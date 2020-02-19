@@ -32,7 +32,10 @@ target_sources(vuk PUBLIC src/main.cpp
 	src/Pipeline.cc
 	src/Program.hpp
 	src/Program.cc
-)
+	"src/Pool.cpp"
+	src/Pool.hpp
+	src/Context.hpp
+	)
 
 target_include_directories(vuk PUBLIC include ext/mapbox-variant/include)
 target_include_directories(vuk PUBLIC ext/shaderc/libshaderc/include)
