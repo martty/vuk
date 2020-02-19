@@ -41,6 +41,7 @@ VkSurfaceKHR create_surface_glfw(VkInstance instance, GLFWwindow* window){
 }
 
 #include "Context.hpp"
+#include "Cache.hpp"
 
 void device_init() {
 	vkb::InstanceBuilder builder;
@@ -113,19 +114,16 @@ void device_init() {
 				// Presenting images in Vulkan requires a special layout.
 				attachmentDescription.finalLayout = vk::ImageLayout::ePresentSrcKHR;
 
-				vk::RenderPassCreateInfo renderPassCreateInfo;
-				renderPassCreateInfo.attachmentCount = 1;
-				renderPassCreateInfo.pAttachments = &attachmentDescription;
-				renderPassCreateInfo.subpassCount = 1;
-				renderPassCreateInfo.pSubpasses = &subpass;
-				renderPassCreateInfo.dependencyCount = 1;
-				renderPassCreateInfo.pDependencies = &dependency;
-				auto rp = device.createRenderPass(renderPassCreateInfo);
+				vk::RenderPassCreateInfo rpci;
+				rpci.attachmentCount = 1;
+				rpci.pAttachments = &attachmentDescription;
+				rpci.subpassCount = 1;
+				rpci.pSubpasses = &subpass;
+				rpci.dependencyCount = 1;
+				rpci.pDependencies = &dependency;
+				
 				{
-					vk::PipelineCacheCreateInfo pci;
-					auto pc = device.createPipelineCacheUnique(pci);
 					vk::GraphicsPipelineCreateInfo gpci;
-					gpci.renderPass = rp;
 					gpci.stageCount = 2;
 					Program prog;
 					prog.shaders.push_back("../../triangle.vert");
@@ -154,12 +152,7 @@ void device_init() {
 					gpci.pViewportState = &pipe.viewportState;
 					gpci.pDepthStencilState = &pipe.depthStencilState;
 					gpci.pDynamicState = &pipe.dynamicState;
-					auto gp = device.createGraphicsPipelineUnique(*pc, gpci);
-
-					auto cp = device.createCommandPoolUnique({});
-					vk::CommandBufferAllocateInfo cba;
-					cba.commandBufferCount = 1;
-					cba.commandPool = *cp;
+					//auto gp = device.createGraphicsPipelineUnique(*context.pipeline_cache, gpci);
 
 					auto swapimages = vkb::get_swapchain_images(*vkswapchain);
 					auto swapimageviews = *vkb::get_swapchain_image_views(*vkswapchain, *swapimages);
@@ -178,9 +171,11 @@ void device_init() {
 						auto cbufs = pfc.commandbuffer_pool.acquire(1);
 						auto& cbuf = cbufs[0];
 
-						auto render_complete = device.createSemaphoreUnique({});
-						auto present_rdy = device.createSemaphoreUnique({});
-						auto acq_result = device.acquireNextImageKHR(swapchain, UINT64_MAX, *present_rdy, vk::Fence{});
+						gpci.renderPass = ictx.renderpass_cache.acquire(rpci);
+						auto pipe = ictx.pipeline_cache.acquire(gpci);
+						auto render_complete = pfc.semaphore_pool.acquire(1)[0];
+						auto present_rdy = pfc.semaphore_pool.acquire(1)[0];
+						auto acq_result = device.acquireNextImageKHR(swapchain, UINT64_MAX, present_rdy, vk::Fence{});
 						auto index = acq_result.value;
 						vk::CommandBufferBeginInfo cbi;
 						cbi.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
@@ -189,7 +184,7 @@ void device_init() {
 						vk::FramebufferCreateInfo fci;
 						fci.attachmentCount = 1;
 						fci.layers = 1;
-						fci.renderPass = rp;
+						fci.renderPass = gpci.renderPass;
 						fci.width = vkswapchain->extent.width;
 						fci.height = vkswapchain->extent.height;
 						vk::ImageView view = swapimageviews[index];
@@ -197,7 +192,7 @@ void device_init() {
 						auto fb = device.createFramebufferUnique(fci);
 
 						vk::RenderPassBeginInfo rbi;
-						rbi.renderPass = rp;
+						rbi.renderPass = gpci.renderPass;
 						rbi.framebuffer = *fb;
 						rbi.clearValueCount = 1;
 						vk::ClearColorValue ccv;
@@ -208,17 +203,17 @@ void device_init() {
 						cbuf.beginRenderPass(rbi, vk::SubpassContents::eInline);
 						cbuf.setViewport(0, vk::Viewport(0, vkswapchain->extent.height, vkswapchain->extent.width, -1.f * (float)vkswapchain->extent.height, 0.f, 1.f));
 						cbuf.setScissor(0, vk::Rect2D({ 0,0 }, { vkswapchain->extent.width, vkswapchain->extent.height }));
-						cbuf.bindPipeline(vk::PipelineBindPoint::eGraphics, *gp);
+						cbuf.bindPipeline(vk::PipelineBindPoint::eGraphics, pipe);
 						cbuf.draw(3, 1, 0, 0);
 						cbuf.endRenderPass();
 						cbuf.end();
 						vk::SubmitInfo si;
 						si.commandBufferCount = 1;
 						si.pCommandBuffers = &cbuf;
-						si.pSignalSemaphores = &*render_complete;
+						si.pSignalSemaphores = &render_complete;
 						si.signalSemaphoreCount = 1;
 						si.waitSemaphoreCount = 1;
-						si.pWaitSemaphores = &*present_rdy;
+						si.pWaitSemaphores = &present_rdy;
 						vk::PipelineStageFlags flags = vk::PipelineStageFlagBits::eAllGraphics;
 						si.pWaitDstStageMask = &flags;
 						graphics_queue.submit(si, {});
@@ -228,7 +223,7 @@ void device_init() {
 						pi.pSwapchains = &swapchain;
 						pi.pImageIndices = &acq_result.value;
 						pi.waitSemaphoreCount = 1;
-						pi.pWaitSemaphores = &*render_complete;
+						pi.pWaitSemaphores = &render_complete;
 						graphics_queue.presentKHR(pi);
 						graphics_queue.waitIdle();
 					}

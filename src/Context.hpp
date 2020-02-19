@@ -4,6 +4,7 @@
 #include <gsl/span>
 
 #include "Pool.hpp"
+#include "Cache.hpp"
 
 namespace vuk {
 	class Context {
@@ -13,11 +14,20 @@ namespace vuk {
 		vk::Device device;
 		Pool<vk::CommandBuffer, FC> cbuf_pools;
 		Pool<vk::Semaphore, FC> semaphore_pools;
+		vk::UniquePipelineCache vk_pipeline_cache;
+		Cache<vk::Pipeline> pipeline_cache;
+		Cache<vk::RenderPass> renderpass_cache;
+
 
 		Context(vk::Device device) : device(device),
 			cbuf_pools(*this),
-			semaphore_pools(*this)
-		{}
+			semaphore_pools(*this),
+			pipeline_cache(*this),
+			renderpass_cache(*this)
+		{
+			vk_pipeline_cache = device.createPipelineCacheUnique({});
+		}
+
 
 		std::atomic<size_t> frame_counter = 0;
 		InflightContext begin();
@@ -33,10 +43,15 @@ namespace vuk {
 		unsigned frame;
 		PFView<vk::CommandBuffer, Context::FC> commandbuffer_pools;
 		PFView<vk::Semaphore, Context::FC> semaphore_pools;
+		Cache<vk::Pipeline>::View pipeline_cache;
+		Cache<vk::RenderPass>::View renderpass_cache;
+
 
 		InflightContext(Context& ctx, unsigned frame) : ctx(ctx), frame(frame),
 			commandbuffer_pools(ctx.cbuf_pools.get_view(*this)),
-			semaphore_pools(ctx.semaphore_pools.get_view(*this))
+			semaphore_pools(ctx.semaphore_pools.get_view(*this)),
+			pipeline_cache(*this, ctx.pipeline_cache),
+			renderpass_cache(*this, ctx.renderpass_cache)
 		{
 			auto prev_frame = prev_(frame, 1, Context::FC);
 			ctx.cbuf_pools.reset(prev_frame);
@@ -73,4 +88,14 @@ namespace vuk {
 	PFView<T, FC> Pool<T, FC>::get_view(InflightContext& ctx) {
 		return PFView<T, FC>(ctx, *this, per_frame_storage[ctx.frame]);
 	}
+
+	template<class T>
+	T create(Context& ctx, create_info_t<T> cinfo) {
+		if constexpr (std::is_same_v<T, vk::Pipeline>) {
+			return ctx.device.createGraphicsPipeline(*ctx.vk_pipeline_cache, cinfo);
+		} else if constexpr (std::is_same_v<T, vk::RenderPass>) {
+			return ctx.device.createRenderPass(cinfo);
+		}
+	}
+
 }

@@ -7,7 +7,7 @@ namespace vuk {
 	gsl::span<vk::Semaphore> PooledType<vk::Semaphore>::acquire(PerThreadContext& ptc, size_t count) {
 		if (values.size() < (needle + count)) {
 			auto remaining = values.size() - needle;
-			for (auto i = 0; i < remaining; i++) {
+			for (auto i = 0; i < (count - remaining); i++) {
 				auto nalloc = ptc.ctx.device.createSemaphore({});
 				values.push_back(nalloc);
 			}
@@ -25,6 +25,7 @@ namespace vuk {
 	}
 
 	template struct PooledType<vk::Semaphore>;
+	template struct PooledType<vk::Pipeline>;
 
 	// vk::CommandBuffer pool
 	PooledType<vk::CommandBuffer>::PooledType(Context& ctx) {
