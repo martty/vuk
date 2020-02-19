@@ -37,6 +37,7 @@ target_sources(vuk PUBLIC src/main.cpp
 target_include_directories(vuk PUBLIC include ext/mapbox-variant/include)
 target_include_directories(vuk PUBLIC ext/shaderc/libshaderc/include)
 target_include_directories(vuk PUBLIC ${Vulkan_INCLUDE_DIRS})
+target_include_directories(vuk PUBLIC ext/plf_colony)
 
 target_compile_options(vuk PRIVATE /W3 /MP /bigobj /std:c++latest /permissive- /EHa /GT)
 target_compile_options(vuk PUBLIC /Zc:char8_t-)

@@ -16,3 +16,6 @@
 [submodule "ext/SPIRV-Cross"]
 	path = ext/SPIRV-Cross
 	url = https://github.com/KhronosGroup/SPIRV-Cross
+[submodule "ext/plf_colony"]
+	path = ext/plf_colony
+	url = https://github.com/mattreecebentley/plf_colony
