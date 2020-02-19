@@ -41,8 +41,8 @@ namespace vuk {
 	public:
 		Context& ctx;
 		unsigned frame;
-		PFView<vk::CommandBuffer, Context::FC> commandbuffer_pools;
-		PFView<vk::Semaphore, Context::FC> semaphore_pools;
+		Pool<vk::CommandBuffer, Context::FC>::PFView commandbuffer_pools;
+		Pool<vk::Semaphore, Context::FC>::PFView semaphore_pools;
 		Cache<vk::Pipeline>::View pipeline_cache;
 		Cache<vk::RenderPass>::View renderpass_cache;
 
@@ -70,8 +70,8 @@ namespace vuk {
 		Context& ctx;
 		InflightContext& ifc;
 		unsigned tid;
-		PFPTView<vk::CommandBuffer> commandbuffer_pool;
-		PFPTView<vk::Semaphore> semaphore_pool;
+		Pool<vk::CommandBuffer, Context::FC>::PFPTView commandbuffer_pool;
+		Pool<vk::Semaphore, Context::FC>::PFPTView semaphore_pool;
 
 		PerThreadContext(InflightContext& ifc, unsigned tid) : ctx(ifc.ctx), ifc(ifc), tid(tid),
 			commandbuffer_pool(ifc.commandbuffer_pools.get_view(*this)),
@@ -85,8 +85,8 @@ namespace vuk {
 	}
 
 	template<class T, size_t FC>
-	PFView<T, FC> Pool<T, FC>::get_view(InflightContext& ctx) {
-		return PFView<T, FC>(ctx, *this, per_frame_storage[ctx.frame]);
+	typename Pool<T, FC>::PFView Pool<T, FC>::get_view(InflightContext& ctx) {
+		return { ctx, *this, per_frame_storage[ctx.frame] };
 	}
 
 	template<class T>

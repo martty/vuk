@@ -81,33 +81,31 @@ namespace vuk {
 			}
 		}
 
-		PFView<T, FC> get_view(InflightContext& ctx);
-	};
+		struct PFPTView {
+			PerThreadContext& ptc;
+			PooledType<T>& pool;
 
-	template<class T>
-	struct PFPTView {
-		PerThreadContext& ptc;
-		PooledType<T>& pool;
+			PFPTView(PerThreadContext& ptc, PooledType<T>& pool) : ptc(ptc), pool(pool) {}
 
-		PFPTView(PerThreadContext& ptc, PooledType<T>& pool) : ptc(ptc), pool(pool) {}
+			gsl::span<T> acquire(size_t count) {
+				return pool.acquire(ptc, count);
+			}
+		};
 
-		gsl::span<T> acquire(size_t count) {
-			return pool.acquire(ptc, count);
-		}
-	};
+		struct PFView {
+			std::mutex lock;
+			Pool& storage;
+			InflightContext& ifc;
+			plf::colony<PooledType<T>>& frame_values;
 
-	template<class T, size_t FC>
-	struct PFView {
-		std::mutex lock;
-		Pool<T, FC>& storage;
-		InflightContext& ifc;
-		plf::colony<PooledType<T>>& frame_values;
+			PFView(InflightContext& ifc, Pool& storage, plf::colony<PooledType<T>>& fv) : ifc(ifc), storage(storage), frame_values(fv) {}
 
-		PFView(InflightContext& ifc, Pool<T, FC>& storage, plf::colony<PooledType<T>>& fv) : ifc(ifc), storage(storage), frame_values(fv) {}
+			PFPTView get_view(PerThreadContext& ptc) {
+				std::lock_guard _(lock);
+				return { ptc, *storage.acquire_one_into(frame_values) };
+			}
+		};
 
-		PFPTView<T> get_view(PerThreadContext& ptc) {
-			std::lock_guard _(lock);
-			return { ptc, *storage.acquire_one_into(frame_values) };
-		}
+		PFView get_view(InflightContext& ctx);
 	};
 }
