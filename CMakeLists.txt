@@ -36,7 +36,9 @@ target_sources(vuk PUBLIC src/main.cpp
 	src/Pool.hpp
 	src/Context.hpp
 	src/Cache.hpp
-	src/Cache.cpp)
+	src/Cache.cpp
+	src/Hash.hpp
+	)
 
 target_include_directories(vuk PUBLIC include ext/mapbox-variant/include)
 target_include_directories(vuk PUBLIC ext/shaderc/libshaderc/include)

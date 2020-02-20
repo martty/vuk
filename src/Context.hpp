@@ -18,6 +18,7 @@ namespace vuk {
 		Cache<vk::Pipeline> pipeline_cache;
 		Cache<vk::RenderPass> renderpass_cache;
 
+		std::unordered_map<const char*, create_info_t<vk::Pipeline>> named_pipelines;
 
 		Context(vk::Device device) : device(device),
 			cbuf_pools(*this),
@@ -28,6 +29,12 @@ namespace vuk {
 			vk_pipeline_cache = device.createPipelineCacheUnique({});
 		}
 
+		template<class T>
+		void create_named(const char * name, create_info_t<T> ci) {
+			if constexpr (std::is_same_v<T, vk::Pipeline>) {
+				named_pipelines.emplace(name, ci);
+			}
+		}
 
 		std::atomic<size_t> frame_counter = 0;
 		InflightContext begin();

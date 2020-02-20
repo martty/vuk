@@ -15,7 +15,7 @@ Pipeline::Pipeline() {
 	dynamicState.pDynamicStates = dynamicStateEnables.data();
 	dynamicState.dynamicStateCount = gsl::narrow_cast<unsigned>(dynamicStateEnables.size());
 
-	multisampleState.pSampleMask = NULL;
+	multisampleState.pSampleMask = nullptr;
 	// No multi sampling used in this example
 	multisampleState.rasterizationSamples = vk::SampleCountFlagBits::e1;
 }

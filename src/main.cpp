@@ -152,7 +152,6 @@ void device_init() {
 					gpci.pViewportState = &pipe.viewportState;
 					gpci.pDepthStencilState = &pipe.depthStencilState;
 					gpci.pDynamicState = &pipe.dynamicState;
-					//auto gp = device.createGraphicsPipelineUnique(*context.pipeline_cache, gpci);
 
 					auto swapimages = vkb::get_swapchain_images(*vkswapchain);
 					auto swapimageviews = *vkb::get_swapchain_image_views(*vkswapchain, *swapimages);
