@@ -25,7 +25,6 @@ namespace vuk {
 	}
 
 	template struct PooledType<vk::Semaphore>;
-	template struct PooledType<vk::Pipeline>;
 
 	// vk::CommandBuffer pool
 	PooledType<vk::CommandBuffer>::PooledType(Context& ctx) {
