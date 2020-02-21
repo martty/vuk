@@ -42,6 +42,7 @@ VkSurfaceKHR create_surface_glfw(VkInstance instance, GLFWwindow* window){
 
 #include "Context.hpp"
 #include "Cache.hpp"
+#include "RenderGraph.hpp"
 
 void device_init() {
 	vkb::InstanceBuilder builder;
@@ -167,53 +168,40 @@ void device_init() {
 						glfwPollEvents();
 						auto ictx = context.begin();
 						auto pfc = ictx.begin();
-						auto cbufs = pfc.commandbuffer_pool.acquire(1);
-						auto& cbuf = cbufs[0];
 
-						gpci.renderPass = ictx.renderpass_cache.acquire(rpci);
-						auto pipe = ictx.pipeline_cache.acquire(gpci);
 						auto render_complete = pfc.semaphore_pool.acquire(1)[0];
 						auto present_rdy = pfc.semaphore_pool.acquire(1)[0];
 						auto acq_result = device.acquireNextImageKHR(swapchain, UINT64_MAX, present_rdy, vk::Fence{});
 						auto index = acq_result.value;
-						vk::CommandBufferBeginInfo cbi;
-						cbi.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
-						cbuf.begin(cbi);
 
-						vk::FramebufferCreateInfo fci;
-						fci.attachmentCount = 1;
-						fci.layers = 1;
-						fci.renderPass = gpci.renderPass;
-						fci.width = vkswapchain->extent.width;
-						fci.height = vkswapchain->extent.height;
-						vk::ImageView view = swapimageviews[index];
-						fci.pAttachments = &view;
-						auto fb = device.createFramebufferUnique(fci);
+						RenderGraph rg;
+						rg.add_pass(Pass{
+							//.read_attachment .write_attachments /* does not set framebuffer */
+							// if framebuffer is not set, then the pass is considered to be outside a renderpass
+							.color_attachments = {{"SWAPCHAIN"}}, /* sets framebuffer */
+							//.depth_attachments = {}, /* sets framebuffer */
+							.execute = [&](CommandBuffer& command_buffer) {
+								command_buffer
+								  .set_viewport(vk::Viewport(0, 480, 640, -1.f * 480, 0.f, 1.f))
+								  .set_scissor(vk::Rect2D({ 0,0 }, { 640, 480 }))
+								  .bind_pipeline(gpci)
+								  .draw(3, 1, 0, 0);
+							  }
+							}
+						);
+						rg.build();
+						rg.bind_output_to_swapchain("SWAPCHAIN", vk::Format(vkswapchain->image_format), vkswapchain->extent, swapimageviews[index]);
+						rg.build(ictx);
+						auto cb = rg.execute(ictx);
 
-						vk::RenderPassBeginInfo rbi;
-						rbi.renderPass = gpci.renderPass;
-						rbi.framebuffer = *fb;
-						rbi.clearValueCount = 1;
-						vk::ClearColorValue ccv;
-						ccv.setFloat32({ 0.3f, 0.3f, 0.3f, 1.f });
-						vk::ClearValue cv;
-						cv.setColor(ccv);
-						rbi.pClearValues = &cv;
-						cbuf.beginRenderPass(rbi, vk::SubpassContents::eInline);
-						cbuf.setViewport(0, vk::Viewport(0, vkswapchain->extent.height, vkswapchain->extent.width, -1.f * (float)vkswapchain->extent.height, 0.f, 1.f));
-						cbuf.setScissor(0, vk::Rect2D({ 0,0 }, { vkswapchain->extent.width, vkswapchain->extent.height }));
-						cbuf.bindPipeline(vk::PipelineBindPoint::eGraphics, pipe);
-						cbuf.draw(3, 1, 0, 0);
-						cbuf.endRenderPass();
-						cbuf.end();
 						vk::SubmitInfo si;
 						si.commandBufferCount = 1;
-						si.pCommandBuffers = &cbuf;
+						si.pCommandBuffers = &cb;
 						si.pSignalSemaphores = &render_complete;
 						si.signalSemaphoreCount = 1;
 						si.waitSemaphoreCount = 1;
 						si.pWaitSemaphores = &present_rdy;
-						vk::PipelineStageFlags flags = vk::PipelineStageFlagBits::eAllGraphics;
+						vk::PipelineStageFlags flags = vk::PipelineStageFlagBits::eColorAttachmentOutput;
 						si.pWaitDstStageMask = &flags;
 						graphics_queue.submit(si, {});
 
