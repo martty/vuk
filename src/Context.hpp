@@ -5,6 +5,7 @@
 
 #include "Pool.hpp"
 #include "Cache.hpp"
+#include <string_view>
 
 namespace vuk {
 	class Context {
@@ -18,7 +19,7 @@ namespace vuk {
 		Cache<vk::Pipeline> pipeline_cache;
 		Cache<vk::RenderPass> renderpass_cache;
 
-		std::unordered_map<const char*, create_info_t<vk::Pipeline>> named_pipelines;
+		std::unordered_map<std::string_view, create_info_t<vk::Pipeline>> named_pipelines;
 
 		Context(vk::Device device) : device(device),
 			cbuf_pools(*this),

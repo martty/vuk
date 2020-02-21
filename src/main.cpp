@@ -153,6 +153,7 @@ void device_init() {
 					gpci.pViewportState = &pipe.viewportState;
 					gpci.pDepthStencilState = &pipe.depthStencilState;
 					gpci.pDynamicState = &pipe.dynamicState;
+					context.named_pipelines.emplace("triangle", gpci);
 
 					auto swapimages = vkb::get_swapchain_images(*vkswapchain);
 					auto swapimageviews = *vkb::get_swapchain_image_views(*vkswapchain, *swapimages);
@@ -174,17 +175,18 @@ void device_init() {
 						auto acq_result = device.acquireNextImageKHR(swapchain, UINT64_MAX, present_rdy, vk::Fence{});
 						auto index = acq_result.value;
 
-						RenderGraph rg;
-						rg.add_pass(Pass{
+						vuk::RenderGraph rg;
+						rg.add_pass({
 							//.read_attachment .write_attachments /* does not set framebuffer */
 							// if framebuffer is not set, then the pass is considered to be outside a renderpass
 							.color_attachments = {{"SWAPCHAIN"}}, /* sets framebuffer */
 							//.depth_attachments = {}, /* sets framebuffer */
-							.execute = [&](CommandBuffer& command_buffer) {
+							.execute = [&](vuk::CommandBuffer& command_buffer) {
 								command_buffer
 								  .set_viewport(vk::Viewport(0, 480, 640, -1.f * 480, 0.f, 1.f))
 								  .set_scissor(vk::Rect2D({ 0,0 }, { 640, 480 }))
-								  .bind_pipeline(gpci)
+								  //.bind_pipeline(gpci)
+								  .bind_pipeline("triangle")
 								  .draw(3, 1, 0, 0);
 							  }
 							}

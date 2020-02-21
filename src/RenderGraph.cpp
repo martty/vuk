@@ -1,137 +1,333 @@
 #include "RenderGraph.hpp"
 #include "Hash.hpp" // for create
+#include "Cache.hpp"
 #include "Context.hpp"
 
-void RenderGraph::build(vuk::InflightContext& ifc) {
-	// output attachments have an initial layout of eUndefined (loadOp: clear or dontcare, storeOp: store)
-	for (auto& [name, attachment_info] : bound_attachments) {
-		// get the first pass this attachment is used
-		auto pass = contains_if(passes, [&](auto& pi) {
-			auto& p = pi.pass;
-			if (contains_if(p.color_attachments, [&](auto& att) { return att.name == name; })) return true;
-			return false;
-		});
-		// in the renderpass this pass participates in, we want to fill in the info for the attachment
-		// TODO: we want to find the first to put in the initial layout
-		// then we want to find the last to put in the final layout
-		assert(pass);
-		auto& dst = *contains_if(rpis[pass->render_pass_index].attachments, [&](auto& att) {return att.name == name; });
-		dst.description = attachment_info.description;
-		dst.srcAccess = attachment_info.srcAccess;
-		dst.srcStage = attachment_info.srcStage;
-		dst.iv = attachment_info.iv;
-		dst.extents = attachment_info.extents;
-	}
-	// do this for input attachments
-	// input attachments have a finallayout matching last use
-	// loadOp: load, storeOp: dontcare
-	// inout attachments
-	// loadOp: load, storeOp: store
+namespace vuk {
+	// determine rendergraph inputs and outputs, and resources that are neither
+	void RenderGraph::build_io() {
+		std::unordered_set<io> inputs;
+		std::unordered_set<io> outputs;
 
-	// -- transient attachments --
-
-	// we now have enough data to build vk::RenderPasses and vk::Framebuffers
-	for (auto& rp : rpis) {
-		// subpasses
-		std::vector<vk::SubpassDescription> subp;
-		std::vector<vk::AttachmentReference> attrefs;
-		std::vector<size_t> offsets;
-		for (auto& s : rp.subpasses) {
-			for (auto& [name, att] : s.attachments) {
-				vk::AttachmentReference attref;
-				attref.layout = att.layout;
-				attref.attachment = std::distance(rp.attachments.begin(), std::find_if(rp.attachments.begin(), rp.attachments.end(), [&](auto& att) { return name == att.name; }));
-				attrefs.push_back(attref);
+		for (auto& pif : passes) {
+			pif.inputs.insert(pif.pass.read_attachments.begin(), pif.pass.read_attachments.end());
+			pif.inputs.insert(pif.pass.color_attachments.begin(), pif.pass.color_attachments.end());
+			if (pif.pass.depth_attachment) {
+				pif.inputs.insert(*pif.pass.depth_attachment);
 			}
-			offsets.push_back(attrefs.size());
-		}
-		for (size_t i = 0; i < rp.subpasses.size(); i++) {
-			vk::SubpassDescription sd;
-			sd.colorAttachmentCount = offsets[i] - (i > 0 ? offsets[i - 1] : 0);
-			sd.pColorAttachments = attrefs.data() + (i > 0 ? offsets[i - 1] : 0);
-			subp.push_back(sd);
-		}
-		rp.rpci.pSubpasses = subp.data();
-		rp.rpci.subpassCount = subp.size();
-		// generate external deps
-		std::vector<vk::SubpassDependency> deps;
-		for (auto& s : rp.subpasses) {
-			if (s.pass->is_head_pass) {	
-				for (auto& attrpinfo : rp.attachments) {
-					if (attrpinfo.first_use.subpass == s.pass->subpass) {
-						vk::SubpassDependency dep_in;
-						dep_in.srcSubpass = VK_SUBPASS_EXTERNAL;
-						dep_in.dstSubpass = s.pass->subpass;
+			pif.outputs.insert(pif.pass.write_attachments.begin(), pif.pass.write_attachments.end());
+			pif.outputs.insert(pif.pass.color_attachments.begin(), pif.pass.color_attachments.end());
+			if (pif.pass.depth_attachment) {
+				pif.outputs.insert(*pif.pass.depth_attachment);
+			}
 
-						dep_in.srcAccessMask = attrpinfo.srcAccess;
-						dep_in.srcStageMask = attrpinfo.srcStage;
-						dep_in.dstAccessMask = attrpinfo.first_use.access;
-						dep_in.dstStageMask = attrpinfo.first_use.stage;
+			for (auto& i : pif.inputs) {
+				if (global_outputs.erase(i) == 0) {
+					pif.global_inputs.insert(i);
+				}
+			}
+			for (auto& i : pif.outputs) {
+				if (global_inputs.erase(i) == 0) {
+					pif.global_outputs.insert(i);
+				}
+			}
 
-						deps.push_back(dep_in);
+			global_inputs.insert(pif.global_inputs.begin(), pif.global_inputs.end());
+			global_outputs.insert(pif.global_outputs.begin(), pif.global_outputs.end());
+
+			inputs.insert(pif.inputs.begin(), pif.inputs.end());
+			outputs.insert(pif.outputs.begin(), pif.outputs.end());
+		}
+
+		std::copy_if(outputs.begin(), outputs.end(), std::back_inserter(tracked), [&](auto& needle) { return !global_outputs.contains(needle); });
+		global_io.insert(global_io.end(), global_inputs.begin(), global_inputs.end());
+		global_io.insert(global_io.end(), global_outputs.begin(), global_outputs.end());
+		global_io.erase(std::unique(global_io.begin(), global_io.end()), global_io.end());
+	}
+
+	void RenderGraph::build() {
+		// compute sync
+		// find which reads are graph inputs (not produced by any pass) & outputs (not consumed by any pass)
+		build_io();
+		// sort passes
+		if (passes.size() > 1) {
+			topological_sort(passes.begin(), passes.end(), [](const auto& p1, const auto& p2) {
+				for (auto& o : p1.outputs) {
+					if (p2.inputs.contains(o)) return true;
+				}
+				return false;
+				});
+		}
+		// determine which passes are "head" and "tail" -> ones that can execute in the beginning or the end of the RG
+		// -> the ones that only have global io
+		for (auto& p : passes) {
+			if (p.global_inputs.size() == p.inputs.size()) {
+				head_passes.push_back(&p);
+				p.is_head_pass = true;
+			}
+			if (p.global_outputs.size() == p.outputs.size()) {
+				tail_passes.push_back(&p);
+				p.is_tail_pass = true;
+			}
+		}
+		// go through all inputs and propagate dependencies onto last write pass
+		for (auto& t : tracked) {
+			std::visit(overloaded{
+				[&](Buffer& th) {
+					// for buffers, we need to track last write (can only be shader_write or transfer_write) + last write queue
+					// if queues are different, we want to put a queue xfer on src and first dst + a semaphore signal on src and semaphore wait on first dst
+					// if queues are the same, we want to put signalEvent on src and waitEvent on first dst OR pbarrier on first dst
+					PassInfo* src = nullptr;
+					PassInfo* dst = nullptr;
+					Name write_queue;
+					Name read_queue = "INVALID";
+					vk::AccessFlags write_access;
+					vk::AccessFlags read_access;
+					vk::PipelineStageFlags write_stage;
+					vk::PipelineStageFlags read_stage;
+					for (auto& p : passes) {
+						if (contains(p.pass.write_buffers, th)) {
+							src = &p;
+							write_queue = p.pass.executes_on;
+							write_access = (th.type == Buffer::Type::eStorage || th.type == Buffer::Type::eUniform) ?
+								vk::AccessFlagBits::eShaderWrite : vk::AccessFlagBits::eTransferWrite;
+							write_stage = (th.type == Buffer::Type::eStorage || th.type == Buffer::Type::eUniform) ?
+								vk::PipelineStageFlagBits::eAllGraphics : vk::PipelineStageFlagBits::eTransfer;
+						}
+
+						if (contains(p.pass.read_buffers, th)) {
+							if (!dst)
+								dst = &p;
+							// handle a single type of dst queue for now
+							assert(read_queue == "INVALID" || read_queue == p.pass.executes_on);
+							read_queue = p.pass.executes_on;
+							read_access |= (th.type == Buffer::Type::eStorage || th.type == Buffer::Type::eUniform) ?
+								vk::AccessFlagBits::eShaderRead : vk::AccessFlagBits::eTransferRead;
+							read_stage |= (th.type == Buffer::Type::eStorage || th.type == Buffer::Type::eUniform) ?
+								vk::PipelineStageFlagBits::eAllGraphics : vk::PipelineStageFlagBits::eTransfer;
+						}
+					}
+					bool queue_xfer = write_queue != read_queue;
+					assert(src);
+					auto& sync_out = src->sync_out;
+					assert(dst);
+					auto& sync_in = dst->sync_in;
+					if (queue_xfer) {
+						Sync::QueueXfer xfer;
+						xfer.queue_src = write_queue;
+						xfer.queue_dst = read_queue;
+						xfer.buffer = th.name;
+						sync_out.queue_transfers.push_back(xfer);
+						sync_in.queue_transfers.push_back(xfer);
+						sync_out.signal_sema.push_back(src->pass.name);
+						sync_in.wait_sema.push_back(src->pass.name);
+					}
+				},
+				[&](Attachment& th) {
+					for (auto& p : passes) {
+					}
+				} }, t);
+		}
+
+		// we need to collect passes into framebuffers, which will determine the renderpasses
+		std::vector<std::pair<std::unordered_set<Attachment>, std::vector<PassInfo*>>> attachment_sets;
+		for (auto& passinfo : passes) {
+			std::unordered_set<Attachment> atts;
+			atts.insert(passinfo.pass.color_attachments.begin(), passinfo.pass.color_attachments.end());
+			if (passinfo.pass.depth_attachment) atts.insert(*passinfo.pass.depth_attachment);
+
+			if (auto p = contains_if(attachment_sets, [&](auto& t) { return t.first == atts; })) {
+				p->second.push_back(&passinfo);
+			} else {
+				attachment_sets.emplace_back(atts, std::vector{ &passinfo });
+			}
+		}
+
+		// renderpasses are uniquely identified by their index from now on
+		// tell passes in which renderpass/subpass they will execute
+		for (auto& set : attachment_sets) {
+			RenderPassInfo rpi;
+			auto rpi_index = rpis.size();
+
+			size_t subpass = 0;
+			for (auto& p : set.second) {
+				p->render_pass_index = rpi_index;
+				p->subpass = subpass++;
+				SubpassInfo si;
+				si.pass = p;
+				for (auto& a : p->pass.color_attachments) {
+					si.attachments.emplace(a.name, AttachmentSInfo{ vk::ImageLayout::eColorAttachmentOptimal });
+					// TODO: ColorAttachmentRead happens if blending or logicOp
+					if (contains_if(rpi.attachments, [&](auto& att) { return att.name == a.name; })) {
+						// TODO: we want to add all same level passes here, otherwise the other passes might not get the right sync
+					} else {
+						AttachmentRPInfo arpi;
+						arpi.name = a.name;
+						arpi.first_use.access = vk::AccessFlagBits::eColorAttachmentWrite;
+						arpi.first_use.stage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+						arpi.first_use.subpass = subpass - 1;
+
+						rpi.attachments.push_back(arpi);
+					}
+				}
+				rpi.subpasses.push_back(si);
+			}
+			rpis.push_back(rpi);
+		}
+
+	}
+
+	void RenderGraph::bind_attachment_to_swapchain(Name name, vk::Format format, vk::Extent2D extent, vk::ImageView siv) {
+		AttachmentRPInfo attachment_info;
+		attachment_info.extents = extent;
+		attachment_info.iv = siv;
+		// for WSI attachments we don't want to preserve previous data
+		attachment_info.description.initialLayout = vk::ImageLayout::eUndefined;
+		// directly presented
+		attachment_info.description.finalLayout = vk::ImageLayout::ePresentSrcKHR;
+		attachment_info.description.loadOp = vk::AttachmentLoadOp::eClear;
+		attachment_info.description.storeOp = vk::AttachmentStoreOp::eStore;
+
+		attachment_info.description.format = format;
+		attachment_info.description.samples = vk::SampleCountFlagBits::e1;
+
+		// for WSI, we want to wait for colourattachmentoutput
+		attachment_info.srcStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+		// we don't care about any writes, we will clear
+		attachment_info.srcAccess = vk::AccessFlags{};
+		bound_attachments.emplace(name, attachment_info);
+	}
+
+	void RenderGraph::build(vuk::InflightContext& ifc) {
+		// output attachments have an initial layout of eUndefined (loadOp: clear or dontcare, storeOp: store)
+		for (auto& [name, attachment_info] : bound_attachments) {
+			// get the first pass this attachment is used
+			auto pass = contains_if(passes, [&](auto& pi) {
+				auto& p = pi.pass;
+				if (contains_if(p.color_attachments, [&](auto& att) { return att.name == name; })) return true;
+				return false;
+				});
+			// in the renderpass this pass participates in, we want to fill in the info for the attachment
+			// TODO: we want to find the first to put in the initial layout
+			// then we want to find the last to put in the final layout
+			assert(pass);
+			auto& dst = *contains_if(rpis[pass->render_pass_index].attachments, [&](auto& att) {return att.name == name; });
+			dst.description = attachment_info.description;
+			dst.srcAccess = attachment_info.srcAccess;
+			dst.srcStage = attachment_info.srcStage;
+			dst.iv = attachment_info.iv;
+			dst.extents = attachment_info.extents;
+		}
+		// do this for input attachments
+		// input attachments have a finallayout matching last use
+		// loadOp: load, storeOp: dontcare
+		// inout attachments
+		// loadOp: load, storeOp: store
+
+		// -- transient attachments --
+
+		// we now have enough data to build vk::RenderPasses and vk::Framebuffers
+		for (auto& rp : rpis) {
+			// subpasses
+			std::vector<vk::SubpassDescription> subp;
+			std::vector<vk::AttachmentReference> attrefs;
+			std::vector<size_t> offsets;
+			for (auto& s : rp.subpasses) {
+				for (auto& [name, att] : s.attachments) {
+					vk::AttachmentReference attref;
+					attref.layout = att.layout;
+					attref.attachment = std::distance(rp.attachments.begin(), std::find_if(rp.attachments.begin(), rp.attachments.end(), [&](auto& att) { return name == att.name; }));
+					attrefs.push_back(attref);
+				}
+				offsets.push_back(attrefs.size());
+			}
+			for (size_t i = 0; i < rp.subpasses.size(); i++) {
+				vk::SubpassDescription sd;
+				sd.colorAttachmentCount = offsets[i] - (i > 0 ? offsets[i - 1] : 0);
+				sd.pColorAttachments = attrefs.data() + (i > 0 ? offsets[i - 1] : 0);
+				subp.push_back(sd);
+			}
+			rp.rpci.pSubpasses = subp.data();
+			rp.rpci.subpassCount = subp.size();
+			// generate external deps
+			std::vector<vk::SubpassDependency> deps;
+			for (auto& s : rp.subpasses) {
+				if (s.pass->is_head_pass) {
+					for (auto& attrpinfo : rp.attachments) {
+						if (attrpinfo.first_use.subpass == s.pass->subpass) {
+							vk::SubpassDependency dep_in;
+							dep_in.srcSubpass = VK_SUBPASS_EXTERNAL;
+							dep_in.dstSubpass = s.pass->subpass;
+
+							dep_in.srcAccessMask = attrpinfo.srcAccess;
+							dep_in.srcStageMask = attrpinfo.srcStage;
+							dep_in.dstAccessMask = attrpinfo.first_use.access;
+							dep_in.dstStageMask = attrpinfo.first_use.stage;
+
+							deps.push_back(dep_in);
+						}
 					}
 				}
 			}
-		}
-		// TODO: subpass - subpass deps
-		// TODO: subpass - external
-		rp.rpci.dependencyCount = deps.size();
-		rp.rpci.pDependencies = deps.data();
+			// TODO: subpass - subpass deps
+			// TODO: subpass - external
+			rp.rpci.dependencyCount = deps.size();
+			rp.rpci.pDependencies = deps.data();
 
-		// attachments
-		std::vector<vk::AttachmentDescription> atts;
-		for (auto& attrpinfo : rp.attachments) {
-			atts.push_back(attrpinfo.description);
-		}
-		rp.rpci.attachmentCount = atts.size();
-		rp.rpci.pAttachments = atts.data();
+			// attachments
+			std::vector<vk::AttachmentDescription> atts;
+			for (auto& attrpinfo : rp.attachments) {
+				atts.push_back(attrpinfo.description);
+			}
+			rp.rpci.attachmentCount = atts.size();
+			rp.rpci.pAttachments = atts.data();
 
-		rp.handle = ifc.renderpass_cache.acquire(rp.rpci);
-		rp.fbci.attachmentCount = rp.attachments.size();
-		rp.fbci.renderPass = rp.handle;
-		rp.fbci.width = rp.attachments[0].extents.width;
-		rp.fbci.height = rp.attachments[0].extents.height;
-		rp.fbci.pAttachments = &rp.attachments[0].iv;
-		rp.fbci.layers = 1;
-		rp.framebuffer = ifc.ctx.device.createFramebuffer(rp.fbci);
+			rp.handle = ifc.renderpass_cache.acquire(rp.rpci);
+			rp.fbci.attachmentCount = rp.attachments.size();
+			rp.fbci.renderPass = rp.handle;
+			rp.fbci.width = rp.attachments[0].extents.width;
+			rp.fbci.height = rp.attachments[0].extents.height;
+			rp.fbci.pAttachments = &rp.attachments[0].iv;
+			rp.fbci.layers = 1;
+			rp.framebuffer = ifc.ctx.device.createFramebuffer(rp.fbci);
+		}
 	}
-}
 
-vk::CommandBuffer RenderGraph::execute(vuk::InflightContext& ifc) {
-	auto pfc = ifc.begin();
-	auto cbufs = pfc.commandbuffer_pool.acquire(1);
-	auto& cbuf = cbufs[0];
+	vk::CommandBuffer RenderGraph::execute(vuk::InflightContext& ifc) {
+		auto pfc = ifc.begin();
+		auto cbufs = pfc.commandbuffer_pool.acquire(1);
+		auto& cbuf = cbufs[0];
 
-	vk::CommandBufferBeginInfo cbi;
-	cbi.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
-	cbuf.begin(cbi);
+		vk::CommandBufferBeginInfo cbi;
+		cbi.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
+		cbuf.begin(cbi);
 
-	CommandBuffer cobuf(ifc, cbuf);
-	for (auto& rpass : rpis) {
-		vk::RenderPassBeginInfo rbi;
-		rbi.renderPass = rpass.handle;
-		rbi.framebuffer = rpass.framebuffer;
-		rbi.clearValueCount = 1; // TODO
-		vk::ClearColorValue ccv;
-		ccv.setFloat32({ 0.3f, 0.3f, 0.3f, 1.f });
-		vk::ClearValue cv;
-		cv.setColor(ccv);
-		rbi.pClearValues = &cv;
-		cbuf.beginRenderPass(rbi, vk::SubpassContents::eInline);
-		for (size_t i = 0; i < rpass.subpasses.size(); i++) {
-			auto& sp = rpass.subpasses[i];
-			cobuf.ongoing_renderpass = std::pair{rpass.handle, i};
-			sp.pass->pass.execute(cobuf);
-			if(i < rpass.subpasses.size() - 1)
-				cbuf.nextSubpass(vk::SubpassContents::eInline);
+		CommandBuffer cobuf(ifc, cbuf);
+		for (auto& rpass : rpis) {
+			vk::RenderPassBeginInfo rbi;
+			rbi.renderPass = rpass.handle;
+			rbi.framebuffer = rpass.framebuffer;
+			rbi.clearValueCount = 1; // TODO
+			vk::ClearColorValue ccv;
+			ccv.setFloat32({ 0.3f, 0.3f, 0.3f, 1.f });
+			vk::ClearValue cv;
+			cv.setColor(ccv);
+			rbi.pClearValues = &cv;
+			cbuf.beginRenderPass(rbi, vk::SubpassContents::eInline);
+			for (size_t i = 0; i < rpass.subpasses.size(); i++) {
+				auto& sp = rpass.subpasses[i];
+				cobuf.ongoing_renderpass = std::pair{ rpass.handle, i };
+				sp.pass->pass.execute(cobuf);
+				if (i < rpass.subpasses.size() - 1)
+					cbuf.nextSubpass(vk::SubpassContents::eInline);
+			}
+			cbuf.endRenderPass();
 		}
-		cbuf.endRenderPass();
+		cbuf.end();
+		return cbuf;
 	}
-	cbuf.end();
-	return cbuf;
-}
 
-void RenderGraph::generate_graph_visualization() {
+	void RenderGraph::generate_graph_visualization() {
 		std::cout << "digraph RG {\n";
 		for (auto& p : passes) {
 			std::cout << p.pass.name << "[shape = Mrecord, label = \"" << p.pass.executes_on << "| {{";
@@ -241,6 +437,11 @@ void RenderGraph::generate_graph_visualization() {
 		std::cout << "}\n";
 	}
 
+	CommandBuffer& CommandBuffer::bind_pipeline(Name p) {
+		next_graphics_pipeline = ifc.ctx.named_pipelines.at(p);
+		return *this;
+	}
+
 	CommandBuffer& CommandBuffer::draw(uint32_t a, uint32_t b, uint32_t c, uint32_t d) {
 		/* flush graphics state */
 		if (next_viewport) {
@@ -261,3 +462,4 @@ void RenderGraph::generate_graph_visualization() {
 		command_buffer.draw(a, b, c, d);
 		return *this;
 	}
+}
