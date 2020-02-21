@@ -190,7 +190,7 @@ void device_init() {
 							}
 						);
 						rg.build();
-						rg.bind_output_to_swapchain("SWAPCHAIN", vk::Format(vkswapchain->image_format), vkswapchain->extent, swapimageviews[index]);
+						rg.bind_attachment_to_swapchain("SWAPCHAIN", vk::Format(vkswapchain->image_format), vkswapchain->extent, swapimageviews[index]);
 						rg.build(ictx);
 						auto cb = rg.execute(ictx);
 

@@ -4,18 +4,23 @@
 
 void RenderGraph::build(vuk::InflightContext& ifc) {
 	// output attachments have an initial layout of eUndefined (loadOp: clear or dontcare, storeOp: store)
-	for (auto& [name, attachment_info] : output_attachments) {
+	for (auto& [name, attachment_info] : bound_attachments) {
 		// get the first pass this attachment is used
 		auto pass = contains_if(passes, [&](auto& pi) {
 			auto& p = pi.pass;
 			if (contains_if(p.color_attachments, [&](auto& att) { return att.name == name; })) return true;
 			return false;
-			});
+		});
 		// in the renderpass this pass participates in, we want to fill in the info for the attachment
 		// TODO: we want to find the first to put in the initial layout
 		// then we want to find the last to put in the final layout
 		assert(pass);
-		rpis[pass->render_pass_index].attachments[name] = attachment_info;
+		auto& dst = *contains_if(rpis[pass->render_pass_index].attachments, [&](auto& att) {return att.name == name; });
+		dst.description = attachment_info.description;
+		dst.srcAccess = attachment_info.srcAccess;
+		dst.srcStage = attachment_info.srcStage;
+		dst.iv = attachment_info.iv;
+		dst.extents = attachment_info.extents;
 	}
 	// do this for input attachments
 	// input attachments have a finallayout matching last use
@@ -27,35 +32,66 @@ void RenderGraph::build(vuk::InflightContext& ifc) {
 
 	// we now have enough data to build vk::RenderPasses and vk::Framebuffers
 	for (auto& rp : rpis) {
-		rp.rpci.attachmentCount = rp.attachments.size();
-		std::vector<vk::AttachmentDescription> atts;
-		for (auto& [name, attrpinfo] : rp.attachments) {
-			atts.push_back(attrpinfo.description);
-		}
-		rp.rpci.pAttachments = atts.data();
+		// subpasses
 		std::vector<vk::SubpassDescription> subp;
+		std::vector<vk::AttachmentReference> attrefs;
+		std::vector<size_t> offsets;
 		for (auto& s : rp.subpasses) {
-			vk::SubpassDescription sd;
-			std::vector<vk::AttachmentReference>* attrefs = new std::vector<vk::AttachmentReference>;
 			for (auto& [name, att] : s.attachments) {
 				vk::AttachmentReference attref;
 				attref.layout = att.layout;
-				attref.attachment = 0; // TODO
-				attrefs->push_back(attref);
+				attref.attachment = std::distance(rp.attachments.begin(), std::find_if(rp.attachments.begin(), rp.attachments.end(), [&](auto& att) { return name == att.name; }));
+				attrefs.push_back(attref);
 			}
-			sd.colorAttachmentCount = attrefs->size();
-			sd.pColorAttachments = attrefs->data();
+			offsets.push_back(attrefs.size());
+		}
+		for (size_t i = 0; i < rp.subpasses.size(); i++) {
+			vk::SubpassDescription sd;
+			sd.colorAttachmentCount = offsets[i] - (i > 0 ? offsets[i - 1] : 0);
+			sd.pColorAttachments = attrefs.data() + (i > 0 ? offsets[i - 1] : 0);
 			subp.push_back(sd);
 		}
 		rp.rpci.pSubpasses = subp.data();
 		rp.rpci.subpassCount = subp.size();
+		// generate external deps
+		std::vector<vk::SubpassDependency> deps;
+		for (auto& s : rp.subpasses) {
+			if (s.pass->is_head_pass) {	
+				for (auto& attrpinfo : rp.attachments) {
+					if (attrpinfo.first_use.subpass == s.pass->subpass) {
+						vk::SubpassDependency dep_in;
+						dep_in.srcSubpass = VK_SUBPASS_EXTERNAL;
+						dep_in.dstSubpass = s.pass->subpass;
+
+						dep_in.srcAccessMask = attrpinfo.srcAccess;
+						dep_in.srcStageMask = attrpinfo.srcStage;
+						dep_in.dstAccessMask = attrpinfo.first_use.access;
+						dep_in.dstStageMask = attrpinfo.first_use.stage;
+
+						deps.push_back(dep_in);
+					}
+				}
+			}
+		}
+		// TODO: subpass - subpass deps
+		// TODO: subpass - external
+		rp.rpci.dependencyCount = deps.size();
+		rp.rpci.pDependencies = deps.data();
+
+		// attachments
+		std::vector<vk::AttachmentDescription> atts;
+		for (auto& attrpinfo : rp.attachments) {
+			atts.push_back(attrpinfo.description);
+		}
+		rp.rpci.attachmentCount = atts.size();
+		rp.rpci.pAttachments = atts.data();
 
 		rp.handle = ifc.renderpass_cache.acquire(rp.rpci);
 		rp.fbci.attachmentCount = rp.attachments.size();
 		rp.fbci.renderPass = rp.handle;
-		rp.fbci.width = rp.attachments.begin()->second.extents.width;
-		rp.fbci.height = rp.attachments.begin()->second.extents.height;
-		rp.fbci.pAttachments = &rp.attachments.begin()->second.iv;
+		rp.fbci.width = rp.attachments[0].extents.width;
+		rp.fbci.height = rp.attachments[0].extents.height;
+		rp.fbci.pAttachments = &rp.attachments[0].iv;
 		rp.fbci.layers = 1;
 		rp.framebuffer = ifc.ctx.device.createFramebuffer(rp.fbci);
 	}
@@ -82,12 +118,12 @@ vk::CommandBuffer RenderGraph::execute(vuk::InflightContext& ifc) {
 		cv.setColor(ccv);
 		rbi.pClearValues = &cv;
 		cbuf.beginRenderPass(rbi, vk::SubpassContents::eInline);
-		size_t subpass_index = 0;
-		for (auto& sp : rpass.subpasses) {
-			cobuf.ongoing_renderpass = std::pair{rpass.handle, subpass_index};
+		for (size_t i = 0; i < rpass.subpasses.size(); i++) {
+			auto& sp = rpass.subpasses[i];
+			cobuf.ongoing_renderpass = std::pair{rpass.handle, i};
 			sp.pass->pass.execute(cobuf);
-			//cbuf.nextSubpass(vk::SubpassContents::eInline);
-			subpass_index++;
+			if(i < rpass.subpasses.size() - 1)
+				cbuf.nextSubpass(vk::SubpassContents::eInline);
 		}
 		cbuf.endRenderPass();
 	}
@@ -118,14 +154,14 @@ void RenderGraph::generate_graph_visualization() {
 		}
 		for (auto& gi : global_inputs) {
 			std::visit(overloaded{
-			[&](Buffer& th) {
+			[&](const Buffer& th) {
 				std::cout << name_to_node(th.name) << "[shape = invtriangle, label =\"" << th.name << "\"];\n";
 				for (auto& p : passes) {
 					if (contains(p.pass.read_buffers, th))
 						std::cout << name_to_node(th.name) << " -> " << p.pass.name << ":" << name_to_node(th.name) << ";\n";
 				}
 			},
-			[&](Attachment& th) {
+			[&](const Attachment& th) {
 				std::cout << name_to_node(th.name) << "[shape = invtrapezium, label =\"" << th.name << "\"];\n";
 				for (auto& p : passes) {
 					if (contains(p.pass.read_attachments, th))
@@ -137,7 +173,7 @@ void RenderGraph::generate_graph_visualization() {
 
 		for (auto& gi : global_outputs) {
 			std::visit(overloaded{
-			[&](Buffer& th) {
+			[&](const Buffer& th) {
 				std::cout << name_to_node(th.name) << "[shape = triangle, label =\"" << th.name << "\"];\n";
 				for (auto& p : passes) {
 					if (contains(p.pass.write_buffers, th))
@@ -145,7 +181,7 @@ void RenderGraph::generate_graph_visualization() {
 				}
 
 			},
-			[&](Attachment& th) {
+			[&](const Attachment& th) {
 				std::cout << name_to_node(th.name) << "[shape = trapezium, label =\"" << th.name << "\"];\n";
 				for (auto& p : passes) {
 					if (contains(p.pass.write_attachments, th))
@@ -158,7 +194,7 @@ void RenderGraph::generate_graph_visualization() {
 		for (auto& gi : tracked) {
 			std::visit(overloaded{
 				// write_buffers -> sync -> sync -> read_buffers
-				[&](Buffer& th) {
+				[&](const Buffer& th) {
 					std::string src_node;
 					Sync sync_out;
 					std::vector<std::pair<std::string, Sync>> dst_nodes;
@@ -182,7 +218,7 @@ void RenderGraph::generate_graph_visualization() {
 						std::cout << current_node << "->" << mlt.first << ":" << name_to_node(th.name) << ";\n";
 					}
 				},
-				[&](Attachment& th) {
+				[&](const Attachment& th) {
 					std::vector<std::string> src_nodes, dst_nodes;
 					for (auto& p : passes) {
 						if (contains(p.pass.write_attachments, th)) {

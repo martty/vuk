@@ -38,6 +38,7 @@ struct Buffer {
 	}
 };
 
+#include <optional>
 #include <functional>
 struct Pass {
 	Name name;
@@ -49,7 +50,7 @@ struct Pass {
 	std::vector<Attachment> write_attachments;
 
 	std::vector<Attachment> color_attachments;
-	std::vector<Attachment> depth_attachments;
+	std::optional<Attachment> depth_attachment;
 
 	std::function<void(struct CommandBuffer&)> execute;
 	//void(*execute)(struct CommandBuffer&);
@@ -78,7 +79,6 @@ namespace vuk {
 	class InflightContext;
 }
 
-#include <optional>
 #include "Cache.hpp"
 struct CommandBuffer {
 	Pass* current_pass;
@@ -231,6 +231,15 @@ struct RenderGraph {
 		size_t render_pass_index;
 		size_t subpass;
 
+		std::unordered_set<io> inputs;
+		std::unordered_set<io> outputs;
+
+		std::unordered_set<io> global_inputs;
+		std::unordered_set<io> global_outputs;
+
+		bool is_head_pass = false;
+		bool is_tail_pass = false;
+
 		bool is_read_attachment(Name n) {
 			return std::find_if(pass.read_attachments.begin(), pass.read_attachments.end(), [&](auto& att) { return att.name == n; }) != pass.read_attachments.end();
 		}
@@ -238,14 +247,33 @@ struct RenderGraph {
 
 	std::vector<PassInfo> passes;
 
+	std::vector<PassInfo*> head_passes;
+	std::vector<PassInfo*> tail_passes;
+
 	struct AttachmentSInfo {
 		vk::ImageLayout layout;
 	};
 
 	struct AttachmentRPInfo {
+		Name name;
 		vk::Extent2D extents;
 		vk::ImageView iv;
 		vk::AttachmentDescription description;
+
+		// sync in
+		// the second half of sync_in is deduced
+		vk::PipelineStageFlagBits srcStage;
+		vk::AccessFlags srcAccess;
+		// sync out
+		// the first half of sync_out is deduced
+		vk::PipelineStageFlagBits dstStage;
+		vk::AccessFlags dstAccess;
+
+		struct Use {
+			vk::PipelineStageFlagBits stage;
+			vk::AccessFlags access;
+			size_t subpass;
+		} first_use, last_use;
 	};
 
 	struct SubpassInfo {
@@ -254,7 +282,7 @@ struct RenderGraph {
 	};
 	struct RenderPassInfo {
 		std::vector<SubpassInfo> subpasses;
-		std::unordered_map<Name, AttachmentRPInfo> attachments;
+		std::vector<AttachmentRPInfo> attachments;
 		vk::RenderPassCreateInfo rpci;
 		vk::FramebufferCreateInfo fbci;
 		vk::RenderPass handle;
@@ -262,47 +290,83 @@ struct RenderGraph {
 	};
 	std::vector<RenderPassInfo> rpis;
 
-	std::vector<io> global_inputs;
-	std::vector<io> global_outputs;
-	std::vector<io> tracked;
 	void add_pass(Pass p) {
 		PassInfo pi;
 		pi.pass = p;
 		passes.push_back(pi);
 	}
 
-	void find_io() {
+	std::unordered_set<io> global_inputs;
+	std::unordered_set<io> global_outputs;
+	std::vector<io> global_io;
+	std::vector<io> tracked;
+
+	// determine rendergraph inputs and outputs, and resources that are neither
+	void build_io() {
 		std::unordered_set<io> inputs;
 		std::unordered_set<io> outputs;
+
 		for (auto& pif : passes) {
-			inputs.insert(pif.pass.read_attachments.begin(), pif.pass.read_attachments.end());
-			outputs.insert(pif.pass.write_attachments.begin(), pif.pass.write_attachments.end());
-			inputs.insert(pif.pass.read_buffers.begin(), pif.pass.read_buffers.end());
-			outputs.insert(pif.pass.write_buffers.begin(), pif.pass.write_buffers.end());
+			pif.inputs.insert(pif.pass.read_attachments.begin(), pif.pass.read_attachments.end());
+			pif.inputs.insert(pif.pass.color_attachments.begin(), pif.pass.color_attachments.end());
+			if (pif.pass.depth_attachment) {
+				pif.inputs.insert(*pif.pass.depth_attachment);
+			}
+			pif.outputs.insert(pif.pass.write_attachments.begin(), pif.pass.write_attachments.end());
+			pif.outputs.insert(pif.pass.color_attachments.begin(), pif.pass.color_attachments.end());
+			if (pif.pass.depth_attachment) {
+				pif.outputs.insert(*pif.pass.depth_attachment);
+			}
+			
+			for (auto& i : pif.inputs) {
+				if (global_outputs.erase(i) == 0) {
+					pif.global_inputs.insert(i);
+				}
+			}
+			for (auto& i : pif.outputs) {
+				if (global_inputs.erase(i) == 0) {
+					pif.global_outputs.insert(i);
+				}
+			}
+
+			global_inputs.insert(pif.global_inputs.begin(), pif.global_inputs.end());
+			global_outputs.insert(pif.global_outputs.begin(), pif.global_outputs.end());
+
+			inputs.insert(pif.inputs.begin(), pif.inputs.end());
+			outputs.insert(pif.outputs.begin(), pif.outputs.end());
 		}
 
-		std::copy_if(inputs.begin(), inputs.end(), std::back_inserter(global_inputs), [&outputs](auto& needle) { return !outputs.contains(needle); });
-		std::copy_if(outputs.begin(), outputs.end(), std::back_inserter(global_outputs), [&inputs](auto& needle) { return !inputs.contains(needle); });
-		std::copy_if(outputs.begin(), outputs.end(), std::back_inserter(tracked), [&inputs](auto& needle) { return inputs.contains(needle); });
+		std::copy_if(outputs.begin(), outputs.end(), std::back_inserter(tracked), [&](auto& needle) { return !global_outputs.contains(needle); });
+		global_io.insert(global_io.end(), global_inputs.begin(), global_inputs.end());
+		global_io.insert(global_io.end(), global_outputs.begin(), global_outputs.end());
+		global_io.erase(std::unique(global_io.begin(), global_io.end()), global_io.end());
 	}
 
 	void build() {
 		// compute sync
 		// find which reads are graph inputs (not produced by any pass) & outputs (not consumed by any pass)
-		find_io();
+		build_io();
 		// sort passes
-		topological_sort(passes.begin(), passes.end(), [](const auto& p1, const auto& p2) {
-			std::unordered_set<io> inputs;
-			std::unordered_set<io> outputs;
-			inputs.insert(p2.pass.read_attachments.begin(), p2.pass.read_attachments.end());
-			outputs.insert(p1.pass.write_attachments.begin(), p1.pass.write_attachments.end());
-			inputs.insert(p2.pass.read_buffers.begin(), p2.pass.read_buffers.end());
-			outputs.insert(p1.pass.write_buffers.begin(), p1.pass.write_buffers.end());
-			for (auto& o : outputs) {
-				if (inputs.contains(o)) return true;
+		if (passes.size() > 1) {
+			topological_sort(passes.begin(), passes.end(), [](const auto& p1, const auto& p2) {
+				for (auto& o : p1.outputs) {
+					if (p2.inputs.contains(o)) return true;
+				}
+				return false;
+				});
+		}
+		// determine which passes are "head" and "tail" -> ones that can execute in the beginning or the end of the RG
+		// -> the ones that only have global io
+		for (auto& p : passes) {
+			if (p.global_inputs.size() == p.inputs.size()) {
+				head_passes.push_back(&p);
+				p.is_head_pass = true;
 			}
-			return false;
-			});
+			if (p.global_outputs.size() == p.outputs.size()) {
+				tail_passes.push_back(&p);
+				p.is_tail_pass = true;
+			}
+		}
 		// go through all inputs and propagate dependencies onto last write pass
 		for (auto& t : tracked) {
 			std::visit(overloaded{
@@ -362,13 +426,12 @@ struct RenderGraph {
 				} }, t);
 		}
 
-
 		// we need to collect passes into framebuffers, which will determine the renderpasses
 		std::vector<std::pair<std::unordered_set<Attachment>, std::vector<PassInfo*>>> attachment_sets;
 		for (auto& passinfo : passes) {
 			std::unordered_set<Attachment> atts;
 			atts.insert(passinfo.pass.color_attachments.begin(), passinfo.pass.color_attachments.end());
-			atts.insert(passinfo.pass.depth_attachments.begin(), passinfo.pass.depth_attachments.end());
+			if(passinfo.pass.depth_attachment) atts.insert(*passinfo.pass.depth_attachment);
 			
 			if (auto p = contains_if(attachment_sets, [&](auto& t) { return t.first == atts; })) {
 				p->second.push_back(&passinfo);
@@ -376,6 +439,7 @@ struct RenderGraph {
 				attachment_sets.emplace_back(atts, std::vector{&passinfo});
 			}
 		}
+
 		// renderpasses are uniquely identified by their index from now on
 		// tell passes in which renderpass/subpass they will execute
 		for (auto& set : attachment_sets) {
@@ -390,18 +454,29 @@ struct RenderGraph {
 				si.pass = p;
 				for (auto& a : p->pass.color_attachments) {
 					si.attachments.emplace(a.name, AttachmentSInfo{vk::ImageLayout::eColorAttachmentOptimal});
+					// TODO: ColorAttachmentRead happens if blending or logicOp
+					if (contains_if(rpi.attachments, [&](auto& att) { return att.name == a.name; })) {
+						// TODO: we want to add all same level passes here, otherwise the other passes might not get the right sync
+					} else {
+						AttachmentRPInfo arpi;
+						arpi.name = a.name;
+						arpi.first_use.access = vk::AccessFlagBits::eColorAttachmentWrite;
+						arpi.first_use.stage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+						arpi.first_use.subpass = subpass - 1;
+
+						rpi.attachments.push_back(arpi);
+					}
 				}
 				rpi.subpasses.push_back(si);
 			}
-
 			rpis.push_back(rpi);
 		}
 
 	}
 
-	std::unordered_map<Name, AttachmentRPInfo> output_attachments;
+	std::unordered_map<Name, AttachmentRPInfo> bound_attachments;
 
-	void bind_output_to_swapchain(Name name, vk::Format format, vk::Extent2D extent, vk::ImageView siv) {
+	void bind_attachment_to_swapchain(Name name, vk::Format format, vk::Extent2D extent, vk::ImageView siv) {
 		AttachmentRPInfo attachment_info;
 		attachment_info.extents = extent;
 		attachment_info.iv = siv;
@@ -414,7 +489,12 @@ struct RenderGraph {
 
 		attachment_info.description.format = format;
 		attachment_info.description.samples = vk::SampleCountFlagBits::e1;
-		output_attachments.emplace(name, attachment_info);
+
+		// for WSI, we want to wait for colourattachmentoutput
+		attachment_info.srcStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+		// we don't care about any writes, we will clear
+		attachment_info.srcAccess = vk::AccessFlags{};
+		bound_attachments.emplace(name, attachment_info);
 	}
 
 	void build(vuk::InflightContext&);
