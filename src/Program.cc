@@ -48,6 +48,7 @@ bool Program::load_source(const std::string& per_pass_glsl) {
 		auto source = slurp(shader);
 		shaderc::SpvCompilationResult module = compiler.CompileGlslToSpv(source, shaderc_glsl_infer_from_source, shader.c_str(), options);
 		if (module.GetCompilationStatus() != shaderc_compilation_status_success) {
+			printf("%s", module.GetErrorMessage().c_str());
 			//Platform::log->error("%s", module.GetErrorMessage().c_str());
 			return false;
 		} else {
@@ -79,6 +80,7 @@ void Program::link(vk::Device device) {
 		auto module = device.createShaderModule(moduleCreateInfo);
 		modules[stage] = module;
 		vk::PipelineShaderStageCreateInfo shaderStage;
+		shaderStage.pSpecializationInfo = nullptr;
 		shaderStage.stage = stage;
 		shaderStage.module = module;
 		shaderStage.pName = "main"; // todo : make param

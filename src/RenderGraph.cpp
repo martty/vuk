@@ -170,6 +170,23 @@ namespace vuk {
 						rpi.attachments.push_back(arpi);
 					}
 				}
+				if (p->pass.depth_attachment) {
+					auto& a = *p->pass.depth_attachment;
+					si.attachments.emplace(a.name, AttachmentSInfo{ vk::ImageLayout::eDepthStencilAttachmentOptimal });
+					// TODO: ColorAttachmentRead happens if blending or logicOp
+					if (contains_if(rpi.attachments, [&](auto& att) { return att.name == a.name; })) {
+						// TODO: we want to add all same level passes here, otherwise the other passes might not get the right sync
+					} else {
+						AttachmentRPInfo arpi;
+						arpi.name = a.name;
+						arpi.first_use.access = vk::AccessFlagBits::eDepthStencilAttachmentRead | vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+						arpi.first_use.stage = vk::PipelineStageFlagBits::eEarlyFragmentTests;
+						arpi.first_use.subpass = subpass - 1;
+
+						rpi.attachments.push_back(arpi);
+					}
+
+				}
 				rpi.subpasses.push_back(si);
 			}
 			rpis.push_back(rpi);
@@ -191,6 +208,7 @@ namespace vuk {
 		attachment_info.description.format = format;
 		attachment_info.description.samples = vk::SampleCountFlagBits::e1;
 
+		attachment_info.is_external = true;
 		// for WSI, we want to wait for colourattachmentoutput
 		attachment_info.srcStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
 		// we don't care about any writes, we will clear
@@ -198,13 +216,32 @@ namespace vuk {
 		bound_attachments.emplace(name, attachment_info);
 	}
 
+	void RenderGraph::mark_attachment_internal(Name name, vk::Format format, vk::Extent2D extent) {
+		AttachmentRPInfo attachment_info;
+		attachment_info.extents = extent;
+		attachment_info.iv = vk::ImageView{};
+		attachment_info.is_external = false;
+		// internal attachment, discard contents
+		attachment_info.description.initialLayout = vk::ImageLayout::eUndefined;
+		
+		//attachment_info.description.finalLayout = vk::ImageLayout::ePresentSrcKHR;
+		attachment_info.description.loadOp = vk::AttachmentLoadOp::eClear;
+		attachment_info.description.storeOp = vk::AttachmentStoreOp::eDontCare;
+
+		attachment_info.description.format = format;
+
+		bound_attachments.emplace(name, attachment_info);
+	}
+
 	void RenderGraph::build(vuk::InflightContext& ifc) {
 		// output attachments have an initial layout of eUndefined (loadOp: clear or dontcare, storeOp: store)
 		for (auto& [name, attachment_info] : bound_attachments) {
+			if (!attachment_info.is_external) continue;
 			// get the first pass this attachment is used
 			auto pass = contains_if(passes, [&](auto& pi) {
 				auto& p = pi.pass;
 				if (contains_if(p.color_attachments, [&](auto& att) { return att.name == name; })) return true;
+				if (p.depth_attachment && p.depth_attachment->name == name) return true;
 				return false;
 				});
 			// in the renderpass this pass participates in, we want to fill in the info for the attachment
@@ -224,27 +261,86 @@ namespace vuk {
 		// inout attachments
 		// loadOp: load, storeOp: store
 
-		// -- transient attachments --
+		// -- transient fb attachments --
+		// perform allocation
+		for (auto& [name, attachment_info] : bound_attachments) {
+			if (attachment_info.is_external) continue;
+			// get the first pass this attachment is used
+			auto pass = contains_if(passes, [&](auto& pi) {
+				auto& p = pi.pass;
+				if (contains_if(p.color_attachments, [&](auto& att) { return att.name == name; })) return true;
+				if (p.depth_attachment && p.depth_attachment->name == name) return true;
+				return false;
+				});
+			assert(pass);
+			auto& dst = *contains_if(rpis[pass->render_pass_index].attachments, [&](auto& att) {return att.name == name; });
+			dst.description = attachment_info.description;
+			// TODO: this should match last use
+			dst.description.finalLayout = vk::ImageLayout::eGeneral;
+			dst.extents = attachment_info.extents;
+
+			vk::ImageCreateInfo ici;
+			ici.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment;
+			ici.arrayLayers = 1;
+			ici.extent = vk::Extent3D(dst.extents, 1);
+			ici.imageType = vk::ImageType::e2D;
+			ici.format = vk::Format::eD32Sfloat;
+			ici.mipLevels = 1;
+			ici.initialLayout = vk::ImageLayout::eUndefined;
+			ici.samples = vk::SampleCountFlagBits::e1;
+			ici.sharingMode = vk::SharingMode::eExclusive;
+			ici.tiling = vk::ImageTiling::eOptimal;
+
+			vk::ImageViewCreateInfo ivci;
+			ivci.image = vk::Image{};
+			ivci.format = dst.description.format;
+			ivci.viewType = vk::ImageViewType::e2D;
+			vk::ImageSubresourceRange isr;
+			isr.aspectMask = vk::ImageAspectFlagBits::eDepth;
+			isr.baseArrayLayer = 0;
+			isr.layerCount = 1;
+			isr.baseMipLevel = 0;
+			isr.levelCount = 1;
+			ivci.subresourceRange = isr;
+
+			RGCI rgci;
+			rgci.ici = ici;
+			rgci.ivci = ivci;
+			
+			auto rg = ifc.transient_images.acquire(rgci);
+			dst.iv = rg.image_view;
+		}
 
 		// we now have enough data to build vk::RenderPasses and vk::Framebuffers
 		for (auto& rp : rpis) {
 			// subpasses
 			std::vector<vk::SubpassDescription> subp;
-			std::vector<vk::AttachmentReference> attrefs;
+			std::vector<vk::AttachmentReference> color_attrefs;
 			std::vector<size_t> offsets;
-			for (auto& s : rp.subpasses) {
+			std::vector<std::optional<vk::AttachmentReference>> ds_attrefs;
+			ds_attrefs.resize(rp.subpasses.size());
+			for (size_t i = 0; i < rp.subpasses.size(); i++) {
+				auto& s = rp.subpasses[i];
 				for (auto& [name, att] : s.attachments) {
 					vk::AttachmentReference attref;
 					attref.layout = att.layout;
 					attref.attachment = std::distance(rp.attachments.begin(), std::find_if(rp.attachments.begin(), rp.attachments.end(), [&](auto& att) { return name == att.name; }));
-					attrefs.push_back(attref);
+
+					if (att.layout != vk::ImageLayout::eColorAttachmentOptimal) {
+						if (att.layout == vk::ImageLayout::eDepthStencilAttachmentOptimal) {
+							ds_attrefs[i] = attref;
+						}
+					} else {
+						color_attrefs.push_back(attref);
+					}
 				}
-				offsets.push_back(attrefs.size());
+				offsets.push_back(color_attrefs.size());
 			}
 			for (size_t i = 0; i < rp.subpasses.size(); i++) {
 				vk::SubpassDescription sd;
 				sd.colorAttachmentCount = offsets[i] - (i > 0 ? offsets[i - 1] : 0);
-				sd.pColorAttachments = attrefs.data() + (i > 0 ? offsets[i - 1] : 0);
+				sd.pColorAttachments = color_attrefs.data() + (i > 0 ? offsets[i - 1] : 0);
+				sd.pDepthStencilAttachment = ds_attrefs[i] ? &*ds_attrefs[i] : nullptr;
 				subp.push_back(sd);
 			}
 			rp.rpci.pSubpasses = subp.data();
@@ -254,7 +350,7 @@ namespace vuk {
 			for (auto& s : rp.subpasses) {
 				if (s.pass->is_head_pass) {
 					for (auto& attrpinfo : rp.attachments) {
-						if (attrpinfo.first_use.subpass == s.pass->subpass) {
+						if (attrpinfo.first_use.subpass == s.pass->subpass && attrpinfo.is_external) {
 							vk::SubpassDependency dep_in;
 							dep_in.srcSubpass = VK_SUBPASS_EXTERNAL;
 							dep_in.dstSubpass = s.pass->subpass;
@@ -276,18 +372,20 @@ namespace vuk {
 
 			// attachments
 			std::vector<vk::AttachmentDescription> atts;
+			std::vector<vk::ImageView> ivs;
 			for (auto& attrpinfo : rp.attachments) {
 				atts.push_back(attrpinfo.description);
+				ivs.push_back(attrpinfo.iv);
 			}
 			rp.rpci.attachmentCount = atts.size();
 			rp.rpci.pAttachments = atts.data();
 
 			rp.handle = ifc.renderpass_cache.acquire(rp.rpci);
-			rp.fbci.attachmentCount = rp.attachments.size();
 			rp.fbci.renderPass = rp.handle;
 			rp.fbci.width = rp.attachments[0].extents.width;
 			rp.fbci.height = rp.attachments[0].extents.height;
-			rp.fbci.pAttachments = &rp.attachments[0].iv;
+			rp.fbci.pAttachments = &ivs[0];
+			rp.fbci.attachmentCount = ivs.size();
 			rp.fbci.layers = 1;
 			rp.framebuffer = ifc.ctx.device.createFramebuffer(rp.fbci);
 		}
@@ -307,12 +405,20 @@ namespace vuk {
 			vk::RenderPassBeginInfo rbi;
 			rbi.renderPass = rpass.handle;
 			rbi.framebuffer = rpass.framebuffer;
-			rbi.clearValueCount = 1; // TODO
 			vk::ClearColorValue ccv;
 			ccv.setFloat32({ 0.3f, 0.3f, 0.3f, 1.f });
 			vk::ClearValue cv;
 			cv.setColor(ccv);
-			rbi.pClearValues = &cv;
+			vk::ClearDepthStencilValue cdv;
+			cdv.depth = 1.f;
+			cdv.stencil = 0;
+			vk::ClearValue cv2;
+			cv2.setDepthStencil(cdv);
+			std::vector<vk::ClearValue> clears;
+			clears.push_back(cv);
+			clears.push_back(cv2);
+			rbi.pClearValues = clears.data();
+			rbi.clearValueCount = clears.size(); // TODO
 			cbuf.beginRenderPass(rbi, vk::SubpassContents::eInline);
 			for (size_t i = 0; i < rpass.subpasses.size(); i++) {
 				auto& sp = rpass.subpasses[i];

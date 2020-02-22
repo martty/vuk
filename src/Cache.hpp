@@ -137,6 +137,18 @@ namespace std {
 
 namespace std {
 	template <>
+	struct hash<vk::Extent3D> {
+		size_t operator()(vk::Extent3D const& x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, x.width, x.height, x.depth);
+			return h;
+		}
+	};
+};
+
+
+namespace std {
+	template <>
 	struct hash<vk::Offset2D> {
 		size_t operator()(vk::Offset2D const& x) const noexcept {
 			size_t h = 0;
@@ -295,7 +307,54 @@ namespace std {
 	template <>
 	struct hash<vk::RenderPassCreateInfo> {
 		size_t operator()(vk::RenderPassCreateInfo const & x) const noexcept {
-			return x.attachmentCount; // kek
+			return x.attachmentCount; // TODO: ...
+		}
+	};
+};
+
+namespace std {
+	template <>
+	struct hash<vk::ImageCreateInfo> {
+		size_t operator()(vk::ImageCreateInfo const & x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, x.flags, x.arrayLayers, x.extent, to_integral(x.format), to_integral(x.imageType), to_integral(x.initialLayout), x.mipLevels, gsl::span(x.pQueueFamilyIndices, x.queueFamilyIndexCount), to_integral(x.samples), to_integral(x.sharingMode), to_integral(x.tiling), x.usage);
+			return h;
+		}
+	};
+};
+
+namespace std {
+	template <>
+	struct hash<vk::ImageSubresourceRange> {
+		size_t operator()(vk::ImageSubresourceRange const& x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, x.aspectMask, x.baseArrayLayer, x.baseMipLevel, x.layerCount, x.levelCount);
+			return h;
+		}
+	};
+};
+
+namespace std {
+	template <>
+	struct hash<vk::ComponentMapping> {
+		size_t operator()(vk::ComponentMapping const& x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, to_integral(x.r), to_integral(x.g), to_integral(x.b), to_integral(x.a));
+			return h;
+		}
+	};
+};
+
+
+namespace std {
+	template <>
+	struct hash<vk::ImageViewCreateInfo> {
+		size_t operator()(vk::ImageViewCreateInfo const & x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, x.flags, x.components, to_integral(x.format), 
+				reinterpret_cast<uint64_t>((VkImage)x.image),
+				x.subresourceRange, to_integral(x.viewType));
+			return h;
 		}
 	};
 };
@@ -340,9 +399,39 @@ namespace vuk {
 
 		struct View {
 			InflightContext& ifc;
-			Cache<T>& cache;
+			Cache& cache;
 
 			View(InflightContext& ifc, Cache<T>& cache) : ifc(ifc), cache(cache) {}
+			T acquire(create_info_t<T> ci);
+			void collect(size_t threshold);
+		};
+	};
+
+	template<class T, size_t FC>
+	struct PerFrameCache {
+		struct LRUEntry {
+			T* ptr;
+			unsigned last_use_frame;
+		};
+
+		Context& ctx;
+		struct PerFrame {
+			plf::colony<T> pool;
+			// possibly vector_map or an intrusive map
+			std::unordered_map<create_info_t<T>, LRUEntry> lru_map;
+
+			std::shared_mutex cache_mtx;
+		};
+		std::array<PerFrame, FC> data;
+
+		PerFrameCache(Context& ctx) : ctx(ctx) {}
+		~PerFrameCache();
+
+		struct View {
+			InflightContext& ifc;
+			PerFrameCache& cache;
+
+			View(InflightContext& ifc, PerFrameCache& cache) : ifc(ifc), cache(cache) {}
 			T acquire(create_info_t<T> ci);
 			void collect(size_t threshold);
 		};

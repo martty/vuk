@@ -43,6 +43,7 @@ VkSurfaceKHR create_surface_glfw(VkInstance instance, GLFWwindow* window){
 #include "Context.hpp"
 #include "Cache.hpp"
 #include "RenderGraph.hpp"
+#include "Allocator.hpp"
 
 void device_init() {
 	vkb::InstanceBuilder builder;
@@ -89,71 +90,90 @@ void device_init() {
 			vkb::SwapchainBuilder swb(vkbdevice);
 			auto vkswapchain = swb.build();
 			vk::SwapchainKHR swapchain = vkswapchain->swapchain;
-			vk::AttachmentReference attachmentReference = { 0, vk::ImageLayout::eColorAttachmentOptimal };
+
+		
+			/*VmaAllocationCreateInfo vaci;
+			vaci.pool = pool;
+			vaci.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
+			VmaAllocation res;
+			VmaAllocationInfo vai;
+			vmaAllocateMemory(allocator, &memrq, &vaci, &res, &vai);
+			VmaAllocation res2;
+			VmaAllocationInfo vai2;
+			vmaAllocateMemory(allocator, &memrq, &vaci, &res2, &vai2);
+			vmaFreeMemory(allocator, res);
+			vmaAllocateMemory(allocator, &memrq, &vaci, &res, &vai);
+			vmaFreeMemory(allocator, res);
+			vmaFreeMemory(allocator, res2);*/
 			{
-				vuk::Context context(device);
-				// Subpass containing first draw
-				vk::SubpassDescription subpass;
-				subpass.colorAttachmentCount = 1;
-				subpass.pColorAttachments = &attachmentReference;
-
-				vk::SubpassDependency dependency;
-				dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-				dependency.dstSubpass = 0;
-				// .srcStageMask needs to be a part of pWaitDstStageMask in the WSI semaphore.
-				dependency.srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-				dependency.dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-				dependency.srcAccessMask = vk::AccessFlags{};
-				dependency.dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
-
-				vk::AttachmentDescription attachmentDescription;
-				attachmentDescription.format = vk::Format(vkswapchain->image_format);
-				attachmentDescription.loadOp = vk::AttachmentLoadOp::eClear;
-				attachmentDescription.storeOp = vk::AttachmentStoreOp::eStore;
-				// The image will automatically be transitioned from UNDEFINED to COLOR_ATTACHMENT_OPTIMAL for rendering, then out to PRESENT_SRC_KHR at the end.
-				attachmentDescription.initialLayout = vk::ImageLayout::eUndefined;
-				// Presenting images in Vulkan requires a special layout.
-				attachmentDescription.finalLayout = vk::ImageLayout::ePresentSrcKHR;
-
-				vk::RenderPassCreateInfo rpci;
-				rpci.attachmentCount = 1;
-				rpci.pAttachments = &attachmentDescription;
-				rpci.subpassCount = 1;
-				rpci.pSubpasses = &subpass;
-				rpci.dependencyCount = 1;
-				rpci.pDependencies = &dependency;
-				
+				vuk::Context context(device, physical_device.phys_device);
+							
 				{
-					vk::GraphicsPipelineCreateInfo gpci;
-					gpci.stageCount = 2;
-					Program prog;
-					prog.shaders.push_back("../../triangle.vert");
-					prog.shaders.push_back("../../triangle.frag");
-					prog.compile("");
-					prog.link(device);
-					Pipeline pipe(&prog);
-					pipe.descriptorSetLayout = device.createDescriptorSetLayout(pipe.descriptorLayout);
-					pipe.pipelineLayoutCreateInfo.pSetLayouts = &pipe.descriptorSetLayout;
-					pipe.pipelineLayoutCreateInfo.setLayoutCount = 1;
-					pipe.pipelineLayout = device.createPipelineLayout(pipe.pipelineLayoutCreateInfo);
-					gpci.layout = pipe.pipelineLayout;
-					gpci.stageCount = prog.pipeline_shader_stage_CIs.size();
-					gpci.pStages = prog.pipeline_shader_stage_CIs.data();
-					gpci.pVertexInputState = &pipe.inputState;
-					pipe.inputAssemblyState.topology = vk::PrimitiveTopology::eTriangleList;
-					gpci.pInputAssemblyState = &pipe.inputAssemblyState;
-					pipe.rasterizationState.lineWidth = 1.f;
-					gpci.pRasterizationState = &pipe.rasterizationState;
-					pipe.colorBlendState.attachmentCount = 1;
-					vk::PipelineColorBlendAttachmentState pcba;
-					pcba.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
-					pipe.colorBlendState.pAttachments = &pcba;
-					gpci.pColorBlendState = &pipe.colorBlendState;
-					gpci.pMultisampleState = &pipe.multisampleState;
-					gpci.pViewportState = &pipe.viewportState;
-					gpci.pDepthStencilState = &pipe.depthStencilState;
-					gpci.pDynamicState = &pipe.dynamicState;
-					context.named_pipelines.emplace("triangle", gpci);
+					{
+						vk::GraphicsPipelineCreateInfo gpci;
+						Program* prog = new Program;
+						prog->shaders.push_back("../../triangle.vert");
+						prog->shaders.push_back("../../triangle.frag");
+						prog->compile("");
+						prog->link(device);
+						Pipeline* pipe = new Pipeline(prog);
+						pipe->descriptorSetLayout = device.createDescriptorSetLayout(pipe->descriptorLayout);
+						pipe->pipelineLayoutCreateInfo.pSetLayouts = &pipe->descriptorSetLayout;
+						pipe->pipelineLayoutCreateInfo.setLayoutCount = 1;
+						pipe->pipelineLayout = device.createPipelineLayout(pipe->pipelineLayoutCreateInfo);
+						gpci.layout = pipe->pipelineLayout;
+						gpci.stageCount = prog->pipeline_shader_stage_CIs.size();
+						gpci.pStages = prog->pipeline_shader_stage_CIs.data();
+						gpci.pVertexInputState = &pipe->inputState;
+						pipe->inputAssemblyState.topology = vk::PrimitiveTopology::eTriangleList;
+						gpci.pInputAssemblyState = &pipe->inputAssemblyState;
+						pipe->rasterizationState.lineWidth = 1.f;
+						gpci.pRasterizationState = &pipe->rasterizationState;
+						pipe->colorBlendState.attachmentCount = 1;
+						vk::PipelineColorBlendAttachmentState pcba;
+						pcba.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
+						pipe->colorBlendState.pAttachments = &pcba;
+						gpci.pColorBlendState = &pipe->colorBlendState;
+						gpci.pMultisampleState = &pipe->multisampleState;
+						gpci.pViewportState = &pipe->viewportState;
+						gpci.pDepthStencilState = &pipe->depthStencilState;
+						gpci.pDynamicState = &pipe->dynamicState;
+						context.named_pipelines.emplace("triangle", gpci);
+					}
+					{
+						vk::GraphicsPipelineCreateInfo gpci;
+						Program* prog = new Program();
+						prog->shaders.push_back("../../cube.vert");
+						prog->shaders.push_back("../../triangle.frag");
+						prog->compile("");
+						prog->link(device);
+						Pipeline* pipe = new Pipeline(prog);
+						pipe->descriptorSetLayout = device.createDescriptorSetLayout(pipe->descriptorLayout);
+						pipe->pipelineLayoutCreateInfo.pSetLayouts = &pipe->descriptorSetLayout;
+						pipe->pipelineLayoutCreateInfo.setLayoutCount = 1;
+						pipe->pipelineLayout = device.createPipelineLayout(pipe->pipelineLayoutCreateInfo);
+						gpci.layout = pipe->pipelineLayout;
+						gpci.stageCount = prog->pipeline_shader_stage_CIs.size();
+						gpci.pStages = prog->pipeline_shader_stage_CIs.data();
+						gpci.pVertexInputState = &pipe->inputState;
+						pipe->inputAssemblyState.topology = vk::PrimitiveTopology::eTriangleList;
+						gpci.pInputAssemblyState = &pipe->inputAssemblyState;
+						pipe->rasterizationState.lineWidth = 1.f;
+						gpci.pRasterizationState = &pipe->rasterizationState;
+						pipe->colorBlendState.attachmentCount = 1;
+						vk::PipelineColorBlendAttachmentState pcba;
+						pcba.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
+						pipe->colorBlendState.pAttachments = &pcba;
+						gpci.pColorBlendState = &pipe->colorBlendState;
+						gpci.pMultisampleState = &pipe->multisampleState;
+						gpci.pViewportState = &pipe->viewportState;
+						pipe->depthStencilState.depthWriteEnable = true;
+						pipe->depthStencilState.depthCompareOp = vk::CompareOp::eAlways;
+						pipe->depthStencilState.depthTestEnable = true;
+						gpci.pDepthStencilState = &pipe->depthStencilState;
+						gpci.pDynamicState = &pipe->dynamicState;
+						context.named_pipelines.emplace("cube", gpci);
+					}
 
 					auto swapimages = vkb::get_swapchain_images(*vkswapchain);
 					auto swapimageviews = *vkb::get_swapchain_image_views(*vkswapchain, *swapimages);
@@ -176,23 +196,33 @@ void device_init() {
 						auto index = acq_result.value;
 
 						vuk::RenderGraph rg;
-						rg.add_pass({
-							//.read_attachment .write_attachments /* does not set framebuffer */
-							// if framebuffer is not set, then the pass is considered to be outside a renderpass
-							.color_attachments = {{"SWAPCHAIN"}}, /* sets framebuffer */
-							//.depth_attachments = {}, /* sets framebuffer */
+						/*rg.add_pass({
+							.color_attachments = {{"SWAPCHAIN"}},
 							.execute = [&](vuk::CommandBuffer& command_buffer) {
 								command_buffer
 								  .set_viewport(vk::Viewport(0, 480, 640, -1.f * 480, 0.f, 1.f))
 								  .set_scissor(vk::Rect2D({ 0,0 }, { 640, 480 }))
-								  //.bind_pipeline(gpci)
 								  .bind_pipeline("triangle")
 								  .draw(3, 1, 0, 0);
 							  }
 							}
+						);*/
+						rg.add_pass({
+							.color_attachments = {{"SWAPCHAIN"}}, 
+							.depth_attachment = Attachment{"depth"},
+							.execute = [&](vuk::CommandBuffer& command_buffer) {
+								command_buffer
+								  .set_viewport(vk::Viewport(0, 480, 640, -1.f * 480, 0.f, 1.f))
+								  .set_scissor(vk::Rect2D({ 0,0 }, { 640, 480 }))
+								  .bind_pipeline("cube")
+								  .draw(36, 1, 0, 0);
+							  }
+							}
 						);
+
 						rg.build();
 						rg.bind_attachment_to_swapchain("SWAPCHAIN", vk::Format(vkswapchain->image_format), vkswapchain->extent, swapimageviews[index]);
+						rg.mark_attachment_internal("depth", vk::Format::eD32Sfloat, vkswapchain->extent);
 						rg.build(ictx);
 						auto cb = rg.execute(ictx);
 
@@ -216,11 +246,15 @@ void device_init() {
 						graphics_queue.presentKHR(pi);
 						graphics_queue.waitIdle();
 					}
+					for (auto& swiv : swapimageviews) {
+						device.destroy(swiv);
+					}
 				}
 			}
+			vkb::destroy_swapchain(*vkswapchain);
 			vkDestroySurfaceKHR(inst.instance, surface, nullptr);
 			destroy_window_glfw(window);
-			vkb::destroy_device(dev_ret.value());
+			vkb::destroy_device(*dev_ret);
 			vkb::destroy_instance(inst);
 }
 

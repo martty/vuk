@@ -39,12 +39,17 @@ target_sources(vuk PUBLIC src/main.cpp
 	src/Cache.cpp
 	src/Hash.hpp
 	src/RenderGraph.hpp
-	 "src/RenderGraph.cpp")
+	src/RenderGraph.cpp 
+	src/VMA.cpp
+	src/Allocator.hpp
+	src/Allocator.cpp
+	)
 
 target_include_directories(vuk PUBLIC include ext/mapbox-variant/include)
 target_include_directories(vuk PUBLIC ext/shaderc/libshaderc/include)
 target_include_directories(vuk PUBLIC ${Vulkan_INCLUDE_DIRS})
 target_include_directories(vuk PUBLIC ext/plf_colony)
+target_include_directories(vuk PUBLIC ext/VulkanMemoryAllocator/src)
 
 target_compile_options(vuk PRIVATE /W3 /MP /bigobj /std:c++latest /permissive- /EHa /GT)
 target_compile_options(vuk PUBLIC /Zc:char8_t-)

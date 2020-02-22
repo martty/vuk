@@ -128,7 +128,7 @@ namespace vuk {
 
 		CommandBuffer& bind_pipeline(Name p);
 
-		CommandBuffer& draw(uint32_t a, uint32_t b, uint32_t c, uint32_t d);
+		CommandBuffer& draw(uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance);
 	};
 }
 
@@ -272,6 +272,8 @@ namespace vuk {
 			vk::PipelineStageFlagBits dstStage;
 			vk::AccessFlags dstAccess;
 
+			bool is_external = false;
+
 			struct Use {
 				vk::PipelineStageFlagBits stage;
 				vk::AccessFlags access;
@@ -309,14 +311,16 @@ namespace vuk {
 
 		void build();
 
+		// RGscaffold
 		std::unordered_map<Name, AttachmentRPInfo> bound_attachments;
-
 		void bind_attachment_to_swapchain(Name name, vk::Format format, vk::Extent2D extent, vk::ImageView siv);
+		void mark_attachment_internal(Name, vk::Format, vk::Extent2D);
 
+		// RG
 		void build(vuk::InflightContext&);
-
 		vk::CommandBuffer execute(vuk::InflightContext&);
 
+		// debug
 		void generate_graph_visualization();
 	};
 }
