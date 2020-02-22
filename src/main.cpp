@@ -177,14 +177,7 @@ void device_init() {
 
 					auto swapimages = vkb::get_swapchain_images(*vkswapchain);
 					auto swapimageviews = *vkb::get_swapchain_image_views(*vkswapchain, *swapimages);
-					auto swapChainImages = device.getSwapchainImagesKHR(swapchain);
-					vk::ImageViewCreateInfo colorAttachmentView;
-					colorAttachmentView.format = vk::Format(vkswapchain->image_format);
-					colorAttachmentView.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
-					colorAttachmentView.subresourceRange.levelCount = 1;
-					colorAttachmentView.subresourceRange.layerCount = 1;
-					colorAttachmentView.viewType = vk::ImageViewType::e2D;
-
+				
 					while (!glfwWindowShouldClose(window)) {
 						glfwPollEvents();
 						auto ictx = context.begin();
