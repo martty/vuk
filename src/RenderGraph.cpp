@@ -216,7 +216,7 @@ namespace vuk {
 		// directly presented
 		attachment_info.description.finalLayout = vk::ImageLayout::ePresentSrcKHR;
 		attachment_info.description.loadOp = vk::AttachmentLoadOp::eClear;
-		attachment_info.description.storeOp = vk::AttachmentStoreOp::eDontCare;
+		attachment_info.description.storeOp = vk::AttachmentStoreOp::eStore;
 
 		attachment_info.description.format = format;
 		attachment_info.description.samples = vk::SampleCountFlagBits::e1;
@@ -239,7 +239,7 @@ namespace vuk {
 		
 		//attachment_info.description.finalLayout = vk::ImageLayout::ePresentSrcKHR;
 		attachment_info.description.loadOp = vk::AttachmentLoadOp::eClear;
-		attachment_info.description.storeOp = vk::AttachmentStoreOp::eStore;
+		attachment_info.description.storeOp = vk::AttachmentStoreOp::eDontCare;
 
 		attachment_info.description.format = format;
 
