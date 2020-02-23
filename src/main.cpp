@@ -44,6 +44,48 @@ VkSurfaceKHR create_surface_glfw(VkInstance instance, GLFWwindow* window){
 #include "Cache.hpp"
 #include "RenderGraph.hpp"
 #include "Allocator.hpp"
+#include "CommandBuffer.hpp"
+#include <glm/glm.hpp>
+#include <glm/gtx/quaternion.hpp>
+
+using glm::vec3;
+std::pair<std::vector<vec3>, std::vector<unsigned>> make_box(vec3 min, vec3 max) {
+	std::pair<std::vector<vec3>, std::vector<unsigned>> out;
+	out.first = {
+		// front
+		{min.x, min.y, max.z},
+		{max.x, min.y, max.z},
+		{max.x, max.y, max.z},
+		{min.x, max.y, max.z},
+		// back
+		{min.x, min.y, min.z},
+		{max.x, min.y, min.z},
+		{max.x, max.y, min.z},
+		{min.x, max.y, min.z}
+	};
+	out.second = {
+		// front
+		0, 1, 2,
+		2, 3, 0,
+		// top
+		1, 5, 6,
+		6, 2, 1,
+		// back
+		7, 6, 5,
+		5, 4, 7,
+		// bottom
+		4, 0, 3,
+		3, 7, 4,
+		// left
+		4, 5, 1,
+		1, 0, 4,
+		// right
+		3, 2, 6,
+		6, 7, 3,
+	};
+
+	return out;
+}
 
 void device_init() {
 	vkb::InstanceBuilder builder;
@@ -107,7 +149,7 @@ void device_init() {
 			vmaFreeMemory(allocator, res2);*/
 			{
 				vuk::Context context(device, physical_device.phys_device);
-							
+				context.graphics_queue = graphics_queue;
 				{
 					{
 						vk::GraphicsPipelineCreateInfo gpci;
@@ -175,8 +217,61 @@ void device_init() {
 						context.named_pipelines.emplace("cube", gpci);
 					}
 
+					{
+						vk::GraphicsPipelineCreateInfo gpci;
+						Program* prog = new Program();
+						prog->shaders.push_back("../../vertex_attribute_test.vert");
+						prog->shaders.push_back("../../triangle.frag");
+						prog->compile("");
+						prog->link(device);
+						Pipeline* pipe = new Pipeline(prog);
+						pipe->descriptorSetLayout = device.createDescriptorSetLayout(pipe->descriptorLayout);
+						pipe->pipelineLayoutCreateInfo.pSetLayouts = &pipe->descriptorSetLayout;
+						pipe->pipelineLayoutCreateInfo.setLayoutCount = 1;
+						pipe->pipelineLayout = device.createPipelineLayout(pipe->pipelineLayoutCreateInfo);
+						gpci.layout = pipe->pipelineLayout;
+						gpci.stageCount = prog->pipeline_shader_stage_CIs.size();
+						gpci.pStages = prog->pipeline_shader_stage_CIs.data();
+						vk::VertexInputAttributeDescription viad;
+						viad.binding = 0;
+						viad.format = vk::Format::eR32G32B32Sfloat;
+						viad.location = 0;
+						viad.offset = 0;
+						pipe->attributeDescriptions.push_back(viad);
+						pipe->inputState.vertexAttributeDescriptionCount = pipe->attributeDescriptions.size();
+						pipe->inputState.pVertexAttributeDescriptions = pipe->attributeDescriptions.data();
+						vk::VertexInputBindingDescription vibd;
+						vibd.binding = 0;
+						vibd.inputRate = vk::VertexInputRate::eVertex;
+						vibd.stride = sizeof(vec3);
+						pipe->bindingDescriptions.push_back(vibd);
+						pipe->inputState.vertexBindingDescriptionCount = pipe->bindingDescriptions.size();
+						pipe->inputState.pVertexBindingDescriptions = pipe->bindingDescriptions.data();
+						gpci.pVertexInputState = &pipe->inputState;
+						pipe->inputAssemblyState.topology = vk::PrimitiveTopology::eTriangleList;
+						gpci.pInputAssemblyState = &pipe->inputAssemblyState;
+						pipe->rasterizationState.lineWidth = 1.f;
+						gpci.pRasterizationState = &pipe->rasterizationState;
+						pipe->colorBlendState.attachmentCount = 1;
+						vk::PipelineColorBlendAttachmentState pcba;
+						pcba.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
+						pipe->colorBlendState.pAttachments = &pcba;
+						gpci.pColorBlendState = &pipe->colorBlendState;
+						gpci.pMultisampleState = &pipe->multisampleState;
+						gpci.pViewportState = &pipe->viewportState;
+						pipe->depthStencilState.depthWriteEnable = true;
+						pipe->depthStencilState.depthCompareOp = vk::CompareOp::eLessOrEqual;
+						pipe->depthStencilState.depthTestEnable = true;
+						gpci.pDepthStencilState = &pipe->depthStencilState;
+						gpci.pDynamicState = &pipe->dynamicState;
+						context.named_pipelines.emplace("vatt", gpci);
+					}
+
 					auto swapimages = vkb::get_swapchain_images(*vkswapchain);
 					auto swapimageviews = *vkb::get_swapchain_image_views(*vkswapchain, *swapimages);
+
+					using glm::vec3;
+					float angle = 0.f;
 				
 					while (!glfwWindowShouldClose(window)) {
 						glfwPollEvents();
@@ -200,7 +295,7 @@ void device_init() {
 							  }
 							}
 						);*/
-						rg.add_pass({
+						/*rg.add_pass({
 							.color_attachments = {{"SWAPCHAIN"}}, 
 							.depth_attachment = Attachment{"depth"},
 							.execute = [&](vuk::CommandBuffer& command_buffer) {
@@ -211,7 +306,35 @@ void device_init() {
 								  .draw(36, 1, 0, 0);
 							  }
 							}
+						);*/
+
+						auto box = make_box(vec3(-0.5f), vec3(0.5f));
+						for (auto& v : box.first) {
+							v = vec3(glm::perspective(glm::degrees(70.f), 1.f, 0.1f, 1000.f) * glm::lookAt(vec3(0, 0.1, 1.0), vec3(0), vec3(0,1,0)) * glm::vec4(glm::angleAxis(glm::radians(angle), vec3(0.f, 1.f, 0.f)) * v, 1.f));
+						}
+						angle += 1.f;
+						//if (angle > 360.f) angle -= 360.f;
+						auto verts = pfc.create_buffer(gsl::span(&box.first[0], box.first.size()));
+						auto inds = pfc.create_buffer(gsl::span(&box.second[0], box.second.size()));
+						pfc.dma_task();
+						pfc.dma_task();
+
+
+						rg.add_pass({
+							.color_attachments = {{"SWAPCHAIN"}}, 
+							.depth_attachment = Attachment{"depth"},
+							.execute = [&](vuk::CommandBuffer& command_buffer) {
+								command_buffer
+								  .set_viewport(vk::Viewport(0, 480, 640, -1.f * 480, 0.f, 1.f))
+								  .set_scissor(vk::Rect2D({ 0,0 }, { 640, 480 }))
+								  .bind_pipeline("vatt")
+								  .bind_vertex_buffer(verts)
+								  .bind_index_buffer(inds)
+								  .draw_indexed(box.second.size(), 1, 0, 0, 0);
+							  }
+							}
 						);
+
 
 						rg.build();
 						rg.bind_attachment_to_swapchain("SWAPCHAIN", vk::Format(vkswapchain->image_format), vkswapchain->extent, swapimageviews[index]);

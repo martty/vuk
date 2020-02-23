@@ -2,6 +2,8 @@
 #include "Hash.hpp" // for create
 #include "Cache.hpp"
 #include "Context.hpp"
+#include "CommandBuffer.hpp"
+#include "Allocator.hpp"
 
 namespace vuk {
 	// determine rendergraph inputs and outputs, and resources that are neither
@@ -73,7 +75,7 @@ namespace vuk {
 		// go through all inputs and propagate dependencies onto last write pass
 		for (auto& t : tracked) {
 			std::visit(overloaded{
-				[&](Buffer& th) {
+				[&](::Buffer& th) {
 					// for buffers, we need to track last write (can only be shader_write or transfer_write) + last write queue
 					// if queues are different, we want to put a queue xfer on src and first dst + a semaphore signal on src and semaphore wait on first dst
 					// if queues are the same, we want to put signalEvent on src and waitEvent on first dst OR pbarrier on first dst
@@ -89,9 +91,9 @@ namespace vuk {
 						if (contains(p.pass.write_buffers, th)) {
 							src = &p;
 							write_queue = p.pass.executes_on;
-							write_access = (th.type == Buffer::Type::eStorage || th.type == Buffer::Type::eUniform) ?
+							write_access = (th.type == ::Buffer::Type::eStorage || th.type == ::Buffer::Type::eUniform) ?
 								vk::AccessFlagBits::eShaderWrite : vk::AccessFlagBits::eTransferWrite;
-							write_stage = (th.type == Buffer::Type::eStorage || th.type == Buffer::Type::eUniform) ?
+							write_stage = (th.type == ::Buffer::Type::eStorage || th.type == ::Buffer::Type::eUniform) ?
 								vk::PipelineStageFlagBits::eAllGraphics : vk::PipelineStageFlagBits::eTransfer;
 						}
 
@@ -101,9 +103,9 @@ namespace vuk {
 							// handle a single type of dst queue for now
 							assert(read_queue == "INVALID" || read_queue == p.pass.executes_on);
 							read_queue = p.pass.executes_on;
-							read_access |= (th.type == Buffer::Type::eStorage || th.type == Buffer::Type::eUniform) ?
+							read_access |= (th.type == ::Buffer::Type::eStorage || th.type == ::Buffer::Type::eUniform) ?
 								vk::AccessFlagBits::eShaderRead : vk::AccessFlagBits::eTransferRead;
-							read_stage |= (th.type == Buffer::Type::eStorage || th.type == Buffer::Type::eUniform) ?
+							read_stage |= (th.type == ::Buffer::Type::eStorage || th.type == ::Buffer::Type::eUniform) ?
 								vk::PipelineStageFlagBits::eAllGraphics : vk::PipelineStageFlagBits::eTransfer;
 						}
 					}
@@ -203,7 +205,7 @@ namespace vuk {
 		// directly presented
 		attachment_info.description.finalLayout = vk::ImageLayout::ePresentSrcKHR;
 		attachment_info.description.loadOp = vk::AttachmentLoadOp::eClear;
-		attachment_info.description.storeOp = vk::AttachmentStoreOp::eStore;
+		attachment_info.description.storeOp = vk::AttachmentStoreOp::eDontCare;
 
 		attachment_info.description.format = format;
 		attachment_info.description.samples = vk::SampleCountFlagBits::e1;
@@ -226,7 +228,7 @@ namespace vuk {
 		
 		//attachment_info.description.finalLayout = vk::ImageLayout::ePresentSrcKHR;
 		attachment_info.description.loadOp = vk::AttachmentLoadOp::eClear;
-		attachment_info.description.storeOp = vk::AttachmentStoreOp::eDontCare;
+		attachment_info.description.storeOp = vk::AttachmentStoreOp::eStore;
 
 		attachment_info.description.format = format;
 
@@ -405,6 +407,7 @@ namespace vuk {
 			vk::RenderPassBeginInfo rbi;
 			rbi.renderPass = rpass.handle;
 			rbi.framebuffer = rpass.framebuffer;
+			rbi.renderArea = vk::Rect2D(vk::Offset2D{}, vk::Extent2D{rpass.fbci.width, rpass.fbci.height});
 			vk::ClearColorValue ccv;
 			ccv.setFloat32({ 0.3f, 0.3f, 0.3f, 1.f });
 			vk::ClearValue cv;
@@ -456,7 +459,7 @@ namespace vuk {
 		}
 		for (auto& gi : global_inputs) {
 			std::visit(overloaded{
-			[&](const Buffer& th) {
+			[&](const ::Buffer& th) {
 				std::cout << name_to_node(th.name) << "[shape = invtriangle, label =\"" << th.name << "\"];\n";
 				for (auto& p : passes) {
 					if (contains(p.pass.read_buffers, th))
@@ -475,7 +478,7 @@ namespace vuk {
 
 		for (auto& gi : global_outputs) {
 			std::visit(overloaded{
-			[&](const Buffer& th) {
+			[&](const ::Buffer& th) {
 				std::cout << name_to_node(th.name) << "[shape = triangle, label =\"" << th.name << "\"];\n";
 				for (auto& p : passes) {
 					if (contains(p.pass.write_buffers, th))
@@ -496,7 +499,7 @@ namespace vuk {
 		for (auto& gi : tracked) {
 			std::visit(overloaded{
 				// write_buffers -> sync -> sync -> read_buffers
-				[&](const Buffer& th) {
+				[&](const ::Buffer& th) {
 					std::string src_node;
 					Sync sync_out;
 					std::vector<std::pair<std::string, Sync>> dst_nodes;
@@ -548,6 +551,17 @@ namespace vuk {
 		return *this;
 	}
 
+	CommandBuffer& CommandBuffer::bind_vertex_buffer(Allocator::Buffer& buf) {
+		command_buffer.bindVertexBuffers(0, buf.buffer, buf.offset);
+		return *this;
+	}
+
+	CommandBuffer& CommandBuffer::bind_index_buffer(Allocator::Buffer& buf) {
+		command_buffer.bindIndexBuffer(buf.buffer, buf.offset, vk::IndexType::eUint32);
+		return *this;
+	}
+
+
 	CommandBuffer& CommandBuffer::draw(uint32_t a, uint32_t b, uint32_t c, uint32_t d) {
 		/* flush graphics state */
 		if (next_viewport) {
@@ -568,4 +582,27 @@ namespace vuk {
 		command_buffer.draw(a, b, c, d);
 		return *this;
 	}
+
+	CommandBuffer& CommandBuffer::draw_indexed(uint32_t index_count, uint32_t instance_count, uint32_t first_index, int32_t vertex_offset, uint32_t first_instance) {
+		/* flush graphics state */
+		if (next_viewport) {
+			command_buffer.setViewport(0, *next_viewport);
+			next_viewport = {};
+		}
+		if (next_scissor) {
+			command_buffer.setScissor(0, *next_scissor);
+			next_scissor = {};
+		}
+		if (next_graphics_pipeline) {
+			next_graphics_pipeline->renderPass = ongoing_renderpass->first;
+			next_graphics_pipeline->subpass = ongoing_renderpass->second;
+			command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, ifc.pipeline_cache.acquire(*next_graphics_pipeline));
+			next_graphics_pipeline = {};
+		}
+		/* execute command */
+		command_buffer.drawIndexed(index_count, instance_count, first_index, vertex_offset, first_instance);
+		return *this;
+
+	}
+
 }

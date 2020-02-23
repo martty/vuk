@@ -17,6 +17,20 @@ namespace vuk {
 		return ret;
 	}
 
+	gsl::span<vk::Fence> PooledType<vk::Fence>::acquire(PerThreadContext& ptc, size_t count) {
+		if (values.size() < (needle + count)) {
+			auto remaining = values.size() - needle;
+			for (auto i = 0; i < (count - remaining); i++) {
+				auto nalloc = ptc.ctx.device.createFence({});
+				values.push_back(nalloc);
+			}
+		}
+		gsl::span<vk::Fence> ret{ &*values.begin() + needle, (ptrdiff_t)count };
+		needle += count;
+		return ret;
+	}
+
+
 	template<class T>
 	void PooledType<T>::free(Context& ctx) {
 		for (auto& v : values) {
@@ -25,6 +39,7 @@ namespace vuk {
 	}
 
 	template struct PooledType<vk::Semaphore>;
+	template struct PooledType<vk::Fence>;
 
 	// vk::CommandBuffer pool
 	PooledType<vk::CommandBuffer>::PooledType(Context& ctx) {
