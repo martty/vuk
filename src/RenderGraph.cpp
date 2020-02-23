@@ -54,10 +54,21 @@ namespace vuk {
 		// sort passes
 		if (passes.size() > 1) {
 			topological_sort(passes.begin(), passes.end(), [](const auto& p1, const auto& p2) {
+				bool could_execute_after = false;
+				bool could_execute_before = false;
 				for (auto& o : p1.outputs) {
-					if (p2.inputs.contains(o)) return true;
+					if (p2.inputs.contains(o)) could_execute_after = true;
 				}
-				return false;
+				for (auto& o : p2.outputs) {
+					if (p1.inputs.contains(o)) could_execute_before = true;
+				}
+				if (could_execute_after && could_execute_before) {
+					// TODO: if these are equal, then we will fail
+					return p1.pass.auxiliary_order < p2.pass.auxiliary_order;
+				} else if (could_execute_after) {
+					return true;
+				} else 
+					return false;
 				});
 		}
 		// determine which passes are "head" and "tail" -> ones that can execute in the beginning or the end of the RG
@@ -256,6 +267,7 @@ namespace vuk {
 			dst.srcStage = attachment_info.srcStage;
 			dst.iv = attachment_info.iv;
 			dst.extents = attachment_info.extents;
+			dst.is_external = true;
 		}
 		// do this for input attachments
 		// input attachments have a finallayout matching last use
@@ -280,7 +292,7 @@ namespace vuk {
 			// TODO: this should match last use
 			dst.description.finalLayout = vk::ImageLayout::eGeneral;
 			dst.extents = attachment_info.extents;
-
+			dst.is_external = false;
 			vk::ImageCreateInfo ici;
 			ici.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment;
 			ici.arrayLayers = 1;
@@ -367,7 +379,44 @@ namespace vuk {
 					}
 				}
 			}
-			// TODO: subpass - subpass deps
+			// subpass-subpass deps
+			//
+			for (auto& attrpinfo : rp.attachments) {
+				size_t last_subpass_use_index = -1;
+				for (size_t i = 0; i < rp.subpasses.size(); i++) {
+					auto& s = rp.subpasses[i];
+					if(s.pass->inputs.contains(attrpinfo.name)){
+						if (last_subpass_use_index == -1) {
+							last_subpass_use_index = i;
+							continue;
+						}
+						auto& last_subpass = rp.subpasses[last_subpass_use_index];
+						auto& satt = last_subpass.attachments[attrpinfo.name];
+						auto& catt = s.attachments[attrpinfo.name];
+						vk::SubpassDependency dep;
+						dep.srcSubpass = last_subpass_use_index;
+						dep.dstSubpass = i;
+						if (satt.layout == vk::ImageLayout::eColorAttachmentOptimal) {
+							dep.srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite | vk::AccessFlagBits::eColorAttachmentRead;
+							dep.srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+						} else if (satt.layout == vk::ImageLayout::eDepthStencilAttachmentOptimal) {
+							dep.srcAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentRead | vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+							dep.srcStageMask = vk::PipelineStageFlagBits::eEarlyFragmentTests;
+						}
+						if (catt.layout == vk::ImageLayout::eColorAttachmentOptimal) {
+							dep.dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite | vk::AccessFlagBits::eColorAttachmentRead;
+							dep.dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+						} else if (catt.layout == vk::ImageLayout::eDepthStencilAttachmentOptimal) {
+							dep.dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentRead | vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+							dep.dstStageMask = vk::PipelineStageFlagBits::eEarlyFragmentTests;
+						}
+
+						deps.push_back(dep);
+						last_subpass_use_index = i;
+					}
+				}
+			}
+
 			// TODO: subpass - external
 			rp.rpci.dependencyCount = deps.size();
 			rp.rpci.pDependencies = deps.data();

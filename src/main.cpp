@@ -332,10 +332,34 @@ void device_init() {
 								  .bind_vertex_buffer(verts)
 								  .bind_index_buffer(inds)
 								  .draw_indexed(box.second.size(), 1, 0, 0, 0);
-							  }
+								}
+							}
+						);
+						rg.add_pass({
+							.color_attachments = {{"SWAPCHAIN"}},
+							.depth_attachment = Attachment{"depth"},
+							.execute = [&](vuk::CommandBuffer& command_buffer) {
+								command_buffer
+								  .set_viewport(vk::Viewport(0, 100, 100, -1.f * 100, 0.f, 1.f))
+								  .set_scissor(vk::Rect2D({ 0,0 }, { 100, 100 }))
+								  .bind_pipeline("triangle")
+								  .draw(3, 1, 0, 0);
+								}
 							}
 						);
 
+						rg.add_pass({
+							.color_attachments = {{"SWAPCHAIN"}},
+							.depth_attachment = Attachment{"depth"},
+							.execute = [&](vuk::CommandBuffer& command_buffer) {
+								command_buffer
+								  .set_viewport(vk::Viewport(540, 100, 100, -1.f * 100, 0.f, 1.f))
+								  .set_scissor(vk::Rect2D({ 540,0 }, { 100, 100 }))
+								  .bind_pipeline("triangle")
+								  .draw(3, 1, 0, 0);
+								}
+							}
+						);
 
 						rg.build();
 						rg.bind_attachment_to_swapchain("SWAPCHAIN", vk::Format(vkswapchain->image_format), vkswapchain->extent, swapimageviews[index]);

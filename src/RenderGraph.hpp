@@ -46,6 +46,7 @@ namespace vuk {
 	struct Pass {
 		Name name;
 		Name executes_on;
+		float auxiliary_order = 0.f;
 		std::vector<::Buffer> read_buffers; /* track read */
 		std::vector<::Buffer> write_buffers; /* track write */
 
