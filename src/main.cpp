@@ -221,7 +221,7 @@ void device_init() {
 						vk::GraphicsPipelineCreateInfo gpci;
 						Program* prog = new Program();
 						prog->shaders.push_back("../../vertex_attribute_test.vert");
-						prog->shaders.push_back("../../triangle.frag");
+						prog->shaders.push_back("../../triangle_depthshaded.frag");
 						prog->compile("");
 						prog->link(device);
 						Pipeline* pipe = new Pipeline(prog);
@@ -310,7 +310,8 @@ void device_init() {
 
 						auto box = make_box(vec3(-0.5f), vec3(0.5f));
 						for (auto& v : box.first) {
-							v = vec3(glm::perspective(glm::degrees(70.f), 1.f, 0.1f, 1000.f) * glm::lookAt(vec3(0, 0.1, 1.0), vec3(0), vec3(0,1,0)) * glm::vec4(glm::angleAxis(glm::radians(angle), vec3(0.f, 1.f, 0.f)) * v, 1.f));
+							auto v1 = glm::perspective(glm::degrees(70.f), 1.f, 0.1f, 10.f) * glm::lookAt(vec3(0, 1.0, 1.5), vec3(0), vec3(0,1,0)) * glm::vec4(glm::angleAxis(glm::radians(angle), vec3(0.f, 1.f, 0.f)) * v, 1.f);
+							v = vec3(v1 / v1.w);
 						}
 						angle += 1.f;
 						//if (angle > 360.f) angle -= 360.f;
