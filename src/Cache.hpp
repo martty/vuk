@@ -402,7 +402,7 @@ namespace vuk {
 			Cache& cache;
 
 			View(InflightContext& ifc, Cache<T>& cache) : ifc(ifc), cache(cache) {}
-			T acquire(create_info_t<T> ci);
+			T& acquire(create_info_t<T> ci);
 			void collect(size_t threshold);
 		};
 	};
@@ -432,7 +432,7 @@ namespace vuk {
 			PerFrameCache& cache;
 
 			View(InflightContext& ifc, PerFrameCache& cache) : ifc(ifc), cache(cache) {}
-			T acquire(create_info_t<T> ci);
+			T& acquire(create_info_t<T> ci);
 			void collect(size_t threshold);
 		};
 	};

@@ -3,7 +3,7 @@
 
 namespace vuk {
 	template<class T>
-	T Cache<T>::View::acquire(create_info_t<T> ci) {
+	T& Cache<T>::View::acquire(create_info_t<T> ci) {
 		std::shared_lock _(cache.cache_mtx);
 		if (auto it = cache.lru_map.find(ci); it != cache.lru_map.end()) {
 			it->second.last_use_frame = ifc.frame;
@@ -50,7 +50,7 @@ namespace vuk {
 	}
 
 	template<class T, size_t FC>
-	T PerFrameCache<T, FC>::View::acquire(create_info_t<T> ci) {
+	T& PerFrameCache<T, FC>::View::acquire(create_info_t<T> ci) {
 		auto& data = cache.data[ifc.frame];
 		std::shared_lock _(data.cache_mtx);
 		if (auto it = data.lru_map.find(ci); it != data.lru_map.end()) {
@@ -79,4 +79,5 @@ namespace vuk {
 	}
 
 	template struct PerFrameCache<vuk::RGImage, Context::FC>;
+	template struct PerFrameCache<Allocator::Pool, Context::FC>;
 }

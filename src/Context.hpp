@@ -38,6 +38,13 @@ namespace std {
 	};
 };
 
+namespace vuk {
+	template<> struct create_info<Allocator::Pool> {
+		using type = PoolSelect;
+	};
+
+}
+
 #include <queue>
 #include <algorithm>
 namespace vuk {
@@ -67,6 +74,7 @@ namespace vuk {
 		Cache<vk::Pipeline> pipeline_cache;
 		Cache<vk::RenderPass> renderpass_cache;
 		PerFrameCache<RGImage, FC> transient_images;
+		PerFrameCache<Allocator::Pool, FC> scratch_buffers;
 
 		std::unordered_map<std::string_view, create_info_t<vk::Pipeline>> named_pipelines;
 
@@ -79,7 +87,8 @@ namespace vuk {
 			pipeline_cache(*this),
 			fence_pools(*this),
 			renderpass_cache(*this),
-			transient_images(*this)
+			transient_images(*this),
+			scratch_buffers(*this)
 		{
 			vk_pipeline_cache = device.createPipelineCacheUnique({});
 		}
@@ -95,6 +104,11 @@ namespace vuk {
 			device.destroy(image.image_view);
 			allocator.destroy_image(image.image);
 		}
+
+		void destroy(const Allocator::Pool& v) {
+			allocator.destroy_scratch_pool(v);
+		}
+
 
 		std::atomic<size_t> frame_counter = 0;
 		InflightContext begin();
@@ -114,6 +128,7 @@ namespace vuk {
 		Cache<vk::Pipeline>::View pipeline_cache;
 		Cache<vk::RenderPass>::View renderpass_cache;
 		PerFrameCache<vuk::RGImage, Context::FC>::View transient_images;
+		PerFrameCache<Allocator::Pool, Context::FC>::View scratch_buffers;
 
 		InflightContext(Context& ctx, unsigned frame) : ctx(ctx), frame(frame),
 			commandbuffer_pools(ctx.cbuf_pools.get_view(*this)),
@@ -121,7 +136,8 @@ namespace vuk {
 			fence_pools(ctx.fence_pools.get_view(*this)),
 			pipeline_cache(*this, ctx.pipeline_cache),
 			renderpass_cache(*this, ctx.renderpass_cache),
-			transient_images(*this, ctx.transient_images)
+			transient_images(*this, ctx.transient_images),
+			scratch_buffers(*this, ctx.scratch_buffers)
 		{
 			auto prev_frame = prev_(frame, 1, Context::FC);
 			ctx.cbuf_pools.reset(prev_frame);
@@ -168,15 +184,30 @@ namespace vuk {
 			fence_pool(ifc.fence_pools.get_view(*this))
 		{}
 
+		Allocator::Buffer _allocate_scratch_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, bool create_mapped) {
+			auto& pool = ifc.scratch_buffers.acquire({ mem_usage, buffer_usage });
+			return ifc.ctx.allocator.allocate_buffer(pool, size, create_mapped);
+		}
+
+		bool is_ready(const TransferStub& stub) {
+			return ifc.last_transfer_complete >= stub.id;
+		}
+
 		template<class T>
-		Allocator::Buffer create_buffer(gsl::span<T> data) {
-			// TODO: not leak this
-			auto staging = ifc.ctx.allocator.allocate_buffer(MemoryUsage::eCPUonly, vk::BufferUsageFlagBits::eTransferSrc, sizeof(T) * data.size(), true);
+		std::pair<Allocator::Buffer, TransferStub> create_scratch_buffer(gsl::span<T> data) {
+			auto dst = _allocate_scratch_buffer(MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eIndexBuffer, sizeof(T) * data.size(), true);
+			auto stub = upload(dst, data);
+			return { dst, stub };
+		}
+
+		template<class T>
+		TransferStub upload(Allocator::Buffer dst, gsl::span<T> data) {
+			auto staging = _allocate_scratch_buffer(MemoryUsage::eCPUonly, vk::BufferUsageFlagBits::eTransferSrc, sizeof(T) * data.size(), true);
 			::memcpy(staging.mapped_ptr, data.data(), sizeof(T) * data.size());
-			auto dst = ifc.ctx.allocator.allocate_buffer(MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eIndexBuffer, sizeof(T) * data.size(), true);
+			
 			TransferStub stub{ ifc.transfer_id++, dst };
 			ifc.transfer_commands.push({ staging, dst, stub });
-			return dst;
+			return stub;
 		}
 
 		void dma_task() {
@@ -232,6 +263,8 @@ namespace vuk {
 			cinfo.ivci.image = res.image;
 			res.image_view = ctx.device.createImageView(cinfo.ivci);
 			return res;
+		} else if constexpr (std::is_same_v<T, Allocator::Pool>) {
+			return ctx.allocator.allocate_pool(cinfo.mem_usage, cinfo.buffer_usage);
 		}
 	}
 

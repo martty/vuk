@@ -314,12 +314,12 @@ void device_init() {
 							v = vec3(v1 / v1.w);
 						}
 						angle += 1.f;
-						//if (angle > 360.f) angle -= 360.f;
-						auto verts = pfc.create_buffer(gsl::span(&box.first[0], box.first.size()));
-						auto inds = pfc.create_buffer(gsl::span(&box.second[0], box.second.size()));
-						pfc.dma_task();
-						pfc.dma_task();
-
+						
+						auto [verts, stub1] = pfc.create_scratch_buffer(gsl::span(&box.first[0], box.first.size()));
+						auto [inds, stub2] = pfc.create_scratch_buffer(gsl::span(&box.second[0], box.second.size()));
+						while (!(pfc.is_ready(stub1) && pfc.is_ready(stub2))) {
+							pfc.dma_task();
+						}
 
 						rg.add_pass({
 							.color_attachments = {{"SWAPCHAIN"}}, 
@@ -367,6 +367,9 @@ void device_init() {
 						device.destroy(swiv);
 					}
 				}
+				/*for (auto& pool : context.allocator.pools) {
+					context.allocator.reset_pool(pool.second);
+				}*/
 			}
 			vkb::destroy_swapchain(*vkswapchain);
 			vkDestroySurfaceKHR(inst.instance, surface, nullptr);

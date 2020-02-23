@@ -21,7 +21,8 @@
 	url = https://github.com/mattreecebentley/plf_colony
 [submodule "ext/VulkanMemoryAllocator"]
 	path = ext/VulkanMemoryAllocator
-	url = https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator
+	url = https://github.com/martty/VulkanMemoryAllocator
+	branch = vuk
 [submodule "ext/FiberTaskingLib"]
 	path = ext/FiberTaskingLib
 	url = https://github.com/RichieSams/FiberTaskingLib
