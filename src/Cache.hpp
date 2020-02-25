@@ -359,10 +359,103 @@ namespace std {
 	};
 };
 
+#define VUK_MAX_BINDINGS 16
+#include <bitset>
+
+namespace vuk {
+	struct DescriptorSetLayoutAllocInfo {
+		std::array<size_t, VkDescriptorType::VK_DESCRIPTOR_TYPE_END_RANGE> descriptor_counts;
+		vk::DescriptorSetLayout layout;
+
+		bool operator==(const DescriptorSetLayoutAllocInfo& o) const {
+			return layout == o.layout;
+		}
+	};
+
+	// use hand rolled variant to control bits
+	// memset to clear out the union
+#pragma pack(push, 1)
+	struct DescriptorBinding {
+		DescriptorBinding() {}
+
+		vk::DescriptorType type;
+		union {
+			struct Unbound {} unbound;
+			vk::DescriptorBufferInfo buffer;
+			vk::DescriptorImageInfo image;
+		};
+
+		bool operator==(const DescriptorBinding& o) const {
+			if (type != o.type) return false;
+			switch (type) {
+			case vk::DescriptorType::eUniformBuffer:
+			case vk::DescriptorType::eStorageBuffer:
+				return buffer == o.buffer;
+				break;
+			case vk::DescriptorType::eSampledImage:
+			case vk::DescriptorType::eSampler:
+			case vk::DescriptorType::eCombinedImageSampler:
+				return image == o.image;
+				break;
+			default:
+				assert(0);
+			}
+
+		}
+	};
+#pragma pack(pop)
+	struct SetBinding {
+		std::bitset<VUK_MAX_BINDINGS> used;
+		std::array<DescriptorBinding, VUK_MAX_BINDINGS> bindings;
+		DescriptorSetLayoutAllocInfo layout_info = {};
+
+		bool operator==(const SetBinding& o) const {
+			return bindings == o.bindings && layout_info == o.layout_info;
+		}
+	};
+}
+
+namespace std {
+	template <>
+	struct hash<vuk::SetBinding> {
+		size_t operator()(vuk::SetBinding const & x) const noexcept {
+			// TODO: should we hash in layout too?
+			unsigned long leading_zero = 0;
+			auto mask = x.used.to_ulong();
+			auto is_null = _BitScanReverse(&leading_zero, mask);
+			leading_zero++;
+			return ::hash::fnv1a::hash(reinterpret_cast<const char*>(&x.bindings[0]), leading_zero * sizeof(vuk::DescriptorBinding));
+		}
+	};
+};
+
+namespace vuk {
+	struct PipelineCreateInfo {
+		vk::GraphicsPipelineCreateInfo gpci;
+		vk::PipelineLayout pipeline_layout;
+		DescriptorSetLayoutAllocInfo layout_info;
+
+		bool operator==(const PipelineCreateInfo& o) const {
+			return std::tie(gpci, pipeline_layout, layout_info) == std::tie(o.gpci, o.pipeline_layout, o.layout_info);
+		}
+	};
+}
+
+namespace std {
+	template <>
+	struct hash<vuk::PipelineCreateInfo> {
+		size_t operator()(vuk::PipelineCreateInfo const & x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, x.gpci); // layout is redundant info, no need to hash
+			return h;
+		}
+	};
+};
 
 namespace vuk {
 	class Context;
 	class InflightContext;
+	class PerThreadContext;
 
 	template<class T>
 	struct create_info;
@@ -370,15 +463,22 @@ namespace vuk {
 	template<class T>
 	using create_info_t = typename create_info<T>::type;
 
-	template<class T>
-	T create(Context& ctx, create_info_t<T> cinfo);
+	struct PipelineInfo {
+		vk::Pipeline pipeline;
+		vk::PipelineLayout pipeline_layout;
+		DescriptorSetLayoutAllocInfo layout_info;
+	};
 
-	template<> struct create_info<vk::Pipeline> {
-		using type = vk::GraphicsPipelineCreateInfo;
+	template<> struct create_info<PipelineInfo> {
+		using type = vuk::PipelineCreateInfo;
 	};
 
 	template<> struct create_info<vk::RenderPass> {
 		using type = vk::RenderPassCreateInfo;
+	};
+
+	template<> struct create_info<vk::DescriptorSet> {
+		using type = vuk::SetBinding;
 	};
 
 
@@ -397,13 +497,20 @@ namespace vuk {
 		Cache(Context& ctx) : ctx(ctx) {}
 		~Cache();
 
-		struct View {
+		struct PFView {
 			InflightContext& ifc;
 			Cache& cache;
 
-			View(InflightContext& ifc, Cache<T>& cache) : ifc(ifc), cache(cache) {}
-			T& acquire(create_info_t<T> ci);
+			PFView(InflightContext& ifc, Cache<T>& cache) : ifc(ifc), cache(cache) {}
 			void collect(size_t threshold);
+		};
+
+		struct PFPTView {
+			PerThreadContext& ptc;
+			PFView& view;
+
+			PFPTView(PerThreadContext& ptc, PFView& view) : ptc(ptc), view(view) {}
+			T& acquire(create_info_t<T> ci);
 		};
 	};
 
@@ -427,13 +534,21 @@ namespace vuk {
 		PerFrameCache(Context& ctx) : ctx(ctx) {}
 		~PerFrameCache();
 
-		struct View {
+		struct PFView {
 			InflightContext& ifc;
 			PerFrameCache& cache;
 
-			View(InflightContext& ifc, PerFrameCache& cache) : ifc(ifc), cache(cache) {}
-			T& acquire(create_info_t<T> ci);
+			PFView(InflightContext& ifc, PerFrameCache& cache) : ifc(ifc), cache(cache) {}
 			void collect(size_t threshold);
 		};
+
+		struct PFPTView {
+			PerThreadContext& ptc;
+			PFView& view;
+
+			PFPTView(PerThreadContext& ptc, PFView& view) : ptc(ptc), view(view) {}
+			T& acquire(create_info_t<T> ci);
+		};
+
 	};
 }

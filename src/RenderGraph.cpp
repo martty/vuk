@@ -246,7 +246,7 @@ namespace vuk {
 		bound_attachments.emplace(name, attachment_info);
 	}
 
-	void RenderGraph::build(vuk::InflightContext& ifc) {
+	void RenderGraph::build(vuk::PerThreadContext& ptc) {
 		// output attachments have an initial layout of eUndefined (loadOp: clear or dontcare, storeOp: store)
 		for (auto& [name, attachment_info] : bound_attachments) {
 			if (!attachment_info.is_external) continue;
@@ -321,7 +321,7 @@ namespace vuk {
 			rgci.ici = ici;
 			rgci.ivci = ivci;
 			
-			auto rg = ifc.transient_images.acquire(rgci);
+			auto rg = ptc.transient_images.acquire(rgci);
 			dst.iv = rg.image_view;
 		}
 
@@ -431,27 +431,26 @@ namespace vuk {
 			rp.rpci.attachmentCount = atts.size();
 			rp.rpci.pAttachments = atts.data();
 
-			rp.handle = ifc.renderpass_cache.acquire(rp.rpci);
+			rp.handle = ptc.renderpass_cache.acquire(rp.rpci);
 			rp.fbci.renderPass = rp.handle;
 			rp.fbci.width = rp.attachments[0].extents.width;
 			rp.fbci.height = rp.attachments[0].extents.height;
 			rp.fbci.pAttachments = &ivs[0];
 			rp.fbci.attachmentCount = ivs.size();
 			rp.fbci.layers = 1;
-			rp.framebuffer = ifc.ctx.device.createFramebuffer(rp.fbci);
+			rp.framebuffer = ptc.ctx.device.createFramebuffer(rp.fbci);
 		}
 	}
 
-	vk::CommandBuffer RenderGraph::execute(vuk::InflightContext& ifc) {
-		auto pfc = ifc.begin();
-		auto cbufs = pfc.commandbuffer_pool.acquire(1);
+	vk::CommandBuffer RenderGraph::execute(vuk::PerThreadContext& ptc) {
+		auto cbufs = ptc.commandbuffer_pool.acquire(1);
 		auto& cbuf = cbufs[0];
 
 		vk::CommandBufferBeginInfo cbi;
 		cbi.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
 		cbuf.begin(cbi);
 
-		CommandBuffer cobuf(ifc, cbuf);
+		CommandBuffer cobuf(ptc, cbuf);
 		for (auto& rpass : rpis) {
 			vk::RenderPassBeginInfo rbi;
 			rbi.renderPass = rpass.handle;
@@ -596,7 +595,7 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::bind_pipeline(Name p) {
-		next_graphics_pipeline = ifc.ctx.named_pipelines.at(p);
+		next_graphics_pipeline = ptc.ifc.ctx.named_pipelines.at(p);
 		return *this;
 	}
 
@@ -611,6 +610,14 @@ namespace vuk {
 	}
 
 
+	CommandBuffer& CommandBuffer::bind_uniform_buffer(unsigned set, unsigned binding, Allocator::Buffer buffer) {
+		assert(next_graphics_pipeline);
+		set_bindings[set].bindings[binding].type = vk::DescriptorType::eUniformBuffer;
+		set_bindings[set].bindings[binding].buffer = vk::DescriptorBufferInfo{ buffer.buffer, buffer.offset, buffer.size };
+		set_bindings[set].used.set(binding);
+		return *this;
+	}
+
 	CommandBuffer& CommandBuffer::draw(uint32_t a, uint32_t b, uint32_t c, uint32_t d) {
 		/* flush graphics state */
 		if (next_viewport) {
@@ -622,9 +629,10 @@ namespace vuk {
 			next_scissor = {};
 		}
 		if (next_graphics_pipeline) {
-			next_graphics_pipeline->renderPass = ongoing_renderpass->first;
-			next_graphics_pipeline->subpass = ongoing_renderpass->second;
-			command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, ifc.pipeline_cache.acquire(*next_graphics_pipeline));
+			next_graphics_pipeline->gpci.renderPass = ongoing_renderpass->first;
+			next_graphics_pipeline->gpci.subpass = ongoing_renderpass->second;
+			auto pipeline_info = ptc.pipeline_cache.acquire(*next_graphics_pipeline);
+			command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_info.pipeline);
 			next_graphics_pipeline = {};
 		}
 		/* execute command */
@@ -643,9 +651,13 @@ namespace vuk {
 			next_scissor = {};
 		}
 		if (next_graphics_pipeline) {
-			next_graphics_pipeline->renderPass = ongoing_renderpass->first;
-			next_graphics_pipeline->subpass = ongoing_renderpass->second;
-			command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, ifc.pipeline_cache.acquire(*next_graphics_pipeline));
+			next_graphics_pipeline->gpci.renderPass = ongoing_renderpass->first;
+			next_graphics_pipeline->gpci.subpass = ongoing_renderpass->second;
+			auto pipeline_info = ptc.pipeline_cache.acquire(*next_graphics_pipeline);
+			command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_info.pipeline);
+			set_bindings[0].layout_info = pipeline_info.layout_info;
+			auto ds = ptc.descriptor_sets.acquire(set_bindings[0]);
+			command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline_info.pipeline_layout, 0, 1, &ds, 0, nullptr);
 			next_graphics_pipeline = {};
 		}
 		/* execute command */

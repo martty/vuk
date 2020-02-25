@@ -267,8 +267,8 @@ namespace vuk {
 		void mark_attachment_internal(Name, vk::Format, vk::Extent2D);
 
 		// RG
-		void build(vuk::InflightContext&);
-		vk::CommandBuffer execute(vuk::InflightContext&);
+		void build(vuk::PerThreadContext&);
+		vk::CommandBuffer execute(vuk::PerThreadContext&);
 
 		// debug
 		void generate_graph_visualization();

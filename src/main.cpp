@@ -180,7 +180,11 @@ void device_init() {
 						gpci.pViewportState = &pipe->viewportState;
 						gpci.pDepthStencilState = &pipe->depthStencilState;
 						gpci.pDynamicState = &pipe->dynamicState;
-						context.named_pipelines.emplace("triangle", gpci);
+						vuk::PipelineCreateInfo pci;
+						pci.gpci = gpci;
+						pci.layout_info.layout = pipe->descriptorSetLayout;
+						pci.pipeline_layout = pipe->pipelineLayout;
+						context.named_pipelines.emplace("triangle", pci);
 					}
 					{
 						vk::GraphicsPipelineCreateInfo gpci;
@@ -214,13 +218,19 @@ void device_init() {
 						pipe->depthStencilState.depthTestEnable = true;
 						gpci.pDepthStencilState = &pipe->depthStencilState;
 						gpci.pDynamicState = &pipe->dynamicState;
-						context.named_pipelines.emplace("cube", gpci);
+
+						vuk::PipelineCreateInfo pci;
+						pci.gpci = gpci;
+						pci.layout_info.layout = pipe->descriptorSetLayout;
+						pci.pipeline_layout = pipe->pipelineLayout;
+
+						context.named_pipelines.emplace("cube", pci);
 					}
 
 					{
 						vk::GraphicsPipelineCreateInfo gpci;
 						Program* prog = new Program();
-						prog->shaders.push_back("../../vertex_attribute_test.vert");
+						prog->shaders.push_back("../../ubo_test.vert");
 						prog->shaders.push_back("../../triangle_depthshaded.frag");
 						prog->compile("");
 						prog->link(device);
@@ -264,7 +274,15 @@ void device_init() {
 						pipe->depthStencilState.depthTestEnable = true;
 						gpci.pDepthStencilState = &pipe->depthStencilState;
 						gpci.pDynamicState = &pipe->dynamicState;
-						context.named_pipelines.emplace("vatt", gpci);
+
+						vuk::PipelineCreateInfo pci{};
+						pci.gpci = gpci;
+						pci.layout_info.layout = pipe->descriptorSetLayout;
+						pci.layout_info.descriptor_counts[to_integral(vk::DescriptorType::eUniformBuffer)] = 2;
+						pci.pipeline_layout = pipe->pipelineLayout;
+
+
+						context.named_pipelines.emplace("vatt", pci);
 					}
 
 					auto swapimages = vkb::get_swapchain_images(*vkswapchain);
@@ -276,10 +294,10 @@ void device_init() {
 					while (!glfwWindowShouldClose(window)) {
 						glfwPollEvents();
 						auto ictx = context.begin();
-						auto pfc = ictx.begin();
+						auto ptc = ictx.begin();
 
-						auto render_complete = pfc.semaphore_pool.acquire(1)[0];
-						auto present_rdy = pfc.semaphore_pool.acquire(1)[0];
+						auto render_complete = ptc.semaphore_pool.acquire(1)[0];
+						auto present_rdy = ptc.semaphore_pool.acquire(1)[0];
 						auto acq_result = device.acquireNextImageKHR(swapchain, UINT64_MAX, present_rdy, vk::Fence{});
 						auto index = acq_result.value;
 
@@ -309,16 +327,23 @@ void device_init() {
 						);*/
 
 						auto box = make_box(vec3(-0.5f), vec3(0.5f));
-						for (auto& v : box.first) {
-							auto v1 = glm::perspective(glm::degrees(70.f), 1.f, 0.1f, 10.f) * glm::lookAt(vec3(0, 1.0, 1.5), vec3(0), vec3(0,1,0)) * glm::vec4(glm::angleAxis(glm::radians(angle), vec3(0.f, 1.f, 0.f)) * v, 1.f);
-							v = vec3(v1 / v1.w);
-						}
-						angle += 1.f;
 						
-						auto [verts, stub1] = pfc.create_scratch_buffer(gsl::span(&box.first[0], box.first.size()));
-						auto [inds, stub2] = pfc.create_scratch_buffer(gsl::span(&box.second[0], box.second.size()));
-						while (!(pfc.is_ready(stub1) && pfc.is_ready(stub2))) {
-							pfc.dma_task();
+						auto [verts, stub1] = ptc.create_scratch_buffer(gsl::span(&box.first[0], box.first.size()));
+						auto [inds, stub2] = ptc.create_scratch_buffer(gsl::span(&box.second[0], box.second.size()));
+						struct vp {
+							glm::mat4 view;
+							glm::mat4 proj;
+						} vp;
+						vp.view = glm::lookAt(vec3(0, 1.0, 1.5), vec3(0), vec3(0, 1, 0));
+						vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 0.1f, 10.f);
+
+						auto [ubo, stub3] = ptc.create_scratch_buffer(gsl::span(&vp, 1));
+
+						auto model = static_cast<glm::mat4>(glm::angleAxis(glm::radians(angle), vec3(0.f, 1.f, 0.f)));
+						angle += 1.f;
+						auto [ubom, stub4] = ptc.create_scratch_buffer(gsl::span(&model, 1));
+						while (!(ptc.is_ready(stub1) && ptc.is_ready(stub2) && ptc.is_ready(stub3))) {
+							ptc.dma_task();
 						}
 
 						rg.add_pass({
@@ -329,6 +354,8 @@ void device_init() {
 								  .set_viewport(vk::Viewport(0, 480, 640, -1.f * 480, 0.f, 1.f))
 								  .set_scissor(vk::Rect2D({ 0,0 }, { 640, 480 }))
 								  .bind_pipeline("vatt")
+								  .bind_uniform_buffer(0, 0, ubo)
+								  .bind_uniform_buffer(0, 1, ubom)
 								  .bind_vertex_buffer(verts)
 								  .bind_index_buffer(inds)
 								  .draw_indexed(box.second.size(), 1, 0, 0, 0);
@@ -364,8 +391,8 @@ void device_init() {
 						rg.build();
 						rg.bind_attachment_to_swapchain("SWAPCHAIN", vk::Format(vkswapchain->image_format), vkswapchain->extent, swapimageviews[index]);
 						rg.mark_attachment_internal("depth", vk::Format::eD32Sfloat, vkswapchain->extent);
-						rg.build(ictx);
-						auto cb = rg.execute(ictx);
+						rg.build(ptc);
+						auto cb = rg.execute(ptc);
 
 						vk::SubmitInfo si;
 						si.commandBufferCount = 1;

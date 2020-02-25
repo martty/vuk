@@ -11,6 +11,7 @@ namespace vuk {
 	class InflightContext;
 	class PerThreadContext;
 
+
 	template<class T>
 	struct PooledType {
 		std::vector<T> values;
@@ -21,8 +22,6 @@ namespace vuk {
 		void reset(Context& ctx) { needle = 0; }
 		void free(Context& ctx);
 	};
-
-	extern template struct PooledType<vk::Semaphore>;
 
 	template<>
 	struct PooledType<vk::CommandBuffer> {
@@ -35,6 +34,21 @@ namespace vuk {
 		void reset(Context&);
 		void free(Context&);
 	};
+
+	struct DescriptorSetLayoutAllocInfo;
+	template<>
+	struct PooledType<vk::DescriptorPool> {
+		std::vector<vk::UniqueDescriptorPool> pools;
+		size_t needle = 0;
+		size_t sets_allocated = 0;
+		size_t sets_used = 0;
+
+		PooledType(Context&);
+		vk::DescriptorPool acquire(PerThreadContext& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info);
+		void reset(Context&);
+		void free(Context&);
+	};
+
 
 	template<class T, size_t FC>
 	struct PFView;
@@ -86,9 +100,10 @@ namespace vuk {
 			PooledType<T>& pool;
 
 			PFPTView(PerThreadContext& ptc, PooledType<T>& pool) : ptc(ptc), pool(pool) {}
-
-			gsl::span<T> acquire(size_t count) {
-				return pool.acquire(ptc, count);
+			
+			template<class... Args>
+			auto acquire(Args&&... args) {
+				return pool.acquire(ptc, std::forward<Args>(args)...);
 			}
 		};
 
