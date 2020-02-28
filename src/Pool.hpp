@@ -37,16 +37,20 @@ namespace vuk {
 
 	struct DescriptorSetLayoutAllocInfo;
 	template<>
-	struct PooledType<vk::DescriptorPool> {
+	struct PooledType<vk::DescriptorSet> {
 		std::vector<vk::UniqueDescriptorPool> pools;
-		size_t needle = 0;
+		size_t pool_needle = 0;
+		std::vector<vk::DescriptorSet> sets;
+		std::vector<vk::DescriptorSet> free_sets;
+		size_t set_needle = 0;
 		size_t sets_allocated = 0;
-		size_t sets_used = 0;
 
 		PooledType(Context&);
-		vk::DescriptorPool acquire(PerThreadContext& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info);
+		vk::DescriptorSet acquire(PerThreadContext& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info);
 		void reset(Context&);
 		void free(Context&);
+
+		vk::DescriptorPool get_pool(PerThreadContext& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info);
 	};
 
 

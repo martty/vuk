@@ -72,40 +72,59 @@ namespace vuk {
 	}
 
 	// vk::DescriptorSet pool
-	PooledType<vk::DescriptorPool>::PooledType(Context& ctx) {}
+	PooledType<vk::DescriptorSet>::PooledType(Context& ctx) {}
 
-	vk::DescriptorPool PooledType<vk::DescriptorPool>::acquire(PerThreadContext& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info) {
-		if (sets_allocated == sets_used) {
-			if (pools.size() < (needle + 1)) {
-				vk::DescriptorPoolCreateInfo dpci;
-				dpci.maxSets = sets_allocated == 0 ? 1 : sets_allocated * 2;
-				std::array<vk::DescriptorPoolSize, VkDescriptorType::VK_DESCRIPTOR_TYPE_END_RANGE> descriptor_counts = {};
-				size_t used_idx = 0;
-				for (auto i = 0; i < descriptor_counts.size(); i++) {
-					if (layout_alloc_info.descriptor_counts[i] > 0) {
-						auto& d = descriptor_counts[used_idx];
-						d.type = vk::DescriptorType(i);
-						d.descriptorCount = layout_alloc_info.descriptor_counts[i] * dpci.maxSets;
-						used_idx++;
-					}
+	vk::DescriptorPool PooledType<vk::DescriptorSet>::get_pool(PerThreadContext& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info) {
+		if (pools.size() < (pool_needle + 1)) {
+			vk::DescriptorPoolCreateInfo dpci;
+			dpci.maxSets = sets_allocated == 0 ? 1 : sets_allocated * 2;
+			std::array<vk::DescriptorPoolSize, VkDescriptorType::VK_DESCRIPTOR_TYPE_END_RANGE> descriptor_counts = {};
+			size_t used_idx = 0;
+			for (auto i = 0; i < descriptor_counts.size(); i++) {
+				if (layout_alloc_info.descriptor_counts[i] > 0) {
+					auto& d = descriptor_counts[used_idx];
+					d.type = vk::DescriptorType(i);
+					d.descriptorCount = layout_alloc_info.descriptor_counts[i] * dpci.maxSets;
+					used_idx++;
 				}
-				dpci.pPoolSizes = descriptor_counts.data();
-				dpci.poolSizeCount = used_idx;
-				pools.emplace_back(ptc.ifc.ctx.device.createDescriptorPoolUnique(dpci));
-				sets_used = 0;
-				sets_allocated = dpci.maxSets;
 			}
-			needle++;
+			dpci.pPoolSizes = descriptor_counts.data();
+			dpci.poolSizeCount = used_idx;
+			pools.emplace_back(ptc.ifc.ctx.device.createDescriptorPoolUnique(dpci));
+			sets_allocated = dpci.maxSets;
 		}
-		return *pools.back();
+		return *pools[pool_needle];
 	}
 
-	void PooledType<vk::DescriptorPool>::reset(Context& ctx) {
-		needle = 0;
-		sets_used = 0;
-		sets_allocated = 0;
+	vk::DescriptorSet PooledType<vk::DescriptorSet>::acquire(PerThreadContext& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info) {
+		if (free_sets.size() > 0) {
+			vk::DescriptorSet ret = free_sets.back();
+			free_sets.pop_back();
+			return ret;
+		}
+		// allocate new ds
+		// we find a descriptorpool that can still allocate
+		// or create a new pool
+		// typically we don't loop
+		VkDescriptorSet ds;
+		while (true) {
+			vk::DescriptorSetAllocateInfo dsai;
+			dsai.descriptorPool = get_pool(ptc, layout_alloc_info);
+			dsai.descriptorSetCount = 1;
+			dsai.pSetLayouts = &layout_alloc_info.layout;
+			auto result = vkAllocateDescriptorSets(ptc.ctx.device, &(VkDescriptorSetAllocateInfo)dsai, &ds);
+			if (result == VK_ERROR_OUT_OF_POOL_MEMORY || result == VK_ERROR_FRAGMENTED_POOL) {
+				pool_needle++;
+			} else {
+				assert(result == VK_SUCCESS);
+				return vk::DescriptorSet(ds);
+			}
+		}
 	}
 
-	void PooledType<vk::DescriptorPool>::free(Context& ctx) {
+	void PooledType<vk::DescriptorSet>::reset(Context& ctx) {
+	}
+
+	void PooledType<vk::DescriptorSet>::free(Context& ctx) {
 	}
 }

@@ -70,7 +70,7 @@ namespace vuk {
 		Pool<vk::CommandBuffer, FC> cbuf_pools;
 		Pool<vk::Semaphore, FC> semaphore_pools;
 		Pool<vk::Fence, FC> fence_pools;
-		Pool<vk::DescriptorPool, FC> descriptor_pools;
+		Pool<vk::DescriptorSet, FC> descriptor_pools;
 		vk::UniquePipelineCache vk_pipeline_cache;
 		Cache<PipelineInfo> pipeline_cache;
 		Cache<vk::RenderPass> renderpass_cache;
@@ -129,7 +129,7 @@ namespace vuk {
 		Pool<vk::CommandBuffer, Context::FC>::PFView commandbuffer_pools;
 		Pool<vk::Semaphore, Context::FC>::PFView semaphore_pools;
 		Pool<vk::Fence, Context::FC>::PFView fence_pools;
-		Pool<vk::DescriptorPool, Context::FC>::PFView descriptor_pools;
+		Pool<vk::DescriptorSet, Context::FC>::PFView descriptor_pools;
 		Cache<PipelineInfo>::PFView pipeline_cache;
 		Cache<vk::RenderPass>::PFView renderpass_cache;
 		PerFrameCache<vuk::RGImage, Context::FC>::PFView transient_images;
@@ -185,7 +185,7 @@ namespace vuk {
 		Pool<vk::CommandBuffer, Context::FC>::PFPTView commandbuffer_pool;
 		Pool<vk::Semaphore, Context::FC>::PFPTView semaphore_pool;
 		Pool<vk::Fence, Context::FC>::PFPTView fence_pool;
-		Pool<vk::DescriptorPool, Context::FC>::PFPTView descriptor_pool;
+		Pool<vk::DescriptorSet, Context::FC>::PFPTView descriptor_pool;
 		Cache<PipelineInfo>::PFPTView pipeline_cache;
 		Cache<vk::RenderPass>::PFPTView renderpass_cache;
 		PerFrameCache<vuk::RGImage, Context::FC>::PFPTView transient_images;
@@ -287,12 +287,8 @@ namespace vuk {
 		} else if constexpr (std::is_same_v<T, Allocator::Pool>) {
 			return ctx.allocator.allocate_pool(cinfo.mem_usage, cinfo.buffer_usage);
 		} else if constexpr (std::is_same_v<T, vk::DescriptorSet>) {
-			vk::DescriptorSetAllocateInfo dsai;
-			dsai.descriptorPool = ptc.descriptor_pool.acquire(cinfo.layout_info);
-			dsai.descriptorSetCount = 1;
-			dsai.pSetLayouts = &cinfo.layout_info.layout;
-			auto ds = ctx.device.allocateDescriptorSets(dsai)[0];
-
+			auto ds = ptc.descriptor_pool.acquire(cinfo.layout_info);
+	
 			unsigned long leading_zero = 0;
 			auto mask = cinfo.used.to_ulong();
 			auto is_null = _BitScanReverse(&leading_zero, mask);

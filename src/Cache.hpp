@@ -405,7 +405,7 @@ namespace vuk {
 	};
 #pragma pack(pop)
 	struct SetBinding {
-		std::bitset<VUK_MAX_BINDINGS> used;
+		std::bitset<VUK_MAX_BINDINGS> used = {};
 		std::array<DescriptorBinding, VUK_MAX_BINDINGS> bindings;
 		DescriptorSetLayoutAllocInfo layout_info = {};
 

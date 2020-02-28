@@ -612,6 +612,7 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::bind_uniform_buffer(unsigned set, unsigned binding, Allocator::Buffer buffer) {
 		assert(next_graphics_pipeline);
+		sets_used[set] = true;
 		set_bindings[set].bindings[binding].type = vk::DescriptorType::eUniformBuffer;
 		set_bindings[set].bindings[binding].buffer = vk::DescriptorBufferInfo{ buffer.buffer, buffer.offset, buffer.size };
 		set_bindings[set].used.set(binding);
@@ -628,13 +629,7 @@ namespace vuk {
 			command_buffer.setScissor(0, *next_scissor);
 			next_scissor = {};
 		}
-		if (next_graphics_pipeline) {
-			next_graphics_pipeline->gpci.renderPass = ongoing_renderpass->first;
-			next_graphics_pipeline->gpci.subpass = ongoing_renderpass->second;
-			auto pipeline_info = ptc.pipeline_cache.acquire(*next_graphics_pipeline);
-			command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_info.pipeline);
-			next_graphics_pipeline = {};
-		}
+		_bind_graphics_pipeline_state();
 		/* execute command */
 		command_buffer.draw(a, b, c, d);
 		return *this;
@@ -650,20 +645,30 @@ namespace vuk {
 			command_buffer.setScissor(0, *next_scissor);
 			next_scissor = {};
 		}
+		_bind_graphics_pipeline_state();
+		/* execute command */
+		command_buffer.drawIndexed(index_count, instance_count, first_index, vertex_offset, first_instance);
+		return *this;
+	}
+
+	void CommandBuffer::_bind_graphics_pipeline_state() {
 		if (next_graphics_pipeline) {
 			next_graphics_pipeline->gpci.renderPass = ongoing_renderpass->first;
 			next_graphics_pipeline->gpci.subpass = ongoing_renderpass->second;
 			auto pipeline_info = ptc.pipeline_cache.acquire(*next_graphics_pipeline);
 			command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_info.pipeline);
-			set_bindings[0].layout_info = pipeline_info.layout_info;
-			auto ds = ptc.descriptor_sets.acquire(set_bindings[0]);
-			command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline_info.pipeline_layout, 0, 1, &ds, 0, nullptr);
+
+			for (size_t i = 0; i < VUK_MAX_SETS; i++) {
+				if (!sets_used[i])
+					continue;
+				set_bindings[i].layout_info = pipeline_info.layout_info;
+				auto ds = ptc.descriptor_sets.acquire(set_bindings[i]);
+				command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline_info.pipeline_layout, 0, 1, &ds, 0, nullptr);
+				sets_used[i] = false;
+				set_bindings[i] = {};
+			}
 			next_graphics_pipeline = {};
 		}
-		/* execute command */
-		command_buffer.drawIndexed(index_count, instance_count, first_index, vertex_offset, first_instance);
-		return *this;
-
 	}
 
 }
