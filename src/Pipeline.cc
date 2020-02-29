@@ -67,7 +67,7 @@ void Pipeline::fill_layout_bindings() {
 		vk::DescriptorSetLayoutBinding layoutBinding;
 		layoutBinding.binding = si.binding;
 		layoutBinding.descriptorType = vk::DescriptorType::eCombinedImageSampler;
-		layoutBinding.descriptorCount = si.array_size;
+		layoutBinding.descriptorCount = 1;
 		layoutBinding.stageFlags = si.stage;
 		layoutBinding.pImmutableSamplers = NULL;
 		descriptorSetLayoutBindings.push_back(layoutBinding);

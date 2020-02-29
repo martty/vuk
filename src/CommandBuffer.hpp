@@ -53,6 +53,8 @@ namespace vuk {
 		CommandBuffer& bind_vertex_buffer(Allocator::Buffer&);
 		CommandBuffer& bind_index_buffer(Allocator::Buffer&);
 
+		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, vk::ImageView iv, vk::Sampler samp);
+
 		std::bitset<VUK_MAX_SETS> sets_used = {};
 		std::array<SetBinding, VUK_MAX_SETS> set_bindings = {};
 

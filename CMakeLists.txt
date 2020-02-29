@@ -53,6 +53,7 @@ target_include_directories(vuk PUBLIC ext/shaderc/libshaderc/include)
 target_include_directories(vuk PUBLIC ${Vulkan_INCLUDE_DIRS})
 target_include_directories(vuk PUBLIC ext/plf_colony)
 target_include_directories(vuk PUBLIC ext/VulkanMemoryAllocator/src)
+target_include_directories(vuk PUBLIC ext/stb)
 
 target_compile_options(vuk PRIVATE /W3 /MP /bigobj /std:c++latest /permissive- /EHa /GT)
 target_compile_options(vuk PUBLIC /Zc:char8_t-)

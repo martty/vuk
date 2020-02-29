@@ -609,6 +609,18 @@ namespace vuk {
 		return *this;
 	}
 
+	CommandBuffer& CommandBuffer::bind_sampled_image(unsigned set, unsigned binding, vk::ImageView iv, vk::Sampler samp) {
+		sets_used[set] = true;
+		set_bindings[set].bindings[binding].type = vk::DescriptorType::eCombinedImageSampler;
+		set_bindings[set].bindings[binding].image = { };
+		set_bindings[set].bindings[binding].image.imageView = iv;
+		set_bindings[set].bindings[binding].image.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+		set_bindings[set].bindings[binding].image.sampler = samp;
+		set_bindings[set].used.set(binding);
+
+		return *this;
+	}
+
 
 	CommandBuffer& CommandBuffer::bind_uniform_buffer(unsigned set, unsigned binding, Allocator::Buffer buffer) {
 		assert(next_graphics_pipeline);

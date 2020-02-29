@@ -57,7 +57,6 @@ namespace vuk {
 
 	struct TransferStub {
 		size_t id;
-		Allocator::Buffer handle;
 	};
 
 	class Context {
@@ -152,11 +151,19 @@ namespace vuk {
 			ctx.semaphore_pools.reset(prev_frame);
 		}
 
-		struct TransferCommand {
+		struct BufferCopyCommand {
 			Allocator::Buffer src;
 			Allocator::Buffer dst;
 			TransferStub stub;
 		};
+
+		struct BufferImageCopyCommand {
+			Allocator::Buffer src;
+			vk::Image dst;
+			vk::Extent3D extent;
+			TransferStub stub;
+		};
+
 		
 		std::atomic<size_t> transfer_id = 1;
 		std::atomic<size_t> last_transfer_complete = 0;
@@ -166,7 +173,8 @@ namespace vuk {
 			vk::Fence fence;
 		};
 		// needs to be mpsc
-		std::queue<TransferCommand> transfer_commands;
+		std::queue<BufferCopyCommand> buffer_transfer_commands;
+		std::queue<BufferImageCopyCommand> bufferimage_transfer_commands;
 		// only accessed by DMAtask
 		std::queue<PendingTransfer> pending_transfers;
 
@@ -220,15 +228,53 @@ namespace vuk {
 			return { dst, stub };
 		}
 
+		std::tuple<vk::Image, vk::UniqueImageView, TransferStub> create_image(vk::Format format, vk::Extent3D extents, void* data) {
+			vk::ImageCreateInfo ici;
+			ici.format = format;
+			ici.extent = extents;
+			ici.arrayLayers = 1;
+			ici.initialLayout = vk::ImageLayout::eUndefined;
+			ici.mipLevels = 1;
+			ici.imageType = vk::ImageType::e2D;
+			ici.samples = vk::SampleCountFlagBits::e1;
+			ici.tiling = vk::ImageTiling::eOptimal;
+			ici.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
+			auto dst = ifc.ctx.allocator.create_image(ici);
+			auto stub = upload(dst, extents, gsl::span<std::byte>((std::byte*)data, extents.width * extents.height * extents.depth * 4));
+			vk::ImageViewCreateInfo ivci;
+			ivci.format = format;
+			ivci.image = dst;
+			ivci.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+			ivci.subresourceRange.baseArrayLayer = 0;
+			ivci.subresourceRange.baseMipLevel = 0;
+			ivci.subresourceRange.layerCount = 1;
+			ivci.subresourceRange.levelCount = 1;
+			ivci.viewType = vk::ImageViewType::e2D;
+			auto iv = ifc.ctx.device.createImageViewUnique(ivci);
+			return { dst, std::move(iv), stub };
+		}
+
+
 		template<class T>
 		TransferStub upload(Allocator::Buffer dst, gsl::span<T> data) {
 			auto staging = _allocate_scratch_buffer(MemoryUsage::eCPUonly, vk::BufferUsageFlagBits::eTransferSrc, sizeof(T) * data.size(), true);
 			::memcpy(staging.mapped_ptr, data.data(), sizeof(T) * data.size());
 			
-			TransferStub stub{ ifc.transfer_id++, dst };
-			ifc.transfer_commands.push({ staging, dst, stub });
+			TransferStub stub{ ifc.transfer_id++ };
+			ifc.buffer_transfer_commands.push({ staging, dst, stub });
 			return stub;
 		}
+
+		template<class T>
+		TransferStub upload(vk::Image dst, vk::Extent3D extent, gsl::span<T> data) {
+			auto staging = _allocate_scratch_buffer(MemoryUsage::eCPUonly, vk::BufferUsageFlagBits::eTransferSrc, sizeof(T) * data.size(), true);
+			::memcpy(staging.mapped_ptr, data.data(), sizeof(T) * data.size());
+			
+			TransferStub stub{ ifc.transfer_id++ };
+			ifc.bufferimage_transfer_commands.push({ staging, dst, extent, stub });
+			return stub;
+		}
+
 
 		void dma_task() {
 			while(!ifc.pending_transfers.empty() && ctx.device.getFenceStatus(ifc.pending_transfers.front().fence) == vk::Result::eSuccess) {
@@ -237,18 +283,60 @@ namespace vuk {
 				ifc.pending_transfers.pop();
 			}
 
-			if (ifc.transfer_commands.empty()) return;
+			if (ifc.buffer_transfer_commands.empty() && ifc.bufferimage_transfer_commands.empty()) return;
 			auto cbuf = commandbuffer_pool.acquire(1)[0];
 			cbuf.begin(vk::CommandBufferBeginInfo{});
 			size_t last = 0;
-			while (!ifc.transfer_commands.empty()) {
-				auto task = ifc.transfer_commands.front();
-				ifc.transfer_commands.pop();
+			while (!ifc.buffer_transfer_commands.empty()) {
+				auto task = ifc.buffer_transfer_commands.front();
+				ifc.buffer_transfer_commands.pop();
 				vk::BufferCopy bc;
 				bc.dstOffset = task.dst.offset;
 				bc.srcOffset = task.src.offset;
 				bc.size = task.src.size;
 				cbuf.copyBuffer(task.src.buffer, task.dst.buffer, bc);
+				last = std::max(last, task.stub.id);
+			}
+			while (!ifc.bufferimage_transfer_commands.empty()) {
+				auto task = ifc.bufferimage_transfer_commands.front();
+				ifc.bufferimage_transfer_commands.pop();
+				vk::BufferImageCopy bc;
+				bc.bufferOffset = task.src.offset;
+				bc.imageOffset = 0;
+				bc.bufferRowLength = 0;
+				bc.bufferImageHeight = 0;
+				bc.imageExtent = task.extent;
+				bc.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+				bc.imageSubresource.baseArrayLayer = 0;
+				bc.imageSubresource.mipLevel = 0;
+				bc.imageSubresource.layerCount = 1;
+
+				vk::ImageMemoryBarrier copy_barrier;
+				copy_barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
+				copy_barrier.oldLayout = vk::ImageLayout::eUndefined;
+				copy_barrier.newLayout = vk::ImageLayout::eTransferDstOptimal;
+				copy_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+				copy_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+				copy_barrier.image = task.dst;
+				copy_barrier.subresourceRange.aspectMask = bc.imageSubresource.aspectMask;
+				copy_barrier.subresourceRange.layerCount = bc.imageSubresource.layerCount;
+				copy_barrier.subresourceRange.baseArrayLayer = bc.imageSubresource.baseArrayLayer;
+				copy_barrier.subresourceRange.baseMipLevel = bc.imageSubresource.mipLevel;
+				copy_barrier.subresourceRange.levelCount = 1;
+
+				vk::ImageMemoryBarrier use_barrier;
+				use_barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+				use_barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+				use_barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
+				use_barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+				use_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+				use_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+				use_barrier.image = task.dst;
+				use_barrier.subresourceRange = copy_barrier.subresourceRange;
+
+				cbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe, vk::PipelineStageFlagBits::eTransfer, vk::DependencyFlagBits(0), {}, {}, copy_barrier);
+				cbuf.copyBufferToImage(task.src.buffer, task.dst, vk::ImageLayout::eTransferDstOptimal, bc);
+				cbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader, vk::DependencyFlagBits(0), {}, {}, use_barrier);
 				last = std::max(last, task.stub.id);
 			}
 			cbuf.end();

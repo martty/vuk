@@ -232,6 +232,22 @@ public:
 		return vkimg;
 	}
 
+	vk::Image create_image(vk::ImageCreateInfo ici) {
+		std::lock_guard _(mutex);
+		VmaAllocationCreateInfo db;
+		db.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
+		db.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+		db.requiredFlags = 0;
+		db.preferredFlags = 0;
+		db.pool = nullptr;
+		VkImage vkimg;
+		VmaAllocation vout;
+		vmaCreateImage(allocator, &(VkImageCreateInfo)ici, &db, &vkimg, &vout, nullptr);
+		images.emplace(reinterpret_cast<uint64_t>(vkimg), vout);
+		return vkimg;
+	}
+
+
 	void destroy_image(vk::Image image) {
 		std::lock_guard _(mutex);
 		auto vkimg = (VkImage)image;
