@@ -303,10 +303,54 @@ namespace std {
 	};
 };
 
+#include <optional>
+
+namespace vuk {
+	template<class T>
+	struct deep_equal_span : public gsl::span<T> {
+		using size_type = typename gsl::span<T>::size_type;
+
+		using gsl::span<T>::span;
+		using gsl::span<T>::size;
+
+		bool operator==(const deep_equal_span& o) const {
+			if (size() != o.size()) return false;
+			for (size_type i = 0; i < size(); i++) {
+				if ((*this)[i] != o[i]) return false;
+			}
+			return true;
+		}
+	};
+
+	template <class Type>
+	deep_equal_span(Type*, size_t)->deep_equal_span<Type>;
+
+	struct SubpassDescription : public vk::SubpassDescription {
+		bool operator==(const SubpassDescription& o) const {
+			return std::tie(flags, pipelineBindPoint) ==
+				std::tie(o.flags, o.pipelineBindPoint);
+		}
+	};
+
+	struct RenderPassCreateInfo : public vk::RenderPassCreateInfo {
+		std::vector<vk::AttachmentDescription> attachments;
+		std::vector<vuk::SubpassDescription> subpass_descriptions;
+		std::vector<vk::SubpassDependency> subpass_dependencies;
+		std::vector<vk::AttachmentReference> color_refs;
+		std::vector<std::optional<vk::AttachmentReference>> ds_refs;
+		std::vector<size_t> color_ref_offsets;
+
+		bool operator==(const RenderPassCreateInfo& o) const {
+			return std::forward_as_tuple(flags, attachments, subpass_descriptions, subpass_dependencies, color_refs, color_ref_offsets, ds_refs) ==
+				std::forward_as_tuple(o.flags, o.attachments, o.subpass_descriptions, o.subpass_dependencies, o.color_refs, o.color_ref_offsets, o.ds_refs);
+		}
+	};
+}
+
 namespace std {
 	template <>
-	struct hash<vk::RenderPassCreateInfo> {
-		size_t operator()(vk::RenderPassCreateInfo const & x) const noexcept {
+	struct hash<vuk::RenderPassCreateInfo> {
+		size_t operator()(vuk::RenderPassCreateInfo const & x) const noexcept {
 			return x.attachmentCount; // TODO: ...
 		}
 	};
@@ -474,7 +518,7 @@ namespace vuk {
 	};
 
 	template<> struct create_info<vk::RenderPass> {
-		using type = vk::RenderPassCreateInfo;
+		using type = vuk::RenderPassCreateInfo;
 	};
 
 	template<> struct create_info<vk::DescriptorSet> {
@@ -510,7 +554,7 @@ namespace vuk {
 			PFView& view;
 
 			PFPTView(PerThreadContext& ptc, PFView& view) : ptc(ptc), view(view) {}
-			T& acquire(create_info_t<T> ci);
+			T& acquire(const create_info_t<T>& ci);
 		};
 	};
 
@@ -547,7 +591,7 @@ namespace vuk {
 			PFView& view;
 
 			PFPTView(PerThreadContext& ptc, PFView& view) : ptc(ptc), view(view) {}
-			T& acquire(create_info_t<T> ci);
+			T& acquire(const create_info_t<T>& ci);
 		};
 
 	};

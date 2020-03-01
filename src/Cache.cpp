@@ -3,7 +3,7 @@
 
 namespace vuk {
 	template<class T>
-	T& Cache<T>::PFPTView::acquire(create_info_t<T> ci) {
+	T& Cache<T>::PFPTView::acquire(const create_info_t<T>& ci) {
 		auto& cache = view.cache;
 		std::shared_lock _(cache.cache_mtx);
 		if (auto it = cache.lru_map.find(ci); it != cache.lru_map.end()) {
@@ -54,7 +54,7 @@ namespace vuk {
 	}
 
 	template<class T, size_t FC>
-	T& PerFrameCache<T, FC>::PFPTView::acquire(create_info_t<T> ci) {
+	T& PerFrameCache<T, FC>::PFPTView::acquire(const create_info_t<T>& ci) {
 		auto& cache = view.cache;
 		auto& data = cache.data[ptc.ifc.frame];
 		std::shared_lock _(data.cache_mtx);

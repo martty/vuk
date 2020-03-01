@@ -328,10 +328,10 @@ namespace vuk {
 		// we now have enough data to build vk::RenderPasses and vk::Framebuffers
 		for (auto& rp : rpis) {
 			// subpasses
-			std::vector<vk::SubpassDescription> subp;
-			std::vector<vk::AttachmentReference> color_attrefs;
-			std::vector<size_t> offsets;
-			std::vector<std::optional<vk::AttachmentReference>> ds_attrefs;
+			auto& subp = rp.rpci.subpass_descriptions;
+			auto& color_attrefs = rp.rpci.color_refs;
+			auto& color_ref_offsets = rp.rpci.color_ref_offsets;
+			auto& ds_attrefs = rp.rpci.ds_refs;
 			ds_attrefs.resize(rp.subpasses.size());
 			for (size_t i = 0; i < rp.subpasses.size(); i++) {
 				auto& s = rp.subpasses[i];
@@ -348,19 +348,28 @@ namespace vuk {
 						color_attrefs.push_back(attref);
 					}
 				}
-				offsets.push_back(color_attrefs.size());
+				color_ref_offsets.push_back(color_attrefs.size());
 			}
 			for (size_t i = 0; i < rp.subpasses.size(); i++) {
-				vk::SubpassDescription sd;
-				sd.colorAttachmentCount = offsets[i] - (i > 0 ? offsets[i - 1] : 0);
-				sd.pColorAttachments = color_attrefs.data() + (i > 0 ? offsets[i - 1] : 0);
+				vuk::SubpassDescription sd;
+				sd.colorAttachmentCount = color_ref_offsets[i] - (i > 0 ? color_ref_offsets[i - 1] : 0);
+				sd.pColorAttachments = color_attrefs.data() + (i > 0 ? color_ref_offsets[i - 1] : 0);
 				sd.pDepthStencilAttachment = ds_attrefs[i] ? &*ds_attrefs[i] : nullptr;
+				sd.flags = {};
+				sd.inputAttachmentCount = 0;
+				sd.pInputAttachments = nullptr;
+				sd.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
+				sd.preserveAttachmentCount = 0;
+				sd.pPreserveAttachments = nullptr;
+				sd.pResolveAttachments = nullptr;
+
 				subp.push_back(sd);
 			}
-			rp.rpci.pSubpasses = subp.data();
-			rp.rpci.subpassCount = subp.size();
+
+			rp.rpci.pSubpasses = rp.rpci.subpass_descriptions.data();
+			rp.rpci.subpassCount = rp.rpci.subpass_descriptions.size();
 			// generate external deps
-			std::vector<vk::SubpassDependency> deps;
+			auto& deps = rp.rpci.subpass_dependencies;
 			for (auto& s : rp.subpasses) {
 				if (s.pass->is_head_pass) {
 					for (auto& attrpinfo : rp.attachments) {
@@ -422,14 +431,13 @@ namespace vuk {
 			rp.rpci.pDependencies = deps.data();
 
 			// attachments
-			std::vector<vk::AttachmentDescription> atts;
 			std::vector<vk::ImageView> ivs;
 			for (auto& attrpinfo : rp.attachments) {
-				atts.push_back(attrpinfo.description);
+				rp.rpci.attachments.push_back(attrpinfo.description);
 				ivs.push_back(attrpinfo.iv);
 			}
-			rp.rpci.attachmentCount = atts.size();
-			rp.rpci.pAttachments = atts.data();
+			rp.rpci.attachmentCount = rp.rpci.attachments.size();
+			rp.rpci.pAttachments = rp.rpci.attachments.data();
 
 			rp.handle = ptc.renderpass_cache.acquire(rp.rpci);
 			rp.fbci.renderPass = rp.handle;

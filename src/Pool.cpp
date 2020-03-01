@@ -41,6 +41,12 @@ namespace vuk {
 	template struct PooledType<vk::Semaphore>;
 	template struct PooledType<vk::Fence>;
 
+	void PooledType<vk::Fence>::reset(Context& ctx) {
+		ctx.device.waitForFences(values, true, UINT64_MAX);
+		ctx.device.resetFences(values);
+		needle = 0;
+	}
+
 	// vk::CommandBuffer pool
 	PooledType<vk::CommandBuffer>::PooledType(Context& ctx) {
 		pool = ctx.device.createCommandPoolUnique({});

@@ -24,6 +24,9 @@ namespace vuk {
 	};
 
 	template<>
+	void PooledType<vk::Fence>::reset(Context& ctx);
+
+	template<>
 	struct PooledType<vk::CommandBuffer> {
 		vk::UniqueCommandPool pool;
 		std::vector<vk::CommandBuffer> values;
@@ -117,7 +120,7 @@ namespace vuk {
 			InflightContext& ifc;
 			plf::colony<PooledType<T>>& frame_values;
 
-			PFView(InflightContext& ifc, Pool& storage, plf::colony<PooledType<T>>& fv) : ifc(ifc), storage(storage), frame_values(fv) {}
+			PFView(InflightContext& ifc, Pool& storage, plf::colony<PooledType<T>>& fv);
 
 			PFPTView get_view(PerThreadContext& ptc) {
 				std::lock_guard _(lock);

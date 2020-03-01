@@ -247,7 +247,6 @@ public:
 		return vkimg;
 	}
 
-
 	void destroy_image(vk::Image image) {
 		std::lock_guard _(mutex);
 		auto vkimg = (VkImage)image;
@@ -261,6 +260,10 @@ public:
 	VmaAllocator allocator;
 
 	~Allocator() {
+		for (auto [img, alloc] : images) {
+			vmaDestroyImage(allocator, (VkImage)img, alloc);
+		}
+
 		for (auto& [ps, pi] : pools) {
 			device.destroy(pi.buffer);
 			vmaDestroyPool(allocator, pi.pool);

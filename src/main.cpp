@@ -363,15 +363,14 @@ void device_init() {
 				
 					while (!glfwWindowShouldClose(window)) {
 						glfwPollEvents();
-						auto ictx = context.begin();
-						auto ptc = ictx.begin();
+						auto ifc = context.begin();
+						auto ptc = ifc.begin();
 
 						auto render_complete = ptc.semaphore_pool.acquire(1)[0];
 						auto present_rdy = ptc.semaphore_pool.acquire(1)[0];
 						auto acq_result = device.acquireNextImageKHR(swapchain, UINT64_MAX, present_rdy, vk::Fence{});
 						auto index = acq_result.value;
 
-						vuk::RenderGraph rg;
 						auto box = generate_cube();
 						
 						auto [verts, stub1] = ptc.create_scratch_buffer(gsl::span(&box.first[0], box.first.size()));
@@ -390,11 +389,12 @@ void device_init() {
 						auto [ubom, stub4] = ptc.create_scratch_buffer(gsl::span(&model, 1));
 
 						auto [img, iv, stub5] = ptc.create_image(vk::Format::eR8G8B8A8Srgb, vk::Extent3D(x,y,1), doge_image);
+						ptc.destroy(img);
+						ptc.destroy(iv);
 						auto samp = ptc.ctx.device.createSampler({});
-						while (!(ptc.is_ready(stub1) && ptc.is_ready(stub2) && ptc.is_ready(stub3))) {
-							ptc.dma_task();
-						}
+						ptc.wait_all_transfers();
 
+						vuk::RenderGraph rg;
 						rg.add_pass({
 							.color_attachments = {{"SWAPCHAIN"}}, 
 							.depth_attachment = Attachment{"depth"},
@@ -405,7 +405,7 @@ void device_init() {
 								  .bind_pipeline("vatte")
 								  .bind_uniform_buffer(0, 0, ubo)
 								  .bind_uniform_buffer(0, 1, ubom)
-								  .bind_sampled_image(0, 2, *iv, samp)
+								  .bind_sampled_image(0, 2, iv, samp)
 								  .bind_vertex_buffer(verts)
 								  .bind_index_buffer(inds)
 								  .draw_indexed(box.second.size(), 1, 0, 0, 0);
@@ -462,15 +462,12 @@ void device_init() {
 						pi.waitSemaphoreCount = 1;
 						pi.pWaitSemaphores = &render_complete;
 						graphics_queue.presentKHR(pi);
-						graphics_queue.waitIdle();
 					}
+					context.device.waitIdle();
 					for (auto& swiv : swapimageviews) {
 						device.destroy(swiv);
 					}
 				}
-				/*for (auto& pool : context.allocator.pools) {
-					context.allocator.reset_pool(pool.second);
-				}*/
 			}
 			vkb::destroy_swapchain(*vkswapchain);
 			vkDestroySurfaceKHR(inst.instance, surface, nullptr);

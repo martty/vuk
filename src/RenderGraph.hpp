@@ -238,7 +238,7 @@ namespace vuk {
 		struct RenderPassInfo {
 			std::vector<SubpassInfo> subpasses;
 			std::vector<AttachmentRPInfo> attachments;
-			vk::RenderPassCreateInfo rpci;
+			vuk::RenderPassCreateInfo rpci;
 			vk::FramebufferCreateInfo fbci;
 			vk::RenderPass handle;
 			vk::Framebuffer framebuffer;
