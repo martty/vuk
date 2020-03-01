@@ -399,8 +399,8 @@ void device_init() {
 							.depth_attachment = Attachment{"depth"},
 							.execute = [&](vuk::CommandBuffer& command_buffer) {
 								command_buffer
-								  .set_viewport(vk::Viewport(0, 480, 640, -1.f * 480, 0.f, 1.f))
-								  .set_scissor(vk::Rect2D({ 0,0 }, { 640, 480 }))
+								  .set_viewport(0, vuk::Area::Framebuffer{})
+								  .set_scissor(0, vuk::Area::Framebuffer{})
 								  .bind_pipeline("vatte")
 								  .bind_uniform_buffer(0, 0, ubo)
 								  .bind_uniform_buffer(0, 1, ubom)
@@ -416,8 +416,8 @@ void device_init() {
 							.depth_attachment = Attachment{"depth"},
 							.execute = [&](vuk::CommandBuffer& command_buffer) {
 								command_buffer
-								  .set_viewport(vk::Viewport(0, 100, 100, -1.f * 100, 0.f, 1.f))
-								  .set_scissor(vk::Rect2D({ 0,0 }, { 100, 100 }))
+								  .set_viewport(0, vuk::Area::Framebuffer{0, 0, 0.2f, 0.2f})
+								  .set_scissor(0, vuk::Area::Framebuffer{0, 0, 0.2f, 0.2f})
 								  .bind_pipeline("triangle")
 								  .draw(3, 1, 0, 0);
 								}
@@ -429,8 +429,8 @@ void device_init() {
 							.depth_attachment = Attachment{"depth"},
 							.execute = [&](vuk::CommandBuffer& command_buffer) {
 								command_buffer
-								  .set_viewport(vk::Viewport(540, 100, 100, -1.f * 100, 0.f, 1.f))
-								  .set_scissor(vk::Rect2D({ 540,0 }, { 100, 100 }))
+								  .set_viewport(0, vuk::Area::Framebuffer{0.8f, 0, 0.2f, 0.2f})
+								  .set_scissor(0, vuk::Area::Framebuffer{0.8f, 0, 0.2f, 0.2f})
 								  .bind_pipeline("triangle")
 								  .draw(3, 1, 0, 0);
 								}

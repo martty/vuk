@@ -480,7 +480,7 @@ namespace vuk {
 			cbuf.beginRenderPass(rbi, vk::SubpassContents::eInline);
 			for (size_t i = 0; i < rpass.subpasses.size(); i++) {
 				auto& sp = rpass.subpasses[i];
-				cobuf.ongoing_renderpass = std::pair{ rpass.handle, i };
+				cobuf.ongoing_renderpass = std::pair<decltype(rpass), unsigned>( rpass, i );
 				sp.pass->pass.execute(cobuf);
 				if (i < rpass.subpasses.size() - 1)
 					cbuf.nextSubpass(vk::SubpassContents::eInline);
@@ -601,6 +601,60 @@ namespace vuk {
 		std::cout << "}\n";
 	}
 
+	CommandBuffer& CommandBuffer::set_viewport(unsigned index, vk::Viewport vp) {
+		command_buffer.setViewport(index, vp);
+		return *this;
+	}
+
+	CommandBuffer& CommandBuffer::set_viewport(unsigned index, Area area) {
+		vk::Viewport vp;
+		vp.x = area.offset.x;
+		vp.y = area.offset.y;
+		vp.width = area.extent.width;
+		vp.height = area.extent.height;
+		vp.minDepth = 0.f;
+		vp.maxDepth = 1.f;
+		command_buffer.setViewport(index, vp);
+		return *this;
+	}
+
+	CommandBuffer& CommandBuffer::set_viewport(unsigned index, Area::Framebuffer area) {
+		assert(ongoing_renderpass);
+		auto fb_dimensions = vk::Extent2D{ ongoing_renderpass->first.fbci.width, ongoing_renderpass->first.fbci.height };
+		vk::Viewport vp;
+		vp.x = area.x * fb_dimensions.width;
+		vp.height = -area.height * fb_dimensions.height;
+		vp.y = area.y * fb_dimensions.height - vp.height;
+		vp.width = area.width * fb_dimensions.width;
+		vp.minDepth = 0.f;
+		vp.maxDepth = 1.f;
+		command_buffer.setViewport(index, vp);
+		return *this;
+	}
+
+	CommandBuffer& CommandBuffer::set_scissor(unsigned index, vk::Rect2D vp) {
+		command_buffer.setScissor(index, vp);
+		return *this;
+	}
+
+	CommandBuffer& CommandBuffer::set_scissor(unsigned index, Area area) {
+		command_buffer.setScissor(index, vk::Rect2D{area.offset, area.extent});
+		return *this;
+	}
+
+	CommandBuffer& CommandBuffer::set_scissor(unsigned index, Area::Framebuffer area) {
+		assert(ongoing_renderpass);
+		auto fb_dimensions = vk::Extent2D{ ongoing_renderpass->first.fbci.width, ongoing_renderpass->first.fbci.height };
+		vk::Rect2D vp;
+		vp.offset.x = area.x * fb_dimensions.width;
+		vp.offset.y = area.y * fb_dimensions.height;
+		vp.extent.width = area.width * fb_dimensions.width;
+		vp.extent.height = area.height * fb_dimensions.height;
+		command_buffer.setScissor(index, vp);
+		return *this;
+	}
+
+
 	CommandBuffer& CommandBuffer::bind_pipeline(Name p) {
 		next_graphics_pipeline = ptc.ifc.ctx.named_pipelines.at(p);
 		return *this;
@@ -628,7 +682,6 @@ namespace vuk {
 		return *this;
 	}
 
-
 	CommandBuffer& CommandBuffer::bind_uniform_buffer(unsigned set, unsigned binding, Allocator::Buffer buffer) {
 		assert(next_graphics_pipeline);
 		sets_used[set] = true;
@@ -639,15 +692,6 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::draw(uint32_t a, uint32_t b, uint32_t c, uint32_t d) {
-		/* flush graphics state */
-		if (next_viewport) {
-			command_buffer.setViewport(0, *next_viewport);
-			next_viewport = {};
-		}
-		if (next_scissor) {
-			command_buffer.setScissor(0, *next_scissor);
-			next_scissor = {};
-		}
 		_bind_graphics_pipeline_state();
 		/* execute command */
 		command_buffer.draw(a, b, c, d);
@@ -655,15 +699,6 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::draw_indexed(uint32_t index_count, uint32_t instance_count, uint32_t first_index, int32_t vertex_offset, uint32_t first_instance) {
-		/* flush graphics state */
-		if (next_viewport) {
-			command_buffer.setViewport(0, *next_viewport);
-			next_viewport = {};
-		}
-		if (next_scissor) {
-			command_buffer.setScissor(0, *next_scissor);
-			next_scissor = {};
-		}
 		_bind_graphics_pipeline_state();
 		/* execute command */
 		command_buffer.drawIndexed(index_count, instance_count, first_index, vertex_offset, first_instance);
@@ -672,7 +707,7 @@ namespace vuk {
 
 	void CommandBuffer::_bind_graphics_pipeline_state() {
 		if (next_graphics_pipeline) {
-			next_graphics_pipeline->gpci.renderPass = ongoing_renderpass->first;
+			next_graphics_pipeline->gpci.renderPass = ongoing_renderpass->first.handle;
 			next_graphics_pipeline->gpci.subpass = ongoing_renderpass->second;
 			auto pipeline_info = ptc.pipeline_cache.acquire(*next_graphics_pipeline);
 			command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_info.pipeline);

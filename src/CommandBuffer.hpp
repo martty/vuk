@@ -12,13 +12,31 @@ namespace vuk {
 	class PerThreadContext;
 	class Buffer;
 
+	enum class RelativeTo {
+		eFramebuffer, eSwapchain
+	};
+
+	struct Area {
+		Area(int32_t x, int32_t y, uint32_t width, uint32_t height) : offset{ x, y }, extent { width, height } {}
+
+		struct Framebuffer {
+			float x = 0.f;
+			float y = 0.f;
+			float width = 1.0f;
+			float height = 1.0f;
+		};
+
+		vk::Offset2D offset;
+		vk::Extent2D extent;
+	};
+
 	struct CommandBuffer {
 		vk::CommandBuffer command_buffer;
 		vuk::PerThreadContext& ptc;
 
 		CommandBuffer(vuk::PerThreadContext& ptc, vk::CommandBuffer cb) : ptc(ptc), command_buffer(cb) {}
 
-		std::optional<std::pair<vk::RenderPass, uint32_t>> ongoing_renderpass;
+		std::optional<std::pair<RenderGraph::RenderPassInfo&, uint32_t>> ongoing_renderpass;
 		std::optional<vk::Viewport> next_viewport;
 		std::optional<vk::Rect2D> next_scissor;
 		std::optional<vuk::create_info_t<vuk::PipelineInfo>> next_graphics_pipeline;
@@ -34,15 +52,12 @@ namespace vuk {
 		};
 		std::vector<QueueXFer> queue_transfers;
 
-		CommandBuffer& set_viewport(vk::Viewport vp) {
-			next_viewport = vp;
-			return *this;
-		}
-
-		CommandBuffer& set_scissor(vk::Rect2D vp) {
-			next_scissor = vp;
-			return *this;
-		}
+		CommandBuffer& set_viewport(unsigned index, vk::Viewport vp);	
+		CommandBuffer& set_viewport(unsigned index, Area area);
+		CommandBuffer& set_viewport(unsigned index, Area::Framebuffer area);
+		CommandBuffer& set_scissor(unsigned index, vk::Rect2D vp);
+		CommandBuffer& set_scissor(unsigned index, Area area);
+		CommandBuffer& set_scissor(unsigned index, Area::Framebuffer area);
 
 		CommandBuffer& bind_pipeline(vuk::PipelineCreateInfo gpci) {
 			next_graphics_pipeline = gpci;
