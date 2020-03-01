@@ -373,8 +373,8 @@ void device_init() {
 
 						auto box = generate_cube();
 						
-						auto [verts, stub1] = ptc.create_scratch_buffer(gsl::span(&box.first[0], box.first.size()));
-						auto [inds, stub2] = ptc.create_scratch_buffer(gsl::span(&box.second[0], box.second.size()));
+						auto [verts, stub1] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eVertexBuffer, gsl::span(&box.first[0], box.first.size()));
+						auto [inds, stub2] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eIndexBuffer, gsl::span(&box.second[0], box.second.size()));
 						struct vp {
 							glm::mat4 view;
 							glm::mat4 proj;
@@ -382,16 +382,15 @@ void device_init() {
 						vp.view = glm::lookAt(vec3(0, 1.5, 3.5), vec3(0), vec3(0, 1, 0));
 						vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 0.1f, 10.f);
 
-						auto [ubo, stub3] = ptc.create_scratch_buffer(gsl::span(&vp, 1));
+						auto [ubo, stub3] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eUniformBuffer, gsl::span(&vp, 1));
 
 						auto model = static_cast<glm::mat4>(glm::angleAxis(glm::radians(angle), vec3(0.f, 1.f, 0.f)));
 						angle += 1.f;
-						auto [ubom, stub4] = ptc.create_scratch_buffer(gsl::span(&model, 1));
+						auto [ubom, stub4] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eUniformBuffer, gsl::span(&model, 1));
 
 						auto [img, iv, stub5] = ptc.create_image(vk::Format::eR8G8B8A8Srgb, vk::Extent3D(x,y,1), doge_image);
 						ptc.destroy(img);
 						ptc.destroy(iv);
-						auto samp = ptc.ctx.device.createSampler({});
 						ptc.wait_all_transfers();
 
 						vuk::RenderGraph rg;
@@ -405,7 +404,7 @@ void device_init() {
 								  .bind_pipeline("vatte")
 								  .bind_uniform_buffer(0, 0, ubo)
 								  .bind_uniform_buffer(0, 1, ubom)
-								  .bind_sampled_image(0, 2, iv, samp)
+								  .bind_sampled_image(0, 2, iv, vk::SamplerCreateInfo{})
 								  .bind_vertex_buffer(verts)
 								  .bind_index_buffer(inds)
 								  .draw_indexed(box.second.size(), 1, 0, 0, 0);

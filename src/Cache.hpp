@@ -529,6 +529,18 @@ namespace std {
 	};
 };
 
+namespace std {
+	template <>
+	struct hash<vk::SamplerCreateInfo> {
+		size_t operator()(vk::SamplerCreateInfo const & x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, x.flags, x.addressModeU, x.addressModeV, x.addressModeW, x.anisotropyEnable, x.borderColor, x.compareEnable, x.compareOp, x.magFilter, x.maxAnisotropy, x.maxLod, x.minFilter, x.minLod, x.mipLodBias, x.mipmapMode, x.unnormalizedCoordinates); 
+			return h;
+		}
+	};
+};
+
+
 namespace vuk {
 	class Context;
 	class InflightContext;
@@ -562,6 +574,9 @@ namespace vuk {
 		using type = vuk::FramebufferCreateInfo;
 	};
 
+	template<> struct create_info<vk::Sampler> {
+		using type = vk::SamplerCreateInfo;
+	};
 
 	template<class T>
 	struct Cache {

@@ -77,6 +77,7 @@ namespace vuk {
 		PerFrameCache<RGImage, FC> transient_images;
 		PerFrameCache<Allocator::Pool, FC> scratch_buffers;
 		Cache<vk::DescriptorSet> descriptor_sets;
+		Cache<vk::Sampler> sampler_cache;
 
 		std::array<std::vector<vk::Image>, Context::FC> image_recycle;
 		std::array<std::vector<vk::ImageView>, Context::FC> image_view_recycle;
@@ -96,7 +97,8 @@ namespace vuk {
 			framebuffer_cache(*this),
 			transient_images(*this),
 			scratch_buffers(*this),
-			descriptor_sets(*this)
+			descriptor_sets(*this),
+			sampler_cache(*this)
 		{
 			vk_pipeline_cache = device.createPipelineCacheUnique({});
 		}
@@ -141,6 +143,7 @@ namespace vuk {
 		PerFrameCache<vuk::RGImage, Context::FC>::PFView transient_images;
 		PerFrameCache<Allocator::Pool, Context::FC>::PFView scratch_buffers;
 		Cache<vk::DescriptorSet>::PFView descriptor_sets;
+		Cache<vk::Sampler>::PFView sampler_cache;
 
 		InflightContext(Context& ctx, unsigned absolute_frame) : ctx(ctx), 
 			absolute_frame(absolute_frame), 
@@ -154,7 +157,8 @@ namespace vuk {
 			framebuffer_cache(*this, ctx.framebuffer_cache),
 			transient_images(*this, ctx.transient_images),
 			scratch_buffers(*this, ctx.scratch_buffers),
-			descriptor_sets(*this, ctx.descriptor_sets)
+			descriptor_sets(*this, ctx.descriptor_sets),
+			sampler_cache(*this, ctx.sampler_cache)
 		{
 			// image recycling
 			for (auto& img : ctx.image_recycle[frame]) {
@@ -167,6 +171,9 @@ namespace vuk {
 			}
 			ctx.image_view_recycle[frame].clear();
 
+			for (auto& sb : scratch_buffers.cache.data[frame].pool) {
+				ctx.allocator.reset_pool(sb);
+			}
 		}
 
 		struct BufferCopyCommand {
@@ -257,6 +264,7 @@ namespace vuk {
 		PerFrameCache<vuk::RGImage, Context::FC>::PFPTView transient_images;
 		PerFrameCache<Allocator::Pool, Context::FC>::PFPTView scratch_buffers;
 		Cache<vk::DescriptorSet>::PFPTView descriptor_sets;
+		Cache<vk::Sampler>::PFPTView sampler_cache;
 
 		// recycling global objects
 		std::vector<Allocator::Buffer> buffer_recycle;
@@ -273,7 +281,8 @@ namespace vuk {
 			framebuffer_cache(*this, ifc.framebuffer_cache),
 			transient_images(*this, ifc.transient_images),
 			scratch_buffers(*this, ifc.scratch_buffers),
-			descriptor_sets(*this, ifc.descriptor_sets)
+			descriptor_sets(*this, ifc.descriptor_sets),
+			sampler_cache(*this, ifc.sampler_cache)
 		{}
 
 		~PerThreadContext() {
@@ -304,9 +313,10 @@ namespace vuk {
 			return ifc.wait_all_transfers();
 		}
 
+		// since data is provided, we will add TransferDst to the flags automatically
 		template<class T>
-		std::pair<Allocator::Buffer, TransferStub> create_scratch_buffer(gsl::span<T> data) {
-			auto dst = _allocate_scratch_buffer(MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eUniformBuffer, sizeof(T) * data.size(), true);
+		std::pair<Allocator::Buffer, TransferStub> create_scratch_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, gsl::span<T> data) {
+			auto dst = _allocate_scratch_buffer(mem_usage, vk::BufferUsageFlagBits::eTransferDst | buffer_usage, sizeof(T) * data.size(), true);
 			auto stub = upload(dst, data);
 			return { dst, stub };
 		}
@@ -498,6 +508,8 @@ namespace vuk {
 			return ds;
 		} else if constexpr (std::is_same_v<T, vk::Framebuffer>) {
 			return ptc.ctx.device.createFramebuffer(cinfo);
+		} else if constexpr (std::is_same_v<T, vk::Sampler>) {
+			return ptc.ctx.device.createSampler(cinfo);
 		}
 	}
 

@@ -63,7 +63,6 @@ namespace vuk {
 					if (p1.inputs.contains(o)) could_execute_before = true;
 				}
 				if (could_execute_after && could_execute_before) {
-					// TODO: if these are equal, then we will fail
 					return p1.pass.auxiliary_order < p2.pass.auxiliary_order;
 				} else if (could_execute_after) {
 					return true;
@@ -617,13 +616,13 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::bind_sampled_image(unsigned set, unsigned binding, vk::ImageView iv, vk::Sampler samp) {
+	CommandBuffer& CommandBuffer::bind_sampled_image(unsigned set, unsigned binding, vk::ImageView iv, vk::SamplerCreateInfo sci) {
 		sets_used[set] = true;
 		set_bindings[set].bindings[binding].type = vk::DescriptorType::eCombinedImageSampler;
 		set_bindings[set].bindings[binding].image = { };
 		set_bindings[set].bindings[binding].image.imageView = iv;
 		set_bindings[set].bindings[binding].image.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-		set_bindings[set].bindings[binding].image.sampler = samp;
+		set_bindings[set].bindings[binding].image.sampler = ptc.sampler_cache.acquire(sci);
 		set_bindings[set].used.set(binding);
 
 		return *this;

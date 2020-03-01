@@ -44,6 +44,7 @@ namespace vuk {
 	template struct Cache<vk::RenderPass>;
 	template struct Cache<vk::DescriptorSet>;
 	template struct Cache<vk::Framebuffer>;
+	template struct Cache<vk::Sampler>;
 
 	template<class T, size_t FC>
 	PerFrameCache<T, FC>::~PerFrameCache() {
