@@ -239,7 +239,7 @@ namespace vuk {
 			std::vector<SubpassInfo> subpasses;
 			std::vector<AttachmentRPInfo> attachments;
 			vuk::RenderPassCreateInfo rpci;
-			vk::FramebufferCreateInfo fbci;
+			vuk::FramebufferCreateInfo fbci;
 			vk::RenderPass handle;
 			vk::Framebuffer framebuffer;
 		};

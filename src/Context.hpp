@@ -73,6 +73,7 @@ namespace vuk {
 		vk::UniquePipelineCache vk_pipeline_cache;
 		Cache<PipelineInfo> pipeline_cache;
 		Cache<vk::RenderPass> renderpass_cache;
+		Cache<vk::Framebuffer> framebuffer_cache;
 		PerFrameCache<RGImage, FC> transient_images;
 		PerFrameCache<Allocator::Pool, FC> scratch_buffers;
 		Cache<vk::DescriptorSet> descriptor_sets;
@@ -92,6 +93,7 @@ namespace vuk {
 			descriptor_pools(*this),
 			pipeline_cache(*this),
 			renderpass_cache(*this),
+			framebuffer_cache(*this),
 			transient_images(*this),
 			scratch_buffers(*this),
 			descriptor_sets(*this)
@@ -127,6 +129,7 @@ namespace vuk {
 	class InflightContext {
 	public:
 		Context& ctx;
+		unsigned absolute_frame;
 		unsigned frame;
 		Pool<vk::CommandBuffer, Context::FC>::PFView commandbuffer_pools;
 		Pool<vk::Semaphore, Context::FC>::PFView semaphore_pools;
@@ -134,17 +137,21 @@ namespace vuk {
 		Pool<vk::DescriptorSet, Context::FC>::PFView descriptor_pools;
 		Cache<PipelineInfo>::PFView pipeline_cache;
 		Cache<vk::RenderPass>::PFView renderpass_cache;
+		Cache<vk::Framebuffer>::PFView framebuffer_cache;
 		PerFrameCache<vuk::RGImage, Context::FC>::PFView transient_images;
 		PerFrameCache<Allocator::Pool, Context::FC>::PFView scratch_buffers;
 		Cache<vk::DescriptorSet>::PFView descriptor_sets;
 
-		InflightContext(Context& ctx, unsigned frame) : ctx(ctx), frame(frame),
+		InflightContext(Context& ctx, unsigned absolute_frame) : ctx(ctx), 
+			absolute_frame(absolute_frame), 
+			frame(absolute_frame % Context::FC),
 			commandbuffer_pools(ctx.cbuf_pools.get_view(*this)),
 			semaphore_pools(ctx.semaphore_pools.get_view(*this)),
 			fence_pools(ctx.fence_pools.get_view(*this)),
 			descriptor_pools(ctx.descriptor_pools.get_view(*this)),
 			pipeline_cache(*this, ctx.pipeline_cache),
 			renderpass_cache(*this, ctx.renderpass_cache),
+			framebuffer_cache(*this, ctx.framebuffer_cache),
 			transient_images(*this, ctx.transient_images),
 			scratch_buffers(*this, ctx.scratch_buffers),
 			descriptor_sets(*this, ctx.descriptor_sets)
@@ -232,7 +239,7 @@ namespace vuk {
 	};
 
 	inline InflightContext Context::begin() {
-		return InflightContext(*this, frame_counter++ % FC);
+		return InflightContext(*this, frame_counter++);
 	}
 
 	class PerThreadContext {
@@ -246,6 +253,7 @@ namespace vuk {
 		Pool<vk::DescriptorSet, Context::FC>::PFPTView descriptor_pool;
 		Cache<PipelineInfo>::PFPTView pipeline_cache;
 		Cache<vk::RenderPass>::PFPTView renderpass_cache;
+		Cache<vk::Framebuffer>::PFPTView framebuffer_cache;
 		PerFrameCache<vuk::RGImage, Context::FC>::PFPTView transient_images;
 		PerFrameCache<Allocator::Pool, Context::FC>::PFPTView scratch_buffers;
 		Cache<vk::DescriptorSet>::PFPTView descriptor_sets;
@@ -262,6 +270,7 @@ namespace vuk {
 			descriptor_pool(ifc.descriptor_pools.get_view(*this)),
 			pipeline_cache(*this, ifc.pipeline_cache),
 			renderpass_cache(*this, ifc.renderpass_cache),
+			framebuffer_cache(*this, ifc.framebuffer_cache),
 			transient_images(*this, ifc.transient_images),
 			scratch_buffers(*this, ifc.scratch_buffers),
 			descriptor_sets(*this, ifc.descriptor_sets)
@@ -279,7 +288,6 @@ namespace vuk {
 		void destroy(vk::ImageView image) {
 			image_view_recycle.push_back(image);
 		}
-
 
 		Allocator::Buffer _allocate_scratch_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, bool create_mapped) {
 			auto& pool = scratch_buffers.acquire({ mem_usage, buffer_usage });
@@ -434,7 +442,11 @@ namespace vuk {
 	Pool<T, FC>::PFView::PFView(InflightContext& ifc, Pool<T, FC>& storage, plf::colony<PooledType<T>>& fv) : ifc(ifc), storage(storage), frame_values(fv) {
 		storage.reset(ifc.frame);
 	}
-
+/*
+	vk::Framebuffer create(PerThreadContext& ptc, const create_info_t<vk::Framebuffer>& cinfo) {
+		return ptc.ctx.device.createFramebuffer(cinfo);
+	}
+	*/
 	template<class T>
 	T create(PerThreadContext& ptc, const create_info_t<T>& cinfo) {
 		auto& ctx = ptc.ifc.ctx;
@@ -484,6 +496,8 @@ namespace vuk {
 			}
 			ctx.device.updateDescriptorSets(leading_zero, writes.data(), 0, nullptr);
 			return ds;
+		} else if constexpr (std::is_same_v<T, vk::Framebuffer>) {
+			return ptc.ctx.device.createFramebuffer(cinfo);
 		}
 	}
 

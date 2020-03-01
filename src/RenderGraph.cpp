@@ -431,7 +431,7 @@ namespace vuk {
 			rp.rpci.pDependencies = deps.data();
 
 			// attachments
-			std::vector<vk::ImageView> ivs;
+			auto& ivs = rp.fbci.attachments;
 			for (auto& attrpinfo : rp.attachments) {
 				rp.rpci.attachments.push_back(attrpinfo.description);
 				ivs.push_back(attrpinfo.iv);
@@ -446,7 +446,7 @@ namespace vuk {
 			rp.fbci.pAttachments = &ivs[0];
 			rp.fbci.attachmentCount = ivs.size();
 			rp.fbci.layers = 1;
-			rp.framebuffer = ptc.ctx.device.createFramebuffer(rp.fbci);
+			rp.framebuffer = ptc.framebuffer_cache.acquire(rp.fbci);
 		}
 	}
 

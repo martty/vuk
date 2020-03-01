@@ -29,6 +29,17 @@ namespace std {
 			return h;
 		}
 	};
+
+	template <class T>
+	struct hash<std::vector<T>> {
+		size_t operator()(std::vector<T> const& x) const noexcept {
+			size_t h = 0;
+			for (auto& e : x) {
+				hash_combine(h, e);
+			}
+			return h;
+		}
+	};
 };
 
 namespace std {
@@ -345,13 +356,31 @@ namespace vuk {
 				std::forward_as_tuple(o.flags, o.attachments, o.subpass_descriptions, o.subpass_dependencies, o.color_refs, o.color_ref_offsets, o.ds_refs);
 		}
 	};
+
+	struct FramebufferCreateInfo : public vk::FramebufferCreateInfo {
+		std::vector<vk::ImageView> attachments;
+
+		bool operator==(const FramebufferCreateInfo& o) const {
+			return std::tie(flags, attachments, width, height, renderPass, layers) ==
+				std::tie(o.flags, o.attachments, o.width, o.height, o.renderPass, o.layers);
+		}
+	};
 }
 
 namespace std {
 	template <>
 	struct hash<vuk::RenderPassCreateInfo> {
-		size_t operator()(vuk::RenderPassCreateInfo const & x) const noexcept {
+		size_t operator()(vuk::RenderPassCreateInfo const& x) const noexcept {
 			return x.attachmentCount; // TODO: ...
+		}
+	};
+
+	template <>
+	struct hash<vuk::FramebufferCreateInfo> {
+		size_t operator()(vuk::FramebufferCreateInfo const& x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, x.flags, x.attachments, x.width, x.height, x.layers);
+			return h;
 		}
 	};
 };
@@ -365,9 +394,7 @@ namespace std {
 			return h;
 		}
 	};
-};
-
-namespace std {
+	
 	template <>
 	struct hash<vk::ImageSubresourceRange> {
 		size_t operator()(vk::ImageSubresourceRange const& x) const noexcept {
@@ -376,9 +403,7 @@ namespace std {
 			return h;
 		}
 	};
-};
 
-namespace std {
 	template <>
 	struct hash<vk::ComponentMapping> {
 		size_t operator()(vk::ComponentMapping const& x) const noexcept {
@@ -387,10 +412,7 @@ namespace std {
 			return h;
 		}
 	};
-};
 
-
-namespace std {
 	template <>
 	struct hash<vk::ImageViewCreateInfo> {
 		size_t operator()(vk::ImageViewCreateInfo const & x) const noexcept {
@@ -401,6 +423,17 @@ namespace std {
 			return h;
 		}
 	};
+
+	template<class T>
+	struct vk_handle_hash {
+		size_t operator()(T const & x) const noexcept {
+			auto as_uint64 = reinterpret_cast<uint64_t>((typename T::CType)x);
+			return std::hash<uint64_t>()(as_uint64);
+		}
+	};
+
+	template <>
+	struct hash<vk::ImageView> : vk_handle_hash<vk::ImageView> {};
 };
 
 #define VUK_MAX_BINDINGS 16
@@ -523,6 +556,10 @@ namespace vuk {
 
 	template<> struct create_info<vk::DescriptorSet> {
 		using type = vuk::SetBinding;
+	};
+
+	template<> struct create_info<vk::Framebuffer> {
+		using type = vuk::FramebufferCreateInfo;
 	};
 
 
