@@ -56,7 +56,6 @@ namespace vuk {
 		vk::DescriptorPool get_pool(PerThreadContext& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info);
 	};
 
-
 	template<class T, size_t FC>
 	struct PFView;
 
@@ -109,7 +108,7 @@ namespace vuk {
 			PFPTView(PerThreadContext& ptc, PooledType<T>& pool) : ptc(ptc), pool(pool) {}
 			
 			template<class... Args>
-			auto acquire(Args&&... args) {
+			decltype(auto) acquire(Args&&... args) {
 				return pool.acquire(ptc, std::forward<Args>(args)...);
 			}
 		};

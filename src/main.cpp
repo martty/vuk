@@ -166,6 +166,7 @@ void device_init() {
 
 			vk::Image font_img;
 			vuk::ImageView font_iv;
+			vuk::SampledImage font(vuk::SampledImage::Global{});
 			{
 				vuk::Context context(device, physical_device.phys_device);
 				context.graphics_queue = graphics_queue;
@@ -181,9 +182,18 @@ void device_init() {
 
 						auto [img, iv, stub] = ptc.create_image(vk::Format::eR8G8B8A8Srgb, vk::Extent3D(width, height, 1), pixels);
 						font_img = img;
-						font_iv = iv;
+						font.global.iv = iv;
+						vk::SamplerCreateInfo sci;
+						sci.minFilter = sci.magFilter = vk::Filter::eLinear;
+						sci.mipmapMode = vk::SamplerMipmapMode::eLinear;
+						sci.addressModeU = sci.addressModeV = sci.addressModeW = vk::SamplerAddressMode::eRepeat;
+						sci.minLod = -1000;
+						sci.maxLod = 1000;
+						sci.maxAnisotropy = 1.0f;
+
+						font.global.sci = sci;
 						ptc.wait_all_transfers();
-						io.Fonts->TexID = (ImTextureID)(intptr_t)(VkImage)font_img;
+						io.Fonts->TexID = (ImTextureID)&font;
 					}
 					{
 						vk::GraphicsPipelineCreateInfo gpci;
@@ -584,20 +594,17 @@ void device_init() {
 						bool show = true;
 						ImGui::ShowDemoWindow(&show);
 
+						ImGui::Begin("Doge");
+						auto& siv = ptc.make_sampled_image(iv, vk::SamplerCreateInfo{});
+						ImGui::Image(&siv, ImVec2(100, 100));
+						ImGui::End();
+
 						ImGui::Render();
 						ImDrawData* draw_data = ImGui::GetDrawData();
 
 						auto reset_render_state = [&font_iv](vuk::CommandBuffer & command_buffer, ImDrawData * draw_data, vuk::Allocator::Buffer vertex, vuk::Allocator::Buffer index) {
 							command_buffer.bind_pipeline("imgui");
-							vk::SamplerCreateInfo sci;
-							sci.minFilter = vk::Filter::eLinear;
-							sci.magFilter = vk::Filter::eLinear;
-							sci.mipmapMode = vk::SamplerMipmapMode::eLinear;
-							sci.addressModeU = sci.addressModeV = sci.addressModeW = vk::SamplerAddressMode::eRepeat;
-							sci.minLod = -1000;
-							sci.maxLod = 1000;
-							sci.maxAnisotropy = 1.0f;
-							command_buffer.bind_sampled_image(0, 0, font_iv, sci);
+							//command_buffer.bind_sampled_image(0, 0, font_iv, sci);
 							if (index.size > 0) {
 								command_buffer.bind_index_buffer(index, sizeof(ImDrawIdx) == 2 ? vk::IndexType::eUint16 : vk::IndexType::eUint32);
 								command_buffer.bind_vertex_buffer(vertex);
@@ -655,7 +662,7 @@ void device_init() {
 											// User callback, registered via ImDrawList::AddCallback()
 											// (ImDrawCallback_ResetRenderState is a special callback value used by the user to request the renderer to reset render state.)
 											if (pcmd->UserCallback == ImDrawCallback_ResetRenderState)
-												;//ImGui_ImplVulkan_SetupRenderState(draw_data, command_buffer, rb, fb_width, fb_height);
+												reset_render_state(command_buffer, draw_data, imvert, imind);
 											else
 												pcmd->UserCallback(cmd_list, pcmd);
 										} else {
@@ -683,6 +690,13 @@ void device_init() {
 												scissor.extent.height = (uint32_t)(clip_rect.w - clip_rect.y);
 												command_buffer.set_scissor(0, scissor);
 
+												// Bind texture
+												if (pcmd->TextureId) {
+													auto& si = *reinterpret_cast<vuk::SampledImage*>(pcmd->TextureId);
+													if (si.is_global) {
+														command_buffer.bind_sampled_image(0, 0, si.global.iv, si.global.sci);
+													}
+												}
 												// Draw
 												command_buffer.draw_indexed(pcmd->ElemCount, 1, pcmd->IdxOffset + global_idx_offset, pcmd->VtxOffset + global_vtx_offset, 0);
 											}

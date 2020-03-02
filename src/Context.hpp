@@ -8,13 +8,16 @@
 #include "Allocator.hpp"
 #include <string_view>
 
+using Name = std::string_view;
+
+
 namespace vuk {
 	struct RGImage {
 		vk::Image image;
 		vuk::ImageView image_view;
 	};
 	struct RGCI {
-		std::string_view name;
+		Name name;
 		vk::ImageCreateInfo ici;
 		vk::ImageViewCreateInfo ivci;
 
@@ -42,6 +45,69 @@ namespace vuk {
 	template<> struct create_info<Allocator::Pool> {
 		using type = PoolSelect;
 	};
+
+	// high level type around binding a sampled image with a sampler
+	struct SampledImage {
+		struct Global {
+			vuk::ImageView iv;
+			vk::SamplerCreateInfo sci = {};
+			vk::ImageLayout image_layout;
+		};
+
+		struct RenderGraphAttachment {
+			Name attachment_name;
+			vk::SamplerCreateInfo sci = {};
+			vk::ImageLayout image_layout;
+		};
+
+		bool is_global;
+		union {
+			Global global = {};
+			RenderGraphAttachment rg_attachment;
+		};
+
+		SampledImage(Global g) : global(g), is_global(true) {}
+		SampledImage(RenderGraphAttachment g) : rg_attachment(g), is_global(false) {}
+
+		SampledImage(const SampledImage& o) {
+			*this = o;
+		}
+
+		SampledImage& operator=(const SampledImage& o) {
+			if (o.is_global) {
+				global = {};
+				global = o.global;
+			} else {
+				rg_attachment = {};
+				rg_attachment = o.rg_attachment;
+			}
+			is_global = o.is_global;
+			return *this;
+		}
+	};
+
+	// the returned values are pointer stable until the frame gets recycled
+	template<>
+	struct PooledType<vuk::SampledImage> {
+		plf::colony<vuk::SampledImage> values;
+		size_t needle = 0;
+
+		PooledType(Context&) {}
+		vuk::SampledImage& acquire(PerThreadContext& ptc, vuk::SampledImage si);
+		void reset(Context&) { needle = 0; }
+		void free(Context&) {} // nothing to free, this is non-owning
+	};
+
+	inline vuk::SampledImage& PooledType<vuk::SampledImage>::acquire(PerThreadContext& ptc, vuk::SampledImage si) {
+		if (values.size() < (needle + 1)) {
+			return *values.emplace(std::move(si));
+		} else {
+			auto it = values.begin();
+			values.advance(it, needle++);
+			*it = si;
+			return *it;
+		}
+	}
 
 }
 
@@ -72,6 +138,7 @@ namespace vuk {
 		PerFrameCache<Allocator::Pool, FC> scratch_buffers;
 		Cache<vk::DescriptorSet> descriptor_sets;
 		Cache<vk::Sampler> sampler_cache;
+		Pool<vuk::SampledImage, FC> sampled_images;
 
 		std::array<std::vector<vk::Image>, Context::FC> image_recycle;
 		std::array<std::vector<vk::ImageView>, Context::FC> image_view_recycle;
@@ -92,7 +159,8 @@ namespace vuk {
 			transient_images(*this),
 			scratch_buffers(*this),
 			descriptor_sets(*this),
-			sampler_cache(*this)
+			sampler_cache(*this),
+			sampled_images(*this)
 		{
 			vk_pipeline_cache = device.createPipelineCacheUnique({});
 		}
@@ -144,6 +212,7 @@ namespace vuk {
 		PerFrameCache<Allocator::Pool, Context::FC>::PFView scratch_buffers;
 		Cache<vk::DescriptorSet>::PFView descriptor_sets;
 		Cache<vk::Sampler>::PFView sampler_cache;
+		Pool<vuk::SampledImage, Context::FC>::PFView sampled_images;
 
 		InflightContext(Context& ctx, unsigned absolute_frame) : ctx(ctx), 
 			absolute_frame(absolute_frame), 
@@ -158,7 +227,8 @@ namespace vuk {
 			transient_images(*this, ctx.transient_images),
 			scratch_buffers(*this, ctx.scratch_buffers),
 			descriptor_sets(*this, ctx.descriptor_sets),
-			sampler_cache(*this, ctx.sampler_cache)
+			sampler_cache(*this, ctx.sampler_cache),
+			sampled_images(ctx.sampled_images.get_view(*this))
 		{
 			// image recycling
 			for (auto& img : ctx.image_recycle[frame]) {
@@ -265,6 +335,7 @@ namespace vuk {
 		PerFrameCache<Allocator::Pool, Context::FC>::PFPTView scratch_buffers;
 		Cache<vk::DescriptorSet>::PFPTView descriptor_sets;
 		Cache<vk::Sampler>::PFPTView sampler_cache;
+		Pool<vuk::SampledImage, Context::FC>::PFPTView sampled_images;
 
 		// recycling global objects
 		std::vector<Allocator::Buffer> buffer_recycle;
@@ -282,7 +353,8 @@ namespace vuk {
 			transient_images(*this, ifc.transient_images),
 			scratch_buffers(*this, ifc.scratch_buffers),
 			descriptor_sets(*this, ifc.descriptor_sets),
-			sampler_cache(*this, ifc.sampler_cache)
+			sampler_cache(*this, ifc.sampler_cache),
+			sampled_images(ifc.sampled_images.get_view(*this))
 		{}
 
 		~PerThreadContext() {
@@ -438,6 +510,11 @@ namespace vuk {
 			si.pCommandBuffers = &cbuf;
 			ifc.ctx.graphics_queue.submit(si, fence);
 			ifc.pending_transfers.emplace(InflightContext::PendingTransfer{ last, fence });
+		}
+
+		vuk::SampledImage& make_sampled_image(vuk::ImageView iv, vk::SamplerCreateInfo sci) {
+			vuk::SampledImage si(vuk::SampledImage::Global{ iv, sci, vk::ImageLayout::eShaderReadOnlyOptimal });
+			return sampled_images.acquire(si);
 		}
 	};
 
