@@ -210,7 +210,7 @@ namespace vuk {
 		struct AttachmentRPInfo {
 			Name name;
 			vk::Extent2D extents;
-			vk::ImageView iv;
+			vuk::ImageView iv;
 			vk::AttachmentDescription description;
 
 			// sync in
@@ -263,7 +263,7 @@ namespace vuk {
 
 		// RGscaffold
 		std::unordered_map<Name, AttachmentRPInfo> bound_attachments;
-		void bind_attachment_to_swapchain(Name name, vk::Format format, vk::Extent2D extent, vk::ImageView siv);
+		void bind_attachment_to_swapchain(Name name, vk::Format format, vk::Extent2D extent, vuk::ImageView siv);
 		void mark_attachment_internal(Name, vk::Format, vk::Extent2D);
 
 		// RG

@@ -65,7 +65,7 @@ namespace vuk {
 		CommandBuffer& bind_vertex_buffer(Allocator::Buffer&);
 		CommandBuffer& bind_index_buffer(Allocator::Buffer&, vk::IndexType type);
 
-		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, vk::ImageView iv, vk::SamplerCreateInfo sampler_create_info);
+		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, vuk::ImageView iv, vk::SamplerCreateInfo sampler_create_info);
 		
 		CommandBuffer& push_constants(vk::ShaderStageFlags stages, size_t offset, void * data, size_t size);
 		template<class T>

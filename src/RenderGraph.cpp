@@ -206,7 +206,7 @@ namespace vuk {
 
 	}
 
-	void RenderGraph::bind_attachment_to_swapchain(Name name, vk::Format format, vk::Extent2D extent, vk::ImageView siv) {
+	void RenderGraph::bind_attachment_to_swapchain(Name name, vk::Format format, vk::Extent2D extent, vuk::ImageView siv) {
 		AttachmentRPInfo attachment_info;
 		attachment_info.extents = extent;
 		attachment_info.iv = siv;
@@ -231,7 +231,7 @@ namespace vuk {
 	void RenderGraph::mark_attachment_internal(Name name, vk::Format format, vk::Extent2D extent) {
 		AttachmentRPInfo attachment_info;
 		attachment_info.extents = extent;
-		attachment_info.iv = vk::ImageView{};
+		attachment_info.iv = {};
 		attachment_info.is_external = false;
 		// internal attachment, discard contents
 		attachment_info.description.initialLayout = vk::ImageLayout::eUndefined;
@@ -431,9 +431,11 @@ namespace vuk {
 
 			// attachments
 			auto& ivs = rp.fbci.attachments;
+			std::vector<vk::ImageView> vkivs;
 			for (auto& attrpinfo : rp.attachments) {
 				rp.rpci.attachments.push_back(attrpinfo.description);
 				ivs.push_back(attrpinfo.iv);
+				vkivs.push_back(attrpinfo.iv.payload);
 			}
 			rp.rpci.attachmentCount = rp.rpci.attachments.size();
 			rp.rpci.pAttachments = rp.rpci.attachments.data();
@@ -442,8 +444,8 @@ namespace vuk {
 			rp.fbci.renderPass = rp.handle;
 			rp.fbci.width = rp.attachments[0].extents.width;
 			rp.fbci.height = rp.attachments[0].extents.height;
-			rp.fbci.pAttachments = &ivs[0];
-			rp.fbci.attachmentCount = ivs.size();
+			rp.fbci.pAttachments = &vkivs[0];
+			rp.fbci.attachmentCount = vkivs.size();
 			rp.fbci.layers = 1;
 			rp.framebuffer = ptc.framebuffer_cache.acquire(rp.fbci);
 		}
@@ -677,13 +679,13 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::bind_sampled_image(unsigned set, unsigned binding, vk::ImageView iv, vk::SamplerCreateInfo sci) {
+	CommandBuffer& CommandBuffer::bind_sampled_image(unsigned set, unsigned binding, vuk::ImageView iv, vk::SamplerCreateInfo sci) {
 		sets_used[set] = true;
 		set_bindings[set].bindings[binding].type = vk::DescriptorType::eCombinedImageSampler;
 		set_bindings[set].bindings[binding].image = { };
-		set_bindings[set].bindings[binding].image.imageView = iv;
-		set_bindings[set].bindings[binding].image.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-		set_bindings[set].bindings[binding].image.sampler = ptc.sampler_cache.acquire(sci);
+		set_bindings[set].bindings[binding].image.image_view = iv;
+		set_bindings[set].bindings[binding].image.image_layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+		set_bindings[set].bindings[binding].image.sampler = ptc.ctx.wrap(ptc.sampler_cache.acquire(sci));
 		set_bindings[set].used.set(binding);
 
 		return *this;

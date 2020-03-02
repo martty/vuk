@@ -165,7 +165,7 @@ void device_init() {
 			io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;  // We can honor the ImDrawCmd::VtxOffset field, allowing for large meshes.
 
 			vk::Image font_img;
-			vk::ImageView font_iv;
+			vuk::ImageView font_iv;
 			{
 				vuk::Context context(device, physical_device.phys_device);
 				context.graphics_queue = graphics_queue;
@@ -485,7 +485,15 @@ void device_init() {
 
 
 					auto swapimages = vkb::get_swapchain_images(*vkswapchain);
-					auto swapimageviews = *vkb::get_swapchain_image_views(*vkswapchain, *swapimages);
+					auto swapimageviews = [&]() {
+						auto vkviews = *vkb::get_swapchain_image_views(*vkswapchain, *swapimages);
+						std::vector<vuk::ImageView> ivs;
+						ivs.reserve(vkviews.size());
+						for (auto& v : vkviews) {
+							ivs.push_back(context.wrap(vk::ImageView{ v }));
+						}
+						return ivs;
+					}();
 
 					using glm::vec3;
 					float angle = 0.f;
@@ -715,7 +723,7 @@ void device_init() {
 					}
 					context.device.waitIdle();
 					for (auto& swiv : swapimageviews) {
-						device.destroy(swiv);
+						device.destroy(swiv.payload);
 					}
 				}
 			}

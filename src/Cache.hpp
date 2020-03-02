@@ -4,6 +4,7 @@
 #include <plf_colony.h>
 #include <vulkan/vulkan.hpp>
 #include "Hash.hpp"
+#include "Handle.hpp"
 #include <gsl/span>
 
 class Context;
@@ -358,7 +359,7 @@ namespace vuk {
 	};
 
 	struct FramebufferCreateInfo : public vk::FramebufferCreateInfo {
-		std::vector<vk::ImageView> attachments;
+		std::vector<vuk::ImageView> attachments;
 
 		bool operator==(const FramebufferCreateInfo& o) const {
 			return std::tie(flags, attachments, width, height, renderPass, layers) ==
@@ -423,17 +424,6 @@ namespace std {
 			return h;
 		}
 	};
-
-	template<class T>
-	struct vk_handle_hash {
-		size_t operator()(T const & x) const noexcept {
-			auto as_uint64 = reinterpret_cast<uint64_t>((typename T::CType)x);
-			return std::hash<uint64_t>()(as_uint64);
-		}
-	};
-
-	template <>
-	struct hash<vk::ImageView> : vk_handle_hash<vk::ImageView> {};
 };
 
 #define VUK_MAX_BINDINGS 16
@@ -449,6 +439,20 @@ namespace vuk {
 		}
 	};
 
+	struct DescriptorImageInfo {
+		vuk::Sampler sampler;
+		vuk::ImageView image_view;
+		vk::ImageLayout image_layout;
+
+		bool operator==(const DescriptorImageInfo& o) const {
+			return std::tie(sampler, image_view, image_layout) == std::tie(o.sampler, o.image_view, o.image_layout);
+		}
+
+		operator vk::DescriptorImageInfo() const {
+			return {sampler.payload, image_view.payload, image_layout};
+		}
+	};
+
 	// use hand rolled variant to control bits
 	// memset to clear out the union
 #pragma pack(push, 1)
@@ -459,7 +463,7 @@ namespace vuk {
 		union {
 			struct Unbound {} unbound;
 			vk::DescriptorBufferInfo buffer;
-			vk::DescriptorImageInfo image;
+			vuk::DescriptorImageInfo image;
 		};
 
 		bool operator==(const DescriptorBinding& o) const {

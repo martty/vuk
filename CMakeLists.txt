@@ -46,6 +46,7 @@ target_sources(vuk PUBLIC src/main.cpp
 	src/Allocator.hpp
 	src/Allocator.cpp
 	src/CommandBuffer.hpp
+	src/Handle.hpp
 	)
 
 target_include_directories(vuk PUBLIC include ext/mapbox-variant/include)

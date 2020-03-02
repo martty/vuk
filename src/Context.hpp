@@ -11,7 +11,7 @@
 namespace vuk {
 	struct RGImage {
 		vk::Image image;
-		vk::ImageView image_view;
+		vuk::ImageView image_view;
 	};
 	struct RGCI {
 		std::string_view name;
@@ -47,14 +47,8 @@ namespace vuk {
 
 #include <queue>
 #include <algorithm>
+
 namespace vuk {
-	struct GPUHandleBase {
-		size_t id;
-	};
-
-	template<class T>
-	struct GPUHandle : public GPUHandleBase {};
-
 	struct TransferStub {
 		size_t id;
 	};
@@ -110,8 +104,13 @@ namespace vuk {
 			}
 		}
 
+		template<class T>
+		Handle<T> wrap(T payload) {
+			return { unique_handle_id_counter++, payload };
+		}
+
 		void destroy(const RGImage& image) {
-			device.destroy(image.image_view);
+			device.destroy(image.image_view.payload);
 			allocator.destroy_image(image.image);
 		}
 
@@ -119,6 +118,7 @@ namespace vuk {
 			allocator.destroy_scratch_pool(v);
 		}
 
+		std::atomic<size_t> unique_handle_id_counter = 0;
 
 		std::atomic<size_t> frame_counter = 0;
 		InflightContext begin();
@@ -294,8 +294,8 @@ namespace vuk {
 			image_recycle.push_back(image);
 		}
 
-		void destroy(vk::ImageView image) {
-			image_view_recycle.push_back(image);
+		void destroy(vuk::ImageView image) {
+			image_view_recycle.push_back(image.payload);
 		}
 
 		Allocator::Buffer _allocate_scratch_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, bool create_mapped) {
@@ -321,7 +321,7 @@ namespace vuk {
 			return { dst, stub };
 		}
 
-		std::tuple<vk::Image, vk::ImageView, TransferStub> create_image(vk::Format format, vk::Extent3D extents, void* data) {
+		std::tuple<vk::Image, vuk::ImageView, TransferStub> create_image(vk::Format format, vk::Extent3D extents, void* data) {
 			vk::ImageCreateInfo ici;
 			ici.format = format;
 			ici.extent = extents;
@@ -344,7 +344,7 @@ namespace vuk {
 			ivci.subresourceRange.levelCount = 1;
 			ivci.viewType = vk::ImageViewType::e2D;
 			auto iv = ifc.ctx.device.createImageView(ivci);
-			return { dst, std::move(iv), stub };
+			return { dst, ifc.ctx.wrap(iv), stub };
 		}
 
 
@@ -471,7 +471,7 @@ namespace vuk {
 			res.image = ctx.allocator.create_image_for_rendertarget(cinfo.ici);
 			auto ivci = cinfo.ivci;
 			ivci.image = res.image;
-			res.image_view = ctx.device.createImageView(ivci);
+			res.image_view = ctx.wrap(ctx.device.createImageView(ivci));
 			return res;
 		} else if constexpr (std::is_same_v<T, Allocator::Pool>) {
 			return ctx.allocator.allocate_pool(cinfo.mem_usage, cinfo.buffer_usage);
@@ -483,6 +483,7 @@ namespace vuk {
 			auto is_null = _BitScanReverse(&leading_zero, mask);
 			leading_zero++;
 			std::array<vk::WriteDescriptorSet, VUK_MAX_BINDINGS> writes;
+			std::array<vk::DescriptorImageInfo, VUK_MAX_BINDINGS> diis;
 			for (unsigned i = 0; i < leading_zero; i++) {
 				if (!cinfo.used.test(i)) continue;
 				auto& write = writes[i];
@@ -500,7 +501,8 @@ namespace vuk {
 					case vk::DescriptorType::eSampledImage:
 					case vk::DescriptorType::eSampler:
 					case vk::DescriptorType::eCombinedImageSampler:
-						write.pImageInfo = &binding.image;
+						diis[i] = binding.image;
+						write.pImageInfo = &diis[i];
 						break;
 					default:
 						assert(0);
