@@ -655,9 +655,16 @@ namespace vuk {
 	}
 
 
-	CommandBuffer& CommandBuffer::bind_pipeline(Name p) {
-		next_graphics_pipeline = ptc.ifc.ctx.named_pipelines.at(p);
+	CommandBuffer& CommandBuffer::bind_pipeline(vuk::PipelineCreateInfo pi) {
+		pi.gpci.renderPass = ongoing_renderpass->first.handle;
+		pi.gpci.subpass = ongoing_renderpass->second;
+		current_pipeline = ptc.pipeline_cache.acquire(pi);
+		command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, current_pipeline->pipeline);
 		return *this;
+	}
+
+	CommandBuffer& CommandBuffer::bind_pipeline(Name p) {
+		return bind_pipeline(ptc.ifc.ctx.named_pipelines.at(p));
 	}
 
 	CommandBuffer& CommandBuffer::bind_vertex_buffer(Allocator::Buffer& buf) {
@@ -665,8 +672,8 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::bind_index_buffer(Allocator::Buffer& buf) {
-		command_buffer.bindIndexBuffer(buf.buffer, buf.offset, vk::IndexType::eUint32);
+	CommandBuffer& CommandBuffer::bind_index_buffer(Allocator::Buffer& buf, vk::IndexType type) {
+		command_buffer.bindIndexBuffer(buf.buffer, buf.offset, type);
 		return *this;
 	}
 
@@ -682,8 +689,13 @@ namespace vuk {
 		return *this;
 	}
 
+	CommandBuffer& CommandBuffer::push_constants(vk::ShaderStageFlags stages, size_t offset, void* data, size_t size) {
+		assert(current_pipeline);
+		command_buffer.pushConstants(current_pipeline->pipeline_layout, stages, offset, size, data);
+		return *this;
+	}
+
 	CommandBuffer& CommandBuffer::bind_uniform_buffer(unsigned set, unsigned binding, Allocator::Buffer buffer) {
-		assert(next_graphics_pipeline);
 		sets_used[set] = true;
 		set_bindings[set].bindings[binding].type = vk::DescriptorType::eUniformBuffer;
 		set_bindings[set].bindings[binding].buffer = vk::DescriptorBufferInfo{ buffer.buffer, buffer.offset, buffer.size };
@@ -706,23 +718,15 @@ namespace vuk {
 	}
 
 	void CommandBuffer::_bind_graphics_pipeline_state() {
-		if (next_graphics_pipeline) {
-			next_graphics_pipeline->gpci.renderPass = ongoing_renderpass->first.handle;
-			next_graphics_pipeline->gpci.subpass = ongoing_renderpass->second;
-			auto pipeline_info = ptc.pipeline_cache.acquire(*next_graphics_pipeline);
-			command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_info.pipeline);
-
-			for (size_t i = 0; i < VUK_MAX_SETS; i++) {
-				if (!sets_used[i])
-					continue;
-				set_bindings[i].layout_info = pipeline_info.layout_info;
-				auto ds = ptc.descriptor_sets.acquire(set_bindings[i]);
-				command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline_info.pipeline_layout, 0, 1, &ds, 0, nullptr);
-				sets_used[i] = false;
-				set_bindings[i] = {};
-			}
-			next_graphics_pipeline = {};
+		assert(current_pipeline);
+		for (size_t i = 0; i < VUK_MAX_SETS; i++) {
+			if (!sets_used[i])
+				continue;
+			set_bindings[i].layout_info = current_pipeline->layout_info;
+			auto ds = ptc.descriptor_sets.acquire(set_bindings[i]);
+			command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, current_pipeline->pipeline_layout, 0, 1, &ds, 0, nullptr);
+			sets_used[i] = false;
+			set_bindings[i] = {};
 		}
 	}
-
 }

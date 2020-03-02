@@ -39,7 +39,7 @@ namespace vuk {
 		std::optional<std::pair<RenderGraph::RenderPassInfo&, uint32_t>> ongoing_renderpass;
 		std::optional<vk::Viewport> next_viewport;
 		std::optional<vk::Rect2D> next_scissor;
-		std::optional<vuk::create_info_t<vuk::PipelineInfo>> next_graphics_pipeline;
+		std::optional<vuk::PipelineInfo> current_pipeline;
 
 		// global memory barrier
 		bool global_memory_barrier_inserted_since_last_draw = false;
@@ -59,16 +59,25 @@ namespace vuk {
 		CommandBuffer& set_scissor(unsigned index, Area area);
 		CommandBuffer& set_scissor(unsigned index, Area::Framebuffer area);
 
-		CommandBuffer& bind_pipeline(vuk::PipelineCreateInfo gpci) {
-			next_graphics_pipeline = gpci;
-			return *this;
-		}
+		CommandBuffer& bind_pipeline(vuk::PipelineCreateInfo gpci);
 		CommandBuffer& bind_pipeline(Name p);
 
 		CommandBuffer& bind_vertex_buffer(Allocator::Buffer&);
-		CommandBuffer& bind_index_buffer(Allocator::Buffer&);
+		CommandBuffer& bind_index_buffer(Allocator::Buffer&, vk::IndexType type);
 
 		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, vk::ImageView iv, vk::SamplerCreateInfo sampler_create_info);
+		
+		CommandBuffer& push_constants(vk::ShaderStageFlags stages, size_t offset, void * data, size_t size);
+		template<class T>
+		CommandBuffer& push_constants(vk::ShaderStageFlags stages, size_t offset, gsl::span<T> span) {
+			return push_constants(stages, offset, (void*)span.data(), sizeof(T) * span.size());
+		}
+
+		template<class T>
+		CommandBuffer& push_constants(vk::ShaderStageFlags stages, size_t offset, T value) {
+			return push_constants(stages, offset, (void*)&value, sizeof(T));
+		}
+
 
 		std::bitset<VUK_MAX_SETS> sets_used = {};
 		std::array<SetBinding, VUK_MAX_SETS> set_bindings = {};

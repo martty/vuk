@@ -120,11 +120,14 @@ namespace vuk {
 		}
 
 		Buffer _allocate_buffer(Pool& pool, size_t size, bool create_mapped) {
+			if (size == 0) {
+				return { .buffer = vk::Buffer{}, .size = 0 };
+			}
 			vk::BufferCreateInfo bci;
 			bci.size = 1024; // ignored
 			bci.usage = pool.usage;
 
-			VmaAllocationCreateInfo vaci;
+			VmaAllocationCreateInfo vaci = {};
 			vaci.pool = pool.pool;
 			if (create_mapped)
 				vaci.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
@@ -134,7 +137,8 @@ namespace vuk {
 			pags.bci = bci;
 			auto mem_reqs = pool.mem_reqs;
 			mem_reqs.size = size;
-			vmaAllocateMemory(allocator, &(VkMemoryRequirements)mem_reqs, &vaci, &res, &vai);
+			auto result = vmaAllocateMemory(allocator, &(VkMemoryRequirements)mem_reqs, &vaci, &res, &vai);
+			assert(result == VK_SUCCESS);
 			real_alloc_callback = noop_cb;
 			if (pags.buffer != vk::Buffer{}) {
 				// TODO: this breaks if we allocate multiple memories for a pool

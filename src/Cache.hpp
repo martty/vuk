@@ -475,6 +475,7 @@ namespace vuk {
 				return image == o.image;
 				break;
 			default:
+				printf("%d\n", to_integral(type));
 				assert(0);
 			}
 
@@ -487,7 +488,12 @@ namespace vuk {
 		DescriptorSetLayoutAllocInfo layout_info = {};
 
 		bool operator==(const SetBinding& o) const {
-			return bindings == o.bindings && layout_info == o.layout_info;
+			if (layout_info != o.layout_info) return false;
+			for (size_t i = 0; i < VUK_MAX_BINDINGS; i++) {
+				if (!used[i]) continue;
+				if (bindings[i] != o.bindings[i]) return false;
+			}
+			return true;
 		}
 	};
 }

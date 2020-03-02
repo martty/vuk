@@ -28,6 +28,8 @@ struct Pipeline {
 	vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 	vk::DescriptorSetLayout descriptorSetLayout;
 	std::vector<vk::DescriptorSetLayoutBinding> descriptorSetLayoutBindings;
+	std::vector<vk::PushConstantRange> pcrs;
+
 	vk::PipelineLayoutCreateInfo pipelineLayoutCreateInfo;
 	vk::PipelineLayout pipelineLayout;
 
