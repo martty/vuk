@@ -726,7 +726,7 @@ namespace vuk {
 				continue;
 			set_bindings[i].layout_info = current_pipeline->layout_info;
 			auto ds = ptc.descriptor_sets.acquire(set_bindings[i]);
-			command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, current_pipeline->pipeline_layout, 0, 1, &ds, 0, nullptr);
+			command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, current_pipeline->pipeline_layout, 0, 1, &ds.descriptor_set, 0, nullptr);
 			sets_used[i] = false;
 			set_bindings[i] = {};
 		}

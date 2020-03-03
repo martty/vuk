@@ -558,7 +558,7 @@ namespace vuk {
 
 	template<class T>
 	struct create_info;
-	
+
 	template<class T>
 	using create_info_t = typename create_info<T>::type;
 
@@ -576,7 +576,41 @@ namespace vuk {
 		using type = vuk::RenderPassCreateInfo;
 	};
 
-	template<> struct create_info<vk::DescriptorSet> {
+	struct DescriptorPool {
+		std::vector<vk::DescriptorPool> pools;
+		size_t pool_needle = 0;
+		size_t sets_allocated = 0;
+		std::vector<vk::DescriptorSet> free_sets;
+
+		vk::DescriptorPool get_pool(PerThreadContext& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info);
+		vk::DescriptorSet acquire(PerThreadContext& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info);
+	};
+}
+
+namespace std {
+	template <>
+	struct hash<vuk::DescriptorSetLayoutAllocInfo> {
+		size_t operator()(vuk::DescriptorSetLayoutAllocInfo const & x) const noexcept {
+			size_t h = 0;
+			// TODO: should use vuk::DescriptorSetLayout here
+			hash_combine(h, ::hash::fnv1a::hash((const char *)&x.descriptor_counts[0], x.descriptor_counts.size() * sizeof(x.descriptor_counts[0])), (VkDescriptorSetLayout)x.layout); 
+			return h;
+		}
+	};
+};
+
+
+namespace vuk {
+	template<> struct create_info<vuk::DescriptorPool> {
+		using type = vuk::DescriptorSetLayoutAllocInfo;
+	};
+
+	struct DescriptorSet {
+		vk::DescriptorSet descriptor_set;
+		DescriptorSetLayoutAllocInfo layout_info;
+	};
+
+	template<> struct create_info<vuk::DescriptorSet> {
 		using type = vuk::SetBinding;
 	};
 
@@ -608,7 +642,6 @@ namespace vuk {
 			Cache& cache;
 
 			PFView(InflightContext& ifc, Cache<T>& cache) : ifc(ifc), cache(cache) {}
-			void collect(size_t threshold);
 		};
 
 		struct PFPTView {
@@ -617,6 +650,7 @@ namespace vuk {
 
 			PFPTView(PerThreadContext& ptc, PFView& view) : ptc(ptc), view(view) {}
 			T& acquire(const create_info_t<T>& ci);
+			void collect(size_t threshold);
 		};
 	};
 
@@ -645,7 +679,6 @@ namespace vuk {
 			PerFrameCache& cache;
 
 			PFView(InflightContext& ifc, PerFrameCache& cache) : ifc(ifc), cache(cache) {}
-			void collect(size_t threshold);
 		};
 
 		struct PFPTView {
@@ -654,6 +687,7 @@ namespace vuk {
 
 			PFPTView(PerThreadContext& ptc, PFView& view) : ptc(ptc), view(view) {}
 			T& acquire(const create_info_t<T>& ci);
+			void collect(size_t threshold);
 		};
 
 	};

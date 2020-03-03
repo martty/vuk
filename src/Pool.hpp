@@ -38,24 +38,6 @@ namespace vuk {
 		void free(Context&);
 	};
 
-	struct DescriptorSetLayoutAllocInfo;
-	template<>
-	struct PooledType<vk::DescriptorSet> {
-		std::vector<vk::UniqueDescriptorPool> pools;
-		size_t pool_needle = 0;
-		std::vector<vk::DescriptorSet> sets;
-		std::vector<vk::DescriptorSet> free_sets;
-		size_t set_needle = 0;
-		size_t sets_allocated = 0;
-
-		PooledType(Context&);
-		vk::DescriptorSet acquire(PerThreadContext& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info);
-		void reset(Context&);
-		void free(Context&);
-
-		vk::DescriptorPool get_pool(PerThreadContext& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info);
-	};
-
 	template<class T, size_t FC>
 	struct PFView;
 
@@ -110,6 +92,10 @@ namespace vuk {
 			template<class... Args>
 			decltype(auto) acquire(Args&&... args) {
 				return pool.acquire(ptc, std::forward<Args>(args)...);
+			}
+
+			void release(T value) {
+				return pool.release(value);
 			}
 		};
 

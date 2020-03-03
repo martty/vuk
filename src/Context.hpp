@@ -129,14 +129,14 @@ namespace vuk {
 		Pool<vk::CommandBuffer, FC> cbuf_pools;
 		Pool<vk::Semaphore, FC> semaphore_pools;
 		Pool<vk::Fence, FC> fence_pools;
-		Pool<vk::DescriptorSet, FC> descriptor_pools;
 		vk::UniquePipelineCache vk_pipeline_cache;
 		Cache<PipelineInfo> pipeline_cache;
 		Cache<vk::RenderPass> renderpass_cache;
 		Cache<vk::Framebuffer> framebuffer_cache;
 		PerFrameCache<RGImage, FC> transient_images;
 		PerFrameCache<Allocator::Pool, FC> scratch_buffers;
-		Cache<vk::DescriptorSet> descriptor_sets;
+		PerFrameCache<vuk::DescriptorPool, FC> pool_cache;
+		Cache<vuk::DescriptorSet> descriptor_sets;
 		Cache<vk::Sampler> sampler_cache;
 		Pool<vuk::SampledImage, FC> sampled_images;
 
@@ -152,7 +152,6 @@ namespace vuk {
 			cbuf_pools(*this),
 			semaphore_pools(*this),
 			fence_pools(*this),
-			descriptor_pools(*this),
 			pipeline_cache(*this),
 			renderpass_cache(*this),
 			framebuffer_cache(*this),
@@ -160,7 +159,8 @@ namespace vuk {
 			scratch_buffers(*this),
 			descriptor_sets(*this),
 			sampler_cache(*this),
-			sampled_images(*this)
+			sampled_images(*this),
+			pool_cache(*this)
 		{
 			vk_pipeline_cache = device.createPipelineCacheUnique({});
 		}
@@ -186,6 +186,26 @@ namespace vuk {
 			allocator.destroy_scratch_pool(v);
 		}
 
+		void destroy(const vuk::DescriptorPool& dp) {
+			for (auto& p : dp.pools) {
+				device.destroy(p);
+			}
+		}
+
+		void destroy(vuk::PipelineInfo) {}
+		void destroy(vk::RenderPass rp) {
+			device.destroy(rp);
+		}
+		void destroy(vuk::DescriptorSet) {
+			// no-op, we destroy the pools
+		}
+		void destroy(vk::Framebuffer fb) {
+			device.destroy(fb);
+		}
+		void destroy(vk::Sampler sa) {
+			device.destroy(sa);
+		}
+
 		std::atomic<size_t> unique_handle_id_counter = 0;
 
 		std::atomic<size_t> frame_counter = 0;
@@ -204,47 +224,17 @@ namespace vuk {
 		Pool<vk::CommandBuffer, Context::FC>::PFView commandbuffer_pools;
 		Pool<vk::Semaphore, Context::FC>::PFView semaphore_pools;
 		Pool<vk::Fence, Context::FC>::PFView fence_pools;
-		Pool<vk::DescriptorSet, Context::FC>::PFView descriptor_pools;
 		Cache<PipelineInfo>::PFView pipeline_cache;
 		Cache<vk::RenderPass>::PFView renderpass_cache;
 		Cache<vk::Framebuffer>::PFView framebuffer_cache;
 		PerFrameCache<vuk::RGImage, Context::FC>::PFView transient_images;
 		PerFrameCache<Allocator::Pool, Context::FC>::PFView scratch_buffers;
-		Cache<vk::DescriptorSet>::PFView descriptor_sets;
+		Cache<vuk::DescriptorSet>::PFView descriptor_sets;
 		Cache<vk::Sampler>::PFView sampler_cache;
 		Pool<vuk::SampledImage, Context::FC>::PFView sampled_images;
+		PerFrameCache<vuk::DescriptorPool, Context::FC>::PFView pool_cache;
 
-		InflightContext(Context& ctx, unsigned absolute_frame) : ctx(ctx), 
-			absolute_frame(absolute_frame), 
-			frame(absolute_frame % Context::FC),
-			commandbuffer_pools(ctx.cbuf_pools.get_view(*this)),
-			semaphore_pools(ctx.semaphore_pools.get_view(*this)),
-			fence_pools(ctx.fence_pools.get_view(*this)),
-			descriptor_pools(ctx.descriptor_pools.get_view(*this)),
-			pipeline_cache(*this, ctx.pipeline_cache),
-			renderpass_cache(*this, ctx.renderpass_cache),
-			framebuffer_cache(*this, ctx.framebuffer_cache),
-			transient_images(*this, ctx.transient_images),
-			scratch_buffers(*this, ctx.scratch_buffers),
-			descriptor_sets(*this, ctx.descriptor_sets),
-			sampler_cache(*this, ctx.sampler_cache),
-			sampled_images(ctx.sampled_images.get_view(*this))
-		{
-			// image recycling
-			for (auto& img : ctx.image_recycle[frame]) {
-				ctx.allocator.destroy_image(img);
-			}
-			ctx.image_recycle[frame].clear();
-
-			for (auto& iv : ctx.image_view_recycle[frame]) {
-				ctx.device.destroy(iv);
-			}
-			ctx.image_view_recycle[frame].clear();
-
-			for (auto& sb : scratch_buffers.cache.data[frame].pool) {
-				ctx.allocator.reset_pool(sb);
-			}
-		}
+		InflightContext(Context& ctx, unsigned absolute_frame);
 
 		struct BufferCopyCommand {
 			Allocator::Buffer src;
@@ -302,16 +292,15 @@ namespace vuk {
 		// recycle
 		std::mutex recycle_mutex;
 
-		void _add_images_to_recycle(std::vector<vk::Image>&& images) {
+		void destroy(std::vector<vk::Image>&& images) {
 			std::lock_guard _(recycle_mutex);
 			ctx.image_recycle[frame].insert(ctx.image_recycle[frame].end(), images.begin(), images.end());
 		}
-		void _add_image_views_to_recycle(std::vector<vk::ImageView>&& images) {
+		void destroy(std::vector<vk::ImageView>&& images) {
 			std::lock_guard _(recycle_mutex);
 			ctx.image_view_recycle[frame].insert(ctx.image_view_recycle[frame].end(), images.begin(), images.end());
 		}
-
-
+	
 		PerThreadContext begin();
 	};
 
@@ -327,15 +316,15 @@ namespace vuk {
 		Pool<vk::CommandBuffer, Context::FC>::PFPTView commandbuffer_pool;
 		Pool<vk::Semaphore, Context::FC>::PFPTView semaphore_pool;
 		Pool<vk::Fence, Context::FC>::PFPTView fence_pool;
-		Pool<vk::DescriptorSet, Context::FC>::PFPTView descriptor_pool;
 		Cache<PipelineInfo>::PFPTView pipeline_cache;
 		Cache<vk::RenderPass>::PFPTView renderpass_cache;
 		Cache<vk::Framebuffer>::PFPTView framebuffer_cache;
 		PerFrameCache<vuk::RGImage, Context::FC>::PFPTView transient_images;
 		PerFrameCache<Allocator::Pool, Context::FC>::PFPTView scratch_buffers;
-		Cache<vk::DescriptorSet>::PFPTView descriptor_sets;
+		Cache<vuk::DescriptorSet>::PFPTView descriptor_sets;
 		Cache<vk::Sampler>::PFPTView sampler_cache;
 		Pool<vuk::SampledImage, Context::FC>::PFPTView sampled_images;
+		PerFrameCache<vuk::DescriptorPool, Context::FC>::PFPTView pool_cache;
 
 		// recycling global objects
 		std::vector<Allocator::Buffer> buffer_recycle;
@@ -346,7 +335,6 @@ namespace vuk {
 			commandbuffer_pool(ifc.commandbuffer_pools.get_view(*this)),
 			semaphore_pool(ifc.semaphore_pools.get_view(*this)),
 			fence_pool(ifc.fence_pools.get_view(*this)),
-			descriptor_pool(ifc.descriptor_pools.get_view(*this)),
 			pipeline_cache(*this, ifc.pipeline_cache),
 			renderpass_cache(*this, ifc.renderpass_cache),
 			framebuffer_cache(*this, ifc.framebuffer_cache),
@@ -354,12 +342,15 @@ namespace vuk {
 			scratch_buffers(*this, ifc.scratch_buffers),
 			descriptor_sets(*this, ifc.descriptor_sets),
 			sampler_cache(*this, ifc.sampler_cache),
-			sampled_images(ifc.sampled_images.get_view(*this))
-		{}
+			sampled_images(ifc.sampled_images.get_view(*this)),
+			pool_cache(*this, ifc.pool_cache)
+		{
+			
+		}
 
 		~PerThreadContext() {
-			ifc._add_images_to_recycle(std::move(image_recycle));
-			ifc._add_image_views_to_recycle(std::move(image_view_recycle));
+			ifc.destroy(std::move(image_recycle));
+			ifc.destroy(std::move(image_view_recycle));
 		}
 
 		void destroy(vk::Image image) {
@@ -368,6 +359,32 @@ namespace vuk {
 
 		void destroy(vuk::ImageView image) {
 			image_view_recycle.push_back(image.payload);
+		}
+
+		void destroy(vuk::DescriptorSet ds) {
+			// note that since we collect at integer times FC, we are releasing the DS back to the right pool
+			pool_cache.acquire(ds.layout_info).free_sets.push_back(ds.descriptor_set);
+		}
+
+		void destroy(vuk::PipelineInfo) {}
+
+		void destroy(vk::Sampler s) {
+			ifc.ctx.device.destroy(s);
+		}
+		void destroy(vk::Framebuffer fb) {
+			ifc.ctx.device.destroy(fb);
+		}
+		void destroy(vuk::Allocator::Pool pool) {
+			ifc.ctx.destroy(pool);
+		}
+		void destroy(vk::RenderPass rp) {
+			ifc.ctx.device.destroy(rp);
+		}
+		void destroy(vuk::RGImage rg) {
+			ifc.ctx.destroy(rg);
+		}
+		void destroy(vuk::DescriptorPool dp) {
+			ctx.destroy(dp);
 		}
 
 		Allocator::Buffer _allocate_scratch_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, bool create_mapped) {
@@ -518,6 +535,41 @@ namespace vuk {
 		}
 	};
 
+	inline InflightContext::InflightContext(Context& ctx, unsigned absolute_frame) : ctx(ctx),
+		absolute_frame(absolute_frame),
+		frame(absolute_frame% Context::FC),
+		commandbuffer_pools(ctx.cbuf_pools.get_view(*this)),
+		semaphore_pools(ctx.semaphore_pools.get_view(*this)),
+		fence_pools(ctx.fence_pools.get_view(*this)),
+		pipeline_cache(*this, ctx.pipeline_cache),
+		renderpass_cache(*this, ctx.renderpass_cache),
+		framebuffer_cache(*this, ctx.framebuffer_cache),
+		transient_images(*this, ctx.transient_images),
+		scratch_buffers(*this, ctx.scratch_buffers),
+		descriptor_sets(*this, ctx.descriptor_sets),
+		sampler_cache(*this, ctx.sampler_cache),
+		sampled_images(ctx.sampled_images.get_view(*this)),
+		pool_cache(*this, ctx.pool_cache)
+	{
+		// image recycling
+		for (auto& img : ctx.image_recycle[frame]) {
+			ctx.allocator.destroy_image(img);
+		}
+		ctx.image_recycle[frame].clear();
+
+		for (auto& iv : ctx.image_view_recycle[frame]) {
+			ctx.device.destroy(iv);
+		}
+		ctx.image_view_recycle[frame].clear();
+
+		for (auto& sb : scratch_buffers.cache.data[frame].pool) {
+			ctx.allocator.reset_pool(sb);
+		}
+
+		auto ptc = begin();
+		ptc.descriptor_sets.collect(Context::FC * 2);
+	}
+
 	inline PerThreadContext InflightContext::begin() {
 		return PerThreadContext{ *this, 0 };
 	}
@@ -552,9 +604,11 @@ namespace vuk {
 			return res;
 		} else if constexpr (std::is_same_v<T, Allocator::Pool>) {
 			return ctx.allocator.allocate_pool(cinfo.mem_usage, cinfo.buffer_usage);
-		} else if constexpr (std::is_same_v<T, vk::DescriptorSet>) {
-			auto ds = ptc.descriptor_pool.acquire(cinfo.layout_info);
-	
+		} else if constexpr (std::is_same_v<T, vuk::DescriptorPool>){
+			return vuk::DescriptorPool{};
+		} else if constexpr (std::is_same_v<T, vuk::DescriptorSet>) {
+			auto& pool = ptc.pool_cache.acquire(cinfo.layout_info);
+			auto ds = pool.acquire(ptc, cinfo.layout_info);
 			unsigned long leading_zero = 0;
 			auto mask = cinfo.used.to_ulong();
 			auto is_null = _BitScanReverse(&leading_zero, mask);
@@ -586,7 +640,7 @@ namespace vuk {
 				}
 			}
 			ctx.device.updateDescriptorSets(leading_zero, writes.data(), 0, nullptr);
-			return ds;
+			return { ds, cinfo.layout_info };
 		} else if constexpr (std::is_same_v<T, vk::Framebuffer>) {
 			return ptc.ctx.device.createFramebuffer(cinfo);
 		} else if constexpr (std::is_same_v<T, vk::Sampler>) {

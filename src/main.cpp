@@ -100,7 +100,8 @@ Mesh generate_cube() {
 
 void device_init() {
 	vkb::InstanceBuilder builder;
-	builder.setup_validation_layers()
+	builder
+		//.setup_validation_layers()
 		.set_debug_callback([](VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
 			VkDebugUtilsMessageTypeFlagsEXT messageType,
 			const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
@@ -725,8 +726,8 @@ void device_init() {
 						si.pWaitSemaphores = &present_rdy;
 						vk::PipelineStageFlags flags = vk::PipelineStageFlagBits::eColorAttachmentOutput;
 						si.pWaitDstStageMask = &flags;
-						graphics_queue.submit(si, ptc.fence_pool.acquire(1)[0]);
-
+						auto fence = ptc.fence_pool.acquire(1)[0];
+						graphics_queue.submit(si, fence);
 						vk::PresentInfoKHR pi;
 						pi.swapchainCount = 1;
 						pi.pSwapchains = &swapchain;
