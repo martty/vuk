@@ -168,7 +168,7 @@ namespace vuk {
 				SubpassInfo si;
 				si.pass = p;
 				for (auto& a : p->pass.color_attachments) {
-					si.attachments.emplace(a.name, AttachmentSInfo{ vk::ImageLayout::eColorAttachmentOptimal });
+					si.attachments.emplace(a.name, AttachmentSInfo{ vk::ImageLayout::eColorAttachmentOptimal, vk::AccessFlagBits::eColorAttachmentWrite, vk::PipelineStageFlagBits::eColorAttachmentOutput });
 					// TODO: ColorAttachmentRead happens if blending or logicOp
 					if (contains_if(rpi.attachments, [&](auto& att) { return att.name == a.name; })) {
 						// TODO: we want to add all same level passes here, otherwise the other passes might not get the right sync
@@ -184,7 +184,7 @@ namespace vuk {
 				}
 				if (p->pass.depth_attachment) {
 					auto& a = *p->pass.depth_attachment;
-					si.attachments.emplace(a.name, AttachmentSInfo{ vk::ImageLayout::eDepthStencilAttachmentOptimal });
+					si.attachments.emplace(a.name, AttachmentSInfo{ vk::ImageLayout::eDepthStencilAttachmentOptimal, vk::AccessFlagBits::eDepthStencilAttachmentRead | vk::AccessFlagBits::eDepthStencilAttachmentWrite, vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eLateFragmentTests });
 					// TODO: ColorAttachmentRead happens if blending or logicOp
 					if (contains_if(rpi.attachments, [&](auto& att) { return att.name == a.name; })) {
 						// TODO: we want to add all same level passes here, otherwise the other passes might not get the right sync
@@ -249,24 +249,84 @@ namespace vuk {
 		// output attachments have an initial layout of eUndefined (loadOp: clear or dontcare, storeOp: store)
 		for (auto& [name, attachment_info] : bound_attachments) {
 			if (!attachment_info.is_external) continue;
-			// get the first pass this attachment is used
-			auto pass = contains_if(passes, [&](auto& pi) {
-				auto& p = pi.pass;
-				if (contains_if(p.color_attachments, [&](auto& att) { return att.name == name; })) return true;
-				if (p.depth_attachment && p.depth_attachment->name == name) return true;
-				return false;
-				});
+			// TODO: get all the passes this attachment is used
+			// get the first pass this attachment is used -> on that RP we need to put the attachment load from external
+			// get the last pass this attachment is used -> on that RP we need to put the store to the format to external
+			// then loop through RPs, and put finallayout = last_use and initial_layout = last_use
+			std::vector<std::pair<RenderPassInfo*, std::vector<PassInfo*>>> use_passes;
+			PassInfo* global_first_use = nullptr;
+			PassInfo* global_last_use = nullptr;
+			for (auto& pass : passes) {
+				auto& p = pass.pass;
+				if (contains_if(p.color_attachments, [&](auto& att) { return att.name == name; }) || (p.depth_attachment && p.depth_attachment->name == name)) {
+					if (!global_first_use) global_first_use = &pass;
+					global_last_use = &pass;
+
+					auto& dst = *contains_if(rpis[pass.render_pass_index].attachments, [&](auto& att) {return att.name == name; });
+					dst.description.format = attachment_info.description.format;
+					dst.description.samples = attachment_info.description.samples;
+					dst.iv = attachment_info.iv;
+					dst.extents = attachment_info.extents;
+					dst.is_external = true;
+
+					auto it = std::find_if(use_passes.begin(), use_passes.end(), [&](auto& t) {return t.first == &rpis[pass.render_pass_index]; });
+					if (it == use_passes.end()) {
+						use_passes.emplace_back(std::pair{ &rpis[pass.render_pass_index], std::vector<PassInfo*>{} });
+						it = use_passes.end() - 1;
+					}
+					it->second.push_back(&pass);
+				}
+			}
+			// we need to figure out first use and last use per renderpass
+			// for now we assume single first and last
+			for (auto i = 0; i < use_passes.size(); i++) {
+				auto& [rpi, passes] = use_passes[i];
+				bool is_first_render_pass = (passes.front() == global_first_use);
+				bool is_last_render_pass = (passes.back() == global_last_use);
+
+				if (!is_last_render_pass) { // we need set final layout to match next renderpass
+					auto& first_pass_in_next_renderpass = use_passes[i + 1].second.front();
+
+					auto& dst = *contains_if(rpi->attachments, [&](auto& att) {return att.name == name; });
+
+					auto& si = rpi->subpasses[first_pass_in_next_renderpass->subpass];
+					auto& spai = si.attachments[name];
+					dst.description.finalLayout = spai.layout;
+					dst.description.storeOp = vk::AttachmentStoreOp::eStore;
+					dst.dstAccess = spai.access;
+					dst.dstStage = spai.stage;
+				}
+				if (!is_first_render_pass) {// we need to set initial layout to match prev renderpass
+					auto& last_pass_in_prev_renderpass = use_passes[i - 1].second.front();
+
+					auto& dst = *contains_if(rpi->attachments, [&](auto& att) {return att.name == name; });
+
+					auto& si = rpi->subpasses[last_pass_in_prev_renderpass->subpass];
+					auto& spai = si.attachments[name];
+					dst.description.initialLayout = spai.layout;
+					dst.description.loadOp = vk::AttachmentLoadOp::eLoad;
+					dst.srcAccess = spai.access;
+					dst.srcStage = spai.stage;
+				}
+			}
+
 			// in the renderpass this pass participates in, we want to fill in the info for the attachment
-			// TODO: we want to find the first to put in the initial layout
-			// then we want to find the last to put in the final layout
-			assert(pass);
-			auto& dst = *contains_if(rpis[pass->render_pass_index].attachments, [&](auto& att) {return att.name == name; });
-			dst.description = attachment_info.description;
-			dst.srcAccess = attachment_info.srcAccess;
-			dst.srcStage = attachment_info.srcStage;
-			dst.iv = attachment_info.iv;
-			dst.extents = attachment_info.extents;
-			dst.is_external = true;
+			assert(global_first_use);
+			{
+				auto& dst = *contains_if(rpis[global_first_use->render_pass_index].attachments, [&](auto& att) {return att.name == name; });
+				dst.srcAccess = attachment_info.srcAccess;
+				dst.srcStage = attachment_info.srcStage;
+				dst.description.loadOp = attachment_info.description.loadOp;
+				dst.description.initialLayout = attachment_info.description.initialLayout;
+			}
+			assert(global_last_use);
+			{
+				auto& dst = *contains_if(rpis[global_last_use->render_pass_index].attachments, [&](auto& att) {return att.name == name; });
+				dst.dstAccess = attachment_info.dstAccess;
+				dst.dstStage = attachment_info.dstStage;
+				dst.description.storeOp = attachment_info.description.storeOp;
+				dst.description.finalLayout = attachment_info.description.finalLayout;
+			}
 		}
 		// do this for input attachments
 		// input attachments have a finallayout matching last use
@@ -369,8 +429,9 @@ namespace vuk {
 			rp.rpci.subpassCount = rp.rpci.subpass_descriptions.size();
 			// generate external deps
 			auto& deps = rp.rpci.subpass_dependencies;
-			for (auto& s : rp.subpasses) {
-				if (s.pass->is_head_pass) {
+			for (auto i = 0; i < rp.subpasses.size(); i++) {
+				auto& s = rp.subpasses[i];
+				if (i == 0) { // for now we assume first pass
 					for (auto& attrpinfo : rp.attachments) {
 						if (attrpinfo.first_use.subpass == s.pass->subpass && attrpinfo.is_external) {
 							vk::SubpassDependency dep_in;

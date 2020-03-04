@@ -644,7 +644,7 @@ void device_init() {
 						ptc.wait_all_transfers();
 						rg.add_pass({
 							.color_attachments = {{"SWAPCHAIN"}},
-							.depth_attachment = Attachment{"depth"},
+							//.depth_attachment = Attachment{"depth"},
 							.execute = [=](vuk::CommandBuffer& command_buffer) {
 								reset_render_state(command_buffer, draw_data, imvert, imind);
 								// Will project scissor/clipping rectangles into framebuffer space

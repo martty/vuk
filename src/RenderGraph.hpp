@@ -205,6 +205,8 @@ namespace vuk {
 
 		struct AttachmentSInfo {
 			vk::ImageLayout layout;
+			vk::AccessFlags access;
+			vk::PipelineStageFlags stage;
 		};
 
 		struct AttachmentRPInfo {
@@ -213,13 +215,9 @@ namespace vuk {
 			vuk::ImageView iv;
 			vk::AttachmentDescription description;
 
-			// sync in
-			// the second half of sync_in is deduced
-			vk::PipelineStageFlagBits srcStage;
+			vk::PipelineStageFlags srcStage;
 			vk::AccessFlags srcAccess;
-			// sync out
-			// the first half of sync_out is deduced
-			vk::PipelineStageFlagBits dstStage;
+			vk::PipelineStageFlags dstStage;
 			vk::AccessFlags dstAccess;
 
 			bool is_external = false;
