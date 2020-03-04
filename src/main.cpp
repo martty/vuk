@@ -101,7 +101,7 @@ Mesh generate_cube() {
 void device_init() {
 	vkb::InstanceBuilder builder;
 	builder
-		//.setup_validation_layers()
+		.setup_validation_layers()
 		.set_debug_callback([](VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
 			VkDebugUtilsMessageTypeFlagsEXT messageType,
 			const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
@@ -494,6 +494,47 @@ void device_init() {
 						context.named_pipelines.emplace("imgui", pci);
 					}
 
+					{
+						vk::GraphicsPipelineCreateInfo gpci;
+						Program* prog = new Program;
+						prog->shaders.push_back("../../fullscreen.vert");
+						prog->shaders.push_back("../../fullscreen.frag");
+						prog->compile("");
+						prog->link(device);
+						Pipeline* pipe = new Pipeline(prog);
+						pipe->descriptorSetLayout = device.createDescriptorSetLayout(pipe->descriptorLayout);
+						pipe->pipelineLayoutCreateInfo.pSetLayouts = &pipe->descriptorSetLayout;
+						pipe->pipelineLayoutCreateInfo.setLayoutCount = 1;
+						pipe->pipelineLayout = device.createPipelineLayout(pipe->pipelineLayoutCreateInfo);
+						gpci.layout = pipe->pipelineLayout;
+						gpci.stageCount = prog->pipeline_shader_stage_CIs.size();
+						gpci.pStages = prog->pipeline_shader_stage_CIs.data();
+						gpci.pVertexInputState = &pipe->inputState;
+						pipe->inputAssemblyState.topology = vk::PrimitiveTopology::eTriangleList;
+						gpci.pInputAssemblyState = &pipe->inputAssemblyState;
+						pipe->rasterizationState.lineWidth = 1.f;
+						gpci.pRasterizationState = &pipe->rasterizationState;
+						pipe->colorBlendState.attachmentCount = 1;
+						vk::PipelineColorBlendAttachmentState pcba;
+						pcba.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
+						pipe->colorBlendState.pAttachments = &pcba;
+						gpci.pColorBlendState = &pipe->colorBlendState;
+						gpci.pMultisampleState = &pipe->multisampleState;
+						gpci.pViewportState = &pipe->viewportState;
+						gpci.pDepthStencilState = &pipe->depthStencilState;
+						gpci.pDynamicState = &pipe->dynamicState;
+
+						vuk::PipelineCreateInfo pci{};
+						pci.gpci = gpci;
+						pci.layout_info.layout = pipe->descriptorSetLayout;
+						pci.layout_info.descriptor_counts[to_integral(vk::DescriptorType::eCombinedImageSampler)] = 1;
+						pci.pipeline_layout = pipe->pipelineLayout;
+
+						context.named_pipelines.emplace("fullscreen", pci);
+					}
+
+
+
 
 					auto swapimages = vkb::get_swapchain_images(*vkswapchain);
 					auto swapimageviews = [&]() {
@@ -530,7 +571,7 @@ void device_init() {
 							glm::mat4 proj;
 						} vp;
 						vp.view = glm::lookAt(vec3(0, 1.5, 3.5), vec3(0), vec3(0, 1, 0));
-						vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 0.1f, 10.f);
+						vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 1.f, 10.f);
 
 						auto [ubo, stub3] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eUniformBuffer, gsl::span(&vp, 1));
 
@@ -586,6 +627,21 @@ void device_init() {
 								}
 							}
 						);
+
+						rg.add_pass({
+							.read_attachments = {{"depth"}},
+							.color_attachments = {{"SWAPCHAIN"}},
+							.execute = [&](vuk::CommandBuffer& command_buffer) {
+								command_buffer
+								  .set_viewport(0, vuk::Area::Framebuffer{0.8f, 0.8f, 0.2f, 0.2f})
+								  .set_scissor(0, vuk::Area::Framebuffer{0.8f, 0.8f, 0.2f, 0.2f})
+								  .bind_sampled_image(0, 0, "depth", vk::SamplerCreateInfo{})
+								  .bind_pipeline("fullscreen")
+								  .draw(3, 1, 0, 0);
+								}
+							}
+						);
+
 
 						/**** imgui *****/
 						ImGuiIO& io = ImGui::GetIO();

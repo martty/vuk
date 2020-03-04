@@ -31,10 +31,11 @@ namespace vuk {
 	};
 
 	struct CommandBuffer {
+		RenderGraph& rg;
 		vk::CommandBuffer command_buffer;
 		vuk::PerThreadContext& ptc;
 
-		CommandBuffer(vuk::PerThreadContext& ptc, vk::CommandBuffer cb) : ptc(ptc), command_buffer(cb) {}
+		CommandBuffer(RenderGraph& rg, vuk::PerThreadContext& ptc, vk::CommandBuffer cb) : rg(rg), ptc(ptc), command_buffer(cb) {}
 
 		std::optional<std::pair<RenderGraph::RenderPassInfo&, uint32_t>> ongoing_renderpass;
 		std::optional<vk::Viewport> next_viewport;
@@ -66,6 +67,7 @@ namespace vuk {
 		CommandBuffer& bind_index_buffer(Allocator::Buffer&, vk::IndexType type);
 
 		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, vuk::ImageView iv, vk::SamplerCreateInfo sampler_create_info);
+		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, Name, vk::SamplerCreateInfo sampler_create_info);
 		
 		CommandBuffer& push_constants(vk::ShaderStageFlags stages, size_t offset, void * data, size_t size);
 		template<class T>

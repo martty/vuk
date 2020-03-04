@@ -252,7 +252,7 @@ namespace vuk {
 			// create the attachment if it is internal
 			if (!attachment_info.is_external) {
 				vk::ImageCreateInfo ici;
-				ici.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment;
+				ici.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled;
 				ici.arrayLayers = 1;
 				ici.extent = vk::Extent3D(attachment_info.extents, 1);
 				ici.imageType = vk::ImageType::e2D;
@@ -291,17 +291,21 @@ namespace vuk {
 			PassInfo* global_last_use = nullptr;
 			for (auto& pass : passes) {
 				auto& p = pass.pass;
-				if (contains_if(p.color_attachments, [&](auto& att) { return att.name == name; }) || (p.depth_attachment && p.depth_attachment->name == name)) {
+				if (contains_if(p.color_attachments, [&](auto& att) { return att.name == name; }) 
+					|| (p.depth_attachment && p.depth_attachment->name == name)
+					|| contains_if(p.read_attachments, [&](auto& att) { return att.name == name; }) 
+					) {
 					if (!global_first_use) global_first_use = &pass;
 					global_last_use = &pass;
 
-					auto& dst = *contains_if(rpis[pass.render_pass_index].attachments, [&](auto& att) {return att.name == name; });
-					dst.description.format = attachment_info.description.format;
-					dst.description.samples = attachment_info.description.samples;
-					dst.iv = attachment_info.iv;
-					dst.extents = attachment_info.extents;
-					dst.is_external = attachment_info.is_external;
-
+					auto dst = contains_if(rpis[pass.render_pass_index].attachments, [&](auto& att) {return att.name == name; });
+					if (dst) {
+						dst->description.format = attachment_info.description.format;
+						dst->description.samples = attachment_info.description.samples;
+						dst->iv = attachment_info.iv;
+						dst->extents = attachment_info.extents;
+						dst->is_external = attachment_info.is_external;
+					}
 					auto it = std::find_if(use_passes.begin(), use_passes.end(), [&](auto& t) {return t.first == &rpis[pass.render_pass_index]; });
 					if (it == use_passes.end()) {
 						use_passes.emplace_back(std::pair{ &rpis[pass.render_pass_index], std::vector<PassInfo*>{} });
@@ -320,26 +324,36 @@ namespace vuk {
 				if (!is_last_render_pass) { // we need set final layout to match next renderpass
 					auto& first_pass_in_next_renderpass = use_passes[i + 1].second.front();
 
-					auto& dst = *contains_if(rpi->attachments, [&](auto& att) {return att.name == name; });
-
-					auto& si = rpi->subpasses[first_pass_in_next_renderpass->subpass];
-					auto& spai = si.attachments[name];
-					dst.description.finalLayout = spai.layout;
-					dst.description.storeOp = vk::AttachmentStoreOp::eStore;
-					dst.dstAccess = spai.access;
-					dst.dstStage = spai.stage;
+					auto dst = contains_if(rpi->attachments, [&](auto& att) {return att.name == name; });
+					if (dst) {
+						auto& si = use_passes[i + 1].first->subpasses[first_pass_in_next_renderpass->subpass];
+						auto sp_it = si.attachments.find(name);
+						if (sp_it == si.attachments.end()) {
+							dst->description.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+							dst->description.storeOp = vk::AttachmentStoreOp::eStore;
+							dst->dstAccess = vk::AccessFlagBits::eShaderRead;
+							dst->dstStage = vk::PipelineStageFlagBits::eFragmentShader;
+						} else {
+							auto& spai = sp_it->second;
+							dst->description.finalLayout = spai.layout;
+							dst->description.storeOp = vk::AttachmentStoreOp::eStore;
+							dst->dstAccess = spai.access;
+							dst->dstStage = spai.stage;
+						}
+					}
 				}
 				if (!is_first_render_pass) {// we need to set initial layout to match prev renderpass
 					auto& last_pass_in_prev_renderpass = use_passes[i - 1].second.front();
 
-					auto& dst = *contains_if(rpi->attachments, [&](auto& att) {return att.name == name; });
-
-					auto& si = rpi->subpasses[last_pass_in_prev_renderpass->subpass];
-					auto& spai = si.attachments[name];
-					dst.description.initialLayout = spai.layout;
-					dst.description.loadOp = vk::AttachmentLoadOp::eLoad;
-					dst.srcAccess = spai.access;
-					dst.srcStage = spai.stage;
+					auto dst = contains_if(rpi->attachments, [&](auto& att) {return att.name == name; });
+					if (dst) {
+						auto& si = rpi->subpasses[last_pass_in_prev_renderpass->subpass];
+						auto& spai = si.attachments[name];
+						dst->description.initialLayout = spai.layout;
+						dst->description.loadOp = vk::AttachmentLoadOp::eLoad;
+						dst->srcAccess = spai.access;
+						dst->srcStage = spai.stage;
+					}
 				}
 			}
 
@@ -354,11 +368,13 @@ namespace vuk {
 			}
 			assert(global_last_use);
 			{
-				auto& dst = *contains_if(rpis[global_last_use->render_pass_index].attachments, [&](auto& att) {return att.name == name; });
-				dst.dstAccess = attachment_info.dstAccess;
-				dst.dstStage = attachment_info.dstStage;
-				dst.description.storeOp = attachment_info.description.storeOp;
-				dst.description.finalLayout = attachment_info.description.finalLayout;
+				auto dst = contains_if(rpis[global_last_use->render_pass_index].attachments, [&](auto& att) {return att.name == name; });
+				if (dst) {
+					dst->dstAccess = attachment_info.dstAccess;
+					dst->dstStage = attachment_info.dstStage;
+					dst->description.storeOp = attachment_info.description.storeOp;
+					dst->description.finalLayout = attachment_info.description.finalLayout;
+				}
 			}
 
 		}
@@ -432,6 +448,31 @@ namespace vuk {
 					}
 				}
 			}
+			{
+				vk::SubpassDependency dep_out;
+				dep_out.srcSubpass = 2;
+				dep_out.dstSubpass = VK_SUBPASS_EXTERNAL;
+
+				dep_out.srcAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite | vk::AccessFlagBits::eDepthStencilAttachmentRead;
+				dep_out.srcStageMask = vk::PipelineStageFlagBits::eEarlyFragmentTests;
+				dep_out.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+				dep_out.dstStageMask = vk::PipelineStageFlagBits::eFragmentShader;
+
+				deps.push_back(dep_out);
+			}
+
+			{
+				vk::SubpassDependency dep_in;
+				dep_in.srcSubpass = VK_SUBPASS_EXTERNAL;
+				dep_in.dstSubpass = 0;
+
+				dep_in.srcAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite | vk::AccessFlagBits::eDepthStencilAttachmentRead;
+				dep_in.srcStageMask = vk::PipelineStageFlagBits::eEarlyFragmentTests;
+				dep_in.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+				dep_in.dstStageMask = vk::PipelineStageFlagBits::eFragmentShader;
+
+				deps.push_back(dep_in);
+			}
 			// subpass-subpass deps
 			//
 			for (auto& attrpinfo : rp.attachments) {
@@ -504,7 +545,7 @@ namespace vuk {
 		cbi.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
 		cbuf.begin(cbi);
 
-		CommandBuffer cobuf(ptc, cbuf);
+		CommandBuffer cobuf(*this, ptc, cbuf);
 		for (auto& rpass : rpis) {
 			vk::RenderPassBeginInfo rbi;
 			rbi.renderPass = rpass.handle;
@@ -734,6 +775,10 @@ namespace vuk {
 		set_bindings[set].used.set(binding);
 
 		return *this;
+	}
+
+	CommandBuffer& CommandBuffer::bind_sampled_image(unsigned set, unsigned binding, Name name, vk::SamplerCreateInfo sampler_create_info) {
+		return bind_sampled_image(set, binding, rg.bound_attachments[name].iv, sampler_create_info);
 	}
 
 	CommandBuffer& CommandBuffer::push_constants(vk::ShaderStageFlags stages, size_t offset, void* data, size_t size) {
