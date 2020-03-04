@@ -235,8 +235,9 @@ namespace vuk {
 		attachment_info.is_external = false;
 		// internal attachment, discard contents
 		attachment_info.description.initialLayout = vk::ImageLayout::eUndefined;
-		
-		//attachment_info.description.finalLayout = vk::ImageLayout::ePresentSrcKHR;
+		// for now
+		// TODO: this should match last use
+		attachment_info.description.finalLayout = vk::ImageLayout::eGeneral;
 		attachment_info.description.loadOp = vk::AttachmentLoadOp::eClear;
 		attachment_info.description.storeOp = vk::AttachmentStoreOp::eDontCare;
 
@@ -248,8 +249,40 @@ namespace vuk {
 	void RenderGraph::build(vuk::PerThreadContext& ptc) {
 		// output attachments have an initial layout of eUndefined (loadOp: clear or dontcare, storeOp: store)
 		for (auto& [name, attachment_info] : bound_attachments) {
-			if (!attachment_info.is_external) continue;
-			// TODO: get all the passes this attachment is used
+			// create the attachment if it is internal
+			if (!attachment_info.is_external) {
+				vk::ImageCreateInfo ici;
+				ici.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment;
+				ici.arrayLayers = 1;
+				ici.extent = vk::Extent3D(attachment_info.extents, 1);
+				ici.imageType = vk::ImageType::e2D;
+				ici.format = vk::Format::eD32Sfloat;
+				ici.mipLevels = 1;
+				ici.initialLayout = vk::ImageLayout::eUndefined;
+				ici.samples = vk::SampleCountFlagBits::e1;
+				ici.sharingMode = vk::SharingMode::eExclusive;
+				ici.tiling = vk::ImageTiling::eOptimal;
+
+				vk::ImageViewCreateInfo ivci;
+				ivci.image = vk::Image{};
+				ivci.format = attachment_info.description.format;
+				ivci.viewType = vk::ImageViewType::e2D;
+				vk::ImageSubresourceRange isr;
+				isr.aspectMask = vk::ImageAspectFlagBits::eDepth;
+				isr.baseArrayLayer = 0;
+				isr.layerCount = 1;
+				isr.baseMipLevel = 0;
+				isr.levelCount = 1;
+				ivci.subresourceRange = isr;
+
+				RGCI rgci;
+				rgci.ici = ici;
+				rgci.ivci = ivci;
+
+				auto rg = ptc.transient_images.acquire(rgci);
+				attachment_info.iv = rg.image_view;
+			}
+
 			// get the first pass this attachment is used -> on that RP we need to put the attachment load from external
 			// get the last pass this attachment is used -> on that RP we need to put the store to the format to external
 			// then loop through RPs, and put finallayout = last_use and initial_layout = last_use
@@ -267,7 +300,7 @@ namespace vuk {
 					dst.description.samples = attachment_info.description.samples;
 					dst.iv = attachment_info.iv;
 					dst.extents = attachment_info.extents;
-					dst.is_external = true;
+					dst.is_external = attachment_info.is_external;
 
 					auto it = std::find_if(use_passes.begin(), use_passes.end(), [&](auto& t) {return t.first == &rpis[pass.render_pass_index]; });
 					if (it == use_passes.end()) {
@@ -327,62 +360,13 @@ namespace vuk {
 				dst.description.storeOp = attachment_info.description.storeOp;
 				dst.description.finalLayout = attachment_info.description.finalLayout;
 			}
+
 		}
 		// do this for input attachments
 		// input attachments have a finallayout matching last use
 		// loadOp: load, storeOp: dontcare
 		// inout attachments
 		// loadOp: load, storeOp: store
-
-		// -- transient fb attachments --
-		// perform allocation
-		for (auto& [name, attachment_info] : bound_attachments) {
-			if (attachment_info.is_external) continue;
-			// get the first pass this attachment is used
-			auto pass = contains_if(passes, [&](auto& pi) {
-				auto& p = pi.pass;
-				if (contains_if(p.color_attachments, [&](auto& att) { return att.name == name; })) return true;
-				if (p.depth_attachment && p.depth_attachment->name == name) return true;
-				return false;
-				});
-			assert(pass);
-			auto& dst = *contains_if(rpis[pass->render_pass_index].attachments, [&](auto& att) {return att.name == name; });
-			dst.description = attachment_info.description;
-			// TODO: this should match last use
-			dst.description.finalLayout = vk::ImageLayout::eGeneral;
-			dst.extents = attachment_info.extents;
-			dst.is_external = false;
-			vk::ImageCreateInfo ici;
-			ici.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment;
-			ici.arrayLayers = 1;
-			ici.extent = vk::Extent3D(dst.extents, 1);
-			ici.imageType = vk::ImageType::e2D;
-			ici.format = vk::Format::eD32Sfloat;
-			ici.mipLevels = 1;
-			ici.initialLayout = vk::ImageLayout::eUndefined;
-			ici.samples = vk::SampleCountFlagBits::e1;
-			ici.sharingMode = vk::SharingMode::eExclusive;
-			ici.tiling = vk::ImageTiling::eOptimal;
-
-			vk::ImageViewCreateInfo ivci;
-			ivci.image = vk::Image{};
-			ivci.format = dst.description.format;
-			ivci.viewType = vk::ImageViewType::e2D;
-			vk::ImageSubresourceRange isr;
-			isr.aspectMask = vk::ImageAspectFlagBits::eDepth;
-			isr.baseArrayLayer = 0;
-			isr.layerCount = 1;
-			isr.baseMipLevel = 0;
-			isr.levelCount = 1;
-			ivci.subresourceRange = isr;
-
-			RGCI rgci;
-			rgci.ici = ici;
-			rgci.ivci = ivci;
-			
-			auto rg = ptc.transient_images.acquire(rgci);
-			dst.iv = rg.image_view;
-		}
 
 		// we now have enough data to build vk::RenderPasses and vk::Framebuffers
 		for (auto& rp : rpis) {
