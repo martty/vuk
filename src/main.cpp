@@ -586,8 +586,7 @@ void device_init() {
 
 						vuk::RenderGraph rg;
 						rg.add_pass({
-							.color_attachments = {{"SWAPCHAIN"}},
-							.depth_attachment = Attachment{"depth"},
+							.resources = {"SWAPCHAIN"_image(vuk::eColorWrite), "depth"_image(vuk::eDepthStencilRW)},
 							.execute = [&](vuk::CommandBuffer& command_buffer) {
 								command_buffer
 								  .set_viewport(0, vuk::Area::Framebuffer{})
@@ -603,8 +602,7 @@ void device_init() {
 							}
 						);
 						rg.add_pass({
-							.color_attachments = {{"SWAPCHAIN"}},
-							.depth_attachment = Attachment{"depth"},
+							.resources = {"SWAPCHAIN"_image(vuk::eColorWrite), "depth"_image(vuk::eDepthStencilRW)},
 							.execute = [&](vuk::CommandBuffer& command_buffer) {
 								command_buffer
 								  .set_viewport(0, vuk::Area::Framebuffer{0, 0, 0.2f, 0.2f})
@@ -616,8 +614,7 @@ void device_init() {
 						);
 
 						rg.add_pass({
-							.color_attachments = {{"SWAPCHAIN"}},
-							.depth_attachment = Attachment{"depth"},
+							.resources = {"SWAPCHAIN"_image(vuk::eColorWrite), "depth"_image(vuk::eDepthStencilRW)},
 							.execute = [&](vuk::CommandBuffer& command_buffer) {
 								command_buffer
 								  .set_viewport(0, vuk::Area::Framebuffer{0.8f, 0, 0.2f, 0.2f})
@@ -629,8 +626,7 @@ void device_init() {
 						);
 
 						rg.add_pass({
-							.read_attachments = {{"depth"}},
-							.color_attachments = {{"SWAPCHAIN"}},
+							.resources = {"SWAPCHAIN"_image(vuk::eColorWrite), "depth"_image(vuk::eFragmentSampled)},
 							.execute = [&](vuk::CommandBuffer& command_buffer) {
 								command_buffer
 								  .set_viewport(0, vuk::Area::Framebuffer{0.8f, 0.8f, 0.2f, 0.2f})
@@ -699,7 +695,7 @@ void device_init() {
 
 						ptc.wait_all_transfers();
 						rg.add_pass({
-							.color_attachments = {{"SWAPCHAIN"}},
+							.resources = {"SWAPCHAIN"_image(vuk::eColorWrite)},
 							//.depth_attachment = Attachment{"depth"},
 							.execute = [=](vuk::CommandBuffer& command_buffer) {
 								reset_render_state(command_buffer, draw_data, imvert, imind);

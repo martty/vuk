@@ -6,23 +6,94 @@
 #include "Allocator.hpp"
 
 namespace vuk {
+	bool is_write_access(ImageAccess ia) {
+		switch (ia) {
+		case eColorWrite:
+		case eColorRW:
+		case eDepthStencilRW:
+		case eFragmentWrite:
+			return true;
+		default:
+			return false;
+		}
+	}
+
+	bool is_read_access(ImageAccess ia) {
+		switch (ia) {
+		case eColorRead:
+		case eColorRW:
+		case eDepthStencilRead:
+		case eFragmentRead:
+		case eFragmentSampled:
+			return true;
+		default:
+			return false;
+		}
+	}
+
+	Resource::Use to_use(ImageAccess ia) {
+		switch (ia) {
+		case eColorWrite: return { vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::AccessFlagBits::eColorAttachmentWrite, vk::ImageLayout::eColorAttachmentOptimal };
+		case eDepthStencilRW : return { vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eLateFragmentTests, vk::AccessFlagBits::eDepthStencilAttachmentRead | vk::AccessFlagBits::eDepthStencilAttachmentWrite, vk::ImageLayout::eDepthStencilAttachmentOptimal };
+
+		case eFragmentSampled: return { vk::PipelineStageFlagBits::eFragmentShader, vk::AccessFlagBits::eShaderRead, vk::ImageLayout::eShaderReadOnlyOptimal };
+		default:
+			assert(0);
+		}
+
+	}
+
+	bool is_framebuffer_attachment(const Resource& r) {
+		if (r.type == Resource::Type::eBuffer) return false;
+		switch (r.ia) {
+		case eColorWrite:
+		case eColorRW:
+		case eDepthStencilRW:
+		case eColorRead:
+		case eDepthStencilRead:
+			return true;
+		default:
+			return false;
+		}
+	}
+
+	bool is_framebuffer_attachment(Resource::Use u) {
+		switch (u.layout) {
+		case vk::ImageLayout::eColorAttachmentOptimal:
+		case vk::ImageLayout::eDepthStencilAttachmentOptimal:
+			return true;
+		default:
+			return false;
+		}
+	}
+
+	bool is_write_access(Resource::Use u) {
+		if (u.access & vk::AccessFlagBits::eColorAttachmentWrite) return true;
+		if (u.access & vk::AccessFlagBits::eDepthStencilAttachmentWrite) return true;
+		if (u.access & vk::AccessFlagBits::eShaderWrite) return true;
+		assert(0);
+		return false;
+	}
+
+	bool is_read_access(Resource::Use u) {
+		return !is_write_access(u);
+	}
+
 	// determine rendergraph inputs and outputs, and resources that are neither
 	void RenderGraph::build_io() {
-		std::unordered_set<io> inputs;
-		std::unordered_set<io> outputs;
+		std::unordered_set<Resource> inputs;
+		std::unordered_set<Resource> outputs;
 
 		for (auto& pif : passes) {
-			pif.inputs.insert(pif.pass.read_attachments.begin(), pif.pass.read_attachments.end());
-			pif.inputs.insert(pif.pass.color_attachments.begin(), pif.pass.color_attachments.end());
-			if (pif.pass.depth_attachment) {
-				pif.inputs.insert(*pif.pass.depth_attachment);
+			for (auto& res : pif.pass.resources) {
+				if (is_read_access(res.ia)) {
+					pif.inputs.insert(res);
+				}
+				if (is_write_access(res.ia)) {
+					pif.outputs.insert(res);
+				}
 			}
-			pif.outputs.insert(pif.pass.write_attachments.begin(), pif.pass.write_attachments.end());
-			pif.outputs.insert(pif.pass.color_attachments.begin(), pif.pass.color_attachments.end());
-			if (pif.pass.depth_attachment) {
-				pif.outputs.insert(*pif.pass.depth_attachment);
-			}
-
+		
 			for (auto& i : pif.inputs) {
 				if (global_outputs.erase(i) == 0) {
 					pif.global_inputs.insert(i);
@@ -83,7 +154,7 @@ namespace vuk {
 			}
 		}
 		// go through all inputs and propagate dependencies onto last write pass
-		for (auto& t : tracked) {
+	/*	for (auto& t : tracked) {
 			std::visit(overloaded{
 				[&](::Buffer& th) {
 					// for buffers, we need to track last write (can only be shader_write or transfer_write) + last write queue
@@ -139,15 +210,24 @@ namespace vuk {
 					for (auto& p : passes) {
 					}
 				} }, t);
+		}*/
+
+		for (auto& passinfo : passes) {
+			for (auto& res : passinfo.pass.resources) {
+				use_chains[res.name].emplace_back(UseRef{ to_use(res.ia), &passinfo });
+			}
 		}
 
 		// we need to collect passes into framebuffers, which will determine the renderpasses
-		std::vector<std::pair<std::unordered_set<Attachment>, std::vector<PassInfo*>>> attachment_sets;
+		std::vector<std::pair<std::unordered_set<Resource>, std::vector<PassInfo*>>> attachment_sets;
 		for (auto& passinfo : passes) {
-			std::unordered_set<Attachment> atts;
-			atts.insert(passinfo.pass.color_attachments.begin(), passinfo.pass.color_attachments.end());
-			if (passinfo.pass.depth_attachment) atts.insert(*passinfo.pass.depth_attachment);
+			std::unordered_set<Resource> atts;
 
+			for (auto& res : passinfo.pass.resources) {
+				if(is_framebuffer_attachment(res))
+					atts.insert(res);
+			}
+		
 			if (auto p = contains_if(attachment_sets, [&](auto& t) { return t.first == atts; })) {
 				p->second.push_back(&passinfo);
 			} else {
@@ -157,74 +237,58 @@ namespace vuk {
 
 		// renderpasses are uniquely identified by their index from now on
 		// tell passes in which renderpass/subpass they will execute
-		for (auto& set : attachment_sets) {
+		rpis.reserve(attachment_sets.size());
+		for (auto& [attachments, passes] : attachment_sets) {
 			RenderPassInfo rpi;
 			auto rpi_index = rpis.size();
 
 			size_t subpass = 0;
-			for (auto& p : set.second) {
+			for (auto& p : passes) {
 				p->render_pass_index = rpi_index;
 				p->subpass = subpass++;
 				SubpassInfo si;
 				si.pass = p;
-				for (auto& a : p->pass.color_attachments) {
-					si.attachments.emplace(a.name, AttachmentSInfo{ vk::ImageLayout::eColorAttachmentOptimal, vk::AccessFlagBits::eColorAttachmentWrite, vk::PipelineStageFlagBits::eColorAttachmentOutput });
-					// TODO: ColorAttachmentRead happens if blending or logicOp
-					if (contains_if(rpi.attachments, [&](auto& att) { return att.name == a.name; })) {
-						// TODO: we want to add all same level passes here, otherwise the other passes might not get the right sync
-					} else {
-						AttachmentRPInfo arpi;
-						arpi.name = a.name;
-						arpi.first_use.access = vk::AccessFlagBits::eColorAttachmentWrite;
-						arpi.first_use.stage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-						arpi.first_use.subpass = subpass - 1;
-
-						rpi.attachments.push_back(arpi);
-					}
-				}
-				if (p->pass.depth_attachment) {
-					auto& a = *p->pass.depth_attachment;
-					si.attachments.emplace(a.name, AttachmentSInfo{ vk::ImageLayout::eDepthStencilAttachmentOptimal, vk::AccessFlagBits::eDepthStencilAttachmentRead | vk::AccessFlagBits::eDepthStencilAttachmentWrite, vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eLateFragmentTests });
-					// TODO: ColorAttachmentRead happens if blending or logicOp
-					if (contains_if(rpi.attachments, [&](auto& att) { return att.name == a.name; })) {
-						// TODO: we want to add all same level passes here, otherwise the other passes might not get the right sync
-					} else {
-						AttachmentRPInfo arpi;
-						arpi.name = a.name;
-						arpi.first_use.access = vk::AccessFlagBits::eDepthStencilAttachmentRead | vk::AccessFlagBits::eDepthStencilAttachmentWrite;
-						arpi.first_use.stage = vk::PipelineStageFlagBits::eEarlyFragmentTests;
-						arpi.first_use.subpass = subpass - 1;
-
-						rpi.attachments.push_back(arpi);
-					}
-
-				}
 				rpi.subpasses.push_back(si);
+			}
+			// TODO: we are better off not reordering the attachments here?
+			for (auto& att : attachments) {
+				AttachmentRPInfo info;
+				info.name = att.name;
+				rpi.attachments.push_back(info);
 			}
 			rpis.push_back(rpi);
 		}
-
 	}
 
 	void RenderGraph::bind_attachment_to_swapchain(Name name, vk::Format format, vk::Extent2D extent, vuk::ImageView siv) {
 		AttachmentRPInfo attachment_info;
 		attachment_info.extents = extent;
 		attachment_info.iv = siv;
-		// for WSI attachments we don't want to preserve previous data
-		attachment_info.description.initialLayout = vk::ImageLayout::eUndefined;
 		// directly presented
-		attachment_info.description.finalLayout = vk::ImageLayout::ePresentSrcKHR;
-		attachment_info.description.loadOp = vk::AttachmentLoadOp::eClear;
-		attachment_info.description.storeOp = vk::AttachmentStoreOp::eStore;
-
 		attachment_info.description.format = format;
 		attachment_info.description.samples = vk::SampleCountFlagBits::e1;
 
 		attachment_info.is_external = true;
+		Resource::Use initial, final;
 		// for WSI, we want to wait for colourattachmentoutput
-		attachment_info.srcStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
 		// we don't care about any writes, we will clear
-		attachment_info.srcAccess = vk::AccessFlags{};
+		initial.access = vk::AccessFlags{};
+		initial.stages = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+		// clear
+		initial.layout = vk::ImageLayout::ePreinitialized;
+		/* Normally, we would need an external dependency at the end as well since we are changing layout in finalLayout,
+   but since we are signalling a semaphore, we can rely on Vulkan's default behavior,
+   which injects an external dependency here with
+   dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+   dstAccessMask = 0. */
+		final.access = vk::AccessFlagBits{};
+		final.layout = vk::ImageLayout::ePresentSrcKHR;
+		final.stages = vk::PipelineStageFlagBits::eBottomOfPipe;
+
+		auto& chain = use_chains.at(name);
+		chain.insert(chain.begin(), { std::move(initial), nullptr });
+		chain.push_back({ std::move(final), nullptr });
+
 		bound_attachments.emplace(name, attachment_info);
 	}
 
@@ -233,33 +297,40 @@ namespace vuk {
 		attachment_info.extents = extent;
 		attachment_info.iv = {};
 		attachment_info.is_external = false;
-		// internal attachment, discard contents
-		attachment_info.description.initialLayout = vk::ImageLayout::eUndefined;
-		// for now
-		// TODO: this should match last use
-		attachment_info.description.finalLayout = vk::ImageLayout::eGeneral;
-		attachment_info.description.loadOp = vk::AttachmentLoadOp::eClear;
-		attachment_info.description.storeOp = vk::AttachmentStoreOp::eDontCare;
-
 		attachment_info.description.format = format;
+
+		Resource::Use initial, final;
+		initial.access = vk::AccessFlags{};
+		initial.stages = vk::PipelineStageFlagBits::eTopOfPipe;
+		// for internal attachments we don't want to preserve previous data
+		initial.layout = vk::ImageLayout::ePreinitialized;
+
+		// with an undefined final layout, there will be no final sync
+		final.layout = vk::ImageLayout::eUndefined;
+		final.access = vk::AccessFlagBits{};
+		final.stages = vk::PipelineStageFlagBits::eBottomOfPipe;
+
+		auto& chain = use_chains.at(name);
+		chain.insert(chain.begin(), UseRef{ std::move(initial), nullptr });
+		chain.emplace_back(UseRef{ final, nullptr });
 
 		bound_attachments.emplace(name, attachment_info);
 	}
 
 	void RenderGraph::build(vuk::PerThreadContext& ptc) {
-		// output attachments have an initial layout of eUndefined (loadOp: clear or dontcare, storeOp: store)
 		for (auto& [name, attachment_info] : bound_attachments) {
 			// create the attachment if it is internal
 			if (!attachment_info.is_external) {
 				vk::ImageCreateInfo ici;
+				// TODO: collect this
 				ici.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled;
 				ici.arrayLayers = 1;
 				ici.extent = vk::Extent3D(attachment_info.extents, 1);
 				ici.imageType = vk::ImageType::e2D;
-				ici.format = vk::Format::eD32Sfloat;
+				ici.format = attachment_info.description.format;
 				ici.mipLevels = 1;
 				ici.initialLayout = vk::ImageLayout::eUndefined;
-				ici.samples = vk::SampleCountFlagBits::e1;
+				ici.samples = vk::SampleCountFlagBits::e1; // should match renderpass
 				ici.sharingMode = vk::SharingMode::eExclusive;
 				ici.tiling = vk::ImageTiling::eOptimal;
 
@@ -283,132 +354,149 @@ namespace vuk {
 				attachment_info.iv = rg.image_view;
 			}
 
-			// get the first pass this attachment is used -> on that RP we need to put the attachment load from external
-			// get the last pass this attachment is used -> on that RP we need to put the store to the format to external
-			// then loop through RPs, and put finallayout = last_use and initial_layout = last_use
-			std::vector<std::pair<RenderPassInfo*, std::vector<PassInfo*>>> use_passes;
-			PassInfo* global_first_use = nullptr;
-			PassInfo* global_last_use = nullptr;
-			for (auto& pass : passes) {
-				auto& p = pass.pass;
-				if (contains_if(p.color_attachments, [&](auto& att) { return att.name == name; }) 
-					|| (p.depth_attachment && p.depth_attachment->name == name)
-					|| contains_if(p.read_attachments, [&](auto& att) { return att.name == name; }) 
-					) {
-					if (!global_first_use) global_first_use = &pass;
-					global_last_use = &pass;
+			auto& chain = use_chains[name];
 
-					auto dst = contains_if(rpis[pass.render_pass_index].attachments, [&](auto& att) {return att.name == name; });
-					if (dst) {
-						dst->description.format = attachment_info.description.format;
-						dst->description.samples = attachment_info.description.samples;
-						dst->iv = attachment_info.iv;
-						dst->extents = attachment_info.extents;
-						dst->is_external = attachment_info.is_external;
-					}
-					auto it = std::find_if(use_passes.begin(), use_passes.end(), [&](auto& t) {return t.first == &rpis[pass.render_pass_index]; });
-					if (it == use_passes.end()) {
-						use_passes.emplace_back(std::pair{ &rpis[pass.render_pass_index], std::vector<PassInfo*>{} });
-						it = use_passes.end() - 1;
-					}
-					it->second.push_back(&pass);
-				}
-			}
-			// we need to figure out first use and last use per renderpass
-			// for now we assume single first and last
-			for (auto i = 0; i < use_passes.size(); i++) {
-				auto& [rpi, passes] = use_passes[i];
-				bool is_first_render_pass = (passes.front() == global_first_use);
-				bool is_last_render_pass = (passes.back() == global_last_use);
+			for (size_t i = 0; i < chain.size() - 1; i++) {
+				auto& left = chain[i];
+				auto& right = chain[i + 1];
 
-				if (!is_last_render_pass) { // we need set final layout to match next renderpass
-					auto& first_pass_in_next_renderpass = use_passes[i + 1].second.front();
+				bool crosses_rpass = (left.pass == nullptr || right.pass == nullptr || left.pass->render_pass_index != right.pass->render_pass_index);
+				if (crosses_rpass) {
+					if (left.pass) { // RenderPass ->
+						auto& left_rp = rpis[left.pass->render_pass_index];
+						// if this is an attachment, we specify layout
+						if (is_framebuffer_attachment(left.use)) {
+							auto& rp_att = *contains_if(left_rp.attachments, [name](auto& att) {return att.name == name; });
 
-					auto dst = contains_if(rpi->attachments, [&](auto& att) {return att.name == name; });
-					if (dst) {
-						auto& si = use_passes[i + 1].first->subpasses[first_pass_in_next_renderpass->subpass];
-						auto sp_it = si.attachments.find(name);
-						if (sp_it == si.attachments.end()) {
-							dst->description.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-							dst->description.storeOp = vk::AttachmentStoreOp::eStore;
-							dst->dstAccess = vk::AccessFlagBits::eShaderRead;
-							dst->dstStage = vk::PipelineStageFlagBits::eFragmentShader;
-						} else {
-							auto& spai = sp_it->second;
-							dst->description.finalLayout = spai.layout;
-							dst->description.storeOp = vk::AttachmentStoreOp::eStore;
-							dst->dstAccess = spai.access;
-							dst->dstStage = spai.stage;
+							rp_att.description.format = attachment_info.description.format;
+							rp_att.description.samples = attachment_info.description.samples;
+							rp_att.iv = attachment_info.iv;
+							rp_att.extents = attachment_info.extents;
+							// if there is a "right" rp
+							// or if this attachment has a required end layout
+							// then we transition for it
+							if (right.pass || right.use.layout != vk::ImageLayout::eUndefined) {
+								rp_att.description.finalLayout = right.use.layout;
+							} else {
+								// we keep last use as finalLayout
+								rp_att.description.finalLayout = left.use.layout;
+							}
+							// compute attachment store
+							if (right.use.layout == vk::ImageLayout::eUndefined) {
+								rp_att.description.storeOp = vk::AttachmentStoreOp::eDontCare;
+							} else {
+								rp_att.description.storeOp = vk::AttachmentStoreOp::eStore;
+							}
+						}
+						// TODO: we need a dep here if there is a write or there is a layout transition
+						if (/*left.use.layout != right.use.layout &&*/ right.use.layout != vk::ImageLayout::eUndefined) { // different layouts, need to have dependency
+							vk::SubpassDependency sd;
+							sd.dstAccessMask = right.use.access;
+							sd.dstStageMask = right.use.stages;
+							sd.srcSubpass = left.pass->subpass;
+							sd.srcAccessMask = left.use.access;
+							sd.srcStageMask = left.use.stages;
+							sd.dstSubpass = VK_SUBPASS_EXTERNAL;
+							left_rp.rpci.subpass_dependencies.push_back(sd);
 						}
 					}
-				}
-				if (!is_first_render_pass) {// we need to set initial layout to match prev renderpass
-					auto& last_pass_in_prev_renderpass = use_passes[i - 1].second.front();
 
-					auto dst = contains_if(rpi->attachments, [&](auto& att) {return att.name == name; });
-					if (dst) {
-						auto& si = rpi->subpasses[last_pass_in_prev_renderpass->subpass];
-						auto& spai = si.attachments[name];
-						dst->description.initialLayout = spai.layout;
-						dst->description.loadOp = vk::AttachmentLoadOp::eLoad;
-						dst->srcAccess = spai.access;
-						dst->srcStage = spai.stage;
+					if (right.pass) { // -> RenderPass
+						auto& right_rp = rpis[right.pass->render_pass_index];
+						// if this is an attachment, we specify layout
+						if (is_framebuffer_attachment(right.use)) {
+							auto& rp_att = *contains_if(right_rp.attachments, [name](auto& att) {return att.name == name; });
+
+							rp_att.description.format = attachment_info.description.format;
+							rp_att.description.samples = attachment_info.description.samples;
+							rp_att.iv = attachment_info.iv;
+							rp_att.extents = attachment_info.extents;
+							// we will have "left" transition for us
+							if (left.pass) {
+								rp_att.description.initialLayout = right.use.layout;
+							} else {
+								// if there is no "left" renderpass, then we take the initial layout
+								rp_att.description.initialLayout = left.use.layout;
+							}
+							// compute attachment load
+							if (left.use.layout == vk::ImageLayout::eUndefined) {
+								rp_att.description.loadOp = vk::AttachmentLoadOp::eDontCare;
+							} else if (left.use.layout == vk::ImageLayout::ePreinitialized) {
+								// preinit means clear
+								rp_att.description.initialLayout = vk::ImageLayout::eUndefined;
+								rp_att.description.loadOp = vk::AttachmentLoadOp::eClear;
+							} else {
+								rp_att.description.loadOp = vk::AttachmentLoadOp::eLoad;
+							}
+						}
+						// TODO: we need a dep here if there is a write or there is a layout transition
+						if (/*right.use.layout != left.use.layout &&*/ left.use.layout != vk::ImageLayout::eUndefined) { // different layouts, need to have dependency
+							vk::SubpassDependency sd;
+							sd.dstAccessMask = right.use.access;
+							sd.dstStageMask = right.use.stages;
+							sd.dstSubpass = right.pass->subpass;
+							sd.srcAccessMask = left.use.access;
+							sd.srcStageMask = left.use.stages;
+							sd.srcSubpass = VK_SUBPASS_EXTERNAL;
+							right_rp.rpci.subpass_dependencies.push_back(sd);
+						}
+					}
+				} else { // subpass-subpass link -> subpass - subpass dependency
+					// WAW, WAR, RAW accesses need sync
+					if (is_framebuffer_attachment(left.use) && (is_write_access(left.use) || (is_read_access(left.use) && is_write_access(right.use)))) {
+						assert(left.pass->render_pass_index == right.pass->render_pass_index);
+						auto& rp = rpis[right.pass->render_pass_index];
+						auto& rp_att = *contains_if(rp.attachments, [name](auto& att) {return att.name == name; });
+						vk::SubpassDependency sd;
+						sd.dstAccessMask = right.use.access;
+						sd.dstStageMask = right.use.stages;
+						sd.dstSubpass = right.pass->subpass;
+						sd.srcAccessMask = left.use.access;
+						sd.srcStageMask = left.use.stages;
+						sd.srcSubpass = left.pass->subpass;
+						rp.rpci.subpass_dependencies.push_back(sd);
 					}
 				}
 			}
-
-			// in the renderpass this pass participates in, we want to fill in the info for the attachment
-			assert(global_first_use);
-			{
-				auto& dst = *contains_if(rpis[global_first_use->render_pass_index].attachments, [&](auto& att) {return att.name == name; });
-				dst.srcAccess = attachment_info.srcAccess;
-				dst.srcStage = attachment_info.srcStage;
-				dst.description.loadOp = attachment_info.description.loadOp;
-				dst.description.initialLayout = attachment_info.description.initialLayout;
-			}
-			assert(global_last_use);
-			{
-				auto dst = contains_if(rpis[global_last_use->render_pass_index].attachments, [&](auto& att) {return att.name == name; });
-				if (dst) {
-					dst->dstAccess = attachment_info.dstAccess;
-					dst->dstStage = attachment_info.dstStage;
-					dst->description.storeOp = attachment_info.description.storeOp;
-					dst->description.finalLayout = attachment_info.description.finalLayout;
-				}
-			}
-
 		}
-		// do this for input attachments
-		// input attachments have a finallayout matching last use
-		// loadOp: load, storeOp: dontcare
-		// inout attachments
-		// loadOp: load, storeOp: store
-
+	
 		// we now have enough data to build vk::RenderPasses and vk::Framebuffers
+		for (auto& [name, attachment_info] : bound_attachments) {
+			auto& chain = use_chains[name];
+			for (auto& c : chain) {
+				if (!c.pass) continue; // not a real pass
+				auto& rp = rpis[c.pass->render_pass_index];
+
+				auto& subp = rp.rpci.subpass_descriptions;
+				auto& color_attrefs = rp.rpci.color_refs;
+				auto& color_ref_offsets = rp.rpci.color_ref_offsets;
+				auto& ds_attrefs = rp.rpci.ds_refs;
+
+				auto subpass_index = c.pass->subpass;
+
+				ds_attrefs.resize(subpass_index + 1);
+				vk::AttachmentReference attref;
+				attref.layout = c.use.layout;
+				attref.attachment = std::distance(rp.attachments.begin(), std::find_if(rp.attachments.begin(), rp.attachments.end(), [&](auto& att) { return name == att.name; }));
+
+				if (attref.layout != vk::ImageLayout::eColorAttachmentOptimal) {
+					if (attref.layout == vk::ImageLayout::eDepthStencilAttachmentOptimal) {
+						ds_attrefs[subpass_index] = attref;
+					}
+				} else {
+					color_attrefs.push_back(attref);
+				}
+				color_ref_offsets.push_back(color_attrefs.size());
+			}
+		}
+
 		for (auto& rp : rpis) {
-			// subpasses
 			auto& subp = rp.rpci.subpass_descriptions;
 			auto& color_attrefs = rp.rpci.color_refs;
 			auto& color_ref_offsets = rp.rpci.color_ref_offsets;
 			auto& ds_attrefs = rp.rpci.ds_refs;
-			ds_attrefs.resize(rp.subpasses.size());
-			for (size_t i = 0; i < rp.subpasses.size(); i++) {
-				auto& s = rp.subpasses[i];
-				for (auto& [name, att] : s.attachments) {
-					vk::AttachmentReference attref;
-					attref.layout = att.layout;
-					attref.attachment = std::distance(rp.attachments.begin(), std::find_if(rp.attachments.begin(), rp.attachments.end(), [&](auto& att) { return name == att.name; }));
 
-					if (att.layout != vk::ImageLayout::eColorAttachmentOptimal) {
-						if (att.layout == vk::ImageLayout::eDepthStencilAttachmentOptimal) {
-							ds_attrefs[i] = attref;
-						}
-					} else {
-						color_attrefs.push_back(attref);
-					}
-				}
-				color_ref_offsets.push_back(color_attrefs.size());
-			}
+			// subpasses
 			for (size_t i = 0; i < rp.subpasses.size(); i++) {
 				vuk::SubpassDescription sd;
 				sd.colorAttachmentCount = color_ref_offsets[i] - (i > 0 ? color_ref_offsets[i - 1] : 0);
@@ -425,95 +513,11 @@ namespace vuk {
 				subp.push_back(sd);
 			}
 
-			rp.rpci.pSubpasses = rp.rpci.subpass_descriptions.data();
 			rp.rpci.subpassCount = rp.rpci.subpass_descriptions.size();
-			// generate external deps
-			auto& deps = rp.rpci.subpass_dependencies;
-			for (auto i = 0; i < rp.subpasses.size(); i++) {
-				auto& s = rp.subpasses[i];
-				if (i == 0) { // for now we assume first pass
-					for (auto& attrpinfo : rp.attachments) {
-						if (attrpinfo.first_use.subpass == s.pass->subpass && attrpinfo.is_external) {
-							vk::SubpassDependency dep_in;
-							dep_in.srcSubpass = VK_SUBPASS_EXTERNAL;
-							dep_in.dstSubpass = s.pass->subpass;
-
-							dep_in.srcAccessMask = attrpinfo.srcAccess;
-							dep_in.srcStageMask = attrpinfo.srcStage;
-							dep_in.dstAccessMask = attrpinfo.first_use.access;
-							dep_in.dstStageMask = attrpinfo.first_use.stage;
-
-							deps.push_back(dep_in);
-						}
-					}
-				}
-			}
-			{
-				vk::SubpassDependency dep_out;
-				dep_out.srcSubpass = 2;
-				dep_out.dstSubpass = VK_SUBPASS_EXTERNAL;
-
-				dep_out.srcAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite | vk::AccessFlagBits::eDepthStencilAttachmentRead;
-				dep_out.srcStageMask = vk::PipelineStageFlagBits::eEarlyFragmentTests;
-				dep_out.dstAccessMask = vk::AccessFlagBits::eShaderRead;
-				dep_out.dstStageMask = vk::PipelineStageFlagBits::eFragmentShader;
-
-				deps.push_back(dep_out);
-			}
-
-			{
-				vk::SubpassDependency dep_in;
-				dep_in.srcSubpass = VK_SUBPASS_EXTERNAL;
-				dep_in.dstSubpass = 0;
-
-				dep_in.srcAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite | vk::AccessFlagBits::eDepthStencilAttachmentRead;
-				dep_in.srcStageMask = vk::PipelineStageFlagBits::eEarlyFragmentTests;
-				dep_in.dstAccessMask = vk::AccessFlagBits::eShaderRead;
-				dep_in.dstStageMask = vk::PipelineStageFlagBits::eFragmentShader;
-
-				deps.push_back(dep_in);
-			}
-			// subpass-subpass deps
-			//
-			for (auto& attrpinfo : rp.attachments) {
-				size_t last_subpass_use_index = -1;
-				for (size_t i = 0; i < rp.subpasses.size(); i++) {
-					auto& s = rp.subpasses[i];
-					if(s.pass->inputs.contains(attrpinfo.name)){
-						if (last_subpass_use_index == -1) {
-							last_subpass_use_index = i;
-							continue;
-						}
-						auto& last_subpass = rp.subpasses[last_subpass_use_index];
-						auto& satt = last_subpass.attachments[attrpinfo.name];
-						auto& catt = s.attachments[attrpinfo.name];
-						vk::SubpassDependency dep;
-						dep.srcSubpass = last_subpass_use_index;
-						dep.dstSubpass = i;
-						if (satt.layout == vk::ImageLayout::eColorAttachmentOptimal) {
-							dep.srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite | vk::AccessFlagBits::eColorAttachmentRead;
-							dep.srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-						} else if (satt.layout == vk::ImageLayout::eDepthStencilAttachmentOptimal) {
-							dep.srcAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentRead | vk::AccessFlagBits::eDepthStencilAttachmentWrite;
-							dep.srcStageMask = vk::PipelineStageFlagBits::eEarlyFragmentTests;
-						}
-						if (catt.layout == vk::ImageLayout::eColorAttachmentOptimal) {
-							dep.dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite | vk::AccessFlagBits::eColorAttachmentRead;
-							dep.dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-						} else if (catt.layout == vk::ImageLayout::eDepthStencilAttachmentOptimal) {
-							dep.dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentRead | vk::AccessFlagBits::eDepthStencilAttachmentWrite;
-							dep.dstStageMask = vk::PipelineStageFlagBits::eEarlyFragmentTests;
-						}
-
-						deps.push_back(dep);
-						last_subpass_use_index = i;
-					}
-				}
-			}
-
-			// TODO: subpass - external
-			rp.rpci.dependencyCount = deps.size();
-			rp.rpci.pDependencies = deps.data();
+			rp.rpci.pSubpasses = rp.rpci.subpass_descriptions.data();
+	
+			rp.rpci.dependencyCount = rp.rpci.subpass_dependencies.size();
+			rp.rpci.pDependencies = rp.rpci.subpass_dependencies.data();
 
 			// attachments
 			auto& ivs = rp.fbci.attachments;
@@ -552,6 +556,7 @@ namespace vuk {
 			rbi.framebuffer = rpass.framebuffer;
 			rbi.renderArea = vk::Rect2D(vk::Offset2D{}, vk::Extent2D{rpass.fbci.width, rpass.fbci.height});
 			vk::ClearColorValue ccv;
+			// TODO: hardcoded
 			ccv.setFloat32({ 0.3f, 0.3f, 0.3f, 1.f });
 			vk::ClearValue cv;
 			cv.setColor(ccv);
@@ -561,10 +566,10 @@ namespace vuk {
 			vk::ClearValue cv2;
 			cv2.setDepthStencil(cdv);
 			std::vector<vk::ClearValue> clears;
-			clears.push_back(cv);
 			clears.push_back(cv2);
+			clears.push_back(cv);
 			rbi.pClearValues = clears.data();
-			rbi.clearValueCount = clears.size(); // TODO
+			rbi.clearValueCount = clears.size();
 			cbuf.beginRenderPass(rbi, vk::SubpassContents::eInline);
 			for (size_t i = 0; i < rpass.subpasses.size(); i++) {
 				auto& sp = rpass.subpasses[i];
@@ -581,7 +586,7 @@ namespace vuk {
 
 	void RenderGraph::generate_graph_visualization() {
 		std::cout << "digraph RG {\n";
-		for (auto& p : passes) {
+		/*for (auto& p : passes) {
 			std::cout << p.pass.name << "[shape = Mrecord, label = \"" << p.pass.executes_on << "| {{";
 			for (auto& i : p.pass.read_attachments) {
 				std::cout << "<" << name_to_node(i.name) << ">" << i.name << "|";
@@ -686,7 +691,7 @@ namespace vuk {
 		}
 
 
-		std::cout << "}\n";
+		std::cout << "}\n";*/
 	}
 
 	CommandBuffer& CommandBuffer::set_viewport(unsigned index, vk::Viewport vp) {

@@ -11,6 +11,7 @@
 #include <string_view>
 #include <optional>
 #include <functional>
+#include "Hash.hpp"
 
 using Name = std::string_view;
 
@@ -43,23 +44,77 @@ struct Buffer {
 namespace vuk {
 	struct CommandBuffer;
 
+	enum ImageAccess {
+		eColorRW,
+		eColorWrite,
+		eColorRead,
+		eDepthStencilRW,
+		eDepthStencilRead,
+		eInputRead,
+		eVertexSampled,
+		eVertexRead,
+		eFragmentSampled,
+		eFragmentRead,
+		eFragmentWrite // written using image store
+	};
+
+	struct Resource;
+	struct BufferResource {};
+	struct ImageResource {
+		Name name;
+
+		Resource operator()(ImageAccess ia);
+	};
+}
+
+inline vuk::ImageResource operator "" _image(const char* name, size_t) {
+	return { name };
+}
+
+namespace vuk {
+	struct Resource {
+		Name name;
+		enum class Type { eBuffer, eImage } type;
+		ImageAccess ia;
+		struct Use {
+			vk::PipelineStageFlags stages;
+			vk::AccessFlags access;
+			vk::ImageLayout layout; // ignored for buffers
+		};
+
+		Resource(Name n, Type t, ImageAccess ia) : name(n), type(t), ia(ia) {}
+
+		bool operator==(const Resource& o) const {
+			return name == o.name;//std::tie(name, type) == std::tie(o.name, o.type);
+		}
+	};
+
+	inline Resource ImageResource::operator()(ImageAccess ia) {
+		return Resource{name, Resource::Type::eImage, ia};
+	}
+
 	struct Pass {
 		Name name;
 		Name executes_on;
 		float auxiliary_order = 0.f;
-		std::vector<::Buffer> read_buffers; /* track read */
-		std::vector<::Buffer> write_buffers; /* track write */
 
-		std::vector<Attachment> read_attachments;
-		std::vector<Attachment> write_attachments;
-
-		std::vector<Attachment> color_attachments;
-		std::optional<Attachment> depth_attachment;
+		std::vector<Resource> resources;
 
 		std::function<void(vuk::CommandBuffer&)> execute;
 		//void(*execute)(struct CommandBuffer&);
 	};
 }
+
+namespace std {
+	template<> struct hash<vuk::Resource> {
+		std::size_t operator()(vuk::Resource const& s) const noexcept {
+			size_t h = 0;
+			hash_combine(h, s.name, s.type);
+			return h;
+		}
+	};
+}
+
 
 enum class BufferAccess {
 	eWrite, eRead, eVertexAttributeRead
@@ -184,24 +239,27 @@ namespace vuk {
 			size_t render_pass_index;
 			size_t subpass;
 
-			std::unordered_set<io> inputs;
-			std::unordered_set<io> outputs;
+			std::unordered_set<Resource> inputs;
+			std::unordered_set<Resource> outputs;
 
-			std::unordered_set<io> global_inputs;
-			std::unordered_set<io> global_outputs;
+			std::unordered_set<Resource> global_inputs;
+			std::unordered_set<Resource> global_outputs;
 
 			bool is_head_pass = false;
 			bool is_tail_pass = false;
-
-			bool is_read_attachment(Name n) {
-				return std::find_if(pass.read_attachments.begin(), pass.read_attachments.end(), [&](auto& att) { return att.name == n; }) != pass.read_attachments.end();
-			}
 		};
 
 		std::vector<PassInfo> passes;
 
 		std::vector<PassInfo*> head_passes;
 		std::vector<PassInfo*> tail_passes;
+
+		struct UseRef {
+			Resource::Use use;
+			PassInfo* pass = nullptr;
+		};
+
+		std::unordered_map<Name, std::vector<UseRef>> use_chains;
 
 		struct AttachmentSInfo {
 			vk::ImageLayout layout;
@@ -215,11 +273,6 @@ namespace vuk {
 			vuk::ImageView iv;
 			vk::AttachmentDescription description;
 
-			vk::PipelineStageFlags srcStage;
-			vk::AccessFlags srcAccess;
-			vk::PipelineStageFlags dstStage;
-			vk::AccessFlags dstAccess;
-
 			bool is_external = false;
 
 			struct Use {
@@ -231,8 +284,8 @@ namespace vuk {
 
 		struct SubpassInfo {
 			PassInfo* pass;
-			std::unordered_map<Name, AttachmentSInfo> attachments;
 		};
+
 		struct RenderPassInfo {
 			std::vector<SubpassInfo> subpasses;
 			std::vector<AttachmentRPInfo> attachments;
@@ -249,10 +302,10 @@ namespace vuk {
 			passes.push_back(pi);
 		}
 
-		std::unordered_set<io> global_inputs;
-		std::unordered_set<io> global_outputs;
-		std::vector<io> global_io;
-		std::vector<io> tracked;
+		std::unordered_set<Resource> global_inputs;
+		std::unordered_set<Resource> global_outputs;
+		std::vector<Resource> global_io;
+		std::vector<Resource> tracked;
 
 		// determine rendergraph inputs and outputs, and resources that are neither
 		void build_io();
