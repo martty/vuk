@@ -676,8 +676,8 @@ void device_init() {
 								}
 							});
 
-							rg.mark_attachment_internal(ca_names[i], vk::Format(swapchain->format), swapchain->extent);
-							rg.mark_attachment_internal(de_names[i], vk::Format::eD32Sfloat, swapchain->extent);
+							rg.mark_attachment_internal(ca_names[i], vk::Format(swapchain->format), swapchain->extent, vuk::ClearColor{0.3f, 0.3f, 0.6f, 1.0f});
+							rg.mark_attachment_internal(de_names[i], vk::Format::eD32Sfloat, swapchain->extent, vuk::ClearDepthStencil{1.0, 0});
 						}
 
 
@@ -827,8 +827,8 @@ void device_init() {
 						);
 
 						rg.build();
-						rg.bind_attachment_to_swapchain("SWAPCHAIN", swapchain);
-						rg.mark_attachment_internal("depth", vk::Format::eD32Sfloat, swapchain->extent);
+						rg.bind_attachment_to_swapchain("SWAPCHAIN", swapchain, vuk::ClearColor{0.3f, 0.5f, 0.3f, 1.0f});
+						rg.mark_attachment_internal("depth", vk::Format::eD32Sfloat, swapchain->extent, vuk::ClearDepthStencil{1.0f, 0});
 						rg.build(ptc);
 						execute_submit_and_present_to_one(ptc, rg, swapchain);
 					}

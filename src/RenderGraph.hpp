@@ -47,6 +47,44 @@ namespace vuk {
 	struct Swapchain;
 	using SwapChainRef = Swapchain *;
 
+	struct Preserve {};
+	struct ClearColor {
+		ClearColor(uint32_t r, uint32_t g, uint32_t b, uint32_t a) {
+			ccv.setUint32({ r,g,b,a });
+		}
+		ClearColor(float r, float g, float b, float a) {
+			ccv.setFloat32({ r,g,b,a });
+		}
+		vk::ClearColorValue ccv;
+	};
+
+	struct ClearDepthStencil {
+		ClearDepthStencil(float depth, uint32_t stencil) {
+			cdsv.depth = depth;
+			cdsv.stencil = stencil;
+		}
+		vk::ClearDepthStencilValue cdsv;
+	};
+
+
+	struct PreserveOrClear {
+		PreserveOrClear(ClearColor cc) : clear(true) { c.color = cc.ccv; }
+		PreserveOrClear(ClearDepthStencil cc) : clear(true) { c.depthStencil = cc.cdsv; }
+		PreserveOrClear(Preserve) : clear(false) {}
+
+		bool clear;
+		vk::ClearValue c;
+	};
+
+	struct Clear {
+		Clear() = default;
+		Clear(ClearColor cc) { c.color = cc.ccv; }
+		Clear(ClearDepthStencil cc) { c.depthStencil = cc.cdsv; }
+	
+		vk::ClearValue c;
+	};
+
+
 	enum ImageAccess {
 		eColorRW,
 		eColorWrite,
@@ -286,6 +324,10 @@ namespace vuk {
 			// nothing for internal
 			// swapchain for swapchain
 			Swapchain* swapchain;
+
+			// optionally set
+			bool should_clear = false;
+			Clear clear_value;
 		};
 
 		struct SubpassInfo {
@@ -320,8 +362,8 @@ namespace vuk {
 
 		// RGscaffold
 		std::unordered_map<Name, AttachmentRPInfo> bound_attachments;
-		void bind_attachment_to_swapchain(Name name, Swapchain* swp);
-		void mark_attachment_internal(Name, vk::Format, vk::Extent2D);
+		void bind_attachment_to_swapchain(Name name, Swapchain* swp, Clear);
+		void mark_attachment_internal(Name, vk::Format, vk::Extent2D, Clear);
 
 		// RG
 		void build(vuk::PerThreadContext&);

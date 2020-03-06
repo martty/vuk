@@ -260,7 +260,7 @@ namespace vuk {
 		}
 	}
 
-	void RenderGraph::bind_attachment_to_swapchain(Name name, SwapchainRef swp) {
+	void RenderGraph::bind_attachment_to_swapchain(Name name, SwapchainRef swp, Clear c) {
 		AttachmentRPInfo attachment_info;
 		attachment_info.extents = swp->extent;
 		attachment_info.iv = {};
@@ -270,6 +270,8 @@ namespace vuk {
 
 		attachment_info.type = AttachmentRPInfo::Type::eSwapchain;
 		attachment_info.swapchain = swp;
+		attachment_info.should_clear = true;
+		attachment_info.clear_value = c;
 		
 		Resource::Use& initial = attachment_info.initial;
 		Resource::Use& final = attachment_info.final;
@@ -291,7 +293,7 @@ namespace vuk {
 		bound_attachments.emplace(name, attachment_info);
 	}
 
-	void RenderGraph::mark_attachment_internal(Name name, vk::Format format, vk::Extent2D extent) {
+	void RenderGraph::mark_attachment_internal(Name name, vk::Format format, vk::Extent2D extent, Clear c) {
 		AttachmentRPInfo attachment_info;
 		attachment_info.extents = extent;
 		attachment_info.iv = {};
@@ -299,6 +301,8 @@ namespace vuk {
 		attachment_info.type = AttachmentRPInfo::Type::eInternal;
 		attachment_info.description.format = format;
 
+		attachment_info.should_clear = true;
+		attachment_info.clear_value = c;
 		Resource::Use& initial = attachment_info.initial;
 		Resource::Use& final = attachment_info.final;
 		initial.access = vk::AccessFlags{};
@@ -336,6 +340,9 @@ namespace vuk {
 							rp_att.description.samples = attachment_info.description.samples;
 							rp_att.iv = attachment_info.iv;
 							rp_att.extents = attachment_info.extents;
+							rp_att.clear_value = attachment_info.clear_value;
+							rp_att.should_clear = attachment_info.should_clear;
+							rp_att.type = attachment_info.type;
 							// if there is a "right" rp
 							// or if this attachment has a required end layout
 							// then we transition for it
@@ -587,19 +594,11 @@ namespace vuk {
 			rbi.renderPass = rpass.handle;
 			rbi.framebuffer = rpass.framebuffer;
 			rbi.renderArea = vk::Rect2D(vk::Offset2D{}, vk::Extent2D{rpass.fbci.width, rpass.fbci.height});
-			vk::ClearColorValue ccv;
-			// TODO: hardcoded
-			ccv.setFloat32({ 0.3f, 0.3f, 0.3f, 1.f });
-			vk::ClearValue cv;
-			cv.setColor(ccv);
-			vk::ClearDepthStencilValue cdv;
-			cdv.depth = 1.f;
-			cdv.stencil = 0;
-			vk::ClearValue cv2;
-			cv2.setDepthStencil(cdv);
 			std::vector<vk::ClearValue> clears;
-			clears.push_back(cv);
-			clears.push_back(cv2);
+			for (auto& att : rpass.attachments) {
+				if(att.should_clear)
+					clears.push_back(att.clear_value.c);
+			}
 			rbi.pClearValues = clears.data();
 			rbi.clearValueCount = clears.size();
 			cbuf.beginRenderPass(rbi, vk::SubpassContents::eInline);
