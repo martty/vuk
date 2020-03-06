@@ -86,6 +86,13 @@ namespace vuk {
 
 		CommandBuffer& bind_uniform_buffer(unsigned set, unsigned binding, Allocator::Buffer buffer);
 
+		void* _map_scratch_uniform_binding(unsigned set, unsigned binding, size_t size);
+
+		template<class T>
+		T* map_scratch_uniform_binding(unsigned set, unsigned binding) {
+			return static_cast<T*>(_map_scratch_uniform_binding(set, binding, sizeof(T)));
+		}
+
 		CommandBuffer& draw(uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance);
 		CommandBuffer& draw_indexed(uint32_t index_count, uint32_t instance_count, uint32_t first_index, int32_t vertex_offset, uint32_t first_instance);
 		void _bind_graphics_pipeline_state();

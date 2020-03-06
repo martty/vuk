@@ -269,7 +269,9 @@ namespace vuk {
 		attachment_info.description.samples = vk::SampleCountFlagBits::e1;
 
 		attachment_info.is_external = true;
-		Resource::Use initial, final;
+		
+		Resource::Use& initial = attachment_info.initial;
+		Resource::Use& final = attachment_info.final;
 		// for WSI, we want to wait for colourattachmentoutput
 		// we don't care about any writes, we will clear
 		initial.access = vk::AccessFlags{};
@@ -285,10 +287,6 @@ namespace vuk {
 		final.layout = vk::ImageLayout::ePresentSrcKHR;
 		final.stages = vk::PipelineStageFlagBits::eBottomOfPipe;
 
-		auto& chain = use_chains.at(name);
-		chain.insert(chain.begin(), { std::move(initial), nullptr });
-		chain.push_back({ std::move(final), nullptr });
-
 		bound_attachments.emplace(name, attachment_info);
 	}
 
@@ -299,7 +297,8 @@ namespace vuk {
 		attachment_info.is_external = false;
 		attachment_info.description.format = format;
 
-		Resource::Use initial, final;
+		Resource::Use& initial = attachment_info.initial;
+		Resource::Use& final = attachment_info.final;
 		initial.access = vk::AccessFlags{};
 		initial.stages = vk::PipelineStageFlagBits::eTopOfPipe;
 		// for internal attachments we don't want to preserve previous data
@@ -310,20 +309,32 @@ namespace vuk {
 		final.access = vk::AccessFlagBits{};
 		final.stages = vk::PipelineStageFlagBits::eBottomOfPipe;
 
-		auto& chain = use_chains.at(name);
-		chain.insert(chain.begin(), UseRef{ std::move(initial), nullptr });
-		chain.emplace_back(UseRef{ final, nullptr });
-
 		bound_attachments.emplace(name, attachment_info);
 	}
 
 	void RenderGraph::build(vuk::PerThreadContext& ptc) {
 		for (auto& [name, attachment_info] : bound_attachments) {
+			auto& chain = use_chains.at(name);
+			chain.insert(chain.begin(), UseRef{ std::move(attachment_info.initial), nullptr });
+			chain.emplace_back(UseRef{ attachment_info.final, nullptr });
+
+			vk::ImageUsageFlags usage;
+			for (auto& c : chain) {
+				if (c.use.layout == vk::ImageLayout::eDepthStencilAttachmentOptimal) {
+					usage |= vk::ImageUsageFlagBits::eDepthStencilAttachment;
+				}
+				if (c.use.layout == vk::ImageLayout::eShaderReadOnlyOptimal) {
+					usage |= vk::ImageUsageFlagBits::eSampled;
+				}
+				if (c.use.layout == vk::ImageLayout::eColorAttachmentOptimal) {
+					usage |= vk::ImageUsageFlagBits::eColorAttachment;
+				}
+			}
+
 			// create the attachment if it is internal
 			if (!attachment_info.is_external) {
 				vk::ImageCreateInfo ici;
-				// TODO: collect this
-				ici.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled;
+				ici.usage = usage;
 				ici.arrayLayers = 1;
 				ici.extent = vk::Extent3D(attachment_info.extents, 1);
 				ici.imageType = vk::ImageType::e2D;
@@ -339,7 +350,13 @@ namespace vuk {
 				ivci.format = attachment_info.description.format;
 				ivci.viewType = vk::ImageViewType::e2D;
 				vk::ImageSubresourceRange isr;
-				isr.aspectMask = vk::ImageAspectFlagBits::eDepth;
+				vk::ImageAspectFlagBits aspect;
+				if (ici.format == vk::Format::eD32Sfloat) {
+					aspect = vk::ImageAspectFlagBits::eDepth;
+				} else {
+					aspect = vk::ImageAspectFlagBits::eColor;
+				}
+				isr.aspectMask = aspect;
 				isr.baseArrayLayer = 0;
 				isr.layerCount = 1;
 				isr.baseMipLevel = 0;
@@ -347,14 +364,13 @@ namespace vuk {
 				ivci.subresourceRange = isr;
 
 				RGCI rgci;
+				rgci.name = name;
 				rgci.ici = ici;
 				rgci.ivci = ivci;
 
 				auto rg = ptc.transient_images.acquire(rgci);
 				attachment_info.iv = rg.image_view;
 			}
-
-			auto& chain = use_chains[name];
 
 			for (size_t i = 0; i < chain.size() - 1; i++) {
 				auto& left = chain[i];
@@ -485,8 +501,8 @@ namespace vuk {
 					}
 				} else {
 					color_attrefs.push_back(attref);
+					color_ref_offsets.push_back(color_attrefs.size());
 				}
-				color_ref_offsets.push_back(color_attrefs.size());
 			}
 		}
 
@@ -566,8 +582,8 @@ namespace vuk {
 			vk::ClearValue cv2;
 			cv2.setDepthStencil(cdv);
 			std::vector<vk::ClearValue> clears;
-			clears.push_back(cv2);
 			clears.push_back(cv);
+			clears.push_back(cv2);
 			rbi.pClearValues = clears.data();
 			rbi.clearValueCount = clears.size();
 			cbuf.beginRenderPass(rbi, vk::SubpassContents::eInline);
@@ -798,6 +814,12 @@ namespace vuk {
 		set_bindings[set].bindings[binding].buffer = vk::DescriptorBufferInfo{ buffer.buffer, buffer.offset, buffer.size };
 		set_bindings[set].used.set(binding);
 		return *this;
+	}
+
+	void* CommandBuffer::_map_scratch_uniform_binding(unsigned set, unsigned binding, size_t size) {
+		auto buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vk::BufferUsageFlagBits::eUniformBuffer, size, true);
+		bind_uniform_buffer(0, 0, buf);
+		return buf.mapped_ptr;
 	}
 
 	CommandBuffer& CommandBuffer::draw(uint32_t a, uint32_t b, uint32_t c, uint32_t d) {

@@ -8,6 +8,7 @@
 #include <iostream>
 #include "Pipeline.hpp"
 #include "Program.hpp"
+#include <random>
 
 GLFWwindow* create_window_glfw(bool resize = true)
 {
@@ -162,8 +163,18 @@ void device_init() {
 
 			// Setup Platform/Renderer bindings
 			ImGui_ImplGlfw_InitForVulkan(window, true);
-			io.BackendRendererName = "imgui_impl_vulkan";
+			io.BackendRendererName = "imgui_impl_vuk";
 			io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;  // We can honor the ImDrawCmd::VtxOffset field, allowing for large meshes.
+
+			// Seed with a real random value, if available
+			std::random_device r;
+
+			std::default_random_engine e1(r());
+			std::uniform_real_distribution<float> x_dist(-1, 1);
+			std::uniform_real_distribution<float> y_dist(-2.5, 2.5);
+			std::uniform_real_distribution<float> z_dist(1.0, 3.0);
+
+			vec3 campp[3] = { {x_dist(e1), y_dist(e1), z_dist(e1)}, {x_dist(e1), y_dist(e1), z_dist(e1)}, {x_dist(e1), y_dist(e1), z_dist(e1)} };
 
 			vk::Image font_img;
 			vuk::ImageView font_iv;
@@ -566,7 +577,7 @@ void device_init() {
 
 						auto [verts, stub1] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eVertexBuffer, gsl::span(&box.first[0], box.first.size()));
 						auto [inds, stub2] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eIndexBuffer, gsl::span(&box.second[0], box.second.size()));
-						struct vp {
+						struct VP {
 							glm::mat4 view;
 							glm::mat4 proj;
 						} vp;
@@ -638,6 +649,35 @@ void device_init() {
 							}
 						);
 
+						const char* ca_names[] = {"aa", "bb", "cc"};
+						const char* de_names[] = {"aad", "bbd", "ccd"};
+
+						for (size_t i = 0; i < 3; i++) {
+							rg.add_pass({
+								.resources = {vuk::Resource(ca_names[i], vuk::Resource::Type::eImage, vuk::eColorWrite), vuk::Resource(de_names[i], vuk::Resource::Type::eImage, vuk::eDepthStencilRW)},
+								.execute = [&, campos = campp[i]](vuk::CommandBuffer& command_buffer) {
+								command_buffer
+								  .set_viewport(0, vuk::Area::Framebuffer{})
+								  .set_scissor(0, vuk::Area::Framebuffer{})
+								  .bind_pipeline("vatte");
+								   VP* ubo = command_buffer.map_scratch_uniform_binding<VP>(0, 0);
+								   ubo->proj = vp.proj;
+								   
+
+								   ubo->view = glm::lookAt(campos, vec3(0), vec3(0, 1, 0));
+								command_buffer
+								  .bind_uniform_buffer(0, 1, ubom)
+								  .bind_sampled_image(0, 2, iv, vk::SamplerCreateInfo{})
+								  .bind_vertex_buffer(verts)
+								  .bind_index_buffer(inds, vk::IndexType::eUint32)
+								  .draw_indexed(box.second.size(), 1, 0, 0, 0);
+								}
+							});
+
+							rg.mark_attachment_internal(ca_names[i], vk::Format(vkswapchain->image_format), vkswapchain->extent);
+							rg.mark_attachment_internal(de_names[i], vk::Format::eD32Sfloat, vkswapchain->extent);
+						}
+
 
 						/**** imgui *****/
 						ImGuiIO& io = ImGui::GetIO();
@@ -648,9 +688,25 @@ void device_init() {
 						ImGui::ShowDemoWindow(&show);
 
 						ImGui::Begin("Doge");
-						auto& siv = ptc.make_sampled_image(iv, vk::SamplerCreateInfo{});
-						ImGui::Image(&siv, ImVec2(100, 100));
+						ImGui::Image(&ptc.make_sampled_image(iv, vk::SamplerCreateInfo{}), ImVec2(100, 100));
 						ImGui::End();
+
+						ImGui::Begin("Depth boofer");
+						ImGui::Image(&ptc.make_sampled_image("depth", vk::SamplerCreateInfo{}), ImVec2(100, 100));
+						ImGui::End();
+
+						ImGui::Begin("0");
+						ImGui::Image(&ptc.make_sampled_image(ca_names[0], vk::SamplerCreateInfo{}), ImVec2(100, 100));
+						ImGui::End();
+
+						ImGui::Begin("1");
+						ImGui::Image(&ptc.make_sampled_image(ca_names[1], vk::SamplerCreateInfo{}), ImVec2(100, 100));
+						ImGui::End();
+
+						ImGui::Begin("2");
+						ImGui::Image(&ptc.make_sampled_image(ca_names[2], vk::SamplerCreateInfo{}), ImVec2(100, 100));
+						ImGui::End();
+
 
 						ImGui::Render();
 						ImDrawData* draw_data = ImGui::GetDrawData();
@@ -695,8 +751,12 @@ void device_init() {
 
 						ptc.wait_all_transfers();
 						rg.add_pass({
-							.resources = {"SWAPCHAIN"_image(vuk::eColorWrite)},
-							//.depth_attachment = Attachment{"depth"},
+							.resources = {"SWAPCHAIN"_image(vuk::eColorWrite),
+								"depth"_image(vuk::eFragmentSampled),
+								vuk::Resource(ca_names[0], vuk::Resource::Type::eImage, vuk::eFragmentSampled),
+								vuk::Resource(ca_names[1], vuk::Resource::Type::eImage, vuk::eFragmentSampled),
+								vuk::Resource(ca_names[2], vuk::Resource::Type::eImage, vuk::eFragmentSampled)
+							},
 							.execute = [=](vuk::CommandBuffer& command_buffer) {
 								reset_render_state(command_buffer, draw_data, imvert, imind);
 								// Will project scissor/clipping rectangles into framebuffer space
@@ -748,6 +808,8 @@ void device_init() {
 													auto& si = *reinterpret_cast<vuk::SampledImage*>(pcmd->TextureId);
 													if (si.is_global) {
 														command_buffer.bind_sampled_image(0, 0, si.global.iv, si.global.sci);
+													} else {
+														command_buffer.bind_sampled_image(0, 0, si.rg_attachment.attachment_name, si.global.sci);
 													}
 												}
 												// Draw

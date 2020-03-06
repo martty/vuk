@@ -100,6 +100,7 @@ namespace vuk {
 
 	inline vuk::SampledImage& PooledType<vuk::SampledImage>::acquire(PerThreadContext& ptc, vuk::SampledImage si) {
 		if (values.size() < (needle + 1)) {
+			needle++;
 			return *values.emplace(std::move(si));
 		} else {
 			auto it = values.begin();
@@ -533,6 +534,12 @@ namespace vuk {
 			vuk::SampledImage si(vuk::SampledImage::Global{ iv, sci, vk::ImageLayout::eShaderReadOnlyOptimal });
 			return sampled_images.acquire(si);
 		}
+
+		vuk::SampledImage& make_sampled_image(Name n, vk::SamplerCreateInfo sci) {
+			vuk::SampledImage si(vuk::SampledImage::RenderGraphAttachment{ n, sci, vk::ImageLayout::eShaderReadOnlyOptimal });
+			return sampled_images.acquire(si);
+		}
+
 	};
 
 	inline InflightContext::InflightContext(Context& ctx, unsigned absolute_frame) : ctx(ctx),

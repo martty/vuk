@@ -273,6 +273,8 @@ namespace vuk {
 			vuk::ImageView iv;
 			vk::AttachmentDescription description;
 
+			Resource::Use initial, final;
+
 			bool is_external = false;
 
 			struct Use {
