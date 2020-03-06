@@ -260,15 +260,16 @@ namespace vuk {
 		}
 	}
 
-	void RenderGraph::bind_attachment_to_swapchain(Name name, vk::Format format, vk::Extent2D extent, vuk::ImageView siv) {
+	void RenderGraph::bind_attachment_to_swapchain(Name name, SwapchainRef swp) {
 		AttachmentRPInfo attachment_info;
-		attachment_info.extents = extent;
-		attachment_info.iv = siv;
+		attachment_info.extents = swp->extent;
+		attachment_info.iv = {};
 		// directly presented
-		attachment_info.description.format = format;
+		attachment_info.description.format = swp->format;
 		attachment_info.description.samples = vk::SampleCountFlagBits::e1;
 
-		attachment_info.is_external = true;
+		attachment_info.type = AttachmentRPInfo::Type::eSwapchain;
+		attachment_info.swapchain = swp;
 		
 		Resource::Use& initial = attachment_info.initial;
 		Resource::Use& final = attachment_info.final;
@@ -294,7 +295,8 @@ namespace vuk {
 		AttachmentRPInfo attachment_info;
 		attachment_info.extents = extent;
 		attachment_info.iv = {};
-		attachment_info.is_external = false;
+
+		attachment_info.type = AttachmentRPInfo::Type::eInternal;
 		attachment_info.description.format = format;
 
 		Resource::Use& initial = attachment_info.initial;
@@ -317,61 +319,7 @@ namespace vuk {
 			auto& chain = use_chains.at(name);
 			chain.insert(chain.begin(), UseRef{ std::move(attachment_info.initial), nullptr });
 			chain.emplace_back(UseRef{ attachment_info.final, nullptr });
-
-			vk::ImageUsageFlags usage;
-			for (auto& c : chain) {
-				if (c.use.layout == vk::ImageLayout::eDepthStencilAttachmentOptimal) {
-					usage |= vk::ImageUsageFlagBits::eDepthStencilAttachment;
-				}
-				if (c.use.layout == vk::ImageLayout::eShaderReadOnlyOptimal) {
-					usage |= vk::ImageUsageFlagBits::eSampled;
-				}
-				if (c.use.layout == vk::ImageLayout::eColorAttachmentOptimal) {
-					usage |= vk::ImageUsageFlagBits::eColorAttachment;
-				}
-			}
-
-			// create the attachment if it is internal
-			if (!attachment_info.is_external) {
-				vk::ImageCreateInfo ici;
-				ici.usage = usage;
-				ici.arrayLayers = 1;
-				ici.extent = vk::Extent3D(attachment_info.extents, 1);
-				ici.imageType = vk::ImageType::e2D;
-				ici.format = attachment_info.description.format;
-				ici.mipLevels = 1;
-				ici.initialLayout = vk::ImageLayout::eUndefined;
-				ici.samples = vk::SampleCountFlagBits::e1; // should match renderpass
-				ici.sharingMode = vk::SharingMode::eExclusive;
-				ici.tiling = vk::ImageTiling::eOptimal;
-
-				vk::ImageViewCreateInfo ivci;
-				ivci.image = vk::Image{};
-				ivci.format = attachment_info.description.format;
-				ivci.viewType = vk::ImageViewType::e2D;
-				vk::ImageSubresourceRange isr;
-				vk::ImageAspectFlagBits aspect;
-				if (ici.format == vk::Format::eD32Sfloat) {
-					aspect = vk::ImageAspectFlagBits::eDepth;
-				} else {
-					aspect = vk::ImageAspectFlagBits::eColor;
-				}
-				isr.aspectMask = aspect;
-				isr.baseArrayLayer = 0;
-				isr.layerCount = 1;
-				isr.baseMipLevel = 0;
-				isr.levelCount = 1;
-				ivci.subresourceRange = isr;
-
-				RGCI rgci;
-				rgci.name = name;
-				rgci.ici = ici;
-				rgci.ivci = ivci;
-
-				auto rg = ptc.transient_images.acquire(rgci);
-				attachment_info.iv = rg.image_view;
-			}
-
+		
 			for (size_t i = 0; i < chain.size() - 1; i++) {
 				auto& left = chain[i];
 				auto& right = chain[i + 1];
@@ -536,17 +484,87 @@ namespace vuk {
 			rp.rpci.pDependencies = rp.rpci.subpass_dependencies.data();
 
 			// attachments
-			auto& ivs = rp.fbci.attachments;
-			std::vector<vk::ImageView> vkivs;
 			for (auto& attrpinfo : rp.attachments) {
 				rp.rpci.attachments.push_back(attrpinfo.description);
-				ivs.push_back(attrpinfo.iv);
-				vkivs.push_back(attrpinfo.iv.payload);
 			}
+			
 			rp.rpci.attachmentCount = rp.rpci.attachments.size();
 			rp.rpci.pAttachments = rp.rpci.attachments.data();
 
 			rp.handle = ptc.renderpass_cache.acquire(rp.rpci);
+		}
+	}
+
+	vk::CommandBuffer RenderGraph::execute(vuk::PerThreadContext& ptc, std::vector<std::pair<SwapChainRef, size_t>> swp_with_index) {
+		// create and bind attachments 
+		for (auto& [name, attachment_info] : bound_attachments) {
+			auto& chain = use_chains.at(name);
+			if (attachment_info.type == AttachmentRPInfo::Type::eInternal) {
+				vk::ImageUsageFlags usage;
+				for (auto& c : chain) {
+					if (c.use.layout == vk::ImageLayout::eDepthStencilAttachmentOptimal) {
+						usage |= vk::ImageUsageFlagBits::eDepthStencilAttachment;
+					}
+					if (c.use.layout == vk::ImageLayout::eShaderReadOnlyOptimal) {
+						usage |= vk::ImageUsageFlagBits::eSampled;
+					}
+					if (c.use.layout == vk::ImageLayout::eColorAttachmentOptimal) {
+						usage |= vk::ImageUsageFlagBits::eColorAttachment;
+					}
+				}
+
+				vk::ImageCreateInfo ici;
+				ici.usage = usage;
+				ici.arrayLayers = 1;
+				ici.extent = vk::Extent3D(attachment_info.extents, 1);
+				ici.imageType = vk::ImageType::e2D;
+				ici.format = attachment_info.description.format;
+				ici.mipLevels = 1;
+				ici.initialLayout = vk::ImageLayout::eUndefined;
+				ici.samples = vk::SampleCountFlagBits::e1; // should match renderpass
+				ici.sharingMode = vk::SharingMode::eExclusive;
+				ici.tiling = vk::ImageTiling::eOptimal;
+
+				vk::ImageViewCreateInfo ivci;
+				ivci.image = vk::Image{};
+				ivci.format = attachment_info.description.format;
+				ivci.viewType = vk::ImageViewType::e2D;
+				vk::ImageSubresourceRange isr;
+				vk::ImageAspectFlagBits aspect;
+				if (ici.format == vk::Format::eD32Sfloat) {
+					aspect = vk::ImageAspectFlagBits::eDepth;
+				} else {
+					aspect = vk::ImageAspectFlagBits::eColor;
+				}
+				isr.aspectMask = aspect;
+				isr.baseArrayLayer = 0;
+				isr.layerCount = 1;
+				isr.baseMipLevel = 0;
+				isr.levelCount = 1;
+				ivci.subresourceRange = isr;
+
+				RGCI rgci;
+				rgci.name = name;
+				rgci.ici = ici;
+				rgci.ivci = ivci;
+
+				auto rg = ptc.transient_images.acquire(rgci);
+				attachment_info.iv = rg.image_view;
+			} else if (attachment_info.type == AttachmentRPInfo::Type::eSwapchain) {
+				auto it = std::find_if(swp_with_index.begin(), swp_with_index.end(), [&](auto& t) { return t.first == attachment_info.swapchain; });
+				attachment_info.iv = it->first->image_views[it->second];
+			}
+		}
+		
+		// create framebuffers
+		for (auto& rp : rpis) {
+			auto& ivs = rp.fbci.attachments;
+			std::vector<vk::ImageView> vkivs;
+			for (auto& attrpinfo : rp.attachments) {
+				auto& bound = bound_attachments[attrpinfo.name];
+				ivs.push_back(bound.iv);
+				vkivs.push_back(bound.iv.payload);
+			}
 			rp.fbci.renderPass = rp.handle;
 			rp.fbci.width = rp.attachments[0].extents.width;
 			rp.fbci.height = rp.attachments[0].extents.height;
@@ -555,9 +573,7 @@ namespace vuk {
 			rp.fbci.layers = 1;
 			rp.framebuffer = ptc.framebuffer_cache.acquire(rp.fbci);
 		}
-	}
-
-	vk::CommandBuffer RenderGraph::execute(vuk::PerThreadContext& ptc) {
+		// actual execution
 		auto cbufs = ptc.commandbuffer_pool.acquire(1);
 		auto& cbuf = cbufs[0];
 

@@ -47,7 +47,7 @@ target_sources(vuk PUBLIC src/main.cpp
 	src/Allocator.cpp
 	src/CommandBuffer.hpp
 	src/Handle.hpp
-	)
+	src/Context.cpp)
 
 target_include_directories(vuk PUBLIC include ext/mapbox-variant/include)
 target_include_directories(vuk PUBLIC ext/shaderc/libshaderc/include)

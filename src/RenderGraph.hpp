@@ -44,6 +44,9 @@ struct Buffer {
 namespace vuk {
 	struct CommandBuffer;
 
+	struct Swapchain;
+	using SwapChainRef = Swapchain *;
+
 	enum ImageAccess {
 		eColorRW,
 		eColorWrite,
@@ -270,18 +273,19 @@ namespace vuk {
 		struct AttachmentRPInfo {
 			Name name;
 			vk::Extent2D extents;
-			vuk::ImageView iv;
 			vk::AttachmentDescription description;
 
 			Resource::Use initial, final;
 
-			bool is_external = false;
+			enum class Type {
+				eInternal, eExternal, eSwapchain
+			} type;
 
-			struct Use {
-				vk::PipelineStageFlagBits stage;
-				vk::AccessFlags access;
-				size_t subpass;
-			} first_use, last_use;
+			// IV for external images
+			vuk::ImageView iv;
+			// nothing for internal
+			// swapchain for swapchain
+			Swapchain* swapchain;
 		};
 
 		struct SubpassInfo {
@@ -316,12 +320,12 @@ namespace vuk {
 
 		// RGscaffold
 		std::unordered_map<Name, AttachmentRPInfo> bound_attachments;
-		void bind_attachment_to_swapchain(Name name, vk::Format format, vk::Extent2D extent, vuk::ImageView siv);
+		void bind_attachment_to_swapchain(Name name, Swapchain* swp);
 		void mark_attachment_internal(Name, vk::Format, vk::Extent2D);
 
 		// RG
 		void build(vuk::PerThreadContext&);
-		vk::CommandBuffer execute(vuk::PerThreadContext&);
+		vk::CommandBuffer execute(vuk::PerThreadContext&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
 
 		// debug
 		void generate_graph_visualization();

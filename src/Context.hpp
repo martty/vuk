@@ -120,6 +120,18 @@ namespace vuk {
 		size_t id;
 	};
 
+	struct Swapchain {
+		vk::SwapchainKHR swapchain;
+		vk::SurfaceKHR surface;
+
+		vk::Format format;
+		vk::Extent2D extent = { 0, 0 };
+		std::vector<vk::Image> images;
+		std::vector<vk::ImageView> _ivs;
+		std::vector<vuk::ImageView> image_views;
+	};
+	using SwapchainRef = Swapchain*;
+
 	class Context {
 	public:
 		constexpr static size_t FC = 3;
@@ -146,6 +158,17 @@ namespace vuk {
 
 		std::unordered_map<std::string_view, create_info_t<vuk::PipelineInfo>> named_pipelines;
 
+		plf::colony<Swapchain> swapchains;
+
+		SwapchainRef add_swapchain(Swapchain sw) {
+			sw.image_views.reserve(sw._ivs.size());
+			for (auto& v : sw._ivs) {
+				sw.image_views.push_back(wrap(vk::ImageView{ v }));
+			}
+
+			return &*swapchains.emplace(sw);
+		}
+
 		vk::Queue graphics_queue;
 
 		Context(vk::Device device, vk::PhysicalDevice physical_device) : device(device), physical_device(physical_device),
@@ -161,13 +184,12 @@ namespace vuk {
 			descriptor_sets(*this),
 			sampler_cache(*this),
 			sampled_images(*this),
-			pool_cache(*this)
-		{
+			pool_cache(*this) {
 			vk_pipeline_cache = device.createPipelineCacheUnique({});
 		}
 
 		template<class T>
-		void create_named(const char * name, create_info_t<T> ci) {
+		void create_named(const char* name, create_info_t<T> ci) {
 			if constexpr (std::is_same_v<T, vk::Pipeline>) {
 				named_pipelines.emplace(name, ci);
 			}
@@ -205,6 +227,16 @@ namespace vuk {
 		}
 		void destroy(vk::Sampler sa) {
 			device.destroy(sa);
+		}
+
+		~Context() {
+			device.waitIdle();
+			for (auto& s : swapchains) {
+				for (auto& swiv : s.image_views) {
+					device.destroy(swiv.payload);
+				}
+				device.destroy(s.swapchain);
+			}
 		}
 
 		std::atomic<size_t> unique_handle_id_counter = 0;
@@ -250,7 +282,7 @@ namespace vuk {
 			TransferStub stub;
 		};
 
-		
+
 		std::atomic<size_t> transfer_id = 1;
 		std::atomic<size_t> last_transfer_complete = 0;
 
@@ -301,7 +333,7 @@ namespace vuk {
 			std::lock_guard _(recycle_mutex);
 			ctx.image_view_recycle[frame].insert(ctx.image_view_recycle[frame].end(), images.begin(), images.end());
 		}
-	
+
 		PerThreadContext begin();
 	};
 
@@ -344,9 +376,8 @@ namespace vuk {
 			descriptor_sets(*this, ifc.descriptor_sets),
 			sampler_cache(*this, ifc.sampler_cache),
 			sampled_images(ifc.sampled_images.get_view(*this)),
-			pool_cache(*this, ifc.pool_cache)
-		{
-			
+			pool_cache(*this, ifc.pool_cache) {
+
 		}
 
 		~PerThreadContext() {
@@ -443,7 +474,7 @@ namespace vuk {
 			if (data.empty()) return { 0 };
 			auto staging = _allocate_scratch_buffer(MemoryUsage::eCPUonly, vk::BufferUsageFlagBits::eTransferSrc, sizeof(T) * data.size(), true);
 			::memcpy(staging.mapped_ptr, data.data(), sizeof(T) * data.size());
-			
+
 			return ifc.enqueue_transfer(staging, dst);
 		}
 
@@ -452,14 +483,14 @@ namespace vuk {
 			assert(!data.empty());
 			auto staging = _allocate_scratch_buffer(MemoryUsage::eCPUonly, vk::BufferUsageFlagBits::eTransferSrc, sizeof(T) * data.size(), true);
 			::memcpy(staging.mapped_ptr, data.data(), sizeof(T) * data.size());
-			
+
 			return ifc.enqueue_transfer(staging, dst, extent);
 		}
 
 
 		void dma_task() {
 			std::lock_guard _(ifc.transfer_mutex);
-			while(!ifc.pending_transfers.empty() && ctx.device.getFenceStatus(ifc.pending_transfers.front().fence) == vk::Result::eSuccess) {
+			while (!ifc.pending_transfers.empty() && ctx.device.getFenceStatus(ifc.pending_transfers.front().fence) == vk::Result::eSuccess) {
 				auto last = ifc.pending_transfers.front();
 				ifc.last_transfer_complete = last.last_transfer_id;
 				ifc.pending_transfers.pop();
@@ -539,7 +570,6 @@ namespace vuk {
 			vuk::SampledImage si(vuk::SampledImage::RenderGraphAttachment{ n, sci, vk::ImageLayout::eShaderReadOnlyOptimal });
 			return sampled_images.acquire(si);
 		}
-
 	};
 
 	inline InflightContext::InflightContext(Context& ctx, unsigned absolute_frame) : ctx(ctx),
@@ -556,8 +586,7 @@ namespace vuk {
 		descriptor_sets(*this, ctx.descriptor_sets),
 		sampler_cache(*this, ctx.sampler_cache),
 		sampled_images(ctx.sampled_images.get_view(*this)),
-		pool_cache(*this, ctx.pool_cache)
-	{
+		pool_cache(*this, ctx.pool_cache) {
 		// image recycling
 		for (auto& img : ctx.image_recycle[frame]) {
 			ctx.allocator.destroy_image(img);
@@ -590,11 +619,11 @@ namespace vuk {
 	Pool<T, FC>::PFView::PFView(InflightContext& ifc, Pool<T, FC>& storage, plf::colony<PooledType<T>>& fv) : ifc(ifc), storage(storage), frame_values(fv) {
 		storage.reset(ifc.frame);
 	}
-/*
-	vk::Framebuffer create(PerThreadContext& ptc, const create_info_t<vk::Framebuffer>& cinfo) {
-		return ptc.ctx.device.createFramebuffer(cinfo);
-	}
-	*/
+	/*
+		vk::Framebuffer create(PerThreadContext& ptc, const create_info_t<vk::Framebuffer>& cinfo) {
+			return ptc.ctx.device.createFramebuffer(cinfo);
+		}
+		*/
 	template<class T>
 	T create(PerThreadContext& ptc, const create_info_t<T>& cinfo) {
 		auto& ctx = ptc.ifc.ctx;
@@ -611,7 +640,7 @@ namespace vuk {
 			return res;
 		} else if constexpr (std::is_same_v<T, Allocator::Pool>) {
 			return ctx.allocator.allocate_pool(cinfo.mem_usage, cinfo.buffer_usage);
-		} else if constexpr (std::is_same_v<T, vuk::DescriptorPool>){
+		} else if constexpr (std::is_same_v<T, vuk::DescriptorPool>) {
 			return vuk::DescriptorPool{};
 		} else if constexpr (std::is_same_v<T, vuk::DescriptorSet>) {
 			auto& pool = ptc.pool_cache.acquire(cinfo.layout_info);
@@ -632,18 +661,18 @@ namespace vuk {
 				write.dstBinding = i;
 				write.dstSet = ds;
 				switch (binding.type) {
-					case vk::DescriptorType::eUniformBuffer:
-					case vk::DescriptorType::eStorageBuffer:
-						write.pBufferInfo = &binding.buffer;
-						break;
-					case vk::DescriptorType::eSampledImage:
-					case vk::DescriptorType::eSampler:
-					case vk::DescriptorType::eCombinedImageSampler:
-						diis[i] = binding.image;
-						write.pImageInfo = &diis[i];
-						break;
-					default:
-						assert(0);
+				case vk::DescriptorType::eUniformBuffer:
+				case vk::DescriptorType::eStorageBuffer:
+					write.pBufferInfo = &binding.buffer;
+					break;
+				case vk::DescriptorType::eSampledImage:
+				case vk::DescriptorType::eSampler:
+				case vk::DescriptorType::eCombinedImageSampler:
+					diis[i] = binding.image;
+					write.pImageInfo = &diis[i];
+					break;
+				default:
+					assert(0);
 				}
 			}
 			ctx.device.updateDescriptorSets(leading_zero, writes.data(), 0, nullptr);
@@ -654,5 +683,9 @@ namespace vuk {
 			return ptc.ctx.device.createSampler(cinfo);
 		}
 	}
+}
 
+namespace vuk {
+	struct RenderGraph;
+	void execute_submit_and_present_to_one(PerThreadContext& ptc, RenderGraph& rg, SwapchainRef swapchain);
 }

@@ -99,6 +99,30 @@ Mesh generate_cube() {
 #include "imgui.h"
 #include "examples/imgui_impl_glfw.h"
 
+namespace util {
+	vuk::Swapchain make_swapchain(vkb::Device vkbdevice) {
+		vkb::SwapchainBuilder swb(vkbdevice);
+		swb.set_desired_format(vk::SurfaceFormatKHR(vk::Format::eR8G8B8A8Srgb, vk::ColorSpaceKHR::eSrgbNonlinear));
+		auto vkswapchain = swb.build();
+
+		vuk::Swapchain sw;
+		auto images = vkb::get_swapchain_images(*vkswapchain);
+		auto views = *vkb::get_swapchain_image_views(*vkswapchain, *images);
+
+		for (auto& i : *images) {
+			sw.images.push_back(i);
+		}
+		for (auto& i : views) {
+			sw._ivs.push_back(i);
+		}
+		sw.extent = vkswapchain->extent;
+		sw.format = vk::Format(vkswapchain->image_format);
+		sw.surface = vkbdevice.surface;
+		sw.swapchain = vkswapchain->swapchain;
+		return sw;
+	}
+}
+
 void device_init() {
 	vkb::InstanceBuilder builder;
 	builder
@@ -142,11 +166,6 @@ void device_init() {
 			vk::Queue graphics_queue = vkb::get_graphics_queue(vkbdevice).value();
 			vk::Device device = vkbdevice.device;
 
-			vkb::SwapchainBuilder swb(vkbdevice);
-			swb.set_desired_format(vk::SurfaceFormatKHR(vk::Format::eR8G8B8A8Srgb, vk::ColorSpaceKHR::eSrgbNonlinear));
-			auto vkswapchain = swb.build();
-			vk::SwapchainKHR swapchain = vkswapchain->swapchain;
-
 			int x, y, chans;
 			auto doge_image = stbi_load("../../doge.png", &x, &y, &chans, 4);
 
@@ -182,6 +201,8 @@ void device_init() {
 			{
 				vuk::Context context(device, physical_device.phys_device);
 				context.graphics_queue = graphics_queue;
+
+				auto swapchain = context.add_swapchain(util::make_swapchain(vkbdevice));
 				{
 					{
 						auto ifc = context.begin();
@@ -544,20 +565,6 @@ void device_init() {
 						context.named_pipelines.emplace("fullscreen", pci);
 					}
 
-
-
-
-					auto swapimages = vkb::get_swapchain_images(*vkswapchain);
-					auto swapimageviews = [&]() {
-						auto vkviews = *vkb::get_swapchain_image_views(*vkswapchain, *swapimages);
-						std::vector<vuk::ImageView> ivs;
-						ivs.reserve(vkviews.size());
-						for (auto& v : vkviews) {
-							ivs.push_back(context.wrap(vk::ImageView{ v }));
-						}
-						return ivs;
-					}();
-
 					using glm::vec3;
 					float angle = 0.f;
 
@@ -567,11 +574,6 @@ void device_init() {
 						glfwPollEvents();
 						auto ifc = context.begin();
 						auto ptc = ifc.begin();
-
-						auto render_complete = ptc.semaphore_pool.acquire(1)[0];
-						auto present_rdy = ptc.semaphore_pool.acquire(1)[0];
-						auto acq_result = device.acquireNextImageKHR(swapchain, UINT64_MAX, present_rdy, vk::Fence{});
-						auto index = acq_result.value;
 
 						auto box = generate_cube();
 
@@ -674,8 +676,8 @@ void device_init() {
 								}
 							});
 
-							rg.mark_attachment_internal(ca_names[i], vk::Format(vkswapchain->image_format), vkswapchain->extent);
-							rg.mark_attachment_internal(de_names[i], vk::Format::eD32Sfloat, vkswapchain->extent);
+							rg.mark_attachment_internal(ca_names[i], vk::Format(swapchain->format), swapchain->extent);
+							rg.mark_attachment_internal(de_names[i], vk::Format::eD32Sfloat, swapchain->extent);
 						}
 
 
@@ -824,39 +826,14 @@ void device_init() {
 							}
 						);
 
-
 						rg.build();
-						rg.bind_attachment_to_swapchain("SWAPCHAIN", vk::Format(vkswapchain->image_format), vkswapchain->extent, swapimageviews[index]);
-						rg.mark_attachment_internal("depth", vk::Format::eD32Sfloat, vkswapchain->extent);
+						rg.bind_attachment_to_swapchain("SWAPCHAIN", swapchain);
+						rg.mark_attachment_internal("depth", vk::Format::eD32Sfloat, swapchain->extent);
 						rg.build(ptc);
-						auto cb = rg.execute(ptc);
-
-						vk::SubmitInfo si;
-						si.commandBufferCount = 1;
-						si.pCommandBuffers = &cb;
-						si.pSignalSemaphores = &render_complete;
-						si.signalSemaphoreCount = 1;
-						si.waitSemaphoreCount = 1;
-						si.pWaitSemaphores = &present_rdy;
-						vk::PipelineStageFlags flags = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-						si.pWaitDstStageMask = &flags;
-						auto fence = ptc.fence_pool.acquire(1)[0];
-						graphics_queue.submit(si, fence);
-						vk::PresentInfoKHR pi;
-						pi.swapchainCount = 1;
-						pi.pSwapchains = &swapchain;
-						pi.pImageIndices = &acq_result.value;
-						pi.waitSemaphoreCount = 1;
-						pi.pWaitSemaphores = &render_complete;
-						graphics_queue.presentKHR(pi);
-					}
-					context.device.waitIdle();
-					for (auto& swiv : swapimageviews) {
-						device.destroy(swiv.payload);
+						execute_submit_and_present_to_one(ptc, rg, swapchain);
 					}
 				}
 			}
-			vkb::destroy_swapchain(*vkswapchain);
 			vkDestroySurfaceKHR(inst.instance, surface, nullptr);
 			destroy_window_glfw(window);
 			vkb::destroy_device(*dev_ret);
