@@ -370,9 +370,48 @@ namespace vuk {
 
 namespace std {
 	template <>
+	struct hash<vk::AttachmentDescription> {
+		size_t operator()(vk::AttachmentDescription const& x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, x.flags, x.initialLayout, x.finalLayout, x.format, x.loadOp, x.stencilLoadOp, x.storeOp, x.stencilStoreOp, x.samples);
+			return h;
+		}
+	};
+
+	template <>
+	struct hash<vk::AttachmentReference> {
+		size_t operator()(vk::AttachmentReference const& x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, x.attachment, x.layout);
+			return h;
+		}
+	};
+
+	template <>
+	struct hash<vk::SubpassDependency> {
+		size_t operator()(vk::SubpassDependency const& x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, x.dependencyFlags, x.srcAccessMask, x.srcStageMask, x.srcSubpass, x.dstAccessMask, x.dstStageMask, x.dstSubpass);
+			return h;
+		}
+	};
+
+	template <>
+	struct hash<vuk::SubpassDescription> {
+		size_t operator()(vuk::SubpassDescription const& x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, x.flags, x.pipelineBindPoint);
+			return h;
+		}
+	};
+
+
+	template <>
 	struct hash<vuk::RenderPassCreateInfo> {
 		size_t operator()(vuk::RenderPassCreateInfo const& x) const noexcept {
-			return x.attachmentCount; // TODO: ...
+			size_t h = 0;
+			hash_combine(h, x.flags, x.attachments, x.color_refs, x.color_ref_offsets, x.ds_refs, x.subpass_dependencies, x.subpass_descriptions);
+			return h;
 		}
 	};
 
