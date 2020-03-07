@@ -84,7 +84,6 @@ namespace vuk {
 		vk::ClearValue c;
 	};
 
-
 	enum ImageAccess {
 		eColorRW,
 		eColorWrite,

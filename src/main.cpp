@@ -126,7 +126,7 @@ namespace util {
 void device_init() {
 	vkb::InstanceBuilder builder;
 	builder
-		.setup_validation_layers()
+		.request_validation_layers()
 		.set_debug_callback([](VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
 			VkDebugUtilsMessageTypeFlagsEXT messageType,
 			const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
@@ -457,7 +457,7 @@ void device_init() {
 						{
 							vk::VertexInputAttributeDescription viad;
 							viad.binding = 0;
-							viad.format = vk::Format::eR32G32B32Sfloat;
+							viad.format = vk::Format::eR32G32Sfloat;
 							viad.location = 0;
 							viad.offset = 0;
 							pipe->attributeDescriptions.push_back(viad);
@@ -604,11 +604,11 @@ void device_init() {
 								command_buffer
 								  .set_viewport(0, vuk::Area::Framebuffer{})
 								  .set_scissor(0, vuk::Area::Framebuffer{})
+								  .bind_vertex_buffer(0, verts, vuk::Packed{vk::Format::eR32G32B32Sfloat, vuk::Ignore{offsetof(Vertex, uv_coordinates) - sizeof(Vertex::position)}, vk::Format::eR32G32Sfloat})
 								  .bind_pipeline("vatte")
 								  .bind_uniform_buffer(0, 0, ubo)
 								  .bind_uniform_buffer(0, 1, ubom)
 								  .bind_sampled_image(0, 2, iv, vk::SamplerCreateInfo{})
-								  .bind_vertex_buffer(verts)
 								  .bind_index_buffer(inds, vk::IndexType::eUint32)
 								  .draw_indexed(box.second.size(), 1, 0, 0, 0);
 								}
@@ -661,6 +661,7 @@ void device_init() {
 								command_buffer
 								  .set_viewport(0, vuk::Area::Framebuffer{})
 								  .set_scissor(0, vuk::Area::Framebuffer{})
+								  .bind_vertex_buffer(0, verts, vuk::Packed{vk::Format::eR32G32B32Sfloat, vuk::Ignore{offsetof(Vertex, uv_coordinates) - sizeof(Vertex::position)}, vk::Format::eR32G32Sfloat})
 								  .bind_pipeline("vatte");
 								   VP* ubo = command_buffer.map_scratch_uniform_binding<VP>(0, 0);
 								   ubo->proj = vp.proj;
@@ -670,7 +671,6 @@ void device_init() {
 								command_buffer
 								  .bind_uniform_buffer(0, 1, ubom)
 								  .bind_sampled_image(0, 2, iv, vk::SamplerCreateInfo{})
-								  .bind_vertex_buffer(verts)
 								  .bind_index_buffer(inds, vk::IndexType::eUint32)
 								  .draw_indexed(box.second.size(), 1, 0, 0, 0);
 								}
@@ -714,12 +714,12 @@ void device_init() {
 						ImDrawData* draw_data = ImGui::GetDrawData();
 
 						auto reset_render_state = [&font_iv](vuk::CommandBuffer & command_buffer, ImDrawData * draw_data, vuk::Allocator::Buffer vertex, vuk::Allocator::Buffer index) {
-							command_buffer.bind_pipeline("imgui");
 							//command_buffer.bind_sampled_image(0, 0, font_iv, sci);
 							if (index.size > 0) {
 								command_buffer.bind_index_buffer(index, sizeof(ImDrawIdx) == 2 ? vk::IndexType::eUint16 : vk::IndexType::eUint32);
-								command_buffer.bind_vertex_buffer(vertex);
+								command_buffer.bind_vertex_buffer(0, vertex, vuk::Packed{vk::Format::eR32G32Sfloat, vk::Format::eR32G32Sfloat, vk::Format::eR8G8B8A8Unorm});
 							}
+							command_buffer.bind_pipeline("imgui");
 							command_buffer.set_viewport(0, vuk::Area::Framebuffer{});
 							struct PC {
 								float scale[2];

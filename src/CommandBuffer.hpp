@@ -30,6 +30,48 @@ namespace vuk {
 		vk::Extent2D extent;
 	};
 
+	inline size_t format_to_size(vk::Format format) {
+		switch (format) {
+		case vk::Format::eR32G32B32A32Sfloat:
+			return sizeof(float) * 4;
+		case vk::Format::eR32G32B32Sfloat:
+			return sizeof(float) * 3;
+		case vk::Format::eR32G32Sfloat:
+			return sizeof(float) * 2;
+		case vk::Format::eR8G8B8A8Unorm:
+			return sizeof(char) * 4;
+		default:
+			assert(0);
+		}
+	}
+
+	struct Ignore {
+		Ignore(size_t bytes) : bytes(bytes) {}
+		Ignore(vk::Format format) : format(format) {}
+		vk::Format format;
+		size_t bytes = 0;
+
+		size_t to_size() {
+			if (bytes != 0) return bytes;
+			return format_to_size(format);
+		}
+	};
+
+	struct FormatOrIgnore {
+		FormatOrIgnore(vk::Format format) : ignore(false), format(format), size(format_to_size(format)) {}
+		FormatOrIgnore(Ignore ign) : ignore(true), format(ign.format), size(ign.to_size()) {}
+
+		bool ignore;
+		vk::Format format;
+		size_t size;
+	};
+
+	struct Packed {
+		Packed(std::initializer_list<FormatOrIgnore> ilist) : list(ilist) {}
+		std::vector<FormatOrIgnore> list;
+	};
+
+
 	struct CommandBuffer {
 		RenderGraph& rg;
 		vk::CommandBuffer command_buffer;
@@ -40,6 +82,9 @@ namespace vuk {
 		std::optional<std::pair<RenderGraph::RenderPassInfo&, uint32_t>> ongoing_renderpass;
 		std::optional<vk::Viewport> next_viewport;
 		std::optional<vk::Rect2D> next_scissor;
+
+		std::vector<vk::VertexInputAttributeDescription> attribute_descriptions;
+		std::vector<vk::VertexInputBindingDescription> binding_descriptions;
 		std::optional<vuk::PipelineInfo> current_pipeline;
 
 		// global memory barrier
@@ -63,7 +108,7 @@ namespace vuk {
 		CommandBuffer& bind_pipeline(vuk::PipelineCreateInfo gpci);
 		CommandBuffer& bind_pipeline(Name p);
 
-		CommandBuffer& bind_vertex_buffer(Allocator::Buffer&);
+		CommandBuffer& bind_vertex_buffer(unsigned index, Allocator::Buffer&, Packed);
 		CommandBuffer& bind_index_buffer(Allocator::Buffer&, vk::IndexType type);
 
 		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, vuk::ImageView iv, vk::SamplerCreateInfo sampler_create_info);

@@ -780,10 +780,24 @@ namespace vuk {
 
 
 	CommandBuffer& CommandBuffer::bind_pipeline(vuk::PipelineCreateInfo pi) {
+		// set vertex input
+		// TODO: we leak here
+		vk::PipelineVertexInputStateCreateInfo* input = new vk::PipelineVertexInputStateCreateInfo(*pi.gpci.pVertexInputState);
+		std::vector<vk::VertexInputAttributeDescription>* viads = new std::vector<vk::VertexInputAttributeDescription>(attribute_descriptions);
+		std::vector<vk::VertexInputBindingDescription>* vibds = new std::vector<vk::VertexInputBindingDescription>(binding_descriptions);
+		input->pVertexAttributeDescriptions = viads->data();
+		input->vertexAttributeDescriptionCount = viads->size();
+		input->pVertexBindingDescriptions = vibds->data();
+		input->vertexBindingDescriptionCount = vibds->size();
+		pi.gpci.pVertexInputState = input;
+
 		pi.gpci.renderPass = ongoing_renderpass->first.handle;
 		pi.gpci.subpass = ongoing_renderpass->second;
 		current_pipeline = ptc.pipeline_cache.acquire(pi);
 		command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, current_pipeline->pipeline);
+		// maybe not clear? we'll see
+		attribute_descriptions.clear();
+		binding_descriptions.clear();
 		return *this;
 	}
 
@@ -791,8 +805,30 @@ namespace vuk {
 		return bind_pipeline(ptc.ifc.ctx.named_pipelines.at(p));
 	}
 
-	CommandBuffer& CommandBuffer::bind_vertex_buffer(Allocator::Buffer& buf) {
-		command_buffer.bindVertexBuffers(0, buf.buffer, buf.offset);
+	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, Allocator::Buffer& buf, Packed format) {
+		size_t location = 0;
+		size_t offset = 0;
+		for (auto& f : format.list) {
+			if (f.ignore) {
+				offset += f.size;
+			} else {
+				vk::VertexInputAttributeDescription viad;
+				viad.binding = binding;
+				viad.format = f.format;
+				viad.location = location;
+				viad.offset = offset;
+				attribute_descriptions.push_back(viad);
+				offset += f.size;
+				location++;
+			}
+		}
+		vk::VertexInputBindingDescription vibd;
+		vibd.binding = binding;
+		vibd.inputRate = vk::VertexInputRate::eVertex;
+		vibd.stride = offset;
+		binding_descriptions.push_back(vibd);
+	
+		command_buffer.bindVertexBuffers(binding, buf.buffer, buf.offset);
 		return *this;
 	}
 
