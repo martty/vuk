@@ -3,33 +3,59 @@
 #include <GSL/gsl_util>
 
 namespace vuk {
+	void PipelineCreateInfo::set_blend(size_t attachment_index, BlendPreset preset) {
+		if(color_blend_attachments.size() <= attachment_index)
+			color_blend_attachments.resize(attachment_index + 1);
+		auto& pcba = color_blend_attachments[attachment_index];
+
+		switch (preset) {
+		case BlendPreset::eAlphaBlend:
+			pcba.blendEnable = true;
+			pcba.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
+			pcba.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+			pcba.colorBlendOp = vk::BlendOp::eAdd;
+			pcba.srcAlphaBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+			pcba.dstAlphaBlendFactor = vk::BlendFactor::eZero;
+			pcba.alphaBlendOp = vk::BlendOp::eAdd;
+			break;
+		case BlendPreset::eOff:
+			pcba.blendEnable = false;
+			break;
+		case BlendPreset::ePremultipliedAlphaBlend:
+			assert(0 && "NYI");
+		}
+	}
+	void PipelineCreateInfo::set_blend(BlendPreset preset) {
+		color_blend_attachments.resize(1);
+		set_blend(0, preset);
+	}
 	// defaults
 	PipelineCreateInfo::PipelineCreateInfo() {
 		// One viewport
-		viewportState.viewportCount = 1;
+		viewport_state.viewportCount = 1;
 		// One scissor rectangle
-		viewportState.scissorCount = 1;
+		viewport_state.scissorCount = 1;
 
 		// The dynamic state properties themselves are stored in the command buffer
-		dynamicStateEnables.push_back(vk::DynamicState::eViewport);
-		dynamicStateEnables.push_back(vk::DynamicState::eScissor);
-		dynamicStateEnables.push_back(vk::DynamicState::eDepthBias);
+		dynamic_states.push_back(vk::DynamicState::eViewport);
+		dynamic_states.push_back(vk::DynamicState::eScissor);
+		dynamic_states.push_back(vk::DynamicState::eDepthBias);
 	
-		multisampleState.pSampleMask = nullptr;
-		multisampleState.rasterizationSamples = vk::SampleCountFlagBits::e1;
+		multisample_state.pSampleMask = nullptr;
+		multisample_state.rasterizationSamples = vk::SampleCountFlagBits::e1;
 
-		inputState.vertexBindingDescriptionCount = 0;
-		inputState.vertexAttributeDescriptionCount = 0;
+		vertex_input_state.vertexBindingDescriptionCount = 0;
+		vertex_input_state.vertexAttributeDescriptionCount = 0;
 
-		inputAssemblyState.topology = vk::PrimitiveTopology::eTriangleList;
-		rasterizationState.lineWidth = 1.f;
+		input_assembly_state.topology = vk::PrimitiveTopology::eTriangleList;
+		rasterization_state.lineWidth = 1.f;
 
-		depthStencilState.depthWriteEnable = true;
-		depthStencilState.depthCompareOp = vk::CompareOp::eLessOrEqual;
-		depthStencilState.depthTestEnable = true;
+		depth_stencil_state.depthWriteEnable = true;
+		depth_stencil_state.depthCompareOp = vk::CompareOp::eLessOrEqual;
+		depth_stencil_state.depthTestEnable = true;
 
-		blendAttachmentState.resize(1);
-		auto& pcba = blendAttachmentState[0];
+		color_blend_attachments.resize(1);
+		auto& pcba = color_blend_attachments[0];
 		pcba.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
 	}
 
@@ -99,14 +125,14 @@ namespace vuk {
 
 	vk::GraphicsPipelineCreateInfo vuk::PipelineCreateInfo::to_vk() const {
 		vk::GraphicsPipelineCreateInfo gpci;
-		gpci.pVertexInputState = &inputState;
-		gpci.pInputAssemblyState = &inputAssemblyState;
-		gpci.pRasterizationState = &rasterizationState;
-		gpci.pColorBlendState = &colorBlendState;
-		gpci.pMultisampleState = &multisampleState;
-		gpci.pViewportState = &viewportState;
-		gpci.pDepthStencilState = &depthStencilState;
-		gpci.pDynamicState = &dynamicState;
+		gpci.pVertexInputState = &vertex_input_state;
+		gpci.pInputAssemblyState = &input_assembly_state;
+		gpci.pRasterizationState = &rasterization_state;
+		gpci.pColorBlendState = &color_blend_state;
+		gpci.pMultisampleState = &multisample_state;
+		gpci.pViewportState = &viewport_state;
+		gpci.pDepthStencilState = &depth_stencil_state;
+		gpci.pDynamicState = &dynamic_state;
 		gpci.renderPass = render_pass;
 		gpci.subpass = subpass;
 		return gpci;

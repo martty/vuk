@@ -34,11 +34,12 @@ namespace vuk {
 	Resource::Use to_use(ImageAccess ia) {
 		switch (ia) {
 		case eColorWrite: return { vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::AccessFlagBits::eColorAttachmentWrite, vk::ImageLayout::eColorAttachmentOptimal };
+		case eColorRW: return { vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::AccessFlagBits::eColorAttachmentWrite | vk::AccessFlagBits::eColorAttachmentRead, vk::ImageLayout::eColorAttachmentOptimal };
 		case eDepthStencilRW : return { vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eLateFragmentTests, vk::AccessFlagBits::eDepthStencilAttachmentRead | vk::AccessFlagBits::eDepthStencilAttachmentWrite, vk::ImageLayout::eDepthStencilAttachmentOptimal };
 
 		case eFragmentSampled: return { vk::PipelineStageFlagBits::eFragmentShader, vk::AccessFlagBits::eShaderRead, vk::ImageLayout::eShaderReadOnlyOptimal };
 		default:
-			assert(0);
+			assert(0 && "NYI");
 		}
 
 	}
@@ -71,7 +72,7 @@ namespace vuk {
 		if (u.access & vk::AccessFlagBits::eColorAttachmentWrite) return true;
 		if (u.access & vk::AccessFlagBits::eDepthStencilAttachmentWrite) return true;
 		if (u.access & vk::AccessFlagBits::eShaderWrite) return true;
-		assert(0);
+		assert(0 && "NYI");
 		return false;
 	}
 
@@ -153,65 +154,8 @@ namespace vuk {
 				p.is_tail_pass = true;
 			}
 		}
-		// go through all inputs and propagate dependencies onto last write pass
-	/*	for (auto& t : tracked) {
-			std::visit(overloaded{
-				[&](::Buffer& th) {
-					// for buffers, we need to track last write (can only be shader_write or transfer_write) + last write queue
-					// if queues are different, we want to put a queue xfer on src and first dst + a semaphore signal on src and semaphore wait on first dst
-					// if queues are the same, we want to put signalEvent on src and waitEvent on first dst OR pbarrier on first dst
-					PassInfo* src = nullptr;
-					PassInfo* dst = nullptr;
-					Name write_queue;
-					Name read_queue = "INVALID";
-					vk::AccessFlags write_access;
-					vk::AccessFlags read_access;
-					vk::PipelineStageFlags write_stage;
-					vk::PipelineStageFlags read_stage;
-					for (auto& p : passes) {
-						if (contains(p.pass.write_buffers, th)) {
-							src = &p;
-							write_queue = p.pass.executes_on;
-							write_access = (th.type == ::Buffer::Type::eStorage || th.type == ::Buffer::Type::eUniform) ?
-								vk::AccessFlagBits::eShaderWrite : vk::AccessFlagBits::eTransferWrite;
-							write_stage = (th.type == ::Buffer::Type::eStorage || th.type == ::Buffer::Type::eUniform) ?
-								vk::PipelineStageFlagBits::eAllGraphics : vk::PipelineStageFlagBits::eTransfer;
-						}
 
-						if (contains(p.pass.read_buffers, th)) {
-							if (!dst)
-								dst = &p;
-							// handle a single type of dst queue for now
-							assert(read_queue == "INVALID" || read_queue == p.pass.executes_on);
-							read_queue = p.pass.executes_on;
-							read_access |= (th.type == ::Buffer::Type::eStorage || th.type == ::Buffer::Type::eUniform) ?
-								vk::AccessFlagBits::eShaderRead : vk::AccessFlagBits::eTransferRead;
-							read_stage |= (th.type == ::Buffer::Type::eStorage || th.type == ::Buffer::Type::eUniform) ?
-								vk::PipelineStageFlagBits::eAllGraphics : vk::PipelineStageFlagBits::eTransfer;
-						}
-					}
-					bool queue_xfer = write_queue != read_queue;
-					assert(src);
-					auto& sync_out = src->sync_out;
-					assert(dst);
-					auto& sync_in = dst->sync_in;
-					if (queue_xfer) {
-						Sync::QueueXfer xfer;
-						xfer.queue_src = write_queue;
-						xfer.queue_dst = read_queue;
-						xfer.buffer = th.name;
-						sync_out.queue_transfers.push_back(xfer);
-						sync_in.queue_transfers.push_back(xfer);
-						sync_out.signal_sema.push_back(src->pass.name);
-						sync_in.wait_sema.push_back(src->pass.name);
-					}
-				},
-				[&](Attachment& th) {
-					for (auto& p : passes) {
-					}
-				} }, t);
-		}*/
-
+		// assemble use chains
 		for (auto& passinfo : passes) {
 			for (auto& res : passinfo.pass.resources) {
 				use_chains[res.name].emplace_back(UseRef{ to_use(res.ia), &passinfo });
@@ -507,16 +451,15 @@ namespace vuk {
 		for (auto& [name, attachment_info] : bound_attachments) {
 			auto& chain = use_chains.at(name);
 			if (attachment_info.type == AttachmentRPInfo::Type::eInternal) {
-				vk::ImageUsageFlags usage;
+				vk::ImageUsageFlags usage = {};
 				for (auto& c : chain) {
-					if (c.use.layout == vk::ImageLayout::eDepthStencilAttachmentOptimal) {
-						usage |= vk::ImageUsageFlagBits::eDepthStencilAttachment;
-					}
-					if (c.use.layout == vk::ImageLayout::eShaderReadOnlyOptimal) {
-						usage |= vk::ImageUsageFlagBits::eSampled;
-					}
-					if (c.use.layout == vk::ImageLayout::eColorAttachmentOptimal) {
-						usage |= vk::ImageUsageFlagBits::eColorAttachment;
+					switch (c.use.layout) {
+					case vk::ImageLayout::eDepthStencilAttachmentOptimal:
+						usage |= vk::ImageUsageFlagBits::eDepthStencilAttachment; break;
+					case vk::ImageLayout::eShaderReadOnlyOptimal:
+						usage |= vk::ImageUsageFlagBits::eSampled; break;
+					case vk::ImageLayout::eColorAttachmentOptimal:
+						usage |= vk::ImageUsageFlagBits::eColorAttachment; break;
 					}
 				}
 
@@ -616,113 +559,6 @@ namespace vuk {
 	}
 
 	void RenderGraph::generate_graph_visualization() {
-		std::cout << "digraph RG {\n";
-		/*for (auto& p : passes) {
-			std::cout << p.pass.name << "[shape = Mrecord, label = \"" << p.pass.executes_on << "| {{";
-			for (auto& i : p.pass.read_attachments) {
-				std::cout << "<" << name_to_node(i.name) << ">" << i.name << "|";
-			}
-			for (auto& i : p.pass.read_buffers) {
-				std::cout << "<" << name_to_node(i.name) << ">" << i.name << "|";
-			}
-			std::cout << "\b ";
-			std::cout << "} | { \\n" << p.pass.name << " } | {";
-			for (auto& i : p.pass.write_attachments) {
-				std::cout << "<" << name_to_node(i.name) << ">" << i.name << "|";
-			}
-			for (auto& i : p.pass.write_buffers) {
-				std::cout << "<" << name_to_node(i.name) << ">" << i.name << "|";
-			}
-			std::cout << "\b ";
-			std::cout << "}}" << "\"];\n";
-		}
-		for (auto& gi : global_inputs) {
-			std::visit(overloaded{
-			[&](const ::Buffer& th) {
-				std::cout << name_to_node(th.name) << "[shape = invtriangle, label =\"" << th.name << "\"];\n";
-				for (auto& p : passes) {
-					if (contains(p.pass.read_buffers, th))
-						std::cout << name_to_node(th.name) << " -> " << p.pass.name << ":" << name_to_node(th.name) << ";\n";
-				}
-			},
-			[&](const Attachment& th) {
-				std::cout << name_to_node(th.name) << "[shape = invtrapezium, label =\"" << th.name << "\"];\n";
-				for (auto& p : passes) {
-					if (contains(p.pass.read_attachments, th))
-						std::cout << name_to_node(th.name) << " -> " << p.pass.name << ":" << name_to_node(th.name) << ";\n";
-				}
-			}
-				}, gi);
-		}
-
-		for (auto& gi : global_outputs) {
-			std::visit(overloaded{
-			[&](const ::Buffer& th) {
-				std::cout << name_to_node(th.name) << "[shape = triangle, label =\"" << th.name << "\"];\n";
-				for (auto& p : passes) {
-					if (contains(p.pass.write_buffers, th))
-						std::cout << p.pass.name << ":" << name_to_node(th.name) << " -> " << name_to_node(th.name) << ";\n";
-				}
-
-			},
-			[&](const Attachment& th) {
-				std::cout << name_to_node(th.name) << "[shape = trapezium, label =\"" << th.name << "\"];\n";
-				for (auto& p : passes) {
-					if (contains(p.pass.write_attachments, th))
-						std::cout << p.pass.name << ":" << name_to_node(th.name) << " -> " << name_to_node(th.name) << ";\n";
-				}
-
-			}
-				}, gi);
-		}
-		for (auto& gi : tracked) {
-			std::visit(overloaded{
-				// write_buffers -> sync -> sync -> read_buffers
-				[&](const ::Buffer& th) {
-					std::string src_node;
-					Sync sync_out;
-					std::vector<std::pair<std::string, Sync>> dst_nodes;
-					for (auto& p : passes) {
-						if (contains(p.pass.write_buffers, th)) {
-							src_node = std::string(p.pass.name);
-							sync_out = p.sync_out;
-						}
-						if (contains(p.pass.read_buffers, th)) {
-							dst_nodes.emplace_back(std::string(p.pass.name), p.sync_in);
-						}
-					}
-					std::string current_node = name_to_node(src_node) + ":" + name_to_node(th.name);
-					if (auto xfer = contains_if(sync_out.queue_transfers, [&](auto& xfer) { return xfer.buffer == th.name; })) {
-						std::cout << name_to_node(src_node) << "_" << name_to_node(th.name) << "_xfer_out" << "[label =\"" << xfer->queue_src << "->" << xfer->queue_dst << "\"];\n";
-						std::cout << name_to_node(src_node) << ":" << name_to_node(th.name) << " -> " << name_to_node(src_node) << "_" << name_to_node(th.name) << "_xfer_out;\n";
-						current_node = name_to_node(src_node) + "_" + name_to_node(th.name) + "_xfer_out";
-					}
-
-					for (auto& mlt : dst_nodes) {
-						std::cout << current_node << "->" << mlt.first << ":" << name_to_node(th.name) << ";\n";
-					}
-				},
-				[&](const Attachment& th) {
-					std::vector<std::string> src_nodes, dst_nodes;
-					for (auto& p : passes) {
-						if (contains(p.pass.write_attachments, th)) {
-							src_nodes.push_back(std::string(p.pass.name));
-						}
-						if (contains(p.pass.read_attachments, th)) {
-							dst_nodes.push_back(std::string(p.pass.name));
-						}
-					}
-					auto& multip = src_nodes.size() > 1 ? src_nodes : dst_nodes;
-					auto& single = src_nodes.size() > 1 ? dst_nodes[0] : src_nodes[0];
-					for (auto& mlt : multip) {
-						std::cout << name_to_node(single) << ":" << name_to_node(th.name) << " -> " << mlt << ":" << name_to_node(th.name) << ";\n";
-					}
-				}
-				}, gi);
-		}
-
-
-		std::cout << "}\n";*/
 	}
 
 	CommandBuffer& CommandBuffer::set_viewport(unsigned index, vk::Viewport vp) {
@@ -778,32 +614,27 @@ namespace vuk {
 		return *this;
 	}
 
-
 	CommandBuffer& CommandBuffer::bind_pipeline(vuk::PipelineCreateInfo pi) {
 		// set vertex input
-		pi.attributeDescriptions = attribute_descriptions;
-		pi.bindingDescriptions = binding_descriptions;
-		auto& vertex_input_state = pi.inputState;
-		vertex_input_state.pVertexAttributeDescriptions = pi.attributeDescriptions.data();
-		vertex_input_state.vertexAttributeDescriptionCount = pi.attributeDescriptions.size();
-		vertex_input_state.pVertexBindingDescriptions = pi.bindingDescriptions.data();
-		vertex_input_state.vertexBindingDescriptionCount = pi.bindingDescriptions.size();
+		pi.attribute_descriptions = attribute_descriptions;
+		pi.binding_descriptions = binding_descriptions;
+		auto& vertex_input_state = pi.vertex_input_state;
+		vertex_input_state.pVertexAttributeDescriptions = pi.attribute_descriptions.data();
+		vertex_input_state.vertexAttributeDescriptionCount = pi.attribute_descriptions.size();
+		vertex_input_state.pVertexBindingDescriptions = pi.binding_descriptions.data();
+		vertex_input_state.vertexBindingDescriptionCount = pi.binding_descriptions.size();
 
 		pi.render_pass = ongoing_renderpass->first.handle;
 		pi.subpass = ongoing_renderpass->second;
 
-		pi.dynamicState.pDynamicStates = pi.dynamicStateEnables.data();
-		pi.dynamicState.dynamicStateCount = gsl::narrow_cast<unsigned>(pi.dynamicStateEnables.size());
+		pi.dynamic_state.pDynamicStates = pi.dynamic_states.data();
+		pi.dynamic_state.dynamicStateCount = gsl::narrow_cast<unsigned>(pi.dynamic_states.size());
 
-		// TODO: set up blend state
-		pi.colorBlendState.pAttachments = pi.blendAttachmentState.data();
-		pi.colorBlendState.attachmentCount = pi.blendAttachmentState.size();
+		pi.color_blend_state.pAttachments = pi.color_blend_attachments.data();
+		pi.color_blend_state.attachmentCount = pi.color_blend_attachments.size();
 
 		current_pipeline = ptc.pipeline_cache.acquire(pi);
 		command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, current_pipeline->pipeline);
-		// maybe not clear? we'll see
-		attribute_descriptions.clear();
-		binding_descriptions.clear();
 		return *this;
 	}
 
@@ -812,6 +643,9 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, Allocator::Buffer& buf, Packed format) {
+		std::erase_if(attribute_descriptions, [&](auto& b) {return b.binding == binding; });
+		std::erase_if(binding_descriptions, [&](auto& b) {return b.binding == binding; });
+
 		size_t location = 0;
 		size_t offset = 0;
 		for (auto& f : format.list) {
@@ -828,6 +662,7 @@ namespace vuk {
 				location++;
 			}
 		}
+	
 		vk::VertexInputBindingDescription vibd;
 		vibd.binding = binding;
 		vibd.inputRate = vk::VertexInputRate::eVertex;
@@ -881,14 +716,12 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::draw(uint32_t a, uint32_t b, uint32_t c, uint32_t d) {
 		_bind_graphics_pipeline_state();
-		/* execute command */
 		command_buffer.draw(a, b, c, d);
 		return *this;
 	}
 
 	CommandBuffer& CommandBuffer::draw_indexed(uint32_t index_count, uint32_t instance_count, uint32_t first_index, int32_t vertex_offset, uint32_t first_instance) {
 		_bind_graphics_pipeline_state();
-		/* execute command */
 		command_buffer.drawIndexed(index_count, instance_count, first_index, vertex_offset, first_instance);
 		return *this;
 	}

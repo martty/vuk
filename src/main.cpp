@@ -232,7 +232,7 @@ void device_init() {
 						vuk::PipelineCreateInfo pci;
 						pci.shaders.push_back("../../triangle.vert");
 						pci.shaders.push_back("../../triangle.frag");
-						pci.depthStencilState.depthCompareOp = vk::CompareOp::eAlways;
+						pci.depth_stencil_state.depthCompareOp = vk::CompareOp::eAlways;
 						context.named_pipelines.emplace("triangle", pci);
 					}
 					{
@@ -260,14 +260,7 @@ void device_init() {
 						vuk::PipelineCreateInfo pci;
 						pci.shaders.push_back("../../imgui.vert");
 						pci.shaders.push_back("../../imgui.frag");
-						auto& pcba = pci.blendAttachmentState[0];
-						pcba.blendEnable = true;
-						pcba.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
-						pcba.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
-						pcba.colorBlendOp = vk::BlendOp::eAdd;
-						pcba.srcAlphaBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
-						pcba.dstAlphaBlendFactor = vk::BlendFactor::eZero;
-						pcba.alphaBlendOp = vk::BlendOp::eAdd;
+						pci.set_blend(vuk::BlendPreset::eAlphaBlend);
 						context.named_pipelines.emplace("imgui", pci);
 					}
 
@@ -281,8 +274,6 @@ void device_init() {
 					using glm::vec3;
 					float angle = 0.f;
 
-
-				
 					while (!glfwWindowShouldClose(window)) {
 						glfwPollEvents();
 						auto ifc = context.begin();
@@ -378,8 +369,6 @@ void device_init() {
 								  .bind_pipeline("vatte");
 								   VP* ubo = command_buffer.map_scratch_uniform_binding<VP>(0, 0);
 								   ubo->proj = vp.proj;
-								   
-
 								   ubo->view = glm::lookAt(campos, vec3(0), vec3(0, 1, 0));
 								command_buffer
 								  .bind_uniform_buffer(0, 1, ubom)
@@ -389,8 +378,8 @@ void device_init() {
 								}
 							});
 
-							rg.mark_attachment_internal(ca_names[i], vk::Format(swapchain->format), swapchain->extent, vuk::ClearColor{0.3f, 0.3f, 0.6f, 1.0f});
-							rg.mark_attachment_internal(de_names[i], vk::Format::eD32Sfloat, swapchain->extent, vuk::ClearDepthStencil{1.0, 0});
+							rg.mark_attachment_internal(ca_names[i], vk::Format::eR8G8B8A8Srgb, vk::Extent2D(200.f, 200.f), vuk::ClearColor{0.3f, 0.3f, 0.6f, 1.0f});
+							rg.mark_attachment_internal(de_names[i], vk::Format::eD32Sfloat, vk::Extent2D(200, 200), vuk::ClearDepthStencil{1.0, 0});
 						}
 
 
@@ -466,7 +455,7 @@ void device_init() {
 
 						ptc.wait_all_transfers();
 						rg.add_pass({
-							.resources = {"SWAPCHAIN"_image(vuk::eColorWrite),
+							.resources = {"SWAPCHAIN"_image(vuk::eColorRW),
 								"depth"_image(vuk::eFragmentSampled),
 								vuk::Resource(ca_names[0], vuk::Resource::Type::eImage, vuk::eFragmentSampled),
 								vuk::Resource(ca_names[1], vuk::Resource::Type::eImage, vuk::eFragmentSampled),
