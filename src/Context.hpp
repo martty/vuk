@@ -6,6 +6,8 @@
 #include "Pool.hpp"
 #include "Cache.hpp"
 #include "Allocator.hpp"
+#include "Program.hpp"
+#include "Pipeline.hpp"
 #include <string_view>
 
 using Name = std::string_view;
@@ -29,6 +31,7 @@ namespace vuk {
 		using type = RGCI;
 	};
 }
+
 
 namespace std {
 	template <>
@@ -131,6 +134,7 @@ namespace vuk {
 		std::vector<vuk::ImageView> image_views;
 	};
 	using SwapchainRef = Swapchain*;
+	struct Program;
 
 	class Context {
 	public:
@@ -152,6 +156,9 @@ namespace vuk {
 		Cache<vuk::DescriptorSet> descriptor_sets;
 		Cache<vk::Sampler> sampler_cache;
 		Pool<vuk::SampledImage, FC> sampled_images;
+		Cache<vuk::ShaderModule> shader_modules;
+		Cache<vuk::DescriptorSetLayoutAllocInfo> descriptor_set_layouts;
+		Cache<vk::PipelineLayout> pipeline_layouts;
 
 		std::array<std::vector<vk::Image>, Context::FC> image_recycle;
 		std::array<std::vector<vk::ImageView>, Context::FC> image_view_recycle;
@@ -184,7 +191,10 @@ namespace vuk {
 			descriptor_sets(*this),
 			sampler_cache(*this),
 			sampled_images(*this),
-			pool_cache(*this) {
+			pool_cache(*this),
+			shader_modules(*this),
+			descriptor_set_layouts(*this),
+			pipeline_layouts(*this) {
 			vk_pipeline_cache = device.createPipelineCacheUnique({});
 		}
 
@@ -194,6 +204,9 @@ namespace vuk {
 				named_pipelines.emplace(name, ci);
 			}
 		}
+
+		Program compile(gsl::span<std::string> shaders);
+
 
 		template<class T>
 		Handle<T> wrap(T payload) {
@@ -216,6 +229,19 @@ namespace vuk {
 		}
 
 		void destroy(vuk::PipelineInfo) {}
+
+		void destroy(vuk::ShaderModule sm) {
+			device.destroy(sm.shader_module);
+		}
+
+		void destroy(vuk::DescriptorSetLayoutAllocInfo ds) {
+			device.destroy(ds.layout);
+		}
+
+		void destroy(vk::PipelineLayout pl) {
+			device.destroy(pl);
+		}
+
 		void destroy(vk::RenderPass rp) {
 			device.destroy(rp);
 		}
@@ -266,6 +292,11 @@ namespace vuk {
 		Cache<vk::Sampler>::PFView sampler_cache;
 		Pool<vuk::SampledImage, Context::FC>::PFView sampled_images;
 		PerFrameCache<vuk::DescriptorPool, Context::FC>::PFView pool_cache;
+
+		Cache<vuk::ShaderModule>::PFView shader_modules;
+		Cache<vuk::DescriptorSetLayoutAllocInfo>::PFView descriptor_set_layouts;
+		Cache<vk::PipelineLayout>::PFView pipeline_layouts;
+
 
 		InflightContext(Context& ctx, unsigned absolute_frame);
 
@@ -358,6 +389,10 @@ namespace vuk {
 		Cache<vk::Sampler>::PFPTView sampler_cache;
 		Pool<vuk::SampledImage, Context::FC>::PFPTView sampled_images;
 		PerFrameCache<vuk::DescriptorPool, Context::FC>::PFPTView pool_cache;
+		Cache<vuk::ShaderModule>::PFPTView shader_modules;
+		Cache<vuk::DescriptorSetLayoutAllocInfo>::PFPTView descriptor_set_layouts;
+		Cache<vk::PipelineLayout>::PFPTView pipeline_layouts;
+
 
 		// recycling global objects
 		std::vector<Allocator::Buffer> buffer_recycle;
@@ -376,13 +411,18 @@ namespace vuk {
 			descriptor_sets(*this, ifc.descriptor_sets),
 			sampler_cache(*this, ifc.sampler_cache),
 			sampled_images(ifc.sampled_images.get_view(*this)),
-			pool_cache(*this, ifc.pool_cache) {
-
-		}
+			pool_cache(*this, ifc.pool_cache),
+			shader_modules(*this, ifc.shader_modules),
+			descriptor_set_layouts(*this, ifc.descriptor_set_layouts),
+			pipeline_layouts(*this, ifc.pipeline_layouts) {}
 
 		~PerThreadContext() {
 			ifc.destroy(std::move(image_recycle));
 			ifc.destroy(std::move(image_view_recycle));
+		}
+		template<class T>
+		void destroy(T t) {
+			ctx.destroy(t);
 		}
 
 		void destroy(vk::Image image) {
@@ -396,27 +436,6 @@ namespace vuk {
 		void destroy(vuk::DescriptorSet ds) {
 			// note that since we collect at integer times FC, we are releasing the DS back to the right pool
 			pool_cache.acquire(ds.layout_info).free_sets.push_back(ds.descriptor_set);
-		}
-
-		void destroy(vuk::PipelineInfo) {}
-
-		void destroy(vk::Sampler s) {
-			ifc.ctx.device.destroy(s);
-		}
-		void destroy(vk::Framebuffer fb) {
-			ifc.ctx.device.destroy(fb);
-		}
-		void destroy(vuk::Allocator::Pool pool) {
-			ifc.ctx.destroy(pool);
-		}
-		void destroy(vk::RenderPass rp) {
-			ifc.ctx.device.destroy(rp);
-		}
-		void destroy(vuk::RGImage rg) {
-			ifc.ctx.destroy(rg);
-		}
-		void destroy(vuk::DescriptorPool dp) {
-			ctx.destroy(dp);
 		}
 
 		Allocator::Buffer _allocate_scratch_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, bool create_mapped) {
@@ -586,7 +605,10 @@ namespace vuk {
 		descriptor_sets(*this, ctx.descriptor_sets),
 		sampler_cache(*this, ctx.sampler_cache),
 		sampled_images(ctx.sampled_images.get_view(*this)),
-		pool_cache(*this, ctx.pool_cache) {
+		pool_cache(*this, ctx.pool_cache),
+		shader_modules(*this, ctx.shader_modules),
+		descriptor_set_layouts(*this, ctx.descriptor_set_layouts),
+		pipeline_layouts(*this, ctx.pipeline_layouts) {
 		// image recycling
 		for (auto& img : ctx.image_recycle[frame]) {
 			ctx.allocator.destroy_image(img);
@@ -624,11 +646,96 @@ namespace vuk {
 			return ptc.ctx.device.createFramebuffer(cinfo);
 		}
 		*/
+}
+#include <spirv_cross.hpp>
+#include <shaderc/shaderc.hpp>
+#include <fstream>
+#include <sstream>
+
+inline std::string slurp(const std::string& path) {
+	std::ostringstream buf;
+	std::ifstream input(path.c_str());
+	buf << input.rdbuf();
+	return buf.str();
+}
+
+inline void burp(const std::string& in, const std::string& path) {
+	std::ofstream output(path.c_str(), std::ios::trunc);
+	if (!output.is_open()) {
+	}
+	output << in;
+	output.close();
+}
+
+namespace vuk {
 	template<class T>
 	T create(PerThreadContext& ptc, const create_info_t<T>& cinfo) {
 		auto& ctx = ptc.ifc.ctx;
 		if constexpr (std::is_same_v<T, PipelineInfo>) {
-			return { ctx.device.createGraphicsPipeline(*ctx.vk_pipeline_cache, cinfo.gpci), cinfo.pipeline_layout, cinfo.layout_info };
+			printf("Creating pipeline\n");
+			std::vector<vk::PipelineShaderStageCreateInfo> psscis;
+
+			// accumulate descriptors from all stages
+			vuk::Program accumulated_reflection;
+			for (auto& path : cinfo.shaders) {
+				auto contents = slurp(path);
+				auto& sm = ptc.shader_modules.acquire({ contents, path });
+				vk::PipelineShaderStageCreateInfo shaderStage;
+				shaderStage.pSpecializationInfo = nullptr;
+				shaderStage.stage = sm.stage;
+				shaderStage.module = sm.shader_module;
+				shaderStage.pName = "main"; //TODO: make param
+				psscis.push_back(shaderStage);
+				accumulated_reflection.append(sm.reflection_info);
+			}
+			// acquire descriptor set layouts (1 per set)
+			// acquire pipeline layout
+			vuk::PipelineLayoutCreateInfo plci;
+			plci.dslcis = vuk::PipelineCreateInfo::build_descriptor_layouts(accumulated_reflection);
+			plci.pcrs = accumulated_reflection.push_constant_ranges;
+			plci.plci.pushConstantRangeCount = accumulated_reflection.push_constant_ranges.size();
+			plci.plci.pPushConstantRanges = accumulated_reflection.push_constant_ranges.data();
+			std::array<vuk::DescriptorSetLayoutAllocInfo, VUK_MAX_SETS> dslai;
+			std::vector<vk::DescriptorSetLayout> dsls;
+			for (auto& dsl : plci.dslcis) {
+				dsl.dslci.bindingCount = dsl.bindings.size();
+				dsl.dslci.pBindings = dsl.bindings.data();
+				auto l = ptc.descriptor_set_layouts.acquire(dsl);
+				dslai[dsl.index] = l;
+				dsls.push_back(dslai[dsl.index].layout);
+			}
+			plci.plci.pSetLayouts = dsls.data();
+			plci.plci.setLayoutCount = dsls.size();
+			// create gfx pipeline
+			vk::GraphicsPipelineCreateInfo gpci = cinfo.to_vk();
+			gpci.layout = ptc.pipeline_layouts.acquire(plci);
+			gpci.pStages = psscis.data();
+			gpci.stageCount = psscis.size();
+
+			return { ctx.device.createGraphicsPipeline(*ctx.vk_pipeline_cache, gpci), gpci.layout, dslai };
+		} else if constexpr (std::is_same_v<T, vuk::ShaderModule>) {
+			shaderc::Compiler compiler;
+			shaderc::CompileOptions options;
+
+			shaderc::SpvCompilationResult module = compiler.CompileGlslToSpv(cinfo.source, shaderc_glsl_infer_from_source, cinfo.filename.c_str(), options);
+
+			if (module.GetCompilationStatus() != shaderc_compilation_status_success) {
+				printf("%s", module.GetErrorMessage().c_str());
+				//Platform::log->error("%s", module.GetErrorMessage().c_str());
+				return {};
+			} else {
+				std::vector<uint32_t> spirv(module.cbegin(), module.cend());
+
+				spirv_cross::Compiler refl(spirv.data(), spirv.size());
+				vuk::Program p;
+				auto stage = p.introspect(refl);
+
+				vk::ShaderModuleCreateInfo moduleCreateInfo;
+				moduleCreateInfo.codeSize = spirv.size() * sizeof(uint32_t);
+				moduleCreateInfo.pCode = (uint32_t*)spirv.data();
+				auto module = ctx.device.createShaderModule(moduleCreateInfo);
+				return { module, p, stage };
+			}
 		} else if constexpr (std::is_same_v<T, vk::RenderPass>) {
 			return ctx.device.createRenderPass(cinfo);
 		} else if constexpr (std::is_same_v<T, vuk::RGImage>) {
@@ -681,6 +788,17 @@ namespace vuk {
 			return ptc.ctx.device.createFramebuffer(cinfo);
 		} else if constexpr (std::is_same_v<T, vk::Sampler>) {
 			return ptc.ctx.device.createSampler(cinfo);
+		} else if constexpr (std::is_same_v<T, vuk::DescriptorSetLayoutAllocInfo>) {
+			printf("Creating dslayout\n");
+			vuk::DescriptorSetLayoutAllocInfo ret;
+			ret.layout = ptc.ctx.device.createDescriptorSetLayout(cinfo.dslci);
+			for (auto& b : cinfo.bindings) {
+				ret.descriptor_counts[to_integral(b.descriptorType)] += b.descriptorCount;
+			}
+			return ret;
+		} else if constexpr (std::is_same_v<T, vk::PipelineLayout>) {
+			printf("Creating playout\n");
+			return ptc.ctx.device.createPipelineLayout(cinfo.plci);
 		}
 	}
 }

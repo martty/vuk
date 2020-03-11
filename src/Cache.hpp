@@ -5,6 +5,8 @@
 #include <vulkan/vulkan.hpp>
 #include "Hash.hpp"
 #include "Handle.hpp"
+#include "Pipeline.hpp"
+#include "Program.hpp"
 #include <gsl/span>
 
 class Context;
@@ -23,17 +25,6 @@ namespace std {
 	template <class T, ptrdiff_t E>
 	struct hash<gsl::span<T, E>> {
 		size_t operator()(gsl::span<T, E> const& x) const noexcept {
-			size_t h = 0;
-			for (auto& e : x) {
-				hash_combine(h, e);
-			}
-			return h;
-		}
-	};
-
-	template <class T>
-	struct hash<std::vector<T>> {
-		size_t operator()(std::vector<T> const& x) const noexcept {
 			size_t h = 0;
 			for (auto& e : x) {
 				hash_combine(h, e);
@@ -470,10 +461,11 @@ namespace std {
 
 namespace vuk {
 	struct DescriptorSetLayoutAllocInfo {
-		std::array<size_t, VkDescriptorType::VK_DESCRIPTOR_TYPE_END_RANGE> descriptor_counts;
+		std::array<size_t, VkDescriptorType::VK_DESCRIPTOR_TYPE_END_RANGE> descriptor_counts = {};
 		vk::DescriptorSetLayout layout;
 
 		bool operator==(const DescriptorSetLayoutAllocInfo& o) const {
+			// TODO!
 			return layout == o.layout;
 		}
 	};
@@ -555,29 +547,6 @@ namespace std {
 	};
 };
 
-namespace vuk {
-	struct PipelineCreateInfo {
-		vk::GraphicsPipelineCreateInfo gpci;
-		vk::PipelineLayout pipeline_layout;
-		DescriptorSetLayoutAllocInfo layout_info;
-
-		bool operator==(const PipelineCreateInfo& o) const {
-			return std::tie(gpci, pipeline_layout, layout_info) == std::tie(o.gpci, o.pipeline_layout, o.layout_info);
-		}
-	};
-}
-
-namespace std {
-	template <>
-	struct hash<vuk::PipelineCreateInfo> {
-		size_t operator()(vuk::PipelineCreateInfo const & x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.gpci); // layout is redundant info, no need to hash
-			return h;
-		}
-	};
-};
-
 namespace std {
 	template <>
 	struct hash<vk::SamplerCreateInfo> {
@@ -589,6 +558,7 @@ namespace std {
 	};
 };
 
+#define VUK_MAX_SETS 8
 
 namespace vuk {
 	class Context;
@@ -604,7 +574,7 @@ namespace vuk {
 	struct PipelineInfo {
 		vk::Pipeline pipeline;
 		vk::PipelineLayout pipeline_layout;
-		DescriptorSetLayoutAllocInfo layout_info;
+		std::array<DescriptorSetLayoutAllocInfo, VUK_MAX_SETS> layout_info;
 	};
 
 	template<> struct create_info<PipelineInfo> {
@@ -638,6 +608,34 @@ namespace std {
 	};
 };
 
+namespace vuk {
+	struct ShaderModuleCreateInfo {
+		std::string source;
+		std::string filename;
+
+		bool operator==(const ShaderModuleCreateInfo& o) const {
+			return source == o.source;
+		}
+	};
+
+	struct ShaderModule {
+		vk::ShaderModule shader_module;
+		vuk::Program reflection_info;
+		vk::ShaderStageFlagBits stage;
+	};
+}
+
+namespace std {
+	template <>
+	struct hash<vuk::ShaderModuleCreateInfo> {
+		size_t operator()(vuk::ShaderModuleCreateInfo const & x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, x.source); // filename is intentionally not hashed in
+			return h;
+		}
+	};
+};
+
 
 namespace vuk {
 	template<> struct create_info<vuk::DescriptorPool> {
@@ -660,6 +658,19 @@ namespace vuk {
 	template<> struct create_info<vk::Sampler> {
 		using type = vk::SamplerCreateInfo;
 	};
+
+	template<> struct create_info<vuk::ShaderModule> {
+		using type = vuk::ShaderModuleCreateInfo;
+	};
+
+	template<> struct create_info<vuk::DescriptorSetLayoutAllocInfo> {
+		using type = vuk::DescriptorSetLayoutCreateInfo;
+	};
+
+	template<> struct create_info<vk::PipelineLayout> {
+		using type = vuk::PipelineLayoutCreateInfo;
+	};
+
 
 	template<class T>
 	struct Cache {

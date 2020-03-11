@@ -781,18 +781,24 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::bind_pipeline(vuk::PipelineCreateInfo pi) {
 		// set vertex input
-		// TODO: we leak here
-		vk::PipelineVertexInputStateCreateInfo* input = new vk::PipelineVertexInputStateCreateInfo(*pi.gpci.pVertexInputState);
-		std::vector<vk::VertexInputAttributeDescription>* viads = new std::vector<vk::VertexInputAttributeDescription>(attribute_descriptions);
-		std::vector<vk::VertexInputBindingDescription>* vibds = new std::vector<vk::VertexInputBindingDescription>(binding_descriptions);
-		input->pVertexAttributeDescriptions = viads->data();
-		input->vertexAttributeDescriptionCount = viads->size();
-		input->pVertexBindingDescriptions = vibds->data();
-		input->vertexBindingDescriptionCount = vibds->size();
-		pi.gpci.pVertexInputState = input;
+		pi.attributeDescriptions = attribute_descriptions;
+		pi.bindingDescriptions = binding_descriptions;
+		auto& vertex_input_state = pi.inputState;
+		vertex_input_state.pVertexAttributeDescriptions = pi.attributeDescriptions.data();
+		vertex_input_state.vertexAttributeDescriptionCount = pi.attributeDescriptions.size();
+		vertex_input_state.pVertexBindingDescriptions = pi.bindingDescriptions.data();
+		vertex_input_state.vertexBindingDescriptionCount = pi.bindingDescriptions.size();
 
-		pi.gpci.renderPass = ongoing_renderpass->first.handle;
-		pi.gpci.subpass = ongoing_renderpass->second;
+		pi.render_pass = ongoing_renderpass->first.handle;
+		pi.subpass = ongoing_renderpass->second;
+
+		pi.dynamicState.pDynamicStates = pi.dynamicStateEnables.data();
+		pi.dynamicState.dynamicStateCount = gsl::narrow_cast<unsigned>(pi.dynamicStateEnables.size());
+
+		// TODO: set up blend state
+		pi.colorBlendState.pAttachments = pi.blendAttachmentState.data();
+		pi.colorBlendState.attachmentCount = pi.blendAttachmentState.size();
+
 		current_pipeline = ptc.pipeline_cache.acquire(pi);
 		command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, current_pipeline->pipeline);
 		// maybe not clear? we'll see
@@ -892,7 +898,7 @@ namespace vuk {
 		for (size_t i = 0; i < VUK_MAX_SETS; i++) {
 			if (!sets_used[i])
 				continue;
-			set_bindings[i].layout_info = current_pipeline->layout_info;
+			set_bindings[i].layout_info = current_pipeline->layout_info[i];
 			auto ds = ptc.descriptor_sets.acquire(set_bindings[i]);
 			command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, current_pipeline->pipeline_layout, 0, 1, &ds.descriptor_set, 0, nullptr);
 			sets_used[i] = false;

@@ -1,5 +1,10 @@
 #include "Context.hpp"
 #include "RenderGraph.hpp"
+#include <shaderc/shaderc.hpp>
+#include "Program.hpp"
+#include <fstream>
+#include <sstream>
+#include <spirv_cross.hpp>
 
 void vuk::execute_submit_and_present_to_one(PerThreadContext& ptc, RenderGraph& rg, SwapchainRef swapchain) {
 	auto render_complete = ptc.semaphore_pool.acquire(1)[0];
@@ -30,3 +35,4 @@ void vuk::execute_submit_and_present_to_one(PerThreadContext& ptc, RenderGraph& 
 	pi.pWaitSemaphores = &render_complete;
 	ptc.ctx.graphics_queue.presentKHR(pi);
 }
+

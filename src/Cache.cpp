@@ -46,6 +46,9 @@ namespace vuk {
 	template struct Cache<vuk::DescriptorSet>;
 	template struct Cache<vk::Framebuffer>;
 	template struct Cache<vk::Sampler>;
+	template struct Cache<vk::PipelineLayout>;
+	template struct Cache<vuk::DescriptorSetLayoutAllocInfo>;
+	template struct Cache<vuk::ShaderModule>;
 
 	template<class T, size_t FC>
 	PerFrameCache<T, FC>::~PerFrameCache() {

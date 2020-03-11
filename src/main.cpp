@@ -229,277 +229,38 @@ void device_init() {
 						io.Fonts->TexID = (ImTextureID)&font;
 					}
 					{
-						vk::GraphicsPipelineCreateInfo gpci;
-						Program* prog = new Program;
-						prog->shaders.push_back("../../triangle.vert");
-						prog->shaders.push_back("../../triangle.frag");
-						prog->compile("");
-						prog->link(device);
-						Pipeline* pipe = new Pipeline(prog);
-						pipe->descriptorSetLayout = device.createDescriptorSetLayout(pipe->descriptorLayout);
-						pipe->pipelineLayoutCreateInfo.pSetLayouts = &pipe->descriptorSetLayout;
-						pipe->pipelineLayoutCreateInfo.setLayoutCount = 1;
-						pipe->pipelineLayout = device.createPipelineLayout(pipe->pipelineLayoutCreateInfo);
-						gpci.layout = pipe->pipelineLayout;
-						gpci.stageCount = prog->pipeline_shader_stage_CIs.size();
-						gpci.pStages = prog->pipeline_shader_stage_CIs.data();
-						gpci.pVertexInputState = &pipe->inputState;
-						pipe->inputAssemblyState.topology = vk::PrimitiveTopology::eTriangleList;
-						gpci.pInputAssemblyState = &pipe->inputAssemblyState;
-						pipe->rasterizationState.lineWidth = 1.f;
-						gpci.pRasterizationState = &pipe->rasterizationState;
-						pipe->colorBlendState.attachmentCount = 1;
-						vk::PipelineColorBlendAttachmentState pcba;
-						pcba.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
-						pipe->colorBlendState.pAttachments = &pcba;
-						gpci.pColorBlendState = &pipe->colorBlendState;
-						gpci.pMultisampleState = &pipe->multisampleState;
-						gpci.pViewportState = &pipe->viewportState;
-						gpci.pDepthStencilState = &pipe->depthStencilState;
-						gpci.pDynamicState = &pipe->dynamicState;
 						vuk::PipelineCreateInfo pci;
-						pci.gpci = gpci;
-						pci.layout_info.layout = pipe->descriptorSetLayout;
-						pci.pipeline_layout = pipe->pipelineLayout;
+						pci.shaders.push_back("../../triangle.vert");
+						pci.shaders.push_back("../../triangle.frag");
+						pci.depthStencilState.depthCompareOp = vk::CompareOp::eAlways;
 						context.named_pipelines.emplace("triangle", pci);
 					}
 					{
-						vk::GraphicsPipelineCreateInfo gpci;
-						Program* prog = new Program();
-						prog->shaders.push_back("../../cube.vert");
-						prog->shaders.push_back("../../triangle.frag");
-						prog->compile("");
-						prog->link(device);
-						Pipeline* pipe = new Pipeline(prog);
-						pipe->descriptorSetLayout = device.createDescriptorSetLayout(pipe->descriptorLayout);
-						pipe->pipelineLayoutCreateInfo.pSetLayouts = &pipe->descriptorSetLayout;
-						pipe->pipelineLayoutCreateInfo.setLayoutCount = 1;
-						pipe->pipelineLayout = device.createPipelineLayout(pipe->pipelineLayoutCreateInfo);
-						gpci.layout = pipe->pipelineLayout;
-						gpci.stageCount = prog->pipeline_shader_stage_CIs.size();
-						gpci.pStages = prog->pipeline_shader_stage_CIs.data();
-						gpci.pVertexInputState = &pipe->inputState;
-						pipe->inputAssemblyState.topology = vk::PrimitiveTopology::eTriangleList;
-						gpci.pInputAssemblyState = &pipe->inputAssemblyState;
-						pipe->rasterizationState.lineWidth = 1.f;
-						gpci.pRasterizationState = &pipe->rasterizationState;
-						pipe->colorBlendState.attachmentCount = 1;
-						vk::PipelineColorBlendAttachmentState pcba;
-						pcba.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
-						pipe->colorBlendState.pAttachments = &pcba;
-						gpci.pColorBlendState = &pipe->colorBlendState;
-						gpci.pMultisampleState = &pipe->multisampleState;
-						gpci.pViewportState = &pipe->viewportState;
-						pipe->depthStencilState.depthWriteEnable = true;
-						pipe->depthStencilState.depthCompareOp = vk::CompareOp::eAlways;
-						pipe->depthStencilState.depthTestEnable = true;
-						gpci.pDepthStencilState = &pipe->depthStencilState;
-						gpci.pDynamicState = &pipe->dynamicState;
-
 						vuk::PipelineCreateInfo pci;
-						pci.gpci = gpci;
-						pci.layout_info.layout = pipe->descriptorSetLayout;
-						pci.pipeline_layout = pipe->pipelineLayout;
-
+						pci.shaders.push_back("../../cube.vert");
+						pci.shaders.push_back("../../triangle.frag");
 						context.named_pipelines.emplace("cube", pci);
 					}
 
 					{
-						vk::GraphicsPipelineCreateInfo gpci;
-						Program* prog = new Program();
-						prog->shaders.push_back("../../ubo_test.vert");
-						prog->shaders.push_back("../../triangle_depthshaded.frag");
-						prog->compile("");
-						prog->link(device);
-						Pipeline* pipe = new Pipeline(prog);
-						pipe->descriptorSetLayout = device.createDescriptorSetLayout(pipe->descriptorLayout);
-						pipe->pipelineLayoutCreateInfo.pSetLayouts = &pipe->descriptorSetLayout;
-						pipe->pipelineLayoutCreateInfo.setLayoutCount = 1;
-						pipe->pipelineLayout = device.createPipelineLayout(pipe->pipelineLayoutCreateInfo);
-						gpci.layout = pipe->pipelineLayout;
-						gpci.stageCount = prog->pipeline_shader_stage_CIs.size();
-						gpci.pStages = prog->pipeline_shader_stage_CIs.data();
-						vk::VertexInputAttributeDescription viad;
-						viad.binding = 0;
-						viad.format = vk::Format::eR32G32B32Sfloat;
-						viad.location = 0;
-						viad.offset = 0;
-						pipe->attributeDescriptions.push_back(viad);
-						pipe->inputState.vertexAttributeDescriptionCount = pipe->attributeDescriptions.size();
-						pipe->inputState.pVertexAttributeDescriptions = pipe->attributeDescriptions.data();
-						vk::VertexInputBindingDescription vibd;
-						vibd.binding = 0;
-						vibd.inputRate = vk::VertexInputRate::eVertex;
-						vibd.stride = sizeof(Vertex);
-						pipe->bindingDescriptions.push_back(vibd);
-						pipe->inputState.vertexBindingDescriptionCount = pipe->bindingDescriptions.size();
-						pipe->inputState.pVertexBindingDescriptions = pipe->bindingDescriptions.data();
-						gpci.pVertexInputState = &pipe->inputState;
-						pipe->inputAssemblyState.topology = vk::PrimitiveTopology::eTriangleList;
-						gpci.pInputAssemblyState = &pipe->inputAssemblyState;
-						pipe->rasterizationState.lineWidth = 1.f;
-						gpci.pRasterizationState = &pipe->rasterizationState;
-						pipe->colorBlendState.attachmentCount = 1;
-						vk::PipelineColorBlendAttachmentState pcba;
-						pcba.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
-						pipe->colorBlendState.pAttachments = &pcba;
-						gpci.pColorBlendState = &pipe->colorBlendState;
-						gpci.pMultisampleState = &pipe->multisampleState;
-						gpci.pViewportState = &pipe->viewportState;
-						pipe->depthStencilState.depthWriteEnable = true;
-						pipe->depthStencilState.depthCompareOp = vk::CompareOp::eLessOrEqual;
-						pipe->depthStencilState.depthTestEnable = true;
-						gpci.pDepthStencilState = &pipe->depthStencilState;
-						gpci.pDynamicState = &pipe->dynamicState;
-
-						vuk::PipelineCreateInfo pci{};
-						pci.gpci = gpci;
-						pci.layout_info.layout = pipe->descriptorSetLayout;
-						pci.layout_info.descriptor_counts[to_integral(vk::DescriptorType::eUniformBuffer)] = 2;
-						pci.pipeline_layout = pipe->pipelineLayout;
-
-
+						vuk::PipelineCreateInfo pci;
+						pci.shaders.push_back("../../ubo_test.vert");
+						pci.shaders.push_back("../../triangle_depthshaded.frag");
 						context.named_pipelines.emplace("vatt", pci);
 					}
 
 					{
-						vk::GraphicsPipelineCreateInfo gpci;
-						Program* prog = new Program();
-						prog->shaders.push_back("../../ubo_test_tex.vert");
-						prog->shaders.push_back("../../triangle_depthshaded_tex.frag");
-						prog->compile("");
-						prog->link(device);
-						Pipeline* pipe = new Pipeline(prog);
-						pipe->descriptorSetLayout = device.createDescriptorSetLayout(pipe->descriptorLayout);
-						pipe->pipelineLayoutCreateInfo.pSetLayouts = &pipe->descriptorSetLayout;
-						pipe->pipelineLayoutCreateInfo.setLayoutCount = 1;
-						pipe->pipelineLayout = device.createPipelineLayout(pipe->pipelineLayoutCreateInfo);
-						gpci.layout = pipe->pipelineLayout;
-						gpci.stageCount = prog->pipeline_shader_stage_CIs.size();
-						gpci.pStages = prog->pipeline_shader_stage_CIs.data();
-						{
-							vk::VertexInputAttributeDescription viad;
-							viad.binding = 0;
-							viad.format = vk::Format::eR32G32B32Sfloat;
-							viad.location = 0;
-							viad.offset = 0;
-							pipe->attributeDescriptions.push_back(viad);
-						}
-						{
-							vk::VertexInputAttributeDescription viad;
-							viad.binding = 0;
-							viad.format = vk::Format::eR32G32Sfloat;
-							viad.location = 1;
-							viad.offset = offsetof(Vertex, uv_coordinates);
-							pipe->attributeDescriptions.push_back(viad);
-						}
-						pipe->inputState.vertexAttributeDescriptionCount = pipe->attributeDescriptions.size();
-						pipe->inputState.pVertexAttributeDescriptions = pipe->attributeDescriptions.data();
-						vk::VertexInputBindingDescription vibd;
-						vibd.binding = 0;
-						vibd.inputRate = vk::VertexInputRate::eVertex;
-						vibd.stride = sizeof(Vertex);
-						pipe->bindingDescriptions.push_back(vibd);
-						pipe->inputState.vertexBindingDescriptionCount = pipe->bindingDescriptions.size();
-						pipe->inputState.pVertexBindingDescriptions = pipe->bindingDescriptions.data();
-						gpci.pVertexInputState = &pipe->inputState;
-						pipe->inputAssemblyState.topology = vk::PrimitiveTopology::eTriangleList;
-						gpci.pInputAssemblyState = &pipe->inputAssemblyState;
-						pipe->rasterizationState.lineWidth = 1.f;
-						gpci.pRasterizationState = &pipe->rasterizationState;
-						pipe->colorBlendState.attachmentCount = 1;
-						vk::PipelineColorBlendAttachmentState pcba;
-						pcba.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
-						pipe->colorBlendState.pAttachments = &pcba;
-						gpci.pColorBlendState = &pipe->colorBlendState;
-						gpci.pMultisampleState = &pipe->multisampleState;
-						gpci.pViewportState = &pipe->viewportState;
-						pipe->depthStencilState.depthWriteEnable = true;
-						pipe->depthStencilState.depthCompareOp = vk::CompareOp::eLessOrEqual;
-						pipe->depthStencilState.depthTestEnable = true;
-						gpci.pDepthStencilState = &pipe->depthStencilState;
-						gpci.pDynamicState = &pipe->dynamicState;
-
-						vuk::PipelineCreateInfo pci{};
-						pci.gpci = gpci;
-						pci.layout_info.layout = pipe->descriptorSetLayout;
-						pci.layout_info.descriptor_counts[to_integral(vk::DescriptorType::eUniformBuffer)] = 2;
-						pci.layout_info.descriptor_counts[to_integral(vk::DescriptorType::eCombinedImageSampler)] = 1;
-						pci.pipeline_layout = pipe->pipelineLayout;
-
+						vuk::PipelineCreateInfo pci;
+						pci.shaders.push_back("../../ubo_test_tex.vert");
+						pci.shaders.push_back("../../triangle_depthshaded_tex.frag");
 						context.named_pipelines.emplace("vatte", pci);
 					}
 
 					{
-						vk::GraphicsPipelineCreateInfo gpci;
-						Program* prog = new Program();
-						prog->shaders.push_back("../../imgui.vert");
-						prog->shaders.push_back("../../imgui.frag");
-						prog->compile("");
-						prog->link(device);
-						Pipeline* pipe = new Pipeline(prog);
-						pipe->descriptorSetLayout = device.createDescriptorSetLayout(pipe->descriptorLayout);
-						pipe->pipelineLayoutCreateInfo.pSetLayouts = &pipe->descriptorSetLayout;
-						pipe->pipelineLayoutCreateInfo.setLayoutCount = 1;
-						{
-							vk::PushConstantRange pcr;
-							pcr.offset = 0;
-							pcr.stageFlags = vk::ShaderStageFlagBits::eVertex;
-							pcr.size = 4 * sizeof(float);
-							pipe->pcrs.push_back(pcr);
-						}
-						pipe->pipelineLayoutCreateInfo.pushConstantRangeCount = pipe->pcrs.size();
-						pipe->pipelineLayoutCreateInfo.pPushConstantRanges = pipe->pcrs.data();
-						pipe->pipelineLayout = device.createPipelineLayout(pipe->pipelineLayoutCreateInfo);
-						gpci.layout = pipe->pipelineLayout;
-						gpci.stageCount = prog->pipeline_shader_stage_CIs.size();
-						gpci.pStages = prog->pipeline_shader_stage_CIs.data();
-						{
-							vk::VertexInputAttributeDescription viad;
-							viad.binding = 0;
-							viad.format = vk::Format::eR32G32Sfloat;
-							viad.location = 0;
-							viad.offset = 0;
-							pipe->attributeDescriptions.push_back(viad);
-						}
-						{
-							vk::VertexInputAttributeDescription viad;
-							viad.binding = 0;
-							viad.format = vk::Format::eR32G32Sfloat;
-							viad.location = 1;
-							viad.offset = offsetof(ImDrawVert, uv);
-							pipe->attributeDescriptions.push_back(viad);
-						}
-						{
-							vk::VertexInputAttributeDescription viad;
-							viad.binding = 0;
-							viad.format = vk::Format::eR8G8B8A8Unorm;
-							viad.location = 2;
-							viad.offset = offsetof(ImDrawVert, col);
-							pipe->attributeDescriptions.push_back(viad);
-						}
-
-						pipe->inputState.vertexAttributeDescriptionCount = pipe->attributeDescriptions.size();
-						pipe->inputState.pVertexAttributeDescriptions = pipe->attributeDescriptions.data();
-						{
-							vk::VertexInputBindingDescription vibd;
-							vibd.binding = 0;
-							vibd.inputRate = vk::VertexInputRate::eVertex;
-							vibd.stride = sizeof(ImDrawVert);
-							pipe->bindingDescriptions.push_back(vibd);
-						}
-						pipe->inputState.vertexBindingDescriptionCount = pipe->bindingDescriptions.size();
-						pipe->inputState.pVertexBindingDescriptions = pipe->bindingDescriptions.data();
-
-						gpci.pVertexInputState = &pipe->inputState;
-						pipe->inputAssemblyState.topology = vk::PrimitiveTopology::eTriangleList;
-						gpci.pInputAssemblyState = &pipe->inputAssemblyState;
-						pipe->rasterizationState.lineWidth = 1.f;
-						pipe->rasterizationState.cullMode = vk::CullModeFlagBits::eNone;
-						gpci.pRasterizationState = &pipe->rasterizationState;
-						pipe->colorBlendState.attachmentCount = 1;
-						vk::PipelineColorBlendAttachmentState pcba;
-						pcba.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
+						vuk::PipelineCreateInfo pci;
+						pci.shaders.push_back("../../imgui.vert");
+						pci.shaders.push_back("../../imgui.frag");
+						auto& pcba = pci.blendAttachmentState[0];
 						pcba.blendEnable = true;
 						pcba.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
 						pcba.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
@@ -507,61 +268,13 @@ void device_init() {
 						pcba.srcAlphaBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
 						pcba.dstAlphaBlendFactor = vk::BlendFactor::eZero;
 						pcba.alphaBlendOp = vk::BlendOp::eAdd;
-						pipe->colorBlendState.pAttachments = &pcba;
-						gpci.pColorBlendState = &pipe->colorBlendState;
-						gpci.pMultisampleState = &pipe->multisampleState;
-						gpci.pViewportState = &pipe->viewportState;
-						pipe->depthStencilState.depthWriteEnable = true;
-						pipe->depthStencilState.depthCompareOp = vk::CompareOp::eLessOrEqual;
-						pipe->depthStencilState.depthTestEnable = true;
-						gpci.pDepthStencilState = &pipe->depthStencilState;
-						gpci.pDynamicState = &pipe->dynamicState;
-
-						vuk::PipelineCreateInfo pci{};
-						pci.gpci = gpci;
-						pci.layout_info.layout = pipe->descriptorSetLayout;
-						pci.layout_info.descriptor_counts[to_integral(vk::DescriptorType::eCombinedImageSampler)] = 1;
-						pci.pipeline_layout = pipe->pipelineLayout;
-
 						context.named_pipelines.emplace("imgui", pci);
 					}
 
 					{
-						vk::GraphicsPipelineCreateInfo gpci;
-						Program* prog = new Program;
-						prog->shaders.push_back("../../fullscreen.vert");
-						prog->shaders.push_back("../../fullscreen.frag");
-						prog->compile("");
-						prog->link(device);
-						Pipeline* pipe = new Pipeline(prog);
-						pipe->descriptorSetLayout = device.createDescriptorSetLayout(pipe->descriptorLayout);
-						pipe->pipelineLayoutCreateInfo.pSetLayouts = &pipe->descriptorSetLayout;
-						pipe->pipelineLayoutCreateInfo.setLayoutCount = 1;
-						pipe->pipelineLayout = device.createPipelineLayout(pipe->pipelineLayoutCreateInfo);
-						gpci.layout = pipe->pipelineLayout;
-						gpci.stageCount = prog->pipeline_shader_stage_CIs.size();
-						gpci.pStages = prog->pipeline_shader_stage_CIs.data();
-						gpci.pVertexInputState = &pipe->inputState;
-						pipe->inputAssemblyState.topology = vk::PrimitiveTopology::eTriangleList;
-						gpci.pInputAssemblyState = &pipe->inputAssemblyState;
-						pipe->rasterizationState.lineWidth = 1.f;
-						gpci.pRasterizationState = &pipe->rasterizationState;
-						pipe->colorBlendState.attachmentCount = 1;
-						vk::PipelineColorBlendAttachmentState pcba;
-						pcba.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
-						pipe->colorBlendState.pAttachments = &pcba;
-						gpci.pColorBlendState = &pipe->colorBlendState;
-						gpci.pMultisampleState = &pipe->multisampleState;
-						gpci.pViewportState = &pipe->viewportState;
-						gpci.pDepthStencilState = &pipe->depthStencilState;
-						gpci.pDynamicState = &pipe->dynamicState;
-
-						vuk::PipelineCreateInfo pci{};
-						pci.gpci = gpci;
-						pci.layout_info.layout = pipe->descriptorSetLayout;
-						pci.layout_info.descriptor_counts[to_integral(vk::DescriptorType::eCombinedImageSampler)] = 1;
-						pci.pipeline_layout = pipe->pipelineLayout;
-
+						vuk::PipelineCreateInfo pci;
+						pci.shaders.push_back("../../fullscreen.vert");
+						pci.shaders.push_back("../../fullscreen.frag");
 						context.named_pipelines.emplace("fullscreen", pci);
 					}
 
@@ -615,7 +328,7 @@ void device_init() {
 							}
 						);
 						rg.add_pass({
-							.resources = {"SWAPCHAIN"_image(vuk::eColorWrite), "depth"_image(vuk::eDepthStencilRW)},
+							.resources = {"SWAPCHAIN"_image(vuk::eColorWrite)},
 							.execute = [&](vuk::CommandBuffer& command_buffer) {
 								command_buffer
 								  .set_viewport(0, vuk::Area::Framebuffer{0, 0, 0.2f, 0.2f})
@@ -627,7 +340,7 @@ void device_init() {
 						);
 
 						rg.add_pass({
-							.resources = {"SWAPCHAIN"_image(vuk::eColorWrite), "depth"_image(vuk::eDepthStencilRW)},
+							.resources = {"SWAPCHAIN"_image(vuk::eColorWrite)},
 							.execute = [&](vuk::CommandBuffer& command_buffer) {
 								command_buffer
 								  .set_viewport(0, vuk::Area::Framebuffer{0.8f, 0, 0.2f, 0.2f})
