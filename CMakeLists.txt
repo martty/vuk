@@ -26,10 +26,10 @@ add_subdirectory(ext/SPIRV-Cross)
 add_subdirectory(ext/smolog)
 #add_subdirectory(ext/FiberTaskingLib)
 add_subdirectory(ext/glm)
-add_executable(vuk)
+add_library(vuk)
 target_compile_features(vuk PUBLIC cxx_std_20)
 
-target_sources(vuk PUBLIC src/main.cpp 
+target_sources(vuk PRIVATE 
 	src/Pipeline.hpp
 	src/Pipeline.cc
 	src/Program.hpp
@@ -54,8 +54,7 @@ target_include_directories(vuk PUBLIC ext/shaderc/libshaderc/include)
 target_include_directories(vuk PUBLIC ${Vulkan_INCLUDE_DIRS})
 target_include_directories(vuk PUBLIC ext/plf_colony)
 target_include_directories(vuk PUBLIC ext/VulkanMemoryAllocator/src)
-target_include_directories(vuk PUBLIC ext/stb)
-target_include_directories(vuk PUBLIC ext/imgui)
+target_include_directories(vuk PUBLIC ext/imgui src/)
 target_sources(vuk PRIVATE ext/imgui/imgui.cpp ext/imgui/imgui_draw.cpp ext/imgui/imgui_demo.cpp ext/imgui/imgui_widgets.cpp ext/imgui/examples/imgui_impl_glfw.cpp)
 
 target_compile_options(vuk PRIVATE /W3 /MP /bigobj /std:c++latest /permissive- /EHa /GT)
@@ -69,5 +68,5 @@ if (WIN32)
 endif()
 target_compile_definitions(vuk PUBLIC GLM_FORCE_SIZE_FUNC GLM_FORCE_EXPLICIT_CTOR _AMD64_ GLM_ENABLE_EXPERIMENTAL GLM_FORCE_RADIANS GLM_FORCE_DEPTH_ZERO_TO_ONE)
 target_compile_definitions(vuk PUBLIC IMGUI_DEFINE_MATH_OPERATORS IMGUI_DEFINE_PLACEMENT_NEW)
-target_compile_definitions(vuk PUBLIC EASTL_MOVE_SEMANTICS_ENABLED EASTL_VARIADIC_TEMPLATES_ENABLED)
-target_compile_definitions(vuk PUBLIC MICROPROFILE_USE_THREAD_NAME_CALLBACK MICROPROFILE_GPU_TIMERS=0 "MICROPROFILE_API=__declspec(dllexport)" "IMGUI_API=__declspec(dllexport)")
+
+add_subdirectory(examples)

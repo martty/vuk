@@ -108,8 +108,8 @@ namespace vuk {
 		CommandBuffer& bind_pipeline(vuk::PipelineCreateInfo gpci);
 		CommandBuffer& bind_pipeline(Name p);
 
-		CommandBuffer& bind_vertex_buffer(unsigned index, Allocator::Buffer&, Packed);
-		CommandBuffer& bind_index_buffer(Allocator::Buffer&, vk::IndexType type);
+		CommandBuffer& bind_vertex_buffer(unsigned index, const Allocator::Buffer&, Packed);
+		CommandBuffer& bind_index_buffer(const Allocator::Buffer&, vk::IndexType type);
 
 		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, vuk::ImageView iv, vk::SamplerCreateInfo sampler_create_info);
 		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, Name, vk::SamplerCreateInfo sampler_create_info);
@@ -124,7 +124,6 @@ namespace vuk {
 		CommandBuffer& push_constants(vk::ShaderStageFlags stages, size_t offset, T value) {
 			return push_constants(stages, offset, (void*)&value, sizeof(T));
 		}
-
 
 		std::bitset<VUK_MAX_SETS> sets_used = {};
 		std::array<SetBinding, VUK_MAX_SETS> set_bindings = {};

@@ -42,7 +42,7 @@ struct Buffer {
 };
 
 namespace vuk {
-	struct CommandBuffer;
+	class CommandBuffer;
 
 	struct Swapchain;
 	using SwapChainRef = Swapchain *;

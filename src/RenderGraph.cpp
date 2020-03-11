@@ -642,7 +642,7 @@ namespace vuk {
 		return bind_pipeline(ptc.ifc.ctx.named_pipelines.at(p));
 	}
 
-	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, Allocator::Buffer& buf, Packed format) {
+	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, const Allocator::Buffer& buf, Packed format) {
 		std::erase_if(attribute_descriptions, [&](auto& b) {return b.binding == binding; });
 		std::erase_if(binding_descriptions, [&](auto& b) {return b.binding == binding; });
 
@@ -673,7 +673,7 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::bind_index_buffer(Allocator::Buffer& buf, vk::IndexType type) {
+	CommandBuffer& CommandBuffer::bind_index_buffer(const Allocator::Buffer& buf, vk::IndexType type) {
 		command_buffer.bindIndexBuffer(buf.buffer, buf.offset, type);
 		return *this;
 	}
@@ -710,7 +710,7 @@ namespace vuk {
 
 	void* CommandBuffer::_map_scratch_uniform_binding(unsigned set, unsigned binding, size_t size) {
 		auto buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vk::BufferUsageFlagBits::eUniformBuffer, size, true);
-		bind_uniform_buffer(0, 0, buf);
+		bind_uniform_buffer(set, binding, buf);
 		return buf.mapped_ptr;
 	}
 
