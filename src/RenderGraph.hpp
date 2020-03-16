@@ -113,7 +113,8 @@ inline vuk::ImageResource operator "" _image(const char* name, size_t) {
 
 namespace vuk {
 	struct Resource {
-		Name name;
+		Name src_name;
+		Name use_name;
 		enum class Type { eBuffer, eImage } type;
 		ImageAccess ia;
 		struct Use {
@@ -122,10 +123,11 @@ namespace vuk {
 			vk::ImageLayout layout; // ignored for buffers
 		};
 
-		Resource(Name n, Type t, ImageAccess ia) : name(n), type(t), ia(ia) {}
+		Resource(Name n, Type t, ImageAccess ia) : src_name(n), use_name(n), type(t), ia(ia) {}
+		Resource(Name src, Name use, Type t, ImageAccess ia) : src_name(src), use_name(use), type(t), ia(ia) {}
 
 		bool operator==(const Resource& o) const {
-			return name == o.name;//std::tie(name, type) == std::tie(o.name, o.type);
+			return use_name == o.src_name || src_name == o.use_name;
 		}
 	};
 
@@ -149,7 +151,7 @@ namespace std {
 	template<> struct hash<vuk::Resource> {
 		std::size_t operator()(vuk::Resource const& s) const noexcept {
 			size_t h = 0;
-			hash_combine(h, s.name, s.type);
+			hash_combine(h, s.src_name, s.use_name, s.type);
 			return h;
 		}
 	};
@@ -293,6 +295,8 @@ namespace vuk {
 
 		std::vector<PassInfo*> head_passes;
 		std::vector<PassInfo*> tail_passes;
+
+		std::unordered_map<Name, Name> aliases;
 
 		struct UseRef {
 			Resource::Use use;

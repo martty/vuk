@@ -10,10 +10,9 @@
 #include "Pipeline.hpp"
 #include <string_view>
 
-using Name = std::string_view;
-
-
 namespace vuk {
+	using Name = std::string_view;
+
 	struct RGImage {
 		vk::Image image;
 		vuk::ImageView image_view;

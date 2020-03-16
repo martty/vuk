@@ -71,6 +71,12 @@ namespace vuk {
 		std::vector<FormatOrIgnore> list;
 	};
 
+	struct RenderGraph;
+	struct RenderPassInfo {
+		vk::RenderPass renderpass;
+		uint32_t subpass;
+		vk::Extent2D extent;
+	};
 
 	struct CommandBuffer {
 		RenderGraph& rg;
@@ -79,24 +85,13 @@ namespace vuk {
 
 		CommandBuffer(RenderGraph& rg, vuk::PerThreadContext& ptc, vk::CommandBuffer cb) : rg(rg), ptc(ptc), command_buffer(cb) {}
 
-		std::optional<std::pair<RenderGraph::RenderPassInfo&, uint32_t>> ongoing_renderpass;
+		std::optional<RenderPassInfo> ongoing_renderpass;
 		std::optional<vk::Viewport> next_viewport;
 		std::optional<vk::Rect2D> next_scissor;
 
 		std::vector<vk::VertexInputAttributeDescription> attribute_descriptions;
 		std::vector<vk::VertexInputBindingDescription> binding_descriptions;
 		std::optional<vuk::PipelineInfo> current_pipeline;
-
-		// global memory barrier
-		bool global_memory_barrier_inserted_since_last_draw = false;
-		unsigned src_access_mask = 0;
-		unsigned dst_access_mask = 0;
-		// buffer barriers
-		struct QueueXFer {
-			QueueID from;
-			QueueID to;
-		};
-		std::vector<QueueXFer> queue_transfers;
 
 		CommandBuffer& set_viewport(unsigned index, vk::Viewport vp);	
 		CommandBuffer& set_viewport(unsigned index, Area area);

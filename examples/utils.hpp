@@ -6,6 +6,16 @@
 #include <utility>
 #include <VkBootstrap.h>
 #include <vulkan/vulkan.hpp>
+#include <imgui.h>
+#include "Handle.hpp"
+#include "Context.hpp"
+#include <string_view>
+
+namespace vuk {
+	class PerThreadContext;
+	struct Pass;
+	using Name = std::string_view;
+}
 
 namespace util {
 	struct Vertex {
@@ -52,6 +62,7 @@ namespace util {
 	inline vuk::Swapchain make_swapchain(vkb::Device vkbdevice) {
 		vkb::SwapchainBuilder swb(vkbdevice);
 		swb.set_desired_format(vk::SurfaceFormatKHR(vk::Format::eR8G8B8A8Srgb, vk::ColorSpaceKHR::eSrgbNonlinear));
+		swb.set_desired_present_mode((VkPresentModeKHR)vk::PresentModeKHR::eImmediate);
 		auto vkswapchain = swb.build();
 
 		vuk::Swapchain sw;
@@ -70,4 +81,12 @@ namespace util {
 		sw.swapchain = vkswapchain->swapchain;
 		return sw;
 	}
+
+	struct ImGuiData {
+		vk::Image font_img;
+		vuk::ImageView font_iv;
+		vk::SamplerCreateInfo font_sci;
+	};
+	ImGuiData ImGui_ImplVuk_Init(vuk::PerThreadContext& ptc);
+	vuk::Pass ImGui_ImplVuk_Render(vuk::PerThreadContext& ptc, vuk::Name src_target, vuk::Name use_target, ImGuiData& data, ImDrawData* draw_data);
 }

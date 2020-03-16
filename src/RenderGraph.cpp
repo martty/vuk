@@ -119,6 +119,15 @@ namespace vuk {
 		global_io.erase(std::unique(global_io.begin(), global_io.end()), global_io.end());
 	}
 
+	Name resolve_name(Name in, const std::unordered_map<Name, Name> aliases) {
+		auto it = aliases.find(in);
+		if (it == aliases.end())
+			return in;
+		else
+			return resolve_name(it->second, aliases);
+	};
+
+
 	void RenderGraph::build() {
 		// compute sync
 		// find which reads are graph inputs (not produced by any pass) & outputs (not consumed by any pass)
@@ -158,7 +167,10 @@ namespace vuk {
 		// assemble use chains
 		for (auto& passinfo : passes) {
 			for (auto& res : passinfo.pass.resources) {
-				use_chains[res.name].emplace_back(UseRef{ to_use(res.ia), &passinfo });
+				if (res.src_name != res.use_name) {
+					aliases[res.use_name] = res.src_name;
+				}
+				use_chains[resolve_name(res.use_name, aliases)].emplace_back(UseRef{ to_use(res.ia), &passinfo });
 			}
 		}
 
@@ -197,7 +209,7 @@ namespace vuk {
 			// TODO: we are better off not reordering the attachments here?
 			for (auto& att : attachments) {
 				AttachmentRPInfo info;
-				info.name = att.name;
+				info.name = resolve_name(att.use_name, aliases);
 				rpi.attachments.push_back(info);
 			}
 			rpis.push_back(rpi);
@@ -263,7 +275,8 @@ namespace vuk {
 	}
 
 	void RenderGraph::build(vuk::PerThreadContext& ptc) {
-		for (auto& [name, attachment_info] : bound_attachments) {
+		for (auto& [raw_name, attachment_info] : bound_attachments) {
+			auto name = resolve_name(raw_name, aliases);
 			auto& chain = use_chains.at(name);
 			chain.insert(chain.begin(), UseRef{ std::move(attachment_info.initial), nullptr });
 			chain.emplace_back(UseRef{ attachment_info.final, nullptr });
@@ -547,7 +560,11 @@ namespace vuk {
 			cbuf.beginRenderPass(rbi, vk::SubpassContents::eInline);
 			for (size_t i = 0; i < rpass.subpasses.size(); i++) {
 				auto& sp = rpass.subpasses[i];
-				cobuf.ongoing_renderpass = std::pair<decltype(rpass), unsigned>( rpass, i );
+				vuk::RenderPassInfo rpi;
+				rpi.renderpass = rpass.handle;
+				rpi.subpass = i;
+				rpi.extent = vk::Extent2D(rpass.fbci.width, rpass.fbci.height);
+				cobuf.ongoing_renderpass = rpi;
 				sp.pass->pass.execute(cobuf);
 				if (i < rpass.subpasses.size() - 1)
 					cbuf.nextSubpass(vk::SubpassContents::eInline);
@@ -580,7 +597,7 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::set_viewport(unsigned index, Area::Framebuffer area) {
 		assert(ongoing_renderpass);
-		auto fb_dimensions = vk::Extent2D{ ongoing_renderpass->first.fbci.width, ongoing_renderpass->first.fbci.height };
+		auto fb_dimensions = ongoing_renderpass->extent;
 		vk::Viewport vp;
 		vp.x = area.x * fb_dimensions.width;
 		vp.height = -area.height * fb_dimensions.height;
@@ -604,7 +621,7 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::set_scissor(unsigned index, Area::Framebuffer area) {
 		assert(ongoing_renderpass);
-		auto fb_dimensions = vk::Extent2D{ ongoing_renderpass->first.fbci.width, ongoing_renderpass->first.fbci.height };
+		auto fb_dimensions = ongoing_renderpass->extent;
 		vk::Rect2D vp;
 		vp.offset.x = area.x * fb_dimensions.width;
 		vp.offset.y = area.y * fb_dimensions.height;
@@ -624,8 +641,8 @@ namespace vuk {
 		vertex_input_state.pVertexBindingDescriptions = pi.binding_descriptions.data();
 		vertex_input_state.vertexBindingDescriptionCount = pi.binding_descriptions.size();
 
-		pi.render_pass = ongoing_renderpass->first.handle;
-		pi.subpass = ongoing_renderpass->second;
+		pi.render_pass = ongoing_renderpass->renderpass;
+		pi.subpass = ongoing_renderpass->subpass;
 
 		pi.dynamic_state.pDynamicStates = pi.dynamic_states.data();
 		pi.dynamic_state.dynamicStateCount = gsl::narrow_cast<unsigned>(pi.dynamic_states.size());

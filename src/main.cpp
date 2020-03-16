@@ -169,22 +169,6 @@ void device_init() {
 			int x, y, chans;
 			auto doge_image = stbi_load("../../doge.png", &x, &y, &chans, 4);
 
-			// Setup Dear ImGui context
-			IMGUI_CHECKVERSION();
-			ImGui::CreateContext();
-			ImGuiIO& io = ImGui::GetIO(); (void)io;
-			//io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
-			//io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
-
-			// Setup Dear ImGui style
-			ImGui::StyleColorsDark();
-			//ImGui::StyleColorsClassic();
-
-			// Setup Platform/Renderer bindings
-			ImGui_ImplGlfw_InitForVulkan(window, true);
-			io.BackendRendererName = "imgui_impl_vuk";
-			io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;  // We can honor the ImDrawCmd::VtxOffset field, allowing for large meshes.
-
 			// Seed with a real random value, if available
 			std::random_device r;
 
@@ -255,15 +239,7 @@ void device_init() {
 						pci.shaders.push_back("../../triangle_depthshaded_tex.frag");
 						context.named_pipelines.emplace("vatte", pci);
 					}
-
-					{
-						vuk::PipelineCreateInfo pci;
-						pci.shaders.push_back("../../imgui.vert");
-						pci.shaders.push_back("../../imgui.frag");
-						pci.set_blend(vuk::BlendPreset::eAlphaBlend);
-						context.named_pipelines.emplace("imgui", pci);
-					}
-
+	
 					{
 						vuk::PipelineCreateInfo pci;
 						pci.shaders.push_back("../../fullscreen.vert");

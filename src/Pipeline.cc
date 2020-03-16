@@ -14,8 +14,8 @@ namespace vuk {
 			pcba.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
 			pcba.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
 			pcba.colorBlendOp = vk::BlendOp::eAdd;
-			pcba.srcAlphaBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
-			pcba.dstAlphaBlendFactor = vk::BlendFactor::eZero;
+			pcba.srcAlphaBlendFactor = vk::BlendFactor::eOne;
+			pcba.dstAlphaBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
 			pcba.alphaBlendOp = vk::BlendOp::eAdd;
 			break;
 		case BlendPreset::eOff:

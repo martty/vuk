@@ -53,18 +53,40 @@ vuk::ExampleRunner::ExampleRunner() {
 void vuk::ExampleRunner::render() {
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
+		ImGui_ImplGlfw_NewFrame();
+		ImGui::NewFrame();
 
 		auto ifc = context->begin();
-		auto rg = examples[0]->render(*this, ifc);
-		rg.build();
-		std::string attachment_name = std::string(examples[0]->name) + "_final";
-		rg.bind_attachment_to_swapchain(attachment_name, swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
+
+		ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 252.f, 2));
+		ImGui::SetNextWindowSize(ImVec2(250, 0));
+		ImGui::Begin("Example selector", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoResize);
+		static vuk::Example* item_current = examples[0];            // Here our selection is a single pointer stored outside the object.
+        if (ImGui::BeginCombo("Examples", item_current->name.data(), ImGuiComboFlags_None)) {
+            for (int n = 0; n < examples.size(); n++)
+            {
+                bool is_selected = (item_current == examples[n]);
+                if (ImGui::Selectable(examples[n]->name.data(), is_selected))
+                    item_current = examples[n];
+                if (is_selected)
+                    ImGui::SetItemDefaultFocus();   // Set the initial focus when opening the combo (scrolling + for keyboard navigation support in the upcoming navigation branch)
+            }
+            ImGui::EndCombo();
+        }
+		ImGui::End();
+		auto rg = item_current->render(*this, ifc);
+
+		ImGui::Render();
+
 		auto ptc = ifc.begin();
+		std::string attachment_name = std::string(item_current->name) + "_final";
+		rg.add_pass(util::ImGui_ImplVuk_Render(ptc, attachment_name, "SWAPCHAIN", imgui_data, ImGui::GetDrawData()));
+		rg.build();
+		rg.bind_attachment_to_swapchain(attachment_name, swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
 		rg.build(ptc);
 		execute_submit_and_present_to_one(ptc, rg, swapchain);
 	}
 }
-
 
 int main() {
 	vuk::ExampleRunner::get_runner().setup();
