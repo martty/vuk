@@ -258,6 +258,18 @@ void topological_sort(Iterator begin, Iterator end, Compare cmp) {
 #include <utility>
 
 namespace vuk {
+	struct Extent2D : public vk::Extent2D {
+		using vk::Extent2D::Extent2D;
+
+		Extent2D(vk::Extent2D e) : vk::Extent2D(e) {}
+
+		struct Framebuffer {
+			float width = 1.0f;
+			float height = 1.0f;
+		};
+	};
+
+
 	struct RenderGraph {
 		struct Sync {
 			//std::vector<QueueXFer> transfers;
@@ -313,7 +325,12 @@ namespace vuk {
 
 		struct AttachmentRPInfo {
 			Name name;
-			vk::Extent2D extents;
+
+			enum class Sizing {
+				eAbsolute, eFramebufferRelative
+			} sizing;
+			vuk::Extent2D::Framebuffer fb_relative;
+			vuk::Extent2D extents;
 			vk::AttachmentDescription description;
 
 			Resource::Use initial, final;
@@ -366,10 +383,12 @@ namespace vuk {
 		// RGscaffold
 		std::unordered_map<Name, AttachmentRPInfo> bound_attachments;
 		void bind_attachment_to_swapchain(Name name, Swapchain* swp, Clear);
-		void mark_attachment_internal(Name, vk::Format, vk::Extent2D, Clear);
+		void mark_attachment_internal(Name, vk::Format, vuk::Extent2D, Clear);
+		void mark_attachment_internal(Name, vk::Format, vuk::Extent2D::Framebuffer, Clear);
 
 		// RG
 		void build(vuk::PerThreadContext&);
+		void create_attachment(vuk::PerThreadContext&, Name name, RenderGraph::AttachmentRPInfo& attachment_info, vuk::Extent2D extents);
 		vk::CommandBuffer execute(vuk::PerThreadContext&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
 
 		// debug

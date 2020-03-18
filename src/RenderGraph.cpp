@@ -40,6 +40,7 @@ namespace vuk {
 		case eFragmentSampled: return { vk::PipelineStageFlagBits::eFragmentShader, vk::AccessFlagBits::eShaderRead, vk::ImageLayout::eShaderReadOnlyOptimal };
 		default:
 			assert(0 && "NYI");
+			return {};
 		}
 
 	}
@@ -249,9 +250,36 @@ namespace vuk {
 		bound_attachments.emplace(name, attachment_info);
 	}
 
-	void RenderGraph::mark_attachment_internal(Name name, vk::Format format, vk::Extent2D extent, Clear c) {
+	void RenderGraph::mark_attachment_internal(Name name, vk::Format format, vuk::Extent2D extent, Clear c) {
 		AttachmentRPInfo attachment_info;
+		attachment_info.sizing = AttachmentRPInfo::Sizing::eAbsolute;
 		attachment_info.extents = extent;
+		attachment_info.iv = {};
+
+		attachment_info.type = AttachmentRPInfo::Type::eInternal;
+		attachment_info.description.format = format;
+
+		attachment_info.should_clear = true;
+		attachment_info.clear_value = c;
+		Resource::Use& initial = attachment_info.initial;
+		Resource::Use& final = attachment_info.final;
+		initial.access = vk::AccessFlags{};
+		initial.stages = vk::PipelineStageFlagBits::eTopOfPipe;
+		// for internal attachments we don't want to preserve previous data
+		initial.layout = vk::ImageLayout::ePreinitialized;
+
+		// with an undefined final layout, there will be no final sync
+		final.layout = vk::ImageLayout::eUndefined;
+		final.access = vk::AccessFlagBits{};
+		final.stages = vk::PipelineStageFlagBits::eBottomOfPipe;
+
+		bound_attachments.emplace(name, attachment_info);
+	}
+
+	void RenderGraph::mark_attachment_internal(Name name, vk::Format format, vuk::Extent2D::Framebuffer fbrel, Clear c) {
+		AttachmentRPInfo attachment_info;
+		attachment_info.sizing = AttachmentRPInfo::Sizing::eFramebufferRelative;
+		attachment_info.fb_relative = fbrel;
 		attachment_info.iv = {};
 
 		attachment_info.type = AttachmentRPInfo::Type::eInternal;
@@ -459,78 +487,101 @@ namespace vuk {
 		}
 	}
 
-	vk::CommandBuffer RenderGraph::execute(vuk::PerThreadContext& ptc, std::vector<std::pair<SwapChainRef, size_t>> swp_with_index) {
-		// create and bind attachments 
-		for (auto& [name, attachment_info] : bound_attachments) {
-			auto& chain = use_chains.at(name);
-			if (attachment_info.type == AttachmentRPInfo::Type::eInternal) {
-				vk::ImageUsageFlags usage = {};
-				for (auto& c : chain) {
-					switch (c.use.layout) {
-					case vk::ImageLayout::eDepthStencilAttachmentOptimal:
-						usage |= vk::ImageUsageFlagBits::eDepthStencilAttachment; break;
-					case vk::ImageLayout::eShaderReadOnlyOptimal:
-						usage |= vk::ImageUsageFlagBits::eSampled; break;
-					case vk::ImageLayout::eColorAttachmentOptimal:
-						usage |= vk::ImageUsageFlagBits::eColorAttachment; break;
-					}
+	void RenderGraph::create_attachment(PerThreadContext& ptc, Name name, RenderGraph::AttachmentRPInfo& attachment_info, vuk::Extent2D fb_extent) {
+		auto& chain = use_chains.at(name);
+		if (attachment_info.type == AttachmentRPInfo::Type::eInternal) {
+			vk::ImageUsageFlags usage = {};
+			for (auto& c : chain) {
+				switch (c.use.layout) {
+				case vk::ImageLayout::eDepthStencilAttachmentOptimal:
+					usage |= vk::ImageUsageFlagBits::eDepthStencilAttachment; break;
+				case vk::ImageLayout::eShaderReadOnlyOptimal:
+					usage |= vk::ImageUsageFlagBits::eSampled; break;
+				case vk::ImageLayout::eColorAttachmentOptimal:
+					usage |= vk::ImageUsageFlagBits::eColorAttachment; break;
 				}
-
-				vk::ImageCreateInfo ici;
-				ici.usage = usage;
-				ici.arrayLayers = 1;
-				ici.extent = vk::Extent3D(attachment_info.extents, 1);
-				ici.imageType = vk::ImageType::e2D;
-				ici.format = attachment_info.description.format;
-				ici.mipLevels = 1;
-				ici.initialLayout = vk::ImageLayout::eUndefined;
-				ici.samples = vk::SampleCountFlagBits::e1; // should match renderpass
-				ici.sharingMode = vk::SharingMode::eExclusive;
-				ici.tiling = vk::ImageTiling::eOptimal;
-
-				vk::ImageViewCreateInfo ivci;
-				ivci.image = vk::Image{};
-				ivci.format = attachment_info.description.format;
-				ivci.viewType = vk::ImageViewType::e2D;
-				vk::ImageSubresourceRange isr;
-				vk::ImageAspectFlagBits aspect;
-				if (ici.format == vk::Format::eD32Sfloat) {
-					aspect = vk::ImageAspectFlagBits::eDepth;
-				} else {
-					aspect = vk::ImageAspectFlagBits::eColor;
-				}
-				isr.aspectMask = aspect;
-				isr.baseArrayLayer = 0;
-				isr.layerCount = 1;
-				isr.baseMipLevel = 0;
-				isr.levelCount = 1;
-				ivci.subresourceRange = isr;
-
-				RGCI rgci;
-				rgci.name = name;
-				rgci.ici = ici;
-				rgci.ivci = ivci;
-
-				auto rg = ptc.transient_images.acquire(rgci);
-				attachment_info.iv = rg.image_view;
-			} else if (attachment_info.type == AttachmentRPInfo::Type::eSwapchain) {
-				auto it = std::find_if(swp_with_index.begin(), swp_with_index.end(), [&](auto& t) { return t.first == attachment_info.swapchain; });
-				attachment_info.iv = it->first->image_views[it->second];
 			}
+
+			vk::ImageCreateInfo ici;
+			ici.usage = usage;
+			ici.arrayLayers = 1;
+			// compute extent
+			if (attachment_info.sizing == AttachmentRPInfo::Sizing::eFramebufferRelative) {
+				ici.extent = vk::Extent3D(attachment_info.fb_relative.width * fb_extent.width, attachment_info.fb_relative.height * fb_extent.height, 1);
+			} else {
+				ici.extent = vk::Extent3D(attachment_info.extents, 1);
+			}
+			ici.imageType = vk::ImageType::e2D;
+			ici.format = attachment_info.description.format;
+			ici.mipLevels = 1;
+			ici.initialLayout = vk::ImageLayout::eUndefined;
+			ici.samples = vk::SampleCountFlagBits::e1; // should match renderpass
+			ici.sharingMode = vk::SharingMode::eExclusive;
+			ici.tiling = vk::ImageTiling::eOptimal;
+
+			vk::ImageViewCreateInfo ivci;
+			ivci.image = vk::Image{};
+			ivci.format = attachment_info.description.format;
+			ivci.viewType = vk::ImageViewType::e2D;
+			vk::ImageSubresourceRange isr;
+			vk::ImageAspectFlagBits aspect;
+			if (ici.format == vk::Format::eD32Sfloat) {
+				aspect = vk::ImageAspectFlagBits::eDepth;
+			} else {
+				aspect = vk::ImageAspectFlagBits::eColor;
+			}
+			isr.aspectMask = aspect;
+			isr.baseArrayLayer = 0;
+			isr.layerCount = 1;
+			isr.baseMipLevel = 0;
+			isr.levelCount = 1;
+			ivci.subresourceRange = isr;
+
+			RGCI rgci;
+			rgci.name = name;
+			rgci.ici = ici;
+			rgci.ivci = ivci;
+
+			auto rg = ptc.transient_images.acquire(rgci);
+			attachment_info.iv = rg.image_view;
 		}
-		
-		// create framebuffers
+	}
+
+	vk::CommandBuffer RenderGraph::execute(vuk::PerThreadContext& ptc, std::vector<std::pair<SwapChainRef, size_t>> swp_with_index) {		
+		// create framebuffers, create & bind attachments
 		for (auto& rp : rpis) {
 			auto& ivs = rp.fbci.attachments;
 			std::vector<vk::ImageView> vkivs;
+			vk::Extent2D fb_extent;
+
+			// bind swapchain attachments, deduce framebuffer size
 			for (auto& attrpinfo : rp.attachments) {
 				auto& bound = bound_attachments[attrpinfo.name];
+
+				if (bound.type == AttachmentRPInfo::Type::eSwapchain) {
+					auto it = std::find_if(swp_with_index.begin(), swp_with_index.end(), [&](auto& t) { return t.first == bound.swapchain; });
+					bound.iv = it->first->image_views[it->second];
+					fb_extent = it->first->extent;
+				} else {
+					if (bound.sizing == AttachmentRPInfo::Sizing::eAbsolute) {
+						fb_extent = bound.extents;
+					}
+				}
+			}
+			// create internal attachments; bind attachments to fb
+			for (auto& attrpinfo : rp.attachments) {
+				auto& bound = bound_attachments[attrpinfo.name];
+
+				if (bound.type == AttachmentRPInfo::Type::eInternal) {
+					create_attachment(ptc, attrpinfo.name, bound, fb_extent);
+				}
+
 				ivs.push_back(bound.iv);
 				vkivs.push_back(bound.iv.payload);
 			}
 			rp.fbci.renderPass = rp.handle;
-			rp.fbci.width = rp.attachments[0].extents.width;
-			rp.fbci.height = rp.attachments[0].extents.height;
+			rp.fbci.width = fb_extent.width;
+			rp.fbci.height = fb_extent.height;
 			rp.fbci.pAttachments = &vkivs[0];
 			rp.fbci.attachmentCount = vkivs.size();
 			rp.fbci.layers = 1;

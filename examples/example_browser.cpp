@@ -110,7 +110,6 @@ void vuk::ExampleRunner::render() {
 			rg.add_pass(util::ImGui_ImplVuk_Render(ptc, "SWAPCHAIN", "SWAPCHAIN", imgui_data, ImGui::GetDrawData()));
 			rg.build();
 			rg.bind_attachment_to_swapchain("SWAPCHAIN", swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
-			rg.mark_attachment_internal("03_depth", vk::Format::eD32Sfloat, vk::Extent2D(200.f, 200.f), vuk::ClearDepthStencil{1.0f, 0});
 			rg.build(ptc);
 			execute_submit_and_present_to_one(ptc, rg, swapchain);
 		}

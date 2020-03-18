@@ -84,7 +84,7 @@ namespace {
 
 			angle += 360.f * ImGui::GetIO().DeltaTime;
 
-			//rg.mark_attachment_internal("03_depth", vk::Format::eD32Sfloat, runner.swapchain->extent, vuk::ClearDepthStencil{1.0f, 0});
+			rg.mark_attachment_internal("03_depth", vk::Format::eD32Sfloat, vuk::Extent2D::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
 			return rg;
 		}
 	};
