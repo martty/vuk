@@ -50,6 +50,8 @@ vuk::ExampleRunner::ExampleRunner() {
 			swapchain = context->add_swapchain(util::make_swapchain(vkbdevice));
 }
 
+bool render_all = false;
+
 void vuk::ExampleRunner::render() {
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
@@ -58,33 +60,60 @@ void vuk::ExampleRunner::render() {
 
 		auto ifc = context->begin();
 
-		ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 252.f, 2));
-		ImGui::SetNextWindowSize(ImVec2(250, 0));
+		ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 352.f, 2));
+		ImGui::SetNextWindowSize(ImVec2(350, 0));
 		ImGui::Begin("Example selector", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoResize);
+		ImGui::Checkbox("All", &render_all); 
+		ImGui::SameLine();
+		
 		static vuk::Example* item_current = examples[0];            // Here our selection is a single pointer stored outside the object.
-        if (ImGui::BeginCombo("Examples", item_current->name.data(), ImGuiComboFlags_None)) {
-            for (int n = 0; n < examples.size(); n++)
-            {
-                bool is_selected = (item_current == examples[n]);
-                if (ImGui::Selectable(examples[n]->name.data(), is_selected))
-                    item_current = examples[n];
-                if (is_selected)
-                    ImGui::SetItemDefaultFocus();   // Set the initial focus when opening the combo (scrolling + for keyboard navigation support in the upcoming navigation branch)
-            }
-            ImGui::EndCombo();
-        }
+		if (!render_all) {
+			if (ImGui::BeginCombo("Examples", item_current->name.data(), ImGuiComboFlags_None)) {
+				for (int n = 0; n < examples.size(); n++) {
+					bool is_selected = (item_current == examples[n]);
+					if (ImGui::Selectable(examples[n]->name.data(), is_selected))
+						item_current = examples[n];
+					if (is_selected)
+						ImGui::SetItemDefaultFocus();   // Set the initial focus when opening the combo (scrolling + for keyboard navigation support in the upcoming navigation branch)
+				}
+				ImGui::EndCombo();
+			}
+		}
 		ImGui::End();
-		auto rg = item_current->render(*this, ifc);
 
-		ImGui::Render();
+		if (!render_all) { // render a single full window example
+			auto rg = item_current->render(*this, ifc);
+			ImGui::Render();
+			auto ptc = ifc.begin();
+			std::string attachment_name = std::string(item_current->name) + "_final";
+			rg.add_pass(util::ImGui_ImplVuk_Render(ptc, attachment_name, "SWAPCHAIN", imgui_data, ImGui::GetDrawData()));
+			rg.build();
+			rg.bind_attachment_to_swapchain(attachment_name, swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
+			rg.build(ptc);
+			execute_submit_and_present_to_one(ptc, rg, swapchain);
+		} else { // render all examples as imgui windows
+			RenderGraph rg;
+			auto ptc = ifc.begin();
+			for (auto& ex : examples) {
+				auto rg_frag = ex->render(*this, ifc);
+				rg.passes.insert(rg.passes.end(), rg_frag.passes.begin(), rg_frag.passes.end());
+				rg.bound_attachments.insert(rg_frag.bound_attachments.begin(), rg_frag.bound_attachments.end());
+				std::string* attachment_name = new std::string(std::string(ex->name) + "_final");
 
-		auto ptc = ifc.begin();
-		std::string attachment_name = std::string(item_current->name) + "_final";
-		rg.add_pass(util::ImGui_ImplVuk_Render(ptc, attachment_name, "SWAPCHAIN", imgui_data, ImGui::GetDrawData()));
-		rg.build();
-		rg.bind_attachment_to_swapchain(attachment_name, swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
-		rg.build(ptc);
-		execute_submit_and_present_to_one(ptc, rg, swapchain);
+				rg.mark_attachment_internal(*attachment_name, vk::Format::eR8G8B8A8Srgb, vk::Extent2D(200.f, 200.f), vuk::ClearColor(0.1, 0.2, 0.3, 1.f));
+				ImGui::Begin(ex->name.data());
+				ImGui::Image(&ptc.make_sampled_image(*attachment_name, imgui_data.font_sci), ImVec2(200, 200));
+				ImGui::End();
+			}
+
+			ImGui::Render();
+			rg.add_pass(util::ImGui_ImplVuk_Render(ptc, "SWAPCHAIN", "SWAPCHAIN", imgui_data, ImGui::GetDrawData()));
+			rg.build();
+			rg.bind_attachment_to_swapchain("SWAPCHAIN", swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
+			rg.mark_attachment_internal("03_depth", vk::Format::eD32Sfloat, vk::Extent2D(200.f, 200.f), vuk::ClearDepthStencil{1.0f, 0});
+			rg.build(ptc);
+			execute_submit_and_present_to_one(ptc, rg, swapchain);
+		}
 	}
 }
 

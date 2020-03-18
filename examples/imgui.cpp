@@ -149,7 +149,7 @@ vuk::Pass util::ImGui_ImplVuk_Render(vuk::PerThreadContext& ptc, vuk::Name src_t
 	// add rendergraph dependencies to be transitioned
 	for (auto& si : ptc.sampled_images.pool.values) {
 		if (!si.is_global) {
-			pass.resources.push_back(vuk::Resource(si.rg_attachment.attachment_name, vuk::Resource::Type::eImage, vuk::ImageAccess::eFragmentRead));
+			pass.resources.push_back(vuk::Resource(si.rg_attachment.attachment_name, vuk::Resource::Type::eImage, vuk::ImageAccess::eFragmentSampled));
 		}
 	}
 

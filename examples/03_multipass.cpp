@@ -65,7 +65,7 @@ namespace {
 			);
 
 			rg.add_pass({
-				.resources = {"03_multipass_final"_image(vuk::eColorWrite), "depth"_image(vuk::eDepthStencilRW)},
+				.resources = {"03_multipass_final"_image(vuk::eColorWrite), "03_depth"_image(vuk::eDepthStencilRW)},
 				.execute = [verts, uboVP, inds](vuk::CommandBuffer& command_buffer) {
 					command_buffer
 					  .set_viewport(0, vuk::Area::Framebuffer{})
@@ -84,7 +84,7 @@ namespace {
 
 			angle += 360.f * ImGui::GetIO().DeltaTime;
 
-			rg.mark_attachment_internal("depth", vk::Format::eD32Sfloat, runner.swapchain->extent, vuk::ClearDepthStencil{1.0f, 0});
+			//rg.mark_attachment_internal("03_depth", vk::Format::eD32Sfloat, runner.swapchain->extent, vuk::ClearDepthStencil{1.0f, 0});
 			return rg;
 		}
 	};
