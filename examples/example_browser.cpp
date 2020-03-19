@@ -1,5 +1,7 @@
 #include "example_runner.hpp"
 
+std::vector<std::string> chosen_resource;
+
 vuk::ExampleRunner::ExampleRunner() {
 	vkb::InstanceBuilder builder;
 	builder
@@ -53,6 +55,8 @@ vuk::ExampleRunner::ExampleRunner() {
 bool render_all = false;
 
 void vuk::ExampleRunner::render() {
+	chosen_resource.resize(examples.size());
+
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
 		ImGui_ImplGlfw_NewFrame();
@@ -94,16 +98,46 @@ void vuk::ExampleRunner::render() {
 		} else { // render all examples as imgui windows
 			RenderGraph rg;
 			auto ptc = ifc.begin();
+			plf::colony<std::string> attachment_names;
+
+			size_t i = 0;
 			for (auto& ex : examples) {
 				auto rg_frag = ex->render(*this, ifc);
+				rg_frag.build();
 				rg.passes.insert(rg.passes.end(), rg_frag.passes.begin(), rg_frag.passes.end());
 				rg.bound_attachments.insert(rg_frag.bound_attachments.begin(), rg_frag.bound_attachments.end());
-				std::string* attachment_name = new std::string(std::string(ex->name) + "_final");
+				auto& attachment_name = *attachment_names.emplace(std::string(ex->name) + "_final");
 
-				rg.mark_attachment_internal(*attachment_name, vk::Format::eR8G8B8A8Srgb, vk::Extent2D(200.f, 200.f), vuk::ClearColor(0.1, 0.2, 0.3, 1.f));
+				rg.mark_attachment_internal(attachment_name, vk::Format::eR8G8B8A8Srgb, vk::Extent2D(200.f, 200.f), vuk::ClearColor(0.1, 0.2, 0.3, 1.f));
 				ImGui::Begin(ex->name.data());
-				ImGui::Image(&ptc.make_sampled_image(*attachment_name, imgui_data.font_sci), ImVec2(200, 200));
+				if (rg_frag.use_chains.size() > 1) {
+					for (auto& c : rg_frag.use_chains) {
+						std::string btn_id = "";
+						if (c.first == attachment_name) {
+							btn_id = "F";
+						} else {
+							auto usage = rg_frag.compute_usage(c.second);
+							if (usage & vk::ImageUsageFlagBits::eColorAttachment) {
+								btn_id += "C";
+							} else if (usage & vk::ImageUsageFlagBits::eDepthStencilAttachment) {
+								btn_id += "D";
+							}
+						}
+						btn_id += "##" + std::string(c.first);
+						if (ImGui::Button(btn_id.c_str())) {
+							chosen_resource[i] = c.first;
+						}
+						if (ImGui::IsItemHovered())
+							ImGui::SetTooltip(c.first.data());
+						ImGui::SameLine();
+					}
+					ImGui::NewLine();
+				}
+				if (chosen_resource[i].empty())
+					chosen_resource[i] = attachment_name;
+				ImGui::Image(&ptc.make_sampled_image(chosen_resource[i], imgui_data.font_sci), ImVec2(200, 200));
 				ImGui::End();
+				i++;
 			}
 
 			ImGui::Render();

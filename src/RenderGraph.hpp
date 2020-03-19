@@ -127,7 +127,7 @@ namespace vuk {
 		Resource(Name src, Name use, Type t, ImageAccess ia) : src_name(src), use_name(use), type(t), ia(ia) {}
 
 		bool operator==(const Resource& o) const {
-			return use_name == o.src_name || src_name == o.use_name;
+			return (use_name == o.use_name && src_name == o.src_name);// || use_name == o.src_name || src_name == o.use_name;
 		}
 	};
 
@@ -385,6 +385,7 @@ namespace vuk {
 		void bind_attachment_to_swapchain(Name name, Swapchain* swp, Clear);
 		void mark_attachment_internal(Name, vk::Format, vuk::Extent2D, Clear);
 		void mark_attachment_internal(Name, vk::Format, vuk::Extent2D::Framebuffer, Clear);
+		vk::ImageUsageFlags compute_usage(std::vector<vuk::RenderGraph::UseRef>& chain);
 
 		// RG
 		void build(vuk::PerThreadContext&);

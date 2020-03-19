@@ -139,10 +139,16 @@ namespace vuk {
 				bool could_execute_after = false;
 				bool could_execute_before = false;
 				for (auto& o : p1.outputs) {
-					if (p2.inputs.contains(o)) could_execute_after = true;
+					for (auto& i : p2.inputs){
+						if(i.src_name == o.use_name)
+							could_execute_after = true;
+					}
 				}
 				for (auto& o : p2.outputs) {
-					if (p1.inputs.contains(o)) could_execute_before = true;
+					for (auto& i : p1.inputs){
+						if(i.src_name == o.use_name)
+							could_execute_before = true;
+					}
 				}
 				if (could_execute_after && could_execute_before) {
 					return p1.pass.auxiliary_order < p2.pass.auxiliary_order;
@@ -461,8 +467,13 @@ namespace vuk {
 			// subpasses
 			for (size_t i = 0; i < rp.subpasses.size(); i++) {
 				vuk::SubpassDescription sd;
-				sd.colorAttachmentCount = color_attrefs.size() - color_ref_offsets[i] - (i > 0 ? color_ref_offsets[i - 1] : 0);
-				sd.pColorAttachments = color_attrefs.data() + color_ref_offsets[i];
+				auto count = color_attrefs.size() - color_ref_offsets[i] - (i > 0 ? color_ref_offsets[i - 1] : 0);
+				auto first = color_attrefs.data() + color_ref_offsets[i];
+				// TODO: is sorting here correct?
+				std::sort(first, first + count, [](auto& l, auto& r) { return l.attachment < r.attachment; });
+				sd.colorAttachmentCount = count;
+				sd.pColorAttachments = first;
+
 				sd.pDepthStencilAttachment = ds_attrefs[i] ? &*ds_attrefs[i] : nullptr;
 				sd.flags = {};
 				sd.inputAttachmentCount = 0;
@@ -493,26 +504,33 @@ namespace vuk {
 		}
 	}
 
+	vk::ImageUsageFlags RenderGraph::compute_usage(std::vector<vuk::RenderGraph::UseRef>& chain) {
+		vk::ImageUsageFlags usage;
+		for (auto& c : chain) {
+			switch (c.use.layout) {
+			case vk::ImageLayout::eDepthStencilAttachmentOptimal:
+				usage |= vk::ImageUsageFlagBits::eDepthStencilAttachment; break;
+			case vk::ImageLayout::eShaderReadOnlyOptimal:
+				usage |= vk::ImageUsageFlagBits::eSampled; break;
+			case vk::ImageLayout::eColorAttachmentOptimal:
+				usage |= vk::ImageUsageFlagBits::eColorAttachment; break;
+			}
+		}
+
+		return usage;
+	}
+
 	void RenderGraph::create_attachment(PerThreadContext& ptc, Name name, RenderGraph::AttachmentRPInfo& attachment_info, vuk::Extent2D fb_extent) {
 		auto& chain = use_chains.at(name);
 		if (attachment_info.type == AttachmentRPInfo::Type::eInternal) {
-			vk::ImageUsageFlags usage = {};
-			for (auto& c : chain) {
-				switch (c.use.layout) {
-				case vk::ImageLayout::eDepthStencilAttachmentOptimal:
-					usage |= vk::ImageUsageFlagBits::eDepthStencilAttachment; break;
-				case vk::ImageLayout::eShaderReadOnlyOptimal:
-					usage |= vk::ImageUsageFlagBits::eSampled; break;
-				case vk::ImageLayout::eColorAttachmentOptimal:
-					usage |= vk::ImageUsageFlagBits::eColorAttachment; break;
-				}
-			}
+			vk::ImageUsageFlags usage = compute_usage(chain);
 
 			vk::ImageCreateInfo ici;
 			ici.usage = usage;
 			ici.arrayLayers = 1;
 			// compute extent
 			if (attachment_info.sizing == AttachmentRPInfo::Sizing::eFramebufferRelative) {
+				assert(fb_extent.width > 0 && fb_extent.height > 0);
 				ici.extent = vk::Extent3D(attachment_info.fb_relative.width * fb_extent.width, attachment_info.fb_relative.height * fb_extent.height, 1);
 			} else {
 				ici.extent = vk::Extent3D(attachment_info.extents, 1);
