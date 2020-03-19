@@ -415,6 +415,11 @@ namespace vuk {
 				}
 			}
 		}
+
+		for (auto& rp : rpis) {
+			rp.rpci.color_ref_offsets.resize(rp.subpasses.size());
+			rp.rpci.ds_refs.resize(rp.subpasses.size());
+		}
 	
 		// we now have enough data to build vk::RenderPasses and vk::Framebuffers
 		for (auto& [name, attachment_info] : bound_attachments) {
@@ -430,7 +435,6 @@ namespace vuk {
 
 				auto subpass_index = c.pass->subpass;
 
-				ds_attrefs.resize(subpass_index + 1);
 				vk::AttachmentReference attref;
 				attref.layout = c.use.layout;
 				attref.attachment = std::distance(rp.attachments.begin(), std::find_if(rp.attachments.begin(), rp.attachments.end(), [&](auto& att) { return name == att.name; }));
@@ -440,8 +444,10 @@ namespace vuk {
 						ds_attrefs[subpass_index] = attref;
 					}
 				} else {
-					color_attrefs.push_back(attref);
-					color_ref_offsets.push_back(color_attrefs.size());
+					color_attrefs.insert(color_attrefs.begin() + color_ref_offsets[subpass_index], attref);
+					for (size_t i = subpass_index + 1; i < rp.subpasses.size(); i++) {
+						color_ref_offsets[i]++;
+					}
 				}
 			}
 		}
@@ -455,8 +461,8 @@ namespace vuk {
 			// subpasses
 			for (size_t i = 0; i < rp.subpasses.size(); i++) {
 				vuk::SubpassDescription sd;
-				sd.colorAttachmentCount = color_ref_offsets[i] - (i > 0 ? color_ref_offsets[i - 1] : 0);
-				sd.pColorAttachments = color_attrefs.data() + (i > 0 ? color_ref_offsets[i - 1] : 0);
+				sd.colorAttachmentCount = color_attrefs.size() - color_ref_offsets[i] - (i > 0 ? color_ref_offsets[i - 1] : 0);
+				sd.pColorAttachments = color_attrefs.data() + color_ref_offsets[i];
 				sd.pDepthStencilAttachment = ds_attrefs[i] ? &*ds_attrefs[i] : nullptr;
 				sd.flags = {};
 				sd.inputAttachmentCount = 0;
@@ -602,7 +608,8 @@ namespace vuk {
 			rbi.framebuffer = rpass.framebuffer;
 			rbi.renderArea = vk::Rect2D(vk::Offset2D{}, vk::Extent2D{rpass.fbci.width, rpass.fbci.height});
 			std::vector<vk::ClearValue> clears;
-			for (auto& att : rpass.attachments) {
+			for (size_t i = 0; i < rpass.attachments.size(); i++) {
+				auto& att = rpass.attachments[i];
 				if(att.should_clear)
 					clears.push_back(att.clear_value.c);
 			}
@@ -615,6 +622,8 @@ namespace vuk {
 				rpi.renderpass = rpass.handle;
 				rpi.subpass = i;
 				rpi.extent = vk::Extent2D(rpass.fbci.width, rpass.fbci.height);
+				auto& spdesc = rpass.rpci.subpass_descriptions[i];
+				rpi.color_attachments = gsl::span<const vk::AttachmentReference>(spdesc.pColorAttachments, spdesc.colorAttachmentCount);
 				cobuf.ongoing_renderpass = rpi;
 				sp.pass->pass.execute(cobuf);
 				if (i < rpass.subpasses.size() - 1)
@@ -698,6 +707,10 @@ namespace vuk {
 		pi.dynamic_state.pDynamicStates = pi.dynamic_states.data();
 		pi.dynamic_state.dynamicStateCount = gsl::narrow_cast<unsigned>(pi.dynamic_states.size());
 
+		// last blend attachment is replicated to cover all attachments
+		if (pi.color_blend_attachments.size() < ongoing_renderpass->color_attachments.size()) {
+			pi.color_blend_attachments.resize(ongoing_renderpass->color_attachments.size(), pi.color_blend_attachments.back());
+		}
 		pi.color_blend_state.pAttachments = pi.color_blend_attachments.data();
 		pi.color_blend_state.attachmentCount = pi.color_blend_attachments.size();
 

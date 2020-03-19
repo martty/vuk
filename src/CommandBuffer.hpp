@@ -38,11 +38,12 @@ namespace vuk {
 			return sizeof(char) * 4;
 		default:
 			assert(0);
+			return 0;
 		}
 	}
 
 	struct Ignore {
-		Ignore(size_t bytes) : bytes(bytes) {}
+		Ignore(size_t bytes) : bytes(bytes), format(vk::Format::eUndefined) {}
 		Ignore(vk::Format format) : format(format) {}
 		vk::Format format;
 		size_t bytes = 0;
@@ -72,6 +73,7 @@ namespace vuk {
 		vk::RenderPass renderpass;
 		uint32_t subpass;
 		vk::Extent2D extent;
+		gsl::span<const vk::AttachmentReference> color_attachments;
 	};
 
 	struct CommandBuffer {
