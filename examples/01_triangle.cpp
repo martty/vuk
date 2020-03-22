@@ -3,7 +3,7 @@
 namespace {
 	vuk::Example x{
 		.name = "01_triangle",
-		.setup = [&](vuk::ExampleRunner& runner) {
+		.setup = [&](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
 			vuk::PipelineCreateInfo pci;
 			pci.shaders.push_back("../../examples/triangle.vert");
 			pci.shaders.push_back("../../examples/triangle.frag");

@@ -86,6 +86,7 @@ namespace util {
 		vk::Image font_img;
 		vuk::ImageView font_iv;
 		vk::SamplerCreateInfo font_sci;
+		std::unique_ptr<vuk::SampledImage> font_si;
 	};
 	ImGuiData ImGui_ImplVuk_Init(vuk::PerThreadContext& ptc);
 	vuk::Pass ImGui_ImplVuk_Render(vuk::PerThreadContext& ptc, vuk::Name src_target, vuk::Name use_target, ImGuiData& data, ImDrawData* draw_data);

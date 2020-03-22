@@ -9,7 +9,7 @@ namespace {
 
 	vuk::Example x{
 		.name = "03_multipass",
-		.setup = [&](vuk::ExampleRunner& runner) {
+		.setup = [&](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
 			{
 			vuk::PipelineCreateInfo pci;
 			pci.shaders.push_back("../../examples/triangle.vert");

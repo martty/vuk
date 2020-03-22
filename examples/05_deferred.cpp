@@ -8,8 +8,8 @@ namespace {
 	auto box = util::generate_cube();
 
 	vuk::Example x{
-		.name = "0X_deferred",
-		.setup = [&](vuk::ExampleRunner& runner) {
+		.name = "05_deferred",
+		.setup = [&](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
 			{
 			vuk::PipelineCreateInfo pci;
 			pci.shaders.push_back("../../examples/deferred.vert");
@@ -44,7 +44,7 @@ namespace {
 			vuk::RenderGraph rg;
 			// MRT pass
 			rg.add_pass({
-				.resources = {"0X_position"_image(vuk::eColorWrite), "0X_normal"_image(vuk::eColorWrite), "0X_color"_image(vuk::eColorWrite), "0X_depth"_image(vuk::eDepthStencilRW)},
+				.resources = {"05_position"_image(vuk::eColorWrite), "05_normal"_image(vuk::eColorWrite), "05_color"_image(vuk::eColorWrite), "05_depth"_image(vuk::eDepthStencilRW)},
 				.execute = [verts, uboVP, inds](vuk::CommandBuffer& command_buffer) {
 					command_buffer
 					  .set_viewport(0, vuk::Area::Framebuffer{})
@@ -64,7 +64,7 @@ namespace {
 			angle += 360.f * ImGui::GetIO().DeltaTime;
 
 			rg.add_pass({
-				.resources = {"0X_deferred_final"_image(vuk::eColorWrite), "0X_position"_image(vuk::eFragmentSampled), "0X_normal"_image(vuk::eFragmentSampled), "0X_color"_image(vuk::eFragmentSampled)},
+				.resources = {"05_deferred_final"_image(vuk::eColorWrite), "05_position"_image(vuk::eFragmentSampled), "05_normal"_image(vuk::eFragmentSampled), "05_color"_image(vuk::eFragmentSampled)},
 				.execute = [=](vuk::CommandBuffer& command_buffer) {
 					command_buffer
 					  .set_viewport(0, vuk::Area::Framebuffer{})
@@ -74,18 +74,18 @@ namespace {
 					vk::SamplerCreateInfo sci;
 					sci.minFilter = sci.magFilter = vk::Filter::eNearest;
 					command_buffer
-					  .bind_sampled_image(0, 0, "0X_position", sci)
-					  .bind_sampled_image(0, 1, "0X_normal", sci)
-					  .bind_sampled_image(0, 2, "0X_color", sci)
+					  .bind_sampled_image(0, 0, "05_position", sci)
+					  .bind_sampled_image(0, 1, "05_normal", sci)
+					  .bind_sampled_image(0, 2, "05_color", sci)
 					  .draw(3, 1, 0, 0);
 					}
 				}
 			);
 
-			rg.mark_attachment_internal("0X_position", vk::Format::eR16G16B16A16Sfloat, vuk::Extent2D{300, 300}, vuk::ClearColor{ 1.f,0.f,0.f,0.f });
-			rg.mark_attachment_internal("0X_normal", vk::Format::eR16G16B16A16Sfloat, vuk::Extent2D::Framebuffer{}, vuk::ClearColor{ 0.f, 1.f, 0.f, 0.f });
-			rg.mark_attachment_internal("0X_color", vk::Format::eR8G8B8A8Unorm, vuk::Extent2D::Framebuffer{}, vuk::ClearColor{ 0.f, 0.f, 1.f, 0.f });
-			rg.mark_attachment_internal("0X_depth", vk::Format::eD32Sfloat, vuk::Extent2D::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
+			rg.mark_attachment_internal("05_position", vk::Format::eR16G16B16A16Sfloat, vuk::Extent2D{300, 300}, vuk::ClearColor{ 1.f,0.f,0.f,0.f });
+			rg.mark_attachment_internal("05_normal", vk::Format::eR16G16B16A16Sfloat, vuk::Extent2D::Framebuffer{}, vuk::ClearColor{ 0.f, 1.f, 0.f, 0.f });
+			rg.mark_attachment_internal("05_color", vk::Format::eR8G8B8A8Unorm, vuk::Extent2D::Framebuffer{}, vuk::ClearColor{ 0.f, 0.f, 1.f, 0.f });
+			rg.mark_attachment_internal("05_depth", vk::Format::eD32Sfloat, vuk::Extent2D::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
 
 			return rg;
 		}

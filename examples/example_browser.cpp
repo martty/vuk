@@ -52,7 +52,7 @@ vuk::ExampleRunner::ExampleRunner() {
 			swapchain = context->add_swapchain(util::make_swapchain(vkbdevice));
 }
 
-bool render_all = false;
+bool render_all = true;
 
 void vuk::ExampleRunner::render() {
 	chosen_resource.resize(examples.size());

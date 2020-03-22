@@ -25,8 +25,8 @@ util::ImGuiData util::ImGui_ImplVuk_Init(vuk::PerThreadContext& ptc) {
 	sci.maxLod = 1000;
 	sci.maxAnisotropy = 1.0f;
 	data.font_sci = sci;
-	io.Fonts->TexID = (ImTextureID)&ptc.make_sampled_image(iv, sci);
-
+	data.font_si = std::make_unique<vuk::SampledImage>(vuk::SampledImage::Global{ iv, sci, vk::ImageLayout::eShaderReadOnlyOptimal });
+	io.Fonts->TexID = (ImTextureID)data.font_si.get();
 	{
 		vuk::PipelineCreateInfo pci;
 		pci.shaders.push_back("../../imgui.vert");
@@ -80,7 +80,7 @@ vuk::Pass util::ImGui_ImplVuk_Render(vuk::PerThreadContext& ptc, vuk::Name src_t
 	ptc.wait_all_transfers();
 	vuk::Pass pass{
 		.resources = { vuk::Resource{src_target, dst_target, vuk::Resource::Type::eImage, vuk::eColorRW} },
-		.execute = [=](vuk::CommandBuffer& command_buffer) {
+		.execute = [&data, imvert, imind, draw_data, reset_render_state](vuk::CommandBuffer& command_buffer) {
 			reset_render_state(data, command_buffer, draw_data, imvert, imind);
 			// Will project scissor/clipping rectangles into framebuffer space
 			ImVec2 clip_off = draw_data->DisplayPos;         // (0,0) unless using multi-viewports
@@ -147,6 +147,7 @@ vuk::Pass util::ImGui_ImplVuk_Render(vuk::PerThreadContext& ptc, vuk::Name src_t
 	};
 
 	// add rendergraph dependencies to be transitioned
+	// make all rendergraph sampled images available
 	for (auto& si : ptc.sampled_images.pool.values) {
 		if (!si.is_global) {
 			pass.resources.push_back(vuk::Resource(si.rg_attachment.attachment_name, vuk::Resource::Type::eImage, vuk::ImageAccess::eFragmentSampled));

@@ -22,7 +22,7 @@ namespace vuk {
 	struct Example {
 		std::string_view name;
 
-		std::function<void(ExampleRunner&)> setup;
+		std::function<void(ExampleRunner&, vuk::InflightContext&)> setup;
 		std::function<RenderGraph(ExampleRunner&, vuk::InflightContext&)> render;
 	};
 }
@@ -52,15 +52,14 @@ namespace vuk {
 			ImGui::StyleColorsDark();
 			// Setup Platform/Renderer bindings
 			ImGui_ImplGlfw_InitForVulkan(window, true);
+			auto ifc = context->begin();
 			{
-				auto ifc = context->begin();
 				auto ptc = ifc.begin();
 				imgui_data = util::ImGui_ImplVuk_Init(ptc);
 				ptc.wait_all_transfers();
 			}
-
 			for(auto& ex : examples)
-				ex->setup(*this);
+				ex->setup(*this, ifc);
 		}
 
 		void render();
