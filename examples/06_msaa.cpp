@@ -2,27 +2,31 @@
 #include <glm/mat4x4.hpp>
 #include <glm/glm.hpp>
 #include <glm/gtx/quaternion.hpp>
+#include <stb_image.h>
 
 namespace {
 	float angle = 0.f;
 	auto box = util::generate_cube();
+	vuk::ImageView image_view;
 
 	vuk::Example x{
-		.name = "03_multipass",
+		.name = "06_msaa",
 		.setup = [&](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
 			{
 			vuk::PipelineCreateInfo pci;
-			pci.shaders.push_back("../../examples/triangle.vert");
-			pci.shaders.push_back("../../examples/triangle.frag");
-			pci.depth_stencil_state.depthCompareOp = vk::CompareOp::eAlways;
-			runner.context->named_pipelines.emplace("triangle", pci);
+			pci.shaders.push_back("../../examples/ubo_test_tex.vert");
+			pci.shaders.push_back("../../examples/triangle_depthshaded_tex.frag");
+			runner.context->named_pipelines.emplace("textured_cube", pci);
 			}
-			{
-			vuk::PipelineCreateInfo pci;
-			pci.shaders.push_back("../../examples/ubo_test.vert");
-			pci.shaders.push_back("../../examples/triangle_depthshaded.frag");
-			runner.context->named_pipelines.emplace("cube", pci);
-			}
+
+			int x, y, chans;
+			auto doge_image = stbi_load("../../examples/doge.png", &x, &y, &chans, 4);
+
+			auto ptc = ifc.begin();
+			auto [img, iv, stub] = ptc.create_image(vk::Format::eR8G8B8A8Srgb, vk::Extent3D(x, y, 1), doge_image);
+			image_view = iv;
+			ptc.wait_all_transfers();
+			stbi_image_free(doge_image);
 		},
 		.render = [&](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
 			auto ptc = ifc.begin();
@@ -40,39 +44,17 @@ namespace {
 			ptc.wait_all_transfers();
 
 			vuk::RenderGraph rg;
-			rg.add_pass({
-				.resources = {"03_multipass_final"_image(vuk::eColorWrite)},
-				.execute = [&](vuk::CommandBuffer& command_buffer) {
-					command_buffer
-					  .set_viewport(0, vuk::Area::Framebuffer{0, 0, 0.2f, 0.2f})
-					  .set_scissor(0, vuk::Area::Framebuffer{0, 0, 0.2f, 0.2f})
-					  .bind_pipeline("triangle")
-					  .draw(3, 1, 0, 0);
-					}
-				}
-			);
 
 			rg.add_pass({
-				.resources = {"03_multipass_final"_image(vuk::eColorWrite)},
-				.execute = [&](vuk::CommandBuffer& command_buffer) {
-					command_buffer
-					  .set_viewport(0, vuk::Area::Framebuffer{0.8f, 0.8f, 0.2f, 0.2f})
-					  .set_scissor(0, vuk::Area::Framebuffer{0.8f, 0.8f, 0.2f, 0.2f})
-					  .bind_pipeline("triangle")
-					  .draw(3, 1, 0, 0);
-					}
-				}
-			);
-
-			rg.add_pass({
-				.resources = {"03_multipass_final"_image(vuk::eColorWrite), "03_depth"_image(vuk::eDepthStencilRW)},
+				.resources = {"06_msaa_MS"_image(vuk::eColorWrite), "06_msaa_depth"_image(vuk::eDepthStencilRW)},
 				.execute = [verts, uboVP, inds](vuk::CommandBuffer& command_buffer) {
 					command_buffer
 					  .set_viewport(0, vuk::Area::Framebuffer{})
 					  .set_scissor(0, vuk::Area::Framebuffer{})
 					  .bind_vertex_buffer(0, verts, vuk::Packed{vk::Format::eR32G32B32Sfloat, vuk::Ignore{offsetof(util::Vertex, uv_coordinates) - sizeof(util::Vertex::position)}, vk::Format::eR32G32Sfloat})
 					  .bind_index_buffer(inds, vk::IndexType::eUint32)
-					  .bind_pipeline("cube")
+					  .bind_sampled_image(0, 2, image_view, vk::SamplerCreateInfo{})
+					  .bind_pipeline("textured_cube")
 					  .bind_uniform_buffer(0, 0, uboVP);
 					glm::mat4* model = command_buffer.map_scratch_uniform_binding<glm::mat4>(0, 1);
 					*model = static_cast<glm::mat4>(glm::angleAxis(glm::radians(angle), glm::vec3(0.f, 1.f, 0.f)));
@@ -82,9 +64,11 @@ namespace {
 				}
 			);
 
-			angle += 360.f * ImGui::GetIO().DeltaTime;
+			angle += 180.f * ImGui::GetIO().DeltaTime;
 
-			rg.mark_attachment_internal("03_depth", vk::Format::eD32Sfloat, vuk::Extent2D::Framebuffer{}, vuk::Samples::e1, vuk::ClearDepthStencil{ 1.0f, 0 });
+			rg.mark_attachment_internal("06_msaa_MS", vk::Format::eR8G8B8A8Srgb, vuk::Extent2D{ 640, 480 }, vuk::Samples::e8, vuk::ClearColor{0.f, 0.f, 0.f, 1.f});
+			rg.mark_attachment_internal("06_msaa_depth", vk::Format::eD32Sfloat, vuk::Extent2D::Framebuffer{}, vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
+			rg.mark_attachment_resolve("06_msaa_final", "06_msaa_MS");
 			return rg;
 		}
 	};

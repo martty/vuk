@@ -15,7 +15,7 @@ vuk::ExampleRunner::ExampleRunner() {
 			})
 		.set_app_name("vuk_example")
 				.set_engine_name("vuk")
-				.set_api_version(1, 2, 0)
+				.require_api_version(1, 1, 0)
 				.set_app_version(0, 1, 0);
 			auto inst_ret = builder.build();
 			if (!inst_ret.has_value()) {
@@ -33,7 +33,7 @@ vuk::ExampleRunner::ExampleRunner() {
 				// error
 			}
 			vkb::PhysicalDevice vkbphysical_device = phys_ret.value();
-			physical_device = vkbphysical_device.phys_device;
+			physical_device = vkbphysical_device.physical_device;
 
 			vkb::DeviceBuilder device_builder{ vkbphysical_device };
 			auto dev_ret = device_builder.build();
@@ -41,7 +41,7 @@ vuk::ExampleRunner::ExampleRunner() {
 				// error
 			}
 			vkbdevice = dev_ret.value();
-			graphics_queue = vkb::get_graphics_queue(vkbdevice).value();
+			graphics_queue = vkbdevice.get_queue(vkb::QueueType::graphics).value();
 			device = vkbdevice.device;
 
 			context.emplace(device, physical_device);

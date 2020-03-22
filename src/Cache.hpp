@@ -340,12 +340,13 @@ namespace vuk {
 		std::vector<vuk::SubpassDescription> subpass_descriptions;
 		std::vector<vk::SubpassDependency> subpass_dependencies;
 		std::vector<vk::AttachmentReference> color_refs;
+		std::vector<vk::AttachmentReference> resolve_refs;
 		std::vector<std::optional<vk::AttachmentReference>> ds_refs;
 		std::vector<size_t> color_ref_offsets;
 
 		bool operator==(const RenderPassCreateInfo& o) const {
-			return std::forward_as_tuple(flags, attachments, subpass_descriptions, subpass_dependencies, color_refs, color_ref_offsets, ds_refs) ==
-				std::forward_as_tuple(o.flags, o.attachments, o.subpass_descriptions, o.subpass_dependencies, o.color_refs, o.color_ref_offsets, o.ds_refs);
+			return std::forward_as_tuple(flags, attachments, subpass_descriptions, subpass_dependencies, color_refs, color_ref_offsets, ds_refs, resolve_refs) ==
+				std::forward_as_tuple(o.flags, o.attachments, o.subpass_descriptions, o.subpass_dependencies, o.color_refs, o.color_ref_offsets, o.ds_refs, o.resolve_refs);
 		}
 	};
 

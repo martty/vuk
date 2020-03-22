@@ -8,6 +8,7 @@
 namespace vuk {
 	bool is_write_access(ImageAccess ia) {
 		switch (ia) {
+		case eColorResolveWrite:
 		case eColorWrite:
 		case eColorRW:
 		case eDepthStencilRW:
@@ -20,6 +21,7 @@ namespace vuk {
 
 	bool is_read_access(ImageAccess ia) {
 		switch (ia) {
+		case eColorResolveRead:
 		case eColorRead:
 		case eColorRW:
 		case eDepthStencilRead:
@@ -33,8 +35,11 @@ namespace vuk {
 
 	Resource::Use to_use(ImageAccess ia) {
 		switch (ia) {
+		case eColorResolveWrite:
 		case eColorWrite: return { vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::AccessFlagBits::eColorAttachmentWrite, vk::ImageLayout::eColorAttachmentOptimal };
 		case eColorRW: return { vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::AccessFlagBits::eColorAttachmentWrite | vk::AccessFlagBits::eColorAttachmentRead, vk::ImageLayout::eColorAttachmentOptimal };
+		case eColorResolveRead:
+		case eColorRead: return { vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::AccessFlagBits::eColorAttachmentRead, vk::ImageLayout::eColorAttachmentOptimal };
 		case eDepthStencilRW : return { vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eLateFragmentTests, vk::AccessFlagBits::eDepthStencilAttachmentRead | vk::AccessFlagBits::eDepthStencilAttachmentWrite, vk::ImageLayout::eDepthStencilAttachmentOptimal };
 
 		case eFragmentSampled: return { vk::PipelineStageFlagBits::eFragmentShader, vk::AccessFlagBits::eShaderRead, vk::ImageLayout::eShaderReadOnlyOptimal };
@@ -53,6 +58,8 @@ namespace vuk {
 		case eDepthStencilRW:
 		case eColorRead:
 		case eDepthStencilRead:
+		case eColorResolveRead:
+		case eColorResolveWrite:
 			return true;
 		default:
 			return false;
@@ -229,7 +236,7 @@ namespace vuk {
 		attachment_info.iv = {};
 		// directly presented
 		attachment_info.description.format = swp->format;
-		attachment_info.description.samples = vk::SampleCountFlagBits::e1;
+		attachment_info.samples = Samples::e1;
 
 		attachment_info.type = AttachmentRPInfo::Type::eSwapchain;
 		attachment_info.swapchain = swp;
@@ -256,7 +263,7 @@ namespace vuk {
 		bound_attachments.emplace(name, attachment_info);
 	}
 
-	void RenderGraph::mark_attachment_internal(Name name, vk::Format format, vuk::Extent2D extent, Clear c) {
+	void RenderGraph::mark_attachment_internal(Name name, vk::Format format, vuk::Extent2D extent, vuk::Samples samp, Clear c) {
 		AttachmentRPInfo attachment_info;
 		attachment_info.sizing = AttachmentRPInfo::Sizing::eAbsolute;
 		attachment_info.extents = extent;
@@ -264,6 +271,7 @@ namespace vuk {
 
 		attachment_info.type = AttachmentRPInfo::Type::eInternal;
 		attachment_info.description.format = format;
+		attachment_info.samples = samp;
 
 		attachment_info.should_clear = true;
 		attachment_info.clear_value = c;
@@ -282,7 +290,7 @@ namespace vuk {
 		bound_attachments.emplace(name, attachment_info);
 	}
 
-	void RenderGraph::mark_attachment_internal(Name name, vk::Format format, vuk::Extent2D::Framebuffer fbrel, Clear c) {
+	void RenderGraph::mark_attachment_internal(Name name, vk::Format format, vuk::Extent2D::Framebuffer fbrel, vuk::Samples samp, Clear c) {
 		AttachmentRPInfo attachment_info;
 		attachment_info.sizing = AttachmentRPInfo::Sizing::eFramebufferRelative;
 		attachment_info.fb_relative = fbrel;
@@ -290,6 +298,7 @@ namespace vuk {
 
 		attachment_info.type = AttachmentRPInfo::Type::eInternal;
 		attachment_info.description.format = format;
+		attachment_info.samples = samp;
 
 		attachment_info.should_clear = true;
 		attachment_info.clear_value = c;
@@ -306,6 +315,16 @@ namespace vuk {
 		final.stages = vk::PipelineStageFlagBits::eBottomOfPipe;
 
 		bound_attachments.emplace(name, attachment_info);
+	}
+
+	void RenderGraph::mark_attachment_resolve(Name resolved_name, Name ms_name) {
+		add_pass({
+			.resources = {
+				vuk::Resource{ms_name, ms_name, vuk::Resource::Type::eImage, vuk::eColorResolveRead},
+				vuk::Resource{resolved_name, resolved_name, vuk::Resource::Type::eImage, vuk::eColorResolveWrite}
+			},
+			.resolves = {{ms_name, resolved_name}}
+		});
 	}
 
 	void RenderGraph::build(vuk::PerThreadContext& ptc) {
@@ -327,13 +346,7 @@ namespace vuk {
 						if (is_framebuffer_attachment(left.use)) {
 							auto& rp_att = *contains_if(left_rp.attachments, [name](auto& att) {return att.name == name; });
 
-							rp_att.description.format = attachment_info.description.format;
-							rp_att.description.samples = attachment_info.description.samples;
-							rp_att.iv = attachment_info.iv;
-							rp_att.extents = attachment_info.extents;
-							rp_att.clear_value = attachment_info.clear_value;
-							rp_att.should_clear = attachment_info.should_clear;
-							rp_att.type = attachment_info.type;
+							sync_bound_attachment_to_renderpass(rp_att, attachment_info);
 							// if there is a "right" rp
 							// or if this attachment has a required end layout
 							// then we transition for it
@@ -369,10 +382,7 @@ namespace vuk {
 						if (is_framebuffer_attachment(right.use)) {
 							auto& rp_att = *contains_if(right_rp.attachments, [name](auto& att) {return att.name == name; });
 
-							rp_att.description.format = attachment_info.description.format;
-							rp_att.description.samples = attachment_info.description.samples;
-							rp_att.iv = attachment_info.iv;
-							rp_att.extents = attachment_info.extents;
+							sync_bound_attachment_to_renderpass(rp_att, attachment_info);
 							// we will have "left" transition for us
 							if (left.pass) {
 								rp_att.description.initialLayout = right.use.layout;
@@ -434,14 +444,17 @@ namespace vuk {
 			auto& rp = rpis[pass.render_pass_index];
 			auto subpass_index = pass.subpass;
 			auto& color_attrefs = rp.rpci.color_refs;
+			auto& resolve_attrefs = rp.rpci.resolve_refs;
 			auto& color_ref_offsets = rp.rpci.color_ref_offsets;
 			auto& ds_attrefs = rp.rpci.ds_refs;
 
 			for (auto& res : pass.pass.resources) {
 				if (!is_framebuffer_attachment(res))
 					continue;
-
+				if (res.ia == vuk::ImageAccess::eColorResolveWrite) // resolve attachment are added when processing the color attachment
+					continue;
 				vk::AttachmentReference attref;
+
 				auto name = resolve_name(res.use_name, aliases);
 				auto& bound = bound_attachments[name];
 				auto& chain = use_chains[name];
@@ -455,18 +468,30 @@ namespace vuk {
 						ds_attrefs[subpass_index] = attref;
 					}
 				} else {
+
+					vk::AttachmentReference rref;
+					rref.attachment = VK_ATTACHMENT_UNUSED;
+					if (auto it = pass.pass.resolves.find(res.use_name); it != pass.pass.resolves.end()) {
+						// this a resolve src attachment
+						// get the dst attachment
+						auto& dst_name = it->second;
+						rref.layout = vk::ImageLayout::eColorAttachmentOptimal; // the only possible layout for resolves
+						rref.attachment = std::distance(rp.attachments.begin(), std::find_if(rp.attachments.begin(), rp.attachments.end(), [&](auto& att) { return dst_name == att.name; }));
+					}
+
 					// we insert the new attachment at the end of the list for current subpass index
 					if (subpass_index < rp.subpasses.size() - 1) {
 						auto next_start = color_ref_offsets[subpass_index + 1];
 						color_attrefs.insert(color_attrefs.begin() + next_start, attref);
+						resolve_attrefs.insert(resolve_attrefs.begin() + next_start, rref);
 					} else {
 						color_attrefs.push_back(attref);
+						resolve_attrefs.push_back(rref);
 					}
 					for (size_t i = subpass_index + 1; i < rp.subpasses.size(); i++) {
 						color_ref_offsets[i]++;
 					}
 				}
-
 			}
 		}
 
@@ -474,15 +499,18 @@ namespace vuk {
 			auto& subp = rp.rpci.subpass_descriptions;
 			auto& color_attrefs = rp.rpci.color_refs;
 			auto& color_ref_offsets = rp.rpci.color_ref_offsets;
+			auto& resolve_attrefs = rp.rpci.resolve_refs;
 			auto& ds_attrefs = rp.rpci.ds_refs;
 
 			// subpasses
 			for (size_t i = 0; i < rp.subpasses.size(); i++) {
 				vuk::SubpassDescription sd;
-				auto count = color_attrefs.size() - color_ref_offsets[i] - (i > 0 ? color_ref_offsets[i - 1] : 0);
-				auto first = color_attrefs.data() + color_ref_offsets[i];
-				sd.colorAttachmentCount = count;
-				sd.pColorAttachments = first;
+				auto color_count = color_attrefs.size() - color_ref_offsets[i] - (i > 0 ? color_ref_offsets[i - 1] : 0);
+				{
+					auto first = color_attrefs.data() + color_ref_offsets[i];
+					sd.colorAttachmentCount = color_count;
+					sd.pColorAttachments = first;
+				}
 
 				sd.pDepthStencilAttachment = ds_attrefs[i] ? &*ds_attrefs[i] : nullptr;
 				sd.flags = {};
@@ -491,7 +519,10 @@ namespace vuk {
 				sd.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
 				sd.preserveAttachmentCount = 0;
 				sd.pPreserveAttachments = nullptr;
-				sd.pResolveAttachments = nullptr;
+				{
+					auto first = resolve_attrefs.data() + color_ref_offsets[i];
+					sd.pResolveAttachments = first;
+				}
 
 				subp.push_back(sd);
 			}
@@ -503,7 +534,19 @@ namespace vuk {
 			rp.rpci.pDependencies = rp.rpci.subpass_dependencies.data();
 
 			// attachments
+			vuk::Samples samples(vk::SampleCountFlagBits::e1);
 			for (auto& attrpinfo : rp.attachments) {
+				auto& bound = bound_attachments.at(attrpinfo.name);
+				if (!bound.samples.infer) {
+					samples = bound.samples;
+				}
+			}
+			for (auto& attrpinfo : rp.attachments) {
+				if (attrpinfo.samples.infer) {
+					attrpinfo.description.samples = samples.count;
+				} else {
+					attrpinfo.description.samples = attrpinfo.samples.count;
+				}
 				rp.rpci.attachments.push_back(attrpinfo.description);
 			}
 			
@@ -512,6 +555,17 @@ namespace vuk {
 
 			rp.handle = ptc.renderpass_cache.acquire(rp.rpci);
 		}
+	}
+
+	void sync_bound_attachment_to_renderpass(vuk::RenderGraph::AttachmentRPInfo& rp_att, vuk::RenderGraph::AttachmentRPInfo& attachment_info) {
+		rp_att.description.format = attachment_info.description.format;
+		rp_att.samples = attachment_info.samples;
+		rp_att.description.samples = attachment_info.samples.count;
+		rp_att.iv = attachment_info.iv;
+		rp_att.extents = attachment_info.extents;
+		rp_att.clear_value = attachment_info.clear_value;
+		rp_att.should_clear = attachment_info.should_clear;
+		rp_att.type = attachment_info.type;
 	}
 
 	vk::ImageUsageFlags RenderGraph::compute_usage(std::vector<vuk::RenderGraph::UseRef>& chain) {
@@ -530,7 +584,7 @@ namespace vuk {
 		return usage;
 	}
 
-	void RenderGraph::create_attachment(PerThreadContext& ptc, Name name, RenderGraph::AttachmentRPInfo& attachment_info, vuk::Extent2D fb_extent) {
+	void RenderGraph::create_attachment(PerThreadContext& ptc, Name name, RenderGraph::AttachmentRPInfo& attachment_info, vuk::Extent2D fb_extent, vk::SampleCountFlagBits samples) {
 		auto& chain = use_chains.at(name);
 		if (attachment_info.type == AttachmentRPInfo::Type::eInternal) {
 			vk::ImageUsageFlags usage = compute_usage(chain);
@@ -549,7 +603,7 @@ namespace vuk {
 			ici.format = attachment_info.description.format;
 			ici.mipLevels = 1;
 			ici.initialLayout = vk::ImageLayout::eUndefined;
-			ici.samples = vk::SampleCountFlagBits::e1; // should match renderpass
+			ici.samples = samples;
 			ici.sharingMode = vk::SharingMode::eExclusive;
 			ici.tiling = vk::ImageTiling::eOptimal;
 
@@ -588,7 +642,7 @@ namespace vuk {
 			std::vector<vk::ImageView> vkivs;
 			vk::Extent2D fb_extent;
 
-			// bind swapchain attachments, deduce framebuffer size
+			// bind swapchain attachments, deduce framebuffer size & sample count
 			for (auto& attrpinfo : rp.attachments) {
 				auto& bound = bound_attachments[attrpinfo.name];
 
@@ -607,7 +661,7 @@ namespace vuk {
 				auto& bound = bound_attachments[attrpinfo.name];
 
 				if (bound.type == AttachmentRPInfo::Type::eInternal) {
-					create_attachment(ptc, attrpinfo.name, bound, fb_extent);
+					create_attachment(ptc, attrpinfo.name, bound, fb_extent, attrpinfo.description.samples);
 				}
 
 				ivs.push_back(bound.iv);
@@ -652,8 +706,14 @@ namespace vuk {
 				rpi.extent = vk::Extent2D(rpass.fbci.width, rpass.fbci.height);
 				auto& spdesc = rpass.rpci.subpass_descriptions[i];
 				rpi.color_attachments = gsl::span<const vk::AttachmentReference>(spdesc.pColorAttachments, spdesc.colorAttachmentCount);
+				for (auto& ca : rpi.color_attachments) {
+					auto& att = rpass.attachments[ca.attachment];
+					if(!att.samples.infer)
+						rpi.samples = att.samples.count;
+				}
 				cobuf.ongoing_renderpass = rpi;
-				sp.pass->pass.execute(cobuf);
+				if(sp.pass->pass.execute)
+					sp.pass->pass.execute(cobuf);
 				if (i < rpass.subpasses.size() - 1)
 					cbuf.nextSubpass(vk::SubpassContents::eInline);
 			}
@@ -734,6 +794,8 @@ namespace vuk {
 
 		pi.dynamic_state.pDynamicStates = pi.dynamic_states.data();
 		pi.dynamic_state.dynamicStateCount = gsl::narrow_cast<unsigned>(pi.dynamic_states.size());
+
+		pi.multisample_state.rasterizationSamples = ongoing_renderpass->samples;
 
 		// last blend attachment is replicated to cover all attachments
 		if (pi.color_blend_attachments.size() < ongoing_renderpass->color_attachments.size()) {

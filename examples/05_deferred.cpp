@@ -82,10 +82,10 @@ namespace {
 				}
 			);
 
-			rg.mark_attachment_internal("05_position", vk::Format::eR16G16B16A16Sfloat, vuk::Extent2D{300, 300}, vuk::ClearColor{ 1.f,0.f,0.f,0.f });
-			rg.mark_attachment_internal("05_normal", vk::Format::eR16G16B16A16Sfloat, vuk::Extent2D::Framebuffer{}, vuk::ClearColor{ 0.f, 1.f, 0.f, 0.f });
-			rg.mark_attachment_internal("05_color", vk::Format::eR8G8B8A8Unorm, vuk::Extent2D::Framebuffer{}, vuk::ClearColor{ 0.f, 0.f, 1.f, 0.f });
-			rg.mark_attachment_internal("05_depth", vk::Format::eD32Sfloat, vuk::Extent2D::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
+			rg.mark_attachment_internal("05_position", vk::Format::eR16G16B16A16Sfloat, vuk::Extent2D{300, 300}, vuk::Samples::e1, vuk::ClearColor{ 1.f,0.f,0.f,0.f });
+			rg.mark_attachment_internal("05_normal", vk::Format::eR16G16B16A16Sfloat, vuk::Extent2D::Framebuffer{}, vuk::Samples::e1, vuk::ClearColor{ 0.f, 1.f, 0.f, 0.f });
+			rg.mark_attachment_internal("05_color", vk::Format::eR8G8B8A8Unorm, vuk::Extent2D::Framebuffer{}, vuk::Samples::e1, vuk::ClearColor{ 0.f, 0.f, 1.f, 0.f });
+			rg.mark_attachment_internal("05_depth", vk::Format::eD32Sfloat, vuk::Extent2D::Framebuffer{}, vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
 
 			return rg;
 		}

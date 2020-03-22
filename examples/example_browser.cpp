@@ -17,7 +17,7 @@ vuk::ExampleRunner::ExampleRunner() {
 			})
 		.set_app_name("vuk_example")
 				.set_engine_name("vuk")
-				.set_api_version(1, 2, 0)
+				.require_api_version(1, 1, 0)
 				.set_app_version(0, 1, 0);
 			auto inst_ret = builder.build();
 			if (!inst_ret.has_value()) {
@@ -35,7 +35,7 @@ vuk::ExampleRunner::ExampleRunner() {
 				// error
 			}
 			vkb::PhysicalDevice vkbphysical_device = phys_ret.value();
-			physical_device = vkbphysical_device.phys_device;
+			physical_device = vkbphysical_device.physical_device;
 
 			vkb::DeviceBuilder device_builder{ vkbphysical_device };
 			auto dev_ret = device_builder.build();
@@ -43,16 +43,16 @@ vuk::ExampleRunner::ExampleRunner() {
 				// error
 			}
 			vkbdevice = dev_ret.value();
-			graphics_queue = vkb::get_graphics_queue(vkbdevice).value();
+			graphics_queue = vkbdevice.get_queue(vkb::QueueType::graphics).value();
 			device = vkbdevice.device;
-
+			
 			context.emplace(device, physical_device);
 			context->graphics_queue = graphics_queue;
 
 			swapchain = context->add_swapchain(util::make_swapchain(vkbdevice));
 }
 
-bool render_all = true;
+bool render_all = false;
 
 void vuk::ExampleRunner::render() {
 	chosen_resource.resize(examples.size());
@@ -108,7 +108,7 @@ void vuk::ExampleRunner::render() {
 				rg.bound_attachments.insert(rg_frag.bound_attachments.begin(), rg_frag.bound_attachments.end());
 				auto& attachment_name = *attachment_names.emplace(std::string(ex->name) + "_final");
 
-				rg.mark_attachment_internal(attachment_name, vk::Format::eR8G8B8A8Srgb, vk::Extent2D(200.f, 200.f), vuk::ClearColor(0.1, 0.2, 0.3, 1.f));
+				rg.mark_attachment_internal(attachment_name, vk::Format::eR8G8B8A8Srgb, vk::Extent2D(640.f, 480.f), vuk::Samples::e1, vuk::ClearColor(0.1, 0.2, 0.3, 1.f));
 				ImGui::Begin(ex->name.data());
 				if (rg_frag.use_chains.size() > 1) {
 					for (auto& c : rg_frag.use_chains) {

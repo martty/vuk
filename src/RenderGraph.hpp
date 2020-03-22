@@ -88,6 +88,8 @@ namespace vuk {
 		eColorRW,
 		eColorWrite,
 		eColorRead,
+		eColorResolveRead, // special op to mark renderpass resolve read
+		eColorResolveWrite, // special op to mark renderpass resolve write
 		eDepthStencilRW,
 		eDepthStencilRead,
 		eInputRead,
@@ -96,6 +98,25 @@ namespace vuk {
 		eFragmentSampled,
 		eFragmentRead,
 		eFragmentWrite // written using image store
+	};
+
+	struct Samples {
+		vk::SampleCountFlagBits count;
+		bool infer;
+
+		struct Framebuffer {};
+
+		Samples() : infer(false), count(vk::SampleCountFlagBits::e1) {}
+		Samples(vk::SampleCountFlagBits samples) : count(samples), infer(false) {}
+		Samples(Framebuffer) : infer(true) {}
+
+		constexpr static auto e1 = vk::SampleCountFlagBits::e1;
+		constexpr static auto e2 = vk::SampleCountFlagBits::e2;
+		constexpr static auto e4 = vk::SampleCountFlagBits::e4;
+		constexpr static auto e8 = vk::SampleCountFlagBits::e8;
+		constexpr static auto e16 = vk::SampleCountFlagBits::e16;
+		constexpr static auto e32 = vk::SampleCountFlagBits::e32;
+		constexpr static auto e64 = vk::SampleCountFlagBits::e64;
 	};
 
 	struct Resource;
@@ -141,8 +162,10 @@ namespace vuk {
 		float auxiliary_order = 0.f;
 
 		std::vector<Resource> resources;
+		std::unordered_map<Name, Name> resolves; // src -> dst
 
 		std::function<void(vuk::CommandBuffer&)> execute;
+
 		//void(*execute)(struct CommandBuffer&);
 	};
 }
@@ -331,6 +354,8 @@ namespace vuk {
 			} sizing;
 			vuk::Extent2D::Framebuffer fb_relative;
 			vuk::Extent2D extents;
+			vuk::Samples samples;
+
 			vk::AttachmentDescription description;
 
 			Resource::Use initial, final;
@@ -383,16 +408,18 @@ namespace vuk {
 		// RGscaffold
 		std::unordered_map<Name, AttachmentRPInfo> bound_attachments;
 		void bind_attachment_to_swapchain(Name name, Swapchain* swp, Clear);
-		void mark_attachment_internal(Name, vk::Format, vuk::Extent2D, Clear);
-		void mark_attachment_internal(Name, vk::Format, vuk::Extent2D::Framebuffer, Clear);
+		void mark_attachment_internal(Name, vk::Format, vuk::Extent2D, vuk::Samples, Clear);
+		void mark_attachment_internal(Name, vk::Format, vuk::Extent2D::Framebuffer, vuk::Samples, Clear);
+		void mark_attachment_resolve(Name resolved_name, Name ms_name);
 		vk::ImageUsageFlags compute_usage(std::vector<vuk::RenderGraph::UseRef>& chain);
 
 		// RG
 		void build(vuk::PerThreadContext&);
-		void create_attachment(vuk::PerThreadContext&, Name name, RenderGraph::AttachmentRPInfo& attachment_info, vuk::Extent2D extents);
+		void create_attachment(vuk::PerThreadContext&, Name name, RenderGraph::AttachmentRPInfo& attachment_info, vuk::Extent2D extents, vk::SampleCountFlagBits);
 		vk::CommandBuffer execute(vuk::PerThreadContext&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
 
 		// debug
 		void generate_graph_visualization();
 	};
+	void sync_bound_attachment_to_renderpass(vuk::RenderGraph::AttachmentRPInfo& rp_att, vuk::RenderGraph::AttachmentRPInfo& attachment_info);
 }

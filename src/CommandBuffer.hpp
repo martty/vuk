@@ -73,6 +73,7 @@ namespace vuk {
 		vk::RenderPass renderpass;
 		uint32_t subpass;
 		vk::Extent2D extent;
+		vk::SampleCountFlagBits samples;
 		gsl::span<const vk::AttachmentReference> color_attachments;
 	};
 
