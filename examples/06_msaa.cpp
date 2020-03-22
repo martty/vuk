@@ -66,7 +66,7 @@ namespace {
 
 			angle += 180.f * ImGui::GetIO().DeltaTime;
 
-			rg.mark_attachment_internal("06_msaa_MS", vk::Format::eR8G8B8A8Srgb, vuk::Extent2D{ 640, 480 }, vuk::Samples::e8, vuk::ClearColor{0.f, 0.f, 0.f, 1.f});
+			rg.mark_attachment_internal("06_msaa_MS", vk::Format::eR8G8B8A8Srgb, vuk::Extent2D::Framebuffer{}, vuk::Samples::e8, vuk::ClearColor{ 0.f, 0.f, 0.f, 1.f });
 			rg.mark_attachment_internal("06_msaa_depth", vk::Format::eD32Sfloat, vuk::Extent2D::Framebuffer{}, vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
 			rg.mark_attachment_resolve("06_msaa_final", "06_msaa_MS");
 			return rg;

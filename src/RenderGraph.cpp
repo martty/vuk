@@ -638,9 +638,8 @@ namespace vuk {
 	vk::CommandBuffer RenderGraph::execute(vuk::PerThreadContext& ptc, std::vector<std::pair<SwapChainRef, size_t>> swp_with_index) {		
 		// create framebuffers, create & bind attachments
 		for (auto& rp : rpis) {
-			auto& ivs = rp.fbci.attachments;
-			std::vector<vk::ImageView> vkivs;
 			vk::Extent2D fb_extent;
+			bool extent_known = false;
 
 			// bind swapchain attachments, deduce framebuffer size & sample count
 			for (auto& attrpinfo : rp.attachments) {
@@ -650,16 +649,37 @@ namespace vuk {
 					auto it = std::find_if(swp_with_index.begin(), swp_with_index.end(), [&](auto& t) { return t.first == bound.swapchain; });
 					bound.iv = it->first->image_views[it->second];
 					fb_extent = it->first->extent;
+					extent_known = true;
 				} else {
 					if (bound.sizing == AttachmentRPInfo::Sizing::eAbsolute) {
 						fb_extent = bound.extents;
+						extent_known = true;
 					}
 				}
 			}
+
+			for (auto& attrpinfo : rp.attachments) {
+				auto& bound = bound_attachments[attrpinfo.name];
+				if (extent_known) {
+					bound.extents = fb_extent;
+				}
+			}
+		}
+
+		for (auto& rp : rpis) {
+			auto& ivs = rp.fbci.attachments;
+			std::vector<vk::ImageView> vkivs;
+			vk::Extent2D fb_extent;
+
+			for (auto& attrpinfo : rp.attachments) {
+				auto& bound = bound_attachments[attrpinfo.name];
+				if (bound.extents.width > 0 && bound.extents.height > 0)
+					fb_extent = bound.extents;
+			}
+			
 			// create internal attachments; bind attachments to fb
 			for (auto& attrpinfo : rp.attachments) {
 				auto& bound = bound_attachments[attrpinfo.name];
-
 				if (bound.type == AttachmentRPInfo::Type::eInternal) {
 					create_attachment(ptc, attrpinfo.name, bound, fb_extent, attrpinfo.description.samples);
 				}
@@ -688,11 +708,11 @@ namespace vuk {
 			vk::RenderPassBeginInfo rbi;
 			rbi.renderPass = rpass.handle;
 			rbi.framebuffer = rpass.framebuffer;
-			rbi.renderArea = vk::Rect2D(vk::Offset2D{}, vk::Extent2D{rpass.fbci.width, rpass.fbci.height});
+			rbi.renderArea = vk::Rect2D(vk::Offset2D{}, vk::Extent2D{ rpass.fbci.width, rpass.fbci.height });
 			std::vector<vk::ClearValue> clears;
 			for (size_t i = 0; i < rpass.attachments.size(); i++) {
 				auto& att = rpass.attachments[i];
-				if(att.should_clear)
+				if (att.should_clear)
 					clears.push_back(att.clear_value.c);
 			}
 			rbi.pClearValues = clears.data();
@@ -708,11 +728,11 @@ namespace vuk {
 				rpi.color_attachments = gsl::span<const vk::AttachmentReference>(spdesc.pColorAttachments, spdesc.colorAttachmentCount);
 				for (auto& ca : rpi.color_attachments) {
 					auto& att = rpass.attachments[ca.attachment];
-					if(!att.samples.infer)
+					if (!att.samples.infer)
 						rpi.samples = att.samples.count;
 				}
 				cobuf.ongoing_renderpass = rpi;
-				if(sp.pass->pass.execute)
+				if (sp.pass->pass.execute)
 					sp.pass->pass.execute(cobuf);
 				if (i < rpass.subpasses.size() - 1)
 					cbuf.nextSubpass(vk::SubpassContents::eInline);
@@ -723,8 +743,7 @@ namespace vuk {
 		return cbuf;
 	}
 
-	void RenderGraph::generate_graph_visualization() {
-	}
+	void RenderGraph::generate_graph_visualization() {}
 
 	CommandBuffer& CommandBuffer::set_viewport(unsigned index, vk::Viewport vp) {
 		command_buffer.setViewport(index, vp);
@@ -763,7 +782,7 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::set_scissor(unsigned index, Area area) {
-		command_buffer.setScissor(index, vk::Rect2D{area.offset, area.extent});
+		command_buffer.setScissor(index, vk::Rect2D{ area.offset, area.extent });
 		return *this;
 	}
 
