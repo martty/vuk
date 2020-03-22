@@ -428,21 +428,26 @@ namespace vuk {
 		}
 	
 		// we now have enough data to build vk::RenderPasses and vk::Framebuffers
-		for (auto& [name, attachment_info] : bound_attachments) {
-			auto& chain = use_chains[name];
-			for (auto& c : chain) {
-				if (!c.pass) continue; // not a real pass
-				auto& rp = rpis[c.pass->render_pass_index];
+		// we have to assign the proper attachments to proper slots
+		// the order is given by the resource binding order
+		for (auto& pass : passes) {
+			auto& rp = rpis[pass.render_pass_index];
+			auto subpass_index = pass.subpass;
+			auto& color_attrefs = rp.rpci.color_refs;
+			auto& color_ref_offsets = rp.rpci.color_ref_offsets;
+			auto& ds_attrefs = rp.rpci.ds_refs;
 
-				auto& subp = rp.rpci.subpass_descriptions;
-				auto& color_attrefs = rp.rpci.color_refs;
-				auto& color_ref_offsets = rp.rpci.color_ref_offsets;
-				auto& ds_attrefs = rp.rpci.ds_refs;
-
-				auto subpass_index = c.pass->subpass;
+			for (auto& res : pass.pass.resources) {
+				if (!is_framebuffer_attachment(res))
+					continue;
 
 				vk::AttachmentReference attref;
-				attref.layout = c.use.layout;
+				auto name = resolve_name(res.use_name, aliases);
+				auto& bound = bound_attachments[name];
+				auto& chain = use_chains[name];
+				auto cit = std::find_if(chain.begin(), chain.end(), [&](auto& useref) { return useref.pass == &pass; });
+				assert(cit != chain.end());
+				attref.layout = cit->use.layout;
 				attref.attachment = std::distance(rp.attachments.begin(), std::find_if(rp.attachments.begin(), rp.attachments.end(), [&](auto& att) { return name == att.name; }));
 
 				if (attref.layout != vk::ImageLayout::eColorAttachmentOptimal) {
@@ -450,11 +455,18 @@ namespace vuk {
 						ds_attrefs[subpass_index] = attref;
 					}
 				} else {
-					color_attrefs.insert(color_attrefs.begin() + color_ref_offsets[subpass_index], attref);
+					// we insert the new attachment at the end of the list for current subpass index
+					if (subpass_index < rp.subpasses.size() - 1) {
+						auto next_start = color_ref_offsets[subpass_index + 1];
+						color_attrefs.insert(color_attrefs.begin() + next_start, attref);
+					} else {
+						color_attrefs.push_back(attref);
+					}
 					for (size_t i = subpass_index + 1; i < rp.subpasses.size(); i++) {
 						color_ref_offsets[i]++;
 					}
 				}
+
 			}
 		}
 
@@ -469,8 +481,6 @@ namespace vuk {
 				vuk::SubpassDescription sd;
 				auto count = color_attrefs.size() - color_ref_offsets[i] - (i > 0 ? color_ref_offsets[i - 1] : 0);
 				auto first = color_attrefs.data() + color_ref_offsets[i];
-				// TODO: is sorting here correct?
-				std::sort(first, first + count, [](auto& l, auto& r) { return l.attachment < r.attachment; });
 				sd.colorAttachmentCount = count;
 				sd.pColorAttachments = first;
 
