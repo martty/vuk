@@ -111,21 +111,41 @@ void vuk::ExampleRunner::render() {
 				rg.mark_attachment_internal(attachment_name, vk::Format::eR8G8B8A8Srgb, vk::Extent2D(300.f, 300.f), vuk::Samples::e1, vuk::ClearColor(0.1, 0.2, 0.3, 1.f));
 				ImGui::Begin(ex->name.data());
 				if (rg_frag.use_chains.size() > 1) {
+					bool disable = false;
 					for (auto& c : rg_frag.use_chains) {
 						std::string btn_id = "";
 						if (c.first == attachment_name) {
+							disable = false;
 							btn_id = "F";
 						} else {
 							auto usage = rg_frag.compute_usage(c.second);
+							auto bound_it = rg_frag.bound_attachments.find(c.first);
+							auto samples = vk::SampleCountFlagBits::e1;
+							if (bound_it != rg_frag.bound_attachments.end()) {
+								if (!bound_it->second.samples.infer)
+									samples = bound_it->second.samples.count;
+								else if (disable) {
+									samples = vk::SampleCountFlagBits::e2; // hack: disable potentially MS attachments
+								}
+							}
+							disable = samples != vk::SampleCountFlagBits::e1;
 							if (usage & vk::ImageUsageFlagBits::eColorAttachment) {
 								btn_id += "C";
 							} else if (usage & vk::ImageUsageFlagBits::eDepthStencilAttachment) {
 								btn_id += "D";
 							}
 						}
-						btn_id += "##" + std::string(c.first);
-						if (ImGui::Button(btn_id.c_str())) {
-							chosen_resource[i] = c.first;
+						if (disable) {
+							btn_id += " (MS)";
+						} else {
+							btn_id += "##" + std::string(c.first);
+						}
+						if (disable) {
+							ImGui::TextDisabled("%s", btn_id.c_str());
+						} else {
+							if (ImGui::Button(btn_id.c_str())) {
+								chosen_resource[i] = c.first;
+							}
 						}
 						if (ImGui::IsItemHovered())
 							ImGui::SetTooltip(c.first.data());
