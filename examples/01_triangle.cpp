@@ -8,7 +8,7 @@ namespace {
 			pci.shaders.push_back("../../examples/triangle.vert");
 			pci.shaders.push_back("../../examples/triangle.frag");
 			pci.depth_stencil_state.depthCompareOp = vk::CompareOp::eAlways;
-			runner.context->named_pipelines.emplace("triangle", pci);
+			runner.context->create_named_pipeline("triangle", pci);
 		},
 		.render = [&](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
 			auto ptc = ifc.begin();

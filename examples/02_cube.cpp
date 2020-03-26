@@ -13,7 +13,7 @@ namespace {
 			vuk::PipelineCreateInfo pci;
 			pci.shaders.push_back("../../examples/ubo_test.vert");
 			pci.shaders.push_back("../../examples/triangle_depthshaded.frag");
-			runner.context->named_pipelines.emplace("cube", pci);
+			runner.context->create_named_pipeline("cube", pci);
 		},
 		.render = [&](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
 			auto ptc = ifc.begin();

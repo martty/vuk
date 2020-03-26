@@ -14,14 +14,14 @@ namespace {
 			vuk::PipelineCreateInfo pci;
 			pci.shaders.push_back("../../examples/deferred.vert");
 			pci.shaders.push_back("../../examples/deferred.frag");
-			runner.context->named_pipelines.emplace("cube_deferred", pci);
+			runner.context->create_named_pipeline("cube_deferred", pci);
 			}
 
 			{
 			vuk::PipelineCreateInfo pci;
 			pci.shaders.push_back("../../examples/fullscreen.vert");
 			pci.shaders.push_back("../../examples/deferred_resolve.frag");
-			runner.context->named_pipelines.emplace("deferred_resolve", pci);
+			runner.context->create_named_pipeline("deferred_resolve", pci);
 			}
 
 		},

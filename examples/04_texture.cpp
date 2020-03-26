@@ -16,7 +16,7 @@ namespace {
 			vuk::PipelineCreateInfo pci;
 			pci.shaders.push_back("../../examples/ubo_test_tex.vert");
 			pci.shaders.push_back("../../examples/triangle_depthshaded_tex.frag");
-			runner.context->named_pipelines.emplace("textured_cube", pci);
+			runner.context->create_named_pipeline("textured_cube", pci);
 			}
 
 			int x, y, chans;

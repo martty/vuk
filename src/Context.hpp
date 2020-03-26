@@ -162,6 +162,7 @@ namespace vuk {
 		std::array<std::vector<vk::Image>, Context::FC> image_recycle;
 		std::array<std::vector<vk::ImageView>, Context::FC> image_view_recycle;
 
+		std::mutex named_pipelines_lock;
 		std::unordered_map<std::string_view, create_info_t<vuk::PipelineInfo>> named_pipelines;
 
 		plf::colony<Swapchain> swapchains;
@@ -197,11 +198,9 @@ namespace vuk {
 			vk_pipeline_cache = device.createPipelineCacheUnique({});
 		}
 
-		template<class T>
-		void create_named(const char* name, create_info_t<T> ci) {
-			if constexpr (std::is_same_v<T, vk::Pipeline>) {
-				named_pipelines.emplace(name, ci);
-			}
+		void create_named_pipeline(const char* name, vuk::PipelineCreateInfo ci) {
+			std::lock_guard _(named_pipelines_lock);
+			named_pipelines.emplace(name, std::move(ci));
 		}
 
 		Program compile(gsl::span<std::string> shaders);
