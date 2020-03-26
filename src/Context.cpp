@@ -36,3 +36,24 @@ void vuk::execute_submit_and_present_to_one(PerThreadContext& ptc, RenderGraph& 
 	ptc.ctx.graphics_queue.presentKHR(pi);
 }
 
+void vuk::Context::DebugUtils::set_name(const vuk::ImageView& iv, Name name) {
+	if (!enabled()) return;
+	vk::DebugUtilsObjectNameInfoEXT info;
+	info.pObjectName = name.data();
+	info.objectType = iv.payload.objectType;
+	info.objectHandle = reinterpret_cast<uint64_t>((VkImageView)iv.payload);
+	setDebugUtilsObjectNameEXT(ctx.device, &(VkDebugUtilsObjectNameInfoEXT)info);
+}
+
+void vuk::Context::DebugUtils::begin_region(const vk::CommandBuffer& cb, Name name, std::array<float, 4> color) {
+	if (!enabled()) return;
+	vk::DebugUtilsLabelEXT label;
+	label.pLabelName = name.data();
+	::memcpy(label.color, color.data(), sizeof(float) * 4);
+	cmdBeginDebugUtilsLabelEXT(cb, &(VkDebugUtilsLabelEXT)label);
+}
+
+void vuk::Context::DebugUtils::end_region(const vk::CommandBuffer& cb) {
+	if (!enabled()) return;
+	cmdEndDebugUtilsLabelEXT(cb);
+}

@@ -14,14 +14,14 @@ namespace {
 			vuk::PipelineCreateInfo pci;
 			pci.shaders.push_back("../../examples/deferred.vert");
 			pci.shaders.push_back("../../examples/deferred.frag");
-			runner.context->create_named_pipeline("cube_deferred", pci);
+			runner.context->named_pipelines.emplace("cube_deferred", pci);
 			}
 
 			{
 			vuk::PipelineCreateInfo pci;
 			pci.shaders.push_back("../../examples/fullscreen.vert");
 			pci.shaders.push_back("../../examples/deferred_resolve.frag");
-			runner.context->create_named_pipeline("deferred_resolve", pci);
+			runner.context->named_pipelines.emplace("deferred_resolve", pci);
 			}
 
 		},
@@ -44,6 +44,7 @@ namespace {
 			vuk::RenderGraph rg;
 			// MRT pass
 			rg.add_pass({
+				.name = "05_deferred_MRT",
 				.resources = {"05_position"_image(vuk::eColorWrite), "05_normal"_image(vuk::eColorWrite), "05_color"_image(vuk::eColorWrite), "05_depth"_image(vuk::eDepthStencilRW)},
 				.execute = [verts, uboVP, inds](vuk::CommandBuffer& command_buffer) {
 					command_buffer
@@ -64,6 +65,7 @@ namespace {
 			angle += 360.f * ImGui::GetIO().DeltaTime;
 
 			rg.add_pass({
+				.name = "05_deferred_resolve",
 				.resources = {"05_deferred_final"_image(vuk::eColorWrite), "05_position"_image(vuk::eFragmentSampled), "05_normal"_image(vuk::eFragmentSampled), "05_color"_image(vuk::eFragmentSampled)},
 				.execute = [=](vuk::CommandBuffer& command_buffer) {
 					command_buffer

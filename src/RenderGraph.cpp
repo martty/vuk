@@ -505,7 +505,12 @@ namespace vuk {
 			// subpasses
 			for (size_t i = 0; i < rp.subpasses.size(); i++) {
 				vuk::SubpassDescription sd;
-				auto color_count = color_attrefs.size() - color_ref_offsets[i] - (i > 0 ? color_ref_offsets[i - 1] : 0);
+				auto color_count = 0; 
+				if (i < rp.subpasses.size() - 1) {
+					color_count = color_ref_offsets[i + 1] - color_ref_offsets[i];
+				} else {
+					color_count = color_attrefs.size() - color_ref_offsets[i];
+				}
 				{
 					auto first = color_attrefs.data() + color_ref_offsets[i];
 					sd.colorAttachmentCount = color_count;
@@ -732,8 +737,15 @@ namespace vuk {
 						rpi.samples = att.samples.count;
 				}
 				cobuf.ongoing_renderpass = rpi;
-				if (sp.pass->pass.execute)
-					sp.pass->pass.execute(cobuf);
+				if (sp.pass->pass.execute) {
+					if (!sp.pass->pass.name.empty()) {
+						//ptc.ctx.debug.begin_region(cobuf.command_buffer, sp.pass->pass.name);
+						sp.pass->pass.execute(cobuf);
+						//ptc.ctx.debug.end_region(cobuf.command_buffer);
+					} else {
+						sp.pass->pass.execute(cobuf);
+					}
+				}
 				if (i < rpass.subpasses.size() - 1)
 					cbuf.nextSubpass(vk::SubpassContents::eInline);
 			}

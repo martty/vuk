@@ -17,6 +17,7 @@ util::ImGuiData util::ImGui_ImplVuk_Init(vuk::PerThreadContext& ptc) {
 	auto [img, iv, stub] = ptc.create_image(vk::Format::eR8G8B8A8Srgb, vk::Extent3D(width, height, 1), pixels);
 	data.font_img = img;
 	data.font_iv = std::move(iv);
+	ptc.ctx.debug.set_name(*data.font_iv, "ImGui/font");
 	vk::SamplerCreateInfo sci;
 	sci.minFilter = sci.magFilter = vk::Filter::eLinear;
 	sci.mipmapMode = vk::SamplerMipmapMode::eLinear;
@@ -32,7 +33,7 @@ util::ImGuiData util::ImGui_ImplVuk_Init(vuk::PerThreadContext& ptc) {
 		pci.shaders.push_back("../../imgui.vert");
 		pci.shaders.push_back("../../imgui.frag");
 		pci.set_blend(vuk::BlendPreset::eAlphaBlend);
-		ptc.ctx.named_pipelines.emplace("imgui", pci);
+		ptc.ctx.create_named_pipeline("imgui", pci);
 	}
 
 	return data;

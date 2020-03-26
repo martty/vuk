@@ -194,6 +194,37 @@ namespace vuk {
 
 		vk::Queue graphics_queue;
 
+		struct DebugUtils {
+			Context& ctx;
+			PFN_vkSetDebugUtilsObjectNameEXT setDebugUtilsObjectNameEXT;
+			PFN_vkCmdBeginDebugUtilsLabelEXT cmdBeginDebugUtilsLabelEXT;
+			PFN_vkCmdEndDebugUtilsLabelEXT cmdEndDebugUtilsLabelEXT;
+
+			bool enabled() {
+				return setDebugUtilsObjectNameEXT != nullptr;
+			}
+
+			DebugUtils(Context& ctx) : ctx(ctx) {
+				setDebugUtilsObjectNameEXT = (PFN_vkSetDebugUtilsObjectNameEXT)vkGetDeviceProcAddr(ctx.device, "vkSetDebugUtilsObjectNameEXT");
+				cmdBeginDebugUtilsLabelEXT = (PFN_vkCmdBeginDebugUtilsLabelEXT)vkGetDeviceProcAddr(ctx.device, "vkCmdBeginDebugUtilsLabelEXT");
+				cmdEndDebugUtilsLabelEXT = (PFN_vkCmdEndDebugUtilsLabelEXT)vkGetDeviceProcAddr(ctx.device, "vkCmdEndDebugUtilsLabelEXT");
+			}
+			void set_name(const vuk::ImageView& iv, /*zstring_view*/Name name);
+			void set_name(const vuk::Allocator::Buffer& iv, /*zstring_view*/Name name);
+			template<class T>
+			void set_name(const T& t, /*zstring_view*/Name name) {
+				if (!enabled()) return;
+				vk::DebugUtilsObjectNameInfoEXT info;
+				info.pObjectName = name.data();
+				info.objectType = t.objectType;
+				info.objectHandle = reinterpret_cast<uint64_t>((typename T::CType)t);
+				setDebugUtilsObjectNameEXT(ctx.device, &(VkDebugUtilsObjectNameInfoEXT)info);
+			}
+
+			void begin_region(const vk::CommandBuffer&, Name name, std::array<float, 4> color = {1,1,1,1});
+			void end_region(const vk::CommandBuffer&);
+		} debug;
+
 		Context(vk::Device device, vk::PhysicalDevice physical_device) : device(device), physical_device(physical_device),
 			allocator(device, physical_device),
 			cbuf_pools(*this),
@@ -210,8 +241,10 @@ namespace vuk {
 			pool_cache(*this),
 			shader_modules(*this),
 			descriptor_set_layouts(*this),
-			pipeline_layouts(*this) {
-			vk_pipeline_cache = device.createPipelineCacheUnique({});
+			pipeline_layouts(*this),
+			debug(*this)
+		{
+				vk_pipeline_cache = device.createPipelineCacheUnique({});
 		}
 
 		void create_named_pipeline(const char* name, vuk::PipelineCreateInfo ci) {
@@ -692,11 +725,11 @@ namespace vuk {
 	T create(PerThreadContext& ptc, const create_info_t<T>& cinfo) {
 		auto& ctx = ptc.ifc.ctx;
 		if constexpr (std::is_same_v<T, PipelineInfo>) {
-			printf("Creating pipeline\n");
 			std::vector<vk::PipelineShaderStageCreateInfo> psscis;
 
 			// accumulate descriptors from all stages
 			vuk::Program accumulated_reflection;
+			std::string pipe_name = "Pipeline:";
 			for (auto& path : cinfo.shaders) {
 				auto contents = slurp(path);
 				auto& sm = ptc.shader_modules.acquire({ contents, path });
@@ -707,7 +740,9 @@ namespace vuk {
 				shaderStage.pName = "main"; //TODO: make param
 				psscis.push_back(shaderStage);
 				accumulated_reflection.append(sm.reflection_info);
+				pipe_name += path + "+";
 			}
+			pipe_name = pipe_name.substr(0, pipe_name.size() - 1); //trim off last "+"
 			// acquire descriptor set layouts (1 per set)
 			// acquire pipeline layout
 			vuk::PipelineLayoutCreateInfo plci;
@@ -732,7 +767,9 @@ namespace vuk {
 			gpci.pStages = psscis.data();
 			gpci.stageCount = psscis.size();
 
-			return { ctx.device.createGraphicsPipeline(*ctx.vk_pipeline_cache, gpci), gpci.layout, dslai };
+			auto pipeline = ctx.device.createGraphicsPipeline(*ctx.vk_pipeline_cache, gpci);
+			ctx.debug.set_name(pipeline, pipe_name);
+			return {pipeline, gpci.layout, dslai };
 		} else if constexpr (std::is_same_v<T, vuk::ShaderModule>) {
 			shaderc::Compiler compiler;
 			shaderc::CompileOptions options;
@@ -754,6 +791,8 @@ namespace vuk {
 				moduleCreateInfo.codeSize = spirv.size() * sizeof(uint32_t);
 				moduleCreateInfo.pCode = (uint32_t*)spirv.data();
 				auto module = ctx.device.createShaderModule(moduleCreateInfo);
+				std::string name = "ShaderModule: " + cinfo.filename;
+				ctx.debug.set_name(module, name);
 				return { module, p, stage };
 			}
 		} else if constexpr (std::is_same_v<T, vk::RenderPass>) {
@@ -763,7 +802,11 @@ namespace vuk {
 			res.image = ctx.allocator.create_image_for_rendertarget(cinfo.ici);
 			auto ivci = cinfo.ivci;
 			ivci.image = res.image;
+			std::string name = std::string("Image: RenderTarget ") + std::string(cinfo.name);
+			ctx.debug.set_name(res.image, name);
+			name = std::string("ImageView: RenderTarget ") + std::string(cinfo.name);
 			res.image_view = ctx.wrap(ctx.device.createImageView(ivci));
+			ctx.debug.set_name(res.image_view, name);
 			return res;
 		} else if constexpr (std::is_same_v<T, Allocator::Pool>) {
 			return ctx.allocator.allocate_pool(cinfo.mem_usage, cinfo.buffer_usage);
@@ -809,7 +852,6 @@ namespace vuk {
 		} else if constexpr (std::is_same_v<T, vk::Sampler>) {
 			return ptc.ctx.device.createSampler(cinfo);
 		} else if constexpr (std::is_same_v<T, vuk::DescriptorSetLayoutAllocInfo>) {
-			printf("Creating dslayout\n");
 			vuk::DescriptorSetLayoutAllocInfo ret;
 			ret.layout = ptc.ctx.device.createDescriptorSetLayout(cinfo.dslci);
 			for (auto& b : cinfo.bindings) {
@@ -817,7 +859,6 @@ namespace vuk {
 			}
 			return ret;
 		} else if constexpr (std::is_same_v<T, vk::PipelineLayout>) {
-			printf("Creating playout\n");
 			return ptc.ctx.device.createPipelineLayout(cinfo.plci);
 		}
 	}
