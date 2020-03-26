@@ -746,6 +746,8 @@ namespace vuk {
 						sp.pass->pass.execute(cobuf);
 					}
 				}
+				cobuf.attribute_descriptions.clear();
+				cobuf.binding_descriptions.clear();
 				if (i < rpass.subpasses.size() - 1)
 					cbuf.nextSubpass(vk::SubpassContents::eInline);
 			}
@@ -844,11 +846,11 @@ namespace vuk {
 		return bind_pipeline(ptc.ifc.ctx.named_pipelines.at(p));
 	}
 
-	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, const Allocator::Buffer& buf, Packed format) {
+	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, const Allocator::Buffer& buf, unsigned first_attribute, Packed format) {
 		std::erase_if(attribute_descriptions, [&](auto& b) {return b.binding == binding; });
 		std::erase_if(binding_descriptions, [&](auto& b) {return b.binding == binding; });
 
-		size_t location = 0;
+		size_t location = first_attribute;
 		size_t offset = 0;
 		for (auto& f : format.list) {
 			if (f.ignore) {
@@ -870,8 +872,9 @@ namespace vuk {
 		vibd.inputRate = vk::VertexInputRate::eVertex;
 		vibd.stride = offset;
 		binding_descriptions.push_back(vibd);
-	
-		command_buffer.bindVertexBuffers(binding, buf.buffer, buf.offset);
+
+		if(buf.buffer)
+			command_buffer.bindVertexBuffers(binding, buf.buffer, buf.offset);
 		return *this;
 	}
 

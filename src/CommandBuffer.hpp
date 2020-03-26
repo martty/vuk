@@ -102,7 +102,7 @@ namespace vuk {
 		CommandBuffer& bind_pipeline(vuk::PipelineCreateInfo gpci);
 		CommandBuffer& bind_pipeline(Name p);
 
-		CommandBuffer& bind_vertex_buffer(unsigned index, const Allocator::Buffer&, Packed);
+		CommandBuffer& bind_vertex_buffer(unsigned index, const Allocator::Buffer&, unsigned first_location, Packed);
 		CommandBuffer& bind_index_buffer(const Allocator::Buffer&, vk::IndexType type);
 
 		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, vuk::ImageView iv, vk::SamplerCreateInfo sampler_create_info);

@@ -44,8 +44,8 @@ vuk::Pass util::ImGui_ImplVuk_Render(vuk::PerThreadContext& ptc, vuk::Name src_t
 		command_buffer.bind_sampled_image(0, 0, *data.font_iv, data.font_sci);
 		if (index.size > 0) {
 			command_buffer.bind_index_buffer(index, sizeof(ImDrawIdx) == 2 ? vk::IndexType::eUint16 : vk::IndexType::eUint32);
-			command_buffer.bind_vertex_buffer(0, vertex, vuk::Packed{ vk::Format::eR32G32Sfloat, vk::Format::eR32G32Sfloat, vk::Format::eR8G8B8A8Unorm });
 		}
+		command_buffer.bind_vertex_buffer(0, vertex, 0, vuk::Packed{ vk::Format::eR32G32Sfloat, vk::Format::eR32G32Sfloat, vk::Format::eR8G8B8A8Unorm });
 		command_buffer.bind_pipeline("imgui");
 		command_buffer.set_viewport(0, vuk::Area::Framebuffer{});
 		struct PC {

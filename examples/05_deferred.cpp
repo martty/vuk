@@ -50,7 +50,7 @@ namespace {
 					command_buffer
 					  .set_viewport(0, vuk::Area::Framebuffer{})
 					  .set_scissor(0, vuk::Area::Framebuffer{})
-					  .bind_vertex_buffer(0, verts, vuk::Packed{vk::Format::eR32G32B32Sfloat, vk::Format::eR32G32B32Sfloat, vuk::Ignore{offsetof(util::Vertex, uv_coordinates) - offsetof(util::Vertex, tangent)}, vk::Format::eR32G32Sfloat})
+					  .bind_vertex_buffer(0, verts, 0, vuk::Packed{vk::Format::eR32G32B32Sfloat, vk::Format::eR32G32B32Sfloat, vuk::Ignore{offsetof(util::Vertex, uv_coordinates) - offsetof(util::Vertex, tangent)}, vk::Format::eR32G32Sfloat})
 					  .bind_index_buffer(inds, vk::IndexType::eUint32)
 					  .bind_pipeline("cube_deferred")
 					  .bind_uniform_buffer(0, 0, uboVP);
