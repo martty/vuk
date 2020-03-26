@@ -85,11 +85,11 @@ namespace vuk {
 		CommandBuffer(RenderGraph& rg, vuk::PerThreadContext& ptc, vk::CommandBuffer cb) : rg(rg), ptc(ptc), command_buffer(cb) {}
 
 		std::optional<RenderPassInfo> ongoing_renderpass;
-		std::optional<vk::Viewport> next_viewport;
-		std::optional<vk::Rect2D> next_scissor;
-
 		std::vector<vk::VertexInputAttributeDescription> attribute_descriptions;
 		std::vector<vk::VertexInputBindingDescription> binding_descriptions;
+		std::vector<vk::PushConstantRange> pcrs;
+		std::array<unsigned char, 64> push_constant_buffer;
+		std::optional<vuk::PipelineCreateInfo> next_pipeline;
 		std::optional<vuk::PipelineInfo> current_pipeline;
 
 		CommandBuffer& set_viewport(unsigned index, vk::Viewport vp);	
