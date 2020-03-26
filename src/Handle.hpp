@@ -15,6 +15,79 @@ namespace vuk {
 			return id == o.id;
 		}
 	};
+
+    class Context;
+    template <typename Type>
+    class Unique {
+        Context* context;
+        Type payload;
+    public:
+        using element_type = Type;
+
+        Unique() : payload(), context(nullptr) {}
+
+        explicit Unique(vuk::Context& ctx, Type payload) : payload(payload), context(&ctx) {}
+        Unique(Unique const&) = delete;
+
+        Unique(Unique&& other) noexcept : context(other.context), payload(other.release()) {}
+
+        ~Unique() noexcept;
+
+        Unique& operator=(Unique const&) = delete;
+
+        Unique& operator=(Unique&& other) noexcept {
+            auto tmp = other.context;
+            reset(other.release());
+            context = tmp;
+            return *this;
+        }
+
+        explicit operator bool() const noexcept {
+            return payload.operator bool();
+        }
+
+        Type const* operator->() const noexcept {
+            return &payload;
+        }
+
+        Type* operator->() noexcept {
+            return &payload;
+        }
+
+        Type const& operator*() const noexcept {
+            return payload;
+        }
+
+        Type& operator*() noexcept {
+            return payload;
+        }
+
+        const Type& get() const noexcept {
+            return payload;
+        }
+
+        Type& get() noexcept {
+            return payload;
+        }
+
+        void reset(Type const& value = Type()) noexcept;
+
+        Type release() noexcept {
+            Type value = payload;
+            context = nullptr;
+            return value;
+        }
+
+        void swap(Unique<Type>& rhs) noexcept {
+            std::swap(payload, rhs.payload);
+            std::swap(context, rhs.context);
+        }
+    };
+
+    template <typename Type>
+    inline void swap(Unique<Type>& lhs, Unique<Type>& rhs) noexcept {
+        lhs.swap(rhs);
+    }
 }
 
 namespace std {

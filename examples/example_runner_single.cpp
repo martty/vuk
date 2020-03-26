@@ -69,4 +69,5 @@ void vuk::ExampleRunner::render() {
 int main() {
 	vuk::ExampleRunner::get_runner().setup();
 	vuk::ExampleRunner::get_runner().render();
+	vuk::ExampleRunner::get_runner().cleanup();
 }

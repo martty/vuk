@@ -84,7 +84,7 @@ namespace util {
 
 	struct ImGuiData {
 		vk::Image font_img;
-		vuk::ImageView font_iv;
+		vuk::Unique<vuk::ImageView> font_iv;
 		vk::SamplerCreateInfo font_sci;
 		std::unique_ptr<vuk::SampledImage> font_si;
 	};

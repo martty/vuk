@@ -24,6 +24,7 @@ namespace vuk {
 
 		std::function<void(ExampleRunner&, vuk::InflightContext&)> setup;
 		std::function<RenderGraph(ExampleRunner&, vuk::InflightContext&)> render;
+		std::function<void(ExampleRunner&, vuk::InflightContext&)> cleanup;
 	};
 }
 
@@ -63,6 +64,21 @@ namespace vuk {
 		}
 
 		void render();
+
+		void cleanup() {
+			context->device.waitIdle();
+			imgui_data.font_iv.reset();
+			auto ifc = context->begin();
+			for (auto& ex : examples) {
+				if (ex->cleanup) {
+					ex->cleanup(*this, ifc);
+				}
+			}
+			// this performs cleanups for all inflight frames
+			for (auto i = 0; i < vuk::Context::FC; i++) {
+				context->begin();
+			}
+		}
 
 		~ExampleRunner() {
 			context.reset();

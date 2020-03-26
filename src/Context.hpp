@@ -135,6 +135,17 @@ namespace vuk {
 	using SwapchainRef = Swapchain*;
 	struct Program;
 
+	inline unsigned _prev(unsigned frame, unsigned amt, unsigned FC) {
+		return ((frame - amt) % FC) + ((frame >= amt) ? 0 : FC - 1);
+	}
+	inline unsigned _next(unsigned frame, unsigned amt, unsigned FC) {
+		return (frame + amt) % FC;
+	}
+	inline unsigned _next(unsigned frame, unsigned FC) {
+		return (frame + 1) % FC;
+	}
+
+
 	class Context {
 	public:
 		constexpr static size_t FC = 3;
@@ -159,15 +170,20 @@ namespace vuk {
 		Cache<vuk::DescriptorSetLayoutAllocInfo> descriptor_set_layouts;
 		Cache<vk::PipelineLayout> pipeline_layouts;
 
-		std::array<std::vector<vk::Image>, Context::FC> image_recycle;
-		std::array<std::vector<vk::ImageView>, Context::FC> image_view_recycle;
+		std::mutex begin_frame_lock;
+
+		std::array<std::mutex, FC> recycle_locks;
+		std::array<std::vector<vk::Image>, FC> image_recycle;
+		std::array<std::vector<vk::ImageView>, FC> image_view_recycle;
 
 		std::mutex named_pipelines_lock;
-		std::unordered_map<std::string_view, create_info_t<vuk::PipelineInfo>> named_pipelines;
+		std::unordered_map<std::string_view, vuk::PipelineCreateInfo> named_pipelines;
 
+		std::mutex swapchains_lock;
 		plf::colony<Swapchain> swapchains;
 
 		SwapchainRef add_swapchain(Swapchain sw) {
+			std::lock_guard _(swapchains_lock);
 			sw.image_views.reserve(sw._ivs.size());
 			for (auto& v : sw._ivs) {
 				sw.image_views.push_back(wrap(vk::ImageView{ v }));
@@ -211,6 +227,11 @@ namespace vuk {
 			return { unique_handle_id_counter++, payload };
 		}
 
+		void enqueue_destroy(vuk::ImageView iv) {
+			std::lock_guard _(recycle_locks[frame_counter % FC]);
+			image_view_recycle[frame_counter % FC].push_back(iv.payload);
+		}
+
 		void destroy(const RGImage& image) {
 			device.destroy(image.image_view.payload);
 			allocator.destroy_image(image.image);
@@ -226,7 +247,9 @@ namespace vuk {
 			}
 		}
 
-		void destroy(vuk::PipelineInfo) {}
+		void destroy(vuk::PipelineInfo pi) {
+			device.destroy(pi.pipeline);
+		}
 
 		void destroy(vuk::ShaderModule sm) {
 			device.destroy(sm.shader_module);
@@ -269,10 +292,6 @@ namespace vuk {
 		InflightContext begin();
 	};
 
-	inline unsigned prev_(unsigned frame, unsigned amt, unsigned FC) {
-		return ((frame - amt) % FC) + ((frame >= amt) ? 0 : FC - 1);
-	}
-
 	class InflightContext {
 	public:
 		Context& ctx;
@@ -296,7 +315,7 @@ namespace vuk {
 		Cache<vk::PipelineLayout>::PFView pipeline_layouts;
 
 
-		InflightContext(Context& ctx, unsigned absolute_frame);
+		InflightContext(Context& ctx, unsigned absolute_frame, std::lock_guard<std::mutex>&& recycle_guard);
 
 		struct BufferCopyCommand {
 			Allocator::Buffer src;
@@ -352,14 +371,14 @@ namespace vuk {
 		}
 
 		// recycle
-		std::mutex recycle_mutex;
+		std::mutex recycle_lock;
 
 		void destroy(std::vector<vk::Image>&& images) {
-			std::lock_guard _(recycle_mutex);
+			std::lock_guard _(recycle_lock);
 			ctx.image_recycle[frame].insert(ctx.image_recycle[frame].end(), images.begin(), images.end());
 		}
 		void destroy(std::vector<vk::ImageView>&& images) {
-			std::lock_guard _(recycle_mutex);
+			std::lock_guard _(recycle_lock);
 			ctx.image_view_recycle[frame].insert(ctx.image_view_recycle[frame].end(), images.begin(), images.end());
 		}
 
@@ -367,7 +386,9 @@ namespace vuk {
 	};
 
 	inline InflightContext Context::begin() {
-		return InflightContext(*this, frame_counter++);
+		std::lock_guard _(begin_frame_lock);
+		std::lock_guard recycle(recycle_locks[_next(frame_counter.load(), FC)]);
+		return InflightContext(*this, frame_counter++, std::move(recycle));
 	}
 
 	class PerThreadContext {
@@ -459,7 +480,7 @@ namespace vuk {
 			return { dst, stub };
 		}
 
-		std::tuple<vk::Image, vuk::ImageView, TransferStub> create_image(vk::Format format, vk::Extent3D extents, void* data) {
+		std::tuple<vk::Image, vuk::Unique<vuk::ImageView>, TransferStub> create_image(vk::Format format, vk::Extent3D extents, void* data) {
 			vk::ImageCreateInfo ici;
 			ici.format = format;
 			ici.extent = extents;
@@ -482,9 +503,9 @@ namespace vuk {
 			ivci.subresourceRange.levelCount = 1;
 			ivci.viewType = vk::ImageViewType::e2D;
 			auto iv = ifc.ctx.device.createImageView(ivci);
-			return { dst, ifc.ctx.wrap(iv), stub };
+			auto ui = vuk::Unique<vuk::ImageView>(ifc.ctx, ifc.ctx.wrap(iv));
+			return { dst, std::move(ui), stub };
 		}
-
 
 		template<class T>
 		TransferStub upload(Allocator::Buffer dst, gsl::span<T> data) {
@@ -503,7 +524,6 @@ namespace vuk {
 
 			return ifc.enqueue_transfer(staging, dst, extent);
 		}
-
 
 		void dma_task() {
 			std::lock_guard _(ifc.transfer_mutex);
@@ -589,7 +609,8 @@ namespace vuk {
 		}
 	};
 
-	inline InflightContext::InflightContext(Context& ctx, unsigned absolute_frame) : ctx(ctx),
+	inline InflightContext::InflightContext(Context& ctx, unsigned absolute_frame, std::lock_guard<std::mutex>&& recycle_guard) : 
+		ctx(ctx),
 		absolute_frame(absolute_frame),
 		frame(absolute_frame% Context::FC),
 		commandbuffer_pools(ctx.cbuf_pools.get_view(*this)),
@@ -607,6 +628,7 @@ namespace vuk {
 		shader_modules(*this, ctx.shader_modules),
 		descriptor_set_layouts(*this, ctx.descriptor_set_layouts),
 		pipeline_layouts(*this, ctx.pipeline_layouts) {
+		
 		// image recycling
 		for (auto& img : ctx.image_recycle[frame]) {
 			ctx.allocator.destroy_image(img);
@@ -799,6 +821,19 @@ namespace vuk {
 			return ptc.ctx.device.createPipelineLayout(cinfo.plci);
 		}
 	}
+
+    template<typename Type>
+    inline Unique<Type>::~Unique() noexcept {
+        if (context) context->enqueue_destroy(payload);
+    }
+    template<typename Type>
+    inline void Unique<Type>::reset(Type const& value) noexcept {
+        if (payload != value) {
+            if (context) context->enqueue_destroy(payload);
+            payload = value;
+        }
+    }
+
 }
 
 namespace vuk {
