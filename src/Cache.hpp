@@ -7,9 +7,10 @@
 #include "Handle.hpp"
 #include "Pipeline.hpp"
 #include "Program.hpp"
+#include "CreateInfo.hpp"
+#include <optional>
 #include <gsl/span>
-
-class Context;
+#include <vector>
 
 namespace std {
 	template <class BitType, class MaskType>
@@ -17,19 +18,6 @@ namespace std {
 		size_t operator()(vk::Flags<BitType, MaskType> const& x) const noexcept {
 			size_t h = 0;
 			return std::hash<MaskType>()((MaskType)x);
-		}
-	};
-};
-
-namespace std {
-	template <class T, ptrdiff_t E>
-	struct hash<gsl::span<T, E>> {
-		size_t operator()(gsl::span<T, E> const& x) const noexcept {
-			size_t h = 0;
-			for (auto& e : x) {
-				hash_combine(h, e);
-			}
-			return h;
 		}
 	};
 };
@@ -43,9 +31,7 @@ namespace std {
 			return h;
 		}
 	};
-};
 
-namespace std {
 	template <>
 	struct hash<vk::VertexInputAttributeDescription> {
 		size_t operator()(vk::VertexInputAttributeDescription const& x) const noexcept {
@@ -54,10 +40,7 @@ namespace std {
 			return h;
 		}
 	};
-};
 
-
-namespace std {
 	template <>
 	struct hash<vk::PipelineVertexInputStateCreateInfo> {
 		size_t operator()(vk::PipelineVertexInputStateCreateInfo const& x) const noexcept {
@@ -66,9 +49,7 @@ namespace std {
 			return h;
 		}
 	};
-};
 
-namespace std {
 	template <>
 	struct hash<vk::SpecializationMapEntry> {
 		size_t operator()(vk::SpecializationMapEntry const& x) const noexcept {
@@ -77,10 +58,7 @@ namespace std {
 			return h;
 		}
 	};
-};
 
-
-namespace std {
 	template <>
 	struct hash<vk::SpecializationInfo> {
 		size_t operator()(vk::SpecializationInfo const& x) const noexcept {
@@ -89,9 +67,7 @@ namespace std {
 			return h;
 		}
 	};
-};
 
-namespace std {
 	template <>
 	struct hash<vk::PipelineShaderStageCreateInfo> {
 		size_t operator()(vk::PipelineShaderStageCreateInfo const& x) const noexcept {
@@ -101,10 +77,7 @@ namespace std {
 			return h;
 		}
 	};
-};
 
-
-namespace std {
 	template <>
 	struct hash<vk::PipelineInputAssemblyStateCreateInfo> {
 		size_t operator()(vk::PipelineInputAssemblyStateCreateInfo const& x) const noexcept {
@@ -113,9 +86,7 @@ namespace std {
 			return h;
 		}
 	};
-};
 
-namespace std {
 	template <>
 	struct hash<vk::PipelineTessellationStateCreateInfo> {
 		size_t operator()(vk::PipelineTessellationStateCreateInfo const& x) const noexcept {
@@ -124,10 +95,7 @@ namespace std {
 			return h;
 		}
 	};
-};
 
-
-namespace std {
 	template <>
 	struct hash<vk::Extent2D> {
 		size_t operator()(vk::Extent2D const& x) const noexcept {
@@ -136,9 +104,7 @@ namespace std {
 			return h;
 		}
 	};
-};
 
-namespace std {
 	template <>
 	struct hash<vk::Extent3D> {
 		size_t operator()(vk::Extent3D const& x) const noexcept {
@@ -147,10 +113,7 @@ namespace std {
 			return h;
 		}
 	};
-};
 
-
-namespace std {
 	template <>
 	struct hash<vk::Offset2D> {
 		size_t operator()(vk::Offset2D const& x) const noexcept {
@@ -159,9 +122,7 @@ namespace std {
 			return h;
 		}
 	};
-};
 
-namespace std {
 	template <>
 	struct hash<vk::Rect2D> {
 		size_t operator()(vk::Rect2D const& x) const noexcept {
@@ -170,9 +131,7 @@ namespace std {
 			return h;
 		}
 	};
-};
 
-namespace std {
 	template <>
 	struct hash<vk::Viewport> {
 		size_t operator()(vk::Viewport const& x) const noexcept {
@@ -181,9 +140,7 @@ namespace std {
 			return h;
 		}
 	};
-};
 
-namespace std {
 	template <>
 	struct hash<vk::PipelineViewportStateCreateInfo> {
 		size_t operator()(vk::PipelineViewportStateCreateInfo const& x) const noexcept {
@@ -196,9 +153,7 @@ namespace std {
 			return h;
 		}
 	};
-};
 
-namespace std {
 	template <>
 	struct hash<vk::PipelineMultisampleStateCreateInfo> {
 		size_t operator()(vk::PipelineMultisampleStateCreateInfo const& x) const noexcept {
@@ -208,9 +163,7 @@ namespace std {
 			return h;
 		}
 	};
-};
 
-namespace std {
 	template <>
 	struct hash<vk::StencilOpState> {
 		size_t operator()(vk::StencilOpState const& x) const noexcept {
@@ -219,10 +172,7 @@ namespace std {
 			return h;
 		}
 	};
-};
 
-
-namespace std {
 	template <>
 	struct hash<vk::PipelineDepthStencilStateCreateInfo> {
 		size_t operator()(vk::PipelineDepthStencilStateCreateInfo const& x) const noexcept {
@@ -231,9 +181,7 @@ namespace std {
 			return h;
 		}
 	};
-};
 
-namespace std {
 	template <>
 	struct hash<vk::PipelineColorBlendAttachmentState> {
 		size_t operator()(vk::PipelineColorBlendAttachmentState const& x) const noexcept {
@@ -242,10 +190,7 @@ namespace std {
 			return h;
 		}
 	};
-};
 
-
-namespace std {
 	template <>
 	struct hash<vk::PipelineColorBlendStateCreateInfo> {
 		size_t operator()(vk::PipelineColorBlendStateCreateInfo const& x) const noexcept {
@@ -254,9 +199,7 @@ namespace std {
 			return h;
 		}
 	};
-};
 
-namespace std {
 	template <>
 	struct hash<vk::DynamicState> {
 		size_t operator()(vk::DynamicState const& x) const noexcept {
@@ -265,10 +208,7 @@ namespace std {
 			return h;
 		}
 	};
-};
 
-
-namespace std {
 	template <>
 	struct hash<vk::PipelineDynamicStateCreateInfo> {
 		size_t operator()(vk::PipelineDynamicStateCreateInfo const& x) const noexcept {
@@ -277,11 +217,7 @@ namespace std {
 			return h;
 		}
 	};
-};
 
-
-
-namespace std {
 	template <>
 	struct hash<vk::GraphicsPipelineCreateInfo> {
 		size_t operator()(vk::GraphicsPipelineCreateInfo const & x) const noexcept {
@@ -304,63 +240,7 @@ namespace std {
 			return h;
 		}
 	};
-};
-
-#include <optional>
-
-namespace vuk {
-	template<class T>
-	struct deep_equal_span : public gsl::span<T> {
-		using size_type = typename gsl::span<T>::size_type;
-
-		using gsl::span<T>::span;
-		using gsl::span<T>::size;
-
-		bool operator==(const deep_equal_span& o) const {
-			if (size() != o.size()) return false;
-			for (size_type i = 0; i < size(); i++) {
-				if ((*this)[i] != o[i]) return false;
-			}
-			return true;
-		}
-	};
-
-	template <class Type>
-	deep_equal_span(Type*, size_t)->deep_equal_span<Type>;
-
-	struct SubpassDescription : public vk::SubpassDescription {
-		bool operator==(const SubpassDescription& o) const {
-			return std::tie(flags, pipelineBindPoint) ==
-				std::tie(o.flags, o.pipelineBindPoint);
-		}
-	};
-
-	struct RenderPassCreateInfo : public vk::RenderPassCreateInfo {
-		std::vector<vk::AttachmentDescription> attachments;
-		std::vector<vuk::SubpassDescription> subpass_descriptions;
-		std::vector<vk::SubpassDependency> subpass_dependencies;
-		std::vector<vk::AttachmentReference> color_refs;
-		std::vector<vk::AttachmentReference> resolve_refs;
-		std::vector<std::optional<vk::AttachmentReference>> ds_refs;
-		std::vector<size_t> color_ref_offsets;
-
-		bool operator==(const RenderPassCreateInfo& o) const {
-			return std::forward_as_tuple(flags, attachments, subpass_descriptions, subpass_dependencies, color_refs, color_ref_offsets, ds_refs, resolve_refs) ==
-				std::forward_as_tuple(o.flags, o.attachments, o.subpass_descriptions, o.subpass_dependencies, o.color_refs, o.color_ref_offsets, o.ds_refs, o.resolve_refs);
-		}
-	};
-
-	struct FramebufferCreateInfo : public vk::FramebufferCreateInfo {
-		std::vector<vuk::ImageView> attachments;
-
-		bool operator==(const FramebufferCreateInfo& o) const {
-			return std::tie(flags, attachments, width, height, renderPass, layers) ==
-				std::tie(o.flags, o.attachments, o.width, o.height, o.renderPass, o.layers);
-		}
-	};
-}
-
-namespace std {
+	
 	template <>
 	struct hash<vk::AttachmentDescription> {
 		size_t operator()(vk::AttachmentDescription const& x) const noexcept {
@@ -388,36 +268,6 @@ namespace std {
 		}
 	};
 
-	template <>
-	struct hash<vuk::SubpassDescription> {
-		size_t operator()(vuk::SubpassDescription const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.flags, x.pipelineBindPoint);
-			return h;
-		}
-	};
-
-
-	template <>
-	struct hash<vuk::RenderPassCreateInfo> {
-		size_t operator()(vuk::RenderPassCreateInfo const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.flags, x.attachments, x.color_refs, x.color_ref_offsets, x.ds_refs, x.subpass_dependencies, x.subpass_descriptions);
-			return h;
-		}
-	};
-
-	template <>
-	struct hash<vuk::FramebufferCreateInfo> {
-		size_t operator()(vuk::FramebufferCreateInfo const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.flags, x.attachments, x.width, x.height, x.layers);
-			return h;
-		}
-	};
-};
-
-namespace std {
 	template <>
 	struct hash<vk::ImageCreateInfo> {
 		size_t operator()(vk::ImageCreateInfo const & x) const noexcept {
@@ -457,97 +307,6 @@ namespace std {
 	};
 };
 
-#define VUK_MAX_BINDINGS 16
-#include <bitset>
-
-namespace vuk {
-	struct DescriptorSetLayoutAllocInfo {
-		std::array<size_t, VkDescriptorType::VK_DESCRIPTOR_TYPE_END_RANGE> descriptor_counts = {};
-		vk::DescriptorSetLayout layout;
-
-		bool operator==(const DescriptorSetLayoutAllocInfo& o) const {
-			// TODO!
-			return layout == o.layout;
-		}
-	};
-
-	struct DescriptorImageInfo {
-		vuk::Sampler sampler;
-		vuk::ImageView image_view;
-		vk::ImageLayout image_layout;
-
-		bool operator==(const DescriptorImageInfo& o) const {
-			return std::tie(sampler, image_view, image_layout) == std::tie(o.sampler, o.image_view, o.image_layout);
-		}
-
-		operator vk::DescriptorImageInfo() const {
-			return {sampler.payload, image_view.payload, image_layout};
-		}
-	};
-
-	// use hand rolled variant to control bits
-	// memset to clear out the union
-#pragma pack(push, 1)
-	struct DescriptorBinding {
-		DescriptorBinding() {}
-
-		vk::DescriptorType type;
-		union {
-			struct Unbound {} unbound;
-			vk::DescriptorBufferInfo buffer;
-			vuk::DescriptorImageInfo image;
-		};
-
-		bool operator==(const DescriptorBinding& o) const {
-			if (type != o.type) return false;
-			switch (type) {
-			case vk::DescriptorType::eUniformBuffer:
-			case vk::DescriptorType::eStorageBuffer:
-				return buffer == o.buffer;
-				break;
-			case vk::DescriptorType::eSampledImage:
-			case vk::DescriptorType::eSampler:
-			case vk::DescriptorType::eCombinedImageSampler:
-				return image == o.image;
-				break;
-			default:
-				printf("%d\n", to_integral(type));
-				assert(0);
-			}
-
-		}
-	};
-#pragma pack(pop)
-	struct SetBinding {
-		std::bitset<VUK_MAX_BINDINGS> used = {};
-		std::array<DescriptorBinding, VUK_MAX_BINDINGS> bindings;
-		DescriptorSetLayoutAllocInfo layout_info = {};
-
-		bool operator==(const SetBinding& o) const {
-			if (layout_info != o.layout_info) return false;
-			for (size_t i = 0; i < VUK_MAX_BINDINGS; i++) {
-				if (!used[i]) continue;
-				if (bindings[i] != o.bindings[i]) return false;
-			}
-			return true;
-		}
-	};
-}
-
-namespace std {
-	template <>
-	struct hash<vuk::SetBinding> {
-		size_t operator()(vuk::SetBinding const & x) const noexcept {
-			// TODO: should we hash in layout too?
-			unsigned long leading_zero = 0;
-			auto mask = x.used.to_ulong();
-			auto is_null = _BitScanReverse(&leading_zero, mask);
-			leading_zero++;
-			return ::hash::fnv1a::hash(reinterpret_cast<const char*>(&x.bindings[0]), leading_zero * sizeof(vuk::DescriptorBinding));
-		}
-	};
-};
-
 namespace std {
 	template <>
 	struct hash<vk::SamplerCreateInfo> {
@@ -559,125 +318,12 @@ namespace std {
 	};
 };
 
-#define VUK_MAX_SETS 8
-
 namespace vuk {
-	class Context;
-	class InflightContext;
-	class PerThreadContext;
-
-	template<class T>
-	struct create_info;
-
-	template<class T>
-	using create_info_t = typename create_info<T>::type;
-
-	struct PipelineInfo {
-		vk::Pipeline pipeline;
-		vk::PipelineLayout pipeline_layout;
-		std::array<DescriptorSetLayoutAllocInfo, VUK_MAX_SETS> layout_info;
-	};
-
-	template<> struct create_info<PipelineInfo> {
-		using type = vuk::PipelineCreateInfo;
-	};
-
-	template<> struct create_info<vk::RenderPass> {
-		using type = vuk::RenderPassCreateInfo;
-	};
-
-	struct DescriptorPool {
-		std::vector<vk::DescriptorPool> pools;
-		size_t pool_needle = 0;
-		size_t sets_allocated = 0;
-		std::vector<vk::DescriptorSet> free_sets;
-
-		vk::DescriptorPool get_pool(PerThreadContext& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info);
-		vk::DescriptorSet acquire(PerThreadContext& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info);
-	};
-}
-
-namespace std {
-	template <>
-	struct hash<vuk::DescriptorSetLayoutAllocInfo> {
-		size_t operator()(vuk::DescriptorSetLayoutAllocInfo const & x) const noexcept {
-			size_t h = 0;
-			// TODO: should use vuk::DescriptorSetLayout here
-			hash_combine(h, ::hash::fnv1a::hash((const char *)&x.descriptor_counts[0], x.descriptor_counts.size() * sizeof(x.descriptor_counts[0])), (VkDescriptorSetLayout)x.layout); 
-			return h;
-		}
-	};
-};
-
-namespace vuk {
-	struct ShaderModuleCreateInfo {
-		std::string source;
-		std::string filename;
-
-		bool operator==(const ShaderModuleCreateInfo& o) const {
-			return source == o.source;
-		}
-	};
-
-	struct ShaderModule {
-		vk::ShaderModule shader_module;
-		vuk::Program reflection_info;
-		vk::ShaderStageFlagBits stage;
-	};
-}
-
-namespace std {
-	template <>
-	struct hash<vuk::ShaderModuleCreateInfo> {
-		size_t operator()(vuk::ShaderModuleCreateInfo const & x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.source); // filename is intentionally not hashed in
-			return h;
-		}
-	};
-};
-
-
-namespace vuk {
-	template<> struct create_info<vuk::DescriptorPool> {
-		using type = vuk::DescriptorSetLayoutAllocInfo;
-	};
-
-	struct DescriptorSet {
-		vk::DescriptorSet descriptor_set;
-		DescriptorSetLayoutAllocInfo layout_info;
-	};
-
-	template<> struct create_info<vuk::DescriptorSet> {
-		using type = vuk::SetBinding;
-	};
-
-	template<> struct create_info<vk::Framebuffer> {
-		using type = vuk::FramebufferCreateInfo;
-	};
-
-	template<> struct create_info<vk::Sampler> {
-		using type = vk::SamplerCreateInfo;
-	};
-
-	template<> struct create_info<vuk::ShaderModule> {
-		using type = vuk::ShaderModuleCreateInfo;
-	};
-
-	template<> struct create_info<vuk::DescriptorSetLayoutAllocInfo> {
-		using type = vuk::DescriptorSetLayoutCreateInfo;
-	};
-
-	template<> struct create_info<vk::PipelineLayout> {
-		using type = vuk::PipelineLayoutCreateInfo;
-	};
-
-
 	template<class T>
 	struct Cache {
 		struct LRUEntry {
 			T* ptr;
-			unsigned last_use_frame;
+			size_t last_use_frame;
 		};
 
 		Context& ctx;
@@ -709,7 +355,7 @@ namespace vuk {
 	struct PerFrameCache {
 		struct LRUEntry {
 			T* ptr;
-			unsigned last_use_frame;
+			size_t last_use_frame;
 		};
 
 		Context& ctx;

@@ -12,41 +12,10 @@
 #include <optional>
 #include <functional>
 #include "Hash.hpp"
-
-using Name = std::string_view;
-
-struct Image {};
-
-struct Attachment {
-	Attachment(Name n) : name(n) {}
-
-	Name name;
-	enum class Type {
-		eDepth, eColour, eInput
-	} type;
-
-	inline bool operator==(const Attachment& rhs) const {
-		return name == rhs.name;
-	}
-};
-
-struct Buffer {
-	Name name;
-	enum class Type {
-		eStorage, eUniform, eTransfer
-	} type;
-
-	inline bool operator==(const Buffer& rhs) const {
-		return name == rhs.name;
-	}
-};
+#include "vuk_fwd.hpp"
+#include "RenderPass.hpp"
 
 namespace vuk {
-	class CommandBuffer;
-
-	struct Swapchain;
-	using SwapChainRef = Swapchain *;
-
 	struct Preserve {};
 	struct ClearColor {
 		ClearColor(uint32_t r, uint32_t g, uint32_t b, uint32_t a) {
@@ -165,8 +134,6 @@ namespace vuk {
 		std::unordered_map<Name, Name> resolves; // src -> dst
 
 		std::function<void(vuk::CommandBuffer&)> execute;
-
-		//void(*execute)(struct CommandBuffer&);
 	};
 }
 
@@ -180,106 +147,6 @@ namespace std {
 	};
 }
 
-
-enum class BufferAccess {
-	eWrite, eRead, eVertexAttributeRead
-};
-enum class ImageAccess {
-	eTransferDst, eTransferSrc, eAttachmentWrite, eAttachmentInput, eShaderRead
-};
-enum class AccessType {
-	eCompute, eGraphics, eHost
-};
-
-using QueueID = size_t;
-
-struct BufferLifeCycle {
-	QueueID last_queue;
-	unsigned last_access;
-	VkShaderStageFlagBits last_access_stage;
-};
-
-#include "Cache.hpp" // for create_info_t
-
-
-template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
-template<class... Ts> overloaded(Ts...)->overloaded<Ts...>;
-using io = std::variant<Buffer, Attachment>;
-
-namespace std {
-	template<> struct hash<Buffer> {
-		std::size_t operator()(Buffer const& s) const noexcept {
-			return std::hash<std::string_view>()(s.name);
-		}
-	};
-}
-
-namespace std {
-	template<> struct hash<Attachment> {
-		std::size_t operator()(Attachment const& s) const noexcept {
-			return std::hash<std::string_view>()(s.name);
-		}
-	};
-}
-
-namespace std {
-	template<> struct hash<io> {
-		std::size_t operator()(io const& s) const noexcept {
-			return std::visit([](const auto& v) -> size_t { return std::hash<std::remove_cvref_t<decltype(v)>>()(v); }, s);
-		}
-	};
-}
-
-
-inline bool operator==(const io& l, const io& r) {
-	if (l.index() != r.index()) return false;
-	return std::visit([&](const auto& v) {
-		const auto& rhs = std::get<std::remove_cvref_t<decltype(v)>>(r);
-		return v == rhs;
-		}, l);
-}
-
-template<class T, class F>
-T * contains_if(std::vector<T>& v, F&& f) {
-	auto it = std::find_if(v.begin(), v.end(), f);
-	if (it != v.end()) return &(*it);
-	else return nullptr;
-}
-
-template<class T, class F>
-T const * contains_if(const std::vector<T>& v, F&& f) {
-	auto it = std::find_if(v.begin(), v.end(), f);
-	if (it != v.end()) return &(*it);
-	else return nullptr;
-}
-
-template<class T>
-T const* contains(const std::vector<T>& v, const T& f) {
-	auto it = std::find(v.begin(), v.end(), f);
-	if (it != v.end()) return &(*it);
-	else return nullptr;
-}
-
-
-inline std::string name_to_node(Name in) {
-	std::string stripped = std::string(in);
-	if (stripped.ends_with("[]")) stripped = stripped.substr(0, stripped.size() - 2);
-	return stripped;
-}
-
-template <typename Iterator, typename Compare>
-void topological_sort(Iterator begin, Iterator end, Compare cmp) {
-	while (begin != end) {
-		auto const new_begin = std::partition(begin, end, [&](auto const& a) {
-			return std::none_of(begin, end, [&](auto const& b) { return cmp(b, a); });
-			});
-		assert(new_begin != begin && "not a partial ordering");
-		begin = new_begin;
-	}
-}
-
-#include <utility>
-
 namespace vuk {
 	struct Extent2D : public vk::Extent2D {
 		using vk::Extent2D::Extent2D;
@@ -292,29 +159,12 @@ namespace vuk {
 		};
 	};
 
-
 	struct RenderGraph {
-		struct Sync {
-			//std::vector<QueueXFer> transfers;
-			/*std::vector<MemoryBarrier> membars;
-			std::vector<ImageMemoryBarrier> imembars;*/
-			struct QueueXfer {
-				Name buffer;
-				Name queue_src;
-				Name queue_dst;
-			};
-			std::vector<QueueXfer> queue_transfers;
-			std::vector<Name> signal_sema;
-			std::vector<Name> wait_sema;
-		};
-
 		struct PassInfo {
 			Pass pass;
-			Sync sync_in;
-			Sync sync_out;
-
+			
 			size_t render_pass_index;
-			size_t subpass;
+			uint32_t subpass;
 
 			std::unordered_set<Resource> inputs;
 			std::unordered_set<Resource> outputs;
@@ -417,9 +267,6 @@ namespace vuk {
 		void build(vuk::PerThreadContext&);
 		void create_attachment(vuk::PerThreadContext&, Name name, RenderGraph::AttachmentRPInfo& attachment_info, vuk::Extent2D extents, vk::SampleCountFlagBits);
 		vk::CommandBuffer execute(vuk::PerThreadContext&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
-
-		// debug
-		void generate_graph_visualization();
 	};
 	void sync_bound_attachment_to_renderpass(vuk::RenderGraph::AttachmentRPInfo& rp_att, vuk::RenderGraph::AttachmentRPInfo& attachment_info);
 }

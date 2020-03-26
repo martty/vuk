@@ -13,7 +13,7 @@ namespace vuk {
 		else {
 			_.unlock();
 			std::unique_lock ulock(cache.cache_mtx);
-			auto pit = cache.pool.emplace(create<T>(ptc, ci));
+			auto pit = cache.pool.emplace(ptc.create(ci));
 			typename Cache::LRUEntry entry{ &*pit, ptc.ifc.absolute_frame };
 			it = cache.lru_map.emplace(ci, entry).first;
 			return *it->second.ptr;
@@ -71,7 +71,7 @@ namespace vuk {
 		else {
 			_.unlock();
 			std::unique_lock ulock(data.cache_mtx);
-			auto pit = data.pool.emplace(create<T>(ptc, ci));
+			auto pit = data.pool.emplace(ptc.create(ci));
 			typename PerFrameCache::LRUEntry entry{ &*pit, ptc.ifc.absolute_frame };
 			it = data.lru_map.emplace(ci, entry).first;
 			return *it->second.ptr;
@@ -99,7 +99,7 @@ namespace vuk {
 			vk::DescriptorPoolCreateInfo dpci;
 			dpci.maxSets = sets_allocated == 0 ? 1 : sets_allocated * 2;
 			std::array<vk::DescriptorPoolSize, VkDescriptorType::VK_DESCRIPTOR_TYPE_END_RANGE> descriptor_counts = {};
-			size_t used_idx = 0;
+			uint32_t used_idx = 0;
 			for (auto i = 0; i < descriptor_counts.size(); i++) {
 				if (layout_alloc_info.descriptor_counts[i] > 0) {
 					auto& d = descriptor_counts[used_idx];

@@ -6,6 +6,40 @@
 #include "Allocator.hpp"
 
 namespace vuk {
+	template<class T, class F>
+	T* contains_if(std::vector<T>& v, F&& f) {
+		auto it = std::find_if(v.begin(), v.end(), f);
+		if (it != v.end()) return &(*it);
+		else return nullptr;
+	}
+
+	template<class T, class F>
+	T const* contains_if(const std::vector<T>& v, F&& f) {
+		auto it = std::find_if(v.begin(), v.end(), f);
+		if (it != v.end()) return &(*it);
+		else return nullptr;
+	}
+
+	template<class T>
+	T const* contains(const std::vector<T>& v, const T& f) {
+		auto it = std::find(v.begin(), v.end(), f);
+		if (it != v.end()) return &(*it);
+		else return nullptr;
+	}
+
+	template <typename Iterator, typename Compare>
+	void topological_sort(Iterator begin, Iterator end, Compare cmp) {
+		while (begin != end) {
+			auto const new_begin = std::partition(begin, end, [&](auto const& a) {
+				return std::none_of(begin, end, [&](auto const& b) { return cmp(b, a); });
+				});
+			assert(new_begin != begin && "not a partial ordering");
+			begin = new_begin;
+		}
+	}
+
+
+
 	bool is_write_access(ImageAccess ia) {
 		switch (ia) {
 		case eColorResolveWrite:
@@ -88,6 +122,32 @@ namespace vuk {
 		return !is_write_access(u);
 	}
 
+	size_t format_to_size(vk::Format format) {
+		switch (format) {
+		case vk::Format::eR32G32B32A32Sfloat:
+			return sizeof(float) * 4;
+		case vk::Format::eR32G32B32Sfloat:
+			return sizeof(float) * 3;
+		case vk::Format::eR32G32Sfloat:
+			return sizeof(float) * 2;
+		case vk::Format::eR8G8B8A8Unorm:
+			return sizeof(char) * 4;
+		default:
+			assert(0);
+			return 0;
+		}
+	}
+
+	uint32_t Ignore::to_size() {
+		if (bytes != 0) return bytes;
+		return (uint32_t)format_to_size(format);
+	}
+
+	FormatOrIgnore::FormatOrIgnore(vk::Format format) : ignore(false), format(format), size((uint32_t)format_to_size(format)) {
+	}
+	FormatOrIgnore::FormatOrIgnore(Ignore ign) : ignore(true), format(ign.format), size(ign.to_size()) {
+	}
+
 	// determine rendergraph inputs and outputs, and resources that are neither
 	void RenderGraph::build_io() {
 		std::unordered_set<Resource> inputs;
@@ -134,7 +194,6 @@ namespace vuk {
 		else
 			return resolve_name(it->second, aliases);
 	};
-
 
 	void RenderGraph::build() {
 		// compute sync
@@ -212,7 +271,7 @@ namespace vuk {
 			RenderPassInfo rpi;
 			auto rpi_index = rpis.size();
 
-			size_t subpass = 0;
+			uint32_t subpass = 0;
 			for (auto& p : passes) {
 				p->render_pass_index = rpi_index;
 				p->subpass = subpass++;
@@ -461,7 +520,7 @@ namespace vuk {
 				auto cit = std::find_if(chain.begin(), chain.end(), [&](auto& useref) { return useref.pass == &pass; });
 				assert(cit != chain.end());
 				attref.layout = cit->use.layout;
-				attref.attachment = std::distance(rp.attachments.begin(), std::find_if(rp.attachments.begin(), rp.attachments.end(), [&](auto& att) { return name == att.name; }));
+				attref.attachment = (uint32_t)std::distance(rp.attachments.begin(), std::find_if(rp.attachments.begin(), rp.attachments.end(), [&](auto& att) { return name == att.name; }));
 
 				if (attref.layout != vk::ImageLayout::eColorAttachmentOptimal) {
 					if (attref.layout == vk::ImageLayout::eDepthStencilAttachmentOptimal) {
@@ -476,7 +535,7 @@ namespace vuk {
 						// get the dst attachment
 						auto& dst_name = it->second;
 						rref.layout = vk::ImageLayout::eColorAttachmentOptimal; // the only possible layout for resolves
-						rref.attachment = std::distance(rp.attachments.begin(), std::find_if(rp.attachments.begin(), rp.attachments.end(), [&](auto& att) { return dst_name == att.name; }));
+						rref.attachment = (uint32_t)std::distance(rp.attachments.begin(), std::find_if(rp.attachments.begin(), rp.attachments.end(), [&](auto& att) { return dst_name == att.name; }));
 					}
 
 					// we insert the new attachment at the end of the list for current subpass index
@@ -505,7 +564,7 @@ namespace vuk {
 			// subpasses
 			for (size_t i = 0; i < rp.subpasses.size(); i++) {
 				vuk::SubpassDescription sd;
-				auto color_count = 0; 
+				size_t color_count = 0; 
 				if (i < rp.subpasses.size() - 1) {
 					color_count = color_ref_offsets[i + 1] - color_ref_offsets[i];
 				} else {
@@ -513,7 +572,7 @@ namespace vuk {
 				}
 				{
 					auto first = color_attrefs.data() + color_ref_offsets[i];
-					sd.colorAttachmentCount = color_count;
+					sd.colorAttachmentCount = (uint32_t)color_count;
 					sd.pColorAttachments = first;
 				}
 
@@ -532,10 +591,10 @@ namespace vuk {
 				subp.push_back(sd);
 			}
 
-			rp.rpci.subpassCount = rp.rpci.subpass_descriptions.size();
+			rp.rpci.subpassCount = (uint32_t)rp.rpci.subpass_descriptions.size();
 			rp.rpci.pSubpasses = rp.rpci.subpass_descriptions.data();
 	
-			rp.rpci.dependencyCount = rp.rpci.subpass_dependencies.size();
+			rp.rpci.dependencyCount = (uint32_t)rp.rpci.subpass_dependencies.size();
 			rp.rpci.pDependencies = rp.rpci.subpass_dependencies.data();
 
 			// attachments
@@ -555,7 +614,7 @@ namespace vuk {
 				rp.rpci.attachments.push_back(attrpinfo.description);
 			}
 			
-			rp.rpci.attachmentCount = rp.rpci.attachments.size();
+			rp.rpci.attachmentCount = (uint32_t)rp.rpci.attachments.size();
 			rp.rpci.pAttachments = rp.rpci.attachments.data();
 
 			rp.handle = ptc.renderpass_cache.acquire(rp.rpci);
@@ -600,7 +659,7 @@ namespace vuk {
 			// compute extent
 			if (attachment_info.sizing == AttachmentRPInfo::Sizing::eFramebufferRelative) {
 				assert(fb_extent.width > 0 && fb_extent.height > 0);
-				ici.extent = vk::Extent3D(attachment_info.fb_relative.width * fb_extent.width, attachment_info.fb_relative.height * fb_extent.height, 1);
+				ici.extent = vk::Extent3D(static_cast<uint32_t>(attachment_info.fb_relative.width * fb_extent.width), static_cast<uint32_t>(attachment_info.fb_relative.height * fb_extent.height), 1);
 			} else {
 				ici.extent = vk::Extent3D(attachment_info.extents, 1);
 			}
@@ -696,7 +755,7 @@ namespace vuk {
 			rp.fbci.width = fb_extent.width;
 			rp.fbci.height = fb_extent.height;
 			rp.fbci.pAttachments = &vkivs[0];
-			rp.fbci.attachmentCount = vkivs.size();
+			rp.fbci.attachmentCount = (uint32_t)vkivs.size();
 			rp.fbci.layers = 1;
 			rp.framebuffer = ptc.framebuffer_cache.acquire(rp.fbci);
 		}
@@ -721,13 +780,13 @@ namespace vuk {
 					clears.push_back(att.clear_value.c);
 			}
 			rbi.pClearValues = clears.data();
-			rbi.clearValueCount = clears.size();
+			rbi.clearValueCount = (uint32_t)clears.size();
 			cbuf.beginRenderPass(rbi, vk::SubpassContents::eInline);
 			for (size_t i = 0; i < rpass.subpasses.size(); i++) {
 				auto& sp = rpass.subpasses[i];
-				vuk::RenderPassInfo rpi;
+				vuk::CommandBuffer::RenderPassInfo rpi;
 				rpi.renderpass = rpass.handle;
-				rpi.subpass = i;
+				rpi.subpass = (uint32_t)i;
 				rpi.extent = vk::Extent2D(rpass.fbci.width, rpass.fbci.height);
 				auto& spdesc = rpass.rpci.subpass_descriptions[i];
 				rpi.color_attachments = gsl::span<const vk::AttachmentReference>(spdesc.pColorAttachments, spdesc.colorAttachmentCount);
@@ -755,204 +814,5 @@ namespace vuk {
 		}
 		cbuf.end();
 		return cbuf;
-	}
-
-	void RenderGraph::generate_graph_visualization() {}
-
-	CommandBuffer& CommandBuffer::set_viewport(unsigned index, vk::Viewport vp) {
-		command_buffer.setViewport(index, vp);
-		return *this;
-	}
-
-	CommandBuffer& CommandBuffer::set_viewport(unsigned index, Area area) {
-		vk::Viewport vp;
-		vp.x = area.offset.x;
-		vp.y = area.offset.y;
-		vp.width = area.extent.width;
-		vp.height = area.extent.height;
-		vp.minDepth = 0.f;
-		vp.maxDepth = 1.f;
-		command_buffer.setViewport(index, vp);
-		return *this;
-	}
-
-	CommandBuffer& CommandBuffer::set_viewport(unsigned index, Area::Framebuffer area) {
-		assert(ongoing_renderpass);
-		auto fb_dimensions = ongoing_renderpass->extent;
-		vk::Viewport vp;
-		vp.x = area.x * fb_dimensions.width;
-		vp.height = -area.height * fb_dimensions.height;
-		vp.y = area.y * fb_dimensions.height - vp.height;
-		vp.width = area.width * fb_dimensions.width;
-		vp.minDepth = 0.f;
-		vp.maxDepth = 1.f;
-		command_buffer.setViewport(index, vp);
-		return *this;
-	}
-
-	CommandBuffer& CommandBuffer::set_scissor(unsigned index, vk::Rect2D vp) {
-		command_buffer.setScissor(index, vp);
-		return *this;
-	}
-
-	CommandBuffer& CommandBuffer::set_scissor(unsigned index, Area area) {
-		command_buffer.setScissor(index, vk::Rect2D{ area.offset, area.extent });
-		return *this;
-	}
-
-	CommandBuffer& CommandBuffer::set_scissor(unsigned index, Area::Framebuffer area) {
-		assert(ongoing_renderpass);
-		auto fb_dimensions = ongoing_renderpass->extent;
-		vk::Rect2D vp;
-		vp.offset.x = area.x * fb_dimensions.width;
-		vp.offset.y = area.y * fb_dimensions.height;
-		vp.extent.width = area.width * fb_dimensions.width;
-		vp.extent.height = area.height * fb_dimensions.height;
-		command_buffer.setScissor(index, vp);
-		return *this;
-	}
-
-	CommandBuffer& CommandBuffer::bind_pipeline(vuk::PipelineCreateInfo pi) {
-		next_pipeline = pi;
-		return *this;
-	}
-
-	CommandBuffer& CommandBuffer::bind_pipeline(Name p) {
-		return bind_pipeline(ptc.ifc.ctx.named_pipelines.at(p));
-	}
-
-	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, const Allocator::Buffer& buf, unsigned first_attribute, Packed format) {
-		std::erase_if(attribute_descriptions, [&](auto& b) {return b.binding == binding; });
-		std::erase_if(binding_descriptions, [&](auto& b) {return b.binding == binding; });
-
-		size_t location = first_attribute;
-		size_t offset = 0;
-		for (auto& f : format.list) {
-			if (f.ignore) {
-				offset += f.size;
-			} else {
-				vk::VertexInputAttributeDescription viad;
-				viad.binding = binding;
-				viad.format = f.format;
-				viad.location = location;
-				viad.offset = offset;
-				attribute_descriptions.push_back(viad);
-				offset += f.size;
-				location++;
-			}
-		}
-	
-		vk::VertexInputBindingDescription vibd;
-		vibd.binding = binding;
-		vibd.inputRate = vk::VertexInputRate::eVertex;
-		vibd.stride = offset;
-		binding_descriptions.push_back(vibd);
-
-		if(buf.buffer)
-			command_buffer.bindVertexBuffers(binding, buf.buffer, buf.offset);
-		return *this;
-	}
-
-	CommandBuffer& CommandBuffer::bind_index_buffer(const Allocator::Buffer& buf, vk::IndexType type) {
-		command_buffer.bindIndexBuffer(buf.buffer, buf.offset, type);
-		return *this;
-	}
-
-	CommandBuffer& CommandBuffer::bind_sampled_image(unsigned set, unsigned binding, vuk::ImageView iv, vk::SamplerCreateInfo sci) {
-		sets_used[set] = true;
-		set_bindings[set].bindings[binding].type = vk::DescriptorType::eCombinedImageSampler;
-		set_bindings[set].bindings[binding].image = { };
-		set_bindings[set].bindings[binding].image.image_view = iv;
-		set_bindings[set].bindings[binding].image.image_layout = vk::ImageLayout::eShaderReadOnlyOptimal;
-		set_bindings[set].bindings[binding].image.sampler = ptc.ctx.wrap(ptc.sampler_cache.acquire(sci));
-		set_bindings[set].used.set(binding);
-
-		return *this;
-	}
-
-	CommandBuffer& CommandBuffer::bind_sampled_image(unsigned set, unsigned binding, Name name, vk::SamplerCreateInfo sampler_create_info) {
-		return bind_sampled_image(set, binding, rg.bound_attachments[name].iv, sampler_create_info);
-	}
-
-	CommandBuffer& CommandBuffer::push_constants(vk::ShaderStageFlags stages, size_t offset, void* data, size_t size) {
-		pcrs.push_back(vk::PushConstantRange(stages, offset, size));
-		void* dst = push_constant_buffer.data() + offset;
-		::memcpy(dst, data, size);
-		return *this;
-	}
-
-	CommandBuffer& CommandBuffer::bind_uniform_buffer(unsigned set, unsigned binding, Allocator::Buffer buffer) {
-		sets_used[set] = true;
-		set_bindings[set].bindings[binding].type = vk::DescriptorType::eUniformBuffer;
-		set_bindings[set].bindings[binding].buffer = vk::DescriptorBufferInfo{ buffer.buffer, buffer.offset, buffer.size };
-		set_bindings[set].used.set(binding);
-		return *this;
-	}
-
-	void* CommandBuffer::_map_scratch_uniform_binding(unsigned set, unsigned binding, size_t size) {
-		auto buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vk::BufferUsageFlagBits::eUniformBuffer, size, true);
-		bind_uniform_buffer(set, binding, buf);
-		return buf.mapped_ptr;
-	}
-
-	CommandBuffer& CommandBuffer::draw(uint32_t a, uint32_t b, uint32_t c, uint32_t d) {
-		_bind_graphics_pipeline_state();
-		command_buffer.draw(a, b, c, d);
-		return *this;
-	}
-
-	CommandBuffer& CommandBuffer::draw_indexed(uint32_t index_count, uint32_t instance_count, uint32_t first_index, int32_t vertex_offset, uint32_t first_instance) {
-		_bind_graphics_pipeline_state();
-		command_buffer.drawIndexed(index_count, instance_count, first_index, vertex_offset, first_instance);
-		return *this;
-	}
-
-	void CommandBuffer::_bind_graphics_pipeline_state() {
-		if (next_pipeline) {
-			auto& pi = next_pipeline.value();
-			// set vertex input
-			pi.attribute_descriptions = attribute_descriptions;
-			pi.binding_descriptions = binding_descriptions;
-			auto& vertex_input_state = pi.vertex_input_state;
-			vertex_input_state.pVertexAttributeDescriptions = pi.attribute_descriptions.data();
-			vertex_input_state.vertexAttributeDescriptionCount = pi.attribute_descriptions.size();
-			vertex_input_state.pVertexBindingDescriptions = pi.binding_descriptions.data();
-			vertex_input_state.vertexBindingDescriptionCount = pi.binding_descriptions.size();
-
-			pi.render_pass = ongoing_renderpass->renderpass;
-			pi.subpass = ongoing_renderpass->subpass;
-
-			pi.dynamic_state.pDynamicStates = pi.dynamic_states.data();
-			pi.dynamic_state.dynamicStateCount = gsl::narrow_cast<unsigned>(pi.dynamic_states.size());
-
-			pi.multisample_state.rasterizationSamples = ongoing_renderpass->samples;
-
-			// last blend attachment is replicated to cover all attachments
-			if (pi.color_blend_attachments.size() < ongoing_renderpass->color_attachments.size()) {
-				pi.color_blend_attachments.resize(ongoing_renderpass->color_attachments.size(), pi.color_blend_attachments.back());
-			}
-			pi.color_blend_state.pAttachments = pi.color_blend_attachments.data();
-			pi.color_blend_state.attachmentCount = pi.color_blend_attachments.size();
-
-			current_pipeline = ptc.pipeline_cache.acquire(pi);
-			command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, current_pipeline->pipeline);
-			next_pipeline = {};
-		}
-
-		for (auto& pcr : pcrs) {
-			void* data = push_constant_buffer.data() + pcr.offset;
-			command_buffer.pushConstants(current_pipeline->pipeline_layout, pcr.stageFlags, pcr.offset, pcr.size, data);
-		}
-		pcrs.clear();
-
-		for (size_t i = 0; i < VUK_MAX_SETS; i++) {
-			if (!sets_used[i])
-				continue;
-			set_bindings[i].layout_info = current_pipeline->layout_info[i];
-			auto ds = ptc.descriptor_sets.acquire(set_bindings[i]);
-			command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, current_pipeline->pipeline_layout, 0, 1, &ds.descriptor_set, 0, nullptr);
-			sets_used[i] = false;
-			set_bindings[i] = {};
-		}
 	}
 }

@@ -3,20 +3,14 @@
 #include <vector>
 #include "vulkan/vulkan.hpp"
 #include "Hash.hpp"
+#include "CreateInfo.hpp"
+#include "Descriptor.hpp"
+
+#define VUK_MAX_SETS 8
 
 namespace vuk {
 	enum class BlendPreset {
 		eOff, eAlphaBlend, ePremultipliedAlphaBlend
-	};
-
-	struct DescriptorSetLayoutCreateInfo {
-		vk::DescriptorSetLayoutCreateInfo dslci;
-		std::vector<vk::DescriptorSetLayoutBinding> bindings;
-		size_t index;
-
-		bool operator==(const DescriptorSetLayoutCreateInfo& o) const {
-			return std::tie(dslci.flags, bindings) == std::tie(o.dslci.flags, o.bindings);
-		}
 	};
 
 	struct PipelineLayoutCreateInfo {
@@ -27,6 +21,10 @@ namespace vuk {
 		bool operator==(const PipelineLayoutCreateInfo& o) const {
 			return std::tie(plci.flags, pcrs, dslcis) == std::tie(o.plci.flags, o.pcrs, o.dslcis);
 		}
+	};
+
+	template<> struct create_info<vk::PipelineLayout> {
+		using type = vuk::PipelineLayoutCreateInfo;
 	};
 
 	struct Program;
@@ -69,9 +67,19 @@ namespace vuk {
 				std::tie(o.shaders, o.binding_descriptions, o.attribute_descriptions, o.input_assembly_state, o.rasterization_state, o.color_blend_attachments, o.viewport_state, o.dynamic_states, o.depth_stencil_state, o.multisample_state, o.render_pass, o.subpass);
 		}
 	};
+
+	struct PipelineInfo {
+		vk::Pipeline pipeline;
+		vk::PipelineLayout pipeline_layout;
+		std::array<DescriptorSetLayoutAllocInfo, VUK_MAX_SETS> layout_info;
+	};
+
+	template<> struct create_info<PipelineInfo> {
+		using type = vuk::PipelineCreateInfo;
+	};
 }
 
-namespace std {
+namespace std {	
 	template <class T>
 	struct hash<std::vector<T>> {
 		size_t operator()(std::vector<T> const& x) const noexcept {
@@ -89,26 +97,6 @@ namespace std {
 			size_t h = 0;
 			// TODO: better hash
 			hash_combine(h, x.shaders);
-			return h;
-		}
-	};
-
-	template <>
-	struct hash<vk::DescriptorSetLayoutBinding> {
-		size_t operator()(vk::DescriptorSetLayoutBinding const & x) const noexcept {
-			size_t h = 0;
-			// TODO: immutable samplers
-			hash_combine(h, x.binding, x.descriptorCount, x.descriptorType, (VkShaderStageFlags)x.stageFlags);
-			return h;
-		}
-	};
-
-
-	template <>
-	struct hash<vuk::DescriptorSetLayoutCreateInfo> {
-		size_t operator()(vuk::DescriptorSetLayoutCreateInfo const & x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.bindings);
 			return h;
 		}
 	};

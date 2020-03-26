@@ -2,6 +2,7 @@
 #include <vulkan/vulkan.hpp>
 #include <unordered_map>
 #include <vector>
+#include "CreateInfo.hpp"
 
 namespace spirv_cross {
 	struct SPIRType;
@@ -84,4 +85,31 @@ namespace vuk {
 
 		void append(const Program& o);
 	};
+
+	struct ShaderModuleCreateInfo {
+		std::string source;
+		std::string filename;
+
+		bool operator==(const ShaderModuleCreateInfo& o) const {
+			return source == o.source; // we check for content equality
+		}
+	};
+
+	struct ShaderModule {
+		vk::ShaderModule shader_module;
+		vuk::Program reflection_info;
+		vk::ShaderStageFlagBits stage;
+	};
+
+	template<> struct create_info<vuk::ShaderModule> {
+		using type = vuk::ShaderModuleCreateInfo;
+	};
 }
+
+namespace std {
+	template <>
+	struct hash<vuk::ShaderModuleCreateInfo> {
+		size_t operator()(vuk::ShaderModuleCreateInfo const& x) const noexcept;
+	};
+};
+

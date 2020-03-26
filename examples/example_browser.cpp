@@ -108,7 +108,7 @@ void vuk::ExampleRunner::render() {
 				rg.bound_attachments.insert(rg_frag.bound_attachments.begin(), rg_frag.bound_attachments.end());
 				auto& attachment_name = *attachment_names.emplace(std::string(ex->name) + "_final");
 
-				rg.mark_attachment_internal(attachment_name, vk::Format::eR8G8B8A8Srgb, vk::Extent2D(300.f, 300.f), vuk::Samples::e1, vuk::ClearColor(0.1, 0.2, 0.3, 1.f));
+				rg.mark_attachment_internal(attachment_name, vk::Format::eR8G8B8A8Srgb, vk::Extent2D(300, 300), vuk::Samples::e1, vuk::ClearColor(0.1f, 0.2f, 0.3f, 1.f));
 				ImGui::Begin(ex->name.data());
 				if (rg_frag.use_chains.size() > 1) {
 					bool disable = false;

@@ -31,9 +31,9 @@ target_compile_features(vuk PUBLIC cxx_std_20)
 
 target_sources(vuk PRIVATE 
 	src/Pipeline.hpp
-	src/Pipeline.cc
+	src/Pipeline.cpp
 	src/Program.hpp
-	src/Program.cc
+	src/Program.cpp
 	src/Pool.cpp
 	src/Pool.hpp
 	src/Context.hpp
@@ -47,7 +47,7 @@ target_sources(vuk PRIVATE
 	src/Allocator.cpp
 	src/CommandBuffer.hpp
 	src/Handle.hpp
-	src/Context.cpp)
+	src/Context.cpp src/CommandBuffer.cpp)
 
 target_include_directories(vuk PUBLIC include ext/mapbox-variant/include)
 target_include_directories(vuk PUBLIC ext/shaderc/libshaderc/include)
@@ -57,16 +57,13 @@ target_include_directories(vuk PUBLIC ext/VulkanMemoryAllocator/src)
 target_include_directories(vuk PUBLIC ext/imgui src/)
 target_sources(vuk PRIVATE ext/imgui/imgui.cpp ext/imgui/imgui_draw.cpp ext/imgui/imgui_demo.cpp ext/imgui/imgui_widgets.cpp ext/imgui/examples/imgui_impl_glfw.cpp)
 
-target_compile_options(vuk PRIVATE /W3 /MP /bigobj /std:c++latest /permissive- /EHa /GT)
+target_compile_options(vuk PRIVATE /W3 /MP /bigobj /permissive- /GT)
 target_compile_options(vuk PUBLIC /Zc:char8_t-)
 
 target_link_libraries(vuk PUBLIC ${Vulkan_LIBRARY} vk-bootstrap glfw GSL spirv-cross-core shaderc smolog glm)
 
 if (WIN32)
-	target_compile_definitions(vuk PUBLIC _WIN32 INITGUID NOMINMAX VC_EXTRALEAN WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS _SCL_SECURE_NO_WARNINGS)
-	target_compile_definitions(vuk PUBLIC GLFW_EXPOSE_NATIVE_WIN32 GLFW_EXPOSE_NATIVE_WGL VK_USE_PLATFORM_WIN32_KHR GLFW_INCLUDE_NONE)
+	target_compile_definitions(vuk PUBLIC NOMINMAX VC_EXTRALEAN WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS _SCL_SECURE_NO_WARNINGS)
 endif()
-target_compile_definitions(vuk PUBLIC GLM_FORCE_SIZE_FUNC GLM_FORCE_EXPLICIT_CTOR _AMD64_ GLM_ENABLE_EXPERIMENTAL GLM_FORCE_RADIANS GLM_FORCE_DEPTH_ZERO_TO_ONE)
-target_compile_definitions(vuk PUBLIC IMGUI_DEFINE_MATH_OPERATORS IMGUI_DEFINE_PLACEMENT_NEW)
-
+target_compile_definitions(vuk PUBLIC GLM_FORCE_SIZE_FUNC GLM_FORCE_EXPLICIT_CTOR GLM_ENABLE_EXPERIMENTAL GLM_FORCE_RADIANS GLM_FORCE_DEPTH_ZERO_TO_ONE)
 add_subdirectory(examples)

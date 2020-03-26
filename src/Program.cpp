@@ -3,6 +3,7 @@
 #include <spirv_cross.hpp>
 #include <regex>
 #include <smolog.hpp>
+#include "Hash.hpp"
 
 vk::ShaderStageFlagBits vuk::Program::introspect(const spirv_cross::Compiler& refl) {
 	auto resources = refl.get_shader_resources();
@@ -96,7 +97,7 @@ vk::ShaderStageFlagBits vuk::Program::introspect(const spirv_cross::Compiler& re
 		auto type = refl.get_type(si.base_type_id);
 		vk::PushConstantRange pcr;
 		pcr.offset = 0;
-		pcr.size = refl.get_declared_struct_size(type);
+		pcr.size = (uint32_t)refl.get_declared_struct_size(type);
 		pcr.stageFlags = stage;
 		push_constant_ranges.push_back(pcr);
 	}
@@ -115,4 +116,10 @@ void vuk::Program::append(const Program& o) {
 		s.texel_buffers.insert(s.texel_buffers.end(), os.texel_buffers.begin(), os.texel_buffers.end());
 		s.subpass_inputs.insert(s.subpass_inputs.end(), os.subpass_inputs.begin(), os.subpass_inputs.end());
 	}
+}
+
+size_t std::hash<vuk::ShaderModuleCreateInfo>::operator()(vuk::ShaderModuleCreateInfo const& x) const noexcept {
+	size_t h = 0;
+	hash_combine(h, x.source); // filename is intentionally not hashed in
+	return h;
 }

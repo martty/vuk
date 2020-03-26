@@ -5,13 +5,9 @@
 #include <mutex>
 #include <vector>
 #include <vulkan/vulkan.hpp>
+#include "vuk_fwd.hpp"
 
 namespace vuk {
-	class Context;
-	class InflightContext;
-	class PerThreadContext;
-
-
 	template<class T>
 	struct PooledType {
 		std::vector<T> values;

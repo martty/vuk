@@ -43,8 +43,8 @@ namespace vuk {
 
 	void PooledType<vk::Fence>::reset(Context& ctx) {
 		if (needle > 0) {
-			ctx.device.waitForFences(needle, values.data(), true, UINT64_MAX);
-			ctx.device.resetFences(needle, values.data());
+			ctx.device.waitForFences((uint32_t)needle, values.data(), true, UINT64_MAX);
+			ctx.device.resetFences((uint32_t)needle, values.data());
 		}
 		needle = 0;
 	}
