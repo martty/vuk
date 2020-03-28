@@ -2,12 +2,10 @@
 #include <gsl/gsl_util>
 #include <spirv_cross.hpp>
 #include <regex>
-#include <smolog.hpp>
 #include "Hash.hpp"
 
 vk::ShaderStageFlagBits vuk::Program::introspect(const spirv_cross::Compiler& refl) {
 	auto resources = refl.get_shader_resources();
-	//auto cross_stage = refl.
 	auto entry_name = refl.get_entry_points_and_stages()[0];
 	auto entry_point = refl.get_entry_point(entry_name.name, entry_name.execution_model);
 	auto model = entry_point.model;
@@ -61,10 +59,6 @@ vk::ShaderStageFlagBits vuk::Program::introspect(const spirv_cross::Compiler& re
 		un.stage = stage;
 		un.name = sb.name.c_str();
 		un.min_size = refl.get_declared_struct_size(refl.get_type(sb.type_id));
-		/*if (type.array.size() > 0)
-			un.array_size = type.array[0];
-		else
-			un.array_size = 1;*/
 		sets[set].storage_buffers.push_back(un);
 	}
 
