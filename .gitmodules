@@ -1,18 +1,12 @@
 [submodule "ext/vk-bootstrap"]
 	path = ext/vk-bootstrap
 	url = https://github.com/charles-lunarg/vk-bootstrap
-[submodule "ext/shaderc"]
-	path = ext/shaderc
-	url = https://github.com/google/shaderc
 [submodule "ext/glfw"]
 	path = ext/glfw
 	url = https://github.com/glfw/glfw
 [submodule "ext/GSL"]
 	path = ext/GSL
 	url = https://github.com/Microsoft/GSL
-[submodule "ext/smolog"]
-	path = ext/smolog
-	url = http://github.com/martty/smolog
 [submodule "ext/SPIRV-Cross"]
 	path = ext/SPIRV-Cross
 	url = https://github.com/KhronosGroup/SPIRV-Cross
@@ -23,9 +17,6 @@
 	path = ext/VulkanMemoryAllocator
 	url = https://github.com/martty/VulkanMemoryAllocator
 	branch = vuk
-[submodule "ext/FiberTaskingLib"]
-	path = ext/FiberTaskingLib
-	url = https://github.com/RichieSams/FiberTaskingLib
 [submodule "ext/glm"]
 	path = ext/glm
 	url = https://github.com/g-truc/glm
