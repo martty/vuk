@@ -22,7 +22,7 @@ vuk::ExampleRunner::ExampleRunner() {
 				// error
 			}
 			vkbinstance = inst_ret.value();
-
+			auto instance = vkbinstance.instance;
 			vkb::PhysicalDeviceSelector selector{ vkbinstance };
 			window = create_window_glfw();
 			surface = create_surface_glfw(vkbinstance.instance, window);
@@ -44,7 +44,7 @@ vuk::ExampleRunner::ExampleRunner() {
 			graphics_queue = vkbdevice.get_queue(vkb::QueueType::graphics).value();
 			device = vkbdevice.device;
 
-			context.emplace(device, physical_device);
+			context.emplace(instance, device, physical_device);
 			context->graphics_queue = graphics_queue;
 
 			swapchain = context->add_swapchain(util::make_swapchain(vkbdevice));

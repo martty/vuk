@@ -1,11 +1,72 @@
 #include "Allocator.hpp"
+#include <string>
+
 namespace vuk {
 	PFN_vmaAllocateDeviceMemoryFunction Allocator::real_alloc_callback = nullptr;
-	Allocator::PoolAllocGlobalState Allocator::pags;
-	std::mutex Allocator::mutex;
 
-	Allocator::Allocator(vk::Device device, vk::PhysicalDevice phys_dev) : device(device), physdev(phys_dev) {
+	std::string to_human_readable(uint64_t in) {
+		/*       k       M      G */
+		if (in >= 1024 * 1024 * 1024) {
+			return std::to_string(in / (1024 * 1024 * 1024)) + " GiB";
+		} else if (in >= 1024 * 1024) {
+			return std::to_string(in / (1024 * 1024)) + " MiB";
+		} else if (in >= 1024) {
+			return std::to_string(in / (1024)) + " kiB";
+		} else {
+			return std::to_string(in) + " B";
+		}
+	}
+
+	void Allocator::pool_cb(VmaAllocator allocator, uint32_t memoryType, VkDeviceMemory memory, VkDeviceSize size, void* userdata) {
+		auto& pags = *reinterpret_cast<PoolAllocHelper*>(userdata);
+		pags.bci.size = size;
+		auto buffer = pags.device.createBuffer(pags.bci);
+		pags.device.bindBufferMemory(buffer, memory, 0);
+		pags.result = buffer;
+
+		std::string devmem_name = "DeviceMemory (Pool [" + std::to_string(memoryType) + "] " + to_human_readable(size) + ")";
+		std::string buffer_name = "Buffer (Pool ";
+		buffer_name += vk::to_string(pags.bci.usage);
+		buffer_name += ")";
+		
+		{
+			VkDebugUtilsObjectNameInfoEXT info;
+			info.pNext = nullptr;
+			info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
+			info.pObjectName = devmem_name.c_str();
+			info.objectType = (VkObjectType)vk::DeviceMemory::objectType;
+			info.objectHandle = reinterpret_cast<uint64_t>(memory);
+			pags.setDebugUtilsObjectNameEXT(pags.device, &info);
+		}
+		{
+			VkDebugUtilsObjectNameInfoEXT info;
+			info.pNext = nullptr;
+			info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
+			info.pObjectName = buffer_name.c_str();
+			info.objectType = (VkObjectType)vk::Buffer::objectType;
+			info.objectHandle = reinterpret_cast<uint64_t>((VkBuffer)buffer);
+			pags.setDebugUtilsObjectNameEXT(pags.device, &info);
+		}
+	}
+
+	void Allocator::noop_cb(VmaAllocator allocator, uint32_t memoryType, VkDeviceMemory memory, VkDeviceSize size, void* userdata) {
+		auto& pags = *reinterpret_cast<PoolAllocHelper*>(userdata);
+		std::string devmem_name = "DeviceMemory (Dedicated [" + std::to_string(memoryType) + "] " + to_human_readable(size) + ")";
+		{
+			VkDebugUtilsObjectNameInfoEXT info;
+			info.pNext = nullptr;
+			info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
+			info.pObjectName = devmem_name.c_str();
+			info.objectType = (VkObjectType)vk::DeviceMemory::objectType;
+			info.objectHandle = reinterpret_cast<uint64_t>(memory);
+			pags.setDebugUtilsObjectNameEXT(pags.device, &info);
+		}
+
+	}
+
+	Allocator::Allocator(vk::Instance instance, vk::Device device, vk::PhysicalDevice phys_dev) : device(device), physdev(phys_dev) {
 		VmaAllocatorCreateInfo allocatorInfo = {};
+		allocatorInfo.instance = instance;
 		allocatorInfo.physicalDevice = phys_dev;
 		allocatorInfo.device = device;
 		allocatorInfo.flags = VMA_ALLOCATOR_CREATE_EXTERNALLY_SYNCHRONIZED_BIT;
@@ -14,11 +75,14 @@ namespace vuk {
 		cbs.pfnFree = nullptr;
 		real_alloc_callback = noop_cb;
 		cbs.pfnAllocate = allocation_cb;
+		pool_helper = std::make_unique<PoolAllocHelper>();
+		pool_helper->setDebugUtilsObjectNameEXT = (PFN_vkSetDebugUtilsObjectNameEXT)vkGetDeviceProcAddr(device, "vkSetDebugUtilsObjectNameEXT");
+		cbs.pUserData = pool_helper.get();
 		allocatorInfo.pDeviceMemoryCallbacks = &cbs;
 
 		vmaCreateAllocator(&allocatorInfo, &allocator);
 
-		pags.device = device;
+		pool_helper->device = device;
 	}
 
 	// not locked, must be called from a locked fn
@@ -60,21 +124,22 @@ namespace vuk {
 		VmaAllocation res;
 		VmaAllocationInfo vai;
 		real_alloc_callback = pool_cb;
-		pags.bci = bci;
+		pool_helper->bci = bci;
+		pool_helper->result = vk::Buffer{};
 		auto mem_reqs = pool.mem_reqs;
 		mem_reqs.size = size;
 		VkMemoryRequirements vkmem_reqs = mem_reqs;
 		auto result = vmaAllocateMemory(allocator, &vkmem_reqs, &vaci, &res, &vai);
 		assert(result == VK_SUCCESS);
 		real_alloc_callback = noop_cb;
-		if (pags.buffer != vk::Buffer{}) {
-			// TODO: this breaks if we allocate multiple memories for a pool
-			// we need a devicememory -> buffer mapping to figure out which vk::Buffer we got
-			pool.buffer = pags.buffer;
-			pags.buffer = vk::Buffer{};
+
+		// record if new buffer was used
+		if (pool_helper->result != vk::Buffer{}) {
+			buffers.emplace(reinterpret_cast<uint64_t>(vai.deviceMemory), pool_helper->result);
+			pool.buffers.emplace_back(pool_helper->result);
 		}
 		Buffer b;
-		b.buffer = pool.buffer;
+		b.buffer = buffers.at(reinterpret_cast<uint64_t>(vai.deviceMemory));
 		b.device_memory = vai.deviceMemory;
 		b.offset = vai.offset;
 		b.size = vai.size;
@@ -141,7 +206,9 @@ namespace vuk {
 		std::lock_guard _(mutex);
 		vmaResetPool(allocator, pool.pool);
 		vmaForceUnmapPool(allocator, pool.pool);
-		device.destroy(pool.buffer);
+		for (auto& buffer : pool.buffers) {
+			device.destroy(buffer);
+		}
 		vmaDestroyPool(allocator, pool.pool);
 	}
 	vk::Image Allocator::create_image_for_rendertarget(vk::ImageCreateInfo ici) {
@@ -184,11 +251,6 @@ namespace vuk {
 	Allocator::~Allocator() {
 		for (auto [img, alloc] : images) {
 			vmaDestroyImage(allocator, (VkImage)img, alloc);
-		}
-
-		for (auto& [ps, pi] : pools) {
-			device.destroy(pi.buffer);
-			vmaDestroyPool(allocator, pi.pool);
 		}
 		vmaDestroyAllocator(allocator);
 	}

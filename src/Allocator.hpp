@@ -43,7 +43,7 @@ namespace vuk {
 			VmaPool pool;
 			vk::MemoryRequirements mem_reqs;
 			vk::BufferUsageFlags usage;
-			vk::Buffer buffer;
+			std::vector<vk::Buffer> buffers;
 		};
 		struct Buffer {
 			vk::DeviceMemory device_memory;
@@ -54,37 +54,34 @@ namespace vuk {
 			VmaAllocation allocation;
 		};
 	private:
-		static std::mutex mutex;
-		struct PoolAllocGlobalState {
+		std::mutex mutex;
+		struct PoolAllocHelper {
 			vk::Device device;
-			vk::Buffer buffer = {};
 			vk::BufferCreateInfo bci;
+			vk::Buffer result;
+			PFN_vkSetDebugUtilsObjectNameEXT setDebugUtilsObjectNameEXT;
 		};
-		static PoolAllocGlobalState pags;
+		std::unique_ptr<PoolAllocHelper> pool_helper;
 
-		static void pool_cb(VmaAllocator allocator, uint32_t memoryType, VkDeviceMemory memory, VkDeviceSize size) {
-			pags.bci.size = size;
-			pags.buffer = pags.device.createBuffer(pags.bci);
-			pags.device.bindBufferMemory(pags.buffer, memory, 0);
-			printf("Pool allocated\n");
-		};
+		static void pool_cb(VmaAllocator allocator, uint32_t memoryType, VkDeviceMemory memory, VkDeviceSize size, void* userdata);;
 
-		static void noop_cb(VmaAllocator allocator, uint32_t memoryType, VkDeviceMemory memory, VkDeviceSize size) {}
+		static void noop_cb(VmaAllocator allocator, uint32_t memoryType, VkDeviceMemory memory, VkDeviceSize size, void* userdata);
 
 		static PFN_vmaAllocateDeviceMemoryFunction real_alloc_callback;
 
-		static void allocation_cb(VmaAllocator allocator, uint32_t memoryType, VkDeviceMemory memory, VkDeviceSize size) {
-			real_alloc_callback(allocator, memoryType, memory, size);
+		static void allocation_cb(VmaAllocator allocator, uint32_t memoryType, VkDeviceMemory memory, VkDeviceSize size, void* userdata) {
+			real_alloc_callback(allocator, memoryType, memory, size, userdata);
 		}
 		vk::Device device;
 		vk::PhysicalDevice physdev;
 
 		std::unordered_map<uint64_t, VmaAllocation> images;
 		std::unordered_map<PoolSelect, Pool> pools;
+		std::unordered_map<uint64_t, vk::Buffer> buffers;
 
 		VmaAllocator allocator;
 	public:
-		Allocator(vk::Device device, vk::PhysicalDevice phys_dev);
+		Allocator(vk::Instance instance, vk::Device device, vk::PhysicalDevice phys_dev);
 		~Allocator();
 
 		// allocate an externally managed pool

@@ -78,7 +78,8 @@ namespace vuk {
 	class Context {
 	public:
 		constexpr static size_t FC = 3;
-
+		
+		vk::Instance instance;
 		vk::Device device;
 		vk::PhysicalDevice physical_device;
 		Allocator allocator;
@@ -147,7 +148,7 @@ namespace vuk {
 			void end_region(const vk::CommandBuffer&);
 		} debug;
 
-		Context(vk::Device device, vk::PhysicalDevice physical_device);
+		Context(vk::Instance instance, vk::Device device, vk::PhysicalDevice physical_device);
 		~Context();
 
 		void create_named_pipeline(const char* name, vuk::PipelineCreateInfo ci);
@@ -212,7 +213,6 @@ namespace vuk {
 			vk::Extent3D extent;
 			TransferStub stub;
 		};
-
 
 		std::atomic<size_t> transfer_id = 1;
 		std::atomic<size_t> last_transfer_complete = 0;

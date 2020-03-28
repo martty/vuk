@@ -476,10 +476,11 @@ vuk::SwapchainRef vuk::Context::add_swapchain(Swapchain sw) {
 	return &*swapchains.emplace(sw);
 }
 
-vuk::Context::Context(vk::Device device, vk::PhysicalDevice physical_device) :
+vuk::Context::Context(vk::Instance instance, vk::Device device, vk::PhysicalDevice physical_device) :
+	instance(instance),
 	device(device),
 	physical_device(physical_device),
-	allocator(device, physical_device),
+	allocator(instance, device, physical_device),
 	cbuf_pools(*this),
 	semaphore_pools(*this),
 	fence_pools(*this),
