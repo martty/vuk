@@ -16,7 +16,6 @@ namespace std {
 	template <class BitType, class MaskType>
 	struct hash<vk::Flags<BitType, MaskType>> {
 		size_t operator()(vk::Flags<BitType, MaskType> const& x) const noexcept {
-			size_t h = 0;
 			return std::hash<MaskType>()((MaskType)x);
 		}
 	};

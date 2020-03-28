@@ -9,17 +9,19 @@ namespace {
 
 	vuk::Example x{
 		.name = "02_cube",
-		.setup = [&](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
+		.setup = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
 			vuk::PipelineCreateInfo pci;
 			pci.shaders.push_back("../../examples/ubo_test.vert");
 			pci.shaders.push_back("../../examples/triangle_depthshaded.frag");
 			runner.context->create_named_pipeline("cube", pci);
 		},
-		.render = [&](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
+		.render = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
 			auto ptc = ifc.begin();
-
-			auto [verts, stub1] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eVertexBuffer, gsl::span(&box.first[0], box.first.size()));
-			auto [inds, stub2] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eIndexBuffer, gsl::span(&box.second[0], box.second.size()));
+		
+			auto [bverts, stub1] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eVertexBuffer, gsl::span(&box.first[0], box.first.size()));
+			auto verts = std::move(bverts);
+			auto [binds, stub2] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eIndexBuffer, gsl::span(&box.second[0], box.second.size()));
+			auto inds = std::move(binds);
 			struct VP {
 				glm::mat4 view;
 				glm::mat4 proj;
@@ -27,7 +29,8 @@ namespace {
 			vp.view = glm::lookAt(glm::vec3(0, 1.5, 3.5), glm::vec3(0), glm::vec3(0, 1, 0));
 			vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 1.f, 10.f);
 
-			auto [uboVP, stub3] = ptc.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vk::BufferUsageFlagBits::eUniformBuffer, gsl::span(&vp, 1));
+			auto [buboVP, stub3] = ptc.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vk::BufferUsageFlagBits::eUniformBuffer, gsl::span(&vp, 1));
+			auto uboVP = buboVP;
 			ptc.wait_all_transfers();
 
 			vuk::RenderGraph rg;

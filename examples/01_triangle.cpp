@@ -3,14 +3,14 @@
 namespace {
 	vuk::Example x{
 		.name = "01_triangle",
-		.setup = [&](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
+		.setup = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
 			vuk::PipelineCreateInfo pci;
 			pci.shaders.push_back("../../examples/triangle.vert");
 			pci.shaders.push_back("../../examples/triangle.frag");
 			pci.depth_stencil_state.depthCompareOp = vk::CompareOp::eAlways;
 			runner.context->create_named_pipeline("triangle", pci);
 		},
-		.render = [&](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
+		.render = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
 			auto ptc = ifc.begin();
 
 			vuk::RenderGraph rg;

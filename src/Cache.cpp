@@ -132,7 +132,9 @@ namespace vuk {
 			dsai.descriptorPool = get_pool(ptc, layout_alloc_info);
 			dsai.descriptorSetCount = 1;
 			dsai.pSetLayouts = &layout_alloc_info.layout;
-			auto result = vkAllocateDescriptorSets(ptc.ctx.device, &(VkDescriptorSetAllocateInfo)dsai, &ds);
+			// use C interface here, because we care about the result
+			VkDescriptorSetAllocateInfo vkdsai = dsai;
+			auto result = vkAllocateDescriptorSets(ptc.ctx.device, &vkdsai, &ds);
 			if (result == VK_ERROR_OUT_OF_POOL_MEMORY || result == VK_ERROR_FRAGMENTED_POOL) {
 				pool_needle++;
 			} else {

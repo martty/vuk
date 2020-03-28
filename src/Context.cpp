@@ -124,19 +124,23 @@ void vuk::execute_submit_and_present_to_one(PerThreadContext& ptc, RenderGraph& 
 
 void vuk::Context::DebugUtils::set_name(const vuk::ImageView& iv, Name name) {
 	if (!enabled()) return;
-	vk::DebugUtilsObjectNameInfoEXT info;
+	VkDebugUtilsObjectNameInfoEXT info;
+	info.pNext = nullptr;
+	info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
 	info.pObjectName = name.data();
-	info.objectType = iv.payload.objectType;
+	info.objectType = (VkObjectType)iv.payload.objectType;
 	info.objectHandle = reinterpret_cast<uint64_t>((VkImageView)iv.payload);
-	setDebugUtilsObjectNameEXT(ctx.device, &(VkDebugUtilsObjectNameInfoEXT)info);
+	setDebugUtilsObjectNameEXT(ctx.device, &info);
 }
 
 void vuk::Context::DebugUtils::begin_region(const vk::CommandBuffer& cb, Name name, std::array<float, 4> color) {
 	if (!enabled()) return;
-	vk::DebugUtilsLabelEXT label;
+	VkDebugUtilsLabelEXT label;
+	label.pNext = nullptr;
+	label.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
 	label.pLabelName = name.data();
 	::memcpy(label.color, color.data(), sizeof(float) * 4);
-	cmdBeginDebugUtilsLabelEXT(cb, &(VkDebugUtilsLabelEXT)label);
+	cmdBeginDebugUtilsLabelEXT(cb, &label);
 }
 
 void vuk::Context::DebugUtils::end_region(const vk::CommandBuffer& cb) {
@@ -304,16 +308,16 @@ vuk::SampledImage& vuk::PerThreadContext::make_sampled_image(Name n, vk::Sampler
 	return sampled_images.acquire(si);
 }
 
+
+
 vuk::DescriptorSet vuk::PerThreadContext::create(const create_info_t<vuk::DescriptorSet>& cinfo) {
 	auto& pool = pool_cache.acquire(cinfo.layout_info);
 	auto ds = pool.acquire(*this, cinfo.layout_info);
-	unsigned long leading_zero = 0;
 	auto mask = cinfo.used.to_ulong();
-	auto is_null = _BitScanReverse(&leading_zero, mask);
-	leading_zero++;
+	unsigned long leading_ones = num_leading_ones(mask);
 	std::array<vk::WriteDescriptorSet, VUK_MAX_BINDINGS> writes;
 	std::array<vk::DescriptorImageInfo, VUK_MAX_BINDINGS> diis;
-	for (unsigned i = 0; i < leading_zero; i++) {
+	for (unsigned i = 0; i < leading_ones; i++) {
 		if (!cinfo.used.test(i)) continue;
 		auto& write = writes[i];
 		auto& binding = cinfo.bindings[i];
@@ -337,7 +341,7 @@ vuk::DescriptorSet vuk::PerThreadContext::create(const create_info_t<vuk::Descri
 			assert(0);
 		}
 	}
-	ctx.device.updateDescriptorSets(leading_zero, writes.data(), 0, nullptr);
+	ctx.device.updateDescriptorSets(leading_ones, writes.data(), 0, nullptr);
 	return { ds, cinfo.layout_info };
 }
 
@@ -484,10 +488,10 @@ vuk::Context::Context(vk::Device device, vk::PhysicalDevice physical_device) :
 	framebuffer_cache(*this),
 	transient_images(*this),
 	scratch_buffers(*this),
+	pool_cache(*this),
 	descriptor_sets(*this),
 	sampler_cache(*this),
 	sampled_images(*this),
-	pool_cache(*this),
 	shader_modules(*this),
 	descriptor_set_layouts(*this),
 	pipeline_layouts(*this),

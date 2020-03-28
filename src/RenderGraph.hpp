@@ -75,7 +75,7 @@ namespace vuk {
 
 		struct Framebuffer {};
 
-		Samples() : infer(false), count(vk::SampleCountFlagBits::e1) {}
+		Samples() : count(vk::SampleCountFlagBits::e1), infer(false) {}
 		Samples(vk::SampleCountFlagBits samples) : count(samples), infer(false) {}
 		Samples(Framebuffer) : infer(true) {}
 

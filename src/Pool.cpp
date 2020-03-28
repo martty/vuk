@@ -3,7 +3,7 @@
 
 namespace vuk {
 	// pools
-
+	template<>
 	gsl::span<vk::Semaphore> PooledType<vk::Semaphore>::acquire(PerThreadContext& ptc, size_t count) {
 		if (values.size() < (needle + count)) {
 			auto remaining = values.size() - needle;
@@ -41,6 +41,7 @@ namespace vuk {
 	template struct PooledType<vk::Semaphore>;
 	template struct PooledType<vk::Fence>;
 
+	template<>
 	void PooledType<vk::Fence>::reset(Context& ctx) {
 		if (needle > 0) {
 			ctx.device.waitForFences((uint32_t)needle, values.data(), true, UINT64_MAX);

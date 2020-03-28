@@ -27,7 +27,7 @@ namespace vuk {
 	};
 
 	struct Ignore {
-		Ignore(size_t bytes) : bytes((uint32_t)bytes), format(vk::Format::eUndefined) {}
+		Ignore(size_t bytes) : format(vk::Format::eUndefined), bytes((uint32_t)bytes) {}
 		Ignore(vk::Format format) : format(format) {}
 		vk::Format format;
 		uint32_t bytes = 0;
@@ -53,8 +53,8 @@ namespace vuk {
 	class CommandBuffer {
 		friend struct RenderGraph;
 		RenderGraph& rg;
-		vk::CommandBuffer command_buffer;
 		vuk::PerThreadContext& ptc;
+		vk::CommandBuffer command_buffer;
 		
 		struct RenderPassInfo {
 			vk::RenderPass renderpass;

@@ -17,11 +17,11 @@ namespace vuk {
 			vk::ImageLayout image_layout;
 		};
 
-		bool is_global;
 		union {
 			Global global = {};
 			RenderGraphAttachment rg_attachment;
 		};
+		bool is_global;
 
 		SampledImage(Global g) : global(g), is_global(true) {}
 		SampledImage(RenderGraphAttachment g) : rg_attachment(g), is_global(false) {}

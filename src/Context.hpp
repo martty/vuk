@@ -134,11 +134,13 @@ namespace vuk {
 			template<class T>
 			void set_name(const T& t, /*zstring_view*/Name name) {
 				if (!enabled()) return;
-				vk::DebugUtilsObjectNameInfoEXT info;
+				VkDebugUtilsObjectNameInfoEXT info;
+				info.pNext = nullptr;
+				info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
 				info.pObjectName = name.data();
-				info.objectType = t.objectType;
+				info.objectType = (VkObjectType)t.objectType;
 				info.objectHandle = reinterpret_cast<uint64_t>((typename T::CType)t);
-				setDebugUtilsObjectNameEXT(ctx.device, &(VkDebugUtilsObjectNameInfoEXT)info);
+				setDebugUtilsObjectNameEXT(ctx.device, &info);
 			}
 
 			void begin_region(const vk::CommandBuffer&, Name name, std::array<float, 4> color = {1,1,1,1});
@@ -167,7 +169,7 @@ namespace vuk {
 		std::atomic<size_t> unique_handle_id_counter = 0;
 		template<class T>
 		Handle<T> wrap(T payload) {
-			return { unique_handle_id_counter++, payload };
+			return { {unique_handle_id_counter++}, payload };
 		}
 
 		std::atomic<size_t> frame_counter = 0;
@@ -335,7 +337,7 @@ namespace vuk {
 	}
 
 	template<class T, size_t FC>
-	Pool<T, FC>::PFView::PFView(InflightContext& ifc, Pool<T, FC>& storage, plf::colony<PooledType<T>>& fv) : ifc(ifc), storage(storage), frame_values(fv) {
+	Pool<T, FC>::PFView::PFView(InflightContext& ifc, Pool<T, FC>& storage, plf::colony<PooledType<T>>& fv) : storage(storage), ifc(ifc), frame_values(fv) {
 		storage.reset(ifc.frame);
 	}	
 }

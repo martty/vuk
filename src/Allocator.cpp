@@ -63,7 +63,8 @@ namespace vuk {
 		pags.bci = bci;
 		auto mem_reqs = pool.mem_reqs;
 		mem_reqs.size = size;
-		auto result = vmaAllocateMemory(allocator, &(VkMemoryRequirements)mem_reqs, &vaci, &res, &vai);
+		VkMemoryRequirements vkmem_reqs = mem_reqs;
+		auto result = vmaAllocateMemory(allocator, &vkmem_reqs, &vaci, &res, &vai);
 		assert(result == VK_SUCCESS);
 		real_alloc_callback = noop_cb;
 		if (pags.buffer != vk::Buffer{}) {
@@ -145,7 +146,7 @@ namespace vuk {
 	}
 	vk::Image Allocator::create_image_for_rendertarget(vk::ImageCreateInfo ici) {
 		std::lock_guard _(mutex);
-		VmaAllocationCreateInfo db;
+		VmaAllocationCreateInfo db{};
 		db.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
 		db.usage = VMA_MEMORY_USAGE_GPU_ONLY;
 		db.requiredFlags = 0;
@@ -153,13 +154,15 @@ namespace vuk {
 		db.pool = nullptr;
 		VkImage vkimg;
 		VmaAllocation vout;
-		vmaCreateImage(allocator, &(VkImageCreateInfo)ici, &db, &vkimg, &vout, nullptr);
+		VkImageCreateInfo vkici = ici;
+		VmaAllocationInfo vai;
+		auto result = vmaCreateImage(allocator, &vkici, &db, &vkimg, &vout, &vai);
 		images.emplace(reinterpret_cast<uint64_t>(vkimg), vout);
 		return vkimg;
 	}
 	vk::Image Allocator::create_image(vk::ImageCreateInfo ici) {
 		std::lock_guard _(mutex);
-		VmaAllocationCreateInfo db;
+		VmaAllocationCreateInfo db{};
 		db.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
 		db.usage = VMA_MEMORY_USAGE_GPU_ONLY;
 		db.requiredFlags = 0;
@@ -167,7 +170,8 @@ namespace vuk {
 		db.pool = nullptr;
 		VkImage vkimg;
 		VmaAllocation vout;
-		vmaCreateImage(allocator, &(VkImageCreateInfo)ici, &db, &vkimg, &vout, nullptr);
+		VkImageCreateInfo vkici = ici;
+		vmaCreateImage(allocator, &vkici, &db, &vkimg, &vout, nullptr);
 		images.emplace(reinterpret_cast<uint64_t>(vkimg), vout);
 		return vkimg;
 	}

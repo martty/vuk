@@ -148,7 +148,7 @@ void vuk::ExampleRunner::render() {
 							}
 						}
 						if (ImGui::IsItemHovered())
-							ImGui::SetTooltip(c.first.data());
+							ImGui::SetTooltip("%s", c.first.data());
 						ImGui::SameLine();
 					}
 					ImGui::NewLine();

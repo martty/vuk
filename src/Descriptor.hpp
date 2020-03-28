@@ -122,11 +122,9 @@ namespace std {
 	struct hash<vuk::SetBinding> {
 		size_t operator()(vuk::SetBinding const & x) const noexcept {
 			// TODO: should we hash in layout too?
-			unsigned long leading_zero = 0;
 			auto mask = x.used.to_ulong();
-			auto is_null = _BitScanReverse(&leading_zero, mask);
-			leading_zero++;
-			return ::hash::fnv1a::hash(reinterpret_cast<const char*>(&x.bindings[0]), leading_zero * sizeof(vuk::DescriptorBinding));
+			unsigned long leading_ones = vuk::num_leading_ones(mask);
+			return ::hash::fnv1a::hash(reinterpret_cast<const char*>(&x.bindings[0]), leading_ones * sizeof(vuk::DescriptorBinding));
 		}
 	};
 

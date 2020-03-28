@@ -477,7 +477,6 @@ namespace vuk {
 					if (is_framebuffer_attachment(left.use) && (is_write_access(left.use) || (is_read_access(left.use) && is_write_access(right.use)))) {
 						assert(left.pass->render_pass_index == right.pass->render_pass_index);
 						auto& rp = rpis[right.pass->render_pass_index];
-						auto& rp_att = *contains_if(rp.attachments, [name](auto& att) {return att.name == name; });
 						vk::SubpassDependency sd;
 						sd.dstAccessMask = right.use.access;
 						sd.dstStageMask = right.use.stages;
@@ -515,7 +514,6 @@ namespace vuk {
 				vk::AttachmentReference attref;
 
 				auto name = resolve_name(res.use_name, aliases);
-				auto& bound = bound_attachments[name];
 				auto& chain = use_chains[name];
 				auto cit = std::find_if(chain.begin(), chain.end(), [&](auto& useref) { return useref.pass == &pass; });
 				assert(cit != chain.end());
@@ -642,6 +640,7 @@ namespace vuk {
 				usage |= vk::ImageUsageFlagBits::eSampled; break;
 			case vk::ImageLayout::eColorAttachmentOptimal:
 				usage |= vk::ImageUsageFlagBits::eColorAttachment; break;
+			default:;
 			}
 		}
 

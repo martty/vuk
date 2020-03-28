@@ -41,12 +41,6 @@ vk::ShaderStageFlagBits vuk::Program::introspect(const spirv_cross::Compiler& re
 
 			un.array_size = arr_t.array[0];
 			un.size /= un.array_size;
-
-			for (unsigned i = 0; i < arr_t.member_types.size(); i++) {
-				auto name = refl.get_member_name(arr_t.self, i);
-				auto sfield_type = refl.get_type(arr_t.member_types[i]);
-				auto offset = refl.type_struct_member_offset(arr_t, i);
-			}
 		}
 		sets[set].uniform_buffers.push_back(un);
 	}

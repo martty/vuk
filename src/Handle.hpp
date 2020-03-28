@@ -24,9 +24,9 @@ namespace vuk {
     public:
         using element_type = Type;
 
-        Unique() : payload(), context(nullptr) {}
+        Unique() : context(nullptr) {}
 
-        explicit Unique(vuk::Context& ctx, Type payload) : payload(payload), context(&ctx) {}
+        explicit Unique(vuk::Context& ctx, Type payload) : context(&ctx), payload(payload) {}
         Unique(Unique const&) = delete;
 
         Unique(Unique&& other) noexcept : context(other.context), payload(other.release()) {}
