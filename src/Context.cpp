@@ -1,4 +1,10 @@
 #include "Context.hpp"
+#include "Context.hpp"
+#include "Context.hpp"
+#include "Context.hpp"
+#include "Context.hpp"
+#include "Context.hpp"
+#include "Context.hpp"
 #include "RenderGraph.hpp"
 #include <shaderc/shaderc.hpp>
 #include <algorithm>
@@ -120,6 +126,16 @@ void vuk::execute_submit_and_present_to_one(PerThreadContext& ptc, RenderGraph& 
 	pi.waitSemaphoreCount = 1;
 	pi.pWaitSemaphores = &render_complete;
 	ptc.ctx.graphics_queue.presentKHR(pi);
+}
+
+bool vuk::Context::DebugUtils::enabled() {
+	return setDebugUtilsObjectNameEXT != nullptr;
+}
+
+vuk::Context::DebugUtils::DebugUtils(Context& ctx) : ctx(ctx) {
+	setDebugUtilsObjectNameEXT = (PFN_vkSetDebugUtilsObjectNameEXT)vkGetDeviceProcAddr(ctx.device, "vkSetDebugUtilsObjectNameEXT");
+	cmdBeginDebugUtilsLabelEXT = (PFN_vkCmdBeginDebugUtilsLabelEXT)vkGetDeviceProcAddr(ctx.device, "vkCmdBeginDebugUtilsLabelEXT");
+	cmdEndDebugUtilsLabelEXT = (PFN_vkCmdEndDebugUtilsLabelEXT)vkGetDeviceProcAddr(ctx.device, "vkCmdEndDebugUtilsLabelEXT");
 }
 
 void vuk::Context::DebugUtils::set_name(const vuk::ImageView& iv, Name name) {
@@ -476,10 +492,11 @@ vuk::SwapchainRef vuk::Context::add_swapchain(Swapchain sw) {
 	return &*swapchains.emplace(sw);
 }
 
-vuk::Context::Context(vk::Instance instance, vk::Device device, vk::PhysicalDevice physical_device) :
+vuk::Context::Context(vk::Instance instance, vk::Device device, vk::PhysicalDevice physical_device, vk::Queue graphics) :
 	instance(instance),
 	device(device),
 	physical_device(physical_device),
+	graphics_queue(graphics),
 	allocator(instance, device, physical_device),
 	cbuf_pools(*this),
 	semaphore_pools(*this),
@@ -503,6 +520,10 @@ vuk::Context::Context(vk::Instance instance, vk::Device device, vk::PhysicalDevi
 void vuk::Context::create_named_pipeline(const char* name, vuk::PipelineCreateInfo ci) {
 	std::lock_guard _(named_pipelines_lock);
 	named_pipelines.emplace(name, std::move(ci));
+}
+
+vuk::PipelineCreateInfo vuk::Context::get_named_pipeline(const char* name) {
+	return named_pipelines.at(name);
 }
 
 void vuk::Context::enqueue_destroy(vuk::ImageView iv) {
@@ -571,6 +592,10 @@ vuk::InflightContext vuk::Context::begin() {
 	std::lock_guard _(begin_frame_lock);
 	std::lock_guard recycle(recycle_locks[_next(frame_counter.load(), FC)]);
 	return InflightContext(*this, frame_counter++, std::move(recycle));
+}
+
+void vuk::Context::wait_idle() {
+	device.waitIdle();
 }
 
 void vuk::InflightContext::destroy(std::vector<vk::ImageView>&& images) {

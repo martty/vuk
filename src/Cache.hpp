@@ -319,7 +319,8 @@ namespace std {
 
 namespace vuk {
 	template<class T>
-	struct Cache {
+	class Cache {
+	private:
 		struct LRUEntry {
 			T* ptr;
 			size_t last_use_frame;
@@ -329,7 +330,7 @@ namespace vuk {
 		plf::colony<T> pool;
 		std::unordered_map<create_info_t<T>, LRUEntry> lru_map; // possibly vector_map or an intrusive map
 		std::shared_mutex cache_mtx;
-
+	public:
 		Cache(Context& ctx) : ctx(ctx) {}
 		~Cache();
 
@@ -351,7 +352,9 @@ namespace vuk {
 	};
 
 	template<class T, size_t FC>
-	struct PerFrameCache {
+	class PerFrameCache {
+	private:
+		friend class InflightContext;
 		struct LRUEntry {
 			T* ptr;
 			size_t last_use_frame;
@@ -366,7 +369,8 @@ namespace vuk {
 			std::shared_mutex cache_mtx;
 		};
 		std::array<PerFrame, FC> data;
-
+	
+	public:
 		PerFrameCache(Context& ctx) : ctx(ctx) {}
 		~PerFrameCache();
 

@@ -41,14 +41,14 @@ namespace vuk {
 		}
 	}
 
-	template struct Cache<vuk::PipelineInfo>;
-	template struct Cache<vk::RenderPass>;
-	template struct Cache<vuk::DescriptorSet>;
-	template struct Cache<vk::Framebuffer>;
-	template struct Cache<vk::Sampler>;
-	template struct Cache<vk::PipelineLayout>;
-	template struct Cache<vuk::DescriptorSetLayoutAllocInfo>;
-	template struct Cache<vuk::ShaderModule>;
+	template class Cache<vuk::PipelineInfo>;
+	template class Cache<vk::RenderPass>;
+	template class Cache<vuk::DescriptorSet>;
+	template class Cache<vk::Framebuffer>;
+	template class Cache<vk::Sampler>;
+	template class Cache<vk::PipelineLayout>;
+	template class Cache<vuk::DescriptorSetLayoutAllocInfo>;
+	template class Cache<vuk::ShaderModule>;
 
 	template<class T, size_t FC>
 	PerFrameCache<T, FC>::~PerFrameCache() {
@@ -90,9 +90,9 @@ namespace vuk {
 		}
 	}
 
-	template struct PerFrameCache<vuk::RGImage, Context::FC>;
-	template struct PerFrameCache<Allocator::Pool, Context::FC>;
-	template struct PerFrameCache<vuk::DescriptorPool, Context::FC>;
+	template class PerFrameCache<vuk::RGImage, Context::FC>;
+	template class PerFrameCache<Allocator::Pool, Context::FC>;
+	template class PerFrameCache<vuk::DescriptorPool, Context::FC>;
 	
 	vk::DescriptorPool DescriptorPool::get_pool(PerThreadContext& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info) {
 		if (pools.size() < (pool_needle + 1)) {
@@ -110,7 +110,7 @@ namespace vuk {
 			}
 			dpci.pPoolSizes = descriptor_counts.data();
 			dpci.poolSizeCount = used_idx;
-			pools.emplace_back(ptc.ifc.ctx.device.createDescriptorPool(dpci));
+			pools.emplace_back(ptc.ctx.device.createDescriptorPool(dpci));
 			sets_allocated = dpci.maxSets;
 		}
 		return pools[pool_needle];

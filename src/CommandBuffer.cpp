@@ -66,7 +66,7 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::bind_pipeline(Name p) {
-		return bind_pipeline(ptc.ifc.ctx.named_pipelines.at(p));
+		return bind_pipeline(ptc.ctx.get_named_pipeline(p.data()));
 	}
 
 	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, const Allocator::Buffer& buf, unsigned first_attribute, Packed format) {

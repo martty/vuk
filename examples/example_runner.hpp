@@ -66,7 +66,7 @@ namespace vuk {
 		void render();
 
 		void cleanup() {
-			context->device.waitIdle();
+			context->wait_idle();
 			imgui_data.font_iv.reset();
 			auto ifc = context->begin();
 			for (auto& ex : examples) {

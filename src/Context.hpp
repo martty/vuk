@@ -82,7 +82,9 @@ namespace vuk {
 		vk::Instance instance;
 		vk::Device device;
 		vk::PhysicalDevice physical_device;
+		vk::Queue graphics_queue;
 		Allocator allocator;
+	private:
 		Pool<vk::CommandBuffer, FC> cbuf_pools;
 		Pool<vk::Semaphore, FC> semaphore_pools;
 		Pool<vk::Fence, FC> fence_pools;
@@ -106,14 +108,17 @@ namespace vuk {
 		std::array<std::vector<vk::Image>, FC> image_recycle;
 		std::array<std::vector<vk::ImageView>, FC> image_view_recycle;
 
+		std::atomic<size_t> frame_counter = 0;
+		std::atomic<size_t> unique_handle_id_counter = 0;
+
 		std::mutex named_pipelines_lock;
 		std::unordered_map<std::string_view, vuk::PipelineCreateInfo> named_pipelines;
 
 		std::mutex swapchains_lock;
 		plf::colony<Swapchain> swapchains;
-		SwapchainRef add_swapchain(Swapchain sw);
-
-		vk::Queue graphics_queue;
+	public:
+		Context(vk::Instance instance, vk::Device device, vk::PhysicalDevice physical_device, vk::Queue graphics);
+		~Context();
 
 		struct DebugUtils {
 			Context& ctx;
@@ -121,39 +126,31 @@ namespace vuk {
 			PFN_vkCmdBeginDebugUtilsLabelEXT cmdBeginDebugUtilsLabelEXT;
 			PFN_vkCmdEndDebugUtilsLabelEXT cmdEndDebugUtilsLabelEXT;
 
-			bool enabled() {
-				return setDebugUtilsObjectNameEXT != nullptr;
-			}
+			bool enabled();
 
-			DebugUtils(Context& ctx) : ctx(ctx) {
-				setDebugUtilsObjectNameEXT = (PFN_vkSetDebugUtilsObjectNameEXT)vkGetDeviceProcAddr(ctx.device, "vkSetDebugUtilsObjectNameEXT");
-				cmdBeginDebugUtilsLabelEXT = (PFN_vkCmdBeginDebugUtilsLabelEXT)vkGetDeviceProcAddr(ctx.device, "vkCmdBeginDebugUtilsLabelEXT");
-				cmdEndDebugUtilsLabelEXT = (PFN_vkCmdEndDebugUtilsLabelEXT)vkGetDeviceProcAddr(ctx.device, "vkCmdEndDebugUtilsLabelEXT");
-			}
+			DebugUtils(Context& ctx);
 			void set_name(const vuk::ImageView& iv, /*zstring_view*/Name name);
-			void set_name(const vuk::Allocator::Buffer& iv, /*zstring_view*/Name name);
 			template<class T>
-			void set_name(const T& t, /*zstring_view*/Name name) {
-				if (!enabled()) return;
-				VkDebugUtilsObjectNameInfoEXT info;
-				info.pNext = nullptr;
-				info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
-				info.pObjectName = name.data();
-				info.objectType = (VkObjectType)t.objectType;
-				info.objectHandle = reinterpret_cast<uint64_t>((typename T::CType)t);
-				setDebugUtilsObjectNameEXT(ctx.device, &info);
-			}
+			void set_name(const T& t, /*zstring_view*/Name name);
 
-			void begin_region(const vk::CommandBuffer&, Name name, std::array<float, 4> color = {1,1,1,1});
+			void begin_region(const vk::CommandBuffer&, Name name, std::array<float, 4> color = { 1,1,1,1 });
 			void end_region(const vk::CommandBuffer&);
 		} debug;
 
-		Context(vk::Instance instance, vk::Device device, vk::PhysicalDevice physical_device);
-		~Context();
-
 		void create_named_pipeline(const char* name, vuk::PipelineCreateInfo ci);
+		vuk::PipelineCreateInfo get_named_pipeline(const char* name);
 
 		void enqueue_destroy(vuk::ImageView iv);
+
+		template<class T>
+		Handle<T> wrap(T payload);
+		
+		SwapchainRef add_swapchain(Swapchain sw);
+
+		InflightContext begin();
+
+		void wait_idle();
+	private:
 		void destroy(const RGImage& image);
 		void destroy(const Allocator::Pool& v);
 		void destroy(const vuk::DescriptorPool& dp);
@@ -166,22 +163,18 @@ namespace vuk {
 		void destroy(vk::Framebuffer fb);
 		void destroy(vk::Sampler sa);
 
-
-		std::atomic<size_t> unique_handle_id_counter = 0;
-		template<class T>
-		Handle<T> wrap(T payload) {
-			return { {unique_handle_id_counter++}, payload };
-		}
-
-		std::atomic<size_t> frame_counter = 0;
-		InflightContext begin();
+		friend class InflightContext;
+		friend class PerThreadContext;
+		template<class T> friend class Cache; // caches can directly destroy
+		template<class T, size_t FC> friend class PerFrameCache;
 	};
 
 	class InflightContext {
 	public:
 		Context& ctx;
-		size_t absolute_frame;
-		unsigned frame;
+		const size_t absolute_frame;
+		const unsigned frame;
+	private:
 		Pool<vk::CommandBuffer, Context::FC>::PFView commandbuffer_pools;
 		Pool<vk::Semaphore, Context::FC>::PFView semaphore_pools;
 		Pool<vk::Fence, Context::FC>::PFView fence_pools;
@@ -198,8 +191,14 @@ namespace vuk {
 		Cache<vuk::ShaderModule>::PFView shader_modules;
 		Cache<vuk::DescriptorSetLayoutAllocInfo>::PFView descriptor_set_layouts;
 		Cache<vk::PipelineLayout>::PFView pipeline_layouts;
-
+	public:
 		InflightContext(Context& ctx, size_t absolute_frame, std::lock_guard<std::mutex>&& recycle_guard);
+
+		void wait_all_transfers();
+		PerThreadContext begin();
+
+	private:
+		friend class PerThreadContext;
 
 		struct BufferCopyCommand {
 			Allocator::Buffer src;
@@ -231,22 +230,17 @@ namespace vuk {
 		TransferStub enqueue_transfer(Allocator::Buffer src, Allocator::Buffer dst);
 		TransferStub enqueue_transfer(Allocator::Buffer src, vk::Image dst, vk::Extent3D extent);
 
-		void wait_all_transfers();
-
 		// recycle
 		std::mutex recycle_lock;
-
 		void destroy(std::vector<vk::Image>&& images);
 		void destroy(std::vector<vk::ImageView>&& images);
-
-		PerThreadContext begin();
 	};
 
 	class PerThreadContext {
 	public:
 		Context& ctx;
 		InflightContext& ifc;
-		unsigned tid;
+		const unsigned tid = 0; // not yet implemented
 		Pool<vk::CommandBuffer, Context::FC>::PFPTView commandbuffer_pool;
 		Pool<vk::Semaphore, Context::FC>::PFPTView semaphore_pool;
 		Pool<vk::Fence, Context::FC>::PFPTView fence_pool;
@@ -262,23 +256,16 @@ namespace vuk {
 		Cache<vuk::ShaderModule>::PFPTView shader_modules;
 		Cache<vuk::DescriptorSetLayoutAllocInfo>::PFPTView descriptor_set_layouts;
 		Cache<vk::PipelineLayout>::PFPTView pipeline_layouts;
-
+	private:
 		// recycling global objects
 		std::vector<Allocator::Buffer> buffer_recycle;
 		std::vector<vk::Image> image_recycle;
 		std::vector<vk::ImageView> image_view_recycle;
-
+	public:
 		PerThreadContext(InflightContext& ifc, unsigned tid);
-
 		~PerThreadContext();
-		template<class T>
-		void destroy(T t) {
-			ctx.destroy(t);
-		}
 
-		void destroy(vk::Image image);
-		void destroy(vuk::ImageView image);
-		void destroy(vuk::DescriptorSet ds);
+		PerThreadContext(const PerThreadContext& o) = delete;
 
 		bool is_ready(const TransferStub& stub);
 		void wait_all_transfers();
@@ -318,6 +305,15 @@ namespace vuk {
 		vuk::SampledImage& make_sampled_image(vuk::ImageView iv, vk::SamplerCreateInfo sci);
 		vuk::SampledImage& make_sampled_image(Name n, vk::SamplerCreateInfo sci);
 
+		template<class T>
+		void destroy(T t) {
+			ctx.destroy(t);
+		}
+
+		void destroy(vk::Image image);
+		void destroy(vuk::ImageView image);
+		void destroy(vuk::DescriptorSet ds);
+
 		PipelineInfo create(const create_info_t<PipelineInfo>& cinfo);
 		vuk::ShaderModule create(const create_info_t<vuk::ShaderModule>& cinfo);
 		vk::RenderPass create(const create_info_t<vk::RenderPass>& cinfo);
@@ -330,7 +326,26 @@ namespace vuk {
 		vuk::DescriptorSetLayoutAllocInfo create(const create_info_t<vuk::DescriptorSetLayoutAllocInfo>& cinfo);
 		vk::PipelineLayout create(const create_info_t<vk::PipelineLayout>& cinfo);
 	};
+	
+	template<class T>
+	void Context::DebugUtils::set_name(const T& t, Name name) {
+		if (!enabled()) return;
+		VkDebugUtilsObjectNameInfoEXT info;
+		info.pNext = nullptr;
+		info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
+		info.pObjectName = name.data();
+		info.objectType = (VkObjectType)t.objectType;
+		info.objectHandle = reinterpret_cast<uint64_t>((typename T::CType)t);
+		setDebugUtilsObjectNameEXT(ctx.device, &info);
+	}
+	
+	template<class T>
+	Handle<T> Context::wrap(T payload) {
+		return { { unique_handle_id_counter++ }, payload };
+	}
+}
 
+namespace vuk {
 	template<class T, size_t FC>
 	typename Pool<T, FC>::PFView Pool<T, FC>::get_view(InflightContext& ctx) {
 		return { ctx, *this, per_frame_storage[ctx.frame] };
@@ -340,9 +355,7 @@ namespace vuk {
 	Pool<T, FC>::PFView::PFView(InflightContext& ifc, Pool<T, FC>& storage, plf::colony<PooledType<T>>& fv) : storage(storage), ifc(ifc), frame_values(fv) {
 		storage.reset(ifc.frame);
 	}	
-}
 
-namespace vuk {
     template<typename Type>
     inline Unique<Type>::~Unique() noexcept {
         if (context) context->enqueue_destroy(payload);
@@ -354,9 +367,7 @@ namespace vuk {
             payload = value;
         }
     }
-}
 
-namespace vuk {
 	struct RenderGraph;
 	void execute_submit_and_present_to_one(PerThreadContext& ptc, RenderGraph& rg, SwapchainRef swapchain);
 }

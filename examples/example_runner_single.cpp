@@ -44,8 +44,7 @@ vuk::ExampleRunner::ExampleRunner() {
 			graphics_queue = vkbdevice.get_queue(vkb::QueueType::graphics).value();
 			device = vkbdevice.device;
 
-			context.emplace(instance, device, physical_device);
-			context->graphics_queue = graphics_queue;
+			context.emplace(instance, device, physical_device, graphics_queue);
 
 			swapchain = context->add_swapchain(util::make_swapchain(vkbdevice));
 }
