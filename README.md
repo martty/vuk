@@ -7,13 +7,17 @@
 ```
 git clone http://github.com/martty/vuk
 cd vuk
+git submodule init
+git submodule update --recursive
 mkdir build
 cd build
-cmake .. -G Ninja
+mkdir debug
+cd debug
+cmake ../.. -G Ninja
 cmake --build .
-cd build_folder/
 ./vuk_all_examples
 ```
+(if building with a multi-config generator, do not make the `debug` folder)
 
 ### Overview of using **vuk**
 3. Initialize your window(s) and Vulkan device
@@ -42,10 +46,15 @@ cd build_folder/
   - [x] and deducing parameters based on renderpass and framebuffer.
 - [x] Automates resource binding with hashmaps, reducing descriptor set allocations and updates.
 - [x] Handles temporary allocations for a frame
-- [ ] Handles long-term allocations with RAII handles.
+- [ ] Handles long-term allocations with RAII handles
+  - [x] for images
+  - [ ] and buffers.
 - [x] Comes with lots of sugar to simplify common operations, but still exposing the full Vulkan interface:
   - [x] Matching viewport/scissor dimensions to attachment sizes
   - [x] Simplified vertex format specification
   - [x] Blend presets
   - [x] Directly writable mapped UBOs
-- [ ] Helps debugging by naming the internal resources
+  - [x] Automatic management of multisampling
+- [x] Helps debugging by naming the internal resources
+- [x] dear imgui integration code
+- [ ] Error checking
