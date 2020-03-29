@@ -4,10 +4,20 @@
 #include <glm/gtx/quaternion.hpp>
 #include <stb_image.h>
 
+/* 04_texture
+* In this example we will build on the previous examples (02_cube and 03_multipass), but we will make the cube textured.
+*
+* These examples are powered by the example framework, which hides some of the code required, as that would be repeated for each example.
+* Furthermore it allows launching individual examples and all examples with the example same code.
+* Check out the framework (example_runner_*) files if interested!
+*/
+
 namespace {
 	float angle = 0.f;
 	auto box = util::generate_cube();
-	vuk::Texture texture_of_doge;
+	// A vuk::Texture is an owned pair of Image and ImageView
+	// An optional is used here so that we can reset this on cleanup, despite being a global (which is to simplify the code here)
+	std::optional<vuk::Texture> texture_of_doge;
 
 	vuk::Example x{
 		.name = "04_texture",
@@ -19,17 +29,21 @@ namespace {
 			runner.context->create_named_pipeline("textured_cube", pci);
 			}
 
+			// Use STBI to load the image
 			int x, y, chans;
 			auto doge_image = stbi_load("../../examples/doge.png", &x, &y, &chans, 4);
 			
 			auto ptc = ifc.begin();
-			auto [tex, stub] = ptc.create_texture(vk::Format::eR8G8B8A8Srgb, vk::Extent3D(x, y, 1), doge_image);
+			// Similarly to buffers, we allocate the image and enqueue the upload
+			auto [tex, _] = ptc.create_texture(vk::Format::eR8G8B8A8Srgb, vk::Extent3D(x, y, 1), doge_image);
 			texture_of_doge = std::move(tex);
 			ptc.wait_all_transfers();
 			stbi_image_free(doge_image);
 		},
 		.render = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
 			auto ptc = ifc.begin();
+
+			// We set up the cube data, same as in example 02_cube
 
 			auto [bverts, stub1] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eVertexBuffer, gsl::span(&box.first[0], box.first.size()));
 			auto verts = std::move(bverts);
@@ -48,6 +62,7 @@ namespace {
 
 			vuk::RenderGraph rg;
 
+			// Set up the pass to draw the textured cube, with a color and a depth attachment
 			rg.add_pass({
 				.resources = {"04_texture_final"_image(vuk::eColorWrite), "04_texture_depth"_image(vuk::eDepthStencilRW)},
 				.execute = [verts, uboVP, inds](vuk::CommandBuffer& command_buffer) {
@@ -56,7 +71,8 @@ namespace {
 					  .set_scissor(0, vuk::Area::Framebuffer{})
 					  .bind_vertex_buffer(0, verts, 0, vuk::Packed{vk::Format::eR32G32B32Sfloat, vuk::Ignore{offsetof(util::Vertex, uv_coordinates) - sizeof(util::Vertex::position)}, vk::Format::eR32G32Sfloat})
 					  .bind_index_buffer(inds, vk::IndexType::eUint32)
-					  .bind_sampled_image(0, 2, texture_of_doge, vk::SamplerCreateInfo{})
+					  // Here we bind our vuk::Texture to (set = 0, binding = 2) with default sampler settings
+					  .bind_sampled_image(0, 2, *texture_of_doge, vk::SamplerCreateInfo{})
 					  .bind_pipeline("textured_cube")
 					  .bind_uniform_buffer(0, 0, uboVP);
 					glm::mat4* model = command_buffer.map_scratch_uniform_binding<glm::mat4>(0, 1);
@@ -72,9 +88,10 @@ namespace {
 			rg.mark_attachment_internal("04_texture_depth", vk::Format::eD32Sfloat, vuk::Extent2D::Framebuffer{}, vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
 			return rg;
 		},
+		// Perform cleanup for the example
 		.cleanup = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
-			texture_of_doge.image.reset();
-			texture_of_doge.view.reset();
+			// We release the texture resources
+			texture_of_doge.reset();
 		}
 	};
 

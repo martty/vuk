@@ -3,6 +3,15 @@
 #include <glm/glm.hpp>
 #include <glm/gtx/quaternion.hpp>
 
+/* 03_multipass
+* In this example we will build on the previous example (02_cube), 
+* but we will add in a second resource (a depth buffer). Furthermore we will see how to add multiple passes.
+*
+* These examples are powered by the example framework, which hides some of the code required, as that would be repeated for each example.
+* Furthermore it allows launching individual examples and all examples with the example same code.
+* Check out the framework (example_runner_*) files if interested!
+*/
+
 namespace {
 	float angle = 0.f;
 	auto box = util::generate_cube();
@@ -14,7 +23,6 @@ namespace {
 			vuk::PipelineCreateInfo pci;
 			pci.shaders.push_back("../../examples/triangle.vert");
 			pci.shaders.push_back("../../examples/triangle.frag");
-			pci.depth_stencil_state.depthCompareOp = vk::CompareOp::eAlways;
 			runner.context->create_named_pipeline("triangle", pci);
 			}
 			{
@@ -25,7 +33,10 @@ namespace {
 			}
 		},
 		.render = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
+			// We acquire a context specific to the thread we are on (PerThreadContext)
 			auto ptc = ifc.begin();
+			
+			// We set up the cube data, same as in example 02_cube
 
 			auto [bverts, stub1] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eVertexBuffer, gsl::span(&box.first[0], box.first.size()));
 			auto verts = std::move(bverts);
@@ -43,6 +54,7 @@ namespace {
 			ptc.wait_all_transfers();
 		
 			vuk::RenderGraph rg;
+			// Add a pass to draw a triangle (from the first example) into the top left corner
 			rg.add_pass({
 				.resources = {"03_multipass_final"_image(vuk::eColorWrite)},
 				.execute = [&](vuk::CommandBuffer& command_buffer) {
@@ -55,6 +67,7 @@ namespace {
 				}
 			);
 
+			// Add a pass to draw a triangle (from the first example) into the bottom right corner
 			rg.add_pass({
 				.resources = {"03_multipass_final"_image(vuk::eColorWrite)},
 				.execute = [&](vuk::CommandBuffer& command_buffer) {
@@ -67,7 +80,11 @@ namespace {
 				}
 			);
 
+			// Add a pass to draw a cube (from the second example) in the middle, but with depth buffering
 			rg.add_pass({
+				// Here a second resource is added: a depth attachment
+				// The example framework took care of our color image, but this attachment we will need bind later
+				// Depth attachments are denoted by the use vuk::eDepthStencilRW
 				.resources = {"03_multipass_final"_image(vuk::eColorWrite), "03_depth"_image(vuk::eDepthStencilRW)},
 				.execute = [verts, uboVP, inds](vuk::CommandBuffer& command_buffer) {
 					command_buffer
@@ -86,8 +103,17 @@ namespace {
 			);
 
 			angle += 360.f * ImGui::GetIO().DeltaTime;
-
+			
+			// The rendergraph has a reference to "03_depth" resource, so we must provide the attachment
+			// In this case, the depth attachment is an "internal" attachment: 
+			// we don't provide an input texture, nor do we want to save the results later
+			// For an internal attachment, we need to provide the format, extents, sample count and clear value
+			// This depth attachment will have extents matching the framebuffer (deduced from the color attachment)
 			rg.mark_attachment_internal("03_depth", vk::Format::eD32Sfloat, vuk::Extent2D::Framebuffer{}, vuk::Samples::e1, vuk::ClearDepthStencil{ 1.0f, 0 });
+
+			// Note that the three passes we given here are not ordered with respect to eachother
+			// They all write to the color attachment, which gives no ordering
+			// Since we render with no overlap, this is not a problem
 			return rg;
 		}
 	};

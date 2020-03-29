@@ -4,14 +4,24 @@
 #include <glm/gtx/quaternion.hpp>
 #include <stb_image.h>
 
+/* 06_msaa
+* In this example we will build on the previous example 04_texture, but we will render the cube to a multisampled texture,
+* which we will resolve to the final swapchain image.
+*
+* These examples are powered by the example framework, which hides some of the code required, as that would be repeated for each example.
+* Furthermore it allows launching individual examples and all examples with the example same code.
+* Check out the framework (example_runner_*) files if interested!
+*/
+
 namespace {
 	float angle = 0.f;
 	auto box = util::generate_cube();
-	vuk::Texture texture_of_doge;
+	std::optional<vuk::Texture> texture_of_doge;
 
 	vuk::Example x{
 		.name = "06_msaa",
 		.setup = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
+			// Same setup as for 04_texture
 			{
 			vuk::PipelineCreateInfo pci;
 			pci.shaders.push_back("../../examples/ubo_test_tex.vert");
@@ -31,6 +41,8 @@ namespace {
 		.render = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
 			auto ptc = ifc.begin();
 
+			// We set up the cube data, same as in example 02_cube
+
 			auto [bverts, stub1] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eVertexBuffer, gsl::span(&box.first[0], box.first.size()));
 			auto verts = std::move(bverts);
 			auto [binds, stub2] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eIndexBuffer, gsl::span(&box.second[0], box.second.size()));
@@ -48,6 +60,8 @@ namespace {
 
 			vuk::RenderGraph rg;
 
+			// The rendering pass is unchanged by going to multisampled, 
+			// but we will use an offscreen multisampled color attachment
 			rg.add_pass({
 				.resources = {"06_msaa_MS"_image(vuk::eColorWrite), "06_msaa_depth"_image(vuk::eDepthStencilRW)},
 				.execute = [verts, uboVP, inds](vuk::CommandBuffer& command_buffer) {
@@ -56,7 +70,7 @@ namespace {
 					  .set_scissor(0, vuk::Area::Framebuffer{})
 					  .bind_vertex_buffer(0, verts, 0, vuk::Packed{vk::Format::eR32G32B32Sfloat, vuk::Ignore{offsetof(util::Vertex, uv_coordinates) - sizeof(util::Vertex::position)}, vk::Format::eR32G32Sfloat})
 					  .bind_index_buffer(inds, vk::IndexType::eUint32)
-					  .bind_sampled_image(0, 2, texture_of_doge, vk::SamplerCreateInfo{})
+					  .bind_sampled_image(0, 2, *texture_of_doge, vk::SamplerCreateInfo{})
 					  .bind_pipeline("textured_cube")
 					  .bind_uniform_buffer(0, 0, uboVP);
 					glm::mat4* model = command_buffer.map_scratch_uniform_binding<glm::mat4>(0, 1);
@@ -69,14 +83,17 @@ namespace {
 
 			angle += 180.f * ImGui::GetIO().DeltaTime;
 
+			// We mark our MS attachment as multisampled (8 samples)
+			// Since resolving requires equal sized images, we can actually infer the size of the MS attachment
+			// from the final image, and we don't need to specify here
 			rg.mark_attachment_internal("06_msaa_MS", vk::Format::eR8G8B8A8Srgb, vuk::Extent2D::Framebuffer{}, vuk::Samples::e8, vuk::ClearColor{ 0.f, 0.f, 0.f, 0.f });
 			rg.mark_attachment_internal("06_msaa_depth", vk::Format::eD32Sfloat, vuk::Extent2D::Framebuffer{}, vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
+			// We mark our final result "06_msaa_final" attachment to be a result of a resolve from "06_msaa_MS"
 			rg.mark_attachment_resolve("06_msaa_final", "06_msaa_MS");
 			return rg;
 		},
 		.cleanup = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
-			texture_of_doge.image.reset();
-			texture_of_doge.view.reset();
+			texture_of_doge.reset();
 		}
 
 	};
