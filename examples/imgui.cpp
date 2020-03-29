@@ -13,10 +13,9 @@ util::ImGuiData util::ImGui_ImplVuk_Init(vuk::PerThreadContext& ptc) {
 	io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
 
 	ImGuiData data;
-	auto [img, iv, stub] = ptc.create_image(vk::Format::eR8G8B8A8Srgb, vk::Extent3D(width, height, 1), pixels);
-	data.font_img = img;
-	data.font_iv = std::move(iv);
-	ptc.ctx.debug.set_name(*data.font_iv, "ImGui/font");
+	auto [tex, stub] = ptc.create_texture(vk::Format::eR8G8B8A8Srgb, vk::Extent3D(width, height, 1), pixels);
+	data.font_texture = std::move(tex);
+	ptc.ctx.debug.set_name(data.font_texture, "ImGui/font");
 	vk::SamplerCreateInfo sci;
 	sci.minFilter = sci.magFilter = vk::Filter::eLinear;
 	sci.mipmapMode = vk::SamplerMipmapMode::eLinear;
@@ -25,7 +24,7 @@ util::ImGuiData util::ImGui_ImplVuk_Init(vuk::PerThreadContext& ptc) {
 	sci.maxLod = 1000;
 	sci.maxAnisotropy = 1.0f;
 	data.font_sci = sci;
-	data.font_si = std::make_unique<vuk::SampledImage>(vuk::SampledImage::Global{ *iv, sci, vk::ImageLayout::eShaderReadOnlyOptimal });
+	data.font_si = std::make_unique<vuk::SampledImage>(vuk::SampledImage::Global{ *data.font_texture.view, sci, vk::ImageLayout::eShaderReadOnlyOptimal });
 	io.Fonts->TexID = (ImTextureID)data.font_si.get();
 	{
 		vuk::PipelineCreateInfo pci;
@@ -40,7 +39,7 @@ util::ImGuiData util::ImGui_ImplVuk_Init(vuk::PerThreadContext& ptc) {
 
 vuk::Pass util::ImGui_ImplVuk_Render(vuk::PerThreadContext& ptc, vuk::Name src_target, vuk::Name dst_target, util::ImGuiData& data, ImDrawData* draw_data) {
 	auto reset_render_state = [](const util::ImGuiData& data, vuk::CommandBuffer& command_buffer, ImDrawData* draw_data, vuk::Buffer vertex, vuk::Buffer index) {
-		command_buffer.bind_sampled_image(0, 0, *data.font_iv, data.font_sci);
+		command_buffer.bind_sampled_image(0, 0, *data.font_texture.view, data.font_sci);
 		if (index.size > 0) {
 			command_buffer.bind_index_buffer(index, sizeof(ImDrawIdx) == 2 ? vk::IndexType::eUint16 : vk::IndexType::eUint32);
 		}

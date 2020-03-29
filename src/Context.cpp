@@ -5,6 +5,7 @@
 #include "Context.hpp"
 #include "Context.hpp"
 #include "Context.hpp"
+#include "Context.hpp"
 #include "RenderGraph.hpp"
 #include <shaderc/shaderc.hpp>
 #include <algorithm>
@@ -138,15 +139,10 @@ vuk::Context::DebugUtils::DebugUtils(Context& ctx) : ctx(ctx) {
 	cmdEndDebugUtilsLabelEXT = (PFN_vkCmdEndDebugUtilsLabelEXT)vkGetDeviceProcAddr(ctx.device, "vkCmdEndDebugUtilsLabelEXT");
 }
 
-void vuk::Context::DebugUtils::set_name(const vuk::ImageView& iv, Name name) {
+void vuk::Context::DebugUtils::set_name(const vuk::Texture& tex, Name name) {
 	if (!enabled()) return;
-	VkDebugUtilsObjectNameInfoEXT info;
-	info.pNext = nullptr;
-	info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
-	info.pObjectName = name.data();
-	info.objectType = (VkObjectType)iv.payload.objectType;
-	info.objectHandle = reinterpret_cast<uint64_t>((VkImageView)iv.payload);
-	setDebugUtilsObjectNameEXT(ctx.device, &info);
+	set_name(tex.image.get(), name);
+	set_name(tex.view.get().payload, name);
 }
 
 void vuk::Context::DebugUtils::begin_region(const vk::CommandBuffer& cb, Name name, std::array<float, 4> color) {
@@ -214,7 +210,7 @@ void vuk::PerThreadContext::wait_all_transfers() {
 	return ifc.wait_all_transfers();
 }
 
-std::tuple<vk::Image, vuk::Unique<vuk::ImageView>, vuk::TransferStub> vuk::PerThreadContext::create_image(vk::Format format, vk::Extent3D extents, void* data) {
+std::pair<vuk::Texture, vuk::TransferStub> vuk::PerThreadContext::create_texture(vk::Format format, vk::Extent3D extents, void* data) {
 	vk::ImageCreateInfo ici;
 	ici.format = format;
 	ici.extent = extents;
@@ -237,8 +233,10 @@ std::tuple<vk::Image, vuk::Unique<vuk::ImageView>, vuk::TransferStub> vuk::PerTh
 	ivci.subresourceRange.levelCount = 1;
 	ivci.viewType = vk::ImageViewType::e2D;
 	auto iv = ifc.ctx.device.createImageView(ivci);
-	auto ui = vuk::Unique<vuk::ImageView>(ifc.ctx, ifc.ctx.wrap(iv));
-	return { dst, std::move(ui), stub };
+	vuk::Texture tex{ vuk::Unique<vk::Image>(ifc.ctx, dst), vuk::Unique<vuk::ImageView>(ifc.ctx, ifc.ctx.wrap(iv)) };
+	tex.extent = extents;
+	tex.format = format;
+	return { std::move(tex), stub };
 }
 
 void vuk::PerThreadContext::dma_task() {
@@ -374,7 +372,7 @@ vuk::RGImage vuk::PerThreadContext::create(const create_info_t<vuk::RGImage>& ci
 	ctx.debug.set_name(res.image, name);
 	name = std::string("ImageView: RenderTarget ") + std::string(cinfo.name);
 	res.image_view = ctx.wrap(ctx.device.createImageView(ivci));
-	ctx.debug.set_name(res.image_view, name);
+	ctx.debug.set_name(res.image_view.payload, name);
 	return res;
 }
 
@@ -524,6 +522,11 @@ void vuk::Context::create_named_pipeline(const char* name, vuk::PipelineCreateIn
 
 vuk::PipelineCreateInfo vuk::Context::get_named_pipeline(const char* name) {
 	return named_pipelines.at(name);
+}
+
+void vuk::Context::enqueue_destroy(vk::Image i) {
+	std::lock_guard _(recycle_locks[frame_counter % FC]);
+	image_recycle[frame_counter % FC].push_back(i);
 }
 
 void vuk::Context::enqueue_destroy(vuk::ImageView iv) {

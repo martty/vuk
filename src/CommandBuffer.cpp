@@ -118,6 +118,10 @@ namespace vuk {
 		return *this;
 	}
 
+	CommandBuffer& CommandBuffer::bind_sampled_image(unsigned set, unsigned binding, const vuk::Texture& texture, vk::SamplerCreateInfo sampler_create_info) {
+		return bind_sampled_image(set, binding, *texture.view, sampler_create_info);
+	}
+
 	CommandBuffer& CommandBuffer::bind_sampled_image(unsigned set, unsigned binding, Name name, vk::SamplerCreateInfo sampler_create_info) {
 		return bind_sampled_image(set, binding, rg.bound_attachments[name].iv, sampler_create_info);
 	}

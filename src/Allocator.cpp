@@ -252,9 +252,6 @@ namespace vuk {
 		images.erase(reinterpret_cast<uint64_t>(vkimg));
 	}
 	Allocator::~Allocator() {
-		for (auto [img, alloc] : images) {
-			vmaDestroyImage(allocator, (VkImage)img, alloc);
-		}
 		vmaDestroyAllocator(allocator);
 	}
 }

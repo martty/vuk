@@ -113,4 +113,11 @@ namespace vuk {
 		size_t size;
 		void* mapped_ptr;
 	};
+
+    struct Texture {
+        Unique<vk::Image> image;
+        Unique<vuk::ImageView> view;
+        vk::Extent3D extent;
+        vk::Format format;
+    };
 }

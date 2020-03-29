@@ -67,7 +67,8 @@ namespace vuk {
 
 		void cleanup() {
 			context->wait_idle();
-			imgui_data.font_iv.reset();
+			imgui_data.font_texture.view.reset();
+			imgui_data.font_texture.image.reset();
 			auto ifc = context->begin();
 			for (auto& ex : examples) {
 				if (ex->cleanup) {

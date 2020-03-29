@@ -7,7 +7,7 @@
 namespace {
 	float angle = 0.f;
 	auto box = util::generate_cube();
-	vuk::Unique<vuk::ImageView> image_view;
+	vuk::Texture texture_of_doge;
 
 	vuk::Example x{
 		.name = "04_texture",
@@ -23,8 +23,8 @@ namespace {
 			auto doge_image = stbi_load("../../examples/doge.png", &x, &y, &chans, 4);
 			
 			auto ptc = ifc.begin();
-			auto [img, iv, stub] = ptc.create_image(vk::Format::eR8G8B8A8Srgb, vk::Extent3D(x, y, 1), doge_image);
-			image_view = std::move(iv);
+			auto [tex, stub] = ptc.create_texture(vk::Format::eR8G8B8A8Srgb, vk::Extent3D(x, y, 1), doge_image);
+			texture_of_doge = std::move(tex);
 			ptc.wait_all_transfers();
 			stbi_image_free(doge_image);
 		},
@@ -56,7 +56,7 @@ namespace {
 					  .set_scissor(0, vuk::Area::Framebuffer{})
 					  .bind_vertex_buffer(0, verts, 0, vuk::Packed{vk::Format::eR32G32B32Sfloat, vuk::Ignore{offsetof(util::Vertex, uv_coordinates) - sizeof(util::Vertex::position)}, vk::Format::eR32G32Sfloat})
 					  .bind_index_buffer(inds, vk::IndexType::eUint32)
-					  .bind_sampled_image(0, 2, *image_view, vk::SamplerCreateInfo{})
+					  .bind_sampled_image(0, 2, texture_of_doge, vk::SamplerCreateInfo{})
 					  .bind_pipeline("textured_cube")
 					  .bind_uniform_buffer(0, 0, uboVP);
 					glm::mat4* model = command_buffer.map_scratch_uniform_binding<glm::mat4>(0, 1);
@@ -73,7 +73,8 @@ namespace {
 			return rg;
 		},
 		.cleanup = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
-			image_view.reset();
+			texture_of_doge.image.reset();
+			texture_of_doge.view.reset();
 		}
 	};
 

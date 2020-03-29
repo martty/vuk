@@ -129,7 +129,7 @@ namespace vuk {
 			bool enabled();
 
 			DebugUtils(Context& ctx);
-			void set_name(const vuk::ImageView& iv, /*zstring_view*/Name name);
+			void set_name(const vuk::Texture& iv, /*zstring_view*/Name name);
 			template<class T>
 			void set_name(const T& t, /*zstring_view*/Name name);
 
@@ -140,6 +140,7 @@ namespace vuk {
 		void create_named_pipeline(const char* name, vuk::PipelineCreateInfo ci);
 		vuk::PipelineCreateInfo get_named_pipeline(const char* name);
 
+		void enqueue_destroy(vk::Image i);
 		void enqueue_destroy(vuk::ImageView iv);
 
 		template<class T>
@@ -280,7 +281,7 @@ namespace vuk {
 			return { dst, stub };
 		}
 
-		std::tuple<vk::Image, vuk::Unique<vuk::ImageView>, TransferStub> create_image(vk::Format format, vk::Extent3D extents, void* data);
+		std::pair<vuk::Texture, TransferStub> create_texture(vk::Format format, vk::Extent3D extents, void* data);
 
 		template<class T>
 		TransferStub upload(Buffer dst, gsl::span<T> data) {
