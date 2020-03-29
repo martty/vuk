@@ -26,7 +26,7 @@ vuk::ExampleRunner::ExampleRunner() {
 			vkbinstance = inst_ret.value();
 			auto instance = vkbinstance.instance;
 			vkb::PhysicalDeviceSelector selector{ vkbinstance };
-			window = create_window_glfw();
+			window = create_window_glfw("Vuk All Examples", false);
 			surface = create_surface_glfw(vkbinstance.instance, window);
 			selector.set_surface(surface)
 				.set_minimum_version(1, 0);

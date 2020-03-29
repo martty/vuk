@@ -2,12 +2,12 @@
 #include <GLFW/glfw3.h>
 #include <vulkan/vulkan.hpp>
 
-inline GLFWwindow* create_window_glfw(bool resize = true) {
+inline GLFWwindow* create_window_glfw(const char* title, bool resize = true) {
 	glfwInit();
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 	if (!resize) glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
-	return glfwCreateWindow(640, 480, "Vulkan Triangle", NULL, NULL);
+	return glfwCreateWindow(640, 480, title, NULL, NULL);
 }
 
 inline void destroy_window_glfw(GLFWwindow* window) {
