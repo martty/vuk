@@ -36,7 +36,7 @@ namespace {
 				// For this example, only a color image is needed to write to (our framebuffer)
 				// The name is declared, and the way it will be used (color attachment - write)
 				.resources = {"01_triangle_final"_image(vuk::eColorWrite)},
-				.execute = [&](vuk::CommandBuffer& command_buffer) {
+				.execute = [](vuk::CommandBuffer& command_buffer) {
 					// Here commands are recorded into the command buffer for rendering
 					// The commands frequently mimick the Vulkan counterpart, with additional sugar
 					// The additional sugar is enabled by having a complete view of the rendering

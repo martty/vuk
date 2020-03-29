@@ -33,9 +33,9 @@ vuk::InflightContext::InflightContext(Context& ctx, size_t absolute_frame, std::
 	ctx(ctx),
 	absolute_frame(absolute_frame),
 	frame(absolute_frame% Context::FC),
+	fence_pools(ctx.fence_pools.get_view(*this)), // must be first, so we wait for the fences
 	commandbuffer_pools(ctx.cbuf_pools.get_view(*this)),
 	semaphore_pools(ctx.semaphore_pools.get_view(*this)),
-	fence_pools(ctx.fence_pools.get_view(*this)),
 	pipeline_cache(*this, ctx.pipeline_cache),
 	renderpass_cache(*this, ctx.renderpass_cache),
 	framebuffer_cache(*this, ctx.framebuffer_cache),

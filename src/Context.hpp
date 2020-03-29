@@ -176,9 +176,9 @@ namespace vuk {
 		const size_t absolute_frame;
 		const unsigned frame;
 	private:
+		Pool<vk::Fence, Context::FC>::PFView fence_pools; // must be first, so we wait for the fences
 		Pool<vk::CommandBuffer, Context::FC>::PFView commandbuffer_pools;
 		Pool<vk::Semaphore, Context::FC>::PFView semaphore_pools;
-		Pool<vk::Fence, Context::FC>::PFView fence_pools;
 		Cache<PipelineInfo>::PFView pipeline_cache;
 		Cache<vk::RenderPass>::PFView renderpass_cache;
 		Cache<vk::Framebuffer>::PFView framebuffer_cache;
