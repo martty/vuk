@@ -67,14 +67,14 @@ vuk::InflightContext::InflightContext(Context& ctx, size_t absolute_frame, std::
 	ptc.descriptor_sets.collect(Context::FC * 2);
 }
 
-vuk::TransferStub vuk::InflightContext::enqueue_transfer(Allocator::Buffer src, Allocator::Buffer dst) {
+vuk::TransferStub vuk::InflightContext::enqueue_transfer(Buffer src, Buffer dst) {
 	std::lock_guard _(transfer_mutex);
 	TransferStub stub{ transfer_id++ };
 	buffer_transfer_commands.push({ src, dst, stub });
 	return stub;
 }
 
-vuk::TransferStub vuk::InflightContext::enqueue_transfer(Allocator::Buffer src, vk::Image dst, vk::Extent3D extent) {
+vuk::TransferStub vuk::InflightContext::enqueue_transfer(Buffer src, vk::Image dst, vk::Extent3D extent) {
 	std::lock_guard _(transfer_mutex);
 	TransferStub stub{ transfer_id++ };
 	bufferimage_transfer_commands.push({ src, dst, extent, stub });
@@ -199,7 +199,7 @@ void vuk::PerThreadContext::destroy(vuk::DescriptorSet ds) {
 	pool_cache.acquire(ds.layout_info).free_sets.push_back(ds.descriptor_set);
 }
 
-vuk::Allocator::Buffer vuk::PerThreadContext::_allocate_scratch_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, bool create_mapped) {
+vuk::Buffer vuk::PerThreadContext::_allocate_scratch_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, bool create_mapped) {
 	auto& pool = scratch_buffers.acquire({ mem_usage, buffer_usage });
 	return ifc.ctx.allocator.allocate_buffer(pool, size, create_mapped);
 }

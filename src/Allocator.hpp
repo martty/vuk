@@ -7,6 +7,7 @@
 #include "Hash.hpp"
 #include "Cache.hpp" // for the hashes
 #include "CreateInfo.hpp"
+#include "Types.hpp"
 
 namespace vuk {
 	enum class MemoryUsage {
@@ -45,14 +46,6 @@ namespace vuk {
 			vk::BufferUsageFlags usage;
 			std::vector<vk::Buffer> buffers;
 		};
-		struct Buffer {
-			vk::DeviceMemory device_memory;
-			vk::Buffer buffer;
-			size_t offset;
-			size_t size;
-			void* mapped_ptr;
-			VmaAllocation allocation;
-		};
 	private:
 		std::mutex mutex;
 		struct PoolAllocHelper {
@@ -76,6 +69,7 @@ namespace vuk {
 		vk::PhysicalDevice physdev;
 
 		std::unordered_map<uint64_t, VmaAllocation> images;
+		std::unordered_map<uint64_t, VmaAllocation> buffer_allocations;
 		std::unordered_map<PoolSelect, Pool> pools;
 		std::unordered_map<uint64_t, vk::Buffer> buffers;
 

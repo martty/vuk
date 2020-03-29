@@ -5,7 +5,7 @@
 #include <vulkan/vulkan.hpp>
 #include <vector>
 #include "vuk_fwd.hpp"
-#include "Handle.hpp"
+#include "Types.hpp"
 
 namespace vuk {
 	struct DescriptorSetLayoutAllocInfo {

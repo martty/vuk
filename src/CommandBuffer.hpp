@@ -10,7 +10,6 @@
 namespace vuk {
 	class Context;
 	class PerThreadContext;
-	class Buffer;
 
 	struct Area {
 		Area(int32_t x, int32_t y, uint32_t width, uint32_t height) : offset{ x, y }, extent { width, height } {}
@@ -87,8 +86,8 @@ namespace vuk {
 		CommandBuffer& bind_pipeline(vuk::PipelineCreateInfo gpci);
 		CommandBuffer& bind_pipeline(Name p);
 
-		CommandBuffer& bind_vertex_buffer(unsigned index, const Allocator::Buffer&, unsigned first_location, Packed);
-		CommandBuffer& bind_index_buffer(const Allocator::Buffer&, vk::IndexType type);
+		CommandBuffer& bind_vertex_buffer(unsigned index, const Buffer&, unsigned first_location, Packed);
+		CommandBuffer& bind_index_buffer(const Buffer&, vk::IndexType type);
 
 		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, vuk::ImageView iv, vk::SamplerCreateInfo sampler_create_info);
 		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, Name, vk::SamplerCreateInfo sampler_create_info);
@@ -99,7 +98,7 @@ namespace vuk {
 		template<class T>
 		CommandBuffer& push_constants(vk::ShaderStageFlags stages, size_t offset, T value);
 
-		CommandBuffer& bind_uniform_buffer(unsigned set, unsigned binding, Allocator::Buffer buffer);
+		CommandBuffer& bind_uniform_buffer(unsigned set, unsigned binding, Buffer buffer);
 
 		void* _map_scratch_uniform_binding(unsigned set, unsigned binding, size_t size);
 

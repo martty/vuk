@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Handle.hpp"
+#include "Types.hpp"
 
 namespace vuk {
 	// high level type around binding a sampled image with a sampler

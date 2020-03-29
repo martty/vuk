@@ -69,7 +69,7 @@ namespace vuk {
 		return bind_pipeline(ptc.ctx.get_named_pipeline(p.data()));
 	}
 
-	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, const Allocator::Buffer& buf, unsigned first_attribute, Packed format) {
+	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, const Buffer& buf, unsigned first_attribute, Packed format) {
 		std::erase_if(attribute_descriptions, [&](auto& b) {return b.binding == binding; });
 		std::erase_if(binding_descriptions, [&](auto& b) {return b.binding == binding; });
 
@@ -101,7 +101,7 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::bind_index_buffer(const Allocator::Buffer& buf, vk::IndexType type) {
+	CommandBuffer& CommandBuffer::bind_index_buffer(const Buffer& buf, vk::IndexType type) {
 		command_buffer.bindIndexBuffer(buf.buffer, buf.offset, type);
 		return *this;
 	}
@@ -129,7 +129,7 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::bind_uniform_buffer(unsigned set, unsigned binding, Allocator::Buffer buffer) {
+	CommandBuffer& CommandBuffer::bind_uniform_buffer(unsigned set, unsigned binding, Buffer buffer) {
 		sets_used[set] = true;
 		set_bindings[set].bindings[binding].type = vk::DescriptorType::eUniformBuffer;
 		set_bindings[set].bindings[binding].buffer = vk::DescriptorBufferInfo{ buffer.buffer, buffer.offset, buffer.size };

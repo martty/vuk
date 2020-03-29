@@ -201,13 +201,13 @@ namespace vuk {
 		friend class PerThreadContext;
 
 		struct BufferCopyCommand {
-			Allocator::Buffer src;
-			Allocator::Buffer dst;
+			Buffer src;
+			Buffer dst;
 			TransferStub stub;
 		};
 
 		struct BufferImageCopyCommand {
-			Allocator::Buffer src;
+			Buffer src;
 			vk::Image dst;
 			vk::Extent3D extent;
 			TransferStub stub;
@@ -227,8 +227,8 @@ namespace vuk {
 		// only accessed by DMAtask
 		std::queue<PendingTransfer> pending_transfers;
 
-		TransferStub enqueue_transfer(Allocator::Buffer src, Allocator::Buffer dst);
-		TransferStub enqueue_transfer(Allocator::Buffer src, vk::Image dst, vk::Extent3D extent);
+		TransferStub enqueue_transfer(Buffer src, Buffer dst);
+		TransferStub enqueue_transfer(Buffer src, vk::Image dst, vk::Extent3D extent);
 
 		// recycle
 		std::mutex recycle_lock;
@@ -258,7 +258,7 @@ namespace vuk {
 		Cache<vk::PipelineLayout>::PFPTView pipeline_layouts;
 	private:
 		// recycling global objects
-		std::vector<Allocator::Buffer> buffer_recycle;
+		std::vector<Buffer> buffer_recycle;
 		std::vector<vk::Image> image_recycle;
 		std::vector<vk::ImageView> image_view_recycle;
 	public:
@@ -270,11 +270,11 @@ namespace vuk {
 		bool is_ready(const TransferStub& stub);
 		void wait_all_transfers();
 
-		Allocator::Buffer _allocate_scratch_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, bool create_mapped);
+		Buffer _allocate_scratch_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, bool create_mapped);
 
 		// since data is provided, we will add TransferDst to the flags automatically
 		template<class T>
-		std::pair<Allocator::Buffer, TransferStub> create_scratch_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, gsl::span<T> data) {
+		std::pair<Buffer, TransferStub> create_scratch_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, gsl::span<T> data) {
 			auto dst = _allocate_scratch_buffer(mem_usage, vk::BufferUsageFlagBits::eTransferDst | buffer_usage, sizeof(T) * data.size(), false);
 			auto stub = upload(dst, data);
 			return { dst, stub };
@@ -283,7 +283,7 @@ namespace vuk {
 		std::tuple<vk::Image, vuk::Unique<vuk::ImageView>, TransferStub> create_image(vk::Format format, vk::Extent3D extents, void* data);
 
 		template<class T>
-		TransferStub upload(Allocator::Buffer dst, gsl::span<T> data) {
+		TransferStub upload(Buffer dst, gsl::span<T> data) {
 			if (data.empty()) return { 0 };
 			auto staging = _allocate_scratch_buffer(MemoryUsage::eCPUonly, vk::BufferUsageFlagBits::eTransferSrc, sizeof(T) * data.size(), true);
 			::memcpy(staging.mapped_ptr, data.data(), sizeof(T) * data.size());

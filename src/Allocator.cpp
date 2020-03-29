@@ -109,7 +109,8 @@ namespace vuk {
 		vmaCreatePool(allocator, &poolCreateInfo, &pool);
 		return pool;
 	}
-	Allocator::Buffer Allocator::_allocate_buffer(Pool& pool, size_t size, bool create_mapped) {
+	
+	Buffer Allocator::_allocate_buffer(Pool& pool, size_t size, bool create_mapped) {
 		if (size == 0) {
 			return { .buffer = vk::Buffer{}, .size = 0 };
 		}
@@ -144,12 +145,11 @@ namespace vuk {
 		b.offset = vai.offset;
 		b.size = vai.size;
 		b.mapped_ptr = vai.pMappedData;
-		b.allocation = res;
+		buffer_allocations.emplace(reinterpret_cast<uint64_t>((VkBuffer)b.buffer), res);
 		return b;
 	}
 
 	// allocate an externally managed pool
-
 	Allocator::Pool Allocator::allocate_pool(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage) {
 		std::lock_guard _(mutex);
 
@@ -167,8 +167,7 @@ namespace vuk {
 	}
 
 	// allocate buffer from an internally managed pool
-
-	Allocator::Buffer Allocator::allocate_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, bool create_mapped) {
+	Buffer Allocator::allocate_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, bool create_mapped) {
 		std::lock_guard _(mutex);
 
 		vk::BufferCreateInfo bci;
@@ -190,18 +189,22 @@ namespace vuk {
 	}
 
 	// allocate a buffer from an externally managed pool
-	Allocator::Buffer Allocator::allocate_buffer(Pool& pool, size_t size, bool create_mapped) {
+	Buffer Allocator::allocate_buffer(Pool& pool, size_t size, bool create_mapped) {
 		std::lock_guard _(mutex);
 		return _allocate_buffer(pool, size, create_mapped);
 	}
+
 	void Allocator::reset_pool(Pool pool) {
 		std::lock_guard _(mutex);
 		vmaResetPool(allocator, pool.pool);
 	}
+
 	void Allocator::free_buffer(const Buffer& b) {
 		std::lock_guard _(mutex);
-		vmaFreeMemory(allocator, b.allocation);
+		vmaFreeMemory(allocator, buffer_allocations.at(reinterpret_cast<uint64_t>((VkBuffer)b.buffer)));
+		buffer_allocations.erase(reinterpret_cast<uint64_t>((VkBuffer)b.buffer));
 	}
+
 	void Allocator::destroy_scratch_pool(Pool pool) {
 		std::lock_guard _(mutex);
 		vmaResetPool(allocator, pool.pool);

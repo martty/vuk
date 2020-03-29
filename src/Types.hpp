@@ -105,4 +105,12 @@ namespace std {
 namespace vuk {
 	using ImageView = Handle<vk::ImageView>;
 	using Sampler = Handle<vk::Sampler>;
+
+	struct Buffer {
+		vk::DeviceMemory device_memory;
+		vk::Buffer buffer;
+		size_t offset;
+		size_t size;
+		void* mapped_ptr;
+	};
 }

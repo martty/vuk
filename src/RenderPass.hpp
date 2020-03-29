@@ -3,7 +3,7 @@
 #include <vulkan/vulkan.hpp>
 #include "vuk_fwd.hpp"
 #include "CreateInfo.hpp"
-#include "Handle.hpp"
+#include "Types.hpp"
 
 namespace vuk {
 	struct SubpassDescription : public vk::SubpassDescription {
