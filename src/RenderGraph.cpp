@@ -279,7 +279,6 @@ namespace vuk {
 				si.pass = p;
 				rpi.subpasses.push_back(si);
 			}
-			// TODO: we are better off not reordering the attachments here?
 			for (auto& att : attachments) {
 				AttachmentRPInfo info;
 				info.name = resolve_name(att.use_name, aliases);

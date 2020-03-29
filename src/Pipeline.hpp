@@ -62,7 +62,6 @@ namespace vuk {
 		vk::GraphicsPipelineCreateInfo to_vk() const;
 		static std::vector<vuk::DescriptorSetLayoutCreateInfo> build_descriptor_layouts(Program&);
 		bool operator==(const PipelineCreateInfo& o) const {
-			// TODO: colorblendstate, render_pass
 			return std::tie(shaders, binding_descriptions, attribute_descriptions, input_assembly_state, rasterization_state, color_blend_attachments, viewport_state, dynamic_states, depth_stencil_state, multisample_state, render_pass, subpass) ==
 				std::tie(o.shaders, o.binding_descriptions, o.attribute_descriptions, o.input_assembly_state, o.rasterization_state, o.color_blend_attachments, o.viewport_state, o.dynamic_states, o.depth_stencil_state, o.multisample_state, o.render_pass, o.subpass);
 		}
