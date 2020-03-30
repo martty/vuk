@@ -86,7 +86,8 @@ namespace {
 			// We mark our MS attachment as multisampled (8 samples)
 			// Since resolving requires equal sized images, we can actually infer the size of the MS attachment
 			// from the final image, and we don't need to specify here
-			rg.mark_attachment_internal("06_msaa_MS", vk::Format::eR8G8B8A8Srgb, vuk::Extent2D::Framebuffer{}, vuk::Samples::e8, vuk::ClearColor{ 0.f, 0.f, 0.f, 0.f });
+			// We use the swapchain format, since resolving needs identical formats
+			rg.mark_attachment_internal("06_msaa_MS", runner.swapchain->format, vuk::Extent2D::Framebuffer{}, vuk::Samples::e8, vuk::ClearColor{ 0.f, 0.f, 0.f, 0.f });
 			rg.mark_attachment_internal("06_msaa_depth", vk::Format::eD32Sfloat, vuk::Extent2D::Framebuffer{}, vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
 			// We mark our final result "06_msaa_final" attachment to be a result of a resolve from "06_msaa_MS"
 			rg.mark_attachment_resolve("06_msaa_final", "06_msaa_MS");

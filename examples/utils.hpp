@@ -62,6 +62,7 @@ namespace util {
 	inline vuk::Swapchain make_swapchain(vkb::Device vkbdevice) {
 		vkb::SwapchainBuilder swb(vkbdevice);
 		swb.set_desired_format(vk::SurfaceFormatKHR(vk::Format::eR8G8B8A8Srgb, vk::ColorSpaceKHR::eSrgbNonlinear));
+		swb.add_fallback_format(vk::SurfaceFormatKHR(vk::Format::eB8G8R8A8Srgb, vk::ColorSpaceKHR::eSrgbNonlinear));
 		swb.set_desired_present_mode((VkPresentModeKHR)vk::PresentModeKHR::eImmediate);
 		auto vkswapchain = swb.build();
 
