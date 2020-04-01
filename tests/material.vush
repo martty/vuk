@@ -1,0 +1,37 @@
+#include "opaque.vuas"
+#pragma model/material:push
+
+struct VS_IN {
+	vec3 position;
+	vec3 normal;
+	vec2 texcoord;
+};
+
+struct VS_OUT {
+	vec4 position;
+	vec4 color;
+	vec2 texcoord;
+};
+
+struct Material {
+  instance::vec4 some_colour;
+  float size;
+};
+
+VS_OUT opaque::vertex(Attribute::VS_IN vin, Aspect::VP vp, BaseInstance::mat4 model_matrix, Material material) {
+	VS_OUT vout;
+	vout.position = vp.projection * vp.view * model_matrix * vec4(vin.position * material.size, 1.0);
+	vout.texcoord = vin.texcoord;
+	vout.color = vin.color * material.some_colour;
+	return vout;
+}
+
+struct FS_OUT {
+	vec4 color_out;
+};
+
+FS_OUT opaque::fragment(VS_OUT vin) {
+	FS_OUT fout;
+	fout.color_out = vec4(1,0,0,1);
+	return fout;
+}

@@ -1,0 +1,29 @@
+#pragma model/texture:bindless_array
+
+struct VS_IN {
+	vec3 position;
+	vec3 normal;
+	vec2 texcoord;
+};
+
+struct VS_OUT {
+	vec4 position;
+	vec2 texcoord;
+};
+
+VS_OUT opaque::vertex(Attribute::VS_IN vin) {
+	VS_OUT vout;
+	vout.position = vec4(vin.position, 1.0);
+	vout.texcoord = vin.texcoord;
+	return vout;
+}
+
+struct FS_OUT {
+	vec4 color_out;
+};
+
+FS_OUT opaque::fragment(VS_OUT vin, Sampler2D t1) {
+	FS_OUT fout;
+	fout.color_out = vec4(texture(t1, vin.texcoord).rgb, 1);
+	return fout;
+}

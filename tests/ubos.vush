@@ -1,0 +1,43 @@
+struct VS_IN {
+	vec3 position;
+	vec3 normal;
+	vec2 texcoord;
+};
+
+struct VS_OUT {
+	vec4 position;
+	vec4 color;
+	vec2 texcoord;
+};
+
+#include "opaque.vuas"
+
+/*
+scopes:
+  (None) - from previous stage
+  Attribute - as an attribute (vattr or PVP)
+  User - bound by hand
+  Aspect - bound by the pass implementing this aspect
+  BaseInstance - coming from a bindless storage indexed by BaseInstanceIndex
+  Instance - coming from a bindless storage indexed by InstanceIndex
+  Draw - coming from a bindless storage indexed by DrawID
+  Push - coming from a bindless storage indexed by a PushConstant
+*/
+
+VS_OUT opaque::vertex(Attribute::VS_IN vin, Aspect::VP vp, User::vec4 tint, BaseInstance::mat4 model_matrix, Draw::vec4 tint) {
+	VS_OUT vout;
+	vout.position = vp.projection * vp.view * model_matrix * vec4(vin.position, 1.0);
+	vout.texcoord = vin.texcoord;
+	vout.color = vin.color * tint;
+	return vout;
+}
+
+struct FS_OUT {
+	vec4 color_out;
+};
+
+FS_OUT opaque::fragment(VS_OUT vin) {
+	FS_OUT fout;
+	fout.color_out = vec4(1,0,0,1);
+	return fout;
+}

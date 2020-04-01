@@ -1,0 +1,47 @@
+// coarse user flags
+#pragma casts_shadows:off
+#pragma transparency:off
+#pragma pre-z:off
+// fine flags
+#pragma rasterization/write_mask:rgb
+
+#include <shaders/aspect/depth>
+#include <shaders/aspect/opaque>
+#include <shaders/model/instance>
+
+struct VS_IN {
+	vec3 position;
+	vec3 normal;
+	vec2 texcoord;
+};
+
+struct VS_OUT {
+	vec4 position;
+	vec2 texcoord;
+};
+
+struct DEPTH_OUT {
+	vec4 position;
+};
+
+DEPTH_OUT depth::vertex(VS_IN vin){
+	DEPTH_OUT vout;
+	vout.position = pass().VP * instance().model * vec4(vin.position, 1.0);
+	return vout;
+}
+
+VS_OUT opaque::vertex(VS_IN vin) {
+	VS_OUT vout;
+	vout.position = pass().VP * instance().model * vec4(vin.position, 1.0);
+	vout.texcoord = vin.texcoord;
+	return vout;
+}
+
+struct FS_OUT {
+	vec4 colour_out;
+};
+
+#pragma opaque::depth_write off
+FS_OUT opaque::fragment(VS_OUT vin) {
+	return vec4(1,0,0,1);
+}
