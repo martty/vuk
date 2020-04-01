@@ -217,6 +217,17 @@ namespace std {
 		}
 	};
 
+	template<>
+	struct hash<vk::PipelineRasterizationStateCreateInfo> {
+		size_t operator()(vk::PipelineRasterizationStateCreateInfo const& x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, x.depthClampEnable, x.rasterizerDiscardEnable, x.polygonMode,
+				x.cullMode, x.frontFace, x.depthBiasEnable,
+				x.depthBiasConstantFactor, x.depthBiasClamp, x.depthBiasSlopeFactor, x.lineWidth);
+			return h;
+		}
+	};
+
 	template <>
 	struct hash<vk::GraphicsPipelineCreateInfo> {
 		size_t operator()(vk::GraphicsPipelineCreateInfo const & x) const noexcept {
