@@ -18,21 +18,21 @@
 	"Aspect" : {
 		"uniform" : {
 			"declaration_template" : "layout(std140, binding = {{binding}}) uniform _aspect_ {\n{{#variables}}\t{{variable_type}} {{variable_name}};\n{{/variables}}} _aspect;\n",
-			"bind_template" : "\t{{#variables}}{{variable_type}} {{variable_name}} = _aspect.{{variable_name}};\n{{/variables}}",
+			"bind_template" : "{{#variables}}\t{{variable_type}} {{variable_name}} = _aspect.{{variable_name}};\n{{/variables}}",
 			"binding_count" : "."
 		}
 	},
 	"User" : {
 		"uniform" : {
 			"declaration_template" : "layout(std140, binding = {{binding}}) uniform _user_ {\n{{#variables}}\t{{variable_type}} {{variable_name}};\n{{/variables}}} _user;\n",
-			"bind_template" : "\t{{#variables}}{{variable_type}} {{variable_name}} = _user.{{variable_name}};\n{{/variables}}",
+			"bind_template" : "{{#variables}}\t{{variable_type}} {{variable_name}} = _user.{{variable_name}};\n{{/variables}}",
 			"binding_count" : "."
 		}
 	},
 	"BaseInstance" : {
 		"uniform" : {
 			"declaration_template" : "struct _baseinstance_t {\n{{#variables}}\t{{variable_type}} {{variable_name}};\n{{/variables}}};\nlayout(std140, binding = {{binding}}) uniform _base_instance_ {\n\t_baseinstance_t _[_BASE_INSTANCE_SIZE];\n} _base_instance;\n",
-			"bind_template" : "\t{{#variables}}{{variable_type}} {{variable_name}} = _base_instance._[gl_BaseInstance].{{variable_name}};\n{{/variables}}",
+			"bind_template" : "{{#variables}}\t{{variable_type}} {{variable_name}} = _base_instance._[gl_BaseInstance].{{variable_name}};\n{{/variables}}",
 			"binding_count" : ".",
 			"parameters" : {
 				"_BASE_INSTANCE_SIZE" : {
@@ -44,7 +44,7 @@
 	"Draw" : {
 		"uniform" : {
 			"declaration_template" : "struct _draw_t {\n{{#variables}}\t{{variable_type}} {{variable_name}};\n{{/variables}}};\nlayout(std140, binding = {{binding}}) uniform _draw_ {\n\t_draw_t _[_DRAW_SIZE];\n} _draw;\n",
-			"bind_template" : "\t{{#variables}}{{variable_type}} {{variable_name}} = _draw._[gl_DrawID].{{variable_name}};\n{{/variables}}",
+			"bind_template" : "{{#variables}}\t{{variable_type}} {{variable_name}} = _draw._[gl_DrawID].{{variable_name}};\n{{/variables}}",
 			"binding_count" : ".",
 			"parameters" : {
 				"_DRAW_SIZE" : {

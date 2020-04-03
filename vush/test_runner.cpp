@@ -39,8 +39,14 @@ TEST_CASE("basic", "[basic]") {
 	run_file("../../tests/basic.vush");
 }
 
-TEST_CASE("ubos", "[ubos]") {
+TEST_CASE("aspect", "[basic]") {
 	add_rules(json::parse(slurp("../../vush/builtin_cfg.json")));
 
-	run_file("../../tests/ubos.vush");
+	run_file("../../tests/aspect.vush");
+}
+
+TEST_CASE("bindless", "[bindless]") {
+	add_rules(json::parse(slurp("../../vush/builtin_cfg.json")));
+
+	run_file("../../tests/bindless.vush");
 }
