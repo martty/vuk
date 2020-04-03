@@ -59,5 +59,5 @@ target_link_libraries_system(vuk PUBLIC Vulkan::Vulkan GSL spirv-cross-core shad
 if (WIN32)
 	target_compile_definitions(vuk PUBLIC NOMINMAX VC_EXTRALEAN WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS _SCL_SECURE_NO_WARNINGS _SILENCE_CLANG_CONCEPTS_MESSAGE)
 endif()
-add_subdirectory(examples)
 add_subdirectory(vush)
+add_subdirectory(examples)

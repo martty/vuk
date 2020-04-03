@@ -1,0 +1,36 @@
+struct VS_IN {
+	vec3 position;
+	vec2 texcoord;
+};
+
+struct VS_OUT {
+	vec2 texcoord;
+};
+
+
+struct VP {
+	mat4 view;
+	mat4 projection;
+};
+
+VS_OUT opaque::vertex(Attribute::VS_IN vin, Aspect::VP vp, User::mat4 model_matrix) {
+	VS_OUT vout;
+	gl_Position = vp.projection * vp.view * model_matrix * vec4(vin.position, 1.0);
+	vout.texcoord = vin.texcoord;
+	return vout;
+}
+
+struct FS_OUT {
+	vec4 color_out;
+};
+
+FS_OUT opaque::fragment(VS_OUT vin) {
+	FS_OUT fout;
+	fout.color_out = vec4(0.4,0,1,1);
+	return fout;
+}
+
+
+
+
+

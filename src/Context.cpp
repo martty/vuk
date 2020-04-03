@@ -6,6 +6,7 @@
 #include "Context.hpp"
 #include "Context.hpp"
 #include "Context.hpp"
+#include "Context.hpp"
 #include "RenderGraph.hpp"
 #include <shaderc/shaderc.hpp>
 #include <algorithm>
@@ -522,6 +523,22 @@ void vuk::Context::create_named_pipeline(const char* name, vuk::PipelineCreateIn
 
 vuk::PipelineCreateInfo vuk::Context::get_named_pipeline(const char* name) {
 	return named_pipelines.at(name);
+}
+
+void vuk::Context::invalidate_shadermodule_and_pipelines(Name filename) {
+	vuk::ShaderModuleCreateInfo sci;
+	sci.filename = filename;
+	auto sm = shader_modules.invalidate(sci);
+	auto pipe = pipeline_cache.invalidate([&](auto& ci, auto& p) {
+		if (std::find(ci.shaders.begin(), ci.shaders.end(), std::string(filename)) != ci.shaders.end()) return true;
+		return false;
+	});
+	while (pipe != std::nullopt) {
+		pipe = pipeline_cache.invalidate([&](auto& ci, auto& p) {
+			if (std::find(ci.shaders.begin(), ci.shaders.end(), std::string(filename)) != ci.shaders.end()) return true;
+			return false;
+		});
+	}
 }
 
 void vuk::Context::enqueue_destroy(vk::Image i) {

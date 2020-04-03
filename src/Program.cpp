@@ -108,6 +108,6 @@ void vuk::Program::append(const Program& o) {
 
 size_t std::hash<vuk::ShaderModuleCreateInfo>::operator()(vuk::ShaderModuleCreateInfo const& x) const noexcept {
 	size_t h = 0;
-	hash_combine(h, x.source); // filename is intentionally not hashed in
+	hash_combine(h, x.filename);
 	return h;
 }

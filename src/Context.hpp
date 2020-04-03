@@ -139,6 +139,7 @@ namespace vuk {
 
 		void create_named_pipeline(const char* name, vuk::PipelineCreateInfo ci);
 		vuk::PipelineCreateInfo get_named_pipeline(const char* name);
+		void invalidate_shadermodule_and_pipelines(Name);
 
 		void enqueue_destroy(vk::Image i);
 		void enqueue_destroy(vuk::ImageView iv);

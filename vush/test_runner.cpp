@@ -5,6 +5,21 @@
 #include <filesystem>
 namespace fs = std::filesystem;
 
+std::string slurp(const std::string& path) {
+	std::ostringstream buf;
+	std::ifstream input(path.c_str());
+	buf << input.rdbuf();
+	return buf.str();
+}
+
+void burp(const std::string& in, const std::string& path) {
+	std::ofstream output(path.c_str(), std::ios::trunc);
+	if (!output.is_open()) {
+	}
+	output << in;
+	output.close();
+}
+
 std::string stage_to_extension(stage_entry::type as) {
 	switch (as) {
 	case stage_entry::type::eVertex: return "vert";

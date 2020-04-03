@@ -91,7 +91,7 @@ namespace vuk {
 		std::string filename;
 
 		bool operator==(const ShaderModuleCreateInfo& o) const {
-			return source == o.source; // we check for content equality
+			return filename == o.filename;
 		}
 	};
 

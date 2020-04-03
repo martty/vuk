@@ -345,6 +345,30 @@ namespace vuk {
 		Cache(Context& ctx) : ctx(ctx) {}
 		~Cache();
 
+		T invalidate(const create_info_t<T>& ci) {
+			std::unique_lock _(cache_mtx);
+			auto it = lru_map.find(ci);
+			auto res = std::move(*it->second.ptr);
+			pool.erase(pool.get_iterator_from_pointer(it->second.ptr));
+			lru_map.erase(it);
+			return res;
+		}
+
+		template<class Compare>
+		std::optional<T> invalidate(Compare cmp) {
+			std::unique_lock _(cache_mtx);
+			for (auto it = lru_map.begin(); it != lru_map.end(); ++it) {
+				if (cmp(it->first, it->second)) {
+					auto res = std::move(*it->second.ptr);
+					pool.erase(pool.get_iterator_from_pointer(it->second.ptr));
+					lru_map.erase(it);
+					return res;
+				}
+			}
+			return {};
+		}
+
+
 		struct PFView {
 			InflightContext& ifc;
 			Cache& cache;
