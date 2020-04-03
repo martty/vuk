@@ -1,8 +1,6 @@
 cmake_minimum_required(VERSION 3.7)
 project(vuk)
 
-set (CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/CMake")
-
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 # https://stackoverflow.com/a/52136398

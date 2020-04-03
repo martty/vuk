@@ -1,6 +1,6 @@
 struct VS_IN {
 	vec3 position;
-	vec3 normal;
+	vec4 color;
 	vec2 texcoord;
 };
 
@@ -14,21 +14,21 @@ struct VS_OUT {
 
 /*
 scopes:
-  (None) - from previous stage
-  Attribute - as an attribute (vattr or PVP)
-  User - bound by hand
-  Aspect - bound by the pass implementing this aspect
-  BaseInstance - coming from a bindless storage indexed by BaseInstanceIndex
-  Instance - coming from a bindless storage indexed by InstanceIndex
-  Draw - coming from a bindless storage indexed by DrawID
-  Push - coming from a bindless storage indexed by a PushConstant
+	(None) - from previous stage
+	Attribute - as an attribute (vattr or PVP)
+	User - bound by hand
+	Aspect - bound by the pass implementing this aspect
+	BaseInstance - coming from a bindless storage indexed by BaseInstanceIndex
+	Instance - coming from a bindless storage indexed by InstanceIndex
+	Draw - coming from a bindless storage indexed by DrawID
+	Push - coming from a bindless storage indexed by a PushConstant
 */
 
-VS_OUT opaque::vertex(Attribute::VS_IN vin, Aspect::VP vp, User::vec4 tint, BaseInstance::mat4 model_matrix, Draw::vec4 tint) {
+VS_OUT opaque::vertex(Attribute::VS_IN vin, Aspect::VP vp, User::vec4 tint, BaseInstance::mat4 model_matrix, Draw::vec4 tint2) {
 	VS_OUT vout;
 	vout.position = vp.projection * vp.view * model_matrix * vec4(vin.position, 1.0);
 	vout.texcoord = vin.texcoord;
-	vout.color = vin.color * tint;
+	vout.color = vin.color * tint * tint2;
 	return vout;
 }
 
