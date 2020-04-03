@@ -27,6 +27,14 @@ void run_file(const std::string& src_file) {
 				checks++;
 			}
 		}
+		auto control_file = src_file + "." + aspect + ".meta.json";
+		auto meta_dump = pa.metadata_as_json.dump();
+		if (fs::exists(fs::path(control_file))) {
+			auto control = slurp(control_file);
+			
+			REQUIRE(pa.metadata_as_json == json::parse(control));
+			checks++;
+		}
 	}
 	REQUIRE(checks > 0);
 
@@ -49,4 +57,10 @@ TEST_CASE("bindless", "[bindless]") {
 	add_rules(json::parse(slurp("../../vush/builtin_cfg.json")));
 
 	run_file("../../tests/bindless.vush");
+}
+
+TEST_CASE("pipeline_stage", "[pragmas]") {
+	add_rules(json::parse(slurp("../../vush/builtin_cfg.json")));
+
+	run_file("../../tests/pipeline_state.vush");
 }
