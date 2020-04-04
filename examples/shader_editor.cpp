@@ -1,5 +1,6 @@
 #include "example_runner.hpp"
 #include "example_runner.hpp"
+#include "example_runner.hpp"
 #include "TextEditor.h"
 #include <fstream>
 #include <stb_image.h>
@@ -24,26 +25,41 @@ struct push_connection {
 	std::vector<std::string> name;
 
 	template<class T>
+	bool push_to_member(vuk::Program::Member& m, uint32_t binding, program_parameters& params, std::vector<std::string> nq, T& data) {
+		if (nq.empty()) {
+			auto& buf = params.buffer.at(binding);
+			*(T*)(buf.data() + m.offset) = data;
+			return true;
+		} else if (m.type == vuk::Program::Type::estruct) {
+			auto nqd = nq;
+			for (auto& mm : m.members) {
+				if (nqd.front() == mm.name) {
+					nqd.erase(nqd.begin());
+					if (push_to_member(mm, binding, params, nqd, data)) return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	template<class T>
 	bool push(vuk::Program refl, program_parameters& params, T data) {
 		auto nq = name;
 		for (auto& [index, set] : refl.sets) {
-			for (auto& un : set.uniform_buffers) {
-				nq = name;
-				if (nq.front() == un.name) {
-					nq.erase(nq.begin());
-				} else {
-					continue;
-				}
-				for (auto& m : un.members) {
-					if (nq.front() == m.name) {
+			if constexpr (!std::is_same_v<T, vuk::ImageView>) {
+				for (auto& un : set.uniform_buffers) {
+					nq = name;
+					if (nq.front() == un.name) {
 						nq.erase(nq.begin());
-						if (nq.empty()) {
-							auto& buf = params.buffer.at(un.binding);
-							*(T*)(buf.data() + m.offset) = data;
-							return true;
-						}
 					} else {
 						continue;
+					}
+					for (auto& m : un.members) {
+						auto nqd = nq;
+						if (nqd.front() == m.name) {
+							nqd.erase(nqd.begin());
+							if (push_to_member(m, un.binding, params, nqd, data)) return true;
+						} 
 					}
 				}
 			}
@@ -52,6 +68,7 @@ struct push_connection {
 				for (auto& s : set.samplers) {
 					if (nq.size() == 1 && nq.front() == s.name) {
 						params.ivs.at(s.binding) = data;
+						return true;
 					}
 				}
 			}
@@ -77,7 +94,7 @@ struct transform {
 		m[3][1] = position[1];
 		m[3][2] = position[2];
 		if (invert)
-			return glm::inverse(m);
+			return glm::lookAt(position, glm::vec3(0.f), scale);
 		else
 			return m;
 	}
@@ -92,6 +109,13 @@ struct texture {
 };
 
 static std::vector<texture> textures;
+
+struct st {
+	vuk::Texture handle;
+	vuk::SampledImage si;
+};
+
+static std::unordered_map<std::string, st> voosh_res;
 
 struct projection {
 	float fovy = glm::radians(60.f);
@@ -129,6 +153,22 @@ void recompile(vuk::PerThreadContext& ptc, const std::string& src) {
 	}
 }
 
+void init_members(vuk::Program::Member& m, std::vector<char>& b) {
+	switch (m.type) {
+	case vuk::Program::Type::evec3:
+		new (b.data() + m.offset) float[3]{ 1,1,1 }; break;
+	case vuk::Program::Type::emat4:
+		glm::mat4 id(1.f);
+		new (b.data() + m.offset) float[16]();
+		::memcpy(b.data() + m.offset, &id[0], sizeof(float) * 16); break;
+	case vuk::Program::Type::estruct:
+		for (auto& mm : m.members) {
+			init_members(mm, b);
+		}
+	}
+
+}
+
 imgui_addons::ImGuiFileBrowser file_dialog; // As a class member or globally
 void load_texture(vuk::PerThreadContext& ptc, const std::string& path) {
 	// Use STBI to load the image
@@ -141,6 +181,19 @@ void load_texture(vuk::PerThreadContext& ptc, const std::string& path) {
 	t.handle = std::move(tex);
 	t.filename = path;
 	textures.emplace_back(std::move(t));
+	ptc.wait_all_transfers();
+}
+
+void load_res_texture(vuk::PerThreadContext& ptc, const std::string& name, const std::string& path) {
+	// Use STBI to load the image
+	int x, y, chans;
+	auto image = stbi_load(path.c_str(), &x, &y, &chans, 4);
+	auto [tex, _] = ptc.create_texture(vk::Format::eR8G8B8A8Srgb, vk::Extent3D(x, y, 1), image);
+	stbi_image_free(image);
+
+	vk::SamplerCreateInfo sci;
+	sci.minFilter = sci.magFilter = vk::Filter::eLinear;
+	voosh_res.emplace(name, st{ std::move(tex), ptc.make_sampled_image(*tex.view, sci) });
 	ptc.wait_all_transfers();
 }
 
@@ -284,6 +337,48 @@ vuk::ExampleRunner::ExampleRunner() {
 		auto ptc = ifc.begin();
 
 		load_texture(ptc, "../../examples/doge.png");
+		load_res_texture(ptc, "mat4x4", "../../examples/mat4x4.jpg");
+}
+
+void droppable(std::vector<std::string>& name_stack, std::string name) {
+	if (ImGui::BeginDragDropTarget()) {
+		if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(VOOSH_PAYLOAD_TYPE_CONNECTION_PTR)) {
+			(*(push_connection**)payload->Data)->name = name_stack;
+			(*(push_connection**)payload->Data)->name.push_back(name);
+		}
+		ImGui::EndDragDropTarget();
+	}
+}
+
+void parameter_ui(vuk::Program::Member& m, std::vector<char>& b, std::vector<std::string> name_stack) {
+	switch (m.type) {
+	case vuk::Program::Type::evec3:
+		ImGui::DragFloat3(m.name.c_str(), (float*)(b.data() + m.offset), 0.01f); 
+		break;
+	case vuk::Program::Type::emat4:
+		ImGui::ImageButton(&voosh_res.at("mat4x4").si, ImVec2(50, 50));
+		break;
+	case vuk::Program::Type::estruct:
+		bool open = ImGui::TreeNodeEx(m.name.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
+		ImGui::NextColumn();
+		ImGui::Text(m.name.c_str());
+		ImGui::NextColumn();
+
+		if(open) {
+			name_stack.push_back(m.name);
+			for (auto& mm : m.members) {
+				parameter_ui(mm, b, name_stack);
+			}
+			name_stack.pop_back();
+			ImGui::TreePop();
+		}
+		return;
+
+	}
+	droppable(name_stack, m.name);
+	ImGui::NextColumn();
+	ImGui::Text(m.name.c_str());
+	ImGui::NextColumn();
 }
 
 void vuk::ExampleRunner::render() {
@@ -386,14 +481,7 @@ void vuk::ExampleRunner::render() {
 					auto& b = program_params.buffer[u.binding];
 					b.resize(u.size, 0);
 					for (auto& m : u.members) {
-						switch (m.type) {
-						case vuk::Program::Type::evec3:
-							new (b.data() + m.offset) float[3]{ 1,1,1 }; break;
-						case vuk::Program::Type::emat4:
-							glm::mat4 id(1.f);
-							new (b.data() + m.offset) float[16]();
-							::memcpy(b.data() + m.offset, &id[0], sizeof(float) * 16); break;
-						}
+						init_members(m, b);
 					}
 				}
 			}
@@ -404,45 +492,26 @@ void vuk::ExampleRunner::render() {
 		}
 
 		if (ImGui::CollapsingHeader("Bindings", ImGuiTreeNodeFlags_DefaultOpen)) {
+			ImGui::Columns(2, "textures", true);
 			for (auto& [set_index, set] : refl.sets) {
+				std::vector<std::string> name_stack;
 				for (auto& u : set.uniform_buffers) {
+					name_stack.push_back(u.name);
 					auto& b = program_params.buffer[u.binding];
 					for (auto& m : u.members) {
-						if (m.type == vuk::Program::Type::estruct) {
-							if (ImGui::CollapsingHeader(m.name.c_str())) {
-								for (auto& mm : m.members) {
-								}
-							}
-						} else {
-							switch (m.type) {
-							case vuk::Program::Type::evec3:
-								ImGui::DragFloat3(m.name.c_str(), (float*)(b.data() + m.offset), 0.01f); break;
-							case vuk::Program::Type::emat4:
-								ImGui::Button(m.name.c_str()); 
-								if (ImGui::BeginDragDropTarget()) {
-									if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(VOOSH_PAYLOAD_TYPE_CONNECTION_PTR)) {
-										(*(push_connection**)payload->Data)->name = { u.name, m.name };
-									}
-										
-									ImGui::EndDragDropTarget();
-								}
-								break;
-							}
-						}
+						parameter_ui(m, b, name_stack);
 					}
+					name_stack.pop_back();
 				}
 				for (auto& s : set.samplers) {
-					ImGui::PushID("...");
 					ImGui::Image(&ptc.make_sampled_image(program_params.ivs[s.binding], {}), ImVec2(100.f, 100.f));
-					if (ImGui::BeginDragDropTarget()) {
-						if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(VOOSH_PAYLOAD_TYPE_CONNECTION_PTR)) {
-							(*(push_connection**)payload->Data)->name = { s.name };
-						}
-						ImGui::EndDragDropTarget();
-					}
-					ImGui::PopID();
+					droppable(name_stack, s.name);
+					ImGui::NextColumn();
+					ImGui::Text(s.name.c_str());
+					ImGui::NextColumn();
 				}
 			}
+			ImGui::Columns(1);
 		}
 		ImGui::End();
 		bool optx = false;
@@ -498,7 +567,7 @@ void vuk::ExampleRunner::render() {
 			load_texture(ptc, file_dialog.selected_path);
 		}
 
-		static std::vector<transform> tfs = { {}, {{}, glm::quat(1,0,0,0), glm::vec3(1.f), true} };
+		static std::vector<transform> tfs = { {}, {glm::vec3(0, 1.5, 3.5), glm::quat(1,0,0,0), glm::vec3(0, 1.f, 0), true} };
 		static std::vector<projection> projections = { {} };
 
 		ImGui::Begin("Transforms");
@@ -507,13 +576,13 @@ void vuk::ExampleRunner::render() {
 		if (ImGui::Button("+"))
 			tfs.push_back({});
 		ImGui::NextColumn();
-		ImGui::Text("Invert");
+		ImGui::Text("as lookAt()");
 		ImGui::NextColumn();
 		ImGui::Text("Position");
 		ImGui::NextColumn();
-		ImGui::Text("Orientation");
+		ImGui::Text("Orientation / Not used");
 		ImGui::NextColumn();
-		ImGui::Text("Scale");
+		ImGui::Text("Scale / Up");
 		ImGui::NextColumn();
 		ImGui::Separator();
 
@@ -542,7 +611,9 @@ void vuk::ExampleRunner::render() {
 			ImGui::DragFloat3("##pos", &tf.position.x, 0.01f);
 			ImGui::NextColumn();
 			ImGui::SetNextItemWidth(ImGui::GetColumnWidth() - 14);
-			ImGui::DragFloat4("##ori", &tf.orientation[0], 0.01f);
+			if (ImGui::DragFloat4("##ori", &tf.orientation[0], 0.01f)) {
+				tf.orientation = glm::normalize(tf.orientation);
+			}
 			ImGui::NextColumn();
 			ImGui::SetNextItemWidth(ImGui::GetColumnWidth() - 14);
 			ImGui::DragFloat3("##sca", &tf.scale.x, 0.1f);
@@ -611,19 +682,6 @@ void vuk::ExampleRunner::render() {
 		auto verts = std::move(bverts);
 		auto [binds, stub2] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eIndexBuffer, gsl::span(&box.second[0], box.second.size()));
 		auto inds = std::move(binds);
-		struct VP {
-			glm::mat4 view;
-			glm::mat4 proj;
-		} vp;
-		vp.view = glm::lookAt(glm::vec3(0, 1.5, 3.5), glm::vec3(0), glm::vec3(0, 1, 0));
-		vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 1.f, 10.f);
-
-		auto [buboVP, stub3] = ptc.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vk::BufferUsageFlagBits::eUniformBuffer, gsl::span(&vp, 1));
-		auto uboVP = buboVP;
-
-		//new(buffer[1].data()) glm::mat4(glm::angleAxis(glm::radians(angle), glm::vec3(0.f, 1.f, 0.f)));
-		auto [user, stubx] = ptc.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vk::BufferUsageFlagBits::eUniformBuffer, gsl::span(program_params.buffer[1].data(), program_params.buffer[1].size()));
-		ptc.wait_all_transfers();
 
 		vuk::RenderGraph rg;
 
@@ -638,16 +696,15 @@ void vuk::ExampleRunner::render() {
 				  .bind_index_buffer(inds, vk::IndexType::eUint32);
 				for (auto& [binding, iv] : program_params.ivs) {
 					command_buffer.bind_sampled_image(0, binding, iv, vk::SamplerCreateInfo{});
-				  }
-				  command_buffer
-					.bind_pipeline("sut")
-					.bind_uniform_buffer(0, 0, uboVP)
-					.bind_uniform_buffer(0, 1, user);
-				  command_buffer
-					.draw_indexed(box.second.size(), 1, 0, 0, 0);
-				  }
-			}
-		);
+				}
+				command_buffer.bind_pipeline("sut");
+				for (auto& [binding, buffer] : program_params.buffer) {
+					void * dst = command_buffer._map_scratch_uniform_binding(0, binding, program_params.buffer[binding].size() * sizeof(char));
+					memcpy(dst, program_params.buffer[binding].data(), program_params.buffer[binding].size() * sizeof(char));
+				}
+				command_buffer.draw_indexed(box.second.size(), 1, 0, 0, 0);
+				}
+			});
 
 		angle += 180.f * ImGui::GetIO().DeltaTime;
 
@@ -672,5 +729,6 @@ int main() {
 	vuk::ExampleRunner::get_runner().setup();
 	vuk::ExampleRunner::get_runner().render();
 	textures.clear();
+	voosh_res.clear();
 	vuk::ExampleRunner::get_runner().cleanup();
 }
