@@ -4,6 +4,65 @@
 #include <regex>
 #include "Hash.hpp"
 
+vuk::Program::Type to_type(spirv_cross::SPIRType s) {
+	using namespace spirv_cross;
+	using namespace vuk;
+
+	switch (s.basetype) {
+	case SPIRType::Float:
+		switch (s.columns) {
+		case 1:
+			switch (s.vecsize) {
+			case 1:	return Program::Type::efloat; break;
+			case 2: return Program::Type::evec2; break;
+			case 3: return Program::Type::evec3; break;
+			case 4: return Program::Type::evec4; break;
+			default: assert("NYI" && 0);
+			}
+		case 4:
+			return Program::Type::emat4; break;
+		}
+	case SPIRType::Int:
+		switch (s.vecsize) {
+		case 1:	return Program::Type::eint; break;
+		case 2: return Program::Type::eivec2; break;
+		case 3: return Program::Type::eivec3; break;
+		case 4: return Program::Type::eivec4; break;
+		default: assert("NYI" && 0);
+		}
+	case SPIRType::UInt:
+		switch (s.vecsize) {
+		case 1:	return Program::Type::euint; break;
+		case 2: return Program::Type::euvec2; break;
+		case 3: return Program::Type::euvec3; break;
+		case 4: return Program::Type::euvec4; break;
+		default: assert("NYI" && 0);
+		}
+	case SPIRType::Struct: return Program::Type::estruct;
+	default: assert("NYI" && 0);
+	}
+}
+
+void reflect_members(const spirv_cross::Compiler& refl, const spirv_cross::SPIRType& type, std::vector<vuk::Program::Member>& members) {
+	for (size_t i = 0; i < type.member_types.size(); i++) {
+		auto& t = type.member_types[i];
+		vuk::Program::Member m;
+		auto spirtype = refl.get_type(t);
+		m.type = to_type(spirtype);
+		m.name = refl.get_member_name(type.self, i);
+		m.size = refl.get_declared_struct_member_size(type, i);
+		m.offset = refl.type_struct_member_offset(type, i);
+		if (m.type == vuk::Program::Type::estruct) {
+			reflect_members(refl, spirtype, m.members);
+		}
+		if (spirtype.array.size() > 0)
+			m.array_size = type.array[0];
+		else
+			m.array_size = 1;
+		members.push_back(m);
+	}
+}
+
 vk::ShaderStageFlagBits vuk::Program::introspect(const spirv_cross::Compiler& refl) {
 	auto resources = refl.get_shader_resources();
 	auto entry_name = refl.get_entry_points_and_stages()[0];
@@ -20,6 +79,17 @@ vk::ShaderStageFlagBits vuk::Program::introspect(const spirv_cross::Compiler& re
 			default: return vk::ShaderStageFlagBits::eVertex;
 		}
 	}();
+	if (stage == vk::ShaderStageFlagBits::eVertex) {
+		for (auto& sb : resources.stage_inputs) {
+			auto type = refl.get_type(sb.type_id);
+			auto location = refl.get_decoration(sb.id, spv::DecorationLocation);
+			Attribute a;
+			a.location = location;
+			a.name = sb.name.c_str();
+			a.type = to_type(type);
+			attributes.push_back(a);
+		}
+	}
 	// uniform buffers
 	for (auto& ub : resources.uniform_buffers) {
 		auto type = refl.get_type(ub.type_id);
@@ -33,15 +103,10 @@ vk::ShaderStageFlagBits vuk::Program::introspect(const spirv_cross::Compiler& re
 			un.array_size = type.array[0];
 		else
 			un.array_size = 1;
-
-		un.size = refl.get_declared_struct_size(type);
-		if (type.member_types.size() == 1 && refl.get_type(type.member_types[0]).array.size() > 0 && un.name == "Materials") { // we process only Materials
-			auto arr_t_id = type.member_types[0];
-			auto arr_t = refl.get_type(arr_t_id);
-
-			un.array_size = arr_t.array[0];
-			un.size /= un.array_size;
+		if (type.basetype == spirv_cross::SPIRType::Struct) {
+			reflect_members(refl, refl.get_type(ub.type_id), un.members);
 		}
+		un.size = refl.get_declared_struct_size(type);
 		sets[set].uniform_buffers.push_back(un);
 	}
 	for (auto& sb : resources.storage_buffers) {

@@ -345,17 +345,20 @@ namespace vuk {
 		Cache(Context& ctx) : ctx(ctx) {}
 		~Cache();
 
-		T invalidate(const create_info_t<T>& ci) {
+		std::optional<T> remove(const create_info_t<T>& ci) {
 			std::unique_lock _(cache_mtx);
 			auto it = lru_map.find(ci);
-			auto res = std::move(*it->second.ptr);
-			pool.erase(pool.get_iterator_from_pointer(it->second.ptr));
-			lru_map.erase(it);
-			return res;
+			if (it != lru_map.end()) {
+				auto res = std::move(*it->second.ptr);
+				pool.erase(pool.get_iterator_from_pointer(it->second.ptr));
+				lru_map.erase(it);
+				return res;
+			}
+			return {};
 		}
 
 		template<class Compare>
-		std::optional<T> invalidate(Compare cmp) {
+		std::optional<T> remove(Compare cmp) {
 			std::unique_lock _(cache_mtx);
 			for (auto it = lru_map.begin(); it != lru_map.end(); ++it) {
 				if (cmp(it->first, it->second)) {
@@ -368,6 +371,16 @@ namespace vuk {
 			return {};
 		}
 
+		template<class Compare>
+		const T * find(Compare cmp) {
+			std::unique_lock _(cache_mtx);
+			for (auto it = lru_map.begin(); it != lru_map.end(); ++it) {
+				if (cmp(it->first, it->second)) {
+					return it->second.ptr;
+				}
+			}
+			return nullptr;
+		}
 
 		struct PFView {
 			InflightContext& ifc;

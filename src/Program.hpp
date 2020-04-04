@@ -10,15 +10,19 @@ namespace spirv_cross {
 };
 namespace vuk {
 	struct Program {
+		enum class Type {
+			euint, eint, efloat,
+			euvec2, euvec3, euvec4,
+			eivec2, eivec3, eivec4,
+			evec2, evec3, evec4,
+			emat4, estruct
+		};
+
 		struct Attribute {
 			std::string name;
-			std::string full_type;
 
-			bool dynamic;
-			size_t vector_size; // usually 2 for vec2, 3 for vec3..
-			size_t size_of_elem; // sizeof(T) (12 for vec3)
-
-			size_t offset;
+			size_t location;
+			Type type;
 		};
 
 		struct TextureAddress {
@@ -26,19 +30,30 @@ namespace vuk {
 			float page;
 		};
 
+		struct Member {
+			std::string name;
+			Type type;
+			size_t size;
+			size_t offset;
+			unsigned array_size;
+			std::vector<Member> members;
+		};
+
+		// always a struct
 		struct UniformBuffer {
 			std::string name;
-			std::string full_name;
 
 			unsigned binding;
 			size_t size;
 			unsigned array_size;
+
+			std::vector<Member> members;
+
 			vk::ShaderStageFlags stage;
 		};
 
 		struct StorageBuffer {
 			std::string name;
-			std::string full_name;
 
 			unsigned binding;
 			size_t min_size;

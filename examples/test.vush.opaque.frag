@@ -11,6 +11,7 @@ struct VS_IN {
 
 struct VS_OUT {
 	vec2 texcoord;
+	vec3 col;
 };
 
 
@@ -29,10 +30,10 @@ layout(location = 0) out vec4 _color_out_out;
 
 layout(location = 0) in VS_OUT vin;
 
-#line 27 "../../examples/test.vush"
+#line 29 "../../examples/test.vush"
 FS_OUT opaque_fragment(VS_OUT vin) {
 	FS_OUT fout;
-	fout.color_out = vec4(0.4,0,1,1);
+	fout.color_out = vec4(vin.col * 2, 1);
 	return fout;
 }
 

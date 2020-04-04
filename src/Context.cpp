@@ -7,6 +7,7 @@
 #include "Context.hpp"
 #include "Context.hpp"
 #include "Context.hpp"
+#include "Context.hpp"
 #include "RenderGraph.hpp"
 #include <shaderc/shaderc.hpp>
 #include <algorithm>
@@ -453,7 +454,7 @@ vuk::PipelineInfo vuk::PerThreadContext::create(const create_info_t<PipelineInfo
 
 	auto pipeline = ctx.device.createGraphicsPipeline(*ctx.vk_pipeline_cache, gpci);
 	ctx.debug.set_name(pipeline, pipe_name);
-	return { pipeline, gpci.layout, dslai };
+	return { pipeline, gpci.layout, dslai, accumulated_reflection };
 }
 
 vk::Framebuffer vuk::PerThreadContext::create(const create_info_t<vk::Framebuffer>& cinfo) {
@@ -525,19 +526,38 @@ vuk::PipelineCreateInfo vuk::Context::get_named_pipeline(const char* name) {
 	return named_pipelines.at(name);
 }
 
+vuk::Program vuk::PerThreadContext::get_pipeline_reflection_info(vuk::PipelineCreateInfo pci) {
+	// TODO: check if we already have this in the cache, then it can just be returned
+	vuk::Program accumulated_reflection;
+	for (auto& path : pci.shaders) {
+		auto contents = slurp(path);
+		auto& sm = shader_modules.acquire({ contents, path });
+		accumulated_reflection.append(sm.reflection_info);
+	}
+	return accumulated_reflection;
+	/*
+	auto& res = pipeline_cache.acquire(pci);
+	return res.reflection_info;
+	*/
+}
+
 void vuk::Context::invalidate_shadermodule_and_pipelines(Name filename) {
 	vuk::ShaderModuleCreateInfo sci;
 	sci.filename = filename;
-	auto sm = shader_modules.invalidate(sci);
-	auto pipe = pipeline_cache.invalidate([&](auto& ci, auto& p) {
-		if (std::find(ci.shaders.begin(), ci.shaders.end(), std::string(filename)) != ci.shaders.end()) return true;
-		return false;
-	});
-	while (pipe != std::nullopt) {
-		pipe = pipeline_cache.invalidate([&](auto& ci, auto& p) {
+	auto sm = shader_modules.remove(sci);
+	if (sm) {
+		device.destroy(sm->shader_module);
+		// TODO: enqueue pipe(s) for destruction
+		auto pipe = pipeline_cache.remove([&](auto& ci, auto& p) {
 			if (std::find(ci.shaders.begin(), ci.shaders.end(), std::string(filename)) != ci.shaders.end()) return true;
 			return false;
-		});
+			});
+		while (pipe != std::nullopt) {
+			pipe = pipeline_cache.remove([&](auto& ci, auto& p) {
+				if (std::find(ci.shaders.begin(), ci.shaders.end(), std::string(filename)) != ci.shaders.end()) return true;
+				return false;
+				});
+		}
 	}
 }
 

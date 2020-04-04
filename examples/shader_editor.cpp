@@ -12,7 +12,60 @@ static const char* fileToEdit = "../../examples/test.vush";
 
 float angle = 0.f;
 auto box = util::generate_cube();
-//std::optional<vuk::Texture> texture_of_doge;
+
+using program_buffer = std::unordered_map<uint32_t, std::vector<char>>;
+
+struct push_connection {
+	std::vector<std::string> name;
+
+	template<class T>
+	bool push(vuk::Program refl, program_buffer& buffer, T data) {
+		auto nq = name;
+		for (auto& [index, set] : refl.sets) {
+			for (auto& un : set.uniform_buffers) {
+				if (nq.front() == un.name) {
+					nq.erase(nq.begin());
+				} else {
+					continue;
+				}
+				for (auto& m : un.members) {
+					if (nq.front() == m.name) {
+						nq.erase(nq.begin());
+						if (nq.empty()) {
+							auto& buf = buffer.at(un.binding);
+							*(T*)(buf.data() + m.offset) = data;
+							return true;
+						}
+					} else {
+						continue;
+					}
+				}
+			}
+		}
+		return false;
+	}
+};
+
+struct transform {
+	glm::vec3 position;
+	glm::quat orientation = glm::quat(1, 0, 0, 0);
+	glm::vec3 scale = glm::vec3(1);
+
+	push_connection connection;
+
+	glm::mat4 to_local() {
+		glm::mat4 m = glm::mat4_cast(orientation);
+		m[0] *= scale.x;
+		m[1] *= scale.y;
+		m[2] *= scale.z;
+		m[3][0] = position[0];
+		m[3][1] = position[1];
+		m[3][2] = position[2];
+		return m;
+	}
+};
+
+#define VOOSH_PAYLOAD_TYPE_TRANSFORM "voosh_payload_tf"
 
 std::string slurp(const std::string& path);
 
@@ -197,7 +250,7 @@ void vuk::ExampleRunner::render() {
 		auto ptc = ifc.begin();
 
 		auto cpos = editor.GetCursorPosition();
-		ImGui::Begin("Text Editor", nullptr, ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_MenuBar);
+		ImGui::Begin("Shader Editor", nullptr, ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_MenuBar);
 		ImGui::SetWindowSize(ImVec2(400, 400), ImGuiCond_FirstUseEver);
 		if (ImGui::BeginMenuBar()) {
 			if (ImGui::BeginMenu("File")) {
@@ -268,8 +321,121 @@ void vuk::ExampleRunner::render() {
 		editor.Render("TextEditor");
 		ImGui::End();
 
-		// We set up the cube data, same as in example 02_cube
+		ImGui::Begin("Parameters");
+		auto refl = ptc.get_pipeline_reflection_info(ptc.ctx.get_named_pipeline("sut"));
+		if (ImGui::CollapsingHeader("Attributes")) {
+			for (auto& att : refl.attributes) {
+				ImGui::Button(att.name.c_str()); ImGui::SameLine();
+			}
+		}
+		ImGui::NewLine();
+		// 1 buffer per binding
+		// TODO: multiple set support
+		static std::unordered_map<uint32_t, std::vector<char>> buffer;
+		// init
+		for (auto& [set_index, set] : refl.sets) {
+			for (auto& u : set.uniform_buffers) {
+				auto& b = buffer[u.binding];
+				b.resize(u.size, 0);
+				// anti-UB code
+				/*for (auto& m : u.members) {
+					switch (m.type) {
+						case vuk::Program::Type::evec3:
+							new (b.data() + m.offset) float[3]{ 1,1,1 };
+						case vuk::Program::Type::emat4:
+							new (b.data() + m.offset) float[16]();
+					}
+				}*/
+			}
+		}
 
+		if (ImGui::CollapsingHeader("Bindings", ImGuiTreeNodeFlags_DefaultOpen)) {
+			for (auto& [set_index, set] : refl.sets) {
+				for (auto& u : set.uniform_buffers) {
+					auto& b = buffer[u.binding];
+					for (auto& m : u.members) {
+						if (m.type == vuk::Program::Type::estruct) {
+							if (ImGui::CollapsingHeader(m.name.c_str())) {
+								for (auto& mm : m.members) {
+								}
+							}
+						} else {
+							switch (m.type) {
+							case vuk::Program::Type::evec3:
+								ImGui::DragFloat3(m.name.c_str(), (float*)(b.data() + m.offset), 0.01f); break;
+							case vuk::Program::Type::emat4:
+								ImGui::Button(m.name.c_str()); 
+								if (ImGui::BeginDragDropTarget()) {
+									if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(VOOSH_PAYLOAD_TYPE_TRANSFORM)) {
+										(*(transform**)payload->Data)->connection.name.push_back(u.name);
+										(*(transform**)payload->Data)->connection.name.push_back(m.name);
+									}
+										
+									ImGui::EndDragDropTarget();
+								}
+								break;
+
+							}
+
+						}
+					}
+				}
+			}
+		}
+		ImGui::End();
+		static std::vector<transform> tfs;
+
+		ImGui::Begin("Instances");
+		ImGui::Columns(4, "mixed", true);
+		ImGui::SetColumnWidth(0, 30.f);
+		if (ImGui::Button("+"))
+			tfs.push_back({});
+		ImGui::NextColumn();
+		ImGui::Text("Position");
+		ImGui::NextColumn();
+		ImGui::Text("Orientation");
+		ImGui::NextColumn();
+		ImGui::Text("Scale");
+		ImGui::NextColumn();
+		ImGui::Separator();
+
+		size_t i = 0;
+		for (auto& tf : tfs) {
+			ImGui::PushID(i);
+			// push data
+			if (!tf.connection.name.empty())
+				tf.connection.push(refl, buffer, tf.to_local());
+
+			if (tf.connection.name.empty())
+				ImGui::Button("O");
+			else
+				if (ImGui::Button("0")) tf.connection.name.clear();
+			if (ImGui::BeginDragDropSource()) {
+				auto ptrt = &tf;
+				ImGui::SetDragDropPayload(VOOSH_PAYLOAD_TYPE_TRANSFORM, &ptrt, sizeof(&tf));
+				ImGui::Text("Transform for (%d)", i);
+				ImGui::EndDragDropSource();
+			}
+
+			ImGui::NextColumn();
+			ImGui::SetNextItemWidth(ImGui::GetColumnWidth() - 14);
+			ImGui::DragFloat3("##pos", &tf.position.x, 0.01f);
+			ImGui::NextColumn();
+			ImGui::SetNextItemWidth(ImGui::GetColumnWidth() - 14);
+			ImGui::DragFloat4("##ori", &tf.orientation[0], 0.01f);
+			ImGui::NextColumn();
+			ImGui::SetNextItemWidth(ImGui::GetColumnWidth() - 14);
+			ImGui::DragFloat3("##sca", &tf.scale.x, 0.1f);
+			ImGui::NextColumn();
+			ImGui::Separator();
+			i++;
+			ImGui::PopID();
+		}
+		ImGui::Columns(1);
+		ImGui::End();
+
+		ImGui::ShowDemoWindow();
+		// We set up the cube data, same as in example 02_cube
 		auto [bverts, stub1] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eVertexBuffer, gsl::span(&box.first[0], box.first.size()));
 		auto verts = std::move(bverts);
 		auto [binds, stub2] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eIndexBuffer, gsl::span(&box.second[0], box.second.size()));
@@ -283,6 +449,9 @@ void vuk::ExampleRunner::render() {
 
 		auto [buboVP, stub3] = ptc.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vk::BufferUsageFlagBits::eUniformBuffer, gsl::span(&vp, 1));
 		auto uboVP = buboVP;
+
+		//new(buffer[1].data()) glm::mat4(glm::angleAxis(glm::radians(angle), glm::vec3(0.f, 1.f, 0.f)));
+		auto [user, stubx] = ptc.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vk::BufferUsageFlagBits::eUniformBuffer, gsl::span(buffer[1].data(), buffer[1].size()));
 		ptc.wait_all_transfers();
 
 		vuk::RenderGraph rg;
@@ -290,18 +459,16 @@ void vuk::ExampleRunner::render() {
 		// Set up the pass to draw the textured cube, with a color and a depth attachment
 		rg.add_pass({
 			.resources = {"04_texture_final"_image(vuk::eColorWrite), "04_texture_depth"_image(vuk::eDepthStencilRW)},
-			.execute = [verts, uboVP, inds](vuk::CommandBuffer& command_buffer) {
+			.execute = [&](vuk::CommandBuffer& command_buffer) {
 				command_buffer
 				  .set_viewport(0, vuk::Area::Framebuffer{})
 				  .set_scissor(0, vuk::Area::Framebuffer{})
 				  .bind_vertex_buffer(0, verts, 0, vuk::Packed{vk::Format::eR32G32B32Sfloat, vuk::Ignore{offsetof(util::Vertex, uv_coordinates) - sizeof(util::Vertex::position)}, vk::Format::eR32G32Sfloat})
 				  .bind_index_buffer(inds, vk::IndexType::eUint32)
-					// Here we bind our vuk::Texture to (set = 0, binding = 2) with default sampler settings
 					//.bind_sampled_image(0, 2, *texture_of_doge, vk::SamplerCreateInfo{})
 					.bind_pipeline("sut")
-					.bind_uniform_buffer(0, 0, uboVP);
-				  glm::mat4* model = command_buffer.map_scratch_uniform_binding<glm::mat4>(0, 1);
-				  *model = static_cast<glm::mat4>(glm::angleAxis(glm::radians(angle), glm::vec3(0.f, 1.f, 0.f)));
+					.bind_uniform_buffer(0, 0, uboVP)
+					.bind_uniform_buffer(0, 1, user);
 				  command_buffer
 					.draw_indexed(box.second.size(), 1, 0, 0, 0);
 				  }

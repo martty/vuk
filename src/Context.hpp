@@ -307,6 +307,8 @@ namespace vuk {
 		vuk::SampledImage& make_sampled_image(vuk::ImageView iv, vk::SamplerCreateInfo sci);
 		vuk::SampledImage& make_sampled_image(Name n, vk::SamplerCreateInfo sci);
 
+		vuk::Program get_pipeline_reflection_info(vuk::PipelineCreateInfo pci);
+
 		template<class T>
 		void destroy(T t) {
 			ctx.destroy(t);

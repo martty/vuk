@@ -5,6 +5,7 @@
 #include "Hash.hpp"
 #include "CreateInfo.hpp"
 #include "Descriptor.hpp"
+#include "Program.hpp"
 
 #define VUK_MAX_SETS 8
 
@@ -71,6 +72,7 @@ namespace vuk {
 		vk::Pipeline pipeline;
 		vk::PipelineLayout pipeline_layout;
 		std::array<DescriptorSetLayoutAllocInfo, VUK_MAX_SETS> layout_info;
+		vuk::Program reflection_info;
 	};
 
 	template<> struct create_info<PipelineInfo> {

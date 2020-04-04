@@ -11,6 +11,7 @@ struct VS_IN {
 
 struct VS_OUT {
 	vec2 texcoord;
+	vec3 col;
 };
 
 
@@ -28,13 +29,15 @@ layout(std140, binding = 0) uniform _aspect_ {
 } _aspect;
 layout(std140, binding = 1) uniform _user_ {
 	mat4 model_matrix;
+	vec3 col;
 } _user;
 
-#line 16 "../../examples/test.vush"
-VS_OUT opaque_vertex(VS_IN vin, VP vp, mat4 model_matrix) {
+#line 17 "../../examples/test.vush"
+VS_OUT opaque_vertex(VS_IN vin, VP vp, mat4 model_matrix, vec3 col) {
 	VS_OUT vout;
 	gl_Position = vp.projection * vp.view * model_matrix * vec4(vin.position, 1.0);
 	vout.texcoord = vin.texcoord;
+	vout.col = col;
 	return vout;
 }
 
@@ -44,5 +47,6 @@ void main() {
 	vin.texcoord = _VS_IN_texcoord;
 	VP vp = _aspect.vp;
 	mat4 model_matrix = _user.model_matrix;
-	_out = opaque_vertex(vin, vp, model_matrix);
+	vec3 col = _user.col;
+	_out = opaque_vertex(vin, vp, model_matrix, col);
 }
