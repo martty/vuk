@@ -26,11 +26,16 @@ struct FS_OUT {
 	vec4 color_out;
 };
 
-FS_OUT opaque::fragment(VS_OUT vin, User::sampler2D t1) {
+FS_OUT opaque::fragment(VS_OUT vin, User::sampler2D t1, User::sampler2D t2) {
 	FS_OUT fout;
-	fout.color_out = vec4(texture(t1, vin.texcoord).rgb * vin.col, 1);
+	fout.color_out = vec4(texture(t1, vin.texcoord).rgb * vin.col * texture(t2, vin.texcoord).rgb, 1);
 	return fout;
 }
+
+
+
+
+
 
 
 

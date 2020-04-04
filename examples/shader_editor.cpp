@@ -390,6 +390,10 @@ void vuk::ExampleRunner::render() {
 		auto ifc = context->begin();
 		auto ptc = ifc.begin();
 
+		// 1 buffer per binding
+		// TODO: multiple set support
+		static program_parameters program_params;
+
 		auto cpos = editor.GetCursorPosition();
 		ImGui::Begin("Shader Editor", nullptr, ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_MenuBar);
 		ImGui::SetWindowSize(ImVec2(400, 400), ImGuiCond_FirstUseEver);
@@ -403,6 +407,8 @@ void vuk::ExampleRunner::render() {
 					}
 					t.close();
 					recompile(ptc, textToSave);
+					program_params.buffer.clear();
+					program_params.ivs.clear();
 				}
 				if (ImGui::MenuItem("Quit", "Alt-F4"))
 					break;
@@ -462,17 +468,23 @@ void vuk::ExampleRunner::render() {
 		editor.Render("TextEditor");
 		ImGui::End();
 
+		vuk::Program refl;
+		bool will_we_render = true;
+		try {
+			refl = ptc.get_pipeline_reflection_info(ptc.ctx.get_named_pipeline("sut"));
+			// clear error marks here
+		} catch (vuk::ShaderCompilationException& e) {
+			// TODO: parse and add error marks
+			will_we_render = false;
+		}
+
 		ImGui::Begin("Parameters");
-		auto refl = ptc.get_pipeline_reflection_info(ptc.ctx.get_named_pipeline("sut"));
 		if (ImGui::CollapsingHeader("Attributes")) {
 			for (auto& att : refl.attributes) {
 				ImGui::Button(att.name.c_str()); ImGui::SameLine();
 			}
 		ImGui::NewLine();
 		}
-		// 1 buffer per binding
-		// TODO: multiple set support
-		static program_parameters program_params;
 		// init
 		for (auto& [set_index, set] : refl.sets) {
 			for (auto& u : set.uniform_buffers) {
@@ -483,7 +495,7 @@ void vuk::ExampleRunner::render() {
 					for (auto& m : u.members) {
 						init_members(m, b);
 					}
-				}
+				} 
 			}
 
 			for (auto& s : set.samplers) {
@@ -702,7 +714,8 @@ void vuk::ExampleRunner::render() {
 					void * dst = command_buffer._map_scratch_uniform_binding(0, binding, program_params.buffer[binding].size() * sizeof(char));
 					memcpy(dst, program_params.buffer[binding].data(), program_params.buffer[binding].size() * sizeof(char));
 				}
-				command_buffer.draw_indexed(box.second.size(), 1, 0, 0, 0);
+				if(will_we_render)
+					command_buffer.draw_indexed(box.second.size(), 1, 0, 0, 0);
 				}
 			});
 
@@ -721,7 +734,12 @@ void vuk::ExampleRunner::render() {
 		rg.build();
 		rg.bind_attachment_to_swapchain(attachment_name, swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
 		rg.build(ptc);
-		execute_submit_and_present_to_one(ptc, rg, swapchain);
+
+		try {
+			execute_submit_and_present_to_one(ptc, rg, swapchain);
+		} catch (vuk::ShaderCompilationException& e) {
+			std::cout << e.what();
+		}
 	}
 }
 

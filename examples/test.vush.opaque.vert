@@ -32,6 +32,7 @@ layout(std140, binding = 1) uniform _user_ {
 	vec3 col;
 } _user;
 layout(binding = 1 + 1 + 0) uniform sampler2D t1;
+layout(binding = 1 + 1 + 1) uniform sampler2D t2;
 
 #line 17 "../../examples/test.vush"
 VS_OUT opaque_vertex(VS_IN vin, VP vp, mat4 model_matrix, vec3 col) {

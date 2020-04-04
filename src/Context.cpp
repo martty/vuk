@@ -389,9 +389,7 @@ vuk::ShaderModule vuk::PerThreadContext::create(const create_info_t<vuk::ShaderM
 	shaderc::SpvCompilationResult module = compiler.CompileGlslToSpv(cinfo.source, shaderc_glsl_infer_from_source, cinfo.filename.c_str(), options);
 
 	if (module.GetCompilationStatus() != shaderc_compilation_status_success) {
-		printf("%s", module.GetErrorMessage().c_str());
-		//Platform::log->error("%s", module.GetErrorMessage().c_str());
-		return {};
+		throw ShaderCompilationException{ module.GetErrorMessage().c_str() };
 	} else {
 		std::vector<uint32_t> spirv(module.cbegin(), module.cend());
 

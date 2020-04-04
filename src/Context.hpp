@@ -13,6 +13,7 @@
 #include "SampledImage.hpp"
 #include "RenderPass.hpp"
 #include "vuk_fwd.hpp"
+#include <exception>
 
 namespace vuk {
 	struct RGImage {
@@ -30,6 +31,14 @@ namespace vuk {
 	};
 	template<> struct create_info<RGImage> {
 		using type = RGCI;
+	};
+
+	struct ShaderCompilationException {
+		std::string error_message;
+
+		const char* what() const {
+			return error_message.c_str();
+		}
 	};
 }
 
