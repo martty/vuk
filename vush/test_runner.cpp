@@ -79,3 +79,9 @@ TEST_CASE("pipeline_stage", "[pragmas]") {
 
 	run_file("../../tests/pipeline_state.vush");
 }
+
+TEST_CASE("sampling", "[textures]") {
+	add_rules(json::parse(slurp("../../vush/builtin_cfg.json")));
+
+	run_file("../../tests/sampling.vush");
+}

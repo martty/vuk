@@ -1,5 +1,5 @@
 #version 460
-#pragma stage(vertex)
+#pragma shader_stage(vertex)
 
 #define _BASEINSTANCE_SIZE 32
 #define _DRAW_SIZE 32

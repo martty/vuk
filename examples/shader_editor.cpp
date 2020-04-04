@@ -6,6 +6,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtx/quaternion.hpp>
 #include "vush.hpp"
+#include <ImGuiFileBrowser.h>
 
 TextEditor editor;
 static const char* fileToEdit = "../../examples/test.vush";
@@ -64,8 +65,17 @@ struct transform {
 		return m;
 	}
 };
-
 #define VOOSH_PAYLOAD_TYPE_TRANSFORM "voosh_payload_tf"
+
+struct texture {
+	vuk::Texture handle;
+	std::string filename;
+
+	push_connection connection;
+};
+
+static std::vector<texture> textures;
+#define VOOSH_PAYLOAD_TYPE_TEXTURE "voosh_payload_tex"
 
 std::string slurp(const std::string& path);
 
@@ -227,18 +237,10 @@ vuk::ExampleRunner::ExampleRunner() {
 				}
 
 			}
-
-			// Use STBI to load the image
-			/*int x, y, chans;
-			auto doge_image = stbi_load("../../examples/doge.png", &x, &y, &chans, 4);
-			auto ifc = context->begin();
-			auto ptc = ifc.begin();
-			// Similarly to buffers, we allocate the image and enqueue the upload
-			/*auto [tex, _] = ptc.create_texture(vk::Format::eR8G8B8A8Srgb, vk::Extent3D(x, y, 1), doge_image);
-			texture_of_doge = std::move(tex);
-			ptc.wait_all_transfers();
-			stbi_image_free(doge_image);*/
 }
+
+imgui_addons::ImGuiFileBrowser file_dialog; // As a class member or globally
+
 
 void vuk::ExampleRunner::render() {
 	while (!glfwWindowShouldClose(window)) {
@@ -367,8 +369,7 @@ void vuk::ExampleRunner::render() {
 								ImGui::Button(m.name.c_str()); 
 								if (ImGui::BeginDragDropTarget()) {
 									if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(VOOSH_PAYLOAD_TYPE_TRANSFORM)) {
-										(*(transform**)payload->Data)->connection.name.push_back(u.name);
-										(*(transform**)payload->Data)->connection.name.push_back(m.name);
+										(*(transform**)payload->Data)->connection.name = { u.name, m.name };
 									}
 										
 									ImGui::EndDragDropTarget();
@@ -383,10 +384,73 @@ void vuk::ExampleRunner::render() {
 			}
 		}
 		ImGui::End();
+		bool optx = false;
+		{
+			ImGui::Begin("Textures");
+			ImGui::Columns(3, "textures", true);
+			ImGui::SetColumnWidth(0, 100.f);
+			if (ImGui::Button("+")) {
+				optx = true;
+			}
+			ImGui::NextColumn();
+			ImGui::SetColumnWidth(1, 114.f);
+			ImGui::Text("Preview");
+			ImGui::NextColumn();
+			ImGui::Text("Filename");
+			ImGui::NextColumn();
+			ImGui::Separator();
+
+			size_t i = 0;
+			for (auto& tex : textures) {
+				ImGui::PushID(i);
+				// push data
+				/*if (!tf.connection.name.empty())
+					tf.connection.push(refl, buffer, tf.to_local());*/
+
+				if (tex.connection.name.empty())
+					ImGui::Button("O");
+				else
+					if (ImGui::Button("0")) tex.connection.name.clear();
+				if (ImGui::BeginDragDropSource()) {
+					auto ptrt = &tex;
+					ImGui::SetDragDropPayload(VOOSH_PAYLOAD_TYPE_TEXTURE, &ptrt, sizeof(ptrt));
+					ImGui::Text("Transform for (%d)", i);
+					ImGui::EndDragDropSource();
+				}
+
+				ImGui::NextColumn();
+				ImGui::SetNextItemWidth(ImGui::GetColumnWidth() - 14);
+				ImGui::Image(&ptc.make_sampled_image(*tex.handle.view, {}), ImVec2(100.f, 100.f));
+				ImGui::NextColumn();
+				ImGui::SetNextItemWidth(ImGui::GetColumnWidth() - 14);
+				ImGui::Text("%s", tex.filename.c_str());
+				ImGui::NextColumn();
+				ImGui::Separator();
+				i++;
+				ImGui::PopID();
+			}
+			ImGui::Columns(1);
+			ImGui::End();
+		}
+		if(optx) ImGui::OpenPopup("Add Texture");
+		if (file_dialog.showFileDialog("Add Texture", imgui_addons::ImGuiFileBrowser::DialogMode::OPEN, ImVec2(700, 310), ".png,.jpg,.bmp,.tga,*.*")) {
+			// Use STBI to load the image
+			int x, y, chans;
+			auto image = stbi_load(file_dialog.selected_path.c_str(), &x, &y, &chans, 4);
+			auto [tex, _] = ptc.create_texture(vk::Format::eR8G8B8A8Srgb, vk::Extent3D(x, y, 1), image);
+			stbi_image_free(image);
+			
+			texture t;
+			t.handle = std::move(tex);
+			t.filename = file_dialog.selected_path;
+			textures.emplace_back(std::move(t));
+			ptc.wait_all_transfers();
+		}
+
 		static std::vector<transform> tfs;
 
 		ImGui::Begin("Instances");
-		ImGui::Columns(4, "mixed", true);
+		ImGui::Columns(4, "instances", true);
 		ImGui::SetColumnWidth(0, 30.f);
 		if (ImGui::Button("+"))
 			tfs.push_back({});
@@ -412,7 +476,7 @@ void vuk::ExampleRunner::render() {
 				if (ImGui::Button("0")) tf.connection.name.clear();
 			if (ImGui::BeginDragDropSource()) {
 				auto ptrt = &tf;
-				ImGui::SetDragDropPayload(VOOSH_PAYLOAD_TYPE_TRANSFORM, &ptrt, sizeof(&tf));
+				ImGui::SetDragDropPayload(VOOSH_PAYLOAD_TYPE_TRANSFORM, &ptrt, sizeof(ptrt));
 				ImGui::Text("Transform for (%d)", i);
 				ImGui::EndDragDropSource();
 			}
@@ -478,10 +542,9 @@ void vuk::ExampleRunner::render() {
 		angle += 180.f * ImGui::GetIO().DeltaTime;
 
 		rg.mark_attachment_internal("04_texture_depth", vk::Format::eD32Sfloat, vuk::Extent2D::Framebuffer{}, vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
-
 		rg.mark_attachment_internal("04_texture_final", vk::Format::eR8G8B8A8Srgb, vk::Extent2D(300, 300), vuk::Samples::e1, vuk::ClearColor(0.1f, 0.2f, 0.3f, 1.f));
+		
 		ImGui::Begin("Preview");
-
 		ImGui::Image(&ptc.make_sampled_image("04_texture_final", imgui_data.font_sci), ImVec2(200, 200));
 		ImGui::End();
 
@@ -498,5 +561,6 @@ void vuk::ExampleRunner::render() {
 int main() {
 	vuk::ExampleRunner::get_runner().setup();
 	vuk::ExampleRunner::get_runner().render();
+	textures.clear();
 	vuk::ExampleRunner::get_runner().cleanup();
 }

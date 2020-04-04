@@ -1,5 +1,5 @@
 #version 450
-#pragma stage(fragment)
+#pragma shader_stage(fragment)
 
 layout(location = 0) in struct VS_OUT {
 	vec4 position;

@@ -17,16 +17,16 @@
 	},
 	"Aspect" : {
 		"uniform" : {
-			"declaration_template" : "layout(std140, binding = {{binding}}) uniform _aspect_ {\n{{#variables}}\t{{variable_type}} {{variable_name}};\n{{/variables}}} _aspect;\n",
+			"declaration_template" : "{{#variables_exist}}layout(std140, binding = {{binding}}) uniform _aspect_ {\n{{#variables}}\t{{variable_type}} {{variable_name}};\n{{/variables}}} _aspect;\n{{/variables_exist}}{{#opaque_variables}}layout(binding = {{binding}} {{#variables_exist}}+ 1 {{/variables_exist}}+ {{variable_index}}) uniform {{variable_type}} {{variable_name}};\n{{/opaque_variables}}",
 			"bind_template" : "{{#variables}}\t{{variable_type}} {{variable_name}} = _aspect.{{variable_name}};\n{{/variables}}",
 			"binding_count" : "."
 		}
 	},
 	"User" : {
 		"uniform" : {
-			"declaration_template" : "layout(std140, binding = {{binding}}) uniform _user_ {\n{{#variables}}\t{{variable_type}} {{variable_name}};\n{{/variables}}} _user;\n",
+			"declaration_template" : "{{#variables_exist}}layout(std140, binding = {{binding}}) uniform _user_ {\n{{#variables}}\t{{variable_type}} {{variable_name}};\n{{/variables}}} _user;\n{{/variables_exist}}{{#opaque_variables}}layout(binding = {{binding}} {{#variables_exist}}+ 1 {{/variables_exist}}+ {{variable_index}}) uniform {{variable_type}} {{variable_name}};\n{{/opaque_variables}}",
 			"bind_template" : "{{#variables}}\t{{variable_type}} {{variable_name}} = _user.{{variable_name}};\n{{/variables}}",
-			"binding_count" : "."
+			"binding_count" : ".{{#variables}}{{#is_opaque}}.{{/is_opaque}}{{/variables}}"
 		}
 	},
 	"BaseInstance" : {

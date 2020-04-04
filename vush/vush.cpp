@@ -320,13 +320,20 @@ generate_result parse_generate(const std::string& src, const char* filename) {
 	return gresult;
 }
 
+bool is_opaque_type(const std::string& t) {
+	if (t == "sampler2D") return true;
+	return false;
+}
+
 mustache::data stage_entry::to_hash(const std::unordered_map<std::string, struct_entry>& structs, const std::string& aspect) {
 	mustache::data root;
 	mustache::data params{ mustache::data::type::list };
 	size_t index = 0;
 	size_t variable_index = 0;
+	size_t opaque_index = 0;
 	for (auto& p : parameters) {
 		if (p.scope != aspect) continue;
+		if (is_opaque_type(p.type)) continue;
 		mustache::data d;
 		d["scope"] = p.scope;
 		d["variable_type"] = p.type;
@@ -353,6 +360,23 @@ mustache::data stage_entry::to_hash(const std::unordered_map<std::string, struct
 		params.push_back(d);
 	}
 	root.set("variables", params);
+	if (params.list_value().size() > 0)
+		root.set("variables_exist", true);
+	params = { mustache::data::type::list};
+	for (auto& p : parameters) {
+		if (p.scope != aspect) continue;
+		if (!is_opaque_type(p.type)) continue;
+		mustache::data d;
+		d["scope"] = p.scope;
+		d["variable_type"] = p.type;
+		d["variable_name"] = p.name;
+
+		d["variable_index"] = std::to_string(opaque_index++);
+		params.push_back(d);
+	}
+	root.set("opaque_variables", params);
+	if (params.list_value().size() > 0)
+		root.set("opaque_variables_exist", true);
 	return root;
 }
 

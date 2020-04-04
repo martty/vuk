@@ -38,3 +38,6 @@
 [submodule "ext/ImGuiColorTextEdit"]
 	path = ext/ImGuiColorTextEdit
 	url = https://github.com/BalazsJako/ImGuiColorTextEdit
+[submodule "ext/ImGui-Addons"]
+	path = ext/ImGui-Addons
+	url = https://github.com/gallickgunner/ImGui-Addons
