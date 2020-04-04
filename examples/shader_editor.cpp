@@ -1,4 +1,5 @@
 #include "example_runner.hpp"
+#include "example_runner.hpp"
 #include "TextEditor.h"
 #include <fstream>
 #include <stb_image.h>
@@ -14,16 +15,20 @@ static const char* fileToEdit = "../../examples/test.vush";
 float angle = 0.f;
 auto box = util::generate_cube();
 
-using program_buffer = std::unordered_map<uint32_t, std::vector<char>>;
+struct program_parameters {
+	std::unordered_map<uint32_t, std::vector<char>> buffer;
+	std::unordered_map<uint32_t, vuk::ImageView> ivs;
+};
 
 struct push_connection {
 	std::vector<std::string> name;
 
 	template<class T>
-	bool push(vuk::Program refl, program_buffer& buffer, T data) {
+	bool push(vuk::Program refl, program_parameters& params, T data) {
 		auto nq = name;
 		for (auto& [index, set] : refl.sets) {
 			for (auto& un : set.uniform_buffers) {
+				nq = name;
 				if (nq.front() == un.name) {
 					nq.erase(nq.begin());
 				} else {
@@ -33,12 +38,20 @@ struct push_connection {
 					if (nq.front() == m.name) {
 						nq.erase(nq.begin());
 						if (nq.empty()) {
-							auto& buf = buffer.at(un.binding);
+							auto& buf = params.buffer.at(un.binding);
 							*(T*)(buf.data() + m.offset) = data;
 							return true;
 						}
 					} else {
 						continue;
+					}
+				}
+			}
+
+			if constexpr (std::is_same_v<T, vuk::ImageView>) {
+				for (auto& s : set.samplers) {
+					if (nq.size() == 1 && nq.front() == s.name) {
+						params.ivs.at(s.binding) = data;
 					}
 				}
 			}
@@ -51,6 +64,7 @@ struct transform {
 	glm::vec3 position;
 	glm::quat orientation = glm::quat(1, 0, 0, 0);
 	glm::vec3 scale = glm::vec3(1);
+	bool invert = false;
 
 	push_connection connection;
 
@@ -62,10 +76,13 @@ struct transform {
 		m[3][0] = position[0];
 		m[3][1] = position[1];
 		m[3][2] = position[2];
-		return m;
+		if (invert)
+			return glm::inverse(m);
+		else
+			return m;
 	}
 };
-#define VOOSH_PAYLOAD_TYPE_TRANSFORM "voosh_payload_tf"
+#define VOOSH_PAYLOAD_TYPE_CONNECTION_PTR "voosh_payload_connection_ptr"
 
 struct texture {
 	vuk::Texture handle;
@@ -75,7 +92,18 @@ struct texture {
 };
 
 static std::vector<texture> textures;
-#define VOOSH_PAYLOAD_TYPE_TEXTURE "voosh_payload_tex"
+
+struct projection {
+	float fovy = glm::radians(60.f);
+	float aspect = 1.f;
+	float near_plane = 0.1f;
+	float far_plane = 100.f;
+
+	push_connection connection;
+	glm::mat4 to_mat() {
+		return glm::perspective(fovy, aspect, near_plane, far_plane);
+	}
+};
 
 std::string slurp(const std::string& path);
 
@@ -100,6 +128,22 @@ void recompile(vuk::PerThreadContext& ptc, const std::string& src) {
 		}
 	}
 }
+
+imgui_addons::ImGuiFileBrowser file_dialog; // As a class member or globally
+void load_texture(vuk::PerThreadContext& ptc, const std::string& path) {
+	// Use STBI to load the image
+	int x, y, chans;
+	auto image = stbi_load(path.c_str(), &x, &y, &chans, 4);
+	auto [tex, _] = ptc.create_texture(vk::Format::eR8G8B8A8Srgb, vk::Extent3D(x, y, 1), image);
+	stbi_image_free(image);
+
+	texture t;
+	t.handle = std::move(tex);
+	t.filename = path;
+	textures.emplace_back(std::move(t));
+	ptc.wait_all_transfers();
+}
+
 
 vuk::ExampleRunner::ExampleRunner() {
 	vkb::InstanceBuilder builder;
@@ -235,12 +279,12 @@ vuk::ExampleRunner::ExampleRunner() {
 					}
 					context->create_named_pipeline("sut", pci);
 				}
-
 			}
+		auto ifc = context->begin();
+		auto ptc = ifc.begin();
+
+		load_texture(ptc, "../../examples/doge.png");
 }
-
-imgui_addons::ImGuiFileBrowser file_dialog; // As a class member or globally
-
 
 void vuk::ExampleRunner::render() {
 	while (!glfwWindowShouldClose(window)) {
@@ -329,32 +373,40 @@ void vuk::ExampleRunner::render() {
 			for (auto& att : refl.attributes) {
 				ImGui::Button(att.name.c_str()); ImGui::SameLine();
 			}
-		}
 		ImGui::NewLine();
+		}
 		// 1 buffer per binding
 		// TODO: multiple set support
-		static std::unordered_map<uint32_t, std::vector<char>> buffer;
+		static program_parameters program_params;
 		// init
 		for (auto& [set_index, set] : refl.sets) {
 			for (auto& u : set.uniform_buffers) {
-				auto& b = buffer[u.binding];
-				b.resize(u.size, 0);
-				// anti-UB code
-				/*for (auto& m : u.members) {
-					switch (m.type) {
+				auto it = program_params.buffer.find(u.binding);
+				if (it == program_params.buffer.end()) {
+					auto& b = program_params.buffer[u.binding];
+					b.resize(u.size, 0);
+					for (auto& m : u.members) {
+						switch (m.type) {
 						case vuk::Program::Type::evec3:
-							new (b.data() + m.offset) float[3]{ 1,1,1 };
+							new (b.data() + m.offset) float[3]{ 1,1,1 }; break;
 						case vuk::Program::Type::emat4:
+							glm::mat4 id(1.f);
 							new (b.data() + m.offset) float[16]();
+							::memcpy(b.data() + m.offset, &id[0], sizeof(float) * 16); break;
+						}
 					}
-				}*/
+				}
+			}
+
+			for (auto& s : set.samplers) {
+				program_params.ivs.emplace(s.binding, *textures.front().handle.view);
 			}
 		}
 
 		if (ImGui::CollapsingHeader("Bindings", ImGuiTreeNodeFlags_DefaultOpen)) {
 			for (auto& [set_index, set] : refl.sets) {
 				for (auto& u : set.uniform_buffers) {
-					auto& b = buffer[u.binding];
+					auto& b = program_params.buffer[u.binding];
 					for (auto& m : u.members) {
 						if (m.type == vuk::Program::Type::estruct) {
 							if (ImGui::CollapsingHeader(m.name.c_str())) {
@@ -368,18 +420,27 @@ void vuk::ExampleRunner::render() {
 							case vuk::Program::Type::emat4:
 								ImGui::Button(m.name.c_str()); 
 								if (ImGui::BeginDragDropTarget()) {
-									if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(VOOSH_PAYLOAD_TYPE_TRANSFORM)) {
-										(*(transform**)payload->Data)->connection.name = { u.name, m.name };
+									if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(VOOSH_PAYLOAD_TYPE_CONNECTION_PTR)) {
+										(*(push_connection**)payload->Data)->name = { u.name, m.name };
 									}
 										
 									ImGui::EndDragDropTarget();
 								}
 								break;
-
 							}
-
 						}
 					}
+				}
+				for (auto& s : set.samplers) {
+					ImGui::PushID("...");
+					ImGui::Image(&ptc.make_sampled_image(program_params.ivs[s.binding], {}), ImVec2(100.f, 100.f));
+					if (ImGui::BeginDragDropTarget()) {
+						if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(VOOSH_PAYLOAD_TYPE_CONNECTION_PTR)) {
+							(*(push_connection**)payload->Data)->name = { s.name };
+						}
+						ImGui::EndDragDropTarget();
+					}
+					ImGui::PopID();
 				}
 			}
 		}
@@ -388,7 +449,7 @@ void vuk::ExampleRunner::render() {
 		{
 			ImGui::Begin("Textures");
 			ImGui::Columns(3, "textures", true);
-			ImGui::SetColumnWidth(0, 100.f);
+			ImGui::SetColumnWidth(0, 30.f);
 			if (ImGui::Button("+")) {
 				optx = true;
 			}
@@ -404,17 +465,17 @@ void vuk::ExampleRunner::render() {
 			for (auto& tex : textures) {
 				ImGui::PushID(i);
 				// push data
-				/*if (!tf.connection.name.empty())
-					tf.connection.push(refl, buffer, tf.to_local());*/
+				if (!tex.connection.name.empty())
+					tex.connection.push(refl, program_params, *tex.handle.view);
 
 				if (tex.connection.name.empty())
 					ImGui::Button("O");
 				else
 					if (ImGui::Button("0")) tex.connection.name.clear();
 				if (ImGui::BeginDragDropSource()) {
-					auto ptrt = &tex;
-					ImGui::SetDragDropPayload(VOOSH_PAYLOAD_TYPE_TEXTURE, &ptrt, sizeof(ptrt));
-					ImGui::Text("Transform for (%d)", i);
+					auto ptrt = &tex.connection;
+					ImGui::SetDragDropPayload(VOOSH_PAYLOAD_TYPE_CONNECTION_PTR, &ptrt, sizeof(ptrt));
+					ImGui::Image(&ptc.make_sampled_image(*tex.handle.view, {}), ImVec2(50.f, 50.f));
 					ImGui::EndDragDropSource();
 				}
 
@@ -434,26 +495,19 @@ void vuk::ExampleRunner::render() {
 		}
 		if(optx) ImGui::OpenPopup("Add Texture");
 		if (file_dialog.showFileDialog("Add Texture", imgui_addons::ImGuiFileBrowser::DialogMode::OPEN, ImVec2(700, 310), ".png,.jpg,.bmp,.tga,*.*")) {
-			// Use STBI to load the image
-			int x, y, chans;
-			auto image = stbi_load(file_dialog.selected_path.c_str(), &x, &y, &chans, 4);
-			auto [tex, _] = ptc.create_texture(vk::Format::eR8G8B8A8Srgb, vk::Extent3D(x, y, 1), image);
-			stbi_image_free(image);
-			
-			texture t;
-			t.handle = std::move(tex);
-			t.filename = file_dialog.selected_path;
-			textures.emplace_back(std::move(t));
-			ptc.wait_all_transfers();
+			load_texture(ptc, file_dialog.selected_path);
 		}
 
-		static std::vector<transform> tfs;
+		static std::vector<transform> tfs = { {}, {{}, glm::quat(1,0,0,0), glm::vec3(1.f), true} };
+		static std::vector<projection> projections = { {} };
 
-		ImGui::Begin("Instances");
-		ImGui::Columns(4, "instances", true);
+		ImGui::Begin("Transforms");
+		ImGui::Columns(5, "instances", true);
 		ImGui::SetColumnWidth(0, 30.f);
 		if (ImGui::Button("+"))
 			tfs.push_back({});
+		ImGui::NextColumn();
+		ImGui::Text("Invert");
 		ImGui::NextColumn();
 		ImGui::Text("Position");
 		ImGui::NextColumn();
@@ -468,19 +522,21 @@ void vuk::ExampleRunner::render() {
 			ImGui::PushID(i);
 			// push data
 			if (!tf.connection.name.empty())
-				tf.connection.push(refl, buffer, tf.to_local());
+				tf.connection.push(refl, program_params, tf.to_local());
 
 			if (tf.connection.name.empty())
-				ImGui::Button("O");
+				ImGui::Button("O##t");
 			else
-				if (ImGui::Button("0")) tf.connection.name.clear();
+				if (ImGui::Button("0##t")) tf.connection.name.clear();
 			if (ImGui::BeginDragDropSource()) {
-				auto ptrt = &tf;
-				ImGui::SetDragDropPayload(VOOSH_PAYLOAD_TYPE_TRANSFORM, &ptrt, sizeof(ptrt));
+				auto ptrt = &tf.connection;
+				ImGui::SetDragDropPayload(VOOSH_PAYLOAD_TYPE_CONNECTION_PTR, &ptrt, sizeof(ptrt));
 				ImGui::Text("Transform for (%d)", i);
 				ImGui::EndDragDropSource();
 			}
 
+			ImGui::NextColumn();
+			ImGui::Checkbox("##inv", &tf.invert);
 			ImGui::NextColumn();
 			ImGui::SetNextItemWidth(ImGui::GetColumnWidth() - 14);
 			ImGui::DragFloat3("##pos", &tf.position.x, 0.01f);
@@ -495,6 +551,57 @@ void vuk::ExampleRunner::render() {
 			i++;
 			ImGui::PopID();
 		}
+		ImGui::Separator();
+		ImGui::Separator();
+		if (ImGui::Button("+##proj"))
+			projections.push_back({});
+		ImGui::NextColumn();
+		ImGui::Text("FovY");
+		ImGui::NextColumn();
+		ImGui::Text("Aspect");
+		ImGui::NextColumn();
+		ImGui::Text("Near");
+		ImGui::NextColumn();
+		ImGui::Text("Far");
+		ImGui::NextColumn();
+		ImGui::Separator();
+
+		i = 0;
+		for (auto& p : projections) {
+			ImGui::PushID(i);
+			// push data
+			if (!p.connection.name.empty())
+				p.connection.push(refl, program_params, p.to_mat());
+
+			if (p.connection.name.empty())
+				ImGui::Button("O##p");
+			else
+				if (ImGui::Button("0##p")) p.connection.name.clear();
+			if (ImGui::BeginDragDropSource()) {
+				auto ptrt = &p.connection;
+				ImGui::SetDragDropPayload(VOOSH_PAYLOAD_TYPE_CONNECTION_PTR, &ptrt, sizeof(ptrt));
+				ImGui::Text("Projection (%d)", i);
+				ImGui::EndDragDropSource();
+			}
+
+			ImGui::NextColumn();
+			ImGui::SetNextItemWidth(ImGui::GetColumnWidth() - 14);
+			ImGui::DragFloat("##fovy", &p.fovy, 0.01f);
+			ImGui::NextColumn();
+			ImGui::SetNextItemWidth(ImGui::GetColumnWidth() - 14);
+			ImGui::DragFloat("##asp", &p.aspect, 0.01f);
+			ImGui::NextColumn();
+			ImGui::SetNextItemWidth(ImGui::GetColumnWidth() - 14);
+			ImGui::DragFloat("##near", &p.near_plane, 0.1f);
+			ImGui::NextColumn();
+			ImGui::SetNextItemWidth(ImGui::GetColumnWidth() - 14);
+			ImGui::DragFloat("##far", &p.far_plane, 0.1f);
+			ImGui::NextColumn();
+			ImGui::Separator();
+			i++;
+			ImGui::PopID();
+		}
+
 		ImGui::Columns(1);
 		ImGui::End();
 
@@ -515,7 +622,7 @@ void vuk::ExampleRunner::render() {
 		auto uboVP = buboVP;
 
 		//new(buffer[1].data()) glm::mat4(glm::angleAxis(glm::radians(angle), glm::vec3(0.f, 1.f, 0.f)));
-		auto [user, stubx] = ptc.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vk::BufferUsageFlagBits::eUniformBuffer, gsl::span(buffer[1].data(), buffer[1].size()));
+		auto [user, stubx] = ptc.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vk::BufferUsageFlagBits::eUniformBuffer, gsl::span(program_params.buffer[1].data(), program_params.buffer[1].size()));
 		ptc.wait_all_transfers();
 
 		vuk::RenderGraph rg;
@@ -528,8 +635,11 @@ void vuk::ExampleRunner::render() {
 				  .set_viewport(0, vuk::Area::Framebuffer{})
 				  .set_scissor(0, vuk::Area::Framebuffer{})
 				  .bind_vertex_buffer(0, verts, 0, vuk::Packed{vk::Format::eR32G32B32Sfloat, vuk::Ignore{offsetof(util::Vertex, uv_coordinates) - sizeof(util::Vertex::position)}, vk::Format::eR32G32Sfloat})
-				  .bind_index_buffer(inds, vk::IndexType::eUint32)
-					//.bind_sampled_image(0, 2, *texture_of_doge, vk::SamplerCreateInfo{})
+				  .bind_index_buffer(inds, vk::IndexType::eUint32);
+				for (auto& [binding, iv] : program_params.ivs) {
+					command_buffer.bind_sampled_image(0, binding, iv, vk::SamplerCreateInfo{});
+				  }
+				  command_buffer
 					.bind_pipeline("sut")
 					.bind_uniform_buffer(0, 0, uboVP)
 					.bind_uniform_buffer(0, 1, user);

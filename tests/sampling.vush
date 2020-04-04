@@ -1,18 +1,24 @@
 struct VS_IN {
 	vec3 position;
-	vec3 normal;
 	vec2 texcoord;
 };
 
 struct VS_OUT {
-	vec4 position;
 	vec2 texcoord;
+	vec3 col;
 };
 
-VS_OUT opaque::vertex(Attribute::VS_IN vin) {
+
+struct VP {
+	mat4 view;
+	mat4 projection;
+};
+
+VS_OUT opaque::vertex(Attribute::VS_IN vin, Aspect::VP vp, User::mat4 model_matrix, User::vec3 col) {
 	VS_OUT vout;
-	vout.position = vec4(vin.position, 1.0);
+	gl_Position = vp.projection * vp.view * model_matrix * vec4(vin.position, 1.0);
 	vout.texcoord = vin.texcoord;
+	vout.col = col;
 	return vout;
 }
 
@@ -20,7 +26,7 @@ struct FS_OUT {
 	vec4 color_out;
 };
 
-FS_OUT opaque::fragment(VS_OUT vin, User::sampler2D t1) {
+FS_OUT opaque::fragment(VS_OUT vin, User::sampler2D t1, User::vec2 ting) {
 	FS_OUT fout;
 	fout.color_out = vec4(texture(t1, vin.texcoord).rgb, 1);
 	return fout;

@@ -43,7 +43,7 @@ struct stage_entry {
 	std::string stage_as_string;
 	size_t signature_line_number;
 	std::vector<parameter_entry> parameters;
-	mustache::data to_hash(const std::unordered_map<std::string, struct_entry>& structs, const std::string& aspect);
+	mustache::data to_hash(const std::unordered_map<std::string, struct_entry>& structs, const std::unordered_map<std::string, std::vector<parameter_entry>>& per_scope, const std::string& aspect, bool use);
 	std::string body;
 };
 
@@ -105,7 +105,7 @@ struct generate_result {
 
 std::unordered_map<std::string, rule>& find_ruleset(const std::string& scope_name);
 
-void generate(const char* filename, stage_entry& se, const std::unordered_map<std::string, struct_entry>& structs, const std::unordered_map<std::string, meta>& metadata, const std::unordered_map<std::string, std::vector<parameter_entry>>& parameters_per_scope, generate_result& gresult);
+void generate(const char* filename, stage_entry& se, const std::unordered_map<std::string, struct_entry>& structs, const std::unordered_map<std::string, meta>& metadata, const std::unordered_map<std::string, std::vector<parameter_entry>>& parameters_per_scope, std::unordered_map<std::string, uint32_t>& bindings, generate_result& gresult);
 
 void parse_includes(const std::string& str, std::unordered_map<std::string, struct_entry>& structs, std::unordered_map<std::string, meta>& metadata);
 

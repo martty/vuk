@@ -158,6 +158,32 @@ vk::ShaderStageFlagBits vuk::Program::introspect(const spirv_cross::Compiler& re
 	return stage;
 }
 
+static auto binding_cmp = [](auto& s1, auto& s2) { return s1.binding < s2.binding; };
+static auto binding_eq = [](auto& s1, auto& s2) { return s1.binding == s2.binding; };
+
+template<class T>
+void unq(T& s) {
+	std::sort(s.begin(), s.end(), binding_cmp);
+	for (auto it = s.begin(); it != s.end();) {
+		vk::ShaderStageFlags stages = it->stage;
+		for (auto it2 = it; it2 != s.end(); it2++) {
+			if (it->binding == it2->binding) {
+				stages |= it2->stage;
+			} else
+				break;
+		}
+		it->stage = stages;
+		auto it2 = it;
+		for (; it2 != s.end(); it2++) {
+			it2->stage = stages;
+			if (it->binding != it2->binding) break;
+		}
+		it = it2;
+
+	}
+	s.erase(std::unique(s.begin(), s.end(), binding_eq), s.end());
+}
+
 void vuk::Program::append(const Program& o) {
 	attributes.insert(attributes.end(), o.attributes.begin(), o.attributes.end());
 	push_constant_ranges.insert(push_constant_ranges.end(), o.push_constant_ranges.begin(), o.push_constant_ranges.end());
@@ -168,6 +194,12 @@ void vuk::Program::append(const Program& o) {
 		s.storage_buffers.insert(s.storage_buffers.end(), os.storage_buffers.begin(), os.storage_buffers.end());
 		s.texel_buffers.insert(s.texel_buffers.end(), os.texel_buffers.begin(), os.texel_buffers.end());
 		s.subpass_inputs.insert(s.subpass_inputs.end(), os.subpass_inputs.begin(), os.subpass_inputs.end());
+
+		unq(s.samplers);
+		unq(s.uniform_buffers);
+		unq(s.storage_buffers);
+		unq(s.texel_buffers);
+		unq(s.subpass_inputs);
 	}
 }
 

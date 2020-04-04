@@ -28,16 +28,24 @@ struct FS_OUT {
 
 layout(location = 0) out vec4 _color_out_out;
 
+layout(std140, binding = 0) uniform _aspect_ {
+	VP vp;
+} _aspect;
+layout(std140, binding = 1) uniform _user_ {
+	mat4 model_matrix;
+	vec3 col;
+} _user;
+layout(binding = 1 + 1 + 0) uniform sampler2D t1;
 layout(location = 0) in VS_OUT vin;
 
 #line 29 "../../examples/test.vush"
-FS_OUT opaque_fragment(VS_OUT vin) {
+FS_OUT opaque_fragment(VS_OUT vin, sampler2D t1) {
 	FS_OUT fout;
-	fout.color_out = vec4(vin.col * 2, 1);
+	fout.color_out = vec4(texture(t1, vin.texcoord).rgb * vin.col, 1);
 	return fout;
 }
 
 void main() {
-	FS_OUT _out = opaque_fragment(vin);
+		FS_OUT _out = opaque_fragment(vin, t1);
 	_color_out_out = _out.color_out;
 }
