@@ -30,9 +30,9 @@ layout(std140, binding = 0) uniform _aspect_ {
 layout(std140, binding = 1) uniform _user_ {
 	mat4 model_matrix;
 	vec3 col;
+	vec3 col2;
 } _user;
 layout(binding = 1 + 1 + 0) uniform sampler2D t1;
-layout(binding = 1 + 1 + 1) uniform sampler2D t2;
 
 #line 17 "../../examples/test.vush"
 VS_OUT opaque_vertex(VS_IN vin, VP vp, mat4 model_matrix, vec3 col) {

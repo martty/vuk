@@ -381,6 +381,10 @@ void parameter_ui(vuk::Program::Member& m, std::vector<char>& b, std::vector<std
 	ImGui::NextColumn();
 }
 
+#include <regex>
+
+std::regex error_regex(R"((\S*):(\d+): (.+?)\n)");
+
 void vuk::ExampleRunner::render() {
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
@@ -473,8 +477,29 @@ void vuk::ExampleRunner::render() {
 		try {
 			refl = ptc.get_pipeline_reflection_info(ptc.ctx.get_named_pipeline("sut"));
 			// clear error marks here
+			editor.SetErrorMarkers({});
 		} catch (vuk::ShaderCompilationException& e) {
-			// TODO: parse and add error marks
+			auto words_begin = std::sregex_iterator(e.error_message.begin(), e.error_message.end(), error_regex);
+			auto words_end = std::sregex_iterator();
+			TextEditor::ErrorMarkers markers;
+			for (std::sregex_iterator it = words_begin; it != words_end; ++it) {
+				std::smatch match = *it;
+
+				// TODO: multiple files
+				auto file = match[1].str();
+				auto lstr = match[2].str();
+				int line = std::stoi(lstr);
+				auto message = match[3].str();
+
+				// merge markers for the same line
+				auto mit = markers.find(line);
+				if (mit == markers.end()) {
+					markers.insert(std::pair<int, std::string>(line, message));
+				} else {
+					mit->second += "\n" + message;
+				}
+			}
+			editor.SetErrorMarkers(markers);
 			will_we_render = false;
 		}
 
@@ -688,7 +713,7 @@ void vuk::ExampleRunner::render() {
 		ImGui::Columns(1);
 		ImGui::End();
 
-		ImGui::ShowDemoWindow();
+		//ImGui::ShowDemoWindow();
 		// We set up the cube data, same as in example 02_cube
 		auto [bverts, stub1] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eVertexBuffer, gsl::span(&box.first[0], box.first.size()));
 		auto verts = std::move(bverts);

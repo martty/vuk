@@ -34,19 +34,20 @@ layout(std140, binding = 0) uniform _aspect_ {
 layout(std140, binding = 1) uniform _user_ {
 	mat4 model_matrix;
 	vec3 col;
+	vec3 col2;
 } _user;
 layout(binding = 1 + 1 + 0) uniform sampler2D t1;
-layout(binding = 1 + 1 + 1) uniform sampler2D t2;
 layout(location = 0) in VS_OUT vin;
 
 #line 29 "../../examples/test.vush"
-FS_OUT opaque_fragment(VS_OUT vin, sampler2D t1, sampler2D t2) {
+FS_OUT opaque_fragment(VS_OUT vin, sampler2D t1, vec3 col2) {
 	FS_OUT fout;
-	fout.color_out = vec4(texture(t1, vin.texcoord).rgb * vin.col * texture(t2, vin.texcoord).rgb, 1);
+	fout.color_out = vec4(texture(t1, vin.texcoord).rgb * vin.col * col2, 1);
 	return fout;
 }
 
 void main() {
-		FS_OUT _out = opaque_fragment(vin, t1, t2);
+		vec3 col2 = _user.col2;
+	FS_OUT _out = opaque_fragment(vin, t1, col2);
 	_color_out_out = _out.color_out;
 }
