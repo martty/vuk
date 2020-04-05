@@ -8,6 +8,7 @@
 #include "Context.hpp"
 #include "Context.hpp"
 #include "Context.hpp"
+#include "Context.hpp"
 #include "RenderGraph.hpp"
 #include <shaderc/shaderc.hpp>
 #include <algorithm>
@@ -61,6 +62,11 @@ vuk::InflightContext::InflightContext(Context& ctx, size_t absolute_frame, std::
 		ctx.device.destroy(iv);
 	}
 	ctx.image_view_recycle[frame].clear();
+
+	for (auto& p : ctx.pipeline_recycle[frame]) {
+		ctx.device.destroy(p);
+	}
+	ctx.pipeline_recycle[frame].clear();
 
 	for (auto& sb : scratch_buffers.cache.data[frame].pool) {
 		ctx.allocator.reset_pool(sb);
@@ -551,6 +557,7 @@ void vuk::Context::invalidate_shadermodule_and_pipelines(Name filename) {
 			return false;
 			});
 		while (pipe != std::nullopt) {
+			enqueue_destroy(pipe->pipeline);
 			pipe = pipeline_cache.remove([&](auto& ci, auto& p) {
 				if (std::find(ci.shaders.begin(), ci.shaders.end(), std::string(filename)) != ci.shaders.end()) return true;
 				return false;
@@ -567,6 +574,11 @@ void vuk::Context::enqueue_destroy(vk::Image i) {
 void vuk::Context::enqueue_destroy(vuk::ImageView iv) {
 	std::lock_guard _(recycle_locks[frame_counter % FC]);
 	image_view_recycle[frame_counter % FC].push_back(iv.payload);
+}
+
+void vuk::Context::enqueue_destroy(vk::Pipeline p) {
+	std::lock_guard _(recycle_locks[frame_counter % FC]);
+	pipeline_recycle[frame_counter % FC].push_back(p);
 }
 
 void vuk::Context::destroy(const RGImage& image) {

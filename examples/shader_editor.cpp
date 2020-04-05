@@ -385,6 +385,25 @@ void parameter_ui(vuk::Program::Member& m, std::vector<char>& b, std::vector<std
 
 std::regex error_regex(R"((\S*):(\d+): (.+?)\n)");
 
+// 1 buffer per binding
+// TODO: multiple set support
+static program_parameters program_params;
+
+void save(vuk::PerThreadContext& ptc) {
+	auto textToSave = editor.GetText();
+	std::ofstream t(fileToEdit);
+	if (t) {
+		t << textToSave;
+	}
+	t.close();
+	recompile(ptc, textToSave);
+	program_params.buffer.clear();
+	program_params.ivs.clear();
+
+}
+
+#include <imgui.h>
+
 void vuk::ExampleRunner::render() {
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
@@ -394,25 +413,25 @@ void vuk::ExampleRunner::render() {
 		auto ifc = context->begin();
 		auto ptc = ifc.begin();
 
-		// 1 buffer per binding
-		// TODO: multiple set support
-		static program_parameters program_params;
 
 		auto cpos = editor.GetCursorPosition();
 		ImGui::Begin("Shader Editor", nullptr, ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_MenuBar);
+		ImGuiIO& io = ImGui::GetIO();
+		auto shift = io.KeyShift;
+		auto ctrl = io.ConfigMacOSXBehaviors ? io.KeySuper : io.KeyCtrl;
+		auto alt = io.ConfigMacOSXBehaviors ? io.KeyCtrl : io.KeyAlt;
+
+		if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) {
+			if (ctrl && !shift && !alt && ImGui::IsKeyPressed(GLFW_KEY_S))
+				save(ptc);
+		}
+
+
 		ImGui::SetWindowSize(ImVec2(400, 400), ImGuiCond_FirstUseEver);
 		if (ImGui::BeginMenuBar()) {
 			if (ImGui::BeginMenu("File")) {
-				if (ImGui::MenuItem("Save")) {
-					auto textToSave = editor.GetText();
-					std::ofstream t(fileToEdit);
-					if (t) {
-						t << textToSave;
-					}
-					t.close();
-					recompile(ptc, textToSave);
-					program_params.buffer.clear();
-					program_params.ivs.clear();
+				if (ImGui::MenuItem("Save", "Ctrl-S")) {
+					save(ptc);
 				}
 				if (ImGui::MenuItem("Quit", "Alt-F4"))
 					break;

@@ -116,6 +116,7 @@ namespace vuk {
 		std::array<std::mutex, FC> recycle_locks;
 		std::array<std::vector<vk::Image>, FC> image_recycle;
 		std::array<std::vector<vk::ImageView>, FC> image_view_recycle;
+		std::array<std::vector<vk::Pipeline>, FC> pipeline_recycle;
 
 		std::atomic<size_t> frame_counter = 0;
 		std::atomic<size_t> unique_handle_id_counter = 0;
@@ -150,8 +151,9 @@ namespace vuk {
 		vuk::PipelineCreateInfo get_named_pipeline(const char* name);
 		void invalidate_shadermodule_and_pipelines(Name);
 
-		void enqueue_destroy(vk::Image i);
-		void enqueue_destroy(vuk::ImageView iv);
+		void enqueue_destroy(vk::Image);
+		void enqueue_destroy(vuk::ImageView);
+		void enqueue_destroy(vk::Pipeline);
 
 		template<class T>
 		Handle<T> wrap(T payload);
