@@ -515,6 +515,7 @@ static program_parameters program_params;
 
 void save(vuk::PerThreadContext& ptc) {
 	auto textToSave = editor.GetText();
+	textToSave = textToSave.substr(0, textToSave.size() - 1);
 	std::ofstream t(fileToEdit);
 	if (t) {
 		t << textToSave;

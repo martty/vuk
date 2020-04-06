@@ -31,16 +31,3 @@ FS_OUT opaque::fragment(VS_OUT vin, User::sampler2D t1) {
 	fout.color_out = vec4(texture(t1, vin.texcoord).rgb * vin.col, 1);
 	return fout;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
