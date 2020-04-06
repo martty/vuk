@@ -16,6 +16,8 @@ function(target_link_libraries_system target access)
   endforeach(lib)
 endfunction(target_link_libraries_system)
 
+add_library(vuk)
+
 find_package(Vulkan REQUIRED)
 
 if(WIN32)
@@ -37,18 +39,25 @@ if(NOT sshaderc_POPULATED)
   FetchContent_Populate(sshaderc)
   execute_process(COMMAND "${CMAKE_COMMAND}" -G "${CMAKE_GENERATOR}" -S ${sshaderc_SOURCE_DIR} -B ${sshaderc_BINARY_DIR} -DSHADERC_SKIP_TESTS=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo -DSHADERC_ENABLE_SHARED_CRT=ON -DSPIRV_SKIP_EXECUTABLES=ON -DENABLE_GLSLANG_BINARIES=OFF)
   execute_process(COMMAND "${CMAKE_COMMAND}" --build ${sshaderc_BINARY_DIR} --config RelWithDebInfo)
-  file(COPY ${sshaderc_BINARY_DIR}/libshaderc/shaderc_shared.dll DESTINATION ${CMAKE_BINARY_DIR})
+  if(EXISTS ${sshaderc_BINARY_DIR}/libshaderc/shaderc_shared.dll)
+	file(COPY ${sshaderc_BINARY_DIR}/libshaderc/shaderc_shared.dll DESTINATION ${CMAKE_BINARY_DIR})
+  else()
+	add_custom_command(TARGET vuk POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy ${sshaderc_BINARY_DIR}/libshaderc/RelWithDebInfo/shaderc_shared.dll ${CMAKE_BINARY_DIR}/${CMAKE_CFG_INTDIR})
+  endif()
 endif()
 
 add_library(shaderc UNKNOWN IMPORTED)
+if(EXISTS ${sshaderc_BINARY_DIR}/libshaderc/shaderc_shared.dll)
 set_target_properties(shaderc PROPERTIES IMPORTED_LOCATION ${sshaderc_BINARY_DIR}/libshaderc/shaderc_shared.lib)
+else()
+set_target_properties(shaderc PROPERTIES IMPORTED_LOCATION ${sshaderc_BINARY_DIR}/libshaderc/RelWithDebInfo/shaderc_shared.lib)
+endif()
 set_property(TARGET shaderc PROPERTY INTERFACE_INCLUDE_DIRECTORIES ${sshaderc_SOURCE_DIR}/libshaderc/include)
 
 set(GSL_CXX_STANDARD 20)
 add_subdirectory(ext/GSL)
 add_subdirectory(ext/SPIRV-Cross)
 
-add_library(vuk)
 target_compile_features(vuk PUBLIC cxx_std_20)
 
 target_sources(vuk PRIVATE 
