@@ -112,6 +112,11 @@ namespace vuk {
 		size_t offset;
 		size_t size;
 		void* mapped_ptr;
+
+        bool operator==(const Buffer& o) const {
+            return std::tie(device_memory, buffer, offset, size) ==
+                std::tie(o.device_memory, o.buffer, o.offset, o.size);
+        }
 	};
 
     struct Texture {

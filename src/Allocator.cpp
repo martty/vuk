@@ -88,7 +88,6 @@ namespace vuk {
 	// not locked, must be called from a locked fn
 
 	VmaPool Allocator::_create_pool(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage) {
-		real_alloc_callback = pool_cb;
 		// Create a pool that can have at most 2 blocks, 128 MiB each.
 		VmaPoolCreateInfo poolCreateInfo = {};
 		VkBufferCreateInfo bci = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
@@ -145,7 +144,7 @@ namespace vuk {
 		b.offset = vai.offset;
 		b.size = vai.size;
 		b.mapped_ptr = vai.pMappedData;
-		buffer_allocations.emplace(reinterpret_cast<uint64_t>((VkBuffer)b.buffer), res);
+		buffer_allocations.emplace(BufferID{ reinterpret_cast<uint64_t>((VkBuffer)b.buffer), b.offset }, res);
 		return b;
 	}
 
@@ -201,11 +200,12 @@ namespace vuk {
 
 	void Allocator::free_buffer(const Buffer& b) {
 		std::lock_guard _(mutex);
-		vmaFreeMemory(allocator, buffer_allocations.at(reinterpret_cast<uint64_t>((VkBuffer)b.buffer)));
-		buffer_allocations.erase(reinterpret_cast<uint64_t>((VkBuffer)b.buffer));
+		vuk::BufferID bufid{ reinterpret_cast<uint64_t>((VkBuffer)b.buffer), b.offset };
+		vmaFreeMemory(allocator, buffer_allocations.at(bufid));
+		buffer_allocations.erase(bufid);
 	}
 
-	void Allocator::destroy_scratch_pool(Pool pool) {
+	void Allocator::destroy_pool(Pool pool) {
 		std::lock_guard _(mutex);
 		vmaResetPool(allocator, pool.pool);
 		vmaForceUnmapPool(allocator, pool.pool);
@@ -214,6 +214,7 @@ namespace vuk {
 		}
 		vmaDestroyPool(allocator, pool.pool);
 	}
+
 	vk::Image Allocator::create_image_for_rendertarget(vk::ImageCreateInfo ici) {
 		std::lock_guard _(mutex);
 		VmaAllocationCreateInfo db{};
@@ -252,6 +253,9 @@ namespace vuk {
 		images.erase(reinterpret_cast<uint64_t>(vkimg));
 	}
 	Allocator::~Allocator() {
+		for (auto& [ps, p] : pools) {
+			destroy_pool(p);
+		}
 		vmaDestroyAllocator(allocator);
 	}
 }

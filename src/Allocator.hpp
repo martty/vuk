@@ -24,6 +24,17 @@ namespace vuk {
 			return std::tie(mem_usage, buffer_usage) == std::tie(o.mem_usage, o.buffer_usage);
 		}
 	};
+
+	struct BufferID {
+		uint64_t vk_buffer;
+		uint64_t offset;
+
+		bool operator==(const BufferID& o) const noexcept {
+			return std::tie(vk_buffer, offset) ==
+				std::tie(o.vk_buffer, o.offset);
+		}
+	};
+
 };
 
 namespace std {
@@ -35,7 +46,17 @@ namespace std {
 			return h;
 		}
 	};
+	
+	template <>
+	struct hash<vuk::BufferID> {
+		size_t operator()(vuk::BufferID const & x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, x.vk_buffer, x.offset); 
+			return h;
+		}
+	};
 };
+
 
 namespace vuk {
 	class Allocator {
@@ -69,7 +90,7 @@ namespace vuk {
 		vk::PhysicalDevice physdev;
 
 		std::unordered_map<uint64_t, VmaAllocation> images;
-		std::unordered_map<uint64_t, VmaAllocation> buffer_allocations;
+		std::unordered_map<BufferID, VmaAllocation> buffer_allocations;
 		std::unordered_map<PoolSelect, Pool> pools;
 		std::unordered_map<uint64_t, vk::Buffer> buffers;
 
@@ -87,7 +108,7 @@ namespace vuk {
 
 		void reset_pool(Pool pool);
 		void free_buffer(const Buffer& b);
-		void destroy_scratch_pool(Pool pool);
+		void destroy_pool(Pool pool);
 		
 		vk::Image create_image_for_rendertarget(vk::ImageCreateInfo ici);
 		vk::Image create_image(vk::ImageCreateInfo ici);

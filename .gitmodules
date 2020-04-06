@@ -41,3 +41,6 @@
 [submodule "ext/ImGui-Addons"]
 	path = ext/ImGui-Addons
 	url = https://github.com/gallickgunner/ImGui-Addons
+[submodule "ext/tinygltf"]
+	path = ext/tinygltf
+	url = https://github.com/syoyo/tinygltf

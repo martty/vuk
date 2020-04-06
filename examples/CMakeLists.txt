@@ -35,7 +35,7 @@ ADD_EXAMPLE(05_deferred)
 ADD_EXAMPLE(06_msaa)
 
 add_executable(voosh)
-target_include_directories(voosh SYSTEM PRIVATE ../ext/stb ../ext/imgui ../ext/ImGuiColorTextEdit ../ext/ImGui-Addons/FileBrowser)
+target_include_directories(voosh SYSTEM PRIVATE ../ext/stb ../ext/imgui ../ext/ImGuiColorTextEdit ../ext/ImGui-Addons/FileBrowser ../ext/tinygltf)
 target_sources(voosh PRIVATE shader_editor.cpp imgui.cpp stbi.cpp ${imgui_sources} ../ext/ImGuiColorTextEdit/TextEditor.cpp ../ext/ImGui-Addons/FileBrowser/ImGuiFileBrowser.cpp)
 target_compile_definitions(voosh PRIVATE GLM_FORCE_SIZE_FUNC GLM_FORCE_EXPLICIT_CTOR GLM_ENABLE_EXPERIMENTAL GLM_FORCE_RADIANS GLM_FORCE_DEPTH_ZERO_TO_ONE)
 target_link_libraries(voosh PRIVATE vuk vush)

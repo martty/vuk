@@ -805,6 +805,8 @@ namespace vuk {
 				}
 				cobuf.attribute_descriptions.clear();
 				cobuf.binding_descriptions.clear();
+				cobuf.set_bindings = {};
+				cobuf.sets_used = {};
 				if (i < rpass.subpasses.size() - 1)
 					cbuf.nextSubpass(vk::SubpassContents::eInline);
 			}

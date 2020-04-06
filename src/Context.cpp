@@ -68,6 +68,12 @@ vuk::InflightContext::InflightContext(Context& ctx, size_t absolute_frame, std::
 	}
 	ctx.pipeline_recycle[frame].clear();
 
+	for (auto& b : ctx.buffer_recycle[frame]) {
+		ctx.allocator.free_buffer(b);
+	}
+	ctx.buffer_recycle[frame].clear();
+
+
 	for (auto& sb : scratch_buffers.cache.data[frame].pool) {
 		ctx.allocator.reset_pool(sb);
 	}
@@ -207,6 +213,11 @@ vuk::Buffer vuk::PerThreadContext::_allocate_scratch_buffer(MemoryUsage mem_usag
 	auto& pool = scratch_buffers.acquire({ mem_usage, buffer_usage });
 	return ifc.ctx.allocator.allocate_buffer(pool, size, create_mapped);
 }
+
+vuk::Unique<vuk::Buffer> vuk::PerThreadContext::_allocate_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, bool create_mapped) {
+	return vuk::Unique<Buffer>(ifc.ctx, ifc.ctx.allocator.allocate_buffer(mem_usage, buffer_usage, size, create_mapped));
+}
+
 
 bool vuk::PerThreadContext::is_ready(const TransferStub& stub) {
 	return ifc.last_transfer_complete >= stub.id;
@@ -392,12 +403,12 @@ vuk::ShaderModule vuk::PerThreadContext::create(const create_info_t<vuk::ShaderM
 	shaderc::Compiler compiler;
 	shaderc::CompileOptions options;
 
-	shaderc::SpvCompilationResult module = compiler.CompileGlslToSpv(cinfo.source, shaderc_glsl_infer_from_source, cinfo.filename.c_str(), options);
+	shaderc::SpvCompilationResult result = compiler.CompileGlslToSpv(cinfo.source, shaderc_glsl_infer_from_source, cinfo.filename.c_str(), options);
 
-	if (module.GetCompilationStatus() != shaderc_compilation_status_success) {
-		throw ShaderCompilationException{ module.GetErrorMessage().c_str() };
+	if (result.GetCompilationStatus() != shaderc_compilation_status_success) {
+		throw ShaderCompilationException{ result.GetErrorMessage().c_str() };
 	} else {
-		std::vector<uint32_t> spirv(module.cbegin(), module.cend());
+		std::vector<uint32_t> spirv(result.cbegin(), result.cend());
 
 		spirv_cross::Compiler refl(spirv.data(), spirv.size());
 		vuk::Program p;
@@ -581,13 +592,19 @@ void vuk::Context::enqueue_destroy(vk::Pipeline p) {
 	pipeline_recycle[frame_counter % FC].push_back(p);
 }
 
+void vuk::Context::enqueue_destroy(vuk::Buffer b) {
+	std::lock_guard _(recycle_locks[frame_counter % FC]);
+	buffer_recycle[frame_counter % FC].push_back(b);
+}
+
+
 void vuk::Context::destroy(const RGImage& image) {
 	device.destroy(image.image_view.payload);
 	allocator.destroy_image(image.image);
 }
 
 void vuk::Context::destroy(const Allocator::Pool& v) {
-	allocator.destroy_scratch_pool(v);
+	allocator.destroy_pool(v);
 }
 
 void vuk::Context::destroy(const vuk::DescriptorPool& dp) {

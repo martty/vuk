@@ -117,6 +117,7 @@ namespace vuk {
 		std::array<std::vector<vk::Image>, FC> image_recycle;
 		std::array<std::vector<vk::ImageView>, FC> image_view_recycle;
 		std::array<std::vector<vk::Pipeline>, FC> pipeline_recycle;
+		std::array<std::vector<vuk::Buffer>, FC> buffer_recycle;
 
 		std::atomic<size_t> frame_counter = 0;
 		std::atomic<size_t> unique_handle_id_counter = 0;
@@ -154,6 +155,7 @@ namespace vuk {
 		void enqueue_destroy(vk::Image);
 		void enqueue_destroy(vuk::ImageView);
 		void enqueue_destroy(vk::Pipeline);
+		void enqueue_destroy(vuk::Buffer);
 
 		template<class T>
 		Handle<T> wrap(T payload);
@@ -284,6 +286,7 @@ namespace vuk {
 		void wait_all_transfers();
 
 		Buffer _allocate_scratch_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, bool create_mapped);
+		Unique<Buffer> _allocate_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, bool create_mapped);
 
 		// since data is provided, we will add TransferDst to the flags automatically
 		template<class T>
@@ -291,6 +294,13 @@ namespace vuk {
 			auto dst = _allocate_scratch_buffer(mem_usage, vk::BufferUsageFlagBits::eTransferDst | buffer_usage, sizeof(T) * data.size(), false);
 			auto stub = upload(dst, data);
 			return { dst, stub };
+		}
+
+		template<class T>
+		std::pair<Unique<Buffer>, TransferStub> create_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, gsl::span<T> data) {
+			auto dst = _allocate_buffer(mem_usage, vk::BufferUsageFlagBits::eTransferDst | buffer_usage, sizeof(T) * data.size(), false);
+			auto stub = upload(*dst, data);
+			return { std::move(dst), stub };
 		}
 
 		std::pair<vuk::Texture, TransferStub> create_texture(vk::Format format, vk::Extent3D extents, void* data);

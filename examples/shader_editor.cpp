@@ -9,16 +9,36 @@
 #include <glm/gtx/quaternion.hpp>
 #include "vush.hpp"
 #include <ImGuiFileBrowser.h>
+#define TINYGLTF_NO_INCLUDE_JSON
+#define TINYGLTF_IMPLEMENTATION
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "tiny_gltf.h"
 
 TextEditor editor;
 static const char* fileToEdit = "../../examples/test.vush";
+tinygltf::TinyGLTF loader;
 
 float angle = 0.f;
 auto box = util::generate_cube();
 
+struct vattr {
+	vuk::Buffer buffer;
+	vk::Format format;
+	size_t offset;
+	size_t stride;
+};
+
+struct vinds {
+	vuk::Buffer buffer;
+	vk::IndexType type;
+	size_t count;
+};
+
 struct program_parameters {
 	std::unordered_map<uint32_t, std::vector<char>> buffer;
 	std::unordered_map<uint32_t, vuk::ImageView> ivs;
+	std::unordered_map<uint32_t, vattr> vattrs;
+	std::optional<vinds> indices;
 };
 
 struct push_connection {
@@ -59,7 +79,7 @@ struct push_connection {
 						if (nqd.front() == m.name) {
 							nqd.erase(nqd.begin());
 							if (push_to_member(m, un.binding, params, nqd, data)) return true;
-						} 
+						}
 					}
 				}
 			}
@@ -71,6 +91,21 @@ struct push_connection {
 						return true;
 					}
 				}
+			}
+		}
+		if constexpr (std::is_same_v<T, vattr>) {
+			for (auto& s : refl.attributes) {
+				if (nq.size() == 1 && nq.front() == s.name) {
+					params.vattrs[s.location] = data;
+					return true;
+				}
+			}
+		}
+
+		if constexpr (std::is_same_v<T, vinds>) {
+			if (nq.size() == 1 && nq.front() == "indices") {
+				params.indices = data;
+				return true;
 			}
 		}
 		return false;
@@ -116,6 +151,91 @@ struct st {
 };
 
 static std::unordered_map<std::string, st> voosh_res;
+
+struct buffer_source {
+	vuk::Unique<vuk::Buffer> buffer;
+	vk::Format format;
+	size_t stride;
+	std::string attr_name;
+	std::string filename;
+
+	push_connection connection;
+};
+
+/*struct submesh {
+	std::unordered_map<std::string, vuk::Unique<vuk::Buffer>> attributes;
+	vuk::Unique<vuk::Buffer> indices;
+};
+
+static submesh sm;*/
+static std::unordered_map<std::string, std::vector<buffer_source>> buf_sources;
+
+void load_model(vuk::PerThreadContext& ptc, const std::string& file) {
+	std::string err;
+	std::string warn;
+
+	tinygltf::Model model;
+	bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, file.c_str());
+	//bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, argv[1]); // for binary glTF(.glb)
+
+	if (!warn.empty()) {
+		printf("Warn: %s\n", warn.c_str());
+	}
+
+	if (!err.empty()) {
+		printf("Err: %s\n", err.c_str());
+	}
+
+	if (!ret) {
+		printf("Failed to parse glTF\n");
+	}
+
+	for (auto& m : model.meshes) {
+		for (auto& p : m.primitives) {
+			//p.mode -> PTS/LINES/TRIS
+			{
+				auto& acc = model.accessors[p.indices];
+				auto& buffer_view = model.bufferViews[acc.bufferView];
+				auto& buffer = model.buffers[buffer_view.buffer];
+				auto data = gsl::span(buffer.data.data() + buffer_view.byteOffset + acc.byteOffset, buffer_view.byteLength);
+				buffer_source bf;
+				bf.attr_name = "index";
+				auto name = m.name + "/" + model.materials[p.material].name;
+				bf.filename = file;
+				assert(acc.type == TINYGLTF_TYPE_SCALAR);
+				bf.stride = acc.ByteStride(buffer_view);
+				bf.buffer = ptc.create_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eIndexBuffer, data).first;
+
+				buf_sources[name].push_back(std::move(bf));
+			}
+
+			for (auto& [name, index] : p.attributes) {
+				auto& acc = model.accessors[index];
+				auto& buffer_view = model.bufferViews[acc.bufferView];
+				auto& buffer = model.buffers[buffer_view.buffer];
+				auto data = gsl::span(buffer.data.data() + buffer_view.byteOffset + acc.byteOffset, buffer_view.byteLength);
+		
+				auto stride = acc.ByteStride(buffer_view);
+				buffer_source bf;
+				bf.attr_name = name;
+				bf.stride = stride;
+				if (acc.componentType == TINYGLTF_COMPONENT_TYPE_FLOAT) {
+					switch(acc.type){
+					case TINYGLTF_TYPE_VEC3: bf.format = vk::Format::eR32G32B32Sfloat; break;
+					case TINYGLTF_TYPE_VEC2: bf.format = vk::Format::eR32G32Sfloat; break;
+					}
+				}
+				auto name = m.name + "/" + model.materials[p.material].name;
+				bf.filename = file;
+
+				bf.buffer = ptc.create_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eVertexBuffer, data).first;
+				buf_sources[name].push_back(std::move(bf));
+			}
+		}
+	}
+	ptc.wait_all_transfers();
+
+}
 
 struct projection {
 	float fovy = glm::radians(60.f);
@@ -336,6 +456,7 @@ vuk::ExampleRunner::ExampleRunner() {
 		auto ifc = context->begin();
 		auto ptc = ifc.begin();
 
+		load_model(ptc, "../../examples/suzy.glb");
 		load_texture(ptc, "../../examples/doge.png");
 		load_res_texture(ptc, "mat4x4", "../../examples/mat4x4.jpg");
 }
@@ -413,7 +534,6 @@ void vuk::ExampleRunner::render() {
 		auto ifc = context->begin();
 		auto ptc = ifc.begin();
 
-
 		auto cpos = editor.GetCursorPosition();
 		ImGui::Begin("Shader Editor", nullptr, ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_MenuBar);
 		ImGuiIO& io = ImGui::GetIO();
@@ -425,7 +545,6 @@ void vuk::ExampleRunner::render() {
 			if (ctrl && !shift && !alt && ImGui::IsKeyPressed(GLFW_KEY_S))
 				save(ptc);
 		}
-
 
 		ImGui::SetWindowSize(ImVec2(400, 400), ImGuiCond_FirstUseEver);
 		if (ImGui::BeginMenuBar()) {
@@ -524,9 +643,13 @@ void vuk::ExampleRunner::render() {
 
 		ImGui::Begin("Parameters");
 		if (ImGui::CollapsingHeader("Attributes")) {
+			std::vector<std::string> name_stack;
 			for (auto& att : refl.attributes) {
-				ImGui::Button(att.name.c_str()); ImGui::SameLine();
+				ImGui::Button(att.name.c_str());
+				droppable(name_stack, att.name);
 			}
+			ImGui::Button("Indices");
+			droppable(name_stack, "indices");
 		ImGui::NewLine();
 		}
 		// init
@@ -731,14 +854,70 @@ void vuk::ExampleRunner::render() {
 
 		ImGui::Columns(1);
 		ImGui::End();
+		{
+			ImGui::Begin("Meshes");
+			ImGui::Columns(3, "meshes", true);
+			if (ImGui::Button("+")) {
+			//	tfs.push_back({});
+			}
+			ImGui::NextColumn();
+			ImGui::Text("Mesh");
+			ImGui::NextColumn();
+			ImGui::Text("Filename");
+			ImGui::NextColumn();
+			ImGui::Separator();
 
+			size_t i = 0;
+			for (auto& [name, bufs] : buf_sources) {
+				ImGui::PushID(name.c_str());
+				for (auto& bf : bufs) {
+					ImGui::PushID(bf.attr_name.c_str());
+					// push data
+					if (!bf.connection.name.empty() && bf.connection.name.front() != "indices") {
+						vattr v;
+						v.buffer = *bf.buffer;
+						v.format = bf.format;
+						v.offset = 0;
+						v.stride = bf.stride;
+						bf.connection.push(refl, program_params, v);
+					} else if (!bf.connection.name.empty() && bf.connection.name.front() == "indices") {
+						vinds v;
+						v.buffer = *bf.buffer;
+						v.count = v.buffer.size / bf.stride;
+						if (bf.stride == sizeof(uint16_t))
+							v.type = vk::IndexType::eUint16;
+						else
+							assert(0);
+						bf.connection.push(refl, program_params, v);
+					}
+
+					if (bf.connection.name.empty())
+						ImGui::Button("O##b");
+					else
+						if (ImGui::Button("0##b")) bf.connection.name.clear();
+					if (ImGui::BeginDragDropSource()) {
+						auto ptrt = &bf.connection;
+						ImGui::SetDragDropPayload(VOOSH_PAYLOAD_TYPE_CONNECTION_PTR, &ptrt, sizeof(ptrt));
+						ImGui::Text("Attribute for (%d)", i);
+						ImGui::EndDragDropSource();
+					}
+					ImGui::SameLine();
+					ImGui::Text(bf.attr_name.c_str());
+					ImGui::PopID();
+				}
+
+				ImGui::NextColumn();
+				ImGui::Text("%s", name.c_str());
+				ImGui::NextColumn();
+				ImGui::Text("%s", bufs[0].filename.c_str());
+				ImGui::NextColumn();
+				ImGui::Separator();
+				i++;
+				ImGui::PopID();
+			}
+			ImGui::End();
+		}
 		//ImGui::ShowDemoWindow();
-		// We set up the cube data, same as in example 02_cube
-		auto [bverts, stub1] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eVertexBuffer, gsl::span(&box.first[0], box.first.size()));
-		auto verts = std::move(bverts);
-		auto [binds, stub2] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eIndexBuffer, gsl::span(&box.second[0], box.second.size()));
-		auto inds = std::move(binds);
-
 		vuk::RenderGraph rg;
 
 		// Set up the pass to draw the textured cube, with a color and a depth attachment
@@ -747,9 +926,14 @@ void vuk::ExampleRunner::render() {
 			.execute = [&](vuk::CommandBuffer& command_buffer) {
 				command_buffer
 				  .set_viewport(0, vuk::Area::Framebuffer{})
-				  .set_scissor(0, vuk::Area::Framebuffer{})
-				  .bind_vertex_buffer(0, verts, 0, vuk::Packed{vk::Format::eR32G32B32Sfloat, vuk::Ignore{offsetof(util::Vertex, uv_coordinates) - sizeof(util::Vertex::position)}, vk::Format::eR32G32Sfloat})
-				  .bind_index_buffer(inds, vk::IndexType::eUint32);
+				  .set_scissor(0, vuk::Area::Framebuffer{});
+
+				for (auto& [location, vattr] : program_params.vattrs) {
+					command_buffer.bind_vertex_buffer(location, vattr.buffer, location, vuk::Packed{vattr.format});
+				}
+				if (program_params.indices) {
+					command_buffer.bind_index_buffer(program_params.indices->buffer, vk::IndexType::eUint16);
+				}
 				for (auto& [binding, iv] : program_params.ivs) {
 					command_buffer.bind_sampled_image(0, binding, iv, vk::SamplerCreateInfo{});
 				}
@@ -758,8 +942,8 @@ void vuk::ExampleRunner::render() {
 					void * dst = command_buffer._map_scratch_uniform_binding(0, binding, program_params.buffer[binding].size() * sizeof(char));
 					memcpy(dst, program_params.buffer[binding].data(), program_params.buffer[binding].size() * sizeof(char));
 				}
-				if(will_we_render)
-					command_buffer.draw_indexed(box.second.size(), 1, 0, 0, 0);
+				if(will_we_render && program_params.indices)
+					command_buffer.draw_indexed(program_params.indices->count, 1, 0, 0, 0);
 				}
 			});
 
@@ -792,5 +976,6 @@ int main() {
 	vuk::ExampleRunner::get_runner().render();
 	textures.clear();
 	voosh_res.clear();
+	buf_sources.clear();
 	vuk::ExampleRunner::get_runner().cleanup();
 }
