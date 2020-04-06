@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.7)
 project(vuk)
 
+include(ExternalProject)
+include(FetchContent)
+
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 # https://stackoverflow.com/a/52136398
@@ -14,13 +17,33 @@ function(target_link_libraries_system target access)
 endfunction(target_link_libraries_system)
 
 find_package(Vulkan REQUIRED)
-#use shaderc shipped with SDK, has to be a source dependency because there are no debug binaries shipped
-set(SHADERC_SKIP_TESTS TRUE)
+
 if(WIN32)
-	add_subdirectory($ENV{VULKAN_SDK}/shaderc shaderc)
+	set(VUK_SHADERC_PATH_D $ENV{VULKAN_SDK}/shaderc)
 else()
-	add_subdirectory($ENV{VULKAN_SDK}/source/shaderc shaderc)
+	set(VUK_SHADERC_PATH_D $ENV{VULKAN_SDK}/source/shaderc)
 endif()
+set(VUK_SHADERC_PATH ${VUK_SHADERC_PATH_D} CACHE PATH "")
+file(TO_CMAKE_PATH "${VUK_SHADERC_PATH}" VUK_SHADERC_PATH_N)
+
+FetchContent_Declare(
+  sshaderc
+  SOURCE_DIR "${VUK_SHADERC_PATH_N}"
+)
+
+FetchContent_GetProperties(sshaderc)
+if(NOT sshaderc_POPULATED)
+  message(STATUS "Building shaderc in RelWithDebInfo")
+  FetchContent_Populate(sshaderc)
+  execute_process(COMMAND "${CMAKE_COMMAND}" -G "${CMAKE_GENERATOR}" -S ${sshaderc_SOURCE_DIR} -B ${sshaderc_BINARY_DIR} -DSHADERC_SKIP_TESTS=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo -DSHADERC_ENABLE_SHARED_CRT=ON -DSPIRV_SKIP_EXECUTABLES=ON -DENABLE_GLSLANG_BINARIES=OFF)
+  execute_process(COMMAND "${CMAKE_COMMAND}" --build ${sshaderc_BINARY_DIR} --config RelWithDebInfo)
+  file(COPY ${sshaderc_BINARY_DIR}/libshaderc/shaderc_shared.dll DESTINATION ${CMAKE_BINARY_DIR})
+endif()
+
+add_library(shaderc UNKNOWN IMPORTED)
+set_target_properties(shaderc PROPERTIES IMPORTED_LOCATION ${sshaderc_BINARY_DIR}/libshaderc/shaderc_shared.lib)
+set_property(TARGET shaderc PROPERTY INTERFACE_INCLUDE_DIRECTORIES ${sshaderc_SOURCE_DIR}/libshaderc/include)
+
 set(GSL_CXX_STANDARD 20)
 add_subdirectory(ext/GSL)
 add_subdirectory(ext/SPIRV-Cross)
@@ -54,7 +77,8 @@ target_include_directories(vuk PUBLIC ext/VulkanMemoryAllocator/src)
 target_include_directories(vuk PUBLIC src/)
 
 target_compile_options(vuk PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/permissive->")
-target_link_libraries_system(vuk PUBLIC Vulkan::Vulkan GSL spirv-cross-core shaderc)
+target_link_libraries_system(vuk PUBLIC Vulkan::Vulkan GSL spirv-cross-core)
+target_link_libraries(vuk PUBLIC shaderc)
 
 if (WIN32)
 	target_compile_definitions(vuk PUBLIC NOMINMAX VC_EXTRALEAN WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS _SCL_SECURE_NO_WARNINGS _SILENCE_CLANG_CONCEPTS_MESSAGE)
