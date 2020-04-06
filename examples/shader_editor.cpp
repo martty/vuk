@@ -474,7 +474,10 @@ void droppable(std::vector<std::string>& name_stack, std::string name) {
 void parameter_ui(vuk::Program::Member& m, std::vector<char>& b, std::vector<std::string> name_stack) {
 	switch (m.type) {
 	case vuk::Program::Type::evec3:
-		ImGui::DragFloat3(m.name.c_str(), (float*)(b.data() + m.offset), 0.01f); 
+		ImGui::PushID(m.name.c_str());
+		ImGui::SetNextItemWidth(ImGui::GetColumnWidth() - 14);
+		ImGui::DragFloat3("", (float*)(b.data() + m.offset), 0.01f); 
+		ImGui::PopID();
 		break;
 	case vuk::Program::Type::emat4:
 		ImGui::ImageButton(&voosh_res.at("mat4x4").si, ImVec2(50, 50));
@@ -642,7 +645,7 @@ void vuk::ExampleRunner::render() {
 		}
 
 		ImGui::Begin("Parameters");
-		if (ImGui::CollapsingHeader("Attributes")) {
+		if (ImGui::CollapsingHeader("Attributes", ImGuiTreeNodeFlags_DefaultOpen)) {
 			std::vector<std::string> name_stack;
 			for (auto& att : refl.attributes) {
 				ImGui::Button(att.name.c_str());
@@ -683,7 +686,7 @@ void vuk::ExampleRunner::render() {
 					name_stack.pop_back();
 				}
 				for (auto& s : set.samplers) {
-					ImGui::Image(&ptc.make_sampled_image(program_params.ivs[s.binding], {}), ImVec2(100.f, 100.f));
+					ImGui::Image(&ptc.make_sampled_image(program_params.ivs[s.binding], {}), ImVec2(ImGui::GetColumnWidth(), ImGui::GetColumnWidth() * /*aspect*/ 1.f));
 					droppable(name_stack, s.name);
 					ImGui::NextColumn();
 					ImGui::Text(s.name.c_str());
