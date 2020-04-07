@@ -54,7 +54,7 @@ void run_file(const std::string& src_file) {
 	REQUIRE(checks > 0);
 
 }
-
+/*
 TEST_CASE("basic", "[basic]") {
 	add_rules(json::parse(slurp("../../vush/builtin_cfg.json")));
 
@@ -83,4 +83,10 @@ TEST_CASE("sampling", "[textures]") {
 	add_rules(json::parse(slurp("../../vush/builtin_cfg.json")));
 
 	run_file("../../tests/sampling.vush");
+}*/
+
+TEST_CASE("probing", "[introspection]") {
+	add_rules(json::parse(slurp("../../vush/builtin_cfg.json")));
+
+	run_file("../../tests/probing_param.vush");
 }

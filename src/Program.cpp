@@ -79,6 +79,7 @@ vk::ShaderStageFlagBits vuk::Program::introspect(const spirv_cross::Compiler& re
 			default: return vk::ShaderStageFlagBits::eVertex;
 		}
 	}();
+	stages = stage;
 	if (stage == vk::ShaderStageFlagBits::eVertex) {
 		for (auto& sb : resources.stage_inputs) {
 			auto type = refl.get_type(sb.type_id);
@@ -201,6 +202,8 @@ void vuk::Program::append(const Program& o) {
 		unq(s.texel_buffers);
 		unq(s.subpass_inputs);
 	}
+
+	stages |= o.stages;
 }
 
 size_t std::hash<vuk::ShaderModuleCreateInfo>::operator()(vuk::ShaderModuleCreateInfo const& x) const noexcept {

@@ -694,6 +694,7 @@ namespace vuk {
 
 			auto rg = ptc.transient_images.acquire(rgci);
 			attachment_info.iv = rg.image_view;
+			attachment_info.image = rg.image;
 		}
 	}
 

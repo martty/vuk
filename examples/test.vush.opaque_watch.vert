@@ -22,8 +22,8 @@ struct VP {
 
 layout(location = 0) out VS_OUT _out;
 
-layout(location = 0+0) in vec3 _VS_IN_position;
-layout(location = 0+1) in vec2 _VS_IN_texcoord;
+layout(location = 0) in Attribut e;
+layout(location = 0) in 0VS_IN vin;
 layout(std140, binding = 0) uniform _aspect_ {
 	VP vp;
 } _aspect;
@@ -35,7 +35,8 @@ layout(std140, binding = 1) uniform _user_ {
 layout(binding = 1 + 1 + 0) uniform sampler2D t1;
 
 #line 17 "../../examples/test.vush"
-VS_OUT opaque_vertex(VS_IN vin, VP vp, mat4 model_matrix, vec3 col) {
+VS_OUT opaque_vertex(Attribut e, 0VS_IN vin, VP vp, mat4 model_matrix, vec3 col) {
+	_watch_0 = VS_IN;
 	VS_OUT vout;
 	gl_Position = vp.projection * vp.view * model_matrix * vec4(vin.position, 1.0);
 	vout.texcoord = vin.texcoord;
@@ -43,11 +44,8 @@ VS_OUT opaque_vertex(VS_IN vin, VP vp, mat4 model_matrix, vec3 col) {
 	return vout;
 }
 void main() {
-	VS_IN vin;
-	vin.position = _VS_IN_position;
-	vin.texcoord = _VS_IN_texcoord;
 	VP vp = _aspect.vp;
 	mat4 model_matrix = _user.model_matrix;
 	vec3 col = _user.col;
-	_out = opaque_vertex(vin, vp, model_matrix, col);
+	_out = opaque_vertex(e, vin, vp, model_matrix, col);
 }

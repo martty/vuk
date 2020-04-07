@@ -337,11 +337,14 @@ vuk::SampledImage& vuk::PerThreadContext::make_sampled_image(vuk::ImageView iv, 
 }
 
 vuk::SampledImage& vuk::PerThreadContext::make_sampled_image(Name n, vk::SamplerCreateInfo sci) {
-	vuk::SampledImage si(vuk::SampledImage::RenderGraphAttachment{ n, sci, vk::ImageLayout::eShaderReadOnlyOptimal });
+	vuk::SampledImage si(vuk::SampledImage::RenderGraphAttachment{ n, sci, {}, vk::ImageLayout::eShaderReadOnlyOptimal });
 	return sampled_images.acquire(si);
 }
 
-
+vuk::SampledImage& vuk::PerThreadContext::make_sampled_image(Name n, vk::ImageViewCreateInfo ivci, vk::SamplerCreateInfo sci) {
+	vuk::SampledImage si(vuk::SampledImage::RenderGraphAttachment{ n, sci, ivci, vk::ImageLayout::eShaderReadOnlyOptimal });
+	return sampled_images.acquire(si);
+}
 
 vuk::DescriptorSet vuk::PerThreadContext::create(const create_info_t<vuk::DescriptorSet>& cinfo) {
 	auto& pool = pool_cache.acquire(cinfo.layout_info);
@@ -534,7 +537,7 @@ vuk::Context::Context(vk::Instance instance, vk::Device device, vk::PhysicalDevi
 
 void vuk::Context::create_named_pipeline(const char* name, vuk::PipelineCreateInfo ci) {
 	std::lock_guard _(named_pipelines_lock);
-	named_pipelines.emplace(name, std::move(ci));
+	named_pipelines.insert_or_assign(name, std::move(ci));
 }
 
 vuk::PipelineCreateInfo vuk::Context::get_named_pipeline(const char* name) {
@@ -562,7 +565,6 @@ void vuk::Context::invalidate_shadermodule_and_pipelines(Name filename) {
 	auto sm = shader_modules.remove(sci);
 	if (sm) {
 		device.destroy(sm->shader_module);
-		// TODO: enqueue pipe(s) for destruction
 		auto pipe = pipeline_cache.remove([&](auto& ci, auto& p) {
 			if (std::find(ci.shaders.begin(), ci.shaders.end(), std::string(filename)) != ci.shaders.end()) return true;
 			return false;
@@ -658,7 +660,7 @@ vuk::Context::~Context() {
 vuk::InflightContext vuk::Context::begin() {
 	std::lock_guard _(begin_frame_lock);
 	std::lock_guard recycle(recycle_locks[_next(frame_counter.load(), FC)]);
-	return InflightContext(*this, frame_counter++, std::move(recycle));
+	return InflightContext(*this, ++frame_counter, std::move(recycle));
 }
 
 void vuk::Context::wait_idle() {

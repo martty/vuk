@@ -131,7 +131,11 @@ vuk::Pass util::ImGui_ImplVuk_Render(vuk::PerThreadContext& ptc, vuk::Name src_t
 								if (si.is_global) {
 									command_buffer.bind_sampled_image(0, 0, si.global.iv, si.global.sci);
 								} else {
-									command_buffer.bind_sampled_image(0, 0, si.rg_attachment.attachment_name, si.global.sci);
+									if (si.rg_attachment.ivci) {
+										command_buffer.bind_sampled_image(0, 0, si.rg_attachment.attachment_name, *si.rg_attachment.ivci, si.rg_attachment.sci);
+									} else {
+										command_buffer.bind_sampled_image(0, 0, si.rg_attachment.attachment_name, si.rg_attachment.sci);
+									}
 								}
 							}
 							// Draw

@@ -33,6 +33,13 @@ struct_entry parse_struct(std::string name, const std::string& body);
 
 std::vector<parameter_entry> parse_parameters(const std::string& src, std::unordered_map<std::string, std::vector<parameter_entry>>& parameters_per_scope);
 
+struct probe_entry {
+	uint32_t number;
+	std::optional<std::string> type;
+	std::string name;
+	uint32_t line;
+};
+
 struct stage_entry {
 	std::string context;
 	std::string return_type;
@@ -45,6 +52,7 @@ struct stage_entry {
 	std::vector<parameter_entry> parameters;
 	mustache::data to_hash(const std::unordered_map<std::string, struct_entry>& structs, const std::unordered_map<std::string, std::vector<parameter_entry>>& per_scope, const std::string& aspect, bool use);
 	std::string body;
+	std::vector<probe_entry> probes;
 };
 
 struct setting {

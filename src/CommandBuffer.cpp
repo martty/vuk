@@ -1,4 +1,5 @@
 #include "CommandBuffer.hpp"
+#include "CommandBuffer.hpp"
 #include "Context.hpp"
 #include "RenderGraph.hpp"
 
@@ -124,6 +125,29 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::bind_sampled_image(unsigned set, unsigned binding, Name name, vk::SamplerCreateInfo sampler_create_info) {
 		return bind_sampled_image(set, binding, rg.bound_attachments[name].iv, sampler_create_info);
+	}
+
+	CommandBuffer& CommandBuffer::bind_sampled_image(unsigned set, unsigned binding, Name name, vk::ImageViewCreateInfo ivci, vk::SamplerCreateInfo sampler_create_info) {
+		ivci.image = rg.bound_attachments[name].image;
+		ivci.format = rg.bound_attachments[name].description.format;
+		ivci.viewType = vk::ImageViewType::e2D;
+		vk::ImageSubresourceRange isr;
+		vk::ImageAspectFlagBits aspect;
+		if (ivci.format == vk::Format::eD32Sfloat) {
+			aspect = vk::ImageAspectFlagBits::eDepth;
+		} else {
+			aspect = vk::ImageAspectFlagBits::eColor;
+		}
+		isr.aspectMask = aspect;
+		isr.baseArrayLayer = 0;
+		isr.layerCount = 1;
+		isr.baseMipLevel = 0;
+		isr.levelCount = 1;
+		ivci.subresourceRange = isr;
+	
+		vuk::Unique<vuk::ImageView> iv = vuk::Unique<vuk::ImageView>(ptc.ctx, ptc.ctx.wrap(ptc.ctx.device.createImageView(ivci)));
+
+		return bind_sampled_image(set, binding, *iv, sampler_create_info);
 	}
 
 	CommandBuffer& CommandBuffer::push_constants(vk::ShaderStageFlags stages, size_t offset, void* data, size_t size) {

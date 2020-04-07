@@ -97,7 +97,7 @@ namespace vuk {
 			std::vector<SubpassInput> subpass_inputs;
 		};
 		std::unordered_map<size_t, Descriptors> sets;
-
+		vk::ShaderStageFlags stages = {};
 		void append(const Program& o);
 	};
 

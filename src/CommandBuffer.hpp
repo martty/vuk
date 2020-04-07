@@ -92,6 +92,7 @@ namespace vuk {
 		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, vuk::ImageView iv, vk::SamplerCreateInfo sampler_create_info);
 		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, const vuk::Texture&, vk::SamplerCreateInfo sampler_create_info);
 		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, Name, vk::SamplerCreateInfo sampler_create_info);
+		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, Name, vk::ImageViewCreateInfo ivci, vk::SamplerCreateInfo sampler_create_info);
 		
 		CommandBuffer& push_constants(vk::ShaderStageFlags stages, size_t offset, void * data, size_t size);
 		template<class T>

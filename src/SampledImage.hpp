@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Types.hpp"
+#include <optional>
 
 namespace vuk {
 	// high level type around binding a sampled image with a sampler
@@ -14,6 +15,7 @@ namespace vuk {
 		struct RenderGraphAttachment {
 			Name attachment_name;
 			vk::SamplerCreateInfo sci = {};
+			std::optional<vk::ImageViewCreateInfo> ivci = {};
 			vk::ImageLayout image_layout;
 		};
 

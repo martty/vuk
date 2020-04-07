@@ -4,12 +4,14 @@
 // haha, computer cache goes bzzzz
 std::unordered_map<std::string, std::unordered_map<std::string, rule>> rules;
 
-std::regex parse_parameters_regex(R"(\s*(?:(\w+)\s*::)?\s*(\w+)\s*(\w+))");
+std::regex parse_parameters_regex(R"(\s*(?:(\w+)\s*::)?\s*(\w+)\s*(?:\$\d+)?(\w+))");
 std::regex find_struct(R"(\s*struct\s*(\w+)\s*\{([\s\S]*?)\};)");
 std::regex parse_struct_members(R"(\s*(?:layout\((.*)\))?\s*(?:(\w+)::)?\s*(\w+)\s*(\w+))");
 std::regex pragma_regex(R"(#pragma\s*(\w+)?\s+(?:(\w+)\s*::)?\s*([\w\/]+)\s*:\s*(\S+))");
 std::regex find_stages(R"((\w+)\s*(\w+?)\s*::\s*(\w+)\s*\((.+)\)(\s*\{[\s\S]+?\}))");
 std::regex include_regex(R"(#include\s*(?:"\s*(\S+)\s*")|#include\s*(?:<\s*(\S+)\s*>))");
+std::regex parse_probes_regex(R"((?:(int|float|vec2|vec3|vec4) )?\$(\d+)([\w.]+))");
+std::regex probe_strip_regex(R"((?:\$\d+)(\w+))");
 
 namespace {
 std::string slurp(const std::string& path) {
@@ -27,6 +29,7 @@ void burp(const std::string& in, const std::string& path) {
 	output.close();
 }
 }
+
 struct_entry parse_struct(std::string name, const std::string& body) {
 	struct_entry str;
 	str.name = name;
@@ -84,6 +87,107 @@ void parse_structs(const std::string& prefix, std::unordered_map<std::string, st
 
 		structs[name] = parse_struct(name, body);
 	}
+}
+
+std::vector<probe_entry> parse_probes(const std::string& prefix, unsigned line_offset, const std::unordered_map<std::string, struct_entry>& structs, const std::vector<parameter_entry>& parameters) {
+	std::vector<probe_entry> probes;
+	auto words_begin = std::sregex_iterator(prefix.begin(), prefix.end(), parse_probes_regex);
+	auto words_end = std::sregex_iterator();
+	auto line_no = line_offset;
+	for (std::sregex_iterator it = words_begin; it != words_end; ++it) {
+		std::smatch match = *it;
+		probe_entry pe;
+
+		pe.number = std::stoi(match[2].str());
+		pe.name = match[3].str();
+		if (match[1].matched) {
+			pe.type = match[1].str();
+		} else { // its a body var
+			bool is_member = pe.name.find(".") != std::string::npos;
+			if (is_member) {
+				auto ind = 0;
+				std::vector<std::string> tokens;
+				while (ind != std::string::npos) {
+					auto newind = pe.name.find('.', ind);
+					if (newind == std::string::npos) {
+						tokens.push_back(pe.name.substr(ind));
+						break;
+					} else {
+						tokens.push_back(pe.name.substr(ind, newind - ind));
+					}
+					ind = newind + 1;
+				}
+				auto strvar = tokens[0];
+				std::string strtype;
+				//TODO: nothing here handles shadowing
+				for (auto& e : parameters) {
+					if (e.name == strvar) {
+						strtype = e.type;
+						break;
+					}
+				}
+				if (strtype == "") {
+					std::string type_ = R"((\w+)\s*)" + strvar;
+					std::regex type_regex(type_);
+					auto words_begin = std::sregex_iterator(prefix.begin(), prefix.end(), type_regex);
+					auto words_end = std::sregex_iterator();
+					auto line_no = line_offset;
+					for (std::sregex_iterator it = words_begin; it != words_end; ++it) {
+						std::smatch match = *it;
+
+						strtype = match[1].str();
+						break; // use first
+					}
+				}
+
+				auto& str = structs.at(strtype);
+
+				tokens.erase(tokens.begin());
+				auto* m = &str.members;
+				const struct_entry::member* res = nullptr;
+				for (auto i = 0; i < tokens.size(); i++) {
+					auto& t = tokens[i];
+					for (auto& memb : *m) {
+						if (memb.name == t) {
+							i++;
+							res = &memb;
+							if (memb.type == "vec4" || memb.type == "vec3" || memb.type == "vec2" || memb.type == "float" || memb.type == "int") {
+								break;
+							}
+								
+							m = &structs.at(memb.type).members;
+						}
+					}
+				}
+				pe.type = res ? res->type : "error";
+			} else { //its a local primitive : search prefix for decl
+				for (auto& e : parameters) {
+					if (e.name == pe.name) {
+						pe.type = e.type;
+						break;
+					}
+				}
+				if (!pe.type) {
+					std::string type_ = R"((int|float|vec2|vec3|vec4)\s*)" + pe.name;
+					std::regex type_regex(type_);
+					auto words_begin = std::sregex_iterator(prefix.begin(), prefix.end(), type_regex);
+					auto words_end = std::sregex_iterator();
+					auto line_no = line_offset;
+					for (std::sregex_iterator it = words_begin; it != words_end; ++it) {
+						std::smatch match = *it;
+
+						pe.type = match[1].str();
+					}
+				}
+			}
+			
+		}
+		auto str = match.prefix().str();
+		line_no += std::count(str.begin(), str.end(), '\n');
+		pe.line = line_no;
+		probes.push_back(pe);
+	}
+	return probes;
 }
 
 void parse_pragmas(const std::string& prefix, std::unordered_map<std::string, meta>& metadata) {
@@ -167,8 +271,18 @@ void generate(const char* filename, stage_entry& se, const std::unordered_map<st
 		auto& str = structs.at(se.return_type);
 		size_t index = 0;
 		for (auto& m : str.members) {
-			result << "layout(location = " << index << ") out " << m.type << " _" << m.name << "_out;\n";
+			auto probe_it = std::find_if(se.probes.begin(), se.probes.end(), [index](auto& p) {return p.number == index; });
+			if (probe_it != se.probes.end()) {
+				result <<  m.type << " _" << m.name << "_out;\n";
+				result << "layout(location = " << index << ") out " << *probe_it->type << " _watch_" << index << ";\n";
+			} else {
+				result << "layout(location = " << index << ") out " << m.type << " _" << m.name << "_out;\n";
+			}
 			index++;
+		}
+		// emit rest of the probes
+		for (; index < se.probes.size(); index++) {
+			result << "layout(location = " << index << ") out " << *se.probes[index].type << " _watch_" << index << ";\n";
 		}
 	}
 
@@ -210,7 +324,29 @@ void generate(const char* filename, stage_entry& se, const std::unordered_map<st
 			result << ", ";
 	}
 	result << ")";
-	result << se.body << '\n';
+	auto ind = 0;
+	auto line_no = se.signature_line_number;
+	while (ind != std::string::npos) {
+		auto newind = se.body.find('\n', ind);
+		if (newind == std::string::npos) {
+			result << se.body.substr(ind);
+			break;
+		} else {
+			auto piece = se.body.substr(ind, newind - ind + 1);
+			result << piece;
+
+			auto pit = se.probes.begin();
+			while (pit != se.probes.end()) {
+				pit = std::find_if(pit, se.probes.end(), [=](auto& p) {return p.line == line_no; });
+				if (pit != se.probes.end()) {
+					result << "\t_watch_" << pit->number << " = " << pit->name << ";\n";
+					pit++;
+				}
+			}
+			line_no++;
+		}
+		ind = newind + 1;
+	}
 
 	result << "\n";
 
@@ -304,10 +440,18 @@ generate_result parse_generate(const std::string& src, const char* filename) {
 
 		se.parameters = parse_parameters(match[4].str(), parameters_per_scope);
 		se.body = match[5].str();
-		stages.push_back(std::move(se));
-
+	
 		// parse prefix for structs & metadata & includes
 		parse_context(prefix, structs, metadata);
+
+		auto param_probes = parse_probes(match[4].str(), se.signature_line_number, structs, se.parameters);
+		auto body_probes = parse_probes(se.body, se.signature_line_number, structs, se.parameters);
+
+		se.body = std::regex_replace(se.body, probe_strip_regex, "$1");
+
+		se.probes.insert(se.probes.end(), param_probes.begin(), param_probes.end());
+		se.probes.insert(se.probes.end(), body_probes.begin(), body_probes.end());
+		stages.push_back(std::move(se));
 	}
 	std::unordered_map<std::string, uint32_t> bindings;
 	for(auto& se : stages){

@@ -259,6 +259,60 @@ std::string stage_to_extension(stage_entry::type as) {
 	}
 }
 
+std::regex out_regex(R"(layout\s*\(location\s*=\s*(\d+)\)\s*out\s*([\S\s]+?);)");
+
+static bool show_watch = false;
+
+void compile_probe(vuk::PerThreadContext& ptc, const std::string& src, uint32_t line_target, const std::string& variable) {
+	auto result = parse_generate(src, fileToEdit);
+	for (const auto& [aspect, pa] : result.aspects) {
+		vuk::PipelineCreateInfo pci;
+		for (auto& ps : pa.shaders) {
+			auto dst = std::string(fileToEdit) + "." + aspect + "_watch." + stage_to_extension(ps.stage);
+
+			/*if (ps.stage == stage_entry::type::eFragment) {
+				// search for all outputs and change them into vanilla vars
+				std::smatch match;
+				std::regex_search(ps.source, match, out_regex);
+				auto pos = match.position();
+				auto modded = std::regex_replace(ps.source, out_regex, "$2;");
+				modded.insert(pos, "layout(location = 0) out vec4 _watch;\n");
+
+				auto cp = 0;
+				auto line = 0;
+				while (true) {
+					cp = modded.find('\n', cp + 1);
+					if (cp == std::string::npos)
+						return;
+					line++;
+					if (line == line_target) break;
+				}
+				auto eq = std::string("_watch = vec4(") + variable + ", 1.f);\n";
+				modded.insert(cp + 1, eq);
+				std::ofstream f(dst);
+				if (f) {
+					f << modded;
+				}
+
+			} else {
+				std::ofstream f(dst);
+				if (f) {
+					f << ps.source;
+				}
+			}*/
+			std::ofstream f(dst);
+			if (f) {
+				f << ps.source;
+			}
+
+			pci.shaders.push_back(dst);
+			ptc.ctx.invalidate_shadermodule_and_pipelines(dst);
+		}
+		ptc.ctx.create_named_pipeline("_watch", pci);
+	}
+	show_watch = true;
+}
+
 void recompile(vuk::PerThreadContext& ptc, const std::string& src) {
 	auto result = parse_generate(src, fileToEdit);
 	for (const auto& [aspect, pa] : result.aspects) {
@@ -611,7 +665,49 @@ void vuk::ExampleRunner::render() {
 			editor.CanUndo() ? "*" : " ",
 			editor.GetLanguageDefinition().mName.c_str(), fileToEdit);
 
+		editor.hover_callback = [&](unsigned line, unsigned column, const std::string& hover, const std::string& linetext) {
+			auto textToSave = editor.GetText();
+			textToSave = textToSave.substr(0, textToSave.size() - 1);
+			auto line_no = 0;
+			auto ind = 0;
+			while (ind != std::string::npos) {
+				auto newind = textToSave.find('\n', ind);
+				if (newind == std::string::npos) {
+					if (line_no == line && ind+column < textToSave.size()) {
+						textToSave.insert(ind + column, "$0");
+						break;
+					}
+				} else {
+					if (line_no == line) {
+						textToSave.insert(ind + column, "$0");
+						break;
+					}
+					line_no++;
+				}
+				ind = newind + 1;
+			}
+			try {
+				compile_probe(ptc, textToSave, line, hover);
+				auto refl = ptc.get_pipeline_reflection_info(ptc.ctx.get_named_pipeline("_watch"));
+				if ((refl.stages & vk::ShaderStageFlagBits::eFragment) == vk::ShaderStageFlagBits{}) {
+					throw "oof";
+				}
+			} catch (...) {
+				show_watch = false;
+			}
+			if (show_watch) {
+				ImGui::BeginTooltip();
+				vk::ImageViewCreateInfo ivci;
+				// TODO: only if less than 4 components
+				ivci.components.a = vk::ComponentSwizzle::eOne;
+				ImGui::Image(&ptc.make_sampled_image("_watch", ivci, {}), ImVec2(100, 100));
+				ImGui::EndTooltip();
+			}
+
+		};
+
 		editor.Render("TextEditor");
+
 		ImGui::End();
 
 		vuk::Program refl;
@@ -955,10 +1051,46 @@ void vuk::ExampleRunner::render() {
 
 		rg.mark_attachment_internal("04_texture_depth", vk::Format::eD32Sfloat, vuk::Extent2D::Framebuffer{}, vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
 		rg.mark_attachment_internal("04_texture_final", vk::Format::eR8G8B8A8Srgb, vk::Extent2D(300, 300), vuk::Samples::e1, vuk::ClearColor(0.1f, 0.2f, 0.3f, 1.f));
+
+		// TODO: copy previous pass instead
+		if (show_watch) {
+			rg.add_pass({
+				.resources = {"_watch"_image(vuk::eColorWrite), "_watch_depth"_image(vuk::eDepthStencilRW)},
+				.execute = [&](vuk::CommandBuffer& command_buffer) {
+					command_buffer
+					  .set_viewport(0, vuk::Area::Framebuffer{})
+					  .set_scissor(0, vuk::Area::Framebuffer{});
+
+					for (auto& [location, vattr] : program_params.vattrs) {
+						command_buffer.bind_vertex_buffer(location, vattr.buffer, location, vuk::Packed{vattr.format});
+					}
+					if (program_params.indices) {
+						command_buffer.bind_index_buffer(program_params.indices->buffer, vk::IndexType::eUint16);
+					}
+					for (auto& [binding, iv] : program_params.ivs) {
+						command_buffer.bind_sampled_image(0, binding, iv, vk::SamplerCreateInfo{});
+					}
+					command_buffer.bind_pipeline("_watch");
+					for (auto& [binding, buffer] : program_params.buffer) {
+						void* dst = command_buffer._map_scratch_uniform_binding(0, binding, program_params.buffer[binding].size() * sizeof(char));
+						memcpy(dst, program_params.buffer[binding].data(), program_params.buffer[binding].size() * sizeof(char));
+					}
+					if (will_we_render && program_params.indices)
+						command_buffer.draw_indexed(program_params.indices->count, 1, 0, 0, 0);
+					}
+				});
+			rg.mark_attachment_internal("_watch_depth", vk::Format::eD32Sfloat, vuk::Extent2D::Framebuffer{}, vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
+			rg.mark_attachment_internal("_watch", vk::Format::eR8G8B8A8Srgb, vk::Extent2D(300, 300), vuk::Samples::e1, vuk::ClearColor(0.1f, 0.2f, 0.3f, 1.f));
+
+			//if (ImGui::Begin("Watch", &show_watch)) {
+			//}
+			//ImGui::End();
+		}
 		
 		ImGui::Begin("Preview");
-		ImGui::Image(&ptc.make_sampled_image("04_texture_final", imgui_data.font_sci), ImVec2(200, 200));
+		ImGui::Image(&ptc.make_sampled_image("04_texture_final", {}), ImVec2(200, 200));
 		ImGui::End();
+
 
 		ImGui::Render();
 		std::string attachment_name = "voosh_final";

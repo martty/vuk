@@ -214,9 +214,8 @@ namespace vuk {
 				eInternal, eExternal, eSwapchain
 			} type;
 
-			// IV for external images
 			vuk::ImageView iv;
-			// nothing for internal
+			vk::Image image = {};
 			// swapchain for swapchain
 			Swapchain* swapchain;
 
