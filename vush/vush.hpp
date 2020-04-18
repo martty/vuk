@@ -82,10 +82,10 @@ void parse_pragmas(const std::string& prefix, std::unordered_map<std::string, me
 struct rule {
 	bool is_unique;
 	std::vector<stage_entry::type> stages;
-	mustache::mustache declaration_template = "";
-	mustache::mustache bind_template = "";
-	mustache::mustache binding_count = "";
-	mustache::mustache location_count = "";
+	mustache::mustache declaration_template = mustache::mustache("");
+	mustache::mustache bind_template = mustache::mustache("");
+	mustache::mustache binding_count = mustache::mustache("");
+	mustache::mustache location_count = mustache::mustache("");
 
 	struct parameter {
 		std::string name;

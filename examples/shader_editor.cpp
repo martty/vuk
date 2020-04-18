@@ -225,11 +225,11 @@ void load_model(vuk::PerThreadContext& ptc, const std::string& file) {
 					case TINYGLTF_TYPE_VEC2: bf.format = vk::Format::eR32G32Sfloat; break;
 					}
 				}
-				auto name = m.name + "/" + model.materials[p.material].name;
+				auto name2 = m.name + "/" + model.materials[p.material].name;
 				bf.filename = file;
 
 				bf.buffer = ptc.create_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eVertexBuffer, data).first;
-				buf_sources[name].push_back(std::move(bf));
+				buf_sources[name2].push_back(std::move(bf));
 			}
 		}
 	}
@@ -328,17 +328,21 @@ void recompile(vuk::PerThreadContext& ptc, const std::string& src) {
 }
 
 void init_members(vuk::Program::Member& m, std::vector<char>& b) {
+    glm::mat4 id(1.f);
+
 	switch (m.type) {
 	case vuk::Program::Type::evec3:
 		new (b.data() + m.offset) float[3]{ 1,1,1 }; break;
 	case vuk::Program::Type::emat4:
-		glm::mat4 id(1.f);
 		new (b.data() + m.offset) float[16]();
 		::memcpy(b.data() + m.offset, &id[0], sizeof(float) * 16); break;
 	case vuk::Program::Type::estruct:
 		for (auto& mm : m.members) {
 			init_members(mm, b);
 		}
+        break;
+    default:
+        break;
 	}
 
 }
@@ -526,6 +530,7 @@ void droppable(std::vector<std::string>& name_stack, std::string name) {
 }
 
 void parameter_ui(vuk::Program::Member& m, std::vector<char>& b, std::vector<std::string> name_stack) {
+    bool open;
 	switch (m.type) {
 	case vuk::Program::Type::evec3:
 		ImGui::PushID(m.name.c_str());
@@ -537,9 +542,9 @@ void parameter_ui(vuk::Program::Member& m, std::vector<char>& b, std::vector<std
 		ImGui::ImageButton(&voosh_res.at("mat4x4").si, ImVec2(50, 50));
 		break;
 	case vuk::Program::Type::estruct:
-		bool open = ImGui::TreeNodeEx(m.name.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
+		open = ImGui::TreeNodeEx(m.name.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
 		ImGui::NextColumn();
-		ImGui::Text(m.name.c_str());
+		ImGui::Text("%s", m.name.c_str());
 		ImGui::NextColumn();
 
 		if(open) {
@@ -551,11 +556,12 @@ void parameter_ui(vuk::Program::Member& m, std::vector<char>& b, std::vector<std
 			ImGui::TreePop();
 		}
 		return;
-
+    default:
+        return;
 	}
 	droppable(name_stack, m.name);
 	ImGui::NextColumn();
-	ImGui::Text(m.name.c_str());
+	ImGui::Text("%s", m.name.c_str());
 	ImGui::NextColumn();
 }
 
@@ -786,7 +792,7 @@ void vuk::ExampleRunner::render() {
 					ImGui::Image(&ptc.make_sampled_image(program_params.ivs[s.binding], {}), ImVec2(ImGui::GetColumnWidth(), ImGui::GetColumnWidth() * /*aspect*/ 1.f));
 					droppable(name_stack, s.name);
 					ImGui::NextColumn();
-					ImGui::Text(s.name.c_str());
+					ImGui::Text("%s", s.name.c_str());
 					ImGui::NextColumn();
 				}
 			}
@@ -879,7 +885,7 @@ void vuk::ExampleRunner::render() {
 			if (ImGui::BeginDragDropSource()) {
 				auto ptrt = &tf.connection;
 				ImGui::SetDragDropPayload(VOOSH_PAYLOAD_TYPE_CONNECTION_PTR, &ptrt, sizeof(ptrt));
-				ImGui::Text("Transform for (%d)", i);
+				ImGui::Text("Transform for (%zu)", i);
 				ImGui::EndDragDropSource();
 			}
 
@@ -930,7 +936,7 @@ void vuk::ExampleRunner::render() {
 			if (ImGui::BeginDragDropSource()) {
 				auto ptrt = &p.connection;
 				ImGui::SetDragDropPayload(VOOSH_PAYLOAD_TYPE_CONNECTION_PTR, &ptrt, sizeof(ptrt));
-				ImGui::Text("Projection (%d)", i);
+				ImGui::Text("Projection (%zu)", i);
 				ImGui::EndDragDropSource();
 			}
 
@@ -998,11 +1004,11 @@ void vuk::ExampleRunner::render() {
 					if (ImGui::BeginDragDropSource()) {
 						auto ptrt = &bf.connection;
 						ImGui::SetDragDropPayload(VOOSH_PAYLOAD_TYPE_CONNECTION_PTR, &ptrt, sizeof(ptrt));
-						ImGui::Text("Attribute for (%d)", i);
+						ImGui::Text("Attribute for (%zu)", i);
 						ImGui::EndDragDropSource();
 					}
 					ImGui::SameLine();
-					ImGui::Text(bf.attr_name.c_str());
+					ImGui::Text("%s", bf.attr_name.c_str());
 					ImGui::PopID();
 				}
 
