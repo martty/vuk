@@ -152,6 +152,18 @@ namespace vuk {
 		vuk::PipelineCreateInfo get_named_pipeline(const char* name);
 		void invalidate_shadermodule_and_pipelines(Name);
 
+		// one pool per thread
+        std::mutex one_time_pool_lock;
+		std::vector<vk::CommandPool> one_time_pools;
+
+		struct Upload {
+            vuk::Buffer dst;
+            gsl::span<unsigned char> data;
+		};
+		vk::Fence fenced_upload(gsl::span<Upload>);
+
+		Buffer allocate_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size);
+
 		void enqueue_destroy(vk::Image);
 		void enqueue_destroy(vuk::ImageView);
 		void enqueue_destroy(vk::Pipeline);

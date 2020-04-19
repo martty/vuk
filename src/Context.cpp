@@ -399,7 +399,8 @@ vuk::ShaderModule vuk::PerThreadContext::create(const create_info_t<vuk::ShaderM
 	shaderc::SpvCompilationResult result = compiler.CompileGlslToSpv(cinfo.source, shaderc_glsl_infer_from_source, cinfo.filename.c_str(), options);
 
 	if (result.GetCompilationStatus() != shaderc_compilation_status_success) {
-		throw ShaderCompilationException{ result.GetErrorMessage().c_str() };
+        std::string message = result.GetErrorMessage().c_str();
+		throw ShaderCompilationException{ message };
 	} else {
 		std::vector<uint32_t> spirv(result.cbegin(), result.cend());
 
@@ -567,6 +568,57 @@ void vuk::Context::invalidate_shadermodule_and_pipelines(Name filename) {
 				});
 		}
 	}
+}
+
+vk::Fence vuk::Context::fenced_upload(gsl::span<Upload> uploads) {
+	// get a one time command buffer
+	// auto tid = get_tid();
+    auto tid = 0;
+    {
+        std::lock_guard _(one_time_pool_lock);
+        if(one_time_pools.size() < (tid + 1)) {
+            one_time_pools.resize(tid + 1, vk::CommandPool{});
+        }
+    }
+    auto& pool = one_time_pools[tid];
+	if (pool == vk::CommandPool{}) {
+        vk::CommandPoolCreateInfo cpci;
+        cpci.queueFamilyIndex = 0; // TODO: this will break
+        cpci.flags = vk::CommandPoolCreateFlagBits::eTransient | vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
+        pool = device.createCommandPool(cpci);
+	}
+    vk::CommandBufferAllocateInfo cbai;
+    cbai.commandPool = pool;
+    cbai.commandBufferCount = 1;
+
+    auto cbuf = device.allocateCommandBuffers(cbai)[0];
+    vk::CommandBufferBeginInfo cbi;
+    cbi.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
+    cbuf.begin(cbi);
+    for(auto& upload: uploads) {
+		// create staging buffer, copy to staging
+		auto staging = allocator.allocate_buffer(vuk::MemoryUsage::eCPUonly, vk::BufferUsageFlagBits::eTransferSrc, upload.data.size(), true);
+		::memcpy(staging.mapped_ptr, upload.data.data(), upload.data.size());
+
+        vk::BufferCopy bc;
+        bc.dstOffset = upload.dst.offset;
+        bc.srcOffset = staging.offset;
+        bc.size = upload.data.size();
+        cbuf.copyBuffer(staging.buffer, upload.dst.buffer, bc);
+    }
+    cbuf.end();
+	// TODO: command buffer is leaked here
+	// get an unpooled fence
+    auto fence = device.createFence({});
+    vk::SubmitInfo si;
+    si.commandBufferCount = 1;
+    si.pCommandBuffers = &cbuf;
+    graphics_queue.submit(si, fence);
+    return fence;
+}
+
+vuk::Buffer vuk::Context::allocate_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size) {
+    return allocator.allocate_buffer(mem_usage, buffer_usage, size, false);
 }
 
 void vuk::Context::enqueue_destroy(vk::Image i) {
