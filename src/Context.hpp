@@ -93,6 +93,8 @@ namespace vuk {
 		vk::PhysicalDevice physical_device;
 		vk::Queue graphics_queue;
 		Allocator allocator;
+
+		std::mutex gfx_queue_lock;
 	private:
 		Pool<vk::CommandBuffer, FC> cbuf_pools;
 		Pool<vk::Semaphore, FC> semaphore_pools;
@@ -155,6 +157,7 @@ namespace vuk {
 		// one pool per thread
         std::mutex one_time_pool_lock;
 		std::vector<vk::CommandPool> one_time_pools;
+        uint32_t (*get_thread_index)() = nullptr;
 
 		struct Upload {
             vuk::Buffer dst;

@@ -123,14 +123,18 @@ void vuk::execute_submit_and_present_to_one(PerThreadContext& ptc, RenderGraph& 
 	vk::PipelineStageFlags flags = vk::PipelineStageFlagBits::eColorAttachmentOutput;
 	si.pWaitDstStageMask = &flags;
 	auto fence = ptc.fence_pool.acquire(1)[0];
-	ptc.ctx.graphics_queue.submit(si, fence);
-	vk::PresentInfoKHR pi;
-	pi.swapchainCount = 1;
-	pi.pSwapchains = &swapchain->swapchain;
-	pi.pImageIndices = &acq_result.value;
-	pi.waitSemaphoreCount = 1;
-	pi.pWaitSemaphores = &render_complete;
-	ptc.ctx.graphics_queue.presentKHR(pi);
+    {
+        std::lock_guard _(ptc.ctx.gfx_queue_lock);
+        ptc.ctx.graphics_queue.submit(si, fence);
+
+        vk::PresentInfoKHR pi;
+        pi.swapchainCount = 1;
+        pi.pSwapchains = &swapchain->swapchain;
+        pi.pImageIndices = &acq_result.value;
+        pi.waitSemaphoreCount = 1;
+        pi.pWaitSemaphores = &render_complete;
+        ptc.ctx.graphics_queue.presentKHR(pi);
+    }
 }
 
 bool vuk::Context::DebugUtils::enabled() {
@@ -457,10 +461,6 @@ vuk::PipelineInfo vuk::PerThreadContext::create(const create_info_t<PipelineInfo
 	plci.plci.setLayoutCount = (uint32_t)dsls.size();
 	// create gfx pipeline
 	vk::GraphicsPipelineCreateInfo gpci = cinfo.to_vk();
-    vk::PipelineColorBlendStateCreateInfo pcbsci;
-    /*pcbsci = *gpci.pColorBlendState;
-    pcbsci.pAttachments = cinfo.color_blend_attachments.data();
-    gpci.pColorBlendState = &pcbsci;*/
 	gpci.layout = pipeline_layouts.acquire(plci);
 	gpci.pStages = psscis.data();
 	gpci.stageCount = (uint32_t)psscis.size();
@@ -576,8 +576,7 @@ void vuk::Context::invalidate_shadermodule_and_pipelines(Name filename) {
 
 vk::Fence vuk::Context::fenced_upload(gsl::span<Upload> uploads) {
 	// get a one time command buffer
-	// auto tid = get_tid();
-    auto tid = 0;
+    auto tid = get_thread_index ? get_thread_index() : 0;
     {
         std::lock_guard _(one_time_pool_lock);
         if(one_time_pools.size() < (tid + 1)) {
@@ -617,7 +616,10 @@ vk::Fence vuk::Context::fenced_upload(gsl::span<Upload> uploads) {
     vk::SubmitInfo si;
     si.commandBufferCount = 1;
     si.pCommandBuffers = &cbuf;
-    graphics_queue.submit(si, fence);
+    {
+        std::lock_guard _(gfx_queue_lock);
+        graphics_queue.submit(si, fence);
+    }
     return fence;
 }
 
