@@ -30,8 +30,7 @@ namespace vuk {
 		uint64_t offset;
 
 		bool operator==(const BufferID& o) const noexcept {
-			return std::tie(vk_buffer, offset) ==
-				std::tie(o.vk_buffer, o.offset);
+			return ::memcmp(this, &o, sizeof(BufferID)) == 0;
 		}
 	};
 

@@ -4,8 +4,10 @@
 #include <utility>
 #include <optional>
 #include "Allocator.hpp"
-
+#include "FixedVector.hpp"
 #define VUK_MAX_SETS 8
+#define VUK_MAX_ATTRIBUTES 8
+#define VUK_MAX_PUSHCONSTANT_RANGES 8
 
 namespace vuk {
 	class Context;
@@ -45,7 +47,7 @@ namespace vuk {
 
 	struct Packed {
 		Packed(std::initializer_list<FormatOrIgnore> ilist) : list(ilist) {}
-		std::vector<FormatOrIgnore> list;
+		vuk::fixed_vector<FormatOrIgnore, VUK_MAX_ATTRIBUTES> list;
 	};
 
 	struct RenderGraph;
@@ -63,9 +65,9 @@ namespace vuk {
 			gsl::span<const vk::AttachmentReference> color_attachments;
 		};
 		std::optional<RenderPassInfo> ongoing_renderpass;
-		std::vector<vk::VertexInputAttributeDescription> attribute_descriptions;
-		std::vector<vk::VertexInputBindingDescription> binding_descriptions;
-		std::vector<vk::PushConstantRange> pcrs;
+		vuk::fixed_vector<vk::VertexInputAttributeDescription, VUK_MAX_ATTRIBUTES> attribute_descriptions;
+		vuk::fixed_vector<vk::VertexInputBindingDescription, VUK_MAX_ATTRIBUTES> binding_descriptions;
+		vuk::fixed_vector<vk::PushConstantRange, VUK_MAX_PUSHCONSTANT_RANGES> pcrs;
 		std::array<unsigned char, 64> push_constant_buffer;
 		std::optional<vuk::PipelineCreateInfo> next_pipeline;
 		std::optional<vuk::PipelineInfo> current_pipeline;

@@ -61,7 +61,7 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::bind_pipeline(vuk::PipelineCreateInfo pi) {
-		next_pipeline = pi;
+		next_pipeline = std::move(pi);
 		return *this;
 	}
 
@@ -70,8 +70,8 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, const Buffer& buf, unsigned first_attribute, Packed format) {
-		std::erase_if(attribute_descriptions, [&](auto& b) {return b.binding == binding; });
-		std::erase_if(binding_descriptions, [&](auto& b) {return b.binding == binding; });
+		attribute_descriptions.resize(std::distance(attribute_descriptions.begin(), std::remove_if(attribute_descriptions.begin(), attribute_descriptions.end(), [&](auto& b) {return b.binding == binding; })));
+		binding_descriptions.resize(std::distance(binding_descriptions.begin(), std::remove_if(binding_descriptions.begin(), binding_descriptions.end(), [&](auto& b) {return b.binding == binding; })));
 
 		uint32_t location = first_attribute;
 		uint32_t offset = 0;

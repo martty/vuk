@@ -337,22 +337,22 @@ namespace vuk {
 
 		void dma_task();
 
-		vuk::SampledImage& make_sampled_image(vuk::ImageView iv, vk::SamplerCreateInfo sci);
-		vuk::SampledImage& make_sampled_image(Name n, vk::SamplerCreateInfo sci);
-		vuk::SampledImage& make_sampled_image(Name n, vk::ImageViewCreateInfo ivci, vk::SamplerCreateInfo sci);
-		
-			vuk::Program get_pipeline_reflection_info(vuk::PipelineCreateInfo pci);
+        vuk::SampledImage& make_sampled_image(vuk::ImageView iv, vk::SamplerCreateInfo sci);
+        vuk::SampledImage& make_sampled_image(Name n, vk::SamplerCreateInfo sci);
+        vuk::SampledImage& make_sampled_image(Name n, vk::ImageViewCreateInfo ivci, vk::SamplerCreateInfo sci);
 
-		template<class T>
-		void destroy(T t) {
-			ctx.destroy(t);
-		}
+        vuk::Program get_pipeline_reflection_info(vuk::PipelineCreateInfo pci);
 
-		void destroy(vk::Image image);
-		void destroy(vuk::ImageView image);
-		void destroy(vuk::DescriptorSet ds);
+        template<class T>
+        void destroy(T t) {
+            ctx.destroy(t);
+        }
 
-		PipelineInfo create(const create_info_t<PipelineInfo>& cinfo);
+        void destroy(vk::Image image);
+        void destroy(vuk::ImageView image);
+        void destroy(vuk::DescriptorSet ds);
+
+        PipelineInfo create(const create_info_t<PipelineInfo>& cinfo);
 		vuk::ShaderModule create(const create_info_t<vuk::ShaderModule>& cinfo);
 		vk::RenderPass create(const create_info_t<vk::RenderPass>& cinfo);
 		vuk::RGImage create(const create_info_t<vuk::RGImage>& cinfo);

@@ -441,7 +441,7 @@ vuk::PipelineInfo vuk::PerThreadContext::create(const create_info_t<PipelineInfo
 														   // acquire pipeline layout
 	vuk::PipelineLayoutCreateInfo plci;
 	plci.dslcis = vuk::PipelineCreateInfo::build_descriptor_layouts(accumulated_reflection);
-	plci.pcrs = accumulated_reflection.push_constant_ranges;
+	plci.pcrs.insert(plci.pcrs.begin(), accumulated_reflection.push_constant_ranges.begin(), accumulated_reflection.push_constant_ranges.end());
 	plci.plci.pushConstantRangeCount = (uint32_t)accumulated_reflection.push_constant_ranges.size();
 	plci.plci.pPushConstantRanges = accumulated_reflection.push_constant_ranges.data();
 	std::array<vuk::DescriptorSetLayoutAllocInfo, VUK_MAX_SETS> dslai;
@@ -457,13 +457,17 @@ vuk::PipelineInfo vuk::PerThreadContext::create(const create_info_t<PipelineInfo
 	plci.plci.setLayoutCount = (uint32_t)dsls.size();
 	// create gfx pipeline
 	vk::GraphicsPipelineCreateInfo gpci = cinfo.to_vk();
+    vk::PipelineColorBlendStateCreateInfo pcbsci;
+    /*pcbsci = *gpci.pColorBlendState;
+    pcbsci.pAttachments = cinfo.color_blend_attachments.data();
+    gpci.pColorBlendState = &pcbsci;*/
 	gpci.layout = pipeline_layouts.acquire(plci);
 	gpci.pStages = psscis.data();
 	gpci.stageCount = (uint32_t)psscis.size();
 
 	auto pipeline = ctx.device.createGraphicsPipeline(*ctx.vk_pipeline_cache, gpci);
 	ctx.debug.set_name(pipeline, pipe_name);
-	return { pipeline, gpci.layout, dslai, accumulated_reflection };
+	return { pipeline, gpci.layout, dslai };
 }
 
 vk::Framebuffer vuk::PerThreadContext::create(const create_info_t<vk::Framebuffer>& cinfo) {

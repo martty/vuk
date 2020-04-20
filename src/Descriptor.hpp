@@ -70,12 +70,13 @@ namespace vuk {
 		DescriptorSetLayoutAllocInfo layout_info = {};
 
 		bool operator==(const SetBinding& o) const {
-			if (layout_info != o.layout_info) return false;
+            return ::memcmp(this, &o, sizeof(SetBinding)) == 0;
+			/*if (layout_info != o.layout_info) return false;
 			for (size_t i = 0; i < VUK_MAX_BINDINGS; i++) {
 				if (!used[i]) continue;
 				if (bindings[i] != o.bindings[i]) return false;
 			}
-			return true;
+			return true;*/
 		}
 	};
 
@@ -124,7 +125,7 @@ namespace std {
 			// TODO: should we hash in layout too?
 			auto mask = x.used.to_ulong();
 			unsigned long leading_ones = vuk::num_leading_ones(mask);
-			return ::hash::fnv1a::hash(reinterpret_cast<const char*>(&x.bindings[0]), leading_ones * sizeof(vuk::DescriptorBinding));
+			return ::hash::fnv1a::hash(reinterpret_cast<const char*>(&x.bindings[0]), leading_ones * sizeof(vuk::DescriptorBinding), ::hash::fnv1a::default_offset_basis);
 		}
 	};
 

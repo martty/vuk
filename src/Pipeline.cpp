@@ -56,11 +56,12 @@ namespace vuk {
 
 		color_blend_attachments.resize(1);
 		auto& pcba = color_blend_attachments[0];
+        pcba = vk::PipelineColorBlendAttachmentState{};
 		pcba.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
 	}
 
-	std::vector<vuk::DescriptorSetLayoutCreateInfo> PipelineCreateInfo::build_descriptor_layouts(Program& program) {
-		std::vector<vuk::DescriptorSetLayoutCreateInfo> dslcis;
+	vuk::fixed_vector<vuk::DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> PipelineCreateInfo::build_descriptor_layouts(Program& program) {
+		vuk::fixed_vector<vuk::DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> dslcis;
 
 		for (auto& [index, set] : program.sets) {
 			vuk::DescriptorSetLayoutCreateInfo dslci;
