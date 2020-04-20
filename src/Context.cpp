@@ -586,7 +586,7 @@ vk::Fence vuk::Context::fenced_upload(gsl::span<Upload> uploads) {
     auto& pool = one_time_pools[tid];
 	if (pool == vk::CommandPool{}) {
         vk::CommandPoolCreateInfo cpci;
-        cpci.queueFamilyIndex = 0; // TODO: this will break
+        cpci.queueFamilyIndex = 2; // TODO: this will break
         cpci.flags = vk::CommandPoolCreateFlagBits::eTransient | vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
         pool = device.createCommandPool(cpci);
 	}
@@ -617,8 +617,8 @@ vk::Fence vuk::Context::fenced_upload(gsl::span<Upload> uploads) {
     si.commandBufferCount = 1;
     si.pCommandBuffers = &cbuf;
     {
-        std::lock_guard _(gfx_queue_lock);
-        graphics_queue.submit(si, fence);
+        std::lock_guard _(xfer_queue_lock);
+        transfer_queue.submit(si, fence);
     }
     return fence;
 }

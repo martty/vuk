@@ -92,9 +92,11 @@ namespace vuk {
 		vk::Device device;
 		vk::PhysicalDevice physical_device;
 		vk::Queue graphics_queue;
+        vk::Queue transfer_queue;
 		Allocator allocator;
 
 		std::mutex gfx_queue_lock;
+        std::mutex xfer_queue_lock;
 	private:
 		Pool<vk::CommandBuffer, FC> cbuf_pools;
 		Pool<vk::Semaphore, FC> semaphore_pools;
