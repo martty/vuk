@@ -228,6 +228,7 @@ namespace vuk {
 		VkImageCreateInfo vkici = ici;
 		VmaAllocationInfo vai;
 		auto result = vmaCreateImage(allocator, &vkici, &db, &vkimg, &vout, &vai);
+        assert(result == VK_SUCCESS);
 		images.emplace(reinterpret_cast<uint64_t>(vkimg), vout);
 		return vkimg;
 	}

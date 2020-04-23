@@ -57,7 +57,7 @@ namespace vuk {
 		void free(Context&) {} // nothing to free, this is non-owning
 	};
 
-	inline vuk::SampledImage& PooledType<vuk::SampledImage>::acquire(PerThreadContext& ptc, vuk::SampledImage si) {
+	inline vuk::SampledImage& PooledType<vuk::SampledImage>::acquire(PerThreadContext&, vuk::SampledImage si) {
 		if (values.size() < (needle + 1)) {
 			needle++;
 			return *values.emplace(std::move(si));

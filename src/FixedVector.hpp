@@ -38,7 +38,7 @@ namespace vuk {
         }
 
     public:
-        static const std::size_t max_size() {
+        static std::size_t max_size() {
             return n;
         }
 

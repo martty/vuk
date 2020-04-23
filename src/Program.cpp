@@ -39,7 +39,9 @@ vuk::Program::Type to_type(spirv_cross::SPIRType s) {
 		default: assert("NYI" && 0);
 		}
 	case SPIRType::Struct: return Program::Type::estruct;
-	default: assert("NYI" && 0);
+    default:
+        assert("NYI" && 0);
+        return Program::Type::estruct;
 	}
 }
 

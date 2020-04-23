@@ -20,14 +20,6 @@ std::string slurp(const std::string& path) {
 	buf << input.rdbuf();
 	return buf.str();
 }
-
-void burp(const std::string& in, const std::string& path) {
-	std::ofstream output(path.c_str(), std::ios::trunc);
-	if (!output.is_open()) {
-	}
-	output << in;
-	output.close();
-}
 }
 
 struct_entry parse_struct(std::string name, const std::string& body) {
@@ -131,7 +123,6 @@ std::vector<probe_entry> parse_probes(const std::string& prefix, unsigned line_o
 					std::regex type_regex(type_);
 					auto words_begin = std::sregex_iterator(prefix.begin(), prefix.end(), type_regex);
 					auto words_end = std::sregex_iterator();
-					auto line_no = line_offset;
 					for (std::sregex_iterator it = words_begin; it != words_end; ++it) {
 						std::smatch match = *it;
 
@@ -172,7 +163,6 @@ std::vector<probe_entry> parse_probes(const std::string& prefix, unsigned line_o
 					std::regex type_regex(type_);
 					auto words_begin = std::sregex_iterator(prefix.begin(), prefix.end(), type_regex);
 					auto words_end = std::sregex_iterator();
-					auto line_no = line_offset;
 					for (std::sregex_iterator it = words_begin; it != words_end; ++it) {
 						std::smatch match = *it;
 
@@ -398,7 +388,7 @@ void parse_includes(const std::string& str, std::unordered_map<std::string, stru
 	for (std::sregex_iterator it = words_begin; it != words_end; ++it) {
 		std::smatch match = *it;
 		bool local = match[1].matched;
-		bool system = match[2].matched;
+		[[maybe_unused]] bool system = match[2].matched;
 		std::string full_path = std::string("../../tests/") + (local ? match[1].str() : match[2].str()); // TODO
 		auto contents = slurp(full_path);
 

@@ -40,7 +40,6 @@ namespace vuk {
 
 		vk::DescriptorType type;
 		union {
-			struct Unbound {} unbound;
 			vk::DescriptorBufferInfo buffer;
 			vuk::DescriptorImageInfo image;
 		};
