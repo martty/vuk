@@ -396,30 +396,34 @@ vk::RenderPass vuk::PerThreadContext::create(const create_info_t<vk::RenderPass>
 	return ctx.device.createRenderPass(cinfo);
 }
 
-vuk::ShaderModule vuk::PerThreadContext::create(const create_info_t<vuk::ShaderModule>& cinfo) {
-	shaderc::Compiler compiler;
-	shaderc::CompileOptions options;
+vuk::ShaderModule vuk::Context::create(const create_info_t<vuk::ShaderModule>& cinfo) {
+    shaderc::Compiler compiler;
+    shaderc::CompileOptions options;
 
-	shaderc::SpvCompilationResult result = compiler.CompileGlslToSpv(cinfo.source, shaderc_glsl_infer_from_source, cinfo.filename.c_str(), options);
+    shaderc::SpvCompilationResult result = compiler.CompileGlslToSpv(cinfo.source, shaderc_glsl_infer_from_source, cinfo.filename.c_str(), options);
 
-	if (result.GetCompilationStatus() != shaderc_compilation_status_success) {
+    if(result.GetCompilationStatus() != shaderc_compilation_status_success) {
         std::string message = result.GetErrorMessage().c_str();
-		throw ShaderCompilationException{ message };
-	} else {
-		std::vector<uint32_t> spirv(result.cbegin(), result.cend());
+        throw ShaderCompilationException{message};
+    } else {
+        std::vector<uint32_t> spirv(result.cbegin(), result.cend());
 
-		spirv_cross::Compiler refl(spirv.data(), spirv.size());
-		vuk::Program p;
-		auto stage = p.introspect(refl);
+        spirv_cross::Compiler refl(spirv.data(), spirv.size());
+        vuk::Program p;
+        auto stage = p.introspect(refl);
 
-		vk::ShaderModuleCreateInfo moduleCreateInfo;
-		moduleCreateInfo.codeSize = spirv.size() * sizeof(uint32_t);
-		moduleCreateInfo.pCode = (uint32_t*)spirv.data();
-		auto module = ctx.device.createShaderModule(moduleCreateInfo);
-		std::string name = "ShaderModule: " + cinfo.filename;
-		ctx.debug.set_name(module, name);
-		return { module, p, stage };
-	}
+        vk::ShaderModuleCreateInfo moduleCreateInfo;
+        moduleCreateInfo.codeSize = spirv.size() * sizeof(uint32_t);
+        moduleCreateInfo.pCode = (uint32_t*)spirv.data();
+        auto module = device.createShaderModule(moduleCreateInfo);
+        std::string name = "ShaderModule: " + cinfo.filename;
+        debug.set_name(module, name);
+        return {module, p, stage};
+    }
+}
+
+vuk::ShaderModule vuk::PerThreadContext::create(const create_info_t<vuk::ShaderModule>& cinfo) {
+    return ctx.create(cinfo);
 }
 
 vuk::PipelineInfo vuk::PerThreadContext::create(const create_info_t<PipelineInfo>& cinfo) {
@@ -572,6 +576,16 @@ void vuk::Context::invalidate_shadermodule_and_pipelines(Name filename) {
 				});
 		}
 	}
+}
+
+void vuk::Context::compile_shader(Name path) {
+	vuk::ShaderModuleCreateInfo sci;
+	sci.filename = path;
+    sci.source = slurp(std::string(path));
+	auto sm = shader_modules.remove(sci);
+    if(sm)
+		device.destroy(sm->shader_module);
+    shader_modules.acquire(sci);
 }
 
 vk::Fence vuk::Context::fenced_upload(gsl::span<Upload> uploads) {

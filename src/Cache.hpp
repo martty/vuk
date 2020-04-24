@@ -382,6 +382,8 @@ namespace vuk {
 			return nullptr;
 		}
 
+		T& acquire(const create_info_t<T>& ci);
+
 		struct PFView {
 			InflightContext& ifc;
 			Cache& cache;

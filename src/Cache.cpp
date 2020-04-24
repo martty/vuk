@@ -2,37 +2,52 @@
 #include "Context.hpp"
 
 namespace vuk {
-	template<class T>
-	T& Cache<T>::PFPTView::acquire(const create_info_t<T>& ci) {
-		auto& cache = view.cache;
-		std::shared_lock _(cache.cache_mtx);
-		if (auto it = cache.lru_map.find(ci); it != cache.lru_map.end()) {
-			it->second.last_use_frame = ptc.ifc.absolute_frame;
-			return *it->second.ptr;
-		}
-		else {
-			_.unlock();
-			std::unique_lock ulock(cache.cache_mtx);
-			auto pit = cache.pool.emplace(ptc.create(ci));
-			typename Cache::LRUEntry entry{ &*pit, ptc.ifc.absolute_frame };
-			it = cache.lru_map.emplace(ci, entry).first;
-			return *it->second.ptr;
-		}
-	}
-	template<class T>
-	void Cache<T>::PFPTView::collect(size_t threshold) {
-		auto& cache = view.cache;
-		std::unique_lock _(cache.cache_mtx);
-		for (auto it = cache.lru_map.begin(); it != cache.lru_map.end(); ) {
-			if (ptc.ifc.absolute_frame - it->second.last_use_frame > threshold) {
-				ptc.destroy(*it->second.ptr);
-				cache.pool.erase(cache.pool.get_iterator_from_pointer(it->second.ptr));
-				it = cache.lru_map.erase(it);
-			} else {
-				++it;
-			}
-		}
-	}
+    template<class T>
+    T& Cache<T>::PFPTView::acquire(const create_info_t<T>& ci) {
+        auto& cache = view.cache;
+        std::shared_lock _(cache.cache_mtx);
+        if(auto it = cache.lru_map.find(ci); it != cache.lru_map.end()) {
+            it->second.last_use_frame = ptc.ifc.absolute_frame;
+            return *it->second.ptr;
+        } else {
+            _.unlock();
+            std::unique_lock ulock(cache.cache_mtx);
+            auto pit = cache.pool.emplace(ptc.create(ci));
+            typename Cache::LRUEntry entry{&*pit, ptc.ifc.absolute_frame};
+            it = cache.lru_map.emplace(ci, entry).first;
+            return *it->second.ptr;
+        }
+    }
+    template<class T>
+    void Cache<T>::PFPTView::collect(size_t threshold) {
+        auto& cache = view.cache;
+        std::unique_lock _(cache.cache_mtx);
+        for(auto it = cache.lru_map.begin(); it != cache.lru_map.end();) {
+            if(ptc.ifc.absolute_frame - it->second.last_use_frame > threshold) {
+                ptc.destroy(*it->second.ptr);
+                cache.pool.erase(cache.pool.get_iterator_from_pointer(it->second.ptr));
+                it = cache.lru_map.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+
+    template<>
+    ShaderModule& Cache<ShaderModule>::acquire(const create_info_t<ShaderModule>& ci) {
+        std::shared_lock _(cache_mtx);
+        if(auto it = lru_map.find(ci); it != lru_map.end()) {
+            it->second.last_use_frame = UINT64_MAX;
+            return *it->second.ptr;
+        } else {
+            _.unlock();
+            std::unique_lock ulock(cache_mtx);
+            auto pit = pool.emplace(ctx.create(ci));
+            typename Cache::LRUEntry entry{&*pit, UINT_MAX};
+            it = lru_map.emplace(ci, entry).first;
+            return *it->second.ptr;
+        }
+    }
 	
 	template<class T>
 	Cache<T>::~Cache() {

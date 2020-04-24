@@ -44,8 +44,8 @@ struct stage_entry {
 	std::string context;
 	std::string return_type;
 	std::string aspect_name;
-	enum class type {
-		eVertex, eTCS, eTES, eGeometry, eFragment, eCompute
+	enum type {
+		eVertex = 0, eTCS = 1, eTES = 2, eGeometry = 3, eFragment = 4, eCompute = 5
 	} stage;
 	std::string stage_as_string;
 	size_t signature_line_number;
