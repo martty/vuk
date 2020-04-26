@@ -38,9 +38,15 @@ namespace vuk {
 		friend class CommandBuffer;
 		friend class Context;
 	public:
+        struct FString {
+            char data[128];
+		};
+
 		/* filled out by the user */
-        void add_shader(std::string filename) {
-            shaders.push_back(filename);
+        void add_shader(std::string_view filename) {
+            auto& n = shaders.emplace_back();
+            strncpy(n.data, filename.data(), filename.size());
+            n.data[filename.size()] = '\0';
             hash_combine(shader_hash, filename);
 		}
 
@@ -64,7 +70,7 @@ namespace vuk {
 		vk::RenderPass render_pass;
 		uint32_t subpass;
         uint64_t shader_hash = 0;
-		vuk::fixed_vector<std::string, 5> shaders;
+		vuk::fixed_vector<FString, 5> shaders;
 
 		friend struct std::hash<PipelineCreateInfo>;
         friend class PerThreadContext;

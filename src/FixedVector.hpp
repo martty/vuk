@@ -120,8 +120,8 @@ namespace vuk {
         }
 
         template<typename... Tn>
-        void emplace_back(Tn&&... argn) {
-            new(ptrat(len++)) T(std::forward<Tn>(argn)...);
+        T& emplace_back(Tn&&... argn) {
+            return *(new(ptrat(len++)) T(std::forward<Tn>(argn)...));
         }
 
         void pop_back() {

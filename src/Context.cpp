@@ -433,8 +433,8 @@ vuk::PipelineInfo vuk::PerThreadContext::create(const create_info_t<PipelineInfo
 	vuk::Program accumulated_reflection;
 	std::string pipe_name = "Pipeline:";
 	for (auto& path : cinfo.shaders) {
-		auto contents = slurp(path);
-		auto& sm = shader_modules.acquire({ contents, path });
+		auto contents = slurp(std::string(path.data));
+		auto& sm = shader_modules.acquire({ contents, std::string(path.data) });
 		vk::PipelineShaderStageCreateInfo shaderStage;
 		shaderStage.pSpecializationInfo = nullptr;
 		shaderStage.stage = sm.stage;
@@ -442,7 +442,7 @@ vuk::PipelineInfo vuk::PerThreadContext::create(const create_info_t<PipelineInfo
 		shaderStage.pName = "main"; //TODO: make param
 		psscis.push_back(shaderStage);
 		accumulated_reflection.append(sm.reflection_info);
-		pipe_name += path + "+";
+		pipe_name += std::string(path.data) + "+";
 	}
 	pipe_name = pipe_name.substr(0, pipe_name.size() - 1); //trim off last "+"
 														   // acquire descriptor set layouts (1 per set)
@@ -547,8 +547,8 @@ vuk::Program vuk::PerThreadContext::get_pipeline_reflection_info(vuk::PipelineCr
 	// TODO: check if we already have this in the cache, then it can just be returned
 	vuk::Program accumulated_reflection;
 	for (auto& path : pci.shaders) {
-		auto contents = slurp(path);
-		auto& sm = shader_modules.acquire({ contents, path });
+		auto contents = slurp(path.data);
+		auto& sm = shader_modules.acquire({ contents, std::string(path.data) });
 		accumulated_reflection.append(sm.reflection_info);
 	}
 	return accumulated_reflection;
@@ -562,20 +562,22 @@ void vuk::Context::invalidate_shadermodule_and_pipelines(Name filename) {
 	vuk::ShaderModuleCreateInfo sci;
 	sci.filename = filename;
 	auto sm = shader_modules.remove(sci);
-	if (sm) {
-		device.destroy(sm->shader_module);
-		auto pipe = pipeline_cache.remove([&](auto& ci, auto& p) {
-			if (std::find(ci.shaders.begin(), ci.shaders.end(), std::string(filename)) != ci.shaders.end()) return true;
-			return false;
-			});
-		while (pipe != std::nullopt) {
-			enqueue_destroy(pipe->pipeline);
-			pipe = pipeline_cache.remove([&](auto& ci, auto& p) {
-				if (std::find(ci.shaders.begin(), ci.shaders.end(), std::string(filename)) != ci.shaders.end()) return true;
-				return false;
-				});
-		}
-	}
+    if(sm) {
+        device.destroy(sm->shader_module);
+        auto pipe = pipeline_cache.remove([&](auto& ci, auto& p) {
+            if(std::find_if(ci.shaders.begin(), ci.shaders.end(), [=](auto& t) { return strcmp(filename.data(), t.data) == 0; }) != ci.shaders.end())
+                return true;
+            return false;
+        });
+        while(pipe != std::nullopt) {
+            enqueue_destroy(pipe->pipeline);
+            pipe = pipeline_cache.remove([&](auto& ci, auto& p) {
+                if(std::find_if(ci.shaders.begin(), ci.shaders.end(), [=](auto& t) { return strcmp(filename.data(), t.data) == 0; }) != ci.shaders.end())
+                    return true;
+                return false;
+            });
+        }
+    }
 }
 
 void vuk::Context::compile_shader(Name path) {
