@@ -106,7 +106,7 @@ namespace vuk {
 	}
 
 	template class PerFrameCache<vuk::RGImage, Context::FC>;
-	template class PerFrameCache<Allocator::Pool, Context::FC>;
+	template class PerFrameCache<Allocator::Linear, Context::FC>;
 	template class PerFrameCache<vuk::DescriptorPool, Context::FC>;
 	
 	vk::DescriptorPool DescriptorPool::get_pool(PerThreadContext& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info) {

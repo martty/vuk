@@ -106,7 +106,7 @@ namespace vuk {
 		Cache<vk::RenderPass> renderpass_cache;
 		Cache<vk::Framebuffer> framebuffer_cache;
 		PerFrameCache<RGImage, FC> transient_images;
-		PerFrameCache<Allocator::Pool, FC> scratch_buffers;
+		PerFrameCache<Allocator::Linear, FC> scratch_buffers;
 		PerFrameCache<vuk::DescriptorPool, FC> pool_cache;
 		Cache<vuk::DescriptorSet> descriptor_sets;
 		Cache<vk::Sampler> sampler_cache;
@@ -187,6 +187,7 @@ namespace vuk {
 	private:
 		void destroy(const RGImage& image);
 		void destroy(const Allocator::Pool& v);
+		void destroy(const Allocator::Linear& v);
 		void destroy(const vuk::DescriptorPool& dp);
 		void destroy(vuk::PipelineInfo pi);
 		void destroy(vuk::ShaderModule sm);
@@ -216,7 +217,7 @@ namespace vuk {
 		Cache<vk::RenderPass>::PFView renderpass_cache;
 		Cache<vk::Framebuffer>::PFView framebuffer_cache;
 		PerFrameCache<vuk::RGImage, Context::FC>::PFView transient_images;
-		PerFrameCache<Allocator::Pool, Context::FC>::PFView scratch_buffers;
+		PerFrameCache<Allocator::Linear, Context::FC>::PFView scratch_buffers;
 		Cache<vuk::DescriptorSet>::PFView descriptor_sets;
 		Cache<vk::Sampler>::PFView sampler_cache;
 		Pool<vuk::SampledImage, Context::FC>::PFView sampled_images;
@@ -282,7 +283,7 @@ namespace vuk {
 		Cache<vk::RenderPass>::PFPTView renderpass_cache;
 		Cache<vk::Framebuffer>::PFPTView framebuffer_cache;
 		PerFrameCache<vuk::RGImage, Context::FC>::PFPTView transient_images;
-		PerFrameCache<Allocator::Pool, Context::FC>::PFPTView scratch_buffers;
+		PerFrameCache<Allocator::Linear, Context::FC>::PFPTView scratch_buffers;
 		Cache<vuk::DescriptorSet>::PFPTView descriptor_sets;
 		Cache<vk::Sampler>::PFPTView sampler_cache;
 		Pool<vuk::SampledImage, Context::FC>::PFPTView sampled_images;
@@ -363,7 +364,8 @@ namespace vuk {
 		vuk::ShaderModule create(const create_info_t<vuk::ShaderModule>& cinfo);
 		vk::RenderPass create(const create_info_t<vk::RenderPass>& cinfo);
 		vuk::RGImage create(const create_info_t<vuk::RGImage>& cinfo);
-		vuk::Allocator::Pool create(const create_info_t<vuk::Allocator::Pool>& cinfo);
+		//vuk::Allocator::Pool create(const create_info_t<vuk::Allocator::Pool>& cinfo);
+		vuk::Allocator::Linear create(const create_info_t<vuk::Allocator::Linear>& cinfo);
 		vuk::DescriptorPool create(const create_info_t<vuk::DescriptorPool>& cinfo);
 		vuk::DescriptorSet create(const create_info_t<vuk::DescriptorSet>& cinfo);
 		vk::Framebuffer create(const create_info_t<vk::Framebuffer>& cinfo);

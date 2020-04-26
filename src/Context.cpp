@@ -375,9 +375,14 @@ vuk::DescriptorSet vuk::PerThreadContext::create(const create_info_t<vuk::Descri
 	return { ds, cinfo.layout_info };
 }
 
-vuk::Allocator::Pool vuk::PerThreadContext::create(const create_info_t<vuk::Allocator::Pool>& cinfo) {
+/*vuk::Allocator::Pool vuk::PerThreadContext::create(const create_info_t<vuk::Allocator::Pool>& cinfo) {
 	return ctx.allocator.allocate_pool(cinfo.mem_usage, cinfo.buffer_usage);
+}*/
+
+vuk::Allocator::Linear vuk::PerThreadContext::create(const create_info_t<vuk::Allocator::Linear>& cinfo) {
+	return ctx.allocator.allocate_linear(cinfo.mem_usage, cinfo.buffer_usage);
 }
+
 
 vuk::RGImage vuk::PerThreadContext::create(const create_info_t<vuk::RGImage>& cinfo) {
 	RGImage res;
@@ -670,8 +675,13 @@ void vuk::Context::destroy(const RGImage& image) {
 }
 
 void vuk::Context::destroy(const Allocator::Pool& v) {
-	allocator.destroy_pool(v);
+	allocator.destroy(v);
 }
+
+void vuk::Context::destroy(const Allocator::Linear& v) {
+	allocator.destroy(v);
+}
+
 
 void vuk::Context::destroy(const vuk::DescriptorPool& dp) {
 	for (auto& p : dp.pools) {

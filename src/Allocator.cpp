@@ -102,12 +102,64 @@ namespace vuk {
 		poolCreateInfo.memoryTypeIndex = memTypeIndex;
 		poolCreateInfo.blockSize = 0;
 		poolCreateInfo.maxBlockCount = 0;
-		poolCreateInfo.flags = VMA_POOL_CREATE_LINEAR_ALGORITHM_BIT;
 
 		VmaPool pool;
 		vmaCreatePool(allocator, &poolCreateInfo, &pool);
 		return pool;
 	}
+
+	// Aligns given value up to nearest multiply of align value. For example: VmaAlignUp(11, 8) = 16.
+    // Use types like uint32_t, uint64_t as T.
+    template<typename T>
+    static inline T VmaAlignUp(T val, T align) {
+        return (val + align - 1) / align * align;
+    }
+
+	Buffer Allocator::_allocate_buffer(Linear& pool, size_t size, bool create_mapped) {
+        if(size == 0) {
+            return {.buffer = vk::Buffer{}, .size = 0};
+        }
+		// TODO: use queried alignment
+        auto align_dif = VmaAlignUp(pool.needle, 0x10ull) - pool.needle;
+        bool can_satisfy = pool.allocations.size() > 0 && (pool.block_size - pool.needle > (size + align_dif));
+        if(!can_satisfy) {
+            vk::BufferCreateInfo bci;
+            bci.size = pool.block_size;
+            bci.usage = pool.usage;
+
+            VmaAllocationCreateInfo vaci = {};
+            if(create_mapped)
+                vaci.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
+            vaci.usage = pool.mem_usage;
+
+            VmaAllocation res;
+            VmaAllocationInfo vai;
+
+            auto mem_reqs = pool.mem_reqs;
+            mem_reqs.size = size;
+            VkMemoryRequirements vkmem_reqs = mem_reqs;
+            VkBuffer buffer;
+			//real_alloc_callback = pool_cb;
+            auto vkbci = (VkBufferCreateInfo)bci;
+            auto result = vmaCreateBuffer(allocator, &vkbci, &vaci, &buffer, &res, &vai);
+            //real_alloc_callback = noop_cb;
+            assert(result == VK_SUCCESS);
+            pool.allocations.emplace_back(res, vk::DeviceMemory(vai.deviceMemory), vai.offset, vk::Buffer(buffer), vai.pMappedData);
+            pool.needle = 0;
+            if(pool.allocations.size() > 1)
+                pool.current_buffer++;
+        }
+        auto& current_alloc = pool.allocations[pool.current_buffer];
+        Buffer b;
+        b.buffer = std::get<vk::Buffer>(current_alloc);
+        b.device_memory = std::get<vk::DeviceMemory>(current_alloc);
+        b.offset = pool.needle + align_dif;
+        b.size = size;
+        b.mapped_ptr = (unsigned char*)std::get<void*>(current_alloc) + pool.needle + align_dif;
+
+		pool.needle += size + align_dif;
+        return b;
+    }
 	
 	Buffer Allocator::_allocate_buffer(Pool& pool, size_t size, bool create_mapped) {
 		if (size == 0) {
@@ -165,6 +217,22 @@ namespace vuk {
 		return pi;
 	}
 
+	Allocator::Linear Allocator::allocate_linear(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage) {
+		std::lock_guard _(mutex);
+
+		vk::BufferCreateInfo bci;
+		bci.size = 1024; // ignored
+		bci.usage = buffer_usage;
+
+		Linear pi;
+		auto testbuff = device.createBuffer(bci);
+		pi.mem_reqs = (VkMemoryRequirements)device.getBufferMemoryRequirements(testbuff);
+		device.destroy(testbuff);
+		pi.usage = buffer_usage;
+		pi.mem_usage = VmaMemoryUsage(to_integral(mem_usage));
+		return pi;
+	}
+
 	// allocate buffer from an internally managed pool
 	Buffer Allocator::allocate_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, bool create_mapped) {
 		std::lock_guard _(mutex);
@@ -193,9 +261,21 @@ namespace vuk {
 		return _allocate_buffer(pool, size, create_mapped);
 	}
 
-	void Allocator::reset_pool(Pool pool) {
+	// allocate a buffer from an externally managed linear pool
+	Buffer Allocator::allocate_buffer(Linear& pool, size_t size, bool create_mapped) {
+		std::lock_guard _(mutex);
+		return _allocate_buffer(pool, size, create_mapped);
+	}
+
+	void Allocator::reset_pool(Pool& pool) {
 		std::lock_guard _(mutex);
 		vmaResetPool(allocator, pool.pool);
+	}
+
+	void Allocator::reset_pool(Linear& pool) {
+		std::lock_guard _(mutex);
+        pool.current_buffer = 0;
+        pool.needle = 0;
 	}
 
 	void Allocator::free_buffer(const Buffer& b) {
@@ -205,7 +285,7 @@ namespace vuk {
 		buffer_allocations.erase(bufid);
 	}
 
-	void Allocator::destroy_pool(Pool pool) {
+	void Allocator::destroy(const Pool& pool) {
 		std::lock_guard _(mutex);
 		vmaResetPool(allocator, pool.pool);
 		vmaForceUnmapPool(allocator, pool.pool);
@@ -214,6 +294,14 @@ namespace vuk {
 		}
 		vmaDestroyPool(allocator, pool.pool);
 	}
+
+	void Allocator::destroy(const Linear& pool) {
+		std::lock_guard _(mutex);
+		for (auto& [va, mem, offset, buffer, map] : pool.allocations) {
+            vmaDestroyBuffer(allocator, (VkBuffer)buffer, va);
+		}
+	}
+
 
 	vk::Image Allocator::create_image_for_rendertarget(vk::ImageCreateInfo ici) {
 		std::lock_guard _(mutex);
@@ -255,7 +343,7 @@ namespace vuk {
 	}
 	Allocator::~Allocator() {
 		for (auto& [ps, p] : pools) {
-			destroy_pool(p);
+			destroy(p);
 		}
 		vmaDestroyAllocator(allocator);
 	}

@@ -66,6 +66,16 @@ namespace vuk {
 			vk::BufferUsageFlags usage;
 			std::vector<vk::Buffer> buffers;
 		};
+
+		struct Linear {
+            size_t current_buffer = 0;
+            size_t needle = 0;
+			vk::MemoryRequirements mem_reqs;
+            VmaMemoryUsage mem_usage;
+			vk::BufferUsageFlags usage;
+            std::vector<std::tuple<VmaAllocation, vk::DeviceMemory, size_t, vk::Buffer, void*>> allocations;
+            size_t block_size = 1024 * 1024;
+		};
 	private:
 		std::mutex mutex;
 		struct PoolAllocHelper {
@@ -100,14 +110,21 @@ namespace vuk {
 
 		// allocate an externally managed pool
 		Pool allocate_pool(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage);
+		// allocate an externally managed linear pool
+		Linear allocate_linear(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage);
 		// allocate buffer from an internally managed pool
 		Buffer allocate_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, bool create_mapped);
 		// allocate a buffer from an externally managed pool
 		Buffer allocate_buffer(Pool& pool, size_t size, bool create_mapped);
+        // allocate a buffer from an externally managed linear pool
+		Buffer allocate_buffer(Linear& pool, size_t size, bool create_mapped);
 
-		void reset_pool(Pool pool);
+		void reset_pool(Pool& pool);
+		void reset_pool(Linear& pool);
+
 		void free_buffer(const Buffer& b);
-		void destroy_pool(Pool pool);
+		void destroy(const Pool& pool);
+		void destroy(const Linear& pool);
 		
 		vk::Image create_image_for_rendertarget(vk::ImageCreateInfo ici);
 		vk::Image create_image(vk::ImageCreateInfo ici);
@@ -117,9 +134,15 @@ namespace vuk {
 		// not locked, must be called from a locked fn
 		VmaPool _create_pool(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage);
 		Buffer _allocate_buffer(Pool& pool, size_t size, bool create_mapped);
+		Buffer _allocate_buffer(Linear& pool, size_t size, bool create_mapped);
 	};
 
 	template<> struct create_info<Allocator::Pool> {
 		using type = PoolSelect;
 	};
+
+	template<> struct create_info<Allocator::Linear> {
+		using type = PoolSelect;
+	};
+
 };
