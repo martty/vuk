@@ -56,6 +56,41 @@ namespace vuk {
             std::copy(initializer.begin(), initializer.begin() + len, data());
         }
 
+        fixed_vector(const fixed_vector& o) {
+            std::uninitialized_copy(o.begin(), o.end(), begin());
+            len = o.len;
+        }
+
+        fixed_vector& operator=(const fixed_vector& o) {
+            auto existing = std::min(len, o.len);
+            std::copy_n(o.begin(), existing, begin());
+            std::uninitialized_copy(o.begin() + existing, o.end(), begin() + existing);
+            resize(o.len);
+            return *this;
+        }
+
+
+        fixed_vector(fixed_vector&& o) {
+            std::uninitialized_move(o.begin(), o.end(), begin());
+            len = o.len;
+            o.resize(0);
+        }
+
+        fixed_vector& operator=(fixed_vector&& o) {
+            auto existing = std::min(len, o.len);
+            std::copy_n(std::make_move_iterator(o.begin()), existing, begin());
+            std::uninitialized_move(o.begin() + existing, o.end(), begin() + existing);
+            resize(o.len);
+            o.resize(0);
+            return *this;
+        }
+
+        ~fixed_vector() {
+            for (auto i = 0; i < len; i++) {
+                ptrat(i)->~T();
+            }
+        }
+
         bool empty() const {
             return len < 1;
         }
@@ -101,6 +136,8 @@ namespace vuk {
         }
 
         void resize(std::size_t sz) {
+            while(len > sz)
+                pop_back();
             len = std::min(sz, n);
         }
 
