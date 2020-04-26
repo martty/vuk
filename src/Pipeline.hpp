@@ -39,7 +39,10 @@ namespace vuk {
 		friend class Context;
 	public:
 		/* filled out by the user */
-		vuk::fixed_vector<std::string, 5> shaders;
+        void add_shader(std::string filename) {
+            shaders.push_back(filename);
+            hash_combine(shader_hash, filename);
+		}
 
 		vk::PipelineInputAssemblyStateCreateInfo input_assembly_state;
 		vuk::fixed_vector<vk::VertexInputBindingDescription, VUK_MAX_ATTRIBUTES> binding_descriptions;
@@ -51,7 +54,7 @@ namespace vuk {
 
 		void set_blend(size_t attachment_index, BlendPreset);
 		void set_blend(BlendPreset);
-	private:
+	//private:
 		/* filled out by vuk */
 		vk::PipelineVertexInputStateCreateInfo vertex_input_state;
 		vk::PipelineViewportStateCreateInfo viewport_state;
@@ -60,15 +63,40 @@ namespace vuk {
 		vk::PipelineMultisampleStateCreateInfo multisample_state;
 		vk::RenderPass render_pass;
 		uint32_t subpass;
+        uint64_t shader_hash = 0;
+		vuk::fixed_vector<std::string, 5> shaders;
 
+		friend struct std::hash<PipelineCreateInfo>;
+        friend class PerThreadContext;
 	public:
 		PipelineCreateInfo();
+
+		PipelineCreateInfo(const PipelineCreateInfo& o) {
+            memcpy(this, &o, offsetof(PipelineCreateInfo, shaders));
+            shaders = o.shaders;
+		}
+
+		PipelineCreateInfo& operator=(const PipelineCreateInfo& o) {
+			memcpy(this, &o, offsetof(PipelineCreateInfo, shaders));
+            shaders = o.shaders;
+            return *this;
+		}
+
+		PipelineCreateInfo(PipelineCreateInfo&& o) {
+            memcpy(this, &o, offsetof(PipelineCreateInfo, shaders));
+            shaders = std::move(o.shaders);
+		}
+
+		PipelineCreateInfo& operator=(PipelineCreateInfo&& o) {
+			memcpy(this, &o, offsetof(PipelineCreateInfo, shaders));
+            shaders = std::move(o.shaders);
+            return *this;
+		}
 		
 		vk::GraphicsPipelineCreateInfo to_vk() const;
 		static vuk::fixed_vector<vuk::DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> build_descriptor_layouts(Program&);
 		bool operator==(const PipelineCreateInfo& o) const {
-			return std::tie(shaders, binding_descriptions, attribute_descriptions, input_assembly_state, rasterization_state, color_blend_attachments, viewport_state, dynamic_states, depth_stencil_state, multisample_state, render_pass, subpass) ==
-				std::tie(o.shaders, o.binding_descriptions, o.attribute_descriptions, o.input_assembly_state, o.rasterization_state, o.color_blend_attachments, o.viewport_state, o.dynamic_states, o.depth_stencil_state, o.multisample_state, o.render_pass, o.subpass);
+            return memcmp(this, &o, offsetof(PipelineCreateInfo, shaders)) == 0;
 		}
 	};
 
@@ -110,10 +138,7 @@ namespace std {
 	template <>
 	struct hash<vuk::PipelineCreateInfo> {
 		size_t operator()(vuk::PipelineCreateInfo const & x) const noexcept {
-			size_t h = 0;
-			// TODO: better hash
-			hash_combine(h, x.shaders);
-			return h;
+            return x.shader_hash;
 		}
 	};
 

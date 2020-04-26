@@ -42,21 +42,28 @@ namespace vuk {
             return n;
         }
 
-        fixed_vector() : len(0) {}
+        fixed_vector(): len(0) {
+            memset(&items, 0, sizeof(T) * n);
+        }
 
-        fixed_vector(std::size_t capacity) : len(std::min(n, capacity)) {}
+        fixed_vector(std::size_t capacity) : len(std::min(n, capacity)) {
+            memset(&items, 0, sizeof(T) * n);
+        }
 
         template<std::size_t c>
         fixed_vector(const T(&arr)[c]) : len(c) {
+            memset(&items, 0, sizeof(T) * n);
             static_assert(c < n, "Array too large to initialize fixed_vector");
             std::copy(std::addressof(arr[0]), std::addressof(arr[c]), data());
         }
 
         fixed_vector(std::initializer_list<T> initializer) : len(std::min(n, initializer.size())) {
+            memset(&items, 0, sizeof(T) * n);
             std::copy(initializer.begin(), initializer.begin() + len, data());
         }
 
         fixed_vector(const fixed_vector& o) {
+            memset(&items, 0, sizeof(T) * n);
             std::uninitialized_copy(o.begin(), o.end(), begin());
             len = o.len;
         }
@@ -71,6 +78,7 @@ namespace vuk {
 
 
         fixed_vector(fixed_vector&& o) {
+            memset(&items, 0, sizeof(T) * n);
             std::uninitialized_move(o.begin(), o.end(), begin());
             len = o.len;
             o.resize(0);
@@ -136,13 +144,23 @@ namespace vuk {
         }
 
         void resize(std::size_t sz) {
+            auto old_len = len;
             while(len > sz)
                 pop_back();
+            if(old_len > len) {
+                memset(reinterpret_cast<char*>(&items) + len * sizeof(T), 0, sizeof(T) * (old_len - len));
+            }
             len = std::min(sz, n);
         }
 
         void resize(std::size_t sz, const value_type& value) {
             auto old_len = len;
+            while(len > sz)
+                pop_back();
+            if(old_len > len) {
+                memset(reinterpret_cast<char*>(&items) + len * sizeof(T), 0, sizeof(T) * (old_len - len));
+            }
+
             len = std::min(sz, n);
 
             std::fill(begin() + old_len, begin() + len, value);

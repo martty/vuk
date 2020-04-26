@@ -31,6 +31,16 @@ namespace vuk {
 	}
 	// defaults
 	PipelineCreateInfo::PipelineCreateInfo() {
+		// perform zeroing of padding bits
+        memset(this, 0, offsetof(PipelineCreateInfo, shaders));
+        new(&input_assembly_state) vk::PipelineInputAssemblyStateCreateInfo{};
+        new(&rasterization_state) vk::PipelineRasterizationStateCreateInfo{};
+        new(&color_blend_state) vk::PipelineColorBlendStateCreateInfo{};
+        new(&depth_stencil_state) vk::PipelineDepthStencilStateCreateInfo{};
+        new(&vertex_input_state) vk::PipelineVertexInputStateCreateInfo{};
+        new(&viewport_state) vk::PipelineViewportStateCreateInfo{};
+        new(&dynamic_state) vk::PipelineDynamicStateCreateInfo{};
+        new(&multisample_state) vk::PipelineMultisampleStateCreateInfo{};
 		// One viewport
 		viewport_state.viewportCount = 1;
 		// One scissor rectangle

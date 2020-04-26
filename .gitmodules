@@ -41,3 +41,6 @@
 [submodule "ext/tinygltf"]
 	path = ext/tinygltf
 	url = https://github.com/syoyo/tinygltf
+[submodule "ext/flat_hash_map"]
+	path = ext/flat_hash_map
+	url = https://github.com/skarupke/flat_hash_map

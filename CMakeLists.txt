@@ -92,6 +92,7 @@ target_sources(vuk PRIVATE
 
 target_include_directories(vuk PUBLIC ext/plf_colony)
 target_include_directories(vuk PUBLIC ext/VulkanMemoryAllocator/src)
+target_include_directories(vuk PUBLIC ext/flat_hash_map)
 target_include_directories(vuk PUBLIC src/)
 
 target_compile_options(vuk PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/permissive->")
