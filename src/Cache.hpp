@@ -11,7 +11,7 @@
 #include <optional>
 #include <gsl/span>
 #include <vector>
-#include <flat_hash_map.hpp>
+#include <unordered_map.hpp>
 
 namespace std {
 	template <class BitType, class MaskType>
@@ -338,7 +338,7 @@ namespace vuk {
 
 		Context& ctx;
 		plf::colony<T> pool;
-		ska::flat_hash_map<create_info_t<T>, LRUEntry> lru_map; // possibly vector_map or an intrusive map
+		ska::unordered_map<create_info_t<T>, LRUEntry> lru_map; // possibly vector_map or an intrusive map
 		std::shared_mutex cache_mtx;
 	public:
 		Cache(Context& ctx) : ctx(ctx) {}
@@ -413,7 +413,7 @@ namespace vuk {
 		struct PerFrame {
 			plf::colony<T> pool;
 			// possibly vector_map or an intrusive map
-			ska::flat_hash_map<create_info_t<T>, LRUEntry> lru_map;
+			ska::unordered_map<create_info_t<T>, LRUEntry> lru_map;
 
 			std::shared_mutex cache_mtx;
 		};

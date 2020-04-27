@@ -52,6 +52,7 @@ namespace vuk {
 
 	struct RenderGraph;
 	class CommandBuffer {
+    protected:
 		friend struct RenderGraph;
 		RenderGraph& rg;
 		vuk::PerThreadContext& ptc;
@@ -111,8 +112,19 @@ namespace vuk {
 
 		CommandBuffer& draw(size_t vertex_count, size_t instance_count, size_t first_vertex, size_t first_instance);
 		CommandBuffer& draw_indexed(size_t index_count, size_t instance_count, size_t first_index, int32_t vertex_offset, size_t first_instance);
-	private:
+
+		class SecondaryCommandBuffer begin_secondary();
+        void execute(gsl::span<vk::CommandBuffer>);
+	protected:
 		void _bind_graphics_pipeline_state();
+	};
+
+	class SecondaryCommandBuffer : public CommandBuffer {
+    public:
+		using CommandBuffer::CommandBuffer;
+		vk::CommandBuffer get_buffer();
+
+		~SecondaryCommandBuffer();
 	};
 
 	template<class T>

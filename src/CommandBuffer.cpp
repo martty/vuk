@@ -180,6 +180,27 @@ namespace vuk {
 		_bind_graphics_pipeline_state();
 		command_buffer.drawIndexed((uint32_t)index_count, (uint32_t)instance_count, (uint32_t)first_index, vertex_offset, (uint32_t)first_instance);
 		return *this;
+    }
+
+    SecondaryCommandBuffer CommandBuffer::begin_secondary() {
+        auto nptc = new vuk::PerThreadContext(ptc.ifc.begin());
+        auto scbuf = nptc->commandbuffer_pool.acquire(vk::CommandBufferLevel::eSecondary, 1)[0];
+		vk::CommandBufferBeginInfo cbi;
+		cbi.flags = vk::CommandBufferUsageFlagBits::eRenderPassContinue;
+        vk::CommandBufferInheritanceInfo cbii;
+        cbii.renderPass = ongoing_renderpass->renderpass;
+        cbii.subpass = ongoing_renderpass->subpass;
+        cbii.framebuffer = vk::Framebuffer{};//TODO
+		cbi.pInheritanceInfo = &cbii;
+		scbuf.begin(cbi);
+        SecondaryCommandBuffer scb(rg, *nptc, scbuf);
+        scb.ongoing_renderpass = ongoing_renderpass;
+        return scb;
+    }
+
+    void CommandBuffer::execute(gsl::span<vk::CommandBuffer> scbufs) {
+        if(scbufs.size() > 0)
+			command_buffer.executeCommands(scbufs.size(), scbufs.data());
 	}
 
 	void CommandBuffer::_bind_graphics_pipeline_state() {
@@ -229,6 +250,15 @@ namespace vuk {
 			sets_used[i] = false;
 			set_bindings[i] = {};
 		}
-	}
+    }
 
-}
+    vk::CommandBuffer SecondaryCommandBuffer::get_buffer() {
+        return command_buffer;
+    }
+
+    SecondaryCommandBuffer::~SecondaryCommandBuffer() {
+        command_buffer.end();
+        delete &ptc;
+    }
+
+} // namespace vuk

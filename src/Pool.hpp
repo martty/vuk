@@ -25,11 +25,13 @@ namespace vuk {
 	template<>
 	struct PooledType<vk::CommandBuffer> {
 		vk::UniqueCommandPool pool;
-		std::vector<vk::CommandBuffer> values;
-		size_t needle = 0;
+		std::vector<vk::CommandBuffer> p_values;
+		std::vector<vk::CommandBuffer> s_values;
+		size_t p_needle = 0;
+        size_t s_needle = 0;
 
 		PooledType(Context&);
-		gsl::span<vk::CommandBuffer> acquire(PerThreadContext& ptc, size_t count);
+		gsl::span<vk::CommandBuffer> acquire(PerThreadContext& ptc, vk::CommandBufferLevel, size_t count);
 		void reset(Context&);
 		void free(Context&);
 	};

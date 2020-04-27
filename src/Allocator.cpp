@@ -108,6 +108,13 @@ namespace vuk {
 		return pool;
 	}
 
+	// Aligns given value down to nearest multiply of align value. For example: VmaAlignUp(11, 8) = 8.
+    // Use types like uint32_t, uint64_t as T.
+    template<typename T>
+    static inline T VmaAlignDown(T val, T align) {
+        return val / align * align;
+    }
+
 	// Aligns given value up to nearest multiply of align value. For example: VmaAlignUp(11, 8) = 16.
     // Use types like uint32_t, uint64_t as T.
     template<typename T>
@@ -115,14 +122,19 @@ namespace vuk {
         return (val + align - 1) / align * align;
     }
 
+	// lock-free bump allocation if there is still space
 	Buffer Allocator::_allocate_buffer(Linear& pool, size_t size, bool create_mapped) {
         if(size == 0) {
             return {.buffer = vk::Buffer{}, .size = 0};
         }
 		// TODO: use queried alignment
-        auto align_dif = VmaAlignUp(pool.needle, 0x10ull) - pool.needle;
-        bool can_satisfy = pool.allocations.size() > 0 && (pool.block_size - pool.needle > (size + align_dif));
-        if(!can_satisfy) {
+        auto alignment = 0x10ull;
+        auto new_needle = pool.needle.fetch_add(size + alignment) + size + alignment; 
+		auto base_addr = new_needle - size - alignment;
+        
+		size_t buffer = new_needle / pool.block_size;
+		bool needs_to_create = base_addr == 0 || (base_addr / pool.block_size != new_needle / pool.block_size);
+        if(needs_to_create) {
             vk::BufferCreateInfo bci;
             bci.size = pool.block_size;
             bci.usage = pool.usage;
@@ -137,27 +149,32 @@ namespace vuk {
 
             auto mem_reqs = pool.mem_reqs;
             mem_reqs.size = size;
-            VkMemoryRequirements vkmem_reqs = mem_reqs;
-            VkBuffer buffer;
-			//real_alloc_callback = pool_cb;
+            VkBuffer vkbuffer;
             auto vkbci = (VkBufferCreateInfo)bci;
-            auto result = vmaCreateBuffer(allocator, &vkbci, &vaci, &buffer, &res, &vai);
-            //real_alloc_callback = noop_cb;
-            assert(result == VK_SUCCESS);
-            pool.allocations.emplace_back(res, vk::DeviceMemory(vai.deviceMemory), vai.offset, vk::Buffer(buffer), vai.pMappedData);
-            pool.needle = 0;
-            if(pool.allocations.size() > 1)
-                pool.current_buffer++;
+
+			auto next_index = pool.current_buffer.load() + 1;
+			if(std::get<vk::Buffer>(pool.allocations[next_index]) == vk::Buffer{}) {
+                std::lock_guard _(mutex);
+                auto result = vmaCreateBuffer(allocator, &vkbci, &vaci, &vkbuffer, &res, &vai);
+                assert(result == VK_SUCCESS);
+                pool.allocations[next_index] =
+                    std::tuple(res, vk::DeviceMemory(vai.deviceMemory), vai.offset, vk::Buffer(vkbuffer), vai.pMappedData);
+            }
+            pool.current_buffer++;
+			// there is no space in the beginning of this allocation, so we just retry 
+            return _allocate_buffer(pool, size, create_mapped);
         }
-        auto& current_alloc = pool.allocations[pool.current_buffer];
+        // wait for the buffer to be allocated
+        while(pool.current_buffer.load() < buffer) {};
+        auto offset = VmaAlignDown(new_needle - size, alignment) % pool.block_size;
+        auto& current_alloc = pool.allocations[buffer];
         Buffer b;
         b.buffer = std::get<vk::Buffer>(current_alloc);
         b.device_memory = std::get<vk::DeviceMemory>(current_alloc);
-        b.offset = pool.needle + align_dif;
+        b.offset = offset;
         b.size = size;
-        b.mapped_ptr = (unsigned char*)std::get<void*>(current_alloc) + pool.needle + align_dif;
+        b.mapped_ptr = (unsigned char*)std::get<void*>(current_alloc) + offset;
 
-		pool.needle += size + align_dif;
         return b;
     }
 	
@@ -224,13 +241,10 @@ namespace vuk {
 		bci.size = 1024; // ignored
 		bci.usage = buffer_usage;
 
-		Linear pi;
 		auto testbuff = device.createBuffer(bci);
-		pi.mem_reqs = (VkMemoryRequirements)device.getBufferMemoryRequirements(testbuff);
+        auto mem_reqs = (VkMemoryRequirements)device.getBufferMemoryRequirements(testbuff);
 		device.destroy(testbuff);
-		pi.usage = buffer_usage;
-		pi.mem_usage = VmaMemoryUsage(to_integral(mem_usage));
-		return pi;
+        return Linear{mem_reqs, VmaMemoryUsage(to_integral(mem_usage)), buffer_usage};
 	}
 
 	// allocate buffer from an internally managed pool
@@ -263,7 +277,6 @@ namespace vuk {
 
 	// allocate a buffer from an externally managed linear pool
 	Buffer Allocator::allocate_buffer(Linear& pool, size_t size, bool create_mapped) {
-		std::lock_guard _(mutex);
 		return _allocate_buffer(pool, size, create_mapped);
 	}
 

@@ -8,6 +8,7 @@
 #include "Cache.hpp" // for the hashes
 #include "CreateInfo.hpp"
 #include "Types.hpp"
+#include <atomic>
 
 namespace vuk {
 	enum class MemoryUsage {
@@ -68,13 +69,27 @@ namespace vuk {
 		};
 
 		struct Linear {
-            size_t current_buffer = 0;
-            size_t needle = 0;
+            std::atomic<int> current_buffer = -1;
+            std::atomic<size_t> needle = 0;
 			vk::MemoryRequirements mem_reqs;
             VmaMemoryUsage mem_usage;
 			vk::BufferUsageFlags usage;
-            std::vector<std::tuple<VmaAllocation, vk::DeviceMemory, size_t, vk::Buffer, void*>> allocations;
+            std::array<std::tuple<VmaAllocation, vk::DeviceMemory, size_t, vk::Buffer, void*>, 32> allocations;
+
             size_t block_size = 1024 * 1024;
+
+			Linear(vk::MemoryRequirements mem_reqs, VmaMemoryUsage mem_usage, vk::BufferUsageFlags buf_usage)
+                : mem_reqs(mem_reqs), mem_usage(mem_usage), usage(buf_usage) {}
+
+			Linear(Linear&& o) noexcept {
+                current_buffer = o.current_buffer.load();
+                needle = o.needle.load();
+                mem_reqs = o.mem_reqs;
+                mem_usage = o.mem_usage;
+                usage = o.usage;
+                allocations = o.allocations;
+                block_size = o.block_size;
+			}
 		};
 	private:
 		std::mutex mutex;

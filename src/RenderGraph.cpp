@@ -759,7 +759,7 @@ namespace vuk {
 			rp.framebuffer = ptc.framebuffer_cache.acquire(rp.fbci);
 		}
 		// actual execution
-		auto cbufs = ptc.commandbuffer_pool.acquire(1);
+		auto cbufs = ptc.commandbuffer_pool.acquire(vk::CommandBufferLevel::ePrimary, 1);
 		auto& cbuf = cbufs[0];
 
 		vk::CommandBufferBeginInfo cbi;
@@ -780,7 +780,7 @@ namespace vuk {
 			}
 			rbi.pClearValues = clears.data();
 			rbi.clearValueCount = (uint32_t)clears.size();
-			cbuf.beginRenderPass(rbi, vk::SubpassContents::eInline);
+			cbuf.beginRenderPass(rbi, vk::SubpassContents::eSecondaryCommandBuffers);
 			for (size_t i = 0; i < rpass.subpasses.size(); i++) {
 				auto& sp = rpass.subpasses[i];
 				vuk::CommandBuffer::RenderPassInfo rpi;

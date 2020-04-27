@@ -204,7 +204,8 @@ void vuk::PerThreadContext::destroy(vuk::DescriptorSet ds) {
 }
 
 vuk::Buffer vuk::PerThreadContext::_allocate_scratch_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, bool create_mapped) {
-	auto& pool = scratch_buffers.acquire({ mem_usage, buffer_usage });
+    PoolSelect ps{mem_usage, buffer_usage};
+	auto& pool = scratch_buffers.acquire(ps);
 	return ifc.ctx.allocator.allocate_buffer(pool, size, create_mapped);
 }
 
@@ -261,7 +262,7 @@ void vuk::PerThreadContext::dma_task() {
 	}
 
 	if (ifc.buffer_transfer_commands.empty() && ifc.bufferimage_transfer_commands.empty()) return;
-	auto cbuf = commandbuffer_pool.acquire(1)[0];
+	auto cbuf = commandbuffer_pool.acquire(vk::CommandBufferLevel::ePrimary, 1)[0];
 	cbuf.begin(vk::CommandBufferBeginInfo{});
 	size_t last = 0;
 	while (!ifc.buffer_transfer_commands.empty()) {
@@ -689,35 +690,35 @@ void vuk::Context::destroy(const vuk::DescriptorPool& dp) {
 	}
 }
 
-void vuk::Context::destroy(vuk::PipelineInfo pi) {
+void vuk::Context::destroy(const vuk::PipelineInfo& pi) {
 	device.destroy(pi.pipeline);
 }
 
-void vuk::Context::destroy(vuk::ShaderModule sm) {
+void vuk::Context::destroy(const vuk::ShaderModule& sm) {
 	device.destroy(sm.shader_module);
 }
 
-void vuk::Context::destroy(vuk::DescriptorSetLayoutAllocInfo ds) {
+void vuk::Context::destroy(const vuk::DescriptorSetLayoutAllocInfo& ds) {
 	device.destroy(ds.layout);
 }
 
-void vuk::Context::destroy(vk::PipelineLayout pl) {
+void vuk::Context::destroy(const vk::PipelineLayout& pl) {
 	device.destroy(pl);
 }
 
-void vuk::Context::destroy(vk::RenderPass rp) {
+void vuk::Context::destroy(const vk::RenderPass& rp) {
 	device.destroy(rp);
 }
 
-void vuk::Context::destroy(vuk::DescriptorSet) {
+void vuk::Context::destroy(const vuk::DescriptorSet&) {
 	// no-op, we destroy the pools
 }
 
-void vuk::Context::destroy(vk::Framebuffer fb) {
+void vuk::Context::destroy(const vk::Framebuffer& fb) {
 	device.destroy(fb);
 }
 
-void vuk::Context::destroy(vk::Sampler sa) {
+void vuk::Context::destroy(const vk::Sampler& sa) {
 	device.destroy(sa);
 }
 
@@ -747,6 +748,6 @@ void vuk::InflightContext::destroy(std::vector<vk::ImageView>&& images) {
 }
 
 vuk::PerThreadContext vuk::InflightContext::begin() {
-	return PerThreadContext{ *this, 0 };
+	return PerThreadContext{ *this, ctx.get_thread_index() };
 }
 

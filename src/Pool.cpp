@@ -55,13 +55,15 @@ namespace vuk {
 		pool = ctx.device.createCommandPoolUnique({});
 	}
 
-	gsl::span<vk::CommandBuffer> PooledType<vk::CommandBuffer>::acquire(PerThreadContext& ptc, size_t count) {
+	gsl::span<vk::CommandBuffer> PooledType<vk::CommandBuffer>::acquire(PerThreadContext& ptc, vk::CommandBufferLevel level, size_t count) {
+        auto& values = level == vk::CommandBufferLevel::ePrimary ? p_values : s_values;
+        auto& needle = level == vk::CommandBufferLevel::ePrimary ? p_needle : s_needle;
 		if (values.size() < (needle + count)) {
 			auto remaining = values.size() - needle;
 			vk::CommandBufferAllocateInfo cbai;
 			cbai.commandBufferCount = (unsigned)(count - remaining);
 			cbai.commandPool = *pool;
-			cbai.level = vk::CommandBufferLevel::ePrimary;
+			cbai.level = level;
 			auto nalloc = ptc.ctx.device.allocateCommandBuffers(cbai);
 			values.insert(values.end(), nalloc.begin(), nalloc.end());
 		}
@@ -72,11 +74,12 @@ namespace vuk {
 	void PooledType<vk::CommandBuffer>::reset(Context& ctx) {
 		vk::CommandPoolResetFlags flags = {};
 		ctx.device.resetCommandPool(*pool, flags);
-		needle = 0;
+		p_needle = s_needle = 0;
 	}
 
 	void PooledType<vk::CommandBuffer>::free(Context& ctx) {
-		ctx.device.freeCommandBuffers(*pool, values);
+		ctx.device.freeCommandBuffers(*pool, s_values);
+		ctx.device.freeCommandBuffers(*pool, p_values);
 		pool.reset();
 	}
 

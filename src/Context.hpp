@@ -189,14 +189,14 @@ namespace vuk {
 		void destroy(const Allocator::Pool& v);
 		void destroy(const Allocator::Linear& v);
 		void destroy(const vuk::DescriptorPool& dp);
-		void destroy(vuk::PipelineInfo pi);
-		void destroy(vuk::ShaderModule sm);
-		void destroy(vuk::DescriptorSetLayoutAllocInfo ds);
-		void destroy(vk::PipelineLayout pl);
-		void destroy(vk::RenderPass rp);
-		void destroy(vuk::DescriptorSet);
-		void destroy(vk::Framebuffer fb);
-		void destroy(vk::Sampler sa);
+		void destroy(const vuk::PipelineInfo& pi);
+		void destroy(const vuk::ShaderModule& sm);
+		void destroy(const vuk::DescriptorSetLayoutAllocInfo& ds);
+		void destroy(const vk::PipelineLayout& pl);
+		void destroy(const vk::RenderPass& rp);
+		void destroy(const vuk::DescriptorSet&);
+		void destroy(const vk::Framebuffer& fb);
+		void destroy(const vk::Sampler& sa);
 
 		friend class InflightContext;
 		friend class PerThreadContext;
@@ -352,7 +352,7 @@ namespace vuk {
         vuk::Program get_pipeline_reflection_info(vuk::PipelineCreateInfo pci);
 
         template<class T>
-        void destroy(T t) {
+        void destroy(const T& t) {
             ctx.destroy(t);
         }
 
