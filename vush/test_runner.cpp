@@ -4,6 +4,7 @@
 #include "catch2/catch.hpp"
 #include <filesystem>
 namespace fs = std::filesystem;
+using namespace vush;
 
 std::string slurp(const std::string& path) {
 	std::ostringstream buf;
@@ -20,7 +21,7 @@ void burp(const std::string& in, const std::string& path) {
 	output.close();
 }
 
-std::string stage_to_extension(stage_entry::type as) {
+std::string stage_to_extension(vush::stage_entry::type as) {
 	switch (as) {
 	case stage_entry::type::eVertex: return "vert";
 	case stage_entry::type::eFragment: return "frag";
@@ -30,7 +31,7 @@ std::string stage_to_extension(stage_entry::type as) {
 
 void run_file(const std::string& src_file) {
 	auto src = slurp(src_file);
-	auto gen = parse_generate(src, src_file.c_str());
+	auto gen = vush::parse_generate(src, src_file.c_str());
 	size_t checks = 0;
 	for (const auto& [aspect, pa] : gen.aspects) {
 		for (auto& ps : pa.shaders) {

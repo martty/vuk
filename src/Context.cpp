@@ -586,14 +586,14 @@ void vuk::Context::invalidate_shadermodule_and_pipelines(Name filename) {
     }
 }
 
-void vuk::Context::compile_shader(Name path) {
+vuk::ShaderModule vuk::Context::compile_shader(Name path) {
 	vuk::ShaderModuleCreateInfo sci;
 	sci.filename = path;
     sci.source = slurp(std::string(path));
 	auto sm = shader_modules.remove(sci);
     if(sm)
 		device.destroy(sm->shader_module);
-    shader_modules.acquire(sci);
+    return shader_modules.acquire(sci);
 }
 
 vk::Fence vuk::Context::fenced_upload(gsl::span<Upload> uploads) {

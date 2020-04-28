@@ -155,7 +155,7 @@ namespace vuk {
 		void create_named_pipeline(const char* name, vuk::PipelineCreateInfo ci);
 		vuk::PipelineCreateInfo get_named_pipeline(const char* name);
 		void invalidate_shadermodule_and_pipelines(Name);
-        void compile_shader(Name path);
+        vuk::ShaderModule compile_shader(Name path);
 		vuk::ShaderModule create(const create_info_t<vuk::ShaderModule>& cinfo);
 
 		// one pool per thread
