@@ -94,7 +94,7 @@ namespace vuk {
         }
 
         ~fixed_vector() {
-            for (auto i = 0; i < len; i++) {
+            for (std::size_t i = 0; i < len; i++) {
                 ptrat(i)->~T();
             }
         }
