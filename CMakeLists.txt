@@ -95,9 +95,17 @@ target_include_directories(vuk PUBLIC ext/VulkanMemoryAllocator/src)
 target_include_directories(vuk PUBLIC ext/flat_hash_map)
 target_include_directories(vuk PUBLIC src/)
 
-target_compile_options(vuk PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/permissive->")
-target_link_libraries_system(vuk PUBLIC Vulkan::Vulkan GSL spirv-cross-core)
+target_precompile_headers(vuk PRIVATE <vulkan/vulkan.hpp>)
+
+if("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang" AND NOT MSVC)
+	target_compile_options(vuk PRIVATE -fno-char8_t)
+elseif(MSVC)
+	target_compile_options(vuk PRIVATE /permissive- /Zc:char8_t-)
+endif()
+
+target_link_libraries_system(vuk PUBLIC Vulkan::Vulkan spirv-cross-core)
 target_link_libraries(vuk PUBLIC shaderc)
+
 
 if (WIN32)
 	target_compile_definitions(vuk PUBLIC NOMINMAX VC_EXTRALEAN WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS _SCL_SECURE_NO_WARNINGS _SILENCE_CLANG_CONCEPTS_MESSAGE)

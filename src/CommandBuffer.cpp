@@ -198,7 +198,7 @@ namespace vuk {
         return scb;
     }
 
-    void CommandBuffer::execute(gsl::span<vk::CommandBuffer> scbufs) {
+    void CommandBuffer::execute(std::span<vk::CommandBuffer> scbufs) {
         if(scbufs.size() > 0)
 			command_buffer.executeCommands(scbufs.size(), scbufs.data());
 	}
@@ -219,7 +219,7 @@ namespace vuk {
 			pi.subpass = ongoing_renderpass->subpass;
 
 			pi.dynamic_state.pDynamicStates = pi.dynamic_states.data();
-			pi.dynamic_state.dynamicStateCount = gsl::narrow_cast<unsigned>(pi.dynamic_states.size());
+			pi.dynamic_state.dynamicStateCount = static_cast<unsigned>(pi.dynamic_states.size());
 
 			pi.multisample_state.rasterizationSamples = ongoing_renderpass->samples;
 

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <atomic>
-#include <gsl/span>
+#include <span>
 
 #include "Pool.hpp"
 #include "Cache.hpp"
@@ -165,9 +165,9 @@ namespace vuk {
 
 		struct Upload {
             vuk::Buffer dst;
-            gsl::span<unsigned char> data;
+            std::span<unsigned char> data;
 		};
-		vk::Fence fenced_upload(gsl::span<Upload>);
+		vk::Fence fenced_upload(std::span<Upload>);
 
 		Buffer allocate_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size);
 
@@ -310,14 +310,14 @@ namespace vuk {
 
 		// since data is provided, we will add TransferDst to the flags automatically
 		template<class T>
-		std::pair<Buffer, TransferStub> create_scratch_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, gsl::span<T> data) {
+		std::pair<Buffer, TransferStub> create_scratch_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, std::span<T> data) {
 			auto dst = _allocate_scratch_buffer(mem_usage, vk::BufferUsageFlagBits::eTransferDst | buffer_usage, sizeof(T) * data.size(), false);
 			auto stub = upload(dst, data);
 			return { dst, stub };
 		}
 
 		template<class T>
-		std::pair<Unique<Buffer>, TransferStub> create_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, gsl::span<T> data) {
+		std::pair<Unique<Buffer>, TransferStub> create_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, std::span<T> data) {
 			auto dst = _allocate_buffer(mem_usage, vk::BufferUsageFlagBits::eTransferDst | buffer_usage, sizeof(T) * data.size(), false);
 			auto stub = upload(*dst, data);
 			return { std::move(dst), stub };
@@ -326,7 +326,7 @@ namespace vuk {
 		std::pair<vuk::Texture, TransferStub> create_texture(vk::Format format, vk::Extent3D extents, void* data);
 
 		template<class T>
-		TransferStub upload(Buffer dst, gsl::span<T> data) {
+		TransferStub upload(Buffer dst, std::span<T> data) {
 			if (data.empty()) return { 0 };
 			auto staging = _allocate_scratch_buffer(MemoryUsage::eCPUonly, vk::BufferUsageFlagBits::eTransferSrc, sizeof(T) * data.size(), true);
 			::memcpy(staging.mapped_ptr, data.data(), sizeof(T) * data.size());
@@ -335,7 +335,7 @@ namespace vuk {
 		}
 
 		template<class T>
-		TransferStub upload(vk::Image dst, vk::Extent3D extent, gsl::span<T> data) {
+		TransferStub upload(vk::Image dst, vk::Extent3D extent, std::span<T> data) {
 			assert(!data.empty());
 			auto staging = _allocate_scratch_buffer(MemoryUsage::eCPUonly, vk::BufferUsageFlagBits::eTransferSrc, sizeof(T) * data.size(), true);
 			::memcpy(staging.mapped_ptr, data.data(), sizeof(T) * data.size());

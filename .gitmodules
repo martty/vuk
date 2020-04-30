@@ -4,9 +4,6 @@
 [submodule "ext/glfw"]
 	path = ext/glfw
 	url = https://github.com/glfw/glfw
-[submodule "ext/GSL"]
-	path = ext/GSL
-	url = https://github.com/Microsoft/GSL
 [submodule "ext/SPIRV-Cross"]
 	path = ext/SPIRV-Cross
 	url = https://github.com/KhronosGroup/SPIRV-Cross

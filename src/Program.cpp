@@ -1,5 +1,4 @@
 #include "Program.hpp"
-#include <gsl/gsl_util>
 #include <spirv_cross.hpp>
 #include <regex>
 #include "Hash.hpp"

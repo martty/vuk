@@ -4,7 +4,7 @@
 namespace vuk {
 	// pools
 	template<>
-	gsl::span<vk::Semaphore> PooledType<vk::Semaphore>::acquire(PerThreadContext& ptc, size_t count) {
+	std::span<vk::Semaphore> PooledType<vk::Semaphore>::acquire(PerThreadContext& ptc, size_t count) {
 		if (values.size() < (needle + count)) {
 			auto remaining = values.size() - needle;
 			for (auto i = 0; i < (count - remaining); i++) {
@@ -12,13 +12,13 @@ namespace vuk {
 				values.push_back(nalloc);
 			}
 		}
-		gsl::span<vk::Semaphore> ret{ &*values.begin() + needle, (ptrdiff_t)count };
+		std::span<vk::Semaphore> ret{ &*values.begin() + needle, count };
 		needle += count;
 		return ret;
 	}
 
 	template<>
-	gsl::span<vk::Fence> PooledType<vk::Fence>::acquire(PerThreadContext& ptc, size_t count) {
+	std::span<vk::Fence> PooledType<vk::Fence>::acquire(PerThreadContext& ptc, size_t count) {
 		if (values.size() < (needle + count)) {
 			auto remaining = values.size() - needle;
 			for (auto i = 0; i < (count - remaining); i++) {
@@ -26,7 +26,7 @@ namespace vuk {
 				values.push_back(nalloc);
 			}
 		}
-		gsl::span<vk::Fence> ret{ &*values.begin() + needle, (ptrdiff_t)count };
+		std::span<vk::Fence> ret{ &*values.begin() + needle, count };
 		needle += count;
 		return ret;
 	}
@@ -55,7 +55,7 @@ namespace vuk {
 		pool = ctx.device.createCommandPoolUnique({});
 	}
 
-	gsl::span<vk::CommandBuffer> PooledType<vk::CommandBuffer>::acquire(PerThreadContext& ptc, vk::CommandBufferLevel level, size_t count) {
+	std::span<vk::CommandBuffer> PooledType<vk::CommandBuffer>::acquire(PerThreadContext& ptc, vk::CommandBufferLevel level, size_t count) {
         auto& values = level == vk::CommandBufferLevel::ePrimary ? p_values : s_values;
         auto& needle = level == vk::CommandBufferLevel::ePrimary ? p_needle : s_needle;
 		if (values.size() < (needle + count)) {
@@ -67,7 +67,7 @@ namespace vuk {
 			auto nalloc = ptc.ctx.device.allocateCommandBuffers(cbai);
 			values.insert(values.end(), nalloc.begin(), nalloc.end());
 		}
-		gsl::span<vk::CommandBuffer> ret{ &*values.begin() + needle, (ptrdiff_t)count };
+		std::span<vk::CommandBuffer> ret{ &*values.begin() + needle, count };
 		needle += count;
 		return ret;
 	}

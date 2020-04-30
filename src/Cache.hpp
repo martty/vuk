@@ -9,7 +9,7 @@
 #include "Program.hpp"
 #include "CreateInfo.hpp"
 #include <optional>
-#include <gsl/span>
+#include <span>
 #include <vector>
 #include <unordered_map.hpp>
 
@@ -45,7 +45,7 @@ namespace std {
 	struct hash<vk::PipelineVertexInputStateCreateInfo> {
 		size_t operator()(vk::PipelineVertexInputStateCreateInfo const& x) const noexcept {
 			size_t h = 0;
-			hash_combine(h, x.flags, gsl::span(x.pVertexBindingDescriptions, x.vertexBindingDescriptionCount), gsl::span(x.pVertexAttributeDescriptions, x.vertexAttributeDescriptionCount));
+			hash_combine(h, x.flags, std::span(x.pVertexBindingDescriptions, x.vertexBindingDescriptionCount), std::span(x.pVertexAttributeDescriptions, x.vertexAttributeDescriptionCount));
 			return h;
 		}
 	};
@@ -63,7 +63,7 @@ namespace std {
 	struct hash<vk::SpecializationInfo> {
 		size_t operator()(vk::SpecializationInfo const& x) const noexcept {
 			size_t h = 0;
-			hash_combine(h, gsl::span(x.pMapEntries, x.mapEntryCount), gsl::span((std::byte*)x.pData, x.dataSize));
+			hash_combine(h, std::span(x.pMapEntries, x.mapEntryCount), std::span((std::byte*)x.pData, x.dataSize));
 			return h;
 		}
 	};
@@ -146,9 +146,9 @@ namespace std {
 		size_t operator()(vk::PipelineViewportStateCreateInfo const& x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, x.flags);
-			if (x.pScissors) hash_combine(h, gsl::span(x.pScissors, x.scissorCount));
+			if (x.pScissors) hash_combine(h, std::span(x.pScissors, x.scissorCount));
 			else hash_combine(h, x.scissorCount);
-			if (x.pViewports) hash_combine(h, gsl::span(x.pViewports, x.viewportCount));
+			if (x.pViewports) hash_combine(h, std::span(x.pViewports, x.viewportCount));
 			else hash_combine(h, x.viewportCount);
 			return h;
 		}
@@ -195,7 +195,7 @@ namespace std {
 	struct hash<vk::PipelineColorBlendStateCreateInfo> {
 		size_t operator()(vk::PipelineColorBlendStateCreateInfo const& x) const noexcept {
 			size_t h = 0;
-			hash_combine(h, x.flags, gsl::span(x.pAttachments, x.attachmentCount), x.blendConstants, to_integral(x.logicOp), x.logicOpEnable);
+			hash_combine(h, x.flags, std::span(x.pAttachments, x.attachmentCount), x.blendConstants, to_integral(x.logicOp), x.logicOpEnable);
 			return h;
 		}
 	};
@@ -213,7 +213,7 @@ namespace std {
 	struct hash<vk::PipelineDynamicStateCreateInfo> {
 		size_t operator()(vk::PipelineDynamicStateCreateInfo const& x) const noexcept {
 			size_t h = 0;
-			hash_combine(h, x.flags, gsl::span(x.pDynamicStates, x.dynamicStateCount));
+			hash_combine(h, x.flags, std::span(x.pDynamicStates, x.dynamicStateCount));
 			return h;
 		}
 	};
@@ -233,7 +233,7 @@ namespace std {
 	struct hash<vk::GraphicsPipelineCreateInfo> {
 		size_t operator()(vk::GraphicsPipelineCreateInfo const & x) const noexcept {
 			size_t h = 0;
-			hash_combine(h, x.flags, gsl::span(x.pStages, x.stageCount));
+			hash_combine(h, x.flags, std::span(x.pStages, x.stageCount));
 			if (x.pVertexInputState) hash_combine(h, *x.pVertexInputState);
 			if (x.pInputAssemblyState) hash_combine(h, *x.pInputAssemblyState);
 			if (x.pTessellationState) hash_combine(h, *x.pTessellationState);
@@ -283,7 +283,7 @@ namespace std {
 	struct hash<vk::ImageCreateInfo> {
 		size_t operator()(vk::ImageCreateInfo const & x) const noexcept {
 			size_t h = 0;
-			hash_combine(h, x.flags, x.arrayLayers, x.extent, to_integral(x.format), to_integral(x.imageType), to_integral(x.initialLayout), x.mipLevels, gsl::span(x.pQueueFamilyIndices, x.queueFamilyIndexCount), to_integral(x.samples), to_integral(x.sharingMode), to_integral(x.tiling), x.usage);
+			hash_combine(h, x.flags, x.arrayLayers, x.extent, to_integral(x.format), to_integral(x.imageType), to_integral(x.initialLayout), x.mipLevels, std::span(x.pQueueFamilyIndices, x.queueFamilyIndexCount), to_integral(x.samples), to_integral(x.sharingMode), to_integral(x.tiling), x.usage);
 			return h;
 		}
 	};

@@ -788,7 +788,7 @@ namespace vuk {
 				rpi.subpass = (uint32_t)i;
 				rpi.extent = vk::Extent2D(rpass.fbci.width, rpass.fbci.height);
 				auto& spdesc = rpass.rpci.subpass_descriptions[i];
-				rpi.color_attachments = gsl::span<const vk::AttachmentReference>(spdesc.pColorAttachments, spdesc.colorAttachmentCount);
+				rpi.color_attachments = std::span<const vk::AttachmentReference>(spdesc.pColorAttachments, spdesc.colorAttachmentCount);
 				for (auto& ca : rpi.color_attachments) {
 					auto& att = rpass.attachments[ca.attachment];
 					if (!att.samples.infer)

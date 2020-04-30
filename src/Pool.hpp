@@ -1,6 +1,6 @@
 #pragma once
 
-#include <gsl/span>
+#include <span>
 #include <plf_colony.h>
 #include <mutex>
 #include <vector>
@@ -14,7 +14,7 @@ namespace vuk {
 		size_t needle = 0;
 
 		PooledType(Context&) {}
-		gsl::span<T> acquire(PerThreadContext& ptc, size_t count);
+		std::span<T> acquire(PerThreadContext& ptc, size_t count);
 		void reset(Context& ctx) { needle = 0; }
 		void free(Context& ctx);
 	};
@@ -31,7 +31,7 @@ namespace vuk {
         size_t s_needle = 0;
 
 		PooledType(Context&);
-		gsl::span<vk::CommandBuffer> acquire(PerThreadContext& ptc, vk::CommandBufferLevel, size_t count);
+		std::span<vk::CommandBuffer> acquire(PerThreadContext& ptc, vk::CommandBufferLevel, size_t count);
 		void reset(Context&);
 		void free(Context&);
 	};

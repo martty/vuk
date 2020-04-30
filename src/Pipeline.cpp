@@ -1,6 +1,5 @@
 #include "Pipeline.hpp"
 #include "Program.hpp"
-#include <gsl/gsl_util>
 
 namespace vuk {
 	void PipelineCreateInfo::set_blend(size_t attachment_index, BlendPreset preset) {

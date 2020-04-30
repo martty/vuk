@@ -1,6 +1,6 @@
 #pragma once
 #include <stdint.h>
-#include <gsl/span>
+#include <span>
 
 //https://gist.github.com/filsinger/1255697/21762ea83a2d3c17561c8e6a29f44249a4626f9e
 
@@ -49,9 +49,9 @@ constexpr auto to_integral(E e) -> typename std::underlying_type<E>::type {
 }
 
 namespace std {
-	template <class T, ptrdiff_t E>
-	struct hash<gsl::span<T, E>> {
-		size_t operator()(gsl::span<T, E> const& x) const noexcept {
+	template <class T, size_t E>
+	struct hash<std::span<T, E>> {
+		size_t operator()(std::span<T, E> const& x) const noexcept {
 			size_t h = 0;
 			for (auto& e : x) {
 				hash_combine(h, e);

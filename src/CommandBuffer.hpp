@@ -63,7 +63,7 @@ namespace vuk {
 			uint32_t subpass;
 			vk::Extent2D extent;
 			vk::SampleCountFlagBits samples;
-			gsl::span<const vk::AttachmentReference> color_attachments;
+			std::span<const vk::AttachmentReference> color_attachments;
 		};
 		std::optional<RenderPassInfo> ongoing_renderpass;
 		vuk::fixed_vector<vk::VertexInputAttributeDescription, VUK_MAX_ATTRIBUTES> attribute_descriptions;
@@ -99,7 +99,7 @@ namespace vuk {
 		
 		CommandBuffer& push_constants(vk::ShaderStageFlags stages, size_t offset, void * data, size_t size);
 		template<class T>
-		CommandBuffer& push_constants(vk::ShaderStageFlags stages, size_t offset, gsl::span<T> span);
+		CommandBuffer& push_constants(vk::ShaderStageFlags stages, size_t offset, std::span<T> span);
 		template<class T>
 		CommandBuffer& push_constants(vk::ShaderStageFlags stages, size_t offset, T value);
 
@@ -114,7 +114,7 @@ namespace vuk {
 		CommandBuffer& draw_indexed(size_t index_count, size_t instance_count, size_t first_index, int32_t vertex_offset, size_t first_instance);
 
 		class SecondaryCommandBuffer begin_secondary();
-        void execute(gsl::span<vk::CommandBuffer>);
+        void execute(std::span<vk::CommandBuffer>);
 	protected:
 		void _bind_graphics_pipeline_state();
 	};
@@ -128,7 +128,7 @@ namespace vuk {
 	};
 
 	template<class T>
-	inline CommandBuffer& CommandBuffer::push_constants(vk::ShaderStageFlags stages, size_t offset, gsl::span<T> span) {
+	inline CommandBuffer& CommandBuffer::push_constants(vk::ShaderStageFlags stages, size_t offset, std::span<T> span) {
 		return push_constants(stages, offset, (void*)span.data(), sizeof(T) * span.size());
 	}
 	template<class T>

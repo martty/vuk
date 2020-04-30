@@ -236,7 +236,7 @@ std::pair<vuk::Texture, vuk::TransferStub> vuk::PerThreadContext::create_texture
 	ici.tiling = vk::ImageTiling::eOptimal;
 	ici.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
 	auto dst = ifc.ctx.allocator.create_image(ici);
-	auto stub = upload(dst, extents, gsl::span<std::byte>((std::byte*)data, extents.width * extents.height * extents.depth * 4));
+	auto stub = upload(dst, extents, std::span<std::byte>((std::byte*)data, extents.width * extents.height * extents.depth * 4));
 	vk::ImageViewCreateInfo ivci;
 	ivci.format = format;
 	ivci.image = dst;
@@ -596,7 +596,7 @@ vuk::ShaderModule vuk::Context::compile_shader(Name path) {
     return shader_modules.acquire(sci);
 }
 
-vk::Fence vuk::Context::fenced_upload(gsl::span<Upload> uploads) {
+vk::Fence vuk::Context::fenced_upload(std::span<Upload> uploads) {
 	// get a one time command buffer
     auto tid = get_thread_index ? get_thread_index() : 0;
     {
