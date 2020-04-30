@@ -34,7 +34,7 @@ target_include_directories(vush SYSTEM PUBLIC ../ext/Mustache)
 target_include_directories(vush PUBLIC .)
 
 target_compile_options(vush PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/permissive->")
-target_link_libraries_system(vush PUBLIC GSL nlohmann_json::nlohmann_json)
+target_link_libraries_system(vush PUBLIC nlohmann_json::nlohmann_json)
 
 if (WIN32)
 	target_compile_definitions(vuk PUBLIC NOMINMAX VC_EXTRALEAN WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS _SCL_SECURE_NO_WARNINGS _SILENCE_CLANG_CONCEPTS_MESSAGE)
