@@ -225,32 +225,49 @@ void vuk::PerThreadContext::wait_all_transfers() {
 }
 
 std::pair<vuk::Texture, vuk::TransferStub> vuk::PerThreadContext::create_texture(vk::Format format, vk::Extent3D extents, void* data) {
-	vk::ImageCreateInfo ici;
-	ici.format = format;
-	ici.extent = extents;
-	ici.arrayLayers = 1;
-	ici.initialLayout = vk::ImageLayout::eUndefined;
-	ici.mipLevels = 1;
-	ici.imageType = vk::ImageType::e2D;
-	ici.samples = vk::SampleCountFlagBits::e1;
-	ici.tiling = vk::ImageTiling::eOptimal;
-	ici.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
-	auto dst = ifc.ctx.allocator.create_image(ici);
-	auto stub = upload(dst, extents, std::span<std::byte>((std::byte*)data, extents.width * extents.height * extents.depth * 4));
-	vk::ImageViewCreateInfo ivci;
-	ivci.format = format;
-	ivci.image = dst;
-	ivci.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
-	ivci.subresourceRange.baseArrayLayer = 0;
-	ivci.subresourceRange.baseMipLevel = 0;
-	ivci.subresourceRange.layerCount = 1;
-	ivci.subresourceRange.levelCount = 1;
-	ivci.viewType = vk::ImageViewType::e2D;
-	auto iv = ifc.ctx.device.createImageView(ivci);
-	vuk::Texture tex{ vuk::Unique<vk::Image>(ifc.ctx, dst), vuk::Unique<vuk::ImageView>(ifc.ctx, ifc.ctx.wrap(iv)) };
-	tex.extent = extents;
-	tex.format = format;
+    auto tex = ctx.allocate_texture(format, extents);
+	auto stub = upload(*tex.image, extents, std::span<std::byte>((std::byte*)data, extents.width * extents.height * extents.depth * 4));
 	return { std::move(tex), stub };
+}
+
+void record_buffer_image_copy(vk::CommandBuffer& cbuf, vuk::InflightContext::BufferImageCopyCommand& task) {
+    vk::BufferImageCopy bc;
+    bc.bufferOffset = task.src.offset;
+    bc.imageOffset = 0;
+    bc.bufferRowLength = 0;
+    bc.bufferImageHeight = 0;
+    bc.imageExtent = task.extent;
+    bc.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+    bc.imageSubresource.baseArrayLayer = 0;
+    bc.imageSubresource.mipLevel = 0;
+    bc.imageSubresource.layerCount = 1;
+
+    vk::ImageMemoryBarrier copy_barrier;
+    copy_barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
+    copy_barrier.oldLayout = vk::ImageLayout::eUndefined;
+    copy_barrier.newLayout = vk::ImageLayout::eTransferDstOptimal;
+    copy_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    copy_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    copy_barrier.image = task.dst;
+    copy_barrier.subresourceRange.aspectMask = bc.imageSubresource.aspectMask;
+    copy_barrier.subresourceRange.layerCount = bc.imageSubresource.layerCount;
+    copy_barrier.subresourceRange.baseArrayLayer = bc.imageSubresource.baseArrayLayer;
+    copy_barrier.subresourceRange.baseMipLevel = bc.imageSubresource.mipLevel;
+    copy_barrier.subresourceRange.levelCount = 1;
+
+    vk::ImageMemoryBarrier use_barrier;
+    use_barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+    use_barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+    use_barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
+    use_barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+    use_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    use_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    use_barrier.image = task.dst;
+    use_barrier.subresourceRange = copy_barrier.subresourceRange;
+
+    cbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe, vk::PipelineStageFlagBits::eTransfer, vk::DependencyFlagBits(0), {}, {}, copy_barrier);
+    cbuf.copyBufferToImage(task.src.buffer, task.dst, vk::ImageLayout::eTransferDstOptimal, bc);
+    cbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader, vk::DependencyFlagBits(0), {}, {}, use_barrier);
 }
 
 void vuk::PerThreadContext::dma_task() {
@@ -278,44 +295,8 @@ void vuk::PerThreadContext::dma_task() {
 	while (!ifc.bufferimage_transfer_commands.empty()) {
 		auto task = ifc.bufferimage_transfer_commands.front();
 		ifc.bufferimage_transfer_commands.pop();
-		vk::BufferImageCopy bc;
-		bc.bufferOffset = task.src.offset;
-		bc.imageOffset = 0;
-		bc.bufferRowLength = 0;
-		bc.bufferImageHeight = 0;
-		bc.imageExtent = task.extent;
-		bc.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-		bc.imageSubresource.baseArrayLayer = 0;
-		bc.imageSubresource.mipLevel = 0;
-		bc.imageSubresource.layerCount = 1;
-
-		vk::ImageMemoryBarrier copy_barrier;
-		copy_barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
-		copy_barrier.oldLayout = vk::ImageLayout::eUndefined;
-		copy_barrier.newLayout = vk::ImageLayout::eTransferDstOptimal;
-		copy_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		copy_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		copy_barrier.image = task.dst;
-		copy_barrier.subresourceRange.aspectMask = bc.imageSubresource.aspectMask;
-		copy_barrier.subresourceRange.layerCount = bc.imageSubresource.layerCount;
-		copy_barrier.subresourceRange.baseArrayLayer = bc.imageSubresource.baseArrayLayer;
-		copy_barrier.subresourceRange.baseMipLevel = bc.imageSubresource.mipLevel;
-		copy_barrier.subresourceRange.levelCount = 1;
-
-		vk::ImageMemoryBarrier use_barrier;
-		use_barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
-		use_barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
-		use_barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
-		use_barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-		use_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		use_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		use_barrier.image = task.dst;
-		use_barrier.subresourceRange = copy_barrier.subresourceRange;
-
-		cbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe, vk::PipelineStageFlagBits::eTransfer, vk::DependencyFlagBits(0), {}, {}, copy_barrier);
-		cbuf.copyBufferToImage(task.src.buffer, task.dst, vk::ImageLayout::eTransferDstOptimal, bc);
-		cbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader, vk::DependencyFlagBits(0), {}, {}, use_barrier);
-		last = std::max(last, task.stub.id);
+        record_buffer_image_copy(cbuf, task);
+        last = std::max(last, task.stub.id);
 	}
 	cbuf.end();
 	auto fence = fence_pool.acquire(1)[0];
@@ -596,16 +577,16 @@ vuk::ShaderModule vuk::Context::compile_shader(Name path) {
     return shader_modules.acquire(sci);
 }
 
-vk::Fence vuk::Context::fenced_upload(std::span<Upload> uploads) {
+vk::Fence vuk::Context::fenced_upload(std::span<Buffer_Upload> uploads) {
 	// get a one time command buffer
     auto tid = get_thread_index ? get_thread_index() : 0;
     {
         std::lock_guard _(one_time_pool_lock);
-        if(one_time_pools.size() < (tid + 1)) {
-            one_time_pools.resize(tid + 1, vk::CommandPool{});
+        if(xfer_one_time_pools.size() < (tid + 1)) {
+            xfer_one_time_pools.resize(tid + 1, vk::CommandPool{});
         }
     }
-    auto& pool = one_time_pools[tid];
+    auto& pool = xfer_one_time_pools[tid];
 	if (pool == vk::CommandPool{}) {
         vk::CommandPoolCreateInfo cpci;
         cpci.queueFamilyIndex = 2; // TODO: this will break
@@ -645,9 +626,87 @@ vk::Fence vuk::Context::fenced_upload(std::span<Upload> uploads) {
     return fence;
 }
 
+vk::Fence vuk::Context::fenced_upload(std::span<Image_Upload> uploads) {
+    // get a one time command buffer
+    auto tid = get_thread_index ? get_thread_index() : 0;
+    {
+        std::lock_guard _(one_time_pool_lock);
+        if(one_time_pools.size() < (tid + 1)) {
+            one_time_pools.resize(tid + 1, vk::CommandPool{});
+        }
+    }
+    auto& pool = one_time_pools[tid];
+    if(pool == vk::CommandPool{}) {
+        vk::CommandPoolCreateInfo cpci;
+        cpci.queueFamilyIndex = 0; // TODO: this will break
+        cpci.flags = vk::CommandPoolCreateFlagBits::eTransient | vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
+        pool = device.createCommandPool(cpci);
+    }
+    vk::CommandBufferAllocateInfo cbai;
+    cbai.commandPool = pool;
+    cbai.commandBufferCount = 1;
+
+    auto cbuf = device.allocateCommandBuffers(cbai)[0];
+    vk::CommandBufferBeginInfo cbi;
+    cbi.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
+    cbuf.begin(cbi);
+    for(auto& upload: uploads) {
+        // create staging buffer, copy to staging
+        auto staging = allocator.allocate_buffer(vuk::MemoryUsage::eCPUonly, vk::BufferUsageFlagBits::eTransferSrc, upload.data.size(), true);
+        ::memcpy(staging.mapped_ptr, upload.data.data(), upload.data.size());
+
+		InflightContext::BufferImageCopyCommand task;
+        task.src = staging;
+        task.dst = upload.dst;
+        task.extent = upload.extent;
+        record_buffer_image_copy(cbuf, task);
+    }
+    cbuf.end();
+    // TODO: command buffer is leaked here
+    // get an unpooled fence
+    auto fence = device.createFence({});
+    vk::SubmitInfo si;
+    si.commandBufferCount = 1;
+    si.pCommandBuffers = &cbuf;
+    {
+        std::lock_guard _(gfx_queue_lock);
+        graphics_queue.submit(si, fence);
+    }
+    return fence;
+}
+
 vuk::Buffer vuk::Context::allocate_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size) {
     return allocator.allocate_buffer(mem_usage, buffer_usage, size, false);
 }
+
+vuk::Texture vuk::Context::allocate_texture(vk::Format format, vk::Extent3D extents) {
+    vk::ImageCreateInfo ici;
+	ici.format = format;
+	ici.extent = extents;
+	ici.arrayLayers = 1;
+	ici.initialLayout = vk::ImageLayout::eUndefined;
+	ici.mipLevels = 1;
+	ici.imageType = vk::ImageType::e2D;
+	ici.samples = vk::SampleCountFlagBits::e1;
+	ici.tiling = vk::ImageTiling::eOptimal;
+	ici.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
+	auto dst = allocator.create_image(ici);
+	vk::ImageViewCreateInfo ivci;
+	ivci.format = format;
+	ivci.image = dst;
+	ivci.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+	ivci.subresourceRange.baseArrayLayer = 0;
+	ivci.subresourceRange.baseMipLevel = 0;
+	ivci.subresourceRange.layerCount = 1;
+	ivci.subresourceRange.levelCount = 1;
+	ivci.viewType = vk::ImageViewType::e2D;
+	auto iv = device.createImageView(ivci);
+	vuk::Texture tex{ vuk::Unique<vk::Image>(*this, dst), vuk::Unique<vuk::ImageView>(*this, wrap(iv)) };
+	tex.extent = extents;
+	tex.format = format;
+    return tex;
+}
+
 
 void vuk::Context::enqueue_destroy(vk::Image i) {
 	std::lock_guard _(recycle_locks[frame_counter % FC]);

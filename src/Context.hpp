@@ -160,16 +160,26 @@ namespace vuk {
 
 		// one pool per thread
         std::mutex one_time_pool_lock;
-		std::vector<vk::CommandPool> one_time_pools;
+		std::vector<vk::CommandPool> xfer_one_time_pools;
+        std::vector<vk::CommandPool> one_time_pools;
+
         uint32_t (*get_thread_index)() = nullptr;
 
-		struct Upload {
+		struct Buffer_Upload {
             vuk::Buffer dst;
             std::span<unsigned char> data;
 		};
-		vk::Fence fenced_upload(std::span<Upload>);
+		vk::Fence fenced_upload(std::span<Buffer_Upload>);
+
+		struct Image_Upload {
+            vk::Image dst;
+            vk::Extent3D extent;
+            std::span<unsigned char> data;
+		};
+		vk::Fence fenced_upload(std::span<Image_Upload>);
 
 		Buffer allocate_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size);
+        Texture allocate_texture(vk::Format format, vk::Extent3D extents);
 
 		void enqueue_destroy(vk::Image);
 		void enqueue_destroy(vuk::ImageView);
@@ -232,9 +242,6 @@ namespace vuk {
 		void wait_all_transfers();
 		PerThreadContext begin();
 
-	private:
-		friend class PerThreadContext;
-
 		struct BufferCopyCommand {
 			Buffer src;
 			Buffer dst;
@@ -248,6 +255,9 @@ namespace vuk {
 			TransferStub stub;
 		};
 
+	private:
+		friend class PerThreadContext;
+		
 		std::atomic<size_t> transfer_id = 1;
 		std::atomic<size_t> last_transfer_complete = 0;
 
