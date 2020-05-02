@@ -179,7 +179,7 @@ namespace vuk {
 		vk::Fence fenced_upload(std::span<Image_Upload>);
 
 		Buffer allocate_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size);
-        Texture allocate_texture(vk::Format format, vk::Extent3D extents);
+        Texture allocate_texture(vk::Format format, vk::Extent3D extents, uint32_t miplevels);
 
 		void enqueue_destroy(vk::Image);
 		void enqueue_destroy(vuk::ImageView);

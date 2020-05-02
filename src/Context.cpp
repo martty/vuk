@@ -225,7 +225,7 @@ void vuk::PerThreadContext::wait_all_transfers() {
 }
 
 std::pair<vuk::Texture, vuk::TransferStub> vuk::PerThreadContext::create_texture(vk::Format format, vk::Extent3D extents, void* data) {
-    auto tex = ctx.allocate_texture(format, extents);
+    auto tex = ctx.allocate_texture(format, extents, 1);
 	auto stub = upload(*tex.image, extents, std::span<std::byte>((std::byte*)data, extents.width * extents.height * extents.depth * 4));
 	return { std::move(tex), stub };
 }
@@ -253,8 +253,33 @@ void record_buffer_image_copy(vk::CommandBuffer& cbuf, vuk::InflightContext::Buf
     copy_barrier.subresourceRange.layerCount = bc.imageSubresource.layerCount;
     copy_barrier.subresourceRange.baseArrayLayer = bc.imageSubresource.baseArrayLayer;
     copy_barrier.subresourceRange.baseMipLevel = bc.imageSubresource.mipLevel;
-    copy_barrier.subresourceRange.levelCount = 1;
+    copy_barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
 
+	// transition top mip to transfersrc
+    vk::ImageMemoryBarrier top_mip_to_barrier;
+    top_mip_to_barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+    top_mip_to_barrier.dstAccessMask = vk::AccessFlagBits::eTransferRead;
+    top_mip_to_barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
+    top_mip_to_barrier.newLayout = vk::ImageLayout::eTransferSrcOptimal;
+    top_mip_to_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    top_mip_to_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    top_mip_to_barrier.image = task.dst;
+    top_mip_to_barrier.subresourceRange = copy_barrier.subresourceRange;
+    top_mip_to_barrier.subresourceRange.levelCount = 1;
+
+    // transition top mip to SROO
+    vk::ImageMemoryBarrier top_mip_use_barrier;
+    top_mip_use_barrier.srcAccessMask = vk::AccessFlagBits::eTransferRead;
+    top_mip_use_barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+    top_mip_use_barrier.oldLayout = vk::ImageLayout::eTransferSrcOptimal;
+    top_mip_use_barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+    top_mip_use_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    top_mip_use_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    top_mip_use_barrier.image = task.dst;
+    top_mip_use_barrier.subresourceRange = copy_barrier.subresourceRange;
+    top_mip_use_barrier.subresourceRange.levelCount = 1;
+
+    // transition rest of the mips to SROO
     vk::ImageMemoryBarrier use_barrier;
     use_barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
     use_barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
@@ -264,9 +289,31 @@ void record_buffer_image_copy(vk::CommandBuffer& cbuf, vuk::InflightContext::Buf
     use_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     use_barrier.image = task.dst;
     use_barrier.subresourceRange = copy_barrier.subresourceRange;
+    use_barrier.subresourceRange.baseMipLevel = 1;
 
     cbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe, vk::PipelineStageFlagBits::eTransfer, vk::DependencyFlagBits(0), {}, {}, copy_barrier);
     cbuf.copyBufferToImage(task.src.buffer, task.dst, vk::ImageLayout::eTransferDstOptimal, bc);
+
+    cbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eTransfer, vk::DependencyFlagBits(0), {}, {}, top_mip_to_barrier);
+    auto mips = (uint32_t)std::min(std::log2f(task.extent.width), std::log2f(task.extent.height));
+
+
+	for(auto miplevel = 1; miplevel < mips; miplevel++) {
+        vk::ImageBlit blit;
+        blit.srcSubresource.aspectMask = copy_barrier.subresourceRange.aspectMask;
+        blit.srcSubresource.baseArrayLayer = 0;
+        blit.srcSubresource.layerCount = 1;
+        blit.srcSubresource.mipLevel = 0;
+        blit.srcOffsets[0] = vk::Offset3D{0};
+        blit.srcOffsets[1] = vk::Offset3D(task.extent.width, task.extent.height, task.extent.depth);
+        blit.dstSubresource = blit.srcSubresource;
+        blit.dstSubresource.mipLevel = miplevel;
+        blit.dstOffsets[0] = vk::Offset3D{0};
+        blit.dstOffsets[1] = vk::Offset3D(task.extent.width >> miplevel, task.extent.height >> miplevel, task.extent.depth);
+        cbuf.blitImage(task.dst, vk::ImageLayout::eTransferSrcOptimal, task.dst, vk::ImageLayout::eTransferDstOptimal, blit, vk::Filter::eLinear);
+	}
+
+    cbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader, vk::DependencyFlagBits(0), {}, {}, top_mip_use_barrier);
     cbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader, vk::DependencyFlagBits(0), {}, {}, use_barrier);
 }
 
@@ -679,17 +726,17 @@ vuk::Buffer vuk::Context::allocate_buffer(MemoryUsage mem_usage, vk::BufferUsage
     return allocator.allocate_buffer(mem_usage, buffer_usage, size, false);
 }
 
-vuk::Texture vuk::Context::allocate_texture(vk::Format format, vk::Extent3D extents) {
+vuk::Texture vuk::Context::allocate_texture(vk::Format format, vk::Extent3D extents, uint32_t miplevels) {
     vk::ImageCreateInfo ici;
 	ici.format = format;
 	ici.extent = extents;
 	ici.arrayLayers = 1;
 	ici.initialLayout = vk::ImageLayout::eUndefined;
-	ici.mipLevels = 1;
+	ici.mipLevels = miplevels;
 	ici.imageType = vk::ImageType::e2D;
 	ici.samples = vk::SampleCountFlagBits::e1;
 	ici.tiling = vk::ImageTiling::eOptimal;
-	ici.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
+	ici.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferSrc;
 	auto dst = allocator.create_image(ici);
 	vk::ImageViewCreateInfo ivci;
 	ivci.format = format;
@@ -698,7 +745,7 @@ vuk::Texture vuk::Context::allocate_texture(vk::Format format, vk::Extent3D exte
 	ivci.subresourceRange.baseArrayLayer = 0;
 	ivci.subresourceRange.baseMipLevel = 0;
 	ivci.subresourceRange.layerCount = 1;
-	ivci.subresourceRange.levelCount = 1;
+	ivci.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
 	ivci.viewType = vk::ImageViewType::e2D;
 	auto iv = device.createImageView(ivci);
 	vuk::Texture tex{ vuk::Unique<vk::Image>(*this, dst), vuk::Unique<vuk::ImageView>(*this, wrap(iv)) };
