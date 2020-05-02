@@ -119,6 +119,7 @@ namespace vuk {
 		std::unordered_map<uint64_t, vk::Buffer> buffers;
 
 		VmaAllocator allocator;
+        vk::PhysicalDeviceProperties properties;
 	public:
 		Allocator(vk::Instance instance, vk::Device device, vk::PhysicalDevice phys_dev);
 		~Allocator();

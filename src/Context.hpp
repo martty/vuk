@@ -92,7 +92,9 @@ namespace vuk {
 		vk::Device device;
 		vk::PhysicalDevice physical_device;
 		vk::Queue graphics_queue;
+        uint32_t graphics_queue_family_index;
         vk::Queue transfer_queue;
+        uint32_t transfer_queue_family_index;
 		Allocator allocator;
 
 		std::mutex gfx_queue_lock;

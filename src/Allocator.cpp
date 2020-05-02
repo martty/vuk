@@ -81,6 +81,7 @@ namespace vuk {
 		allocatorInfo.pDeviceMemoryCallbacks = &cbs;
 
 		vmaCreateAllocator(&allocatorInfo, &allocator);
+        properties = phys_dev.getProperties();
 
 		pool_helper->device = device;
 	}
@@ -127,8 +128,13 @@ namespace vuk {
         if(size == 0) {
             return {.buffer = vk::Buffer{}, .size = 0};
         }
-		// TODO: use queried alignment
-        auto alignment = 0x10ull;
+        auto alignment = pool.mem_reqs.alignment;
+		if (pool.usage & vk::BufferUsageFlagBits::eUniformBuffer) {
+            alignment = std::max(alignment, properties.limits.minUniformBufferOffsetAlignment);
+		}
+		if (pool.usage & vk::BufferUsageFlagBits::eStorageBuffer) {
+            alignment = std::max(alignment, properties.limits.minStorageBufferOffsetAlignment);
+		}
         auto new_needle = pool.needle.fetch_add(size + alignment) + size + alignment; 
 		auto base_addr = new_needle - size - alignment;
         
