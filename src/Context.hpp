@@ -167,18 +167,28 @@ namespace vuk {
 
         uint32_t (*get_thread_index)() = nullptr;
 
-		struct Buffer_Upload {
+		// when the fence is signaled, caller should clean up the resources
+		struct UploadResult {
+            vk::Fence fence;
+            vk::CommandBuffer command_buffer;
+            vuk::Buffer staging;
+            bool is_buffer;
+            unsigned thread_index;
+		};
+
+		struct BufferUpload {
             vuk::Buffer dst;
             std::span<unsigned char> data;
 		};
-		vk::Fence fenced_upload(std::span<Buffer_Upload>);
+		UploadResult fenced_upload(std::span<BufferUpload>);
 
-		struct Image_Upload {
+		struct ImageUpload {
             vk::Image dst;
             vk::Extent3D extent;
             std::span<unsigned char> data;
 		};
-		vk::Fence fenced_upload(std::span<Image_Upload>);
+		UploadResult fenced_upload(std::span<ImageUpload>);
+        void free_upload_resources(const UploadResult&);
 
 		Buffer allocate_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size);
         Texture allocate_texture(vk::Format format, vk::Extent3D extents, uint32_t miplevels);
@@ -417,7 +427,8 @@ namespace vuk {
 
     template<typename Type>
     inline Unique<Type>::~Unique() noexcept {
-        if (context) context->enqueue_destroy(payload);
+        if(context && payload != Type{})
+            context->enqueue_destroy(payload);
     }
     template<typename Type>
     inline void Unique<Type>::reset(Type const& value) noexcept {

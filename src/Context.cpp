@@ -624,33 +624,45 @@ vuk::ShaderModule vuk::Context::compile_shader(Name path) {
     return shader_modules.acquire(sci);
 }
 
-vk::Fence vuk::Context::fenced_upload(std::span<Buffer_Upload> uploads) {
+vuk::Context::UploadResult vuk::Context::fenced_upload(std::span<BufferUpload> uploads) {
 	// get a one time command buffer
     auto tid = get_thread_index ? get_thread_index() : 0;
+
+	vk::CommandBuffer cbuf;
     {
         std::lock_guard _(one_time_pool_lock);
         if(xfer_one_time_pools.size() < (tid + 1)) {
             xfer_one_time_pools.resize(tid + 1, vk::CommandPool{});
         }
-    }
-    auto& pool = xfer_one_time_pools[tid];
-	if (pool == vk::CommandPool{}) {
-        vk::CommandPoolCreateInfo cpci;
-        cpci.queueFamilyIndex = transfer_queue_family_index; 
-        cpci.flags = vk::CommandPoolCreateFlagBits::eTransient | vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
-        pool = device.createCommandPool(cpci);
-	}
-    vk::CommandBufferAllocateInfo cbai;
-    cbai.commandPool = pool;
-    cbai.commandBufferCount = 1;
 
-    auto cbuf = device.allocateCommandBuffers(cbai)[0];
+        auto& pool = xfer_one_time_pools[tid];
+        if(pool == vk::CommandPool{}) {
+            vk::CommandPoolCreateInfo cpci;
+            cpci.queueFamilyIndex = transfer_queue_family_index;
+            cpci.flags = vk::CommandPoolCreateFlagBits::eTransient;
+            pool = device.createCommandPool(cpci);
+        }
+
+        vk::CommandBufferAllocateInfo cbai;
+        cbai.commandPool = pool;
+        cbai.commandBufferCount = 1;
+
+        cbuf = device.allocateCommandBuffers(cbai)[0];
+    }
     vk::CommandBufferBeginInfo cbi;
     cbi.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
     cbuf.begin(cbi);
+
+	size_t size = 0;
+	for (auto& upload : uploads) {
+        size += upload.data.size();
+	}
+
+	// create 1 big staging buffer
+	auto staging_alloc = allocator.allocate_buffer(vuk::MemoryUsage::eCPUonly, vk::BufferUsageFlagBits::eTransferSrc, size, true);
+    auto staging = staging_alloc;
     for(auto& upload: uploads) {
-		// create staging buffer, copy to staging
-		auto staging = allocator.allocate_buffer(vuk::MemoryUsage::eCPUonly, vk::BufferUsageFlagBits::eTransferSrc, upload.data.size(), true);
+		// copy to staging
 		::memcpy(staging.mapped_ptr, upload.data.data(), upload.data.size());
 
         vk::BufferCopy bc;
@@ -658,9 +670,11 @@ vk::Fence vuk::Context::fenced_upload(std::span<Buffer_Upload> uploads) {
         bc.srcOffset = staging.offset;
         bc.size = upload.data.size();
         cbuf.copyBuffer(staging.buffer, upload.dst.buffer, bc);
+
+		staging.offset += upload.data.size();
+        staging.mapped_ptr = static_cast<unsigned char*>(staging.mapped_ptr) + upload.data.size();
     }
     cbuf.end();
-	// TODO: command buffer is leaked here
 	// get an unpooled fence
     auto fence = device.createFence({});
     vk::SubmitInfo si;
@@ -670,36 +684,45 @@ vk::Fence vuk::Context::fenced_upload(std::span<Buffer_Upload> uploads) {
         std::lock_guard _(xfer_queue_lock);
         transfer_queue.submit(si, fence);
     }
-    return fence;
+    return {fence, cbuf, staging_alloc, true, tid};
 }
 
-vk::Fence vuk::Context::fenced_upload(std::span<Image_Upload> uploads) {
+vuk::Context::UploadResult vuk::Context::fenced_upload(std::span<ImageUpload> uploads) {
     // get a one time command buffer
     auto tid = get_thread_index ? get_thread_index() : 0;
+    vk::CommandBuffer cbuf;
     {
         std::lock_guard _(one_time_pool_lock);
         if(one_time_pools.size() < (tid + 1)) {
             one_time_pools.resize(tid + 1, vk::CommandPool{});
         }
-    }
-    auto& pool = one_time_pools[tid];
-    if(pool == vk::CommandPool{}) {
-        vk::CommandPoolCreateInfo cpci;
-        cpci.queueFamilyIndex = graphics_queue_family_index;
-        cpci.flags = vk::CommandPoolCreateFlagBits::eTransient | vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
-        pool = device.createCommandPool(cpci);
-    }
-    vk::CommandBufferAllocateInfo cbai;
-    cbai.commandPool = pool;
-    cbai.commandBufferCount = 1;
+        auto& pool = one_time_pools[tid];
+        if(pool == vk::CommandPool{}) {
+            vk::CommandPoolCreateInfo cpci;
+            cpci.queueFamilyIndex = graphics_queue_family_index;
+            cpci.flags = vk::CommandPoolCreateFlagBits::eTransient;
+            pool = device.createCommandPool(cpci);
+        }
+        vk::CommandBufferAllocateInfo cbai;
+        cbai.commandPool = pool;
+        cbai.commandBufferCount = 1;
 
-    auto cbuf = device.allocateCommandBuffers(cbai)[0];
+        cbuf = device.allocateCommandBuffers(cbai)[0];
+    }
     vk::CommandBufferBeginInfo cbi;
     cbi.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
     cbuf.begin(cbi);
+
+    size_t size = 0;
     for(auto& upload: uploads) {
-        // create staging buffer, copy to staging
-        auto staging = allocator.allocate_buffer(vuk::MemoryUsage::eCPUonly, vk::BufferUsageFlagBits::eTransferSrc, upload.data.size(), true);
+        size += upload.data.size();
+    }
+
+    // create 1 big staging buffer
+	auto staging_alloc = allocator.allocate_buffer(vuk::MemoryUsage::eCPUonly, vk::BufferUsageFlagBits::eTransferSrc, size, true);
+    auto staging = staging_alloc;
+    for(auto& upload: uploads) {
+        // copy to staging
         ::memcpy(staging.mapped_ptr, upload.data.data(), upload.data.size());
 
 		InflightContext::BufferImageCopyCommand task;
@@ -707,9 +730,10 @@ vk::Fence vuk::Context::fenced_upload(std::span<Image_Upload> uploads) {
         task.dst = upload.dst;
         task.extent = upload.extent;
         record_buffer_image_copy(cbuf, task);
+		staging.offset += upload.data.size();
+        staging.mapped_ptr = static_cast<unsigned char*>(staging.mapped_ptr) + upload.data.size();
     }
     cbuf.end();
-    // TODO: command buffer is leaked here
     // get an unpooled fence
     auto fence = device.createFence({});
     vk::SubmitInfo si;
@@ -719,7 +743,15 @@ vk::Fence vuk::Context::fenced_upload(std::span<Image_Upload> uploads) {
         std::lock_guard _(gfx_queue_lock);
         graphics_queue.submit(si, fence);
     }
-    return fence;
+    return {fence, cbuf, staging_alloc, false, tid};
+}
+
+void vuk::Context::free_upload_resources(const UploadResult& ur) {
+    auto& pools = ur.is_buffer ? xfer_one_time_pools : one_time_pools;
+    std::lock_guard _(one_time_pool_lock);
+    device.freeCommandBuffers(pools[ur.thread_index], ur.command_buffer);
+    allocator.free_buffer(ur.staging);
+    device.destroyFence(ur.fence);
 }
 
 vuk::Buffer vuk::Context::allocate_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size) {
@@ -835,7 +867,17 @@ vuk::Context::~Context() {
 			device.destroy(swiv.payload);
 		}
 		device.destroy(s.swapchain);
-	}
+    }
+    for(auto& cp: one_time_pools) {
+        if(cp != vk::CommandPool{}) {
+            device.destroyCommandPool(cp);
+        }
+    }
+    for(auto& cp: xfer_one_time_pools) {
+        if(cp != vk::CommandPool{}) {
+            device.destroyCommandPool(cp);
+        }
+    }
 }
 
 vuk::InflightContext vuk::Context::begin() {
