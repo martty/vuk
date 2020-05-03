@@ -8,7 +8,7 @@ std::regex parse_parameters_regex(R"(\s*(?:(\w+)\s*::)?\s*(\w+)\s*(?:\$\d+)?(\w+
 std::regex find_struct(R"(\s*struct\s*(\w+)\s*\{([\s\S]*?)\};)");
 std::regex parse_struct_members(R"(\s*(?:layout\((.*)\))?\s*(?:(\w+)::)?\s*(\w+)\s*(\w+))");
 std::regex pragma_regex(R"(#pragma\s*(\w+)?\s+(?:(\w+)\s*::)?\s*([\w\/]+)\s*:\s*(\S+))");
-std::regex find_stages(R"((\w+)\s*(\w+?)\s*::\s*(\w+)\s*\((.+)\)(\s*\{[\s\S]+?\}))");
+std::regex find_stages(R"((\w+)\s*(\w+?)\s*::\s*(\w+)\s*\((.+)\)\s*\{)");
 std::regex include_regex(R"(#include\s*(?:"\s*(\S+)\s*")|#include\s*(?:<\s*(\S+)\s*>))");
 std::regex parse_probes_regex(R"((?:(int|float|vec2|vec3|vec4) )?\$(\d+)([\w.]+))");
 std::regex probe_strip_regex(R"((?:\$\d+)(\w+))");
@@ -421,13 +421,14 @@ namespace vush {
 
         auto words_begin = std::sregex_iterator(src.begin(), src.end(), find_stages);
         auto words_end = std::sregex_iterator();
+        auto prefix_offset = 0;
         for(std::sregex_iterator it = words_begin; it != words_end; ++it) {
             std::smatch match = *it;
             stage_entry se;
             auto pos = match.position(0);
             auto before = src.substr(0, pos);
             se.signature_line_number = std::count(before.begin(), before.end(), '\n') + 1;
-            auto prefix = match.prefix().str();
+            auto prefix = match.prefix().str().substr(prefix_offset);
             context += prefix;
             se.context = context;
             se.return_type = match[1].str();
@@ -436,7 +437,21 @@ namespace vush {
             se.stage_as_string = match[3].str();
 
             se.parameters = parse_parameters(match[4].str(), parameters_per_scope);
-            se.body = match[5].str();
+            int open_count = 1;
+            auto suffix = match.suffix().str();
+            for(auto i = 0; i < suffix.size(); i++) {
+                auto s = suffix[i];
+                if(s == '{') {
+                    open_count++;
+                } else if(s == '}') {
+                    open_count--;
+                    if (open_count == 0) {
+                        se.body = "{" + suffix.substr(0, i + 1);
+                        prefix_offset = i + 1;
+                        break;
+                    }
+                }
+            }
 
             // parse prefix for structs & metadata & includes
             parse_context(prefix, structs, metadata);
