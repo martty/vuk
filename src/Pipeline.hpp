@@ -78,24 +78,20 @@ namespace vuk {
 		PipelineCreateInfo();
 
 		PipelineCreateInfo(const PipelineCreateInfo& o) {
-            memcpy(this, &o, offsetof(PipelineCreateInfo, shaders));
-            shaders = o.shaders;
+            memcpy(this, &o, sizeof(PipelineCreateInfo));
 		}
 
 		PipelineCreateInfo& operator=(const PipelineCreateInfo& o) {
-			memcpy(this, &o, offsetof(PipelineCreateInfo, shaders));
-            shaders = o.shaders;
+            memcpy(this, &o, sizeof(PipelineCreateInfo));
             return *this;
 		}
 
 		PipelineCreateInfo(PipelineCreateInfo&& o) {
-            memcpy(this, &o, offsetof(PipelineCreateInfo, shaders));
-            shaders = std::move(o.shaders);
+            memcpy(this, &o, sizeof(PipelineCreateInfo));
 		}
 
 		PipelineCreateInfo& operator=(PipelineCreateInfo&& o) {
-			memcpy(this, &o, offsetof(PipelineCreateInfo, shaders));
-            shaders = std::move(o.shaders);
+            memcpy(this, &o, sizeof(PipelineCreateInfo));
             return *this;
 		}
 		

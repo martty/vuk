@@ -794,6 +794,9 @@ namespace vuk {
 					if (!att.samples.infer)
 						rpi.samples = att.samples.count;
 				}
+				if (rpi.color_attachments.size() == 0) { // depth only pass, samples == 1
+                    rpi.samples = vk::SampleCountFlagBits::e1;
+				}
 				cobuf.ongoing_renderpass = rpi;
 				if (sp.pass->pass.execute) {
 					if (!sp.pass->pass.name.empty()) {

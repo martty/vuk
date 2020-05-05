@@ -262,7 +262,7 @@ namespace vush {
         // emit out handling
         if(se.stage == stage_entry::type::eVertex) {
             result << "layout(location = 0) out " << se.return_type << " _out;\n";
-        } else if(se.stage == stage_entry::type::eFragment) {
+        } else if(se.stage == stage_entry::type::eFragment && se.return_type != "void") {
             auto& str = structs.at(se.return_type);
             size_t index = 0;
             for(auto& m: str.members) {
@@ -358,10 +358,12 @@ namespace vush {
             result << rule.bind_template.render(hash);
         }
 
-        if(se.stage != stage_entry::type::eFragment) {
-            result << "\t_out = ";
-        } else {
-            result << "\t" << se.return_type << " _out = ";
+        if(se.return_type != "void") {
+            if(se.stage != stage_entry::type::eFragment) {
+                result << "\t_out = ";
+            } else {
+                result << "\t" << se.return_type << " _out = ";
+            }
         }
         result << se.aspect_name << "_" << se.stage_as_string << "(";
         for(auto i = 0; i < se.parameters.size(); i++) {
@@ -371,15 +373,16 @@ namespace vush {
                 result << ", ";
         }
         result << ");\n";
-        if(se.stage == stage_entry::type::eFragment) { // destructure the result into the out params
+
+        if(se.stage == stage_entry::type::eFragment && se.return_type != "void") { // destructure the result into the out params
             auto& str = structs.at(se.return_type);
             for(auto& m: str.members) {
                 result << "\t"
                        << "_" << m.name << "_out = _out." << m.name << ";\n";
             }
         }
-        result << "}";
 
+        result << "}";
         generate_result::per_aspect& pa = gresult.aspects[se.aspect_name];
         pa.shaders.emplace_back(generate_result::per_aspect::shader{se.stage, result.str()});
         auto mit = metadata.find(se.aspect_name);
@@ -415,7 +418,7 @@ namespace vush {
 
         std::unordered_map<std::string, struct_entry> structs;
         std::unordered_map<std::string, meta> metadata;
-        std::unordered_map<std::string, std::vector<parameter_entry>> parameters_per_scope;
+        std::unordered_map<std::string, std::unordered_map<std::string, std::vector<parameter_entry>>> parameters_per_scope;
         std::vector<stage_entry> stages;
         std::string context = "";
 
@@ -436,7 +439,7 @@ namespace vush {
             se.stage = to_stage(match[3].str());
             se.stage_as_string = match[3].str();
 
-            se.parameters = parse_parameters(match[4].str(), parameters_per_scope);
+            se.parameters = parse_parameters(match[4].str(), parameters_per_scope[se.aspect_name]);
             int open_count = 1;
             auto suffix = match.suffix().str();
             for(auto i = 0; i < suffix.size(); i++) {
@@ -470,7 +473,7 @@ namespace vush {
         }
         
         for(auto& se: stages) {
-            generate(filename, se, structs, metadata, parameters_per_scope, gresult);
+            generate(filename, se, structs, metadata, parameters_per_scope[se.aspect_name], gresult);
         }
 
         for(auto& [aspect, res]: gresult.aspects) {
