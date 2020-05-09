@@ -812,7 +812,7 @@ namespace vuk {
 				cobuf.set_bindings = {};
 				cobuf.sets_used = {};
 				if (i < rpass.subpasses.size() - 1)
-					cbuf.nextSubpass(vk::SubpassContents::eInline);
+					cbuf.nextSubpass(vk::SubpassContents::eSecondaryCommandBuffers);
 			}
 			cbuf.endRenderPass();
 		}

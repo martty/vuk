@@ -10,6 +10,7 @@
 std::string slurp(const std::string& path) {
 	std::ostringstream buf;
 	std::ifstream input(path.c_str());
+    assert(input);
 	buf << input.rdbuf();
 	return buf.str();
 }

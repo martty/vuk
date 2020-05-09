@@ -7,7 +7,7 @@ std::unordered_map<std::string, std::unordered_map<std::string, vush::rule>> rul
 std::regex parse_parameters_regex(R"(\s*(?:(\w+)\s*::)?\s*(\w+)\s*(?:\$\d+)?(\w+))");
 std::regex find_struct(R"(\s*struct\s*(\w+)\s*\{([\s\S]*?)\};)");
 std::regex parse_struct_members(R"(\s*(?:layout\((.*)\))?\s*(?:(\w+)::)?\s*(\w+)\s*(\w+))");
-std::regex pragma_regex(R"(#pragma\s*(\w+)?\s+(?:(\w+)\s*::)?\s*([\w\/]+)\s*:\s*(\S+))");
+std::regex pragma_regex(R"(^#pragma\s*(\w+)?\s+(?:(\w+)\s*::)?\s*([\w\/]+)\s*:\s*(\S+))");
 std::regex find_stages(R"((\w+)\s*(\w+?)\s*::\s*(\w+)\s*\((.+)\)\s*\{)");
 std::regex include_regex(R"(#include\s*(?:"\s*(\S+)\s*")|#include\s*(?:<\s*(\S+)\s*>))");
 std::regex parse_probes_regex(R"((?:(int|float|vec2|vec3|vec4) )?\$(\d+)([\w.]+))");
