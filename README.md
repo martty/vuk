@@ -1,3 +1,5 @@
+![vuk logo](https://github.com/martty/vuk/blob/master/vuk_logo.png)
+
 ### **vuk** - A rendergraph-based abstraction for Vulkan
 
 ### Quick Start
