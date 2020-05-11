@@ -8,21 +8,153 @@ std::regex parse_parameters_regex(R"(\s*(?:(\w+)\s*::)?\s*(\w+)\s*(?:\$\d+)?(\w+
 std::regex find_struct(R"(\s*struct\s*(\w+)\s*\{([\s\S]*?)\};)");
 std::regex parse_struct_members(R"(\s*(?:layout\((.*)\))?\s*(?:(\w+)::)?\s*(\w+)\s*(\w+))");
 std::regex pragma_regex(R"(^#pragma\s*(\w+)?\s+(?:(\w+)\s*::)?\s*([\w\/]+)\s*:\s*(\S+))");
-std::regex find_stages(R"((\w+)\s*(\w+?)\s*::\s*(\w+)\s*\((.+)\)\s*\{)");
+std::regex find_stages(R"((\w+)\s*(\w+?)\s*::\s*(\w+)\s*\(([\s\S]+?)\)\s*\{)");
 std::regex include_regex(R"(#include\s*(?:"\s*(\S+)\s*")|#include\s*(?:<\s*(\S+)\s*>))");
 std::regex parse_probes_regex(R"((?:(int|float|vec2|vec3|vec4) )?\$(\d+)([\w.]+))");
 std::regex probe_strip_regex(R"((?:\$\d+)(\w+))");
 
 namespace {
-std::string slurp(const std::string& path) {
-	std::ostringstream buf;
-	std::ifstream input(path.c_str());
-	buf << input.rdbuf();
-	return buf.str();
-}
-}
+    std::string slurp(const std::string& path) {
+        std::ostringstream buf;
+        std::ifstream input(path.c_str());
+        buf << input.rdbuf();
+        return buf.str();
+    }
+} // namespace
 
 namespace vush {
+
+    /*
+pre-preprocess FEATURE(flag, A) into
+#if flag != 0
+A
+#endif
+
+pre-preprocess FEATURE(flag, A, B) into
+#if flag == 1
+A
+#elif flag == 0
+B
+#else
+A, B
+#endif
+
+pre-preprocess SELECT(flag, A) into
+#if flag == 1
+A
+#elif flag == 2
+if(_features.flag) { A; }
+#endif
+
+pre-preprocess SELECT(flag, A, B) into
+#if flag == 1
+A
+#elif flag == 0
+B
+#else
+_features.flag ? A : B
+#endif
+*/
+    std::string expand_feature(const std::string& str) {
+        std::stringstream out;
+        auto offset = 0;
+        auto begin = str.find("FEATURE(", offset);
+        while(begin != str.npos) {
+            auto open_count = 1;
+            auto i = begin + 8;
+            std::vector<size_t> comma_pos;
+            for(; i < str.size(); i++) {
+                if(str[i] == '(') {
+                    open_count++;
+                } else if(str[i] == ')') {
+                    open_count--;
+                    if(open_count == 0)
+                        break;
+                } else if(str[i] == ',' && open_count == 1) {
+                    comma_pos.push_back(i);
+                }
+            }
+            out << str.substr(offset, begin - offset);
+            offset = i;
+            auto flag = std::string_view(str.data() + begin + 8, comma_pos[0] - (begin + 8));
+            std::array<std::string_view, 2> args;
+            bool two_arg = comma_pos.size() == 2;
+            if(two_arg) {
+                args[0] = std::string_view(str.data() + comma_pos[0] + 1, comma_pos[1] - comma_pos[0] - 1);
+                args[1] = std::string_view(str.data() + comma_pos[1] + 1, offset - comma_pos[1] - 1);
+                out << "#if " << flag << " == 1\n";
+                out << args[0] << '\n';
+                out << "#elif " << flag << " == 0\n";
+                out << args[1] << '\n';
+                out << "#else\n";
+                out << args[0] << ", " << args[1] << '\n';
+                out << "#endif\n";
+            } else {
+                args[0] = std::string_view(str.data() + comma_pos[0] + 1, offset - comma_pos[0] - 1);
+                out << "#if " << flag << "!= 0\n";
+                out << args[0] << '\n';
+                out << "#endif\n";
+            }
+            offset++; // trailing )
+            begin = str.find("FEATURE(", offset);
+        }
+        out << str.substr(offset, str.npos);
+        return out.str();
+    }
+
+    std::string expand_select(const std::string& str) {
+        std::stringstream out;
+        auto offset = 0;
+        auto begin = str.find("SELECT(", offset);
+        while(begin != str.npos) {
+            auto open_count = 1;
+            auto i = begin + 7;
+            std::vector<size_t> comma_pos;
+            for(; i < str.size(); i++) {
+                if(str[i] == '(') {
+                    open_count++;
+                } else if(str[i] == ')') {
+                    open_count--;
+                    if(open_count == 0)
+                        break;
+                } else if(str[i] == ',' && open_count == 1) {
+                    comma_pos.push_back(i);
+                }
+            }
+            out << str.substr(offset, begin - offset);
+            offset = i;
+            auto flag = std::string_view(str.data() + begin + 7, comma_pos[0] - (begin + 7));
+            std::array<std::string_view, 2> args;
+            bool two_arg = comma_pos.size() == 2;
+            if(two_arg) {
+                args[0] = std::string_view(str.data() + comma_pos[0] + 1, comma_pos[1] - comma_pos[0] - 1);
+                args[1] = std::string_view(str.data() + comma_pos[1] + 1, offset - comma_pos[1] - 1);
+                out << "\n#if " << flag << " == 1\n";
+                out << args[0] << '\n';
+                out << "#elif " << flag << " == 0\n";
+                out << args[1] << '\n';
+                out << "#else\n";
+                out << "_features." << flag << " ? " << args[0] << " : " << args[1] << '\n';
+                out << "#endif\n";
+            } else {
+                args[0] = std::string_view(str.data() + comma_pos[0] + 1, offset - comma_pos[0] - 1);
+                out << "#if " << flag << "== 1\n";
+                out << args[0] << '\n';
+                out << "#elif " << flag << " == 2\n";
+                out << "if(_features." << flag << ") {" << args[0] << ";}\n";
+                out << "#endif\n";
+            }
+            offset++; // trailing )
+            begin = str.find("SELECT(", offset);
+        }
+        out << str.substr(offset, str.npos);
+        return out.str();
+    }
+
+    std::string preprocess(const std::string& str) {
+        return expand_select(expand_feature(str));
+    }
+
     struct_entry parse_struct(std::string name, const std::string& body) {
         struct_entry str;
         str.name = name;
@@ -246,8 +378,7 @@ namespace vush {
 
     void generate(const char* filename, stage_entry& se, const std::unordered_map<std::string, struct_entry>& structs,
                   const std::unordered_map<std::string, meta>& metadata,
-                  const std::unordered_map<std::string, std::vector<parameter_entry>>& parameters_per_scope,
-                  generate_result& gresult) {
+                  const std::unordered_map<std::string, std::vector<parameter_entry>>& parameters_per_scope, generate_result& gresult) {
         std::stringstream result;
         // assemble template hash
         result << "// file generated by vush compiler, from " << filename << '\n';
@@ -306,8 +437,6 @@ namespace vush {
 
             auto binding_count = rule.binding_count.render(hash).length();
             binding += binding_count;
-
-            
         }
         result << '\n';
 
@@ -448,7 +577,7 @@ namespace vush {
                     open_count++;
                 } else if(s == '}') {
                     open_count--;
-                    if (open_count == 0) {
+                    if(open_count == 0) {
                         se.body = "{" + suffix.substr(0, i + 1);
                         prefix_offset = i + 1;
                         break;
@@ -460,7 +589,7 @@ namespace vush {
             parse_context(prefix, structs, metadata);
             auto& meta = metadata[se.aspect_name];
             meta.parameters.insert(meta.parameters.end(), se.parameters.begin(), se.parameters.end());
-            gresult.structs.insert(structs.begin(), structs.end()); 
+            gresult.structs.insert(structs.begin(), structs.end());
 
             auto param_probes = parse_probes(match[4].str(), se.signature_line_number, structs, se.parameters);
             auto body_probes = parse_probes(se.body, se.signature_line_number, structs, se.parameters);
@@ -471,7 +600,7 @@ namespace vush {
             se.probes.insert(se.probes.end(), body_probes.begin(), body_probes.end());
             stages.push_back(std::move(se));
         }
-        
+
         for(auto& se: stages) {
             generate(filename, se, structs, metadata, parameters_per_scope[se.aspect_name], gresult);
         }

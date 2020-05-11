@@ -111,6 +111,8 @@ namespace vush {
 
     std::unordered_map<std::string, rule>& find_ruleset(const std::string& scope_name);
 
+    std::string preprocess(const std::string& str);
+
     void generate(const char* filename, stage_entry& se, const std::unordered_map<std::string, struct_entry>& structs,
                   const std::unordered_map<std::string, meta>& metadata,
                   const std::unordered_map<std::string, std::vector<parameter_entry>>& parameters_per_scope,
