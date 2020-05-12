@@ -80,11 +80,11 @@ vuk::TransferStub vuk::InflightContext::enqueue_transfer(Buffer src, Buffer dst)
 	return stub;
 }
 
-vuk::TransferStub vuk::InflightContext::enqueue_transfer(Buffer src, vk::Image dst, vk::Extent3D extent) {
+vuk::TransferStub vuk::InflightContext::enqueue_transfer(Buffer src, vk::Image dst, vk::Extent3D extent, bool generate_mips) {
 	std::lock_guard _(transfer_mutex);
 	TransferStub stub{ transfer_id++ };
-	bufferimage_transfer_commands.push({ src, dst, extent, stub });
-	return stub;
+    bufferimage_transfer_commands.push({src, dst, extent, generate_mips, stub});
+    return stub;
 }
 
 void vuk::InflightContext::wait_all_transfers() {
@@ -227,7 +227,7 @@ void vuk::PerThreadContext::wait_all_transfers() {
 
 std::pair<vuk::Texture, vuk::TransferStub> vuk::PerThreadContext::create_texture(vk::Format format, vk::Extent3D extents, void* data) {
     auto tex = ctx.allocate_texture(format, extents, 1);
-	auto stub = upload(*tex.image, extents, std::span<std::byte>((std::byte*)data, extents.width * extents.height * extents.depth * 4));
+	auto stub = upload(*tex.image, extents, std::span<std::byte>((std::byte*)data, extents.width * extents.height * extents.depth * 4), false);
 	return { std::move(tex), stub };
 }
 
@@ -272,7 +272,7 @@ void record_buffer_image_copy(vk::CommandBuffer& cbuf, vuk::InflightContext::Buf
     vk::ImageMemoryBarrier top_mip_use_barrier;
     top_mip_use_barrier.srcAccessMask = vk::AccessFlagBits::eTransferRead;
     top_mip_use_barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
-    top_mip_use_barrier.oldLayout = vk::ImageLayout::eTransferSrcOptimal;
+    top_mip_use_barrier.oldLayout = task.generate_mips ? vk::ImageLayout::eTransferSrcOptimal : vk::ImageLayout::eTransferDstOptimal;
     top_mip_use_barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
     top_mip_use_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     top_mip_use_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -294,28 +294,29 @@ void record_buffer_image_copy(vk::CommandBuffer& cbuf, vuk::InflightContext::Buf
 
     cbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe, vk::PipelineStageFlagBits::eTransfer, vk::DependencyFlagBits(0), {}, {}, copy_barrier);
     cbuf.copyBufferToImage(task.src.buffer, task.dst, vk::ImageLayout::eTransferDstOptimal, bc);
+    if(task.generate_mips) {
+        cbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eTransfer, vk::DependencyFlagBits(0), {}, {}, top_mip_to_barrier);
+        auto mips = (uint32_t)std::min(std::log2f(task.extent.width), std::log2f(task.extent.height));
 
-    cbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eTransfer, vk::DependencyFlagBits(0), {}, {}, top_mip_to_barrier);
-    auto mips = (uint32_t)std::min(std::log2f(task.extent.width), std::log2f(task.extent.height));
+        for(auto miplevel = 1; miplevel < mips; miplevel++) {
+            vk::ImageBlit blit;
+            blit.srcSubresource.aspectMask = copy_barrier.subresourceRange.aspectMask;
+            blit.srcSubresource.baseArrayLayer = 0;
+            blit.srcSubresource.layerCount = 1;
+            blit.srcSubresource.mipLevel = 0;
+            blit.srcOffsets[0] = vk::Offset3D{0};
+            blit.srcOffsets[1] = vk::Offset3D(task.extent.width, task.extent.height, task.extent.depth);
+            blit.dstSubresource = blit.srcSubresource;
+            blit.dstSubresource.mipLevel = miplevel;
+            blit.dstOffsets[0] = vk::Offset3D{0};
+            blit.dstOffsets[1] = vk::Offset3D(task.extent.width >> miplevel, task.extent.height >> miplevel, task.extent.depth);
+            cbuf.blitImage(task.dst, vk::ImageLayout::eTransferSrcOptimal, task.dst, vk::ImageLayout::eTransferDstOptimal, blit, vk::Filter::eLinear);
+        }
 
-
-	for(auto miplevel = 1; miplevel < mips; miplevel++) {
-        vk::ImageBlit blit;
-        blit.srcSubresource.aspectMask = copy_barrier.subresourceRange.aspectMask;
-        blit.srcSubresource.baseArrayLayer = 0;
-        blit.srcSubresource.layerCount = 1;
-        blit.srcSubresource.mipLevel = 0;
-        blit.srcOffsets[0] = vk::Offset3D{0};
-        blit.srcOffsets[1] = vk::Offset3D(task.extent.width, task.extent.height, task.extent.depth);
-        blit.dstSubresource = blit.srcSubresource;
-        blit.dstSubresource.mipLevel = miplevel;
-        blit.dstOffsets[0] = vk::Offset3D{0};
-        blit.dstOffsets[1] = vk::Offset3D(task.extent.width >> miplevel, task.extent.height >> miplevel, task.extent.depth);
-        cbuf.blitImage(task.dst, vk::ImageLayout::eTransferSrcOptimal, task.dst, vk::ImageLayout::eTransferDstOptimal, blit, vk::Filter::eLinear);
-	}
-
-    cbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader, vk::DependencyFlagBits(0), {}, {}, top_mip_use_barrier);
-    cbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader, vk::DependencyFlagBits(0), {}, {}, use_barrier);
+        cbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader, vk::DependencyFlagBits(0), {}, {}, use_barrier);
+    }
+    cbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader, vk::DependencyFlagBits(0), {}, {},
+                         top_mip_use_barrier);
 }
 
 void vuk::PerThreadContext::dma_task() {
@@ -730,6 +731,7 @@ vuk::Context::UploadResult vuk::Context::fenced_upload(std::span<ImageUpload> up
         task.src = staging;
         task.dst = upload.dst;
         task.extent = upload.extent;
+        task.generate_mips = true;
         record_buffer_image_copy(cbuf, task);
 		staging.offset += upload.data.size();
         staging.mapped_ptr = static_cast<unsigned char*>(staging.mapped_ptr) + upload.data.size();

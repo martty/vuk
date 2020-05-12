@@ -167,8 +167,10 @@ namespace vuk {
                     std::tuple(res, vk::DeviceMemory(vai.deviceMemory), vai.offset, vk::Buffer(vkbuffer), vai.pMappedData);
             }
             pool.current_buffer++;
-			// there is no space in the beginning of this allocation, so we just retry 
-            return _allocate_buffer(pool, size, create_mapped);
+            if(base_addr > 0) {
+                // there is no space in the beginning of this allocation, so we just retry
+                return _allocate_buffer(pool, size, create_mapped);
+            }
         }
         // wait for the buffer to be allocated
         while(pool.current_buffer.load() < buffer) {};
@@ -293,7 +295,7 @@ namespace vuk {
 
 	void Allocator::reset_pool(Linear& pool) {
 		std::lock_guard _(mutex);
-        pool.current_buffer = 0;
+        pool.current_buffer = -1;
         pool.needle = 0;
 	}
 
