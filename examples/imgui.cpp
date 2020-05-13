@@ -28,8 +28,8 @@ util::ImGuiData util::ImGui_ImplVuk_Init(vuk::PerThreadContext& ptc) {
 	io.Fonts->TexID = (ImTextureID)data.font_si.get();
 	{
 		vuk::PipelineCreateInfo pci;
-		pci.shaders.push_back("../../imgui.vert");
-		pci.shaders.push_back("../../imgui.frag");
+		pci.add_shader("../../imgui.vert");
+		pci.add_shader("../../imgui.frag");
 		pci.set_blend(vuk::BlendPreset::eAlphaBlend);
 		ptc.ctx.create_named_pipeline("imgui", pci);
 	}
@@ -70,8 +70,8 @@ vuk::Pass util::ImGui_ImplVuk_Render(vuk::PerThreadContext& ptc, vuk::Name src_t
 		auto imindo = imind;
 		imindo.offset += idx_dst * sizeof(ImDrawIdx);
 
-		ptc.upload(imverto, gsl::span(cmd_list->VtxBuffer.Data, cmd_list->VtxBuffer.Size));
-		ptc.upload(imindo, gsl::span(cmd_list->IdxBuffer.Data, cmd_list->IdxBuffer.Size));
+		ptc.upload(imverto, std::span(cmd_list->VtxBuffer.Data, cmd_list->VtxBuffer.Size));
+		ptc.upload(imindo, std::span(cmd_list->IdxBuffer.Data, cmd_list->IdxBuffer.Size));
 		vtx_dst += cmd_list->VtxBuffer.Size;
 		idx_dst += cmd_list->IdxBuffer.Size;
 	}

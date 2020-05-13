@@ -200,7 +200,7 @@ namespace vuk {
 
     void CommandBuffer::execute(std::span<vk::CommandBuffer> scbufs) {
         if(scbufs.size() > 0)
-			command_buffer.executeCommands(scbufs.size(), scbufs.data());
+			command_buffer.executeCommands((uint32_t)scbufs.size(), scbufs.data());
 	}
 
 	void CommandBuffer::_bind_graphics_pipeline_state() {

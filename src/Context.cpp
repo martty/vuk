@@ -899,6 +899,6 @@ void vuk::InflightContext::destroy(std::vector<vk::ImageView>&& images) {
 }
 
 vuk::PerThreadContext vuk::InflightContext::begin() {
-	return PerThreadContext{ *this, ctx.get_thread_index() };
+	return PerThreadContext{ *this, ctx.get_thread_index ? ctx.get_thread_index() : 0 };
 }
 

@@ -24,8 +24,8 @@ namespace {
 		// Same setup as previously
 		.setup = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
 			vuk::PipelineCreateInfo pci;
-			pci.shaders.push_back("../../examples/ubo_test.vert");
-			pci.shaders.push_back("../../examples/triangle_depthshaded.frag");
+			pci.add_shader("../../examples/ubo_test.vert");
+			pci.add_shader("../../examples/triangle_depthshaded.frag");
 			runner.context->create_named_pipeline("cube", pci);
 		},
 		.render = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
@@ -37,10 +37,10 @@ namespace {
 			// And enqueues a transfer operation, which will copy the given data
 			// Finally it returns a vuk::Buffer, which holds the info for the allocation
 			// And a TransferStub, which can be used to query for the transfer status
-			auto [bverts, stub1] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eVertexBuffer, gsl::span(&box.first[0], box.first.size()));
+			auto [bverts, stub1] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eVertexBuffer, std::span(&box.first[0], box.first.size()));
 			// We do this move here so that we can capture this variable later
 			auto verts = std::move(bverts);
-			auto [binds, stub2] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eIndexBuffer, gsl::span(&box.second[0], box.second.size()));
+			auto [binds, stub2] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eIndexBuffer, std::span(&box.second[0], box.second.size()));
 			auto inds = std::move(binds);
 			// This struct will represent the view-projection transform used for the cube
 			struct VP {
@@ -52,7 +52,7 @@ namespace {
 			// Fill the projection matrix, standard perspective matrix
 			vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 1.f, 10.f);
 			// Allocate and transfer view-projection transform
-			auto [buboVP, stub3] = ptc.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vk::BufferUsageFlagBits::eUniformBuffer, gsl::span(&vp, 1));
+			auto [buboVP, stub3] = ptc.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vk::BufferUsageFlagBits::eUniformBuffer, std::span(&vp, 1));
 			auto uboVP = buboVP;
 			// For this example, we just request that all transfer finish before we continue
 			ptc.wait_all_transfers();

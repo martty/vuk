@@ -780,7 +780,7 @@ namespace vuk {
 			}
 			rbi.pClearValues = clears.data();
 			rbi.clearValueCount = (uint32_t)clears.size();
-			cbuf.beginRenderPass(rbi, vk::SubpassContents::eSecondaryCommandBuffers);
+			cbuf.beginRenderPass(rbi, vk::SubpassContents::eInline);
 			for (size_t i = 0; i < rpass.subpasses.size(); i++) {
 				auto& sp = rpass.subpasses[i];
 				vuk::CommandBuffer::RenderPassInfo rpi;
@@ -812,7 +812,7 @@ namespace vuk {
 				cobuf.set_bindings = {};
 				cobuf.sets_used = {};
 				if (i < rpass.subpasses.size() - 1)
-					cbuf.nextSubpass(vk::SubpassContents::eSecondaryCommandBuffers);
+					cbuf.nextSubpass(vk::SubpassContents::eInline);
 			}
 			cbuf.endRenderPass();
 		}

@@ -25,15 +25,15 @@ namespace {
 		.setup = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
 			{
 			vuk::PipelineCreateInfo pci;
-			pci.shaders.push_back("../../examples/deferred.vert");
-			pci.shaders.push_back("../../examples/deferred.frag");
+			pci.add_shader("../../examples/deferred.vert");
+			pci.add_shader("../../examples/deferred.frag");
 			runner.context->create_named_pipeline("cube_deferred", pci);
 			}
 
 			{
 			vuk::PipelineCreateInfo pci;
-			pci.shaders.push_back("../../examples/fullscreen.vert");
-			pci.shaders.push_back("../../examples/deferred_resolve.frag");
+			pci.add_shader("../../examples/fullscreen.vert");
+			pci.add_shader("../../examples/deferred_resolve.frag");
 			runner.context->create_named_pipeline("deferred_resolve", pci);
 			}
 
@@ -43,9 +43,9 @@ namespace {
 
 			// We set up the cube data, same as in example 02_cube
 
-			auto [bverts, stub1] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eVertexBuffer, gsl::span(&box.first[0], box.first.size()));
+			auto [bverts, stub1] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eVertexBuffer, std::span(&box.first[0], box.first.size()));
 			auto verts = std::move(bverts);
-			auto [binds, stub2] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eIndexBuffer, gsl::span(&box.second[0], box.second.size()));
+			auto [binds, stub2] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eIndexBuffer, std::span(&box.second[0], box.second.size()));
 			auto inds = std::move(binds);
 			struct VP {
 				glm::mat4 view;
@@ -55,7 +55,7 @@ namespace {
 			vp.view = glm::lookAt(cam_pos, glm::vec3(0), glm::vec3(0, 1, 0));
 			vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 1.f, 10.f);
 
-			auto [buboVP, stub3] = ptc.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vk::BufferUsageFlagBits::eUniformBuffer, gsl::span(&vp, 1));
+			auto [buboVP, stub3] = ptc.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vk::BufferUsageFlagBits::eUniformBuffer, std::span(&vp, 1));
 			auto uboVP = buboVP;
 			ptc.wait_all_transfers();
 

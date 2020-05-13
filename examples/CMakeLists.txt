@@ -15,6 +15,10 @@ target_sources(vuk_all_examples PRIVATE example_browser.cpp imgui.cpp stbi.cpp $
 target_compile_definitions(vuk_all_examples PRIVATE GLM_FORCE_SIZE_FUNC GLM_FORCE_EXPLICIT_CTOR GLM_ENABLE_EXPERIMENTAL GLM_FORCE_RADIANS GLM_FORCE_DEPTH_ZERO_TO_ONE)
 target_link_libraries(vuk_all_examples PRIVATE vuk)
 target_link_libraries_system(vuk_all_examples PRIVATE vk-bootstrap glfw glm)
+set_target_properties(vuk_all_examples
+    PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+)
 
 function(ADD_EXAMPLE name)
     set(FULL_NAME "vuk_example_${name}")

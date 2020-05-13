@@ -18,8 +18,8 @@ namespace {
 			// Pipelines are created by filling out a vuk::PipelineCreateInfo
 			// In this case, we only need the shaders, we don't care about the rest of the state
 			vuk::PipelineCreateInfo pci;
-			pci.shaders.push_back("../../examples/triangle.vert");
-			pci.shaders.push_back("../../examples/triangle.frag");
+			pci.add_shader("../../examples/triangle.vert");
+			pci.add_shader("../../examples/triangle.frag");
 			// The pipeline is stored with a user give name for simplicity
 			runner.context->create_named_pipeline("triangle", pci);
 		},

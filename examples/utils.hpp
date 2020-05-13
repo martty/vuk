@@ -67,13 +67,13 @@ namespace util {
 		auto vkswapchain = swb.build();
 
 		vuk::Swapchain sw;
-		auto images = vkb::get_swapchain_images(*vkswapchain);
-		auto views = *vkb::get_swapchain_image_views(*vkswapchain, *images);
+		auto images = vkswapchain->get_images();
+		auto views = vkswapchain->get_image_views();
 
 		for (auto& i : *images) {
 			sw.images.push_back(i);
 		}
-		for (auto& i : views) {
+		for (auto& i : *views) {
 			sw._ivs.push_back(i);
 		}
 		sw.extent = vkswapchain->extent;
