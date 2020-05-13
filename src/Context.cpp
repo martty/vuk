@@ -390,7 +390,7 @@ vuk::DescriptorSet vuk::PerThreadContext::create(const create_info_t<vuk::Descri
 		switch (binding.type) {
 		case vk::DescriptorType::eUniformBuffer:
 		case vk::DescriptorType::eStorageBuffer:
-			write.pBufferInfo = &binding.buffer;
+			write.pBufferInfo = (vk::DescriptorBufferInfo*)&binding.buffer;
 			break;
 		case vk::DescriptorType::eSampledImage:
 		case vk::DescriptorType::eSampler:

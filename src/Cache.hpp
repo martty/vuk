@@ -14,10 +14,10 @@
 #include <unordered_map.hpp>
 
 namespace std {
-	template <class BitType, class MaskType>
-	struct hash<vk::Flags<BitType, MaskType>> {
-		size_t operator()(vk::Flags<BitType, MaskType> const& x) const noexcept {
-			return std::hash<MaskType>()((MaskType)x);
+	template <class BitType>
+	struct hash<vk::Flags<BitType>> {
+		size_t operator()(vk::Flags<BitType> const& x) const noexcept {
+			return std::hash<typename vk::Flags<BitType>::MaskType>()((typename vk::Flags<BitType>::MaskType)x);
 		}
 	};
 };

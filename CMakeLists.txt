@@ -20,41 +20,14 @@ add_library(vuk)
 
 find_package(Vulkan REQUIRED)
 
-if(WIN32)
-	set(VUK_SHADERC_PATH_D $ENV{VULKAN_SDK}/shaderc)
-else()
-	set(VUK_SHADERC_PATH_D $ENV{VULKAN_SDK}/source/shaderc)
-endif()
-set(VUK_SHADERC_PATH ${VUK_SHADERC_PATH_D} CACHE PATH "")
-file(TO_CMAKE_PATH "${VUK_SHADERC_PATH}" VUK_SHADERC_PATH_N)
-
-FetchContent_Declare(
-  sshaderc
-  SOURCE_DIR "${VUK_SHADERC_PATH_N}"
-)
-
-FetchContent_GetProperties(sshaderc)
-if(NOT sshaderc_POPULATED)
-  message(STATUS "Building shaderc in RelWithDebInfo")
-  FetchContent_Populate(sshaderc)
-  execute_process(COMMAND "${CMAKE_COMMAND}" -G "${CMAKE_GENERATOR}" -S ${sshaderc_SOURCE_DIR} -B ${sshaderc_BINARY_DIR} -DSHADERC_SKIP_TESTS=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo -DSHADERC_ENABLE_SHARED_CRT=ON -DSPIRV_SKIP_EXECUTABLES=ON -DENABLE_GLSLANG_BINARIES=OFF -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER} -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER})
-  execute_process(COMMAND "${CMAKE_COMMAND}" --build ${sshaderc_BINARY_DIR} --config RelWithDebInfo)
-  if(EXISTS ${sshaderc_BINARY_DIR}/libshaderc/shaderc_shared.dll)
-	file(COPY ${sshaderc_BINARY_DIR}/libshaderc/shaderc_shared.dll DESTINATION "${CMAKE_BINARY_DIR}")
-  else()
-	add_custom_command(TARGET vuk POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy ${sshaderc_BINARY_DIR}/libshaderc/RelWithDebInfo/shaderc_shared.dll ${CMAKE_BINARY_DIR}/${CMAKE_CFG_INTDIR})
-  endif()
-endif()
-
 add_library(shaderc UNKNOWN IMPORTED)
-if(EXISTS ${sshaderc_BINARY_DIR}/libshaderc/shaderc_shared.dll)
-set_target_properties(shaderc PROPERTIES IMPORTED_LOCATION ${sshaderc_BINARY_DIR}/libshaderc/shaderc_shared.lib)
-target_link_directories(shaderc INTERFACE ${CMAKE_BINARY_DIR})
+if(WIN32)
+	# use the version in the SDK	
+	set_target_properties(shaderc PROPERTIES IMPORTED_LOCATION $ENV{VULKAN_SDK}/Lib/shaderc_shared.lib)
+	set_property(TARGET shaderc PROPERTY INTERFACE_INCLUDE_DIRECTORIES $ENV{VULKAN_SDK}/Include)
 else()
-set_target_properties(shaderc PROPERTIES IMPORTED_LOCATION ${sshaderc_BINARY_DIR}/libshaderc/RelWithDebInfo/shaderc_shared.lib)
-target_link_directories(shaderc INTERFACE ${CMAKE_BINARY_DIR}/${CMAKE_CFG_INTDIR})
+	# TODO
 endif()
-set_property(TARGET shaderc PROPERTY INTERFACE_INCLUDE_DIRECTORIES ${sshaderc_SOURCE_DIR}/libshaderc/include)
 
 set(GSL_CXX_STANDARD 20)
 set(SPIRV_CROSS_CLI OFF CACHE BOOL "")

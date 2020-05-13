@@ -40,7 +40,7 @@ namespace vuk {
 
 		vk::DescriptorType type;
 		union {
-			vk::DescriptorBufferInfo buffer;
+			VkDescriptorBufferInfo buffer;
 			vuk::DescriptorImageInfo image;
 		};
 
@@ -49,13 +49,11 @@ namespace vuk {
 			switch (type) {
 			case vk::DescriptorType::eUniformBuffer:
 			case vk::DescriptorType::eStorageBuffer:
-				return buffer == o.buffer;
-				break;
+				return memcmp(&buffer, &o.buffer, sizeof(VkDescriptorBufferInfo)) == 0;
 			case vk::DescriptorType::eSampledImage:
 			case vk::DescriptorType::eSampler:
 			case vk::DescriptorType::eCombinedImageSampler:
 				return image == o.image;
-				break;
 			default:
 				assert(0);
 				return false;
