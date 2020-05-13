@@ -440,5 +440,5 @@ namespace vuk {
     }
 
 	struct RenderGraph;
-	void execute_submit_and_present_to_one(PerThreadContext& ptc, RenderGraph& rg, SwapchainRef swapchain);
+	void execute_submit_and_present_to_one(PerThreadContext& ptc, RenderGraph& rg, SwapchainRef swapchain, bool use_secondary_command_buffers = false);
 }

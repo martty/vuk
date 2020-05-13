@@ -265,7 +265,7 @@ namespace vuk {
 		// RG
 		void build(vuk::PerThreadContext&);
 		void create_attachment(vuk::PerThreadContext&, Name name, RenderGraph::AttachmentRPInfo& attachment_info, vuk::Extent2D extents, vk::SampleCountFlagBits);
-		vk::CommandBuffer execute(vuk::PerThreadContext&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
+		vk::CommandBuffer execute(vuk::PerThreadContext&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index, bool use_secondary_command_buffers);
 	};
 	void sync_bound_attachment_to_renderpass(vuk::RenderGraph::AttachmentRPInfo& rp_att, vuk::RenderGraph::AttachmentRPInfo& attachment_info);
 }

@@ -104,7 +104,7 @@ void vuk::InflightContext::destroy(std::vector<vk::Image>&& images) {
 }
 
 
-void vuk::execute_submit_and_present_to_one(PerThreadContext& ptc, RenderGraph& rg, SwapchainRef swapchain) {
+void vuk::execute_submit_and_present_to_one(PerThreadContext& ptc, RenderGraph& rg, SwapchainRef swapchain, bool use_secondary_command_buffers) {
 	auto render_complete = ptc.semaphore_pool.acquire(1)[0];
 	auto present_rdy = ptc.semaphore_pool.acquire(1)[0];
 	auto acq_result = ptc.ctx.device.acquireNextImageKHR(swapchain->swapchain, UINT64_MAX, present_rdy, vk::Fence{});
@@ -112,7 +112,7 @@ void vuk::execute_submit_and_present_to_one(PerThreadContext& ptc, RenderGraph& 
 
 	std::vector<std::pair<SwapChainRef, size_t>> swapchains_with_indexes = { { swapchain, index } };
 
-	auto cb = rg.execute(ptc, swapchains_with_indexes);
+	auto cb = rg.execute(ptc, swapchains_with_indexes, use_secondary_command_buffers);
 
 	vk::SubmitInfo si;
 	si.commandBufferCount = 1;
