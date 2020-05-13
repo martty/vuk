@@ -35,7 +35,7 @@ layout(std140, binding = 1) uniform _user_ {
 layout(binding = 1 + 1 + 0) uniform sampler2D t1;
 
 #line 17 "../../examples/test.vush"
-VS_OUT opaque_vertex(VS_IN vin, VP vp, mat4 model_matrix, vec3 col) {
+VS_OUT opaque_vertex(VS_IN vin, VP vp, mat4 model_matrix, vec3 col){
 	VS_OUT vout;
 	gl_Position = vp.projection * vp.view * model_matrix * vec4(vin.position, 1.0);
 	vout.texcoord = vin.texcoord;

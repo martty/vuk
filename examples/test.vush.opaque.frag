@@ -40,7 +40,7 @@ layout(binding = 1 + 1 + 0) uniform sampler2D t1;
 layout(location = 0) in VS_OUT vin;
 
 #line 29 "../../examples/test.vush"
-FS_OUT opaque_fragment(VS_OUT vin, sampler2D t1, vec3 col2) {
+FS_OUT opaque_fragment(VS_OUT vin, sampler2D t1, vec3 col2){
 	FS_OUT fout;
 	float a = 0.1;
 	fout.color_out = vec4(texture(t1, vin.texcoord).rgb * vin.col * col2, 1);
