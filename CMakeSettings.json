@@ -29,6 +29,24 @@
       "ctestCommandArgs": "",
       "inheritEnvironments": [ "msvc_x64_x64" ],
       "variables": []
+    },
+    {
+      "name": "x64-Clang-Debug",
+      "generator": "Ninja",
+      "configurationType": "Debug",
+      "buildRoot": "${projectDir}\\out\\build\\${name}",
+      "installRoot": "${projectDir}\\out\\install\\${name}",
+      "cmakeCommandArgs": "",
+      "buildCommandArgs": "",
+      "ctestCommandArgs": "",
+      "inheritEnvironments": [ "clang_cl_x64_x64" ],
+      "variables": [
+        {
+          "name": "VUK_BUILD_EXAMPLES",
+          "value": "True",
+          "type": "BOOL"
+        }
+      ]
     }
   ]
 }

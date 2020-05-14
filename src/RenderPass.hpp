@@ -4,6 +4,7 @@
 #include "vuk_fwd.hpp"
 #include "CreateInfo.hpp"
 #include "Types.hpp"
+#include "Cache.hpp"
 
 namespace vuk {
 	struct SubpassDescription : public vk::SubpassDescription {
