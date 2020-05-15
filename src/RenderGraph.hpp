@@ -225,7 +225,7 @@ namespace vuk {
 		};
 
 		struct SubpassInfo {
-			PassInfo* pass;
+			std::vector<PassInfo*> passes;
 		};
 
 		struct RenderPassInfo {

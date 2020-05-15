@@ -271,12 +271,21 @@ namespace vuk {
 			RenderPassInfo rpi;
 			auto rpi_index = rpis.size();
 
-			uint32_t subpass = 0;
+			int32_t subpass = -1;
 			for (auto& p : passes) {
 				p->render_pass_index = rpi_index;
-				p->subpass = subpass++;
+				if (rpi.subpasses.size() > 0) {
+                    auto& last_pass = rpi.subpasses.back().passes[0];
+                    if(last_pass->inputs == p->inputs && last_pass->outputs == p->outputs) {
+                        p->subpass = last_pass->subpass;
+                        rpi.subpasses.back().passes.push_back(p);
+                        continue;
+                    }
+				}
 				SubpassInfo si;
-				si.pass = p;
+                si.passes = {p};
+
+				p->subpass = ++subpass;
 				rpi.subpasses.push_back(si);
 			}
 			for (auto& att : attachments) {
@@ -798,13 +807,14 @@ namespace vuk {
                     rpi.samples = vk::SampleCountFlagBits::e1;
 				}
 				cobuf.ongoing_renderpass = rpi;
-				if (sp.pass->pass.execute) {
-					if (!sp.pass->pass.name.empty()) {
+                for(auto& p : sp.passes )
+				if (p->pass.execute) {
+					if (!p->pass.name.empty()) {
 						//ptc.ctx.debug.begin_region(cobuf.command_buffer, sp.pass->pass.name);
-						sp.pass->pass.execute(cobuf);
+						p->pass.execute(cobuf);
 						//ptc.ctx.debug.end_region(cobuf.command_buffer);
 					} else {
-						sp.pass->pass.execute(cobuf);
+						p->pass.execute(cobuf);
 					}
 				}
 				cobuf.attribute_descriptions.clear();
