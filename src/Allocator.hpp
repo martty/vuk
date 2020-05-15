@@ -129,11 +129,11 @@ namespace vuk {
 		// allocate an externally managed linear pool
 		Linear allocate_linear(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage);
 		// allocate buffer from an internally managed pool
-		Buffer allocate_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, bool create_mapped);
+		Buffer allocate_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, size_t alignment, bool create_mapped);
 		// allocate a buffer from an externally managed pool
-		Buffer allocate_buffer(Pool& pool, size_t size, bool create_mapped);
+		Buffer allocate_buffer(Pool& pool, size_t size, size_t alignment, bool create_mapped);
         // allocate a buffer from an externally managed linear pool
-		Buffer allocate_buffer(Linear& pool, size_t size, bool create_mapped);
+		Buffer allocate_buffer(Linear& pool, size_t size, size_t alignment, bool create_mapped);
 
 		void reset_pool(Pool& pool);
 		void reset_pool(Linear& pool);
@@ -149,8 +149,8 @@ namespace vuk {
 	private:
 		// not locked, must be called from a locked fn
 		VmaPool _create_pool(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage);
-		Buffer _allocate_buffer(Pool& pool, size_t size, bool create_mapped);
-		Buffer _allocate_buffer(Linear& pool, size_t size, bool create_mapped);
+		Buffer _allocate_buffer(Pool& pool, size_t size, size_t alignment, bool create_mapped);
+		Buffer _allocate_buffer(Linear& pool, size_t size, size_t alignment, bool create_mapped);
 	};
 
 	template<> struct create_info<Allocator::Pool> {

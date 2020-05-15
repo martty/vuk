@@ -104,6 +104,7 @@ namespace vuk {
 		CommandBuffer& push_constants(vk::ShaderStageFlags stages, size_t offset, T value);
 
 		CommandBuffer& bind_uniform_buffer(unsigned set, unsigned binding, Buffer buffer);
+        CommandBuffer& bind_storage_buffer(unsigned set, unsigned binding, Buffer buffer);
 
 		void* _map_scratch_uniform_binding(unsigned set, unsigned binding, size_t size);
 

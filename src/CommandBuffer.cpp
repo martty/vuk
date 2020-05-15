@@ -74,7 +74,7 @@ namespace vuk {
 		binding_descriptions.resize(std::distance(binding_descriptions.begin(), std::remove_if(binding_descriptions.begin(), binding_descriptions.end(), [&](auto& b) {return b.binding == binding; })));
 
 		uint32_t location = first_attribute;
-		uint32_t offset = 0;
+        uint32_t offset = 0;
 		for (auto& f : format.list) {
 			if (f.ignore) {
 				offset += f.size;
@@ -159,6 +159,14 @@ namespace vuk {
 	CommandBuffer& CommandBuffer::bind_uniform_buffer(unsigned set, unsigned binding, Buffer buffer) {
 		sets_used[set] = true;
 		set_bindings[set].bindings[binding].type = vk::DescriptorType::eUniformBuffer;
+		set_bindings[set].bindings[binding].buffer = vk::DescriptorBufferInfo{ buffer.buffer, buffer.offset, buffer.size };
+		set_bindings[set].used.set(binding);
+		return *this;
+	}
+
+	CommandBuffer& CommandBuffer::bind_storage_buffer(unsigned set, unsigned binding, Buffer buffer) {
+		sets_used[set] = true;
+		set_bindings[set].bindings[binding].type = vk::DescriptorType::eStorageBuffer;
 		set_bindings[set].bindings[binding].buffer = vk::DescriptorBufferInfo{ buffer.buffer, buffer.offset, buffer.size };
 		set_bindings[set].used.set(binding);
 		return *this;

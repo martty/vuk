@@ -124,11 +124,11 @@ namespace vuk {
     }
 
 	// lock-free bump allocation if there is still space
-	Buffer Allocator::_allocate_buffer(Linear& pool, size_t size, bool create_mapped) {
+	Buffer Allocator::_allocate_buffer(Linear& pool, size_t size, size_t alignment, bool create_mapped) {
         if(size == 0) {
             return {.buffer = vk::Buffer{}, .size = 0};
         }
-        auto alignment = pool.mem_reqs.alignment;
+        alignment = std::max(pool.mem_reqs.alignment, alignment);
 		if (pool.usage & vk::BufferUsageFlagBits::eUniformBuffer) {
             alignment = std::max(alignment, properties.limits.minUniformBufferOffsetAlignment);
 		}
@@ -169,7 +169,7 @@ namespace vuk {
             pool.current_buffer++;
             if(base_addr > 0) {
                 // there is no space in the beginning of this allocation, so we just retry
-                return _allocate_buffer(pool, size, create_mapped);
+                return _allocate_buffer(pool, size, alignment, create_mapped);
             }
         }
         // wait for the buffer to be allocated
@@ -186,7 +186,7 @@ namespace vuk {
         return b;
     }
 	
-	Buffer Allocator::_allocate_buffer(Pool& pool, size_t size, bool create_mapped) {
+	Buffer Allocator::_allocate_buffer(Pool& pool, size_t size, size_t alignment, bool create_mapped) {
 		if (size == 0) {
 			return { .buffer = vk::Buffer{}, .size = 0 };
 		}
@@ -205,6 +205,7 @@ namespace vuk {
 		pool_helper->result = vk::Buffer{};
 		auto mem_reqs = pool.mem_reqs;
 		mem_reqs.size = size;
+        mem_reqs.alignment = std::max(mem_reqs.alignment, alignment);
 		VkMemoryRequirements vkmem_reqs = mem_reqs;
 		auto result = vmaAllocateMemory(allocator, &vkmem_reqs, &vaci, &res, &vai);
 		assert(result == VK_SUCCESS);
@@ -256,7 +257,7 @@ namespace vuk {
 	}
 
 	// allocate buffer from an internally managed pool
-	Buffer Allocator::allocate_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, bool create_mapped) {
+	Buffer Allocator::allocate_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, size_t alignment, bool create_mapped) {
 		std::lock_guard _(mutex);
 
 		vk::BufferCreateInfo bci;
@@ -274,18 +275,18 @@ namespace vuk {
 			pool_it = pools.emplace(PoolSelect{ mem_usage, buffer_usage }, pi).first;
 		}
 
-		return _allocate_buffer(pool_it->second, size, create_mapped);
+		return _allocate_buffer(pool_it->second, size, alignment, create_mapped);
 	}
 
 	// allocate a buffer from an externally managed pool
-	Buffer Allocator::allocate_buffer(Pool& pool, size_t size, bool create_mapped) {
+	Buffer Allocator::allocate_buffer(Pool& pool, size_t size, size_t alignment, bool create_mapped) {
 		std::lock_guard _(mutex);
-		return _allocate_buffer(pool, size, create_mapped);
+		return _allocate_buffer(pool, size, alignment, create_mapped);
 	}
 
 	// allocate a buffer from an externally managed linear pool
-	Buffer Allocator::allocate_buffer(Linear& pool, size_t size, bool create_mapped) {
-		return _allocate_buffer(pool, size, create_mapped);
+	Buffer Allocator::allocate_buffer(Linear& pool, size_t size, size_t alignment, bool create_mapped) {
+		return _allocate_buffer(pool, size, alignment, create_mapped);
 	}
 
 	void Allocator::reset_pool(Pool& pool) {

@@ -207,11 +207,11 @@ void vuk::PerThreadContext::destroy(vuk::DescriptorSet ds) {
 vuk::Buffer vuk::PerThreadContext::_allocate_scratch_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, bool create_mapped) {
     PoolSelect ps{mem_usage, buffer_usage};
 	auto& pool = scratch_buffers.acquire(ps);
-	return ifc.ctx.allocator.allocate_buffer(pool, size, create_mapped);
+	return ifc.ctx.allocator.allocate_buffer(pool, size, 1, create_mapped);
 }
 
 vuk::Unique<vuk::Buffer> vuk::PerThreadContext::_allocate_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, bool create_mapped) {
-	return vuk::Unique<Buffer>(ifc.ctx, ifc.ctx.allocator.allocate_buffer(mem_usage, buffer_usage, size, create_mapped));
+	return vuk::Unique<Buffer>(ifc.ctx, ifc.ctx.allocator.allocate_buffer(mem_usage, buffer_usage, size, 1, create_mapped));
 }
 
 
@@ -661,7 +661,7 @@ vuk::Context::UploadResult vuk::Context::fenced_upload(std::span<BufferUpload> u
 	}
 
 	// create 1 big staging buffer
-	auto staging_alloc = allocator.allocate_buffer(vuk::MemoryUsage::eCPUonly, vk::BufferUsageFlagBits::eTransferSrc, size, true);
+	auto staging_alloc = allocator.allocate_buffer(vuk::MemoryUsage::eCPUonly, vk::BufferUsageFlagBits::eTransferSrc, size, 1, true);
     auto staging = staging_alloc;
     for(auto& upload: uploads) {
 		// copy to staging
@@ -721,7 +721,7 @@ vuk::Context::UploadResult vuk::Context::fenced_upload(std::span<ImageUpload> up
     }
 
     // create 1 big staging buffer
-	auto staging_alloc = allocator.allocate_buffer(vuk::MemoryUsage::eCPUonly, vk::BufferUsageFlagBits::eTransferSrc, size, true);
+	auto staging_alloc = allocator.allocate_buffer(vuk::MemoryUsage::eCPUonly, vk::BufferUsageFlagBits::eTransferSrc, size, 1, true);
     auto staging = staging_alloc;
     for(auto& upload: uploads) {
         // copy to staging
@@ -757,8 +757,8 @@ void vuk::Context::free_upload_resources(const UploadResult& ur) {
     device.destroyFence(ur.fence);
 }
 
-vuk::Buffer vuk::Context::allocate_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size) {
-    return allocator.allocate_buffer(mem_usage, buffer_usage, size, false);
+vuk::Buffer vuk::Context::allocate_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, size_t alignment) {
+    return allocator.allocate_buffer(mem_usage, buffer_usage, size, alignment, false);
 }
 
 vuk::Texture vuk::Context::allocate_texture(vk::Format format, vk::Extent3D extents, uint32_t miplevels) {

@@ -67,7 +67,7 @@ namespace vuk {
 		DescriptorSetLayoutAllocInfo layout_info = {};
 
 		bool operator==(const SetBinding& o) const {
-            return ::memcmp(this, &o, sizeof(SetBinding)) == 0;
+            return used == o.used && layout_info == o.layout_info && bindings == o.bindings;
 			/*if (layout_info != o.layout_info) return false;
 			for (size_t i = 0; i < VUK_MAX_BINDINGS; i++) {
 				if (!used[i]) continue;
