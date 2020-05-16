@@ -14,15 +14,6 @@
 #include <unordered_map.hpp>
 
 namespace std {
-	template <class BitType>
-	struct hash<vk::Flags<BitType>> {
-		size_t operator()(vk::Flags<BitType> const& x) const noexcept {
-			return std::hash<typename vk::Flags<BitType>::MaskType>()((typename vk::Flags<BitType>::MaskType)x);
-		}
-	};
-};
-
-namespace std {
 	template <>
 	struct hash<vk::VertexInputBindingDescription> {
 		size_t operator()(vk::VertexInputBindingDescription const& x) const noexcept {
@@ -74,15 +65,6 @@ namespace std {
 			size_t h = 0;
 			hash_combine(h, x.flags, x.pName, to_integral(x.stage), reinterpret_cast<uint64_t>((VkShaderModule)x.module));
 			if (x.pSpecializationInfo) hash_combine(h, *x.pSpecializationInfo);
-			return h;
-		}
-	};
-
-	template <>
-	struct hash<vk::PipelineInputAssemblyStateCreateInfo> {
-		size_t operator()(vk::PipelineInputAssemblyStateCreateInfo const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.flags, x.primitiveRestartEnable, to_integral(x.topology));
 			return h;
 		}
 	};
@@ -165,42 +147,6 @@ namespace std {
 	};
 
 	template <>
-	struct hash<vk::StencilOpState> {
-		size_t operator()(vk::StencilOpState const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.compareMask, to_integral(x.compareOp), to_integral(x.failOp), to_integral(x.depthFailOp), to_integral(x.passOp), x.reference, x.writeMask);
-			return h;
-		}
-	};
-
-	template <>
-	struct hash<vk::PipelineDepthStencilStateCreateInfo> {
-		size_t operator()(vk::PipelineDepthStencilStateCreateInfo const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.flags, x.back, x.front, x.depthBoundsTestEnable, to_integral(x.depthCompareOp), x.depthTestEnable, x.depthWriteEnable, x.maxDepthBounds, x.minDepthBounds, x.stencilTestEnable);
-			return h;
-		}
-	};
-
-	template <>
-	struct hash<vk::PipelineColorBlendAttachmentState> {
-		size_t operator()(vk::PipelineColorBlendAttachmentState const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, to_integral(x.alphaBlendOp), x.blendEnable, to_integral(x.colorBlendOp), to_integral(x.dstAlphaBlendFactor), to_integral(x.srcAlphaBlendFactor), to_integral(x.dstColorBlendFactor), to_integral(x.srcColorBlendFactor));
-			return h;
-		}
-	};
-
-	template <>
-	struct hash<vk::PipelineColorBlendStateCreateInfo> {
-		size_t operator()(vk::PipelineColorBlendStateCreateInfo const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.flags, std::span(x.pAttachments, x.attachmentCount), x.blendConstants, to_integral(x.logicOp), x.logicOpEnable);
-			return h;
-		}
-	};
-
-	template <>
 	struct hash<vk::DynamicState> {
 		size_t operator()(vk::DynamicState const& x) const noexcept {
 			size_t h = 0;
@@ -214,17 +160,6 @@ namespace std {
 		size_t operator()(vk::PipelineDynamicStateCreateInfo const& x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, x.flags, std::span(x.pDynamicStates, x.dynamicStateCount));
-			return h;
-		}
-	};
-
-	template<>
-	struct hash<vk::PipelineRasterizationStateCreateInfo> {
-		size_t operator()(vk::PipelineRasterizationStateCreateInfo const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.depthClampEnable, x.rasterizerDiscardEnable, x.polygonMode,
-				x.cullMode, x.frontFace, x.depthBiasEnable,
-				x.depthBiasConstantFactor, x.depthBiasClamp, x.depthBiasSlopeFactor, x.lineWidth);
 			return h;
 		}
 	};
@@ -370,8 +305,19 @@ namespace vuk {
 			return {};
 		}
 
+        void remove_ptr(const T* ptr) {
+            std::unique_lock _(cache_mtx);
+            for(auto it = lru_map.begin(); it != lru_map.end(); ++it) {
+                if(ptr == it->second.ptr) {
+                    pool.erase(pool.get_iterator_from_pointer(it->second.ptr));
+                    lru_map.erase(it);
+                    return;
+                }
+            }
+        }
+
 		template<class Compare>
-		const T * find(Compare cmp) {
+		const T* find(Compare cmp) {
 			std::unique_lock _(cache_mtx);
 			for (auto it = lru_map.begin(); it != lru_map.end(); ++it) {
 				if (cmp(it->first, it->second)) {

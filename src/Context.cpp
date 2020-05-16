@@ -31,6 +31,7 @@ vuk::InflightContext::InflightContext(Context& ctx, size_t absolute_frame, std::
 	commandbuffer_pools(ctx.cbuf_pools.get_view(*this)),
 	semaphore_pools(ctx.semaphore_pools.get_view(*this)),
 	pipeline_cache(*this, ctx.pipeline_cache),
+    pipelinebase_cache(*this, ctx.pipelinebase_cache),
 	renderpass_cache(*this, ctx.renderpass_cache),
 	framebuffer_cache(*this, ctx.framebuffer_cache),
 	transient_images(*this, ctx.transient_images),
@@ -174,6 +175,7 @@ commandbuffer_pool(ifc.commandbuffer_pools.get_view(*this)),
 semaphore_pool(ifc.semaphore_pools.get_view(*this)),
 fence_pool(ifc.fence_pools.get_view(*this)),
 pipeline_cache(*this, ifc.pipeline_cache),
+pipelinebase_cache(*this, ifc.pipelinebase_cache),
 renderpass_cache(*this, ifc.renderpass_cache),
 framebuffer_cache(*this, ifc.framebuffer_cache),
 transient_images(*this, ifc.transient_images),
@@ -462,15 +464,17 @@ vuk::ShaderModule vuk::PerThreadContext::create(const create_info_t<vuk::ShaderM
     return ctx.create(cinfo);
 }
 
-vuk::PipelineInfo vuk::PerThreadContext::create(const create_info_t<PipelineInfo>& cinfo) {
+vuk::PipelineBaseInfo vuk::Context::create(const create_info_t<PipelineBaseInfo>& cinfo) {
 	std::vector<vk::PipelineShaderStageCreateInfo> psscis;
 
 	// accumulate descriptors from all stages
 	vuk::Program accumulated_reflection;
 	std::string pipe_name = "Pipeline:";
-	for (auto& path : cinfo.shaders) {
-		auto contents = slurp(std::string(path.data));
-		auto& sm = shader_modules.acquire({ contents, std::string(path.data) });
+    for(auto i = 0; i < cinfo.shaders.size(); i++) {
+		auto contents = cinfo.shaders[i];
+        if(contents.empty())
+            continue;
+		auto& sm = shader_modules.acquire({ contents, cinfo.shader_paths[i] });
 		vk::PipelineShaderStageCreateInfo shaderStage;
 		shaderStage.pSpecializationInfo = nullptr;
 		shaderStage.stage = sm.stage;
@@ -478,13 +482,13 @@ vuk::PipelineInfo vuk::PerThreadContext::create(const create_info_t<PipelineInfo
 		shaderStage.pName = "main"; //TODO: make param
 		psscis.push_back(shaderStage);
 		accumulated_reflection.append(sm.reflection_info);
-		pipe_name += std::string(path.data) + "+";
+		pipe_name += cinfo.shader_paths[i] + "+";
 	}
 	pipe_name = pipe_name.substr(0, pipe_name.size() - 1); //trim off last "+"
 														   // acquire descriptor set layouts (1 per set)
 														   // acquire pipeline layout
 	vuk::PipelineLayoutCreateInfo plci;
-	plci.dslcis = vuk::PipelineCreateInfo::build_descriptor_layouts(accumulated_reflection);
+	plci.dslcis = vuk::PipelineBaseCreateInfo::build_descriptor_layouts(accumulated_reflection);
 	plci.pcrs.insert(plci.pcrs.begin(), accumulated_reflection.push_constant_ranges.begin(), accumulated_reflection.push_constant_ranges.end());
 	plci.plci.pushConstantRangeCount = (uint32_t)accumulated_reflection.push_constant_ranges.size();
 	plci.plci.pPushConstantRanges = accumulated_reflection.push_constant_ranges.data();
@@ -499,15 +503,34 @@ vuk::PipelineInfo vuk::PerThreadContext::create(const create_info_t<PipelineInfo
 	}
 	plci.plci.pSetLayouts = dsls.data();
 	plci.plci.setLayoutCount = (uint32_t)dsls.size();
+
+	PipelineBaseInfo pbi;
+    pbi.psscis = std::move(psscis);
+    pbi.color_blend_attachments = cinfo.color_blend_attachments;
+    pbi.color_blend_state = cinfo.color_blend_state;
+    pbi.depth_stencil_state = cinfo.depth_stencil_state;
+    pbi.layout_info = dslai;
+	pbi.pipeline_layout = pipeline_layouts.acquire(plci);
+    pbi.rasterization_state = cinfo.rasterization_state;
+    pbi.pipeline_name = std::move(pipe_name);
+    pbi.reflection_info = accumulated_reflection;
+    return pbi;
+}
+
+vuk::PipelineBaseInfo vuk::PerThreadContext::create(const create_info_t<PipelineBaseInfo>& cinfo) {
+    return ctx.create(cinfo);
+}
+
+vuk::PipelineInfo vuk::PerThreadContext::create(const create_info_t<PipelineInfo>& cinfo) {
 	// create gfx pipeline
 	vk::GraphicsPipelineCreateInfo gpci = cinfo.to_vk();
-	gpci.layout = pipeline_layouts.acquire(plci);
-	gpci.pStages = psscis.data();
-	gpci.stageCount = (uint32_t)psscis.size();
+	gpci.layout = cinfo.base->pipeline_layout;
+	gpci.pStages = cinfo.base->psscis.data();
+	gpci.stageCount = (uint32_t)cinfo.base->psscis.size();
 
 	auto pipeline = ctx.device.createGraphicsPipeline(*ctx.vk_pipeline_cache, gpci);
-	ctx.debug.set_name(pipeline, pipe_name);
-	return { pipeline, gpci.layout, dslai };
+	ctx.debug.set_name(pipeline, cinfo.base->pipeline_name);
+	return { pipeline, gpci.layout, cinfo.base->layout_info };
 }
 
 vk::Framebuffer vuk::PerThreadContext::create(const create_info_t<vk::Framebuffer>& cinfo) {
@@ -518,17 +541,25 @@ vk::Sampler vuk::PerThreadContext::create(const create_info_t<vk::Sampler>& cinf
 	return ctx.device.createSampler(cinfo);
 }
 
-vuk::DescriptorSetLayoutAllocInfo vuk::PerThreadContext::create(const create_info_t<vuk::DescriptorSetLayoutAllocInfo>& cinfo) {
+vuk::DescriptorSetLayoutAllocInfo vuk::Context::create(const create_info_t<vuk::DescriptorSetLayoutAllocInfo>& cinfo) {
 	vuk::DescriptorSetLayoutAllocInfo ret;
-	ret.layout = ctx.device.createDescriptorSetLayout(cinfo.dslci);
+	ret.layout = device.createDescriptorSetLayout(cinfo.dslci);
 	for (auto& b : cinfo.bindings) {
 		ret.descriptor_counts[to_integral(b.descriptorType)] += b.descriptorCount;
 	}
 	return ret;
 }
 
+vuk::DescriptorSetLayoutAllocInfo vuk::PerThreadContext::create(const create_info_t<vuk::DescriptorSetLayoutAllocInfo>& cinfo) {
+    return ctx.create(cinfo);
+}
+
+vk::PipelineLayout vuk::Context::create(const create_info_t<vk::PipelineLayout>& cinfo) {
+	return device.createPipelineLayout(cinfo.plci);
+}
+
 vk::PipelineLayout vuk::PerThreadContext::create(const create_info_t<vk::PipelineLayout>& cinfo) {
-	return ctx.device.createPipelineLayout(cinfo.plci);
+    return ctx.create(cinfo);
 }
 
 vuk::DescriptorPool vuk::PerThreadContext::create(const create_info_t<vuk::DescriptorPool>& cinfo) {
@@ -554,6 +585,7 @@ vuk::Context::Context(vk::Instance instance, vk::Device device, vk::PhysicalDevi
 	cbuf_pools(*this),
 	semaphore_pools(*this),
 	fence_pools(*this),
+	pipelinebase_cache(*this),
 	pipeline_cache(*this),
 	renderpass_cache(*this),
 	framebuffer_cache(*this),
@@ -570,53 +602,57 @@ vuk::Context::Context(vk::Instance instance, vk::Device device, vk::PhysicalDevi
 	vk_pipeline_cache = device.createPipelineCacheUnique({});
 }
 
-void vuk::Context::create_named_pipeline(const char* name, vuk::PipelineCreateInfo ci) {
+void vuk::Context::create_named_pipeline(const char* name, vuk::PipelineBaseCreateInfo ci) {
 	std::lock_guard _(named_pipelines_lock);
-	named_pipelines.insert_or_assign(name, std::move(ci));
+	named_pipelines.insert_or_assign(name, &pipelinebase_cache.acquire(std::move(ci)));
 }
 
-vuk::PipelineCreateInfo vuk::Context::get_named_pipeline(const char* name) {
+vuk::PipelineBaseInfo* vuk::Context::get_named_pipeline(const char* name) {
 	return named_pipelines.at(name);
 }
 
-vuk::Program vuk::PerThreadContext::get_pipeline_reflection_info(vuk::PipelineCreateInfo pci) {
-	// TODO: check if we already have this in the cache, then it can just be returned
-	vuk::Program accumulated_reflection;
-	for (auto& path : pci.shaders) {
-		auto contents = slurp(path.data);
-		auto& sm = shader_modules.acquire({ contents, std::string(path.data) });
-		accumulated_reflection.append(sm.reflection_info);
-	}
-	return accumulated_reflection;
-	/*
-	auto& res = pipeline_cache.acquire(pci);
+vuk::PipelineBaseInfo* vuk::Context::get_pipeline(const vuk::PipelineBaseCreateInfo& pbci) {
+    return &pipelinebase_cache.acquire(pbci);
+}
+
+vuk::Program vuk::PerThreadContext::get_pipeline_reflection_info(vuk::PipelineBaseCreateInfo pci) {
+	auto& res = pipelinebase_cache.acquire(pci);
 	return res.reflection_info;
-	*/
+}
+
+vuk::Program vuk::Context::get_pipeline_reflection_info(vuk::PipelineBaseCreateInfo pci) {
+	auto& res = pipelinebase_cache.acquire(pci);
+	return res.reflection_info;
 }
 
 void vuk::Context::invalidate_shadermodule_and_pipelines(Name filename) {
-	vuk::ShaderModuleCreateInfo sci;
-	sci.filename = filename;
-	auto sm = shader_modules.remove(sci);
-    if(sm) {
-        device.destroy(sm->shader_module);
-        auto pipe = pipeline_cache.remove([&](auto& ci, auto& p) {
-            if(std::find_if(ci.shaders.begin(), ci.shaders.end(), [=](auto& t) { return strcmp(filename.data(), t.data) == 0; }) != ci.shaders.end())
-                return true;
-            return false;
-        });
-        while(pipe != std::nullopt) {
-            enqueue_destroy(pipe->pipeline);
-            pipe = pipeline_cache.remove([&](auto& ci, auto& p) {
-                if(std::find_if(ci.shaders.begin(), ci.shaders.end(), [=](auto& t) { return strcmp(filename.data(), t.data) == 0; }) != ci.shaders.end())
-                    return true;
-                return false;
-            });
+    std::optional<vuk::ShaderModule> sm;
+    do {
+        sm = shader_modules.remove([&](auto& ci, auto& p) { return ci.filename == filename; });
+        if(sm) {
+            device.destroy(sm->shader_module);
+            const PipelineBaseInfo* pipe_base;
+            do {
+                pipe_base = pipelinebase_cache.find([&](auto& ci, auto& p) {
+                    if(std::find_if(ci.shader_paths.begin(), ci.shader_paths.end(), [=](auto& t) { return t == filename; }) != ci.shader_paths.end())
+                        return true;
+                    return false;
+                });
+                if(pipe_base) {
+                    std::optional<PipelineInfo> pipe;
+                    do {
+                        pipe = pipeline_cache.remove([&](auto& ci, auto& p) { return ci.base == pipe_base; });
+                        if(pipe)
+                            enqueue_destroy(pipe->pipeline);
+                    } while(pipe != std::nullopt);
+                    pipelinebase_cache.remove_ptr(pipe_base);
+                }
+            } while(pipe_base != nullptr);
         }
-    }
+    } while(sm != std::nullopt);
 }
 
-vuk::ShaderModule vuk::Context::compile_shader(Name path) {
+vuk::ShaderModule vuk::Context::compile_shader(std::string source, Name path) {
 	vuk::ShaderModuleCreateInfo sci;
 	sci.filename = path;
     sci.source = slurp(std::string(path));
@@ -861,6 +897,10 @@ void vuk::Context::destroy(const vk::Framebuffer& fb) {
 
 void vuk::Context::destroy(const vk::Sampler& sa) {
 	device.destroy(sa);
+}
+
+void vuk::Context::destroy(const vuk::PipelineBaseInfo& pbi) {
+	// no-op, we don't own device objects
 }
 
 vuk::Context::~Context() {

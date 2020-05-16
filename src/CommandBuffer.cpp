@@ -60,8 +60,8 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::bind_pipeline(vuk::PipelineCreateInfo pi) {
-		next_pipeline = std::move(pi);
+	CommandBuffer& CommandBuffer::bind_pipeline(vuk::PipelineBaseInfo* pi) {
+		next_pipeline = pi;
 		return *this;
 	}
 
@@ -213,7 +213,8 @@ namespace vuk {
 
 	void CommandBuffer::_bind_graphics_pipeline_state() {
 		if (next_pipeline) {
-			auto& pi = next_pipeline.value();
+            vuk::PipelineInstanceCreateInfo pi;
+            pi.base = next_pipeline;
 			// set vertex input
 			pi.attribute_descriptions = attribute_descriptions;
 			pi.binding_descriptions = binding_descriptions;
@@ -226,21 +227,23 @@ namespace vuk {
 			pi.render_pass = ongoing_renderpass->renderpass;
 			pi.subpass = ongoing_renderpass->subpass;
 
-			pi.dynamic_state.pDynamicStates = pi.dynamic_states.data();
-			pi.dynamic_state.dynamicStateCount = static_cast<unsigned>(pi.dynamic_states.size());
+			pi.dynamic_state.pDynamicStates = next_pipeline->dynamic_states.data();
+			pi.dynamic_state.dynamicStateCount = static_cast<unsigned>(next_pipeline->dynamic_states.size());
 
 			pi.multisample_state.rasterizationSamples = ongoing_renderpass->samples;
 
+			pi.color_blend_attachments = pi.base->color_blend_attachments;
 			// last blend attachment is replicated to cover all attachments
 			if (pi.color_blend_attachments.size() < (size_t)ongoing_renderpass->color_attachments.size()) {
 				pi.color_blend_attachments.resize(ongoing_renderpass->color_attachments.size(), pi.color_blend_attachments.back());
 			}
+            pi.color_blend_state = pi.base->color_blend_state;
 			pi.color_blend_state.pAttachments = pi.color_blend_attachments.data();
 			pi.color_blend_state.attachmentCount = (uint32_t)pi.color_blend_attachments.size();
 
 			current_pipeline = ptc.pipeline_cache.acquire(pi);
 			command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, current_pipeline->pipeline);
-			next_pipeline = {};
+			next_pipeline = nullptr;
 		}
 
 		for (auto& pcr : pcrs) {

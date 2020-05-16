@@ -70,7 +70,7 @@ namespace vuk {
 		vuk::fixed_vector<vk::VertexInputBindingDescription, VUK_MAX_ATTRIBUTES> binding_descriptions;
 		vuk::fixed_vector<vk::PushConstantRange, VUK_MAX_PUSHCONSTANT_RANGES> pcrs;
 		std::array<unsigned char, 64> push_constant_buffer;
-		std::optional<vuk::PipelineCreateInfo> next_pipeline;
+		vuk::PipelineBaseInfo* next_pipeline = nullptr;
 		std::optional<vuk::PipelineInfo> current_pipeline;
 		std::bitset<VUK_MAX_SETS> sets_used = {};
 		std::array<SetBinding, VUK_MAX_SETS> set_bindings = {};
@@ -86,7 +86,7 @@ namespace vuk {
 		CommandBuffer& set_scissor(unsigned index, Area area);
 		CommandBuffer& set_scissor(unsigned index, Area::Framebuffer area);
 
-		CommandBuffer& bind_pipeline(vuk::PipelineCreateInfo gpci);
+		CommandBuffer& bind_pipeline(vuk::PipelineBaseInfo* gpci);
 		CommandBuffer& bind_pipeline(Name p);
 
 		CommandBuffer& bind_vertex_buffer(unsigned index, const Buffer&, unsigned first_location, Packed);

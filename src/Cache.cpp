@@ -48,7 +48,55 @@ namespace vuk {
             return *it->second.ptr;
         }
     }
-	
+
+	template<>
+    PipelineBaseInfo& Cache<PipelineBaseInfo>::acquire(const create_info_t<PipelineBaseInfo>& ci) {
+        std::shared_lock _(cache_mtx);
+        if(auto it = lru_map.find(ci); it != lru_map.end()) {
+            it->second.last_use_frame = UINT64_MAX;
+            return *it->second.ptr;
+        } else {
+            _.unlock();
+            std::unique_lock ulock(cache_mtx);
+            auto pit = pool.emplace(ctx.create(ci));
+            typename Cache::LRUEntry entry{&*pit, UINT_MAX};
+            it = lru_map.emplace(ci, entry).first;
+            return *it->second.ptr;
+        }
+    }
+
+	template<>
+    DescriptorSetLayoutAllocInfo& Cache<DescriptorSetLayoutAllocInfo>::acquire(const create_info_t<DescriptorSetLayoutAllocInfo>& ci) {
+        std::shared_lock _(cache_mtx);
+        if(auto it = lru_map.find(ci); it != lru_map.end()) {
+            it->second.last_use_frame = UINT64_MAX;
+            return *it->second.ptr;
+        } else {
+            _.unlock();
+            std::unique_lock ulock(cache_mtx);
+            auto pit = pool.emplace(ctx.create(ci));
+            typename Cache::LRUEntry entry{&*pit, UINT_MAX};
+            it = lru_map.emplace(ci, entry).first;
+            return *it->second.ptr;
+        }
+    }
+
+	template<>
+    vk::PipelineLayout& Cache<vk::PipelineLayout>::acquire(const create_info_t<vk::PipelineLayout>& ci) {
+        std::shared_lock _(cache_mtx);
+        if(auto it = lru_map.find(ci); it != lru_map.end()) {
+            it->second.last_use_frame = UINT64_MAX;
+            return *it->second.ptr;
+        } else {
+            _.unlock();
+            std::unique_lock ulock(cache_mtx);
+            auto pit = pool.emplace(ctx.create(ci));
+            typename Cache::LRUEntry entry{&*pit, UINT_MAX};
+            it = lru_map.emplace(ci, entry).first;
+            return *it->second.ptr;
+        }
+    }
+
 	template<class T>
 	Cache<T>::~Cache() {
 		for (auto& v : pool) {
@@ -57,6 +105,7 @@ namespace vuk {
 	}
 
 	template class Cache<vuk::PipelineInfo>;
+	template class Cache<vuk::PipelineBaseInfo>;
 	template class Cache<vk::RenderPass>;
 	template class Cache<vuk::DescriptorSet>;
 	template class Cache<vk::Framebuffer>;

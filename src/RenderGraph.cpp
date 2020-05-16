@@ -807,20 +807,21 @@ namespace vuk {
                     rpi.samples = vk::SampleCountFlagBits::e1;
 				}
 				cobuf.ongoing_renderpass = rpi;
-                for(auto& p : sp.passes )
-				if (p->pass.execute) {
-					if (!p->pass.name.empty()) {
-						//ptc.ctx.debug.begin_region(cobuf.command_buffer, sp.pass->pass.name);
-						p->pass.execute(cobuf);
-						//ptc.ctx.debug.end_region(cobuf.command_buffer);
-					} else {
-						p->pass.execute(cobuf);
-					}
-				}
-				cobuf.attribute_descriptions.clear();
-				cobuf.binding_descriptions.clear();
-				cobuf.set_bindings = {};
-				cobuf.sets_used = {};
+                for(auto& p: sp.passes) {
+                    if(p->pass.execute) {
+                        if(!p->pass.name.empty()) {
+                            //ptc.ctx.debug.begin_region(cobuf.command_buffer, sp.pass->pass.name);
+                            p->pass.execute(cobuf);
+                            //ptc.ctx.debug.end_region(cobuf.command_buffer);
+                        } else {
+                            p->pass.execute(cobuf);
+                        }
+                    }
+                    cobuf.attribute_descriptions.clear();
+                    cobuf.binding_descriptions.clear();
+                    cobuf.set_bindings = {};
+                    cobuf.sets_used = {};
+                }
 				if (i < rpass.subpasses.size() - 1)
 					cbuf.nextSubpass(use_secondary_command_buffers ? vk::SubpassContents::eSecondaryCommandBuffers : vk::SubpassContents::eInline);
 			}
