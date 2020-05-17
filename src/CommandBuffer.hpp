@@ -66,6 +66,7 @@ namespace vuk {
 			std::span<const vk::AttachmentReference> color_attachments;
 		};
 		std::optional<RenderPassInfo> ongoing_renderpass;
+        vk::PrimitiveTopology topology;
 		vuk::fixed_vector<vk::VertexInputAttributeDescription, VUK_MAX_ATTRIBUTES> attribute_descriptions;
 		vuk::fixed_vector<vk::VertexInputBindingDescription, VUK_MAX_ATTRIBUTES> binding_descriptions;
 		vuk::fixed_vector<vk::PushConstantRange, VUK_MAX_PUSHCONSTANT_RANGES> pcrs;
@@ -89,7 +90,9 @@ namespace vuk {
 		CommandBuffer& bind_pipeline(vuk::PipelineBaseInfo* gpci);
 		CommandBuffer& bind_pipeline(Name p);
 
-		CommandBuffer& bind_vertex_buffer(unsigned index, const Buffer&, unsigned first_location, Packed);
+		CommandBuffer& set_primitive_topology(vk::PrimitiveTopology);
+		CommandBuffer& bind_vertex_buffer(unsigned binding, const Buffer&, unsigned first_location, Packed);
+		CommandBuffer& bind_vertex_buffer(unsigned binding, const Buffer&, std::span<vk::VertexInputAttributeDescription>, uint32_t stride);
 		CommandBuffer& bind_index_buffer(const Buffer&, vk::IndexType type);
 
 		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, vuk::ImageView iv, vk::SamplerCreateInfo sampler_create_info);

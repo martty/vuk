@@ -101,9 +101,32 @@ namespace vuk {
 		return *this;
 	}
 
+	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, const Buffer& buf, std::span<vk::VertexInputAttributeDescription> viads, uint32_t stride) {
+		attribute_descriptions.resize(std::distance(attribute_descriptions.begin(), std::remove_if(attribute_descriptions.begin(), attribute_descriptions.end(), [&](auto& b) {return b.binding == binding; })));
+		binding_descriptions.resize(std::distance(binding_descriptions.begin(), std::remove_if(binding_descriptions.begin(), binding_descriptions.end(), [&](auto& b) {return b.binding == binding; })));
+
+		attribute_descriptions.insert(attribute_descriptions.end(), viads.begin(), viads.end());
+
+		vk::VertexInputBindingDescription vibd;
+		vibd.binding = binding;
+		vibd.inputRate = vk::VertexInputRate::eVertex;
+		vibd.stride = stride;
+		binding_descriptions.push_back(vibd);
+
+        if(buf.buffer)
+            command_buffer.bindVertexBuffers(binding, buf.buffer, buf.offset);
+
+		return *this;
+	}
+
 	CommandBuffer& CommandBuffer::bind_index_buffer(const Buffer& buf, vk::IndexType type) {
 		command_buffer.bindIndexBuffer(buf.buffer, buf.offset, type);
 		return *this;
+	}
+
+	CommandBuffer& CommandBuffer::set_primitive_topology(vk::PrimitiveTopology topo) {
+        topology = topo;
+        return *this;
 	}
 
 	CommandBuffer& CommandBuffer::bind_sampled_image(unsigned set, unsigned binding, vuk::ImageView iv, vk::SamplerCreateInfo sci) {
@@ -194,7 +217,7 @@ namespace vuk {
         auto nptc = new vuk::PerThreadContext(ptc.ifc.begin());
         auto scbuf = nptc->commandbuffer_pool.acquire(vk::CommandBufferLevel::eSecondary, 1)[0];
 		vk::CommandBufferBeginInfo cbi;
-		cbi.flags = vk::CommandBufferUsageFlagBits::eRenderPassContinue;
+		cbi.flags = vk::CommandBufferUsageFlagBits::eRenderPassContinue | vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
         vk::CommandBufferInheritanceInfo cbii;
         cbii.renderPass = ongoing_renderpass->renderpass;
         cbii.subpass = ongoing_renderpass->subpass;
@@ -223,6 +246,9 @@ namespace vuk {
 			vertex_input_state.vertexAttributeDescriptionCount = (uint32_t)pi.attribute_descriptions.size();
 			vertex_input_state.pVertexBindingDescriptions = pi.binding_descriptions.data();
 			vertex_input_state.vertexBindingDescriptionCount = (uint32_t)pi.binding_descriptions.size();
+
+			pi.input_assembly_state.topology = topology;
+            pi.input_assembly_state.primitiveRestartEnable = false;
 
 			pi.render_pass = ongoing_renderpass->renderpass;
 			pi.subpass = ongoing_renderpass->subpass;
