@@ -67,6 +67,8 @@ namespace vuk {
 			unsigned array_size;
 			unsigned binding;
 
+			bool shadow; // if this is a samplerXXXShadow
+
 			vk::ShaderStageFlags stage;
 		};
 

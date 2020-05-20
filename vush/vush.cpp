@@ -618,6 +618,8 @@ _features.flag ? A : B
     bool is_opaque_type(const std::string& t) {
         if(t == "sampler2D")
             return true;
+        if(t == "sampler2DShadow")
+            return true;
         return false;
     }
 

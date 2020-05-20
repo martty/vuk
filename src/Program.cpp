@@ -132,6 +132,7 @@ vk::ShaderStageFlagBits vuk::Program::introspect(const spirv_cross::Compiler& re
 		t.name = std::string(si.name.c_str());
 		t.stage = stage;
 		t.array_size = type.array[0];
+        t.shadow = type.image.depth;
 		sets[set].samplers.push_back(t);
 	}
 	
