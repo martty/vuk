@@ -65,9 +65,8 @@ vuk::InflightContext::InflightContext(Context& ctx, size_t absolute_frame, std::
 	}
 	ctx.buffer_recycle[frame].clear();
 
-
-	for (auto& sb : scratch_buffers.cache.data[frame].pool) {
-		ctx.allocator.reset_pool(sb);
+	for (auto& [k, v] : scratch_buffers.cache.data[frame].lru_map) {
+		ctx.allocator.reset_pool(v.value);
 	}
 
 	auto ptc = begin();
@@ -203,7 +202,7 @@ void vuk::PerThreadContext::destroy(vuk::ImageView image) {
 
 void vuk::PerThreadContext::destroy(vuk::DescriptorSet ds) {
 	// note that since we collect at integer times FC, we are releasing the DS back to the right pool
-	pool_cache.acquire(ds.layout_info).free_sets.push_back(ds.descriptor_set);
+	pool_cache.acquire(ds.layout_info).free_sets.enqueue(ds.descriptor_set);
 }
 
 vuk::Buffer vuk::PerThreadContext::_allocate_scratch_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, bool create_mapped) {

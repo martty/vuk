@@ -255,7 +255,7 @@ namespace vuk {
 
 		void add_pass(Pass p) {
 			PassInfo pi(arena_);
-			pi.pass = p;
+			pi.pass = std::move(p);
 			passes.push_back(pi);
 		}
 

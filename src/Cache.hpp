@@ -12,6 +12,7 @@
 #include <span>
 #include <vector>
 #include <unordered_map.hpp>
+#include <atomic>
 
 namespace std {
 	template <>
@@ -351,17 +352,17 @@ namespace vuk {
 	private:
 		friend class InflightContext;
 		struct LRUEntry {
-			T* ptr;
+			T value;
 			size_t last_use_frame;
 		};
 
 		Context& ctx;
 		struct PerFrame {
-			plf::colony<T> pool;
-			// possibly vector_map or an intrusive map
 			ska::unordered_map<create_info_t<T>, LRUEntry> lru_map;
-
-			std::shared_mutex cache_mtx;
+            std::array<std::vector<T>, 32> per_thread_append_v;
+            std::array<std::vector<create_info_t<T>>, 32> per_thread_append_k;
+			
+			std::mutex cache_mtx;
 		};
 		std::array<PerFrame, FC> data;
 	
@@ -370,11 +371,11 @@ namespace vuk {
 		~PerFrameCache();
 
 		struct PFView {
-			InflightContext& ifc;
-			PerFrameCache& cache;
+            InflightContext& ifc;
+            PerFrameCache& cache;
 
-			PFView(InflightContext& ifc, PerFrameCache& cache) : ifc(ifc), cache(cache) {}
-		};
+            PFView(InflightContext& ifc, PerFrameCache& cache);
+        };
 
 		struct PFPTView {
 			PerThreadContext& ptc;

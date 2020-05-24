@@ -41,3 +41,6 @@
 [submodule "ext/flat_hash_map"]
 	path = ext/flat_hash_map
 	url = https://github.com/skarupke/flat_hash_map
+[submodule "ext/concurrentqueue"]
+	path = ext/concurrentqueue
+	url = https://github.com/cameron314/concurrentqueue

@@ -110,8 +110,8 @@ namespace vuk {
 		Cache<vk::Framebuffer> framebuffer_cache;
 		PerFrameCache<RGImage, FC> transient_images;
 		PerFrameCache<Allocator::Linear, FC> scratch_buffers;
-		PerFrameCache<vuk::DescriptorPool, FC> pool_cache;
-		Cache<vuk::DescriptorSet> descriptor_sets;
+		Cache<vuk::DescriptorPool> pool_cache;
+		PerFrameCache<vuk::DescriptorSet, FC> descriptor_sets;
 		Cache<vk::Sampler> sampler_cache;
 		Pool<vuk::SampledImage, FC> sampled_images;
 		Cache<vuk::ShaderModule> shader_modules;
@@ -249,10 +249,10 @@ namespace vuk {
 		Cache<vk::Framebuffer>::PFView framebuffer_cache;
 		PerFrameCache<vuk::RGImage, Context::FC>::PFView transient_images;
 		PerFrameCache<Allocator::Linear, Context::FC>::PFView scratch_buffers;
-		Cache<vuk::DescriptorSet>::PFView descriptor_sets;
+		PerFrameCache<vuk::DescriptorSet, Context::FC>::PFView descriptor_sets;
 		Cache<vk::Sampler>::PFView sampler_cache;
 		Pool<vuk::SampledImage, Context::FC>::PFView sampled_images;
-		PerFrameCache<vuk::DescriptorPool, Context::FC>::PFView pool_cache;
+		Cache<vuk::DescriptorPool>::PFView pool_cache;
 
 		Cache<vuk::ShaderModule>::PFView shader_modules;
 		Cache<vuk::DescriptorSetLayoutAllocInfo>::PFView descriptor_set_layouts;
@@ -317,10 +317,10 @@ namespace vuk {
 		Cache<vk::Framebuffer>::PFPTView framebuffer_cache;
 		PerFrameCache<vuk::RGImage, Context::FC>::PFPTView transient_images;
 		PerFrameCache<Allocator::Linear, Context::FC>::PFPTView scratch_buffers;
-		Cache<vuk::DescriptorSet>::PFPTView descriptor_sets;
+		PerFrameCache<vuk::DescriptorSet, Context::FC>::PFPTView descriptor_sets;
 		Cache<vk::Sampler>::PFPTView sampler_cache;
 		Pool<vuk::SampledImage, Context::FC>::PFPTView sampled_images;
-		PerFrameCache<vuk::DescriptorPool, Context::FC>::PFPTView pool_cache;
+		Cache<vuk::DescriptorPool>::PFPTView pool_cache;
 		Cache<vuk::ShaderModule>::PFPTView shader_modules;
 		Cache<vuk::DescriptorSetLayoutAllocInfo>::PFPTView descriptor_set_layouts;
 		Cache<vk::PipelineLayout>::PFPTView pipeline_layouts;

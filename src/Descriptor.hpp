@@ -6,6 +6,8 @@
 #include <vector>
 #include "vuk_fwd.hpp"
 #include "Types.hpp"
+#include <concurrentqueue.h>
+#include <mutex>
 
 namespace vuk {
 	struct DescriptorSetLayoutAllocInfo {
@@ -101,13 +103,19 @@ namespace vuk {
 	};
 
 	struct DescriptorPool {
+        std::mutex grow_mutex;
 		std::vector<vk::DescriptorPool> pools;
-		size_t pool_needle = 0;
-		uint32_t sets_allocated = 0;
-		std::vector<vk::DescriptorSet> free_sets;
+        size_t sets_allocated = 0;
+        moodycamel::ConcurrentQueue<vk::DescriptorSet> free_sets{1024};
 
-		vk::DescriptorPool get_pool(PerThreadContext& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info);
+		void grow(PerThreadContext& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info);
 		vk::DescriptorSet acquire(PerThreadContext& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info);
+
+		DescriptorPool() = default;
+		DescriptorPool(DescriptorPool&& o) {
+            pools = o.pools;
+            sets_allocated = o.sets_allocated;
+		}
 	};
 
 	template<> struct create_info<vuk::DescriptorPool> {
