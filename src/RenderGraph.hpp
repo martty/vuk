@@ -14,6 +14,7 @@
 #include "Hash.hpp"
 #include "vuk_fwd.hpp"
 #include "RenderPass.hpp"
+#include "unordered_map.hpp"
 
 namespace vuk {
 	struct Preserve {};
@@ -147,6 +148,8 @@ namespace std {
 	};
 }
 
+#include <ShortAlloc.hpp>
+
 namespace vuk {
 	struct Extent2D : public vk::Extent2D {
 		using vk::Extent2D::Extent2D;
@@ -160,35 +163,45 @@ namespace vuk {
 	};
 
 	struct RenderGraph {
+        arena arena_;
+        RenderGraph();
+
 		struct PassInfo {
-			Pass pass;
-			
-			size_t render_pass_index;
-			uint32_t subpass;
+            PassInfo(arena&);
+            Pass pass;
 
-			std::unordered_set<Resource> inputs;
-			std::unordered_set<Resource> outputs;
+            size_t render_pass_index;
+            uint32_t subpass;
 
-			std::unordered_set<Resource> global_inputs;
-			std::unordered_set<Resource> global_outputs;
+            ska::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>> inputs;
+            ska::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>> outputs;
 
-			bool is_head_pass = false;
-			bool is_tail_pass = false;
-		};
+            ska::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>> global_inputs;
+            ska::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>> global_outputs;
 
-		std::vector<PassInfo> passes;
+            bool is_head_pass = false;
+            bool is_tail_pass = false;
+        };
 
-		std::vector<PassInfo*> head_passes;
-		std::vector<PassInfo*> tail_passes;
+		std::vector<PassInfo, short_alloc<PassInfo, 64>> passes;
 
-		std::unordered_map<Name, Name> aliases;
+		std::vector<PassInfo*, short_alloc<PassInfo*, 8>> head_passes;
+		std::vector<PassInfo*, short_alloc<PassInfo*, 8>> tail_passes;
+
+		ska::unordered_map<Name, Name, std::hash<Name>, std::equal_to<Name>, short_alloc<std::pair<const Name, Name>, 64>> aliases;
+
+		ska::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>> global_inputs;
+		ska::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>> global_outputs;
+        std::vector<Resource, short_alloc<Resource, 16>> global_io;
 
 		struct UseRef {
 			Resource::Use use;
 			PassInfo* pass = nullptr;
 		};
 
-		std::unordered_map<Name, std::vector<UseRef>> use_chains;
+		ska::unordered_map<Name, std::vector<UseRef, short_alloc<UseRef, 64>>, std::hash<Name>, std::equal_to<Name>,
+                           short_alloc<std::pair<const Name, std::vector<UseRef, short_alloc<UseRef, 64>>>, 64>>
+            use_chains;
 
 		struct AttachmentSInfo {
 			vk::ImageLayout layout;
@@ -225,29 +238,26 @@ namespace vuk {
 		};
 
 		struct SubpassInfo {
-			std::vector<PassInfo*> passes;
+            SubpassInfo(arena&);
+			std::vector<PassInfo*, short_alloc<PassInfo*, 16>> passes;
 		};
 
 		struct RenderPassInfo {
-			std::vector<SubpassInfo> subpasses;
-			std::vector<AttachmentRPInfo> attachments;
+            RenderPassInfo(arena&);
+			std::vector<SubpassInfo, short_alloc<SubpassInfo, 64>> subpasses;
+			std::vector<AttachmentRPInfo, short_alloc<AttachmentRPInfo, 16>> attachments;
 			vuk::RenderPassCreateInfo rpci;
 			vuk::FramebufferCreateInfo fbci;
 			vk::RenderPass handle;
 			vk::Framebuffer framebuffer;
 		};
-		std::vector<RenderPassInfo> rpis;
+		std::vector<RenderPassInfo, short_alloc<RenderPassInfo, 64>> rpis;
 
 		void add_pass(Pass p) {
-			PassInfo pi;
+			PassInfo pi(arena_);
 			pi.pass = p;
 			passes.push_back(pi);
 		}
-
-		std::unordered_set<Resource> global_inputs;
-		std::unordered_set<Resource> global_outputs;
-		std::vector<Resource> global_io;
-		std::vector<Resource> tracked;
 
 		// determine rendergraph inputs and outputs, and resources that are neither
 		void build_io();
@@ -255,12 +265,12 @@ namespace vuk {
 		void build();
 
 		// RGscaffold
-		std::unordered_map<Name, AttachmentRPInfo> bound_attachments;
+		ska::unordered_map<Name, AttachmentRPInfo> bound_attachments;
 		void bind_attachment_to_swapchain(Name name, Swapchain* swp, Clear);
 		void mark_attachment_internal(Name, vk::Format, vuk::Extent2D, vuk::Samples, Clear);
 		void mark_attachment_internal(Name, vk::Format, vuk::Extent2D::Framebuffer, vuk::Samples, Clear);
 		void mark_attachment_resolve(Name resolved_name, Name ms_name);
-		vk::ImageUsageFlags compute_usage(std::vector<vuk::RenderGraph::UseRef>& chain);
+		vk::ImageUsageFlags compute_usage(std::vector<vuk::RenderGraph::UseRef, short_alloc<UseRef, 64>>& chain);
 
 		// RG
 		void build(vuk::PerThreadContext&);

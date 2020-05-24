@@ -6,22 +6,22 @@
 #include "Allocator.hpp"
 
 namespace vuk {
-	template<class T, class F>
-	T* contains_if(std::vector<T>& v, F&& f) {
+	template<class T, class A, class F>
+	T* contains_if(std::vector<T, A>& v, F&& f) {
 		auto it = std::find_if(v.begin(), v.end(), f);
 		if (it != v.end()) return &(*it);
 		else return nullptr;
 	}
 
-	template<class T, class F>
-	T const* contains_if(const std::vector<T>& v, F&& f) {
+	template<class T, class A, class F>
+	T const* contains_if(const std::vector<T, A>& v, F&& f) {
 		auto it = std::find_if(v.begin(), v.end(), f);
 		if (it != v.end()) return &(*it);
 		else return nullptr;
 	}
 
-	template<class T>
-	T const* contains(const std::vector<T>& v, const T& f) {
+	template<class T, class A>
+	T const* contains(const std::vector<T, A>& v, const T& f) {
 		auto it = std::find(v.begin(), v.end(), f);
 		if (it != v.end()) return &(*it);
 		else return nullptr;
@@ -148,7 +148,12 @@ namespace vuk {
 	FormatOrIgnore::FormatOrIgnore(Ignore ign) : ignore(true), format(ign.format), size(ign.to_size()) {
 	}
 
-	// determine rendergraph inputs and outputs, and resources that are neither
+#define INIT(x) x(decltype(x)::allocator_type(arena_))
+
+	RenderGraph::RenderGraph() : arena_(1024*128), INIT(passes), INIT(head_passes), INIT(tail_passes), INIT(aliases), INIT(global_inputs), INIT(global_outputs), INIT(global_io), INIT(use_chains), INIT(rpis) {
+	}
+
+    // determine rendergraph inputs and outputs, and resources that are neither
 	void RenderGraph::build_io() {
 		std::unordered_set<Resource> inputs;
 		std::unordered_set<Resource> outputs;
@@ -181,13 +186,13 @@ namespace vuk {
 			outputs.insert(pif.outputs.begin(), pif.outputs.end());
 		}
 
-		std::copy_if(outputs.begin(), outputs.end(), std::back_inserter(tracked), [&](auto& needle) { return !global_outputs.contains(needle); });
 		global_io.insert(global_io.end(), global_inputs.begin(), global_inputs.end());
 		global_io.insert(global_io.end(), global_outputs.begin(), global_outputs.end());
 		global_io.erase(std::unique(global_io.begin(), global_io.end()), global_io.end());
 	}
 
-	Name resolve_name(Name in, const std::unordered_map<Name, Name> aliases) {
+	template<class T>
+	Name resolve_name(Name in, const T& aliases) {
 		auto it = aliases.find(in);
 		if (it == aliases.end())
 			return in;
@@ -247,7 +252,11 @@ namespace vuk {
 				if (res.src_name != res.use_name) {
 					aliases[res.use_name] = res.src_name;
 				}
-				use_chains[resolve_name(res.use_name, aliases)].emplace_back(UseRef{ to_use(res.ia), &passinfo });
+                auto it = use_chains.find(resolve_name(res.use_name, aliases));
+				if (it == use_chains.end()) {
+                    it = use_chains.emplace(resolve_name(res.use_name, aliases), std::vector<UseRef, short_alloc<UseRef, 64>>{short_alloc<UseRef, 64>{arena_}}).first;
+				}
+				it->second.emplace_back(UseRef{ to_use(res.ia), &passinfo });
 			}
 		}
 
@@ -272,7 +281,7 @@ namespace vuk {
 		// tell passes in which renderpass/subpass they will execute
 		rpis.reserve(attachment_sets.size());
 		for (auto& [attachments, passes] : attachment_sets) {
-			RenderPassInfo rpi;
+            RenderPassInfo rpi{arena_};
 			auto rpi_index = rpis.size();
 
 			int32_t subpass = -1;
@@ -286,7 +295,7 @@ namespace vuk {
                         continue;
                     }
 				}
-				SubpassInfo si;
+                SubpassInfo si{arena_};
                 si.passes = {p};
 
 				p->subpass = ++subpass;
@@ -526,7 +535,7 @@ namespace vuk {
 				vk::AttachmentReference attref;
 
 				auto name = resolve_name(res.use_name, aliases);
-				auto& chain = use_chains[name];
+				auto& chain = use_chains.find(name)->second;
 				auto cit = std::find_if(chain.begin(), chain.end(), [&](auto& useref) { return useref.pass == &pass; });
 				assert(cit != chain.end());
 				attref.layout = cit->use.layout;
@@ -642,7 +651,7 @@ namespace vuk {
 		rp_att.type = attachment_info.type;
 	}
 
-	vk::ImageUsageFlags RenderGraph::compute_usage(std::vector<vuk::RenderGraph::UseRef>& chain) {
+	vk::ImageUsageFlags RenderGraph::compute_usage(std::vector<vuk::RenderGraph::UseRef, short_alloc<UseRef, 64>>& chain) {
 		vk::ImageUsageFlags usage;
 		for (auto& c : chain) {
 			switch (c.use.layout) {
@@ -834,4 +843,11 @@ namespace vuk {
 		cbuf.end();
 		return cbuf;
 	}
-}
+    RenderGraph::RenderPassInfo::RenderPassInfo(arena& arena_) : INIT(subpasses), INIT(attachments) {
+	}
+
+    RenderGraph::PassInfo::PassInfo(arena& arena_) : INIT(inputs), INIT(outputs), INIT(global_inputs), INIT(global_outputs) {}
+
+    RenderGraph::SubpassInfo::SubpassInfo(arena& arena_) : INIT(passes) {}
+	#undef INIT
+} // namespace vuk
