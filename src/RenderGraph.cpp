@@ -216,6 +216,10 @@ namespace vuk {
 							could_execute_before = true;
 					}
 				}
+				if (!could_execute_after && !could_execute_before && p1.outputs == p2.outputs) {
+                    return p1.pass.auxiliary_order < p2.pass.auxiliary_order;
+				}
+
 				if (could_execute_after && could_execute_before) {
 					return p1.pass.auxiliary_order < p2.pass.auxiliary_order;
 				} else if (could_execute_after) {

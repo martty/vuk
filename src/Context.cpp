@@ -452,7 +452,7 @@ vuk::ShaderModule vuk::Context::create(const create_info_t<vuk::ShaderModule>& c
 
         vk::ShaderModuleCreateInfo moduleCreateInfo;
         moduleCreateInfo.codeSize = spirv.size() * sizeof(uint32_t);
-        moduleCreateInfo.pCode = (uint32_t*)spirv.data();
+        moduleCreateInfo.pCode = spirv.data();
         auto module = device.createShaderModule(moduleCreateInfo);
         std::string name = "ShaderModule: " + cinfo.filename;
         debug.set_name(module, name);
