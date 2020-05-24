@@ -116,6 +116,7 @@ namespace vuk {
 
 		CommandBuffer& draw(size_t vertex_count, size_t instance_count, size_t first_vertex, size_t first_instance);
 		CommandBuffer& draw_indexed(size_t index_count, size_t instance_count, size_t first_index, int32_t vertex_offset, size_t first_instance);
+		CommandBuffer& draw_indexed_indirect(std::span<vk::DrawIndexedIndirectCommand>);
 
 		class SecondaryCommandBuffer begin_secondary();
         void execute(std::span<vk::CommandBuffer>);

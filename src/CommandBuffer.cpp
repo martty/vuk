@@ -213,6 +213,14 @@ namespace vuk {
 		return *this;
     }
 
+	CommandBuffer& CommandBuffer::draw_indexed_indirect(std::span<vk::DrawIndexedIndirectCommand> cmds) {
+		_bind_graphics_pipeline_state();
+		auto buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vk::BufferUsageFlagBits::eIndirectBuffer, cmds.size_bytes(), true);
+        memcpy(buf.mapped_ptr, cmds.data(), cmds.size_bytes());
+        command_buffer.drawIndexedIndirect(buf.buffer, buf.offset, cmds.size(), sizeof(vk::DrawIndexedIndirectCommand));
+        return *this;
+	}
+
     SecondaryCommandBuffer CommandBuffer::begin_secondary() {
         auto nptc = new vuk::PerThreadContext(ptc.ifc.begin());
         auto scbuf = nptc->commandbuffer_pool.acquire(vk::CommandBufferLevel::eSecondary, 1)[0];
