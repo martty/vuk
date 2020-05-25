@@ -151,12 +151,13 @@ namespace vuk {
 #define INIT(x) x(decltype(x)::allocator_type(arena_))
 
 	RenderGraph::RenderGraph() : arena_(1024*128), INIT(passes), INIT(head_passes), INIT(tail_passes), INIT(aliases), INIT(global_inputs), INIT(global_outputs), INIT(global_io), INIT(use_chains), INIT(rpis) {
+        passes.reserve(64);
 	}
 
     // determine rendergraph inputs and outputs, and resources that are neither
 	void RenderGraph::build_io() {
-		std::unordered_set<Resource> inputs;
-		std::unordered_set<Resource> outputs;
+        std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 8>> inputs{arena_};
+        std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 8>> outputs{arena_};
 
 		for (auto& pif : passes) {
 			for (auto& res : pif.pass.resources) {
@@ -261,9 +262,11 @@ namespace vuk {
 		}
 
 		// we need to collect passes into framebuffers, which will determine the renderpasses
-		std::vector<std::pair<std::unordered_set<Resource>, std::vector<PassInfo*>>> attachment_sets;
+		using attachment_set = std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>>;
+		using passinfo_vec = std::vector<PassInfo*, short_alloc<PassInfo*, 16>>;
+        std::vector<std::pair<attachment_set, passinfo_vec>, short_alloc<std::pair<attachment_set, passinfo_vec>, 8>> attachment_sets{arena_};
 		for (auto& passinfo : passes) {
-			std::unordered_set<Resource> atts;
+            attachment_set atts{arena_};
 
 			for (auto& res : passinfo.pass.resources) {
 				if(is_framebuffer_attachment(res))
@@ -273,7 +276,9 @@ namespace vuk {
 			if (auto p = contains_if(attachment_sets, [&](auto& t) { return t.first == atts; })) {
 				p->second.push_back(&passinfo);
 			} else {
-				attachment_sets.emplace_back(atts, std::vector{ &passinfo });
+                passinfo_vec pv{arena_};
+                pv.push_back(&passinfo);
+				attachment_sets.emplace_back(atts, pv);
 			}
 		}
 

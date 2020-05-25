@@ -71,6 +71,8 @@ vuk::InflightContext::InflightContext(Context& ctx, size_t absolute_frame, std::
 
 	auto ptc = begin();
 	ptc.descriptor_sets.collect(Context::FC * 2);
+    ptc.transient_images.collect(Context::FC * 2);
+    ptc.scratch_buffers.collect(Context::FC * 2);
 }
 
 vuk::TransferStub vuk::InflightContext::enqueue_transfer(Buffer src, Buffer dst) {

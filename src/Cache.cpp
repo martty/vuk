@@ -123,19 +123,7 @@ namespace vuk {
 	}
 
 	template<class T, size_t FC>
-    PerFrameCache<T, FC>::PFView::PFView(InflightContext& ifc, PerFrameCache& cache): ifc(ifc), cache(cache) {
-        auto& data = cache.data[ifc.frame];
-		std::unique_lock _(data.cache_mtx);
-        for(size_t tid = 0; tid < cache.data[ifc.frame].per_thread_append_v.size(); tid++) {
-           auto& vs = cache.data[ifc.frame].per_thread_append_v[tid];
-		   auto& ks = cache.data[ifc.frame].per_thread_append_k[tid];
-		   for (size_t i = 0; i < vs.size(); i++) {
-               data.lru_map.emplace(ks[i], LRUEntry{std::move(vs[i]), ifc.absolute_frame});
-		   }
-           vs.clear();
-           ks.clear();
-		}
-    }
+    PerFrameCache<T, FC>::PFView::PFView(InflightContext& ifc, PerFrameCache& cache): ifc(ifc), cache(cache) {}
 
 	template<class T, size_t FC>
 	T& PerFrameCache<T, FC>::PFPTView::acquire(const create_info_t<T>& ci) {
@@ -170,6 +158,20 @@ namespace vuk {
             } else {
                 ++it;
 			}
+		}
+
+        for(size_t tid = 0; tid < view.cache.data[ptc.ifc.frame].per_thread_append_v.size(); tid++) {
+           auto& vs = view.cache.data[ptc.ifc.frame].per_thread_append_v[tid];
+		   auto& ks = view.cache.data[ptc.ifc.frame].per_thread_append_k[tid];
+		   for (size_t i = 0; i < vs.size(); i++) {
+               if(data.lru_map.find(ks[i]) == data.lru_map.end()) {
+                   data.lru_map.emplace(ks[i], LRUEntry{std::move(vs[i]), ptc.ifc.absolute_frame});
+               } else {
+                   ptc.destroy(vs[i]);
+               }
+		   }
+           vs.clear();
+           ks.clear();
 		}
 	}
 
