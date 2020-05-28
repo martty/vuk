@@ -66,6 +66,7 @@ namespace util {
 		swb.set_desired_format(vk::SurfaceFormatKHR(vk::Format::eR8G8B8A8Srgb, vk::ColorSpaceKHR::eSrgbNonlinear));
 		swb.add_fallback_format(vk::SurfaceFormatKHR(vk::Format::eB8G8R8A8Srgb, vk::ColorSpaceKHR::eSrgbNonlinear));
 		swb.set_desired_present_mode((VkPresentModeKHR)vk::PresentModeKHR::eImmediate);
+		swb.set_image_usage_flags(VkImageUsageFlagBits::VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VkImageUsageFlagBits::VK_IMAGE_USAGE_TRANSFER_DST_BIT);
 		auto vkswapchain = swb.build();
 
 		vuk::Swapchain sw;

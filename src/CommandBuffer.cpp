@@ -1,4 +1,6 @@
 #include "CommandBuffer.hpp"
+#include "CommandBuffer.hpp"
+#include "CommandBuffer.hpp"
 #include "Context.hpp"
 #include "RenderGraph.hpp"
 
@@ -240,6 +242,37 @@ namespace vuk {
     void CommandBuffer::execute(std::span<vk::CommandBuffer> scbufs) {
         if(scbufs.size() > 0)
 			command_buffer.executeCommands((uint32_t)scbufs.size(), scbufs.data());
+	}
+
+	void CommandBuffer::resolve_image(Name src, Name dst) {
+		vk::ImageResolve ir;
+		auto src_image = rg.bound_attachments[src].image;
+		auto dst_image = rg.bound_attachments[dst].image;
+		vk::ImageSubresourceLayers isl;
+		vk::ImageAspectFlagBits aspect;
+		if (rg.bound_attachments[src].description.format == vk::Format::eD32Sfloat) {
+			aspect = vk::ImageAspectFlagBits::eDepth;
+		} else {
+			aspect = vk::ImageAspectFlagBits::eColor;
+		}
+		isl.aspectMask = aspect;
+		isl.baseArrayLayer = 0;
+		isl.layerCount = 1;
+		isl.mipLevel = 0;
+
+		ir.srcOffset = vk::Offset3D{};
+		ir.srcSubresource = isl;
+		ir.dstOffset = vk::Offset3D{};
+		ir.dstSubresource = isl;
+		ir.extent = vk::Extent3D(rg.bound_attachments[src].extents, 1);
+		command_buffer.resolveImage(src_image, vk::ImageLayout::eTransferSrcOptimal, dst_image, vk::ImageLayout::eTransferDstOptimal, ir);
+	}
+
+	void CommandBuffer::blit_image(Name src, Name dst, vk::ImageBlit region, vk::Filter filter) {
+		auto src_image = rg.bound_attachments[src].image;
+		auto dst_image = rg.bound_attachments[dst].image;
+
+		command_buffer.blitImage(src_image, vk::ImageLayout::eTransferSrcOptimal, dst_image, vk::ImageLayout::eTransferDstOptimal, region, filter);
 	}
 
 	void CommandBuffer::_bind_graphics_pipeline_state() {

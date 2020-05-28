@@ -67,7 +67,9 @@ namespace vuk {
 		eVertexRead,
 		eFragmentSampled,
 		eFragmentRead,
-		eFragmentWrite // written using image store
+		eFragmentWrite, // written using image store
+		eTransferSrc,
+		eTransferDst
 	};
 
 	struct Samples {
@@ -173,11 +175,11 @@ namespace vuk {
             size_t render_pass_index;
             uint32_t subpass;
 
-            ska::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>> inputs;
-            ska::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>> outputs;
+            std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>> inputs;
+            std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>> outputs;
 
-            ska::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>> global_inputs;
-            ska::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>> global_outputs;
+            std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>> global_inputs;
+            std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>> global_outputs;
 
             bool is_head_pass = false;
             bool is_tail_pass = false;
@@ -190,8 +192,8 @@ namespace vuk {
 
 		ska::unordered_map<Name, Name, std::hash<Name>, std::equal_to<Name>, short_alloc<std::pair<const Name, Name>, 64>> aliases;
 
-		ska::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>> global_inputs;
-		ska::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>> global_outputs;
+		std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>> global_inputs;
+		std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>> global_outputs;
         std::vector<Resource, short_alloc<Resource, 16>> global_io;
 
 		struct UseRef {
@@ -199,7 +201,7 @@ namespace vuk {
 			PassInfo* pass = nullptr;
 		};
 
-		ska::unordered_map<Name, std::vector<UseRef, short_alloc<UseRef, 64>>, std::hash<Name>, std::equal_to<Name>,
+		std::unordered_map<Name, std::vector<UseRef, short_alloc<UseRef, 64>>, std::hash<Name>, std::equal_to<Name>,
                            short_alloc<std::pair<const Name, std::vector<UseRef, short_alloc<UseRef, 64>>>, 64>>
             use_chains;
 
@@ -237,9 +239,18 @@ namespace vuk {
 			Clear clear_value;
 		};
 
+		struct ImageBarrier {
+			Name image;
+			vk::ImageMemoryBarrier barrier;
+			vk::PipelineStageFlags src;
+			vk::PipelineStageFlags dst;
+		};
+
 		struct SubpassInfo {
             SubpassInfo(arena&);
 			std::vector<PassInfo*, short_alloc<PassInfo*, 16>> passes;
+			std::vector<ImageBarrier> pre_barriers;
+			std::vector<ImageBarrier> post_barriers;
 		};
 
 		struct RenderPassInfo {
@@ -248,7 +259,8 @@ namespace vuk {
 			std::vector<AttachmentRPInfo, short_alloc<AttachmentRPInfo, 16>> attachments;
 			vuk::RenderPassCreateInfo rpci;
 			vuk::FramebufferCreateInfo fbci;
-			vk::RenderPass handle;
+			bool framebufferless = false;
+			vk::RenderPass handle = {};
 			vk::Framebuffer framebuffer;
 		};
 		std::vector<RenderPassInfo, short_alloc<RenderPassInfo, 64>> rpis;
@@ -265,7 +277,7 @@ namespace vuk {
 		void build();
 
 		// RGscaffold
-		ska::unordered_map<Name, AttachmentRPInfo> bound_attachments;
+		std::unordered_map<Name, AttachmentRPInfo> bound_attachments;
 		void bind_attachment_to_swapchain(Name name, Swapchain* swp, Clear);
 		void mark_attachment_internal(Name, vk::Format, vuk::Extent2D, vuk::Samples, Clear);
 		void mark_attachment_internal(Name, vk::Format, vuk::Extent2D::Framebuffer, vuk::Samples, Clear);
@@ -276,6 +288,8 @@ namespace vuk {
 		void build(vuk::PerThreadContext&);
 		void create_attachment(vuk::PerThreadContext&, Name name, RenderGraph::AttachmentRPInfo& attachment_info, vuk::Extent2D extents, vk::SampleCountFlagBits);
 		vk::CommandBuffer execute(vuk::PerThreadContext&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index, bool use_secondary_command_buffers);
+
+		private:
+			void fill_renderpass_info(vuk::RenderGraph::RenderPassInfo& rpass, const size_t& i, vuk::CommandBuffer& cobuf);
 	};
-	void sync_bound_attachment_to_renderpass(vuk::RenderGraph::AttachmentRPInfo& rp_att, vuk::RenderGraph::AttachmentRPInfo& attachment_info);
 }

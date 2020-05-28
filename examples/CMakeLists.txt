@@ -41,6 +41,7 @@ ADD_EXAMPLE(03_multipass)
 ADD_EXAMPLE(04_texture)
 ADD_EXAMPLE(05_deferred)
 ADD_EXAMPLE(06_msaa)
+ADD_EXAMPLE(07_commands)
 
 add_executable(voosh)
 target_include_directories(voosh SYSTEM PRIVATE ../ext/stb ../ext/imgui ../ext/ImGuiColorTextEdit ../ext/ImGui-Addons/FileBrowser ../ext/tinygltf)

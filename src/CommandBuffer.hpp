@@ -66,7 +66,7 @@ namespace vuk {
 			std::span<const vk::AttachmentReference> color_attachments;
 		};
 		std::optional<RenderPassInfo> ongoing_renderpass;
-        vk::PrimitiveTopology topology;
+        vk::PrimitiveTopology topology = vk::PrimitiveTopology::eTriangleList;
 		vuk::fixed_vector<vk::VertexInputAttributeDescription, VUK_MAX_ATTRIBUTES> attribute_descriptions;
 		vuk::fixed_vector<vk::VertexInputBindingDescription, VUK_MAX_ATTRIBUTES> binding_descriptions;
 		vuk::fixed_vector<vk::PushConstantRange, VUK_MAX_PUSHCONSTANT_RANGES> pcrs;
@@ -120,6 +120,10 @@ namespace vuk {
 
 		class SecondaryCommandBuffer begin_secondary();
         void execute(std::span<vk::CommandBuffer>);
+
+		// commands for renderpass-less command buffers
+		void resolve_image(Name src, Name dst);
+		void blit_image(Name src, Name dst, vk::ImageBlit region, vk::Filter filter);
 	protected:
 		void _bind_graphics_pipeline_state();
 	};

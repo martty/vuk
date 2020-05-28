@@ -7,14 +7,6 @@
 #include <sstream>
 #include <spirv_cross.hpp>
 
-std::string slurp(const std::string& path) {
-	std::ostringstream buf;
-	std::ifstream input(path.c_str());
-    assert(input);
-	buf << input.rdbuf();
-	return buf.str();
-}
-
 void burp(const std::string& in, const std::string& path) {
 	std::ofstream output(path.c_str(), std::ios::trunc);
 	if (!output.is_open()) {
@@ -426,8 +418,11 @@ vuk::RGImage vuk::PerThreadContext::create(const create_info_t<vuk::RGImage>& ci
 	std::string name = std::string("Image: RenderTarget ") + std::string(cinfo.name);
 	ctx.debug.set_name(res.image, name);
 	name = std::string("ImageView: RenderTarget ") + std::string(cinfo.name);
-	res.image_view = ctx.wrap(ctx.device.createImageView(ivci));
-	ctx.debug.set_name(res.image_view.payload, name);
+	// skip creating image views for images that can't be viewed
+	if (cinfo.ici.usage & (vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eInputAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage)) {
+		res.image_view = ctx.wrap(ctx.device.createImageView(ivci));
+		ctx.debug.set_name(res.image_view.payload, name);
+	}
 	return res;
 }
 
@@ -656,7 +651,7 @@ void vuk::Context::invalidate_shadermodule_and_pipelines(Name filename) {
 vuk::ShaderModule vuk::Context::compile_shader(std::string source, Name path) {
 	vuk::ShaderModuleCreateInfo sci;
 	sci.filename = path;
-    sci.source = slurp(std::string(path));
+    sci.source = std::move(source);
 	auto sm = shader_modules.remove(sci);
     if(sm)
 		device.destroy(sm->shader_module);
