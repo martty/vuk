@@ -24,16 +24,16 @@ namespace {
 		.name = "05_deferred",
 		.setup = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
 			{
-			vuk::PipelineCreateInfo pci;
-			pci.add_shader("../../examples/deferred.vert");
-			pci.add_shader("../../examples/deferred.frag");
+			vuk::PipelineBaseCreateInfo pci;
+			pci.add_shader(util::read_entire_file("../../examples/deferred.vert"), "deferred.vert");
+			pci.add_shader(util::read_entire_file("../../examples/deferred.frag"), "deferred.frag");
 			runner.context->create_named_pipeline("cube_deferred", pci);
 			}
 
 			{
-			vuk::PipelineCreateInfo pci;
-			pci.add_shader("../../examples/fullscreen.vert");
-			pci.add_shader("../../examples/deferred_resolve.frag");
+			vuk::PipelineBaseCreateInfo pci;
+			pci.add_shader(util::read_entire_file("../../examples/fullscreen.vert"), "fullscreen.vert");
+			pci.add_shader(util::read_entire_file("../../examples/deferred_resolve.frag"), "deferred_resolve.frag");
 			runner.context->create_named_pipeline("deferred_resolve", pci);
 			}
 

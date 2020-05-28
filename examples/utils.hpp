@@ -10,6 +10,8 @@
 #include "Types.hpp"
 #include "Context.hpp"
 #include <string_view>
+#include <fstream>
+#include <sstream>
 
 namespace vuk {
 	class PerThreadContext;
@@ -90,4 +92,12 @@ namespace util {
 	};
 	ImGuiData ImGui_ImplVuk_Init(vuk::PerThreadContext& ptc);
 	vuk::Pass ImGui_ImplVuk_Render(vuk::PerThreadContext& ptc, vuk::Name src_target, vuk::Name use_target, ImGuiData& data, ImDrawData* draw_data);
+
+	inline std::string read_entire_file(const std::string& path) {
+		std::ostringstream buf;
+		std::ifstream input(path.c_str());
+		assert(input);
+		buf << input.rdbuf();
+		return buf.str();
+	}
 }

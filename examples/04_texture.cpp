@@ -23,9 +23,9 @@ namespace {
 		.name = "04_texture",
 		.setup = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
 			{
-			vuk::PipelineCreateInfo pci;
-			pci.add_shader("../../examples/ubo_test_tex.vert");
-			pci.add_shader("../../examples/triangle_depthshaded_tex.frag");
+			vuk::PipelineBaseCreateInfo pci;
+			pci.add_shader(util::read_entire_file("../../examples/ubo_test_tex.vert"), "ubo_test_tex.vert");
+			pci.add_shader(util::read_entire_file("../../examples/triangle_depthshaded_tex.frag"), "triangle_depthshaded_tex.frag");
 			runner.context->create_named_pipeline("textured_cube", pci);
 			}
 

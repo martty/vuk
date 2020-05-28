@@ -27,9 +27,13 @@ util::ImGuiData util::ImGui_ImplVuk_Init(vuk::PerThreadContext& ptc) {
 	data.font_si = std::make_unique<vuk::SampledImage>(vuk::SampledImage::Global{ *data.font_texture.view, sci, vk::ImageLayout::eShaderReadOnlyOptimal });
 	io.Fonts->TexID = (ImTextureID)data.font_si.get();
 	{
-		vuk::PipelineCreateInfo pci;
-		pci.add_shader("../../imgui.vert");
-		pci.add_shader("../../imgui.frag");
+		vuk::PipelineBaseCreateInfo pci;
+		auto vpath = "../../imgui.vert";
+		auto vcont = util::read_entire_file(vpath);
+		pci.add_shader(vcont, vpath);
+		auto fpath = "../../imgui.frag";
+		auto fcont = util::read_entire_file(fpath);
+		pci.add_shader(fcont, fpath);
 		pci.set_blend(vuk::BlendPreset::eAlphaBlend);
 		ptc.ctx.create_named_pipeline("imgui", pci);
 	}

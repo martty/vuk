@@ -249,8 +249,6 @@ struct projection {
 	}
 };
 
-std::string slurp(const std::string& path);
-
 std::string stage_to_extension(vush::stage_entry::type as) {
 	switch (as) {
 	case vush::stage_entry::type::eVertex: return "vert";
@@ -266,7 +264,7 @@ static bool show_watch = false;
 void compile_probe(vuk::PerThreadContext& ptc, const std::string& src, uint32_t line_target, const std::string& variable) {
 	auto result = vush::parse_generate(src, fileToEdit);
 	for (const auto& [aspect, pa] : result.aspects) {
-		vuk::PipelineCreateInfo pci;
+		vuk::PipelineBaseCreateInfo pci;
 		for (auto& ps : pa.shaders) {
 			auto dst = std::string(fileToEdit) + "." + aspect + "_watch." + stage_to_extension(ps.stage);
 
@@ -305,7 +303,7 @@ void compile_probe(vuk::PerThreadContext& ptc, const std::string& src, uint32_t 
 				f << ps.source;
 			}
 
-			pci.add_shader(dst);
+			pci.add_shader(util::read_entire_file(dst), dst);
 			ptc.ctx.invalidate_shadermodule_and_pipelines(dst);
 		}
 		ptc.ctx.create_named_pipeline("_watch", pci);
@@ -431,14 +429,14 @@ vuk::ExampleRunner::ExampleRunner() {
 			editor.SetLanguageDefinition(lang);
 			editor.SetShowWhitespaces(false);
 
-			vush::add_rules(json::parse(slurp("../../vush/builtin_cfg.json")));
+			vush::add_rules(json::parse(util::read_entire_file("../../vush/builtin_cfg.json")));
 			{
 				std::ifstream t(fileToEdit);
 				if (t) {
 					std::string str((std::istreambuf_iterator<char>(t)), std::istreambuf_iterator<char>());
 					editor.SetText(str);
 
-					vuk::PipelineCreateInfo pci;
+					vuk::PipelineBaseCreateInfo pci;
 					auto result = vush::parse_generate(str, fileToEdit);
 					for (const auto& [aspect, pa] : result.aspects) {
 						for (auto& ps : pa.shaders) {
@@ -448,7 +446,7 @@ vuk::ExampleRunner::ExampleRunner() {
 								f << ps.source;
 							}
 
-							pci.add_shader(dst);
+							pci.add_shader(util::read_entire_file(dst), dst);
 						}
 					}
 					context->create_named_pipeline("sut", pci);
@@ -637,7 +635,7 @@ void vuk::ExampleRunner::render() {
 			}
 			try {
 				compile_probe(ptc, textToSave, line, hover);
-				auto refl = ptc.get_pipeline_reflection_info(ptc.ctx.get_named_pipeline("_watch"));
+				auto refl = ptc.ctx.get_named_pipeline("_watch")->reflection_info;
 				if ((refl.stages & vk::ShaderStageFlagBits::eFragment) == vk::ShaderStageFlagBits{}) {
 					throw "oof";
 				}
@@ -662,7 +660,7 @@ void vuk::ExampleRunner::render() {
 		vuk::Program refl;
 		bool will_we_render = true;
 		try {
-			refl = ptc.get_pipeline_reflection_info(ptc.ctx.get_named_pipeline("sut"));
+			refl = ptc.ctx.get_named_pipeline("sut")->reflection_info;
 			// clear error marks here
 			editor.SetErrorMarkers({});
 		} catch (vuk::ShaderCompilationException& e) {

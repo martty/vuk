@@ -20,15 +20,15 @@ namespace {
 		.name = "03_multipass",
 		.setup = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
 			{
-			vuk::PipelineCreateInfo pci;
-			pci.add_shader("../../examples/triangle.vert");
-			pci.add_shader("../../examples/triangle.frag");
+			vuk::PipelineBaseCreateInfo pci;
+			pci.add_shader(util::read_entire_file("../../examples/triangle.vert"), "triangle.vert");
+			pci.add_shader(util::read_entire_file("../../examples/triangle.frag"), "triangle.frag");
 			runner.context->create_named_pipeline("triangle", pci);
 			}
 			{
-			vuk::PipelineCreateInfo pci;
-			pci.add_shader("../../examples/ubo_test.vert");
-			pci.add_shader("../../examples/triangle_depthshaded.frag");
+			vuk::PipelineBaseCreateInfo pci;
+			pci.add_shader(util::read_entire_file("../../examples/ubo_test.vert"), "ubo_test.vert");
+			pci.add_shader(util::read_entire_file("../../examples/triangle_depthshaded.frag"), "triangle_depthshaded.frag");
 			runner.context->create_named_pipeline("cube", pci);
 			}
 		},

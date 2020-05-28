@@ -17,9 +17,9 @@ namespace {
 		.setup = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
 			// Pipelines are created by filling out a vuk::PipelineCreateInfo
 			// In this case, we only need the shaders, we don't care about the rest of the state
-			vuk::PipelineCreateInfo pci;
-			pci.add_shader("../../examples/triangle.vert");
-			pci.add_shader("../../examples/triangle.frag");
+			vuk::PipelineBaseCreateInfo pci;
+			pci.add_shader(util::read_entire_file("../../examples/triangle.vert"), "triangle.vert");
+			pci.add_shader(util::read_entire_file("../../examples/triangle.frag"), "triangle.frag");
 			// The pipeline is stored with a user give name for simplicity
 			runner.context->create_named_pipeline("triangle", pci);
 		},
