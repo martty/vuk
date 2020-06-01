@@ -9,7 +9,7 @@
 
 /* 07_commands
 * In this example we will see how to create passes that execute outside of renderpasses.
-* To showcases this, we will manually resolve an MSAA image (from the previous example),
+* To showcase this, we will manually resolve an MSAA image (from the previous example),
 * then blit parts of it to the final image.
 *
 * These examples are powered by the example framework, which hides some of the code required, as that would be repeated for each example.
