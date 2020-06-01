@@ -80,7 +80,7 @@ namespace {
 					  .bind_vertex_buffer(0, verts, 0, vuk::Packed{vk::Format::eR32G32B32Sfloat, vuk::Ignore{offsetof(util::Vertex, uv_coordinates) - sizeof(util::Vertex::position)}, vk::Format::eR32G32Sfloat})
 					  .bind_index_buffer(inds, vk::IndexType::eUint32)
 					  .bind_sampled_image(0, 2, *texture_of_doge, vk::SamplerCreateInfo{})
-					  .bind_pipeline("textured_cube")
+					  .bind_graphics_pipeline("textured_cube")
 					  .bind_uniform_buffer(0, 0, uboVP);
 					glm::mat4* model = command_buffer.map_scratch_uniform_binding<glm::mat4>(0, 1);
 					*model = static_cast<glm::mat4>(glm::angleAxis(glm::radians(0.f), glm::vec3(0.f, 1.f, 0.f)));
@@ -99,8 +99,8 @@ namespace {
 				}
 			});
 
-			float tile_x_size = runner.swapchain->extent.width / 3;
-			float tile_y_size = runner.swapchain->extent.height / 3;
+			float tile_x_size = 300 / 3;
+			float tile_y_size = 300 / 3;
 
 			// Here we demonstrate blitting by splitting up the resolved image into 09 tiles
 			// And blitting those tiles in the order dictated by 'shuf'
@@ -159,9 +159,9 @@ namespace {
 			// Since resolving requires equal sized images, we can actually infer the size of the MS attachment
 			// from the final image, and we don't need to specify here
 			// We use the swapchain format & extents, since resolving needs identical formats & extents
-			rg.mark_attachment_internal("07_commands_MS", runner.swapchain->format, runner.swapchain->extent, vuk::Samples::e8, vuk::ClearColor{ 0.f, 0.f, 0.f, 0.f });
+			rg.mark_attachment_internal("07_commands_MS", runner.swapchain->format, vuk::Extent2D{300, 300}, vuk::Samples::e8, vuk::ClearColor{ 0.f, 0.f, 0.f, 0.f });
 			rg.mark_attachment_internal("07_commands_depth", vk::Format::eD32Sfloat, vuk::Extent2D::Framebuffer{}, vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
-			rg.mark_attachment_internal("07_commands_NMS", runner.swapchain->format, runner.swapchain->extent, vuk::Samples::e1, vuk::ClearColor{ 0.f, 0.f, 0.f, 0.f });
+			rg.mark_attachment_internal("07_commands_NMS", runner.swapchain->format, vuk::Extent2D{300, 300}, vuk::Samples::e1, vuk::ClearColor{ 0.f, 0.f, 0.f, 0.f });
 			return rg;
 		},
 		.cleanup = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {

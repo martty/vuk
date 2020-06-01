@@ -15,8 +15,7 @@ namespace vuk {
 		vk::DescriptorSetLayout layout;
 
 		bool operator==(const DescriptorSetLayoutAllocInfo& o) const {
-			// TODO!
-			return layout == o.layout;
+			return layout == o.layout && descriptor_counts == o.descriptor_counts;
 		}
 	};
 

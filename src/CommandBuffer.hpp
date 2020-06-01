@@ -72,13 +72,18 @@ namespace vuk {
 		vuk::fixed_vector<vk::PushConstantRange, VUK_MAX_PUSHCONSTANT_RANGES> pcrs;
 		std::array<unsigned char, 64> push_constant_buffer;
 		vuk::PipelineBaseInfo* next_pipeline = nullptr;
+		vuk::ComputePipelineInfo* next_compute_pipeline = nullptr;
 		std::optional<vuk::PipelineInfo> current_pipeline;
+		std::optional<vuk::ComputePipelineInfo> current_compute_pipeline;
 		std::bitset<VUK_MAX_SETS> sets_used = {};
 		std::array<SetBinding, VUK_MAX_SETS> set_bindings = {};
 	public:
 		CommandBuffer(RenderGraph& rg, vuk::PerThreadContext& ptc, vk::CommandBuffer cb) : rg(rg), ptc(ptc), command_buffer(cb) {}
 
 		const RenderPassInfo& get_ongoing_renderpass() const;
+		vuk::Buffer get_resource_buffer(Name) const;
+		vk::Image get_resource_image(Name) const;
+		vuk::ImageView get_resource_image_view(Name) const;
 
 		CommandBuffer& set_viewport(unsigned index, vk::Viewport vp);	
 		CommandBuffer& set_viewport(unsigned index, Area area);
@@ -87,8 +92,11 @@ namespace vuk {
 		CommandBuffer& set_scissor(unsigned index, Area area);
 		CommandBuffer& set_scissor(unsigned index, Area::Framebuffer area);
 
-		CommandBuffer& bind_pipeline(vuk::PipelineBaseInfo* gpci);
-		CommandBuffer& bind_pipeline(Name p);
+		CommandBuffer& bind_graphics_pipeline(vuk::PipelineBaseInfo*);
+		CommandBuffer& bind_graphics_pipeline(Name);
+
+		CommandBuffer& bind_compute_pipeline(vuk::ComputePipelineInfo*);
+		CommandBuffer& bind_compute_pipeline(Name);
 
 		CommandBuffer& set_primitive_topology(vk::PrimitiveTopology);
 		CommandBuffer& bind_vertex_buffer(unsigned binding, const Buffer&, unsigned first_location, Packed);
@@ -118,6 +126,8 @@ namespace vuk {
 		CommandBuffer& draw_indexed(size_t index_count, size_t instance_count, size_t first_index, int32_t vertex_offset, size_t first_instance);
 		CommandBuffer& draw_indexed_indirect(std::span<vk::DrawIndexedIndirectCommand>);
 
+		CommandBuffer& dispatch(size_t group_count_x, size_t group_count_y = 1, size_t group_count_z = 1);
+
 		class SecondaryCommandBuffer begin_secondary();
         void execute(std::span<vk::CommandBuffer>);
 
@@ -125,6 +135,8 @@ namespace vuk {
 		void resolve_image(Name src, Name dst);
 		void blit_image(Name src, Name dst, vk::ImageBlit region, vk::Filter filter);
 	protected:
+		void _bind_state(bool graphics);
+		void _bind_compute_pipeline_state();
 		void _bind_graphics_pipeline_state();
 	};
 

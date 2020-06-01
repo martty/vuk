@@ -54,9 +54,7 @@ namespace vuk {
 
 		void set_blend(size_t attachment_index, BlendPreset);
 		void set_blend(BlendPreset);
-	//private:
-		/* filled out by vuk */
-
+		
 		friend struct std::hash<PipelineBaseCreateInfo>;
         friend class PerThreadContext;
 	public:
@@ -86,6 +84,27 @@ namespace vuk {
 
 	template<> struct create_info<PipelineBaseInfo> {
 		using type = vuk::PipelineBaseCreateInfo;
+	};
+
+	struct ComputePipelineCreateInfo {
+		friend class CommandBuffer;
+		friend class Context;
+	public:
+        void add_shader(std::string source, std::string filename) {
+            shader = std::move(source);
+            shader_path = std::move(filename);
+		}
+
+		friend struct std::hash<ComputePipelineCreateInfo>;
+        friend class PerThreadContext;
+	private:
+		std::string shader;
+		std::string shader_path;
+
+	public:
+		bool operator==(const ComputePipelineCreateInfo& o) const {
+            return shader == o.shader;
+		}
 	};
 
 	struct PipelineInstanceCreateInfo {
@@ -120,6 +139,13 @@ namespace vuk {
 
 	template<> struct create_info<PipelineInfo> {
 		using type = vuk::PipelineInstanceCreateInfo;
+	};
+
+	struct ComputePipelineInfo : PipelineInfo {
+	};
+
+	template<> struct create_info<ComputePipelineInfo> {
+		using type = vuk::ComputePipelineCreateInfo;
 	};
 }
 
@@ -221,6 +247,14 @@ namespace std {
 		}
 	};
 
+	template <>
+	struct hash<vuk::ComputePipelineCreateInfo> {
+		size_t operator()(vuk::ComputePipelineCreateInfo const & x) const noexcept {
+            size_t h = 0;
+            hash_combine(h, x.shader);
+            return h;
+		}
+	};
 
 	template <>
 	struct hash<vuk::PipelineInstanceCreateInfo> {

@@ -23,6 +23,7 @@ vuk::InflightContext::InflightContext(Context& ctx, size_t absolute_frame, std::
 	commandbuffer_pools(ctx.cbuf_pools.get_view(*this)),
 	semaphore_pools(ctx.semaphore_pools.get_view(*this)),
 	pipeline_cache(*this, ctx.pipeline_cache),
+	compute_pipeline_cache(*this, ctx.compute_pipeline_cache),
     pipelinebase_cache(*this, ctx.pipelinebase_cache),
 	renderpass_cache(*this, ctx.renderpass_cache),
 	framebuffer_cache(*this, ctx.framebuffer_cache),
@@ -168,6 +169,7 @@ commandbuffer_pool(ifc.commandbuffer_pools.get_view(*this)),
 semaphore_pool(ifc.semaphore_pools.get_view(*this)),
 fence_pool(ifc.fence_pools.get_view(*this)),
 pipeline_cache(*this, ifc.pipeline_cache),
+compute_pipeline_cache(*this, ifc.compute_pipeline_cache),
 pipelinebase_cache(*this, ifc.pipelinebase_cache),
 renderpass_cache(*this, ifc.renderpass_cache),
 framebuffer_cache(*this, ifc.framebuffer_cache),
@@ -471,12 +473,12 @@ vuk::PipelineBaseInfo vuk::Context::create(const create_info_t<PipelineBaseInfo>
         if(contents.empty())
             continue;
 		auto& sm = shader_modules.acquire({ contents, cinfo.shader_paths[i] });
-		vk::PipelineShaderStageCreateInfo shaderStage;
-		shaderStage.pSpecializationInfo = nullptr;
-		shaderStage.stage = sm.stage;
-		shaderStage.module = sm.shader_module;
-		shaderStage.pName = "main"; //TODO: make param
-		psscis.push_back(shaderStage);
+		vk::PipelineShaderStageCreateInfo shader_stage;
+		shader_stage.pSpecializationInfo = nullptr;
+		shader_stage.stage = sm.stage;
+		shader_stage.module = sm.shader_module;
+		shader_stage.pName = "main"; //TODO: make param
+		psscis.push_back(shader_stage);
 		accumulated_reflection.append(sm.reflection_info);
 		pipe_name += cinfo.shader_paths[i] + "+";
 	}
@@ -527,6 +529,45 @@ vuk::PipelineInfo vuk::PerThreadContext::create(const create_info_t<PipelineInfo
 	auto pipeline = ctx.device.createGraphicsPipeline(*ctx.vk_pipeline_cache, gpci);
 	ctx.debug.set_name(pipeline, cinfo.base->pipeline_name);
 	return { pipeline, gpci.layout, cinfo.base->layout_info };
+}
+
+vuk::ComputePipelineInfo vuk::Context::create(const create_info_t<vuk::ComputePipelineInfo>& cinfo) {
+	vk::PipelineShaderStageCreateInfo shader_stage;
+	std::string pipe_name = "Compute:";
+	auto& sm = shader_modules.acquire({ cinfo.shader, cinfo.shader_path });
+	shader_stage.pSpecializationInfo = nullptr;
+	shader_stage.stage = sm.stage;
+	shader_stage.module = sm.shader_module;
+	shader_stage.pName = "main"; //TODO: make param
+	pipe_name += cinfo.shader_path;
+
+	vuk::PipelineLayoutCreateInfo plci;
+	plci.dslcis = vuk::PipelineBaseCreateInfo::build_descriptor_layouts(sm.reflection_info);
+	plci.pcrs.insert(plci.pcrs.begin(), sm.reflection_info.push_constant_ranges.begin(), sm.reflection_info.push_constant_ranges.end());
+	plci.plci.pushConstantRangeCount = (uint32_t)sm.reflection_info.push_constant_ranges.size();
+	plci.plci.pPushConstantRanges = sm.reflection_info.push_constant_ranges.data();
+	std::array<vuk::DescriptorSetLayoutAllocInfo, VUK_MAX_SETS> dslai;
+	std::vector<vk::DescriptorSetLayout> dsls;
+	for (auto& dsl : plci.dslcis) {
+		dsl.dslci.bindingCount = (uint32_t)dsl.bindings.size();
+		dsl.dslci.pBindings = dsl.bindings.data();
+		auto l = descriptor_set_layouts.acquire(dsl);
+		dslai[dsl.index] = l;
+		dsls.push_back(dslai[dsl.index].layout);
+	}
+	plci.plci.pSetLayouts = dsls.data();
+	plci.plci.setLayoutCount = (uint32_t)dsls.size();
+
+	vk::ComputePipelineCreateInfo cpci;
+	cpci.stage = shader_stage;
+	cpci.layout = pipeline_layouts.acquire(plci);
+	auto pipeline = device.createComputePipeline(*vk_pipeline_cache, cpci);
+	debug.set_name(pipeline, pipe_name);
+	return { { pipeline, cpci.layout, dslai } };
+}
+
+vuk::ComputePipelineInfo vuk::PerThreadContext::create(const create_info_t<ComputePipelineInfo>& cinfo) {
+	return ctx.create(cinfo);
 }
 
 vk::Framebuffer vuk::PerThreadContext::create(const create_info_t<vk::Framebuffer>& cinfo) {
@@ -583,6 +624,7 @@ vuk::Context::Context(vk::Instance instance, vk::Device device, vk::PhysicalDevi
 	fence_pools(*this),
 	pipelinebase_cache(*this),
 	pipeline_cache(*this),
+	compute_pipeline_cache(*this),
 	renderpass_cache(*this),
 	framebuffer_cache(*this),
 	transient_images(*this),
@@ -603,8 +645,19 @@ void vuk::Context::create_named_pipeline(const char* name, vuk::PipelineBaseCrea
 	named_pipelines.insert_or_assign(name, &pipelinebase_cache.acquire(std::move(ci)));
 }
 
+void vuk::Context::create_named_pipeline(const char* name, vuk::ComputePipelineCreateInfo ci) {
+	std::lock_guard _(named_pipelines_lock);
+	named_compute_pipelines.insert_or_assign(name, &compute_pipeline_cache.acquire(std::move(ci)));
+}
+
 vuk::PipelineBaseInfo* vuk::Context::get_named_pipeline(const char* name) {
+	std::lock_guard _(named_pipelines_lock);
 	return named_pipelines.at(name);
+}
+
+vuk::ComputePipelineInfo* vuk::Context::get_named_compute_pipeline(const char* name) {
+	std::lock_guard _(named_pipelines_lock);
+	return named_compute_pipelines.at(name);
 }
 
 vuk::PipelineBaseInfo* vuk::Context::get_pipeline(const vuk::PipelineBaseCreateInfo& pbci) {

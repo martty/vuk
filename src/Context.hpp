@@ -106,6 +106,7 @@ namespace vuk {
 		vk::UniquePipelineCache vk_pipeline_cache;
         Cache<PipelineBaseInfo> pipelinebase_cache;
 		Cache<PipelineInfo> pipeline_cache;
+		Cache<ComputePipelineInfo> compute_pipeline_cache;
 		Cache<vk::RenderPass> renderpass_cache;
 		Cache<vk::Framebuffer> framebuffer_cache;
 		PerFrameCache<RGImage, FC> transient_images;
@@ -131,6 +132,7 @@ namespace vuk {
 
 		std::mutex named_pipelines_lock;
 		std::unordered_map<std::string_view, vuk::PipelineBaseInfo*> named_pipelines;
+		std::unordered_map<std::string_view, vuk::ComputePipelineInfo*> named_compute_pipelines;
 
 		std::mutex swapchains_lock;
 		plf::colony<Swapchain> swapchains;
@@ -156,8 +158,12 @@ namespace vuk {
 		} debug;
 
 		void create_named_pipeline(const char* name, vuk::PipelineBaseCreateInfo pbci);
+		void create_named_pipeline(const char* name, vuk::ComputePipelineCreateInfo pbci);
+
 		vuk::PipelineBaseInfo* get_named_pipeline(const char* name);
-        vuk::PipelineBaseInfo* get_pipeline(const vuk::PipelineBaseCreateInfo& pbci);
+		vuk::ComputePipelineInfo* get_named_compute_pipeline(const char* name);
+        
+		vuk::PipelineBaseInfo* get_pipeline(const vuk::PipelineBaseCreateInfo& pbci);
 		void invalidate_shadermodule_and_pipelines(Name);
         vuk::Program get_pipeline_reflection_info(vuk::PipelineBaseCreateInfo pbci);
         vuk::ShaderModule compile_shader(std::string source, Name path);
@@ -166,6 +172,7 @@ namespace vuk {
         vuk::PipelineBaseInfo create(const create_info_t<vuk::PipelineBaseInfo>& cinfo);
         vk::PipelineLayout create(const create_info_t<vk::PipelineLayout>& cinfo);
         vuk::DescriptorSetLayoutAllocInfo create(const create_info_t<vuk::DescriptorSetLayoutAllocInfo>& cinfo);
+		vuk::ComputePipelineInfo create(const create_info_t<vuk::ComputePipelineInfo>& cinfo);
 
 		// one pool per thread
         std::mutex one_time_pool_lock;
@@ -244,6 +251,7 @@ namespace vuk {
 		Pool<vk::CommandBuffer, Context::FC>::PFView commandbuffer_pools;
 		Pool<vk::Semaphore, Context::FC>::PFView semaphore_pools;
 		Cache<PipelineInfo>::PFView pipeline_cache;
+		Cache<ComputePipelineInfo>::PFView compute_pipeline_cache;
 		Cache<PipelineBaseInfo>::PFView pipelinebase_cache;
 		Cache<vk::RenderPass>::PFView renderpass_cache;
 		Cache<vk::Framebuffer>::PFView framebuffer_cache;
@@ -312,6 +320,7 @@ namespace vuk {
 		Pool<vk::Semaphore, Context::FC>::PFPTView semaphore_pool;
 		Pool<vk::Fence, Context::FC>::PFPTView fence_pool;
 		Cache<PipelineInfo>::PFPTView pipeline_cache;
+		Cache<ComputePipelineInfo>::PFPTView compute_pipeline_cache;
 		Cache<PipelineBaseInfo>::PFPTView pipelinebase_cache;
 		Cache<vk::RenderPass>::PFPTView renderpass_cache;
 		Cache<vk::Framebuffer>::PFPTView framebuffer_cache;
@@ -406,6 +415,7 @@ namespace vuk {
 		vk::Sampler create(const create_info_t<vk::Sampler>& cinfo);
 		vuk::DescriptorSetLayoutAllocInfo create(const create_info_t<vuk::DescriptorSetLayoutAllocInfo>& cinfo);
 		vk::PipelineLayout create(const create_info_t<vk::PipelineLayout>& cinfo);
+		vuk::ComputePipelineInfo create(const create_info_t<vuk::ComputePipelineInfo>& cinfo);
 	};
 	
 	template<class T>

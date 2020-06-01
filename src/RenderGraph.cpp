@@ -1,6 +1,4 @@
 #include "RenderGraph.hpp"
-#include "RenderGraph.hpp"
-#include "RenderGraph.hpp"
 #include "Hash.hpp" // for create
 #include "Cache.hpp"
 #include "Context.hpp"
@@ -42,7 +40,7 @@ namespace vuk {
 
 
 
-	bool is_write_access(ImageAccess ia) {
+	bool is_write_access(Access ia) {
 		switch (ia) {
 		case eColorResolveWrite:
 		case eColorWrite:
@@ -56,7 +54,7 @@ namespace vuk {
 		}
 	}
 
-	bool is_read_access(ImageAccess ia) {
+	bool is_read_access(Access ia) {
 		switch (ia) {
 		case eColorResolveRead:
 		case eColorRead:
@@ -71,7 +69,7 @@ namespace vuk {
 		}
 	}
 
-	Resource::Use to_use(ImageAccess ia) {
+	Resource::Use to_use(Access ia) {
 		switch (ia) {
 		case eColorResolveWrite:
 		case eColorWrite: return { vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::AccessFlagBits::eColorAttachmentWrite, vk::ImageLayout::eColorAttachmentOptimal };
@@ -81,9 +79,12 @@ namespace vuk {
 		case eDepthStencilRW : return { vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eLateFragmentTests, vk::AccessFlagBits::eDepthStencilAttachmentRead | vk::AccessFlagBits::eDepthStencilAttachmentWrite, vk::ImageLayout::eDepthStencilAttachmentOptimal };
 		
 		case eFragmentSampled: return { vk::PipelineStageFlagBits::eFragmentShader, vk::AccessFlagBits::eShaderRead, vk::ImageLayout::eShaderReadOnlyOptimal };
+		case eFragmentRead: return { vk::PipelineStageFlagBits::eFragmentShader, vk::AccessFlagBits::eShaderRead, vk::ImageLayout::eShaderReadOnlyOptimal };
 
 		case eTransferSrc: return { vk::PipelineStageFlagBits::eTransfer, vk::AccessFlagBits::eTransferRead, vk::ImageLayout::eTransferSrcOptimal };
 		case eTransferDst: return { vk::PipelineStageFlagBits::eTransfer, vk::AccessFlagBits::eTransferWrite, vk::ImageLayout::eTransferDstOptimal };
+
+		case eComputeRW: return { vk::PipelineStageFlagBits::eComputeShader, vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite, vk::ImageLayout::eShaderReadOnlyOptimal };
 		default:
 			assert(0 && "NYI");
 			return {};
@@ -180,7 +181,7 @@ namespace vuk {
 
 #define INIT(x) x(decltype(x)::allocator_type(arena_))
 
-	RenderGraph::RenderGraph() : arena_(1024*128), INIT(passes), INIT(head_passes), INIT(tail_passes), INIT(aliases), INIT(global_inputs), INIT(global_outputs), INIT(global_io), INIT(use_chains), INIT(rpis) {
+	RenderGraph::RenderGraph() : arena_(1024*128), INIT(head_passes), INIT(tail_passes), INIT(aliases), INIT(global_inputs), INIT(global_outputs), INIT(global_io), INIT(use_chains), INIT(rpis) {
         passes.reserve(64);
 	}
 
@@ -447,6 +448,11 @@ namespace vuk {
 		});
 	}
 
+	void RenderGraph::bind_buffer(Name name, vuk::Buffer buf) {
+		BufferInfo buf_info{.buffer = buf};
+		bound_buffers.emplace(name, buf_info);
+	}
+
 	void sync_bound_attachment_to_renderpass(vuk::RenderGraph::AttachmentRPInfo& rp_att, vuk::RenderGraph::AttachmentRPInfo& attachment_info) {
 		rp_att.description.format = attachment_info.description.format;
 		rp_att.samples = attachment_info.samples;
@@ -626,6 +632,55 @@ namespace vuk {
 			}
 		}
 
+		for (auto& [raw_name, buffer_info] : bound_buffers) {
+			auto name = resolve_name(raw_name, aliases);
+			auto& chain = use_chains.at(name);
+			chain.insert(chain.begin(), UseRef{ std::move(buffer_info.initial), nullptr });
+			chain.emplace_back(UseRef{ buffer_info.final, nullptr });
+
+			for (size_t i = 0; i < chain.size() - 1; i++) {
+				auto& left = chain[i];
+				auto& right = chain[i + 1];
+
+				bool crosses_rpass = (left.pass == nullptr || right.pass == nullptr || left.pass->render_pass_index != right.pass->render_pass_index);
+				if (crosses_rpass) {
+					if (left.pass) { // RenderPass ->
+						auto& left_rp = rpis[left.pass->render_pass_index];
+
+						vk::MemoryBarrier barrier;
+						barrier.dstAccessMask = right.use.access;
+						barrier.srcAccessMask = left.use.access;
+						MemoryBarrier mb{ .barrier = barrier, .src = left.use.stages, .dst = right.use.stages };
+						left_rp.subpasses[left.pass->subpass].post_mem_barriers.push_back(mb);
+					}
+
+					if (right.pass) { // -> RenderPass
+						auto& right_rp = rpis[right.pass->render_pass_index];
+						
+						vk::MemoryBarrier barrier;
+						barrier.dstAccessMask = right.use.access;
+						barrier.srcAccessMask = left.use.access;
+						MemoryBarrier mb{ .barrier = barrier, .src = left.use.stages, .dst = right.use.stages };
+						if (mb.src == vk::PipelineStageFlags{}) {
+							mb.src = vk::PipelineStageFlagBits::eTopOfPipe;
+							mb.barrier.srcAccessMask = {};
+						}
+						right_rp.subpasses[right.pass->subpass].pre_mem_barriers.push_back(mb);
+					}
+				} else { // subpass-subpass link -> subpass - subpass dependency
+					auto& left_rp = rpis[left.pass->render_pass_index];
+					if (left_rp.framebufferless) {
+						vk::MemoryBarrier barrier;
+						barrier.dstAccessMask = right.use.access;
+						barrier.srcAccessMask = left.use.access;
+						MemoryBarrier mb{ .barrier = barrier, .src = left.use.stages, .dst = right.use.stages };
+						left_rp.subpasses[left.pass->subpass].post_mem_barriers.push_back(mb);
+					}
+				}
+			}
+		}
+
+
 		for (auto& rp : rpis) {
 			rp.rpci.color_ref_offsets.resize(rp.subpasses.size());
 			rp.rpci.ds_refs.resize(rp.subpasses.size());
@@ -645,7 +700,7 @@ namespace vuk {
 			for (auto& res : pass.pass.resources) {
 				if (!is_framebuffer_attachment(res))
 					continue;
-				if (res.ia == vuk::ImageAccess::eColorResolveWrite) // resolve attachment are added when processing the color attachment
+				if (res.ia == vuk::Access::eColorResolveWrite) // resolve attachment are added when processing the color attachment
 					continue;
 				vk::AttachmentReference attref;
 
@@ -955,6 +1010,9 @@ namespace vuk {
 						dep.barrier.image = bound_attachments[dep.image].image;
 						cbuf.pipelineBarrier(dep.src, dep.dst, {}, {}, {}, dep.barrier);
 					}
+					for (auto dep : sp.pre_mem_barriers) {
+						cbuf.pipelineBarrier(dep.src, dep.dst, {}, dep.barrier, {}, {});
+					}
 				}
                 for(auto& p: sp.passes) {
                     if(p->pass.execute) {
@@ -981,6 +1039,9 @@ namespace vuk {
 						dep.barrier.image = bound_attachments[dep.image].image;
 						cbuf.pipelineBarrier(dep.src, dep.dst, {}, {}, {}, dep.barrier);
 					}
+					for (auto dep : sp.post_mem_barriers) {
+						cbuf.pipelineBarrier(dep.src, dep.dst, {}, dep.barrier, {}, {});
+					}
 				}
 			}
 			if (rpass.handle != vk::RenderPass{})
@@ -989,6 +1050,11 @@ namespace vuk {
 		cbuf.end();
 		return cbuf;
 	}
+	
+	RenderGraph::BufferInfo RenderGraph::get_resource_buffer(Name n) {
+		return bound_buffers.at(n);
+	}
+
     RenderGraph::RenderPassInfo::RenderPassInfo(arena& arena_) : INIT(subpasses), INIT(attachments) {
 	}
 

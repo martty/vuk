@@ -984,7 +984,7 @@ void vuk::ExampleRunner::render() {
 				for (auto& [binding, iv] : program_params.ivs) {
 					command_buffer.bind_sampled_image(0, binding, iv, vk::SamplerCreateInfo{});
 				}
-				command_buffer.bind_pipeline("sut");
+				command_buffer.bind_graphics_pipeline("sut");
 				for (auto& [binding, buffer] : program_params.buffer) {
 					void * dst = command_buffer._map_scratch_uniform_binding(0, binding, program_params.buffer[binding].size() * sizeof(char));
 					memcpy(dst, program_params.buffer[binding].data(), program_params.buffer[binding].size() * sizeof(char));
@@ -1017,7 +1017,7 @@ void vuk::ExampleRunner::render() {
 					for (auto& [binding, iv] : program_params.ivs) {
 						command_buffer.bind_sampled_image(0, binding, iv, vk::SamplerCreateInfo{});
 					}
-					command_buffer.bind_pipeline("_watch");
+					command_buffer.bind_graphics_pipeline("_watch");
 					for (auto& [binding, buffer] : program_params.buffer) {
 						void* dst = command_buffer._map_scratch_uniform_binding(0, binding, program_params.buffer[binding].size() * sizeof(char));
 						memcpy(dst, program_params.buffer[binding].data(), program_params.buffer[binding].size() * sizeof(char));

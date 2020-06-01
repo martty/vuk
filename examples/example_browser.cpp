@@ -103,8 +103,12 @@ void vuk::ExampleRunner::render() {
 			for (auto& ex : examples) {
 				auto rg_frag = ex->render(*this, ifc);
 				rg_frag.build();
-				rg.passes.insert(rg.passes.end(), rg_frag.passes.begin(), rg_frag.passes.end());
+				for (auto& p : rg_frag.passes) {
+					rg.add_pass(p.pass);
+				}
 				rg.bound_attachments.insert(rg_frag.bound_attachments.begin(), rg_frag.bound_attachments.end());
+				rg.bound_buffers.insert(rg_frag.bound_buffers.begin(), rg_frag.bound_buffers.end());
+
 				auto& attachment_name = *attachment_names.emplace(std::string(ex->name) + "_final");
 
 				rg.mark_attachment_internal(attachment_name, swapchain->format, vk::Extent2D(300, 300), vuk::Samples::e1, vuk::ClearColor(0.1f, 0.2f, 0.3f, 1.f));
@@ -112,7 +116,10 @@ void vuk::ExampleRunner::render() {
 				if (rg_frag.use_chains.size() > 1) {
 					bool disable = false;
 					for (auto& c : rg_frag.use_chains) {
+						if (rg.bound_attachments.find(c.first) == rg.bound_attachments.end())
+							continue;
 						std::string btn_id = "";
+						bool storage = false;
 						if (c.first == attachment_name) {
 							disable = false;
 							btn_id = "F";
@@ -132,7 +139,9 @@ void vuk::ExampleRunner::render() {
 								btn_id += "C";
 							} else if (usage & vk::ImageUsageFlagBits::eDepthStencilAttachment) {
 								btn_id += "D";
-							}
+							} else if (usage & (vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst)){
+								btn_id += "X";
+							} 
 						}
 						if (disable) {
 							btn_id += " (MS)";

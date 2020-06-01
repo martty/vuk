@@ -75,7 +75,7 @@ namespace {
 					  .bind_vertex_buffer(0, verts, 0, vuk::Packed{vk::Format::eR32G32B32Sfloat, vuk::Ignore{sizeof(util::Vertex) - sizeof(util::Vertex::position)}})
 					  // Bind the index buffer
 					  .bind_index_buffer(inds, vk::IndexType::eUint32)
-					  .bind_pipeline("cube")
+					  .bind_graphics_pipeline("cube")
 					  // Bind the uniform buffer we allocated to (set = 0, binding = 0)
 					  .bind_uniform_buffer(0, 0, uboVP);
 					  // For the model matrix, we will take a shorter route

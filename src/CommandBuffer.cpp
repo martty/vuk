@@ -1,12 +1,14 @@
 #include "CommandBuffer.hpp"
-#include "CommandBuffer.hpp"
-#include "CommandBuffer.hpp"
 #include "Context.hpp"
 #include "RenderGraph.hpp"
 
 namespace vuk {
 	const CommandBuffer::RenderPassInfo& CommandBuffer::get_ongoing_renderpass() const {
 		return ongoing_renderpass.value();
+	}
+
+	vuk::Buffer CommandBuffer::get_resource_buffer(Name n) const {
+		return rg.get_resource_buffer(n).buffer;
 	}
 
 	CommandBuffer& CommandBuffer::set_viewport(unsigned index, vk::Viewport vp) {
@@ -62,13 +64,22 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::bind_pipeline(vuk::PipelineBaseInfo* pi) {
+	CommandBuffer& CommandBuffer::bind_graphics_pipeline(vuk::PipelineBaseInfo* pi) {
 		next_pipeline = pi;
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::bind_pipeline(Name p) {
-		return bind_pipeline(ptc.ctx.get_named_pipeline(p.data()));
+	CommandBuffer& CommandBuffer::bind_graphics_pipeline(Name p) {
+		return bind_graphics_pipeline(ptc.ctx.get_named_pipeline(p.data()));
+	}
+
+	CommandBuffer& CommandBuffer::bind_compute_pipeline(vuk::ComputePipelineInfo* gpci) {
+		next_compute_pipeline = gpci;
+		return *this;
+	}
+
+	CommandBuffer& CommandBuffer::bind_compute_pipeline(Name p) {
+		return bind_compute_pipeline(ptc.ctx.get_named_compute_pipeline(p.data()));
 	}
 
 	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, const Buffer& buf, unsigned first_attribute, Packed format) {
@@ -223,6 +234,12 @@ namespace vuk {
         return *this;
 	}
 
+	CommandBuffer& CommandBuffer::dispatch(size_t size_x, size_t size_y, size_t size_z) {
+		_bind_compute_pipeline_state();
+		command_buffer.dispatch(size_x, size_y, size_z);
+		return *this;
+	}
+
     SecondaryCommandBuffer CommandBuffer::begin_secondary() {
         auto nptc = new vuk::PerThreadContext(ptc.ifc.begin());
         auto scbuf = nptc->commandbuffer_pool.acquire(vk::CommandBufferLevel::eSecondary, 1)[0];
@@ -275,6 +292,34 @@ namespace vuk {
 		command_buffer.blitImage(src_image, vk::ImageLayout::eTransferSrcOptimal, dst_image, vk::ImageLayout::eTransferDstOptimal, region, filter);
 	}
 
+	void CommandBuffer::_bind_state(bool graphics) {
+		for (auto& pcr : pcrs) {
+			void* data = push_constant_buffer.data() + pcr.offset;
+			command_buffer.pushConstants(current_pipeline->pipeline_layout, pcr.stageFlags, pcr.offset, pcr.size, data);
+		}
+		pcrs.clear();
+
+		for (size_t i = 0; i < VUK_MAX_SETS; i++) {
+			if (!sets_used[i])
+				continue;
+			set_bindings[i].layout_info = graphics? current_pipeline->layout_info[i] : current_compute_pipeline->layout_info[i];
+			auto ds = ptc.descriptor_sets.acquire(set_bindings[i]);
+			command_buffer.bindDescriptorSets(graphics ? vk::PipelineBindPoint::eGraphics : vk::PipelineBindPoint::eCompute, graphics ? current_pipeline->pipeline_layout : current_compute_pipeline->pipeline_layout, 0, 1, &ds.descriptor_set, 0, nullptr);
+			sets_used[i] = false;
+			set_bindings[i] = {};
+		}
+	}
+
+	void CommandBuffer::_bind_compute_pipeline_state() {
+		if (next_compute_pipeline) {
+			command_buffer.bindPipeline(vk::PipelineBindPoint::eCompute, next_compute_pipeline->pipeline);
+			current_compute_pipeline = *next_compute_pipeline;
+			next_compute_pipeline = nullptr;
+		}
+
+		_bind_state(false);
+	}
+
 	void CommandBuffer::_bind_graphics_pipeline_state() {
 		if (next_pipeline) {
             vuk::PipelineInstanceCreateInfo pi;
@@ -312,22 +357,7 @@ namespace vuk {
 			command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, current_pipeline->pipeline);
 			next_pipeline = nullptr;
 		}
-
-		for (auto& pcr : pcrs) {
-			void* data = push_constant_buffer.data() + pcr.offset;
-			command_buffer.pushConstants(current_pipeline->pipeline_layout, pcr.stageFlags, pcr.offset, pcr.size, data);
-		}
-		pcrs.clear();
-
-		for (size_t i = 0; i < VUK_MAX_SETS; i++) {
-			if (!sets_used[i])
-				continue;
-			set_bindings[i].layout_info = current_pipeline->layout_info[i];
-			auto ds = ptc.descriptor_sets.acquire(set_bindings[i]);
-			command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, current_pipeline->pipeline_layout, 0, 1, &ds.descriptor_set, 0, nullptr);
-			sets_used[i] = false;
-			set_bindings[i] = {};
-		}
+		_bind_state(true);
     }
 
     vk::CommandBuffer SecondaryCommandBuffer::get_buffer() {

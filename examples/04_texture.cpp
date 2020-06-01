@@ -73,7 +73,7 @@ namespace {
 					  .bind_index_buffer(inds, vk::IndexType::eUint32)
 					  // Here we bind our vuk::Texture to (set = 0, binding = 2) with default sampler settings
 					  .bind_sampled_image(0, 2, *texture_of_doge, vk::SamplerCreateInfo{})
-					  .bind_pipeline("textured_cube")
+					  .bind_graphics_pipeline("textured_cube")
 					  .bind_uniform_buffer(0, 0, uboVP);
 					glm::mat4* model = command_buffer.map_scratch_uniform_binding<glm::mat4>(0, 1);
 					*model = static_cast<glm::mat4>(glm::angleAxis(glm::radians(angle), glm::vec3(0.f, 1.f, 0.f)));

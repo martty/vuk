@@ -46,7 +46,7 @@ namespace {
 					command_buffer.set_viewport(0, vuk::Area::Framebuffer{});
 					command_buffer
 					  .set_scissor(0, vuk::Area::Framebuffer{}) // Set the scissor area to cover the entire framebuffer
-					  .bind_pipeline("triangle") // Recall pipeline for "triangle" and bind
+					  .bind_graphics_pipeline("triangle") // Recall pipeline for "triangle" and bind
 					  .draw(3, 1, 0, 0); // Draw 3 vertices
 					}
 				}

@@ -54,7 +54,8 @@ namespace vuk {
 		vk::ClearValue c;
 	};
 
-	enum ImageAccess {
+	enum Access {
+		eNone,
 		eColorRW,
 		eColorWrite,
 		eColorRead,
@@ -69,7 +70,10 @@ namespace vuk {
 		eFragmentRead,
 		eFragmentWrite, // written using image store
 		eTransferSrc,
-		eTransferDst
+		eTransferDst,
+		eComputeRead,
+		eComputeWrite,
+		eComputeRW,
 	};
 
 	struct Samples {
@@ -92,15 +96,23 @@ namespace vuk {
 	};
 
 	struct Resource;
-	struct BufferResource {};
+	struct BufferResource {
+		Name name;
+
+		Resource operator()(Access ba);
+	};
 	struct ImageResource {
 		Name name;
 
-		Resource operator()(ImageAccess ia);
+		Resource operator()(Access ia);
 	};
 }
 
 inline vuk::ImageResource operator "" _image(const char* name, size_t) {
+	return { name };
+}
+
+inline vuk::BufferResource operator "" _buffer(const char* name, size_t) {
 	return { name };
 }
 
@@ -109,23 +121,27 @@ namespace vuk {
 		Name src_name;
 		Name use_name;
 		enum class Type { eBuffer, eImage } type;
-		ImageAccess ia;
+		Access ia;
 		struct Use {
 			vk::PipelineStageFlags stages;
 			vk::AccessFlags access;
 			vk::ImageLayout layout; // ignored for buffers
 		};
 
-		Resource(Name n, Type t, ImageAccess ia) : src_name(n), use_name(n), type(t), ia(ia) {}
-		Resource(Name src, Name use, Type t, ImageAccess ia) : src_name(src), use_name(use), type(t), ia(ia) {}
+		Resource(Name n, Type t, Access ia) : src_name(n), use_name(n), type(t), ia(ia) {}
+		Resource(Name src, Name use, Type t, Access ia) : src_name(src), use_name(use), type(t), ia(ia) {}
 
 		bool operator==(const Resource& o) const {
-			return (use_name == o.use_name && src_name == o.src_name);// || use_name == o.src_name || src_name == o.use_name;
+			return (use_name == o.use_name && src_name == o.src_name);
 		}
 	};
 
-	inline Resource ImageResource::operator()(ImageAccess ia) {
+	inline Resource ImageResource::operator()(Access ia) {
 		return Resource{name, Resource::Type::eImage, ia};
+	}
+
+	inline Resource BufferResource::operator()(Access ba) {
+		return Resource{ name, Resource::Type::eBuffer, ba };
 	}
 
 	struct Pass {
@@ -170,6 +186,7 @@ namespace vuk {
 
 		struct PassInfo {
             PassInfo(arena&);
+			
             Pass pass;
 
             size_t render_pass_index;
@@ -185,7 +202,7 @@ namespace vuk {
             bool is_tail_pass = false;
         };
 
-		std::vector<PassInfo, short_alloc<PassInfo, 64>> passes;
+		std::vector<PassInfo> passes;
 
 		std::vector<PassInfo*, short_alloc<PassInfo*, 8>> head_passes;
 		std::vector<PassInfo*, short_alloc<PassInfo*, 8>> tail_passes;
@@ -239,9 +256,25 @@ namespace vuk {
 			Clear clear_value;
 		};
 
+		struct BufferInfo {
+			Name name;
+
+			Resource::Use initial;
+			Resource::Use final;
+
+			vuk::Buffer buffer;
+		};
+
+
 		struct ImageBarrier {
 			Name image;
 			vk::ImageMemoryBarrier barrier;
+			vk::PipelineStageFlags src;
+			vk::PipelineStageFlags dst;
+		};
+
+		struct MemoryBarrier {
+			vk::MemoryBarrier barrier;
 			vk::PipelineStageFlags src;
 			vk::PipelineStageFlags dst;
 		};
@@ -251,6 +284,7 @@ namespace vuk {
 			std::vector<PassInfo*, short_alloc<PassInfo*, 16>> passes;
 			std::vector<ImageBarrier> pre_barriers;
 			std::vector<ImageBarrier> post_barriers;
+			std::vector<MemoryBarrier> pre_mem_barriers, post_mem_barriers;
 		};
 
 		struct RenderPassInfo {
@@ -278,16 +312,20 @@ namespace vuk {
 
 		// RGscaffold
 		std::unordered_map<Name, AttachmentRPInfo> bound_attachments;
-		void bind_attachment_to_swapchain(Name name, Swapchain* swp, Clear);
+		std::unordered_map<Name, BufferInfo> bound_buffers;
+		void bind_attachment_to_swapchain(Name, Swapchain* swp, Clear);
 		void mark_attachment_internal(Name, vk::Format, vuk::Extent2D, vuk::Samples, Clear);
 		void mark_attachment_internal(Name, vk::Format, vuk::Extent2D::Framebuffer, vuk::Samples, Clear);
 		void mark_attachment_resolve(Name resolved_name, Name ms_name);
+		void bind_buffer(Name, vuk::Buffer);
 		vk::ImageUsageFlags compute_usage(std::vector<vuk::RenderGraph::UseRef, short_alloc<UseRef, 64>>& chain);
 
 		// RG
 		void build(vuk::PerThreadContext&);
 		void create_attachment(vuk::PerThreadContext&, Name name, RenderGraph::AttachmentRPInfo& attachment_info, vuk::Extent2D extents, vk::SampleCountFlagBits);
 		vk::CommandBuffer execute(vuk::PerThreadContext&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index, bool use_secondary_command_buffers);
+
+		BufferInfo get_resource_buffer(Name);
 
 		private:
 			void fill_renderpass_info(vuk::RenderGraph::RenderPassInfo& rpass, const size_t& i, vuk::CommandBuffer& cobuf);

@@ -61,7 +61,7 @@ namespace {
 					command_buffer
 					  .set_viewport(0, vuk::Area::Framebuffer{0, 0, 0.2f, 0.2f})
 					  .set_scissor(0, vuk::Area::Framebuffer{0, 0, 0.2f, 0.2f})
-					  .bind_pipeline("triangle")
+					  .bind_graphics_pipeline("triangle")
 					  .draw(3, 1, 0, 0);
 					}
 				}
@@ -74,7 +74,7 @@ namespace {
 					command_buffer
 					  .set_viewport(0, vuk::Area::Framebuffer{0.8f, 0.8f, 0.2f, 0.2f})
 					  .set_scissor(0, vuk::Area::Framebuffer{0.8f, 0.8f, 0.2f, 0.2f})
-					  .bind_pipeline("triangle")
+					  .bind_graphics_pipeline("triangle")
 					  .draw(3, 1, 0, 0);
 					}
 				}
@@ -91,7 +91,7 @@ namespace {
 					  .set_viewport(0, vuk::Area::Framebuffer{})
 					  .set_scissor(0, vuk::Area::Framebuffer{})
 					  .bind_index_buffer(inds, vk::IndexType::eUint32)
-					  .bind_pipeline("cube")
+					  .bind_graphics_pipeline("cube")
 					  .bind_vertex_buffer(0, verts, 0, vuk::Packed{vk::Format::eR32G32B32Sfloat, vuk::Ignore{sizeof(util::Vertex) - sizeof(util::Vertex::position)}})
 					  .bind_uniform_buffer(0, 0, uboVP);
 					glm::mat4* model = command_buffer.map_scratch_uniform_binding<glm::mat4>(0, 1);
