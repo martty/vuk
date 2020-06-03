@@ -66,6 +66,7 @@ namespace vuk {
 		eInputRead,
 		eVertexSampled,
 		eVertexRead,
+		eAttributeRead,
 		eFragmentSampled,
 		eFragmentRead,
 		eFragmentWrite, // written using image store

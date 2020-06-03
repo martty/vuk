@@ -664,6 +664,10 @@ vuk::PipelineBaseInfo* vuk::Context::get_pipeline(const vuk::PipelineBaseCreateI
     return &pipelinebase_cache.acquire(pbci);
 }
 
+vuk::ComputePipelineInfo* vuk::Context::get_pipeline(const vuk::ComputePipelineCreateInfo& pbci) {
+    return &compute_pipeline_cache.acquire(pbci);
+}
+
 vuk::Program vuk::PerThreadContext::get_pipeline_reflection_info(vuk::PipelineBaseCreateInfo pci) {
 	auto& res = pipelinebase_cache.acquire(pci);
 	return res.reflection_info;

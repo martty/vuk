@@ -42,6 +42,7 @@ namespace vush {
 
     struct stage_entry {
         std::string context;
+        std::string epilogue;
         std::string return_type;
         std::string aspect_name;
         enum type { eVertex = 0, eTCS = 1, eTES = 2, eGeometry = 3, eFragment = 4, eCompute = 5 } stage;

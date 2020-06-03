@@ -5,7 +5,7 @@
 // haha, computer cache goes bzzzz
 std::unordered_map<std::string, std::unordered_map<std::string, vush::rule>> rules;
 
-std::regex parse_parameters_regex(R"(\s*(?:(\w+)\s*::)?\s*(\w+)\s*(?:\$\d+)?(\w+))");
+std::regex parse_parameters_regex(R"(\s*(?:(\w+)\s*::)?\s*([\w\[]+\]?)\s*(?:\$\d+)?(\w+))");
 std::regex find_struct(R"(\s*struct\s*(\w+)\s*\{([\s\S]*?)\};)");
 std::regex parse_struct_members(R"(\s*(?:layout\((.*)\))?\s*(?:(\w+)::)?\s*(\w+)\s*(\w+))");
 std::regex pragma_regex(R"(^#pragma\s*(\w+)?\s+(?:(\w+)\s*:)?\s*([\w\/\[\]]+)\s*:\s*(\S+))");
@@ -205,6 +205,8 @@ _features.flag ? A : B
             return stage_entry::type::eVertex;
         if(i == "fragment")
             return stage_entry::type::eFragment;
+        if(i == "compute")
+            return stage_entry::type::eCompute;
         assert(0);
         return stage_entry::type::eVertex;
     }
@@ -450,6 +452,8 @@ _features.flag ? A : B
         result << se.return_type << " " << se.aspect_name << "_" << se.stage_as_string << "(";
         for(auto i = 0; i < se.parameters.size(); i++) {
             auto& p = se.parameters[i];
+            if(p.type.substr(p.type.size() - 2) == "[]")
+                continue;
             result << p.type << " " << p.name;
             if(i < se.parameters.size() - 1)
                 result << ", ";
@@ -502,6 +506,8 @@ _features.flag ? A : B
         result << se.aspect_name << "_" << se.stage_as_string << "(";
         for(auto i = 0; i < se.parameters.size(); i++) {
             auto& p = se.parameters[i];
+            if(p.type.substr(p.type.size() - 2) == "[]")
+                continue;
             result << p.name;
             if(i < se.parameters.size() - 1)
                 result << ", ";
@@ -517,6 +523,9 @@ _features.flag ? A : B
         }
 
         result << "}";
+
+        result << se.epilogue;
+
         generate_result::per_aspect& pa = gresult.aspects[se.aspect_name];
         pa.shaders.emplace_back(generate_result::per_aspect::shader{se.stage, result.str()});
         auto mit = metadata.find(se.aspect_name);
@@ -558,6 +567,7 @@ _features.flag ? A : B
 
         auto words_begin = std::sregex_iterator(src.begin(), src.end(), find_stages);
         auto words_end = std::sregex_iterator();
+        std::string last_epilogue;
         auto prefix_offset = 0;
         for(std::sregex_iterator it = words_begin; it != words_end; ++it) {
             std::smatch match = *it;
@@ -566,6 +576,9 @@ _features.flag ? A : B
             auto before = src.substr(0, pos);
             se.signature_line_number = std::count(before.begin(), before.end(), '\n') + 1;
             auto prefix = match.prefix().str().substr(prefix_offset);
+            for (auto& s : stages) {
+                s.epilogue += prefix;
+            }
             context += prefix;
             se.context = context;
             se.return_type = match[1].str();
@@ -599,12 +612,21 @@ _features.flag ? A : B
             auto param_probes = parse_probes(match[4].str(), se.signature_line_number, structs, se.parameters);
             auto body_probes = parse_probes(se.body, se.signature_line_number, structs, se.parameters);
 
+            if(auto lit = it; ++lit == words_end) {
+                last_epilogue = match.suffix().str().substr(se.body.size());
+            }
+
             se.body = std::regex_replace(se.body, probe_strip_regex, "$1");
 
             se.probes.insert(se.probes.end(), param_probes.begin(), param_probes.end());
             se.probes.insert(se.probes.end(), body_probes.begin(), body_probes.end());
             stages.push_back(std::move(se));
         }
+
+        for (auto& s : stages) {
+            s.epilogue += last_epilogue;
+        }
+
 
         for(auto& se: stages) {
             generate(filename, se, structs, metadata, parameters_per_scope[se.aspect_name], gresult);

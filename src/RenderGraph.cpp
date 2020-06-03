@@ -84,7 +84,12 @@ namespace vuk {
 		case eTransferSrc: return { vk::PipelineStageFlagBits::eTransfer, vk::AccessFlagBits::eTransferRead, vk::ImageLayout::eTransferSrcOptimal };
 		case eTransferDst: return { vk::PipelineStageFlagBits::eTransfer, vk::AccessFlagBits::eTransferWrite, vk::ImageLayout::eTransferDstOptimal };
 
+		case eComputeRead: return { vk::PipelineStageFlagBits::eComputeShader, vk::AccessFlagBits::eShaderRead, vk::ImageLayout::eShaderReadOnlyOptimal };
+		case eComputeWrite: return { vk::PipelineStageFlagBits::eComputeShader, vk::AccessFlagBits::eShaderWrite, vk::ImageLayout::eShaderReadOnlyOptimal };
 		case eComputeRW: return { vk::PipelineStageFlagBits::eComputeShader, vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite, vk::ImageLayout::eShaderReadOnlyOptimal };
+
+		case eAttributeRead: return { vk::PipelineStageFlagBits::eVertexInput, vk::AccessFlagBits::eVertexAttributeRead, vk::ImageLayout::eGeneral /* ignored */ };
+
 		default:
 			assert(0 && "NYI");
 			return {};
