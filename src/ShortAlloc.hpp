@@ -21,7 +21,7 @@ class arena {
 
 public:
    arena(std::size_t N) noexcept {
-        buf_ = new(std::align_val_t{alignment}) char[N];
+        buf_ = (char *) operator new[](N, (std::align_val_t{alignment}));
         ptr_ = buf_;
         size_ = N;
     }
@@ -31,13 +31,13 @@ public:
     }
     arena(const arena& o) {
         size_ = o.size_;
-        buf_ = new(std::align_val_t{alignment}) char[size_];
+        buf_ = (char *) operator new[](size_, (std::align_val_t{alignment}));
         ptr_ = buf_;
     }
     arena& operator=(const arena& o){
         ::operator delete[](buf_, std::align_val_t{alignment});
         size_ = o.size_;
-        buf_ = new(std::align_val_t{alignment}) char[size_];
+        buf_ = (char *) operator new[](size_, (std::align_val_t{alignment}));
         ptr_ = buf_;
         return *this;
     };
@@ -59,7 +59,7 @@ public:
 inline char* arena::allocate(std::size_t n) {
     assert(pointer_in_buffer(ptr_) && "short_alloc has outlived arena");
     n = align_up(n);
-    if(buf_ + size_ - ptr_ >= n) {
+    if(buf_ + size_ - ptr_ >= (int64_t)n) {
         char* r = ptr_;
         ptr_ += n;
         return r;

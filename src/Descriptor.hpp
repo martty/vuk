@@ -68,13 +68,12 @@ namespace vuk {
 		DescriptorSetLayoutAllocInfo layout_info = {};
 
 		bool operator==(const SetBinding& o) const {
-            return used == o.used && layout_info == o.layout_info && bindings == o.bindings;
-			/*if (layout_info != o.layout_info) return false;
+			if (layout_info != o.layout_info) return false;
 			for (size_t i = 0; i < VUK_MAX_BINDINGS; i++) {
 				if (!used[i]) continue;
 				if (bindings[i] != o.bindings[i]) return false;
 			}
-			return true;*/
+			return true;
 		}
 	};
 

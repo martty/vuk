@@ -79,6 +79,7 @@ namespace vuk {
 		std::array<SetBinding, VUK_MAX_SETS> set_bindings = {};
 	public:
 		CommandBuffer(RenderGraph& rg, vuk::PerThreadContext& ptc, vk::CommandBuffer cb) : rg(rg), ptc(ptc), command_buffer(cb) {}
+		CommandBuffer(RenderGraph& rg, vuk::PerThreadContext& ptc, vk::CommandBuffer cb, std::optional<RenderPassInfo> ongoing) : rg(rg), ptc(ptc), command_buffer(cb), ongoing_renderpass(ongoing) {}
 
 		const RenderPassInfo& get_ongoing_renderpass() const;
 		vuk::Buffer get_resource_buffer(Name) const;

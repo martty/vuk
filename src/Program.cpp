@@ -45,7 +45,7 @@ vuk::Program::Type to_type(spirv_cross::SPIRType s) {
 }
 
 void reflect_members(const spirv_cross::Compiler& refl, const spirv_cross::SPIRType& type, std::vector<vuk::Program::Member>& members) {
-	for (size_t i = 0; i < type.member_types.size(); i++) {
+	for (uint32_t i = 0; i < type.member_types.size(); i++) {
 		auto& t = type.member_types[i];
 		vuk::Program::Member m;
 		auto spirtype = refl.get_type(t);

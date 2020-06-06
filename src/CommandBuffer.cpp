@@ -251,9 +251,7 @@ namespace vuk {
         cbii.framebuffer = vk::Framebuffer{};//TODO
 		cbi.pInheritanceInfo = &cbii;
 		scbuf.begin(cbi);
-        SecondaryCommandBuffer scb(rg, *nptc, scbuf);
-        scb.ongoing_renderpass = ongoing_renderpass;
-        return scb;
+        return SecondaryCommandBuffer(rg, *nptc, scbuf, ongoing_renderpass);
     }
 
     void CommandBuffer::execute(std::span<vk::CommandBuffer> scbufs) {
