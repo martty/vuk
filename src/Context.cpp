@@ -99,10 +99,22 @@ void vuk::InflightContext::destroy(std::vector<vk::Image>&& images) {
 }
 
 
-void vuk::execute_submit_and_present_to_one(PerThreadContext& ptc, RenderGraph& rg, SwapchainRef swapchain, bool use_secondary_command_buffers) {
-	auto render_complete = ptc.semaphore_pool.acquire(1)[0];
+bool vuk::execute_submit_and_present_to_one(PerThreadContext& ptc, RenderGraph& rg, SwapchainRef swapchain, bool use_secondary_command_buffers) {
 	auto present_rdy = ptc.semaphore_pool.acquire(1)[0];
 	auto acq_result = ptc.ctx.device.acquireNextImageKHR(swapchain->swapchain, UINT64_MAX, present_rdy, vk::Fence{});
+	if (acq_result.result != vk::Result::eSuccess) {
+        vk::SubmitInfo si;
+        si.commandBufferCount = 0;
+        si.pCommandBuffers = nullptr;
+        si.waitSemaphoreCount = 1;
+        si.pWaitSemaphores = &present_rdy;
+        vk::PipelineStageFlags flags = vk::PipelineStageFlagBits::eTopOfPipe;
+        si.pWaitDstStageMask = &flags;
+
+        return false;
+	}
+
+	auto render_complete = ptc.semaphore_pool.acquire(1)[0];
 	auto index = acq_result.value;
 
 	std::vector<std::pair<SwapChainRef, size_t>> swapchains_with_indexes = { { swapchain, index } };
@@ -131,6 +143,7 @@ void vuk::execute_submit_and_present_to_one(PerThreadContext& ptc, RenderGraph& 
         pi.pWaitSemaphores = &render_complete;
         ptc.ctx.graphics_queue.presentKHR(pi);
     }
+    return true;
 }
 
 bool vuk::Context::DebugUtils::enabled() {
