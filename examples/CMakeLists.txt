@@ -2,8 +2,9 @@ cmake_minimum_required(VERSION 3.7)
 project(vuk-examples)
 
 add_subdirectory(../ext/vk-bootstrap vk-bootstrap)
-set(GLFW_BUILD_DOCS FALSE)
-set(GLFW_INSTALL FALSE)
+set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 add_subdirectory(../ext/glfw glfw)
 add_subdirectory(../ext/glm glm)
 
