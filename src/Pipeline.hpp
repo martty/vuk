@@ -232,7 +232,7 @@ namespace std {
 	struct hash<vk::PipelineColorBlendStateCreateInfo> {
 		size_t operator()(vk::PipelineColorBlendStateCreateInfo const& x) const noexcept {
 			size_t h = 0;
-			hash_combine(h, x.flags, std::span(x.pAttachments, x.attachmentCount), x.blendConstants, to_integral(x.logicOp), x.logicOpEnable);
+			hash_combine(h, x.flags, std::span(x.pAttachments, x.attachmentCount), x.blendConstants[0], x.blendConstants[1], x.blendConstants[2], x.blendConstants[3], to_integral(x.logicOp), x.logicOpEnable);
 			return h;
 		}
 	};

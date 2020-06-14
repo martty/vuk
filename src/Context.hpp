@@ -348,8 +348,8 @@ namespace vuk {
 		bool is_ready(const TransferStub& stub);
 		void wait_all_transfers();
 
-		Buffer _allocate_scratch_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, bool create_mapped);
-		Unique<Buffer> _allocate_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, bool create_mapped);
+		Buffer _allocate_scratch_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, size_t alignment, bool create_mapped);
+        Unique<Buffer> _allocate_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, size_t alignment, bool create_mapped);
 
 		// since data is provided, we will add TransferDst to the flags automatically
 		template<class T>
@@ -371,7 +371,7 @@ namespace vuk {
 		template<class T>
 		TransferStub upload(Buffer dst, std::span<T> data) {
 			if (data.empty()) return { 0 };
-			auto staging = _allocate_scratch_buffer(MemoryUsage::eCPUonly, vk::BufferUsageFlagBits::eTransferSrc, sizeof(T) * data.size(), true);
+			auto staging = _allocate_scratch_buffer(MemoryUsage::eCPUonly, vk::BufferUsageFlagBits::eTransferSrc, sizeof(T) * data.size(), 1, true);
 			::memcpy(staging.mapped_ptr, data.data(), sizeof(T) * data.size());
 
 			return ifc.enqueue_transfer(staging, dst);
@@ -380,7 +380,7 @@ namespace vuk {
 		template<class T>
 		TransferStub upload(vk::Image dst, vk::Extent3D extent, std::span<T> data, bool generate_mips) {
 			assert(!data.empty());
-			auto staging = _allocate_scratch_buffer(MemoryUsage::eCPUonly, vk::BufferUsageFlagBits::eTransferSrc, sizeof(T) * data.size(), true);
+			auto staging = _allocate_scratch_buffer(MemoryUsage::eCPUonly, vk::BufferUsageFlagBits::eTransferSrc, sizeof(T) * data.size(), 1, true);
 			::memcpy(staging.mapped_ptr, data.data(), sizeof(T) * data.size());
 
 			return ifc.enqueue_transfer(staging, dst, extent, generate_mips);

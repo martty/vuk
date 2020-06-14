@@ -204,7 +204,7 @@ namespace vuk {
             return;
         vk::DescriptorPoolCreateInfo dpci;
         dpci.maxSets = sets_allocated == 0 ? 1 : sets_allocated * 2;
-        std::array<vk::DescriptorPoolSize, VkDescriptorType::VK_DESCRIPTOR_TYPE_END_RANGE> descriptor_counts = {};
+        std::array<vk::DescriptorPoolSize, 12> descriptor_counts = {};
         uint32_t used_idx = 0;
         for(auto i = 0; i < descriptor_counts.size(); i++) {
             if(layout_alloc_info.descriptor_counts[i] > 0) {

@@ -11,7 +11,7 @@
 
 namespace vuk {
 	struct DescriptorSetLayoutAllocInfo {
-		std::array<uint32_t, VkDescriptorType::VK_DESCRIPTOR_TYPE_END_RANGE> descriptor_counts = {};
+		std::array<uint32_t, 12> descriptor_counts = {};
 		vk::DescriptorSetLayout layout;
 
 		bool operator==(const DescriptorSetLayoutAllocInfo& o) const {

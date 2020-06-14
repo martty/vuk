@@ -214,14 +214,14 @@ void vuk::PerThreadContext::destroy(vuk::DescriptorSet ds) {
 	pool_cache.acquire(ds.layout_info).free_sets.enqueue(ds.descriptor_set);
 }
 
-vuk::Buffer vuk::PerThreadContext::_allocate_scratch_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, bool create_mapped) {
+vuk::Buffer vuk::PerThreadContext::_allocate_scratch_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, size_t alignment, bool create_mapped) {
     PoolSelect ps{mem_usage, buffer_usage};
 	auto& pool = scratch_buffers.acquire(ps);
-	return ifc.ctx.allocator.allocate_buffer(pool, size, 1, create_mapped);
+	return ifc.ctx.allocator.allocate_buffer(pool, size, alignment, create_mapped);
 }
 
-vuk::Unique<vuk::Buffer> vuk::PerThreadContext::_allocate_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, bool create_mapped) {
-	return vuk::Unique<Buffer>(ifc.ctx, ifc.ctx.allocator.allocate_buffer(mem_usage, buffer_usage, size, 1, create_mapped));
+vuk::Unique<vuk::Buffer> vuk::PerThreadContext::_allocate_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, size_t alignment, bool create_mapped) {
+	return vuk::Unique<Buffer>(ifc.ctx, ifc.ctx.allocator.allocate_buffer(mem_usage, buffer_usage, size, alignment, create_mapped));
 }
 
 
@@ -540,7 +540,7 @@ vuk::PipelineInfo vuk::PerThreadContext::create(const create_info_t<PipelineInfo
 	gpci.stageCount = (uint32_t)cinfo.base->psscis.size();
 
 	auto pipeline = ctx.device.createGraphicsPipeline(*ctx.vk_pipeline_cache, gpci);
-	ctx.debug.set_name(pipeline, cinfo.base->pipeline_name);
+	ctx.debug.set_name(pipeline.value, cinfo.base->pipeline_name);
 	return { pipeline, gpci.layout, cinfo.base->layout_info };
 }
 
@@ -575,7 +575,7 @@ vuk::ComputePipelineInfo vuk::Context::create(const create_info_t<vuk::ComputePi
 	cpci.stage = shader_stage;
 	cpci.layout = pipeline_layouts.acquire(plci);
 	auto pipeline = device.createComputePipeline(*vk_pipeline_cache, cpci);
-	debug.set_name(pipeline, pipe_name);
+	debug.set_name(pipeline.value, pipe_name);
 	return { { pipeline, cpci.layout, dslai } };
 }
 

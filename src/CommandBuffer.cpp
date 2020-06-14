@@ -209,7 +209,7 @@ namespace vuk {
 	}
 
 	void* CommandBuffer::_map_scratch_uniform_binding(unsigned set, unsigned binding, size_t size) {
-		auto buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vk::BufferUsageFlagBits::eUniformBuffer, size, true);
+		auto buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vk::BufferUsageFlagBits::eUniformBuffer, size, 1, true);
 		bind_uniform_buffer(set, binding, buf);
 		return buf.mapped_ptr;
 	}
@@ -228,7 +228,7 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::draw_indexed_indirect(std::span<vk::DrawIndexedIndirectCommand> cmds) {
 		_bind_graphics_pipeline_state();
-		auto buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vk::BufferUsageFlagBits::eIndirectBuffer, cmds.size_bytes(), true);
+		auto buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vk::BufferUsageFlagBits::eIndirectBuffer, cmds.size_bytes(), 1, true);
         memcpy(buf.mapped_ptr, cmds.data(), cmds.size_bytes());
         command_buffer.drawIndexedIndirect(buf.buffer, buf.offset, cmds.size(), sizeof(vk::DrawIndexedIndirectCommand));
         return *this;

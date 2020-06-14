@@ -1,5 +1,6 @@
 #include "Allocator.hpp"
 #include <string>
+#include <numeric>
 
 namespace vuk {
 	PFN_vmaAllocateDeviceMemoryFunction Allocator::real_alloc_callback = nullptr;
@@ -103,6 +104,7 @@ namespace vuk {
 		poolCreateInfo.memoryTypeIndex = memTypeIndex;
 		poolCreateInfo.blockSize = 0;
 		poolCreateInfo.maxBlockCount = 0;
+        poolCreateInfo.flags = VMA_POOL_CREATE_IGNORE_BUFFER_IMAGE_GRANULARITY_BIT;
 
 		VmaPool pool;
 		vmaCreatePool(allocator, &poolCreateInfo, &pool);
@@ -128,12 +130,12 @@ namespace vuk {
         if(size == 0) {
             return {.buffer = vk::Buffer{}, .size = 0};
         }
-        alignment = std::max(pool.mem_reqs.alignment, alignment);
+        alignment = std::lcm(pool.mem_reqs.alignment, alignment);
 		if (pool.usage & vk::BufferUsageFlagBits::eUniformBuffer) {
-            alignment = std::max(alignment, properties.limits.minUniformBufferOffsetAlignment);
+            alignment = std::lcm(alignment, properties.limits.minUniformBufferOffsetAlignment);
 		}
 		if (pool.usage & vk::BufferUsageFlagBits::eStorageBuffer) {
-            alignment = std::max(alignment, properties.limits.minStorageBufferOffsetAlignment);
+            alignment = std::lcm(alignment, properties.limits.minStorageBufferOffsetAlignment);
 		}
         auto new_needle = pool.needle.fetch_add(size + alignment) + size + alignment; 
 		auto base_addr = new_needle - size - alignment;
@@ -205,7 +207,9 @@ namespace vuk {
 		pool_helper->result = vk::Buffer{};
 		auto mem_reqs = pool.mem_reqs;
 		mem_reqs.size = size;
-        mem_reqs.alignment = std::max(mem_reqs.alignment, alignment);
+        mem_reqs.alignment = std::max(1ull, mem_reqs.alignment);
+        alignment = std::max(1ull, alignment);
+        mem_reqs.alignment = std::lcm(mem_reqs.alignment, alignment);
 		VkMemoryRequirements vkmem_reqs = mem_reqs;
 		auto result = vmaAllocateMemory(allocator, &vkmem_reqs, &vaci, &res, &vai);
 		assert(result == VK_SUCCESS);
