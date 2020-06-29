@@ -41,7 +41,7 @@ set(SPIRV_CROSS_ENABLE_UTIL OFF CACHE BOOL "")
 
 add_subdirectory(ext/SPIRV-Cross)
 
-target_compile_features(vuk PUBLIC cxx_std_20)
+#target_compile_features(vuk PUBLIC cxx_std_20)
 
 target_sources(vuk PRIVATE 
 	src/Pipeline.hpp
@@ -75,7 +75,7 @@ target_precompile_headers(vuk PRIVATE <vulkan/vulkan.hpp>)
 if("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang" AND NOT MSVC)
 	target_compile_options(vuk PRIVATE -fno-char8_t)
 elseif(MSVC)
-	target_compile_options(vuk PRIVATE /permissive- /Zc:char8_t-)
+	target_compile_options(vuk PRIVATE /std:c++latest /permissive- /Zc:char8_t-)
 endif()
 
 target_link_libraries_system(vuk PUBLIC Vulkan::Vulkan spirv-cross-core)
