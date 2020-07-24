@@ -356,14 +356,14 @@ namespace vuk {
 		// since data is provided, we will add TransferDst to the flags automatically
 		template<class T>
 		std::pair<Buffer, TransferStub> create_scratch_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, std::span<T> data) {
-			auto dst = _allocate_scratch_buffer(mem_usage, vk::BufferUsageFlagBits::eTransferDst | buffer_usage, sizeof(T) * data.size(), false);
+			auto dst = _allocate_scratch_buffer(mem_usage, vk::BufferUsageFlagBits::eTransferDst | buffer_usage, sizeof(T) * data.size(), 1, false);
 			auto stub = upload(dst, data);
 			return { dst, stub };
 		}
 
 		template<class T>
 		std::pair<Unique<Buffer>, TransferStub> create_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, std::span<T> data) {
-			auto dst = _allocate_buffer(mem_usage, vk::BufferUsageFlagBits::eTransferDst | buffer_usage, sizeof(T) * data.size(), false);
+			auto dst = _allocate_buffer(mem_usage, vk::BufferUsageFlagBits::eTransferDst | buffer_usage, sizeof(T) * data.size(), 1, false);
 			auto stub = upload(*dst, data);
 			return { std::move(dst), stub };
 		}

@@ -63,8 +63,8 @@ vuk::Pass util::ImGui_ImplVuk_Render(vuk::PerThreadContext& ptc, vuk::Name src_t
 
 	size_t vertex_size = draw_data->TotalVtxCount * sizeof(ImDrawVert);
 	size_t index_size = draw_data->TotalIdxCount * sizeof(ImDrawIdx);
-	auto imvert = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst, vertex_size, false);
-	auto imind = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst, index_size, false);
+	auto imvert = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst, vertex_size, 1, false);
+	auto imind = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst, index_size, 1, false);
 
 	size_t vtx_dst = 0, idx_dst = 0;
 	for (int n = 0; n < draw_data->CmdListsCount; n++) {
