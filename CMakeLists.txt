@@ -72,8 +72,15 @@ target_include_directories(vuk PUBLIC src/)
 
 target_precompile_headers(vuk PRIVATE <vulkan/vulkan.hpp>)
 
-if("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang" AND NOT MSVC)
-	target_compile_options(vuk PRIVATE -fno-char8_t)
+string(FIND "${CMAKE_CXX_COMPILER}" "clang++" VUK_COMPILER_CLANGPP)
+if(VUK_COMPILER_CLANGPP GREATER -1)
+  set(VUK_COMPILER_CLANGPP ON)
+else()
+  set(VUK_COMPILER_CLANGPP OFF)
+endif()
+
+if(VUK_COMPILER_CLANGPP)
+	target_compile_options(vuk PRIVATE -std=c++20 -fno-char8_t)
 elseif(MSVC)
 	target_compile_options(vuk PRIVATE /std:c++latest /permissive- /Zc:char8_t-)
 endif()
