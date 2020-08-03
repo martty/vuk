@@ -260,7 +260,9 @@ namespace vuk {
 		PerFrameCache<Allocator::Linear, Context::FC>::PFView scratch_buffers;
 		PerFrameCache<vuk::DescriptorSet, Context::FC>::PFView descriptor_sets;
 		Cache<vk::Sampler>::PFView sampler_cache;
+    public:
 		Pool<vuk::SampledImage, Context::FC>::PFView sampled_images;
+    private:
 		Cache<vuk::DescriptorPool>::PFView pool_cache;
 
 		Cache<vuk::ShaderModule>::PFView shader_modules;

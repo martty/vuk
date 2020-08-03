@@ -81,6 +81,10 @@ namespace vuk {
 		CommandBuffer(RenderGraph& rg, vuk::PerThreadContext& ptc, vk::CommandBuffer cb) : rg(rg), ptc(ptc), command_buffer(cb) {}
 		CommandBuffer(RenderGraph& rg, vuk::PerThreadContext& ptc, vk::CommandBuffer cb, std::optional<RenderPassInfo> ongoing) : rg(rg), ptc(ptc), command_buffer(cb), ongoing_renderpass(ongoing) {}
 
+		vuk::PerThreadContext& get_context() {
+            return ptc;
+        }
+
 		const RenderPassInfo& get_ongoing_renderpass() const;
 		vuk::Buffer get_resource_buffer(Name) const;
 		vk::Image get_resource_image(Name) const;

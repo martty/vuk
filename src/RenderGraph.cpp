@@ -330,6 +330,7 @@ namespace vuk {
 				p->render_pass_index = rpi_index;
 				if (rpi.subpasses.size() > 0) {
                     auto& last_pass = rpi.subpasses.back().passes[0];
+					// if the pass has the same inputs and outputs, we execute them on the same subpass
                     if(last_pass->inputs == p->inputs && last_pass->outputs == p->outputs) {
                         p->subpass = last_pass->subpass;
                         rpi.subpasses.back().passes.push_back(p);
@@ -603,6 +604,10 @@ namespace vuk {
 					}
 				} else { // subpass-subpass link -> subpass - subpass dependency
 					// WAW, WAR, RAW accesses need sync
+
+					// if we merged the passes into a subpass, no sync is needed
+                    if(left.pass->subpass == right.pass->subpass)
+                        continue;
 					if (is_framebuffer_attachment(left.use) && (is_write_access(left.use) || (is_read_access(left.use) && is_write_access(right.use)))) {
 						assert(left.pass->render_pass_index == right.pass->render_pass_index);
 						auto& rp = rpis[right.pass->render_pass_index];
@@ -673,6 +678,8 @@ namespace vuk {
 						right_rp.subpasses[right.pass->subpass].pre_mem_barriers.push_back(mb);
 					}
 				} else { // subpass-subpass link -> subpass - subpass dependency
+                    if(left.pass->subpass == right.pass->subpass)
+                        continue;
 					auto& left_rp = rpis[left.pass->render_pass_index];
 					if (left_rp.framebufferless) {
 						vk::MemoryBarrier barrier;
@@ -694,6 +701,7 @@ namespace vuk {
 		// we now have enough data to build vk::RenderPasses and vk::Framebuffers
 		// we have to assign the proper attachments to proper slots
 		// the order is given by the resource binding order
+        uint32_t previous_rp = -1, previous_sp = -1;
 		for (auto& pass : passes) {
 			auto& rp = rpis[pass.render_pass_index];
 			auto subpass_index = pass.subpass;
@@ -701,6 +709,14 @@ namespace vuk {
 			auto& resolve_attrefs = rp.rpci.resolve_refs;
 			auto& color_ref_offsets = rp.rpci.color_ref_offsets;
 			auto& ds_attrefs = rp.rpci.ds_refs;
+
+			// do not process merged passes
+			if (previous_rp != -1 && previous_rp == pass.render_pass_index && previous_sp == pass.subpass) {
+                continue;
+            } else {
+                previous_rp = pass.render_pass_index;
+                previous_sp = pass.subpass;
+			}
 
 			for (auto& res : pass.pass.resources) {
 				if (!is_framebuffer_attachment(res))
