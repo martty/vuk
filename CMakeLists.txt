@@ -68,7 +68,7 @@ target_include_directories(vuk PUBLIC ext/plf_colony)
 target_include_directories(vuk PUBLIC ext/VulkanMemoryAllocator/src)
 target_include_directories(vuk PUBLIC ext/flat_hash_map)
 target_include_directories(vuk PUBLIC ext/concurrentqueue)
-target_include_directories(vuk PUBLIC src/)
+target_include_directories(vuk PUBLIC src/ include/)
 
 target_precompile_headers(vuk PRIVATE <vulkan/vulkan.hpp>)
 
@@ -85,8 +85,8 @@ elseif(MSVC)
 	target_compile_options(vuk PRIVATE /std:c++latest /permissive- /Zc:char8_t-)
 endif()
 
-target_link_libraries_system(vuk PUBLIC Vulkan::Vulkan spirv-cross-core)
-target_link_libraries(vuk PUBLIC shaderc)
+target_link_libraries_system(vuk PUBLIC spirv-cross-core)
+target_link_libraries(vuk PUBLIC shaderc ${Vulkan_LIBRARIES})
 
 
 if (WIN32)
