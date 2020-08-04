@@ -119,10 +119,30 @@ namespace vuk {
         }
 	};
 
+	struct Samples {
+		vk::SampleCountFlagBits count;
+		bool infer;
+
+		struct Framebuffer {};
+
+		Samples() : count(vk::SampleCountFlagBits::e1), infer(false) {}
+		Samples(vk::SampleCountFlagBits samples) : count(samples), infer(false) {}
+		Samples(Framebuffer) : infer(true) {}
+
+		constexpr static auto e1 = vk::SampleCountFlagBits::e1;
+		constexpr static auto e2 = vk::SampleCountFlagBits::e2;
+		constexpr static auto e4 = vk::SampleCountFlagBits::e4;
+		constexpr static auto e8 = vk::SampleCountFlagBits::e8;
+		constexpr static auto e16 = vk::SampleCountFlagBits::e16;
+		constexpr static auto e32 = vk::SampleCountFlagBits::e32;
+		constexpr static auto e64 = vk::SampleCountFlagBits::e64;
+	};
+
     struct Texture {
         Unique<vk::Image> image;
         Unique<vuk::ImageView> view;
         vk::Extent3D extent;
         vk::Format format;
+        vuk::Samples sample_count;
     };
 }

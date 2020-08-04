@@ -235,8 +235,14 @@ void vuk::PerThreadContext::wait_all_transfers() {
 	return ifc.wait_all_transfers();
 }
 
+vuk::Texture vuk::PerThreadContext::allocate_texture(vk::Format format, vk::Extent3D extents, vuk::Samples samples) {
+    auto tex = ctx.allocate_texture(format, extents, 1, samples);
+	return tex;
+}
+
+
 std::pair<vuk::Texture, vuk::TransferStub> vuk::PerThreadContext::create_texture(vk::Format format, vk::Extent3D extents, void* data) {
-    auto tex = ctx.allocate_texture(format, extents, 1);
+    auto tex = ctx.allocate_texture(format, extents, 1, vuk::Samples::e1);
 	auto stub = upload(*tex.image, extents, std::span<std::byte>((std::byte*)data, extents.width * extents.height * extents.depth * 4), false);
 	return { std::move(tex), stub };
 }
@@ -863,7 +869,7 @@ vuk::Buffer vuk::Context::allocate_buffer(MemoryUsage mem_usage, vk::BufferUsage
     return allocator.allocate_buffer(mem_usage, buffer_usage, size, alignment, false);
 }
 
-vuk::Texture vuk::Context::allocate_texture(vk::Format format, vk::Extent3D extents, uint32_t miplevels) {
+vuk::Texture vuk::Context::allocate_texture(vk::Format format, vk::Extent3D extents, uint32_t miplevels, vuk::Samples samples) {
     vk::ImageCreateInfo ici;
 	ici.format = format;
 	ici.extent = extents;
@@ -871,9 +877,9 @@ vuk::Texture vuk::Context::allocate_texture(vk::Format format, vk::Extent3D exte
 	ici.initialLayout = vk::ImageLayout::eUndefined;
 	ici.mipLevels = miplevels;
 	ici.imageType = vk::ImageType::e2D;
-	ici.samples = vk::SampleCountFlagBits::e1;
+	ici.samples = samples.count;
 	ici.tiling = vk::ImageTiling::eOptimal;
-	ici.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferSrc;
+	ici.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eColorAttachment;
 	auto dst = allocator.create_image(ici);
 	vk::ImageViewCreateInfo ivci;
 	ivci.format = format;

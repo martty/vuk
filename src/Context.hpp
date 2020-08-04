@@ -206,7 +206,7 @@ namespace vuk {
         void free_upload_resources(const UploadResult&);
 
 		Buffer allocate_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, size_t alignment);
-        Texture allocate_texture(vk::Format format, vk::Extent3D extents, uint32_t miplevels);
+        Texture allocate_texture(vk::Format format, vk::Extent3D extents, uint32_t miplevels, vuk::Samples);
 
 		void enqueue_destroy(vk::Image);
 		void enqueue_destroy(vuk::ImageView);
@@ -368,6 +368,8 @@ namespace vuk {
 			return { std::move(dst), stub };
 		}
 
+
+		vuk::Texture allocate_texture(vk::Format format, vk::Extent3D extents, vuk::Samples);
 		std::pair<vuk::Texture, TransferStub> create_texture(vk::Format format, vk::Extent3D extents, void* data);
 
 		template<class T>

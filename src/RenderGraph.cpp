@@ -90,6 +90,8 @@ namespace vuk {
 
 		case eAttributeRead: return { vk::PipelineStageFlagBits::eVertexInput, vk::AccessFlagBits::eVertexAttributeRead, vk::ImageLayout::eGeneral /* ignored */ };
 
+		case eClear : return { vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::AccessFlagBits::eColorAttachmentWrite, vk::ImageLayout::ePreinitialized };
+
 		default:
 			assert(0 && "NYI");
 			return {};
@@ -458,6 +460,25 @@ namespace vuk {
 		BufferInfo buf_info{.buffer = buf};
 		bound_buffers.emplace(name, buf_info);
 	}
+
+	void RenderGraph::bind_attachment(Name name, Attachment att, Access initial_acc, Access final_acc) {
+        AttachmentRPInfo attachment_info;
+        attachment_info.sizing = AttachmentRPInfo::Sizing::eAbsolute;
+        attachment_info.extents = att.extent;
+        attachment_info.iv = att.image_view;
+
+        attachment_info.type = AttachmentRPInfo::Type::eExternal;
+        attachment_info.description.format = att.format;
+        attachment_info.samples = att.sample_count;
+
+        attachment_info.should_clear = initial_acc == Access::eClear; // if initial access was clear, we will clear
+        attachment_info.clear_value = att.clear_value;
+        Resource::Use& initial = attachment_info.initial;
+        Resource::Use& final = attachment_info.final;
+        initial = to_use(initial_acc);
+        final = to_use(final_acc);
+        bound_attachments.emplace(name, attachment_info);
+    }
 
 	void sync_bound_attachment_to_renderpass(vuk::RenderGraph::AttachmentRPInfo& rp_att, vuk::RenderGraph::AttachmentRPInfo& attachment_info) {
 		rp_att.description.format = attachment_info.description.format;

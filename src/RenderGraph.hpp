@@ -56,6 +56,7 @@ namespace vuk {
 
 	enum Access {
 		eNone,
+		eClear,
 		eColorRW,
 		eColorWrite,
 		eColorRead,
@@ -75,25 +76,6 @@ namespace vuk {
 		eComputeRead,
 		eComputeWrite,
 		eComputeRW,
-	};
-
-	struct Samples {
-		vk::SampleCountFlagBits count;
-		bool infer;
-
-		struct Framebuffer {};
-
-		Samples() : count(vk::SampleCountFlagBits::e1), infer(false) {}
-		Samples(vk::SampleCountFlagBits samples) : count(samples), infer(false) {}
-		Samples(Framebuffer) : infer(true) {}
-
-		constexpr static auto e1 = vk::SampleCountFlagBits::e1;
-		constexpr static auto e2 = vk::SampleCountFlagBits::e2;
-		constexpr static auto e4 = vk::SampleCountFlagBits::e4;
-		constexpr static auto e8 = vk::SampleCountFlagBits::e8;
-		constexpr static auto e16 = vk::SampleCountFlagBits::e16;
-		constexpr static auto e32 = vk::SampleCountFlagBits::e32;
-		constexpr static auto e64 = vk::SampleCountFlagBits::e64;
 	};
 
 	struct Resource;
@@ -180,6 +162,21 @@ namespace vuk {
 			float height = 1.0f;
 		};
 	};
+
+	struct Attachment {
+        vk::Image image;
+        vuk::ImageView image_view;
+        
+		vk::Extent2D extent;
+        vk::Format format;
+        vuk::Samples sample_count = vuk::Samples::e1;
+        Clear clear_value;
+
+		static Attachment from_texture(const vuk::Texture& t, Clear clear_value) {
+            return Attachment{
+                .image = t.image.get(), .image_view = t.view.get(), .extent = {t.extent.width, t.extent.height}, .format = t.format, .sample_count = {t.sample_count}, .clear_value = clear_value};
+        }
+    };
 
 	struct RenderGraph {
         arena arena_;
@@ -319,6 +316,7 @@ namespace vuk {
 		void mark_attachment_internal(Name, vk::Format, vuk::Extent2D::Framebuffer, vuk::Samples, Clear);
 		void mark_attachment_resolve(Name resolved_name, Name ms_name);
 		void bind_buffer(Name, vuk::Buffer);
+        void bind_attachment(Name, Attachment, Access initial, Access final);
 		vk::ImageUsageFlags compute_usage(std::vector<vuk::RenderGraph::UseRef, short_alloc<UseRef, 64>>& chain);
 
 		// RG
