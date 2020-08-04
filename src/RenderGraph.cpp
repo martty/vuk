@@ -465,6 +465,7 @@ namespace vuk {
         AttachmentRPInfo attachment_info;
         attachment_info.sizing = AttachmentRPInfo::Sizing::eAbsolute;
         attachment_info.extents = att.extent;
+        attachment_info.image = att.image;
         attachment_info.iv = att.image_view;
 
         attachment_info.type = AttachmentRPInfo::Type::eExternal;

@@ -164,7 +164,9 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::bind_sampled_image(unsigned set, unsigned binding, Name name, vk::ImageViewCreateInfo ivci, vk::SamplerCreateInfo sampler_create_info) {
 		ivci.image = rg.bound_attachments[name].image;
-		ivci.format = rg.bound_attachments[name].description.format;
+        if(ivci.format == vk::Format{}) {
+            ivci.format = rg.bound_attachments[name].description.format;
+        }
 		ivci.viewType = vk::ImageViewType::e2D;
 		vk::ImageSubresourceRange isr;
 		vk::ImageAspectFlagBits aspect;

@@ -880,6 +880,7 @@ vuk::Texture vuk::Context::allocate_texture(vk::Format format, vk::Extent3D exte
 	ici.samples = samples.count;
 	ici.tiling = vk::ImageTiling::eOptimal;
 	ici.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eColorAttachment;
+    ici.flags = vk::ImageCreateFlagBits::eMutableFormat;
 	auto dst = allocator.create_image(ici);
 	vk::ImageViewCreateInfo ivci;
 	ivci.format = format;
