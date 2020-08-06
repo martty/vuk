@@ -311,7 +311,7 @@ namespace vuk {
 					atts.insert(res);
 			}
 		
-			if (auto p = contains_if(attachment_sets, [&](auto& t) { return t.first == atts; })) {
+			if (auto p = attachment_sets.size() > 0 && attachment_sets.back().first == atts ? &attachment_sets.back() : nullptr) {
 				p->second.push_back(&passinfo);
 			} else {
                 passinfo_vec pv{arena_};
