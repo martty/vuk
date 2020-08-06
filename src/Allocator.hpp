@@ -15,6 +15,7 @@ namespace vuk {
 		eGPUonly = VMA_MEMORY_USAGE_GPU_ONLY,
 		eCPUtoGPU = VMA_MEMORY_USAGE_CPU_TO_GPU,
 		eCPUonly = VMA_MEMORY_USAGE_CPU_ONLY,
+		eGPUtoCPU = VMA_MEMORY_USAGE_GPU_TO_CPU
 	};
 
 	struct PoolSelect {

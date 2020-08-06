@@ -292,6 +292,15 @@ namespace vuk {
 		command_buffer.blitImage(src_image, vk::ImageLayout::eTransferSrcOptimal, dst_image, vk::ImageLayout::eTransferDstOptimal, region, filter);
 	}
 
+	void CommandBuffer::copy_image_to_buffer(Name src, Name dst, vk::BufferImageCopy bic) {
+        auto src_batt = rg.bound_attachments[src];
+        auto dst_bbuf = rg.bound_buffers[dst];
+
+		bic.bufferOffset += dst_bbuf.buffer.offset;
+
+		command_buffer.copyImageToBuffer(src_batt.image, vk::ImageLayout::eTransferSrcOptimal, dst_bbuf.buffer.buffer, bic);
+	}
+
 	void CommandBuffer::_bind_state(bool graphics) {
 		for (auto& pcr : pcrs) {
 			void* data = push_constant_buffer.data() + pcr.offset;

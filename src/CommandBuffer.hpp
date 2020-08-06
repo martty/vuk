@@ -139,6 +139,7 @@ namespace vuk {
 		// commands for renderpass-less command buffers
 		void resolve_image(Name src, Name dst);
 		void blit_image(Name src, Name dst, vk::ImageBlit region, vk::Filter filter);
+        void copy_image_to_buffer(Name src, Name dst, vk::BufferImageCopy);
 	protected:
 		void _bind_state(bool graphics);
 		void _bind_compute_pipeline_state();
