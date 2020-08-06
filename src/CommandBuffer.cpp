@@ -19,9 +19,9 @@ namespace vuk {
 	CommandBuffer& CommandBuffer::set_viewport(unsigned index, Area area) {
 		vk::Viewport vp;
 		vp.x = (float)area.offset.x;
-		vp.y = (float)area.offset.y;
+        vp.y = (float)area.offset.y + (float)area.extent.height;
 		vp.width = (float)area.extent.width;
-		vp.height = (float)area.extent.height;
+		vp.height = -(float)area.extent.height;
 		vp.minDepth = 0.f;
 		vp.maxDepth = 1.f;
 		command_buffer.setViewport(index, vp);

@@ -90,7 +90,11 @@ namespace vuk {
 
 		case eAttributeRead: return { vk::PipelineStageFlagBits::eVertexInput, vk::AccessFlagBits::eVertexAttributeRead, vk::ImageLayout::eGeneral /* ignored */ };
 
-		case eClear : return { vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::AccessFlagBits::eColorAttachmentWrite, vk::ImageLayout::ePreinitialized };
+
+		case eNone:
+            return {vk::PipelineStageFlagBits{}, vk::AccessFlagBits{}, vk::ImageLayout::eUndefined};
+        case eClear:
+            return {vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::AccessFlagBits::eColorAttachmentWrite, vk::ImageLayout::ePreinitialized};
 
 		default:
 			assert(0 && "NYI");
@@ -515,7 +519,8 @@ namespace vuk {
 					if (left.pass) { // RenderPass ->
 						auto& left_rp = rpis[left.pass->render_pass_index];
 						// if this is an attachment, we specify layout
-						if (is_framebuffer_attachment(left.use)) {
+                        if(is_framebuffer_attachment(left.use)) {
+                            assert(!left_rp.framebufferless);
 							auto& rp_att = *contains_if(left_rp.attachments, [name](auto& att) {return att.name == name; });
 
 							sync_bound_attachment_to_renderpass(rp_att, attachment_info);
@@ -569,6 +574,7 @@ namespace vuk {
 						auto& right_rp = rpis[right.pass->render_pass_index];
 						// if this is an attachment, we specify layout
 						if (is_framebuffer_attachment(right.use)) {
+                            assert(!right_rp.framebufferless);
 							auto& rp_att = *contains_if(right_rp.attachments, [name](auto& att) {return att.name == name; });
 
 							sync_bound_attachment_to_renderpass(rp_att, attachment_info);
@@ -676,7 +682,7 @@ namespace vuk {
 
 				bool crosses_rpass = (left.pass == nullptr || right.pass == nullptr || left.pass->render_pass_index != right.pass->render_pass_index);
 				if (crosses_rpass) {
-					if (left.pass) { // RenderPass ->
+					if (left.pass && right.use.layout != vk::ImageLayout::eUndefined) { // RenderPass ->
 						auto& left_rp = rpis[left.pass->render_pass_index];
 
 						vk::MemoryBarrier barrier;
@@ -686,7 +692,7 @@ namespace vuk {
 						left_rp.subpasses[left.pass->subpass].post_mem_barriers.push_back(mb);
 					}
 
-					if (right.pass) { // -> RenderPass
+					if (right.pass && left.use.layout != vk::ImageLayout::eUndefined) { // -> RenderPass
 						auto& right_rp = rpis[right.pass->render_pass_index];
 						
 						vk::MemoryBarrier barrier;
