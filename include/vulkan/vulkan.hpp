@@ -72,7 +72,7 @@
 #endif
 
 #if 201711 <= __cpp_impl_three_way_comparison
-# define VULKAN_HPP_HAS_SPACESHIP_OPERATOR
+//# define VULKAN_HPP_HAS_SPACESHIP_OPERATOR
 #endif
 #if defined(VULKAN_HPP_HAS_SPACESHIP_OPERATOR)
 # include <compare>
