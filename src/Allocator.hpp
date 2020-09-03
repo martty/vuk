@@ -77,7 +77,7 @@ namespace vuk {
 			vk::BufferUsageFlags usage;
             std::array<std::tuple<VmaAllocation, vk::DeviceMemory, size_t, vk::Buffer, void*>, 32> allocations;
 
-            size_t block_size = 1024 * 1024;
+            size_t block_size = 1024 * 1024 * 4;
 
 			Linear(vk::MemoryRequirements mem_reqs, VmaMemoryUsage mem_usage, vk::BufferUsageFlags buf_usage)
                 : mem_reqs(mem_reqs), mem_usage(mem_usage), usage(buf_usage) {}
