@@ -232,13 +232,13 @@ namespace vuk {
 		_bind_graphics_pipeline_state();
 		auto buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vk::BufferUsageFlagBits::eIndirectBuffer, cmds.size_bytes(), 1, true);
         memcpy(buf.mapped_ptr, cmds.data(), cmds.size_bytes());
-        command_buffer.drawIndexedIndirect(buf.buffer, buf.offset, cmds.size(), sizeof(vk::DrawIndexedIndirectCommand));
+        command_buffer.drawIndexedIndirect(buf.buffer, (uint32_t)buf.offset, (uint32_t)cmds.size(), sizeof(vk::DrawIndexedIndirectCommand));
         return *this;
 	}
 
 	CommandBuffer& CommandBuffer::dispatch(size_t size_x, size_t size_y, size_t size_z) {
 		_bind_compute_pipeline_state();
-		command_buffer.dispatch(size_x, size_y, size_z);
+		command_buffer.dispatch((uint32_t)size_x, (uint32_t)size_y, (uint32_t)size_z);
 		return *this;
 	}
 

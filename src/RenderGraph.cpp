@@ -729,7 +729,8 @@ namespace vuk {
 		// we now have enough data to build vk::RenderPasses and vk::Framebuffers
 		// we have to assign the proper attachments to proper slots
 		// the order is given by the resource binding order
-        uint32_t previous_rp = -1, previous_sp = -1;
+        size_t previous_rp = -1;
+		uint32_t previous_sp = -1;
 		for (auto& pass : passes) {
 			auto& rp = rpis[pass.render_pass_index];
 			auto subpass_index = pass.subpass;

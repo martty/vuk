@@ -312,9 +312,9 @@ void record_buffer_image_copy(vk::CommandBuffer& cbuf, vuk::InflightContext::Buf
     cbuf.copyBufferToImage(task.src.buffer, task.dst, vk::ImageLayout::eTransferDstOptimal, bc);
     if(task.generate_mips) {
         cbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eTransfer, vk::DependencyFlagBits(0), {}, {}, top_mip_to_barrier);
-        auto mips = (uint32_t)std::min(std::log2f(task.extent.width), std::log2f(task.extent.height));
+        auto mips = (uint32_t)std::min(std::log2f((float)task.extent.width), std::log2f((float)task.extent.height));
 
-        for(auto miplevel = 1; miplevel < mips; miplevel++) {
+        for(uint32_t miplevel = 1; miplevel < mips; miplevel++) {
             vk::ImageBlit blit;
             blit.srcSubresource.aspectMask = copy_barrier.subresourceRange.aspectMask;
             blit.srcSubresource.baseArrayLayer = 0;
