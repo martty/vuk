@@ -141,7 +141,9 @@ bool vuk::execute_submit_and_present_to_one(PerThreadContext& ptc, RenderGraph& 
         pi.pImageIndices = &acq_result.value;
         pi.waitSemaphoreCount = 1;
         pi.pWaitSemaphores = &render_complete;
-        ptc.ctx.graphics_queue.presentKHR(pi);
+        try {
+            ptc.ctx.graphics_queue.presentKHR(pi);
+		} catch(vk::OutOfDateKHRError&) { return false; }
     }
     return true;
 }
