@@ -460,7 +460,9 @@ namespace vuk {
     template<typename Type>
     inline void Unique<Type>::reset(Type const& value) noexcept {
         if (payload != value) {
-            if (context) context->enqueue_destroy(payload);
+            if (context && payload != Type{}) {
+				context->enqueue_destroy(payload);
+			} 
             payload = value;
         }
     }
