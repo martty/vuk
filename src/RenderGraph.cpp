@@ -551,22 +551,26 @@ namespace vuk {
 							sd.dstSubpass = VK_SUBPASS_EXTERNAL;
 							left_rp.rpci.subpass_dependencies.push_back(sd);
 						}
-						if (left_rp.framebufferless) {
-							// right layout == Undefined means the chain terminates, no transition/barrier
-							if (right.use.layout == vk::ImageLayout::eUndefined)
-								continue;
-							vk::ImageMemoryBarrier barrier;
-							barrier.dstAccessMask = right.use.access;
-							barrier.srcAccessMask = left.use.access;
-							barrier.newLayout = right.use.layout;
-							barrier.oldLayout = left.use.layout;
-							barrier.subresourceRange.aspectMask = aspect;
-							barrier.subresourceRange.baseArrayLayer = 0;
-							barrier.subresourceRange.baseMipLevel = 0;
-							barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
-							barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
-							ImageBarrier ib{.image = name, .barrier = barrier, .src = left.use.stages, .dst = right.use.stages};
-							left_rp.subpasses[left.pass->subpass].post_barriers.push_back(ib);
+						if (right.pass) {
+							auto& right_rp = rpis[right.pass->render_pass_index];
+							// if we are going to an fbless pass, then that will emit a pre-barrier for us
+							if (left_rp.framebufferless && !right_rp.framebufferless) {
+								// right layout == Undefined means the chain terminates, no transition/barrier
+								if (right.use.layout == vk::ImageLayout::eUndefined)
+									continue;
+								vk::ImageMemoryBarrier barrier;
+								barrier.dstAccessMask = right.use.access;
+								barrier.srcAccessMask = left.use.access;
+								barrier.newLayout = right.use.layout;
+								barrier.oldLayout = left.use.layout;
+								barrier.subresourceRange.aspectMask = aspect;
+								barrier.subresourceRange.baseArrayLayer = 0;
+								barrier.subresourceRange.baseMipLevel = 0;
+								barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
+								barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
+								ImageBarrier ib{ .image = name, .barrier = barrier, .src = left.use.stages, .dst = right.use.stages };
+								left_rp.subpasses[left.pass->subpass].post_barriers.push_back(ib);
+							}
 						}
 					}
 

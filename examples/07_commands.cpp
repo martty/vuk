@@ -93,6 +93,7 @@ namespace {
 			// Since we didn't declare any framebuffer forming resources, this pass will execute outside of a renderpass
 			// Hence we can only call commands that are valid outside of a renderpass
 			rg.add_pass({
+				.name = "07_resolve",
 				.resources = {"07_commands_MS"_image(vuk::eTransferSrc), "07_commands_NMS"_image(vuk::eTransferDst)},
 				.execute = [](vuk::CommandBuffer& command_buffer) {
 					command_buffer.resolve_image("07_commands_MS", "07_commands_NMS");
@@ -106,6 +107,7 @@ namespace {
 			// And blitting those tiles in the order dictated by 'shuf'
 			// We will also sort shuf over time, to show a nice animation
 			rg.add_pass({
+				.name = "07_blit",
 				.resources = {"07_commands_NMS"_image(vuk::eTransferSrc), "07_commands_final"_image(vuk::eTransferDst)},
 				.execute = [tile_x_size, tile_y_size](vuk::CommandBuffer& command_buffer) {
 					for (auto i = 0; i < 9; i++) {
