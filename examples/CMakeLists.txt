@@ -1,12 +1,29 @@
 cmake_minimum_required(VERSION 3.7)
 project(vuk-examples)
 
-add_subdirectory(../ext/vk-bootstrap vk-bootstrap)
+FetchContent_Declare(
+  vk-bootstrap 
+  GIT_REPOSITORY https://github.com/charles-lunarg/vk-bootstrap
+  GIT_TAG        v0.11
+)
+FetchContent_MakeAvailable(vk-bootstrap)
+
 set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-add_subdirectory(../ext/glfw glfw)
-add_subdirectory(../ext/glm glm)
+FetchContent_Declare(
+  glfw 
+  GIT_REPOSITORY https://github.com/glfw/glfw
+  GIT_TAG        3.3.2
+)
+FetchContent_MakeAvailable(glfw)
+
+FetchContent_Declare(
+  glm
+  GIT_REPOSITORY https://github.com/g-truc/glm
+  GIT_TAG        0.9.9.8
+)
+FetchContent_MakeAvailable(glm)
 
 SET(imgui_sources ../ext/imgui/imgui.cpp ../ext/imgui/imgui_draw.cpp ../ext/imgui/imgui_demo.cpp ../ext/imgui/imgui_widgets.cpp ../ext/imgui/examples/imgui_impl_glfw.cpp)
 

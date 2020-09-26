@@ -1,9 +1,3 @@
-[submodule "ext/vk-bootstrap"]
-	path = ext/vk-bootstrap
-	url = https://github.com/charles-lunarg/vk-bootstrap
-[submodule "ext/glfw"]
-	path = ext/glfw
-	url = https://github.com/glfw/glfw
 [submodule "ext/SPIRV-Cross"]
 	path = ext/SPIRV-Cross
 	url = https://github.com/KhronosGroup/SPIRV-Cross
