@@ -20,7 +20,6 @@
 
 namespace {
 	float time = 0.f;
-	bool start = false;
 	auto box = util::generate_cube();
 	int x, y;
 	std::optional<vuk::Texture> texture_of_doge;

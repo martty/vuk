@@ -20,6 +20,11 @@ set_target_properties(vuk_all_examples
     PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
 )
+if(VUK_COMPILER_CLANGPP)
+    target_compile_options(vuk_all_examples PRIVATE -std=c++20 -fno-char8_t)
+elseif(MSVC)
+    target_compile_options(vuk_all_examples PRIVATE /std:c++latest /permissive- /Zc:char8_t-)
+endif()
 
 function(ADD_EXAMPLE name)
     set(FULL_NAME "vuk_example_${name}")
@@ -34,6 +39,11 @@ function(ADD_EXAMPLE name)
         PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     )
+    if(VUK_COMPILER_CLANGPP)
+	    target_compile_options(${FULL_NAME} PRIVATE -std=c++20 -fno-char8_t)
+    elseif(MSVC)
+	    target_compile_options(${FULL_NAME} PRIVATE /std:c++latest /permissive- /Zc:char8_t-)
+    endif()
 endfunction(ADD_EXAMPLE)
 
 ADD_EXAMPLE(01_triangle)
