@@ -1,6 +1,0 @@
-#pragma force blending:off // force blending to be off for all targets
-
-struct VP {
-	mat4 view;
-	mat4 projection;
-};

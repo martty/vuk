@@ -94,11 +94,7 @@ if (WIN32)
 endif()
 target_compile_definitions(vuk PUBLIC VULKAN_HPP_ENABLE_DYNAMIC_LOADER_TOOL=0)
 
-option(VUK_BUILD_VUSH "Build vush" ON)
 option(VUK_BUILD_EXAMPLES "Build examples" OFF)
-if(VUK_BUILD_VUSH)
-	add_subdirectory(vush)
-endif()
 
 if(VUK_BUILD_EXAMPLES)
 	add_subdirectory(examples)
