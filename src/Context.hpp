@@ -165,7 +165,6 @@ namespace vuk {
         
 		vuk::PipelineBaseInfo* get_pipeline(const vuk::PipelineBaseCreateInfo& pbci);
         vuk::ComputePipelineInfo* get_pipeline(const vuk::ComputePipelineCreateInfo& pbci);
-		void invalidate_shadermodule_and_pipelines(Name);
         vuk::Program get_pipeline_reflection_info(vuk::PipelineBaseCreateInfo pbci);
         vuk::ShaderModule compile_shader(std::string source, Name path);
 		

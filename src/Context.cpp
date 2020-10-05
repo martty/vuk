@@ -699,33 +699,6 @@ vuk::Program vuk::Context::get_pipeline_reflection_info(vuk::PipelineBaseCreateI
 	return res.reflection_info;
 }
 
-void vuk::Context::invalidate_shadermodule_and_pipelines(Name filename) {
-    std::optional<vuk::ShaderModule> sm;
-    do {
-        sm = shader_modules.remove([&](auto& ci, auto& p) { return ci.filename == filename; });
-        if(sm) {
-            device.destroy(sm->shader_module);
-            const PipelineBaseInfo* pipe_base;
-            do {
-                pipe_base = pipelinebase_cache.find([&](auto& ci, auto& p) {
-                    if(std::find_if(ci.shader_paths.begin(), ci.shader_paths.end(), [=](auto& t) { return t == filename; }) != ci.shader_paths.end())
-                        return true;
-                    return false;
-                });
-                if(pipe_base) {
-                    std::optional<PipelineInfo> pipe;
-                    do {
-                        pipe = pipeline_cache.remove([&](auto& ci, auto& p) { return ci.base == pipe_base; });
-                        if(pipe)
-                            enqueue_destroy(pipe->pipeline);
-                    } while(pipe != std::nullopt);
-                    pipelinebase_cache.remove_ptr(pipe_base);
-                }
-            } while(pipe_base != nullptr);
-        }
-    } while(sm != std::nullopt);
-}
-
 vuk::ShaderModule vuk::Context::compile_shader(std::string source, Name path) {
 	vuk::ShaderModuleCreateInfo sci;
 	sci.filename = path;
