@@ -683,6 +683,18 @@ vuk::ComputePipelineInfo vuk::Context::create(const create_info_t<vuk::ComputePi
 	return { { pipeline, cpci.layout, dslai }, sm.reflection_info.local_size };
 }
 
+bool vuk::Context::load_pipeline_cache(std::span<uint8_t> data) {
+    vk::PipelineCacheCreateInfo pcci;
+    pcci.initialDataSize = data.size_bytes();
+    pcci.pInitialData = data.data();
+    vk_pipeline_cache = device.createPipelineCacheUnique(pcci);
+    return true;
+}
+
+std::vector<uint8_t> vuk::Context::save_pipeline_cache() {
+    return device.getPipelineCacheData(*vk_pipeline_cache);
+}
+
 vuk::ComputePipelineInfo vuk::PerThreadContext::create(const create_info_t<ComputePipelineInfo>& cinfo) {
 	return ctx.create(cinfo);
 }

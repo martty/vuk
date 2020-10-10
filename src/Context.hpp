@@ -175,6 +175,9 @@ namespace vuk {
         vuk::DescriptorSetLayoutAllocInfo create(const create_info_t<vuk::DescriptorSetLayoutAllocInfo>& cinfo);
 		vuk::ComputePipelineInfo create(const create_info_t<vuk::ComputePipelineInfo>& cinfo);
 
+		bool load_pipeline_cache(std::span<uint8_t> data);
+        std::vector<uint8_t> save_pipeline_cache();
+
 		// one pool per thread
         std::mutex one_time_pool_lock;
 		std::vector<vk::CommandPool> xfer_one_time_pools;
