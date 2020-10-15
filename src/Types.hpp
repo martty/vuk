@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vulkan/vulkan.hpp>
+#include <Hash.hpp>
 
 namespace vuk {
 	struct HandleBase {

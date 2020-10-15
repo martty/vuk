@@ -179,7 +179,7 @@ namespace vuk {
     };
 
 	struct RenderGraph {
-        arena arena_;
+        std::unique_ptr<arena> arena_;
         RenderGraph();
 
 		struct PassInfo {
@@ -298,7 +298,7 @@ namespace vuk {
 		std::vector<RenderPassInfo, short_alloc<RenderPassInfo, 64>> rpis;
 
 		void add_pass(Pass p) {
-			PassInfo pi(arena_);
+			PassInfo pi(*arena_);
 			pi.pass = std::move(p);
 			passes.push_back(pi);
 		}

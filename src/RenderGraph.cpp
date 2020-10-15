@@ -190,16 +190,17 @@ namespace vuk {
 	FormatOrIgnore::FormatOrIgnore(Ignore ign) : ignore(true), format(ign.format), size(ign.to_size()) {
 	}
 
-#define INIT(x) x(decltype(x)::allocator_type(arena_))
+#define INIT(x) x(decltype(x)::allocator_type(*arena_))
+#define INIT2(x) x(decltype(x)::allocator_type(arena_))
 
-	RenderGraph::RenderGraph() : arena_(1024*128), INIT(head_passes), INIT(tail_passes), INIT(aliases), INIT(global_inputs), INIT(global_outputs), INIT(global_io), INIT(use_chains), INIT(rpis) {
+	RenderGraph::RenderGraph() : arena_(new arena(1024*128)), INIT(head_passes), INIT(tail_passes), INIT(aliases), INIT(global_inputs), INIT(global_outputs), INIT(global_io), INIT(use_chains), INIT(rpis) {
         passes.reserve(64);
 	}
 
     // determine rendergraph inputs and outputs, and resources that are neither
 	void RenderGraph::build_io() {
-        std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 8>> inputs{arena_};
-        std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 8>> outputs{arena_};
+        std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 8>> inputs{*arena_};
+        std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 8>> outputs{*arena_};
 
 		for (auto& pif : passes) {
 			for (auto& res : pif.pass.resources) {
@@ -297,7 +298,7 @@ namespace vuk {
 				}
                 auto it = use_chains.find(resolve_name(res.use_name, aliases));
 				if (it == use_chains.end()) {
-                    it = use_chains.emplace(resolve_name(res.use_name, aliases), std::vector<UseRef, short_alloc<UseRef, 64>>{short_alloc<UseRef, 64>{arena_}}).first;
+                    it = use_chains.emplace(resolve_name(res.use_name, aliases), std::vector<UseRef, short_alloc<UseRef, 64>>{short_alloc<UseRef, 64>{*arena_}}).first;
 				}
 				it->second.emplace_back(UseRef{ to_use(res.ia), &passinfo });
 			}
@@ -306,9 +307,9 @@ namespace vuk {
 		// we need to collect passes into framebuffers, which will determine the renderpasses
 		using attachment_set = std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>>;
 		using passinfo_vec = std::vector<PassInfo*, short_alloc<PassInfo*, 16>>;
-        std::vector<std::pair<attachment_set, passinfo_vec>, short_alloc<std::pair<attachment_set, passinfo_vec>, 8>> attachment_sets{arena_};
+        std::vector<std::pair<attachment_set, passinfo_vec>, short_alloc<std::pair<attachment_set, passinfo_vec>, 8>> attachment_sets{*arena_};
 		for (auto& passinfo : passes) {
-            attachment_set atts{arena_};
+            attachment_set atts{*arena_};
 
 			for (auto& res : passinfo.pass.resources) {
 				if(is_framebuffer_attachment(res))
@@ -318,7 +319,7 @@ namespace vuk {
 			if (auto p = attachment_sets.size() > 0 && attachment_sets.back().first == atts ? &attachment_sets.back() : nullptr) {
 				p->second.push_back(&passinfo);
 			} else {
-                passinfo_vec pv{arena_};
+                passinfo_vec pv{*arena_};
                 pv.push_back(&passinfo);
 				attachment_sets.emplace_back(atts, pv);
 			}
@@ -328,7 +329,7 @@ namespace vuk {
 		// tell passes in which renderpass/subpass they will execute
 		rpis.reserve(attachment_sets.size());
 		for (auto& [attachments, passes] : attachment_sets) {
-            RenderPassInfo rpi{arena_};
+            RenderPassInfo rpi{*arena_};
 			auto rpi_index = rpis.size();
 
 			int32_t subpass = -1;
@@ -343,7 +344,7 @@ namespace vuk {
                         continue;
                     }
 				}
-                SubpassInfo si{arena_};
+                SubpassInfo si{*arena_};
                 si.passes = {p};
 
 				p->subpass = ++subpass;
@@ -1109,11 +1110,11 @@ namespace vuk {
 		return bound_buffers.at(n);
 	}
 
-    RenderGraph::RenderPassInfo::RenderPassInfo(arena& arena_) : INIT(subpasses), INIT(attachments) {
+    RenderGraph::RenderPassInfo::RenderPassInfo(arena& arena_) : INIT2(subpasses), INIT2(attachments) {
 	}
 
-    RenderGraph::PassInfo::PassInfo(arena& arena_) : INIT(inputs), INIT(outputs), INIT(global_inputs), INIT(global_outputs) {}
+    RenderGraph::PassInfo::PassInfo(arena& arena_) : INIT2(inputs), INIT2(outputs), INIT2(global_inputs), INIT2(global_outputs) {}
 
-    RenderGraph::SubpassInfo::SubpassInfo(arena& arena_) : INIT(passes) {}
+    RenderGraph::SubpassInfo::SubpassInfo(arena& arena_) : INIT2(passes) {}
 	#undef INIT
 } // namespace vuk
