@@ -27,7 +27,7 @@ namespace vuk {
 
         Unique() : context(nullptr) {}
 
-        explicit Unique(vuk::Context& ctx, Type payload) : context(&ctx), payload(payload) {}
+        explicit Unique(vuk::Context& ctx, Type payload) : context(&ctx), payload(std::move(payload)) {}
         Unique(Unique const&) = delete;
 
         Unique(Unique&& other) noexcept : context(other.context), payload(other.release()) {}
@@ -71,12 +71,11 @@ namespace vuk {
             return payload;
         }
 
-        void reset(Type const& value = Type()) noexcept;
+        void reset(Type value = Type()) noexcept;
 
         Type release() noexcept {
-            Type value = payload;
             context = nullptr;
-            return value;
+            return std::move(payload);
         }
 
         void swap(Unique<Type>& rhs) noexcept {

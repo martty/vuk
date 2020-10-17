@@ -1,0 +1,12 @@
+#version 450
+#pragma shader_stage(compute)
+
+layout (binding = 0) uniform sampler2D tex_in;
+layout (binding = 1, rgba8) uniform image2D tex_out;
+
+layout (local_size_x = 8, local_size_y = 8) in;
+
+void main() {
+	vec4 val = texelFetch(tex_in, ivec2(gl_GlobalInvocationID.xy), 0);
+	imageStore(tex_out, ivec2(gl_GlobalInvocationID.xy), 1.0 - val);
+}

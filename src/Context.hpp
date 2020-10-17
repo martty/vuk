@@ -126,6 +126,7 @@ namespace vuk {
 		std::array<std::vector<vk::ImageView>, FC> image_view_recycle;
 		std::array<std::vector<vk::Pipeline>, FC> pipeline_recycle;
 		std::array<std::vector<vuk::Buffer>, FC> buffer_recycle;
+		std::array<std::vector<vuk::PersistentDescriptorSet>, FC> pds_recycle;
 
 		std::atomic<size_t> frame_counter = 0;
 		std::atomic<size_t> unique_handle_id_counter = 0;
@@ -205,12 +206,13 @@ namespace vuk {
         void free_upload_resources(const UploadResult&);
 
 		Buffer allocate_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, size_t alignment);
-        Texture allocate_texture(vk::Format format, vk::Extent3D extents, uint32_t miplevels, vuk::Samples);
+        Texture allocate_texture(vk::ImageCreateInfo ici);
 
 		void enqueue_destroy(vk::Image);
 		void enqueue_destroy(vuk::ImageView);
 		void enqueue_destroy(vk::Pipeline);
 		void enqueue_destroy(vuk::Buffer);
+		void enqueue_destroy(vuk::PersistentDescriptorSet);
 
 		template<class T>
 		Handle<T> wrap(T payload);
@@ -349,6 +351,9 @@ namespace vuk {
 		bool is_ready(const TransferStub& stub);
 		void wait_all_transfers();
 
+		Unique<PersistentDescriptorSet> create_persistent_descriptorset(const PipelineBaseInfo& base, unsigned set, unsigned num_descriptors);
+		void commit_persistent_descriptorset(PersistentDescriptorSet& array);
+
 		Buffer _allocate_scratch_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, size_t alignment, bool create_mapped);
         Unique<Buffer> _allocate_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, size_t alignment, bool create_mapped);
 
@@ -368,7 +373,7 @@ namespace vuk {
 		}
 
 
-		vuk::Texture allocate_texture(vk::Format format, vk::Extent3D extents, vuk::Samples);
+		vuk::Texture allocate_texture(vk::ImageCreateInfo);
 		std::pair<vuk::Texture, TransferStub> create_texture(vk::Format format, vk::Extent3D extents, void* data);
 
 		template<class T>
@@ -454,18 +459,19 @@ namespace vuk {
     template<typename Type>
     inline Unique<Type>::~Unique() noexcept {
         if(context && payload != Type{})
-            context->enqueue_destroy(payload);
+            context->enqueue_destroy(std::move(payload));
     }
     template<typename Type>
-    inline void Unique<Type>::reset(Type const& value) noexcept {
+    inline void Unique<Type>::reset(Type value) noexcept {
         if (payload != value) {
             if (context && payload != Type{}) {
-				context->enqueue_destroy(payload);
+				context->enqueue_destroy(std::move(payload));
 			} 
-            payload = value;
+            payload = std::move(value);
         }
     }
 
 	struct RenderGraph;
 	bool execute_submit_and_present_to_one(PerThreadContext& ptc, RenderGraph& rg, SwapchainRef swapchain, bool use_secondary_command_buffers = false);
+	void execute_submit_and_wait(PerThreadContext& ptc, RenderGraph& rg, bool use_secondary_command_buffers = false);
 }

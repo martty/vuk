@@ -52,10 +52,10 @@ namespace vuk {
 		input_assembly_state.topology = vk::PrimitiveTopology::eTriangleList;
 	}
 
-	vuk::fixed_vector<vuk::DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> PipelineBaseCreateInfo::build_descriptor_layouts(Program& program) {
+	vuk::fixed_vector<vuk::DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> PipelineBaseCreateInfo::build_descriptor_layouts(const Program& program, const PipelineBaseCreateInfoBase& bci) {
 		vuk::fixed_vector<vuk::DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> dslcis;
 
-		for (auto& [index, set] : program.sets) {
+		for (const auto& [index, set] : program.sets) {
 			vuk::DescriptorSetLayoutCreateInfo dslci;
 			dslci.index = index;
 			auto& bindings = dslci.bindings;
@@ -94,6 +94,20 @@ namespace vuk {
 				vk::DescriptorSetLayoutBinding layoutBinding;
 				layoutBinding.binding = si.binding;
 				layoutBinding.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+				layoutBinding.descriptorCount = si.array_size == (unsigned)-1 ? 1 : si.array_size;
+				layoutBinding.stageFlags = si.stage;
+				layoutBinding.pImmutableSamplers = nullptr;
+				if (si.array_size == 0) {
+					assert(bci.variable_count_max[index] > 0); // forgot to mark this descriptor as variable count
+					layoutBinding.descriptorCount = bci.variable_count_max[index];
+				}
+				bindings.push_back(layoutBinding);
+			}
+
+			for (auto& si : set.storage_images) {
+				vk::DescriptorSetLayoutBinding layoutBinding;
+				layoutBinding.binding = si.binding;
+				layoutBinding.descriptorType = vk::DescriptorType::eStorageImage;
 				layoutBinding.descriptorCount = 1;
 				layoutBinding.stageFlags = si.stage;
 				layoutBinding.pImmutableSamplers = nullptr;
@@ -109,6 +123,19 @@ namespace vuk {
 				layoutBinding.pImmutableSamplers = nullptr;
 				bindings.push_back(layoutBinding);
 			}
+			
+			// extract flags from the packed bitset
+			// TODO: rewrite this without _Getword
+			auto set_word_offset = index * VUK_MAX_BINDINGS * 4 / (sizeof(unsigned long long) * 8);
+			for (unsigned i = 0; i <= set.highest_descriptor_binding; i++) {
+				auto word = bci.binding_flags._Getword(set_word_offset + i * 4 / (sizeof(unsigned long long) * 8));
+				if (word & ((0b1111) << i)) {
+					vk::DescriptorBindingFlags f((word >> i) & 0b1111);
+					dslci.flags.resize(i + 1);
+					dslci.flags[i] = f;
+				}
+			}
+
 			dslcis.push_back(dslci);
 		}
 		return dslcis;

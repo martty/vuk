@@ -13,6 +13,9 @@ namespace vuk {
 	struct DescriptorSetLayoutAllocInfo {
 		std::array<uint32_t, 12> descriptor_counts = {};
 		vk::DescriptorSetLayout layout;
+		unsigned variable_count_binding = (unsigned)-1;
+		vk::DescriptorType variable_count_binding_type;
+		unsigned variable_count_binding_max_size;
 
 		bool operator==(const DescriptorSetLayoutAllocInfo& o) const {
 			return layout == o.layout && descriptor_counts == o.descriptor_counts;
@@ -22,14 +25,16 @@ namespace vuk {
 	struct DescriptorImageInfo {
 		vuk::Sampler sampler;
 		vuk::ImageView image_view;
-		vk::ImageLayout image_layout;
+		vk::DescriptorImageInfo dii;
+
+		DescriptorImageInfo(vuk::Sampler s, vuk::ImageView iv, vk::ImageLayout il) : sampler(s), image_view(iv), dii(s.payload, iv.payload, il) {}
 
 		bool operator==(const DescriptorImageInfo& o) const {
-			return std::tie(sampler, image_view, image_layout) == std::tie(o.sampler, o.image_view, o.image_layout);
+			return std::tie(sampler, image_view, dii.imageLayout) == std::tie(o.sampler, o.image_view, o.dii.imageLayout);
 		}
 
 		operator vk::DescriptorImageInfo() const {
-			return {sampler.payload, image_view.payload, image_layout};
+			return dii;
 		}
 	};
 
@@ -39,7 +44,7 @@ namespace vuk {
 	struct DescriptorBinding {
 		DescriptorBinding() {}
 
-		vk::DescriptorType type;
+		vk::DescriptorType type = vk::DescriptorType(-1);
 		union {
 			VkDescriptorBufferInfo buffer;
 			vuk::DescriptorImageInfo image;
@@ -80,10 +85,11 @@ namespace vuk {
 	struct DescriptorSetLayoutCreateInfo {
 		vk::DescriptorSetLayoutCreateInfo dslci;
 		std::vector<vk::DescriptorSetLayoutBinding> bindings;
+		std::vector<vk::DescriptorBindingFlags> flags;
 		size_t index;
 
 		bool operator==(const DescriptorSetLayoutCreateInfo& o) const {
-			return std::tie(dslci.flags, bindings) == std::tie(o.dslci.flags, o.bindings);
+			return std::tie(dslci.flags, bindings, flags) == std::tie(o.dslci.flags, o.bindings, o.flags);
 		}
 	};
 
@@ -103,7 +109,7 @@ namespace vuk {
 	struct DescriptorPool {
         std::mutex grow_mutex;
 		std::vector<vk::DescriptorPool> pools;
-        size_t sets_allocated = 0;
+        uint32_t sets_allocated = 0;
         moodycamel::ConcurrentQueue<vk::DescriptorSet> free_sets{1024};
 
 		void grow(PerThreadContext& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info);
@@ -118,6 +124,21 @@ namespace vuk {
 
 	template<> struct create_info<vuk::DescriptorPool> {
 		using type = vuk::DescriptorSetLayoutAllocInfo;
+	};
+
+	struct PersistentDescriptorSet {
+		vk::UniqueDescriptorPool backing_pool;
+		vk::DescriptorSet backing_set;
+
+		std::vector<DescriptorBinding> descriptor_bindings;
+
+		std::vector<vk::WriteDescriptorSet> pending_writes;
+
+		bool operator==(const PersistentDescriptorSet& other) const {
+			return backing_pool.get() == other.backing_pool.get();
+		}
+
+		void update_combined_image_sampler(PerThreadContext& ptc, unsigned binding, unsigned array_index, vuk::ImageView iv, vk::SamplerCreateInfo sampler_create_info, vk::ImageLayout layout);
 	};
 }
 

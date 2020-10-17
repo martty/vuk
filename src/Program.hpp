@@ -61,6 +61,13 @@ namespace vuk {
 
 		};
 
+		struct StorageImage {
+			std::string name;
+
+			unsigned binding;
+			vk::ShaderStageFlags stage;
+		};
+
 		struct Sampler {
 			std::string name;
 
@@ -77,7 +84,6 @@ namespace vuk {
 
 			unsigned binding;
 			vk::ShaderStageFlags stage;
-
 		};
 
 		struct SubpassInput {
@@ -89,14 +95,19 @@ namespace vuk {
 
 		vk::ShaderStageFlagBits introspect(const spirv_cross::Compiler& refl);
 
+		std::array<unsigned, 3> local_size;
+
 		std::vector<Attribute> attributes;
 		std::vector<vk::PushConstantRange> push_constant_ranges;
 		struct Descriptors {
 			std::vector<UniformBuffer> uniform_buffers;
 			std::vector<StorageBuffer> storage_buffers;
+			std::vector<StorageImage> storage_images;
 			std::vector<TexelBuffer> texel_buffers;
 			std::vector<Sampler> samplers;
 			std::vector<SubpassInput> subpass_inputs;
+
+			unsigned highest_descriptor_binding = 0;
 		};
 		std::unordered_map<size_t, Descriptors> sets;
 		vk::ShaderStageFlags stages = {};

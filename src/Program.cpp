@@ -111,6 +111,7 @@ vk::ShaderStageFlagBits vuk::Program::introspect(const spirv_cross::Compiler& re
 		un.size = refl.get_declared_struct_size(type);
 		sets[set].uniform_buffers.push_back(un);
 	}
+
 	for (auto& sb : resources.storage_buffers) {
 		auto type = refl.get_type(sb.type_id);
 		auto binding = refl.get_decoration(sb.id, spv::DecorationBinding);
@@ -131,9 +132,20 @@ vk::ShaderStageFlagBits vuk::Program::introspect(const spirv_cross::Compiler& re
 		t.binding = binding;
 		t.name = std::string(si.name.c_str());
 		t.stage = stage;
-		t.array_size = type.array[0];
+		t.array_size = type.array.size() == 1 ? type.array[0] : -1;
         t.shadow = type.image.depth;
 		sets[set].samplers.push_back(t);
+	}
+
+	for (auto& sb : resources.storage_images) {
+		auto type = refl.get_type(sb.type_id);
+		auto binding = refl.get_decoration(sb.id, spv::DecorationBinding);
+		auto set = refl.get_decoration(sb.id, spv::DecorationDescriptorSet);
+		StorageImage un;
+		un.binding = binding;
+		un.stage = stage;
+		un.name = sb.name.c_str();
+		sets[set].storage_images.push_back(un);
 	}
 	
 	// subpass inputs
@@ -148,6 +160,26 @@ vk::ShaderStageFlagBits vuk::Program::introspect(const spirv_cross::Compiler& re
 		sets[set].subpass_inputs.push_back(s);
 	}
 
+	for (auto& [index, set] : sets) {
+		unsigned max_binding = 0;
+		for (auto& ub : set.uniform_buffers) {
+			max_binding = std::max(max_binding, ub.binding);
+		}
+		for (auto& ub : set.storage_buffers) {
+			max_binding = std::max(max_binding, ub.binding);
+		}
+		for (auto& ub : set.samplers) {
+			max_binding = std::max(max_binding, ub.binding);
+		}
+		for (auto& ub : set.subpass_inputs) {
+			max_binding = std::max(max_binding, ub.binding);
+		}
+		for (auto& ub : set.storage_buffers) {
+			max_binding = std::max(max_binding, ub.binding);
+		}
+		set.highest_descriptor_binding = max_binding;
+	}
+
 	// push constants
 	for (auto& si : resources.push_constant_buffers) {
 		auto type = refl.get_type(si.base_type_id);
@@ -156,6 +188,12 @@ vk::ShaderStageFlagBits vuk::Program::introspect(const spirv_cross::Compiler& re
 		pcr.size = (uint32_t)refl.get_declared_struct_size(type);
 		pcr.stageFlags = stage;
 		push_constant_ranges.push_back(pcr);
+	}
+	
+	if (stage == vk::ShaderStageFlagBits::eCompute) {
+		local_size = { refl.get_execution_mode_argument(spv::ExecutionMode::ExecutionModeLocalSize, 0),
+					   refl.get_execution_mode_argument(spv::ExecutionMode::ExecutionModeLocalSize, 1),
+					   refl.get_execution_mode_argument(spv::ExecutionMode::ExecutionModeLocalSize, 2) };
 	}
 
 	return stage;
@@ -197,12 +235,15 @@ void vuk::Program::append(const Program& o) {
 		s.storage_buffers.insert(s.storage_buffers.end(), os.storage_buffers.begin(), os.storage_buffers.end());
 		s.texel_buffers.insert(s.texel_buffers.end(), os.texel_buffers.begin(), os.texel_buffers.end());
 		s.subpass_inputs.insert(s.subpass_inputs.end(), os.subpass_inputs.begin(), os.subpass_inputs.end());
+		s.storage_images.insert(s.storage_images.end(), os.storage_images.begin(), os.storage_images.end());
 
 		unq(s.samplers);
 		unq(s.uniform_buffers);
 		unq(s.storage_buffers);
 		unq(s.texel_buffers);
 		unq(s.subpass_inputs);
+		unq(s.storage_images);
+		s.highest_descriptor_binding = std::max(s.highest_descriptor_binding, os.highest_descriptor_binding);
 	}
 
 	stages |= o.stages;

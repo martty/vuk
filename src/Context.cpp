@@ -58,6 +58,8 @@ vuk::InflightContext::InflightContext(Context& ctx, size_t absolute_frame, std::
 	}
 	ctx.buffer_recycle[frame].clear();
 
+	ctx.pds_recycle[frame].clear();
+
 	for (auto& [k, v] : scratch_buffers.cache.data[frame].lru_map) {
 		ctx.allocator.reset_pool(v.value);
 	}
@@ -148,6 +150,21 @@ bool vuk::execute_submit_and_present_to_one(PerThreadContext& ptc, RenderGraph& 
     return true;
 }
 
+void vuk::execute_submit_and_wait(PerThreadContext& ptc, RenderGraph& rg, bool use_secondary_command_buffers) {
+	auto cbuf = rg.execute(ptc, {}, use_secondary_command_buffers);
+	// get an unpooled fence
+	auto fence = ptc.ctx.device.createFence({});
+	vk::SubmitInfo si;
+	si.commandBufferCount = 1;
+	si.pCommandBuffers = &cbuf;
+	{
+		std::lock_guard _(ptc.ctx.gfx_queue_lock);
+		ptc.ctx.graphics_queue.submit(si, fence);
+	}
+	ptc.ctx.device.waitForFences(fence, VK_TRUE, UINT64_MAX);
+	ptc.ctx.device.destroyFence(fence);
+}
+
 bool vuk::Context::DebugUtils::enabled() {
 	return setDebugUtilsObjectNameEXT != nullptr;
 }
@@ -216,6 +233,68 @@ void vuk::PerThreadContext::destroy(vuk::DescriptorSet ds) {
 	pool_cache.acquire(ds.layout_info).free_sets.enqueue(ds.descriptor_set);
 }
 
+vuk::Unique<vuk::PersistentDescriptorSet> vuk::PerThreadContext::create_persistent_descriptorset(const PipelineBaseInfo& base, unsigned set, unsigned num_descriptors) {
+	vuk::PersistentDescriptorSet tda;
+	auto dsl = base.layout_info[set].layout;
+	vk::DescriptorPoolCreateInfo dpci;
+	dpci.maxSets = 1;
+	std::array<vk::DescriptorPoolSize, 12> descriptor_counts = {};
+	uint32_t used_idx = 0;
+	for (auto i = 0; i < descriptor_counts.size(); i++) {
+		bool used = false;
+		// create non-variable count descriptors
+		if (base.layout_info[set].descriptor_counts[i] > 0) {
+			auto& d = descriptor_counts[used_idx];
+			d.type = vk::DescriptorType(i);
+			d.descriptorCount = base.layout_info[set].descriptor_counts[i];
+			used = true;
+		}
+		// create variable count descriptors
+		if (base.layout_info[set].variable_count_binding != (unsigned)-1 && 
+			base.layout_info[set].variable_count_binding_type == vk::DescriptorType(i)) {
+			auto& d = descriptor_counts[used_idx];
+			d.type = vk::DescriptorType(i);
+			d.descriptorCount += num_descriptors;
+			used = true;
+		}
+		if (used) {
+			used_idx++;
+		}
+	}
+
+	dpci.pPoolSizes = descriptor_counts.data();
+	dpci.poolSizeCount = used_idx;
+	tda.backing_pool = ctx.device.createDescriptorPoolUnique(dpci);
+	vk::DescriptorSetAllocateInfo dsai;
+	dsai.descriptorPool = tda.backing_pool.get();
+	dsai.descriptorSetCount = 1;
+	dsai.pSetLayouts = &dsl;
+	vk::DescriptorSetVariableDescriptorCountAllocateInfo dsvdcai(1, &num_descriptors);
+	dsai.setPNext(&dsvdcai);
+
+	tda.backing_set = std::move(ctx.device.allocateDescriptorSets(dsai)[0]);
+	tda.descriptor_bindings.resize(num_descriptors);
+	return Unique<PersistentDescriptorSet>(ctx, std::move(tda));
+}
+
+void vuk::PersistentDescriptorSet::update_combined_image_sampler(PerThreadContext& ptc, unsigned binding, unsigned array_index, vuk::ImageView iv, vk::SamplerCreateInfo sci, vk::ImageLayout layout) {
+	descriptor_bindings[array_index].image = vuk::DescriptorImageInfo(ptc.ctx.wrap(ptc.sampler_cache.acquire(sci)), iv, layout);
+	descriptor_bindings[array_index].type = vk::DescriptorType::eCombinedImageSampler;
+	vk::WriteDescriptorSet wds;
+	wds.descriptorCount = 1;
+	wds.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+	wds.dstArrayElement = array_index;
+	wds.dstBinding = binding;
+	wds.pImageInfo = &descriptor_bindings[array_index].image.dii;
+	wds.dstSet = backing_set;
+	pending_writes.push_back(wds);
+}
+
+void vuk::PerThreadContext::commit_persistent_descriptorset(vuk::PersistentDescriptorSet& array) {
+	ctx.device.updateDescriptorSets(array.pending_writes, {});
+	array.pending_writes.clear();
+}
+
 vuk::Buffer vuk::PerThreadContext::_allocate_scratch_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, size_t alignment, bool create_mapped) {
     PoolSelect ps{mem_usage, buffer_usage};
 	auto& pool = scratch_buffers.acquire(ps);
@@ -237,14 +316,23 @@ void vuk::PerThreadContext::wait_all_transfers() {
 	return ifc.wait_all_transfers();
 }
 
-vuk::Texture vuk::PerThreadContext::allocate_texture(vk::Format format, vk::Extent3D extents, vuk::Samples samples) {
-    auto tex = ctx.allocate_texture(format, extents, 1, samples);
+vuk::Texture vuk::PerThreadContext::allocate_texture(vk::ImageCreateInfo ici) {
+    auto tex = ctx.allocate_texture(ici);
 	return tex;
 }
 
 
 std::pair<vuk::Texture, vuk::TransferStub> vuk::PerThreadContext::create_texture(vk::Format format, vk::Extent3D extents, void* data) {
-    auto tex = ctx.allocate_texture(format, extents, 1, vuk::Samples::e1);
+	vk::ImageCreateInfo ici;
+	ici.format = format;
+	ici.extent = extents;
+	ici.samples = vuk::Samples::e1;
+	ici.imageType = vk::ImageType::e2D;
+	ici.initialLayout = vk::ImageLayout::eUndefined;
+	ici.tiling = vk::ImageTiling::eOptimal;
+	ici.usage = vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
+	ici.mipLevels = ici.arrayLayers = 1;
+    auto tex = ctx.allocate_texture(ici);
 	auto stub = upload(*tex.image, extents, std::span<std::byte>((std::byte*)data, extents.width * extents.height * extents.depth * 4), false);
 	return { std::move(tex), stub };
 }
@@ -413,6 +501,7 @@ vuk::DescriptorSet vuk::PerThreadContext::create(const create_info_t<vuk::Descri
 		case vk::DescriptorType::eSampledImage:
 		case vk::DescriptorType::eSampler:
 		case vk::DescriptorType::eCombinedImageSampler:
+		case vk::DescriptorType::eStorageImage:
 			diis[i] = binding.image;
 			write.pImageInfo = &diis[i];
 			break;
@@ -504,10 +593,11 @@ vuk::PipelineBaseInfo vuk::Context::create(const create_info_t<PipelineBaseInfo>
 		pipe_name += cinfo.shader_paths[i] + "+";
 	}
 	pipe_name = pipe_name.substr(0, pipe_name.size() - 1); //trim off last "+"
-														   // acquire descriptor set layouts (1 per set)
-														   // acquire pipeline layout
+
+	// acquire descriptor set layouts (1 per set)
+	// acquire pipeline layout
 	vuk::PipelineLayoutCreateInfo plci;
-	plci.dslcis = vuk::PipelineBaseCreateInfo::build_descriptor_layouts(accumulated_reflection);
+	plci.dslcis = vuk::PipelineBaseCreateInfo::build_descriptor_layouts(accumulated_reflection, cinfo);
 	plci.pcrs.insert(plci.pcrs.begin(), accumulated_reflection.push_constant_ranges.begin(), accumulated_reflection.push_constant_ranges.end());
 	plci.plci.pushConstantRangeCount = (uint32_t)accumulated_reflection.push_constant_ranges.size();
 	plci.plci.pPushConstantRanges = accumulated_reflection.push_constant_ranges.data();
@@ -516,8 +606,14 @@ vuk::PipelineBaseInfo vuk::Context::create(const create_info_t<PipelineBaseInfo>
 	for (auto& dsl : plci.dslcis) {
 		dsl.dslci.bindingCount = (uint32_t)dsl.bindings.size();
 		dsl.dslci.pBindings = dsl.bindings.data();
-		auto l = descriptor_set_layouts.acquire(dsl);
-		dslai[dsl.index] = l;
+		if (dsl.flags.size() > 0) {
+			vk::DescriptorSetLayoutBindingFlagsCreateInfo dslbfci;
+			dslbfci.bindingCount = (uint32_t)dsl.bindings.size();
+			dslbfci.pBindingFlags = dsl.flags.data();
+			dsl.dslci.setPNext(&dslbfci);
+		}
+		auto descset_layout_alloc_info = descriptor_set_layouts.acquire(dsl);
+		dslai[dsl.index] = descset_layout_alloc_info;
 		dsls.push_back(dslai[dsl.index].layout);
 	}
 	plci.plci.pSetLayouts = dsls.data();
@@ -533,6 +629,8 @@ vuk::PipelineBaseInfo vuk::Context::create(const create_info_t<PipelineBaseInfo>
     pbi.rasterization_state = cinfo.rasterization_state;
     pbi.pipeline_name = std::move(pipe_name);
     pbi.reflection_info = accumulated_reflection;
+	pbi.binding_flags = cinfo.binding_flags;
+	pbi.variable_count_max = cinfo.variable_count_max;
     return pbi;
 }
 
@@ -563,7 +661,7 @@ vuk::ComputePipelineInfo vuk::Context::create(const create_info_t<vuk::ComputePi
 	pipe_name += cinfo.shader_path;
 
 	vuk::PipelineLayoutCreateInfo plci;
-	plci.dslcis = vuk::PipelineBaseCreateInfo::build_descriptor_layouts(sm.reflection_info);
+	plci.dslcis = vuk::PipelineBaseCreateInfo::build_descriptor_layouts(sm.reflection_info, cinfo);
 	plci.pcrs.insert(plci.pcrs.begin(), sm.reflection_info.push_constant_ranges.begin(), sm.reflection_info.push_constant_ranges.end());
 	plci.plci.pushConstantRangeCount = (uint32_t)sm.reflection_info.push_constant_ranges.size();
 	plci.plci.pPushConstantRanges = sm.reflection_info.push_constant_ranges.data();
@@ -584,7 +682,7 @@ vuk::ComputePipelineInfo vuk::Context::create(const create_info_t<vuk::ComputePi
 	cpci.layout = pipeline_layouts.acquire(plci);
 	auto pipeline = device.createComputePipeline(*vk_pipeline_cache, cpci);
 	debug.set_name(pipeline.value, pipe_name);
-	return { { pipeline, cpci.layout, dslai } };
+	return { { pipeline, cpci.layout, dslai }, sm.reflection_info.local_size };
 }
 
 vuk::ComputePipelineInfo vuk::PerThreadContext::create(const create_info_t<ComputePipelineInfo>& cinfo) {
@@ -602,8 +700,16 @@ vk::Sampler vuk::PerThreadContext::create(const create_info_t<vk::Sampler>& cinf
 vuk::DescriptorSetLayoutAllocInfo vuk::Context::create(const create_info_t<vuk::DescriptorSetLayoutAllocInfo>& cinfo) {
 	vuk::DescriptorSetLayoutAllocInfo ret;
 	ret.layout = device.createDescriptorSetLayout(cinfo.dslci);
-	for (auto& b : cinfo.bindings) {
-		ret.descriptor_counts[to_integral(b.descriptorType)] += b.descriptorCount;
+	for (size_t i = 0; i < cinfo.bindings.size(); i++) {
+		auto& b = cinfo.bindings[i];
+		// if this is not a variable count binding, add it to the descriptor count
+		if (cinfo.flags.size() <= i || !(cinfo.flags[i] & vk::DescriptorBindingFlagBits::eVariableDescriptorCount)) {
+			ret.descriptor_counts[to_integral(b.descriptorType)] += b.descriptorCount;
+		} else { // a variable count binding
+			ret.variable_count_binding = (uint32_t)i;
+			ret.variable_count_binding_type = b.descriptorType;
+			ret.variable_count_binding_max_size = b.descriptorCount;
+		}
 	}
 	return ret;
 }
@@ -844,21 +950,10 @@ vuk::Buffer vuk::Context::allocate_buffer(MemoryUsage mem_usage, vk::BufferUsage
     return allocator.allocate_buffer(mem_usage, buffer_usage, size, alignment, false);
 }
 
-vuk::Texture vuk::Context::allocate_texture(vk::Format format, vk::Extent3D extents, uint32_t miplevels, vuk::Samples samples) {
-    vk::ImageCreateInfo ici;
-	ici.format = format;
-	ici.extent = extents;
-	ici.arrayLayers = 1;
-	ici.initialLayout = vk::ImageLayout::eUndefined;
-	ici.mipLevels = miplevels;
-	ici.imageType = vk::ImageType::e2D;
-	ici.samples = samples.count;
-	ici.tiling = vk::ImageTiling::eOptimal;
-	ici.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eColorAttachment;
-    ici.flags = vk::ImageCreateFlagBits::eMutableFormat;
-	auto dst = allocator.create_image(ici);
+vuk::Texture vuk::Context::allocate_texture(vk::ImageCreateInfo ici) {
+    auto dst = allocator.create_image(ici);
 	vk::ImageViewCreateInfo ivci;
-	ivci.format = format;
+	ivci.format = ici.format;
 	ivci.image = dst;
 	ivci.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
 	ivci.subresourceRange.baseArrayLayer = 0;
@@ -868,8 +963,8 @@ vuk::Texture vuk::Context::allocate_texture(vk::Format format, vk::Extent3D exte
 	ivci.viewType = vk::ImageViewType::e2D;
 	auto iv = device.createImageView(ivci);
 	vuk::Texture tex{ vuk::Unique<vk::Image>(*this, dst), vuk::Unique<vuk::ImageView>(*this, wrap(iv)) };
-	tex.extent = extents;
-	tex.format = format;
+	tex.extent = ici.extent;
+	tex.format = ici.format;
     return tex;
 }
 
@@ -892,6 +987,11 @@ void vuk::Context::enqueue_destroy(vk::Pipeline p) {
 void vuk::Context::enqueue_destroy(vuk::Buffer b) {
 	std::lock_guard _(recycle_locks[frame_counter % FC]);
 	buffer_recycle[frame_counter % FC].push_back(b);
+}
+
+void vuk::Context::enqueue_destroy(vuk::PersistentDescriptorSet b) {
+	std::lock_guard _(recycle_locks[frame_counter % FC]);
+	pds_recycle[frame_counter % FC].push_back(std::move(b));
 }
 
 

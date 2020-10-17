@@ -76,6 +76,9 @@ namespace vuk {
 		eComputeRead,
 		eComputeWrite,
 		eComputeRW,
+		eMemoryRead,
+		eMemoryWrite,
+		eMemoryRW
 	};
 
 	struct Resource;
@@ -175,6 +178,10 @@ namespace vuk {
 		static Attachment from_texture(const vuk::Texture& t, Clear clear_value) {
             return Attachment{
                 .image = t.image.get(), .image_view = t.view.get(), .extent = {t.extent.width, t.extent.height}, .format = t.format, .sample_count = {t.sample_count}, .clear_value = clear_value};
+        }
+		static Attachment from_texture(const vuk::Texture& t) {
+            return Attachment{
+                .image = t.image.get(), .image_view = t.view.get(), .extent = {t.extent.width, t.extent.height}, .format = t.format, .sample_count = {t.sample_count}};
         }
     };
 
@@ -317,7 +324,7 @@ namespace vuk {
 		void mark_attachment_resolve(Name resolved_name, Name ms_name);
 		void bind_buffer(Name, vuk::Buffer);
         void bind_attachment(Name, Attachment, Access initial, Access final);
-		vk::ImageUsageFlags compute_usage(std::vector<vuk::RenderGraph::UseRef, short_alloc<UseRef, 64>>& chain);
+		vk::ImageUsageFlags compute_usage(const std::vector<vuk::RenderGraph::UseRef, short_alloc<UseRef, 64>>& chain);
 
 		// RG
 		void build(vuk::PerThreadContext&);
@@ -325,8 +332,9 @@ namespace vuk {
 		vk::CommandBuffer execute(vuk::PerThreadContext&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index, bool use_secondary_command_buffers);
 
 		BufferInfo get_resource_buffer(Name);
+		bool is_resource_image_in_general_layout(Name, unsigned pass_index);
 
-		private:
-			void fill_renderpass_info(vuk::RenderGraph::RenderPassInfo& rpass, const size_t& i, vuk::CommandBuffer& cobuf);
+	private:
+		void fill_renderpass_info(vuk::RenderGraph::RenderPassInfo& rpass, const size_t& i, vuk::CommandBuffer& cobuf);
 	};
 }

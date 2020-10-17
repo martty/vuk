@@ -1,4 +1,5 @@
 #include "RenderGraph.hpp"
+#include "RenderGraph.hpp"
 #include "Hash.hpp" // for create
 #include "Cache.hpp"
 #include "Context.hpp"
@@ -84,15 +85,18 @@ namespace vuk {
 		case eTransferSrc: return { vk::PipelineStageFlagBits::eTransfer, vk::AccessFlagBits::eTransferRead, vk::ImageLayout::eTransferSrcOptimal };
 		case eTransferDst: return { vk::PipelineStageFlagBits::eTransfer, vk::AccessFlagBits::eTransferWrite, vk::ImageLayout::eTransferDstOptimal };
 
-		case eComputeRead: return { vk::PipelineStageFlagBits::eComputeShader, vk::AccessFlagBits::eShaderRead, vk::ImageLayout::eShaderReadOnlyOptimal };
-		case eComputeWrite: return { vk::PipelineStageFlagBits::eComputeShader, vk::AccessFlagBits::eShaderWrite, vk::ImageLayout::eShaderReadOnlyOptimal };
-		case eComputeRW: return { vk::PipelineStageFlagBits::eComputeShader, vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite, vk::ImageLayout::eShaderReadOnlyOptimal };
+		case eComputeRead: return { vk::PipelineStageFlagBits::eComputeShader, vk::AccessFlagBits::eShaderRead, vk::ImageLayout::eGeneral };
+		case eComputeWrite: return { vk::PipelineStageFlagBits::eComputeShader, vk::AccessFlagBits::eShaderWrite, vk::ImageLayout::eGeneral };
+		case eComputeRW: return { vk::PipelineStageFlagBits::eComputeShader, vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite, vk::ImageLayout::eGeneral };
 
 		case eAttributeRead: return { vk::PipelineStageFlagBits::eVertexInput, vk::AccessFlagBits::eVertexAttributeRead, vk::ImageLayout::eGeneral /* ignored */ };
 
+		case eMemoryRead: return { vk::PipelineStageFlagBits::eBottomOfPipe, vk::AccessFlagBits::eMemoryRead, vk::ImageLayout::eGeneral };
+		case eMemoryWrite: return { vk::PipelineStageFlagBits::eBottomOfPipe, vk::AccessFlagBits::eMemoryWrite, vk::ImageLayout::eGeneral };
+		case eMemoryRW: return { vk::PipelineStageFlagBits::eBottomOfPipe, vk::AccessFlagBits::eMemoryRead | vk::AccessFlagBits::eMemoryWrite, vk::ImageLayout::eGeneral };
 
 		case eNone:
-            return {vk::PipelineStageFlagBits{}, vk::AccessFlagBits{}, vk::ImageLayout::eUndefined};
+            return {vk::PipelineStageFlagBits::eTopOfPipe, vk::AccessFlagBits{}, vk::ImageLayout::eUndefined};
         case eClear:
             return {vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::AccessFlagBits::eColorAttachmentWrite, vk::ImageLayout::ePreinitialized};
 
@@ -142,9 +146,9 @@ namespace vuk {
 		return !is_write_access(u);
 	}
 
-	vk::ImageUsageFlags RenderGraph::compute_usage(std::vector<vuk::RenderGraph::UseRef, short_alloc<UseRef, 64>>& chain) {
+	vk::ImageUsageFlags RenderGraph::compute_usage(const std::vector<vuk::RenderGraph::UseRef, short_alloc<UseRef, 64>>& chain) {
 		vk::ImageUsageFlags usage;
-		for (auto& c : chain) {
+		for (const auto& c : chain) {
 			switch (c.use.layout) {
 			case vk::ImageLayout::eDepthStencilAttachmentOptimal:
 				usage |= vk::ImageUsageFlagBits::eDepthStencilAttachment; break;
@@ -542,7 +546,7 @@ namespace vuk {
 							}
 						}
 						// TODO: we need a dep here if there is a write or there is a layout transition
-						if (/*left.use.layout != right.use.layout &&*/ right.use.layout != vk::ImageLayout::eUndefined) { // different layouts, need to have dependency
+						if (/*left.use.layout != right.use.layout &&*/ right.use.layout != vk::ImageLayout::eUndefined && !left_rp.framebufferless) { // different layouts, need to have dependency
 							vk::SubpassDependency sd;
 							sd.dstAccessMask = right.use.access;
 							sd.dstStageMask = right.use.stages;
@@ -552,26 +556,23 @@ namespace vuk {
 							sd.dstSubpass = VK_SUBPASS_EXTERNAL;
 							left_rp.rpci.subpass_dependencies.push_back(sd);
 						}
-						if (right.pass) {
-							auto& right_rp = rpis[right.pass->render_pass_index];
-							// if we are going to an fbless pass, then that will emit a pre-barrier for us
-							if (left_rp.framebufferless && !right_rp.framebufferless) {
-								// right layout == Undefined means the chain terminates, no transition/barrier
-								if (right.use.layout == vk::ImageLayout::eUndefined)
-									continue;
-								vk::ImageMemoryBarrier barrier;
-								barrier.dstAccessMask = right.use.access;
-								barrier.srcAccessMask = left.use.access;
-								barrier.newLayout = right.use.layout;
-								barrier.oldLayout = left.use.layout;
-								barrier.subresourceRange.aspectMask = aspect;
-								barrier.subresourceRange.baseArrayLayer = 0;
-								barrier.subresourceRange.baseMipLevel = 0;
-								barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
-								barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
-								ImageBarrier ib{ .image = name, .barrier = barrier, .src = left.use.stages, .dst = right.use.stages };
-								left_rp.subpasses[left.pass->subpass].post_barriers.push_back(ib);
-							}
+						// if we are coming from an fbless pass we need to emit barriers if the right pass doesn't exist (chain end) or has framebuffer 
+						if (left_rp.framebufferless && (right.pass && !rpis[right.pass->render_pass_index].framebufferless) || !right.pass) {
+							// right layout == Undefined means the chain terminates, no transition/barrier
+							if (right.use.layout == vk::ImageLayout::eUndefined)
+								continue;
+							vk::ImageMemoryBarrier barrier;
+							barrier.dstAccessMask = right.use.access;
+							barrier.srcAccessMask = left.use.access;
+							barrier.newLayout = right.use.layout;
+							barrier.oldLayout = left.use.layout;
+							barrier.subresourceRange.aspectMask = aspect;
+							barrier.subresourceRange.baseArrayLayer = 0;
+							barrier.subresourceRange.baseMipLevel = 0;
+							barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
+							barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
+							ImageBarrier ib{ .image = name, .barrier = barrier, .src = left.use.stages, .dst = right.use.stages };
+							left_rp.subpasses[left.pass->subpass].post_barriers.push_back(ib);
 						}
 					}
 
@@ -1071,6 +1072,7 @@ namespace vuk {
 				}
                 for(auto& p: sp.passes) {
                     if(p->pass.execute) {
+						cobuf.pass_index = static_cast<uint32_t>(&*passes.begin() - p);
                         if(!p->pass.name.empty()) {
                             //ptc.ctx.debug.begin_region(cobuf.command_buffer, sp.pass->pass.name);
                             p->pass.execute(cobuf);
@@ -1108,6 +1110,11 @@ namespace vuk {
 	
 	RenderGraph::BufferInfo RenderGraph::get_resource_buffer(Name n) {
 		return bound_buffers.at(n);
+	}
+
+	bool RenderGraph::is_resource_image_in_general_layout(Name n, unsigned pass_index) {
+		auto& chain = use_chains.at(n);
+		return chain[pass_index+1].use.layout == vk::ImageLayout::eGeneral;
 	}
 
     RenderGraph::RenderPassInfo::RenderPassInfo(arena& arena_) : INIT2(subpasses), INIT2(attachments) {

@@ -3,12 +3,27 @@
 #include "RenderGraph.hpp"
 
 namespace vuk {
+	CommandBuffer::CommandBuffer(vuk::PerThreadContext& ptc) : ptc(ptc){
+		command_buffer = ptc.commandbuffer_pool.acquire(vk::CommandBufferLevel::ePrimary, 1)[0];
+	}
+
 	const CommandBuffer::RenderPassInfo& CommandBuffer::get_ongoing_renderpass() const {
 		return ongoing_renderpass.value();
 	}
 
 	vuk::Buffer CommandBuffer::get_resource_buffer(Name n) const {
-		return rg.get_resource_buffer(n).buffer;
+		assert(rg);
+		return rg->get_resource_buffer(n).buffer;
+	}
+
+	vk::Image CommandBuffer::get_resource_image(Name n) const {
+		assert(rg);
+		return rg->bound_attachments[n].image;
+	}
+
+	vuk::ImageView CommandBuffer::get_resource_image_view(Name n) const {
+		assert(rg);
+		return rg->bound_attachments[n].iv;
 	}
 
 	CommandBuffer& CommandBuffer::set_viewport(unsigned index, vk::Viewport vp) {
@@ -142,30 +157,32 @@ namespace vuk {
         return *this;
 	}
 
-	CommandBuffer& CommandBuffer::bind_sampled_image(unsigned set, unsigned binding, vuk::ImageView iv, vk::SamplerCreateInfo sci) {
+	CommandBuffer& CommandBuffer::bind_sampled_image(unsigned set, unsigned binding, vuk::ImageView iv, vk::SamplerCreateInfo sci, vk::ImageLayout il) {
 		sets_used[set] = true;
 		set_bindings[set].bindings[binding].type = vk::DescriptorType::eCombinedImageSampler;
-		set_bindings[set].bindings[binding].image = { };
-		set_bindings[set].bindings[binding].image.image_view = iv;
-		set_bindings[set].bindings[binding].image.image_layout = vk::ImageLayout::eShaderReadOnlyOptimal;
-		set_bindings[set].bindings[binding].image.sampler = ptc.ctx.wrap(ptc.sampler_cache.acquire(sci));
+		set_bindings[set].bindings[binding].image = vuk::DescriptorImageInfo(ptc.ctx.wrap(ptc.sampler_cache.acquire(sci)), iv, il);
 		set_bindings[set].used.set(binding);
 
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::bind_sampled_image(unsigned set, unsigned binding, const vuk::Texture& texture, vk::SamplerCreateInfo sampler_create_info) {
-		return bind_sampled_image(set, binding, *texture.view, sampler_create_info);
+	CommandBuffer& CommandBuffer::bind_sampled_image(unsigned set, unsigned binding, const vuk::Texture& texture, vk::SamplerCreateInfo sampler_create_info, vk::ImageLayout il) {
+		return bind_sampled_image(set, binding, *texture.view, sampler_create_info, il);
 	}
 
 	CommandBuffer& CommandBuffer::bind_sampled_image(unsigned set, unsigned binding, Name name, vk::SamplerCreateInfo sampler_create_info) {
-		return bind_sampled_image(set, binding, rg.bound_attachments[name].iv, sampler_create_info);
+		assert(rg);
+
+		auto layout = rg->is_resource_image_in_general_layout(name, pass_index) ? vk::ImageLayout::eGeneral : vk::ImageLayout::eShaderReadOnlyOptimal;
+
+		return bind_sampled_image(set, binding, rg->bound_attachments[name].iv, sampler_create_info, layout);
 	}
 
 	CommandBuffer& CommandBuffer::bind_sampled_image(unsigned set, unsigned binding, Name name, vk::ImageViewCreateInfo ivci, vk::SamplerCreateInfo sampler_create_info) {
-		ivci.image = rg.bound_attachments[name].image;
+		assert(rg);
+		ivci.image = rg->bound_attachments[name].image;
         if(ivci.format == vk::Format{}) {
-            ivci.format = rg.bound_attachments[name].description.format;
+            ivci.format = rg->bound_attachments[name].description.format;
         }
 		ivci.viewType = vk::ImageViewType::e2D;
 		vk::ImageSubresourceRange isr;
@@ -181,10 +198,18 @@ namespace vuk {
 		isr.baseMipLevel = 0;
 		isr.levelCount = 1;
 		ivci.subresourceRange = isr;
+
+		auto layout = rg->is_resource_image_in_general_layout(name, pass_index) ? vk::ImageLayout::eGeneral : vk::ImageLayout::eShaderReadOnlyOptimal;
 	
 		vuk::Unique<vuk::ImageView> iv = vuk::Unique<vuk::ImageView>(ptc.ctx, ptc.ctx.wrap(ptc.ctx.device.createImageView(ivci)));
 
-		return bind_sampled_image(set, binding, *iv, sampler_create_info);
+		return bind_sampled_image(set, binding, *iv, sampler_create_info, layout);
+	}
+
+	CommandBuffer& CommandBuffer::bind_persistent(unsigned set, PersistentDescriptorSet& pda) {
+		persistent_sets_used[set] = true;
+		persistent_sets[set] = pda.backing_set;
+		return *this;
 	}
 
 	CommandBuffer& CommandBuffer::push_constants(vk::ShaderStageFlags stages, size_t offset, void* data, size_t size) {
@@ -208,6 +233,18 @@ namespace vuk {
 		set_bindings[set].bindings[binding].buffer = vk::DescriptorBufferInfo{ buffer.buffer, buffer.offset, buffer.size };
 		set_bindings[set].used.set(binding);
 		return *this;
+	}
+
+	CommandBuffer& CommandBuffer::bind_storage_image(unsigned set, unsigned binding, vuk::ImageView image_view) {
+		sets_used[set] = true;
+		set_bindings[set].bindings[binding].type = vk::DescriptorType::eStorageImage;
+		set_bindings[set].bindings[binding].image = vuk::DescriptorImageInfo({}, image_view, vk::ImageLayout::eGeneral);
+		set_bindings[set].used.set(binding);
+		return *this;
+	}
+
+	CommandBuffer& CommandBuffer::bind_storage_image(unsigned set, unsigned binding, Name name) {
+		return bind_storage_image(set, binding, get_resource_image_view(name));
 	}
 
 	void* CommandBuffer::_map_scratch_uniform_binding(unsigned set, unsigned binding, size_t size) {
@@ -242,6 +279,17 @@ namespace vuk {
 		return *this;
 	}
 
+	CommandBuffer& CommandBuffer::dispatch_invocations(size_t invocation_count_x, size_t invocation_count_y, size_t invocation_count_z) {
+		_bind_compute_pipeline_state();
+		auto local_size = current_compute_pipeline->local_size;
+		// integer div ceil
+		uint32_t x = (uint32_t)(invocation_count_x + local_size[0] - 1) / local_size[0];
+		uint32_t y = (uint32_t)(invocation_count_y + local_size[1] - 1) / local_size[1];
+		uint32_t z = (uint32_t)(invocation_count_z + local_size[2] - 1) / local_size[2];
+		command_buffer.dispatch(x, y, z);
+		return *this;
+	}
+
     SecondaryCommandBuffer CommandBuffer::begin_secondary() {
         auto nptc = new vuk::PerThreadContext(ptc.ifc.begin());
         auto scbuf = nptc->commandbuffer_pool.acquire(vk::CommandBufferLevel::eSecondary, 1)[0];
@@ -262,12 +310,13 @@ namespace vuk {
 	}
 
 	void CommandBuffer::resolve_image(Name src, Name dst) {
+		assert(rg);
 		vk::ImageResolve ir;
-		auto src_image = rg.bound_attachments[src].image;
-		auto dst_image = rg.bound_attachments[dst].image;
+		auto src_image = rg->bound_attachments[src].image;
+		auto dst_image = rg->bound_attachments[dst].image;
 		vk::ImageSubresourceLayers isl;
 		vk::ImageAspectFlagBits aspect;
-		if (rg.bound_attachments[src].description.format == vk::Format::eD32Sfloat) {
+		if (rg->bound_attachments[src].description.format == vk::Format::eD32Sfloat) {
 			aspect = vk::ImageAspectFlagBits::eDepth;
 		} else {
 			aspect = vk::ImageAspectFlagBits::eColor;
@@ -281,24 +330,34 @@ namespace vuk {
 		ir.srcSubresource = isl;
 		ir.dstOffset = vk::Offset3D{};
 		ir.dstSubresource = isl;
-		ir.extent = vk::Extent3D(rg.bound_attachments[src].extents, 1);
-		command_buffer.resolveImage(src_image, vk::ImageLayout::eTransferSrcOptimal, dst_image, vk::ImageLayout::eTransferDstOptimal, ir);
+		ir.extent = vk::Extent3D(rg->bound_attachments[src].extents, 1);
+
+		auto src_layout = rg->is_resource_image_in_general_layout(src, pass_index) ? vk::ImageLayout::eGeneral : vk::ImageLayout::eTransferSrcOptimal;
+		auto dst_layout = rg->is_resource_image_in_general_layout(dst, pass_index) ? vk::ImageLayout::eGeneral : vk::ImageLayout::eTransferDstOptimal;
+
+		command_buffer.resolveImage(src_image, src_layout, dst_image, dst_layout, ir);
 	}
 
 	void CommandBuffer::blit_image(Name src, Name dst, vk::ImageBlit region, vk::Filter filter) {
-		auto src_image = rg.bound_attachments[src].image;
-		auto dst_image = rg.bound_attachments[dst].image;
+		assert(rg);
+		auto src_image = rg->bound_attachments[src].image;
+		auto dst_image = rg->bound_attachments[dst].image;
 
-		command_buffer.blitImage(src_image, vk::ImageLayout::eTransferSrcOptimal, dst_image, vk::ImageLayout::eTransferDstOptimal, region, filter);
+		auto src_layout = rg->is_resource_image_in_general_layout(src, pass_index) ? vk::ImageLayout::eGeneral : vk::ImageLayout::eTransferSrcOptimal;
+		auto dst_layout = rg->is_resource_image_in_general_layout(dst, pass_index) ? vk::ImageLayout::eGeneral : vk::ImageLayout::eTransferDstOptimal;
+
+		command_buffer.blitImage(src_image, src_layout, dst_image, dst_layout, region, filter);
 	}
 
 	void CommandBuffer::copy_image_to_buffer(Name src, Name dst, vk::BufferImageCopy bic) {
-        auto src_batt = rg.bound_attachments[src];
-        auto dst_bbuf = rg.bound_buffers[dst];
+		assert(rg);
+        auto src_batt = rg->bound_attachments[src];
+        auto dst_bbuf = rg->bound_buffers[dst];
 
 		bic.bufferOffset += dst_bbuf.buffer.offset;
 
-		command_buffer.copyImageToBuffer(src_batt.image, vk::ImageLayout::eTransferSrcOptimal, dst_bbuf.buffer.buffer, bic);
+		auto src_layout = rg->is_resource_image_in_general_layout(src, pass_index) ? vk::ImageLayout::eGeneral : vk::ImageLayout::eTransferSrcOptimal;
+		command_buffer.copyImageToBuffer(src_batt.image, src_layout, dst_bbuf.buffer.buffer, bic);
 	}
 
 	void CommandBuffer::_bind_state(bool graphics) {
@@ -308,14 +367,21 @@ namespace vuk {
 		}
 		pcrs.clear();
 
-		for (size_t i = 0; i < VUK_MAX_SETS; i++) {
-			if (!sets_used[i])
+		for (unsigned i = 0; i < VUK_MAX_SETS; i++) {
+			bool persistent = persistent_sets_used[i];
+			if (!sets_used[i] && !persistent_sets_used[i])
 				continue;
 			set_bindings[i].layout_info = graphics? current_pipeline->layout_info[i] : current_compute_pipeline->layout_info[i];
-			auto ds = ptc.descriptor_sets.acquire(set_bindings[i]);
-			command_buffer.bindDescriptorSets(graphics ? vk::PipelineBindPoint::eGraphics : vk::PipelineBindPoint::eCompute, graphics ? current_pipeline->pipeline_layout : current_compute_pipeline->pipeline_layout, 0, 1, &ds.descriptor_set, 0, nullptr);
-			sets_used[i] = false;
-			set_bindings[i] = {};
+			if (!persistent) {
+				auto ds = ptc.descriptor_sets.acquire(set_bindings[i]);
+				command_buffer.bindDescriptorSets(graphics ? vk::PipelineBindPoint::eGraphics : vk::PipelineBindPoint::eCompute, graphics ? current_pipeline->pipeline_layout : current_compute_pipeline->pipeline_layout, i, 1, &ds.descriptor_set, 0, nullptr);
+				sets_used[i] = false;
+				set_bindings[i] = {};
+			} else {
+				command_buffer.bindDescriptorSets(graphics ? vk::PipelineBindPoint::eGraphics : vk::PipelineBindPoint::eCompute, graphics ? current_pipeline->pipeline_layout : current_compute_pipeline->pipeline_layout, i, 1, &persistent_sets[i], 0, nullptr);
+				persistent_sets_used[i] = false;
+				persistent_sets[i] = vk::DescriptorSet{};
+			}
 		}
 	}
 

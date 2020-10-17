@@ -34,8 +34,32 @@ namespace vuk {
 
 	struct Program;
 
+	struct PipelineBaseCreateInfoBase {
+		// 4 valid flags
+		std::bitset<4 * VUK_MAX_SETS * VUK_MAX_BINDINGS> binding_flags = {};
+		// set flags on specific descriptor in specific set
+		void set_binding_flags(unsigned set, unsigned binding, vk::DescriptorBindingFlags flags) {
+			unsigned f = static_cast<unsigned>(flags);
+			binding_flags.set(set * 4 * VUK_MAX_BINDINGS + binding * 4 + 0, f & 0b1);
+			binding_flags.set(set * 4 * VUK_MAX_BINDINGS + binding * 4 + 1, f & 0b10);
+			binding_flags.set(set * 4 * VUK_MAX_BINDINGS + binding * 4 + 2, f & 0b100);
+			binding_flags.set(set * 4 * VUK_MAX_BINDINGS + binding * 4 + 3, f & 0b1000);
+		}
+		// if the set has a variable count binding, the maximum number of bindings possible
+		std::array<uint32_t, VUK_MAX_SETS> variable_count_max = {};
+		void set_variable_count_binding(unsigned set, unsigned binding, uint32_t max_descriptors) {
+			// clear all variable count bits
+			for (unsigned i = 0; i < VUK_MAX_BINDINGS; i++) {
+				binding_flags.set(set * 4 * VUK_MAX_BINDINGS + i * 4 + 3, 0);
+			}
+			// set variable count (0x8)
+			binding_flags.set(set * 4 * VUK_MAX_BINDINGS + binding * 4 + 3, 1);
+			variable_count_max[set] = max_descriptors;
+		}
+	};
+
 	/* filled out by the user */
-	struct PipelineBaseCreateInfo {
+	struct PipelineBaseCreateInfo : PipelineBaseCreateInfoBase {
 		friend class CommandBuffer;
 		friend class Context;
 	public:
@@ -60,10 +84,10 @@ namespace vuk {
 	public:
 		PipelineBaseCreateInfo();
 		
-		static vuk::fixed_vector<vuk::DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> build_descriptor_layouts(Program&);
+		static vuk::fixed_vector<vuk::DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> build_descriptor_layouts(const Program&, const PipelineBaseCreateInfoBase&);
 		bool operator==(const PipelineBaseCreateInfo& o) const {
             return shaders == o.shaders && rasterization_state == o.rasterization_state && color_blend_state == o.color_blend_state &&
-                   color_blend_attachments == o.color_blend_attachments && depth_stencil_state == o.depth_stencil_state;
+                   color_blend_attachments == o.color_blend_attachments && depth_stencil_state == o.depth_stencil_state && binding_flags == o.binding_flags && variable_count_max == o.variable_count_max;
 		}
 	};
 
@@ -80,13 +104,18 @@ namespace vuk {
 
         vuk::fixed_vector<vk::DynamicState, 8> dynamic_states = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
         vk::PipelineViewportStateCreateInfo viewport_state{{}, 1, nullptr, 1, nullptr};
+
+		// 4 valid flags
+		std::bitset<4 * VUK_MAX_SETS * VUK_MAX_BINDINGS> binding_flags = {};
+		// if the set has a variable count binding, the maximum number of bindings possible
+		std::array<uint32_t, VUK_MAX_SETS> variable_count_max = {};
 	};
 
 	template<> struct create_info<PipelineBaseInfo> {
 		using type = vuk::PipelineBaseCreateInfo;
 	};
 
-	struct ComputePipelineCreateInfo {
+	struct ComputePipelineCreateInfo : PipelineBaseCreateInfoBase {
 		friend class CommandBuffer;
 		friend class Context;
 	public:
@@ -103,7 +132,7 @@ namespace vuk {
 
 	public:
 		bool operator==(const ComputePipelineCreateInfo& o) const {
-            return shader == o.shader;
+            return shader == o.shader && binding_flags == o.binding_flags && variable_count_max == o.variable_count_max;
 		}
 	};
 
@@ -142,6 +171,7 @@ namespace vuk {
 	};
 
 	struct ComputePipelineInfo : PipelineInfo {
+		std::array<unsigned, 3> local_size;
 	};
 
 	template<> struct create_info<ComputePipelineInfo> {
