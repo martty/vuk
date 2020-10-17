@@ -9,10 +9,13 @@
 #include <numeric>
 
 /* 09_persistent_descriptorset
-* In this example we will see how to run compute shaders on the graphics queue.
-* To showcases this, we will render a texture to a fullscreen framebuffer,
-* then display it, but scramble the pixels determined by indices in a storage buffer.
-* Between these two steps, we perform some iterations of bubble sort on the indices buffer in compute.
+* In this example we will see how to create persistent descriptorsets.
+* Normal descriptorsets are completely managed by vuk, and are cached based on their contents.
+* However, this behaviour is not helpful if you plan to keep the descriptorsets around, or if they have many elements (such as "bindless").
+* For these scenarios, you can create and explicitly manage descriptorsets.
+* Here we first generate two additional textures from the one we load: the first by Y flipping using blitting and the second by
+* running a compute shader on it. Afterwards we create the persistent set and write the three images into it.
+* Later, we draw three cubes and fetch the texture based on the base instance.
 *
 * These examples are powered by the example framework, which hides some of the code required, as that would be repeated for each example.
 * Furthermore it allows launching individual examples and all examples with the example same code.
@@ -125,7 +128,6 @@ namespace {
 			auto ptc = ifc.begin();
 
 			// We set up the cube data, same as in example 02_cube
-
 			auto [bverts, stub1] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eVertexBuffer, std::span(&box.first[0], box.first.size()));
 			auto verts = std::move(bverts);
 			auto [binds, stub2] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eIndexBuffer, std::span(&box.second[0], box.second.size()));
@@ -146,7 +148,7 @@ namespace {
 			// Set up the pass to draw the textured cube, with a color and a depth attachment
 			rg.add_pass({
 				.resources = {"09_persistent_descriptorset_final"_image(vuk::eColorWrite), "09_depth"_image(vuk::eDepthStencilRW)},
-				.execute = [verts, uboVP, inds, frame = ifc.frame](vuk::CommandBuffer& command_buffer) {
+				.execute = [verts, uboVP, inds](vuk::CommandBuffer& command_buffer) {
 					command_buffer
 					  .set_viewport(0, vuk::Area::Framebuffer{})
 					  .set_scissor(0, vuk::Area::Framebuffer{})

@@ -557,7 +557,7 @@ namespace vuk {
 							left_rp.rpci.subpass_dependencies.push_back(sd);
 						}
 						// if we are coming from an fbless pass we need to emit barriers if the right pass doesn't exist (chain end) or has framebuffer 
-						if (left_rp.framebufferless && (right.pass && !rpis[right.pass->render_pass_index].framebufferless) || !right.pass) {
+						if (left_rp.framebufferless && ((right.pass && !rpis[right.pass->render_pass_index].framebufferless) || right.pass == nullptr)) {
 							// right layout == Undefined means the chain terminates, no transition/barrier
 							if (right.use.layout == vk::ImageLayout::eUndefined)
 								continue;
@@ -1120,6 +1120,7 @@ namespace vuk {
 			}
 		}
 		assert(0);
+		return false;
 	}
 
     RenderGraph::RenderPassInfo::RenderPassInfo(arena& arena_) : INIT2(subpasses), INIT2(attachments) {
