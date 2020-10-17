@@ -38,7 +38,13 @@ vuk::ExampleRunner::ExampleRunner() {
 			physical_device = vkbphysical_device.physical_device;
 
 			vkb::DeviceBuilder device_builder{ vkbphysical_device };
-			auto dev_ret = device_builder.build();
+			vk::PhysicalDeviceDescriptorIndexingFeatures descriptor_indexing_features{};
+			descriptor_indexing_features.descriptorBindingPartiallyBound = true;
+			descriptor_indexing_features.descriptorBindingUpdateUnusedWhilePending = true;
+			descriptor_indexing_features.shaderSampledImageArrayNonUniformIndexing = true;
+			descriptor_indexing_features.runtimeDescriptorArray = true;
+			descriptor_indexing_features.descriptorBindingVariableDescriptorCount = true;
+			auto dev_ret = device_builder.add_pNext(&descriptor_indexing_features).build();
 			if (!dev_ret.has_value()) {
 				// error
 			}

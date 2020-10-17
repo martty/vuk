@@ -483,7 +483,6 @@ vuk::DescriptorSet vuk::PerThreadContext::create(const create_info_t<vuk::Descri
 	auto mask = cinfo.used.to_ulong();
 	unsigned long leading_ones = num_leading_ones(mask);
 	std::array<vk::WriteDescriptorSet, VUK_MAX_BINDINGS> writes;
-	std::array<vk::DescriptorImageInfo, VUK_MAX_BINDINGS> diis;
 	for (unsigned i = 0; i < leading_ones; i++) {
 		if (!cinfo.used.test(i)) continue;
 		auto& write = writes[i];
@@ -502,8 +501,7 @@ vuk::DescriptorSet vuk::PerThreadContext::create(const create_info_t<vuk::Descri
 		case vk::DescriptorType::eSampler:
 		case vk::DescriptorType::eCombinedImageSampler:
 		case vk::DescriptorType::eStorageImage:
-			diis[i] = binding.image;
-			write.pImageInfo = &diis[i];
+			write.pImageInfo = &binding.image.dii;
 			break;
 		default:
 			assert(0);

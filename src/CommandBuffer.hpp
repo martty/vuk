@@ -51,6 +51,8 @@ namespace vuk {
 	};
 
 	struct RenderGraph;
+	struct PassInfo;
+
 	class CommandBuffer {
     protected:
 		friend struct RenderGraph;
@@ -66,7 +68,7 @@ namespace vuk {
 			std::span<const vk::AttachmentReference> color_attachments;
 		};
 		std::optional<RenderPassInfo> ongoing_renderpass;
-		uint32_t pass_index = (uint32_t)-1; // index into the PassInfos in the RenderGraph
+		PassInfo* current_pass = nullptr;
         vk::PrimitiveTopology topology = vk::PrimitiveTopology::eTriangleList;
 		vuk::fixed_vector<vk::VertexInputAttributeDescription, VUK_MAX_ATTRIBUTES> attribute_descriptions;
 		vuk::fixed_vector<vk::VertexInputBindingDescription, VUK_MAX_ATTRIBUTES> binding_descriptions;

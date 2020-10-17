@@ -39,7 +39,7 @@ namespace {
 			pci.set_variable_count_binding(1, 0, 1024);
 			// Flag this binding as partially bound, so that we don't need to set all the array elements
 			pci.set_binding_flags(1, 0, vk::DescriptorBindingFlagBits::ePartiallyBound);
-			runner.context->create_named_pipeline("textured_cube", pci);
+			runner.context->create_named_pipeline("bindless_cube", pci);
 			}
 
 			// creating a compute pipeline that inverts an image 
@@ -112,7 +112,7 @@ namespace {
 			execute_submit_and_wait(ptc, rg);
 
 			// Create persistent descriptorset for a pipeline and set index
-			pda = ptc.create_persistent_descriptorset(*runner.context->get_named_pipeline("textured_cube"), 1, 64);
+			pda = ptc.create_persistent_descriptorset(*runner.context->get_named_pipeline("bindless_cube"), 1, 64);
 			// Enqueue updates to the descriptors in the array
 			// This records the writes internally, but does not execute them
 			pda->update_combined_image_sampler(ptc, 0, 0, texture_of_doge->view.get(), {}, vk::ImageLayout::eShaderReadOnlyOptimal);
@@ -153,7 +153,7 @@ namespace {
 					  .bind_vertex_buffer(0, verts, 0, vuk::Packed{vk::Format::eR32G32B32Sfloat, vuk::Ignore{offsetof(util::Vertex, uv_coordinates) - sizeof(util::Vertex::position)}, vk::Format::eR32G32Sfloat})
 					  .bind_index_buffer(inds, vk::IndexType::eUint32)
 					  .bind_persistent(1, pda.get())
-					  .bind_graphics_pipeline("textured_cube")
+					  .bind_graphics_pipeline("bindless_cube")
 					  .bind_uniform_buffer(0, 0, uboVP);
 					glm::mat4* model = command_buffer.map_scratch_uniform_binding<glm::mat4>(0, 1);
 					*model = static_cast<glm::mat4>(glm::angleAxis(glm::radians(angle), glm::vec3(0.f, 1.f, 0.f)));

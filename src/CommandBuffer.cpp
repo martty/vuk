@@ -173,7 +173,7 @@ namespace vuk {
 	CommandBuffer& CommandBuffer::bind_sampled_image(unsigned set, unsigned binding, Name name, vk::SamplerCreateInfo sampler_create_info) {
 		assert(rg);
 
-		auto layout = rg->is_resource_image_in_general_layout(name, pass_index) ? vk::ImageLayout::eGeneral : vk::ImageLayout::eShaderReadOnlyOptimal;
+		auto layout = rg->is_resource_image_in_general_layout(name, current_pass) ? vk::ImageLayout::eGeneral : vk::ImageLayout::eShaderReadOnlyOptimal;
 
 		return bind_sampled_image(set, binding, rg->bound_attachments[name].iv, sampler_create_info, layout);
 	}
@@ -199,7 +199,7 @@ namespace vuk {
 		isr.levelCount = 1;
 		ivci.subresourceRange = isr;
 
-		auto layout = rg->is_resource_image_in_general_layout(name, pass_index) ? vk::ImageLayout::eGeneral : vk::ImageLayout::eShaderReadOnlyOptimal;
+		auto layout = rg->is_resource_image_in_general_layout(name, current_pass) ? vk::ImageLayout::eGeneral : vk::ImageLayout::eShaderReadOnlyOptimal;
 	
 		vuk::Unique<vuk::ImageView> iv = vuk::Unique<vuk::ImageView>(ptc.ctx, ptc.ctx.wrap(ptc.ctx.device.createImageView(ivci)));
 
@@ -332,8 +332,8 @@ namespace vuk {
 		ir.dstSubresource = isl;
 		ir.extent = vk::Extent3D(rg->bound_attachments[src].extents, 1);
 
-		auto src_layout = rg->is_resource_image_in_general_layout(src, pass_index) ? vk::ImageLayout::eGeneral : vk::ImageLayout::eTransferSrcOptimal;
-		auto dst_layout = rg->is_resource_image_in_general_layout(dst, pass_index) ? vk::ImageLayout::eGeneral : vk::ImageLayout::eTransferDstOptimal;
+		auto src_layout = rg->is_resource_image_in_general_layout(src, current_pass) ? vk::ImageLayout::eGeneral : vk::ImageLayout::eTransferSrcOptimal;
+		auto dst_layout = rg->is_resource_image_in_general_layout(dst, current_pass) ? vk::ImageLayout::eGeneral : vk::ImageLayout::eTransferDstOptimal;
 
 		command_buffer.resolveImage(src_image, src_layout, dst_image, dst_layout, ir);
 	}
@@ -343,8 +343,8 @@ namespace vuk {
 		auto src_image = rg->bound_attachments[src].image;
 		auto dst_image = rg->bound_attachments[dst].image;
 
-		auto src_layout = rg->is_resource_image_in_general_layout(src, pass_index) ? vk::ImageLayout::eGeneral : vk::ImageLayout::eTransferSrcOptimal;
-		auto dst_layout = rg->is_resource_image_in_general_layout(dst, pass_index) ? vk::ImageLayout::eGeneral : vk::ImageLayout::eTransferDstOptimal;
+		auto src_layout = rg->is_resource_image_in_general_layout(src, current_pass) ? vk::ImageLayout::eGeneral : vk::ImageLayout::eTransferSrcOptimal;
+		auto dst_layout = rg->is_resource_image_in_general_layout(dst, current_pass) ? vk::ImageLayout::eGeneral : vk::ImageLayout::eTransferDstOptimal;
 
 		command_buffer.blitImage(src_image, src_layout, dst_image, dst_layout, region, filter);
 	}
@@ -356,7 +356,7 @@ namespace vuk {
 
 		bic.bufferOffset += dst_bbuf.buffer.offset;
 
-		auto src_layout = rg->is_resource_image_in_general_layout(src, pass_index) ? vk::ImageLayout::eGeneral : vk::ImageLayout::eTransferSrcOptimal;
+		auto src_layout = rg->is_resource_image_in_general_layout(src, current_pass) ? vk::ImageLayout::eGeneral : vk::ImageLayout::eTransferSrcOptimal;
 		command_buffer.copyImageToBuffer(src_batt.image, src_layout, dst_bbuf.buffer.buffer, bic);
 	}
 

@@ -182,30 +182,31 @@ namespace vuk {
 		static Attachment from_texture(const vuk::Texture& t) {
             return Attachment{
                 .image = t.image.get(), .image_view = t.view.get(), .extent = {t.extent.width, t.extent.height}, .format = t.format, .sample_count = {t.sample_count}};
-        }
-    };
+		}
+	};
+
+	struct PassInfo {
+		PassInfo(arena&);
+
+		Pass pass;
+
+		size_t render_pass_index;
+		uint32_t subpass;
+
+		std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>> inputs;
+		std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>> outputs;
+
+		std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>> global_inputs;
+		std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>> global_outputs;
+
+		bool is_head_pass = false;
+		bool is_tail_pass = false;
+	};
+
 
 	struct RenderGraph {
-        std::unique_ptr<arena> arena_;
-        RenderGraph();
-
-		struct PassInfo {
-            PassInfo(arena&);
-			
-            Pass pass;
-
-            size_t render_pass_index;
-            uint32_t subpass;
-
-            std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>> inputs;
-            std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>> outputs;
-
-            std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>> global_inputs;
-            std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>> global_outputs;
-
-            bool is_head_pass = false;
-            bool is_tail_pass = false;
-        };
+		std::unique_ptr<arena> arena_;
+		RenderGraph();
 
 		std::vector<PassInfo> passes;
 
@@ -332,7 +333,7 @@ namespace vuk {
 		vk::CommandBuffer execute(vuk::PerThreadContext&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index, bool use_secondary_command_buffers);
 
 		BufferInfo get_resource_buffer(Name);
-		bool is_resource_image_in_general_layout(Name, unsigned pass_index);
+		bool is_resource_image_in_general_layout(Name n, PassInfo* pass_info);
 
 	private:
 		void fill_renderpass_info(vuk::RenderGraph::RenderPassInfo& rpass, const size_t& i, vuk::CommandBuffer& cobuf);

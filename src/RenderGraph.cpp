@@ -1072,7 +1072,7 @@ namespace vuk {
 				}
                 for(auto& p: sp.passes) {
                     if(p->pass.execute) {
-						cobuf.pass_index = static_cast<uint32_t>(&*passes.begin() - p);
+						cobuf.current_pass = p;
                         if(!p->pass.name.empty()) {
                             //ptc.ctx.debug.begin_region(cobuf.command_buffer, sp.pass->pass.name);
                             p->pass.execute(cobuf);
@@ -1112,15 +1112,20 @@ namespace vuk {
 		return bound_buffers.at(n);
 	}
 
-	bool RenderGraph::is_resource_image_in_general_layout(Name n, unsigned pass_index) {
+	bool RenderGraph::is_resource_image_in_general_layout(Name n, PassInfo* pass_info) {
 		auto& chain = use_chains.at(n);
-		return chain[pass_index+1].use.layout == vk::ImageLayout::eGeneral;
+		for (auto& elem : chain) {
+			if (elem.pass == pass_info) {
+				return elem.use.layout == vk::ImageLayout::eGeneral;
+			}
+		}
+		assert(0);
 	}
 
     RenderGraph::RenderPassInfo::RenderPassInfo(arena& arena_) : INIT2(subpasses), INIT2(attachments) {
 	}
 
-    RenderGraph::PassInfo::PassInfo(arena& arena_) : INIT2(inputs), INIT2(outputs), INIT2(global_inputs), INIT2(global_outputs) {}
+    PassInfo::PassInfo(arena& arena_) : INIT2(inputs), INIT2(outputs), INIT2(global_inputs), INIT2(global_outputs) {}
 
     RenderGraph::SubpassInfo::SubpassInfo(arena& arena_) : INIT2(passes) {}
 	#undef INIT
