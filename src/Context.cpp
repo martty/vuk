@@ -233,9 +233,9 @@ void vuk::PerThreadContext::destroy(vuk::DescriptorSet ds) {
 	pool_cache.acquire(ds.layout_info).free_sets.enqueue(ds.descriptor_set);
 }
 
-vuk::Unique<vuk::PersistentDescriptorSet> vuk::PerThreadContext::create_persistent_descriptorset(const PipelineBaseInfo& base, unsigned set, unsigned num_descriptors) {
+vuk::Unique<vuk::PersistentDescriptorSet> vuk::PerThreadContext::create_persistent_descriptorset(const DescriptorSetLayoutAllocInfo& dslai, unsigned num_descriptors) {
 	vuk::PersistentDescriptorSet tda;
-	auto dsl = base.layout_info[set].layout;
+	auto dsl = dslai .layout;
 	vk::DescriptorPoolCreateInfo dpci;
 	dpci.maxSets = 1;
 	std::array<vk::DescriptorPoolSize, 12> descriptor_counts = {};
@@ -243,15 +243,15 @@ vuk::Unique<vuk::PersistentDescriptorSet> vuk::PerThreadContext::create_persiste
 	for (auto i = 0; i < descriptor_counts.size(); i++) {
 		bool used = false;
 		// create non-variable count descriptors
-		if (base.layout_info[set].descriptor_counts[i] > 0) {
+		if (dslai.descriptor_counts[i] > 0) {
 			auto& d = descriptor_counts[used_idx];
 			d.type = vk::DescriptorType(i);
-			d.descriptorCount = base.layout_info[set].descriptor_counts[i];
+			d.descriptorCount = dslai.descriptor_counts[i];
 			used = true;
 		}
 		// create variable count descriptors
-		if (base.layout_info[set].variable_count_binding != (unsigned)-1 && 
-			base.layout_info[set].variable_count_binding_type == vk::DescriptorType(i)) {
+		if (dslai.variable_count_binding != (unsigned)-1 &&
+			dslai.variable_count_binding_type == vk::DescriptorType(i)) {
 			auto& d = descriptor_counts[used_idx];
 			d.type = vk::DescriptorType(i);
 			d.descriptorCount += num_descriptors;
@@ -275,6 +275,14 @@ vuk::Unique<vuk::PersistentDescriptorSet> vuk::PerThreadContext::create_persiste
 	tda.backing_set = std::move(ctx.device.allocateDescriptorSets(dsai)[0]);
 	tda.descriptor_bindings.resize(num_descriptors);
 	return Unique<PersistentDescriptorSet>(ctx, std::move(tda));
+}
+
+vuk::Unique<vuk::PersistentDescriptorSet> vuk::PerThreadContext::create_persistent_descriptorset(const PipelineBaseInfo& base, unsigned set, unsigned num_descriptors) {
+	return create_persistent_descriptorset(base.layout_info[set], num_descriptors);
+}
+
+vuk::Unique<vuk::PersistentDescriptorSet> vuk::PerThreadContext::create_persistent_descriptorset(const ComputePipelineInfo& base, unsigned set, unsigned num_descriptors) {
+	return create_persistent_descriptorset(base.layout_info[set], num_descriptors);
 }
 
 void vuk::PersistentDescriptorSet::update_combined_image_sampler(PerThreadContext& ptc, unsigned binding, unsigned array_index, vuk::ImageView iv, vk::SamplerCreateInfo sci, vk::ImageLayout layout) {
