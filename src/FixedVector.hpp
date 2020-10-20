@@ -163,7 +163,7 @@ namespace vuk {
 
             len = std::min(sz, n);
 
-            std::fill(begin() + old_len, begin() + len, value);
+            std::uninitialized_fill(begin() + old_len, begin() + len, value);
         }
 
         T* data() {

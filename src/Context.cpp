@@ -612,8 +612,8 @@ vuk::PipelineBaseInfo vuk::Context::create(const create_info_t<PipelineBaseInfo>
 	for (auto& dsl : plci.dslcis) {
 		dsl.dslci.bindingCount = (uint32_t)dsl.bindings.size();
 		dsl.dslci.pBindings = dsl.bindings.data();
+        vk::DescriptorSetLayoutBindingFlagsCreateInfo dslbfci;
 		if (dsl.flags.size() > 0) {
-			vk::DescriptorSetLayoutBindingFlagsCreateInfo dslbfci;
 			dslbfci.bindingCount = (uint32_t)dsl.bindings.size();
 			dslbfci.pBindingFlags = dsl.flags.data();
 			dsl.dslci.setPNext(&dslbfci);
@@ -676,9 +676,15 @@ vuk::ComputePipelineInfo vuk::Context::create(const create_info_t<vuk::ComputePi
 	for (auto& dsl : plci.dslcis) {
 		dsl.dslci.bindingCount = (uint32_t)dsl.bindings.size();
 		dsl.dslci.pBindings = dsl.bindings.data();
-		auto l = descriptor_set_layouts.acquire(dsl);
-		dslai[dsl.index] = l;
-		dsls.push_back(dslai[dsl.index].layout);
+        vk::DescriptorSetLayoutBindingFlagsCreateInfo dslbfci;
+        if(dsl.flags.size() > 0) {
+            dslbfci.bindingCount = (uint32_t)dsl.bindings.size();
+            dslbfci.pBindingFlags = dsl.flags.data();
+            dsl.dslci.setPNext(&dslbfci);
+        }
+        auto descset_layout_alloc_info = descriptor_set_layouts.acquire(dsl);
+        dslai[dsl.index] = descset_layout_alloc_info;
+        dsls.push_back(dslai[dsl.index].layout);
 	}
 	plci.plci.pSetLayouts = dsls.data();
 	plci.plci.setLayoutCount = (uint32_t)dsls.size();

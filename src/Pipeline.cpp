@@ -56,6 +56,9 @@ namespace vuk {
 		vuk::fixed_vector<vuk::DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> dslcis;
 
 		for (const auto& [index, set] : program.sets) {
+            // fill up unused sets, if there are holes in descriptor set order
+            dslcis.resize(index, {});
+
 			vuk::DescriptorSetLayoutCreateInfo dslci;
 			dslci.index = index;
 			auto& bindings = dslci.bindings;

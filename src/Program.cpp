@@ -3,6 +3,32 @@
 #include <regex>
 #include "Hash.hpp"
 
+static auto binding_cmp = [](auto& s1, auto& s2) { return s1.binding < s2.binding; };
+static auto binding_eq = [](auto& s1, auto& s2) { return s1.binding == s2.binding; };
+
+template<class T>
+void unq(T& s) {
+    std::sort(s.begin(), s.end(), binding_cmp);
+    for(auto it = s.begin(); it != s.end();) {
+        vk::ShaderStageFlags stages = it->stage;
+        for(auto it2 = it; it2 != s.end(); it2++) {
+            if(it->binding == it2->binding) {
+                stages |= it2->stage;
+            } else
+                break;
+        }
+        it->stage = stages;
+        auto it2 = it;
+        for(; it2 != s.end(); it2++) {
+            it2->stage = stages;
+            if(it->binding != it2->binding)
+                break;
+        }
+        it = it2;
+    }
+    s.erase(std::unique(s.begin(), s.end(), binding_eq), s.end());
+}
+
 vuk::Program::Type to_type(spirv_cross::SPIRType s) {
 	using namespace spirv_cross;
 	using namespace vuk;
@@ -160,6 +186,17 @@ vk::ShaderStageFlagBits vuk::Program::introspect(const spirv_cross::Compiler& re
 		sets[set].subpass_inputs.push_back(s);
 	}
 
+	// remove duplicated bindings (aliased bindings)
+	// TODO: we need to preserve this information somewhere
+	for(auto& [index, set]: sets) {
+        unq(set.samplers);
+        unq(set.uniform_buffers);
+        unq(set.storage_buffers);
+        unq(set.texel_buffers);
+        unq(set.subpass_inputs);
+        unq(set.storage_images);
+    }
+
 	for (auto& [index, set] : sets) {
 		unsigned max_binding = 0;
 		for (auto& ub : set.uniform_buffers) {
@@ -197,32 +234,6 @@ vk::ShaderStageFlagBits vuk::Program::introspect(const spirv_cross::Compiler& re
 	}
 
 	return stage;
-}
-
-static auto binding_cmp = [](auto& s1, auto& s2) { return s1.binding < s2.binding; };
-static auto binding_eq = [](auto& s1, auto& s2) { return s1.binding == s2.binding; };
-
-template<class T>
-void unq(T& s) {
-	std::sort(s.begin(), s.end(), binding_cmp);
-	for (auto it = s.begin(); it != s.end();) {
-		vk::ShaderStageFlags stages = it->stage;
-		for (auto it2 = it; it2 != s.end(); it2++) {
-			if (it->binding == it2->binding) {
-				stages |= it2->stage;
-			} else
-				break;
-		}
-		it->stage = stages;
-		auto it2 = it;
-		for (; it2 != s.end(); it2++) {
-			it2->stage = stages;
-			if (it->binding != it2->binding) break;
-		}
-		it = it2;
-
-	}
-	s.erase(std::unique(s.begin(), s.end(), binding_eq), s.end());
 }
 
 void vuk::Program::append(const Program& o) {
