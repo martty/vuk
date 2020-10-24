@@ -57,6 +57,9 @@ namespace vuk {
 
 			unsigned binding;
 			size_t min_size;
+
+			std::vector<Member> members;
+
 			vk::ShaderStageFlags stage;
 
 		};

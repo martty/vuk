@@ -80,6 +80,7 @@ void reflect_members(const spirv_cross::Compiler& refl, const spirv_cross::SPIRT
 		m.size = refl.get_declared_struct_member_size(type, i);
 		m.offset = refl.type_struct_member_offset(type, i);
 		if (m.type == vuk::Program::Type::estruct) {
+			m.size = refl.get_declared_struct_size(spirtype);
 			reflect_members(refl, spirtype, m.members);
 		}
 		if (spirtype.array.size() > 0)
@@ -147,6 +148,9 @@ vk::ShaderStageFlagBits vuk::Program::introspect(const spirv_cross::Compiler& re
 		un.stage = stage;
 		un.name = sb.name.c_str();
 		un.min_size = refl.get_declared_struct_size(refl.get_type(sb.type_id));
+        if(type.basetype == spirv_cross::SPIRType::Struct) {
+            reflect_members(refl, refl.get_type(sb.type_id), un.members);
+        }
 		sets[set].storage_buffers.push_back(un);
 	}
 
@@ -158,7 +162,8 @@ vk::ShaderStageFlagBits vuk::Program::introspect(const spirv_cross::Compiler& re
 		t.binding = binding;
 		t.name = std::string(si.name.c_str());
 		t.stage = stage;
-		t.array_size = type.array.size() == 1 ? type.array[0] : -1;
+		// maybe spirv cross bug?
+		t.array_size = type.array.size() == 1 ? (type.array[0] == 1 ? 0 : type.array[0]) : -1;
         t.shadow = type.image.depth;
 		sets[set].samplers.push_back(t);
 	}

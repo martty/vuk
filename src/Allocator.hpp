@@ -117,7 +117,7 @@ namespace vuk {
 		std::unordered_map<uint64_t, VmaAllocation> images;
 		std::unordered_map<BufferID, VmaAllocation> buffer_allocations;
 		std::unordered_map<PoolSelect, Pool> pools;
-		std::unordered_map<uint64_t, vk::Buffer> buffers;
+		std::unordered_map<uint64_t, std::pair<vk::Buffer, size_t>> buffers;
 
 		VmaAllocator allocator;
         vk::PhysicalDeviceProperties properties;
@@ -135,6 +135,8 @@ namespace vuk {
 		Buffer allocate_buffer(Pool& pool, size_t size, size_t alignment, bool create_mapped);
         // allocate a buffer from an externally managed linear pool
 		Buffer allocate_buffer(Linear& pool, size_t size, size_t alignment, bool create_mapped);
+
+		size_t get_allocation_size(const Buffer&);
 
 		void reset_pool(Pool& pool);
 		void reset_pool(Linear& pool);

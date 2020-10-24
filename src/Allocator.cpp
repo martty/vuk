@@ -90,11 +90,10 @@ namespace vuk {
 	// not locked, must be called from a locked fn
 
 	VmaPool Allocator::_create_pool(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage) {
-		// Create a pool that can have at most 2 blocks, 128 MiB each.
 		VmaPoolCreateInfo poolCreateInfo = {};
 		VkBufferCreateInfo bci = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
 		bci.size = 1024; // Whatever.
-		bci.usage = (VkBufferUsageFlags)buffer_usage; // Change if needed.
+		bci.usage = (VkBufferUsageFlags)buffer_usage; 
 
 		VmaAllocationCreateInfo allocCreateInfo = {};
 		allocCreateInfo.usage = VmaMemoryUsage(to_integral(mem_usage));
@@ -222,11 +221,12 @@ namespace vuk {
 
 		// record if new buffer was used
 		if (pool_helper->result != vk::Buffer{}) {
-			buffers.emplace(reinterpret_cast<uint64_t>(vai.deviceMemory), pool_helper->result);
+			buffers.emplace(reinterpret_cast<uint64_t>(vai.deviceMemory), std::pair(pool_helper->result, pool_helper->bci.size));
 			pool.buffers.emplace_back(pool_helper->result);
 		}
 		Buffer b;
-		b.buffer = buffers.at(reinterpret_cast<uint64_t>(vai.deviceMemory));
+        auto [vkbuffer, _] = buffers.at(reinterpret_cast<uint64_t>(vai.deviceMemory));
+		b.buffer = vkbuffer;
 		b.device_memory = vai.deviceMemory;
 		b.offset = vai.offset;
 		b.size = vai.size;
@@ -296,7 +296,15 @@ namespace vuk {
 	// allocate a buffer from an externally managed linear pool
 	Buffer Allocator::allocate_buffer(Linear& pool, size_t size, size_t alignment, bool create_mapped) {
 		return _allocate_buffer(pool, size, alignment, create_mapped);
-	}
+    }
+
+    size_t Allocator::get_allocation_size(const Buffer& b) {
+        std::lock_guard _(mutex);
+        vuk::BufferID bufid{reinterpret_cast<uint64_t>((VkBuffer)b.buffer), b.offset};
+        VmaAllocationInfo vmai;
+        vmaGetAllocationInfo(allocator, buffer_allocations.at(bufid), &vmai);
+        return buffers.at(reinterpret_cast<uint64_t>(vmai.deviceMemory)).second;
+    }
 
 	void Allocator::reset_pool(Pool& pool) {
 		std::lock_guard _(mutex);

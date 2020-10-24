@@ -359,6 +359,7 @@ namespace vuk {
 		Unique<PersistentDescriptorSet> create_persistent_descriptorset(const DescriptorSetLayoutAllocInfo& dslai, unsigned num_descriptors);
 		void commit_persistent_descriptorset(PersistentDescriptorSet& array);
 
+		size_t get_allocation_size(Buffer);
 		Buffer _allocate_scratch_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, size_t alignment, bool create_mapped);
         Unique<Buffer> _allocate_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, size_t alignment, bool create_mapped);
 

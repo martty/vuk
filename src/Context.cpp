@@ -303,7 +303,12 @@ void vuk::PerThreadContext::commit_persistent_descriptorset(vuk::PersistentDescr
 	array.pending_writes.clear();
 }
 
-vuk::Buffer vuk::PerThreadContext::_allocate_scratch_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, size_t alignment, bool create_mapped) {
+size_t vuk::PerThreadContext::get_allocation_size(Buffer buf) {
+    return ctx.allocator.get_allocation_size(buf);
+}
+
+vuk::Buffer vuk::PerThreadContext::_allocate_scratch_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, size_t alignment,
+                                                            bool create_mapped) {
     PoolSelect ps{mem_usage, buffer_usage};
 	auto& pool = scratch_buffers.acquire(ps);
 	return ifc.ctx.allocator.allocate_buffer(pool, size, alignment, create_mapped);
@@ -551,6 +556,7 @@ vk::RenderPass vuk::PerThreadContext::create(const create_info_t<vk::RenderPass>
 vuk::ShaderModule vuk::Context::create(const create_info_t<vuk::ShaderModule>& cinfo) {
     shaderc::Compiler compiler;
     shaderc::CompileOptions options;
+    options.SetTargetEnvironment(shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_1);
 
     shaderc::SpvCompilationResult result = compiler.CompileGlslToSpv(cinfo.source, shaderc_glsl_infer_from_source, cinfo.filename.c_str(), options);
 
