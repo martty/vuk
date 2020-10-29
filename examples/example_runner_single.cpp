@@ -42,7 +42,9 @@ vuk::ExampleRunner::ExampleRunner() {
 			descriptor_indexing_features.shaderSampledImageArrayNonUniformIndexing = true;
 			descriptor_indexing_features.runtimeDescriptorArray = true;
 			descriptor_indexing_features.descriptorBindingVariableDescriptorCount = true;
-			auto dev_ret = device_builder.add_pNext(&descriptor_indexing_features).build();
+			vk::PhysicalDeviceVulkan11Features feats;
+			feats.shaderDrawParameters = true;
+			auto dev_ret = device_builder.add_pNext(&descriptor_indexing_features).add_pNext(&feats).build();
 			if (!dev_ret.has_value()) {
 				// error
 			}

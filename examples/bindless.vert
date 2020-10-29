@@ -1,4 +1,4 @@
-#version 460
+#version 460 core
 #pragma shader_stage(vertex)
 
 layout(location = 0) in vec3 ipos;
