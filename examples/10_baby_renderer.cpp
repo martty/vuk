@@ -91,7 +91,7 @@ namespace {
 
 			auto ptc = ifc.begin();
 			// Similarly to buffers, we allocate the image and enqueue the upload
-			auto [tex, _] = ptc.create_texture(vk::Format::eR8G8B8A8Srgb, vk::Extent3D(x, y, 1), doge_image);
+			auto [tex, _] = ptc.create_texture(vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, doge_image);
 			texture_of_doge = std::move(tex);
 			ptc.wait_all_transfers();
 			stbi_image_free(doge_image);
@@ -103,18 +103,18 @@ namespace {
 				pci.add_shader(util::read_entire_file("../../examples/invert.comp"), "invert.comp");
 				runner.context->create_named_pipeline("invert", pci);
 			}
-			vk::ImageCreateInfo ici;
-			ici.format = vk::Format::eR8G8B8A8Srgb;
-			ici.extent = vk::Extent3D(x, y, 1);
+			vuk::ImageCreateInfo ici;
+			ici.format = vuk::Format::eR8G8B8A8Srgb;
+			ici.extent = vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u };
 			ici.samples = vuk::Samples::e1;
-			ici.imageType = vk::ImageType::e2D;
-			ici.initialLayout = vk::ImageLayout::eUndefined;
-			ici.tiling = vk::ImageTiling::eOptimal;
-			ici.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
+			ici.imageType = vuk::ImageType::e2D;
+			ici.initialLayout = vuk::ImageLayout::eUndefined;
+			ici.tiling = vuk::ImageTiling::eOptimal;
+			ici.usage = vuk::ImageUsageFlagBits::eTransferDst | vuk::ImageUsageFlagBits::eSampled;
 			ici.mipLevels = ici.arrayLayers = 1;
 			variant1 = ptc.allocate_texture(ici);
-			ici.format = vk::Format::eR8G8B8A8Unorm;
-			ici.usage = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled;
+			ici.format = vuk::Format::eR8G8B8A8Unorm;
+			ici.usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled;
 			variant2 = ptc.allocate_texture(ici);
 			// Make a RenderGraph to process the loaded image
 			vuk::RenderGraph rg;
@@ -123,17 +123,17 @@ namespace {
 						.resources = {"10_doge"_image(vuk::eMemoryRead), "10_v1"_image(vuk::eTransferDst), "10_v2"_image(vuk::eComputeRead)},
 						.execute = [x, y](vuk::CommandBuffer& command_buffer) {
 					// For the first image, flip the image on the Y axis using a blit
-					vk::ImageBlit blit;
-					blit.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+					vuk::ImageBlit blit;
+					blit.srcSubresource.aspectMask = vuk::ImageAspectFlagBits::eColor;
 					blit.srcSubresource.baseArrayLayer = 0;
 					blit.srcSubresource.layerCount = 1;
 					blit.srcSubresource.mipLevel = 0;
-					blit.srcOffsets[0] = vk::Offset3D{ 0, 0, 0 };
-					blit.srcOffsets[1] = vk::Offset3D{ x, y, 1 };
+					blit.srcOffsets[0] = vuk::Offset3D{ 0, 0, 0 };
+					blit.srcOffsets[1] = vuk::Offset3D{ x, y, 1 };
 					blit.dstSubresource = blit.srcSubresource;
-					blit.dstOffsets[0] = vk::Offset3D{ x, y, 0 };
-					blit.dstOffsets[1] = vk::Offset3D{ 0, 0, 1 };
-					command_buffer.blit_image("10_doge", "10_v1", blit, vk::Filter::eLinear);
+					blit.dstOffsets[0] = vuk::Offset3D{ x, y, 0 };
+					blit.dstOffsets[1] = vuk::Offset3D{ 0, 0, 1 };
+					command_buffer.blit_image("10_doge", "10_v1", blit, vuk::Filter::eLinear);
 					// For the second image, invert the colours in compute
 					command_buffer
 						.bind_sampled_image(0, 0, "10_doge", {})
@@ -157,13 +157,13 @@ namespace {
 
 			// Create meshes
 			cube_mesh = {};
-			cube_mesh->vertex_buffer = ptc.create_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eVertexBuffer, std::span(&box.first[0], box.first.size())).first;
-			cube_mesh->index_buffer = ptc.create_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eIndexBuffer, std::span(&box.second[0], box.second.size())).first;
+			cube_mesh->vertex_buffer = ptc.create_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eVertexBuffer, std::span(&box.first[0], box.first.size())).first;
+			cube_mesh->index_buffer = ptc.create_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eIndexBuffer, std::span(&box.second[0], box.second.size())).first;
 			cube_mesh->index_count = (uint32_t)box.second.size();
 
 			quad_mesh = {};
-			quad_mesh->vertex_buffer = ptc.create_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eVertexBuffer, std::span(&box.first[0], 6)).first;
-			quad_mesh->index_buffer = ptc.create_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eIndexBuffer, std::span(&box.second[0], 6)).first;
+			quad_mesh->vertex_buffer = ptc.create_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eVertexBuffer, std::span(&box.first[0], 6)).first;
+			quad_mesh->index_buffer = ptc.create_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eIndexBuffer, std::span(&box.second[0], 6)).first;
 			quad_mesh->index_count = 6;
 			ptc.wait_all_transfers();
 
@@ -243,7 +243,7 @@ namespace {
 			vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 1.f, 100.f);
 
 			// Upload view & projection
-			auto [buboVP, stub3] = ptc.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vk::BufferUsageFlagBits::eUniformBuffer, std::span(&vp, 1));
+			auto [buboVP, stub3] = ptc.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eUniformBuffer, std::span(&vp, 1));
 			auto uboVP = buboVP;
 			ptc.wait_all_transfers();
 
@@ -256,7 +256,7 @@ namespace {
 			}
 
 			// Upload model matrices to an array
-			auto modelmats = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vk::BufferUsageFlagBits::eStorageBuffer, sizeof(glm::mat4) * renderables.size(), 1, true);
+			auto modelmats = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eStorageBuffer, sizeof(glm::mat4) * renderables.size(), 1, true);
 			for (auto i = 0; i < renderables.size(); i++) {
 				glm::mat4 model_matrix = glm::translate(glm::mat4(1.f), renderables[i].position);
 				memcpy(reinterpret_cast<glm::mat4*>(modelmats.mapped_ptr) + i, &model_matrix, sizeof(glm::mat4));
@@ -277,8 +277,8 @@ namespace {
 
 						// Set up the draw state based on the mesh and material
 						command_buffer
-							.bind_vertex_buffer(0, r.mesh->vertex_buffer.get(), 0, vuk::Packed{ vk::Format::eR32G32B32Sfloat, vuk::Ignore{offsetof(util::Vertex, uv_coordinates) - sizeof(util::Vertex::position)}, vk::Format::eR32G32Sfloat })
-							.bind_index_buffer(r.mesh->index_buffer.get(), vk::IndexType::eUint32)
+							.bind_vertex_buffer(0, r.mesh->vertex_buffer.get(), 0, vuk::Packed{ vuk::Format::eR32G32B32Sfloat, vuk::Ignore{offsetof(util::Vertex, uv_coordinates) - sizeof(util::Vertex::position)}, vuk::Format::eR32G32Sfloat })
+							.bind_index_buffer(r.mesh->index_buffer.get(), vuk::IndexType::eUint32)
 							.bind_graphics_pipeline(r.material->pipeline)
 							.bind_uniform_buffer(0, 0, uboVP)
 							.bind_storage_buffer(0, 1, modelmats);
@@ -294,7 +294,7 @@ namespace {
 
 			angle += 10.f * ImGui::GetIO().DeltaTime;
 
-			rg.mark_attachment_internal("10_depth", vk::Format::eD32Sfloat, vuk::Extent2D::Framebuffer{}, vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
+			rg.mark_attachment_internal("10_depth", vuk::Format::eD32Sfloat, vuk::Extent2D::Framebuffer{}, vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
 			return rg;
 	},
 		// Perform cleanup for the example

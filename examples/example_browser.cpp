@@ -38,7 +38,7 @@ vuk::ExampleRunner::ExampleRunner() {
 			physical_device = vkbphysical_device.physical_device;
 
 			vkb::DeviceBuilder device_builder{ vkbphysical_device };
-			vk::PhysicalDeviceDescriptorIndexingFeatures descriptor_indexing_features{};
+			VkPhysicalDeviceDescriptorIndexingFeatures descriptor_indexing_features{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES };
 			descriptor_indexing_features.descriptorBindingPartiallyBound = true;
 			descriptor_indexing_features.descriptorBindingUpdateUnusedWhilePending = true;
 			descriptor_indexing_features.shaderSampledImageArrayNonUniformIndexing = true;
@@ -117,7 +117,7 @@ void vuk::ExampleRunner::render() {
 
 				auto& attachment_name = *attachment_names.emplace(std::string(ex->name) + "_final");
 
-				rg.mark_attachment_internal(attachment_name, swapchain->format, vk::Extent2D(300, 300), vuk::Samples::e1, vuk::ClearColor(0.1f, 0.2f, 0.3f, 1.f));
+				rg.mark_attachment_internal(attachment_name, swapchain->format, vuk::Extent2D{ 300, 300 }, vuk::Samples::e1, vuk::ClearColor(0.1f, 0.2f, 0.3f, 1.f));
 				ImGui::Begin(ex->name.data());
 				if (rg_frag.use_chains.size() > 1) {
 					bool disable = false;
@@ -132,20 +132,20 @@ void vuk::ExampleRunner::render() {
 						} else {
 							auto usage = rg_frag.compute_usage(c.second);
 							auto bound_it = rg_frag.bound_attachments.find(c.first);
-							auto samples = vk::SampleCountFlagBits::e1;
+							auto samples = vuk::SampleCountFlagBits::e1;
 							if (bound_it != rg_frag.bound_attachments.end()) {
 								if (!bound_it->second.samples.infer)
 									samples = bound_it->second.samples.count;
 								else if (disable) {
-									samples = vk::SampleCountFlagBits::e2; // hack: disable potentially MS attachments
+									samples = vuk::SampleCountFlagBits::e2; // hack: disable potentially MS attachments
 								}
 							}
-							disable = samples != vk::SampleCountFlagBits::e1;
-							if (usage & vk::ImageUsageFlagBits::eColorAttachment) {
+							disable = samples != vuk::SampleCountFlagBits::e1;
+							if (usage & vuk::ImageUsageFlagBits::eColorAttachment) {
 								btn_id += "C";
-							} else if (usage & vk::ImageUsageFlagBits::eDepthStencilAttachment) {
+							} else if (usage & vuk::ImageUsageFlagBits::eDepthStencilAttachment) {
 								btn_id += "D";
-							} else if (usage & (vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst)){
+							} else if (usage & (vuk::ImageUsageFlagBits::eTransferSrc | vuk::ImageUsageFlagBits::eTransferDst)){
 								btn_id += "X";
 							} 
 						}

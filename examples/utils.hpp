@@ -5,10 +5,10 @@
 #include <vector>
 #include <utility>
 #include <VkBootstrap.h>
-#include <vulkan/vulkan.hpp>
 #include <imgui.h>
 #include "Types.hpp"
 #include "Context.hpp"
+#include "Swapchain.hpp"
 #include <string_view>
 #include <fstream>
 #include <sstream>
@@ -63,9 +63,9 @@ namespace util {
 
 	inline vuk::Swapchain make_swapchain(vkb::Device vkbdevice) {
 		vkb::SwapchainBuilder swb(vkbdevice);
-		swb.set_desired_format(vk::SurfaceFormatKHR(vk::Format::eR8G8B8A8Srgb, vk::ColorSpaceKHR::eSrgbNonlinear));
-		swb.add_fallback_format(vk::SurfaceFormatKHR(vk::Format::eB8G8R8A8Srgb, vk::ColorSpaceKHR::eSrgbNonlinear));
-		swb.set_desired_present_mode((VkPresentModeKHR)vk::PresentModeKHR::eImmediate);
+		swb.set_desired_format(vuk::SurfaceFormatKHR{ vuk::Format::eR8G8B8A8Srgb, vuk::ColorSpaceKHR::eSrgbNonlinear });
+		swb.add_fallback_format(vuk::SurfaceFormatKHR{ vuk::Format::eB8G8R8A8Srgb, vuk::ColorSpaceKHR::eSrgbNonlinear });
+		swb.set_desired_present_mode((VkPresentModeKHR)vuk::PresentModeKHR::eImmediate);
 		swb.set_image_usage_flags(VkImageUsageFlagBits::VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VkImageUsageFlagBits::VK_IMAGE_USAGE_TRANSFER_DST_BIT);
 		auto vkswapchain = swb.build();
 
@@ -79,8 +79,8 @@ namespace util {
 		for (auto& i : *views) {
 			sw._ivs.push_back(i);
 		}
-		sw.extent = vkswapchain->extent;
-		sw.format = vk::Format(vkswapchain->image_format);
+		sw.extent = vuk::Extent2D{ vkswapchain->extent.width, vkswapchain->extent.height };
+		sw.format = vuk::Format(vkswapchain->image_format);
 		sw.surface = vkbdevice.surface;
 		sw.swapchain = vkswapchain->swapchain;
 		return sw;
@@ -88,7 +88,7 @@ namespace util {
 
 	struct ImGuiData {
 		vuk::Texture font_texture;
-		vk::SamplerCreateInfo font_sci;
+		vuk::SamplerCreateInfo font_sci;
 		std::unique_ptr<vuk::SampledImage> font_si;
 	};
 	ImGuiData ImGui_ImplVuk_Init(vuk::PerThreadContext& ptc);

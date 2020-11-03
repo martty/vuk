@@ -35,7 +35,7 @@ namespace {
 			
 			auto ptc = ifc.begin();
 			// Similarly to buffers, we allocate the image and enqueue the upload
-			auto [tex, _] = ptc.create_texture(vk::Format::eR8G8B8A8Srgb, vk::Extent3D(x, y, 1), doge_image);
+			auto [tex, _] = ptc.create_texture(vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, doge_image);
 			texture_of_doge = std::move(tex);
 			ptc.wait_all_transfers();
 			stbi_image_free(doge_image);
@@ -45,9 +45,9 @@ namespace {
 
 			// We set up the cube data, same as in example 02_cube
 
-			auto [bverts, stub1] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eVertexBuffer, std::span(&box.first[0], box.first.size()));
+			auto [bverts, stub1] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eVertexBuffer, std::span(&box.first[0], box.first.size()));
 			auto verts = std::move(bverts);
-			auto [binds, stub2] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eIndexBuffer, std::span(&box.second[0], box.second.size()));
+			auto [binds, stub2] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eIndexBuffer, std::span(&box.second[0], box.second.size()));
 			auto inds = std::move(binds);
 			struct VP {
 				glm::mat4 view;
@@ -56,7 +56,7 @@ namespace {
 			vp.view = glm::lookAt(glm::vec3(0, 1.5, 3.5), glm::vec3(0), glm::vec3(0, 1, 0));
 			vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 1.f, 10.f);
 
-			auto [buboVP, stub3] = ptc.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vk::BufferUsageFlagBits::eUniformBuffer, std::span(&vp, 1));
+			auto [buboVP, stub3] = ptc.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eUniformBuffer, std::span(&vp, 1));
 			auto uboVP = buboVP;
 			ptc.wait_all_transfers();
 
@@ -69,10 +69,10 @@ namespace {
 					command_buffer
 					  .set_viewport(0, vuk::Area::Framebuffer{})
 					  .set_scissor(0, vuk::Area::Framebuffer{})
-					  .bind_vertex_buffer(0, verts, 0, vuk::Packed{vk::Format::eR32G32B32Sfloat, vuk::Ignore{offsetof(util::Vertex, uv_coordinates) - sizeof(util::Vertex::position)}, vk::Format::eR32G32Sfloat})
-					  .bind_index_buffer(inds, vk::IndexType::eUint32)
+					  .bind_vertex_buffer(0, verts, 0, vuk::Packed{vuk::Format::eR32G32B32Sfloat, vuk::Ignore{offsetof(util::Vertex, uv_coordinates) - sizeof(util::Vertex::position)}, vuk::Format::eR32G32Sfloat})
+					  .bind_index_buffer(inds, vuk::IndexType::eUint32)
 					  // Here we bind our vuk::Texture to (set = 0, binding = 2) with default sampler settings
-					  .bind_sampled_image(0, 2, *texture_of_doge, vk::SamplerCreateInfo{})
+					  .bind_sampled_image(0, 2, *texture_of_doge, vuk::SamplerCreateInfo{})
 					  .bind_graphics_pipeline("textured_cube")
 					  .bind_uniform_buffer(0, 0, uboVP);
 					glm::mat4* model = command_buffer.map_scratch_uniform_binding<glm::mat4>(0, 1);
@@ -85,7 +85,7 @@ namespace {
 
 			angle += 180.f * ImGui::GetIO().DeltaTime;
 
-			rg.mark_attachment_internal("04_texture_depth", vk::Format::eD32Sfloat, vuk::Extent2D::Framebuffer{}, vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
+			rg.mark_attachment_internal("04_texture_depth", vuk::Format::eD32Sfloat, vuk::Extent2D::Framebuffer{}, vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
 			return rg;
 		},
 		// Perform cleanup for the example

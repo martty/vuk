@@ -70,8 +70,6 @@ target_include_directories(vuk PUBLIC ext/flat_hash_map)
 target_include_directories(vuk PUBLIC ext/concurrentqueue)
 target_include_directories(vuk PUBLIC src/ include/)
 
-target_precompile_headers(vuk PRIVATE <vulkan/vulkan.hpp>)
-
 string(FIND "${CMAKE_CXX_COMPILER}" "clang++" VUK_COMPILER_CLANGPP)
 if(VUK_COMPILER_CLANGPP GREATER -1)
   set(VUK_COMPILER_CLANGPP ON)

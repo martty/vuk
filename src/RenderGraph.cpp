@@ -73,32 +73,32 @@ namespace vuk {
 	Resource::Use to_use(Access ia) {
 		switch (ia) {
 		case eColorResolveWrite:
-		case eColorWrite: return { vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::AccessFlagBits::eColorAttachmentWrite, vk::ImageLayout::eColorAttachmentOptimal };
-		case eColorRW: return { vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::AccessFlagBits::eColorAttachmentWrite | vk::AccessFlagBits::eColorAttachmentRead, vk::ImageLayout::eColorAttachmentOptimal };
+		case eColorWrite: return { vuk::PipelineStageFlagBits::eColorAttachmentOutput, vuk::AccessFlagBits::eColorAttachmentWrite, vuk::ImageLayout::eColorAttachmentOptimal };
+		case eColorRW: return { vuk::PipelineStageFlagBits::eColorAttachmentOutput, vuk::AccessFlagBits::eColorAttachmentWrite | vuk::AccessFlagBits::eColorAttachmentRead, vuk::ImageLayout::eColorAttachmentOptimal };
 		case eColorResolveRead:
-		case eColorRead: return { vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::AccessFlagBits::eColorAttachmentRead, vk::ImageLayout::eColorAttachmentOptimal };
-		case eDepthStencilRW : return { vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eLateFragmentTests, vk::AccessFlagBits::eDepthStencilAttachmentRead | vk::AccessFlagBits::eDepthStencilAttachmentWrite, vk::ImageLayout::eDepthStencilAttachmentOptimal };
+		case eColorRead: return { vuk::PipelineStageFlagBits::eColorAttachmentOutput, vuk::AccessFlagBits::eColorAttachmentRead, vuk::ImageLayout::eColorAttachmentOptimal };
+		case eDepthStencilRW : return { vuk::PipelineStageFlagBits::eEarlyFragmentTests | vuk::PipelineStageFlagBits::eLateFragmentTests, vuk::AccessFlagBits::eDepthStencilAttachmentRead | vuk::AccessFlagBits::eDepthStencilAttachmentWrite, vuk::ImageLayout::eDepthStencilAttachmentOptimal };
 		
-		case eFragmentSampled: return { vk::PipelineStageFlagBits::eFragmentShader, vk::AccessFlagBits::eShaderRead, vk::ImageLayout::eShaderReadOnlyOptimal };
-		case eFragmentRead: return { vk::PipelineStageFlagBits::eFragmentShader, vk::AccessFlagBits::eShaderRead, vk::ImageLayout::eShaderReadOnlyOptimal };
+		case eFragmentSampled: return { vuk::PipelineStageFlagBits::eFragmentShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eShaderReadOnlyOptimal };
+		case eFragmentRead: return { vuk::PipelineStageFlagBits::eFragmentShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eShaderReadOnlyOptimal };
 
-		case eTransferSrc: return { vk::PipelineStageFlagBits::eTransfer, vk::AccessFlagBits::eTransferRead, vk::ImageLayout::eTransferSrcOptimal };
-		case eTransferDst: return { vk::PipelineStageFlagBits::eTransfer, vk::AccessFlagBits::eTransferWrite, vk::ImageLayout::eTransferDstOptimal };
+		case eTransferSrc: return { vuk::PipelineStageFlagBits::eTransfer, vuk::AccessFlagBits::eTransferRead, vuk::ImageLayout::eTransferSrcOptimal };
+		case eTransferDst: return { vuk::PipelineStageFlagBits::eTransfer, vuk::AccessFlagBits::eTransferWrite, vuk::ImageLayout::eTransferDstOptimal };
 
-		case eComputeRead: return { vk::PipelineStageFlagBits::eComputeShader, vk::AccessFlagBits::eShaderRead, vk::ImageLayout::eGeneral };
-		case eComputeWrite: return { vk::PipelineStageFlagBits::eComputeShader, vk::AccessFlagBits::eShaderWrite, vk::ImageLayout::eGeneral };
-		case eComputeRW: return { vk::PipelineStageFlagBits::eComputeShader, vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite, vk::ImageLayout::eGeneral };
+		case eComputeRead: return { vuk::PipelineStageFlagBits::eComputeShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eGeneral };
+		case eComputeWrite: return { vuk::PipelineStageFlagBits::eComputeShader, vuk::AccessFlagBits::eShaderWrite, vuk::ImageLayout::eGeneral };
+		case eComputeRW: return { vuk::PipelineStageFlagBits::eComputeShader, vuk::AccessFlagBits::eShaderRead | vuk::AccessFlagBits::eShaderWrite, vuk::ImageLayout::eGeneral };
 
-		case eAttributeRead: return { vk::PipelineStageFlagBits::eVertexInput, vk::AccessFlagBits::eVertexAttributeRead, vk::ImageLayout::eGeneral /* ignored */ };
+		case eAttributeRead: return { vuk::PipelineStageFlagBits::eVertexInput, vuk::AccessFlagBits::eVertexAttributeRead, vuk::ImageLayout::eGeneral /* ignored */ };
 
-		case eMemoryRead: return { vk::PipelineStageFlagBits::eBottomOfPipe, vk::AccessFlagBits::eMemoryRead, vk::ImageLayout::eGeneral };
-		case eMemoryWrite: return { vk::PipelineStageFlagBits::eBottomOfPipe, vk::AccessFlagBits::eMemoryWrite, vk::ImageLayout::eGeneral };
-		case eMemoryRW: return { vk::PipelineStageFlagBits::eBottomOfPipe, vk::AccessFlagBits::eMemoryRead | vk::AccessFlagBits::eMemoryWrite, vk::ImageLayout::eGeneral };
+		case eMemoryRead: return { vuk::PipelineStageFlagBits::eBottomOfPipe, vuk::AccessFlagBits::eMemoryRead, vuk::ImageLayout::eGeneral };
+		case eMemoryWrite: return { vuk::PipelineStageFlagBits::eBottomOfPipe, vuk::AccessFlagBits::eMemoryWrite, vuk::ImageLayout::eGeneral };
+		case eMemoryRW: return { vuk::PipelineStageFlagBits::eBottomOfPipe, vuk::AccessFlagBits::eMemoryRead | vuk::AccessFlagBits::eMemoryWrite, vuk::ImageLayout::eGeneral };
 
 		case eNone:
-            return {vk::PipelineStageFlagBits::eTopOfPipe, vk::AccessFlagBits{}, vk::ImageLayout::eUndefined};
+            return {vuk::PipelineStageFlagBits::eTopOfPipe, vuk::AccessFlagBits{}, vuk::ImageLayout::eUndefined};
         case eClear:
-            return {vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::AccessFlagBits::eColorAttachmentWrite, vk::ImageLayout::ePreinitialized};
+            return {vuk::PipelineStageFlagBits::eColorAttachmentOutput, vuk::AccessFlagBits::eColorAttachmentWrite, vuk::ImageLayout::ePreinitialized};
 
 		default:
 			assert(0 && "NYI");
@@ -125,8 +125,8 @@ namespace vuk {
 
 	bool is_framebuffer_attachment(Resource::Use u) {
 		switch (u.layout) {
-		case vk::ImageLayout::eColorAttachmentOptimal:
-		case vk::ImageLayout::eDepthStencilAttachmentOptimal:
+		case vuk::ImageLayout::eColorAttachmentOptimal:
+		case vuk::ImageLayout::eDepthStencilAttachmentOptimal:
 			return true;
 		default:
 			return false;
@@ -134,10 +134,10 @@ namespace vuk {
 	}
 
 	bool is_write_access(Resource::Use u) {
-		if (u.access & vk::AccessFlagBits::eColorAttachmentWrite) return true;
-		if (u.access & vk::AccessFlagBits::eDepthStencilAttachmentWrite) return true;
-		if (u.access & vk::AccessFlagBits::eShaderWrite) return true;
-		if (u.access & vk::AccessFlagBits::eTransferWrite) return true;
+		if (u.access & vuk::AccessFlagBits::eColorAttachmentWrite) return true;
+		if (u.access & vuk::AccessFlagBits::eDepthStencilAttachmentWrite) return true;
+		if (u.access & vuk::AccessFlagBits::eShaderWrite) return true;
+		if (u.access & vuk::AccessFlagBits::eTransferWrite) return true;
 		assert(0 && "NYI");
 		return false;
 	}
@@ -146,20 +146,20 @@ namespace vuk {
 		return !is_write_access(u);
 	}
 
-	vk::ImageUsageFlags RenderGraph::compute_usage(const std::vector<vuk::RenderGraph::UseRef, short_alloc<UseRef, 64>>& chain) {
-		vk::ImageUsageFlags usage;
+	vuk::ImageUsageFlags RenderGraph::compute_usage(const std::vector<vuk::RenderGraph::UseRef, short_alloc<UseRef, 64>>& chain) {
+		vuk::ImageUsageFlags usage;
 		for (const auto& c : chain) {
 			switch (c.use.layout) {
-			case vk::ImageLayout::eDepthStencilAttachmentOptimal:
-				usage |= vk::ImageUsageFlagBits::eDepthStencilAttachment; break;
-			case vk::ImageLayout::eShaderReadOnlyOptimal:
-				usage |= vk::ImageUsageFlagBits::eSampled; break;
-			case vk::ImageLayout::eColorAttachmentOptimal:
-				usage |= vk::ImageUsageFlagBits::eColorAttachment; break;
-			case vk::ImageLayout::eTransferSrcOptimal:
-				usage |= vk::ImageUsageFlagBits::eTransferSrc; break;
-			case vk::ImageLayout::eTransferDstOptimal:
-				usage |= vk::ImageUsageFlagBits::eTransferDst; break;
+			case vuk::ImageLayout::eDepthStencilAttachmentOptimal:
+				usage |= vuk::ImageUsageFlagBits::eDepthStencilAttachment; break;
+			case vuk::ImageLayout::eShaderReadOnlyOptimal:
+				usage |= vuk::ImageUsageFlagBits::eSampled; break;
+			case vuk::ImageLayout::eColorAttachmentOptimal:
+				usage |= vuk::ImageUsageFlagBits::eColorAttachment; break;
+			case vuk::ImageLayout::eTransferSrcOptimal:
+				usage |= vuk::ImageUsageFlagBits::eTransferSrc; break;
+			case vuk::ImageLayout::eTransferDstOptimal:
+				usage |= vuk::ImageUsageFlagBits::eTransferDst; break;
 			default:;
 			}
 		}
@@ -168,15 +168,15 @@ namespace vuk {
 	}
 
 
-	size_t format_to_size(vk::Format format) {
+	size_t format_to_size(vuk::Format format) {
 		switch (format) {
-		case vk::Format::eR32G32B32A32Sfloat:
+		case vuk::Format::eR32G32B32A32Sfloat:
 			return sizeof(float) * 4;
-		case vk::Format::eR32G32B32Sfloat:
+		case vuk::Format::eR32G32B32Sfloat:
 			return sizeof(float) * 3;
-		case vk::Format::eR32G32Sfloat:
+		case vuk::Format::eR32G32Sfloat:
 			return sizeof(float) * 2;
-		case vk::Format::eR8G8B8A8Unorm:
+		case vuk::Format::eR8G8B8A8Unorm:
 			return sizeof(char) * 4;
 		default:
 			assert(0);
@@ -189,7 +189,7 @@ namespace vuk {
 		return (uint32_t)format_to_size(format);
 	}
 
-	FormatOrIgnore::FormatOrIgnore(vk::Format format) : ignore(false), format(format), size((uint32_t)format_to_size(format)) {
+	FormatOrIgnore::FormatOrIgnore(vuk::Format format) : ignore(false), format(format), size((uint32_t)format_to_size(format)) {
 	}
 	FormatOrIgnore::FormatOrIgnore(Ignore ign) : ignore(true), format(ign.format), size(ign.to_size()) {
 	}
@@ -373,7 +373,7 @@ namespace vuk {
 		attachment_info.extents = swp->extent;
 		attachment_info.iv = {};
 		// directly presented
-		attachment_info.description.format = swp->format;
+		attachment_info.description.format = (VkFormat)swp->format;
 		attachment_info.samples = Samples::e1;
 
 		attachment_info.type = AttachmentRPInfo::Type::eSwapchain;
@@ -385,72 +385,72 @@ namespace vuk {
 		Resource::Use& final = attachment_info.final;
 		// for WSI, we want to wait for colourattachmentoutput
 		// we don't care about any writes, we will clear
-		initial.access = vk::AccessFlags{};
-		initial.stages = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+		initial.access = vuk::AccessFlags{};
+		initial.stages = vuk::PipelineStageFlagBits::eColorAttachmentOutput;
 		// clear
-		initial.layout = vk::ImageLayout::ePreinitialized;
+		initial.layout = vuk::ImageLayout::ePreinitialized;
 		/* Normally, we would need an external dependency at the end as well since we are changing layout in finalLayout,
    but since we are signalling a semaphore, we can rely on Vulkan's default behavior,
    which injects an external dependency here with
    dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
    dstAccessMask = 0. */
-		final.access = vk::AccessFlagBits{};
-		final.layout = vk::ImageLayout::ePresentSrcKHR;
-		final.stages = vk::PipelineStageFlagBits::eBottomOfPipe;
+		final.access = vuk::AccessFlagBits{};
+		final.layout = vuk::ImageLayout::ePresentSrcKHR;
+		final.stages = vuk::PipelineStageFlagBits::eBottomOfPipe;
 
 		bound_attachments.emplace(name, attachment_info);
 	}
 
-	void RenderGraph::mark_attachment_internal(Name name, vk::Format format, vuk::Extent2D extent, vuk::Samples samp, Clear c) {
+	void RenderGraph::mark_attachment_internal(Name name, vuk::Format format, vuk::Extent2D extent, vuk::Samples samp, Clear c) {
 		AttachmentRPInfo attachment_info;
 		attachment_info.sizing = AttachmentRPInfo::Sizing::eAbsolute;
 		attachment_info.extents = extent;
 		attachment_info.iv = {};
 
 		attachment_info.type = AttachmentRPInfo::Type::eInternal;
-		attachment_info.description.format = format;
+		attachment_info.description.format = (VkFormat)format;
 		attachment_info.samples = samp;
 
 		attachment_info.should_clear = true;
 		attachment_info.clear_value = c;
 		Resource::Use& initial = attachment_info.initial;
 		Resource::Use& final = attachment_info.final;
-		initial.access = vk::AccessFlags{};
-		initial.stages = vk::PipelineStageFlagBits::eTopOfPipe;
+		initial.access = vuk::AccessFlags{};
+		initial.stages = vuk::PipelineStageFlagBits::eTopOfPipe;
 		// for internal attachments we don't want to preserve previous data
-		initial.layout = vk::ImageLayout::ePreinitialized;
+		initial.layout = vuk::ImageLayout::ePreinitialized;
 
 		// with an undefined final layout, there will be no final sync
-		final.layout = vk::ImageLayout::eUndefined;
-		final.access = vk::AccessFlagBits{};
-		final.stages = vk::PipelineStageFlagBits::eBottomOfPipe;
+		final.layout = vuk::ImageLayout::eUndefined;
+		final.access = vuk::AccessFlagBits{};
+		final.stages = vuk::PipelineStageFlagBits::eBottomOfPipe;
 
 		bound_attachments.emplace(name, attachment_info);
 	}
 
-	void RenderGraph::mark_attachment_internal(Name name, vk::Format format, vuk::Extent2D::Framebuffer fbrel, vuk::Samples samp, Clear c) {
+	void RenderGraph::mark_attachment_internal(Name name, vuk::Format format, vuk::Extent2D::Framebuffer fbrel, vuk::Samples samp, Clear c) {
 		AttachmentRPInfo attachment_info;
 		attachment_info.sizing = AttachmentRPInfo::Sizing::eFramebufferRelative;
 		attachment_info.fb_relative = fbrel;
 		attachment_info.iv = {};
 
 		attachment_info.type = AttachmentRPInfo::Type::eInternal;
-		attachment_info.description.format = format;
+		attachment_info.description.format = (VkFormat)format;
 		attachment_info.samples = samp;
 
 		attachment_info.should_clear = true;
 		attachment_info.clear_value = c;
 		Resource::Use& initial = attachment_info.initial;
 		Resource::Use& final = attachment_info.final;
-		initial.access = vk::AccessFlags{};
-		initial.stages = vk::PipelineStageFlagBits::eTopOfPipe;
+		initial.access = vuk::AccessFlags{};
+		initial.stages = vuk::PipelineStageFlagBits::eTopOfPipe;
 		// for internal attachments we don't want to preserve previous data
-		initial.layout = vk::ImageLayout::ePreinitialized;
+		initial.layout = vuk::ImageLayout::ePreinitialized;
 
 		// with an undefined final layout, there will be no final sync
-		final.layout = vk::ImageLayout::eUndefined;
-		final.access = vk::AccessFlagBits{};
-		final.stages = vk::PipelineStageFlagBits::eBottomOfPipe;
+		final.layout = vuk::ImageLayout::eUndefined;
+		final.access = vuk::AccessFlagBits{};
+		final.stages = vuk::PipelineStageFlagBits::eBottomOfPipe;
 
 		bound_attachments.emplace(name, attachment_info);
 	}
@@ -478,7 +478,7 @@ namespace vuk {
         attachment_info.iv = att.image_view;
 
         attachment_info.type = AttachmentRPInfo::Type::eExternal;
-        attachment_info.description.format = att.format;
+        attachment_info.description.format = (VkFormat)att.format;
         attachment_info.samples = att.sample_count;
 
         attachment_info.should_clear = initial_acc == Access::eClear; // if initial access was clear, we will clear
@@ -493,7 +493,7 @@ namespace vuk {
 	void sync_bound_attachment_to_renderpass(vuk::RenderGraph::AttachmentRPInfo& rp_att, vuk::RenderGraph::AttachmentRPInfo& attachment_info) {
 		rp_att.description.format = attachment_info.description.format;
 		rp_att.samples = attachment_info.samples;
-		rp_att.description.samples = attachment_info.samples.count;
+		rp_att.description.samples = (VkSampleCountFlagBits)attachment_info.samples.count;
 		rp_att.iv = attachment_info.iv;
 		rp_att.extents = attachment_info.extents;
 		rp_att.clear_value = attachment_info.clear_value;
@@ -508,11 +508,11 @@ namespace vuk {
 			chain.insert(chain.begin(), UseRef{ std::move(attachment_info.initial), nullptr });
 			chain.emplace_back(UseRef{ attachment_info.final, nullptr });
 
-			vk::ImageAspectFlagBits aspect;
-			if (attachment_info.description.format == vk::Format::eD32Sfloat) {
-				aspect = vk::ImageAspectFlagBits::eDepth;
+			vuk::ImageAspectFlagBits aspect;
+			if (attachment_info.description.format == (VkFormat)vuk::Format::eD32Sfloat) {
+				aspect = vuk::ImageAspectFlagBits::eDepth;
 			} else {
-				aspect = vk::ImageAspectFlagBits::eColor;
+				aspect = vuk::ImageAspectFlagBits::eColor;
 			}
 		
 			for (size_t i = 0; i < chain.size() - 1; i++) {
@@ -532,41 +532,41 @@ namespace vuk {
 							// if there is a "right" rp
 							// or if this attachment has a required end layout
 							// then we transition for it
-							if (right.pass || right.use.layout != vk::ImageLayout::eUndefined) {
-								rp_att.description.finalLayout = right.use.layout;
+							if (right.pass || right.use.layout != vuk::ImageLayout::eUndefined) {
+								rp_att.description.finalLayout = (VkImageLayout)right.use.layout;
 							} else {
 								// we keep last use as finalLayout
-								rp_att.description.finalLayout = left.use.layout;
+								rp_att.description.finalLayout = (VkImageLayout)left.use.layout;
 							}
 							// compute attachment store
-							if (right.use.layout == vk::ImageLayout::eUndefined) {
-								rp_att.description.storeOp = vk::AttachmentStoreOp::eDontCare;
+							if (right.use.layout == vuk::ImageLayout::eUndefined) {
+								rp_att.description.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 							} else {
-								rp_att.description.storeOp = vk::AttachmentStoreOp::eStore;
+								rp_att.description.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 							}
 						}
 						// TODO: we need a dep here if there is a write or there is a layout transition
-						if (/*left.use.layout != right.use.layout &&*/ right.use.layout != vk::ImageLayout::eUndefined && !left_rp.framebufferless) { // different layouts, need to have dependency
-							vk::SubpassDependency sd;
-							sd.dstAccessMask = right.use.access;
-							sd.dstStageMask = right.use.stages;
+						if (/*left.use.layout != right.use.layout &&*/ right.use.layout != vuk::ImageLayout::eUndefined && !left_rp.framebufferless) { // different layouts, need to have dependency
+							VkSubpassDependency sd{};
+							sd.dstAccessMask = (VkAccessFlags)right.use.access;
+							sd.dstStageMask = (VkPipelineStageFlags)right.use.stages;
 							sd.srcSubpass = left.pass->subpass;
-							sd.srcAccessMask = left.use.access;
-							sd.srcStageMask = left.use.stages;
+							sd.srcAccessMask = (VkAccessFlags)left.use.access;
+							sd.srcStageMask = (VkPipelineStageFlags)left.use.stages;
 							sd.dstSubpass = VK_SUBPASS_EXTERNAL;
 							left_rp.rpci.subpass_dependencies.push_back(sd);
 						}
 						// if we are coming from an fbless pass we need to emit barriers if the right pass doesn't exist (chain end) or has framebuffer 
 						if (left_rp.framebufferless && ((right.pass && !rpis[right.pass->render_pass_index].framebufferless) || right.pass == nullptr)) {
 							// right layout == Undefined means the chain terminates, no transition/barrier
-							if (right.use.layout == vk::ImageLayout::eUndefined)
+							if (right.use.layout == vuk::ImageLayout::eUndefined)
 								continue;
-							vk::ImageMemoryBarrier barrier;
-							barrier.dstAccessMask = right.use.access;
-							barrier.srcAccessMask = left.use.access;
-							barrier.newLayout = right.use.layout;
-							barrier.oldLayout = left.use.layout;
-							barrier.subresourceRange.aspectMask = aspect;
+							VkImageMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+							barrier.dstAccessMask = (VkAccessFlags)right.use.access;
+							barrier.srcAccessMask = (VkAccessFlags)left.use.access;
+							barrier.newLayout = (VkImageLayout)right.use.layout;
+							barrier.oldLayout = (VkImageLayout)left.use.layout;
+							barrier.subresourceRange.aspectMask = (VkImageAspectFlags)aspect;
 							barrier.subresourceRange.baseArrayLayer = 0;
 							barrier.subresourceRange.baseMipLevel = 0;
 							barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
@@ -586,30 +586,30 @@ namespace vuk {
 							sync_bound_attachment_to_renderpass(rp_att, attachment_info);
 							// we will have "left" transition for us
 							if (left.pass) {
-								rp_att.description.initialLayout = right.use.layout;
+								rp_att.description.initialLayout = (VkImageLayout)right.use.layout;
 							} else {
 								// if there is no "left" renderpass, then we take the initial layout
-								rp_att.description.initialLayout = left.use.layout;
+								rp_att.description.initialLayout = (VkImageLayout)left.use.layout;
 							}
 							// compute attachment load
-							if (left.use.layout == vk::ImageLayout::eUndefined) {
-								rp_att.description.loadOp = vk::AttachmentLoadOp::eDontCare;
-							} else if (left.use.layout == vk::ImageLayout::ePreinitialized) {
+							if (left.use.layout == vuk::ImageLayout::eUndefined) {
+								rp_att.description.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+							} else if (left.use.layout == vuk::ImageLayout::ePreinitialized) {
 								// preinit means clear
-								rp_att.description.initialLayout = vk::ImageLayout::eUndefined;
-								rp_att.description.loadOp = vk::AttachmentLoadOp::eClear;
+								rp_att.description.initialLayout = (VkImageLayout)vuk::ImageLayout::eUndefined;
+								rp_att.description.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 							} else {
-								rp_att.description.loadOp = vk::AttachmentLoadOp::eLoad;
+								rp_att.description.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
 							}
 						}
 						// TODO: we need a dep here if there is a write or there is a layout transition
-						if (/*right.use.layout != left.use.layout &&*/ left.use.layout != vk::ImageLayout::eUndefined) { // different layouts, need to have dependency
-							vk::SubpassDependency sd;
-							sd.dstAccessMask = right.use.access;
-							sd.dstStageMask = right.use.stages;
+						if (/*right.use.layout != left.use.layout &&*/ left.use.layout != vuk::ImageLayout::eUndefined) { // different layouts, need to have dependency
+							VkSubpassDependency sd{};
+							sd.dstAccessMask = (VkAccessFlags)right.use.access;
+							sd.dstStageMask = (VkPipelineStageFlags)right.use.stages;
 							sd.dstSubpass = right.pass->subpass;
-							sd.srcAccessMask = left.use.access;
-							sd.srcStageMask = left.use.stages;
+							sd.srcAccessMask = (VkAccessFlags)left.use.access;
+							sd.srcStageMask = (VkPipelineStageFlags)left.use.stages;
 							sd.srcSubpass = VK_SUBPASS_EXTERNAL;
 							right_rp.rpci.subpass_dependencies.push_back(sd);
 						}
@@ -621,12 +621,12 @@ namespace vuk {
 								if (!left_rp.framebufferless && is_framebuffer_attachment(left.use))
 									continue;
 							}
-							vk::ImageMemoryBarrier barrier;
-							barrier.dstAccessMask = right.use.access;
-							barrier.srcAccessMask = left.use.access;
-							barrier.newLayout = right.use.layout;
-							barrier.oldLayout = left.use.layout == vk::ImageLayout::ePreinitialized ? vk::ImageLayout::eUndefined : left.use.layout;
-							barrier.subresourceRange.aspectMask = aspect;
+							VkImageMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+							barrier.dstAccessMask = (VkAccessFlags)right.use.access;
+							barrier.srcAccessMask = (VkAccessFlags)left.use.access;
+							barrier.newLayout = (VkImageLayout)right.use.layout;
+							barrier.oldLayout = left.use.layout == vuk::ImageLayout::ePreinitialized ? (VkImageLayout)vuk::ImageLayout::eUndefined : (VkImageLayout)left.use.layout;
+							barrier.subresourceRange.aspectMask = (VkImageAspectFlags)aspect;
 							barrier.subresourceRange.baseArrayLayer = 0;
 							barrier.subresourceRange.baseMipLevel = 0;
 							barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
@@ -645,26 +645,26 @@ namespace vuk {
 					if (is_framebuffer_attachment(left.use) && (is_write_access(left.use) || (is_read_access(left.use) && is_write_access(right.use)))) {
 						assert(left.pass->render_pass_index == right.pass->render_pass_index);
 						auto& rp = rpis[right.pass->render_pass_index];
-						vk::SubpassDependency sd;
-						sd.dstAccessMask = right.use.access;
-						sd.dstStageMask = right.use.stages;
+						VkSubpassDependency sd;
+						sd.dstAccessMask = (VkAccessFlags)right.use.access;
+						sd.dstStageMask = (VkPipelineStageFlags)right.use.stages;
 						sd.dstSubpass = right.pass->subpass;
-						sd.srcAccessMask = left.use.access;
-						sd.srcStageMask = left.use.stages;
+						sd.srcAccessMask = (VkAccessFlags)left.use.access;
+						sd.srcStageMask = (VkPipelineStageFlags)left.use.stages;
 						sd.srcSubpass = left.pass->subpass;
 						rp.rpci.subpass_dependencies.push_back(sd);
 					}
 					auto& left_rp = rpis[left.pass->render_pass_index];
 					if (left_rp.framebufferless) {
 						// right layout == Undefined means the chain terminates, no transition/barrier
-						if (right.use.layout == vk::ImageLayout::eUndefined)
+						if (right.use.layout == vuk::ImageLayout::eUndefined)
 							continue;
-						vk::ImageMemoryBarrier barrier;
-						barrier.dstAccessMask = right.use.access;
-						barrier.srcAccessMask = left.use.access;
-						barrier.newLayout = right.use.layout;
-						barrier.oldLayout = left.use.layout;
-						barrier.subresourceRange.aspectMask = aspect;
+						VkImageMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+						barrier.dstAccessMask = (VkAccessFlags)right.use.access;
+						barrier.srcAccessMask = (VkAccessFlags)left.use.access;
+						barrier.newLayout = (VkImageLayout)right.use.layout;
+						barrier.oldLayout = (VkImageLayout)left.use.layout;
+						barrier.subresourceRange.aspectMask = (VkImageAspectFlags)aspect;
 						barrier.subresourceRange.baseArrayLayer = 0;
 						barrier.subresourceRange.baseMipLevel = 0;
 						barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
@@ -688,25 +688,25 @@ namespace vuk {
 
 				bool crosses_rpass = (left.pass == nullptr || right.pass == nullptr || left.pass->render_pass_index != right.pass->render_pass_index);
 				if (crosses_rpass) {
-					if (left.pass && right.use.layout != vk::ImageLayout::eUndefined) { // RenderPass ->
+					if (left.pass && right.use.layout != vuk::ImageLayout::eUndefined) { // RenderPass ->
 						auto& left_rp = rpis[left.pass->render_pass_index];
 
-						vk::MemoryBarrier barrier;
-						barrier.dstAccessMask = right.use.access;
-						barrier.srcAccessMask = left.use.access;
+						VkMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER };
+						barrier.dstAccessMask = (VkAccessFlags)right.use.access;
+						barrier.srcAccessMask = (VkAccessFlags)left.use.access;
 						MemoryBarrier mb{ .barrier = barrier, .src = left.use.stages, .dst = right.use.stages };
 						left_rp.subpasses[left.pass->subpass].post_mem_barriers.push_back(mb);
 					}
 
-					if (right.pass && left.use.layout != vk::ImageLayout::eUndefined) { // -> RenderPass
+					if (right.pass && left.use.layout != vuk::ImageLayout::eUndefined) { // -> RenderPass
 						auto& right_rp = rpis[right.pass->render_pass_index];
 						
-						vk::MemoryBarrier barrier;
-						barrier.dstAccessMask = right.use.access;
-						barrier.srcAccessMask = left.use.access;
+						VkMemoryBarrier barrier{.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+						barrier.dstAccessMask = (VkAccessFlags)right.use.access;
+						barrier.srcAccessMask = (VkAccessFlags)left.use.access;
 						MemoryBarrier mb{ .barrier = barrier, .src = left.use.stages, .dst = right.use.stages };
-						if (mb.src == vk::PipelineStageFlags{}) {
-							mb.src = vk::PipelineStageFlagBits::eTopOfPipe;
+						if (mb.src == vuk::PipelineStageFlags{}) {
+							mb.src = vuk::PipelineStageFlagBits::eTopOfPipe;
 							mb.barrier.srcAccessMask = {};
 						}
 						right_rp.subpasses[right.pass->subpass].pre_mem_barriers.push_back(mb);
@@ -716,9 +716,9 @@ namespace vuk {
                         continue;
 					auto& left_rp = rpis[left.pass->render_pass_index];
 					if (left_rp.framebufferless) {
-						vk::MemoryBarrier barrier;
-						barrier.dstAccessMask = right.use.access;
-						barrier.srcAccessMask = left.use.access;
+						VkMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER };
+						barrier.dstAccessMask = (VkAccessFlags)right.use.access;
+						barrier.srcAccessMask = (VkAccessFlags)left.use.access;
 						MemoryBarrier mb{ .barrier = barrier, .src = left.use.stages, .dst = right.use.stages };
 						left_rp.subpasses[left.pass->subpass].post_mem_barriers.push_back(mb);
 					}
@@ -758,28 +758,28 @@ namespace vuk {
 					continue;
 				if (res.ia == vuk::Access::eColorResolveWrite) // resolve attachment are added when processing the color attachment
 					continue;
-				vk::AttachmentReference attref;
+				VkAttachmentReference attref{};
 
 				auto name = resolve_name(res.use_name, aliases);
 				auto& chain = use_chains.find(name)->second;
 				auto cit = std::find_if(chain.begin(), chain.end(), [&](auto& useref) { return useref.pass == &pass; });
 				assert(cit != chain.end());
-				attref.layout = cit->use.layout;
+				attref.layout = (VkImageLayout)cit->use.layout;
 				attref.attachment = (uint32_t)std::distance(rp.attachments.begin(), std::find_if(rp.attachments.begin(), rp.attachments.end(), [&](auto& att) { return name == att.name; }));
 
-				if (attref.layout != vk::ImageLayout::eColorAttachmentOptimal) {
-					if (attref.layout == vk::ImageLayout::eDepthStencilAttachmentOptimal) {
+				if (attref.layout != (VkImageLayout)vuk::ImageLayout::eColorAttachmentOptimal) {
+					if (attref.layout == (VkImageLayout)vuk::ImageLayout::eDepthStencilAttachmentOptimal) {
 						ds_attrefs[subpass_index] = attref;
 					}
 				} else {
 
-					vk::AttachmentReference rref;
+					VkAttachmentReference rref{};
 					rref.attachment = VK_ATTACHMENT_UNUSED;
 					if (auto it = pass.pass.resolves.find(res.use_name); it != pass.pass.resolves.end()) {
 						// this a resolve src attachment
 						// get the dst attachment
 						auto& dst_name = it->second;
-						rref.layout = vk::ImageLayout::eColorAttachmentOptimal; // the only possible layout for resolves
+						rref.layout = (VkImageLayout)vuk::ImageLayout::eColorAttachmentOptimal; // the only possible layout for resolves
 						rref.attachment = (uint32_t)std::distance(rp.attachments.begin(), std::find_if(rp.attachments.begin(), rp.attachments.end(), [&](auto& att) { return dst_name == att.name; }));
 					}
 
@@ -829,7 +829,7 @@ namespace vuk {
 				sd.flags = {};
 				sd.inputAttachmentCount = 0;
 				sd.pInputAttachments = nullptr;
-				sd.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
+				sd.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 				sd.preserveAttachmentCount = 0;
 				sd.pPreserveAttachments = nullptr;
 				{
@@ -847,7 +847,7 @@ namespace vuk {
 			rp.rpci.pDependencies = rp.rpci.subpass_dependencies.data();
 
 			// attachments
-			vuk::Samples samples(vk::SampleCountFlagBits::e1);
+			vuk::Samples samples(vuk::SampleCountFlagBits::e1);
 			for (auto& attrpinfo : rp.attachments) {
 				auto& bound = bound_attachments.at(attrpinfo.name);
 				if (!bound.samples.infer) {
@@ -856,9 +856,9 @@ namespace vuk {
 			}
 			for (auto& attrpinfo : rp.attachments) {
 				if (attrpinfo.samples.infer) {
-					attrpinfo.description.samples = samples.count;
+					attrpinfo.description.samples = (VkSampleCountFlagBits)samples.count;
 				} else {
-					attrpinfo.description.samples = attrpinfo.samples.count;
+					attrpinfo.description.samples = (VkSampleCountFlagBits)attrpinfo.samples.count;
 				}
 				rp.rpci.attachments.push_back(attrpinfo.description);
 			}
@@ -870,39 +870,39 @@ namespace vuk {
 		}
 	}
 
-	void RenderGraph::create_attachment(PerThreadContext& ptc, Name name, RenderGraph::AttachmentRPInfo& attachment_info, vuk::Extent2D fb_extent, vk::SampleCountFlagBits samples) {
+	void RenderGraph::create_attachment(PerThreadContext& ptc, Name name, RenderGraph::AttachmentRPInfo& attachment_info, vuk::Extent2D fb_extent, vuk::SampleCountFlagBits samples) {
 		auto& chain = use_chains.at(name);
 		if (attachment_info.type == AttachmentRPInfo::Type::eInternal) {
-			vk::ImageUsageFlags usage = compute_usage(chain);
+			vuk::ImageUsageFlags usage = compute_usage(chain);
 
-			vk::ImageCreateInfo ici;
+			vuk::ImageCreateInfo ici;
 			ici.usage = usage;
 			ici.arrayLayers = 1;
 			// compute extent
 			if (attachment_info.sizing == AttachmentRPInfo::Sizing::eFramebufferRelative) {
 				assert(fb_extent.width > 0 && fb_extent.height > 0);
-				ici.extent = vk::Extent3D(static_cast<uint32_t>(attachment_info.fb_relative.width * fb_extent.width), static_cast<uint32_t>(attachment_info.fb_relative.height * fb_extent.height), 1);
+				ici.extent = vuk::Extent3D{ static_cast<uint32_t>(attachment_info.fb_relative.width * fb_extent.width), static_cast<uint32_t>(attachment_info.fb_relative.height * fb_extent.height), 1u };
 			} else {
-				ici.extent = vk::Extent3D(attachment_info.extents, 1);
+				ici.extent = static_cast<vuk::Extent3D>(attachment_info.extents);
 			}
-			ici.imageType = vk::ImageType::e2D;
-			ici.format = attachment_info.description.format;
+			ici.imageType = vuk::ImageType::e2D;
+			ici.format = vuk::Format(attachment_info.description.format);
 			ici.mipLevels = 1;
-			ici.initialLayout = vk::ImageLayout::eUndefined;
+			ici.initialLayout = vuk::ImageLayout::eUndefined;
 			ici.samples = samples;
-			ici.sharingMode = vk::SharingMode::eExclusive;
-			ici.tiling = vk::ImageTiling::eOptimal;
+			ici.sharingMode = vuk::SharingMode::eExclusive;
+			ici.tiling = vuk::ImageTiling::eOptimal;
 
-			vk::ImageViewCreateInfo ivci;
-			ivci.image = vk::Image{};
-			ivci.format = attachment_info.description.format;
-			ivci.viewType = vk::ImageViewType::e2D;
-			vk::ImageSubresourceRange isr;
-			vk::ImageAspectFlagBits aspect;
-			if (ici.format == vk::Format::eD32Sfloat) {
-				aspect = vk::ImageAspectFlagBits::eDepth;
+			vuk::ImageViewCreateInfo ivci;
+			ivci.image = vuk::Image{};
+			ivci.format = vuk::Format(attachment_info.description.format);
+			ivci.viewType = vuk::ImageViewType::e2D;
+			vuk::ImageSubresourceRange isr;
+			vuk::ImageAspectFlagBits aspect;
+			if (ici.format == vuk::Format::eD32Sfloat) {
+				aspect = vuk::ImageAspectFlagBits::eDepth;
 			} else {
-				aspect = vk::ImageAspectFlagBits::eColor;
+				aspect = vuk::ImageAspectFlagBits::eColor;
 			}
 			isr.aspectMask = aspect;
 			isr.baseArrayLayer = 0;
@@ -922,16 +922,16 @@ namespace vuk {
 		}
 	}
 
-	void begin_renderpass(vuk::RenderGraph::RenderPassInfo& rpass, vk::CommandBuffer& cbuf, bool use_secondary_command_buffers) {
-		if (rpass.handle == vk::RenderPass{}) {
+	void begin_renderpass(vuk::RenderGraph::RenderPassInfo& rpass, VkCommandBuffer& cbuf, bool use_secondary_command_buffers) {
+		if (rpass.handle == VK_NULL_HANDLE) {
 			return;
 		}
 
-		vk::RenderPassBeginInfo rbi;
+		VkRenderPassBeginInfo rbi{.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
 		rbi.renderPass = rpass.handle;
 		rbi.framebuffer = rpass.framebuffer;
-		rbi.renderArea = vk::Rect2D(vk::Offset2D{}, vk::Extent2D{ rpass.fbci.width, rpass.fbci.height });
-		std::vector<vk::ClearValue> clears;
+		rbi.renderArea = vuk::Rect2D{ vuk::Offset2D{}, vuk::Extent2D{ rpass.fbci.width, rpass.fbci.height } };
+		std::vector<VkClearValue> clears;
 		for (size_t i = 0; i < rpass.attachments.size(); i++) {
 			auto& att = rpass.attachments[i];
 			if (att.should_clear)
@@ -939,20 +939,21 @@ namespace vuk {
 		}
 		rbi.pClearValues = clears.data();
 		rbi.clearValueCount = (uint32_t)clears.size();
-		cbuf.beginRenderPass(rbi, use_secondary_command_buffers ? vk::SubpassContents::eSecondaryCommandBuffers : vk::SubpassContents::eInline);
+
+		vkCmdBeginRenderPass(cbuf, &rbi, use_secondary_command_buffers ? VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS : VK_SUBPASS_CONTENTS_INLINE);
 	}
 
 	void RenderGraph::fill_renderpass_info(vuk::RenderGraph::RenderPassInfo& rpass, const size_t& i, vuk::CommandBuffer& cobuf) {
-		if (rpass.handle == vk::RenderPass{}) {
+		if (rpass.handle == VK_NULL_HANDLE) {
 			cobuf.ongoing_renderpass = {};
 			return;
 		}
 		vuk::CommandBuffer::RenderPassInfo rpi;
 		rpi.renderpass = rpass.handle;
 		rpi.subpass = (uint32_t)i;
-		rpi.extent = vk::Extent2D(rpass.fbci.width, rpass.fbci.height);
+		rpi.extent = vuk::Extent2D{ rpass.fbci.width, rpass.fbci.height };
 		auto& spdesc = rpass.rpci.subpass_descriptions[i];
-		rpi.color_attachments = std::span<const vk::AttachmentReference>(spdesc.pColorAttachments, spdesc.colorAttachmentCount);
+		rpi.color_attachments = std::span<const VkAttachmentReference>(spdesc.pColorAttachments, spdesc.colorAttachmentCount);
 		for (auto& ca : rpi.color_attachments) {
 			auto& att = rpass.attachments[ca.attachment];
 			if (!att.samples.infer)
@@ -960,18 +961,18 @@ namespace vuk {
 		}
 		// TODO: depth could be msaa too
 		if (rpi.color_attachments.size() == 0) { // depth only pass, samples == 1
-			rpi.samples = vk::SampleCountFlagBits::e1;
+			rpi.samples = vuk::SampleCountFlagBits::e1;
 		}
 		cobuf.ongoing_renderpass = rpi;
 	}
 
-	vk::CommandBuffer RenderGraph::execute(vuk::PerThreadContext& ptc, std::vector<std::pair<SwapChainRef, size_t>> swp_with_index, bool use_secondary_command_buffers) {
+	VkCommandBuffer RenderGraph::execute(vuk::PerThreadContext& ptc, std::vector<std::pair<SwapChainRef, size_t>> swp_with_index, bool use_secondary_command_buffers) {
 		// create framebuffers, create & bind attachments
 		for (auto& rp : rpis) {
 			if (rp.attachments.size() == 0)
 				continue;
 
-			vk::Extent2D fb_extent;
+			vuk::Extent2D fb_extent;
 			bool extent_known = false;
 
 			// bind swapchain attachments, deduce framebuffer size & sample count
@@ -1013,8 +1014,8 @@ namespace vuk {
 				continue;
 
 			auto& ivs = rp.fbci.attachments;
-			std::vector<vk::ImageView> vkivs;
-			vk::Extent2D fb_extent;
+			std::vector<VkImageView> vkivs;
+			vuk::Extent2D fb_extent;
 
 			for (auto& attrpinfo : rp.attachments) {
 				auto& bound = bound_attachments[attrpinfo.name];
@@ -1026,7 +1027,7 @@ namespace vuk {
 			for (auto& attrpinfo : rp.attachments) {
 				auto& bound = bound_attachments[attrpinfo.name];
 				if (bound.type == AttachmentRPInfo::Type::eInternal) {
-					create_attachment(ptc, attrpinfo.name, bound, fb_extent, attrpinfo.description.samples);
+					create_attachment(ptc, attrpinfo.name, bound, fb_extent, (vuk::SampleCountFlagBits)attrpinfo.description.samples);
 				}
 
 				ivs.push_back(bound.iv);
@@ -1042,17 +1043,16 @@ namespace vuk {
 		}
 		// create non-attachment images
 		for (auto& [name, bound] : bound_attachments) {
-			if (bound.type == AttachmentRPInfo::Type::eInternal && bound.image == vk::Image{}) {
-				create_attachment(ptc, name, bound, vk::Extent2D{0,0}, bound.samples.count);
+			if (bound.type == AttachmentRPInfo::Type::eInternal && bound.image == VK_NULL_HANDLE) {
+				create_attachment(ptc, name, bound, vuk::Extent2D{0,0}, bound.samples.count);
 			}
 		}
 
 		// actual execution
-		auto cbuf = ptc.commandbuffer_pool.acquire(vk::CommandBufferLevel::ePrimary, 1)[0];
+		auto cbuf = ptc.commandbuffer_pool.acquire(VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1)[0];
 
-		vk::CommandBufferBeginInfo cbi;
-		cbi.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
-		cbuf.begin(cbi);
+		VkCommandBufferBeginInfo cbi{.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
+		vkBeginCommandBuffer(cbuf, &cbi);
 
 		CommandBuffer cobuf(*this, ptc, cbuf);
 		for (auto& rpass : rpis) {
@@ -1061,13 +1061,13 @@ namespace vuk {
 				auto& sp = rpass.subpasses[i];
 				fill_renderpass_info(rpass, i, cobuf);
 				// insert image pre-barriers
-				if (rpass.handle == vk::RenderPass{}) {
+				if (rpass.handle == VK_NULL_HANDLE) {
 					for (auto dep : sp.pre_barriers) {
 						dep.barrier.image = bound_attachments[dep.image].image;
-						cbuf.pipelineBarrier(dep.src, dep.dst, {}, {}, {}, dep.barrier);
+						vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
 					}
 					for (auto dep : sp.pre_mem_barriers) {
-						cbuf.pipelineBarrier(dep.src, dep.dst, {}, dep.barrier, {}, {});
+						vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 1, &dep.barrier, 0, nullptr, 0, nullptr);
 					}
 				}
                 for(auto& p: sp.passes) {
@@ -1086,25 +1086,26 @@ namespace vuk {
                     cobuf.set_bindings = {};
                     cobuf.sets_used = {};
                 }
-				if (i < rpass.subpasses.size() - 1 && rpass.handle != vk::RenderPass{}) {
-					cbuf.nextSubpass(use_secondary_command_buffers ? vk::SubpassContents::eSecondaryCommandBuffers : vk::SubpassContents::eInline);
+				if (i < rpass.subpasses.size() - 1 && rpass.handle != VK_NULL_HANDLE) {
+					vkCmdNextSubpass(cbuf, use_secondary_command_buffers ? VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS : VK_SUBPASS_CONTENTS_INLINE);
 				}
 
 				// insert image post-barriers
-				if (rpass.handle == vk::RenderPass{}) {
+				if (rpass.handle == VK_NULL_HANDLE) {
 					for (auto dep : sp.post_barriers) {
 						dep.barrier.image = bound_attachments[dep.image].image;
-						cbuf.pipelineBarrier(dep.src, dep.dst, {}, {}, {}, dep.barrier);
+						vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
 					}
 					for (auto dep : sp.post_mem_barriers) {
-						cbuf.pipelineBarrier(dep.src, dep.dst, {}, dep.barrier, {}, {});
+						vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 1, &dep.barrier, 0, nullptr, 0, nullptr);
 					}
 				}
 			}
-			if (rpass.handle != vk::RenderPass{})
-				cbuf.endRenderPass();
+			if (rpass.handle != VK_NULL_HANDLE) {
+				vkCmdEndRenderPass(cbuf);
+			}
 		}
-		cbuf.end();
+		vkEndCommandBuffer(cbuf);
 		return cbuf;
 	}
 	
@@ -1116,7 +1117,7 @@ namespace vuk {
 		auto& chain = use_chains.at(n);
 		for (auto& elem : chain) {
 			if (elem.pass == pass_info) {
-				return elem.use.layout == vk::ImageLayout::eGeneral;
+				return elem.use.layout == vuk::ImageLayout::eGeneral;
 			}
 		}
 		assert(0);

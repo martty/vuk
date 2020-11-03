@@ -13,18 +13,18 @@ util::ImGuiData util::ImGui_ImplVuk_Init(vuk::PerThreadContext& ptc) {
 	io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
 
 	ImGuiData data;
-	auto [tex, stub] = ptc.create_texture(vk::Format::eR8G8B8A8Srgb, vk::Extent3D(width, height, 1), pixels);
+	auto [tex, stub] = ptc.create_texture(vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)width, (unsigned)height, 1u }, pixels);
 	data.font_texture = std::move(tex);
 	ptc.ctx.debug.set_name(data.font_texture, "ImGui/font");
-	vk::SamplerCreateInfo sci;
-	sci.minFilter = sci.magFilter = vk::Filter::eLinear;
-	sci.mipmapMode = vk::SamplerMipmapMode::eLinear;
-	sci.addressModeU = sci.addressModeV = sci.addressModeW = vk::SamplerAddressMode::eRepeat;
+	vuk::SamplerCreateInfo sci;
+	sci.minFilter = sci.magFilter = vuk::Filter::eLinear;
+	sci.mipmapMode = vuk::SamplerMipmapMode::eLinear;
+	sci.addressModeU = sci.addressModeV = sci.addressModeW = vuk::SamplerAddressMode::eRepeat;
 	sci.minLod = -1000;
 	sci.maxLod = 1000;
 	sci.maxAnisotropy = 1.0f;
 	data.font_sci = sci;
-	data.font_si = std::make_unique<vuk::SampledImage>(vuk::SampledImage::Global{ *data.font_texture.view, sci, vk::ImageLayout::eShaderReadOnlyOptimal });
+	data.font_si = std::make_unique<vuk::SampledImage>(vuk::SampledImage::Global{ *data.font_texture.view, sci, vuk::ImageLayout::eShaderReadOnlyOptimal });
 	io.Fonts->TexID = (ImTextureID)data.font_si.get();
 	{
 		vuk::PipelineBaseCreateInfo pci;
@@ -45,9 +45,9 @@ vuk::Pass util::ImGui_ImplVuk_Render(vuk::PerThreadContext& ptc, vuk::Name src_t
 	auto reset_render_state = [](const util::ImGuiData& data, vuk::CommandBuffer& command_buffer, ImDrawData* draw_data, vuk::Buffer vertex, vuk::Buffer index) {
 		command_buffer.bind_sampled_image(0, 0, *data.font_texture.view, data.font_sci);
 		if (index.size > 0) {
-			command_buffer.bind_index_buffer(index, sizeof(ImDrawIdx) == 2 ? vk::IndexType::eUint16 : vk::IndexType::eUint32);
+			command_buffer.bind_index_buffer(index, sizeof(ImDrawIdx) == 2 ? vuk::IndexType::eUint16 : vuk::IndexType::eUint32);
 		}
-		command_buffer.bind_vertex_buffer(0, vertex, 0, vuk::Packed{ vk::Format::eR32G32Sfloat, vk::Format::eR32G32Sfloat, vk::Format::eR8G8B8A8Unorm });
+		command_buffer.bind_vertex_buffer(0, vertex, 0, vuk::Packed{ vuk::Format::eR32G32Sfloat, vuk::Format::eR32G32Sfloat, vuk::Format::eR8G8B8A8Unorm });
 		command_buffer.bind_graphics_pipeline("imgui");
 		command_buffer.set_viewport(0, vuk::Area::Framebuffer{});
 		struct PC {
@@ -58,13 +58,13 @@ vuk::Pass util::ImGui_ImplVuk_Render(vuk::PerThreadContext& ptc, vuk::Name src_t
 		pc.scale[1] = -2.0f / draw_data->DisplaySize.y;
 		pc.translate[0] = -1.0f - draw_data->DisplayPos.x * pc.scale[0];
 		pc.translate[1] = 1.0f + draw_data->DisplayPos.y * pc.scale[1];
-		command_buffer.push_constants(vk::ShaderStageFlagBits::eVertex, 0, pc);
+		command_buffer.push_constants(vuk::ShaderStageFlagBits::eVertex, 0, pc);
 	};
 
 	size_t vertex_size = draw_data->TotalVtxCount * sizeof(ImDrawVert);
 	size_t index_size = draw_data->TotalIdxCount * sizeof(ImDrawIdx);
-	auto imvert = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst, vertex_size, 1, false);
-	auto imind = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst, index_size, 1, false);
+	auto imvert = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eVertexBuffer | vuk::BufferUsageFlagBits::eTransferDst, vertex_size, 1, false);
+	auto imind = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eIndexBuffer | vuk::BufferUsageFlagBits::eTransferDst, index_size, 1, false);
 
 	size_t vtx_dst = 0, idx_dst = 0;
 	for (int n = 0; n < draw_data->CmdListsCount; n++) {
@@ -122,7 +122,7 @@ vuk::Pass util::ImGui_ImplVuk_Render(vuk::PerThreadContext& ptc, vuk::Name src_t
 								clip_rect.y = 0.0f;
 
 							// Apply scissor/clipping rectangle
-							VkRect2D scissor;
+							vuk::Rect2D scissor;
 							scissor.offset.x = (int32_t)(clip_rect.x);
 							scissor.offset.y = (int32_t)(clip_rect.y);
 							scissor.extent.width = (uint32_t)(clip_rect.z - clip_rect.x);

@@ -1,7 +1,6 @@
 #pragma once
 
 #include <VkBootstrap.h>
-#include <vulkan/vulkan.hpp>
 #include "Context.hpp"
 #include <optional>
 #include "utils.hpp"
@@ -30,13 +29,13 @@ namespace vuk {
 
 namespace vuk {
 	struct ExampleRunner {
-		vk::Device device;
-		vk::PhysicalDevice physical_device;
-		vk::Queue graphics_queue;
+		VkDevice device;
+		VkPhysicalDevice physical_device;
+		VkQueue graphics_queue;
 		std::optional<Context> context;
 		vuk::SwapchainRef swapchain;
 		GLFWwindow* window;
-		vk::SurfaceKHR surface;
+		VkSurfaceKHR surface;
 		vkb::Instance vkbinstance;
 		vkb::Device vkbdevice;
 		util::ImGuiData imgui_data;

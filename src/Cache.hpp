@@ -2,7 +2,6 @@
 #include <shared_mutex>
 #include <unordered_map>
 #include <plf_colony.h>
-#include <vulkan/vulkan.hpp>
 #include "Hash.hpp"
 #include "Types.hpp"
 #include "Pipeline.hpp"
@@ -16,8 +15,8 @@
 
 namespace std {
 	template <>
-	struct hash<vk::VertexInputBindingDescription> {
-		size_t operator()(vk::VertexInputBindingDescription const& x) const noexcept {
+	struct hash<VkVertexInputBindingDescription> {
+		size_t operator()(VkVertexInputBindingDescription const& x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, x.binding, x.inputRate, x.stride);
 			return h;
@@ -25,8 +24,8 @@ namespace std {
 	};
 
 	template <>
-	struct hash<vk::VertexInputAttributeDescription> {
-		size_t operator()(vk::VertexInputAttributeDescription const& x) const noexcept {
+	struct hash<VkVertexInputAttributeDescription> {
+		size_t operator()(VkVertexInputAttributeDescription const& x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, x.binding, x.format, x.location, x.offset);
 			return h;
@@ -34,8 +33,8 @@ namespace std {
 	};
 
 	template <>
-	struct hash<vk::PipelineVertexInputStateCreateInfo> {
-		size_t operator()(vk::PipelineVertexInputStateCreateInfo const& x) const noexcept {
+	struct hash<VkPipelineVertexInputStateCreateInfo> {
+		size_t operator()(VkPipelineVertexInputStateCreateInfo const& x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, x.flags, std::span(x.pVertexBindingDescriptions, x.vertexBindingDescriptionCount), std::span(x.pVertexAttributeDescriptions, x.vertexAttributeDescriptionCount));
 			return h;
@@ -43,8 +42,8 @@ namespace std {
 	};
 
 	template <>
-	struct hash<vk::SpecializationMapEntry> {
-		size_t operator()(vk::SpecializationMapEntry const& x) const noexcept {
+	struct hash<VkSpecializationMapEntry> {
+		size_t operator()(VkSpecializationMapEntry const& x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, x.constantID, x.offset, x.size);
 			return h;
@@ -52,8 +51,8 @@ namespace std {
 	};
 
 	template <>
-	struct hash<vk::SpecializationInfo> {
-		size_t operator()(vk::SpecializationInfo const& x) const noexcept {
+	struct hash<VkSpecializationInfo> {
+		size_t operator()(VkSpecializationInfo const& x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, std::span(x.pMapEntries, x.mapEntryCount), std::span((std::byte*)x.pData, x.dataSize));
 			return h;
@@ -61,8 +60,8 @@ namespace std {
 	};
 
 	template <>
-	struct hash<vk::PipelineShaderStageCreateInfo> {
-		size_t operator()(vk::PipelineShaderStageCreateInfo const& x) const noexcept {
+	struct hash<VkPipelineShaderStageCreateInfo> {
+		size_t operator()(VkPipelineShaderStageCreateInfo const& x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, x.flags, x.pName, to_integral(x.stage), reinterpret_cast<uint64_t>((VkShaderModule)x.module));
 			if (x.pSpecializationInfo) hash_combine(h, *x.pSpecializationInfo);
@@ -71,8 +70,8 @@ namespace std {
 	};
 
 	template <>
-	struct hash<vk::PipelineTessellationStateCreateInfo> {
-		size_t operator()(vk::PipelineTessellationStateCreateInfo const& x) const noexcept {
+	struct hash<VkPipelineTessellationStateCreateInfo> {
+		size_t operator()(VkPipelineTessellationStateCreateInfo const& x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, x.flags, x.patchControlPoints);
 			return h;
@@ -80,8 +79,8 @@ namespace std {
 	};
 
 	template <>
-	struct hash<vk::Extent2D> {
-		size_t operator()(vk::Extent2D const& x) const noexcept {
+	struct hash<vuk::Extent2D> {
+		size_t operator()(vuk::Extent2D const& x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, x.width, x.height);
 			return h;
@@ -89,8 +88,8 @@ namespace std {
 	};
 
 	template <>
-	struct hash<vk::Extent3D> {
-		size_t operator()(vk::Extent3D const& x) const noexcept {
+	struct hash<vuk::Extent3D> {
+		size_t operator()(vuk::Extent3D const& x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, x.width, x.height, x.depth);
 			return h;
@@ -98,8 +97,8 @@ namespace std {
 	};
 
 	template <>
-	struct hash<vk::Offset2D> {
-		size_t operator()(vk::Offset2D const& x) const noexcept {
+	struct hash<vuk::Offset2D> {
+		size_t operator()(vuk::Offset2D const& x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, x.x, x.y);
 			return h;
@@ -107,8 +106,8 @@ namespace std {
 	};
 
 	template <>
-	struct hash<vk::Rect2D> {
-		size_t operator()(vk::Rect2D const& x) const noexcept {
+	struct hash<vuk::Rect2D> {
+		size_t operator()(vuk::Rect2D const& x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, x.extent, x.offset);
 			return h;
@@ -116,8 +115,44 @@ namespace std {
 	};
 
 	template <>
-	struct hash<vk::Viewport> {
-		size_t operator()(vk::Viewport const& x) const noexcept {
+	struct hash<VkExtent2D> {
+		size_t operator()(VkExtent2D const& x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, x.width, x.height);
+			return h;
+		}
+	};
+
+	template <>
+	struct hash<VkExtent3D> {
+		size_t operator()(VkExtent3D const& x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, x.width, x.height, x.depth);
+			return h;
+		}
+	};
+
+	template <>
+	struct hash<VkOffset2D> {
+		size_t operator()(VkOffset2D const& x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, x.x, x.y);
+			return h;
+		}
+	};
+
+	template <>
+	struct hash<VkRect2D> {
+		size_t operator()(VkRect2D const& x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, x.extent, x.offset);
+			return h;
+		}
+	};
+
+	template <>
+	struct hash<VkViewport> {
+		size_t operator()(VkViewport const& x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, x.x, x.y, x.width, x.height, x.minDepth, x.maxDepth);
 			return h;
@@ -125,8 +160,8 @@ namespace std {
 	};
 
 	template <>
-	struct hash<vk::PipelineViewportStateCreateInfo> {
-		size_t operator()(vk::PipelineViewportStateCreateInfo const& x) const noexcept {
+	struct hash<VkPipelineViewportStateCreateInfo> {
+		size_t operator()(VkPipelineViewportStateCreateInfo const& x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, x.flags);
 			if (x.pScissors) hash_combine(h, std::span(x.pScissors, x.scissorCount));
@@ -138,8 +173,8 @@ namespace std {
 	};
 
 	template <>
-	struct hash<vk::PipelineMultisampleStateCreateInfo> {
-		size_t operator()(vk::PipelineMultisampleStateCreateInfo const& x) const noexcept {
+	struct hash<VkPipelineMultisampleStateCreateInfo> {
+		size_t operator()(VkPipelineMultisampleStateCreateInfo const& x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, x.flags, x.alphaToCoverageEnable, x.alphaToOneEnable, x.minSampleShading, x.rasterizationSamples, x.sampleShadingEnable);
 			if (x.pSampleMask) hash_combine(h, *x.pSampleMask);
@@ -148,8 +183,8 @@ namespace std {
 	};
 
 	template <>
-	struct hash<vk::DynamicState> {
-		size_t operator()(vk::DynamicState const& x) const noexcept {
+	struct hash<VkDynamicState> {
+		size_t operator()(VkDynamicState const& x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, to_integral(x));
 			return h;
@@ -157,17 +192,17 @@ namespace std {
 	};
 
 	template <>
-	struct hash<vk::PipelineDynamicStateCreateInfo> {
-		size_t operator()(vk::PipelineDynamicStateCreateInfo const& x) const noexcept {
+	struct hash<VkPipelineDynamicStateCreateInfo> {
+		size_t operator()(VkPipelineDynamicStateCreateInfo const& x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, x.flags, std::span(x.pDynamicStates, x.dynamicStateCount));
 			return h;
 		}
 	};
 
-	template <>
-	struct hash<vk::GraphicsPipelineCreateInfo> {
-		size_t operator()(vk::GraphicsPipelineCreateInfo const & x) const noexcept {
+/*	template <>
+	struct hash<VkGraphicsPipelineCreateInfo> {
+		size_t operator()(VkGraphicsPipelineCreateInfo const & x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, x.flags, std::span(x.pStages, x.stageCount));
 			if (x.pVertexInputState) hash_combine(h, *x.pVertexInputState);
@@ -186,11 +221,11 @@ namespace std {
 				x.basePipelineIndex);
 			return h;
 		}
-	};
+	};*/
 	
 	template <>
-	struct hash<vk::AttachmentDescription> {
-		size_t operator()(vk::AttachmentDescription const& x) const noexcept {
+	struct hash<VkAttachmentDescription> {
+		size_t operator()(VkAttachmentDescription const& x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, x.flags, x.initialLayout, x.finalLayout, x.format, x.loadOp, x.stencilLoadOp, x.storeOp, x.stencilStoreOp, x.samples);
 			return h;
@@ -198,8 +233,8 @@ namespace std {
 	};
 
 	template <>
-	struct hash<vk::AttachmentReference> {
-		size_t operator()(vk::AttachmentReference const& x) const noexcept {
+	struct hash<VkAttachmentReference> {
+		size_t operator()(VkAttachmentReference const& x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, x.attachment, x.layout);
 			return h;
@@ -207,8 +242,8 @@ namespace std {
 	};
 
 	template <>
-	struct hash<vk::SubpassDependency> {
-		size_t operator()(vk::SubpassDependency const& x) const noexcept {
+	struct hash<VkSubpassDependency> {
+		size_t operator()(VkSubpassDependency const& x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, x.dependencyFlags, x.srcAccessMask, x.srcStageMask, x.srcSubpass, x.dstAccessMask, x.dstStageMask, x.dstSubpass);
 			return h;
@@ -216,8 +251,8 @@ namespace std {
 	};
 
 	template <>
-	struct hash<vk::ImageCreateInfo> {
-		size_t operator()(vk::ImageCreateInfo const & x) const noexcept {
+	struct hash<vuk::ImageCreateInfo> {
+		size_t operator()(vuk::ImageCreateInfo const & x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, x.flags, x.arrayLayers, x.extent, to_integral(x.format), to_integral(x.imageType), to_integral(x.initialLayout), x.mipLevels, std::span(x.pQueueFamilyIndices, x.queueFamilyIndexCount), to_integral(x.samples), to_integral(x.sharingMode), to_integral(x.tiling), x.usage);
 			return h;
@@ -225,8 +260,8 @@ namespace std {
 	};
 	
 	template <>
-	struct hash<vk::ImageSubresourceRange> {
-		size_t operator()(vk::ImageSubresourceRange const& x) const noexcept {
+	struct hash<vuk::ImageSubresourceRange> {
+		size_t operator()(vuk::ImageSubresourceRange const& x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, x.aspectMask, x.baseArrayLayer, x.baseMipLevel, x.layerCount, x.levelCount);
 			return h;
@@ -234,8 +269,8 @@ namespace std {
 	};
 
 	template <>
-	struct hash<vk::ComponentMapping> {
-		size_t operator()(vk::ComponentMapping const& x) const noexcept {
+	struct hash<vuk::ComponentMapping> {
+		size_t operator()(vuk::ComponentMapping const& x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, to_integral(x.r), to_integral(x.g), to_integral(x.b), to_integral(x.a));
 			return h;
@@ -243,8 +278,8 @@ namespace std {
 	};
 
 	template <>
-	struct hash<vk::ImageViewCreateInfo> {
-		size_t operator()(vk::ImageViewCreateInfo const & x) const noexcept {
+	struct hash<vuk::ImageViewCreateInfo> {
+		size_t operator()(vuk::ImageViewCreateInfo const & x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, x.flags, x.components, to_integral(x.format), 
 				reinterpret_cast<uint64_t>((VkImage)x.image),
@@ -254,8 +289,8 @@ namespace std {
 	};
 
 	template <>
-	struct hash<vk::SamplerCreateInfo> {
-		size_t operator()(vk::SamplerCreateInfo const & x) const noexcept {
+	struct hash<vuk::SamplerCreateInfo> {
+		size_t operator()(vuk::SamplerCreateInfo const & x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, x.flags, x.addressModeU, x.addressModeV, x.addressModeW, x.anisotropyEnable, x.borderColor, x.compareEnable, x.compareOp, x.magFilter, x.maxAnisotropy, x.maxLod, x.minFilter, x.minLod, x.mipLodBias, x.mipmapMode, x.unnormalizedCoordinates); 
 			return h;

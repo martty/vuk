@@ -1,6 +1,5 @@
 #pragma once
 #include <GLFW/glfw3.h>
-#include <vulkan/vulkan.hpp>
 
 inline GLFWwindow* create_window_glfw(const char* title, bool resize = true) {
 	glfwInit();

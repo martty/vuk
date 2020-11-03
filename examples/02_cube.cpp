@@ -37,10 +37,10 @@ namespace {
 			// And enqueues a transfer operation, which will copy the given data
 			// Finally it returns a vuk::Buffer, which holds the info for the allocation
 			// And a TransferStub, which can be used to query for the transfer status
-			auto [bverts, stub1] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eVertexBuffer, std::span(&box.first[0], box.first.size()));
+			auto [bverts, stub1] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eVertexBuffer, std::span(&box.first[0], box.first.size()));
 			// We do this move here so that we can capture this variable later
 			auto verts = std::move(bverts);
-			auto [binds, stub2] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eIndexBuffer, std::span(&box.second[0], box.second.size()));
+			auto [binds, stub2] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eIndexBuffer, std::span(&box.second[0], box.second.size()));
 			auto inds = std::move(binds);
 			// This struct will represent the view-projection transform used for the cube
 			struct VP {
@@ -52,7 +52,7 @@ namespace {
 			// Fill the projection matrix, standard perspective matrix
 			vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 1.f, 10.f);
 			// Allocate and transfer view-projection transform
-			auto [buboVP, stub3] = ptc.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vk::BufferUsageFlagBits::eUniformBuffer, std::span(&vp, 1));
+			auto [buboVP, stub3] = ptc.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eUniformBuffer, std::span(&vp, 1));
 			auto uboVP = buboVP;
 			// For this example, we just request that all transfer finish before we continue
 			ptc.wait_all_transfers();
@@ -68,13 +68,13 @@ namespace {
 					  .set_scissor(0, vuk::Area::Framebuffer{}) // Set the scissor area to cover the entire framebuffer
 					  // The vertex format and the buffer used are bound together for this call
 					  // The format is specified here as vuk::Packed{}, meaning we are going to make a consecutive binding
-					  // For each element in the list, a vk::Format signifies a binding
+					  // For each element in the list, a vuk::Format signifies a binding
 					  // And a vuk::Ignore signifies a number of bytes to be skipped
-					  // In this case, we will bind vk::Format::eR32G32B32Sfloat to the first location (0)
+					  // In this case, we will bind vuk::Format::eR32G32B32Sfloat to the first location (0)
 					  // And use the remaining vuk::Ignore-d bytes to establish the stride of the buffer
-					  .bind_vertex_buffer(0, verts, 0, vuk::Packed{vk::Format::eR32G32B32Sfloat, vuk::Ignore{sizeof(util::Vertex) - sizeof(util::Vertex::position)}})
+					  .bind_vertex_buffer(0, verts, 0, vuk::Packed{vuk::Format::eR32G32B32Sfloat, vuk::Ignore{sizeof(util::Vertex) - sizeof(util::Vertex::position)}})
 					  // Bind the index buffer
-					  .bind_index_buffer(inds, vk::IndexType::eUint32)
+					  .bind_index_buffer(inds, vuk::IndexType::eUint32)
 					  .bind_graphics_pipeline("cube")
 					  // Bind the uniform buffer we allocated to (set = 0, binding = 0)
 					  .bind_uniform_buffer(0, 0, uboVP);

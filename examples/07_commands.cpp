@@ -39,7 +39,7 @@ namespace {
 			auto doge_image = stbi_load("../../examples/doge.png", &x, &y, &chans, 4);
 
 			auto ptc = ifc.begin();
-			auto [tex, stub] = ptc.create_texture(vk::Format::eR8G8B8A8Srgb, vk::Extent3D(x, y, 1), doge_image);
+			auto [tex, stub] = ptc.create_texture(vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, doge_image);
 			texture_of_doge = std::move(tex);
 			ptc.wait_all_transfers();
 			stbi_image_free(doge_image);
@@ -52,9 +52,9 @@ namespace {
 
 			// We set up the cube data, same as in example 02_cube
 
-			auto [bverts, stub1] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eVertexBuffer, std::span(&box.first[0], box.first.size()));
+			auto [bverts, stub1] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eVertexBuffer, std::span(&box.first[0], box.first.size()));
 			auto verts = std::move(bverts);
-			auto [binds, stub2] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eIndexBuffer, std::span(&box.second[0], box.second.size()));
+			auto [binds, stub2] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eIndexBuffer, std::span(&box.second[0], box.second.size()));
 			auto inds = std::move(binds);
 			struct VP {
 				glm::mat4 view;
@@ -63,7 +63,7 @@ namespace {
 			vp.view = glm::lookAt(glm::vec3(0, 0, 1.75), glm::vec3(0), glm::vec3(0, 1, 0));
 			vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 0.1f, 10.f);
 
-			auto [buboVP, stub3] = ptc.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vk::BufferUsageFlagBits::eUniformBuffer, std::span(&vp, 1));
+			auto [buboVP, stub3] = ptc.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eUniformBuffer, std::span(&vp, 1));
 			auto uboVP = buboVP;
 			ptc.wait_all_transfers();
 
@@ -77,9 +77,9 @@ namespace {
 					command_buffer
 					  .set_viewport(0, vuk::Area::Framebuffer{})
 					  .set_scissor(0, vuk::Area::Framebuffer{})
-					  .bind_vertex_buffer(0, verts, 0, vuk::Packed{vk::Format::eR32G32B32Sfloat, vuk::Ignore{offsetof(util::Vertex, uv_coordinates) - sizeof(util::Vertex::position)}, vk::Format::eR32G32Sfloat})
-					  .bind_index_buffer(inds, vk::IndexType::eUint32)
-					  .bind_sampled_image(0, 2, *texture_of_doge, vk::SamplerCreateInfo{})
+					  .bind_vertex_buffer(0, verts, 0, vuk::Packed{vuk::Format::eR32G32B32Sfloat, vuk::Ignore{offsetof(util::Vertex, uv_coordinates) - sizeof(util::Vertex::position)}, vuk::Format::eR32G32Sfloat})
+					  .bind_index_buffer(inds, vuk::IndexType::eUint32)
+					  .bind_sampled_image(0, 2, *texture_of_doge, vuk::SamplerCreateInfo{})
 					  .bind_graphics_pipeline("textured_cube")
 					  .bind_uniform_buffer(0, 0, uboVP);
 					glm::mat4* model = command_buffer.map_scratch_uniform_binding<glm::mat4>(0, 1);
@@ -117,17 +117,17 @@ namespace {
 						auto sx = shuf[i] % 3;
 						auto sy = shuf[i] / 3;
 
-						vk::ImageBlit blit;
-						blit.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+						vuk::ImageBlit blit;
+						blit.srcSubresource.aspectMask = vuk::ImageAspectFlagBits::eColor;
 						blit.srcSubresource.baseArrayLayer = 0;
 						blit.srcSubresource.layerCount = 1;
 						blit.srcSubresource.mipLevel = 0;
-						blit.srcOffsets[0] = vk::Offset3D{ static_cast<int>(x * tile_x_size), static_cast<int>(y * tile_y_size), 0 };
-						blit.srcOffsets[1] = vk::Offset3D{ static_cast<int>((x + 1) * tile_x_size), static_cast<int>((y + 1) * tile_y_size), 1 };
+						blit.srcOffsets[0] = vuk::Offset3D{ static_cast<int>(x * tile_x_size), static_cast<int>(y * tile_y_size), 0 };
+						blit.srcOffsets[1] = vuk::Offset3D{ static_cast<int>((x + 1) * tile_x_size), static_cast<int>((y + 1) * tile_y_size), 1 };
 						blit.dstSubresource = blit.srcSubresource;
-						blit.dstOffsets[0] = vk::Offset3D{ static_cast<int>(sx * tile_x_size), static_cast<int>(sy * tile_y_size), 0 };
-						blit.dstOffsets[1] = vk::Offset3D{ static_cast<int>((sx + 1) * tile_x_size), static_cast<int>((sy + 1) * tile_y_size), 1 };
-						command_buffer.blit_image("07_commands_NMS", "07_commands_final", blit, vk::Filter::eLinear);
+						blit.dstOffsets[0] = vuk::Offset3D{ static_cast<int>(sx * tile_x_size), static_cast<int>(sy * tile_y_size), 0 };
+						blit.dstOffsets[1] = vuk::Offset3D{ static_cast<int>((sx + 1) * tile_x_size), static_cast<int>((sy + 1) * tile_y_size), 1 };
+						command_buffer.blit_image("07_commands_NMS", "07_commands_final", blit, vuk::Filter::eLinear);
 					}
 				}
 			});
@@ -162,7 +162,7 @@ namespace {
 			// from the final image, and we don't need to specify here
 			// We use the swapchain format & extents, since resolving needs identical formats & extents
 			rg.mark_attachment_internal("07_commands_MS", runner.swapchain->format, vuk::Extent2D{300, 300}, vuk::Samples::e8, vuk::ClearColor{ 0.f, 0.f, 0.f, 0.f });
-			rg.mark_attachment_internal("07_commands_depth", vk::Format::eD32Sfloat, vuk::Extent2D::Framebuffer{}, vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
+			rg.mark_attachment_internal("07_commands_depth", vuk::Format::eD32Sfloat, vuk::Extent2D::Framebuffer{}, vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
 			rg.mark_attachment_internal("07_commands_NMS", runner.swapchain->format, vuk::Extent2D{300, 300}, vuk::Samples::e1, vuk::ClearColor{ 0.f, 0.f, 0.f, 0.f });
 			return rg;
 		},

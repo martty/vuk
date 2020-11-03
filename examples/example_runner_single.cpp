@@ -36,13 +36,13 @@ vuk::ExampleRunner::ExampleRunner() {
 			physical_device = vkbphysical_device.physical_device;
 
 			vkb::DeviceBuilder device_builder{ vkbphysical_device };
-			vk::PhysicalDeviceDescriptorIndexingFeatures descriptor_indexing_features{};
+			VkPhysicalDeviceDescriptorIndexingFeatures descriptor_indexing_features{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES };
 			descriptor_indexing_features.descriptorBindingPartiallyBound = true;
 			descriptor_indexing_features.descriptorBindingUpdateUnusedWhilePending = true;
 			descriptor_indexing_features.shaderSampledImageArrayNonUniformIndexing = true;
 			descriptor_indexing_features.runtimeDescriptorArray = true;
 			descriptor_indexing_features.descriptorBindingVariableDescriptorCount = true;
-			vk::PhysicalDeviceVulkan11Features feats;
+			VkPhysicalDeviceVulkan11Features feats{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES };
 			feats.shaderDrawParameters = true;
 			auto dev_ret = device_builder.add_pNext(&descriptor_indexing_features).add_pNext(&feats).build();
 			if (!dev_ret.has_value()) {

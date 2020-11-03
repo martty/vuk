@@ -1,8 +1,9 @@
 #pragma once
-#include <vulkan/vulkan.hpp>
 #include <unordered_map>
 #include <vector>
+#include <array>
 #include "CreateInfo.hpp"
+#include <vulkan/vulkan.h>
 
 namespace spirv_cross {
 	struct SPIRType;
@@ -49,7 +50,7 @@ namespace vuk {
 
 			std::vector<Member> members;
 
-			vk::ShaderStageFlags stage;
+			VkShaderStageFlags stage;
 		};
 
 		struct StorageBuffer {
@@ -60,7 +61,7 @@ namespace vuk {
 
 			std::vector<Member> members;
 
-			vk::ShaderStageFlags stage;
+			VkShaderStageFlags stage;
 
 		};
 
@@ -68,7 +69,7 @@ namespace vuk {
 			std::string name;
 
 			unsigned binding;
-			vk::ShaderStageFlags stage;
+			VkShaderStageFlags stage;
 		};
 
 		struct Sampler {
@@ -79,29 +80,29 @@ namespace vuk {
 
 			bool shadow; // if this is a samplerXXXShadow
 
-			vk::ShaderStageFlags stage;
+			VkShaderStageFlags stage;
 		};
 
 		struct TexelBuffer {
 			std::string name;
 
 			unsigned binding;
-			vk::ShaderStageFlags stage;
+			VkShaderStageFlags stage;
 		};
 
 		struct SubpassInput {
 			std::string name;
 
 			unsigned binding;
-			vk::ShaderStageFlags stage;
+			VkShaderStageFlags stage;
 		};
 
-		vk::ShaderStageFlagBits introspect(const spirv_cross::Compiler& refl);
+		VkShaderStageFlagBits introspect(const spirv_cross::Compiler& refl);
 
 		std::array<unsigned, 3> local_size;
 
 		std::vector<Attribute> attributes;
-		std::vector<vk::PushConstantRange> push_constant_ranges;
+		std::vector<VkPushConstantRange> push_constant_ranges;
 		struct Descriptors {
 			std::vector<UniformBuffer> uniform_buffers;
 			std::vector<StorageBuffer> storage_buffers;
@@ -113,7 +114,7 @@ namespace vuk {
 			unsigned highest_descriptor_binding = 0;
 		};
 		std::unordered_map<size_t, Descriptors> sets;
-		vk::ShaderStageFlags stages = {};
+		VkShaderStageFlags stages = {};
 		void append(const Program& o);
 	};
 
@@ -127,9 +128,9 @@ namespace vuk {
 	};
 
 	struct ShaderModule {
-		vk::ShaderModule shader_module;
+		VkShaderModule shader_module;
 		vuk::Program reflection_info;
-		vk::ShaderStageFlagBits stage;
+		VkShaderStageFlagBits stage;
 	};
 
 	template<> struct create_info<vuk::ShaderModule> {

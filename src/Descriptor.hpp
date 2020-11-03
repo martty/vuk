@@ -2,19 +2,53 @@
 
 #define VUK_MAX_BINDINGS 16
 #include <bitset>
-#include <vulkan/vulkan.hpp>
 #include <vector>
 #include "vuk_fwd.hpp"
 #include "Types.hpp"
 #include <concurrentqueue.h>
 #include <mutex>
+#include "Image.hpp"
+
+inline bool operator==(VkDescriptorSetLayoutBinding const& lhs, VkDescriptorSetLayoutBinding const& rhs) noexcept {
+	return (lhs.binding == rhs.binding)
+		&& (lhs.descriptorType == rhs.descriptorType)
+		&& (lhs.descriptorCount == rhs.descriptorCount)
+		&& (lhs.stageFlags == rhs.stageFlags)
+		&& (lhs.pImmutableSamplers == rhs.pImmutableSamplers);
+}
 
 namespace vuk {
+	enum class DescriptorType {
+		eSampler = VK_DESCRIPTOR_TYPE_SAMPLER,
+		eCombinedImageSampler = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+		eSampledImage = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+		eStorageImage = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+		eUniformTexelBuffer = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,
+		eStorageTexelBuffer = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER,
+		eUniformBuffer = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+		eStorageBuffer = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		eUniformBufferDynamic = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
+		eStorageBufferDynamic = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC,
+		eInputAttachment = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
+		eInlineUniformBlockEXT = VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT,
+		eAccelerationStructureKHR = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
+		eAccelerationStructureNV = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV
+	};
+
+	enum class DescriptorBindingFlagBits : VkDescriptorBindingFlags {
+		eUpdateAfterBind = VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT,
+		eUpdateUnusedWhilePending = VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT,
+		ePartiallyBound = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT,
+		eVariableDescriptorCount = VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT
+	};
+
+	using DescriptorBindingFlags = Flags<DescriptorBindingFlagBits>;
+
 	struct DescriptorSetLayoutAllocInfo {
 		std::array<uint32_t, 12> descriptor_counts = {};
-		vk::DescriptorSetLayout layout;
+		VkDescriptorSetLayout layout;
 		unsigned variable_count_binding = (unsigned)-1;
-		vk::DescriptorType variable_count_binding_type;
+		vuk::DescriptorType variable_count_binding_type;
 		unsigned variable_count_binding_max_size;
 
 		bool operator==(const DescriptorSetLayoutAllocInfo& o) const {
@@ -25,15 +59,15 @@ namespace vuk {
 	struct DescriptorImageInfo {
 		vuk::Sampler sampler;
 		vuk::ImageView image_view;
-		vk::DescriptorImageInfo dii;
+		VkDescriptorImageInfo dii;
 
-		DescriptorImageInfo(vuk::Sampler s, vuk::ImageView iv, vk::ImageLayout il) : sampler(s), image_view(iv), dii(s.payload, iv.payload, il) {}
+		DescriptorImageInfo(vuk::Sampler s, vuk::ImageView iv, vuk::ImageLayout il) : sampler(s), image_view(iv), dii{ s.payload, iv.payload, (VkImageLayout)il } {		}
 
 		bool operator==(const DescriptorImageInfo& o) const {
 			return std::tie(sampler, image_view, dii.imageLayout) == std::tie(o.sampler, o.image_view, o.dii.imageLayout);
 		}
 
-		operator vk::DescriptorImageInfo() const {
+		operator VkDescriptorImageInfo() const {
 			return dii;
 		}
 	};
@@ -44,7 +78,7 @@ namespace vuk {
 	struct DescriptorBinding {
 		DescriptorBinding() {}
 
-		vk::DescriptorType type = vk::DescriptorType(-1);
+		vuk::DescriptorType type = vuk::DescriptorType(-1);
 		union {
 			VkDescriptorBufferInfo buffer;
 			vuk::DescriptorImageInfo image;
@@ -53,12 +87,12 @@ namespace vuk {
 		bool operator==(const DescriptorBinding& o) const {
 			if (type != o.type) return false;
 			switch (type) {
-			case vk::DescriptorType::eUniformBuffer:
-			case vk::DescriptorType::eStorageBuffer:
+			case vuk::DescriptorType::eUniformBuffer:
+			case vuk::DescriptorType::eStorageBuffer:
 				return memcmp(&buffer, &o.buffer, sizeof(VkDescriptorBufferInfo)) == 0;
-			case vk::DescriptorType::eSampledImage:
-			case vk::DescriptorType::eSampler:
-			case vk::DescriptorType::eCombinedImageSampler:
+			case vuk::DescriptorType::eSampledImage:
+			case vuk::DescriptorType::eSampler:
+			case vuk::DescriptorType::eCombinedImageSampler:
 				return image == o.image;
 			default:
 				assert(0);
@@ -83,9 +117,9 @@ namespace vuk {
 	};
 
 	struct DescriptorSetLayoutCreateInfo {
-		vk::DescriptorSetLayoutCreateInfo dslci;
-		std::vector<vk::DescriptorSetLayoutBinding> bindings;
-		std::vector<vk::DescriptorBindingFlags> flags;
+		VkDescriptorSetLayoutCreateInfo dslci = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+		std::vector<VkDescriptorSetLayoutBinding> bindings;
+		std::vector<VkDescriptorBindingFlags> flags;
 		size_t index;
 
 		bool operator==(const DescriptorSetLayoutCreateInfo& o) const {
@@ -98,7 +132,7 @@ namespace vuk {
 	};
 
 	struct DescriptorSet {
-		vk::DescriptorSet descriptor_set;
+		VkDescriptorSet descriptor_set = VK_NULL_HANDLE;
 		DescriptorSetLayoutAllocInfo layout_info;
 	};
 
@@ -108,12 +142,12 @@ namespace vuk {
 
 	struct DescriptorPool {
         std::mutex grow_mutex;
-		std::vector<vk::DescriptorPool> pools;
+		std::vector<VkDescriptorPool> pools;
         uint32_t sets_allocated = 0;
-        moodycamel::ConcurrentQueue<vk::DescriptorSet> free_sets{1024};
+        moodycamel::ConcurrentQueue<VkDescriptorSet> free_sets{1024};
 
 		void grow(PerThreadContext& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info);
-		vk::DescriptorSet acquire(PerThreadContext& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info);
+		VkDescriptorSet acquire(PerThreadContext& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info);
 
 		DescriptorPool() = default;
 		DescriptorPool(DescriptorPool&& o) {
@@ -127,18 +161,18 @@ namespace vuk {
 	};
 
 	struct PersistentDescriptorSet {
-		vk::UniqueDescriptorPool backing_pool;
-		vk::DescriptorSet backing_set;
+		VkDescriptorPool backing_pool;
+		VkDescriptorSet backing_set;
 
 		std::vector<DescriptorBinding> descriptor_bindings;
 
-		std::vector<vk::WriteDescriptorSet> pending_writes;
+		std::vector<VkWriteDescriptorSet> pending_writes;
 
 		bool operator==(const PersistentDescriptorSet& other) const {
-			return backing_pool.get() == other.backing_pool.get();
+			return backing_pool == other.backing_pool;
 		}
 
-		void update_combined_image_sampler(PerThreadContext& ptc, unsigned binding, unsigned array_index, vuk::ImageView iv, vk::SamplerCreateInfo sampler_create_info, vk::ImageLayout layout);
+		void update_combined_image_sampler(PerThreadContext& ptc, unsigned binding, unsigned array_index, vuk::ImageView iv, vuk::SamplerCreateInfo sampler_create_info, vuk::ImageLayout layout);
 	};
 }
 
@@ -164,11 +198,11 @@ namespace std {
 	};
 
 	template <>
-	struct hash<vk::DescriptorSetLayoutBinding> {
-		size_t operator()(vk::DescriptorSetLayoutBinding const & x) const noexcept {
+	struct hash<VkDescriptorSetLayoutBinding> {
+		size_t operator()(VkDescriptorSetLayoutBinding const & x) const noexcept {
 			size_t h = 0;
 			// TODO: immutable samplers
-			hash_combine(h, x.binding, x.descriptorCount, x.descriptorType, (VkShaderStageFlags)x.stageFlags);
+			hash_combine(h, x.binding, x.descriptorCount, x.descriptorType, x.stageFlags);
 			return h;
 		}
 	};

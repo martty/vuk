@@ -1,26 +1,55 @@
 #pragma once
 
-#include <vulkan/vulkan.hpp>
 #include "vuk_fwd.hpp"
 #include "CreateInfo.hpp"
 #include "Types.hpp"
 #include "Cache.hpp"
+#include <optional>
+
+inline bool operator==(VkAttachmentDescription const& lhs, VkAttachmentDescription const& rhs) noexcept {
+	return (lhs.flags == rhs.flags)
+		&& (lhs.format == rhs.format)
+		&& (lhs.samples == rhs.samples)
+		&& (lhs.loadOp == rhs.loadOp)
+		&& (lhs.storeOp == rhs.storeOp)
+		&& (lhs.stencilLoadOp == rhs.stencilLoadOp)
+		&& (lhs.stencilStoreOp == rhs.stencilStoreOp)
+		&& (lhs.initialLayout == rhs.initialLayout)
+		&& (lhs.finalLayout == rhs.finalLayout);
+}
+
+inline bool operator==(VkSubpassDependency const& lhs, VkSubpassDependency const& rhs) noexcept {
+	return (lhs.srcSubpass == rhs.srcSubpass)
+		&& (lhs.dstSubpass == rhs.dstSubpass)
+		&& (lhs.srcStageMask == rhs.srcStageMask)
+		&& (lhs.dstStageMask == rhs.dstStageMask)
+		&& (lhs.srcAccessMask == rhs.srcAccessMask)
+		&& (lhs.dstAccessMask == rhs.dstAccessMask)
+		&& (lhs.dependencyFlags == rhs.dependencyFlags);
+}
+
+inline bool operator==(VkAttachmentReference const& lhs, VkAttachmentReference const& rhs) noexcept {
+	return (lhs.attachment == rhs.attachment)
+		&& (lhs.layout == rhs.layout);
+}
 
 namespace vuk {
-	struct SubpassDescription : public vk::SubpassDescription {
+	struct SubpassDescription : public VkSubpassDescription {
+		SubpassDescription() : VkSubpassDescription{} {}
 		bool operator==(const SubpassDescription& o) const {
 			return std::tie(flags, pipelineBindPoint) ==
 				std::tie(o.flags, o.pipelineBindPoint);
 		}
 	};
 
-	struct RenderPassCreateInfo : public vk::RenderPassCreateInfo {
-		std::vector<vk::AttachmentDescription> attachments;
+	struct RenderPassCreateInfo : public VkRenderPassCreateInfo {
+		RenderPassCreateInfo() : VkRenderPassCreateInfo{.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO } {}
+		std::vector<VkAttachmentDescription> attachments;
 		std::vector<vuk::SubpassDescription> subpass_descriptions;
-		std::vector<vk::SubpassDependency> subpass_dependencies;
-		std::vector<vk::AttachmentReference> color_refs;
-		std::vector<vk::AttachmentReference> resolve_refs;
-		std::vector<std::optional<vk::AttachmentReference>> ds_refs;
+		std::vector<VkSubpassDependency> subpass_dependencies;
+		std::vector<VkAttachmentReference> color_refs;
+		std::vector<VkAttachmentReference> resolve_refs;
+		std::vector<std::optional<VkAttachmentReference>> ds_refs;
 		std::vector<size_t> color_ref_offsets;
 
 		bool operator==(const RenderPassCreateInfo& o) const {
@@ -29,11 +58,12 @@ namespace vuk {
 		}
 	};
 
-	template<> struct create_info<vk::RenderPass> {
+	template<> struct create_info<VkRenderPass> {
 		using type = vuk::RenderPassCreateInfo;
 	};
 
-	struct FramebufferCreateInfo : public vk::FramebufferCreateInfo {
+	struct FramebufferCreateInfo : public VkFramebufferCreateInfo {
+		FramebufferCreateInfo() : VkFramebufferCreateInfo{.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO } {}
 		std::vector<vuk::ImageView> attachments;
 
 		bool operator==(const FramebufferCreateInfo& o) const {
@@ -42,12 +72,8 @@ namespace vuk {
 		}
 	};
 
-	template<> struct create_info<vk::Framebuffer> {
+	template<> struct create_info<VkFramebuffer> {
 		using type = vuk::FramebufferCreateInfo;
-	};
-
-	template<> struct create_info<vk::Sampler> {
-		using type = vk::SamplerCreateInfo;
 	};
 }
 

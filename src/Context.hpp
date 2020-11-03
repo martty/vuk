@@ -14,16 +14,18 @@
 #include "RenderPass.hpp"
 #include "vuk_fwd.hpp"
 #include <exception>
+#include "Image.hpp"
+#include "Buffer.hpp"
 
 namespace vuk {
 	struct RGImage {
-		vk::Image image;
+		vuk::Image image;
 		vuk::ImageView image_view;
 	};
 	struct RGCI {
 		Name name;
-		vk::ImageCreateInfo ici;
-		vk::ImageViewCreateInfo ivci;
+		vuk::ImageCreateInfo ici;
+		vuk::ImageViewCreateInfo ivci;
 
 		bool operator==(const RGCI& other) const {
 			return std::tie(name, ici, ivci) == std::tie(other.name, other.ici, other.ivci);
@@ -45,7 +47,7 @@ namespace vuk {
 namespace std {
 	template <>
 	struct hash<vuk::RGCI> {
-		size_t operator()(vuk::RGCI const & x) const noexcept {
+		size_t operator()(vuk::RGCI const& x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, x.name, x.ici, x.ivci);
 			return h;
@@ -59,13 +61,13 @@ namespace vuk {
 	};
 
 	struct Swapchain {
-		vk::SwapchainKHR swapchain;
-		vk::SurfaceKHR surface;
+		VkSwapchainKHR swapchain;
+		VkSurfaceKHR surface;
 
-		vk::Format format;
-		vk::Extent2D extent = { 0, 0 };
-		std::vector<vk::Image> images;
-		std::vector<vk::ImageView> _ivs;
+		vuk::Format format;
+		vuk::Extent2D extent = { 0, 0 };
+		std::vector<vuk::Image> images;
+		std::vector<VkImageView> _ivs;
 		std::vector<vuk::ImageView> image_views;
 	};
 	using SwapchainRef = Swapchain*;
@@ -87,44 +89,44 @@ namespace vuk {
 	class Context {
 	public:
 		constexpr static size_t FC = 3;
-		
-		vk::Instance instance;
-		vk::Device device;
-		vk::PhysicalDevice physical_device;
-		vk::Queue graphics_queue;
-        uint32_t graphics_queue_family_index;
-        vk::Queue transfer_queue;
-        uint32_t transfer_queue_family_index;
+
+		VkInstance instance;
+		VkDevice device;
+		VkPhysicalDevice physical_device;
+		VkQueue graphics_queue;
+		uint32_t graphics_queue_family_index;
+		VkQueue transfer_queue;
+		uint32_t transfer_queue_family_index;
 		Allocator allocator;
 
 		std::mutex gfx_queue_lock;
-        std::mutex xfer_queue_lock;
+		std::mutex xfer_queue_lock;
 	private:
-		Pool<vk::CommandBuffer, FC> cbuf_pools;
-		Pool<vk::Semaphore, FC> semaphore_pools;
-		Pool<vk::Fence, FC> fence_pools;
-		vk::UniquePipelineCache vk_pipeline_cache;
-        Cache<PipelineBaseInfo> pipelinebase_cache;
+		Pool<VkCommandBuffer, FC> cbuf_pools;
+		Pool<VkSemaphore, FC> semaphore_pools;
+		Pool<VkFence, FC> fence_pools;
+		VkPipelineCache vk_pipeline_cache;
+		Cache<PipelineBaseInfo> pipelinebase_cache;
 		Cache<PipelineInfo> pipeline_cache;
 		Cache<ComputePipelineInfo> compute_pipeline_cache;
-		Cache<vk::RenderPass> renderpass_cache;
-		Cache<vk::Framebuffer> framebuffer_cache;
+		Cache<VkRenderPass> renderpass_cache;
+		Cache<VkFramebuffer> framebuffer_cache;
 		PerFrameCache<RGImage, FC> transient_images;
 		PerFrameCache<Allocator::Linear, FC> scratch_buffers;
 		Cache<vuk::DescriptorPool> pool_cache;
 		PerFrameCache<vuk::DescriptorSet, FC> descriptor_sets;
-		Cache<vk::Sampler> sampler_cache;
+		Cache<vuk::Sampler> sampler_cache;
 		Pool<vuk::SampledImage, FC> sampled_images;
 		Cache<vuk::ShaderModule> shader_modules;
 		Cache<vuk::DescriptorSetLayoutAllocInfo> descriptor_set_layouts;
-		Cache<vk::PipelineLayout> pipeline_layouts;
+		Cache<VkPipelineLayout> pipeline_layouts;
 
 		std::mutex begin_frame_lock;
 
 		std::array<std::mutex, FC> recycle_locks;
-		std::array<std::vector<vk::Image>, FC> image_recycle;
-		std::array<std::vector<vk::ImageView>, FC> image_view_recycle;
-		std::array<std::vector<vk::Pipeline>, FC> pipeline_recycle;
+		std::array<std::vector<vuk::Image>, FC> image_recycle;
+		std::array<std::vector<VkImageView>, FC> image_view_recycle;
+		std::array<std::vector<VkPipeline>, FC> pipeline_recycle;
 		std::array<std::vector<vuk::Buffer>, FC> buffer_recycle;
 		std::array<std::vector<vuk::PersistentDescriptorSet>, FC> pds_recycle;
 
@@ -138,7 +140,7 @@ namespace vuk {
 		std::mutex swapchains_lock;
 		plf::colony<Swapchain> swapchains;
 	public:
-		Context(vk::Instance instance, vk::Device device, vk::PhysicalDevice physical_device, vk::Queue graphics);
+		Context(VkInstance instance, VkDevice device, VkPhysicalDevice physical_device, VkQueue graphics);
 		~Context();
 
 		struct DebugUtils {
@@ -154,8 +156,8 @@ namespace vuk {
 			template<class T>
 			void set_name(const T& t, /*zstring_view*/Name name);
 
-			void begin_region(const vk::CommandBuffer&, Name name, std::array<float, 4> color = { 1,1,1,1 });
-			void end_region(const vk::CommandBuffer&);
+			void begin_region(const VkCommandBuffer&, Name name, std::array<float, 4> color = { 1,1,1,1 });
+			void end_region(const VkCommandBuffer&);
 		} debug;
 
 		void create_named_pipeline(const char* name, vuk::PipelineBaseCreateInfo pbci);
@@ -163,63 +165,63 @@ namespace vuk {
 
 		vuk::PipelineBaseInfo* get_named_pipeline(const char* name);
 		vuk::ComputePipelineInfo* get_named_compute_pipeline(const char* name);
-        
+
 		vuk::PipelineBaseInfo* get_pipeline(const vuk::PipelineBaseCreateInfo& pbci);
-        vuk::ComputePipelineInfo* get_pipeline(const vuk::ComputePipelineCreateInfo& pbci);
-        vuk::Program get_pipeline_reflection_info(vuk::PipelineBaseCreateInfo pbci);
-        vuk::ShaderModule compile_shader(std::string source, Name path);
-		
+		vuk::ComputePipelineInfo* get_pipeline(const vuk::ComputePipelineCreateInfo& pbci);
+		vuk::Program get_pipeline_reflection_info(vuk::PipelineBaseCreateInfo pbci);
+		vuk::ShaderModule compile_shader(std::string source, Name path);
+
 		vuk::ShaderModule create(const create_info_t<vuk::ShaderModule>& cinfo);
-        vuk::PipelineBaseInfo create(const create_info_t<vuk::PipelineBaseInfo>& cinfo);
-        vk::PipelineLayout create(const create_info_t<vk::PipelineLayout>& cinfo);
-        vuk::DescriptorSetLayoutAllocInfo create(const create_info_t<vuk::DescriptorSetLayoutAllocInfo>& cinfo);
+		vuk::PipelineBaseInfo create(const create_info_t<vuk::PipelineBaseInfo>& cinfo);
+		VkPipelineLayout create(const create_info_t<VkPipelineLayout>& cinfo);
+		vuk::DescriptorSetLayoutAllocInfo create(const create_info_t<vuk::DescriptorSetLayoutAllocInfo>& cinfo);
 		vuk::ComputePipelineInfo create(const create_info_t<vuk::ComputePipelineInfo>& cinfo);
 
 		bool load_pipeline_cache(std::span<uint8_t> data);
-        std::vector<uint8_t> save_pipeline_cache();
+		std::vector<uint8_t> save_pipeline_cache();
 
 		// one pool per thread
-        std::mutex one_time_pool_lock;
-		std::vector<vk::CommandPool> xfer_one_time_pools;
-        std::vector<vk::CommandPool> one_time_pools;
+		std::mutex one_time_pool_lock;
+		std::vector<VkCommandPool> xfer_one_time_pools;
+		std::vector<VkCommandPool> one_time_pools;
 
-        uint32_t (*get_thread_index)() = nullptr;
+		uint32_t(*get_thread_index)() = nullptr;
 
 		// when the fence is signaled, caller should clean up the resources
 		struct UploadResult {
-            vk::Fence fence;
-            vk::CommandBuffer command_buffer;
-            vuk::Buffer staging;
-            bool is_buffer;
-            unsigned thread_index;
+			VkFence fence;
+			VkCommandBuffer command_buffer;
+			vuk::Buffer staging;
+			bool is_buffer;
+			unsigned thread_index;
 		};
 
 		struct BufferUpload {
-            vuk::Buffer dst;
-            std::span<unsigned char> data;
+			vuk::Buffer dst;
+			std::span<unsigned char> data;
 		};
 		UploadResult fenced_upload(std::span<BufferUpload>);
 
 		struct ImageUpload {
-            vk::Image dst;
-            vk::Extent3D extent;
-            std::span<unsigned char> data;
+			vuk::Image dst;
+			vuk::Extent3D extent;
+			std::span<unsigned char> data;
 		};
 		UploadResult fenced_upload(std::span<ImageUpload>);
-        void free_upload_resources(const UploadResult&);
+		void free_upload_resources(const UploadResult&);
 
-		Buffer allocate_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, size_t alignment);
-        Texture allocate_texture(vk::ImageCreateInfo ici);
+		Buffer allocate_buffer(MemoryUsage mem_usage, BufferUsageFlags buffer_usage, size_t size, size_t alignment);
+		Texture allocate_texture(vuk::ImageCreateInfo ici);
 
-		void enqueue_destroy(vk::Image);
+		void enqueue_destroy(vuk::Image);
 		void enqueue_destroy(vuk::ImageView);
-		void enqueue_destroy(vk::Pipeline);
+		void enqueue_destroy(VkPipeline);
 		void enqueue_destroy(vuk::Buffer);
 		void enqueue_destroy(vuk::PersistentDescriptorSet);
 
 		template<class T>
 		Handle<T> wrap(T payload);
-		
+
 		SwapchainRef add_swapchain(Swapchain sw);
 
 		InflightContext begin();
@@ -233,12 +235,12 @@ namespace vuk {
 		void destroy(const vuk::PipelineInfo& pi);
 		void destroy(const vuk::ShaderModule& sm);
 		void destroy(const vuk::DescriptorSetLayoutAllocInfo& ds);
-		void destroy(const vk::PipelineLayout& pl);
-		void destroy(const vk::RenderPass& rp);
+		void destroy(const VkPipelineLayout& pl);
+		void destroy(const VkRenderPass& rp);
 		void destroy(const vuk::DescriptorSet&);
-		void destroy(const vk::Framebuffer& fb);
-		void destroy(const vk::Sampler& sa);
-        void destroy(const vuk::PipelineBaseInfo& pbi);
+		void destroy(const VkFramebuffer& fb);
+		void destroy(const vuk::Sampler& sa);
+		void destroy(const vuk::PipelineBaseInfo& pbi);
 
 		friend class InflightContext;
 		friend class PerThreadContext;
@@ -252,26 +254,26 @@ namespace vuk {
 		const size_t absolute_frame;
 		const unsigned frame;
 	private:
-		Pool<vk::Fence, Context::FC>::PFView fence_pools; // must be first, so we wait for the fences
-		Pool<vk::CommandBuffer, Context::FC>::PFView commandbuffer_pools;
-		Pool<vk::Semaphore, Context::FC>::PFView semaphore_pools;
+		Pool<VkFence, Context::FC>::PFView fence_pools; // must be first, so we wait for the fences
+		Pool<VkCommandBuffer, Context::FC>::PFView commandbuffer_pools;
+		Pool<VkSemaphore, Context::FC>::PFView semaphore_pools;
 		Cache<PipelineInfo>::PFView pipeline_cache;
 		Cache<ComputePipelineInfo>::PFView compute_pipeline_cache;
 		Cache<PipelineBaseInfo>::PFView pipelinebase_cache;
-		Cache<vk::RenderPass>::PFView renderpass_cache;
-		Cache<vk::Framebuffer>::PFView framebuffer_cache;
+		Cache<VkRenderPass>::PFView renderpass_cache;
+		Cache<VkFramebuffer>::PFView framebuffer_cache;
 		PerFrameCache<vuk::RGImage, Context::FC>::PFView transient_images;
 		PerFrameCache<Allocator::Linear, Context::FC>::PFView scratch_buffers;
 		PerFrameCache<vuk::DescriptorSet, Context::FC>::PFView descriptor_sets;
-		Cache<vk::Sampler>::PFView sampler_cache;
-    public:
+		Cache<vuk::Sampler>::PFView sampler_cache;
+	public:
 		Pool<vuk::SampledImage, Context::FC>::PFView sampled_images;
-    private:
+	private:
 		Cache<vuk::DescriptorPool>::PFView pool_cache;
 
 		Cache<vuk::ShaderModule>::PFView shader_modules;
 		Cache<vuk::DescriptorSetLayoutAllocInfo>::PFView descriptor_set_layouts;
-		Cache<vk::PipelineLayout>::PFView pipeline_layouts;
+		Cache<VkPipelineLayout>::PFView pipeline_layouts;
 	public:
 		InflightContext(Context& ctx, size_t absolute_frame, std::lock_guard<std::mutex>&& recycle_guard);
 
@@ -286,21 +288,21 @@ namespace vuk {
 
 		struct BufferImageCopyCommand {
 			Buffer src;
-			vk::Image dst;
-			vk::Extent3D extent;
-            bool generate_mips;
+			vuk::Image dst;
+			vuk::Extent3D extent;
+			bool generate_mips;
 			TransferStub stub;
 		};
 
 	private:
 		friend class PerThreadContext;
-		
+
 		std::atomic<size_t> transfer_id = 1;
 		std::atomic<size_t> last_transfer_complete = 0;
 
 		struct PendingTransfer {
 			size_t last_transfer_id;
-			vk::Fence fence;
+			VkFence fence;
 		};
 		// needs to be mpsc
 		std::mutex transfer_mutex;
@@ -310,12 +312,12 @@ namespace vuk {
 		std::queue<PendingTransfer> pending_transfers;
 
 		TransferStub enqueue_transfer(Buffer src, Buffer dst);
-		TransferStub enqueue_transfer(Buffer src, vk::Image dst, vk::Extent3D extent, bool generate_mips);
+		TransferStub enqueue_transfer(Buffer src, vuk::Image dst, vuk::Extent3D extent, bool generate_mips);
 
 		// recycle
 		std::mutex recycle_lock;
-		void destroy(std::vector<vk::Image>&& images);
-		void destroy(std::vector<vk::ImageView>&& images);
+		void destroy(std::vector<vuk::Image>&& images);
+		void destroy(std::vector<VkImageView>&& images);
 	};
 
 	class PerThreadContext {
@@ -323,28 +325,28 @@ namespace vuk {
 		Context& ctx;
 		InflightContext& ifc;
 		const unsigned tid = 0; // not yet implemented
-		Pool<vk::CommandBuffer, Context::FC>::PFPTView commandbuffer_pool;
-		Pool<vk::Semaphore, Context::FC>::PFPTView semaphore_pool;
-		Pool<vk::Fence, Context::FC>::PFPTView fence_pool;
+		Pool<VkCommandBuffer, Context::FC>::PFPTView commandbuffer_pool;
+		Pool<VkSemaphore, Context::FC>::PFPTView semaphore_pool;
+		Pool<VkFence, Context::FC>::PFPTView fence_pool;
 		Cache<PipelineInfo>::PFPTView pipeline_cache;
 		Cache<ComputePipelineInfo>::PFPTView compute_pipeline_cache;
 		Cache<PipelineBaseInfo>::PFPTView pipelinebase_cache;
-		Cache<vk::RenderPass>::PFPTView renderpass_cache;
-		Cache<vk::Framebuffer>::PFPTView framebuffer_cache;
+		Cache<VkRenderPass>::PFPTView renderpass_cache;
+		Cache<VkFramebuffer>::PFPTView framebuffer_cache;
 		PerFrameCache<vuk::RGImage, Context::FC>::PFPTView transient_images;
 		PerFrameCache<Allocator::Linear, Context::FC>::PFPTView scratch_buffers;
 		PerFrameCache<vuk::DescriptorSet, Context::FC>::PFPTView descriptor_sets;
-		Cache<vk::Sampler>::PFPTView sampler_cache;
+		Cache<vuk::Sampler>::PFPTView sampler_cache;
 		Pool<vuk::SampledImage, Context::FC>::PFPTView sampled_images;
 		Cache<vuk::DescriptorPool>::PFPTView pool_cache;
 		Cache<vuk::ShaderModule>::PFPTView shader_modules;
 		Cache<vuk::DescriptorSetLayoutAllocInfo>::PFPTView descriptor_set_layouts;
-		Cache<vk::PipelineLayout>::PFPTView pipeline_layouts;
+		Cache<VkPipelineLayout>::PFPTView pipeline_layouts;
 	private:
 		// recycling global objects
 		std::vector<Buffer> buffer_recycle;
-		std::vector<vk::Image> image_recycle;
-		std::vector<vk::ImageView> image_view_recycle;
+		std::vector<vuk::Image> image_recycle;
+		std::vector<VkImageView> image_view_recycle;
 	public:
 		PerThreadContext(InflightContext& ifc, unsigned tid);
 		~PerThreadContext();
@@ -360,41 +362,41 @@ namespace vuk {
 		void commit_persistent_descriptorset(PersistentDescriptorSet& array);
 
 		size_t get_allocation_size(Buffer);
-		Buffer _allocate_scratch_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, size_t alignment, bool create_mapped);
-        Unique<Buffer> _allocate_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, size_t size, size_t alignment, bool create_mapped);
+		Buffer _allocate_scratch_buffer(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, size_t size, size_t alignment, bool create_mapped);
+		Unique<Buffer> _allocate_buffer(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, size_t size, size_t alignment, bool create_mapped);
 
 		// since data is provided, we will add TransferDst to the flags automatically
 		template<class T>
-		std::pair<Buffer, TransferStub> create_scratch_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, std::span<T> data) {
-			auto dst = _allocate_scratch_buffer(mem_usage, vk::BufferUsageFlagBits::eTransferDst | buffer_usage, sizeof(T) * data.size(), 1, false);
+		std::pair<Buffer, TransferStub> create_scratch_buffer(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, std::span<T> data) {
+			auto dst = _allocate_scratch_buffer(mem_usage, vuk::BufferUsageFlagBits::eTransferDst | buffer_usage, sizeof(T) * data.size(), 1, false);
 			auto stub = upload(dst, data);
 			return { dst, stub };
 		}
 
 		template<class T>
-		std::pair<Unique<Buffer>, TransferStub> create_buffer(MemoryUsage mem_usage, vk::BufferUsageFlags buffer_usage, std::span<T> data) {
-			auto dst = _allocate_buffer(mem_usage, vk::BufferUsageFlagBits::eTransferDst | buffer_usage, sizeof(T) * data.size(), 1, false);
+		std::pair<Unique<Buffer>, TransferStub> create_buffer(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, std::span<T> data) {
+			auto dst = _allocate_buffer(mem_usage, vuk::BufferUsageFlagBits::eTransferDst | buffer_usage, sizeof(T) * data.size(), 1, false);
 			auto stub = upload(*dst, data);
 			return { std::move(dst), stub };
 		}
 
 
-		vuk::Texture allocate_texture(vk::ImageCreateInfo);
-		std::pair<vuk::Texture, TransferStub> create_texture(vk::Format format, vk::Extent3D extents, void* data);
+		vuk::Texture allocate_texture(vuk::ImageCreateInfo);
+		std::pair<vuk::Texture, TransferStub> create_texture(vuk::Format format, vuk::Extent3D extents, void* data);
 
 		template<class T>
 		TransferStub upload(Buffer dst, std::span<T> data) {
 			if (data.empty()) return { 0 };
-			auto staging = _allocate_scratch_buffer(MemoryUsage::eCPUonly, vk::BufferUsageFlagBits::eTransferSrc, sizeof(T) * data.size(), 1, true);
+			auto staging = _allocate_scratch_buffer(MemoryUsage::eCPUonly, vuk::BufferUsageFlagBits::eTransferSrc, sizeof(T) * data.size(), 1, true);
 			::memcpy(staging.mapped_ptr, data.data(), sizeof(T) * data.size());
 
 			return ifc.enqueue_transfer(staging, dst);
 		}
 
 		template<class T>
-		TransferStub upload(vk::Image dst, vk::Extent3D extent, std::span<T> data, bool generate_mips) {
+		TransferStub upload(vuk::Image dst, vuk::Extent3D extent, std::span<T> data, bool generate_mips) {
 			assert(!data.empty());
-			auto staging = _allocate_scratch_buffer(MemoryUsage::eCPUonly, vk::BufferUsageFlagBits::eTransferSrc, sizeof(T) * data.size(), 1, true);
+			auto staging = _allocate_scratch_buffer(MemoryUsage::eCPUonly, vuk::BufferUsageFlagBits::eTransferSrc, sizeof(T) * data.size(), 1, true);
 			::memcpy(staging.mapped_ptr, data.data(), sizeof(T) * data.size());
 
 			return ifc.enqueue_transfer(staging, dst, extent, generate_mips);
@@ -402,49 +404,56 @@ namespace vuk {
 
 		void dma_task();
 
-        vuk::SampledImage& make_sampled_image(vuk::ImageView iv, vk::SamplerCreateInfo sci);
-        vuk::SampledImage& make_sampled_image(Name n, vk::SamplerCreateInfo sci);
-        vuk::SampledImage& make_sampled_image(Name n, vk::ImageViewCreateInfo ivci, vk::SamplerCreateInfo sci);
+		vuk::SampledImage& make_sampled_image(vuk::ImageView iv, vuk::SamplerCreateInfo sci);
+		vuk::SampledImage& make_sampled_image(Name n, vuk::SamplerCreateInfo sci);
+		vuk::SampledImage& make_sampled_image(Name n, vuk::ImageViewCreateInfo ivci, vuk::SamplerCreateInfo sci);
 
-        vuk::Program get_pipeline_reflection_info(vuk::PipelineBaseCreateInfo pci);
+		vuk::Program get_pipeline_reflection_info(vuk::PipelineBaseCreateInfo pci);
 
-        template<class T>
-        void destroy(const T& t) {
-            ctx.destroy(t);
-        }
+		template<class T>
+		void destroy(const T& t) {
+			ctx.destroy(t);
+		}
 
-        void destroy(vk::Image image);
-        void destroy(vuk::ImageView image);
-        void destroy(vuk::DescriptorSet ds);
+		void destroy(vuk::Image image);
+		void destroy(vuk::ImageView image);
+		void destroy(vuk::DescriptorSet ds);
 
-        PipelineBaseInfo create(const create_info_t<PipelineBaseInfo>& cinfo);
-        PipelineInfo create(const create_info_t<PipelineInfo>& cinfo);
+		PipelineBaseInfo create(const create_info_t<PipelineBaseInfo>& cinfo);
+		PipelineInfo create(const create_info_t<PipelineInfo>& cinfo);
 		vuk::ShaderModule create(const create_info_t<vuk::ShaderModule>& cinfo);
-		vk::RenderPass create(const create_info_t<vk::RenderPass>& cinfo);
+		VkRenderPass create(const create_info_t<VkRenderPass>& cinfo);
 		vuk::RGImage create(const create_info_t<vuk::RGImage>& cinfo);
 		//vuk::Allocator::Pool create(const create_info_t<vuk::Allocator::Pool>& cinfo);
 		vuk::Allocator::Linear create(const create_info_t<vuk::Allocator::Linear>& cinfo);
 		vuk::DescriptorPool create(const create_info_t<vuk::DescriptorPool>& cinfo);
 		vuk::DescriptorSet create(const create_info_t<vuk::DescriptorSet>& cinfo);
-		vk::Framebuffer create(const create_info_t<vk::Framebuffer>& cinfo);
-		vk::Sampler create(const create_info_t<vk::Sampler>& cinfo);
+		VkFramebuffer create(const create_info_t<VkFramebuffer>& cinfo);
+		vuk::Sampler create(const create_info_t<vuk::Sampler>& cinfo);
 		vuk::DescriptorSetLayoutAllocInfo create(const create_info_t<vuk::DescriptorSetLayoutAllocInfo>& cinfo);
-		vk::PipelineLayout create(const create_info_t<vk::PipelineLayout>& cinfo);
+		VkPipelineLayout create(const create_info_t<VkPipelineLayout>& cinfo);
 		vuk::ComputePipelineInfo create(const create_info_t<vuk::ComputePipelineInfo>& cinfo);
 	};
-	
+
 	template<class T>
 	void Context::DebugUtils::set_name(const T& t, Name name) {
 		if (!enabled()) return;
-		VkDebugUtilsObjectNameInfoEXT info;
-		info.pNext = nullptr;
-		info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
+		VkDebugUtilsObjectNameInfoEXT info = { .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT };
 		info.pObjectName = name.data();
-		info.objectType = (VkObjectType)t.objectType;
-		info.objectHandle = reinterpret_cast<uint64_t>((typename T::CType)t);
+		if constexpr (std::is_same_v<T, VkImage>) {
+			info.objectType = VK_OBJECT_TYPE_IMAGE;
+		} else if constexpr (std::is_same_v<T, VkImageView>) {
+			info.objectType = VK_OBJECT_TYPE_IMAGE_VIEW;
+		} else if constexpr (std::is_same_v<T, VkShaderModule>) {
+			info.objectType = VK_OBJECT_TYPE_SHADER_MODULE;
+		} else if constexpr (std::is_same_v<T, VkPipeline>) {
+			info.objectType = VK_OBJECT_TYPE_PIPELINE;
+		}
+		//info.objectType = (VkObjectType)t.objectType;
+		info.objectHandle = reinterpret_cast<uint64_t>(t);
 		setDebugUtilsObjectNameEXT(ctx.device, &info);
 	}
-	
+
 	template<class T>
 	Handle<T> Context::wrap(T payload) {
 		return { { unique_handle_id_counter++ }, payload };
@@ -460,22 +469,22 @@ namespace vuk {
 	template<class T, size_t FC>
 	Pool<T, FC>::PFView::PFView(InflightContext& ifc, Pool<T, FC>& storage, plf::colony<PooledType<T>>& fv) : storage(storage), ifc(ifc), frame_values(fv) {
 		storage.reset(ifc.frame);
-	}	
+	}
 
-    template<typename Type>
-    inline Unique<Type>::~Unique() noexcept {
-        if(context && payload != Type{})
-            context->enqueue_destroy(std::move(payload));
-    }
-    template<typename Type>
-    inline void Unique<Type>::reset(Type value) noexcept {
-        if (payload != value) {
-            if (context && payload != Type{}) {
+	template<typename Type>
+	inline Unique<Type>::~Unique() noexcept {
+		if (context && payload != Type{})
+			context->enqueue_destroy(std::move(payload));
+	}
+	template<typename Type>
+	inline void Unique<Type>::reset(Type value) noexcept {
+		if (payload != value) {
+			if (context && payload != Type{}) {
 				context->enqueue_destroy(std::move(payload));
-			} 
-            payload = std::move(value);
-        }
-    }
+			}
+			payload = std::move(value);
+		}
+	}
 
 	struct RenderGraph;
 	bool execute_submit_and_present_to_one(PerThreadContext& ptc, RenderGraph& rg, SwapchainRef swapchain, bool use_secondary_command_buffers = false);

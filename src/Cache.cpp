@@ -99,7 +99,7 @@ namespace vuk {
     }
 
 	template<>
-    vk::PipelineLayout& Cache<vk::PipelineLayout>::acquire(const create_info_t<vk::PipelineLayout>& ci) {
+    VkPipelineLayout& Cache<VkPipelineLayout>::acquire(const create_info_t<VkPipelineLayout>& ci) {
         std::shared_lock _(cache_mtx);
         if(auto it = lru_map.find(ci); it != lru_map.end()) {
             it->second.last_use_frame = UINT64_MAX;
@@ -124,10 +124,10 @@ namespace vuk {
 	template class Cache<vuk::PipelineInfo>;
 	template class Cache<vuk::PipelineBaseInfo>;
 	template class Cache<vuk::ComputePipelineInfo>;
-	template class Cache<vk::RenderPass>;
-	template class Cache<vk::Framebuffer>;
-	template class Cache<vk::Sampler>;
-	template class Cache<vk::PipelineLayout>;
+	template class Cache<VkRenderPass>;
+	template class Cache<VkFramebuffer>;
+	template class Cache<vuk::Sampler>;
+	template class Cache<VkPipelineLayout>;
 	template class Cache<vuk::DescriptorSetLayoutAllocInfo>;
 	template class Cache<vuk::ShaderModule>;
 
@@ -202,37 +202,40 @@ namespace vuk {
 	void DescriptorPool::grow(PerThreadContext& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info) {
         if(!grow_mutex.try_lock())
             return;
-        vk::DescriptorPoolCreateInfo dpci;
+		VkDescriptorPoolCreateInfo dpci{ .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
         dpci.maxSets = sets_allocated == 0 ? 1 : sets_allocated * 2;
-        std::array<vk::DescriptorPoolSize, 12> descriptor_counts = {};
+        std::array<VkDescriptorPoolSize, 12> descriptor_counts = {};
         uint32_t used_idx = 0;
         for(auto i = 0; i < descriptor_counts.size(); i++) {
             if(layout_alloc_info.descriptor_counts[i] > 0) {
                 auto& d = descriptor_counts[used_idx];
-                d.type = vk::DescriptorType(i);
+                d.type = VkDescriptorType(i);
                 d.descriptorCount = layout_alloc_info.descriptor_counts[i] * dpci.maxSets;
                 used_idx++;
             }
         }
         dpci.pPoolSizes = descriptor_counts.data();
         dpci.poolSizeCount = used_idx;
-        pools.emplace_back(ptc.ctx.device.createDescriptorPool(dpci));
+        VkDescriptorPool pool;
+        vkCreateDescriptorPool(ptc.ctx.device, &dpci, nullptr, &pool);
+        pools.emplace_back(pool);
 
-        vk::DescriptorSetAllocateInfo dsai;
+		VkDescriptorSetAllocateInfo dsai{ .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
         dsai.descriptorPool = pools.back();
         dsai.descriptorSetCount = dpci.maxSets;
-        std::vector<vk::DescriptorSetLayout> layouts(dpci.maxSets, layout_alloc_info.layout);
+        std::vector<VkDescriptorSetLayout> layouts(dpci.maxSets, layout_alloc_info.layout);
         dsai.pSetLayouts = layouts.data();
         // allocate all the descriptorsets
-        auto sets = ptc.ctx.device.allocateDescriptorSets(dsai);
+        std::vector<VkDescriptorSet> sets(dsai.descriptorSetCount);
+        vkAllocateDescriptorSets(ptc.ctx.device, &dsai, sets.data());
         free_sets.enqueue_bulk(sets.data(), sets.size());
         sets_allocated = dpci.maxSets;
         
         grow_mutex.unlock();
     }
 	
-	vk::DescriptorSet DescriptorPool::acquire(PerThreadContext& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info) {
-        vk::DescriptorSet ds;
+	VkDescriptorSet DescriptorPool::acquire(PerThreadContext& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info) {
+        VkDescriptorSet ds;
         while (!free_sets.try_dequeue(ds)) {
             grow(ptc, layout_alloc_info);
         }

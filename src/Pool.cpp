@@ -4,83 +4,96 @@
 namespace vuk {
 	// pools
 	template<>
-	std::span<vk::Semaphore> PooledType<vk::Semaphore>::acquire(PerThreadContext& ptc, size_t count) {
+	std::span<VkSemaphore> PooledType<VkSemaphore>::acquire(PerThreadContext& ptc, size_t count) {
 		if (values.size() < (needle + count)) {
 			auto remaining = values.size() - needle;
 			for (auto i = 0; i < (count - remaining); i++) {
-				auto nalloc = ptc.ctx.device.createSemaphore({});
-				values.push_back(nalloc);
+				VkSemaphoreCreateInfo sci{.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+				VkSemaphore sema;
+				vkCreateSemaphore(ptc.ctx.device, &sci, nullptr, &sema);
+				values.push_back(sema);
 			}
 		}
-		std::span<vk::Semaphore> ret{ &*values.begin() + needle, count };
+		std::span<VkSemaphore> ret{ &*values.begin() + needle, count };
 		needle += count;
 		return ret;
 	}
 
 	template<>
-	std::span<vk::Fence> PooledType<vk::Fence>::acquire(PerThreadContext& ptc, size_t count) {
+	std::span<VkFence> PooledType<VkFence>::acquire(PerThreadContext& ptc, size_t count) {
 		if (values.size() < (needle + count)) {
 			auto remaining = values.size() - needle;
 			for (auto i = 0; i < (count - remaining); i++) {
-				auto nalloc = ptc.ctx.device.createFence({});
-				values.push_back(nalloc);
+				VkFenceCreateInfo sci{ .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
+				VkFence fence;
+				vkCreateFence(ptc.ctx.device, &sci, nullptr, &fence);
+				values.push_back(fence);
 			}
 		}
-		std::span<vk::Fence> ret{ &*values.begin() + needle, count };
+		std::span<VkFence> ret{ &*values.begin() + needle, count };
 		needle += count;
 		return ret;
 	}
 
-	template<class T>
-	void PooledType<T>::free(Context& ctx) {
+	template<>
+	void PooledType<VkSemaphore>::free(Context& ctx) {
 		for (auto& v : values) {
-			ctx.device.destroy(v);
+			vkDestroySemaphore(ctx.device, v, nullptr);
 		}
 	}
 
-	template struct PooledType<vk::Semaphore>;
-	template struct PooledType<vk::Fence>;
+	template<>
+	void PooledType<VkFence>::free(Context& ctx) {
+		for (auto& v : values) {
+			vkDestroyFence(ctx.device, v, nullptr);
+		}
+	}
+
+	template struct PooledType<VkSemaphore>;
+	template struct PooledType<VkFence>;
 
 	template<>
-	void PooledType<vk::Fence>::reset(Context& ctx) {
+	void PooledType<VkFence>::reset(Context& ctx) {
 		if (needle > 0) {
-			ctx.device.waitForFences((uint32_t)needle, values.data(), true, UINT64_MAX);
-			ctx.device.resetFences((uint32_t)needle, values.data());
+			vkWaitForFences(ctx.device, (uint32_t)needle, values.data(), true, UINT64_MAX);
+			vkResetFences(ctx.device, (uint32_t)needle, values.data());
 		}
 		needle = 0;
 	}
 
 	// vk::CommandBuffer pool
-	PooledType<vk::CommandBuffer>::PooledType(Context& ctx) {
-		pool = ctx.device.createCommandPoolUnique({});
+	PooledType<VkCommandBuffer>::PooledType(Context& ctx) {
+		VkCommandPoolCreateInfo cpci{.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
+		vkCreateCommandPool(ctx.device, &cpci, nullptr, &pool);
 	}
 
-	std::span<vk::CommandBuffer> PooledType<vk::CommandBuffer>::acquire(PerThreadContext& ptc, vk::CommandBufferLevel level, size_t count) {
-        auto& values = level == vk::CommandBufferLevel::ePrimary ? p_values : s_values;
-        auto& needle = level == vk::CommandBufferLevel::ePrimary ? p_needle : s_needle;
+	std::span<VkCommandBuffer> PooledType<VkCommandBuffer>::acquire(PerThreadContext& ptc, VkCommandBufferLevel level, size_t count) {
+        auto& values = level == VK_COMMAND_BUFFER_LEVEL_PRIMARY ? p_values : s_values;
+        auto& needle = level == VK_COMMAND_BUFFER_LEVEL_PRIMARY ? p_needle : s_needle;
 		if (values.size() < (needle + count)) {
 			auto remaining = values.size() - needle;
-			vk::CommandBufferAllocateInfo cbai;
+			VkCommandBufferAllocateInfo cbai{.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
 			cbai.commandBufferCount = (unsigned)(count - remaining);
-			cbai.commandPool = *pool;
+			cbai.commandPool = pool;
 			cbai.level = level;
-			auto nalloc = ptc.ctx.device.allocateCommandBuffers(cbai);
-			values.insert(values.end(), nalloc.begin(), nalloc.end());
+			auto ori_end = values.size();
+			values.resize(needle + count);
+			vkAllocateCommandBuffers(ptc.ctx.device, &cbai, values.data() + ori_end);
 		}
-		std::span<vk::CommandBuffer> ret{ &*values.begin() + needle, count };
+		std::span<VkCommandBuffer> ret{ &*values.begin() + needle, count };
 		needle += count;
 		return ret;
 	}
-	void PooledType<vk::CommandBuffer>::reset(Context& ctx) {
-		vk::CommandPoolResetFlags flags = {};
-		ctx.device.resetCommandPool(*pool, flags);
+
+	void PooledType<VkCommandBuffer>::reset(Context& ctx) {
+		VkCommandPoolResetFlags flags = {};
+		vkResetCommandPool(ctx.device, pool, flags);
 		p_needle = s_needle = 0;
 	}
 
-	void PooledType<vk::CommandBuffer>::free(Context& ctx) {
-		ctx.device.freeCommandBuffers(*pool, s_values);
-		ctx.device.freeCommandBuffers(*pool, p_values);
-		pool.reset();
+	void PooledType<VkCommandBuffer>::free(Context& ctx) {
+		vkFreeCommandBuffers(ctx.device, pool, p_values.size(), p_values.data());
+		vkFreeCommandBuffers(ctx.device, pool, s_values.size(), s_values.data());
+		vkDestroyCommandPool(ctx.device, pool, nullptr);
 	}
-
 }

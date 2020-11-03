@@ -56,11 +56,11 @@ namespace {
 			auto doge_image = stbi_load("../../examples/doge.png", &x, &y, &chans, 4);
 
 			auto ptc = ifc.begin();
-			auto [tex, stub] = ptc.create_texture(vk::Format::eR8G8B8A8Srgb, vk::Extent3D(x, y, 1), doge_image);
+			auto [tex, stub] = ptc.create_texture(vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1 }, doge_image);
 			texture_of_doge = std::move(tex);
 	
 			// init scrambling buffer
-			scramble_buf = ptc._allocate_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer, sizeof(unsigned) * x * y, 1, false);
+			scramble_buf = ptc._allocate_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eTransferDst | vuk::BufferUsageFlagBits::eStorageBuffer, sizeof(unsigned) * x * y, 1, false);
 			std::vector<unsigned> indices(x * y);
 			std::iota(indices.begin(), indices.end(), 0);
 			std::shuffle(indices.begin(), indices.end(), g);

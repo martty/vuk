@@ -38,9 +38,9 @@ namespace {
 			
 			// We set up the cube data, same as in example 02_cube
 
-			auto [bverts, stub1] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eVertexBuffer, std::span(&box.first[0], box.first.size()));
+			auto [bverts, stub1] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eVertexBuffer, std::span(&box.first[0], box.first.size()));
 			auto verts = std::move(bverts);
-			auto [binds, stub2] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eIndexBuffer, std::span(&box.second[0], box.second.size()));
+			auto [binds, stub2] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eIndexBuffer, std::span(&box.second[0], box.second.size()));
 			auto inds = std::move(binds);
 			struct VP {
 				glm::mat4 view;
@@ -49,7 +49,7 @@ namespace {
 			vp.view = glm::lookAt(glm::vec3(0, 1.5, 3.5), glm::vec3(0), glm::vec3(0, 1, 0));
 			vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 1.f, 10.f);
 
-			auto [buboVP, stub3] = ptc.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vk::BufferUsageFlagBits::eUniformBuffer, std::span(&vp, 1));
+			auto [buboVP, stub3] = ptc.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eUniformBuffer, std::span(&vp, 1));
 			auto uboVP = buboVP;
 			ptc.wait_all_transfers();
 		
@@ -90,9 +90,9 @@ namespace {
 					command_buffer
 					  .set_viewport(0, vuk::Area::Framebuffer{})
 					  .set_scissor(0, vuk::Area::Framebuffer{})
-					  .bind_index_buffer(inds, vk::IndexType::eUint32)
+					  .bind_index_buffer(inds, vuk::IndexType::eUint32)
 					  .bind_graphics_pipeline("cube")
-					  .bind_vertex_buffer(0, verts, 0, vuk::Packed{vk::Format::eR32G32B32Sfloat, vuk::Ignore{sizeof(util::Vertex) - sizeof(util::Vertex::position)}})
+					  .bind_vertex_buffer(0, verts, 0, vuk::Packed{vuk::Format::eR32G32B32Sfloat, vuk::Ignore{sizeof(util::Vertex) - sizeof(util::Vertex::position)}})
 					  .bind_uniform_buffer(0, 0, uboVP);
 					glm::mat4* model = command_buffer.map_scratch_uniform_binding<glm::mat4>(0, 1);
 					*model = static_cast<glm::mat4>(glm::angleAxis(glm::radians(angle), glm::vec3(0.f, 1.f, 0.f)));
@@ -109,7 +109,7 @@ namespace {
 			// we don't provide an input texture, nor do we want to save the results later
 			// For an internal attachment, we need to provide the format, extents, sample count and clear value
 			// This depth attachment will have extents matching the framebuffer (deduced from the color attachment)
-			rg.mark_attachment_internal("03_depth", vk::Format::eD32Sfloat, vuk::Extent2D::Framebuffer{}, vuk::Samples::e1, vuk::ClearDepthStencil{ 1.0f, 0 });
+			rg.mark_attachment_internal("03_depth", vuk::Format::eD32Sfloat, vuk::Extent2D::Framebuffer{}, vuk::Samples::e1, vuk::ClearDepthStencil{ 1.0f, 0 });
 
 			// Note that the three passes we given here are not ordered with respect to eachother
 			// They all write to the color attachment, which gives no ordering

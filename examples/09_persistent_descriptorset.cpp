@@ -41,7 +41,7 @@ namespace {
 			// Set the binding #0 in set #1 as a variable count binding, and set the maximum number of descriptors
 			pci.set_variable_count_binding(1, 0, 1024);
 			// Flag this binding as partially bound, so that we don't need to set all the array elements
-			pci.set_binding_flags(1, 0, vk::DescriptorBindingFlagBits::ePartiallyBound);
+			pci.set_binding_flags(1, 0, vuk::DescriptorBindingFlagBits::ePartiallyBound);
 			runner.context->create_named_pipeline("bindless_cube", pci);
 			}
 
@@ -58,24 +58,24 @@ namespace {
 
 			auto ptc = ifc.begin();
 			// Similarly to buffers, we allocate the image and enqueue the upload
-			auto [tex, _] = ptc.create_texture(vk::Format::eR8G8B8A8Srgb, vk::Extent3D(x, y, 1), doge_image);
+			auto [tex, _] = ptc.create_texture(vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, doge_image);
 			texture_of_doge = std::move(tex);
 			ptc.wait_all_transfers();
 			stbi_image_free(doge_image);
 
 			// Let's create two variants of the doge image
-			vk::ImageCreateInfo ici;
-			ici.format = vk::Format::eR8G8B8A8Srgb;
-			ici.extent = vk::Extent3D(x, y, 1);
+			vuk::ImageCreateInfo ici;
+			ici.format = vuk::Format::eR8G8B8A8Srgb;
+			ici.extent = vuk::Extent3D{ (unsigned)x, (unsigned)y, 1 };
 			ici.samples = vuk::Samples::e1;
-			ici.imageType = vk::ImageType::e2D;
-			ici.initialLayout = vk::ImageLayout::eUndefined;
-			ici.tiling = vk::ImageTiling::eOptimal;
-			ici.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
+			ici.imageType = vuk::ImageType::e2D;
+			ici.initialLayout = vuk::ImageLayout::eUndefined;
+			ici.tiling = vuk::ImageTiling::eOptimal;
+			ici.usage = vuk::ImageUsageFlagBits::eTransferDst | vuk::ImageUsageFlagBits::eSampled;
 			ici.mipLevels = ici.arrayLayers = 1;
 			variant1 = ptc.allocate_texture(ici);
-			ici.format = vk::Format::eR8G8B8A8Unorm;
-			ici.usage = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled;
+			ici.format = vuk::Format::eR8G8B8A8Unorm;
+			ici.usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled;
 			variant2 = ptc.allocate_texture(ici);
 			// Make a RenderGraph to process the loaded image
 			vuk::RenderGraph rg;
@@ -84,17 +84,17 @@ namespace {
 						.resources = {"09_doge"_image(vuk::eMemoryRead), "09_v1"_image(vuk::eTransferDst), "09_v2"_image(vuk::eComputeRead)},
 						.execute = [x, y](vuk::CommandBuffer& command_buffer) {
 								// For the first image, flip the image on the Y axis using a blit
-								vk::ImageBlit blit;
-								blit.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+								vuk::ImageBlit blit;
+								blit.srcSubresource.aspectMask = vuk::ImageAspectFlagBits::eColor;
 								blit.srcSubresource.baseArrayLayer = 0;
 								blit.srcSubresource.layerCount = 1;
 								blit.srcSubresource.mipLevel = 0;
-								blit.srcOffsets[0] = vk::Offset3D{ 0, 0, 0 };
-								blit.srcOffsets[1] = vk::Offset3D{ x, y, 1 };
+								blit.srcOffsets[0] = vuk::Offset3D{ 0, 0, 0 };
+								blit.srcOffsets[1] = vuk::Offset3D{ x, y, 1 };
 								blit.dstSubresource = blit.srcSubresource;
-								blit.dstOffsets[0] = vk::Offset3D{ x, y, 0 };
-								blit.dstOffsets[1] = vk::Offset3D{ 0, 0, 1 };
-								command_buffer.blit_image("09_doge", "09_v1", blit, vk::Filter::eLinear);
+								blit.dstOffsets[0] = vuk::Offset3D{ x, y, 0 };
+								blit.dstOffsets[1] = vuk::Offset3D{ 0, 0, 1 };
+								command_buffer.blit_image("09_doge", "09_v1", blit, vuk::Filter::eLinear);
 								// For the second image, invert the colours in compute
 								command_buffer
 									.bind_sampled_image(0, 0, "09_doge", {})
@@ -118,9 +118,9 @@ namespace {
 			pda = ptc.create_persistent_descriptorset(*runner.context->get_named_pipeline("bindless_cube"), 1, 64);
 			// Enqueue updates to the descriptors in the array
 			// This records the writes internally, but does not execute them
-			pda->update_combined_image_sampler(ptc, 0, 0, texture_of_doge->view.get(), {}, vk::ImageLayout::eShaderReadOnlyOptimal);
-			pda->update_combined_image_sampler(ptc, 0, 1, variant1->view.get(), {}, vk::ImageLayout::eShaderReadOnlyOptimal);
-			pda->update_combined_image_sampler(ptc, 0, 2, variant2->view.get(), {}, vk::ImageLayout::eShaderReadOnlyOptimal);
+			pda->update_combined_image_sampler(ptc, 0, 0, texture_of_doge->view.get(), {}, vuk::ImageLayout::eShaderReadOnlyOptimal);
+			pda->update_combined_image_sampler(ptc, 0, 1, variant1->view.get(), {}, vuk::ImageLayout::eShaderReadOnlyOptimal);
+			pda->update_combined_image_sampler(ptc, 0, 2, variant2->view.get(), {}, vuk::ImageLayout::eShaderReadOnlyOptimal);
 			// Execute the writes
 			ptc.commit_persistent_descriptorset(pda.get());
 		},
@@ -128,9 +128,9 @@ namespace {
 			auto ptc = ifc.begin();
 
 			// We set up the cube data, same as in example 02_cube
-			auto [bverts, stub1] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eVertexBuffer, std::span(&box.first[0], box.first.size()));
+			auto [bverts, stub1] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eVertexBuffer, std::span(&box.first[0], box.first.size()));
 			auto verts = std::move(bverts);
-			auto [binds, stub2] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vk::BufferUsageFlagBits::eIndexBuffer, std::span(&box.second[0], box.second.size()));
+			auto [binds, stub2] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eIndexBuffer, std::span(&box.second[0], box.second.size()));
 			auto inds = std::move(binds);
 			struct VP {
 				glm::mat4 view;
@@ -139,7 +139,7 @@ namespace {
 			vp.view = glm::lookAt(glm::vec3(0, 1.5, 5.5), glm::vec3(0), glm::vec3(0, 1, 0));
 			vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 1.f, 10.f);
 
-			auto [buboVP, stub3] = ptc.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vk::BufferUsageFlagBits::eUniformBuffer, std::span(&vp, 1));
+			auto [buboVP, stub3] = ptc.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eUniformBuffer, std::span(&vp, 1));
 			auto uboVP = buboVP;
 			ptc.wait_all_transfers();
 
@@ -152,8 +152,8 @@ namespace {
 					command_buffer
 					  .set_viewport(0, vuk::Area::Framebuffer{})
 					  .set_scissor(0, vuk::Area::Framebuffer{})
-					  .bind_vertex_buffer(0, verts, 0, vuk::Packed{vk::Format::eR32G32B32Sfloat, vuk::Ignore{offsetof(util::Vertex, uv_coordinates) - sizeof(util::Vertex::position)}, vk::Format::eR32G32Sfloat})
-					  .bind_index_buffer(inds, vk::IndexType::eUint32)
+					  .bind_vertex_buffer(0, verts, 0, vuk::Packed{vuk::Format::eR32G32B32Sfloat, vuk::Ignore{offsetof(util::Vertex, uv_coordinates) - sizeof(util::Vertex::position)}, vuk::Format::eR32G32Sfloat})
+					  .bind_index_buffer(inds, vuk::IndexType::eUint32)
 					  .bind_persistent(1, pda.get())
 					  .bind_graphics_pipeline("bindless_cube")
 					  .bind_uniform_buffer(0, 0, uboVP);
@@ -170,7 +170,7 @@ namespace {
 
 			  angle += 10.f * ImGui::GetIO().DeltaTime;
 
-			  rg.mark_attachment_internal("09_depth", vk::Format::eD32Sfloat, vuk::Extent2D::Framebuffer{}, vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
+			  rg.mark_attachment_internal("09_depth", vuk::Format::eD32Sfloat, vuk::Extent2D::Framebuffer{}, vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
 			  return rg;
 		  },
 			// Perform cleanup for the example

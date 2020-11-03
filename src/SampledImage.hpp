@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Types.hpp"
+#include "Image.hpp"
 #include <optional>
 
 namespace vuk {
@@ -8,15 +9,15 @@ namespace vuk {
 	struct SampledImage {
 		struct Global {
 			vuk::ImageView iv;
-			vk::SamplerCreateInfo sci = {};
-			vk::ImageLayout image_layout;
+			vuk::SamplerCreateInfo sci = {};
+			vuk::ImageLayout image_layout;
 		};
 
 		struct RenderGraphAttachment {
 			Name attachment_name;
-			vk::SamplerCreateInfo sci = {};
-			std::optional<vk::ImageViewCreateInfo> ivci = {};
-			vk::ImageLayout image_layout;
+			vuk::SamplerCreateInfo sci = {};
+			std::optional<vuk::ImageViewCreateInfo> ivci = {};
+			vuk::ImageLayout image_layout;
 		};
 
 		union {

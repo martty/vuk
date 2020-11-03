@@ -10,7 +10,7 @@ template<class T>
 void unq(T& s) {
     std::sort(s.begin(), s.end(), binding_cmp);
     for(auto it = s.begin(); it != s.end();) {
-        vk::ShaderStageFlags stages = it->stage;
+        VkShaderStageFlags stages = it->stage;
         for(auto it2 = it; it2 != s.end(); it2++) {
             if(it->binding == it2->binding) {
                 stages |= it2->stage;
@@ -91,24 +91,24 @@ void reflect_members(const spirv_cross::Compiler& refl, const spirv_cross::SPIRT
 	}
 }
 
-vk::ShaderStageFlagBits vuk::Program::introspect(const spirv_cross::Compiler& refl) {
+VkShaderStageFlagBits vuk::Program::introspect(const spirv_cross::Compiler& refl) {
 	auto resources = refl.get_shader_resources();
 	auto entry_name = refl.get_entry_points_and_stages()[0];
 	auto entry_point = refl.get_entry_point(entry_name.name, entry_name.execution_model);
 	auto model = entry_point.model;
 	auto stage = [=]() {
 		switch (model) {
-			case spv::ExecutionModel::ExecutionModelVertex: return vk::ShaderStageFlagBits::eVertex;
-			case spv::ExecutionModel::ExecutionModelTessellationControl: return vk::ShaderStageFlagBits::eTessellationControl;
-			case spv::ExecutionModel::ExecutionModelTessellationEvaluation: return vk::ShaderStageFlagBits::eTessellationEvaluation;
-			case spv::ExecutionModel::ExecutionModelGeometry: return vk::ShaderStageFlagBits::eGeometry;
-			case spv::ExecutionModel::ExecutionModelFragment: return vk::ShaderStageFlagBits::eFragment;
-			case spv::ExecutionModel::ExecutionModelGLCompute: return vk::ShaderStageFlagBits::eCompute;
-			default: return vk::ShaderStageFlagBits::eVertex;
+			case spv::ExecutionModel::ExecutionModelVertex: return VK_SHADER_STAGE_VERTEX_BIT;
+			case spv::ExecutionModel::ExecutionModelTessellationControl: return VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+			case spv::ExecutionModel::ExecutionModelTessellationEvaluation: return VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+			case spv::ExecutionModel::ExecutionModelGeometry: return VK_SHADER_STAGE_GEOMETRY_BIT;
+			case spv::ExecutionModel::ExecutionModelFragment: return VK_SHADER_STAGE_FRAGMENT_BIT;
+			case spv::ExecutionModel::ExecutionModelGLCompute: return VK_SHADER_STAGE_COMPUTE_BIT;
+			default: return VK_SHADER_STAGE_VERTEX_BIT;
 		}
 	}();
 	stages = stage;
-	if (stage == vk::ShaderStageFlagBits::eVertex) {
+	if (stage == VK_SHADER_STAGE_VERTEX_BIT) {
 		for (auto& sb : resources.stage_inputs) {
 			auto type = refl.get_type(sb.type_id);
 			auto location = refl.get_decoration(sb.id, spv::DecorationLocation);
@@ -225,14 +225,14 @@ vk::ShaderStageFlagBits vuk::Program::introspect(const spirv_cross::Compiler& re
 	// push constants
 	for (auto& si : resources.push_constant_buffers) {
 		auto type = refl.get_type(si.base_type_id);
-		vk::PushConstantRange pcr;
+		VkPushConstantRange pcr;
 		pcr.offset = 0;
 		pcr.size = (uint32_t)refl.get_declared_struct_size(type);
 		pcr.stageFlags = stage;
 		push_constant_ranges.push_back(pcr);
 	}
 	
-	if (stage == vk::ShaderStageFlagBits::eCompute) {
+	if (stage == VK_SHADER_STAGE_COMPUTE_BIT) {
 		local_size = { refl.get_execution_mode_argument(spv::ExecutionMode::ExecutionModeLocalSize, 0),
 					   refl.get_execution_mode_argument(spv::ExecutionMode::ExecutionModeLocalSize, 1),
 					   refl.get_execution_mode_argument(spv::ExecutionMode::ExecutionModeLocalSize, 2) };

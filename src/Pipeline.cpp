@@ -10,12 +10,12 @@ namespace vuk {
 		switch (preset) {
 		case BlendPreset::eAlphaBlend:
 			pcba.blendEnable = true;
-			pcba.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
-			pcba.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
-			pcba.colorBlendOp = vk::BlendOp::eAdd;
-			pcba.srcAlphaBlendFactor = vk::BlendFactor::eOne;
-			pcba.dstAlphaBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
-			pcba.alphaBlendOp = vk::BlendOp::eAdd;
+			pcba.srcColorBlendFactor = vuk::BlendFactor::eSrcAlpha;
+			pcba.dstColorBlendFactor = vuk::BlendFactor::eOneMinusSrcAlpha;
+			pcba.colorBlendOp = vuk::BlendOp::eAdd;
+			pcba.srcAlphaBlendFactor = vuk::BlendFactor::eOne;
+			pcba.dstAlphaBlendFactor = vuk::BlendFactor::eOneMinusSrcAlpha;
+			pcba.alphaBlendOp = vuk::BlendOp::eAdd;
 			break;
 		case BlendPreset::eOff:
 			pcba.blendEnable = false;
@@ -33,23 +33,23 @@ namespace vuk {
 		rasterization_state.lineWidth = 1.f;
 
 		depth_stencil_state.depthWriteEnable = true;
-		depth_stencil_state.depthCompareOp = vk::CompareOp::eLessOrEqual;
+		depth_stencil_state.depthCompareOp = vuk::CompareOp::eLessOrEqual;
 		depth_stencil_state.depthTestEnable = true;
 
 		color_blend_attachments.resize(1);
 		auto& pcba = color_blend_attachments[0];
-        pcba = vk::PipelineColorBlendAttachmentState{};
-		pcba.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
+        pcba = vuk::PipelineColorBlendAttachmentState{};
+		pcba.colorWriteMask = vuk::ColorComponentFlagBits::eR | vuk::ColorComponentFlagBits::eG | vuk::ColorComponentFlagBits::eB | vuk::ColorComponentFlagBits::eA;
 	}
 
 	PipelineInstanceCreateInfo::PipelineInstanceCreateInfo() {	
 		multisample_state.pSampleMask = nullptr;
-		multisample_state.rasterizationSamples = vk::SampleCountFlagBits::e1;
+		multisample_state.rasterizationSamples = (VkSampleCountFlagBits)vuk::SampleCountFlagBits::e1;
 
 		vertex_input_state.vertexBindingDescriptionCount = 0;
 		vertex_input_state.vertexAttributeDescriptionCount = 0;
 
-		input_assembly_state.topology = vk::PrimitiveTopology::eTriangleList;
+		input_assembly_state.topology = (VkPrimitiveTopology)vuk::PrimitiveTopology::eTriangleList;
 	}
 
 	vuk::fixed_vector<vuk::DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> PipelineBaseCreateInfo::build_descriptor_layouts(const Program& program, const PipelineBaseCreateInfoBase& bci) {
@@ -64,9 +64,9 @@ namespace vuk {
 			auto& bindings = dslci.bindings;
 
 			for (auto& ub : set.uniform_buffers) {
-				vk::DescriptorSetLayoutBinding layoutBinding;
+				VkDescriptorSetLayoutBinding layoutBinding;
 				layoutBinding.binding = ub.binding;
-				layoutBinding.descriptorType = vk::DescriptorType::eUniformBuffer;
+				layoutBinding.descriptorType = (VkDescriptorType)vuk::DescriptorType::eUniformBuffer;
 				layoutBinding.descriptorCount = 1;
 				layoutBinding.stageFlags = ub.stage;
 				layoutBinding.pImmutableSamplers = nullptr;
@@ -74,9 +74,9 @@ namespace vuk {
 			}
 
 			for (auto& sb : set.storage_buffers) {
-				vk::DescriptorSetLayoutBinding layoutBinding;
+				VkDescriptorSetLayoutBinding layoutBinding;
 				layoutBinding.binding = sb.binding;
-				layoutBinding.descriptorType = vk::DescriptorType::eStorageBuffer;
+				layoutBinding.descriptorType = (VkDescriptorType)vuk::DescriptorType::eStorageBuffer;
 				layoutBinding.descriptorCount = 1;
 				layoutBinding.stageFlags = sb.stage;
 				layoutBinding.pImmutableSamplers = nullptr;
@@ -84,9 +84,9 @@ namespace vuk {
 			}
 
 			for (auto& tb : set.texel_buffers) {
-				vk::DescriptorSetLayoutBinding layoutBinding;
+				VkDescriptorSetLayoutBinding layoutBinding;
 				layoutBinding.binding = tb.binding;
-				layoutBinding.descriptorType = vk::DescriptorType::eUniformTexelBuffer;
+				layoutBinding.descriptorType = (VkDescriptorType)vuk::DescriptorType::eUniformTexelBuffer;
 				layoutBinding.descriptorCount = 1;
 				layoutBinding.stageFlags = tb.stage;
 				layoutBinding.pImmutableSamplers = nullptr;
@@ -94,9 +94,9 @@ namespace vuk {
 			}
 
 			for (auto& si : set.samplers) {
-				vk::DescriptorSetLayoutBinding layoutBinding;
+				VkDescriptorSetLayoutBinding layoutBinding;
 				layoutBinding.binding = si.binding;
-				layoutBinding.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+				layoutBinding.descriptorType = (VkDescriptorType)vuk::DescriptorType::eCombinedImageSampler;
 				layoutBinding.descriptorCount = si.array_size == (unsigned)-1 ? 1 : si.array_size;
 				layoutBinding.stageFlags = si.stage;
 				layoutBinding.pImmutableSamplers = nullptr;
@@ -108,9 +108,9 @@ namespace vuk {
 			}
 
 			for (auto& si : set.storage_images) {
-				vk::DescriptorSetLayoutBinding layoutBinding;
+				VkDescriptorSetLayoutBinding layoutBinding;
 				layoutBinding.binding = si.binding;
-				layoutBinding.descriptorType = vk::DescriptorType::eStorageImage;
+				layoutBinding.descriptorType = (VkDescriptorType)vuk::DescriptorType::eStorageImage;
 				layoutBinding.descriptorCount = 1;
 				layoutBinding.stageFlags = si.stage;
 				layoutBinding.pImmutableSamplers = nullptr;
@@ -118,9 +118,9 @@ namespace vuk {
 			}
 
 			for (auto& si : set.subpass_inputs) {
-				vk::DescriptorSetLayoutBinding layoutBinding;
+				VkDescriptorSetLayoutBinding layoutBinding;
 				layoutBinding.binding = si.binding;
-				layoutBinding.descriptorType = vk::DescriptorType::eInputAttachment;
+				layoutBinding.descriptorType = (VkDescriptorType)vuk::DescriptorType::eInputAttachment;
 				layoutBinding.descriptorCount = 1;
 				layoutBinding.stageFlags = si.stage;
 				layoutBinding.pImmutableSamplers = nullptr;
@@ -133,7 +133,7 @@ namespace vuk {
 			for (unsigned i = 0; i <= set.highest_descriptor_binding; i++) {
 				auto word = bci.binding_flags._Getword(set_word_offset + i * 4 / (sizeof(unsigned long long) * 8));
 				if (word & ((0b1111) << i)) {
-					vk::DescriptorBindingFlags f((word >> i) & 0b1111);
+					VkDescriptorBindingFlags f((word >> i) & 0b1111);
 					dslci.flags.resize(i + 1);
 					dslci.flags[i] = f;
 				}
@@ -144,8 +144,8 @@ namespace vuk {
 		return dslcis;
 	}
 
-	vk::GraphicsPipelineCreateInfo vuk::PipelineInstanceCreateInfo::to_vk() const {
-		vk::GraphicsPipelineCreateInfo gpci;
+	VkGraphicsPipelineCreateInfo vuk::PipelineInstanceCreateInfo::to_vk() const {
+		VkGraphicsPipelineCreateInfo gpci{ .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
 		gpci.pVertexInputState = &vertex_input_state;
 		gpci.pInputAssemblyState = &input_assembly_state;
 		gpci.pRasterizationState = &base->rasterization_state;

@@ -3,29 +3,35 @@
 #include <stdio.h>
 #include <vector>
 #include <unordered_map>
-#include <vulkan/vulkan.hpp>
 #include <unordered_set>
 #include <algorithm>
 #include <iostream>
-#include <variant>
 #include <string_view>
 #include <optional>
 #include <functional>
 #include "Hash.hpp"
 #include "vuk_fwd.hpp"
 #include "RenderPass.hpp"
+#include "Buffer.hpp"
+#include "Image.hpp"
 #include "unordered_map.hpp"
 
 namespace vuk {
 	struct Preserve {};
 	struct ClearColor {
 		ClearColor(uint32_t r, uint32_t g, uint32_t b, uint32_t a) {
-			ccv.setUint32({ r,g,b,a });
+			ccv.uint32[0] = r;
+			ccv.uint32[1] = g;
+			ccv.uint32[2] = b;
+			ccv.uint32[3] = a;
 		}
 		ClearColor(float r, float g, float b, float a) {
-			ccv.setFloat32({ r,g,b,a });
+			ccv.float32[0] = r;
+			ccv.float32[1] = g;
+			ccv.float32[2] = b;
+			ccv.float32[3] = a;
 		}
-		vk::ClearColorValue ccv;
+		VkClearColorValue ccv;
 	};
 
 	struct ClearDepthStencil {
@@ -33,7 +39,7 @@ namespace vuk {
 			cdsv.depth = depth;
 			cdsv.stencil = stencil;
 		}
-		vk::ClearDepthStencilValue cdsv;
+		VkClearDepthStencilValue cdsv;
 	};
 
 
@@ -43,7 +49,7 @@ namespace vuk {
 		PreserveOrClear(Preserve) : clear(false) {}
 
 		bool clear;
-		vk::ClearValue c;
+		VkClearValue c;
 	};
 
 	struct Clear {
@@ -51,7 +57,7 @@ namespace vuk {
 		Clear(ClearColor cc) { c.color = cc.ccv; }
 		Clear(ClearDepthStencil cc) { c.depthStencil = cc.cdsv; }
 	
-		vk::ClearValue c;
+		VkClearValue c;
 	};
 
 	enum Access {
@@ -92,6 +98,53 @@ namespace vuk {
 
 		Resource operator()(Access ia);
 	};
+
+	enum class AccessFlagBits : VkAccessFlags {
+		eIndirectCommandRead = VK_ACCESS_INDIRECT_COMMAND_READ_BIT,
+		eIndexRead = VK_ACCESS_INDEX_READ_BIT,
+		eVertexAttributeRead = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT,
+		eUniformRead = VK_ACCESS_UNIFORM_READ_BIT,
+		eInputAttachmentRead = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT,
+		eShaderRead = VK_ACCESS_SHADER_READ_BIT,
+		eShaderWrite = VK_ACCESS_SHADER_WRITE_BIT,
+		eColorAttachmentRead = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT,
+		eColorAttachmentWrite = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+		eDepthStencilAttachmentRead = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
+		eDepthStencilAttachmentWrite = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+		eTransferRead = VK_ACCESS_TRANSFER_READ_BIT,
+		eTransferWrite = VK_ACCESS_TRANSFER_WRITE_BIT,
+		eHostRead = VK_ACCESS_HOST_READ_BIT,
+		eHostWrite = VK_ACCESS_HOST_WRITE_BIT,
+		eMemoryRead = VK_ACCESS_MEMORY_READ_BIT,
+		eMemoryWrite = VK_ACCESS_MEMORY_WRITE_BIT,
+		eTransformFeedbackWriteEXT = VK_ACCESS_TRANSFORM_FEEDBACK_WRITE_BIT_EXT,
+		eTransformFeedbackCounterReadEXT = VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_READ_BIT_EXT,
+		eTransformFeedbackCounterWriteEXT = VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_WRITE_BIT_EXT,
+		eConditionalRenderingReadEXT = VK_ACCESS_CONDITIONAL_RENDERING_READ_BIT_EXT,
+		eColorAttachmentReadNoncoherentEXT = VK_ACCESS_COLOR_ATTACHMENT_READ_NONCOHERENT_BIT_EXT,
+		eAccelerationStructureReadKHR = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,
+		eAccelerationStructureWriteKHR = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,
+		eShadingRateImageReadNV = VK_ACCESS_SHADING_RATE_IMAGE_READ_BIT_NV,
+		eFragmentDensityMapReadEXT = VK_ACCESS_FRAGMENT_DENSITY_MAP_READ_BIT_EXT,
+		eCommandPreprocessReadNV = VK_ACCESS_COMMAND_PREPROCESS_READ_BIT_NV,
+		eCommandPreprocessWriteNV = VK_ACCESS_COMMAND_PREPROCESS_WRITE_BIT_NV,
+		eAccelerationStructureReadNV = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_NV,
+		eAccelerationStructureWriteNV = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_NV
+	};
+
+	using AccessFlags = Flags<AccessFlagBits>;
+
+	inline constexpr AccessFlags operator|(AccessFlagBits bit0, AccessFlags bit1) noexcept {
+		return AccessFlags(bit0) | bit1;
+	}
+
+	inline constexpr AccessFlags operator&(AccessFlagBits bit0, AccessFlagBits bit1) noexcept {
+		return AccessFlags(bit0) & bit1;
+	}
+
+	inline constexpr AccessFlags operator^(AccessFlagBits bit0, AccessFlagBits bit1) noexcept {
+		return AccessFlags(bit0) ^ bit1;
+	}
 }
 
 inline vuk::ImageResource operator "" _image(const char* name, size_t) {
@@ -109,9 +162,9 @@ namespace vuk {
 		enum class Type { eBuffer, eImage } type;
 		Access ia;
 		struct Use {
-			vk::PipelineStageFlags stages;
-			vk::AccessFlags access;
-			vk::ImageLayout layout; // ignored for buffers
+			vuk::PipelineStageFlags stages;
+			vuk::AccessFlags access;
+			vuk::ImageLayout layout; // ignored for buffers
 		};
 
 		Resource(Name n, Type t, Access ia) : src_name(n), use_name(n), type(t), ia(ia) {}
@@ -155,23 +208,12 @@ namespace std {
 #include <ShortAlloc.hpp>
 
 namespace vuk {
-	struct Extent2D : public vk::Extent2D {
-		using vk::Extent2D::Extent2D;
-
-		Extent2D(vk::Extent2D e) : vk::Extent2D(e) {}
-
-		struct Framebuffer {
-			float width = 1.0f;
-			float height = 1.0f;
-		};
-	};
-
 	struct Attachment {
-        vk::Image image;
+        vuk::Image image;
         vuk::ImageView image_view;
         
-		vk::Extent2D extent;
-        vk::Format format;
+		vuk::Extent2D extent;
+        vuk::Format format;
         vuk::Samples sample_count = vuk::Samples::e1;
         Clear clear_value;
 
@@ -229,9 +271,9 @@ namespace vuk {
             use_chains;
 
 		struct AttachmentSInfo {
-			vk::ImageLayout layout;
-			vk::AccessFlags access;
-			vk::PipelineStageFlags stage;
+			vuk::ImageLayout layout;
+			vuk::AccessFlags access;
+			vuk::PipelineStageFlags stage;
 		};
 
 		struct AttachmentRPInfo {
@@ -244,7 +286,7 @@ namespace vuk {
 			vuk::Extent2D extents;
 			vuk::Samples samples;
 
-			vk::AttachmentDescription description;
+			VkAttachmentDescription description = {};
 
 			Resource::Use initial, final;
 
@@ -253,7 +295,7 @@ namespace vuk {
 			} type;
 
 			vuk::ImageView iv;
-			vk::Image image = {};
+			vuk::Image image = {};
 			// swapchain for swapchain
 			Swapchain* swapchain;
 
@@ -274,15 +316,15 @@ namespace vuk {
 
 		struct ImageBarrier {
 			Name image;
-			vk::ImageMemoryBarrier barrier;
-			vk::PipelineStageFlags src;
-			vk::PipelineStageFlags dst;
+			VkImageMemoryBarrier barrier = {};
+			vuk::PipelineStageFlags src;
+			vuk::PipelineStageFlags dst;
 		};
 
 		struct MemoryBarrier {
-			vk::MemoryBarrier barrier;
-			vk::PipelineStageFlags src;
-			vk::PipelineStageFlags dst;
+			VkMemoryBarrier barrier = {};
+			vuk::PipelineStageFlags src;
+			vuk::PipelineStageFlags dst;
 		};
 
 		struct SubpassInfo {
@@ -300,8 +342,8 @@ namespace vuk {
 			vuk::RenderPassCreateInfo rpci;
 			vuk::FramebufferCreateInfo fbci;
 			bool framebufferless = false;
-			vk::RenderPass handle = {};
-			vk::Framebuffer framebuffer;
+			VkRenderPass handle = {};
+			VkFramebuffer framebuffer;
 		};
 		std::vector<RenderPassInfo, short_alloc<RenderPassInfo, 64>> rpis;
 
@@ -320,17 +362,17 @@ namespace vuk {
 		std::unordered_map<Name, AttachmentRPInfo> bound_attachments;
 		std::unordered_map<Name, BufferInfo> bound_buffers;
 		void bind_attachment_to_swapchain(Name, Swapchain* swp, Clear);
-		void mark_attachment_internal(Name, vk::Format, vuk::Extent2D, vuk::Samples, Clear);
-		void mark_attachment_internal(Name, vk::Format, vuk::Extent2D::Framebuffer, vuk::Samples, Clear);
+		void mark_attachment_internal(Name, vuk::Format, vuk::Extent2D, vuk::Samples, Clear);
+		void mark_attachment_internal(Name, vuk::Format, vuk::Extent2D::Framebuffer, vuk::Samples, Clear);
 		void mark_attachment_resolve(Name resolved_name, Name ms_name);
 		void bind_buffer(Name, vuk::Buffer);
         void bind_attachment(Name, Attachment, Access initial, Access final);
-		vk::ImageUsageFlags compute_usage(const std::vector<vuk::RenderGraph::UseRef, short_alloc<UseRef, 64>>& chain);
+		vuk::ImageUsageFlags compute_usage(const std::vector<vuk::RenderGraph::UseRef, short_alloc<UseRef, 64>>& chain);
 
 		// RG
 		void build(vuk::PerThreadContext&);
-		void create_attachment(vuk::PerThreadContext&, Name name, RenderGraph::AttachmentRPInfo& attachment_info, vuk::Extent2D extents, vk::SampleCountFlagBits);
-		vk::CommandBuffer execute(vuk::PerThreadContext&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index, bool use_secondary_command_buffers);
+		void create_attachment(vuk::PerThreadContext&, Name name, RenderGraph::AttachmentRPInfo& attachment_info, vuk::Extent2D extents, vuk::SampleCountFlagBits);
+		VkCommandBuffer execute(vuk::PerThreadContext&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index, bool use_secondary_command_buffers);
 
 		BufferInfo get_resource_buffer(Name);
 		bool is_resource_image_in_general_layout(Name n, PassInfo* pass_info);

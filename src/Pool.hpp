@@ -4,8 +4,8 @@
 #include <plf_colony.h>
 #include <mutex>
 #include <vector>
-#include <vulkan/vulkan.hpp>
 #include "vuk_fwd.hpp"
+#include <vulkan/vulkan.h>
 
 namespace vuk {
 	template<class T>
@@ -20,18 +20,18 @@ namespace vuk {
 	};
 
 	template<>
-	void PooledType<vk::Fence>::reset(Context& ctx);
+	void PooledType<VkFence>::reset(Context& ctx);
 
 	template<>
-	struct PooledType<vk::CommandBuffer> {
-		vk::UniqueCommandPool pool;
-		std::vector<vk::CommandBuffer> p_values;
-		std::vector<vk::CommandBuffer> s_values;
+	struct PooledType<VkCommandBuffer> {
+		VkCommandPool pool;
+		std::vector<VkCommandBuffer> p_values;
+		std::vector<VkCommandBuffer> s_values;
 		size_t p_needle = 0;
         size_t s_needle = 0;
 
 		PooledType(Context&);
-		std::span<vk::CommandBuffer> acquire(PerThreadContext& ptc, vk::CommandBufferLevel, size_t count);
+		std::span<VkCommandBuffer> acquire(PerThreadContext& ptc, VkCommandBufferLevel, size_t count);
 		void reset(Context&);
 		void free(Context&);
 	};
