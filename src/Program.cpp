@@ -20,9 +20,9 @@ void unq(T& s) {
         it->stage = stages;
         auto it2 = it;
         for(; it2 != s.end(); it2++) {
-            it2->stage = stages;
             if(it->binding != it2->binding)
                 break;
+            it2->stage = stages;
         }
         it = it2;
     }
