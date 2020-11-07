@@ -4,7 +4,7 @@
 #include <plf_colony.h>
 #include <mutex>
 #include <vector>
-#include "vuk_fwd.hpp"
+#include "vuk/vuk_fwd.hpp"
 #include <vulkan/vulkan.h>
 
 namespace vuk {

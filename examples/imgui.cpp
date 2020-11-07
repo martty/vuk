@@ -1,7 +1,7 @@
 #include "utils.hpp"
-#include "Context.hpp"
-#include "CommandBuffer.hpp"
-#include "RenderGraph.hpp"
+#include "vuk/Context.hpp"
+#include "vuk/CommandBuffer.hpp"
+#include "vuk/RenderGraph.hpp"
 
 util::ImGuiData util::ImGui_ImplVuk_Init(vuk::PerThreadContext& ptc) {
 	auto& io = ImGui::GetIO();

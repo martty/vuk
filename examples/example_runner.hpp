@@ -1,7 +1,7 @@
 #pragma once
 
 #include <VkBootstrap.h>
-#include "Context.hpp"
+#include "vuk/Context.hpp"
 #include <optional>
 #include "utils.hpp"
 #include "glfw.hpp"
@@ -10,8 +10,8 @@
 #include <string>
 #include <stdio.h>
 #include <vector>
-#include "RenderGraph.hpp"
-#include "CommandBuffer.hpp"
+#include "vuk/RenderGraph.hpp"
+#include "vuk/CommandBuffer.hpp"
 #include "examples/imgui_impl_glfw.h"
 
 

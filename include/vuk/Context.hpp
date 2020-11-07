@@ -6,16 +6,16 @@
 #include "Pool.hpp"
 #include "Cache.hpp"
 #include "Allocator.hpp"
-#include "Program.hpp"
-#include "Pipeline.hpp"
+#include "vuk/Program.hpp"
+#include "vuk/Pipeline.hpp"
 #include <queue>
 #include <string_view>
-#include "SampledImage.hpp"
+#include "vuk/SampledImage.hpp"
 #include "RenderPass.hpp"
 #include "vuk_fwd.hpp"
 #include <exception>
-#include "Image.hpp"
-#include "Buffer.hpp"
+#include "vuk/Image.hpp"
+#include "vuk/Buffer.hpp"
 
 namespace vuk {
 	struct RGImage {

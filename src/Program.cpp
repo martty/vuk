@@ -1,7 +1,8 @@
-#include "Program.hpp"
 #include <spirv_cross.hpp>
 #include <regex>
-#include "Hash.hpp"
+
+#include "vuk/Program.hpp"
+#include "vuk/Hash.hpp"
 
 static auto binding_cmp = [](auto& s1, auto& s2) { return s1.binding < s2.binding; };
 static auto binding_eq = [](auto& s1, auto& s2) { return s1.binding == s2.binding; };

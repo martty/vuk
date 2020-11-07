@@ -187,16 +187,16 @@ namespace vuk {
 
 	using ColorComponentFlags = Flags<ColorComponentFlagBits>;
 
-	inline constexpr ColorComponentFlags operator|(ColorComponentFlags bit0, ColorComponentFlagBits bit1) noexcept {
-		return bit0 | (ColorComponentFlags)bit1;
+	inline constexpr ColorComponentFlags operator|(ColorComponentFlagBits bit0, ColorComponentFlagBits bit1) noexcept {
+		return (ColorComponentFlags)bit0 | bit1;
 	}
 
-	inline constexpr ColorComponentFlags operator&(ColorComponentFlags bit0, ColorComponentFlagBits bit1) noexcept {
-		return bit0 & (ColorComponentFlags)bit1;
+	inline constexpr ColorComponentFlags operator&(ColorComponentFlagBits bit0, ColorComponentFlagBits bit1) noexcept {
+		return (ColorComponentFlags)bit0 & bit1;
 	}
 
-	inline constexpr ColorComponentFlags operator^(ColorComponentFlags bit0, ColorComponentFlagBits bit1) noexcept {
-		return bit0 ^ (ColorComponentFlags)bit1;
+	inline constexpr ColorComponentFlags operator^(ColorComponentFlagBits bit0, ColorComponentFlagBits bit1) noexcept {
+		return (ColorComponentFlags)bit0 ^ bit1;
 	}
 
 	struct PipelineColorBlendAttachmentState {

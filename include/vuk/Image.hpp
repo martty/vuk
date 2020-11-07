@@ -78,7 +78,7 @@ namespace vuk {
 	};
 
 	using ImageCreateFlags = Flags<ImageCreateFlagBits>;
-	inline constexpr ImageCreateFlags operator|(ImageCreateFlagBits bit0, ImageCreateFlags bit1) noexcept {
+	inline constexpr ImageCreateFlags operator|(ImageCreateFlagBits bit0, ImageCreateFlagBits bit1) noexcept {
 		return ImageCreateFlags(bit0) | bit1;
 	}
 

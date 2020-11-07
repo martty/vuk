@@ -1,8 +1,8 @@
 #pragma once
 
-#include "vuk_fwd.hpp"
+#include "vuk/vuk_fwd.hpp"
 #include "CreateInfo.hpp"
-#include "Types.hpp"
+#include "vuk/Types.hpp"
 #include "Cache.hpp"
 #include <optional>
 

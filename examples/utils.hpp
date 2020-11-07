@@ -6,9 +6,9 @@
 #include <utility>
 #include <VkBootstrap.h>
 #include <imgui.h>
-#include "Types.hpp"
-#include "Context.hpp"
-#include "Swapchain.hpp"
+#include "vuk/Types.hpp"
+#include "vuk/Context.hpp"
+#include "vuk/Swapchain.hpp"
 #include <string_view>
 #include <fstream>
 #include <sstream>

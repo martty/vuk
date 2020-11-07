@@ -44,31 +44,24 @@ add_subdirectory(ext/SPIRV-Cross)
 #target_compile_features(vuk PUBLIC cxx_std_20)
 
 target_sources(vuk PRIVATE 
-	src/Pipeline.hpp
 	src/Pipeline.cpp
-	src/Program.hpp
 	src/Program.cpp
 	src/Pool.cpp
-	src/Pool.hpp
-	src/Context.hpp
-	src/Cache.hpp
 	src/Cache.cpp
-	src/Hash.hpp
-	src/RenderGraph.hpp
 	src/RenderGraph.cpp 
 	src/VMA.cpp
-	src/Allocator.hpp
 	src/Allocator.cpp
-	src/CommandBuffer.hpp
-	src/Types.hpp
 	src/Context.cpp
-	src/CommandBuffer.cpp)
+	src/CommandBuffer.cpp
+	include/vuk/Context.hpp
+	)
 
 target_include_directories(vuk PUBLIC ext/plf_colony)
 target_include_directories(vuk PUBLIC ext/VulkanMemoryAllocator/src)
 target_include_directories(vuk PUBLIC ext/flat_hash_map)
 target_include_directories(vuk PUBLIC ext/concurrentqueue)
-target_include_directories(vuk PUBLIC src/ include/)
+target_include_directories(vuk PUBLIC include)
+target_include_directories(vuk PUBLIC src/)
 
 string(FIND "${CMAKE_CXX_COMPILER}" "clang++" VUK_COMPILER_CLANGPP)
 if(VUK_COMPILER_CLANGPP GREATER -1)

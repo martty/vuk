@@ -25,7 +25,7 @@ namespace vuk {
 
     using BufferUsageFlags = Flags<BufferUsageFlagBits>;
 
-    inline constexpr BufferUsageFlags operator|(BufferUsageFlagBits bit0, BufferUsageFlags bit1) noexcept {
+    inline constexpr BufferUsageFlags operator|(BufferUsageFlagBits bit0, BufferUsageFlagBits bit1) noexcept {
         return BufferUsageFlags(bit0) | bit1;
     }
 

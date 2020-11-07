@@ -9,11 +9,12 @@
 #include <string_view>
 #include <optional>
 #include <functional>
-#include "Hash.hpp"
-#include "vuk_fwd.hpp"
+#include "vuk/Hash.hpp"
+#include "vuk/vuk_fwd.hpp"
 #include "RenderPass.hpp"
-#include "Buffer.hpp"
-#include "Image.hpp"
+#include "vuk/Buffer.hpp"
+#include "vuk/Image.hpp"
+#include <vuk/ShortAlloc.hpp>
 #include "unordered_map.hpp"
 
 namespace vuk {
@@ -134,7 +135,7 @@ namespace vuk {
 
 	using AccessFlags = Flags<AccessFlagBits>;
 
-	inline constexpr AccessFlags operator|(AccessFlagBits bit0, AccessFlags bit1) noexcept {
+	inline constexpr AccessFlags operator|(AccessFlagBits bit0, AccessFlagBits bit1) noexcept {
 		return AccessFlags(bit0) | bit1;
 	}
 
@@ -204,8 +205,6 @@ namespace std {
 		}
 	};
 }
-
-#include <ShortAlloc.hpp>
 
 namespace vuk {
 	struct Attachment {

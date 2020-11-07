@@ -3,13 +3,13 @@
 #include "vk_mem_alloc.h"
 #include <mutex>
 #include <unordered_map>
-#include "Hash.hpp"
+#include <atomic>
+#include "vuk/Hash.hpp"
 #include "Cache.hpp" // for the hashes
 #include "CreateInfo.hpp"
-#include "Types.hpp"
-#include "Buffer.hpp"
-#include "Image.hpp"
-#include <atomic>
+#include "vuk/Types.hpp"
+#include "vuk/Buffer.hpp"
+#include "vuk/Image.hpp"
 
 namespace vuk {
 	enum class MemoryUsage {

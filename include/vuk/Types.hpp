@@ -1,7 +1,7 @@
 #pragma once
 
 #include <vulkan/vulkan.h>
-#include <Hash.hpp>
+#include <vuk/Hash.hpp>
 
 namespace vuk {
 	struct HandleBase {
@@ -233,7 +233,7 @@ namespace vuk {
 	};
 
 	inline Extent2D::operator Extent3D() {
-		return Extent3D{width, height, 1};
+		return Extent3D{ width, height, 1 };
 	}
 
 	struct Rect2D {
@@ -286,7 +286,6 @@ namespace vuk {
 		bool operator!=(Viewport const& rhs) const noexcept {
 			return !operator==(rhs);
 		}
-
 	};
 	static_assert(sizeof(Viewport) == sizeof(VkViewport), "struct and wrapper have different size!");
 	static_assert(std::is_standard_layout<Viewport>::value, "struct wrapper is not a standard layout!");
@@ -580,7 +579,7 @@ namespace vuk {
 	template <typename BitType>
 	class Flags {
 	public:
-		using MaskType = typename std::underlying_type<BitType>::type;
+		using MaskType = typename std::underlying_type_t<BitType>;
 
 		// constructors
 		constexpr Flags() noexcept
@@ -628,19 +627,6 @@ namespace vuk {
 			return !m_mask;
 		}
 
-		// bitwise operators
-		constexpr Flags<BitType> operator&(Flags<BitType> const& rhs) const noexcept {
-			return Flags<BitType>(m_mask & rhs.m_mask);
-		}
-
-		constexpr Flags<BitType> operator|(Flags<BitType> const& rhs) const noexcept {
-			return Flags<BitType>(m_mask | rhs.m_mask);
-		}
-
-		constexpr Flags<BitType> operator^(Flags<BitType> const& rhs) const noexcept {
-			return Flags<BitType>(m_mask ^ rhs.m_mask);
-		}
-
 		// assignment operators
 		constexpr Flags<BitType>& operator=(Flags<BitType> const& rhs) noexcept {
 			m_mask = rhs.m_mask;
@@ -669,6 +655,31 @@ namespace vuk {
 
 		explicit constexpr operator MaskType() const noexcept {
 			return m_mask;
+		}
+
+		// bitwise operators
+		friend constexpr Flags<BitType> operator&(Flags<BitType> const& lhs, Flags<BitType> const& rhs) noexcept {
+			return Flags<BitType>(lhs.m_mask & rhs.m_mask);
+		}
+
+		friend constexpr Flags<BitType> operator|(Flags<BitType> const& lhs, Flags<BitType> const& rhs) noexcept {
+			return Flags<BitType>(lhs.m_mask | rhs.m_mask);
+		}
+
+		friend constexpr Flags<BitType> operator^(Flags<BitType> const& lhs, Flags<BitType> const& rhs) noexcept {
+			return Flags<BitType>(lhs.m_mask ^ rhs.m_mask);
+		}
+
+		friend constexpr Flags<BitType> operator&(Flags<BitType> const& lhs, BitType const& rhs) noexcept {
+			return Flags<BitType>(lhs.m_mask & (std::underlying_type_t<BitType>)rhs);
+		}
+
+		friend constexpr Flags<BitType> operator|(Flags<BitType> const& lhs, BitType const& rhs) noexcept {
+			return Flags<BitType>(lhs.m_mask | (std::underlying_type_t<BitType>)rhs);
+		}
+
+		friend constexpr Flags<BitType> operator^(Flags<BitType> const& lhs, BitType const& rhs) noexcept {
+			return Flags<BitType>(lhs.m_mask ^ (std::underlying_type_t<BitType>)rhs);
 		}
 
 	private:
@@ -701,7 +712,7 @@ namespace vuk {
 	};
 
 	using ShaderStageFlags = Flags<ShaderStageFlagBits>;
-	inline constexpr ShaderStageFlags operator|(ShaderStageFlagBits bit0, ShaderStageFlags bit1) noexcept {
+	inline constexpr ShaderStageFlags operator|(ShaderStageFlagBits bit0, ShaderStageFlagBits bit1) noexcept {
 		return ShaderStageFlags(bit0) | bit1;
 	}
 
@@ -745,7 +756,7 @@ namespace vuk {
 	};
 
 	using PipelineStageFlags = Flags<PipelineStageFlagBits>;
-	inline constexpr PipelineStageFlags operator|(PipelineStageFlagBits bit0, PipelineStageFlags bit1) noexcept {
+	inline constexpr PipelineStageFlags operator|(PipelineStageFlagBits bit0, PipelineStageFlagBits bit1) noexcept {
 		return PipelineStageFlags(bit0) | bit1;
 	}
 

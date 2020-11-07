@@ -1,5 +1,5 @@
-#include "Pipeline.hpp"
-#include "Program.hpp"
+#include "vuk/Pipeline.hpp"
+#include "vuk/Program.hpp"
 
 namespace vuk {
 	void PipelineBaseCreateInfo::set_blend(size_t attachment_index, BlendPreset preset) {
