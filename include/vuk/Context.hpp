@@ -2,58 +2,20 @@
 
 #include <atomic>
 #include <span>
+#include <queue>
+#include <string_view>
 
 #include "Pool.hpp"
 #include "Cache.hpp"
 #include "Allocator.hpp"
 #include "vuk/Program.hpp"
 #include "vuk/Pipeline.hpp"
-#include <queue>
-#include <string_view>
 #include "vuk/SampledImage.hpp"
 #include "RenderPass.hpp"
 #include "vuk_fwd.hpp"
-#include <exception>
 #include "vuk/Image.hpp"
 #include "vuk/Buffer.hpp"
-
-namespace vuk {
-	struct RGImage {
-		vuk::Image image;
-		vuk::ImageView image_view;
-	};
-	struct RGCI {
-		Name name;
-		vuk::ImageCreateInfo ici;
-		vuk::ImageViewCreateInfo ivci;
-
-		bool operator==(const RGCI& other) const {
-			return std::tie(name, ici, ivci) == std::tie(other.name, other.ici, other.ivci);
-		}
-	};
-	template<> struct create_info<RGImage> {
-		using type = RGCI;
-	};
-
-	struct ShaderCompilationException {
-		std::string error_message;
-
-		const char* what() const {
-			return error_message.c_str();
-		}
-	};
-}
-
-namespace std {
-	template <>
-	struct hash<vuk::RGCI> {
-		size_t operator()(vuk::RGCI const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.name, x.ici, x.ivci);
-			return h;
-		}
-	};
-};
+#include "RGImage.hpp"
 
 namespace vuk {
 	struct TransferStub {
@@ -86,10 +48,11 @@ namespace vuk {
 		return (frame + 1) % FC;
 	}
 
+	struct ContextImpl;
+
 	class Context {
 	public:
 		constexpr static size_t FC = 3;
-
 		VkInstance instance;
 		VkDevice device;
 		VkPhysicalDevice physical_device;
@@ -97,49 +60,9 @@ namespace vuk {
 		uint32_t graphics_queue_family_index;
 		VkQueue transfer_queue;
 		uint32_t transfer_queue_family_index;
-		Allocator allocator;
-
-		std::mutex gfx_queue_lock;
-		std::mutex xfer_queue_lock;
-	private:
-		Pool<VkCommandBuffer, FC> cbuf_pools;
-		Pool<VkSemaphore, FC> semaphore_pools;
-		Pool<VkFence, FC> fence_pools;
-		VkPipelineCache vk_pipeline_cache;
-		Cache<PipelineBaseInfo> pipelinebase_cache;
-		Cache<PipelineInfo> pipeline_cache;
-		Cache<ComputePipelineInfo> compute_pipeline_cache;
-		Cache<VkRenderPass> renderpass_cache;
-		Cache<VkFramebuffer> framebuffer_cache;
-		PerFrameCache<RGImage, FC> transient_images;
-		PerFrameCache<Allocator::Linear, FC> scratch_buffers;
-		Cache<vuk::DescriptorPool> pool_cache;
-		PerFrameCache<vuk::DescriptorSet, FC> descriptor_sets;
-		Cache<vuk::Sampler> sampler_cache;
-		Pool<vuk::SampledImage, FC> sampled_images;
-		Cache<vuk::ShaderModule> shader_modules;
-		Cache<vuk::DescriptorSetLayoutAllocInfo> descriptor_set_layouts;
-		Cache<VkPipelineLayout> pipeline_layouts;
-
-		std::mutex begin_frame_lock;
-
-		std::array<std::mutex, FC> recycle_locks;
-		std::array<std::vector<vuk::Image>, FC> image_recycle;
-		std::array<std::vector<VkImageView>, FC> image_view_recycle;
-		std::array<std::vector<VkPipeline>, FC> pipeline_recycle;
-		std::array<std::vector<vuk::Buffer>, FC> buffer_recycle;
-		std::array<std::vector<vuk::PersistentDescriptorSet>, FC> pds_recycle;
 
 		std::atomic<size_t> frame_counter = 0;
-		std::atomic<size_t> unique_handle_id_counter = 0;
 
-		std::mutex named_pipelines_lock;
-		std::unordered_map<std::string_view, vuk::PipelineBaseInfo*> named_pipelines;
-		std::unordered_map<std::string_view, vuk::ComputePipelineInfo*> named_compute_pipelines;
-
-		std::mutex swapchains_lock;
-		plf::colony<Swapchain> swapchains;
-	public:
 		Context(VkInstance instance, VkDevice device, VkPhysicalDevice physical_device, VkQueue graphics);
 		~Context();
 
@@ -179,11 +102,6 @@ namespace vuk {
 
 		bool load_pipeline_cache(std::span<uint8_t> data);
 		std::vector<uint8_t> save_pipeline_cache();
-
-		// one pool per thread
-		std::mutex one_time_pool_lock;
-		std::vector<VkCommandPool> xfer_one_time_pools;
-		std::vector<VkCommandPool> one_time_pools;
 
 		uint32_t(*get_thread_index)() = nullptr;
 
@@ -227,8 +145,14 @@ namespace vuk {
 		InflightContext begin();
 
 		void wait_idle();
+		
+		void submit_graphics(VkSubmitInfo, VkFence);
+		void submit_transfer(VkSubmitInfo, VkFence);
 	private:
-		void destroy(const RGImage& image);
+		struct ContextImpl* impl;
+		std::atomic<size_t> unique_handle_id_counter = 0;
+
+		void destroy(const struct RGImage& image);
 		void destroy(const Allocator::Pool& v);
 		void destroy(const Allocator::Linear& v);
 		void destroy(const vuk::DescriptorPool& dp);
