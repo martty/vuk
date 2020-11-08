@@ -1,7 +1,8 @@
 #pragma once
 
-#include "Types.hpp"
-#include "Image.hpp"
+#include "vuk/Types.hpp"
+#include "vuk/Image.hpp"
+#include "Pool.hpp"
 #include <optional>
 
 namespace vuk {

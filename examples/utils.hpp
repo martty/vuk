@@ -77,7 +77,8 @@ namespace util {
 			sw.images.push_back(i);
 		}
 		for (auto& i : *views) {
-			sw._ivs.push_back(i);
+			sw.image_views.emplace_back();
+			sw.image_views.back().payload = i;
 		}
 		sw.extent = vuk::Extent2D{ vkswapchain->extent.width, vkswapchain->extent.height };
 		sw.format = vuk::Format(vkswapchain->image_format);

@@ -147,7 +147,7 @@ namespace vuk {
 	}
 
 	// lock-free bump allocation if there is still space
-	Buffer Allocator::_allocate_buffer(Linear& pool, size_t size, size_t alignment, bool create_mapped) {
+	Buffer Allocator::_allocate_buffer(LinearAllocator& pool, size_t size, size_t alignment, bool create_mapped) {
 		if (size == 0) {
 			return { .buffer = VK_NULL_HANDLE, .size = 0 };
 		} else if (size > pool.block_size) {
@@ -213,7 +213,7 @@ namespace vuk {
 		return b;
 	}
 
-	Buffer Allocator::_allocate_buffer(Pool& pool, size_t size, size_t alignment, bool create_mapped) {
+	Buffer Allocator::_allocate_buffer(PoolAllocator& pool, size_t size, size_t alignment, bool create_mapped) {
 		if (size == 0) {
 			return { .buffer = VK_NULL_HANDLE, .size = 0 };
 		}
@@ -266,28 +266,28 @@ namespace vuk {
 	}
 
 	// allocate an externally managed pool
-	Allocator::Pool Allocator::allocate_pool(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage) {
+	PoolAllocator Allocator::allocate_pool(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage) {
 		std::lock_guard _(mutex);
 
 		VkBufferCreateInfo bci{ .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
 		bci.size = 1024; // ignored
 		bci.usage = (VkBufferUsageFlags)buffer_usage;
 
-		Pool pi;
+		PoolAllocator pi;
 		pi.mem_reqs = get_memory_requirements(bci);
 		pi.pool = _create_pool(mem_usage, buffer_usage);
 		pi.usage = buffer_usage;
 		return pi;
 	}
 
-	Allocator::Linear Allocator::allocate_linear(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage) {
+	LinearAllocator Allocator::allocate_linear(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage) {
 		std::lock_guard _(mutex);
 
 		VkBufferCreateInfo bci{ .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
 		bci.size = 1024; // ignored
 		bci.usage = (VkBufferUsageFlags)buffer_usage;
 
-		return Linear{ get_memory_requirements(bci), VmaMemoryUsage(to_integral(mem_usage)), buffer_usage };
+		return LinearAllocator{ get_memory_requirements(bci), VmaMemoryUsage(to_integral(mem_usage)), buffer_usage };
 	}
 
 	// allocate buffer from an internally managed pool
@@ -300,7 +300,7 @@ namespace vuk {
 
 		auto pool_it = pools.find(PoolSelect{ mem_usage, buffer_usage });
 		if (pool_it == pools.end()) {
-			Pool pi;
+			PoolAllocator pi;
 
 			pi.mem_reqs = get_memory_requirements(bci);
 			pi.pool = _create_pool(mem_usage, buffer_usage);
@@ -312,13 +312,13 @@ namespace vuk {
 	}
 
 	// allocate a buffer from an externally managed pool
-	Buffer Allocator::allocate_buffer(Pool& pool, size_t size, size_t alignment, bool create_mapped) {
+	Buffer Allocator::allocate_buffer(PoolAllocator& pool, size_t size, size_t alignment, bool create_mapped) {
 		std::lock_guard _(mutex);
 		return _allocate_buffer(pool, size, alignment, create_mapped);
 	}
 
 	// allocate a buffer from an externally managed linear pool
-	Buffer Allocator::allocate_buffer(Linear& pool, size_t size, size_t alignment, bool create_mapped) {
+	Buffer Allocator::allocate_buffer(LinearAllocator& pool, size_t size, size_t alignment, bool create_mapped) {
 		return _allocate_buffer(pool, size, alignment, create_mapped);
 	}
 
@@ -330,12 +330,12 @@ namespace vuk {
 		return buffers.at(reinterpret_cast<uint64_t>(vmai.deviceMemory)).second;
 	}
 
-	void Allocator::reset_pool(Pool& pool) {
+	void Allocator::reset_pool(PoolAllocator& pool) {
 		std::lock_guard _(mutex);
 		vmaResetPool(allocator, pool.pool);
 	}
 
-	void Allocator::reset_pool(Linear& pool) {
+	void Allocator::reset_pool(LinearAllocator& pool) {
 		std::lock_guard _(mutex);
 		pool.current_buffer = -1;
 		pool.needle = 0;
@@ -348,7 +348,7 @@ namespace vuk {
 		buffer_allocations.erase(bufid);
 	}
 
-	void Allocator::destroy(const Pool& pool) {
+	void Allocator::destroy(const PoolAllocator& pool) {
 		std::lock_guard _(mutex);
 		vmaResetPool(allocator, pool.pool);
 		vmaForceUnmapPool(allocator, pool.pool);
@@ -358,7 +358,7 @@ namespace vuk {
 		vmaDestroyPool(allocator, pool.pool);
 	}
 
-	void Allocator::destroy(const Linear& pool) {
+	void Allocator::destroy(const LinearAllocator& pool) {
 		std::lock_guard _(mutex);
 		for (auto& [va, mem, offset, buffer, map] : pool.allocations) {
 			vmaDestroyBuffer(allocator, buffer, va);

@@ -251,9 +251,8 @@ VkPipelineLayout vuk::Context::create(const create_info_t<VkPipelineLayout>& cin
 
 vuk::SwapchainRef vuk::Context::add_swapchain(Swapchain sw) {
 	std::lock_guard _(impl->swapchains_lock);
-	sw.image_views.reserve(sw._ivs.size());
-	for (auto& v : sw._ivs) {
-		sw.image_views.push_back(wrap(v));
+	for (auto& v : sw.image_views) {
+		v = wrap(v.payload);
 	}
 
 	return &*impl->swapchains.emplace(sw);
@@ -486,11 +485,11 @@ void vuk::Context::destroy(const RGImage& image) {
 	impl->allocator.destroy_image(image.image);
 }
 
-void vuk::Context::destroy(const Allocator::Pool& v) {
+void vuk::Context::destroy(const PoolAllocator& v) {
 	impl->allocator.destroy(v);
 }
 
-void vuk::Context::destroy(const Allocator::Linear& v) {
+void vuk::Context::destroy(const LinearAllocator& v) {
 	impl->allocator.destroy(v);
 }
 

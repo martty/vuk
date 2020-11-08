@@ -1,5 +1,6 @@
 #include "Cache.hpp"
 #include "vuk/Context.hpp"
+#include "Allocator.hpp"
 
 namespace vuk {
     template<class T>
@@ -195,7 +196,7 @@ namespace vuk {
 
 	template class PerFrameCache<vuk::DescriptorSet, Context::FC>;
 	template class PerFrameCache<vuk::RGImage, Context::FC>;
-	template class PerFrameCache<Allocator::Linear, Context::FC>;
+	template class PerFrameCache<LinearAllocator, Context::FC>;
 	
     template class Cache<vuk::DescriptorPool>;
 	

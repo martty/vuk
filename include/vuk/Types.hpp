@@ -768,5 +768,12 @@ namespace vuk {
 		return PipelineStageFlags(bit0) ^ bit1;
 	}
 
+	enum class MemoryUsage {
+		eGPUonly = 1/*VMA_MEMORY_USAGE_GPU_ONLY*/,
+		eCPUtoGPU = 3/*VMA_MEMORY_USAGE_CPU_TO_GPU*/,
+		eCPUonly = 2/*VMA_MEMORY_USAGE_CPU_ONLY*/,
+		eGPUtoCPU = 4/*VMA_MEMORY_USAGE_GPU_TO_CPU*/
+	};
+
 	using Bool32 = uint32_t;
 }

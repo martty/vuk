@@ -12,13 +12,6 @@
 #include "vuk/Image.hpp"
 
 namespace vuk {
-	enum class MemoryUsage {
-		eGPUonly = VMA_MEMORY_USAGE_GPU_ONLY,
-		eCPUtoGPU = VMA_MEMORY_USAGE_CPU_TO_GPU,
-		eCPUonly = VMA_MEMORY_USAGE_CPU_ONLY,
-		eGPUtoCPU = VMA_MEMORY_USAGE_GPU_TO_CPU
-	};
-
 	struct PoolSelect {
 		MemoryUsage mem_usage;
 		vuk::BufferUsageFlags buffer_usage;
@@ -61,39 +54,39 @@ namespace std {
 
 
 namespace vuk {
+	struct PoolAllocator {
+		VmaPool pool;
+		VkMemoryRequirements mem_reqs;
+		vuk::BufferUsageFlags usage;
+		std::vector<VkBuffer> buffers;
+	};
+
+	struct LinearAllocator {
+		std::atomic<int> current_buffer = -1;
+		std::atomic<size_t> needle = 0;
+		VkMemoryRequirements mem_reqs;
+		VmaMemoryUsage mem_usage;
+		vuk::BufferUsageFlags usage;
+		std::array<std::tuple<VmaAllocation, VkDeviceMemory, size_t, VkBuffer, void*>, 32> allocations;
+
+		size_t block_size = 1024 * 1024 * 16;
+
+		LinearAllocator(VkMemoryRequirements mem_reqs, VmaMemoryUsage mem_usage, vuk::BufferUsageFlags buf_usage)
+			: mem_reqs(mem_reqs), mem_usage(mem_usage), usage(buf_usage) {
+		}
+
+		LinearAllocator(LinearAllocator&& o) noexcept {
+			current_buffer = o.current_buffer.load();
+			needle = o.needle.load();
+			mem_reqs = o.mem_reqs;
+			mem_usage = o.mem_usage;
+			usage = o.usage;
+			allocations = o.allocations;
+			block_size = o.block_size;
+		}
+	};
+
 	class Allocator {
-	public:
-		struct Pool {
-			VmaPool pool;
-			VkMemoryRequirements mem_reqs;
-			vuk::BufferUsageFlags usage;
-			std::vector<VkBuffer> buffers;
-		};
-
-		struct Linear {
-            std::atomic<int> current_buffer = -1;
-            std::atomic<size_t> needle = 0;
-			VkMemoryRequirements mem_reqs;
-            VmaMemoryUsage mem_usage;
-			vuk::BufferUsageFlags usage;
-            std::array<std::tuple<VmaAllocation, VkDeviceMemory, size_t, VkBuffer, void*>, 32> allocations;
-
-            size_t block_size = 1024 * 1024 * 16;
-
-			Linear(VkMemoryRequirements mem_reqs, VmaMemoryUsage mem_usage, vuk::BufferUsageFlags buf_usage)
-                : mem_reqs(mem_reqs), mem_usage(mem_usage), usage(buf_usage) {}
-
-			Linear(Linear&& o) noexcept {
-                current_buffer = o.current_buffer.load();
-                needle = o.needle.load();
-                mem_reqs = o.mem_reqs;
-                mem_usage = o.mem_usage;
-                usage = o.usage;
-                allocations = o.allocations;
-                block_size = o.block_size;
-			}
-		};
-	private:
 		std::mutex mutex;
 		struct PoolAllocHelper {
 			VkDevice device;
@@ -116,7 +109,7 @@ namespace vuk {
 
 		std::unordered_map<uint64_t, VmaAllocation> images;
 		std::unordered_map<BufferID, VmaAllocation> buffer_allocations;
-		std::unordered_map<PoolSelect, Pool> pools;
+		std::unordered_map<PoolSelect, PoolAllocator> pools;
 		std::unordered_map<uint64_t, std::pair<VkBuffer, size_t>> buffers;
 
 		VmaAllocator allocator;
@@ -126,24 +119,24 @@ namespace vuk {
 		~Allocator();
 
 		// allocate an externally managed pool
-		Pool allocate_pool(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage);
+		PoolAllocator allocate_pool(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage);
 		// allocate an externally managed linear pool
-		Linear allocate_linear(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage);
+		LinearAllocator allocate_linear(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage);
 		// allocate buffer from an internally managed pool
 		Buffer allocate_buffer(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, size_t size, size_t alignment, bool create_mapped);
 		// allocate a buffer from an externally managed pool
-		Buffer allocate_buffer(Pool& pool, size_t size, size_t alignment, bool create_mapped);
+		Buffer allocate_buffer(PoolAllocator& pool, size_t size, size_t alignment, bool create_mapped);
         // allocate a buffer from an externally managed linear pool
-		Buffer allocate_buffer(Linear& pool, size_t size, size_t alignment, bool create_mapped);
+		Buffer allocate_buffer(LinearAllocator& pool, size_t size, size_t alignment, bool create_mapped);
 
 		size_t get_allocation_size(const Buffer&);
 
-		void reset_pool(Pool& pool);
-		void reset_pool(Linear& pool);
+		void reset_pool(PoolAllocator& pool);
+		void reset_pool(LinearAllocator& pool);
 
 		void free_buffer(const Buffer& b);
-		void destroy(const Pool& pool);
-		void destroy(const Linear& pool);
+		void destroy(const PoolAllocator& pool);
+		void destroy(const LinearAllocator& pool);
 		
 		vuk::Image create_image_for_rendertarget(vuk::ImageCreateInfo ici);
 		vuk::Image create_image(vuk::ImageCreateInfo ici);
@@ -152,20 +145,17 @@ namespace vuk {
 	private:
 		// not locked, must be called from a locked fn
 		VmaPool _create_pool(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage);
-		Buffer _allocate_buffer(Pool& pool, size_t size, size_t alignment, bool create_mapped);
-		Buffer _allocate_buffer(Linear& pool, size_t size, size_t alignment, bool create_mapped);
+		Buffer _allocate_buffer(PoolAllocator& pool, size_t size, size_t alignment, bool create_mapped);
+		Buffer _allocate_buffer(LinearAllocator& pool, size_t size, size_t alignment, bool create_mapped);
 
 		VkMemoryRequirements get_memory_requirements(VkBufferCreateInfo& bci);
 	};
 
-	template<> struct create_info<Allocator::Pool> {
+	template<> struct create_info<PoolAllocator> {
 		using type = PoolSelect;
 	};
 
-	template<> struct create_info<Allocator::Linear> {
+	template<> struct create_info<LinearAllocator> {
 		using type = PoolSelect;
 	};
-
-	void NewFunction(VkBufferCreateInfo& bci, vuk::Allocator::Pool& pi);
-
 };

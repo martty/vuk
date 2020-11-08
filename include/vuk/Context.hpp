@@ -4,35 +4,17 @@
 #include <span>
 #include <string_view>
 
-#include "Pool.hpp"
-#include "Cache.hpp"
-#include "Allocator.hpp"
-#include "vuk/Program.hpp"
+#include "vuk_fwd.hpp"
 #include "vuk/Pipeline.hpp"
 #include "vuk/SampledImage.hpp"
-#include "RenderPass.hpp"
-#include "vuk_fwd.hpp"
 #include "vuk/Image.hpp"
 #include "vuk/Buffer.hpp"
-#include "RGImage.hpp"
+#include "vuk/Swapchain.hpp"
 
 namespace vuk {
 	struct TransferStub {
 		size_t id;
 	};
-
-	struct Swapchain {
-		VkSwapchainKHR swapchain;
-		VkSurfaceKHR surface;
-
-		vuk::Format format;
-		vuk::Extent2D extent = { 0, 0 };
-		std::vector<vuk::Image> images;
-		std::vector<VkImageView> _ivs;
-		std::vector<vuk::ImageView> image_views;
-	};
-	using SwapchainRef = Swapchain*;
-	struct Program;
 
 	class Context {
 	public:
@@ -70,19 +52,19 @@ namespace vuk {
 		void create_named_pipeline(const char* name, vuk::PipelineBaseCreateInfo pbci);
 		void create_named_pipeline(const char* name, vuk::ComputePipelineCreateInfo pbci);
 
-		vuk::PipelineBaseInfo* get_named_pipeline(const char* name);
-		vuk::ComputePipelineInfo* get_named_compute_pipeline(const char* name);
+		PipelineBaseInfo* get_named_pipeline(const char* name);
+		ComputePipelineInfo* get_named_compute_pipeline(const char* name);
 
-		vuk::PipelineBaseInfo* get_pipeline(const vuk::PipelineBaseCreateInfo& pbci);
-		vuk::ComputePipelineInfo* get_pipeline(const vuk::ComputePipelineCreateInfo& pbci);
-		vuk::Program get_pipeline_reflection_info(vuk::PipelineBaseCreateInfo pbci);
-		vuk::ShaderModule compile_shader(std::string source, Name path);
+		PipelineBaseInfo* get_pipeline(const PipelineBaseCreateInfo& pbci);
+		ComputePipelineInfo* get_pipeline(const ComputePipelineCreateInfo& pbci);
+		Program get_pipeline_reflection_info(PipelineBaseCreateInfo pbci);
+		ShaderModule compile_shader(std::string source, Name path);
 
-		vuk::ShaderModule create(const create_info_t<vuk::ShaderModule>& cinfo);
-		vuk::PipelineBaseInfo create(const create_info_t<vuk::PipelineBaseInfo>& cinfo);
+		ShaderModule create(const create_info_t<ShaderModule>& cinfo);
+		PipelineBaseInfo create(const create_info_t<PipelineBaseInfo>& cinfo);
 		VkPipelineLayout create(const create_info_t<VkPipelineLayout>& cinfo);
-		vuk::DescriptorSetLayoutAllocInfo create(const create_info_t<vuk::DescriptorSetLayoutAllocInfo>& cinfo);
-		vuk::ComputePipelineInfo create(const create_info_t<vuk::ComputePipelineInfo>& cinfo);
+		DescriptorSetLayoutAllocInfo create(const create_info_t<DescriptorSetLayoutAllocInfo>& cinfo);
+		ComputePipelineInfo create(const create_info_t<ComputePipelineInfo>& cinfo);
 
 		bool load_pipeline_cache(std::span<uint8_t> data);
 		std::vector<uint8_t> save_pipeline_cache();
@@ -129,7 +111,7 @@ namespace vuk {
 		InflightContext begin();
 
 		void wait_idle();
-		
+
 		void submit_graphics(VkSubmitInfo, VkFence);
 		void submit_transfer(VkSubmitInfo, VkFence);
 	private:
@@ -137,18 +119,18 @@ namespace vuk {
 		std::atomic<size_t> unique_handle_id_counter = 0;
 
 		void destroy(const struct RGImage& image);
-		void destroy(const Allocator::Pool& v);
-		void destroy(const Allocator::Linear& v);
-		void destroy(const vuk::DescriptorPool& dp);
-		void destroy(const vuk::PipelineInfo& pi);
-		void destroy(const vuk::ShaderModule& sm);
-		void destroy(const vuk::DescriptorSetLayoutAllocInfo& ds);
+		void destroy(const struct PoolAllocator& v);
+		void destroy(const struct LinearAllocator& v);
+		void destroy(const DescriptorPool& dp);
+		void destroy(const PipelineInfo& pi);
+		void destroy(const ShaderModule& sm);
+		void destroy(const DescriptorSetLayoutAllocInfo& ds);
 		void destroy(const VkPipelineLayout& pl);
 		void destroy(const VkRenderPass& rp);
-		void destroy(const vuk::DescriptorSet&);
+		void destroy(const DescriptorSet&);
 		void destroy(const VkFramebuffer& fb);
-		void destroy(const vuk::Sampler& sa);
-		void destroy(const vuk::PipelineBaseInfo& pbi);
+		void destroy(const Sampler& sa);
+		void destroy(const PipelineBaseInfo& pbi);
 
 		friend class InflightContext;
 		friend class PerThreadContext;
@@ -176,7 +158,7 @@ namespace vuk {
 
 		std::atomic<size_t> transfer_id = 1;
 		std::atomic<size_t> last_transfer_complete = 0;
-	
+
 		TransferStub enqueue_transfer(Buffer src, Buffer dst);
 		TransferStub enqueue_transfer(Buffer src, vuk::Image dst, vuk::Extent3D extent, bool generate_mips);
 		void destroy(std::vector<vuk::Image>&& images);
@@ -264,28 +246,28 @@ namespace vuk {
 		VkFence acquire_fence();
 		VkCommandBuffer acquire_command_buffer(VkCommandBufferLevel);
 		VkSemaphore acquire_semaphore();
-		VkFramebuffer acquire_framebuffer(const vuk::FramebufferCreateInfo&);
-		VkRenderPass acquire_renderpass(const vuk::RenderPassCreateInfo&);
-		RGImage acquire_rendertarget(const vuk::RGCI&);
-		vuk::Sampler acquire_sampler(const vuk::SamplerCreateInfo&);
-		vuk::DescriptorSet acquire_descriptorset(const vuk::SetBinding&);
-		vuk::PipelineInfo acquire_pipeline(const vuk::PipelineInstanceCreateInfo&);
+		VkFramebuffer acquire_framebuffer(const struct FramebufferCreateInfo&);
+		VkRenderPass acquire_renderpass(const struct RenderPassCreateInfo&);
+		RGImage acquire_rendertarget(const struct RGCI&);
+		Sampler acquire_sampler(const SamplerCreateInfo&);
+		DescriptorSet acquire_descriptorset(const SetBinding&);
+		PipelineInfo acquire_pipeline(const PipelineInstanceCreateInfo&);
 
-		const plf::colony<vuk::SampledImage>& get_sampled_images();
+		const plf::colony<SampledImage>& get_sampled_images();
 
-		PipelineBaseInfo create(const create_info_t<PipelineBaseInfo>& cinfo);
-		PipelineInfo create(const create_info_t<PipelineInfo>& cinfo);
-		vuk::ShaderModule create(const create_info_t<vuk::ShaderModule>& cinfo);
-		VkRenderPass create(const create_info_t<VkRenderPass>& cinfo);
-		vuk::RGImage create(const create_info_t<vuk::RGImage>& cinfo);
-		vuk::Allocator::Linear create(const create_info_t<vuk::Allocator::Linear>& cinfo);
-		vuk::DescriptorPool create(const create_info_t<vuk::DescriptorPool>& cinfo);
-		vuk::DescriptorSet create(const create_info_t<vuk::DescriptorSet>& cinfo);
-		VkFramebuffer create(const create_info_t<VkFramebuffer>& cinfo);
-		vuk::Sampler create(const create_info_t<vuk::Sampler>& cinfo);
-		vuk::DescriptorSetLayoutAllocInfo create(const create_info_t<vuk::DescriptorSetLayoutAllocInfo>& cinfo);
-		VkPipelineLayout create(const create_info_t<VkPipelineLayout>& cinfo);
-		vuk::ComputePipelineInfo create(const create_info_t<vuk::ComputePipelineInfo>& cinfo);
+		PipelineBaseInfo create(const struct PipelineBaseCreateInfo& cinfo);
+		PipelineInfo create(const struct PipelineInstanceCreateInfo& cinfo);
+		ShaderModule create(const struct ShaderModuleCreateInfo& cinfo);
+		VkRenderPass create(const struct RenderPassCreateInfo& cinfo);
+		RGImage create(const struct RGCI& cinfo);
+		LinearAllocator create(const struct PoolSelect& cinfo);
+		DescriptorPool create(const struct DescriptorSetLayoutAllocInfo& cinfo);
+		DescriptorSet create(const struct SetBinding& cinfo);
+		VkFramebuffer create(const struct FramebufferCreateInfo& cinfo);
+		Sampler create(const struct SamplerCreateInfo& cinfo);
+		DescriptorSetLayoutAllocInfo create(const struct DescriptorSetLayoutCreateInfo& cinfo);
+		VkPipelineLayout create(const struct PipelineLayoutCreateInfo& cinfo);
+		ComputePipelineInfo create(const struct ComputePipelineCreateInfo& cinfo);
 
 	private:
 		friend class InflightContext;
@@ -307,13 +289,10 @@ namespace vuk {
 		} else if constexpr (std::is_same_v<T, VkPipeline>) {
 			info.objectType = VK_OBJECT_TYPE_PIPELINE;
 		}
-		//info.objectType = (VkObjectType)t.objectType;
 		info.objectHandle = reinterpret_cast<uint64_t>(t);
 		setDebugUtilsObjectNameEXT(ctx.device, &info);
 	}
-}
 
-namespace vuk {
 	template<typename Type>
 	inline Unique<Type>::~Unique() noexcept {
 		if (context && payload != Type{})
@@ -328,7 +307,10 @@ namespace vuk {
 			payload = std::move(value);
 		}
 	}
+}
 
+// utility functions
+namespace vuk {
 	struct RenderGraph;
 	bool execute_submit_and_present_to_one(PerThreadContext& ptc, RenderGraph& rg, SwapchainRef swapchain, bool use_secondary_command_buffers = false);
 	void execute_submit_and_wait(PerThreadContext& ptc, RenderGraph& rg, bool use_secondary_command_buffers = false);

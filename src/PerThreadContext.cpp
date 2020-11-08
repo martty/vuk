@@ -217,10 +217,9 @@ vuk::DescriptorSet vuk::PerThreadContext::create(const create_info_t<vuk::Descri
 	return { ds, cinfo.layout_info };
 }
 
-vuk::Allocator::Linear vuk::PerThreadContext::create(const create_info_t<vuk::Allocator::Linear>& cinfo) {
+vuk::LinearAllocator vuk::PerThreadContext::create(const create_info_t<vuk::LinearAllocator>& cinfo) {
 	return ctx.impl->allocator.allocate_linear(cinfo.mem_usage, cinfo.buffer_usage);
 }
-
 
 vuk::RGImage vuk::PerThreadContext::create(const create_info_t<vuk::RGImage>& cinfo) {
 	RGImage res{};

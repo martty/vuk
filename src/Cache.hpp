@@ -7,6 +7,8 @@
 #include "vuk/Pipeline.hpp"
 #include "vuk/Program.hpp"
 #include "CreateInfo.hpp"
+#include "RenderPass.hpp"
+#include "RGImage.hpp"
 #include <optional>
 #include <span>
 #include <vector>

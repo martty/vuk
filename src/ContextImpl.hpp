@@ -4,6 +4,11 @@
 #include <mutex>
 #include <queue>
 
+#include "Allocator.hpp"
+#include "Pool.hpp"
+#include "Cache.hpp"
+#include "RenderPass.hpp"
+
 namespace vuk {
 	struct ContextImpl {
 		Allocator allocator;
@@ -20,7 +25,7 @@ namespace vuk {
 		Cache<VkRenderPass> renderpass_cache;
 		Cache<VkFramebuffer> framebuffer_cache;
 		PerFrameCache<RGImage, Context::FC> transient_images;
-		PerFrameCache<Allocator::Linear, Context::FC> scratch_buffers;
+		PerFrameCache<LinearAllocator, Context::FC> scratch_buffers;
 		Cache<vuk::DescriptorPool> pool_cache;
 		PerFrameCache<vuk::DescriptorSet, Context::FC> descriptor_sets;
 		Cache<vuk::Sampler> sampler_cache;
@@ -221,7 +226,7 @@ namespace vuk {
 		Cache<VkRenderPass>::PFView renderpass_cache;
 		Cache<VkFramebuffer>::PFView framebuffer_cache;
 		PerFrameCache<vuk::RGImage, Context::FC>::PFView transient_images;
-		PerFrameCache<Allocator::Linear, Context::FC>::PFView scratch_buffers;
+		PerFrameCache<LinearAllocator, Context::FC>::PFView scratch_buffers;
 		PerFrameCache<vuk::DescriptorSet, Context::FC>::PFView descriptor_sets;
 		Cache<vuk::Sampler>::PFView sampler_cache;
 		Pool<vuk::SampledImage, Context::FC>::PFView sampled_images;
@@ -272,7 +277,7 @@ namespace vuk {
 		Cache<VkRenderPass>::PFPTView renderpass_cache;
 		Cache<VkFramebuffer>::PFPTView framebuffer_cache;
 		PerFrameCache<vuk::RGImage, Context::FC>::PFPTView transient_images;
-		PerFrameCache<Allocator::Linear, Context::FC>::PFPTView scratch_buffers;
+		PerFrameCache<LinearAllocator, Context::FC>::PFPTView scratch_buffers;
 		PerFrameCache<vuk::DescriptorSet, Context::FC>::PFPTView descriptor_sets;
 		Cache<vuk::Sampler>::PFPTView sampler_cache;
 		Pool<vuk::SampledImage, Context::FC>::PFPTView sampled_images;

@@ -14,6 +14,12 @@ namespace vuk {
 	struct Swapchain;
 	using SwapChainRef = Swapchain *;
 
+	class Allocator;
+
+	// temporary
+	struct RGImage;
+	struct RGCI;
+
 	// 0b00111 -> 3
 	inline uint32_t num_leading_ones(uint32_t mask) {
 #ifdef __builtin_clz

@@ -1,7 +1,8 @@
 #pragma once
 
-#include "Types.hpp"
 #include <vulkan/vulkan.h>
+#include "Types.hpp"
+#include <vector>
 
 namespace vuk {
     enum class ColorSpaceKHR {
@@ -56,4 +57,16 @@ namespace vuk {
         eSharedDemandRefresh = VK_PRESENT_MODE_SHARED_DEMAND_REFRESH_KHR,
         eSharedContinuousRefresh = VK_PRESENT_MODE_SHARED_CONTINUOUS_REFRESH_KHR
     };
+
+	struct Swapchain {
+		VkSwapchainKHR swapchain;
+		VkSurfaceKHR surface;
+
+		vuk::Format format;
+		vuk::Extent2D extent = { 0, 0 };
+		std::vector<vuk::Image> images;
+		std::vector<vuk::ImageView> image_views;
+	};
+
+	using SwapchainRef = Swapchain*;
 }
