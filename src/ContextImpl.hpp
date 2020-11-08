@@ -2,6 +2,7 @@
 #include "RGImage.hpp"
 
 #include <mutex>
+#include <queue>
 
 namespace vuk {
 	struct ContextImpl {
@@ -72,9 +73,51 @@ namespace vuk {
 			vkCreatePipelineCache(ctx.device, &pcci, nullptr, &vk_pipeline_cache);
 		}
 	};
+
+	inline unsigned _prev(unsigned frame, unsigned amt, unsigned FC) {
+		return ((frame - amt) % FC) + ((frame >= amt) ? 0 : FC - 1);
+	}
+	inline unsigned _next(unsigned frame, unsigned amt, unsigned FC) {
+		return (frame + amt) % FC;
+	}
+	inline unsigned _next(unsigned frame, unsigned FC) {
+		return (frame + 1) % FC;
+	}
+	inline size_t _next(size_t frame, unsigned FC) {
+		return (frame + 1) % FC;
+	}
+
+	template<class T>
+	Handle<T> Context::wrap(T payload) {
+		return { { unique_handle_id_counter++ }, payload };
+	}
+
+	struct BufferCopyCommand {
+		Buffer src;
+		Buffer dst;
+		TransferStub stub;
+	};
+
+	struct BufferImageCopyCommand {
+		Buffer src;
+		vuk::Image dst;
+		vuk::Extent3D extent;
+		bool generate_mips;
+		TransferStub stub;
+	};
+
+	template<class T, size_t FC>
+	typename Pool<T, FC>::PFView Pool<T, FC>::get_view(InflightContext& ctx) {
+		return { ctx, *this, per_frame_storage[ctx.frame] };
+	}
+
+	template<class T, size_t FC>
+	Pool<T, FC>::PFView::PFView(InflightContext& ifc, Pool<T, FC>& storage, plf::colony<PooledType<T>>& fv) : storage(storage), ifc(ifc), frame_values(fv) {
+		storage.reset(ifc.frame);
+	}
 }
 
-inline void record_buffer_image_copy(VkCommandBuffer& cbuf, vuk::InflightContext::BufferImageCopyCommand& task) {
+inline void record_buffer_image_copy(VkCommandBuffer& cbuf, vuk::BufferImageCopyCommand& task) {
 	VkBufferImageCopy bc;
 	bc.bufferOffset = task.src.offset;
 	bc.imageOffset = VkOffset3D{ 0, 0, 0 };
@@ -162,4 +205,105 @@ inline void record_buffer_image_copy(VkCommandBuffer& cbuf, vuk::InflightContext
 	vkCmdPipelineBarrier(cbuf, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &top_mip_use_barrier);
 }
 
+namespace vuk {
+	struct PendingTransfer {
+		size_t last_transfer_id;
+		VkFence fence;
+	};
+
+	struct IFCImpl {
+		Pool<VkFence, Context::FC>::PFView fence_pools; // must be first, so we wait for the fences
+		Pool<VkCommandBuffer, Context::FC>::PFView commandbuffer_pools;
+		Pool<VkSemaphore, Context::FC>::PFView semaphore_pools;
+		Cache<PipelineInfo>::PFView pipeline_cache;
+		Cache<ComputePipelineInfo>::PFView compute_pipeline_cache;
+		Cache<PipelineBaseInfo>::PFView pipelinebase_cache;
+		Cache<VkRenderPass>::PFView renderpass_cache;
+		Cache<VkFramebuffer>::PFView framebuffer_cache;
+		PerFrameCache<vuk::RGImage, Context::FC>::PFView transient_images;
+		PerFrameCache<Allocator::Linear, Context::FC>::PFView scratch_buffers;
+		PerFrameCache<vuk::DescriptorSet, Context::FC>::PFView descriptor_sets;
+		Cache<vuk::Sampler>::PFView sampler_cache;
+		Pool<vuk::SampledImage, Context::FC>::PFView sampled_images;
+		Cache<vuk::DescriptorPool>::PFView pool_cache;
+
+		Cache<vuk::ShaderModule>::PFView shader_modules;
+		Cache<vuk::DescriptorSetLayoutAllocInfo>::PFView descriptor_set_layouts;
+		Cache<VkPipelineLayout>::PFView pipeline_layouts;
+
+		// needs to be mpsc
+		std::mutex transfer_mutex;
+		std::queue<BufferCopyCommand> buffer_transfer_commands;
+		std::queue<BufferImageCopyCommand> bufferimage_transfer_commands;
+		// only accessed by DMAtask
+		std::queue<PendingTransfer> pending_transfers;
+
+		// recycle
+		std::mutex recycle_lock;
+
+		IFCImpl(Context& ctx, InflightContext& ifc) :
+			fence_pools(ctx.impl->fence_pools.get_view(ifc)), // must be first, so we wait for the fences
+			commandbuffer_pools(ctx.impl->cbuf_pools.get_view(ifc)),
+			semaphore_pools(ctx.impl->semaphore_pools.get_view(ifc)),
+			pipeline_cache(ifc, ctx.impl->pipeline_cache),
+			compute_pipeline_cache(ifc, ctx.impl->compute_pipeline_cache),
+			pipelinebase_cache(ifc, ctx.impl->pipelinebase_cache),
+			renderpass_cache(ifc, ctx.impl->renderpass_cache),
+			framebuffer_cache(ifc, ctx.impl->framebuffer_cache),
+			transient_images(ifc, ctx.impl->transient_images),
+			scratch_buffers(ifc, ctx.impl->scratch_buffers),
+			descriptor_sets(ifc, ctx.impl->descriptor_sets),
+			sampler_cache(ifc, ctx.impl->sampler_cache),
+			sampled_images(ctx.impl->sampled_images.get_view(ifc)),
+			pool_cache(ifc, ctx.impl->pool_cache),
+			shader_modules(ifc, ctx.impl->shader_modules),
+			descriptor_set_layouts(ifc, ctx.impl->descriptor_set_layouts),
+			pipeline_layouts(ifc, ctx.impl->pipeline_layouts) {
+		}
+	};
+
+	struct PTCImpl {
+		Pool<VkCommandBuffer, Context::FC>::PFPTView commandbuffer_pool;
+		Pool<VkSemaphore, Context::FC>::PFPTView semaphore_pool;
+		Pool<VkFence, Context::FC>::PFPTView fence_pool;
+		Cache<PipelineInfo>::PFPTView pipeline_cache;
+		Cache<ComputePipelineInfo>::PFPTView compute_pipeline_cache;
+		Cache<PipelineBaseInfo>::PFPTView pipelinebase_cache;
+		Cache<VkRenderPass>::PFPTView renderpass_cache;
+		Cache<VkFramebuffer>::PFPTView framebuffer_cache;
+		PerFrameCache<vuk::RGImage, Context::FC>::PFPTView transient_images;
+		PerFrameCache<Allocator::Linear, Context::FC>::PFPTView scratch_buffers;
+		PerFrameCache<vuk::DescriptorSet, Context::FC>::PFPTView descriptor_sets;
+		Cache<vuk::Sampler>::PFPTView sampler_cache;
+		Pool<vuk::SampledImage, Context::FC>::PFPTView sampled_images;
+		Cache<vuk::DescriptorPool>::PFPTView pool_cache;
+		Cache<vuk::ShaderModule>::PFPTView shader_modules;
+		Cache<vuk::DescriptorSetLayoutAllocInfo>::PFPTView descriptor_set_layouts;
+		Cache<VkPipelineLayout>::PFPTView pipeline_layouts;
+
+		// recycling global objects
+		std::vector<Buffer> buffer_recycle;
+		std::vector<vuk::Image> image_recycle;
+		std::vector<VkImageView> image_view_recycle;
+
+		PTCImpl(InflightContext& ifc, PerThreadContext& ptc) :
+			commandbuffer_pool(ifc.impl->commandbuffer_pools.get_view(ptc)),
+			semaphore_pool(ifc.impl->semaphore_pools.get_view(ptc)),
+			fence_pool(ifc.impl->fence_pools.get_view(ptc)),
+			pipeline_cache(ptc, ifc.impl->pipeline_cache),
+			compute_pipeline_cache(ptc, ifc.impl->compute_pipeline_cache),
+			pipelinebase_cache(ptc, ifc.impl->pipelinebase_cache),
+			renderpass_cache(ptc, ifc.impl->renderpass_cache),
+			framebuffer_cache(ptc, ifc.impl->framebuffer_cache),
+			transient_images(ptc, ifc.impl->transient_images),
+			scratch_buffers(ptc, ifc.impl->scratch_buffers),
+			descriptor_sets(ptc, ifc.impl->descriptor_sets),
+			sampler_cache(ptc, ifc.impl->sampler_cache),
+			sampled_images(ifc.impl->sampled_images.get_view(ptc)),
+			pool_cache(ptc, ifc.impl->pool_cache),
+			shader_modules(ptc, ifc.impl->shader_modules),
+			descriptor_set_layouts(ptc, ifc.impl->descriptor_set_layouts),
+			pipeline_layouts(ptc, ifc.impl->pipeline_layouts) {}
+	};
+}
 

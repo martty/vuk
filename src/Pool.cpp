@@ -92,8 +92,8 @@ namespace vuk {
 	}
 
 	void PooledType<VkCommandBuffer>::free(Context& ctx) {
-		vkFreeCommandBuffers(ctx.device, pool, p_values.size(), p_values.data());
-		vkFreeCommandBuffers(ctx.device, pool, s_values.size(), s_values.data());
+		vkFreeCommandBuffers(ctx.device, pool, (uint32_t)p_values.size(), p_values.data());
+		vkFreeCommandBuffers(ctx.device, pool, (uint32_t)s_values.size(), s_values.data());
 		vkDestroyCommandPool(ctx.device, pool, nullptr);
 	}
 }

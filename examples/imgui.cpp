@@ -155,7 +155,7 @@ vuk::Pass util::ImGui_ImplVuk_Render(vuk::PerThreadContext& ptc, vuk::Name src_t
 
 	// add rendergraph dependencies to be transitioned
 	// make all rendergraph sampled images available
-	for (auto& si : ptc.sampled_images.pool.values) {
+	for (auto& si : ptc.get_sampled_images()) {
 		if (!si.is_global) {
 			pass.resources.push_back(vuk::Resource(si.rg_attachment.attachment_name, vuk::Resource::Type::eImage, vuk::Access::eFragmentSampled));
 		}

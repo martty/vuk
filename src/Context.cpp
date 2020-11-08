@@ -65,9 +65,8 @@ void vuk::Context::submit_transfer(VkSubmitInfo si, VkFence fence) {
 	vkQueueSubmit(transfer_queue, 1, &si, fence);
 }
 
-
 void vuk::PersistentDescriptorSet::update_combined_image_sampler(PerThreadContext& ptc, unsigned binding, unsigned array_index, vuk::ImageView iv, vuk::SamplerCreateInfo sci, vuk::ImageLayout layout) {
-	descriptor_bindings[array_index].image = vuk::DescriptorImageInfo(ptc.sampler_cache.acquire(sci), iv, layout);
+	descriptor_bindings[array_index].image = vuk::DescriptorImageInfo(ptc.acquire_sampler(sci), iv, layout);
 	descriptor_bindings[array_index].type = vuk::DescriptorType::eCombinedImageSampler;
 	VkWriteDescriptorSet wds = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
 	wds.descriptorCount = 1;
@@ -404,7 +403,7 @@ vuk::Context::UploadResult vuk::Context::fenced_upload(std::span<ImageUpload> up
 		// copy to staging
 		::memcpy(staging.mapped_ptr, upload.data.data(), upload.data.size());
 
-		InflightContext::BufferImageCopyCommand task;
+		BufferImageCopyCommand task;
 		task.src = staging;
 		task.dst = upload.dst;
 		task.extent = upload.extent;
@@ -482,7 +481,6 @@ void vuk::Context::enqueue_destroy(vuk::PersistentDescriptorSet b) {
 	impl->pds_recycle[frame_counter % FC].push_back(std::move(b));
 }
 
-
 void vuk::Context::destroy(const RGImage& image) {
 	vkDestroyImageView(device, image.image_view.payload, nullptr);
 	impl->allocator.destroy_image(image.image);
@@ -495,7 +493,6 @@ void vuk::Context::destroy(const Allocator::Pool& v) {
 void vuk::Context::destroy(const Allocator::Linear& v) {
 	impl->allocator.destroy(v);
 }
-
 
 void vuk::Context::destroy(const vuk::DescriptorPool& dp) {
 	for (auto& p : dp.pools) {

@@ -4,7 +4,7 @@
 
 namespace vuk {
 	CommandBuffer::CommandBuffer(vuk::PerThreadContext& ptc) : ptc(ptc){
-		command_buffer = ptc.commandbuffer_pool.acquire(VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1)[0];
+		command_buffer = ptc.acquire_command_buffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 	}
 
 	const CommandBuffer::RenderPassInfo& CommandBuffer::get_ongoing_renderpass() const {
@@ -165,7 +165,7 @@ namespace vuk {
 	CommandBuffer& CommandBuffer::bind_sampled_image(unsigned set, unsigned binding, vuk::ImageView iv, vuk::SamplerCreateInfo sci, vuk::ImageLayout il) {
 		sets_used[set] = true;
 		set_bindings[set].bindings[binding].type = vuk::DescriptorType::eCombinedImageSampler;
-		set_bindings[set].bindings[binding].image = vuk::DescriptorImageInfo(ptc.sampler_cache.acquire(sci), iv, il);
+		set_bindings[set].bindings[binding].image = vuk::DescriptorImageInfo(ptc.acquire_sampler(sci), iv, il);
 		set_bindings[set].used.set(binding);
 
 		return *this;
@@ -301,7 +301,7 @@ namespace vuk {
 
     SecondaryCommandBuffer CommandBuffer::begin_secondary() {
         auto nptc = new vuk::PerThreadContext(ptc.ifc.begin());
-        auto scbuf = nptc->commandbuffer_pool.acquire(VK_COMMAND_BUFFER_LEVEL_SECONDARY, 1)[0];
+        auto scbuf = nptc->acquire_command_buffer(VK_COMMAND_BUFFER_LEVEL_SECONDARY);
 		VkCommandBufferBeginInfo cbi;
 		cbi.flags = VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT | VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
         VkCommandBufferInheritanceInfo cbii;
@@ -383,7 +383,7 @@ namespace vuk {
 				continue;
 			set_bindings[i].layout_info = graphics? current_pipeline->layout_info[i] : current_compute_pipeline->layout_info[i];
 			if (!persistent) {
-				auto ds = ptc.descriptor_sets.acquire(set_bindings[i]);
+				auto ds = ptc.acquire_descriptorset(set_bindings[i]);
 				vkCmdBindDescriptorSets(command_buffer, graphics ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE, graphics ? current_pipeline->pipeline_layout : current_compute_pipeline->pipeline_layout, i, 1, &ds.descriptor_set, 0, nullptr);
 				sets_used[i] = false;
 				set_bindings[i] = {};
@@ -438,7 +438,7 @@ namespace vuk {
 			pi.color_blend_state.pAttachments = (VkPipelineColorBlendAttachmentState*)pi.color_blend_attachments.data();
 			pi.color_blend_state.attachmentCount = (uint32_t)pi.color_blend_attachments.size();
 
-			current_pipeline = ptc.pipeline_cache.acquire(pi);
+			current_pipeline = ptc.acquire_pipeline(pi);
 
 			vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, current_pipeline->pipeline);
 			next_pipeline = nullptr;

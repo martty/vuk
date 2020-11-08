@@ -865,7 +865,7 @@ namespace vuk {
 			rp.rpci.attachmentCount = (uint32_t)rp.rpci.attachments.size();
 			rp.rpci.pAttachments = rp.rpci.attachments.data();
 
-			rp.handle = ptc.renderpass_cache.acquire(rp.rpci);
+			rp.handle = ptc.acquire_renderpass(rp.rpci);
 		}
 	}
 
@@ -915,7 +915,7 @@ namespace vuk {
 			rgci.ici = ici;
 			rgci.ivci = ivci;
 
-			auto rg = ptc.transient_images.acquire(rgci);
+			auto rg = ptc.acquire_rendertarget(rgci);
 			attachment_info.iv = rg.image_view;
 			attachment_info.image = rg.image;
 		}
@@ -1038,7 +1038,7 @@ namespace vuk {
 			rp.fbci.pAttachments = &vkivs[0];
 			rp.fbci.attachmentCount = (uint32_t)vkivs.size();
 			rp.fbci.layers = 1;
-			rp.framebuffer = ptc.framebuffer_cache.acquire(rp.fbci);
+			rp.framebuffer = ptc.acquire_framebuffer(rp.fbci);
 		}
 		// create non-attachment images
 		for (auto& [name, bound] : bound_attachments) {
@@ -1048,7 +1048,7 @@ namespace vuk {
 		}
 
 		// actual execution
-		auto cbuf = ptc.commandbuffer_pool.acquire(VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1)[0];
+		auto cbuf = ptc.acquire_command_buffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 
 		VkCommandBufferBeginInfo cbi{.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
 		vkBeginCommandBuffer(cbuf, &cbi);

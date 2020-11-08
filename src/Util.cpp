@@ -2,7 +2,7 @@
 #include "vuk/RenderGraph.hpp"
 
 bool vuk::execute_submit_and_present_to_one(PerThreadContext& ptc, RenderGraph& rg, SwapchainRef swapchain, bool use_secondary_command_buffers) {
-	auto present_rdy = ptc.semaphore_pool.acquire(1)[0];
+	auto present_rdy = ptc.acquire_semaphore();
 	uint32_t image_index = (uint32_t)-1;
 	VkResult acq_result = vkAcquireNextImageKHR(ptc.ctx.device, swapchain->swapchain, UINT64_MAX, present_rdy, VK_NULL_HANDLE, &image_index);
 	if (acq_result != VK_SUCCESS) {
@@ -17,7 +17,7 @@ bool vuk::execute_submit_and_present_to_one(PerThreadContext& ptc, RenderGraph& 
 		return false;
 	}
 
-	auto render_complete = ptc.semaphore_pool.acquire(1)[0];
+	auto render_complete = ptc.acquire_semaphore();
 	std::vector<std::pair<SwapChainRef, size_t>> swapchains_with_indexes = { { swapchain, image_index } };
 
 	auto cb = rg.execute(ptc, swapchains_with_indexes, use_secondary_command_buffers);
@@ -31,7 +31,7 @@ bool vuk::execute_submit_and_present_to_one(PerThreadContext& ptc, RenderGraph& 
 	si.pWaitSemaphores = &present_rdy;
 	VkPipelineStageFlags flags = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 	si.pWaitDstStageMask = &flags;
-	auto fence = ptc.fence_pool.acquire(1)[0];
+	auto fence = ptc.acquire_fence();
 	ptc.ctx.submit_graphics(si, fence);
 
 	VkPresentInfoKHR pi{ .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };

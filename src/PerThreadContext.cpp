@@ -1,42 +1,26 @@
 #include "vuk/Context.hpp"
 #include "ContextImpl.hpp"
 
-vuk::PerThreadContext::PerThreadContext(InflightContext& ifc, unsigned tid) : ctx(ifc.ctx), ifc(ifc), tid(tid),
-commandbuffer_pool(ifc.commandbuffer_pools.get_view(*this)),
-semaphore_pool(ifc.semaphore_pools.get_view(*this)),
-fence_pool(ifc.fence_pools.get_view(*this)),
-pipeline_cache(*this, ifc.pipeline_cache),
-compute_pipeline_cache(*this, ifc.compute_pipeline_cache),
-pipelinebase_cache(*this, ifc.pipelinebase_cache),
-renderpass_cache(*this, ifc.renderpass_cache),
-framebuffer_cache(*this, ifc.framebuffer_cache),
-transient_images(*this, ifc.transient_images),
-scratch_buffers(*this, ifc.scratch_buffers),
-descriptor_sets(*this, ifc.descriptor_sets),
-sampler_cache(*this, ifc.sampler_cache),
-sampled_images(ifc.sampled_images.get_view(*this)),
-pool_cache(*this, ifc.pool_cache),
-shader_modules(*this, ifc.shader_modules),
-descriptor_set_layouts(*this, ifc.descriptor_set_layouts),
-pipeline_layouts(*this, ifc.pipeline_layouts) {
+vuk::PerThreadContext::PerThreadContext(InflightContext& ifc, unsigned tid) : ctx(ifc.ctx), ifc(ifc), tid(tid), impl(new PTCImpl(ifc, *this)) {
 }
 
 vuk::PerThreadContext::~PerThreadContext() {
-	ifc.destroy(std::move(image_recycle));
-	ifc.destroy(std::move(image_view_recycle));
+	ifc.destroy(std::move(impl->image_recycle));
+	ifc.destroy(std::move(impl->image_view_recycle));
+	delete impl;
 }
 
 void vuk::PerThreadContext::destroy(vuk::Image image) {
-	image_recycle.push_back(image);
+	impl->image_recycle.push_back(image);
 }
 
 void vuk::PerThreadContext::destroy(vuk::ImageView image) {
-	image_view_recycle.push_back(image.payload);
+	impl->image_view_recycle.push_back(image.payload);
 }
 
 void vuk::PerThreadContext::destroy(vuk::DescriptorSet ds) {
 	// note that since we collect at integer times FC, we are releasing the DS back to the right pool
-	pool_cache.acquire(ds.layout_info).free_sets.enqueue(ds.descriptor_set);
+	impl->pool_cache.acquire(ds.layout_info).free_sets.enqueue(ds.descriptor_set);
 }
 
 vuk::Unique<vuk::PersistentDescriptorSet> vuk::PerThreadContext::create_persistent_descriptorset(const DescriptorSetLayoutAllocInfo& dslai, unsigned num_descriptors) {
@@ -105,7 +89,7 @@ size_t vuk::PerThreadContext::get_allocation_size(Buffer buf) {
 vuk::Buffer vuk::PerThreadContext::_allocate_scratch_buffer(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, size_t size, size_t alignment,
 	bool create_mapped) {
 	PoolSelect ps{ mem_usage, buffer_usage };
-	auto& pool = scratch_buffers.acquire(ps);
+	auto& pool = impl->scratch_buffers.acquire(ps);
 	return ifc.ctx.impl->allocator.allocate_buffer(pool, size, alignment, create_mapped);
 }
 
@@ -146,21 +130,21 @@ std::pair<vuk::Texture, vuk::TransferStub> vuk::PerThreadContext::create_texture
 }
 
 void vuk::PerThreadContext::dma_task() {
-	std::lock_guard _(ifc.transfer_mutex);
-	while (!ifc.pending_transfers.empty() && vkGetFenceStatus(ctx.device, ifc.pending_transfers.front().fence) == VK_SUCCESS) {
-		auto last = ifc.pending_transfers.front();
+	std::lock_guard _(ifc.impl->transfer_mutex);
+	while (!ifc.impl->pending_transfers.empty() && vkGetFenceStatus(ctx.device, ifc.impl->pending_transfers.front().fence) == VK_SUCCESS) {
+		auto last = ifc.impl->pending_transfers.front();
 		ifc.last_transfer_complete = last.last_transfer_id;
-		ifc.pending_transfers.pop();
+		ifc.impl->pending_transfers.pop();
 	}
 
-	if (ifc.buffer_transfer_commands.empty() && ifc.bufferimage_transfer_commands.empty()) return;
-	auto cbuf = commandbuffer_pool.acquire(VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1)[0];
+	if (ifc.impl->buffer_transfer_commands.empty() && ifc.impl->bufferimage_transfer_commands.empty()) return;
+	auto cbuf = impl->commandbuffer_pool.acquire(VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1)[0];
 	VkCommandBufferBeginInfo cbi = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
 	vkBeginCommandBuffer(cbuf, &cbi);
 	size_t last = 0;
-	while (!ifc.buffer_transfer_commands.empty()) {
-		auto task = ifc.buffer_transfer_commands.front();
-		ifc.buffer_transfer_commands.pop();
+	while (!ifc.impl->buffer_transfer_commands.empty()) {
+		auto task = ifc.impl->buffer_transfer_commands.front();
+		ifc.impl->buffer_transfer_commands.pop();
 		VkBufferCopy bc;
 		bc.dstOffset = task.dst.offset;
 		bc.srcOffset = task.src.offset;
@@ -168,38 +152,38 @@ void vuk::PerThreadContext::dma_task() {
 		vkCmdCopyBuffer(cbuf, task.src.buffer, task.dst.buffer, 1, &bc);
 		last = std::max(last, task.stub.id);
 	}
-	while (!ifc.bufferimage_transfer_commands.empty()) {
-		auto task = ifc.bufferimage_transfer_commands.front();
-		ifc.bufferimage_transfer_commands.pop();
+	while (!ifc.impl->bufferimage_transfer_commands.empty()) {
+		auto task = ifc.impl->bufferimage_transfer_commands.front();
+		ifc.impl->bufferimage_transfer_commands.pop();
 		record_buffer_image_copy(cbuf, task);
 		last = std::max(last, task.stub.id);
 	}
 	vkEndCommandBuffer(cbuf);
-	auto fence = fence_pool.acquire(1)[0];
+	auto fence = impl->fence_pool.acquire(1)[0];
 	VkSubmitInfo si{ .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO };
 	si.commandBufferCount = 1;
 	si.pCommandBuffers = &cbuf;
-	vkQueueSubmit(ifc.ctx.graphics_queue, 1, &si, fence);
-	ifc.pending_transfers.emplace(InflightContext::PendingTransfer{ last, fence });
+	ctx.submit_graphics(si, fence);
+	ifc.impl->pending_transfers.emplace(PendingTransfer{ last, fence });
 }
 
 vuk::SampledImage& vuk::PerThreadContext::make_sampled_image(vuk::ImageView iv, vuk::SamplerCreateInfo sci) {
 	vuk::SampledImage si(vuk::SampledImage::Global{ iv, sci, vuk::ImageLayout::eShaderReadOnlyOptimal });
-	return sampled_images.acquire(si);
+	return impl->sampled_images.acquire(si);
 }
 
 vuk::SampledImage& vuk::PerThreadContext::make_sampled_image(Name n, vuk::SamplerCreateInfo sci) {
 	vuk::SampledImage si(vuk::SampledImage::RenderGraphAttachment{ n, sci, {}, vuk::ImageLayout::eShaderReadOnlyOptimal });
-	return sampled_images.acquire(si);
+	return impl->sampled_images.acquire(si);
 }
 
 vuk::SampledImage& vuk::PerThreadContext::make_sampled_image(Name n, vuk::ImageViewCreateInfo ivci, vuk::SamplerCreateInfo sci) {
 	vuk::SampledImage si(vuk::SampledImage::RenderGraphAttachment{ n, sci, ivci, vuk::ImageLayout::eShaderReadOnlyOptimal });
-	return sampled_images.acquire(si);
+	return impl->sampled_images.acquire(si);
 }
 
 vuk::DescriptorSet vuk::PerThreadContext::create(const create_info_t<vuk::DescriptorSet>& cinfo) {
-	auto& pool = pool_cache.acquire(cinfo.layout_info);
+	auto& pool = impl->pool_cache.acquire(cinfo.layout_info);
 	auto ds = pool.acquire(*this, cinfo.layout_info);
 	auto mask = cinfo.used.to_ulong();
 	unsigned long leading_ones = num_leading_ones(mask);
@@ -312,8 +296,48 @@ vuk::DescriptorPool vuk::PerThreadContext::create(const create_info_t<vuk::Descr
 }
 
 vuk::Program vuk::PerThreadContext::get_pipeline_reflection_info(vuk::PipelineBaseCreateInfo pci) {
-	auto& res = pipelinebase_cache.acquire(pci);
+	auto& res = impl->pipelinebase_cache.acquire(pci);
 	return res.reflection_info;
+}
+
+VkFence vuk::PerThreadContext::acquire_fence() {
+	return impl->fence_pool.acquire(1)[0];
+}
+
+VkCommandBuffer vuk::PerThreadContext::acquire_command_buffer(VkCommandBufferLevel level) {
+	return impl->commandbuffer_pool.acquire(level, 1)[0];
+}
+
+VkSemaphore vuk::PerThreadContext::acquire_semaphore() {
+	return impl->semaphore_pool.acquire(1)[0];
+}
+
+VkFramebuffer vuk::PerThreadContext::acquire_framebuffer(const vuk::FramebufferCreateInfo& fbci) {
+	return impl->framebuffer_cache.acquire(fbci);
+}
+
+VkRenderPass vuk::PerThreadContext::acquire_renderpass(const vuk::RenderPassCreateInfo& rpci) {
+	return impl->renderpass_cache.acquire(rpci);
+}
+
+vuk::RGImage vuk::PerThreadContext::acquire_rendertarget(const vuk::RGCI& rgci) {
+	return impl->transient_images.acquire(rgci);
+}
+
+vuk::Sampler vuk::PerThreadContext::acquire_sampler(const vuk::SamplerCreateInfo& sci) {
+	return impl->sampler_cache.acquire(sci);
+}
+
+vuk::DescriptorSet vuk::PerThreadContext::acquire_descriptorset(const vuk::SetBinding& sb) {
+	return impl->descriptor_sets.acquire(sb);
+}
+
+vuk::PipelineInfo vuk::PerThreadContext::acquire_pipeline(const vuk::PipelineInstanceCreateInfo& pici) {
+	return impl->pipeline_cache.acquire(pici);
+}
+
+const plf::colony<vuk::SampledImage>& vuk::PerThreadContext::get_sampled_images() {
+	return impl->sampled_images.pool.values;
 }
 
 

@@ -2,7 +2,6 @@
 
 #include <atomic>
 #include <span>
-#include <queue>
 #include <string_view>
 
 #include "Pool.hpp"
@@ -34,21 +33,6 @@ namespace vuk {
 	};
 	using SwapchainRef = Swapchain*;
 	struct Program;
-
-	inline unsigned _prev(unsigned frame, unsigned amt, unsigned FC) {
-		return ((frame - amt) % FC) + ((frame >= amt) ? 0 : FC - 1);
-	}
-	inline unsigned _next(unsigned frame, unsigned amt, unsigned FC) {
-		return (frame + amt) % FC;
-	}
-	inline unsigned _next(unsigned frame, unsigned FC) {
-		return (frame + 1) % FC;
-	}
-	inline size_t _next(size_t frame, unsigned FC) {
-		return (frame + 1) % FC;
-	}
-
-	struct ContextImpl;
 
 	class Context {
 	public:
@@ -168,6 +152,8 @@ namespace vuk {
 
 		friend class InflightContext;
 		friend class PerThreadContext;
+		friend struct IFCImpl;
+		friend struct PTCImpl;
 		template<class T> friend class Cache; // caches can directly destroy
 		template<class T, size_t FC> friend class PerFrameCache;
 	};
@@ -177,69 +163,22 @@ namespace vuk {
 		Context& ctx;
 		const size_t absolute_frame;
 		const unsigned frame;
-	private:
-		Pool<VkFence, Context::FC>::PFView fence_pools; // must be first, so we wait for the fences
-		Pool<VkCommandBuffer, Context::FC>::PFView commandbuffer_pools;
-		Pool<VkSemaphore, Context::FC>::PFView semaphore_pools;
-		Cache<PipelineInfo>::PFView pipeline_cache;
-		Cache<ComputePipelineInfo>::PFView compute_pipeline_cache;
-		Cache<PipelineBaseInfo>::PFView pipelinebase_cache;
-		Cache<VkRenderPass>::PFView renderpass_cache;
-		Cache<VkFramebuffer>::PFView framebuffer_cache;
-		PerFrameCache<vuk::RGImage, Context::FC>::PFView transient_images;
-		PerFrameCache<Allocator::Linear, Context::FC>::PFView scratch_buffers;
-		PerFrameCache<vuk::DescriptorSet, Context::FC>::PFView descriptor_sets;
-		Cache<vuk::Sampler>::PFView sampler_cache;
-	public:
-		Pool<vuk::SampledImage, Context::FC>::PFView sampled_images;
-	private:
-		Cache<vuk::DescriptorPool>::PFView pool_cache;
-
-		Cache<vuk::ShaderModule>::PFView shader_modules;
-		Cache<vuk::DescriptorSetLayoutAllocInfo>::PFView descriptor_set_layouts;
-		Cache<VkPipelineLayout>::PFView pipeline_layouts;
-	public:
 		InflightContext(Context& ctx, size_t absolute_frame, std::lock_guard<std::mutex>&& recycle_guard);
+		~InflightContext();
 
 		void wait_all_transfers();
 		PerThreadContext begin();
 
-		struct BufferCopyCommand {
-			Buffer src;
-			Buffer dst;
-			TransferStub stub;
-		};
-
-		struct BufferImageCopyCommand {
-			Buffer src;
-			vuk::Image dst;
-			vuk::Extent3D extent;
-			bool generate_mips;
-			TransferStub stub;
-		};
-
 	private:
+		struct IFCImpl* impl;
 		friend class PerThreadContext;
+		friend struct PTCImpl;
 
 		std::atomic<size_t> transfer_id = 1;
 		std::atomic<size_t> last_transfer_complete = 0;
-
-		struct PendingTransfer {
-			size_t last_transfer_id;
-			VkFence fence;
-		};
-		// needs to be mpsc
-		std::mutex transfer_mutex;
-		std::queue<BufferCopyCommand> buffer_transfer_commands;
-		std::queue<BufferImageCopyCommand> bufferimage_transfer_commands;
-		// only accessed by DMAtask
-		std::queue<PendingTransfer> pending_transfers;
-
+	
 		TransferStub enqueue_transfer(Buffer src, Buffer dst);
 		TransferStub enqueue_transfer(Buffer src, vuk::Image dst, vuk::Extent3D extent, bool generate_mips);
-
-		// recycle
-		std::mutex recycle_lock;
 		void destroy(std::vector<vuk::Image>&& images);
 		void destroy(std::vector<VkImageView>&& images);
 	};
@@ -248,34 +187,13 @@ namespace vuk {
 	public:
 		Context& ctx;
 		InflightContext& ifc;
-		const unsigned tid = 0; // not yet implemented
-		Pool<VkCommandBuffer, Context::FC>::PFPTView commandbuffer_pool;
-		Pool<VkSemaphore, Context::FC>::PFPTView semaphore_pool;
-		Pool<VkFence, Context::FC>::PFPTView fence_pool;
-		Cache<PipelineInfo>::PFPTView pipeline_cache;
-		Cache<ComputePipelineInfo>::PFPTView compute_pipeline_cache;
-		Cache<PipelineBaseInfo>::PFPTView pipelinebase_cache;
-		Cache<VkRenderPass>::PFPTView renderpass_cache;
-		Cache<VkFramebuffer>::PFPTView framebuffer_cache;
-		PerFrameCache<vuk::RGImage, Context::FC>::PFPTView transient_images;
-		PerFrameCache<Allocator::Linear, Context::FC>::PFPTView scratch_buffers;
-		PerFrameCache<vuk::DescriptorSet, Context::FC>::PFPTView descriptor_sets;
-		Cache<vuk::Sampler>::PFPTView sampler_cache;
-		Pool<vuk::SampledImage, Context::FC>::PFPTView sampled_images;
-		Cache<vuk::DescriptorPool>::PFPTView pool_cache;
-		Cache<vuk::ShaderModule>::PFPTView shader_modules;
-		Cache<vuk::DescriptorSetLayoutAllocInfo>::PFPTView descriptor_set_layouts;
-		Cache<VkPipelineLayout>::PFPTView pipeline_layouts;
-	private:
-		// recycling global objects
-		std::vector<Buffer> buffer_recycle;
-		std::vector<vuk::Image> image_recycle;
-		std::vector<VkImageView> image_view_recycle;
-	public:
+		const unsigned tid = 0;
+
 		PerThreadContext(InflightContext& ifc, unsigned tid);
 		~PerThreadContext();
 
 		PerThreadContext(const PerThreadContext& o) = delete;
+		PerThreadContext& operator=(const PerThreadContext& o) = delete;
 
 		bool is_ready(const TransferStub& stub);
 		void wait_all_transfers();
@@ -343,12 +261,23 @@ namespace vuk {
 		void destroy(vuk::ImageView image);
 		void destroy(vuk::DescriptorSet ds);
 
+		VkFence acquire_fence();
+		VkCommandBuffer acquire_command_buffer(VkCommandBufferLevel);
+		VkSemaphore acquire_semaphore();
+		VkFramebuffer acquire_framebuffer(const vuk::FramebufferCreateInfo&);
+		VkRenderPass acquire_renderpass(const vuk::RenderPassCreateInfo&);
+		RGImage acquire_rendertarget(const vuk::RGCI&);
+		vuk::Sampler acquire_sampler(const vuk::SamplerCreateInfo&);
+		vuk::DescriptorSet acquire_descriptorset(const vuk::SetBinding&);
+		vuk::PipelineInfo acquire_pipeline(const vuk::PipelineInstanceCreateInfo&);
+
+		const plf::colony<vuk::SampledImage>& get_sampled_images();
+
 		PipelineBaseInfo create(const create_info_t<PipelineBaseInfo>& cinfo);
 		PipelineInfo create(const create_info_t<PipelineInfo>& cinfo);
 		vuk::ShaderModule create(const create_info_t<vuk::ShaderModule>& cinfo);
 		VkRenderPass create(const create_info_t<VkRenderPass>& cinfo);
 		vuk::RGImage create(const create_info_t<vuk::RGImage>& cinfo);
-		//vuk::Allocator::Pool create(const create_info_t<vuk::Allocator::Pool>& cinfo);
 		vuk::Allocator::Linear create(const create_info_t<vuk::Allocator::Linear>& cinfo);
 		vuk::DescriptorPool create(const create_info_t<vuk::DescriptorPool>& cinfo);
 		vuk::DescriptorSet create(const create_info_t<vuk::DescriptorSet>& cinfo);
@@ -357,6 +286,11 @@ namespace vuk {
 		vuk::DescriptorSetLayoutAllocInfo create(const create_info_t<vuk::DescriptorSetLayoutAllocInfo>& cinfo);
 		VkPipelineLayout create(const create_info_t<VkPipelineLayout>& cinfo);
 		vuk::ComputePipelineInfo create(const create_info_t<vuk::ComputePipelineInfo>& cinfo);
+
+	private:
+		friend class InflightContext;
+
+		struct PTCImpl* impl;
 	};
 
 	template<class T>
@@ -377,24 +311,9 @@ namespace vuk {
 		info.objectHandle = reinterpret_cast<uint64_t>(t);
 		setDebugUtilsObjectNameEXT(ctx.device, &info);
 	}
-
-	template<class T>
-	Handle<T> Context::wrap(T payload) {
-		return { { unique_handle_id_counter++ }, payload };
-	}
 }
 
 namespace vuk {
-	template<class T, size_t FC>
-	typename Pool<T, FC>::PFView Pool<T, FC>::get_view(InflightContext& ctx) {
-		return { ctx, *this, per_frame_storage[ctx.frame] };
-	}
-
-	template<class T, size_t FC>
-	Pool<T, FC>::PFView::PFView(InflightContext& ifc, Pool<T, FC>& storage, plf::colony<PooledType<T>>& fv) : storage(storage), ifc(ifc), frame_values(fv) {
-		storage.reset(ifc.frame);
-	}
-
 	template<typename Type>
 	inline Unique<Type>::~Unique() noexcept {
 		if (context && payload != Type{})
