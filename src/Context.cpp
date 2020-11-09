@@ -315,20 +315,19 @@ vuk::Context::UploadResult vuk::Context::fenced_upload(std::span<BufferUpload> u
 
 		auto& pool = impl->xfer_one_time_pools[tid];
 		if (pool == VK_NULL_HANDLE) {
-			VkCommandPoolCreateInfo cpci;
+            VkCommandPoolCreateInfo cpci{.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
 			cpci.queueFamilyIndex = transfer_queue_family_index;
 			cpci.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
 			vkCreateCommandPool(device, &cpci, nullptr, &pool);
 		}
 
-		VkCommandBufferAllocateInfo cbai;
+		VkCommandBufferAllocateInfo cbai{.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
 		cbai.commandPool = pool;
 		cbai.commandBufferCount = 1;
 
 		vkAllocateCommandBuffers(device, &cbai, &cbuf);
 	}
-	VkCommandBufferBeginInfo cbi;
-	cbi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    VkCommandBufferBeginInfo cbi{.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
 	vkBeginCommandBuffer(cbuf, &cbi);
 
 	size_t size = 0;
@@ -357,7 +356,7 @@ vuk::Context::UploadResult vuk::Context::fenced_upload(std::span<BufferUpload> u
 	VkFenceCreateInfo fci{ .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
 	VkFence fence;
 	vkCreateFence(device, &fci, nullptr, &fence);
-	VkSubmitInfo si;
+    VkSubmitInfo si{.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO};
 	si.commandBufferCount = 1;
 	si.pCommandBuffers = &cbuf;
 	submit_transfer(si, fence);
@@ -375,19 +374,19 @@ vuk::Context::UploadResult vuk::Context::fenced_upload(std::span<ImageUpload> up
 		}
 		auto& pool = impl->one_time_pools[tid];
 		if (pool == VK_NULL_HANDLE) {
-			VkCommandPoolCreateInfo cpci;
-			cpci.queueFamilyIndex = transfer_queue_family_index;
+            VkCommandPoolCreateInfo cpci{.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
+			cpci.queueFamilyIndex = graphics_queue_family_index;
 			cpci.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
 			vkCreateCommandPool(device, &cpci, nullptr, &pool);
 		}
-		VkCommandBufferAllocateInfo cbai;
+        VkCommandBufferAllocateInfo cbai{.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
 		cbai.commandPool = pool;
 		cbai.commandBufferCount = 1;
 
 		vkAllocateCommandBuffers(device, &cbai, &cbuf);
 	}
-	VkCommandBufferBeginInfo cbi;
-	cbi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+    VkCommandBufferBeginInfo cbi{.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
 	vkBeginCommandBuffer(cbuf, &cbi);
 
 	size_t size = 0;
@@ -416,7 +415,7 @@ vuk::Context::UploadResult vuk::Context::fenced_upload(std::span<ImageUpload> up
 	VkFenceCreateInfo fci{ .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
 	VkFence fence;
 	vkCreateFence(device, &fci, nullptr, &fence);
-	VkSubmitInfo si;
+    VkSubmitInfo si{.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO};
 	si.commandBufferCount = 1;
 	si.pCommandBuffers = &cbuf;
 	submit_graphics(si, fence);

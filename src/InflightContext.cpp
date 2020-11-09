@@ -1,5 +1,6 @@
 #include "vuk/Context.hpp"
 #include "ContextImpl.hpp"
+#include "Pool.hpp"
 
 vuk::InflightContext::InflightContext(Context& ctx, size_t absolute_frame, std::lock_guard<std::mutex>&& recycle_guard) :
 	ctx(ctx),
@@ -84,4 +85,12 @@ void vuk::InflightContext::destroy(std::vector<vuk::Image>&& images) {
 void vuk::InflightContext::destroy(std::vector<VkImageView>&& images) {
 	std::lock_guard _(impl->recycle_lock);
 	ctx.impl->image_view_recycle[frame].insert(ctx.impl->image_view_recycle[frame].end(), images.begin(), images.end());
+}
+
+std::vector<vuk::SampledImage> vuk::InflightContext::get_sampled_images() {
+    std::vector<vuk::SampledImage> sis;
+	for (auto& p : impl->sampled_images.frame_values) {
+        sis.insert(sis.end(), p.values.begin(), p.values.end());
+	}
+    return sis;
 }

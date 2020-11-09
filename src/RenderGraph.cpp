@@ -644,7 +644,7 @@ namespace vuk {
 					if (is_framebuffer_attachment(left.use) && (is_write_access(left.use) || (is_read_access(left.use) && is_write_access(right.use)))) {
 						assert(left.pass->render_pass_index == right.pass->render_pass_index);
 						auto& rp = rpis[right.pass->render_pass_index];
-						VkSubpassDependency sd;
+                        VkSubpassDependency sd{};
 						sd.dstAccessMask = (VkAccessFlags)right.use.access;
 						sd.dstStageMask = (VkPipelineStageFlags)right.use.stages;
 						sd.dstSubpass = right.pass->subpass;

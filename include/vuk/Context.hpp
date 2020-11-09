@@ -151,6 +151,7 @@ namespace vuk {
 		void wait_all_transfers();
 		PerThreadContext begin();
 
+		std::vector<SampledImage> get_sampled_images();
 	private:
 		struct IFCImpl* impl;
 		friend class PerThreadContext;

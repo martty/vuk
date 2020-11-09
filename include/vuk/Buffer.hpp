@@ -45,8 +45,7 @@ namespace vuk {
 		void* mapped_ptr;
 
 		bool operator==(const Buffer& o) const {
-			return std::tie(device_memory, buffer, offset, size) ==
-				std::tie(o.device_memory, o.buffer, o.offset, o.size);
+            return device_memory == o.device_memory && buffer == o.buffer && offset == o.offset && size == o.size;
 		}
 	};
 }

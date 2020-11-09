@@ -302,9 +302,9 @@ namespace vuk {
     SecondaryCommandBuffer CommandBuffer::begin_secondary() {
         auto nptc = new vuk::PerThreadContext(ptc.ifc.begin());
         auto scbuf = nptc->acquire_command_buffer(VK_COMMAND_BUFFER_LEVEL_SECONDARY);
-		VkCommandBufferBeginInfo cbi;
-		cbi.flags = VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT | VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-        VkCommandBufferInheritanceInfo cbii;
+        VkCommandBufferBeginInfo cbi{.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+                                     .flags = VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT | VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
+        VkCommandBufferInheritanceInfo cbii{.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO};
         cbii.renderPass = ongoing_renderpass->renderpass;
         cbii.subpass = ongoing_renderpass->subpass;
         cbii.framebuffer = VK_NULL_HANDLE; //TODO
