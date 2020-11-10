@@ -29,24 +29,36 @@ namespace vuk {
 		eStorageBuffer = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 		eUniformBufferDynamic = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
 		eStorageBufferDynamic = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC,
-		eInputAttachment = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
-		eInlineUniformBlockEXT = VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT,
-		eAccelerationStructureKHR = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
-		eAccelerationStructureNV = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV
-	};
+        eInputAttachment = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
+        eInlineUniformBlockEXT = VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT,
+        eAccelerationStructureKHR = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
+        eAccelerationStructureNV = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV
+    };
 
-	enum class DescriptorBindingFlagBits : VkDescriptorBindingFlags {
-		eUpdateAfterBind = VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT,
-		eUpdateUnusedWhilePending = VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT,
-		ePartiallyBound = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT,
-		eVariableDescriptorCount = VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT
-	};
+    enum class DescriptorBindingFlagBits : VkDescriptorBindingFlags {
+        eUpdateAfterBind = VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT,
+        eUpdateUnusedWhilePending = VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT,
+        ePartiallyBound = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT,
+        eVariableDescriptorCount = VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT
+    };
 
-	using DescriptorBindingFlags = Flags<DescriptorBindingFlagBits>;
+    using DescriptorBindingFlags = Flags<DescriptorBindingFlagBits>;
 
-	struct DescriptorSetLayoutAllocInfo {
-		std::array<uint32_t, 12> descriptor_counts = {};
-		VkDescriptorSetLayout layout;
+    inline constexpr DescriptorBindingFlags operator|(DescriptorBindingFlagBits bit0, DescriptorBindingFlagBits bit1) noexcept {
+        return DescriptorBindingFlags(bit0) | bit1;
+    }
+
+    inline constexpr DescriptorBindingFlags operator&(DescriptorBindingFlagBits bit0, DescriptorBindingFlagBits bit1) noexcept {
+        return DescriptorBindingFlags(bit0) & bit1;
+    }
+
+    inline constexpr DescriptorBindingFlags operator^(DescriptorBindingFlagBits bit0, DescriptorBindingFlagBits bit1) noexcept {
+        return DescriptorBindingFlags(bit0) ^ bit1;
+    }
+
+    struct DescriptorSetLayoutAllocInfo {
+        std::array<uint32_t, 12> descriptor_counts = {};
+        VkDescriptorSetLayout layout;
 		unsigned variable_count_binding = (unsigned)-1;
 		vuk::DescriptorType variable_count_binding_type;
 		unsigned variable_count_binding_max_size;

@@ -410,8 +410,8 @@ namespace vuk {
             vuk::PipelineInstanceCreateInfo pi;
             pi.base = next_pipeline;
 			// set vertex input
-			pi.attribute_descriptions = attribute_descriptions;
-			pi.binding_descriptions = binding_descriptions;
+			pi.attribute_descriptions = std::move(attribute_descriptions);
+			pi.binding_descriptions = std::move(binding_descriptions);
 			auto& vertex_input_state = pi.vertex_input_state;
 			vertex_input_state.pVertexAttributeDescriptions = (VkVertexInputAttributeDescription*)pi.attribute_descriptions.data();
 			vertex_input_state.vertexAttributeDescriptionCount = (uint32_t)pi.attribute_descriptions.size();
