@@ -166,7 +166,6 @@ namespace vuk {
 		return usage;
 	}
 
-
 	size_t format_to_size(vuk::Format format) {
 		switch (format) {
 		case vuk::Format::eR32G32B32A32Sfloat:
@@ -507,12 +506,7 @@ namespace vuk {
 			chain.insert(chain.begin(), UseRef{ std::move(attachment_info.initial), nullptr });
 			chain.emplace_back(UseRef{ attachment_info.final, nullptr });
 
-			vuk::ImageAspectFlagBits aspect;
-			if (attachment_info.description.format == (VkFormat)vuk::Format::eD32Sfloat) {
-				aspect = vuk::ImageAspectFlagBits::eDepth;
-			} else {
-				aspect = vuk::ImageAspectFlagBits::eColor;
-			}
+			vuk::ImageAspectFlags aspect = format_to_aspect((vuk::Format)attachment_info.description.format);
 		
 			for (size_t i = 0; i < chain.size() - 1; i++) {
 				auto& left = chain[i];
@@ -897,13 +891,8 @@ namespace vuk {
 			ivci.format = vuk::Format(attachment_info.description.format);
 			ivci.viewType = vuk::ImageViewType::e2D;
 			vuk::ImageSubresourceRange isr;
-			vuk::ImageAspectFlagBits aspect;
-			if (ici.format == vuk::Format::eD32Sfloat) {
-				aspect = vuk::ImageAspectFlagBits::eDepth;
-			} else {
-				aspect = vuk::ImageAspectFlagBits::eColor;
-			}
-			isr.aspectMask = aspect;
+
+			isr.aspectMask = format_to_aspect(ici.format);
 			isr.baseArrayLayer = 0;
 			isr.layerCount = 1;
 			isr.baseMipLevel = 0;

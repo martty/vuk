@@ -237,6 +237,17 @@ namespace vuk {
 	};
 
 	using ImageAspectFlags = Flags<ImageAspectFlagBits>;
+    inline constexpr ImageAspectFlags operator|(ImageAspectFlagBits bit0, ImageAspectFlagBits bit1) noexcept {
+        return ImageAspectFlags(bit0) | bit1;
+    }
+
+    inline constexpr ImageAspectFlags operator&(ImageAspectFlagBits bit0, ImageAspectFlagBits bit1) noexcept {
+        return ImageAspectFlags(bit0) & bit1;
+    }
+
+    inline constexpr ImageAspectFlags operator^(ImageAspectFlagBits bit0, ImageAspectFlagBits bit1) noexcept {
+        return ImageAspectFlags(bit0) ^ bit1;
+    }
 
 	struct ImageSubresourceRange {
 		ImageAspectFlags aspectMask = {};
@@ -425,4 +436,21 @@ namespace vuk {
 		vuk::Format format;
 		vuk::Samples sample_count;
 	};
+
+	inline vuk::ImageAspectFlags format_to_aspect(vuk::Format format) {
+        switch(format) {
+            case vuk::Format::eD16Unorm:
+            case vuk::Format::eD32Sfloat:
+            case vuk::Format::eX8D24UnormPack32:
+                return vuk::ImageAspectFlagBits::eDepth;
+            case vuk::Format::eD16UnormS8Uint:
+            case vuk::Format::eD24UnormS8Uint:
+            case vuk::Format::eD32SfloatS8Uint:
+                return vuk::ImageAspectFlagBits::eDepth | vuk::ImageAspectFlagBits::eStencil;
+            case vuk::Format::eS8Uint:
+                return vuk::ImageAspectFlagBits::eStencil;
+			default:
+                return vuk::ImageAspectFlagBits::eColor;
+        }
+    }
 };

@@ -439,7 +439,7 @@ vuk::Texture vuk::Context::allocate_texture(vuk::ImageCreateInfo ici) {
 	vuk::ImageViewCreateInfo ivci;
 	ivci.format = ici.format;
 	ivci.image = dst;
-	ivci.subresourceRange.aspectMask = vuk::ImageAspectFlagBits::eColor;
+    ivci.subresourceRange.aspectMask = format_to_aspect(ici.format);
 	ivci.subresourceRange.baseArrayLayer = 0;
 	ivci.subresourceRange.baseMipLevel = 0;
 	ivci.subresourceRange.layerCount = 1;
