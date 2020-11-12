@@ -343,12 +343,14 @@ namespace vuk {
                     if(last_pass->inputs == p->inputs && last_pass->outputs == p->outputs) {
                         p->subpass = last_pass->subpass;
                         rpi.subpasses.back().passes.push_back(p);
+						// potentially upgrade to secondary cbufs
+                        rpi.subpasses.back().use_secondary_command_buffers |= p->pass.use_secondary_command_buffers;
                         continue;
                     }
 				}
                 SubpassInfo si{*arena_};
                 si.passes = {p};
-
+                si.use_secondary_command_buffers = p->pass.use_secondary_command_buffers;
 				p->subpass = ++subpass;
 				rpi.subpasses.push_back(si);
 			}
@@ -954,7 +956,7 @@ namespace vuk {
 		cobuf.ongoing_renderpass = rpi;
 	}
 
-	VkCommandBuffer RenderGraph::execute(vuk::PerThreadContext& ptc, std::vector<std::pair<SwapChainRef, size_t>> swp_with_index, bool use_secondary_command_buffers) {
+	VkCommandBuffer RenderGraph::execute(vuk::PerThreadContext& ptc, std::vector<std::pair<SwapChainRef, size_t>> swp_with_index) {
 		// create framebuffers, create & bind attachments
 		for (auto& rp : rpis) {
 			if (rp.attachments.size() == 0)
@@ -1044,7 +1046,8 @@ namespace vuk {
 
 		CommandBuffer cobuf(*this, ptc, cbuf);
 		for (auto& rpass : rpis) {
-			begin_renderpass(rpass, cbuf, use_secondary_command_buffers);
+            bool use_secondary_command_buffers = rpass.subpasses[0].use_secondary_command_buffers;
+            begin_renderpass(rpass, cbuf, use_secondary_command_buffers);
 			for (size_t i = 0; i < rpass.subpasses.size(); i++) {
 				auto& sp = rpass.subpasses[i];
 				fill_renderpass_info(rpass, i, cobuf);
@@ -1059,22 +1062,41 @@ namespace vuk {
 					}
 				}
                 for(auto& p: sp.passes) {
-                    if(p->pass.execute) {
-						cobuf.current_pass = p;
-                        if(!p->pass.name.empty()) {
-                            //ptc.ctx.debug.begin_region(cobuf.command_buffer, sp.pass->pass.name);
-                            p->pass.execute(cobuf);
-                            //ptc.ctx.debug.end_region(cobuf.command_buffer);
-                        } else {
-                            p->pass.execute(cobuf);
+					// if pass requested no secondary cbufs, but due to subpass merging that is what we got
+					if (p->pass.use_secondary_command_buffers == false && use_secondary_command_buffers == true) {
+                        auto secondary = cobuf.begin_secondary();
+                        if(p->pass.execute) {
+                            secondary.current_pass = p;
+                            if(!p->pass.name.empty()) {
+                                //ptc.ctx.debug.begin_region(cobuf.command_buffer, sp.pass->pass.name);
+                                p->pass.execute(secondary);
+                                //ptc.ctx.debug.end_region(cobuf.command_buffer);
+                            } else {
+                                p->pass.execute(secondary);
+                            }
                         }
+                        auto result = secondary.get_buffer();
+                        cobuf.execute({&result, 1});
+                    } else {
+                        if(p->pass.execute) {
+                            cobuf.current_pass = p;
+                            if(!p->pass.name.empty()) {
+                                //ptc.ctx.debug.begin_region(cobuf.command_buffer, sp.pass->pass.name);
+                                p->pass.execute(cobuf);
+                                //ptc.ctx.debug.end_region(cobuf.command_buffer);
+                            } else {
+                                p->pass.execute(cobuf);
+                            }
+                        }
+
+                        cobuf.attribute_descriptions.clear();
+                        cobuf.binding_descriptions.clear();
+                        cobuf.set_bindings = {};
+                        cobuf.sets_used = {};
                     }
-                    cobuf.attribute_descriptions.clear();
-                    cobuf.binding_descriptions.clear();
-                    cobuf.set_bindings = {};
-                    cobuf.sets_used = {};
                 }
 				if (i < rpass.subpasses.size() - 1 && rpass.handle != VK_NULL_HANDLE) {
+                    use_secondary_command_buffers = rpass.subpasses[i + 1].use_secondary_command_buffers;
 					vkCmdNextSubpass(cbuf, use_secondary_command_buffers ? VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS : VK_SUBPASS_CONTENTS_INLINE);
 				}
 

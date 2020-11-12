@@ -188,6 +188,7 @@ namespace vuk {
 		Name name;
 		Name executes_on;
 		float auxiliary_order = 0.f;
+        bool use_secondary_command_buffers = false;
 
 		std::vector<Resource> resources;
 		std::unordered_map<Name, Name> resolves; // src -> dst
@@ -328,6 +329,7 @@ namespace vuk {
 
 		struct SubpassInfo {
             SubpassInfo(arena&);
+            bool use_secondary_command_buffers;
 			std::vector<PassInfo*, short_alloc<PassInfo*, 16>> passes;
 			std::vector<ImageBarrier> pre_barriers;
 			std::vector<ImageBarrier> post_barriers;
@@ -371,7 +373,7 @@ namespace vuk {
 		// RG
 		void build(vuk::PerThreadContext&);
 		void create_attachment(vuk::PerThreadContext&, Name name, RenderGraph::AttachmentRPInfo& attachment_info, vuk::Extent2D extents, vuk::SampleCountFlagBits);
-		VkCommandBuffer execute(vuk::PerThreadContext&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index, bool use_secondary_command_buffers);
+		VkCommandBuffer execute(vuk::PerThreadContext&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
 
 		BufferInfo get_resource_buffer(Name);
 		bool is_resource_image_in_general_layout(Name n, PassInfo* pass_info);

@@ -313,6 +313,6 @@ namespace vuk {
 // utility functions
 namespace vuk {
 	struct RenderGraph;
-	bool execute_submit_and_present_to_one(PerThreadContext& ptc, RenderGraph& rg, SwapchainRef swapchain, bool use_secondary_command_buffers = false);
-	void execute_submit_and_wait(PerThreadContext& ptc, RenderGraph& rg, bool use_secondary_command_buffers = false);
+	bool execute_submit_and_present_to_one(PerThreadContext& ptc, RenderGraph& rg, SwapchainRef swapchain);
+	void execute_submit_and_wait(PerThreadContext& ptc, RenderGraph& rg);
 }
