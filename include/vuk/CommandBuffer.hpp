@@ -17,18 +17,26 @@ namespace vuk {
 	class PerThreadContext;
 
 	struct Area {
-		Area(int32_t x, int32_t y, uint32_t width, uint32_t height) : offset{ x, y }, extent { width, height } {}
+		enum class Sizing {eAbsolute, eRelative} sizing = Sizing::eAbsolute;
 
-		struct Framebuffer {
-			float x = 0.f;
-			float y = 0.f;
-			float width = 1.0f;
-			float height = 1.0f;
-		};
-
+		static Area absolute(int32_t x, int32_t y, uint32_t width, uint32_t height) {
+            return Area{.sizing = Sizing::eAbsolute, .offset = {x, y}, .extent = {width, height}};
+		}
+		static Area relative(float x, float y, float width, float height) {
+            return Area{.sizing = Sizing::eRelative, .x = x, .y = y, .width = width, .height = height};
+		}
+		static Area framebuffer() {
+            return Area{.sizing = Sizing::eRelative};
+		}
+		
 		vuk::Offset2D offset;
 		vuk::Extent2D extent;
-	};
+
+		float x = 0.f;
+        float y = 0.f;
+        float width = 1.0f;
+        float height = 1.0f;
+    };
 
 	struct Ignore {
 		Ignore(size_t bytes) : format(vuk::Format::eUndefined), bytes((uint32_t)bytes) {}
@@ -227,10 +235,8 @@ namespace vuk {
 
 		CommandBuffer& set_viewport(unsigned index, vuk::Viewport vp);	
 		CommandBuffer& set_viewport(unsigned index, Area area);
-		CommandBuffer& set_viewport(unsigned index, Area::Framebuffer area);
 		CommandBuffer& set_scissor(unsigned index, vuk::Rect2D vp);
 		CommandBuffer& set_scissor(unsigned index, Area area);
-		CommandBuffer& set_scissor(unsigned index, Area::Framebuffer area);
 
 		CommandBuffer& bind_graphics_pipeline(vuk::PipelineBaseInfo*);
 		CommandBuffer& bind_graphics_pipeline(Name);

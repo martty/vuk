@@ -33,28 +33,24 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::set_viewport(unsigned index, Area area) {
 		vuk::Viewport vp;
-		vp.x = (float)area.offset.x;
-        vp.y = (float)area.offset.y + (float)area.extent.height;
-		vp.width = (float)area.extent.width;
-		vp.height = -(float)area.extent.height;
-		vp.minDepth = 0.f;
-		vp.maxDepth = 1.f;
+        if(area.sizing == Area::Sizing::eAbsolute) {
+            vp.x = (float)area.offset.x;
+            vp.y = (float)area.offset.y + (float)area.extent.height;
+            vp.width = (float)area.extent.width;
+            vp.height = -(float)area.extent.height;
+            vp.minDepth = 0.f;
+            vp.maxDepth = 1.f;
+        } else {
+            assert(ongoing_renderpass);
+            auto fb_dimensions = ongoing_renderpass->extent;
+            vp.x = area.x * fb_dimensions.width;
+            vp.height = -area.height * fb_dimensions.height;
+            vp.y = area.y * fb_dimensions.height - vp.height;
+            vp.width = area.width * fb_dimensions.width;
+            vp.minDepth = 0.f;
+            vp.maxDepth = 1.f;
+		}
 
-		vkCmdSetViewport(command_buffer, 0, 1, (VkViewport*)&vp);
-		return *this;
-	}
-
-	CommandBuffer& CommandBuffer::set_viewport(unsigned index, Area::Framebuffer area) {
-		assert(ongoing_renderpass);
-		auto fb_dimensions = ongoing_renderpass->extent;
-		vuk::Viewport vp;
-		vp.x = area.x * fb_dimensions.width;
-		vp.height = -area.height * fb_dimensions.height;
-		vp.y = area.y * fb_dimensions.height - vp.height;
-		vp.width = area.width * fb_dimensions.width;
-		vp.minDepth = 0.f;
-		vp.maxDepth = 1.f;
-		
 		vkCmdSetViewport(command_buffer, 0, 1, (VkViewport*)&vp);
 		return *this;
 	}
@@ -65,20 +61,17 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::set_scissor(unsigned index, Area area) {
-		vuk::Rect2D rect{ area.offset, area.extent };
-		vkCmdSetScissor(command_buffer, 0, 1, (VkRect2D*)&rect);
-		return *this;
-	}
-
-	CommandBuffer& CommandBuffer::set_scissor(unsigned index, Area::Framebuffer area) {
-		assert(ongoing_renderpass);
-		auto fb_dimensions = ongoing_renderpass->extent;
 		vuk::Rect2D vp;
-		vp.offset.x = static_cast<int32_t>(area.x * fb_dimensions.width);
-		vp.offset.y = static_cast<int32_t>(area.y * fb_dimensions.height);
-		vp.extent.width = static_cast<int32_t>(area.width * fb_dimensions.width);
-		vp.extent.height = static_cast<int32_t>(area.height * fb_dimensions.height);
-
+		if (area.sizing == Area::Sizing::eAbsolute) {
+            vp = {area.offset, area.extent};
+        } else {
+            assert(ongoing_renderpass);
+            auto fb_dimensions = ongoing_renderpass->extent;
+            vp.offset.x = static_cast<int32_t>(area.x * fb_dimensions.width);
+            vp.offset.y = static_cast<int32_t>(area.y * fb_dimensions.height);
+            vp.extent.width = static_cast<int32_t>(area.width * fb_dimensions.width);
+            vp.extent.height = static_cast<int32_t>(area.height * fb_dimensions.height);
+		}
 		vkCmdSetScissor(command_buffer, 0, 1, (VkRect2D*)&vp);
 		return *this;
 	}
