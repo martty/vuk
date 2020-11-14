@@ -4,6 +4,7 @@
 #include "vuk/Context.hpp"
 #include "vuk/CommandBuffer.hpp"
 #include "Allocator.hpp"
+#include <unordered_set>
 
 namespace vuk {
 	template<class T, class A, class F>
@@ -195,7 +196,7 @@ namespace vuk {
 #define INIT(x) x(decltype(x)::allocator_type(*arena_))
 #define INIT2(x) x(decltype(x)::allocator_type(arena_))
 
-	RenderGraph::RenderGraph() : arena_(new arena(1024*128)), INIT(head_passes), INIT(tail_passes), INIT(aliases), INIT(global_inputs), INIT(global_outputs), INIT(global_io), INIT(use_chains), INIT(rpis) {
+	RenderGraph::RenderGraph() : arena_(new arena(1024*128)), INIT(head_passes), INIT(tail_passes), INIT(global_io), INIT(rpis) {
         passes.reserve(64);
 	}
 
@@ -1137,7 +1138,7 @@ namespace vuk {
     RenderGraph::RenderPassInfo::RenderPassInfo(arena& arena_) : INIT2(subpasses), INIT2(attachments) {
 	}
 
-    PassInfo::PassInfo(arena& arena_, Pass&& p) : INIT2(inputs), INIT2(outputs), INIT2(global_inputs), INIT2(global_outputs), pass(std::move(p)) {}
+    PassInfo::PassInfo(arena& arena_, Pass&& p) : pass(std::move(p)) {}
 
     RenderGraph::SubpassInfo::SubpassInfo(arena& arena_) : INIT2(passes) {}
 	#undef INIT

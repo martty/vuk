@@ -2,8 +2,6 @@
 
 #include <stdio.h>
 #include <vector>
-#include <unordered_map>
-#include <unordered_set>
 #include <algorithm>
 #include <iostream>
 #include <string_view>
@@ -15,7 +13,7 @@
 #include "vuk/Buffer.hpp"
 #include "vuk/Image.hpp"
 #include <vuk/ShortAlloc.hpp>
-#include "unordered_map.hpp"
+#include "robin_hood.h"
 
 namespace vuk {
 	struct Preserve {};
@@ -198,7 +196,7 @@ namespace vuk {
         bool use_secondary_command_buffers = false;
 
 		std::vector<Resource> resources;
-		std::unordered_map<Name, Name> resolves; // src -> dst
+		robin_hood::unordered_flat_map<Name, Name> resolves; // src -> dst
 
 		std::function<void(vuk::CommandBuffer&)> execute;
 	};
@@ -242,11 +240,11 @@ namespace vuk {
 		size_t render_pass_index;
 		uint32_t subpass;
 
-		std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>> inputs;
-		std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>> outputs;
+		robin_hood::unordered_flat_set<Resource> inputs;
+		robin_hood::unordered_flat_set<Resource> outputs;
 
-		std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>> global_inputs;
-		std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>> global_outputs;
+		robin_hood::unordered_flat_set<Resource> global_inputs;
+		robin_hood::unordered_flat_set<Resource> global_outputs;
 
 		bool is_head_pass = false;
 		bool is_tail_pass = false;
@@ -262,10 +260,10 @@ namespace vuk {
 		std::vector<PassInfo*, short_alloc<PassInfo*, 8>> head_passes;
 		std::vector<PassInfo*, short_alloc<PassInfo*, 8>> tail_passes;
 
-		ska::unordered_map<Name, Name, std::hash<Name>, std::equal_to<Name>, short_alloc<std::pair<const Name, Name>, 64>> aliases;
+		robin_hood::unordered_flat_map<Name, Name> aliases;
 
-		std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>> global_inputs;
-		std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>> global_outputs;
+		robin_hood::unordered_flat_set<Resource> global_inputs;
+		robin_hood::unordered_flat_set<Resource> global_outputs;
         std::vector<Resource, short_alloc<Resource, 16>> global_io;
 
 		struct UseRef {
@@ -273,9 +271,7 @@ namespace vuk {
 			PassInfo* pass = nullptr;
 		};
 
-		std::unordered_map<Name, std::vector<UseRef, short_alloc<UseRef, 64>>, std::hash<Name>, std::equal_to<Name>,
-                           short_alloc<std::pair<const Name, std::vector<UseRef, short_alloc<UseRef, 64>>>, 64>>
-            use_chains;
+		robin_hood::unordered_flat_map<Name, std::vector<UseRef, short_alloc<UseRef, 64>>> use_chains;
 
 		struct AttachmentSInfo {
 			vuk::ImageLayout layout;
@@ -365,8 +361,8 @@ namespace vuk {
 		void build();
 
 		// RGscaffold
-		std::unordered_map<Name, AttachmentRPInfo> bound_attachments;
-		std::unordered_map<Name, BufferInfo> bound_buffers;
+		robin_hood::unordered_flat_map<Name, AttachmentRPInfo> bound_attachments;
+		robin_hood::unordered_flat_map<Name, BufferInfo> bound_buffers;
 		void bind_attachment_to_swapchain(Name, Swapchain* swp, Clear);
 		void mark_attachment_internal(Name, vuk::Format, vuk::Extent2D, vuk::Samples, Clear);
 		void mark_attachment_internal(Name, vuk::Format, vuk::Extent2D::Framebuffer, vuk::Samples, Clear);
