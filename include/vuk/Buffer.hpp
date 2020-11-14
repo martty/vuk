@@ -38,14 +38,22 @@ namespace vuk {
     }
 
 	struct Buffer {
-		VkDeviceMemory device_memory;
-		VkBuffer buffer;
-		size_t offset;
-		size_t size;
-		void* mapped_ptr;
+		VkDeviceMemory device_memory = VK_NULL_HANDLE;
+		VkBuffer buffer = VK_NULL_HANDLE;
+		size_t offset = 0;
+		size_t size = 0;
+		void* mapped_ptr = nullptr;
 
-		bool operator==(const Buffer& o) const {
+		bool operator==(const Buffer& o) const noexcept {
             return device_memory == o.device_memory && buffer == o.buffer && offset == o.offset && size == o.size;
 		}
+
+        bool operator!=(const Buffer& o) const noexcept {
+            return device_memory != o.device_memory || buffer != o.buffer || offset != o.offset || size != o.size;
+        }
+
+        explicit operator bool() noexcept {
+            return buffer == VK_NULL_HANDLE;
+        }
 	};
 }

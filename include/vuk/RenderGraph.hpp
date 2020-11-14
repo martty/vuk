@@ -160,6 +160,8 @@ namespace vuk {
 	struct Resource {
 		Name src_name;
 		Name use_name;
+        unsigned hash_src_name;
+        unsigned hash_use_name;
 		enum class Type { eBuffer, eImage } type;
 		Access ia;
 		struct Use {
@@ -168,11 +170,16 @@ namespace vuk {
 			vuk::ImageLayout layout; // ignored for buffers
 		};
 
-		Resource(Name n, Type t, Access ia) : src_name(n), use_name(n), type(t), ia(ia) {}
-		Resource(Name src, Name use, Type t, Access ia) : src_name(src), use_name(use), type(t), ia(ia) {}
+		Resource(Name n, Type t, Access ia): src_name(n), use_name(n), type(t), ia(ia) {
+            hash_src_name = hash_use_name = hash::fnv1a::hash(src_name.data(), src_name.size(), hash::fnv1a::default_offset_basis);
+		}
+		Resource(Name src, Name use, Type t, Access ia) : src_name(src), use_name(use), type(t), ia(ia) {
+            hash_src_name = hash::fnv1a::hash(src_name.data(), src_name.size(), hash::fnv1a::default_offset_basis);
+            hash_use_name = hash::fnv1a::hash(use_name.data(), use_name.size(), hash::fnv1a::default_offset_basis);
+		}
 
-		bool operator==(const Resource& o) const {
-			return (use_name == o.use_name && src_name == o.src_name);
+		bool operator==(const Resource& o) const noexcept {
+			return (hash_use_name == o.hash_use_name && hash_src_name == o.hash_src_name);
 		}
 	};
 

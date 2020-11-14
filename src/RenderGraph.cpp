@@ -257,13 +257,13 @@ namespace vuk {
 				bool could_execute_before = false;
 				for (auto& o : p1.outputs) {
 					for (auto& i : p2.inputs){
-						if(i.src_name == o.use_name)
+						if(i.hash_src_name == o.hash_use_name)
 							could_execute_after = true;
 					}
 				}
 				for (auto& o : p2.outputs) {
 					for (auto& i : p1.inputs){
-						if(i.src_name == o.use_name)
+						if(i.hash_src_name == o.hash_use_name)
 							could_execute_before = true;
 					}
 				}

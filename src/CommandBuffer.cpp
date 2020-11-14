@@ -373,19 +373,18 @@ namespace vuk {
 		for (unsigned i = 0; i < VUK_MAX_SETS; i++) {
 			bool persistent = persistent_sets_used[i];
 			if (!sets_used[i] && !persistent_sets_used[i])
-				continue;
+				break;
 			set_bindings[i].layout_info = graphics? current_pipeline->layout_info[i] : current_compute_pipeline->layout_info[i];
 			if (!persistent) {
 				auto ds = ptc.acquire_descriptorset(set_bindings[i]);
 				vkCmdBindDescriptorSets(command_buffer, graphics ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE, graphics ? current_pipeline->pipeline_layout : current_compute_pipeline->pipeline_layout, i, 1, &ds.descriptor_set, 0, nullptr);
-				sets_used[i] = false;
-				set_bindings[i] = {};
 			} else {
 				vkCmdBindDescriptorSets(command_buffer, graphics ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE, graphics ? current_pipeline->pipeline_layout : current_compute_pipeline->pipeline_layout, i, 1, &persistent_sets[i], 0, nullptr);
-				persistent_sets_used[i] = false;
-				persistent_sets[i] = VK_NULL_HANDLE;
 			}
+			set_bindings[i].used.reset();
 		}
+        sets_used.reset();
+        persistent_sets_used.reset();
 	}
 
 	void CommandBuffer::_bind_compute_pipeline_state() {
