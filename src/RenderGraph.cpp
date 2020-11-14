@@ -1137,7 +1137,7 @@ namespace vuk {
     RenderGraph::RenderPassInfo::RenderPassInfo(arena& arena_) : INIT2(subpasses), INIT2(attachments) {
 	}
 
-    PassInfo::PassInfo(arena& arena_) : INIT2(inputs), INIT2(outputs), INIT2(global_inputs), INIT2(global_outputs) {}
+    PassInfo::PassInfo(arena& arena_, Pass&& p) : INIT2(inputs), INIT2(outputs), INIT2(global_inputs), INIT2(global_outputs), pass(std::move(p)) {}
 
     RenderGraph::SubpassInfo::SubpassInfo(arena& arena_) : INIT2(passes) {}
 	#undef INIT

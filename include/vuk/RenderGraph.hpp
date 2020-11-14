@@ -235,7 +235,7 @@ namespace vuk {
 	};
 
 	struct PassInfo {
-		PassInfo(arena&);
+		PassInfo(arena&, Pass&&);
 
 		Pass pass;
 
@@ -356,9 +356,7 @@ namespace vuk {
 		std::vector<RenderPassInfo, short_alloc<RenderPassInfo, 64>> rpis;
 
 		void add_pass(Pass p) {
-			PassInfo pi(*arena_);
-			pi.pass = std::move(p);
-			passes.push_back(pi);
+			passes.emplace_back(*arena_, std::move(p));
 		}
 
 		// determine rendergraph inputs and outputs, and resources that are neither
