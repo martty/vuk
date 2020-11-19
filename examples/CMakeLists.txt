@@ -25,10 +25,17 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(glm)
 
+FetchContent_Declare(
+  tinygltf
+  GIT_REPOSITORY https://github.com/syoyo/tinygltf
+  GIT_TAG        v2.5.0
+)
+FetchContent_Populate(tinygltf)
+
 SET(imgui_sources ../ext/imgui/imgui.cpp ../ext/imgui/imgui_draw.cpp ../ext/imgui/imgui_demo.cpp ../ext/imgui/imgui_widgets.cpp ../ext/imgui/examples/imgui_impl_glfw.cpp)
 
 add_executable(vuk_all_examples)
-target_include_directories(vuk_all_examples SYSTEM PRIVATE ../ext/stb ../ext/imgui)
+target_include_directories(vuk_all_examples SYSTEM PRIVATE ../ext/stb ../ext/imgui ${tinygltf_SOURCE_DIR})
 target_sources(vuk_all_examples PRIVATE example_browser.cpp imgui.cpp stbi.cpp ${imgui_sources})
 target_compile_definitions(vuk_all_examples PRIVATE GLM_FORCE_SIZE_FUNC GLM_FORCE_EXPLICIT_CTOR GLM_ENABLE_EXPERIMENTAL GLM_FORCE_RADIANS GLM_FORCE_DEPTH_ZERO_TO_ONE)
 target_link_libraries(vuk_all_examples PRIVATE vuk)
@@ -48,7 +55,7 @@ function(ADD_EXAMPLE name)
     add_executable(${FULL_NAME})
     target_sources(${FULL_NAME} PRIVATE "${name}.cpp" example_runner_single.cpp imgui.cpp stbi.cpp ${imgui_sources})
     target_sources(vuk_all_examples PRIVATE "${name}.cpp")
-    target_include_directories(${FULL_NAME} SYSTEM PRIVATE ../ext/stb ../ext/imgui)
+    target_include_directories(${FULL_NAME} SYSTEM PRIVATE ../ext/stb ../ext/imgui ${tinygltf_SOURCE_DIR})
     target_compile_definitions(${FULL_NAME} PRIVATE GLM_FORCE_SIZE_FUNC GLM_FORCE_EXPLICIT_CTOR GLM_ENABLE_EXPERIMENTAL GLM_FORCE_RADIANS GLM_FORCE_DEPTH_ZERO_TO_ONE)
     target_link_libraries(${FULL_NAME} PRIVATE vuk)
     target_link_libraries(${FULL_NAME} PRIVATE vk-bootstrap glfw glm)
@@ -73,3 +80,5 @@ ADD_EXAMPLE(07_commands)
 ADD_EXAMPLE(08_pipelined_compute)
 ADD_EXAMPLE(09_persistent_descriptorset)
 ADD_EXAMPLE(10_baby_renderer)
+
+ADD_EXAMPLE(X1_tss)

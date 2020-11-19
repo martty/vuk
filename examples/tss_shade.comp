@@ -1,0 +1,66 @@
+#version 460
+#pragma shader_stage(compute)
+
+#extension GL_AMD_shader_image_load_store_lod :  require
+#extension GL_EXT_nonuniform_qualifier : require
+
+layout (binding = 0) uniform usampler2D in_info;
+layout (binding = 1) uniform usampler2D in_UV;
+
+layout (binding = 2) readonly buffer vertex_buf {
+	float[] vertex_data;
+};
+
+layout (set = 0, binding = 3) readonly buffer index_map_buf {
+	uint[] index_map;
+};
+
+struct mesh_data {
+	uint index_offset;
+};
+
+layout (set = 0, binding = 4) readonly buffer mesh_info_buf {
+	mesh_data[] mesh_info;
+};
+
+// with all the mips
+layout (set = 1, binding = 0, rgba8) uniform image2D out_tss_map[10];
+
+
+
+vec4 shade(vec3 position, uvec2 uv){
+	return vec4(position, 1.f);
+}
+
+layout (local_size_x = 8, local_size_y = 8) in;
+
+void main() {
+	ivec2 gid = ivec2(gl_GlobalInvocationID.xy);
+	if(gid.x > textureSize(in_info, 0).x || gid.y > textureSize(in_info, 0).y) return;
+	uvec4 info = texelFetch(in_info, gid, 0);
+	uvec4 uv_bary = texelFetch(in_UV, gid, 0);
+	uvec2 uv = uv_bary.xy;
+	// step 0: unpack fragment info
+	uint mesh_index = info.x;
+	int lod = int(bitfieldExtract(info.y, 28, 4));
+	//if(lod > 0) return; // for now
+	uint triangle_index = bitfieldInsert(info.y, 0, 28, 4); // zero lod bits
+	vec3 barycentrics;
+	//barycentrics.xy = texelFetch(bary_map, ivec2(uv), 0).xy;
+	barycentrics.xy = unpackUnorm2x16(uv_bary.z);//w;
+	barycentrics.z = 1 - barycentrics.x - barycentrics.y;
+	// step 1: compute interpolated vertex attributes for fragment
+	// retrieve triangle indices
+	uvec3 indices = uvec3(index_map[mesh_info[mesh_index].index_offset + 3*triangle_index], index_map[mesh_info[mesh_index].index_offset + 3*triangle_index+1], index_map[mesh_info[mesh_index].index_offset + 3*triangle_index+2]);
+	// interpolate vertex attributes
+	// position
+	vec3 pos0 = vec3(vertex_data[3*indices.x], vertex_data[3*indices.x+1], vertex_data[3*indices.x+2]);
+	vec3 pos1 = vec3(vertex_data[3*indices.y], vertex_data[3*indices.y+1], vertex_data[3*indices.y+2]);
+	vec3 pos2 = vec3(vertex_data[3*indices.z], vertex_data[3*indices.z+1], vertex_data[3*indices.z+2]);
+	vec3 pos_interp = pos0 * barycentrics.x + pos1 * barycentrics.y + pos2 * barycentrics.z;
+	// ... additional attributes ...
+	// step 2: shade pixels
+	vec4 shaded_value = shade(pos_interp, uv);
+	// step 3: store into appropriate mip level in TSS map
+	imageStore(out_tss_map[nonuniformEXT(lod)], ivec2(uv), vec4(shaded_value.xyz, 1.0));
+}
