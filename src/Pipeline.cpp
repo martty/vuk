@@ -55,9 +55,10 @@ namespace vuk {
 	vuk::fixed_vector<vuk::DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> PipelineBaseCreateInfo::build_descriptor_layouts(const Program& program, const PipelineBaseCreateInfoBase& bci) {
 		vuk::fixed_vector<vuk::DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> dslcis;
 
+
 		for (const auto& [index, set] : program.sets) {
             // fill up unused sets, if there are holes in descriptor set order
-            dslcis.resize(index, {});
+            dslcis.resize(std::max(dslcis.size(), index + 1), {});
 
 			vuk::DescriptorSetLayoutCreateInfo dslci;
 			dslci.index = index;
@@ -111,9 +112,13 @@ namespace vuk {
 				VkDescriptorSetLayoutBinding layoutBinding;
 				layoutBinding.binding = si.binding;
 				layoutBinding.descriptorType = (VkDescriptorType)vuk::DescriptorType::eStorageImage;
-				layoutBinding.descriptorCount = 1;
+				layoutBinding.descriptorCount = si.array_size == (unsigned)-1 ? 1 : si.array_size;
 				layoutBinding.stageFlags = si.stage;
 				layoutBinding.pImmutableSamplers = nullptr;
+				if (si.array_size == 0) {
+					assert(bci.variable_count_max[index] > 0); // forgot to mark this descriptor as variable count
+					layoutBinding.descriptorCount = bci.variable_count_max[index];
+				}
 				bindings.push_back(layoutBinding);
 			}
 
@@ -139,7 +144,7 @@ namespace vuk {
 				}
 			}
 
-			dslcis.push_back(dslci);
+			dslcis[index] = std::move(dslci);
 		}
 		return dslcis;
 	}

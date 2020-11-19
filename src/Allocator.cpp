@@ -191,7 +191,7 @@ namespace vuk {
 				auto result = vmaCreateBuffer(allocator, &bci, &vaci, &vkbuffer, &res, &vai);
 				assert(result == VK_SUCCESS);
 				pool.allocations[next_index] =
-					std::tuple(res, vai.deviceMemory, vai.offset, vkbuffer, vai.pMappedData);
+					std::tuple(res, vai.deviceMemory, vai.offset, vkbuffer, (std::byte*)vai.pMappedData);
 			}
 			pool.current_buffer++;
 			if (base_addr > 0) {
@@ -208,7 +208,7 @@ namespace vuk {
 		b.device_memory = std::get<VkDeviceMemory>(current_alloc);
 		b.offset = offset;
 		b.size = size;
-		b.mapped_ptr = (unsigned char*)std::get<void*>(current_alloc) + offset;
+		b.mapped_ptr = std::get<std::byte*>(current_alloc) + offset;
 
 		return b;
 	}
@@ -251,7 +251,7 @@ namespace vuk {
 		b.device_memory = vai.deviceMemory;
 		b.offset = vai.offset;
 		b.size = vai.size;
-		b.mapped_ptr = vai.pMappedData;
+		b.mapped_ptr = (std::byte*)vai.pMappedData;
 		buffer_allocations.emplace(BufferID{ reinterpret_cast<uint64_t>(b.buffer), b.offset }, res);
 		return b;
 	}

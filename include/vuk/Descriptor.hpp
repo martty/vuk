@@ -102,6 +102,7 @@ namespace vuk {
 			case vuk::DescriptorType::eUniformBuffer:
 			case vuk::DescriptorType::eStorageBuffer:
 				return memcmp(&buffer, &o.buffer, sizeof(VkDescriptorBufferInfo)) == 0;
+			case vuk::DescriptorType::eStorageImage:
 			case vuk::DescriptorType::eSampledImage:
 			case vuk::DescriptorType::eSampler:
 			case vuk::DescriptorType::eCombinedImageSampler:
@@ -185,6 +186,7 @@ namespace vuk {
 		}
 
 		void update_combined_image_sampler(PerThreadContext& ptc, unsigned binding, unsigned array_index, vuk::ImageView iv, vuk::SamplerCreateInfo sampler_create_info, vuk::ImageLayout layout);
+		void update_storage_image(PerThreadContext& ptc, unsigned binding, unsigned array_index, vuk::ImageView iv);
 	};
 }
 

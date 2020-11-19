@@ -16,76 +16,6 @@
 #include "robin_hood.h"
 
 namespace vuk {
-	struct Preserve {};
-	struct ClearColor {
-		ClearColor(uint32_t r, uint32_t g, uint32_t b, uint32_t a) {
-			ccv.uint32[0] = r;
-			ccv.uint32[1] = g;
-			ccv.uint32[2] = b;
-			ccv.uint32[3] = a;
-		}
-		ClearColor(float r, float g, float b, float a) {
-			ccv.float32[0] = r;
-			ccv.float32[1] = g;
-			ccv.float32[2] = b;
-			ccv.float32[3] = a;
-		}
-		VkClearColorValue ccv;
-	};
-
-	struct ClearDepthStencil {
-		ClearDepthStencil(float depth, uint32_t stencil) {
-			cdsv.depth = depth;
-			cdsv.stencil = stencil;
-		}
-		VkClearDepthStencilValue cdsv;
-	};
-
-
-	struct PreserveOrClear {
-		PreserveOrClear(ClearColor cc) : clear(true) { c.color = cc.ccv; }
-		PreserveOrClear(ClearDepthStencil cc) : clear(true) { c.depthStencil = cc.cdsv; }
-		PreserveOrClear(Preserve) : clear(false) {}
-
-		bool clear;
-		VkClearValue c;
-	};
-
-	struct Clear {
-		Clear() = default;
-		Clear(ClearColor cc) { c.color = cc.ccv; }
-		Clear(ClearDepthStencil cc) { c.depthStencil = cc.cdsv; }
-	
-		VkClearValue c;
-	};
-
-	enum Access {
-		eNone,
-		eClear,
-		eColorRW,
-		eColorWrite,
-		eColorRead,
-		eColorResolveRead, // special op to mark renderpass resolve read
-		eColorResolveWrite, // special op to mark renderpass resolve write
-		eDepthStencilRW,
-		eDepthStencilRead,
-		eInputRead,
-		eVertexSampled,
-		eVertexRead,
-		eAttributeRead,
-		eFragmentSampled,
-		eFragmentRead,
-		eFragmentWrite, // written using image store
-		eTransferSrc,
-		eTransferDst,
-		eComputeRead,
-		eComputeWrite,
-		eComputeRW,
-		eMemoryRead,
-		eMemoryWrite,
-		eMemoryRW
-	};
-
 	struct Resource;
 	struct BufferResource {
 		Name name;
@@ -144,6 +74,8 @@ namespace vuk {
 	inline constexpr AccessFlags operator^(AccessFlagBits bit0, AccessFlagBits bit1) noexcept {
 		return AccessFlags(bit0) ^ bit1;
 	}
+
+	size_t format_to_size(vuk::Format) noexcept;
 }
 
 inline vuk::ImageResource operator "" _image(const char* name, size_t) {
@@ -180,6 +112,8 @@ namespace vuk {
 			return (hash_use_name == o.hash_use_name && hash_src_name == o.hash_src_name);
 		}
 	};
+
+	Resource::Use to_use(Access acc);
 
 	inline Resource ImageResource::operator()(Access ia) {
 		return Resource{name, Resource::Type::eImage, ia};

@@ -113,6 +113,11 @@ vuk::Texture vuk::PerThreadContext::allocate_texture(vuk::ImageCreateInfo ici) {
 	return tex;
 }
 
+vuk::Unique<vuk::ImageView> vuk::PerThreadContext::create_image_view(vuk::ImageViewCreateInfo ivci) {
+	VkImageView iv;
+	vkCreateImageView(ctx.device, (VkImageViewCreateInfo*)&ivci, nullptr, &iv);
+	return vuk::Unique<vuk::ImageView>(ctx, ctx.wrap(iv));
+}
 
 std::pair<vuk::Texture, vuk::TransferStub> vuk::PerThreadContext::create_texture(vuk::Format format, vuk::Extent3D extents, void* data) {
 	vuk::ImageCreateInfo ici;

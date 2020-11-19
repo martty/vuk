@@ -6,16 +6,6 @@ include(FetchContent)
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
-# https://stackoverflow.com/a/52136398
-function(target_link_libraries_system target access)
-  set(libs ${ARGN})
-  foreach(lib ${libs})
-    get_target_property(lib_include_dirs ${lib} INTERFACE_INCLUDE_DIRECTORIES)
-    target_include_directories(${target} SYSTEM ${access} ${lib_include_dirs})
-    target_link_libraries(${target} ${access} ${lib})
-  endforeach(lib)
-endfunction(target_link_libraries_system)
-
 add_library(vuk)
 
 find_package(Vulkan REQUIRED)
@@ -77,7 +67,7 @@ elseif(MSVC)
 	target_compile_options(vuk PRIVATE /std:c++latest /permissive- /Zc:char8_t-)
 endif()
 
-target_link_libraries_system(vuk PUBLIC spirv-cross-core robin_hood)
+target_link_libraries(vuk PUBLIC spirv-cross-core robin_hood)
 target_link_libraries(vuk PUBLIC shaderc ${Vulkan_LIBRARIES})
 
 
