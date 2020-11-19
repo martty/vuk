@@ -68,6 +68,7 @@ namespace vuk {
 		struct StorageImage {
 			std::string name;
 
+			unsigned array_size;
 			unsigned binding;
 			VkShaderStageFlags stage;
 		};

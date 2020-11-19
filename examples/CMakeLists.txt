@@ -32,7 +32,7 @@ target_include_directories(vuk_all_examples SYSTEM PRIVATE ../ext/stb ../ext/img
 target_sources(vuk_all_examples PRIVATE example_browser.cpp imgui.cpp stbi.cpp ${imgui_sources})
 target_compile_definitions(vuk_all_examples PRIVATE GLM_FORCE_SIZE_FUNC GLM_FORCE_EXPLICIT_CTOR GLM_ENABLE_EXPERIMENTAL GLM_FORCE_RADIANS GLM_FORCE_DEPTH_ZERO_TO_ONE)
 target_link_libraries(vuk_all_examples PRIVATE vuk)
-target_link_libraries_system(vuk_all_examples PRIVATE vk-bootstrap glfw glm)
+target_link_libraries(vuk_all_examples PRIVATE vk-bootstrap glfw glm)
 set_target_properties(vuk_all_examples
     PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
@@ -51,7 +51,7 @@ function(ADD_EXAMPLE name)
     target_include_directories(${FULL_NAME} SYSTEM PRIVATE ../ext/stb ../ext/imgui)
     target_compile_definitions(${FULL_NAME} PRIVATE GLM_FORCE_SIZE_FUNC GLM_FORCE_EXPLICIT_CTOR GLM_ENABLE_EXPERIMENTAL GLM_FORCE_RADIANS GLM_FORCE_DEPTH_ZERO_TO_ONE)
     target_link_libraries(${FULL_NAME} PRIVATE vuk)
-    target_link_libraries_system(${FULL_NAME} PRIVATE vk-bootstrap glfw glm)
+    target_link_libraries(${FULL_NAME} PRIVATE vk-bootstrap glfw glm)
     set_target_properties(${FULL_NAME}
         PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"

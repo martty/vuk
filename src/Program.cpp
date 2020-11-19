@@ -177,6 +177,8 @@ VkShaderStageFlagBits vuk::Program::introspect(const spirv_cross::Compiler& refl
 		un.binding = binding;
 		un.stage = stage;
 		un.name = sb.name.c_str();
+		// maybe spirv cross bug?
+		un.array_size = type.array.size() == 1 ? (type.array[0] == 1 ? 0 : type.array[0]) : -1;
 		sets[set].storage_images.push_back(un);
 	}
 	

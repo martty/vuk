@@ -48,6 +48,8 @@ namespace vuk {
 		case eDepthStencilRW:
 		case eFragmentWrite:
 		case eTransferDst:
+		case eComputeWrite:
+		case eComputeRW:
 			return true;
 		default:
 			return false;
@@ -63,6 +65,8 @@ namespace vuk {
 		case eFragmentRead:
 		case eFragmentSampled:
 		case eTransferSrc:
+		case eComputeRead:
+		case eComputeSampled:
 			return true;
 		default:
 			return false;
@@ -87,6 +91,7 @@ namespace vuk {
 		case eComputeRead: return { vuk::PipelineStageFlagBits::eComputeShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eGeneral };
 		case eComputeWrite: return { vuk::PipelineStageFlagBits::eComputeShader, vuk::AccessFlagBits::eShaderWrite, vuk::ImageLayout::eGeneral };
 		case eComputeRW: return { vuk::PipelineStageFlagBits::eComputeShader, vuk::AccessFlagBits::eShaderRead | vuk::AccessFlagBits::eShaderWrite, vuk::ImageLayout::eGeneral };
+		case eComputeSampled: return { vuk::PipelineStageFlagBits::eComputeShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eShaderReadOnlyOptimal };
 
 		case eAttributeRead: return { vuk::PipelineStageFlagBits::eVertexInput, vuk::AccessFlagBits::eVertexAttributeRead, vuk::ImageLayout::eGeneral /* ignored */ };
 
@@ -98,7 +103,8 @@ namespace vuk {
             return {vuk::PipelineStageFlagBits::eTopOfPipe, vuk::AccessFlagBits{}, vuk::ImageLayout::eUndefined};
         case eClear:
             return {vuk::PipelineStageFlagBits::eColorAttachmentOutput, vuk::AccessFlagBits::eColorAttachmentWrite, vuk::ImageLayout::ePreinitialized};
-
+		case eTransferClear:
+            return {vuk::PipelineStageFlagBits::eTransfer, vuk::AccessFlagBits::eTransferWrite, vuk::ImageLayout::eTransferDstOptimal};
 		default:
 			assert(0 && "NYI");
 			return {};
@@ -151,7 +157,7 @@ namespace vuk {
 			switch (c.use.layout) {
 			case vuk::ImageLayout::eDepthStencilAttachmentOptimal:
 				usage |= vuk::ImageUsageFlagBits::eDepthStencilAttachment; break;
-			case vuk::ImageLayout::eShaderReadOnlyOptimal:
+			case vuk::ImageLayout::eShaderReadOnlyOptimal: // TODO: more complex analysis
 				usage |= vuk::ImageUsageFlagBits::eSampled; break;
 			case vuk::ImageLayout::eColorAttachmentOptimal:
 				usage |= vuk::ImageUsageFlagBits::eColorAttachment; break;
@@ -167,7 +173,7 @@ namespace vuk {
 	}
 
 
-	size_t format_to_size(vuk::Format format) {
+	size_t format_to_size(vuk::Format format) noexcept {
 		switch (format) {
 		case vuk::Format::eR32G32B32A32Sfloat:
 			return sizeof(float) * 4;

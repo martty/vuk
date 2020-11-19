@@ -162,8 +162,9 @@ namespace vuk {
             }
 
             len = std::min(sz, n);
-
-            std::uninitialized_fill(begin() + old_len, begin() + len, value);
+            if (len > old_len) {
+                std::uninitialized_fill(begin() + old_len, begin() + len, value);
+            }
         }
 
         T* data() {

@@ -78,6 +78,19 @@ void vuk::PersistentDescriptorSet::update_combined_image_sampler(PerThreadContex
 	pending_writes.push_back(wds);
 }
 
+void vuk::PersistentDescriptorSet::update_storage_image(PerThreadContext& ptc, unsigned binding, unsigned array_index, vuk::ImageView iv) {
+	descriptor_bindings[array_index].image = vuk::DescriptorImageInfo({}, iv, vuk::ImageLayout::eGeneral);
+	descriptor_bindings[array_index].type = vuk::DescriptorType::eStorageImage;
+	VkWriteDescriptorSet wds = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+	wds.descriptorCount = 1;
+	wds.descriptorType = (VkDescriptorType)vuk::DescriptorType::eStorageImage;
+	wds.dstArrayElement = array_index;
+	wds.dstBinding = binding;
+	wds.pImageInfo = &descriptor_bindings[array_index].image.dii;
+	wds.dstSet = backing_set;
+	pending_writes.push_back(wds);
+}
+
 vuk::ShaderModule vuk::Context::create(const create_info_t<vuk::ShaderModule>& cinfo) {
 	shaderc::Compiler compiler;
 	shaderc::CompileOptions options;
@@ -349,7 +362,7 @@ vuk::Context::UploadResult vuk::Context::fenced_upload(std::span<BufferUpload> u
 		vkCmdCopyBuffer(cbuf, staging.buffer, upload.dst.buffer, 1, &bc);
 
 		staging.offset += upload.data.size();
-		staging.mapped_ptr = static_cast<unsigned char*>(staging.mapped_ptr) + upload.data.size();
+		staging.mapped_ptr = staging.mapped_ptr + upload.data.size();
 	}
 	vkEndCommandBuffer(cbuf);
 	// get an unpooled fence
@@ -408,7 +421,7 @@ vuk::Context::UploadResult vuk::Context::fenced_upload(std::span<ImageUpload> up
 		task.generate_mips = true;
 		record_buffer_image_copy(cbuf, task);
 		staging.offset += upload.data.size();
-		staging.mapped_ptr = static_cast<unsigned char*>(staging.mapped_ptr) + upload.data.size();
+		staging.mapped_ptr = staging.mapped_ptr + upload.data.size();
 	}
 	vkEndCommandBuffer(cbuf);
 	// get an unpooled fence

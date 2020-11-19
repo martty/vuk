@@ -49,6 +49,7 @@ namespace vuk {
 	};
 
 	struct Packed {
+		Packed() {}
 		Packed(std::initializer_list<FormatOrIgnore> ilist) : list(ilist) {}
 		vuk::fixed_vector<FormatOrIgnore, VUK_MAX_ATTRIBUTES> list;
 	};
@@ -85,9 +86,9 @@ namespace vuk {
 
 	struct ImageSubresourceLayers {
 		ImageAspectFlags aspectMask = {};
-		uint32_t mipLevel = {};
-		uint32_t baseArrayLayer = {};
-		uint32_t layerCount = {};
+		uint32_t mipLevel = 0;
+		uint32_t baseArrayLayer = 0;
+		uint32_t layerCount = 1;
 
 		operator VkImageSubresourceLayers const& () const noexcept {
 			return *reinterpret_cast<const VkImageSubresourceLayers*>(this);
@@ -280,9 +281,12 @@ namespace vuk {
         void execute(std::span<VkCommandBuffer>);
 
 		// commands for renderpass-less command buffers
+		void clear_image(Name src, Clear);
 		void resolve_image(Name src, Name dst);
 		void blit_image(Name src, Name dst, vuk::ImageBlit region, vuk::Filter filter);
         void copy_image_to_buffer(Name src, Name dst, vuk::BufferImageCopy);
+		// explicit synchronisation
+		void image_barrier(Name, vuk::Access src_access, vuk::Access dst_access);
 	protected:
 		void _bind_state(bool graphics);
 		void _bind_compute_pipeline_state();

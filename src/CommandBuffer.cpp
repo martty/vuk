@@ -319,6 +319,20 @@ namespace vuk {
 		}
 	}
 
+	void CommandBuffer::clear_image(Name src, Clear c) {
+		// TODO: depth images
+		assert(rg);
+		auto att = rg->bound_attachments[src];
+		auto layout = rg->is_resource_image_in_general_layout(src, current_pass) ? vuk::ImageLayout::eGeneral : vuk::ImageLayout::eTransferDstOptimal;
+		VkImageSubresourceRange isr = {};
+		isr.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		isr.baseArrayLayer = 0;
+		isr.layerCount = VK_REMAINING_ARRAY_LAYERS;
+		isr.baseMipLevel = 0;
+		isr.levelCount = VK_REMAINING_MIP_LEVELS;
+		vkCmdClearColorImage(command_buffer, att.image, (VkImageLayout)layout, &c.c.color, 1, &isr);	
+	}
+
 	void CommandBuffer::resolve_image(Name src, Name dst) {
 		assert(rg);
 		VkImageResolve ir;
@@ -368,6 +382,32 @@ namespace vuk {
 
 		auto src_layout = rg->is_resource_image_in_general_layout(src, current_pass) ? vuk::ImageLayout::eGeneral : vuk::ImageLayout::eTransferSrcOptimal;
 		vkCmdCopyImageToBuffer(command_buffer, src_batt.image, (VkImageLayout)src_layout, dst_bbuf.buffer.buffer, 1, (VkBufferImageCopy*)&bic);
+	}
+
+	void CommandBuffer::image_barrier(Name src, vuk::Access src_acc, vuk::Access dst_acc) {
+		assert(rg);
+		auto att = rg->bound_attachments[src];
+
+		VkImageSubresourceRange isr = {};
+		isr.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		isr.baseArrayLayer = 0;
+		isr.layerCount = VK_REMAINING_ARRAY_LAYERS;
+		isr.baseMipLevel = 0;
+		isr.levelCount = VK_REMAINING_MIP_LEVELS;
+		VkImageMemoryBarrier imb{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+		imb.image = att.image;
+		auto src_use = to_use(src_acc);
+		auto dst_use = to_use(dst_acc);
+		imb.srcAccessMask = (VkAccessFlags)src_use.access;
+		imb.dstAccessMask = (VkAccessFlags)dst_use.access;
+		if (rg->is_resource_image_in_general_layout(src, current_pass)) {
+			imb.oldLayout = imb.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+		} else {
+			imb.oldLayout = (VkImageLayout)src_use.layout;
+			imb.newLayout = (VkImageLayout)dst_use.layout;
+		}
+		imb.subresourceRange = isr;
+		vkCmdPipelineBarrier(command_buffer, (VkPipelineStageFlags)src_use.stages, (VkPipelineStageFlags)dst_use.stages, {}, 0, nullptr, 0, nullptr, 1, &imb);
 	}
 
 	void CommandBuffer::_bind_state(bool graphics) {

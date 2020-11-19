@@ -240,10 +240,10 @@ namespace vuk {
 
 	struct ImageSubresourceRange {
 		ImageAspectFlags aspectMask = {};
-		uint32_t baseMipLevel = {};
-		uint32_t levelCount = {};
-		uint32_t baseArrayLayer = {};
-		uint32_t layerCount = {};
+		uint32_t baseMipLevel = 0;
+		uint32_t levelCount = 1;
+		uint32_t baseArrayLayer = 0;
+		uint32_t layerCount = 1;
 
 		operator VkImageSubresourceRange const& () const noexcept {
 			return *reinterpret_cast<const VkImageSubresourceRange*>(this);
@@ -374,7 +374,7 @@ namespace vuk {
 		Bool32 compareEnable = {};
 		CompareOp compareOp = CompareOp::eNever;
 		float minLod = {};
-		float maxLod = {};
+		float maxLod = 32.f;
 		BorderColor borderColor = BorderColor::eFloatTransparentBlack;
 		Bool32 unnormalizedCoordinates = {};
 
