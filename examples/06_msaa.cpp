@@ -66,8 +66,8 @@ namespace {
 				.resources = {"06_msaa_MS"_image(vuk::eColorWrite), "06_msaa_depth"_image(vuk::eDepthStencilRW)},
 				.execute = [verts, uboVP, inds](vuk::CommandBuffer& command_buffer) {
 					command_buffer
-					  .set_viewport(0, vuk::Area::Framebuffer{})
-					  .set_scissor(0, vuk::Area::Framebuffer{})
+					  .set_viewport(0, vuk::Area::framebuffer())
+					  .set_scissor(0, vuk::Area::framebuffer())
 					  .bind_vertex_buffer(0, verts, 0, vuk::Packed{vuk::Format::eR32G32B32Sfloat, vuk::Ignore{offsetof(util::Vertex, uv_coordinates) - sizeof(util::Vertex::position)}, vuk::Format::eR32G32Sfloat})
 					  .bind_index_buffer(inds, vuk::IndexType::eUint32)
 					  .bind_sampled_image(0, 2, *texture_of_doge, vuk::SamplerCreateInfo{})

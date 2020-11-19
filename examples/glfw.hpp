@@ -6,7 +6,7 @@ inline GLFWwindow* create_window_glfw(const char* title, bool resize = true) {
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 	if (!resize) glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
-	return glfwCreateWindow(1024, 768, title, NULL, NULL);
+	return glfwCreateWindow(1024, 1024, title, NULL, NULL);
 }
 
 inline void destroy_window_glfw(GLFWwindow* window) {

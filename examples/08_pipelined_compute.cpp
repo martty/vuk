@@ -80,8 +80,8 @@ namespace {
 				.resources = {"08_rtt"_image(vuk::eColorWrite)},
 				.execute = [](vuk::CommandBuffer& command_buffer) {
 					command_buffer
-					  .set_viewport(0, vuk::Area::Framebuffer{})
-					  .set_scissor(0, vuk::Area::Framebuffer{})
+					  .set_viewport(0, vuk::Area::framebuffer())
+					  .set_scissor(0, vuk::Area::framebuffer())
 					  .bind_sampled_image(0, 0, *texture_of_doge, {})
 					  .bind_graphics_pipeline("rtt")
 					  .draw(3, 1, 0, 0);
@@ -105,8 +105,8 @@ namespace {
 				.resources = {"08_scramble"_buffer(vuk::eFragmentRead), "08_rtt"_image(vuk::eFragmentSampled), "08_pipelined_compute_final"_image(vuk::eColorWrite)},
 				.execute = [](vuk::CommandBuffer& command_buffer) {
 					command_buffer
-						.set_viewport(0, vuk::Area::Framebuffer{})
-						.set_scissor(0, vuk::Area::Framebuffer{})
+						.set_viewport(0, vuk::Area::framebuffer())
+						.set_scissor(0, vuk::Area::framebuffer())
 
 						.bind_sampled_image(0, 0, "08_rtt", {})
 						.bind_storage_buffer(0, 1, command_buffer.get_resource_buffer("08_scramble"))
