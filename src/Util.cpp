@@ -13,7 +13,7 @@ bool vuk::execute_submit_and_present_to_one(PerThreadContext& ptc, RenderGraph& 
 		si.pWaitSemaphores = &present_rdy;
 		VkPipelineStageFlags flags = (VkPipelineStageFlags)vuk::PipelineStageFlagBits::eTopOfPipe;
 		si.pWaitDstStageMask = &flags;
-
+        ptc.ctx.submit_graphics(si, VK_NULL_HANDLE);
 		return false;
 	}
 
