@@ -301,7 +301,7 @@ namespace vuk {
 		void mark_attachment_internal(Name, vuk::Format, vuk::Extent2D, vuk::Samples, Clear);
 		void mark_attachment_internal(Name, vuk::Format, vuk::Extent2D::Framebuffer, vuk::Samples, Clear);
 		void mark_attachment_resolve(Name resolved_name, Name ms_name);
-		void bind_buffer(Name, vuk::Buffer);
+		void bind_buffer(Name, Buffer, Access initial, Access final);
         void bind_attachment(Name, Attachment, Access initial, Access final);
 		vuk::ImageUsageFlags compute_usage(const std::vector<vuk::RenderGraph::UseRef, short_alloc<UseRef, 64>>& chain);
 

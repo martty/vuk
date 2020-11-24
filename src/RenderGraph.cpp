@@ -51,6 +51,10 @@ namespace vuk {
 		case eTransferDst:
 		case eComputeWrite:
 		case eComputeRW:
+        case eHostWrite:
+        case eHostRW:
+        case eMemoryWrite:
+        case eMemoryRW:
 			return true;
 		default:
 			return false;
@@ -63,11 +67,17 @@ namespace vuk {
 		case eColorRead:
 		case eColorRW:
 		case eDepthStencilRead:
+		case eDepthStencilRW:
 		case eFragmentRead:
 		case eFragmentSampled:
 		case eTransferSrc:
 		case eComputeRead:
 		case eComputeSampled:
+        case eComputeRW:
+        case eHostRead:
+        case eHostRW:
+        case eMemoryRead:
+        case eMemoryRW:
 			return true;
 		default:
 			return false;
@@ -95,6 +105,13 @@ namespace vuk {
 		case eComputeSampled: return { vuk::PipelineStageFlagBits::eComputeShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eShaderReadOnlyOptimal };
 
 		case eAttributeRead: return { vuk::PipelineStageFlagBits::eVertexInput, vuk::AccessFlagBits::eVertexAttributeRead, vuk::ImageLayout::eGeneral /* ignored */ };
+
+		case eHostRead:
+            return {vuk::PipelineStageFlagBits::eHost, vuk::AccessFlagBits::eHostRead, vuk::ImageLayout::eGeneral};
+        case eHostWrite:
+            return {vuk::PipelineStageFlagBits::eHost, vuk::AccessFlagBits::eHostWrite, vuk::ImageLayout::eGeneral};
+        case eHostRW:
+            return {vuk::PipelineStageFlagBits::eHost, vuk::AccessFlagBits::eHostRead | vuk::AccessFlagBits::eHostWrite, vuk::ImageLayout::eGeneral};
 
 		case eMemoryRead: return { vuk::PipelineStageFlagBits::eBottomOfPipe, vuk::AccessFlagBits::eMemoryRead, vuk::ImageLayout::eGeneral };
 		case eMemoryWrite: return { vuk::PipelineStageFlagBits::eBottomOfPipe, vuk::AccessFlagBits::eMemoryWrite, vuk::ImageLayout::eGeneral };
@@ -144,6 +161,7 @@ namespace vuk {
 		if (u.access & vuk::AccessFlagBits::eDepthStencilAttachmentWrite) return true;
 		if (u.access & vuk::AccessFlagBits::eShaderWrite) return true;
 		if (u.access & vuk::AccessFlagBits::eTransferWrite) return true;
+		if (u.access & vuk::AccessFlagBits::eHostWrite) return true;
 		assert(0 && "NYI");
 		return false;
 	}
@@ -472,8 +490,8 @@ namespace vuk {
 		});
 	}
 
-	void RenderGraph::bind_buffer(Name name, vuk::Buffer buf) {
-		BufferInfo buf_info{.buffer = buf};
+	void RenderGraph::bind_buffer(Name name, vuk::Buffer buf, Access initial, Access final) {
+		BufferInfo buf_info{.name = name, .initial = to_use(initial), .final = to_use(final), .buffer = buf};
 		bound_buffers.emplace(name, buf_info);
 	}
 
