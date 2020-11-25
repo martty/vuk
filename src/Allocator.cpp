@@ -150,12 +150,7 @@ namespace vuk {
 	Buffer Allocator::_allocate_buffer(LinearAllocator& pool, size_t size, size_t alignment, bool create_mapped) {
 		if (size == 0) {
 			return { .buffer = VK_NULL_HANDLE, .size = 0 };
-		} else if (size > pool.block_size) {
-			// we are not handling sizes bigger than the block_size
-			// we could allocate a buffer that is multiple block_sizes big
-			// and fake the entries, but for now this is too much complexity
-			return allocate_buffer((vuk::MemoryUsage)pool.mem_usage, pool.usage, size, alignment, create_mapped);
-		}
+		} 
 		alignment = std::lcm(pool.mem_reqs.alignment, alignment);
 		if (pool.usage & vuk::BufferUsageFlagBits::eUniformBuffer) {
 			alignment = std::lcm(alignment, properties.limits.minUniformBufferOffsetAlignment);
@@ -163,6 +158,14 @@ namespace vuk {
 		if (pool.usage & vuk::BufferUsageFlagBits::eStorageBuffer) {
 			alignment = std::lcm(alignment, properties.limits.minStorageBufferOffsetAlignment);
 		}
+		
+		if ((size + alignment) > pool.block_size) {
+			// we are not handling sizes bigger than the block_size
+			// we could allocate a buffer that is multiple block_sizes big
+			// and fake the entries, but for now this is too much complexity
+			return allocate_buffer((vuk::MemoryUsage)pool.mem_usage, pool.usage, size, alignment, create_mapped);
+		}
+
 		auto new_needle = pool.needle.fetch_add(size + alignment) + size + alignment;
 		auto base_addr = new_needle - size - alignment;
 
