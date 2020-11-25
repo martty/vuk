@@ -161,7 +161,7 @@ namespace vuk {
 		std::atomic<size_t> last_transfer_complete = 0;
 
 		TransferStub enqueue_transfer(Buffer src, Buffer dst);
-		TransferStub enqueue_transfer(Buffer src, vuk::Image dst, vuk::Extent3D extent, bool generate_mips);
+		TransferStub enqueue_transfer(Buffer src, vuk::Image dst, vuk::Extent3D extent, uint32_t base_layer, bool generate_mips);
 		void destroy(std::vector<vuk::Image>&& images);
 		void destroy(std::vector<VkImageView>&& images);
 	};
@@ -219,12 +219,12 @@ namespace vuk {
 		}
 
 		template<class T>
-		TransferStub upload(vuk::Image dst, vuk::Extent3D extent, std::span<T> data, bool generate_mips) {
+		TransferStub upload(vuk::Image dst, vuk::Extent3D extent, uint32_t base_layer, std::span<T> data, bool generate_mips) {
 			assert(!data.empty());
 			auto staging = _allocate_scratch_buffer(MemoryUsage::eCPUonly, vuk::BufferUsageFlagBits::eTransferSrc, sizeof(T) * data.size(), 1, true);
 			::memcpy(staging.mapped_ptr, data.data(), sizeof(T) * data.size());
 
-			return ifc.enqueue_transfer(staging, dst, extent, generate_mips);
+			return ifc.enqueue_transfer(staging, dst, extent, base_layer, generate_mips);
 		}
 
 		void dma_task();

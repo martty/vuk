@@ -125,7 +125,7 @@ std::pair<vuk::Texture, vuk::TransferStub> vuk::PerThreadContext::create_texture
 	ici.usage = vuk::ImageUsageFlagBits::eTransferSrc | vuk::ImageUsageFlagBits::eTransferDst | vuk::ImageUsageFlagBits::eSampled;
 	ici.mipLevels = ici.arrayLayers = 1;
 	auto tex = ctx.allocate_texture(ici);
-	auto stub = upload(*tex.image, extents, std::span<std::byte>((std::byte*)data, extents.width * extents.height * extents.depth * 4), false);
+	auto stub = upload(*tex.image, extents, 0, std::span<std::byte>((std::byte*)data, extents.width * extents.height * extents.depth * 4), false);
 	return { std::move(tex), stub };
 }
 

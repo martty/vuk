@@ -107,6 +107,7 @@ namespace vuk {
 		Buffer src;
 		vuk::Image dst;
 		vuk::Extent3D extent;
+		uint32_t base_array_level;
 		bool generate_mips;
 		TransferStub stub;
 	};
@@ -130,7 +131,7 @@ inline void record_buffer_image_copy(VkCommandBuffer& cbuf, vuk::BufferImageCopy
 	bc.bufferImageHeight = 0;
 	bc.imageExtent = task.extent;
 	bc.imageSubresource.aspectMask = (VkImageAspectFlagBits)vuk::ImageAspectFlagBits::eColor;
-	bc.imageSubresource.baseArrayLayer = 0;
+	bc.imageSubresource.baseArrayLayer = task.base_array_level;
 	bc.imageSubresource.mipLevel = 0;
 	bc.imageSubresource.layerCount = 1;
 
@@ -193,7 +194,7 @@ inline void record_buffer_image_copy(VkCommandBuffer& cbuf, vuk::BufferImageCopy
 			VkImageBlit blit;
 			blit.srcSubresource.aspectMask = copy_barrier.subresourceRange.aspectMask;
 			blit.srcSubresource.baseArrayLayer = 0;
-			blit.srcSubresource.layerCount = 1;
+			blit.srcSubresource.layerCount = VK_REMAINING_ARRAY_LAYERS;
 			blit.srcSubresource.mipLevel = 0;
 			blit.srcOffsets[0] = VkOffset3D{ 0 };
 			blit.srcOffsets[1] = VkOffset3D{ (int32_t)task.extent.width, (int32_t)task.extent.height, (int32_t)task.extent.depth };
