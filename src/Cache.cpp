@@ -131,6 +131,7 @@ namespace vuk {
 	template class Cache<VkPipelineLayout>;
 	template class Cache<vuk::DescriptorSetLayoutAllocInfo>;
 	template class Cache<vuk::ShaderModule>;
+	template class Cache<vuk::RGImage>;
 
 	template<class T, size_t FC>
 	PerFrameCache<T, FC>::~PerFrameCache() {
@@ -195,7 +196,6 @@ namespace vuk {
 	}
 
 	template class PerFrameCache<vuk::DescriptorSet, Context::FC>;
-	template class PerFrameCache<vuk::RGImage, Context::FC>;
 	template class PerFrameCache<LinearAllocator, Context::FC>;
 	
     template class Cache<vuk::DescriptorPool>;

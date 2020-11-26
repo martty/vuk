@@ -4,6 +4,7 @@
 #include "vuk/Context.hpp"
 #include "vuk/CommandBuffer.hpp"
 #include "Allocator.hpp"
+#include <unordered_set>
 
 namespace vuk {
 	template<class T, class A, class F>
@@ -50,6 +51,10 @@ namespace vuk {
 		case eTransferDst:
 		case eComputeWrite:
 		case eComputeRW:
+        case eHostWrite:
+        case eHostRW:
+        case eMemoryWrite:
+        case eMemoryRW:
 			return true;
 		default:
 			return false;
@@ -62,11 +67,17 @@ namespace vuk {
 		case eColorRead:
 		case eColorRW:
 		case eDepthStencilRead:
+		case eDepthStencilRW:
 		case eFragmentRead:
 		case eFragmentSampled:
 		case eTransferSrc:
 		case eComputeRead:
 		case eComputeSampled:
+        case eComputeRW:
+        case eHostRead:
+        case eHostRW:
+        case eMemoryRead:
+        case eMemoryRW:
 			return true;
 		default:
 			return false;
@@ -94,6 +105,13 @@ namespace vuk {
 		case eComputeSampled: return { vuk::PipelineStageFlagBits::eComputeShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eShaderReadOnlyOptimal };
 
 		case eAttributeRead: return { vuk::PipelineStageFlagBits::eVertexInput, vuk::AccessFlagBits::eVertexAttributeRead, vuk::ImageLayout::eGeneral /* ignored */ };
+
+		case eHostRead:
+            return {vuk::PipelineStageFlagBits::eHost, vuk::AccessFlagBits::eHostRead, vuk::ImageLayout::eGeneral};
+        case eHostWrite:
+            return {vuk::PipelineStageFlagBits::eHost, vuk::AccessFlagBits::eHostWrite, vuk::ImageLayout::eGeneral};
+        case eHostRW:
+            return {vuk::PipelineStageFlagBits::eHost, vuk::AccessFlagBits::eHostRead | vuk::AccessFlagBits::eHostWrite, vuk::ImageLayout::eGeneral};
 
 		case eMemoryRead: return { vuk::PipelineStageFlagBits::eBottomOfPipe, vuk::AccessFlagBits::eMemoryRead, vuk::ImageLayout::eGeneral };
 		case eMemoryWrite: return { vuk::PipelineStageFlagBits::eBottomOfPipe, vuk::AccessFlagBits::eMemoryWrite, vuk::ImageLayout::eGeneral };
@@ -143,6 +161,7 @@ namespace vuk {
 		if (u.access & vuk::AccessFlagBits::eDepthStencilAttachmentWrite) return true;
 		if (u.access & vuk::AccessFlagBits::eShaderWrite) return true;
 		if (u.access & vuk::AccessFlagBits::eTransferWrite) return true;
+		if (u.access & vuk::AccessFlagBits::eHostWrite) return true;
 		assert(0 && "NYI");
 		return false;
 	}
@@ -171,7 +190,6 @@ namespace vuk {
 
 		return usage;
 	}
-
 
 	size_t format_to_size(vuk::Format format) noexcept {
 		switch (format) {
@@ -202,7 +220,7 @@ namespace vuk {
 #define INIT(x) x(decltype(x)::allocator_type(*arena_))
 #define INIT2(x) x(decltype(x)::allocator_type(arena_))
 
-	RenderGraph::RenderGraph() : arena_(new arena(1024*128)), INIT(head_passes), INIT(tail_passes), INIT(aliases), INIT(global_inputs), INIT(global_outputs), INIT(global_io), INIT(use_chains), INIT(rpis) {
+	RenderGraph::RenderGraph() : arena_(new arena(1024*128)), INIT(head_passes), INIT(tail_passes), INIT(global_io), INIT(rpis) {
         passes.reserve(64);
 	}
 
@@ -264,13 +282,13 @@ namespace vuk {
 				bool could_execute_before = false;
 				for (auto& o : p1.outputs) {
 					for (auto& i : p2.inputs){
-						if(i.src_name == o.use_name)
+						if(i.hash_src_name == o.hash_use_name)
 							could_execute_after = true;
 					}
 				}
 				for (auto& o : p2.outputs) {
 					for (auto& i : p1.inputs){
-						if(i.src_name == o.use_name)
+						if(i.hash_src_name == o.hash_use_name)
 							could_execute_before = true;
 					}
 				}
@@ -350,12 +368,14 @@ namespace vuk {
                     if(last_pass->inputs == p->inputs && last_pass->outputs == p->outputs) {
                         p->subpass = last_pass->subpass;
                         rpi.subpasses.back().passes.push_back(p);
+						// potentially upgrade to secondary cbufs
+                        rpi.subpasses.back().use_secondary_command_buffers |= p->pass.use_secondary_command_buffers;
                         continue;
                     }
 				}
                 SubpassInfo si{*arena_};
                 si.passes = {p};
-
+                si.use_secondary_command_buffers = p->pass.use_secondary_command_buffers;
 				p->subpass = ++subpass;
 				rpi.subpasses.push_back(si);
 			}
@@ -470,8 +490,8 @@ namespace vuk {
 		});
 	}
 
-	void RenderGraph::bind_buffer(Name name, vuk::Buffer buf) {
-		BufferInfo buf_info{.buffer = buf};
+	void RenderGraph::bind_buffer(Name name, vuk::Buffer buf, Access initial, Access final) {
+		BufferInfo buf_info{.name = name, .initial = to_use(initial), .final = to_use(final), .buffer = buf};
 		bound_buffers.emplace(name, buf_info);
 	}
 
@@ -513,12 +533,7 @@ namespace vuk {
 			chain.insert(chain.begin(), UseRef{ std::move(attachment_info.initial), nullptr });
 			chain.emplace_back(UseRef{ attachment_info.final, nullptr });
 
-			vuk::ImageAspectFlagBits aspect;
-			if (attachment_info.description.format == (VkFormat)vuk::Format::eD32Sfloat) {
-				aspect = vuk::ImageAspectFlagBits::eDepth;
-			} else {
-				aspect = vuk::ImageAspectFlagBits::eColor;
-			}
+			vuk::ImageAspectFlags aspect = format_to_aspect((vuk::Format)attachment_info.description.format);
 		
 			for (size_t i = 0; i < chain.size() - 1; i++) {
 				auto& left = chain[i];
@@ -903,13 +918,8 @@ namespace vuk {
 			ivci.format = vuk::Format(attachment_info.description.format);
 			ivci.viewType = vuk::ImageViewType::e2D;
 			vuk::ImageSubresourceRange isr;
-			vuk::ImageAspectFlagBits aspect;
-			if (ici.format == vuk::Format::eD32Sfloat) {
-				aspect = vuk::ImageAspectFlagBits::eDepth;
-			} else {
-				aspect = vuk::ImageAspectFlagBits::eColor;
-			}
-			isr.aspectMask = aspect;
+
+			isr.aspectMask = format_to_aspect(ici.format);
 			isr.baseArrayLayer = 0;
 			isr.layerCount = 1;
 			isr.baseMipLevel = 0;
@@ -971,7 +981,7 @@ namespace vuk {
 		cobuf.ongoing_renderpass = rpi;
 	}
 
-	VkCommandBuffer RenderGraph::execute(vuk::PerThreadContext& ptc, std::vector<std::pair<SwapChainRef, size_t>> swp_with_index, bool use_secondary_command_buffers) {
+	VkCommandBuffer RenderGraph::execute(vuk::PerThreadContext& ptc, std::vector<std::pair<SwapChainRef, size_t>> swp_with_index) {
 		// create framebuffers, create & bind attachments
 		for (auto& rp : rpis) {
 			if (rp.attachments.size() == 0)
@@ -1061,7 +1071,8 @@ namespace vuk {
 
 		CommandBuffer cobuf(*this, ptc, cbuf);
 		for (auto& rpass : rpis) {
-			begin_renderpass(rpass, cbuf, use_secondary_command_buffers);
+            bool use_secondary_command_buffers = rpass.subpasses[0].use_secondary_command_buffers;
+            begin_renderpass(rpass, cbuf, use_secondary_command_buffers);
 			for (size_t i = 0; i < rpass.subpasses.size(); i++) {
 				auto& sp = rpass.subpasses[i];
 				fill_renderpass_info(rpass, i, cobuf);
@@ -1076,22 +1087,41 @@ namespace vuk {
 					}
 				}
                 for(auto& p: sp.passes) {
-                    if(p->pass.execute) {
-						cobuf.current_pass = p;
-                        if(!p->pass.name.empty()) {
-                            //ptc.ctx.debug.begin_region(cobuf.command_buffer, sp.pass->pass.name);
-                            p->pass.execute(cobuf);
-                            //ptc.ctx.debug.end_region(cobuf.command_buffer);
-                        } else {
-                            p->pass.execute(cobuf);
+					// if pass requested no secondary cbufs, but due to subpass merging that is what we got
+					if (p->pass.use_secondary_command_buffers == false && use_secondary_command_buffers == true) {
+                        auto secondary = cobuf.begin_secondary();
+                        if(p->pass.execute) {
+                            secondary.current_pass = p;
+                            if(!p->pass.name.empty()) {
+                                //ptc.ctx.debug.begin_region(cobuf.command_buffer, sp.pass->pass.name);
+                                p->pass.execute(secondary);
+                                //ptc.ctx.debug.end_region(cobuf.command_buffer);
+                            } else {
+                                p->pass.execute(secondary);
+                            }
                         }
+                        auto result = secondary.get_buffer();
+                        cobuf.execute({&result, 1});
+                    } else {
+                        if(p->pass.execute) {
+                            cobuf.current_pass = p;
+                            if(!p->pass.name.empty()) {
+                                //ptc.ctx.debug.begin_region(cobuf.command_buffer, sp.pass->pass.name);
+                                p->pass.execute(cobuf);
+                                //ptc.ctx.debug.end_region(cobuf.command_buffer);
+                            } else {
+                                p->pass.execute(cobuf);
+                            }
+                        }
+
+                        cobuf.attribute_descriptions.clear();
+                        cobuf.binding_descriptions.clear();
+                        cobuf.set_bindings = {};
+                        cobuf.sets_used = {};
                     }
-                    cobuf.attribute_descriptions.clear();
-                    cobuf.binding_descriptions.clear();
-                    cobuf.set_bindings = {};
-                    cobuf.sets_used = {};
                 }
 				if (i < rpass.subpasses.size() - 1 && rpass.handle != VK_NULL_HANDLE) {
+                    use_secondary_command_buffers = rpass.subpasses[i + 1].use_secondary_command_buffers;
 					vkCmdNextSubpass(cbuf, use_secondary_command_buffers ? VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS : VK_SUBPASS_CONTENTS_INLINE);
 				}
 
@@ -1132,7 +1162,7 @@ namespace vuk {
     RenderGraph::RenderPassInfo::RenderPassInfo(arena& arena_) : INIT2(subpasses), INIT2(attachments) {
 	}
 
-    PassInfo::PassInfo(arena& arena_) : INIT2(inputs), INIT2(outputs), INIT2(global_inputs), INIT2(global_outputs) {}
+    PassInfo::PassInfo(arena& arena_, Pass&& p) : pass(std::move(p)) {}
 
     RenderGraph::SubpassInfo::SubpassInfo(arena& arena_) : INIT2(passes) {}
 	#undef INIT

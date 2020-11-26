@@ -269,8 +269,8 @@ namespace {
 				.resources = {"10_baby_renderer_final"_image(vuk::eColorWrite), "10_depth"_image(vuk::eDepthStencilRW)},
 				.execute = [uboVP, modelmats](vuk::CommandBuffer& command_buffer) {
 					command_buffer
-					  .set_viewport(0, vuk::Area::Framebuffer{})
-					  .set_scissor(0, vuk::Area::Framebuffer{});
+					  .set_viewport(0, vuk::Area::framebuffer())
+					  .set_scissor(0, vuk::Area::framebuffer());
 
 					for (auto i = 0; i < renderables.size(); i++) {
 						auto& r = renderables[i];

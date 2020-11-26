@@ -49,7 +49,7 @@ target_sources(vuk PRIVATE
 
 target_include_directories(vuk PUBLIC ext/plf_colony)
 target_include_directories(vuk PUBLIC ext/VulkanMemoryAllocator/src)
-target_include_directories(vuk PUBLIC ext/flat_hash_map)
+add_subdirectory(ext/robin-hood-hashing)
 target_include_directories(vuk PUBLIC ext/concurrentqueue)
 target_include_directories(vuk PUBLIC include)
 target_include_directories(vuk PUBLIC src/)
@@ -67,7 +67,7 @@ elseif(MSVC)
 	target_compile_options(vuk PRIVATE /std:c++latest /permissive- /Zc:char8_t-)
 endif()
 
-target_link_libraries(vuk PUBLIC spirv-cross-core)
+target_link_libraries(vuk PUBLIC spirv-cross-core robin_hood)
 target_link_libraries(vuk PUBLIC shaderc ${Vulkan_LIBRARIES})
 
 

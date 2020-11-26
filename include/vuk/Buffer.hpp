@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Types.hpp"
+#include <assert.h>
 
 namespace vuk {
     enum class BufferUsageFlagBits : VkBufferUsageFlags {

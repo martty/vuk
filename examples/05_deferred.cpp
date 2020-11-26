@@ -69,8 +69,8 @@ namespace {
 				.execute = [verts, uboVP, inds](vuk::CommandBuffer& command_buffer) {
 					// Rendering is the same as in the case for forward
 					command_buffer
-					  .set_viewport(0, vuk::Area::Framebuffer{})
-					  .set_scissor(0, vuk::Area::Framebuffer{})
+					  .set_viewport(0, vuk::Area::framebuffer())
+					  .set_scissor(0, vuk::Area::framebuffer())
 					  .bind_vertex_buffer(0, verts, 0, vuk::Packed{vuk::Format::eR32G32B32Sfloat, vuk::Format::eR32G32B32Sfloat, vuk::Ignore{offsetof(util::Vertex, uv_coordinates) - offsetof(util::Vertex, tangent)}, vuk::Format::eR32G32Sfloat})
 					  .bind_index_buffer(inds, vuk::IndexType::eUint32)
 					  .bind_graphics_pipeline("cube_deferred")
@@ -93,8 +93,8 @@ namespace {
 				.resources = {"05_deferred_final"_image(vuk::eColorWrite), "05_position"_image(vuk::eFragmentSampled), "05_normal"_image(vuk::eFragmentSampled), "05_color"_image(vuk::eFragmentSampled)},
 				.execute = [cam_pos](vuk::CommandBuffer& command_buffer) {
 					command_buffer
-					  .set_viewport(0, vuk::Area::Framebuffer{})
-					  .set_scissor(0, vuk::Area::Framebuffer{})
+					  .set_viewport(0, vuk::Area::framebuffer())
+					  .set_scissor(0, vuk::Area::framebuffer())
 					  .bind_graphics_pipeline("deferred_resolve");
 					// Set camera position so we can do lighting
 					*command_buffer.map_scratch_uniform_binding<glm::vec3>(0, 3) = cam_pos;

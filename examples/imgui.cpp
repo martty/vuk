@@ -49,7 +49,7 @@ vuk::Pass util::ImGui_ImplVuk_Render(vuk::PerThreadContext& ptc, vuk::Name src_t
 		}
 		command_buffer.bind_vertex_buffer(0, vertex, 0, vuk::Packed{ vuk::Format::eR32G32Sfloat, vuk::Format::eR32G32Sfloat, vuk::Format::eR8G8B8A8Unorm });
 		command_buffer.bind_graphics_pipeline("imgui");
-		command_buffer.set_viewport(0, vuk::Area::Framebuffer{});
+		command_buffer.set_viewport(0, vuk::Area::framebuffer());
 		struct PC {
 			float scale[2];
 			float translate[2];

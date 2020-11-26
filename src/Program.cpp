@@ -77,19 +77,26 @@ void reflect_members(const spirv_cross::Compiler& refl, const spirv_cross::SPIRT
 		vuk::Program::Member m;
 		auto spirtype = refl.get_type(t);
 		m.type = to_type(spirtype);
+		if (m.type == vuk::Program::Type::estruct) {
+            m.type_name = refl.get_name(t);
+		}
 		m.name = refl.get_member_name(type.self, i);
 		m.size = refl.get_declared_struct_member_size(type, i);
 		m.offset = refl.type_struct_member_offset(type, i);
+	
 		if (m.type == vuk::Program::Type::estruct) {
 			m.size = refl.get_declared_struct_size(spirtype);
 			reflect_members(refl, spirtype, m.members);
-		}
-		if (spirtype.array.size() > 0)
-			m.array_size = type.array[0];
-		else
-			m.array_size = 1;
-		members.push_back(m);
-	}
+        }
+
+        if(spirtype.array.size() > 0) {
+            m.array_size = spirtype.array[0];
+        } else {
+            m.array_size = 1;
+        }
+
+        members.push_back(m);
+    }
 }
 
 VkShaderStageFlagBits vuk::Program::introspect(const spirv_cross::Compiler& refl) {

@@ -844,6 +844,9 @@ namespace vuk {
 		eComputeWrite,
 		eComputeRW,
 		eComputeSampled,
+		eHostRead,
+		eHostWrite,
+		eHostRW,
 		eMemoryRead,
 		eMemoryWrite,
 		eMemoryRW

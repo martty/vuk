@@ -32,9 +32,9 @@
 [submodule "ext/tinygltf"]
 	path = ext/tinygltf
 	url = https://github.com/syoyo/tinygltf
-[submodule "ext/flat_hash_map"]
-	path = ext/flat_hash_map
-	url = https://github.com/skarupke/flat_hash_map
 [submodule "ext/concurrentqueue"]
 	path = ext/concurrentqueue
 	url = https://github.com/cameron314/concurrentqueue
+[submodule "ext/robin-hood-hashing"]
+	path = ext/robin-hood-hashing
+	url = https://github.com/martinus/robin-hood-hashing

@@ -64,8 +64,8 @@ namespace {
 				.resources = {"02_cube_final"_image(vuk::eColorWrite)},
 				.execute = [verts, uboVP, inds](vuk::CommandBuffer& command_buffer) {
 					command_buffer
-					  .set_viewport(0, vuk::Area::Framebuffer{}) // Set the viewport to cover the entire framebuffer
-					  .set_scissor(0, vuk::Area::Framebuffer{}) // Set the scissor area to cover the entire framebuffer
+					  .set_viewport(0, vuk::Area::framebuffer()) // Set the viewport to cover the entire framebuffer
+					  .set_scissor(0, vuk::Area::framebuffer()) // Set the scissor area to cover the entire framebuffer
 					  // The vertex format and the buffer used are bound together for this call
 					  // The format is specified here as vuk::Packed{}, meaning we are going to make a consecutive binding
 					  // For each element in the list, a vuk::Format signifies a binding

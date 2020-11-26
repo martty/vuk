@@ -37,10 +37,10 @@ inline void hash_combine(size_t& seed, const T& v) {
 	seed ^= hasher(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
 }
 template <typename T, typename... Rest>
-inline void hash_combine(size_t& seed, const T& v, Rest... rest) {
+inline void hash_combine(size_t& seed, const T& v, Rest&&... rest) {
 	std::hash<T> hasher;
 	seed ^= hasher(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-	hash_combine(seed, rest...);
+	hash_combine(seed, std::forward<Rest>(rest)...);
 }
 
 template<typename E>

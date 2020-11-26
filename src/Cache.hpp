@@ -12,7 +12,7 @@
 #include <optional>
 #include <span>
 #include <vector>
-#include <unordered_map.hpp>
+#include "robin_hood.h" 
 #include <atomic>
 
 namespace std {
@@ -311,7 +311,7 @@ namespace vuk {
 
 		Context& ctx;
 		plf::colony<T> pool;
-		ska::unordered_map<create_info_t<T>, LRUEntry> lru_map; // possibly vector_map or an intrusive map
+		robin_hood::unordered_map<create_info_t<T>, LRUEntry> lru_map; // possibly vector_map or an intrusive map
 		std::shared_mutex cache_mtx;
 	public:
 		Cache(Context& ctx) : ctx(ctx) {}
@@ -395,7 +395,7 @@ namespace vuk {
 
 		Context& ctx;
 		struct PerFrame {
-			ska::unordered_map<create_info_t<T>, LRUEntry> lru_map;
+			robin_hood::unordered_map<create_info_t<T>, LRUEntry> lru_map;
             std::array<std::vector<T>, 32> per_thread_append_v;
             std::array<std::vector<create_info_t<T>>, 32> per_thread_append_k;
 			
