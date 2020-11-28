@@ -119,10 +119,10 @@ vuk::Unique<vuk::ImageView> vuk::PerThreadContext::create_image_view(vuk::ImageV
 	return vuk::Unique<vuk::ImageView>(ctx, ctx.wrap(iv));
 }
 
-std::pair<vuk::Texture, vuk::TransferStub> vuk::PerThreadContext::create_texture(vuk::Format format, vuk::Extent3D extents, void* data) {
+std::pair<vuk::Texture, vuk::TransferStub> vuk::PerThreadContext::create_texture(vuk::Format format, vuk::Extent3D extent, void* data) {
 	vuk::ImageCreateInfo ici;
 	ici.format = format;
-	ici.extent = extents;
+	ici.extent = extent;
 	ici.samples = vuk::Samples::e1;
 	ici.imageType = vuk::ImageType::e2D;
 	ici.initialLayout = vuk::ImageLayout::eUndefined;
@@ -130,7 +130,7 @@ std::pair<vuk::Texture, vuk::TransferStub> vuk::PerThreadContext::create_texture
 	ici.usage = vuk::ImageUsageFlagBits::eTransferSrc | vuk::ImageUsageFlagBits::eTransferDst | vuk::ImageUsageFlagBits::eSampled;
 	ici.mipLevels = ici.arrayLayers = 1;
 	auto tex = ctx.allocate_texture(ici);
-	auto stub = upload(*tex.image, format, extents, 0, std::span<std::byte>((std::byte*)data, extents.width * extents.height * extents.depth * format_to_texel_block_size(format)), false);
+	auto stub = upload(*tex.image, format, extent, 0, std::span<std::byte>((std::byte*)data, compute_image_size(format, extent)), false);
 	return { std::move(tex), stub };
 }
 

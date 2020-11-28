@@ -74,8 +74,6 @@ namespace vuk {
 	inline constexpr AccessFlags operator^(AccessFlagBits bit0, AccessFlagBits bit1) noexcept {
 		return AccessFlags(bit0) ^ bit1;
 	}
-
-	size_t format_to_size(vuk::Format) noexcept;
 }
 
 inline vuk::ImageResource operator "" _image(const char* name, size_t) {

@@ -437,7 +437,7 @@ namespace vuk {
 		vuk::Samples sample_count;
 	};
 
-	inline vuk::ImageAspectFlags format_to_aspect(vuk::Format format) {
+	inline vuk::ImageAspectFlags format_to_aspect(vuk::Format format) noexcept {
         switch(format) {
             case vuk::Format::eD16Unorm:
             case vuk::Format::eD32Sfloat:
@@ -454,5 +454,10 @@ namespace vuk {
         }
     }
 
-	size_t format_to_texel_block_size(vuk::Format format) noexcept;
+	// return the texel block size of a format
+	uint32_t format_to_texel_block_size(vuk::Format) noexcept;
+	// return the 3D texel block extent of a format
+	Extent3D format_to_texel_block_extent(vuk::Format) noexcept;
+	// compute the byte size of an image with given format and extent
+	uint32_t compute_image_size(vuk::Format, vuk::Extent3D) noexcept;
 };
