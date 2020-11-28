@@ -119,7 +119,7 @@ namespace {
 			
 			rg.mark_attachment_internal("08_rtt", runner.swapchain->format, vuk::Extent2D{(unsigned)x, (unsigned)y}, vuk::Samples::e1, vuk::ClearColor{ 0.f, 0.f, 0.f, 0.f });
 			// we bind our externally managed buffer to the rendergraph
-			rg.bind_buffer("08_scramble", scramble_buf.get());
+			rg.bind_buffer("08_scramble", scramble_buf.get(), vuk::eNone, vuk::eNone);
 			return rg;
 		},
 		.cleanup = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
