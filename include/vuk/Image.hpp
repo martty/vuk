@@ -453,4 +453,6 @@ namespace vuk {
                 return vuk::ImageAspectFlagBits::eColor;
         }
     }
+
+	size_t format_to_texel_block_size(vuk::Format format) noexcept;
 };

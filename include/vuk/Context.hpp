@@ -220,9 +220,11 @@ namespace vuk {
 		}
 
 		template<class T>
-		TransferStub upload(vuk::Image dst, vuk::Extent3D extent, uint32_t base_layer, std::span<T> data, bool generate_mips) {
+		TransferStub upload(vuk::Image dst, vuk::Format format, vuk::Extent3D extent, uint32_t base_layer, std::span<T> data, bool generate_mips) {
 			assert(!data.empty());
-			auto staging = _allocate_scratch_buffer(MemoryUsage::eCPUonly, vuk::BufferUsageFlagBits::eTransferSrc, sizeof(T) * data.size(), 1, true);
+			// compute staging buffer alignment as texel block size
+			size_t alignment = format_to_texel_block_size(format);
+			auto staging = _allocate_scratch_buffer(MemoryUsage::eCPUonly, vuk::BufferUsageFlagBits::eTransferSrc, sizeof(T) * data.size(), alignment, true);
 			::memcpy(staging.mapped_ptr, data.data(), sizeof(T) * data.size());
 
 			return ifc.enqueue_transfer(staging, dst, extent, base_layer, generate_mips);

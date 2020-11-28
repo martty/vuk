@@ -51,10 +51,10 @@ namespace vuk {
 		case eTransferDst:
 		case eComputeWrite:
 		case eComputeRW:
-        case eHostWrite:
-        case eHostRW:
-        case eMemoryWrite:
-        case eMemoryRW:
+		case eHostWrite:
+		case eHostRW:
+		case eMemoryWrite:
+		case eMemoryRW:
 			return true;
 		default:
 			return false;
@@ -73,11 +73,11 @@ namespace vuk {
 		case eTransferSrc:
 		case eComputeRead:
 		case eComputeSampled:
-        case eComputeRW:
-        case eHostRead:
-        case eHostRW:
-        case eMemoryRead:
-        case eMemoryRW:
+		case eComputeRW:
+		case eHostRead:
+		case eHostRW:
+		case eMemoryRead:
+		case eMemoryRW:
 			return true;
 		default:
 			return false;
@@ -91,8 +91,8 @@ namespace vuk {
 		case eColorRW: return { vuk::PipelineStageFlagBits::eColorAttachmentOutput, vuk::AccessFlagBits::eColorAttachmentWrite | vuk::AccessFlagBits::eColorAttachmentRead, vuk::ImageLayout::eColorAttachmentOptimal };
 		case eColorResolveRead:
 		case eColorRead: return { vuk::PipelineStageFlagBits::eColorAttachmentOutput, vuk::AccessFlagBits::eColorAttachmentRead, vuk::ImageLayout::eColorAttachmentOptimal };
-		case eDepthStencilRW : return { vuk::PipelineStageFlagBits::eEarlyFragmentTests | vuk::PipelineStageFlagBits::eLateFragmentTests, vuk::AccessFlagBits::eDepthStencilAttachmentRead | vuk::AccessFlagBits::eDepthStencilAttachmentWrite, vuk::ImageLayout::eDepthStencilAttachmentOptimal };
-		
+		case eDepthStencilRW: return { vuk::PipelineStageFlagBits::eEarlyFragmentTests | vuk::PipelineStageFlagBits::eLateFragmentTests, vuk::AccessFlagBits::eDepthStencilAttachmentRead | vuk::AccessFlagBits::eDepthStencilAttachmentWrite, vuk::ImageLayout::eDepthStencilAttachmentOptimal };
+
 		case eFragmentSampled: return { vuk::PipelineStageFlagBits::eFragmentShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eShaderReadOnlyOptimal };
 		case eFragmentRead: return { vuk::PipelineStageFlagBits::eFragmentShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eShaderReadOnlyOptimal };
 
@@ -107,22 +107,22 @@ namespace vuk {
 		case eAttributeRead: return { vuk::PipelineStageFlagBits::eVertexInput, vuk::AccessFlagBits::eVertexAttributeRead, vuk::ImageLayout::eGeneral /* ignored */ };
 
 		case eHostRead:
-            return {vuk::PipelineStageFlagBits::eHost, vuk::AccessFlagBits::eHostRead, vuk::ImageLayout::eGeneral};
-        case eHostWrite:
-            return {vuk::PipelineStageFlagBits::eHost, vuk::AccessFlagBits::eHostWrite, vuk::ImageLayout::eGeneral};
-        case eHostRW:
-            return {vuk::PipelineStageFlagBits::eHost, vuk::AccessFlagBits::eHostRead | vuk::AccessFlagBits::eHostWrite, vuk::ImageLayout::eGeneral};
+			return { vuk::PipelineStageFlagBits::eHost, vuk::AccessFlagBits::eHostRead, vuk::ImageLayout::eGeneral };
+		case eHostWrite:
+			return { vuk::PipelineStageFlagBits::eHost, vuk::AccessFlagBits::eHostWrite, vuk::ImageLayout::eGeneral };
+		case eHostRW:
+			return { vuk::PipelineStageFlagBits::eHost, vuk::AccessFlagBits::eHostRead | vuk::AccessFlagBits::eHostWrite, vuk::ImageLayout::eGeneral };
 
 		case eMemoryRead: return { vuk::PipelineStageFlagBits::eBottomOfPipe, vuk::AccessFlagBits::eMemoryRead, vuk::ImageLayout::eGeneral };
 		case eMemoryWrite: return { vuk::PipelineStageFlagBits::eBottomOfPipe, vuk::AccessFlagBits::eMemoryWrite, vuk::ImageLayout::eGeneral };
 		case eMemoryRW: return { vuk::PipelineStageFlagBits::eBottomOfPipe, vuk::AccessFlagBits::eMemoryRead | vuk::AccessFlagBits::eMemoryWrite, vuk::ImageLayout::eGeneral };
 
 		case eNone:
-            return {vuk::PipelineStageFlagBits::eTopOfPipe, vuk::AccessFlagBits{}, vuk::ImageLayout::eUndefined};
-        case eClear:
-            return {vuk::PipelineStageFlagBits::eColorAttachmentOutput, vuk::AccessFlagBits::eColorAttachmentWrite, vuk::ImageLayout::ePreinitialized};
+			return { vuk::PipelineStageFlagBits::eTopOfPipe, vuk::AccessFlagBits{}, vuk::ImageLayout::eUndefined };
+		case eClear:
+			return { vuk::PipelineStageFlagBits::eColorAttachmentOutput, vuk::AccessFlagBits::eColorAttachmentWrite, vuk::ImageLayout::ePreinitialized };
 		case eTransferClear:
-            return {vuk::PipelineStageFlagBits::eTransfer, vuk::AccessFlagBits::eTransferWrite, vuk::ImageLayout::eTransferDstOptimal};
+			return { vuk::PipelineStageFlagBits::eTransfer, vuk::AccessFlagBits::eTransferWrite, vuk::ImageLayout::eTransferDstOptimal };
 		default:
 			assert(0 && "NYI");
 			return {};
@@ -207,6 +207,279 @@ namespace vuk {
 		}
 	}
 
+	size_t format_to_texel_block_size(vuk::Format format) noexcept {
+		switch (format) {
+		case vuk::Format::eR4G4UnormPack8:
+		case vuk::Format::eR8Unorm:
+		case vuk::Format::eR8Snorm:
+		case vuk::Format::eR8Uscaled:
+		case vuk::Format::eR8Sscaled:
+		case vuk::Format::eR8Uint:
+		case vuk::Format::eR8Sint:
+		case vuk::Format::eR8Srgb:
+			return 1;
+		case vuk::Format::eR4G4B4A4UnormPack16:
+		case vuk::Format::eB4G4R4A4UnormPack16:
+		case vuk::Format::eR5G6B5UnormPack16:
+		case vuk::Format::eB5G6R5UnormPack16:
+		case vuk::Format::eR5G5B5A1UnormPack16:
+		case vuk::Format::eB5G5R5A1UnormPack16:
+		case vuk::Format::eA1R5G5B5UnormPack16:
+		case vuk::Format::eR8G8Unorm:
+		case vuk::Format::eR8G8Snorm:
+		case vuk::Format::eR8G8Uscaled:
+		case vuk::Format::eR8G8Sscaled:
+		case vuk::Format::eR8G8Uint:
+		case vuk::Format::eR8G8Sint:
+		case vuk::Format::eR8G8Srgb:
+		case vuk::Format::eR16Unorm:
+		case vuk::Format::eR16Snorm:
+		case vuk::Format::eR16Uscaled:
+		case vuk::Format::eR16Sscaled:
+		case vuk::Format::eR16Uint:
+		case vuk::Format::eR16Sint:
+		case vuk::Format::eR16Sfloat:
+		case vuk::Format::eR10X6UnormPack16:
+		case vuk::Format::eR12X4UnormPack16:
+			return 2;
+		case vuk::Format::eR8G8B8Unorm:
+		case vuk::Format::eR8G8B8Snorm:
+		case vuk::Format::eR8G8B8Uscaled:
+		case vuk::Format::eR8G8B8Sscaled:
+		case vuk::Format::eR8G8B8Uint:
+		case vuk::Format::eR8G8B8Sint:
+		case vuk::Format::eR8G8B8Srgb:
+		case vuk::Format::eB8G8R8Unorm:
+		case vuk::Format::eB8G8R8Snorm:
+		case vuk::Format::eB8G8R8Uscaled:
+		case vuk::Format::eB8G8R8Sscaled:
+		case vuk::Format::eB8G8R8Uint:
+		case vuk::Format::eB8G8R8Sint:
+		case vuk::Format::eB8G8R8Srgb:
+			return 3;
+		case vuk::Format::eR8G8B8A8Unorm:
+		case vuk::Format::eR8G8B8A8Snorm:
+		case vuk::Format::eR8G8B8A8Uscaled:
+		case vuk::Format::eR8G8B8A8Sscaled:
+		case vuk::Format::eR8G8B8A8Uint:
+		case vuk::Format::eR8G8B8A8Sint:
+		case vuk::Format::eR8G8B8A8Srgb:
+		case vuk::Format::eB8G8R8A8Unorm:
+		case vuk::Format::eB8G8R8A8Snorm:
+		case vuk::Format::eB8G8R8A8Uscaled:
+		case vuk::Format::eB8G8R8A8Sscaled:
+		case vuk::Format::eB8G8R8A8Uint:
+		case vuk::Format::eB8G8R8A8Sint:
+		case vuk::Format::eB8G8R8A8Srgb:
+		case vuk::Format::eA8B8G8R8UnormPack32:
+		case vuk::Format::eA8B8G8R8SnormPack32:
+		case vuk::Format::eA8B8G8R8UscaledPack32:
+		case vuk::Format::eA8B8G8R8SscaledPack32:
+		case vuk::Format::eA8B8G8R8UintPack32:
+		case vuk::Format::eA8B8G8R8SintPack32:
+		case vuk::Format::eA8B8G8R8SrgbPack32:
+		case vuk::Format::eA2R10G10B10UnormPack32:
+		case vuk::Format::eA2R10G10B10SnormPack32:
+		case vuk::Format::eA2R10G10B10UscaledPack32:
+		case vuk::Format::eA2R10G10B10SscaledPack32:
+		case vuk::Format::eA2R10G10B10UintPack32:
+		case vuk::Format::eA2R10G10B10SintPack32:
+		case vuk::Format::eA2B10G10R10UnormPack32:
+		case vuk::Format::eA2B10G10R10SnormPack32:
+		case vuk::Format::eA2B10G10R10UscaledPack32:
+		case vuk::Format::eA2B10G10R10SscaledPack32:
+		case vuk::Format::eA2B10G10R10UintPack32:
+		case vuk::Format::eA2B10G10R10SintPack32:
+		case vuk::Format::eR16G16Unorm:
+		case vuk::Format::eR16G16Snorm:
+		case vuk::Format::eR16G16Uscaled:
+		case vuk::Format::eR16G16Sscaled:
+		case vuk::Format::eR16G16Uint:
+		case vuk::Format::eR16G16Sint:
+		case vuk::Format::eR16G16Sfloat:
+		case vuk::Format::eR32Uint:
+		case vuk::Format::eR32Sint:
+		case vuk::Format::eR32Sfloat:
+		case vuk::Format::eB10G11R11UfloatPack32:
+		case vuk::Format::eE5B9G9R9UfloatPack32:
+		case vuk::Format::eR10X6G10X6Unorm2Pack16:
+		case vuk::Format::eR12X4G12X4Unorm2Pack16:
+			return 4;
+		case vuk::Format::eG8B8G8R8422Unorm:
+			return 4;
+		case vuk::Format::eB8G8R8G8422Unorm:
+			return 4;
+		case vuk::Format::eR16G16B16Unorm:
+		case vuk::Format::eR16G16B16Snorm:
+		case vuk::Format::eR16G16B16Uscaled:
+		case vuk::Format::eR16G16B16Sscaled:
+		case vuk::Format::eR16G16B16Uint:
+		case vuk::Format::eR16G16B16Sint:
+		case vuk::Format::eR16G16B16Sfloat:
+			return 6;
+		case vuk::Format::eR16G16B16A16Unorm:
+		case vuk::Format::eR16G16B16A16Snorm:
+		case vuk::Format::eR16G16B16A16Uscaled:
+		case vuk::Format::eR16G16B16A16Sscaled:
+		case vuk::Format::eR16G16B16A16Uint:
+		case vuk::Format::eR16G16B16A16Sint:
+		case vuk::Format::eR16G16B16A16Sfloat:
+		case vuk::Format::eR32G32Uint:
+		case vuk::Format::eR32G32Sint:
+		case vuk::Format::eR32G32Sfloat:
+		case vuk::Format::eR64Uint:
+		case vuk::Format::eR64Sint:
+		case vuk::Format::eR64Sfloat:
+			return 8;
+		case vuk::Format::eR10X6G10X6B10X6A10X6Unorm4Pack16:
+			return 8;
+		case vuk::Format::eG10X6B10X6G10X6R10X6422Unorm4Pack16:
+			return 8;
+		case vuk::Format::eB10X6G10X6R10X6G10X6422Unorm4Pack16:
+			return 8;
+		case vuk::Format::eR12X4G12X4B12X4A12X4Unorm4Pack16:
+			return 8;
+		case vuk::Format::eG12X4B12X4G12X4R12X4422Unorm4Pack16:
+			return 8;
+		case vuk::Format::eB12X4G12X4R12X4G12X4422Unorm4Pack16:
+			return 8;
+		case vuk::Format::eG16B16G16R16422Unorm:
+			return 8;
+		case vuk::Format::eB16G16R16G16422Unorm:
+			return 8;
+		case vuk::Format::eR32G32B32Uint:
+		case vuk::Format::eR32G32B32Sint:
+		case vuk::Format::eR32G32B32Sfloat:
+			return 12;
+		case vuk::Format::eR32G32B32A32Uint:
+		case vuk::Format::eR32G32B32A32Sint:
+		case vuk::Format::eR32G32B32A32Sfloat:
+		case vuk::Format::eR64G64Uint:
+		case vuk::Format::eR64G64Sint:
+		case vuk::Format::eR64G64Sfloat:
+			return 16;
+		case vuk::Format::eR64G64B64Uint:
+		case vuk::Format::eR64G64B64Sint:
+		case vuk::Format::eR64G64B64Sfloat:
+			return 24;
+		case vuk::Format::eR64G64B64A64Uint:
+		case vuk::Format::eR64G64B64A64Sint:
+		case vuk::Format::eR64G64B64A64Sfloat:
+			return 32;
+		case vuk::Format::eBc1RgbUnormBlock:
+		case vuk::Format::eBc1RgbSrgbBlock:
+			return 8;
+		case vuk::Format::eBc1RgbaUnormBlock:
+		case vuk::Format::eBc1RgbaSrgbBlock:
+			return 8;
+		case vuk::Format::eBc2UnormBlock:
+		case vuk::Format::eBc2SrgbBlock:
+			return 16;
+		case vuk::Format::eBc3UnormBlock:
+		case vuk::Format::eBc3SrgbBlock:
+			return 16;
+		case vuk::Format::eBc4UnormBlock:
+		case vuk::Format::eBc4SnormBlock:
+			return 8;
+		case vuk::Format::eBc5UnormBlock:
+		case vuk::Format::eBc5SnormBlock:
+			return 16;
+		case vuk::Format::eBc6HUfloatBlock:
+		case vuk::Format::eBc6HSfloatBlock:
+			return 16;
+		case vuk::Format::eBc7UnormBlock:
+		case vuk::Format::eBc7SrgbBlock:
+			return 16;
+		case vuk::Format::eEtc2R8G8B8UnormBlock:
+		case vuk::Format::eEtc2R8G8B8SrgbBlock:
+			return 8;
+		case vuk::Format::eEtc2R8G8B8A1UnormBlock:
+		case vuk::Format::eEtc2R8G8B8A1SrgbBlock:
+			return 8;
+		case vuk::Format::eEtc2R8G8B8A8UnormBlock:
+		case vuk::Format::eEtc2R8G8B8A8SrgbBlock:
+			return 8;
+		case vuk::Format::eEacR11UnormBlock:
+		case vuk::Format::eEacR11SnormBlock:
+			return 8;
+		case vuk::Format::eEacR11G11UnormBlock:
+		case vuk::Format::eEacR11G11SnormBlock:
+			return 16;
+		case vuk::Format::eAstc4x4UnormBlock:
+		case vuk::Format::eAstc4x4SfloatBlockEXT:
+		case vuk::Format::eAstc4x4SrgbBlock:
+			return 16;
+		case vuk::Format::eAstc5x4UnormBlock:
+		case vuk::Format::eAstc5x4SfloatBlockEXT:
+		case vuk::Format::eAstc5x4SrgbBlock:
+			return 16;
+		case vuk::Format::eAstc5x5UnormBlock:
+		case vuk::Format::eAstc5x5SfloatBlockEXT:
+		case vuk::Format::eAstc5x5SrgbBlock:
+			return 16;
+		case vuk::Format::eAstc6x5UnormBlock:
+		case vuk::Format::eAstc6x5SfloatBlockEXT:
+		case vuk::Format::eAstc6x5SrgbBlock:
+			return 16;
+		case vuk::Format::eAstc6x6UnormBlock:
+		case vuk::Format::eAstc6x6SfloatBlockEXT:
+		case vuk::Format::eAstc6x6SrgbBlock:
+			return 16;
+		case vuk::Format::eAstc8x5UnormBlock:
+		case vuk::Format::eAstc8x5SfloatBlockEXT:
+		case vuk::Format::eAstc8x5SrgbBlock:
+			return 16;
+		case vuk::Format::eAstc8x6UnormBlock:
+		case vuk::Format::eAstc8x6SfloatBlockEXT:
+		case vuk::Format::eAstc8x6SrgbBlock:
+			return 16;
+		case vuk::Format::eAstc8x8UnormBlock:
+		case vuk::Format::eAstc8x8SfloatBlockEXT:
+		case vuk::Format::eAstc8x8SrgbBlock:
+			return 16;
+		case vuk::Format::eAstc10x5UnormBlock:
+		case vuk::Format::eAstc10x5SfloatBlockEXT:
+		case vuk::Format::eAstc10x5SrgbBlock:
+			return 16;
+		case vuk::Format::eAstc10x6UnormBlock:
+		case vuk::Format::eAstc10x6SfloatBlockEXT:
+		case vuk::Format::eAstc10x6SrgbBlock:
+			return 16;
+		case vuk::Format::eAstc10x8UnormBlock:
+		case vuk::Format::eAstc10x8SfloatBlockEXT:
+		case vuk::Format::eAstc10x8SrgbBlock:
+			return 16;
+		case vuk::Format::eAstc10x10UnormBlock:
+		case vuk::Format::eAstc10x10SfloatBlockEXT:
+		case vuk::Format::eAstc10x10SrgbBlock:
+			return 16;
+		case vuk::Format::eAstc12x10UnormBlock:
+		case vuk::Format::eAstc12x10SfloatBlockEXT:
+		case vuk::Format::eAstc12x10SrgbBlock:
+			return 16;
+		case vuk::Format::eAstc12x12UnormBlock:
+		case vuk::Format::eAstc12x12SfloatBlockEXT:
+		case vuk::Format::eAstc12x12SrgbBlock:
+			return 16;
+		case vuk::Format::eD16Unorm:
+			return 2;
+		case vuk::Format::eX8D24UnormPack32:
+			return 4;
+		case vuk::Format::eD32Sfloat:
+			return 4;
+		case vuk::Format::eS8Uint:
+			return 1;
+		case vuk::Format::eD16UnormS8Uint:
+			return 3;
+		case vuk::Format::eD24UnormS8Uint:
+			return 4;
+		case vuk::Format::eD32SfloatS8Uint:
+			return 5;
+		default:
+			assert(0 && "format cannot be used with this function.");
+		}
+	}
+
 	uint32_t Ignore::to_size() {
 		if (bytes != 0) return bytes;
 		return (uint32_t)format_to_size(format);
@@ -220,14 +493,14 @@ namespace vuk {
 #define INIT(x) x(decltype(x)::allocator_type(*arena_))
 #define INIT2(x) x(decltype(x)::allocator_type(arena_))
 
-	RenderGraph::RenderGraph() : arena_(new arena(1024*128)), INIT(head_passes), INIT(tail_passes), INIT(global_io), INIT(rpis) {
-        passes.reserve(64);
+	RenderGraph::RenderGraph() : arena_(new arena(1024 * 128)), INIT(head_passes), INIT(tail_passes), INIT(global_io), INIT(rpis) {
+		passes.reserve(64);
 	}
 
-    // determine rendergraph inputs and outputs, and resources that are neither
+	// determine rendergraph inputs and outputs, and resources that are neither
 	void RenderGraph::build_io() {
-        std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 8>> inputs{*arena_};
-        std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 8>> outputs{*arena_};
+		std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 8>> inputs{ *arena_ };
+		std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 8>> outputs{ *arena_ };
 
 		for (auto& pif : passes) {
 			for (auto& res : pif.pass.resources) {
@@ -238,7 +511,7 @@ namespace vuk {
 					pif.outputs.insert(res);
 				}
 			}
-		
+
 			for (auto& i : pif.inputs) {
 				if (global_outputs.erase(i) == 0) {
 					pif.global_inputs.insert(i);
@@ -281,26 +554,26 @@ namespace vuk {
 				bool could_execute_after = false;
 				bool could_execute_before = false;
 				for (auto& o : p1.outputs) {
-					for (auto& i : p2.inputs){
-						if(i.hash_src_name == o.hash_use_name)
+					for (auto& i : p2.inputs) {
+						if (i.hash_src_name == o.hash_use_name)
 							could_execute_after = true;
 					}
 				}
 				for (auto& o : p2.outputs) {
-					for (auto& i : p1.inputs){
-						if(i.hash_src_name == o.hash_use_name)
+					for (auto& i : p1.inputs) {
+						if (i.hash_src_name == o.hash_use_name)
 							could_execute_before = true;
 					}
 				}
 				if (!could_execute_after && !could_execute_before && p1.outputs == p2.outputs) {
-                    return p1.pass.auxiliary_order < p2.pass.auxiliary_order;
+					return p1.pass.auxiliary_order < p2.pass.auxiliary_order;
 				}
 
 				if (could_execute_after && could_execute_before) {
 					return p1.pass.auxiliary_order < p2.pass.auxiliary_order;
 				} else if (could_execute_after) {
 					return true;
-				} else 
+				} else
 					return false;
 				});
 		}
@@ -323,9 +596,9 @@ namespace vuk {
 				if (res.src_name != res.use_name) {
 					aliases[res.use_name] = res.src_name;
 				}
-                auto it = use_chains.find(resolve_name(res.use_name, aliases));
+				auto it = use_chains.find(resolve_name(res.use_name, aliases));
 				if (it == use_chains.end()) {
-                    it = use_chains.emplace(resolve_name(res.use_name, aliases), std::vector<UseRef, short_alloc<UseRef, 64>>{short_alloc<UseRef, 64>{*arena_}}).first;
+					it = use_chains.emplace(resolve_name(res.use_name, aliases), std::vector<UseRef, short_alloc<UseRef, 64>>{short_alloc<UseRef, 64>{*arena_}}).first;
 				}
 				it->second.emplace_back(UseRef{ to_use(res.ia), &passinfo });
 			}
@@ -334,20 +607,20 @@ namespace vuk {
 		// we need to collect passes into framebuffers, which will determine the renderpasses
 		using attachment_set = std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>>;
 		using passinfo_vec = std::vector<PassInfo*, short_alloc<PassInfo*, 16>>;
-        std::vector<std::pair<attachment_set, passinfo_vec>, short_alloc<std::pair<attachment_set, passinfo_vec>, 8>> attachment_sets{*arena_};
+		std::vector<std::pair<attachment_set, passinfo_vec>, short_alloc<std::pair<attachment_set, passinfo_vec>, 8>> attachment_sets{ *arena_ };
 		for (auto& passinfo : passes) {
-            attachment_set atts{*arena_};
+			attachment_set atts{ *arena_ };
 
 			for (auto& res : passinfo.pass.resources) {
-				if(is_framebuffer_attachment(res))
+				if (is_framebuffer_attachment(res))
 					atts.insert(res);
 			}
-		
+
 			if (auto p = attachment_sets.size() > 0 && attachment_sets.back().first == atts ? &attachment_sets.back() : nullptr) {
 				p->second.push_back(&passinfo);
 			} else {
-                passinfo_vec pv{*arena_};
-                pv.push_back(&passinfo);
+				passinfo_vec pv{ *arena_ };
+				pv.push_back(&passinfo);
 				attachment_sets.emplace_back(atts, pv);
 			}
 		}
@@ -356,26 +629,26 @@ namespace vuk {
 		// tell passes in which renderpass/subpass they will execute
 		rpis.reserve(attachment_sets.size());
 		for (auto& [attachments, passes] : attachment_sets) {
-            RenderPassInfo rpi{*arena_};
+			RenderPassInfo rpi{ *arena_ };
 			auto rpi_index = rpis.size();
 
 			int32_t subpass = -1;
 			for (auto& p : passes) {
 				p->render_pass_index = rpi_index;
 				if (rpi.subpasses.size() > 0) {
-                    auto& last_pass = rpi.subpasses.back().passes[0];
+					auto& last_pass = rpi.subpasses.back().passes[0];
 					// if the pass has the same inputs and outputs, we execute them on the same subpass
-                    if(last_pass->inputs == p->inputs && last_pass->outputs == p->outputs) {
-                        p->subpass = last_pass->subpass;
-                        rpi.subpasses.back().passes.push_back(p);
+					if (last_pass->inputs == p->inputs && last_pass->outputs == p->outputs) {
+						p->subpass = last_pass->subpass;
+						rpi.subpasses.back().passes.push_back(p);
 						// potentially upgrade to secondary cbufs
-                        rpi.subpasses.back().use_secondary_command_buffers |= p->pass.use_secondary_command_buffers;
-                        continue;
-                    }
+						rpi.subpasses.back().use_secondary_command_buffers |= p->pass.use_secondary_command_buffers;
+						continue;
+					}
 				}
-                SubpassInfo si{*arena_};
-                si.passes = {p};
-                si.use_secondary_command_buffers = p->pass.use_secondary_command_buffers;
+				SubpassInfo si{ *arena_ };
+				si.passes = { p };
+				si.use_secondary_command_buffers = p->pass.use_secondary_command_buffers;
 				p->subpass = ++subpass;
 				rpi.subpasses.push_back(si);
 			}
@@ -405,9 +678,9 @@ namespace vuk {
 		attachment_info.swapchain = swp;
 		attachment_info.should_clear = true;
 		attachment_info.clear_value = c;
-		
+
 		Resource::Use& initial = attachment_info.initial;
-		Resource::Use& final = attachment_info.final;
+		Resource::Use & final = attachment_info.final;
 		// for WSI, we want to wait for colourattachmentoutput
 		// we don't care about any writes, we will clear
 		initial.access = vuk::AccessFlags{};
@@ -439,7 +712,7 @@ namespace vuk {
 		attachment_info.should_clear = true;
 		attachment_info.clear_value = c;
 		Resource::Use& initial = attachment_info.initial;
-		Resource::Use& final = attachment_info.final;
+		Resource::Use & final = attachment_info.final;
 		initial.access = vuk::AccessFlags{};
 		initial.stages = vuk::PipelineStageFlagBits::eTopOfPipe;
 		// for internal attachments we don't want to preserve previous data
@@ -466,7 +739,7 @@ namespace vuk {
 		attachment_info.should_clear = true;
 		attachment_info.clear_value = c;
 		Resource::Use& initial = attachment_info.initial;
-		Resource::Use& final = attachment_info.final;
+		Resource::Use & final = attachment_info.final;
 		initial.access = vuk::AccessFlags{};
 		initial.stages = vuk::PipelineStageFlagBits::eTopOfPipe;
 		// for internal attachments we don't want to preserve previous data
@@ -487,33 +760,33 @@ namespace vuk {
 				vuk::Resource{resolved_name, resolved_name, vuk::Resource::Type::eImage, vuk::eColorResolveWrite}
 			},
 			.resolves = {{ms_name, resolved_name}}
-		});
+			});
 	}
 
 	void RenderGraph::bind_buffer(Name name, vuk::Buffer buf, Access initial, Access final) {
-		BufferInfo buf_info{.name = name, .initial = to_use(initial), .final = to_use(final), .buffer = buf};
+		BufferInfo buf_info{ .name = name, .initial = to_use(initial), .final = to_use(final), .buffer = buf };
 		bound_buffers.emplace(name, buf_info);
 	}
 
 	void RenderGraph::bind_attachment(Name name, Attachment att, Access initial_acc, Access final_acc) {
-        AttachmentRPInfo attachment_info;
-        attachment_info.sizing = AttachmentRPInfo::Sizing::eAbsolute;
-        attachment_info.extents = att.extent;
-        attachment_info.image = att.image;
-        attachment_info.iv = att.image_view;
+		AttachmentRPInfo attachment_info;
+		attachment_info.sizing = AttachmentRPInfo::Sizing::eAbsolute;
+		attachment_info.extents = att.extent;
+		attachment_info.image = att.image;
+		attachment_info.iv = att.image_view;
 
-        attachment_info.type = AttachmentRPInfo::Type::eExternal;
-        attachment_info.description.format = (VkFormat)att.format;
-        attachment_info.samples = att.sample_count;
+		attachment_info.type = AttachmentRPInfo::Type::eExternal;
+		attachment_info.description.format = (VkFormat)att.format;
+		attachment_info.samples = att.sample_count;
 
-        attachment_info.should_clear = initial_acc == Access::eClear; // if initial access was clear, we will clear
-        attachment_info.clear_value = att.clear_value;
-        Resource::Use& initial = attachment_info.initial;
-        Resource::Use& final = attachment_info.final;
-        initial = to_use(initial_acc);
-        final = to_use(final_acc);
-        bound_attachments.emplace(name, attachment_info);
-    }
+		attachment_info.should_clear = initial_acc == Access::eClear; // if initial access was clear, we will clear
+		attachment_info.clear_value = att.clear_value;
+		Resource::Use& initial = attachment_info.initial;
+		Resource::Use & final = attachment_info.final;
+		initial = to_use(initial_acc);
+		final = to_use(final_acc);
+		bound_attachments.emplace(name, attachment_info);
+	}
 
 	void sync_bound_attachment_to_renderpass(vuk::RenderGraph::AttachmentRPInfo& rp_att, vuk::RenderGraph::AttachmentRPInfo& attachment_info) {
 		rp_att.description.format = attachment_info.description.format;
@@ -534,7 +807,7 @@ namespace vuk {
 			chain.emplace_back(UseRef{ attachment_info.final, nullptr });
 
 			vuk::ImageAspectFlags aspect = format_to_aspect((vuk::Format)attachment_info.description.format);
-		
+
 			for (size_t i = 0; i < chain.size() - 1; i++) {
 				auto& left = chain[i];
 				auto& right = chain[i + 1];
@@ -544,8 +817,8 @@ namespace vuk {
 					if (left.pass) { // RenderPass ->
 						auto& left_rp = rpis[left.pass->render_pass_index];
 						// if this is an attachment, we specify layout
-                        if(is_framebuffer_attachment(left.use)) {
-                            assert(!left_rp.framebufferless);
+						if (is_framebuffer_attachment(left.use)) {
+							assert(!left_rp.framebufferless);
 							auto& rp_att = *contains_if(left_rp.attachments, [name](auto& att) {return att.name == name; });
 
 							sync_bound_attachment_to_renderpass(rp_att, attachment_info);
@@ -600,7 +873,7 @@ namespace vuk {
 						auto& right_rp = rpis[right.pass->render_pass_index];
 						// if this is an attachment, we specify layout
 						if (is_framebuffer_attachment(right.use)) {
-                            assert(!right_rp.framebufferless);
+							assert(!right_rp.framebufferless);
 							auto& rp_att = *contains_if(right_rp.attachments, [name](auto& att) {return att.name == name; });
 
 							sync_bound_attachment_to_renderpass(rp_att, attachment_info);
@@ -651,7 +924,7 @@ namespace vuk {
 							barrier.subresourceRange.baseMipLevel = 0;
 							barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
 							barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
-							ImageBarrier ib{.image = name, .barrier = barrier, .src = left.use.stages, .dst = right.use.stages};
+							ImageBarrier ib{ .image = name, .barrier = barrier, .src = left.use.stages, .dst = right.use.stages };
 							right_rp.subpasses[right.pass->subpass].pre_barriers.push_back(ib);
 						}
 
@@ -660,12 +933,12 @@ namespace vuk {
 					// WAW, WAR, RAW accesses need sync
 
 					// if we merged the passes into a subpass, no sync is needed
-                    if(left.pass->subpass == right.pass->subpass)
-                        continue;
+					if (left.pass->subpass == right.pass->subpass)
+						continue;
 					if (is_framebuffer_attachment(left.use) && (is_write_access(left.use) || (is_read_access(left.use) && is_write_access(right.use)))) {
 						assert(left.pass->render_pass_index == right.pass->render_pass_index);
 						auto& rp = rpis[right.pass->render_pass_index];
-                        VkSubpassDependency sd{};
+						VkSubpassDependency sd{};
 						sd.dstAccessMask = (VkAccessFlags)right.use.access;
 						sd.dstStageMask = (VkPipelineStageFlags)right.use.stages;
 						sd.dstSubpass = right.pass->subpass;
@@ -720,8 +993,8 @@ namespace vuk {
 
 					if (right.pass && left.use.layout != vuk::ImageLayout::eUndefined) { // -> RenderPass
 						auto& right_rp = rpis[right.pass->render_pass_index];
-						
-						VkMemoryBarrier barrier{.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+
+						VkMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER };
 						barrier.dstAccessMask = (VkAccessFlags)right.use.access;
 						barrier.srcAccessMask = (VkAccessFlags)left.use.access;
 						MemoryBarrier mb{ .barrier = barrier, .src = left.use.stages, .dst = right.use.stages };
@@ -732,8 +1005,8 @@ namespace vuk {
 						right_rp.subpasses[right.pass->subpass].pre_mem_barriers.push_back(mb);
 					}
 				} else { // subpass-subpass link -> subpass - subpass dependency
-                    if(left.pass->subpass == right.pass->subpass)
-                        continue;
+					if (left.pass->subpass == right.pass->subpass)
+						continue;
 					auto& left_rp = rpis[left.pass->render_pass_index];
 					if (left_rp.framebufferless) {
 						VkMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER };
@@ -751,11 +1024,11 @@ namespace vuk {
 			rp.rpci.color_ref_offsets.resize(rp.subpasses.size());
 			rp.rpci.ds_refs.resize(rp.subpasses.size());
 		}
-	
+
 		// we now have enough data to build vk::RenderPasses and vk::Framebuffers
 		// we have to assign the proper attachments to proper slots
 		// the order is given by the resource binding order
-        size_t previous_rp = -1;
+		size_t previous_rp = -1;
 		uint32_t previous_sp = -1;
 		for (auto& pass : passes) {
 			auto& rp = rpis[pass.render_pass_index];
@@ -767,10 +1040,10 @@ namespace vuk {
 
 			// do not process merged passes
 			if (previous_rp != -1 && previous_rp == pass.render_pass_index && previous_sp == pass.subpass) {
-                continue;
-            } else {
-                previous_rp = pass.render_pass_index;
-                previous_sp = pass.subpass;
+				continue;
+			} else {
+				previous_rp = pass.render_pass_index;
+				previous_sp = pass.subpass;
 			}
 
 			for (auto& res : pass.pass.resources) {
@@ -833,7 +1106,7 @@ namespace vuk {
 			// subpasses
 			for (size_t i = 0; i < rp.subpasses.size(); i++) {
 				vuk::SubpassDescription sd;
-				size_t color_count = 0; 
+				size_t color_count = 0;
 				if (i < rp.subpasses.size() - 1) {
 					color_count = color_ref_offsets[i + 1] - color_ref_offsets[i];
 				} else {
@@ -862,7 +1135,7 @@ namespace vuk {
 
 			rp.rpci.subpassCount = (uint32_t)rp.rpci.subpass_descriptions.size();
 			rp.rpci.pSubpasses = rp.rpci.subpass_descriptions.data();
-	
+
 			rp.rpci.dependencyCount = (uint32_t)rp.rpci.subpass_dependencies.size();
 			rp.rpci.pDependencies = rp.rpci.subpass_dependencies.data();
 
@@ -882,7 +1155,7 @@ namespace vuk {
 				}
 				rp.rpci.attachments.push_back(attrpinfo.description);
 			}
-			
+
 			rp.rpci.attachmentCount = (uint32_t)rp.rpci.attachments.size();
 			rp.rpci.pAttachments = rp.rpci.attachments.data();
 
@@ -942,7 +1215,7 @@ namespace vuk {
 			return;
 		}
 
-		VkRenderPassBeginInfo rbi{.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+		VkRenderPassBeginInfo rbi{ .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
 		rbi.renderPass = rpass.handle;
 		rbi.framebuffer = rpass.framebuffer;
 		rbi.renderArea = vuk::Rect2D{ vuk::Offset2D{}, vuk::Extent2D{ rpass.fbci.width, rpass.fbci.height } };
@@ -1023,7 +1296,7 @@ namespace vuk {
 				bound.image = it->first->images[it->second];
 			}
 		}
-	
+
 		for (auto& rp : rpis) {
 			if (rp.attachments.size() == 0)
 				continue;
@@ -1037,7 +1310,7 @@ namespace vuk {
 				if (bound.extents.width > 0 && bound.extents.height > 0)
 					fb_extent = bound.extents;
 			}
-			
+
 			// create internal attachments; bind attachments to fb
 			for (auto& attrpinfo : rp.attachments) {
 				auto& bound = bound_attachments[attrpinfo.name];
@@ -1059,20 +1332,20 @@ namespace vuk {
 		// create non-attachment images
 		for (auto& [name, bound] : bound_attachments) {
 			if (bound.type == AttachmentRPInfo::Type::eInternal && bound.image == VK_NULL_HANDLE) {
-				create_attachment(ptc, name, bound, vuk::Extent2D{0,0}, bound.samples.count);
+				create_attachment(ptc, name, bound, vuk::Extent2D{ 0,0 }, bound.samples.count);
 			}
 		}
 
 		// actual execution
 		auto cbuf = ptc.acquire_command_buffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 
-		VkCommandBufferBeginInfo cbi{.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
+		VkCommandBufferBeginInfo cbi{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
 		vkBeginCommandBuffer(cbuf, &cbi);
 
 		CommandBuffer cobuf(*this, ptc, cbuf);
 		for (auto& rpass : rpis) {
-            bool use_secondary_command_buffers = rpass.subpasses[0].use_secondary_command_buffers;
-            begin_renderpass(rpass, cbuf, use_secondary_command_buffers);
+			bool use_secondary_command_buffers = rpass.subpasses[0].use_secondary_command_buffers;
+			begin_renderpass(rpass, cbuf, use_secondary_command_buffers);
 			for (size_t i = 0; i < rpass.subpasses.size(); i++) {
 				auto& sp = rpass.subpasses[i];
 				fill_renderpass_info(rpass, i, cobuf);
@@ -1086,42 +1359,42 @@ namespace vuk {
 						vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 1, &dep.barrier, 0, nullptr, 0, nullptr);
 					}
 				}
-                for(auto& p: sp.passes) {
+				for (auto& p : sp.passes) {
 					// if pass requested no secondary cbufs, but due to subpass merging that is what we got
 					if (p->pass.use_secondary_command_buffers == false && use_secondary_command_buffers == true) {
-                        auto secondary = cobuf.begin_secondary();
-                        if(p->pass.execute) {
-                            secondary.current_pass = p;
-                            if(!p->pass.name.empty()) {
-                                //ptc.ctx.debug.begin_region(cobuf.command_buffer, sp.pass->pass.name);
-                                p->pass.execute(secondary);
-                                //ptc.ctx.debug.end_region(cobuf.command_buffer);
-                            } else {
-                                p->pass.execute(secondary);
-                            }
-                        }
-                        auto result = secondary.get_buffer();
-                        cobuf.execute({&result, 1});
-                    } else {
-                        if(p->pass.execute) {
-                            cobuf.current_pass = p;
-                            if(!p->pass.name.empty()) {
-                                //ptc.ctx.debug.begin_region(cobuf.command_buffer, sp.pass->pass.name);
-                                p->pass.execute(cobuf);
-                                //ptc.ctx.debug.end_region(cobuf.command_buffer);
-                            } else {
-                                p->pass.execute(cobuf);
-                            }
-                        }
+						auto secondary = cobuf.begin_secondary();
+						if (p->pass.execute) {
+							secondary.current_pass = p;
+							if (!p->pass.name.empty()) {
+								//ptc.ctx.debug.begin_region(cobuf.command_buffer, sp.pass->pass.name);
+								p->pass.execute(secondary);
+								//ptc.ctx.debug.end_region(cobuf.command_buffer);
+							} else {
+								p->pass.execute(secondary);
+							}
+						}
+						auto result = secondary.get_buffer();
+						cobuf.execute({ &result, 1 });
+					} else {
+						if (p->pass.execute) {
+							cobuf.current_pass = p;
+							if (!p->pass.name.empty()) {
+								//ptc.ctx.debug.begin_region(cobuf.command_buffer, sp.pass->pass.name);
+								p->pass.execute(cobuf);
+								//ptc.ctx.debug.end_region(cobuf.command_buffer);
+							} else {
+								p->pass.execute(cobuf);
+							}
+						}
 
-                        cobuf.attribute_descriptions.clear();
-                        cobuf.binding_descriptions.clear();
-                        cobuf.set_bindings = {};
-                        cobuf.sets_used = {};
-                    }
-                }
+						cobuf.attribute_descriptions.clear();
+						cobuf.binding_descriptions.clear();
+						cobuf.set_bindings = {};
+						cobuf.sets_used = {};
+					}
+				}
 				if (i < rpass.subpasses.size() - 1 && rpass.handle != VK_NULL_HANDLE) {
-                    use_secondary_command_buffers = rpass.subpasses[i + 1].use_secondary_command_buffers;
+					use_secondary_command_buffers = rpass.subpasses[i + 1].use_secondary_command_buffers;
 					vkCmdNextSubpass(cbuf, use_secondary_command_buffers ? VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS : VK_SUBPASS_CONTENTS_INLINE);
 				}
 
@@ -1143,7 +1416,7 @@ namespace vuk {
 		vkEndCommandBuffer(cbuf);
 		return cbuf;
 	}
-	
+
 	RenderGraph::BufferInfo RenderGraph::get_resource_buffer(Name n) {
 		return bound_buffers.at(n);
 	}
@@ -1159,11 +1432,11 @@ namespace vuk {
 		return false;
 	}
 
-    RenderGraph::RenderPassInfo::RenderPassInfo(arena& arena_) : INIT2(subpasses), INIT2(attachments) {
+	RenderGraph::RenderPassInfo::RenderPassInfo(arena& arena_) : INIT2(subpasses), INIT2(attachments) {
 	}
 
-    PassInfo::PassInfo(arena& arena_, Pass&& p) : pass(std::move(p)) {}
+	PassInfo::PassInfo(arena& arena_, Pass&& p) : pass(std::move(p)) {}
 
-    RenderGraph::SubpassInfo::SubpassInfo(arena& arena_) : INIT2(passes) {}
-	#undef INIT
+	RenderGraph::SubpassInfo::SubpassInfo(arena& arena_) : INIT2(passes) {}
+#undef INIT
 } // namespace vuk
