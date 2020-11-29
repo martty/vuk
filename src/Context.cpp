@@ -404,13 +404,22 @@ vuk::Context::UploadResult vuk::Context::fenced_upload(std::span<ImageUpload> up
 
 	size_t size = 0;
 	for (auto& upload : uploads) {
+		size = align_up(size, (size_t)format_to_texel_block_size(upload.format));
 		size += upload.data.size();
 	}
 
 	// create 1 big staging buffer
-	auto staging_alloc = impl->allocator.allocate_buffer(vuk::MemoryUsage::eCPUonly, vuk::BufferUsageFlagBits::eTransferSrc, size, 1, true);
+	// we need to have this aligned for the first upload
+	// as that corresponds to offset = 0
+	auto staging_alloc = impl->allocator.allocate_buffer(vuk::MemoryUsage::eCPUonly, vuk::BufferUsageFlagBits::eTransferSrc, size, format_to_texel_block_size(uploads[0].format), true);
 	auto staging = staging_alloc;
 	for (auto& upload : uploads) {
+		// realign offset
+		auto aligned = align_up(staging.offset, (size_t)format_to_texel_block_size(upload.format));
+		auto delta = aligned - staging.offset;
+		staging.offset = aligned;
+		staging.mapped_ptr = staging.mapped_ptr + delta;
+
 		// copy to staging
 		::memcpy(staging.mapped_ptr, upload.data.data(), upload.data.size());
 
@@ -420,6 +429,7 @@ vuk::Context::UploadResult vuk::Context::fenced_upload(std::span<ImageUpload> up
 		task.extent = upload.extent;
 		task.generate_mips = true;
 		record_buffer_image_copy(cbuf, task);
+
 		staging.offset += upload.data.size();
 		staging.mapped_ptr = staging.mapped_ptr + upload.data.size();
 	}

@@ -851,4 +851,12 @@ namespace vuk {
 		eMemoryWrite,
 		eMemoryRW
 	};
+
+	// Aligns given value up to nearest multiply of align value. For example: VmaAlignUp(11, 8) = 16.
+	// Use types like uint32_t, uint64_t as T.
+	// Source: VMA
+	template <typename T>
+	static inline T align_up(T val, T align) {
+		return (val + align - 1) / align * align;
+	}
 }

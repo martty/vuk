@@ -88,6 +88,7 @@ namespace vuk {
 
 		struct ImageUpload {
 			vuk::Image dst;
+			vuk::Format format;
 			vuk::Extent3D extent;
 			std::span<unsigned char> data;
 		};
