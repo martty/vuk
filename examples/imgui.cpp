@@ -55,9 +55,9 @@ void util::ImGui_ImplVuk_Render(vuk::PerThreadContext& ptc, vuk::RenderGraph& rg
 			float translate[2];
 		} pc;
 		pc.scale[0] = 2.0f / draw_data->DisplaySize.x;
-		pc.scale[1] = -2.0f / draw_data->DisplaySize.y;
+		pc.scale[1] = 2.0f / draw_data->DisplaySize.y;
 		pc.translate[0] = -1.0f - draw_data->DisplayPos.x * pc.scale[0];
-		pc.translate[1] = 1.0f + draw_data->DisplayPos.y * pc.scale[1];
+		pc.translate[1] = -1.0f - draw_data->DisplayPos.y * pc.scale[1];
 		command_buffer.push_constants(vuk::ShaderStageFlagBits::eVertex, 0, pc);
 	};
 

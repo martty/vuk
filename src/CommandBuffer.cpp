@@ -46,17 +46,17 @@ namespace vuk {
 		vuk::Viewport vp;
 		if (area.sizing == Sizing::eAbsolute) {
 			vp.x = (float)area.offset.x;
-			vp.y = (float)area.offset.y + (float)area.extent.height;
+			vp.y = (float)area.offset.y;
 			vp.width = (float)area.extent.width;
-			vp.height = -(float)area.extent.height;
+			vp.height = (float)area.extent.height;
 			vp.minDepth = min_depth;
 			vp.maxDepth = max_depth;
 		} else {
 			assert(ongoing_renderpass);
 			auto fb_dimensions = ongoing_renderpass->extent;
 			vp.x = area._relative.x * fb_dimensions.width;
-			vp.height = -area._relative.height * fb_dimensions.height;
-			vp.y = area._relative.y * fb_dimensions.height - vp.height;
+			vp.height = area._relative.height * fb_dimensions.height;
+			vp.y = area._relative.y * fb_dimensions.height;
 			vp.width = area._relative.width * fb_dimensions.width;
 			vp.minDepth = min_depth;
 			vp.maxDepth = max_depth;

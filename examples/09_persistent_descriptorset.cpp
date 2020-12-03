@@ -136,6 +136,7 @@ namespace {
 			} vp;
 			vp.view = glm::lookAt(glm::vec3(0, 1.5, 5.5), glm::vec3(0), glm::vec3(0, 1, 0));
 			vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 1.f, 10.f);
+			vp.proj[1][1] *= -1;
 
 			auto [buboVP, stub3] = ptc.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eUniformBuffer, std::span(&vp, 1));
 			auto uboVP = buboVP;
