@@ -194,7 +194,7 @@ inline void record_buffer_image_copy(VkCommandBuffer& cbuf, vuk::BufferImageCopy
 		for (uint32_t miplevel = 1; miplevel < mips; miplevel++) {
 			VkImageBlit blit;
 			blit.srcSubresource.aspectMask = copy_barrier.subresourceRange.aspectMask;
-			blit.srcSubresource.baseArrayLayer = 0;
+			blit.srcSubresource.baseArrayLayer = task.base_array_level;
 			blit.srcSubresource.layerCount = 1;
 			blit.srcSubresource.mipLevel = 0;
 			blit.srcOffsets[0] = VkOffset3D{ 0 };
