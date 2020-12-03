@@ -109,9 +109,9 @@ namespace vuk {
 		// assemble use chains
 		for (auto& passinfo : impl->passes) {
 			for (auto& res : passinfo.pass.resources) {
-                auto it = impl->use_chains.find(resolve_name(res.name, impl->aliases));
+				auto it = impl->use_chains.find(resolve_name(res.name, impl->aliases));
 				if (it == impl->use_chains.end()) {
-                    it = impl->use_chains.emplace(resolve_name(res.name, impl->aliases), std::vector<UseRef, short_alloc<UseRef, 64>>{short_alloc<UseRef, 64>{*impl->arena_}}).first;
+					it = impl->use_chains.emplace(resolve_name(res.name, impl->aliases), std::vector<UseRef, short_alloc<UseRef, 64>>{short_alloc<UseRef, 64>{*impl->arena_}}).first;
 				}
 				it->second.emplace_back(UseRef{ to_use(res.ia), &passinfo });
 			}
@@ -120,9 +120,9 @@ namespace vuk {
 		// we need to collect passes into framebuffers, which will determine the renderpasses
 		using attachment_set = std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>>;
 		using passinfo_vec = std::vector<PassInfo*, short_alloc<PassInfo*, 16>>;
-        std::vector<std::pair<attachment_set, passinfo_vec>, short_alloc<std::pair<attachment_set, passinfo_vec>, 8>> attachment_sets{*impl->arena_};
+		std::vector<std::pair<attachment_set, passinfo_vec>, short_alloc<std::pair<attachment_set, passinfo_vec>, 8>> attachment_sets{ *impl->arena_ };
 		for (auto& passinfo : impl->passes) {
-            attachment_set atts{*impl->arena_};
+			attachment_set atts{ *impl->arena_ };
 
 			for (auto& res : passinfo.pass.resources) {
 				if (is_framebuffer_attachment(res))
@@ -132,8 +132,8 @@ namespace vuk {
 			if (auto p = attachment_sets.size() > 0 && attachment_sets.back().first == atts ? &attachment_sets.back() : nullptr) {
 				p->second.push_back(&passinfo);
 			} else {
-                passinfo_vec pv{*impl->arena_};
-                pv.push_back(&passinfo);
+				passinfo_vec pv{ *impl->arena_ };
+				pv.push_back(&passinfo);
 				attachment_sets.emplace_back(atts, pv);
 			}
 		}
@@ -142,7 +142,7 @@ namespace vuk {
 		// tell passes in which renderpass/subpass they will execute
 		impl->rpis.reserve(attachment_sets.size());
 		for (auto& [attachments, passes] : attachment_sets) {
-            RenderPassInfo rpi{*impl->arena_};
+			RenderPassInfo rpi{ *impl->arena_ };
 			auto rpi_index = impl->rpis.size();
 
 			int32_t subpass = -1;
@@ -159,9 +159,9 @@ namespace vuk {
 						continue;
 					}
 				}
-                SubpassInfo si{*impl->arena_};
-                si.passes = {p};
-                si.use_secondary_command_buffers = p->pass.use_secondary_command_buffers;
+				SubpassInfo si{ *impl->arena_ };
+				si.passes = { p };
+				si.use_secondary_command_buffers = p->pass.use_secondary_command_buffers;
 				p->subpass = ++subpass;
 				rpi.subpasses.push_back(si);
 			}
@@ -201,9 +201,9 @@ namespace vuk {
 		attachment_info.swapchain = swp;
 		attachment_info.should_clear = true;
 		attachment_info.clear_value = c;
-		
+
 		Resource::Use& initial = attachment_info.initial;
-		Resource::Use& final = attachment_info.final;
+		Resource::Use & final = attachment_info.final;
 		// for WSI, we want to wait for colourattachmentoutput
 		// we don't care about any writes, we will clear
 		initial.access = vuk::AccessFlags{};
@@ -234,7 +234,7 @@ namespace vuk {
 		attachment_info.should_clear = true;
 		attachment_info.clear_value = c;
 		Resource::Use& initial = attachment_info.initial;
-		Resource::Use& final = attachment_info.final;
+		Resource::Use & final = attachment_info.final;
 		initial.access = vuk::AccessFlags{};
 		initial.stages = vuk::PipelineStageFlagBits::eTopOfPipe;
 		// for internal attachments we don't want to preserve previous data
@@ -249,28 +249,28 @@ namespace vuk {
 	}
 
 	void RenderGraph::attach_buffer(Name name, vuk::Buffer buf, Access initial, Access final) {
-		BufferInfo buf_info{.name = name, .initial = to_use(initial), .final = to_use(final), .buffer = buf};
+		BufferInfo buf_info{ .name = name, .initial = to_use(initial), .final = to_use(final), .buffer = buf };
 		impl->bound_buffers.emplace(name, buf_info);
 	}
 
 	void RenderGraph::attach_image(Name name, ImageAttachment att, Access initial_acc, Access final_acc) {
-        AttachmentRPInfo attachment_info;
-        attachment_info.extents = vuk::Dimension2D::absolute(att.extent);
-        attachment_info.image = att.image;
-        attachment_info.iv = att.image_view;
+		AttachmentRPInfo attachment_info;
+		attachment_info.extents = vuk::Dimension2D::absolute(att.extent);
+		attachment_info.image = att.image;
+		attachment_info.iv = att.image_view;
 
-        attachment_info.type = AttachmentRPInfo::Type::eExternal;
-        attachment_info.description.format = (VkFormat)att.format;
-        attachment_info.samples = att.sample_count;
+		attachment_info.type = AttachmentRPInfo::Type::eExternal;
+		attachment_info.description.format = (VkFormat)att.format;
+		attachment_info.samples = att.sample_count;
 
-        attachment_info.should_clear = initial_acc == Access::eClear; // if initial access was clear, we will clear
-        attachment_info.clear_value = att.clear_value;
-        Resource::Use& initial = attachment_info.initial;
-        Resource::Use& final = attachment_info.final;
-        initial = to_use(initial_acc);
-        final = to_use(final_acc);
+		attachment_info.should_clear = initial_acc == Access::eClear; // if initial access was clear, we will clear
+		attachment_info.clear_value = att.clear_value;
+		Resource::Use& initial = attachment_info.initial;
+		Resource::Use & final = attachment_info.final;
+		initial = to_use(initial_acc);
+		final = to_use(final_acc);
 		impl->bound_attachments.emplace(name, attachment_info);
-    }
+	}
 
 	void sync_bound_attachment_to_renderpass(vuk::AttachmentRPInfo& rp_att, vuk::AttachmentRPInfo& attachment_info) {
 		rp_att.description.format = attachment_info.description.format;
@@ -283,7 +283,7 @@ namespace vuk {
 		rp_att.type = attachment_info.type;
 	}
 
-	ExecutableRenderGraph RenderGraph::link(vuk::PerThreadContext& ptc) && {
+	ExecutableRenderGraph RenderGraph::link(vuk::PerThreadContext& ptc)&& {
 		compile();
 
 		for (auto& [raw_name, attachment_info] : impl->bound_attachments) {
@@ -293,7 +293,7 @@ namespace vuk {
 			chain.emplace_back(UseRef{ attachment_info.final, nullptr });
 
 			vuk::ImageAspectFlags aspect = format_to_aspect((vuk::Format)attachment_info.description.format);
-		
+
 			for (size_t i = 0; i < chain.size() - 1; i++) {
 				auto& left = chain[i];
 				auto& right = chain[i + 1];
@@ -303,8 +303,8 @@ namespace vuk {
 					if (left.pass) { // RenderPass ->
 						auto& left_rp = impl->rpis[left.pass->render_pass_index];
 						// if this is an attachment, we specify layout
-                        if(is_framebuffer_attachment(left.use)) {
-                            assert(!left_rp.framebufferless);
+						if (is_framebuffer_attachment(left.use)) {
+							assert(!left_rp.framebufferless);
 							auto& rp_att = *contains_if(left_rp.attachments, [name](auto& att) {return att.name == name; });
 
 							sync_bound_attachment_to_renderpass(rp_att, attachment_info);
@@ -359,7 +359,7 @@ namespace vuk {
 						auto& right_rp = impl->rpis[right.pass->render_pass_index];
 						// if this is an attachment, we specify layout
 						if (is_framebuffer_attachment(right.use)) {
-                            assert(!right_rp.framebufferless);
+							assert(!right_rp.framebufferless);
 							auto& rp_att = *contains_if(right_rp.attachments, [name](auto& att) {return att.name == name; });
 
 							sync_bound_attachment_to_renderpass(rp_att, attachment_info);
@@ -410,7 +410,7 @@ namespace vuk {
 							barrier.subresourceRange.baseMipLevel = 0;
 							barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
 							barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
-							ImageBarrier ib{.image = name, .barrier = barrier, .src = left.use.stages, .dst = right.use.stages};
+							ImageBarrier ib{ .image = name, .barrier = barrier, .src = left.use.stages, .dst = right.use.stages };
 							right_rp.subpasses[right.pass->subpass].pre_barriers.push_back(ib);
 						}
 
@@ -419,12 +419,12 @@ namespace vuk {
 					// WAW, WAR, RAW accesses need sync
 
 					// if we merged the passes into a subpass, no sync is needed
-                    if(left.pass->subpass == right.pass->subpass)
-                        continue;
+					if (left.pass->subpass == right.pass->subpass)
+						continue;
 					if (is_framebuffer_attachment(left.use) && (is_write_access(left.use) || (is_read_access(left.use) && is_write_access(right.use)))) {
 						assert(left.pass->render_pass_index == right.pass->render_pass_index);
 						auto& rp = impl->rpis[right.pass->render_pass_index];
-                        VkSubpassDependency sd{};
+						VkSubpassDependency sd{};
 						sd.dstAccessMask = (VkAccessFlags)right.use.access;
 						sd.dstStageMask = (VkPipelineStageFlags)right.use.stages;
 						sd.dstSubpass = right.pass->subpass;
@@ -479,8 +479,8 @@ namespace vuk {
 
 					if (right.pass && left.use.layout != vuk::ImageLayout::eUndefined) { // -> RenderPass
 						auto& right_rp = impl->rpis[right.pass->render_pass_index];
-						
-						VkMemoryBarrier barrier{.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+
+						VkMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER };
 						barrier.dstAccessMask = (VkAccessFlags)right.use.access;
 						barrier.srcAccessMask = (VkAccessFlags)left.use.access;
 						MemoryBarrier mb{ .barrier = barrier, .src = left.use.stages, .dst = right.use.stages };
@@ -491,8 +491,8 @@ namespace vuk {
 						right_rp.subpasses[right.pass->subpass].pre_mem_barriers.push_back(mb);
 					}
 				} else { // subpass-subpass link -> subpass - subpass dependency
-                    if(left.pass->subpass == right.pass->subpass)
-                        continue;
+					if (left.pass->subpass == right.pass->subpass)
+						continue;
 					auto& left_rp = impl->rpis[left.pass->render_pass_index];
 					if (left_rp.framebufferless) {
 						VkMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER };
@@ -510,11 +510,11 @@ namespace vuk {
 			rp.rpci.color_ref_offsets.resize(rp.subpasses.size());
 			rp.rpci.ds_refs.resize(rp.subpasses.size());
 		}
-	
+
 		// we now have enough data to build vk::RenderPasses and vk::Framebuffers
 		// we have to assign the proper attachments to proper slots
 		// the order is given by the resource binding order
-        size_t previous_rp = -1;
+		size_t previous_rp = -1;
 		uint32_t previous_sp = -1;
 		for (auto& pass : impl->passes) {
 			auto& rp = impl->rpis[pass.render_pass_index];
@@ -526,10 +526,10 @@ namespace vuk {
 
 			// do not process merged passes
 			if (previous_rp != -1 && previous_rp == pass.render_pass_index && previous_sp == pass.subpass) {
-                continue;
-            } else {
-                previous_rp = pass.render_pass_index;
-                previous_sp = pass.subpass;
+				continue;
+			} else {
+				previous_rp = pass.render_pass_index;
+				previous_sp = pass.subpass;
 			}
 
 			for (auto& res : pass.pass.resources) {
@@ -592,7 +592,7 @@ namespace vuk {
 			// subpasses
 			for (size_t i = 0; i < rp.subpasses.size(); i++) {
 				vuk::SubpassDescription sd;
-				size_t color_count = 0; 
+				size_t color_count = 0;
 				if (i < rp.subpasses.size() - 1) {
 					color_count = color_ref_offsets[i + 1] - color_ref_offsets[i];
 				} else {
@@ -621,7 +621,7 @@ namespace vuk {
 
 			rp.rpci.subpassCount = (uint32_t)rp.rpci.subpass_descriptions.size();
 			rp.rpci.pSubpasses = rp.rpci.subpass_descriptions.data();
-	
+
 			rp.rpci.dependencyCount = (uint32_t)rp.rpci.subpass_dependencies.size();
 			rp.rpci.pDependencies = rp.rpci.subpass_dependencies.data();
 
@@ -641,7 +641,7 @@ namespace vuk {
 				}
 				rp.rpci.attachments.push_back(attrpinfo.description);
 			}
-			
+
 			rp.rpci.attachmentCount = (uint32_t)rp.rpci.attachments.size();
 			rp.rpci.pAttachments = rp.rpci.attachments.data();
 

@@ -3,7 +3,7 @@
 
 namespace vuk {
 	void PipelineBaseCreateInfo::set_blend(size_t attachment_index, BlendPreset preset) {
-		if(color_blend_attachments.size() <= attachment_index)
+		if (color_blend_attachments.size() <= attachment_index)
 			color_blend_attachments.resize(attachment_index + 1);
 		auto& pcba = color_blend_attachments[attachment_index];
 
@@ -38,11 +38,11 @@ namespace vuk {
 
 		color_blend_attachments.resize(1);
 		auto& pcba = color_blend_attachments[0];
-        pcba = vuk::PipelineColorBlendAttachmentState{};
+		pcba = vuk::PipelineColorBlendAttachmentState{};
 		pcba.colorWriteMask = vuk::ColorComponentFlagBits::eR | vuk::ColorComponentFlagBits::eG | vuk::ColorComponentFlagBits::eB | vuk::ColorComponentFlagBits::eA;
 	}
 
-	PipelineInstanceCreateInfo::PipelineInstanceCreateInfo() {	
+	PipelineInstanceCreateInfo::PipelineInstanceCreateInfo() {
 		multisample_state.pSampleMask = nullptr;
 		multisample_state.rasterizationSamples = (VkSampleCountFlagBits)vuk::SampleCountFlagBits::e1;
 
@@ -57,8 +57,8 @@ namespace vuk {
 
 
 		for (const auto& [index, set] : program.sets) {
-            // fill up unused sets, if there are holes in descriptor set order
-            dslcis.resize(std::max(dslcis.size(), index + 1), {});
+			// fill up unused sets, if there are holes in descriptor set order
+			dslcis.resize(std::max(dslcis.size(), index + 1), {});
 
 			vuk::DescriptorSetLayoutCreateInfo dslci;
 			dslci.index = index;
@@ -131,7 +131,7 @@ namespace vuk {
 				layoutBinding.pImmutableSamplers = nullptr;
 				bindings.push_back(layoutBinding);
 			}
-			
+
 			// extract flags from the packed bitset
 			// TODO: rewrite this without _Getword
 			auto set_word_offset = index * VUK_MAX_BINDINGS * 4 / (sizeof(unsigned long long) * 8);

@@ -118,7 +118,7 @@ namespace vuk {
 
 	struct ImageCreateInfo {
 		static constexpr VkStructureType structureType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-		
+
 		VkStructureType sType = structureType;
 		const void* pNext = {};
 		ImageCreateFlags flags = {};
@@ -238,17 +238,17 @@ namespace vuk {
 	};
 
 	using ImageAspectFlags = Flags<ImageAspectFlagBits>;
-    inline constexpr ImageAspectFlags operator|(ImageAspectFlagBits bit0, ImageAspectFlagBits bit1) noexcept {
-        return ImageAspectFlags(bit0) | bit1;
-    }
+	inline constexpr ImageAspectFlags operator|(ImageAspectFlagBits bit0, ImageAspectFlagBits bit1) noexcept {
+		return ImageAspectFlags(bit0) | bit1;
+	}
 
-    inline constexpr ImageAspectFlags operator&(ImageAspectFlagBits bit0, ImageAspectFlagBits bit1) noexcept {
-        return ImageAspectFlags(bit0) & bit1;
-    }
+	inline constexpr ImageAspectFlags operator&(ImageAspectFlagBits bit0, ImageAspectFlagBits bit1) noexcept {
+		return ImageAspectFlags(bit0) & bit1;
+	}
 
-    inline constexpr ImageAspectFlags operator^(ImageAspectFlagBits bit0, ImageAspectFlagBits bit1) noexcept {
-        return ImageAspectFlags(bit0) ^ bit1;
-    }
+	inline constexpr ImageAspectFlags operator^(ImageAspectFlagBits bit0, ImageAspectFlagBits bit1) noexcept {
+		return ImageAspectFlags(bit0) ^ bit1;
+	}
 
 	struct ImageSubresourceRange {
 		ImageAspectFlags aspectMask = {};
@@ -283,7 +283,7 @@ namespace vuk {
 
 	struct ImageViewCreateInfo {
 		static constexpr VkStructureType structureType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-		
+
 		VkStructureType sType = structureType;
 		const void* pNext = {};
 		ImageViewCreateFlags flags = {};
@@ -439,19 +439,19 @@ namespace vuk {
 	};
 
 	inline vuk::ImageAspectFlags format_to_aspect(vuk::Format format) noexcept {
-        switch(format) {
-            case vuk::Format::eD16Unorm:
-            case vuk::Format::eD32Sfloat:
-            case vuk::Format::eX8D24UnormPack32:
-                return vuk::ImageAspectFlagBits::eDepth;
-            case vuk::Format::eD16UnormS8Uint:
-            case vuk::Format::eD24UnormS8Uint:
-            case vuk::Format::eD32SfloatS8Uint:
-                return vuk::ImageAspectFlagBits::eDepth | vuk::ImageAspectFlagBits::eStencil;
-            case vuk::Format::eS8Uint:
-                return vuk::ImageAspectFlagBits::eStencil;
-			default:
-                return vuk::ImageAspectFlagBits::eColor;
-        }
-    }
+		switch (format) {
+		case vuk::Format::eD16Unorm:
+		case vuk::Format::eD32Sfloat:
+		case vuk::Format::eX8D24UnormPack32:
+			return vuk::ImageAspectFlagBits::eDepth;
+		case vuk::Format::eD16UnormS8Uint:
+		case vuk::Format::eD24UnormS8Uint:
+		case vuk::Format::eD32SfloatS8Uint:
+			return vuk::ImageAspectFlagBits::eDepth | vuk::ImageAspectFlagBits::eStencil;
+		case vuk::Format::eS8Uint:
+			return vuk::ImageAspectFlagBits::eStencil;
+		default:
+			return vuk::ImageAspectFlagBits::eColor;
+		}
+	}
 };

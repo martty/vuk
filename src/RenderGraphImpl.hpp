@@ -14,7 +14,7 @@ namespace vuk {
 
 		robin_hood::unordered_flat_set<Resource> global_inputs;
 		robin_hood::unordered_flat_set<Resource> global_outputs;
-        std::vector<Resource, short_alloc<Resource, 16>> global_io;
+		std::vector<Resource, short_alloc<Resource, 16>> global_io;
 
 		robin_hood::unordered_flat_map<Name, std::vector<UseRef, short_alloc<UseRef, 64>>> use_chains;
 

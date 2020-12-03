@@ -166,12 +166,12 @@ namespace vuk {
 	struct PassInfo;
 
 	class CommandBuffer {
-    protected:
+	protected:
 		friend struct ExecutableRenderGraph;
 		ExecutableRenderGraph* rg = nullptr;
 		vuk::PerThreadContext& ptc;
 		VkCommandBuffer command_buffer;
-		
+
 		struct RenderPassInfo {
 			VkRenderPass renderpass;
 			uint32_t subpass;
@@ -181,7 +181,7 @@ namespace vuk {
 		};
 		std::optional<RenderPassInfo> ongoing_renderpass;
 		PassInfo* current_pass = nullptr;
-        vuk::PrimitiveTopology topology = vuk::PrimitiveTopology::eTriangleList;
+		vuk::PrimitiveTopology topology = vuk::PrimitiveTopology::eTriangleList;
 		vuk::fixed_vector<vuk::VertexInputAttributeDescription, VUK_MAX_ATTRIBUTES> attribute_descriptions;
 		vuk::fixed_vector<VkVertexInputBindingDescription, VUK_MAX_ATTRIBUTES> binding_descriptions;
 		vuk::fixed_vector<VkPushConstantRange, VUK_MAX_PUSHCONSTANT_RANGES> pcrs;
@@ -205,14 +205,14 @@ namespace vuk {
 		CommandBuffer(ExecutableRenderGraph* rg, vuk::PerThreadContext& ptc, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing) : rg(rg), ptc(ptc), command_buffer(cb), ongoing_renderpass(ongoing) {}
 
 		vuk::PerThreadContext& get_context() {
-            return ptc;
-        }
+			return ptc;
+		}
 		const RenderPassInfo& get_ongoing_renderpass() const;
 		vuk::Buffer get_resource_buffer(Name) const;
 		vuk::Image get_resource_image(Name) const;
 		vuk::ImageView get_resource_image_view(Name) const;
 
-		CommandBuffer& set_viewport(unsigned index, Viewport vp);	
+		CommandBuffer& set_viewport(unsigned index, Viewport vp);
 		CommandBuffer& set_viewport(unsigned index, Rect2D area, float min_depth = 0.f, float max_depth = 1.f);
 		CommandBuffer& set_scissor(unsigned index, Rect2D vp);
 
@@ -233,18 +233,18 @@ namespace vuk {
 		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, Name, vuk::ImageViewCreateInfo ivci, vuk::SamplerCreateInfo sampler_create_info);
 
 		CommandBuffer& bind_persistent(unsigned set, PersistentDescriptorSet&);
-		
-		CommandBuffer& push_constants(vuk::ShaderStageFlags stages, size_t offset, void * data, size_t size);
+
+		CommandBuffer& push_constants(vuk::ShaderStageFlags stages, size_t offset, void* data, size_t size);
 		template<class T>
 		CommandBuffer& push_constants(vuk::ShaderStageFlags stages, size_t offset, std::span<T> span);
 		template<class T>
 		CommandBuffer& push_constants(vuk::ShaderStageFlags stages, size_t offset, T value);
 
 		CommandBuffer& bind_uniform_buffer(unsigned set, unsigned binding, Buffer buffer);
-        CommandBuffer& bind_storage_buffer(unsigned set, unsigned binding, Buffer buffer);
+		CommandBuffer& bind_storage_buffer(unsigned set, unsigned binding, Buffer buffer);
 
-        CommandBuffer& bind_storage_image(unsigned set, unsigned binding, vuk::ImageView image_view);
-        CommandBuffer& bind_storage_image(unsigned set, unsigned binding, Name);
+		CommandBuffer& bind_storage_image(unsigned set, unsigned binding, vuk::ImageView image_view);
+		CommandBuffer& bind_storage_image(unsigned set, unsigned binding, Name);
 
 		void* _map_scratch_uniform_binding(unsigned set, unsigned binding, size_t size);
 
@@ -261,13 +261,13 @@ namespace vuk {
 		CommandBuffer& dispatch_invocations(size_t invocation_count_x, size_t invocation_count_y = 1, size_t invocation_count_z = 1);
 
 		class SecondaryCommandBuffer begin_secondary();
-        void execute(std::span<VkCommandBuffer>);
+		void execute(std::span<VkCommandBuffer>);
 
 		// commands for renderpass-less command buffers
 		void clear_image(Name src, Clear);
 		void resolve_image(Name src, Name dst);
 		void blit_image(Name src, Name dst, vuk::ImageBlit region, vuk::Filter filter);
-        void copy_image_to_buffer(Name src, Name dst, vuk::BufferImageCopy);
+		void copy_image_to_buffer(Name src, Name dst, vuk::BufferImageCopy);
 		// explicit synchronisation
 		void image_barrier(Name, vuk::Access src_access, vuk::Access dst_access);
 	protected:
@@ -277,7 +277,7 @@ namespace vuk {
 	};
 
 	class SecondaryCommandBuffer : public CommandBuffer {
-    public:
+	public:
 		using CommandBuffer::CommandBuffer;
 		VkCommandBuffer get_buffer();
 
