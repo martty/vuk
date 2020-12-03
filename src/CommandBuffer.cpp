@@ -1,8 +1,19 @@
 #include "vuk/CommandBuffer.hpp"
 #include "vuk/Context.hpp"
 #include "vuk/RenderGraph.hpp"
+#include "RenderGraphUtil.hpp"
 
 namespace vuk {
+	uint32_t Ignore::to_size() {
+		if (bytes != 0) return bytes;
+		return format_to_texel_block_size(format);
+	}
+
+	FormatOrIgnore::FormatOrIgnore(vuk::Format format) : ignore(false), format(format), size(format_to_texel_block_size(format)) {
+	}
+	FormatOrIgnore::FormatOrIgnore(Ignore ign) : ignore(true), format(ign.format), size(ign.to_size()) {
+	}
+
 	CommandBuffer::CommandBuffer(vuk::PerThreadContext& ptc) : ptc(ptc){
 		command_buffer = ptc.acquire_command_buffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 	}
@@ -18,12 +29,12 @@ namespace vuk {
 
 	vuk::Image CommandBuffer::get_resource_image(Name n) const {
 		assert(rg);
-		return rg->bound_attachments[n].image;
+		return rg->get_resource_image(n).image;
 	}
 
 	vuk::ImageView CommandBuffer::get_resource_image_view(Name n) const {
 		assert(rg);
-		return rg->bound_attachments[n].iv;
+		return rg->get_resource_image(n).iv;
 	}
 
 	CommandBuffer& CommandBuffer::set_viewport(unsigned index, vuk::Viewport vp) {
@@ -173,14 +184,14 @@ namespace vuk {
 
 		auto layout = rg->is_resource_image_in_general_layout(name, current_pass) ? vuk::ImageLayout::eGeneral : vuk::ImageLayout::eShaderReadOnlyOptimal;
 
-		return bind_sampled_image(set, binding, rg->bound_attachments[name].iv, sampler_create_info, layout);
+		return bind_sampled_image(set, binding, rg->get_resource_image(name).iv, sampler_create_info, layout);
 	}
 
 	CommandBuffer& CommandBuffer::bind_sampled_image(unsigned set, unsigned binding, Name name, vuk::ImageViewCreateInfo ivci, vuk::SamplerCreateInfo sampler_create_info) {
 		assert(rg);
-		ivci.image = rg->bound_attachments[name].image;
+		ivci.image = rg->get_resource_image(name).image;
         if(ivci.format == vuk::Format{}) {
-            ivci.format = vuk::Format(rg->bound_attachments[name].description.format);
+            ivci.format = vuk::Format(rg->get_resource_image(name).description.format);
         }
 		ivci.viewType = vuk::ImageViewType::e2D;
 		vuk::ImageSubresourceRange isr;
@@ -315,7 +326,7 @@ namespace vuk {
 	void CommandBuffer::clear_image(Name src, Clear c) {
 		// TODO: depth images
 		assert(rg);
-		auto att = rg->bound_attachments[src];
+		auto att = rg->get_resource_image(src);
 		auto layout = rg->is_resource_image_in_general_layout(src, current_pass) ? vuk::ImageLayout::eGeneral : vuk::ImageLayout::eTransferDstOptimal;
 		VkImageSubresourceRange isr = {};
 		isr.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -329,11 +340,11 @@ namespace vuk {
 	void CommandBuffer::resolve_image(Name src, Name dst) {
 		assert(rg);
 		VkImageResolve ir;
-		auto src_image = rg->bound_attachments[src].image;
-		auto dst_image = rg->bound_attachments[dst].image;
+		auto src_image = rg->get_resource_image(src).image;
+		auto dst_image = rg->get_resource_image(dst).image;
 		vuk::ImageSubresourceLayers isl;
 		vuk::ImageAspectFlagBits aspect;
-		if (rg->bound_attachments[src].description.format == (VkFormat)vuk::Format::eD32Sfloat) {
+		if (rg->get_resource_image(dst).description.format == (VkFormat)vuk::Format::eD32Sfloat) {
 			aspect = vuk::ImageAspectFlagBits::eDepth;
 		} else {
 			aspect = vuk::ImageAspectFlagBits::eColor;
@@ -347,7 +358,7 @@ namespace vuk {
 		ir.srcSubresource = isl;
 		ir.dstOffset = vuk::Offset3D{};
 		ir.dstSubresource = isl;
-		ir.extent = static_cast<vuk::Extent3D>(rg->bound_attachments[src].extents);
+		ir.extent = static_cast<vuk::Extent3D>(rg->get_resource_image(src).extents);
 
 		auto src_layout = rg->is_resource_image_in_general_layout(src, current_pass) ? vuk::ImageLayout::eGeneral : vuk::ImageLayout::eTransferSrcOptimal;
 		auto dst_layout = rg->is_resource_image_in_general_layout(dst, current_pass) ? vuk::ImageLayout::eGeneral : vuk::ImageLayout::eTransferDstOptimal;
@@ -357,8 +368,8 @@ namespace vuk {
 
 	void CommandBuffer::blit_image(Name src, Name dst, vuk::ImageBlit region, vuk::Filter filter) {
 		assert(rg);
-		auto src_image = rg->bound_attachments[src].image;
-		auto dst_image = rg->bound_attachments[dst].image;
+		auto src_image = rg->get_resource_image(src).image;
+		auto dst_image = rg->get_resource_image(dst).image;
 
 		auto src_layout = rg->is_resource_image_in_general_layout(src, current_pass) ? vuk::ImageLayout::eGeneral : vuk::ImageLayout::eTransferSrcOptimal;
 		auto dst_layout = rg->is_resource_image_in_general_layout(dst, current_pass) ? vuk::ImageLayout::eGeneral : vuk::ImageLayout::eTransferDstOptimal;
@@ -368,8 +379,8 @@ namespace vuk {
 
 	void CommandBuffer::copy_image_to_buffer(Name src, Name dst, vuk::BufferImageCopy bic) {
 		assert(rg);
-        auto src_batt = rg->bound_attachments[src];
-        auto dst_bbuf = rg->bound_buffers[dst];
+        auto src_batt = rg->get_resource_image(src);
+        auto dst_bbuf = rg->get_resource_buffer(dst);
 
 		bic.bufferOffset += dst_bbuf.buffer.offset;
 
@@ -379,7 +390,7 @@ namespace vuk {
 
 	void CommandBuffer::image_barrier(Name src, vuk::Access src_acc, vuk::Access dst_acc) {
 		assert(rg);
-		auto att = rg->bound_attachments[src];
+		auto att = rg->get_resource_image(src);
 
 		VkImageSubresourceRange isr = {};
 		isr.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;

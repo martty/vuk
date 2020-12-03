@@ -1,4 +1,5 @@
 #include "example_runner.hpp"
+#include "RenderGraphUtil.hpp"
 
 std::vector<std::string> chosen_resource;
 
@@ -51,7 +52,7 @@ vuk::ExampleRunner::ExampleRunner() {
 			vkbdevice = dev_ret.value();
 			graphics_queue = vkbdevice.get_queue(vkb::QueueType::graphics).value();
 			device = vkbdevice.device;
-			
+
 			context.emplace(instance, device, physical_device, graphics_queue);
 
 			swapchain = context->add_swapchain(util::make_swapchain(vkbdevice));
@@ -72,9 +73,9 @@ void vuk::ExampleRunner::render() {
 		ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 352.f, 2));
 		ImGui::SetNextWindowSize(ImVec2(350, 0));
 		ImGui::Begin("Example selector", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoResize);
-		ImGui::Checkbox("All", &render_all); 
+		ImGui::Checkbox("All", &render_all);
 		ImGui::SameLine();
-		
+
 		static vuk::Example* item_current = examples[0];            // Here our selection is a single pointer stored outside the object.
 		if (!render_all) {
 			if (ImGui::BeginCombo("Examples", item_current->name.data(), ImGuiComboFlags_None)) {
@@ -96,10 +97,8 @@ void vuk::ExampleRunner::render() {
 			auto ptc = ifc.begin();
 			std::string attachment_name = std::string(item_current->name) + "_final";
 			rg.add_pass(util::ImGui_ImplVuk_Render(ptc, attachment_name, "SWAPCHAIN", imgui_data, ImGui::GetDrawData()));
-			rg.build();
 			rg.bind_attachment_to_swapchain(attachment_name, swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
-			rg.build(ptc);
-			execute_submit_and_present_to_one(ptc, rg, swapchain);
+			execute_submit_and_present_to_one(ptc, std::move(rg).link(ptc), swapchain);
 		} else { // render all examples as imgui windows
 			RenderGraph rg;
 			auto ptc = ifc.begin();
@@ -108,65 +107,59 @@ void vuk::ExampleRunner::render() {
 			size_t i = 0;
 			for (auto& ex : examples) {
 				auto rg_frag = ex->render(*this, ifc);
-				rg_frag.build();
-				for (auto& p : rg_frag.passes) {
-					rg.add_pass(p.pass);
-				}
-				rg.bound_attachments.insert(rg_frag.bound_attachments.begin(), rg_frag.bound_attachments.end());
-				rg.bound_buffers.insert(rg_frag.bound_buffers.begin(), rg_frag.bound_buffers.end());
 
 				auto& attachment_name = *attachment_names.emplace(std::string(ex->name) + "_final");
-
-				rg.mark_attachment_internal(attachment_name, swapchain->format, vuk::Extent2D{ 300, 300 }, vuk::Samples::e1, vuk::ClearColor(0.1f, 0.2f, 0.3f, 1.f));
 				ImGui::Begin(ex->name.data());
-				if (rg_frag.use_chains.size() > 1) {
+				if (rg_frag.get_use_chains().size() > 1) {
+					const auto& bound_attachments = rg_frag.get_bound_attachments();
 					bool disable = false;
-					for (auto& c : rg_frag.use_chains) {
-						if (rg.bound_attachments.find(c.first) == rg.bound_attachments.end())
+					for (const auto [key, use_refs] : rg_frag.get_use_chains()) {
+						auto bound_it = bound_attachments.find(key);
+						if (bound_it == bound_attachments.end())
 							continue;
 						std::string btn_id = "";
 						bool storage = false;
-						if (c.first == attachment_name) {
+						if (key == attachment_name) {
 							disable = false;
 							btn_id = "F";
 						} else {
-							auto usage = rg_frag.compute_usage(c.second);
-							auto bound_it = rg_frag.bound_attachments.find(c.first);
+							auto usage = rg_frag.compute_usage(use_refs);
 							auto samples = vuk::SampleCountFlagBits::e1;
-							if (bound_it != rg_frag.bound_attachments.end()) {
-								if (!bound_it->second.samples.infer)
-									samples = bound_it->second.samples.count;
-								else if (disable) {
-									samples = vuk::SampleCountFlagBits::e2; // hack: disable potentially MS attachments
-								}
+							if (!(*bound_it).second.samples.infer)
+								samples = (*bound_it).second.samples.count;
+							else if (disable) {
+								samples = vuk::SampleCountFlagBits::e2; // hack: disable potentially MS attachments
 							}
 							disable = samples != vuk::SampleCountFlagBits::e1;
 							if (usage & vuk::ImageUsageFlagBits::eColorAttachment) {
 								btn_id += "C";
 							} else if (usage & vuk::ImageUsageFlagBits::eDepthStencilAttachment) {
 								btn_id += "D";
-							} else if (usage & (vuk::ImageUsageFlagBits::eTransferSrc | vuk::ImageUsageFlagBits::eTransferDst)){
+							} else if (usage & (vuk::ImageUsageFlagBits::eTransferSrc | vuk::ImageUsageFlagBits::eTransferDst)) {
 								btn_id += "X";
-							} 
+							}
 						}
 						if (disable) {
 							btn_id += " (MS)";
 						} else {
-							btn_id += "##" + std::string(c.first);
+							btn_id += "##" + std::string(key);
 						}
 						if (disable) {
 							ImGui::TextDisabled("%s", btn_id.c_str());
 						} else {
 							if (ImGui::Button(btn_id.c_str())) {
-								chosen_resource[i] = c.first;
+								chosen_resource[i] = key;
 							}
 						}
 						if (ImGui::IsItemHovered())
-							ImGui::SetTooltip("%s", c.first.data());
+							ImGui::SetTooltip("%s", key.data());
 						ImGui::SameLine();
 					}
 					ImGui::NewLine();
 				}
+				rg.append(std::move(rg_frag));
+				rg.mark_attachment_internal(attachment_name, swapchain->format, vuk::Extent2D{ 300, 300 }, vuk::Samples::e1, vuk::ClearColor(0.1f, 0.2f, 0.3f, 1.f));
+
 				if (chosen_resource[i].empty())
 					chosen_resource[i] = attachment_name;
 				ImGui::Image(&ptc.make_sampled_image(chosen_resource[i], imgui_data.font_sci), ImVec2(200, 200));
@@ -176,10 +169,8 @@ void vuk::ExampleRunner::render() {
 
 			ImGui::Render();
 			rg.add_pass(util::ImGui_ImplVuk_Render(ptc, "SWAPCHAIN", "SWAPCHAIN", imgui_data, ImGui::GetDrawData()));
-			rg.build();
 			rg.bind_attachment_to_swapchain("SWAPCHAIN", swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
-			rg.build(ptc);
-			execute_submit_and_present_to_one(ptc, rg, swapchain);
+			execute_submit_and_present_to_one(ptc, std::move(rg).link(ptc), swapchain);
 		}
 	}
 }

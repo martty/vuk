@@ -184,13 +184,13 @@ namespace vuk {
 	static_assert(std::is_standard_layout<BufferImageCopy>::value, "struct wrapper is not a standard layout!");
 
 
-	struct RenderGraph;
+	struct ExecutableRenderGraph;
 	struct PassInfo;
 
 	class CommandBuffer {
     protected:
-		friend struct RenderGraph;
-		RenderGraph* rg = nullptr;
+		friend struct ExecutableRenderGraph;
+		ExecutableRenderGraph* rg = nullptr;
 		vuk::PerThreadContext& ptc;
 		VkCommandBuffer command_buffer;
 		
@@ -218,13 +218,13 @@ namespace vuk {
 		std::array<VkDescriptorSet, VUK_MAX_SETS> persistent_sets = {};
 
 		// for rendergraph
-		CommandBuffer(RenderGraph& rg, vuk::PerThreadContext& ptc, VkCommandBuffer cb) : rg(&rg), ptc(ptc), command_buffer(cb) {}
-		CommandBuffer(RenderGraph& rg, vuk::PerThreadContext& ptc, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing) : rg(&rg), ptc(ptc), command_buffer(cb), ongoing_renderpass(ongoing) {}
+		CommandBuffer(ExecutableRenderGraph& rg, vuk::PerThreadContext& ptc, VkCommandBuffer cb) : rg(&rg), ptc(ptc), command_buffer(cb) {}
+		CommandBuffer(ExecutableRenderGraph& rg, vuk::PerThreadContext& ptc, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing) : rg(&rg), ptc(ptc), command_buffer(cb), ongoing_renderpass(ongoing) {}
 	public:
 		// for one shot
 		CommandBuffer(vuk::PerThreadContext& ptc);
 		// for secondary cbufs
-		CommandBuffer(RenderGraph* rg, vuk::PerThreadContext& ptc, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing) : rg(rg), ptc(ptc), command_buffer(cb), ongoing_renderpass(ongoing) {}
+		CommandBuffer(ExecutableRenderGraph* rg, vuk::PerThreadContext& ptc, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing) : rg(rg), ptc(ptc), command_buffer(cb), ongoing_renderpass(ongoing) {}
 
 		vuk::PerThreadContext& get_context() {
             return ptc;

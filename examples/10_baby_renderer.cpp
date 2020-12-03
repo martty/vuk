@@ -148,10 +148,8 @@ namespace {
 			rg.bind_attachment("10_doge", vuk::Attachment::from_texture(*texture_of_doge), vuk::eFragmentSampled, vuk::eFragmentSampled);
 			rg.bind_attachment("10_v1", vuk::Attachment::from_texture(*variant1), vuk::eNone, vuk::eFragmentSampled);
 			rg.bind_attachment("10_v2", vuk::Attachment::from_texture(*variant2), vuk::eNone, vuk::eFragmentSampled);
-			rg.build();
-			rg.build(ptc);
 			// The rendergraph is submitted and fence-waited on
-			execute_submit_and_wait(ptc, rg);
+			execute_submit_and_wait(ptc, std::move(rg).link(ptc));
 
 			// Set up the resources for our renderer
 

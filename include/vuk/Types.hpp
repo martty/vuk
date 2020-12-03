@@ -568,6 +568,14 @@ namespace vuk {
 		eR12X4UnormPack16KHR = VK_FORMAT_R12X4_UNORM_PACK16_KHR
 	};
 
+	// return the texel block size of a format
+	uint32_t format_to_texel_block_size(vuk::Format) noexcept;
+	// return the 3D texel block extent of a format
+	Extent3D format_to_texel_block_extent(vuk::Format) noexcept;
+	// compute the byte size of an image with given format and extent
+	uint32_t compute_image_size(vuk::Format, vuk::Extent3D) noexcept;
+
+
 	enum class IndexType {
 		eUint16 = VK_INDEX_TYPE_UINT16,
 		eUint32 = VK_INDEX_TYPE_UINT32,
@@ -766,6 +774,53 @@ namespace vuk {
 
 	inline constexpr PipelineStageFlags operator^(PipelineStageFlagBits bit0, PipelineStageFlagBits bit1) noexcept {
 		return PipelineStageFlags(bit0) ^ bit1;
+	}
+
+	enum class AccessFlagBits : VkAccessFlags {
+		eIndirectCommandRead = VK_ACCESS_INDIRECT_COMMAND_READ_BIT,
+		eIndexRead = VK_ACCESS_INDEX_READ_BIT,
+		eVertexAttributeRead = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT,
+		eUniformRead = VK_ACCESS_UNIFORM_READ_BIT,
+		eInputAttachmentRead = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT,
+		eShaderRead = VK_ACCESS_SHADER_READ_BIT,
+		eShaderWrite = VK_ACCESS_SHADER_WRITE_BIT,
+		eColorAttachmentRead = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT,
+		eColorAttachmentWrite = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+		eDepthStencilAttachmentRead = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
+		eDepthStencilAttachmentWrite = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+		eTransferRead = VK_ACCESS_TRANSFER_READ_BIT,
+		eTransferWrite = VK_ACCESS_TRANSFER_WRITE_BIT,
+		eHostRead = VK_ACCESS_HOST_READ_BIT,
+		eHostWrite = VK_ACCESS_HOST_WRITE_BIT,
+		eMemoryRead = VK_ACCESS_MEMORY_READ_BIT,
+		eMemoryWrite = VK_ACCESS_MEMORY_WRITE_BIT,
+		eTransformFeedbackWriteEXT = VK_ACCESS_TRANSFORM_FEEDBACK_WRITE_BIT_EXT,
+		eTransformFeedbackCounterReadEXT = VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_READ_BIT_EXT,
+		eTransformFeedbackCounterWriteEXT = VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_WRITE_BIT_EXT,
+		eConditionalRenderingReadEXT = VK_ACCESS_CONDITIONAL_RENDERING_READ_BIT_EXT,
+		eColorAttachmentReadNoncoherentEXT = VK_ACCESS_COLOR_ATTACHMENT_READ_NONCOHERENT_BIT_EXT,
+		eAccelerationStructureReadKHR = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,
+		eAccelerationStructureWriteKHR = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,
+		eShadingRateImageReadNV = VK_ACCESS_SHADING_RATE_IMAGE_READ_BIT_NV,
+		eFragmentDensityMapReadEXT = VK_ACCESS_FRAGMENT_DENSITY_MAP_READ_BIT_EXT,
+		eCommandPreprocessReadNV = VK_ACCESS_COMMAND_PREPROCESS_READ_BIT_NV,
+		eCommandPreprocessWriteNV = VK_ACCESS_COMMAND_PREPROCESS_WRITE_BIT_NV,
+		eAccelerationStructureReadNV = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_NV,
+		eAccelerationStructureWriteNV = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_NV
+	};
+
+	using AccessFlags = Flags<AccessFlagBits>;
+
+	inline constexpr AccessFlags operator|(AccessFlagBits bit0, AccessFlagBits bit1) noexcept {
+		return AccessFlags(bit0) | bit1;
+	}
+
+	inline constexpr AccessFlags operator&(AccessFlagBits bit0, AccessFlagBits bit1) noexcept {
+		return AccessFlags(bit0) & bit1;
+	}
+
+	inline constexpr AccessFlags operator^(AccessFlagBits bit0, AccessFlagBits bit1) noexcept {
+		return AccessFlags(bit0) ^ bit1;
 	}
 
 	enum class MemoryUsage {

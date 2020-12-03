@@ -316,7 +316,7 @@ namespace vuk {
 
 // utility functions
 namespace vuk {
-	struct RenderGraph;
-	bool execute_submit_and_present_to_one(PerThreadContext& ptc, RenderGraph& rg, SwapchainRef swapchain);
-	void execute_submit_and_wait(PerThreadContext& ptc, RenderGraph& rg);
+	struct ExecutableRenderGraph;
+	bool execute_submit_and_present_to_one(PerThreadContext& ptc, ExecutableRenderGraph&& rg, SwapchainRef swapchain);
+	void execute_submit_and_wait(PerThreadContext& ptc, ExecutableRenderGraph&& rg);
 }

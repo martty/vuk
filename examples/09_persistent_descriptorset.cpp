@@ -109,10 +109,8 @@ namespace {
 			rg.bind_attachment("09_doge", vuk::Attachment::from_texture(*texture_of_doge), vuk::eFragmentSampled, vuk::eFragmentSampled);
 			rg.bind_attachment("09_v1", vuk::Attachment::from_texture(*variant1), vuk::eNone, vuk::eFragmentSampled);
 			rg.bind_attachment("09_v2", vuk::Attachment::from_texture(*variant2), vuk::eNone, vuk::eFragmentSampled);
-			rg.build();
-			rg.build(ptc);
 			// The rendergraph is submitted and fence-waited on
-			execute_submit_and_wait(ptc, rg);
+			execute_submit_and_wait(ptc, std::move(rg).link(ptc));
 
 			// Create persistent descriptorset for a pipeline and set index
 			pda = ptc.create_persistent_descriptorset(*runner.context->get_named_pipeline("bindless_cube"), 1, 64);

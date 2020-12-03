@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Types.hpp"
+#include "CreateInfo.hpp"
 
 namespace vuk {
 	using Image = VkImage;
@@ -425,16 +426,16 @@ namespace vuk {
 	static_assert(sizeof(SamplerCreateInfo) == sizeof(VkSamplerCreateInfo), "struct and wrapper have different size!");
 	static_assert(std::is_standard_layout<SamplerCreateInfo>::value, "struct wrapper is not a standard layout!");
 
-	template<> struct create_info<vuk::Sampler> {
+	template<> struct create_info<Sampler> {
 		using type = vuk::SamplerCreateInfo;
 	};
 
 	struct Texture {
-		Unique<vuk::Image> image;
-		Unique<vuk::ImageView> view;
-		vuk::Extent3D extent;
-		vuk::Format format;
-		vuk::Samples sample_count;
+		Unique<Image> image;
+		Unique<ImageView> view;
+		Extent3D extent;
+		Format format;
+		Samples sample_count;
 	};
 
 	inline vuk::ImageAspectFlags format_to_aspect(vuk::Format format) noexcept {
@@ -453,11 +454,4 @@ namespace vuk {
                 return vuk::ImageAspectFlagBits::eColor;
         }
     }
-
-	// return the texel block size of a format
-	uint32_t format_to_texel_block_size(vuk::Format) noexcept;
-	// return the 3D texel block extent of a format
-	Extent3D format_to_texel_block_extent(vuk::Format) noexcept;
-	// compute the byte size of an image with given format and extent
-	uint32_t compute_image_size(vuk::Format, vuk::Extent3D) noexcept;
 };

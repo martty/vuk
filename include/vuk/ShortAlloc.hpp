@@ -1,3 +1,4 @@
+#pragma once
 //http://howardhinnant.github.io/stack_alloc.html
 //https://codereview.stackexchange.com/a/31575
 // but modified to use a heap arena
