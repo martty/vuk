@@ -41,7 +41,7 @@ util::ImGuiData util::ImGui_ImplVuk_Init(vuk::PerThreadContext& ptc) {
 	return data;
 }
 
-vuk::Pass util::ImGui_ImplVuk_Render(vuk::PerThreadContext& ptc, vuk::Name src_target, vuk::Name dst_target, util::ImGuiData& data, ImDrawData* draw_data) {
+void util::ImGui_ImplVuk_Render(vuk::PerThreadContext& ptc, vuk::RenderGraph& rg, vuk::Name src_target, vuk::Name dst_target, util::ImGuiData& data, ImDrawData* draw_data) {
 	auto reset_render_state = [](const util::ImGuiData& data, vuk::CommandBuffer& command_buffer, ImDrawData* draw_data, vuk::Buffer vertex, vuk::Buffer index) {
 		command_buffer.bind_sampled_image(0, 0, *data.font_texture.view, data.font_sci);
 		if (index.size > 0) {
@@ -49,7 +49,7 @@ vuk::Pass util::ImGui_ImplVuk_Render(vuk::PerThreadContext& ptc, vuk::Name src_t
 		}
 		command_buffer.bind_vertex_buffer(0, vertex, 0, vuk::Packed{ vuk::Format::eR32G32Sfloat, vuk::Format::eR32G32Sfloat, vuk::Format::eR8G8B8A8Unorm });
 		command_buffer.bind_graphics_pipeline("imgui");
-		command_buffer.set_viewport(0, vuk::Area::framebuffer());
+		command_buffer.set_viewport(0, vuk::Rect2D::framebuffer());
 		struct PC {
 			float scale[2];
 			float translate[2];
@@ -82,7 +82,7 @@ vuk::Pass util::ImGui_ImplVuk_Render(vuk::PerThreadContext& ptc, vuk::Name src_t
 
 	ptc.wait_all_transfers();
 	vuk::Pass pass{
-		.resources = { vuk::Resource{src_target, dst_target, vuk::Resource::Type::eImage, vuk::eColorRW} },
+		.resources = { vuk::Resource{dst_target, vuk::Resource::Type::eImage, vuk::eColorRW} },
 		.execute = [&data, imvert, imind, draw_data, reset_render_state](vuk::CommandBuffer& command_buffer) {
 			reset_render_state(data, command_buffer, draw_data, imvert, imind);
 			// Will project scissor/clipping rectangles into framebuffer space
@@ -161,5 +161,6 @@ vuk::Pass util::ImGui_ImplVuk_Render(vuk::PerThreadContext& ptc, vuk::Name src_t
 		}
 	}
 
-	return pass;
+	rg.add_pass(std::move(pass));
+	rg.add_alias(dst_target, src_target);
 }

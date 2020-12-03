@@ -59,8 +59,8 @@ namespace {
 				.resources = {"03_multipass_final"_image(vuk::eColorWrite)},
 				.execute = [&](vuk::CommandBuffer& command_buffer) {
 					command_buffer
-					  .set_viewport(0, vuk::Area::relative(0, 0, 0.2f, 0.2f))
-					  .set_scissor(0, vuk::Area::relative(0, 0, 0.2f, 0.2f))
+					  .set_viewport(0, vuk::Rect2D::relative(0, 0, 0.2f, 0.2f))
+					  .set_scissor(0, vuk::Rect2D::relative(0, 0, 0.2f, 0.2f))
 					  .bind_graphics_pipeline("triangle")
 					  .draw(3, 1, 0, 0);
 					}
@@ -72,8 +72,8 @@ namespace {
 				.resources = {"03_multipass_final"_image(vuk::eColorWrite)},
 				.execute = [&](vuk::CommandBuffer& command_buffer) {
 					command_buffer
-					  .set_viewport(0, vuk::Area::relative(0.8f, 0.8f, 0.2f, 0.2f))
-					  .set_scissor(0, vuk::Area::relative(0.8f, 0.8f, 0.2f, 0.2f))
+					  .set_viewport(0, vuk::Rect2D::relative(0.8f, 0.8f, 0.2f, 0.2f))
+					  .set_scissor(0, vuk::Rect2D::relative(0.8f, 0.8f, 0.2f, 0.2f))
 					  .bind_graphics_pipeline("triangle")
 					  .draw(3, 1, 0, 0);
 					}
@@ -88,8 +88,8 @@ namespace {
 				.resources = {"03_multipass_final"_image(vuk::eColorWrite), "03_depth"_image(vuk::eDepthStencilRW)},
 				.execute = [verts, uboVP, inds](vuk::CommandBuffer& command_buffer) {
 					command_buffer
-					  .set_viewport(0, vuk::Area::framebuffer())
-					  .set_scissor(0, vuk::Area::framebuffer())
+					  .set_viewport(0, vuk::Rect2D::framebuffer())
+					  .set_scissor(0, vuk::Rect2D::framebuffer())
 					  .bind_index_buffer(inds, vuk::IndexType::eUint32)
 					  .bind_graphics_pipeline("cube")
 					  .bind_vertex_buffer(0, verts, 0, vuk::Packed{vuk::Format::eR32G32B32Sfloat, vuk::Ignore{sizeof(util::Vertex) - sizeof(util::Vertex::position)}})
@@ -109,7 +109,7 @@ namespace {
 			// we don't provide an input texture, nor do we want to save the results later
 			// For an internal attachment, we need to provide the format, extents, sample count and clear value
 			// This depth attachment will have extents matching the framebuffer (deduced from the color attachment)
-			rg.mark_attachment_internal("03_depth", vuk::Format::eD32Sfloat, vuk::Extent2D::Framebuffer{}, vuk::Samples::e1, vuk::ClearDepthStencil{ 1.0f, 0 });
+			rg.attach_managed("03_depth", vuk::Format::eD32Sfloat, vuk::Dimension2D::framebuffer(), vuk::Samples::e1, vuk::ClearDepthStencil{ 1.0f, 0 });
 
 			// Note that the three passes we given here are not ordered with respect to eachother
 			// They all write to the color attachment, which gives no ordering

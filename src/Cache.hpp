@@ -108,8 +108,8 @@ namespace std {
 	};
 
 	template <>
-	struct hash<vuk::Rect2D> {
-		size_t operator()(vuk::Rect2D const& x) const noexcept {
+	struct hash<VkRect2D> {
+		size_t operator()(VkRect2D const& x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, x.extent, x.offset);
 			return h;
@@ -139,15 +139,6 @@ namespace std {
 		size_t operator()(VkOffset2D const& x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, x.x, x.y);
-			return h;
-		}
-	};
-
-	template <>
-	struct hash<VkRect2D> {
-		size_t operator()(VkRect2D const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.extent, x.offset);
 			return h;
 		}
 	};

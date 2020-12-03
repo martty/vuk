@@ -69,8 +69,8 @@ namespace {
 				.execute = [verts, uboVP, inds](vuk::CommandBuffer& command_buffer) {
 					// Rendering is the same as in the case for forward
 					command_buffer
-					  .set_viewport(0, vuk::Area::framebuffer())
-					  .set_scissor(0, vuk::Area::framebuffer())
+					  .set_viewport(0, vuk::Rect2D::framebuffer())
+					  .set_scissor(0, vuk::Rect2D::framebuffer())
 					  .bind_vertex_buffer(0, verts, 0, vuk::Packed{vuk::Format::eR32G32B32Sfloat, vuk::Format::eR32G32B32Sfloat, vuk::Ignore{offsetof(util::Vertex, uv_coordinates) - offsetof(util::Vertex, tangent)}, vuk::Format::eR32G32Sfloat})
 					  .bind_index_buffer(inds, vuk::IndexType::eUint32)
 					  .bind_graphics_pipeline("cube_deferred")
@@ -93,8 +93,8 @@ namespace {
 				.resources = {"05_deferred_final"_image(vuk::eColorWrite), "05_position"_image(vuk::eFragmentSampled), "05_normal"_image(vuk::eFragmentSampled), "05_color"_image(vuk::eFragmentSampled)},
 				.execute = [cam_pos](vuk::CommandBuffer& command_buffer) {
 					command_buffer
-					  .set_viewport(0, vuk::Area::framebuffer())
-					  .set_scissor(0, vuk::Area::framebuffer())
+					  .set_viewport(0, vuk::Rect2D::framebuffer())
+					  .set_scissor(0, vuk::Rect2D::framebuffer())
 					  .bind_graphics_pipeline("deferred_resolve");
 					// Set camera position so we can do lighting
 					*command_buffer.map_scratch_uniform_binding<glm::vec3>(0, 3) = cam_pos;
@@ -113,10 +113,10 @@ namespace {
 			
 			// The intermediate offscreen textures need to be bound
 			// The "internal" rendering resolution is set here for one attachment, the rest infers from it
-			rg.mark_attachment_internal("05_position", vuk::Format::eR16G16B16A16Sfloat, vuk::Extent2D{300, 300}, vuk::Samples::e1, vuk::ClearColor{ 1.f,0.f,0.f,0.f });
-			rg.mark_attachment_internal("05_normal", vuk::Format::eR16G16B16A16Sfloat, vuk::Extent2D::Framebuffer{}, vuk::Samples::e1, vuk::ClearColor{ 0.f, 1.f, 0.f, 0.f });
-			rg.mark_attachment_internal("05_color", vuk::Format::eR8G8B8A8Unorm, vuk::Extent2D::Framebuffer{}, vuk::Samples::e1, vuk::ClearColor{ 0.f, 0.f, 1.f, 0.f });
-			rg.mark_attachment_internal("05_depth", vuk::Format::eD32Sfloat, vuk::Extent2D::Framebuffer{}, vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
+			rg.attach_managed("05_position", vuk::Format::eR16G16B16A16Sfloat, vuk::Dimension2D::absolute(300, 300), vuk::Samples::e1, vuk::ClearColor{ 1.f,0.f,0.f,0.f });
+			rg.attach_managed("05_normal", vuk::Format::eR16G16B16A16Sfloat, vuk::Dimension2D::framebuffer(), vuk::Samples::e1, vuk::ClearColor{ 0.f, 1.f, 0.f, 0.f });
+			rg.attach_managed("05_color", vuk::Format::eR8G8B8A8Unorm, vuk::Dimension2D::framebuffer(), vuk::Samples::e1, vuk::ClearColor{ 0.f, 0.f, 1.f, 0.f });
+			rg.attach_managed("05_depth", vuk::Format::eD32Sfloat, vuk::Dimension2D::framebuffer(), vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
 
 			return rg;
 		}

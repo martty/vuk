@@ -17,6 +17,7 @@ namespace vuk {
 	class PerThreadContext;
 	struct Pass;
 	using Name = std::string_view;
+	struct RenderGraph;
 }
 
 namespace util {
@@ -93,7 +94,7 @@ namespace util {
 		std::unique_ptr<vuk::SampledImage> font_si;
 	};
 	ImGuiData ImGui_ImplVuk_Init(vuk::PerThreadContext& ptc);
-	vuk::Pass ImGui_ImplVuk_Render(vuk::PerThreadContext& ptc, vuk::Name src_target, vuk::Name use_target, ImGuiData& data, ImDrawData* draw_data);
+	void ImGui_ImplVuk_Render(vuk::PerThreadContext& ptc, vuk::RenderGraph& rg, vuk::Name src_target, vuk::Name use_target, ImGuiData& data, ImDrawData* draw_data);
 
 	inline std::string read_entire_file(const std::string& path) {
 		std::ostringstream buf;

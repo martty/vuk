@@ -6,9 +6,7 @@
 namespace std {
 	template<> struct hash<vuk::Resource> {
 		std::size_t operator()(vuk::Resource const& s) const noexcept {
-			size_t h = 0;
-			hash_combine(h, s.src_name, s.use_name, s.type);
-			return h;
+			return s.hash_name;
 		}
 	};
 }
@@ -205,11 +203,7 @@ namespace vuk {
 	struct AttachmentRPInfo {
 		Name name;
 
-		enum class Sizing {
-			eAbsolute, eFramebufferRelative
-		} sizing;
-		vuk::Extent2D::Framebuffer fb_relative;
-		vuk::Extent2D extents;
+		vuk::Dimension2D extents;
 		vuk::Samples samples;
 
 		VkAttachmentDescription description = {};

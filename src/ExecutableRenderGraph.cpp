@@ -12,6 +12,12 @@ namespace vuk {
 		rg.impl = nullptr; //pilfered
 	}
 
+	ExecutableRenderGraph::ExecutableRenderGraph(ExecutableRenderGraph&& o) noexcept : impl(std::exchange(o.impl, nullptr)) {}
+	ExecutableRenderGraph& ExecutableRenderGraph::operator=(ExecutableRenderGraph&& o) noexcept {
+		impl = std::exchange(o.impl, nullptr);
+		return *this;
+	}
+
 	ExecutableRenderGraph::~ExecutableRenderGraph() {
 		delete impl;
 	}
@@ -25,12 +31,14 @@ namespace vuk {
 			ici.usage = usage;
 			ici.arrayLayers = 1;
 			// compute extent
-			if (attachment_info.sizing == AttachmentRPInfo::Sizing::eFramebufferRelative) {
+			if (attachment_info.extents.sizing == Sizing::eRelative) {
 				assert(fb_extent.width > 0 && fb_extent.height > 0);
-				ici.extent = vuk::Extent3D{ static_cast<uint32_t>(attachment_info.fb_relative.width * fb_extent.width), static_cast<uint32_t>(attachment_info.fb_relative.height * fb_extent.height), 1u };
+				ici.extent = vuk::Extent3D{ static_cast<uint32_t>(attachment_info.extents._relative.width * fb_extent.width), static_cast<uint32_t>(attachment_info.extents._relative.height * fb_extent.height), 1u };
 			} else {
-				ici.extent = static_cast<vuk::Extent3D>(attachment_info.extents);
+				ici.extent = static_cast<vuk::Extent3D>(attachment_info.extents.extent);
 			}
+			// concretize attachment size
+			attachment_info.extents = Dimension2D::absolute(ici.extent.width, ici.extent.height);
 			ici.imageType = vuk::ImageType::e2D;
 			ici.format = vuk::Format(attachment_info.description.format);
 			ici.mipLevels = 1;
@@ -71,7 +79,7 @@ namespace vuk {
 		VkRenderPassBeginInfo rbi{.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
 		rbi.renderPass = rpass.handle;
 		rbi.framebuffer = rpass.framebuffer;
-		rbi.renderArea = vuk::Rect2D{ vuk::Offset2D{}, vuk::Extent2D{ rpass.fbci.width, rpass.fbci.height } };
+		rbi.renderArea = VkRect2D{ vuk::Offset2D{}, vuk::Extent2D{ rpass.fbci.width, rpass.fbci.height } };
 		std::vector<VkClearValue> clears;
 		for (size_t i = 0; i < rpass.attachments.size(); i++) {
 			auto& att = rpass.attachments[i];
@@ -125,19 +133,25 @@ namespace vuk {
 					bound.iv = it->first->image_views[it->second];
 					bound.image = it->first->images[it->second];
 					fb_extent = it->first->extent;
+					bound.extents = Dimension2D::absolute(it->first->extent);
 					extent_known = true;
 				} else {
-					if (bound.sizing == AttachmentRPInfo::Sizing::eAbsolute) {
-						fb_extent = bound.extents;
+					if (bound.extents.sizing == Sizing::eAbsolute) {
+						fb_extent = bound.extents.extent;
 						extent_known = true;
 					}
 				}
 			}
 
+			if (extent_known) {
+				rp.fbci.width = fb_extent.width;
+				rp.fbci.height = fb_extent.height;
+			}
+
 			for (auto& attrpinfo : rp.attachments) {
 				auto& bound = impl->bound_attachments[attrpinfo.name];
 				if (extent_known) {
-					bound.extents = fb_extent;
+					bound.extents = Dimension2D::absolute(fb_extent);
 				}
 			}
 		}
@@ -156,14 +170,21 @@ namespace vuk {
 
 			auto& ivs = rp.fbci.attachments;
 			std::vector<VkImageView> vkivs;
-			vuk::Extent2D fb_extent;
 
-			for (auto& attrpinfo : rp.attachments) {
-				auto& bound = impl->bound_attachments[attrpinfo.name];
-				if (bound.extents.width > 0 && bound.extents.height > 0)
-					fb_extent = bound.extents;
-			}
+			Extent2D fb_extent = Extent2D{rp.fbci.width, rp.fbci.height};
 			
+			// do a second pass so that we can infer from the attachments we previously inferred from
+			// TODO: we should allow arbitrary number of passes
+			if (fb_extent.width == 0 || fb_extent.height == 0) {
+				for (auto& attrpinfo : rp.attachments) {
+					auto& bound = impl->bound_attachments[attrpinfo.name];
+					if (bound.extents.extent.width > 0 && bound.extents.extent.height > 0) {
+						fb_extent = bound.extents.extent;
+					}
+				}
+			}
+			// TODO: check here if all attachments have been sized
+
 			// create internal attachments; bind attachments to fb
 			for (auto& attrpinfo : rp.attachments) {
 				auto& bound = impl->bound_attachments[attrpinfo.name];
@@ -175,13 +196,14 @@ namespace vuk {
 				vkivs.push_back(bound.iv.payload);
 			}
 			rp.fbci.renderPass = rp.handle;
+			rp.fbci.pAttachments = &vkivs[0];
 			rp.fbci.width = fb_extent.width;
 			rp.fbci.height = fb_extent.height;
-			rp.fbci.pAttachments = &vkivs[0];
 			rp.fbci.attachmentCount = (uint32_t)vkivs.size();
 			rp.fbci.layers = 1;
 			rp.framebuffer = ptc.acquire_framebuffer(rp.fbci);
 		}
+
 		// create non-attachment images
 		for (auto& [name, bound] : impl->bound_attachments) {
 			if (bound.type == AttachmentRPInfo::Type::eInternal && bound.image == VK_NULL_HANDLE) {

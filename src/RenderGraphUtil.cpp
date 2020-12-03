@@ -3,14 +3,24 @@
 #include "RenderGraphUtil.hpp"
 
 namespace vuk {
+	namespace detail {
+		Resource ImageResource::operator()(Access ia) {
+			return Resource{ name, Resource::Type::eImage, ia };
+		}
+
+		Resource BufferResource::operator()(Access ba) {
+			return Resource{ name, Resource::Type::eBuffer, ba };
+		}
+	}
+
 #define INIT2(x) x(decltype(x)::allocator_type(arena_))
 
 	RenderPassInfo::RenderPassInfo(arena& arena_) : INIT2(subpasses), INIT2(attachments) {
 	}
 
-    PassInfo::PassInfo(arena& arena_, Pass&& p) : pass(std::move(p)) {}
+	PassInfo::PassInfo(arena& arena_, Pass&& p) : pass(std::move(p)) {}
 
-    SubpassInfo::SubpassInfo(arena& arena_) : INIT2(passes) {}
+	SubpassInfo::SubpassInfo(arena& arena_) : INIT2(passes) {}
 
 #undef INIT2
 
@@ -63,7 +73,7 @@ namespace vuk {
 	bool MPI1::operator==(MPI1 const& other) const noexcept {
 		return *reinterpret_cast<M1::iterator const*>(_iter) == *reinterpret_cast<M1::iterator const*>(other._iter);
 	}
-	
+
 
 	// implement MapProxy for attachment
 	using MP2 = MapProxy<Name, AttachmentRPInfo&>;

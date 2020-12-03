@@ -29,6 +29,12 @@ namespace vuk {
 		impl->bound_buffers.insert(std::make_move_iterator(other.impl->bound_buffers.begin()), std::make_move_iterator(other.impl->bound_buffers.end()));
 	}
 
+	void RenderGraph::add_alias(Name new_name, Name old_name) {
+		if (new_name != old_name) {
+			impl->aliases[new_name] = old_name;
+		}
+	}
+
 	// determine rendergraph inputs and outputs, and resources that are neither
 	void RenderGraph::build_io() {
 		std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 8>> inputs{ *impl->arena_ };
@@ -72,18 +78,18 @@ namespace vuk {
 		build_io();
 		// sort passes
 		if (impl->passes.size() > 1) {
-			topological_sort(impl->passes.begin(), impl->passes.end(), [](const auto& p1, const auto& p2) {
+			topological_sort(impl->passes.begin(), impl->passes.end(), [this](const auto& p1, const auto& p2) {
 				bool could_execute_after = false;
 				bool could_execute_before = false;
 				for (auto& o : p1.outputs) {
 					for (auto& i : p2.inputs) {
-						if (i.hash_src_name == o.hash_use_name)
+						if (i.name == resolve_name(o.name, impl->aliases))
 							could_execute_after = true;
 					}
 				}
 				for (auto& o : p2.outputs) {
 					for (auto& i : p1.inputs) {
-						if (i.hash_src_name == o.hash_use_name)
+						if (i.name == resolve_name(o.name, impl->aliases))
 							could_execute_before = true;
 					}
 				}
@@ -103,12 +109,9 @@ namespace vuk {
 		// assemble use chains
 		for (auto& passinfo : impl->passes) {
 			for (auto& res : passinfo.pass.resources) {
-				if (res.src_name != res.use_name) {
-					impl->aliases[res.use_name] = res.src_name;
-				}
-                auto it = impl->use_chains.find(resolve_name(res.use_name, impl->aliases));
+                auto it = impl->use_chains.find(resolve_name(res.name, impl->aliases));
 				if (it == impl->use_chains.end()) {
-                    it = impl->use_chains.emplace(resolve_name(res.use_name, impl->aliases), std::vector<UseRef, short_alloc<UseRef, 64>>{short_alloc<UseRef, 64>{*impl->arena_}}).first;
+                    it = impl->use_chains.emplace(resolve_name(res.name, impl->aliases), std::vector<UseRef, short_alloc<UseRef, 64>>{short_alloc<UseRef, 64>{*impl->arena_}}).first;
 				}
 				it->second.emplace_back(UseRef{ to_use(res.ia), &passinfo });
 			}
@@ -164,7 +167,7 @@ namespace vuk {
 			}
 			for (auto& att : attachments) {
 				AttachmentRPInfo info;
-				info.name = resolve_name(att.use_name, impl->aliases);
+				info.name = resolve_name(att.name, impl->aliases);
 				rpi.attachments.push_back(info);
 			}
 
@@ -176,19 +179,19 @@ namespace vuk {
 		}
 	}
 
-	void RenderGraph::mark_attachment_resolve(Name resolved_name, Name ms_name) {
+	void RenderGraph::resolve_resource_into(Name resolved_name, Name ms_name) {
 		add_pass({
 			.resources = {
-				vuk::Resource{ms_name, ms_name, vuk::Resource::Type::eImage, vuk::eColorResolveRead},
-				vuk::Resource{resolved_name, resolved_name, vuk::Resource::Type::eImage, vuk::eColorResolveWrite}
+				vuk::Resource{ms_name, vuk::Resource::Type::eImage, vuk::eColorResolveRead},
+				vuk::Resource{resolved_name, vuk::Resource::Type::eImage, vuk::eColorResolveWrite}
 			},
 			.resolves = {{ms_name, resolved_name}}
 			});
 	}
 
-	void RenderGraph::bind_attachment_to_swapchain(Name name, SwapchainRef swp, Clear c) {
+	void RenderGraph::attach_swapchain(Name name, SwapchainRef swp, Clear c) {
 		AttachmentRPInfo attachment_info;
-		attachment_info.extents = swp->extent;
+		attachment_info.extents = vuk::Dimension2D::absolute(swp->extent);
 		attachment_info.iv = {};
 		// directly presented
 		attachment_info.description.format = (VkFormat)swp->format;
@@ -219,9 +222,8 @@ namespace vuk {
 		impl->bound_attachments.emplace(name, attachment_info);
 	}
 
-	void RenderGraph::mark_attachment_internal(Name name, vuk::Format format, vuk::Extent2D extent, vuk::Samples samp, Clear c) {
+	void RenderGraph::attach_managed(Name name, vuk::Format format, vuk::Dimension2D extent, vuk::Samples samp, Clear c) {
 		AttachmentRPInfo attachment_info;
-		attachment_info.sizing = AttachmentRPInfo::Sizing::eAbsolute;
 		attachment_info.extents = extent;
 		attachment_info.iv = {};
 
@@ -246,42 +248,14 @@ namespace vuk {
 		impl->bound_attachments.emplace(name, attachment_info);
 	}
 
-	void RenderGraph::mark_attachment_internal(Name name, vuk::Format format, vuk::Extent2D::Framebuffer fbrel, vuk::Samples samp, Clear c) {
-		AttachmentRPInfo attachment_info;
-		attachment_info.sizing = AttachmentRPInfo::Sizing::eFramebufferRelative;
-		attachment_info.fb_relative = fbrel;
-		attachment_info.iv = {};
-
-		attachment_info.type = AttachmentRPInfo::Type::eInternal;
-		attachment_info.description.format = (VkFormat)format;
-		attachment_info.samples = samp;
-
-		attachment_info.should_clear = true;
-		attachment_info.clear_value = c;
-		Resource::Use& initial = attachment_info.initial;
-		Resource::Use& final = attachment_info.final;
-		initial.access = vuk::AccessFlags{};
-		initial.stages = vuk::PipelineStageFlagBits::eTopOfPipe;
-		// for internal attachments we don't want to preserve previous data
-		initial.layout = vuk::ImageLayout::ePreinitialized;
-
-		// with an undefined final layout, there will be no final sync
-		final.layout = vuk::ImageLayout::eUndefined;
-		final.access = vuk::AccessFlagBits{};
-		final.stages = vuk::PipelineStageFlagBits::eBottomOfPipe;
-
-		impl->bound_attachments.emplace(name, attachment_info);
-	}
-
-	void RenderGraph::bind_buffer(Name name, vuk::Buffer buf, Access initial, Access final) {
+	void RenderGraph::attach_buffer(Name name, vuk::Buffer buf, Access initial, Access final) {
 		BufferInfo buf_info{.name = name, .initial = to_use(initial), .final = to_use(final), .buffer = buf};
 		impl->bound_buffers.emplace(name, buf_info);
 	}
 
-	void RenderGraph::bind_attachment(Name name, Attachment att, Access initial_acc, Access final_acc) {
+	void RenderGraph::attach_image(Name name, ImageAttachment att, Access initial_acc, Access final_acc) {
         AttachmentRPInfo attachment_info;
-        attachment_info.sizing = AttachmentRPInfo::Sizing::eAbsolute;
-        attachment_info.extents = att.extent;
+        attachment_info.extents = vuk::Dimension2D::absolute(att.extent);
         attachment_info.image = att.image;
         attachment_info.iv = att.image_view;
 
@@ -565,7 +539,7 @@ namespace vuk {
 					continue;
 				VkAttachmentReference attref{};
 
-				auto name = resolve_name(res.use_name, impl->aliases);
+				auto name = resolve_name(res.name, impl->aliases);
 				auto& chain = impl->use_chains.find(name)->second;
 				auto cit = std::find_if(chain.begin(), chain.end(), [&](auto& useref) { return useref.pass == &pass; });
 				assert(cit != chain.end());
@@ -580,7 +554,7 @@ namespace vuk {
 
 					VkAttachmentReference rref{};
 					rref.attachment = VK_ATTACHMENT_UNUSED;
-					if (auto it = pass.pass.resolves.find(res.use_name); it != pass.pass.resolves.end()) {
+					if (auto it = pass.pass.resolves.find(res.name); it != pass.pass.resolves.end()) {
 						// this a resolve src attachment
 						// get the dst attachment
 						auto& dst_name = it->second;

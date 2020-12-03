@@ -14,22 +14,23 @@
 
 namespace vuk {
 	struct Resource;
-	struct BufferResource {
-		Name name;
 
-		Resource operator()(Access ba);
-	};
-	struct ImageResource {
-		Name name;
+	namespace detail {
+		struct BufferResource {
+			Name name;
 
-		Resource operator()(Access ia);
-	};
-	
+			Resource operator()(Access ba);
+		};
+		struct ImageResource {
+			Name name;
+
+			Resource operator()(Access ia);
+		};
+	}
+
 	struct Resource {
-		Name src_name;
-		Name use_name;
-        unsigned hash_src_name;
-        unsigned hash_use_name;
+		Name name;
+		unsigned hash_name;
 		enum class Type { eBuffer, eImage } type;
 		Access ia;
 		struct Use {
@@ -38,45 +39,34 @@ namespace vuk {
 			vuk::ImageLayout layout; // ignored for buffers
 		};
 
-		Resource(Name n, Type t, Access ia): src_name(n), use_name(n), type(t), ia(ia) {
-            hash_src_name = hash_use_name = hash::fnv1a::hash(src_name.data(), src_name.size(), hash::fnv1a::default_offset_basis);
-		}
-		Resource(Name src, Name use, Type t, Access ia) : src_name(src), use_name(use), type(t), ia(ia) {
-            hash_src_name = hash::fnv1a::hash(src_name.data(), src_name.size(), hash::fnv1a::default_offset_basis);
-            hash_use_name = hash::fnv1a::hash(use_name.data(), use_name.size(), hash::fnv1a::default_offset_basis);
+		Resource(Name n, Type t, Access ia) : name(n), type(t), ia(ia) {
+			hash_name = hash::fnv1a::hash(name.data(), name.size(), hash::fnv1a::default_offset_basis);
 		}
 
 		bool operator==(const Resource& o) const noexcept {
-			return (hash_use_name == o.hash_use_name && hash_src_name == o.hash_src_name);
+			return hash_name == o.hash_name;
 		}
 	};
 
 	Resource::Use to_use(Access acc);
 
-	inline Resource ImageResource::operator()(Access ia) {
-		return Resource{name, Resource::Type::eImage, ia};
-	}
+	// TODO: infer this from a smart IV
+	struct ImageAttachment {
+		vuk::Image image;
+		vuk::ImageView image_view;
 
-	inline Resource BufferResource::operator()(Access ba) {
-		return Resource{ name, Resource::Type::eBuffer, ba };
-	}
-
-	struct Attachment {
-        vuk::Image image;
-        vuk::ImageView image_view;
-        
 		vuk::Extent2D extent;
-        vuk::Format format;
-        vuk::Samples sample_count = vuk::Samples::e1;
-        Clear clear_value;
+		vuk::Format format;
+		vuk::Samples sample_count = vuk::Samples::e1;
+		Clear clear_value;
 
-		static Attachment from_texture(const vuk::Texture& t, Clear clear_value) {
-            return Attachment{
-                .image = t.image.get(), .image_view = t.view.get(), .extent = {t.extent.width, t.extent.height}, .format = t.format, .sample_count = {t.sample_count}, .clear_value = clear_value};
-        }
-		static Attachment from_texture(const vuk::Texture& t) {
-            return Attachment{
-                .image = t.image.get(), .image_view = t.view.get(), .extent = {t.extent.width, t.extent.height}, .format = t.format, .sample_count = {t.sample_count}};
+		static ImageAttachment from_texture(const vuk::Texture& t, Clear clear_value) {
+			return ImageAttachment{
+				.image = t.image.get(), .image_view = t.view.get(), .extent = {t.extent.width, t.extent.height}, .format = t.format, .sample_count = {t.sample_count}, .clear_value = clear_value };
+		}
+		static ImageAttachment from_texture(const vuk::Texture& t) {
+			return ImageAttachment{
+				.image = t.image.get(), .image_view = t.view.get(), .extent = {t.extent.width, t.extent.height}, .format = t.format, .sample_count = {t.sample_count} };
 		}
 	};
 
@@ -84,7 +74,7 @@ namespace vuk {
 		Name name;
 		Name executes_on;
 		float auxiliary_order = 0.f;
-        bool use_secondary_command_buffers = false;
+		bool use_secondary_command_buffers = false;
 
 		std::vector<Resource> resources;
 		robin_hood::unordered_flat_map<Name, Name> resolves; // src -> dst
@@ -96,27 +86,43 @@ namespace vuk {
 		RenderGraph();
 		~RenderGraph();
 
+		RenderGraph(const RenderGraph&) = delete;
+		RenderGraph& operator=(const RenderGraph&) = delete;
+
 		RenderGraph(RenderGraph&&) noexcept;
 		RenderGraph& operator=(RenderGraph&&) noexcept;
 
-		void add_pass(Pass p);
+		/// @brief 
+		/// @param the Pass to add to the RenderGraph 
+		void add_pass(Pass);
 
+		// append the other RenderGraph onto this one
+		// will copy or move passes and attachments
 		void append(RenderGraph other);
 
-		void mark_attachment_resolve(Name resolved_name, Name ms_name);
-		void bind_attachment_to_swapchain(Name, SwapchainRef swp, Clear);
-		void mark_attachment_internal(Name, Format, Extent2D, Samples, Clear);
-		void mark_attachment_internal(Name, Format, Extent2D::Framebuffer, Samples, Clear);
-		void bind_buffer(Name, Buffer, Access initial, Access final);
-		void bind_attachment(Name, Attachment, Access initial, Access final);
+		/// @brief Add an alias for a resource
+		/// @param new_name 
+		/// @param old_name 
+		void add_alias(Name new_name, Name old_name);
 
-		struct ExecutableRenderGraph link(PerThreadContext&) &&;
+		/// @brief Add a resolve operation from the image resource `ms_name` to image_resource `resolved_name`
+		/// @param resolved_name 
+		/// @param ms_name 
+		void resolve_resource_into(Name resolved_name, Name ms_name);
+
+		void attach_swapchain(Name, SwapchainRef swp, Clear);
+		void attach_buffer(Name, Buffer, Access initial, Access final);
+		void attach_image(Name, ImageAttachment, Access initial, Access final);
+
+		void attach_managed(Name, Format, Dimension2D, Samples, Clear);
+
+		/// @brief Consume this RenderGraph and create an ExecutableRenderGraph
+		struct ExecutableRenderGraph link(PerThreadContext& ptc)&&;
 
 		// reflection functions
 		MapProxy<Name, std::span<const struct UseRef>> get_use_chains();
 		MapProxy<Name, struct AttachmentRPInfo&> get_bound_attachments();
 		vuk::ImageUsageFlags compute_usage(std::span<const UseRef> chain);
-
 	private:
 		struct RGImpl* impl;
 		friend struct ExecutableRenderGraph;
@@ -130,6 +136,12 @@ namespace vuk {
 	struct ExecutableRenderGraph {
 		ExecutableRenderGraph(RenderGraph&&);
 		~ExecutableRenderGraph();
+
+		ExecutableRenderGraph(const ExecutableRenderGraph&) = delete;
+		ExecutableRenderGraph& operator=(const ExecutableRenderGraph&) = delete;
+
+		ExecutableRenderGraph(ExecutableRenderGraph&&) noexcept;
+		ExecutableRenderGraph& operator=(ExecutableRenderGraph&&) noexcept;
 
 		VkCommandBuffer execute(vuk::PerThreadContext&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
 
@@ -145,12 +157,11 @@ namespace vuk {
 	};
 }
 
-
-inline vuk::ImageResource operator "" _image(const char* name, size_t) {
+inline vuk::detail::ImageResource operator "" _image(const char* name, size_t) {
 	return { name };
 }
 
-inline vuk::BufferResource operator "" _buffer(const char* name, size_t) {
+inline vuk::detail::BufferResource operator "" _buffer(const char* name, size_t) {
 	return { name };
 }
 
