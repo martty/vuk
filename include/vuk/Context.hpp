@@ -71,29 +71,52 @@ namespace vuk {
 
 		uint32_t(*get_thread_index)() = nullptr;
 
-		// when the fence is signaled, caller should clean up the resources
+		/// @brief Information about a pending upload
 		struct UploadResult {
+			/// @brief Fence to be signaled when the upload completes
 			VkFence fence;
+			/// @brief VKCommandBuffer that is used for the upload
 			VkCommandBuffer command_buffer;
+			/// @brief Staging buffer memory used for this upload
 			vuk::Buffer staging;
+			/// @brief If this is a buffer or an image upload
 			bool is_buffer;
+			/// @brief Thread index of the initiator thread
 			unsigned thread_index;
 		};
 
+		/// @brief Describes a single upload to a Buffer
 		struct BufferUpload {
+			/// @brief Buffer to upload to
 			vuk::Buffer dst;
+			/// @brief Data to upload
 			std::span<unsigned char> data;
 		};
-		UploadResult fenced_upload(std::span<BufferUpload>);
 
+		/// @brief Enqueue buffer data for upload
+		/// @param uploads BufferUpload structures describing the upload parameters
+		/// @return UploadResult
+		UploadResult fenced_upload(std::span<BufferUpload> uploads);
+
+		/// @brief Describes a single upload to an Image
 		struct ImageUpload {
+			/// @brief Image to upload to
 			vuk::Image dst;
+			/// @brief Format of the image data
 			vuk::Format format;
+			/// @brief Extent of the image data
 			vuk::Extent3D extent;
+			/// @brief Image data
 			std::span<unsigned char> data;
 		};
-		UploadResult fenced_upload(std::span<ImageUpload>);
-		void free_upload_resources(const UploadResult&);
+
+		/// @brief Enqueue image data for upload
+		/// @param uploads ImageUpload structures describing the upload parameters
+		/// @return UploadResult
+		UploadResult fenced_upload(std::span<ImageUpload> uploads);
+		/// @brief Free upload resources involved in a fenced upload
+		/// @param result UploadResult to free
+		void free_upload_resources(const UploadResult& result);
 
 		Buffer allocate_buffer(MemoryUsage mem_usage, BufferUsageFlags buffer_usage, size_t size, size_t alignment);
 		Texture allocate_texture(vuk::ImageCreateInfo ici);
