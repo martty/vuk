@@ -8,7 +8,7 @@ Fenced uploads can be used to upload to either :cpp:struct:`buffers <vuk::Buffer
 .. doxygenstruct:: vuk::Context::BufferUpload
    :members:
 
-or Images :
+or :cpp:type:`images <vuk::Image>`:
 
 .. doxygenstruct:: vuk::Context::ImageUpload
    :members:

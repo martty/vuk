@@ -42,6 +42,15 @@ author = 'Marcell Kiss'
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
+    'sphinx.ext.autodoc',
+    'sphinx.ext.intersphinx',
+    'sphinx.ext.autosectionlabel',
+    'sphinx.ext.todo',
+    'sphinx.ext.coverage',
+    'sphinx.ext.mathjax',
+    'sphinx.ext.ifconfig',
+    'sphinx.ext.viewcode',
+    'sphinx.ext.inheritance_diagram',
     "breathe"
 ]
 
@@ -66,8 +75,29 @@ html_theme = 'sphinx_rtd_theme'
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
 
+html_theme_options = {
+    'canonical_url': '',
+    'analytics_id': '',  #  Provided by Google in your dashboard
+    'display_version': True,
+    'prev_next_buttons_location': 'bottom',
+    'style_external_links': False,
+    
+    'logo_only': False,
+
+    # Toc options
+    'collapse_navigation': True,
+    'sticky_navigation': True,
+    'navigation_depth': 4,
+    'includehidden': True,
+    'titles_only': False
+}
+# html_logo = ''
+# github_url = ''
+# html_baseurl = ''
+
 # Breathe Configuration
 breathe_default_project = "vuk"
+breathe_domain_by_extension = {"h" : "cpp"}
 
 breathe_projects = {}
 
