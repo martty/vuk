@@ -146,27 +146,6 @@ namespace vuk {
 		PassInfo* pass = nullptr;
 	};
 
-	inline vuk::ImageUsageFlags compute_usage(const std::vector<UseRef, short_alloc<UseRef, 64>>& chain) {
-		vuk::ImageUsageFlags usage;
-		for (const auto& c : chain) {
-			switch (c.use.layout) {
-			case vuk::ImageLayout::eDepthStencilAttachmentOptimal:
-				usage |= vuk::ImageUsageFlagBits::eDepthStencilAttachment; break;
-			case vuk::ImageLayout::eShaderReadOnlyOptimal: // TODO: more complex analysis
-				usage |= vuk::ImageUsageFlagBits::eSampled; break;
-			case vuk::ImageLayout::eColorAttachmentOptimal:
-				usage |= vuk::ImageUsageFlagBits::eColorAttachment; break;
-			case vuk::ImageLayout::eTransferSrcOptimal:
-				usage |= vuk::ImageUsageFlagBits::eTransferSrc; break;
-			case vuk::ImageLayout::eTransferDstOptimal:
-				usage |= vuk::ImageUsageFlagBits::eTransferDst; break;
-			default:;
-			}
-		}
-
-		return usage;
-	}
-
 	template<class T>
 	Name resolve_name(Name in, const T& aliases) {
 		auto it = aliases.find(in);

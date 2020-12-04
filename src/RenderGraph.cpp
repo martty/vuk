@@ -660,6 +660,23 @@ namespace vuk {
 	}
 
 	vuk::ImageUsageFlags RenderGraph::compute_usage(std::span<const UseRef> chain) {
-		return {};
+		vuk::ImageUsageFlags usage;
+		for (const auto& c : chain) {
+			switch (c.use.layout) {
+			case vuk::ImageLayout::eDepthStencilAttachmentOptimal:
+				usage |= vuk::ImageUsageFlagBits::eDepthStencilAttachment; break;
+			case vuk::ImageLayout::eShaderReadOnlyOptimal: // TODO: more complex analysis
+				usage |= vuk::ImageUsageFlagBits::eSampled; break;
+			case vuk::ImageLayout::eColorAttachmentOptimal:
+				usage |= vuk::ImageUsageFlagBits::eColorAttachment; break;
+			case vuk::ImageLayout::eTransferSrcOptimal:
+				usage |= vuk::ImageUsageFlagBits::eTransferSrc; break;
+			case vuk::ImageLayout::eTransferDstOptimal:
+				usage |= vuk::ImageUsageFlagBits::eTransferDst; break;
+			default:;
+			}
+		}
+
+		return usage;
 	}
 } // namespace vuk

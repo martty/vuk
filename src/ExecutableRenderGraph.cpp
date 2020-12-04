@@ -25,7 +25,7 @@ namespace vuk {
 	void ExecutableRenderGraph::create_attachment(PerThreadContext& ptc, Name name, AttachmentRPInfo& attachment_info, vuk::Extent2D fb_extent, vuk::SampleCountFlagBits samples) {
 		auto& chain = impl->use_chains.at(name);
 		if (attachment_info.type == AttachmentRPInfo::Type::eInternal) {
-			vuk::ImageUsageFlags usage = compute_usage(chain);
+			vuk::ImageUsageFlags usage = RenderGraph::compute_usage(std::span(chain));
 
 			vuk::ImageCreateInfo ici;
 			ici.usage = usage;
