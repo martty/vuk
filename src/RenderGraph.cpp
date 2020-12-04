@@ -83,13 +83,13 @@ namespace vuk {
 				bool could_execute_before = false;
 				for (auto& o : p1.outputs) {
 					for (auto& i : p2.inputs) {
-						if (i.name == resolve_name(o.name, impl->aliases))
+						if (o.name == resolve_name(i.name, impl->aliases))
 							could_execute_after = true;
 					}
 				}
 				for (auto& o : p2.outputs) {
 					for (auto& i : p1.inputs) {
-						if (i.name == resolve_name(o.name, impl->aliases))
+						if (o.name == resolve_name(i.name, impl->aliases))
 							could_execute_before = true;
 					}
 				}

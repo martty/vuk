@@ -82,6 +82,7 @@ void util::ImGui_ImplVuk_Render(vuk::PerThreadContext& ptc, vuk::RenderGraph& rg
 
 	ptc.wait_all_transfers();
 	vuk::Pass pass{
+		.name = "imgui",
 		.resources = { vuk::Resource{dst_target, vuk::Resource::Type::eImage, vuk::eColorRW} },
 		.execute = [&data, imvert, imind, draw_data, reset_render_state](vuk::CommandBuffer& command_buffer) {
 			reset_render_state(data, command_buffer, draw_data, imvert, imind);
