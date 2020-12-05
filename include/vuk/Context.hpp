@@ -135,6 +135,13 @@ namespace vuk {
 		/// @brief Wait for the device to become idle. Useful for only a few synchronisation events, like resizing or shutting down.
 		void wait_idle();
 
+		/// @brief Create a wrapped handle type (eg. a vuk::ImageView) from an externally sourced Vulkan handle
+		/// @tparam T Vulkan handle type to wrap
+		/// @param payload Vulkan handle to wrap
+		/// @return The wrapped handle.
+		template<class T>
+		Handle<T> wrap(T payload);
+
 		void submit_graphics(VkSubmitInfo, VkFence);
 		void submit_transfer(VkSubmitInfo, VkFence);
 	private:
@@ -162,9 +169,6 @@ namespace vuk {
 		VkPipelineLayout create(const create_info_t<VkPipelineLayout>& cinfo);
 		DescriptorSetLayoutAllocInfo create(const create_info_t<DescriptorSetLayoutAllocInfo>& cinfo);
 		ComputePipelineInfo create(const create_info_t<ComputePipelineInfo>& cinfo);
-
-		template<class T>
-		Handle<T> wrap(T payload);
 
 		friend class InflightContext;
 		friend class PerThreadContext;
