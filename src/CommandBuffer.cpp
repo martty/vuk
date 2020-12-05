@@ -419,7 +419,7 @@ namespace vuk {
 		for (unsigned i = 0; i < VUK_MAX_SETS; i++) {
 			bool persistent = persistent_sets_used[i];
 			if (!sets_used[i] && !persistent_sets_used[i])
-				break;
+				continue;
 			set_bindings[i].layout_info = graphics ? current_pipeline->layout_info[i] : current_compute_pipeline->layout_info[i];
 			if (!persistent) {
 				auto ds = ptc.acquire_descriptorset(set_bindings[i]);
