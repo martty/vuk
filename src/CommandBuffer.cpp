@@ -205,10 +205,7 @@ namespace vuk {
 
 		auto layout = rg->is_resource_image_in_general_layout(name, current_pass) ? vuk::ImageLayout::eGeneral : vuk::ImageLayout::eShaderReadOnlyOptimal;
 
-		VkImageView image_view;
-		vkCreateImageView(ptc.ctx.device, (VkImageViewCreateInfo*)&ivci, nullptr, &image_view);
-		vuk::Unique<vuk::ImageView> iv = vuk::Unique<vuk::ImageView>(ptc.ctx, ptc.ctx.wrap(image_view));
-
+		vuk::Unique<vuk::ImageView> iv = ptc.create_image_view(ivci);
 		return bind_sampled_image(set, binding, *iv, sampler_create_info, layout);
 	}
 

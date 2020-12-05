@@ -2,6 +2,7 @@
 #include "RenderGraphUtil.hpp"
 #include "RenderGraphImpl.hpp"
 #include "vuk/Context.hpp"
+#include "vuk/Exception.hpp"
 #include <unordered_set>
 
 namespace vuk {
@@ -285,12 +286,21 @@ namespace vuk {
 		rp_att.type = attachment_info.type;
 	}
 
+	void RenderGraph::validate() {
+		// check if all resourced are attached
+		for (const auto& [n, v] : impl->use_chains) {
+			if (!impl->bound_attachments.contains(n)) {
+				throw RenderGraphException{ std::string("Missing resource: \"") + std::string(n) + "\". Did you forget to attach it?" };
+			}
+		}
+	}
+
 	ExecutableRenderGraph RenderGraph::link(vuk::PerThreadContext& ptc)&& {
 		compile();
 
 		// at this point the graph is built, we know of all the resources and everything should have been attached
 		// perform checking if this indeed the case
-
+		validate();
 
 		for (auto& [raw_name, attachment_info] : impl->bound_attachments) {
 			auto name = resolve_name(raw_name, impl->aliases);

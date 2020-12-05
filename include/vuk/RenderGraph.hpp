@@ -132,6 +132,10 @@ namespace vuk {
 		struct RGImpl* impl;
 		friend struct ExecutableRenderGraph;
 
+		/// @brief Check if this rendergraph is valid.
+		/// \throws RenderGraphException
+		void validate();
+
 		// determine rendergraph inputs and outputs, and resources that are neither
 		void build_io();
 	};

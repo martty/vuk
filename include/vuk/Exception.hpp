@@ -1,13 +1,24 @@
 #pragma once
 
 #include <exception>
+#include <string>
 
 namespace vuk {
-	struct ShaderCompilationException {
+	struct Exception : std::exception {
 		std::string error_message;
 
-		const char* what() const {
+		Exception(std::string message) : error_message(std::move(message)) {}
+
+		const char* what() const override {
 			return error_message.c_str();
 		}
+	};
+
+	struct ShaderCompilationException : Exception {
+		using Exception::Exception;
+	};
+
+	struct RenderGraphException : Exception {
+		using Exception::Exception;
 	};
 }
