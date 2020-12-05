@@ -85,9 +85,9 @@ namespace vuk {
 
 
 	// implement MapProxy for attachment
-	using MP2 = MapProxy<Name, AttachmentRPInfo&>;
-	using MPI2 = ConstMapIterator<Name, AttachmentRPInfo&>;
-	using M2 = robin_hood::unordered_flat_map<Name, AttachmentRPInfo&>;
+	using MP2 = MapProxy<Name, const AttachmentRPInfo&>;
+	using MPI2 = ConstMapIterator<Name, const AttachmentRPInfo&>;
+	using M2 = robin_hood::unordered_flat_map<Name, AttachmentRPInfo>;
 
 	template<>
 	MP2::const_iterator MP2::cbegin() const noexcept {
@@ -126,8 +126,7 @@ namespace vuk {
 	template<>
 	MPI2::reference MPI2::operator*() noexcept {
 		const auto& iter = *reinterpret_cast<M2::const_iterator const*>(_iter);
-		std::pair<const Name&, AttachmentRPInfo&> result(iter->first, iter->second);
-		return result;
+		return { iter->first, iter->second };
 	}
 
 	template<>

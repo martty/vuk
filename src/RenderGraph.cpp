@@ -289,7 +289,7 @@ namespace vuk {
 	void RenderGraph::validate() {
 		// check if all resourced are attached
 		for (const auto& [n, v] : impl->use_chains) {
-			if (!impl->bound_attachments.contains(n)) {
+			if (!impl->bound_attachments.contains(n) && !impl->bound_buffers.contains(n)) {
 				throw RenderGraphException{ std::string("Missing resource: \"") + std::string(n) + "\". Did you forget to attach it?" };
 			}
 		}
@@ -667,11 +667,11 @@ namespace vuk {
 		return { std::move(*this) };
 	}
 
-	MapProxy<Name, std::span<const struct UseRef>> RenderGraph::get_use_chains() {
+	MapProxy<Name, std::span<const UseRef>> RenderGraph::get_use_chains() {
 		return &impl->use_chains;
 	}
 
-	MapProxy<Name, struct AttachmentRPInfo&> RenderGraph::get_bound_attachments() {
+	MapProxy<Name, const AttachmentRPInfo&> RenderGraph::get_bound_attachments() {
 		return &impl->bound_attachments;
 	}
 

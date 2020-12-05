@@ -126,7 +126,7 @@ namespace vuk {
 		void compile();
 
 		MapProxy<Name, std::span<const struct UseRef>> get_use_chains();
-		MapProxy<Name, struct AttachmentRPInfo&> get_bound_attachments();
+		MapProxy<Name, const struct AttachmentRPInfo&> get_bound_attachments();
 		static vuk::ImageUsageFlags compute_usage(std::span<const UseRef> chain);
 	private:
 		struct RGImpl* impl;

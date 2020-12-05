@@ -107,8 +107,9 @@ void vuk::ExampleRunner::render() {
 			size_t i = 0;
 			for (auto& ex : examples) {
 				auto rg_frag = ex->render(*this, ifc);
-
 				auto& attachment_name = *attachment_names.emplace(std::string(ex->name) + "_final");
+				rg_frag.attach_managed(attachment_name, swapchain->format, vuk::Dimension2D::absolute( 300, 300 ), vuk::Samples::e1, vuk::ClearColor(0.1f, 0.2f, 0.3f, 1.f));
+				rg_frag.compile();
 				ImGui::Begin(ex->name.data());
 				if (rg_frag.get_use_chains().size() > 1) {
 					const auto& bound_attachments = rg_frag.get_bound_attachments();
@@ -117,20 +118,26 @@ void vuk::ExampleRunner::render() {
 						auto bound_it = bound_attachments.find(key);
 						if (bound_it == bound_attachments.end())
 							continue;
+						auto usage = rg_frag.compute_usage(use_refs);
+						auto samples = vuk::SampleCountFlagBits::e1;
+						if (!(*bound_it).second.samples.infer)
+							samples = (*bound_it).second.samples.count;
+						disable = disable || (samples != vuk::SampleCountFlagBits::e1);
+					}
+
+					for (const auto [key, use_refs] : rg_frag.get_use_chains()) {
+						auto bound_it = bound_attachments.find(key);
+						if (bound_it == bound_attachments.end())
+							continue;
 						std::string btn_id = "";
 						bool storage = false;
+						bool prevent_disable = false;
 						if (key == attachment_name) {
-							disable = false;
+							prevent_disable = true;
 							btn_id = "F";
 						} else {
 							auto usage = rg_frag.compute_usage(use_refs);
 							auto samples = vuk::SampleCountFlagBits::e1;
-							if (!(*bound_it).second.samples.infer)
-								samples = (*bound_it).second.samples.count;
-							else if (disable) {
-								samples = vuk::SampleCountFlagBits::e2; // hack: disable potentially MS attachments
-							}
-							disable = samples != vuk::SampleCountFlagBits::e1;
 							if (usage & vuk::ImageUsageFlagBits::eColorAttachment) {
 								btn_id += "C";
 							} else if (usage & vuk::ImageUsageFlagBits::eDepthStencilAttachment) {
@@ -139,12 +146,12 @@ void vuk::ExampleRunner::render() {
 								btn_id += "X";
 							}
 						}
-						if (disable) {
+						if (disable && !prevent_disable) {
 							btn_id += " (MS)";
 						} else {
 							btn_id += "##" + std::string(key);
 						}
-						if (disable) {
+						if (disable && !prevent_disable) {
 							ImGui::TextDisabled("%s", btn_id.c_str());
 						} else {
 							if (ImGui::Button(btn_id.c_str())) {
@@ -158,7 +165,6 @@ void vuk::ExampleRunner::render() {
 					ImGui::NewLine();
 				}
 				rg.append(std::move(rg_frag));
-				rg.attach_managed(attachment_name, swapchain->format, vuk::Dimension2D::absolute( 300, 300 ), vuk::Samples::e1, vuk::ClearColor(0.1f, 0.2f, 0.3f, 1.f));
 
 				if (chosen_resource[i].empty())
 					chosen_resource[i] = attachment_name;
