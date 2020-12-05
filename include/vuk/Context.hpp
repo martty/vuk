@@ -60,12 +60,6 @@ namespace vuk {
 		Program get_pipeline_reflection_info(PipelineBaseCreateInfo pbci);
 		ShaderModule compile_shader(std::string source, Name path);
 
-		ShaderModule create(const create_info_t<ShaderModule>& cinfo);
-		PipelineBaseInfo create(const create_info_t<PipelineBaseInfo>& cinfo);
-		VkPipelineLayout create(const create_info_t<VkPipelineLayout>& cinfo);
-		DescriptorSetLayoutAllocInfo create(const create_info_t<DescriptorSetLayoutAllocInfo>& cinfo);
-		ComputePipelineInfo create(const create_info_t<ComputePipelineInfo>& cinfo);
-
 		bool load_pipeline_cache(std::span<uint8_t> data);
 		std::vector<uint8_t> save_pipeline_cache();
 
@@ -121,19 +115,24 @@ namespace vuk {
 		Buffer allocate_buffer(MemoryUsage mem_usage, BufferUsageFlags buffer_usage, size_t size, size_t alignment);
 		Texture allocate_texture(vuk::ImageCreateInfo ici);
 
+		/// @brief Manually request destruction of vuk::Image
 		void enqueue_destroy(vuk::Image);
+		/// @brief Manually request destruction of vuk::ImageView
 		void enqueue_destroy(vuk::ImageView);
-		void enqueue_destroy(VkPipeline);
+		/// @brief Manually request destruction of vuk::Buffer
 		void enqueue_destroy(vuk::Buffer);
+		/// @brief Manually request destruction of vuk::PersistentDescriptorSet
 		void enqueue_destroy(vuk::PersistentDescriptorSet);
 
-		template<class T>
-		Handle<T> wrap(T payload);
-
-		SwapchainRef add_swapchain(Swapchain sw);
-
+		/// @brief Add a swapchain to be managed by the Context
+		/// @return Reference to the new swapchain that can be used during presentation
+		SwapchainRef add_swapchain(Swapchain);
+		
+		/// @brief Begin new frame, with a new InflightContext
+		/// @return the new InflightContext
 		InflightContext begin();
 
+		/// @brief Wait for the device to become idle. Useful for only a few synchronisation events, like resizing or shutting down.
 		void wait_idle();
 
 		void submit_graphics(VkSubmitInfo, VkFence);
@@ -141,6 +140,8 @@ namespace vuk {
 	private:
 		struct ContextImpl* impl;
 		std::atomic<size_t> unique_handle_id_counter = 0;
+
+		void enqueue_destroy(VkPipeline);
 
 		void destroy(const struct RGImage& image);
 		void destroy(const struct PoolAllocator& v);
@@ -155,6 +156,15 @@ namespace vuk {
 		void destroy(const VkFramebuffer& fb);
 		void destroy(const Sampler& sa);
 		void destroy(const PipelineBaseInfo& pbi);
+
+		ShaderModule create(const create_info_t<ShaderModule>& cinfo);
+		PipelineBaseInfo create(const create_info_t<PipelineBaseInfo>& cinfo);
+		VkPipelineLayout create(const create_info_t<VkPipelineLayout>& cinfo);
+		DescriptorSetLayoutAllocInfo create(const create_info_t<DescriptorSetLayoutAllocInfo>& cinfo);
+		ComputePipelineInfo create(const create_info_t<ComputePipelineInfo>& cinfo);
+
+		template<class T>
+		Handle<T> wrap(T payload);
 
 		friend class InflightContext;
 		friend class PerThreadContext;

@@ -120,6 +120,11 @@ namespace vuk {
 		struct ExecutableRenderGraph link(PerThreadContext& ptc)&&;
 
 		// reflection functions
+ 
+		/// @brief Build the graph, assign framebuffers, renderpasses and subpasses
+		///	link automatically calls this, only needed if you want to use the reflection functions
+		void compile();
+
 		MapProxy<Name, std::span<const struct UseRef>> get_use_chains();
 		MapProxy<Name, struct AttachmentRPInfo&> get_bound_attachments();
 		static vuk::ImageUsageFlags compute_usage(std::span<const UseRef> chain);
@@ -129,8 +134,6 @@ namespace vuk {
 
 		// determine rendergraph inputs and outputs, and resources that are neither
 		void build_io();
-		// build the graph, assign framebuffers, renderpasses and subpass
-		void compile();
 	};
 
 	struct ExecutableRenderGraph {

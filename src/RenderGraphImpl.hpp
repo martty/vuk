@@ -14,7 +14,6 @@ namespace vuk {
 
 		robin_hood::unordered_flat_set<Resource> global_inputs;
 		robin_hood::unordered_flat_set<Resource> global_outputs;
-		std::vector<Resource, short_alloc<Resource, 16>> global_io;
 
 		robin_hood::unordered_flat_map<Name, std::vector<UseRef, short_alloc<UseRef, 64>>> use_chains;
 
@@ -23,7 +22,7 @@ namespace vuk {
 		robin_hood::unordered_flat_map<Name, AttachmentRPInfo> bound_attachments;
 		robin_hood::unordered_flat_map<Name, BufferInfo> bound_buffers;
 
-		RGImpl() : arena_(new arena(1024 * 128)), INIT(global_io), INIT(rpis) {
+		RGImpl() : arena_(new arena(1024 * 128)), INIT(rpis) {
 			passes.reserve(64);
 		}
 	};

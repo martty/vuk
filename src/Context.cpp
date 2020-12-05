@@ -8,14 +8,7 @@
 #include "ContextImpl.hpp"
 #include "vuk/RenderGraph.hpp"
 #include "vuk/Program.hpp"
-
-void burp(const std::string& in, const std::string& path) {
-	std::ofstream output(path.c_str(), std::ios::trunc);
-	if (!output.is_open()) {
-	}
-	output << in;
-	output.close();
-}
+#include "vuk/Exception.hpp"
 
 vuk::Context::Context(VkInstance instance, VkDevice device, VkPhysicalDevice physical_device, VkQueue graphics) :
 	instance(instance),
@@ -25,7 +18,6 @@ vuk::Context::Context(VkInstance instance, VkDevice device, VkPhysicalDevice phy
 	debug(*this),
 	impl(new ContextImpl(*this)) {
 }
-
 
 bool vuk::Context::DebugUtils::enabled() {
 	return setDebugUtilsObjectNameEXT != nullptr;

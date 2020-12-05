@@ -19,14 +19,6 @@ namespace vuk {
 	template<> struct create_info<RGImage> {
 		using type = RGCI;
 	};
-
-	struct ShaderCompilationException {
-		std::string error_message;
-
-		const char* what() const {
-			return error_message.c_str();
-		}
-	};
 }
 
 namespace std {

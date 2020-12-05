@@ -37,6 +37,9 @@ namespace vuk {
 
 	// determine rendergraph inputs and outputs, and resources that are neither
 	void RenderGraph::build_io() {
+		impl->global_inputs.clear();
+		impl->global_outputs.clear();
+
 		std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 8>> inputs{ *impl->arena_ };
 		std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 8>> outputs{ *impl->arena_ };
 
@@ -67,15 +70,12 @@ namespace vuk {
 			inputs.insert(pif.inputs.begin(), pif.inputs.end());
 			outputs.insert(pif.outputs.begin(), pif.outputs.end());
 		}
-
-		impl->global_io.insert(impl->global_io.end(), impl->global_inputs.begin(), impl->global_inputs.end());
-		impl->global_io.insert(impl->global_io.end(), impl->global_outputs.begin(), impl->global_outputs.end());
-		impl->global_io.erase(std::unique(impl->global_io.begin(), impl->global_io.end()), impl->global_io.end());
 	}
 
 	void RenderGraph::compile() {
 		// find which reads are graph inputs (not produced by any pass) & outputs (not consumed by any pass)
 		build_io();
+
 		// sort passes
 		if (impl->passes.size() > 1) {
 			topological_sort(impl->passes.begin(), impl->passes.end(), [this](const auto& p1, const auto& p2) {
@@ -106,6 +106,7 @@ namespace vuk {
 				});
 		}
 
+		impl->use_chains.clear();
 		// assemble use chains
 		for (auto& passinfo : impl->passes) {
 			for (auto& res : passinfo.pass.resources) {
@@ -138,6 +139,7 @@ namespace vuk {
 			}
 		}
 
+		impl->rpis.clear();
 		// renderpasses are uniquely identified by their index from now on
 		// tell passes in which renderpass/subpass they will execute
 		impl->rpis.reserve(attachment_sets.size());
@@ -285,6 +287,10 @@ namespace vuk {
 
 	ExecutableRenderGraph RenderGraph::link(vuk::PerThreadContext& ptc)&& {
 		compile();
+
+		// at this point the graph is built, we know of all the resources and everything should have been attached
+		// perform checking if this indeed the case
+
 
 		for (auto& [raw_name, attachment_info] : impl->bound_attachments) {
 			auto name = resolve_name(raw_name, impl->aliases);
