@@ -5,7 +5,6 @@
 
 namespace vuk {
 	using Image = VkImage;
-	using ImageView = Handle<VkImageView>;
 	using Sampler = Handle<VkSampler>;
 
 	enum class ImageTiling {
@@ -319,6 +318,24 @@ namespace vuk {
 	static_assert(sizeof(ImageViewCreateInfo) == sizeof(VkImageViewCreateInfo), "struct and wrapper have different size!");
 	static_assert(std::is_standard_layout<ImageViewCreateInfo>::value, "struct wrapper is not a standard layout!");
 
+	struct ImageView {
+		VkImageView payload;
+
+		Format format; //32 bits
+		uint32_t id : 29;
+		ImageViewType type : 3;
+		uint32_t base_mip : 4;
+		uint32_t mip_count : 4;
+		uint32_t base_layer : 11;
+		uint32_t layer_count : 11;
+
+		bool operator==(const ImageView& other) const noexcept {
+			return payload == other.payload;
+		}
+	};
+
+	static_assert(sizeof(ImageView) == 24);
+
 	enum class SamplerCreateFlagBits : VkSamplerCreateFlags {
 		eSubsampledEXT = VK_SAMPLER_CREATE_SUBSAMPLED_BIT_EXT,
 		eSubsampledCoarseReconstructionEXT = VK_SAMPLER_CREATE_SUBSAMPLED_COARSE_RECONSTRUCTION_BIT_EXT
@@ -455,3 +472,14 @@ namespace vuk {
 		}
 	}
 };
+
+namespace std {
+	template<>
+	struct hash<vuk::ImageView> {
+		size_t operator()(vuk::ImageView const& x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, x.id, reinterpret_cast<uint64_t>(x.payload));
+			return h;
+		}
+	};
+}
