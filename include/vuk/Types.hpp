@@ -99,7 +99,6 @@ namespace std {
 			return h;
 		}
 	};
-
 }
 
 namespace vuk {

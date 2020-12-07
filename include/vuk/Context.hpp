@@ -136,6 +136,7 @@ namespace vuk {
 		/// @return The allocated buffer in a RAII handle.
 		Unique<Buffer> allocate_buffer(MemoryUsage mem_usage, BufferUsageFlags buffer_usage, size_t size, size_t alignment, bool create_mapped);
 		Texture allocate_texture(vuk::ImageCreateInfo ici);
+		Unique<ImageView> create_image_view(vuk::ImageViewCreateInfo);
 
 		/// @brief Manually request destruction of vuk::Image
 		void enqueue_destroy(vuk::Image);
@@ -163,6 +164,8 @@ namespace vuk {
 		/// @return The wrapped handle.
 		template<class T>
 		Handle<T> wrap(T payload);
+		vuk::ImageView wrap(VkImageView payload, vuk::ImageViewCreateInfo);
+
 
 		void submit_graphics(VkSubmitInfo, VkFence);
 		void submit_transfer(VkSubmitInfo, VkFence);
@@ -250,6 +253,8 @@ namespace vuk {
 		Buffer _allocate_scratch_buffer(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, size_t size, size_t alignment, bool create_mapped);
 		Unique<Buffer> _allocate_buffer(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, size_t size, size_t alignment, bool create_mapped);
 
+		std::pair<vuk::Texture, TransferStub> create_texture(vuk::Format format, vuk::Extent3D extents, void* data);
+
 		// since data is provided, we will add TransferDst to the flags automatically
 		template<class T>
 		std::pair<Buffer, TransferStub> create_scratch_buffer(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, std::span<T> data) {
@@ -264,11 +269,6 @@ namespace vuk {
 			auto stub = upload(*dst, data);
 			return { std::move(dst), stub };
 		}
-
-
-		vuk::Texture allocate_texture(vuk::ImageCreateInfo);
-		std::pair<vuk::Texture, TransferStub> create_texture(vuk::Format format, vuk::Extent3D extents, void* data);
-		Unique<ImageView> create_image_view(vuk::ImageViewCreateInfo);
 
 		template<class T>
 		TransferStub upload(Buffer dst, std::span<T> data) {

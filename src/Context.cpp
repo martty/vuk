@@ -260,10 +260,6 @@ VkPipelineLayout vuk::Context::create(const create_info_t<VkPipelineLayout>& cin
 
 vuk::SwapchainRef vuk::Context::add_swapchain(Swapchain sw) {
 	std::lock_guard _(impl->swapchains_lock);
-	for (auto& v : sw.image_views) {
-		v = wrap(v.payload);
-	}
-
 	return &*impl->swapchains.emplace(sw);
 }
 
@@ -522,9 +518,7 @@ vuk::Texture vuk::Context::allocate_texture(vuk::ImageCreateInfo ici) {
 	ivci.subresourceRange.layerCount = 1;
 	ivci.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
 	ivci.viewType = vuk::ImageViewType::e2D;
-	VkImageView iv;
-	vkCreateImageView(device, (VkImageViewCreateInfo*)&ivci, nullptr, &iv);
-	vuk::Texture tex{ Unique<Image>(*this, dst), Unique<ImageView>(*this, wrap(iv)) };
+	vuk::Texture tex{ Unique<Image>(*this, dst), create_image_view(ivci) };
 	tex.extent = ici.extent;
 	tex.format = ici.format;
 	return tex;
@@ -636,4 +630,10 @@ vuk::InflightContext vuk::Context::begin() {
 
 void vuk::Context::wait_idle() {
 	vkDeviceWaitIdle(device);
+}
+
+vuk::Unique<vuk::ImageView> vuk::Context::create_image_view(vuk::ImageViewCreateInfo ivci) {
+	VkImageView iv;
+	vkCreateImageView(device, (VkImageViewCreateInfo*)&ivci, nullptr, &iv);
+	return vuk::Unique<vuk::ImageView>(*this, wrap(iv, ivci));
 }

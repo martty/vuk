@@ -108,17 +108,6 @@ void vuk::PerThreadContext::wait_all_transfers() {
 	return ifc.wait_all_transfers();
 }
 
-vuk::Texture vuk::PerThreadContext::allocate_texture(vuk::ImageCreateInfo ici) {
-	auto tex = ctx.allocate_texture(ici);
-	return tex;
-}
-
-vuk::Unique<vuk::ImageView> vuk::PerThreadContext::create_image_view(vuk::ImageViewCreateInfo ivci) {
-	VkImageView iv;
-	vkCreateImageView(ctx.device, (VkImageViewCreateInfo*)&ivci, nullptr, &iv);
-	return vuk::Unique<vuk::ImageView>(ctx, ctx.wrap(iv));
-}
-
 std::pair<vuk::Texture, vuk::TransferStub> vuk::PerThreadContext::create_texture(vuk::Format format, vuk::Extent3D extent, void* data) {
 	vuk::ImageCreateInfo ici;
 	ici.format = format;
@@ -236,9 +225,7 @@ vuk::RGImage vuk::PerThreadContext::create(const create_info_t<vuk::RGImage>& ci
 	name = std::string("ImageView: RenderTarget ") + std::string(cinfo.name);
 	// skip creating image views for images that can't be viewed
 	if (cinfo.ici.usage & (vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eDepthStencilAttachment | vuk::ImageUsageFlagBits::eInputAttachment | vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage)) {
-		VkImageView iv;
-		vkCreateImageView(ctx.device, (VkImageViewCreateInfo*)&ivci, nullptr, &iv);
-		res.image_view = ctx.wrap(iv);
+		res.image_view = ctx.create_image_view(ivci).release();
 		ctx.debug.set_name(res.image_view.payload, name);
 	}
 	return res;
