@@ -700,3 +700,29 @@ vuk::Unique<vuk::ImageView> vuk::Context::create_image_view(vuk::ImageViewCreate
 	vkCreateImageView(device, (VkImageViewCreateInfo*)&ivci, nullptr, &iv);
 	return vuk::Unique<vuk::ImageView>(*this, wrap(iv, ivci));
 }
+
+vuk::Unique<vuk::ImageView> vuk::Unique<vuk::ImageView>::SubrangeBuilder::apply(){
+	ImageViewCreateInfo ivci;
+	ivci.viewType = iv.type;
+	ivci.subresourceRange.baseMipLevel = base_mip == 0xdeadbeef ? iv.base_mip : base_mip;
+	ivci.subresourceRange.levelCount = mip_count == 0xdeadbeef ? iv.mip_count : mip_count;
+	ivci.subresourceRange.baseArrayLayer = base_layer == 0xdeadbeef ? iv.base_layer : base_layer;
+	ivci.subresourceRange.layerCount = layer_count == 0xdeadbeef ? iv.layer_count : layer_count;
+	ivci.image = iv.image;
+	ivci.format = iv.format;
+	ivci.components = iv.components;
+	return ctx->create_image_view(ivci);
+}
+
+vuk::Unique<vuk::ImageView>::~Unique() noexcept {
+	if (context && payload != vuk::ImageView{})
+		context->enqueue_destroy(std::move(payload));
+}
+void vuk::Unique<vuk::ImageView>::reset(vuk::ImageView value) noexcept {
+	if (payload != value) {
+		if (context && payload != vuk::ImageView{}) {
+			context->enqueue_destroy(std::move(payload));
+		}
+		payload = std::move(value);
+	}
+}
