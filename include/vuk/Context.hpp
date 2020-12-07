@@ -144,6 +144,7 @@ namespace vuk {
 		/// @return The allocated buffer in a RAII handle.
 		Unique<Buffer> allocate_buffer(MemoryUsage mem_usage, BufferUsageFlags buffer_usage, size_t size, size_t alignment, bool create_mapped);
 		Texture allocate_texture(vuk::ImageCreateInfo ici);
+		Unique<ImageView> create_image_view(vuk::ImageViewCreateInfo);
 
 		/// @brief Manually request destruction of vuk::Image
 		void enqueue_destroy(vuk::Image);
@@ -175,6 +176,8 @@ namespace vuk {
 		/// @return The wrapped handle.
 		template<class T>
 		Handle<T> wrap(T payload);
+		vuk::ImageView wrap(VkImageView payload, vuk::ImageViewCreateInfo);
+
 
 		void submit_graphics(VkSubmitInfo, VkFence);
 		void submit_transfer(VkSubmitInfo, VkFence);

@@ -112,10 +112,10 @@ namespace {
 			ici.tiling = vuk::ImageTiling::eOptimal;
 			ici.usage = vuk::ImageUsageFlagBits::eTransferDst | vuk::ImageUsageFlagBits::eSampled;
 			ici.mipLevels = ici.arrayLayers = 1;
-			variant1 = ptc.allocate_texture(ici);
+			variant1 = ptc.ctx.allocate_texture(ici);
 			ici.format = vuk::Format::eR8G8B8A8Unorm;
 			ici.usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled;
-			variant2 = ptc.allocate_texture(ici);
+			variant2 = ptc.ctx.allocate_texture(ici);
 			// Make a RenderGraph to process the loaded image
 			vuk::RenderGraph rg;
 			rg.add_pass({
