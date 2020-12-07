@@ -16,6 +16,18 @@ namespace vuk {
 		size_t id;
 	};
 
+	struct ContextCreateParameters {
+		VkInstance instance;
+		VkDevice device;
+		VkPhysicalDevice physical_device;
+		VkQueue graphics_queue;
+		uint32_t graphics_queue_family_index;
+		/// @brief Optional transfer queue
+		VkQueue transfer_queue = VK_NULL_HANDLE;
+		/// @brief Optional transfer queue index
+		uint32_t transfer_queue_family_index = VK_QUEUE_FAMILY_IGNORED;
+	};
+
 	class Context {
 	public:
 		constexpr static size_t FC = 3;
@@ -29,7 +41,9 @@ namespace vuk {
 
 		std::atomic<size_t> frame_counter = 0;
 
-		Context(VkInstance instance, VkDevice device, VkPhysicalDevice physical_device, VkQueue graphics);
+		/// @brief Create a new Context
+		/// @param params Vulkan parameters initialized beforehand
+		Context(ContextCreateParameters params);
 		~Context();
 
 		struct DebugUtils {
@@ -65,54 +79,62 @@ namespace vuk {
 
 		uint32_t(*get_thread_index)() = nullptr;
 
-		/// @brief Information about a pending upload
-		struct UploadResult {
-			/// @brief Fence to be signaled when the upload completes
-			VkFence fence;
-			/// @brief VKCommandBuffer that is used for the upload
-			VkCommandBuffer command_buffer;
-			/// @brief Staging buffer memory used for this upload
-			vuk::Buffer staging;
-			/// @brief If this is a buffer or an image upload
+		struct UploadItem {
+			/// @brief Describes a single upload to a Buffer
+			struct BufferUpload {
+				/// @brief Buffer to upload to
+				vuk::Buffer dst;
+				/// @brief Data to upload
+				std::span<unsigned char> data;
+			};
+
+			/// @brief Describes a single upload to an Image
+			struct ImageUpload {
+				/// @brief Image to upload to
+				vuk::Image dst;
+				/// @brief Format of the image data
+				vuk::Format format;
+				/// @brief Extent of the image data
+				vuk::Extent3D extent;
+				/// @brief Mip level
+				uint32_t mip_level;
+				/// @brief Base array layer
+				uint32_t base_array_layer;
+				/// @brief Should mips be automatically generated for levels higher than mip_level
+				bool generate_mips;
+				/// @brief Image data
+				std::span<unsigned char> data;
+			};
+
+			UploadItem(BufferUpload bu) : is_buffer(true), buffer(std::move(bu)) {}
+			UploadItem(ImageUpload bu) : is_buffer(false), image(std::move(bu)) {}
+
+			union {
+				BufferUpload buffer = {};
+				ImageUpload image;
+			};
 			bool is_buffer;
-			/// @brief Thread index of the initiator thread
-			unsigned thread_index;
 		};
 
-		/// @brief Describes a single upload to a Buffer
-		struct BufferUpload {
-			/// @brief Buffer to upload to
-			vuk::Buffer dst;
-			/// @brief Data to upload
-			std::span<unsigned char> data;
-		};
+		using TransientSubmitStub = struct TransientSubmitBundle*;
 
-		/// @brief Enqueue buffer data for upload
-		/// @param uploads BufferUpload structures describing the upload parameters
-		/// @return UploadResult
-		UploadResult fenced_upload(std::span<BufferUpload> uploads);
+		/// @brief Enqueue buffer or image data for upload
+		/// @param uploads UploadItem structures describing the upload parameters
+		/// @param dst_queue_family The queue family where the uploads will be used (ignored for buffers)
+		TransientSubmitStub fenced_upload(std::span<UploadItem> uploads, uint32_t dst_queue_family);
 
-		/// @brief Describes a single upload to an Image
-		struct ImageUpload {
-			/// @brief Image to upload to
-			vuk::Image dst;
-			/// @brief Format of the image data
-			vuk::Format format;
-			/// @brief Extent of the image data
-			vuk::Extent3D extent;
-			/// @brief Image data
-			std::span<unsigned char> data;
-		};
+		/// @brief Check if the upload has finished. If the upload has finished, resources will be reclaimed automatically. If this function returns true you must not poll again.
+		/// @param pending TransientSubmitStub object to check. 
+		bool poll_upload(TransientSubmitStub pending);
 
-		/// @brief Enqueue image data for upload
-		/// @param uploads ImageUpload structures describing the upload parameters
-		/// @return UploadResult
-		UploadResult fenced_upload(std::span<ImageUpload> uploads);
-		/// @brief Free upload resources involved in a fenced upload
-		/// @param result UploadResult to free
-		void free_upload_resources(const UploadResult& result);
-
-		Buffer allocate_buffer(MemoryUsage mem_usage, BufferUsageFlags buffer_usage, size_t size, size_t alignment);
+		/// @brief Allocate a Buffer in device-visible memory (GPU or CPU).
+		/// @param mem_usage Determines which memory will be used.
+		/// @param buffer_usage Set to the usage of the buffer.
+		/// @param size Size of the allocation.
+		/// @param alignment Minimum alignment of the allocation.
+		/// @param create_mapped Should the memory be mapped. Should only be true for CPU-visible memory.
+		/// @return The allocated buffer in a RAII handle.
+		Unique<Buffer> allocate_buffer(MemoryUsage mem_usage, BufferUsageFlags buffer_usage, size_t size, size_t alignment, bool create_mapped);
 		Texture allocate_texture(vuk::ImageCreateInfo ici);
 
 		/// @brief Manually request destruction of vuk::Image

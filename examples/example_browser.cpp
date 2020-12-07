@@ -51,9 +51,10 @@ vuk::ExampleRunner::ExampleRunner() {
 			}
 			vkbdevice = dev_ret.value();
 			graphics_queue = vkbdevice.get_queue(vkb::QueueType::graphics).value();
+			auto graphics_queue_family_index = vkbdevice.get_queue_index(vkb::QueueType::graphics).value();
 			device = vkbdevice.device;
 
-			context.emplace(instance, device, physical_device, graphics_queue);
+			context.emplace(ContextCreateParameters{ instance, device, physical_device, graphics_queue, graphics_queue_family_index });
 
 			swapchain = context->add_swapchain(util::make_swapchain(vkbdevice));
 }

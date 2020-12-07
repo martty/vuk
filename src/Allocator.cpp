@@ -87,7 +87,7 @@ namespace vuk {
 
 	}
 
-	Allocator::Allocator(VkInstance instance, VkDevice device, VkPhysicalDevice phys_dev) : device(device) {
+	Allocator::Allocator(VkInstance instance, VkDevice device, VkPhysicalDevice phys_dev, uint32_t graphics_queue_family, uint32_t transfer_queue_family) : device(device) {
 		VmaAllocatorCreateInfo allocatorInfo = {};
 		allocatorInfo.instance = instance;
 		allocatorInfo.physicalDevice = phys_dev;
@@ -107,6 +107,13 @@ namespace vuk {
 		vkGetPhysicalDeviceProperties(phys_dev, &properties);
 
 		pool_helper->device = device;
+
+		if (transfer_queue_family != VK_QUEUE_FAMILY_IGNORED) {
+			all_queue_families = { graphics_queue_family, transfer_queue_family };
+		} else {
+			all_queue_families = { graphics_queue_family };
+		}
+		queue_family_count = all_queue_families.size();
 	}
 
 	// not locked, must be called from a locked fn
@@ -116,6 +123,9 @@ namespace vuk {
 		VkBufferCreateInfo bci = { .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
 		bci.size = 1024; // Whatever.
 		bci.usage = (VkBufferUsageFlags)buffer_usage;
+		bci.queueFamilyIndexCount = queue_family_count;
+		bci.sharingMode = bci.queueFamilyIndexCount > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
+		bci.pQueueFamilyIndices = all_queue_families.data();
 
 		VmaAllocationCreateInfo allocCreateInfo = {};
 		allocCreateInfo.usage = VmaMemoryUsage(to_integral(mem_usage));
@@ -175,6 +185,9 @@ namespace vuk {
 			VkBufferCreateInfo bci{ .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
 			bci.size = pool.block_size;
 			bci.usage = (VkBufferUsageFlags)pool.usage;
+			bci.queueFamilyIndexCount = queue_family_count;
+			bci.sharingMode = bci.queueFamilyIndexCount > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
+			bci.pQueueFamilyIndices = all_queue_families.data();
 
 			VmaAllocationCreateInfo vaci = {};
 			if (create_mapped)
@@ -223,6 +236,9 @@ namespace vuk {
 		VkBufferCreateInfo bci{ .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
 		bci.size = 1024; // ignored
 		bci.usage = (VkBufferUsageFlags)pool.usage;
+		bci.queueFamilyIndexCount = queue_family_count;
+		bci.sharingMode = bci.queueFamilyIndexCount > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
+		bci.pQueueFamilyIndices = all_queue_families.data();
 
 		VmaAllocationCreateInfo vaci = {};
 		vaci.pool = pool.pool;
@@ -275,6 +291,9 @@ namespace vuk {
 		VkBufferCreateInfo bci{ .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
 		bci.size = 1024; // ignored
 		bci.usage = (VkBufferUsageFlags)buffer_usage;
+		bci.queueFamilyIndexCount = queue_family_count;
+		bci.sharingMode = bci.queueFamilyIndexCount > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
+		bci.pQueueFamilyIndices = all_queue_families.data();
 
 		PoolAllocator pi;
 		pi.mem_reqs = get_memory_requirements(bci);
@@ -289,6 +308,9 @@ namespace vuk {
 		VkBufferCreateInfo bci{ .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
 		bci.size = 1024; // ignored
 		bci.usage = (VkBufferUsageFlags)buffer_usage;
+		bci.queueFamilyIndexCount = queue_family_count;
+		bci.sharingMode = bci.queueFamilyIndexCount > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
+		bci.pQueueFamilyIndices = all_queue_families.data();
 
 		return LinearAllocator{ get_memory_requirements(bci), VmaMemoryUsage(to_integral(mem_usage)), buffer_usage };
 	}
@@ -300,6 +322,9 @@ namespace vuk {
 		VkBufferCreateInfo bci{ .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
 		bci.size = 1024; // ignored
 		bci.usage = (VkBufferUsageFlags)buffer_usage;
+		bci.queueFamilyIndexCount = queue_family_count;
+		bci.sharingMode = bci.queueFamilyIndexCount > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
+		bci.pQueueFamilyIndices = all_queue_families.data();
 
 		auto pool_it = pools.find(PoolSelect{ mem_usage, buffer_usage });
 		if (pool_it == pools.end()) {

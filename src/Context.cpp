@@ -10,11 +10,14 @@
 #include "vuk/Program.hpp"
 #include "vuk/Exception.hpp"
 
-vuk::Context::Context(VkInstance instance, VkDevice device, VkPhysicalDevice physical_device, VkQueue graphics) :
-	instance(instance),
-	device(device),
-	physical_device(physical_device),
-	graphics_queue(graphics),
+vuk::Context::Context(ContextCreateParameters params) :
+	instance(params.instance),
+	device(params.device),
+	physical_device(params.physical_device),
+	graphics_queue(params.graphics_queue),
+	graphics_queue_family_index(params.graphics_queue_family_index),
+	transfer_queue(params.transfer_queue),
+	transfer_queue_family_index(params.transfer_queue_family_index),
 	debug(*this),
 	impl(new ContextImpl(*this)) {
 }
@@ -308,146 +311,204 @@ vuk::ShaderModule vuk::Context::compile_shader(std::string source, Name path) {
 	return impl->shader_modules.acquire(sci);
 }
 
-vuk::Context::UploadResult vuk::Context::fenced_upload(std::span<BufferUpload> uploads) {
-	// get a one time command buffer
-	auto tid = get_thread_index ? get_thread_index() : 0;
-
-	VkCommandBuffer cbuf;
-	{
-		std::lock_guard _(impl->one_time_pool_lock);
-		if (impl->xfer_one_time_pools.size() < (tid + 1)) {
-			impl->xfer_one_time_pools.resize(tid + 1, VK_NULL_HANDLE);
-		}
-
-		auto& pool = impl->xfer_one_time_pools[tid];
-		if (pool == VK_NULL_HANDLE) {
-			VkCommandPoolCreateInfo cpci{ .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
-			cpci.queueFamilyIndex = transfer_queue_family_index;
-			cpci.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
-			vkCreateCommandPool(device, &cpci, nullptr, &pool);
-		}
-
-		VkCommandBufferAllocateInfo cbai{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
-		cbai.commandPool = pool;
-		cbai.commandBufferCount = 1;
-
-		vkAllocateCommandBuffers(device, &cbai, &cbuf);
-	}
+vuk::Context::TransientSubmitStub vuk::Context::fenced_upload(std::span<UploadItem> uploads, uint32_t dst_queue_family) {
+	TransientSubmitBundle* bundle = impl->get_transient_bundle(transfer_queue_family_index);
+	TransientSubmitBundle* head_bundle = bundle;
+	VkCommandBuffer xfercbuf = impl->get_command_buffer(bundle);
 	VkCommandBufferBeginInfo cbi{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
-	vkBeginCommandBuffer(cbuf, &cbi);
+	vkBeginCommandBuffer(xfercbuf, &cbi);
 
+	bool any_image_transfers = false;
+
+	// size a staging buffer to fit all the uploads, with proper alignment
 	size_t size = 0;
+	size_t biggest_align = 1;
 	for (auto& upload : uploads) {
-		size += upload.data.size();
-	}
-
-	// create 1 big staging buffer
-	auto staging_alloc = impl->allocator.allocate_buffer(vuk::MemoryUsage::eCPUonly, vuk::BufferUsageFlagBits::eTransferSrc, size, 1, true);
-	auto staging = staging_alloc;
-	for (auto& upload : uploads) {
-		// copy to staging
-		::memcpy(staging.mapped_ptr, upload.data.data(), upload.data.size());
-
-		VkBufferCopy bc;
-		bc.dstOffset = upload.dst.offset;
-		bc.srcOffset = staging.offset;
-		bc.size = upload.data.size();
-		vkCmdCopyBuffer(cbuf, staging.buffer, upload.dst.buffer, 1, &bc);
-
-		staging.offset += upload.data.size();
-		staging.mapped_ptr = staging.mapped_ptr + upload.data.size();
-	}
-	vkEndCommandBuffer(cbuf);
-	// get an unpooled fence
-	VkFenceCreateInfo fci{ .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
-	VkFence fence;
-	vkCreateFence(device, &fci, nullptr, &fence);
-	VkSubmitInfo si{ .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO };
-	si.commandBufferCount = 1;
-	si.pCommandBuffers = &cbuf;
-	submit_transfer(si, fence);
-	return { fence, cbuf, staging_alloc, true, tid };
-}
-
-vuk::Context::UploadResult vuk::Context::fenced_upload(std::span<ImageUpload> uploads) {
-	// get a one time command buffer
-	auto tid = get_thread_index ? get_thread_index() : 0;
-	VkCommandBuffer cbuf;
-	{
-		std::lock_guard _(impl->one_time_pool_lock);
-		if (impl->one_time_pools.size() < (tid + 1)) {
-			impl->one_time_pools.resize(tid + 1, VK_NULL_HANDLE);
+		if (!upload.is_buffer) {
+			size = align_up(size, (size_t)format_to_texel_block_size(upload.image.format));
+			size += upload.image.data.size();
+			biggest_align = std::max(biggest_align, (size_t)format_to_texel_block_size(upload.image.format));
+			any_image_transfers = true;
+		} else {
+			size += upload.buffer.data.size();
 		}
-		auto& pool = impl->one_time_pools[tid];
-		if (pool == VK_NULL_HANDLE) {
-			VkCommandPoolCreateInfo cpci{ .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
-			cpci.queueFamilyIndex = graphics_queue_family_index;
-			cpci.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
-			vkCreateCommandPool(device, &cpci, nullptr, &pool);
-		}
-		VkCommandBufferAllocateInfo cbai{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
-		cbai.commandPool = pool;
-		cbai.commandBufferCount = 1;
-
-		vkAllocateCommandBuffers(device, &cbai, &cbuf);
 	}
 
-	VkCommandBufferBeginInfo cbi{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
-	vkBeginCommandBuffer(cbuf, &cbi);
-
-	size_t size = 0;
-	for (auto& upload : uploads) {
-		size = align_up(size, (size_t)format_to_texel_block_size(upload.format));
-		size += upload.data.size();
+	VkCommandBuffer dstcbuf;
+	TransientSubmitBundle* dst_bundle = nullptr;
+	// image transfers will finish on the dst queue, get a bundle for them and hook it up to our transfer bundle
+	if (any_image_transfers) {
+		dst_bundle = impl->get_transient_bundle(dst_queue_family);
+		dst_bundle->next = bundle;
+		dstcbuf = impl->get_command_buffer(dst_bundle);
+		VkCommandBufferBeginInfo cbi{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
+		vkBeginCommandBuffer(dstcbuf, &cbi);
+		head_bundle = dst_bundle;
 	}
 
 	// create 1 big staging buffer
 	// we need to have this aligned for the first upload
 	// as that corresponds to offset = 0
-	auto staging_alloc = impl->allocator.allocate_buffer(vuk::MemoryUsage::eCPUonly, vuk::BufferUsageFlagBits::eTransferSrc, size, format_to_texel_block_size(uploads[0].format), true);
-	auto staging = staging_alloc;
+	bundle->buffer = impl->allocator.allocate_buffer(vuk::MemoryUsage::eCPUonly, vuk::BufferUsageFlagBits::eTransferSrc, size, biggest_align, true);
+	auto staging = bundle->buffer;
+
 	for (auto& upload : uploads) {
 		// realign offset
-		auto aligned = align_up(staging.offset, (size_t)format_to_texel_block_size(upload.format));
+		auto aligned = upload.is_buffer ? staging.offset : align_up(staging.offset, (size_t)format_to_texel_block_size(upload.image.format));
 		auto delta = aligned - staging.offset;
 		staging.offset = aligned;
 		staging.mapped_ptr = staging.mapped_ptr + delta;
 
 		// copy to staging
-		::memcpy(staging.mapped_ptr, upload.data.data(), upload.data.size());
+		auto& data = upload.is_buffer ? upload.buffer.data : upload.image.data;
+		::memcpy(staging.mapped_ptr, data.data(), data.size());
 
-		BufferImageCopyCommand task;
-		task.src = staging;
-		task.dst = upload.dst;
-		task.extent = upload.extent;
-		task.generate_mips = true;
-		record_buffer_image_copy(cbuf, task);
+		if (upload.is_buffer) {
+			VkBufferCopy bc;
+			bc.dstOffset = upload.buffer.dst.offset;
+			bc.srcOffset = staging.offset;
+			bc.size = upload.buffer.data.size();
+			vkCmdCopyBuffer(xfercbuf, staging.buffer, upload.buffer.dst.buffer, 1, &bc);
+		} else {
+			// perform buffer->image copy on the xfer queue
+			VkBufferImageCopy bc;
+			bc.bufferOffset = staging.offset;
+			bc.imageOffset = VkOffset3D{ 0, 0, 0 };
+			bc.bufferRowLength = 0;
+			bc.bufferImageHeight = 0;
+			bc.imageExtent = upload.image.extent;
+			bc.imageSubresource.aspectMask = (VkImageAspectFlags)format_to_aspect(upload.image.format);
+			bc.imageSubresource.baseArrayLayer = upload.image.base_array_layer;
+			bc.imageSubresource.mipLevel = upload.image.mip_level;
+			bc.imageSubresource.layerCount = 1;
 
-		staging.offset += upload.data.size();
-		staging.mapped_ptr = staging.mapped_ptr + upload.data.size();
+			VkImageMemoryBarrier copy_barrier = { .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+			copy_barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+			copy_barrier.oldLayout = (VkImageLayout)vuk::ImageLayout::eUndefined;
+			copy_barrier.newLayout = (VkImageLayout)vuk::ImageLayout::eTransferDstOptimal;
+			copy_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			copy_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			copy_barrier.image = upload.image.dst;
+			copy_barrier.subresourceRange.aspectMask = bc.imageSubresource.aspectMask;
+			copy_barrier.subresourceRange.layerCount = bc.imageSubresource.layerCount;
+			copy_barrier.subresourceRange.baseArrayLayer = bc.imageSubresource.baseArrayLayer;
+			copy_barrier.subresourceRange.baseMipLevel = bc.imageSubresource.mipLevel;
+			copy_barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
+
+			vkCmdPipelineBarrier(xfercbuf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &copy_barrier);
+			vkCmdCopyBufferToImage(xfercbuf, staging.buffer, upload.image.dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bc);
+
+			if (!upload.image.generate_mips) {
+				// transition the mips to SROO on xfer & release to dst_queue_family
+				VkImageMemoryBarrier release_barrier = { .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };;
+				release_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+				release_barrier.dstAccessMask = 0; // ignored
+				release_barrier.oldLayout = (VkImageLayout)vuk::ImageLayout::eTransferDstOptimal;
+				release_barrier.newLayout = (VkImageLayout)vuk::ImageLayout::eShaderReadOnlyOptimal;
+				release_barrier.dstQueueFamilyIndex = transfer_queue_family_index;
+				release_barrier.srcQueueFamilyIndex = dst_queue_family;
+				release_barrier.image = upload.image.dst;
+				release_barrier.subresourceRange = copy_barrier.subresourceRange;
+				vkCmdPipelineBarrier(xfercbuf, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, nullptr, 0, nullptr, 1, &release_barrier);
+
+				// acquire on dst_queue_family
+				VkImageMemoryBarrier acq_barrier = { .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };;
+				acq_barrier.srcAccessMask = 0; // ignored
+				acq_barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT; // TODO: maybe memory read?
+				acq_barrier.oldLayout = (VkImageLayout)vuk::ImageLayout::eTransferDstOptimal;
+				acq_barrier.newLayout = (VkImageLayout)vuk::ImageLayout::eShaderReadOnlyOptimal;
+				acq_barrier.dstQueueFamilyIndex = transfer_queue_family_index;
+				acq_barrier.srcQueueFamilyIndex = dst_queue_family;
+				acq_barrier.image = upload.image.dst;
+				acq_barrier.subresourceRange = copy_barrier.subresourceRange;
+				// no wait, no delay, we wait on host
+				vkCmdPipelineBarrier(dstcbuf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, nullptr, 0, nullptr, 1, &acq_barrier);
+			} else {
+				// for now, we blit, which requires the gfx queue
+				assert(dst_queue_family == graphics_queue_family_index);
+				// release to dst_queue_family
+				VkImageMemoryBarrier release_barrier = { .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };;
+				release_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+				release_barrier.dstAccessMask = 0; // ignored
+				release_barrier.oldLayout = (VkImageLayout)vuk::ImageLayout::eTransferDstOptimal;
+				release_barrier.newLayout = (VkImageLayout)vuk::ImageLayout::eTransferDstOptimal;
+				release_barrier.dstQueueFamilyIndex = transfer_queue_family_index;
+				release_barrier.srcQueueFamilyIndex = dst_queue_family;
+				release_barrier.image = upload.image.dst;
+				release_barrier.subresourceRange = copy_barrier.subresourceRange;
+				vkCmdPipelineBarrier(xfercbuf, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, nullptr, 0, nullptr, 1, &release_barrier);
+
+				// acquire on dst_queue_family
+				VkImageMemoryBarrier acq_barrier = { .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };;
+				acq_barrier.srcAccessMask = 0; // ignored
+				acq_barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+				acq_barrier.oldLayout = (VkImageLayout)vuk::ImageLayout::eTransferDstOptimal;
+				acq_barrier.newLayout = (VkImageLayout)vuk::ImageLayout::eTransferDstOptimal;
+				acq_barrier.dstQueueFamilyIndex = transfer_queue_family_index;
+				acq_barrier.srcQueueFamilyIndex = dst_queue_family;
+				acq_barrier.image = upload.image.dst;
+				acq_barrier.subresourceRange = copy_barrier.subresourceRange;
+				
+				// no wait, no delay, sync'd by the sema
+				vkCmdPipelineBarrier(dstcbuf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, nullptr, 0, nullptr, 1, &acq_barrier);
+				MipGenerateCommand task;
+				task.dst = upload.image.dst;
+				task.extent = upload.image.extent;
+				task.base_array_layer = upload.image.base_array_layer;
+				task.base_mip_level = upload.image.mip_level;
+				task.format = upload.image.format;
+				record_mip_gen(dstcbuf, task, vuk::ImageLayout::eTransferDstOptimal);
+			}
+		}
+
+		staging.offset += data.size();
+		staging.mapped_ptr = staging.mapped_ptr + data.size();
 	}
-	vkEndCommandBuffer(cbuf);
-	// get an unpooled fence
-	VkFenceCreateInfo fci{ .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
-	VkFence fence;
-	vkCreateFence(device, &fci, nullptr, &fence);
+	vkEndCommandBuffer(xfercbuf);
+
+	// get a fence, submit command buffer
+	VkFence fence = impl->get_unpooled_fence();
 	VkSubmitInfo si{ .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO };
 	si.commandBufferCount = 1;
-	si.pCommandBuffers = &cbuf;
-	submit_graphics(si, fence);
-	return { fence, cbuf, staging_alloc, false, tid };
+	si.pCommandBuffers = &xfercbuf;
+	if (!any_image_transfers) {
+		// only buffers, single submit to transfer, fence waits on single cbuf
+		submit_transfer(si, fence);
+	} else {
+		// buffers and images, submit to transfer, signal sema
+		si.signalSemaphoreCount = 1;
+		auto sema = impl->get_unpooled_sema();
+		si.pSignalSemaphores = &sema;
+		submit_transfer(si, VkFence{VK_NULL_HANDLE});
+		// second submit, to dst queue ideally, but for now to graphics
+		si.signalSemaphoreCount = 0;
+		si.waitSemaphoreCount = 1;
+		si.pWaitSemaphores = &sema;
+		// mipping happens in TRANSFER for now
+		VkPipelineStageFlags wait = VK_PIPELINE_STAGE_TRANSFER_BIT;
+		si.pWaitDstStageMask = &wait;
+		// stash semaphore
+		head_bundle->sema = sema;
+		// submit with fence
+		submit_graphics(si, fence);
+	}
+
+	head_bundle->fence = fence;
+	return head_bundle;
 }
 
-void vuk::Context::free_upload_resources(const UploadResult& ur) {
-	auto& pools = ur.is_buffer ? impl->xfer_one_time_pools : impl->one_time_pools;
-	std::lock_guard _(impl->one_time_pool_lock);
-	vkFreeCommandBuffers(device, pools[ur.thread_index], 1, &ur.command_buffer);
-	impl->allocator.free_buffer(ur.staging);
-	vkDestroyFence(device, ur.fence, nullptr);
+bool vuk::Context::poll_upload(TransientSubmitBundle* ur) {
+	if (vkGetFenceStatus(device, ur->fence) == VK_SUCCESS) {
+		std::lock_guard _(impl->transient_submit_lock);
+		impl->cleanup_transient_bundle_recursively(ur);
+		return true;
+	} else {
+		return false;
+	}
 }
 
-vuk::Buffer vuk::Context::allocate_buffer(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, size_t size, size_t alignment) {
-	return impl->allocator.allocate_buffer(mem_usage, buffer_usage, size, alignment, false);
+vuk::Unique<vuk::Buffer> vuk::Context::allocate_buffer(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, size_t size, size_t alignment, bool create_mapped) {
+	return Unique{ *this, impl->allocator.allocate_buffer(mem_usage, buffer_usage, size, alignment, create_mapped) };
 }
 
 vuk::Texture vuk::Context::allocate_texture(vuk::ImageCreateInfo ici) {
@@ -463,7 +524,7 @@ vuk::Texture vuk::Context::allocate_texture(vuk::ImageCreateInfo ici) {
 	ivci.viewType = vuk::ImageViewType::e2D;
 	VkImageView iv;
 	vkCreateImageView(device, (VkImageViewCreateInfo*)&ivci, nullptr, &iv);
-	vuk::Texture tex{ vuk::Unique<vuk::Image>(*this, dst), vuk::Unique<vuk::ImageView>(*this, wrap(iv)) };
+	vuk::Texture tex{ Unique<Image>(*this, dst), Unique<ImageView>(*this, wrap(iv)) };
 	tex.extent = ici.extent;
 	tex.format = ici.format;
 	return tex;
@@ -558,14 +619,9 @@ vuk::Context::~Context() {
 		}
 		vkDestroySwapchainKHR(device, s.swapchain, nullptr);
 	}
-	for (auto& cp : impl->one_time_pools) {
-		if (cp != VK_NULL_HANDLE) {
-			vkDestroyCommandPool(device, cp, nullptr);
-		}
-	}
-	for (auto& cp : impl->xfer_one_time_pools) {
-		if (cp != VK_NULL_HANDLE) {
-			vkDestroyCommandPool(device, cp, nullptr);
+	for (auto& cp : impl->transient_submit_bundles) {
+		if (cp.cpool != VK_NULL_HANDLE) {
+			vkDestroyCommandPool(device, cp.cpool, nullptr);
 		}
 	}
 	vkDestroyPipelineCache(device, impl->vk_pipeline_cache, nullptr);

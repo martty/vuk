@@ -114,8 +114,10 @@ namespace vuk {
 
 		VmaAllocator allocator;
 		VkPhysicalDeviceProperties properties;
+		std::vector<uint32_t> all_queue_families;
+		uint32_t queue_family_count;
 	public:
-		Allocator(VkInstance instance, VkDevice device, VkPhysicalDevice phys_dev);
+		Allocator(VkInstance instance, VkDevice device, VkPhysicalDevice phys_dev, uint32_t graphics_queue_family, uint32_t transfer_queue_family);
 		~Allocator();
 
 		// allocate an externally managed pool

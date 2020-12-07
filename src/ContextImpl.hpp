@@ -11,8 +11,19 @@
 #include "RenderPass.hpp"
 
 namespace vuk {
+	struct TransientSubmitBundle {
+		uint32_t queue_family_index;
+		VkCommandPool cpool = VK_NULL_HANDLE;
+		std::vector<VkCommandBuffer> command_buffers;
+		vuk::Buffer buffer;
+		VkFence fence = VK_NULL_HANDLE;
+		VkSemaphore sema = VK_NULL_HANDLE;
+		TransientSubmitBundle* next = nullptr;
+	};
+
 	struct ContextImpl {
 		Allocator allocator;
+		VkDevice device;
 
 		std::mutex gfx_queue_lock;
 		std::mutex xfer_queue_lock;
@@ -51,12 +62,83 @@ namespace vuk {
 		std::mutex swapchains_lock;
 		plf::colony<Swapchain> swapchains;
 
-		// one pool per thread
-		std::mutex one_time_pool_lock;
-		std::vector<VkCommandPool> xfer_one_time_pools;
-		std::vector<VkCommandPool> one_time_pools;
+		std::mutex transient_submit_lock;
+		/// @brief with stable addresses, so we can hand out opaque pointers
+		plf::colony<TransientSubmitBundle> transient_submit_bundles;
+		std::vector<plf::colony<TransientSubmitBundle>::iterator> transient_submit_freelist;
 
-		ContextImpl(Context& ctx) : allocator(ctx.instance, ctx.device, ctx.physical_device),
+		TransientSubmitBundle* get_transient_bundle(uint32_t queue_family_index) {
+			std::lock_guard _(transient_submit_lock);
+
+			plf::colony<TransientSubmitBundle>::iterator it = transient_submit_bundles.end();
+			for (auto fit = transient_submit_freelist.begin(); fit != transient_submit_freelist.end(); fit++) {
+				if ((*fit)->queue_family_index == queue_family_index) {
+					it = *fit;
+					transient_submit_freelist.erase(fit);
+					break;
+				}
+			}
+			if (it == transient_submit_bundles.end()) { // didn't find suitable bundle
+				it = transient_submit_bundles.emplace();
+				auto bundle = *it;
+
+				VkCommandPoolCreateInfo cpci{ .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
+				cpci.queueFamilyIndex = queue_family_index;
+				cpci.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+				vkCreateCommandPool(device, &cpci, nullptr, &bundle.cpool);
+			}
+			return &*it;
+		}
+
+		void cleanup_transient_bundle_recursively(vuk::TransientSubmitBundle* ur) {
+			if (ur->cpool) {
+				vkResetCommandPool(device, ur->cpool, 0);
+				vkFreeCommandBuffers(device, ur->cpool, (uint32_t)ur->command_buffers.size(), ur->command_buffers.data());
+				ur->command_buffers.clear();
+			}
+			if (ur->buffer) {
+				allocator.free_buffer(ur->buffer);
+			}
+			if (ur->fence) {
+				vkDestroyFence(device, ur->fence, nullptr);
+				ur->fence = VK_NULL_HANDLE;
+			}
+			if (ur->sema) {
+				vkDestroySemaphore(device, ur->sema, nullptr);
+				ur->sema = VK_NULL_HANDLE;
+			}
+			if (ur->next) {
+				cleanup_transient_bundle_recursively(ur->next);
+			}
+		}
+
+		VkCommandBuffer get_command_buffer(TransientSubmitBundle* bundle) {
+			VkCommandBuffer cbuf;
+			VkCommandBufferAllocateInfo cbai{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
+			cbai.commandPool = bundle->cpool;
+			cbai.commandBufferCount = 1;
+
+			vkAllocateCommandBuffers(device, &cbai, &cbuf);
+			bundle->command_buffers.push_back(cbuf);
+			return cbuf;
+		}
+
+		VkFence get_unpooled_fence() {
+			VkFenceCreateInfo fci{ .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
+			VkFence fence;
+			vkCreateFence(device, &fci, nullptr, &fence);
+			return fence;
+		}
+
+		VkSemaphore get_unpooled_sema() {
+			VkSemaphoreCreateInfo sci{ .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
+			VkSemaphore sema;
+			vkCreateSemaphore(device, &sci, nullptr, &sema);
+			return sema;
+		}
+
+		ContextImpl(Context& ctx) : allocator(ctx.instance, ctx.device, ctx.physical_device, ctx.graphics_queue_family_index, ctx.transfer_queue_family_index),
+			device(ctx.device),
 			cbuf_pools(ctx),
 			semaphore_pools(ctx),
 			fence_pools(ctx),
@@ -108,8 +190,20 @@ namespace vuk {
 		Buffer src;
 		vuk::Image dst;
 		vuk::Extent3D extent;
-		uint32_t base_array_level;
+		uint32_t base_array_layer;
+		uint32_t layer_count;
+		uint32_t mip_level;
 		bool generate_mips;
+		TransferStub stub;
+	};
+
+	struct MipGenerateCommand {
+		vuk::Image dst;
+		vuk::Format format;
+		vuk::Extent3D extent;
+		uint32_t base_array_layer;
+		uint32_t layer_count;
+		uint32_t base_mip_level;
 		TransferStub stub;
 	};
 
@@ -124,6 +218,87 @@ namespace vuk {
 	}
 }
 
+inline void record_mip_gen(VkCommandBuffer& cbuf, vuk::MipGenerateCommand& task, vuk::ImageLayout last_layout) {
+	// transition top mip to transfersrc
+	VkImageMemoryBarrier top_mip_to_barrier = { .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+	top_mip_to_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+	top_mip_to_barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+	top_mip_to_barrier.oldLayout = (VkImageLayout)last_layout;
+	top_mip_to_barrier.newLayout = (VkImageLayout)vuk::ImageLayout::eTransferSrcOptimal;
+	top_mip_to_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	top_mip_to_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	top_mip_to_barrier.image = task.dst;
+	top_mip_to_barrier.subresourceRange.aspectMask = (VkImageAspectFlags)vuk::format_to_aspect(task.format);
+	top_mip_to_barrier.subresourceRange.baseMipLevel = task.base_mip_level;
+	top_mip_to_barrier.subresourceRange.baseArrayLayer = task.base_array_layer;
+	top_mip_to_barrier.subresourceRange.layerCount = task.layer_count;
+	top_mip_to_barrier.subresourceRange.levelCount = 1;
+
+	// transition other mips to transferdst
+	VkImageMemoryBarrier rest_mip_to_barrier = { .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+	rest_mip_to_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+	rest_mip_to_barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+	rest_mip_to_barrier.oldLayout = (VkImageLayout)last_layout;
+	rest_mip_to_barrier.newLayout = (VkImageLayout)vuk::ImageLayout::eTransferDstOptimal;
+	rest_mip_to_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	rest_mip_to_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	rest_mip_to_barrier.image = task.dst;
+	rest_mip_to_barrier.subresourceRange.aspectMask = (VkImageAspectFlags)vuk::format_to_aspect(task.format);
+	rest_mip_to_barrier.subresourceRange.baseMipLevel = task.base_mip_level + 1;
+	rest_mip_to_barrier.subresourceRange.baseArrayLayer = task.base_array_layer;
+	rest_mip_to_barrier.subresourceRange.layerCount = task.layer_count;
+	rest_mip_to_barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
+
+	// transition top mip to SROO
+	VkImageMemoryBarrier top_mip_use_barrier = { .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+	top_mip_use_barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+	top_mip_use_barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT; // TODO: maybe memory read?
+	top_mip_use_barrier.oldLayout = (VkImageLayout)vuk::ImageLayout::eTransferSrcOptimal;
+	top_mip_use_barrier.newLayout = (VkImageLayout)vuk::ImageLayout::eShaderReadOnlyOptimal;
+	top_mip_use_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	top_mip_use_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	top_mip_use_barrier.image = task.dst;
+	top_mip_use_barrier.subresourceRange = top_mip_to_barrier.subresourceRange;
+
+	// transition rest of the mips to SROO
+	VkImageMemoryBarrier use_barrier = { .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };;
+	use_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+	use_barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT; // TODO: maybe memory read?
+	use_barrier.oldLayout = (VkImageLayout)last_layout;
+	use_barrier.newLayout = (VkImageLayout)vuk::ImageLayout::eShaderReadOnlyOptimal;
+	use_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	use_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	use_barrier.image = task.dst;
+	use_barrier.subresourceRange = top_mip_to_barrier.subresourceRange;
+	use_barrier.subresourceRange.baseMipLevel = task.base_mip_level + 1;
+	use_barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
+
+
+	VkImageMemoryBarrier to_bars[] = { top_mip_to_barrier, rest_mip_to_barrier };
+	vkCmdPipelineBarrier(cbuf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 2, to_bars);
+	auto mips = (uint32_t)std::log2f((float)std::max(task.extent.width, task.extent.height)) + 1;
+
+	for (uint32_t miplevel = task.base_mip_level + 1; miplevel < mips; miplevel++) {
+		VkImageBlit blit;
+		blit.srcSubresource.aspectMask = top_mip_to_barrier.subresourceRange.aspectMask;
+		blit.srcSubresource.baseArrayLayer = task.base_array_layer;
+		blit.srcSubresource.layerCount = task.layer_count;
+		blit.srcSubresource.mipLevel = 0; // blit from 0th mip
+		blit.srcOffsets[0] = VkOffset3D{ 0 };
+		blit.srcOffsets[1] = VkOffset3D{ (int32_t)task.extent.width, (int32_t)task.extent.height, (int32_t)task.extent.depth };
+		blit.dstSubresource = blit.srcSubresource;
+		blit.dstSubresource.mipLevel = miplevel;
+		blit.dstOffsets[0] = VkOffset3D{ 0 };
+		blit.dstOffsets[1] = VkOffset3D{ (int32_t)task.extent.width >> miplevel, (int32_t)task.extent.height >> miplevel, (int32_t)task.extent.depth };
+		vkCmdBlitImage(cbuf, task.dst, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, task.dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
+	}
+
+	VkImageMemoryBarrier bars[] = { use_barrier, top_mip_use_barrier };
+	// wait for transfer, delay all (we don't know where this will be used, be safe)
+	vkCmdPipelineBarrier(cbuf, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, 0, 0, nullptr, 0, nullptr, 2, bars);
+}
+
+// single queue copy + optional mip gen
 inline void record_buffer_image_copy(VkCommandBuffer& cbuf, vuk::BufferImageCopyCommand& task) {
 	VkBufferImageCopy bc;
 	bc.bufferOffset = task.src.offset;
@@ -132,9 +307,9 @@ inline void record_buffer_image_copy(VkCommandBuffer& cbuf, vuk::BufferImageCopy
 	bc.bufferImageHeight = 0;
 	bc.imageExtent = task.extent;
 	bc.imageSubresource.aspectMask = (VkImageAspectFlagBits)vuk::ImageAspectFlagBits::eColor;
-	bc.imageSubresource.baseArrayLayer = task.base_array_level;
-	bc.imageSubresource.mipLevel = 0;
-	bc.imageSubresource.layerCount = 1;
+	bc.imageSubresource.baseArrayLayer = task.base_array_layer;
+	bc.imageSubresource.mipLevel = task.mip_level;
+	bc.imageSubresource.layerCount = task.layer_count;
 
 	VkImageMemoryBarrier copy_barrier = { .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
 	copy_barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -183,20 +358,22 @@ inline void record_buffer_image_copy(VkCommandBuffer& cbuf, vuk::BufferImageCopy
 	use_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 	use_barrier.image = task.dst;
 	use_barrier.subresourceRange = copy_barrier.subresourceRange;
-	use_barrier.subresourceRange.baseMipLevel = 1;
+	use_barrier.subresourceRange.baseMipLevel = task.mip_level + 1;
+	use_barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
 
 	vkCmdPipelineBarrier(cbuf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &copy_barrier);
 	vkCmdCopyBufferToImage(cbuf, task.src.buffer, task.dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bc);
 	if (task.generate_mips) {
 		vkCmdPipelineBarrier(cbuf, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &top_mip_to_barrier);
-		auto mips = (uint32_t)std::min(std::log2f((float)task.extent.width), std::log2f((float)task.extent.height));
+		
+		auto mips = (uint32_t)std::log2f((float)std::max(task.extent.width, task.extent.height)) + 1;
 
-		for (uint32_t miplevel = 1; miplevel < mips; miplevel++) {
+		for (uint32_t miplevel = task.mip_level; miplevel < mips; miplevel++) {
 			VkImageBlit blit;
 			blit.srcSubresource.aspectMask = copy_barrier.subresourceRange.aspectMask;
-			blit.srcSubresource.baseArrayLayer = task.base_array_level;
-			blit.srcSubresource.layerCount = 1;
-			blit.srcSubresource.mipLevel = 0;
+			blit.srcSubresource.baseArrayLayer = task.base_array_layer;
+			blit.srcSubresource.layerCount = task.layer_count;
+			blit.srcSubresource.mipLevel = task.mip_level;
 			blit.srcOffsets[0] = VkOffset3D{ 0 };
 			blit.srcOffsets[1] = VkOffset3D{ (int32_t)task.extent.width, (int32_t)task.extent.height, (int32_t)task.extent.depth };
 			blit.dstSubresource = blit.srcSubresource;
@@ -310,7 +487,8 @@ namespace vuk {
 			pool_cache(ptc, ifc.impl->pool_cache),
 			shader_modules(ptc, ifc.impl->shader_modules),
 			descriptor_set_layouts(ptc, ifc.impl->descriptor_set_layouts),
-			pipeline_layouts(ptc, ifc.impl->pipeline_layouts) {}
+			pipeline_layouts(ptc, ifc.impl->pipeline_layouts) {
+		}
 	};
 }
 

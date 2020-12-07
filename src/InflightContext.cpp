@@ -62,7 +62,8 @@ vuk::TransferStub vuk::InflightContext::enqueue_transfer(Buffer src, Buffer dst)
 vuk::TransferStub vuk::InflightContext::enqueue_transfer(Buffer src, vuk::Image dst, vuk::Extent3D extent, uint32_t base_layer, bool generate_mips) {
 	std::lock_guard _(impl->transfer_mutex);
 	TransferStub stub{ transfer_id++ };
-	impl->bufferimage_transfer_commands.push({ src, dst, extent, base_layer, generate_mips, stub });
+	// TODO: expose extra transfer knobs
+	impl->bufferimage_transfer_commands.push({ src, dst, extent, base_layer, 1, 0, generate_mips, stub });
 	return stub;
 }
 
