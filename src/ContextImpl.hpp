@@ -188,6 +188,8 @@ namespace vuk {
 		viv.mip_count = ivci.subresourceRange.levelCount;
 		viv.format = ivci.format;
 		viv.type = ivci.viewType;
+		viv.image = ivci.image;
+		viv.components = ivci.components;
 		viv.id = unique_handle_id_counter++;
 		return viv;
 	}
