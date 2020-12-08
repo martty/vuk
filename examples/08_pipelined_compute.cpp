@@ -97,7 +97,7 @@ namespace {
 				.resources = {"08_scramble"_buffer(vuk::eComputeRW)},
 				.execute = [](vuk::CommandBuffer& command_buffer) {
 					command_buffer
-						.INLINE_COMPUTE([](vuk::TypedBuffer<unsigned> data_in, unsigned pc) {
+						.INLINE_COMPUTE([](vuk::TypedBuffer<unsigned> data_in, unsigned pc) [[local_size(1)]] {
 							int n_changes = 0;
 							for (int i = 0; i < data_in.length(); i++) {
 								if (data_in[i - 1] > data_in[i]) {
@@ -109,8 +109,6 @@ namespace {
 								}
 							}
 						})(command_buffer.get_resource_buffer("08_scramble"), 3000)
-						/*.bind_storage_buffer(0, 0, command_buffer.get_resource_buffer("08_scramble"))
-						.push_constants(vuk::ShaderStageFlagBits::eCompute, 0, 3000)*/
 						.dispatch(1);
 				}
 			});

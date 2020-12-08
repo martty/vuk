@@ -297,15 +297,27 @@ namespace vuk {
 	}
 
 	void CommandBuffer::_inline_compute_helper(const char* source, std::vector<SymType> arg_types, const char * file) {
-		std::string glsl = "#version 460\n#pragma shader_stage(compute)\n\n";
 		// parse and strip C++ header
 		std::string_view sv(source);
-		auto end_of_header = sv.find(") {");
-		auto body = sv.substr(end_of_header + 1);
-		std::vector<std::string> arg_names;
-		// extract arg names
+		auto end_of_header = sv.find("{");
+		auto body = sv.substr(end_of_header);
 		auto header = sv.substr(0, end_of_header);
+		auto att_start = header.find_last_of("[[");
+		auto att_end = header.find_last_of("]]");
+		unsigned sizes[3] = {1,1,1};
+		if (att_start != std::string::npos) {
+			std::string_view atts = header.substr(att_start + 1);
+			atts = atts.substr(atts.find_first_not_of(' '));
+			sscanf(atts.data(), "local_size(%d,%d,%d)", &sizes[0], &sizes[1], &sizes[2]);
+			printf("");
+		}
+		std::string glsl = "#version 460\n#pragma shader_stage(compute)\n\nlayout(local_size_x = ";
+		glsl += std::to_string(sizes[0]) + ", local_size_y = " + std::to_string(sizes[1]) + ", local_size_z = " + std::to_string(sizes[2]) + ") in;\n";
+		// extract arg names
+		std::vector<std::string> arg_names;
+		header = header.substr(0, att_start - 1);
 		header = header.substr(header.find_first_of('(') + 1);
+		header = header.substr(0, header.find_last_of(')'));
 		size_t last_comma = std::string::npos;
 		do {
 			auto prev_comma = last_comma + 1;
