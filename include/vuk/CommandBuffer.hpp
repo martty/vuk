@@ -69,6 +69,7 @@ namespace vuk {
 		enum class Type {
 			ePushConstant, eDescriptor
 		} type;
+		DescriptorType descr_type;
 		std::string declaration;
 		std::string GLSL_type;
 
@@ -85,6 +86,7 @@ namespace vuk {
 					%s[] %s;
 				};
 				)";
+				st.descr_type = DescriptorType::eStorageBuffer;
 			} else {
 				assert(0);
 			}
@@ -355,14 +357,43 @@ namespace vuk {
 		// Actual invocation count will be rounded up to be a multiple of local_size_{x,y,z}
 		CommandBuffer& dispatch_invocations(size_t invocation_count_x, size_t invocation_count_y = 1, size_t invocation_count_z = 1);
 
+		struct ImmediatelyInvoked {
+			CommandBuffer* cbuf;
+			std::vector<SymType> arg_types;
+
+			unsigned binding_count = 0;
+			unsigned pc_offset = 0;
+
+			template<class T>
+			void bind_helper(T&& t) {
+				if constexpr (std::is_same_v<T, Buffer>) {
+					if (arg_types[binding_count].descr_type == DescriptorType::eStorageBuffer) {
+						cbuf->bind_storage_buffer(0, binding_count++, t);
+					} else {
+						assert(0);
+					}
+				} else if constexpr (std::is_trivially_copyable_v<T>) { // maybe not the right check
+					cbuf->push_constants(vuk::ShaderStageFlagBits::eCompute, pc_offset, t);
+					pc_offset += sizeof(T);
+				}
+			}
+
+			template<class... Args>
+			CommandBuffer& operator()(Args&&... args) {
+				assert(sizeof...(Args) == arg_types.size());
+				(bind_helper(std::forward<Args>(args)), ...);
+				return *cbuf;
+			}
+		};
+
 		template<class F>
-		CommandBuffer& _inline_compute(F&&, const char* src, const char* file) {
+		ImmediatelyInvoked _inline_compute(F&&, const char* src, const char* file) {
 			std::vector<SymType> arg_types;
 			std::apply([&](auto&&... v) {
 				(arg_types.emplace_back(SymType::convert(v)), ...);
 				}, typename function_traits<F>::args{});
-			_inline_compute_helper(src, std::move(arg_types), file);
-			return *this;
+			_inline_compute_helper(src, arg_types, file);
+			return ImmediatelyInvoked{this, arg_types};
 		}
 
 		class SecondaryCommandBuffer begin_secondary();

@@ -108,9 +108,9 @@ namespace {
 										return;
 								}
 							}
-						})
-						.bind_storage_buffer(0, 0, command_buffer.get_resource_buffer("08_scramble"))
-						.push_constants(vuk::ShaderStageFlagBits::eCompute, 0, 3000)
+						})(command_buffer.get_resource_buffer("08_scramble"), 3000)
+						/*.bind_storage_buffer(0, 0, command_buffer.get_resource_buffer("08_scramble"))
+						.push_constants(vuk::ShaderStageFlagBits::eCompute, 0, 3000)*/
 						.dispatch(1);
 				}
 			});
