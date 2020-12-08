@@ -308,7 +308,7 @@ namespace vuk {
 		if (att_start != std::string::npos) {
 			std::string_view atts = header.substr(att_start + 1);
 			atts = atts.substr(atts.find_first_not_of(' '));
-			sscanf(atts.data(), "local_size(%d,%d,%d)", &sizes[0], &sizes[1], &sizes[2]);
+			sscanf(atts.data(), "vuk::local_size(%d,%d,%d)", &sizes[0], &sizes[1], &sizes[2]);
 			printf("");
 		}
 		std::string glsl = "#version 460\n#pragma shader_stage(compute)\n\nlayout(local_size_x = ";
