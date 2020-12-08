@@ -12,6 +12,101 @@
 #define VUK_MAX_ATTRIBUTES 8
 #define VUK_MAX_PUSHCONSTANT_RANGES 8
 
+template <typename T>
+struct function_traits
+	: public function_traits<decltype(&T::operator())> {
+};
+// For generic types, directly use the result of the signature of its 'operator()'
+
+template <typename ClassType, typename ReturnType, typename... Args>
+struct function_traits<ReturnType(ClassType::*)(Args...) const>
+	// we specialize for pointers to member function
+{
+	enum { arity = sizeof...(Args) };
+	// arity is the number of arguments.
+
+	typedef ReturnType result_type;
+
+	using args = std::tuple<Args...>;
+
+	template <size_t i>
+	struct arg {
+		typedef typename std::tuple_element<i, std::tuple<Args...>>::type type;
+		// the i-th argument is equivalent to the i-th tuple element of a tuple
+		// composed of those arguments.
+	};
+};
+
+template <typename T>
+constexpr auto type_name() noexcept {
+	std::string_view name = "Error: unsupported compiler", prefix, suffix;
+#ifdef __clang__
+	name = __PRETTY_FUNCTION__;
+	prefix = "auto type_name() [T = ";
+	suffix = "]";
+#elif defined(__GNUC__)
+	name = __PRETTY_FUNCTION__;
+	prefix = "constexpr auto type_name() [with T = ";
+	suffix = "]";
+#elif defined(_MSC_VER)
+	name = __FUNCSIG__;
+	prefix = "auto __cdecl type_name<";
+	suffix = ">(void) noexcept";
+#endif
+	name.remove_prefix(prefix.size());
+	name.remove_suffix(suffix.size());
+	return name;
+}
+
+namespace vuk {
+	template<typename>
+	struct is_typed_buffer : std::false_type {};
+
+	template<typename T>
+	struct is_typed_buffer<TypedBuffer<T>> : std::true_type {};
+
+	struct SymType {
+		enum class Type {
+			ePushConstant, eDescriptor
+		} type;
+		std::string declaration;
+		std::string GLSL_type;
+
+		template<class T, template<typename> typename F>
+		static SymType convert(F<T> const&) {
+			SymType st;
+			if constexpr (std::is_same_v<T, unsigned>) {
+				st.GLSL_type = "uint";
+			} else {
+				assert(0);
+			}
+			if constexpr (is_typed_buffer<F<T>>::value) {
+				st.declaration = R"(layout (std430, binding = %d) buffer %s {
+					%s[] %s;
+				};
+				)";
+			} else {
+				assert(0);
+			}
+			st.type = Type::eDescriptor;
+			return st;
+		}
+
+		template<class T>
+		static SymType convert(T const&) {
+			SymType st;
+			if constexpr (std::is_same_v<T, unsigned>) {
+				st.GLSL_type = "uint";
+			} else {
+				assert(0);
+			}
+			st.declaration = "%s %s;\n";
+			st.type = Type::ePushConstant;
+			return st;
+		}
+	};
+}
+
 namespace vuk {
 	class Context;
 	class PerThreadContext;
@@ -260,6 +355,16 @@ namespace vuk {
 		// Actual invocation count will be rounded up to be a multiple of local_size_{x,y,z}
 		CommandBuffer& dispatch_invocations(size_t invocation_count_x, size_t invocation_count_y = 1, size_t invocation_count_z = 1);
 
+		template<class F>
+		CommandBuffer& _inline_compute(F&&, const char* src, const char* file) {
+			std::vector<SymType> arg_types;
+			std::apply([&](auto&&... v) {
+				(arg_types.emplace_back(SymType::convert(v)), ...);
+				}, typename function_traits<F>::args{});
+			_inline_compute_helper(src, std::move(arg_types), file);
+			return *this;
+		}
+
 		class SecondaryCommandBuffer begin_secondary();
 		void execute(std::span<VkCommandBuffer>);
 
@@ -274,6 +379,8 @@ namespace vuk {
 		void _bind_state(bool graphics);
 		void _bind_compute_pipeline_state();
 		void _bind_graphics_pipeline_state();
+	private:
+		void _inline_compute_helper(const char* source, std::vector<SymType> arg_types, const char* file);
 	};
 
 	class SecondaryCommandBuffer : public CommandBuffer {

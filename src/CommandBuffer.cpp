@@ -2,6 +2,7 @@
 #include "vuk/Context.hpp"
 #include "vuk/RenderGraph.hpp"
 #include "RenderGraphUtil.hpp"
+#include <cstdio>
 
 namespace vuk {
 	uint32_t Ignore::to_size() {
@@ -295,6 +296,78 @@ namespace vuk {
 		return *this;
 	}
 
+	void CommandBuffer::_inline_compute_helper(const char* source, std::vector<SymType> arg_types, const char * file) {
+		std::string glsl = "#version 460\n#pragma shader_stage(compute)\n\n";
+		// parse and strip C++ header
+		std::string_view sv(source);
+		auto end_of_header = sv.find(") {");
+		auto body = sv.substr(end_of_header + 1);
+		std::vector<std::string> arg_names;
+		// extract arg names
+		auto header = sv.substr(0, end_of_header);
+		header = header.substr(header.find_first_of('(') + 1);
+		size_t last_comma = std::string::npos;
+		do {
+			auto prev_comma = last_comma + 1;
+			last_comma = header.find_first_of(',', prev_comma);
+			std::string_view decl = header.substr(prev_comma, last_comma);
+			// parse argument declaration
+			auto last_space = decl.find_last_of(' ');
+			std::string_view var_name = decl.substr(last_space + 1);
+			arg_names.push_back(std::string(var_name));
+		} while (last_comma != std::string::npos);
+		
+		// generate header
+		unsigned binding_counter = 0;
+		// descriptors
+		bool emit_pc = false;
+		for (unsigned i = 0; i < arg_types.size(); i++) {
+			auto& arg = arg_types[i];
+			if (arg.type != SymType::Type::eDescriptor) {
+				if (arg.type == SymType::Type::ePushConstant) {
+					emit_pc = true;
+				}
+				continue;
+			}
+			std::string& arg_name = arg_names[i];
+			std::string block_name = "_" + arg_name + "_";
+			std::string dst_buf;
+			unsigned chars = snprintf(nullptr, 0, arg.declaration.c_str(), binding_counter, block_name.c_str(), arg.GLSL_type.c_str(), arg_name.c_str());
+			dst_buf.resize(chars);
+			sprintf(dst_buf.data(), arg.declaration.c_str(), binding_counter, block_name.c_str(), arg.GLSL_type.c_str(), arg_name.c_str());
+			
+			glsl += dst_buf;
+			binding_counter++;
+		}
+		// push consts
+		if (emit_pc) {
+			glsl += "layout(push_constant) uniform _pc_ {\n";
+			for (unsigned i = 0; i < arg_types.size(); i++) {
+				auto& arg = arg_types[i];
+				if (arg.type != SymType::Type::ePushConstant) {
+					continue;
+				}
+				std::string& arg_name = arg_names[i];
+				std::string dst_buf;
+				unsigned chars = snprintf(nullptr, 0, arg.declaration.c_str(), arg.GLSL_type.c_str(), arg_name.c_str());
+				dst_buf.resize(chars);
+				sprintf(dst_buf.data(), arg.declaration.c_str(), arg.GLSL_type.c_str(), arg_name.c_str());
+
+				glsl += dst_buf;
+				binding_counter++;
+			}
+			glsl += "};\n";
+		}
+		// finish text
+		glsl += "void main()";
+		glsl += body;
+		// create compute pipeline
+		vuk::ComputePipelineCreateInfo pci;
+		pci.add_shader(glsl, file);
+		auto pipeinfo = ptc.ctx.get_pipeline(pci);
+		bind_compute_pipeline(pipeinfo);
+	}
+
 	SecondaryCommandBuffer CommandBuffer::begin_secondary() {
 		auto nptc = new vuk::PerThreadContext(ptc.ifc.begin());
 		auto scbuf = nptc->acquire_command_buffer(VK_COMMAND_BUFFER_LEVEL_SECONDARY);
@@ -409,7 +482,7 @@ namespace vuk {
 	void CommandBuffer::_bind_state(bool graphics) {
 		for (auto& pcr : pcrs) {
 			void* data = push_constant_buffer.data() + pcr.offset;
-			vkCmdPushConstants(command_buffer, current_pipeline->pipeline_layout, pcr.stageFlags, pcr.offset, pcr.size, data);
+			vkCmdPushConstants(command_buffer, graphics ? current_pipeline->pipeline_layout : current_compute_pipeline->pipeline_layout, pcr.stageFlags, pcr.offset, pcr.size, data);
 		}
 		pcrs.clear();
 

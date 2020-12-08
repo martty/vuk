@@ -67,4 +67,19 @@ namespace vuk {
 			return { device_memory, buffer, offset + new_offset, new_size, mapped_ptr != nullptr ? mapped_ptr + new_offset : nullptr };
 		}
 	};
+
+	template<class T>
+	struct TypedBuffer {
+
+		static T dummy_value;
+		Name n;
+
+		TypedBuffer() {}
+		TypedBuffer(Name n) : n(n){}
+		TypedBuffer(const char* n) : n(n) {}
+		
+		// glsl placeholders
+		uint32_t length() { return 0; } 
+		T& operator[](uint32_t) { return dummy_value; }
+	};
 }

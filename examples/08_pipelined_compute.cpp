@@ -18,6 +18,9 @@
 * Check out the framework (example_runner_*) files if interested!
 */
 
+using uint = uint32_t;
+#define INLINE_COMPUTE(FN) _inline_compute(FN, #FN, __FILE__)
+
 namespace {
 	float time = 0.f;
 	auto box = util::generate_cube();
@@ -58,7 +61,7 @@ namespace {
 			auto ptc = ifc.begin();
 			auto [tex, stub] = ptc.create_texture(vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1 }, doge_image);
 			texture_of_doge = std::move(tex);
-	
+
 			// init scrambling buffer
 			scramble_buf = ptc._allocate_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eTransferDst | vuk::BufferUsageFlagBits::eStorageBuffer, sizeof(unsigned) * x * y, 1, false);
 			std::vector<unsigned> indices(x * y);
@@ -94,8 +97,20 @@ namespace {
 				.resources = {"08_scramble"_buffer(vuk::eComputeRW)},
 				.execute = [](vuk::CommandBuffer& command_buffer) {
 					command_buffer
+						.INLINE_COMPUTE([](vuk::TypedBuffer<unsigned> data_in, unsigned pc) {
+							int n_changes = 0;
+							for (int i = 0; i < data_in.length(); i++) {
+								if (data_in[i - 1] > data_in[i]) {
+									uint tmp = data_in[i];
+									data_in[i] = data_in[i - 1];
+									data_in[i - 1] = tmp;
+									if (n_changes++ > pc)
+										return;
+								}
+							}
+						})
 						.bind_storage_buffer(0, 0, command_buffer.get_resource_buffer("08_scramble"))
-						.bind_compute_pipeline("stupidsort")
+						.push_constants(vuk::ShaderStageFlagBits::eCompute, 0, 3000)
 						.dispatch(1);
 				}
 			});
@@ -114,9 +129,9 @@ namespace {
 						.draw(3, 1, 0, 0);
 				}
 			});
-	
+
 			time += ImGui::GetIO().DeltaTime;
-			
+
 			rg.attach_managed("08_rtt", runner.swapchain->format, vuk::Dimension2D::absolute((unsigned)x, (unsigned)y), vuk::Samples::e1, vuk::ClearColor{ 0.f, 0.f, 0.f, 0.f });
 			// we bind our externally managed buffer to the rendergraph
 			rg.attach_buffer("08_scramble", scramble_buf.get(), vuk::eNone, vuk::eNone);

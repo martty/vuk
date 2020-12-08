@@ -403,23 +403,35 @@ namespace vuk {
 			std::swap(context, rhs.context);
 		}
 
-		struct SubrangeBuilder {
+		struct ImageViewMutator {
 			vuk::Context* ctx;
 			vuk::ImageView iv;
 			uint32_t base_mip = 0xdeadbeef; // 0xdeadbeef is an out of band value for all
 			uint32_t mip_count = 0xdeadbeef;
 			uint32_t base_layer = 0xdeadbeef;
 			uint32_t layer_count = 0xdeadbeef;
+			ImageViewType view_type = (ImageViewType)-1;
+			Format format = (Format)-1;
 
-			SubrangeBuilder& layer_subrange(uint32_t base_layer, uint32_t layer_count) {
+			ImageViewMutator& layer_subrange(uint32_t base_layer, uint32_t layer_count) {
 				this->base_layer = base_layer;
 				this->layer_count = layer_count;
 				return *this;
 			}
 
-			SubrangeBuilder& mip_subrange(uint32_t base_mip, uint32_t mip_count) {
+			ImageViewMutator& mip_subrange(uint32_t base_mip, uint32_t mip_count) {
 				this->base_mip = base_mip;
 				this->mip_count = mip_count;
+				return *this;
+			}
+
+			ImageViewMutator& view_as(ImageViewType view_type) {
+				this->view_type = view_type;
+				return *this;
+			}
+
+			ImageViewMutator& format_as(Format format) {
+				this->format = format;
 				return *this;
 			}
 
@@ -427,11 +439,11 @@ namespace vuk {
 		};
 
 		// external builder fns
-		SubrangeBuilder layer_subrange(uint32_t base_layer, uint32_t layer_count) {
+		ImageViewMutator layer_subrange(uint32_t base_layer, uint32_t layer_count) {
 			return { .ctx = context, .iv = payload, .base_layer = base_layer, .layer_count = layer_count };
 		}
 
-		SubrangeBuilder mip_subrange(uint32_t base_mip, uint32_t mip_count) {
+		ImageViewMutator mip_subrange(uint32_t base_mip, uint32_t mip_count) {
 			return { .ctx = context, .iv = payload, .base_mip = base_mip, .mip_count = mip_count };
 		}
 	};
