@@ -269,6 +269,12 @@ namespace vuk {
 		return *this;
 	}
 
+	CommandBuffer& CommandBuffer::draw_indexed_indirect(size_t command_count, Buffer indirect_buffer) {
+		_bind_graphics_pipeline_state();
+		vkCmdDrawIndexedIndirect(command_buffer, indirect_buffer.buffer, (uint32_t)indirect_buffer.offset, (uint32_t)command_count, sizeof(vuk::DrawIndexedIndirectCommand));
+		return *this;
+	}
+
 	CommandBuffer& CommandBuffer::draw_indexed_indirect(std::span<vuk::DrawIndexedIndirectCommand> cmds) {
 		_bind_graphics_pipeline_state();
 		auto buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eIndirectBuffer, cmds.size_bytes(), 1, true);
@@ -409,7 +415,7 @@ namespace vuk {
 	void CommandBuffer::_bind_state(bool graphics) {
 		for (auto& pcr : pcrs) {
 			void* data = push_constant_buffer.data() + pcr.offset;
-			vkCmdPushConstants(command_buffer, current_pipeline->pipeline_layout, pcr.stageFlags, pcr.offset, pcr.size, data);
+			vkCmdPushConstants(command_buffer, graphics ? current_pipeline->pipeline_layout : current_compute_pipeline->pipeline_layout, pcr.stageFlags, pcr.offset, pcr.size, data);
 		}
 		pcrs.clear();
         
