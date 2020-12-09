@@ -1,0 +1,128 @@
+#version 450
+#pragma shader_stage(compute)
+//SDF meatballs
+// SDF2DC
+
+layout(push_constant) uniform pcs {
+	vec3 voxbounds_min;
+	float dx1;
+	vec3 vox_size;
+	float dx2;
+};
+
+float sdSphere(vec3 p, float s){
+  return length(p)-s;
+}
+
+float opSmoothUnion(float d1, float d2, float k){
+    float h = clamp( 0.5 + 0.5*(d2-d1)/k, 0.0, 1.0 );
+    return mix( d2, d1, h ) - k*h*(1.0-h); 
+}
+
+float eval(vec3 p) {
+	float sph1 = sdSphere(p - vec3(dx1,0,0), 1);
+	float sph2 = sdSphere(p - vec3(dx2,0,0), 1);
+	return opSmoothUnion(sph1, sph2, 1);
+}
+
+vec3 approximate_normal(vec3 p){
+	return vec3(0);
+}
+
+layout(binding = 0) buffer verts {
+	float vertices[];
+};
+
+layout(binding = 1) buffer inds {
+	uint indices[];
+};
+
+layout(binding = 2) buffer cmd {
+	uint indexCount;
+	uint instanceCount;
+	uint firstIndex;
+	int vertexOffset;
+	uint firstInstance;
+};
+
+uint linear_index(uvec3 index){
+	return index.z * gl_NumWorkGroups.y * gl_NumWorkGroups.x +
+                        index.y * gl_NumWorkGroups.x +
+                        index.x * 1;
+}
+
+void add_vertex(uint idx, vec3 vtx){
+	vertices[idx * 3] = vtx.x;
+	vertices[idx * 3 + 1] = vtx.y;
+	vertices[idx * 3 + 2] = vtx.z;
+}
+
+void append_quad(uvec4 inds, bool swap){
+	uint dst = atomicAdd(indexCount, 6);
+	if(swap){
+		inds = inds.wzyx; // flip
+	}
+	indices[dst+0] = inds[0];
+	indices[dst+1] = inds[1];
+	indices[dst+2] = inds[2];
+	indices[dst+3] = inds[0];
+	indices[dst+4] = inds[2];
+	indices[dst+5] = inds[3];
+}
+
+layout(local_size_x = 1) in;
+
+void main(){
+	uint lin_index = gl_GlobalInvocationID.z * gl_NumWorkGroups.y * gl_NumWorkGroups.x +
+                        gl_GlobalInvocationID.y * gl_NumWorkGroups.x +
+                        gl_GlobalInvocationID.x * 1;
+	if(lin_index == 0){
+		instanceCount = 1;
+		firstIndex = 0;
+		vertexOffset = 0;
+		firstInstance = 0;
+	}
+	vec3 corner = gl_GlobalInvocationID*vox_size + voxbounds_min;
+	vec3 center = corner + 0.5*vox_size;
+	uint x = gl_GlobalInvocationID.x;
+	uint y = gl_GlobalInvocationID.y;
+	uint z = gl_GlobalInvocationID.z;
+	add_vertex(lin_index, center);
+	bool solid1 = eval(corner) > 0;
+	
+	if(x > 0 && y > 0){
+		bool solid2 = eval(corner + vec3(0,0,1)*vox_size) > 0;
+		if(solid1 != solid2){
+			append_quad(uvec4(
+				linear_index(uvec3(x - 1, y - 1, z)),
+				linear_index(uvec3(x - 0, y - 1, z)),
+				linear_index(uvec3(x - 0, y - 0, z)),
+				linear_index(uvec3(x - 1, y - 0, z))
+			), solid2);
+		}
+	}
+	
+	if(x > 0 && z > 0){
+		bool solid2 = eval(corner + vec3(0,1,0)*vox_size) > 0;
+		if(solid1 != solid2){
+			append_quad(uvec4(
+				linear_index(uvec3(x - 1, y, z - 1)),
+				linear_index(uvec3(x - 0, y, z - 1)),
+				linear_index(uvec3(x - 0, y, z - 0)),
+				linear_index(uvec3(x - 1, y, z - 0))
+			), solid2);
+		}
+	}
+	
+	if(y > 0 && z > 0){
+		bool solid2 = eval(corner + vec3(1,0,0)*vox_size) > 0;
+		if(solid1 != solid2){
+			append_quad(uvec4(
+				linear_index(uvec3(x, y - 1, z - 1)),
+				linear_index(uvec3(x, y - 0, z - 1)),
+				linear_index(uvec3(x, y - 0, z - 0)),
+				linear_index(uvec3(x, y - 1, z - 0))
+			), solid2);
+		}
+	}
+}

@@ -22,8 +22,9 @@ namespace {
 	float time = 0.f;
 	auto box = util::generate_cube();
 	int x, y;
+	float dx1 = 0.f, dx2 = 0.f;
+	bool d1 = true, d2 = false;
 	std::optional<vuk::Texture> texture_of_doge;
-	vuk::Unique<vuk::Buffer> scramble_buf;
 	std::random_device rd;
 	std::mt19937 g(rd());
 
@@ -32,24 +33,17 @@ namespace {
 		.setup = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
 			{
 			vuk::PipelineBaseCreateInfo pci;
-			pci.add_glsl(util::read_entire_file("../../examples/fullscreen.vert"), "fullscreen.vert");
-			pci.add_glsl(util::read_entire_file("../../examples/rtt.frag"), "rtt.frag");
-			runner.context->create_named_pipeline("rtt", pci);
-			}
-
-			{
-			vuk::PipelineBaseCreateInfo pci;
-			pci.add_glsl(util::read_entire_file("../../examples/fullscreen.vert"), "fullscreen.vert");
-			pci.add_glsl(util::read_entire_file("../../examples/scrambled_draw.frag"), "scrambled_draw.frag");
-			runner.context->create_named_pipeline("scrambled_draw", pci);
+			pci.add_shader(util::read_entire_file("../../examples/ubo_test.vert"), "ubo_test.vert");
+			pci.add_shader(util::read_entire_file("../../examples/triangle_depthshaded.frag"), "triangle_depthshaded.frag");
+			runner.context->create_named_pipeline("fwd", pci);
 			}
 
 			// creating a compute pipeline is very similar to creating a graphics pipeline
 			// but here we can compile immediately
 			{
 			vuk::ComputePipelineCreateInfo pci;
-			pci.add_glsl(util::read_entire_file("../../examples/stupidsort.comp"), "stupidsort.comp");
-			runner.context->create_named_pipeline("stupidsort", pci);
+			pci.add_shader(util::read_entire_file("../../examples/sdf.comp"), "sdf.comp");
+			runner.context->create_named_pipeline("sdf", pci);
 			}
 
 			int chans;
@@ -58,14 +52,6 @@ namespace {
 			auto ptc = ifc.begin();
 			auto [tex, stub] = ptc.create_texture(vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1 }, doge_image);
 			texture_of_doge = std::move(tex);
-	
-			// init scrambling buffer
-			scramble_buf = ptc.allocate_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eTransferDst | vuk::BufferUsageFlagBits::eStorageBuffer, sizeof(unsigned) * x * y, 1);
-			std::vector<unsigned> indices(x * y);
-			std::iota(indices.begin(), indices.end(), 0);
-			std::shuffle(indices.begin(), indices.end(), g);
-
-			ptc.upload(scramble_buf.get(), std::span(indices.begin(), indices.end()));
 
 			ptc.wait_all_transfers();
 			stbi_image_free(doge_image);
@@ -73,58 +59,88 @@ namespace {
 		.render = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
 			auto ptc = ifc.begin();
 
+			glm::vec3 max = glm::vec3(5.f, 2.f, 2.f);
+			glm::vec3 min = glm::vec3(-5.f, -2.f, -2.f);
+			glm::vec3 vox = glm::vec3(0.05f);
+			glm::uvec3 count = glm::uvec3((max - min) / vox);
+
+			// init vtx_buf
+			auto vtx_buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eStorageBuffer | vuk::BufferUsageFlagBits::eVertexBuffer, sizeof(glm::vec3) * count.x * count.y * count.z, 1, false);
+			auto idx_buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eStorageBuffer | vuk::BufferUsageFlagBits::eIndexBuffer, sizeof(glm::uint) * 100 * 4096, 1, false);
+			auto idcmd_buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eStorageBuffer | vuk::BufferUsageFlagBits::eIndirectBuffer, sizeof(vuk::DrawIndexedIndirectCommand), sizeof(vuk::DrawIndexedIndirectCommand), true);
+			memset(idcmd_buf.mapped_ptr, 0, sizeof(vuk::DrawIndexedIndirectCommand));
+
+			struct VP {
+				glm::mat4 view;
+				glm::mat4 proj;
+			} vp;
+			vp.view = glm::lookAt(glm::vec3(0, 1.5, 5.5), glm::vec3(0), glm::vec3(0, 1, 0));
+			vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 1.f, 10.f);
+			vp.proj[1][1] *= -1;
+
 			vuk::RenderGraph rg;
-
-			// standard render to texture
-			rg.add_pass({
-				.resources = {"08_rtt"_image(vuk::eColorWrite)},
-				.execute = [](vuk::CommandBuffer& command_buffer) {
-					command_buffer
-					  .set_viewport(0, vuk::Rect2D::framebuffer())
-					  .set_scissor(0, vuk::Rect2D::framebuffer())
-					  .bind_sampled_image(0, 0, *texture_of_doge, {})
-					  .bind_graphics_pipeline("rtt")
-					  .draw(3, 1, 0, 0);
-				}
-			});
-
 			// this pass executes outside of a renderpass
 			// we declare a buffer dependency and dispatch a compute shader
+
+			struct PC {
+				glm::vec3 min;
+				float px1 = 0.f;
+				glm::vec3 vox_size;
+				float px2 = 0.f;
+			}pc = {min, dx1, vox, dx2};
+
 			rg.add_pass({
-				.resources = {"08_scramble"_buffer(vuk::eComputeRW)},
-				.execute = [](vuk::CommandBuffer& command_buffer) {
+				.resources = {"vtx"_buffer(vuk::eComputeWrite), "idx"_buffer(vuk::eComputeWrite), "cmd"_buffer(vuk::eComputeWrite)},
+				.execute = [pc, count](vuk::CommandBuffer& command_buffer) {
 					command_buffer
-						.bind_storage_buffer(0, 0, command_buffer.get_resource_buffer("08_scramble"))
-						.bind_compute_pipeline("stupidsort")
-						.dispatch(1);
+						.bind_storage_buffer(0, 0, command_buffer.get_resource_buffer("vtx"))
+						.bind_storage_buffer(0, 1, command_buffer.get_resource_buffer("idx"))
+						.bind_storage_buffer(0, 2, command_buffer.get_resource_buffer("cmd"))
+						.bind_compute_pipeline("sdf")
+						.push_constants(vuk::ShaderStageFlagBits::eCompute, 0, pc)
+						.dispatch_invocations(count.x, count.y, count.z);
 				}
 			});
+
+			auto p = ptc.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eUniformBuffer, std::span(&vp, 1));
+			auto uboVP = p.first;
+			ptc.wait_all_transfers();
 
 			// draw the scrambled image, with a buffer dependency on the scramble buffer
 			rg.add_pass({
-				.resources = {"08_scramble"_buffer(vuk::eFragmentRead), "08_rtt"_image(vuk::eFragmentSampled), "08_pipelined_compute_final"_image(vuk::eColorWrite)},
-				.execute = [](vuk::CommandBuffer& command_buffer) {
+				.resources = {"08_pipelined_compute_final"_image(vuk::eColorWrite), "08_depth"_image(vuk::eDepthStencilRW), "vtx"_buffer(vuk::eAttributeRead), "idx"_buffer(vuk::eIndexRead), "cmd"_buffer(vuk::eIndirectRead)},
+				.execute = [uboVP](vuk::CommandBuffer& command_buffer) {
 					command_buffer
 						.set_viewport(0, vuk::Rect2D::framebuffer())
 						.set_scissor(0, vuk::Rect2D::framebuffer())
 
-						.bind_sampled_image(0, 0, "08_rtt", {})
-						.bind_storage_buffer(0, 1, command_buffer.get_resource_buffer("08_scramble"))
-						.bind_graphics_pipeline("scrambled_draw")
-						.draw(3, 1, 0, 0);
+						.bind_vertex_buffer(0, command_buffer.get_resource_buffer("vtx"), 0, vuk::Packed{vuk::Format::eR32G32B32Sfloat})
+						.bind_index_buffer(command_buffer.get_resource_buffer("idx"), vuk::IndexType::eUint32)
+						.bind_graphics_pipeline("fwd")
+						.bind_uniform_buffer(0, 0, uboVP)
+						.draw_indexed_indirect(1, command_buffer.get_resource_buffer("cmd"));
 				}
 			});
 	
 			time += ImGui::GetIO().DeltaTime;
-			
-			rg.attach_managed("08_rtt", runner.swapchain->format, vuk::Dimension2D::absolute((unsigned)x, (unsigned)y), vuk::Samples::e1, vuk::ClearColor{ 0.f, 0.f, 0.f, 0.f });
-			// we bind our externally managed buffer to the rendergraph
-			rg.attach_buffer("08_scramble", scramble_buf.get(), vuk::eNone, vuk::eNone);
+
+			if (d1) {
+				dx1 += 0.001f;
+			} else {
+				dx1 -= 0.001f;
+			}
+			if (abs(dx1) > 5.f) {
+				d1 = !d1;
+			}
+		
+			rg.attach_managed("08_depth", vuk::Format::eD32Sfloat, vuk::Dimension2D::framebuffer(), vuk::Samples::e1, vuk::ClearDepthStencil{ 1.f, 0 });
+			rg.attach_buffer("vtx", vtx_buf, vuk::eNone, vuk::eNone);
+			rg.attach_buffer("idx", idx_buf, vuk::eNone, vuk::eNone);
+			rg.attach_buffer("cmd", idcmd_buf, vuk::eNone, vuk::eNone);
 			return rg;
 		},
 		.cleanup = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
 			texture_of_doge.reset();
-			scramble_buf.reset();
 		}
 
 	};
