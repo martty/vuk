@@ -87,41 +87,41 @@ void main(){
 	uint y = gl_GlobalInvocationID.y;
 	uint z = gl_GlobalInvocationID.z;
 	add_vertex(lin_index, center);
-	bool solid1 = eval(corner) > 0;
+	bool solid1 = eval(corner) > FLT_EPS;
 	
 	if(x > 0 && y > 0){
-		bool solid2 = eval(corner + vec3(0,0,1)*vox_size) > 0;
-		if(solid1 != solid2){
+		bool solid2 = eval(corner + vec3(0,0,1)*vox_size) < FLT_EPS;
+		if(solid1 == solid2){
 			append_quad(uvec4(
 				linear_index(uvec3(x - 1, y - 1, z)),
 				linear_index(uvec3(x - 0, y - 1, z)),
 				linear_index(uvec3(x - 0, y - 0, z)),
 				linear_index(uvec3(x - 1, y - 0, z))
-			), solid2);
+			), !solid2);
 		}
 	}
 	
 	if(x > 0 && z > 0){
-		bool solid2 = eval(corner + vec3(0,1,0)*vox_size) > 0;
-		if(solid1 != solid2){
+		bool solid2 = eval(corner + vec3(0,1,0)*vox_size) < FLT_EPS;
+		if(solid1 == solid2){
 			append_quad(uvec4(
 				linear_index(uvec3(x - 1, y, z - 1)),
 				linear_index(uvec3(x - 0, y, z - 1)),
 				linear_index(uvec3(x - 0, y, z - 0)),
 				linear_index(uvec3(x - 1, y, z - 0))
-			), solid2);
+			), !solid2);
 		}
 	}
 	
 	if(y > 0 && z > 0){
-		bool solid2 = eval(corner + vec3(1,0,0)*vox_size) > 0;
-		if(solid1 != solid2){
+		bool solid2 = eval(corner + vec3(1,0,0)*vox_size) < FLT_EPS;
+		if(solid1 == solid2){
 			append_quad(uvec4(
 				linear_index(uvec3(x, y - 1, z - 1)),
 				linear_index(uvec3(x, y - 0, z - 1)),
 				linear_index(uvec3(x, y - 0, z - 0)),
 				linear_index(uvec3(x, y - 1, z - 0))
-			), solid2);
+			), !solid2);
 		}
 	}
 }
