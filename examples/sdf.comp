@@ -3,6 +3,8 @@
 //SDF meatballs
 // SDF2DC
 
+layout(local_size_x = 200) in;
+
 layout(push_constant) uniform pcs {
 	vec3 voxbounds_min;
 	float dx1;
@@ -21,7 +23,7 @@ float opSmoothUnion(float d1, float d2, float k){
 
 float eval(vec3 p) {
 	float sph1 = sdSphere(p - vec3(dx1,0,0), 1);
-	float sph2 = sdSphere(p - vec3(dx2,0,0), 1);
+	float sph2 = sdSphere(p - vec3(dx2,0,0), 0.75);
 	return opSmoothUnion(sph1, sph2, 1);
 }
 
@@ -45,10 +47,9 @@ layout(binding = 2) buffer cmd {
 	uint firstInstance;
 };
 
-uint linear_index(uvec3 index){
-	return index.z * gl_NumWorkGroups.y * gl_NumWorkGroups.x +
-                        index.y * gl_NumWorkGroups.x +
-                        index.x * 1;
+uint linear_index(uvec3 id){
+	uvec3 mp =  gl_NumWorkGroups * gl_WorkGroupSize;
+	return id.z * mp.y * mp.x + id.y * mp.x + id.x * 1;
 }
 
 void add_vertex(uint idx, vec3 vtx){
@@ -70,12 +71,10 @@ void append_quad(uvec4 inds, bool swap){
 	indices[dst+5] = inds[3];
 }
 
-layout(local_size_x = 1) in;
+#define FLT_EPS 1E-5
 
 void main(){
-	uint lin_index = gl_GlobalInvocationID.z * gl_NumWorkGroups.y * gl_NumWorkGroups.x +
-                        gl_GlobalInvocationID.y * gl_NumWorkGroups.x +
-                        gl_GlobalInvocationID.x * 1;
+	uint lin_index = linear_index(gl_GlobalInvocationID);
 	if(lin_index == 0){
 		instanceCount = 1;
 		firstIndex = 0;
