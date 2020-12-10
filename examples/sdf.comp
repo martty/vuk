@@ -52,12 +52,8 @@ layout(binding = 2) coherent restrict buffer cmd {
 };
 
 shared uint needed_vertices[(WG_SIZE + 1) * 4]; // in our line + [-y -z, -y z, y -z]
-shared uint vertex_remap[(WG_SIZE + 1) * 4];
 shared uint local_indices[WG_SIZE * 3 * 6]; // each invoc can add at max 3 quads, each 6 indices
 shared uint local_index_count;
-const uint num_sg = 4;
-shared uint sg_sync;
-
 shared uint req_verts;
 
 shared uint vert_idx;
@@ -107,16 +103,15 @@ void append_quad(uvec4 inds, bool swap){
 	if(swap){
 		inds = inds.wzyx; // flip
 	}
-	//inds = clamp(inds, uvec4(0), uvec4((WG_SIZE + 1) * 4 - 1));
-	/*atomicAdd(needed_vertices[inds[0]], 1);
-	atomicAdd(needed_vertices[inds[1]], 1);
-	atomicAdd(needed_vertices[inds[2]], 1);*/
 	local_indices[dst+0] = inds[0];
 	local_indices[dst+1] = inds[1];
 	local_indices[dst+2] = inds[2];
 	local_indices[dst+3] = inds[0];
 	local_indices[dst+4] = inds[2];
 	local_indices[dst+5] = inds[3];
+	/*atomicAdd(needed_vertices[inds[0]], 1);
+	atomicAdd(needed_vertices[inds[1]], 1);
+	atomicAdd(needed_vertices[inds[2]], 1);*/
 }
 
 #define FLT_EPS 1E-5
@@ -135,7 +130,6 @@ void main(){
 	}
 	if(gl_LocalInvocationIndex == 0){
 		local_index_count = 0;
-		sg_sync = 0;
 		for(int i = 0; i < (WG_SIZE+1)*4; i++){
 			needed_vertices[i] = 0;
 		}
@@ -156,7 +150,7 @@ void main(){
 		req_verts = 0;
 	}
 	memoryBarrierShared();
-	barrier();
+	//barrier();
 	/*if(subgroupElect()){
 		block_size = block_size_sh;
 		block_corner = block_corner_sh;
@@ -177,7 +171,6 @@ void main(){
 	vec3 center = corner + 0.5*vox_size;
 
 	bool solid1 = eval(corner) > FLT_EPS;
-	
 	if(x > 0 && y > 0){
 		bool solid2 = eval(corner + vec3(0,0,1)*vox_size) < FLT_EPS;
 		if(solid1 == solid2){
@@ -189,7 +182,6 @@ void main(){
 			), !solid2);
 		}
 	}
-	
 	if(x > 0 && z > 0){
 		bool solid2 = eval(corner + vec3(0,1,0)*vox_size) < FLT_EPS;
 		if(solid1 == solid2){
@@ -213,7 +205,8 @@ void main(){
 			), !solid2);
 		}
 	}
-	barrier(); // SG finish
+	
+	//barrier(); // SG finish
 	memoryBarrierShared();
 	// elect survivor SG v-------v
 	/*if(subgroupElect()){
@@ -222,12 +215,11 @@ void main(){
 		*/
 	
 	// calculate required vertices
-	
 	for(uint i = gl_LocalInvocationIndex; i < local_index_count; i += WG_SIZE){
 		atomicAdd(needed_vertices[local_indices[i]], 1);
 	}
 	barrier();
-	memoryBarrierShared();
+	//memoryBarrierShared();
 	// write out vertices, remember the mapping
 	for(uint i = gl_LocalInvocationIndex; i < ((WG_SIZE + 1) * 4); i += WG_SIZE){
 		if(needed_vertices[i] > 0){
@@ -235,32 +227,32 @@ void main(){
 		}
 	}
 	barrier();
-	memoryBarrierShared();
+	//memoryBarrierShared();
 	if(gl_LocalInvocationIndex == 0){
 		vert_idx = atomicAdd(firstInstance, req_verts * 3); // reserve space in vtx buffer
 		ind_idx = atomicAdd(indexCount, local_index_count); // reserve space in the idx buffer
 	}
 	barrier();
-	memoryBarrierShared();
+	//memoryBarrierShared();
 	uint vidx;
 	for(uint i = gl_LocalInvocationIndex; i < ((WG_SIZE + 1) * 4); i += WG_SIZE){
 		if(needed_vertices[i] > 0){
 			vidx = atomicAdd(vert_idx, 1);
 			add_vertex(vidx, to_coord(i) + 0.5*vox_size);
-			vertex_remap[i] = vidx;
+			needed_vertices[i] = vidx;
 		}
-		memoryBarrierShared();
+		//memoryBarrierShared();
 	}
 	barrier();
-	memoryBarrierShared();
+	//memoryBarrierShared();
 	// write out indices, remap as we go
 	uint tris = local_index_count/3;
 	uint idx;
 	for(uint i = gl_LocalInvocationIndex; i < tris; i += WG_SIZE){
 		idx = atomicAdd(ind_idx, 3);
-		indices[idx] = vertex_remap[local_indices[3*i]];
-		indices[idx+1] = vertex_remap[local_indices[3*i+1]];
-		indices[idx+2] = vertex_remap[local_indices[3*i+2]];
-		memoryBarrierShared();
+		indices[idx] = needed_vertices[local_indices[3*i]];
+		indices[idx+1] = needed_vertices[local_indices[3*i+1]];
+		indices[idx+2] = needed_vertices[local_indices[3*i+2]];
+		//memoryBarrierShared();
 	}
 }
