@@ -58,8 +58,6 @@ shared uint req_verts;
 shared uint vert_idx;
 shared uint ind_idx;
 
-shared uvec3 block_size_sh;
-shared uvec3 block_corner_sh;
 uvec3 block_size;
 uvec3 block_corner;
 
@@ -130,35 +128,28 @@ void main(){
 		vertexOffset = 0;
 		firstInstance = 0;
 	}
-	if(gl_LocalInvocationIndex == 0){
-		local_index_count = 0;
-		for(int i = 0; i < (WG_SIZE+1)*4; i++){
-			needed_vertices[i] = 0;
-		}
-		block_corner_sh = gl_GlobalInvocationID;
-		block_size_sh = gl_WorkGroupSize;
-		if(x > 0){
-			block_size_sh.x++;
-			block_corner_sh.x--;
-		}
-		if(y > 0){
-			block_size_sh.y++;
-			block_corner_sh.y--;
-		}
-		if(z > 0){
-			block_size_sh.z++;
-			block_corner_sh.z--;
-		}
-		req_verts = 0;
+	for(uint i = gl_LocalInvocationIndex; i < ((WG_SIZE + 1) * 4); i += WG_SIZE){
+		needed_vertices[i] = 0;
 	}
-	memoryBarrierShared();
-	//barrier();
-	
-	// this really helps VGPR count
 	if(subgroupElect()){
-		block_size = block_size_sh;
-		block_corner = block_corner_sh;
+		block_corner = gl_WorkGroupID * gl_WorkGroupSize;
+		block_size = gl_WorkGroupSize;
+		if(block_corner.x > 0){
+			block_size.x++;
+			block_corner.x--;
+		}
+		if(block_corner.y > 0){
+			block_size.y++;
+			block_corner.y--;
+		}
+		if(block_corner.z > 0){
+			block_size.z++;
+			block_corner.z--;
+		}
+		atomicExchange(req_verts, 0);
+		atomicExchange(local_index_count, 0);
 	}
+	// this really helps VGPR count
 	block_size = subgroupBroadcast(block_size, 0);
 	block_corner = subgroupBroadcast(block_corner, 0);
 	/*block_size = block_size_sh;
