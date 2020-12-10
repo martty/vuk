@@ -120,14 +120,6 @@ void main(){
 	uint x = gl_GlobalInvocationID.x;
 	uint y = gl_GlobalInvocationID.y;
 	uint z = gl_GlobalInvocationID.z;
-	uint lin_index = linear_index(gl_GlobalInvocationID);
-	if(lin_index == 0){
-		firstIndex = 0;
-		instanceCount = 1;
-		firstIndex = 0;
-		vertexOffset = 0;
-		firstInstance = 0;
-	}
 	for(uint i = gl_LocalInvocationIndex; i < ((WG_SIZE + 1) * 4); i += WG_SIZE){
 		needed_vertices[i] = 0;
 	}
@@ -149,6 +141,7 @@ void main(){
 		atomicExchange(req_verts, 0);
 		atomicExchange(local_index_count, 0);
 	}
+	barrier();
 	// this really helps VGPR count
 	block_size = subgroupBroadcast(block_size, 0);
 	block_corner = subgroupBroadcast(block_corner, 0);
@@ -167,7 +160,7 @@ void main(){
 
 	bool solid1 = eval(corner) > FLT_EPS;
 	if(x > 0 && y > 0){
-		bool solid2 = eval(corner + vec3(0,0,1)*vox_size) < FLT_EPS;
+		bool solid2 = eval(corner + vec3(0,0,vox_size.z)) < FLT_EPS;
 		if(solid1 == solid2){
 			append_quad(uvec4(
 				local_index(uvec3(x - 1, y - 1, z)),
@@ -178,7 +171,7 @@ void main(){
 		}
 	}
 	if(x > 0 && z > 0){
-		bool solid2 = eval(corner + vec3(0,1,0)*vox_size) < FLT_EPS;
+		bool solid2 = eval(corner + vec3(0,vox_size.y,0)) < FLT_EPS;
 		if(solid1 == solid2){
 			append_quad(uvec4(
 				local_index(uvec3(x - 1, y, z - 1)),
@@ -190,7 +183,7 @@ void main(){
 	}
 	
 	if(y > 0 && z > 0){
-		bool solid2 = eval(corner + vec3(1,0,0)*vox_size) < FLT_EPS;
+		bool solid2 = eval(corner + vec3(vox_size.x,0,0)) < FLT_EPS;
 		if(solid1 == solid2){
 			append_quad(uvec4(
 				local_index(uvec3(x, y - 1, z - 1)),
@@ -202,7 +195,6 @@ void main(){
 	}
 	
 	//barrier(); // SG finish
-	memoryBarrierShared();
 	atomicAdd(local_index_count, n_local_quad_inds * 6);
 	barrier();
 	//memoryBarrierShared();
