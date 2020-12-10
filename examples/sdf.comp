@@ -52,7 +52,6 @@ layout(binding = 2) coherent restrict buffer cmd {
 };
 
 shared uint needed_vertices[(WG_SIZE + 1) * 4]; // in our line + [-y -z, -y z, y -z]
-shared uint local_indices[WG_SIZE * 3 * 6]; // each invoc can add at max 3 quads, each 6 indices
 shared uint local_index_count;
 shared uint req_verts;
 
@@ -98,20 +97,23 @@ void add_vertex(uint idx, vec3 vtx){
 	vertices[idx * 3 + 2] = vtx.z;
 }
 
+uint local_quads[3 * 4];
+uint n_local_quad_inds = 0;
+
 void append_quad(uvec4 inds, bool swap){
-	uint dst = atomicAdd(local_index_count, 6);
+	uint dst = n_local_quad_inds*4;
 	if(swap){
 		inds = inds.wzyx; // flip
 	}
-	local_indices[dst+0] = inds[0];
-	local_indices[dst+1] = inds[1];
-	local_indices[dst+2] = inds[2];
-	local_indices[dst+3] = inds[0];
-	local_indices[dst+4] = inds[2];
-	local_indices[dst+5] = inds[3];
-	/*atomicAdd(needed_vertices[inds[0]], 1);
+	local_quads[dst+0] = inds[0];
+	local_quads[dst+1] = inds[1];
+	local_quads[dst+2] = inds[2];
+	local_quads[dst+3] = inds[3];
+	atomicAdd(needed_vertices[inds[0]], 1);
 	atomicAdd(needed_vertices[inds[1]], 1);
-	atomicAdd(needed_vertices[inds[2]], 1);*/
+	atomicAdd(needed_vertices[inds[2]], 1);
+	atomicAdd(needed_vertices[inds[3]], 1);
+	n_local_quad_inds += 1;
 }
 
 #define FLT_EPS 1E-5
@@ -151,14 +153,16 @@ void main(){
 	}
 	memoryBarrierShared();
 	//barrier();
-	/*if(subgroupElect()){
+	
+	// this really helps VGPR count
+	if(subgroupElect()){
 		block_size = block_size_sh;
 		block_corner = block_corner_sh;
 	}
 	block_size = subgroupBroadcast(block_size, 0);
-	block_corner = subgroupBroadcast(block_corner, 0);*/
-	block_size = block_size_sh;
-	block_corner = block_corner_sh;
+	block_corner = subgroupBroadcast(block_corner, 0);
+	/*block_size = block_size_sh;
+	block_corner = block_corner_sh;*/
 	/*uint loid = local_index(uvec3(x,y,z));
 	uvec3 lid = to_lid(loid);
 	uvec3 gid = to_gid(loid);
@@ -208,16 +212,7 @@ void main(){
 	
 	//barrier(); // SG finish
 	memoryBarrierShared();
-	// elect survivor SG v-------v
-	/*if(subgroupElect()){
-		uint res = atomicAdd(sg_sync, 1);
-		if(res == num_sg - 1){ // we are last sg
-		*/
-	
-	// calculate required vertices
-	for(uint i = gl_LocalInvocationIndex; i < local_index_count; i += WG_SIZE){
-		atomicAdd(needed_vertices[local_indices[i]], 1);
-	}
+	atomicAdd(local_index_count, n_local_quad_inds * 6);
 	barrier();
 	//memoryBarrierShared();
 	// write out vertices, remember the mapping
@@ -234,10 +229,9 @@ void main(){
 	}
 	barrier();
 	//memoryBarrierShared();
-	uint vidx;
 	for(uint i = gl_LocalInvocationIndex; i < ((WG_SIZE + 1) * 4); i += WG_SIZE){
 		if(needed_vertices[i] > 0){
-			vidx = atomicAdd(vert_idx, 1);
+			uint vidx = atomicAdd(vert_idx, 1);
 			add_vertex(vidx, to_coord(i) + 0.5*vox_size);
 			needed_vertices[i] = vidx;
 		}
@@ -246,13 +240,13 @@ void main(){
 	barrier();
 	//memoryBarrierShared();
 	// write out indices, remap as we go
-	uint tris = local_index_count/3;
-	uint idx;
-	for(uint i = gl_LocalInvocationIndex; i < tris; i += WG_SIZE){
-		idx = atomicAdd(ind_idx, 3);
-		indices[idx] = needed_vertices[local_indices[3*i]];
-		indices[idx+1] = needed_vertices[local_indices[3*i+1]];
-		indices[idx+2] = needed_vertices[local_indices[3*i+2]];
-		//memoryBarrierShared();
+	uint idx = atomicAdd(ind_idx, n_local_quad_inds * 6);
+	for(uint i = 0; i < n_local_quad_inds; i++){
+		indices[idx + 6*i + 0] = needed_vertices[local_quads[4*i+0]];
+		indices[idx + 6*i + 1] = needed_vertices[local_quads[4*i+1]];
+		indices[idx + 6*i + 2] = needed_vertices[local_quads[4*i+2]];
+		indices[idx + 6*i + 3] = needed_vertices[local_quads[4*i+0]];
+		indices[idx + 6*i + 4] = needed_vertices[local_quads[4*i+2]];
+		indices[idx + 6*i + 5] = needed_vertices[local_quads[4*i+3]];
 	}
 }
