@@ -95,18 +95,16 @@ void add_vertex(uint idx, vec3 vtx){
 	vertices[idx * 3 + 2] = vtx.z;
 }
 
-uint local_quads[3 * 4];
+uint local_quads[3];
 uint n_local_quad_inds = 0;
 
-void append_quad(uvec4 inds, bool swap){
-	uint dst = n_local_quad_inds*4;
+void append_quad(uint type, uvec4 inds, bool swap){
+	uint dst = n_local_quad_inds;
 	if(swap){
 		inds = inds.wzyx; // flip
 	}
-	local_quads[dst+0] = inds[0];
-	local_quads[dst+1] = inds[1];
-	local_quads[dst+2] = inds[2];
-	local_quads[dst+3] = inds[3];
+	local_quads[dst] = type;
+	
 	atomicAdd(needed_vertices[inds[0]], 1);
 	atomicAdd(needed_vertices[inds[1]], 1);
 	atomicAdd(needed_vertices[inds[2]], 1);
@@ -162,7 +160,7 @@ void main(){
 	if(x > 0 && y > 0){
 		bool solid2 = eval(corner + vec3(0,0,vox_size.z)) < FLT_EPS;
 		if(solid1 == solid2){
-			append_quad(uvec4(
+			append_quad(0, uvec4(
 				local_index(uvec3(x - 1, y - 1, z)),
 				local_index(uvec3(x - 0, y - 1, z)),
 				local_index(uvec3(x - 0, y - 0, z)),
@@ -173,7 +171,7 @@ void main(){
 	if(x > 0 && z > 0){
 		bool solid2 = eval(corner + vec3(0,vox_size.y,0)) < FLT_EPS;
 		if(solid1 == solid2){
-			append_quad(uvec4(
+			append_quad(1, uvec4(
 				local_index(uvec3(x - 1, y, z - 1)),
 				local_index(uvec3(x - 0, y, z - 1)),
 				local_index(uvec3(x - 0, y, z - 0)),
@@ -185,7 +183,7 @@ void main(){
 	if(y > 0 && z > 0){
 		bool solid2 = eval(corner + vec3(vox_size.x,0,0)) < FLT_EPS;
 		if(solid1 == solid2){
-			append_quad(uvec4(
+			append_quad(2, uvec4(
 				local_index(uvec3(x, y - 1, z - 1)),
 				local_index(uvec3(x, y - 0, z - 1)),
 				local_index(uvec3(x, y - 0, z - 0)),
@@ -195,7 +193,7 @@ void main(){
 	}
 	
 	//barrier(); // SG finish
-	atomicAdd(local_index_count, n_local_quad_inds * 6);
+	atomicAdd(local_index_count, n_local_quad_inds * 6 * 4);
 	barrier();
 	//memoryBarrierShared();
 	// write out vertices, remember the mapping
@@ -223,13 +221,32 @@ void main(){
 	barrier();
 	//memoryBarrierShared();
 	// write out indices, remap as we go
-	uint idx = atomicAdd(ind_idx, n_local_quad_inds * 6);
+	uint idx = atomicAdd(ind_idx, n_local_quad_inds * 6 * 4);
 	for(uint i = 0; i < n_local_quad_inds; i++){
-		indices[idx + 6*i + 0] = needed_vertices[local_quads[4*i+0]];
-		indices[idx + 6*i + 1] = needed_vertices[local_quads[4*i+1]];
-		indices[idx + 6*i + 2] = needed_vertices[local_quads[4*i+2]];
-		indices[idx + 6*i + 3] = needed_vertices[local_quads[4*i+0]];
-		indices[idx + 6*i + 4] = needed_vertices[local_quads[4*i+2]];
-		indices[idx + 6*i + 5] = needed_vertices[local_quads[4*i+3]];
+		uvec4 quad;
+		if(local_quads[i] == 0){
+			quad = uvec4(local_index(uvec3(x - 1, y - 1, z)),
+				local_index(uvec3(x - 0, y - 1, z)),
+				local_index(uvec3(x - 0, y - 0, z)),
+				local_index(uvec3(x - 1, y - 0, z)));
+		} else if (local_quads[i] == 1){
+			quad = uvec4(
+				local_index(uvec3(x - 1, y, z - 1)),
+				local_index(uvec3(x - 0, y, z - 1)),
+				local_index(uvec3(x - 0, y, z - 0)),
+				local_index(uvec3(x - 1, y, z - 0)));
+		} else if (local_quads[i] == 2){
+			quad = uvec4(
+				local_index(uvec3(x, y - 1, z - 1)),
+				local_index(uvec3(x, y - 0, z - 1)),
+				local_index(uvec3(x, y - 0, z - 0)),
+				local_index(uvec3(x, y - 1, z - 0)));
+		}
+		indices[idx + 6*4*i + 0] = needed_vertices[quad[0]];
+		indices[idx + 6*4*i + 1] = needed_vertices[quad[1]];
+		indices[idx + 6*4*i + 2] = needed_vertices[quad[2]];
+		indices[idx + 6*4*i + 3] = needed_vertices[quad[0]];
+		indices[idx + 6*4*i + 4] = needed_vertices[quad[2]];
+		indices[idx + 6*4*i + 5] = needed_vertices[quad[3]];
 	}
 }
