@@ -9,6 +9,8 @@
 #define WG_SIZE 200
 layout(local_size_x = WG_SIZE) in;
 
+#define FLT_EPS 1E-5
+
 layout(push_constant) uniform pcs {
 	vec3 voxbounds_min;
 	float dx1;
@@ -95,6 +97,63 @@ void add_vertex(uint idx, vec3 vtx){
 	vertices[idx * 3 + 2] = vtx.z;
 }
 
+void add_vertex_trilinear(uint idx, uvec3 gid){
+	float v[2][2][2];
+	vec3 corner = gid*vox_size + voxbounds_min;
+	vec3 delta = uvec3(1,1,1)*vox_size;
+	// evaluate SDF at corners
+	for(uint i = 0; i < 2; i++){
+		for(uint j = 0; j < 2; j++){
+			for(uint k = 0; k < 2; k++){
+				vec3 pt = corner + uvec3(i,j,k) * delta;
+				v[i][j][k] = eval(pt);
+			}
+		}
+	}
+	vec3 p_sum = vec3(0);//corner + 0.5*vox_size;
+	uint p_count = 0;
+	for(uint dx = 0; dx < 2; dx++){
+		for(uint dy = 0; dy < 2; dy++){
+			float v0 = v[dx][dy][0];
+			float v1 = v[dx][dy][1];
+			float fac = (0-v0)/(v1-v0);
+			if((v0 > FLT_EPS) == (v1 < FLT_EPS)){
+				vec3 p = corner + vec3(dx, dy, fac) * delta;
+				p_sum += p;
+				p_count++;
+			}
+		}
+	}
+	for(uint dx = 0; dx < 2; dx++){
+		for(uint dz = 0; dz < 2; dz++){
+			float v0 = v[dx][0][dz];
+			float v1 = v[dx][1][dz];
+			float fac = (0-v0)/(v1-v0);
+			if((v0 > FLT_EPS) == (v1 < FLT_EPS)){
+				vec3 p = corner + vec3(dx, fac, dz) * delta;
+				p_sum += p;
+				p_count++;
+			}
+		}
+	}
+	for(uint dy = 0; dy < 2; dy++){
+		for(uint dz = 0; dz < 2; dz++){
+			float v0 = v[0][dy][dz];
+			float v1 = v[1][dy][dz];
+			float fac = (0-v0)/(v1-v0);
+			if((v0 > FLT_EPS) == (v1 < FLT_EPS)){
+				vec3 p = corner + vec3(fac, dy, dz) * delta;
+				p_sum += p;
+				p_count++;
+			}
+		}
+	}
+	vec3 vtx = p_sum / p_count;
+	vertices[idx * 3 + 0] = vtx.x;
+	vertices[idx * 3 + 1] = vtx.y;
+	vertices[idx * 3 + 2] = vtx.z;
+}
+
 uint local_quads[3];
 uint n_local_quad_inds = 0;
 
@@ -111,8 +170,6 @@ void append_quad(uint type, uvec4 inds, bool swap){
 	atomicAdd(needed_vertices[inds[3]], 1);
 	n_local_quad_inds += 1;
 }
-
-#define FLT_EPS 1E-5
 
 void main(){
 	uint x = gl_GlobalInvocationID.x;
@@ -213,7 +270,7 @@ void main(){
 	for(uint i = gl_LocalInvocationIndex; i < ((WG_SIZE + 1) * 4); i += WG_SIZE){
 		if(needed_vertices[i] > 0){
 			uint vidx = atomicAdd(vert_idx, 1);
-			add_vertex(vidx, to_coord(i) + 0.5*vox_size);
+			add_vertex_trilinear(vidx, to_gid(i));
 			needed_vertices[i] = vidx;
 		}
 		//memoryBarrierShared();
