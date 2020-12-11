@@ -2,6 +2,7 @@
 #pragma shader_stage(compute)
 
 #extension GL_KHR_shader_subgroup_ballot: enable
+#extension GL_EXT_control_flow_attributes: enable
 
 //SDF meatballs
 // SDF2DC
@@ -52,7 +53,52 @@ layout(binding = 1) restrict buffer inds {
 	uint indices[];
 };
 
-layout(binding = 2) coherent restrict buffer cmd {
+#define STACK_DEPTH 3
+
+#define SDF_CMD_END 0
+#define SDF_CMD_TRANSFORM 1
+#define SDF_CMD_SPHERE 2
+#define SDF_CMD_SMOOTH_COMBINE 3
+
+layout(binding = 2) restrict buffer cmdin {
+	uint cmdstream[];
+};
+
+// TODO: scalarize
+float eval_vm(vec3 p){
+	float stack[STACK_DEPTH];
+	uint sp = 0;
+	uint pc = 0; // program counter (dwords), all instr/data multiple of dwords
+	mat4 inv_transform = mat4(1.f);
+	uint cmd = cmdstream[pc];
+	[[loop]]
+	while(cmd != SDF_CMD_END){
+		pc++;
+		switch(cmd){
+			case SDF_CMD_TRANSFORM:
+				inv_transform = mat4(uintBitsToFloat(cmdstream[pc]),uintBitsToFloat(cmdstream[pc+1]),uintBitsToFloat(cmdstream[pc+2]),uintBitsToFloat(cmdstream[pc+3]), uintBitsToFloat(cmdstream[pc+4]),uintBitsToFloat(cmdstream[pc+5]),uintBitsToFloat(cmdstream[pc+6]),uintBitsToFloat(cmdstream[pc+7]),uintBitsToFloat(cmdstream[pc+8]),uintBitsToFloat(cmdstream[pc+9]),uintBitsToFloat(cmdstream[pc+10]),uintBitsToFloat(cmdstream[pc+11]),uintBitsToFloat(cmdstream[pc+12]),uintBitsToFloat(cmdstream[pc+13]),uintBitsToFloat(cmdstream[pc+14]),uintBitsToFloat(cmdstream[pc+15]));
+				pc += 16;
+				break;
+			case SDF_CMD_SPHERE:
+				float radius = uintBitsToFloat(cmdstream[pc]);
+				stack[sp] = sdSphere(vec3(inv_transform * vec4(p, 1.0)), radius); // push sphere eval to stack
+				sp++;
+				inv_transform = mat4(1.0); // consume transform
+				pc += 4;
+				break;
+			case SDF_CMD_SMOOTH_COMBINE:
+				float k = uintBitsToFloat(cmdstream[pc]);
+				stack[sp-2] = opSmoothUnion(stack[sp-2], stack[sp-1], k); // pop 1, set
+				sp--;
+				pc++;
+				break;
+		}
+		cmd = cmdstream[pc];
+	}
+	return stack[0]; // top of stack must be final SDF
+}
+
+layout(binding = 3) coherent restrict buffer cmdout {
 	uint indexCount;
 	uint instanceCount;
 	uint firstIndex;
@@ -122,7 +168,7 @@ void add_vertex_trilinear(uint idx, uvec3 gid){
 		for(uint j = 0; j < 2; j++){
 			for(uint k = 0; k < 2; k++){
 				vec3 pt = corner + uvec3(i,j,k) * delta;
-				v[i][j][k] = eval(pt);
+				v[i][j][k] = eval_vm(pt);
 			}
 		}
 	}
@@ -232,9 +278,9 @@ void main(){
 	return;*/
 	vec3 corner = gl_GlobalInvocationID*vox_size + voxbounds_min;
 
-	bool solid1 = eval(corner) > FLT_EPS;
+	bool solid1 = eval_vm(corner) > FLT_EPS;
 	if(x > 0 && y > 0){
-		bool solid2 = eval(corner + vec3(0,0,vox_size.z)) < FLT_EPS;
+		bool solid2 = eval_vm(corner + vec3(0,0,vox_size.z)) < FLT_EPS;
 		if(solid1 == solid2){
 			append_quad(0, uvec4(
 				local_index(uvec3(x - 1, y - 1, z)),
@@ -245,7 +291,7 @@ void main(){
 		}
 	}
 	if(x > 0 && z > 0){
-		bool solid2 = eval(corner + vec3(0,vox_size.y,0)) < FLT_EPS;
+		bool solid2 = eval_vm(corner + vec3(0,vox_size.y,0)) < FLT_EPS;
 		if(solid1 == solid2){
 			append_quad(1, uvec4(
 				local_index(uvec3(x - 1, y, z - 1)),
@@ -257,7 +303,7 @@ void main(){
 	}
 	
 	if(y > 0 && z > 0){
-		bool solid2 = eval(corner + vec3(vox_size.x,0,0)) < FLT_EPS;
+		bool solid2 = eval_vm(corner + vec3(vox_size.x,0,0)) < FLT_EPS;
 		if(solid1 == solid2){
 			append_quad(2, uvec4(
 				local_index(uvec3(x, y - 1, z - 1)),

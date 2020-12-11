@@ -7,6 +7,8 @@
 #include <random>
 #include <numeric>
 
+
+using glm::vec3;
 /* 08_pipelined_compute
 * In this example we will see how to run compute shaders on the graphics queue.
 * To showcases this, we will render a texture to a fullscreen framebuffer,
@@ -17,6 +19,51 @@
 * Furthermore it allows launching individual examples and all examples with the example same code.
 * Check out the framework (example_runner_*) files if interested!
 */
+
+enum class SDF_CMD_type : unsigned {
+	end = 0,
+	transform = 1,
+	sphere = 2,
+	smooth_combine = 3
+};
+
+struct end_cmd {
+	SDF_CMD_type type = SDF_CMD_type::end;
+};
+
+struct transform_cmd {
+	SDF_CMD_type type = SDF_CMD_type::transform;
+	glm::mat4 inv_tf;
+
+	transform_cmd(glm::mat4 tf) : inv_tf(glm::inverse(tf)) {}
+};
+
+struct sphere_cmd {
+	SDF_CMD_type type = SDF_CMD_type::sphere;
+	float radius;
+	glm::vec3 color;
+
+	sphere_cmd(float r, glm::vec3 color) : radius(r), color(color) {}
+};
+
+struct smooth_combine_cmd {
+	SDF_CMD_type type = SDF_CMD_type::smooth_combine;
+	float k;
+
+	smooth_combine_cmd(float k) : k(k) {}
+};
+
+struct SDF_commands {
+	std::vector<std::byte> data;
+
+	template<class T>
+	void push(const T& cmd) {
+		auto size = data.size();
+		data.resize(data.size() + sizeof(T));
+		auto ptr = data.data() + size;
+		memcpy(ptr, &cmd, sizeof(T));
+	}
+};
 
 namespace {
 	float time = 0.f;
@@ -30,7 +77,7 @@ namespace {
 	glm::vec3 max = glm::vec3(5.f, 2.f, 2.f);
 	glm::vec3 min = glm::vec3(-5.f, -2.f, -2.f);
 	glm::vec3 vox = glm::vec3(0.1f);
-	enum class VertexPlacement : uint32_t{
+	enum class VertexPlacement : uint32_t {
 		surface_net = 0,
 		linear = 1
 	};
@@ -80,7 +127,14 @@ namespace {
 			vuk::DrawIndexedIndirectCommand di{};
 			di.instanceCount = 1;
 			memcpy(idcmd_buf.mapped_ptr, &di, sizeof(vuk::DrawIndexedIndirectCommand));
-
+			SDF_commands cmds;
+			cmds.push(transform_cmd(glm::translate(glm::mat4(1.f), vec3(dx1, 0, 0))));
+			cmds.push(sphere_cmd(1, vec3(1, 0, 0)));
+			cmds.push(sphere_cmd(0.75, vec3(0, 0, 1)));
+			cmds.push(smooth_combine_cmd(1));
+			cmds.push(end_cmd());
+			auto vmcmd_buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eStorageBuffer, cmds.data.size(), 1, true);
+			memcpy(vmcmd_buf.mapped_ptr, cmds.data.data(), cmds.data.size());
 			struct VP {
 				glm::mat4 view;
 				glm::mat4 proj;
@@ -103,11 +157,12 @@ namespace {
 
 			rg.add_pass({
 				.resources = {"vtx"_buffer(vuk::eComputeWrite), "idx"_buffer(vuk::eComputeWrite), "cmd"_buffer(vuk::eComputeWrite)},
-				.execute = [pc](vuk::CommandBuffer& command_buffer) {
+				.execute = [pc, vmcmd_buf](vuk::CommandBuffer& command_buffer) {
 					command_buffer
 						.bind_storage_buffer(0, 0, command_buffer.get_resource_buffer("vtx"))
 						.bind_storage_buffer(0, 1, command_buffer.get_resource_buffer("idx"))
-						.bind_storage_buffer(0, 2, command_buffer.get_resource_buffer("cmd"))
+						.bind_storage_buffer(0, 2, vmcmd_buf)
+						.bind_storage_buffer(0, 3, command_buffer.get_resource_buffer("cmd"))
 						.bind_compute_pipeline("sdf")
 						.push_constants(vuk::ShaderStageFlagBits::eCompute, 0, pc)
 						.dispatch_invocations(count.x, count.y, count.z);
@@ -132,7 +187,7 @@ namespace {
 						.draw_indexed_indirect(1, command_buffer.get_resource_buffer("cmd"));
 				}
 			});
-	
+
 			time += ImGui::GetIO().DeltaTime;
 
 			if (d1) {
@@ -143,7 +198,7 @@ namespace {
 			if (abs(dx1) > 5.f) {
 				d1 = !d1;
 			}
-		
+
 			rg.attach_managed("08_depth", vuk::Format::eD32Sfloat, vuk::Dimension2D::framebuffer(), vuk::Samples::e1, vuk::ClearDepthStencil{ 1.f, 0 });
 			rg.attach_buffer("vtx", vtx_buf, vuk::eNone, vuk::eNone);
 			rg.attach_buffer("idx", idx_buf, vuk::eNone, vuk::eNone);
