@@ -63,6 +63,10 @@ struct SDF_commands {
 		auto ptr = data.data() + size;
 		memcpy(ptr, &cmd, sizeof(T));
 	}
+
+	void clear() {
+		data.clear();
+	}
 };
 
 namespace {
@@ -74,15 +78,18 @@ namespace {
 	std::optional<vuk::Texture> texture_of_doge;
 	std::random_device rd;
 	std::mt19937 g(rd());
-	glm::vec3 max = glm::vec3(5.f, 2.f, 2.f);
-	glm::vec3 min = glm::vec3(-5.f, -2.f, -2.f);
+	std::vector<vec3> poss;
+	std::vector<vec3> vels;
+	glm::vec3 max = glm::vec3(5.f, 5.f, 5.f);
+	glm::vec3 min = glm::vec3(-5.f, -5.f, -5.f);
 	glm::vec3 vox = glm::vec3(0.1f);
 	enum class VertexPlacement : uint32_t {
 		surface_net = 0,
 		linear = 1
 	};
-	static VertexPlacement placement_method;
+	static VertexPlacement placement_method = VertexPlacement::linear;
 	static glm::uvec3 count = glm::uvec3((max - min) / vox);
+	static SDF_commands cmds;
 
 	vuk::Example xample{
 		.name = "08_pipelined_compute",
@@ -108,7 +115,13 @@ namespace {
 			auto ptc = ifc.begin();
 			auto [tex, stub] = ptc.create_texture(vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1 }, doge_image);
 			texture_of_doge = std::move(tex);
+			std::uniform_real_distribution<float> dist_pos(-5, 5);
 
+			for (int i = 0; i < 32; i++) {
+				glm::vec3 pos = glm::vec3(dist_pos(g), dist_pos(g), dist_pos(g));
+				vels.push_back(0.01f * glm::normalize(glm::cross(pos, vec3(0, 1, 0))));
+				poss.push_back(pos);
+			}
 			ptc.wait_all_transfers();
 			stbi_image_free(doge_image);
 		},
@@ -127,12 +140,21 @@ namespace {
 			vuk::DrawIndexedIndirectCommand di{};
 			di.instanceCount = 1;
 			memcpy(idcmd_buf.mapped_ptr, &di, sizeof(vuk::DrawIndexedIndirectCommand));
-			SDF_commands cmds;
-			cmds.push(transform_cmd(glm::translate(glm::mat4(1.f), vec3(dx1, 0, 0))));
+			cmds.clear();
 			cmds.push(sphere_cmd(1, vec3(1, 0, 0)));
-			cmds.push(sphere_cmd(0.75, vec3(0, 0, 1)));
-			cmds.push(smooth_combine_cmd(1));
+			for (auto i = 0; i < poss.size(); i++) {
+				cmds.push(transform_cmd(glm::translate(glm::mat4(1.f), poss[i])));
+				cmds.push(sphere_cmd(0.2, vec3(0, 0, 1)));
+				cmds.push(smooth_combine_cmd(1));
+			}
 			cmds.push(end_cmd());
+
+			for (auto i = 0; i < vels.size(); i++) {
+				auto force_mag = 0.1f / glm::length(poss[i]);
+				vels[i] += force_mag * (-poss[i]) * ImGui::GetIO().DeltaTime;
+				poss[i] += vels[i] * ImGui::GetIO().DeltaTime;
+			}
+
 			auto vmcmd_buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eStorageBuffer, cmds.data.size(), 1, true);
 			memcpy(vmcmd_buf.mapped_ptr, cmds.data.data(), cmds.data.size());
 			struct VP {
