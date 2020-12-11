@@ -250,7 +250,7 @@ void main(){
 	}
 	
 	//barrier(); // SG finish
-	atomicAdd(local_index_count, n_local_quad_inds * 6 * 4);
+	atomicAdd(local_index_count, n_local_quad_inds);
 	barrier();
 	//memoryBarrierShared();
 	// write out vertices, remember the mapping
@@ -263,7 +263,7 @@ void main(){
 	//memoryBarrierShared();
 	if(gl_LocalInvocationIndex == 0){
 		vert_idx = atomicAdd(firstInstance, req_verts * 3); // reserve space in vtx buffer
-		ind_idx = atomicAdd(indexCount, local_index_count); // reserve space in the idx buffer
+		ind_idx = atomicAdd(indexCount, local_index_count * 6); // reserve space in the idx buffer
 	}
 	barrier();
 	//memoryBarrierShared();
@@ -278,7 +278,7 @@ void main(){
 	barrier();
 	//memoryBarrierShared();
 	// write out indices, remap as we go
-	uint idx = atomicAdd(ind_idx, n_local_quad_inds * 6 * 4);
+	uint idx = atomicAdd(ind_idx, n_local_quad_inds * 6);
 	for(uint i = 0; i < n_local_quad_inds; i++){
 		uvec4 quad;
 		if(local_quads[i] == 0){
@@ -299,11 +299,11 @@ void main(){
 				local_index(uvec3(x, y - 0, z - 0)),
 				local_index(uvec3(x, y - 1, z - 0)));
 		}
-		indices[idx + 6*4*i + 0] = needed_vertices[quad[0]];
-		indices[idx + 6*4*i + 1] = needed_vertices[quad[1]];
-		indices[idx + 6*4*i + 2] = needed_vertices[quad[2]];
-		indices[idx + 6*4*i + 3] = needed_vertices[quad[0]];
-		indices[idx + 6*4*i + 4] = needed_vertices[quad[2]];
-		indices[idx + 6*4*i + 5] = needed_vertices[quad[3]];
+		indices[idx + 6*i + 0] = needed_vertices[quad[0]];
+		indices[idx + 6*i + 1] = needed_vertices[quad[1]];
+		indices[idx + 6*i + 2] = needed_vertices[quad[2]];
+		indices[idx + 6*i + 3] = needed_vertices[quad[0]];
+		indices[idx + 6*i + 4] = needed_vertices[quad[2]];
+		indices[idx + 6*i + 5] = needed_vertices[quad[3]];
 	}
 }
