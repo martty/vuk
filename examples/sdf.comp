@@ -16,6 +16,7 @@ layout(push_constant) uniform pcs {
 	float dx1;
 	vec3 vox_size;
 	float dx2;
+	uint vtx_plc_method;
 };
 
 float sdSphere(vec3 p, float s){
@@ -66,6 +67,8 @@ shared uint req_verts;
 shared uint vert_idx;
 shared uint ind_idx;
 
+shared bool abort;
+
 uvec3 block_size;
 uvec3 block_corner;
 
@@ -101,9 +104,13 @@ void add_vertex(uint idx, uvec3 gid){
 	vec3 corner = gid*vox_size + voxbounds_min;
 	vec3 center = corner + 0.5*vox_size;
 	vec3 vtx = center;
-	vertices[idx * 3 + 0] = vtx.x;
-	vertices[idx * 3 + 1] = vtx.y;
-	vertices[idx * 3 + 2] = vtx.z;
+	vec3 col = eval_color(vtx);
+	vertices[idx * 6 + 0] = vtx.x;
+	vertices[idx * 6 + 1] = vtx.y;
+	vertices[idx * 6 + 2] = vtx.z;
+	vertices[idx * 6 + 3] = col.x;
+	vertices[idx * 6 + 4] = col.y;
+	vertices[idx * 6 + 5] = col.z;
 }
 
 void add_vertex_trilinear(uint idx, uvec3 gid){
@@ -274,15 +281,31 @@ void main(){
 	barrier();
 	//memoryBarrierShared();
 	if(gl_LocalInvocationIndex == 0){
-		vert_idx = atomicAdd(firstInstance, req_verts * 6); // reserve space in vtx buffer
-		ind_idx = atomicAdd(indexCount, local_index_count * 6); // reserve space in the idx buffer
+		abort = (firstInstance * 6 > (vertices.length() - req_verts * 6)) || ((indexCount > (indices.length() - local_index_count*6)));
+		if(!abort){
+			vert_idx = atomicAdd(firstInstance, req_verts); // reserve space in vtx buffer
+			ind_idx = atomicAdd(indexCount, local_index_count * 6); // reserve space in the idx buffer
+			abort = abort || (vert_idx * 6 > (vertices.length() - req_verts * 6));
+			if(abort){
+				for(uint i = 0; i < local_index_count * 6; i++){
+					indices[ind_idx + i] = 0;
+				}
+			}
+			abort = abort || ((ind_idx > (indices.length() - local_index_count*6)));
+		}
 	}
 	barrier();
+	if(abort)
+		return;
 	//memoryBarrierShared();
 	for(uint i = gl_LocalInvocationIndex; i < ((WG_SIZE + 1) * 4); i += WG_SIZE){
 		if(needed_vertices[i] > 0){
 			uint vidx = atomicAdd(vert_idx, 1);
-			add_vertex_trilinear(vidx, to_gid(i));
+			if(vtx_plc_method == 0){
+				add_vertex(vidx, to_gid(i));
+			} else if (vtx_plc_method == 1){
+				add_vertex_trilinear(vidx, to_gid(i));
+			}
 			needed_vertices[i] = vidx;
 		}
 		//memoryBarrierShared();

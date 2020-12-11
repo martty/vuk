@@ -30,6 +30,11 @@ namespace {
 	glm::vec3 max = glm::vec3(5.f, 2.f, 2.f);
 	glm::vec3 min = glm::vec3(-5.f, -2.f, -2.f);
 	glm::vec3 vox = glm::vec3(0.1f);
+	enum class VertexPlacement : uint32_t{
+		surface_net = 0,
+		linear = 1
+	};
+	static VertexPlacement placement_method;
 	static glm::uvec3 count = glm::uvec3((max - min) / vox);
 
 	vuk::Example xample{
@@ -62,8 +67,12 @@ namespace {
 		},
 		.render = [&](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
 			auto ptc = ifc.begin();
-			ImGui::DragFloat3("Resolution", &vox[0], 0.01f, 0.f, 5.f, "%.3f", 1.f);
+			float resolution = vox.x;
+			ImGui::DragFloat("Resolution", &resolution, 0.01f, 0.f, 5.f, "%.3f", 1.f);
+			vox = glm::vec3(resolution);
 			count = glm::uvec3((max - min) / vox);
+			const char* items[] = { "Surface net", "Linear contouring" };
+			ImGui::Combo("Meshing", (int32_t*)&placement_method, items, std::size(items));
 			// init vtx_buf
 			auto vtx_buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eStorageBuffer | vuk::BufferUsageFlagBits::eVertexBuffer, sizeof(glm::vec3) * 2 * 150000, 1, false);
 			auto idx_buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eStorageBuffer | vuk::BufferUsageFlagBits::eIndexBuffer, sizeof(glm::uint) * 100 * 4096, 1, false);
@@ -89,7 +98,8 @@ namespace {
 				float px1 = 0.f;
 				glm::vec3 vox_size;
 				float px2 = 0.f;
-			}pc = {min, dx1, vox, dx2};
+				VertexPlacement placement_method;
+			}pc = {min, dx1, vox, dx2, placement_method};
 
 			rg.add_pass({
 				.resources = {"vtx"_buffer(vuk::eComputeWrite), "idx"_buffer(vuk::eComputeWrite), "cmd"_buffer(vuk::eComputeWrite)},
