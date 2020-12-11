@@ -29,7 +29,7 @@ namespace {
 	std::mt19937 g(rd());
 	glm::vec3 max = glm::vec3(5.f, 2.f, 2.f);
 	glm::vec3 min = glm::vec3(-5.f, -2.f, -2.f);
-	glm::vec3 vox = glm::vec3(0.05f);
+	glm::vec3 vox = glm::vec3(0.1f);
 	static glm::uvec3 count = glm::uvec3((max - min) / vox);
 
 	vuk::Example xample{
@@ -65,7 +65,7 @@ namespace {
 			ImGui::DragFloat3("Resolution", &vox[0], 0.01f, 0.f, 5.f, "%.3f", 1.f);
 			count = glm::uvec3((max - min) / vox);
 			// init vtx_buf
-			auto vtx_buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eStorageBuffer | vuk::BufferUsageFlagBits::eVertexBuffer, sizeof(glm::vec3) * 150000, 1, false);
+			auto vtx_buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eStorageBuffer | vuk::BufferUsageFlagBits::eVertexBuffer, sizeof(glm::vec3) * 2 * 150000, 1, false);
 			auto idx_buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eStorageBuffer | vuk::BufferUsageFlagBits::eIndexBuffer, sizeof(glm::uint) * 100 * 4096, 1, false);
 			auto idcmd_buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eStorageBuffer | vuk::BufferUsageFlagBits::eIndirectBuffer, sizeof(vuk::DrawIndexedIndirectCommand), sizeof(vuk::DrawIndexedIndirectCommand), true);
 			vuk::DrawIndexedIndirectCommand di{};
@@ -115,7 +115,7 @@ namespace {
 						.set_viewport(0, vuk::Rect2D::framebuffer())
 						.set_scissor(0, vuk::Rect2D::framebuffer())
 
-						.bind_vertex_buffer(0, command_buffer.get_resource_buffer("vtx"), 0, vuk::Packed{vuk::Format::eR32G32B32Sfloat})
+						.bind_vertex_buffer(0, command_buffer.get_resource_buffer("vtx"), 0, vuk::Packed{vuk::Format::eR32G32B32Sfloat, vuk::Format::eR32G32B32Sfloat})
 						.bind_index_buffer(command_buffer.get_resource_buffer("idx"), vuk::IndexType::eUint32)
 						.bind_graphics_pipeline("fwd")
 						.bind_uniform_buffer(0, 0, uboVP)

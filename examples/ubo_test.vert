@@ -2,6 +2,7 @@
 #pragma shader_stage(vertex)
 
 layout(location = 0) in vec3 ipos;
+layout(location = 1) in vec3 icol;
 
 layout(binding = 0) uniform VP {
 	mat4 view;
@@ -16,6 +17,6 @@ out gl_PerVertex
 layout (location = 0) out vec3 color;
 
 void main() {
-	color = vec3(1,1,1);
+	color = icol;
     gl_Position = projection * view * vec4(ipos, 1.0);
 }

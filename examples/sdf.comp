@@ -33,8 +33,14 @@ float eval(vec3 p) {
 	return opSmoothUnion(sph1, sph2, 1);
 }
 
-vec3 approximate_normal(vec3 p){
-	return vec3(0);
+vec3 eval_color(vec3 p) {
+	vec3 c1 = vec3(1,0,0);
+	vec3 c2 = vec3(0,0,1);
+	float sph1 = sdSphere(p - vec3(dx1,0,0), 1);
+	float sph2 = sdSphere(p - vec3(dx2,0,0), 0.75);
+	float h = clamp(0.5 + 0.5*(sph2-sph1)/1, 0.0, 1.0);
+	h = smoothstep(0.1, 0.9, h);
+	return mix(c2, c1, h);
 }
 
 layout(binding = 0) restrict buffer verts {
@@ -152,9 +158,13 @@ void add_vertex_trilinear(uint idx, uvec3 gid){
 		}
 	}
 	vec3 vtx = p_sum / p_count;
-	vertices[idx * 3 + 0] = vtx.x;
-	vertices[idx * 3 + 1] = vtx.y;
-	vertices[idx * 3 + 2] = vtx.z;
+	vec3 col = eval_color(vtx);
+	vertices[idx * 6 + 0] = vtx.x;
+	vertices[idx * 6 + 1] = vtx.y;
+	vertices[idx * 6 + 2] = vtx.z;
+	vertices[idx * 6 + 3] = col.x;
+	vertices[idx * 6 + 4] = col.y;
+	vertices[idx * 6 + 5] = col.z;
 }
 
 uint local_quads[3];
@@ -264,7 +274,7 @@ void main(){
 	barrier();
 	//memoryBarrierShared();
 	if(gl_LocalInvocationIndex == 0){
-		vert_idx = atomicAdd(firstInstance, req_verts * 3); // reserve space in vtx buffer
+		vert_idx = atomicAdd(firstInstance, req_verts * 6); // reserve space in vtx buffer
 		ind_idx = atomicAdd(indexCount, local_index_count * 6); // reserve space in the idx buffer
 	}
 	barrier();
