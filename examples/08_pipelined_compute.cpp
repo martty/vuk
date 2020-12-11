@@ -27,6 +27,10 @@ namespace {
 	std::optional<vuk::Texture> texture_of_doge;
 	std::random_device rd;
 	std::mt19937 g(rd());
+	glm::vec3 max = glm::vec3(5.f, 2.f, 2.f);
+	glm::vec3 min = glm::vec3(-5.f, -2.f, -2.f);
+	glm::vec3 vox = glm::vec3(0.05f);
+	static glm::uvec3 count = glm::uvec3((max - min) / vox);
 
 	vuk::Example xample{
 		.name = "08_pipelined_compute",
@@ -56,14 +60,10 @@ namespace {
 			ptc.wait_all_transfers();
 			stbi_image_free(doge_image);
 		},
-		.render = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
+		.render = [&](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
 			auto ptc = ifc.begin();
-
-			glm::vec3 max = glm::vec3(5.f, 2.f, 2.f);
-			glm::vec3 min = glm::vec3(-5.f, -2.f, -2.f);
-			glm::vec3 vox = glm::vec3(0.05f);
-			glm::uvec3 count = glm::uvec3((max - min) / vox);
-
+			ImGui::DragFloat3("Resolution", &vox[0], 0.01f, 0.f, 5.f, "%.3f", 1.f);
+			count = glm::uvec3((max - min) / vox);
 			// init vtx_buf
 			auto vtx_buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eStorageBuffer | vuk::BufferUsageFlagBits::eVertexBuffer, sizeof(glm::vec3) * 150000, 1, false);
 			auto idx_buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eStorageBuffer | vuk::BufferUsageFlagBits::eIndexBuffer, sizeof(glm::uint) * 100 * 4096, 1, false);
@@ -93,7 +93,7 @@ namespace {
 
 			rg.add_pass({
 				.resources = {"vtx"_buffer(vuk::eComputeWrite), "idx"_buffer(vuk::eComputeWrite), "cmd"_buffer(vuk::eComputeWrite)},
-				.execute = [pc, count](vuk::CommandBuffer& command_buffer) {
+				.execute = [pc](vuk::CommandBuffer& command_buffer) {
 					command_buffer
 						.bind_storage_buffer(0, 0, command_buffer.get_resource_buffer("vtx"))
 						.bind_storage_buffer(0, 1, command_buffer.get_resource_buffer("idx"))
@@ -104,9 +104,8 @@ namespace {
 				}
 			});
 
-			auto p = ptc.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eUniformBuffer, std::span(&vp, 1));
-			auto uboVP = p.first;
-			ptc.wait_all_transfers();
+			auto uboVP = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eUniformBuffer, sizeof(VP), 1, true);
+			memcpy(uboVP.mapped_ptr, &vp, sizeof(VP));
 
 			// draw the scrambled image, with a buffer dependency on the scramble buffer
 			rg.add_pass({

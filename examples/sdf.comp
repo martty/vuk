@@ -91,7 +91,10 @@ vec3 to_coord(uint local_index){
 	return to_gid(local_index)*vox_size + voxbounds_min;
 }
 
-void add_vertex(uint idx, vec3 vtx){
+void add_vertex(uint idx, uvec3 gid){
+	vec3 corner = gid*vox_size + voxbounds_min;
+	vec3 center = corner + 0.5*vox_size;
+	vec3 vtx = center;
 	vertices[idx * 3 + 0] = vtx.x;
 	vertices[idx * 3 + 1] = vtx.y;
 	vertices[idx * 3 + 2] = vtx.z;
@@ -211,7 +214,6 @@ void main(){
 	/*indices[lin_index] = loid;
 	return;*/
 	vec3 corner = gl_GlobalInvocationID*vox_size + voxbounds_min;
-	vec3 center = corner + 0.5*vox_size;
 
 	bool solid1 = eval(corner) > FLT_EPS;
 	if(x > 0 && y > 0){
