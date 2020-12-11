@@ -80,10 +80,11 @@ void eval_vm(vec3 p, out float pos, out vec3 color){
 	uint pc = 0; // program counter (dwords), all instr/data multiple of dwords
 	mat4 inv_transform = mat4(1.f);
 	uint cmd;
+
 	//if(subgroupElect())
 		cmd = cmdstream[pc];
 	//cmd = subgroupBroadcast(cmd, 0);
-	for(int i = 0; i < 128 && cmd != SDF_CMD_END; i++){
+	for(int i = 0; i < 256 && cmd != SDF_CMD_END; i++){
 		//if(subgroupElect())
 			pc++;
 		//pc = subgroupBroadcast(pc, 0);
@@ -283,10 +284,10 @@ void append_quad(uint type, uvec4 inds, bool swap){
 	}
 	local_quads[dst] = type;
 	
-	atomicAdd(needed_vertices[inds[0]], 1);
-	atomicAdd(needed_vertices[inds[1]], 1);
-	atomicAdd(needed_vertices[inds[2]], 1);
-	atomicAdd(needed_vertices[inds[3]], 1);
+	atomicExchange(needed_vertices[inds[0]], 1);
+	atomicExchange(needed_vertices[inds[1]], 1);
+	atomicExchange(needed_vertices[inds[2]], 1);
+	atomicExchange(needed_vertices[inds[3]], 1);
 	n_local_quad_inds += 1;
 }
 
