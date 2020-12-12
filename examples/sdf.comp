@@ -3,12 +3,10 @@
 
 #extension GL_KHR_shader_subgroup_ballot: enable
 #extension GL_EXT_control_flow_attributes: enable
-#extension GL_EXT_subgroupuniform_qualifier : enable
+#extension GL_EXT_shader_explicit_arithmetic_types_int64:enable
 
-//SDF meatballs
-// SDF2DC
-
-#define WG_SIZE 200
+// TODO: corruption with larger size, why?
+#define WG_SIZE 64
 layout(local_size_x = WG_SIZE) in;
 
 #define FLT_EPS 1E-5
@@ -30,10 +28,10 @@ float opSmoothUnion(float d1, float d2, float k){
     return mix( d2, d1, h ) - k*h*(1.0-h); 
 }
 
-vec3 opColorSmoothUnion(vec3 c1, vec3 c2, float d1, float d2, float k){
+uint opColorSmoothUnion(uint c1, uint c2, float d1, float d2, float k){
 	float h = clamp(0.5 + 0.5*(d2-d1)/k, 0.0, 1.0);
 	h = smoothstep(0.1, 0.9, h);
-	return mix(c2, c1, h);
+	return uint(mix(c2, c1, h));
 }
 
 float eval(vec3 p) {
@@ -60,88 +58,58 @@ layout(binding = 1) restrict buffer inds {
 	uint indices[];
 };
 
-#define STACK_DEPTH 3
+#define STACK_DEPTH 2
 
 #define SDF_CMD_END 0
 #define SDF_CMD_TRANSFORM 1
 #define SDF_CMD_SPHERE 2
 #define SDF_CMD_SMOOTH_COMBINE 3
 
-layout(binding = 2) restrict buffer cmdin {
-	uint cmdstream[];
+layout(binding = 2) restrict uniform cmdin {
+	uvec4 cmdstream[512];
 };
 
-// TODO: scalarization didn't help?
-// scalarize cmd decoding
+layout(binding = 2) restrict uniform cmdin_mat4 {
+	vec4 cmdstream_mat4[512];
+};
+
 void eval_vm(vec3 p, out float pos, out vec3 color){
+	barrier();
 	float stack[STACK_DEPTH];
-	vec3 color_stack[STACK_DEPTH];
+	uint color_stack[STACK_DEPTH];
 	uint sp = 0;
 	uint pc = 0; // program counter (dwords), all instr/data multiple of dwords
 	mat4 inv_transform = mat4(1.f);
 	uint cmd;
 
-	//if(subgroupElect())
-		cmd = cmdstream[pc];
-	//cmd = subgroupBroadcast(cmd, 0);
+	cmd = cmdstream[pc].x;
 	for(int i = 0; i < 256 && cmd != SDF_CMD_END; i++){
-		//if(subgroupElect())
-			pc++;
-		//pc = subgroupBroadcast(pc, 0);
 		switch(cmd){
 			case SDF_CMD_TRANSFORM:
-				//if(subgroupElect()){
-				inv_transform = mat4(uintBitsToFloat(cmdstream[pc]),uintBitsToFloat(cmdstream[pc+1]),uintBitsToFloat(cmdstream[pc+2]),uintBitsToFloat(cmdstream[pc+3]), uintBitsToFloat(cmdstream[pc+4]),uintBitsToFloat(cmdstream[pc+5]),uintBitsToFloat(cmdstream[pc+6]),uintBitsToFloat(cmdstream[pc+7]),uintBitsToFloat(cmdstream[pc+8]),uintBitsToFloat(cmdstream[pc+9]),uintBitsToFloat(cmdstream[pc+10]),uintBitsToFloat(cmdstream[pc+11]),uintBitsToFloat(cmdstream[pc+12]),uintBitsToFloat(cmdstream[pc+13]),uintBitsToFloat(cmdstream[pc+14]),uintBitsToFloat(cmdstream[pc+15]));
-				//}
-				/*inv_transform[0] = subgroupBroadcast(inv_transform[0], 0);
-				inv_transform[1] = subgroupBroadcast(inv_transform[1], 0);
-				inv_transform[2] = subgroupBroadcast(inv_transform[2], 0);
-				inv_transform[3] = subgroupBroadcast(inv_transform[3], 0);*/
-				//if(subgroupElect())
-					pc+=16;
-				//pc = subgroupBroadcast(pc, 0);
+				pc++;
+				inv_transform = mat4(cmdstream_mat4[pc], cmdstream_mat4[pc+1], cmdstream_mat4[pc+2], cmdstream_mat4[pc+3]);
+				pc+=4;
 				break;
 			case SDF_CMD_SPHERE:
-				float radius;
-				//if(subgroupElect())
-					radius = uintBitsToFloat(cmdstream[pc]);
-				//radius = subgroupBroadcast(radius, 0);
+				float radius = uintBitsToFloat(cmdstream[pc].y);
 				stack[sp] = sdSphere(vec3(inv_transform * vec4(p, 1.0)), radius); // push sphere eval to stack
-				//if(subgroupElect())
-					color_stack[sp] = vec3(uintBitsToFloat(cmdstream[pc+1]), uintBitsToFloat(cmdstream[pc+2]), uintBitsToFloat(cmdstream[pc+3]));
-				//color_stack[sp] = subgroupBroadcast(color_stack[sp], 0);
-				//if(subgroupElect())
-					sp++;
-				//sp = subgroupBroadcast(sp, 0);
-				//if(subgroupElect())
-					inv_transform = mat4(1.0); // consume transform
-				/*inv_transform[0] = subgroupBroadcast(inv_transform[0], 0);
-				inv_transform[1] = subgroupBroadcast(inv_transform[1], 0);
-				inv_transform[2] = subgroupBroadcast(inv_transform[2], 0);
-				inv_transform[3] = subgroupBroadcast(inv_transform[3], 0);*/
-				//if(subgroupElect())
-					pc+=4;
-				//pc = subgroupBroadcast(pc, 0);
+				color_stack[sp] = uint(uintBitsToFloat(cmdstream[pc].z));
+				sp++;
+				inv_transform = mat4(1.0); // consume transform
+				pc++;
 				break;
 			case SDF_CMD_SMOOTH_COMBINE:
-				float k = uintBitsToFloat(cmdstream[pc]);
+				float k = uintBitsToFloat(cmdstream[pc].y);
 				color_stack[sp-2] = opColorSmoothUnion(color_stack[sp-2], color_stack[sp-1], stack[sp-2], stack[sp-1], k); // pop 1, set
 				stack[sp-2] = opSmoothUnion(stack[sp-2], stack[sp-1], k); // pop 1, set
-				//if(subgroupElect())
-					sp--;
-				//sp = subgroupBroadcast(sp, 0);
-				//if(subgroupElect())
-					pc++;
-				//pc = subgroupBroadcast(pc, 0);
+				sp--;
+				pc++;
 				break;
 		}
-		//subgroupBarrier();
-		//if(subgroupElect())
-			cmd = cmdstream[pc];
-		//cmd = subgroupBroadcast(cmd, 0);
+		cmd = cmdstream[pc].x;
 	}
 	pos = stack[0]; // top of stack must be final SDF
-	color = color_stack[0];
+	color = vec3(color_stack[0]);
 }
 
 layout(binding = 3) coherent restrict buffer cmdout {
@@ -231,11 +199,10 @@ void add_vertex_trilinear(uint idx, uvec3 gid){
 			float v0 = v[dx][dy][0];
 			float v1 = v[dx][dy][1];
 			float fac = (0-v0)/(v1-v0);
-			if((v0 > FLT_EPS) == (v1 < FLT_EPS)){
-				vec3 p = corner + vec3(dx, dy, fac) * delta;
-				p_sum += p;
-				p_count++;
-			}
+			uint val = uint((v0 > FLT_EPS) == (v1 < FLT_EPS));
+			vec3 p = vec3(dx, dy, fac) * delta;
+			p_sum += p * val;
+			p_count+=val;
 		}
 	}
 	for(uint dx = 0; dx < 2; dx++){
@@ -243,11 +210,10 @@ void add_vertex_trilinear(uint idx, uvec3 gid){
 			float v0 = v[dx][0][dz];
 			float v1 = v[dx][1][dz];
 			float fac = (0-v0)/(v1-v0);
-			if((v0 > FLT_EPS) == (v1 < FLT_EPS)){
-				vec3 p = corner + vec3(dx, fac, dz) * delta;
-				p_sum += p;
-				p_count++;
-			}
+			uint val = uint((v0 > FLT_EPS) == (v1 < FLT_EPS));
+			vec3 p = vec3(dx, fac, dz) * delta;
+			p_sum += p * val;
+			p_count+=val;
 		}
 	}
 	for(uint dy = 0; dy < 2; dy++){
@@ -255,14 +221,13 @@ void add_vertex_trilinear(uint idx, uvec3 gid){
 			float v0 = v[0][dy][dz];
 			float v1 = v[1][dy][dz];
 			float fac = (0-v0)/(v1-v0);
-			if((v0 > FLT_EPS) == (v1 < FLT_EPS)){
-				vec3 p = corner + vec3(fac, dy, dz) * delta;
-				p_sum += p;
-				p_count++;
-			}
+			uint val = uint((v0 > FLT_EPS) == (v1 < FLT_EPS));
+			vec3 p = vec3(fac, dy, dz) * delta;
+			p_sum += p * val;
+			p_count+=val;
 		}
 	}
-	vec3 vtx = p_sum / p_count;
+	vec3 vtx = corner + p_sum / p_count;
 	float _;
 	vec3 col;
 	eval_vm(vtx, _, col);
@@ -274,21 +239,11 @@ void add_vertex_trilinear(uint idx, uvec3 gid){
 	vertices[idx * 6 + 5] = col.z;
 }
 
-uint local_quads[3];
-uint n_local_quad_inds = 0;
-
-void append_quad(uint type, uvec4 inds, bool swap){
-	uint dst = n_local_quad_inds;
-	if(swap){
-		inds = inds.wzyx; // flip
-	}
-	local_quads[dst] = type;
-	
+void append_quad(uvec4 inds, bool swap){
 	atomicExchange(needed_vertices[inds[0]], 1);
 	atomicExchange(needed_vertices[inds[1]], 1);
 	atomicExchange(needed_vertices[inds[2]], 1);
 	atomicExchange(needed_vertices[inds[3]], 1);
-	n_local_quad_inds += 1;
 }
 
 void main(){
@@ -320,27 +275,23 @@ void main(){
 	// this really helps VGPR count
 	block_size = subgroupBroadcast(block_size, 0);
 	block_corner = subgroupBroadcast(block_corner, 0);
-	/*block_size = block_size_sh;
-	block_corner = block_corner_sh;*/
-	/*uint loid = local_index(uvec3(x,y,z));
-	uvec3 lid = to_lid(loid);
-	uvec3 gid = to_gid(loid);
-	indices[3*lin_index+0] = gid.x;
-	indices[3*lin_index+1] = gid.y;
-	indices[3*lin_index+2] = gid.z;*/
-	/*indices[lin_index] = loid;
-	return;*/
+
 	vec3 corner = gl_GlobalInvocationID*vox_size + voxbounds_min;
 	vec3 _;
+	vec3 col;
 	float pos;
+	
 	eval_vm(corner, pos, _);
+	
+	bool lquad[3] = {false, false, false};
 	bool solid1 = pos > FLT_EPS;
 	
-	eval_vm(corner + vec3(0,0,vox_size.z), pos, _);
 	if(x > 0 && y > 0){
+		eval_vm(corner + vec3(0,0,vox_size.z), pos, _);
 		bool solid2 = pos < FLT_EPS;
 		if(solid1 == solid2){
-			append_quad(0, uvec4(
+			lquad[0] = true;
+			append_quad(uvec4(
 				local_index(uvec3(x - 1, y - 1, z)),
 				local_index(uvec3(x - 0, y - 1, z)),
 				local_index(uvec3(x - 0, y - 0, z)),
@@ -349,11 +300,12 @@ void main(){
 		}
 	}
 	
-	eval_vm(corner + vec3(0,vox_size.y,0), pos, _);
 	if(x > 0 && z > 0){
+		eval_vm(corner + vec3(0,vox_size.y,0), pos, _);
 		bool solid2 = pos < FLT_EPS;
 		if(solid1 == solid2){
-			append_quad(1, uvec4(
+			lquad[1] = true;
+			append_quad(uvec4(
 				local_index(uvec3(x - 1, y, z - 1)),
 				local_index(uvec3(x - 0, y, z - 1)),
 				local_index(uvec3(x - 0, y, z - 0)),
@@ -362,11 +314,12 @@ void main(){
 		}
 	}
 	
-	eval_vm(corner + vec3(vox_size.x,0,0), pos, _);
 	if(y > 0 && z > 0){
+		eval_vm(corner + vec3(vox_size.x,0,0), pos, _);
 		bool solid2 = pos < FLT_EPS;
 		if(solid1 == solid2){
-			append_quad(2, uvec4(
+			lquad[2] = true;
+			append_quad(uvec4(
 				local_index(uvec3(x, y - 1, z - 1)),
 				local_index(uvec3(x, y - 0, z - 1)),
 				local_index(uvec3(x, y - 0, z - 0)),
@@ -375,18 +328,22 @@ void main(){
 		}
 	}
 	
-	//barrier(); // SG finish
-	atomicAdd(local_index_count, n_local_quad_inds);
+	barrier(); // SG finish
+	
+	uint n_sg_quad_inds = subgroupBallotBitCount(subgroupBallot(lquad[0])) + subgroupBallotBitCount(subgroupBallot(lquad[1])) + subgroupBallotBitCount(subgroupBallot(lquad[2]));
+	if(subgroupElect()){
+		atomicAdd(local_index_count, n_sg_quad_inds);
+	}
+	memoryBarrierShared();
 	barrier();
-	//memoryBarrierShared();
 	// write out vertices, remember the mapping
 	for(uint i = gl_LocalInvocationIndex; i < ((WG_SIZE + 1) * 4); i += WG_SIZE){
-		if(needed_vertices[i] > 0){
+		if(needed_vertices[i] == 1){
 			atomicAdd(req_verts, 1);
 		}
 	}
 	barrier();
-	//memoryBarrierShared();
+	memoryBarrierShared();
 	if(gl_LocalInvocationIndex == 0){
 		abort = (firstInstance * 6 > (vertices.length() - req_verts * 6)) || ((indexCount > (indices.length() - local_index_count*6)));
 		if(!abort){
@@ -404,9 +361,8 @@ void main(){
 	barrier();
 	if(abort)
 		return;
-	//memoryBarrierShared();
 	for(uint i = gl_LocalInvocationIndex; i < ((WG_SIZE + 1) * 4); i += WG_SIZE){
-		if(needed_vertices[i] > 0){
+		if(needed_vertices[i] == 1){
 			uint vidx = atomicAdd(vert_idx, 1);
 			if(vtx_plc_method == 0){
 				add_vertex(vidx, to_gid(i));
@@ -415,37 +371,51 @@ void main(){
 			}
 			needed_vertices[i] = vidx;
 		}
-		//memoryBarrierShared();
 	}
 	barrier();
-	//memoryBarrierShared();
+	memoryBarrierShared();
 	// write out indices, remap as we go
-	uint idx = atomicAdd(ind_idx, n_local_quad_inds * 6);
-	for(uint i = 0; i < n_local_quad_inds; i++){
-		uvec4 quad;
-		if(local_quads[i] == 0){
-			quad = uvec4(local_index(uvec3(x - 1, y - 1, z)),
-				local_index(uvec3(x - 0, y - 1, z)),
-				local_index(uvec3(x - 0, y - 0, z)),
-				local_index(uvec3(x - 1, y - 0, z)));
-		} else if (local_quads[i] == 1){
-			quad = uvec4(
-				local_index(uvec3(x - 1, y, z - 1)),
-				local_index(uvec3(x - 0, y, z - 1)),
-				local_index(uvec3(x - 0, y, z - 0)),
-				local_index(uvec3(x - 1, y, z - 0)));
-		} else if (local_quads[i] == 2){
-			quad = uvec4(
-				local_index(uvec3(x, y - 1, z - 1)),
-				local_index(uvec3(x, y - 0, z - 1)),
-				local_index(uvec3(x, y - 0, z - 0)),
-				local_index(uvec3(x, y - 1, z - 0)));
-		}
-		indices[idx + 6*i + 0] = needed_vertices[quad[0]];
-		indices[idx + 6*i + 1] = needed_vertices[quad[1]];
-		indices[idx + 6*i + 2] = needed_vertices[quad[2]];
-		indices[idx + 6*i + 3] = needed_vertices[quad[0]];
-		indices[idx + 6*i + 4] = needed_vertices[quad[2]];
-		indices[idx + 6*i + 5] = needed_vertices[quad[3]];
+	uint n_ids = (uint(lquad[0]) + uint(lquad[1]) + uint(lquad[2]));
+	uint idx = atomicAdd(ind_idx, n_ids * 6);
+	if(lquad[0]){
+		uvec4 quad = uvec4(
+			local_index(uvec3(x - 1, y - 1, z)),
+			local_index(uvec3(x - 0, y - 1, z)),
+			local_index(uvec3(x - 0, y - 0, z)),
+			local_index(uvec3(x - 1, y - 0, z)));
+		indices[idx + 0] = needed_vertices[quad[0]];
+		indices[idx + 1] = needed_vertices[quad[1]];
+		indices[idx + 2] = needed_vertices[quad[2]];
+		indices[idx + 3] = needed_vertices[quad[0]];
+		indices[idx + 4] = needed_vertices[quad[2]];
+		indices[idx + 5] = needed_vertices[quad[3]];
+		idx += 6;
+	} 
+	if (lquad[1]){
+		uvec4 quad = uvec4(
+			local_index(uvec3(x - 1, y, z - 1)),
+			local_index(uvec3(x - 0, y, z - 1)),
+			local_index(uvec3(x - 0, y, z - 0)),
+			local_index(uvec3(x - 1, y, z - 0)));
+		indices[idx + 0] = needed_vertices[quad[0]];
+		indices[idx + 1] = needed_vertices[quad[1]];
+		indices[idx + 2] = needed_vertices[quad[2]];
+		indices[idx + 3] = needed_vertices[quad[0]];
+		indices[idx + 4] = needed_vertices[quad[2]];
+		indices[idx + 5] = needed_vertices[quad[3]];
+		idx += 6;
+	}
+	if (lquad[2]){
+		uvec4 quad = uvec4(
+			local_index(uvec3(x, y - 1, z - 1)),
+			local_index(uvec3(x, y - 0, z - 1)),
+			local_index(uvec3(x, y - 0, z - 0)),
+			local_index(uvec3(x, y - 1, z - 0)));
+		indices[idx + 0] = needed_vertices[quad[0]];
+		indices[idx + 1] = needed_vertices[quad[1]];
+		indices[idx + 2] = needed_vertices[quad[2]];
+		indices[idx + 3] = needed_vertices[quad[0]];
+		indices[idx + 4] = needed_vertices[quad[2]];
+		indices[idx + 5] = needed_vertices[quad[3]];
 	}
 }

@@ -28,26 +28,26 @@ enum class SDF_CMD_type : unsigned {
 };
 
 struct end_cmd {
-	SDF_CMD_type type = SDF_CMD_type::end;
+	alignas(16) SDF_CMD_type type = SDF_CMD_type::end;
 };
 
 struct transform_cmd {
-	SDF_CMD_type type = SDF_CMD_type::transform;
-	glm::mat4 inv_tf;
+	alignas(16) SDF_CMD_type type = SDF_CMD_type::transform;
+	alignas(16) glm::mat4 inv_tf;
 
 	transform_cmd(glm::mat4 tf) : inv_tf(glm::inverse(tf)) {}
 };
 
 struct sphere_cmd {
-	SDF_CMD_type type = SDF_CMD_type::sphere;
+	alignas(16) SDF_CMD_type type = SDF_CMD_type::sphere;
 	float radius;
-	glm::vec3 color;
+	float color;
 
-	sphere_cmd(float r, glm::vec3 color) : radius(r), color(color) {}
+	sphere_cmd(float r, float color) : radius(r), color(color) {}
 };
 
 struct smooth_combine_cmd {
-	SDF_CMD_type type = SDF_CMD_type::smooth_combine;
+	alignas(16) SDF_CMD_type type = SDF_CMD_type::smooth_combine;
 	float k;
 
 	smooth_combine_cmd(float k) : k(k) {}
@@ -87,7 +87,7 @@ namespace {
 		surface_net = 0,
 		linear = 1
 	};
-	static VertexPlacement placement_method = VertexPlacement::linear;
+	static VertexPlacement placement_method = VertexPlacement::surface_net;
 	static glm::uvec3 count = glm::uvec3((max - min) / vox);
 	static SDF_commands cmds;
 
@@ -134,17 +134,17 @@ namespace {
 			const char* items[] = { "Surface net", "Linear contouring" };
 			ImGui::Combo("Meshing", (int32_t*)&placement_method, items, std::size(items));
 			// init vtx_buf
-			auto vtx_buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eStorageBuffer | vuk::BufferUsageFlagBits::eVertexBuffer, sizeof(glm::vec3) * 2 * 150000, 1, false);
-			auto idx_buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eStorageBuffer | vuk::BufferUsageFlagBits::eIndexBuffer, sizeof(glm::uint) * 100 * 4096, 1, false);
+			auto vtx_buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eStorageBuffer | vuk::BufferUsageFlagBits::eVertexBuffer, sizeof(glm::vec3) * 3 * 150000, 1, false);
+			auto idx_buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eStorageBuffer | vuk::BufferUsageFlagBits::eIndexBuffer, sizeof(glm::uint) * 200 * 4096, 1, false);
 			auto idcmd_buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eStorageBuffer | vuk::BufferUsageFlagBits::eIndirectBuffer, sizeof(vuk::DrawIndexedIndirectCommand), sizeof(vuk::DrawIndexedIndirectCommand), true);
 			vuk::DrawIndexedIndirectCommand di{};
 			di.instanceCount = 1;
 			memcpy(idcmd_buf.mapped_ptr, &di, sizeof(vuk::DrawIndexedIndirectCommand));
 			cmds.clear();
-			cmds.push(sphere_cmd(1, vec3(1, 0, 0)));
+			cmds.push(sphere_cmd(1, 1.f));
 			for (auto i = 0; i < poss.size(); i++) {
 				cmds.push(transform_cmd(glm::translate(glm::mat4(1.f), poss[i])));
-				cmds.push(sphere_cmd(0.2, vec3(0, 0, 1)));
+				cmds.push(sphere_cmd(0.2, 0.1f));
 				cmds.push(smooth_combine_cmd(1));
 			}
 			cmds.push(end_cmd());
@@ -155,7 +155,7 @@ namespace {
 				poss[i] += vels[i] * ImGui::GetIO().DeltaTime;
 			}
 
-			auto vmcmd_buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eStorageBuffer, cmds.data.size(), 1, true);
+			auto vmcmd_buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eUniformBuffer, cmds.data.size(), 1, true);
 			memcpy(vmcmd_buf.mapped_ptr, cmds.data.data(), cmds.data.size());
 			struct VP {
 				glm::mat4 view;
@@ -183,7 +183,7 @@ namespace {
 					command_buffer
 						.bind_storage_buffer(0, 0, command_buffer.get_resource_buffer("vtx"))
 						.bind_storage_buffer(0, 1, command_buffer.get_resource_buffer("idx"))
-						.bind_storage_buffer(0, 2, vmcmd_buf)
+						.bind_uniform_buffer(0, 2, vmcmd_buf)
 						.bind_storage_buffer(0, 3, command_buffer.get_resource_buffer("cmd"))
 						.bind_compute_pipeline("sdf")
 						.push_constants(vuk::ShaderStageFlagBits::eCompute, 0, pc)
