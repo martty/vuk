@@ -328,13 +328,12 @@ void main(){
 		}
 	}
 	
-	barrier(); // SG finish
 	
 	uint n_sg_quad_inds = subgroupBallotBitCount(subgroupBallot(lquad[0])) + subgroupBallotBitCount(subgroupBallot(lquad[1])) + subgroupBallotBitCount(subgroupBallot(lquad[2]));
 	if(subgroupElect()){
 		atomicAdd(local_index_count, n_sg_quad_inds);
 	}
-	memoryBarrierShared();
+	
 	barrier();
 	// write out vertices, remember the mapping
 	for(uint i = gl_LocalInvocationIndex; i < ((WG_SIZE + 1) * 4); i += WG_SIZE){
@@ -343,7 +342,7 @@ void main(){
 		}
 	}
 	barrier();
-	memoryBarrierShared();
+	
 	if(gl_LocalInvocationIndex == 0){
 		abort = (firstInstance * 6 > (vertices.length() - req_verts * 6)) || ((indexCount > (indices.length() - local_index_count*6)));
 		if(!abort){
@@ -373,7 +372,6 @@ void main(){
 		}
 	}
 	barrier();
-	memoryBarrierShared();
 	// write out indices, remap as we go
 	uint n_ids = (uint(lquad[0]) + uint(lquad[1]) + uint(lquad[2]));
 	uint idx = atomicAdd(ind_idx, n_ids * 6);

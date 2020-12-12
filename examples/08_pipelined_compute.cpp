@@ -87,7 +87,7 @@ namespace {
 		surface_net = 0,
 		linear = 1
 	};
-	static VertexPlacement placement_method = VertexPlacement::surface_net;
+	static VertexPlacement placement_method = VertexPlacement::linear;
 	static glm::uvec3 count = glm::uvec3((max - min) / vox);
 	static SDF_commands cmds;
 
