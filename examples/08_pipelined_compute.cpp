@@ -151,7 +151,7 @@ namespace {
 
 			for (int i = 0; i < 32; i++) {
 				glm::vec3 pos = glm::vec3(dist_pos(g), dist_pos(g), dist_pos(g));
-				vels.push_back(0.01f * glm::normalize(glm::cross(pos, vec3(0, 1, 0))));
+				vels.push_back(0.5f * glm::normalize(glm::cross(pos, vec3(0, 1, 0))));
 				poss.push_back(pos);
 			}
 			ptc.wait_all_transfers();
@@ -279,7 +279,7 @@ namespace {
 				glm::mat4 proj;
 			} vp;
 			vp.view = glm::lookAt(glm::vec3(0, 1.5f, 3.5f), glm::vec3(0), glm::vec3(0, 1, 0));
-			vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 1.f, 10.f);
+			vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 0.01f, 10.f);
 			vp.proj[1][1] *= -1;
 
 			vuk::RenderGraph rg;
