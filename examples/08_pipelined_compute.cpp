@@ -132,7 +132,7 @@ namespace {
 			vox = glm::vec3(resolution);
 			count = glm::uvec3((max - min) / vox);
 			const char* items[] = { "Surface net", "Linear contouring" };
-			ImGui::Combo("Meshing", (int32_t*)&placement_method, items, std::size(items));
+			ImGui::Combo("Meshing", (int32_t*)&placement_method, items, (int)std::size(items));
 			// init vtx_buf
 			auto vtx_buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eStorageBuffer | vuk::BufferUsageFlagBits::eVertexBuffer, sizeof(glm::vec3) * 3 * 150000, 1, false);
 			auto idx_buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eStorageBuffer | vuk::BufferUsageFlagBits::eIndexBuffer, sizeof(glm::uint) * 200 * 4096, 1, false);
@@ -144,7 +144,7 @@ namespace {
 			cmds.push(sphere_cmd(1, vec3(1,0,0)));
 			for (auto i = 0; i < poss.size(); i++) {
 				cmds.push(transform_cmd(glm::translate(glm::mat4(1.f), poss[i])));
-				cmds.push(sphere_cmd(0.2, vec3(0, 0, 1)));
+				cmds.push(sphere_cmd(0.2f, vec3(0, 0, 1)));
 				cmds.push(smooth_combine_cmd(1));
 			}
 			cmds.push(end_cmd());
@@ -161,7 +161,7 @@ namespace {
 				glm::mat4 view;
 				glm::mat4 proj;
 			} vp;
-			vp.view = glm::lookAt(glm::vec3(0, 1.5, 3.5), glm::vec3(0), glm::vec3(0, 1, 0));
+			vp.view = glm::lookAt(glm::vec3(0, 1.5f, 3.5f), glm::vec3(0), glm::vec3(0, 1, 0));
 			vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 1.f, 10.f);
 			vp.proj[1][1] *= -1;
 
