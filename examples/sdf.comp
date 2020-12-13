@@ -11,7 +11,7 @@ layout(local_size_x = WG_SIZE) in;
 
 #define FLT_EPS 1E-5
 
-#define NUM_VERTEX_FLOATS 6
+#define NUM_VERTEX_FLOATS 4
 
 layout(push_constant) uniform pcs {
 	vec3 voxbounds_min;
@@ -63,10 +63,10 @@ layout(binding = 2) restrict uniform cmdin_mat4 {
 	vec4 cmdstream_mat4[512];
 };
 
-void eval_vm(vec3 p, out float pos, out vec3 col){
-	barrier();
+shared uint col_stack[WG_SIZE][STACK_DEPTH];
+
+void eval_vm(vec3 p, out float pos){
 	float stack[STACK_DEPTH];
-	uint col_stack[STACK_DEPTH];
 	uint sp = 0;
 	uint pc = 0; // program counter (dwords), all instr/data multiple of dwords
 	mat4 inv_transform = mat4(1.f);
@@ -83,14 +83,12 @@ void eval_vm(vec3 p, out float pos, out vec3 col){
 			case SDF_CMD_SPHERE:
 				float radius = uintBitsToFloat(cmdstream[pc].y);
 				stack[sp] = sdSphere(vec3(inv_transform * vec4(p, 1.0)), radius); // push sphere eval to stack
-				col_stack[sp] = packUnorm4x8(vec4(vec3(cmdstream_mat4[pc+1]),1));
 				sp++;
 				inv_transform = mat4(1.0); // consume transform
 				pc+=2;
 				break;
 			case SDF_CMD_SMOOTH_COMBINE:
 				float k = uintBitsToFloat(cmdstream[pc].y);
-				col_stack[sp-2] = opColorSmoothUnion(col_stack[sp-2], col_stack[sp-1], stack[sp-2], stack[sp-1], k); // pop 1, set
 				stack[sp-2] = opSmoothUnion(stack[sp-2], stack[sp-1], k); // pop 1, set
 				sp--;
 				pc++;
@@ -99,7 +97,43 @@ void eval_vm(vec3 p, out float pos, out vec3 col){
 		cmd = cmdstream[pc].x;
 	}
 	pos = stack[0]; // top of stack must be final SDF
-	col = vec3(unpackUnorm4x8(col_stack[0]));
+}
+
+void eval_vm_c(vec3 p, out float pos, out uint col){
+	float stack[STACK_DEPTH];
+	uint sp = 0;
+	uint pc = 0; // program counter (dwords), all instr/data multiple of dwords
+	mat4 inv_transform = mat4(1.f);
+	uint cmd;
+
+	cmd = cmdstream[pc].x;
+	for(int i = 0; i < 256 && cmd != SDF_CMD_END; i++){
+		switch(cmd){
+			case SDF_CMD_TRANSFORM:
+				pc++;
+				inv_transform = mat4(cmdstream_mat4[pc], cmdstream_mat4[pc+1], cmdstream_mat4[pc+2], cmdstream_mat4[pc+3]);
+				pc+=4;
+				break;
+			case SDF_CMD_SPHERE:
+				float radius = uintBitsToFloat(cmdstream[pc].y);
+				stack[sp] = sdSphere(vec3(inv_transform * vec4(p, 1.0)), radius); // push sphere eval to stack
+				col_stack[gl_LocalInvocationIndex][sp] = packUnorm4x8(vec4(vec3(cmdstream_mat4[pc+1]),1));
+				sp++;
+				inv_transform = mat4(1.0); // consume transform
+				pc+=2;
+				break;
+			case SDF_CMD_SMOOTH_COMBINE:
+				float k = uintBitsToFloat(cmdstream[pc].y);
+				col_stack[gl_LocalInvocationIndex][sp-2] = opColorSmoothUnion(col_stack[gl_LocalInvocationIndex][sp-2], col_stack[gl_LocalInvocationIndex][sp-1], stack[sp-2], stack[sp-1], k); // pop 1, set
+				stack[sp-2] = opSmoothUnion(stack[sp-2], stack[sp-1], k); // pop 1, set
+				sp--;
+				pc++;
+				break;
+		}
+		cmd = cmdstream[pc].x;
+	}
+	pos = stack[0]; // top of stack must be final SDF
+	col = col_stack[gl_LocalInvocationIndex][0];
 }
 
 layout(binding = 3) coherent restrict buffer cmdout {
@@ -155,14 +189,12 @@ void add_vertex(uint idx, uvec3 gid){
 	vec3 center = corner + 0.5*vox_size;
 	vec3 vtx = center;
 	float _;
-	vec3 col;
-	eval_vm(vtx, _, col);
+	uint col;
+	eval_vm_c(vtx, _, col);
 	vertices[idx * NUM_VERTEX_FLOATS + 0] = vtx.x;
 	vertices[idx * NUM_VERTEX_FLOATS + 1] = vtx.y;
 	vertices[idx * NUM_VERTEX_FLOATS + 2] = vtx.z;
-	vertices[idx * NUM_VERTEX_FLOATS + 3] = col.x;
-	vertices[idx * NUM_VERTEX_FLOATS + 4] = col.y;
-	vertices[idx * NUM_VERTEX_FLOATS + 5] = col.z;
+	vertices[idx * NUM_VERTEX_FLOATS + 3] = uintBitsToFloat(col);
 }
 
 void add_vertex_trilinear(uint idx, uvec3 gid){
@@ -177,8 +209,8 @@ void add_vertex_trilinear(uint idx, uvec3 gid){
 			[[unroll]]
 			for(uint k = 0; k < 2; k++){
 				vec3 pt = corner + uvec3(i,j,k) * delta;
-				vec3 _;
-				eval_vm(pt, v[i][j][k], _);
+				uint _;
+				eval_vm(pt, v[i][j][k]);
 			}
 		}
 	}
@@ -219,14 +251,12 @@ void add_vertex_trilinear(uint idx, uvec3 gid){
 	}
 	vec3 vtx = corner + p_sum / p_count;
 	float _;
-	vec3 col;
-	eval_vm(vtx, _, col);
+	uint col;
+	eval_vm_c(vtx, _, col);
 	vertices[idx * NUM_VERTEX_FLOATS + 0] = vtx.x;
 	vertices[idx * NUM_VERTEX_FLOATS + 1] = vtx.y;
 	vertices[idx * NUM_VERTEX_FLOATS + 2] = vtx.z;
-	vertices[idx * NUM_VERTEX_FLOATS + 3] = col.x;
-	vertices[idx * NUM_VERTEX_FLOATS + 4] = col.y;
-	vertices[idx * NUM_VERTEX_FLOATS + 5] = col.z;
+	vertices[idx * NUM_VERTEX_FLOATS + 3] = uintBitsToFloat(col);
 }
 
 void append_quad(uvec4 inds, bool swap){
@@ -267,16 +297,16 @@ void main(){
 	block_corner = subgroupBroadcast(block_corner, 0);
 
 	vec3 corner = gl_GlobalInvocationID*vox_size + voxbounds_min;
-	vec3 _;
+	uint _;
 	float pos;
 	
-	eval_vm(corner, pos, _);
+	eval_vm(corner, pos);
 	
 	bool lquad[3] = {false, false, false};
 	bool solid1 = pos > FLT_EPS;
 	
 	if(x > 0 && y > 0){
-		eval_vm(corner + vec3(0,0,vox_size.z), pos, _);
+		eval_vm(corner + vec3(0,0,vox_size.z), pos);
 		bool solid2 = pos < FLT_EPS;
 		if(solid1 == solid2){
 			lquad[0] = true;
@@ -290,7 +320,7 @@ void main(){
 	}
 	
 	if(x > 0 && z > 0){
-		eval_vm(corner + vec3(0,vox_size.y,0), pos, _);
+		eval_vm(corner + vec3(0,vox_size.y,0), pos);
 		bool solid2 = pos < FLT_EPS;
 		if(solid1 == solid2){
 			lquad[1] = true;
@@ -304,7 +334,7 @@ void main(){
 	}
 	
 	if(y > 0 && z > 0){
-		eval_vm(corner + vec3(vox_size.x,0,0), pos, _);
+		eval_vm(corner + vec3(vox_size.x,0,0), pos);
 		bool solid2 = pos < FLT_EPS;
 		if(solid1 == solid2){
 			lquad[2] = true;
