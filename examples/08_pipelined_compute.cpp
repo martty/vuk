@@ -41,9 +41,9 @@ struct transform_cmd {
 struct sphere_cmd {
 	alignas(16) SDF_CMD_type type = SDF_CMD_type::sphere;
 	float radius;
-	float color;
+	alignas(16) vec3 material;
 
-	sphere_cmd(float r, float color) : radius(r), color(color) {}
+	sphere_cmd(float r, vec3 material) : radius(r), material(material) {}
 };
 
 struct smooth_combine_cmd {
@@ -115,7 +115,7 @@ namespace {
 			auto ptc = ifc.begin();
 			auto [tex, stub] = ptc.create_texture(vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1 }, doge_image);
 			texture_of_doge = std::move(tex);
-			std::uniform_real_distribution<float> dist_pos(-5, 5);
+			std::uniform_real_distribution<float> dist_pos(-3, 3);
 
 			for (int i = 0; i < 32; i++) {
 				glm::vec3 pos = glm::vec3(dist_pos(g), dist_pos(g), dist_pos(g));
@@ -141,10 +141,10 @@ namespace {
 			di.instanceCount = 1;
 			memcpy(idcmd_buf.mapped_ptr, &di, sizeof(vuk::DrawIndexedIndirectCommand));
 			cmds.clear();
-			cmds.push(sphere_cmd(1, 1.f));
+			cmds.push(sphere_cmd(1, vec3(1,0,0)));
 			for (auto i = 0; i < poss.size(); i++) {
 				cmds.push(transform_cmd(glm::translate(glm::mat4(1.f), poss[i])));
-				cmds.push(sphere_cmd(0.2, 0.1f));
+				cmds.push(sphere_cmd(0.2, vec3(0, 0, 1)));
 				cmds.push(smooth_combine_cmd(1));
 			}
 			cmds.push(end_cmd());

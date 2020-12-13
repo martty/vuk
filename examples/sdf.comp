@@ -11,6 +11,8 @@ layout(local_size_x = WG_SIZE) in;
 
 #define FLT_EPS 1E-5
 
+#define NUM_VERTEX_FLOATS 6
+
 layout(push_constant) uniform pcs {
 	vec3 voxbounds_min;
 	float dx1;
@@ -28,24 +30,12 @@ float opSmoothUnion(float d1, float d2, float k){
     return mix( d2, d1, h ) - k*h*(1.0-h); 
 }
 
-uint opColorSmoothUnion(uint c1, uint c2, float d1, float d2, float k){
+/**
+
+**/
+
+vec3 opColorSmoothUnion(vec3 c1, vec3 c2, float d1, float d2, float k){
 	float h = clamp(0.5 + 0.5*(d2-d1)/k, 0.0, 1.0);
-	h = smoothstep(0.1, 0.9, h);
-	return uint(mix(c2, c1, h));
-}
-
-float eval(vec3 p) {
-	float sph1 = sdSphere(p - vec3(dx1,0,0), 1);
-	float sph2 = sdSphere(p - vec3(dx2,0,0), 0.75);
-	return opSmoothUnion(sph1, sph2, 1);
-}
-
-vec3 eval_color(vec3 p) {
-	vec3 c1 = vec3(1,0,0);
-	vec3 c2 = vec3(0,0,1);
-	float sph1 = sdSphere(p - vec3(dx1,0,0), 1);
-	float sph2 = sdSphere(p - vec3(dx2,0,0), 0.75);
-	float h = clamp(0.5 + 0.5*(sph2-sph1)/1, 0.0, 1.0);
 	h = smoothstep(0.1, 0.9, h);
 	return mix(c2, c1, h);
 }
@@ -73,10 +63,10 @@ layout(binding = 2) restrict uniform cmdin_mat4 {
 	vec4 cmdstream_mat4[512];
 };
 
-void eval_vm(vec3 p, out float pos, out vec3 color){
+void eval_vm(vec3 p, out float pos, out vec3 col){
 	barrier();
 	float stack[STACK_DEPTH];
-	uint color_stack[STACK_DEPTH];
+	vec3 col_stack[STACK_DEPTH];
 	uint sp = 0;
 	uint pc = 0; // program counter (dwords), all instr/data multiple of dwords
 	mat4 inv_transform = mat4(1.f);
@@ -93,14 +83,14 @@ void eval_vm(vec3 p, out float pos, out vec3 color){
 			case SDF_CMD_SPHERE:
 				float radius = uintBitsToFloat(cmdstream[pc].y);
 				stack[sp] = sdSphere(vec3(inv_transform * vec4(p, 1.0)), radius); // push sphere eval to stack
-				color_stack[sp] = uint(uintBitsToFloat(cmdstream[pc].z));
+				col_stack[sp] = vec3(cmdstream_mat4[pc+1]);
 				sp++;
 				inv_transform = mat4(1.0); // consume transform
-				pc++;
+				pc+=2;
 				break;
 			case SDF_CMD_SMOOTH_COMBINE:
 				float k = uintBitsToFloat(cmdstream[pc].y);
-				color_stack[sp-2] = opColorSmoothUnion(color_stack[sp-2], color_stack[sp-1], stack[sp-2], stack[sp-1], k); // pop 1, set
+				col_stack[sp-2] = opColorSmoothUnion(col_stack[sp-2], col_stack[sp-1], stack[sp-2], stack[sp-1], k); // pop 1, set
 				stack[sp-2] = opSmoothUnion(stack[sp-2], stack[sp-1], k); // pop 1, set
 				sp--;
 				pc++;
@@ -109,7 +99,7 @@ void eval_vm(vec3 p, out float pos, out vec3 color){
 		cmd = cmdstream[pc].x;
 	}
 	pos = stack[0]; // top of stack must be final SDF
-	color = vec3(color_stack[0]);
+	col = col_stack[0];
 }
 
 layout(binding = 3) coherent restrict buffer cmdout {
@@ -167,12 +157,12 @@ void add_vertex(uint idx, uvec3 gid){
 	float _;
 	vec3 col;
 	eval_vm(vtx, _, col);
-	vertices[idx * 6 + 0] = vtx.x;
-	vertices[idx * 6 + 1] = vtx.y;
-	vertices[idx * 6 + 2] = vtx.z;
-	vertices[idx * 6 + 3] = col.x;
-	vertices[idx * 6 + 4] = col.y;
-	vertices[idx * 6 + 5] = col.z;
+	vertices[idx * NUM_VERTEX_FLOATS + 0] = vtx.x;
+	vertices[idx * NUM_VERTEX_FLOATS + 1] = vtx.y;
+	vertices[idx * NUM_VERTEX_FLOATS + 2] = vtx.z;
+	vertices[idx * NUM_VERTEX_FLOATS + 3] = col.x;
+	vertices[idx * NUM_VERTEX_FLOATS + 4] = col.y;
+	vertices[idx * NUM_VERTEX_FLOATS + 5] = col.z;
 }
 
 void add_vertex_trilinear(uint idx, uvec3 gid){
@@ -231,12 +221,12 @@ void add_vertex_trilinear(uint idx, uvec3 gid){
 	float _;
 	vec3 col;
 	eval_vm(vtx, _, col);
-	vertices[idx * 6 + 0] = vtx.x;
-	vertices[idx * 6 + 1] = vtx.y;
-	vertices[idx * 6 + 2] = vtx.z;
-	vertices[idx * 6 + 3] = col.x;
-	vertices[idx * 6 + 4] = col.y;
-	vertices[idx * 6 + 5] = col.z;
+	vertices[idx * NUM_VERTEX_FLOATS + 0] = vtx.x;
+	vertices[idx * NUM_VERTEX_FLOATS + 1] = vtx.y;
+	vertices[idx * NUM_VERTEX_FLOATS + 2] = vtx.z;
+	vertices[idx * NUM_VERTEX_FLOATS + 3] = col.x;
+	vertices[idx * NUM_VERTEX_FLOATS + 4] = col.y;
+	vertices[idx * NUM_VERTEX_FLOATS + 5] = col.z;
 }
 
 void append_quad(uvec4 inds, bool swap){
@@ -278,7 +268,6 @@ void main(){
 
 	vec3 corner = gl_GlobalInvocationID*vox_size + voxbounds_min;
 	vec3 _;
-	vec3 col;
 	float pos;
 	
 	eval_vm(corner, pos, _);
@@ -344,11 +333,11 @@ void main(){
 	barrier();
 	
 	if(gl_LocalInvocationIndex == 0){
-		abort = (firstInstance * 6 > (vertices.length() - req_verts * 6)) || ((indexCount > (indices.length() - local_index_count*6)));
+		abort = (firstInstance * NUM_VERTEX_FLOATS > (vertices.length() - req_verts * NUM_VERTEX_FLOATS)) || ((indexCount > (indices.length() - local_index_count*6)));
 		if(!abort){
 			vert_idx = atomicAdd(firstInstance, req_verts); // reserve space in vtx buffer
 			ind_idx = atomicAdd(indexCount, local_index_count * 6); // reserve space in the idx buffer
-			abort = abort || (vert_idx * 6 > (vertices.length() - req_verts * 6));
+			abort = abort || (vert_idx * NUM_VERTEX_FLOATS > (vertices.length() - req_verts * NUM_VERTEX_FLOATS));
 			if(abort){
 				for(uint i = 0; i < local_index_count * 6; i++){
 					indices[ind_idx + i] = 0;
