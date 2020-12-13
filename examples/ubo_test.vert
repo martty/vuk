@@ -23,5 +23,5 @@ void main() {
 	color = icol;
     gl_Position = projection * view * vec4(ipos, 1.0);
 	pos = ipos;
-	norm = normalize(vec3(inorm.x, -inorm.y, -inorm.z));
+	norm = normalize(vec3(inorm.x, inorm.y, inorm.z));
 }

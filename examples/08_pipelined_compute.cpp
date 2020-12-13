@@ -122,6 +122,7 @@ namespace {
 	static SDF_commands cmds;
 	vuk::Texture env_cubemap;
 	vuk::Texture hdr_texture;
+	bool use_smooth_normals = true;
 
 	vuk::Example xample{
 		.name = "08_pipelined_compute",
@@ -149,7 +150,7 @@ namespace {
 			texture_of_doge = std::move(tex);
 			std::uniform_real_distribution<float> dist_pos(-3, 3);
 
-			for (int i = 0; i < 32; i++) {
+			for (int i = 0; i < 64; i++) {
 				glm::vec3 pos = glm::vec3(dist_pos(g), dist_pos(g), dist_pos(g));
 				vels.push_back(0.5f * glm::normalize(glm::cross(pos, vec3(0, 1, 0))));
 				poss.push_back(pos);
@@ -245,6 +246,7 @@ namespace {
 		.render = [&](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
 			auto ptc = ifc.begin();
 			float resolution = vox.x;
+			ImGui::Checkbox("Smooth normals", &use_smooth_normals);
 			ImGui::DragFloat("Resolution", &resolution, 0.01f, 0.f, 5.f, "%.3f", 1.f);
 			vox = glm::vec3(resolution);
 			count = glm::uvec3((max - min) / vox);
@@ -258,10 +260,10 @@ namespace {
 			di.instanceCount = 1;
 			memcpy(idcmd_buf.mapped_ptr, &di, sizeof(vuk::DrawIndexedIndirectCommand));
 			cmds.clear();
-			cmds.push(sphere_cmd(1, vec3(1,0,0)));
+			cmds.push(sphere_cmd(1, vec3(1.00, 0.71, 0.29)));
 			for (auto i = 0; i < poss.size(); i++) {
 				cmds.push(transform_cmd(glm::translate(glm::mat4(1.f), poss[i])));
-				cmds.push(sphere_cmd(0.2f, vec3(0, 0, 1)));
+				cmds.push(sphere_cmd(0.2f, vec3(0.95, 0.93, 0.88)));
 				cmds.push(smooth_combine_cmd(1));
 			}
 			cmds.push(end_cmd());
@@ -278,7 +280,9 @@ namespace {
 				glm::mat4 view;
 				glm::mat4 proj;
 			} vp;
-			vp.view = glm::lookAt(glm::vec3(0, 1.5f, 3.5f), glm::vec3(0), glm::vec3(0, 1, 0));
+
+			vec3 cam_pos = glm::vec3(0, 1.5f, 3.5f);
+			vp.view = glm::lookAt(cam_pos, glm::vec3(0), glm::vec3(0, 1, 0));
 			vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 0.01f, 10.f);
 			vp.proj[1][1] *= -1;
 
@@ -311,10 +315,14 @@ namespace {
 			auto uboVP = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eUniformBuffer, sizeof(VP), 1, true);
 			memcpy(uboVP.mapped_ptr, &vp, sizeof(VP));
 
-			// draw the scrambled image, with a buffer dependency on the scramble buffer
+			struct FwdConstants {
+				vec3 camPos;
+				unsigned use_smooth_normals;
+			} fwd_pc = { cam_pos, use_smooth_normals };
+
 			rg.add_pass({
 				.resources = {"08_pipelined_compute_final"_image(vuk::eColorWrite), "08_depth"_image(vuk::eDepthStencilRW), "vtx"_buffer(vuk::eAttributeRead), "idx"_buffer(vuk::eIndexRead), "cmd"_buffer(vuk::eIndirectRead)},
-				.execute = [uboVP](vuk::CommandBuffer& command_buffer) {
+				.execute = [uboVP, fwd_pc](vuk::CommandBuffer& command_buffer) {
 					command_buffer
 						.set_viewport(0, vuk::Rect2D::framebuffer())
 						.set_scissor(0, vuk::Rect2D::framebuffer())
@@ -324,6 +332,7 @@ namespace {
 						.bind_graphics_pipeline("fwd")
 						.bind_uniform_buffer(0, 0, uboVP)
 						.bind_sampled_image(0, 1, *env_cubemap.view, {})
+						.push_constants(vuk::ShaderStageFlagBits::eFragment, 0, fwd_pc)
 						.draw_indexed_indirect(1, command_buffer.get_resource_buffer("cmd"));
 				}
 			});
