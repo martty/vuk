@@ -319,7 +319,7 @@ namespace {
 						.set_viewport(0, vuk::Rect2D::framebuffer())
 						.set_scissor(0, vuk::Rect2D::framebuffer())
 
-						.bind_vertex_buffer(0, command_buffer.get_resource_buffer("vtx"), 0, vuk::Packed{vuk::Format::eR32G32B32Sfloat, vuk::Format::eR8G8B8A8Unorm})
+						.bind_vertex_buffer(0, command_buffer.get_resource_buffer("vtx"), 0, vuk::Packed{vuk::Format::eR32G32B32Sfloat, vuk::Format::eR8G8B8A8Unorm, vuk::Format::eR32G32B32Sfloat})
 						.bind_index_buffer(command_buffer.get_resource_buffer("idx"), vuk::IndexType::eUint32)
 						.bind_graphics_pipeline("fwd")
 						.bind_uniform_buffer(0, 0, uboVP)

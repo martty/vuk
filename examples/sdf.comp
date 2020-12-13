@@ -11,7 +11,7 @@ layout(local_size_x = WG_SIZE) in;
 
 #define FLT_EPS 1E-5
 
-#define NUM_VERTEX_FLOATS 4
+#define NUM_VERTEX_FLOATS 7
 
 layout(push_constant) uniform pcs {
 	vec3 voxbounds_min;
@@ -195,6 +195,9 @@ void add_vertex(uint idx, uvec3 gid){
 	vertices[idx * NUM_VERTEX_FLOATS + 1] = vtx.y;
 	vertices[idx * NUM_VERTEX_FLOATS + 2] = vtx.z;
 	vertices[idx * NUM_VERTEX_FLOATS + 3] = uintBitsToFloat(col);
+	vertices[idx * NUM_VERTEX_FLOATS + 4] = 0;
+	vertices[idx * NUM_VERTEX_FLOATS + 5] = 0;
+	vertices[idx * NUM_VERTEX_FLOATS + 6] = 0;
 }
 
 void add_vertex_trilinear(uint idx, uvec3 gid){
@@ -257,6 +260,10 @@ void add_vertex_trilinear(uint idx, uvec3 gid){
 	vertices[idx * NUM_VERTEX_FLOATS + 1] = vtx.y;
 	vertices[idx * NUM_VERTEX_FLOATS + 2] = vtx.z;
 	vertices[idx * NUM_VERTEX_FLOATS + 3] = uintBitsToFloat(col);
+	vec3 norm = vec3(v[0][0][0] - v[1][0][0], v[0][0][0] - v[0][1][0], v[0][0][0] - v[0][0][1]);
+	vertices[idx * NUM_VERTEX_FLOATS + 4] = norm.x;
+	vertices[idx * NUM_VERTEX_FLOATS + 5] = norm.y;
+	vertices[idx * NUM_VERTEX_FLOATS + 6] = norm.z;
 }
 
 void append_quad(uvec4 inds, bool swap){
