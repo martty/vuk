@@ -34,10 +34,10 @@ float opSmoothUnion(float d1, float d2, float k){
 
 **/
 
-vec3 opColorSmoothUnion(vec3 c1, vec3 c2, float d1, float d2, float k){
+uint opColorSmoothUnion(uint c1, uint c2, float d1, float d2, float k){
 	float h = clamp(0.5 + 0.5*(d2-d1)/k, 0.0, 1.0);
 	h = smoothstep(0.1, 0.9, h);
-	return mix(c2, c1, h);
+	return packUnorm4x8(vec4(vec3(mix(unpackUnorm4x8(c2), unpackUnorm4x8(c1), vec4(h))), 1.0));
 }
 
 layout(binding = 0) restrict buffer verts {
@@ -66,7 +66,7 @@ layout(binding = 2) restrict uniform cmdin_mat4 {
 void eval_vm(vec3 p, out float pos, out vec3 col){
 	barrier();
 	float stack[STACK_DEPTH];
-	vec3 col_stack[STACK_DEPTH];
+	uint col_stack[STACK_DEPTH];
 	uint sp = 0;
 	uint pc = 0; // program counter (dwords), all instr/data multiple of dwords
 	mat4 inv_transform = mat4(1.f);
@@ -83,7 +83,7 @@ void eval_vm(vec3 p, out float pos, out vec3 col){
 			case SDF_CMD_SPHERE:
 				float radius = uintBitsToFloat(cmdstream[pc].y);
 				stack[sp] = sdSphere(vec3(inv_transform * vec4(p, 1.0)), radius); // push sphere eval to stack
-				col_stack[sp] = vec3(cmdstream_mat4[pc+1]);
+				col_stack[sp] = packUnorm4x8(vec4(vec3(cmdstream_mat4[pc+1]),1));
 				sp++;
 				inv_transform = mat4(1.0); // consume transform
 				pc+=2;
@@ -99,7 +99,7 @@ void eval_vm(vec3 p, out float pos, out vec3 col){
 		cmd = cmdstream[pc].x;
 	}
 	pos = stack[0]; // top of stack must be final SDF
-	col = col_stack[0];
+	col = vec3(unpackUnorm4x8(col_stack[0]));
 }
 
 layout(binding = 3) coherent restrict buffer cmdout {
