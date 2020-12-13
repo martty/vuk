@@ -704,12 +704,14 @@ vuk::Unique<vuk::ImageView> vuk::Context::create_image_view(vuk::ImageViewCreate
 vuk::Unique<vuk::ImageView> vuk::Unique<vuk::ImageView>::SubrangeBuilder::apply(){
 	ImageViewCreateInfo ivci;
 	ivci.viewType = iv.type;
+	ivci.subresourceRange.aspectMask = format_to_aspect(iv.format);
 	ivci.subresourceRange.baseMipLevel = base_mip == 0xdeadbeef ? iv.base_mip : base_mip;
 	ivci.subresourceRange.levelCount = mip_count == 0xdeadbeef ? iv.mip_count : mip_count;
 	ivci.subresourceRange.baseArrayLayer = base_layer == 0xdeadbeef ? iv.base_layer : base_layer;
 	ivci.subresourceRange.layerCount = layer_count == 0xdeadbeef ? iv.layer_count : layer_count;
 	ivci.image = iv.image;
-	ivci.format = iv.format;
+	ivci.format = format == Format(-1) ? iv.format : format;
+	ivci.viewType = view_type == ImageViewType(-1) ? iv.type : view_type;
 	ivci.components = iv.components;
 	return ctx->create_image_view(ivci);
 }

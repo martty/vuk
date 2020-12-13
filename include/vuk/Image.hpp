@@ -410,6 +410,8 @@ namespace vuk {
 			uint32_t mip_count = 0xdeadbeef;
 			uint32_t base_layer = 0xdeadbeef;
 			uint32_t layer_count = 0xdeadbeef;
+			ImageViewType view_type = (ImageViewType)-1;
+			Format format = (Format)-1;
 
 			SubrangeBuilder& layer_subrange(uint32_t base_layer, uint32_t layer_count) {
 				this->base_layer = base_layer;
@@ -420,6 +422,11 @@ namespace vuk {
 			SubrangeBuilder& mip_subrange(uint32_t base_mip, uint32_t mip_count) {
 				this->base_mip = base_mip;
 				this->mip_count = mip_count;
+				return *this;
+			}
+
+			SubrangeBuilder& view_as(ImageViewType type) {
+				this->view_type = type;
 				return *this;
 			}
 

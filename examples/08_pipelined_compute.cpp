@@ -69,6 +69,36 @@ struct SDF_commands {
 	}
 };
 
+// cubemap code from @jazzfool			
+vuk::Texture load_cubemap_texture(std::string path, vuk::PerThreadContext& ptc) {
+	int x, y, chans;
+	stbi_set_flip_vertically_on_load(true);
+	auto img = stbi_loadf(path.c_str(), &x, &y, &chans, STBI_rgb_alpha);
+	stbi_set_flip_vertically_on_load(false);
+	assert(img != nullptr);
+
+	vuk::ImageCreateInfo ici;
+	ici.format = vuk::Format::eR32G32B32A32Sfloat;
+	ici.extent = vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u };
+	ici.samples = vuk::Samples::e1;
+	ici.imageType = vuk::ImageType::e2D;
+	ici.initialLayout = vuk::ImageLayout::eUndefined;
+	ici.tiling = vuk::ImageTiling::eOptimal;
+	ici.usage = vuk::ImageUsageFlagBits::eTransferSrc | vuk::ImageUsageFlagBits::eTransferDst | vuk::ImageUsageFlagBits::eSampled;
+	ici.mipLevels = 1;
+	ici.arrayLayers = 1;
+
+	auto tex = ptc.ctx.allocate_texture(ici);
+
+	ptc.upload(*tex.image, ici.format, ici.extent, 0, std::span(&img[0], x * y * 4), false);
+
+	ptc.wait_all_transfers();
+
+	stbi_image_free(img);
+
+	return tex;
+}
+
 namespace {
 	float time = 0.f;
 	auto box = util::generate_cube();
@@ -90,6 +120,8 @@ namespace {
 	static VertexPlacement placement_method = VertexPlacement::linear;
 	static glm::uvec3 count = glm::uvec3((max - min) / vox);
 	static SDF_commands cmds;
+	vuk::Texture env_cubemap;
+	vuk::Texture hdr_texture;
 
 	vuk::Example xample{
 		.name = "08_pipelined_compute",
@@ -124,6 +156,91 @@ namespace {
 			}
 			ptc.wait_all_transfers();
 			stbi_image_free(doge_image);
+
+			// cubemap code from @jazzfool
+			// https://github.com/jazzfool/vuk-pbr/blob/main/Source/Renderer.cpp
+
+			hdr_texture = load_cubemap_texture("../../examples/the_sky_is_on_fire_2k.hdr", ptc);
+
+			// m_hdr_texture is a 2:1 equirectangular; it needs to be converted to a cubemap
+
+			vuk::ImageCreateInfo cube_ici{
+				.flags = vuk::ImageCreateFlagBits::eCubeCompatible,
+				.imageType = vuk::ImageType::e2D,
+				.format = vuk::Format::eR32G32B32A32Sfloat,
+				.extent = {1024,1024,1},
+				.arrayLayers = 6,
+				.usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eColorAttachment
+			};
+			env_cubemap.image = ptc.ctx.allocate_texture(cube_ici).image;
+			vuk::ImageViewCreateInfo cube_ivci{
+				.image = *env_cubemap.image,
+				.viewType = vuk::ImageViewType::eCube,
+				.format = vuk::Format::eR32G32B32A32Sfloat,
+				.subresourceRange = vuk::ImageSubresourceRange{.aspectMask = vuk::ImageAspectFlagBits::eColor, .layerCount = 6}
+			};
+			env_cubemap.view = ptc.ctx.create_image_view(cube_ivci);
+			env_cubemap.format = vuk::Format::eR32G32B32A32Sfloat;
+			env_cubemap.extent = { 1024,1024,1 };
+
+			const glm::mat4 capture_projection = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 10.0f);
+			const glm::mat4 capture_views[] = { glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f)),
+											   glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(-1.0f, 0.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f)),
+											   glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f)),
+											   glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f)),
+											   glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f, -1.0f, 0.0f)),
+											   glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f), glm::vec3(0.0f, -1.0f, 0.0f)) };
+
+
+			// upload the cube mesh
+			auto [bverts, stub1] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eVertexBuffer, std::span{ box.first });
+			auto verts = std::move(bverts);
+			auto [binds, stub2] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eIndexBuffer, std::span{ box.second });
+			auto inds = std::move(binds);
+
+			ptc.wait_all_transfers();
+
+			vuk::PipelineBaseCreateInfo equirectangular_to_cubemap;
+			equirectangular_to_cubemap.add_shader(util::read_entire_file("../../examples/cubemap.vert"), "cubemap.vert");
+			equirectangular_to_cubemap.add_shader(util::read_entire_file("../../examples/equirectangular_to_cubemap.frag"), "equirectangular_to_cubemap.frag");
+			ptc.ctx.create_named_pipeline("equirectangular_to_cubemap", equirectangular_to_cubemap);
+
+			{
+				for (unsigned i = 0; i < 6; ++i) {
+					vuk::RenderGraph rg;
+					rg.add_pass({.resources = {"env_cubemap_face"_image(vuk::eColorWrite)}, .execute = [&](vuk::CommandBuffer& cbuf) {
+									 cbuf.set_viewport(0, vuk::Rect2D::framebuffer())
+										 .set_scissor(0, vuk::Rect2D::framebuffer())
+										 .bind_vertex_buffer(0, verts, 0,
+															 vuk::Packed{vuk::Format::eR32G32B32Sfloat, vuk::Ignore{sizeof(util::Vertex) - sizeof(util::Vertex::position)}})
+										 .bind_index_buffer(inds, vuk::IndexType::eUint32)
+										 .bind_sampled_image(0, 2, hdr_texture,
+															 vuk::SamplerCreateInfo{.magFilter = vuk::Filter::eLinear,
+																					.minFilter = vuk::Filter::eLinear,
+																					.mipmapMode = vuk::SamplerMipmapMode::eLinear,
+																					.addressModeU = vuk::SamplerAddressMode::eClampToEdge,
+																					.addressModeV = vuk::SamplerAddressMode::eClampToEdge,
+																					.addressModeW = vuk::SamplerAddressMode::eClampToEdge})
+										 .bind_graphics_pipeline("equirectangular_to_cubemap");
+									 glm::mat4* projection = cbuf.map_scratch_uniform_binding<glm::mat4>(0, 0);
+									 *projection = capture_projection;
+									 glm::mat4* view = cbuf.map_scratch_uniform_binding<glm::mat4>(0, 1);
+									 *view = capture_views[i];
+									 cbuf.draw_indexed(box.second.size(), 1, 0, 0, 0);
+								 } });
+
+					vuk::ImageAttachment ia{
+							.image = *env_cubemap.image,
+							.image_view = *env_cubemap.view.layer_subrange(i, 1).view_as(vuk::ImageViewType::e2D).apply(),
+							.extent = vuk::Extent2D{1024, 1024},
+							.format = vuk::Format::eR32G32B32A32Sfloat,
+					};
+					rg.attach_image("env_cubemap_face",	ia, vuk::Access::eNone, vuk::Access::eFragmentSampled);
+
+					auto erg = std::move(rg).link(ptc);
+					vuk::execute_submit_and_wait(ptc, std::move(erg));
+				}
+			}
 		},
 		.render = [&](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
 			auto ptc = ifc.begin();
@@ -206,6 +323,7 @@ namespace {
 						.bind_index_buffer(command_buffer.get_resource_buffer("idx"), vuk::IndexType::eUint32)
 						.bind_graphics_pipeline("fwd")
 						.bind_uniform_buffer(0, 0, uboVP)
+						.bind_sampled_image(0, 1, *env_cubemap.view, {})
 						.draw_indexed_indirect(1, command_buffer.get_resource_buffer("cmd"));
 				}
 			});

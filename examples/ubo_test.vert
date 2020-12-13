@@ -15,8 +15,10 @@ out gl_PerVertex
 };
 
 layout (location = 0) out vec3 color;
+layout (location = 1) out vec3 pos;
 
 void main() {
 	color = icol;
     gl_Position = projection * view * vec4(ipos, 1.0);
+	pos = ipos;
 }
