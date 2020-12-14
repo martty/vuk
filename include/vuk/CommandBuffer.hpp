@@ -11,6 +11,7 @@
 #define VUK_MAX_SETS 8
 #define VUK_MAX_ATTRIBUTES 8
 #define VUK_MAX_PUSHCONSTANT_RANGES 8
+#define VUK_MAX_SPECIALIZATIONCONSTANT_RANGES 8
 
 namespace vuk {
 	class Context;
@@ -186,6 +187,8 @@ namespace vuk {
 		vuk::fixed_vector<VkVertexInputBindingDescription, VUK_MAX_ATTRIBUTES> binding_descriptions;
 		vuk::fixed_vector<VkPushConstantRange, VUK_MAX_PUSHCONSTANT_RANGES> pcrs;
 		std::array<unsigned char, 64> push_constant_buffer;
+		vuk::fixed_vector<std::pair<VkSpecializationMapEntry, VkShaderStageFlags>, VUK_MAX_SPECIALIZATIONCONSTANT_RANGES> smes;
+		std::array<unsigned char, 64> specialization_constant_buffer;
 		vuk::PipelineBaseInfo* next_pipeline = nullptr;
 		vuk::ComputePipelineInfo* next_compute_pipeline = nullptr;
 		std::optional<vuk::PipelineInfo> current_pipeline;
@@ -240,6 +243,12 @@ namespace vuk {
 		template<class T>
 		CommandBuffer& push_constants(vuk::ShaderStageFlags stages, size_t offset, T value);
 
+		CommandBuffer& specialization_constants(unsigned constant_id, vuk::ShaderStageFlags stages, size_t offset, void* data, size_t size);
+		template<class T>
+		CommandBuffer& specialization_constants(unsigned constant_id, vuk::ShaderStageFlags stages, size_t offset, std::span<T> span);
+		template<class T>
+		CommandBuffer& specialization_constants(unsigned constant_id, vuk::ShaderStageFlags stages, size_t offset, T value);
+
 		CommandBuffer& bind_uniform_buffer(unsigned set, unsigned binding, Buffer buffer);
 		CommandBuffer& bind_storage_buffer(unsigned set, unsigned binding, Buffer buffer);
 
@@ -288,10 +297,22 @@ namespace vuk {
 	inline CommandBuffer& CommandBuffer::push_constants(vuk::ShaderStageFlags stages, size_t offset, std::span<T> span) {
 		return push_constants(stages, offset, (void*)span.data(), sizeof(T) * span.size());
 	}
+
 	template<class T>
 	inline CommandBuffer& CommandBuffer::push_constants(vuk::ShaderStageFlags stages, size_t offset, T value) {
 		return push_constants(stages, offset, (void*)&value, sizeof(T));
 	}
+
+	template<class T>
+	inline CommandBuffer& CommandBuffer::specialization_constants(unsigned constant_id, vuk::ShaderStageFlags stages, size_t offset, std::span<T> span) {
+		return specialization_constants(constant_id, stages, offset, (void*)span.data(), sizeof(T) * span.size());
+	}
+
+	template<class T>
+	inline CommandBuffer& CommandBuffer::specialization_constants(unsigned constant_id, vuk::ShaderStageFlags stages, size_t offset, T value) {
+		return specialization_constants(constant_id, stages, offset, (void*)&value, sizeof(T));
+	}
+
 	template<class T>
 	inline T* CommandBuffer::map_scratch_uniform_binding(unsigned set, unsigned binding) {
 		return static_cast<T*>(_map_scratch_uniform_binding(set, binding, sizeof(T)));

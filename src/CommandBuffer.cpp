@@ -222,6 +222,13 @@ namespace vuk {
 		return *this;
 	}
 
+	CommandBuffer& CommandBuffer::specialization_constants(unsigned constant_id, vuk::ShaderStageFlags stages, size_t offset, void* data, size_t size) {
+		smes.emplace_back(VkSpecializationMapEntry{ (uint32_t)constant_id, (uint32_t) offset, (size_t)size }, stages);
+		void* dst = specialization_constant_buffer.data() + offset;
+		::memcpy(dst, data, size);
+		return *this;
+	}
+
 	CommandBuffer& CommandBuffer::bind_uniform_buffer(unsigned set, unsigned binding, Buffer buffer) {
 		sets_used[set] = true;
 		set_bindings[set].bindings[binding].type = vuk::DescriptorType::eUniformBuffer;
@@ -444,6 +451,37 @@ namespace vuk {
 		if (next_pipeline) {
 			vuk::PipelineInstanceCreateInfo pi;
 			pi.base = next_pipeline;
+
+			// set specialization constants
+			vuk::fixed_vector<VkSpecializationMapEntry, VUK_MAX_SPECIALIZATIONCONSTANT_RANGES> vsmes;
+			for (auto [sme, _] : smes) {
+				vsmes.push_back(sme);
+			}
+
+			for (auto& pssci : pi.base->psscis) {
+				size_t offset = pi.smes.size();
+				bool empty = true;
+				for (auto& [sme, stage] : smes) {
+					if (pssci.stage == stage) {
+						pi.smes.push_back(sme);
+						empty = false;
+					}
+				}
+
+				if (empty) {
+					continue;
+				}
+
+				VkSpecializationInfo si;
+				si.pMapEntries = pi.smes.data() + offset;
+				si.mapEntryCount = pi.smes.size() - offset;
+				si.pData = specialization_constant_buffer.data();
+				si.dataSize = specialization_constant_buffer.size();
+				pi.sis.push_back(si);
+
+				pssci.pSpecializationInfo = &pi.sis.back();
+			}
+
 			// set vertex input
 			pi.attribute_descriptions = std::move(attribute_descriptions);
 			pi.binding_descriptions = std::move(binding_descriptions);
