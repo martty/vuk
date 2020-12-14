@@ -123,6 +123,7 @@ namespace {
 	vuk::Texture env_cubemap;
 	vuk::Texture hdr_texture;
 	bool use_smooth_normals = true;
+	bool view_space_grid = false;
 
 	vuk::Example xample{
 		.name = "08_pipelined_compute",
@@ -247,9 +248,9 @@ namespace {
 			auto ptc = ifc.begin();
 			float resolution = vox.x;
 			ImGui::Checkbox("Smooth normals", &use_smooth_normals);
+			ImGui::Checkbox("Viewspace grid", &view_space_grid);
 			ImGui::DragFloat("Resolution", &resolution, 0.01f, 0.f, 5.f, "%.3f", 1.f);
-			vox = glm::vec3(resolution);
-			count = glm::uvec3((max - min) / vox);
+			
 			const char* items[] = { "Surface net", "Linear contouring" };
 			ImGui::Combo("Meshing", (int32_t*)&placement_method, items, (int)std::size(items));
 			// init vtx_buf
@@ -286,9 +287,18 @@ namespace {
 			vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 0.01f, 10.f);
 			vp.proj[1][1] *= -1;
 
+			vox = glm::vec3(resolution);
+			vec3 mmin = min, mmax = max;
+			if (view_space_grid) {
+				vox = vec3(vp.view * glm::vec4(vox, 0.f));
+				mmin = vec3(vp.view * glm::vec4(min, 1.f));
+				mmax = vec3(vp.view * glm::vec4(max, 1.f));
+			}
+			auto mmmin = glm::min(mmin, mmax);
+			auto mmmax = glm::max(mmin, mmax);
+			count = glm::uvec3((mmmax - mmmin) / vox);
+
 			vuk::RenderGraph rg;
-			// this pass executes outside of a renderpass
-			// we declare a buffer dependency and dispatch a compute shader
 
 			struct PC {
 				glm::vec3 min;
@@ -296,7 +306,7 @@ namespace {
 				glm::vec3 vox_size;
 				float px2 = 0.f;
 				VertexPlacement placement_method;
-			}pc = {min, dx1, vox, dx2, placement_method};
+			}pc = {mmin, dx1, vox, dx2, placement_method};
 
 			rg.add_pass({
 				.resources = {"vtx"_buffer(vuk::eComputeWrite), "idx"_buffer(vuk::eComputeWrite), "cmd"_buffer(vuk::eComputeWrite)},
@@ -318,7 +328,8 @@ namespace {
 			struct FwdConstants {
 				vec3 camPos;
 				unsigned use_smooth_normals;
-			} fwd_pc = { cam_pos, use_smooth_normals };
+				unsigned view_space_grid;
+			} fwd_pc = { cam_pos, use_smooth_normals, view_space_grid };
 
 			rg.add_pass({
 				.resources = {"08_pipelined_compute_final"_image(vuk::eColorWrite), "08_depth"_image(vuk::eDepthStencilRW), "vtx"_buffer(vuk::eAttributeRead), "idx"_buffer(vuk::eIndexRead), "cmd"_buffer(vuk::eIndirectRead)},
@@ -332,7 +343,7 @@ namespace {
 						.bind_graphics_pipeline("fwd")
 						.bind_uniform_buffer(0, 0, uboVP)
 						.bind_sampled_image(0, 1, *env_cubemap.view, {})
-						.push_constants(vuk::ShaderStageFlagBits::eFragment, 0, fwd_pc)
+						.push_constants(vuk::ShaderStageFlagBits::eVertex | vuk::ShaderStageFlagBits::eFragment, 0, fwd_pc)
 						.draw_indexed_indirect(1, command_buffer.get_resource_buffer("cmd"));
 				}
 			});

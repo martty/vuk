@@ -10,6 +10,7 @@ layout (binding = 1) uniform samplerCube env;
 layout (push_constant) uniform PushConstants {
     vec3 camPos;
     uint use_smooth_normals;
+	uint _;
 };
 
 layout (location = 0) out vec4 outFragColor;

@@ -10,6 +10,12 @@ layout(binding = 0) uniform VP {
 	mat4 projection;
 };
 
+layout (push_constant) uniform PushConstants {
+	vec3 camPos;
+    uint use_smooth_normals;
+	uint view_space_grid;
+};
+
 out gl_PerVertex 
 {
     vec4 gl_Position;
@@ -24,4 +30,8 @@ void main() {
     gl_Position = projection * view * vec4(ipos, 1.0);
 	pos = ipos;
 	norm = normalize(vec3(inorm.x, inorm.y, inorm.z));
+	/*if(view_space_grid == 1){
+		norm = -vec3(inverse(view) * vec4(norm, 0));
+		gl_Position = projection * view * vec4(ipos, 1.0);
+	}*/
 }
