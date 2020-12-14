@@ -12,6 +12,7 @@
 #define VUK_MAX_ATTRIBUTES 8
 #define VUK_MAX_COLOR_ATTACHMENTS 8
 #define VUK_MAX_PUSHCONSTANT_RANGES 8
+#define VUK_MAX_SPECIALIZATIONCONSTANT_RANGES 8
 
 namespace vuk {
 	// return a/b rounded to infinity
@@ -535,6 +536,7 @@ namespace vuk {
 		std::string pipeline_name;
 		vuk::Program reflection_info;
 		std::vector<VkPipelineShaderStageCreateInfo> psscis;
+		std::vector<VkSpecializationMapEntry> smes;
 		VkPipelineLayout pipeline_layout;
 		std::array<DescriptorSetLayoutAllocInfo, VUK_MAX_SETS> layout_info;
 		VkPipelineRasterizationStateCreateInfo rasterization_state;
@@ -657,6 +659,8 @@ namespace vuk {
 		VkPipelineVertexInputStateCreateInfo vertex_input_state{ .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
 		VkPipelineMultisampleStateCreateInfo multisample_state{ .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO };
 		VkPipelineDynamicStateCreateInfo dynamic_state{ .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO };
+		vuk::fixed_vector<VkSpecializationMapEntry, VUK_MAX_SPECIALIZATIONCONSTANT_RANGES> smes;
+		std::vector<VkSpecializationInfo> sis;
 		VkRenderPass render_pass;
 		uint32_t subpass;
 
