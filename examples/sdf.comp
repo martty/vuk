@@ -18,8 +18,8 @@ layout(push_constant) uniform pcs {
 	vec3 voxbounds_min;
 	float dx1;
 	vec3 vox_size;
-	float dx2;
 	uint vtx_plc_method;
+	vec3 view_vec;
 };
 
 float sdSphere(vec3 p, float s){

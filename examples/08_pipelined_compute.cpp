@@ -302,11 +302,11 @@ namespace {
 
 			struct PC {
 				glm::vec3 min;
-				float px1 = 0.f;
+				float pad = 0.f;
 				glm::vec3 vox_size;
-				float px2 = 0.f;
 				VertexPlacement placement_method;
-			}pc = {mmin, dx1, vox, dx2, placement_method};
+				glm::vec3 view_vec;
+			}pc = {mmin, 0.f, vox, placement_method, glm::vec3(vp.view * glm::vec4(0,0,1,0))};
 
 			rg.add_pass({
 				.resources = {"vtx"_buffer(vuk::eComputeWrite), "idx"_buffer(vuk::eComputeWrite), "cmd"_buffer(vuk::eComputeWrite)},
