@@ -1,9 +1,6 @@
 #pragma once
 
-#include <stdio.h>
 #include <vector>
-#include <algorithm>
-#include <iostream>
 #include <string_view>
 #include <optional>
 #include <functional>
@@ -12,84 +9,28 @@
 #include "RenderPass.hpp"
 #include "vuk/Buffer.hpp"
 #include "vuk/Image.hpp"
-#include <vuk/ShortAlloc.hpp>
-#include "robin_hood.h"
+#include "vuk/Swapchain.hpp"
+#include "vuk/MapProxy.hpp"
 
 namespace vuk {
 	struct Resource;
-	struct BufferResource {
-		Name name;
 
-		Resource operator()(Access ba);
-	};
-	struct ImageResource {
-		Name name;
+	namespace detail {
+		struct BufferResource {
+			Name name;
 
-		Resource operator()(Access ia);
-	};
+			Resource operator()(Access ba);
+		};
+		struct ImageResource {
+			Name name;
 
-	enum class AccessFlagBits : VkAccessFlags {
-		eIndirectCommandRead = VK_ACCESS_INDIRECT_COMMAND_READ_BIT,
-		eIndexRead = VK_ACCESS_INDEX_READ_BIT,
-		eVertexAttributeRead = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT,
-		eUniformRead = VK_ACCESS_UNIFORM_READ_BIT,
-		eInputAttachmentRead = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT,
-		eShaderRead = VK_ACCESS_SHADER_READ_BIT,
-		eShaderWrite = VK_ACCESS_SHADER_WRITE_BIT,
-		eColorAttachmentRead = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT,
-		eColorAttachmentWrite = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-		eDepthStencilAttachmentRead = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
-		eDepthStencilAttachmentWrite = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-		eTransferRead = VK_ACCESS_TRANSFER_READ_BIT,
-		eTransferWrite = VK_ACCESS_TRANSFER_WRITE_BIT,
-		eHostRead = VK_ACCESS_HOST_READ_BIT,
-		eHostWrite = VK_ACCESS_HOST_WRITE_BIT,
-		eMemoryRead = VK_ACCESS_MEMORY_READ_BIT,
-		eMemoryWrite = VK_ACCESS_MEMORY_WRITE_BIT,
-		eTransformFeedbackWriteEXT = VK_ACCESS_TRANSFORM_FEEDBACK_WRITE_BIT_EXT,
-		eTransformFeedbackCounterReadEXT = VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_READ_BIT_EXT,
-		eTransformFeedbackCounterWriteEXT = VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_WRITE_BIT_EXT,
-		eConditionalRenderingReadEXT = VK_ACCESS_CONDITIONAL_RENDERING_READ_BIT_EXT,
-		eColorAttachmentReadNoncoherentEXT = VK_ACCESS_COLOR_ATTACHMENT_READ_NONCOHERENT_BIT_EXT,
-		eAccelerationStructureReadKHR = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,
-		eAccelerationStructureWriteKHR = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,
-		eShadingRateImageReadNV = VK_ACCESS_SHADING_RATE_IMAGE_READ_BIT_NV,
-		eFragmentDensityMapReadEXT = VK_ACCESS_FRAGMENT_DENSITY_MAP_READ_BIT_EXT,
-		eCommandPreprocessReadNV = VK_ACCESS_COMMAND_PREPROCESS_READ_BIT_NV,
-		eCommandPreprocessWriteNV = VK_ACCESS_COMMAND_PREPROCESS_WRITE_BIT_NV,
-		eAccelerationStructureReadNV = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_NV,
-		eAccelerationStructureWriteNV = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_NV
-	};
-
-	using AccessFlags = Flags<AccessFlagBits>;
-
-	inline constexpr AccessFlags operator|(AccessFlagBits bit0, AccessFlagBits bit1) noexcept {
-		return AccessFlags(bit0) | bit1;
+			Resource operator()(Access ia);
+		};
 	}
 
-	inline constexpr AccessFlags operator&(AccessFlagBits bit0, AccessFlagBits bit1) noexcept {
-		return AccessFlags(bit0) & bit1;
-	}
-
-	inline constexpr AccessFlags operator^(AccessFlagBits bit0, AccessFlagBits bit1) noexcept {
-		return AccessFlags(bit0) ^ bit1;
-	}
-}
-
-inline vuk::ImageResource operator "" _image(const char* name, size_t) {
-	return { name };
-}
-
-inline vuk::BufferResource operator "" _buffer(const char* name, size_t) {
-	return { name };
-}
-
-namespace vuk {
 	struct Resource {
-		Name src_name;
-		Name use_name;
-        unsigned hash_src_name;
-        unsigned hash_use_name;
+		Name name;
+		unsigned hash_name;
 		enum class Type { eBuffer, eImage } type;
 		Access ia;
 		struct Use {
@@ -98,220 +39,136 @@ namespace vuk {
 			vuk::ImageLayout layout; // ignored for buffers
 		};
 
-		Resource(Name n, Type t, Access ia): src_name(n), use_name(n), type(t), ia(ia) {
-            hash_src_name = hash_use_name = hash::fnv1a::hash(src_name.data(), src_name.size(), hash::fnv1a::default_offset_basis);
-		}
-		Resource(Name src, Name use, Type t, Access ia) : src_name(src), use_name(use), type(t), ia(ia) {
-            hash_src_name = hash::fnv1a::hash(src_name.data(), src_name.size(), hash::fnv1a::default_offset_basis);
-            hash_use_name = hash::fnv1a::hash(use_name.data(), use_name.size(), hash::fnv1a::default_offset_basis);
+		Resource(Name n, Type t, Access ia) : name(n), type(t), ia(ia) {
+			hash_name = hash::fnv1a::hash(name.data(), name.size(), hash::fnv1a::default_offset_basis);
 		}
 
 		bool operator==(const Resource& o) const noexcept {
-			return (hash_use_name == o.hash_use_name && hash_src_name == o.hash_src_name);
+			return hash_name == o.hash_name;
 		}
 	};
 
 	Resource::Use to_use(Access acc);
 
-	inline Resource ImageResource::operator()(Access ia) {
-		return Resource{name, Resource::Type::eImage, ia};
-	}
+	// TODO: infer this from a smart IV
+	struct ImageAttachment {
+		vuk::Image image;
+		vuk::ImageView image_view;
 
-	inline Resource BufferResource::operator()(Access ba) {
-		return Resource{ name, Resource::Type::eBuffer, ba };
-	}
+		vuk::Extent2D extent;
+		vuk::Format format;
+		vuk::Samples sample_count = vuk::Samples::e1;
+		Clear clear_value;
+
+		static ImageAttachment from_texture(const vuk::Texture& t, Clear clear_value) {
+			return ImageAttachment{
+				.image = t.image.get(), .image_view = t.view.get(), .extent = {t.extent.width, t.extent.height}, .format = t.format, .sample_count = {t.sample_count}, .clear_value = clear_value };
+		}
+		static ImageAttachment from_texture(const vuk::Texture& t) {
+			return ImageAttachment{
+				.image = t.image.get(), .image_view = t.view.get(), .extent = {t.extent.width, t.extent.height}, .format = t.format, .sample_count = {t.sample_count} };
+		}
+	};
 
 	struct Pass {
 		Name name;
 		Name executes_on;
 		float auxiliary_order = 0.f;
-        bool use_secondary_command_buffers = false;
+		bool use_secondary_command_buffers = false;
 
 		std::vector<Resource> resources;
 		robin_hood::unordered_flat_map<Name, Name> resolves; // src -> dst
 
 		std::function<void(vuk::CommandBuffer&)> execute;
 	};
-}
-
-namespace std {
-	template<> struct hash<vuk::Resource> {
-		std::size_t operator()(vuk::Resource const& s) const noexcept {
-			size_t h = 0;
-			hash_combine(h, s.src_name, s.use_name, s.type);
-			return h;
-		}
-	};
-}
-
-namespace vuk {
-	struct Attachment {
-        vuk::Image image;
-        vuk::ImageView image_view;
-        
-		vuk::Extent2D extent;
-        vuk::Format format;
-        vuk::Samples sample_count = vuk::Samples::e1;
-        Clear clear_value;
-
-		static Attachment from_texture(const vuk::Texture& t, Clear clear_value) {
-            return Attachment{
-                .image = t.image.get(), .image_view = t.view.get(), .extent = {t.extent.width, t.extent.height}, .format = t.format, .sample_count = {t.sample_count}, .clear_value = clear_value};
-        }
-		static Attachment from_texture(const vuk::Texture& t) {
-            return Attachment{
-                .image = t.image.get(), .image_view = t.view.get(), .extent = {t.extent.width, t.extent.height}, .format = t.format, .sample_count = {t.sample_count}};
-		}
-	};
-
-	struct PassInfo {
-		PassInfo(arena&, Pass&&);
-
-		Pass pass;
-
-		size_t render_pass_index;
-		uint32_t subpass;
-
-		robin_hood::unordered_flat_set<Resource> inputs;
-		robin_hood::unordered_flat_set<Resource> outputs;
-
-		robin_hood::unordered_flat_set<Resource> global_inputs;
-		robin_hood::unordered_flat_set<Resource> global_outputs;
-
-		bool is_head_pass = false;
-		bool is_tail_pass = false;
-	};
-
 
 	struct RenderGraph {
-		std::unique_ptr<arena> arena_;
 		RenderGraph();
+		~RenderGraph();
 
-		std::vector<PassInfo> passes;
+		RenderGraph(const RenderGraph&) = delete;
+		RenderGraph& operator=(const RenderGraph&) = delete;
 
-		std::vector<PassInfo*, short_alloc<PassInfo*, 8>> head_passes;
-		std::vector<PassInfo*, short_alloc<PassInfo*, 8>> tail_passes;
+		RenderGraph(RenderGraph&&) noexcept;
+		RenderGraph& operator=(RenderGraph&&) noexcept;
 
-		robin_hood::unordered_flat_map<Name, Name> aliases;
+		/// @brief 
+		/// @param the Pass to add to the RenderGraph 
+		void add_pass(Pass);
 
-		robin_hood::unordered_flat_set<Resource> global_inputs;
-		robin_hood::unordered_flat_set<Resource> global_outputs;
-        std::vector<Resource, short_alloc<Resource, 16>> global_io;
+		// append the other RenderGraph onto this one
+		// will copy or move passes and attachments
+		void append(RenderGraph other);
 
-		struct UseRef {
-			Resource::Use use;
-			PassInfo* pass = nullptr;
-		};
+		/// @brief Add an alias for a resource
+		/// @param new_name 
+		/// @param old_name 
+		void add_alias(Name new_name, Name old_name);
 
-		robin_hood::unordered_flat_map<Name, std::vector<UseRef, short_alloc<UseRef, 64>>> use_chains;
+		/// @brief Add a resolve operation from the image resource `ms_name` to image_resource `resolved_name`
+		/// @param resolved_name 
+		/// @param ms_name 
+		void resolve_resource_into(Name resolved_name, Name ms_name);
 
-		struct AttachmentSInfo {
-			vuk::ImageLayout layout;
-			vuk::AccessFlags access;
-			vuk::PipelineStageFlags stage;
-		};
+		void attach_swapchain(Name, SwapchainRef swp, Clear);
+		void attach_buffer(Name, Buffer, Access initial, Access final);
+		void attach_image(Name, ImageAttachment, Access initial, Access final);
 
-		struct AttachmentRPInfo {
-			Name name;
+		void attach_managed(Name, Format, Dimension2D, Samples, Clear);
 
-			enum class Sizing {
-				eAbsolute, eFramebufferRelative
-			} sizing;
-			vuk::Extent2D::Framebuffer fb_relative;
-			vuk::Extent2D extents;
-			vuk::Samples samples;
+		/// @brief Consume this RenderGraph and create an ExecutableRenderGraph
+		struct ExecutableRenderGraph link(PerThreadContext& ptc)&&;
 
-			VkAttachmentDescription description = {};
+		// reflection functions
+ 
+		/// @brief Build the graph, assign framebuffers, renderpasses and subpasses
+		///	link automatically calls this, only needed if you want to use the reflection functions
+		void compile();
 
-			Resource::Use initial, final;
+		MapProxy<Name, std::span<const struct UseRef>> get_use_chains();
+		MapProxy<Name, const struct AttachmentRPInfo&> get_bound_attachments();
+		static vuk::ImageUsageFlags compute_usage(std::span<const UseRef> chain);
+	private:
+		struct RGImpl* impl;
+		friend struct ExecutableRenderGraph;
 
-			enum class Type {
-				eInternal, eExternal, eSwapchain
-			} type;
-
-			vuk::ImageView iv;
-			vuk::Image image = {};
-			// swapchain for swapchain
-			Swapchain* swapchain;
-
-			// optionally set
-			bool should_clear = false;
-			Clear clear_value;
-		};
-
-		struct BufferInfo {
-			Name name;
-
-			Resource::Use initial;
-			Resource::Use final;
-
-			vuk::Buffer buffer;
-		};
-
-
-		struct ImageBarrier {
-			Name image;
-			VkImageMemoryBarrier barrier = {};
-			vuk::PipelineStageFlags src;
-			vuk::PipelineStageFlags dst;
-		};
-
-		struct MemoryBarrier {
-			VkMemoryBarrier barrier = {};
-			vuk::PipelineStageFlags src;
-			vuk::PipelineStageFlags dst;
-		};
-
-		struct SubpassInfo {
-            SubpassInfo(arena&);
-            bool use_secondary_command_buffers;
-			std::vector<PassInfo*, short_alloc<PassInfo*, 16>> passes;
-			std::vector<ImageBarrier> pre_barriers;
-			std::vector<ImageBarrier> post_barriers;
-			std::vector<MemoryBarrier> pre_mem_barriers, post_mem_barriers;
-		};
-
-		struct RenderPassInfo {
-            RenderPassInfo(arena&);
-			std::vector<SubpassInfo, short_alloc<SubpassInfo, 64>> subpasses;
-			std::vector<AttachmentRPInfo, short_alloc<AttachmentRPInfo, 16>> attachments;
-			vuk::RenderPassCreateInfo rpci;
-			vuk::FramebufferCreateInfo fbci;
-			bool framebufferless = false;
-			VkRenderPass handle = {};
-			VkFramebuffer framebuffer;
-		};
-		std::vector<RenderPassInfo, short_alloc<RenderPassInfo, 64>> rpis;
-
-		void add_pass(Pass p) {
-			passes.emplace_back(*arena_, std::move(p));
-		}
+		/// @brief Check if this rendergraph is valid.
+		/// \throws RenderGraphException
+		void validate();
 
 		// determine rendergraph inputs and outputs, and resources that are neither
 		void build_io();
+	};
 
-		void build();
+	struct ExecutableRenderGraph {
+		ExecutableRenderGraph(RenderGraph&&);
+		~ExecutableRenderGraph();
 
-		// RGscaffold
-		robin_hood::unordered_flat_map<Name, AttachmentRPInfo> bound_attachments;
-		robin_hood::unordered_flat_map<Name, BufferInfo> bound_buffers;
-		void bind_attachment_to_swapchain(Name, Swapchain* swp, Clear);
-		void mark_attachment_internal(Name, vuk::Format, vuk::Extent2D, vuk::Samples, Clear);
-		void mark_attachment_internal(Name, vuk::Format, vuk::Extent2D::Framebuffer, vuk::Samples, Clear);
-		void mark_attachment_resolve(Name resolved_name, Name ms_name);
-		void bind_buffer(Name, Buffer, Access initial, Access final);
-        void bind_attachment(Name, Attachment, Access initial, Access final);
-		vuk::ImageUsageFlags compute_usage(const std::vector<vuk::RenderGraph::UseRef, short_alloc<UseRef, 64>>& chain);
+		ExecutableRenderGraph(const ExecutableRenderGraph&) = delete;
+		ExecutableRenderGraph& operator=(const ExecutableRenderGraph&) = delete;
 
-		// RG
-		void build(vuk::PerThreadContext&);
-		void create_attachment(vuk::PerThreadContext&, Name name, RenderGraph::AttachmentRPInfo& attachment_info, vuk::Extent2D extents, vuk::SampleCountFlagBits);
+		ExecutableRenderGraph(ExecutableRenderGraph&&) noexcept;
+		ExecutableRenderGraph& operator=(ExecutableRenderGraph&&) noexcept;
+
 		VkCommandBuffer execute(vuk::PerThreadContext&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
 
-		BufferInfo get_resource_buffer(Name);
-		bool is_resource_image_in_general_layout(Name n, PassInfo* pass_info);
+		struct BufferInfo get_resource_buffer(Name);
+		struct AttachmentRPInfo get_resource_image(Name);
 
+		bool is_resource_image_in_general_layout(Name n, struct PassInfo* pass_info);
 	private:
-		void fill_renderpass_info(vuk::RenderGraph::RenderPassInfo& rpass, const size_t& i, vuk::CommandBuffer& cobuf);
+		struct RGImpl* impl;
+
+		void create_attachment(PerThreadContext& ptc, Name name, struct AttachmentRPInfo& attachment_info, Extent2D fb_extent, SampleCountFlagBits samples);
+		void fill_renderpass_info(struct RenderPassInfo& rpass, const size_t& i, class CommandBuffer& cobuf);
 	};
 }
+
+inline vuk::detail::ImageResource operator "" _image(const char* name, size_t) {
+	return { name };
+}
+
+inline vuk::detail::BufferResource operator "" _buffer(const char* name, size_t) {
+	return { name };
+}
+

@@ -13,7 +13,7 @@ layout(binding = 3) uniform Material {
 
 void main() 
 {
-  vec3 col = texture(tex, vec2(inUV.x, 1-inUV.y)).xyz;
+  vec3 col = texture(tex, vec2(inUV.x, inUV.y)).xyz;
   if(any(greaterThan(col, vec3(0.8)))) discard;
   vec3 tinted = col + (tint.xyz - col) * tint.a;
   outFragColor = vec4(inColor * tinted, 1.0);

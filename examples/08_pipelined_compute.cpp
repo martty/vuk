@@ -80,8 +80,8 @@ namespace {
 				.resources = {"08_rtt"_image(vuk::eColorWrite)},
 				.execute = [](vuk::CommandBuffer& command_buffer) {
 					command_buffer
-					  .set_viewport(0, vuk::Area::framebuffer())
-					  .set_scissor(0, vuk::Area::framebuffer())
+					  .set_viewport(0, vuk::Rect2D::framebuffer())
+					  .set_scissor(0, vuk::Rect2D::framebuffer())
 					  .bind_sampled_image(0, 0, *texture_of_doge, {})
 					  .bind_graphics_pipeline("rtt")
 					  .draw(3, 1, 0, 0);
@@ -105,8 +105,8 @@ namespace {
 				.resources = {"08_scramble"_buffer(vuk::eFragmentRead), "08_rtt"_image(vuk::eFragmentSampled), "08_pipelined_compute_final"_image(vuk::eColorWrite)},
 				.execute = [](vuk::CommandBuffer& command_buffer) {
 					command_buffer
-						.set_viewport(0, vuk::Area::framebuffer())
-						.set_scissor(0, vuk::Area::framebuffer())
+						.set_viewport(0, vuk::Rect2D::framebuffer())
+						.set_scissor(0, vuk::Rect2D::framebuffer())
 
 						.bind_sampled_image(0, 0, "08_rtt", {})
 						.bind_storage_buffer(0, 1, command_buffer.get_resource_buffer("08_scramble"))
@@ -117,9 +117,9 @@ namespace {
 	
 			time += ImGui::GetIO().DeltaTime;
 			
-			rg.mark_attachment_internal("08_rtt", runner.swapchain->format, vuk::Extent2D{(unsigned)x, (unsigned)y}, vuk::Samples::e1, vuk::ClearColor{ 0.f, 0.f, 0.f, 0.f });
+			rg.attach_managed("08_rtt", runner.swapchain->format, vuk::Dimension2D::absolute((unsigned)x, (unsigned)y), vuk::Samples::e1, vuk::ClearColor{ 0.f, 0.f, 0.f, 0.f });
 			// we bind our externally managed buffer to the rendergraph
-			rg.bind_buffer("08_scramble", scramble_buf.get(), vuk::eNone, vuk::eNone);
+			rg.attach_buffer("08_scramble", scramble_buf.get(), vuk::eNone, vuk::eNone);
 			return rg;
 		},
 		.cleanup = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {

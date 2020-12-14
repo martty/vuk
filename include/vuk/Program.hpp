@@ -33,7 +33,7 @@ namespace vuk {
 
 		struct Member {
 			std::string name;
-            std::string type_name; // if this is a struct
+			std::string type_name; // if this is a struct
 			Type type;
 			size_t size;
 			size_t offset;

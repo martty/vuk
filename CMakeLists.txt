@@ -4,6 +4,8 @@ project(vuk)
 include(ExternalProject)
 include(FetchContent)
 
+set(CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
+
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 add_library(vuk)
@@ -39,13 +41,16 @@ target_sources(vuk PRIVATE
 	src/Pool.cpp
 	src/Cache.cpp
 	src/RenderGraph.cpp 
+	src/RenderGraphUtil.cpp
+	src/ExecutableRenderGraph.cpp
 	src/VMA.cpp
 	src/Allocator.cpp
 	src/Context.cpp
 	src/CommandBuffer.cpp
 	src/InflightContext.cpp
 	src/PerThreadContext.cpp
-	src/Util.cpp)
+	src/Util.cpp
+	src/Format.cpp)
 
 target_include_directories(vuk PUBLIC ext/plf_colony)
 target_include_directories(vuk PUBLIC ext/VulkanMemoryAllocator/src)
@@ -80,4 +85,9 @@ option(VUK_BUILD_EXAMPLES "Build examples" OFF)
 
 if(VUK_BUILD_EXAMPLES)
 	add_subdirectory(examples)
+endif()
+
+option(VUK_BUILD_DOCS "Build docs" OFF)
+if(VUK_BUILD_DOCS)
+	add_subdirectory(docs)
 endif()

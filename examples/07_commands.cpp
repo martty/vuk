@@ -62,6 +62,7 @@ namespace {
 			} vp;
 			vp.view = glm::lookAt(glm::vec3(0, 0, 1.75), glm::vec3(0), glm::vec3(0, 1, 0));
 			vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 0.1f, 10.f);
+			vp.proj[1][1] *= -1;
 
 			auto [buboVP, stub3] = ptc.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eUniformBuffer, std::span(&vp, 1));
 			auto uboVP = buboVP;
@@ -75,8 +76,8 @@ namespace {
 				.resources = {"07_commands_MS"_image(vuk::eColorWrite), "07_commands_depth"_image(vuk::eDepthStencilRW)},
 				.execute = [verts, uboVP, inds](vuk::CommandBuffer& command_buffer) {
 					command_buffer
-					  .set_viewport(0, vuk::Area::framebuffer())
-					  .set_scissor(0, vuk::Area::framebuffer())
+					  .set_viewport(0, vuk::Rect2D::framebuffer())
+					  .set_scissor(0, vuk::Rect2D::framebuffer())
 					  .bind_vertex_buffer(0, verts, 0, vuk::Packed{vuk::Format::eR32G32B32Sfloat, vuk::Ignore{offsetof(util::Vertex, uv_coordinates) - sizeof(util::Vertex::position)}, vuk::Format::eR32G32Sfloat})
 					  .bind_index_buffer(inds, vuk::IndexType::eUint32)
 					  .bind_sampled_image(0, 2, *texture_of_doge, vuk::SamplerCreateInfo{})
@@ -161,9 +162,9 @@ namespace {
 			// Since resolving requires equal sized images, we can actually infer the size of the MS attachment
 			// from the final image, and we don't need to specify here
 			// We use the swapchain format & extents, since resolving needs identical formats & extents
-			rg.mark_attachment_internal("07_commands_MS", runner.swapchain->format, vuk::Extent2D{300, 300}, vuk::Samples::e8, vuk::ClearColor{ 0.f, 0.f, 0.f, 0.f });
-			rg.mark_attachment_internal("07_commands_depth", vuk::Format::eD32Sfloat, vuk::Extent2D::Framebuffer{}, vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
-			rg.mark_attachment_internal("07_commands_NMS", runner.swapchain->format, vuk::Extent2D{300, 300}, vuk::Samples::e1, vuk::ClearColor{ 0.f, 0.f, 0.f, 0.f });
+			rg.attach_managed("07_commands_MS", runner.swapchain->format, vuk::Dimension2D::absolute(300, 300), vuk::Samples::e8, vuk::ClearColor{ 0.f, 0.f, 0.f, 0.f });
+			rg.attach_managed("07_commands_depth", vuk::Format::eD32Sfloat, vuk::Dimension2D::framebuffer(), vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
+			rg.attach_managed("07_commands_NMS", runner.swapchain->format, vuk::Dimension2D::absolute(300, 300), vuk::Samples::e1, vuk::ClearColor{ 0.f, 0.f, 0.f, 0.f });
 			return rg;
 		},
 		.cleanup = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {

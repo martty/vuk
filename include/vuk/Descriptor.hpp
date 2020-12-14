@@ -29,36 +29,36 @@ namespace vuk {
 		eStorageBuffer = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 		eUniformBufferDynamic = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
 		eStorageBufferDynamic = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC,
-        eInputAttachment = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
-        eInlineUniformBlockEXT = VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT,
-        eAccelerationStructureKHR = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
-        eAccelerationStructureNV = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV
-    };
+		eInputAttachment = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
+		eInlineUniformBlockEXT = VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT,
+		eAccelerationStructureKHR = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
+		eAccelerationStructureNV = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV
+	};
 
-    enum class DescriptorBindingFlagBits : VkDescriptorBindingFlags {
-        eUpdateAfterBind = VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT,
-        eUpdateUnusedWhilePending = VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT,
-        ePartiallyBound = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT,
-        eVariableDescriptorCount = VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT
-    };
+	enum class DescriptorBindingFlagBits : VkDescriptorBindingFlags {
+		eUpdateAfterBind = VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT,
+		eUpdateUnusedWhilePending = VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT,
+		ePartiallyBound = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT,
+		eVariableDescriptorCount = VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT
+	};
 
-    using DescriptorBindingFlags = Flags<DescriptorBindingFlagBits>;
+	using DescriptorBindingFlags = Flags<DescriptorBindingFlagBits>;
 
-    inline constexpr DescriptorBindingFlags operator|(DescriptorBindingFlagBits bit0, DescriptorBindingFlagBits bit1) noexcept {
-        return DescriptorBindingFlags(bit0) | bit1;
-    }
+	inline constexpr DescriptorBindingFlags operator|(DescriptorBindingFlagBits bit0, DescriptorBindingFlagBits bit1) noexcept {
+		return DescriptorBindingFlags(bit0) | bit1;
+	}
 
-    inline constexpr DescriptorBindingFlags operator&(DescriptorBindingFlagBits bit0, DescriptorBindingFlagBits bit1) noexcept {
-        return DescriptorBindingFlags(bit0) & bit1;
-    }
+	inline constexpr DescriptorBindingFlags operator&(DescriptorBindingFlagBits bit0, DescriptorBindingFlagBits bit1) noexcept {
+		return DescriptorBindingFlags(bit0) & bit1;
+	}
 
-    inline constexpr DescriptorBindingFlags operator^(DescriptorBindingFlagBits bit0, DescriptorBindingFlagBits bit1) noexcept {
-        return DescriptorBindingFlags(bit0) ^ bit1;
-    }
+	inline constexpr DescriptorBindingFlags operator^(DescriptorBindingFlagBits bit0, DescriptorBindingFlagBits bit1) noexcept {
+		return DescriptorBindingFlags(bit0) ^ bit1;
+	}
 
-    struct DescriptorSetLayoutAllocInfo {
-        std::array<uint32_t, 12> descriptor_counts = {};
-        VkDescriptorSetLayout layout;
+	struct DescriptorSetLayoutAllocInfo {
+		std::array<uint32_t, 12> descriptor_counts = {};
+		VkDescriptorSetLayout layout;
 		unsigned variable_count_binding = (unsigned)-1;
 		vuk::DescriptorType variable_count_binding_type;
 		unsigned variable_count_binding_max_size;
@@ -130,7 +130,7 @@ namespace vuk {
 	};
 
 	struct DescriptorSetLayoutCreateInfo {
-		VkDescriptorSetLayoutCreateInfo dslci = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+		VkDescriptorSetLayoutCreateInfo dslci = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
 		std::vector<VkDescriptorSetLayoutBinding> bindings;
 		std::vector<VkDescriptorBindingFlags> flags;
 		size_t index;
@@ -154,18 +154,18 @@ namespace vuk {
 	};
 
 	struct DescriptorPool {
-        std::mutex grow_mutex;
+		std::mutex grow_mutex;
 		std::vector<VkDescriptorPool> pools;
-        uint32_t sets_allocated = 0;
-        moodycamel::ConcurrentQueue<VkDescriptorSet> free_sets{1024};
+		uint32_t sets_allocated = 0;
+		moodycamel::ConcurrentQueue<VkDescriptorSet> free_sets{ 1024 };
 
 		void grow(PerThreadContext& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info);
 		VkDescriptorSet acquire(PerThreadContext& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info);
 
 		DescriptorPool() = default;
 		DescriptorPool(DescriptorPool&& o) {
-            pools = o.pools;
-            sets_allocated = o.sets_allocated;
+			pools = o.pools;
+			sets_allocated = o.sets_allocated;
 		}
 	};
 
@@ -193,7 +193,7 @@ namespace vuk {
 namespace std {
 	template <>
 	struct hash<vuk::SetBinding> {
-		size_t operator()(vuk::SetBinding const & x) const noexcept {
+		size_t operator()(vuk::SetBinding const& x) const noexcept {
 			// TODO: should we hash in layout too?
 			auto mask = x.used.to_ulong();
 			unsigned long leading_ones = vuk::num_leading_ones(mask);
@@ -203,17 +203,17 @@ namespace std {
 
 	template <>
 	struct hash<vuk::DescriptorSetLayoutAllocInfo> {
-		size_t operator()(vuk::DescriptorSetLayoutAllocInfo const & x) const noexcept {
+		size_t operator()(vuk::DescriptorSetLayoutAllocInfo const& x) const noexcept {
 			size_t h = 0;
 			// TODO: should use vuk::DescriptorSetLayout here
-			hash_combine(h, ::hash::fnv1a::hash((const char *)&x.descriptor_counts[0], x.descriptor_counts.size() * sizeof(x.descriptor_counts[0]), ::hash::fnv1a::default_offset_basis), (VkDescriptorSetLayout)x.layout); 
+			hash_combine(h, ::hash::fnv1a::hash((const char*)&x.descriptor_counts[0], x.descriptor_counts.size() * sizeof(x.descriptor_counts[0]), ::hash::fnv1a::default_offset_basis), (VkDescriptorSetLayout)x.layout);
 			return h;
 		}
 	};
 
 	template <>
 	struct hash<VkDescriptorSetLayoutBinding> {
-		size_t operator()(VkDescriptorSetLayoutBinding const & x) const noexcept {
+		size_t operator()(VkDescriptorSetLayoutBinding const& x) const noexcept {
 			size_t h = 0;
 			// TODO: immutable samplers
 			hash_combine(h, x.binding, x.descriptorCount, x.descriptorType, x.stageFlags);
@@ -224,7 +224,7 @@ namespace std {
 
 	template <>
 	struct hash<vuk::DescriptorSetLayoutCreateInfo> {
-		size_t operator()(vuk::DescriptorSetLayoutCreateInfo const & x) const noexcept {
+		size_t operator()(vuk::DescriptorSetLayoutCreateInfo const& x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, x.bindings);
 			return h;

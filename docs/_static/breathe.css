@@ -1,0 +1,58 @@
+
+/* -- breathe specific styles ----------------------------------------------- */
+
+/* So enum value descriptions are displayed inline to the item */
+.breatheenumvalues li tt + p {
+  display: inline;
+}
+
+/* So parameter descriptions are displayed inline to the item */
+.breatheparameterlist li tt + p {
+  display: inline;
+}
+
+.container .breathe-sectiondef {
+  width: inherit;
+}
+
+.descname {
+	padding-left: inherit !important;
+}
+
+span+code.descname {
+	padding-left: 0 !important;
+}
+
+dt>code.sig-prename {
+	margin-right: -6px !important;
+	padding-left: 6px !important;
+}
+
+dt>em {
+	padding-left: 4px !important;
+}
+
+dt>em.property {
+	padding-left: 0 !important;
+}
+
+.property {
+	font-style: normal;
+	padding-right: 2px !important;
+}
+
+dt>a:first-child.reference {
+	padding-right: 4px !important;
+}
+
+.github-btn {
+  border: 0;
+  overflow: hidden;
+}
+
+.jumbotron {
+  background-size: 100% 4px;
+  background-repeat: repeat-y;
+  color: white;
+  text-align: center;
+}

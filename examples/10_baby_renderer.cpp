@@ -145,13 +145,11 @@ namespace {
 			// Bind the resources for the variant generation
 			// We specify the initial and final access
 			// The texture we have created is already in ShaderReadOptimal, but we need it in General during the pass, and we need it back to ShaderReadOptimal afterwards
-			rg.bind_attachment("10_doge", vuk::Attachment::from_texture(*texture_of_doge), vuk::eFragmentSampled, vuk::eFragmentSampled);
-			rg.bind_attachment("10_v1", vuk::Attachment::from_texture(*variant1), vuk::eNone, vuk::eFragmentSampled);
-			rg.bind_attachment("10_v2", vuk::Attachment::from_texture(*variant2), vuk::eNone, vuk::eFragmentSampled);
-			rg.build();
-			rg.build(ptc);
+			rg.attach_image("10_doge", vuk::ImageAttachment::from_texture(*texture_of_doge), vuk::eFragmentSampled, vuk::eFragmentSampled);
+			rg.attach_image("10_v1", vuk::ImageAttachment::from_texture(*variant1), vuk::eNone, vuk::eFragmentSampled);
+			rg.attach_image("10_v2", vuk::ImageAttachment::from_texture(*variant2), vuk::eNone, vuk::eFragmentSampled);
 			// The rendergraph is submitted and fence-waited on
-			execute_submit_and_wait(ptc, rg);
+			execute_submit_and_wait(ptc, std::move(rg).link(ptc));
 
 			// Set up the resources for our renderer
 
@@ -241,6 +239,7 @@ namespace {
 			} vp;
 			vp.view = glm::lookAt(glm::vec3(0, 10.0, 11), glm::vec3(0), glm::vec3(0, 1, 0));
 			vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 1.f, 100.f);
+			vp.proj[1][1] *= -1;
 
 			// Upload view & projection
 			auto [buboVP, stub3] = ptc.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eUniformBuffer, std::span(&vp, 1));
@@ -269,8 +268,8 @@ namespace {
 				.resources = {"10_baby_renderer_final"_image(vuk::eColorWrite), "10_depth"_image(vuk::eDepthStencilRW)},
 				.execute = [uboVP, modelmats](vuk::CommandBuffer& command_buffer) {
 					command_buffer
-					  .set_viewport(0, vuk::Area::framebuffer())
-					  .set_scissor(0, vuk::Area::framebuffer());
+					  .set_viewport(0, vuk::Rect2D::framebuffer())
+					  .set_scissor(0, vuk::Rect2D::framebuffer());
 
 					for (auto i = 0; i < renderables.size(); i++) {
 						auto& r = renderables[i];
@@ -294,7 +293,7 @@ namespace {
 
 			angle += 10.f * ImGui::GetIO().DeltaTime;
 
-			rg.mark_attachment_internal("10_depth", vuk::Format::eD32Sfloat, vuk::Extent2D::Framebuffer{}, vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
+			rg.attach_managed("10_depth", vuk::Format::eD32Sfloat, vuk::Dimension2D::framebuffer(), vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
 			return rg;
 	},
 		// Perform cleanup for the example

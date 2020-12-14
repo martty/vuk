@@ -1,7 +1,7 @@
 #include "vuk/Context.hpp"
 #include "vuk/RenderGraph.hpp"
 
-bool vuk::execute_submit_and_present_to_one(PerThreadContext& ptc, RenderGraph& rg, SwapchainRef swapchain) {
+bool vuk::execute_submit_and_present_to_one(PerThreadContext& ptc, ExecutableRenderGraph&& rg, SwapchainRef swapchain) {
 	auto present_rdy = ptc.acquire_semaphore();
 	uint32_t image_index = (uint32_t)-1;
 	VkResult acq_result = vkAcquireNextImageKHR(ptc.ctx.device, swapchain->swapchain, UINT64_MAX, present_rdy, VK_NULL_HANDLE, &image_index);
@@ -44,7 +44,7 @@ bool vuk::execute_submit_and_present_to_one(PerThreadContext& ptc, RenderGraph& 
 	return present_result == VK_SUCCESS;
 }
 
-void vuk::execute_submit_and_wait(PerThreadContext& ptc, RenderGraph& rg) {
+void vuk::execute_submit_and_wait(PerThreadContext& ptc, ExecutableRenderGraph&& rg) {
 	auto cbuf = rg.execute(ptc, {});
 	// get an unpooled fence
 	VkFenceCreateInfo fci{ .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };

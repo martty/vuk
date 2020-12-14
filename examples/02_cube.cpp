@@ -51,6 +51,7 @@ namespace {
 			vp.view = glm::lookAt(glm::vec3(0, 1.5, 3.5), glm::vec3(0), glm::vec3(0, 1, 0));
 			// Fill the projection matrix, standard perspective matrix
 			vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 1.f, 10.f);
+			vp.proj[1][1] *= -1;
 			// Allocate and transfer view-projection transform
 			auto [buboVP, stub3] = ptc.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eUniformBuffer, std::span(&vp, 1));
 			auto uboVP = buboVP;
@@ -64,8 +65,8 @@ namespace {
 				.resources = {"02_cube_final"_image(vuk::eColorWrite)},
 				.execute = [verts, uboVP, inds](vuk::CommandBuffer& command_buffer) {
 					command_buffer
-					  .set_viewport(0, vuk::Area::framebuffer()) // Set the viewport to cover the entire framebuffer
-					  .set_scissor(0, vuk::Area::framebuffer()) // Set the scissor area to cover the entire framebuffer
+					  .set_viewport(0, vuk::Rect2D::framebuffer()) // Set the viewport to cover the entire framebuffer
+					  .set_scissor(0, vuk::Rect2D::framebuffer()) // Set the scissor area to cover the entire framebuffer
 					  // The vertex format and the buffer used are bound together for this call
 					  // The format is specified here as vuk::Packed{}, meaning we are going to make a consecutive binding
 					  // For each element in the list, a vuk::Format signifies a binding

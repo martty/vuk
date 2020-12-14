@@ -150,7 +150,7 @@ namespace vuk {
 	Buffer Allocator::_allocate_buffer(LinearAllocator& pool, size_t size, size_t alignment, bool create_mapped) {
 		if (size == 0) {
 			return { .buffer = VK_NULL_HANDLE, .size = 0 };
-		} 
+		}
 		alignment = std::lcm(pool.mem_reqs.alignment, alignment);
 		if (pool.usage & vuk::BufferUsageFlagBits::eUniformBuffer) {
 			alignment = std::lcm(alignment, properties.limits.minUniformBufferOffsetAlignment);
@@ -158,7 +158,7 @@ namespace vuk {
 		if (pool.usage & vuk::BufferUsageFlagBits::eStorageBuffer) {
 			alignment = std::lcm(alignment, properties.limits.minStorageBufferOffsetAlignment);
 		}
-		
+
 		if ((size + alignment) > pool.block_size) {
 			// we are not handling sizes bigger than the block_size
 			// we could allocate a buffer that is multiple block_sizes big

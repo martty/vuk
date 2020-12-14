@@ -8,14 +8,7 @@
 #include "ContextImpl.hpp"
 #include "vuk/RenderGraph.hpp"
 #include "vuk/Program.hpp"
-
-void burp(const std::string& in, const std::string& path) {
-	std::ofstream output(path.c_str(), std::ios::trunc);
-	if (!output.is_open()) {
-	}
-	output << in;
-	output.close();
-}
+#include "vuk/Exception.hpp"
 
 vuk::Context::Context(VkInstance instance, VkDevice device, VkPhysicalDevice physical_device, VkQueue graphics) :
 	instance(instance),
@@ -23,8 +16,8 @@ vuk::Context::Context(VkInstance instance, VkDevice device, VkPhysicalDevice phy
 	physical_device(physical_device),
 	graphics_queue(graphics),
 	debug(*this),
-	impl(new ContextImpl(*this)){}
-
+	impl(new ContextImpl(*this)) {
+}
 
 bool vuk::Context::DebugUtils::enabled() {
 	return setDebugUtilsObjectNameEXT != nullptr;
@@ -328,19 +321,19 @@ vuk::Context::UploadResult vuk::Context::fenced_upload(std::span<BufferUpload> u
 
 		auto& pool = impl->xfer_one_time_pools[tid];
 		if (pool == VK_NULL_HANDLE) {
-            VkCommandPoolCreateInfo cpci{.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
+			VkCommandPoolCreateInfo cpci{ .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
 			cpci.queueFamilyIndex = transfer_queue_family_index;
 			cpci.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
 			vkCreateCommandPool(device, &cpci, nullptr, &pool);
 		}
 
-		VkCommandBufferAllocateInfo cbai{.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
+		VkCommandBufferAllocateInfo cbai{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
 		cbai.commandPool = pool;
 		cbai.commandBufferCount = 1;
 
 		vkAllocateCommandBuffers(device, &cbai, &cbuf);
 	}
-    VkCommandBufferBeginInfo cbi{.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
+	VkCommandBufferBeginInfo cbi{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
 	vkBeginCommandBuffer(cbuf, &cbi);
 
 	size_t size = 0;
@@ -369,7 +362,7 @@ vuk::Context::UploadResult vuk::Context::fenced_upload(std::span<BufferUpload> u
 	VkFenceCreateInfo fci{ .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
 	VkFence fence;
 	vkCreateFence(device, &fci, nullptr, &fence);
-    VkSubmitInfo si{.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO};
+	VkSubmitInfo si{ .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO };
 	si.commandBufferCount = 1;
 	si.pCommandBuffers = &cbuf;
 	submit_transfer(si, fence);
@@ -387,19 +380,19 @@ vuk::Context::UploadResult vuk::Context::fenced_upload(std::span<ImageUpload> up
 		}
 		auto& pool = impl->one_time_pools[tid];
 		if (pool == VK_NULL_HANDLE) {
-            VkCommandPoolCreateInfo cpci{.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
+			VkCommandPoolCreateInfo cpci{ .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
 			cpci.queueFamilyIndex = graphics_queue_family_index;
 			cpci.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
 			vkCreateCommandPool(device, &cpci, nullptr, &pool);
 		}
-        VkCommandBufferAllocateInfo cbai{.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
+		VkCommandBufferAllocateInfo cbai{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
 		cbai.commandPool = pool;
 		cbai.commandBufferCount = 1;
 
 		vkAllocateCommandBuffers(device, &cbai, &cbuf);
 	}
 
-    VkCommandBufferBeginInfo cbi{.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
+	VkCommandBufferBeginInfo cbi{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
 	vkBeginCommandBuffer(cbuf, &cbi);
 
 	size_t size = 0;
@@ -438,7 +431,7 @@ vuk::Context::UploadResult vuk::Context::fenced_upload(std::span<ImageUpload> up
 	VkFenceCreateInfo fci{ .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
 	VkFence fence;
 	vkCreateFence(device, &fci, nullptr, &fence);
-    VkSubmitInfo si{.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO};
+	VkSubmitInfo si{ .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO };
 	si.commandBufferCount = 1;
 	si.pCommandBuffers = &cbuf;
 	submit_graphics(si, fence);
@@ -462,7 +455,7 @@ vuk::Texture vuk::Context::allocate_texture(vuk::ImageCreateInfo ici) {
 	vuk::ImageViewCreateInfo ivci;
 	ivci.format = ici.format;
 	ivci.image = dst;
-    ivci.subresourceRange.aspectMask = format_to_aspect(ici.format);
+	ivci.subresourceRange.aspectMask = format_to_aspect(ici.format);
 	ivci.subresourceRange.baseArrayLayer = 0;
 	ivci.subresourceRange.baseMipLevel = 0;
 	ivci.subresourceRange.layerCount = 1;

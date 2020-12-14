@@ -1,0 +1,248 @@
+#pragma once
+
+#include "vuk/RenderGraph.hpp"
+#include <vuk/ShortAlloc.hpp>
+
+namespace std {
+	template<> struct hash<vuk::Resource> {
+		std::size_t operator()(vuk::Resource const& s) const noexcept {
+			return s.hash_name;
+		}
+	};
+}
+
+namespace vuk {
+	inline bool is_write_access(Access ia) {
+		switch (ia) {
+		case eColorResolveWrite:
+		case eColorWrite:
+		case eColorRW:
+		case eDepthStencilRW:
+		case eFragmentWrite:
+		case eTransferDst:
+		case eComputeWrite:
+		case eComputeRW:
+		case eHostWrite:
+		case eHostRW:
+		case eMemoryWrite:
+		case eMemoryRW:
+			return true;
+		default:
+			return false;
+		}
+	}
+
+	inline bool is_read_access(Access ia) {
+		switch (ia) {
+		case eColorResolveRead:
+		case eColorRead:
+		case eColorRW:
+		case eDepthStencilRead:
+		case eDepthStencilRW:
+		case eFragmentRead:
+		case eFragmentSampled:
+		case eTransferSrc:
+		case eComputeRead:
+		case eComputeSampled:
+		case eComputeRW:
+		case eHostRead:
+		case eHostRW:
+		case eMemoryRead:
+		case eMemoryRW:
+			return true;
+		default:
+			return false;
+		}
+	}
+
+	inline Resource::Use to_use(Access ia) {
+		switch (ia) {
+		case eColorResolveWrite:
+		case eColorWrite: return { vuk::PipelineStageFlagBits::eColorAttachmentOutput, vuk::AccessFlagBits::eColorAttachmentWrite, vuk::ImageLayout::eColorAttachmentOptimal };
+		case eColorRW: return { vuk::PipelineStageFlagBits::eColorAttachmentOutput, vuk::AccessFlagBits::eColorAttachmentWrite | vuk::AccessFlagBits::eColorAttachmentRead, vuk::ImageLayout::eColorAttachmentOptimal };
+		case eColorResolveRead:
+		case eColorRead: return { vuk::PipelineStageFlagBits::eColorAttachmentOutput, vuk::AccessFlagBits::eColorAttachmentRead, vuk::ImageLayout::eColorAttachmentOptimal };
+		case eDepthStencilRW: return { vuk::PipelineStageFlagBits::eEarlyFragmentTests | vuk::PipelineStageFlagBits::eLateFragmentTests, vuk::AccessFlagBits::eDepthStencilAttachmentRead | vuk::AccessFlagBits::eDepthStencilAttachmentWrite, vuk::ImageLayout::eDepthStencilAttachmentOptimal };
+
+		case eFragmentSampled: return { vuk::PipelineStageFlagBits::eFragmentShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eShaderReadOnlyOptimal };
+		case eFragmentRead: return { vuk::PipelineStageFlagBits::eFragmentShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eShaderReadOnlyOptimal };
+
+		case eTransferSrc: return { vuk::PipelineStageFlagBits::eTransfer, vuk::AccessFlagBits::eTransferRead, vuk::ImageLayout::eTransferSrcOptimal };
+		case eTransferDst: return { vuk::PipelineStageFlagBits::eTransfer, vuk::AccessFlagBits::eTransferWrite, vuk::ImageLayout::eTransferDstOptimal };
+
+		case eComputeRead: return { vuk::PipelineStageFlagBits::eComputeShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eGeneral };
+		case eComputeWrite: return { vuk::PipelineStageFlagBits::eComputeShader, vuk::AccessFlagBits::eShaderWrite, vuk::ImageLayout::eGeneral };
+		case eComputeRW: return { vuk::PipelineStageFlagBits::eComputeShader, vuk::AccessFlagBits::eShaderRead | vuk::AccessFlagBits::eShaderWrite, vuk::ImageLayout::eGeneral };
+		case eComputeSampled: return { vuk::PipelineStageFlagBits::eComputeShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eShaderReadOnlyOptimal };
+
+		case eAttributeRead: return { vuk::PipelineStageFlagBits::eVertexInput, vuk::AccessFlagBits::eVertexAttributeRead, vuk::ImageLayout::eGeneral /* ignored */ };
+
+		case eHostRead:
+			return { vuk::PipelineStageFlagBits::eHost, vuk::AccessFlagBits::eHostRead, vuk::ImageLayout::eGeneral };
+		case eHostWrite:
+			return { vuk::PipelineStageFlagBits::eHost, vuk::AccessFlagBits::eHostWrite, vuk::ImageLayout::eGeneral };
+		case eHostRW:
+			return { vuk::PipelineStageFlagBits::eHost, vuk::AccessFlagBits::eHostRead | vuk::AccessFlagBits::eHostWrite, vuk::ImageLayout::eGeneral };
+
+		case eMemoryRead: return { vuk::PipelineStageFlagBits::eBottomOfPipe, vuk::AccessFlagBits::eMemoryRead, vuk::ImageLayout::eGeneral };
+		case eMemoryWrite: return { vuk::PipelineStageFlagBits::eBottomOfPipe, vuk::AccessFlagBits::eMemoryWrite, vuk::ImageLayout::eGeneral };
+		case eMemoryRW: return { vuk::PipelineStageFlagBits::eBottomOfPipe, vuk::AccessFlagBits::eMemoryRead | vuk::AccessFlagBits::eMemoryWrite, vuk::ImageLayout::eGeneral };
+
+		case eNone:
+			return { vuk::PipelineStageFlagBits::eTopOfPipe, vuk::AccessFlagBits{}, vuk::ImageLayout::eUndefined };
+		case eClear:
+			return { vuk::PipelineStageFlagBits::eColorAttachmentOutput, vuk::AccessFlagBits::eColorAttachmentWrite, vuk::ImageLayout::ePreinitialized };
+		case eTransferClear:
+			return { vuk::PipelineStageFlagBits::eTransfer, vuk::AccessFlagBits::eTransferWrite, vuk::ImageLayout::eTransferDstOptimal };
+		default:
+			assert(0 && "NYI");
+			return {};
+		}
+
+	}
+
+	inline bool is_framebuffer_attachment(const Resource& r) {
+		if (r.type == Resource::Type::eBuffer) return false;
+		switch (r.ia) {
+		case eColorWrite:
+		case eColorRW:
+		case eDepthStencilRW:
+		case eColorRead:
+		case eDepthStencilRead:
+		case eColorResolveRead:
+		case eColorResolveWrite:
+			return true;
+		default:
+			return false;
+		}
+	}
+
+	inline bool is_framebuffer_attachment(Resource::Use u) {
+		switch (u.layout) {
+		case vuk::ImageLayout::eColorAttachmentOptimal:
+		case vuk::ImageLayout::eDepthStencilAttachmentOptimal:
+			return true;
+		default:
+			return false;
+		}
+	}
+
+	inline bool is_write_access(Resource::Use u) {
+		if (u.access & vuk::AccessFlagBits::eColorAttachmentWrite) return true;
+		if (u.access & vuk::AccessFlagBits::eDepthStencilAttachmentWrite) return true;
+		if (u.access & vuk::AccessFlagBits::eShaderWrite) return true;
+		if (u.access & vuk::AccessFlagBits::eTransferWrite) return true;
+		if (u.access & vuk::AccessFlagBits::eHostWrite) return true;
+		assert(0 && "NYI");
+		return false;
+	}
+
+	inline bool is_read_access(Resource::Use u) {
+		return !is_write_access(u);
+	}
+
+	struct UseRef {
+		Resource::Use use;
+		PassInfo* pass = nullptr;
+	};
+
+	template<class T>
+	Name resolve_name(Name in, const T& aliases) {
+		auto it = aliases.find(in);
+		if (it == aliases.end())
+			return in;
+		else
+			return resolve_name(it->second, aliases);
+	};
+
+	struct PassInfo {
+		PassInfo(arena&, Pass&&);
+
+		Pass pass;
+
+		size_t render_pass_index;
+		uint32_t subpass;
+
+		robin_hood::unordered_flat_set<Resource> inputs;
+		robin_hood::unordered_flat_set<Resource> outputs;
+
+		robin_hood::unordered_flat_set<Resource> global_inputs;
+		robin_hood::unordered_flat_set<Resource> global_outputs;
+
+		bool is_head_pass = false;
+		bool is_tail_pass = false;
+	};
+
+	struct AttachmentSInfo {
+		vuk::ImageLayout layout;
+		vuk::AccessFlags access;
+		vuk::PipelineStageFlags stage;
+	};
+
+	struct AttachmentRPInfo {
+		Name name;
+
+		vuk::Dimension2D extents;
+		vuk::Samples samples;
+
+		VkAttachmentDescription description = {};
+
+		Resource::Use initial, final;
+
+		enum class Type {
+			eInternal, eExternal, eSwapchain
+		} type;
+
+		vuk::ImageView iv;
+		vuk::Image image = {};
+		// swapchain for swapchain
+		Swapchain* swapchain;
+
+		// optionally set
+		bool should_clear = false;
+		Clear clear_value;
+	};
+
+	struct BufferInfo {
+		Name name;
+
+		Resource::Use initial;
+		Resource::Use final;
+
+		vuk::Buffer buffer;
+	};
+
+	struct ImageBarrier {
+		Name image;
+		VkImageMemoryBarrier barrier = {};
+		vuk::PipelineStageFlags src;
+		vuk::PipelineStageFlags dst;
+	};
+
+	struct MemoryBarrier {
+		VkMemoryBarrier barrier = {};
+		vuk::PipelineStageFlags src;
+		vuk::PipelineStageFlags dst;
+	};
+
+	struct SubpassInfo {
+		SubpassInfo(arena&);
+		bool use_secondary_command_buffers;
+		std::vector<PassInfo*, short_alloc<PassInfo*, 16>> passes;
+		std::vector<ImageBarrier> pre_barriers;
+		std::vector<ImageBarrier> post_barriers;
+		std::vector<MemoryBarrier> pre_mem_barriers, post_mem_barriers;
+	};
+
+	struct RenderPassInfo {
+		RenderPassInfo(arena&);
+		std::vector<SubpassInfo, short_alloc<SubpassInfo, 64>> subpasses;
+		std::vector<AttachmentRPInfo, short_alloc<AttachmentRPInfo, 16>> attachments;
+		vuk::RenderPassCreateInfo rpci;
+		vuk::FramebufferCreateInfo fbci;
+		bool framebufferless = false;
+		VkRenderPass handle = {};
+		VkFramebuffer framebuffer;
+	};
+
+} // namespace vuk

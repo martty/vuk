@@ -132,6 +132,7 @@ namespace vuk {
 		constexpr static auto e64 = SampleCountFlagBits::e64;
 	};
 
+	struct Offset3D;
 	struct Offset2D {
 		int32_t x = {};
 		int32_t y = {};
@@ -152,17 +153,14 @@ namespace vuk {
 		operator VkOffset2D& () noexcept {
 			return *reinterpret_cast<VkOffset2D*>(this);
 		}
+
+		explicit operator Offset3D();
 	};
 
 	struct Extent3D;
 	struct Extent2D {
 		uint32_t width = {};
 		uint32_t height = {};
-
-		struct Framebuffer {
-			float width = 1.0f;
-			float height = 1.0f;
-		};
 
 		bool operator==(Extent2D const& rhs) const noexcept {
 			return (width == rhs.width)
@@ -208,6 +206,10 @@ namespace vuk {
 		}
 	};
 
+	inline Offset2D::operator Offset3D() {
+		return Offset3D{ x, y, 0 };
+	}
+
 	struct Extent3D {
 		uint32_t width = {};
 		uint32_t height = {};
@@ -233,38 +235,16 @@ namespace vuk {
 	};
 
 	inline Extent2D::operator Extent3D() {
-		return Extent3D{ width, height, 1 };
+		return Extent3D{ width, height, 1u };
 	}
-
-	struct Rect2D {
-		Offset2D offset = {};
-		Extent2D extent = {};
-
-		operator VkRect2D const& () const noexcept {
-			return *reinterpret_cast<const VkRect2D*>(this);
-		}
-
-		operator VkRect2D& () noexcept {
-			return *reinterpret_cast<VkRect2D*>(this);
-		}
-
-		bool operator==(Rect2D const& rhs) const noexcept {
-			return (offset == rhs.offset)
-				&& (extent == rhs.extent);
-		}
-
-		bool operator!=(Rect2D const& rhs) const noexcept {
-			return !operator==(rhs);
-		}
-	};
 
 	struct Viewport {
 		float x = {};
 		float y = {};
 		float width = {};
 		float height = {};
-		float minDepth = {};
-		float maxDepth = {};
+		float minDepth = 0.f;
+		float maxDepth = 1.f;
 
 		operator VkViewport const& () const noexcept {
 			return *reinterpret_cast<const VkViewport*>(this);
@@ -289,6 +269,59 @@ namespace vuk {
 	};
 	static_assert(sizeof(Viewport) == sizeof(VkViewport), "struct and wrapper have different size!");
 	static_assert(std::is_standard_layout<Viewport>::value, "struct wrapper is not a standard layout!");
+
+	enum class Sizing { eAbsolute, eRelative };
+
+	struct Dimension2D {
+		Sizing sizing = Sizing::eAbsolute;
+
+		Extent2D extent;
+
+		struct {
+			float width = 1.0f;
+			float height = 1.0f;
+		} _relative;
+
+		static Dimension2D absolute(uint32_t width, uint32_t height) {
+			return Dimension2D{ .extent = {width, height} };
+		}
+		static Dimension2D absolute(Extent2D extent) {
+			return Dimension2D{ .extent = extent };
+		}
+		static Dimension2D relative(float width, float height) {
+			return Dimension2D{ .sizing = Sizing::eRelative, ._relative = {.width = width, .height = height} };
+		}
+		static Dimension2D framebuffer() {
+			return Dimension2D{ .sizing = Sizing::eRelative };
+		}
+	};
+
+	struct Rect2D {
+		Sizing sizing = Sizing::eAbsolute;
+
+		Offset2D offset = {};
+		Extent2D extent = {};
+
+		struct {
+			float x = 0.f;
+			float y = 0.f;
+			float width = 1.0f;
+			float height = 1.0f;
+		} _relative;
+
+		static Rect2D absolute(int32_t x, int32_t y, uint32_t width, uint32_t height) {
+			return Rect2D{ .offset = {x, y}, .extent = {width, height} };
+		}
+		static Rect2D absolute(Offset2D offset, Extent2D extent) {
+			return Rect2D{ .offset = offset, .extent = extent };
+		}
+		static Rect2D relative(float x, float y, float width, float height) {
+			return Rect2D{ .sizing = Sizing::eRelative, ._relative = {.x = x, .y = y, .width = width, .height = height } };
+		}
+		static Rect2D framebuffer() {
+			return Rect2D{ .sizing = Sizing::eRelative };
+		}
+	};
 
 	enum class Format {
 		eUndefined = VK_FORMAT_UNDEFINED,
@@ -568,6 +601,13 @@ namespace vuk {
 		eR12X4UnormPack16KHR = VK_FORMAT_R12X4_UNORM_PACK16_KHR
 	};
 
+	// return the texel block size of a format
+	uint32_t format_to_texel_block_size(vuk::Format) noexcept;
+	// return the 3D texel block extent of a format
+	Extent3D format_to_texel_block_extent(vuk::Format) noexcept;
+	// compute the byte size of an image with given format and extent
+	uint32_t compute_image_size(vuk::Format, vuk::Extent3D) noexcept;
+
 	enum class IndexType {
 		eUint16 = VK_INDEX_TYPE_UINT16,
 		eUint32 = VK_INDEX_TYPE_UINT32,
@@ -768,6 +808,53 @@ namespace vuk {
 		return PipelineStageFlags(bit0) ^ bit1;
 	}
 
+	enum class AccessFlagBits : VkAccessFlags {
+		eIndirectCommandRead = VK_ACCESS_INDIRECT_COMMAND_READ_BIT,
+		eIndexRead = VK_ACCESS_INDEX_READ_BIT,
+		eVertexAttributeRead = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT,
+		eUniformRead = VK_ACCESS_UNIFORM_READ_BIT,
+		eInputAttachmentRead = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT,
+		eShaderRead = VK_ACCESS_SHADER_READ_BIT,
+		eShaderWrite = VK_ACCESS_SHADER_WRITE_BIT,
+		eColorAttachmentRead = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT,
+		eColorAttachmentWrite = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+		eDepthStencilAttachmentRead = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
+		eDepthStencilAttachmentWrite = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+		eTransferRead = VK_ACCESS_TRANSFER_READ_BIT,
+		eTransferWrite = VK_ACCESS_TRANSFER_WRITE_BIT,
+		eHostRead = VK_ACCESS_HOST_READ_BIT,
+		eHostWrite = VK_ACCESS_HOST_WRITE_BIT,
+		eMemoryRead = VK_ACCESS_MEMORY_READ_BIT,
+		eMemoryWrite = VK_ACCESS_MEMORY_WRITE_BIT,
+		eTransformFeedbackWriteEXT = VK_ACCESS_TRANSFORM_FEEDBACK_WRITE_BIT_EXT,
+		eTransformFeedbackCounterReadEXT = VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_READ_BIT_EXT,
+		eTransformFeedbackCounterWriteEXT = VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_WRITE_BIT_EXT,
+		eConditionalRenderingReadEXT = VK_ACCESS_CONDITIONAL_RENDERING_READ_BIT_EXT,
+		eColorAttachmentReadNoncoherentEXT = VK_ACCESS_COLOR_ATTACHMENT_READ_NONCOHERENT_BIT_EXT,
+		eAccelerationStructureReadKHR = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,
+		eAccelerationStructureWriteKHR = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,
+		eShadingRateImageReadNV = VK_ACCESS_SHADING_RATE_IMAGE_READ_BIT_NV,
+		eFragmentDensityMapReadEXT = VK_ACCESS_FRAGMENT_DENSITY_MAP_READ_BIT_EXT,
+		eCommandPreprocessReadNV = VK_ACCESS_COMMAND_PREPROCESS_READ_BIT_NV,
+		eCommandPreprocessWriteNV = VK_ACCESS_COMMAND_PREPROCESS_WRITE_BIT_NV,
+		eAccelerationStructureReadNV = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_NV,
+		eAccelerationStructureWriteNV = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_NV
+	};
+
+	using AccessFlags = Flags<AccessFlagBits>;
+
+	inline constexpr AccessFlags operator|(AccessFlagBits bit0, AccessFlagBits bit1) noexcept {
+		return AccessFlags(bit0) | bit1;
+	}
+
+	inline constexpr AccessFlags operator&(AccessFlagBits bit0, AccessFlagBits bit1) noexcept {
+		return AccessFlags(bit0) & bit1;
+	}
+
+	inline constexpr AccessFlags operator^(AccessFlagBits bit0, AccessFlagBits bit1) noexcept {
+		return AccessFlags(bit0) ^ bit1;
+	}
+
 	enum class MemoryUsage {
 		eGPUonly = 1/*VMA_MEMORY_USAGE_GPU_ONLY*/,
 		eCPUtoGPU = 3/*VMA_MEMORY_USAGE_CPU_TO_GPU*/,
@@ -816,7 +903,7 @@ namespace vuk {
 		Clear() = default;
 		Clear(ClearColor cc) { c.color = cc.ccv; }
 		Clear(ClearDepthStencil cc) { c.depthStencil = cc.cdsv; }
-	
+
 		VkClearValue c;
 	};
 

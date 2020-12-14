@@ -60,64 +60,95 @@ namespace vuk {
 		Program get_pipeline_reflection_info(PipelineBaseCreateInfo pbci);
 		ShaderModule compile_shader(std::string source, Name path);
 
-		ShaderModule create(const create_info_t<ShaderModule>& cinfo);
-		PipelineBaseInfo create(const create_info_t<PipelineBaseInfo>& cinfo);
-		VkPipelineLayout create(const create_info_t<VkPipelineLayout>& cinfo);
-		DescriptorSetLayoutAllocInfo create(const create_info_t<DescriptorSetLayoutAllocInfo>& cinfo);
-		ComputePipelineInfo create(const create_info_t<ComputePipelineInfo>& cinfo);
-
 		bool load_pipeline_cache(std::span<uint8_t> data);
 		std::vector<uint8_t> save_pipeline_cache();
 
 		uint32_t(*get_thread_index)() = nullptr;
 
-		// when the fence is signaled, caller should clean up the resources
+		/// @brief Information about a pending upload
 		struct UploadResult {
+			/// @brief Fence to be signaled when the upload completes
 			VkFence fence;
+			/// @brief VKCommandBuffer that is used for the upload
 			VkCommandBuffer command_buffer;
+			/// @brief Staging buffer memory used for this upload
 			vuk::Buffer staging;
+			/// @brief If this is a buffer or an image upload
 			bool is_buffer;
+			/// @brief Thread index of the initiator thread
 			unsigned thread_index;
 		};
 
+		/// @brief Describes a single upload to a Buffer
 		struct BufferUpload {
+			/// @brief Buffer to upload to
 			vuk::Buffer dst;
+			/// @brief Data to upload
 			std::span<unsigned char> data;
 		};
-		UploadResult fenced_upload(std::span<BufferUpload>);
 
+		/// @brief Enqueue buffer data for upload
+		/// @param uploads BufferUpload structures describing the upload parameters
+		/// @return UploadResult
+		UploadResult fenced_upload(std::span<BufferUpload> uploads);
+
+		/// @brief Describes a single upload to an Image
 		struct ImageUpload {
+			/// @brief Image to upload to
 			vuk::Image dst;
+			/// @brief Format of the image data
 			vuk::Format format;
+			/// @brief Extent of the image data
 			vuk::Extent3D extent;
+			/// @brief Image data
 			std::span<unsigned char> data;
 		};
-		UploadResult fenced_upload(std::span<ImageUpload>);
-		void free_upload_resources(const UploadResult&);
+
+		/// @brief Enqueue image data for upload
+		/// @param uploads ImageUpload structures describing the upload parameters
+		/// @return UploadResult
+		UploadResult fenced_upload(std::span<ImageUpload> uploads);
+		/// @brief Free upload resources involved in a fenced upload
+		/// @param result UploadResult to free
+		void free_upload_resources(const UploadResult& result);
 
 		Buffer allocate_buffer(MemoryUsage mem_usage, BufferUsageFlags buffer_usage, size_t size, size_t alignment);
 		Texture allocate_texture(vuk::ImageCreateInfo ici);
 
+		/// @brief Manually request destruction of vuk::Image
 		void enqueue_destroy(vuk::Image);
+		/// @brief Manually request destruction of vuk::ImageView
 		void enqueue_destroy(vuk::ImageView);
-		void enqueue_destroy(VkPipeline);
+		/// @brief Manually request destruction of vuk::Buffer
 		void enqueue_destroy(vuk::Buffer);
+		/// @brief Manually request destruction of vuk::PersistentDescriptorSet
 		void enqueue_destroy(vuk::PersistentDescriptorSet);
 
-		template<class T>
-		Handle<T> wrap(T payload);
-
-		SwapchainRef add_swapchain(Swapchain sw);
-
+		/// @brief Add a swapchain to be managed by the Context
+		/// @return Reference to the new swapchain that can be used during presentation
+		SwapchainRef add_swapchain(Swapchain);
+		
+		/// @brief Begin new frame, with a new InflightContext
+		/// @return the new InflightContext
 		InflightContext begin();
 
+		/// @brief Wait for the device to become idle. Useful for only a few synchronisation events, like resizing or shutting down.
 		void wait_idle();
+
+		/// @brief Create a wrapped handle type (eg. a vuk::ImageView) from an externally sourced Vulkan handle
+		/// @tparam T Vulkan handle type to wrap
+		/// @param payload Vulkan handle to wrap
+		/// @return The wrapped handle.
+		template<class T>
+		Handle<T> wrap(T payload);
 
 		void submit_graphics(VkSubmitInfo, VkFence);
 		void submit_transfer(VkSubmitInfo, VkFence);
 	private:
 		struct ContextImpl* impl;
 		std::atomic<size_t> unique_handle_id_counter = 0;
+
+		void enqueue_destroy(VkPipeline);
 
 		void destroy(const struct RGImage& image);
 		void destroy(const struct PoolAllocator& v);
@@ -132,6 +163,12 @@ namespace vuk {
 		void destroy(const VkFramebuffer& fb);
 		void destroy(const Sampler& sa);
 		void destroy(const PipelineBaseInfo& pbi);
+
+		ShaderModule create(const create_info_t<ShaderModule>& cinfo);
+		PipelineBaseInfo create(const create_info_t<PipelineBaseInfo>& cinfo);
+		VkPipelineLayout create(const create_info_t<VkPipelineLayout>& cinfo);
+		DescriptorSetLayoutAllocInfo create(const create_info_t<DescriptorSetLayoutAllocInfo>& cinfo);
+		ComputePipelineInfo create(const create_info_t<ComputePipelineInfo>& cinfo);
 
 		friend class InflightContext;
 		friend class PerThreadContext;
@@ -316,7 +353,7 @@ namespace vuk {
 
 // utility functions
 namespace vuk {
-	struct RenderGraph;
-	bool execute_submit_and_present_to_one(PerThreadContext& ptc, RenderGraph& rg, SwapchainRef swapchain);
-	void execute_submit_and_wait(PerThreadContext& ptc, RenderGraph& rg);
+	struct ExecutableRenderGraph;
+	bool execute_submit_and_present_to_one(PerThreadContext& ptc, ExecutableRenderGraph&& rg, SwapchainRef swapchain);
+	void execute_submit_and_wait(PerThreadContext& ptc, ExecutableRenderGraph&& rg);
 }

@@ -16,28 +16,6 @@ namespace vuk {
 	class Context;
 	class PerThreadContext;
 
-	struct Area {
-		enum class Sizing {eAbsolute, eRelative} sizing = Sizing::eAbsolute;
-
-		static Area absolute(int32_t x, int32_t y, uint32_t width, uint32_t height) {
-            return Area{.sizing = Sizing::eAbsolute, .offset = {x, y}, .extent = {width, height}};
-		}
-		static Area relative(float x, float y, float width, float height) {
-            return Area{.sizing = Sizing::eRelative, .x = x, .y = y, .width = width, .height = height};
-		}
-		static Area framebuffer() {
-            return Area{.sizing = Sizing::eRelative};
-		}
-		
-		vuk::Offset2D offset;
-		vuk::Extent2D extent;
-
-		float x = 0.f;
-        float y = 0.f;
-        float width = 1.0f;
-        float height = 1.0f;
-    };
-
 	struct Ignore {
 		Ignore(size_t bytes) : format(vuk::Format::eUndefined), bytes((uint32_t)bytes) {}
 		Ignore(Format format) : format(format) {}
@@ -184,16 +162,16 @@ namespace vuk {
 	static_assert(std::is_standard_layout<BufferImageCopy>::value, "struct wrapper is not a standard layout!");
 
 
-	struct RenderGraph;
+	struct ExecutableRenderGraph;
 	struct PassInfo;
 
 	class CommandBuffer {
-    protected:
-		friend struct RenderGraph;
-		RenderGraph* rg = nullptr;
+	protected:
+		friend struct ExecutableRenderGraph;
+		ExecutableRenderGraph* rg = nullptr;
 		vuk::PerThreadContext& ptc;
 		VkCommandBuffer command_buffer;
-		
+
 		struct RenderPassInfo {
 			VkRenderPass renderpass;
 			uint32_t subpass;
@@ -203,7 +181,7 @@ namespace vuk {
 		};
 		std::optional<RenderPassInfo> ongoing_renderpass;
 		PassInfo* current_pass = nullptr;
-        vuk::PrimitiveTopology topology = vuk::PrimitiveTopology::eTriangleList;
+		vuk::PrimitiveTopology topology = vuk::PrimitiveTopology::eTriangleList;
 		vuk::fixed_vector<vuk::VertexInputAttributeDescription, VUK_MAX_ATTRIBUTES> attribute_descriptions;
 		vuk::fixed_vector<VkVertexInputBindingDescription, VUK_MAX_ATTRIBUTES> binding_descriptions;
 		vuk::fixed_vector<VkPushConstantRange, VUK_MAX_PUSHCONSTANT_RANGES> pcrs;
@@ -218,26 +196,25 @@ namespace vuk {
 		std::array<VkDescriptorSet, VUK_MAX_SETS> persistent_sets = {};
 
 		// for rendergraph
-		CommandBuffer(RenderGraph& rg, vuk::PerThreadContext& ptc, VkCommandBuffer cb) : rg(&rg), ptc(ptc), command_buffer(cb) {}
-		CommandBuffer(RenderGraph& rg, vuk::PerThreadContext& ptc, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing) : rg(&rg), ptc(ptc), command_buffer(cb), ongoing_renderpass(ongoing) {}
+		CommandBuffer(ExecutableRenderGraph& rg, vuk::PerThreadContext& ptc, VkCommandBuffer cb) : rg(&rg), ptc(ptc), command_buffer(cb) {}
+		CommandBuffer(ExecutableRenderGraph& rg, vuk::PerThreadContext& ptc, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing) : rg(&rg), ptc(ptc), command_buffer(cb), ongoing_renderpass(ongoing) {}
 	public:
 		// for one shot
 		CommandBuffer(vuk::PerThreadContext& ptc);
 		// for secondary cbufs
-		CommandBuffer(RenderGraph* rg, vuk::PerThreadContext& ptc, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing) : rg(rg), ptc(ptc), command_buffer(cb), ongoing_renderpass(ongoing) {}
+		CommandBuffer(ExecutableRenderGraph* rg, vuk::PerThreadContext& ptc, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing) : rg(rg), ptc(ptc), command_buffer(cb), ongoing_renderpass(ongoing) {}
 
 		vuk::PerThreadContext& get_context() {
-            return ptc;
-        }
+			return ptc;
+		}
 		const RenderPassInfo& get_ongoing_renderpass() const;
 		vuk::Buffer get_resource_buffer(Name) const;
 		vuk::Image get_resource_image(Name) const;
 		vuk::ImageView get_resource_image_view(Name) const;
 
-		CommandBuffer& set_viewport(unsigned index, vuk::Viewport vp);	
-		CommandBuffer& set_viewport(unsigned index, Area area);
-		CommandBuffer& set_scissor(unsigned index, vuk::Rect2D vp);
-		CommandBuffer& set_scissor(unsigned index, Area area);
+		CommandBuffer& set_viewport(unsigned index, Viewport vp);
+		CommandBuffer& set_viewport(unsigned index, Rect2D area, float min_depth = 0.f, float max_depth = 1.f);
+		CommandBuffer& set_scissor(unsigned index, Rect2D vp);
 
 		CommandBuffer& bind_graphics_pipeline(vuk::PipelineBaseInfo*);
 		CommandBuffer& bind_graphics_pipeline(Name);
@@ -256,18 +233,18 @@ namespace vuk {
 		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, Name, vuk::ImageViewCreateInfo ivci, vuk::SamplerCreateInfo sampler_create_info);
 
 		CommandBuffer& bind_persistent(unsigned set, PersistentDescriptorSet&);
-		
-		CommandBuffer& push_constants(vuk::ShaderStageFlags stages, size_t offset, void * data, size_t size);
+
+		CommandBuffer& push_constants(vuk::ShaderStageFlags stages, size_t offset, void* data, size_t size);
 		template<class T>
 		CommandBuffer& push_constants(vuk::ShaderStageFlags stages, size_t offset, std::span<T> span);
 		template<class T>
 		CommandBuffer& push_constants(vuk::ShaderStageFlags stages, size_t offset, T value);
 
 		CommandBuffer& bind_uniform_buffer(unsigned set, unsigned binding, Buffer buffer);
-        CommandBuffer& bind_storage_buffer(unsigned set, unsigned binding, Buffer buffer);
+		CommandBuffer& bind_storage_buffer(unsigned set, unsigned binding, Buffer buffer);
 
-        CommandBuffer& bind_storage_image(unsigned set, unsigned binding, vuk::ImageView image_view);
-        CommandBuffer& bind_storage_image(unsigned set, unsigned binding, Name);
+		CommandBuffer& bind_storage_image(unsigned set, unsigned binding, vuk::ImageView image_view);
+		CommandBuffer& bind_storage_image(unsigned set, unsigned binding, Name);
 
 		void* _map_scratch_uniform_binding(unsigned set, unsigned binding, size_t size);
 
@@ -284,13 +261,13 @@ namespace vuk {
 		CommandBuffer& dispatch_invocations(size_t invocation_count_x, size_t invocation_count_y = 1, size_t invocation_count_z = 1);
 
 		class SecondaryCommandBuffer begin_secondary();
-        void execute(std::span<VkCommandBuffer>);
+		void execute(std::span<VkCommandBuffer>);
 
 		// commands for renderpass-less command buffers
 		void clear_image(Name src, Clear);
 		void resolve_image(Name src, Name dst);
 		void blit_image(Name src, Name dst, vuk::ImageBlit region, vuk::Filter filter);
-        void copy_image_to_buffer(Name src, Name dst, vuk::BufferImageCopy);
+		void copy_image_to_buffer(Name src, Name dst, vuk::BufferImageCopy);
 		// explicit synchronisation
 		void image_barrier(Name, vuk::Access src_access, vuk::Access dst_access);
 	protected:
@@ -300,7 +277,7 @@ namespace vuk {
 	};
 
 	class SecondaryCommandBuffer : public CommandBuffer {
-    public:
+	public:
 		using CommandBuffer::CommandBuffer;
 		VkCommandBuffer get_buffer();
 

@@ -10,7 +10,7 @@ layout(binding = 2) uniform sampler2D tex;
 
 void main() 
 {
-  vec3 col = texture(tex, vec2(inUV.x, 1-inUV.y)).xyz;
+  vec3 col = texture(tex, vec2(inUV.x, inUV.y)).xyz;
   if(any(greaterThan(col, vec3(0.8)))) discard;
-  outFragColor = vec4(inColor * pow(1 - gl_FragCoord.z, 1/3) * texture(tex, vec2(inUV.x, 1-inUV.y)).xyz, 1.0);
+  outFragColor = vec4(inColor * pow(1 - gl_FragCoord.z, 1/3) * texture(tex, vec2(inUV.x, inUV.y)).xyz, 1.0);
 }

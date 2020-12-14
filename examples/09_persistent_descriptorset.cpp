@@ -106,13 +106,11 @@ namespace {
 			// Bind the resources for the variant generation
 			// We specify the initial and final access
 			// The texture we have created is already in ShaderReadOptimal, but we need it in General during the pass, and we need it back to ShaderReadOptimal afterwards
-			rg.bind_attachment("09_doge", vuk::Attachment::from_texture(*texture_of_doge), vuk::eFragmentSampled, vuk::eFragmentSampled);
-			rg.bind_attachment("09_v1", vuk::Attachment::from_texture(*variant1), vuk::eNone, vuk::eFragmentSampled);
-			rg.bind_attachment("09_v2", vuk::Attachment::from_texture(*variant2), vuk::eNone, vuk::eFragmentSampled);
-			rg.build();
-			rg.build(ptc);
+			rg.attach_image("09_doge", vuk::ImageAttachment::from_texture(*texture_of_doge), vuk::eFragmentSampled, vuk::eFragmentSampled);
+			rg.attach_image("09_v1", vuk::ImageAttachment::from_texture(*variant1), vuk::eNone, vuk::eFragmentSampled);
+			rg.attach_image("09_v2", vuk::ImageAttachment::from_texture(*variant2), vuk::eNone, vuk::eFragmentSampled);
 			// The rendergraph is submitted and fence-waited on
-			execute_submit_and_wait(ptc, rg);
+			execute_submit_and_wait(ptc, std::move(rg).link(ptc));
 
 			// Create persistent descriptorset for a pipeline and set index
 			pda = ptc.create_persistent_descriptorset(*runner.context->get_named_pipeline("bindless_cube"), 1, 64);
@@ -138,6 +136,7 @@ namespace {
 			} vp;
 			vp.view = glm::lookAt(glm::vec3(0, 1.5, 5.5), glm::vec3(0), glm::vec3(0, 1, 0));
 			vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 1.f, 10.f);
+			vp.proj[1][1] *= -1;
 
 			auto [buboVP, stub3] = ptc.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eUniformBuffer, std::span(&vp, 1));
 			auto uboVP = buboVP;
@@ -150,8 +149,8 @@ namespace {
 				.resources = {"09_persistent_descriptorset_final"_image(vuk::eColorWrite), "09_depth"_image(vuk::eDepthStencilRW)},
 				.execute = [verts, uboVP, inds](vuk::CommandBuffer& command_buffer) {
 					command_buffer
-					  .set_viewport(0, vuk::Area::framebuffer())
-					  .set_scissor(0, vuk::Area::framebuffer())
+					  .set_viewport(0, vuk::Rect2D::framebuffer())
+					  .set_scissor(0, vuk::Rect2D::framebuffer())
 					  .bind_vertex_buffer(0, verts, 0, vuk::Packed{vuk::Format::eR32G32B32Sfloat, vuk::Ignore{offsetof(util::Vertex, uv_coordinates) - sizeof(util::Vertex::position)}, vuk::Format::eR32G32Sfloat})
 					  .bind_index_buffer(inds, vuk::IndexType::eUint32)
 					  .bind_persistent(1, pda.get())
@@ -170,7 +169,7 @@ namespace {
 
 			  angle += 10.f * ImGui::GetIO().DeltaTime;
 
-			  rg.mark_attachment_internal("09_depth", vuk::Format::eD32Sfloat, vuk::Extent2D::Framebuffer{}, vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
+			  rg.attach_managed("09_depth", vuk::Format::eD32Sfloat, vuk::Dimension2D::framebuffer(), vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
 			  return rg;
 		  },
 			// Perform cleanup for the example

@@ -41,12 +41,12 @@ namespace std {
 			return h;
 		}
 	};
-	
+
 	template <>
 	struct hash<vuk::BufferID> {
-		size_t operator()(vuk::BufferID const & x) const noexcept {
+		size_t operator()(vuk::BufferID const& x) const noexcept {
 			size_t h = 0;
-			hash_combine(h, x.vk_buffer, x.offset); 
+			hash_combine(h, x.vk_buffer, x.offset);
 			return h;
 		}
 	};
@@ -113,7 +113,7 @@ namespace vuk {
 		std::unordered_map<uint64_t, std::pair<VkBuffer, size_t>> buffers;
 
 		VmaAllocator allocator;
-        VkPhysicalDeviceProperties properties;
+		VkPhysicalDeviceProperties properties;
 	public:
 		Allocator(VkInstance instance, VkDevice device, VkPhysicalDevice phys_dev);
 		~Allocator();
@@ -126,7 +126,7 @@ namespace vuk {
 		Buffer allocate_buffer(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, size_t size, size_t alignment, bool create_mapped);
 		// allocate a buffer from an externally managed pool
 		Buffer allocate_buffer(PoolAllocator& pool, size_t size, size_t alignment, bool create_mapped);
-        // allocate a buffer from an externally managed linear pool
+		// allocate a buffer from an externally managed linear pool
 		Buffer allocate_buffer(LinearAllocator& pool, size_t size, size_t alignment, bool create_mapped);
 
 		size_t get_allocation_size(const Buffer&);
@@ -137,7 +137,7 @@ namespace vuk {
 		void free_buffer(const Buffer& b);
 		void destroy(const PoolAllocator& pool);
 		void destroy(const LinearAllocator& pool);
-		
+
 		vuk::Image create_image_for_rendertarget(vuk::ImageCreateInfo ici);
 		vuk::Image create_image(vuk::ImageCreateInfo ici);
 		void destroy_image(vuk::Image image);

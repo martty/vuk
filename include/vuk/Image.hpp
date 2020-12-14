@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Types.hpp"
+#include "CreateInfo.hpp"
 
 namespace vuk {
 	using Image = VkImage;
@@ -117,7 +118,7 @@ namespace vuk {
 
 	struct ImageCreateInfo {
 		static constexpr VkStructureType structureType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-		
+
 		VkStructureType sType = structureType;
 		const void* pNext = {};
 		ImageCreateFlags flags = {};
@@ -237,17 +238,17 @@ namespace vuk {
 	};
 
 	using ImageAspectFlags = Flags<ImageAspectFlagBits>;
-    inline constexpr ImageAspectFlags operator|(ImageAspectFlagBits bit0, ImageAspectFlagBits bit1) noexcept {
-        return ImageAspectFlags(bit0) | bit1;
-    }
+	inline constexpr ImageAspectFlags operator|(ImageAspectFlagBits bit0, ImageAspectFlagBits bit1) noexcept {
+		return ImageAspectFlags(bit0) | bit1;
+	}
 
-    inline constexpr ImageAspectFlags operator&(ImageAspectFlagBits bit0, ImageAspectFlagBits bit1) noexcept {
-        return ImageAspectFlags(bit0) & bit1;
-    }
+	inline constexpr ImageAspectFlags operator&(ImageAspectFlagBits bit0, ImageAspectFlagBits bit1) noexcept {
+		return ImageAspectFlags(bit0) & bit1;
+	}
 
-    inline constexpr ImageAspectFlags operator^(ImageAspectFlagBits bit0, ImageAspectFlagBits bit1) noexcept {
-        return ImageAspectFlags(bit0) ^ bit1;
-    }
+	inline constexpr ImageAspectFlags operator^(ImageAspectFlagBits bit0, ImageAspectFlagBits bit1) noexcept {
+		return ImageAspectFlags(bit0) ^ bit1;
+	}
 
 	struct ImageSubresourceRange {
 		ImageAspectFlags aspectMask = {};
@@ -282,7 +283,7 @@ namespace vuk {
 
 	struct ImageViewCreateInfo {
 		static constexpr VkStructureType structureType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-		
+
 		VkStructureType sType = structureType;
 		const void* pNext = {};
 		ImageViewCreateFlags flags = {};
@@ -425,39 +426,32 @@ namespace vuk {
 	static_assert(sizeof(SamplerCreateInfo) == sizeof(VkSamplerCreateInfo), "struct and wrapper have different size!");
 	static_assert(std::is_standard_layout<SamplerCreateInfo>::value, "struct wrapper is not a standard layout!");
 
-	template<> struct create_info<vuk::Sampler> {
+	template<> struct create_info<Sampler> {
 		using type = vuk::SamplerCreateInfo;
 	};
 
 	struct Texture {
-		Unique<vuk::Image> image;
-		Unique<vuk::ImageView> view;
-		vuk::Extent3D extent;
-		vuk::Format format;
-		vuk::Samples sample_count;
+		Unique<Image> image;
+		Unique<ImageView> view;
+		Extent3D extent;
+		Format format;
+		Samples sample_count;
 	};
 
 	inline vuk::ImageAspectFlags format_to_aspect(vuk::Format format) noexcept {
-        switch(format) {
-            case vuk::Format::eD16Unorm:
-            case vuk::Format::eD32Sfloat:
-            case vuk::Format::eX8D24UnormPack32:
-                return vuk::ImageAspectFlagBits::eDepth;
-            case vuk::Format::eD16UnormS8Uint:
-            case vuk::Format::eD24UnormS8Uint:
-            case vuk::Format::eD32SfloatS8Uint:
-                return vuk::ImageAspectFlagBits::eDepth | vuk::ImageAspectFlagBits::eStencil;
-            case vuk::Format::eS8Uint:
-                return vuk::ImageAspectFlagBits::eStencil;
-			default:
-                return vuk::ImageAspectFlagBits::eColor;
-        }
-    }
-
-	// return the texel block size of a format
-	uint32_t format_to_texel_block_size(vuk::Format) noexcept;
-	// return the 3D texel block extent of a format
-	Extent3D format_to_texel_block_extent(vuk::Format) noexcept;
-	// compute the byte size of an image with given format and extent
-	uint32_t compute_image_size(vuk::Format, vuk::Extent3D) noexcept;
+		switch (format) {
+		case vuk::Format::eD16Unorm:
+		case vuk::Format::eD32Sfloat:
+		case vuk::Format::eX8D24UnormPack32:
+			return vuk::ImageAspectFlagBits::eDepth;
+		case vuk::Format::eD16UnormS8Uint:
+		case vuk::Format::eD24UnormS8Uint:
+		case vuk::Format::eD32SfloatS8Uint:
+			return vuk::ImageAspectFlagBits::eDepth | vuk::ImageAspectFlagBits::eStencil;
+		case vuk::Format::eS8Uint:
+			return vuk::ImageAspectFlagBits::eStencil;
+		default:
+			return vuk::ImageAspectFlagBits::eColor;
+		}
+	}
 };
