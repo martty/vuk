@@ -41,11 +41,11 @@ uint opColorSmoothUnion(uint c1, uint c2, float d1, float d2, float k){
 	return packUnorm4x8(vec4(vec3(mix(unpackUnorm4x8(c2), unpackUnorm4x8(c1), vec4(h))), 1.0));
 }
 
-layout(binding = 0) restrict buffer verts {
+layout(binding = 0) restrict coherent writeonly buffer verts {
 	float vertices[];
 };
 
-layout(binding = 1) restrict buffer inds {
+layout(binding = 1) restrict coherent writeonly buffer inds {
 	uint indices[];
 };
 
@@ -143,6 +143,7 @@ layout(binding = 3) coherent restrict buffer cmdout {
 	uint firstIndex;
 	int vertexOffset;
 	uint firstInstance;
+	uint tmpIndex;
 };
 
 shared uint needed_vertices[BOX_SIZE]; // in our line + [-y -z, -y z, y -z]
@@ -371,10 +372,10 @@ void main(){
 	barrier();
 	
 	if(gl_LocalInvocationIndex == 0){
-		abort = (firstInstance * NUM_VERTEX_FLOATS > (vertices.length() - req_verts * NUM_VERTEX_FLOATS)) || ((indexCount > (indices.length() - local_index_count*6)));
+		abort = (firstInstance * NUM_VERTEX_FLOATS > (vertices.length() - req_verts * NUM_VERTEX_FLOATS)) || ((tmpIndex > (indices.length() - local_index_count*6)));
 		if(!abort){
 			vert_idx = atomicAdd(firstInstance, req_verts); // reserve space in vtx buffer
-			ind_idx = atomicAdd(indexCount, local_index_count * 6); // reserve space in the idx buffer
+			ind_idx = atomicAdd(tmpIndex, local_index_count * 6); // reserve space in the idx buffer
 			abort = abort || (vert_idx * NUM_VERTEX_FLOATS > (vertices.length() - req_verts * NUM_VERTEX_FLOATS));
 			if(abort){
 				for(uint i = 0; i < local_index_count * 6; i++){
@@ -442,5 +443,9 @@ void main(){
 		indices[idx + 3] = needed_vertices[quad[0]];
 		indices[idx + 4] = needed_vertices[quad[2]];
 		indices[idx + 5] = needed_vertices[quad[3]];
+	}
+	
+	if(gl_LocalInvocationIndex == 0){
+		atomicAdd(indexCount, local_index_count * 6);
 	}
 }

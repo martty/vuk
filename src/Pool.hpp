@@ -21,6 +21,8 @@ namespace vuk {
 
 	template<>
 	void PooledType<VkFence>::reset(Context& ctx);
+	template<>
+	void PooledType<VkEvent>::reset(Context& ctx);
 
 	template<>
 	struct PooledType<VkCommandBuffer> {

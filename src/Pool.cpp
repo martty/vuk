@@ -20,6 +20,22 @@ namespace vuk {
 	}
 
 	template<>
+	std::span<VkEvent> PooledType<VkEvent>::acquire(PerThreadContext& ptc, size_t count) {
+		if (values.size() < (needle + count)) {
+			auto remaining = values.size() - needle;
+			for (auto i = 0; i < (count - remaining); i++) {
+				VkEventCreateInfo sci{ .sType = VK_STRUCTURE_TYPE_EVENT_CREATE_INFO };
+				VkEvent event;
+				vkCreateEvent(ptc.ctx.device, &sci, nullptr, &event);
+				values.push_back(event);
+			}
+		}
+		std::span<VkEvent> ret{ &*values.begin() + needle, count };
+		needle += count;
+		return ret;
+	}
+
+	template<>
 	std::span<VkFence> PooledType<VkFence>::acquire(PerThreadContext& ptc, size_t count) {
 		if (values.size() < (needle + count)) {
 			auto remaining = values.size() - needle;
@@ -43,6 +59,13 @@ namespace vuk {
 	}
 
 	template<>
+	void PooledType<VkEvent>::free(Context& ctx) {
+		for (auto& v : values) {
+			vkDestroyEvent(ctx.device, v, nullptr);
+		}
+	}
+
+	template<>
 	void PooledType<VkFence>::free(Context& ctx) {
 		for (auto& v : values) {
 			vkDestroyFence(ctx.device, v, nullptr);
@@ -51,12 +74,21 @@ namespace vuk {
 
 	template struct PooledType<VkSemaphore>;
 	template struct PooledType<VkFence>;
+	template struct PooledType<VkEvent>;
 
 	template<>
 	void PooledType<VkFence>::reset(Context& ctx) {
 		if (needle > 0) {
 			vkWaitForFences(ctx.device, (uint32_t)needle, values.data(), true, UINT64_MAX);
 			vkResetFences(ctx.device, (uint32_t)needle, values.data());
+		}
+		needle = 0;
+	}
+
+	template<>
+	void PooledType<VkEvent>::reset(Context& ctx) {
+		for (auto i = 0; i < needle; i++) {
+			vkResetEvent(ctx.device, values[i]);
 		}
 		needle = 0;
 	}

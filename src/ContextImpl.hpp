@@ -31,6 +31,7 @@ namespace vuk {
 		Pool<VkCommandBuffer, Context::FC> cbuf_pools;
 		Pool<TimestampQuery, Context::FC> tsquery_pools;
 		Pool<VkSemaphore, Context::FC> semaphore_pools;
+		Pool<VkEvent, Context::FC> event_pools;
 		Pool<VkFence, Context::FC> fence_pools;
 		VkPipelineCache vk_pipeline_cache;
 		Cache<PipelineBaseInfo> pipelinebase_cache;
@@ -147,6 +148,7 @@ namespace vuk {
 			cbuf_pools(ctx),
 			tsquery_pools(ctx),
 			semaphore_pools(ctx),
+			event_pools(ctx),
 			fence_pools(ctx),
 			pipelinebase_cache(ctx),
 			pipeline_cache(ctx),
@@ -425,6 +427,7 @@ namespace vuk {
 		Pool<VkCommandBuffer, Context::FC>::PFView commandbuffer_pools;
 		Pool<TimestampQuery, Context::FC>::PFView tsquery_pools;
 		Pool<VkSemaphore, Context::FC>::PFView semaphore_pools;
+		Pool<VkEvent, Context::FC>::PFView event_pools;
 		Cache<PipelineInfo>::PFView pipeline_cache;
 		Cache<ComputePipelineInfo>::PFView compute_pipeline_cache;
 		Cache<PipelineBaseInfo>::PFView pipelinebase_cache;
@@ -459,6 +462,7 @@ namespace vuk {
 			commandbuffer_pools(ctx.impl->cbuf_pools.get_view(ifc)),
 			tsquery_pools(ctx.impl->tsquery_pools.get_view(ifc)),
 			semaphore_pools(ctx.impl->semaphore_pools.get_view(ifc)),
+			event_pools(ctx.impl->event_pools.get_view(ifc)),
 			pipeline_cache(ifc, ctx.impl->pipeline_cache),
 			compute_pipeline_cache(ifc, ctx.impl->compute_pipeline_cache),
 			pipelinebase_cache(ifc, ctx.impl->pipelinebase_cache),
@@ -479,6 +483,7 @@ namespace vuk {
 	struct PTCImpl {
 		Pool<VkCommandBuffer, Context::FC>::PFPTView commandbuffer_pool;
 		Pool<VkSemaphore, Context::FC>::PFPTView semaphore_pool;
+		Pool<VkEvent, Context::FC>::PFPTView event_pool;
 		Pool<VkFence, Context::FC>::PFPTView fence_pool;
 		Pool<TimestampQuery, Context::FC>::PFPTView tsquery_pool;
 		Cache<PipelineInfo>::PFPTView pipeline_cache;
@@ -504,6 +509,7 @@ namespace vuk {
 		PTCImpl(InflightContext& ifc, PerThreadContext& ptc) :
 			commandbuffer_pool(ifc.impl->commandbuffer_pools.get_view(ptc)),
 			semaphore_pool(ifc.impl->semaphore_pools.get_view(ptc)),
+			event_pool(ifc.impl->event_pools.get_view(ptc)),
 			fence_pool(ifc.impl->fence_pools.get_view(ptc)),
 			tsquery_pool(ifc.impl->tsquery_pools.get_view(ptc)),
 			pipeline_cache(ptc, ifc.impl->pipeline_cache),

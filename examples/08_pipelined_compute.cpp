@@ -250,16 +250,24 @@ namespace {
 			ImGui::Checkbox("Smooth normals", &use_smooth_normals);
 			ImGui::Checkbox("Viewspace grid", &view_space_grid);
 			ImGui::DragFloat("Resolution", &resolution, 0.01f, 0.f, 5.f, "%.3f", 1.f);
-			
+
 			const char* items[] = { "Surface net", "Linear contouring" };
 			ImGui::Combo("Meshing", (int32_t*)&placement_method, items, (int)std::size(items));
 			// init vtx_buf
-			auto vtx_buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eStorageBuffer | vuk::BufferUsageFlagBits::eVertexBuffer, sizeof(glm::vec3) * 3 * 150000, 1, false);
-			auto idx_buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eStorageBuffer | vuk::BufferUsageFlagBits::eIndexBuffer, sizeof(glm::uint) * 200 * 4096, 1, false);
-			auto idcmd_buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eStorageBuffer | vuk::BufferUsageFlagBits::eIndirectBuffer, sizeof(vuk::DrawIndexedIndirectCommand), sizeof(vuk::DrawIndexedIndirectCommand), true);
-			vuk::DrawIndexedIndirectCommand di{};
-			di.instanceCount = 1;
-			memcpy(idcmd_buf.mapped_ptr, &di, sizeof(vuk::DrawIndexedIndirectCommand));
+			auto vtx_buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eStorageBuffer | vuk::BufferUsageFlagBits::eVertexBuffer, sizeof(glm::vec3) * 2 * 150000, 1, false);
+			auto idx_buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eStorageBuffer | vuk::BufferUsageFlagBits::eIndexBuffer, sizeof(glm::uint) * 100 * 4096, 1, false);
+			struct DI {
+				vuk::DrawIndexedIndirectCommand di{};
+				unsigned temporary = 0;
+			} di;
+			auto idcmd_buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eStorageBuffer | vuk::BufferUsageFlagBits::eIndirectBuffer, sizeof(DI), sizeof(vuk::DrawIndexedIndirectCommand), true);
+			di.di.instanceCount = 1;
+			memcpy(idcmd_buf.mapped_ptr, &di, sizeof(DI));
+
+			auto vtx2_buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eStorageBuffer | vuk::BufferUsageFlagBits::eVertexBuffer, sizeof(glm::vec3) * 2 * 150000, 1, false);
+			auto idx2_buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eStorageBuffer | vuk::BufferUsageFlagBits::eIndexBuffer, sizeof(glm::uint) * 100 * 4096, 1, false);
+			auto idcmd2_buf = ptc._allocate_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eStorageBuffer | vuk::BufferUsageFlagBits::eIndirectBuffer, sizeof(DI), sizeof(vuk::DrawIndexedIndirectCommand), true);
+			memcpy(idcmd2_buf.mapped_ptr, &di, sizeof(DI));
 			cmds.clear();
 			cmds.push(sphere_cmd(1, vec3(1.00, 0.71, 0.29)));
 			for (auto i = 0; i < poss.size(); i++) {
@@ -308,9 +316,22 @@ namespace {
 				glm::vec3 view_vec;
 			}pc = {mmin, 0.f, vox, placement_method, glm::vec3(vp.view * glm::vec4(0,0,1,0))};
 
+			// clear pass
+			rg.add_pass({
+			.resources = {"08_pipelined_compute_final"_image(vuk::eColorWrite), "08_depth"_image(vuk::eDepthStencilRW)},
+			.execute = [](vuk::CommandBuffer& command_buffer) {
+			} });
+
+			rg.add_alias("08_pipelined_compute_final_1", "08_pipelined_compute_final");
+			rg.add_alias("08_depth_1", "08_depth");
+
+			auto evt0 = ptc.acquire_event();
+			auto evt1 = ptc.acquire_event();
+			auto evt2 = ptc.acquire_event();
+
 			rg.add_pass({
 				.resources = {"vtx"_buffer(vuk::eComputeWrite), "idx"_buffer(vuk::eComputeWrite), "cmd"_buffer(vuk::eComputeWrite)},
-				.execute = [pc, vmcmd_buf](vuk::CommandBuffer& command_buffer) {
+				.execute = [pc, vmcmd_buf, evt0](vuk::CommandBuffer& command_buffer) {
 					command_buffer
 						.bind_storage_buffer(0, 0, command_buffer.get_resource_buffer("vtx"))
 						.bind_storage_buffer(0, 1, command_buffer.get_resource_buffer("idx"))
@@ -318,7 +339,22 @@ namespace {
 						.bind_storage_buffer(0, 3, command_buffer.get_resource_buffer("cmd"))
 						.bind_compute_pipeline("sdf")
 						.push_constants(vuk::ShaderStageFlagBits::eCompute, 0, pc)
-						.dispatch_invocations(count.x, count.y, count.z);
+						.dispatch_invocations(4*count.x / 5, count.y, count.z);
+					command_buffer.set_event(evt0, vuk::PipelineStageFlagBits::eComputeShader);
+				}
+			});
+			rg.add_pass({
+				.resources = {"vtx2"_buffer(vuk::eComputeWrite), "idx2"_buffer(vuk::eComputeWrite), "cmd2"_buffer(vuk::eComputeWrite)},
+				.execute = [pc, vmcmd_buf, evt1](vuk::CommandBuffer& command_buffer) {
+					command_buffer
+						.bind_storage_buffer(0, 0, command_buffer.get_resource_buffer("vtx2"))
+						.bind_storage_buffer(0, 1, command_buffer.get_resource_buffer("idx2"))
+						.bind_uniform_buffer(0, 2, vmcmd_buf)
+						.bind_storage_buffer(0, 3, command_buffer.get_resource_buffer("cmd2"))
+						.bind_compute_pipeline("sdf")
+						.push_constants(vuk::ShaderStageFlagBits::eCompute, 0, pc)
+						.dispatch_invocations_base(4*count.x / 5, 1*count.x / 5, 0, count.y, 0, count.z);
+					command_buffer.set_event(evt1, vuk::PipelineStageFlagBits::eComputeShader);
 				}
 			});
 
@@ -332,8 +368,9 @@ namespace {
 			} fwd_pc = { cam_pos, use_smooth_normals, view_space_grid };
 
 			rg.add_pass({
-				.resources = {"08_pipelined_compute_final"_image(vuk::eColorWrite), "08_depth"_image(vuk::eDepthStencilRW), "vtx"_buffer(vuk::eAttributeRead), "idx"_buffer(vuk::eIndexRead), "cmd"_buffer(vuk::eIndirectRead)},
-				.execute = [uboVP, fwd_pc](vuk::CommandBuffer& command_buffer) {
+				.resources = {"08_pipelined_compute_final_1"_image(vuk::eColorWrite), "08_depth_1"_image(vuk::eDepthStencilRW)},
+				.execute = [uboVP, fwd_pc, evt0, evt2](vuk::CommandBuffer& command_buffer) {
+					command_buffer.wait_event_global_membar(evt0, vuk::PipelineStageFlagBits::eComputeShader, vuk::PipelineStageFlagBits::eDrawIndirect | vuk::PipelineStageFlagBits::eVertexInput, vuk::AccessFlagBits::eShaderWrite, vuk::AccessFlagBits::eIndirectCommandRead | vuk::AccessFlagBits::eIndexRead | vuk::AccessFlagBits::eVertexAttributeRead);
 					command_buffer
 						.set_viewport(0, vuk::Rect2D::framebuffer())
 						.set_scissor(0, vuk::Rect2D::framebuffer())
@@ -345,8 +382,27 @@ namespace {
 						.bind_sampled_image(0, 1, *env_cubemap.view, {})
 						.push_constants(vuk::ShaderStageFlagBits::eVertex | vuk::ShaderStageFlagBits::eFragment, 0, fwd_pc)
 						.draw_indexed_indirect(1, command_buffer.get_resource_buffer("cmd"));
+					command_buffer.set_event(evt2, vuk::PipelineStageFlagBits::eFragmentShader);
 				}
 			});
+
+			rg.add_pass({
+			.resources = {"08_pipelined_compute_final_1"_image(vuk::eColorWrite), "08_depth_1"_image(vuk::eDepthStencilRW)},
+			.execute = [uboVP, fwd_pc, evt2](vuk::CommandBuffer& command_buffer) {
+				command_buffer.wait_event_global_membar(evt2, vuk::PipelineStageFlagBits::eFragmentShader, vuk::PipelineStageFlagBits::eDrawIndirect | vuk::PipelineStageFlagBits::eVertexInput, vuk::AccessFlagBits::eShaderWrite, vuk::AccessFlagBits::eIndirectCommandRead | vuk::AccessFlagBits::eIndexRead | vuk::AccessFlagBits::eVertexAttributeRead);
+				command_buffer
+					.set_viewport(0, vuk::Rect2D::framebuffer())
+					.set_scissor(0, vuk::Rect2D::framebuffer())
+
+					.bind_vertex_buffer(0, command_buffer.get_resource_buffer("vtx2"), 0, vuk::Packed{vuk::Format::eR32G32B32Sfloat, vuk::Format::eR8G8B8A8Unorm, vuk::Format::eR32G32B32Sfloat})
+					.bind_index_buffer(command_buffer.get_resource_buffer("idx2"), vuk::IndexType::eUint32)
+					.bind_graphics_pipeline("fwd")
+					.bind_uniform_buffer(0, 0, uboVP)
+					.bind_sampled_image(0, 1, *env_cubemap.view, {})
+					.push_constants(vuk::ShaderStageFlagBits::eVertex | vuk::ShaderStageFlagBits::eFragment, 0, fwd_pc)
+					.draw_indexed_indirect(1, command_buffer.get_resource_buffer("cmd2"));
+			}
+				});
 
 			time += ImGui::GetIO().DeltaTime;
 
@@ -363,6 +419,9 @@ namespace {
 			rg.attach_buffer("vtx", vtx_buf, vuk::eNone, vuk::eNone);
 			rg.attach_buffer("idx", idx_buf, vuk::eNone, vuk::eNone);
 			rg.attach_buffer("cmd", idcmd_buf, vuk::eNone, vuk::eNone);
+			rg.attach_buffer("vtx2", vtx2_buf, vuk::eNone, vuk::eNone);
+			rg.attach_buffer("idx2", idx2_buf, vuk::eNone, vuk::eNone);
+			rg.attach_buffer("cmd2", idcmd2_buf, vuk::eNone, vuk::eNone);
 			return rg;
 		},
 		.cleanup = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {

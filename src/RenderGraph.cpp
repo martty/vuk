@@ -416,7 +416,9 @@ namespace vuk {
 							sd.srcAccessMask = is_read_access(left.use) ? 0 : (VkAccessFlags)left.use.access;
 							sd.srcStageMask = (VkPipelineStageFlags)left.use.stages;
 							sd.srcSubpass = VK_SUBPASS_EXTERNAL;
-							right_rp.rpci.subpass_dependencies.push_back(sd);
+							if (right.pass->render_pass_index == 0) {
+								right_rp.rpci.subpass_dependencies.push_back(sd);
+							}
 						}
 						if (right_rp.framebufferless) {
 							if (left.pass) {

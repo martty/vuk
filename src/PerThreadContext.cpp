@@ -350,6 +350,10 @@ VkSemaphore vuk::PerThreadContext::acquire_semaphore() {
 	return impl->semaphore_pool.acquire(1)[0];
 }
 
+VkEvent vuk::PerThreadContext::acquire_event() {
+	return impl->event_pool.acquire(1)[0];
+}
+
 VkFramebuffer vuk::PerThreadContext::acquire_framebuffer(const vuk::FramebufferCreateInfo& fbci) {
 	return impl->framebuffer_cache.acquire(fbci);
 }

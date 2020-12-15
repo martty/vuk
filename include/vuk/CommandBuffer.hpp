@@ -281,6 +281,11 @@ namespace vuk {
 		// Actual invocation count will be rounded up to be a multiple of local_size_{x,y,z}
 		CommandBuffer& dispatch_invocations(size_t invocation_count_x, size_t invocation_count_y = 1, size_t invocation_count_z = 1);
 
+		// Perform a dispatch while specifying the minimum invocation count
+		// Actual invocation count will be rounded up to be a multiple of local_size_{x,y,z}
+		// Base counts are added to the invocation numbers as offsets
+		CommandBuffer& dispatch_invocations_base(size_t base_x, size_t invocation_count_x, size_t base_y = 0, size_t invocation_count_y = 1, size_t base_z = 0, size_t invocation_count_z = 1);
+
 		class SecondaryCommandBuffer begin_secondary();
 		void execute(std::span<VkCommandBuffer>);
 
@@ -292,6 +297,9 @@ namespace vuk {
 
 		// explicit synchronisation
 		void image_barrier(Name, vuk::Access src_access, vuk::Access dst_access);
+		void set_event(VkEvent event, vuk::PipelineStageFlags pipeline_stages);
+		void reset_event(VkEvent event, vuk::PipelineStageFlags pipeline_stages);
+		void wait_event_global_membar(VkEvent event, vuk::PipelineStageFlags src_stages, vuk::PipelineStageFlags dst_stages, vuk::AccessFlags src_access, vuk::AccessFlags dst_access);
 
 		// queries
 		void write_timestamp(Query, vuk::PipelineStageFlagBits stage = vuk::PipelineStageFlagBits::eBottomOfPipe);

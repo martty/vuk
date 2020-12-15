@@ -332,6 +332,22 @@ namespace vuk {
 		return *this;
 	}
 
+	CommandBuffer& CommandBuffer::dispatch_invocations_base(size_t base_x, size_t invocation_count_x, size_t base_y, size_t invocation_count_y, size_t base_z, size_t invocation_count_z) {
+		_bind_compute_pipeline_state();
+		auto local_size = current_compute_pipeline->local_size;
+		// integer div ceil
+		uint32_t x = (uint32_t)(invocation_count_x + local_size[0] - 1) / local_size[0];
+		uint32_t y = (uint32_t)(invocation_count_y + local_size[1] - 1) / local_size[1];
+		uint32_t z = (uint32_t)(invocation_count_z + local_size[2] - 1) / local_size[2];
+
+		uint32_t bx = (uint32_t)(base_x + local_size[0] - 1) / local_size[0];
+		uint32_t by = (uint32_t)(base_y + local_size[1] - 1) / local_size[1];
+		uint32_t bz = (uint32_t)(base_z + local_size[2] - 1) / local_size[2];
+
+		vkCmdDispatchBase(command_buffer, bx, by, bz, x, y, z);
+		return *this;
+	}
+
 	SecondaryCommandBuffer CommandBuffer::begin_secondary() {
 		auto nptc = new vuk::PerThreadContext(ptc.ifc.begin());
 		auto scbuf = nptc->acquire_command_buffer(VK_COMMAND_BUFFER_LEVEL_SECONDARY);
@@ -443,6 +459,17 @@ namespace vuk {
 		vkCmdPipelineBarrier(command_buffer, (VkPipelineStageFlags)src_use.stages, (VkPipelineStageFlags)dst_use.stages, {}, 0, nullptr, 0, nullptr, 1, &imb);
 	}
 
+	void CommandBuffer::set_event(VkEvent event, vuk::PipelineStageFlags pipeline_stages) {
+		vkCmdSetEvent(command_buffer, event, (VkPipelineStageFlags)pipeline_stages);
+	}
+	void CommandBuffer::reset_event(VkEvent event, vuk::PipelineStageFlags pipeline_stages) {
+		vkCmdResetEvent(command_buffer, event, (VkPipelineStageFlags)pipeline_stages);
+	}
+	void CommandBuffer::wait_event_global_membar(VkEvent event, vuk::PipelineStageFlags src_stages, vuk::PipelineStageFlags dst_stages, vuk::AccessFlags src_access, vuk::AccessFlags dst_access) {
+		VkMemoryBarrier membar{ .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = (VkAccessFlags)src_access, .dstAccessMask = (VkAccessFlags)dst_access };
+		vkCmdWaitEvents(command_buffer, 1, &event, (VkPipelineStageFlags)src_stages, (VkPipelineStageFlags)dst_stages, 1, &membar, 0, nullptr, 0, nullptr);
+	}
+	
 	void CommandBuffer::write_timestamp(Query q, vuk::PipelineStageFlagBits stage) {
 		// TODO: check for duplicate submission of a query
 		auto tsq = ptc.register_timestamp_query(q);

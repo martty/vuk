@@ -355,6 +355,7 @@ namespace vuk {
 		VkFence acquire_fence();
 		VkCommandBuffer acquire_command_buffer(VkCommandBufferLevel);
 		VkSemaphore acquire_semaphore();
+		VkEvent acquire_event();
 		VkFramebuffer acquire_framebuffer(const struct FramebufferCreateInfo&);
 		VkRenderPass acquire_renderpass(const struct RenderPassCreateInfo&);
 		RGImage acquire_rendertarget(const struct RGCI&);
