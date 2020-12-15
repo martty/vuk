@@ -536,7 +536,6 @@ namespace vuk {
 		std::string pipeline_name;
 		vuk::Program reflection_info;
 		std::vector<VkPipelineShaderStageCreateInfo> psscis;
-		std::vector<VkSpecializationMapEntry> smes;
 		VkPipelineLayout pipeline_layout;
 		std::array<DescriptorSetLayoutAllocInfo, VUK_MAX_SETS> layout_info;
 		VkPipelineRasterizationStateCreateInfo rasterization_state;
@@ -648,6 +647,19 @@ inline bool operator==(VkPushConstantRange const& lhs, VkPushConstantRange const
 		&& (lhs.size == rhs.size);
 }
 
+inline bool operator==(VkSpecializationMapEntry const& lhs, VkSpecializationMapEntry const& rhs) noexcept {
+	return (lhs.constantID == rhs.constantID)
+		&& (lhs.offset == rhs.offset)
+		&& (lhs.size == rhs.size);
+}
+
+inline bool operator==(VkSpecializationInfo const& lhs, VkSpecializationInfo const& rhs) noexcept {
+	return (lhs.dataSize == rhs.dataSize)
+		&& (lhs.pData == rhs.pData)
+		&& (lhs.mapEntryCount == rhs.mapEntryCount)
+		&& (lhs.pMapEntries == rhs.pMapEntries);
+}
+
 namespace vuk {
 	struct PipelineInstanceCreateInfo {
 		PipelineBaseInfo* base;
@@ -660,7 +672,7 @@ namespace vuk {
 		VkPipelineMultisampleStateCreateInfo multisample_state{ .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO };
 		VkPipelineDynamicStateCreateInfo dynamic_state{ .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO };
 		vuk::fixed_vector<VkSpecializationMapEntry, VUK_MAX_SPECIALIZATIONCONSTANT_RANGES> smes;
-		std::vector<VkSpecializationInfo> sis;
+		vuk::fixed_vector<VkSpecializationInfo, 5> sis;
 		VkRenderPass render_pass;
 		uint32_t subpass;
 
@@ -671,7 +683,7 @@ namespace vuk {
 			return base == o.base && binding_descriptions == o.binding_descriptions && attribute_descriptions == o.attribute_descriptions &&
 				color_blend_attachments == o.color_blend_attachments && color_blend_state == o.color_blend_state &&
 				vertex_input_state == o.vertex_input_state && multisample_state == o.multisample_state && dynamic_state == o.dynamic_state &&
-				render_pass == o.render_pass && subpass == o.subpass;
+				render_pass == o.render_pass && subpass == o.subpass && smes == o.smes && sis == o.sis;
 		}
 	};
 

@@ -239,7 +239,7 @@ namespace vuk {
     }
     
 	CommandBuffer& CommandBuffer::specialization_constants(unsigned constant_id, vuk::ShaderStageFlags stages, size_t offset, void* data, size_t size) {
-		smes.emplace_back(VkSpecializationMapEntry{ (uint32_t)constant_id, (uint32_t) offset, (size_t)size }, stages);
+		smes.emplace_back(VkSpecializationMapEntry{ (uint32_t)constant_id, (uint32_t)offset, (size_t)size }, stages);
 		void* dst = specialization_constant_buffer.data() + offset;
 		::memcpy(dst, data, size);
 		return *this;
@@ -491,12 +491,6 @@ namespace vuk {
             vuk::PipelineInstanceCreateInfo pi;
             pi.base = next_pipeline;
             
-            // set specialization constants
-			vuk::fixed_vector<VkSpecializationMapEntry, VUK_MAX_SPECIALIZATIONCONSTANT_RANGES> vsmes;
-			for (auto [sme, _] : smes) {
-				vsmes.push_back(sme);
-			}
-
 			for (auto& pssci : pi.base->psscis) {
 				size_t offset = pi.smes.size();
 				bool empty = true;
