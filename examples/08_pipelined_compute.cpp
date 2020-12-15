@@ -369,7 +369,7 @@ namespace {
 
 			rg.add_pass({
 				.resources = {"08_pipelined_compute_final_1"_image(vuk::eColorWrite), "08_depth_1"_image(vuk::eDepthStencilRW)},
-				.execute = [uboVP, fwd_pc, evt0, evt2](vuk::CommandBuffer& command_buffer) {
+				.execute = [uboVP, fwd_pc, evt0](vuk::CommandBuffer& command_buffer) {
 					command_buffer.wait_event_global_membar(evt0, vuk::PipelineStageFlagBits::eComputeShader, vuk::PipelineStageFlagBits::eDrawIndirect | vuk::PipelineStageFlagBits::eVertexInput, vuk::AccessFlagBits::eShaderWrite, vuk::AccessFlagBits::eIndirectCommandRead | vuk::AccessFlagBits::eIndexRead | vuk::AccessFlagBits::eVertexAttributeRead);
 					command_buffer
 						.set_viewport(0, vuk::Rect2D::framebuffer())
@@ -382,14 +382,13 @@ namespace {
 						.bind_sampled_image(0, 1, *env_cubemap.view, {})
 						.push_constants(vuk::ShaderStageFlagBits::eVertex | vuk::ShaderStageFlagBits::eFragment, 0, fwd_pc)
 						.draw_indexed_indirect(1, command_buffer.get_resource_buffer("cmd"));
-					command_buffer.set_event(evt2, vuk::PipelineStageFlagBits::eFragmentShader);
 				}
 			});
 
 			rg.add_pass({
 			.resources = {"08_pipelined_compute_final_1"_image(vuk::eColorWrite), "08_depth_1"_image(vuk::eDepthStencilRW)},
-			.execute = [uboVP, fwd_pc, evt2](vuk::CommandBuffer& command_buffer) {
-				command_buffer.wait_event_global_membar(evt2, vuk::PipelineStageFlagBits::eFragmentShader, vuk::PipelineStageFlagBits::eDrawIndirect | vuk::PipelineStageFlagBits::eVertexInput, vuk::AccessFlagBits::eShaderWrite, vuk::AccessFlagBits::eIndirectCommandRead | vuk::AccessFlagBits::eIndexRead | vuk::AccessFlagBits::eVertexAttributeRead);
+			.execute = [uboVP, fwd_pc, evt1](vuk::CommandBuffer& command_buffer) {
+				command_buffer.wait_event_global_membar(evt1, vuk::PipelineStageFlagBits::eComputeShader, vuk::PipelineStageFlagBits::eDrawIndirect | vuk::PipelineStageFlagBits::eVertexInput, vuk::AccessFlagBits::eShaderWrite, vuk::AccessFlagBits::eIndirectCommandRead | vuk::AccessFlagBits::eIndexRead | vuk::AccessFlagBits::eVertexAttributeRead);
 				command_buffer
 					.set_viewport(0, vuk::Rect2D::framebuffer())
 					.set_scissor(0, vuk::Rect2D::framebuffer())
