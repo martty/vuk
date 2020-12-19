@@ -432,8 +432,8 @@ vuk::Context::TransientSubmitStub vuk::Context::fenced_upload(std::span<UploadIt
 				release_barrier.dstAccessMask = 0; // ignored
 				release_barrier.oldLayout = (VkImageLayout)vuk::ImageLayout::eTransferDstOptimal;
 				release_barrier.newLayout = (VkImageLayout)vuk::ImageLayout::eTransferDstOptimal;
-				release_barrier.dstQueueFamilyIndex = transfer_queue_family_index;
-				release_barrier.srcQueueFamilyIndex = dst_queue_family;
+				release_barrier.srcQueueFamilyIndex = transfer_queue_family_index;
+				release_barrier.dstQueueFamilyIndex = dst_queue_family;
 				release_barrier.image = upload.image.dst;
 				release_barrier.subresourceRange = copy_barrier.subresourceRange;
 				vkCmdPipelineBarrier(xfercbuf, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, nullptr, 0, nullptr, 1, &release_barrier);
@@ -444,18 +444,19 @@ vuk::Context::TransientSubmitStub vuk::Context::fenced_upload(std::span<UploadIt
 				acq_barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
 				acq_barrier.oldLayout = (VkImageLayout)vuk::ImageLayout::eTransferDstOptimal;
 				acq_barrier.newLayout = (VkImageLayout)vuk::ImageLayout::eTransferDstOptimal;
-				acq_barrier.dstQueueFamilyIndex = transfer_queue_family_index;
-				acq_barrier.srcQueueFamilyIndex = dst_queue_family;
+				acq_barrier.srcQueueFamilyIndex = transfer_queue_family_index;
+				acq_barrier.dstQueueFamilyIndex = dst_queue_family;
 				acq_barrier.image = upload.image.dst;
 				acq_barrier.subresourceRange = copy_barrier.subresourceRange;
 				
 				// no wait, no delay, sync'd by the sema
-				vkCmdPipelineBarrier(dstcbuf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, nullptr, 0, nullptr, 1, &acq_barrier);
+				vkCmdPipelineBarrier(dstcbuf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &acq_barrier);
 				MipGenerateCommand task;
 				task.dst = upload.image.dst;
 				task.extent = upload.image.extent;
 				task.base_array_layer = upload.image.base_array_layer;
 				task.base_mip_level = upload.image.mip_level;
+                task.layer_count = 1;
 				task.format = upload.image.format;
 				record_mip_gen(dstcbuf, task, vuk::ImageLayout::eTransferDstOptimal);
 			}
@@ -475,6 +476,7 @@ vuk::Context::TransientSubmitStub vuk::Context::fenced_upload(std::span<UploadIt
 		// only buffers, single submit to transfer, fence waits on single cbuf
 		submit_transfer(si, fence);
 	} else {
+        vkEndCommandBuffer(dstcbuf);
 		// buffers and images, submit to transfer, signal sema
 		si.signalSemaphoreCount = 1;
 		auto sema = impl->get_unpooled_sema();
@@ -484,9 +486,10 @@ vuk::Context::TransientSubmitStub vuk::Context::fenced_upload(std::span<UploadIt
 		si.signalSemaphoreCount = 0;
 		si.waitSemaphoreCount = 1;
 		si.pWaitSemaphores = &sema;
-		// mipping happens in TRANSFER for now
+		// mipping happens in STAGE_TRANSFER for now
 		VkPipelineStageFlags wait = VK_PIPELINE_STAGE_TRANSFER_BIT;
 		si.pWaitDstStageMask = &wait;
+        si.pCommandBuffers = &dstcbuf;
 		// stash semaphore
 		head_bundle->sema = sema;
 		// submit with fence

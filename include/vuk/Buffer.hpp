@@ -53,8 +53,8 @@ namespace vuk {
 			return device_memory != o.device_memory || buffer != o.buffer || offset != o.offset || size != o.size;
 		}
 
-		explicit operator bool() noexcept {
-			return buffer == VK_NULL_HANDLE;
+		explicit operator bool() const noexcept {
+			return buffer != VK_NULL_HANDLE;
 		}
 
 		Buffer add_offset(size_t offset_to_add) {

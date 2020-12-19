@@ -80,7 +80,7 @@ namespace vuk {
 			}
 			if (it == transient_submit_bundles.end()) { // didn't find suitable bundle
 				it = transient_submit_bundles.emplace();
-				auto bundle = *it;
+				auto& bundle = *it;
 
 				VkCommandPoolCreateInfo cpci{ .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
 				cpci.queueFamilyIndex = queue_family_index;
@@ -221,7 +221,7 @@ namespace vuk {
 inline void record_mip_gen(VkCommandBuffer& cbuf, vuk::MipGenerateCommand& task, vuk::ImageLayout last_layout) {
 	// transition top mip to transfersrc
 	VkImageMemoryBarrier top_mip_to_barrier = { .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
-	top_mip_to_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+	top_mip_to_barrier.srcAccessMask = 0;
 	top_mip_to_barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
 	top_mip_to_barrier.oldLayout = (VkImageLayout)last_layout;
 	top_mip_to_barrier.newLayout = (VkImageLayout)vuk::ImageLayout::eTransferSrcOptimal;
@@ -236,7 +236,7 @@ inline void record_mip_gen(VkCommandBuffer& cbuf, vuk::MipGenerateCommand& task,
 
 	// transition other mips to transferdst
 	VkImageMemoryBarrier rest_mip_to_barrier = { .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
-	rest_mip_to_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+	rest_mip_to_barrier.srcAccessMask = 0;
 	rest_mip_to_barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
 	rest_mip_to_barrier.oldLayout = (VkImageLayout)last_layout;
 	rest_mip_to_barrier.newLayout = (VkImageLayout)vuk::ImageLayout::eTransferDstOptimal;
@@ -276,7 +276,7 @@ inline void record_mip_gen(VkCommandBuffer& cbuf, vuk::MipGenerateCommand& task,
 
 	VkImageMemoryBarrier to_bars[] = { top_mip_to_barrier, rest_mip_to_barrier };
 	vkCmdPipelineBarrier(cbuf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 2, to_bars);
-	auto mips = (uint32_t)std::log2f((float)std::max(task.extent.width, task.extent.height)) + 1;
+	auto mips = (uint32_t)std::log2f((float)std::max(task.extent.width, task.extent.height));
 
 	for (uint32_t miplevel = task.base_mip_level + 1; miplevel < mips; miplevel++) {
 		VkImageBlit blit;
