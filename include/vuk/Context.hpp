@@ -149,6 +149,10 @@ namespace vuk {
 		/// @brief Add a swapchain to be managed by the Context
 		/// @return Reference to the new swapchain that can be used during presentation
 		SwapchainRef add_swapchain(Swapchain);
+
+		/// @brief Remove a swapchain that is managed by the Context
+		/// the swapchain is not destroyed
+        void remove_swapchain(SwapchainRef);
 		
 		/// @brief Begin new frame, with a new InflightContext
 		/// @return the new InflightContext

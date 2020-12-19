@@ -267,6 +267,16 @@ vuk::SwapchainRef vuk::Context::add_swapchain(Swapchain sw) {
 	return &*impl->swapchains.emplace(sw);
 }
 
+void vuk::Context::remove_swapchain(SwapchainRef sw) {
+    std::lock_guard _(impl->swapchains_lock);
+    for(auto it = impl->swapchains.begin(); it != impl->swapchains.end(); it++) {
+		if (&*it == sw) {
+            impl->swapchains.erase(it);
+            return;
+		}
+	}
+}
+
 void vuk::Context::create_named_pipeline(const char* name, vuk::PipelineBaseCreateInfo ci) {
 	std::lock_guard _(impl->named_pipelines_lock);
 	impl->named_pipelines.insert_or_assign(name, &impl->pipelinebase_cache.acquire(std::move(ci)));
