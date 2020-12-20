@@ -691,6 +691,14 @@ namespace vuk {
 				usage |= vuk::ImageUsageFlagBits::eTransferDst; break;
 			default:;
 			}
+			// TODO: this isn't conservative enough, we need more information
+			if (c.use.layout == vuk::ImageLayout::eGeneral) {
+				if (c.use.stages & (vuk::PipelineStageFlagBits::eComputeShader | vuk::PipelineStageFlagBits::eVertexShader |
+					vuk::PipelineStageFlagBits::eTessellationControlShader | vuk::PipelineStageFlagBits::eTessellationEvaluationShader |
+					vuk::PipelineStageFlagBits::eGeometryShader | vuk::PipelineStageFlagBits::eFragmentShader)) {
+                    usage |= vuk::ImageUsageFlagBits::eStorage;
+				}
+			}
 		}
 
 		return usage;
