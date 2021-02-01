@@ -101,7 +101,7 @@ namespace vuk {
 				layoutBinding.descriptorCount = si.array_size == (unsigned)-1 ? 1 : si.array_size;
 				layoutBinding.stageFlags = si.stage;
 				layoutBinding.pImmutableSamplers = nullptr;
-				if (si.array_size == 0) {
+				if (si.array_size == 0) { 
 					assert(bci.variable_count_max[index] > 0); // forgot to mark this descriptor as variable count
 					layoutBinding.descriptorCount = bci.variable_count_max[index];
 				}

@@ -22,7 +22,6 @@ namespace vuk {
 		if (value & BufferUsageFlagBits::eTransformFeedbackBufferEXT) result += "TransformFeedbackBufferEXT | ";
 		if (value & BufferUsageFlagBits::eTransformFeedbackCounterBufferEXT) result += "TransformFeedbackCounterBufferEXT | ";
 		if (value & BufferUsageFlagBits::eConditionalRenderingEXT) result += "ConditionalRenderingEXT | ";
-		if (value & BufferUsageFlagBits::eRayTracingKHR) result += "RayTracingKHR | ";
 		return "{ " + result.substr(0, result.size() - 3) + " }";
 	}
 
