@@ -38,38 +38,22 @@ namespace vuk {
 
 	// determine rendergraph inputs and outputs, and resources that are neither
 	void RenderGraph::build_io() {
-		impl->global_inputs.clear();
-		impl->global_outputs.clear();
-
-		std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 8>> inputs{ *impl->arena_ };
-		std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 8>> outputs{ *impl->arena_ };
-
 		for (auto& pif : impl->passes) {
 			for (auto& res : pif.pass.resources) {
 				if (is_read_access(res.ia)) {
-					pif.inputs.insert(res);
+					pif.inputs.emplace_back(res);
+                    auto resolved_name = resolve_name(res.name, impl->aliases);
+                    auto hashed_resolved_name = ::hash::fnv1a::hash(resolved_name.data(), resolved_name.size(), hash::fnv1a::default_offset_basis);
+                    pif.resolved_input_name_hashes.emplace_back(hashed_resolved_name);
+                    pif.bloom_resolved_inputs |= hashed_resolved_name;
 				}
 				if (is_write_access(res.ia)) {
-					pif.outputs.insert(res);
+                    auto hashed_name = ::hash::fnv1a::hash(res.name.data(), res.name.size(), hash::fnv1a::default_offset_basis);
+                    pif.bloom_outputs |= hashed_name;
+                    pif.output_name_hashes.emplace_back(hashed_name);
+					pif.outputs.emplace_back(res);
 				}
 			}
-
-			for (auto& i : pif.inputs) {
-				if (impl->global_outputs.erase(i) == 0) {
-					pif.global_inputs.insert(i);
-				}
-			}
-			for (auto& i : pif.outputs) {
-				if (impl->global_inputs.erase(i) == 0) {
-					pif.global_outputs.insert(i);
-				}
-			}
-
-			impl->global_inputs.insert(pif.global_inputs.begin(), pif.global_inputs.end());
-			impl->global_outputs.insert(pif.global_outputs.begin(), pif.global_outputs.end());
-
-			inputs.insert(pif.inputs.begin(), pif.inputs.end());
-			outputs.insert(pif.outputs.begin(), pif.outputs.end());
 		}
 	}
 
@@ -82,18 +66,28 @@ namespace vuk {
 			topological_sort(impl->passes.begin(), impl->passes.end(), [this](const auto& p1, const auto& p2) {
 				bool could_execute_after = false;
 				bool could_execute_before = false;
-				for (auto& o : p1.outputs) {
-					for (auto& i : p2.inputs) {
-						if (o.name == resolve_name(i.name, impl->aliases))
-							could_execute_after = true;
-					}
-				}
-				for (auto& o : p2.outputs) {
-					for (auto& i : p1.inputs) {
-						if (o.name == resolve_name(i.name, impl->aliases))
-							could_execute_before = true;
-					}
-				}
+
+                if((p1.bloom_outputs & p2.bloom_resolved_inputs) != 0) {
+                    for(auto& o: p1.output_name_hashes) {
+                        for(auto& i: p2.resolved_input_name_hashes) {
+                            if(o == i) {
+                                could_execute_after = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+				if((p2.bloom_outputs & p1.bloom_resolved_inputs) != 0) {
+                    for(auto& o: p2.output_name_hashes) {
+                        for(auto& i: p1.resolved_input_name_hashes) {
+                            if(o == i) {
+                                could_execute_before = true;
+                                break;
+                            }
+                        }
+                    }
+                }
 				if (!could_execute_after && !could_execute_before && p1.outputs == p2.outputs) {
 					return p1.pass.auxiliary_order < p2.pass.auxiliary_order;
 				}

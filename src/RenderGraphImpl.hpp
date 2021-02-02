@@ -12,9 +12,6 @@ namespace vuk {
 
 		robin_hood::unordered_flat_map<Name, Name> aliases;
 
-		robin_hood::unordered_flat_set<Resource> global_inputs;
-		robin_hood::unordered_flat_set<Resource> global_outputs;
-
 		robin_hood::unordered_flat_map<Name, std::vector<UseRef, short_alloc<UseRef, 64>>> use_chains;
 
 		std::vector<RenderPassInfo, short_alloc<RenderPassInfo, 64>> rpis;

@@ -163,11 +163,12 @@ namespace vuk {
 		size_t render_pass_index;
 		uint32_t subpass;
 
-		robin_hood::unordered_flat_set<Resource> inputs;
-		robin_hood::unordered_flat_set<Resource> outputs;
-
-		robin_hood::unordered_flat_set<Resource> global_inputs;
-		robin_hood::unordered_flat_set<Resource> global_outputs;
+		std::vector<Resource> inputs;
+        uint32_t bloom_resolved_inputs = 0;
+        std::vector<uint32_t> resolved_input_name_hashes;
+        uint32_t bloom_outputs = 0;
+		std::vector<Resource> outputs;
+        std::vector<uint32_t> output_name_hashes;
 
 		bool is_head_pass = false;
 		bool is_tail_pass = false;
