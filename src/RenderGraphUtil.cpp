@@ -18,7 +18,7 @@ namespace vuk {
 	RenderPassInfo::RenderPassInfo(arena& arena_) : INIT2(subpasses), INIT2(attachments) {
 	}
 
-	PassInfo::PassInfo(arena& arena_, Pass&& p) : pass(std::move(p)) {}
+	PassInfo::PassInfo(arena& arena_, Pass&& p) : pass(std::move(p)), INIT2(inputs), INIT2(resolved_input_name_hashes), INIT2(outputs), INIT2(output_name_hashes) {}
 
 	SubpassInfo::SubpassInfo(arena& arena_) : INIT2(passes) {}
 
