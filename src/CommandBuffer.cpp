@@ -412,13 +412,17 @@ namespace vuk {
 			vkCmdPushConstants(command_buffer, current_pipeline->pipeline_layout, pcr.stageFlags, pcr.offset, pcr.size, data);
 		}
 		pcrs.clear();
-
+        
+		auto sets_mask = sets_used.to_ulong();
+        auto persistent_sets_mask = persistent_sets_used.to_ulong();
 		for (unsigned i = 0; i < VUK_MAX_SETS; i++) {
-			bool persistent = persistent_sets_used[i];
-			if (!sets_used[i] && !persistent_sets_used[i])
+            bool set_used = sets_mask & (1 << i);
+            bool persistent = persistent_sets_mask & (1 << i);
+            if(!set_used && !persistent)
 				continue;
 			set_bindings[i].layout_info = graphics ? current_pipeline->layout_info[i] : current_compute_pipeline->layout_info[i];
 			if (!persistent) {
+                set_bindings[i].calculate_hash();
 				auto ds = ptc.acquire_descriptorset(set_bindings[i]);
 				vkCmdBindDescriptorSets(command_buffer, graphics ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE, graphics ? current_pipeline->pipeline_layout : current_compute_pipeline->pipeline_layout, i, 1, &ds.descriptor_set, 0, nullptr);
 			} else {
