@@ -185,7 +185,7 @@ namespace vuk {
 		vuk::fixed_vector<vuk::VertexInputAttributeDescription, VUK_MAX_ATTRIBUTES> attribute_descriptions;
 		vuk::fixed_vector<VkVertexInputBindingDescription, VUK_MAX_ATTRIBUTES> binding_descriptions;
 		vuk::fixed_vector<VkPushConstantRange, VUK_MAX_PUSHCONSTANT_RANGES> pcrs;
-		std::array<unsigned char, 64> push_constant_buffer;
+		std::array<unsigned char, 128> push_constant_buffer;
 		vuk::PipelineBaseInfo* next_pipeline = nullptr;
 		vuk::ComputePipelineInfo* next_compute_pipeline = nullptr;
 		std::optional<vuk::PipelineInfo> current_pipeline;
@@ -256,6 +256,8 @@ namespace vuk {
 		
 		CommandBuffer& draw_indexed_indirect(size_t command_count, Buffer indirect_buffer);
 		CommandBuffer& draw_indexed_indirect(std::span<vuk::DrawIndexedIndirectCommand>);
+
+		CommandBuffer& draw_indexed_indirect_count(size_t max_draw_count, Buffer indirect_buffer, Buffer count_buffer);
 
 		CommandBuffer& dispatch(size_t group_count_x, size_t group_count_y = 1, size_t group_count_z = 1);
 		// Perform a dispatch while specifying the minimum invocation count

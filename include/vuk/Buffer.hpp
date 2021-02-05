@@ -55,12 +55,12 @@ namespace vuk {
 			return buffer != VK_NULL_HANDLE;
 		}
 
-		Buffer add_offset(size_t offset_to_add) {
+		[[nodiscard]] Buffer add_offset(size_t offset_to_add) {
 			assert(offset_to_add <= size);
 			return { device_memory, buffer, offset + offset_to_add, size - offset_to_add, mapped_ptr != nullptr ? mapped_ptr + offset_to_add : nullptr };
 		}
 
-		Buffer subrange(size_t new_offset, size_t new_size) {
+		[[nodiscard]] Buffer subrange(size_t new_offset, size_t new_size) {
 			assert(new_offset + new_size <= size);
 			return { device_memory, buffer, offset + new_offset, new_size, mapped_ptr != nullptr ? mapped_ptr + new_offset : nullptr };
 		}
