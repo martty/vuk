@@ -186,10 +186,15 @@ namespace vuk {
 		vuk::fixed_vector<VkVertexInputBindingDescription, VUK_MAX_ATTRIBUTES> binding_descriptions;
 		vuk::fixed_vector<VkPushConstantRange, VUK_MAX_PUSHCONSTANT_RANGES> pcrs;
 		std::array<unsigned char, 128> push_constant_buffer;
+		
+		std::optional<vuk::PipelineColorBlendAttachmentState> blend_state_override;
+        std::optional<std::array<float, 4>> blend_constants;
+
 		vuk::PipelineBaseInfo* next_pipeline = nullptr;
 		vuk::ComputePipelineInfo* next_compute_pipeline = nullptr;
 		std::optional<vuk::PipelineInfo> current_pipeline;
 		std::optional<vuk::ComputePipelineInfo> current_compute_pipeline;
+
 		std::bitset<VUK_MAX_SETS> sets_used = {};
 		std::array<SetBinding, VUK_MAX_SETS> set_bindings = {};
 		std::bitset<VUK_MAX_SETS> persistent_sets_used = {};
@@ -215,6 +220,9 @@ namespace vuk {
 		CommandBuffer& set_viewport(unsigned index, Viewport vp);
 		CommandBuffer& set_viewport(unsigned index, Rect2D area, float min_depth = 0.f, float max_depth = 1.f);
 		CommandBuffer& set_scissor(unsigned index, Rect2D vp);
+
+		CommandBuffer& set_blend_state(vuk::PipelineColorBlendAttachmentState);
+        CommandBuffer& set_blend_constants(std::array<float, 4> constants);
 
 		CommandBuffer& bind_graphics_pipeline(vuk::PipelineBaseInfo*);
 		CommandBuffer& bind_graphics_pipeline(Name);

@@ -81,6 +81,16 @@ namespace vuk {
         return *this;
     }
 
+    CommandBuffer& CommandBuffer::set_blend_state(vuk::PipelineColorBlendAttachmentState pcbs){
+        blend_state_override = pcbs;
+        return *this;
+    }
+
+    CommandBuffer& CommandBuffer::set_blend_constants(std::array<float, 4> constants) {
+        blend_constants = constants;
+        return *this;
+    }
+
     CommandBuffer& CommandBuffer::bind_graphics_pipeline(vuk::PipelineBaseInfo* pi) {
         next_pipeline = pi;
         return *this;
@@ -494,6 +504,11 @@ namespace vuk {
             pi.multisample_state.rasterizationSamples = (VkSampleCountFlagBits)ongoing_renderpass->samples;
 
             pi.color_blend_attachments = pi.base->color_blend_attachments;
+            if (blend_state_override) {
+                pi.color_blend_attachments.resize(1);
+                pi.color_blend_attachments[0] = *blend_state_override;
+                blend_state_override = {};
+            }
             // last blend attachment is replicated to cover all attachments
             if(pi.color_blend_attachments.size() < (size_t)ongoing_renderpass->color_attachments.size()) {
                 pi.color_blend_attachments.resize(ongoing_renderpass->color_attachments.size(), pi.color_blend_attachments.back());
@@ -501,6 +516,11 @@ namespace vuk {
             pi.color_blend_state = pi.base->color_blend_state;
             pi.color_blend_state.pAttachments = (VkPipelineColorBlendAttachmentState*)pi.color_blend_attachments.data();
             pi.color_blend_state.attachmentCount = (uint32_t)pi.color_blend_attachments.size();
+
+            if (blend_constants) { // TODO: support dynamic state on this
+                memcpy(&pi.color_blend_state.blendConstants, &*blend_constants, sizeof(float) * 4);
+                blend_constants = {};
+            }
 
             current_pipeline = ptc.acquire_pipeline(pi);
 

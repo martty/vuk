@@ -165,34 +165,6 @@ namespace std {
 		}
 	};
 
-	template <>
-	struct hash<VkPipelineMultisampleStateCreateInfo> {
-		size_t operator()(VkPipelineMultisampleStateCreateInfo const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.flags, x.alphaToCoverageEnable, x.alphaToOneEnable, x.minSampleShading, x.rasterizationSamples, x.sampleShadingEnable);
-			if (x.pSampleMask) hash_combine(h, *x.pSampleMask);
-			return h;
-		}
-	};
-
-	template <>
-	struct hash<VkDynamicState> {
-		size_t operator()(VkDynamicState const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, to_integral(x));
-			return h;
-		}
-	};
-
-	template <>
-	struct hash<VkPipelineDynamicStateCreateInfo> {
-		size_t operator()(VkPipelineDynamicStateCreateInfo const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.flags, std::span(x.pDynamicStates, x.dynamicStateCount));
-			return h;
-		}
-	};
-
 /*	template <>
 	struct hash<VkGraphicsPipelineCreateInfo> {
 		size_t operator()(VkGraphicsPipelineCreateInfo const & x) const noexcept {

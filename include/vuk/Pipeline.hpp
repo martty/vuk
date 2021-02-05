@@ -230,7 +230,8 @@ namespace vuk {
 		BlendFactor srcAlphaBlendFactor = BlendFactor::eZero;
 		BlendFactor dstAlphaBlendFactor = BlendFactor::eZero;
 		BlendOp alphaBlendOp = BlendOp::eAdd;
-		ColorComponentFlags colorWriteMask = {};
+        ColorComponentFlags colorWriteMask =
+            vuk::ColorComponentFlagBits::eR | vuk::ColorComponentFlagBits::eG | vuk::ColorComponentFlagBits::eB | vuk::ColorComponentFlagBits::eA;
 	};
 	static_assert(sizeof(PipelineColorBlendAttachmentState) == sizeof(VkPipelineColorBlendAttachmentState), "struct and wrapper have different size!");
 	static_assert(std::is_standard_layout<PipelineColorBlendAttachmentState>::value, "struct wrapper is not a standard layout!");
@@ -754,11 +755,50 @@ namespace std {
 		}
 	};
 
+	template<>
+    struct hash<VkPipelineColorBlendStateCreateInfo> {
+        size_t operator()(VkPipelineColorBlendStateCreateInfo const& x) const noexcept {
+            size_t h = 0;
+            hash_combine(h, x.blendConstants[0], x.blendConstants[1], x.blendConstants[2], x.blendConstants[3], x.logicOpEnable, to_integral(x.logicOp),
+                         x.attachmentCount);
+            return h;
+        }
+    };
+
+	template<>
+    struct hash<VkPipelineMultisampleStateCreateInfo> {
+        size_t operator()(VkPipelineMultisampleStateCreateInfo const& x) const noexcept {
+            size_t h = 0;
+            hash_combine(h, x.flags, x.alphaToCoverageEnable, x.alphaToOneEnable, x.minSampleShading, x.rasterizationSamples, x.sampleShadingEnable);
+            if(x.pSampleMask)
+                hash_combine(h, *x.pSampleMask);
+            return h;
+        }
+    };
+
+    template<>
+    struct hash<VkDynamicState> {
+        size_t operator()(VkDynamicState const& x) const noexcept {
+            size_t h = 0;
+            hash_combine(h, to_integral(x));
+            return h;
+        }
+    };
+
+    template<>
+    struct hash<VkPipelineDynamicStateCreateInfo> {
+        size_t operator()(VkPipelineDynamicStateCreateInfo const& x) const noexcept {
+            size_t h = 0;
+            hash_combine(h, x.flags, std::span(x.pDynamicStates, x.dynamicStateCount));
+            return h;
+        }
+    };
+
 	template <>
 	struct hash<vuk::PipelineInstanceCreateInfo> {
 		size_t operator()(vuk::PipelineInstanceCreateInfo const& x) const noexcept {
 			size_t h = 0;
-			hash_combine(h, x.base, reinterpret_cast<uint64_t>((VkRenderPass)x.render_pass), x.subpass);
+			hash_combine(h, x.base, reinterpret_cast<uint64_t>((VkRenderPass)x.render_pass), x.subpass, x.color_blend_attachments, x.color_blend_state, x.multisample_state, x.dynamic_state);
 			return h;
 		}
 	};
