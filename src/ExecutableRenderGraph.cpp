@@ -68,6 +68,10 @@ namespace vuk {
 			auto rg = ptc.acquire_rendertarget(rgci);
 			attachment_info.iv = rg.image_view;
 			attachment_info.image = rg.image;
+
+			std::string dbg_name = "RT_" + std::string(name);
+            ptc.ctx.debug.set_name(rg.image, dbg_name);
+            ptc.ctx.debug.set_name(rg.image_view.payload, dbg_name);
 		}
 	}
 
@@ -286,6 +290,13 @@ namespace vuk {
 			}
 			if (rpass.handle != VK_NULL_HANDLE) {
 				vkCmdEndRenderPass(cbuf);
+                for(auto dep: rpass.post_barriers) {
+                    dep.barrier.image = impl->bound_attachments[dep.image].image;
+                    vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
+                }
+                for(auto dep: rpass.post_mem_barriers) {
+                    vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 1, &dep.barrier, 0, nullptr, 0, nullptr);
+                }
 			}
 		}
 		vkEndCommandBuffer(cbuf);

@@ -234,8 +234,7 @@ namespace vuk {
 		SubpassInfo(arena&);
 		bool use_secondary_command_buffers;
 		std::vector<PassInfo*, short_alloc<PassInfo*, 16>> passes;
-		std::vector<ImageBarrier> pre_barriers;
-		std::vector<ImageBarrier> post_barriers;
+        std::vector<ImageBarrier> pre_barriers, post_barriers;
 		std::vector<MemoryBarrier> pre_mem_barriers, post_mem_barriers;
 	};
 
@@ -248,6 +247,8 @@ namespace vuk {
 		bool framebufferless = false;
 		VkRenderPass handle = {};
 		VkFramebuffer framebuffer;
+        std::vector<ImageBarrier> pre_barriers, post_barriers;
+        std::vector<MemoryBarrier> pre_mem_barriers, post_mem_barriers;
 	};
 
 } // namespace vuk

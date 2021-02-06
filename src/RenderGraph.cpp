@@ -345,8 +345,12 @@ namespace vuk {
 							sd.dstSubpass = VK_SUBPASS_EXTERNAL;
 							left_rp.rpci.subpass_dependencies.push_back(sd);
 						}
-						// if we are coming from an fbless pass we need to emit barriers if the right pass doesn't exist (chain end) or has framebuffer 
-						if (left_rp.framebufferless && ((right.pass && !impl->rpis[right.pass->render_pass_index].framebufferless) || right.pass == nullptr)) {
+						// IF
+						//    we are coming from an fbless pass OR a pass where this wasn't a framebuffer attachment 
+						// THEN 
+						//    we need to emit a barrier, but only if 
+						//    the right pass doesn't exist (chain end) or has framebuffer
+						if ((left_rp.framebufferless || !is_framebuffer_attachment(left.use)) && ((right.pass && !impl->rpis[right.pass->render_pass_index].framebufferless) || right.pass == nullptr)) {
 							// right layout == Undefined means the chain terminates, no transition/barrier
 							if (right.use.layout == vuk::ImageLayout::eUndefined)
 								continue;
@@ -361,7 +365,12 @@ namespace vuk {
 							barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
 							barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
 							ImageBarrier ib{ .image = name, .barrier = barrier, .src = left.use.stages, .dst = right.use.stages };
-							left_rp.subpasses[left.pass->subpass].post_barriers.push_back(ib);
+							// attach this barrier to the end of subpass or end of renderpass
+                            if(left_rp.framebufferless) {
+                                left_rp.subpasses[left.pass->subpass].post_barriers.push_back(ib);
+                            } else {
+                                left_rp.post_barriers.push_back(ib);
+							}
 						}
 					}
 
