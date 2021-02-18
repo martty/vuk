@@ -14,6 +14,47 @@
 #define VUK_MAX_PUSHCONSTANT_RANGES 8
 
 namespace vuk {
+	// return a/b rounded to infinity
+	constexpr uint64_t idivceil(uint64_t a, uint64_t b) noexcept {
+		return (a + b - 1) / b;
+	}
+
+	template<uint64_t Count>
+	struct Bitset {
+		static constexpr uint64_t bitmask(uint64_t const onecount) {
+			return static_cast<uint64_t>(-(onecount != 0))
+				& (static_cast<uint64_t>(-1) >> ((sizeof(uint64_t) * 8) - onecount));
+		}
+		
+		static constexpr uint64_t n_bits = sizeof(uint64_t) * 8;
+		static constexpr uint64_t n_words = idivceil(Count, n_bits);
+		static constexpr uint64_t remainder = Count - Count * (Count / n_bits);
+		static constexpr uint64_t last_word_mask = bitmask(remainder);
+		uint64_t words[n_words];
+
+		Bitset& set(uint64_t pos, bool value = true) noexcept {
+			auto word = pos / n_bits;
+			if (value) {
+				words[word] |= 1ULL << (pos - n_bits * word);
+			} else {
+				words[word] &= ~(1ULL << (pos - n_bits * word));
+			}
+			return *this;
+		}
+
+		bool operator==(const Bitset& other) const noexcept {
+			uint64_t i = 0;
+			for (; i < (Count / n_bits); i++) {
+				if (words[i] != other.words[i])
+					return false;
+			}
+			if constexpr (remainder > 0) {
+				return (words[n_words - 1] & last_word_mask) == (other.words[n_words - 1] & last_word_mask);
+			}
+			return true;
+		}
+	};
+
 	enum class PrimitiveTopology {
 		ePointList = VK_PRIMITIVE_TOPOLOGY_POINT_LIST,
 		eLineList = VK_PRIMITIVE_TOPOLOGY_LINE_LIST,
@@ -434,7 +475,8 @@ namespace vuk {
 
 	struct PipelineBaseCreateInfoBase {
 		// 4 valid flags
-		std::bitset<4 * VUK_MAX_SETS * VUK_MAX_BINDINGS> binding_flags = {};
+		
+		Bitset<4 * VUK_MAX_SETS * VUK_MAX_BINDINGS> binding_flags = {};
 		// set flags on specific descriptor in specific set
 		void set_binding_flags(unsigned set, unsigned binding, vuk::DescriptorBindingFlags flags) {
 			unsigned f = static_cast<unsigned>(flags);
@@ -504,7 +546,7 @@ namespace vuk {
 		VkPipelineViewportStateCreateInfo viewport_state{ VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO, nullptr, 0, 1, nullptr, 1, nullptr };
 
 		// 4 valid flags
-		std::bitset<4 * VUK_MAX_SETS * VUK_MAX_BINDINGS> binding_flags = {};
+		Bitset<4 * VUK_MAX_SETS * VUK_MAX_BINDINGS> binding_flags = {};
 		// if the set has a variable count binding, the maximum number of bindings possible
 		std::array<uint32_t, VUK_MAX_SETS> variable_count_max = {};
 	};

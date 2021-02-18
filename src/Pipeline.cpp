@@ -136,7 +136,7 @@ namespace vuk {
 			// TODO: rewrite this without _Getword
 			auto set_word_offset = index * VUK_MAX_BINDINGS * 4 / (sizeof(unsigned long long) * 8);
 			for (unsigned i = 0; i <= set.highest_descriptor_binding; i++) {
-				auto word = bci.binding_flags._Getword(set_word_offset + i * 4 / (sizeof(unsigned long long) * 8));
+				auto word = bci.binding_flags.words[set_word_offset + i * 4 / (sizeof(unsigned long long) * 8)];
 				if (word & ((0b1111) << i)) {
 					VkDescriptorBindingFlags f((word >> i) & 0b1111);
 					dslci.flags.resize(i + 1);
