@@ -4,7 +4,7 @@ project(vuk-examples)
 FetchContent_Declare(
   vk-bootstrap 
   GIT_REPOSITORY https://github.com/charles-lunarg/vk-bootstrap
-  GIT_TAG        v0.2
+  GIT_TAG        cf8df11a0a071463009031cb474099dacffe90ed
 )
 FetchContent_MakeAvailable(vk-bootstrap)
 
