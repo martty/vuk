@@ -241,7 +241,10 @@ namespace vuk {
 
 		PerThreadContext(const PerThreadContext& o) = delete;
 		PerThreadContext& operator=(const PerThreadContext& o) = delete;
-
+		
+		/// @brief Checks if the given transfer is complete (ready)
+		/// @param stub The transfer to check
+		/// @return True if the transfer has completed
 		bool is_ready(const TransferStub& stub);
 		void wait_all_transfers();
 
@@ -251,24 +254,43 @@ namespace vuk {
 		void commit_persistent_descriptorset(PersistentDescriptorSet& array);
 
 		size_t get_allocation_size(Buffer);
-		Buffer _allocate_scratch_buffer(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, size_t size, size_t alignment, bool create_mapped);
-		Unique<Buffer> _allocate_buffer(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, size_t size, size_t alignment, bool create_mapped);
+		/// @brief Allocates a scratch buffer, i.e. a buffer that has its lifetime bound to the current inflight frame
+		/// @param mem_usage Where to allocate the buffer (host visible buffers will be automatically mapped)
+		/// @param buffer_usage How this buffer will be used
+		/// @param size Size of the buffer
+		/// @param alignment Alignment of the buffer
+		/// @return The allocated Buffer
+		Buffer allocate_scratch_buffer(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, size_t size, size_t alignment);
+		
+		/// @brief Allocates a buffer with explicitly managed lifetime
+		/// @param mem_usage Where to allocate the buffer (host visible buffers will be automatically mapped)
+		/// @param buffer_usage How this buffer will be used
+		/// @param size Size of the buffer
+		/// @param alignment Alignment of the buffer
+		/// @return The allocated Buffer
+		Unique<Buffer> allocate_buffer(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, size_t size, size_t alignment);
 
-		// since data is provided, we will add TransferDst to the flags automatically
+		/// @brief Allocates & fills a scratch buffer, i.e. a buffer that has its lifetime bound to the current inflight frame
+		/// @param mem_usage Where to allocate the buffer (host visible buffers will be automatically mapped)
+		/// @param buffer_usage How this buffer will be used (since data is provided, TransferDst is added to the flags)
+		/// @return The allocated Buffer
 		template<class T>
 		std::pair<Buffer, TransferStub> create_scratch_buffer(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, std::span<T> data) {
-			auto dst = _allocate_scratch_buffer(mem_usage, vuk::BufferUsageFlagBits::eTransferDst | buffer_usage, sizeof(T) * data.size(), 1, false);
+			auto dst = allocate_scratch_buffer(mem_usage, vuk::BufferUsageFlagBits::eTransferDst | buffer_usage, sizeof(T) * data.size(), 1);
 			auto stub = upload(dst, data);
 			return { dst, stub };
 		}
 
+		/// @brief Allocates & fills a buffer with explicitly managed lifetime
+		/// @param mem_usage Where to allocate the buffer (host visible buffers will be automatically mapped)
+		/// @param buffer_usage How this buffer will be used (since data is provided, TransferDst is added to the flags)
+		/// @return The allocated Buffer
 		template<class T>
 		std::pair<Unique<Buffer>, TransferStub> create_buffer(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, std::span<T> data) {
-			auto dst = _allocate_buffer(mem_usage, vuk::BufferUsageFlagBits::eTransferDst | buffer_usage, sizeof(T) * data.size(), 1, false);
+			auto dst = allocate_buffer(mem_usage, vuk::BufferUsageFlagBits::eTransferDst | buffer_usage, sizeof(T) * data.size(), 1);
 			auto stub = upload(*dst, data);
 			return { std::move(dst), stub };
 		}
-
 
 		vuk::Texture allocate_texture(vuk::ImageCreateInfo);
 		std::pair<vuk::Texture, TransferStub> create_texture(vuk::Format format, vuk::Extent3D extents, void* data);
@@ -277,7 +299,7 @@ namespace vuk {
 		template<class T>
 		TransferStub upload(Buffer dst, std::span<T> data) {
 			if (data.empty()) return { 0 };
-			auto staging = _allocate_scratch_buffer(MemoryUsage::eCPUonly, vuk::BufferUsageFlagBits::eTransferSrc, sizeof(T) * data.size(), 1, true);
+			auto staging = allocate_scratch_buffer(MemoryUsage::eCPUonly, vuk::BufferUsageFlagBits::eTransferSrc, sizeof(T) * data.size(), 1);
 			::memcpy(staging.mapped_ptr, data.data(), sizeof(T) * data.size());
 
 			return ifc.enqueue_transfer(staging, dst);
@@ -288,7 +310,7 @@ namespace vuk {
 			assert(!data.empty());
 			// compute staging buffer alignment as texel block size
 			size_t alignment = format_to_texel_block_size(format);
-			auto staging = _allocate_scratch_buffer(MemoryUsage::eCPUonly, vuk::BufferUsageFlagBits::eTransferSrc, sizeof(T) * data.size(), alignment, true);
+			auto staging = allocate_scratch_buffer(MemoryUsage::eCPUonly, vuk::BufferUsageFlagBits::eTransferSrc, sizeof(T) * data.size(), alignment);
 			::memcpy(staging.mapped_ptr, data.data(), sizeof(T) * data.size());
 
 			return ifc.enqueue_transfer(staging, dst, extent, base_layer, generate_mips);
