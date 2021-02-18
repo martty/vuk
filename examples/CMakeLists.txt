@@ -4,7 +4,7 @@ project(vuk-examples)
 FetchContent_Declare(
   vk-bootstrap 
   GIT_REPOSITORY https://github.com/charles-lunarg/vk-bootstrap
-  GIT_TAG        v0.11
+  GIT_TAG        v0.2
 )
 FetchContent_MakeAvailable(vk-bootstrap)
 
@@ -37,7 +37,7 @@ set_target_properties(vuk_all_examples
     PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
 )
-if(VUK_COMPILER_CLANGPP)
+if(VUK_COMPILER_CLANGPP OR VUK_COMPILER_GPP)
     target_compile_options(vuk_all_examples PRIVATE -std=c++20 -fno-char8_t)
 elseif(MSVC)
     target_compile_options(vuk_all_examples PRIVATE /std:c++latest /permissive- /Zc:char8_t-)
@@ -56,7 +56,7 @@ function(ADD_EXAMPLE name)
         PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     )
-    if(VUK_COMPILER_CLANGPP)
+    if(VUK_COMPILER_CLANGPP OR VUK_COMPILER_GPP)
 	    target_compile_options(${FULL_NAME} PRIVATE -std=c++20 -fno-char8_t)
     elseif(MSVC)
 	    target_compile_options(${FULL_NAME} PRIVATE /std:c++latest /permissive- /Zc:char8_t-)

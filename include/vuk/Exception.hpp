@@ -9,7 +9,7 @@ namespace vuk {
 
 		Exception(std::string message) : error_message(std::move(message)) {}
 
-		const char* what() const override {
+		const char* what() const noexcept override {
 			return error_message.c_str();
 		}
 	};

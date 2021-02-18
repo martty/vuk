@@ -1,6 +1,7 @@
 #pragma once
 #include <stdint.h>
 #include <span>
+#include <functional>
 
 //https://gist.github.com/filsinger/1255697/21762ea83a2d3c17561c8e6a29f44249a4626f9e
 

@@ -66,7 +66,14 @@ else()
   set(VUK_COMPILER_CLANGPP OFF)
 endif()
 
-if(VUK_COMPILER_CLANGPP)
+string(FIND "${CMAKE_CXX_COMPILER}" "g++" VUK_COMPILER_GPP)
+if(VUK_COMPILER_GPP GREATER -1)
+  set(VUK_COMPILER_GPP ON)
+else()
+  set(VUK_COMPILER_GPP OFF)
+endif()
+
+if(VUK_COMPILER_CLANGPP OR VUK_COMPILER_GPP)
 	target_compile_options(vuk PRIVATE -std=c++20 -fno-char8_t)
 elseif(MSVC)
 	target_compile_options(vuk PRIVATE /std:c++latest /permissive- /Zc:char8_t-)
@@ -79,7 +86,6 @@ target_link_libraries(vuk PUBLIC shaderc ${Vulkan_LIBRARIES})
 if (WIN32)
 	target_compile_definitions(vuk PUBLIC NOMINMAX VC_EXTRALEAN WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS _SCL_SECURE_NO_WARNINGS _SILENCE_CLANG_CONCEPTS_MESSAGE)
 endif()
-target_compile_definitions(vuk PUBLIC VULKAN_HPP_ENABLE_DYNAMIC_LOADER_TOOL=0)
 
 option(VUK_BUILD_EXAMPLES "Build examples" OFF)
 

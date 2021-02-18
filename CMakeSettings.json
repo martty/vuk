@@ -53,6 +53,52 @@
           "type": "BOOL"
         }
       ]
+    },
+    {
+      "environments": [
+        {
+          "MINGW64_ROOT": "C:/mingw64",
+          "BIN_ROOT": "${env.MINGW64_ROOT}/bin",
+          "FLAVOR": "x86_64-w64-mingw32",
+          "TOOLSET_VERSION": "10.2.0",
+          "INCLUDE": "${env.MINGW64_ROOT}\\include\\c++\\${env.TOOLSET_VERSION};${env.MINGW64_ROOT}\\include\\c++\\${env.TOOLSET_VERSION}\\tr1;${env.MINGW64_ROOT}\\include\\c++\\${env.TOOLSET_VERSION}\\${env.FLAVOR}",
+
+          "MINGW_PREFIX": "C:/mingw64",
+          "MINGW_CHOST": "x86_64-w64-mingw32",
+          "MINGW_PACKAGE_PREFIX": "mingw-w64-x86_64",
+          "MSYSTEM": "MINGW64",
+          "MSYSTEM_CARCH": "x64_64",
+          "MSYSTEM_PREFIX": "C:/mingw64",
+          "MSYSTEM_CHOST": " x86_64-w64-mingw32",
+
+          "environment": "mingw64"
+        }
+      ],
+      "name": "x64-mingw-Debug",
+      "generator": "Ninja",
+      "configurationType": "Debug",
+      "buildRoot": "${projectDir}\\build\\${name}",
+      "installRoot": "${projectDir}\\out\\install\\${name}",
+      "cmakeCommandArgs": "",
+      "buildCommandArgs": "",
+      "ctestCommandArgs": "",
+      "inheritEnvironments": [ "mingw64" ],
+      "intelliSenseMode": "linux-gcc-x64",
+      "variables": [
+        {
+          "name": "CMAKE_C_COMPILER",
+          "value": "${env.BIN_ROOT}/gcc.exe"
+        },
+        {
+          "name": "CMAKE_CXX_COMPILER",
+          "value": "${env.BIN_ROOT}/g++.exe"
+        },
+        {
+          "name": "VUK_BUILD_EXAMPLES",
+          "value": "True",
+          "type": "BOOL"
+        }
+      ]
     }
   ]
 }

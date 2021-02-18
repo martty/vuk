@@ -82,6 +82,10 @@ namespace vuk {
 		std::function<void(vuk::CommandBuffer&)> execute;
 	};
 
+	// declare these specializations for GCC
+	template<> ConstMapIterator<Name, std::span<const struct UseRef>>::~ConstMapIterator();
+	template<> ConstMapIterator<Name, const struct AttachmentRPInfo&>::~ConstMapIterator();
+
 	struct RenderGraph {
 		RenderGraph();
 		~RenderGraph();
