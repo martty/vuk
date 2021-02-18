@@ -24,7 +24,11 @@ namespace vuk {
 	}
 
 	void RenderGraph::append(RenderGraph other) {
-		impl->passes.insert(impl->passes.end(), std::make_move_iterator(other.impl->passes.begin()), std::make_move_iterator(other.impl->passes.end()));
+		// TODO:
+		// this code is written weird because of wonky allocators
+		for (auto& p : other.impl->passes) {
+			impl->passes.emplace_back(*impl->arena_, Pass{}) = p;
+		}
 
 		impl->bound_attachments.insert(std::make_move_iterator(other.impl->bound_attachments.begin()), std::make_move_iterator(other.impl->bound_attachments.end()));
 		impl->bound_buffers.insert(std::make_move_iterator(other.impl->bound_buffers.begin()), std::make_move_iterator(other.impl->bound_buffers.end()));

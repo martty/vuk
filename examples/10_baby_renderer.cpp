@@ -154,12 +154,12 @@ namespace {
 			// Set up the resources for our renderer
 
 			// Create meshes
-			cube_mesh = {};
+			cube_mesh = Mesh{};
 			cube_mesh->vertex_buffer = ptc.create_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eVertexBuffer, std::span(&box.first[0], box.first.size())).first;
 			cube_mesh->index_buffer = ptc.create_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eIndexBuffer, std::span(&box.second[0], box.second.size())).first;
 			cube_mesh->index_count = (uint32_t)box.second.size();
 
-			quad_mesh = {};
+			quad_mesh = Mesh{};
 			quad_mesh->vertex_buffer = ptc.create_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eVertexBuffer, std::span(&box.first[0], 6)).first;
 			quad_mesh->index_buffer = ptc.create_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eIndexBuffer, std::span(&box.second[0], 6)).first;
 			quad_mesh->index_count = 6;

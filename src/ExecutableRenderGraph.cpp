@@ -68,10 +68,6 @@ namespace vuk {
 			auto rg = ptc.acquire_rendertarget(rgci);
 			attachment_info.iv = rg.image_view;
 			attachment_info.image = rg.image;
-
-			std::string dbg_name = "RT_" + std::string(name);
-            ptc.ctx.debug.set_name(rg.image, dbg_name);
-            ptc.ctx.debug.set_name(rg.image_view.payload, dbg_name);
 		}
 	}
 

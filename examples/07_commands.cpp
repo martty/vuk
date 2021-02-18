@@ -134,7 +134,7 @@ namespace {
 			});
 
 			time += ImGui::GetIO().DeltaTime;
-			if (!start && time > 20.f) {
+			if (!start && time > 5.f) {
 				start = true;
 				time = 0;
 				std::random_device rd;

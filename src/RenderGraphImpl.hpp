@@ -8,7 +8,7 @@ namespace vuk {
 #define INIT(x) x(decltype(x)::allocator_type(*arena_))
 	struct RGImpl {
 		std::unique_ptr<arena> arena_;
-		std::vector<PassInfo> passes;
+		std::vector<PassInfo, short_alloc<PassInfo, 64>> passes;
 
 		robin_hood::unordered_flat_map<Name, Name> aliases;
 
@@ -19,8 +19,7 @@ namespace vuk {
 		robin_hood::unordered_flat_map<Name, AttachmentRPInfo> bound_attachments;
 		robin_hood::unordered_flat_map<Name, BufferInfo> bound_buffers;
 
-		RGImpl() : arena_(new arena(1024 * 128)), INIT(rpis) {
-			passes.reserve(64);
+		RGImpl() : arena_(new arena(1024 * 128)), INIT(rpis), INIT(passes) {
 		}
 	};
 #undef INIT
