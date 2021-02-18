@@ -1,6 +1,7 @@
 #include "vuk/Context.hpp"
 #include "RGImage.hpp"
 
+#include <math.h>
 #include <mutex>
 #include <queue>
 #include <string_view>
@@ -276,7 +277,7 @@ inline void record_mip_gen(VkCommandBuffer& cbuf, vuk::MipGenerateCommand& task,
 
 	VkImageMemoryBarrier to_bars[] = { top_mip_to_barrier, rest_mip_to_barrier };
 	vkCmdPipelineBarrier(cbuf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 2, to_bars);
-	auto mips = (uint32_t)std::log2f((float)std::max(task.extent.width, task.extent.height));
+	auto mips = (uint32_t)log2f((float)std::max(task.extent.width, task.extent.height));
 
 	for (uint32_t miplevel = task.base_mip_level + 1; miplevel < mips; miplevel++) {
 		VkImageBlit blit;
@@ -365,8 +366,8 @@ inline void record_buffer_image_copy(VkCommandBuffer& cbuf, vuk::BufferImageCopy
 	vkCmdCopyBufferToImage(cbuf, task.src.buffer, task.dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bc);
 	if (task.generate_mips) {
 		vkCmdPipelineBarrier(cbuf, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &top_mip_to_barrier);
-		
-		auto mips = (uint32_t)std::log2f((float)std::max(task.extent.width, task.extent.height)) + 1;
+
+		auto mips = (uint32_t)log2f((float)std::max(task.extent.width, task.extent.height)) + 1;
 
 		for (uint32_t miplevel = task.mip_level; miplevel < mips; miplevel++) {
 			VkImageBlit blit;
@@ -491,4 +492,3 @@ namespace vuk {
 		}
 	};
 }
-
