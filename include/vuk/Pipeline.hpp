@@ -23,12 +23,12 @@ namespace vuk {
 	struct Bitset {
 		static constexpr uint64_t bitmask(uint64_t const onecount) {
 			return static_cast<uint64_t>(-(onecount != 0))
-				& (static_cast<uint64_t>(-1) >> ((sizeof(uint64_t) * 8) - onecount));
+				& (static_cast<uint64_t>(-1) >> ((sizeof(uint64_t)) - onecount));
 		}
 		
 		static constexpr uint64_t n_bits = sizeof(uint64_t) * 8;
 		static constexpr uint64_t n_words = idivceil(Count, n_bits);
-		static constexpr uint64_t remainder = Count - Count * (Count / n_bits);
+		static constexpr uint64_t remainder = Count - n_bits * (Count / n_bits);
 		static constexpr uint64_t last_word_mask = bitmask(remainder);
 		uint64_t words[n_words];
 
