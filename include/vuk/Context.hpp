@@ -225,7 +225,7 @@ namespace vuk {
 		PerThreadContext begin();
 
 		std::optional<uint64_t> get_timestamp_query_result(Query);
-		std::optional<double> get_duration_query_result(Query, Query);
+		std::optional<double> get_duration_query_result(Query start, Query end);
 		//std::optional<double> get_named_timestamp_query_results(Name);
 
 		std::vector<SampledImage> get_sampled_images();

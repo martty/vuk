@@ -17,17 +17,59 @@
 namespace vuk {
 	struct BenchRunner;
 
-	struct Bench {
-		std::string_view name;
+	struct CaseBase {
+		std::string_view label;
+		std::vector<std::string_view> subcase_labels;
+		std::vector<std::function<RenderGraph(BenchRunner&, vuk::InflightContext&, Query, Query)>> subcases;
+		std::vector<std::vector<double>> timings;
+		std::vector<uint32_t> last_stage_ran;
+		std::vector<uint32_t> runs_required;
+		std::vector<double> est_mean;
+		std::vector<double> est_variance;
+		std::vector<double> mean;
+		std::vector<double> variance;
+	};
 
+	struct BenchBase {
+		std::string_view name;
 		std::function<void(BenchRunner&, vuk::InflightContext&)> setup;
-		std::function<RenderGraph(BenchRunner&, vuk::InflightContext&)> render;
 		std::function<void(BenchRunner&, vuk::InflightContext&)> gui;
 		std::function<void(BenchRunner&, vuk::InflightContext&)> cleanup;
+		std::function<CaseBase&(unsigned)> get_case;
+		size_t num_cases;
+	};
+
+	template<class... Args>
+	struct Bench {
+		BenchBase base;
+		using Params = std::tuple<Args...>;
+
+		struct Case : CaseBase {
+			template<class F>
+			Case(std::string_view label, F&& subcase_template) : CaseBase(label) {
+				std::apply([this, subcase_template](auto&&... ts) {
+					(subcases.emplace_back(
+						[=](BenchRunner& runner, vuk::InflightContext& ifc, Query start, Query end) { 
+							return subcase_template(runner, ifc, start, end, ts); 
+						}), ...);
+					(subcase_labels.emplace_back(ts.description), ...);
+					timings.resize(sizeof...(Args));
+					runs_required.resize(sizeof...(Args));
+					mean.resize(sizeof...(Args));
+					variance.resize(sizeof...(Args));
+					est_mean.resize(sizeof...(Args));
+					est_variance.resize(sizeof...(Args));
+					last_stage_ran.resize(sizeof...(Args));
+				}, Params{});
+			}
+		};
+
+		std::vector<Case> cases;
 	};
 }
 
 namespace vuk {
+
 	struct BenchRunner {
 		VkDevice device;
 		VkPhysicalDevice physical_device;
@@ -40,7 +82,14 @@ namespace vuk {
 		vkb::Device vkbdevice;
 		util::ImGuiData imgui_data;
 
-		std::vector<Bench*> benches;
+		Query start, end;
+		unsigned current_case = 0;
+		unsigned current_subcase = 0;
+		unsigned current_stage = 0;
+
+		unsigned num_runs = 0;
+
+		BenchBase* bench;
 
 		BenchRunner();
 
@@ -52,18 +101,17 @@ namespace vuk {
 			ImGui::StyleColorsDark();
 			// Setup Platform/Renderer bindings
 			ImGui_ImplGlfw_InitForVulkan(window, true);
+
+			start = context->create_timestamp_query();
+			end = context->create_timestamp_query();
+
 			auto ifc = context->begin();
 			{
 				auto ptc = ifc.begin();
 				imgui_data = util::ImGui_ImplVuk_Init(ptc);
 				ptc.wait_all_transfers();
 			}
-			for(auto& ex : benches)
-				ex->setup(*this, ifc);
-		}
-
-		void gui(vuk::InflightContext& ifc) {
-			benches[0]->gui(*this, ifc);
+			bench->setup(*this, ifc);
 		}
 
 		void render();
@@ -73,11 +121,10 @@ namespace vuk {
 			imgui_data.font_texture.view.reset();
 			imgui_data.font_texture.image.reset();
 			auto ifc = context->begin();
-			for (auto& ex : benches) {
-				if (ex->cleanup) {
-					ex->cleanup(*this, ifc);
-				}
+			if (bench->cleanup) {
+				bench->cleanup(*this, ifc);
 			}
+
 			// this performs cleanups for all inflight frames
 			for (auto i = 0; i < vuk::Context::FC; i++) {
 				context->begin();
@@ -101,8 +148,11 @@ namespace vuk {
 
 namespace util {
 	struct Register {
-		Register(vuk::Bench& x) {
-			vuk::BenchRunner::get_runner().benches.push_back(&x);
+		template<class... Args>
+		Register(vuk::Bench<Args...>& x) {
+			vuk::BenchRunner::get_runner().bench = &x.base;
+			vuk::BenchRunner::get_runner().bench->get_case = [&x](unsigned i) -> vuk::CaseBase& { return x.cases[i]; };
+			vuk::BenchRunner::get_runner().bench->num_cases = x.cases.size();
 		}
 	};
 }
