@@ -305,6 +305,13 @@ vuk::Program vuk::PerThreadContext::get_pipeline_reflection_info(vuk::PipelineBa
 	return res.reflection_info;
 }
 
+vuk::TimestampQuery vuk::PerThreadContext::register_timestamp_query(vuk::Query handle) {
+	auto query_slot = impl->tsquery_pool.acquire(1)[0];
+	auto& mapping = impl->tsquery_pool.pool.id_to_value_mapping;
+	mapping.emplace_back(handle.id, query_slot.id);
+	return query_slot;
+}
+
 VkFence vuk::PerThreadContext::acquire_fence() {
 	return impl->fence_pool.acquire(1)[0];
 }

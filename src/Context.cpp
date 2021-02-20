@@ -235,6 +235,10 @@ std::vector<uint8_t> vuk::Context::save_pipeline_cache() {
 	return data;
 }
 
+vuk::Query vuk::Context::create_timestamp_query() {
+	return { impl->query_id_counter++ };
+}
+
 vuk::DescriptorSetLayoutAllocInfo vuk::Context::create(const create_info_t<vuk::DescriptorSetLayoutAllocInfo>& cinfo) {
 	vuk::DescriptorSetLayoutAllocInfo ret;
 	vkCreateDescriptorSetLayout(device, &cinfo.dslci, nullptr, &ret.layout);

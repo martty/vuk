@@ -15,6 +15,11 @@
           "name": "VUK_BUILD_EXAMPLES",
           "value": "True",
           "type": "BOOL"
+        },
+        {
+          "name": "VUK_BUILD_BENCHMARKS",
+          "value": "True",
+          "type": "BOOL"
         }
       ]
     },
@@ -33,6 +38,12 @@
           "name": "VUK_BUILD_EXAMPLES",
           "value": "True",
           "type": "BOOL"
+        },
+
+        {
+          "name": "VUK_BUILD_BENCHMARKS",
+          "value": "True",
+          "type": "BOOL"
         }
       ]
     },
@@ -49,6 +60,11 @@
       "variables": [
         {
           "name": "VUK_BUILD_EXAMPLES",
+          "value": "True",
+          "type": "BOOL"
+        },
+        {
+          "name": "VUK_BUILD_BENCHMARKS",
           "value": "True",
           "type": "BOOL"
         }

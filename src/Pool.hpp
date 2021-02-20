@@ -36,6 +36,23 @@ namespace vuk {
 		void free(Context&);
 	};
 
+	struct TimestampQuery;
+
+	template<>
+	struct PooledType<TimestampQuery> {
+		VkQueryPool pool;
+		std::vector<TimestampQuery> values;
+		std::vector<uint64_t> host_values;
+		std::vector<std::pair<uint64_t, uint64_t>> id_to_value_mapping;
+		size_t needle = 0;
+
+		PooledType(Context&);
+		std::span<TimestampQuery> acquire(PerThreadContext& ptc, size_t count);
+		void get_results(Context&);
+		void reset(Context&);
+		void free(Context&);
+	};
+
 	template<class T, size_t FC>
 	struct PFView;
 

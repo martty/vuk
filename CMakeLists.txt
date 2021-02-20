@@ -50,7 +50,7 @@ target_sources(vuk PRIVATE
 	src/InflightContext.cpp
 	src/PerThreadContext.cpp
 	src/Util.cpp
-	src/Format.cpp)
+	src/Format.cpp "include/vuk/Query.hpp")
 
 target_include_directories(vuk PUBLIC ext/plf_colony)
 target_include_directories(vuk PUBLIC ext/VulkanMemoryAllocator/src)
@@ -92,6 +92,13 @@ option(VUK_BUILD_EXAMPLES "Build examples" OFF)
 if(VUK_BUILD_EXAMPLES)
 	add_subdirectory(examples)
 endif()
+
+option(VUK_BUILD_BENCHMARKS "Build benchmarks" OFF)
+
+if(VUK_BUILD_BENCHMARKS)
+	add_subdirectory(benchmarks)
+endif()
+
 
 option(VUK_BUILD_DOCS "Build docs" OFF)
 if(VUK_BUILD_DOCS)

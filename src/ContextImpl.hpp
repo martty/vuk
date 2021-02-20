@@ -29,6 +29,7 @@ namespace vuk {
 		std::mutex gfx_queue_lock;
 		std::mutex xfer_queue_lock;
 		Pool<VkCommandBuffer, Context::FC> cbuf_pools;
+		Pool<TimestampQuery, Context::FC> tsquery_pools;
 		Pool<VkSemaphore, Context::FC> semaphore_pools;
 		Pool<VkFence, Context::FC> fence_pools;
 		VkPipelineCache vk_pipeline_cache;
@@ -59,6 +60,9 @@ namespace vuk {
 		std::mutex named_pipelines_lock;
 		std::unordered_map<std::string_view, vuk::PipelineBaseInfo*> named_pipelines;
 		std::unordered_map<std::string_view, vuk::ComputePipelineInfo*> named_compute_pipelines;
+
+		std::atomic<uint64_t> query_id_counter = 0;
+		VkPhysicalDeviceProperties physical_device_properties;
 
 		std::mutex swapchains_lock;
 		plf::colony<Swapchain> swapchains;
@@ -141,6 +145,7 @@ namespace vuk {
 		ContextImpl(Context& ctx) : allocator(ctx.instance, ctx.device, ctx.physical_device, ctx.graphics_queue_family_index, ctx.transfer_queue_family_index),
 			device(ctx.device),
 			cbuf_pools(ctx),
+			tsquery_pools(ctx),
 			semaphore_pools(ctx),
 			fence_pools(ctx),
 			pipelinebase_cache(ctx),
@@ -160,6 +165,7 @@ namespace vuk {
 
 			VkPipelineCacheCreateInfo pcci{ .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO };
 			vkCreatePipelineCache(ctx.device, &pcci, nullptr, &vk_pipeline_cache);
+			vkGetPhysicalDeviceProperties(ctx.physical_device, &physical_device_properties);
 		}
 	};
 
@@ -399,6 +405,7 @@ namespace vuk {
 	struct IFCImpl {
 		Pool<VkFence, Context::FC>::PFView fence_pools; // must be first, so we wait for the fences
 		Pool<VkCommandBuffer, Context::FC>::PFView commandbuffer_pools;
+		Pool<TimestampQuery, Context::FC>::PFView tsquery_pools;
 		Pool<VkSemaphore, Context::FC>::PFView semaphore_pools;
 		Cache<PipelineInfo>::PFView pipeline_cache;
 		Cache<ComputePipelineInfo>::PFView compute_pipeline_cache;
@@ -426,9 +433,13 @@ namespace vuk {
 		// recycle
 		std::mutex recycle_lock;
 
+		// query results on host
+		std::unordered_map<uint64_t, uint64_t> query_result_map;
+
 		IFCImpl(Context& ctx, InflightContext& ifc) :
 			fence_pools(ctx.impl->fence_pools.get_view(ifc)), // must be first, so we wait for the fences
 			commandbuffer_pools(ctx.impl->cbuf_pools.get_view(ifc)),
+			tsquery_pools(ctx.impl->tsquery_pools.get_view(ifc)),
 			semaphore_pools(ctx.impl->semaphore_pools.get_view(ifc)),
 			pipeline_cache(ifc, ctx.impl->pipeline_cache),
 			compute_pipeline_cache(ifc, ctx.impl->compute_pipeline_cache),
@@ -451,6 +462,7 @@ namespace vuk {
 		Pool<VkCommandBuffer, Context::FC>::PFPTView commandbuffer_pool;
 		Pool<VkSemaphore, Context::FC>::PFPTView semaphore_pool;
 		Pool<VkFence, Context::FC>::PFPTView fence_pool;
+		Pool<TimestampQuery, Context::FC>::PFPTView tsquery_pool;
 		Cache<PipelineInfo>::PFPTView pipeline_cache;
 		Cache<ComputePipelineInfo>::PFPTView compute_pipeline_cache;
 		Cache<PipelineBaseInfo>::PFPTView pipelinebase_cache;
@@ -475,6 +487,7 @@ namespace vuk {
 			commandbuffer_pool(ifc.impl->commandbuffer_pools.get_view(ptc)),
 			semaphore_pool(ifc.impl->semaphore_pools.get_view(ptc)),
 			fence_pool(ifc.impl->fence_pools.get_view(ptc)),
+			tsquery_pool(ifc.impl->tsquery_pools.get_view(ptc)),
 			pipeline_cache(ptc, ifc.impl->pipeline_cache),
 			compute_pipeline_cache(ptc, ifc.impl->compute_pipeline_cache),
 			pipelinebase_cache(ptc, ifc.impl->pipelinebase_cache),

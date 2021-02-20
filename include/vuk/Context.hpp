@@ -10,10 +10,16 @@
 #include "vuk/Image.hpp"
 #include "vuk/Buffer.hpp"
 #include "vuk/Swapchain.hpp"
+#include "vuk/Query.hpp"
 
 namespace vuk {
 	struct TransferStub {
 		size_t id;
+	};
+
+	struct TimestampQuery {
+		VkQueryPool pool;
+		uint32_t id;
 	};
 
 	struct ContextCreateParameters {
@@ -76,6 +82,9 @@ namespace vuk {
 
 		bool load_pipeline_cache(std::span<uint8_t> data);
 		std::vector<uint8_t> save_pipeline_cache();
+
+		Query create_timestamp_query();
+		void create_named_timestamp_query(Name);
 
 		uint32_t(*get_thread_index)() = nullptr;
 
@@ -152,8 +161,8 @@ namespace vuk {
 
 		/// @brief Remove a swapchain that is managed by the Context
 		/// the swapchain is not destroyed
-        void remove_swapchain(SwapchainRef);
-		
+		void remove_swapchain(SwapchainRef);
+
 		/// @brief Begin new frame, with a new InflightContext
 		/// @return the new InflightContext
 		InflightContext begin();
@@ -215,6 +224,10 @@ namespace vuk {
 		void wait_all_transfers();
 		PerThreadContext begin();
 
+		std::optional<uint64_t> get_timestamp_query_result(Query);
+		std::optional<double> get_duration_query_result(Query, Query);
+		//std::optional<double> get_named_timestamp_query_results(Name);
+
 		std::vector<SampledImage> get_sampled_images();
 	private:
 		struct IFCImpl* impl;
@@ -226,6 +239,7 @@ namespace vuk {
 
 		TransferStub enqueue_transfer(Buffer src, Buffer dst);
 		TransferStub enqueue_transfer(Buffer src, vuk::Image dst, vuk::Extent3D extent, uint32_t base_layer, bool generate_mips);
+
 		void destroy(std::vector<vuk::Image>&& images);
 		void destroy(std::vector<VkImageView>&& images);
 	};
@@ -241,7 +255,7 @@ namespace vuk {
 
 		PerThreadContext(const PerThreadContext& o) = delete;
 		PerThreadContext& operator=(const PerThreadContext& o) = delete;
-		
+
 		/// @brief Checks if the given transfer is complete (ready)
 		/// @param stub The transfer to check
 		/// @return True if the transfer has completed
@@ -261,7 +275,7 @@ namespace vuk {
 		/// @param alignment Alignment of the buffer
 		/// @return The allocated Buffer
 		Buffer allocate_scratch_buffer(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, size_t size, size_t alignment);
-		
+
 		/// @brief Allocates a buffer with explicitly managed lifetime
 		/// @param mem_usage Where to allocate the buffer (host visible buffers will be automatically mapped)
 		/// @param buffer_usage How this buffer will be used
@@ -323,6 +337,8 @@ namespace vuk {
 		vuk::SampledImage& make_sampled_image(Name n, vuk::ImageViewCreateInfo ivci, vuk::SamplerCreateInfo sci);
 
 		vuk::Program get_pipeline_reflection_info(vuk::PipelineBaseCreateInfo pci);
+
+		TimestampQuery register_timestamp_query(Query);
 
 		template<class T>
 		void destroy(const T& t) {

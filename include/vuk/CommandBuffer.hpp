@@ -7,6 +7,7 @@
 #include "Types.hpp"
 #include "Buffer.hpp"
 #include "Image.hpp"
+#include "Query.hpp"
 
 #define VUK_MAX_SETS 8
 #define VUK_MAX_ATTRIBUTES 8
@@ -165,6 +166,7 @@ namespace vuk {
 
 	struct ExecutableRenderGraph;
 	struct PassInfo;
+	struct Query;
 
 	class CommandBuffer {
 	protected:
@@ -291,8 +293,13 @@ namespace vuk {
 		void resolve_image(Name src, Name dst);
 		void blit_image(Name src, Name dst, vuk::ImageBlit region, vuk::Filter filter);
 		void copy_image_to_buffer(Name src, Name dst, vuk::BufferImageCopy);
+		
 		// explicit synchronisation
 		void image_barrier(Name, vuk::Access src_access, vuk::Access dst_access);
+
+		// queries
+		void write_timestamp(Query);
+
 	protected:
 		void _bind_state(bool graphics);
 		void _bind_compute_pipeline_state();
@@ -331,5 +338,19 @@ namespace vuk {
 	inline T* CommandBuffer::map_scratch_uniform_binding(unsigned set, unsigned binding) {
 		return static_cast<T*>(_map_scratch_uniform_binding(set, binding, sizeof(T)));
 	}
+
+	struct TimedScope {
+		TimedScope(CommandBuffer& cbuf, Query a, Query b) : cbuf(cbuf), a(a), b(b) {
+			cbuf.write_timestamp(a);
+		}
+
+		~TimedScope() {
+			cbuf.write_timestamp(b);
+		}
+
+		CommandBuffer& cbuf;
+		Query a;
+		Query b;
+	};
 }
 
