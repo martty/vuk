@@ -446,7 +446,7 @@ namespace vuk {
     void CommandBuffer::write_timestamp(Query q) {
         // TODO: check for duplicate submission of a query
         auto tsq = ptc.register_timestamp_query(q);
-        vkCmdWriteTimestamp(command_buffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, tsq.pool, tsq.id);
+        vkCmdWriteTimestamp(command_buffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, tsq.pool, tsq.id);
     }
 
     void CommandBuffer::_bind_state(bool graphics) {

@@ -98,7 +98,7 @@ void vuk::BenchRunner::render() {
 					} else if (current_stage == stage_variance) {
 						runs = 1000;
 					} else if (current_stage == stage_live) {
-						runs = bcase.runs_required[current_case];
+						runs = bcase.runs_required[j];
 					} else {
 						runs = num_runs;
 					}
