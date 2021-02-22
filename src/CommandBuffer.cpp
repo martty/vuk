@@ -443,10 +443,10 @@ namespace vuk {
         vkCmdPipelineBarrier(command_buffer, (VkPipelineStageFlags)src_use.stages, (VkPipelineStageFlags)dst_use.stages, {}, 0, nullptr, 0, nullptr, 1, &imb);
     }
 
-    void CommandBuffer::write_timestamp(Query q) {
+    void CommandBuffer::write_timestamp(Query q, vuk::PipelineStageFlagBits stage) {
         // TODO: check for duplicate submission of a query
         auto tsq = ptc.register_timestamp_query(q);
-        vkCmdWriteTimestamp(command_buffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, tsq.pool, tsq.id);
+        vkCmdWriteTimestamp(command_buffer, (VkPipelineStageFlagBits)stage, tsq.pool, tsq.id);
     }
 
     void CommandBuffer::_bind_state(bool graphics) {

@@ -22,10 +22,12 @@ namespace vuk {
 		std::vector<std::string_view> subcase_labels;
 		std::vector<std::function<RenderGraph(BenchRunner&, vuk::InflightContext&, Query, Query)>> subcases;
 		std::vector<std::vector<double>> timings;
+		std::vector<std::vector<float>> binned;
 		std::vector<uint32_t> last_stage_ran;
 		std::vector<uint32_t> runs_required;
 		std::vector<double> est_mean;
 		std::vector<double> est_variance;
+		std::vector<std::pair<double, double>> min_max;
 		std::vector<double> mean;
 		std::vector<double> variance;
 	};
@@ -60,6 +62,8 @@ namespace vuk {
 					est_mean.resize(sizeof...(Args));
 					est_variance.resize(sizeof...(Args));
 					last_stage_ran.resize(sizeof...(Args));
+					min_max.resize(sizeof...(Args));
+					binned.resize(sizeof...(Args));
 				}, Params{});
 			}
 		};

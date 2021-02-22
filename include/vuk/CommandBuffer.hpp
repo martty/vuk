@@ -298,7 +298,7 @@ namespace vuk {
 		void image_barrier(Name, vuk::Access src_access, vuk::Access dst_access);
 
 		// queries
-		void write_timestamp(Query);
+		void write_timestamp(Query, vuk::PipelineStageFlagBits stage = vuk::PipelineStageFlagBits::eBottomOfPipe);
 
 	protected:
 		void _bind_state(bool graphics);
@@ -341,11 +341,11 @@ namespace vuk {
 
 	struct TimedScope {
 		TimedScope(CommandBuffer& cbuf, Query a, Query b) : cbuf(cbuf), a(a), b(b) {
-			cbuf.write_timestamp(a);
+			cbuf.write_timestamp(a, vuk::PipelineStageFlagBits::eBottomOfPipe);
 		}
 
 		~TimedScope() {
-			cbuf.write_timestamp(b);
+			cbuf.write_timestamp(b, vuk::PipelineStageFlagBits::eBottomOfPipe);
 		}
 
 		CommandBuffer& cbuf;

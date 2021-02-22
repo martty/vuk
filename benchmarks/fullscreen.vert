@@ -9,10 +9,10 @@ out gl_PerVertex
 layout (location = 0) out vec2 uv;
 
 void main() {
-	if(gl_VertexIndex == 0){
+	if(gl_VertexIndex % 3 == 0){
 		gl_Position = vec4(-1, -1, 0.0, 1.0);
 		uv = vec2(0, 0);
-	} else if (gl_VertexIndex == 1){
+	} else if (gl_VertexIndex % 3 == 1){
 		gl_Position = vec4(-1, 3, 0.0, 1.0);
 		uv = vec2(0, 2);
 	} else {

@@ -79,7 +79,7 @@ std::optional<double> vuk::InflightContext::get_duration_query_result(vuk::Query
 		return {};
 	}
 	double period = ctx.impl->physical_device_properties.limits.timestampPeriod;
-	auto ns = period * (int64_t(r2.value()) - int64_t(r1.value()));
+	auto ns = period * (r2.value() - r1.value());
 	return ns * 1e-9;
 }
 

@@ -94,9 +94,9 @@ void vuk::BenchRunner::render() {
 
 					uint32_t runs;
 					if (current_stage == stage_warmup) {
-						runs = 1000;
+						runs = 50;
 					} else if (current_stage == stage_variance) {
-						runs = 1000;
+						runs = 50;
 					} else if (current_stage == stage_live) {
 						runs = bcase.runs_required[j];
 					} else {
@@ -116,13 +116,13 @@ void vuk::BenchRunner::render() {
 					if (lsr > stage_warmup) {
 						l1 += " - done";
 					} else if (w) {
-						l1 += " (" + std::to_string(num_runs) + " / 1000)";
+						l1 += " (" + std::to_string(num_runs) + " / " + std::to_string(runs) + ")";
 					}
 					ImGui::Selectable(l1.c_str(), &w, w ? 0 : ImGuiSelectableFlags_Disabled);
 					w = sel && current_stage == stage_variance;
 					std::string l2 = "Variance estimation";
 					if (w) {
-						l2 = "Estimating variance (" + std::to_string(num_runs) + " / 1000)";
+						l2 = "Estimating variance (" + std::to_string(num_runs) + " / " + std::to_string(runs) + ")";
 					} else if (lsr > stage_variance) {
 						l2 = "Estimate (mu=" + std::to_string(bcase.est_mean[j] * 1e6) + " us, sigma=" + std::to_string(bcase.est_variance[j] * 1e12) + " us2, runs: " + std::to_string(bcase.runs_required[j]) + ")";
 					}
@@ -130,11 +130,14 @@ void vuk::BenchRunner::render() {
 					w = sel && current_stage == stage_live;
 					std::string l3 = "Sampling";
 					if (w) {
-						l3 = "Running (" + std::to_string(num_runs) + " / " + std::to_string(bcase.runs_required[j]) + ")";
+						l3 = "Sampling (" + std::to_string(num_runs) + " / " + std::to_string(runs) + ")";
 					} else if (lsr > stage_live) {
 						l3 = "Result (mu=" + std::to_string(bcase.mean[j] * 1e6) + " us, sigma=" + std::to_string(bcase.variance[j] * 1e12) + " us2, SEM = " + std::to_string(sqrt(bcase.variance[j] * 1e12 / bcase.runs_required[j])) + " us)";
 					}
 					ImGui::Selectable(l3.c_str(), &w, w ? 0 : ImGuiSelectableFlags_Disabled);
+					if (lsr > stage_live) {
+						ImGui::PlotHistogram("Bins", bcase.binned[j].data(), (int)bcase.binned[j].size());
+					}
 					ImGui::Unindent();
 				}
 			}
@@ -162,7 +165,7 @@ void vuk::BenchRunner::render() {
 			num_runs++;
 		}
 		// transition between stages
-		if (current_stage == stage_warmup && num_runs > 1000) {
+		if (current_stage == stage_warmup && num_runs >= 50) {
 			current_stage++;
 			bcase.last_stage_ran[current_subcase]++;
 			bcase.last_stage_ran[current_subcase]++;
@@ -174,7 +177,7 @@ void vuk::BenchRunner::render() {
 			}
 			num_runs = 0;
 			bcase.timings[current_subcase].clear();
-		} else if (current_stage == stage_variance && num_runs > 1000) {
+		} else if (current_stage == stage_variance && num_runs >= 50) {
 			double& mean = bcase.est_mean[current_subcase];
 			mean = 0;
 			for (auto& t : bcase.timings[current_subcase]) {
@@ -191,23 +194,35 @@ void vuk::BenchRunner::render() {
 
 			const auto Z = 1.96; // 95% confidence
 			bcase.runs_required[current_subcase] = (uint32_t)std::ceil(4 * Z * Z * variance / ((0.1 * mean) * (0.1 * mean)));
+			// run at least 128 iterations
+			bcase.runs_required[current_subcase] = std::max(bcase.runs_required[current_subcase], 128u);
 
 			current_stage++;
 			bcase.last_stage_ran[current_subcase]++;
-			num_runs = 0;
-			bcase.timings[current_subcase].clear();
-		} else if (current_stage == stage_live && num_runs > bcase.runs_required[current_subcase]) {
+			// reuse timings for subsequent live
+		} else if (current_stage == stage_live && num_runs >= bcase.runs_required[current_subcase]) {
 			double& mean = bcase.mean[current_subcase];
 			mean = 0;
+			double& min = bcase.min_max[current_subcase].first;
+			min = DBL_MAX;
+			double& max = bcase.min_max[current_subcase].second;
+			max = 0;
 			for (auto& t : bcase.timings[current_subcase]) {
 				mean += t;
+				min = std::min(min, t);
+				max = std::max(max, t);
 			}
 			mean /= num_runs;
+
+			auto& bins = bcase.binned[current_subcase];
+			bins.resize(64);
 
 			double& variance = bcase.variance[current_subcase];
 			variance = 0;
 			for (auto& t : bcase.timings[current_subcase]) {
 				variance += (t - mean) * (t - mean);
+				auto bin_index = (uint32_t)std::floor((bins.size() - 1) * (t - min) / (max - min));
+				bins[bin_index]++;
 			}
 			variance *= 1.0 / (num_runs - 1);
 

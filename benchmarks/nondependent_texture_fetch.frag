@@ -11,15 +11,15 @@ layout(binding = 0) uniform sampler2D image;
 void main() {
     vec2 size = textureSize(image, 0);
     
-    FragmentColor = texture(image, uv) * weight[0];
+    FragmentColor = textureLod(image, uv, 0) * weight[0];
    
-    FragmentColor += textureOffset(image, uv, ivec2(0, 1)) * weight[1];
-    FragmentColor += textureOffset(image, uv, ivec2(0,-1)) * weight[1];
-    FragmentColor += textureOffset(image, uv, ivec2(0, 2)) * weight[2];
-    FragmentColor += textureOffset(image, uv, ivec2(0,-2)) * weight[2];
-    FragmentColor += textureOffset(image, uv, ivec2(0, 3)) * weight[3];
-    FragmentColor += textureOffset(image, uv, ivec2(0,-3)) * weight[3];
-    FragmentColor += textureOffset(image, uv, ivec2(0, 4)) * weight[4];
-    FragmentColor += textureOffset(image, uv, ivec2(0,-4)) * weight[4];
+    FragmentColor += textureLodOffset(image, uv, 0, ivec2(0, 1)) * weight[1];
+    FragmentColor += textureLodOffset(image, uv, ivec2(0,-1)) * weight[1];
+    FragmentColor += textureLodOffset(image, uv, ivec2(0, 2)) * weight[2];
+    FragmentColor += textureLodOffset(image, uv, ivec2(0,-2)) * weight[2];
+    FragmentColor += textureLodOffset(image, uv, ivec2(0, 3)) * weight[3];
+    FragmentColor += textureLodOffset(image, uv, ivec2(0,-3)) * weight[3];
+    FragmentColor += textureLodOffset(image, uv, ivec2(0, 4)) * weight[4];
+    FragmentColor += textureLodOffset(image, uv, ivec2(0,-4)) * weight[4];
    
 }
