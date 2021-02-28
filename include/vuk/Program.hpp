@@ -2,8 +2,8 @@
 #include <unordered_map>
 #include <vector>
 #include <array>
-#include "CreateInfo.hpp"
-#include <vulkan/vulkan.h>
+#include <CreateInfo.hpp>
+#include <vuk/Config.hpp>
 
 namespace spirv_cross {
 	struct SPIRType;

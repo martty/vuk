@@ -1,7 +1,7 @@
 #pragma once
 
-#include <vulkan/vulkan.h>
-#include "Types.hpp"
+#include <vuk/Config.hpp>
+#include <vuk/Types.hpp>
 #include <vector>
 
 namespace vuk {

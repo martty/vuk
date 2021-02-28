@@ -115,8 +115,8 @@ namespace vuk {
 				std::span<unsigned char> data;
 			};
 
-			UploadItem(BufferUpload bu) : is_buffer(true), buffer(std::move(bu)) {}
-			UploadItem(ImageUpload bu) : is_buffer(false), image(std::move(bu)) {}
+			UploadItem(BufferUpload bu) : buffer(std::move(bu)), is_buffer(true) {}
+			UploadItem(ImageUpload bu) : image(std::move(bu)), is_buffer(false) {}
 
 			union {
 				BufferUpload buffer = {};

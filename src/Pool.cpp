@@ -111,7 +111,7 @@ namespace vuk {
 
 	std::span<TimestampQuery> PooledType<TimestampQuery>::acquire(PerThreadContext& ptc, size_t count) {
 		if (values.size() < (needle + count)) {
-			auto remaining = values.size() - needle;
+			//auto remaining = values.size() - needle;
 
 			assert(false && "Unimpl.");
 		}

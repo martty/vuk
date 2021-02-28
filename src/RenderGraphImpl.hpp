@@ -19,7 +19,7 @@ namespace vuk {
 		robin_hood::unordered_flat_map<Name, AttachmentRPInfo> bound_attachments;
 		robin_hood::unordered_flat_map<Name, BufferInfo> bound_buffers;
 
-		RGImpl() : arena_(new arena(1024 * 128)), INIT(rpis), INIT(passes) {
+		RGImpl() : arena_(new arena(1024 * 128)), INIT(passes), INIT(rpis) {
 		}
 	};
 #undef INIT

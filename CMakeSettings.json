@@ -39,7 +39,6 @@
           "value": "True",
           "type": "BOOL"
         },
-
         {
           "name": "VUK_BUILD_BENCHMARKS",
           "value": "True",
@@ -78,7 +77,6 @@
           "FLAVOR": "x86_64-w64-mingw32",
           "TOOLSET_VERSION": "10.2.0",
           "INCLUDE": "${env.MINGW64_ROOT}\\include\\c++\\${env.TOOLSET_VERSION};${env.MINGW64_ROOT}\\include\\c++\\${env.TOOLSET_VERSION}\\tr1;${env.MINGW64_ROOT}\\include\\c++\\${env.TOOLSET_VERSION}\\${env.FLAVOR}",
-
           "MINGW_PREFIX": "C:/mingw64",
           "MINGW_CHOST": "x86_64-w64-mingw32",
           "MINGW_PACKAGE_PREFIX": "mingw-w64-x86_64",
@@ -86,7 +84,6 @@
           "MSYSTEM_CARCH": "x64_64",
           "MSYSTEM_PREFIX": "C:/mingw64",
           "MSYSTEM_CHOST": " x86_64-w64-mingw32",
-
           "environment": "mingw64"
         }
       ],
@@ -103,11 +100,13 @@
       "variables": [
         {
           "name": "CMAKE_C_COMPILER",
-          "value": "${env.BIN_ROOT}/gcc.exe"
+          "value": "${env.BIN_ROOT}/gcc.exe",
+          "type": "STRING"
         },
         {
           "name": "CMAKE_CXX_COMPILER",
-          "value": "${env.BIN_ROOT}/g++.exe"
+          "value": "${env.BIN_ROOT}/g++.exe",
+          "type": "STRING"
         },
         {
           "name": "VUK_BUILD_EXAMPLES",

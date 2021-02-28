@@ -4,8 +4,8 @@
 #include <plf_colony.h>
 #include <mutex>
 #include <vector>
-#include "vuk/vuk_fwd.hpp"
-#include <vulkan/vulkan.h>
+#include <vuk/vuk_fwd.hpp>
+#include <vuk/Config.hpp>
 
 namespace vuk {
 	template<class T>

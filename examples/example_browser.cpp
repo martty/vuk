@@ -119,7 +119,6 @@ void vuk::ExampleRunner::render() {
 						auto bound_it = bound_attachments.find(key);
 						if (bound_it == bound_attachments.end())
 							continue;
-						auto usage = rg_frag.compute_usage(use_refs);
 						auto samples = vuk::SampleCountFlagBits::e1;
 						if (!(*bound_it).second.samples.infer)
 							samples = (*bound_it).second.samples.count;
@@ -131,14 +130,12 @@ void vuk::ExampleRunner::render() {
 						if (bound_it == bound_attachments.end())
 							continue;
 						std::string btn_id = "";
-						bool storage = false;
 						bool prevent_disable = false;
 						if (key == attachment_name) {
 							prevent_disable = true;
 							btn_id = "F";
 						} else {
 							auto usage = rg_frag.compute_usage(use_refs);
-							auto samples = vuk::SampleCountFlagBits::e1;
 							if (usage & vuk::ImageUsageFlagBits::eColorAttachment) {
 								btn_id += "C";
 							} else if (usage & vuk::ImageUsageFlagBits::eDepthStencilAttachment) {

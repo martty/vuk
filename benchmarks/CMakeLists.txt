@@ -25,6 +25,13 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(glm)
 
+FetchContent_Declare(
+  volk
+  GIT_REPOSITORY https://github.com/zeux/volk
+  GIT_TAG        1.2.170
+)
+FetchContent_MakeAvailable(volk)
+
 SET(imgui_sources ../ext/imgui/imgui.cpp ../ext/imgui/imgui_draw.cpp ../ext/imgui/imgui_demo.cpp ../ext/imgui/imgui_widgets.cpp ../ext/imgui/examples/imgui_impl_glfw.cpp)
 
 function(ADD_BENCH name)

@@ -48,7 +48,7 @@ namespace vuk {
 
 		struct Case : CaseBase {
 			template<class F>
-			Case(std::string_view label, F&& subcase_template) : CaseBase(label) {
+			Case(std::string_view label, F&& subcase_template) : CaseBase{ label } {
 				std::apply([this, subcase_template](auto&&... ts) {
 					(subcases.emplace_back(
 						[=](BenchRunner& runner, vuk::InflightContext& ifc, Query start, Query end) { 

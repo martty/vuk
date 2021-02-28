@@ -10,6 +10,22 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 add_library(vuk)
 
+option(VUK_BUILD_EXAMPLES "Build examples" OFF)
+option(VUK_BUILD_BENCHMARKS "Build benchmarks" OFF)
+option(VUK_BUILD_DOCS "Build docs" OFF)
+option(VUK_LINK_TO_LOADER "Link \"statically\" to the loader" ON)
+
+##### Using vuk with volk (or a similar library)
+# step 1: turn off VUK_LINK_TO_LOADER and add_subdirectory vuk
+# set(VUK_LINK_TO_LOADER OFF)
+# add_subdirectory(vuk)
+# step 2: replace the default <vulkan/vulkan.h> with your include
+# target_compile_definitions(vuk PUBLIC VUK_CUSTOM_VULKAN_HEADER=<volk.h>)
+# step 3: link vuk to the loader lib (this policy might be needed for link_libraries)
+# cmake_policy(SET CMP0079 NEW)
+# target_link_libraries(vuk PUBLIC volk)
+#####
+
 find_package(Vulkan REQUIRED)
 
 add_library(shaderc UNKNOWN IMPORTED)
@@ -33,6 +49,7 @@ set(SPIRV_CROSS_ENABLE_UTIL OFF CACHE BOOL "")
 
 add_subdirectory(ext/SPIRV-Cross)
 
+# we don't enable this directly, because the order of flags disables /Zc:char8_t- on MSVC
 #target_compile_features(vuk PUBLIC cxx_std_20)
 
 target_sources(vuk PRIVATE 
@@ -50,7 +67,7 @@ target_sources(vuk PRIVATE
 	src/InflightContext.cpp
 	src/PerThreadContext.cpp
 	src/Util.cpp
-	src/Format.cpp "include/vuk/Query.hpp")
+	src/Format.cpp)
 
 target_include_directories(vuk PUBLIC ext/plf_colony)
 target_include_directories(vuk PUBLIC ext/VulkanMemoryAllocator/src)
@@ -80,27 +97,24 @@ elseif(MSVC)
 endif()
 
 target_link_libraries(vuk PUBLIC spirv-cross-core robin_hood)
-target_link_libraries(vuk PUBLIC shaderc ${Vulkan_LIBRARIES})
+target_link_libraries(vuk PUBLIC shaderc)
 
+if(VUK_LINK_TO_LOADER)
+	target_link_libraries(vuk PRIVATE ${Vulkan_LIBRARIES})
+endif()
 
 if (WIN32)
 	target_compile_definitions(vuk PUBLIC NOMINMAX VC_EXTRALEAN WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS _SCL_SECURE_NO_WARNINGS _SILENCE_CLANG_CONCEPTS_MESSAGE)
 endif()
 
-option(VUK_BUILD_EXAMPLES "Build examples" OFF)
-
 if(VUK_BUILD_EXAMPLES)
 	add_subdirectory(examples)
 endif()
-
-option(VUK_BUILD_BENCHMARKS "Build benchmarks" OFF)
 
 if(VUK_BUILD_BENCHMARKS)
 	add_subdirectory(benchmarks)
 endif()
 
-
-option(VUK_BUILD_DOCS "Build docs" OFF)
 if(VUK_BUILD_DOCS)
 	add_subdirectory(docs)
 endif()

@@ -54,7 +54,7 @@ namespace {
 			});
 		rg.add_pass({
 			.resources = {"_final"_image(vuk::eColorWrite), "_dst"_image(vuk::eFragmentSampled)},
-			.execute = [start, end, parameters](vuk::CommandBuffer& command_buffer) {
+			.execute = [](vuk::CommandBuffer& command_buffer) {
 				command_buffer
 					.set_viewport(0, vuk::Rect2D::framebuffer())
 					.set_scissor(0, vuk::Rect2D::framebuffer())

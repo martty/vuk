@@ -67,7 +67,7 @@ namespace vuk {
 
 		// sort passes
 		if (impl->passes.size() > 1) {
-			topological_sort(impl->passes.begin(), impl->passes.end(), [this](const auto& p1, const auto& p2) {
+			topological_sort(impl->passes.begin(), impl->passes.end(), [](const auto& p1, const auto& p2) {
 				bool could_execute_after = false;
 				bool could_execute_before = false;
 

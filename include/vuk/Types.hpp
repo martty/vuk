@@ -1,6 +1,6 @@
 #pragma once
 
-#include <vulkan/vulkan.h>
+#include <vuk/Config.hpp>
 #include <vuk/Hash.hpp>
 
 namespace vuk {
