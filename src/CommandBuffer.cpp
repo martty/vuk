@@ -498,7 +498,7 @@ namespace vuk {
             pi.base = next_pipeline;
             
 			for (auto& pssci : pi.base->psscis) {
-				size_t offset = pi.smes.size();
+				uint32_t offset = (uint32_t)pi.smes.size();
 				bool empty = true;
 				for (auto& [sme, stage] : smes) {
 					if (pssci.stage == stage) {
@@ -513,7 +513,7 @@ namespace vuk {
 
 				VkSpecializationInfo si;
 				si.pMapEntries = pi.smes.data() + offset;
-				si.mapEntryCount = pi.smes.size() - offset;
+				si.mapEntryCount = (uint32_t)pi.smes.size() - offset;
 				si.pData = specialization_constant_buffer.data();
 				si.dataSize = specialization_constant_buffer.size();
 				pi.sis.push_back(si);

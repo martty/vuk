@@ -1,18 +1,13 @@
 #pragma once
 
 #include <vector>
-#include "Hash.hpp"
-#include "CreateInfo.hpp"
-#include "Descriptor.hpp"
-#include "Program.hpp"
-#include "FixedVector.hpp"
-#include "Image.hpp"
-
-#define VUK_MAX_SETS 8
-#define VUK_MAX_ATTRIBUTES 8
-#define VUK_MAX_COLOR_ATTACHMENTS 8
-#define VUK_MAX_PUSHCONSTANT_RANGES 8
-#define VUK_MAX_SPECIALIZATIONCONSTANT_RANGES 8
+#include <vuk/Config.hpp>
+#include <vuk/Hash.hpp>
+#include <CreateInfo.hpp>
+#include <vuk/Descriptor.hpp>
+#include <vuk/Program.hpp>
+#include <vuk/FixedVector.hpp>
+#include <vuk/Image.hpp>
 
 namespace vuk {
 	// return a/b rounded to infinity
@@ -26,7 +21,7 @@ namespace vuk {
 			return static_cast<uint64_t>(-(onecount != 0))
 				& (static_cast<uint64_t>(-1) >> ((sizeof(uint64_t)) - onecount));
 		}
-		
+
 		static constexpr uint64_t n_bits = sizeof(uint64_t) * 8;
 		static constexpr uint64_t n_words = idivceil(Count, n_bits);
 		static constexpr uint64_t remainder = Count - n_bits * (Count / n_bits);
@@ -272,8 +267,8 @@ namespace vuk {
 		BlendFactor srcAlphaBlendFactor = BlendFactor::eZero;
 		BlendFactor dstAlphaBlendFactor = BlendFactor::eZero;
 		BlendOp alphaBlendOp = BlendOp::eAdd;
-        ColorComponentFlags colorWriteMask =
-            vuk::ColorComponentFlagBits::eR | vuk::ColorComponentFlagBits::eG | vuk::ColorComponentFlagBits::eB | vuk::ColorComponentFlagBits::eA;
+		ColorComponentFlags colorWriteMask =
+			vuk::ColorComponentFlagBits::eR | vuk::ColorComponentFlagBits::eG | vuk::ColorComponentFlagBits::eB | vuk::ColorComponentFlagBits::eA;
 	};
 	static_assert(sizeof(PipelineColorBlendAttachmentState) == sizeof(VkPipelineColorBlendAttachmentState), "struct and wrapper have different size!");
 	static_assert(std::is_standard_layout<PipelineColorBlendAttachmentState>::value, "struct wrapper is not a standard layout!");
@@ -476,7 +471,6 @@ namespace vuk {
 
 	struct PipelineBaseCreateInfoBase {
 		// 4 valid flags
-		
 		Bitset<4 * VUK_MAX_SETS * VUK_MAX_BINDINGS> binding_flags = {};
 		// set flags on specific descriptor in specific set
 		void set_binding_flags(unsigned set, unsigned binding, vuk::DescriptorBindingFlags flags) {
@@ -497,6 +491,10 @@ namespace vuk {
 			binding_flags.set(set * 4 * VUK_MAX_BINDINGS + binding * 4 + 3, 1);
 			variable_count_max[set] = max_descriptors;
 		}
+	};
+
+	struct ShaderSource {
+
 	};
 
 	/* filled out by the user */
@@ -814,43 +812,43 @@ namespace std {
 	};
 
 	template<>
-    struct hash<VkPipelineColorBlendStateCreateInfo> {
-        size_t operator()(VkPipelineColorBlendStateCreateInfo const& x) const noexcept {
-            size_t h = 0;
-            hash_combine(h, x.blendConstants[0], x.blendConstants[1], x.blendConstants[2], x.blendConstants[3], x.logicOpEnable, to_integral(x.logicOp),
-                         x.attachmentCount);
-            return h;
-        }
-    };
+	struct hash<VkPipelineColorBlendStateCreateInfo> {
+		size_t operator()(VkPipelineColorBlendStateCreateInfo const& x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, x.blendConstants[0], x.blendConstants[1], x.blendConstants[2], x.blendConstants[3], x.logicOpEnable, to_integral(x.logicOp),
+				x.attachmentCount);
+			return h;
+		}
+	};
 
 	template<>
-    struct hash<VkPipelineMultisampleStateCreateInfo> {
-        size_t operator()(VkPipelineMultisampleStateCreateInfo const& x) const noexcept {
-            size_t h = 0;
-            hash_combine(h, x.flags, x.alphaToCoverageEnable, x.alphaToOneEnable, x.minSampleShading, x.rasterizationSamples, x.sampleShadingEnable);
-            if(x.pSampleMask)
-                hash_combine(h, *x.pSampleMask);
-            return h;
-        }
-    };
+	struct hash<VkPipelineMultisampleStateCreateInfo> {
+		size_t operator()(VkPipelineMultisampleStateCreateInfo const& x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, x.flags, x.alphaToCoverageEnable, x.alphaToOneEnable, x.minSampleShading, x.rasterizationSamples, x.sampleShadingEnable);
+			if (x.pSampleMask)
+				hash_combine(h, *x.pSampleMask);
+			return h;
+		}
+	};
 
-    template<>
-    struct hash<VkDynamicState> {
-        size_t operator()(VkDynamicState const& x) const noexcept {
-            size_t h = 0;
-            hash_combine(h, to_integral(x));
-            return h;
-        }
-    };
+	template<>
+	struct hash<VkDynamicState> {
+		size_t operator()(VkDynamicState const& x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, to_integral(x));
+			return h;
+		}
+	};
 
-    template<>
-    struct hash<VkPipelineDynamicStateCreateInfo> {
-        size_t operator()(VkPipelineDynamicStateCreateInfo const& x) const noexcept {
-            size_t h = 0;
-            hash_combine(h, x.flags, std::span(x.pDynamicStates, x.dynamicStateCount));
-            return h;
-        }
-    };
+	template<>
+	struct hash<VkPipelineDynamicStateCreateInfo> {
+		size_t operator()(VkPipelineDynamicStateCreateInfo const& x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, x.flags, std::span(x.pDynamicStates, x.dynamicStateCount));
+			return h;
+		}
+	};
 
 	template <>
 	struct hash<vuk::PipelineInstanceCreateInfo> {

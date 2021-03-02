@@ -18,7 +18,7 @@ vuk::ExampleRunner::ExampleRunner() {
 			})
 		.set_app_name("vuk_example")
 				.set_engine_name("vuk")
-				.require_api_version(1, 1, 0)
+				.require_api_version(1, 2, 0)
 				.set_app_version(0, 1, 0);
 			auto inst_ret = builder.build();
 			if (!inst_ret.has_value()) {
@@ -39,13 +39,16 @@ vuk::ExampleRunner::ExampleRunner() {
 			physical_device = vkbphysical_device.physical_device;
 
 			vkb::DeviceBuilder device_builder{ vkbphysical_device };
-			VkPhysicalDeviceDescriptorIndexingFeatures descriptor_indexing_features{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES };
-			descriptor_indexing_features.descriptorBindingPartiallyBound = true;
-			descriptor_indexing_features.descriptorBindingUpdateUnusedWhilePending = true;
-			descriptor_indexing_features.shaderSampledImageArrayNonUniformIndexing = true;
-			descriptor_indexing_features.runtimeDescriptorArray = true;
-			descriptor_indexing_features.descriptorBindingVariableDescriptorCount = true;
-			auto dev_ret = device_builder.add_pNext(&descriptor_indexing_features).build();
+			VkPhysicalDeviceVulkan12Features vk12features{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };
+			vk12features.descriptorBindingPartiallyBound = true;
+			vk12features.descriptorBindingUpdateUnusedWhilePending = true;
+			vk12features.shaderSampledImageArrayNonUniformIndexing = true;
+			vk12features.runtimeDescriptorArray = true;
+			vk12features.descriptorBindingVariableDescriptorCount = true;
+			vk12features.hostQueryReset = true;
+			VkPhysicalDeviceVulkan11Features vk11features{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES };
+			vk11features.shaderDrawParameters = true;
+			auto dev_ret = device_builder.add_pNext(&vk12features).add_pNext(&vk11features).build();
 			if (!dev_ret.has_value()) {
 				// error
 			}
