@@ -14,6 +14,7 @@ option(VUK_BUILD_EXAMPLES "Build examples" OFF)
 option(VUK_BUILD_BENCHMARKS "Build benchmarks" OFF)
 option(VUK_BUILD_DOCS "Build docs" OFF)
 option(VUK_LINK_TO_LOADER "Link \"statically\" to the loader" ON)
+option(VUK_USE_VULKAN_SDK "Use the Vulkan SDK to locate headers and libraries" ON)
 
 ##### Using vuk with volk (or a similar library)
 # step 1: turn off VUK_LINK_TO_LOADER and add_subdirectory vuk
@@ -25,16 +26,26 @@ option(VUK_LINK_TO_LOADER "Link \"statically\" to the loader" ON)
 # cmake_policy(SET CMP0079 NEW)
 # target_link_libraries(vuk PUBLIC volk)
 #####
-
-find_package(Vulkan REQUIRED)
-
-add_library(shaderc UNKNOWN IMPORTED)
-if(WIN32)
-	# use the version in the SDK	
-	set_target_properties(shaderc PROPERTIES IMPORTED_LOCATION $ENV{VULKAN_SDK}/Lib/shaderc_shared.lib)
-	set_property(TARGET shaderc PROPERTY INTERFACE_INCLUDE_DIRECTORIES $ENV{VULKAN_SDK}/Include)
+if(VUK_USE_VULKAN_SDK)
+	find_package(Vulkan REQUIRED)
+	add_library(shaderc UNKNOWN IMPORTED)
+	if(WIN32)
+		# use the version in the SDK
+		set_target_properties(shaderc PROPERTIES IMPORTED_LOCATION $ENV{VULKAN_SDK}/Lib/shaderc_shared.lib)
+		set_property(TARGET shaderc PROPERTY INTERFACE_INCLUDE_DIRECTORIES $ENV{VULKAN_SDK}/Include)
+	else()
+		# TODO
+	endif()
 else()
-	# TODO
+	target_link_libraries(vuk PRIVATE shaderc_combined)
+	target_link_libraries(vuk PRIVATE glslang)
+	target_link_libraries(vuk PRIVATE MachineIndependent)
+	target_link_libraries(vuk PRIVATE OSDependent)
+	target_link_libraries(vuk PRIVATE OGLCompiler)
+	target_link_libraries(vuk PRIVATE GenericCodeGen)
+	target_link_libraries(vuk PRIVATE SPIRV)
+	target_link_libraries(vuk PRIVATE SPIRV-Tools-opt)
+	target_link_libraries(vuk PRIVATE SPIRV-Tools)
 endif()
 
 set(GSL_CXX_STANDARD 20)
@@ -97,10 +108,16 @@ elseif(MSVC)
 endif()
 
 target_link_libraries(vuk PUBLIC spirv-cross-core robin_hood)
-target_link_libraries(vuk PUBLIC shaderc)
+if(VUK_USE_VULKAN_SDK)
+	target_link_libraries(vuk PUBLIC shaderc)
+endif()
 
 if(VUK_LINK_TO_LOADER)
-	target_link_libraries(vuk PRIVATE ${Vulkan_LIBRARIES})
+	if (VUK_USE_VULKAN_SDK)
+		target_link_libraries(vuk PRIVATE ${Vulkan_LIBRARIES})
+	else()
+		target_link_libraries(vuk PRIVATE vulkan)
+	endif()
 endif()
 
 if (WIN32)
