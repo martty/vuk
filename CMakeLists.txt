@@ -15,6 +15,7 @@ option(VUK_BUILD_BENCHMARKS "Build benchmarks" OFF)
 option(VUK_BUILD_DOCS "Build docs" OFF)
 option(VUK_LINK_TO_LOADER "Link \"statically\" to the loader" ON)
 option(VUK_USE_VULKAN_SDK "Use the Vulkan SDK to locate headers and libraries" ON)
+option(VUK_USE_SHADERC "Link in shaderc for runtime compilation of shaders" ON)
 
 ##### Using vuk with volk (or a similar library)
 # step 1: turn off VUK_LINK_TO_LOADER and add_subdirectory vuk
@@ -28,19 +29,23 @@ option(VUK_USE_VULKAN_SDK "Use the Vulkan SDK to locate headers and libraries" O
 #####
 if(VUK_USE_VULKAN_SDK)
 	find_package(Vulkan REQUIRED)
-	add_library(shaderc UNKNOWN IMPORTED)
-	if(WIN32)
-		# use the version in the SDK
-		set_target_properties(shaderc PROPERTIES IMPORTED_LOCATION $ENV{VULKAN_SDK}/Lib/shaderc_shared.lib)
-		set_property(TARGET shaderc PROPERTY INTERFACE_INCLUDE_DIRECTORIES $ENV{VULKAN_SDK}/Include)
-	else()
-		# TODO
+	if(VUK_USE_SHADERC)
+		add_library(shaderc UNKNOWN IMPORTED)
+		if(WIN32)
+			# use the version in the SDK
+			set_target_properties(shaderc PROPERTIES IMPORTED_LOCATION $ENV{VULKAN_SDK}/Lib/shaderc_shared.lib)
+			set_property(TARGET shaderc PROPERTY INTERFACE_INCLUDE_DIRECTORIES $ENV{VULKAN_SDK}/Include)
+			target_link_libraries(vuk PRIVATE shaderc)
+		else()
+			target_link_libraries(vuk PRIVATE shaderc_combined glslang MachineIndependent OSDependent OGLCompiler GenericCodeGen SPIRV SPIRV-Tools-opt SPIRV-Tools)
+		endif()
 	endif()
-else()
+elseif(VUK_USE_SHADERC)
 	target_link_libraries(vuk PRIVATE shaderc_combined glslang MachineIndependent OSDependent OGLCompiler GenericCodeGen SPIRV SPIRV-Tools-opt SPIRV-Tools)
 endif()
 
-set(GSL_CXX_STANDARD 20)
+target_compile_definitions(vuk PUBLIC VUK_USE_SHADERC=${VUK_USE_SHADERC})
+
 set(SPIRV_CROSS_CLI OFF CACHE BOOL "")
 set(SPIRV_CROSS_ENABLE_TESTS OFF CACHE BOOL "")
 set(SPIRV_CROSS_ENABLE_HLSL OFF CACHE BOOL "")
@@ -100,12 +105,10 @@ elseif(MSVC)
 endif()
 
 target_link_libraries(vuk PUBLIC spirv-cross-core robin_hood)
-if(VUK_USE_VULKAN_SDK)
-	target_link_libraries(vuk PUBLIC shaderc)
-endif()
 
 if(VUK_LINK_TO_LOADER)
 	if (VUK_USE_VULKAN_SDK)
+		target_include_directories(vuk PUBLIC ${Vulkan_INCLUDE_DIRS})
 		target_link_libraries(vuk PRIVATE ${Vulkan_LIBRARIES})
 	else()
 		target_link_libraries(vuk PRIVATE vulkan)

@@ -1,14 +1,16 @@
+#if VUK_USE_SHADERC
 #include <shaderc/shaderc.hpp>
+#endif
 #include <algorithm>
 #include <fstream>
 #include <sstream>
 #include <spirv_cross.hpp>
 
-#include "vuk/Context.hpp"
-#include "ContextImpl.hpp"
-#include "vuk/RenderGraph.hpp"
-#include "vuk/Program.hpp"
-#include "vuk/Exception.hpp"
+#include <vuk/Context.hpp>
+#include <ContextImpl.hpp>
+#include <vuk/RenderGraph.hpp>
+#include <vuk/Program.hpp>
+#include <vuk/Exception.hpp>
 
 vuk::Context::Context(ContextCreateParameters params) :
 	instance(params.instance),
@@ -89,6 +91,7 @@ void vuk::PersistentDescriptorSet::update_storage_image(PerThreadContext& ptc, u
 
 vuk::ShaderModule vuk::Context::create(const create_info_t<vuk::ShaderModule>& cinfo) {
 	// given source is GLSL, compile it via shaderc
+#if VUK_USE_SHADERC
 	shaderc::SpvCompilationResult result;
 	if (!cinfo.source.is_spirv) {
 		shaderc::Compiler compiler;
@@ -104,7 +107,10 @@ vuk::ShaderModule vuk::Context::create(const create_info_t<vuk::ShaderModule>& c
 	}
 
 	const std::vector<uint32_t>& spirv = cinfo.source.is_spirv ? cinfo.source.data : std::vector<uint32_t>(result.cbegin(), result.cend());
-
+#else
+	assert(cinfo.source.is_spirv && "Shaderc not enabled (VUK_USE_SHADERC == OFF), no runtime compilation possible.");
+	const std::vector<uint32_t>& spirv = cinfo.source.data;
+#endif
 	spirv_cross::Compiler refl(spirv.data(), spirv.size());
 	vuk::Program p;
 	auto stage = p.introspect(refl);

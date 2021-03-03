@@ -28,16 +28,16 @@ util::ImGuiData util::ImGui_ImplVuk_Init(vuk::PerThreadContext& ptc) {
 	io.Fonts->TexID = (ImTextureID)data.font_si.get();
 	{
 		vuk::PipelineBaseCreateInfo pci;
-		auto vpath = "../../imgui.vert";
-		auto vcont = util::read_entire_file(vpath);
-		pci.add_glsl(vcont, vpath);
-		auto fpath = "../../imgui.frag";
-		auto fcont = util::read_entire_file(fpath);
-		pci.add_glsl(fcont, fpath);
+		auto vpath = "../../examples/imgui.vert.spv";
+		auto vcont = util::read_spirv(vpath);
+		pci.add_spirv(vcont, vpath);
+		auto fpath = "../../examples/imgui.frag.spv";
+		auto fcont = util::read_spirv(fpath);
+		pci.add_spirv(fcont, fpath);
 		pci.set_blend(vuk::BlendPreset::eAlphaBlend);
 		ptc.ctx.create_named_pipeline("imgui", pci);
 	}
-
+	ptc.wait_all_transfers();
 	return data;
 }
 
