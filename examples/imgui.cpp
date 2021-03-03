@@ -20,9 +20,6 @@ util::ImGuiData util::ImGui_ImplVuk_Init(vuk::PerThreadContext& ptc) {
 	sci.minFilter = sci.magFilter = vuk::Filter::eLinear;
 	sci.mipmapMode = vuk::SamplerMipmapMode::eLinear;
 	sci.addressModeU = sci.addressModeV = sci.addressModeW = vuk::SamplerAddressMode::eRepeat;
-	sci.minLod = -1000;
-	sci.maxLod = 1000;
-	sci.maxAnisotropy = 1.0f;
 	data.font_sci = sci;
 	data.font_si = std::make_unique<vuk::SampledImage>(vuk::SampledImage::Global{ *data.font_texture.view, sci, vuk::ImageLayout::eShaderReadOnlyOptimal });
 	io.Fonts->TexID = (ImTextureID)data.font_si.get();

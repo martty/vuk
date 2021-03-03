@@ -385,8 +385,8 @@ namespace vuk {
 		float maxAnisotropy = {};
 		Bool32 compareEnable = {};
 		CompareOp compareOp = CompareOp::eNever;
-		float minLod = {};
-		float maxLod = 32.f;
+		float minLod = 0.f;
+		float maxLod = VK_LOD_CLAMP_NONE;
 		BorderColor borderColor = BorderColor::eFloatTransparentBlack;
 		Bool32 unnormalizedCoordinates = {};
 
