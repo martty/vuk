@@ -232,15 +232,15 @@ vuk::RGImage vuk::PerThreadContext::create(const create_info_t<vuk::RGImage>& ci
 	res.image = ctx.impl->allocator.create_image_for_rendertarget(cinfo.ici);
 	auto ivci = cinfo.ivci;
 	ivci.image = res.image;
-	std::string name = std::string("Image: RenderTarget ") + std::string(cinfo.name);
-	ctx.debug.set_name(res.image, name);
-	name = std::string("ImageView: RenderTarget ") + std::string(cinfo.name);
+	std::string name = std::string("Image: RenderTarget ") + std::string(cinfo.name.to_sv());
+	ctx.debug.set_name(res.image, Name(name));
+	name = std::string("ImageView: RenderTarget ") + std::string(cinfo.name.to_sv());
 	// skip creating image views for images that can't be viewed
 	if (cinfo.ici.usage & (vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eDepthStencilAttachment | vuk::ImageUsageFlagBits::eInputAttachment | vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage)) {
 		VkImageView iv;
 		vkCreateImageView(ctx.device, (VkImageViewCreateInfo*)&ivci, nullptr, &iv);
 		res.image_view = ctx.wrap(iv);
-		ctx.debug.set_name(res.image_view.payload, name);
+		ctx.debug.set_name(res.image_view.payload, Name(name));
 	}
 	return res;
 }

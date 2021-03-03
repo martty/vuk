@@ -69,22 +69,21 @@ namespace vuk {
 			void end_region(const VkCommandBuffer&);
 		} debug;
 
-		void create_named_pipeline(const char* name, vuk::PipelineBaseCreateInfo pbci);
-		void create_named_pipeline(const char* name, vuk::ComputePipelineCreateInfo pbci);
+		void create_named_pipeline(Name name, vuk::PipelineBaseCreateInfo pbci);
+		void create_named_pipeline(Name name, vuk::ComputePipelineCreateInfo pbci);
 
-		PipelineBaseInfo* get_named_pipeline(const char* name);
-		ComputePipelineInfo* get_named_compute_pipeline(const char* name);
+		PipelineBaseInfo* get_named_pipeline(Name name);
+		ComputePipelineInfo* get_named_compute_pipeline(Name name);
 
 		PipelineBaseInfo* get_pipeline(const PipelineBaseCreateInfo& pbci);
 		ComputePipelineInfo* get_pipeline(const ComputePipelineCreateInfo& pbci);
 		Program get_pipeline_reflection_info(PipelineBaseCreateInfo pbci);
-		ShaderModule compile_shader(ShaderSource source, Name path);
+		ShaderModule compile_shader(ShaderSource source, std::string path);
 
 		bool load_pipeline_cache(std::span<uint8_t> data);
 		std::vector<uint8_t> save_pipeline_cache();
 
 		Query create_timestamp_query();
-		void create_named_timestamp_query(Name);
 
 		uint32_t(*get_thread_index)() = nullptr;
 
@@ -385,7 +384,7 @@ namespace vuk {
 	void Context::DebugUtils::set_name(const T& t, Name name) {
 		if (!enabled()) return;
 		VkDebugUtilsObjectNameInfoEXT info = { .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT };
-		info.pObjectName = name.data();
+		info.pObjectName = name.c_str();
 		if constexpr (std::is_same_v<T, VkImage>) {
 			info.objectType = VK_OBJECT_TYPE_IMAGE;
 		} else if constexpr (std::is_same_v<T, VkImageView>) {

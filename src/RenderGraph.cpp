@@ -47,12 +47,12 @@ namespace vuk {
 				if (is_read_access(res.ia)) {
 					pif.inputs.emplace_back(res);
 					auto resolved_name = resolve_name(res.name, impl->aliases);
-					auto hashed_resolved_name = ::hash::fnv1a::hash(resolved_name.data(), resolved_name.size(), hash::fnv1a::default_offset_basis);
+					auto hashed_resolved_name = ::hash::fnv1a::hash(resolved_name.to_sv().data(), resolved_name.to_sv().size(), hash::fnv1a::default_offset_basis);
 					pif.resolved_input_name_hashes.emplace_back(hashed_resolved_name);
 					pif.bloom_resolved_inputs |= hashed_resolved_name;
 				}
 				if (is_write_access(res.ia)) {
-					auto hashed_name = ::hash::fnv1a::hash(res.name.data(), res.name.size(), hash::fnv1a::default_offset_basis);
+					auto hashed_name = ::hash::fnv1a::hash(res.name.to_sv().data(), res.name.to_sv().size(), hash::fnv1a::default_offset_basis);
 					pif.bloom_outputs |= hashed_name;
 					pif.output_name_hashes.emplace_back(hashed_name);
 					pif.outputs.emplace_back(res);
@@ -288,7 +288,7 @@ namespace vuk {
 		// check if all resourced are attached
 		for (const auto& [n, v] : impl->use_chains) {
 			if (!impl->bound_attachments.contains(n) && !impl->bound_buffers.contains(n)) {
-				throw RenderGraphException{ std::string("Missing resource: \"") + std::string(n) + "\". Did you forget to attach it?" };
+				throw RenderGraphException{ std::string("Missing resource: \"") + std::string(n.to_sv()) + "\". Did you forget to attach it?" };
 			}
 		}
 	}

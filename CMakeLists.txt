@@ -75,7 +75,9 @@ target_sources(vuk PRIVATE
 	src/InflightContext.cpp
 	src/PerThreadContext.cpp
 	src/Util.cpp
-	src/Format.cpp)
+	src/Format.cpp
+	src/Name.cpp
+	)
 
 target_include_directories(vuk PUBLIC ext/plf_colony)
 target_include_directories(vuk PUBLIC ext/VulkanMemoryAllocator/src)

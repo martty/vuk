@@ -1,7 +1,7 @@
 #include "example_runner.hpp"
 #include "RenderGraphUtil.hpp"
 
-std::vector<std::string> chosen_resource;
+std::vector<vuk::Name> chosen_resource;
 
 vuk::ExampleRunner::ExampleRunner() {
 	vkb::InstanceBuilder builder;
@@ -99,14 +99,14 @@ void vuk::ExampleRunner::render() {
 			auto rg = item_current->render(*this, ifc);
 			ImGui::Render();
 			auto ptc = ifc.begin();
-			std::string attachment_name = std::string(item_current->name) + "_final";
+			vuk::Name attachment_name = vuk::Name(std::string(item_current->name) + "_final");
 			util::ImGui_ImplVuk_Render(ptc, rg, attachment_name, "SWAPCHAIN", imgui_data, ImGui::GetDrawData());
 			rg.attach_swapchain(attachment_name, swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
 			execute_submit_and_present_to_one(ptc, std::move(rg).link(ptc), swapchain);
 		} else { // render all examples as imgui windows
 			RenderGraph rg;
 			auto ptc = ifc.begin();
-			plf::colony<std::string> attachment_names;
+			plf::colony<vuk::Name> attachment_names;
 
 			size_t i = 0;
 			for (auto& ex : examples) {
@@ -134,7 +134,7 @@ void vuk::ExampleRunner::render() {
 							continue;
 						std::string btn_id = "";
 						bool prevent_disable = false;
-						if (key == attachment_name) {
+						if (key.to_sv() == attachment_name) {
 							prevent_disable = true;
 							btn_id = "F";
 						} else {
@@ -150,24 +150,24 @@ void vuk::ExampleRunner::render() {
 						if (disable && !prevent_disable) {
 							btn_id += " (MS)";
 						} else {
-							btn_id += "##" + std::string(key);
+							btn_id += "##" + std::string(key.to_sv());
 						}
 						if (disable && !prevent_disable) {
 							ImGui::TextDisabled("%s", btn_id.c_str());
 						} else {
 							if (ImGui::Button(btn_id.c_str())) {
-								chosen_resource[i] = key;
+								chosen_resource[i] = key.to_sv();
 							}
 						}
 						if (ImGui::IsItemHovered())
-							ImGui::SetTooltip("%s", key.data());
+							ImGui::SetTooltip("%s", key.c_str());
 						ImGui::SameLine();
 					}
 					ImGui::NewLine();
 				}
 				rg.append(std::move(rg_frag));
 
-				if (chosen_resource[i].empty())
+				if (chosen_resource[i].is_invalid())
 					chosen_resource[i] = attachment_name;
 				ImGui::Image(&ptc.make_sampled_image(chosen_resource[i], imgui_data.font_sci), ImVec2(200, 200));
 				ImGui::End();

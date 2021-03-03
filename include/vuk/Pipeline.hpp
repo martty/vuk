@@ -532,7 +532,7 @@ namespace vuk {
 	};
 
 	struct PipelineBaseInfo {
-		std::string pipeline_name;
+		Name pipeline_name;
 		vuk::Program reflection_info;
 		std::vector<VkPipelineShaderStageCreateInfo> psscis;
 		VkPipelineLayout pipeline_layout;

@@ -58,8 +58,8 @@ namespace vuk {
 		std::array<std::vector<vuk::PersistentDescriptorSet>, Context::FC> pds_recycle;
 
 		std::mutex named_pipelines_lock;
-		std::unordered_map<std::string_view, vuk::PipelineBaseInfo*> named_pipelines;
-		std::unordered_map<std::string_view, vuk::ComputePipelineInfo*> named_compute_pipelines;
+		std::unordered_map<Name, vuk::PipelineBaseInfo*> named_pipelines;
+		std::unordered_map<Name, vuk::ComputePipelineInfo*> named_compute_pipelines;
 
 		std::atomic<uint64_t> query_id_counter = 0;
 		VkPhysicalDeviceProperties physical_device_properties;

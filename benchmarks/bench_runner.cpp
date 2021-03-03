@@ -150,7 +150,7 @@ void vuk::BenchRunner::render() {
 		auto rg = bench->get_case(current_case).subcases[current_subcase](*this, ifc, start, end);
 		ImGui::Render();
 		auto ptc = ifc.begin();
-		std::string attachment_name = "_final";
+		vuk::Name attachment_name = "_final";
 		util::ImGui_ImplVuk_Render(ptc, rg, attachment_name, "SWAPCHAIN", imgui_data, ImGui::GetDrawData());
 		rg.attach_swapchain(attachment_name, swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
 		execute_submit_and_present_to_one(ptc, std::move(rg).link(ptc), swapchain);

@@ -43,7 +43,7 @@ void vuk::Context::DebugUtils::set_name(const vuk::Texture& tex, Name name) {
 void vuk::Context::DebugUtils::begin_region(const VkCommandBuffer& cb, Name name, std::array<float, 4> color) {
 	if (!enabled()) return;
 	VkDebugUtilsLabelEXT label = { .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT };
-	label.pLabelName = name.data();
+	label.pLabelName = name.c_str();
 	::memcpy(label.color, color.data(), sizeof(float) * 4);
 	cmdBeginDebugUtilsLabelEXT(cb, &label);
 }
@@ -121,7 +121,7 @@ vuk::ShaderModule vuk::Context::create(const create_info_t<vuk::ShaderModule>& c
 	VkShaderModule sm;
 	vkCreateShaderModule(device, &moduleCreateInfo, nullptr, &sm);
 	std::string name = "ShaderModule: " + cinfo.filename;
-	debug.set_name(sm, name);
+	debug.set_name(sm, Name(name));
 	return { sm, p, stage };
 }
 
@@ -180,7 +180,7 @@ vuk::PipelineBaseInfo vuk::Context::create(const create_info_t<PipelineBaseInfo>
 	pbi.layout_info = dslai;
 	pbi.pipeline_layout = impl->pipeline_layouts.acquire(plci);
 	pbi.rasterization_state = cinfo.rasterization_state;
-	pbi.pipeline_name = std::move(pipe_name);
+	pbi.pipeline_name = Name(pipe_name);
 	pbi.reflection_info = accumulated_reflection;
 	pbi.binding_flags = cinfo.binding_flags;
 	pbi.variable_count_max = cinfo.variable_count_max;
@@ -225,7 +225,7 @@ vuk::ComputePipelineInfo vuk::Context::create(const create_info_t<vuk::ComputePi
 	cpci.layout = impl->pipeline_layouts.acquire(plci);
 	VkPipeline pipeline;
 	vkCreateComputePipelines(device, impl->vk_pipeline_cache, 1, &cpci, nullptr, &pipeline);
-	debug.set_name(pipeline, pipe_name);
+	debug.set_name(pipeline, Name(pipe_name));
 	return { { pipeline, cpci.layout, dslai }, sm.reflection_info.local_size };
 }
 
@@ -291,22 +291,22 @@ void vuk::Context::remove_swapchain(SwapchainRef sw) {
 	}
 }
 
-void vuk::Context::create_named_pipeline(const char* name, vuk::PipelineBaseCreateInfo ci) {
+void vuk::Context::create_named_pipeline(vuk::Name name, vuk::PipelineBaseCreateInfo ci) {
 	std::lock_guard _(impl->named_pipelines_lock);
 	impl->named_pipelines.insert_or_assign(name, &impl->pipelinebase_cache.acquire(std::move(ci)));
 }
 
-void vuk::Context::create_named_pipeline(const char* name, vuk::ComputePipelineCreateInfo ci) {
+void vuk::Context::create_named_pipeline(vuk::Name name, vuk::ComputePipelineCreateInfo ci) {
 	std::lock_guard _(impl->named_pipelines_lock);
 	impl->named_compute_pipelines.insert_or_assign(name, &impl->compute_pipeline_cache.acquire(std::move(ci)));
 }
 
-vuk::PipelineBaseInfo* vuk::Context::get_named_pipeline(const char* name) {
+vuk::PipelineBaseInfo* vuk::Context::get_named_pipeline(vuk::Name name) {
 	std::lock_guard _(impl->named_pipelines_lock);
 	return impl->named_pipelines.at(name);
 }
 
-vuk::ComputePipelineInfo* vuk::Context::get_named_compute_pipeline(const char* name) {
+vuk::ComputePipelineInfo* vuk::Context::get_named_compute_pipeline(vuk::Name name) {
 	std::lock_guard _(impl->named_pipelines_lock);
 	return impl->named_compute_pipelines.at(name);
 }
@@ -324,9 +324,9 @@ vuk::Program vuk::Context::get_pipeline_reflection_info(vuk::PipelineBaseCreateI
 	return res.reflection_info;
 }
 
-vuk::ShaderModule vuk::Context::compile_shader(ShaderSource source, Name path) {
+vuk::ShaderModule vuk::Context::compile_shader(ShaderSource source, std::string path) {
 	vuk::ShaderModuleCreateInfo sci;
-	sci.filename = path;
+	sci.filename = std::move(path);
 	sci.source = std::move(source);
 	auto sm = impl->shader_modules.remove(sci);
 	if (sm) {

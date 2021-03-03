@@ -6,9 +6,10 @@
 #include <utility>
 #include <VkBootstrap.h>
 #include <imgui.h>
-#include "vuk/Types.hpp"
-#include "vuk/Context.hpp"
-#include "vuk/Swapchain.hpp"
+#include <vuk/vuk_fwd.hpp>
+#include <vuk/Types.hpp>
+#include <vuk/Context.hpp>
+#include <vuk/Swapchain.hpp>
 #include <string_view>
 #include <fstream>
 #include <sstream>
@@ -16,7 +17,6 @@
 namespace vuk {
 	class PerThreadContext;
 	struct Pass;
-	using Name = std::string_view;
 	struct RenderGraph;
 }
 

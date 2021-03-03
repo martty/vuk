@@ -6,7 +6,7 @@
 namespace std {
 	template<> struct hash<vuk::Resource> {
 		std::size_t operator()(vuk::Resource const& s) const noexcept {
-			return s.hash_name;
+			return (size_t)((uintptr_t)s.name.c_str());
 		}
 	};
 }

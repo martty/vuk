@@ -97,7 +97,7 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::bind_graphics_pipeline(Name p) {
-		return bind_graphics_pipeline(ptc.ctx.get_named_pipeline(p.data()));
+		return bind_graphics_pipeline(ptc.ctx.get_named_pipeline(p));
 	}
 
 	CommandBuffer& CommandBuffer::bind_compute_pipeline(vuk::ComputePipelineInfo* gpci) {
@@ -106,7 +106,7 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::bind_compute_pipeline(Name p) {
-		return bind_compute_pipeline(ptc.ctx.get_named_compute_pipeline(p.data()));
+		return bind_compute_pipeline(ptc.ctx.get_named_compute_pipeline(p));
 	}
 
 	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, const Buffer& buf, unsigned first_attribute, Packed format) {
