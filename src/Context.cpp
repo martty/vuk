@@ -272,11 +272,11 @@ vuk::SwapchainRef vuk::Context::add_swapchain(Swapchain sw) {
 }
 
 void vuk::Context::remove_swapchain(SwapchainRef sw) {
-    std::lock_guard _(impl->swapchains_lock);
-    for(auto it = impl->swapchains.begin(); it != impl->swapchains.end(); it++) {
+	std::lock_guard _(impl->swapchains_lock);
+	for (auto it = impl->swapchains.begin(); it != impl->swapchains.end(); it++) {
 		if (&*it == sw) {
-            impl->swapchains.erase(it);
-            return;
+			impl->swapchains.erase(it);
+			return;
 		}
 	}
 }
@@ -462,7 +462,7 @@ vuk::Context::TransientSubmitStub vuk::Context::fenced_upload(std::span<UploadIt
 				acq_barrier.dstQueueFamilyIndex = dst_queue_family;
 				acq_barrier.image = upload.image.dst;
 				acq_barrier.subresourceRange = copy_barrier.subresourceRange;
-				
+
 				// no wait, no delay, sync'd by the sema
 				vkCmdPipelineBarrier(dstcbuf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &acq_barrier);
 				MipGenerateCommand task;
@@ -470,7 +470,7 @@ vuk::Context::TransientSubmitStub vuk::Context::fenced_upload(std::span<UploadIt
 				task.extent = upload.image.extent;
 				task.base_array_layer = upload.image.base_array_layer;
 				task.base_mip_level = upload.image.mip_level;
-                task.layer_count = 1;
+				task.layer_count = 1;
 				task.format = upload.image.format;
 				record_mip_gen(dstcbuf, task, vuk::ImageLayout::eTransferDstOptimal);
 			}
@@ -490,12 +490,12 @@ vuk::Context::TransientSubmitStub vuk::Context::fenced_upload(std::span<UploadIt
 		// only buffers, single submit to transfer, fence waits on single cbuf
 		submit_transfer(si, fence);
 	} else {
-        vkEndCommandBuffer(dstcbuf);
+		vkEndCommandBuffer(dstcbuf);
 		// buffers and images, submit to transfer, signal sema
 		si.signalSemaphoreCount = 1;
 		auto sema = impl->get_unpooled_sema();
 		si.pSignalSemaphores = &sema;
-		submit_transfer(si, VkFence{VK_NULL_HANDLE});
+		submit_transfer(si, VkFence{ VK_NULL_HANDLE });
 		// second submit, to dst queue ideally, but for now to graphics
 		si.signalSemaphoreCount = 0;
 		si.waitSemaphoreCount = 1;
@@ -503,7 +503,7 @@ vuk::Context::TransientSubmitStub vuk::Context::fenced_upload(std::span<UploadIt
 		// mipping happens in STAGE_TRANSFER for now
 		VkPipelineStageFlags wait = VK_PIPELINE_STAGE_TRANSFER_BIT;
 		si.pWaitDstStageMask = &wait;
-        si.pCommandBuffers = &dstcbuf;
+		si.pCommandBuffers = &dstcbuf;
 		// stash semaphore
 		head_bundle->sema = sema;
 		// submit with fence

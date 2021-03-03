@@ -112,7 +112,7 @@ namespace vuk {
 		} else {
 			all_queue_families = { graphics_queue_family };
 		}
-		queue_family_count = (uint32_t) all_queue_families.size();
+		queue_family_count = (uint32_t)all_queue_families.size();
 	}
 
 	// not locked, must be called from a locked fn

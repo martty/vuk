@@ -9,25 +9,25 @@ static auto binding_eq = [](auto& s1, auto& s2) { return s1.binding == s2.bindin
 
 template<class T>
 void unq(T& s) {
-    std::sort(s.begin(), s.end(), binding_cmp);
-    for(auto it = s.begin(); it != s.end();) {
-        VkShaderStageFlags stages = it->stage;
-        for(auto it2 = it; it2 != s.end(); it2++) {
-            if(it->binding == it2->binding) {
-                stages |= it2->stage;
-            } else
-                break;
-        }
-        it->stage = stages;
-        auto it2 = it;
-        for(; it2 != s.end(); it2++) {
-            if(it->binding != it2->binding)
-                break;
-            it2->stage = stages;
-        }
-        it = it2;
-    }
-    s.erase(std::unique(s.begin(), s.end(), binding_eq), s.end());
+	std::sort(s.begin(), s.end(), binding_cmp);
+	for (auto it = s.begin(); it != s.end();) {
+		VkShaderStageFlags stages = it->stage;
+		for (auto it2 = it; it2 != s.end(); it2++) {
+			if (it->binding == it2->binding) {
+				stages |= it2->stage;
+			} else
+				break;
+		}
+		it->stage = stages;
+		auto it2 = it;
+		for (; it2 != s.end(); it2++) {
+			if (it->binding != it2->binding)
+				break;
+			it2->stage = stages;
+		}
+		it = it2;
+	}
+	s.erase(std::unique(s.begin(), s.end(), binding_eq), s.end());
 }
 
 vuk::Program::Type to_type(spirv_cross::SPIRType s) {
@@ -65,9 +65,9 @@ vuk::Program::Type to_type(spirv_cross::SPIRType s) {
 		default: assert("NYI" && 0);
 		}
 	case SPIRType::Struct: return Program::Type::estruct;
-    default:
-        assert("NYI" && 0);
-        return Program::Type::estruct;
+	default:
+		assert("NYI" && 0);
+		return Program::Type::estruct;
 	}
 }
 
@@ -78,25 +78,25 @@ void reflect_members(const spirv_cross::Compiler& refl, const spirv_cross::SPIRT
 		auto spirtype = refl.get_type(t);
 		m.type = to_type(spirtype);
 		if (m.type == vuk::Program::Type::estruct) {
-            m.type_name = refl.get_name(t);
+			m.type_name = refl.get_name(t);
 		}
 		m.name = refl.get_member_name(type.self, i);
 		m.size = refl.get_declared_struct_member_size(type, i);
 		m.offset = refl.type_struct_member_offset(type, i);
-	
+
 		if (m.type == vuk::Program::Type::estruct) {
 			m.size = refl.get_declared_struct_size(spirtype);
 			reflect_members(refl, spirtype, m.members);
-        }
+		}
 
-        if(spirtype.array.size() > 0) {
-            m.array_size = spirtype.array[0];
-        } else {
-            m.array_size = 1;
-        }
+		if (spirtype.array.size() > 0) {
+			m.array_size = spirtype.array[0];
+		} else {
+			m.array_size = 1;
+		}
 
-        members.push_back(m);
-    }
+		members.push_back(m);
+	}
 }
 
 VkShaderStageFlagBits vuk::Program::introspect(const spirv_cross::Compiler& refl) {
@@ -106,13 +106,13 @@ VkShaderStageFlagBits vuk::Program::introspect(const spirv_cross::Compiler& refl
 	auto model = entry_point.model;
 	auto stage = [=]() {
 		switch (model) {
-			case spv::ExecutionModel::ExecutionModelVertex: return VK_SHADER_STAGE_VERTEX_BIT;
-			case spv::ExecutionModel::ExecutionModelTessellationControl: return VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
-			case spv::ExecutionModel::ExecutionModelTessellationEvaluation: return VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
-			case spv::ExecutionModel::ExecutionModelGeometry: return VK_SHADER_STAGE_GEOMETRY_BIT;
-			case spv::ExecutionModel::ExecutionModelFragment: return VK_SHADER_STAGE_FRAGMENT_BIT;
-			case spv::ExecutionModel::ExecutionModelGLCompute: return VK_SHADER_STAGE_COMPUTE_BIT;
-			default: return VK_SHADER_STAGE_VERTEX_BIT;
+		case spv::ExecutionModel::ExecutionModelVertex: return VK_SHADER_STAGE_VERTEX_BIT;
+		case spv::ExecutionModel::ExecutionModelTessellationControl: return VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+		case spv::ExecutionModel::ExecutionModelTessellationEvaluation: return VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+		case spv::ExecutionModel::ExecutionModelGeometry: return VK_SHADER_STAGE_GEOMETRY_BIT;
+		case spv::ExecutionModel::ExecutionModelFragment: return VK_SHADER_STAGE_FRAGMENT_BIT;
+		case spv::ExecutionModel::ExecutionModelGLCompute: return VK_SHADER_STAGE_COMPUTE_BIT;
+		default: return VK_SHADER_STAGE_VERTEX_BIT;
 		}
 	}();
 	stages = stage;
@@ -156,9 +156,9 @@ VkShaderStageFlagBits vuk::Program::introspect(const spirv_cross::Compiler& refl
 		un.stage = stage;
 		un.name = sb.name.c_str();
 		un.min_size = refl.get_declared_struct_size(refl.get_type(sb.type_id));
-        if(type.basetype == spirv_cross::SPIRType::Struct) {
-            reflect_members(refl, refl.get_type(sb.type_id), un.members);
-        }
+		if (type.basetype == spirv_cross::SPIRType::Struct) {
+			reflect_members(refl, refl.get_type(sb.type_id), un.members);
+		}
 		sets[set].storage_buffers.push_back(un);
 	}
 
@@ -172,7 +172,7 @@ VkShaderStageFlagBits vuk::Program::introspect(const spirv_cross::Compiler& refl
 		t.stage = stage;
 		// maybe spirv cross bug?
 		t.array_size = type.array.size() == 1 ? (type.array[0] == 1 ? 0 : type.array[0]) : -1;
-        t.shadow = type.image.depth;
+		t.shadow = type.image.depth;
 		sets[set].samplers.push_back(t);
 	}
 
@@ -188,7 +188,7 @@ VkShaderStageFlagBits vuk::Program::introspect(const spirv_cross::Compiler& refl
 		un.array_size = type.array.size() == 1 ? (type.array[0] == 1 ? 0 : type.array[0]) : -1;
 		sets[set].storage_images.push_back(un);
 	}
-	
+
 	// subpass inputs
 	for (auto& si : resources.subpass_inputs) {
 		auto type = refl.get_type(si.type_id);
@@ -203,14 +203,14 @@ VkShaderStageFlagBits vuk::Program::introspect(const spirv_cross::Compiler& refl
 
 	// remove duplicated bindings (aliased bindings)
 	// TODO: we need to preserve this information somewhere
-	for(auto& [index, set]: sets) {
-        unq(set.samplers);
-        unq(set.uniform_buffers);
-        unq(set.storage_buffers);
-        unq(set.texel_buffers);
-        unq(set.subpass_inputs);
-        unq(set.storage_images);
-    }
+	for (auto& [index, set] : sets) {
+		unq(set.samplers);
+		unq(set.uniform_buffers);
+		unq(set.storage_buffers);
+		unq(set.texel_buffers);
+		unq(set.subpass_inputs);
+		unq(set.storage_images);
+	}
 
 	for (auto& [index, set] : sets) {
 		unsigned max_binding = 0;
@@ -241,7 +241,7 @@ VkShaderStageFlagBits vuk::Program::introspect(const spirv_cross::Compiler& refl
 		pcr.stageFlags = stage;
 		push_constant_ranges.push_back(pcr);
 	}
-	
+
 	if (stage == VK_SHADER_STAGE_COMPUTE_BIT) {
 		local_size = { refl.get_execution_mode_argument(spv::ExecutionMode::ExecutionModeLocalSize, 0),
 					   refl.get_execution_mode_argument(spv::ExecutionMode::ExecutionModeLocalSize, 1),

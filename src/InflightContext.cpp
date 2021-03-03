@@ -5,8 +5,8 @@
 vuk::InflightContext::InflightContext(Context& ctx, size_t absolute_frame, std::lock_guard<std::mutex>&& recycle_guard) :
 	ctx(ctx),
 	absolute_frame(absolute_frame),
-	frame(absolute_frame% Context::FC){
-	
+	frame(absolute_frame% Context::FC) {
+
 	// extract query results before resetting
 	std::unordered_map<uint64_t, uint64_t> query_results;
 	for (auto& p : ctx.impl->tsquery_pools.per_frame_storage[frame]) {
@@ -49,7 +49,7 @@ vuk::InflightContext::InflightContext(Context& ctx, size_t absolute_frame, std::
 	for (auto& [k, v] : impl->scratch_buffers.cache.data[frame].lru_map) {
 		ctx.impl->allocator.reset_pool(v.value);
 	}
-	
+
 	auto ptc = begin();
 	ptc.impl->descriptor_sets.collect(Context::FC * 2);
 	ptc.impl->transient_images.collect(Context::FC * 2);
@@ -120,9 +120,9 @@ void vuk::InflightContext::destroy(std::vector<VkImageView>&& images) {
 }
 
 std::vector<vuk::SampledImage> vuk::InflightContext::get_sampled_images() {
-    std::vector<vuk::SampledImage> sis;
+	std::vector<vuk::SampledImage> sis;
 	for (auto& p : impl->sampled_images.frame_values) {
-        sis.insert(sis.end(), p.values.begin(), p.values.end());
+		sis.insert(sis.end(), p.values.begin(), p.values.end());
 	}
-    return sis;
+	return sis;
 }

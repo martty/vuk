@@ -46,15 +46,15 @@ namespace vuk {
 			for (auto& res : pif.pass.resources) {
 				if (is_read_access(res.ia)) {
 					pif.inputs.emplace_back(res);
-                    auto resolved_name = resolve_name(res.name, impl->aliases);
-                    auto hashed_resolved_name = ::hash::fnv1a::hash(resolved_name.data(), resolved_name.size(), hash::fnv1a::default_offset_basis);
-                    pif.resolved_input_name_hashes.emplace_back(hashed_resolved_name);
-                    pif.bloom_resolved_inputs |= hashed_resolved_name;
+					auto resolved_name = resolve_name(res.name, impl->aliases);
+					auto hashed_resolved_name = ::hash::fnv1a::hash(resolved_name.data(), resolved_name.size(), hash::fnv1a::default_offset_basis);
+					pif.resolved_input_name_hashes.emplace_back(hashed_resolved_name);
+					pif.bloom_resolved_inputs |= hashed_resolved_name;
 				}
 				if (is_write_access(res.ia)) {
-                    auto hashed_name = ::hash::fnv1a::hash(res.name.data(), res.name.size(), hash::fnv1a::default_offset_basis);
-                    pif.bloom_outputs |= hashed_name;
-                    pif.output_name_hashes.emplace_back(hashed_name);
+					auto hashed_name = ::hash::fnv1a::hash(res.name.data(), res.name.size(), hash::fnv1a::default_offset_basis);
+					pif.bloom_outputs |= hashed_name;
+					pif.output_name_hashes.emplace_back(hashed_name);
 					pif.outputs.emplace_back(res);
 				}
 			}
@@ -71,27 +71,27 @@ namespace vuk {
 				bool could_execute_after = false;
 				bool could_execute_before = false;
 
-                if((p1.bloom_outputs & p2.bloom_resolved_inputs) != 0) {
-                    for(auto& o: p1.output_name_hashes) {
-                        for(auto& i: p2.resolved_input_name_hashes) {
-                            if(o == i) {
-                                could_execute_after = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-                
-				if((p2.bloom_outputs & p1.bloom_resolved_inputs) != 0) {
-                    for(auto& o: p2.output_name_hashes) {
-                        for(auto& i: p1.resolved_input_name_hashes) {
-                            if(o == i) {
-                                could_execute_before = true;
-                                break;
-                            }
-                        }
-                    }
-                }
+				if ((p1.bloom_outputs & p2.bloom_resolved_inputs) != 0) {
+					for (auto& o : p1.output_name_hashes) {
+						for (auto& i : p2.resolved_input_name_hashes) {
+							if (o == i) {
+								could_execute_after = true;
+								break;
+							}
+						}
+					}
+				}
+
+				if ((p2.bloom_outputs & p1.bloom_resolved_inputs) != 0) {
+					for (auto& o : p2.output_name_hashes) {
+						for (auto& i : p1.resolved_input_name_hashes) {
+							if (o == i) {
+								could_execute_before = true;
+								break;
+							}
+						}
+					}
+				}
 				if (!could_execute_after && !could_execute_before && p1.outputs == p2.outputs) {
 					return p1.pass.auxiliary_order < p2.pass.auxiliary_order;
 				}
@@ -370,10 +370,10 @@ namespace vuk {
 							barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
 							ImageBarrier ib{ .image = name, .barrier = barrier, .src = left.use.stages, .dst = right.use.stages };
 							// attach this barrier to the end of subpass or end of renderpass
-                            if(left_rp.framebufferless) {
-                                left_rp.subpasses[left.pass->subpass].post_barriers.push_back(ib);
-                            } else {
-                                left_rp.post_barriers.push_back(ib);
+							if (left_rp.framebufferless) {
+								left_rp.subpasses[left.pass->subpass].post_barriers.push_back(ib);
+							} else {
+								left_rp.post_barriers.push_back(ib);
 							}
 						}
 					}
@@ -703,7 +703,7 @@ namespace vuk {
 				if (c.use.stages & (vuk::PipelineStageFlagBits::eComputeShader | vuk::PipelineStageFlagBits::eVertexShader |
 					vuk::PipelineStageFlagBits::eTessellationControlShader | vuk::PipelineStageFlagBits::eTessellationEvaluationShader |
 					vuk::PipelineStageFlagBits::eGeometryShader | vuk::PipelineStageFlagBits::eFragmentShader)) {
-                    usage |= vuk::ImageUsageFlagBits::eStorage;
+					usage |= vuk::ImageUsageFlagBits::eStorage;
 				}
 			}
 		}

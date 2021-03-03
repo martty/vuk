@@ -8,7 +8,7 @@ namespace vuk {
 		if (values.size() < (needle + count)) {
 			auto remaining = values.size() - needle;
 			for (auto i = 0; i < (count - remaining); i++) {
-				VkSemaphoreCreateInfo sci{.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+				VkSemaphoreCreateInfo sci{ .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
 				VkSemaphore sema;
 				vkCreateSemaphore(ptc.ctx.device, &sci, nullptr, &sema);
 				values.push_back(sema);
@@ -63,16 +63,16 @@ namespace vuk {
 
 	// vk::CommandBuffer pool
 	PooledType<VkCommandBuffer>::PooledType(Context& ctx) {
-		VkCommandPoolCreateInfo cpci{.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
+		VkCommandPoolCreateInfo cpci{ .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
 		vkCreateCommandPool(ctx.device, &cpci, nullptr, &pool);
 	}
 
 	std::span<VkCommandBuffer> PooledType<VkCommandBuffer>::acquire(PerThreadContext& ptc, VkCommandBufferLevel level, size_t count) {
-        auto& values = level == VK_COMMAND_BUFFER_LEVEL_PRIMARY ? p_values : s_values;
-        auto& needle = level == VK_COMMAND_BUFFER_LEVEL_PRIMARY ? p_needle : s_needle;
+		auto& values = level == VK_COMMAND_BUFFER_LEVEL_PRIMARY ? p_values : s_values;
+		auto& needle = level == VK_COMMAND_BUFFER_LEVEL_PRIMARY ? p_needle : s_needle;
 		if (values.size() < (needle + count)) {
 			auto remaining = values.size() - needle;
-			VkCommandBufferAllocateInfo cbai{.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
+			VkCommandBufferAllocateInfo cbai{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
 			cbai.commandBufferCount = (unsigned)(count - remaining);
 			cbai.commandPool = pool;
 			cbai.level = level;

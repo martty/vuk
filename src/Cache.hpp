@@ -165,29 +165,29 @@ namespace std {
 		}
 	};
 
-/*	template <>
-	struct hash<VkGraphicsPipelineCreateInfo> {
-		size_t operator()(VkGraphicsPipelineCreateInfo const & x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.flags, std::span(x.pStages, x.stageCount));
-			if (x.pVertexInputState) hash_combine(h, *x.pVertexInputState);
-			if (x.pInputAssemblyState) hash_combine(h, *x.pInputAssemblyState);
-			if (x.pTessellationState) hash_combine(h, *x.pTessellationState);
-			if (x.pViewportState) hash_combine(h, *x.pViewportState);
-			if (x.pMultisampleState) hash_combine(h, *x.pMultisampleState);
-			if (x.pDepthStencilState) hash_combine(h, *x.pDepthStencilState);
-			if (x.pColorBlendState) hash_combine(h, *x.pColorBlendState);
-			if (x.pDynamicState) hash_combine(h, *x.pDynamicState);
-			hash_combine(h,
-				reinterpret_cast<uint64_t>((VkPipelineLayout)x.layout),
-				reinterpret_cast<uint64_t>((VkRenderPass)x.renderPass),
-				x.subpass,
-				reinterpret_cast<uint64_t>((VkPipeline)x.basePipelineHandle),
-				x.basePipelineIndex);
-			return h;
-		}
-	};*/
-	
+	/*	template <>
+		struct hash<VkGraphicsPipelineCreateInfo> {
+			size_t operator()(VkGraphicsPipelineCreateInfo const & x) const noexcept {
+				size_t h = 0;
+				hash_combine(h, x.flags, std::span(x.pStages, x.stageCount));
+				if (x.pVertexInputState) hash_combine(h, *x.pVertexInputState);
+				if (x.pInputAssemblyState) hash_combine(h, *x.pInputAssemblyState);
+				if (x.pTessellationState) hash_combine(h, *x.pTessellationState);
+				if (x.pViewportState) hash_combine(h, *x.pViewportState);
+				if (x.pMultisampleState) hash_combine(h, *x.pMultisampleState);
+				if (x.pDepthStencilState) hash_combine(h, *x.pDepthStencilState);
+				if (x.pColorBlendState) hash_combine(h, *x.pColorBlendState);
+				if (x.pDynamicState) hash_combine(h, *x.pDynamicState);
+				hash_combine(h,
+					reinterpret_cast<uint64_t>((VkPipelineLayout)x.layout),
+					reinterpret_cast<uint64_t>((VkRenderPass)x.renderPass),
+					x.subpass,
+					reinterpret_cast<uint64_t>((VkPipeline)x.basePipelineHandle),
+					x.basePipelineIndex);
+				return h;
+			}
+		};*/
+
 	template <>
 	struct hash<VkAttachmentDescription> {
 		size_t operator()(VkAttachmentDescription const& x) const noexcept {
@@ -217,13 +217,13 @@ namespace std {
 
 	template <>
 	struct hash<vuk::ImageCreateInfo> {
-		size_t operator()(vuk::ImageCreateInfo const & x) const noexcept {
+		size_t operator()(vuk::ImageCreateInfo const& x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, x.flags, x.arrayLayers, x.extent, to_integral(x.format), to_integral(x.imageType), to_integral(x.initialLayout), x.mipLevels, std::span(x.pQueueFamilyIndices, x.queueFamilyIndexCount), to_integral(x.samples), to_integral(x.sharingMode), to_integral(x.tiling), x.usage);
 			return h;
 		}
 	};
-	
+
 	template <>
 	struct hash<vuk::ImageSubresourceRange> {
 		size_t operator()(vuk::ImageSubresourceRange const& x) const noexcept {
@@ -244,9 +244,9 @@ namespace std {
 
 	template <>
 	struct hash<vuk::ImageViewCreateInfo> {
-		size_t operator()(vuk::ImageViewCreateInfo const & x) const noexcept {
+		size_t operator()(vuk::ImageViewCreateInfo const& x) const noexcept {
 			size_t h = 0;
-			hash_combine(h, x.flags, x.components, to_integral(x.format), 
+			hash_combine(h, x.flags, x.components, to_integral(x.format),
 				reinterpret_cast<uint64_t>((VkImage)x.image),
 				x.subresourceRange, to_integral(x.viewType));
 			return h;
@@ -255,9 +255,9 @@ namespace std {
 
 	template <>
 	struct hash<vuk::SamplerCreateInfo> {
-		size_t operator()(vuk::SamplerCreateInfo const & x) const noexcept {
+		size_t operator()(vuk::SamplerCreateInfo const& x) const noexcept {
 			size_t h = 0;
-			hash_combine(h, x.flags, x.addressModeU, x.addressModeV, x.addressModeW, x.anisotropyEnable, x.borderColor, x.compareEnable, x.compareOp, x.magFilter, x.maxAnisotropy, x.maxLod, x.minFilter, x.minLod, x.mipLodBias, x.mipmapMode, x.unnormalizedCoordinates); 
+			hash_combine(h, x.flags, x.addressModeU, x.addressModeV, x.addressModeW, x.anisotropyEnable, x.borderColor, x.compareEnable, x.compareOp, x.magFilter, x.maxAnisotropy, x.maxLod, x.minFilter, x.minLod, x.mipLodBias, x.mipmapMode, x.unnormalizedCoordinates);
 			return h;
 		}
 	};
@@ -306,16 +306,16 @@ namespace vuk {
 			return {};
 		}
 
-        void remove_ptr(const T* ptr) {
-            std::unique_lock _(cache_mtx);
-            for(auto it = lru_map.begin(); it != lru_map.end(); ++it) {
-                if(ptr == it->second.ptr) {
-                    pool.erase(pool.get_iterator_from_pointer(it->second.ptr));
-                    lru_map.erase(it);
-                    return;
-                }
-            }
-        }
+		void remove_ptr(const T* ptr) {
+			std::unique_lock _(cache_mtx);
+			for (auto it = lru_map.begin(); it != lru_map.end(); ++it) {
+				if (ptr == it->second.ptr) {
+					pool.erase(pool.get_iterator_from_pointer(it->second.ptr));
+					lru_map.erase(it);
+					return;
+				}
+			}
+		}
 
 		template<class Compare>
 		const T* find(Compare cmp) {
@@ -359,23 +359,23 @@ namespace vuk {
 		Context& ctx;
 		struct PerFrame {
 			robin_hood::unordered_map<create_info_t<T>, LRUEntry> lru_map;
-            std::array<std::vector<T>, 32> per_thread_append_v;
-            std::array<std::vector<create_info_t<T>>, 32> per_thread_append_k;
-			
+			std::array<std::vector<T>, 32> per_thread_append_v;
+			std::array<std::vector<create_info_t<T>>, 32> per_thread_append_k;
+
 			std::mutex cache_mtx;
 		};
 		std::array<PerFrame, FC> data;
-	
+
 	public:
 		PerFrameCache(Context& ctx) : ctx(ctx) {}
 		~PerFrameCache();
 
 		struct PFView {
-            InflightContext& ifc;
-            PerFrameCache& cache;
+			InflightContext& ifc;
+			PerFrameCache& cache;
 
-            PFView(InflightContext& ifc, PerFrameCache& cache);
-        };
+			PFView(InflightContext& ifc, PerFrameCache& cache);
+		};
 
 		struct PFPTView {
 			PerThreadContext& ptc;

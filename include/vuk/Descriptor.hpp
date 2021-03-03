@@ -1,14 +1,14 @@
 #pragma once
 
-#define VUK_MAX_BINDINGS 16
 #include <bitset>
 #include <vector>
-#include "vuk_fwd.hpp"
-#include "Types.hpp"
+#include <vuk/Config.hpp>
+#include <vuk/vuk_fwd.hpp>
+#include <vuk/Types.hpp>
 #include <concurrentqueue.h>
 #include <mutex>
-#include "Image.hpp"
-#include "robin_hood.h"
+#include <vuk/Image.hpp>
+#include <robin_hood.h>
 
 inline bool operator==(VkDescriptorSetLayoutBinding const& lhs, VkDescriptorSetLayoutBinding const& rhs) noexcept {
 	return (lhs.binding == rhs.binding)
@@ -118,87 +118,87 @@ namespace vuk {
 
 	// from robin_hood
 	inline size_t hash_bytes(void const* ptr, size_t len) noexcept {
-        static constexpr uint64_t m = UINT64_C(0xc6a4a7935bd1e995);
-        static constexpr uint64_t seed = UINT64_C(0xe17a1465);
-        static constexpr unsigned int r = 47;
+		static constexpr uint64_t m = UINT64_C(0xc6a4a7935bd1e995);
+		static constexpr uint64_t seed = UINT64_C(0xe17a1465);
+		static constexpr unsigned int r = 47;
 
-        auto const* const data64 = static_cast<uint64_t const*>(ptr);
-        uint64_t h = seed ^ (len * m);
+		auto const* const data64 = static_cast<uint64_t const*>(ptr);
+		uint64_t h = seed ^ (len * m);
 
-        size_t const n_blocks = len / 8;
-        for(size_t i = 0; i < n_blocks; ++i) {
-            auto k = *(data64 + i);
+		size_t const n_blocks = len / 8;
+		for (size_t i = 0; i < n_blocks; ++i) {
+			auto k = *(data64 + i);
 
-            k *= m;
-            k ^= k >> r;
-            k *= m;
+			k *= m;
+			k ^= k >> r;
+			k *= m;
 
-            h ^= k;
-            h *= m;
-        }
+			h ^= k;
+			h *= m;
+		}
 
-        auto const* const data8 = reinterpret_cast<uint8_t const*>(data64 + n_blocks);
-        switch(len & 7U) {
-            case 7:
-                h ^= static_cast<uint64_t>(data8[6]) << 48U;
-                ROBIN_HOOD(FALLTHROUGH); // FALLTHROUGH
-            case 6:
-                h ^= static_cast<uint64_t>(data8[5]) << 40U;
-                ROBIN_HOOD(FALLTHROUGH); // FALLTHROUGH
-            case 5:
-                h ^= static_cast<uint64_t>(data8[4]) << 32U;
-                ROBIN_HOOD(FALLTHROUGH); // FALLTHROUGH
-            case 4:
-                h ^= static_cast<uint64_t>(data8[3]) << 24U;
-                ROBIN_HOOD(FALLTHROUGH); // FALLTHROUGH
-            case 3:
-                h ^= static_cast<uint64_t>(data8[2]) << 16U;
-                ROBIN_HOOD(FALLTHROUGH); // FALLTHROUGH
-            case 2:
-                h ^= static_cast<uint64_t>(data8[1]) << 8U;
-                ROBIN_HOOD(FALLTHROUGH); // FALLTHROUGH
-            case 1:
-                h ^= static_cast<uint64_t>(data8[0]);
-                h *= m;
-                ROBIN_HOOD(FALLTHROUGH); // FALLTHROUGH
-            default:
-                break;
-        }
+		auto const* const data8 = reinterpret_cast<uint8_t const*>(data64 + n_blocks);
+		switch (len & 7U) {
+		case 7:
+			h ^= static_cast<uint64_t>(data8[6]) << 48U;
+			ROBIN_HOOD(FALLTHROUGH); // FALLTHROUGH
+		case 6:
+			h ^= static_cast<uint64_t>(data8[5]) << 40U;
+			ROBIN_HOOD(FALLTHROUGH); // FALLTHROUGH
+		case 5:
+			h ^= static_cast<uint64_t>(data8[4]) << 32U;
+			ROBIN_HOOD(FALLTHROUGH); // FALLTHROUGH
+		case 4:
+			h ^= static_cast<uint64_t>(data8[3]) << 24U;
+			ROBIN_HOOD(FALLTHROUGH); // FALLTHROUGH
+		case 3:
+			h ^= static_cast<uint64_t>(data8[2]) << 16U;
+			ROBIN_HOOD(FALLTHROUGH); // FALLTHROUGH
+		case 2:
+			h ^= static_cast<uint64_t>(data8[1]) << 8U;
+			ROBIN_HOOD(FALLTHROUGH); // FALLTHROUGH
+		case 1:
+			h ^= static_cast<uint64_t>(data8[0]);
+			h *= m;
+			ROBIN_HOOD(FALLTHROUGH); // FALLTHROUGH
+		default:
+			break;
+		}
 
-        h ^= h >> r;
-        h *= m;
-        h ^= h >> r;
-        return static_cast<size_t>(h);
-    }
+		h ^= h >> r;
+		h *= m;
+		h ^= h >> r;
+		return static_cast<size_t>(h);
+	}
 
 	struct SetBinding {
-        uint32_t mask = 0;
-        uint32_t count = 0;
+		uint32_t mask = 0;
+		uint32_t count = 0;
 		std::bitset<VUK_MAX_BINDINGS> used = {};
 		std::array<DescriptorBinding, VUK_MAX_BINDINGS> bindings;
-        std::array<DescriptorBinding, VUK_MAX_BINDINGS> compressed_bindings; // TODO: remove bindings and uncompress on use
+		std::array<DescriptorBinding, VUK_MAX_BINDINGS> compressed_bindings; // TODO: remove bindings and uncompress on use
 		DescriptorSetLayoutAllocInfo layout_info = {};
-        uint64_t hash = 0;
+		uint64_t hash = 0;
 
 		void calculate_hash() {
-            mask = used.to_ulong();
-            unsigned long leading_ones = vuk::num_leading_ones(mask);
-            hash = hash_bytes(reinterpret_cast<const char*>(&bindings[0]), leading_ones * sizeof(DescriptorBinding));
-            hash_combine(hash, layout_info.layout);
-            count = 0;
-            for(size_t i = 0; i < VUK_MAX_BINDINGS; i++) {
-                if((mask & (1 << i)) == 0) {
-                    continue;
-                } else {
-                    *(compressed_bindings.data() + count) = *(bindings.data() + i); // ugly, but fast in debug
-                    count++;
-                }
-            }
+			mask = used.to_ulong();
+			unsigned long leading_ones = vuk::num_leading_ones(mask);
+			hash = hash_bytes(reinterpret_cast<const char*>(&bindings[0]), leading_ones * sizeof(DescriptorBinding));
+			hash_combine(hash, layout_info.layout);
+			count = 0;
+			for (size_t i = 0; i < VUK_MAX_BINDINGS; i++) {
+				if ((mask & (1 << i)) == 0) {
+					continue;
+				} else {
+					*(compressed_bindings.data() + count) = *(bindings.data() + i); // ugly, but fast in debug
+					count++;
+				}
+			}
 		}
 
 		bool operator==(const SetBinding& o) const noexcept {
 			if (layout_info != o.layout_info) return false;
-            return memcmp(compressed_bindings.data(), o.compressed_bindings.data(), count * sizeof(DescriptorBinding)) == 0;
+			return memcmp(compressed_bindings.data(), o.compressed_bindings.data(), count * sizeof(DescriptorBinding)) == 0;
 		}
 	};
 
@@ -264,19 +264,19 @@ namespace vuk {
 }
 
 namespace robin_hood {
-    template<>
-    struct hash<vuk::SetBinding, std::true_type> {
-        size_t operator()(vuk::SetBinding const& x) const noexcept {
-            return x.hash;
-        }
-    };
+	template<>
+	struct hash<vuk::SetBinding, std::true_type> {
+		size_t operator()(vuk::SetBinding const& x) const noexcept {
+			return x.hash;
+		}
+	};
 }
 
 namespace std {
 	template <>
 	struct hash<vuk::SetBinding> {
 		size_t operator()(vuk::SetBinding const& x) const noexcept {
-            return x.hash;
+			return x.hash;
 		}
 	};
 

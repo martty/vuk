@@ -6,14 +6,14 @@ bool vuk::execute_submit_and_present_to_one(PerThreadContext& ptc, ExecutableRen
 	uint32_t image_index = (uint32_t)-1;
 	VkResult acq_result = vkAcquireNextImageKHR(ptc.ctx.device, swapchain->swapchain, UINT64_MAX, present_rdy, VK_NULL_HANDLE, &image_index);
 	if (acq_result != VK_SUCCESS) {
-		VkSubmitInfo si { .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO };
+		VkSubmitInfo si{ .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO };
 		si.commandBufferCount = 0;
 		si.pCommandBuffers = nullptr;
 		si.waitSemaphoreCount = 1;
 		si.pWaitSemaphores = &present_rdy;
 		VkPipelineStageFlags flags = (VkPipelineStageFlags)vuk::PipelineStageFlagBits::eTopOfPipe;
 		si.pWaitDstStageMask = &flags;
-        ptc.ctx.submit_graphics(si, VK_NULL_HANDLE);
+		ptc.ctx.submit_graphics(si, VK_NULL_HANDLE);
 		return false;
 	}
 
@@ -22,7 +22,7 @@ bool vuk::execute_submit_and_present_to_one(PerThreadContext& ptc, ExecutableRen
 
 	auto cb = rg.execute(ptc, swapchains_with_indexes);
 
-	VkSubmitInfo si { .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO };
+	VkSubmitInfo si{ .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO };
 	si.commandBufferCount = 1;
 	si.pCommandBuffers = &cb;
 	si.pSignalSemaphores = &render_complete;
