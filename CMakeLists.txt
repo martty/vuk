@@ -44,7 +44,7 @@ elseif(VUK_USE_SHADERC)
 	target_link_libraries(vuk PRIVATE shaderc_combined glslang MachineIndependent OSDependent OGLCompiler GenericCodeGen SPIRV SPIRV-Tools-opt SPIRV-Tools)
 endif()
 
-target_compile_definitions(vuk PUBLIC VUK_USE_SHADERC=${VUK_USE_SHADERC})
+target_compile_definitions(vuk PUBLIC VUK_USE_SHADERC=$<BOOL:VUK_USE_SHADERC>)
 
 set(SPIRV_CROSS_CLI OFF CACHE BOOL "")
 set(SPIRV_CROSS_ENABLE_TESTS OFF CACHE BOOL "")
