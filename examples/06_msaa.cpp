@@ -21,11 +21,12 @@ namespace {
 	vuk::Example x{
 		.name = "06_msaa",
 		.setup = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
-			// Same setup as for 04_texture
+			// Same setup as for 04_texture, except we use spirv to create the pipeline
+			// This is a good option is if you don't want to ship shaderc or if you are caching or have your sl -> spirv pipeline
 			{
 			vuk::PipelineBaseCreateInfo pci;
-			pci.add_shader(util::read_entire_file("../../examples/ubo_test_tex.vert"), "ubo_test_tex.vert");
-			pci.add_shader(util::read_entire_file("../../examples/triangle_depthshaded_tex.frag"), "triangle_depthshaded_text.frag");
+			pci.add_spirv(util::read_spirv("../../examples/ubo_test_tex.vert.spv"), "ubo_test_tex.vert");
+			pci.add_spirv(util::read_spirv("../../examples/triangle_depthshaded_tex.frag.spv"), "triangle_depthshaded_text.frag");
 			runner.context->create_named_pipeline("textured_cube", pci);
 			}
 

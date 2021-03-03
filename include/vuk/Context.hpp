@@ -78,7 +78,7 @@ namespace vuk {
 		PipelineBaseInfo* get_pipeline(const PipelineBaseCreateInfo& pbci);
 		ComputePipelineInfo* get_pipeline(const ComputePipelineCreateInfo& pbci);
 		Program get_pipeline_reflection_info(PipelineBaseCreateInfo pbci);
-		ShaderModule compile_shader(std::string source, Name path);
+		ShaderModule compile_shader(ShaderSource source, Name path);
 
 		bool load_pipeline_cache(std::span<uint8_t> data);
 		std::vector<uint8_t> save_pipeline_cache();

@@ -99,24 +99,24 @@ namespace {
 			// In this case, we only need the shaders, we don't care about the rest of the state
 			{
 				vuk::PipelineBaseCreateInfo pci;
-				pci.add_shader(util::read_entire_file("../../benchmarks/fullscreen.vert"), "fullscreen.vert");
-				pci.add_shader(util::read_entire_file("../../benchmarks/dependent_texture_fetch_explicit_lod.frag"), "dependent_texture_fetch_explicit_lod.frag");
+				pci.add_glsl(util::read_entire_file("../../benchmarks/fullscreen.vert"), "fullscreen.vert");
+				pci.add_glsl(util::read_entire_file("../../benchmarks/dependent_texture_fetch_explicit_lod.frag"), "dependent_texture_fetch_explicit_lod.frag");
 
 				pci.depth_stencil_state.depthCompareOp = vuk::CompareOp::eAlways;
 				runner.context->create_named_pipeline("dependent", pci);
 			}
 			{
 				vuk::PipelineBaseCreateInfo pci;
-				pci.add_shader(util::read_entire_file("../../benchmarks/fullscreen.vert"), "fullscreen.vert");
-				pci.add_shader(util::read_entire_file("../../benchmarks/nondependent_texture_fetch_explicit_lod.frag"), "nondependent_texture_fetch_explicit_lod.frag");
+				pci.add_glsl(util::read_entire_file("../../benchmarks/fullscreen.vert"), "fullscreen.vert");
+				pci.add_glsl(util::read_entire_file("../../benchmarks/nondependent_texture_fetch_explicit_lod.frag"), "nondependent_texture_fetch_explicit_lod.frag");
 
 				pci.depth_stencil_state.depthCompareOp = vuk::CompareOp::eAlways;
 				runner.context->create_named_pipeline("nondependent", pci);
 			}
 			{
 				vuk::PipelineBaseCreateInfo pci;
-				pci.add_shader(util::read_entire_file("../../benchmarks/fullscreen.vert"), "fullscreen.vert");
-				pci.add_shader(util::read_entire_file("../../benchmarks/blit.frag"), "blit.frag");
+				pci.add_glsl(util::read_entire_file("../../benchmarks/fullscreen.vert"), "fullscreen.vert");
+				pci.add_glsl(util::read_entire_file("../../benchmarks/blit.frag"), "blit.frag");
 
 				pci.depth_stencil_state.depthCompareOp = vuk::CompareOp::eAlways;
 				runner.context->create_named_pipeline("blit", pci);

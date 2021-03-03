@@ -36,8 +36,8 @@ namespace {
 		.setup = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
 			{
 			vuk::PipelineBaseCreateInfo pci;
-			pci.add_shader(util::read_entire_file("../../examples/bindless.vert"), "bindless.vert");
-			pci.add_shader(util::read_entire_file("../../examples/triangle_tex_bindless.frag"), "triange_tex_bindless.frag");
+			pci.add_glsl(util::read_entire_file("../../examples/bindless.vert"), "bindless.vert");
+			pci.add_glsl(util::read_entire_file("../../examples/triangle_tex_bindless.frag"), "triange_tex_bindless.frag");
 			// Set the binding #0 in set #1 as a variable count binding, and set the maximum number of descriptors
 			pci.set_variable_count_binding(1, 0, 1024);
 			// Flag this binding as partially bound, so that we don't need to set all the array elements
@@ -48,7 +48,7 @@ namespace {
 			// creating a compute pipeline that inverts an image 
 			{
 			vuk::ComputePipelineCreateInfo pci;
-			pci.add_shader(util::read_entire_file("../../examples/invert.comp"), "invert.comp");
+			pci.add_glsl(util::read_entire_file("../../examples/invert.comp"), "invert.comp");
 			runner.context->create_named_pipeline("invert", pci);
 			}
 

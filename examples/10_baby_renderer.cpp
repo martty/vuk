@@ -100,7 +100,7 @@ namespace {
 			// Creating a compute pipeline that inverts an image 
 			{
 				vuk::ComputePipelineCreateInfo pci;
-				pci.add_shader(util::read_entire_file("../../examples/invert.comp"), "invert.comp");
+				pci.add_glsl(util::read_entire_file("../../examples/invert.comp"), "invert.comp");
 				runner.context->create_named_pipeline("invert", pci);
 			}
 			vuk::ImageCreateInfo ici;
@@ -170,8 +170,8 @@ namespace {
 			vuk::PipelineBaseInfo* pipe1;
 			{
 				vuk::PipelineBaseCreateInfo pci;
-				pci.add_shader(util::read_entire_file("../../examples/baby_renderer.vert"), "baby_renderer.vert");
-				pci.add_shader(util::read_entire_file("../../examples/triangle_depthshaded_tex.frag"), "triangle_depthshaded_tex.frag");
+				pci.add_glsl(util::read_entire_file("../../examples/baby_renderer.vert"), "baby_renderer.vert");
+				pci.add_glsl(util::read_entire_file("../../examples/triangle_depthshaded_tex.frag"), "triangle_depthshaded_tex.frag");
 				pipe1 = runner.context->get_pipeline(pci);
 			}
 
@@ -179,8 +179,8 @@ namespace {
 			vuk::PipelineBaseInfo* pipe2;
 			{
 				vuk::PipelineBaseCreateInfo pci;
-				pci.add_shader(util::read_entire_file("../../examples/baby_renderer.vert"), "baby_renderer.vert");
-				pci.add_shader(util::read_entire_file("../../examples/triangle_tinted_tex.frag"), "triangle_tinted_tex.frag");
+				pci.add_glsl(util::read_entire_file("../../examples/baby_renderer.vert"), "baby_renderer.vert");
+				pci.add_glsl(util::read_entire_file("../../examples/triangle_tinted_tex.frag"), "triangle_tinted_tex.frag");
 				pipe2 = runner.context->get_pipeline(pci);
 			}
 

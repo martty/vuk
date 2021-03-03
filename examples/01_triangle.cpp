@@ -18,8 +18,8 @@ namespace {
 			// Pipelines are created by filling out a vuk::PipelineCreateInfo
 			// In this case, we only need the shaders, we don't care about the rest of the state
 			vuk::PipelineBaseCreateInfo pci;
-			pci.add_shader(util::read_entire_file("../../examples/triangle.vert"), "triangle.vert");
-			pci.add_shader(util::read_entire_file("../../examples/triangle.frag"), "triangle.frag");
+			pci.add_glsl(util::read_entire_file("../../examples/triangle.vert"), "triangle.vert");
+			pci.add_glsl(util::read_entire_file("../../examples/triangle.frag"), "triangle.frag");
 			// The pipeline is stored with a user give name for simplicity
 			runner.context->create_named_pipeline("triangle", pci);
 		},

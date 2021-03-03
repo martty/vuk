@@ -30,10 +30,10 @@ util::ImGuiData util::ImGui_ImplVuk_Init(vuk::PerThreadContext& ptc) {
 		vuk::PipelineBaseCreateInfo pci;
 		auto vpath = "../../imgui.vert";
 		auto vcont = util::read_entire_file(vpath);
-		pci.add_shader(vcont, vpath);
+		pci.add_glsl(vcont, vpath);
 		auto fpath = "../../imgui.frag";
 		auto fcont = util::read_entire_file(fpath);
-		pci.add_shader(fcont, fpath);
+		pci.add_glsl(fcont, fpath);
 		pci.set_blend(vuk::BlendPreset::eAlphaBlend);
 		ptc.ctx.create_named_pipeline("imgui", pci);
 	}

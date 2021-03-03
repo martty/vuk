@@ -88,31 +88,35 @@ void vuk::PersistentDescriptorSet::update_storage_image(PerThreadContext& ptc, u
 }
 
 vuk::ShaderModule vuk::Context::create(const create_info_t<vuk::ShaderModule>& cinfo) {
-	shaderc::Compiler compiler;
-	shaderc::CompileOptions options;
-	options.SetTargetEnvironment(shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_1);
+	// given source is GLSL, compile it via shaderc
+	shaderc::SpvCompilationResult result;
+	if (!cinfo.source.is_spirv) {
+		shaderc::Compiler compiler;
+		shaderc::CompileOptions options;
+		options.SetTargetEnvironment(shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_1);
 
-	shaderc::SpvCompilationResult result = compiler.CompileGlslToSpv(cinfo.source, shaderc_glsl_infer_from_source, cinfo.filename.c_str(), options);
+		result = compiler.CompileGlslToSpv(cinfo.source.as_glsl(), shaderc_glsl_infer_from_source, cinfo.filename.c_str(), options);
 
-	if (result.GetCompilationStatus() != shaderc_compilation_status_success) {
-		std::string message = result.GetErrorMessage().c_str();
-		throw ShaderCompilationException{ message };
-	} else {
-		std::vector<uint32_t> spirv(result.cbegin(), result.cend());
-
-		spirv_cross::Compiler refl(spirv.data(), spirv.size());
-		vuk::Program p;
-		auto stage = p.introspect(refl);
-
-		VkShaderModuleCreateInfo moduleCreateInfo{ .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO };
-		moduleCreateInfo.codeSize = spirv.size() * sizeof(uint32_t);
-		moduleCreateInfo.pCode = spirv.data();
-		VkShaderModule sm;
-		vkCreateShaderModule(device, &moduleCreateInfo, nullptr, &sm);
-		std::string name = "ShaderModule: " + cinfo.filename;
-		debug.set_name(sm, name);
-		return { sm, p, stage };
+		if (result.GetCompilationStatus() != shaderc_compilation_status_success) {
+			std::string message = result.GetErrorMessage().c_str();
+			throw ShaderCompilationException{ message };
+		}
 	}
+
+	const std::vector<uint32_t>& spirv = cinfo.source.is_spirv ? cinfo.source.data : std::vector<uint32_t>(result.cbegin(), result.cend());
+
+	spirv_cross::Compiler refl(spirv.data(), spirv.size());
+	vuk::Program p;
+	auto stage = p.introspect(refl);
+
+	VkShaderModuleCreateInfo moduleCreateInfo{ .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO };
+	moduleCreateInfo.codeSize = spirv.size() * sizeof(uint32_t);
+	moduleCreateInfo.pCode = spirv.data();
+	VkShaderModule sm;
+	vkCreateShaderModule(device, &moduleCreateInfo, nullptr, &sm);
+	std::string name = "ShaderModule: " + cinfo.filename;
+	debug.set_name(sm, name);
+	return { sm, p, stage };
 }
 
 vuk::PipelineBaseInfo vuk::Context::create(const create_info_t<PipelineBaseInfo>& cinfo) {
@@ -123,7 +127,7 @@ vuk::PipelineBaseInfo vuk::Context::create(const create_info_t<PipelineBaseInfo>
 	std::string pipe_name = "Pipeline:";
 	for (auto i = 0; i < cinfo.shaders.size(); i++) {
 		auto contents = cinfo.shaders[i];
-		if (contents.empty())
+		if (contents.data.empty())
 			continue;
 		auto& sm = impl->shader_modules.acquire({ contents, cinfo.shader_paths[i] });
 		VkPipelineShaderStageCreateInfo shader_stage{ .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
@@ -314,7 +318,7 @@ vuk::Program vuk::Context::get_pipeline_reflection_info(vuk::PipelineBaseCreateI
 	return res.reflection_info;
 }
 
-vuk::ShaderModule vuk::Context::compile_shader(std::string source, Name path) {
+vuk::ShaderModule vuk::Context::compile_shader(ShaderSource source, Name path) {
 	vuk::ShaderModuleCreateInfo sci;
 	sci.filename = path;
 	sci.source = std::move(source);

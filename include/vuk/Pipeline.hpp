@@ -10,11 +10,6 @@
 #include <vuk/Image.hpp>
 
 namespace vuk {
-	// return a/b rounded to infinity
-	constexpr uint64_t idivceil(uint64_t a, uint64_t b) noexcept {
-		return (a + b - 1) / b;
-	}
-
 	template<uint64_t Count>
 	struct Bitset {
 		static constexpr uint64_t bitmask(uint64_t const onecount) {
@@ -493,17 +488,23 @@ namespace vuk {
 		}
 	};
 
-	struct ShaderSource {
-
-	};
-
 	/* filled out by the user */
 	struct PipelineBaseCreateInfo : PipelineBaseCreateInfoBase {
 		friend class CommandBuffer;
 		friend class Context;
 	public:
-		void add_shader(std::string source, std::string filename) {
+		void add_shader(ShaderSource source, std::string filename) {
 			shaders.emplace_back(std::move(source));
+			shader_paths.emplace_back(std::move(filename));
+		}
+
+		void add_glsl(std::string source, std::string filename) {
+			shaders.emplace_back(ShaderSource::glsl(std::move(source)));
+			shader_paths.emplace_back(std::move(filename));
+		}
+
+		void add_spirv(std::vector<uint32_t> source, std::string filename) {
+			shaders.emplace_back(ShaderSource::spirv(std::move(source)));
 			shader_paths.emplace_back(std::move(filename));
 		}
 
@@ -512,7 +513,7 @@ namespace vuk {
 		vuk::fixed_vector<vuk::PipelineColorBlendAttachmentState, VUK_MAX_COLOR_ATTACHMENTS> color_blend_attachments;
 		vuk::PipelineDepthStencilStateCreateInfo depth_stencil_state;
 
-		vuk::fixed_vector<std::string, 5> shaders;
+		vuk::fixed_vector<ShaderSource, 5> shaders;
 		vuk::fixed_vector<std::string, 5> shader_paths;
 
 		void set_blend(size_t attachment_index, BlendPreset);
@@ -558,15 +559,25 @@ namespace vuk {
 		friend class CommandBuffer;
 		friend class Context;
 	public:
-		void add_shader(std::string source, std::string filename) {
+		void add_shader(ShaderSource source, std::string filename) {
 			shader = std::move(source);
+			shader_path = std::move(filename);
+		}
+
+		void add_glsl(std::string source, std::string filename) {
+			shader = ShaderSource::glsl(std::move(source));
+			shader_path = std::move(filename);
+		}
+
+		void add_spirv(std::vector<uint32_t> source, std::string filename) {
+			shader = ShaderSource::spirv(std::move(source));
 			shader_path = std::move(filename);
 		}
 
 		friend struct std::hash<ComputePipelineCreateInfo>;
 		friend class PerThreadContext;
 	private:
-		std::string shader;
+		ShaderSource shader;
 		std::string shader_path;
 
 	public:
@@ -732,6 +743,15 @@ namespace std {
 			for (auto& e : x) {
 				hash_combine(h, e);
 			}
+			return h;
+		}
+	};
+
+	template <>
+	struct hash<vuk::ShaderSource> {
+		size_t operator()(vuk::ShaderSource const& x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, x.is_spirv, x.data);
 			return h;
 		}
 	};

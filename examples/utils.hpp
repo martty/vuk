@@ -103,4 +103,15 @@ namespace util {
 		buf << input.rdbuf();
 		return buf.str();
 	}
+
+	inline std::vector<uint32_t> read_spirv(const std::string& path) {
+		std::ostringstream buf;
+		std::ifstream input(path.c_str(), std::ios::ate | std::ios::binary);
+		assert(input);
+		size_t file_size = (size_t)input.tellg();
+		std::vector<uint32_t> buffer(file_size / sizeof(uint32_t));
+		input.seekg(0);
+		input.read(reinterpret_cast<char *>(buffer.data()), file_size);
+		return buffer;
+	}
 }

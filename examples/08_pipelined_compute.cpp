@@ -32,15 +32,15 @@ namespace {
 		.setup = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
 			{
 			vuk::PipelineBaseCreateInfo pci;
-			pci.add_shader(util::read_entire_file("../../examples/fullscreen.vert"), "fullscreen.vert");
-			pci.add_shader(util::read_entire_file("../../examples/rtt.frag"), "rtt.frag");
+			pci.add_glsl(util::read_entire_file("../../examples/fullscreen.vert"), "fullscreen.vert");
+			pci.add_glsl(util::read_entire_file("../../examples/rtt.frag"), "rtt.frag");
 			runner.context->create_named_pipeline("rtt", pci);
 			}
 
 			{
 			vuk::PipelineBaseCreateInfo pci;
-			pci.add_shader(util::read_entire_file("../../examples/fullscreen.vert"), "fullscreen.vert");
-			pci.add_shader(util::read_entire_file("../../examples/scrambled_draw.frag"), "scrambled_draw.frag");
+			pci.add_glsl(util::read_entire_file("../../examples/fullscreen.vert"), "fullscreen.vert");
+			pci.add_glsl(util::read_entire_file("../../examples/scrambled_draw.frag"), "scrambled_draw.frag");
 			runner.context->create_named_pipeline("scrambled_draw", pci);
 			}
 
@@ -48,7 +48,7 @@ namespace {
 			// but here we can compile immediately
 			{
 			vuk::ComputePipelineCreateInfo pci;
-			pci.add_shader(util::read_entire_file("../../examples/stupidsort.comp"), "stupidsort.comp");
+			pci.add_glsl(util::read_entire_file("../../examples/stupidsort.comp"), "stupidsort.comp");
 			runner.context->create_named_pipeline("stupidsort", pci);
 			}
 
