@@ -193,11 +193,15 @@ vuk::DescriptorSet vuk::PerThreadContext::create(const create_info_t<vuk::Descri
 	auto ds = pool.acquire(*this, cinfo.layout_info);
 	auto mask = cinfo.used.to_ulong();
 	unsigned long leading_ones = num_leading_ones(mask);
-	std::array<VkWriteDescriptorSet, VUK_MAX_BINDINGS> writes;
-	for (unsigned i = 0; i < leading_ones; i++) {
-		if (!cinfo.used.test(i)) continue;
-		auto& write = writes[i];
-		write = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+    std::array<VkWriteDescriptorSet, VUK_MAX_BINDINGS> writes = {};
+    int j = 0;
+	for (int i = 0; i < leading_ones; i++, j++) {
+        if(!cinfo.used.test(i)) {
+            j--;
+            continue;
+        }
+        auto& write = writes[j];
+        write = {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
 		auto& binding = cinfo.bindings[i];
 		write.descriptorType = (VkDescriptorType)binding.type;
 		write.dstArrayElement = 0;
@@ -219,7 +223,7 @@ vuk::DescriptorSet vuk::PerThreadContext::create(const create_info_t<vuk::Descri
 			assert(0);
 		}
 	}
-	vkUpdateDescriptorSets(ctx.device, leading_ones, writes.data(), 0, nullptr);
+	vkUpdateDescriptorSets(ctx.device, j, writes.data(), 0, nullptr);
 	return { ds, cinfo.layout_info };
 }
 

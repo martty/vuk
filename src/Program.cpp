@@ -78,7 +78,10 @@ void reflect_members(const spirv_cross::Compiler& refl, const spirv_cross::SPIRT
 		auto spirtype = refl.get_type(t);
 		m.type = to_type(spirtype);
 		if (m.type == vuk::Program::Type::estruct) {
-			m.type_name = refl.get_name(t);
+            m.type_name = refl.get_name(t);
+			if (m.type_name == "") {
+                m.type_name = refl.get_name(spirtype.parent_type);
+			}
 		}
 		m.name = refl.get_member_name(type.self, i);
 		m.size = refl.get_declared_struct_member_size(type, i);

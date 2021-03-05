@@ -262,6 +262,7 @@ namespace vuk {
 							}
 						}
 
+						cobuf.pcrs.clear();
 						cobuf.attribute_descriptions.clear();
 						cobuf.binding_descriptions.clear();
 						cobuf.set_bindings = {};
