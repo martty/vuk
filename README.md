@@ -27,30 +27,30 @@ cmake --build .
 4. Each frame:
   1. Each frame, prepare high level description of your rendering, in the form of `vuk::Pass`
   2. Bind concrete resources as inputs and outputs
-  3. Bind temporary resources
-  4. Record the execution your rendergraph into `vk::CommandBuffer`(s)
+  3. Bind managed resources (temporary resources used by the 
+  4. Record the execution your rendergraph into a command buffer
   5. Submit and present
 
 ### What does **vuk** do
 - [x] Automatically deduces renderpasses, subpasses and framebuffers
-  - [ ] in an optimal way
   - [x] with all the synchronization handled for you
-   - [ ] including buffers
+   - [x] including buffers
    - [x] images
    - [x] and rendertargets.
+  - [ ] for multiple queues
+  - [ ] using fine grained synchronization when possible (events)
 - [x] Automatically transitions images into proper layouts
   - [x] for renderpasses
-  - [ ] and commands outside of renderpasses (eg. blitting).
+  - [x] and commands outside of renderpasses (eg. blitting).
 - [x] Automates pipeline creation with
+  - [x] optionally compiling your shaders at runtime using shaderc
   - [x] pipeline layouts and
   - [x] descriptor set layouts
   - [x] by reflecting your shaders
   - [x] and deducing parameters based on renderpass and framebuffer.
 - [x] Automates resource binding with hashmaps, reducing descriptor set allocations and updates.
 - [x] Handles temporary allocations for a frame
-- [ ] Handles long-term allocations with RAII handles
-  - [x] for images
-  - [ ] and buffers.
+- [x] Handles long-term allocations with RAII handles
 - [x] Comes with lots of sugar to simplify common operations, but still exposing the full Vulkan interface:
   - [x] Matching viewport/scissor dimensions to attachment sizes
   - [x] Simplified vertex format specification
@@ -59,4 +59,3 @@ cmake --build .
   - [x] Automatic management of multisampling
 - [x] Helps debugging by naming the internal resources
 - [x] dear imgui integration code
-- [ ] Error checking
