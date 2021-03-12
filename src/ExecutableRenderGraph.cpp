@@ -116,54 +116,67 @@ namespace vuk {
 	}
 
 	VkCommandBuffer ExecutableRenderGraph::execute(vuk::PerThreadContext& ptc, std::vector<std::pair<SwapChainRef, size_t>> swp_with_index) {
-		// create framebuffers, create & bind attachments
-		for (auto& rp : impl->rpis) {
-			if (rp.attachments.size() == 0)
-				continue;
-
-			vuk::Extent2D fb_extent;
-			bool extent_known = false;
-
-			// bind swapchain attachments, deduce framebuffer size & sample count
-			for (auto& attrpinfo : rp.attachments) {
-				auto& bound = impl->bound_attachments[attrpinfo.name];
-
-				if (bound.type == AttachmentRPInfo::Type::eSwapchain) {
-					auto it = std::find_if(swp_with_index.begin(), swp_with_index.end(), [&](auto& t) { return t.first == bound.swapchain; });
-					bound.iv = it->first->image_views[it->second];
-					bound.image = it->first->images[it->second];
-					fb_extent = it->first->extent;
-					bound.extents = Dimension2D::absolute(it->first->extent);
-					extent_known = true;
-				} else {
-					if (bound.extents.sizing == Sizing::eAbsolute) {
-						fb_extent = bound.extents.extent;
-						extent_known = true;
-					}
-				}
-			}
-
-			if (extent_known) {
-				rp.fbci.width = fb_extent.width;
-				rp.fbci.height = fb_extent.height;
-			}
-
-			for (auto& attrpinfo : rp.attachments) {
-				auto& bound = impl->bound_attachments[attrpinfo.name];
-				if (extent_known) {
-					bound.extents = Dimension2D::absolute(fb_extent);
-				}
-			}
-		}
-
+		// bind swapchain attachment images & ivs
 		for (auto& [name, bound] : impl->bound_attachments) {
 			if (bound.type == AttachmentRPInfo::Type::eSwapchain) {
 				auto it = std::find_if(swp_with_index.begin(), swp_with_index.end(), [boundb = &bound](auto& t) { return t.first == boundb->swapchain; });
 				bound.iv = it->first->image_views[it->second];
 				bound.image = it->first->images[it->second];
+				bound.extents = Dimension2D::absolute(it->first->extent);
 			}
 		}
 
+		// perform size inference for framebuffers
+		// loop through all renderpasses, and attempt to infer any size we can
+		// then loop again, stopping if we have inferred all or have not made progress
+		bool fb_sized = false;
+		bool any_fb_unsized = false;
+		do {
+			any_fb_unsized = false;
+			fb_sized = false;
+			for (auto& rp : impl->rpis) {
+				if (rp.attachments.size() == 0) {
+					continue;
+				}
+
+				// an extent is known if it is not 0
+				// 0 sized framebuffers are illegal
+				Extent2D fb_extent = Extent2D{ rp.fbci.width, rp.fbci.height };
+				bool extent_known = !(fb_extent.width == 0 || fb_extent.height == 0);
+
+				if (extent_known) {
+					continue;
+				}
+
+				// bind swapchain attachments, deduce framebuffer size & sample count
+				for (auto& attrpinfo : rp.attachments) {
+					auto& bound = impl->bound_attachments[attrpinfo.name];
+
+					if (bound.extents.sizing == vuk::Sizing::eAbsolute && bound.extents.extent.width > 0 && bound.extents.extent.height > 0) {
+						fb_extent = bound.extents.extent;
+						extent_known = true;
+						break;
+					}
+				}
+
+				if (extent_known) {
+					rp.fbci.width = fb_extent.width;
+					rp.fbci.height = fb_extent.height;
+					fb_sized = true; // progress made
+					// propagate known extent onto attachments
+					for (auto& attrpinfo : rp.attachments) {
+						auto& bound = impl->bound_attachments[attrpinfo.name];
+						bound.extents = Dimension2D::absolute(fb_extent);
+					}
+				} else {
+					any_fb_unsized = true;
+				}
+			}
+		} while (any_fb_unsized || fb_sized); // stop looping if all attachment have been sized or we made no progress
+
+		assert(!any_fb_unsized && "Failed to infer size for all attachments.");
+
+		// create framebuffers, create & bind attachments
 		for (auto& rp : impl->rpis) {
 			if (rp.attachments.size() == 0)
 				continue;
@@ -172,18 +185,6 @@ namespace vuk {
 			std::vector<VkImageView> vkivs;
 
 			Extent2D fb_extent = Extent2D{ rp.fbci.width, rp.fbci.height };
-
-			// do a second pass so that we can infer from the attachments we previously inferred from
-			// TODO: we should allow arbitrary number of passes
-			if (fb_extent.width == 0 || fb_extent.height == 0) {
-				for (auto& attrpinfo : rp.attachments) {
-					auto& bound = impl->bound_attachments[attrpinfo.name];
-					if (bound.extents.extent.width > 0 && bound.extents.extent.height > 0) {
-						fb_extent = bound.extents.extent;
-					}
-				}
-			}
-			// TODO: check here if all attachments have been sized
 
 			// create internal attachments; bind attachments to fb
 			for (auto& attrpinfo : rp.attachments) {
@@ -315,7 +316,7 @@ namespace vuk {
 				return elem.use.layout == vuk::ImageLayout::eGeneral;
 			}
 		}
-		assert(0);
+		assert(false && "Image resourced was not declared to be used in this pass, but was referred to.");
 		return false;
 	}
 } // namespace vuk
