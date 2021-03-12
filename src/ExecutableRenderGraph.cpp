@@ -103,15 +103,7 @@ namespace vuk {
 		rpi.extent = vuk::Extent2D{ rpass.fbci.width, rpass.fbci.height };
 		auto& spdesc = rpass.rpci.subpass_descriptions[i];
 		rpi.color_attachments = std::span<const VkAttachmentReference>(spdesc.pColorAttachments, spdesc.colorAttachmentCount);
-		for (auto& ca : rpi.color_attachments) {
-			auto& att = rpass.attachments[ca.attachment];
-			if (!att.samples.infer)
-				rpi.samples = att.samples.count;
-		}
-		// TODO: depth could be msaa too
-		if (rpi.color_attachments.size() == 0) { // depth only pass, samples == 1
-			rpi.samples = vuk::SampleCountFlagBits::e1;
-		}
+		rpi.samples = rpass.fbci.sample_count.count;
 		cobuf.ongoing_renderpass = rpi;
 	}
 
@@ -123,17 +115,18 @@ namespace vuk {
 				bound.iv = it->first->image_views[it->second];
 				bound.image = it->first->images[it->second];
 				bound.extents = Dimension2D::absolute(it->first->extent);
+				bound.samples = vuk::Samples::e1;
 			}
 		}
 
-		// perform size inference for framebuffers
+		// perform size inference for framebuffers (we need to do this here due to swapchain attachments)
 		// loop through all renderpasses, and attempt to infer any size we can
 		// then loop again, stopping if we have inferred all or have not made progress
-		bool fb_sized = false;
-		bool any_fb_unsized = false;
+		bool infer_progress = false;
+		bool any_fb_incomplete = false;
 		do {
-			any_fb_unsized = false;
-			fb_sized = false;
+			any_fb_incomplete = false;
+			infer_progress = false;
 			for (auto& rp : impl->rpis) {
 				if (rp.attachments.size() == 0) {
 					continue;
@@ -148,7 +141,7 @@ namespace vuk {
 					continue;
 				}
 
-				// bind swapchain attachments, deduce framebuffer size & sample count
+				// see if any attachment has an absolute size
 				for (auto& attrpinfo : rp.attachments) {
 					auto& bound = impl->bound_attachments[attrpinfo.name];
 
@@ -162,19 +155,22 @@ namespace vuk {
 				if (extent_known) {
 					rp.fbci.width = fb_extent.width;
 					rp.fbci.height = fb_extent.height;
-					fb_sized = true; // progress made
-					// propagate known extent onto attachments
+
 					for (auto& attrpinfo : rp.attachments) {
 						auto& bound = impl->bound_attachments[attrpinfo.name];
 						bound.extents = Dimension2D::absolute(fb_extent);
 					}
-				} else {
-					any_fb_unsized = true;
+
+					infer_progress = true; // progress made
+				}
+
+				if (!extent_known) {
+					any_fb_incomplete = true;
 				}
 			}
-		} while (any_fb_unsized || fb_sized); // stop looping if all attachment have been sized or we made no progress
+		} while (any_fb_incomplete || infer_progress); // stop looping if all attachment have been sized or we made no progress
 
-		assert(!any_fb_unsized && "Failed to infer size for all attachments.");
+		assert(!any_fb_incomplete && "Failed to infer size for all attachments.");
 
 		// create framebuffers, create & bind attachments
 		for (auto& rp : impl->rpis) {

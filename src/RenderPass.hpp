@@ -65,10 +65,11 @@ namespace vuk {
 	struct FramebufferCreateInfo : public VkFramebufferCreateInfo {
 		FramebufferCreateInfo() : VkFramebufferCreateInfo{.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO } {}
 		std::vector<vuk::ImageView> attachments;
+		vuk::Samples sample_count = vuk::Samples::eInfer;
 
 		bool operator==(const FramebufferCreateInfo& o) const {
-			return std::tie(flags, attachments, width, height, renderPass, layers) ==
-				std::tie(o.flags, o.attachments, o.width, o.height, o.renderPass, o.layers);
+			return std::tie(flags, attachments, width, height, renderPass, layers, sample_count) ==
+				std::tie(o.flags, o.attachments, o.width, o.height, o.renderPass, o.layers, o.sample_count);
 		}
 	};
 

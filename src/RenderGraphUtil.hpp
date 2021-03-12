@@ -206,6 +206,8 @@ namespace vuk {
 		// optionally set
 		bool should_clear = false;
 		Clear clear_value;
+
+		bool is_resolve_dst = false;
 	};
 
 	struct BufferInfo {

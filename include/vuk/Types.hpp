@@ -110,18 +110,18 @@ namespace vuk {
 		e8 = VK_SAMPLE_COUNT_8_BIT,
 		e16 = VK_SAMPLE_COUNT_16_BIT,
 		e32 = VK_SAMPLE_COUNT_32_BIT,
-		e64 = VK_SAMPLE_COUNT_64_BIT
+		e64 = VK_SAMPLE_COUNT_64_BIT,
+		eInfer = 1024
 	};
 
 	struct Samples {
 		SampleCountFlagBits count;
-		bool infer;
 
 		struct Framebuffer {};
 
-		Samples() : count(SampleCountFlagBits::e1), infer(false) {}
-		Samples(SampleCountFlagBits samples) : count(samples), infer(false) {}
-		Samples(Framebuffer) : infer(true) {}
+		Samples() : count(SampleCountFlagBits::e1) {}
+		Samples(SampleCountFlagBits samples) : count(samples){}
+		Samples(Framebuffer) : count(SampleCountFlagBits::eInfer) {}
 
 		constexpr static auto e1 = SampleCountFlagBits::e1;
 		constexpr static auto e2 = SampleCountFlagBits::e2;
@@ -130,7 +130,12 @@ namespace vuk {
 		constexpr static auto e16 = SampleCountFlagBits::e16;
 		constexpr static auto e32 = SampleCountFlagBits::e32;
 		constexpr static auto e64 = SampleCountFlagBits::e64;
+		constexpr static auto eInfer = SampleCountFlagBits::eInfer;
 	};
+
+	inline bool operator==(Samples const& a, Samples const& b) noexcept {
+		return a.count == b.count;
+	}
 
 	struct Offset3D;
 	struct Offset2D {
