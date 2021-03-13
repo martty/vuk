@@ -5,21 +5,25 @@
 #include <queue>
 #include <string_view>
 #include <math.h>
+#include <functional>
 
 #include "Allocator.hpp"
 #include "Pool.hpp"
 #include "Cache.hpp"
 #include "RenderPass.hpp"
+#include "vuk/RenderGraph.hpp"
+#include "ResourceBundle.hpp"
+
+namespace {
+	inline static uint64_t token_generation[USHRT_MAX];
+}
 
 namespace vuk {
-	struct TransientSubmitBundle {
-		uint32_t queue_family_index;
-		VkCommandPool cpool = VK_NULL_HANDLE;
-		std::vector<VkCommandBuffer> command_buffers;
-		vuk::Buffer buffer;
-		VkFence fence = VK_NULL_HANDLE;
-		VkSemaphore sema = VK_NULL_HANDLE;
-		TransientSubmitBundle* next = nullptr;
+	struct TokenData {
+		enum class State { eInitial, eArmed, ePending, eComplete } state = State::eInitial;  // token state : nothing -> armed (ready for submit) -> pending (submitted) -> complete (observed on CPU)
+		enum class TokenType { eUndecided, eTimeline, eAnyDevice, eEvent, eBarrier, eOrder } token_type = TokenType::eUndecided;
+		TransientSubmitBundle* resources = nullptr; // internally may have resources bound to the token, which get freed or enqueued for deletion
+		std::unique_ptr<vuk::RenderGraph> rg;
 	};
 
 	struct ContextImpl {
@@ -66,6 +70,8 @@ namespace vuk {
 
 		std::mutex swapchains_lock;
 		plf::colony<Swapchain> swapchains;
+
+		plf::colony<TokenData> token_data;
 
 		std::mutex transient_submit_lock;
 		/// @brief with stable addresses, so we can hand out opaque pointers
@@ -117,17 +123,6 @@ namespace vuk {
 			}
 		}
 
-		VkCommandBuffer get_command_buffer(TransientSubmitBundle* bundle) {
-			VkCommandBuffer cbuf;
-			VkCommandBufferAllocateInfo cbai{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
-			cbai.commandPool = bundle->cpool;
-			cbai.commandBufferCount = 1;
-
-			vkAllocateCommandBuffers(device, &cbai, &cbuf);
-			bundle->command_buffers.push_back(cbuf);
-			return cbuf;
-		}
-
 		VkFence get_unpooled_fence() {
 			VkFenceCreateInfo fci{ .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
 			VkFence fence;
@@ -140,6 +135,21 @@ namespace vuk {
 			VkSemaphore sema;
 			vkCreateSemaphore(device, &sci, nullptr, &sema);
 			return sema;
+		}
+
+		Token create_token() {
+			auto it = token_data.emplace();
+			auto index = token_data.get_index_from_iterator(it);
+			assert(index < USHRT_MAX);
+			auto gen = token_generation[index]++;
+			return { gen << 16 | index };
+		}
+
+		TokenData& get_token_data(Token tok) {
+			auto index = tok.id & 0xFFFF;
+			auto gen = tok.id >> 16;
+			assert(token_generation[index] == gen && "Dead token!");
+			return *token_data.get_iterator_from_index(index);
 		}
 
 		ContextImpl(Context& ctx) : allocator(ctx.instance, ctx.device, ctx.physical_device, ctx.graphics_queue_family_index, ctx.transfer_queue_family_index),

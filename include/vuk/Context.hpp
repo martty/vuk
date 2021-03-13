@@ -17,9 +17,21 @@ namespace vuk {
 		size_t id;
 	};
 
+	struct Token {
+		size_t id;
+	};
+
 	struct TimestampQuery {
 		VkQueryPool pool;
 		uint32_t id;
+	};
+
+	enum class Domain {
+		eNone = 0,
+		eHost = 1 << 0,
+		eGeneralQueue = 1 << 1,
+		eComputeQueue = 1 << 2,
+		eTransferQueue = 1 << 3
 	};
 
 	struct ContextCreateParameters {
@@ -144,6 +156,7 @@ namespace vuk {
 		/// @return The allocated buffer in a RAII handle.
 		Unique<Buffer> allocate_buffer(MemoryUsage mem_usage, BufferUsageFlags buffer_usage, size_t size, size_t alignment, bool create_mapped);
 		Texture allocate_texture(vuk::ImageCreateInfo ici);
+		Unique<ImageView> create_image_view(vuk::ImageViewCreateInfo);
 
 		/// @brief Manually request destruction of vuk::Image
 		void enqueue_destroy(vuk::Image);
@@ -153,6 +166,9 @@ namespace vuk {
 		void enqueue_destroy(vuk::Buffer);
 		/// @brief Manually request destruction of vuk::PersistentDescriptorSet
 		void enqueue_destroy(vuk::PersistentDescriptorSet);
+
+		Token create_token();
+		Token transition_image(vuk::Texture&, vuk::Access src_access, vuk::Access dst_access);
 
 		/// @brief Add a swapchain to be managed by the Context
 		/// @return Reference to the new swapchain that can be used during presentation
@@ -203,9 +219,16 @@ namespace vuk {
 		VkPipelineLayout create(const create_info_t<VkPipelineLayout>& cinfo);
 		DescriptorSetLayoutAllocInfo create(const create_info_t<DescriptorSetLayoutAllocInfo>& cinfo);
 		ComputePipelineInfo create(const create_info_t<ComputePipelineInfo>& cinfo);
+		PipelineInfo create(const struct PipelineInstanceCreateInfo& cinfo);
+		VkRenderPass create(const struct RenderPassCreateInfo& cinfo);
+		VkFramebuffer create(const struct FramebufferCreateInfo& cinfo);
+		Sampler create(const struct SamplerCreateInfo& cinfo);
+		DescriptorPool create(const struct DescriptorSetLayoutAllocInfo& cinfo);
+		RGImage create(const struct RGCI& cinfo);
 
 		friend class InflightContext;
 		friend class PerThreadContext;
+		friend struct TransientSubmitBundle;
 		friend struct IFCImpl;
 		friend struct PTCImpl;
 		template<class T> friend class Cache; // caches can directly destroy
@@ -246,14 +269,29 @@ namespace vuk {
 	class PerThreadContext {
 	public:
 		Context& ctx;
-		InflightContext& ifc;
-		const unsigned tid = 0;
+		InflightContext* ifc;
+		unsigned tid = 0;
 
 		PerThreadContext(InflightContext& ifc, unsigned tid);
 		~PerThreadContext();
 
 		PerThreadContext(const PerThreadContext& o) = delete;
 		PerThreadContext& operator=(const PerThreadContext& o) = delete;
+
+		PerThreadContext(PerThreadContext&& o) : ctx(o.ctx) {
+			*this = std::move(o);
+		}
+		PerThreadContext& operator=(PerThreadContext&& o) {
+			ifc = o.ifc;
+			tid = o.tid;
+			impl = std::exchange(o.impl, nullptr);
+			return *this;
+		}
+
+		PerThreadContext clone();
+		Context& get_context() {
+			return ctx;
+		}
 
 		/// @brief Checks if the given transfer is complete (ready)
 		/// @param stub The transfer to check
@@ -315,7 +353,7 @@ namespace vuk {
 			auto staging = allocate_scratch_buffer(MemoryUsage::eCPUonly, vuk::BufferUsageFlagBits::eTransferSrc, sizeof(T) * data.size(), 1);
 			::memcpy(staging.mapped_ptr, data.data(), sizeof(T) * data.size());
 
-			return ifc.enqueue_transfer(staging, dst);
+			return ifc->enqueue_transfer(staging, dst);
 		}
 
 		template<class T>
@@ -326,7 +364,7 @@ namespace vuk {
 			auto staging = allocate_scratch_buffer(MemoryUsage::eCPUonly, vuk::BufferUsageFlagBits::eTransferSrc, sizeof(T) * data.size(), alignment);
 			::memcpy(staging.mapped_ptr, data.data(), sizeof(T) * data.size());
 
-			return ifc.enqueue_transfer(staging, dst, extent, base_layer, generate_mips);
+			return ifc->enqueue_transfer(staging, dst, extent, base_layer, generate_mips);
 		}
 
 		void dma_task();
@@ -338,6 +376,8 @@ namespace vuk {
 		vuk::Program get_pipeline_reflection_info(vuk::PipelineBaseCreateInfo pci);
 
 		TimestampQuery register_timestamp_query(Query);
+
+		void submit(Token, Domain wait_domain);
 
 		template<class T>
 		void destroy(const T& t) {
@@ -361,7 +401,6 @@ namespace vuk {
 		const plf::colony<SampledImage>& get_sampled_images();
 
 		PipelineBaseInfo create(const struct PipelineBaseCreateInfo& cinfo);
-		PipelineInfo create(const struct PipelineInstanceCreateInfo& cinfo);
 		ShaderModule create(const struct ShaderModuleCreateInfo& cinfo);
 		VkRenderPass create(const struct RenderPassCreateInfo& cinfo);
 		RGImage create(const struct RGCI& cinfo);
@@ -373,7 +412,7 @@ namespace vuk {
 		DescriptorSetLayoutAllocInfo create(const struct DescriptorSetLayoutCreateInfo& cinfo);
 		VkPipelineLayout create(const struct PipelineLayoutCreateInfo& cinfo);
 		ComputePipelineInfo create(const struct ComputePipelineCreateInfo& cinfo);
-
+		PipelineInfo create(const struct PipelineInstanceCreateInfo& cinfo);
 	private:
 		friend class InflightContext;
 

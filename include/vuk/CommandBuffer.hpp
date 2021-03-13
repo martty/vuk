@@ -164,11 +164,14 @@ namespace vuk {
 	struct PassInfo;
 	struct Query;
 
+	class SecondaryCommandBuffer;
+
 	class CommandBuffer {
+	public:
+		Context& ctx;
 	protected:
 		friend struct ExecutableRenderGraph;
 		ExecutableRenderGraph* rg = nullptr;
-		vuk::PerThreadContext& ptc;
 		VkCommandBuffer command_buffer;
 
 		struct RenderPassInfo {
@@ -204,17 +207,12 @@ namespace vuk {
 		std::array<VkDescriptorSet, VUK_MAX_SETS> persistent_sets = {};
 
 		// for rendergraph
-		CommandBuffer(ExecutableRenderGraph& rg, vuk::PerThreadContext& ptc, VkCommandBuffer cb) : rg(&rg), ptc(ptc), command_buffer(cb) {}
-		CommandBuffer(ExecutableRenderGraph& rg, vuk::PerThreadContext& ptc, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing) : rg(&rg), ptc(ptc), command_buffer(cb), ongoing_renderpass(ongoing) {}
+		CommandBuffer(Context& ctx, ExecutableRenderGraph& rg, VkCommandBuffer cb) : ctx(ctx), rg(&rg), command_buffer(cb) {}
 	public:
-		// for one shot
-		CommandBuffer(vuk::PerThreadContext& ptc);
 		// for secondary cbufs
-		CommandBuffer(ExecutableRenderGraph* rg, vuk::PerThreadContext& ptc, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing) : rg(rg), ptc(ptc), command_buffer(cb), ongoing_renderpass(ongoing) {}
+		CommandBuffer(Context& ctx, ExecutableRenderGraph* rg, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing) : ctx(ctx), rg(rg), command_buffer(cb), ongoing_renderpass(ongoing) {}
+		virtual ~CommandBuffer() {}
 
-		vuk::PerThreadContext& get_context() {
-			return ptc;
-		}
 		const RenderPassInfo& get_ongoing_renderpass() const;
 		vuk::Buffer get_resource_buffer(Name) const;
 		vuk::Image get_resource_image(Name) const;
@@ -238,10 +236,10 @@ namespace vuk {
 		CommandBuffer& bind_vertex_buffer(unsigned binding, const Buffer&, std::span<vuk::VertexInputAttributeDescription>, uint32_t stride);
 		CommandBuffer& bind_index_buffer(const Buffer&, vuk::IndexType type);
 
-		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, vuk::ImageView iv, vuk::SamplerCreateInfo sampler_create_info, vuk::ImageLayout = vuk::ImageLayout::eShaderReadOnlyOptimal);
 		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, const vuk::Texture&, vuk::SamplerCreateInfo sampler_create_info, vuk::ImageLayout = vuk::ImageLayout::eShaderReadOnlyOptimal);
 		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, Name, vuk::SamplerCreateInfo sampler_create_info);
-		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, Name, vuk::ImageViewCreateInfo ivci, vuk::SamplerCreateInfo sampler_create_info);
+		virtual CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, vuk::ImageView iv, vuk::SamplerCreateInfo sampler_create_info, vuk::ImageLayout = vuk::ImageLayout::eShaderReadOnlyOptimal) = 0;
+		virtual CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, Name, vuk::ImageViewCreateInfo ivci, vuk::SamplerCreateInfo sampler_create_info) = 0;
 
 		CommandBuffer& bind_persistent(unsigned set, PersistentDescriptorSet&);
 
@@ -263,7 +261,7 @@ namespace vuk {
 		CommandBuffer& bind_storage_image(unsigned set, unsigned binding, vuk::ImageView image_view);
 		CommandBuffer& bind_storage_image(unsigned set, unsigned binding, Name);
 
-		void* _map_scratch_uniform_binding(unsigned set, unsigned binding, size_t size);
+		virtual void* _map_scratch_uniform_binding(unsigned set, unsigned binding, size_t size) = 0;
 
 		template<class T>
 		T* map_scratch_uniform_binding(unsigned set, unsigned binding);
@@ -272,7 +270,7 @@ namespace vuk {
 		CommandBuffer& draw_indexed(size_t index_count, size_t instance_count, size_t first_index, int32_t vertex_offset, size_t first_instance);
 
 		CommandBuffer& draw_indexed_indirect(size_t command_count, Buffer indirect_buffer);
-		CommandBuffer& draw_indexed_indirect(std::span<vuk::DrawIndexedIndirectCommand>);
+		virtual CommandBuffer& draw_indexed_indirect(std::span<vuk::DrawIndexedIndirectCommand>) = 0;
 
 		CommandBuffer& draw_indexed_indirect_count(size_t max_draw_count, Buffer indirect_buffer, Buffer count_buffer);
 
@@ -281,7 +279,7 @@ namespace vuk {
 		// Actual invocation count will be rounded up to be a multiple of local_size_{x,y,z}
 		CommandBuffer& dispatch_invocations(size_t invocation_count_x, size_t invocation_count_y = 1, size_t invocation_count_z = 1);
 
-		class SecondaryCommandBuffer begin_secondary();
+		virtual CommandBuffer& begin_secondary() = 0;
 		void execute(std::span<VkCommandBuffer>);
 
 		// commands for renderpass-less command buffers
@@ -294,21 +292,45 @@ namespace vuk {
 		void image_barrier(Name, vuk::Access src_access, vuk::Access dst_access);
 
 		// queries
-		void write_timestamp(Query, vuk::PipelineStageFlagBits stage = vuk::PipelineStageFlagBits::eBottomOfPipe);
+		virtual void write_timestamp(Query, vuk::PipelineStageFlagBits stage = vuk::PipelineStageFlagBits::eBottomOfPipe) = 0;
 
-	protected:
-		void _bind_state(bool graphics);
-		void _bind_compute_pipeline_state();
-		void _bind_graphics_pipeline_state();
-	};
-
-	class SecondaryCommandBuffer : public CommandBuffer {
-	public:
-		using CommandBuffer::CommandBuffer;
+		// direct Vulkan access
 		VkCommandBuffer get_buffer();
-
-		~SecondaryCommandBuffer();
+	protected:
+		virtual void _bind_state(bool graphics) = 0;
+		void _bind_compute_pipeline_state();
+		virtual void _bind_graphics_pipeline_state() = 0;
 	};
+
+	template<class Allocator>
+	class CommandBufferImpl : public CommandBuffer {
+	protected:
+		Allocator allocator;
+		CommandBuffer* parent;
+	public:
+		CommandBufferImpl(ExecutableRenderGraph& rg, Allocator&& allocator, VkCommandBuffer cb);
+		CommandBufferImpl(CommandBuffer& parent, ExecutableRenderGraph& rg, Allocator&& allocator, std::optional<RenderPassInfo> ongoing);
+		~CommandBufferImpl();
+
+		CommandBufferImpl<Allocator>& bind_sampled_image(unsigned set, unsigned binding, vuk::ImageView iv, vuk::SamplerCreateInfo sci, vuk::ImageLayout il) override;
+		CommandBufferImpl<Allocator>& bind_sampled_image(unsigned set, unsigned binding, Name name, vuk::ImageViewCreateInfo ivci,
+			vuk::SamplerCreateInfo sampler_create_info) override;
+		void* _map_scratch_uniform_binding(unsigned set, unsigned binding, size_t size) override;
+		CommandBufferImpl<Allocator>& draw_indexed_indirect(std::span<vuk::DrawIndexedIndirectCommand> cmds) override;
+
+		void write_timestamp(Query, vuk::PipelineStageFlagBits stage = vuk::PipelineStageFlagBits::eBottomOfPipe) override;
+
+		CommandBufferImpl<Allocator>& begin_secondary() override;
+	protected:
+		void _bind_state(bool graphics) override;
+		void _bind_graphics_pipeline_state() override;
+	private:
+		struct Impl;
+		Impl* impl;
+	};
+
+	using FrameCommandBuffer = CommandBufferImpl<PerThreadContext>;
+	using OneTimeCommandBuffer = CommandBufferImpl<struct TransientSubmitBundle>;
 
 	template<class T>
 	inline CommandBuffer& CommandBuffer::push_constants(vuk::ShaderStageFlags stages, size_t offset, std::span<T> span) {

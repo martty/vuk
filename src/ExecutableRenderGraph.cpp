@@ -5,7 +5,7 @@
 #include "vuk/CommandBuffer.hpp"
 #include "Allocator.hpp"
 #include "RenderGraphImpl.hpp"
-#include <unordered_set>
+#include "ResourceBundle.hpp"
 
 namespace vuk {
 	ExecutableRenderGraph::ExecutableRenderGraph(RenderGraph&& rg) : impl(rg.impl) {
@@ -22,7 +22,8 @@ namespace vuk {
 		delete impl;
 	}
 
-	void ExecutableRenderGraph::create_attachment(PerThreadContext& ptc, Name name, AttachmentRPInfo& attachment_info, vuk::Extent2D fb_extent, vuk::SampleCountFlagBits samples) {
+	template<class Allocator>
+	void ExecutableRenderGraph::create_attachment(Allocator& allocator, Name name, AttachmentRPInfo& attachment_info, vuk::Extent2D fb_extent, vuk::SampleCountFlagBits samples) {
 		auto& chain = impl->use_chains.at(name);
 		if (attachment_info.type == AttachmentRPInfo::Type::eInternal) {
 			vuk::ImageUsageFlags usage = RenderGraph::compute_usage(std::span(chain));
@@ -65,7 +66,7 @@ namespace vuk {
 			rgci.ici = ici;
 			rgci.ivci = ivci;
 
-			auto rg = ptc.acquire_rendertarget(rgci);
+			auto rg = allocator.acquire_rendertarget(rgci);
 			attachment_info.iv = rg.image_view;
 			attachment_info.image = rg.image;
 		}
@@ -107,23 +108,13 @@ namespace vuk {
 		cobuf.ongoing_renderpass = rpi;
 	}
 
-	VkCommandBuffer ExecutableRenderGraph::execute(vuk::PerThreadContext& ptc, std::vector<std::pair<SwapChainRef, size_t>> swp_with_index) {
-		// bind swapchain attachment images & ivs
-		for (auto& [name, bound] : impl->bound_attachments) {
-			if (bound.type == AttachmentRPInfo::Type::eSwapchain) {
-				auto it = std::find_if(swp_with_index.begin(), swp_with_index.end(), [boundb = &bound](auto& t) { return t.first == boundb->swapchain; });
-				bound.iv = it->first->image_views[it->second];
-				bound.image = it->first->images[it->second];
-				bound.extents = Dimension2D::absolute(it->first->extent);
-				bound.samples = vuk::Samples::e1;
-			}
-		}
-
+	void ExecutableRenderGraph::size_attachments(std::vector<std::pair<SwapChainRef, size_t>> swp_with_index) {
 		// perform size inference for framebuffers (we need to do this here due to swapchain attachments)
-		// loop through all renderpasses, and attempt to infer any size we can
-		// then loop again, stopping if we have inferred all or have not made progress
+// loop through all renderpasses, and attempt to infer any size we can
+// then loop again, stopping if we have inferred all or have not made progress
 		bool infer_progress = false;
 		bool any_fb_incomplete = false;
+
 		do {
 			any_fb_incomplete = false;
 			infer_progress = false;
@@ -171,7 +162,23 @@ namespace vuk {
 		} while (any_fb_incomplete || infer_progress); // stop looping if all attachment have been sized or we made no progress
 
 		assert(!any_fb_incomplete && "Failed to infer size for all attachments.");
+	}
 
+	void ExecutableRenderGraph::bind_swapchain_images(std::vector<std::pair<SwapChainRef, size_t>> swp_with_index) {
+		// bind swapchain attachment images & ivs
+		for (auto& [name, bound] : impl->bound_attachments) {
+			if (bound.type == AttachmentRPInfo::Type::eSwapchain) {
+				auto it = std::find_if(swp_with_index.begin(), swp_with_index.end(), [boundb = &bound](auto& t) { return t.first == boundb->swapchain; });
+				bound.iv = it->first->image_views[it->second];
+				bound.image = it->first->images[it->second];
+				bound.extents = Dimension2D::absolute(it->first->extent);
+				bound.samples = vuk::Samples::e1;
+			}
+		}
+	}
+
+	template<class Allocator>
+	void ExecutableRenderGraph::bind_attachments(Allocator& allocator) {
 		// create framebuffers, create & bind attachments
 		for (auto& rp : impl->rpis) {
 			if (rp.attachments.size() == 0)
@@ -186,7 +193,7 @@ namespace vuk {
 			for (auto& attrpinfo : rp.attachments) {
 				auto& bound = impl->bound_attachments[attrpinfo.name];
 				if (bound.type == AttachmentRPInfo::Type::eInternal) {
-					create_attachment(ptc, attrpinfo.name, bound, fb_extent, (vuk::SampleCountFlagBits)attrpinfo.description.samples);
+					create_attachment(allocator, attrpinfo.name, bound, fb_extent, (vuk::SampleCountFlagBits)attrpinfo.description.samples);
 				}
 
 				ivs.push_back(bound.iv);
@@ -198,23 +205,26 @@ namespace vuk {
 			rp.fbci.height = fb_extent.height;
 			rp.fbci.attachmentCount = (uint32_t)vkivs.size();
 			rp.fbci.layers = 1;
-			rp.framebuffer = ptc.acquire_framebuffer(rp.fbci);
+			rp.framebuffer = allocator.acquire_framebuffer(rp.fbci);
 		}
 
 		// create non-attachment images
 		for (auto& [name, bound] : impl->bound_attachments) {
 			if (bound.type == AttachmentRPInfo::Type::eInternal && bound.image == VK_NULL_HANDLE) {
-				create_attachment(ptc, name, bound, vuk::Extent2D{ 0,0 }, bound.samples.count);
+				create_attachment(allocator, name, bound, vuk::Extent2D{ 0,0 }, bound.samples.count);
 			}
 		}
+	}
 
+	template<class Allocator>
+	VkCommandBuffer ExecutableRenderGraph::run_passes(Allocator& allocator) {
 		// actual execution
-		auto cbuf = ptc.acquire_command_buffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY);
+		VkCommandBuffer cbuf = allocator.acquire_command_buffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 
 		VkCommandBufferBeginInfo cbi{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
 		vkBeginCommandBuffer(cbuf, &cbi);
 
-		CommandBuffer cobuf(*this, ptc, cbuf);
+		CommandBufferImpl<Allocator> cobuf(*this, allocator.clone(), cbuf);
 		for (auto& rpass : impl->rpis) {
 			bool use_secondary_command_buffers = rpass.subpasses[0].use_secondary_command_buffers;
 			begin_renderpass(rpass, cbuf, use_secondary_command_buffers);
@@ -233,39 +243,26 @@ namespace vuk {
 				}
 				for (auto& p : sp.passes) {
 					// if pass requested no secondary cbufs, but due to subpass merging that is what we got
-					if (p->pass.use_secondary_command_buffers == false && use_secondary_command_buffers == true) {
-						auto secondary = cobuf.begin_secondary();
-						if (p->pass.execute) {
-							secondary.current_pass = p;
-							if (!p->pass.name.is_invalid()) {
-								//ptc.ctx.debug.begin_region(cobuf.command_buffer, sp.pass->pass.name);
-								p->pass.execute(secondary);
-								//ptc.ctx.debug.end_region(cobuf.command_buffer);
-							} else {
-								p->pass.execute(secondary);
-							}
+					bool make_secondary_cbuf = p->pass.use_secondary_command_buffers == false && use_secondary_command_buffers == true;
+					auto&& cbuf_to_use = make_secondary_cbuf ? cobuf.begin_secondary() : cobuf;
+					if (p->pass.execute) {
+						cbuf_to_use.current_pass = p;
+						if (!p->pass.name.is_invalid()) {
+							//ptc.ctx.debug.begin_region(cobuf.command_buffer, sp.pass->pass.name);
+							p->pass.execute(cbuf_to_use);
+							//ptc.ctx.debug.end_region(cobuf.command_buffer);
+						} else {
+							p->pass.execute(cbuf_to_use);
 						}
-						auto result = secondary.get_buffer();
-						cobuf.execute({ &result, 1 });
-					} else {
-						if (p->pass.execute) {
-							cobuf.current_pass = p;
-							if (!p->pass.name.is_invalid()) {
-								//ptc.ctx.debug.begin_region(cobuf.command_buffer, sp.pass->pass.name);
-								p->pass.execute(cobuf);
-								//ptc.ctx.debug.end_region(cobuf.command_buffer);
-							} else {
-								p->pass.execute(cobuf);
-							}
-						}
-
-						cobuf.pcrs.clear();
-						cobuf.attribute_descriptions.clear();
-						cobuf.binding_descriptions.clear();
-						cobuf.set_bindings = {};
-						cobuf.sets_used = {};
 					}
+
+					cobuf.pcrs.clear();
+					cobuf.attribute_descriptions.clear();
+					cobuf.binding_descriptions.clear();
+					cobuf.set_bindings = {};
+					cobuf.sets_used = {};
 				}
+
 				if (i < rpass.subpasses.size() - 1 && rpass.handle != VK_NULL_HANDLE) {
 					use_secondary_command_buffers = rpass.subpasses[i + 1].use_secondary_command_buffers;
 					vkCmdNextSubpass(cbuf, use_secondary_command_buffers ? VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS : VK_SUBPASS_CONTENTS_INLINE);
@@ -295,6 +292,22 @@ namespace vuk {
 		}
 		vkEndCommandBuffer(cbuf);
 		return cbuf;
+	}
+
+	VkCommandBuffer ExecutableRenderGraph::execute(vuk::PerThreadContext& ptc, std::vector<std::pair<SwapChainRef, size_t>> swp_with_index) {
+		bind_swapchain_images(swp_with_index);
+		size_attachments(swp_with_index);
+		bind_attachments(ptc);
+
+		return run_passes(ptc);
+	}
+
+	VkCommandBuffer ExecutableRenderGraph::execute(TransientSubmitBundle& bundle, std::vector<std::pair<SwapChainRef, size_t>> swp_with_index) {
+		bind_swapchain_images(swp_with_index);
+		size_attachments(swp_with_index);
+		bind_attachments(bundle);
+
+		return run_passes(bundle);
 	}
 
 	BufferInfo ExecutableRenderGraph::get_resource_buffer(Name n) {

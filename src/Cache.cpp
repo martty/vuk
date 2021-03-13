@@ -8,13 +8,13 @@ namespace vuk {
 		auto& cache = view.cache;
 		std::shared_lock _(cache.cache_mtx);
 		if (auto it = cache.lru_map.find(ci); it != cache.lru_map.end()) {
-			it->second.last_use_frame = ptc.ifc.absolute_frame;
+			it->second.last_use_frame = ptc.ifc->absolute_frame;
 			return *it->second.ptr;
 		} else {
 			_.unlock();
 			std::unique_lock ulock(cache.cache_mtx);
 			auto pit = cache.pool.emplace(ptc.create(ci));
-			typename Cache::LRUEntry entry{ &*pit, ptc.ifc.absolute_frame };
+			typename Cache::LRUEntry entry{ &*pit, ptc.ifc->absolute_frame };
 			it = cache.lru_map.emplace(ci, entry).first;
 			return *it->second.ptr;
 		}
@@ -24,7 +24,7 @@ namespace vuk {
 		auto& cache = view.cache;
 		std::unique_lock _(cache.cache_mtx);
 		for (auto it = cache.lru_map.begin(); it != cache.lru_map.end();) {
-			if (ptc.ifc.absolute_frame - it->second.last_use_frame > threshold) {
+			if (ptc.ifc->absolute_frame - it->second.last_use_frame > threshold) {
 				ptc.destroy(*it->second.ptr);
 				cache.pool.erase(cache.pool.get_iterator_from_pointer(it->second.ptr));
 				it = cache.lru_map.erase(it);
@@ -34,73 +34,8 @@ namespace vuk {
 		}
 	}
 
-	template<>
-	ShaderModule& Cache<ShaderModule>::acquire(const create_info_t<ShaderModule>& ci) {
-		std::shared_lock _(cache_mtx);
-		if (auto it = lru_map.find(ci); it != lru_map.end()) {
-			it->second.last_use_frame = UINT64_MAX;
-			return *it->second.ptr;
-		} else {
-			_.unlock();
-			std::unique_lock ulock(cache_mtx);
-			auto pit = pool.emplace(ctx.create(ci));
-			typename Cache::LRUEntry entry{ &*pit, UINT_MAX };
-			it = lru_map.emplace(ci, entry).first;
-			return *it->second.ptr;
-		}
-	}
-
-	template<>
-	PipelineBaseInfo& Cache<PipelineBaseInfo>::acquire(const create_info_t<PipelineBaseInfo>& ci) {
-		std::shared_lock _(cache_mtx);
-		if (auto it = lru_map.find(ci); it != lru_map.end()) {
-			it->second.last_use_frame = UINT64_MAX;
-			return *it->second.ptr;
-		} else {
-			_.unlock();
-			std::unique_lock ulock(cache_mtx);
-			auto pit = pool.emplace(ctx.create(ci));
-			typename Cache::LRUEntry entry{ &*pit, UINT_MAX };
-			it = lru_map.emplace(ci, entry).first;
-			return *it->second.ptr;
-		}
-	}
-
-	template<>
-	ComputePipelineInfo& Cache<ComputePipelineInfo>::acquire(const create_info_t<ComputePipelineInfo>& ci) {
-		std::shared_lock _(cache_mtx);
-		if (auto it = lru_map.find(ci); it != lru_map.end()) {
-			it->second.last_use_frame = UINT64_MAX;
-			return *it->second.ptr;
-		} else {
-			_.unlock();
-			std::unique_lock ulock(cache_mtx);
-			auto pit = pool.emplace(ctx.create(ci));
-			typename Cache::LRUEntry entry{ &*pit, UINT_MAX };
-			it = lru_map.emplace(ci, entry).first;
-			return *it->second.ptr;
-		}
-	}
-
-
-	template<>
-	DescriptorSetLayoutAllocInfo& Cache<DescriptorSetLayoutAllocInfo>::acquire(const create_info_t<DescriptorSetLayoutAllocInfo>& ci) {
-		std::shared_lock _(cache_mtx);
-		if (auto it = lru_map.find(ci); it != lru_map.end()) {
-			it->second.last_use_frame = UINT64_MAX;
-			return *it->second.ptr;
-		} else {
-			_.unlock();
-			std::unique_lock ulock(cache_mtx);
-			auto pit = pool.emplace(ctx.create(ci));
-			typename Cache::LRUEntry entry{ &*pit, UINT_MAX };
-			it = lru_map.emplace(ci, entry).first;
-			return *it->second.ptr;
-		}
-	}
-
-	template<>
-	VkPipelineLayout& Cache<VkPipelineLayout>::acquire(const create_info_t<VkPipelineLayout>& ci) {
+	template<class T>
+	T& Cache<T>::acquire(const create_info_t<T>& ci){
 		std::shared_lock _(cache_mtx);
 		if (auto it = lru_map.find(ci); it != lru_map.end()) {
 			it->second.last_use_frame = UINT64_MAX;
@@ -148,9 +83,9 @@ namespace vuk {
 	template<class T, size_t FC>
 	T& PerFrameCache<T, FC>::PFPTView::acquire(const create_info_t<T>& ci) {
 		auto& cache = view.cache;
-		auto& data = cache.data[ptc.ifc.frame];
+		auto& data = cache.data[ptc.ifc->frame];
 		if (auto it = data.lru_map.find(ci); it != data.lru_map.end()) {
-			it->second.last_use_frame = ptc.ifc.absolute_frame;
+			it->second.last_use_frame = ptc.ifc->absolute_frame;
 			return it->second.value;
 		} else {
 			// if the value is not in the cache, we look in our per thread buffers
@@ -169,10 +104,10 @@ namespace vuk {
 
 	template<class T, size_t FC>
 	void PerFrameCache<T, FC>::PFPTView::collect(size_t threshold) {
-		auto& data = view.cache.data[ptc.ifc.frame];
+		auto& data = view.cache.data[ptc.ifc->frame];
 		std::unique_lock _(data.cache_mtx);
 		for (auto it = data.lru_map.begin(); it != data.lru_map.end();) {
-			if (ptc.ifc.absolute_frame - it->second.last_use_frame > threshold) {
+			if (ptc.ifc->absolute_frame - it->second.last_use_frame > threshold) {
 				ptc.destroy(it->second.value);
 				it = data.lru_map.erase(it);
 			} else {
@@ -180,12 +115,12 @@ namespace vuk {
 			}
 		}
 
-		for (size_t tid = 0; tid < view.cache.data[ptc.ifc.frame].per_thread_append_v.size(); tid++) {
-			auto& vs = view.cache.data[ptc.ifc.frame].per_thread_append_v[tid];
-			auto& ks = view.cache.data[ptc.ifc.frame].per_thread_append_k[tid];
+		for (size_t tid = 0; tid < view.cache.data[ptc.ifc->frame].per_thread_append_v.size(); tid++) {
+			auto& vs = view.cache.data[ptc.ifc->frame].per_thread_append_v[tid];
+			auto& ks = view.cache.data[ptc.ifc->frame].per_thread_append_k[tid];
 			for (size_t i = 0; i < vs.size(); i++) {
 				if (data.lru_map.find(ks[i]) == data.lru_map.end()) {
-					data.lru_map.emplace(ks[i], LRUEntry{ std::move(vs[i]), ptc.ifc.absolute_frame });
+					data.lru_map.emplace(ks[i], LRUEntry{ std::move(vs[i]), ptc.ifc->absolute_frame });
 				} else {
 					ptc.destroy(vs[i]);
 				}

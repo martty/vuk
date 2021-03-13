@@ -11,6 +11,7 @@
 #include "vuk/Image.hpp"
 #include "vuk/Swapchain.hpp"
 #include "vuk/MapProxy.hpp"
+#include <ResourceBundle.hpp>
 
 namespace vuk {
 	struct Resource;
@@ -151,7 +152,8 @@ namespace vuk {
 		ExecutableRenderGraph(ExecutableRenderGraph&&) noexcept;
 		ExecutableRenderGraph& operator=(ExecutableRenderGraph&&) noexcept;
 
-		VkCommandBuffer execute(vuk::PerThreadContext&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
+		VkCommandBuffer execute(PerThreadContext&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
+		VkCommandBuffer execute(TransientSubmitBundle& bundle, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
 
 		struct BufferInfo get_resource_buffer(Name);
 		struct AttachmentRPInfo get_resource_image(Name);
@@ -160,8 +162,18 @@ namespace vuk {
 	private:
 		struct RGImpl* impl;
 
-		void create_attachment(PerThreadContext& ptc, Name name, struct AttachmentRPInfo& attachment_info, Extent2D fb_extent, SampleCountFlagBits samples);
 		void fill_renderpass_info(struct RenderPassInfo& rpass, const size_t& i, class CommandBuffer& cobuf);
+		void size_attachments(std::vector<std::pair<SwapChainRef, size_t>> swp_with_index);
+		void bind_swapchain_images(std::vector<std::pair<SwapChainRef, size_t>> swp_with_index);
+
+		template<class Allocator>
+		void create_attachment(Allocator& allocator, Name name, struct AttachmentRPInfo& attachment_info, Extent2D fb_extent, SampleCountFlagBits samples);
+
+		template<class Allocator>
+		void bind_attachments(Allocator& allocator);
+		
+		template<class Allocator>
+		VkCommandBuffer run_passes(Allocator& allocator);
 	};
 }
 

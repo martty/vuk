@@ -9,6 +9,7 @@
 #include <vuk/Context.hpp>
 #include <ContextImpl.hpp>
 #include <vuk/RenderGraph.hpp>
+#include <vuk/CommandBuffer.hpp>
 #include <vuk/Program.hpp>
 #include <vuk/Exception.hpp>
 
@@ -272,6 +273,59 @@ VkPipelineLayout vuk::Context::create(const create_info_t<VkPipelineLayout>& cin
 	return pl;
 }
 
+vuk::PipelineInfo vuk::Context::create(const create_info_t<PipelineInfo>& cinfo) {
+	// create gfx pipeline
+	VkGraphicsPipelineCreateInfo gpci = cinfo.to_vk();
+	gpci.layout = cinfo.base->pipeline_layout;
+	gpci.pStages = cinfo.base->psscis.data();
+	gpci.stageCount = (uint32_t)cinfo.base->psscis.size();
+
+	VkPipeline pipeline;
+	vkCreateGraphicsPipelines(device, impl->vk_pipeline_cache, 1, &gpci, nullptr, &pipeline);
+	debug.set_name(pipeline, cinfo.base->pipeline_name);
+	return { pipeline, gpci.layout, cinfo.base->layout_info };
+}
+
+VkRenderPass vuk::Context::create(const create_info_t<VkRenderPass>& cinfo) {
+	VkRenderPass rp;
+	vkCreateRenderPass(device, &cinfo, nullptr, &rp);
+	return rp;
+}
+
+VkFramebuffer vuk::Context::create(const create_info_t<VkFramebuffer>& cinfo) {
+	VkFramebuffer fb;
+	vkCreateFramebuffer(device, &cinfo, nullptr, &fb);
+	return fb;
+}
+
+vuk::Sampler vuk::Context::create(const create_info_t<vuk::Sampler>& cinfo) {
+	VkSampler s;
+	vkCreateSampler(device, (VkSamplerCreateInfo*)&cinfo, nullptr, &s);
+	return wrap(s);
+}
+
+vuk::DescriptorPool vuk::Context::create(const create_info_t<vuk::DescriptorPool>& cinfo) {
+	return vuk::DescriptorPool{};
+}
+
+vuk::RGImage vuk::Context::create(const create_info_t<vuk::RGImage>& cinfo) {
+	RGImage res{};
+	res.image = impl->allocator.create_image_for_rendertarget(cinfo.ici);
+	auto ivci = cinfo.ivci;
+	ivci.image = res.image;
+	std::string name = std::string("Image: RenderTarget ") + std::string(cinfo.name.to_sv());
+	debug.set_name(res.image, Name(name));
+	name = std::string("ImageView: RenderTarget ") + std::string(cinfo.name.to_sv());
+	// skip creating image views for images that can't be viewed
+	if (cinfo.ici.usage & (vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eDepthStencilAttachment | vuk::ImageUsageFlagBits::eInputAttachment | vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage)) {
+		VkImageView iv;
+		vkCreateImageView(device, (VkImageViewCreateInfo*)&ivci, nullptr, &iv);
+		res.image_view = wrap(iv);
+		debug.set_name(res.image_view.payload, Name(name));
+	}
+	return res;
+}
+
 vuk::SwapchainRef vuk::Context::add_swapchain(Swapchain sw) {
 	std::lock_guard _(impl->swapchains_lock);
 	for (auto& v : sw.image_views) {
@@ -338,7 +392,7 @@ vuk::ShaderModule vuk::Context::compile_shader(ShaderSource source, std::string 
 vuk::Context::TransientSubmitStub vuk::Context::fenced_upload(std::span<UploadItem> uploads, uint32_t dst_queue_family) {
 	TransientSubmitBundle* bundle = impl->get_transient_bundle(transfer_queue_family_index);
 	TransientSubmitBundle* head_bundle = bundle;
-	VkCommandBuffer xfercbuf = impl->get_command_buffer(bundle);
+	VkCommandBuffer xfercbuf = bundle->acquire_command_buffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 	VkCommandBufferBeginInfo cbi{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
 	vkBeginCommandBuffer(xfercbuf, &cbi);
 
@@ -364,7 +418,7 @@ vuk::Context::TransientSubmitStub vuk::Context::fenced_upload(std::span<UploadIt
 	if (any_image_transfers) {
 		dst_bundle = impl->get_transient_bundle(dst_queue_family);
 		dst_bundle->next = bundle;
-		dstcbuf = impl->get_command_buffer(dst_bundle);
+		dstcbuf = bundle->acquire_command_buffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 		VkCommandBufferBeginInfo cbi{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
 		vkBeginCommandBuffer(dstcbuf, &cbi);
 		head_bundle = dst_bundle;
@@ -549,12 +603,16 @@ vuk::Texture vuk::Context::allocate_texture(vuk::ImageCreateInfo ici) {
 	ivci.subresourceRange.layerCount = 1;
 	ivci.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
 	ivci.viewType = vuk::ImageViewType::e2D;
-	VkImageView iv;
-	vkCreateImageView(device, (VkImageViewCreateInfo*)&ivci, nullptr, &iv);
-	vuk::Texture tex{ Unique<Image>(*this, dst), Unique<ImageView>(*this, wrap(iv)) };
+	vuk::Texture tex{ Unique<Image>(*this, dst), create_image_view(ivci) };
 	tex.extent = ici.extent;
 	tex.format = ici.format;
 	return tex;
+}
+
+vuk::Unique<vuk::ImageView> vuk::Context::create_image_view(vuk::ImageViewCreateInfo ivci) {
+	VkImageView iv;
+	vkCreateImageView(device, (VkImageViewCreateInfo*)&ivci, nullptr, &iv);
+	return vuk::Unique<vuk::ImageView>(*this, wrap(iv));
 }
 
 
@@ -581,6 +639,18 @@ void vuk::Context::enqueue_destroy(vuk::Buffer b) {
 void vuk::Context::enqueue_destroy(vuk::PersistentDescriptorSet b) {
 	std::lock_guard _(impl->recycle_locks[frame_counter % FC]);
 	impl->pds_recycle[frame_counter % FC].push_back(std::move(b));
+}
+
+vuk::Token vuk::Context::create_token() {
+	return impl->create_token();
+}
+
+vuk::Token vuk::Context::transition_image(vuk::Texture& t, vuk::Access src_access, vuk::Access dst_access) {
+	Token tok = impl->create_token();
+	auto& data = impl->get_token_data(tok);
+	data.rg = std::make_unique<vuk::RenderGraph>();
+	data.rg->attach_image("_transition", ImageAttachment::from_texture(t), src_access, dst_access);
+	return tok;
 }
 
 void vuk::Context::destroy(const RGImage& image) {
