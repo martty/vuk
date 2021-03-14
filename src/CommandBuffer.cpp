@@ -599,5 +599,5 @@ namespace vuk {
 	}
 
 	template class CommandBufferImpl<PerThreadContext>;
-	template class CommandBufferImpl<TransientSubmitBundle>;
+	template class CommandBufferImpl<LinearResourceAllocator>;
 } // namespace vuk

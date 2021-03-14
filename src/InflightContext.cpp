@@ -52,7 +52,7 @@ vuk::InflightContext::InflightContext(Context& ctx, size_t absolute_frame, std::
 
 	auto ptc = begin();
 	ptc.impl->descriptor_sets.collect(Context::FC * 2);
-	ptc.impl->transient_images.collect(Context::FC * 2);
+	ctx.impl->transient_images.collect(absolute_frame, Context::FC * 2);
 	ptc.impl->scratch_buffers.collect(Context::FC * 2);
 }
 
@@ -129,38 +129,38 @@ std::vector<vuk::SampledImage> vuk::InflightContext::get_sampled_images() {
 
 ////// TEMP REGION
 
-vuk::TransientSubmitBundle vuk::TransientSubmitBundle::clone() {
+vuk::LinearResourceAllocator vuk::LinearResourceAllocator::clone() {
 	assert(0);
 	return *ctx->impl->get_transient_bundle(0); // TODO: bogus
 }
 
-VkFramebuffer vuk::TransientSubmitBundle::acquire_framebuffer(const vuk::FramebufferCreateInfo& fbci) {
+VkFramebuffer vuk::LinearResourceAllocator::acquire_framebuffer(const vuk::FramebufferCreateInfo& fbci) {
 	return ctx->impl->framebuffer_cache.acquire(fbci);
 }
 
-vuk::RGImage vuk::TransientSubmitBundle::acquire_rendertarget(const vuk::RGCI& rgci) {
+vuk::RGImage vuk::LinearResourceAllocator::acquire_rendertarget(const vuk::RGCI& rgci) {
 	return ctx->impl->transient_images.acquire(rgci);
 }
 
-vuk::Sampler vuk::TransientSubmitBundle::acquire_sampler(const vuk::SamplerCreateInfo& sci) {
+vuk::Sampler vuk::LinearResourceAllocator::acquire_sampler(const vuk::SamplerCreateInfo& sci) {
 	return ctx->impl->sampler_cache.acquire(sci);
 }
 
-vuk::TimestampQuery vuk::TransientSubmitBundle::register_timestamp_query(vuk::Query handle) {
+vuk::TimestampQuery vuk::LinearResourceAllocator::register_timestamp_query(vuk::Query handle) {
 	assert(0);
 	return {0};
 }
 
-vuk::PipelineInfo vuk::TransientSubmitBundle::acquire_pipeline(const vuk::PipelineInstanceCreateInfo& pici) {
+vuk::PipelineInfo vuk::LinearResourceAllocator::acquire_pipeline(const vuk::PipelineInstanceCreateInfo& pici) {
 	return ctx->impl->pipeline_cache.acquire(pici);
 }
 
-vuk::DescriptorSet vuk::TransientSubmitBundle::acquire_descriptorset(const vuk::SetBinding&) {
+vuk::DescriptorSet vuk::LinearResourceAllocator::acquire_descriptorset(const vuk::SetBinding&) {
 	assert(0);
 	return {};
 }
 
-vuk::Buffer vuk::TransientSubmitBundle::allocate_scratch_buffer(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, size_t size, size_t alignment) {
+vuk::Buffer vuk::LinearResourceAllocator::allocate_scratch_buffer(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, size_t size, size_t alignment) {
 	assert(0);
 	return {};
 }

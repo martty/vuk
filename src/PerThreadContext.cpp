@@ -5,9 +5,11 @@ vuk::PerThreadContext::PerThreadContext(InflightContext& ifc, unsigned tid) : ct
 }
 
 vuk::PerThreadContext::~PerThreadContext() {
-	ifc->destroy(std::move(impl->image_recycle));
-	ifc->destroy(std::move(impl->image_view_recycle));
-	delete impl;
+	if (impl) {
+		ifc->destroy(std::move(impl->image_recycle));
+		ifc->destroy(std::move(impl->image_view_recycle));
+		delete impl;
+	}
 }
 
 vuk::PerThreadContext vuk::PerThreadContext::clone() {
@@ -24,7 +26,7 @@ void vuk::PerThreadContext::destroy(vuk::ImageView image) {
 
 void vuk::PerThreadContext::destroy(vuk::DescriptorSet ds) {
 	// note that since we collect at integer times FC, we are releasing the DS back to the right pool
-	impl->pool_cache.acquire(ds.layout_info).free_sets.enqueue(ds.descriptor_set);
+	ctx.impl->pool_cache.acquire(ds.layout_info, ifc->absolute_frame).free_sets.enqueue(ds.descriptor_set);
 }
 
 vuk::Unique<vuk::PersistentDescriptorSet> vuk::PerThreadContext::create_persistent_descriptorset(const DescriptorSetLayoutAllocInfo& dslai, unsigned num_descriptors) {
@@ -188,7 +190,7 @@ vuk::SampledImage& vuk::PerThreadContext::make_sampled_image(Name n, vuk::ImageV
 }
 
 vuk::DescriptorSet vuk::PerThreadContext::create(const create_info_t<vuk::DescriptorSet>& cinfo) {
-	auto& pool = impl->pool_cache.acquire(cinfo.layout_info);
+	auto& pool = ctx.impl->pool_cache.acquire(cinfo.layout_info, ifc->absolute_frame);
 	auto ds = pool.acquire(*this, cinfo.layout_info);
 	auto mask = cinfo.used.to_ulong();
 	unsigned long leading_ones = num_leading_ones(mask);
@@ -275,8 +277,7 @@ vuk::DescriptorPool vuk::PerThreadContext::create(const create_info_t<vuk::Descr
 }
 
 vuk::Program vuk::PerThreadContext::get_pipeline_reflection_info(vuk::PipelineBaseCreateInfo pci) {
-	auto& res = impl->pipelinebase_cache.acquire(pci);
-	return res.reflection_info;
+	return ctx.impl->pipelinebase_cache.acquire(pci, ifc->absolute_frame).reflection_info;
 }
 
 vuk::TimestampQuery vuk::PerThreadContext::register_timestamp_query(vuk::Query handle) {
@@ -293,24 +294,21 @@ void vuk::PerThreadContext::submit(vuk::Token token, vuk::Domain domain) {
 	}*/
 	token_type = TokenData::TokenType::eTimeline;
 	auto& data = ctx.impl->get_token_data(token);
+	assert(data.state == TokenData::State::eArmed);
 	if (data.rg) {
 		ExecutableRenderGraph erg = std::move(*data.rg);
 
 		auto cbuf = erg.execute(*this, {});
-		// get an unpooled fence
-		VkFenceCreateInfo fci{ .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
-		VkFence fence;
-		vkCreateFence(ctx.device, &fci, nullptr, &fence);
 		VkSubmitInfo si{ .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO };
 		si.commandBufferCount = 1;
 		si.pCommandBuffers = &cbuf;
 		VkTimelineSemaphoreSubmitInfo tssi{ .sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO };
-		fci.pNext = &tssi;
+		si.pNext = &tssi;
 		if (!data.resources) {
 			// TODO: map domain to queue family
 			data.resources = ctx.impl->get_transient_bundle(ctx.graphics_queue_family_index);
 		}
-		ctx.submit_graphics(si, fence);
+		ctx.submit_graphics(si, VK_NULL_HANDLE);
 	}
 }
 
@@ -327,19 +325,19 @@ VkSemaphore vuk::PerThreadContext::acquire_semaphore() {
 }
 
 VkFramebuffer vuk::PerThreadContext::acquire_framebuffer(const vuk::FramebufferCreateInfo& fbci) {
-	return impl->framebuffer_cache.acquire(fbci);
+	return ctx.impl->framebuffer_cache.acquire(fbci, ifc->absolute_frame);
 }
 
 VkRenderPass vuk::PerThreadContext::acquire_renderpass(const vuk::RenderPassCreateInfo& rpci) {
-	return impl->renderpass_cache.acquire(rpci);
+	return ctx.impl->renderpass_cache.acquire(rpci, ifc->absolute_frame);
 }
 
 vuk::RGImage vuk::PerThreadContext::acquire_rendertarget(const vuk::RGCI& rgci) {
-	return impl->transient_images.acquire(rgci);
+	return ctx.impl->transient_images.acquire(rgci, ifc->absolute_frame);
 }
 
 vuk::Sampler vuk::PerThreadContext::acquire_sampler(const vuk::SamplerCreateInfo& sci) {
-	return impl->sampler_cache.acquire(sci);
+	return ctx.impl->sampler_cache.acquire(sci);
 }
 
 vuk::DescriptorSet vuk::PerThreadContext::acquire_descriptorset(const vuk::SetBinding& sb) {
@@ -347,7 +345,7 @@ vuk::DescriptorSet vuk::PerThreadContext::acquire_descriptorset(const vuk::SetBi
 }
 
 vuk::PipelineInfo vuk::PerThreadContext::acquire_pipeline(const vuk::PipelineInstanceCreateInfo& pici) {
-	return impl->pipeline_cache.acquire(pici);
+	return ctx.impl->pipeline_cache.acquire(pici, ifc->absolute_frame);
 }
 
 const plf::colony<vuk::SampledImage>& vuk::PerThreadContext::get_sampled_images() {

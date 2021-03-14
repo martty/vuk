@@ -3,9 +3,9 @@
 #include "vuk/Context.hpp"
 
 namespace vuk {
-	struct TransientSubmitBundle;
+	struct LinearResourceAllocator;
 
-	struct TransientSubmitBundle {
+	struct LinearResourceAllocator {
 		vuk::Context* ctx;
 		uint32_t queue_family_index;
 		VkCommandPool cpool = VK_NULL_HANDLE;
@@ -15,9 +15,9 @@ namespace vuk {
 		std::vector<vuk::ImageView> image_views;
 		VkFence fence = VK_NULL_HANDLE;
 		VkSemaphore sema = VK_NULL_HANDLE;
-		TransientSubmitBundle* next = nullptr;
+		LinearResourceAllocator* next = nullptr;
 
-		TransientSubmitBundle clone();
+		LinearResourceAllocator clone();
 
 		Context& get_context() {
 			return *ctx;

@@ -390,8 +390,8 @@ vuk::ShaderModule vuk::Context::compile_shader(ShaderSource source, std::string 
 }
 
 vuk::Context::TransientSubmitStub vuk::Context::fenced_upload(std::span<UploadItem> uploads, uint32_t dst_queue_family) {
-	TransientSubmitBundle* bundle = impl->get_transient_bundle(transfer_queue_family_index);
-	TransientSubmitBundle* head_bundle = bundle;
+	LinearResourceAllocator* bundle = impl->get_transient_bundle(transfer_queue_family_index);
+	LinearResourceAllocator* head_bundle = bundle;
 	VkCommandBuffer xfercbuf = bundle->acquire_command_buffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 	VkCommandBufferBeginInfo cbi{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
 	vkBeginCommandBuffer(xfercbuf, &cbi);
@@ -413,7 +413,7 @@ vuk::Context::TransientSubmitStub vuk::Context::fenced_upload(std::span<UploadIt
 	}
 
 	VkCommandBuffer dstcbuf;
-	TransientSubmitBundle* dst_bundle = nullptr;
+	LinearResourceAllocator* dst_bundle = nullptr;
 	// image transfers will finish on the dst queue, get a bundle for them and hook it up to our transfer bundle
 	if (any_image_transfers) {
 		dst_bundle = impl->get_transient_bundle(dst_queue_family);
@@ -578,7 +578,7 @@ vuk::Context::TransientSubmitStub vuk::Context::fenced_upload(std::span<UploadIt
 	return head_bundle;
 }
 
-bool vuk::Context::poll_upload(TransientSubmitBundle* ur) {
+bool vuk::Context::poll_upload(LinearResourceAllocator* ur) {
 	if (vkGetFenceStatus(device, ur->fence) == VK_SUCCESS) {
 		std::lock_guard _(impl->transient_submit_lock);
 		impl->cleanup_transient_bundle_recursively(ur);

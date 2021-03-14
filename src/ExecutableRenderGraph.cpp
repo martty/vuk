@@ -302,7 +302,7 @@ namespace vuk {
 		return run_passes(ptc);
 	}
 
-	VkCommandBuffer ExecutableRenderGraph::execute(TransientSubmitBundle& bundle, std::vector<std::pair<SwapChainRef, size_t>> swp_with_index) {
+	VkCommandBuffer ExecutableRenderGraph::execute(LinearResourceAllocator& bundle, std::vector<std::pair<SwapChainRef, size_t>> swp_with_index) {
 		bind_swapchain_images(swp_with_index);
 		size_attachments(swp_with_index);
 		bind_attachments(bundle);

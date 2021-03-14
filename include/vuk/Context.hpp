@@ -136,7 +136,7 @@ namespace vuk {
 			bool is_buffer;
 		};
 
-		using TransientSubmitStub = struct TransientSubmitBundle*;
+		using TransientSubmitStub = struct LinearResourceAllocator*;
 
 		/// @brief Enqueue buffer or image data for upload
 		/// @param uploads UploadItem structures describing the upload parameters
@@ -228,7 +228,7 @@ namespace vuk {
 
 		friend class InflightContext;
 		friend class PerThreadContext;
-		friend struct TransientSubmitBundle;
+		friend struct LinearResourceAllocator;
 		friend struct IFCImpl;
 		friend struct PTCImpl;
 		template<class T> friend class Cache; // caches can directly destroy

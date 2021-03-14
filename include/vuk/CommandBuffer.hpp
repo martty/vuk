@@ -306,7 +306,7 @@ namespace vuk {
 	class CommandBufferImpl : public CommandBuffer {
 	protected:
 		Allocator allocator;
-		CommandBuffer* parent;
+		CommandBuffer* parent = nullptr;
 	public:
 		CommandBufferImpl(ExecutableRenderGraph& rg, Allocator&& allocator, VkCommandBuffer cb);
 		CommandBufferImpl(CommandBuffer& parent, ExecutableRenderGraph& rg, Allocator&& allocator, std::optional<RenderPassInfo> ongoing);

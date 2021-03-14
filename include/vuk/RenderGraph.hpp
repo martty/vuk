@@ -153,7 +153,7 @@ namespace vuk {
 		ExecutableRenderGraph& operator=(ExecutableRenderGraph&&) noexcept;
 
 		VkCommandBuffer execute(PerThreadContext&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
-		VkCommandBuffer execute(TransientSubmitBundle& bundle, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
+		VkCommandBuffer execute(LinearResourceAllocator& bundle, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
 
 		struct BufferInfo get_resource_buffer(Name);
 		struct AttachmentRPInfo get_resource_image(Name);

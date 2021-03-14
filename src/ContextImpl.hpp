@@ -22,7 +22,7 @@ namespace vuk {
 	struct TokenData {
 		enum class State { eInitial, eArmed, ePending, eComplete } state = State::eInitial;  // token state : nothing -> armed (ready for submit) -> pending (submitted) -> complete (observed on CPU)
 		enum class TokenType { eUndecided, eTimeline, eAnyDevice, eEvent, eBarrier, eOrder } token_type = TokenType::eUndecided;
-		TransientSubmitBundle* resources = nullptr; // internally may have resources bound to the token, which get freed or enqueued for deletion
+		LinearResourceAllocator* resources = nullptr; // internally may have resources bound to the token, which get freed or enqueued for deletion
 		std::unique_ptr<vuk::RenderGraph> rg;
 	};
 
@@ -75,13 +75,13 @@ namespace vuk {
 
 		std::mutex transient_submit_lock;
 		/// @brief with stable addresses, so we can hand out opaque pointers
-		plf::colony<TransientSubmitBundle> transient_submit_bundles;
-		std::vector<plf::colony<TransientSubmitBundle>::iterator> transient_submit_freelist;
+		plf::colony<LinearResourceAllocator> transient_submit_bundles;
+		std::vector<plf::colony<LinearResourceAllocator>::iterator> transient_submit_freelist;
 
-		TransientSubmitBundle* get_transient_bundle(uint32_t queue_family_index) {
+		LinearResourceAllocator* get_transient_bundle(uint32_t queue_family_index) {
 			std::lock_guard _(transient_submit_lock);
 
-			plf::colony<TransientSubmitBundle>::iterator it = transient_submit_bundles.end();
+			plf::colony<LinearResourceAllocator>::iterator it = transient_submit_bundles.end();
 			for (auto fit = transient_submit_freelist.begin(); fit != transient_submit_freelist.end(); fit++) {
 				if ((*fit)->queue_family_index == queue_family_index) {
 					it = *fit;
@@ -101,7 +101,7 @@ namespace vuk {
 			return &*it;
 		}
 
-		void cleanup_transient_bundle_recursively(vuk::TransientSubmitBundle* ur) {
+		void cleanup_transient_bundle_recursively(vuk::LinearResourceAllocator* ur) {
 			if (ur->cpool) {
 				vkResetCommandPool(device, ur->cpool, 0);
 				vkFreeCommandBuffers(device, ur->cpool, (uint32_t)ur->command_buffers.size(), ur->command_buffers.data());
@@ -421,21 +421,9 @@ namespace vuk {
 		Pool<VkCommandBuffer, Context::FC>::PFView commandbuffer_pools;
 		Pool<TimestampQuery, Context::FC>::PFView tsquery_pools;
 		Pool<VkSemaphore, Context::FC>::PFView semaphore_pools;
-		Cache<PipelineInfo>::PFView pipeline_cache;
-		Cache<ComputePipelineInfo>::PFView compute_pipeline_cache;
-		Cache<PipelineBaseInfo>::PFView pipelinebase_cache;
-		Cache<VkRenderPass>::PFView renderpass_cache;
-		Cache<VkFramebuffer>::PFView framebuffer_cache;
-		Cache<vuk::RGImage>::PFView transient_images;
 		PerFrameCache<LinearAllocator, Context::FC>::PFView scratch_buffers;
 		PerFrameCache<vuk::DescriptorSet, Context::FC>::PFView descriptor_sets;
-		Cache<vuk::Sampler>::PFView sampler_cache;
 		Pool<vuk::SampledImage, Context::FC>::PFView sampled_images;
-		Cache<vuk::DescriptorPool>::PFView pool_cache;
-
-		Cache<vuk::ShaderModule>::PFView shader_modules;
-		Cache<vuk::DescriptorSetLayoutAllocInfo>::PFView descriptor_set_layouts;
-		Cache<VkPipelineLayout>::PFView pipeline_layouts;
 
 		// needs to be mpsc
 		std::mutex transfer_mutex;
@@ -455,20 +443,9 @@ namespace vuk {
 			commandbuffer_pools(ctx.impl->cbuf_pools.get_view(ifc)),
 			tsquery_pools(ctx.impl->tsquery_pools.get_view(ifc)),
 			semaphore_pools(ctx.impl->semaphore_pools.get_view(ifc)),
-			pipeline_cache(ifc, ctx.impl->pipeline_cache),
-			compute_pipeline_cache(ifc, ctx.impl->compute_pipeline_cache),
-			pipelinebase_cache(ifc, ctx.impl->pipelinebase_cache),
-			renderpass_cache(ifc, ctx.impl->renderpass_cache),
-			framebuffer_cache(ifc, ctx.impl->framebuffer_cache),
-			transient_images(ifc, ctx.impl->transient_images),
 			scratch_buffers(ifc, ctx.impl->scratch_buffers),
 			descriptor_sets(ifc, ctx.impl->descriptor_sets),
-			sampler_cache(ifc, ctx.impl->sampler_cache),
-			sampled_images(ctx.impl->sampled_images.get_view(ifc)),
-			pool_cache(ifc, ctx.impl->pool_cache),
-			shader_modules(ifc, ctx.impl->shader_modules),
-			descriptor_set_layouts(ifc, ctx.impl->descriptor_set_layouts),
-			pipeline_layouts(ifc, ctx.impl->pipeline_layouts) {
+			sampled_images(ctx.impl->sampled_images.get_view(ifc)){
 		}
 	};
 
@@ -477,20 +454,9 @@ namespace vuk {
 		Pool<VkSemaphore, Context::FC>::PFPTView semaphore_pool;
 		Pool<VkFence, Context::FC>::PFPTView fence_pool;
 		Pool<TimestampQuery, Context::FC>::PFPTView tsquery_pool;
-		Cache<PipelineInfo>::PFPTView pipeline_cache;
-		Cache<ComputePipelineInfo>::PFPTView compute_pipeline_cache;
-		Cache<PipelineBaseInfo>::PFPTView pipelinebase_cache;
-		Cache<VkRenderPass>::PFPTView renderpass_cache;
-		Cache<VkFramebuffer>::PFPTView framebuffer_cache;
-		Cache<vuk::RGImage>::PFPTView transient_images;
+		Pool<vuk::SampledImage, Context::FC>::PFPTView sampled_images;
 		PerFrameCache<LinearAllocator, Context::FC>::PFPTView scratch_buffers;
 		PerFrameCache<vuk::DescriptorSet, Context::FC>::PFPTView descriptor_sets;
-		Cache<vuk::Sampler>::PFPTView sampler_cache;
-		Pool<vuk::SampledImage, Context::FC>::PFPTView sampled_images;
-		Cache<vuk::DescriptorPool>::PFPTView pool_cache;
-		Cache<vuk::ShaderModule>::PFPTView shader_modules;
-		Cache<vuk::DescriptorSetLayoutAllocInfo>::PFPTView descriptor_set_layouts;
-		Cache<VkPipelineLayout>::PFPTView pipeline_layouts;
 
 		// recycling global objects
 		std::vector<Buffer> buffer_recycle;
@@ -502,20 +468,9 @@ namespace vuk {
 			semaphore_pool(ifc.impl->semaphore_pools.get_view(ptc)),
 			fence_pool(ifc.impl->fence_pools.get_view(ptc)),
 			tsquery_pool(ifc.impl->tsquery_pools.get_view(ptc)),
-			pipeline_cache(ptc, ifc.impl->pipeline_cache),
-			compute_pipeline_cache(ptc, ifc.impl->compute_pipeline_cache),
-			pipelinebase_cache(ptc, ifc.impl->pipelinebase_cache),
-			renderpass_cache(ptc, ifc.impl->renderpass_cache),
-			framebuffer_cache(ptc, ifc.impl->framebuffer_cache),
-			transient_images(ptc, ifc.impl->transient_images),
-			scratch_buffers(ptc, ifc.impl->scratch_buffers),
-			descriptor_sets(ptc, ifc.impl->descriptor_sets),
-			sampler_cache(ptc, ifc.impl->sampler_cache),
 			sampled_images(ifc.impl->sampled_images.get_view(ptc)),
-			pool_cache(ptc, ifc.impl->pool_cache),
-			shader_modules(ptc, ifc.impl->shader_modules),
-			descriptor_set_layouts(ptc, ifc.impl->descriptor_set_layouts),
-			pipeline_layouts(ptc, ifc.impl->pipeline_layouts) {
+			scratch_buffers(ptc, ifc.impl->scratch_buffers),
+			descriptor_sets(ptc, ifc.impl->descriptor_sets){
 		}
 	};
 }
