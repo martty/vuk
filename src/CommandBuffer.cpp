@@ -338,10 +338,10 @@ namespace vuk {
 	}
 
 	template<class Allocator>
-	CommandBufferImpl<Allocator>::CommandBufferImpl(ExecutableRenderGraph& rg, Allocator&& allocator, VkCommandBuffer cb) : CommandBuffer(allocator.get_context(), &rg, cb, {}), allocator(std::move(allocator)), impl(new Impl) {}
+	CommandBufferImpl<Allocator>::CommandBufferImpl(ExecutableRenderGraph& rg, Allocator& allocator, VkCommandBuffer cb) : CommandBuffer(allocator.get_context(), &rg, cb, {}), allocator(allocator), impl(new Impl) {}
 	
 	template<class Allocator>
-	CommandBufferImpl<Allocator>::CommandBufferImpl(CommandBuffer& parent, ExecutableRenderGraph& rg, Allocator&& allocator, std::optional<RenderPassInfo> ongoing) : CommandBuffer(parent.ctx, &rg, VK_NULL_HANDLE, ongoing), allocator(std::move(allocator)), parent(&parent), impl(new Impl) {
+	CommandBufferImpl<Allocator>::CommandBufferImpl(CommandBuffer& parent, ExecutableRenderGraph& rg, Allocator& allocator, std::optional<RenderPassInfo> ongoing) : CommandBuffer(parent.ctx, &rg, VK_NULL_HANDLE, ongoing), allocator(allocator), parent(&parent), impl(new Impl) {
 		command_buffer = this->allocator.acquire_command_buffer(VK_COMMAND_BUFFER_LEVEL_SECONDARY);
 	}
 
@@ -356,8 +356,7 @@ namespace vuk {
 
 	template<class Allocator>
 	CommandBufferImpl<Allocator>& CommandBufferImpl<Allocator>::begin_secondary() {
-		CommandBufferImpl<Allocator> foo(*this, *rg, allocator.clone(), ongoing_renderpass);
-		auto it = impl->secondaries.emplace(*this, *rg, allocator.clone(), ongoing_renderpass);
+		auto it = impl->secondaries.emplace(*this, *rg, allocator, ongoing_renderpass);
 		VkCommandBufferBeginInfo cbi{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
 									 .flags = VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT | VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
 		VkCommandBufferInheritanceInfo cbii{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO };
@@ -438,6 +437,17 @@ namespace vuk {
 
 		auto src_layout = rg->is_resource_image_in_general_layout(src, current_pass) ? vuk::ImageLayout::eGeneral : vuk::ImageLayout::eTransferSrcOptimal;
 		vkCmdCopyImageToBuffer(command_buffer, src_batt.image, (VkImageLayout)src_layout, dst_bbuf.buffer.buffer, 1, (VkBufferImageCopy*)&bic);
+	}
+
+	void CommandBuffer::copy_buffer(Name src, Name dst, VkBufferCopy bic) {
+		assert(rg);
+		auto src_bbuf = rg->get_resource_buffer(src);
+		auto dst_bbuf = rg->get_resource_buffer(dst);
+
+		bic.srcOffset += src_bbuf.buffer.offset;
+		bic.dstOffset += dst_bbuf.buffer.offset;
+
+		vkCmdCopyBuffer(command_buffer, src_bbuf.buffer.buffer, dst_bbuf.buffer.buffer, 1, &bic);
 	}
 
 	void CommandBuffer::image_barrier(Name src, vuk::Access src_acc, vuk::Access dst_acc) {

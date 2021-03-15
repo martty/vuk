@@ -287,6 +287,7 @@ namespace vuk {
 		void resolve_image(Name src, Name dst);
 		void blit_image(Name src, Name dst, vuk::ImageBlit region, vuk::Filter filter);
 		void copy_image_to_buffer(Name src, Name dst, vuk::BufferImageCopy);
+		void copy_buffer(Name src, Name dst, VkBufferCopy bic);
 
 		// explicit synchronisation
 		void image_barrier(Name, vuk::Access src_access, vuk::Access dst_access);
@@ -305,11 +306,11 @@ namespace vuk {
 	template<class Allocator>
 	class CommandBufferImpl : public CommandBuffer {
 	protected:
-		Allocator allocator;
+		Allocator& allocator;
 		CommandBuffer* parent = nullptr;
 	public:
-		CommandBufferImpl(ExecutableRenderGraph& rg, Allocator&& allocator, VkCommandBuffer cb);
-		CommandBufferImpl(CommandBuffer& parent, ExecutableRenderGraph& rg, Allocator&& allocator, std::optional<RenderPassInfo> ongoing);
+		CommandBufferImpl(ExecutableRenderGraph& rg, Allocator& allocator, VkCommandBuffer cb);
+		CommandBufferImpl(CommandBuffer& parent, ExecutableRenderGraph& rg, Allocator& allocator, std::optional<RenderPassInfo> ongoing);
 		~CommandBufferImpl();
 
 		CommandBufferImpl<Allocator>& bind_sampled_image(unsigned set, unsigned binding, vuk::ImageView iv, vuk::SamplerCreateInfo sci, vuk::ImageLayout il) override;

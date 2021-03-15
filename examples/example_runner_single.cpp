@@ -68,7 +68,7 @@ void vuk::ExampleRunner::render() {
 		auto attachment_name = vuk::Name(std::string(examples[0]->name) + "_final");
 		rg.attach_swapchain(attachment_name, swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
 		auto ptc = ifc.begin();
-		auto erg = std::move(rg).link(ptc);
+		auto erg = std::move(rg).link(ptc.ctx);
 		execute_submit_and_present_to_one(ptc, std::move(erg), swapchain);
 	}
 }

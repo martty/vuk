@@ -44,11 +44,14 @@ namespace {
 			auto ptc = ifc.begin();
 
 			// We set up the cube data, same as in example 02_cube
+			auto verts = ptc.allocate_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eVertexBuffer | vuk::BufferUsageFlagBits::eTransferDst, box.first.size() * sizeof(box.first[0]), 1);
+			auto inds = ptc.allocate_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eIndexBuffer | vuk::BufferUsageFlagBits::eTransferDst, box.second.size() * sizeof(box.second[0]), 1);
 
-			auto [bverts, stub1] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eVertexBuffer, std::span(&box.first[0], box.first.size()));
-			auto verts = std::move(bverts);
-			auto [binds, stub2] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eIndexBuffer, std::span(&box.second[0], box.second.size()));
-			auto inds = std::move(binds);
+			// t1 is a Token with a reference to Context to allow chaining, but the Token can be extracted
+			auto t1 = ptc.ctx.copy_to_buffer(verts, box.first.data(), box.first.size() * sizeof(box.first[0]));
+			// += appends another token, but doesn't establish ordering
+			t1 += ptc.ctx.copy_to_buffer(inds, box.second.data(), box.second.size() * sizeof(box.second[0]));
+			
 			struct VP {
 				glm::mat4 view;
 				glm::mat4 proj;
@@ -57,15 +60,20 @@ namespace {
 			vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 1.f, 10.f);
 			vp.proj[1][1] *= -1;
 
-			auto [buboVP, stub3] = ptc.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eUniformBuffer, std::span(&vp, 1));
+			auto [buboVP, _] = ptc.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eUniformBuffer, std::span(&vp, 1));
 			auto uboVP = buboVP;
-			ptc.wait_all_transfers();
+			
+			// instead of ptc.wait_all_transfers, or similar:
+			ptc.submit(t1, vuk::Domain::eHost);
+			ptc.wait(t1);
 
 			vuk::RenderGraph rg;
 
 			// Set up the pass to draw the textured cube, with a color and a depth attachment
 			rg.add_pass({
 				.resources = {"04_texture_final"_image(vuk::eColorWrite), "04_texture_depth"_image(vuk::eDepthStencilRW)},
+				// this pass waits for t1 to complete (for now the entire rg)
+				//.waits = {t1},
 				.execute = [verts, uboVP, inds](vuk::CommandBuffer& command_buffer) {
 					command_buffer
 					  .set_viewport(0, vuk::Rect2D::framebuffer())

@@ -76,6 +76,7 @@ namespace vuk {
 
 		std::vector<Resource> resources;
 		robin_hood::unordered_flat_map<Name, Name> resolves; // src -> dst
+		std::vector<Token> waits;
 
 		std::function<void(vuk::CommandBuffer&)> execute;
 	};
@@ -119,7 +120,7 @@ namespace vuk {
 		void attach_managed(Name, Format, Dimension2D, Samples, Clear);
 
 		/// @brief Consume this RenderGraph and create an ExecutableRenderGraph
-		struct ExecutableRenderGraph link(PerThreadContext& ptc)&&;
+		struct ExecutableRenderGraph link(Context&)&&;
 
 		// reflection functions
  
@@ -142,6 +143,15 @@ namespace vuk {
 		void build_io();
 	};
 
+	struct SubmitInfo {
+		std::vector<VkCommandBuffer> command_buffers;
+		std::vector<VkSemaphore> signal_semaphores;
+		std::vector<uint64_t> signal_values;
+		std::vector<VkSemaphore> wait_semaphores;
+		std::vector<uint64_t> wait_values;
+		std::vector<VkPipelineStageFlags> wait_stages;
+	};
+
 	struct ExecutableRenderGraph {
 		ExecutableRenderGraph(RenderGraph&&);
 		~ExecutableRenderGraph();
@@ -152,8 +162,8 @@ namespace vuk {
 		ExecutableRenderGraph(ExecutableRenderGraph&&) noexcept;
 		ExecutableRenderGraph& operator=(ExecutableRenderGraph&&) noexcept;
 
-		VkCommandBuffer execute(PerThreadContext&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
-		VkCommandBuffer execute(LinearResourceAllocator& bundle, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
+		SubmitInfo execute(PerThreadContext&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
+		SubmitInfo execute(LinearResourceAllocator& bundle, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
 
 		struct BufferInfo get_resource_buffer(Name);
 		struct AttachmentRPInfo get_resource_image(Name);
@@ -173,7 +183,7 @@ namespace vuk {
 		void bind_attachments(Allocator& allocator);
 		
 		template<class Allocator>
-		VkCommandBuffer run_passes(Allocator& allocator);
+		SubmitInfo run_passes(Allocator& allocator);
 	};
 }
 

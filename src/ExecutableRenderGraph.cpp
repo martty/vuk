@@ -6,6 +6,7 @@
 #include "Allocator.hpp"
 #include "RenderGraphImpl.hpp"
 #include "ResourceBundle.hpp"
+#include "ContextImpl.hpp"
 
 namespace vuk {
 	ExecutableRenderGraph::ExecutableRenderGraph(RenderGraph&& rg) : impl(rg.impl) {
@@ -217,14 +218,14 @@ namespace vuk {
 	}
 
 	template<class Allocator>
-	VkCommandBuffer ExecutableRenderGraph::run_passes(Allocator& allocator) {
+	SubmitInfo ExecutableRenderGraph::run_passes(Allocator& allocator) {
 		// actual execution
 		VkCommandBuffer cbuf = allocator.acquire_command_buffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 
 		VkCommandBufferBeginInfo cbi{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
 		vkBeginCommandBuffer(cbuf, &cbi);
 
-		CommandBufferImpl<Allocator> cobuf(*this, allocator.clone(), cbuf);
+		CommandBufferImpl<Allocator> cobuf(*this, allocator, cbuf);
 		for (auto& rpass : impl->rpis) {
 			bool use_secondary_command_buffers = rpass.subpasses[0].use_secondary_command_buffers;
 			begin_renderpass(rpass, cbuf, use_secondary_command_buffers);
@@ -291,10 +292,21 @@ namespace vuk {
 			}
 		}
 		vkEndCommandBuffer(cbuf);
-		return cbuf;
+
+		SubmitInfo cbws{ .command_buffers = {cbuf} };
+		for (auto& passinfo : impl->passes) {
+			for (auto token : passinfo.pass.waits) {
+				// TODO: proper wait/signal values
+				cbws.wait_values.push_back(1);
+				auto sema = allocator.get_context().get_token_data(token).resources->sema;
+				cbws.wait_semaphores.push_back(sema);
+				cbws.wait_stages.push_back(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
+			}
+		}
+		return cbws;
 	}
 
-	VkCommandBuffer ExecutableRenderGraph::execute(vuk::PerThreadContext& ptc, std::vector<std::pair<SwapChainRef, size_t>> swp_with_index) {
+	SubmitInfo ExecutableRenderGraph::execute(vuk::PerThreadContext& ptc, std::vector<std::pair<SwapChainRef, size_t>> swp_with_index) {
 		bind_swapchain_images(swp_with_index);
 		size_attachments(swp_with_index);
 		bind_attachments(ptc);
@@ -302,7 +314,7 @@ namespace vuk {
 		return run_passes(ptc);
 	}
 
-	VkCommandBuffer ExecutableRenderGraph::execute(LinearResourceAllocator& bundle, std::vector<std::pair<SwapChainRef, size_t>> swp_with_index) {
+	SubmitInfo ExecutableRenderGraph::execute(LinearResourceAllocator& bundle, std::vector<std::pair<SwapChainRef, size_t>> swp_with_index) {
 		bind_swapchain_images(swp_with_index);
 		size_attachments(swp_with_index);
 		bind_attachments(bundle);

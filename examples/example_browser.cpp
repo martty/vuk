@@ -102,7 +102,7 @@ void vuk::ExampleRunner::render() {
 			vuk::Name attachment_name = vuk::Name(std::string(item_current->name) + "_final");
 			util::ImGui_ImplVuk_Render(ptc, rg, attachment_name, "SWAPCHAIN", imgui_data, ImGui::GetDrawData());
 			rg.attach_swapchain(attachment_name, swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
-			execute_submit_and_present_to_one(ptc, std::move(rg).link(ptc), swapchain);
+			execute_submit_and_present_to_one(ptc, std::move(rg).link(ptc.ctx), swapchain);
 		} else { // render all examples as imgui windows
 			RenderGraph rg;
 			auto ptc = ifc.begin();
@@ -177,7 +177,7 @@ void vuk::ExampleRunner::render() {
 			ImGui::Render();
 			util::ImGui_ImplVuk_Render(ptc, rg, "SWAPCHAIN", "SWAPCHAIN", imgui_data, ImGui::GetDrawData());
 			rg.attach_swapchain("SWAPCHAIN", swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
-			execute_submit_and_present_to_one(ptc, std::move(rg).link(ptc), swapchain);
+			execute_submit_and_present_to_one(ptc, std::move(rg).link(ptc.ctx), swapchain);
 		}
 	}
 }

@@ -8,6 +8,7 @@ vuk::PerThreadContext::~PerThreadContext() {
 	if (impl) {
 		ifc->destroy(std::move(impl->image_recycle));
 		ifc->destroy(std::move(impl->image_view_recycle));
+		ifc->destroy(std::move(impl->linear_allocators));
 		delete impl;
 	}
 }
@@ -194,15 +195,15 @@ vuk::DescriptorSet vuk::PerThreadContext::create(const create_info_t<vuk::Descri
 	auto ds = pool.acquire(*this, cinfo.layout_info);
 	auto mask = cinfo.used.to_ulong();
 	unsigned long leading_ones = num_leading_ones(mask);
-    std::array<VkWriteDescriptorSet, VUK_MAX_BINDINGS> writes = {};
-    int j = 0;
+	std::array<VkWriteDescriptorSet, VUK_MAX_BINDINGS> writes = {};
+	int j = 0;
 	for (int i = 0; i < leading_ones; i++, j++) {
-        if(!cinfo.used.test(i)) {
-            j--;
-            continue;
-        }
-        auto& write = writes[j];
-        write = {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+		if (!cinfo.used.test(i)) {
+			j--;
+			continue;
+		}
+		auto& write = writes[j];
+		write = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
 		auto& binding = cinfo.bindings[i];
 		write.descriptorType = (VkDescriptorType)binding.type;
 		write.dstArrayElement = 0;
@@ -287,28 +288,86 @@ vuk::TimestampQuery vuk::PerThreadContext::register_timestamp_query(vuk::Query h
 	return query_slot;
 }
 
-void vuk::PerThreadContext::submit(vuk::Token token, vuk::Domain domain) {
+vuk::Token vuk::PerThreadContext::submit(vuk::Token token, vuk::Domain domain) {
 	TokenData::TokenType token_type;
 	/*if (domain & vuk::Domain::eHost) {
 		token_type = TokenData::TokenType::eTimeline;
 	}*/
-	token_type = TokenData::TokenType::eTimeline;
-	auto& data = ctx.impl->get_token_data(token);
-	assert(data.state == TokenData::State::eArmed);
-	if (data.rg) {
-		ExecutableRenderGraph erg = std::move(*data.rg);
+	TokenData* data = &ctx.impl->get_token_data(token);
+	data->token_type = TokenData::TokenType::eTimeline;
+	assert(data->state == TokenData::State::eArmed);
 
-		auto cbuf = erg.execute(*this, {});
-		VkSubmitInfo si{ .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO };
-		si.commandBufferCount = 1;
-		si.pCommandBuffers = &cbuf;
-		VkTimelineSemaphoreSubmitInfo tssi{ .sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO };
-		si.pNext = &tssi;
-		if (!data.resources) {
-			// TODO: map domain to queue family
-			data.resources = ctx.impl->get_transient_bundle(ctx.graphics_queue_family_index);
+	std::vector<VkCommandBuffer> cbufs;
+
+	vuk::LinearResourceAllocator* allocator;
+	if (!data->resources) {
+		// TODO: map domain to queue family
+		data->resources = ctx.impl->get_linear_allocator(ctx.graphics_queue_family_index);
+	}
+
+	allocator = data->resources;
+
+	while (data != nullptr) {
+		if (data->rg) {
+			ExecutableRenderGraph erg = std::move(*data->rg).link(ctx);
+			cbufs.push_back(erg.execute(*allocator, {}).command_buffers[0]); // TODO: the waits and signals
 		}
-		ctx.submit_graphics(si, VK_NULL_HANDLE);
+		data->state = TokenData::State::ePending;
+		data = data->next;
+	}
+
+	if (cbufs.size() == 0) {
+		//TODO: free token
+		ctx.impl->get_token_data(token).state = TokenData::State::eComplete;
+		return token;
+	}
+
+	allocator->sema = allocator->acquire_timeline_semaphore();
+	
+	// enqueue for destruction on frame end
+	impl->linear_allocators.push_back(allocator);
+
+	VkSubmitInfo si{ .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO };
+	si.commandBufferCount = cbufs.size();
+	si.pCommandBuffers = cbufs.data();
+	VkTimelineSemaphoreSubmitInfo tssi{ .sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO };
+	uint64_t signal = 1;
+	si.pSignalSemaphores = &allocator->sema;
+	si.signalSemaphoreCount = 1;
+	tssi.pSignalSemaphoreValues = &signal;
+	tssi.signalSemaphoreValueCount = 1;
+	si.pNext = &tssi;
+
+	allocator->fence = allocator->acquire_fence();
+
+	ctx.submit_graphics(si, allocator->fence);
+
+	return token;
+}
+
+void vuk::PerThreadContext::wait(Token token) {
+	TokenData& data = ctx.impl->get_token_data(token);
+	if (data.state == TokenData::State::eComplete) {
+		return;
+	}
+	assert(data.state == TokenData::State::ePending && "Token must have been submitted to be waited on.");
+	assert(data.token_type == TokenData::TokenType::eTimeline && "Can only wait on Timeline tokens on host");
+	VkSemaphoreWaitInfo swi{ .sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO };
+	swi.pSemaphores = &data.resources->sema;
+	uint64_t value = 1;
+	swi.pValues = &value;
+	swi.semaphoreCount = 1;
+	vkWaitSemaphores(ctx.device, &swi, UINT64_MAX);
+	data.state = TokenData::State::eComplete;
+	free(token);
+}
+
+void vuk::PerThreadContext::free(Token token) {
+	TokenData* data = &ctx.impl->get_token_data(token);
+	//vkDestroySemaphore(ctx.device, data.resources->sema, nullptr);
+	while (data != nullptr) {
+		ctx.impl->cleanup_transient_bundle_recursively(data->resources);
+		data = data->next;
 	}
 }
 

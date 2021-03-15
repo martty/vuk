@@ -21,6 +21,17 @@ namespace vuk {
 		size_t id;
 	};
 
+	struct TokenWithContext {
+		Context& ctx;
+		Token token;
+
+		void operator+=(Token other);
+
+		operator Token() {
+			return token;
+		}
+	};
+
 	struct TimestampQuery {
 		VkQueryPool pool;
 		uint32_t id;
@@ -155,8 +166,9 @@ namespace vuk {
 		/// @param create_mapped Should the memory be mapped. Should only be true for CPU-visible memory.
 		/// @return The allocated buffer in a RAII handle.
 		Unique<Buffer> allocate_buffer(MemoryUsage mem_usage, BufferUsageFlags buffer_usage, size_t size, size_t alignment, bool create_mapped);
-		Texture allocate_texture(vuk::ImageCreateInfo ici);
-		Unique<ImageView> create_image_view(vuk::ImageViewCreateInfo);
+		Texture allocate_texture(ImageCreateInfo ici);
+		Unique<ImageView> create_image_view(ImageViewCreateInfo);
+		VkRenderPass acquire_renderpass(const struct RenderPassCreateInfo&);
 
 		/// @brief Manually request destruction of vuk::Image
 		void enqueue_destroy(vuk::Image);
@@ -168,7 +180,8 @@ namespace vuk {
 		void enqueue_destroy(vuk::PersistentDescriptorSet);
 
 		Token create_token();
-		Token transition_image(vuk::Texture&, vuk::Access src_access, vuk::Access dst_access);
+		TokenWithContext transition_image(vuk::Texture&, vuk::Access src_access, vuk::Access dst_access);
+		TokenWithContext copy_to_buffer(vuk::Buffer buffer, void* data, size_t size);
 
 		/// @brief Add a swapchain to be managed by the Context
 		/// @return Reference to the new swapchain that can be used during presentation
@@ -226,11 +239,15 @@ namespace vuk {
 		DescriptorPool create(const struct DescriptorSetLayoutAllocInfo& cinfo);
 		RGImage create(const struct RGCI& cinfo);
 
+		struct TokenData& get_token_data(Token);
+
 		friend class InflightContext;
 		friend class PerThreadContext;
 		friend struct LinearResourceAllocator;
+		friend struct TokenWithContext;
 		friend struct IFCImpl;
 		friend struct PTCImpl;
+		friend struct ExecutableRenderGraph;
 		template<class T> friend class Cache; // caches can directly destroy
 		template<class T, size_t FC> friend class PerFrameCache;
 	};
@@ -264,6 +281,7 @@ namespace vuk {
 
 		void destroy(std::vector<vuk::Image>&& images);
 		void destroy(std::vector<VkImageView>&& images);
+		void destroy(std::vector<struct LinearResourceAllocator*>&&);
 	};
 
 	class PerThreadContext {
@@ -327,7 +345,11 @@ namespace vuk {
 		/// @return The allocated Buffer
 		template<class T>
 		std::pair<Buffer, TransferStub> create_scratch_buffer(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, std::span<T> data) {
-			auto dst = allocate_scratch_buffer(mem_usage, vuk::BufferUsageFlagBits::eTransferDst | buffer_usage, sizeof(T) * data.size(), 1);
+			auto dst = allocate_scratch_buffer(mem_usage, vuk::BufferUsageFlagBits::eTransferDst | buffer_usage, data.size_bytes(), 1);
+			if (dst.mapped_ptr) {
+				memcpy(dst.mapped_ptr, data.data(), data.size_bytes());
+				return { dst, TransferStub{} };
+			}
 			auto stub = upload(dst, data);
 			return { dst, stub };
 		}
@@ -338,7 +360,11 @@ namespace vuk {
 		/// @return The allocated Buffer
 		template<class T>
 		std::pair<Unique<Buffer>, TransferStub> create_buffer(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, std::span<T> data) {
-			auto dst = allocate_buffer(mem_usage, vuk::BufferUsageFlagBits::eTransferDst | buffer_usage, sizeof(T) * data.size(), 1);
+			auto dst = allocate_buffer(mem_usage, vuk::BufferUsageFlagBits::eTransferDst | buffer_usage, data.size_bytes(), 1);
+			if (dst->mapped_ptr) {
+				memcpy(dst->mapped_ptr, data.data(), data.size_bytes());
+				return { std::move(dst), TransferStub{} };
+			}
 			auto stub = upload(*dst, data);
 			return { std::move(dst), stub };
 		}
@@ -377,7 +403,9 @@ namespace vuk {
 
 		TimestampQuery register_timestamp_query(Query);
 
-		void submit(Token, Domain wait_domain);
+		Token submit(Token, Domain wait_domain);
+		void wait(Token);
+		void free(Token);
 
 		template<class T>
 		void destroy(const T& t) {

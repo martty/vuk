@@ -24,9 +24,11 @@ namespace vuk {
 		enum class TokenType { eUndecided, eTimeline, eAnyDevice, eEvent, eBarrier, eOrder } token_type = TokenType::eUndecided;
 		LinearResourceAllocator* resources = nullptr; // internally may have resources bound to the token, which get freed or enqueued for deletion
 		std::unique_ptr<vuk::RenderGraph> rg;
+		TokenData* next = nullptr;
 	};
 
 	struct ContextImpl {
+		Context& ctx;
 		Allocator allocator;
 		VkDevice device;
 
@@ -60,6 +62,7 @@ namespace vuk {
 		std::array<std::vector<VkPipeline>, Context::FC> pipeline_recycle;
 		std::array<std::vector<vuk::Buffer>, Context::FC> buffer_recycle;
 		std::array<std::vector<vuk::PersistentDescriptorSet>, Context::FC> pds_recycle;
+		std::array<std::vector<LinearResourceAllocator*>, Context::FC> lra_recycle;
 
 		std::mutex named_pipelines_lock;
 		std::unordered_map<Name, vuk::PipelineBaseInfo*> named_pipelines;
@@ -78,7 +81,7 @@ namespace vuk {
 		plf::colony<LinearResourceAllocator> transient_submit_bundles;
 		std::vector<plf::colony<LinearResourceAllocator>::iterator> transient_submit_freelist;
 
-		LinearResourceAllocator* get_transient_bundle(uint32_t queue_family_index) {
+		LinearResourceAllocator* get_linear_allocator(uint32_t queue_family_index) {
 			std::lock_guard _(transient_submit_lock);
 
 			plf::colony<LinearResourceAllocator>::iterator it = transient_submit_bundles.end();
@@ -90,37 +93,42 @@ namespace vuk {
 				}
 			}
 			if (it == transient_submit_bundles.end()) { // didn't find suitable bundle
-				it = transient_submit_bundles.emplace();
+				it = transient_submit_bundles.emplace(&ctx);
 				auto& bundle = *it;
 
 				VkCommandPoolCreateInfo cpci{ .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
 				cpci.queueFamilyIndex = queue_family_index;
 				cpci.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
-				vkCreateCommandPool(device, &cpci, nullptr, &bundle.cpool);
+				assert(vkCreateCommandPool(device, &cpci, nullptr, &bundle.cpool) == VK_SUCCESS);
 			}
 			return &*it;
 		}
 
 		void cleanup_transient_bundle_recursively(vuk::LinearResourceAllocator* ur) {
-			if (ur->cpool) {
-				vkResetCommandPool(device, ur->cpool, 0);
-				vkFreeCommandBuffers(device, ur->cpool, (uint32_t)ur->command_buffers.size(), ur->command_buffers.data());
-				ur->command_buffers.clear();
-			}
-			if (ur->buffer) {
-				allocator.free_buffer(ur->buffer);
-			}
-			if (ur->fence) {
-				vkDestroyFence(device, ur->fence, nullptr);
-				ur->fence = VK_NULL_HANDLE;
+			if (ur->next) {
+				cleanup_transient_bundle_recursively(ur->next);
 			}
 			if (ur->sema) {
 				vkDestroySemaphore(device, ur->sema, nullptr);
 				ur->sema = VK_NULL_HANDLE;
 			}
-			if (ur->next) {
-				cleanup_transient_bundle_recursively(ur->next);
+			if (ur->cpool) {
+				vkResetCommandPool(device, ur->cpool, 0);
+				if (ur->command_buffers.size() > 0) {
+					vkFreeCommandBuffers(device, ur->cpool, (uint32_t)ur->command_buffers.size(), ur->command_buffers.data());
+					ur->command_buffers.clear();
+				}
 			}
+			if (ur->buffer) {
+				allocator.free_buffer(ur->buffer);
+				ur->buffer = {};
+			}
+			if (ur->fence) {
+				vkDestroyFence(device, ur->fence, nullptr);
+				ur->fence = VK_NULL_HANDLE;
+			}
+			std::lock_guard _(transient_submit_lock);
+			transient_submit_freelist.push_back(transient_submit_bundles.get_iterator_from_pointer(ur));
 		}
 
 		VkFence get_unpooled_fence() {
@@ -141,7 +149,7 @@ namespace vuk {
 			auto it = token_data.emplace();
 			auto index = token_data.get_index_from_iterator(it);
 			assert(index < USHRT_MAX);
-			auto gen = token_generation[index]++;
+			auto gen = token_generation[index];
 			return { gen << 16 | index };
 		}
 
@@ -152,7 +160,9 @@ namespace vuk {
 			return *token_data.get_iterator_from_index(index);
 		}
 
-		ContextImpl(Context& ctx) : allocator(ctx.instance, ctx.device, ctx.physical_device, ctx.graphics_queue_family_index, ctx.transfer_queue_family_index),
+		// token on kill :  token_generation[index]++
+
+		ContextImpl(Context& ctx) : ctx(ctx), allocator(ctx.instance, ctx.device, ctx.physical_device, ctx.graphics_queue_family_index, ctx.transfer_queue_family_index),
 			device(ctx.device),
 			cbuf_pools(ctx),
 			tsquery_pools(ctx),
@@ -445,7 +455,7 @@ namespace vuk {
 			semaphore_pools(ctx.impl->semaphore_pools.get_view(ifc)),
 			scratch_buffers(ifc, ctx.impl->scratch_buffers),
 			descriptor_sets(ifc, ctx.impl->descriptor_sets),
-			sampled_images(ctx.impl->sampled_images.get_view(ifc)){
+			sampled_images(ctx.impl->sampled_images.get_view(ifc)) {
 		}
 	};
 
@@ -462,6 +472,7 @@ namespace vuk {
 		std::vector<Buffer> buffer_recycle;
 		std::vector<vuk::Image> image_recycle;
 		std::vector<VkImageView> image_view_recycle;
+		std::vector<LinearResourceAllocator*> linear_allocators;
 
 		PTCImpl(InflightContext& ifc, PerThreadContext& ptc) :
 			commandbuffer_pool(ifc.impl->commandbuffer_pools.get_view(ptc)),
@@ -470,7 +481,7 @@ namespace vuk {
 			tsquery_pool(ifc.impl->tsquery_pools.get_view(ptc)),
 			sampled_images(ifc.impl->sampled_images.get_view(ptc)),
 			scratch_buffers(ptc, ifc.impl->scratch_buffers),
-			descriptor_sets(ptc, ifc.impl->descriptor_sets){
+			descriptor_sets(ptc, ifc.impl->descriptor_sets) {
 		}
 	};
 }

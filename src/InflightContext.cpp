@@ -50,6 +50,11 @@ vuk::InflightContext::InflightContext(Context& ctx, size_t absolute_frame, std::
 		ctx.impl->allocator.reset_pool(v.value);
 	}
 
+	for (auto& lra : ctx.impl->lra_recycle[frame]) {
+		ctx.impl->cleanup_transient_bundle_recursively(lra);
+	}
+	ctx.impl->lra_recycle[frame].clear();
+
 	auto ptc = begin();
 	ptc.impl->descriptor_sets.collect(Context::FC * 2);
 	ctx.impl->transient_images.collect(absolute_frame, Context::FC * 2);
@@ -119,6 +124,11 @@ void vuk::InflightContext::destroy(std::vector<VkImageView>&& images) {
 	ctx.impl->image_view_recycle[frame].insert(ctx.impl->image_view_recycle[frame].end(), images.begin(), images.end());
 }
 
+void vuk::InflightContext::destroy(std::vector<LinearResourceAllocator*>&& lras) {
+	std::lock_guard _(impl->recycle_lock);
+	ctx.impl->lra_recycle[frame].insert(ctx.impl->lra_recycle[frame].end(), lras.begin(), lras.end());
+}
+
 std::vector<vuk::SampledImage> vuk::InflightContext::get_sampled_images() {
 	std::vector<vuk::SampledImage> sis;
 	for (auto& p : impl->sampled_images.frame_values) {
@@ -131,11 +141,23 @@ std::vector<vuk::SampledImage> vuk::InflightContext::get_sampled_images() {
 
 vuk::LinearResourceAllocator vuk::LinearResourceAllocator::clone() {
 	assert(0);
-	return *ctx->impl->get_transient_bundle(0); // TODO: bogus
+	return *ctx->impl->get_linear_allocator(queue_family_index);
+	/*next = alloc;
+	return alloc;*/
 }
 
 VkFramebuffer vuk::LinearResourceAllocator::acquire_framebuffer(const vuk::FramebufferCreateInfo& fbci) {
 	return ctx->impl->framebuffer_cache.acquire(fbci);
+}
+
+VkSemaphore vuk::LinearResourceAllocator::acquire_timeline_semaphore() {
+	VkSemaphoreCreateInfo sci{ .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
+	VkSemaphoreTypeCreateInfo stci{ .sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO };
+	stci.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
+	sci.pNext = &stci;
+	VkSemaphore sema;
+	vkCreateSemaphore(ctx->device, &sci, nullptr, &sema);
+	return sema;
 }
 
 vuk::RGImage vuk::LinearResourceAllocator::acquire_rendertarget(const vuk::RGCI& rgci) {
@@ -146,9 +168,13 @@ vuk::Sampler vuk::LinearResourceAllocator::acquire_sampler(const vuk::SamplerCre
 	return ctx->impl->sampler_cache.acquire(sci);
 }
 
+VkFence vuk::LinearResourceAllocator::acquire_fence() {
+	return ctx->impl->get_unpooled_fence();
+}
+
 vuk::TimestampQuery vuk::LinearResourceAllocator::register_timestamp_query(vuk::Query handle) {
 	assert(0);
-	return {0};
+	return { 0 };
 }
 
 vuk::PipelineInfo vuk::LinearResourceAllocator::acquire_pipeline(const vuk::PipelineInstanceCreateInfo& pici) {

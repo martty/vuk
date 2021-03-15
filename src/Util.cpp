@@ -20,20 +20,31 @@ bool vuk::execute_submit_and_present_to_one(PerThreadContext& ptc, ExecutableRen
 	auto render_complete = ptc.acquire_semaphore();
 	std::vector<std::pair<SwapChainRef, size_t>> swapchains_with_indexes = { { swapchain, image_index } };
 
-	auto cb = rg.execute(ptc, swapchains_with_indexes);
+	auto cbws = rg.execute(ptc, swapchains_with_indexes);
+
+	cbws.wait_semaphores.push_back(present_rdy);
+	cbws.wait_values.push_back(0);
+	cbws.wait_stages.push_back(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
 
 	VkSubmitInfo si{ .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO };
-	si.commandBufferCount = 1;
-	si.pCommandBuffers = &cb;
+	si.commandBufferCount = cbws.command_buffers.size();
+	si.pCommandBuffers = cbws.command_buffers.data();
+	VkTimelineSemaphoreSubmitInfo tssi{ .sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO };
+
 	si.pSignalSemaphores = &render_complete;
 	si.signalSemaphoreCount = 1;
-	si.waitSemaphoreCount = 1;
-	si.pWaitSemaphores = &present_rdy;
-	VkPipelineStageFlags flags = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-	si.pWaitDstStageMask = &flags;
+	si.pWaitSemaphores = cbws.wait_semaphores.data();
+	si.waitSemaphoreCount = cbws.wait_semaphores.size();
+	si.pWaitDstStageMask = cbws.wait_stages.data();
+	tssi.pWaitSemaphoreValues = cbws.wait_values.data();
+	tssi.waitSemaphoreValueCount = cbws.wait_semaphores.size();
+	uint64_t v = 1;
+	tssi.pSignalSemaphoreValues = &v;
+	si.pNext = &tssi;
+
 	auto fence = ptc.acquire_fence();
 	ptc.ctx.submit_graphics(si, fence);
-
+	//printf("%d", image_index);
 	VkPresentInfoKHR pi{ .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
 	pi.swapchainCount = 1;
 	pi.pSwapchains = &swapchain->swapchain;
@@ -45,14 +56,14 @@ bool vuk::execute_submit_and_present_to_one(PerThreadContext& ptc, ExecutableRen
 }
 
 void vuk::execute_submit_and_wait(PerThreadContext& ptc, ExecutableRenderGraph&& rg) {
-	auto cbuf = rg.execute(ptc, {});
+	auto cbws = rg.execute(ptc, {});
 	// get an unpooled fence
 	VkFenceCreateInfo fci{ .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
 	VkFence fence;
 	vkCreateFence(ptc.ctx.device, &fci, nullptr, &fence);
 	VkSubmitInfo si{ .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO };
-	si.commandBufferCount = 1;
-	si.pCommandBuffers = &cbuf;
+	si.commandBufferCount = cbws.command_buffers.size();
+	si.pCommandBuffers = cbws.command_buffers.data();
 
 	ptc.ctx.submit_graphics(si, fence);
 	vkWaitForFences(ptc.ctx.device, 1, &fence, VK_TRUE, UINT64_MAX);

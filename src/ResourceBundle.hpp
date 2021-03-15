@@ -30,13 +30,14 @@ namespace vuk {
 			cbai.commandBufferCount = 1;
 			cbai.level = level;
 
-			vkAllocateCommandBuffers(ctx->device, &cbai, &cbuf);
+			assert(vkAllocateCommandBuffers(ctx->device, &cbai, &cbuf) == VK_SUCCESS);
 			command_buffers.push_back(cbuf);
 			return cbuf;
 		}
 
 		VkFence acquire_fence();
 		VkSemaphore acquire_semaphore();
+		VkSemaphore acquire_timeline_semaphore();
 		VkFramebuffer acquire_framebuffer(const struct FramebufferCreateInfo&);
 		VkRenderPass acquire_renderpass(const struct RenderPassCreateInfo&);
 		RGImage acquire_rendertarget(const struct RGCI&);

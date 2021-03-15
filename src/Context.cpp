@@ -56,12 +56,13 @@ void vuk::Context::DebugUtils::end_region(const VkCommandBuffer& cb) {
 
 void vuk::Context::submit_graphics(VkSubmitInfo si, VkFence fence) {
 	std::lock_guard _(impl->gfx_queue_lock);
-	vkQueueSubmit(graphics_queue, 1, &si, fence);
+	VkResult result = vkQueueSubmit(graphics_queue, 1, &si, fence);
+	assert(result == VK_SUCCESS);
 }
 
 void vuk::Context::submit_transfer(VkSubmitInfo si, VkFence fence) {
 	std::lock_guard _(impl->xfer_queue_lock);
-	vkQueueSubmit(transfer_queue, 1, &si, fence);
+	assert(vkQueueSubmit(transfer_queue, 1, &si, fence) == VK_SUCCESS);
 }
 
 void vuk::PersistentDescriptorSet::update_combined_image_sampler(PerThreadContext& ptc, unsigned binding, unsigned array_index, vuk::ImageView iv, vuk::SamplerCreateInfo sci, vuk::ImageLayout layout) {
@@ -91,10 +92,10 @@ void vuk::PersistentDescriptorSet::update_storage_image(PerThreadContext& ptc, u
 }
 
 vuk::ShaderModule vuk::Context::create(const create_info_t<vuk::ShaderModule>& cinfo) {
-	// given source is GLSL, compile it via shaderc
 #if VUK_USE_SHADERC
 	shaderc::SpvCompilationResult result;
 	if (!cinfo.source.is_spirv) {
+		// given source is GLSL, compile it via shaderc
 		shaderc::Compiler compiler;
 		shaderc::CompileOptions options;
 		options.SetTargetEnvironment(shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_1);
@@ -390,7 +391,7 @@ vuk::ShaderModule vuk::Context::compile_shader(ShaderSource source, std::string 
 }
 
 vuk::Context::TransientSubmitStub vuk::Context::fenced_upload(std::span<UploadItem> uploads, uint32_t dst_queue_family) {
-	LinearResourceAllocator* bundle = impl->get_transient_bundle(transfer_queue_family_index);
+	LinearResourceAllocator* bundle = impl->get_linear_allocator(transfer_queue_family_index);
 	LinearResourceAllocator* head_bundle = bundle;
 	VkCommandBuffer xfercbuf = bundle->acquire_command_buffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 	VkCommandBufferBeginInfo cbi{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
@@ -416,7 +417,7 @@ vuk::Context::TransientSubmitStub vuk::Context::fenced_upload(std::span<UploadIt
 	LinearResourceAllocator* dst_bundle = nullptr;
 	// image transfers will finish on the dst queue, get a bundle for them and hook it up to our transfer bundle
 	if (any_image_transfers) {
-		dst_bundle = impl->get_transient_bundle(dst_queue_family);
+		dst_bundle = impl->get_linear_allocator(dst_queue_family);
 		dst_bundle->next = bundle;
 		dstcbuf = bundle->acquire_command_buffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 		VkCommandBufferBeginInfo cbi{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
@@ -615,6 +616,9 @@ vuk::Unique<vuk::ImageView> vuk::Context::create_image_view(vuk::ImageViewCreate
 	return vuk::Unique<vuk::ImageView>(*this, wrap(iv));
 }
 
+VkRenderPass vuk::Context::acquire_renderpass(const vuk::RenderPassCreateInfo& rpci) {
+	return impl->renderpass_cache.acquire(rpci, frame_counter);
+}
 
 void vuk::Context::enqueue_destroy(vuk::Image i) {
 	std::lock_guard _(impl->recycle_locks[frame_counter % FC]);
@@ -645,12 +649,46 @@ vuk::Token vuk::Context::create_token() {
 	return impl->create_token();
 }
 
-vuk::Token vuk::Context::transition_image(vuk::Texture& t, vuk::Access src_access, vuk::Access dst_access) {
+vuk::TokenData& vuk::Context::get_token_data(Token t) {
+	return impl->get_token_data(t);
+}
+
+void vuk::TokenWithContext::operator+=(Token other) {
+	auto& data = ctx.impl->get_token_data(token);
+	assert(data.next == nullptr);
+	data.next = &ctx.impl->get_token_data(other);
+}
+
+vuk::TokenWithContext vuk::Context::transition_image(vuk::Texture& t, vuk::Access src_access, vuk::Access dst_access) {
 	Token tok = impl->create_token();
 	auto& data = impl->get_token_data(tok);
 	data.rg = std::make_unique<vuk::RenderGraph>();
 	data.rg->attach_image("_transition", ImageAttachment::from_texture(t), src_access, dst_access);
-	return tok;
+	data.state = TokenData::State::eArmed;
+	return { *this, tok };
+}
+
+vuk::TokenWithContext vuk::Context::copy_to_buffer(vuk::Buffer buffer, void* src_data, size_t size) {
+	// TODO: if host mapped, just memcpy
+	Token tok = impl->create_token();
+	auto& data = impl->get_token_data(tok);
+
+	data.resources = impl->get_linear_allocator(graphics_queue_family_index);
+
+	auto src = impl->allocator.allocate_buffer(vuk::MemoryUsage::eCPUonly, vuk::BufferUsageFlagBits::eTransferSrc, size, 1, true);
+	memcpy(src.mapped_ptr, src_data, size);
+	data.resources->buffer = src;
+
+	data.rg = std::make_unique<vuk::RenderGraph>();
+	data.rg->add_pass({
+		.resources = {"_dst"_buffer(vuk::Access::eTransferDst), "_src"_buffer(vuk::Access::eTransferSrc)},
+		.execute = [size](vuk::CommandBuffer& command_buffer) {
+			command_buffer.copy_buffer("_src", "_dst", VkBufferCopy{.size = size});
+		} });
+	data.rg->attach_buffer("_src", src, vuk::Access::eNone, vuk::Access::eNone);
+	data.rg->attach_buffer("_dst", buffer, vuk::Access::eNone, vuk::Access::eNone);
+	data.state = TokenData::State::eArmed;
+	return { *this, tok };
 }
 
 void vuk::Context::destroy(const RGImage& image) {
