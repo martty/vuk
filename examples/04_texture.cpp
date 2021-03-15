@@ -63,17 +63,19 @@ namespace {
 			auto [buboVP, _] = ptc.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eUniformBuffer, std::span(&vp, 1));
 			auto uboVP = buboVP;
 			
-			// instead of ptc.wait_all_transfers, or similar:
+			// submit work (rg) bound to t1
 			ptc.submit(t1, vuk::Domain::eHost);
-			ptc.wait(t1);
+			// to wait on host:
+			// instead of ptc.wait_all_transfers, or similar:
+			// ptc.wait(t1);
 
 			vuk::RenderGraph rg;
 
 			// Set up the pass to draw the textured cube, with a color and a depth attachment
 			rg.add_pass({
 				.resources = {"04_texture_final"_image(vuk::eColorWrite), "04_texture_depth"_image(vuk::eDepthStencilRW)},
-				// this pass waits for t1 to complete (for now the entire rg)
-				//.waits = {t1},
+				// this pass waits for t1 to complete
+				.waits = {t1},
 				.execute = [verts, uboVP, inds](vuk::CommandBuffer& command_buffer) {
 					command_buffer
 					  .set_viewport(0, vuk::Rect2D::framebuffer())
