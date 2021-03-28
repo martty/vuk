@@ -81,6 +81,7 @@ namespace vuk {
 		plf::colony<LinearResourceAllocator> transient_submit_bundles;
 		std::vector<plf::colony<LinearResourceAllocator>::iterator> transient_submit_freelist;
 
+		// TODO: split queue family from allocator
 		LinearResourceAllocator* get_linear_allocator(uint32_t queue_family_index) {
 			std::lock_guard _(transient_submit_lock);
 

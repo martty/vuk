@@ -70,7 +70,7 @@ namespace vuk {
 
 	struct Pass {
 		Name name;
-		Name executes_on;
+		vuk::Domain executes_on;
 		float auxiliary_order = 0.f;
 		bool use_secondary_command_buffers = false;
 

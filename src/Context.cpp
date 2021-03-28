@@ -668,10 +668,52 @@ vuk::TokenWithContext vuk::Context::transition_image(vuk::Texture& t, vuk::Acces
 	return { *this, tok };
 }
 
-vuk::TokenWithContext vuk::Context::copy_to_buffer(vuk::Buffer buffer, void* src_data, size_t size) {
-	// TODO: if host mapped, just memcpy
+vuk::TokenWithContext vuk::Context::copy_to_image(vuk::Image dst, vuk::Format format, vuk::Extent3D extent, uint32_t base_layer, void* src_data, size_t size) {
 	Token tok = impl->create_token();
 	auto& data = impl->get_token_data(tok);
+
+	data.resources = impl->get_linear_allocator(transfer_queue_family_index);
+
+	// compute staging buffer alignment as texel block size
+	size_t alignment = format_to_texel_block_size(format);
+	auto src = impl->allocator.allocate_buffer(vuk::MemoryUsage::eCPUonly, vuk::BufferUsageFlagBits::eTransferSrc, size, alignment, true);
+	memcpy(src.mapped_ptr, src_data, size);
+	data.resources->buffer = src;
+
+	data.rg = std::make_unique<vuk::RenderGraph>();
+
+	data.rg->add_pass({
+		.executes_on = vuk::Domain::eTransfer,
+		.resources = {"_dst"_image(vuk::Access::eTransferDst), "_src"_buffer(vuk::Access::eTransferSrc)},
+		.execute = [base_layer](vuk::CommandBuffer& command_buffer) {
+			command_buffer.copy_image_to_buffer("_src", "_dst", vuk::BufferImageCopy{.imageSubresource = {.baseArrayLayer = base_layer}});
+		}
+	});
+
+	Access src_access = vuk::eNone;
+	vuk::ImageAttachment ia;
+	ia.image = dst;
+	ia.image_view = {};
+	ia.format = format;
+	ia.extent = vuk::Extent2D(extent.width, extent.height);
+	ia.sample_count = vuk::Samples::e1;
+
+	data.rg->attach_buffer("_src", src, vuk::Access::eNone, vuk::Access::eNone);
+	data.rg->attach_image("_dst", ia, src_access, vuk::eConsume);
+	data.state = TokenData::State::eArmed;
+	return { *this, tok };
+}
+
+vuk::TokenWithContext vuk::Context::copy_to_buffer(vuk::Domain copy_domain, vuk::Buffer buffer, void* src_data, size_t size) {
+	Token tok = impl->create_token();
+	auto& data = impl->get_token_data(tok);
+
+	// host-mapped buffers just get memcpys
+	if (buffer.mapped_ptr) {
+		memcpy(buffer.mapped_ptr, src_data, size);
+		data.state = TokenData::State::eComplete;
+		return { *this, tok };
+	}
 
 	data.resources = impl->get_linear_allocator(graphics_queue_family_index);
 
@@ -681,6 +723,7 @@ vuk::TokenWithContext vuk::Context::copy_to_buffer(vuk::Buffer buffer, void* src
 
 	data.rg = std::make_unique<vuk::RenderGraph>();
 	data.rg->add_pass({
+		.executes_on = copy_domain,
 		.resources = {"_dst"_buffer(vuk::Access::eTransferDst), "_src"_buffer(vuk::Access::eTransferSrc)},
 		.execute = [size](vuk::CommandBuffer& command_buffer) {
 			command_buffer.copy_buffer("_src", "_dst", VkBufferCopy{.size = size});

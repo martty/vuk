@@ -286,6 +286,7 @@ namespace vuk {
 		void clear_image(Name src, Clear);
 		void resolve_image(Name src, Name dst);
 		void blit_image(Name src, Name dst, vuk::ImageBlit region, vuk::Filter filter);
+		void copy_buffer_to_image(Name src, Name dst, vuk::BufferImageCopy);
 		void copy_image_to_buffer(Name src, Name dst, vuk::BufferImageCopy);
 		void copy_buffer(Name src, Name dst, VkBufferCopy bic);
 

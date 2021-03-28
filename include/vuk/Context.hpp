@@ -40,9 +40,10 @@ namespace vuk {
 	enum class Domain {
 		eNone = 0,
 		eHost = 1 << 0,
-		eGeneralQueue = 1 << 1,
-		eComputeQueue = 1 << 2,
-		eTransferQueue = 1 << 3
+		eGraphics = 1 << 1,
+		eCompute = 1 << 2,
+		eTransfer = 1 << 3,
+		eDevice = eGraphics | eCompute | eTransfer
 	};
 
 	struct ContextCreateParameters {
@@ -181,7 +182,8 @@ namespace vuk {
 
 		Token create_token();
 		TokenWithContext transition_image(vuk::Texture&, vuk::Access src_access, vuk::Access dst_access);
-		TokenWithContext copy_to_buffer(vuk::Buffer buffer, void* data, size_t size);
+		TokenWithContext copy_to_buffer(vuk::Domain copy_domain, vuk::Buffer buffer, void* data, size_t size);
+		TokenWithContext copy_to_image(vuk::Image dst, vuk::Format format, vuk::Extent3D extent, uint32_t base_layer, void* data, size_t size);
 
 		/// @brief Add a swapchain to be managed by the Context
 		/// @return Reference to the new swapchain that can be used during presentation

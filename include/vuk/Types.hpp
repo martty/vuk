@@ -943,7 +943,8 @@ namespace vuk {
 		eHostRW,
 		eMemoryRead,
 		eMemoryWrite,
-		eMemoryRW
+		eMemoryRW,
+		eConsume // this access must be consumed during the compilation
 	};
 
 	// Aligns given value up to nearest multiply of align value. For example: VmaAlignUp(11, 8) = 16.

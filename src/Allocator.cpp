@@ -223,8 +223,9 @@ namespace vuk {
 		b.device_memory = std::get<VkDeviceMemory>(current_alloc);
 		b.offset = offset;
 		b.size = size;
-		b.mapped_ptr = std::get<std::byte*>(current_alloc) + offset;
-
+		
+		auto mapped = std::get<std::byte*>(current_alloc);
+		b.mapped_ptr = mapped ? mapped + offset : nullptr;
 		return b;
 	}
 

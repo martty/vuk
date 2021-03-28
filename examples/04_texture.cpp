@@ -35,7 +35,18 @@ namespace {
 			
 			auto ptc = ifc.begin();
 			// Similarly to buffers, we allocate the image and enqueue the upload
-			auto [tex, _] = ptc.create_texture(vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, doge_image, true);
+			/*vuk::ImageCreateInfo ici;
+			ici.format = vuk::Format::eR8G8B8A8Srgb;
+			ici.extent = vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u };
+			ici.samples = vuk::Samples::e1;
+			ici.imageType = vuk::ImageType::e2D;
+			ici.initialLayout = vuk::ImageLayout::eUndefined;
+			ici.tiling = vuk::ImageTiling::eOptimal;
+			ici.usage = vuk::ImageUsageFlagBits::eTransferSrc | vuk::ImageUsageFlagBits::eTransferDst | vuk::ImageUsageFlagBits::eSampled;
+			ici.mipLevels = ici.arrayLayers = 1;
+			auto tex = ptc.allocate_texture(ici);
+			auto t = ptc.ctx. */
+			auto [tex, _] = ptc.create_texture(vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, doge_image);
 			texture_of_doge = std::move(tex);
 			ptc.wait_all_transfers();
 			stbi_image_free(doge_image);
@@ -48,9 +59,9 @@ namespace {
 			auto inds = ptc.allocate_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eIndexBuffer | vuk::BufferUsageFlagBits::eTransferDst, box.second.size() * sizeof(box.second[0]), 1);
 
 			// t1 is a Token with a reference to Context to allow chaining, but the Token can be extracted
-			auto t1 = ptc.ctx.copy_to_buffer(verts, box.first.data(), box.first.size() * sizeof(box.first[0]));
+			auto t1 = ptc.ctx.copy_to_buffer(vuk::Domain::eGraphics, verts, box.first.data(), box.first.size() * sizeof(box.first[0]));
 			// += appends another token, but doesn't establish ordering
-			t1 += ptc.ctx.copy_to_buffer(inds, box.second.data(), box.second.size() * sizeof(box.second[0]));
+			t1 += ptc.ctx.copy_to_buffer(vuk::Domain::eGraphics, inds, box.second.data(), box.second.size() * sizeof(box.second[0]));
 			
 			struct VP {
 				glm::mat4 view;
@@ -65,8 +76,8 @@ namespace {
 			
 			// submit work (rg) bound to t1
 			ptc.submit(t1, vuk::Domain::eHost);
-			// to wait on host:
-			// instead of ptc.wait_all_transfers, or similar:
+			// to wait on host for the work of t1 to finish:
+			// (instead of ptc.wait_all_transfers)
 			// ptc.wait(t1);
 
 			vuk::RenderGraph rg;
