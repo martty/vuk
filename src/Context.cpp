@@ -1,17 +1,9 @@
-#if VUK_USE_SHADERC
-#include <shaderc/shaderc.hpp>
-#endif
 #include <algorithm>
-#include <fstream>
-#include <sstream>
-#include <spirv_cross.hpp>
 
 #include <vuk/Context.hpp>
 #include <ContextImpl.hpp>
 #include <vuk/RenderGraph.hpp>
 #include <vuk/CommandBuffer.hpp>
-#include <vuk/Program.hpp>
-#include <vuk/Exception.hpp>
 
 vuk::Context::Context(ContextCreateParameters params) :
 	instance(params.instance),
@@ -21,27 +13,26 @@ vuk::Context::Context(ContextCreateParameters params) :
 	graphics_queue_family_index(params.graphics_queue_family_index),
 	transfer_queue(params.transfer_queue),
 	transfer_queue_family_index(params.transfer_queue_family_index),
-	debug(*this),
 	impl(new ContextImpl(*this)) {
 }
 
-bool vuk::Context::DebugUtils::enabled() {
+bool vuk::DebugUtils::enabled() {
 	return setDebugUtilsObjectNameEXT != nullptr;
 }
 
-vuk::Context::DebugUtils::DebugUtils(Context& ctx) : ctx(ctx) {
-	setDebugUtilsObjectNameEXT = (PFN_vkSetDebugUtilsObjectNameEXT)vkGetDeviceProcAddr(ctx.device, "vkSetDebugUtilsObjectNameEXT");
-	cmdBeginDebugUtilsLabelEXT = (PFN_vkCmdBeginDebugUtilsLabelEXT)vkGetDeviceProcAddr(ctx.device, "vkCmdBeginDebugUtilsLabelEXT");
-	cmdEndDebugUtilsLabelEXT = (PFN_vkCmdEndDebugUtilsLabelEXT)vkGetDeviceProcAddr(ctx.device, "vkCmdEndDebugUtilsLabelEXT");
+vuk::DebugUtils::DebugUtils(VkDevice device) : device(device) {
+	setDebugUtilsObjectNameEXT = (PFN_vkSetDebugUtilsObjectNameEXT)vkGetDeviceProcAddr(device, "vkSetDebugUtilsObjectNameEXT");
+	cmdBeginDebugUtilsLabelEXT = (PFN_vkCmdBeginDebugUtilsLabelEXT)vkGetDeviceProcAddr(device, "vkCmdBeginDebugUtilsLabelEXT");
+	cmdEndDebugUtilsLabelEXT = (PFN_vkCmdEndDebugUtilsLabelEXT)vkGetDeviceProcAddr(device, "vkCmdEndDebugUtilsLabelEXT");
 }
 
-void vuk::Context::DebugUtils::set_name(const vuk::Texture& tex, Name name) {
+void vuk::DebugUtils::set_name(const vuk::Texture& tex, Name name) {
 	if (!enabled()) return;
 	set_name(tex.image.get(), name);
 	set_name(tex.view.get().payload, name);
 }
 
-void vuk::Context::DebugUtils::begin_region(const VkCommandBuffer& cb, Name name, std::array<float, 4> color) {
+void vuk::DebugUtils::begin_region(const VkCommandBuffer& cb, Name name, std::array<float, 4> color) {
 	if (!enabled()) return;
 	VkDebugUtilsLabelEXT label = { .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT };
 	label.pLabelName = name.c_str();
@@ -49,7 +40,7 @@ void vuk::Context::DebugUtils::begin_region(const VkCommandBuffer& cb, Name name
 	cmdBeginDebugUtilsLabelEXT(cb, &label);
 }
 
-void vuk::Context::DebugUtils::end_region(const VkCommandBuffer& cb) {
+void vuk::DebugUtils::end_region(const VkCommandBuffer& cb) {
 	if (!enabled()) return;
 	cmdEndDebugUtilsLabelEXT(cb);
 }
@@ -91,240 +82,24 @@ void vuk::PersistentDescriptorSet::update_storage_image(PerThreadContext& ptc, u
 	pending_writes.push_back(wds);
 }
 
-vuk::ShaderModule vuk::Context::create(const create_info_t<vuk::ShaderModule>& cinfo) {
-#if VUK_USE_SHADERC
-	shaderc::SpvCompilationResult result;
-	if (!cinfo.source.is_spirv) {
-		// given source is GLSL, compile it via shaderc
-		shaderc::Compiler compiler;
-		shaderc::CompileOptions options;
-		options.SetTargetEnvironment(shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_1);
-
-		result = compiler.CompileGlslToSpv(cinfo.source.as_glsl(), shaderc_glsl_infer_from_source, cinfo.filename.c_str(), options);
-
-		if (result.GetCompilationStatus() != shaderc_compilation_status_success) {
-			std::string message = result.GetErrorMessage().c_str();
-			throw ShaderCompilationException{ message };
-		}
-	}
-
-	const std::vector<uint32_t>& spirv = cinfo.source.is_spirv ? cinfo.source.data : std::vector<uint32_t>(result.cbegin(), result.cend());
-#else
-	assert(cinfo.source.is_spirv && "Shaderc not enabled (VUK_USE_SHADERC == OFF), no runtime compilation possible.");
-	const std::vector<uint32_t>& spirv = cinfo.source.data;
-#endif
-	spirv_cross::Compiler refl(spirv.data(), spirv.size());
-	vuk::Program p;
-	auto stage = p.introspect(refl);
-
-	VkShaderModuleCreateInfo moduleCreateInfo{ .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO };
-	moduleCreateInfo.codeSize = spirv.size() * sizeof(uint32_t);
-	moduleCreateInfo.pCode = spirv.data();
-	VkShaderModule sm;
-	vkCreateShaderModule(device, &moduleCreateInfo, nullptr, &sm);
-	std::string name = "ShaderModule: " + cinfo.filename;
-	debug.set_name(sm, Name(name));
-	return { sm, p, stage };
-}
-
-vuk::PipelineBaseInfo vuk::Context::create(const create_info_t<PipelineBaseInfo>& cinfo) {
-	std::vector<VkPipelineShaderStageCreateInfo> psscis;
-
-	// accumulate descriptors from all stages
-	vuk::Program accumulated_reflection;
-	std::string pipe_name = "Pipeline:";
-	for (auto i = 0; i < cinfo.shaders.size(); i++) {
-		auto contents = cinfo.shaders[i];
-		if (contents.data.empty())
-			continue;
-		auto& sm = impl->shader_modules.acquire({ contents, cinfo.shader_paths[i] });
-		VkPipelineShaderStageCreateInfo shader_stage{ .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
-		shader_stage.pSpecializationInfo = nullptr;
-		shader_stage.stage = sm.stage;
-		shader_stage.module = sm.shader_module;
-		shader_stage.pName = "main"; //TODO: make param
-		psscis.push_back(shader_stage);
-		accumulated_reflection.append(sm.reflection_info);
-		pipe_name += cinfo.shader_paths[i] + "+";
-	}
-	pipe_name = pipe_name.substr(0, pipe_name.size() - 1); //trim off last "+"
-
-	// acquire descriptor set layouts (1 per set)
-	// acquire pipeline layout
-	vuk::PipelineLayoutCreateInfo plci;
-	plci.dslcis = vuk::PipelineBaseCreateInfo::build_descriptor_layouts(accumulated_reflection, cinfo);
-	plci.pcrs.insert(plci.pcrs.begin(), accumulated_reflection.push_constant_ranges.begin(), accumulated_reflection.push_constant_ranges.end());
-	plci.plci.pushConstantRangeCount = (uint32_t)accumulated_reflection.push_constant_ranges.size();
-	plci.plci.pPushConstantRanges = accumulated_reflection.push_constant_ranges.data();
-	std::array<vuk::DescriptorSetLayoutAllocInfo, VUK_MAX_SETS> dslai;
-	std::vector<VkDescriptorSetLayout> dsls;
-	for (auto& dsl : plci.dslcis) {
-		dsl.dslci.bindingCount = (uint32_t)dsl.bindings.size();
-		dsl.dslci.pBindings = dsl.bindings.data();
-		VkDescriptorSetLayoutBindingFlagsCreateInfo dslbfci{ .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO };
-		if (dsl.flags.size() > 0) {
-			dslbfci.bindingCount = (uint32_t)dsl.bindings.size();
-			dslbfci.pBindingFlags = dsl.flags.data();
-			dsl.dslci.pNext = &dslbfci;
-		}
-		auto descset_layout_alloc_info = impl->descriptor_set_layouts.acquire(dsl);
-		dslai[dsl.index] = descset_layout_alloc_info;
-		dsls.push_back(dslai[dsl.index].layout);
-	}
-	plci.plci.pSetLayouts = dsls.data();
-	plci.plci.setLayoutCount = (uint32_t)dsls.size();
-
-	PipelineBaseInfo pbi;
-	pbi.psscis = std::move(psscis);
-	pbi.color_blend_attachments = cinfo.color_blend_attachments;
-	pbi.color_blend_state = cinfo.color_blend_state;
-	pbi.depth_stencil_state = cinfo.depth_stencil_state;
-	pbi.layout_info = dslai;
-	pbi.pipeline_layout = impl->pipeline_layouts.acquire(plci);
-	pbi.rasterization_state = cinfo.rasterization_state;
-	pbi.pipeline_name = Name(pipe_name);
-	pbi.reflection_info = accumulated_reflection;
-	pbi.binding_flags = cinfo.binding_flags;
-	pbi.variable_count_max = cinfo.variable_count_max;
-	return pbi;
-}
-
-vuk::ComputePipelineInfo vuk::Context::create(const create_info_t<vuk::ComputePipelineInfo>& cinfo) {
-	VkPipelineShaderStageCreateInfo shader_stage{ .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
-	std::string pipe_name = "Compute:";
-	auto& sm = impl->shader_modules.acquire({ cinfo.shader, cinfo.shader_path });
-	shader_stage.pSpecializationInfo = nullptr;
-	shader_stage.stage = sm.stage;
-	shader_stage.module = sm.shader_module;
-	shader_stage.pName = "main"; //TODO: make param
-	pipe_name += cinfo.shader_path;
-
-	vuk::PipelineLayoutCreateInfo plci;
-	plci.dslcis = vuk::PipelineBaseCreateInfo::build_descriptor_layouts(sm.reflection_info, cinfo);
-	plci.pcrs.insert(plci.pcrs.begin(), sm.reflection_info.push_constant_ranges.begin(), sm.reflection_info.push_constant_ranges.end());
-	plci.plci.pushConstantRangeCount = (uint32_t)sm.reflection_info.push_constant_ranges.size();
-	plci.plci.pPushConstantRanges = sm.reflection_info.push_constant_ranges.data();
-	std::array<vuk::DescriptorSetLayoutAllocInfo, VUK_MAX_SETS> dslai;
-	std::vector<VkDescriptorSetLayout> dsls;
-	for (auto& dsl : plci.dslcis) {
-		dsl.dslci.bindingCount = (uint32_t)dsl.bindings.size();
-		dsl.dslci.pBindings = dsl.bindings.data();
-		VkDescriptorSetLayoutBindingFlagsCreateInfo dslbfci{ .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO };
-		if (dsl.flags.size() > 0) {
-			dslbfci.bindingCount = (uint32_t)dsl.bindings.size();
-			dslbfci.pBindingFlags = dsl.flags.data();
-			dsl.dslci.pNext = &dslbfci;
-		}
-		auto descset_layout_alloc_info = impl->descriptor_set_layouts.acquire(dsl);
-		dslai[dsl.index] = descset_layout_alloc_info;
-		dsls.push_back(dslai[dsl.index].layout);
-	}
-	plci.plci.pSetLayouts = dsls.data();
-	plci.plci.setLayoutCount = (uint32_t)dsls.size();
-
-	VkComputePipelineCreateInfo cpci{ .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO };
-	cpci.stage = shader_stage;
-	cpci.layout = impl->pipeline_layouts.acquire(plci);
-	VkPipeline pipeline;
-	vkCreateComputePipelines(device, impl->vk_pipeline_cache, 1, &cpci, nullptr, &pipeline);
-	debug.set_name(pipeline, Name(pipe_name));
-	return { { pipeline, cpci.layout, dslai }, sm.reflection_info.local_size };
-}
-
 bool vuk::Context::load_pipeline_cache(std::span<uint8_t> data) {
 	VkPipelineCacheCreateInfo pcci{ .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO, .initialDataSize = data.size_bytes(), .pInitialData = data.data() };
-	vkDestroyPipelineCache(device, impl->vk_pipeline_cache, nullptr);
-	vkCreatePipelineCache(device, &pcci, nullptr, &impl->vk_pipeline_cache);
+	vkDestroyPipelineCache(device, vk_pipeline_cache, nullptr);
+	vkCreatePipelineCache(device, &pcci, nullptr, &vk_pipeline_cache);
 	return true;
 }
 
 std::vector<uint8_t> vuk::Context::save_pipeline_cache() {
 	size_t size;
 	std::vector<uint8_t> data;
-	vkGetPipelineCacheData(device, impl->vk_pipeline_cache, &size, nullptr);
+	vkGetPipelineCacheData(device, vk_pipeline_cache, &size, nullptr);
 	data.resize(size);
-	vkGetPipelineCacheData(device, impl->vk_pipeline_cache, &size, data.data());
+	vkGetPipelineCacheData(device, vk_pipeline_cache, &size, data.data());
 	return data;
 }
 
 vuk::Query vuk::Context::create_timestamp_query() {
 	return { impl->query_id_counter++ };
-}
-
-vuk::DescriptorSetLayoutAllocInfo vuk::Context::create(const create_info_t<vuk::DescriptorSetLayoutAllocInfo>& cinfo) {
-	vuk::DescriptorSetLayoutAllocInfo ret;
-	vkCreateDescriptorSetLayout(device, &cinfo.dslci, nullptr, &ret.layout);
-	for (size_t i = 0; i < cinfo.bindings.size(); i++) {
-		auto& b = cinfo.bindings[i];
-		// if this is not a variable count binding, add it to the descriptor count
-		if (cinfo.flags.size() <= i || !(cinfo.flags[i] & to_integral(vuk::DescriptorBindingFlagBits::eVariableDescriptorCount))) {
-			ret.descriptor_counts[to_integral(b.descriptorType)] += b.descriptorCount;
-		} else { // a variable count binding
-			ret.variable_count_binding = (uint32_t)i;
-			ret.variable_count_binding_type = vuk::DescriptorType(b.descriptorType);
-			ret.variable_count_binding_max_size = b.descriptorCount;
-		}
-	}
-	return ret;
-}
-
-VkPipelineLayout vuk::Context::create(const create_info_t<VkPipelineLayout>& cinfo) {
-	VkPipelineLayout pl;
-	vkCreatePipelineLayout(device, &cinfo.plci, nullptr, &pl);
-	return pl;
-}
-
-vuk::PipelineInfo vuk::Context::create(const create_info_t<PipelineInfo>& cinfo) {
-	// create gfx pipeline
-	VkGraphicsPipelineCreateInfo gpci = cinfo.to_vk();
-	gpci.layout = cinfo.base->pipeline_layout;
-	gpci.pStages = cinfo.base->psscis.data();
-	gpci.stageCount = (uint32_t)cinfo.base->psscis.size();
-
-	VkPipeline pipeline;
-	vkCreateGraphicsPipelines(device, impl->vk_pipeline_cache, 1, &gpci, nullptr, &pipeline);
-	debug.set_name(pipeline, cinfo.base->pipeline_name);
-	return { pipeline, gpci.layout, cinfo.base->layout_info };
-}
-
-VkRenderPass vuk::Context::create(const create_info_t<VkRenderPass>& cinfo) {
-	VkRenderPass rp;
-	vkCreateRenderPass(device, &cinfo, nullptr, &rp);
-	return rp;
-}
-
-VkFramebuffer vuk::Context::create(const create_info_t<VkFramebuffer>& cinfo) {
-	VkFramebuffer fb;
-	vkCreateFramebuffer(device, &cinfo, nullptr, &fb);
-	return fb;
-}
-
-vuk::Sampler vuk::Context::create(const create_info_t<vuk::Sampler>& cinfo) {
-	VkSampler s;
-	vkCreateSampler(device, (VkSamplerCreateInfo*)&cinfo, nullptr, &s);
-	return wrap(s);
-}
-
-vuk::DescriptorPool vuk::Context::create(const create_info_t<vuk::DescriptorPool>& cinfo) {
-	return vuk::DescriptorPool{};
-}
-
-vuk::RGImage vuk::Context::create(const create_info_t<vuk::RGImage>& cinfo) {
-	RGImage res{};
-	res.image = impl->allocator.create_image_for_rendertarget(cinfo.ici);
-	auto ivci = cinfo.ivci;
-	ivci.image = res.image;
-	std::string name = std::string("Image: RenderTarget ") + std::string(cinfo.name.to_sv());
-	debug.set_name(res.image, Name(name));
-	name = std::string("ImageView: RenderTarget ") + std::string(cinfo.name.to_sv());
-	// skip creating image views for images that can't be viewed
-	if (cinfo.ici.usage & (vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eDepthStencilAttachment | vuk::ImageUsageFlagBits::eInputAttachment | vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage)) {
-		VkImageView iv;
-		vkCreateImageView(device, (VkImageViewCreateInfo*)&ivci, nullptr, &iv);
-		res.image_view = wrap(iv);
-		debug.set_name(res.image_view.payload, Name(name));
-	}
-	return res;
 }
 
 vuk::SwapchainRef vuk::Context::add_swapchain(Swapchain sw) {
@@ -589,11 +364,12 @@ bool vuk::Context::poll_upload(LinearResourceAllocator* ur) {
 	}
 }
 
-vuk::Unique<vuk::Buffer> vuk::Context::allocate_buffer(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, size_t size, size_t alignment, bool create_mapped) {
+vuk::Unique<vuk::Buffer> vuk::Context::allocate_buffer(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, size_t size, size_t alignment) {
+	bool create_mapped = mem_usage == MemoryUsage::eCPUonly || mem_usage == MemoryUsage::eCPUtoGPU || mem_usage == MemoryUsage::eGPUtoCPU;
 	return Unique{ *this, impl->allocator.allocate_buffer(mem_usage, buffer_usage, size, alignment, create_mapped) };
 }
 
-vuk::Texture vuk::Context::allocate_texture(vuk::ImageCreateInfo ici) {
+vuk::Texture vuk::Context::allocate_texture(const vuk::ImageCreateInfo& ici) {
 	auto dst = impl->allocator.create_image(ici);
 	vuk::ImageViewCreateInfo ivci;
 	ivci.format = ici.format;
@@ -688,14 +464,14 @@ vuk::TokenWithContext vuk::Context::copy_to_image(vuk::Image dst, vuk::Format fo
 		.execute = [base_layer](vuk::CommandBuffer& command_buffer) {
 			command_buffer.copy_image_to_buffer("_src", "_dst", vuk::BufferImageCopy{.imageSubresource = {.baseArrayLayer = base_layer}});
 		}
-	});
+		});
 
 	Access src_access = vuk::eNone;
 	vuk::ImageAttachment ia;
 	ia.image = dst;
 	ia.image_view = {};
 	ia.format = format;
-	ia.extent = vuk::Extent2D(extent.width, extent.height);
+	ia.extent = vuk::Extent2D{ extent.width, extent.height };
 	ia.sample_count = vuk::Samples::e1;
 
 	data.rg->attach_buffer("_src", src, vuk::Access::eNone, vuk::Access::eNone);
@@ -734,58 +510,58 @@ vuk::TokenWithContext vuk::Context::copy_to_buffer(vuk::Domain copy_domain, vuk:
 	return { *this, tok };
 }
 
-void vuk::Context::destroy(const RGImage& image) {
+void vuk::GlobalAllocator::deallocate(const RGImage& image) {
 	vkDestroyImageView(device, image.image_view.payload, nullptr);
-	impl->allocator.destroy_image(image.image);
+	device_memory_allocator->destroy_image(image.image);
 }
 
-void vuk::Context::destroy(const PoolAllocator& v) {
-	impl->allocator.destroy(v);
+void vuk::GlobalAllocator::deallocate(const PoolAllocator& v) {
+	device_memory_allocator->destroy(v);
 }
 
-void vuk::Context::destroy(const LinearAllocator& v) {
-	impl->allocator.destroy(v);
+void vuk::GlobalAllocator::deallocate(const LinearAllocator& v) {
+	device_memory_allocator->destroy(v);
 }
 
-void vuk::Context::destroy(const vuk::DescriptorPool& dp) {
+void vuk::GlobalAllocator::deallocate(const vuk::DescriptorPool& dp) {
 	for (auto& p : dp.pools) {
 		vkDestroyDescriptorPool(device, p, nullptr);
 	}
 }
 
-void vuk::Context::destroy(const vuk::PipelineInfo& pi) {
+void vuk::GlobalAllocator::deallocate(const vuk::PipelineInfo& pi) {
 	vkDestroyPipeline(device, pi.pipeline, nullptr);
 }
 
-void vuk::Context::destroy(const vuk::ShaderModule& sm) {
+void vuk::GlobalAllocator::deallocate(const vuk::ShaderModule& sm) {
 	vkDestroyShaderModule(device, sm.shader_module, nullptr);
 }
 
-void vuk::Context::destroy(const vuk::DescriptorSetLayoutAllocInfo& ds) {
+void vuk::GlobalAllocator::deallocate(const vuk::DescriptorSetLayoutAllocInfo& ds) {
 	vkDestroyDescriptorSetLayout(device, ds.layout, nullptr);
 }
 
-void vuk::Context::destroy(const VkPipelineLayout& pl) {
+void vuk::GlobalAllocator::deallocate(const VkPipelineLayout& pl) {
 	vkDestroyPipelineLayout(device, pl, nullptr);
 }
 
-void vuk::Context::destroy(const VkRenderPass& rp) {
+void vuk::GlobalAllocator::deallocate(const VkRenderPass& rp) {
 	vkDestroyRenderPass(device, rp, nullptr);
 }
 
-void vuk::Context::destroy(const vuk::DescriptorSet&) {
+void vuk::GlobalAllocator::deallocate(const vuk::DescriptorSet&) {
 	// no-op, we destroy the pools
 }
 
-void vuk::Context::destroy(const VkFramebuffer& fb) {
+void vuk::GlobalAllocator::deallocate(const VkFramebuffer& fb) {
 	vkDestroyFramebuffer(device, fb, nullptr);
 }
 
-void vuk::Context::destroy(const vuk::Sampler& sa) {
+void vuk::GlobalAllocator::deallocate(const vuk::Sampler& sa) {
 	vkDestroySampler(device, sa.payload, nullptr);
 }
 
-void vuk::Context::destroy(const vuk::PipelineBaseInfo& pbi) {
+void vuk::GlobalAllocator::deallocate(const vuk::PipelineBaseInfo& pbi) {
 	// no-op, we don't own device objects
 }
 

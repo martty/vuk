@@ -46,6 +46,130 @@ namespace vuk {
 		eDevice = eGraphics | eCompute | eTransfer
 	};
 
+	template<class Parent_T>
+	struct NestedAllocator {
+		using Parent_Type = Parent_T;
+
+		template<class Object>
+		Object allocate(create_info_t<Object> const& ci) {
+			return parent->allocate(ci);
+		}
+		/*template<class Object>
+		std::vector<Object> allocate(std::span<create_info_t<Object>> cis) {
+			parent->allocate(cis);
+		}*/
+
+		template<class Object>
+		void deallocate(const Object& ob) {
+			parent->deallocate(ob);
+		}
+		/*template<class Object>
+		void deallocate(std::span<Object> obs) {
+			parent->deallocate(obs);
+		}*/
+
+		Parent_T* parent = nullptr;
+	};
+
+	struct BufferAllocationCreateInfo {
+		/// @brief mem_usage Determines which memory will be used.
+		MemoryUsage mem_usage; 
+		/// @param buffer_usage Set to the usage of the buffer.
+		BufferUsageFlags buffer_usage;
+		/// @param size Size of the allocation.
+		size_t size;
+		/// @param alignment Minimum alignment of the allocation.
+		size_t alignment;
+	};
+
+	struct DebugUtils {
+		VkDevice device;
+		PFN_vkSetDebugUtilsObjectNameEXT setDebugUtilsObjectNameEXT;
+		PFN_vkCmdBeginDebugUtilsLabelEXT cmdBeginDebugUtilsLabelEXT;
+		PFN_vkCmdEndDebugUtilsLabelEXT cmdEndDebugUtilsLabelEXT;
+
+		DebugUtils(VkDevice device);
+
+		bool enabled();
+		void set_name(const vuk::Texture& iv, /*zstring_view*/Name name);
+		template<class T>
+		void set_name(const T& t, /*zstring_view*/Name name);
+
+		void begin_region(const VkCommandBuffer&, Name name, std::array<float, 4> color = { 1,1,1,1 });
+		void end_region(const VkCommandBuffer&);
+	};
+
+	struct HostMemoryCreateInfo {
+		size_t size;
+	};
+
+	struct NewDeleteAllocator {
+		std::byte* allocate(size_t size) {
+			return new std::byte[size];
+		}
+		void deallocate(std::byte* ptr) {
+			delete[] ptr;
+		}
+	};
+
+	/// @brief Thread-safe, global allocator
+	template<class DevMemAllocator = DeviceMemoryAllocator, class HostMemAllocator = NewDeleteAllocator>
+	struct GlobalAllocator {
+		GlobalAllocator(VkDevice device) : device(device) {}
+
+		ShaderModule allocate(const create_info_t<ShaderModule>& cinfo);
+		PipelineBaseInfo allocate(const create_info_t<PipelineBaseInfo>& cinfo);
+		VkPipelineLayout allocate(const create_info_t<VkPipelineLayout>& cinfo);
+		DescriptorSetLayoutAllocInfo allocate(const create_info_t<DescriptorSetLayoutAllocInfo>& cinfo);
+		ComputePipelineInfo allocate(const create_info_t<ComputePipelineInfo>& cinfo);
+		PipelineInfo allocate(const create_info_t<PipelineInfo>& cinfo);
+		VkRenderPass allocate(const create_info_t<VkRenderPass>& cinfo);
+		VkFramebuffer allocate(const create_info_t<VkFramebuffer>& cinfo);
+		Sampler allocate(const create_info_t<Sampler>& cinfo);
+		DescriptorPool allocate(const create_info_t<DescriptorPool>& cinfo);
+		RGImage allocate(const create_info_t<RGImage>&);
+		/// @brief Allocate a Buffer in device-visible memory (GPU or CPU).
+		Buffer allocate(const BufferAllocationCreateInfo&);
+		Image allocate(const ImageCreateInfo&);
+		ImageView allocate(const ImageViewCreateInfo&);
+		/// @brief Allocate host memory (~malloc)
+		/// @param  Struct describing the size
+		/// @return Pointer to allocated memory
+		std::byte* allocate(const HostMemoryCreateInfo&);
+
+		void deallocate(const struct RGImage& image);
+		void deallocate(const struct PoolAllocator& v);
+		void deallocate(const struct LinearAllocator& v);
+		void deallocate(const DescriptorPool& dp);
+		void deallocate(const PipelineInfo& pi);
+		void deallocate(const ShaderModule& sm);
+		void deallocate(const DescriptorSetLayoutAllocInfo& ds);
+		void deallocate(const VkPipelineLayout& pl);
+		void deallocate(const VkRenderPass& rp);
+		void deallocate(const DescriptorSet&);
+		void deallocate(const VkFramebuffer& fb);
+		void deallocate(const Sampler& sa);
+		void deallocate(const PipelineBaseInfo& pbi);
+
+		/// @brief Create a wrapped handle type (eg. a vuk::ImageView) from an externally sourced Vulkan handle
+		/// @tparam T Vulkan handle type to wrap
+		/// @param payload Vulkan handle to wrap
+		/// @return The wrapped handle.
+		template<class T>
+		Handle<T> wrap(T payload);
+
+		VkDevice device;
+		struct DevMemAllocator* device_memory_allocator = nullptr;
+		struct HostMemAllocator* host_memory_allocator = nullptr;
+		DebugUtils* debug_utils = nullptr;
+		VkPipelineCache vk_pipeline_cache = VK_NULL_HANDLE;
+		std::atomic<uint64_t> unique_handle_id_counter = 0;
+	};
+
+	struct CachedAllocator : NestedAllocator<GlobalAllocator>{
+
+	};
+
 	struct ContextCreateParameters {
 		VkInstance instance;
 		VkDevice device;
@@ -76,23 +200,6 @@ namespace vuk {
 		Context(ContextCreateParameters params);
 		~Context();
 
-		struct DebugUtils {
-			Context& ctx;
-			PFN_vkSetDebugUtilsObjectNameEXT setDebugUtilsObjectNameEXT;
-			PFN_vkCmdBeginDebugUtilsLabelEXT cmdBeginDebugUtilsLabelEXT;
-			PFN_vkCmdEndDebugUtilsLabelEXT cmdEndDebugUtilsLabelEXT;
-
-			bool enabled();
-
-			DebugUtils(Context& ctx);
-			void set_name(const vuk::Texture& iv, /*zstring_view*/Name name);
-			template<class T>
-			void set_name(const T& t, /*zstring_view*/Name name);
-
-			void begin_region(const VkCommandBuffer&, Name name, std::array<float, 4> color = { 1,1,1,1 });
-			void end_region(const VkCommandBuffer&);
-		} debug;
-
 		void create_named_pipeline(Name name, vuk::PipelineBaseCreateInfo pbci);
 		void create_named_pipeline(Name name, vuk::ComputePipelineCreateInfo pbci);
 
@@ -106,6 +213,8 @@ namespace vuk {
 
 		bool load_pipeline_cache(std::span<uint8_t> data);
 		std::vector<uint8_t> save_pipeline_cache();
+
+		VkRenderPass acquire_renderpass(const struct RenderPassCreateInfo& rpci);
 
 		Query create_timestamp_query();
 
@@ -159,18 +268,6 @@ namespace vuk {
 		/// @param pending TransientSubmitStub object to check. 
 		bool poll_upload(TransientSubmitStub pending);
 
-		/// @brief Allocate a Buffer in device-visible memory (GPU or CPU).
-		/// @param mem_usage Determines which memory will be used.
-		/// @param buffer_usage Set to the usage of the buffer.
-		/// @param size Size of the allocation.
-		/// @param alignment Minimum alignment of the allocation.
-		/// @param create_mapped Should the memory be mapped. Should only be true for CPU-visible memory.
-		/// @return The allocated buffer in a RAII handle.
-		Unique<Buffer> allocate_buffer(MemoryUsage mem_usage, BufferUsageFlags buffer_usage, size_t size, size_t alignment, bool create_mapped);
-		Texture allocate_texture(ImageCreateInfo ici);
-		Unique<ImageView> create_image_view(ImageViewCreateInfo);
-		VkRenderPass acquire_renderpass(const struct RenderPassCreateInfo&);
-
 		/// @brief Manually request destruction of vuk::Image
 		void enqueue_destroy(vuk::Image);
 		/// @brief Manually request destruction of vuk::ImageView
@@ -179,6 +276,11 @@ namespace vuk {
 		void enqueue_destroy(vuk::Buffer);
 		/// @brief Manually request destruction of vuk::PersistentDescriptorSet
 		void enqueue_destroy(vuk::PersistentDescriptorSet);
+
+		/// @brief Allocate a Buffer in device-visible memory (GPU or CPU).
+		Unique<Buffer> allocate_buffer(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, size_t size, size_t alignment);
+		Texture allocate_texture(const ImageCreateInfo&);
+		Unique<ImageView> create_image_view(ImageViewCreateInfo);
 
 		Token create_token();
 		TokenWithContext transition_image(vuk::Texture&, vuk::Access src_access, vuk::Access dst_access);
@@ -200,46 +302,12 @@ namespace vuk {
 		/// @brief Wait for the device to become idle. Useful for only a few synchronisation events, like resizing or shutting down.
 		void wait_idle();
 
-		/// @brief Create a wrapped handle type (eg. a vuk::ImageView) from an externally sourced Vulkan handle
-		/// @tparam T Vulkan handle type to wrap
-		/// @param payload Vulkan handle to wrap
-		/// @return The wrapped handle.
-		template<class T>
-		Handle<T> wrap(T payload);
-
 		void submit_graphics(VkSubmitInfo, VkFence);
 		void submit_transfer(VkSubmitInfo, VkFence);
 	private:
 		struct ContextImpl* impl;
-		std::atomic<size_t> unique_handle_id_counter = 0;
 
 		void enqueue_destroy(VkPipeline);
-
-		void destroy(const struct RGImage& image);
-		void destroy(const struct PoolAllocator& v);
-		void destroy(const struct LinearAllocator& v);
-		void destroy(const DescriptorPool& dp);
-		void destroy(const PipelineInfo& pi);
-		void destroy(const ShaderModule& sm);
-		void destroy(const DescriptorSetLayoutAllocInfo& ds);
-		void destroy(const VkPipelineLayout& pl);
-		void destroy(const VkRenderPass& rp);
-		void destroy(const DescriptorSet&);
-		void destroy(const VkFramebuffer& fb);
-		void destroy(const Sampler& sa);
-		void destroy(const PipelineBaseInfo& pbi);
-
-		ShaderModule create(const create_info_t<ShaderModule>& cinfo);
-		PipelineBaseInfo create(const create_info_t<PipelineBaseInfo>& cinfo);
-		VkPipelineLayout create(const create_info_t<VkPipelineLayout>& cinfo);
-		DescriptorSetLayoutAllocInfo create(const create_info_t<DescriptorSetLayoutAllocInfo>& cinfo);
-		ComputePipelineInfo create(const create_info_t<ComputePipelineInfo>& cinfo);
-		PipelineInfo create(const struct PipelineInstanceCreateInfo& cinfo);
-		VkRenderPass create(const struct RenderPassCreateInfo& cinfo);
-		VkFramebuffer create(const struct FramebufferCreateInfo& cinfo);
-		Sampler create(const struct SamplerCreateInfo& cinfo);
-		DescriptorPool create(const struct DescriptorSetLayoutAllocInfo& cinfo);
-		RGImage create(const struct RGCI& cinfo);
 
 		struct TokenData& get_token_data(Token);
 
@@ -411,7 +479,7 @@ namespace vuk {
 
 		template<class T>
 		void destroy(const T& t) {
-			ctx.destroy(t);
+			//ctx.destroy(t);
 		}
 
 		void destroy(vuk::Image image);
@@ -450,7 +518,7 @@ namespace vuk {
 	};
 
 	template<class T>
-	void Context::DebugUtils::set_name(const T& t, Name name) {
+	void DebugUtils::set_name(const T& t, Name name) {
 		if (!enabled()) return;
 		VkDebugUtilsObjectNameInfoEXT info = { .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT };
 		info.pObjectName = name.c_str();
@@ -464,7 +532,12 @@ namespace vuk {
 			info.objectType = VK_OBJECT_TYPE_PIPELINE;
 		}
 		info.objectHandle = reinterpret_cast<uint64_t>(t);
-		setDebugUtilsObjectNameEXT(ctx.device, &info);
+		setDebugUtilsObjectNameEXT(device, &info);
+	}
+
+	template<class T>
+	Handle<T> GlobalAllocator::wrap(T payload) {
+		return { { unique_handle_id_counter++ }, payload };
 	}
 
 	template<typename Type>

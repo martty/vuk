@@ -16,9 +16,6 @@ namespace vuk {
 			return std::tie(name, ici, ivci) == std::tie(other.name, other.ici, other.ivci);
 		}
 	};
-	template<> struct create_info<RGImage> {
-		using type = RGCI;
-	};
 }
 
 namespace std {

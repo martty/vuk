@@ -2,6 +2,7 @@
 
 #include <vuk/Config.hpp>
 #include <vuk/Hash.hpp>
+#include <CreateInfo.hpp>
 
 namespace vuk {
 	struct HandleBase {
@@ -954,4 +955,14 @@ namespace vuk {
 	static inline T align_up(T val, T align) {
 		return (val + align - 1) / align * align;
 	}
+	
+	struct RenderPassCreateInfo;
+	template<> struct create_info<VkRenderPass> {
+		using type = RenderPassCreateInfo;
+	};
+
+	struct FramebufferCreateInfo;
+	template<> struct create_info<VkFramebuffer> {
+		using type = FramebufferCreateInfo;
+	};
 }

@@ -6,6 +6,7 @@ namespace vuk {
 	struct LinearResourceAllocator;
 
 	struct LinearResourceAllocator {
+		LinearResourceAllocator(vuk::Context* ctx) : ctx(ctx) {}
 		vuk::Context* ctx;
 		uint32_t queue_family_index;
 		VkCommandPool cpool = VK_NULL_HANDLE;

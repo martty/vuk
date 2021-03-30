@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vuk/Name.hpp>
+#include <CreateInfo.hpp>
 
 namespace vuk {
 	class Context;
@@ -12,7 +13,7 @@ namespace vuk {
 	struct Swapchain;
 	using SwapChainRef = Swapchain*;
 
-	class Allocator;
+	struct DeviceMemoryAllocator;
 
 	struct ShaderSource;
 
@@ -40,4 +41,11 @@ namespace vuk {
 	constexpr uint64_t idivceil(uint64_t a, uint64_t b) noexcept {
 		return (a + b - 1) / b;
 	}
+
+	struct RGImage;
+	struct RGCI;
+
+	template<> struct create_info<RGImage> {
+		using type = RGCI;
+	};
 }

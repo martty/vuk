@@ -15,7 +15,7 @@ util::ImGuiData util::ImGui_ImplVuk_Init(vuk::PerThreadContext& ptc) {
 	ImGuiData data;
 	auto [tex, stub] = ptc.create_texture(vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)width, (unsigned)height, 1u }, pixels);
 	data.font_texture = std::move(tex);
-	ptc.ctx.debug.set_name(data.font_texture, "ImGui/font");
+	ptc.ctx.debug_utils->set_name(data.font_texture, "ImGui/font");
 	vuk::SamplerCreateInfo sci;
 	sci.minFilter = sci.magFilter = vuk::Filter::eLinear;
 	sci.mipmapMode = vuk::SamplerMipmapMode::eLinear;

@@ -234,43 +234,43 @@ vuk::LinearAllocator vuk::PerThreadContext::create(const create_info_t<vuk::Line
 }
 
 vuk::RGImage vuk::PerThreadContext::create(const create_info_t<vuk::RGImage>& cinfo) {
-	return ctx.create(cinfo);
+	return ctx.allocate(cinfo);
 }
 
 VkRenderPass vuk::PerThreadContext::create(const create_info_t<VkRenderPass>& cinfo) {
-	return ctx.create(cinfo);
+	return ctx.allocate(cinfo);
 }
 
 vuk::ShaderModule vuk::PerThreadContext::create(const create_info_t<vuk::ShaderModule>& cinfo) {
-	return ctx.create(cinfo);
+	return ctx.allocate(cinfo);
 }
 
 vuk::PipelineBaseInfo vuk::PerThreadContext::create(const create_info_t<PipelineBaseInfo>& cinfo) {
-	return ctx.create(cinfo);
+	return ctx.allocate(cinfo);
 }
 
 vuk::PipelineInfo vuk::PerThreadContext::create(const create_info_t<PipelineInfo>& cinfo) {
-	return ctx.create(cinfo);
+	return ctx.allocate(cinfo);
 }
 
 vuk::ComputePipelineInfo vuk::PerThreadContext::create(const create_info_t<ComputePipelineInfo>& cinfo) {
-	return ctx.create(cinfo);
+	return ctx.allocate(cinfo);
 }
 
 VkFramebuffer vuk::PerThreadContext::create(const create_info_t<VkFramebuffer>& cinfo) {
-	return ctx.create(cinfo);
+	return ctx.allocate(cinfo);
 }
 
 vuk::Sampler vuk::PerThreadContext::create(const create_info_t<vuk::Sampler>& cinfo) {
-	return ctx.create(cinfo);
+	return ctx.allocate(cinfo);
 }
 
 vuk::DescriptorSetLayoutAllocInfo vuk::PerThreadContext::create(const create_info_t<vuk::DescriptorSetLayoutAllocInfo>& cinfo) {
-	return ctx.create(cinfo);
+	return ctx.allocate(cinfo);
 }
 
 VkPipelineLayout vuk::PerThreadContext::create(const create_info_t<VkPipelineLayout>& cinfo) {
-	return ctx.create(cinfo);
+	return ctx.allocate(cinfo);
 }
 
 vuk::DescriptorPool vuk::PerThreadContext::create(const create_info_t<vuk::DescriptorPool>& cinfo) {

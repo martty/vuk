@@ -176,14 +176,14 @@ namespace vuk {
 		void size_attachments(std::vector<std::pair<SwapChainRef, size_t>> swp_with_index);
 		void bind_swapchain_images(std::vector<std::pair<SwapChainRef, size_t>> swp_with_index);
 
-		template<class Allocator>
-		void create_attachment(Allocator& allocator, Name name, struct AttachmentRPInfo& attachment_info, Extent2D fb_extent, SampleCountFlagBits samples);
+		template<class DeviceMemoryAllocator>
+		void create_attachment(DeviceMemoryAllocator& allocator, Name name, struct AttachmentRPInfo& attachment_info, Extent2D fb_extent, SampleCountFlagBits samples);
 
-		template<class Allocator>
-		void bind_attachments(Allocator& allocator);
+		template<class DeviceMemoryAllocator>
+		void bind_attachments(DeviceMemoryAllocator& allocator);
 		
-		template<class Allocator>
-		SubmitInfo run_passes(Allocator& allocator);
+		template<class DeviceMemoryAllocator>
+		SubmitInfo run_passes(DeviceMemoryAllocator& allocator);
 	};
 }
 

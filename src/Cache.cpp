@@ -12,7 +12,7 @@ namespace vuk {
 		} else {
 			_.unlock();
 			std::unique_lock ulock(cache_mtx);
-			auto pit = pool.emplace(ctx.create(ci));
+			auto pit = pool.emplace(ctx.allocate(ci));
 			typename Cache::LRUEntry entry{ &*pit, current_frame };
 			it = lru_map.emplace(ci, entry).first;
 			return *it->second.ptr;
@@ -24,7 +24,7 @@ namespace vuk {
 		std::unique_lock _(cache_mtx);
 		for (auto it = lru_map.begin(); it != lru_map.end();) {
 			if (current_frame - it->second.last_use_frame > threshold) {
-				ctx.destroy(*it->second.ptr);
+				ctx.deallocate(*it->second.ptr);
 				pool.erase(pool.get_iterator_from_pointer(it->second.ptr));
 				it = lru_map.erase(it);
 			} else {
@@ -36,7 +36,7 @@ namespace vuk {
 	template<class T>
 	Cache<T>::~Cache() {
 		for (auto& v : pool) {
-			ctx.destroy(v);
+			ctx.deallocate(v);
 		}
 	}
 
@@ -55,7 +55,7 @@ namespace vuk {
 	PerFrameCache<T, FC>::~PerFrameCache() {
 		for (auto& p : data) {
 			for (auto& [k, v] : p.lru_map) {
-				ctx.destroy(v.value);
+				ctx.deallocate(v.value);
 			}
 		}
 	}

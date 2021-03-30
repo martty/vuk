@@ -3,7 +3,7 @@
 #include <numeric>
 
 namespace vuk {
-	PFN_vmaAllocateDeviceMemoryFunction Allocator::real_alloc_callback = nullptr;
+	PFN_vmaAllocateDeviceMemoryFunction DeviceMemoryAllocator::real_alloc_callback = nullptr;
 
 	std::string to_string(BufferUsageFlags value) {
 		if (!value) return "{}";
@@ -38,7 +38,7 @@ namespace vuk {
 		}
 	}
 
-	void Allocator::pool_cb(VmaAllocator allocator, uint32_t memoryType, VkDeviceMemory memory, VkDeviceSize size, void* userdata) {
+	void DeviceMemoryAllocator::pool_cb(VmaAllocator allocator, uint32_t memoryType, VkDeviceMemory memory, VkDeviceSize size, void* userdata) {
 		auto& pags = *reinterpret_cast<PoolAllocHelper*>(userdata);
 		pags.bci.size = size;
 		VkBuffer buffer;
@@ -71,7 +71,7 @@ namespace vuk {
 		}
 	}
 
-	void Allocator::noop_cb(VmaAllocator allocator, uint32_t memoryType, VkDeviceMemory memory, VkDeviceSize size, void* userdata) {
+	void DeviceMemoryAllocator::noop_cb(VmaAllocator allocator, uint32_t memoryType, VkDeviceMemory memory, VkDeviceSize size, void* userdata) {
 		auto& pags = *reinterpret_cast<PoolAllocHelper*>(userdata);
 		std::string devmem_name = "DeviceMemory (Dedicated [" + std::to_string(memoryType) + "] " + to_human_readable(size) + ")";
 		{
@@ -86,7 +86,7 @@ namespace vuk {
 
 	}
 
-	Allocator::Allocator(VkInstance instance, VkDevice device, VkPhysicalDevice phys_dev, uint32_t graphics_queue_family, uint32_t transfer_queue_family) : device(device) {
+	DeviceMemoryAllocator::DeviceMemoryAllocator(VkInstance instance, VkDevice device, VkPhysicalDevice phys_dev, uint32_t graphics_queue_family, uint32_t transfer_queue_family) : device(device) {
 		VmaAllocatorCreateInfo allocatorInfo = {};
 		allocatorInfo.instance = instance;
 		allocatorInfo.physicalDevice = phys_dev;
@@ -117,7 +117,7 @@ namespace vuk {
 
 	// not locked, must be called from a locked fn
 
-	VmaPool Allocator::_create_pool(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage) {
+	VmaPool DeviceMemoryAllocator::_create_pool(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage) {
 		VmaPoolCreateInfo poolCreateInfo = {};
 		VkBufferCreateInfo bci = { .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
 		bci.size = 1024; // Whatever.
@@ -156,7 +156,7 @@ namespace vuk {
 	}
 
 	// lock-free bump allocation if there is still space
-	Buffer Allocator::_allocate_buffer(LinearAllocator& pool, size_t size, size_t alignment, bool create_mapped) {
+	Buffer DeviceMemoryAllocator::_allocate_buffer(LinearAllocator& pool, size_t size, size_t alignment, bool create_mapped) {
 		if (size == 0) {
 			return { .buffer = VK_NULL_HANDLE, .size = 0 };
 		}
@@ -229,7 +229,7 @@ namespace vuk {
 		return b;
 	}
 
-	Buffer Allocator::_allocate_buffer(PoolAllocator& pool, size_t size, size_t alignment, bool create_mapped) {
+	Buffer DeviceMemoryAllocator::_allocate_buffer(PoolAllocator& pool, size_t size, size_t alignment, bool create_mapped) {
 		if (size == 0) {
 			return { .buffer = VK_NULL_HANDLE, .size = 0 };
 		}
@@ -275,7 +275,7 @@ namespace vuk {
 		return b;
 	}
 
-	VkMemoryRequirements Allocator::get_memory_requirements(VkBufferCreateInfo& bci) {
+	VkMemoryRequirements DeviceMemoryAllocator::get_memory_requirements(VkBufferCreateInfo& bci) {
 		VkBuffer testbuff;
 		vkCreateBuffer(device, &bci, nullptr, &testbuff);
 		VkMemoryRequirements mem_reqs;
@@ -285,7 +285,7 @@ namespace vuk {
 	}
 
 	// allocate an externally managed pool
-	PoolAllocator Allocator::allocate_pool(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage) {
+	PoolAllocator DeviceMemoryAllocator::allocate_pool(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage) {
 		std::lock_guard _(mutex);
 
 		VkBufferCreateInfo bci{ .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
@@ -302,7 +302,7 @@ namespace vuk {
 		return pi;
 	}
 
-	LinearAllocator Allocator::allocate_linear(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage) {
+	LinearAllocator DeviceMemoryAllocator::allocate_linear(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage) {
 		std::lock_guard _(mutex);
 
 		VkBufferCreateInfo bci{ .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
@@ -316,7 +316,7 @@ namespace vuk {
 	}
 
 	// allocate buffer from an internally managed pool
-	Buffer Allocator::allocate_buffer(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, size_t size, size_t alignment, bool create_mapped) {
+	Buffer DeviceMemoryAllocator::allocate_buffer(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, size_t size, size_t alignment, bool create_mapped) {
 		std::lock_guard _(mutex);
 
 		VkBufferCreateInfo bci{ .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
@@ -340,17 +340,17 @@ namespace vuk {
 	}
 
 	// allocate a buffer from an externally managed pool
-	Buffer Allocator::allocate_buffer(PoolAllocator& pool, size_t size, size_t alignment, bool create_mapped) {
+	Buffer DeviceMemoryAllocator::allocate_buffer(PoolAllocator& pool, size_t size, size_t alignment, bool create_mapped) {
 		std::lock_guard _(mutex);
 		return _allocate_buffer(pool, size, alignment, create_mapped);
 	}
 
 	// allocate a buffer from an externally managed linear pool
-	Buffer Allocator::allocate_buffer(LinearAllocator& pool, size_t size, size_t alignment, bool create_mapped) {
+	Buffer DeviceMemoryAllocator::allocate_buffer(LinearAllocator& pool, size_t size, size_t alignment, bool create_mapped) {
 		return _allocate_buffer(pool, size, alignment, create_mapped);
 	}
 
-	size_t Allocator::get_allocation_size(const Buffer& b) {
+	size_t DeviceMemoryAllocator::get_allocation_size(const Buffer& b) {
 		std::lock_guard _(mutex);
 		vuk::BufferID bufid{ reinterpret_cast<uint64_t>(b.buffer), b.offset };
 		VmaAllocationInfo vmai;
@@ -358,25 +358,25 @@ namespace vuk {
 		return buffers.at(reinterpret_cast<uint64_t>(vmai.deviceMemory)).second;
 	}
 
-	void Allocator::reset_pool(PoolAllocator& pool) {
+	void DeviceMemoryAllocator::reset_pool(PoolAllocator& pool) {
 		std::lock_guard _(mutex);
 		vmaResetPool(allocator, pool.pool);
 	}
 
-	void Allocator::reset_pool(LinearAllocator& pool) {
+	void DeviceMemoryAllocator::reset_pool(LinearAllocator& pool) {
 		std::lock_guard _(mutex);
 		pool.current_buffer = -1;
 		pool.needle = 0;
 	}
 
-	void Allocator::free_buffer(const Buffer& b) {
+	void DeviceMemoryAllocator::free_buffer(const Buffer& b) {
 		std::lock_guard _(mutex);
 		vuk::BufferID bufid{ reinterpret_cast<uint64_t>(b.buffer), b.offset };
 		vmaFreeMemory(allocator, buffer_allocations.at(bufid));
 		buffer_allocations.erase(bufid);
 	}
 
-	void Allocator::destroy(const PoolAllocator& pool) {
+	void DeviceMemoryAllocator::destroy(const PoolAllocator& pool) {
 		std::lock_guard _(mutex);
 		vmaResetPool(allocator, pool.pool);
 		vmaForceUnmapPool(allocator, pool.pool);
@@ -386,7 +386,7 @@ namespace vuk {
 		vmaDestroyPool(allocator, pool.pool);
 	}
 
-	void Allocator::destroy(const LinearAllocator& pool) {
+	void DeviceMemoryAllocator::destroy(const LinearAllocator& pool) {
 		std::lock_guard _(mutex);
 		for (auto& [va, mem, offset, buffer, map] : pool.allocations) {
 			vmaDestroyBuffer(allocator, buffer, va);
@@ -394,7 +394,7 @@ namespace vuk {
 	}
 
 
-	vuk::Image Allocator::create_image_for_rendertarget(vuk::ImageCreateInfo ici) {
+	vuk::Image DeviceMemoryAllocator::create_image_for_rendertarget(vuk::ImageCreateInfo ici) {
 		std::lock_guard _(mutex);
 		VmaAllocationCreateInfo db{};
 		db.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
@@ -411,7 +411,7 @@ namespace vuk {
 		images.emplace(reinterpret_cast<uint64_t>(vkimg), vout);
 		return vkimg;
 	}
-	vuk::Image Allocator::create_image(vuk::ImageCreateInfo ici) {
+	vuk::Image DeviceMemoryAllocator::create_image(vuk::ImageCreateInfo ici) {
 		std::lock_guard _(mutex);
 		VmaAllocationCreateInfo db{};
 		db.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
@@ -426,13 +426,13 @@ namespace vuk {
 		images.emplace(reinterpret_cast<uint64_t>(vkimg), vout);
 		return vkimg;
 	}
-	void Allocator::destroy_image(vuk::Image image) {
+	void DeviceMemoryAllocator::destroy_image(vuk::Image image) {
 		std::lock_guard _(mutex);
 		auto vkimg = (VkImage)image;
 		vmaDestroyImage(allocator, image, images.at(reinterpret_cast<uint64_t>(vkimg)));
 		images.erase(reinterpret_cast<uint64_t>(vkimg));
 	}
-	Allocator::~Allocator() {
+	DeviceMemoryAllocator::~DeviceMemoryAllocator() {
 		for (auto& [ps, p] : pools) {
 			destroy(p);
 		}

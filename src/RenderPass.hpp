@@ -58,10 +58,6 @@ namespace vuk {
 		}
 	};
 
-	template<> struct create_info<VkRenderPass> {
-		using type = vuk::RenderPassCreateInfo;
-	};
-
 	struct FramebufferCreateInfo : public VkFramebufferCreateInfo {
 		FramebufferCreateInfo() : VkFramebufferCreateInfo{.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO } {}
 		std::vector<vuk::ImageView> attachments;
@@ -71,10 +67,6 @@ namespace vuk {
 			return std::tie(flags, attachments, width, height, renderPass, layers, sample_count) ==
 				std::tie(o.flags, o.attachments, o.width, o.height, o.renderPass, o.layers, o.sample_count);
 		}
-	};
-
-	template<> struct create_info<VkFramebuffer> {
-		using type = vuk::FramebufferCreateInfo;
 	};
 }
 

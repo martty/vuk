@@ -77,7 +77,7 @@ target_sources(vuk PRIVATE
 	src/Util.cpp
 	src/Format.cpp
 	src/Name.cpp
-	)
+	 "src/CachedAllocator.cpp" "src/GlobalAllocator.cpp")
 
 target_include_directories(vuk PUBLIC ext/plf_colony)
 target_include_directories(vuk PUBLIC ext/VulkanMemoryAllocator/src)

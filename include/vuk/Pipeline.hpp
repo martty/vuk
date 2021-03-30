@@ -557,7 +557,7 @@ namespace vuk {
 
 	struct ComputePipelineCreateInfo : PipelineBaseCreateInfoBase {
 		friend class CommandBuffer;
-		friend class Context;
+		friend struct GlobalAllocator;
 	public:
 		void add_shader(ShaderSource source, std::string filename) {
 			shader = std::move(source);

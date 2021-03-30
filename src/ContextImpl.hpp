@@ -1,5 +1,6 @@
 #include "vuk/Context.hpp"
 #include "RGImage.hpp"
+#include <vuk/Types.hpp>
 
 #include <mutex>
 #include <queue>
@@ -29,7 +30,7 @@ namespace vuk {
 
 	struct ContextImpl {
 		Context& ctx;
-		Allocator allocator;
+		DeviceMemoryAllocator allocator;
 		VkDevice device;
 
 		std::mutex gfx_queue_lock;
@@ -201,11 +202,6 @@ namespace vuk {
 	}
 	inline size_t _next(size_t frame, unsigned FC) {
 		return (frame + 1) % FC;
-	}
-
-	template<class T>
-	Handle<T> Context::wrap(T payload) {
-		return { { unique_handle_id_counter++ }, payload };
 	}
 
 	struct BufferCopyCommand {
