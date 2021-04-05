@@ -375,7 +375,7 @@ inline void record_buffer_image_copy(VkCommandBuffer& cbuf, vuk::BufferImageCopy
 		
 		auto mips = (uint32_t)log2f((float)std::max(task.extent.width, task.extent.height)) + 1;
 
-		for (uint32_t miplevel = task.mip_level; miplevel < mips; miplevel++) {
+		for (uint32_t miplevel = task.mip_level + 1; miplevel < mips; miplevel++) {
 			VkImageBlit blit;
 			blit.srcSubresource.aspectMask = copy_barrier.subresourceRange.aspectMask;
 			blit.srcSubresource.baseArrayLayer = task.base_array_layer;
@@ -386,7 +386,7 @@ inline void record_buffer_image_copy(VkCommandBuffer& cbuf, vuk::BufferImageCopy
 			blit.dstSubresource = blit.srcSubresource;
 			blit.dstSubresource.mipLevel = miplevel;
 			blit.dstOffsets[0] = VkOffset3D{ 0 };
-			blit.dstOffsets[1] = VkOffset3D{ (int32_t)task.extent.width >> miplevel, (int32_t)task.extent.height >> miplevel, (int32_t)task.extent.depth };
+			blit.dstOffsets[1] = VkOffset3D{ std::max((int32_t)task.extent.width >> miplevel, 1), std::max((int32_t)task.extent.height >> miplevel, 1), (int32_t)task.extent.depth };
 			vkCmdBlitImage(cbuf, task.dst, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, task.dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
 		}
 
