@@ -120,7 +120,7 @@ namespace {
 			vuk::RenderGraph rg;
 			rg.add_pass({
 						.name = "10_preprocess",
-						.resources = {"10_doge"_image(vuk::eMemoryRead), "10_v1"_image(vuk::eTransferDst), "10_v2"_image(vuk::eComputeRead)},
+						.resources = {"10_doge"_image(vuk::eMemoryRead), "10_v1"_image(vuk::eTransferDst), "10_v2"_image(vuk::eComputeWrite)},
 						.execute = [x, y](vuk::CommandBuffer& command_buffer) {
 					// For the first image, flip the image on the Y axis using a blit
 					vuk::ImageBlit blit;
