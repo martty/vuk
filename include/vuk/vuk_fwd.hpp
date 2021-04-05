@@ -48,4 +48,10 @@ namespace vuk {
 	template<> struct create_info<RGImage> {
 		using type = RGCI;
 	};
+
+	struct SourceLocation {
+		const char* file;
+		unsigned line;
+	};
+#define VUK_HERE() SourceLocation{__FILE__, __LINE__}
 }

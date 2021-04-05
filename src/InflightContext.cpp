@@ -114,21 +114,6 @@ void vuk::InflightContext::wait_all_transfers() {
 	}
 }
 
-void vuk::InflightContext::destroy(std::vector<vuk::Image>&& images) {
-	std::lock_guard _(impl->recycle_lock);
-	ctx.impl->image_recycle[frame].insert(ctx.impl->image_recycle[frame].end(), images.begin(), images.end());
-}
-
-void vuk::InflightContext::destroy(std::vector<VkImageView>&& images) {
-	std::lock_guard _(impl->recycle_lock);
-	ctx.impl->image_view_recycle[frame].insert(ctx.impl->image_view_recycle[frame].end(), images.begin(), images.end());
-}
-
-void vuk::InflightContext::destroy(std::vector<LinearResourceAllocator*>&& lras) {
-	std::lock_guard _(impl->recycle_lock);
-	ctx.impl->lra_recycle[frame].insert(ctx.impl->lra_recycle[frame].end(), lras.begin(), lras.end());
-}
-
 std::vector<vuk::SampledImage> vuk::InflightContext::get_sampled_images() {
 	std::vector<vuk::SampledImage> sis;
 	for (auto& p : impl->sampled_images.frame_values) {

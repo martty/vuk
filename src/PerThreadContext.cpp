@@ -17,19 +17,6 @@ vuk::PerThreadContext vuk::PerThreadContext::clone() {
 	return ifc->begin();
 }
 
-void vuk::PerThreadContext::destroy(vuk::Image image) {
-	impl->image_recycle.push_back(image);
-}
-
-void vuk::PerThreadContext::destroy(vuk::ImageView image) {
-	impl->image_view_recycle.push_back(image.payload);
-}
-
-void vuk::PerThreadContext::destroy(vuk::DescriptorSet ds) {
-	// note that since we collect at integer times FC, we are releasing the DS back to the right pool
-	ctx.impl->pool_cache.acquire(ds.layout_info, ifc->absolute_frame).free_sets.enqueue(ds.descriptor_set);
-}
-
 vuk::Unique<vuk::PersistentDescriptorSet> vuk::PerThreadContext::create_persistent_descriptorset(const DescriptorSetLayoutAllocInfo& dslai, unsigned num_descriptors) {
 	vuk::PersistentDescriptorSet tda;
 	auto dsl = dslai.layout;
@@ -190,91 +177,8 @@ vuk::SampledImage& vuk::PerThreadContext::make_sampled_image(Name n, vuk::ImageV
 	return impl->sampled_images.acquire(si);
 }
 
-vuk::DescriptorSet vuk::PerThreadContext::create(const create_info_t<vuk::DescriptorSet>& cinfo) {
-	auto& pool = ctx.impl->pool_cache.acquire(cinfo.layout_info, ifc->absolute_frame);
-	auto ds = pool.acquire(*this, cinfo.layout_info);
-	auto mask = cinfo.used.to_ulong();
-	unsigned long leading_ones = num_leading_ones(mask);
-	std::array<VkWriteDescriptorSet, VUK_MAX_BINDINGS> writes = {};
-	int j = 0;
-	for (int i = 0; i < leading_ones; i++, j++) {
-		if (!cinfo.used.test(i)) {
-			j--;
-			continue;
-		}
-		auto& write = writes[j];
-		write = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
-		auto& binding = cinfo.bindings[i];
-		write.descriptorType = (VkDescriptorType)binding.type;
-		write.dstArrayElement = 0;
-		write.descriptorCount = 1;
-		write.dstBinding = i;
-		write.dstSet = ds;
-		switch (binding.type) {
-		case vuk::DescriptorType::eUniformBuffer:
-		case vuk::DescriptorType::eStorageBuffer:
-			write.pBufferInfo = &binding.buffer;
-			break;
-		case vuk::DescriptorType::eSampledImage:
-		case vuk::DescriptorType::eSampler:
-		case vuk::DescriptorType::eCombinedImageSampler:
-		case vuk::DescriptorType::eStorageImage:
-			write.pImageInfo = &binding.image.dii;
-			break;
-		default:
-			assert(0);
-		}
-	}
-	vkUpdateDescriptorSets(ctx.device, j, writes.data(), 0, nullptr);
-	return { ds, cinfo.layout_info };
-}
-
 vuk::LinearAllocator vuk::PerThreadContext::create(const create_info_t<vuk::LinearAllocator>& cinfo) {
 	return ctx.impl->allocator.allocate_linear(cinfo.mem_usage, cinfo.buffer_usage);
-}
-
-vuk::RGImage vuk::PerThreadContext::create(const create_info_t<vuk::RGImage>& cinfo) {
-	return ctx.allocate(cinfo);
-}
-
-VkRenderPass vuk::PerThreadContext::create(const create_info_t<VkRenderPass>& cinfo) {
-	return ctx.allocate(cinfo);
-}
-
-vuk::ShaderModule vuk::PerThreadContext::create(const create_info_t<vuk::ShaderModule>& cinfo) {
-	return ctx.allocate(cinfo);
-}
-
-vuk::PipelineBaseInfo vuk::PerThreadContext::create(const create_info_t<PipelineBaseInfo>& cinfo) {
-	return ctx.allocate(cinfo);
-}
-
-vuk::PipelineInfo vuk::PerThreadContext::create(const create_info_t<PipelineInfo>& cinfo) {
-	return ctx.allocate(cinfo);
-}
-
-vuk::ComputePipelineInfo vuk::PerThreadContext::create(const create_info_t<ComputePipelineInfo>& cinfo) {
-	return ctx.allocate(cinfo);
-}
-
-VkFramebuffer vuk::PerThreadContext::create(const create_info_t<VkFramebuffer>& cinfo) {
-	return ctx.allocate(cinfo);
-}
-
-vuk::Sampler vuk::PerThreadContext::create(const create_info_t<vuk::Sampler>& cinfo) {
-	return ctx.allocate(cinfo);
-}
-
-vuk::DescriptorSetLayoutAllocInfo vuk::PerThreadContext::create(const create_info_t<vuk::DescriptorSetLayoutAllocInfo>& cinfo) {
-	return ctx.allocate(cinfo);
-}
-
-VkPipelineLayout vuk::PerThreadContext::create(const create_info_t<VkPipelineLayout>& cinfo) {
-	return ctx.allocate(cinfo);
-}
-
-vuk::DescriptorPool vuk::PerThreadContext::create(const create_info_t<vuk::DescriptorPool>& cinfo) {
-	return vuk::DescriptorPool{};
 }
 
 vuk::Program vuk::PerThreadContext::get_pipeline_reflection_info(vuk::PipelineBaseCreateInfo pci) {
@@ -371,44 +275,6 @@ void vuk::PerThreadContext::free(Token token) {
 	}
 }
 
-VkFence vuk::PerThreadContext::acquire_fence() {
-	return impl->fence_pool.acquire(1)[0];
-}
-
-VkCommandBuffer vuk::PerThreadContext::acquire_command_buffer(VkCommandBufferLevel level) {
-	return impl->commandbuffer_pool.acquire(level, 1)[0];
-}
-
-VkSemaphore vuk::PerThreadContext::acquire_semaphore() {
-	return impl->semaphore_pool.acquire(1)[0];
-}
-
-VkFramebuffer vuk::PerThreadContext::acquire_framebuffer(const vuk::FramebufferCreateInfo& fbci) {
-	return ctx.impl->framebuffer_cache.acquire(fbci, ifc->absolute_frame);
-}
-
-VkRenderPass vuk::PerThreadContext::acquire_renderpass(const vuk::RenderPassCreateInfo& rpci) {
-	return ctx.impl->renderpass_cache.acquire(rpci, ifc->absolute_frame);
-}
-
-vuk::RGImage vuk::PerThreadContext::acquire_rendertarget(const vuk::RGCI& rgci) {
-	return ctx.impl->transient_images.acquire(rgci, ifc->absolute_frame);
-}
-
-vuk::Sampler vuk::PerThreadContext::acquire_sampler(const vuk::SamplerCreateInfo& sci) {
-	return ctx.impl->sampler_cache.acquire(sci);
-}
-
-vuk::DescriptorSet vuk::PerThreadContext::acquire_descriptorset(const vuk::SetBinding& sb) {
-	return impl->descriptor_sets.acquire(sb);
-}
-
-vuk::PipelineInfo vuk::PerThreadContext::acquire_pipeline(const vuk::PipelineInstanceCreateInfo& pici) {
-	return ctx.impl->pipeline_cache.acquire(pici, ifc->absolute_frame);
-}
-
 const plf::colony<vuk::SampledImage>& vuk::PerThreadContext::get_sampled_images() {
 	return impl->sampled_images.pool.values;
 }
-
-

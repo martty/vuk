@@ -46,31 +46,6 @@ namespace vuk {
 		eDevice = eGraphics | eCompute | eTransfer
 	};
 
-	template<class Parent_T>
-	struct NestedAllocator {
-		using Parent_Type = Parent_T;
-
-		template<class Object>
-		Object allocate(create_info_t<Object> const& ci) {
-			return parent->allocate(ci);
-		}
-		/*template<class Object>
-		std::vector<Object> allocate(std::span<create_info_t<Object>> cis) {
-			parent->allocate(cis);
-		}*/
-
-		template<class Object>
-		void deallocate(const Object& ob) {
-			parent->deallocate(ob);
-		}
-		/*template<class Object>
-		void deallocate(std::span<Object> obs) {
-			parent->deallocate(obs);
-		}*/
-
-		Parent_T* parent = nullptr;
-	};
-
 	struct BufferAllocationCreateInfo {
 		/// @brief mem_usage Determines which memory will be used.
 		MemoryUsage mem_usage; 
@@ -97,77 +72,6 @@ namespace vuk {
 
 		void begin_region(const VkCommandBuffer&, Name name, std::array<float, 4> color = { 1,1,1,1 });
 		void end_region(const VkCommandBuffer&);
-	};
-
-	struct HostMemoryCreateInfo {
-		size_t size;
-	};
-
-	struct NewDeleteAllocator {
-		std::byte* allocate(size_t size) {
-			return new std::byte[size];
-		}
-		void deallocate(std::byte* ptr) {
-			delete[] ptr;
-		}
-	};
-
-	/// @brief Thread-safe, global allocator
-	template<class DevMemAllocator = DeviceMemoryAllocator, class HostMemAllocator = NewDeleteAllocator>
-	struct GlobalAllocator {
-		GlobalAllocator(VkDevice device) : device(device) {}
-
-		ShaderModule allocate(const create_info_t<ShaderModule>& cinfo);
-		PipelineBaseInfo allocate(const create_info_t<PipelineBaseInfo>& cinfo);
-		VkPipelineLayout allocate(const create_info_t<VkPipelineLayout>& cinfo);
-		DescriptorSetLayoutAllocInfo allocate(const create_info_t<DescriptorSetLayoutAllocInfo>& cinfo);
-		ComputePipelineInfo allocate(const create_info_t<ComputePipelineInfo>& cinfo);
-		PipelineInfo allocate(const create_info_t<PipelineInfo>& cinfo);
-		VkRenderPass allocate(const create_info_t<VkRenderPass>& cinfo);
-		VkFramebuffer allocate(const create_info_t<VkFramebuffer>& cinfo);
-		Sampler allocate(const create_info_t<Sampler>& cinfo);
-		DescriptorPool allocate(const create_info_t<DescriptorPool>& cinfo);
-		RGImage allocate(const create_info_t<RGImage>&);
-		/// @brief Allocate a Buffer in device-visible memory (GPU or CPU).
-		Buffer allocate(const BufferAllocationCreateInfo&);
-		Image allocate(const ImageCreateInfo&);
-		ImageView allocate(const ImageViewCreateInfo&);
-		/// @brief Allocate host memory (~malloc)
-		/// @param  Struct describing the size
-		/// @return Pointer to allocated memory
-		std::byte* allocate(const HostMemoryCreateInfo&);
-
-		void deallocate(const struct RGImage& image);
-		void deallocate(const struct PoolAllocator& v);
-		void deallocate(const struct LinearAllocator& v);
-		void deallocate(const DescriptorPool& dp);
-		void deallocate(const PipelineInfo& pi);
-		void deallocate(const ShaderModule& sm);
-		void deallocate(const DescriptorSetLayoutAllocInfo& ds);
-		void deallocate(const VkPipelineLayout& pl);
-		void deallocate(const VkRenderPass& rp);
-		void deallocate(const DescriptorSet&);
-		void deallocate(const VkFramebuffer& fb);
-		void deallocate(const Sampler& sa);
-		void deallocate(const PipelineBaseInfo& pbi);
-
-		/// @brief Create a wrapped handle type (eg. a vuk::ImageView) from an externally sourced Vulkan handle
-		/// @tparam T Vulkan handle type to wrap
-		/// @param payload Vulkan handle to wrap
-		/// @return The wrapped handle.
-		template<class T>
-		Handle<T> wrap(T payload);
-
-		VkDevice device;
-		struct DevMemAllocator* device_memory_allocator = nullptr;
-		struct HostMemAllocator* host_memory_allocator = nullptr;
-		DebugUtils* debug_utils = nullptr;
-		VkPipelineCache vk_pipeline_cache = VK_NULL_HANDLE;
-		std::atomic<uint64_t> unique_handle_id_counter = 0;
-	};
-
-	struct CachedAllocator : NestedAllocator<GlobalAllocator>{
-
 	};
 
 	struct ContextCreateParameters {
@@ -268,15 +172,6 @@ namespace vuk {
 		/// @param pending TransientSubmitStub object to check. 
 		bool poll_upload(TransientSubmitStub pending);
 
-		/// @brief Manually request destruction of vuk::Image
-		void enqueue_destroy(vuk::Image);
-		/// @brief Manually request destruction of vuk::ImageView
-		void enqueue_destroy(vuk::ImageView);
-		/// @brief Manually request destruction of vuk::Buffer
-		void enqueue_destroy(vuk::Buffer);
-		/// @brief Manually request destruction of vuk::PersistentDescriptorSet
-		void enqueue_destroy(vuk::PersistentDescriptorSet);
-
 		/// @brief Allocate a Buffer in device-visible memory (GPU or CPU).
 		Unique<Buffer> allocate_buffer(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, size_t size, size_t alignment);
 		Texture allocate_texture(const ImageCreateInfo&);
@@ -306,8 +201,6 @@ namespace vuk {
 		void submit_transfer(VkSubmitInfo, VkFence);
 	private:
 		struct ContextImpl* impl;
-
-		void enqueue_destroy(VkPipeline);
 
 		struct TokenData& get_token_data(Token);
 
@@ -477,40 +370,7 @@ namespace vuk {
 		void wait(Token);
 		void free(Token);
 
-		template<class T>
-		void destroy(const T& t) {
-			//ctx.destroy(t);
-		}
-
-		void destroy(vuk::Image image);
-		void destroy(vuk::ImageView image);
-		void destroy(vuk::DescriptorSet ds);
-
-		VkFence acquire_fence();
-		VkCommandBuffer acquire_command_buffer(VkCommandBufferLevel);
-		VkSemaphore acquire_semaphore();
-		VkFramebuffer acquire_framebuffer(const struct FramebufferCreateInfo&);
-		VkRenderPass acquire_renderpass(const struct RenderPassCreateInfo&);
-		RGImage acquire_rendertarget(const struct RGCI&);
-		Sampler acquire_sampler(const SamplerCreateInfo&);
-		DescriptorSet acquire_descriptorset(const SetBinding&);
-		PipelineInfo acquire_pipeline(const PipelineInstanceCreateInfo&);
-
 		const plf::colony<SampledImage>& get_sampled_images();
-
-		PipelineBaseInfo create(const struct PipelineBaseCreateInfo& cinfo);
-		ShaderModule create(const struct ShaderModuleCreateInfo& cinfo);
-		VkRenderPass create(const struct RenderPassCreateInfo& cinfo);
-		RGImage create(const struct RGCI& cinfo);
-		LinearAllocator create(const struct PoolSelect& cinfo);
-		DescriptorPool create(const struct DescriptorSetLayoutAllocInfo& cinfo);
-		DescriptorSet create(const struct SetBinding& cinfo);
-		VkFramebuffer create(const struct FramebufferCreateInfo& cinfo);
-		Sampler create(const struct SamplerCreateInfo& cinfo);
-		DescriptorSetLayoutAllocInfo create(const struct DescriptorSetLayoutCreateInfo& cinfo);
-		VkPipelineLayout create(const struct PipelineLayoutCreateInfo& cinfo);
-		ComputePipelineInfo create(const struct ComputePipelineCreateInfo& cinfo);
-		PipelineInfo create(const struct PipelineInstanceCreateInfo& cinfo);
 	private:
 		friend class InflightContext;
 

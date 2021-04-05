@@ -396,31 +396,6 @@ VkRenderPass vuk::Context::acquire_renderpass(const vuk::RenderPassCreateInfo& r
 	return impl->renderpass_cache.acquire(rpci, frame_counter);
 }
 
-void vuk::Context::enqueue_destroy(vuk::Image i) {
-	std::lock_guard _(impl->recycle_locks[frame_counter % FC]);
-	impl->image_recycle[frame_counter % FC].push_back(i);
-}
-
-void vuk::Context::enqueue_destroy(vuk::ImageView iv) {
-	std::lock_guard _(impl->recycle_locks[frame_counter % FC]);
-	impl->image_view_recycle[frame_counter % FC].push_back(iv.payload);
-}
-
-void vuk::Context::enqueue_destroy(VkPipeline p) {
-	std::lock_guard _(impl->recycle_locks[frame_counter % FC]);
-	impl->pipeline_recycle[frame_counter % FC].push_back(p);
-}
-
-void vuk::Context::enqueue_destroy(vuk::Buffer b) {
-	std::lock_guard _(impl->recycle_locks[frame_counter % FC]);
-	impl->buffer_recycle[frame_counter % FC].push_back(b);
-}
-
-void vuk::Context::enqueue_destroy(vuk::PersistentDescriptorSet b) {
-	std::lock_guard _(impl->recycle_locks[frame_counter % FC]);
-	impl->pds_recycle[frame_counter % FC].push_back(std::move(b));
-}
-
 vuk::Token vuk::Context::create_token() {
 	return impl->create_token();
 }
@@ -508,61 +483,6 @@ vuk::TokenWithContext vuk::Context::copy_to_buffer(vuk::Domain copy_domain, vuk:
 	data.rg->attach_buffer("_dst", buffer, vuk::Access::eNone, vuk::Access::eNone);
 	data.state = TokenData::State::eArmed;
 	return { *this, tok };
-}
-
-void vuk::GlobalAllocator::deallocate(const RGImage& image) {
-	vkDestroyImageView(device, image.image_view.payload, nullptr);
-	device_memory_allocator->destroy_image(image.image);
-}
-
-void vuk::GlobalAllocator::deallocate(const PoolAllocator& v) {
-	device_memory_allocator->destroy(v);
-}
-
-void vuk::GlobalAllocator::deallocate(const LinearAllocator& v) {
-	device_memory_allocator->destroy(v);
-}
-
-void vuk::GlobalAllocator::deallocate(const vuk::DescriptorPool& dp) {
-	for (auto& p : dp.pools) {
-		vkDestroyDescriptorPool(device, p, nullptr);
-	}
-}
-
-void vuk::GlobalAllocator::deallocate(const vuk::PipelineInfo& pi) {
-	vkDestroyPipeline(device, pi.pipeline, nullptr);
-}
-
-void vuk::GlobalAllocator::deallocate(const vuk::ShaderModule& sm) {
-	vkDestroyShaderModule(device, sm.shader_module, nullptr);
-}
-
-void vuk::GlobalAllocator::deallocate(const vuk::DescriptorSetLayoutAllocInfo& ds) {
-	vkDestroyDescriptorSetLayout(device, ds.layout, nullptr);
-}
-
-void vuk::GlobalAllocator::deallocate(const VkPipelineLayout& pl) {
-	vkDestroyPipelineLayout(device, pl, nullptr);
-}
-
-void vuk::GlobalAllocator::deallocate(const VkRenderPass& rp) {
-	vkDestroyRenderPass(device, rp, nullptr);
-}
-
-void vuk::GlobalAllocator::deallocate(const vuk::DescriptorSet&) {
-	// no-op, we destroy the pools
-}
-
-void vuk::GlobalAllocator::deallocate(const VkFramebuffer& fb) {
-	vkDestroyFramebuffer(device, fb, nullptr);
-}
-
-void vuk::GlobalAllocator::deallocate(const vuk::Sampler& sa) {
-	vkDestroySampler(device, sa.payload, nullptr);
-}
-
-void vuk::GlobalAllocator::deallocate(const vuk::PipelineBaseInfo& pbi) {
-	// no-op, we don't own device objects
 }
 
 vuk::Context::~Context() {

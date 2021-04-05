@@ -39,31 +39,27 @@ namespace vuk {
 		Pool<TimestampQuery, Context::FC> tsquery_pools;
 		Pool<VkSemaphore, Context::FC> semaphore_pools;
 		Pool<VkFence, Context::FC> fence_pools;
-		VkPipelineCache vk_pipeline_cache;
+		Pool<vuk::SampledImage, Context::FC> sampled_images;
+		PerFrameCache<LinearAllocator, Context::FC> scratch_buffers;
+		PerFrameCache<vuk::DescriptorSet, Context::FC> descriptor_sets;
+
 		Cache<PipelineBaseInfo> pipelinebase_cache;
 		Cache<PipelineInfo> pipeline_cache;
 		Cache<ComputePipelineInfo> compute_pipeline_cache;
 		Cache<VkRenderPass> renderpass_cache;
 		Cache<VkFramebuffer> framebuffer_cache;
 		Cache<RGImage> transient_images;
-		PerFrameCache<LinearAllocator, Context::FC> scratch_buffers;
+		
+		
 		Cache<vuk::DescriptorPool> pool_cache;
-		PerFrameCache<vuk::DescriptorSet, Context::FC> descriptor_sets;
 		Cache<vuk::Sampler> sampler_cache;
-		Pool<vuk::SampledImage, Context::FC> sampled_images;
 		Cache<vuk::ShaderModule> shader_modules;
 		Cache<vuk::DescriptorSetLayoutAllocInfo> descriptor_set_layouts;
 		Cache<VkPipelineLayout> pipeline_layouts;
 
-		std::mutex begin_frame_lock;
+		VkPipelineCache vk_pipeline_cache;
 
-		std::array<std::mutex, Context::FC> recycle_locks;
-		std::array<std::vector<vuk::Image>, Context::FC> image_recycle;
-		std::array<std::vector<VkImageView>, Context::FC> image_view_recycle;
-		std::array<std::vector<VkPipeline>, Context::FC> pipeline_recycle;
-		std::array<std::vector<vuk::Buffer>, Context::FC> buffer_recycle;
-		std::array<std::vector<vuk::PersistentDescriptorSet>, Context::FC> pds_recycle;
-		std::array<std::vector<LinearResourceAllocator*>, Context::FC> lra_recycle;
+		std::mutex begin_frame_lock;
 
 		std::mutex named_pipelines_lock;
 		std::unordered_map<Name, vuk::PipelineBaseInfo*> named_pipelines;
@@ -230,16 +226,6 @@ namespace vuk {
 		uint32_t base_mip_level;
 		TransferStub stub;
 	};
-
-	template<class T, size_t FC>
-	typename Pool<T, FC>::PFView Pool<T, FC>::get_view(InflightContext& ctx) {
-		return { ctx, *this, per_frame_storage[ctx.frame] };
-	}
-
-	template<class T, size_t FC>
-	Pool<T, FC>::PFView::PFView(InflightContext& ifc, Pool<T, FC>& storage, plf::colony<PooledType<T>>& fv) : storage(storage), ifc(ifc), frame_values(fv) {
-		storage.reset(ifc.frame);
-	}
 }
 
 inline void record_mip_gen(VkCommandBuffer& cbuf, vuk::MipGenerateCommand& task, vuk::ImageLayout last_layout) {

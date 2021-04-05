@@ -165,29 +165,6 @@ namespace std {
 		}
 	};
 
-	/*	template <>
-		struct hash<VkGraphicsPipelineCreateInfo> {
-			size_t operator()(VkGraphicsPipelineCreateInfo const & x) const noexcept {
-				size_t h = 0;
-				hash_combine(h, x.flags, std::span(x.pStages, x.stageCount));
-				if (x.pVertexInputState) hash_combine(h, *x.pVertexInputState);
-				if (x.pInputAssemblyState) hash_combine(h, *x.pInputAssemblyState);
-				if (x.pTessellationState) hash_combine(h, *x.pTessellationState);
-				if (x.pViewportState) hash_combine(h, *x.pViewportState);
-				if (x.pMultisampleState) hash_combine(h, *x.pMultisampleState);
-				if (x.pDepthStencilState) hash_combine(h, *x.pDepthStencilState);
-				if (x.pColorBlendState) hash_combine(h, *x.pColorBlendState);
-				if (x.pDynamicState) hash_combine(h, *x.pDynamicState);
-				hash_combine(h,
-					reinterpret_cast<uint64_t>((VkPipelineLayout)x.layout),
-					reinterpret_cast<uint64_t>((VkRenderPass)x.renderPass),
-					x.subpass,
-					reinterpret_cast<uint64_t>((VkPipeline)x.basePipelineHandle),
-					x.basePipelineIndex);
-				return h;
-			}
-		};*/
-
 	template <>
 	struct hash<VkAttachmentDescription> {
 		size_t operator()(VkAttachmentDescription const& x) const noexcept {
@@ -264,20 +241,22 @@ namespace std {
 };
 
 namespace vuk {
+	struct GlobalAllocator;
+
 	template<class T>
 	class Cache {
 	private:
 		struct LRUEntry {
 			T* ptr;
-			size_t last_use_frame;
+			uint64_t last_use_frame;
 		};
 
-		Context& ctx;
+		GlobalAllocator& ga;
 		plf::colony<T> pool;
 		robin_hood::unordered_map<create_info_t<T>, LRUEntry> lru_map; // possibly vector_map or an intrusive map
 		std::shared_mutex cache_mtx;
 	public:
-		Cache(Context& ctx) : ctx(ctx) {}
+		Cache(GlobalAllocator& ga) : ga(ga) {}
 		~Cache();
 
 		std::optional<T> remove(const create_info_t<T>& ci) {
@@ -332,6 +311,15 @@ namespace vuk {
 		void collect(uint64_t current_frame, uint64_t threshold);
 	};
 
+	template<class T>
+	struct PFCPerFrame {
+		robin_hood::unordered_map<create_info_t<T>, LRUEntry> lru_map;
+		std::array<std::vector<T>, 32> per_thread_append_v;
+		std::array<std::vector<create_info_t<T>>, 32> per_thread_append_k;
+
+		std::mutex cache_mtx;
+	};
+
 	template<class T, size_t FC>
 	class PerFrameCache {
 	private:
@@ -341,35 +329,28 @@ namespace vuk {
 			size_t last_use_frame;
 		};
 
-		Context& ctx;
-		struct PerFrame {
-			robin_hood::unordered_map<create_info_t<T>, LRUEntry> lru_map;
-			std::array<std::vector<T>, 32> per_thread_append_v;
-			std::array<std::vector<create_info_t<T>>, 32> per_thread_append_k;
-
-			std::mutex cache_mtx;
-		};
-		std::array<PerFrame, FC> data;
+		GlobalAllocator& ga;
+		std::array<PFCPerFrame, FC> data;
 
 	public:
-		PerFrameCache(Context& ctx) : ctx(ctx) {}
+		PerFrameCache(GlobalAllocator& ga) : ga(ga) {}
 		~PerFrameCache();
+	};
 
-		struct PFView {
-			InflightContext& ifc;
-			PerFrameCache& cache;
+	template<class T>
+	struct PerFrameCacheView {
+		PFCPerFrame<T>& cache;
 
-			PFView(InflightContext& ifc, PerFrameCache& cache);
-		};
+		template<size_t FC>
+		PerFrameCacheView(PerFrameCache<T, FC>& cache, unsigned frame) : cache(cache.data[frame]) {}
+	};
 
-		struct PFPTView {
-			PerThreadContext& ptc;
-			PFView& view;
+	template<class T>
+	struct PTPerFrameCacheView {
+		PerFrameCacheView<T>& view;
 
-			PFPTView(PerThreadContext& ptc, PFView& view) : ptc(ptc), view(view) {}
-			T& acquire(const create_info_t<T>& ci);
-			void collect(size_t threshold);
-		};
-
+		PFPTView(PerFrameCacheView<T>& view) : view(view) {}
+		T& acquire(GlobalAllocator& ga, const create_info_t<T>& ci);
+		void collect(GlobalAllocator& ga, size_t threshold);
 	};
 }
