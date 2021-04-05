@@ -332,20 +332,20 @@ inline void record_buffer_image_copy(VkCommandBuffer& cbuf, vuk::BufferImageCopy
 	copy_barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
 
 	// transition top mip to transfersrc
-	VkImageMemoryBarrier top_mip_to_barrier = { .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
-	top_mip_to_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-	top_mip_to_barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-	top_mip_to_barrier.oldLayout = (VkImageLayout)vuk::ImageLayout::eTransferDstOptimal;
-	top_mip_to_barrier.newLayout = (VkImageLayout)vuk::ImageLayout::eTransferSrcOptimal;
-	top_mip_to_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	top_mip_to_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	top_mip_to_barrier.image = task.dst;
-	top_mip_to_barrier.subresourceRange = copy_barrier.subresourceRange;
-	top_mip_to_barrier.subresourceRange.levelCount = 1;
+	VkImageMemoryBarrier mip_to_src_barrier = { .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+	mip_to_src_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+	mip_to_src_barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+	mip_to_src_barrier.oldLayout = (VkImageLayout)vuk::ImageLayout::eTransferDstOptimal;
+	mip_to_src_barrier.newLayout = (VkImageLayout)vuk::ImageLayout::eTransferSrcOptimal;
+	mip_to_src_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	mip_to_src_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	mip_to_src_barrier.image = task.dst;
+	mip_to_src_barrier.subresourceRange = copy_barrier.subresourceRange;
+	mip_to_src_barrier.subresourceRange.levelCount = 1;
 
 	// transition top mip to SROO
 	VkImageMemoryBarrier top_mip_use_barrier = { .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
-	top_mip_use_barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+	top_mip_use_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 	top_mip_use_barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 	top_mip_use_barrier.oldLayout = task.generate_mips ? (VkImageLayout)vuk::ImageLayout::eTransferSrcOptimal : (VkImageLayout)vuk::ImageLayout::eTransferDstOptimal;
 	top_mip_use_barrier.newLayout = (VkImageLayout)vuk::ImageLayout::eShaderReadOnlyOptimal;
@@ -359,7 +359,7 @@ inline void record_buffer_image_copy(VkCommandBuffer& cbuf, vuk::BufferImageCopy
 	VkImageMemoryBarrier use_barrier = { .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };;
 	use_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 	use_barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-	use_barrier.oldLayout = (VkImageLayout)vuk::ImageLayout::eTransferDstOptimal;
+	use_barrier.oldLayout = (VkImageLayout)vuk::ImageLayout::eTransferSrcOptimal;
 	use_barrier.newLayout = (VkImageLayout)vuk::ImageLayout::eShaderReadOnlyOptimal;
 	use_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 	use_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -371,23 +371,27 @@ inline void record_buffer_image_copy(VkCommandBuffer& cbuf, vuk::BufferImageCopy
 	vkCmdPipelineBarrier(cbuf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &copy_barrier);
 	vkCmdCopyBufferToImage(cbuf, task.src.buffer, task.dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bc);
 	if (task.generate_mips) {
-		vkCmdPipelineBarrier(cbuf, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &top_mip_to_barrier);
+		vkCmdPipelineBarrier(cbuf, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &mip_to_src_barrier);
 		
 		auto mips = (uint32_t)log2f((float)std::max(task.extent.width, task.extent.height)) + 1;
 
 		for (uint32_t miplevel = task.mip_level + 1; miplevel < mips; miplevel++) {
+			uint32_t dmiplevel = miplevel - task.mip_level;
 			VkImageBlit blit;
 			blit.srcSubresource.aspectMask = copy_barrier.subresourceRange.aspectMask;
 			blit.srcSubresource.baseArrayLayer = task.base_array_layer;
 			blit.srcSubresource.layerCount = task.layer_count;
-			blit.srcSubresource.mipLevel = task.mip_level;
+			blit.srcSubresource.mipLevel = miplevel - 1;
 			blit.srcOffsets[0] = VkOffset3D{ 0 };
-			blit.srcOffsets[1] = VkOffset3D{ (int32_t)task.extent.width, (int32_t)task.extent.height, (int32_t)task.extent.depth };
+			blit.srcOffsets[1] = VkOffset3D{ std::max((int32_t)task.extent.width >> (dmiplevel - 1), 1), std::max((int32_t)task.extent.height >> (dmiplevel - 1), 1), (int32_t)task.extent.depth };
 			blit.dstSubresource = blit.srcSubresource;
 			blit.dstSubresource.mipLevel = miplevel;
 			blit.dstOffsets[0] = VkOffset3D{ 0 };
-			blit.dstOffsets[1] = VkOffset3D{ std::max((int32_t)task.extent.width >> miplevel, 1), std::max((int32_t)task.extent.height >> miplevel, 1), (int32_t)task.extent.depth };
+			blit.dstOffsets[1] = VkOffset3D{ std::max((int32_t)task.extent.width >> dmiplevel, 1), std::max((int32_t)task.extent.height >> dmiplevel, 1), (int32_t)task.extent.depth };
 			vkCmdBlitImage(cbuf, task.dst, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, task.dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
+
+			mip_to_src_barrier.subresourceRange.baseMipLevel = miplevel;
+			vkCmdPipelineBarrier(cbuf, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &mip_to_src_barrier);
 		}
 
 		vkCmdPipelineBarrier(cbuf, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &use_barrier);

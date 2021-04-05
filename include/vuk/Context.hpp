@@ -306,7 +306,7 @@ namespace vuk {
 		}
 
 		vuk::Texture allocate_texture(vuk::ImageCreateInfo);
-		std::pair<vuk::Texture, TransferStub> create_texture(vuk::Format format, vuk::Extent3D extents, void* data);
+		std::pair<vuk::Texture, TransferStub> create_texture(vuk::Format format, vuk::Extent3D extents, void* data, bool generate_mips = false);
 		Unique<ImageView> create_image_view(vuk::ImageViewCreateInfo);
 
 		template<class T>
