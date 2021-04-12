@@ -313,6 +313,11 @@ namespace vuk {
 
 	template<class T>
 	struct PFCPerFrame {
+		struct LRUEntry {
+			T value;
+			size_t last_use_frame;
+		};
+
 		robin_hood::unordered_map<create_info_t<T>, LRUEntry> lru_map;
 		std::array<std::vector<T>, 32> per_thread_append_v;
 		std::array<std::vector<create_info_t<T>>, 32> per_thread_append_k;
@@ -320,37 +325,26 @@ namespace vuk {
 		std::mutex cache_mtx;
 	};
 
-	template<class T, size_t FC>
-	class PerFrameCache {
+	template<class T>
+	struct PerFrameCache {
 	private:
-		friend class InflightContext;
-		struct LRUEntry {
-			T value;
-			size_t last_use_frame;
-		};
-
+		size_t FC;
 		GlobalAllocator& ga;
-		std::array<PFCPerFrame, FC> data;
-
+		std::unique_ptr<PFCPerFrame<T>[]> data;
+		template<class U> friend struct PerFrameCacheView;
 	public:
-		PerFrameCache(GlobalAllocator& ga) : ga(ga) {}
+		PerFrameCache(GlobalAllocator& ga, size_t FC);
 		~PerFrameCache();
 	};
 
 	template<class T>
 	struct PerFrameCacheView {
 		PFCPerFrame<T>& cache;
+		uint64_t absolute_frame;
 
-		template<size_t FC>
-		PerFrameCacheView(PerFrameCache<T, FC>& cache, unsigned frame) : cache(cache.data[frame]) {}
-	};
+		PerFrameCacheView(PerFrameCache<T>& cache, uint64_t absolute_frame, unsigned frame) : cache(cache.data[frame]), absolute_frame(absolute_frame) {}
 
-	template<class T>
-	struct PTPerFrameCacheView {
-		PerFrameCacheView<T>& view;
-
-		PFPTView(PerFrameCacheView<T>& view) : view(view) {}
-		T& acquire(GlobalAllocator& ga, const create_info_t<T>& ci);
+		T& acquire(GlobalAllocator& ga, const create_info_t<T>& ci, unsigned tid);
 		void collect(GlobalAllocator& ga, size_t threshold);
 	};
 }

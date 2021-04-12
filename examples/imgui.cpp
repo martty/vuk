@@ -1,9 +1,12 @@
 #include "utils.hpp"
-#include "vuk/Context.hpp"
-#include "vuk/CommandBuffer.hpp"
-#include "vuk/RenderGraph.hpp"
+#include <vuk/Context.hpp>
+#include <vuk/GlobalAllocator.hpp>
+#include <vuk/FrameAllocator.hpp>
+#include <vuk/CommandBuffer.hpp>
+#include <vuk/RenderGraph.hpp>
+#include <vuk/Partials.hpp>
 
-util::ImGuiData util::ImGui_ImplVuk_Init(vuk::PerThreadContext& ptc) {
+util::ImGuiData util::ImGui_ImplVuk_Init(vuk::GlobalAllocator& ga) {
 	auto& io = ImGui::GetIO();
 	io.BackendRendererName = "imgui_impl_vuk";
 	io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;  // We can honor the ImDrawCmd::VtxOffset field, allowing for large meshes.
@@ -13,9 +16,9 @@ util::ImGuiData util::ImGui_ImplVuk_Init(vuk::PerThreadContext& ptc) {
 	io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
 
 	ImGuiData data;
-	auto [tex, stub] = ptc.create_texture(vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)width, (unsigned)height, 1u }, pixels);
+	auto [tex, tok] = ga.create_texture(vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)width, (unsigned)height, 1u }, pixels, false, 0, VUK_HERE());
 	data.font_texture = std::move(tex);
-	ptc.ctx.debug_utils->set_name(data.font_texture, "ImGui/font");
+	ga.debug_utils->set_name(data.font_texture, "ImGui/font");
 	vuk::SamplerCreateInfo sci;
 	sci.minFilter = sci.magFilter = vuk::Filter::eLinear;
 	sci.mipmapMode = vuk::SamplerMipmapMode::eLinear;
@@ -32,13 +35,13 @@ util::ImGuiData util::ImGui_ImplVuk_Init(vuk::PerThreadContext& ptc) {
 		auto fcont = util::read_spirv(fpath);
 		pci.add_spirv(fcont, fpath);
 		pci.set_blend(vuk::BlendPreset::eAlphaBlend);
-		ptc.ctx.create_named_pipeline("imgui", pci);
+		ga.ctx.create_named_pipeline("imgui", ga.allocate_pipeline_base(pci, 0, VUK_HERE()));
 	}
-	ptc.wait_all_transfers();
+	ga.ctx.wait(ga, tok);
 	return data;
 }
 
-void util::ImGui_ImplVuk_Render(vuk::PerThreadContext& ptc, vuk::RenderGraph& rg, vuk::Name src_target, vuk::Name dst_target, util::ImGuiData& data, ImDrawData* draw_data) {
+void util::ImGui_ImplVuk_Render(vuk::ThreadLocalFrameAllocator& fa, vuk::RenderGraph& rg, vuk::Name src_target, vuk::Name dst_target, util::ImGuiData& data, ImDrawData* draw_data) {
 	auto reset_render_state = [](const util::ImGuiData& data, vuk::CommandBuffer& command_buffer, ImDrawData* draw_data, vuk::Buffer vertex, vuk::Buffer index) {
 		command_buffer.bind_sampled_image(0, 0, *data.font_texture.view, data.font_sci);
 		if (index.size > 0) {
@@ -60,24 +63,25 @@ void util::ImGui_ImplVuk_Render(vuk::PerThreadContext& ptc, vuk::RenderGraph& rg
 
 	size_t vertex_size = draw_data->TotalVtxCount * sizeof(ImDrawVert);
 	size_t index_size = draw_data->TotalIdxCount * sizeof(ImDrawIdx);
-	auto imvert = ptc.allocate_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eVertexBuffer | vuk::BufferUsageFlagBits::eTransferDst, vertex_size, 1);
-	auto imind = ptc.allocate_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eIndexBuffer | vuk::BufferUsageFlagBits::eTransferDst, index_size, 1);
+	vuk::Buffer imvert = fa.allocate_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eVertexBuffer | vuk::BufferUsageFlagBits::eTransferDst, vertex_size, 1);
+	vuk::Buffer imind = fa.allocate_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eIndexBuffer | vuk::BufferUsageFlagBits::eTransferDst, index_size, 1);
 
 	size_t vtx_dst = 0, idx_dst = 0;
+	vuk::TokenWithContext t{ fa.ctx, fa.allocate_token() };
 	for (int n = 0; n < draw_data->CmdListsCount; n++) {
 		const ImDrawList* cmd_list = draw_data->CmdLists[n];
-		auto imverto = imvert;
+		auto imverto = imvert; // TODO: with add_offset
 		imverto.offset += vtx_dst * sizeof(ImDrawVert);
 		auto imindo = imind;
 		imindo.offset += idx_dst * sizeof(ImDrawIdx);
 
-		ptc.upload(imverto, std::span(cmd_list->VtxBuffer.Data, cmd_list->VtxBuffer.Size));
-		ptc.upload(imindo, std::span(cmd_list->IdxBuffer.Data, cmd_list->IdxBuffer.Size));
+		t += vuk::copy_to_buffer(fa, vuk::Domain::eGraphics, imverto, std::span(cmd_list->VtxBuffer.Data, cmd_list->VtxBuffer.Size));
+		t += vuk::copy_to_buffer(fa, vuk::Domain::eGraphics, imindo, std::span(cmd_list->IdxBuffer.Data, cmd_list->IdxBuffer.Size));
 		vtx_dst += cmd_list->VtxBuffer.Size;
 		idx_dst += cmd_list->IdxBuffer.Size;
 	}
-
-	ptc.wait_all_transfers();
+	
+	fa.ctx.wait(fa, fa.ctx.submit(fa, t, vuk::Domain::eHost));
 	vuk::Pass pass{
 		.name = "imgui",
 		.resources = { vuk::Resource{dst_target, vuk::Resource::Type::eImage, vuk::eColorRW} },
@@ -153,11 +157,11 @@ void util::ImGui_ImplVuk_Render(vuk::PerThreadContext& ptc, vuk::RenderGraph& rg
 
 	// add rendergraph dependencies to be transitioned
 	// make all rendergraph sampled images available
-	for (auto& si : ptc.get_sampled_images()) {
+	/*for (auto& si : ptc.get_sampled_images()) {
 		if (!si.is_global) {
 			pass.resources.push_back(vuk::Resource(si.rg_attachment.attachment_name, vuk::Resource::Type::eImage, vuk::Access::eFragmentSampled));
 		}
-	}
+	}*/
 
 	rg.add_pass(std::move(pass));
 	rg.add_alias(dst_target, src_target);

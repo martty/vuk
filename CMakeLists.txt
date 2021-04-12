@@ -79,7 +79,7 @@ target_sources(vuk PRIVATE
 	src/Name.cpp
 	src/FrameAllocator.cpp
 	src/GlobalAllocator.cpp
-)
+ "include/vuk/Partials.hpp" "include/vuk/Allocator.hpp")
 
 target_include_directories(vuk PUBLIC ext/plf_colony)
 target_include_directories(vuk PUBLIC ext/VulkanMemoryAllocator/src)

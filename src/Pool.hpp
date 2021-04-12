@@ -55,14 +55,14 @@ namespace vuk {
 		void free(GlobalAllocator&);
 	};
 
-	template<class T, size_t FC>
+	template<class T>
 	struct Pool {
 		std::mutex lock;
 		plf::colony<PooledType<T>> store;
-		std::array<plf::colony<PooledType<T>>, FC> per_frame_storage;
-		Context& ctx;
+		std::vector<plf::colony<PooledType<T>>> per_frame_storage;
+		GlobalAllocator& ga;
 
-		Pool(Context& ctx) : ctx(ctx) {}
+		Pool(GlobalAllocator& ga, size_t FC) : per_frame_storage(FC), ga(ga) {}
 
 		PooledType<T>* acquire_one_into(plf::colony<PooledType<T>>& dst) {
 			std::lock_guard _(lock);
@@ -72,14 +72,14 @@ namespace vuk {
 				store.erase(--store.end());
 				return &*new_it;
 			} else {
-				return &*dst.emplace(PooledType<T>(ctx));
+				return &*dst.emplace(PooledType<T>(ga));
 			}
 		}
 
 		void reset(unsigned frame) {
 			std::lock_guard _(lock);
 			for (auto& t : per_frame_storage[frame]) {
-				t.reset(ctx);
+				t.reset(ga);
 			}
 			store.splice(per_frame_storage[frame]);
 		}
@@ -88,11 +88,11 @@ namespace vuk {
 			// return all to pool
 			for (auto& pf : per_frame_storage) {
 				for (auto& s : pf) {
-					s.free(ctx);
+					s.free(ga);
 				}
 			}
 			for (auto& s : store) {
-				s.free(ctx);
+				s.free(ga);
 			}
 		}
 	};
@@ -100,39 +100,33 @@ namespace vuk {
 	template<class T>
 	struct PoolView {
 		std::mutex lock;
+		GlobalAllocator& ga;
 		plf::colony<PooledType<T>>& frame_values;
 		unsigned frame;
-		void* storage;
-		PooledType<T>&(*allocate_fn)(void*, plf::colony<PooledType<T>>&);
-
-		template<size_t FC>
-		PoolView(Pool<T, FC>& st, plf::colony<PooledType<T>>& fv, unsigned frame) : frame(frame), storage(&st), frame_values(st.per_frame_storage[frame]) {
-			allocate_fn = [](void* st, plf::colony<PooledType<T>>& fv) {
-				auto& storage = *reinterpret_cast<Pool<T, FC>>(st);
-				return *storage.acquire_one_into(fv);
-			}
-		}
+		Pool<T>& storage;
+		
+		PoolView(Pool<T>& st, unsigned frame) : ga(st.ga), frame_values(st.per_frame_storage[frame]), frame(frame), storage(st) {}
 
 		void reset() {
-			st.reset(frame);
+			storage.reset(frame);
 		}
 
 		PooledType<T>& allocate_thread() {
 			std::lock_guard _(lock);
-			return *allocate_fn(storage, frame_values);
-		}
+			return *storage.acquire_one_into(frame_values);
+		};
 	};
 
 	template<class T>
 	struct PTPoolView {
 		PooledType<T>& pool;
-		GlobalAllocator& global_allocator;
+		GlobalAllocator& ga;
 
-		PTPoolView(PoolView<T>& pool_view) : pool(pool_view.allocate_thread()) {}
+		PTPoolView(PoolView<T>& pool_view) : pool(pool_view.allocate_thread()), ga(pool_view.ga) {}
 
 		template<class... Args>
 		decltype(auto) allocate(Args&&... args) {
-			return pool.acquire(global_allocator, std::forward<Args>(args)...);
+			return pool.acquire(ga, std::forward<Args>(args)...);
 		}
 
 		void deallocate(T value) {

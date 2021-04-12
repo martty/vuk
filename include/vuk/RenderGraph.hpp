@@ -113,17 +113,17 @@ namespace vuk {
 		/// @param ms_name 
 		void resolve_resource_into(Name resolved_name, Name ms_name);
 
-		void attach_swapchain(Name, SwapchainRef swp, Clear);
+		void attach_swapchain(Name, Swapchain& swp, Clear);
 		void attach_buffer(Name, Buffer, Access initial, Access final);
 		void attach_image(Name, ImageAttachment, Access initial, Access final);
 
 		void attach_managed(Name, Format, Dimension2D, Samples, Clear);
 
 		/// @brief Consume this RenderGraph and create an ExecutableRenderGraph
-		struct ExecutableRenderGraph link(Context&)&&;
+		struct ExecutableRenderGraph link()&&;
 
 		// reflection functions
- 
+
 		/// @brief Build the graph, assign framebuffers, renderpasses and subpasses
 		///	link automatically calls this, only needed if you want to use the reflection functions
 		void compile();
@@ -162,8 +162,8 @@ namespace vuk {
 		ExecutableRenderGraph(ExecutableRenderGraph&&) noexcept;
 		ExecutableRenderGraph& operator=(ExecutableRenderGraph&&) noexcept;
 
-		SubmitInfo execute(PerThreadContext&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
-		SubmitInfo execute(LinearResourceAllocator& bundle, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
+		SubmitInfo execute(struct ThreadLocalFrameAllocator&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
+		SubmitInfo execute(LinearResourceAllocator<Allocator>& bundle, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
 
 		struct BufferInfo get_resource_buffer(Name);
 		struct AttachmentRPInfo get_resource_image(Name);
@@ -173,17 +173,17 @@ namespace vuk {
 		struct RGImpl* impl;
 
 		void fill_renderpass_info(struct RenderPassInfo& rpass, const size_t& i, class CommandBuffer& cobuf);
-		void size_attachments(std::vector<std::pair<SwapChainRef, size_t>> swp_with_index);
-		void bind_swapchain_images(std::vector<std::pair<SwapChainRef, size_t>> swp_with_index);
+		void size_attachments(std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
+		void bind_swapchain_images(std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
 
-		template<class DeviceMemoryAllocator>
-		void create_attachment(DeviceMemoryAllocator& allocator, Name name, struct AttachmentRPInfo& attachment_info, Extent2D fb_extent, SampleCountFlagBits samples);
+		template<class Allocator>
+		void create_attachment(Allocator& allocator, Name name, struct AttachmentRPInfo& attachment_info, Extent2D fb_extent, SampleCountFlagBits samples);
 
-		template<class DeviceMemoryAllocator>
-		void bind_attachments(DeviceMemoryAllocator& allocator);
-		
-		template<class DeviceMemoryAllocator>
-		SubmitInfo run_passes(DeviceMemoryAllocator& allocator);
+		template<class Allocator>
+		void bind_attachments(Allocator& allocator);
+
+		template<class Allocator>
+		SubmitInfo run_passes(Allocator& allocator);
 	};
 }
 

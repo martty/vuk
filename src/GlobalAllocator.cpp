@@ -1,5 +1,6 @@
 #include <vuk/Context.hpp>
 #include <vuk/GlobalAllocator.hpp>
+#include <vuk/Partials.hpp>
 #include <Cache.hpp>
 #include <Allocator.hpp>
 
@@ -15,15 +16,6 @@
 #include <spirv_cross.hpp>
 
 namespace vuk {
-	struct SemaphoreCreateInfo {};
-
-	GlobalAllocator::GlobalAllocator(Context& ctx) :
-		device_memory_allocator(new DeviceMemoryAllocator(ctx.instance, ctx.device, ctx.physical_device, ctx.graphics_queue_family_index, ctx.transfer_queue_family_index))
-
-	{
-
-	}
-
 	struct GlobalAllocatorImpl {
 		GlobalAllocator& ga;
 		VkDevice device;
@@ -41,7 +33,7 @@ namespace vuk {
 			sampler_cache(ga),
 			shader_modules(ga),
 			descriptor_set_layouts(ga),
-			pipeline_layouts(ga) 		{
+			pipeline_layouts(ga) {
 
 		}
 
@@ -59,16 +51,28 @@ namespace vuk {
 		Cache<VkPipelineLayout> pipeline_layouts;
 	};
 
-	VkFence GlobalAllocator::allocate_fence(uint64_t absolute_frame, SourceLocation) {
-		return create(create_info_t<VkFence>{});
+	GlobalAllocator::GlobalAllocator(Context& ctx) : Allocator(ctx),
+		device_memory_allocator(new DeviceMemoryAllocator(ctx.instance, ctx.device, ctx.physical_device, ctx.graphics_queue_family_index, ctx.transfer_queue_family_index)), device(ctx.device), debug_utils(new DebugUtils(device)) {
+		impl = new GlobalAllocatorImpl(*this);
+		VkPipelineCacheCreateInfo pcci{ .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO };
+		vkCreatePipelineCache(ctx.device, &pcci, nullptr, &vk_pipeline_cache);
+		vkGetPhysicalDeviceProperties(ctx.physical_device, &ctx.physical_device_properties);
 	}
 
-	VkCommandBuffer GlobalAllocator::allocate_command_buffer(VkCommandBufferLevel level, uint64_t absolute_frame, SourceLocation) {
-		return impl->commandbuffer_pool.acquire(level, 1)[0];
+	VkFence GlobalAllocator::allocate_fence(uint64_t absolute_frame, SourceLocation) {
+		return create(FenceCreateInfo{}, absolute_frame);
+	}
+
+	VkCommandBuffer GlobalAllocator::allocate_command_buffer(const CommandBufferCreateInfo& cinfo, uint64_t absolute_frame, SourceLocation) {
+		return create(cinfo, absolute_frame);
 	}
 
 	VkSemaphore GlobalAllocator::allocate_semaphore(uint64_t absolute_frame, SourceLocation) {
-		return create(SemaphoreCreateInfo{});
+		return create(SemaphoreCreateInfo{}, absolute_frame);
+	}
+
+	VkSemaphore GlobalAllocator::allocate_timeline_semaphore(uint64_t initial_value, uint64_t absolute_frame, SourceLocation) {
+		return create(SemaphoreCreateInfo{ .timeline = true, .initial_value = initial_value }, absolute_frame);
 	}
 
 	VkFramebuffer GlobalAllocator::allocate_framebuffer(const vuk::FramebufferCreateInfo& fbci, uint64_t absolute_frame, SourceLocation) {
@@ -88,14 +92,18 @@ namespace vuk {
 	}
 
 	vuk::DescriptorSet GlobalAllocator::allocate_descriptorset(const vuk::SetBinding& sb, uint64_t absolute_frame, SourceLocation) {
-		return create(sb);
+		return create(sb, absolute_frame);
 	}
 
 	vuk::PipelineInfo GlobalAllocator::allocate_pipeline(const vuk::PipelineInstanceCreateInfo& pici, uint64_t absolute_frame, SourceLocation) {
 		return impl->pipeline_cache.acquire(pici, absolute_frame);
 	}
 
-	RGImage GlobalAllocator::create(const create_info_t<RGImage>& cinfo) {
+	PipelineBaseInfo& GlobalAllocator::allocate_pipeline_base(const PipelineBaseCreateInfo& pbci, uint64_t absolute_frame, SourceLocation) {
+		return impl->pipelinebase_cache.acquire(pbci, absolute_frame);
+	}
+
+	RGImage GlobalAllocator::create(const create_info_t<RGImage>& cinfo, uint64_t absolute_frame) {
 		RGImage res{};
 		res.image = device_memory_allocator->create_image_for_rendertarget(cinfo.ici);
 		auto ivci = cinfo.ivci;
@@ -126,17 +134,37 @@ namespace vuk {
 		device_memory_allocator->destroy(v);
 	}
 
-	VkSemaphore GlobalAllocator::create(const create_info_t<VkSemaphore>& cinfo) {
-		VkSemaphoreCreateInfo sci{ .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
-		VkSemaphoreTypeCreateInfo stci{ .sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO };
-		stci.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
-		sci.pNext = &stci;
+	void GlobalAllocator::destroy(const Buffer& buffer) {
+		// TODO: zombie list
+	}
+
+	VkFence GlobalAllocator::create(const FenceCreateInfo& cinfo, uint64_t absolute_frame) {
+		VkFence fence;
+		VkFenceCreateInfo fci{ .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
+		vkCreateFence(device, &fci, nullptr, &fence);
+		return fence;
+	}
+
+	VkSemaphore GlobalAllocator::create(const SemaphoreCreateInfo& cinfo, uint64_t absolute_frame) {
 		VkSemaphore sema;
+		VkSemaphoreCreateInfo sci{ .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
+		if (cinfo.timeline) {
+			VkSemaphoreTypeCreateInfo stci{ .sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO };
+			stci.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
+			stci.initialValue = cinfo.initial_value;
+			sci.pNext = &stci;
+		}
 		vkCreateSemaphore(device, &sci, nullptr, &sema);
 		return sema;
 	}
 
-	ShaderModule GlobalAllocator::create(const create_info_t<ShaderModule>& cinfo) {
+	VkCommandBuffer GlobalAllocator::create(const CommandBufferCreateInfo& cinfo, uint64_t absolute_frame) {
+		// TODO:
+		assert(0);
+		return VK_NULL_HANDLE;
+	}
+
+	ShaderModule GlobalAllocator::create(const create_info_t<ShaderModule>& cinfo, uint64_t absolute_frame) {
 #if VUK_USE_SHADERC
 		shaderc::SpvCompilationResult result;
 		if (!cinfo.source.is_spirv) {
@@ -172,7 +200,7 @@ namespace vuk {
 		return { sm, p, stage };
 	}
 
-	PipelineBaseInfo GlobalAllocator::create(const create_info_t<PipelineBaseInfo>& cinfo) {
+	PipelineBaseInfo GlobalAllocator::create(const create_info_t<PipelineBaseInfo>& cinfo, uint64_t absolute_frame) {
 		std::vector<VkPipelineShaderStageCreateInfo> psscis;
 
 		// accumulate descriptors from all stages
@@ -182,7 +210,7 @@ namespace vuk {
 			auto contents = cinfo.shaders[i];
 			if (contents.data.empty())
 				continue;
-			auto sm = create(ShaderModuleCreateInfo{ contents, cinfo.shader_paths[i] });
+			auto sm = create(ShaderModuleCreateInfo{ contents, cinfo.shader_paths[i] }, absolute_frame);
 			VkPipelineShaderStageCreateInfo shader_stage{ .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
 			shader_stage.pSpecializationInfo = nullptr;
 			shader_stage.stage = sm.stage;
@@ -212,7 +240,7 @@ namespace vuk {
 				dslbfci.pBindingFlags = dsl.flags.data();
 				dsl.dslci.pNext = &dslbfci;
 			}
-			auto descset_layout_alloc_info = create(dsl);
+			auto descset_layout_alloc_info = create(dsl, absolute_frame);
 			dslai[dsl.index] = descset_layout_alloc_info;
 			dsls.push_back(dslai[dsl.index].layout);
 		}
@@ -225,7 +253,7 @@ namespace vuk {
 		pbi.color_blend_state = cinfo.color_blend_state;
 		pbi.depth_stencil_state = cinfo.depth_stencil_state;
 		pbi.layout_info = dslai;
-		pbi.pipeline_layout = create(plci);
+		pbi.pipeline_layout = create(plci, absolute_frame);
 		pbi.rasterization_state = cinfo.rasterization_state;
 		pbi.pipeline_name = Name(pipe_name);
 		pbi.reflection_info = accumulated_reflection;
@@ -234,10 +262,10 @@ namespace vuk {
 		return pbi;
 	}
 
-	ComputePipelineInfo GlobalAllocator::create(const create_info_t<ComputePipelineInfo>& cinfo) {
+	ComputePipelineInfo GlobalAllocator::create(const create_info_t<ComputePipelineInfo>& cinfo, uint64_t absolute_frame) {
 		VkPipelineShaderStageCreateInfo shader_stage{ .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
 		std::string pipe_name = "Compute:";
-		auto sm = create(ShaderModuleCreateInfo{ cinfo.shader, cinfo.shader_path });
+		auto sm = create(ShaderModuleCreateInfo{ cinfo.shader, cinfo.shader_path }, absolute_frame);
 		shader_stage.pSpecializationInfo = nullptr;
 		shader_stage.stage = sm.stage;
 		shader_stage.module = sm.shader_module;
@@ -260,7 +288,7 @@ namespace vuk {
 				dslbfci.pBindingFlags = dsl.flags.data();
 				dsl.dslci.pNext = &dslbfci;
 			}
-			auto descset_layout_alloc_info = create(dsl);
+			auto descset_layout_alloc_info = create(dsl, absolute_frame);
 			dslai[dsl.index] = descset_layout_alloc_info;
 			dsls.push_back(dslai[dsl.index].layout);
 		}
@@ -269,14 +297,14 @@ namespace vuk {
 
 		VkComputePipelineCreateInfo cpci{ .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO };
 		cpci.stage = shader_stage;
-		cpci.layout = create(plci);
+		cpci.layout = create(plci, absolute_frame);
 		VkPipeline pipeline;
 		vkCreateComputePipelines(device, vk_pipeline_cache, 1, &cpci, nullptr, &pipeline);
 		debug_utils->set_name(pipeline, Name(pipe_name));
 		return { { pipeline, cpci.layout, dslai }, sm.reflection_info.local_size };
 	}
 
-	PipelineInfo GlobalAllocator::create(const create_info_t<PipelineInfo>& cinfo) {
+	PipelineInfo GlobalAllocator::create(const create_info_t<PipelineInfo>& cinfo, uint64_t absolute_frame) {
 		// create gfx pipeline
 		VkGraphicsPipelineCreateInfo gpci = cinfo.to_vk();
 		gpci.layout = cinfo.base->pipeline_layout;
@@ -289,25 +317,25 @@ namespace vuk {
 		return { pipeline, gpci.layout, cinfo.base->layout_info };
 	}
 
-	VkRenderPass GlobalAllocator::create(const create_info_t<VkRenderPass>& cinfo) {
+	VkRenderPass GlobalAllocator::create(const create_info_t<VkRenderPass>& cinfo, uint64_t absolute_frame) {
 		VkRenderPass rp;
 		vkCreateRenderPass(device, &cinfo, nullptr, &rp);
 		return rp;
 	}
 
-	VkFramebuffer GlobalAllocator::create(const create_info_t<VkFramebuffer>& cinfo) {
+	VkFramebuffer GlobalAllocator::create(const create_info_t<VkFramebuffer>& cinfo, uint64_t absolute_frame) {
 		VkFramebuffer fb;
 		vkCreateFramebuffer(device, &cinfo, nullptr, &fb);
 		return fb;
 	}
 
-	Sampler GlobalAllocator::create(const create_info_t<Sampler>& cinfo) {
+	Sampler GlobalAllocator::create(const create_info_t<Sampler>& cinfo, uint64_t absolute_frame) {
 		VkSampler s;
 		vkCreateSampler(device, (VkSamplerCreateInfo*)&cinfo, nullptr, &s);
 		return wrap(s);
 	}
 
-	DescriptorSetLayoutAllocInfo GlobalAllocator::create(const create_info_t<DescriptorSetLayoutAllocInfo>& cinfo) {
+	DescriptorSetLayoutAllocInfo GlobalAllocator::create(const create_info_t<DescriptorSetLayoutAllocInfo>& cinfo, uint64_t absolute_frame) {
 		DescriptorSetLayoutAllocInfo ret;
 		vkCreateDescriptorSetLayout(device, &cinfo.dslci, nullptr, &ret.layout);
 		for (size_t i = 0; i < cinfo.bindings.size(); i++) {
@@ -324,17 +352,17 @@ namespace vuk {
 		return ret;
 	}
 
-	VkPipelineLayout GlobalAllocator::create(const create_info_t<VkPipelineLayout>& cinfo) {
+	VkPipelineLayout GlobalAllocator::create(const create_info_t<VkPipelineLayout>& cinfo, uint64_t absolute_frame) {
 		VkPipelineLayout pl;
 		vkCreatePipelineLayout(device, &cinfo.plci, nullptr, &pl);
 		return pl;
 	}
 
-	DescriptorPool GlobalAllocator::create(const create_info_t<DescriptorPool>& cinfo) {
+	DescriptorPool GlobalAllocator::create(const create_info_t<DescriptorPool>& cinfo, uint64_t absolute_frame) {
 		return DescriptorPool{};
 	}
 
-	vuk::DescriptorSet GlobalAllocator::create(const create_info_t<vuk::DescriptorSet>& cinfo, uint64_t absolute_frame){
+	vuk::DescriptorSet GlobalAllocator::create(const create_info_t<vuk::DescriptorSet>& cinfo, uint64_t absolute_frame) {
 		auto& pool = impl->pool_cache.acquire(cinfo.layout_info, absolute_frame);
 		auto ds = pool.acquire(*this, cinfo.layout_info);
 		auto mask = cinfo.used.to_ulong();
@@ -371,6 +399,16 @@ namespace vuk {
 		}
 		vkUpdateDescriptorSets(device, j, writes.data(), 0, nullptr);
 		return { ds, cinfo.layout_info };
+	}
+
+	ImageView GlobalAllocator::create(const ImageViewCreateInfo& ivci, uint64_t absolute_frame) {
+		VkImageView iv;
+		vkCreateImageView(device, (VkImageViewCreateInfo*)&ivci, nullptr, &iv);
+		return wrap(iv);
+	}
+
+	LinearAllocator GlobalAllocator::create(const create_info_t<struct LinearAllocator>& cinfo, uint64_t absolute_frame) {
+		return device_memory_allocator->allocate_linear(cinfo.mem_usage, cinfo.buffer_usage);
 	}
 
 	void GlobalAllocator::destroy(const DescriptorPool& dp) {
@@ -413,5 +451,116 @@ namespace vuk {
 
 	void GlobalAllocator::destroy(const PipelineBaseInfo& pbi) {
 		// no-op, we don't own device objects
+	}
+
+	void GlobalAllocator::destroy(Image image) {
+		device_memory_allocator->destroy_image(image);
+	}
+
+	void GlobalAllocator::destroy(ImageView image) {
+		vkDestroyImageView(device, image.payload, nullptr);
+	}
+
+	void GlobalAllocator::load_pipeline_cache(std::span<std::byte> data) {
+		VkPipelineCacheCreateInfo pcci{ .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO, .initialDataSize = data.size_bytes(), .pInitialData = data.data() };
+		vkDestroyPipelineCache(device, vk_pipeline_cache, nullptr);
+		vkCreatePipelineCache(device, &pcci, nullptr, &vk_pipeline_cache);
+	}
+
+	std::vector<std::byte> GlobalAllocator::save_pipeline_cache() {
+		size_t size;
+		std::vector<std::byte> data;
+		vkGetPipelineCacheData(device, vk_pipeline_cache, &size, nullptr);
+		data.resize(size);
+		vkGetPipelineCacheData(device, vk_pipeline_cache, &size, data.data());
+		return data;
+	}
+	/*
+	vuk::ShaderModule vuk::Context::compile_shader(ShaderSource source, std::string path) {
+		vuk::ShaderModuleCreateInfo sci;
+		sci.filename = std::move(path);
+		sci.source = std::move(source);
+		auto sm = impl->shader_modules.remove(sci);
+		if (sm) {
+			vkDestroyShaderModule(device, sm->shader_module, nullptr);
+		}
+		return impl->shader_modules.acquire(sci);
+	}*/
+
+	Unique<Buffer> GlobalAllocator::allocate_buffer(const BufferAllocationCreateInfo& baci, uint64_t absolute_frame, SourceLocation) {
+		bool create_mapped = baci.mem_usage == MemoryUsage::eCPUonly || baci.mem_usage == MemoryUsage::eCPUtoGPU || baci.mem_usage == MemoryUsage::eGPUtoCPU;
+		return Unique{ *this, device_memory_allocator->allocate_buffer(baci.mem_usage, baci.buffer_usage, baci.size, baci.alignment, create_mapped) };
+	}
+
+	Unique<Image> GlobalAllocator::allocate_image(const struct ImageCreateInfo& ici, uint64_t absolute_frame, SourceLocation) {
+		return Unique{ *this, device_memory_allocator->create_image(ici) };
+	}
+	Unique<ImageView> GlobalAllocator::allocate_image_view(const struct ImageViewCreateInfo& ivci, uint64_t absolute_frame, SourceLocation) {
+		return Unique{ *this, create(ivci, absolute_frame) };
+	}
+
+	Token GlobalAllocator::allocate_token() {
+		return ctx.create_token();
+	}
+
+	std::pair<Texture, Token> GlobalAllocator::create_texture(vuk::Format format, vuk::Extent3D extent, void* data, bool generate_mips, uint64_t absolute_frame, SourceLocation) {
+		vuk::ImageCreateInfo ici;
+		ici.format = format;
+		ici.extent = extent;
+		ici.samples = vuk::Samples::e1;
+		ici.imageType = vuk::ImageType::e2D;
+		ici.initialLayout = vuk::ImageLayout::eUndefined;
+		ici.tiling = vuk::ImageTiling::eOptimal;
+		ici.usage = vuk::ImageUsageFlagBits::eTransferSrc | vuk::ImageUsageFlagBits::eTransferDst | vuk::ImageUsageFlagBits::eSampled;
+		ici.mipLevels = generate_mips ? (uint32_t)log2f((float)std::max(extent.width, extent.height)) + 1 : 1;
+		ici.arrayLayers = 1;
+		auto tex = allocate_texture(ici, absolute_frame, VUK_HERE());
+		auto tok = vuk::copy_to_image(*this, *tex.image, format, extent, 0, data, compute_image_size(format, extent));
+		ctx.submit(*this, tok.token, vuk::Domain::eAny);
+		return { std::move(tex), tok.token };
+	}
+
+	Texture GlobalAllocator::allocate_texture(const vuk::ImageCreateInfo& ici, uint64_t absolute_frame, SourceLocation) {
+		auto dst = allocate_image(ici, absolute_frame, VUK_HERE()).release();
+		vuk::ImageViewCreateInfo ivci;
+		ivci.format = ici.format;
+		ivci.image = dst;
+		ivci.subresourceRange.aspectMask = format_to_aspect(ici.format);
+		ivci.subresourceRange.baseArrayLayer = 0;
+		ivci.subresourceRange.baseMipLevel = 0;
+		ivci.subresourceRange.layerCount = 1;
+		ivci.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
+		ivci.viewType = vuk::ImageViewType::e2D;
+		vuk::Texture tex{ Unique<Image>(*this, dst), allocate_image_view(ivci, absolute_frame, VUK_HERE()) };
+		tex.extent = ici.extent;
+		tex.format = ici.format;
+		return tex;
+	}
+
+	struct TokenData& GlobalAllocator::get_token_data(Token t) {
+		return ctx.get_token_data(t);
+	}
+
+	void GlobalAllocator::destroy(Token token) {
+		ctx.destroy_token(token);
+	}
+
+	void GlobalAllocator::deallocate(VkPipeline) {
+		assert(0);
+	}
+	void GlobalAllocator::deallocate(vuk::Image) {
+		assert(0);
+	}
+	void GlobalAllocator::deallocate(vuk::ImageView) {
+		assert(0);
+	}
+	void GlobalAllocator::deallocate(VkImageView) {
+		assert(0);
+	}
+	void GlobalAllocator::deallocate(vuk::Buffer) {
+		assert(0);
+	}
+	void GlobalAllocator::deallocate(vuk::PersistentDescriptorSet) {
+		assert(0);
 	}
 }

@@ -60,13 +60,10 @@ namespace vuk {
 
 	struct Swapchain {
 		VkSwapchainKHR swapchain;
-		VkSurfaceKHR surface;
 
 		vuk::Format format;
 		vuk::Extent2D extent = { 0, 0 };
 		std::vector<vuk::Image> images;
 		std::vector<vuk::ImageView> image_views;
 	};
-
-	using SwapchainRef = Swapchain*;
 }

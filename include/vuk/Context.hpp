@@ -11,6 +11,7 @@
 #include "vuk/Buffer.hpp"
 #include "vuk/Swapchain.hpp"
 #include "vuk/Query.hpp"
+#include <vuk/Allocator.hpp>
 
 namespace vuk {
 	struct TransferStub {
@@ -32,6 +33,15 @@ namespace vuk {
 		}
 	};
 
+	template<class Parent> struct LinearResourceAllocator;
+	struct TokenData {
+		enum class State { eInitial, eArmed, ePending, eComplete } state = State::eInitial;  // token state : nothing -> armed (ready for submit) -> pending (submitted) -> complete (observed on CPU)
+		enum class TokenType { eUndecided, eTimeline, eAnyDevice, eEvent, eBarrier, eOrder } token_type = TokenType::eUndecided;
+		LinearResourceAllocator<Allocator>* resources = nullptr; // internally may have resources bound to the token, which get freed or enqueued for deletion
+		struct RenderGraph* rg;
+		TokenData* next = nullptr;
+	};
+
 	struct TimestampQuery {
 		VkQueryPool pool;
 		uint32_t id;
@@ -43,18 +53,8 @@ namespace vuk {
 		eGraphics = 1 << 1,
 		eCompute = 1 << 2,
 		eTransfer = 1 << 3,
-		eDevice = eGraphics | eCompute | eTransfer
-	};
-
-	struct BufferAllocationCreateInfo {
-		/// @brief mem_usage Determines which memory will be used.
-		MemoryUsage mem_usage; 
-		/// @param buffer_usage Set to the usage of the buffer.
-		BufferUsageFlags buffer_usage;
-		/// @param size Size of the allocation.
-		size_t size;
-		/// @param alignment Minimum alignment of the allocation.
-		size_t alignment;
+		eDevice = eGraphics | eCompute | eTransfer,
+		eAny = eDevice | eHost
 	};
 
 	struct DebugUtils {
@@ -96,6 +96,7 @@ namespace vuk {
 		uint32_t graphics_queue_family_index;
 		VkQueue transfer_queue;
 		uint32_t transfer_queue_family_index;
+		VkPhysicalDeviceProperties physical_device_properties;
 
 		std::atomic<size_t> frame_counter = 0;
 
@@ -104,7 +105,7 @@ namespace vuk {
 		Context(ContextCreateParameters params);
 		~Context();
 
-		void create_named_pipeline(Name name, vuk::PipelineBaseCreateInfo pbci);
+		void create_named_pipeline(Name name, vuk::PipelineBaseInfo&);
 		void create_named_pipeline(Name name, vuk::ComputePipelineCreateInfo pbci);
 
 		PipelineBaseInfo* get_named_pipeline(Name name);
@@ -118,81 +119,15 @@ namespace vuk {
 		bool load_pipeline_cache(std::span<uint8_t> data);
 		std::vector<uint8_t> save_pipeline_cache();
 
-		VkRenderPass acquire_renderpass(const struct RenderPassCreateInfo& rpci);
-
-		Query create_timestamp_query();
-
-		uint32_t(*get_thread_index)() = nullptr;
-
-		struct UploadItem {
-			/// @brief Describes a single upload to a Buffer
-			struct BufferUpload {
-				/// @brief Buffer to upload to
-				vuk::Buffer dst;
-				/// @brief Data to upload
-				std::span<unsigned char> data;
-			};
-
-			/// @brief Describes a single upload to an Image
-			struct ImageUpload {
-				/// @brief Image to upload to
-				vuk::Image dst;
-				/// @brief Format of the image data
-				vuk::Format format;
-				/// @brief Extent of the image data
-				vuk::Extent3D extent;
-				/// @brief Mip level
-				uint32_t mip_level;
-				/// @brief Base array layer
-				uint32_t base_array_layer;
-				/// @brief Should mips be automatically generated for levels higher than mip_level
-				bool generate_mips;
-				/// @brief Image data
-				std::span<unsigned char> data;
-			};
-
-			UploadItem(BufferUpload bu) : buffer(std::move(bu)), is_buffer(true) {}
-			UploadItem(ImageUpload bu) : image(std::move(bu)), is_buffer(false) {}
-
-			union {
-				BufferUpload buffer = {};
-				ImageUpload image;
-			};
-			bool is_buffer;
-		};
-
-		using TransientSubmitStub = struct LinearResourceAllocator*;
-
-		/// @brief Enqueue buffer or image data for upload
-		/// @param uploads UploadItem structures describing the upload parameters
-		/// @param dst_queue_family The queue family where the uploads will be used (ignored for buffers)
-		TransientSubmitStub fenced_upload(std::span<UploadItem> uploads, uint32_t dst_queue_family);
-
-		/// @brief Check if the upload has finished. If the upload has finished, resources will be reclaimed automatically. If this function returns true you must not poll again.
-		/// @param pending TransientSubmitStub object to check. 
-		bool poll_upload(TransientSubmitStub pending);
-
-		/// @brief Allocate a Buffer in device-visible memory (GPU or CPU).
-		Unique<Buffer> allocate_buffer(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, size_t size, size_t alignment);
-		Texture allocate_texture(const ImageCreateInfo&);
-		Unique<ImageView> create_image_view(ImageViewCreateInfo);
-
 		Token create_token();
+		TokenData& get_token_data(Token t);
+		Token submit(Allocator&, Token, Domain wait_domain);
+		void wait(Allocator&, Token);
+		void destroy_token(Token);
+
 		TokenWithContext transition_image(vuk::Texture&, vuk::Access src_access, vuk::Access dst_access);
 		TokenWithContext copy_to_buffer(vuk::Domain copy_domain, vuk::Buffer buffer, void* data, size_t size);
 		TokenWithContext copy_to_image(vuk::Image dst, vuk::Format format, vuk::Extent3D extent, uint32_t base_layer, void* data, size_t size);
-
-		/// @brief Add a swapchain to be managed by the Context
-		/// @return Reference to the new swapchain that can be used during presentation
-		SwapchainRef add_swapchain(Swapchain);
-
-		/// @brief Remove a swapchain that is managed by the Context
-		/// the swapchain is not destroyed
-		void remove_swapchain(SwapchainRef);
-
-		/// @brief Begin new frame, with a new InflightContext
-		/// @return the new InflightContext
-		InflightContext begin();
 
 		/// @brief Wait for the device to become idle. Useful for only a few synchronisation events, like resizing or shutting down.
 		void wait_idle();
@@ -202,49 +137,11 @@ namespace vuk {
 	private:
 		struct ContextImpl* impl;
 
-		struct TokenData& get_token_data(Token);
-
-		friend class InflightContext;
-		friend class PerThreadContext;
-		friend struct LinearResourceAllocator;
+		template<class Parent> friend struct LinearResourceAllocator;
 		friend struct TokenWithContext;
 		friend struct IFCImpl;
 		friend struct PTCImpl;
 		friend struct ExecutableRenderGraph;
-		template<class T> friend class Cache; // caches can directly destroy
-		template<class T, size_t FC> friend class PerFrameCache;
-	};
-
-	class InflightContext {
-	public:
-		Context& ctx;
-		const size_t absolute_frame;
-		const unsigned frame;
-		InflightContext(Context& ctx, size_t absolute_frame, std::lock_guard<std::mutex>&& recycle_guard);
-		~InflightContext();
-
-		void wait_all_transfers();
-		PerThreadContext begin();
-
-		std::optional<uint64_t> get_timestamp_query_result(Query);
-		std::optional<double> get_duration_query_result(Query start, Query end);
-		//std::optional<double> get_named_timestamp_query_results(Name);
-
-		std::vector<SampledImage> get_sampled_images();
-	private:
-		struct IFCImpl* impl;
-		friend class PerThreadContext;
-		friend struct PTCImpl;
-
-		std::atomic<size_t> transfer_id = 1;
-		std::atomic<size_t> last_transfer_complete = 0;
-
-		TransferStub enqueue_transfer(Buffer src, Buffer dst);
-		TransferStub enqueue_transfer(Buffer src, vuk::Image dst, vuk::Extent3D extent, uint32_t base_layer, bool generate_mips);
-
-		void destroy(std::vector<vuk::Image>&& images);
-		void destroy(std::vector<VkImageView>&& images);
-		void destroy(std::vector<struct LinearResourceAllocator*>&&);
 	};
 
 	class PerThreadContext {
@@ -333,17 +230,7 @@ namespace vuk {
 		}
 
 		vuk::Texture allocate_texture(vuk::ImageCreateInfo);
-		std::pair<vuk::Texture, TransferStub> create_texture(vuk::Format format, vuk::Extent3D extents, void* data, bool generate_mips = false);
 		Unique<ImageView> create_image_view(vuk::ImageViewCreateInfo);
-
-		template<class T>
-		TransferStub upload(Buffer dst, std::span<T> data) {
-			if (data.empty()) return { 0 };
-			auto staging = allocate_scratch_buffer(MemoryUsage::eCPUonly, vuk::BufferUsageFlagBits::eTransferSrc, sizeof(T) * data.size(), 1);
-			::memcpy(staging.mapped_ptr, data.data(), sizeof(T) * data.size());
-
-			return ifc->enqueue_transfer(staging, dst);
-		}
 
 		template<class T>
 		TransferStub upload(vuk::Image dst, vuk::Format format, vuk::Extent3D extent, uint32_t base_layer, std::span<T> data, bool generate_mips) {
@@ -353,7 +240,7 @@ namespace vuk {
 			auto staging = allocate_scratch_buffer(MemoryUsage::eCPUonly, vuk::BufferUsageFlagBits::eTransferSrc, sizeof(T) * data.size(), alignment);
 			::memcpy(staging.mapped_ptr, data.data(), sizeof(T) * data.size());
 
-			return ifc->enqueue_transfer(staging, dst, extent, base_layer, generate_mips);
+			return {};// ifc->enqueue_transfer(staging, dst, extent, base_layer, generate_mips);
 		}
 
 		void dma_task();
@@ -366,14 +253,8 @@ namespace vuk {
 
 		TimestampQuery register_timestamp_query(Query);
 
-		Token submit(Token, Domain wait_domain);
-		void wait(Token);
-		void free(Token);
-
 		const plf::colony<SampledImage>& get_sampled_images();
 	private:
-		friend class InflightContext;
-
 		struct PTCImpl* impl;
 	};
 
@@ -395,21 +276,16 @@ namespace vuk {
 		setDebugUtilsObjectNameEXT(device, &info);
 	}
 
-	template<class T>
-	Handle<T> GlobalAllocator::wrap(T payload) {
-		return { { unique_handle_id_counter++ }, payload };
-	}
-
-	template<typename Type>
-	inline Unique<Type>::~Unique() noexcept {
+	template<typename Type, class Allocator>
+	inline Unique<Type, Allocator>::~Unique() noexcept {
 		if (context && payload != Type{})
-			context->enqueue_destroy(std::move(payload));
+			context->destroy(std::move(payload));
 	}
-	template<typename Type>
-	inline void Unique<Type>::reset(Type value) noexcept {
+	template<typename Type, class Allocator>
+	inline void Unique<Type, Allocator>::reset(Type value) noexcept {
 		if (payload != value) {
 			if (context && payload != Type{}) {
-				context->enqueue_destroy(std::move(payload));
+				context->destroy(std::move(payload));
 			}
 			payload = std::move(value);
 		}
@@ -419,6 +295,7 @@ namespace vuk {
 // utility functions
 namespace vuk {
 	struct ExecutableRenderGraph;
-	bool execute_submit_and_present_to_one(PerThreadContext& ptc, ExecutableRenderGraph&& rg, SwapchainRef swapchain);
-	void execute_submit_and_wait(PerThreadContext& ptc, ExecutableRenderGraph&& rg);
+	// TODO: template these?
+	bool execute_submit_and_present_to_one(Context&, struct ThreadLocalFrameAllocator&, ExecutableRenderGraph&& rg, vuk::Swapchain& swapchain);
+	void execute_submit_and_wait(Context&, struct ThreadLocalFrameAllocator&, ExecutableRenderGraph&& rg);
 }

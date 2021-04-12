@@ -1,6 +1,8 @@
-#include "Cache.hpp"
-#include "vuk/Context.hpp"
-#include "Allocator.hpp"
+#include <Cache.hpp>
+#include <vuk/Context.hpp>
+#include <Allocator.hpp>
+#include <vuk/GlobalAllocator.hpp>
+#include <vuk/Descriptor.hpp>
 
 namespace vuk {
 	template<class T>
@@ -12,7 +14,7 @@ namespace vuk {
 		} else {
 			_.unlock();
 			std::unique_lock ulock(cache_mtx);
-			auto pit = pool.emplace(ctx.allocate(ci));
+			auto pit = pool.emplace(ga.create(ci, current_frame));
 			typename Cache::LRUEntry entry{ &*pit, current_frame };
 			it = lru_map.emplace(ci, entry).first;
 			return *it->second.ptr;
@@ -24,7 +26,7 @@ namespace vuk {
 		std::unique_lock _(cache_mtx);
 		for (auto it = lru_map.begin(); it != lru_map.end();) {
 			if (current_frame - it->second.last_use_frame > threshold) {
-				ctx.deallocate(*it->second.ptr);
+				ga.destroy(*it->second.ptr);
 				pool.erase(pool.get_iterator_from_pointer(it->second.ptr));
 				it = lru_map.erase(it);
 			} else {
@@ -36,7 +38,7 @@ namespace vuk {
 	template<class T>
 	Cache<T>::~Cache() {
 		for (auto& v : pool) {
-			ctx.deallocate(v);
+			ga.destroy(v);
 		}
 	}
 
@@ -51,30 +53,32 @@ namespace vuk {
 	template class Cache<vuk::ShaderModule>;
 	template class Cache<vuk::RGImage>;
 
-	template<class T, size_t FC>
-	PerFrameCache<T, FC>::~PerFrameCache() {
-		for (auto& p : data) {
+	template<class T>
+	PerFrameCache<T>::PerFrameCache(GlobalAllocator& ga, size_t FC) : FC(FC), ga(ga), data(new PFCPerFrame<T>[FC]) { }
+
+	template<class T>
+	PerFrameCache<T>::~PerFrameCache() {
+		for (auto& p : std::span(data.get(), FC)) {
 			for (auto& [k, v] : p.lru_map) {
-				ctx.deallocate(v.value);
+				ga.destroy(v.value);
 			}
 		}
 	}
 
 	template<class T>
-	T& PTPerFrameCacheView<T>::acquire(GlobalAllocator& ga, const create_info_t<T>& ci) {
-		auto& cache = view.cache;
-		auto& data = cache.data[ptc.ifc->frame];
+	T& PerFrameCacheView<T>::acquire(GlobalAllocator& ga, const create_info_t<T>& ci, unsigned tid) {
+		auto& data = cache;
 		if (auto it = data.lru_map.find(ci); it != data.lru_map.end()) {
-			it->second.last_use_frame = ptc.ifc->absolute_frame;
+			it->second.last_use_frame = absolute_frame;
 			return it->second.value;
 		} else {
 			// if the value is not in the cache, we look in our per thread buffers
 			// if it doesn't exist there either, we add it
-			auto& ptv = data.per_thread_append_v[ptc.tid];
-			auto& ptk = data.per_thread_append_k[ptc.tid];
+			auto& ptv = data.per_thread_append_v[tid];
+			auto& ptk = data.per_thread_append_k[tid];
 			auto pit = std::find(ptk.begin(), ptk.end(), ci);
 			if (pit == ptk.end()) {
-				ptv.emplace_back(ga.allocate(ci));
+				ptv.emplace_back(ga.create(ci, absolute_frame));
 				pit = ptk.insert(ptk.end(), ci);
 			}
 			auto index = std::distance(ptk.begin(), pit);
@@ -83,26 +87,25 @@ namespace vuk {
 	}
 
 	template<class T>
-	void PTPerFrameCacheView<T>::collect(GlobalAllocator& ga, size_t threshold) {
-		auto& data = view.cache.data[ptc.ifc->frame];
-		std::unique_lock _(data.cache_mtx);
-		for (auto it = data.lru_map.begin(); it != data.lru_map.end();) {
-			if (ptc.ifc->absolute_frame - it->second.last_use_frame > threshold) {
-				ga.deallocate(it->second.value);
-				it = data.lru_map.erase(it);
+	void PerFrameCacheView<T>::collect(GlobalAllocator& ga, size_t threshold) {
+		std::unique_lock _(cache.cache_mtx);
+		for (auto it = cache.lru_map.begin(); it != cache.lru_map.end();) {
+			if (absolute_frame - it->second.last_use_frame > threshold) {
+				ga.destroy(it->second.value);
+				it = cache.lru_map.erase(it);
 			} else {
 				++it;
 			}
 		}
 
-		for (size_t tid = 0; tid < view.cache.data[ptc.ifc->frame].per_thread_append_v.size(); tid++) {
-			auto& vs = view.cache.data[ptc.ifc->frame].per_thread_append_v[tid];
-			auto& ks = view.cache.data[ptc.ifc->frame].per_thread_append_k[tid];
+		for (size_t tid = 0; tid < cache.per_thread_append_v.size(); tid++) {
+			auto& vs = cache.per_thread_append_v[tid];
+			auto& ks = cache.per_thread_append_k[tid];
 			for (size_t i = 0; i < vs.size(); i++) {
-				if (data.lru_map.find(ks[i]) == data.lru_map.end()) {
-					data.lru_map.emplace(ks[i], LRUEntry{ std::move(vs[i]), ptc.ifc->absolute_frame });
+				if (cache.lru_map.find(ks[i]) == cache.lru_map.end()) {
+					cache.lru_map.emplace(ks[i], typename PFCPerFrame<T>::LRUEntry{ std::move(vs[i]), absolute_frame });
 				} else {
-					ga.deallocate(vs[i]);
+					ga.destroy(vs[i]);
 				}
 			}
 			vs.clear();
@@ -110,8 +113,11 @@ namespace vuk {
 		}
 	}
 
-	template class PerFrameCache<vuk::DescriptorSet, Context::FC>;
-	template class PerFrameCache<LinearAllocator, Context::FC>;
+	template struct PerFrameCache<vuk::DescriptorSet>;
+	template struct PerFrameCache<LinearAllocator>;
+
+	template struct PerFrameCacheView<vuk::DescriptorSet>;
+	template struct PerFrameCacheView<LinearAllocator>;
 
 	template class Cache<vuk::DescriptorPool>;
 

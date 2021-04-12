@@ -11,7 +11,6 @@ namespace vuk {
 	class CommandBuffer;
 
 	struct Swapchain;
-	using SwapChainRef = Swapchain*;
 
 	struct DeviceMemoryAllocator;
 
@@ -53,5 +52,5 @@ namespace vuk {
 		const char* file;
 		unsigned line;
 	};
-#define VUK_HERE() SourceLocation{__FILE__, __LINE__}
+#define VUK_HERE() vuk::SourceLocation{__FILE__, __LINE__}
 }

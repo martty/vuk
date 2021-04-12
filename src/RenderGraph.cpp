@@ -190,16 +190,16 @@ namespace vuk {
 			});
 	}
 
-	void RenderGraph::attach_swapchain(Name name, SwapchainRef swp, Clear c) {
+	void RenderGraph::attach_swapchain(Name name, Swapchain& swp, Clear c) {
 		AttachmentRPInfo attachment_info;
-		attachment_info.extents = vuk::Dimension2D::absolute(swp->extent);
+		attachment_info.extents = vuk::Dimension2D::absolute(swp.extent);
 		attachment_info.iv = {};
 		// directly presented
-		attachment_info.description.format = (VkFormat)swp->format;
+		attachment_info.description.format = (VkFormat)swp.format;
 		attachment_info.samples = Samples::e1;
 
 		attachment_info.type = AttachmentRPInfo::Type::eSwapchain;
-		attachment_info.swapchain = swp;
+		attachment_info.swapchain = &swp;
 		attachment_info.should_clear = true;
 		attachment_info.clear_value = c;
 
@@ -293,7 +293,7 @@ namespace vuk {
 		}
 	}
 
-	ExecutableRenderGraph RenderGraph::link(Context& ctx) && {
+	ExecutableRenderGraph RenderGraph::link() && {
 		compile();
 
 		// at this point the graph is built, we know of all the resources and everything should have been attached
@@ -705,27 +705,6 @@ namespace vuk {
 		} while (any_fb_incomplete || infer_progress); // stop looping if all attachment have been sized or we made no progress
 
 		assert(!any_fb_incomplete && "Failed to infer sample count for all attachments.");
-
-		// finish by acquiring the renderpasses
-		for (auto& rp : impl->rpis) {
-			if (rp.attachments.size() == 0) {
-				continue;
-			}
-
-			for (auto& attrpinfo : rp.attachments) {
-				if (attrpinfo.is_resolve_dst) {
-					attrpinfo.description.samples = VK_SAMPLE_COUNT_1_BIT;
-				} else {
-					attrpinfo.description.samples = (VkSampleCountFlagBits)rp.fbci.sample_count.count;
-				}
-				rp.rpci.attachments.push_back(attrpinfo.description);
-			}
-
-			rp.rpci.attachmentCount = (uint32_t)rp.rpci.attachments.size();
-			rp.rpci.pAttachments = rp.rpci.attachments.data();
-
-			rp.handle = ctx.acquire_renderpass(rp.rpci);
-		}
 
 		return { std::move(*this) };
 	}

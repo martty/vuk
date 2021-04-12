@@ -10,14 +10,15 @@
 #include <vuk/Types.hpp>
 #include <vuk/Context.hpp>
 #include <vuk/Swapchain.hpp>
+#include <vuk/GlobalAllocator.hpp>
 #include <string_view>
 #include <fstream>
 #include <sstream>
 
 namespace vuk {
-	class PerThreadContext;
 	struct Pass;
 	struct RenderGraph;
+	struct ThreadLocalFrameAllocator;
 }
 
 namespace util {
@@ -62,7 +63,7 @@ namespace util {
 		// clang-format on
 	}
 
-	inline vuk::Swapchain make_swapchain(vkb::Device vkbdevice) {
+	inline vuk::Swapchain make_swapchain(vkb::Device vkbdevice, vuk::GlobalAllocator& ga) {
 		vkb::SwapchainBuilder swb(vkbdevice);
 		swb.set_desired_format(vuk::SurfaceFormatKHR{ vuk::Format::eR8G8B8A8Srgb, vuk::ColorSpaceKHR::eSrgbNonlinear });
 		swb.add_fallback_format(vuk::SurfaceFormatKHR{ vuk::Format::eB8G8R8A8Srgb, vuk::ColorSpaceKHR::eSrgbNonlinear });
@@ -78,12 +79,10 @@ namespace util {
 			sw.images.push_back(i);
 		}
 		for (auto& i : *views) {
-			sw.image_views.emplace_back();
-			sw.image_views.back().payload = i;
+			sw.image_views.emplace_back(ga.wrap(i));
 		}
 		sw.extent = vuk::Extent2D{ vkswapchain->extent.width, vkswapchain->extent.height };
 		sw.format = vuk::Format(vkswapchain->image_format);
-		sw.surface = vkbdevice.surface;
 		sw.swapchain = vkswapchain->swapchain;
 		return sw;
 	}
@@ -93,8 +92,8 @@ namespace util {
 		vuk::SamplerCreateInfo font_sci;
 		std::unique_ptr<vuk::SampledImage> font_si;
 	};
-	ImGuiData ImGui_ImplVuk_Init(vuk::PerThreadContext& ptc);
-	void ImGui_ImplVuk_Render(vuk::PerThreadContext& ptc, vuk::RenderGraph& rg, vuk::Name src_target, vuk::Name use_target, ImGuiData& data, ImDrawData* draw_data);
+	ImGuiData ImGui_ImplVuk_Init(vuk::GlobalAllocator&);
+	void ImGui_ImplVuk_Render(vuk::ThreadLocalFrameAllocator&, vuk::RenderGraph& rg, vuk::Name src_target, vuk::Name use_target, ImGuiData& data, ImDrawData* draw_data);
 
 	inline std::string read_entire_file(const std::string& path) {
 		std::ostringstream buf;

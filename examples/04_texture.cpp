@@ -3,6 +3,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtx/quaternion.hpp>
 #include <stb_image.h>
+#include <vuk/Partials.hpp>
 
 /* 04_texture
 * In this example we will build on the previous examples (02_cube and 03_multipass), but we will make the cube textured.
@@ -21,19 +22,18 @@ namespace {
 
 	vuk::Example x{
 		.name = "04_texture",
-		.setup = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
+		.setup = [](vuk::ExampleRunner& runner, vuk::GlobalAllocator& ga) {
 			{
 			vuk::PipelineBaseCreateInfo pci;
 			pci.add_glsl(util::read_entire_file("../../examples/ubo_test_tex.vert"), "ubo_test_tex.vert");
 			pci.add_glsl(util::read_entire_file("../../examples/triangle_depthshaded_tex.frag"), "triangle_depthshaded_tex.frag");
-			runner.context->create_named_pipeline("textured_cube", pci);
+			runner.context->create_named_pipeline("textured_cube", ga.allocate_pipeline_base(pci, 0, VUK_HERE()));
 			}
 
 			// Use STBI to load the image
 			int x, y, chans;
 			auto doge_image = stbi_load("../../examples/doge.png", &x, &y, &chans, 4);
 			
-			auto ptc = ifc.begin();
 			// Similarly to buffers, we allocate the image and enqueue the upload
 			/*vuk::ImageCreateInfo ici;
 			ici.format = vuk::Format::eR8G8B8A8Srgb;
@@ -46,22 +46,20 @@ namespace {
 			ici.mipLevels = ici.arrayLayers = 1;
 			auto tex = ptc.allocate_texture(ici);
 			auto t = ptc.ctx. */
-			auto [tex, _] = ptc.create_texture(vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, doge_image);
+			auto [tex, _] = ga.create_texture(vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, doge_image, true, 0, VUK_HERE());
 			texture_of_doge = std::move(tex);
-			ptc.wait_all_transfers();
 			stbi_image_free(doge_image);
 		},
-		.render = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
-			auto ptc = ifc.begin();
-
+		.render = [](vuk::ExampleRunner& runner, vuk::FrameAllocator& ffa) {
+			vuk::ThreadLocalFrameAllocator fa(ffa, 0);
 			// We set up the cube data, same as in example 02_cube
-			auto verts = ptc.allocate_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eVertexBuffer | vuk::BufferUsageFlagBits::eTransferDst, box.first.size() * sizeof(box.first[0]), 1);
-			auto inds = ptc.allocate_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eIndexBuffer | vuk::BufferUsageFlagBits::eTransferDst, box.second.size() * sizeof(box.second[0]), 1);
+			auto verts = fa.allocate_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eVertexBuffer | vuk::BufferUsageFlagBits::eTransferDst, box.first.size() * sizeof(box.first[0]), 1);
+			auto inds = fa.allocate_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eIndexBuffer | vuk::BufferUsageFlagBits::eTransferDst, box.second.size() * sizeof(box.second[0]), 1);
 
 			// t1 is a Token with a reference to Context to allow chaining, but the Token can be extracted
-			auto t1 = ptc.ctx.copy_to_buffer(vuk::Domain::eGraphics, verts, box.first.data(), box.first.size() * sizeof(box.first[0]));
+			auto t1 = vuk::copy_to_buffer(fa, vuk::Domain::eGraphics, verts, box.first.data(), box.first.size() * sizeof(box.first[0]));
 			// += appends another token, but doesn't establish ordering
-			t1 += ptc.ctx.copy_to_buffer(vuk::Domain::eGraphics, inds, box.second.data(), box.second.size() * sizeof(box.second[0]));
+			t1 += vuk::copy_to_buffer(fa, vuk::Domain::eGraphics, inds, box.second.data(), box.second.size() * sizeof(box.second[0]));
 			
 			struct VP {
 				glm::mat4 view;
@@ -71,11 +69,10 @@ namespace {
 			vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 1.f, 10.f);
 			vp.proj[1][1] *= -1;
 
-			auto [buboVP, _] = ptc.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eUniformBuffer, std::span(&vp, 1));
-			auto uboVP = buboVP;
+			auto uboVP = fa.create_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eUniformBuffer, std::span(&vp, 1));
 			
 			// submit work (rg) bound to t1
-			ptc.submit(t1, vuk::Domain::eHost);
+			runner.context->submit(fa, t1, vuk::Domain::eHost);
 			// to wait on host for the work of t1 to finish:
 			// (instead of ptc.wait_all_transfers)
 			// ptc.wait(t1);
@@ -111,7 +108,7 @@ namespace {
 			return rg;
 		},
 		// Perform cleanup for the example
-		.cleanup = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
+		.cleanup = [](vuk::ExampleRunner& runner, vuk::GlobalAllocator&) {
 			// We release the texture resources
 			texture_of_doge.reset();
 		}

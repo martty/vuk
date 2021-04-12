@@ -53,13 +53,13 @@ namespace vuk {
 		plf::colony<vuk::SampledImage> values;
 		size_t needle = 0;
 
-		PooledType(Context&) {}
-		vuk::SampledImage& acquire(PerThreadContext& ptc, vuk::SampledImage si);
-		void reset(Context&) { needle = 0; }
-		void free(Context&) {} // nothing to free, this is non-owning
+		PooledType(GlobalAllocator&) {}
+		vuk::SampledImage& acquire(GlobalAllocator& ptc, vuk::SampledImage si);
+		void reset(GlobalAllocator&) { needle = 0; }
+		void free(GlobalAllocator&) {} // nothing to free, this is non-owning
 	};
 
-	inline vuk::SampledImage& PooledType<vuk::SampledImage>::acquire(PerThreadContext&, vuk::SampledImage si) {
+	inline vuk::SampledImage& PooledType<vuk::SampledImage>::acquire(GlobalAllocator&, vuk::SampledImage si) {
 		if (values.size() < (needle + 1)) {
 			needle++;
 			return *values.emplace(std::move(si));

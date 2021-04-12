@@ -55,21 +55,22 @@ vuk::ExampleRunner::ExampleRunner() {
 			device = vkbdevice.device;
 
 			context.emplace(ContextCreateParameters{ instance, device, physical_device, graphics_queue, graphics_queue_family_index });
-
-			swapchain = context->add_swapchain(util::make_swapchain(vkbdevice));
+			global_allocator.emplace(*context);
+			ring_allocator.emplace(*global_allocator, FC);
+			swapchain = util::make_swapchain(vkbdevice, *global_allocator);
 }
 
 void vuk::ExampleRunner::render() {
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
 
-		auto ifc = context->begin();
-		auto rg = examples[0]->render(*this, ifc);
+		FrameAllocator fa(*ring_allocator, absolute_frame, absolute_frame % 3);
+		auto rg = examples[0]->render(*this, fa);
 		auto attachment_name = vuk::Name(std::string(examples[0]->name) + "_final");
 		rg.attach_swapchain(attachment_name, swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
-		auto ptc = ifc.begin();
-		auto erg = std::move(rg).link(ptc.ctx);
-		execute_submit_and_present_to_one(ptc, std::move(erg), swapchain);
+		auto erg = std::move(rg).link();
+		ThreadLocalFrameAllocator tlfa(fa, 0);
+		execute_submit_and_present_to_one(*context, tlfa, std::move(erg), swapchain);
 	}
 }
 

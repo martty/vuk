@@ -232,8 +232,8 @@ namespace vuk {
 		uint32_t sets_allocated = 0;
 		moodycamel::ConcurrentQueue<VkDescriptorSet> free_sets{ 1024 };
 
-		void grow(GlobalAllocator& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info);
-		VkDescriptorSet acquire(GlobalAllocator& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info);
+		void grow(struct GlobalAllocator& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info);
+		VkDescriptorSet acquire(struct GlobalAllocator& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info);
 
 		DescriptorPool() = default;
 		DescriptorPool(DescriptorPool&& o) {

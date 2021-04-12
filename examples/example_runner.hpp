@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <vector>
 #include "vuk/RenderGraph.hpp"
+#include <vuk/FrameAllocator.hpp>
 #include "vuk/CommandBuffer.hpp"
 #include "examples/imgui_impl_glfw.h"
 
@@ -21,24 +22,29 @@ namespace vuk {
 	struct Example {
 		std::string_view name;
 
-		std::function<void(ExampleRunner&, vuk::InflightContext&)> setup;
-		std::function<RenderGraph(ExampleRunner&, vuk::InflightContext&)> render;
-		std::function<void(ExampleRunner&, vuk::InflightContext&)> cleanup;
+		std::function<void(ExampleRunner&, vuk::GlobalAllocator&)> setup;
+		std::function<RenderGraph(ExampleRunner&, vuk::FrameAllocator&)> render;
+		std::function<void(ExampleRunner&, vuk::GlobalAllocator&)> cleanup;
 	};
 }
 
 namespace vuk {
 	struct ExampleRunner {
+		static constexpr unsigned FC = 3;
+
 		VkDevice device;
 		VkPhysicalDevice physical_device;
 		VkQueue graphics_queue;
 		std::optional<Context> context;
-		vuk::SwapchainRef swapchain;
+		std::optional<GlobalAllocator> global_allocator;
+		std::optional<RingFrameAllocator> ring_allocator;
+		vuk::Swapchain swapchain;
 		GLFWwindow* window;
 		VkSurfaceKHR surface;
 		vkb::Instance vkbinstance;
 		vkb::Device vkbdevice;
 		util::ImGuiData imgui_data;
+		uint64_t absolute_frame = 0;
 
 		std::vector<Example*> examples;
 
@@ -52,14 +58,10 @@ namespace vuk {
 			ImGui::StyleColorsDark();
 			// Setup Platform/Renderer bindings
 			ImGui_ImplGlfw_InitForVulkan(window, true);
-			auto ifc = context->begin();
-			{
-				auto ptc = ifc.begin();
-				imgui_data = util::ImGui_ImplVuk_Init(ptc);
-				ptc.wait_all_transfers();
-			}
+			imgui_data = util::ImGui_ImplVuk_Init(*global_allocator);
+
 			for(auto& ex : examples)
-				ex->setup(*this, ifc);
+				ex->setup(*this, *global_allocator);
 		}
 
 		void render();
@@ -68,15 +70,10 @@ namespace vuk {
 			context->wait_idle();
 			imgui_data.font_texture.view.reset();
 			imgui_data.font_texture.image.reset();
-			auto ifc = context->begin();
 			for (auto& ex : examples) {
 				if (ex->cleanup) {
-					ex->cleanup(*this, ifc);
+					ex->cleanup(*this, *global_allocator);
 				}
-			}
-			// this performs cleanups for all inflight frames
-			for (auto i = 0; i < vuk::Context::FC; i++) {
-				context->begin();
 			}
 		}
 

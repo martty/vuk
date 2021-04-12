@@ -14,59 +14,25 @@
 #include "RenderPass.hpp"
 #include "vuk/RenderGraph.hpp"
 #include "ResourceBundle.hpp"
+#include <vuk/GlobalAllocator.hpp>
 
 namespace {
 	inline static uint64_t token_generation[USHRT_MAX];
 }
 
 namespace vuk {
-	struct TokenData {
-		enum class State { eInitial, eArmed, ePending, eComplete } state = State::eInitial;  // token state : nothing -> armed (ready for submit) -> pending (submitted) -> complete (observed on CPU)
-		enum class TokenType { eUndecided, eTimeline, eAnyDevice, eEvent, eBarrier, eOrder } token_type = TokenType::eUndecided;
-		LinearResourceAllocator* resources = nullptr; // internally may have resources bound to the token, which get freed or enqueued for deletion
-		std::unique_ptr<vuk::RenderGraph> rg;
-		TokenData* next = nullptr;
-	};
-
 	struct ContextImpl {
 		Context& ctx;
-		DeviceMemoryAllocator allocator;
 		VkDevice device;
 
 		std::mutex gfx_queue_lock;
 		std::mutex xfer_queue_lock;
-		Pool<VkCommandBuffer, Context::FC> cbuf_pools;
-		Pool<TimestampQuery, Context::FC> tsquery_pools;
-		Pool<VkSemaphore, Context::FC> semaphore_pools;
-		Pool<VkFence, Context::FC> fence_pools;
-		Pool<vuk::SampledImage, Context::FC> sampled_images;
-		PerFrameCache<LinearAllocator, Context::FC> scratch_buffers;
-		PerFrameCache<vuk::DescriptorSet, Context::FC> descriptor_sets;
-
-		Cache<PipelineBaseInfo> pipelinebase_cache;
-		Cache<PipelineInfo> pipeline_cache;
-		Cache<ComputePipelineInfo> compute_pipeline_cache;
-		Cache<VkRenderPass> renderpass_cache;
-		Cache<VkFramebuffer> framebuffer_cache;
-		Cache<RGImage> transient_images;
-		
-		
-		Cache<vuk::DescriptorPool> pool_cache;
-		Cache<vuk::Sampler> sampler_cache;
-		Cache<vuk::ShaderModule> shader_modules;
-		Cache<vuk::DescriptorSetLayoutAllocInfo> descriptor_set_layouts;
-		Cache<VkPipelineLayout> pipeline_layouts;
-
-		VkPipelineCache vk_pipeline_cache;
-
-		std::mutex begin_frame_lock;
 
 		std::mutex named_pipelines_lock;
 		std::unordered_map<Name, vuk::PipelineBaseInfo*> named_pipelines;
 		std::unordered_map<Name, vuk::ComputePipelineInfo*> named_compute_pipelines;
 
 		std::atomic<uint64_t> query_id_counter = 0;
-		VkPhysicalDeviceProperties physical_device_properties;
 
 		std::mutex swapchains_lock;
 		plf::colony<Swapchain> swapchains;
@@ -75,14 +41,14 @@ namespace vuk {
 
 		std::mutex transient_submit_lock;
 		/// @brief with stable addresses, so we can hand out opaque pointers
-		plf::colony<LinearResourceAllocator> transient_submit_bundles;
-		std::vector<plf::colony<LinearResourceAllocator>::iterator> transient_submit_freelist;
+		plf::colony<LinearResourceAllocator<Allocator>> transient_submit_bundles;
+		std::vector<plf::colony<LinearResourceAllocator<Allocator>>::iterator> transient_submit_freelist;
 
 		// TODO: split queue family from allocator
-		LinearResourceAllocator* get_linear_allocator(uint32_t queue_family_index) {
+		LinearResourceAllocator<Allocator>* get_linear_allocator(GlobalAllocator& ga, uint32_t queue_family_index) {
 			std::lock_guard _(transient_submit_lock);
 
-			plf::colony<LinearResourceAllocator>::iterator it = transient_submit_bundles.end();
+			auto it = transient_submit_bundles.end();
 			for (auto fit = transient_submit_freelist.begin(); fit != transient_submit_freelist.end(); fit++) {
 				if ((*fit)->queue_family_index == queue_family_index) {
 					it = *fit;
@@ -91,7 +57,7 @@ namespace vuk {
 				}
 			}
 			if (it == transient_submit_bundles.end()) { // didn't find suitable bundle
-				it = transient_submit_bundles.emplace(&ctx);
+				it = transient_submit_bundles.emplace(static_cast<Allocator&>(ga));
 				auto& bundle = *it;
 
 				VkCommandPoolCreateInfo cpci{ .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
@@ -102,7 +68,10 @@ namespace vuk {
 			return &*it;
 		}
 
-		void cleanup_transient_bundle_recursively(vuk::LinearResourceAllocator* ur) {
+		void cleanup_transient_bundle_recursively(vuk::LinearResourceAllocator<Allocator>* ur) {
+			if (!ur) {
+				return;
+			}
 			if (ur->next) {
 				cleanup_transient_bundle_recursively(ur->next);
 			}
@@ -118,7 +87,7 @@ namespace vuk {
 				}
 			}
 			if (ur->buffer) {
-				allocator.free_buffer(ur->buffer);
+				//allocator.free_buffer(ur->buffer);
 				ur->buffer = {};
 			}
 			if (ur->fence) {
@@ -126,7 +95,8 @@ namespace vuk {
 				ur->fence = VK_NULL_HANDLE;
 			}
 			std::lock_guard _(transient_submit_lock);
-			transient_submit_freelist.push_back(transient_submit_bundles.get_iterator_from_pointer(ur));
+			//TODO:
+			//transient_submit_freelist.push_back(transient_submit_bundles.get_iterator_from_pointer(ur));
 		}
 
 		VkFence get_unpooled_fence() {
@@ -160,30 +130,7 @@ namespace vuk {
 
 		// token on kill :  token_generation[index]++
 
-		ContextImpl(Context& ctx) : ctx(ctx), allocator(ctx.instance, ctx.device, ctx.physical_device, ctx.graphics_queue_family_index, ctx.transfer_queue_family_index),
-			device(ctx.device),
-			cbuf_pools(ctx),
-			tsquery_pools(ctx),
-			semaphore_pools(ctx),
-			fence_pools(ctx),
-			pipelinebase_cache(ctx),
-			pipeline_cache(ctx),
-			compute_pipeline_cache(ctx),
-			renderpass_cache(ctx),
-			framebuffer_cache(ctx),
-			transient_images(ctx),
-			scratch_buffers(ctx),
-			pool_cache(ctx),
-			descriptor_sets(ctx),
-			sampler_cache(ctx),
-			sampled_images(ctx),
-			shader_modules(ctx),
-			descriptor_set_layouts(ctx),
-			pipeline_layouts(ctx) {
-
-			VkPipelineCacheCreateInfo pcci{ .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO };
-			vkCreatePipelineCache(ctx.device, &pcci, nullptr, &vk_pipeline_cache);
-			vkGetPhysicalDeviceProperties(ctx.physical_device, &physical_device_properties);
+		ContextImpl(Context& ctx) : ctx(ctx), device(ctx.device) {
 		}
 	};
 
@@ -407,65 +354,6 @@ namespace vuk {
 	struct PendingTransfer {
 		size_t last_transfer_id;
 		VkFence fence;
-	};
-
-	struct IFCImpl {
-		Pool<VkFence, Context::FC>::PFView fence_pools; // must be first, so we wait for the fences
-		Pool<VkCommandBuffer, Context::FC>::PFView commandbuffer_pools;
-		Pool<TimestampQuery, Context::FC>::PFView tsquery_pools;
-		Pool<VkSemaphore, Context::FC>::PFView semaphore_pools;
-		PerFrameCache<LinearAllocator, Context::FC>::PFView scratch_buffers;
-		PerFrameCache<vuk::DescriptorSet, Context::FC>::PFView descriptor_sets;
-		Pool<vuk::SampledImage, Context::FC>::PFView sampled_images;
-
-		// needs to be mpsc
-		std::mutex transfer_mutex;
-		std::queue<BufferCopyCommand> buffer_transfer_commands;
-		std::queue<BufferImageCopyCommand> bufferimage_transfer_commands;
-		// only accessed by DMAtask
-		std::queue<PendingTransfer> pending_transfers;
-
-		// recycle
-		std::mutex recycle_lock;
-
-		// query results on host
-		std::unordered_map<uint64_t, uint64_t> query_result_map;
-
-		IFCImpl(Context& ctx, InflightContext& ifc) :
-			fence_pools(ctx.impl->fence_pools.get_view(ifc)), // must be first, so we wait for the fences
-			commandbuffer_pools(ctx.impl->cbuf_pools.get_view(ifc)),
-			tsquery_pools(ctx.impl->tsquery_pools.get_view(ifc)),
-			semaphore_pools(ctx.impl->semaphore_pools.get_view(ifc)),
-			scratch_buffers(ifc, ctx.impl->scratch_buffers),
-			descriptor_sets(ifc, ctx.impl->descriptor_sets),
-			sampled_images(ctx.impl->sampled_images.get_view(ifc)) {
-		}
-	};
-
-	struct PTCImpl {
-		Pool<VkCommandBuffer, Context::FC>::PFPTView commandbuffer_pool;
-		Pool<VkSemaphore, Context::FC>::PFPTView semaphore_pool;
-		Pool<VkFence, Context::FC>::PFPTView fence_pool;
-		Pool<TimestampQuery, Context::FC>::PFPTView tsquery_pool;
-		Pool<vuk::SampledImage, Context::FC>::PFPTView sampled_images;
-		PerFrameCache<LinearAllocator, Context::FC>::PFPTView scratch_buffers;
-		PerFrameCache<vuk::DescriptorSet, Context::FC>::PFPTView descriptor_sets;
-
-		// recycling global objects
-		std::vector<Buffer> buffer_recycle;
-		std::vector<vuk::Image> image_recycle;
-		std::vector<VkImageView> image_view_recycle;
-		std::vector<LinearResourceAllocator*> linear_allocators;
-
-		PTCImpl(InflightContext& ifc, PerThreadContext& ptc) :
-			commandbuffer_pool(ifc.impl->commandbuffer_pools.get_view(ptc)),
-			semaphore_pool(ifc.impl->semaphore_pools.get_view(ptc)),
-			fence_pool(ifc.impl->fence_pools.get_view(ptc)),
-			tsquery_pool(ifc.impl->tsquery_pools.get_view(ptc)),
-			sampled_images(ifc.impl->sampled_images.get_view(ptc)),
-			scratch_buffers(ptc, ifc.impl->scratch_buffers),
-			descriptor_sets(ptc, ifc.impl->descriptor_sets) {
-		}
 	};
 }
 

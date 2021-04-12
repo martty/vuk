@@ -1,7 +1,8 @@
-#include "vuk/CommandBuffer.hpp"
-#include "RenderGraphUtil.hpp"
-#include "vuk/Context.hpp"
-#include "vuk/RenderGraph.hpp"
+#include <vuk/CommandBuffer.hpp>
+#include <RenderGraphUtil.hpp>
+#include <vuk/Context.hpp>
+#include <vuk/FrameAllocator.hpp>
+#include <vuk/RenderGraph.hpp>
 
 namespace vuk {
 	uint32_t Ignore::to_size() {
@@ -180,7 +181,7 @@ namespace vuk {
 	CommandBufferImpl<Allocator>& CommandBufferImpl<Allocator>::bind_sampled_image(unsigned set, unsigned binding, vuk::ImageView iv, vuk::SamplerCreateInfo sci, vuk::ImageLayout il) {
 		sets_used[set] = true;
 		set_bindings[set].bindings[binding].type = vuk::DescriptorType::eCombinedImageSampler;
-		set_bindings[set].bindings[binding].image = vuk::DescriptorImageInfo(allocator.acquire_sampler(sci), iv, il);
+		set_bindings[set].bindings[binding].image = vuk::DescriptorImageInfo(allocator.allocate_sampler(sci), iv, il);
 		set_bindings[set].used.set(binding);
 
 		return *this;
@@ -224,8 +225,8 @@ namespace vuk {
 
 		auto layout = rg->is_resource_image_in_general_layout(name, current_pass) ? vuk::ImageLayout::eGeneral : vuk::ImageLayout::eShaderReadOnlyOptimal;
 
-		vuk::Unique<vuk::ImageView> iv = ctx.create_image_view(ivci);
-		return bind_sampled_image(set, binding, *iv, sampler_create_info, layout);
+		auto iv = allocator.allocate_image_view(ivci);
+		return bind_sampled_image(set, binding, iv, sampler_create_info, layout);
 	}
 
 	CommandBuffer& CommandBuffer::bind_persistent(unsigned set, PersistentDescriptorSet& pda) {
@@ -278,7 +279,7 @@ namespace vuk {
 
 	template<class Allocator>
 	void* CommandBufferImpl<Allocator>::_map_scratch_uniform_binding(unsigned set, unsigned binding, size_t size) {
-		auto buf = allocator.allocate_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eUniformBuffer, size, 1);
+		auto buf = allocator.allocate_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eUniformBuffer, size, 1);
 		bind_uniform_buffer(set, binding, buf);
 		return buf.mapped_ptr;
 	}
@@ -306,7 +307,7 @@ namespace vuk {
 	template<class Allocator>
 	CommandBufferImpl<Allocator>& CommandBufferImpl<Allocator>::draw_indexed_indirect(std::span<vuk::DrawIndexedIndirectCommand> cmds) {
 		_bind_graphics_pipeline_state();
-		auto buf = allocator.allocate_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eIndirectBuffer, cmds.size_bytes(), 1);
+		auto buf = allocator.allocate_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eIndirectBuffer, cmds.size_bytes(), 1);
 		memcpy(buf.mapped_ptr, cmds.data(), cmds.size_bytes());
 		vkCmdDrawIndexedIndirect(command_buffer, buf.buffer, (uint32_t)buf.offset, (uint32_t)cmds.size(), sizeof(vuk::DrawIndexedIndirectCommand));
 		return *this;
@@ -338,11 +339,12 @@ namespace vuk {
 	}
 
 	template<class Allocator>
-	CommandBufferImpl<Allocator>::CommandBufferImpl(ExecutableRenderGraph& rg, Allocator& allocator, VkCommandBuffer cb) : CommandBuffer(allocator.get_context(), &rg, cb, {}), allocator(allocator), impl(new Impl) {}
+	CommandBufferImpl<Allocator>::CommandBufferImpl(ExecutableRenderGraph& rg, Allocator& allocator, VkCommandBuffer cb) : CommandBuffer(allocator.ctx, &rg, cb, {}), allocator(allocator), impl(new Impl) {}
 	
 	template<class Allocator>
 	CommandBufferImpl<Allocator>::CommandBufferImpl(CommandBuffer& parent, ExecutableRenderGraph& rg, Allocator& allocator, std::optional<RenderPassInfo> ongoing) : CommandBuffer(parent.ctx, &rg, VK_NULL_HANDLE, ongoing), allocator(allocator), parent(&parent), impl(new Impl) {
-		command_buffer = this->allocator.acquire_command_buffer(VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+		// TODO: queue family index
+		command_buffer = this->allocator.allocate_command_buffer(VK_COMMAND_BUFFER_LEVEL_SECONDARY, allocator.ctx.graphics_queue_family_index);
 	}
 
 	template<class Allocator>
@@ -439,6 +441,17 @@ namespace vuk {
 		vkCmdCopyImageToBuffer(command_buffer, src_batt.image, (VkImageLayout)src_layout, dst_bbuf.buffer.buffer, 1, (VkBufferImageCopy*)&bic);
 	}
 
+	void CommandBuffer::copy_buffer_to_image(Name src, Name dst, vuk::BufferImageCopy bic) {
+		assert(rg);
+		auto src_bbuf = rg->get_resource_buffer(src);
+		auto dst_batt = rg->get_resource_image(dst);
+
+		bic.bufferOffset += src_bbuf.buffer.offset;
+
+		auto src_layout = rg->is_resource_image_in_general_layout(src, current_pass) ? vuk::ImageLayout::eGeneral : vuk::ImageLayout::eTransferSrcOptimal;
+		vkCmdCopyBufferToImage(command_buffer, src_bbuf.buffer.buffer, dst_batt.image, (VkImageLayout)src_layout, 1, (VkBufferImageCopy*)&bic);
+	}
+
 	void CommandBuffer::copy_buffer(Name src, Name dst, VkBufferCopy bic) {
 		assert(rg);
 		auto src_bbuf = rg->get_resource_buffer(src);
@@ -502,7 +515,7 @@ namespace vuk {
 			set_bindings[i].layout_info = graphics ? current_pipeline->layout_info[i] : current_compute_pipeline->layout_info[i];
 			if (!persistent) {
 				set_bindings[i].calculate_hash();
-				auto ds = allocator.acquire_descriptorset(set_bindings[i]);
+				auto ds = allocator.allocate_descriptorset(set_bindings[i]);
 				vkCmdBindDescriptorSets(command_buffer, graphics ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE,
 					graphics ? current_pipeline->pipeline_layout : current_compute_pipeline->pipeline_layout, i, 1, &ds.descriptor_set, 0,
 					nullptr);
@@ -596,7 +609,7 @@ namespace vuk {
 				blend_constants = {};
 			}
 
-			current_pipeline = allocator.acquire_pipeline(pi);
+			current_pipeline = allocator.allocate_pipeline(pi);
 
 			vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, current_pipeline->pipeline);
 			next_pipeline = nullptr;
@@ -608,6 +621,6 @@ namespace vuk {
 		return command_buffer;
 	}
 
-	template class CommandBufferImpl<PerThreadContext>;
-	template class CommandBufferImpl<LinearResourceAllocator>;
+	template class CommandBufferImpl<ThreadLocalFrameAllocator>;
+	template class CommandBufferImpl<LinearResourceAllocator<Allocator>>;
 } // namespace vuk

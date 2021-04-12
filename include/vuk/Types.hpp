@@ -18,17 +18,18 @@ namespace vuk {
 		}
 	};
 
-	class Context;
-	template <typename Type>
+	struct GlobalAllocator;
+
+	template <typename Type, class Allocator = GlobalAllocator>
 	class Unique {
-		Context* context;
+		Allocator* context;
 		Type payload;
 	public:
 		using element_type = Type;
 
 		Unique() : context(nullptr) {}
 
-		explicit Unique(vuk::Context& ctx, Type payload) : context(&ctx), payload(std::move(payload)) {}
+		explicit Unique(Allocator& ctx, Type payload) : context(&ctx), payload(std::move(payload)) {}
 		Unique(Unique const&) = delete;
 
 		Unique(Unique&& other) noexcept : context(other.context), payload(other.release()) {}
@@ -79,14 +80,14 @@ namespace vuk {
 			return std::move(payload);
 		}
 
-		void swap(Unique<Type>& rhs) noexcept {
+		void swap(Unique<Type, Allocator>& rhs) noexcept {
 			std::swap(payload, rhs.payload);
 			std::swap(context, rhs.context);
 		}
 	};
 
-	template <typename Type>
-	inline void swap(Unique<Type>& lhs, Unique<Type>& rhs) noexcept {
+	template <typename Type, class Allocator>
+	inline void swap(Unique<Type, Allocator>& lhs, Unique<Type, Allocator>& rhs) noexcept {
 		lhs.swap(rhs);
 	}
 }
