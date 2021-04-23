@@ -292,10 +292,9 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::draw_indexed_indirect(size_t command_count, Buffer indirect_buffer) {
+	CommandBuffer& CommandBuffer::draw_indexed_indirect(size_t command_count, Buffer indirect_buffer, size_t stride) {
 		_bind_graphics_pipeline_state();
-		vkCmdDrawIndexedIndirect(command_buffer, indirect_buffer.buffer, (uint32_t)indirect_buffer.offset, (uint32_t)command_count,
-			sizeof(vuk::DrawIndexedIndirectCommand));
+		vkCmdDrawIndexedIndirect(command_buffer, indirect_buffer.buffer, (uint32_t)indirect_buffer.offset, (uint32_t)command_count, stride);
 		return *this;
 	}
 
@@ -307,10 +306,10 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::draw_indexed_indirect_count(size_t max_draw_count, Buffer indirect_buffer, Buffer count_buffer) {
+	CommandBuffer& CommandBuffer::draw_indexed_indirect_count(size_t max_draw_count, Buffer indirect_buffer, Buffer count_buffer, size_t stride) {
 		_bind_graphics_pipeline_state();
 		vkCmdDrawIndexedIndirectCount(command_buffer, indirect_buffer.buffer, indirect_buffer.offset, count_buffer.buffer, count_buffer.offset,
-			(uint32_t)max_draw_count, sizeof(vuk::DrawIndexedIndirectCommand));
+			(uint32_t)max_draw_count, stride);
 		return *this;
 	}
 
