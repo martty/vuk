@@ -271,10 +271,10 @@ namespace vuk {
 		CommandBuffer& draw(size_t vertex_count, size_t instance_count, size_t first_vertex, size_t first_instance);
 		CommandBuffer& draw_indexed(size_t index_count, size_t instance_count, size_t first_index, int32_t vertex_offset, size_t first_instance);
 
-		CommandBuffer& draw_indexed_indirect(size_t command_count, Buffer indirect_buffer);
+		CommandBuffer& draw_indexed_indirect(size_t command_count, Buffer indirect_buffer, size_t stride = sizeof(vuk::DrawIndexedIndirectCommand));
 		CommandBuffer& draw_indexed_indirect(std::span<vuk::DrawIndexedIndirectCommand>);
 
-		CommandBuffer& draw_indexed_indirect_count(size_t max_draw_count, Buffer indirect_buffer, Buffer count_buffer);
+		CommandBuffer& draw_indexed_indirect_count(size_t max_draw_count, Buffer indirect_buffer, Buffer count_buffer, size_t stride = sizeof(vuk::DrawIndexedIndirectCommand));
 
 		CommandBuffer& dispatch(size_t group_count_x, size_t group_count_y = 1, size_t group_count_z = 1);
 		// Perform a dispatch while specifying the minimum invocation count
