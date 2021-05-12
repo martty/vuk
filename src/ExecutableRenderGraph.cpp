@@ -238,9 +238,9 @@ namespace vuk {
 						if (p->pass.execute) {
 							secondary.current_pass = p;
 							if (!p->pass.name.is_invalid()) {
-								//ptc.ctx.debug.begin_region(cobuf.command_buffer, sp.pass->pass.name);
+								ptc.ctx.debug.begin_region(cobuf.command_buffer, p->pass.name);
 								p->pass.execute(secondary);
-								//ptc.ctx.debug.end_region(cobuf.command_buffer);
+								ptc.ctx.debug.end_region(cobuf.command_buffer);
 							} else {
 								p->pass.execute(secondary);
 							}
@@ -251,9 +251,9 @@ namespace vuk {
 						if (p->pass.execute) {
 							cobuf.current_pass = p;
 							if (!p->pass.name.is_invalid()) {
-								//ptc.ctx.debug.begin_region(cobuf.command_buffer, sp.pass->pass.name);
+								ptc.ctx.debug.begin_region(cobuf.command_buffer, p->pass.name);
 								p->pass.execute(cobuf);
-								//ptc.ctx.debug.end_region(cobuf.command_buffer);
+								ptc.ctx.debug.end_region(cobuf.command_buffer);
 							} else {
 								p->pass.execute(cobuf);
 							}
