@@ -527,7 +527,7 @@ namespace vuk {
 		vkCmdCopyImageToBuffer(command_buffer, src_batt.image, (VkImageLayout)src_layout, dst_bbuf.buffer.buffer, 1, (VkBufferImageCopy*)&bic);
 	}
 
-	void CommandBuffer::image_barrier(Name src, vuk::Access src_acc, vuk::Access dst_acc) {
+	void CommandBuffer::image_barrier(Name src, vuk::Access src_acc, vuk::Access dst_acc, uint32_t mip_level, uint32_t mip_count) {
 		assert(rg);
 		auto att = rg->get_resource_image(src);
 
@@ -535,20 +535,16 @@ namespace vuk {
 		isr.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		isr.baseArrayLayer = 0;
 		isr.layerCount = VK_REMAINING_ARRAY_LAYERS;
-		isr.baseMipLevel = 0;
-		isr.levelCount = VK_REMAINING_MIP_LEVELS;
+		isr.baseMipLevel = mip_level;
+		isr.levelCount = mip_count;
 		VkImageMemoryBarrier imb{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
 		imb.image = att.image;
 		auto src_use = to_use(src_acc);
 		auto dst_use = to_use(dst_acc);
 		imb.srcAccessMask = (VkAccessFlags)src_use.access;
 		imb.dstAccessMask = (VkAccessFlags)dst_use.access;
-		if (rg->is_resource_image_in_general_layout(src, current_pass)) {
-			imb.oldLayout = imb.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-		} else {
-			imb.oldLayout = (VkImageLayout)src_use.layout;
-			imb.newLayout = (VkImageLayout)dst_use.layout;
-		}
+		imb.oldLayout = (VkImageLayout)src_use.layout;
+		imb.newLayout = (VkImageLayout)dst_use.layout;
 		imb.subresourceRange = isr;
 		vkCmdPipelineBarrier(command_buffer, (VkPipelineStageFlags)src_use.stages, (VkPipelineStageFlags)dst_use.stages, {}, 0, nullptr, 0, nullptr, 1, &imb);
 	}
