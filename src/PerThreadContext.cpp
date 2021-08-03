@@ -293,7 +293,7 @@ vuk::PipelineInfo vuk::PerThreadContext::create(const create_info_t<PipelineInfo
 	gpci.stageCount = (uint32_t)cinfo.base->psscis.size();
 
 	VkPipeline pipeline;
-	vkCreateGraphicsPipelines(ctx.device, ctx.impl->vk_pipeline_cache, 1, &gpci, nullptr, &pipeline);
+	assert(vkCreateGraphicsPipelines(ctx.device, ctx.impl->vk_pipeline_cache, 1, &gpci, nullptr, &pipeline) == VK_SUCCESS);
 	ctx.debug.set_name(pipeline, cinfo.base->pipeline_name);
 	return { pipeline, gpci.layout, cinfo.base->layout_info };
 }
