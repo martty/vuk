@@ -64,29 +64,55 @@ void vuk::Context::submit_transfer(VkSubmitInfo si, VkFence fence) {
 }
 
 void vuk::PersistentDescriptorSet::update_combined_image_sampler(PerThreadContext& ptc, unsigned binding, unsigned array_index, vuk::ImageView iv, vuk::SamplerCreateInfo sci, vuk::ImageLayout layout) {
-	descriptor_bindings[array_index].image = vuk::DescriptorImageInfo(ptc.acquire_sampler(sci), iv, layout);
-	descriptor_bindings[array_index].type = vuk::DescriptorType::eCombinedImageSampler;
+    descriptor_bindings[binding][array_index].image = vuk::DescriptorImageInfo(ptc.acquire_sampler(sci), iv, layout);
+    descriptor_bindings[binding][array_index].type = vuk::DescriptorType::eCombinedImageSampler;
 	VkWriteDescriptorSet wds = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
 	wds.descriptorCount = 1;
 	wds.descriptorType = (VkDescriptorType)vuk::DescriptorType::eCombinedImageSampler;
 	wds.dstArrayElement = array_index;
 	wds.dstBinding = binding;
-	wds.pImageInfo = &descriptor_bindings[array_index].image.dii;
+    wds.pImageInfo = &descriptor_bindings[binding][array_index].image.dii;
 	wds.dstSet = backing_set;
 	pending_writes.push_back(wds);
 }
 
 void vuk::PersistentDescriptorSet::update_storage_image(PerThreadContext& ptc, unsigned binding, unsigned array_index, vuk::ImageView iv) {
-	descriptor_bindings[array_index].image = vuk::DescriptorImageInfo({}, iv, vuk::ImageLayout::eGeneral);
-	descriptor_bindings[array_index].type = vuk::DescriptorType::eStorageImage;
+	descriptor_bindings[binding][array_index].image = vuk::DescriptorImageInfo({}, iv, vuk::ImageLayout::eGeneral);
+    descriptor_bindings[binding][array_index].type = vuk::DescriptorType::eStorageImage;
 	VkWriteDescriptorSet wds = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
 	wds.descriptorCount = 1;
 	wds.descriptorType = (VkDescriptorType)vuk::DescriptorType::eStorageImage;
 	wds.dstArrayElement = array_index;
 	wds.dstBinding = binding;
-	wds.pImageInfo = &descriptor_bindings[array_index].image.dii;
+    wds.pImageInfo = &descriptor_bindings[binding][array_index].image.dii;
 	wds.dstSet = backing_set;
 	pending_writes.push_back(wds);
+}
+
+void vuk::PersistentDescriptorSet::update_uniform_buffer(PerThreadContext& ptc, unsigned binding, unsigned array_index, vuk::Buffer buffer) {
+    descriptor_bindings[binding][array_index].buffer = VkDescriptorBufferInfo{buffer.buffer, buffer.offset, buffer.size};
+    descriptor_bindings[binding][array_index].type = vuk::DescriptorType::eUniformBuffer;
+    VkWriteDescriptorSet wds = {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+    wds.descriptorCount = 1;
+    wds.descriptorType = (VkDescriptorType)vuk::DescriptorType::eUniformBuffer;
+    wds.dstArrayElement = 0;
+    wds.dstBinding = binding;
+    wds.pBufferInfo = &descriptor_bindings[binding][array_index].buffer;
+    wds.dstSet = backing_set;
+    pending_writes.push_back(wds);
+}
+
+void vuk::PersistentDescriptorSet::update_storage_buffer(PerThreadContext& ptc, unsigned binding, unsigned array_index, vuk::Buffer buffer) {
+    descriptor_bindings[binding][array_index].buffer = VkDescriptorBufferInfo{buffer.buffer, buffer.offset, buffer.size};
+    descriptor_bindings[binding][array_index].type = vuk::DescriptorType::eStorageBuffer;
+    VkWriteDescriptorSet wds = {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+    wds.descriptorCount = 1;
+    wds.descriptorType = (VkDescriptorType)vuk::DescriptorType::eStorageBuffer;
+    wds.dstArrayElement = 0;
+    wds.dstBinding = binding;
+    wds.pBufferInfo = &descriptor_bindings[binding][array_index].buffer;
+    wds.dstSet = backing_set;
+    pending_writes.push_back(wds);
 }
 
 vuk::ShaderModule vuk::Context::create(const create_info_t<vuk::ShaderModule>& cinfo) {

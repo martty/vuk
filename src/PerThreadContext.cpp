@@ -23,6 +23,20 @@ void vuk::PerThreadContext::destroy(vuk::DescriptorSet ds) {
 	impl->pool_cache.acquire(ds.layout_info).free_sets.enqueue(ds.descriptor_set);
 }
 
+vuk::Unique<vuk::PersistentDescriptorSet> vuk::PerThreadContext::create_persistent_descriptorset(DescriptorSetLayoutCreateInfo dslci,
+                                                                                                 unsigned num_descriptors) {
+    dslci.dslci.bindingCount = (uint32_t)dslci.bindings.size();
+    dslci.dslci.pBindings = dslci.bindings.data();
+    if(dslci.flags.size() > 0) {
+        VkDescriptorSetLayoutBindingFlagsCreateInfo dslbfci{.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO};
+        dslbfci.bindingCount = (uint32_t)dslci.bindings.size();
+        dslbfci.pBindingFlags = dslci.flags.data();
+        dslci.dslci.pNext = &dslbfci;
+    }
+    auto& dslai = ctx.impl->descriptor_set_layouts.acquire(dslci);
+    return create_persistent_descriptorset(dslai, num_descriptors);
+}
+
 vuk::Unique<vuk::PersistentDescriptorSet> vuk::PerThreadContext::create_persistent_descriptorset(const DescriptorSetLayoutAllocInfo& dslai, unsigned num_descriptors) {
 	vuk::PersistentDescriptorSet tda;
 	auto dsl = dslai.layout;
@@ -65,7 +79,14 @@ vuk::Unique<vuk::PersistentDescriptorSet> vuk::PerThreadContext::create_persiste
 	dsai.pNext = &dsvdcai;
 
 	vkAllocateDescriptorSets(ctx.device, &dsai, &tda.backing_set);
-	tda.descriptor_bindings.resize(num_descriptors);
+	// TODO: we need more information here to handled arrayed bindings properly
+	// for now we assume no arrayed bindings outside of the variable count one
+    for(auto& bindings: tda.descriptor_bindings) {
+        bindings.resize(1);
+    }
+    if (dslai.variable_count_binding != (unsigned)-1) {
+        tda.descriptor_bindings[dslai.variable_count_binding].resize(num_descriptors);
+    }
 	return Unique<PersistentDescriptorSet>(ctx, std::move(tda));
 }
 
