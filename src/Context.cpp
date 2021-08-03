@@ -177,6 +177,10 @@ vuk::PipelineBaseInfo vuk::Context::create(const create_info_t<PipelineBaseInfo>
 	// acquire pipeline layout
 	vuk::PipelineLayoutCreateInfo plci;
 	plci.dslcis = vuk::PipelineBaseCreateInfo::build_descriptor_layouts(accumulated_reflection, cinfo);
+    // use explicit descriptor layouts if there are any
+    for(auto& l: cinfo.explicit_set_layouts) {
+        plci.dslcis[l.index] = l;
+    }
 	plci.pcrs.insert(plci.pcrs.begin(), accumulated_reflection.push_constant_ranges.begin(), accumulated_reflection.push_constant_ranges.end());
 	plci.plci.pushConstantRangeCount = (uint32_t)accumulated_reflection.push_constant_ranges.size();
 	plci.plci.pPushConstantRanges = accumulated_reflection.push_constant_ranges.data();
@@ -225,6 +229,10 @@ vuk::ComputePipelineInfo vuk::Context::create(const create_info_t<vuk::ComputePi
 
 	vuk::PipelineLayoutCreateInfo plci;
 	plci.dslcis = vuk::PipelineBaseCreateInfo::build_descriptor_layouts(sm.reflection_info, cinfo);
+    // use explicit descriptor layouts if there are any
+    for(auto& l: cinfo.explicit_set_layouts) {
+        plci.dslcis[l.index] = l;
+    }
 	plci.pcrs.insert(plci.pcrs.begin(), sm.reflection_info.push_constant_ranges.begin(), sm.reflection_info.push_constant_ranges.end());
 	plci.plci.pushConstantRangeCount = (uint32_t)sm.reflection_info.push_constant_ranges.size();
 	plci.plci.pPushConstantRanges = sm.reflection_info.push_constant_ranges.data();

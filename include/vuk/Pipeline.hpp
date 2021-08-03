@@ -486,6 +486,8 @@ namespace vuk {
 			binding_flags.set(set * 4 * VUK_MAX_BINDINGS + binding * 4 + 3, 1);
 			variable_count_max[set] = max_descriptors;
 		}
+
+		vuk::fixed_vector<DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> explicit_set_layouts = {};
 	};
 
 	/* filled out by the user */
