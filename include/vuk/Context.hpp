@@ -155,6 +155,8 @@ namespace vuk {
 		void enqueue_destroy(vuk::Buffer);
 		/// @brief Manually request destruction of vuk::PersistentDescriptorSet
 		void enqueue_destroy(vuk::PersistentDescriptorSet);
+		/// @brief Manually request destruction of VkFramebuffer
+		void enqueue_destroy(VkFramebuffer fb);
 		/// @brief Manually request destruction of VkSwapchainKHR
 		void enqueue_destroy(VkSwapchainKHR);
 
