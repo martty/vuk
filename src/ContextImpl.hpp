@@ -57,7 +57,7 @@ namespace vuk {
 		std::array<std::vector<VkPipeline>, Context::FC> pipeline_recycle;
 		std::array<std::vector<vuk::Buffer>, Context::FC> buffer_recycle;
 		std::array<std::vector<vuk::PersistentDescriptorSet>, Context::FC> pds_recycle;
-		std::array<std::vector<VkFramebuffer>, Context::FC> fb_recycle;
+		std::array<std::vector<VkSwapchainKHR>, Context::FC> swapchain_recycle;
 
 		std::mutex named_pipelines_lock;
 		std::unordered_map<Name, vuk::PipelineBaseInfo*> named_pipelines;

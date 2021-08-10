@@ -46,10 +46,10 @@ vuk::InflightContext::InflightContext(Context& ctx, size_t absolute_frame, std::
 	}
 	ctx.impl->pds_recycle[frame].clear();
 
-	for (auto& fb : ctx.impl->fb_recycle[frame]) {
-		vkDestroyFramebuffer(ctx.device, fb, nullptr);
+	for (auto sc : ctx.impl->swapchain_recycle[frame]) {
+		vkDestroySwapchainKHR(ctx.device, sc, nullptr);
 	}
-	ctx.impl->fb_recycle[frame].clear();
+	ctx.impl->swapchain_recycle[frame].clear();
 
 	for (auto& [k, v] : impl->scratch_buffers.cache.data[frame].lru_map) {
 		ctx.impl->allocator.reset_pool(v.value);
