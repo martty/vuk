@@ -55,12 +55,14 @@ void vuk::Context::DebugUtils::end_region(const VkCommandBuffer& cb) {
 
 void vuk::Context::submit_graphics(VkSubmitInfo si, VkFence fence) {
 	std::lock_guard _(impl->gfx_queue_lock);
-	assert(vkQueueSubmit(graphics_queue, 1, &si, fence) == VK_SUCCESS);
+    VkResult res = vkQueueSubmit(graphics_queue, 1, &si, fence);
+	assert(res == VK_SUCCESS);
 }
 
 void vuk::Context::submit_transfer(VkSubmitInfo si, VkFence fence) {
 	std::lock_guard _(impl->xfer_queue_lock);
-    assert(vkQueueSubmit(transfer_queue, 1, &si, fence) == VK_SUCCESS);
+    VkResult res = vkQueueSubmit(transfer_queue, 1, &si, fence);
+    assert(res == VK_SUCCESS);
 }
 
 void vuk::PersistentDescriptorSet::update_combined_image_sampler(PerThreadContext& ptc, unsigned binding, unsigned array_index, vuk::ImageView iv, vuk::SamplerCreateInfo sci, vuk::ImageLayout layout) {

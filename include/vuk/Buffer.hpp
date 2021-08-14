@@ -41,6 +41,7 @@ namespace vuk {
 		VkBuffer buffer = VK_NULL_HANDLE;
 		size_t offset = 0;
 		size_t size = 0;
+        size_t allocation_size = 0;
 		std::byte* mapped_ptr = nullptr;
 
 		bool operator==(const Buffer& o) const noexcept {
@@ -57,12 +58,12 @@ namespace vuk {
 
 		[[nodiscard]] Buffer add_offset(size_t offset_to_add) {
 			assert(offset_to_add <= size);
-			return { device_memory, buffer, offset + offset_to_add, size - offset_to_add, mapped_ptr != nullptr ? mapped_ptr + offset_to_add : nullptr };
+			return { device_memory, buffer, offset + offset_to_add, size - offset_to_add, allocation_size, mapped_ptr != nullptr ? mapped_ptr + offset_to_add : nullptr };
 		}
 
 		[[nodiscard]] Buffer subrange(size_t new_offset, size_t new_size) {
 			assert(new_offset + new_size <= size);
-			return { device_memory, buffer, offset + new_offset, new_size, mapped_ptr != nullptr ? mapped_ptr + new_offset : nullptr };
+			return { device_memory, buffer, offset + new_offset, new_size, allocation_size, mapped_ptr != nullptr ? mapped_ptr + new_offset : nullptr };
 		}
 	};
 }
