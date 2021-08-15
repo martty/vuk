@@ -38,10 +38,10 @@ namespace {
 			vuk::PipelineBaseCreateInfo pci;
 			pci.add_glsl(util::read_entire_file("../../examples/bindless.vert"), "bindless.vert");
 			pci.add_glsl(util::read_entire_file("../../examples/triangle_tex_bindless.frag"), "triange_tex_bindless.frag");
-			// Set the binding #0 in set #1 as a variable count binding, and set the maximum number of descriptors
-			pci.set_variable_count_binding(1, 0, 1024);
 			// Flag this binding as partially bound, so that we don't need to set all the array elements
 			pci.set_binding_flags(1, 0, vuk::DescriptorBindingFlagBits::ePartiallyBound);
+			// Set the binding #0 in set #1 as a variable count binding, and set the maximum number of descriptors
+			pci.set_variable_count_binding(1, 0, 1024);
 			runner.context->create_named_pipeline("bindless_cube", pci);
 			}
 
