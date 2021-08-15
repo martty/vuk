@@ -286,11 +286,11 @@ namespace vuk {
 					}
 				}
 			}
+            if(is_single_pass) {
+                ptc.ctx.debug.end_region(cobuf.command_buffer);
+            }
 			if (rpass.handle != VK_NULL_HANDLE) {
 				vkCmdEndRenderPass(cbuf);
-                if(is_single_pass) {
-                    ptc.ctx.debug.end_region(cobuf.command_buffer);
-                }
 				for (auto dep : rpass.post_barriers) {
 					dep.barrier.image = impl->bound_attachments[dep.image].image;
 					vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
