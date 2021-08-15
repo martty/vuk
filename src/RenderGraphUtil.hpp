@@ -132,16 +132,19 @@ namespace vuk {
 	}
 
 	inline bool is_write_access(Resource::Use u) {
+        if (u.access == vuk::AccessFlagBits{}) return false;
 		if (u.access & vuk::AccessFlagBits::eColorAttachmentWrite) return true;
 		if (u.access & vuk::AccessFlagBits::eDepthStencilAttachmentWrite) return true;
 		if (u.access & vuk::AccessFlagBits::eShaderWrite) return true;
 		if (u.access & vuk::AccessFlagBits::eTransferWrite) return true;
 		if (u.access & vuk::AccessFlagBits::eHostWrite) return true;
-		assert(0 && "NYI");
+        if (u.access & vuk::AccessFlagBits::eMemoryWrite) return true;
+        if (u.access & vuk::AccessFlagBits::eAccelerationStructureWriteKHR) return true;
 		return false;
 	}
 
 	inline bool is_read_access(Resource::Use u) {
+        if(u.access == vuk::AccessFlagBits{}) return false;
 		return !is_write_access(u);
 	}
 
