@@ -322,15 +322,9 @@ namespace vuk {
 							auto& rp_att = *contains_if(left_rp.attachments, [name](auto& att) {return att.name == name; });
 
 							sync_bound_attachment_to_renderpass(rp_att, attachment_info);
-							// if there is a "right" rp
-							// or if this attachment has a required end layout
-							// then we transition for it
-							if (right.pass || right.use.layout != vuk::ImageLayout::eUndefined) {
-								rp_att.description.finalLayout = (VkImageLayout)right.use.layout;
-							} else {
-								// we keep last use as finalLayout
-								rp_att.description.finalLayout = (VkImageLayout)left.use.layout;
-							}
+							// we keep last use as finalLayout
+							rp_att.description.finalLayout = (VkImageLayout)left.use.layout;
+	
 							// compute attachment store
 							if (right.use.layout == vuk::ImageLayout::eUndefined) {
 								rp_att.description.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -338,16 +332,32 @@ namespace vuk {
 								rp_att.description.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 							}
 						}
-
-                        if(!left_rp.framebufferless && ((left.use.layout != right.use.layout && right.use.layout != vuk::ImageLayout::eUndefined) || (is_write_access(left.use) || is_write_access(right.use)))) { // different layouts, need to have dependency
-							VkSubpassDependency sd{};
-							sd.dstAccessMask = (VkAccessFlags)right.use.access;
-							sd.dstStageMask = (VkPipelineStageFlags)right.use.stages;
-							sd.srcSubpass = left.pass->subpass;
-                            sd.srcAccessMask = is_read_access(left.use) ? 0 : (VkAccessFlags)left.use.access;
-							sd.srcStageMask = (VkPipelineStageFlags)left.use.stages;
-							sd.dstSubpass = VK_SUBPASS_EXTERNAL;
-							left_rp.rpci.subpass_dependencies.push_back(sd);
+						// we are keeping this weird logic until this is configurable
+						// emit a barrier for now instead of an external subpass dep
+                        if(!left_rp.framebufferless && right.use.layout != vuk::ImageLayout::eUndefined && (left.use.layout != right.use.layout || (is_write_access(left.use) || is_write_access(right.use)))) { // different layouts, need to have dependency
+							VkImageMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+							ImageBarrier ib{};
+							barrier.dstAccessMask = (VkAccessFlags)right.use.access;
+                            barrier.srcAccessMask = is_read_access(left.use) ? 0 : (VkAccessFlags)left.use.access;
+							barrier.oldLayout = (VkImageLayout)left.use.layout;
+							barrier.newLayout = (VkImageLayout)right.use.layout;
+							barrier.subresourceRange.aspectMask = (VkImageAspectFlags)aspect;
+							barrier.subresourceRange.baseArrayLayer = 0;
+							barrier.subresourceRange.baseMipLevel = 0;
+							barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
+							barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
+							barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+							barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+							ib.src = left.use.stages;
+							ib.dst = right.use.stages;
+							ib.barrier = barrier;
+							ib.image = name;
+							if (left_rp.framebufferless) {
+								left_rp.subpasses[left.pass->subpass].post_barriers.push_back(ib);
+							}
+							else {
+								left_rp.post_barriers.push_back(ib);
+							}
 						}
 						// IF
 						//    we are coming from an fbless pass OR a pass where this wasn't a framebuffer attachment 
@@ -371,6 +381,8 @@ namespace vuk {
 							barrier.subresourceRange.baseMipLevel = 0;
 							barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
 							barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
+							barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+							barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 							ImageBarrier ib{ .image = name, .barrier = barrier, .src = left.use.stages, .dst = right.use.stages };
 							// attach this barrier to the end of subpass or end of renderpass
 							if (left_rp.framebufferless) {
@@ -389,12 +401,9 @@ namespace vuk {
 							auto& rp_att = *contains_if(right_rp.attachments, [name](auto& att) {return att.name == name; });
 
 							sync_bound_attachment_to_renderpass(rp_att, attachment_info);
-							// we will have "left" transition for us
+							// 
 							if (left.pass) {
 								rp_att.description.initialLayout = (VkImageLayout)right.use.layout;
-							} else {
-								// if there is no "left" renderpass, then we take the initial layout
-								rp_att.description.initialLayout = (VkImageLayout)left.use.layout;
 							}
 							// compute attachment load
 							if (left.use.layout == vuk::ImageLayout::eUndefined) {
@@ -407,16 +416,23 @@ namespace vuk {
 								rp_att.description.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
 							}
 						}
-						
-                        if((right.use.layout != left.use.layout && left.use.layout != vuk::ImageLayout::eUndefined) || (is_write_access(left.use) || is_write_access(right.use))) { // different layouts, need to have dependency
-							VkSubpassDependency sd{};
-							sd.dstAccessMask = (VkAccessFlags)right.use.access;
-							sd.dstStageMask = (VkPipelineStageFlags)right.use.stages;
-							sd.dstSubpass = right.pass->subpass;
-							sd.srcAccessMask = is_read_access(left.use) ? 0 : (VkAccessFlags)left.use.access;
-							sd.srcStageMask = (VkPipelineStageFlags)left.use.stages;
-							sd.srcSubpass = VK_SUBPASS_EXTERNAL;
-							right_rp.rpci.subpass_dependencies.push_back(sd);
+						// we are keeping this weird logic until this is configurable
+						// emit a barrier for now instead of an external subpass dep
+						if(!left.pass && left.use.layout != vuk::ImageLayout::eUndefined && (right.use.layout != left.use.layout || (is_write_access(left.use) || is_write_access(right.use)))) { // different layouts, need to have dependency
+							VkImageMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+							barrier.dstAccessMask = (VkAccessFlags)right.use.access;
+							barrier.srcAccessMask = is_read_access(left.use) ? 0 : (VkAccessFlags)left.use.access;
+							barrier.oldLayout = left.use.layout == vuk::ImageLayout::ePreinitialized ? (VkImageLayout)vuk::ImageLayout::eUndefined : (VkImageLayout)left.use.layout;
+							barrier.newLayout = (VkImageLayout)right.use.layout;
+							barrier.subresourceRange.aspectMask = (VkImageAspectFlags)aspect;
+							barrier.subresourceRange.baseArrayLayer = 0;
+							barrier.subresourceRange.baseMipLevel = 0;
+							barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
+							barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
+							barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+							barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+							ImageBarrier ib{ .image = name, .barrier = barrier, .src = left.use.stages, .dst = right.use.stages };
+							right_rp.subpasses[right.pass->subpass].pre_barriers.push_back(ib);
 						}
 						if (right_rp.framebufferless) {
 							if (left.pass) {
@@ -429,13 +445,15 @@ namespace vuk {
 							VkImageMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
 							barrier.dstAccessMask = (VkAccessFlags)right.use.access;
                             barrier.srcAccessMask = is_read_access(left.use) ? 0 : (VkAccessFlags)left.use.access;
-							barrier.newLayout = (VkImageLayout)right.use.layout;
 							barrier.oldLayout = left.use.layout == vuk::ImageLayout::ePreinitialized ? (VkImageLayout)vuk::ImageLayout::eUndefined : (VkImageLayout)left.use.layout;
+							barrier.newLayout = (VkImageLayout)right.use.layout;
 							barrier.subresourceRange.aspectMask = (VkImageAspectFlags)aspect;
 							barrier.subresourceRange.baseArrayLayer = 0;
 							barrier.subresourceRange.baseMipLevel = 0;
 							barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
 							barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
+							barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+							barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 							ImageBarrier ib{ .image = name, .barrier = barrier, .src = left.use.stages, .dst = right.use.stages };
 							right_rp.subpasses[right.pass->subpass].pre_barriers.push_back(ib);
 						}
