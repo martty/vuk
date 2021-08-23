@@ -182,11 +182,6 @@ namespace vuk {
 		return (frame + 1) % FC;
 	}
 
-	template<class T>
-	Handle<T> Context::wrap(T payload) {
-		return { { unique_handle_id_counter++ }, payload };
-	}
-
 	inline vuk::ImageView Context::wrap(VkImageView iv, vuk::ImageViewCreateInfo ivci) {
 		vuk::ImageView viv{ .payload = iv };
 		viv.base_layer = ivci.subresourceRange.baseArrayLayer;

@@ -385,6 +385,11 @@ namespace vuk {
 	};
 
 	template<class T>
+	Handle<T> Context::wrap(T payload) {
+		return { { unique_handle_id_counter++ }, payload };
+	}
+
+	template<class T>
 	void Context::DebugUtils::set_name(const T& t, Name name) {
 		if (!enabled()) return;
 		VkDebugUtilsObjectNameInfoEXT info = { .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT };

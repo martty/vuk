@@ -138,7 +138,7 @@ vuk::Texture vuk::PerThreadContext::allocate_texture(vuk::ImageCreateInfo ici) {
 vuk::Unique<vuk::ImageView> vuk::PerThreadContext::create_image_view(vuk::ImageViewCreateInfo ivci) {
 	VkImageView iv;
 	vkCreateImageView(ctx.device, (VkImageViewCreateInfo*)&ivci, nullptr, &iv);
-	return vuk::Unique<vuk::ImageView>(ctx, ctx.wrap(iv));
+	return vuk::Unique<vuk::ImageView>(ctx, ctx.wrap(iv, ivci));
 }
 
 std::pair<vuk::Texture, vuk::TransferStub> vuk::PerThreadContext::create_texture(vuk::Format format, vuk::Extent3D extent, void* data, bool generate_mips) {
@@ -265,7 +265,7 @@ vuk::RGImage vuk::PerThreadContext::create(const create_info_t<vuk::RGImage>& ci
 	if (cinfo.ici.usage & (vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eDepthStencilAttachment | vuk::ImageUsageFlagBits::eInputAttachment | vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage)) {
 		VkImageView iv;
 		vkCreateImageView(ctx.device, (VkImageViewCreateInfo*)&ivci, nullptr, &iv);
-		res.image_view = ctx.wrap(iv);
+		res.image_view = ctx.wrap(iv, ivci);
 		ctx.debug.set_name(res.image_view.payload, Name(name));
 	}
 	return res;
