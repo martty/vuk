@@ -72,10 +72,6 @@ namespace vuk {
 	}
 
 	void begin_renderpass(vuk::RenderPassInfo& rpass, VkCommandBuffer& cbuf, bool use_secondary_command_buffers) {
-		if (rpass.handle == VK_NULL_HANDLE) {
-			return;
-		}
-
 		VkRenderPassBeginInfo rbi{ .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
 		rbi.renderPass = rpass.handle;
 		rbi.framebuffer = rpass.framebuffer;
@@ -221,7 +217,19 @@ namespace vuk {
 			if (is_single_pass) {
                 ptc.ctx.debug.begin_region(cobuf.command_buffer, rpass.subpasses[0].passes[0]->pass.name);
 			}
-			begin_renderpass(rpass, cbuf, use_secondary_command_buffers);
+
+			for(auto dep: rpass.pre_barriers) {
+                dep.barrier.image = impl->bound_attachments[dep.image].image;
+                vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
+            }
+            for(const auto& dep: rpass.pre_mem_barriers) {
+                vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 1, &dep.barrier, 0, nullptr, 0, nullptr);
+            }
+            
+			if(rpass.handle != VK_NULL_HANDLE) {
+                begin_renderpass(rpass, cbuf, use_secondary_command_buffers);
+            }
+            
 			for (size_t i = 0; i < rpass.subpasses.size(); i++) {
 				auto& sp = rpass.subpasses[i];
 				fill_renderpass_info(rpass, i, cobuf);
@@ -289,15 +297,15 @@ namespace vuk {
             if(is_single_pass) {
                 ptc.ctx.debug.end_region(cobuf.command_buffer);
             }
-			if (rpass.handle != VK_NULL_HANDLE) {
-				vkCmdEndRenderPass(cbuf);
-				for (auto dep : rpass.post_barriers) {
-					dep.barrier.image = impl->bound_attachments[dep.image].image;
-					vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
-				}
-                for(const auto& dep: rpass.post_mem_barriers) {
-					vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 1, &dep.barrier, 0, nullptr, 0, nullptr);
-				}
+            if(rpass.handle != VK_NULL_HANDLE) {
+                vkCmdEndRenderPass(cbuf);
+            }
+			for (auto dep : rpass.post_barriers) {
+				dep.barrier.image = impl->bound_attachments[dep.image].image;
+				vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
+			}
+            for(const auto& dep: rpass.post_mem_barriers) {
+				vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 1, &dep.barrier, 0, nullptr, 0, nullptr);
 			}
 		}
 		vkEndCommandBuffer(cbuf);
