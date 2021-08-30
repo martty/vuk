@@ -713,11 +713,12 @@ vuk::Unique<vuk::ImageView> vuk::Context::create_image_view(vuk::ImageViewCreate
 
 vuk::Unique<vuk::ImageView> vuk::Unique<vuk::ImageView>::SubrangeBuilder::apply(){
 	ImageViewCreateInfo ivci;
-	ivci.viewType = iv.type;
+	ivci.viewType = type == vuk::ImageViewType(0xdeadbeef) ? iv.type : type;
 	ivci.subresourceRange.baseMipLevel = base_mip == 0xdeadbeef ? iv.base_mip : base_mip;
 	ivci.subresourceRange.levelCount = mip_count == 0xdeadbeef ? iv.mip_count : mip_count;
 	ivci.subresourceRange.baseArrayLayer = base_layer == 0xdeadbeef ? iv.base_layer : base_layer;
 	ivci.subresourceRange.layerCount = layer_count == 0xdeadbeef ? iv.layer_count : layer_count;
+	ivci.subresourceRange.aspectMask = format_to_aspect(iv.format);
 	ivci.image = iv.image;
 	ivci.format = iv.format;
 	ivci.components = iv.components;

@@ -406,6 +406,7 @@ namespace vuk {
 		struct SubrangeBuilder {
 			vuk::Context* ctx;
 			vuk::ImageView iv;
+			vuk::ImageViewType type = vuk::ImageViewType(0xdeadbeef);
 			uint32_t base_mip = 0xdeadbeef; // 0xdeadbeef is an out of band value for all
 			uint32_t mip_count = 0xdeadbeef;
 			uint32_t base_layer = 0xdeadbeef;
@@ -420,6 +421,11 @@ namespace vuk {
 			SubrangeBuilder& mip_subrange(uint32_t base_mip, uint32_t mip_count) {
 				this->base_mip = base_mip;
 				this->mip_count = mip_count;
+				return *this;
+			}
+
+			SubrangeBuilder& view_as(ImageViewType type) {
+				this->type = type;
 				return *this;
 			}
 
