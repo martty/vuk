@@ -1,5 +1,5 @@
 #include "example_runner.hpp"
-#include "RenderGraphUtil.hpp"
+#include "../src/RenderGraphUtil.hpp"
 
 std::vector<vuk::Name> chosen_resource;
 

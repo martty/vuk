@@ -3,7 +3,7 @@
 #include <vector>
 #include <vuk/Config.hpp>
 #include <vuk/Hash.hpp>
-#include <CreateInfo.hpp>
+#include <../src/CreateInfo.hpp>
 #include <vuk/Descriptor.hpp>
 #include <vuk/Program.hpp>
 #include <vuk/FixedVector.hpp>

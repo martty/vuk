@@ -3,7 +3,7 @@
 #include <utility>
 #include <optional>
 #include <vuk/Config.hpp>
-#include <Allocator.hpp>
+#include <../src/Allocator.hpp>
 #include <vuk/FixedVector.hpp>
 #include <vuk/Types.hpp>
 #include <vuk/Types.hpp>
@@ -349,4 +349,3 @@ namespace vuk {
 		Query b;
 	};
 }
-

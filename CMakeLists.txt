@@ -84,7 +84,6 @@ target_include_directories(vuk PUBLIC ext/VulkanMemoryAllocator/src)
 add_subdirectory(ext/robin-hood-hashing)
 target_include_directories(vuk PUBLIC ext/concurrentqueue)
 target_include_directories(vuk PUBLIC include)
-target_include_directories(vuk PUBLIC src/)
 
 string(FIND "${CMAKE_CXX_COMPILER}" "clang++" VUK_COMPILER_CLANGPP)
 if(VUK_COMPILER_CLANGPP GREATER -1)

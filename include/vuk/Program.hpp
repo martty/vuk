@@ -2,7 +2,7 @@
 #include <unordered_map>
 #include <vector>
 #include <array>
-#include <CreateInfo.hpp>
+#include <../src/CreateInfo.hpp>
 #include <vuk/Config.hpp>
 #include <vuk/vuk_fwd.hpp>
 
@@ -180,4 +180,3 @@ namespace std {
 		size_t operator()(vuk::ShaderModuleCreateInfo const& x) const noexcept;
 	};
 };
-
