@@ -6,7 +6,7 @@
 #include <functional>
 #include "vuk/Hash.hpp"
 #include "vuk/vuk_fwd.hpp"
-#include "RenderPass.hpp"
+#include "../src/RenderPass.hpp"
 #include "vuk/Buffer.hpp"
 #include "vuk/Image.hpp"
 #include "vuk/Swapchain.hpp"
@@ -172,4 +172,3 @@ inline vuk::detail::ImageResource operator "" _image(const char* name, size_t) {
 inline vuk::detail::BufferResource operator "" _buffer(const char* name, size_t) {
 	return { name };
 }
-

@@ -7,7 +7,7 @@
 #include <spirv_cross.hpp>
 
 #include <vuk/Context.hpp>
-#include <ContextImpl.hpp>
+#include <../src/ContextImpl.hpp>
 #include <vuk/RenderGraph.hpp>
 #include <vuk/Program.hpp>
 #include <vuk/Exception.hpp>

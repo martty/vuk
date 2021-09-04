@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Types.hpp"
-#include "CreateInfo.hpp"
+#include "../src/CreateInfo.hpp"
 
 namespace vuk {
 	using Image = VkImage;

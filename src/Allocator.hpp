@@ -5,8 +5,8 @@
 #include <unordered_map>
 #include <atomic>
 #include <vuk/Hash.hpp>
-#include <Cache.hpp> // for the hashes
-#include <CreateInfo.hpp>
+#include <../src/Cache.hpp> // for the hashes
+#include <../src/CreateInfo.hpp>
 #include <vuk/Types.hpp>
 #include <vuk/Buffer.hpp>
 #include <vuk/Image.hpp>

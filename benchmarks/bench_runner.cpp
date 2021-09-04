@@ -1,5 +1,5 @@
 #include "bench_runner.hpp"
-#include "RenderGraphUtil.hpp"
+#include "../src/RenderGraphUtil.hpp"
 
 std::vector<std::string> chosen_resource;
 
