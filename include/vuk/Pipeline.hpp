@@ -500,8 +500,8 @@ namespace vuk {
 			shader_paths.emplace_back(std::move(filename));
 		}
 
-		void add_glsl(std::string source, std::string filename) {
-			shaders.emplace_back(ShaderSource::glsl(std::move(source)));
+		void add_glsl(std::string_view source, std::string filename) {
+			shaders.emplace_back(ShaderSource::glsl(source));
 			shader_paths.emplace_back(std::move(filename));
 		}
 
