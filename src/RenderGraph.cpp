@@ -61,12 +61,12 @@ namespace vuk {
 		}
 	}
 
-	void RenderGraph::compile() {
+	void RenderGraph::compile(const vuk::RenderGraph::CompileOptions& compile_options) {
 		// find which reads are graph inputs (not produced by any pass) & outputs (not consumed by any pass)
 		build_io();
 
-		// sort passes
-		if (impl->passes.size() > 1) {
+		// sort passes if requested
+		if (impl->passes.size() > 1 && compile_options.reorder_passes) {
 			topological_sort(impl->passes.begin(), impl->passes.end(), [](const auto& p1, const auto& p2) {
 				bool could_execute_after = false;
 				bool could_execute_before = false;
@@ -103,6 +103,44 @@ namespace vuk {
 				} else
 					return false;
 				});
+		}
+
+		if (compile_options.check_pass_ordering) {
+			for (unsigned i = 0; i < impl->passes.size() - 1; i++) {
+				for (unsigned j = i; j < impl->passes.size(); j++) {
+					auto& p1 = impl->passes[i];
+					auto& p2 = impl->passes[j];
+
+					bool could_execute_after = false;
+					bool could_execute_before = false;
+
+					if ((p1.bloom_outputs & p2.bloom_resolved_inputs) != 0) {
+						for (auto& o : p1.output_name_hashes) {
+							for (auto& i : p2.resolved_input_name_hashes) {
+								if (o == i) {
+									could_execute_after = true;
+									break;
+								}
+							}
+						}
+					}
+
+					if ((p2.bloom_outputs & p1.bloom_resolved_inputs) != 0) {
+						for (auto& o : p2.output_name_hashes) {
+							for (auto& i : p1.resolved_input_name_hashes) {
+								if (o == i) {
+									could_execute_before = true;
+									break;
+								}
+							}
+						}
+					}
+					// unambiguously wrong ordering found
+					if (could_execute_before && !could_execute_after) {
+						throw RenderGraphException{ "Pass ordering violates resource constraints." };
+					}
+				}
+			}
 		}
 
 		impl->use_chains.clear();
@@ -293,8 +331,8 @@ namespace vuk {
 		}
 	}
 
-	ExecutableRenderGraph RenderGraph::link(vuk::PerThreadContext& ptc)&& {
-		compile();
+	ExecutableRenderGraph RenderGraph::link(vuk::PerThreadContext& ptc, const vuk::RenderGraph::CompileOptions& compile_options)&& {
+		compile(compile_options);
 
 		// at this point the graph is built, we know of all the resources and everything should have been attached
 		// perform checking if this indeed the case

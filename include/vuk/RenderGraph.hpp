@@ -117,14 +117,19 @@ namespace vuk {
 
 		void attach_managed(Name, Format, Dimension2D, Samples, Clear);
 
+		struct CompileOptions {
+			bool reorder_passes = true; // reorder passes according to resources
+			bool check_pass_ordering = false; // check that pass ordering does not violate resource constraints (not needed when reordering passes)
+		};
+
 		/// @brief Consume this RenderGraph and create an ExecutableRenderGraph
-		struct ExecutableRenderGraph link(PerThreadContext& ptc)&&;
+		struct ExecutableRenderGraph link(PerThreadContext& ptc, const CompileOptions& compile_options)&&;
 
 		// reflection functions
  
 		/// @brief Build the graph, assign framebuffers, renderpasses and subpasses
 		///	link automatically calls this, only needed if you want to use the reflection functions
-		void compile();
+		void compile(const CompileOptions& compile_options);
 
 		MapProxy<Name, std::span<const struct UseRef>> get_use_chains();
 		MapProxy<Name, const struct AttachmentRPInfo&> get_bound_attachments();
