@@ -207,6 +207,7 @@ namespace vuk {
 				assert(result == VK_SUCCESS);
 				pool.allocations[next_index] =
 					std::tuple(res, vai.deviceMemory, vai.offset, vkbuffer, (std::byte*)vai.pMappedData);
+                buffers.emplace(reinterpret_cast<uint64_t>(vai.deviceMemory), std::pair(vkbuffer, bci.size));
 			}
 			pool.current_buffer++;
 			if (base_addr > 0) {
@@ -224,6 +225,7 @@ namespace vuk {
 		b.offset = offset;
 		b.size = size;
 		b.mapped_ptr = std::get<std::byte*>(current_alloc) + offset;
+        b.allocation_size = pool.block_size;
 
 		return b;
 	}
@@ -264,12 +266,13 @@ namespace vuk {
 			pool.buffers.emplace_back(pool_helper->result);
 		}
 		Buffer b;
-		auto [vkbuffer, _] = buffers.at(reinterpret_cast<uint64_t>(vai.deviceMemory));
+		auto [vkbuffer, allocation_size] = buffers.at(reinterpret_cast<uint64_t>(vai.deviceMemory));
 		b.buffer = vkbuffer;
 		b.device_memory = vai.deviceMemory;
 		b.offset = vai.offset;
 		b.size = vai.size;
 		b.mapped_ptr = (std::byte*)vai.pMappedData;
+        b.allocation_size = allocation_size;
 		buffer_allocations.emplace(BufferID{ reinterpret_cast<uint64_t>(b.buffer), b.offset }, res);
 		return b;
 	}
@@ -350,11 +353,7 @@ namespace vuk {
 	}
 
 	size_t Allocator::get_allocation_size(const Buffer& b) {
-		std::lock_guard _(mutex);
-		vuk::BufferID bufid{ reinterpret_cast<uint64_t>(b.buffer), b.offset };
-		VmaAllocationInfo vmai;
-		vmaGetAllocationInfo(allocator, buffer_allocations.at(bufid), &vmai);
-		return buffers.at(reinterpret_cast<uint64_t>(vmai.deviceMemory)).second;
+        return b.allocation_size;
 	}
 
 	void Allocator::reset_pool(PoolAllocator& pool) {

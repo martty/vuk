@@ -1,5 +1,5 @@
 #include "bench_runner.hpp"
-#include "RenderGraphUtil.hpp"
+#include "../src/RenderGraphUtil.hpp"
 
 std::vector<std::string> chosen_resource;
 
@@ -153,7 +153,7 @@ void vuk::BenchRunner::render() {
 		vuk::Name attachment_name = "_final";
 		util::ImGui_ImplVuk_Render(ptc, rg, attachment_name, "SWAPCHAIN", imgui_data, ImGui::GetDrawData());
 		rg.attach_swapchain(attachment_name, swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
-		execute_submit_and_present_to_one(ptc, std::move(rg).link(ptc), swapchain);
+		execute_submit_and_present_to_one(ptc, std::move(rg).link(ptc, vuk::RenderGraph::CompileOptions{}), swapchain);
 
 		std::optional<double> duration = ifc.get_duration_query_result(start, end);
 		auto& bcase = bench->get_case(current_case);

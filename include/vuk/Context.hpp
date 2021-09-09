@@ -144,6 +144,7 @@ namespace vuk {
 		/// @return The allocated buffer in a RAII handle.
 		Unique<Buffer> allocate_buffer(MemoryUsage mem_usage, BufferUsageFlags buffer_usage, size_t size, size_t alignment, bool create_mapped);
 		Texture allocate_texture(vuk::ImageCreateInfo ici);
+		Unique<ImageView> create_image_view(vuk::ImageViewCreateInfo);
 
 		/// @brief Manually request destruction of vuk::Image
 		void enqueue_destroy(vuk::Image);
@@ -153,6 +154,8 @@ namespace vuk {
 		void enqueue_destroy(vuk::Buffer);
 		/// @brief Manually request destruction of vuk::PersistentDescriptorSet
 		void enqueue_destroy(vuk::PersistentDescriptorSet);
+		/// @brief Manually request destruction of VkFramebuffer
+		void enqueue_destroy(VkFramebuffer fb);
 
 		/// @brief Add a swapchain to be managed by the Context
 		/// @return Reference to the new swapchain that can be used during presentation
@@ -175,6 +178,8 @@ namespace vuk {
 		/// @return The wrapped handle.
 		template<class T>
 		Handle<T> wrap(T payload);
+		vuk::ImageView wrap(VkImageView payload, vuk::ImageViewCreateInfo);
+
 
 		void submit_graphics(VkSubmitInfo, VkFence);
 		void submit_transfer(VkSubmitInfo, VkFence);
@@ -264,6 +269,7 @@ namespace vuk {
 		Unique<PersistentDescriptorSet> create_persistent_descriptorset(const PipelineBaseInfo& base, unsigned set, unsigned num_descriptors);
 		Unique<PersistentDescriptorSet> create_persistent_descriptorset(const ComputePipelineInfo& base, unsigned set, unsigned num_descriptors);
 		Unique<PersistentDescriptorSet> create_persistent_descriptorset(const DescriptorSetLayoutAllocInfo& dslai, unsigned num_descriptors);
+        Unique<PersistentDescriptorSet> create_persistent_descriptorset(DescriptorSetLayoutCreateInfo dslci, unsigned num_descriptors);
 		void commit_persistent_descriptorset(PersistentDescriptorSet& array);
 
 		size_t get_allocation_size(Buffer);
@@ -351,7 +357,6 @@ namespace vuk {
 		VkFence acquire_fence();
 		VkCommandBuffer acquire_command_buffer(VkCommandBufferLevel);
 		VkSemaphore acquire_semaphore();
-		VkFramebuffer acquire_framebuffer(const struct FramebufferCreateInfo&);
 		VkRenderPass acquire_renderpass(const struct RenderPassCreateInfo&);
 		RGImage acquire_rendertarget(const struct RGCI&);
 		Sampler acquire_sampler(const SamplerCreateInfo&);
@@ -368,7 +373,7 @@ namespace vuk {
 		LinearAllocator create(const struct PoolSelect& cinfo);
 		DescriptorPool create(const struct DescriptorSetLayoutAllocInfo& cinfo);
 		DescriptorSet create(const struct SetBinding& cinfo);
-		VkFramebuffer create(const struct FramebufferCreateInfo& cinfo);
+		Unique<VkFramebuffer> create(const struct FramebufferCreateInfo& cinfo);
 		Sampler create(const struct SamplerCreateInfo& cinfo);
 		DescriptorSetLayoutAllocInfo create(const struct DescriptorSetLayoutCreateInfo& cinfo);
 		VkPipelineLayout create(const struct PipelineLayoutCreateInfo& cinfo);
@@ -379,6 +384,11 @@ namespace vuk {
 
 		struct PTCImpl* impl;
 	};
+
+	template<class T>
+	Handle<T> Context::wrap(T payload) {
+		return { { unique_handle_id_counter++ }, payload };
+	}
 
 	template<class T>
 	void Context::DebugUtils::set_name(const T& t, Name name) {

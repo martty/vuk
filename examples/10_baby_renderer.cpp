@@ -112,10 +112,10 @@ namespace {
 			ici.tiling = vuk::ImageTiling::eOptimal;
 			ici.usage = vuk::ImageUsageFlagBits::eTransferDst | vuk::ImageUsageFlagBits::eSampled;
 			ici.mipLevels = ici.arrayLayers = 1;
-			variant1 = ptc.allocate_texture(ici);
+			variant1 = ptc.ctx.allocate_texture(ici);
 			ici.format = vuk::Format::eR8G8B8A8Unorm;
 			ici.usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled;
-			variant2 = ptc.allocate_texture(ici);
+			variant2 = ptc.ctx.allocate_texture(ici);
 			// Make a RenderGraph to process the loaded image
 			vuk::RenderGraph rg;
 			rg.add_pass({
@@ -149,7 +149,7 @@ namespace {
 			rg.attach_image("10_v1", vuk::ImageAttachment::from_texture(*variant1), vuk::eNone, vuk::eFragmentSampled);
 			rg.attach_image("10_v2", vuk::ImageAttachment::from_texture(*variant2), vuk::eNone, vuk::eFragmentSampled);
 			// The rendergraph is submitted and fence-waited on
-			execute_submit_and_wait(ptc, std::move(rg).link(ptc));
+			execute_submit_and_wait(ptc, std::move(rg).link(ptc, vuk::RenderGraph::CompileOptions{}));
 
 			// Set up the resources for our renderer
 

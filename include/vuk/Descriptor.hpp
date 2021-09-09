@@ -204,9 +204,9 @@ namespace vuk {
 
 	struct DescriptorSetLayoutCreateInfo {
 		VkDescriptorSetLayoutCreateInfo dslci = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
+        size_t index; // index of the descriptor set when used in a pipeline layout
 		std::vector<VkDescriptorSetLayoutBinding> bindings;
 		std::vector<VkDescriptorBindingFlags> flags;
-		size_t index;
 
 		bool operator==(const DescriptorSetLayoutCreateInfo& o) const {
 			return std::tie(dslci.flags, bindings, flags) == std::tie(o.dslci.flags, o.bindings, o.flags);
@@ -246,11 +246,13 @@ namespace vuk {
 		using type = vuk::DescriptorSetLayoutAllocInfo;
 	};
 
+	struct Buffer;
+
 	struct PersistentDescriptorSet {
 		VkDescriptorPool backing_pool;
 		VkDescriptorSet backing_set;
 
-		std::vector<DescriptorBinding> descriptor_bindings;
+        std::array<std::vector<DescriptorBinding>, VUK_MAX_BINDINGS> descriptor_bindings;
 
 		std::vector<VkWriteDescriptorSet> pending_writes;
 
@@ -260,6 +262,8 @@ namespace vuk {
 
 		void update_combined_image_sampler(PerThreadContext& ptc, unsigned binding, unsigned array_index, vuk::ImageView iv, vuk::SamplerCreateInfo sampler_create_info, vuk::ImageLayout layout);
 		void update_storage_image(PerThreadContext& ptc, unsigned binding, unsigned array_index, vuk::ImageView iv);
+        void update_uniform_buffer(PerThreadContext& ptc, unsigned binding, unsigned array_index, Buffer buf);
+        void update_storage_buffer(PerThreadContext& ptc, unsigned binding, unsigned array_index, Buffer buf);
 	};
 }
 

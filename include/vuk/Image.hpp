@@ -1,11 +1,10 @@
 #pragma once
 
 #include "Types.hpp"
-#include "CreateInfo.hpp"
+#include "../src/CreateInfo.hpp"
 
 namespace vuk {
 	using Image = VkImage;
-	using ImageView = Handle<VkImageView>;
 	using Sampler = Handle<VkSampler>;
 
 	enum class ImageTiling {
@@ -319,6 +318,124 @@ namespace vuk {
 	static_assert(sizeof(ImageViewCreateInfo) == sizeof(VkImageViewCreateInfo), "struct and wrapper have different size!");
 	static_assert(std::is_standard_layout<ImageViewCreateInfo>::value, "struct wrapper is not a standard layout!");
 
+	struct ImageView {
+		VkImageView payload = VK_NULL_HANDLE;
+
+		VkImage image; // 64 bits
+		Format format; //32 bits
+		uint32_t id : 29;
+		ImageViewType type : 3;
+		uint32_t base_mip : 4;
+		uint32_t mip_count : 4;
+		uint32_t base_layer : 11;
+		uint32_t layer_count : 11;
+		ComponentMapping components;
+
+		bool operator==(const ImageView& other) const noexcept {
+			return payload == other.payload;
+		}
+	};
+
+	//static_assert(sizeof(ImageView) == 64);
+
+	template<>
+	class Unique<ImageView> {
+		Context* context;
+		ImageView payload;
+	public:
+		using element_type = ImageView;
+
+		Unique() : context(nullptr) {}
+
+		explicit Unique(vuk::Context& ctx, ImageView payload) : context(&ctx), payload(std::move(payload)) {}
+		Unique(Unique const&) = delete;
+
+		Unique(Unique&& other) noexcept : context(other.context), payload(other.release()) {}
+
+		~Unique() noexcept;
+
+		Unique& operator=(Unique const&) = delete;
+
+		Unique& operator=(Unique&& other) noexcept {
+			auto tmp = other.context;
+			reset(other.release());
+			context = tmp;
+			return *this;
+		}
+
+		explicit operator bool() const noexcept {
+			return payload.payload == VK_NULL_HANDLE;
+		}
+
+		ImageView const* operator->() const noexcept {
+			return &payload;
+		}
+
+		ImageView* operator->() noexcept {
+			return &payload;
+		}
+
+		ImageView const& operator*() const noexcept {
+			return payload;
+		}
+
+		ImageView& operator*() noexcept {
+			return payload;
+		}
+
+		const ImageView& get() const noexcept {
+			return payload;
+		}
+
+		ImageView& get() noexcept {
+			return payload;
+		}
+
+		void reset(ImageView value = ImageView()) noexcept;
+
+		ImageView release() noexcept {
+			context = nullptr;
+			return std::move(payload);
+		}
+
+		void swap(Unique<ImageView>& rhs) noexcept {
+			std::swap(payload, rhs.payload);
+			std::swap(context, rhs.context);
+		}
+
+		struct SubrangeBuilder {
+			vuk::Context* ctx;
+			vuk::ImageView iv;
+			uint32_t base_mip = 0xdeadbeef; // 0xdeadbeef is an out of band value for all
+			uint32_t mip_count = 0xdeadbeef;
+			uint32_t base_layer = 0xdeadbeef;
+			uint32_t layer_count = 0xdeadbeef;
+
+			SubrangeBuilder& layer_subrange(uint32_t base_layer, uint32_t layer_count) {
+				this->base_layer = base_layer;
+				this->layer_count = layer_count;
+				return *this;
+			}
+
+			SubrangeBuilder& mip_subrange(uint32_t base_mip, uint32_t mip_count) {
+				this->base_mip = base_mip;
+				this->mip_count = mip_count;
+				return *this;
+			}
+
+			Unique<ImageView> apply();
+		};
+
+		// external builder fns
+		SubrangeBuilder layer_subrange(uint32_t base_layer, uint32_t layer_count) {
+			return { .ctx = context, .iv = payload, .base_layer = base_layer, .layer_count = layer_count };
+		}
+
+		SubrangeBuilder mip_subrange(uint32_t base_mip, uint32_t mip_count) {
+			return { .ctx = context, .iv = payload, .base_mip = base_mip, .mip_count = mip_count };
+		}
+	};
+
 	enum class SamplerCreateFlagBits : VkSamplerCreateFlags {
 		eSubsampledEXT = VK_SAMPLER_CREATE_SUBSAMPLED_BIT_EXT,
 		eSubsampledCoarseReconstructionEXT = VK_SAMPLER_CREATE_SUBSAMPLED_COARSE_RECONSTRUCTION_BIT_EXT
@@ -455,3 +572,14 @@ namespace vuk {
 		}
 	}
 };
+
+namespace std {
+	template<>
+	struct hash<vuk::ImageView> {
+		size_t operator()(vuk::ImageView const& x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, x.id, reinterpret_cast<uint64_t>(x.payload));
+			return h;
+		}
+	};
+}

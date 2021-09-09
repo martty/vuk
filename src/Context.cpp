@@ -7,7 +7,7 @@
 #include <spirv_cross.hpp>
 
 #include <vuk/Context.hpp>
-#include <ContextImpl.hpp>
+#include <../src/ContextImpl.hpp>
 #include <vuk/RenderGraph.hpp>
 #include <vuk/Program.hpp>
 #include <vuk/Exception.hpp>
@@ -55,38 +55,66 @@ void vuk::Context::DebugUtils::end_region(const VkCommandBuffer& cb) {
 
 void vuk::Context::submit_graphics(VkSubmitInfo si, VkFence fence) {
 	std::lock_guard _(impl->gfx_queue_lock);
-	vkQueueSubmit(graphics_queue, 1, &si, fence);
+    VkResult res = vkQueueSubmit(graphics_queue, 1, &si, fence);
+	assert(res == VK_SUCCESS);
 }
 
 void vuk::Context::submit_transfer(VkSubmitInfo si, VkFence fence) {
 	std::lock_guard _(impl->xfer_queue_lock);
-	vkQueueSubmit(transfer_queue, 1, &si, fence);
+    VkResult res = vkQueueSubmit(transfer_queue, 1, &si, fence);
+    assert(res == VK_SUCCESS);
 }
 
 void vuk::PersistentDescriptorSet::update_combined_image_sampler(PerThreadContext& ptc, unsigned binding, unsigned array_index, vuk::ImageView iv, vuk::SamplerCreateInfo sci, vuk::ImageLayout layout) {
-	descriptor_bindings[array_index].image = vuk::DescriptorImageInfo(ptc.acquire_sampler(sci), iv, layout);
-	descriptor_bindings[array_index].type = vuk::DescriptorType::eCombinedImageSampler;
+    descriptor_bindings[binding][array_index].image = vuk::DescriptorImageInfo(ptc.acquire_sampler(sci), iv, layout);
+    descriptor_bindings[binding][array_index].type = vuk::DescriptorType::eCombinedImageSampler;
 	VkWriteDescriptorSet wds = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
 	wds.descriptorCount = 1;
 	wds.descriptorType = (VkDescriptorType)vuk::DescriptorType::eCombinedImageSampler;
 	wds.dstArrayElement = array_index;
 	wds.dstBinding = binding;
-	wds.pImageInfo = &descriptor_bindings[array_index].image.dii;
+    wds.pImageInfo = &descriptor_bindings[binding][array_index].image.dii;
 	wds.dstSet = backing_set;
 	pending_writes.push_back(wds);
 }
 
 void vuk::PersistentDescriptorSet::update_storage_image(PerThreadContext& ptc, unsigned binding, unsigned array_index, vuk::ImageView iv) {
-	descriptor_bindings[array_index].image = vuk::DescriptorImageInfo({}, iv, vuk::ImageLayout::eGeneral);
-	descriptor_bindings[array_index].type = vuk::DescriptorType::eStorageImage;
+	descriptor_bindings[binding][array_index].image = vuk::DescriptorImageInfo({}, iv, vuk::ImageLayout::eGeneral);
+    descriptor_bindings[binding][array_index].type = vuk::DescriptorType::eStorageImage;
 	VkWriteDescriptorSet wds = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
 	wds.descriptorCount = 1;
 	wds.descriptorType = (VkDescriptorType)vuk::DescriptorType::eStorageImage;
 	wds.dstArrayElement = array_index;
 	wds.dstBinding = binding;
-	wds.pImageInfo = &descriptor_bindings[array_index].image.dii;
+    wds.pImageInfo = &descriptor_bindings[binding][array_index].image.dii;
 	wds.dstSet = backing_set;
 	pending_writes.push_back(wds);
+}
+
+void vuk::PersistentDescriptorSet::update_uniform_buffer(PerThreadContext& ptc, unsigned binding, unsigned array_index, vuk::Buffer buffer) {
+    descriptor_bindings[binding][array_index].buffer = VkDescriptorBufferInfo{buffer.buffer, buffer.offset, buffer.size};
+    descriptor_bindings[binding][array_index].type = vuk::DescriptorType::eUniformBuffer;
+    VkWriteDescriptorSet wds = {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+    wds.descriptorCount = 1;
+    wds.descriptorType = (VkDescriptorType)vuk::DescriptorType::eUniformBuffer;
+    wds.dstArrayElement = 0;
+    wds.dstBinding = binding;
+    wds.pBufferInfo = &descriptor_bindings[binding][array_index].buffer;
+    wds.dstSet = backing_set;
+    pending_writes.push_back(wds);
+}
+
+void vuk::PersistentDescriptorSet::update_storage_buffer(PerThreadContext& ptc, unsigned binding, unsigned array_index, vuk::Buffer buffer) {
+    descriptor_bindings[binding][array_index].buffer = VkDescriptorBufferInfo{buffer.buffer, buffer.offset, buffer.size};
+    descriptor_bindings[binding][array_index].type = vuk::DescriptorType::eStorageBuffer;
+    VkWriteDescriptorSet wds = {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+    wds.descriptorCount = 1;
+    wds.descriptorType = (VkDescriptorType)vuk::DescriptorType::eStorageBuffer;
+    wds.dstArrayElement = 0;
+    wds.dstBinding = binding;
+    wds.pBufferInfo = &descriptor_bindings[binding][array_index].buffer;
+    wds.dstSet = backing_set;
+    pending_writes.push_back(wds);
 }
 
 vuk::ShaderModule vuk::Context::create(const create_info_t<vuk::ShaderModule>& cinfo) {
@@ -151,6 +179,10 @@ vuk::PipelineBaseInfo vuk::Context::create(const create_info_t<PipelineBaseInfo>
 	// acquire pipeline layout
 	vuk::PipelineLayoutCreateInfo plci;
 	plci.dslcis = vuk::PipelineBaseCreateInfo::build_descriptor_layouts(accumulated_reflection, cinfo);
+    // use explicit descriptor layouts if there are any
+    for(auto& l: cinfo.explicit_set_layouts) {
+        plci.dslcis[l.index] = l;
+    }
 	plci.pcrs.insert(plci.pcrs.begin(), accumulated_reflection.push_constant_ranges.begin(), accumulated_reflection.push_constant_ranges.end());
 	plci.plci.pushConstantRangeCount = (uint32_t)accumulated_reflection.push_constant_ranges.size();
 	plci.plci.pPushConstantRanges = accumulated_reflection.push_constant_ranges.data();
@@ -199,6 +231,10 @@ vuk::ComputePipelineInfo vuk::Context::create(const create_info_t<vuk::ComputePi
 
 	vuk::PipelineLayoutCreateInfo plci;
 	plci.dslcis = vuk::PipelineBaseCreateInfo::build_descriptor_layouts(sm.reflection_info, cinfo);
+    // use explicit descriptor layouts if there are any
+    for(auto& l: cinfo.explicit_set_layouts) {
+        plci.dslcis[l.index] = l;
+    }
 	plci.pcrs.insert(plci.pcrs.begin(), sm.reflection_info.push_constant_ranges.begin(), sm.reflection_info.push_constant_ranges.end());
 	plci.plci.pushConstantRangeCount = (uint32_t)sm.reflection_info.push_constant_ranges.size();
 	plci.plci.pPushConstantRanges = sm.reflection_info.push_constant_ranges.data();
@@ -274,10 +310,6 @@ VkPipelineLayout vuk::Context::create(const create_info_t<VkPipelineLayout>& cin
 
 vuk::SwapchainRef vuk::Context::add_swapchain(Swapchain sw) {
 	std::lock_guard _(impl->swapchains_lock);
-	for (auto& v : sw.image_views) {
-		v = wrap(v.payload);
-	}
-
 	return &*impl->swapchains.emplace(sw);
 }
 
@@ -554,9 +586,7 @@ vuk::Texture vuk::Context::allocate_texture(vuk::ImageCreateInfo ici) {
 	ivci.viewType = ici.imageType == vuk::ImageType::e3D? vuk::ImageViewType::e3D :
 	                ici.imageType == vuk::ImageType::e2D? vuk::ImageViewType::e2D :
 	                vuk::ImageViewType::e1D;
-	VkImageView iv;
-	vkCreateImageView(device, (VkImageViewCreateInfo*)&ivci, nullptr, &iv);
-	vuk::Texture tex{ Unique<Image>(*this, dst), Unique<ImageView>(*this, wrap(iv)) };
+	vuk::Texture tex{ Unique<Image>(*this, dst), create_image_view(ivci) };
 	tex.extent = ici.extent;
 	tex.format = ici.format;
 	return tex;
@@ -586,6 +616,11 @@ void vuk::Context::enqueue_destroy(vuk::Buffer b) {
 void vuk::Context::enqueue_destroy(vuk::PersistentDescriptorSet b) {
 	std::lock_guard _(impl->recycle_locks[frame_counter % FC]);
 	impl->pds_recycle[frame_counter % FC].push_back(std::move(b));
+}
+
+void vuk::Context::enqueue_destroy(VkFramebuffer fb) {
+	std::lock_guard _(impl->recycle_locks[frame_counter % FC]);
+	impl->fb_recycle[frame_counter % FC].push_back(fb);
 }
 
 void vuk::Context::destroy(const RGImage& image) {
@@ -668,4 +703,36 @@ vuk::InflightContext vuk::Context::begin() {
 
 void vuk::Context::wait_idle() {
 	vkDeviceWaitIdle(device);
+}
+
+vuk::Unique<vuk::ImageView> vuk::Context::create_image_view(vuk::ImageViewCreateInfo ivci) {
+	VkImageView iv;
+	vkCreateImageView(device, (VkImageViewCreateInfo*)&ivci, nullptr, &iv);
+	return vuk::Unique<vuk::ImageView>(*this, wrap(iv, ivci));
+}
+
+vuk::Unique<vuk::ImageView> vuk::Unique<vuk::ImageView>::SubrangeBuilder::apply(){
+	ImageViewCreateInfo ivci;
+	ivci.viewType = iv.type;
+	ivci.subresourceRange.baseMipLevel = base_mip == 0xdeadbeef ? iv.base_mip : base_mip;
+	ivci.subresourceRange.levelCount = mip_count == 0xdeadbeef ? iv.mip_count : mip_count;
+	ivci.subresourceRange.baseArrayLayer = base_layer == 0xdeadbeef ? iv.base_layer : base_layer;
+	ivci.subresourceRange.layerCount = layer_count == 0xdeadbeef ? iv.layer_count : layer_count;
+	ivci.image = iv.image;
+	ivci.format = iv.format;
+	ivci.components = iv.components;
+	return ctx->create_image_view(ivci);
+}
+
+vuk::Unique<vuk::ImageView>::~Unique() noexcept {
+	if (context && payload != vuk::ImageView{})
+		context->enqueue_destroy(std::move(payload));
+}
+void vuk::Unique<vuk::ImageView>::reset(vuk::ImageView value) noexcept {
+	if (payload != value) {
+		if (context && payload != vuk::ImageView{}) {
+			context->enqueue_destroy(std::move(payload));
+		}
+		payload = std::move(value);
+	}
 }

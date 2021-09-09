@@ -3,7 +3,7 @@
 #include <vector>
 #include <vuk/Config.hpp>
 #include <vuk/Hash.hpp>
-#include <CreateInfo.hpp>
+#include <../src/CreateInfo.hpp>
 #include <vuk/Descriptor.hpp>
 #include <vuk/Program.hpp>
 #include <vuk/FixedVector.hpp>
@@ -486,6 +486,8 @@ namespace vuk {
 			binding_flags.set(set * 4 * VUK_MAX_BINDINGS + binding * 4 + 3, 1);
 			variable_count_max[set] = max_descriptors;
 		}
+
+		vuk::fixed_vector<DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> explicit_set_layouts = {};
 	};
 
 	/* filled out by the user */
@@ -498,8 +500,8 @@ namespace vuk {
 			shader_paths.emplace_back(std::move(filename));
 		}
 
-		void add_glsl(std::string source, std::string filename) {
-			shaders.emplace_back(ShaderSource::glsl(std::move(source)));
+		void add_glsl(std::string_view source, std::string filename) {
+			shaders.emplace_back(ShaderSource::glsl(source));
 			shader_paths.emplace_back(std::move(filename));
 		}
 

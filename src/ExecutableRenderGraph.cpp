@@ -72,10 +72,6 @@ namespace vuk {
 	}
 
 	void begin_renderpass(vuk::RenderPassInfo& rpass, VkCommandBuffer& cbuf, bool use_secondary_command_buffers) {
-		if (rpass.handle == VK_NULL_HANDLE) {
-			return;
-		}
-
 		VkRenderPassBeginInfo rbi{ .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
 		rbi.renderPass = rpass.handle;
 		rbi.framebuffer = rpass.framebuffer;
@@ -198,7 +194,7 @@ namespace vuk {
 			rp.fbci.height = fb_extent.height;
 			rp.fbci.attachmentCount = (uint32_t)vkivs.size();
 			rp.fbci.layers = 1;
-			rp.framebuffer = ptc.acquire_framebuffer(rp.fbci);
+			rp.framebuffer = ptc.create(rp.fbci).get(); // queue framebuffer for destruction
 		}
 
 		// create non-attachment images
@@ -217,7 +213,23 @@ namespace vuk {
 		CommandBuffer cobuf(*this, ptc, cbuf);
 		for (auto& rpass : impl->rpis) {
 			bool use_secondary_command_buffers = rpass.subpasses[0].use_secondary_command_buffers;
-			begin_renderpass(rpass, cbuf, use_secondary_command_buffers);
+            bool is_single_pass = rpass.subpasses.size() == 1 && rpass.subpasses[0].passes.size() == 1;
+			if (is_single_pass) {
+                ptc.ctx.debug.begin_region(cobuf.command_buffer, rpass.subpasses[0].passes[0]->pass.name);
+			}
+
+			for(auto dep: rpass.pre_barriers) {
+                dep.barrier.image = impl->bound_attachments[dep.image].image;
+                vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
+            }
+            for(const auto& dep: rpass.pre_mem_barriers) {
+                vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 1, &dep.barrier, 0, nullptr, 0, nullptr);
+            }
+            
+			if(rpass.handle != VK_NULL_HANDLE) {
+                begin_renderpass(rpass, cbuf, use_secondary_command_buffers);
+            }
+            
 			for (size_t i = 0; i < rpass.subpasses.size(); i++) {
 				auto& sp = rpass.subpasses[i];
 				fill_renderpass_info(rpass, i, cobuf);
@@ -227,7 +239,7 @@ namespace vuk {
 						dep.barrier.image = impl->bound_attachments[dep.image].image;
 						vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
 					}
-					for (auto dep : sp.pre_mem_barriers) {
+                    for(const auto& dep: sp.pre_mem_barriers) {
 						vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 1, &dep.barrier, 0, nullptr, 0, nullptr);
 					}
 				}
@@ -237,10 +249,10 @@ namespace vuk {
 						auto secondary = cobuf.begin_secondary();
 						if (p->pass.execute) {
 							secondary.current_pass = p;
-							if (!p->pass.name.is_invalid()) {
-								//ptc.ctx.debug.begin_region(cobuf.command_buffer, sp.pass->pass.name);
+							if (!p->pass.name.is_invalid() && !is_single_pass) {
+								ptc.ctx.debug.begin_region(cobuf.command_buffer, p->pass.name);
 								p->pass.execute(secondary);
-								//ptc.ctx.debug.end_region(cobuf.command_buffer);
+								ptc.ctx.debug.end_region(cobuf.command_buffer);
 							} else {
 								p->pass.execute(secondary);
 							}
@@ -250,10 +262,10 @@ namespace vuk {
 					} else {
 						if (p->pass.execute) {
 							cobuf.current_pass = p;
-							if (!p->pass.name.is_invalid()) {
-								//ptc.ctx.debug.begin_region(cobuf.command_buffer, sp.pass->pass.name);
+                            if(!p->pass.name.is_invalid() && !is_single_pass) {
+								ptc.ctx.debug.begin_region(cobuf.command_buffer, p->pass.name);
 								p->pass.execute(cobuf);
-								//ptc.ctx.debug.end_region(cobuf.command_buffer);
+								ptc.ctx.debug.end_region(cobuf.command_buffer);
 							} else {
 								p->pass.execute(cobuf);
 							}
@@ -277,20 +289,23 @@ namespace vuk {
 						dep.barrier.image = impl->bound_attachments[dep.image].image;
 						vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
 					}
-					for (auto dep : sp.post_mem_barriers) {
+					for (const auto& dep : sp.post_mem_barriers) {
 						vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 1, &dep.barrier, 0, nullptr, 0, nullptr);
 					}
 				}
 			}
-			if (rpass.handle != VK_NULL_HANDLE) {
-				vkCmdEndRenderPass(cbuf);
-				for (auto dep : rpass.post_barriers) {
-					dep.barrier.image = impl->bound_attachments[dep.image].image;
-					vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
-				}
-				for (auto dep : rpass.post_mem_barriers) {
-					vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 1, &dep.barrier, 0, nullptr, 0, nullptr);
-				}
+            if(is_single_pass) {
+                ptc.ctx.debug.end_region(cobuf.command_buffer);
+            }
+            if(rpass.handle != VK_NULL_HANDLE) {
+                vkCmdEndRenderPass(cbuf);
+            }
+			for (auto dep : rpass.post_barriers) {
+				dep.barrier.image = impl->bound_attachments[dep.image].image;
+				vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
+			}
+            for(const auto& dep: rpass.post_mem_barriers) {
+				vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 1, &dep.barrier, 0, nullptr, 0, nullptr);
 			}
 		}
 		vkEndCommandBuffer(cbuf);

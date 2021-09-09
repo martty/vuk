@@ -37,7 +37,6 @@ namespace vuk {
 		Cache<PipelineInfo> pipeline_cache;
 		Cache<ComputePipelineInfo> compute_pipeline_cache;
 		Cache<VkRenderPass> renderpass_cache;
-		Cache<VkFramebuffer> framebuffer_cache;
 		Cache<RGImage> transient_images;
 		PerFrameCache<LinearAllocator, Context::FC> scratch_buffers;
 		Cache<vuk::DescriptorPool> pool_cache;
@@ -56,6 +55,7 @@ namespace vuk {
 		std::array<std::vector<VkPipeline>, Context::FC> pipeline_recycle;
 		std::array<std::vector<vuk::Buffer>, Context::FC> buffer_recycle;
 		std::array<std::vector<vuk::PersistentDescriptorSet>, Context::FC> pds_recycle;
+		std::array<std::vector<VkFramebuffer>, Context::FC> fb_recycle;
 
 		std::mutex named_pipelines_lock;
 		std::unordered_map<Name, vuk::PipelineBaseInfo*> named_pipelines;
@@ -152,7 +152,6 @@ namespace vuk {
 			pipeline_cache(ctx),
 			compute_pipeline_cache(ctx),
 			renderpass_cache(ctx),
-			framebuffer_cache(ctx),
 			transient_images(ctx),
 			scratch_buffers(ctx),
 			pool_cache(ctx),
@@ -182,9 +181,18 @@ namespace vuk {
 		return (frame + 1) % FC;
 	}
 
-	template<class T>
-	Handle<T> Context::wrap(T payload) {
-		return { { unique_handle_id_counter++ }, payload };
+	inline vuk::ImageView Context::wrap(VkImageView iv, vuk::ImageViewCreateInfo ivci) {
+		vuk::ImageView viv{ .payload = iv };
+		viv.base_layer = ivci.subresourceRange.baseArrayLayer;
+		viv.layer_count = ivci.subresourceRange.layerCount;
+		viv.base_mip = ivci.subresourceRange.baseMipLevel;
+		viv.mip_count = ivci.subresourceRange.levelCount;
+		viv.format = ivci.format;
+		viv.type = ivci.viewType;
+		viv.image = ivci.image;
+		viv.components = ivci.components;
+		viv.id = unique_handle_id_counter++;
+		return viv;
 	}
 
 	struct BufferCopyCommand {
@@ -415,7 +423,6 @@ namespace vuk {
 		Cache<ComputePipelineInfo>::PFView compute_pipeline_cache;
 		Cache<PipelineBaseInfo>::PFView pipelinebase_cache;
 		Cache<VkRenderPass>::PFView renderpass_cache;
-		Cache<VkFramebuffer>::PFView framebuffer_cache;
 		Cache<vuk::RGImage>::PFView transient_images;
 		PerFrameCache<LinearAllocator, Context::FC>::PFView scratch_buffers;
 		PerFrameCache<vuk::DescriptorSet, Context::FC>::PFView descriptor_sets;
@@ -449,7 +456,6 @@ namespace vuk {
 			compute_pipeline_cache(ifc, ctx.impl->compute_pipeline_cache),
 			pipelinebase_cache(ifc, ctx.impl->pipelinebase_cache),
 			renderpass_cache(ifc, ctx.impl->renderpass_cache),
-			framebuffer_cache(ifc, ctx.impl->framebuffer_cache),
 			transient_images(ifc, ctx.impl->transient_images),
 			scratch_buffers(ifc, ctx.impl->scratch_buffers),
 			descriptor_sets(ifc, ctx.impl->descriptor_sets),
@@ -471,7 +477,6 @@ namespace vuk {
 		Cache<ComputePipelineInfo>::PFPTView compute_pipeline_cache;
 		Cache<PipelineBaseInfo>::PFPTView pipelinebase_cache;
 		Cache<VkRenderPass>::PFPTView renderpass_cache;
-		Cache<VkFramebuffer>::PFPTView framebuffer_cache;
 		Cache<vuk::RGImage>::PFPTView transient_images;
 		PerFrameCache<LinearAllocator, Context::FC>::PFPTView scratch_buffers;
 		PerFrameCache<vuk::DescriptorSet, Context::FC>::PFPTView descriptor_sets;
@@ -496,7 +501,6 @@ namespace vuk {
 			compute_pipeline_cache(ptc, ifc.impl->compute_pipeline_cache),
 			pipelinebase_cache(ptc, ifc.impl->pipelinebase_cache),
 			renderpass_cache(ptc, ifc.impl->renderpass_cache),
-			framebuffer_cache(ptc, ifc.impl->framebuffer_cache),
 			transient_images(ptc, ifc.impl->transient_images),
 			scratch_buffers(ptc, ifc.impl->scratch_buffers),
 			descriptor_sets(ptc, ifc.impl->descriptor_sets),

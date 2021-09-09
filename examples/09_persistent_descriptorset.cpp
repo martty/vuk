@@ -38,10 +38,10 @@ namespace {
 			vuk::PipelineBaseCreateInfo pci;
 			pci.add_glsl(util::read_entire_file("../../examples/bindless.vert"), "bindless.vert");
 			pci.add_glsl(util::read_entire_file("../../examples/triangle_tex_bindless.frag"), "triange_tex_bindless.frag");
-			// Set the binding #0 in set #1 as a variable count binding, and set the maximum number of descriptors
-			pci.set_variable_count_binding(1, 0, 1024);
 			// Flag this binding as partially bound, so that we don't need to set all the array elements
 			pci.set_binding_flags(1, 0, vuk::DescriptorBindingFlagBits::ePartiallyBound);
+			// Set the binding #0 in set #1 as a variable count binding, and set the maximum number of descriptors
+			pci.set_variable_count_binding(1, 0, 1024);
 			runner.context->create_named_pipeline("bindless_cube", pci);
 			}
 
@@ -73,10 +73,10 @@ namespace {
 			ici.tiling = vuk::ImageTiling::eOptimal;
 			ici.usage = vuk::ImageUsageFlagBits::eTransferDst | vuk::ImageUsageFlagBits::eSampled;
 			ici.mipLevels = ici.arrayLayers = 1;
-			variant1 = ptc.allocate_texture(ici);
+			variant1 = ptc.ctx.allocate_texture(ici);
 			ici.format = vuk::Format::eR8G8B8A8Unorm;
 			ici.usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled;
-			variant2 = ptc.allocate_texture(ici);
+			variant2 = ptc.ctx.allocate_texture(ici);
 			// Make a RenderGraph to process the loaded image
 			vuk::RenderGraph rg;
 			rg.add_pass({
@@ -110,7 +110,7 @@ namespace {
 			rg.attach_image("09_v1", vuk::ImageAttachment::from_texture(*variant1), vuk::eNone, vuk::eFragmentSampled);
 			rg.attach_image("09_v2", vuk::ImageAttachment::from_texture(*variant2), vuk::eNone, vuk::eFragmentSampled);
 			// The rendergraph is submitted and fence-waited on
-			execute_submit_and_wait(ptc, std::move(rg).link(ptc));
+			execute_submit_and_wait(ptc, std::move(rg).link(ptc, vuk::RenderGraph::CompileOptions{}));
 
 			// Create persistent descriptorset for a pipeline and set index
 			pda = ptc.create_persistent_descriptorset(*runner.context->get_named_pipeline("bindless_cube"), 1, 64);

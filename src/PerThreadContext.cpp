@@ -23,6 +23,20 @@ void vuk::PerThreadContext::destroy(vuk::DescriptorSet ds) {
 	impl->pool_cache.acquire(ds.layout_info).free_sets.enqueue(ds.descriptor_set);
 }
 
+vuk::Unique<vuk::PersistentDescriptorSet> vuk::PerThreadContext::create_persistent_descriptorset(DescriptorSetLayoutCreateInfo dslci,
+                                                                                                 unsigned num_descriptors) {
+    dslci.dslci.bindingCount = (uint32_t)dslci.bindings.size();
+    dslci.dslci.pBindings = dslci.bindings.data();
+    if(dslci.flags.size() > 0) {
+        VkDescriptorSetLayoutBindingFlagsCreateInfo dslbfci{.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO};
+        dslbfci.bindingCount = (uint32_t)dslci.bindings.size();
+        dslbfci.pBindingFlags = dslci.flags.data();
+        dslci.dslci.pNext = &dslbfci;
+    }
+    auto& dslai = ctx.impl->descriptor_set_layouts.acquire(dslci);
+    return create_persistent_descriptorset(dslai, num_descriptors);
+}
+
 vuk::Unique<vuk::PersistentDescriptorSet> vuk::PerThreadContext::create_persistent_descriptorset(const DescriptorSetLayoutAllocInfo& dslai, unsigned num_descriptors) {
 	vuk::PersistentDescriptorSet tda;
 	auto dsl = dslai.layout;
@@ -65,7 +79,14 @@ vuk::Unique<vuk::PersistentDescriptorSet> vuk::PerThreadContext::create_persiste
 	dsai.pNext = &dsvdcai;
 
 	vkAllocateDescriptorSets(ctx.device, &dsai, &tda.backing_set);
-	tda.descriptor_bindings.resize(num_descriptors);
+	// TODO: we need more information here to handled arrayed bindings properly
+	// for now we assume no arrayed bindings outside of the variable count one
+    for(auto& bindings: tda.descriptor_bindings) {
+        bindings.resize(1);
+    }
+    if (dslai.variable_count_binding != (unsigned)-1) {
+        tda.descriptor_bindings[dslai.variable_count_binding].resize(num_descriptors);
+    }
 	return Unique<PersistentDescriptorSet>(ctx, std::move(tda));
 }
 
@@ -117,7 +138,7 @@ vuk::Texture vuk::PerThreadContext::allocate_texture(vuk::ImageCreateInfo ici) {
 vuk::Unique<vuk::ImageView> vuk::PerThreadContext::create_image_view(vuk::ImageViewCreateInfo ivci) {
 	VkImageView iv;
 	vkCreateImageView(ctx.device, (VkImageViewCreateInfo*)&ivci, nullptr, &iv);
-	return vuk::Unique<vuk::ImageView>(ctx, ctx.wrap(iv));
+	return vuk::Unique<vuk::ImageView>(ctx, ctx.wrap(iv, ivci));
 }
 
 std::pair<vuk::Texture, vuk::TransferStub> vuk::PerThreadContext::create_texture(vuk::Format format, vuk::Extent3D extent, void* data, bool generate_mips) {
@@ -243,7 +264,7 @@ vuk::RGImage vuk::PerThreadContext::create(const create_info_t<vuk::RGImage>& ci
 	if (cinfo.ici.usage & (vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eDepthStencilAttachment | vuk::ImageUsageFlagBits::eInputAttachment | vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage)) {
 		VkImageView iv;
 		vkCreateImageView(ctx.device, (VkImageViewCreateInfo*)&ivci, nullptr, &iv);
-		res.image_view = ctx.wrap(iv);
+		res.image_view = ctx.wrap(iv, ivci);
 		ctx.debug.set_name(res.image_view.payload, Name(name));
 	}
 	return res;
@@ -271,7 +292,8 @@ vuk::PipelineInfo vuk::PerThreadContext::create(const create_info_t<PipelineInfo
 	gpci.stageCount = (uint32_t)cinfo.base->psscis.size();
 
 	VkPipeline pipeline;
-	vkCreateGraphicsPipelines(ctx.device, ctx.impl->vk_pipeline_cache, 1, &gpci, nullptr, &pipeline);
+	VkResult res = vkCreateGraphicsPipelines(ctx.device, ctx.impl->vk_pipeline_cache, 1, &gpci, nullptr, &pipeline);
+	assert(res == VK_SUCCESS);
 	ctx.debug.set_name(pipeline, cinfo.base->pipeline_name);
 	return { pipeline, gpci.layout, cinfo.base->layout_info };
 }
@@ -280,10 +302,10 @@ vuk::ComputePipelineInfo vuk::PerThreadContext::create(const create_info_t<Compu
 	return ctx.create(cinfo);
 }
 
-VkFramebuffer vuk::PerThreadContext::create(const create_info_t<VkFramebuffer>& cinfo) {
+vuk::Unique<VkFramebuffer> vuk::PerThreadContext::create(const create_info_t<VkFramebuffer>& cinfo) {
 	VkFramebuffer fb;
 	vkCreateFramebuffer(ctx.device, &cinfo, nullptr, &fb);
-	return fb;
+	return vuk::Unique(ctx, fb);
 }
 
 vuk::Sampler vuk::PerThreadContext::create(const create_info_t<vuk::Sampler>& cinfo) {
@@ -326,10 +348,6 @@ VkCommandBuffer vuk::PerThreadContext::acquire_command_buffer(VkCommandBufferLev
 
 VkSemaphore vuk::PerThreadContext::acquire_semaphore() {
 	return impl->semaphore_pool.acquire(1)[0];
-}
-
-VkFramebuffer vuk::PerThreadContext::acquire_framebuffer(const vuk::FramebufferCreateInfo& fbci) {
-	return impl->framebuffer_cache.acquire(fbci);
 }
 
 VkRenderPass vuk::PerThreadContext::acquire_renderpass(const vuk::RenderPassCreateInfo& rpci) {
