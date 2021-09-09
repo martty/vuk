@@ -571,6 +571,9 @@ vuk::Unique<vuk::Buffer> vuk::Context::allocate_buffer(MemoryUsage mem_usage, vu
 }
 
 vuk::Texture vuk::Context::allocate_texture(vuk::ImageCreateInfo ici) {
+	ici.imageType = ici.extent.depth > 1?  vuk::ImageType::e3D :
+	                ici.extent.height > 1? vuk::ImageType::e2D :
+	                vuk::ImageType::e1D;
 	auto dst = impl->allocator.create_image(ici);
 	vuk::ImageViewCreateInfo ivci;
 	ivci.format = ici.format;
@@ -580,7 +583,9 @@ vuk::Texture vuk::Context::allocate_texture(vuk::ImageCreateInfo ici) {
 	ivci.subresourceRange.baseMipLevel = 0;
 	ivci.subresourceRange.layerCount = 1;
 	ivci.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
-	ivci.viewType = vuk::ImageViewType::e2D;
+	ivci.viewType = ici.imageType == vuk::ImageType::e3D? vuk::ImageViewType::e3D :
+	                ici.imageType == vuk::ImageType::e2D? vuk::ImageViewType::e2D :
+	                vuk::ImageViewType::e1D;
 	vuk::Texture tex{ Unique<Image>(*this, dst), create_image_view(ivci) };
 	tex.extent = ici.extent;
 	tex.format = ici.format;

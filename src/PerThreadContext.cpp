@@ -146,7 +146,6 @@ std::pair<vuk::Texture, vuk::TransferStub> vuk::PerThreadContext::create_texture
 	ici.format = format;
 	ici.extent = extent;
 	ici.samples = vuk::Samples::e1;
-	ici.imageType = vuk::ImageType::e2D;
 	ici.initialLayout = vuk::ImageLayout::eUndefined;
 	ici.tiling = vuk::ImageTiling::eOptimal;
 	ici.usage = vuk::ImageUsageFlagBits::eTransferSrc | vuk::ImageUsageFlagBits::eTransferDst | vuk::ImageUsageFlagBits::eSampled;
