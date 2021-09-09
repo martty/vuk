@@ -613,6 +613,11 @@ void vuk::Context::enqueue_destroy(vuk::PersistentDescriptorSet b) {
 	impl->pds_recycle[frame_counter % FC].push_back(std::move(b));
 }
 
+void vuk::Context::enqueue_destroy(VkFramebuffer fb) {
+	std::lock_guard _(impl->recycle_locks[frame_counter % FC]);
+	impl->fb_recycle[frame_counter % FC].push_back(fb);
+}
+
 void vuk::Context::destroy(const RGImage& image) {
 	vkDestroyImageView(device, image.image_view.payload, nullptr);
 	impl->allocator.destroy_image(image.image);

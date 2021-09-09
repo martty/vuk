@@ -126,7 +126,6 @@ namespace vuk {
 	template class Cache<vuk::PipelineBaseInfo>;
 	template class Cache<vuk::ComputePipelineInfo>;
 	template class Cache<VkRenderPass>;
-	template class Cache<VkFramebuffer>;
 	template class Cache<vuk::Sampler>;
 	template class Cache<VkPipelineLayout>;
 	template class Cache<vuk::DescriptorSetLayoutAllocInfo>;

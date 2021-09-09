@@ -303,10 +303,10 @@ vuk::ComputePipelineInfo vuk::PerThreadContext::create(const create_info_t<Compu
 	return ctx.create(cinfo);
 }
 
-VkFramebuffer vuk::PerThreadContext::create(const create_info_t<VkFramebuffer>& cinfo) {
+vuk::Unique<VkFramebuffer> vuk::PerThreadContext::create(const create_info_t<VkFramebuffer>& cinfo) {
 	VkFramebuffer fb;
 	vkCreateFramebuffer(ctx.device, &cinfo, nullptr, &fb);
-	return fb;
+	return vuk::Unique(ctx, fb);
 }
 
 vuk::Sampler vuk::PerThreadContext::create(const create_info_t<vuk::Sampler>& cinfo) {
@@ -349,10 +349,6 @@ VkCommandBuffer vuk::PerThreadContext::acquire_command_buffer(VkCommandBufferLev
 
 VkSemaphore vuk::PerThreadContext::acquire_semaphore() {
 	return impl->semaphore_pool.acquire(1)[0];
-}
-
-VkFramebuffer vuk::PerThreadContext::acquire_framebuffer(const vuk::FramebufferCreateInfo& fbci) {
-	return impl->framebuffer_cache.acquire(fbci);
 }
 
 VkRenderPass vuk::PerThreadContext::acquire_renderpass(const vuk::RenderPassCreateInfo& rpci) {

@@ -154,6 +154,8 @@ namespace vuk {
 		void enqueue_destroy(vuk::Buffer);
 		/// @brief Manually request destruction of vuk::PersistentDescriptorSet
 		void enqueue_destroy(vuk::PersistentDescriptorSet);
+		/// @brief Manually request destruction of VkFramebuffer
+		void enqueue_destroy(VkFramebuffer fb);
 
 		/// @brief Add a swapchain to be managed by the Context
 		/// @return Reference to the new swapchain that can be used during presentation
@@ -355,7 +357,6 @@ namespace vuk {
 		VkFence acquire_fence();
 		VkCommandBuffer acquire_command_buffer(VkCommandBufferLevel);
 		VkSemaphore acquire_semaphore();
-		VkFramebuffer acquire_framebuffer(const struct FramebufferCreateInfo&);
 		VkRenderPass acquire_renderpass(const struct RenderPassCreateInfo&);
 		RGImage acquire_rendertarget(const struct RGCI&);
 		Sampler acquire_sampler(const SamplerCreateInfo&);
@@ -372,7 +373,7 @@ namespace vuk {
 		LinearAllocator create(const struct PoolSelect& cinfo);
 		DescriptorPool create(const struct DescriptorSetLayoutAllocInfo& cinfo);
 		DescriptorSet create(const struct SetBinding& cinfo);
-		VkFramebuffer create(const struct FramebufferCreateInfo& cinfo);
+		Unique<VkFramebuffer> create(const struct FramebufferCreateInfo& cinfo);
 		Sampler create(const struct SamplerCreateInfo& cinfo);
 		DescriptorSetLayoutAllocInfo create(const struct DescriptorSetLayoutCreateInfo& cinfo);
 		VkPipelineLayout create(const struct PipelineLayoutCreateInfo& cinfo);

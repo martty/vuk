@@ -194,7 +194,7 @@ namespace vuk {
 			rp.fbci.height = fb_extent.height;
 			rp.fbci.attachmentCount = (uint32_t)vkivs.size();
 			rp.fbci.layers = 1;
-			rp.framebuffer = ptc.acquire_framebuffer(rp.fbci);
+			rp.framebuffer = ptc.create(rp.fbci).get(); // queue framebuffer for destruction
 		}
 
 		// create non-attachment images
