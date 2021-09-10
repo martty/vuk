@@ -705,6 +705,20 @@ void vuk::Context::wait_idle() {
 	vkDeviceWaitIdle(device);
 }
 
+vuk::ImageView vuk::Context::wrap(VkImageView iv, vuk::ImageViewCreateInfo ivci) {
+    vuk::ImageView viv{.payload = iv};
+    viv.base_layer = ivci.subresourceRange.baseArrayLayer;
+    viv.layer_count = ivci.subresourceRange.layerCount;
+    viv.base_mip = ivci.subresourceRange.baseMipLevel;
+    viv.mip_count = ivci.subresourceRange.levelCount;
+    viv.format = ivci.format;
+    viv.type = ivci.viewType;
+    viv.image = ivci.image;
+    viv.components = ivci.components;
+    viv.id = unique_handle_id_counter++;
+    return viv;
+}
+
 vuk::Unique<vuk::ImageView> vuk::Context::create_image_view(vuk::ImageViewCreateInfo ivci) {
 	VkImageView iv;
 	vkCreateImageView(device, (VkImageViewCreateInfo*)&ivci, nullptr, &iv);

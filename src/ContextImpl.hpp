@@ -181,20 +181,6 @@ namespace vuk {
 		return (frame + 1) % FC;
 	}
 
-	inline vuk::ImageView Context::wrap(VkImageView iv, vuk::ImageViewCreateInfo ivci) {
-		vuk::ImageView viv{ .payload = iv };
-		viv.base_layer = ivci.subresourceRange.baseArrayLayer;
-		viv.layer_count = ivci.subresourceRange.layerCount;
-		viv.base_mip = ivci.subresourceRange.baseMipLevel;
-		viv.mip_count = ivci.subresourceRange.levelCount;
-		viv.format = ivci.format;
-		viv.type = ivci.viewType;
-		viv.image = ivci.image;
-		viv.components = ivci.components;
-		viv.id = unique_handle_id_counter++;
-		return viv;
-	}
-
 	struct BufferCopyCommand {
 		Buffer src;
 		Buffer dst;
