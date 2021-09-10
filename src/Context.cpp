@@ -20,8 +20,12 @@ vuk::Context::Context(ContextCreateParameters params) :
 	graphics_queue_family_index(params.graphics_queue_family_index),
 	transfer_queue(params.transfer_queue),
 	transfer_queue_family_index(params.transfer_queue_family_index),
-	debug(*this),
-	impl(new ContextImpl(*this)) {
+	debug(*this){
+    if(transfer_queue == VK_NULL_HANDLE || transfer_queue_family_index == VK_QUEUE_FAMILY_IGNORED) {
+        transfer_queue = graphics_queue;
+        transfer_queue_family_index = graphics_queue_family_index;
+	}
+    impl = new ContextImpl(*this);
 }
 
 bool vuk::Context::DebugUtils::enabled() {
@@ -60,9 +64,15 @@ void vuk::Context::submit_graphics(VkSubmitInfo si, VkFence fence) {
 }
 
 void vuk::Context::submit_transfer(VkSubmitInfo si, VkFence fence) {
-	std::lock_guard _(impl->xfer_queue_lock);
-    VkResult res = vkQueueSubmit(transfer_queue, 1, &si, fence);
-    assert(res == VK_SUCCESS);
+    if(transfer_queue == graphics_queue) {
+        std::lock_guard _(impl->gfx_queue_lock);
+        VkResult res = vkQueueSubmit(graphics_queue, 1, &si, fence);
+        assert(res == VK_SUCCESS);
+    } else {
+        std::lock_guard _(impl->xfer_queue_lock);
+        VkResult res = vkQueueSubmit(transfer_queue, 1, &si, fence);
+        assert(res == VK_SUCCESS);
+	}
 }
 
 void vuk::PersistentDescriptorSet::update_combined_image_sampler(PerThreadContext& ptc, unsigned binding, unsigned array_index, vuk::ImageView iv, vuk::SamplerCreateInfo sci, vuk::ImageLayout layout) {

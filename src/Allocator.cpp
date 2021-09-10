@@ -107,7 +107,7 @@ namespace vuk {
 
 		pool_helper->device = device;
 
-		if (transfer_queue_family != VK_QUEUE_FAMILY_IGNORED) {
+		if(transfer_queue_family != graphics_queue_family) {
 			all_queue_families = { graphics_queue_family, transfer_queue_family };
 		} else {
 			all_queue_families = { graphics_queue_family };
