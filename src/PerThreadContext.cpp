@@ -27,8 +27,8 @@ vuk::Unique<vuk::PersistentDescriptorSet> vuk::PerThreadContext::create_persiste
                                                                                                  unsigned num_descriptors) {
     dslci.dslci.bindingCount = (uint32_t)dslci.bindings.size();
     dslci.dslci.pBindings = dslci.bindings.data();
+    VkDescriptorSetLayoutBindingFlagsCreateInfo dslbfci{.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO};
     if(dslci.flags.size() > 0) {
-        VkDescriptorSetLayoutBindingFlagsCreateInfo dslbfci{.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO};
         dslbfci.bindingCount = (uint32_t)dslci.bindings.size();
         dslbfci.pBindingFlags = dslci.flags.data();
         dslci.dslci.pNext = &dslbfci;
