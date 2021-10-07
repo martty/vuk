@@ -332,6 +332,12 @@ namespace vuk {
 		return *this;
 	}
 
+	CommandBuffer& CommandBuffer::dispatch_indirect(Buffer indirect_buffer, size_t offset) {
+		_bind_compute_pipeline_state();
+		vkCmdDispatchIndirect(command_buffer, indirect_buffer.buffer, indirect_buffer.offset + offset);
+		return *this;
+	}
+
 	SecondaryCommandBuffer CommandBuffer::begin_secondary() {
 		auto nptc = new vuk::PerThreadContext(ptc.ifc.begin());
 		auto scbuf = nptc->acquire_command_buffer(VK_COMMAND_BUFFER_LEVEL_SECONDARY);
