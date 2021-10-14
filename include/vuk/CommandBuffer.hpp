@@ -281,6 +281,8 @@ namespace vuk {
 		// Actual invocation count will be rounded up to be a multiple of local_size_{x,y,z}
 		CommandBuffer& dispatch_invocations(size_t invocation_count_x, size_t invocation_count_y = 1, size_t invocation_count_z = 1);
 
+		CommandBuffer& dispatch_indirect(Buffer indirect_buffer);
+
 		class SecondaryCommandBuffer begin_secondary();
 		void execute(std::span<VkCommandBuffer>);
 
