@@ -599,6 +599,7 @@ vuk::Texture vuk::Context::allocate_texture(vuk::ImageCreateInfo ici) {
 	vuk::Texture tex{ Unique<Image>(*this, dst), create_image_view(ivci) };
 	tex.extent = ici.extent;
 	tex.format = ici.format;
+	tex.sample_count = ici.samples;
 	return tex;
 }
 
