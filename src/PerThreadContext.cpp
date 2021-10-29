@@ -213,10 +213,10 @@ vuk::DescriptorSet vuk::PerThreadContext::create(const create_info_t<vuk::Descri
 	auto& pool = impl->pool_cache.acquire(cinfo.layout_info);
 	auto ds = pool.acquire(*this, cinfo.layout_info);
 	auto mask = cinfo.used.to_ulong();
-	unsigned long leading_ones = num_leading_ones(mask);
+	uint32_t leading_ones = num_leading_ones(mask);
     std::array<VkWriteDescriptorSet, VUK_MAX_BINDINGS> writes = {};
     int j = 0;
-	for (int i = 0; i < leading_ones; i++, j++) {
+	for (uint32_t i = 0; i < leading_ones; i++, j++) {
         if(!cinfo.used.test(i)) {
             j--;
             continue;

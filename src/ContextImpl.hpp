@@ -32,7 +32,7 @@ namespace vuk {
 		Pool<TimestampQuery, Context::FC> tsquery_pools;
 		Pool<VkSemaphore, Context::FC> semaphore_pools;
 		Pool<VkFence, Context::FC> fence_pools;
-		VkPipelineCache vk_pipeline_cache;
+		VkPipelineCache vk_pipeline_cache = VK_NULL_HANDLE;
 		Cache<PipelineBaseInfo> pipelinebase_cache;
 		Cache<PipelineInfo> pipeline_cache;
 		Cache<ComputePipelineBaseInfo> compute_pipelinebase_cache;
@@ -163,9 +163,6 @@ namespace vuk {
 			shader_modules(ctx),
 			descriptor_set_layouts(ctx),
 			pipeline_layouts(ctx) {
-
-			VkPipelineCacheCreateInfo pcci{ .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO };
-			vkCreatePipelineCache(ctx.device, &pcci, nullptr, &vk_pipeline_cache);
 			vkGetPhysicalDeviceProperties(ctx.physical_device, &physical_device_properties);
 		}
 	};
