@@ -44,24 +44,6 @@ namespace std {
 	};
 
 	template <>
-	struct hash<VkSpecializationMapEntry> {
-		size_t operator()(VkSpecializationMapEntry const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.constantID, x.offset, x.size);
-			return h;
-		}
-	};
-
-	template <>
-	struct hash<VkSpecializationInfo> {
-		size_t operator()(VkSpecializationInfo const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, std::span(x.pMapEntries, x.mapEntryCount), std::span((std::byte*)x.pData, x.dataSize));
-			return h;
-		}
-	};
-
-	template <>
 	struct hash<VkPipelineShaderStageCreateInfo> {
 		size_t operator()(VkPipelineShaderStageCreateInfo const& x) const noexcept {
 			size_t h = 0;

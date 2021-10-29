@@ -67,7 +67,7 @@ namespace vuk {
 	}
 
 	template<>
-	ComputePipelineInfo& Cache<ComputePipelineInfo>::acquire(const create_info_t<ComputePipelineInfo>& ci) {
+	ComputePipelineBaseInfo& Cache<ComputePipelineBaseInfo>::acquire(const create_info_t<ComputePipelineBaseInfo>& ci) {
 		std::shared_lock _(cache_mtx);
 		if (auto it = lru_map.find(ci); it != lru_map.end()) {
 			it->second.last_use_frame = UINT64_MAX;
@@ -125,6 +125,7 @@ namespace vuk {
 	template class Cache<vuk::PipelineInfo>;
 	template class Cache<vuk::PipelineBaseInfo>;
 	template class Cache<vuk::ComputePipelineInfo>;
+	template class Cache<vuk::ComputePipelineBaseInfo>;
 	template class Cache<VkRenderPass>;
 	template class Cache<vuk::Sampler>;
 	template class Cache<VkPipelineLayout>;

@@ -298,9 +298,23 @@ vuk::PipelineInfo vuk::PerThreadContext::create(const create_info_t<PipelineInfo
 	return { pipeline, gpci.layout, cinfo.base->layout_info };
 }
 
-vuk::ComputePipelineInfo vuk::PerThreadContext::create(const create_info_t<ComputePipelineInfo>& cinfo) {
+vuk::ComputePipelineBaseInfo vuk::PerThreadContext::create(const create_info_t<ComputePipelineBaseInfo>& cinfo) {
 	return ctx.create(cinfo);
 }
+
+vuk::ComputePipelineInfo vuk::PerThreadContext::create(const create_info_t<ComputePipelineInfo>& cinfo) {
+	// create gfx pipeline
+	VkComputePipelineCreateInfo cpci = cinfo.to_vk();
+	cpci.layout = cinfo.base->pipeline_layout;
+	cpci.stage = cinfo.base->pssci;
+
+	VkPipeline pipeline;
+	VkResult res = vkCreateComputePipelines(ctx.device, ctx.impl->vk_pipeline_cache, 1, &cpci, nullptr, &pipeline);
+	assert(res == VK_SUCCESS);
+	ctx.debug.set_name(pipeline, cinfo.base->pipeline_name);
+	return { pipeline, cpci.layout, cinfo.base->layout_info, cinfo.base->reflection_info.local_size };
+}
+
 
 vuk::Unique<VkFramebuffer> vuk::PerThreadContext::create(const create_info_t<VkFramebuffer>& cinfo) {
 	VkFramebuffer fb;
@@ -326,8 +340,13 @@ vuk::DescriptorPool vuk::PerThreadContext::create(const create_info_t<vuk::Descr
 	return vuk::DescriptorPool{};
 }
 
-vuk::Program vuk::PerThreadContext::get_pipeline_reflection_info(vuk::PipelineBaseCreateInfo pci) {
+vuk::Program vuk::PerThreadContext::get_pipeline_reflection_info(const vuk::PipelineBaseCreateInfo& pci) {
 	auto& res = impl->pipelinebase_cache.acquire(pci);
+	return res.reflection_info;
+}
+
+vuk::Program vuk::PerThreadContext::get_pipeline_reflection_info(const vuk::ComputePipelineBaseCreateInfo& pci) {
+	auto& res = impl->compute_pipelinebase_cache.acquire(pci);
 	return res.reflection_info;
 }
 
@@ -368,6 +387,10 @@ vuk::DescriptorSet vuk::PerThreadContext::acquire_descriptorset(const vuk::SetBi
 
 vuk::PipelineInfo vuk::PerThreadContext::acquire_pipeline(const vuk::PipelineInstanceCreateInfo& pici) {
 	return impl->pipeline_cache.acquire(pici);
+}
+
+vuk::ComputePipelineInfo vuk::PerThreadContext::acquire_pipeline(const vuk::ComputePipelineInstanceCreateInfo& pici) {
+	return impl->compute_pipeline_cache.acquire(pici);
 }
 
 const plf::colony<vuk::SampledImage>& vuk::PerThreadContext::get_sampled_images() {

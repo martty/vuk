@@ -44,12 +44,11 @@ namespace {
 			runner.context->create_named_pipeline("scrambled_draw", pci);
 			}
 
-			// creating a compute pipeline is very similar to creating a graphics pipeline
-			// but here we can compile immediately
+			// creating a compute pipeline is the same as creating a graphics pipeline
 			{
-			vuk::ComputePipelineCreateInfo pci;
-			pci.add_glsl(util::read_entire_file("../../examples/stupidsort.comp"), "stupidsort.comp");
-			runner.context->create_named_pipeline("stupidsort", pci);
+			vuk::ComputePipelineBaseCreateInfo pbci;
+			pbci.add_glsl(util::read_entire_file("../../examples/stupidsort.comp"), "stupidsort.comp");
+			runner.context->create_named_pipeline("stupidsort", pbci);
 			}
 
 			int chans;

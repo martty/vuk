@@ -194,7 +194,7 @@ namespace vuk {
 		std::optional<std::array<float, 4>> blend_constants;
 
 		vuk::PipelineBaseInfo* next_pipeline = nullptr;
-		vuk::ComputePipelineInfo* next_compute_pipeline = nullptr;
+		vuk::ComputePipelineBaseInfo* next_compute_pipeline = nullptr;
 		std::optional<vuk::PipelineInfo> current_pipeline;
 		std::optional<vuk::ComputePipelineInfo> current_compute_pipeline;
 
@@ -230,7 +230,7 @@ namespace vuk {
 		CommandBuffer& bind_graphics_pipeline(vuk::PipelineBaseInfo*);
 		CommandBuffer& bind_graphics_pipeline(Name);
 
-		CommandBuffer& bind_compute_pipeline(vuk::ComputePipelineInfo*);
+		CommandBuffer& bind_compute_pipeline(vuk::ComputePipelineBaseInfo*);
 		CommandBuffer& bind_compute_pipeline(Name);
 
 		CommandBuffer& set_primitive_topology(vuk::PrimitiveTopology);

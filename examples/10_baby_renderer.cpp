@@ -99,9 +99,9 @@ namespace {
 			// Let's create two variants of the doge image (like in example 09)
 			// Creating a compute pipeline that inverts an image 
 			{
-				vuk::ComputePipelineCreateInfo pci;
-				pci.add_glsl(util::read_entire_file("../../examples/invert.comp"), "invert.comp");
-				runner.context->create_named_pipeline("invert", pci);
+				vuk::ComputePipelineBaseCreateInfo pbci;
+				pbci.add_glsl(util::read_entire_file("../../examples/invert.comp"), "invert.comp");
+				runner.context->create_named_pipeline("invert", pbci);
 			}
 			vuk::ImageCreateInfo ici;
 			ici.format = vuk::Format::eR8G8B8A8Srgb;

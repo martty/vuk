@@ -557,7 +557,7 @@ namespace vuk {
 		using type = vuk::PipelineBaseCreateInfo;
 	};
 
-	struct ComputePipelineCreateInfo : PipelineBaseCreateInfoBase {
+	struct ComputePipelineBaseCreateInfo : PipelineBaseCreateInfoBase {
 		friend class CommandBuffer;
 		friend class Context;
 	public:
@@ -576,16 +576,33 @@ namespace vuk {
 			shader_path = std::move(filename);
 		}
 
-		friend struct std::hash<ComputePipelineCreateInfo>;
+		friend struct std::hash<ComputePipelineBaseCreateInfo>;
 		friend class PerThreadContext;
 	private:
 		ShaderSource shader;
 		std::string shader_path;
 
 	public:
-		bool operator==(const ComputePipelineCreateInfo& o) const {
+		bool operator==(const ComputePipelineBaseCreateInfo& o) const {
 			return shader == o.shader && binding_flags == o.binding_flags && variable_count_max == o.variable_count_max;
 		}
+	};
+
+	struct ComputePipelineBaseInfo {
+		Name pipeline_name;
+		vuk::Program reflection_info;
+		VkPipelineShaderStageCreateInfo pssci;
+		VkPipelineLayout pipeline_layout;
+		std::array<DescriptorSetLayoutAllocInfo, VUK_MAX_SETS> layout_info;
+
+		// 4 valid flags
+		Bitset<4 * VUK_MAX_SETS * VUK_MAX_BINDINGS> binding_flags = {};
+		// if the set has a variable count binding, the maximum number of bindings possible
+		std::array<uint32_t, VUK_MAX_SETS> variable_count_max = {};
+	};
+
+	template<> struct create_info<ComputePipelineBaseInfo> {
+		using type = vuk::ComputePipelineBaseCreateInfo;
 	};
 }
 
@@ -690,7 +707,7 @@ namespace vuk {
 		VkGraphicsPipelineCreateInfo to_vk() const;
 		PipelineInstanceCreateInfo();
 
-		bool operator==(const PipelineInstanceCreateInfo& o) const {
+		bool operator==(const PipelineInstanceCreateInfo& o) const noexcept {
 			return base == o.base && binding_descriptions == o.binding_descriptions && attribute_descriptions == o.attribute_descriptions &&
 				color_blend_attachments == o.color_blend_attachments && color_blend_state == o.color_blend_state &&
 				vertex_input_state == o.vertex_input_state && multisample_state == o.multisample_state && dynamic_state == o.dynamic_state &&
@@ -708,12 +725,25 @@ namespace vuk {
 		using type = vuk::PipelineInstanceCreateInfo;
 	};
 
+	struct ComputePipelineInstanceCreateInfo {
+		ComputePipelineBaseInfo* base;
+
+		vuk::fixed_vector<VkSpecializationMapEntry, VUK_MAX_SPECIALIZATIONCONSTANT_RANGES> specialization_map_entries;
+		VkSpecializationInfo specialization_info = {};
+
+		VkComputePipelineCreateInfo to_vk() const;
+
+		bool operator==(const ComputePipelineInstanceCreateInfo& o) const noexcept {
+			return base == o.base && specialization_map_entries == o.specialization_map_entries && specialization_info == o.specialization_info;
+		}
+	};
+
 	struct ComputePipelineInfo : PipelineInfo {
 		std::array<unsigned, 3> local_size;
 	};
 
 	template<> struct create_info<ComputePipelineInfo> {
-		using type = vuk::ComputePipelineCreateInfo;
+		using type = vuk::ComputePipelineInstanceCreateInfo;
 	};
 }
 
@@ -825,8 +855,8 @@ namespace std {
 	};
 
 	template <>
-	struct hash<vuk::ComputePipelineCreateInfo> {
-		size_t operator()(vuk::ComputePipelineCreateInfo const& x) const noexcept {
+	struct hash<vuk::ComputePipelineBaseCreateInfo> {
+		size_t operator()(vuk::ComputePipelineBaseCreateInfo const& x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, x.shader);
 			return h;
@@ -876,7 +906,34 @@ namespace std {
 	struct hash<vuk::PipelineInstanceCreateInfo> {
 		size_t operator()(vuk::PipelineInstanceCreateInfo const& x) const noexcept {
 			size_t h = 0;
-			hash_combine(h, x.base, reinterpret_cast<uint64_t>((VkRenderPass)x.render_pass), x.subpass, x.color_blend_attachments, x.color_blend_state, x.multisample_state, x.dynamic_state);
+			hash_combine(h, x.base, reinterpret_cast<uint64_t>((VkRenderPass)x.render_pass), x.subpass, x.color_blend_attachments, x.color_blend_state, x.multisample_state, x.dynamic_state, x.smes, x.sis);
+			return h;
+		}
+	};
+
+	template <>
+	struct hash<VkSpecializationMapEntry> {
+		size_t operator()(VkSpecializationMapEntry const& x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, x.constantID, x.offset, x.size);
+			return h;
+		}
+	};
+
+	template <>
+	struct hash<VkSpecializationInfo> {
+		size_t operator()(VkSpecializationInfo const& x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, std::span(x.pMapEntries, x.mapEntryCount), std::span((std::byte*)x.pData, x.dataSize));
+			return h;
+		}
+	};
+
+	template <>
+	struct hash<vuk::ComputePipelineInstanceCreateInfo> {
+		size_t operator()(vuk::ComputePipelineInstanceCreateInfo const& x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, x.base, x.specialization_info, x.specialization_map_entries);
 			return h;
 		}
 	};

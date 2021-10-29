@@ -47,9 +47,9 @@ namespace {
 
 			// creating a compute pipeline that inverts an image 
 			{
-			vuk::ComputePipelineCreateInfo pci;
-			pci.add_glsl(util::read_entire_file("../../examples/invert.comp"), "invert.comp");
-			runner.context->create_named_pipeline("invert", pci);
+			vuk::ComputePipelineBaseCreateInfo pbci;
+			pbci.add_glsl(util::read_entire_file("../../examples/invert.comp"), "invert.comp");
+			runner.context->create_named_pipeline("invert", pbci);
 			}
 
 			// Use STBI to load the image

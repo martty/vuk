@@ -70,14 +70,15 @@ namespace vuk {
 		} debug;
 
 		void create_named_pipeline(Name name, vuk::PipelineBaseCreateInfo pbci);
-		void create_named_pipeline(Name name, vuk::ComputePipelineCreateInfo pbci);
+		void create_named_pipeline(Name name, vuk::ComputePipelineBaseCreateInfo pbci);
 
 		PipelineBaseInfo* get_named_pipeline(Name name);
-		ComputePipelineInfo* get_named_compute_pipeline(Name name);
+		ComputePipelineBaseInfo* get_named_compute_pipeline(Name name);
 
 		PipelineBaseInfo* get_pipeline(const PipelineBaseCreateInfo& pbci);
-		ComputePipelineInfo* get_pipeline(const ComputePipelineCreateInfo& pbci);
-		Program get_pipeline_reflection_info(PipelineBaseCreateInfo pbci);
+		ComputePipelineBaseInfo* get_pipeline(const ComputePipelineBaseCreateInfo& pbci);
+		Program get_pipeline_reflection_info(const PipelineBaseCreateInfo& pbci);
+		Program get_pipeline_reflection_info(const ComputePipelineBaseCreateInfo& pbci);
 		ShaderModule compile_shader(ShaderSource source, std::string path);
 
 		bool load_pipeline_cache(std::span<uint8_t> data);
@@ -194,6 +195,7 @@ namespace vuk {
 		void destroy(const struct LinearAllocator& v);
 		void destroy(const DescriptorPool& dp);
 		void destroy(const PipelineInfo& pi);
+		void destroy(const ComputePipelineInfo& pi);
 		void destroy(const ShaderModule& sm);
 		void destroy(const DescriptorSetLayoutAllocInfo& ds);
 		void destroy(const VkPipelineLayout& pl);
@@ -202,12 +204,13 @@ namespace vuk {
 		void destroy(const VkFramebuffer& fb);
 		void destroy(const Sampler& sa);
 		void destroy(const PipelineBaseInfo& pbi);
+		void destroy(const ComputePipelineBaseInfo& pbi);
 
 		ShaderModule create(const create_info_t<ShaderModule>& cinfo);
 		PipelineBaseInfo create(const create_info_t<PipelineBaseInfo>& cinfo);
+		ComputePipelineBaseInfo create(const create_info_t<ComputePipelineBaseInfo>& cinfo);
 		VkPipelineLayout create(const create_info_t<VkPipelineLayout>& cinfo);
 		DescriptorSetLayoutAllocInfo create(const create_info_t<DescriptorSetLayoutAllocInfo>& cinfo);
-		ComputePipelineInfo create(const create_info_t<ComputePipelineInfo>& cinfo);
 
 		friend class InflightContext;
 		friend class PerThreadContext;
@@ -341,7 +344,8 @@ namespace vuk {
 		vuk::SampledImage& make_sampled_image(Name n, vuk::SamplerCreateInfo sci);
 		vuk::SampledImage& make_sampled_image(Name n, vuk::ImageViewCreateInfo ivci, vuk::SamplerCreateInfo sci);
 
-		vuk::Program get_pipeline_reflection_info(vuk::PipelineBaseCreateInfo pci);
+		Program get_pipeline_reflection_info(const PipelineBaseCreateInfo& pci);
+		Program get_pipeline_reflection_info(const ComputePipelineBaseCreateInfo& pci);
 
 		TimestampQuery register_timestamp_query(Query);
 
@@ -362,11 +366,14 @@ namespace vuk {
 		Sampler acquire_sampler(const SamplerCreateInfo&);
 		DescriptorSet acquire_descriptorset(const SetBinding&);
 		PipelineInfo acquire_pipeline(const PipelineInstanceCreateInfo&);
+		ComputePipelineInfo acquire_pipeline(const ComputePipelineInstanceCreateInfo&);
 
 		const plf::colony<SampledImage>& get_sampled_images();
 
 		PipelineBaseInfo create(const struct PipelineBaseCreateInfo& cinfo);
 		PipelineInfo create(const struct PipelineInstanceCreateInfo& cinfo);
+		ComputePipelineBaseInfo create(const struct ComputePipelineBaseCreateInfo& cinfo);
+		ComputePipelineInfo create(const struct ComputePipelineInstanceCreateInfo& cinfo);
 		ShaderModule create(const struct ShaderModuleCreateInfo& cinfo);
 		VkRenderPass create(const struct RenderPassCreateInfo& cinfo);
 		RGImage create(const struct RGCI& cinfo);
@@ -377,7 +384,6 @@ namespace vuk {
 		Sampler create(const struct SamplerCreateInfo& cinfo);
 		DescriptorSetLayoutAllocInfo create(const struct DescriptorSetLayoutCreateInfo& cinfo);
 		VkPipelineLayout create(const struct PipelineLayoutCreateInfo& cinfo);
-		ComputePipelineInfo create(const struct ComputePipelineCreateInfo& cinfo);
 
 	private:
 		friend class InflightContext;

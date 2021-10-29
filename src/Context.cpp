@@ -229,7 +229,7 @@ vuk::PipelineBaseInfo vuk::Context::create(const create_info_t<PipelineBaseInfo>
 	return pbi;
 }
 
-vuk::ComputePipelineInfo vuk::Context::create(const create_info_t<vuk::ComputePipelineInfo>& cinfo) {
+vuk::ComputePipelineBaseInfo vuk::Context::create(const create_info_t<vuk::ComputePipelineBaseInfo>& cinfo) {
 	VkPipelineShaderStageCreateInfo shader_stage{ .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
 	std::string pipe_name = "Compute:";
 	auto& sm = impl->shader_modules.acquire({ cinfo.shader, cinfo.shader_path });
@@ -266,13 +266,16 @@ vuk::ComputePipelineInfo vuk::Context::create(const create_info_t<vuk::ComputePi
 	plci.plci.pSetLayouts = dsls.data();
 	plci.plci.setLayoutCount = (uint32_t)dsls.size();
 
-	VkComputePipelineCreateInfo cpci{ .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO };
-	cpci.stage = shader_stage;
-	cpci.layout = impl->pipeline_layouts.acquire(plci);
-	VkPipeline pipeline;
-	vkCreateComputePipelines(device, impl->vk_pipeline_cache, 1, &cpci, nullptr, &pipeline);
-	debug.set_name(pipeline, Name(pipe_name));
-	return { { pipeline, cpci.layout, dslai }, sm.reflection_info.local_size };
+	vuk::ComputePipelineBaseInfo cpbi;
+	cpbi.pssci = shader_stage;
+	cpbi.layout_info = dslai;
+	cpbi.pipeline_layout = impl->pipeline_layouts.acquire(plci);
+	cpbi.pipeline_name = Name(pipe_name);
+	cpbi.reflection_info = sm.reflection_info;
+	cpbi.binding_flags = cinfo.binding_flags;
+	cpbi.variable_count_max = cinfo.variable_count_max;
+
+	return cpbi;
 }
 
 bool vuk::Context::load_pipeline_cache(std::span<uint8_t> data) {
@@ -338,9 +341,9 @@ void vuk::Context::create_named_pipeline(vuk::Name name, vuk::PipelineBaseCreate
 	impl->named_pipelines.insert_or_assign(name, &impl->pipelinebase_cache.acquire(std::move(ci)));
 }
 
-void vuk::Context::create_named_pipeline(vuk::Name name, vuk::ComputePipelineCreateInfo ci) {
+void vuk::Context::create_named_pipeline(vuk::Name name, vuk::ComputePipelineBaseCreateInfo ci) {
 	std::lock_guard _(impl->named_pipelines_lock);
-	impl->named_compute_pipelines.insert_or_assign(name, &impl->compute_pipeline_cache.acquire(std::move(ci)));
+	impl->named_compute_pipelines.insert_or_assign(name, &impl->compute_pipelinebase_cache.acquire(std::move(ci)));
 }
 
 vuk::PipelineBaseInfo* vuk::Context::get_named_pipeline(vuk::Name name) {
@@ -348,7 +351,7 @@ vuk::PipelineBaseInfo* vuk::Context::get_named_pipeline(vuk::Name name) {
 	return impl->named_pipelines.at(name);
 }
 
-vuk::ComputePipelineInfo* vuk::Context::get_named_compute_pipeline(vuk::Name name) {
+vuk::ComputePipelineBaseInfo* vuk::Context::get_named_compute_pipeline(vuk::Name name) {
 	std::lock_guard _(impl->named_pipelines_lock);
 	return impl->named_compute_pipelines.at(name);
 }
@@ -357,12 +360,17 @@ vuk::PipelineBaseInfo* vuk::Context::get_pipeline(const vuk::PipelineBaseCreateI
 	return &impl->pipelinebase_cache.acquire(pbci);
 }
 
-vuk::ComputePipelineInfo* vuk::Context::get_pipeline(const vuk::ComputePipelineCreateInfo& pbci) {
-	return &impl->compute_pipeline_cache.acquire(pbci);
+vuk::ComputePipelineBaseInfo* vuk::Context::get_pipeline(const vuk::ComputePipelineBaseCreateInfo& pbci) {
+	return &impl->compute_pipelinebase_cache.acquire(pbci);
 }
 
-vuk::Program vuk::Context::get_pipeline_reflection_info(vuk::PipelineBaseCreateInfo pci) {
+vuk::Program vuk::Context::get_pipeline_reflection_info(const vuk::PipelineBaseCreateInfo& pci) {
 	auto& res = impl->pipelinebase_cache.acquire(pci);
+	return res.reflection_info;
+}
+
+vuk::Program vuk::Context::get_pipeline_reflection_info(const vuk::ComputePipelineBaseCreateInfo& pci) {
+	auto& res = impl->compute_pipelinebase_cache.acquire(pci);
 	return res.reflection_info;
 }
 
@@ -657,6 +665,10 @@ void vuk::Context::destroy(const vuk::PipelineInfo& pi) {
 	vkDestroyPipeline(device, pi.pipeline, nullptr);
 }
 
+void vuk::Context::destroy(const vuk::ComputePipelineInfo& pi) {
+	vkDestroyPipeline(device, pi.pipeline, nullptr);
+}
+
 void vuk::Context::destroy(const vuk::ShaderModule& sm) {
 	vkDestroyShaderModule(device, sm.shader_module, nullptr);
 }
@@ -686,6 +698,10 @@ void vuk::Context::destroy(const vuk::Sampler& sa) {
 }
 
 void vuk::Context::destroy(const vuk::PipelineBaseInfo& pbi) {
+	// no-op, we don't own device objects
+}
+
+void vuk::Context::destroy(const vuk::ComputePipelineBaseInfo& pbi) {
 	// no-op, we don't own device objects
 }
 

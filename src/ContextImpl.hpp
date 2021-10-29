@@ -35,6 +35,7 @@ namespace vuk {
 		VkPipelineCache vk_pipeline_cache;
 		Cache<PipelineBaseInfo> pipelinebase_cache;
 		Cache<PipelineInfo> pipeline_cache;
+		Cache<ComputePipelineBaseInfo> compute_pipelinebase_cache;
 		Cache<ComputePipelineInfo> compute_pipeline_cache;
 		Cache<VkRenderPass> renderpass_cache;
 		Cache<RGImage> transient_images;
@@ -59,7 +60,7 @@ namespace vuk {
 
 		std::mutex named_pipelines_lock;
 		std::unordered_map<Name, vuk::PipelineBaseInfo*> named_pipelines;
-		std::unordered_map<Name, vuk::ComputePipelineInfo*> named_compute_pipelines;
+		std::unordered_map<Name, vuk::ComputePipelineBaseInfo*> named_compute_pipelines;
 
 		std::atomic<uint64_t> query_id_counter = 0;
 		VkPhysicalDeviceProperties physical_device_properties;
@@ -150,6 +151,7 @@ namespace vuk {
 			fence_pools(ctx),
 			pipelinebase_cache(ctx),
 			pipeline_cache(ctx),
+			compute_pipelinebase_cache(ctx),
 			compute_pipeline_cache(ctx),
 			renderpass_cache(ctx),
 			transient_images(ctx),
@@ -406,8 +408,9 @@ namespace vuk {
 		Pool<TimestampQuery, Context::FC>::PFView tsquery_pools;
 		Pool<VkSemaphore, Context::FC>::PFView semaphore_pools;
 		Cache<PipelineInfo>::PFView pipeline_cache;
-		Cache<ComputePipelineInfo>::PFView compute_pipeline_cache;
 		Cache<PipelineBaseInfo>::PFView pipelinebase_cache;
+		Cache<ComputePipelineBaseInfo>::PFView compute_pipelinebase_cache;
+		Cache<ComputePipelineInfo>::PFView compute_pipeline_cache;
 		Cache<VkRenderPass>::PFView renderpass_cache;
 		Cache<vuk::RGImage>::PFView transient_images;
 		PerFrameCache<LinearAllocator, Context::FC>::PFView scratch_buffers;
@@ -438,9 +441,10 @@ namespace vuk {
 			commandbuffer_pools(ctx.impl->cbuf_pools.get_view(ifc)),
 			tsquery_pools(ctx.impl->tsquery_pools.get_view(ifc)),
 			semaphore_pools(ctx.impl->semaphore_pools.get_view(ifc)),
-			pipeline_cache(ifc, ctx.impl->pipeline_cache),
-			compute_pipeline_cache(ifc, ctx.impl->compute_pipeline_cache),
 			pipelinebase_cache(ifc, ctx.impl->pipelinebase_cache),
+			pipeline_cache(ifc, ctx.impl->pipeline_cache),
+			compute_pipelinebase_cache(ifc, ctx.impl->compute_pipelinebase_cache),
+			compute_pipeline_cache(ifc, ctx.impl->compute_pipeline_cache),
 			renderpass_cache(ifc, ctx.impl->renderpass_cache),
 			transient_images(ifc, ctx.impl->transient_images),
 			scratch_buffers(ifc, ctx.impl->scratch_buffers),
@@ -459,9 +463,10 @@ namespace vuk {
 		Pool<VkSemaphore, Context::FC>::PFPTView semaphore_pool;
 		Pool<VkFence, Context::FC>::PFPTView fence_pool;
 		Pool<TimestampQuery, Context::FC>::PFPTView tsquery_pool;
-		Cache<PipelineInfo>::PFPTView pipeline_cache;
-		Cache<ComputePipelineInfo>::PFPTView compute_pipeline_cache;
 		Cache<PipelineBaseInfo>::PFPTView pipelinebase_cache;
+		Cache<PipelineInfo>::PFPTView pipeline_cache;
+		Cache<ComputePipelineBaseInfo>::PFPTView compute_pipelinebase_cache;
+		Cache<ComputePipelineInfo>::PFPTView compute_pipeline_cache;
 		Cache<VkRenderPass>::PFPTView renderpass_cache;
 		Cache<vuk::RGImage>::PFPTView transient_images;
 		PerFrameCache<LinearAllocator, Context::FC>::PFPTView scratch_buffers;
@@ -483,9 +488,10 @@ namespace vuk {
 			semaphore_pool(ifc.impl->semaphore_pools.get_view(ptc)),
 			fence_pool(ifc.impl->fence_pools.get_view(ptc)),
 			tsquery_pool(ifc.impl->tsquery_pools.get_view(ptc)),
-			pipeline_cache(ptc, ifc.impl->pipeline_cache),
-			compute_pipeline_cache(ptc, ifc.impl->compute_pipeline_cache),
 			pipelinebase_cache(ptc, ifc.impl->pipelinebase_cache),
+			pipeline_cache(ptc, ifc.impl->pipeline_cache),
+			compute_pipelinebase_cache(ptc, ifc.impl->compute_pipelinebase_cache),
+			compute_pipeline_cache(ptc, ifc.impl->compute_pipeline_cache),
 			renderpass_cache(ptc, ifc.impl->renderpass_cache),
 			transient_images(ptc, ifc.impl->transient_images),
 			scratch_buffers(ptc, ifc.impl->scratch_buffers),

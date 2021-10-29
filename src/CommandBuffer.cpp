@@ -100,7 +100,8 @@ namespace vuk {
 		return bind_graphics_pipeline(ptc.ctx.get_named_pipeline(p));
 	}
 
-	CommandBuffer& CommandBuffer::bind_compute_pipeline(vuk::ComputePipelineInfo* gpci) {
+	CommandBuffer& CommandBuffer::bind_compute_pipeline(vuk::ComputePipelineBaseInfo* gpci) {
+		assert(!ongoing_renderpass);
 		next_compute_pipeline = gpci;
 		return *this;
 	}
@@ -120,7 +121,8 @@ namespace vuk {
 		for (auto& f : format.list) {
 			if (f.ignore) {
 				offset += f.size;
-			} else {
+			}
+			else {
 				vuk::VertexInputAttributeDescription viad;
 				viad.binding = binding;
 				viad.format = f.format;
@@ -209,7 +211,8 @@ namespace vuk {
 		vuk::ImageAspectFlagBits aspect;
 		if (ivci.format == vuk::Format::eD32Sfloat) {
 			aspect = vuk::ImageAspectFlagBits::eDepth;
-		} else {
+		}
+		else {
 			aspect = vuk::ImageAspectFlagBits::eColor;
 		}
 		isr.aspectMask = aspect;
@@ -381,7 +384,8 @@ namespace vuk {
 		vuk::ImageAspectFlagBits aspect;
 		if (rg->get_resource_image(dst).description.format == (VkFormat)vuk::Format::eD32Sfloat) {
 			aspect = vuk::ImageAspectFlagBits::eDepth;
-		} else {
+		}
+		else {
 			aspect = vuk::ImageAspectFlagBits::eColor;
 		}
 		isl.aspectMask = aspect;
@@ -441,7 +445,8 @@ namespace vuk {
 		imb.dstAccessMask = (VkAccessFlags)dst_use.access;
 		if (rg->is_resource_image_in_general_layout(src, current_pass)) {
 			imb.oldLayout = imb.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-		} else {
+		}
+		else {
 			imb.oldLayout = (VkImageLayout)src_use.layout;
 			imb.newLayout = (VkImageLayout)dst_use.layout;
 		}
@@ -477,7 +482,8 @@ namespace vuk {
 				vkCmdBindDescriptorSets(command_buffer, graphics ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE,
 					graphics ? current_pipeline->pipeline_layout : current_compute_pipeline->pipeline_layout, i, 1, &ds.descriptor_set, 0,
 					nullptr);
-			} else {
+			}
+			else {
 				vkCmdBindDescriptorSets(command_buffer, graphics ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE,
 					graphics ? current_pipeline->pipeline_layout : current_compute_pipeline->pipeline_layout, i, 1, &persistent_sets[i], 0,
 					nullptr);
@@ -490,8 +496,30 @@ namespace vuk {
 
 	void CommandBuffer::_bind_compute_pipeline_state() {
 		if (next_compute_pipeline) {
-			vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, next_compute_pipeline->pipeline);
-			current_compute_pipeline = *next_compute_pipeline;
+			vuk::ComputePipelineInstanceCreateInfo pi;
+			pi.base = next_compute_pipeline;
+
+			bool empty = true;
+			for (auto& [sme, stage] : smes) {
+				if (VkShaderStageFlagBits::VK_SHADER_STAGE_COMPUTE_BIT == stage) {
+					pi.specialization_map_entries.push_back(sme);
+					empty = false;
+				}
+			}
+
+			if (!empty) {
+				VkSpecializationInfo& si = pi.specialization_info;
+				si.pMapEntries = pi.specialization_map_entries.data();
+				si.mapEntryCount = (uint32_t)pi.specialization_map_entries.size();
+				si.pData = specialization_constant_buffer.data();
+				si.dataSize = specialization_constant_buffer.size();
+
+				pi.base->pssci.pSpecializationInfo = &pi.specialization_info;
+			}
+
+			current_compute_pipeline = ptc.acquire_pipeline(pi);
+
+			vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, current_compute_pipeline->pipeline);
 			next_compute_pipeline = nullptr;
 		}
 

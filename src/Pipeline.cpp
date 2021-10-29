@@ -101,7 +101,7 @@ namespace vuk {
 				layoutBinding.descriptorCount = si.array_size == (unsigned)-1 ? 1 : si.array_size;
 				layoutBinding.stageFlags = si.stage;
 				layoutBinding.pImmutableSamplers = nullptr;
-				if (si.array_size == 0) { 
+				if (si.array_size == 0) {
 					assert(bci.variable_count_max[index] > 0); // forgot to mark this descriptor as variable count
 					layoutBinding.descriptorCount = bci.variable_count_max[index];
 				}
@@ -162,5 +162,10 @@ namespace vuk {
 		gpci.renderPass = render_pass;
 		gpci.subpass = subpass;
 		return gpci;
+	}
+
+	VkComputePipelineCreateInfo vuk::ComputePipelineInstanceCreateInfo::to_vk() const {
+		VkComputePipelineCreateInfo cpci{ .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO };
+		return cpci;
 	}
 }
