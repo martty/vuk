@@ -48,7 +48,6 @@ namespace std {
 		size_t operator()(VkPipelineShaderStageCreateInfo const& x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, x.flags, x.pName, to_integral(x.stage), reinterpret_cast<uint64_t>((VkShaderModule)x.module));
-			if (x.pSpecializationInfo) hash_combine(h, *x.pSpecializationInfo);
 			return h;
 		}
 	};
@@ -146,29 +145,6 @@ namespace std {
 			return h;
 		}
 	};
-
-	/*	template <>
-		struct hash<VkGraphicsPipelineCreateInfo> {
-			size_t operator()(VkGraphicsPipelineCreateInfo const & x) const noexcept {
-				size_t h = 0;
-				hash_combine(h, x.flags, std::span(x.pStages, x.stageCount));
-				if (x.pVertexInputState) hash_combine(h, *x.pVertexInputState);
-				if (x.pInputAssemblyState) hash_combine(h, *x.pInputAssemblyState);
-				if (x.pTessellationState) hash_combine(h, *x.pTessellationState);
-				if (x.pViewportState) hash_combine(h, *x.pViewportState);
-				if (x.pMultisampleState) hash_combine(h, *x.pMultisampleState);
-				if (x.pDepthStencilState) hash_combine(h, *x.pDepthStencilState);
-				if (x.pColorBlendState) hash_combine(h, *x.pColorBlendState);
-				if (x.pDynamicState) hash_combine(h, *x.pDynamicState);
-				hash_combine(h,
-					reinterpret_cast<uint64_t>((VkPipelineLayout)x.layout),
-					reinterpret_cast<uint64_t>((VkRenderPass)x.renderPass),
-					x.subpass,
-					reinterpret_cast<uint64_t>((VkPipeline)x.basePipelineHandle),
-					x.basePipelineIndex);
-				return h;
-			}
-		};*/
 
 	template <>
 	struct hash<VkAttachmentDescription> {

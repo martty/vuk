@@ -22,6 +22,7 @@ namespace {
 	float time = 0.f;
 	auto box = util::generate_cube();
 	int x, y;
+	uint32_t speed_count = 1;
 	std::optional<vuk::Texture> texture_of_doge;
 	vuk::Unique<vuk::Buffer> scramble_buf;
 	std::random_device rd;
@@ -95,7 +96,9 @@ namespace {
 					command_buffer
 						.bind_storage_buffer(0, 0, command_buffer.get_resource_buffer("08_scramble"))
 						.bind_compute_pipeline("stupidsort")
+						.specialization_constants<uint32_t>(0, vuk::ShaderStageFlagBits::eCompute, speed_count)
 						.dispatch(1);
+					speed_count += 256;
 				}
 			});
 

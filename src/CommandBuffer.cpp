@@ -241,9 +241,10 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::specialization_constants(unsigned constant_id, vuk::ShaderStageFlags stages, size_t offset, void* data, size_t size) {
-		smes.emplace_back(VkSpecializationMapEntry{ (uint32_t)constant_id, (uint32_t)offset, (size_t)size }, stages);
-		void* dst = specialization_constant_buffer.data() + offset;
+	CommandBuffer& CommandBuffer::specialization_constants(unsigned constant_id, vuk::ShaderStageFlags stages, void* data, size_t size) {
+		smes.emplace_back(VkSpecializationMapEntry{ (uint32_t)constant_id, (uint32_t)specialization_constant_buffer.size(), (size_t)size}, stages);
+		void* dst = specialization_constant_buffer.data() + specialization_constant_buffer.size();
+		specialization_constant_buffer.resize(specialization_constant_buffer.size() + size);
 		::memcpy(dst, data, size);
 		return *this;
 	}
@@ -513,6 +514,9 @@ namespace vuk {
 				si.mapEntryCount = (uint32_t)pi.specialization_map_entries.size();
 				si.pData = specialization_constant_buffer.data();
 				si.dataSize = specialization_constant_buffer.size();
+				
+				// copy spec constant bytes into pipeline
+				memcpy(pi.specialization_constant_data.data(), specialization_constant_buffer.data(), specialization_constant_buffer.size());
 
 				pi.base->pssci.pSpecializationInfo = &pi.specialization_info;
 			}
@@ -521,6 +525,7 @@ namespace vuk {
 
 			vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, current_compute_pipeline->pipeline);
 			next_compute_pipeline = nullptr;
+			specialization_constant_buffer.clear();
 		}
 
 		_bind_state(false);
@@ -531,28 +536,33 @@ namespace vuk {
 			vuk::PipelineInstanceCreateInfo pi;
 			pi.base = next_pipeline;
 
-			for (auto& pssci : pi.base->psscis) {
-				uint32_t offset = (uint32_t)pi.smes.size();
+			vuk::fixed_vector<VkSpecializationInfo, vuk::graphics_stage_count> specialization_infos;
+			for (uint32_t i = 0; i < pi.base->psscis.size(); i++) {
+				auto& pssci = pi.base->psscis[i];
+				uint32_t offset = (uint32_t)pi.specialization_map_entries.size();
 				bool empty = true;
 				for (auto& [sme, stage] : smes) {
 					if (pssci.stage == stage) {
-						pi.smes.push_back(sme);
+						pi.specialization_map_entries.push_back(sme);
 						empty = false;
 					}
 				}
 
 				if (empty) {
+					pi.stage_map_entry_offsets[i] = -1;
 					continue;
 				}
 
+				pi.stage_map_entry_offsets[i] = offset;
+				
 				VkSpecializationInfo si;
-				si.pMapEntries = pi.smes.data() + offset;
-				si.mapEntryCount = (uint32_t)pi.smes.size() - offset;
+				si.pMapEntries = pi.specialization_map_entries.data() + offset;
+				si.mapEntryCount = (uint32_t)pi.specialization_map_entries.size() - offset;
 				si.pData = specialization_constant_buffer.data();
 				si.dataSize = specialization_constant_buffer.size();
-				pi.sis.push_back(si);
+				specialization_infos.push_back(si);
 
-				pssci.pSpecializationInfo = &pi.sis.back();
+				pssci.pSpecializationInfo = &specialization_infos.back();
 			}
 
 			// set vertex input
@@ -598,6 +608,7 @@ namespace vuk {
 
 			vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, current_pipeline->pipeline);
 			next_pipeline = nullptr;
+			specialization_constant_buffer.clear();
 		}
 		_bind_state(true);
 	}

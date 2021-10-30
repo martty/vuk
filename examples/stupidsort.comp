@@ -5,6 +5,8 @@ layout (std430, binding = 0) buffer coherent BufferIn {
 	uint[] data_in;
 };
 
+layout (constant_id = 0) const uint CHANGE_COUNT = 1;
+
 layout (local_size_x = 1) in;
 
 void main() {
@@ -14,7 +16,7 @@ void main() {
 			uint tmp = data_in[i];
 			data_in[i] = data_in[i-1];
 			data_in[i-1] = tmp;
-			if(n_changes++ > 10000)
+			if(n_changes++ > CHANGE_COUNT)
 				return;
 		}
 	}

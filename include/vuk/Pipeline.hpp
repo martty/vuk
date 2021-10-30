@@ -27,7 +27,8 @@ namespace vuk {
 			auto word = pos / n_bits;
 			if (value) {
 				words[word] |= 1ULL << (pos - n_bits * word);
-			} else {
+			}
+			else {
 				words[word] &= ~(1ULL << (pos - n_bits * word));
 			}
 			return *this;
@@ -446,7 +447,7 @@ namespace vuk {
 	static_assert(sizeof(VertexInputAttributeDescription) == sizeof(VkVertexInputAttributeDescription), "struct and wrapper have different size!");
 	static_assert(std::is_standard_layout<VertexInputAttributeDescription>::value, "struct wrapper is not a standard layout!");
 
-
+	static constexpr uint32_t graphics_stage_count = 5;
 
 	struct PipelineLayoutCreateInfo {
 		VkPipelineLayoutCreateInfo plci{ .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
@@ -515,8 +516,8 @@ namespace vuk {
 		vuk::fixed_vector<vuk::PipelineColorBlendAttachmentState, VUK_MAX_COLOR_ATTACHMENTS> color_blend_attachments;
 		vuk::PipelineDepthStencilStateCreateInfo depth_stencil_state;
 
-		vuk::fixed_vector<ShaderSource, 5> shaders;
-		vuk::fixed_vector<std::string, 5> shader_paths;
+		vuk::fixed_vector<ShaderSource, graphics_stage_count> shaders;
+		vuk::fixed_vector<std::string, graphics_stage_count> shader_paths;
 
 		void set_blend(size_t attachment_index, BlendPreset);
 		void set_blend(BlendPreset);
@@ -699,8 +700,10 @@ namespace vuk {
 		VkPipelineVertexInputStateCreateInfo vertex_input_state{ .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
 		VkPipelineMultisampleStateCreateInfo multisample_state{ .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO };
 		VkPipelineDynamicStateCreateInfo dynamic_state{ .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO };
-		vuk::fixed_vector<VkSpecializationMapEntry, VUK_MAX_SPECIALIZATIONCONSTANT_RANGES> smes;
-		vuk::fixed_vector<VkSpecializationInfo, 5> sis;
+
+		vuk::fixed_vector<std::byte, VUK_MAX_SPECIALIZATIONCONSTANT_DATA> specialization_constant_data;
+		vuk::fixed_vector<VkSpecializationMapEntry, VUK_MAX_SPECIALIZATIONCONSTANT_RANGES> specialization_map_entries;
+		vuk::fixed_vector<int32_t, graphics_stage_count> stage_map_entry_offsets; // in specialization_map_entries, at which offset are the relevant entries for the stage, -1 for no entries
 		VkRenderPass render_pass;
 		uint32_t subpass;
 
@@ -711,7 +714,8 @@ namespace vuk {
 			return base == o.base && binding_descriptions == o.binding_descriptions && attribute_descriptions == o.attribute_descriptions &&
 				color_blend_attachments == o.color_blend_attachments && color_blend_state == o.color_blend_state &&
 				vertex_input_state == o.vertex_input_state && multisample_state == o.multisample_state && dynamic_state == o.dynamic_state &&
-				render_pass == o.render_pass && subpass == o.subpass && smes == o.smes && sis == o.sis;
+				render_pass == o.render_pass && subpass == o.subpass && specialization_map_entries == o.specialization_map_entries && 
+				stage_map_entry_offsets == o.stage_map_entry_offsets && memcmp(specialization_constant_data.data(), o.specialization_constant_data.data(), specialization_constant_data.size()) == 0;
 		}
 	};
 
@@ -728,13 +732,14 @@ namespace vuk {
 	struct ComputePipelineInstanceCreateInfo {
 		ComputePipelineBaseInfo* base;
 
+		std::array<std::byte, VUK_MAX_SPECIALIZATIONCONSTANT_DATA> specialization_constant_data;
 		vuk::fixed_vector<VkSpecializationMapEntry, VUK_MAX_SPECIALIZATIONCONSTANT_RANGES> specialization_map_entries;
 		VkSpecializationInfo specialization_info = {};
 
 		VkComputePipelineCreateInfo to_vk() const;
 
 		bool operator==(const ComputePipelineInstanceCreateInfo& o) const noexcept {
-			return base == o.base && specialization_map_entries == o.specialization_map_entries && specialization_info == o.specialization_info;
+			return base == o.base && specialization_map_entries == o.specialization_map_entries && specialization_info.dataSize == o.specialization_info.dataSize && memcmp(specialization_constant_data.data(), o.specialization_constant_data.data(), specialization_info.dataSize) == 0;
 		}
 	};
 
@@ -906,7 +911,7 @@ namespace std {
 	struct hash<vuk::PipelineInstanceCreateInfo> {
 		size_t operator()(vuk::PipelineInstanceCreateInfo const& x) const noexcept {
 			size_t h = 0;
-			hash_combine(h, x.base, reinterpret_cast<uint64_t>((VkRenderPass)x.render_pass), x.subpass, x.color_blend_attachments, x.color_blend_state, x.multisample_state, x.dynamic_state, x.smes, x.sis);
+			hash_combine(h, x.base, reinterpret_cast<uint64_t>((VkRenderPass)x.render_pass), x.subpass, x.color_blend_attachments, x.color_blend_state, x.multisample_state, x.dynamic_state, robin_hood::hash_bytes(x.specialization_constant_data.data(), x.specialization_constant_data.size()), x.specialization_map_entries, x.stage_map_entry_offsets);
 			return h;
 		}
 	};
@@ -921,19 +926,10 @@ namespace std {
 	};
 
 	template <>
-	struct hash<VkSpecializationInfo> {
-		size_t operator()(VkSpecializationInfo const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, std::span(x.pMapEntries, x.mapEntryCount), std::span((std::byte*)x.pData, x.dataSize));
-			return h;
-		}
-	};
-
-	template <>
 	struct hash<vuk::ComputePipelineInstanceCreateInfo> {
 		size_t operator()(vuk::ComputePipelineInstanceCreateInfo const& x) const noexcept {
 			size_t h = 0;
-			hash_combine(h, x.base, x.specialization_info, x.specialization_map_entries);
+			hash_combine(h, x.base, robin_hood::hash_bytes(x.specialization_constant_data.data(), x.specialization_info.dataSize), x.specialization_map_entries);
 			return h;
 		}
 	};
@@ -956,5 +952,4 @@ namespace std {
 			return h;
 		}
 	};
-
 };

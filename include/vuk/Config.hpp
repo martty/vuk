@@ -12,3 +12,5 @@
 #define VUK_MAX_COLOR_ATTACHMENTS 8
 #define VUK_MAX_PUSHCONSTANT_RANGES 8
 #define VUK_MAX_SPECIALIZATIONCONSTANT_RANGES 8
+// number of bytes all specialization constants can take up
+#define VUK_MAX_SPECIALIZATIONCONSTANT_DATA 32

@@ -188,7 +188,7 @@ namespace vuk {
 		std::array<unsigned char, 128> push_constant_buffer;
 
 		vuk::fixed_vector<std::pair<VkSpecializationMapEntry, VkShaderStageFlags>, VUK_MAX_SPECIALIZATIONCONSTANT_RANGES> smes;
-		std::array<unsigned char, 64> specialization_constant_buffer;
+		vuk::fixed_vector<unsigned char, VUK_MAX_SPECIALIZATIONCONSTANT_DATA> specialization_constant_buffer;
 
 		std::optional<vuk::PipelineColorBlendAttachmentState> blend_state_override;
 		std::optional<std::array<float, 4>> blend_constants;
@@ -251,11 +251,11 @@ namespace vuk {
 		template<class T>
 		CommandBuffer& push_constants(vuk::ShaderStageFlags stages, size_t offset, T value);
 
-		CommandBuffer& specialization_constants(unsigned constant_id, vuk::ShaderStageFlags stages, size_t offset, void* data, size_t size);
+		CommandBuffer& specialization_constants(unsigned constant_id, vuk::ShaderStageFlags stages, void* data, size_t size);
 		template<class T>
-		CommandBuffer& specialization_constants(unsigned constant_id, vuk::ShaderStageFlags stages, size_t offset, std::span<T> span);
+		CommandBuffer& specialization_constants(unsigned constant_id, vuk::ShaderStageFlags stages, std::span<T> span);
 		template<class T>
-		CommandBuffer& specialization_constants(unsigned constant_id, vuk::ShaderStageFlags stages, size_t offset, T value);
+		CommandBuffer& specialization_constants(unsigned constant_id, vuk::ShaderStageFlags stages, T value);
 
 		CommandBuffer& bind_uniform_buffer(unsigned set, unsigned binding, Buffer buffer);
 		CommandBuffer& bind_storage_buffer(unsigned set, unsigned binding, Buffer buffer);
@@ -323,13 +323,13 @@ namespace vuk {
 	}
 
 	template<class T>
-	inline CommandBuffer& CommandBuffer::specialization_constants(unsigned constant_id, vuk::ShaderStageFlags stages, size_t offset, std::span<T> span) {
-		return specialization_constants(constant_id, stages, offset, (void*)span.data(), sizeof(T) * span.size());
+	inline CommandBuffer& CommandBuffer::specialization_constants(unsigned constant_id, vuk::ShaderStageFlags stages, std::span<T> span) {
+		return specialization_constants(constant_id, stages, (void*)span.data(), sizeof(T) * span.size());
 	}
 
 	template<class T>
-	inline CommandBuffer& CommandBuffer::specialization_constants(unsigned constant_id, vuk::ShaderStageFlags stages, size_t offset, T value) {
-		return specialization_constants(constant_id, stages, offset, (void*)&value, sizeof(T));
+	inline CommandBuffer& CommandBuffer::specialization_constants(unsigned constant_id, vuk::ShaderStageFlags stages, T value) {
+		return specialization_constants(constant_id, stages, (void*)&value, sizeof(T));
 	}
 
 	template<class T>
