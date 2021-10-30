@@ -35,24 +35,6 @@ namespace std {
 	};
 
 	template <>
-	struct hash<VkPipelineVertexInputStateCreateInfo> {
-		size_t operator()(VkPipelineVertexInputStateCreateInfo const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.flags, std::span(x.pVertexBindingDescriptions, x.vertexBindingDescriptionCount), std::span(x.pVertexAttributeDescriptions, x.vertexAttributeDescriptionCount));
-			return h;
-		}
-	};
-
-	template <>
-	struct hash<VkPipelineShaderStageCreateInfo> {
-		size_t operator()(VkPipelineShaderStageCreateInfo const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.flags, x.pName, to_integral(x.stage), reinterpret_cast<uint64_t>((VkShaderModule)x.module));
-			return h;
-		}
-	};
-
-	template <>
 	struct hash<VkPipelineTessellationStateCreateInfo> {
 		size_t operator()(VkPipelineTessellationStateCreateInfo const& x) const noexcept {
 			size_t h = 0;
@@ -129,19 +111,6 @@ namespace std {
 		size_t operator()(VkViewport const& x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, x.x, x.y, x.width, x.height, x.minDepth, x.maxDepth);
-			return h;
-		}
-	};
-
-	template <>
-	struct hash<VkPipelineViewportStateCreateInfo> {
-		size_t operator()(VkPipelineViewportStateCreateInfo const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.flags);
-			if (x.pScissors) hash_combine(h, std::span(x.pScissors, x.scissorCount));
-			else hash_combine(h, x.scissorCount);
-			if (x.pViewports) hash_combine(h, std::span(x.pViewports, x.viewportCount));
-			else hash_combine(h, x.viewportCount);
 			return h;
 		}
 	};

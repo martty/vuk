@@ -24,7 +24,8 @@ namespace vuk {
 		auto& cache = view.cache;
 		std::unique_lock _(cache.cache_mtx);
 		for (auto it = cache.lru_map.begin(); it != cache.lru_map.end();) {
-			if (ptc.ifc.absolute_frame - it->second.last_use_frame > threshold) {
+			auto last_use_frame = it->second.last_use_frame;
+			if ((int64_t)ptc.ifc.absolute_frame - (int64_t)last_use_frame > (int64_t)threshold) {
 				ptc.destroy(*it->second.ptr);
 				cache.pool.erase(cache.pool.get_iterator_from_pointer(it->second.ptr));
 				it = cache.lru_map.erase(it);
@@ -38,13 +39,12 @@ namespace vuk {
 	ShaderModule& Cache<ShaderModule>::acquire(const create_info_t<ShaderModule>& ci) {
 		std::shared_lock _(cache_mtx);
 		if (auto it = lru_map.find(ci); it != lru_map.end()) {
-			it->second.last_use_frame = UINT64_MAX;
 			return *it->second.ptr;
 		} else {
 			_.unlock();
 			std::unique_lock ulock(cache_mtx);
 			auto pit = pool.emplace(ctx.create(ci));
-			typename Cache::LRUEntry entry{ &*pit, UINT_MAX };
+			typename Cache::LRUEntry entry{ &*pit, INT64_MAX };
 			it = lru_map.emplace(ci, entry).first;
 			return *it->second.ptr;
 		}
@@ -54,13 +54,12 @@ namespace vuk {
 	PipelineBaseInfo& Cache<PipelineBaseInfo>::acquire(const create_info_t<PipelineBaseInfo>& ci) {
 		std::shared_lock _(cache_mtx);
 		if (auto it = lru_map.find(ci); it != lru_map.end()) {
-			it->second.last_use_frame = UINT64_MAX;
 			return *it->second.ptr;
 		} else {
 			_.unlock();
 			std::unique_lock ulock(cache_mtx);
 			auto pit = pool.emplace(ctx.create(ci));
-			typename Cache::LRUEntry entry{ &*pit, UINT_MAX };
+			typename Cache::LRUEntry entry{ &*pit, INT64_MAX };
 			it = lru_map.emplace(ci, entry).first;
 			return *it->second.ptr;
 		}
@@ -70,13 +69,12 @@ namespace vuk {
 	ComputePipelineBaseInfo& Cache<ComputePipelineBaseInfo>::acquire(const create_info_t<ComputePipelineBaseInfo>& ci) {
 		std::shared_lock _(cache_mtx);
 		if (auto it = lru_map.find(ci); it != lru_map.end()) {
-			it->second.last_use_frame = UINT64_MAX;
 			return *it->second.ptr;
 		} else {
 			_.unlock();
 			std::unique_lock ulock(cache_mtx);
 			auto pit = pool.emplace(ctx.create(ci));
-			typename Cache::LRUEntry entry{ &*pit, UINT_MAX };
+			typename Cache::LRUEntry entry{ &*pit, INT64_MAX };
 			it = lru_map.emplace(ci, entry).first;
 			return *it->second.ptr;
 		}
@@ -87,13 +85,12 @@ namespace vuk {
 	DescriptorSetLayoutAllocInfo& Cache<DescriptorSetLayoutAllocInfo>::acquire(const create_info_t<DescriptorSetLayoutAllocInfo>& ci) {
 		std::shared_lock _(cache_mtx);
 		if (auto it = lru_map.find(ci); it != lru_map.end()) {
-			it->second.last_use_frame = UINT64_MAX;
 			return *it->second.ptr;
 		} else {
 			_.unlock();
 			std::unique_lock ulock(cache_mtx);
 			auto pit = pool.emplace(ctx.create(ci));
-			typename Cache::LRUEntry entry{ &*pit, UINT_MAX };
+			typename Cache::LRUEntry entry{ &*pit, INT64_MAX };
 			it = lru_map.emplace(ci, entry).first;
 			return *it->second.ptr;
 		}
@@ -103,13 +100,12 @@ namespace vuk {
 	VkPipelineLayout& Cache<VkPipelineLayout>::acquire(const create_info_t<VkPipelineLayout>& ci) {
 		std::shared_lock _(cache_mtx);
 		if (auto it = lru_map.find(ci); it != lru_map.end()) {
-			it->second.last_use_frame = UINT64_MAX;
 			return *it->second.ptr;
 		} else {
 			_.unlock();
 			std::unique_lock ulock(cache_mtx);
 			auto pit = pool.emplace(ctx.create(ci));
-			typename Cache::LRUEntry entry{ &*pit, UINT_MAX };
+			typename Cache::LRUEntry entry{ &*pit, INT64_MAX };
 			it = lru_map.emplace(ci, entry).first;
 			return *it->second.ptr;
 		}

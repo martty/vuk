@@ -61,9 +61,9 @@ namespace vuk {
 			bool enabled();
 
 			DebugUtils(Context& ctx);
-			void set_name(const vuk::Texture& iv, /*zstring_view*/Name name);
+			void set_name(const vuk::Texture& iv, Name name);
 			template<class T>
-			void set_name(const T& t, /*zstring_view*/Name name);
+			void set_name(const T& t, Name name);
 
 			void begin_region(const VkCommandBuffer&, Name name, std::array<float, 4> color = { 1,1,1,1 });
 			void end_region(const VkCommandBuffer&);

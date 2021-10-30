@@ -59,6 +59,25 @@ vuk::InflightContext::InflightContext(Context& ctx, size_t absolute_frame, std::
 	ptc.impl->descriptor_sets.collect(Context::FC * 2);
 	ptc.impl->transient_images.collect(Context::FC * 2);
 	ptc.impl->scratch_buffers.collect(Context::FC * 2);
+	// collect rarer resources
+	static constexpr uint32_t cache_collection_frequency = 16;
+	auto remainder = absolute_frame % cache_collection_frequency;
+	switch (remainder) {
+	case 0:
+		ptc.impl->pipeline_cache.collect(cache_collection_frequency); break;
+	case 1:
+		ptc.impl->compute_pipeline_cache.collect(cache_collection_frequency); break;
+	case 2:
+		ptc.impl->renderpass_cache.collect(cache_collection_frequency); break;
+	case 3:
+		ptc.impl->sampler_cache.collect(cache_collection_frequency); break;
+	case 4:
+		ptc.impl->pipeline_layouts.collect(cache_collection_frequency); break;
+	case 5:
+		ptc.impl->pipelinebase_cache.collect(cache_collection_frequency); break;
+	case 6:
+		ptc.impl->compute_pipelinebase_cache.collect(cache_collection_frequency); break;
+	}
 }
 
 vuk::InflightContext::~InflightContext() {
