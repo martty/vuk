@@ -278,16 +278,16 @@ vuk::ComputePipelineBaseInfo vuk::Context::create(const create_info_t<vuk::Compu
 	return cpbi;
 }
 
-bool vuk::Context::load_pipeline_cache(std::span<uint8_t> data) {
+bool vuk::Context::load_pipeline_cache(std::span<std::byte> data) {
 	VkPipelineCacheCreateInfo pcci{ .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO, .initialDataSize = data.size_bytes(), .pInitialData = data.data() };
 	vkDestroyPipelineCache(device, impl->vk_pipeline_cache, nullptr);
 	vkCreatePipelineCache(device, &pcci, nullptr, &impl->vk_pipeline_cache);
 	return true;
 }
 
-std::vector<uint8_t> vuk::Context::save_pipeline_cache() {
+std::vector<std::byte> vuk::Context::save_pipeline_cache() {
 	size_t size;
-	std::vector<uint8_t> data;
+	std::vector<std::byte> data;
 	vkGetPipelineCacheData(device, impl->vk_pipeline_cache, &size, nullptr);
 	data.resize(size);
 	vkGetPipelineCacheData(device, impl->vk_pipeline_cache, &size, data.data());

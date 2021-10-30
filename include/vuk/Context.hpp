@@ -81,8 +81,8 @@ namespace vuk {
 		Program get_pipeline_reflection_info(const ComputePipelineBaseCreateInfo& pbci);
 		ShaderModule compile_shader(ShaderSource source, std::string path);
 
-		bool load_pipeline_cache(std::span<uint8_t> data);
-		std::vector<uint8_t> save_pipeline_cache();
+		bool load_pipeline_cache(std::span<std::byte> data);
+		std::vector<std::byte> save_pipeline_cache();
 
 		Query create_timestamp_query();
 
