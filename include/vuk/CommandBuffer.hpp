@@ -180,28 +180,36 @@ namespace vuk {
 		};
 		std::optional<RenderPassInfo> ongoing_renderpass;
 		PassInfo* current_pass = nullptr;
-		vuk::PrimitiveTopology topology = vuk::PrimitiveTopology::eTriangleList;
-		vuk::fixed_vector<vuk::VertexInputAttributeDescription, VUK_MAX_ATTRIBUTES> attribute_descriptions;
-		vuk::fixed_vector<VkVertexInputBindingDescription, VUK_MAX_ATTRIBUTES> binding_descriptions;
-		vuk::fixed_vector<VkPushConstantRange, VUK_MAX_PUSHCONSTANT_RANGES> pcrs;
 
-		std::array<unsigned char, 128> push_constant_buffer;
-
-		vuk::fixed_vector<std::pair<VkSpecializationMapEntry, VkShaderStageFlags>, VUK_MAX_SPECIALIZATIONCONSTANT_RANGES> smes;
-		vuk::fixed_vector<unsigned char, VUK_MAX_SPECIALIZATIONCONSTANT_DATA> specialization_constant_buffer;
-
-		std::optional<vuk::PipelineColorBlendAttachmentState> blend_state_override;
-		std::optional<std::array<float, 4>> blend_constants;
-
+		// Current & next graphics & compute pipelines
 		vuk::PipelineBaseInfo* next_pipeline = nullptr;
 		vuk::ComputePipelineBaseInfo* next_compute_pipeline = nullptr;
 		std::optional<vuk::PipelineInfo> current_pipeline;
 		std::optional<vuk::ComputePipelineInfo> current_compute_pipeline;
 
+		// Input assembly & fixed-function attributes
+		vuk::PrimitiveTopology topology = vuk::PrimitiveTopology::eTriangleList;
+		vuk::fixed_vector<vuk::VertexInputAttributeDescription, VUK_MAX_ATTRIBUTES> attribute_descriptions;
+		vuk::fixed_vector<VkVertexInputBindingDescription, VUK_MAX_ATTRIBUTES> binding_descriptions;
+
+		// Push constants
+		std::array<unsigned char, 128> push_constant_buffer;
+		vuk::fixed_vector<VkPushConstantRange, VUK_MAX_PUSHCONSTANT_RANGES> pcrs;
+
+		// Descriptor sets
 		std::bitset<VUK_MAX_SETS> sets_used = {};
 		std::array<SetBinding, VUK_MAX_SETS> set_bindings = {};
 		std::bitset<VUK_MAX_SETS> persistent_sets_used = {};
 		std::array<VkDescriptorSet, VUK_MAX_SETS> persistent_sets = {};
+
+		// Specialization constant support
+		vuk::fixed_vector<std::pair<VkSpecializationMapEntry, VkShaderStageFlags>, VUK_MAX_SPECIALIZATIONCONSTANT_RANGES> smes;
+		vuk::fixed_vector<std::byte, VUK_MAX_SPECIALIZATIONCONSTANT_DATA> specialization_constant_buffer;
+
+		// Dynamic state support
+		DynamicStateFlags set_dynamic_state = {};
+		std::optional<vuk::PipelineColorBlendAttachmentState> blend_state_override;
+		std::optional<std::array<float, 4>> blend_constants;
 
 		// for rendergraph
 		CommandBuffer(ExecutableRenderGraph& rg, vuk::PerThreadContext& ptc, VkCommandBuffer cb) : rg(&rg), ptc(ptc), command_buffer(cb) {}

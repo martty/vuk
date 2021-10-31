@@ -565,6 +565,9 @@ namespace vuk {
 				pssci.pSpecializationInfo = &specialization_infos.back();
 			}
 
+			// copy spec constant bytes into pipeline
+			pi.specialization_constant_data = specialization_constant_buffer;
+
 			// set vertex input
 			pi.attribute_descriptions = std::move(attribute_descriptions);
 			pi.binding_descriptions = std::move(binding_descriptions);
