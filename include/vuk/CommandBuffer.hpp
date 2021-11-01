@@ -207,7 +207,6 @@ namespace vuk {
 		vuk::fixed_vector<std::byte, VUK_MAX_SPECIALIZATIONCONSTANT_DATA> specialization_constant_buffer;
 
 		// Dynamic state support
-		DynamicStateFlags set_dynamic_state = {};
 		std::optional<vuk::PipelineColorBlendAttachmentState> blend_state_override;
 		std::optional<std::array<float, 4>> blend_constants;
 
