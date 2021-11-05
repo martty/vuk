@@ -526,6 +526,7 @@ namespace vuk {
 			vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, current_compute_pipeline->pipeline);
 			next_compute_pipeline = nullptr;
 			specialization_constant_buffer.clear();
+			smes.clear();
 		}
 
 		_bind_state(false);
@@ -612,6 +613,7 @@ namespace vuk {
 			vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, current_pipeline->pipeline);
 			next_pipeline = nullptr;
 			specialization_constant_buffer.clear();
+			smes.clear();
 		}
 		_bind_state(true);
 	}
