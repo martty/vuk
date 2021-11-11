@@ -8,6 +8,7 @@ namespace vuk {
 	public:
 		Name() = default;
 
+		Name(decltype(nullptr));
 		Name(const char* str) noexcept;
 		Name(std::string_view str) noexcept;
 
