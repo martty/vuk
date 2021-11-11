@@ -69,8 +69,8 @@ vuk::InflightContext::InflightContext(Context& ctx, size_t absolute_frame, std::
 		ptc.impl->compute_pipeline_cache.collect(cache_collection_frequency); break;
 	case 2:
 		ptc.impl->renderpass_cache.collect(cache_collection_frequency); break;
-	case 3:
-		ptc.impl->sampler_cache.collect(cache_collection_frequency); break;
+	/*case 3:
+		ptc.impl->sampler_cache.collect(cache_collection_frequency); break;*/ // sampler cache can't be collected due to persistent descriptor sets
 	case 4:
 		ptc.impl->pipeline_layouts.collect(cache_collection_frequency); break;
 	case 5:
