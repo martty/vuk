@@ -27,16 +27,36 @@ namespace vuk {
 			auto word = pos / n_bits;
 			if (value) {
 				words[word] |= 1ULL << (pos - n_bits * word);
-			}
-			else {
+			} else {
 				words[word] &= ~(1ULL << (pos - n_bits * word));
 			}
 			return *this;
 		}
 
+		uint64_t count() const noexcept {
+			uint64_t accum = 0;
+			for (uint64_t i = 0; i < (Count / n_bits); i++) {
+				accum += std::popcount(words[i]);
+			}
+			if constexpr (remainder > 0) {
+				accum += std::popcount(words[n_words - 1] & last_word_mask);
+			}
+			return accum;
+		}
+
+		bool test(uint64_t pos) const noexcept {
+			auto word = pos / n_bits;
+			return words[word] & 1ULL << (pos - n_bits * word);
+		}
+
+		void clear() noexcept {
+			for (uint64_t i = 0; i < (Count / n_bits); i++) {
+				words[i] = 0;
+			}
+		}
+
 		bool operator==(const Bitset& other) const noexcept {
-			uint64_t i = 0;
-			for (; i < (Count / n_bits); i++) {
+			for (uint64_t i = 0; i < (Count / n_bits); i++) {
 				if (words[i] != other.words[i])
 					return false;
 			}
