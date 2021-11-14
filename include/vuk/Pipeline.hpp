@@ -8,6 +8,7 @@
 #include <vuk/Program.hpp>
 #include <vuk/FixedVector.hpp>
 #include <vuk/Image.hpp>
+#include <bit>
 
 namespace vuk {
 	template<uint64_t Count>
@@ -531,42 +532,25 @@ namespace vuk {
 			shader_paths.emplace_back(std::move(filename));
 		}
 
-		vuk::PipelineRasterizationStateCreateInfo rasterization_state;
-		vuk::PipelineColorBlendStateCreateInfo color_blend_state;
-		vuk::fixed_vector<vuk::PipelineColorBlendAttachmentState, VUK_MAX_COLOR_ATTACHMENTS> color_blend_attachments;
-		vuk::PipelineDepthStencilStateCreateInfo depth_stencil_state;
-
 		vuk::fixed_vector<ShaderSource, graphics_stage_count> shaders;
 		vuk::fixed_vector<std::string, graphics_stage_count> shader_paths;
-
-		void set_blend(size_t attachment_index, BlendPreset);
-		void set_blend(BlendPreset);
 
 		friend struct std::hash<PipelineBaseCreateInfo>;
 		friend class PerThreadContext;
 	public:
-		PipelineBaseCreateInfo();
 
 		static vuk::fixed_vector<vuk::DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> build_descriptor_layouts(const Program&, const PipelineBaseCreateInfoBase&);
 		bool operator==(const PipelineBaseCreateInfo& o) const {
-			return shaders == o.shaders && rasterization_state == o.rasterization_state && color_blend_state == o.color_blend_state &&
-				color_blend_attachments == o.color_blend_attachments && depth_stencil_state == o.depth_stencil_state && binding_flags == o.binding_flags && variable_count_max == o.variable_count_max;
+			return shaders == o.shaders && binding_flags == o.binding_flags && variable_count_max == o.variable_count_max;
 		}
 	};
 
 	struct PipelineBaseInfo {
 		Name pipeline_name;
 		vuk::Program reflection_info;
-		std::vector<VkPipelineShaderStageCreateInfo> psscis;
+		vuk::fixed_vector<VkPipelineShaderStageCreateInfo, vuk::graphics_stage_count> psscis;
 		VkPipelineLayout pipeline_layout;
 		std::array<DescriptorSetLayoutAllocInfo, VUK_MAX_SETS> layout_info;
-		VkPipelineRasterizationStateCreateInfo rasterization_state;
-		VkPipelineColorBlendStateCreateInfo color_blend_state;
-		vuk::fixed_vector<vuk::PipelineColorBlendAttachmentState, VUK_MAX_COLOR_ATTACHMENTS> color_blend_attachments;
-		VkPipelineDepthStencilStateCreateInfo depth_stencil_state;
-
-		vuk::fixed_vector<VkDynamicState, 8> dynamic_states = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
-		VkPipelineViewportStateCreateInfo viewport_state{ VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO, nullptr, 0, 1, nullptr, 1, nullptr };
 
 		// 4 valid flags
 		Bitset<4 * VUK_MAX_SETS * VUK_MAX_BINDINGS> binding_flags = {};
@@ -712,30 +696,114 @@ inline bool operator==(VkSpecializationInfo const& lhs, VkSpecializationInfo con
 namespace vuk {
 	struct PipelineInstanceCreateInfo {
 		PipelineBaseInfo* base;
-		vuk::fixed_vector<VkVertexInputBindingDescription, VUK_MAX_ATTRIBUTES> binding_descriptions;
-		vuk::fixed_vector<vuk::VertexInputAttributeDescription, VUK_MAX_ATTRIBUTES> attribute_descriptions;
-		vuk::fixed_vector<vuk::PipelineColorBlendAttachmentState, VUK_MAX_COLOR_ATTACHMENTS> color_blend_attachments;
-		VkPipelineInputAssemblyStateCreateInfo input_assembly_state{ .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO };
-		VkPipelineColorBlendStateCreateInfo color_blend_state{ .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO };
-		VkPipelineVertexInputStateCreateInfo vertex_input_state{ .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
-		VkPipelineMultisampleStateCreateInfo multisample_state{ .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO };
-		VkPipelineDynamicStateCreateInfo dynamic_state{ .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO };
-
-		vuk::fixed_vector<std::byte, VUK_MAX_SPECIALIZATIONCONSTANT_DATA> specialization_constant_data;
-		vuk::fixed_vector<VkSpecializationMapEntry, VUK_MAX_SPECIALIZATIONCONSTANT_RANGES> specialization_map_entries;
-		vuk::fixed_vector<int32_t, graphics_stage_count> stage_map_entry_offsets; // in specialization_map_entries, at which offset are the relevant entries for the stage, -1 for no entries
 		VkRenderPass render_pass;
-		uint32_t subpass;
+		uint16_t extended_size = 0;
+		struct RecordsExist {
+			uint32_t nonzero_subpass : 1;
+			uint32_t vertex_input : 1;
+			uint32_t color_blend_attachments : 1;
+			uint32_t broadcast_color_blend_attachment_0 : 1;
+			uint32_t logic_op : 1;
+			uint32_t blend_constants : 1;
+			uint32_t specialization_constants : 1;
+			uint32_t viewports : 1;
+			uint32_t scissors : 1;
+			uint32_t non_trivial_raster_state : 1;
+			uint32_t depth_stencil : 1;
+			uint32_t depth_bias : 1;
+			uint32_t depth_bounds : 1;
+			uint32_t stencil_state : 1;
+			uint32_t line_width_not_1 : 1;
+			uint32_t more_than_one_sample : 1;
+		} records = {};
+		uint8_t attachmentCount : std::bit_width(VUK_MAX_COLOR_ATTACHMENTS); // up to VUK_MAX_COLOR_ATTACHMENTS attachments
+		// input assembly state
+		VkPrimitiveTopology topology : std::bit_width(10u);
+		bool primitive_restart_enable : 1;
+		VkCullModeFlags cullMode : 2;
+		std::byte* extended_data;
+		
+#pragma pack(push, 1)
+		struct VertexInputBindingDescription {
+			uint32_t             stride : 31;
+			VkVertexInputRate    inputRate : 1;
+			uint8_t             binding;
+		};
+		struct VertexInputAttributeDescription {
+			Format format;
+			uint32_t offset;
+			uint8_t location;
+			uint8_t binding;
+		};
 
-		VkGraphicsPipelineCreateInfo to_vk() const;
-		PipelineInstanceCreateInfo();
+		struct PipelineColorBlendAttachmentState {
+			Bool32 blendEnable : 1;
+			BlendFactor srcColorBlendFactor : std::bit_width(18u);
+			BlendFactor dstColorBlendFactor : std::bit_width(18u);
+			BlendOp colorBlendOp : std::bit_width(5u); // not supporting blend op zoo yet
+			BlendFactor srcAlphaBlendFactor : std::bit_width(18u);
+			BlendFactor dstAlphaBlendFactor : std::bit_width(18u);
+			BlendOp alphaBlendOp : std::bit_width(5u); // not supporting blend op zoo yet
+			uint32_t colorWriteMask : 4;
+		};
+
+		// blend state
+		struct BlendStateLogicOp {
+			VkLogicOp logic_op : std::bit_width(16u);
+		};
+		// blend constants here, if they exist
+		struct SpecializationMapEntry {
+			uint32_t shader_stage;
+			uint32_t constantID : std::bit_width(VUK_MAX_SPECIALIZATIONCONSTANT_RANGES);
+			uint32_t offset : std::bit_width(VUK_MAX_SPECIALIZATIONCONSTANT_DATA);
+			uint32_t size : std::bit_width(VUK_MAX_SPECIALIZATIONCONSTANT_DATA);
+		};
+		// stage map entry offsets
+		// spec constant data
+
+		struct RasterizationState {
+			bool                                   depthClampEnable : 1;
+			bool                                   rasterizerDiscardEnable : 1;
+			VkPolygonMode                              polygonMode : 2; // VK_POLYGON_MODE_FILL_RECTANGLE_NV unsupported
+			VkFrontFace                                frontFace : 1;
+		};
+
+		struct DepthBias {
+			float                                      depthBiasConstantFactor;
+			float                                      depthBiasClamp;
+			float                                      depthBiasSlopeFactor;
+		};
+		// float lineWidth, if exists
+
+		struct DepthState {
+			bool                                  depthTestEnable : 1;
+			bool                                  depthWriteEnable : 1;
+			VkCompareOp                           depthCompareOp : std::bit_width(7u);
+		};
+		struct PipelineDepthBounds {
+			float                                     minDepthBounds;
+			float                                     maxDepthBounds;
+		};
+		struct PipelineStencil {
+			VkStencilOpState                          front;
+			VkStencilOpState                          back;
+		};
+
+		struct MultisampleState {
+			VkSampleCountFlagBits rasterization_samples : 7;
+			bool sample_shading_enable : 1;
+			// pSampleMask not yet supported
+			bool alpha_to_coverage_enable : 1;
+			bool alpha_to_one_enable : 1;
+			float min_sample_shading;
+		};
+
+		// viewports (VkViewport)
+		// scissors (VkRect2D)
+#pragma pack(pop)
 
 		bool operator==(const PipelineInstanceCreateInfo& o) const noexcept {
-			return base == o.base && binding_descriptions == o.binding_descriptions && attribute_descriptions == o.attribute_descriptions &&
-				color_blend_attachments == o.color_blend_attachments && color_blend_state == o.color_blend_state &&
-				vertex_input_state == o.vertex_input_state && multisample_state == o.multisample_state && dynamic_state == o.dynamic_state &&
-				render_pass == o.render_pass && subpass == o.subpass && specialization_map_entries == o.specialization_map_entries && 
-				stage_map_entry_offsets == o.stage_map_entry_offsets && memcmp(specialization_constant_data.data(), o.specialization_constant_data.data(), specialization_constant_data.size()) == 0;
+			return base == o.base && render_pass == o.render_pass && extended_size == o.extended_size && memcmp(extended_data, o.extended_data, extended_size) == 0;
 		}
 	};
 
@@ -874,7 +942,7 @@ namespace std {
 	struct hash<vuk::PipelineBaseCreateInfo> {
 		size_t operator()(vuk::PipelineBaseCreateInfo const& x) const noexcept {
 			size_t h = 0;
-			hash_combine(h, x.shaders, x.color_blend_state, x.color_blend_attachments, x.depth_stencil_state, x.rasterization_state);
+			hash_combine(h, x.shaders);
 			return h;
 		}
 	};
@@ -931,7 +999,7 @@ namespace std {
 	struct hash<vuk::PipelineInstanceCreateInfo> {
 		size_t operator()(vuk::PipelineInstanceCreateInfo const& x) const noexcept {
 			size_t h = 0;
-			hash_combine(h, x.base, reinterpret_cast<uint64_t>((VkRenderPass)x.render_pass), x.subpass, x.color_blend_attachments, x.color_blend_state, x.multisample_state, x.dynamic_state, robin_hood::hash_bytes(x.specialization_constant_data.data(), x.specialization_constant_data.size()), x.specialization_map_entries, x.stage_map_entry_offsets);
+			hash_combine(h, x.base, reinterpret_cast<uint64_t>((VkRenderPass)x.render_pass), x.extended_size, robin_hood::hash_bytes(x.extended_data, x.extended_size));
 			return h;
 		}
 	};

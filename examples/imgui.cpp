@@ -31,7 +31,6 @@ util::ImGuiData util::ImGui_ImplVuk_Init(vuk::PerThreadContext& ptc) {
 		auto fpath = "../../examples/imgui.frag.spv";
 		auto fcont = util::read_spirv(fpath);
 		pci.add_spirv(fcont, fpath);
-		pci.set_blend(vuk::BlendPreset::eAlphaBlend);
 		ptc.ctx.create_named_pipeline("imgui", pci);
 	}
 	ptc.wait_all_transfers();
@@ -81,7 +80,9 @@ void util::ImGui_ImplVuk_Render(vuk::PerThreadContext& ptc, vuk::RenderGraph& rg
 	vuk::Pass pass{
 		.name = "imgui",
 		.resources = { vuk::Resource{dst_target, vuk::Resource::Type::eImage, vuk::eColorRW} },
-		.execute = [&data, imvert, imind, draw_data, reset_render_state](vuk::CommandBuffer& command_buffer) {
+		.execute = [&data, imvert, imind, draw_data, reset_render_state, src_target](vuk::CommandBuffer& command_buffer) {
+			command_buffer.set_rasterization(vuk::PipelineRasterizationStateCreateInfo{});
+			command_buffer.set_color_blend(src_target, vuk::BlendPreset::eAlphaBlend);
 			reset_render_state(data, command_buffer, draw_data, imvert, imind);
 			// Will project scissor/clipping rectangles into framebuffer space
 			ImVec2 clip_off = draw_data->DisplayPos;         // (0,0) unless using multi-viewports

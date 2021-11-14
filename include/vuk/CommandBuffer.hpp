@@ -176,6 +176,8 @@ namespace vuk {
 			uint32_t subpass;
 			vuk::Extent2D extent;
 			vuk::SampleCountFlagBits samples;
+			VkAttachmentReference const* depth_stencil_attachment;
+			std::array<Name, VUK_MAX_COLOR_ATTACHMENTS> color_attachment_names;
 			std::span<const VkAttachmentReference> color_attachments;
 		};
 		std::optional<RenderPassInfo> ongoing_renderpass;
@@ -207,8 +209,14 @@ namespace vuk {
 		vuk::fixed_vector<std::byte, VUK_MAX_SPECIALIZATIONCONSTANT_DATA> specialization_constant_buffer;
 
 		// Dynamic state support
-		std::optional<vuk::PipelineColorBlendAttachmentState> blend_state_override;
+		std::optional<vuk::PipelineRasterizationStateCreateInfo> rasterization_state;
+		std::optional<vuk::PipelineDepthStencilStateCreateInfo> depth_stencil_state;
+		bool broadcast_color_blend_attachment_0 = false;
+		vuk::Bitset<VUK_MAX_COLOR_ATTACHMENTS> set_color_blend_attachments = {};
+		vuk::fixed_vector<vuk::PipelineColorBlendAttachmentState, VUK_MAX_COLOR_ATTACHMENTS> color_blend_attachments;
 		std::optional<std::array<float, 4>> blend_constants;
+		vuk::fixed_vector<VkViewport, VUK_MAX_VIEWPORTS> viewports;
+		vuk::fixed_vector<VkRect2D, VUK_MAX_SCISSORS> scissors;
 
 		// for rendergraph
 		CommandBuffer(ExecutableRenderGraph& rg, vuk::PerThreadContext& ptc, VkCommandBuffer cb) : rg(&rg), ptc(ptc), command_buffer(cb) {}
@@ -227,11 +235,19 @@ namespace vuk {
 		vuk::Image get_resource_image(Name) const;
 		vuk::ImageView get_resource_image_view(Name) const;
 
+		// command buffer state setting
+		// when a state is set it is persistent for a pass - similar to vulkan dynamic state
 		CommandBuffer& set_viewport(unsigned index, Viewport vp);
 		CommandBuffer& set_viewport(unsigned index, Rect2D area, float min_depth = 0.f, float max_depth = 1.f);
 		CommandBuffer& set_scissor(unsigned index, Rect2D vp);
 
-		CommandBuffer& set_blend_state(vuk::PipelineColorBlendAttachmentState);
+		CommandBuffer& set_rasterization(vuk::PipelineRasterizationStateCreateInfo);
+		CommandBuffer& set_depth_stencil(vuk::PipelineDepthStencilStateCreateInfo);
+		
+		CommandBuffer& broadcast_color_blend(vuk::PipelineColorBlendAttachmentState);
+		CommandBuffer& broadcast_color_blend(BlendPreset);
+		CommandBuffer& set_color_blend(Name color_attachment, vuk::PipelineColorBlendAttachmentState);
+		CommandBuffer& set_color_blend(Name color_attachment, BlendPreset);
 		CommandBuffer& set_blend_constants(std::array<float, 4> constants);
 
 		CommandBuffer& bind_graphics_pipeline(vuk::PipelineBaseInfo*);

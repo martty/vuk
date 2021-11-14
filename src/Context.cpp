@@ -164,7 +164,7 @@ vuk::ShaderModule vuk::Context::create(const create_info_t<vuk::ShaderModule>& c
 }
 
 vuk::PipelineBaseInfo vuk::Context::create(const create_info_t<PipelineBaseInfo>& cinfo) {
-	std::vector<VkPipelineShaderStageCreateInfo> psscis;
+	vuk::fixed_vector<VkPipelineShaderStageCreateInfo, vuk::graphics_stage_count> psscis;
 
 	// accumulate descriptors from all stages
 	vuk::Program accumulated_reflection;
@@ -216,12 +216,8 @@ vuk::PipelineBaseInfo vuk::Context::create(const create_info_t<PipelineBaseInfo>
 
 	PipelineBaseInfo pbi;
 	pbi.psscis = std::move(psscis);
-	pbi.color_blend_attachments = cinfo.color_blend_attachments;
-	pbi.color_blend_state = cinfo.color_blend_state;
-	pbi.depth_stencil_state = cinfo.depth_stencil_state;
 	pbi.layout_info = dslai;
 	pbi.pipeline_layout = impl->pipeline_layouts.acquire(plci);
-	pbi.rasterization_state = cinfo.rasterization_state;
 	pbi.pipeline_name = Name(pipe_name);
 	pbi.reflection_info = accumulated_reflection;
 	pbi.binding_flags = cinfo.binding_flags;

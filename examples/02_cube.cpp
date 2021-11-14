@@ -67,6 +67,8 @@ namespace {
 					command_buffer
 					  .set_viewport(0, vuk::Rect2D::framebuffer()) // Set the viewport to cover the entire framebuffer
 					  .set_scissor(0, vuk::Rect2D::framebuffer()) // Set the scissor area to cover the entire framebuffer
+					  .set_rasterization({}) // Set the default rasterization state
+					  .broadcast_color_blend({}) // Set the default color blend state
 					  // The vertex format and the buffer used are bound together for this call
 					  // The format is specified here as vuk::Packed{}, meaning we are going to make a consecutive binding
 					  // For each element in the list, a vuk::Format signifies a binding
@@ -74,22 +76,40 @@ namespace {
 					  // In this case, we will bind vuk::Format::eR32G32B32Sfloat to the first location (0)
 					  // And use the remaining vuk::Ignore-d bytes to establish the stride of the buffer
 					  .bind_vertex_buffer(0, verts, 0, vuk::Packed{vuk::Format::eR32G32B32Sfloat, vuk::Ignore{sizeof(util::Vertex) - sizeof(util::Vertex::position)}})
-					  // Bind the index buffer
-					  .bind_index_buffer(inds, vuk::IndexType::eUint32)
-					  .bind_graphics_pipeline("cube")
-					  // Bind the uniform buffer we allocated to (set = 0, binding = 0)
-					  .bind_uniform_buffer(0, 0, uboVP);
-					  // For the model matrix, we will take a shorter route
-					  // Frequently updated uniform buffers should always be in CPUtoGPU type memory, which is mappable
-					  // So we create a typed mapping directly and write the model matrix
-					glm::mat4* model = command_buffer.map_scratch_uniform_binding<glm::mat4>(0, 1);
-					*model = static_cast<glm::mat4>(glm::angleAxis(glm::radians(angle), glm::vec3(0.f, 1.f, 0.f)));
-					  // The cube is drawn via indexed drawing
-					command_buffer
-					  .draw_indexed(box.second.size(), 1, 0, 0, 0);
-					}
-				}
-			);
+						// Bind the index buffer
+						.bind_index_buffer(inds, vuk::IndexType::eUint32)
+						.bind_graphics_pipeline("cube")
+						// Bind the uniform buffer we allocated to (set = 0, binding = 0)
+						.bind_uniform_buffer(0, 0, uboVP);
+					// For the model matrix, we will take a shorter route
+					// Frequently updated uniform buffers should be in CPUtoGPU type memory, which is mapped
+					// So we create a typed mapping directly and write the model matrix
+				  glm::mat4* model = command_buffer.map_scratch_uniform_binding<glm::mat4>(0, 1);
+				  *model = static_cast<glm::mat4>(glm::angleAxis(glm::radians(angle), glm::vec3(0.f, 1.f, 0.f)));
+
+				  // We can also customize pipelines by using specialization constants
+				  // Here we will apply a tint based on the current frame
+				  auto current_frame = command_buffer.get_context().ifc.absolute_frame;
+				  auto mod_frame = current_frame % 1000;
+				  glm::vec3 tint{1.f, 1.f, 1.f};
+				  if (mod_frame <= 500 && mod_frame > 250) {
+					  tint = { 1.f, 0.5f, 0.5f };
+				  } else if (mod_frame <= 750 && mod_frame > 500) {
+					  tint = { 0.5f, 1.0f, 0.5f };
+				  } else if (mod_frame > 750) {
+					  tint = { 0.5f, 0.5f, 1.0f };
+				  }
+				  // Specialization constants can only be scalars, use three to make a vec3
+				  command_buffer
+					  .specialization_constants(0, vuk::ShaderStageFlagBits::eAll, tint.x)
+					  .specialization_constants(1, vuk::ShaderStageFlagBits::eAll, tint.y)
+					  .specialization_constants(2, vuk::ShaderStageFlagBits::eAll, tint.z);
+				  // The cube is drawn via indexed drawing
+				  command_buffer
+					.draw_indexed(box.second.size(), 1, 0, 0, 0);
+				  }
+			  }
+		  );
 			// The angle is update to rotate the cube
 			angle += 360.f * ImGui::GetIO().DeltaTime;
 

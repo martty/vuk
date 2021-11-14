@@ -268,9 +268,16 @@ namespace {
 				.resources = {"10_baby_renderer_final"_image(vuk::eColorWrite), "10_depth"_image(vuk::eDepthStencilRW)},
 				.execute = [uboVP, modelmats](vuk::CommandBuffer& command_buffer) {
 					command_buffer
-					  .set_viewport(0, vuk::Rect2D::framebuffer())
-					  .set_scissor(0, vuk::Rect2D::framebuffer());
-
+						.set_viewport(0, vuk::Rect2D::framebuffer())
+						.set_scissor(0, vuk::Rect2D::framebuffer())
+						.set_rasterization({}) // Set the default rasterization state
+						// Set the depth/stencil state
+						.set_depth_stencil(vuk::PipelineDepthStencilStateCreateInfo{
+							.depthTestEnable = true,
+							.depthWriteEnable = true,
+							.depthCompareOp = vuk::CompareOp::eLessOrEqual,
+						})
+						.broadcast_color_blend({}); // Set the default color blend state
 					for (auto i = 0; i < renderables.size(); i++) {
 						auto& r = renderables[i];
 

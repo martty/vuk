@@ -100,6 +100,11 @@ namespace vuk {
 		auto& spdesc = rpass.rpci.subpass_descriptions[i];
 		rpi.color_attachments = std::span<const VkAttachmentReference>(spdesc.pColorAttachments, spdesc.colorAttachmentCount);
 		rpi.samples = rpass.fbci.sample_count.count;
+		rpi.depth_stencil_attachment = spdesc.pDepthStencilAttachment;
+		for (uint32_t i = 0; i < spdesc.colorAttachmentCount; i++) {
+			rpi.color_attachment_names[i] = rpass.attachments[spdesc.pColorAttachments[i].attachment].name;
+		}
+		cobuf.color_blend_attachments.resize(spdesc.colorAttachmentCount);
 		cobuf.ongoing_renderpass = rpi;
 	}
 
@@ -213,23 +218,23 @@ namespace vuk {
 		CommandBuffer cobuf(*this, ptc, cbuf);
 		for (auto& rpass : impl->rpis) {
 			bool use_secondary_command_buffers = rpass.subpasses[0].use_secondary_command_buffers;
-            bool is_single_pass = rpass.subpasses.size() == 1 && rpass.subpasses[0].passes.size() == 1;
+			bool is_single_pass = rpass.subpasses.size() == 1 && rpass.subpasses[0].passes.size() == 1;
 			if (is_single_pass) {
-                ptc.ctx.debug.begin_region(cobuf.command_buffer, rpass.subpasses[0].passes[0]->pass.name);
+				ptc.ctx.debug.begin_region(cobuf.command_buffer, rpass.subpasses[0].passes[0]->pass.name);
 			}
 
-			for(auto dep: rpass.pre_barriers) {
-                dep.barrier.image = impl->bound_attachments[dep.image].image;
-                vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
-            }
-            for(const auto& dep: rpass.pre_mem_barriers) {
-                vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 1, &dep.barrier, 0, nullptr, 0, nullptr);
-            }
-            
-			if(rpass.handle != VK_NULL_HANDLE) {
-                begin_renderpass(rpass, cbuf, use_secondary_command_buffers);
-            }
-            
+			for (auto dep : rpass.pre_barriers) {
+				dep.barrier.image = impl->bound_attachments[dep.image].image;
+				vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
+			}
+			for (const auto& dep : rpass.pre_mem_barriers) {
+				vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 1, &dep.barrier, 0, nullptr, 0, nullptr);
+			}
+
+			if (rpass.handle != VK_NULL_HANDLE) {
+				begin_renderpass(rpass, cbuf, use_secondary_command_buffers);
+			}
+
 			for (size_t i = 0; i < rpass.subpasses.size(); i++) {
 				auto& sp = rpass.subpasses[i];
 				fill_renderpass_info(rpass, i, cobuf);
@@ -239,7 +244,7 @@ namespace vuk {
 						dep.barrier.image = impl->bound_attachments[dep.image].image;
 						vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
 					}
-                    for(const auto& dep: sp.pre_mem_barriers) {
+					for (const auto& dep : sp.pre_mem_barriers) {
 						vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 1, &dep.barrier, 0, nullptr, 0, nullptr);
 					}
 				}
@@ -262,7 +267,7 @@ namespace vuk {
 					} else {
 						if (p->pass.execute) {
 							cobuf.current_pass = p;
-                            if(!p->pass.name.is_invalid() && !is_single_pass) {
+							if (!p->pass.name.is_invalid() && !is_single_pass) {
 								ptc.ctx.debug.begin_region(cobuf.command_buffer, p->pass.name);
 								p->pass.execute(cobuf);
 								ptc.ctx.debug.end_region(cobuf.command_buffer);
@@ -270,13 +275,18 @@ namespace vuk {
 								p->pass.execute(cobuf);
 							}
 						}
-
-						cobuf.pcrs.clear();
-						cobuf.attribute_descriptions.clear();
-						cobuf.binding_descriptions.clear();
-						cobuf.set_bindings = {};
-						cobuf.sets_used = {};
 					}
+					cobuf.pcrs.clear();
+					cobuf.attribute_descriptions.clear();
+					cobuf.binding_descriptions.clear();
+					cobuf.scissors.clear();
+					cobuf.viewports.clear();
+					cobuf.rasterization_state = {};
+					cobuf.depth_stencil_state = {};
+					cobuf.set_color_blend_attachments.clear();
+					cobuf.broadcast_color_blend_attachment_0 = false;
+					cobuf.set_bindings = {};
+					cobuf.sets_used = {};
 				}
 				if (i < rpass.subpasses.size() - 1 && rpass.handle != VK_NULL_HANDLE) {
 					use_secondary_command_buffers = rpass.subpasses[i + 1].use_secondary_command_buffers;
@@ -294,17 +304,17 @@ namespace vuk {
 					}
 				}
 			}
-            if(is_single_pass) {
-                ptc.ctx.debug.end_region(cobuf.command_buffer);
-            }
-            if(rpass.handle != VK_NULL_HANDLE) {
-                vkCmdEndRenderPass(cbuf);
-            }
+			if (is_single_pass) {
+				ptc.ctx.debug.end_region(cobuf.command_buffer);
+			}
+			if (rpass.handle != VK_NULL_HANDLE) {
+				vkCmdEndRenderPass(cbuf);
+			}
 			for (auto dep : rpass.post_barriers) {
 				dep.barrier.image = impl->bound_attachments[dep.image].image;
 				vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
 			}
-            for(const auto& dep: rpass.post_mem_barriers) {
+			for (const auto& dep : rpass.post_mem_barriers) {
 				vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 1, &dep.barrier, 0, nullptr, 0, nullptr);
 			}
 		}

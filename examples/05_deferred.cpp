@@ -72,6 +72,16 @@ namespace {
 					command_buffer
 					  .set_viewport(0, vuk::Rect2D::framebuffer())
 					  .set_scissor(0, vuk::Rect2D::framebuffer())
+					  .set_rasterization(vuk::PipelineRasterizationStateCreateInfo{}) // Set the default rasterization state
+					   // Set the depth/stencil state
+					  .set_depth_stencil(vuk::PipelineDepthStencilStateCreateInfo{
+						.depthTestEnable = true,
+						.depthWriteEnable = true,
+						.depthCompareOp = vuk::CompareOp::eLessOrEqual,
+					   })
+					  .set_color_blend("05_position", {}) // Set the default color blend state individually for demonstration
+					  .set_color_blend("05_normal", {}) // If you want to use different blending state per attachment, you must enable the independentBlend feature
+					  .set_color_blend("05_color", {})
 					  .bind_vertex_buffer(0, verts, 0, vuk::Packed{vuk::Format::eR32G32B32Sfloat, vuk::Format::eR32G32B32Sfloat, vuk::Ignore{offsetof(util::Vertex, uv_coordinates) - offsetof(util::Vertex, tangent)}, vuk::Format::eR32G32Sfloat})
 					  .bind_index_buffer(inds, vuk::IndexType::eUint32)
 					  .bind_graphics_pipeline("cube_deferred")
@@ -96,6 +106,8 @@ namespace {
 					command_buffer
 					  .set_viewport(0, vuk::Rect2D::framebuffer())
 					  .set_scissor(0, vuk::Rect2D::framebuffer())
+					  .set_rasterization({}) // Set the default rasterization state
+					  .broadcast_color_blend({}) // Set the default color blend state
 					  .bind_graphics_pipeline("deferred_resolve");
 					// Set camera position so we can do lighting
 					*command_buffer.map_scratch_uniform_binding<glm::vec3>(0, 3) = cam_pos;

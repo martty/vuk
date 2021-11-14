@@ -70,6 +70,14 @@ namespace {
 					command_buffer
 					  .set_viewport(0, vuk::Rect2D::framebuffer())
 					  .set_scissor(0, vuk::Rect2D::framebuffer())
+					  .set_rasterization({}) // Set the default rasterization state
+					   // Set the depth/stencil state
+					  .set_depth_stencil(vuk::PipelineDepthStencilStateCreateInfo{
+						.depthTestEnable = true,
+						.depthWriteEnable = true,
+						.depthCompareOp = vuk::CompareOp::eLessOrEqual,
+					   })
+					  .broadcast_color_blend({}) // Set the default color blend state
 					  .bind_vertex_buffer(0, verts, 0, vuk::Packed{vuk::Format::eR32G32B32Sfloat, vuk::Ignore{offsetof(util::Vertex, uv_coordinates) - sizeof(util::Vertex::position)}, vuk::Format::eR32G32Sfloat})
 					  .bind_index_buffer(inds, vuk::IndexType::eUint32)
 					  .bind_sampled_image(0, 2, *texture_of_doge, vuk::SamplerCreateInfo{})

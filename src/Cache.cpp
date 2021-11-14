@@ -19,6 +19,7 @@ namespace vuk {
 			return *it->second.ptr;
 		}
 	}
+
 	template<class T>
 	void Cache<T>::PFPTView::collect(size_t threshold) {
 		auto& cache = view.cache;
@@ -108,6 +109,43 @@ namespace vuk {
 			typename Cache::LRUEntry entry{ &*pit, INT64_MAX };
 			it = lru_map.emplace(ci, entry).first;
 			return *it->second.ptr;
+		}
+	}
+	// unfortunately, we need to manage extended_data lifetime here
+	template<>
+	PipelineInfo& Cache<PipelineInfo>::PFPTView::acquire(const create_info_t<PipelineInfo>& ci) {
+		auto& cache = view.cache;
+		std::shared_lock _(cache.cache_mtx);
+		if (auto it = cache.lru_map.find(ci); it != cache.lru_map.end()) {
+			it->second.last_use_frame = ptc.ifc.absolute_frame;
+			return *it->second.ptr;
+		} else {
+			_.unlock();
+			std::unique_lock ulock(cache.cache_mtx);
+			auto ci_copy = ci;
+			ci_copy.extended_data = new std::byte[ci_copy.extended_size];
+			memcpy(ci_copy.extended_data, ci.extended_data, ci_copy.extended_size);
+			auto pit = cache.pool.emplace(ptc.create(ci_copy));
+			typename Cache::LRUEntry entry{ &*pit, ptc.ifc.absolute_frame };
+			it = cache.lru_map.emplace(ci_copy, entry).first;
+			return *it->second.ptr;
+		}
+	}
+
+	template<>
+	void Cache<PipelineInfo>::PFPTView::collect(size_t threshold) {
+		auto& cache = view.cache;
+		std::unique_lock _(cache.cache_mtx);
+		for (auto it = cache.lru_map.begin(); it != cache.lru_map.end();) {
+			auto last_use_frame = it->second.last_use_frame;
+			if ((int64_t)ptc.ifc.absolute_frame - (int64_t)last_use_frame > (int64_t)threshold) {
+				ptc.destroy(*it->second.ptr);
+				delete it->first.extended_data;
+				cache.pool.erase(cache.pool.get_iterator_from_pointer(it->second.ptr));
+				it = cache.lru_map.erase(it);
+			} else {
+				++it;
+			}
 		}
 	}
 

@@ -37,7 +37,10 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::set_viewport(unsigned index, vuk::Viewport vp) {
-		vkCmdSetViewport(command_buffer, 0, 1, (VkViewport*)&vp);
+		if (viewports.size() < (index + 1)) {
+			viewports.resize(index + 1);
+		}
+		viewports[index] = vp;
 		return *this;
 	}
 
@@ -60,8 +63,10 @@ namespace vuk {
 			vp.minDepth = min_depth;
 			vp.maxDepth = max_depth;
 		}
-
-		vkCmdSetViewport(command_buffer, 0, 1, (VkViewport*)&vp);
+		if (viewports.size() < (index + 1)) {
+			viewports.resize(index + 1);
+		}
+		viewports[index] = vp;
 		return *this;
 	}
 
@@ -77,12 +82,70 @@ namespace vuk {
 			vp.extent.width = static_cast<int32_t>(area._relative.width * fb_dimensions.width);
 			vp.extent.height = static_cast<int32_t>(area._relative.height * fb_dimensions.height);
 		}
-		vkCmdSetScissor(command_buffer, 0, 1, &vp);
+		if (scissors.size() < (index + 1)) {
+			scissors.resize(index + 1);
+		}
+		scissors[index] = vp;
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::set_blend_state(vuk::PipelineColorBlendAttachmentState pcbs) {
-		blend_state_override = pcbs;
+	CommandBuffer& CommandBuffer::set_rasterization(vuk::PipelineRasterizationStateCreateInfo state) {
+		rasterization_state = state;
+		return *this;
+	}
+
+	CommandBuffer& CommandBuffer::set_depth_stencil(vuk::PipelineDepthStencilStateCreateInfo state) {
+		depth_stencil_state = state;
+		return *this;
+	}
+
+	PipelineColorBlendAttachmentState blend_preset_to_pcba(BlendPreset preset) {
+		PipelineColorBlendAttachmentState pcba;
+		switch (preset) {
+		case BlendPreset::eAlphaBlend:
+			pcba.blendEnable = true;
+			pcba.srcColorBlendFactor = vuk::BlendFactor::eSrcAlpha;
+			pcba.dstColorBlendFactor = vuk::BlendFactor::eOneMinusSrcAlpha;
+			pcba.colorBlendOp = vuk::BlendOp::eAdd;
+			pcba.srcAlphaBlendFactor = vuk::BlendFactor::eOne;
+			pcba.dstAlphaBlendFactor = vuk::BlendFactor::eOneMinusSrcAlpha;
+			pcba.alphaBlendOp = vuk::BlendOp::eAdd;
+			break;
+		case BlendPreset::eOff:
+			pcba.blendEnable = false;
+			break;
+		case BlendPreset::ePremultipliedAlphaBlend:
+			assert(0 && "NYI");
+		}
+		return pcba;
+	}
+
+	CommandBuffer& CommandBuffer::broadcast_color_blend(vuk::PipelineColorBlendAttachmentState state) {
+		assert(ongoing_renderpass);
+		color_blend_attachments[0] = state;
+		set_color_blend_attachments.set(0, true);
+		broadcast_color_blend_attachment_0 = true;
+		return *this;
+	}
+
+	CommandBuffer& CommandBuffer::broadcast_color_blend(BlendPreset preset) {
+		broadcast_color_blend(blend_preset_to_pcba(preset));
+		return *this;
+	}
+
+	CommandBuffer& CommandBuffer::set_color_blend(Name att, vuk::PipelineColorBlendAttachmentState state) {
+		assert(ongoing_renderpass);
+		auto it = std::find(ongoing_renderpass->color_attachment_names.begin(), ongoing_renderpass->color_attachment_names.end(), att);
+		assert(it != ongoing_renderpass->color_attachment_names.end() && "Color attachment name not found.");
+		auto idx = std::distance(ongoing_renderpass->color_attachment_names.begin(), it);
+		set_color_blend_attachments.set(idx, true);
+		color_blend_attachments[idx] = state;
+		broadcast_color_blend_attachment_0 = false;
+		return *this;
+	}
+
+	CommandBuffer& CommandBuffer::set_color_blend(Name att, BlendPreset preset) {
+		set_color_blend(att, blend_preset_to_pcba(preset));
 		return *this;
 	}
 
@@ -92,6 +155,7 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::bind_graphics_pipeline(vuk::PipelineBaseInfo* pi) {
+		assert(ongoing_renderpass);
 		next_pipeline = pi;
 		return *this;
 	}
@@ -121,8 +185,7 @@ namespace vuk {
 		for (auto& f : format.list) {
 			if (f.ignore) {
 				offset += f.size;
-			}
-			else {
+			} else {
 				vuk::VertexInputAttributeDescription viad;
 				viad.binding = binding;
 				viad.format = f.format;
@@ -211,8 +274,7 @@ namespace vuk {
 		vuk::ImageAspectFlagBits aspect;
 		if (ivci.format == vuk::Format::eD32Sfloat) {
 			aspect = vuk::ImageAspectFlagBits::eDepth;
-		}
-		else {
+		} else {
 			aspect = vuk::ImageAspectFlagBits::eColor;
 		}
 		isr.aspectMask = aspect;
@@ -242,7 +304,7 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::specialization_constants(unsigned constant_id, vuk::ShaderStageFlags stages, void* data, size_t size) {
-		smes.emplace_back(VkSpecializationMapEntry{ (uint32_t)constant_id, (uint32_t)specialization_constant_buffer.size(), (size_t)size}, stages);
+		smes.emplace_back(VkSpecializationMapEntry{ (uint32_t)constant_id, (uint32_t)specialization_constant_buffer.size(), (size_t)size }, stages);
 		void* dst = specialization_constant_buffer.data() + specialization_constant_buffer.size();
 		specialization_constant_buffer.resize(specialization_constant_buffer.size() + size);
 		::memcpy(dst, data, size);
@@ -385,8 +447,7 @@ namespace vuk {
 		vuk::ImageAspectFlagBits aspect;
 		if (rg->get_resource_image(dst).description.format == (VkFormat)vuk::Format::eD32Sfloat) {
 			aspect = vuk::ImageAspectFlagBits::eDepth;
-		}
-		else {
+		} else {
 			aspect = vuk::ImageAspectFlagBits::eColor;
 		}
 		isl.aspectMask = aspect;
@@ -446,8 +507,7 @@ namespace vuk {
 		imb.dstAccessMask = (VkAccessFlags)dst_use.access;
 		if (rg->is_resource_image_in_general_layout(src, current_pass)) {
 			imb.oldLayout = imb.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-		}
-		else {
+		} else {
 			imb.oldLayout = (VkImageLayout)src_use.layout;
 			imb.newLayout = (VkImageLayout)dst_use.layout;
 		}
@@ -483,8 +543,7 @@ namespace vuk {
 				vkCmdBindDescriptorSets(command_buffer, graphics ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE,
 					graphics ? current_pipeline->pipeline_layout : current_compute_pipeline->pipeline_layout, i, 1, &ds.descriptor_set, 0,
 					nullptr);
-			}
-			else {
+			} else {
 				vkCmdBindDescriptorSets(command_buffer, graphics ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE,
 					graphics ? current_pipeline->pipeline_layout : current_compute_pipeline->pipeline_layout, i, 1, &persistent_sets[i], 0,
 					nullptr);
@@ -514,7 +573,7 @@ namespace vuk {
 				si.mapEntryCount = (uint32_t)pi.specialization_map_entries.size();
 				si.pData = specialization_constant_buffer.data();
 				si.dataSize = specialization_constant_buffer.size();
-				
+
 				// copy spec constant bytes into pipeline
 				memcpy(pi.specialization_constant_data.data(), specialization_constant_buffer.data(), specialization_constant_buffer.size());
 
@@ -532,83 +591,209 @@ namespace vuk {
 		_bind_state(false);
 	}
 
+	template<class T>
+	void write(std::byte*& data_ptr, const T& data) {
+		memcpy(data_ptr, &data, sizeof(T));
+		data_ptr += sizeof(T);
+	};
+
 	void CommandBuffer::_bind_graphics_pipeline_state() {
 		if (next_pipeline) {
 			vuk::PipelineInstanceCreateInfo pi;
 			pi.base = next_pipeline;
-
-			vuk::fixed_vector<VkSpecializationInfo, vuk::graphics_stage_count> specialization_infos;
-			for (uint32_t i = 0; i < pi.base->psscis.size(); i++) {
-				auto& pssci = pi.base->psscis[i];
-				uint32_t offset = (uint32_t)pi.specialization_map_entries.size();
-				bool empty = true;
-				for (auto& [sme, stage] : smes) {
-					if (pssci.stage == stage) {
-						pi.specialization_map_entries.push_back(sme);
-						empty = false;
-					}
-				}
-
-				if (empty) {
-					pi.stage_map_entry_offsets[i] = -1;
-					continue;
-				}
-
-				pi.stage_map_entry_offsets[i] = offset;
-				
-				VkSpecializationInfo si;
-				si.pMapEntries = pi.specialization_map_entries.data() + offset;
-				si.mapEntryCount = (uint32_t)pi.specialization_map_entries.size() - offset;
-				si.pData = specialization_constant_buffer.data();
-				si.dataSize = specialization_constant_buffer.size();
-				specialization_infos.push_back(si);
-
-				pssci.pSpecializationInfo = &specialization_infos.back();
-			}
-
-			// copy spec constant bytes into pipeline
-			pi.specialization_constant_data = specialization_constant_buffer;
-
-			// set vertex input
-			pi.attribute_descriptions = std::move(attribute_descriptions);
-			pi.binding_descriptions = std::move(binding_descriptions);
-			auto& vertex_input_state = pi.vertex_input_state;
-			vertex_input_state.pVertexAttributeDescriptions = (VkVertexInputAttributeDescription*)pi.attribute_descriptions.data();
-			vertex_input_state.vertexAttributeDescriptionCount = (uint32_t)pi.attribute_descriptions.size();
-			vertex_input_state.pVertexBindingDescriptions = pi.binding_descriptions.data();
-			vertex_input_state.vertexBindingDescriptionCount = (uint32_t)pi.binding_descriptions.size();
-
-			pi.input_assembly_state.topology = (VkPrimitiveTopology)topology;
-			pi.input_assembly_state.primitiveRestartEnable = false;
-
 			pi.render_pass = ongoing_renderpass->renderpass;
-			pi.subpass = ongoing_renderpass->subpass;
-
-			pi.dynamic_state.pDynamicStates = next_pipeline->dynamic_states.data();
-			pi.dynamic_state.dynamicStateCount = static_cast<unsigned>(next_pipeline->dynamic_states.size());
-
-			pi.multisample_state.rasterizationSamples = (VkSampleCountFlagBits)ongoing_renderpass->samples;
-
-			pi.color_blend_attachments = pi.base->color_blend_attachments;
-			if (blend_state_override) {
-				pi.color_blend_attachments.resize(1);
-				pi.color_blend_attachments[0] = *blend_state_override;
-				blend_state_override = {};
+			auto& records = pi.records;
+			if (ongoing_renderpass->subpass > 0) {
+				records.nonzero_subpass = true;
+				pi.extended_size += sizeof(uint8_t);
 			}
-			// last blend attachment is replicated to cover all attachments
-			if (pi.color_blend_attachments.size() < (size_t)ongoing_renderpass->color_attachments.size()) {
-				pi.color_blend_attachments.resize(ongoing_renderpass->color_attachments.size(), pi.color_blend_attachments.back());
-			}
-			pi.color_blend_state = pi.base->color_blend_state;
-			pi.color_blend_state.pAttachments = (VkPipelineColorBlendAttachmentState*)pi.color_blend_attachments.data();
-			pi.color_blend_state.attachmentCount = (uint32_t)pi.color_blend_attachments.size();
+			pi.topology = (VkPrimitiveTopology)topology;
+			pi.primitive_restart_enable = false;
 
-			if (blend_constants) { // TODO: support dynamic state on this
-				memcpy(&pi.color_blend_state.blendConstants, &*blend_constants, sizeof(float) * 4);
-				blend_constants = {};
+			if (attribute_descriptions.size() > 0 && binding_descriptions.size() > 0) {
+				records.vertex_input = true;
+				pi.extended_size += sizeof(uint8_t);
+				pi.extended_size += attribute_descriptions.size() * sizeof(PipelineInstanceCreateInfo::VertexInputAttributeDescription);
+				pi.extended_size += sizeof(uint8_t);
+				pi.extended_size += binding_descriptions.size() * sizeof(PipelineInstanceCreateInfo::VertexInputBindingDescription);
+			}
+			// attachmentCount says how many attachments
+			pi.attachmentCount = (uint8_t)ongoing_renderpass->color_attachments.size();
+			bool rasterization = ongoing_renderpass->depth_stencil_attachment || pi.attachmentCount > 0;
+
+			if (pi.attachmentCount > 0) {
+				assert(set_color_blend_attachments.count() > 0 && "If a pass has a color attachment, you must set at least one color blend state.");
+				records.broadcast_color_blend_attachment_0 = broadcast_color_blend_attachment_0;
+
+				if (broadcast_color_blend_attachment_0) {
+					assert(set_color_blend_attachments.test(0) && "Broadcast turned on, but no blend state set.");
+					if (color_blend_attachments[0] != vuk::PipelineColorBlendAttachmentState{}) {
+						records.color_blend_attachments = true;
+						pi.extended_size += sizeof(PipelineInstanceCreateInfo::PipelineColorBlendAttachmentState);
+					}
+				} else {
+					assert(set_color_blend_attachments.count() >= pi.attachmentCount && "If color blend state is not broadcast, you must set it for each color attachment.");
+					records.color_blend_attachments = true;
+					pi.extended_size += pi.attachmentCount * sizeof(PipelineInstanceCreateInfo::PipelineColorBlendAttachmentState);
+				}
+			}
+			records.logic_op = false; // TODO: logic op unsupported
+			if (blend_constants) {
+				records.blend_constants = true;
+				pi.extended_size += sizeof(float) * 4;
 			}
 
+			if (smes.size() > 0) {
+				records.specialization_constants = true;
+				pi.extended_size += sizeof(uint16_t);
+				pi.extended_size += specialization_constant_buffer.size();
+				pi.extended_size += sizeof(uint8_t);
+				pi.extended_size += smes.size() * sizeof(PipelineInstanceCreateInfo::SpecializationMapEntry);
+			}
+
+			if (rasterization) {
+				assert(rasterization_state && "If a pass has a depth/stencil or color attachment, you must set the rasterization state.");
+
+				pi.cullMode = (VkCullModeFlags)rasterization_state->cullMode;
+				vuk::PipelineRasterizationStateCreateInfo def{ .cullMode = rasterization_state->cullMode };
+				if (*rasterization_state != def) {
+					records.non_trivial_raster_state = true;
+					pi.extended_size += sizeof(PipelineInstanceCreateInfo::RasterizationState);
+				}
+			}
+			// TODO: depth bias unsupported
+
+			if (ongoing_renderpass->depth_stencil_attachment) {
+				assert(depth_stencil_state && "If a pass has a depth/stencil attachment, you must set the depth/stencil state.");
+
+				records.depth_stencil = true;
+				pi.extended_size += sizeof(PipelineInstanceCreateInfo::DepthState);
+			}
+			// TODO: stencil unsupported
+			// TODO: depth bounds unsupported
+
+			if (ongoing_renderpass->samples != vuk::SampleCountFlagBits::e1) {
+				records.more_than_one_sample = true;
+				pi.extended_size += sizeof(PipelineInstanceCreateInfo::MultisampleState);
+			}
+
+			if (rasterization) {
+				assert(viewports.size() > 0 && "If a pass has a depth/stencil or color attachment, you must set at least one viewport.");
+				records.viewports = true;
+				pi.extended_size += sizeof(uint8_t);
+				pi.extended_size += viewports.size() * sizeof(VkViewport);
+			}
+
+			if (rasterization) {
+				assert(scissors.size() > 0 && "If a pass has a depth/stencil or color attachment, you must set at least one scissor.");
+				records.scissors = true;
+				pi.extended_size += sizeof(uint8_t);
+				pi.extended_size += scissors.size() * sizeof(VkRect2D);
+			}
+			// allocate extended size
+			pi.extended_data = new std::byte[pi.extended_size];
+			auto data_ptr = pi.extended_data;
+			// start writing packed stream
+			if (ongoing_renderpass->subpass > 0) {
+				write<uint8_t>(data_ptr, ongoing_renderpass->subpass);
+			}
+
+			if (attribute_descriptions.size() > 0 && binding_descriptions.size() > 0) {
+				write<uint8_t>(data_ptr, attribute_descriptions.size());
+				for (auto& att : attribute_descriptions) {
+					PipelineInstanceCreateInfo::VertexInputAttributeDescription viad{ .format = att.format, .offset = att.offset, .location = (uint8_t)att.location, .binding = (uint8_t)att.binding };
+					write(data_ptr, viad);
+				}
+				write<uint8_t>(data_ptr, binding_descriptions.size());
+				for (auto& bin : binding_descriptions) {
+					PipelineInstanceCreateInfo::VertexInputBindingDescription vibd{ .stride = bin.stride, .inputRate = bin.inputRate, .binding = (uint8_t)bin.binding };
+					write(data_ptr, vibd);
+				}
+			}
+
+			if (records.color_blend_attachments) {
+				uint32_t num_pcba_to_write = records.broadcast_color_blend_attachment_0 ? 1 : color_blend_attachments.size();
+				for (uint32_t i = 0; i < num_pcba_to_write; i++) {
+					auto& cba = color_blend_attachments[i];
+					PipelineInstanceCreateInfo::PipelineColorBlendAttachmentState pcba{
+						.blendEnable = cba.blendEnable,
+						.srcColorBlendFactor = cba.srcColorBlendFactor,
+						.dstColorBlendFactor = cba.dstColorBlendFactor,
+						.colorBlendOp = cba.colorBlendOp,
+						.srcAlphaBlendFactor = cba.srcAlphaBlendFactor,
+						.dstAlphaBlendFactor = cba.dstAlphaBlendFactor,
+						.alphaBlendOp = cba.alphaBlendOp,
+						.colorWriteMask = (uint32_t)cba.colorWriteMask
+					};
+					write(data_ptr, pcba);
+				}
+			}
+
+			if (blend_constants) {
+				memcpy(data_ptr, &*blend_constants, sizeof(float) * 4);
+				data_ptr += sizeof(float) * 4;
+			}
+
+			if (smes.size() > 0) {
+				write<uint16_t>(data_ptr, specialization_constant_buffer.size());
+				memcpy(data_ptr, specialization_constant_buffer.data(), specialization_constant_buffer.size());
+				data_ptr += specialization_constant_buffer.size();
+
+				write<uint8_t>(data_ptr, smes.size());
+				for (auto& [sme, stage] : smes) {
+					PipelineInstanceCreateInfo::SpecializationMapEntry map_entry{
+						.shader_stage = stage,
+						.constantID = sme.constantID,
+						.offset = sme.offset,
+						.size = (uint32_t)sme.size
+					};
+					write(data_ptr, map_entry);
+				}
+			}
+
+			if (records.non_trivial_raster_state) {
+				PipelineInstanceCreateInfo::RasterizationState rs{
+					.depthClampEnable = (bool)rasterization_state->depthClampEnable,
+					.rasterizerDiscardEnable = (bool)rasterization_state->rasterizerDiscardEnable,
+					.polygonMode = (VkPolygonMode)rasterization_state->polygonMode,
+					.frontFace = (VkFrontFace)rasterization_state->frontFace };
+				write(data_ptr, rs);
+				// TODO: support depth bias
+			}
+
+			if (ongoing_renderpass->depth_stencil_attachment) {
+				PipelineInstanceCreateInfo::DepthState ds = {
+					.depthTestEnable = (bool)depth_stencil_state->depthTestEnable,
+					.depthWriteEnable = (bool)depth_stencil_state->depthWriteEnable,
+					.depthCompareOp = (VkCompareOp)depth_stencil_state->depthCompareOp
+				};
+				// TODO: support stencil
+				write(data_ptr, ds);
+			}
+
+			if (ongoing_renderpass->samples != vuk::SampleCountFlagBits::e1) {
+				PipelineInstanceCreateInfo::MultisampleState ms{ .rasterization_samples = (VkSampleCountFlagBits)ongoing_renderpass->samples };
+				write(data_ptr, ms);
+			}
+
+			if (viewports.size() > 0) {
+				write<uint8_t>(data_ptr, viewports.size());
+				for (const auto& vp : viewports) {
+					write(data_ptr, vp);
+				}
+			}
+
+			if (scissors.size() > 0) {
+				write<uint8_t>(data_ptr, scissors.size());
+				for (const auto& sc : scissors) {
+					write(data_ptr, sc);
+				}
+			}
+
+			assert(data_ptr - pi.extended_data == pi.extended_size); // sanity check: we wrote all the data we wanted to
+			// acquire_pipeline makes copy of extended_data if it needs to
 			current_pipeline = ptc.acquire_pipeline(pi);
+			delete pi.extended_data;
 
 			vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, current_pipeline->pipeline);
 			next_pipeline = nullptr;

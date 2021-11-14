@@ -24,17 +24,17 @@ void vuk::PerThreadContext::destroy(vuk::DescriptorSet ds) {
 }
 
 vuk::Unique<vuk::PersistentDescriptorSet> vuk::PerThreadContext::create_persistent_descriptorset(DescriptorSetLayoutCreateInfo dslci,
-                                                                                                 unsigned num_descriptors) {
-    dslci.dslci.bindingCount = (uint32_t)dslci.bindings.size();
-    dslci.dslci.pBindings = dslci.bindings.data();
-    VkDescriptorSetLayoutBindingFlagsCreateInfo dslbfci{.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO};
-    if(dslci.flags.size() > 0) {
-        dslbfci.bindingCount = (uint32_t)dslci.bindings.size();
-        dslbfci.pBindingFlags = dslci.flags.data();
-        dslci.dslci.pNext = &dslbfci;
-    }
-    auto& dslai = ctx.impl->descriptor_set_layouts.acquire(dslci);
-    return create_persistent_descriptorset(dslai, num_descriptors);
+	unsigned num_descriptors) {
+	dslci.dslci.bindingCount = (uint32_t)dslci.bindings.size();
+	dslci.dslci.pBindings = dslci.bindings.data();
+	VkDescriptorSetLayoutBindingFlagsCreateInfo dslbfci{ .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO };
+	if (dslci.flags.size() > 0) {
+		dslbfci.bindingCount = (uint32_t)dslci.bindings.size();
+		dslbfci.pBindingFlags = dslci.flags.data();
+		dslci.dslci.pNext = &dslbfci;
+	}
+	auto& dslai = ctx.impl->descriptor_set_layouts.acquire(dslci);
+	return create_persistent_descriptorset(dslai, num_descriptors);
 }
 
 vuk::Unique<vuk::PersistentDescriptorSet> vuk::PerThreadContext::create_persistent_descriptorset(const DescriptorSetLayoutAllocInfo& dslai, unsigned num_descriptors) {
@@ -81,12 +81,12 @@ vuk::Unique<vuk::PersistentDescriptorSet> vuk::PerThreadContext::create_persiste
 	vkAllocateDescriptorSets(ctx.device, &dsai, &tda.backing_set);
 	// TODO: we need more information here to handled arrayed bindings properly
 	// for now we assume no arrayed bindings outside of the variable count one
-    for(auto& bindings: tda.descriptor_bindings) {
-        bindings.resize(1);
-    }
-    if (dslai.variable_count_binding != (unsigned)-1) {
-        tda.descriptor_bindings[dslai.variable_count_binding].resize(num_descriptors);
-    }
+	for (auto& bindings : tda.descriptor_bindings) {
+		bindings.resize(1);
+	}
+	if (dslai.variable_count_binding != (unsigned)-1) {
+		tda.descriptor_bindings[dslai.variable_count_binding].resize(num_descriptors);
+	}
 	return Unique<PersistentDescriptorSet>(ctx, std::move(tda));
 }
 
@@ -214,15 +214,15 @@ vuk::DescriptorSet vuk::PerThreadContext::create(const create_info_t<vuk::Descri
 	auto ds = pool.acquire(*this, cinfo.layout_info);
 	auto mask = cinfo.used.to_ulong();
 	uint32_t leading_ones = num_leading_ones(mask);
-    std::array<VkWriteDescriptorSet, VUK_MAX_BINDINGS> writes = {};
-    int j = 0;
+	std::array<VkWriteDescriptorSet, VUK_MAX_BINDINGS> writes = {};
+	int j = 0;
 	for (uint32_t i = 0; i < leading_ones; i++, j++) {
-        if(!cinfo.used.test(i)) {
-            j--;
-            continue;
-        }
-        auto& write = writes[j];
-        write = {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+		if (!cinfo.used.test(i)) {
+			j--;
+			continue;
+		}
+		auto& write = writes[j];
+		write = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
 		auto& binding = cinfo.bindings[i];
 		write.descriptorType = (VkDescriptorType)binding.type;
 		write.dstArrayElement = 0;
@@ -284,12 +284,252 @@ vuk::PipelineBaseInfo vuk::PerThreadContext::create(const create_info_t<Pipeline
 	return ctx.create(cinfo);
 }
 
+template<class T>
+T read(std::byte*& data_ptr) {
+	T t;
+	memcpy(&t, data_ptr, sizeof(T));
+	data_ptr += sizeof(T);
+	return t;
+};
+
 vuk::PipelineInfo vuk::PerThreadContext::create(const create_info_t<PipelineInfo>& cinfo) {
 	// create gfx pipeline
-	VkGraphicsPipelineCreateInfo gpci = cinfo.to_vk();
+	VkGraphicsPipelineCreateInfo gpci{ .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
+	gpci.renderPass = cinfo.render_pass;
 	gpci.layout = cinfo.base->pipeline_layout;
-	gpci.pStages = cinfo.base->psscis.data();
-	gpci.stageCount = (uint32_t)cinfo.base->psscis.size();
+	auto psscis = cinfo.base->psscis;
+	gpci.pStages = psscis.data();
+	gpci.stageCount = psscis.size();
+
+	// read variable sized data
+	std::byte* data_ptr = cinfo.extended_data;
+
+	// subpass
+	if (cinfo.records.nonzero_subpass) {
+		gpci.subpass = read<uint8_t>(data_ptr);
+	}
+
+	// INPUT ASSEMBLY
+	VkPipelineInputAssemblyStateCreateInfo input_assembly_state{ .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO, .topology = cinfo.topology, .primitiveRestartEnable = cinfo.primitive_restart_enable };
+	gpci.pInputAssemblyState = &input_assembly_state;
+	// VERTEX INPUT
+	std::vector<VkVertexInputBindingDescription> vibds;
+	std::vector<VkVertexInputAttributeDescription> viads;
+	VkPipelineVertexInputStateCreateInfo vertex_input_state{ .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
+	if (cinfo.records.vertex_input) {
+		viads.resize(read<uint8_t>(data_ptr));
+		for (auto& viad : viads) {
+			auto compressed = read<PipelineInstanceCreateInfo::VertexInputAttributeDescription>(data_ptr);
+			viad.binding = compressed.binding;
+			viad.location = compressed.location;
+			viad.format = (VkFormat)compressed.format;
+			viad.offset = compressed.offset;
+		}
+		vertex_input_state.pVertexAttributeDescriptions = viads.data();
+		vertex_input_state.vertexAttributeDescriptionCount = (uint32_t)viads.size();
+
+		vibds.resize(read<uint8_t>(data_ptr));
+		for (auto& vibd : vibds) {
+			auto compressed = read<PipelineInstanceCreateInfo::VertexInputBindingDescription>(data_ptr);
+			vibd.binding = compressed.binding;
+			vibd.inputRate = compressed.inputRate;
+			vibd.stride = compressed.stride;
+		}
+		vertex_input_state.pVertexBindingDescriptions = vibds.data();
+		vertex_input_state.vertexBindingDescriptionCount = (uint32_t)vibds.size();
+	}
+	gpci.pVertexInputState = &vertex_input_state;
+	// PIPELINE COLOR BLEND ATTACHMENTS
+	VkPipelineColorBlendStateCreateInfo color_blend_state{ 
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO, 
+		.attachmentCount = cinfo.attachmentCount 
+	};
+	auto default_writemask = vuk::ColorComponentFlagBits::eR | vuk::ColorComponentFlagBits::eG | vuk::ColorComponentFlagBits::eB | vuk::ColorComponentFlagBits::eA;
+	std::vector<VkPipelineColorBlendAttachmentState> pcbas(cinfo.attachmentCount, 
+		VkPipelineColorBlendAttachmentState{ 
+			.blendEnable = false, 
+			.colorWriteMask = (VkColorComponentFlags)default_writemask
+		}
+	);
+	if (cinfo.records.color_blend_attachments) {
+		if (!cinfo.records.broadcast_color_blend_attachment_0) {
+			for (auto& pcba : pcbas) {
+				auto compressed = read<PipelineInstanceCreateInfo::PipelineColorBlendAttachmentState>(data_ptr);
+				pcba = {
+					compressed.blendEnable,
+					(VkBlendFactor)compressed.srcColorBlendFactor,
+					(VkBlendFactor)compressed.dstColorBlendFactor,
+					(VkBlendOp)compressed.colorBlendOp,
+					(VkBlendFactor)compressed.srcAlphaBlendFactor,
+					(VkBlendFactor)compressed.dstAlphaBlendFactor,
+					(VkBlendOp)compressed.alphaBlendOp,
+					compressed.colorWriteMask
+				};
+			}
+		} else { // handle broadcast
+			auto compressed = read<PipelineInstanceCreateInfo::PipelineColorBlendAttachmentState>(data_ptr);
+			for (auto& pcba : pcbas) {
+				pcba = {
+					compressed.blendEnable,
+					(VkBlendFactor)compressed.srcColorBlendFactor,
+					(VkBlendFactor)compressed.dstColorBlendFactor,
+					(VkBlendOp)compressed.colorBlendOp,
+					(VkBlendFactor)compressed.srcAlphaBlendFactor,
+					(VkBlendFactor)compressed.dstAlphaBlendFactor,
+					(VkBlendOp)compressed.alphaBlendOp,
+					compressed.colorWriteMask
+				};
+			}
+		}
+	}
+	if (cinfo.records.logic_op) {
+		auto compressed = read<PipelineInstanceCreateInfo::BlendStateLogicOp>(data_ptr);
+		color_blend_state.logicOpEnable = true;
+		color_blend_state.logicOp = compressed.logic_op;
+	}
+	if (cinfo.records.blend_constants) {
+		memcpy(&color_blend_state.blendConstants, data_ptr, sizeof(float) * 4);
+		data_ptr += sizeof(float) * 4;
+	}
+
+	color_blend_state.pAttachments = pcbas.data();
+	color_blend_state.attachmentCount = pcbas.size();
+	gpci.pColorBlendState = &color_blend_state;
+
+	// SPECIALIZATION CONSTANTS
+	vuk::fixed_vector<VkSpecializationInfo, vuk::graphics_stage_count> specialization_infos;
+	vuk::fixed_vector<VkSpecializationMapEntry, VUK_MAX_SPECIALIZATIONCONSTANT_RANGES> specialization_map_entries;
+	uint16_t specialization_constant_data_size;
+	std::byte* specialization_constant_data;
+	if (cinfo.records.specialization_constants) {
+		specialization_constant_data_size = read<uint16_t>(data_ptr);
+		specialization_constant_data = data_ptr;
+		data_ptr += specialization_constant_data_size;
+
+		auto sme_count = read<uint8_t>(data_ptr);
+
+		std::byte* local_data_ptr;
+		for (uint32_t i = 0; i < psscis.size(); i++) {
+			auto& pssci = psscis[i];
+			uint32_t offset = (uint32_t)specialization_map_entries.size();
+			bool empty = true;
+			local_data_ptr = data_ptr;
+			for (uint32_t i = 0; i < sme_count; i++) {
+				auto compressed = read<PipelineInstanceCreateInfo::SpecializationMapEntry>(local_data_ptr);
+				if (compressed.shader_stage & pssci.stage) {
+					specialization_map_entries.emplace_back(VkSpecializationMapEntry{
+						compressed.constantID,
+						compressed.offset,
+						compressed.size
+						});
+				}
+			}
+
+			VkSpecializationInfo si;
+			si.pMapEntries = specialization_map_entries.data() + offset;
+			si.mapEntryCount = (uint32_t)specialization_map_entries.size() - offset;
+			si.pData = specialization_constant_data;
+			si.dataSize = specialization_constant_data_size;
+			specialization_infos.push_back(si);
+			pssci.pSpecializationInfo = &specialization_infos.back();
+		}
+		data_ptr = local_data_ptr;
+	}
+
+	// RASTER STATE
+	VkPipelineRasterizationStateCreateInfo rasterization_state{
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+		.polygonMode = VK_POLYGON_MODE_FILL,
+		.cullMode = cinfo.cullMode,
+		.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+		.lineWidth = 1.f
+	};
+	if (cinfo.records.non_trivial_raster_state) {
+		auto rs = read<PipelineInstanceCreateInfo::RasterizationState>(data_ptr);
+		rasterization_state = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+		.depthClampEnable = rs.depthClampEnable,
+		.rasterizerDiscardEnable = rs.rasterizerDiscardEnable,
+		.polygonMode = rs.polygonMode,
+		.cullMode = cinfo.cullMode,
+		.frontFace = rs.frontFace,
+		.lineWidth = 1.f
+		};
+	}
+	if (cinfo.records.depth_bias) {
+		auto db = read<PipelineInstanceCreateInfo::DepthBias>(data_ptr);
+		rasterization_state.depthBiasEnable = true;
+		rasterization_state.depthBiasClamp = db.depthBiasClamp;
+		rasterization_state.depthBiasConstantFactor = db.depthBiasConstantFactor;
+		rasterization_state.depthBiasSlopeFactor = db.depthBiasSlopeFactor;
+	}
+	if (cinfo.records.line_width_not_1) {
+		rasterization_state.lineWidth = read<float>(data_ptr);
+	}
+	gpci.pRasterizationState = &rasterization_state;
+
+	// DEPTH - STENCIL STATE
+	VkPipelineDepthStencilStateCreateInfo depth_stencil_state{ VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO };
+	if (cinfo.records.depth_stencil) {
+		auto d = read<PipelineInstanceCreateInfo::DepthState>(data_ptr);
+		depth_stencil_state.depthTestEnable = d.depthTestEnable;
+		depth_stencil_state.depthWriteEnable = d.depthWriteEnable;
+		depth_stencil_state.depthCompareOp = d.depthCompareOp;
+		if (cinfo.records.depth_bounds) {
+			auto db = read<PipelineInstanceCreateInfo::PipelineDepthBounds>(data_ptr);
+			depth_stencil_state.depthBoundsTestEnable = true;
+			depth_stencil_state.minDepthBounds = db.minDepthBounds;
+			depth_stencil_state.maxDepthBounds = db.maxDepthBounds;
+		}
+		if (cinfo.records.stencil_state) {
+			auto s = read<PipelineInstanceCreateInfo::PipelineStencil>(data_ptr);
+			depth_stencil_state.stencilTestEnable = true;
+			depth_stencil_state.front = s.front;
+			depth_stencil_state.back = s.back;
+		}
+		gpci.pDepthStencilState = &depth_stencil_state;
+	}
+
+	// MULTISAMPLE STATE
+	VkPipelineMultisampleStateCreateInfo multisample_state{ .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO, .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT };
+	if (cinfo.records.more_than_one_sample) {
+		auto ms = read<PipelineInstanceCreateInfo::MultisampleState>(data_ptr);
+		multisample_state.rasterizationSamples = ms.rasterization_samples;
+		multisample_state.alphaToCoverageEnable = ms.alpha_to_coverage_enable;
+		multisample_state.alphaToOneEnable = ms.alpha_to_one_enable;
+		multisample_state.minSampleShading = ms.min_sample_shading;
+		multisample_state.sampleShadingEnable = ms.sample_shading_enable;
+		multisample_state.pSampleMask = nullptr; // not yet supported
+	}
+	gpci.pMultisampleState = &multisample_state;
+
+	// VIEWPORTS
+	VkViewport* viewports = nullptr;
+	uint8_t num_viewports = 1;
+	if (cinfo.records.viewports) {
+		num_viewports = read<uint8_t>(data_ptr);
+		viewports = reinterpret_cast<VkViewport*>(data_ptr);
+		data_ptr += num_viewports * sizeof(VkViewport);
+	}
+
+	// SCISSORS
+	VkRect2D* scissors = nullptr;
+	uint8_t num_scissors = 1;
+	if (cinfo.records.scissors) {
+		num_scissors = read<uint8_t>(data_ptr);
+		scissors = reinterpret_cast<VkRect2D*>(data_ptr);
+		data_ptr += num_scissors * sizeof(VkRect2D);
+	}
+
+	VkPipelineViewportStateCreateInfo viewport_state{ VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO };
+	viewport_state.pViewports = viewports;
+	viewport_state.viewportCount = num_viewports;
+	viewport_state.pScissors = scissors;
+	viewport_state.scissorCount = num_scissors;
+	gpci.pViewportState = &viewport_state;
+
+	VkPipelineDynamicStateCreateInfo dynamic_state{ .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO };
+	gpci.pDynamicState = &dynamic_state;
 
 	VkPipeline pipeline;
 	VkResult res = vkCreateGraphicsPipelines(ctx.device, ctx.impl->vk_pipeline_cache, 1, &gpci, nullptr, &pipeline);

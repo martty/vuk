@@ -2,56 +2,6 @@
 #include "vuk/Program.hpp"
 
 namespace vuk {
-	void PipelineBaseCreateInfo::set_blend(size_t attachment_index, BlendPreset preset) {
-		if (color_blend_attachments.size() <= attachment_index)
-			color_blend_attachments.resize(attachment_index + 1);
-		auto& pcba = color_blend_attachments[attachment_index];
-
-		switch (preset) {
-		case BlendPreset::eAlphaBlend:
-			pcba.blendEnable = true;
-			pcba.srcColorBlendFactor = vuk::BlendFactor::eSrcAlpha;
-			pcba.dstColorBlendFactor = vuk::BlendFactor::eOneMinusSrcAlpha;
-			pcba.colorBlendOp = vuk::BlendOp::eAdd;
-			pcba.srcAlphaBlendFactor = vuk::BlendFactor::eOne;
-			pcba.dstAlphaBlendFactor = vuk::BlendFactor::eOneMinusSrcAlpha;
-			pcba.alphaBlendOp = vuk::BlendOp::eAdd;
-			break;
-		case BlendPreset::eOff:
-			pcba.blendEnable = false;
-			break;
-		case BlendPreset::ePremultipliedAlphaBlend:
-			assert(0 && "NYI");
-		}
-	}
-	void PipelineBaseCreateInfo::set_blend(BlendPreset preset) {
-		color_blend_attachments.resize(1);
-		set_blend(0, preset);
-	}
-	// defaults
-	PipelineBaseCreateInfo::PipelineBaseCreateInfo() {
-		rasterization_state.lineWidth = 1.f;
-
-		depth_stencil_state.depthWriteEnable = true;
-		depth_stencil_state.depthCompareOp = vuk::CompareOp::eLessOrEqual;
-		depth_stencil_state.depthTestEnable = true;
-
-		color_blend_attachments.resize(1);
-		auto& pcba = color_blend_attachments[0];
-		pcba = vuk::PipelineColorBlendAttachmentState{};
-		pcba.colorWriteMask = vuk::ColorComponentFlagBits::eR | vuk::ColorComponentFlagBits::eG | vuk::ColorComponentFlagBits::eB | vuk::ColorComponentFlagBits::eA;
-	}
-
-	PipelineInstanceCreateInfo::PipelineInstanceCreateInfo() {
-		multisample_state.pSampleMask = nullptr;
-		multisample_state.rasterizationSamples = (VkSampleCountFlagBits)vuk::SampleCountFlagBits::e1;
-
-		vertex_input_state.vertexBindingDescriptionCount = 0;
-		vertex_input_state.vertexAttributeDescriptionCount = 0;
-
-		input_assembly_state.topology = (VkPrimitiveTopology)vuk::PrimitiveTopology::eTriangleList;
-	}
-
 	vuk::fixed_vector<vuk::DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> PipelineBaseCreateInfo::build_descriptor_layouts(const Program& program, const PipelineBaseCreateInfoBase& bci) {
 		vuk::fixed_vector<vuk::DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> dslcis;
 
@@ -147,21 +97,6 @@ namespace vuk {
 			dslcis[index] = std::move(dslci);
 		}
 		return dslcis;
-	}
-
-	VkGraphicsPipelineCreateInfo vuk::PipelineInstanceCreateInfo::to_vk() const {
-		VkGraphicsPipelineCreateInfo gpci{ .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
-		gpci.pVertexInputState = &vertex_input_state;
-		gpci.pInputAssemblyState = &input_assembly_state;
-		gpci.pRasterizationState = &base->rasterization_state;
-		gpci.pColorBlendState = &color_blend_state;
-		gpci.pDepthStencilState = &base->depth_stencil_state;
-		gpci.pMultisampleState = &multisample_state;
-		gpci.pViewportState = &base->viewport_state;
-		gpci.pDynamicState = &dynamic_state;
-		gpci.renderPass = render_pass;
-		gpci.subpass = subpass;
-		return gpci;
 	}
 
 	VkComputePipelineCreateInfo vuk::ComputePipelineInstanceCreateInfo::to_vk() const {

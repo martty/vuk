@@ -31,6 +31,17 @@ namespace {
 	vuk::Example xample{
 		.name = "08_pipelined_compute",
 		.setup = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
+			// 958 bytes (start)
+			// 784 bytes
+			// 512 bytes
+			// 480 bytes
+			// 384 bytes
+			// 376 bytes (reorder)
+			// 336 bytes (no more fixed_vector)
+			// 480 bytes (new state)
+			// 48 bytes lmao
+			sizeof(vuk::PipelineInstanceCreateInfo);
+
 			{
 			vuk::PipelineBaseCreateInfo pci;
 			pci.add_glsl(util::read_entire_file("../../examples/fullscreen.vert"), "fullscreen.vert");
@@ -58,7 +69,7 @@ namespace {
 			auto ptc = ifc.begin();
 			auto [tex, stub] = ptc.create_texture(vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1 }, doge_image);
 			texture_of_doge = std::move(tex);
-	
+
 			// init scrambling buffer
 			scramble_buf = ptc.allocate_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eTransferDst | vuk::BufferUsageFlagBits::eStorageBuffer, sizeof(unsigned) * x * y, 1);
 			std::vector<unsigned> indices(x * y);
@@ -80,11 +91,13 @@ namespace {
 				.resources = {"08_rtt"_image(vuk::eColorWrite)},
 				.execute = [](vuk::CommandBuffer& command_buffer) {
 					command_buffer
-					  .set_viewport(0, vuk::Rect2D::framebuffer())
-					  .set_scissor(0, vuk::Rect2D::framebuffer())
-					  .bind_sampled_image(0, 0, *texture_of_doge, {})
-					  .bind_graphics_pipeline("rtt")
-					  .draw(3, 1, 0, 0);
+						.set_viewport(0, vuk::Rect2D::framebuffer())
+						.set_scissor(0, vuk::Rect2D::framebuffer())
+						.set_rasterization({}) // Set the default rasterization state
+						.broadcast_color_blend({}) // Set the default color blend state
+						.bind_sampled_image(0, 0, *texture_of_doge, {})
+						.bind_graphics_pipeline("rtt")
+						.draw(3, 1, 0, 0);
 				}
 			});
 
@@ -98,7 +111,13 @@ namespace {
 						.bind_compute_pipeline("stupidsort")
 						.specialization_constants<uint32_t>(0, vuk::ShaderStageFlagBits::eCompute, speed_count)
 						.dispatch(1);
-					speed_count += 256;
+					// We can also customize pipelines by using specialization constants
+					// Here we will apply a tint based on the current frame
+					auto current_frame = command_buffer.get_context().ifc.absolute_frame;
+					auto mod_frame = current_frame % 100;
+					if (mod_frame == 99) {
+						speed_count += 256;
+					}
 				}
 			});
 
@@ -109,16 +128,17 @@ namespace {
 					command_buffer
 						.set_viewport(0, vuk::Rect2D::framebuffer())
 						.set_scissor(0, vuk::Rect2D::framebuffer())
-
+						.set_rasterization({}) // Set the default rasterization state
+						.broadcast_color_blend({}) // Set the default color blend state
 						.bind_sampled_image(0, 0, "08_rtt", {})
 						.bind_storage_buffer(0, 1, command_buffer.get_resource_buffer("08_scramble"))
 						.bind_graphics_pipeline("scrambled_draw")
 						.draw(3, 1, 0, 0);
 				}
 			});
-	
+
 			time += ImGui::GetIO().DeltaTime;
-			
+
 			rg.attach_managed("08_rtt", runner.swapchain->format, vuk::Dimension2D::absolute((unsigned)x, (unsigned)y), vuk::Samples::e1, vuk::ClearColor{ 0.f, 0.f, 0.f, 0.f });
 			// we bind our externally managed buffer to the rendergraph
 			rg.attach_buffer("08_scramble", scramble_buf.get(), vuk::eNone, vuk::eNone);
