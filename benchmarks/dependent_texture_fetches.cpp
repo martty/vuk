@@ -38,6 +38,8 @@ namespace {
 				command_buffer
 					.set_viewport(0, vuk::Rect2D::framebuffer())
 					.set_scissor(0, vuk::Rect2D::framebuffer())
+					.set_rasterization({})
+					.broadcast_color_blend({})
 					.bind_sampled_image(0, 0, src, vuk::SamplerCreateInfo{.magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear });
 				if (dependent) {
 					command_buffer.bind_graphics_pipeline("dependent");
@@ -58,6 +60,8 @@ namespace {
 				command_buffer
 					.set_viewport(0, vuk::Rect2D::framebuffer())
 					.set_scissor(0, vuk::Rect2D::framebuffer())
+					.set_rasterization({})
+					.broadcast_color_blend({})
 					.bind_graphics_pipeline("blit")
 					.bind_sampled_image(0, 0, "_dst", vuk::SamplerCreateInfo{.magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear });
 				command_buffer.draw(3, 1, 0, 0);
@@ -76,6 +80,8 @@ namespace {
 				command_buffer
 					.set_viewport(0, vuk::Rect2D::framebuffer())
 					.set_scissor(0, vuk::Rect2D::framebuffer())
+					.set_rasterization({})
+					.broadcast_color_blend({})
 					.bind_graphics_pipeline("blit")
 					.bind_sampled_image(0, 0, src, vuk::SamplerCreateInfo{.magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear });
 				command_buffer.draw(3, 1, 0, 0);
@@ -102,7 +108,6 @@ namespace {
 				pci.add_glsl(util::read_entire_file("../../benchmarks/fullscreen.vert"), "fullscreen.vert");
 				pci.add_glsl(util::read_entire_file("../../benchmarks/dependent_texture_fetch_explicit_lod.frag"), "dependent_texture_fetch_explicit_lod.frag");
 
-				pci.depth_stencil_state.depthCompareOp = vuk::CompareOp::eAlways;
 				runner.context->create_named_pipeline("dependent", pci);
 			}
 			{
@@ -110,7 +115,6 @@ namespace {
 				pci.add_glsl(util::read_entire_file("../../benchmarks/fullscreen.vert"), "fullscreen.vert");
 				pci.add_glsl(util::read_entire_file("../../benchmarks/nondependent_texture_fetch_explicit_lod.frag"), "nondependent_texture_fetch_explicit_lod.frag");
 
-				pci.depth_stencil_state.depthCompareOp = vuk::CompareOp::eAlways;
 				runner.context->create_named_pipeline("nondependent", pci);
 			}
 			{
@@ -118,7 +122,6 @@ namespace {
 				pci.add_glsl(util::read_entire_file("../../benchmarks/fullscreen.vert"), "fullscreen.vert");
 				pci.add_glsl(util::read_entire_file("../../benchmarks/blit.frag"), "blit.frag");
 
-				pci.depth_stencil_state.depthCompareOp = vuk::CompareOp::eAlways;
 				runner.context->create_named_pipeline("blit", pci);
 			}
 
