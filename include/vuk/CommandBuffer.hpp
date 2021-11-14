@@ -183,6 +183,10 @@ namespace vuk {
 		std::optional<RenderPassInfo> ongoing_renderpass;
 		PassInfo* current_pass = nullptr;
 
+		// Pipeline state
+		// Enabled dynamic state
+		DynamicStateFlags dynamic_state_flags = {};
+
 		// Current & next graphics & compute pipelines
 		vuk::PipelineBaseInfo* next_pipeline = nullptr;
 		vuk::ComputePipelineBaseInfo* next_compute_pipeline = nullptr;
@@ -193,6 +197,21 @@ namespace vuk {
 		vuk::PrimitiveTopology topology = vuk::PrimitiveTopology::eTriangleList;
 		vuk::fixed_vector<vuk::VertexInputAttributeDescription, VUK_MAX_ATTRIBUTES> attribute_descriptions;
 		vuk::fixed_vector<VkVertexInputBindingDescription, VUK_MAX_ATTRIBUTES> binding_descriptions;
+	
+		// Specialization constant support
+		vuk::fixed_vector<std::pair<VkSpecializationMapEntry, VkShaderStageFlags>, VUK_MAX_SPECIALIZATIONCONSTANT_RANGES> smes;
+		vuk::fixed_vector<std::byte, VUK_MAX_SPECIALIZATIONCONSTANT_DATA> specialization_constant_buffer;
+
+		// Individual pipeline states
+		std::optional<vuk::PipelineRasterizationStateCreateInfo> rasterization_state;
+		std::optional<vuk::PipelineDepthStencilStateCreateInfo> depth_stencil_state;
+		bool broadcast_color_blend_attachment_0 = false;
+		vuk::Bitset<VUK_MAX_COLOR_ATTACHMENTS> set_color_blend_attachments = {};
+		vuk::fixed_vector<vuk::PipelineColorBlendAttachmentState, VUK_MAX_COLOR_ATTACHMENTS> color_blend_attachments;
+		std::optional<std::array<float, 4>> blend_constants;
+		float line_width = 1.0f;
+		vuk::fixed_vector<VkViewport, VUK_MAX_VIEWPORTS> viewports;
+		vuk::fixed_vector<VkRect2D, VUK_MAX_SCISSORS> scissors;
 
 		// Push constants
 		std::array<unsigned char, 128> push_constant_buffer;
@@ -204,19 +223,6 @@ namespace vuk {
 		std::bitset<VUK_MAX_SETS> persistent_sets_used = {};
 		std::array<VkDescriptorSet, VUK_MAX_SETS> persistent_sets = {};
 
-		// Specialization constant support
-		vuk::fixed_vector<std::pair<VkSpecializationMapEntry, VkShaderStageFlags>, VUK_MAX_SPECIALIZATIONCONSTANT_RANGES> smes;
-		vuk::fixed_vector<std::byte, VUK_MAX_SPECIALIZATIONCONSTANT_DATA> specialization_constant_buffer;
-
-		// Dynamic state support
-		std::optional<vuk::PipelineRasterizationStateCreateInfo> rasterization_state;
-		std::optional<vuk::PipelineDepthStencilStateCreateInfo> depth_stencil_state;
-		bool broadcast_color_blend_attachment_0 = false;
-		vuk::Bitset<VUK_MAX_COLOR_ATTACHMENTS> set_color_blend_attachments = {};
-		vuk::fixed_vector<vuk::PipelineColorBlendAttachmentState, VUK_MAX_COLOR_ATTACHMENTS> color_blend_attachments;
-		std::optional<std::array<float, 4>> blend_constants;
-		vuk::fixed_vector<VkViewport, VUK_MAX_VIEWPORTS> viewports;
-		vuk::fixed_vector<VkRect2D, VUK_MAX_SCISSORS> scissors;
 
 		// for rendergraph
 		CommandBuffer(ExecutableRenderGraph& rg, vuk::PerThreadContext& ptc, VkCommandBuffer cb) : rg(&rg), ptc(ptc), command_buffer(cb) {}
@@ -235,6 +241,8 @@ namespace vuk {
 		vuk::Image get_resource_image(Name) const;
 		vuk::ImageView get_resource_image_view(Name) const;
 
+		// request dynamic state for the subsequent pipeline
+		CommandBuffer& set_dynamic_state(DynamicStateFlags);
 		// command buffer state setting
 		// when a state is set it is persistent for a pass - similar to vulkan dynamic state
 		CommandBuffer& set_viewport(unsigned index, Viewport vp);

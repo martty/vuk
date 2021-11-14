@@ -529,6 +529,19 @@ vuk::PipelineInfo vuk::PerThreadContext::create(const create_info_t<PipelineInfo
 	gpci.pViewportState = &viewport_state;
 
 	VkPipelineDynamicStateCreateInfo dynamic_state{ .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO };
+	dynamic_state.dynamicStateCount = std::popcount(cinfo.dynamic_state_flags.m_mask);
+	vuk::fixed_vector<VkDynamicState, VkDynamicState::VK_DYNAMIC_STATE_DEPTH_BOUNDS> dyn_states;
+	uint64_t dyn_state_cnt = 0;
+	uint64_t mask = cinfo.dynamic_state_flags.m_mask;
+	while (mask > 0) {
+		bool set = mask & 0x1;
+		if (set) {
+			dyn_states.push_back((VkDynamicState)dyn_state_cnt); // TODO: we will need a switch here instead of a cast when handling EXT
+		}
+		mask >>= 1;
+		dyn_state_cnt++;
+	}
+	dynamic_state.pDynamicStates = dyn_states.data();
 	gpci.pDynamicState = &dynamic_state;
 
 	VkPipeline pipeline;

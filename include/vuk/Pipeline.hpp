@@ -468,6 +468,61 @@ namespace vuk {
 	static_assert(sizeof(VertexInputAttributeDescription) == sizeof(VkVertexInputAttributeDescription), "struct and wrapper have different size!");
 	static_assert(std::is_standard_layout<VertexInputAttributeDescription>::value, "struct wrapper is not a standard layout!");
 
+	enum class DynamicStateFlagBits : uint64_t {
+		eNone = 0,
+		eViewport = 1 << 0,
+		eScissor = 1 << 1,
+		eLineWidth = 1 << 2,
+		eDepthBias = 1 << 3,
+		eBlendConstants = 1 << 4,
+		eDepthBounds = 1 << 5,
+		// additional dynamic state to implement:
+		/*eStencilCompareMask = 1 << 6,
+		eStencilWriteMask = 1 << 7,
+		eStencilReference = 1 << 8,
+		eViewportWScalingNV = 1 << 9,
+		eDiscardRectangleEXT = 1 << 10,
+		eSampleLocationsEXT = 1 << 11,
+		eRaytracingPipelineStackSizeKHR = 1 << 12,
+		eViewportShadingRatePaletteNV = 1 << 13,
+		eViewportCoarseSampleOrderNV = 1 << 14,
+		eExclusiveScissorNV = 1 << 15,
+		eFragmentShadingRateKHR = 1 << 16,
+		eLineStippleEXT = 1 << 17,
+		eCullModeEXT = 1 << 18,
+		eFrontFaceEXT = 1 << 19,
+		ePrimitiveTopologyEXT = 1 << 20,
+		eViewportWithCountEXT = 1 << 21,
+		eScissorWithCountEXT = 1 << 22,
+		eVertexInputBindingStrideEXT = 1 << 23,
+		eDepthTestEnableEXT = 1 << 24,
+		eDepthWriteEnableEXT = 1 << 25,
+		eDepthCompareOpEXT = 1 << 26,
+		eStencilTestEnableEXT = 1 << 27,
+		eStencilOpEXT = 1 << 28,
+		eVertexInputEXT = 1 << 29,
+		ePatchControlPointsEXT = 1 << 30,
+		eRasterizerDiscardEnableEXT = 1 << 31,
+		eDepthBiasEnableEXT = 1Ui64 << 32,
+		eLogicOpEXT = 1Ui64 << 33,
+		ePrimitiveRestartEnableEXT = 1Ui64 << 34,
+		eColorWriteEnableEXT = 1Ui64 << 35*/
+	};
+
+	using DynamicStateFlags = Flags<DynamicStateFlagBits>;
+
+	inline constexpr DynamicStateFlags operator|(DynamicStateFlagBits bit0, DynamicStateFlagBits bit1) noexcept {
+		return (DynamicStateFlags)bit0 | bit1;
+	}
+
+	inline constexpr DynamicStateFlags operator&(DynamicStateFlagBits bit0, DynamicStateFlagBits bit1) noexcept {
+		return (DynamicStateFlags)bit0 & bit1;
+	}
+
+	inline constexpr DynamicStateFlags operator^(DynamicStateFlagBits bit0, DynamicStateFlagBits bit1) noexcept {
+		return (DynamicStateFlags)bit0 ^ bit1;
+	}
+
 	static constexpr uint32_t graphics_stage_count = 5;
 
 	struct PipelineLayoutCreateInfo {
@@ -697,6 +752,7 @@ namespace vuk {
 	struct PipelineInstanceCreateInfo {
 		PipelineBaseInfo* base;
 		VkRenderPass render_pass;
+		DynamicStateFlags dynamic_state_flags;
 		uint16_t extended_size = 0;
 		struct RecordsExist {
 			uint32_t nonzero_subpass : 1;

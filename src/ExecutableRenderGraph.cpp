@@ -215,12 +215,11 @@ namespace vuk {
 		VkCommandBufferBeginInfo cbi{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
 		vkBeginCommandBuffer(cbuf, &cbi);
 
-		CommandBuffer cobuf(*this, ptc, cbuf);
 		for (auto& rpass : impl->rpis) {
 			bool use_secondary_command_buffers = rpass.subpasses[0].use_secondary_command_buffers;
 			bool is_single_pass = rpass.subpasses.size() == 1 && rpass.subpasses[0].passes.size() == 1;
 			if (is_single_pass) {
-				ptc.ctx.debug.begin_region(cobuf.command_buffer, rpass.subpasses[0].passes[0]->pass.name);
+				ptc.ctx.debug.begin_region(cbuf, rpass.subpasses[0].passes[0]->pass.name);
 			}
 
 			for (auto dep : rpass.pre_barriers) {
@@ -237,7 +236,6 @@ namespace vuk {
 
 			for (size_t i = 0; i < rpass.subpasses.size(); i++) {
 				auto& sp = rpass.subpasses[i];
-				fill_renderpass_info(rpass, i, cobuf);
 				// insert image pre-barriers
 				if (rpass.handle == VK_NULL_HANDLE) {
 					for (auto dep : sp.pre_barriers) {
@@ -249,6 +247,8 @@ namespace vuk {
 					}
 				}
 				for (auto& p : sp.passes) {
+					CommandBuffer cobuf(*this, ptc, cbuf);
+					fill_renderpass_info(rpass, i, cobuf);
 					// if pass requested no secondary cbufs, but due to subpass merging that is what we got
 					if (p->pass.use_secondary_command_buffers == false && use_secondary_command_buffers == true) {
 						auto secondary = cobuf.begin_secondary();
@@ -276,17 +276,6 @@ namespace vuk {
 							}
 						}
 					}
-					cobuf.pcrs.clear();
-					cobuf.attribute_descriptions.clear();
-					cobuf.binding_descriptions.clear();
-					cobuf.scissors.clear();
-					cobuf.viewports.clear();
-					cobuf.rasterization_state = {};
-					cobuf.depth_stencil_state = {};
-					cobuf.set_color_blend_attachments.clear();
-					cobuf.broadcast_color_blend_attachment_0 = false;
-					cobuf.set_bindings = {};
-					cobuf.sets_used = {};
 				}
 				if (i < rpass.subpasses.size() - 1 && rpass.handle != VK_NULL_HANDLE) {
 					use_secondary_command_buffers = rpass.subpasses[i + 1].use_secondary_command_buffers;
@@ -305,7 +294,7 @@ namespace vuk {
 				}
 			}
 			if (is_single_pass) {
-				ptc.ctx.debug.end_region(cobuf.command_buffer);
+				ptc.ctx.debug.end_region(cbuf);
 			}
 			if (rpass.handle != VK_NULL_HANDLE) {
 				vkCmdEndRenderPass(cbuf);

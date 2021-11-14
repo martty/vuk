@@ -726,7 +726,6 @@ namespace vuk {
 			return Flags<BitType>(lhs.m_mask ^ (std::underlying_type_t<BitType>)rhs);
 		}
 
-	private:
 		MaskType m_mask;
 	};
 

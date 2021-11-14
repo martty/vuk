@@ -36,11 +36,41 @@ namespace vuk {
 		return rg->get_resource_image(n).iv;
 	}
 
+	CommandBuffer& CommandBuffer::set_dynamic_state(DynamicStateFlags flags) {
+		// determine which states change to dynamic now - those states need to be flushed into the command buffer
+		DynamicStateFlags not_enabled = DynamicStateFlags{ ~dynamic_state_flags.m_mask }; // has invalid bits, but doesn't matter
+		auto to_dynamic = not_enabled & flags;
+		if (to_dynamic & vuk::DynamicStateFlagBits::eViewport && viewports.size() > 0) {
+			vkCmdSetViewport(command_buffer, 0, viewports.size(), viewports.data());
+		}
+		if (to_dynamic & vuk::DynamicStateFlagBits::eScissor && scissors.size() > 0) {
+			vkCmdSetScissor(command_buffer, 0, scissors.size(), scissors.data());
+		}
+		if (to_dynamic & vuk::DynamicStateFlagBits::eLineWidth) {
+			vkCmdSetLineWidth(command_buffer, line_width);
+		}
+		if (to_dynamic & vuk::DynamicStateFlagBits::eDepthBias && rasterization_state) {
+			vkCmdSetDepthBias(command_buffer, rasterization_state->depthBiasConstantFactor, rasterization_state->depthBiasClamp, rasterization_state->depthBiasSlopeFactor);
+		}
+		if (to_dynamic & vuk::DynamicStateFlagBits::eBlendConstants && blend_constants) {
+			vkCmdSetBlendConstants(command_buffer, blend_constants.value().data());
+		}
+		if (to_dynamic & vuk::DynamicStateFlagBits::eDepthBounds && depth_stencil_state) {
+			vkCmdSetDepthBounds(command_buffer, depth_stencil_state->minDepthBounds, depth_stencil_state->maxDepthBounds);
+		}
+		dynamic_state_flags = flags;
+		return *this;
+	}
+
 	CommandBuffer& CommandBuffer::set_viewport(unsigned index, vuk::Viewport vp) {
 		if (viewports.size() < (index + 1)) {
 			viewports.resize(index + 1);
 		}
 		viewports[index] = vp;
+
+		if (dynamic_state_flags & vuk::DynamicStateFlagBits::eViewport) {
+			vkCmdSetViewport(command_buffer, index, 1, &viewports[index]);
+		}
 		return *this;
 	}
 
@@ -63,10 +93,7 @@ namespace vuk {
 			vp.minDepth = min_depth;
 			vp.maxDepth = max_depth;
 		}
-		if (viewports.size() < (index + 1)) {
-			viewports.resize(index + 1);
-		}
-		viewports[index] = vp;
+		set_viewport(index, vp);
 		return *this;
 	}
 
@@ -86,16 +113,28 @@ namespace vuk {
 			scissors.resize(index + 1);
 		}
 		scissors[index] = vp;
+		if (dynamic_state_flags & vuk::DynamicStateFlagBits::eScissor) {
+			vkCmdSetScissor(command_buffer, index, 1, &scissors[index]);
+		}
 		return *this;
 	}
 
 	CommandBuffer& CommandBuffer::set_rasterization(vuk::PipelineRasterizationStateCreateInfo state) {
 		rasterization_state = state;
+		if (state.depthBiasEnable && (dynamic_state_flags & vuk::DynamicStateFlagBits::eDepthBias)) {
+			vkCmdSetDepthBias(command_buffer, state.depthBiasConstantFactor, state.depthBiasClamp, state.depthBiasSlopeFactor);
+		}
+		if (state.lineWidth != line_width && (dynamic_state_flags & vuk::DynamicStateFlagBits::eLineWidth)) {
+			vkCmdSetLineWidth(command_buffer, state.lineWidth);
+		}
 		return *this;
 	}
 
 	CommandBuffer& CommandBuffer::set_depth_stencil(vuk::PipelineDepthStencilStateCreateInfo state) {
 		depth_stencil_state = state;
+		if (state.depthBoundsTestEnable && (dynamic_state_flags & vuk::DynamicStateFlagBits::eDepthBounds)) {
+			vkCmdSetDepthBounds(command_buffer, state.minDepthBounds, state.maxDepthBounds);
+		}
 		return *this;
 	}
 
@@ -151,6 +190,9 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::set_blend_constants(std::array<float, 4> constants) {
 		blend_constants = constants;
+		if (dynamic_state_flags & vuk::DynamicStateFlagBits::eBlendConstants) {
+			vkCmdSetBlendConstants(command_buffer, constants.data());
+		}
 		return *this;
 	}
 
@@ -602,6 +644,7 @@ namespace vuk {
 			vuk::PipelineInstanceCreateInfo pi;
 			pi.base = next_pipeline;
 			pi.render_pass = ongoing_renderpass->renderpass;
+			pi.dynamic_state_flags = dynamic_state_flags;
 			auto& records = pi.records;
 			if (ongoing_renderpass->subpass > 0) {
 				records.nonzero_subpass = true;
@@ -637,8 +680,9 @@ namespace vuk {
 					pi.extended_size += pi.attachmentCount * sizeof(PipelineInstanceCreateInfo::PipelineColorBlendAttachmentState);
 				}
 			}
+
 			records.logic_op = false; // TODO: logic op unsupported
-			if (blend_constants) {
+			if (blend_constants && !(dynamic_state_flags & vuk::DynamicStateFlagBits::eBlendConstants)) {
 				records.blend_constants = true;
 				pi.extended_size += sizeof(float) * 4;
 			}
@@ -656,35 +700,45 @@ namespace vuk {
 
 				pi.cullMode = (VkCullModeFlags)rasterization_state->cullMode;
 				vuk::PipelineRasterizationStateCreateInfo def{ .cullMode = rasterization_state->cullMode };
+				if (dynamic_state_flags & vuk::DynamicStateFlagBits::eDepthBias) {
+					def.depthBiasConstantFactor = rasterization_state->depthBiasConstantFactor;
+					def.depthBiasClamp = rasterization_state->depthBiasClamp;
+					def.depthBiasSlopeFactor = rasterization_state->depthBiasSlopeFactor;
+				} else {
+					// TODO: static depth bias unsupported
+					assert(rasterization_state->depthBiasConstantFactor == def.depthBiasConstantFactor);
+					assert(rasterization_state->depthBiasClamp == def.depthBiasClamp);
+					assert(rasterization_state->depthBiasSlopeFactor == def.depthBiasSlopeFactor);
+				}
 				if (*rasterization_state != def) {
 					records.non_trivial_raster_state = true;
 					pi.extended_size += sizeof(PipelineInstanceCreateInfo::RasterizationState);
 				}
 			}
-			// TODO: depth bias unsupported
 
 			if (ongoing_renderpass->depth_stencil_attachment) {
 				assert(depth_stencil_state && "If a pass has a depth/stencil attachment, you must set the depth/stencil state.");
 
 				records.depth_stencil = true;
 				pi.extended_size += sizeof(PipelineInstanceCreateInfo::DepthState);
+
+				assert(depth_stencil_state->stencilTestEnable == false); // TODO: stencil unsupported
+				assert(depth_stencil_state->depthBoundsTestEnable == false); // TODO: depth bounds unsupported
 			}
-			// TODO: stencil unsupported
-			// TODO: depth bounds unsupported
 
 			if (ongoing_renderpass->samples != vuk::SampleCountFlagBits::e1) {
 				records.more_than_one_sample = true;
 				pi.extended_size += sizeof(PipelineInstanceCreateInfo::MultisampleState);
 			}
 
-			if (rasterization) {
+			if (rasterization && !(dynamic_state_flags & vuk::DynamicStateFlagBits::eViewport)) {
 				assert(viewports.size() > 0 && "If a pass has a depth/stencil or color attachment, you must set at least one viewport.");
 				records.viewports = true;
 				pi.extended_size += sizeof(uint8_t);
 				pi.extended_size += viewports.size() * sizeof(VkViewport);
 			}
 
-			if (rasterization) {
+			if (rasterization && !(dynamic_state_flags & vuk::DynamicStateFlagBits::eScissor)) {
 				assert(scissors.size() > 0 && "If a pass has a depth/stencil or color attachment, you must set at least one scissor.");
 				records.scissors = true;
 				pi.extended_size += sizeof(uint8_t);
@@ -729,7 +783,7 @@ namespace vuk {
 				}
 			}
 
-			if (blend_constants) {
+			if (blend_constants && !(dynamic_state_flags & vuk::DynamicStateFlagBits::eBlendConstants)) {
 				memcpy(data_ptr, &*blend_constants, sizeof(float) * 4);
 				data_ptr += sizeof(float) * 4;
 			}
@@ -767,8 +821,9 @@ namespace vuk {
 					.depthWriteEnable = (bool)depth_stencil_state->depthWriteEnable,
 					.depthCompareOp = (VkCompareOp)depth_stencil_state->depthCompareOp
 				};
-				// TODO: support stencil
 				write(data_ptr, ds);
+				// TODO: support stencil
+				// TODO: support depth bounds
 			}
 
 			if (ongoing_renderpass->samples != vuk::SampleCountFlagBits::e1) {
@@ -776,14 +831,14 @@ namespace vuk {
 				write(data_ptr, ms);
 			}
 
-			if (viewports.size() > 0) {
+			if (viewports.size() > 0 && !(dynamic_state_flags & vuk::DynamicStateFlagBits::eViewport)) {
 				write<uint8_t>(data_ptr, viewports.size());
 				for (const auto& vp : viewports) {
 					write(data_ptr, vp);
 				}
 			}
 
-			if (scissors.size() > 0) {
+			if (scissors.size() > 0 && !(dynamic_state_flags & vuk::DynamicStateFlagBits::eScissor)) {
 				write<uint8_t>(data_ptr, scissors.size());
 				for (const auto& sc : scissors) {
 					write(data_ptr, sc);
