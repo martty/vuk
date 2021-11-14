@@ -81,6 +81,7 @@ void util::ImGui_ImplVuk_Render(vuk::PerThreadContext& ptc, vuk::RenderGraph& rg
 		.name = "imgui",
 		.resources = { vuk::Resource{dst_target, vuk::Resource::Type::eImage, vuk::eColorRW} },
 		.execute = [&data, imvert, imind, draw_data, reset_render_state, src_target](vuk::CommandBuffer& command_buffer) {
+			command_buffer.set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor);
 			command_buffer.set_rasterization(vuk::PipelineRasterizationStateCreateInfo{});
 			command_buffer.set_color_blend(src_target, vuk::BlendPreset::eAlphaBlend);
 			reset_render_state(data, command_buffer, draw_data, imvert, imind);

@@ -299,7 +299,7 @@ vuk::PipelineInfo vuk::PerThreadContext::create(const create_info_t<PipelineInfo
 	gpci.layout = cinfo.base->pipeline_layout;
 	auto psscis = cinfo.base->psscis;
 	gpci.pStages = psscis.data();
-	gpci.stageCount = psscis.size();
+	gpci.stageCount = (uint32_t)psscis.size();
 
 	// read variable sized data
 	std::byte* data_ptr = cinfo.extended_data;
@@ -332,7 +332,7 @@ vuk::PipelineInfo vuk::PerThreadContext::create(const create_info_t<PipelineInfo
 		for (auto& vibd : vibds) {
 			auto compressed = read<PipelineInstanceCreateInfo::VertexInputBindingDescription>(data_ptr);
 			vibd.binding = compressed.binding;
-			vibd.inputRate = compressed.inputRate;
+			vibd.inputRate = (VkVertexInputRate)compressed.inputRate;
 			vibd.stride = compressed.stride;
 		}
 		vertex_input_state.pVertexBindingDescriptions = vibds.data();
@@ -393,7 +393,7 @@ vuk::PipelineInfo vuk::PerThreadContext::create(const create_info_t<PipelineInfo
 	}
 
 	color_blend_state.pAttachments = pcbas.data();
-	color_blend_state.attachmentCount = pcbas.size();
+	color_blend_state.attachmentCount = (uint32_t)pcbas.size();
 	gpci.pColorBlendState = &color_blend_state;
 
 	// SPECIALIZATION CONSTANTS
@@ -450,9 +450,9 @@ vuk::PipelineInfo vuk::PerThreadContext::create(const create_info_t<PipelineInfo
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
 		.depthClampEnable = rs.depthClampEnable,
 		.rasterizerDiscardEnable = rs.rasterizerDiscardEnable,
-		.polygonMode = rs.polygonMode,
+		.polygonMode = (VkPolygonMode)rs.polygonMode,
 		.cullMode = cinfo.cullMode,
-		.frontFace = rs.frontFace,
+		.frontFace = (VkFrontFace)rs.frontFace,
 		.lineWidth = 1.f
 		};
 	}
@@ -474,7 +474,7 @@ vuk::PipelineInfo vuk::PerThreadContext::create(const create_info_t<PipelineInfo
 		auto d = read<PipelineInstanceCreateInfo::DepthState>(data_ptr);
 		depth_stencil_state.depthTestEnable = d.depthTestEnable;
 		depth_stencil_state.depthWriteEnable = d.depthWriteEnable;
-		depth_stencil_state.depthCompareOp = d.depthCompareOp;
+		depth_stencil_state.depthCompareOp = (VkCompareOp)d.depthCompareOp;
 		if (cinfo.records.depth_bounds) {
 			auto db = read<PipelineInstanceCreateInfo::PipelineDepthBounds>(data_ptr);
 			depth_stencil_state.depthBoundsTestEnable = true;

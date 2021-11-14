@@ -778,11 +778,11 @@ namespace vuk {
 		bool primitive_restart_enable : 1;
 		VkCullModeFlags cullMode : 2;
 		std::byte* extended_data;
-		
+
 #pragma pack(push, 1)
 		struct VertexInputBindingDescription {
 			uint32_t             stride : 31;
-			VkVertexInputRate    inputRate : 1;
+			uint32_t    inputRate : 1;
 			uint8_t             binding;
 		};
 		struct VertexInputAttributeDescription {
@@ -810,18 +810,18 @@ namespace vuk {
 		// blend constants here, if they exist
 		struct SpecializationMapEntry {
 			uint32_t shader_stage;
-			uint32_t constantID : std::bit_width(VUK_MAX_SPECIALIZATIONCONSTANT_RANGES);
-			uint32_t offset : std::bit_width(VUK_MAX_SPECIALIZATIONCONSTANT_DATA);
-			uint32_t size : std::bit_width(VUK_MAX_SPECIALIZATIONCONSTANT_DATA);
+			uint16_t constantID : std::bit_width(VUK_MAX_SPECIALIZATIONCONSTANT_RANGES);
+			uint16_t offset : std::bit_width(VUK_MAX_SPECIALIZATIONCONSTANT_DATA);
+			uint16_t size : std::bit_width(VUK_MAX_SPECIALIZATIONCONSTANT_DATA);
 		};
 		// stage map entry offsets
 		// spec constant data
 
 		struct RasterizationState {
-			bool                                   depthClampEnable : 1;
-			bool                                   rasterizerDiscardEnable : 1;
-			VkPolygonMode                              polygonMode : 2; // VK_POLYGON_MODE_FILL_RECTANGLE_NV unsupported
-			VkFrontFace                                frontFace : 1;
+			uint8_t                                   depthClampEnable : 1;
+			uint8_t                                   rasterizerDiscardEnable : 1;
+			uint8_t                              polygonMode : 2; // VK_POLYGON_MODE_FILL_RECTANGLE_NV unsupported
+			uint8_t                                frontFace : 1;
 		};
 
 		struct DepthBias {
@@ -832,9 +832,9 @@ namespace vuk {
 		// float lineWidth, if exists
 
 		struct DepthState {
-			bool                                  depthTestEnable : 1;
-			bool                                  depthWriteEnable : 1;
-			VkCompareOp                           depthCompareOp : std::bit_width(7u);
+			uint8_t                                  depthTestEnable : 1;
+			uint8_t                                  depthWriteEnable : 1;
+			uint8_t                           depthCompareOp : std::bit_width(7u);
 		};
 		struct PipelineDepthBounds {
 			float                                     minDepthBounds;

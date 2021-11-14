@@ -268,6 +268,7 @@ namespace {
 				.resources = {"10_baby_renderer_final"_image(vuk::eColorWrite), "10_depth"_image(vuk::eDepthStencilRW)},
 				.execute = [uboVP, modelmats](vuk::CommandBuffer& command_buffer) {
 					command_buffer
+						.set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
 						.set_viewport(0, vuk::Rect2D::framebuffer())
 						.set_scissor(0, vuk::Rect2D::framebuffer())
 						.set_rasterization({}) // Set the default rasterization state

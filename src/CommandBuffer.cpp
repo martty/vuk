@@ -760,7 +760,7 @@ namespace vuk {
 				}
 				write<uint8_t>(data_ptr, binding_descriptions.size());
 				for (auto& bin : binding_descriptions) {
-					PipelineInstanceCreateInfo::VertexInputBindingDescription vibd{ .stride = bin.stride, .inputRate = bin.inputRate, .binding = (uint8_t)bin.binding };
+					PipelineInstanceCreateInfo::VertexInputBindingDescription vibd{ .stride = bin.stride, .inputRate = (uint32_t)bin.inputRate, .binding = (uint8_t)bin.binding };
 					write(data_ptr, vibd);
 				}
 			}
@@ -797,9 +797,9 @@ namespace vuk {
 				for (auto& [sme, stage] : smes) {
 					PipelineInstanceCreateInfo::SpecializationMapEntry map_entry{
 						.shader_stage = stage,
-						.constantID = sme.constantID,
-						.offset = sme.offset,
-						.size = (uint32_t)sme.size
+						.constantID = (uint16_t)sme.constantID,
+						.offset = (uint16_t)sme.offset,
+						.size = (uint16_t)sme.size
 					};
 					write(data_ptr, map_entry);
 				}
@@ -809,8 +809,8 @@ namespace vuk {
 				PipelineInstanceCreateInfo::RasterizationState rs{
 					.depthClampEnable = (bool)rasterization_state->depthClampEnable,
 					.rasterizerDiscardEnable = (bool)rasterization_state->rasterizerDiscardEnable,
-					.polygonMode = (VkPolygonMode)rasterization_state->polygonMode,
-					.frontFace = (VkFrontFace)rasterization_state->frontFace };
+					.polygonMode = (uint8_t)rasterization_state->polygonMode,
+					.frontFace = (uint8_t)rasterization_state->frontFace };
 				write(data_ptr, rs);
 				// TODO: support depth bias
 			}
@@ -819,7 +819,7 @@ namespace vuk {
 				PipelineInstanceCreateInfo::DepthState ds = {
 					.depthTestEnable = (bool)depth_stencil_state->depthTestEnable,
 					.depthWriteEnable = (bool)depth_stencil_state->depthWriteEnable,
-					.depthCompareOp = (VkCompareOp)depth_stencil_state->depthCompareOp
+					.depthCompareOp = (uint8_t)depth_stencil_state->depthCompareOp
 				};
 				write(data_ptr, ds);
 				// TODO: support stencil
@@ -832,14 +832,14 @@ namespace vuk {
 			}
 
 			if (viewports.size() > 0 && !(dynamic_state_flags & vuk::DynamicStateFlagBits::eViewport)) {
-				write<uint8_t>(data_ptr, viewports.size());
+				write<uint8_t>(data_ptr, (uint8_t)viewports.size());
 				for (const auto& vp : viewports) {
 					write(data_ptr, vp);
 				}
 			}
 
 			if (scissors.size() > 0 && !(dynamic_state_flags & vuk::DynamicStateFlagBits::eScissor)) {
-				write<uint8_t>(data_ptr, scissors.size());
+				write<uint8_t>(data_ptr, (uint8_t)scissors.size());
 				for (const auto& sc : scissors) {
 					write(data_ptr, sc);
 				}
