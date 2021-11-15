@@ -123,8 +123,10 @@ namespace vuk {
 			_.unlock();
 			std::unique_lock ulock(cache.cache_mtx);
 			auto ci_copy = ci;
-			ci_copy.extended_data = new std::byte[ci_copy.extended_size];
-			memcpy(ci_copy.extended_data, ci.extended_data, ci_copy.extended_size);
+			if (!ci_copy.is_inline()) {
+				ci_copy.extended_data = new std::byte[ci_copy.extended_size];
+				memcpy(ci_copy.extended_data, ci.extended_data, ci_copy.extended_size);
+			}
 			auto pit = cache.pool.emplace(ptc.create(ci_copy));
 			typename Cache::LRUEntry entry{ &*pit, ptc.ifc.absolute_frame };
 			it = cache.lru_map.emplace(ci_copy, entry).first;
@@ -140,7 +142,9 @@ namespace vuk {
 			auto last_use_frame = it->second.last_use_frame;
 			if ((int64_t)ptc.ifc.absolute_frame - (int64_t)last_use_frame > (int64_t)threshold) {
 				ptc.destroy(*it->second.ptr);
-				delete it->first.extended_data;
+				if (!it->first.is_inline()) {
+					delete it->first.extended_data;
+				}
 				cache.pool.erase(cache.pool.get_iterator_from_pointer(it->second.ptr));
 				it = cache.lru_map.erase(it);
 			} else {

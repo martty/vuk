@@ -285,7 +285,7 @@ vuk::PipelineBaseInfo vuk::PerThreadContext::create(const create_info_t<Pipeline
 }
 
 template<class T>
-T read(std::byte*& data_ptr) {
+T read(const std::byte*& data_ptr) {
 	T t;
 	memcpy(&t, data_ptr, sizeof(T));
 	data_ptr += sizeof(T);
@@ -302,7 +302,7 @@ vuk::PipelineInfo vuk::PerThreadContext::create(const create_info_t<PipelineInfo
 	gpci.stageCount = (uint32_t)psscis.size();
 
 	// read variable sized data
-	std::byte* data_ptr = cinfo.extended_data;
+	const std::byte* data_ptr = cinfo.is_inline() ? cinfo.inline_data : cinfo.extended_data;
 
 	// subpass
 	if (cinfo.records.nonzero_subpass) {
@@ -400,7 +400,7 @@ vuk::PipelineInfo vuk::PerThreadContext::create(const create_info_t<PipelineInfo
 	vuk::fixed_vector<VkSpecializationInfo, vuk::graphics_stage_count> specialization_infos;
 	vuk::fixed_vector<VkSpecializationMapEntry, VUK_MAX_SPECIALIZATIONCONSTANT_RANGES> specialization_map_entries;
 	uint16_t specialization_constant_data_size;
-	std::byte* specialization_constant_data;
+	const std::byte* specialization_constant_data;
 	if (cinfo.records.specialization_constants) {
 		specialization_constant_data_size = read<uint16_t>(data_ptr);
 		specialization_constant_data = data_ptr;
@@ -408,7 +408,7 @@ vuk::PipelineInfo vuk::PerThreadContext::create(const create_info_t<PipelineInfo
 
 		auto sme_count = read<uint8_t>(data_ptr);
 
-		std::byte* local_data_ptr;
+		const std::byte* local_data_ptr;
 		for (uint32_t i = 0; i < psscis.size(); i++) {
 			auto& pssci = psscis[i];
 			uint32_t offset = (uint32_t)specialization_map_entries.size();
@@ -504,20 +504,20 @@ vuk::PipelineInfo vuk::PerThreadContext::create(const create_info_t<PipelineInfo
 	gpci.pMultisampleState = &multisample_state;
 
 	// VIEWPORTS
-	VkViewport* viewports = nullptr;
+	const VkViewport* viewports = nullptr;
 	uint8_t num_viewports = 1;
 	if (cinfo.records.viewports) {
 		num_viewports = read<uint8_t>(data_ptr);
-		viewports = reinterpret_cast<VkViewport*>(data_ptr);
+		viewports = reinterpret_cast<const VkViewport*>(data_ptr);
 		data_ptr += num_viewports * sizeof(VkViewport);
 	}
 
 	// SCISSORS
-	VkRect2D* scissors = nullptr;
+	const VkRect2D* scissors = nullptr;
 	uint8_t num_scissors = 1;
 	if (cinfo.records.scissors) {
 		num_scissors = read<uint8_t>(data_ptr);
-		scissors = reinterpret_cast<VkRect2D*>(data_ptr);
+		scissors = reinterpret_cast<const VkRect2D*>(data_ptr);
 		data_ptr += num_scissors * sizeof(VkRect2D);
 	}
 

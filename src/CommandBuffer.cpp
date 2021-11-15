@@ -744,9 +744,16 @@ namespace vuk {
 				pi.extended_size += sizeof(uint8_t);
 				pi.extended_size += scissors.size() * sizeof(VkRect2D);
 			}
-			// allocate extended size
-			pi.extended_data = new std::byte[pi.extended_size];
-			auto data_ptr = pi.extended_data;
+			// small buffer optimization:
+			// if the extended data fits, then we put it inline in the key
+			std::byte* data_ptr;
+			std::byte* data_start_ptr;
+			if (pi.is_inline()) {
+				data_start_ptr = data_ptr = pi.inline_data;
+			} else { // otherwise we allocate
+				pi.extended_data = new std::byte[pi.extended_size];
+				data_start_ptr = data_ptr = pi.extended_data;
+			}
 			// start writing packed stream
 			if (ongoing_renderpass->subpass > 0) {
 				write<uint8_t>(data_ptr, ongoing_renderpass->subpass);
@@ -845,10 +852,12 @@ namespace vuk {
 				}
 			}
 
-			assert(data_ptr - pi.extended_data == pi.extended_size); // sanity check: we wrote all the data we wanted to
+			assert(data_ptr - data_start_ptr == pi.extended_size); // sanity check: we wrote all the data we wanted to
 			// acquire_pipeline makes copy of extended_data if it needs to
 			current_pipeline = ptc.acquire_pipeline(pi);
-			delete pi.extended_data;
+			if (!pi.is_inline()) {
+				delete pi.extended_data;
+			}
 
 			vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, current_pipeline->pipeline);
 			next_pipeline = nullptr;

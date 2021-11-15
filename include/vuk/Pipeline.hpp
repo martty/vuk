@@ -777,7 +777,10 @@ namespace vuk {
 		VkPrimitiveTopology topology : std::bit_width(10u);
 		bool primitive_restart_enable : 1;
 		VkCullModeFlags cullMode : 2;
-		std::byte* extended_data;
+		union {
+			std::byte inline_data[80];
+			std::byte* extended_data;
+		};
 
 #pragma pack(push, 1)
 		struct VertexInputBindingDescription {
@@ -859,7 +862,11 @@ namespace vuk {
 #pragma pack(pop)
 
 		bool operator==(const PipelineInstanceCreateInfo& o) const noexcept {
-			return base == o.base && render_pass == o.render_pass && extended_size == o.extended_size && memcmp(extended_data, o.extended_data, extended_size) == 0;
+			return base == o.base && render_pass == o.render_pass && extended_size == o.extended_size && (is_inline() ? (memcmp(inline_data, o.inline_data, extended_size) == 0) : (memcmp(extended_data, o.extended_data, extended_size) == 0));
+		}
+
+		bool is_inline() const noexcept {
+			return extended_size <= sizeof(inline_data);
 		}
 	};
 
@@ -1055,7 +1062,8 @@ namespace std {
 	struct hash<vuk::PipelineInstanceCreateInfo> {
 		size_t operator()(vuk::PipelineInstanceCreateInfo const& x) const noexcept {
 			size_t h = 0;
-			hash_combine(h, x.base, reinterpret_cast<uint64_t>((VkRenderPass)x.render_pass), x.extended_size, robin_hood::hash_bytes(x.extended_data, x.extended_size));
+			auto ext_hash = x.is_inline() ? robin_hood::hash_bytes(x.inline_data, x.extended_size) : robin_hood::hash_bytes(x.extended_data, x.extended_size);
+			hash_combine(h, x.base, reinterpret_cast<uint64_t>((VkRenderPass)x.render_pass), x.extended_size, ext_hash);
 			return h;
 		}
 	};
