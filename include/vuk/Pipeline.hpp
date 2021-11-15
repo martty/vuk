@@ -592,69 +592,6 @@ namespace vuk {
 	};
 }
 
-inline bool operator==(VkVertexInputBindingDescription const& lhs, VkVertexInputBindingDescription const& rhs) noexcept {
-	return (lhs.binding == rhs.binding)
-		&& (lhs.stride == rhs.stride)
-		&& (lhs.inputRate == rhs.inputRate);
-}
-
-inline bool operator==(VkVertexInputAttributeDescription const& lhs, VkVertexInputAttributeDescription const& rhs) noexcept {
-	return (lhs.location == rhs.location)
-		&& (lhs.binding == rhs.binding)
-		&& (lhs.format == rhs.format)
-		&& (lhs.offset == rhs.offset);
-}
-
-inline bool operator==(VkPipelineColorBlendAttachmentState const& lhs, VkPipelineColorBlendAttachmentState const& rhs) noexcept {
-	return (lhs.blendEnable == rhs.blendEnable)
-		&& (lhs.srcColorBlendFactor == rhs.srcColorBlendFactor)
-		&& (lhs.dstColorBlendFactor == rhs.dstColorBlendFactor)
-		&& (lhs.colorBlendOp == rhs.colorBlendOp)
-		&& (lhs.srcAlphaBlendFactor == rhs.srcAlphaBlendFactor)
-		&& (lhs.dstAlphaBlendFactor == rhs.dstAlphaBlendFactor)
-		&& (lhs.alphaBlendOp == rhs.alphaBlendOp)
-		&& (lhs.colorWriteMask == rhs.colorWriteMask);
-}
-
-inline bool operator==(VkPipelineInputAssemblyStateCreateInfo const& lhs, VkPipelineInputAssemblyStateCreateInfo const& rhs) noexcept {
-	return (lhs.flags == rhs.flags)
-		&& (lhs.topology == rhs.topology)
-		&& (lhs.primitiveRestartEnable == rhs.primitiveRestartEnable);
-}
-
-inline bool operator==(VkPipelineColorBlendStateCreateInfo const& lhs, VkPipelineColorBlendStateCreateInfo const& rhs) noexcept {
-	return (lhs.flags == rhs.flags)
-		&& (lhs.logicOpEnable == rhs.logicOpEnable)
-		&& (lhs.logicOp == rhs.logicOp)
-		&& (lhs.attachmentCount == rhs.attachmentCount)
-		&& (lhs.pAttachments == rhs.pAttachments)
-		&& (memcmp(lhs.blendConstants, rhs.blendConstants, sizeof(lhs.blendConstants)) == 0);
-}
-
-inline bool operator==(VkPipelineVertexInputStateCreateInfo const& lhs, VkPipelineVertexInputStateCreateInfo const& rhs) noexcept {
-	return (lhs.flags == rhs.flags)
-		&& (lhs.vertexBindingDescriptionCount == rhs.vertexBindingDescriptionCount)
-		&& (lhs.pVertexBindingDescriptions == rhs.pVertexBindingDescriptions)
-		&& (lhs.vertexAttributeDescriptionCount == rhs.vertexAttributeDescriptionCount)
-		&& (lhs.pVertexAttributeDescriptions == rhs.pVertexAttributeDescriptions);
-}
-
-inline bool operator==(VkPipelineMultisampleStateCreateInfo const& lhs, VkPipelineMultisampleStateCreateInfo const& rhs) noexcept {
-	return (lhs.flags == rhs.flags)
-		&& (lhs.rasterizationSamples == rhs.rasterizationSamples)
-		&& (lhs.sampleShadingEnable == rhs.sampleShadingEnable)
-		&& (lhs.minSampleShading == rhs.minSampleShading)
-		&& (lhs.pSampleMask == rhs.pSampleMask)
-		&& (lhs.alphaToCoverageEnable == rhs.alphaToCoverageEnable)
-		&& (lhs.alphaToOneEnable == rhs.alphaToOneEnable);
-}
-
-inline bool operator==(VkPipelineDynamicStateCreateInfo const& lhs, VkPipelineDynamicStateCreateInfo const& rhs) noexcept {
-	return (lhs.flags == rhs.flags)
-		&& (lhs.dynamicStateCount == rhs.dynamicStateCount)
-		&& (lhs.pDynamicStates == rhs.pDynamicStates);
-}
-
 inline bool operator==(VkPushConstantRange const& lhs, VkPushConstantRange const& rhs) noexcept {
 	return (lhs.stageFlags == rhs.stageFlags)
 		&& (lhs.offset == rhs.offset)
@@ -743,7 +680,7 @@ namespace vuk {
 			uint16_t offset : std::bit_width(VUK_MAX_SPECIALIZATIONCONSTANT_DATA);
 			uint16_t size : std::bit_width(VUK_MAX_SPECIALIZATIONCONSTANT_DATA);
 		};
-		
+
 		struct RasterizationState {
 			uint8_t depthClampEnable : 1;
 			uint8_t rasterizerDiscardEnable : 1;
@@ -866,63 +803,6 @@ namespace std {
 	};
 
 	template <>
-	struct hash<VkPipelineInputAssemblyStateCreateInfo> {
-		size_t operator()(VkPipelineInputAssemblyStateCreateInfo const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.flags, x.primitiveRestartEnable, to_integral(x.topology));
-			return h;
-		}
-	};
-
-	template <>
-	struct hash<vuk::StencilOpState> {
-		size_t operator()(vuk::StencilOpState const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.compareMask, to_integral(x.compareOp), to_integral(x.failOp), to_integral(x.depthFailOp), to_integral(x.passOp), x.reference, x.writeMask);
-			return h;
-		}
-	};
-
-	template <>
-	struct hash<vuk::PipelineDepthStencilStateCreateInfo> {
-		size_t operator()(vuk::PipelineDepthStencilStateCreateInfo const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.back, x.front, x.depthBoundsTestEnable, to_integral(x.depthCompareOp), x.depthTestEnable, x.depthWriteEnable, x.maxDepthBounds, x.minDepthBounds, x.stencilTestEnable);
-			return h;
-		}
-	};
-
-	template<>
-	struct hash<vuk::PipelineRasterizationStateCreateInfo> {
-		size_t operator()(vuk::PipelineRasterizationStateCreateInfo const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.depthClampEnable, x.rasterizerDiscardEnable, x.polygonMode,
-				x.cullMode, x.frontFace, x.depthBiasEnable,
-				x.depthBiasConstantFactor, x.depthBiasClamp, x.depthBiasSlopeFactor, x.lineWidth);
-			return h;
-		}
-	};
-
-	template <>
-	struct hash<vuk::PipelineColorBlendAttachmentState> {
-		size_t operator()(vuk::PipelineColorBlendAttachmentState const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, to_integral(x.alphaBlendOp), x.blendEnable, to_integral(x.colorBlendOp), to_integral(x.dstAlphaBlendFactor), to_integral(x.srcAlphaBlendFactor), to_integral(x.dstColorBlendFactor), to_integral(x.srcColorBlendFactor));
-			return h;
-		}
-	};
-
-	template <>
-	struct hash<vuk::PipelineColorBlendStateCreateInfo> {
-		size_t operator()(vuk::PipelineColorBlendStateCreateInfo const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, std::span(x.pAttachments, x.attachmentCount), x.blendConstants[0], x.blendConstants[1], x.blendConstants[2], x.blendConstants[3], to_integral(x.logicOp), x.logicOpEnable);
-			return h;
-		}
-	};
-
-
-	template <>
 	struct hash<vuk::PipelineBaseCreateInfo> {
 		size_t operator()(vuk::PipelineBaseCreateInfo const& x) const noexcept {
 			size_t h = 0;
@@ -936,45 +816,6 @@ namespace std {
 		size_t operator()(vuk::ComputePipelineBaseCreateInfo const& x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, x.shader);
-			return h;
-		}
-	};
-
-	template<>
-	struct hash<VkPipelineColorBlendStateCreateInfo> {
-		size_t operator()(VkPipelineColorBlendStateCreateInfo const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.blendConstants[0], x.blendConstants[1], x.blendConstants[2], x.blendConstants[3], x.logicOpEnable, to_integral(x.logicOp),
-				x.attachmentCount);
-			return h;
-		}
-	};
-
-	template<>
-	struct hash<VkPipelineMultisampleStateCreateInfo> {
-		size_t operator()(VkPipelineMultisampleStateCreateInfo const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.flags, x.alphaToCoverageEnable, x.alphaToOneEnable, x.minSampleShading, x.rasterizationSamples, x.sampleShadingEnable);
-			if (x.pSampleMask)
-				hash_combine(h, *x.pSampleMask);
-			return h;
-		}
-	};
-
-	template<>
-	struct hash<VkDynamicState> {
-		size_t operator()(VkDynamicState const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, to_integral(x));
-			return h;
-		}
-	};
-
-	template<>
-	struct hash<VkPipelineDynamicStateCreateInfo> {
-		size_t operator()(VkPipelineDynamicStateCreateInfo const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.flags, std::span(x.pDynamicStates, x.dynamicStateCount));
 			return h;
 		}
 	};
