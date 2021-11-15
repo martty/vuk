@@ -345,7 +345,7 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::specialization_constants(unsigned constant_id, vuk::ShaderStageFlags stages, void* data, size_t size) {
+	CommandBuffer& CommandBuffer::specialize_constants(unsigned constant_id, vuk::ShaderStageFlags stages, void* data, size_t size) {
 		smes.emplace_back(VkSpecializationMapEntry{ (uint32_t)constant_id, (uint32_t)specialization_constant_buffer.size(), (size_t)size }, stages);
 		void* dst = specialization_constant_buffer.data() + specialization_constant_buffer.size();
 		specialization_constant_buffer.resize(specialization_constant_buffer.size() + size);
