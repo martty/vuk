@@ -471,18 +471,18 @@ vuk::PipelineInfo vuk::PerThreadContext::create(const create_info_t<PipelineInfo
 	// DEPTH - STENCIL STATE
 	VkPipelineDepthStencilStateCreateInfo depth_stencil_state{ VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO };
 	if (cinfo.records.depth_stencil) {
-		auto d = read<PipelineInstanceCreateInfo::DepthState>(data_ptr);
+		auto d = read<PipelineInstanceCreateInfo::Depth>(data_ptr);
 		depth_stencil_state.depthTestEnable = d.depthTestEnable;
 		depth_stencil_state.depthWriteEnable = d.depthWriteEnable;
 		depth_stencil_state.depthCompareOp = (VkCompareOp)d.depthCompareOp;
 		if (cinfo.records.depth_bounds) {
-			auto db = read<PipelineInstanceCreateInfo::PipelineDepthBounds>(data_ptr);
+			auto db = read<PipelineInstanceCreateInfo::DepthBounds>(data_ptr);
 			depth_stencil_state.depthBoundsTestEnable = true;
 			depth_stencil_state.minDepthBounds = db.minDepthBounds;
 			depth_stencil_state.maxDepthBounds = db.maxDepthBounds;
 		}
 		if (cinfo.records.stencil_state) {
-			auto s = read<PipelineInstanceCreateInfo::PipelineStencil>(data_ptr);
+			auto s = read<PipelineInstanceCreateInfo::Stencil>(data_ptr);
 			depth_stencil_state.stencilTestEnable = true;
 			depth_stencil_state.front = s.front;
 			depth_stencil_state.back = s.back;
@@ -493,7 +493,7 @@ vuk::PipelineInfo vuk::PerThreadContext::create(const create_info_t<PipelineInfo
 	// MULTISAMPLE STATE
 	VkPipelineMultisampleStateCreateInfo multisample_state{ .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO, .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT };
 	if (cinfo.records.more_than_one_sample) {
-		auto ms = read<PipelineInstanceCreateInfo::MultisampleState>(data_ptr);
+		auto ms = read<PipelineInstanceCreateInfo::Multisample>(data_ptr);
 		multisample_state.rasterizationSamples = ms.rasterization_samples;
 		multisample_state.alphaToCoverageEnable = ms.alpha_to_coverage_enable;
 		multisample_state.alphaToOneEnable = ms.alpha_to_one_enable;

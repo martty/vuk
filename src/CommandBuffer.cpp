@@ -720,7 +720,7 @@ namespace vuk {
 				assert(depth_stencil_state && "If a pass has a depth/stencil attachment, you must set the depth/stencil state.");
 
 				records.depth_stencil = true;
-				pi.extended_size += sizeof(PipelineInstanceCreateInfo::DepthState);
+				pi.extended_size += sizeof(PipelineInstanceCreateInfo::Depth);
 
 				assert(depth_stencil_state->stencilTestEnable == false); // TODO: stencil unsupported
 				assert(depth_stencil_state->depthBoundsTestEnable == false); // TODO: depth bounds unsupported
@@ -728,7 +728,7 @@ namespace vuk {
 
 			if (ongoing_renderpass->samples != vuk::SampleCountFlagBits::e1) {
 				records.more_than_one_sample = true;
-				pi.extended_size += sizeof(PipelineInstanceCreateInfo::MultisampleState);
+				pi.extended_size += sizeof(PipelineInstanceCreateInfo::Multisample);
 			}
 
 			if (rasterization && !(dynamic_state_flags & vuk::DynamicStateFlagBits::eViewport)) {
@@ -823,7 +823,7 @@ namespace vuk {
 			}
 
 			if (ongoing_renderpass->depth_stencil_attachment) {
-				PipelineInstanceCreateInfo::DepthState ds = {
+				PipelineInstanceCreateInfo::Depth ds = {
 					.depthTestEnable = (bool)depth_stencil_state->depthTestEnable,
 					.depthWriteEnable = (bool)depth_stencil_state->depthWriteEnable,
 					.depthCompareOp = (uint8_t)depth_stencil_state->depthCompareOp
@@ -834,7 +834,7 @@ namespace vuk {
 			}
 
 			if (ongoing_renderpass->samples != vuk::SampleCountFlagBits::e1) {
-				PipelineInstanceCreateInfo::MultisampleState ms{ .rasterization_samples = (VkSampleCountFlagBits)ongoing_renderpass->samples };
+				PipelineInstanceCreateInfo::Multisample ms{ .rasterization_samples = (VkSampleCountFlagBits)ongoing_renderpass->samples };
 				write(data_ptr, ms);
 			}
 

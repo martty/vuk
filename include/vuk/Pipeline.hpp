@@ -110,7 +110,7 @@ namespace vuk {
 		eReverseSubtract = VK_BLEND_OP_REVERSE_SUBTRACT,
 		eMin = VK_BLEND_OP_MIN,
 		eMax = VK_BLEND_OP_MAX,
-		eZeroEXT = VK_BLEND_OP_ZERO_EXT,
+		/*eZeroEXT = VK_BLEND_OP_ZERO_EXT,
 		eSrcEXT = VK_BLEND_OP_SRC_EXT,
 		eDstEXT = VK_BLEND_OP_DST_EXT,
 		eSrcOverEXT = VK_BLEND_OP_SRC_OVER_EXT,
@@ -155,7 +155,7 @@ namespace vuk {
 		eInvertOvgEXT = VK_BLEND_OP_INVERT_OVG_EXT,
 		eRedEXT = VK_BLEND_OP_RED_EXT,
 		eGreenEXT = VK_BLEND_OP_GREEN_EXT,
-		eBlueEXT = VK_BLEND_OP_BLUE_EXT
+		eBlueEXT = VK_BLEND_OP_BLUE_EXT*/
 	};
 
 	enum class BlendPreset {
@@ -166,7 +166,7 @@ namespace vuk {
 		eFill = VK_POLYGON_MODE_FILL,
 		eLine = VK_POLYGON_MODE_LINE,
 		ePoint = VK_POLYGON_MODE_POINT,
-		eFillRectangleNV = VK_POLYGON_MODE_FILL_RECTANGLE_NV
+		//eFillRectangleNV = VK_POLYGON_MODE_FILL_RECTANGLE_NV
 	};
 
 	enum class CullModeFlagBits : VkCullModeFlags {
@@ -184,22 +184,9 @@ namespace vuk {
 	using CullModeFlags = Flags<CullModeFlagBits>;
 
 	struct PipelineRasterizationStateCreateInfo {
-		static constexpr VkStructureType structureType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-
-		operator VkPipelineRasterizationStateCreateInfo const& () const noexcept {
-			return *reinterpret_cast<const VkPipelineRasterizationStateCreateInfo*>(this);
-		}
-
-		operator VkPipelineRasterizationStateCreateInfo& () noexcept {
-			return *reinterpret_cast<VkPipelineRasterizationStateCreateInfo*>(this);
-		}
-
 
 		bool operator==(PipelineRasterizationStateCreateInfo const& rhs) const noexcept {
-			return (sType == rhs.sType)
-				&& (pNext == rhs.pNext)
-				&& (flags == rhs.flags)
-				&& (depthClampEnable == rhs.depthClampEnable)
+			return (depthClampEnable == rhs.depthClampEnable)
 				&& (rasterizerDiscardEnable == rhs.rasterizerDiscardEnable)
 				&& (polygonMode == rhs.polygonMode)
 				&& (cullMode == rhs.cullMode)
@@ -215,9 +202,6 @@ namespace vuk {
 			return !operator==(rhs);
 		}
 
-		VkStructureType sType = structureType;
-		const void* pNext = {};
-		uint32_t flags = {}; // unused
 		Bool32 depthClampEnable = {};
 		Bool32 rasterizerDiscardEnable = {};
 		PolygonMode polygonMode = PolygonMode::eFill;
@@ -229,8 +213,6 @@ namespace vuk {
 		float depthBiasSlopeFactor = {};
 		float lineWidth = {};
 	};
-	static_assert(sizeof(PipelineRasterizationStateCreateInfo) == sizeof(VkPipelineRasterizationStateCreateInfo), "struct and wrapper have different size!");
-	static_assert(std::is_standard_layout<PipelineRasterizationStateCreateInfo>::value, "struct wrapper is not a standard layout!");
 
 	enum class ColorComponentFlagBits : VkColorComponentFlags {
 		eR = VK_COLOR_COMPONENT_R_BIT,
@@ -254,14 +236,6 @@ namespace vuk {
 	}
 
 	struct PipelineColorBlendAttachmentState {
-		operator VkPipelineColorBlendAttachmentState const& () const noexcept {
-			return *reinterpret_cast<const VkPipelineColorBlendAttachmentState*>(this);
-		}
-
-		operator VkPipelineColorBlendAttachmentState& () noexcept {
-			return *reinterpret_cast<VkPipelineColorBlendAttachmentState*>(this);
-		}
-
 		bool operator==(PipelineColorBlendAttachmentState const& rhs) const noexcept {
 			return (blendEnable == rhs.blendEnable)
 				&& (srcColorBlendFactor == rhs.srcColorBlendFactor)
@@ -287,8 +261,6 @@ namespace vuk {
 		ColorComponentFlags colorWriteMask =
 			vuk::ColorComponentFlagBits::eR | vuk::ColorComponentFlagBits::eG | vuk::ColorComponentFlagBits::eB | vuk::ColorComponentFlagBits::eA;
 	};
-	static_assert(sizeof(PipelineColorBlendAttachmentState) == sizeof(VkPipelineColorBlendAttachmentState), "struct and wrapper have different size!");
-	static_assert(std::is_standard_layout<PipelineColorBlendAttachmentState>::value, "struct wrapper is not a standard layout!");
 
 	enum class LogicOp {
 		eClear = VK_LOGIC_OP_CLEAR,
@@ -310,21 +282,8 @@ namespace vuk {
 	};
 
 	struct PipelineColorBlendStateCreateInfo {
-		static constexpr VkStructureType structureType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-
-		operator VkPipelineColorBlendStateCreateInfo const& () const noexcept {
-			return *reinterpret_cast<const VkPipelineColorBlendStateCreateInfo*>(this);
-		}
-
-		operator VkPipelineColorBlendStateCreateInfo& () noexcept {
-			return *reinterpret_cast<VkPipelineColorBlendStateCreateInfo*>(this);
-		}
-
 		bool operator==(PipelineColorBlendStateCreateInfo const& rhs) const noexcept {
-			return (sType == rhs.sType)
-				&& (pNext == rhs.pNext)
-				&& (flags == rhs.flags)
-				&& (logicOpEnable == rhs.logicOpEnable)
+			return (logicOpEnable == rhs.logicOpEnable)
 				&& (logicOp == rhs.logicOp)
 				&& (attachmentCount == rhs.attachmentCount)
 				&& (pAttachments == rhs.pAttachments)
@@ -335,17 +294,12 @@ namespace vuk {
 			return !operator==(rhs);
 		}
 
-		VkStructureType sType = structureType;
-		const void* pNext = {};
-		uint32_t flags = {}; // unused
 		Bool32 logicOpEnable = {};
 		LogicOp logicOp = LogicOp::eClear;
 		uint32_t attachmentCount = {};
 		const vuk::PipelineColorBlendAttachmentState* pAttachments = {};
 		std::array<float, 4> blendConstants = {};
 	};
-	static_assert(sizeof(PipelineColorBlendStateCreateInfo) == sizeof(VkPipelineColorBlendStateCreateInfo), "struct and wrapper have different size!");
-	static_assert(std::is_standard_layout<PipelineColorBlendStateCreateInfo>::value, "struct wrapper is not a standard layout!");
 
 	enum class StencilOp {
 		eKeep = VK_STENCIL_OP_KEEP,
@@ -394,20 +348,8 @@ namespace vuk {
 	static_assert(std::is_standard_layout<StencilOpState>::value, "struct wrapper is not a standard layout!");
 
 	struct PipelineDepthStencilStateCreateInfo {
-		static constexpr VkStructureType structureType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-
-		operator VkPipelineDepthStencilStateCreateInfo const& () const noexcept {
-			return *reinterpret_cast<const VkPipelineDepthStencilStateCreateInfo*>(this);
-		}
-
-		operator VkPipelineDepthStencilStateCreateInfo& () noexcept {
-			return *reinterpret_cast<VkPipelineDepthStencilStateCreateInfo*>(this);
-		}
 		bool operator==(PipelineDepthStencilStateCreateInfo const& rhs) const noexcept {
-			return (sType == rhs.sType)
-				&& (pNext == rhs.pNext)
-				&& (flags == rhs.flags)
-				&& (depthTestEnable == rhs.depthTestEnable)
+			return (depthTestEnable == rhs.depthTestEnable)
 				&& (depthWriteEnable == rhs.depthWriteEnable)
 				&& (depthCompareOp == rhs.depthCompareOp)
 				&& (depthBoundsTestEnable == rhs.depthBoundsTestEnable)
@@ -422,9 +364,6 @@ namespace vuk {
 			return !operator==(rhs);
 		}
 
-		VkStructureType sType = structureType;
-		const void* pNext = {};
-		uint32_t flags = {}; // unused
 		Bool32 depthTestEnable = {};
 		Bool32 depthWriteEnable = {};
 		CompareOp depthCompareOp = CompareOp::eNever;
@@ -435,18 +374,8 @@ namespace vuk {
 		float minDepthBounds = {};
 		float maxDepthBounds = {};
 	};
-	static_assert(sizeof(PipelineDepthStencilStateCreateInfo) == sizeof(VkPipelineDepthStencilStateCreateInfo), "struct and wrapper have different size!");
-	static_assert(std::is_standard_layout<PipelineDepthStencilStateCreateInfo>::value, "struct wrapper is not a standard layout!");
 
 	struct VertexInputAttributeDescription {
-		operator VkVertexInputAttributeDescription const& () const noexcept {
-			return *reinterpret_cast<const VkVertexInputAttributeDescription*>(this);
-		}
-
-		operator VkVertexInputAttributeDescription& () noexcept {
-			return *reinterpret_cast<VkVertexInputAttributeDescription*>(this);
-		}
-
 		bool operator==(VertexInputAttributeDescription const& rhs) const noexcept {
 			return (location == rhs.location)
 				&& (binding == rhs.binding)
@@ -458,15 +387,12 @@ namespace vuk {
 			return !operator==(rhs);
 		}
 
-	public:
 		uint32_t location = {};
 		uint32_t binding = {};
 		Format format = Format::eUndefined;
 		uint32_t offset = {};
 
 	};
-	static_assert(sizeof(VertexInputAttributeDescription) == sizeof(VkVertexInputAttributeDescription), "struct and wrapper have different size!");
-	static_assert(std::is_standard_layout<VertexInputAttributeDescription>::value, "struct wrapper is not a standard layout!");
 
 	enum class DynamicStateFlagBits : uint64_t {
 		eNone = 0,
@@ -784,9 +710,9 @@ namespace vuk {
 
 #pragma pack(push, 1)
 		struct VertexInputBindingDescription {
-			uint32_t             stride : 31;
-			uint32_t    inputRate : 1;
-			uint8_t             binding;
+			uint32_t stride : 31;
+			uint32_t inputRate : 1;
+			uint8_t binding;
 		};
 		struct VertexInputAttributeDescription {
 			Format format;
@@ -817,38 +743,35 @@ namespace vuk {
 			uint16_t offset : std::bit_width(VUK_MAX_SPECIALIZATIONCONSTANT_DATA);
 			uint16_t size : std::bit_width(VUK_MAX_SPECIALIZATIONCONSTANT_DATA);
 		};
-		// stage map entry offsets
-		// spec constant data
-
+		
 		struct RasterizationState {
-			uint8_t                                   depthClampEnable : 1;
-			uint8_t                                   rasterizerDiscardEnable : 1;
-			uint8_t                              polygonMode : 2; // VK_POLYGON_MODE_FILL_RECTANGLE_NV unsupported
-			uint8_t                                frontFace : 1;
+			uint8_t depthClampEnable : 1;
+			uint8_t rasterizerDiscardEnable : 1;
+			uint8_t polygonMode : 2;
+			uint8_t frontFace : 1;
 		};
 
 		struct DepthBias {
-			float                                      depthBiasConstantFactor;
-			float                                      depthBiasClamp;
-			float                                      depthBiasSlopeFactor;
-		};
-		// float lineWidth, if exists
-
-		struct DepthState {
-			uint8_t                                  depthTestEnable : 1;
-			uint8_t                                  depthWriteEnable : 1;
-			uint8_t                           depthCompareOp : std::bit_width(7u);
-		};
-		struct PipelineDepthBounds {
-			float                                     minDepthBounds;
-			float                                     maxDepthBounds;
-		};
-		struct PipelineStencil {
-			VkStencilOpState                          front;
-			VkStencilOpState                          back;
+			float depthBiasConstantFactor;
+			float depthBiasClamp;
+			float depthBiasSlopeFactor;
 		};
 
-		struct MultisampleState {
+		struct Depth {
+			uint8_t depthTestEnable : 1;
+			uint8_t depthWriteEnable : 1;
+			uint8_t depthCompareOp : std::bit_width(7u);
+		};
+		struct DepthBounds {
+			float minDepthBounds;
+			float maxDepthBounds;
+		};
+		struct Stencil {
+			VkStencilOpState front;
+			VkStencilOpState back;
+		};
+
+		struct Multisample {
 			VkSampleCountFlagBits rasterization_samples : 7;
 			bool sample_shading_enable : 1;
 			// pSampleMask not yet supported
@@ -857,8 +780,6 @@ namespace vuk {
 			float min_sample_shading;
 		};
 
-		// viewports (VkViewport)
-		// scissors (VkRect2D)
 #pragma pack(pop)
 
 		bool operator==(const PipelineInstanceCreateInfo& o) const noexcept {
@@ -966,7 +887,7 @@ namespace std {
 	struct hash<vuk::PipelineDepthStencilStateCreateInfo> {
 		size_t operator()(vuk::PipelineDepthStencilStateCreateInfo const& x) const noexcept {
 			size_t h = 0;
-			hash_combine(h, x.flags, x.back, x.front, x.depthBoundsTestEnable, to_integral(x.depthCompareOp), x.depthTestEnable, x.depthWriteEnable, x.maxDepthBounds, x.minDepthBounds, x.stencilTestEnable);
+			hash_combine(h, x.back, x.front, x.depthBoundsTestEnable, to_integral(x.depthCompareOp), x.depthTestEnable, x.depthWriteEnable, x.maxDepthBounds, x.minDepthBounds, x.stencilTestEnable);
 			return h;
 		}
 	};
@@ -995,7 +916,7 @@ namespace std {
 	struct hash<vuk::PipelineColorBlendStateCreateInfo> {
 		size_t operator()(vuk::PipelineColorBlendStateCreateInfo const& x) const noexcept {
 			size_t h = 0;
-			hash_combine(h, x.flags, std::span(x.pAttachments, x.attachmentCount), x.blendConstants[0], x.blendConstants[1], x.blendConstants[2], x.blendConstants[3], to_integral(x.logicOp), x.logicOpEnable);
+			hash_combine(h, std::span(x.pAttachments, x.attachmentCount), x.blendConstants[0], x.blendConstants[1], x.blendConstants[2], x.blendConstants[3], to_integral(x.logicOp), x.logicOpEnable);
 			return h;
 		}
 	};

@@ -31,17 +31,6 @@ namespace {
 	vuk::Example xample{
 		.name = "08_pipelined_compute",
 		.setup = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
-			// 958 bytes (start)
-			// 784 bytes
-			// 512 bytes
-			// 480 bytes
-			// 384 bytes
-			// 376 bytes (reorder)
-			// 336 bytes (no more fixed_vector)
-			// 480 bytes (new state)
-			// 48 bytes lmao
-			sizeof(vuk::PipelineInstanceCreateInfo);
-
 			{
 			vuk::PipelineBaseCreateInfo pci;
 			pci.add_glsl(util::read_entire_file("../../examples/fullscreen.vert"), "fullscreen.vert");
