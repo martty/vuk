@@ -41,10 +41,10 @@ namespace vuk {
 		DynamicStateFlags not_enabled = DynamicStateFlags{ ~dynamic_state_flags.m_mask }; // has invalid bits, but doesn't matter
 		auto to_dynamic = not_enabled & flags;
 		if (to_dynamic & vuk::DynamicStateFlagBits::eViewport && viewports.size() > 0) {
-			vkCmdSetViewport(command_buffer, 0, viewports.size(), viewports.data());
+			vkCmdSetViewport(command_buffer, 0, (uint32_t)viewports.size(), viewports.data());
 		}
 		if (to_dynamic & vuk::DynamicStateFlagBits::eScissor && scissors.size() > 0) {
-			vkCmdSetScissor(command_buffer, 0, scissors.size(), scissors.data());
+			vkCmdSetScissor(command_buffer, 0, (uint32_t)scissors.size(), scissors.data());
 		}
 		if (to_dynamic & vuk::DynamicStateFlagBits::eLineWidth) {
 			vkCmdSetLineWidth(command_buffer, line_width);
@@ -656,9 +656,9 @@ namespace vuk {
 			if (attribute_descriptions.size() > 0 && binding_descriptions.size() > 0) {
 				records.vertex_input = true;
 				pi.extended_size += sizeof(uint8_t);
-				pi.extended_size += attribute_descriptions.size() * sizeof(PipelineInstanceCreateInfo::VertexInputAttributeDescription);
+				pi.extended_size += (uint16_t)attribute_descriptions.size() * sizeof(PipelineInstanceCreateInfo::VertexInputAttributeDescription);
 				pi.extended_size += sizeof(uint8_t);
-				pi.extended_size += binding_descriptions.size() * sizeof(PipelineInstanceCreateInfo::VertexInputBindingDescription);
+				pi.extended_size += (uint16_t)binding_descriptions.size() * sizeof(PipelineInstanceCreateInfo::VertexInputBindingDescription);
 			}
 			// attachmentCount says how many attachments
 			pi.attachmentCount = (uint8_t)ongoing_renderpass->color_attachments.size();
@@ -690,9 +690,9 @@ namespace vuk {
 			if (smes.size() > 0) {
 				records.specialization_constants = true;
 				pi.extended_size += sizeof(uint16_t);
-				pi.extended_size += specialization_constant_buffer.size();
+				pi.extended_size += (uint16_t)specialization_constant_buffer.size();
 				pi.extended_size += sizeof(uint8_t);
-				pi.extended_size += smes.size() * sizeof(PipelineInstanceCreateInfo::SpecializationMapEntry);
+				pi.extended_size += (uint16_t)smes.size() * sizeof(PipelineInstanceCreateInfo::SpecializationMapEntry);
 			}
 
 			if (rasterization) {
@@ -735,14 +735,14 @@ namespace vuk {
 				assert(viewports.size() > 0 && "If a pass has a depth/stencil or color attachment, you must set at least one viewport.");
 				records.viewports = true;
 				pi.extended_size += sizeof(uint8_t);
-				pi.extended_size += viewports.size() * sizeof(VkViewport);
+				pi.extended_size += (uint16_t)viewports.size() * sizeof(VkViewport);
 			}
 
 			if (rasterization && !(dynamic_state_flags & vuk::DynamicStateFlagBits::eScissor)) {
 				assert(scissors.size() > 0 && "If a pass has a depth/stencil or color attachment, you must set at least one scissor.");
 				records.scissors = true;
 				pi.extended_size += sizeof(uint8_t);
-				pi.extended_size += scissors.size() * sizeof(VkRect2D);
+				pi.extended_size += (uint16_t)scissors.size() * sizeof(VkRect2D);
 			}
 			// small buffer optimization:
 			// if the extended data fits, then we put it inline in the key
@@ -760,12 +760,12 @@ namespace vuk {
 			}
 
 			if (attribute_descriptions.size() > 0 && binding_descriptions.size() > 0) {
-				write<uint8_t>(data_ptr, attribute_descriptions.size());
+				write<uint8_t>(data_ptr, (uint8_t)attribute_descriptions.size());
 				for (auto& att : attribute_descriptions) {
 					PipelineInstanceCreateInfo::VertexInputAttributeDescription viad{ .format = att.format, .offset = att.offset, .location = (uint8_t)att.location, .binding = (uint8_t)att.binding };
 					write(data_ptr, viad);
 				}
-				write<uint8_t>(data_ptr, binding_descriptions.size());
+				write<uint8_t>(data_ptr, (uint8_t)binding_descriptions.size());
 				for (auto& bin : binding_descriptions) {
 					PipelineInstanceCreateInfo::VertexInputBindingDescription vibd{ .stride = bin.stride, .inputRate = (uint32_t)bin.inputRate, .binding = (uint8_t)bin.binding };
 					write(data_ptr, vibd);
@@ -773,7 +773,7 @@ namespace vuk {
 			}
 
 			if (records.color_blend_attachments) {
-				uint32_t num_pcba_to_write = records.broadcast_color_blend_attachment_0 ? 1 : color_blend_attachments.size();
+				uint32_t num_pcba_to_write = records.broadcast_color_blend_attachment_0 ? 1 : (uint32_t)color_blend_attachments.size();
 				for (uint32_t i = 0; i < num_pcba_to_write; i++) {
 					auto& cba = color_blend_attachments[i];
 					PipelineInstanceCreateInfo::PipelineColorBlendAttachmentState pcba{
@@ -796,11 +796,11 @@ namespace vuk {
 			}
 
 			if (smes.size() > 0) {
-				write<uint16_t>(data_ptr, specialization_constant_buffer.size());
+				write<uint16_t>(data_ptr, (uint16_t)specialization_constant_buffer.size());
 				memcpy(data_ptr, specialization_constant_buffer.data(), specialization_constant_buffer.size());
 				data_ptr += specialization_constant_buffer.size();
 
-				write<uint8_t>(data_ptr, smes.size());
+				write<uint8_t>(data_ptr, (uint8_t)smes.size());
 				for (auto& [sme, stage] : smes) {
 					PipelineInstanceCreateInfo::SpecializationMapEntry map_entry{
 						.shader_stage = stage,

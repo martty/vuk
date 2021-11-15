@@ -68,25 +68,24 @@ namespace {
 				.resources = {"06_msaa_MS"_image(vuk::eColorWrite), "06_msaa_depth"_image(vuk::eDepthStencilRW)},
 				.execute = [verts, uboVP, inds](vuk::CommandBuffer& command_buffer) {
 					command_buffer
-					  .set_viewport(0, vuk::Rect2D::framebuffer())
-					  .set_scissor(0, vuk::Rect2D::framebuffer())
-					  .set_rasterization({}) // Set the default rasterization state
-					   // Set the depth/stencil state
-					  .set_depth_stencil(vuk::PipelineDepthStencilStateCreateInfo{
-						.depthTestEnable = true,
-						.depthWriteEnable = true,
-						.depthCompareOp = vuk::CompareOp::eLessOrEqual,
-					   })
-					  .broadcast_color_blend({}) // Set the default color blend state
-					  .bind_vertex_buffer(0, verts, 0, vuk::Packed{vuk::Format::eR32G32B32Sfloat, vuk::Ignore{offsetof(util::Vertex, uv_coordinates) - sizeof(util::Vertex::position)}, vuk::Format::eR32G32Sfloat})
-					  .bind_index_buffer(inds, vuk::IndexType::eUint32)
-					  .bind_sampled_image(0, 2, *texture_of_doge, vuk::SamplerCreateInfo{})
-					  .bind_graphics_pipeline("textured_cube")
-					  .bind_uniform_buffer(0, 0, uboVP);
+						.set_viewport(0, vuk::Rect2D::framebuffer())
+						.set_scissor(0, vuk::Rect2D::framebuffer())
+						.set_rasterization({}) // Set the default rasterization state
+						// Set the depth/stencil state
+						.set_depth_stencil(vuk::PipelineDepthStencilStateCreateInfo{
+							.depthTestEnable = true,
+							.depthWriteEnable = true,
+							.depthCompareOp = vuk::CompareOp::eLessOrEqual,
+						})
+						.broadcast_color_blend({}) // Set the default color blend state
+						.bind_vertex_buffer(0, verts, 0, vuk::Packed{vuk::Format::eR32G32B32Sfloat, vuk::Ignore{offsetof(util::Vertex, uv_coordinates) - sizeof(util::Vertex::position)}, vuk::Format::eR32G32Sfloat})
+						.bind_index_buffer(inds, vuk::IndexType::eUint32)
+						.bind_sampled_image(0, 2, *texture_of_doge, vuk::SamplerCreateInfo{})
+						.bind_graphics_pipeline("textured_cube")
+						.bind_uniform_buffer(0, 0, uboVP);
 					glm::mat4* model = command_buffer.map_scratch_uniform_binding<glm::mat4>(0, 1);
 					*model = static_cast<glm::mat4>(glm::angleAxis(glm::radians(angle), glm::vec3(0.f, 1.f, 0.f)));
-					command_buffer
-					  .draw_indexed(box.second.size(), 1, 0, 0, 0);
+					command_buffer.draw_indexed(box.second.size(), 1, 0, 0, 0);
 					}
 				}
 			);

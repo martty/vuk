@@ -4,6 +4,13 @@
 
 namespace vuk {
 	template<class T>
+	T& Cache<T>::acquire(const create_info_t<T>& ci) {
+		assert(0);
+		static T t;
+		return t;
+	}
+
+	template<class T>
 	T& Cache<T>::PFPTView::acquire(const create_info_t<T>& ci) {
 		auto& cache = view.cache;
 		std::shared_lock _(cache.cache_mtx);

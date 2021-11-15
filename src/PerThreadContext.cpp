@@ -340,14 +340,14 @@ vuk::PipelineInfo vuk::PerThreadContext::create(const create_info_t<PipelineInfo
 	}
 	gpci.pVertexInputState = &vertex_input_state;
 	// PIPELINE COLOR BLEND ATTACHMENTS
-	VkPipelineColorBlendStateCreateInfo color_blend_state{ 
-		.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO, 
-		.attachmentCount = cinfo.attachmentCount 
+	VkPipelineColorBlendStateCreateInfo color_blend_state{
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+		.attachmentCount = cinfo.attachmentCount
 	};
 	auto default_writemask = vuk::ColorComponentFlagBits::eR | vuk::ColorComponentFlagBits::eG | vuk::ColorComponentFlagBits::eB | vuk::ColorComponentFlagBits::eA;
-	std::vector<VkPipelineColorBlendAttachmentState> pcbas(cinfo.attachmentCount, 
-		VkPipelineColorBlendAttachmentState{ 
-			.blendEnable = false, 
+	std::vector<VkPipelineColorBlendAttachmentState> pcbas(cinfo.attachmentCount,
+		VkPipelineColorBlendAttachmentState{
+			.blendEnable = false,
 			.colorWriteMask = (VkColorComponentFlags)default_writemask
 		}
 	);

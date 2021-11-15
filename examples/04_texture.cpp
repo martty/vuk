@@ -32,7 +32,7 @@ namespace {
 			// Use STBI to load the image
 			int x, y, chans;
 			auto doge_image = stbi_load("../../examples/doge.png", &x, &y, &chans, 4);
-			
+
 			auto ptc = ifc.begin();
 			// Similarly to buffers, we allocate the image and enqueue the upload
 			auto [tex, _] = ptc.create_texture(vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, doge_image, true);
@@ -68,40 +68,39 @@ namespace {
 				.resources = {"04_texture_final"_image(vuk::eColorWrite), "04_texture_depth"_image(vuk::eDepthStencilRW)},
 				.execute = [verts, uboVP, inds](vuk::CommandBuffer& command_buffer) {
 					command_buffer
-					  .set_viewport(0, vuk::Rect2D::framebuffer())
-					  .set_scissor(0, vuk::Rect2D::framebuffer())
-					  .set_rasterization({}) // Set the default rasterization state
-					   // Set the depth/stencil state
-					  .set_depth_stencil(vuk::PipelineDepthStencilStateCreateInfo{
-						.depthTestEnable = true,
-						.depthWriteEnable = true,
-						.depthCompareOp = vuk::CompareOp::eLessOrEqual,
-					   })
-					  .broadcast_color_blend({}) // Set the default color blend state
-					  .bind_vertex_buffer(0, verts, 0, vuk::Packed{vuk::Format::eR32G32B32Sfloat, vuk::Ignore{offsetof(util::Vertex, uv_coordinates) - sizeof(util::Vertex::position)}, vuk::Format::eR32G32Sfloat})
-					  .bind_index_buffer(inds, vuk::IndexType::eUint32)
-					  // Here we bind our vuk::Texture to (set = 0, binding = 2) with default sampler settings
-					  .bind_sampled_image(0, 2, *texture_of_doge, vuk::SamplerCreateInfo{})
-					  .bind_graphics_pipeline("textured_cube")
-					  .bind_uniform_buffer(0, 0, uboVP);
-					glm::mat4* model = command_buffer.map_scratch_uniform_binding<glm::mat4>(0, 1);
-					*model = static_cast<glm::mat4>(glm::angleAxis(glm::radians(angle), glm::vec3(0.f, 1.f, 0.f)));
-					command_buffer
-					  .draw_indexed(box.second.size(), 1, 0, 0, 0);
-					}
-				}
-			);
+						.set_viewport(0, vuk::Rect2D::framebuffer())
+						.set_scissor(0, vuk::Rect2D::framebuffer())
+						.set_rasterization({}) // Set the default rasterization state
+						// Set the depth/stencil state
+						.set_depth_stencil(vuk::PipelineDepthStencilStateCreateInfo{
+							.depthTestEnable = true,
+							.depthWriteEnable = true,
+							.depthCompareOp = vuk::CompareOp::eLessOrEqual,
+						})
+						.broadcast_color_blend({}) // Set the default color blend state
+						.bind_vertex_buffer(0, verts, 0, vuk::Packed{vuk::Format::eR32G32B32Sfloat, vuk::Ignore{offsetof(util::Vertex, uv_coordinates) - sizeof(util::Vertex::position)}, vuk::Format::eR32G32Sfloat})
+						.bind_index_buffer(inds, vuk::IndexType::eUint32)
+						// Here we bind our vuk::Texture to (set = 0, binding = 2) with default sampler settings
+						.bind_sampled_image(0, 2, *texture_of_doge, vuk::SamplerCreateInfo{})
+						.bind_graphics_pipeline("textured_cube")
+						.bind_uniform_buffer(0, 0, uboVP);
+					  glm::mat4* model = command_buffer.map_scratch_uniform_binding<glm::mat4>(0, 1);
+					  *model = static_cast<glm::mat4>(glm::angleAxis(glm::radians(angle), glm::vec3(0.f, 1.f, 0.f)));
+					  command_buffer.draw_indexed(box.second.size(), 1, 0, 0, 0);
+					  }
+				  }
+			  );
 
-			angle += 180.f * ImGui::GetIO().DeltaTime;
+			  angle += 180.f * ImGui::GetIO().DeltaTime;
 
-			rg.attach_managed("04_texture_depth", vuk::Format::eD32Sfloat, vuk::Dimension2D::framebuffer(), vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
-			return rg;
-		},
-		// Perform cleanup for the example
-		.cleanup = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
-			// We release the texture resources
-			texture_of_doge.reset();
-		}
+			  rg.attach_managed("04_texture_depth", vuk::Format::eD32Sfloat, vuk::Dimension2D::framebuffer(), vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
+			  return rg;
+		  },
+			// Perform cleanup for the example
+			.cleanup = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
+			  // We release the texture resources
+			  texture_of_doge.reset();
+		  }
 	};
 
 	REGISTER_EXAMPLE(x);

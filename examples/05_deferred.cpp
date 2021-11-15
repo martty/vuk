@@ -70,26 +70,26 @@ namespace {
 				.execute = [verts, uboVP, inds](vuk::CommandBuffer& command_buffer) {
 					// Rendering is the same as in the case for forward
 					command_buffer
-					  .set_viewport(0, vuk::Rect2D::framebuffer())
-					  .set_scissor(0, vuk::Rect2D::framebuffer())
-					  .set_rasterization(vuk::PipelineRasterizationStateCreateInfo{}) // Set the default rasterization state
-					   // Set the depth/stencil state
-					  .set_depth_stencil(vuk::PipelineDepthStencilStateCreateInfo{
-						.depthTestEnable = true,
-						.depthWriteEnable = true,
-						.depthCompareOp = vuk::CompareOp::eLessOrEqual,
-					   })
-					  .set_color_blend("05_position", {}) // Set the default color blend state individually for demonstration
-					  .set_color_blend("05_normal", {}) // If you want to use different blending state per attachment, you must enable the independentBlend feature
-					  .set_color_blend("05_color", {})
-					  .bind_vertex_buffer(0, verts, 0, vuk::Packed{vuk::Format::eR32G32B32Sfloat, vuk::Format::eR32G32B32Sfloat, vuk::Ignore{offsetof(util::Vertex, uv_coordinates) - offsetof(util::Vertex, tangent)}, vuk::Format::eR32G32Sfloat})
-					  .bind_index_buffer(inds, vuk::IndexType::eUint32)
-					  .bind_graphics_pipeline("cube_deferred")
-					  .bind_uniform_buffer(0, 0, uboVP);
+						.set_viewport(0, vuk::Rect2D::framebuffer())
+						.set_scissor(0, vuk::Rect2D::framebuffer())
+						.set_rasterization(vuk::PipelineRasterizationStateCreateInfo{}) // Set the default rasterization state
+						// Set the depth/stencil state
+						.set_depth_stencil(vuk::PipelineDepthStencilStateCreateInfo{
+							.depthTestEnable = true,
+							.depthWriteEnable = true,
+							.depthCompareOp = vuk::CompareOp::eLessOrEqual,
+						})
+						.set_color_blend("05_position", {}) // Set the default color blend state individually for demonstration
+						.set_color_blend("05_normal", {}) // If you want to use different blending state per attachment, you must enable the independentBlend feature
+						.set_color_blend("05_color", {})
+						.bind_vertex_buffer(0, verts, 0, vuk::Packed{vuk::Format::eR32G32B32Sfloat, vuk::Format::eR32G32B32Sfloat, vuk::Ignore{offsetof(util::Vertex, uv_coordinates) - offsetof(util::Vertex, tangent)}, vuk::Format::eR32G32Sfloat})
+						.bind_index_buffer(inds, vuk::IndexType::eUint32)
+						.bind_graphics_pipeline("cube_deferred")
+						.bind_uniform_buffer(0, 0, uboVP);
 					glm::mat4* model = command_buffer.map_scratch_uniform_binding<glm::mat4>(0, 1);
 					*model = static_cast<glm::mat4>(glm::angleAxis(glm::radians(angle), glm::vec3(0.f, 1.f, 0.f)));
 					command_buffer
-					  .draw_indexed(box.second.size(), 1, 0, 0, 0);
+						.draw_indexed(box.second.size(), 1, 0, 0, 0);
 					}
 				}
 			);
@@ -104,11 +104,11 @@ namespace {
 				.resources = {"05_deferred_final"_image(vuk::eColorWrite), "05_position"_image(vuk::eFragmentSampled), "05_normal"_image(vuk::eFragmentSampled), "05_color"_image(vuk::eFragmentSampled)},
 				.execute = [cam_pos](vuk::CommandBuffer& command_buffer) {
 					command_buffer
-					  .set_viewport(0, vuk::Rect2D::framebuffer())
-					  .set_scissor(0, vuk::Rect2D::framebuffer())
-					  .set_rasterization({}) // Set the default rasterization state
-					  .broadcast_color_blend({}) // Set the default color blend state
-					  .bind_graphics_pipeline("deferred_resolve");
+						.set_viewport(0, vuk::Rect2D::framebuffer())
+						.set_scissor(0, vuk::Rect2D::framebuffer())
+						.set_rasterization({}) // Set the default rasterization state
+						.broadcast_color_blend({}) // Set the default color blend state
+						.bind_graphics_pipeline("deferred_resolve");
 					// Set camera position so we can do lighting
 					*command_buffer.map_scratch_uniform_binding<glm::vec3>(0, 3) = cam_pos;
 					// We will sample using nearest neighbour
@@ -116,14 +116,14 @@ namespace {
 					sci.minFilter = sci.magFilter = vuk::Filter::eNearest;
 					// Bind the previous attachments as sampled images
 					command_buffer
-					  .bind_sampled_image(0, 0, "05_position", sci)
-					  .bind_sampled_image(0, 1, "05_normal", sci)
-					  .bind_sampled_image(0, 2, "05_color", sci)
-					  .draw(3, 1, 0, 0);
+						.bind_sampled_image(0, 0, "05_position", sci)
+						.bind_sampled_image(0, 1, "05_normal", sci)
+						.bind_sampled_image(0, 2, "05_color", sci)
+						.draw(3, 1, 0, 0);
 					}
 				}
 			);
-			
+
 			// The intermediate offscreen textures need to be bound
 			// The "internal" rendering resolution is set here for one attachment, the rest infers from it
 			rg.attach_managed("05_position", vuk::Format::eR16G16B16A16Sfloat, vuk::Dimension2D::absolute(300, 300), vuk::Samples::e1, vuk::ClearColor{ 1.f,0.f,0.f,0.f });

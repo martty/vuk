@@ -46,10 +46,10 @@ namespace {
 					// Set the scissor area to cover the entire framebuffer
 					command_buffer.set_scissor(0, vuk::Rect2D::framebuffer());
 					command_buffer
-					  .set_rasterization({}) // Set the default rasterization state
-					  .set_color_blend("01_triangle_final", {}) // Set the default color blend state
-					  .bind_graphics_pipeline("triangle") // Recall pipeline for "triangle" and bind
-					  .draw(3, 1, 0, 0); // Draw 3 vertices
+						.set_rasterization({}) // Set the default rasterization state
+						.set_color_blend("01_triangle_final", {}) // Set the default color blend state
+						.bind_graphics_pipeline("triangle") // Recall pipeline for "triangle" and bind
+						.draw(3, 1, 0, 0); // Draw 3 vertices
 					}
 				}
 			);
