@@ -673,7 +673,7 @@ namespace vuk {
 		struct BlendStateLogicOp {
 			VkLogicOp logic_op : std::bit_width(16u);
 		};
-		// blend constants here, if they exist
+
 		struct SpecializationMapEntry {
 			uint32_t shader_stage;
 			uint16_t constantID : std::bit_width(VUK_MAX_SPECIALIZATIONCONSTANT_RANGES);

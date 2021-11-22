@@ -345,11 +345,9 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::specialize_constants(unsigned constant_id, vuk::ShaderStageFlags stages, void* data, size_t size) {
-		smes.emplace_back(VkSpecializationMapEntry{ (uint32_t)constant_id, (uint32_t)specialization_constant_buffer.size(), (size_t)size }, stages);
-		void* dst = specialization_constant_buffer.data() + specialization_constant_buffer.size();
-		specialization_constant_buffer.resize(specialization_constant_buffer.size() + size);
-		::memcpy(dst, data, size);
+	CommandBuffer& CommandBuffer::specialize_constants(uint8_t constant_id, vuk::ShaderStageFlags stages, void* data, size_t size) {
+		auto v = spec_map_entries.emplace(constant_id, SpecEntry{ stages, size == sizeof(double) });
+		memcpy(&v.first->second.data, data, size);
 		return *this;
 	}
 
@@ -602,9 +600,16 @@ namespace vuk {
 			pi.base = next_compute_pipeline;
 
 			bool empty = true;
-			for (auto& [sme, stage] : smes) {
-				if (VkShaderStageFlagBits::VK_SHADER_STAGE_COMPUTE_BIT == stage) {
-					pi.specialization_map_entries.push_back(sme);
+			unsigned offset = 0;
+			unsigned idx = 0;
+			for (auto& sc : pi.base->reflection_info.spec_constants) {
+				auto it = spec_map_entries.find(sc.binding);
+				if (it != spec_map_entries.end()) {
+					auto& map_e = it->second;
+					unsigned size = map_e.is_double ? (unsigned)sizeof(double) : 4;
+					pi.specialization_map_entries.push_back(VkSpecializationMapEntry{ sc.binding, offset, size });
+					memcpy(pi.specialization_constant_data.data() + offset, map_e.data, size);
+					offset += size;
 					empty = false;
 				}
 			}
@@ -613,11 +618,8 @@ namespace vuk {
 				VkSpecializationInfo& si = pi.specialization_info;
 				si.pMapEntries = pi.specialization_map_entries.data();
 				si.mapEntryCount = (uint32_t)pi.specialization_map_entries.size();
-				si.pData = specialization_constant_buffer.data();
-				si.dataSize = specialization_constant_buffer.size();
-
-				// copy spec constant bytes into pipeline
-				memcpy(pi.specialization_constant_data.data(), specialization_constant_buffer.data(), specialization_constant_buffer.size());
+				si.pData = pi.specialization_constant_data.data();
+				si.dataSize = pi.specialization_constant_data.size();
 
 				pi.base->pssci.pSpecializationInfo = &pi.specialization_info;
 			}
@@ -626,8 +628,6 @@ namespace vuk {
 
 			vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, current_compute_pipeline->pipeline);
 			next_compute_pipeline = nullptr;
-			specialization_constant_buffer.clear();
-			smes.clear();
 		}
 
 		_bind_state(false);
@@ -687,12 +687,21 @@ namespace vuk {
 				pi.extended_size += sizeof(float) * 4;
 			}
 
-			if (smes.size() > 0) {
+			unsigned spec_const_size = 0;
+			Bitset<VUK_MAX_SPECIALIZATIONCONSTANT_RANGES> set_constants = {};
+			if (spec_map_entries.size() > 0 && pi.base->reflection_info.spec_constants.size() > 0) {
+				for (unsigned i = 0; i < pi.base->reflection_info.spec_constants.size(); i++) {
+					auto& sc = pi.base->reflection_info.spec_constants[i];
+					auto size = sc.type == vuk::Program::Type::edouble ? sizeof(double) : 4;
+					auto it = spec_map_entries.find(sc.binding);
+					if (it != spec_map_entries.end()) {
+						spec_const_size += size;
+						set_constants.set(i, true);
+					}
+				}
 				records.specialization_constants = true;
-				pi.extended_size += sizeof(uint16_t);
-				pi.extended_size += (uint16_t)specialization_constant_buffer.size();
-				pi.extended_size += sizeof(uint8_t);
-				pi.extended_size += (uint16_t)smes.size() * sizeof(PipelineInstanceCreateInfo::SpecializationMapEntry);
+				pi.extended_size += (uint16_t)sizeof(set_constants);
+				pi.extended_size += (uint16_t)spec_const_size;
 			}
 
 			if (rasterization) {
@@ -795,20 +804,16 @@ namespace vuk {
 				data_ptr += sizeof(float) * 4;
 			}
 
-			if (smes.size() > 0) {
-				write<uint16_t>(data_ptr, (uint16_t)specialization_constant_buffer.size());
-				memcpy(data_ptr, specialization_constant_buffer.data(), specialization_constant_buffer.size());
-				data_ptr += specialization_constant_buffer.size();
-
-				write<uint8_t>(data_ptr, (uint8_t)smes.size());
-				for (auto& [sme, stage] : smes) {
-					PipelineInstanceCreateInfo::SpecializationMapEntry map_entry{
-						.shader_stage = stage,
-						.constantID = (uint16_t)sme.constantID,
-						.offset = (uint16_t)sme.offset,
-						.size = (uint16_t)sme.size
-					};
-					write(data_ptr, map_entry);
+			if (records.specialization_constants) {
+				write(data_ptr, set_constants);
+				for (unsigned i = 0; i < VUK_MAX_SPECIALIZATIONCONSTANT_RANGES; i++) {
+					if (set_constants.test(i)) {
+						auto& sc = pi.base->reflection_info.spec_constants[i];
+						auto size = sc.type == vuk::Program::Type::edouble ? sizeof(double) : 4;
+						auto& map_e = spec_map_entries.find(sc.binding)->second;
+						memcpy(data_ptr, map_e.data, size);
+						data_ptr += size;
+					}
 				}
 			}
 
@@ -861,8 +866,6 @@ namespace vuk {
 
 			vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, current_pipeline->pipeline);
 			next_pipeline = nullptr;
-			specialization_constant_buffer.clear();
-			smes.clear();
 		}
 		_bind_state(true);
 	}

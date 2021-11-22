@@ -197,10 +197,14 @@ namespace vuk {
 		vuk::PrimitiveTopology topology = vuk::PrimitiveTopology::eTriangleList;
 		vuk::fixed_vector<vuk::VertexInputAttributeDescription, VUK_MAX_ATTRIBUTES> attribute_descriptions;
 		vuk::fixed_vector<VkVertexInputBindingDescription, VUK_MAX_ATTRIBUTES> binding_descriptions;
-	
+
 		// Specialization constant support
-		vuk::fixed_vector<std::pair<VkSpecializationMapEntry, VkShaderStageFlags>, VUK_MAX_SPECIALIZATIONCONSTANT_RANGES> smes;
-		vuk::fixed_vector<std::byte, VUK_MAX_SPECIALIZATIONCONSTANT_DATA> specialization_constant_buffer;
+		struct SpecEntry {
+			vuk::ShaderStageFlags stages;
+			bool is_double;
+			std::byte data[sizeof(double)];
+		};
+		robin_hood::unordered_flat_map<uint8_t, SpecEntry> spec_map_entries; // constantID -> SpecEntry
 
 		// Individual pipeline states
 		std::optional<vuk::PipelineRasterizationStateCreateInfo> rasterization_state;
@@ -251,7 +255,7 @@ namespace vuk {
 
 		CommandBuffer& set_rasterization(vuk::PipelineRasterizationStateCreateInfo);
 		CommandBuffer& set_depth_stencil(vuk::PipelineDepthStencilStateCreateInfo);
-		
+
 		CommandBuffer& broadcast_color_blend(vuk::PipelineColorBlendAttachmentState);
 		CommandBuffer& broadcast_color_blend(BlendPreset);
 		CommandBuffer& set_color_blend(Name color_attachment, vuk::PipelineColorBlendAttachmentState);
@@ -282,11 +286,11 @@ namespace vuk {
 		template<class T>
 		CommandBuffer& push_constants(vuk::ShaderStageFlags stages, size_t offset, T value);
 
-		CommandBuffer& specialize_constants(unsigned constant_id, vuk::ShaderStageFlags stages, void* data, size_t size);
+		CommandBuffer& specialize_constants(uint8_t constant_id, vuk::ShaderStageFlags stages, void* data, size_t size);
 		template<class T>
-		CommandBuffer& specialize_constants(unsigned constant_id, vuk::ShaderStageFlags stages, std::span<T> span);
+		CommandBuffer& specialize_constants(uint8_t constant_id, vuk::ShaderStageFlags stages, std::span<T> span);
 		template<class T>
-		CommandBuffer& specialize_constants(unsigned constant_id, vuk::ShaderStageFlags stages, T value);
+		CommandBuffer& specialize_constants(uint8_t constant_id, vuk::ShaderStageFlags stages, T value);
 
 		CommandBuffer& bind_uniform_buffer(unsigned set, unsigned binding, Buffer buffer);
 		CommandBuffer& bind_storage_buffer(unsigned set, unsigned binding, Buffer buffer);
@@ -354,12 +358,12 @@ namespace vuk {
 	}
 
 	template<class T>
-	inline CommandBuffer& CommandBuffer::specialize_constants(unsigned constant_id, vuk::ShaderStageFlags stages, std::span<T> span) {
+	inline CommandBuffer& CommandBuffer::specialize_constants(uint8_t constant_id, vuk::ShaderStageFlags stages, std::span<T> span) {
 		return specialize_constants(constant_id, stages, (void*)span.data(), sizeof(T) * span.size());
 	}
 
 	template<class T>
-	inline CommandBuffer& CommandBuffer::specialize_constants(unsigned constant_id, vuk::ShaderStageFlags stages, T value) {
+	inline CommandBuffer& CommandBuffer::specialize_constants(uint8_t constant_id, vuk::ShaderStageFlags stages, T value) {
 		return specialize_constants(constant_id, stages, (void*)&value, sizeof(T));
 	}
 

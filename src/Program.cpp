@@ -30,6 +30,7 @@ void unq(T& s) {
 	s.erase(std::unique(s.begin(), s.end(), binding_eq), s.end());
 }
 
+
 vuk::Program::Type to_type(spirv_cross::SPIRType s) {
 	using namespace spirv_cross;
 	using namespace vuk;
@@ -47,6 +48,19 @@ vuk::Program::Type to_type(spirv_cross::SPIRType s) {
 			}
 		case 4:
 			return Program::Type::emat4; break;
+		}
+	case SPIRType::Double:
+		switch (s.columns) {
+		case 1:
+			switch (s.vecsize) {
+			case 1:	return Program::Type::edouble; break;
+			case 2: return Program::Type::edvec2; break;
+			case 3: return Program::Type::edvec3; break;
+			case 4: return Program::Type::edvec4; break;
+			default: assert("NYI" && 0);
+			}
+		case 4:
+			return Program::Type::edmat4; break;
 		}
 	case SPIRType::Int:
 		switch (s.vecsize) {
@@ -204,6 +218,10 @@ VkShaderStageFlagBits vuk::Program::introspect(const spirv_cross::Compiler& refl
 		sets[set].subpass_inputs.push_back(s);
 	}
 
+	for (auto& sc : refl.get_specialization_constants()) {
+		spec_constants.emplace_back(SpecConstant{ sc.constant_id, to_type(refl.get_type(refl.get_constant(sc.id).constant_type)), (VkShaderStageFlags)stage});
+	}
+
 	// remove duplicated bindings (aliased bindings)
 	// TODO: we need to preserve this information somewhere
 	for (auto& [index, set] : sets) {
@@ -214,6 +232,8 @@ VkShaderStageFlagBits vuk::Program::introspect(const spirv_cross::Compiler& refl
 		unq(set.subpass_inputs);
 		unq(set.storage_images);
 	}
+
+	std::sort(spec_constants.begin(), spec_constants.end(), binding_cmp);
 
 	for (auto& [index, set] : sets) {
 		unsigned max_binding = 0;
@@ -257,6 +277,8 @@ VkShaderStageFlagBits vuk::Program::introspect(const spirv_cross::Compiler& refl
 void vuk::Program::append(const Program& o) {
 	attributes.insert(attributes.end(), o.attributes.begin(), o.attributes.end());
 	push_constant_ranges.insert(push_constant_ranges.end(), o.push_constant_ranges.begin(), o.push_constant_ranges.end());
+	spec_constants.insert(spec_constants.end(), o.spec_constants.begin(), o.spec_constants.end());
+	unq(spec_constants);
 	for (auto& [index, os] : o.sets) {
 		auto& s = sets[index];
 		s.samplers.insert(s.samplers.end(), os.samplers.begin(), os.samplers.end());

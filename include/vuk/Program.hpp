@@ -46,11 +46,12 @@ namespace vuk {
 
 	struct Program {
 		enum class Type {
-			euint, eint, efloat,
+			euint, eint, efloat, edouble,
 			euvec2, euvec3, euvec4,
 			eivec2, eivec3, eivec4,
 			evec2, evec3, evec4,
-			emat4, estruct
+			edvec2, edvec3, edvec4,
+			emat4, edmat4, estruct
 		};
 
 		struct Attribute {
@@ -133,12 +134,20 @@ namespace vuk {
 			VkShaderStageFlags stage;
 		};
 
+		struct SpecConstant {
+			unsigned binding; // constant_id
+			Type type;
+
+			VkShaderStageFlags stage;
+		};
+
 		VkShaderStageFlagBits introspect(const spirv_cross::Compiler& refl);
 
 		std::array<unsigned, 3> local_size;
 
 		std::vector<Attribute> attributes;
 		std::vector<VkPushConstantRange> push_constant_ranges;
+		std::vector<SpecConstant> spec_constants;
 		struct Descriptors {
 			std::vector<UniformBuffer> uniform_buffers;
 			std::vector<StorageBuffer> storage_buffers;

@@ -399,41 +399,51 @@ vuk::PipelineInfo vuk::PerThreadContext::create(const create_info_t<PipelineInfo
 	// SPECIALIZATION CONSTANTS
 	vuk::fixed_vector<VkSpecializationInfo, vuk::graphics_stage_count> specialization_infos;
 	vuk::fixed_vector<VkSpecializationMapEntry, VUK_MAX_SPECIALIZATIONCONSTANT_RANGES> specialization_map_entries;
-	uint16_t specialization_constant_data_size;
-	const std::byte* specialization_constant_data;
+	uint16_t specialization_constant_data_size = 0;
+	const std::byte* specialization_constant_data = nullptr;
 	if (cinfo.records.specialization_constants) {
-		specialization_constant_data_size = read<uint16_t>(data_ptr);
+		Bitset<VUK_MAX_SPECIALIZATIONCONSTANT_RANGES> set_constants = {};
+		set_constants = read<Bitset<VUK_MAX_SPECIALIZATIONCONSTANT_RANGES>>(data_ptr);
 		specialization_constant_data = data_ptr;
+
+		for (unsigned i = 0; i < cinfo.base->reflection_info.spec_constants.size(); i++) {
+			auto& sc = cinfo.base->reflection_info.spec_constants[i];
+			uint16_t size = sc.type == vuk::Program::Type::edouble ? (uint16_t)sizeof(double) : 4;
+			if (set_constants.test(i)) {
+				specialization_constant_data_size += size;
+			}
+		}
 		data_ptr += specialization_constant_data_size;
 
-		auto sme_count = read<uint8_t>(data_ptr);
-
-		const std::byte* local_data_ptr;
+		uint16_t entry_offset = 0;
 		for (uint32_t i = 0; i < psscis.size(); i++) {
 			auto& pssci = psscis[i];
-			uint32_t offset = (uint32_t)specialization_map_entries.size();
-			bool empty = true;
-			local_data_ptr = data_ptr;
-			for (uint32_t i = 0; i < sme_count; i++) {
-				auto compressed = read<PipelineInstanceCreateInfo::SpecializationMapEntry>(local_data_ptr);
-				if (compressed.shader_stage & pssci.stage) {
+			uint16_t data_offset = 0;
+			uint16_t current_entry_offset = entry_offset;
+			for (unsigned i = 0; i < cinfo.base->reflection_info.spec_constants.size(); i++) {
+				auto& sc = cinfo.base->reflection_info.spec_constants[i];
+				auto size = sc.type == vuk::Program::Type::edouble ? sizeof(double) : 4;
+				if (sc.stage & pssci.stage) {
 					specialization_map_entries.emplace_back(VkSpecializationMapEntry{
-						compressed.constantID,
-						compressed.offset,
-						compressed.size
+						sc.binding,
+						data_offset,
+						size
 						});
+					data_offset += size;
+					entry_offset++;
 				}
 			}
 
 			VkSpecializationInfo si;
-			si.pMapEntries = specialization_map_entries.data() + offset;
-			si.mapEntryCount = (uint32_t)specialization_map_entries.size() - offset;
+			si.pMapEntries = specialization_map_entries.data() + current_entry_offset;
+			si.mapEntryCount = (uint32_t)specialization_map_entries.size() - current_entry_offset;
 			si.pData = specialization_constant_data;
 			si.dataSize = specialization_constant_data_size;
-			specialization_infos.push_back(si);
-			pssci.pSpecializationInfo = &specialization_infos.back();
+			if (si.mapEntryCount > 0) {
+				specialization_infos.push_back(si);
+				pssci.pSpecializationInfo = &specialization_infos.back();
+			}
 		}
-		data_ptr = local_data_ptr;
 	}
 
 	// RASTER STATE
