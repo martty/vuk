@@ -429,7 +429,7 @@ vuk::PipelineInfo vuk::PerThreadContext::create(const create_info_t<PipelineInfo
 						data_offset,
 						size
 						});
-					data_offset += size;
+					data_offset += (uint16_t)size;
 					entry_offset++;
 				}
 			}
