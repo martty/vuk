@@ -195,8 +195,10 @@ namespace vuk {
 
 		// Input assembly & fixed-function attributes
 		PrimitiveTopology topology = PrimitiveTopology::eTriangleList;
-		vuk::fixed_vector<vuk::VertexInputAttributeDescription, VUK_MAX_ATTRIBUTES> attribute_descriptions;
-		vuk::fixed_vector<VkVertexInputBindingDescription, VUK_MAX_ATTRIBUTES> binding_descriptions;
+		Bitset<VUK_MAX_ATTRIBUTES> set_attribute_descriptions = {};
+		std::array<VertexInputAttributeDescription, VUK_MAX_ATTRIBUTES> attribute_descriptions;
+		Bitset<VUK_MAX_ATTRIBUTES> set_binding_descriptions = {};
+		std::array<VkVertexInputBindingDescription, VUK_MAX_ATTRIBUTES> binding_descriptions;
 
 		// Specialization constant support
 		struct SpecEntry {

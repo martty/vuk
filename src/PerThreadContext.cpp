@@ -313,11 +313,11 @@ vuk::PipelineInfo vuk::PerThreadContext::create(const create_info_t<PipelineInfo
 	VkPipelineInputAssemblyStateCreateInfo input_assembly_state{ .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO, .topology = cinfo.topology, .primitiveRestartEnable = cinfo.primitive_restart_enable };
 	gpci.pInputAssemblyState = &input_assembly_state;
 	// VERTEX INPUT
-	std::vector<VkVertexInputBindingDescription> vibds;
-	std::vector<VkVertexInputAttributeDescription> viads;
+	vuk::fixed_vector<VkVertexInputBindingDescription, VUK_MAX_ATTRIBUTES> vibds;
+	vuk::fixed_vector<VkVertexInputAttributeDescription, VUK_MAX_ATTRIBUTES> viads;
 	VkPipelineVertexInputStateCreateInfo vertex_input_state{ .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
 	if (cinfo.records.vertex_input) {
-		viads.resize(read<uint8_t>(data_ptr));
+		viads.resize(cinfo.base->reflection_info.attributes.size());
 		for (auto& viad : viads) {
 			auto compressed = read<PipelineInstanceCreateInfo::VertexInputAttributeDescription>(data_ptr);
 			viad.binding = compressed.binding;

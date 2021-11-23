@@ -217,11 +217,7 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, const Buffer& buf, unsigned first_attribute, Packed format) {
-		attribute_descriptions.resize(std::distance(attribute_descriptions.begin(), std::remove_if(attribute_descriptions.begin(), attribute_descriptions.end(),
-			[&](auto& b) { return b.binding == binding; })));
-		binding_descriptions.resize(std::distance(binding_descriptions.begin(), std::remove_if(binding_descriptions.begin(), binding_descriptions.end(),
-			[&](auto& b) { return b.binding == binding; })));
-
+		assert(binding < VUK_MAX_ATTRIBUTES && "Vertex buffer binding must be smaller than VUK_MAX_ATTRIBUTES.");
 		uint32_t location = first_attribute;
 		uint32_t offset = 0;
 		for (auto& f : format.list) {
@@ -233,7 +229,8 @@ namespace vuk {
 				viad.format = f.format;
 				viad.location = location;
 				viad.offset = offset;
-				attribute_descriptions.push_back(viad);
+				attribute_descriptions[viad.location] = viad;
+				set_attribute_descriptions.set(viad.location, true);
 				offset += f.size;
 				location++;
 			}
@@ -243,7 +240,8 @@ namespace vuk {
 		vibd.binding = binding;
 		vibd.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 		vibd.stride = offset;
-		binding_descriptions.push_back(vibd);
+		binding_descriptions[binding] = vibd; 
+		set_binding_descriptions.set(binding, true);
 
 		if (buf.buffer) {
 			vkCmdBindVertexBuffers(command_buffer, binding, 1, &buf.buffer, &buf.offset);
@@ -253,18 +251,18 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, const Buffer& buf, std::span<vuk::VertexInputAttributeDescription> viads,
 		uint32_t stride) {
-		attribute_descriptions.resize(std::distance(attribute_descriptions.begin(), std::remove_if(attribute_descriptions.begin(), attribute_descriptions.end(),
-			[&](auto& b) { return b.binding == binding; })));
-		binding_descriptions.resize(std::distance(binding_descriptions.begin(), std::remove_if(binding_descriptions.begin(), binding_descriptions.end(),
-			[&](auto& b) { return b.binding == binding; })));
-
-		attribute_descriptions.insert(attribute_descriptions.end(), viads.begin(), viads.end());
+		assert(binding < VUK_MAX_ATTRIBUTES && "Vertex buffer binding must be smaller than VUK_MAX_ATTRIBUTES.");
+		for (auto& viad : viads) {
+			attribute_descriptions[viad.location] = viad;
+			set_attribute_descriptions.set(viad.location, true);
+		}
 
 		VkVertexInputBindingDescription vibd;
 		vibd.binding = binding;
 		vibd.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 		vibd.stride = stride;
-		binding_descriptions.push_back(vibd);
+		binding_descriptions[binding] = vibd;
+		set_binding_descriptions.set(binding, true);
 
 		if (buf.buffer) {
 			vkCmdBindVertexBuffers(command_buffer, binding, 1, &buf.buffer, &buf.offset);
@@ -654,12 +652,18 @@ namespace vuk {
 			pi.primitive_restart_enable = false;
 
 			// VERTEX INPUT
-			if (attribute_descriptions.size() > 0 && binding_descriptions.size() > 0) {
+			vuk::Bitset<VUK_MAX_ATTRIBUTES> used_bindings = {};
+			if (attribute_descriptions.size() > 0 && binding_descriptions.size() > 0 && pi.base->reflection_info.attributes.size() > 0) {
 				records.vertex_input = true;
+				for (unsigned i = 0; i < pi.base->reflection_info.attributes.size(); i++) {
+					auto& attr = pi.base->reflection_info.attributes[i];
+					assert(set_attribute_descriptions.test(i) && "Pipeline expects attribute, but was never set in command buffer.");
+					used_bindings.set(attribute_descriptions[i].binding, true);
+				}
+
+				pi.extended_size += (uint16_t)pi.base->reflection_info.attributes.size() * sizeof(PipelineInstanceCreateInfo::VertexInputAttributeDescription);
 				pi.extended_size += sizeof(uint8_t);
-				pi.extended_size += (uint16_t)attribute_descriptions.size() * sizeof(PipelineInstanceCreateInfo::VertexInputAttributeDescription);
-				pi.extended_size += sizeof(uint8_t);
-				pi.extended_size += (uint16_t)binding_descriptions.size() * sizeof(PipelineInstanceCreateInfo::VertexInputBindingDescription);
+				pi.extended_size += (uint16_t)used_bindings.count() * sizeof(PipelineInstanceCreateInfo::VertexInputBindingDescription);
 			}
 
 			// BLEND STATE
@@ -771,16 +775,20 @@ namespace vuk {
 				write<uint8_t>(data_ptr, ongoing_renderpass->subpass);
 			}
 
-			if (attribute_descriptions.size() > 0 && binding_descriptions.size() > 0) {
-				write<uint8_t>(data_ptr, (uint8_t)attribute_descriptions.size());
-				for (auto& att : attribute_descriptions) {
+			if (records.vertex_input) {
+				for (unsigned i = 0; i < pi.base->reflection_info.attributes.size(); i++) {
+					auto& attr = pi.base->reflection_info.attributes[i];
+					auto& att = attribute_descriptions[i];
 					PipelineInstanceCreateInfo::VertexInputAttributeDescription viad{ .format = att.format, .offset = att.offset, .location = (uint8_t)att.location, .binding = (uint8_t)att.binding };
 					write(data_ptr, viad);
 				}
-				write<uint8_t>(data_ptr, (uint8_t)binding_descriptions.size());
-				for (auto& bin : binding_descriptions) {
-					PipelineInstanceCreateInfo::VertexInputBindingDescription vibd{ .stride = bin.stride, .inputRate = (uint32_t)bin.inputRate, .binding = (uint8_t)bin.binding };
-					write(data_ptr, vibd);
+				write<uint8_t>(data_ptr, (uint8_t)used_bindings.count());
+				for (unsigned i = 0; i < VUK_MAX_ATTRIBUTES; i++) {
+					if (used_bindings.test(i)) {
+						auto& bin = binding_descriptions[i];
+						PipelineInstanceCreateInfo::VertexInputBindingDescription vibd{ .stride = bin.stride, .inputRate = (uint32_t)bin.inputRate, .binding = (uint8_t)bin.binding };
+						write(data_ptr, vibd);
+					}
 				}
 			}
 
