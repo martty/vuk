@@ -13,11 +13,11 @@
 * In this example we make a small (baby) renderer (not for rendering babies!).
 * Here we use very simple (read: potentially not performant or convenient) abstractions.
 * The goal is that we can render diverse object with a single simple loop render loop.
-* 
+*
 * Generally resources can be bound individually to draws, here we show this for textures and a material buffer.
 * Or they can be aggregated into arrays and indexed in the shader, which is done here for model matrices.
 * This small example shows no state deduplication or sorting, which are very good optimizations for a real renderer.
-* 
+*
 * These examples are powered by the example framework, which hides some of the code required, as that would be repeated for each example.
 * Furthermore it allows launching individual examples and all examples with the example same code.
 * Check out the framework (example_runner_*) files if interested!
@@ -208,7 +208,7 @@ namespace {
 			std::uniform_int_distribution<size_t> dist_tex(0, 2);
 
 			std::uniform_real_distribution<float> dist_pos(-10, 10);
-			
+
 			// 64 quads
 			for (int i = 0; i < 64; i++) {
 				auto mat_id = dist_mat(g);
@@ -226,7 +226,7 @@ namespace {
 
 				Material* m = mat_id == 0 ? (Material*)&nmats[tex_id] : (Material*)&tmats[tex_id];
 				glm::vec3 pos = glm::vec3(dist_pos(g), dist_pos(g), dist_pos(g));
-				renderables.emplace_back(Renderable{ .mesh = &*cube_mesh, .material = m, .position = pos });
+				renderables.emplace_back(Renderable{.mesh = &*cube_mesh, .material = m, .position = pos });
 			}
 	},
 		.render = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
@@ -249,7 +249,7 @@ namespace {
 			// Do a terrible simulation step
 			// All objects are attracted to the origin
 			for (auto& r : renderables) {
-				auto force_mag = 0.1f/glm::length(r.position);
+				auto force_mag = 0.1f / glm::length(r.position);
 				r.velocity += force_mag * (-r.position) * ImGui::GetIO().DeltaTime;
 				r.position += r.velocity * ImGui::GetIO().DeltaTime;
 			}

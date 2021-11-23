@@ -76,8 +76,8 @@ namespace vuk {
 		case eComputeSampled: return { vuk::PipelineStageFlagBits::eComputeShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eShaderReadOnlyOptimal };
 
 		case eAttributeRead: return { vuk::PipelineStageFlagBits::eVertexInput, vuk::AccessFlagBits::eVertexAttributeRead, vuk::ImageLayout::eGeneral /* ignored */ };
-        case eVertexRead:
-            return {vuk::PipelineStageFlagBits::eVertexShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eGeneral /* ignored */};
+		case eVertexRead:
+			return { vuk::PipelineStageFlagBits::eVertexShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eGeneral /* ignored */ };
 		case eIndexRead: return { vuk::PipelineStageFlagBits::eVertexInput, vuk::AccessFlagBits::eIndexRead, vuk::ImageLayout::eGeneral /* ignored */ };
 		case eIndirectRead: return { vuk::PipelineStageFlagBits::eDrawIndirect, vuk::AccessFlagBits::eIndirectCommandRead, vuk::ImageLayout::eGeneral /* ignored */ };
 
@@ -132,19 +132,19 @@ namespace vuk {
 	}
 
 	inline bool is_write_access(Resource::Use u) {
-        if (u.access == vuk::AccessFlagBits{}) return false;
+		if (u.access == vuk::AccessFlagBits{}) return false;
 		if (u.access & vuk::AccessFlagBits::eColorAttachmentWrite) return true;
 		if (u.access & vuk::AccessFlagBits::eDepthStencilAttachmentWrite) return true;
 		if (u.access & vuk::AccessFlagBits::eShaderWrite) return true;
 		if (u.access & vuk::AccessFlagBits::eTransferWrite) return true;
 		if (u.access & vuk::AccessFlagBits::eHostWrite) return true;
-        if (u.access & vuk::AccessFlagBits::eMemoryWrite) return true;
-        if (u.access & vuk::AccessFlagBits::eAccelerationStructureWriteKHR) return true;
+		if (u.access & vuk::AccessFlagBits::eMemoryWrite) return true;
+		if (u.access & vuk::AccessFlagBits::eAccelerationStructureWriteKHR) return true;
 		return false;
 	}
 
 	inline bool is_read_access(Resource::Use u) {
-        if(u.access == vuk::AccessFlagBits{}) return false;
+		if (u.access == vuk::AccessFlagBits{}) return false;
 		return !is_write_access(u);
 	}
 
@@ -171,11 +171,11 @@ namespace vuk {
 		uint32_t subpass;
 
 		std::vector<Resource, short_alloc<Resource, 16>> inputs;
-        uint32_t bloom_resolved_inputs = 0;
-        std::vector<uint32_t, short_alloc<uint32_t, 16>> resolved_input_name_hashes;
-        uint32_t bloom_outputs = 0;
-        std::vector<Resource, short_alloc<Resource, 16>> outputs;
-        std::vector<uint32_t, short_alloc<uint32_t, 16>> output_name_hashes;
+		uint32_t bloom_resolved_inputs = 0;
+		std::vector<uint32_t, short_alloc<uint32_t, 16>> resolved_input_name_hashes;
+		uint32_t bloom_outputs = 0;
+		std::vector<Resource, short_alloc<Resource, 16>> outputs;
+		std::vector<uint32_t, short_alloc<uint32_t, 16>> output_name_hashes;
 
 		bool is_head_pass = false;
 		bool is_tail_pass = false;
@@ -239,7 +239,7 @@ namespace vuk {
 		SubpassInfo(arena&);
 		bool use_secondary_command_buffers;
 		std::vector<PassInfo*, short_alloc<PassInfo*, 16>> passes;
-        std::vector<ImageBarrier> pre_barriers, post_barriers;
+		std::vector<ImageBarrier> pre_barriers, post_barriers;
 		std::vector<MemoryBarrier> pre_mem_barriers, post_mem_barriers;
 	};
 
@@ -252,8 +252,8 @@ namespace vuk {
 		bool framebufferless = false;
 		VkRenderPass handle = {};
 		VkFramebuffer framebuffer;
-        std::vector<ImageBarrier> pre_barriers, post_barriers;
-        std::vector<MemoryBarrier> pre_mem_barriers, post_mem_barriers;
+		std::vector<ImageBarrier> pre_barriers, post_barriers;
+		std::vector<MemoryBarrier> pre_mem_barriers, post_mem_barriers;
 	};
 
 } // namespace vuk

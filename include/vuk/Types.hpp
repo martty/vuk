@@ -119,7 +119,7 @@ namespace vuk {
 		struct Framebuffer {};
 
 		Samples() : count(SampleCountFlagBits::e1) {}
-		Samples(SampleCountFlagBits samples) : count(samples){}
+		Samples(SampleCountFlagBits samples) : count(samples) {}
 		Samples(Framebuffer) : count(SampleCountFlagBits::eInfer) {}
 
 		constexpr static auto e1 = SampleCountFlagBits::e1;

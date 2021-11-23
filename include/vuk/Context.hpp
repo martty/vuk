@@ -272,7 +272,7 @@ namespace vuk {
 		Unique<PersistentDescriptorSet> create_persistent_descriptorset(const PipelineBaseInfo& base, unsigned set, unsigned num_descriptors);
 		Unique<PersistentDescriptorSet> create_persistent_descriptorset(const ComputePipelineInfo& base, unsigned set, unsigned num_descriptors);
 		Unique<PersistentDescriptorSet> create_persistent_descriptorset(const DescriptorSetLayoutAllocInfo& dslai, unsigned num_descriptors);
-        Unique<PersistentDescriptorSet> create_persistent_descriptorset(DescriptorSetLayoutCreateInfo dslci, unsigned num_descriptors);
+		Unique<PersistentDescriptorSet> create_persistent_descriptorset(DescriptorSetLayoutCreateInfo dslci, unsigned num_descriptors);
 		void commit_persistent_descriptorset(PersistentDescriptorSet& array);
 
 		size_t get_allocation_size(Buffer);

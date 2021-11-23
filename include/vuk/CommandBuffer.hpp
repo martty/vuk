@@ -275,10 +275,16 @@ namespace vuk {
 		/// @param first_location First location assigned to the attributes
 		/// @param format_list List of formats packed in buffer to generate attributes from
 		CommandBuffer& bind_vertex_buffer(unsigned binding, const Buffer& buffer, unsigned first_location, Packed format_list);
-		// binds a vertex buffer to the given binding point and configures attributes sourced from this buffer based on a span of attribute descriptions and stride
-		CommandBuffer& bind_vertex_buffer(unsigned binding, const Buffer& buffer, std::span<vuk::VertexInputAttributeDescription>, uint32_t stride);
-		// binds an index buffer with the given type
-		CommandBuffer& bind_index_buffer(const Buffer&, vuk::IndexType type);
+		/// @brief Binds a vertex buffer to the given binding point and configures attributes sourced from this buffer based on a span of attribute descriptions and stride
+		/// @param binding The binding point of the buffer
+		/// @param buffer The buffer to be bound
+		/// @param attribute_descriptions Attributes that are sourced from this buffer
+		/// @param stride Stride of a vertex sourced from this buffer
+		CommandBuffer& bind_vertex_buffer(unsigned binding, const Buffer& buffer, std::span<vuk::VertexInputAttributeDescription> attribute_descriptions, uint32_t stride);
+		/// @brief Binds an index buffer with the given type
+		/// @param buffer The buffer to be bound
+		/// @param type The index type in the buffer
+		CommandBuffer& bind_index_buffer(const Buffer& buffer, vuk::IndexType type);
 
 		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, vuk::ImageView iv, vuk::SamplerCreateInfo sampler_create_info, vuk::ImageLayout = vuk::ImageLayout::eShaderReadOnlyOptimal);
 		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, const vuk::Texture&, vuk::SamplerCreateInfo sampler_create_info, vuk::ImageLayout = vuk::ImageLayout::eShaderReadOnlyOptimal);
