@@ -200,11 +200,10 @@ namespace vuk {
 
 		// Specialization constant support
 		struct SpecEntry {
-			vuk::ShaderStageFlags stages;
 			bool is_double;
 			std::byte data[sizeof(double)];
 		};
-		robin_hood::unordered_flat_map<uint8_t, SpecEntry> spec_map_entries; // constantID -> SpecEntry
+		robin_hood::unordered_flat_map<uint32_t, SpecEntry> spec_map_entries; // constantID -> SpecEntry
 
 		// Individual pipeline states
 		std::optional<vuk::PipelineRasterizationStateCreateInfo> rasterization_state;
@@ -269,8 +268,16 @@ namespace vuk {
 		CommandBuffer& bind_compute_pipeline(Name);
 
 		CommandBuffer& set_primitive_topology(vuk::PrimitiveTopology);
-		CommandBuffer& bind_vertex_buffer(unsigned binding, const Buffer&, unsigned first_location, Packed);
-		CommandBuffer& bind_vertex_buffer(unsigned binding, const Buffer&, std::span<vuk::VertexInputAttributeDescription>, uint32_t stride);
+
+		/// @brief Binds a vertex buffer to the given binding point and configures attributes sourced from this buffer based on a packed format list, the attribute locations are offset with first_location
+		/// @param binding The binding point of the buffer
+		/// @param buffer The buffer to be bound
+		/// @param first_location First location assigned to the attributes
+		/// @param format_list List of formats packed in buffer to generate attributes from
+		CommandBuffer& bind_vertex_buffer(unsigned binding, const Buffer& buffer, unsigned first_location, Packed format_list);
+		// binds a vertex buffer to the given binding point and configures attributes sourced from this buffer based on a span of attribute descriptions and stride
+		CommandBuffer& bind_vertex_buffer(unsigned binding, const Buffer& buffer, std::span<vuk::VertexInputAttributeDescription>, uint32_t stride);
+		// binds an index buffer with the given type
 		CommandBuffer& bind_index_buffer(const Buffer&, vuk::IndexType type);
 
 		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, vuk::ImageView iv, vuk::SamplerCreateInfo sampler_create_info, vuk::ImageLayout = vuk::ImageLayout::eShaderReadOnlyOptimal);
@@ -286,11 +293,26 @@ namespace vuk {
 		template<class T>
 		CommandBuffer& push_constants(vuk::ShaderStageFlags stages, size_t offset, T value);
 
-		CommandBuffer& specialize_constants(uint8_t constant_id, vuk::ShaderStageFlags stages, void* data, size_t size);
-		template<class T>
-		CommandBuffer& specialize_constants(uint8_t constant_id, vuk::ShaderStageFlags stages, std::span<T> span);
-		template<class T>
-		CommandBuffer& specialize_constants(uint8_t constant_id, vuk::ShaderStageFlags stages, T value);
+		/// @brief Set specialization constants for the command buffer
+		/// @param constant_id ID of the constant. All stages form a single namespace for IDs.
+		/// @param value Value of the specialization constant
+		CommandBuffer& specialize_constants(uint32_t constant_id, bool value);
+		/// @brief Set specialization constants for the command buffer
+		/// @param constant_id ID of the constant. All stages form a single namespace for IDs.
+		/// @param value Value of the specialization constant
+		CommandBuffer& specialize_constants(uint32_t constant_id, uint32_t value);
+		/// @brief Set specialization constants for the command buffer
+		/// @param constant_id ID of the constant. All stages form a single namespace for IDs.
+		/// @param value Value of the specialization constant
+		CommandBuffer& specialize_constants(uint32_t constant_id, int32_t value);
+		/// @brief Set specialization constants for the command buffer
+		/// @param constant_id ID of the constant. All stages form a single namespace for IDs.
+		/// @param value Value of the specialization constant
+		CommandBuffer& specialize_constants(uint32_t constant_id, float value);
+		/// @brief Set specialization constants for the command buffer
+		/// @param constant_id ID of the constant. All stages form a single namespace for IDs.
+		/// @param value Value of the specialization constant
+		CommandBuffer& specialize_constants(uint32_t constant_id, double value);
 
 		CommandBuffer& bind_uniform_buffer(unsigned set, unsigned binding, Buffer buffer);
 		CommandBuffer& bind_storage_buffer(unsigned set, unsigned binding, Buffer buffer);
@@ -337,6 +359,8 @@ namespace vuk {
 		void _bind_state(bool graphics);
 		void _bind_compute_pipeline_state();
 		void _bind_graphics_pipeline_state();
+
+		CommandBuffer& specialize_constants(uint32_t constant_id, void* data, size_t size);
 	};
 
 	class SecondaryCommandBuffer : public CommandBuffer {
@@ -357,14 +381,24 @@ namespace vuk {
 		return push_constants(stages, offset, (void*)&value, sizeof(T));
 	}
 
-	template<class T>
-	inline CommandBuffer& CommandBuffer::specialize_constants(uint8_t constant_id, vuk::ShaderStageFlags stages, std::span<T> span) {
-		return specialize_constants(constant_id, stages, (void*)span.data(), sizeof(T) * span.size());
+	inline CommandBuffer& CommandBuffer::specialize_constants(uint32_t constant_id, bool value) {
+		return specialize_constants(constant_id, (uint32_t)value);
 	}
 
-	template<class T>
-	inline CommandBuffer& CommandBuffer::specialize_constants(uint8_t constant_id, vuk::ShaderStageFlags stages, T value) {
-		return specialize_constants(constant_id, stages, (void*)&value, sizeof(T));
+	inline CommandBuffer& CommandBuffer::specialize_constants(uint32_t constant_id, uint32_t value) {
+		return specialize_constants(constant_id, (void*)&value, sizeof(uint32_t));
+	}
+
+	inline CommandBuffer& CommandBuffer::specialize_constants(uint32_t constant_id, int32_t value) {
+		return specialize_constants(constant_id, (void*)&value, sizeof(int32_t));
+	}
+
+	inline CommandBuffer& CommandBuffer::specialize_constants(uint32_t constant_id, float value) {
+		return specialize_constants(constant_id, (void*)&value, sizeof(float));
+	}
+
+	inline CommandBuffer& CommandBuffer::specialize_constants(uint32_t constant_id, double value) {
+		return specialize_constants(constant_id, (void*)&value, sizeof(double));
 	}
 
 	template<class T>

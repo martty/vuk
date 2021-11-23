@@ -98,7 +98,7 @@ namespace {
 					command_buffer
 						.bind_storage_buffer(0, 0, command_buffer.get_resource_buffer("08_scramble"))
 						.bind_compute_pipeline("stupidsort")
-						.specialize_constants<uint32_t>(0, vuk::ShaderStageFlagBits::eCompute, speed_count)
+						.specialize_constants(0, speed_count)
 						.dispatch(1);
 					// We can also customize pipelines by using specialization constants
 					// Here we will apply a tint based on the current frame

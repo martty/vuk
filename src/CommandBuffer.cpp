@@ -345,8 +345,8 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::specialize_constants(uint8_t constant_id, vuk::ShaderStageFlags stages, void* data, size_t size) {
-		auto v = spec_map_entries.emplace(constant_id, SpecEntry{ stages, size == sizeof(double) });
+	CommandBuffer& CommandBuffer::specialize_constants(uint32_t constant_id, void* data, size_t size) {
+		auto v = spec_map_entries.emplace(constant_id, SpecEntry{ size == sizeof(double) });
 		memcpy(&v.first->second.data, data, size);
 		return *this;
 	}
@@ -653,6 +653,7 @@ namespace vuk {
 			pi.topology = (VkPrimitiveTopology)topology;
 			pi.primitive_restart_enable = false;
 
+			// VERTEX INPUT
 			if (attribute_descriptions.size() > 0 && binding_descriptions.size() > 0) {
 				records.vertex_input = true;
 				pi.extended_size += sizeof(uint8_t);
@@ -660,6 +661,8 @@ namespace vuk {
 				pi.extended_size += sizeof(uint8_t);
 				pi.extended_size += (uint16_t)binding_descriptions.size() * sizeof(PipelineInstanceCreateInfo::VertexInputBindingDescription);
 			}
+
+			// BLEND STATE
 			// attachmentCount says how many attachments
 			pi.attachmentCount = (uint8_t)ongoing_renderpass->color_attachments.size();
 			bool rasterization = ongoing_renderpass->depth_stencil_attachment || pi.attachmentCount > 0;
@@ -695,7 +698,7 @@ namespace vuk {
 					auto size = sc.type == vuk::Program::Type::edouble ? sizeof(double) : 4;
 					auto it = spec_map_entries.find(sc.binding);
 					if (it != spec_map_entries.end()) {
-						spec_const_size += size;
+						spec_const_size += (uint32_t)size;
 						set_constants.set(i, true);
 					}
 				}

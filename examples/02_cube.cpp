@@ -105,9 +105,9 @@ namespace {
 					}
 					// Specialization constants can only be scalars, use three to make a vec3
 					command_buffer
-						.specialize_constants(0, vuk::ShaderStageFlagBits::eAll, tint.x)
-						.specialize_constants(1, vuk::ShaderStageFlagBits::eAll, tint.y)
-						.specialize_constants(2, vuk::ShaderStageFlagBits::eAll, tint.z);
+						.specialize_constants(0, tint.x)
+						.specialize_constants(1, tint.y)
+						.specialize_constants(2, tint.z);
 					// The cube is drawn via indexed drawing
 					command_buffer
 						.draw_indexed(box.second.size(), 1, 0, 0, 0);

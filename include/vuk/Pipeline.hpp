@@ -674,13 +674,6 @@ namespace vuk {
 			VkLogicOp logic_op : std::bit_width(16u);
 		};
 
-		struct SpecializationMapEntry {
-			uint32_t shader_stage;
-			uint16_t constantID : std::bit_width(VUK_MAX_SPECIALIZATIONCONSTANT_RANGES);
-			uint16_t offset : std::bit_width(VUK_MAX_SPECIALIZATIONCONSTANT_DATA);
-			uint16_t size : std::bit_width(VUK_MAX_SPECIALIZATIONCONSTANT_DATA);
-		};
-
 		struct RasterizationState {
 			uint8_t depthClampEnable : 1;
 			uint8_t rasterizerDiscardEnable : 1;
