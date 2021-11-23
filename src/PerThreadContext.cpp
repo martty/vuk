@@ -94,7 +94,7 @@ vuk::Unique<vuk::PersistentDescriptorSet> vuk::PerThreadContext::create_persiste
 	return create_persistent_descriptorset(base.layout_info[set], num_descriptors);
 }
 
-vuk::Unique<vuk::PersistentDescriptorSet> vuk::PerThreadContext::create_persistent_descriptorset(const ComputePipelineInfo& base, unsigned set, unsigned num_descriptors) {
+vuk::Unique<vuk::PersistentDescriptorSet> vuk::PerThreadContext::create_persistent_descriptorset(const ComputePipelineBaseInfo& base, unsigned set, unsigned num_descriptors) {
 	return create_persistent_descriptorset(base.layout_info[set], num_descriptors);
 }
 
