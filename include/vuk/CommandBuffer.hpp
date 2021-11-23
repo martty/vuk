@@ -244,7 +244,7 @@ namespace vuk {
 		vuk::Image get_resource_image(Name) const;
 		vuk::ImageView get_resource_image_view(Name) const;
 
-		// request dynamic state for the subsequent pipeline
+		// request dynamic state for the subsequent pipelines
 		CommandBuffer& set_dynamic_state(DynamicStateFlags);
 		// command buffer state setting
 		// when a state is set it is persistent for a pass - similar to vulkan dynamic state
@@ -291,7 +291,10 @@ namespace vuk {
 		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, Name, vuk::SamplerCreateInfo sampler_create_info);
 		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, Name, vuk::ImageViewCreateInfo ivci, vuk::SamplerCreateInfo sampler_create_info);
 
-		CommandBuffer& bind_persistent(unsigned set, PersistentDescriptorSet&);
+		/// @brief Bind a persistent descriptor set to the command buffer
+		/// @param set The set bind index to be used
+		/// @param desc_set The persistent descriptor set to be bound
+		CommandBuffer& bind_persistent(unsigned set, PersistentDescriptorSet& desc_set);
 
 		CommandBuffer& push_constants(vuk::ShaderStageFlags stages, size_t offset, void* data, size_t size);
 		template<class T>
@@ -320,8 +323,16 @@ namespace vuk {
 		/// @param value Value of the specialization constant
 		CommandBuffer& specialize_constants(uint32_t constant_id, double value);
 
-		CommandBuffer& bind_uniform_buffer(unsigned set, unsigned binding, Buffer buffer);
-		CommandBuffer& bind_storage_buffer(unsigned set, unsigned binding, Buffer buffer);
+		/// @brief Bind a uniform buffer to the command buffer
+		/// @param set The set bind index to be used
+		/// @param binding The descriptor binding to bind the buffer to
+		/// @param buffer The buffer to be bound
+		CommandBuffer& bind_uniform_buffer(unsigned set, unsigned binding, const Buffer& buffer);
+		/// @brief Bind a storage buffer to the command buffer
+		/// @param set The set bind index to be used
+		/// @param binding The descriptor binding to bind the buffer to
+		/// @param buffer The buffer to be bound
+		CommandBuffer& bind_storage_buffer(unsigned set, unsigned binding, const Buffer& buffer);
 
 		CommandBuffer& bind_storage_image(unsigned set, unsigned binding, vuk::ImageView image_view);
 		CommandBuffer& bind_storage_image(unsigned set, unsigned binding, Name);
@@ -334,17 +345,17 @@ namespace vuk {
 		CommandBuffer& draw(size_t vertex_count, size_t instance_count, size_t first_vertex, size_t first_instance);
 		CommandBuffer& draw_indexed(size_t index_count, size_t instance_count, size_t first_index, int32_t vertex_offset, size_t first_instance);
 
-		CommandBuffer& draw_indexed_indirect(size_t command_count, Buffer indirect_buffer);
+		CommandBuffer& draw_indexed_indirect(size_t command_count, const Buffer& indirect_buffer);
 		CommandBuffer& draw_indexed_indirect(std::span<vuk::DrawIndexedIndirectCommand>);
 
-		CommandBuffer& draw_indexed_indirect_count(size_t max_draw_count, Buffer indirect_buffer, Buffer count_buffer);
+		CommandBuffer& draw_indexed_indirect_count(size_t max_draw_count, const Buffer& indirect_buffer, const Buffer& count_buffer);
 
 		CommandBuffer& dispatch(size_t group_count_x, size_t group_count_y = 1, size_t group_count_z = 1);
 		// Perform a dispatch while specifying the minimum invocation count
 		// Actual invocation count will be rounded up to be a multiple of local_size_{x,y,z}
 		CommandBuffer& dispatch_invocations(size_t invocation_count_x, size_t invocation_count_y = 1, size_t invocation_count_z = 1);
 
-		CommandBuffer& dispatch_indirect(Buffer indirect_buffer);
+		CommandBuffer& dispatch_indirect(const Buffer& indirect_buffer);
 
 		class SecondaryCommandBuffer begin_secondary();
 		void execute(std::span<VkCommandBuffer>);

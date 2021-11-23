@@ -351,7 +351,7 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::bind_uniform_buffer(unsigned set, unsigned binding, Buffer buffer) {
+	CommandBuffer& CommandBuffer::bind_uniform_buffer(unsigned set, unsigned binding, const Buffer& buffer) {
 		sets_used[set] = true;
 		set_bindings[set].bindings[binding].type = vuk::DescriptorType::eUniformBuffer;
 		set_bindings[set].bindings[binding].buffer = VkDescriptorBufferInfo{ buffer.buffer, buffer.offset, buffer.size };
@@ -359,7 +359,7 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::bind_storage_buffer(unsigned set, unsigned binding, Buffer buffer) {
+	CommandBuffer& CommandBuffer::bind_storage_buffer(unsigned set, unsigned binding, const Buffer& buffer) {
 		sets_used[set] = true;
 		set_bindings[set].bindings[binding].type = vuk::DescriptorType::eStorageBuffer;
 		set_bindings[set].bindings[binding].buffer = VkDescriptorBufferInfo{ buffer.buffer, buffer.offset, buffer.size };
@@ -398,7 +398,7 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::draw_indexed_indirect(size_t command_count, Buffer indirect_buffer) {
+	CommandBuffer& CommandBuffer::draw_indexed_indirect(size_t command_count, const Buffer& indirect_buffer) {
 		_bind_graphics_pipeline_state();
 		vkCmdDrawIndexedIndirect(command_buffer, indirect_buffer.buffer, (uint32_t)indirect_buffer.offset, (uint32_t)command_count,
 			sizeof(vuk::DrawIndexedIndirectCommand));
@@ -413,7 +413,7 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::draw_indexed_indirect_count(size_t max_draw_count, Buffer indirect_buffer, Buffer count_buffer) {
+	CommandBuffer& CommandBuffer::draw_indexed_indirect_count(size_t max_draw_count, const Buffer& indirect_buffer, const Buffer& count_buffer) {
 		_bind_graphics_pipeline_state();
 		vkCmdDrawIndexedIndirectCount(command_buffer, indirect_buffer.buffer, indirect_buffer.offset, count_buffer.buffer, count_buffer.offset,
 			(uint32_t)max_draw_count, sizeof(vuk::DrawIndexedIndirectCommand));
@@ -438,7 +438,7 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::dispatch_indirect(Buffer indirect_buffer) {
+	CommandBuffer& CommandBuffer::dispatch_indirect(const Buffer& indirect_buffer) {
 		_bind_compute_pipeline_state();
 		vkCmdDispatchIndirect(command_buffer, indirect_buffer.buffer, indirect_buffer.offset);
 		return *this;
