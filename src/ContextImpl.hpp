@@ -10,6 +10,7 @@
 #include "Pool.hpp"
 #include "Cache.hpp"
 #include "RenderPass.hpp"
+#include <vuk/PipelineInstance.hpp>
 
 namespace vuk {
 	struct TransientSubmitBundle {

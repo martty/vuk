@@ -6,16 +6,16 @@
 #include <../src/Allocator.hpp>
 #include <vuk/FixedVector.hpp>
 #include <vuk/Types.hpp>
-#include <vuk/Types.hpp>
 #include <vuk/Image.hpp>
 #include <vuk/Query.hpp>
+#include <vuk/PipelineInstance.hpp>
 
 namespace vuk {
 	class Context;
 	class PerThreadContext;
 
 	struct Ignore {
-		Ignore(size_t bytes) : format(vuk::Format::eUndefined), bytes((uint32_t)bytes) {}
+		Ignore(size_t bytes) : format(Format::eUndefined), bytes((uint32_t)bytes) {}
 		Ignore(Format format) : format(format) {}
 		Format format;
 		uint32_t bytes = 0;
@@ -35,7 +35,7 @@ namespace vuk {
 	struct Packed {
 		Packed() {}
 		Packed(std::initializer_list<FormatOrIgnore> ilist) : list(ilist) {}
-		vuk::fixed_vector<FormatOrIgnore, VUK_MAX_ATTRIBUTES> list;
+		fixed_vector<FormatOrIgnore, VUK_MAX_ATTRIBUTES> list;
 	};
 
 	struct DrawIndexedIndirectCommand {
@@ -168,14 +168,14 @@ namespace vuk {
 	protected:
 		friend struct ExecutableRenderGraph;
 		ExecutableRenderGraph* rg = nullptr;
-		vuk::PerThreadContext& ptc;
+		PerThreadContext& ptc;
 		VkCommandBuffer command_buffer;
 
 		struct RenderPassInfo {
 			VkRenderPass renderpass;
 			uint32_t subpass;
-			vuk::Extent2D extent;
-			vuk::SampleCountFlagBits samples;
+			Extent2D extent;
+			SampleCountFlagBits samples;
 			VkAttachmentReference const* depth_stencil_attachment;
 			std::array<Name, VUK_MAX_COLOR_ATTACHMENTS> color_attachment_names;
 			std::span<const VkAttachmentReference> color_attachments;
@@ -188,13 +188,13 @@ namespace vuk {
 		DynamicStateFlags dynamic_state_flags = {};
 
 		// Current & next graphics & compute pipelines
-		vuk::PipelineBaseInfo* next_pipeline = nullptr;
-		vuk::ComputePipelineBaseInfo* next_compute_pipeline = nullptr;
-		std::optional<vuk::PipelineInfo> current_pipeline;
-		std::optional<vuk::ComputePipelineInfo> current_compute_pipeline;
+		PipelineBaseInfo* next_pipeline = nullptr;
+		ComputePipelineBaseInfo* next_compute_pipeline = nullptr;
+		std::optional<PipelineInfo> current_pipeline;
+		std::optional<ComputePipelineInfo> current_compute_pipeline;
 
 		// Input assembly & fixed-function attributes
-		vuk::PrimitiveTopology topology = vuk::PrimitiveTopology::eTriangleList;
+		PrimitiveTopology topology = PrimitiveTopology::eTriangleList;
 		vuk::fixed_vector<vuk::VertexInputAttributeDescription, VUK_MAX_ATTRIBUTES> attribute_descriptions;
 		vuk::fixed_vector<VkVertexInputBindingDescription, VUK_MAX_ATTRIBUTES> binding_descriptions;
 
@@ -206,19 +206,19 @@ namespace vuk {
 		robin_hood::unordered_flat_map<uint32_t, SpecEntry> spec_map_entries; // constantID -> SpecEntry
 
 		// Individual pipeline states
-		std::optional<vuk::PipelineRasterizationStateCreateInfo> rasterization_state;
-		std::optional<vuk::PipelineDepthStencilStateCreateInfo> depth_stencil_state;
+		std::optional<PipelineRasterizationStateCreateInfo> rasterization_state;
+		std::optional<PipelineDepthStencilStateCreateInfo> depth_stencil_state;
 		bool broadcast_color_blend_attachment_0 = false;
-		vuk::Bitset<VUK_MAX_COLOR_ATTACHMENTS> set_color_blend_attachments = {};
-		vuk::fixed_vector<vuk::PipelineColorBlendAttachmentState, VUK_MAX_COLOR_ATTACHMENTS> color_blend_attachments;
+		Bitset<VUK_MAX_COLOR_ATTACHMENTS> set_color_blend_attachments = {};
+		fixed_vector<PipelineColorBlendAttachmentState, VUK_MAX_COLOR_ATTACHMENTS> color_blend_attachments;
 		std::optional<std::array<float, 4>> blend_constants;
 		float line_width = 1.0f;
-		vuk::fixed_vector<VkViewport, VUK_MAX_VIEWPORTS> viewports;
-		vuk::fixed_vector<VkRect2D, VUK_MAX_SCISSORS> scissors;
+		fixed_vector<VkViewport, VUK_MAX_VIEWPORTS> viewports;
+		fixed_vector<VkRect2D, VUK_MAX_SCISSORS> scissors;
 
 		// Push constants
 		std::array<unsigned char, 128> push_constant_buffer;
-		vuk::fixed_vector<VkPushConstantRange, VUK_MAX_PUSHCONSTANT_RANGES> pcrs;
+		fixed_vector<VkPushConstantRange, VUK_MAX_PUSHCONSTANT_RANGES> pcrs;
 
 		// Descriptor sets
 		std::bitset<VUK_MAX_SETS> sets_used = {};
@@ -228,21 +228,21 @@ namespace vuk {
 
 
 		// for rendergraph
-		CommandBuffer(ExecutableRenderGraph& rg, vuk::PerThreadContext& ptc, VkCommandBuffer cb) : rg(&rg), ptc(ptc), command_buffer(cb) {}
-		CommandBuffer(ExecutableRenderGraph& rg, vuk::PerThreadContext& ptc, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing) : rg(&rg), ptc(ptc), command_buffer(cb), ongoing_renderpass(ongoing) {}
+		CommandBuffer(ExecutableRenderGraph& rg, PerThreadContext& ptc, VkCommandBuffer cb) : rg(&rg), ptc(ptc), command_buffer(cb) {}
+		CommandBuffer(ExecutableRenderGraph& rg, PerThreadContext& ptc, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing) : rg(&rg), ptc(ptc), command_buffer(cb), ongoing_renderpass(ongoing) {}
 	public:
 		// for one shot
-		CommandBuffer(vuk::PerThreadContext& ptc);
+		CommandBuffer(PerThreadContext& ptc);
 		// for secondary cbufs
-		CommandBuffer(ExecutableRenderGraph* rg, vuk::PerThreadContext& ptc, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing) : rg(rg), ptc(ptc), command_buffer(cb), ongoing_renderpass(ongoing) {}
+		CommandBuffer(ExecutableRenderGraph* rg, PerThreadContext& ptc, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing) : rg(rg), ptc(ptc), command_buffer(cb), ongoing_renderpass(ongoing) {}
 
-		vuk::PerThreadContext& get_context() {
+		PerThreadContext& get_context() {
 			return ptc;
 		}
 		const RenderPassInfo& get_ongoing_renderpass() const;
-		vuk::Buffer get_resource_buffer(Name) const;
-		vuk::Image get_resource_image(Name) const;
-		vuk::ImageView get_resource_image_view(Name) const;
+		Buffer get_resource_buffer(Name) const;
+		Image get_resource_image(Name) const;
+		ImageView get_resource_image_view(Name) const;
 
 		// request dynamic state for the subsequent pipelines
 		CommandBuffer& set_dynamic_state(DynamicStateFlags);
@@ -252,22 +252,22 @@ namespace vuk {
 		CommandBuffer& set_viewport(unsigned index, Rect2D area, float min_depth = 0.f, float max_depth = 1.f);
 		CommandBuffer& set_scissor(unsigned index, Rect2D vp);
 
-		CommandBuffer& set_rasterization(vuk::PipelineRasterizationStateCreateInfo);
-		CommandBuffer& set_depth_stencil(vuk::PipelineDepthStencilStateCreateInfo);
+		CommandBuffer& set_rasterization(PipelineRasterizationStateCreateInfo);
+		CommandBuffer& set_depth_stencil(PipelineDepthStencilStateCreateInfo);
 
-		CommandBuffer& broadcast_color_blend(vuk::PipelineColorBlendAttachmentState);
+		CommandBuffer& broadcast_color_blend(PipelineColorBlendAttachmentState);
 		CommandBuffer& broadcast_color_blend(BlendPreset);
-		CommandBuffer& set_color_blend(Name color_attachment, vuk::PipelineColorBlendAttachmentState);
+		CommandBuffer& set_color_blend(Name color_attachment, PipelineColorBlendAttachmentState);
 		CommandBuffer& set_color_blend(Name color_attachment, BlendPreset);
 		CommandBuffer& set_blend_constants(std::array<float, 4> constants);
 
-		CommandBuffer& bind_graphics_pipeline(vuk::PipelineBaseInfo*);
+		CommandBuffer& bind_graphics_pipeline(PipelineBaseInfo*);
 		CommandBuffer& bind_graphics_pipeline(Name);
 
-		CommandBuffer& bind_compute_pipeline(vuk::ComputePipelineBaseInfo*);
+		CommandBuffer& bind_compute_pipeline(ComputePipelineBaseInfo*);
 		CommandBuffer& bind_compute_pipeline(Name);
 
-		CommandBuffer& set_primitive_topology(vuk::PrimitiveTopology);
+		CommandBuffer& set_primitive_topology(PrimitiveTopology);
 
 		/// @brief Binds a vertex buffer to the given binding point and configures attributes sourced from this buffer based on a packed format list, the attribute locations are offset with first_location
 		/// @param binding The binding point of the buffer
@@ -280,27 +280,27 @@ namespace vuk {
 		/// @param buffer The buffer to be bound
 		/// @param attribute_descriptions Attributes that are sourced from this buffer
 		/// @param stride Stride of a vertex sourced from this buffer
-		CommandBuffer& bind_vertex_buffer(unsigned binding, const Buffer& buffer, std::span<vuk::VertexInputAttributeDescription> attribute_descriptions, uint32_t stride);
+		CommandBuffer& bind_vertex_buffer(unsigned binding, const Buffer& buffer, std::span<VertexInputAttributeDescription> attribute_descriptions, uint32_t stride);
 		/// @brief Binds an index buffer with the given type
 		/// @param buffer The buffer to be bound
 		/// @param type The index type in the buffer
-		CommandBuffer& bind_index_buffer(const Buffer& buffer, vuk::IndexType type);
+		CommandBuffer& bind_index_buffer(const Buffer& buffer, IndexType type);
 
-		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, vuk::ImageView iv, vuk::SamplerCreateInfo sampler_create_info, vuk::ImageLayout = vuk::ImageLayout::eShaderReadOnlyOptimal);
-		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, const vuk::Texture&, vuk::SamplerCreateInfo sampler_create_info, vuk::ImageLayout = vuk::ImageLayout::eShaderReadOnlyOptimal);
-		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, Name, vuk::SamplerCreateInfo sampler_create_info);
-		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, Name, vuk::ImageViewCreateInfo ivci, vuk::SamplerCreateInfo sampler_create_info);
+		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, ImageView iv, SamplerCreateInfo sampler_create_info, ImageLayout = ImageLayout::eShaderReadOnlyOptimal);
+		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, const Texture&, SamplerCreateInfo sampler_create_info, ImageLayout = ImageLayout::eShaderReadOnlyOptimal);
+		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, Name, SamplerCreateInfo sampler_create_info);
+		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, Name, ImageViewCreateInfo ivci, SamplerCreateInfo sampler_create_info);
 
 		/// @brief Bind a persistent descriptor set to the command buffer
 		/// @param set The set bind index to be used
 		/// @param desc_set The persistent descriptor set to be bound
 		CommandBuffer& bind_persistent(unsigned set, PersistentDescriptorSet& desc_set);
 
-		CommandBuffer& push_constants(vuk::ShaderStageFlags stages, size_t offset, void* data, size_t size);
+		CommandBuffer& push_constants(ShaderStageFlags stages, size_t offset, void* data, size_t size);
 		template<class T>
-		CommandBuffer& push_constants(vuk::ShaderStageFlags stages, size_t offset, std::span<T> span);
+		CommandBuffer& push_constants(ShaderStageFlags stages, size_t offset, std::span<T> span);
 		template<class T>
-		CommandBuffer& push_constants(vuk::ShaderStageFlags stages, size_t offset, T value);
+		CommandBuffer& push_constants(ShaderStageFlags stages, size_t offset, T value);
 
 		/// @brief Set specialization constants for the command buffer
 		/// @param constant_id ID of the constant. All stages form a single namespace for IDs.
@@ -334,7 +334,7 @@ namespace vuk {
 		/// @param buffer The buffer to be bound
 		CommandBuffer& bind_storage_buffer(unsigned set, unsigned binding, const Buffer& buffer);
 
-		CommandBuffer& bind_storage_image(unsigned set, unsigned binding, vuk::ImageView image_view);
+		CommandBuffer& bind_storage_image(unsigned set, unsigned binding, ImageView image_view);
 		CommandBuffer& bind_storage_image(unsigned set, unsigned binding, Name);
 
 		void* _map_scratch_uniform_binding(unsigned set, unsigned binding, size_t size);
@@ -346,7 +346,7 @@ namespace vuk {
 		CommandBuffer& draw_indexed(size_t index_count, size_t instance_count, size_t first_index, int32_t vertex_offset, size_t first_instance);
 
 		CommandBuffer& draw_indexed_indirect(size_t command_count, const Buffer& indirect_buffer);
-		CommandBuffer& draw_indexed_indirect(std::span<vuk::DrawIndexedIndirectCommand>);
+		CommandBuffer& draw_indexed_indirect(std::span<DrawIndexedIndirectCommand>);
 
 		CommandBuffer& draw_indexed_indirect_count(size_t max_draw_count, const Buffer& indirect_buffer, const Buffer& count_buffer);
 
@@ -363,14 +363,14 @@ namespace vuk {
 		// commands for renderpass-less command buffers
 		void clear_image(Name src, Clear);
 		void resolve_image(Name src, Name dst);
-		void blit_image(Name src, Name dst, vuk::ImageBlit region, vuk::Filter filter);
-		void copy_image_to_buffer(Name src, Name dst, vuk::BufferImageCopy);
+		void blit_image(Name src, Name dst, ImageBlit region, Filter filter);
+		void copy_image_to_buffer(Name src, Name dst, BufferImageCopy);
 
 		// explicit synchronisation
-		void image_barrier(Name, vuk::Access src_access, vuk::Access dst_access);
+		void image_barrier(Name, Access src_access, Access dst_access);
 
 		// queries
-		void write_timestamp(Query, vuk::PipelineStageFlagBits stage = vuk::PipelineStageFlagBits::eBottomOfPipe);
+		void write_timestamp(Query, PipelineStageFlagBits stage = PipelineStageFlagBits::eBottomOfPipe);
 
 	protected:
 		void _bind_state(bool graphics);
@@ -389,12 +389,12 @@ namespace vuk {
 	};
 
 	template<class T>
-	inline CommandBuffer& CommandBuffer::push_constants(vuk::ShaderStageFlags stages, size_t offset, std::span<T> span) {
+	inline CommandBuffer& CommandBuffer::push_constants(ShaderStageFlags stages, size_t offset, std::span<T> span) {
 		return push_constants(stages, offset, (void*)span.data(), sizeof(T) * span.size());
 	}
 
 	template<class T>
-	inline CommandBuffer& CommandBuffer::push_constants(vuk::ShaderStageFlags stages, size_t offset, T value) {
+	inline CommandBuffer& CommandBuffer::push_constants(ShaderStageFlags stages, size_t offset, T value) {
 		return push_constants(stages, offset, (void*)&value, sizeof(T));
 	}
 
@@ -425,11 +425,11 @@ namespace vuk {
 
 	struct TimedScope {
 		TimedScope(CommandBuffer& cbuf, Query a, Query b) : cbuf(cbuf), a(a), b(b) {
-			cbuf.write_timestamp(a, vuk::PipelineStageFlagBits::eBottomOfPipe);
+			cbuf.write_timestamp(a, PipelineStageFlagBits::eBottomOfPipe);
 		}
 
 		~TimedScope() {
-			cbuf.write_timestamp(b, vuk::PipelineStageFlagBits::eBottomOfPipe);
+			cbuf.write_timestamp(b, PipelineStageFlagBits::eBottomOfPipe);
 		}
 
 		CommandBuffer& cbuf;

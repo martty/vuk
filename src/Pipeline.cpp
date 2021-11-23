@@ -5,7 +5,6 @@ namespace vuk {
 	vuk::fixed_vector<vuk::DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> PipelineBaseCreateInfo::build_descriptor_layouts(const Program& program, const PipelineBaseCreateInfoBase& bci) {
 		vuk::fixed_vector<vuk::DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> dslcis;
 
-
 		for (const auto& [index, set] : program.sets) {
 			// fill up unused sets, if there are holes in descriptor set order
 			dslcis.resize(std::max(dslcis.size(), index + 1), {});
@@ -97,10 +96,5 @@ namespace vuk {
 			dslcis[index] = std::move(dslci);
 		}
 		return dslcis;
-	}
-
-	VkComputePipelineCreateInfo vuk::ComputePipelineInstanceCreateInfo::to_vk() const {
-		VkComputePipelineCreateInfo cpci{ .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO };
-		return cpci;
 	}
 }

@@ -194,8 +194,8 @@ namespace vuk {
 		void destroy(const struct PoolAllocator& v);
 		void destroy(const struct LinearAllocator& v);
 		void destroy(const DescriptorPool& dp);
-		void destroy(const PipelineInfo& pi);
-		void destroy(const ComputePipelineInfo& pi);
+		void destroy(const struct PipelineInfo& pi);
+		void destroy(const struct ComputePipelineInfo& pi);
 		void destroy(const ShaderModule& sm);
 		void destroy(const DescriptorSetLayoutAllocInfo& ds);
 		void destroy(const VkPipelineLayout& pl);
@@ -365,8 +365,8 @@ namespace vuk {
 		RGImage acquire_rendertarget(const struct RGCI&);
 		Sampler acquire_sampler(const SamplerCreateInfo&);
 		DescriptorSet acquire_descriptorset(const SetBinding&);
-		PipelineInfo acquire_pipeline(const PipelineInstanceCreateInfo&);
-		ComputePipelineInfo acquire_pipeline(const ComputePipelineInstanceCreateInfo&);
+		PipelineInfo acquire_pipeline(const struct PipelineInstanceCreateInfo&);
+		ComputePipelineInfo acquire_pipeline(const struct ComputePipelineInstanceCreateInfo&);
 
 		const plf::colony<SampledImage>& get_sampled_images();
 

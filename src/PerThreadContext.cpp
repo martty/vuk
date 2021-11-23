@@ -566,8 +566,8 @@ vuk::ComputePipelineBaseInfo vuk::PerThreadContext::create(const create_info_t<C
 }
 
 vuk::ComputePipelineInfo vuk::PerThreadContext::create(const create_info_t<ComputePipelineInfo>& cinfo) {
-	// create gfx pipeline
-	VkComputePipelineCreateInfo cpci = cinfo.to_vk();
+	// create compute pipeline
+	VkComputePipelineCreateInfo cpci{ .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO };
 	cpci.layout = cinfo.base->pipeline_layout;
 	cpci.stage = cinfo.base->pssci;
 

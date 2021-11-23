@@ -1,6 +1,7 @@
 #include "Cache.hpp"
 #include "vuk/Context.hpp"
 #include "Allocator.hpp"
+#include <vuk/PipelineInstance.hpp>
 
 namespace vuk {
 	template<class T>
