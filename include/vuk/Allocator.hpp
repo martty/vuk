@@ -12,7 +12,14 @@ namespace vuk {
 		const char* file;
 		unsigned line;
 	};
+
+	struct SourceLocationAtFrame {
+		SourceLocation source_location;
+		uint64_t absolute_frame;
+	};
+
 #define VUK_HERE() vuk::SourceLocation{__FILE__, __LINE__}
+#define VUK_HERE_AND_NOW() vuk::SourceLocationAtFrame{vuk::SourceLocation{__FILE__, __LINE__}, -1ULL}
 
 	struct AllocateException : vuk::Exception {
 		AllocateException(VkResult res) {
@@ -52,7 +59,7 @@ namespace vuk {
 		virtual VkFramebuffer allocate_framebuffer(const struct FramebufferCreateInfo&, uint64_t frame, SourceLocation loc);
 		virtual VkRenderPass allocate_renderpass(const struct RenderPassCreateInfo&, uint64_t frame, SourceLocation loc);*/
 
-		virtual Result<void, AllocateException> allocate_semaphores(std::span<VkSemaphore> dst, uint64_t frame, SourceLocation loc) { return upstream->allocate_semaphores(dst, frame, loc); }
+		virtual Result<void, AllocateException> allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) { return upstream->allocate_semaphores(dst, loc); }
 		virtual Result<void, AllocateException> allocate_timeline_semaphore(uint64_t initial_value, uint64_t frame, SourceLocation loc) { return upstream->allocate_timeline_semaphore(initial_value, frame, loc); }
 		virtual Result<void, AllocateException> allocate_fence(uint64_t frame, SourceLocation loc) { return upstream->allocate_fence(frame, loc); }
 
@@ -69,7 +76,7 @@ namespace vuk {
 	struct Global : VkResource {
 		Global(Context& ctx) : VkResource(ctx, nullptr) {}
 
-		Result<void, AllocateException> allocate_semaphores(std::span<VkSemaphore> dst, uint64_t frame, SourceLocation loc) override {
+		Result<void, AllocateException> allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) override {
 			VkSemaphoreCreateInfo sci{ .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
 			for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
 				VkResult res = vkCreateSemaphore(ctx.device, &sci, nullptr, &dst[i]);
@@ -96,8 +103,8 @@ namespace vuk {
 
 		std::vector<VkSemaphore> semaphores;
 
-		Result<void, AllocateException> allocate_semaphores(std::span<VkSemaphore> dst, uint64_t frame, SourceLocation loc) override {
-			auto result = upstream->allocate_semaphores(dst, frame, loc);
+		Result<void, AllocateException> allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) override {
+			auto result = upstream->allocate_semaphores(dst, loc);
 			semaphores.insert(semaphores.end(), dst.begin(), dst.end());
 			return result;
 		}
@@ -112,8 +119,8 @@ namespace vuk {
 	struct NAllocator {
 		explicit NAllocator(VkResource& mr) : mr(&mr) {}
 
-		Result<void, AllocateException> allocate_semaphores(std::span<VkSemaphore> dst, uint64_t frame, SourceLocation loc) {
-			return mr->allocate_semaphores(dst, frame, loc);
+		Result<void, AllocateException> allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) {
+			return mr->allocate_semaphores(dst, loc);
 		}
 
 		void deallocate_semaphores(std::span<const VkSemaphore> src) {
