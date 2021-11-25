@@ -7,6 +7,7 @@ namespace vuk {
 	struct Exception : std::exception {
 		std::string error_message;
 
+		Exception() {}
 		Exception(std::string message) : error_message(std::move(message)) {}
 
 		const char* what() const noexcept override {

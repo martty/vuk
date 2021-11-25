@@ -430,9 +430,11 @@ namespace vuk {
 	}
 }
 
+#include <vuk/Allocator.hpp>
+
 // utility functions
 namespace vuk {
 	struct ExecutableRenderGraph;
-	bool execute_submit_and_present_to_one(PerThreadContext& ptc, ExecutableRenderGraph&& rg, SwapchainRef swapchain);
+	bool execute_submit_and_present_to_one(PerThreadContext& ptc, NAllocator nalloc, ExecutableRenderGraph&& rg, SwapchainRef swapchain);
 	void execute_submit_and_wait(PerThreadContext& ptc, ExecutableRenderGraph&& rg);
 }

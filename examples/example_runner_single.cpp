@@ -55,7 +55,7 @@ vuk::ExampleRunner::ExampleRunner() {
 			device = vkbdevice.device;
 
 			context.emplace(ContextCreateParameters{ instance, device, physical_device, graphics_queue, graphics_queue_family_index });
-
+			global_alloc.emplace(*context);
 			swapchain = context->add_swapchain(util::make_swapchain(vkbdevice));
 }
 
@@ -69,7 +69,8 @@ void vuk::ExampleRunner::render() {
 		rg.attach_swapchain(attachment_name, swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
 		auto ptc = ifc.begin();
 		auto erg = std::move(rg).link(ptc, vuk::RenderGraph::CompileOptions{});
-		execute_submit_and_present_to_one(ptc, std::move(erg), swapchain);
+		vuk::NLinear nl(*context, &*global_alloc);
+		execute_submit_and_present_to_one(ptc, NAllocator(nl), std::move(erg), swapchain);
 	}
 }
 

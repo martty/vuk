@@ -50,3 +50,7 @@
 #ifndef VUK_MAX_SCISSORS
 #define VUK_MAX_SCISSORS 1u
 #endif
+
+namespace vuk {
+	static constexpr bool use_exceptions = true;
+}
