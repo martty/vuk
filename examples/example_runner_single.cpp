@@ -69,7 +69,7 @@ void vuk::ExampleRunner::render() {
 		rg.attach_swapchain(attachment_name, swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
 		auto ptc = ifc.begin();
 		auto erg = std::move(rg).link(ptc, vuk::RenderGraph::CompileOptions{});
-		vuk::NLinear nl(*context, &*global_alloc);
+		vuk::NLinear nl(&*global_alloc);
 		execute_submit_and_present_to_one(ptc, NAllocator(nl), std::move(erg), swapchain);
 	}
 }

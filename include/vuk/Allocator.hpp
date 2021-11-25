@@ -33,7 +33,7 @@ namespace vuk {
 			}
 		}
 	};
-
+	/*
 	struct CPUResorce {
 		virtual void* allocate_cpu(size_t bytes, size_t alignment, uint64_t frame, SourceLocation loc = {}) {
 			return upstream->allocate_cpu(bytes, frame, alignment, loc);
@@ -43,47 +43,54 @@ namespace vuk {
 		}
 
 		CPUResorce* upstream = nullptr;
-	};
+	};*/
 
 	struct VkResource {
-		VkResource(class Context& ctx, VkResource* upstream) : ctx(ctx), upstream(upstream) {}
+		virtual Result<void, AllocateException> allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) = 0;
+		virtual void deallocate_semaphores(std::span<const VkSemaphore> sema) = 0;
+	};
+
+	struct VkResourceNested : VkResource {
+		VkResourceNested(VkResource* upstream) : upstream(upstream) {}
+
+		virtual Result<void, AllocateException> allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) { return upstream->allocate_semaphores(dst, loc); }
+		virtual void deallocate_semaphores(std::span<const VkSemaphore> sema) { upstream->deallocate_semaphores(sema); }
 
 		/*virtual uint64_t allocate_gpu() {
 
 		}*/
 
 		//virtual VkCommandBuffer allocate_command_buffer(VkCommandBufferLevel, uint32_t queue_family_index, uint64_t frame, SourceLocation loc);
-		virtual ImageView allocate_image_view(const ImageViewCreateInfo& info, uint64_t frame, SourceLocation loc) { return upstream->allocate_image_view(info, frame, loc); }
-		virtual Sampler allocate_sampler(const SamplerCreateInfo& info, uint64_t frame, SourceLocation loc) { return upstream->allocate_sampler(info, frame, loc); }
+		/*virtual ImageView allocate_image_view(const ImageViewCreateInfo& info, uint64_t frame, SourceLocation loc) { return upstream->allocate_image_view(info, frame, loc); }
+		virtual Sampler allocate_sampler(const SamplerCreateInfo& info, uint64_t frame, SourceLocation loc) { return upstream->allocate_sampler(info, frame, loc); }*/
 		/*virtual DescriptorSet allocate_descriptorset(const SetBinding&, uint64_t frame, SourceLocation loc);
 		virtual VkFramebuffer allocate_framebuffer(const struct FramebufferCreateInfo&, uint64_t frame, SourceLocation loc);
 		virtual VkRenderPass allocate_renderpass(const struct RenderPassCreateInfo&, uint64_t frame, SourceLocation loc);*/
 
-		virtual Result<void, AllocateException> allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) { return upstream->allocate_semaphores(dst, loc); }
+		/*
 		virtual Result<void, AllocateException> allocate_timeline_semaphore(uint64_t initial_value, uint64_t frame, SourceLocation loc) { return upstream->allocate_timeline_semaphore(initial_value, frame, loc); }
 		virtual Result<void, AllocateException> allocate_fence(uint64_t frame, SourceLocation loc) { return upstream->allocate_fence(frame, loc); }
 
 		virtual void deallocate_image_view(ImageView iv) { upstream->deallocate_image_view(iv); }
 		virtual void deallocate_sampler(Sampler samp) { upstream->deallocate_sampler(samp); }
-		virtual void deallocate_semaphores(std::span<const VkSemaphore> sema) { upstream->deallocate_semaphores(sema); }
 		virtual void deallocate_timeline_semaphore(VkSemaphore sema) { upstream->deallocate_timeline_semaphore(sema); }
 		virtual void deallocate_fence(VkFence fence) { upstream->deallocate_fence(fence); }
+		*/
 
 		VkResource* upstream = nullptr;
-		class Context& ctx;
 	};
 
 	struct Global : VkResource {
-		Global(Context& ctx) : VkResource(ctx, nullptr) {}
+		Global(Context& ctx) : device(ctx.device) {}
 
 		Result<void, AllocateException> allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) override {
 			VkSemaphoreCreateInfo sci{ .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
 			for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
-				VkResult res = vkCreateSemaphore(ctx.device, &sci, nullptr, &dst[i]);
+				VkResult res = vkCreateSemaphore(device, &sci, nullptr, &dst[i]);
 				if (res != VK_SUCCESS) {
 					// release resources that we already allocated to not leak
 					for (i--; i >= 0; i--) {
-						vkDestroySemaphore(ctx.device, dst[i], nullptr);
+						vkDestroySemaphore(device, dst[i], nullptr);
 					}
 					return { expected_error, AllocateException{res} };
 				}
@@ -93,13 +100,15 @@ namespace vuk {
 
 		void deallocate_semaphores(std::span<const VkSemaphore> src) override {
 			for (auto& v : src) {
-				vkDestroySemaphore(ctx.device, v, nullptr);
+				vkDestroySemaphore(device, v, nullptr);
 			}
 		}
+
+		VkDevice device;
 	};
 
-	struct NLinear : VkResource {
-		using VkResource::VkResource;
+	struct NLinear : VkResourceNested {
+		using VkResourceNested::VkResourceNested;
 
 		std::vector<VkSemaphore> semaphores;
 
