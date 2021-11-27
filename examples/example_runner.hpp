@@ -33,6 +33,7 @@ namespace vuk {
 		VkPhysicalDevice physical_device;
 		VkQueue graphics_queue;
 		std::optional<Context> context;
+		std::optional<Direct> direct_alloc;
 		std::optional<Global> global_alloc;
 		vuk::SwapchainRef swapchain;
 		GLFWwindow* window;
@@ -83,6 +84,7 @@ namespace vuk {
 
 		~ExampleRunner() {
 			context.reset();
+			global_alloc.reset();
 			vkDestroySurfaceKHR(vkbinstance.instance, surface, nullptr);
 			destroy_window_glfw(window);
 			vkb::destroy_device(vkbdevice);

@@ -294,6 +294,10 @@ vuk::Query vuk::Context::create_timestamp_query() {
 	return { impl->query_id_counter++ };
 }
 
+vuk::NAllocator vuk::Context::get_direct_allocator() {
+	return NAllocator(impl->direct_resource);
+}
+
 vuk::DescriptorSetLayoutAllocInfo vuk::Context::create(const create_info_t<vuk::DescriptorSetLayoutAllocInfo>& cinfo) {
 	vuk::DescriptorSetLayoutAllocInfo ret;
 	vkCreateDescriptorSetLayout(device, &cinfo.dslci, nullptr, &ret.layout);

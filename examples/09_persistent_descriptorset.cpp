@@ -110,7 +110,8 @@ namespace {
 			rg.attach_image("09_v1", vuk::ImageAttachment::from_texture(*variant1), vuk::eNone, vuk::eFragmentSampled);
 			rg.attach_image("09_v2", vuk::ImageAttachment::from_texture(*variant2), vuk::eNone, vuk::eFragmentSampled);
 			// The rendergraph is submitted and fence-waited on
-			execute_submit_and_wait(ptc, std::move(rg).link(ptc, vuk::RenderGraph::CompileOptions{}));
+
+			execute_submit_and_wait(ptc, ifc.ctx.get_direct_allocator(), std::move(rg).link(ptc, vuk::RenderGraph::CompileOptions{}));
 
 			// Create persistent descriptorset for a pipeline and set index
 			pda = ptc.create_persistent_descriptorset(*runner.context->get_named_pipeline("bindless_cube"), 1, 64);

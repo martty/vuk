@@ -12,6 +12,8 @@
 #include "vuk/Swapchain.hpp"
 #include "vuk/Query.hpp"
 
+#include <vuk/Allocator.hpp>
+
 namespace vuk {
 	struct TransferStub {
 		size_t id;
@@ -85,6 +87,12 @@ namespace vuk {
 		std::vector<std::byte> save_pipeline_cache();
 
 		Query create_timestamp_query();
+
+		// Allocator support
+
+		/// @brief Return an allocator over the direct resource - resources will be allocated from the Vulkan runtime
+		/// @return 
+		NAllocator get_direct_allocator();
 
 		uint32_t(*get_thread_index)() = nullptr;
 
@@ -430,11 +438,9 @@ namespace vuk {
 	}
 }
 
-#include <vuk/Allocator.hpp>
-
 // utility functions
 namespace vuk {
 	struct ExecutableRenderGraph;
-	bool execute_submit_and_present_to_one(PerThreadContext& ptc, NAllocator nalloc, ExecutableRenderGraph&& rg, SwapchainRef swapchain);
-	void execute_submit_and_wait(PerThreadContext& ptc, ExecutableRenderGraph&& rg);
+	Result<void> execute_submit_and_present_to_one(PerThreadContext& ptc, NAllocator nalloc, ExecutableRenderGraph&& rg, SwapchainRef swapchain);
+	Result<void> execute_submit_and_wait(PerThreadContext& ptc, NAllocator nalloc, ExecutableRenderGraph&& rg);
 }

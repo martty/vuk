@@ -9,6 +9,7 @@
 #define MOV(x) (static_cast<std::remove_reference_t<decltype(x)>&&>(x))
 
 namespace vuk {
+    struct Exception;
     struct ResultErrorTag {
         explicit ResultErrorTag() = default;
     };
@@ -21,7 +22,7 @@ namespace vuk {
 
     constexpr ResultValueTag expected_value;
 
-    template<typename T, typename E>
+    template<typename T, typename E = vuk::Exception>
     struct Result {
     public:
         using value_type = T;

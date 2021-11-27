@@ -149,7 +149,7 @@ namespace {
 			rg.attach_image("10_v1", vuk::ImageAttachment::from_texture(*variant1), vuk::eNone, vuk::eFragmentSampled);
 			rg.attach_image("10_v2", vuk::ImageAttachment::from_texture(*variant2), vuk::eNone, vuk::eFragmentSampled);
 			// The rendergraph is submitted and fence-waited on
-			execute_submit_and_wait(ptc, std::move(rg).link(ptc, vuk::RenderGraph::CompileOptions{}));
+			execute_submit_and_wait(ptc, ifc.ctx.get_direct_allocator(), std::move(rg).link(ptc, vuk::RenderGraph::CompileOptions{}));
 
 			// Set up the resources for our renderer
 

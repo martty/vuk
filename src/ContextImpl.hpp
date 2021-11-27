@@ -10,7 +10,8 @@
 #include "Pool.hpp"
 #include "Cache.hpp"
 #include "RenderPass.hpp"
-#include <vuk/PipelineInstance.hpp>
+#include "vuk/Allocator.hpp"
+#include "vuk/PipelineInstance.hpp"
 
 namespace vuk {
 	struct TransientSubmitBundle {
@@ -73,6 +74,8 @@ namespace vuk {
 		/// @brief with stable addresses, so we can hand out opaque pointers
 		plf::colony<TransientSubmitBundle> transient_submit_bundles;
 		std::vector<plf::colony<TransientSubmitBundle>::iterator> transient_submit_freelist;
+
+		Direct direct_resource;
 
 		TransientSubmitBundle* get_transient_bundle(uint32_t queue_family_index) {
 			std::lock_guard _(transient_submit_lock);
@@ -163,7 +166,9 @@ namespace vuk {
 			sampled_images(ctx),
 			shader_modules(ctx),
 			descriptor_set_layouts(ctx),
-			pipeline_layouts(ctx) {
+			pipeline_layouts(ctx),
+			direct_resource(ctx.device)
+		{
 			vkGetPhysicalDeviceProperties(ctx.physical_device, &physical_device_properties);
 		}
 	};

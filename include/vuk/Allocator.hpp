@@ -6,6 +6,7 @@
 #include <vuk/Exception.hpp>
 #include <span>
 #include <vector>
+#include <atomic>
 
 namespace vuk {
 	struct SourceLocation {
@@ -18,8 +19,8 @@ namespace vuk {
 		uint64_t absolute_frame;
 	};
 
-#define VUK_HERE() vuk::SourceLocation{__FILE__, __LINE__}
-#define VUK_HERE_AND_NOW() vuk::SourceLocationAtFrame{vuk::SourceLocation{__FILE__, __LINE__}, -1ULL}
+#define VUK_HERE_AND_NOW() vuk::SourceLocationAtFrame{vuk::SourceLocation{__FILE__, __LINE__}, (uint64_t)-1LL}
+#define VUK_HERE_AT_FRAME(frame) vuk::SourceLocationAtFrame{vuk::SourceLocation{__FILE__, __LINE__}, frame}
 
 	struct AllocateException : vuk::Exception {
 		AllocateException(VkResult res) {
@@ -28,37 +29,92 @@ namespace vuk {
 			{
 				error_message = "Out of host memory."; break;
 			}
+			case VK_ERROR_OUT_OF_DEVICE_MEMORY:
+			{
+				error_message = "Out of device memory."; break;
+			}
+			case VK_ERROR_INITIALIZATION_FAILED:
+			{
+				error_message = "Initialization failed."; break;
+			}
+			case VK_ERROR_DEVICE_LOST:
+			{
+				error_message = "Device lost."; break;
+			}
+			case VK_ERROR_MEMORY_MAP_FAILED:
+			{
+				error_message = "Memory map failed."; break;
+			}
+			case VK_ERROR_LAYER_NOT_PRESENT:
+			{
+				error_message = "Layer not present."; break;
+			}
+			case VK_ERROR_EXTENSION_NOT_PRESENT:
+			{
+				error_message = "Extension not present."; break;
+			}
+			case VK_ERROR_FEATURE_NOT_PRESENT:
+			{
+				error_message = "Feature not present."; break;
+			}
+			case VK_ERROR_INCOMPATIBLE_DRIVER:
+			{
+				error_message = "Incompatible driver."; break;
+			}
+			case VK_ERROR_TOO_MANY_OBJECTS:
+			{
+				error_message = "Too many objects."; break;
+			}
+			case VK_ERROR_FORMAT_NOT_SUPPORTED:
+			{
+				error_message = "Format not supported."; break;
+			}
 			default:
 				assert(0 && "Unimplemented error."); break;
 			}
 		}
 	};
-	/*
-	struct CPUResorce {
-		virtual void* allocate_cpu(size_t bytes, size_t alignment, uint64_t frame, SourceLocation loc = {}) {
-			return upstream->allocate_cpu(bytes, frame, alignment, loc);
+
+	struct CPUResource {
+		virtual void* allocate(size_t bytes, size_t alignment, SourceLocationAtFrame loc) = 0;
+		//virtual void allocate_at_least(size_t bytes, size_t alignment, SourceLocationAtFrame loc) = 0;
+		virtual void deallocate(void* ptr, size_t bytes, size_t alignment) = 0;
+	};
+
+	struct CPUResourceNested : CPUResource {
+		virtual void* allocate(size_t bytes, size_t alignment, SourceLocationAtFrame loc) {
+			return upstream->allocate(bytes, alignment, loc);
 		}
-		virtual void deallocate_cpu(void* ptr, size_t bytes, size_t alignment) {
-			return upstream->deallocate_cpu(ptr, bytes, alignment);
+		virtual void deallocate(void* ptr, size_t bytes, size_t alignment) {
+			return upstream->deallocate(ptr, bytes, alignment);
 		}
 
-		CPUResorce* upstream = nullptr;
-	};*/
+		CPUResource* upstream = nullptr;
+	};
+
+	struct gvoid;
+
+	struct GPUResource {
+		virtual Result<gvoid*, AllocateException> allocate(size_t bytes, size_t alignment, SourceLocationAtFrame loc) = 0;
+		virtual void deallocate(gvoid*) = 0;
+	};
 
 	struct VkResource {
 		virtual Result<void, AllocateException> allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) = 0;
 		virtual void deallocate_semaphores(std::span<const VkSemaphore> sema) = 0;
+
+		virtual Result<void, AllocateException> allocate_fences(std::span<VkFence> dst, SourceLocationAtFrame loc) = 0;
+		virtual void deallocate_fences(std::span<const VkFence> dst) = 0;
 	};
 
 	struct VkResourceNested : VkResource {
 		VkResourceNested(VkResource* upstream) : upstream(upstream) {}
 
-		virtual Result<void, AllocateException> allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) { return upstream->allocate_semaphores(dst, loc); }
-		virtual void deallocate_semaphores(std::span<const VkSemaphore> sema) { upstream->deallocate_semaphores(sema); }
+		Result<void, AllocateException> allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) override { return upstream->allocate_semaphores(dst, loc); }
+		void deallocate_semaphores(std::span<const VkSemaphore> sema) override { upstream->deallocate_semaphores(sema); }
 
-		/*virtual uint64_t allocate_gpu() {
-
-		}*/
+		Result<void, AllocateException> allocate_fences(std::span<VkFence> dst, SourceLocationAtFrame loc) override { return upstream->allocate_fences(dst, loc); }
+		void deallocate_fences(std::span<const VkFence> dst) override { upstream->deallocate_fences(dst); }
 
 		//virtual VkCommandBuffer allocate_command_buffer(VkCommandBufferLevel, uint32_t queue_family_index, uint64_t frame, SourceLocation loc);
 		/*virtual ImageView allocate_image_view(const ImageViewCreateInfo& info, uint64_t frame, SourceLocation loc) { return upstream->allocate_image_view(info, frame, loc); }
@@ -69,7 +125,7 @@ namespace vuk {
 
 		/*
 		virtual Result<void, AllocateException> allocate_timeline_semaphore(uint64_t initial_value, uint64_t frame, SourceLocation loc) { return upstream->allocate_timeline_semaphore(initial_value, frame, loc); }
-		virtual Result<void, AllocateException> allocate_fence(uint64_t frame, SourceLocation loc) { return upstream->allocate_fence(frame, loc); }
+		 }
 
 		virtual void deallocate_image_view(ImageView iv) { upstream->deallocate_image_view(iv); }
 		virtual void deallocate_sampler(Sampler samp) { upstream->deallocate_sampler(samp); }
@@ -80,18 +136,15 @@ namespace vuk {
 		VkResource* upstream = nullptr;
 	};
 
-	struct Global : VkResource {
-		Global(Context& ctx) : device(ctx.device) {}
+	struct Direct final : VkResource {
+		Direct(VkDevice device) : device(device) {}
 
 		Result<void, AllocateException> allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) override {
 			VkSemaphoreCreateInfo sci{ .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
 			for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
 				VkResult res = vkCreateSemaphore(device, &sci, nullptr, &dst[i]);
 				if (res != VK_SUCCESS) {
-					// release resources that we already allocated to not leak
-					for (i--; i >= 0; i--) {
-						vkDestroySemaphore(device, dst[i], nullptr);
-					}
+					deallocate_semaphores({ dst.data(), (uint64_t)i });
 					return { expected_error, AllocateException{res} };
 				}
 			}
@@ -100,17 +153,105 @@ namespace vuk {
 
 		void deallocate_semaphores(std::span<const VkSemaphore> src) override {
 			for (auto& v : src) {
-				vkDestroySemaphore(device, v, nullptr);
+				if (v != VK_NULL_HANDLE) {
+					vkDestroySemaphore(device, v, nullptr);
+				}
+			}
+		}
+
+		Result<void, AllocateException> allocate_fences(std::span<VkFence> dst, SourceLocationAtFrame loc) override {
+			VkFenceCreateInfo sci{ .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
+			for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
+				VkResult res = vkCreateFence(device, &sci, nullptr, &dst[i]);
+				if (res != VK_SUCCESS) {
+					deallocate_fences({ dst.data(), (uint64_t)i });
+					return { expected_error, AllocateException{res} };
+				}
+			}
+			return { expected_value };
+		}
+
+		void deallocate_fences(std::span<const VkFence> src) override {
+			for (auto& v : src) {
+				if (v != VK_NULL_HANDLE) {
+					vkDestroyFence(device, v, nullptr);
+				}
 			}
 		}
 
 		VkDevice device;
 	};
 
-	struct NLinear : VkResourceNested {
-		using VkResourceNested::VkResourceNested;
+	/// @brief Global is an allocator that defers deallocations based on frames-in-flight & waits on fences
+	struct Global : VkResource {
+		Global(VkDevice device, uint64_t frames_in_flight) : direct(device), frames_in_flight(frames_in_flight) {
+			semaphores_deferred.resize(frames_in_flight);
+			fences_deferred.resize(frames_in_flight);
+		}
 
+		std::vector<std::vector<VkSemaphore>> semaphores_deferred;
+
+		Result<void, AllocateException> allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) override {
+			return direct.allocate_semaphores(dst, loc);
+		}
+
+		void deallocate_semaphores(std::span<const VkSemaphore> src) override {
+			auto& vec = semaphores_deferred[local_frame];
+			vec.insert(vec.end(), src.begin(), src.end());
+		}
+
+		std::vector<std::vector<VkFence>> fences_deferred;
+
+		Result<void, AllocateException> allocate_fences(std::span<VkFence> dst, SourceLocationAtFrame loc) override {
+			return direct.allocate_fences(dst, loc);
+		}
+
+		void deallocate_fences(std::span<const VkFence> src) override {
+			auto& vec = fences_deferred[local_frame];
+			vec.insert(vec.end(), src.begin(), src.end());
+		}
+
+		void wait_for_fences(uint64_t frame) {
+			auto& fences = fences_deferred[frame];
+			if (fences.size() > 0) {
+				vkWaitForFences(direct.device, (uint32_t)fences.size(), fences.data(), true, UINT64_MAX);
+			}
+		}
+
+		void next_frame() {
+			frame_counter++;
+			local_frame = frame_counter % frames_in_flight;
+
+			wait_for_fences(local_frame);
+
+			direct.deallocate_fences(fences_deferred[local_frame]);
+			fences_deferred[local_frame].clear();
+
+			direct.deallocate_semaphores(semaphores_deferred[local_frame]);
+			semaphores_deferred[local_frame].clear();
+		}
+
+		virtual ~Global() {
+			for (auto i = 0; i < frames_in_flight; i++) {
+				auto frame = (frame_counter + i) % frames_in_flight;
+				wait_for_fences(frame);
+				direct.deallocate_fences(fences_deferred[frame]);
+				direct.deallocate_semaphores(semaphores_deferred[frame]);
+			}
+		}
+
+		Direct direct;
+		std::atomic<uint64_t> frame_counter;
+		std::atomic<uint64_t> local_frame;
+		const uint64_t frames_in_flight;
+	};
+
+	struct NLinear : VkResourceNested {
+		NLinear(VkDevice device, VkResource& upstream) : device(device), VkResourceNested(&upstream) {}
+
+		bool should_subsume = false;
 		std::vector<VkSemaphore> semaphores;
+		std::vector<VkFence> fences;
 
 		Result<void, AllocateException> allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) override {
 			auto result = upstream->allocate_semaphores(dst, loc);
@@ -120,10 +261,37 @@ namespace vuk {
 
 		void deallocate_semaphores(std::span<const VkSemaphore>) override {} // linear allocator, noop
 
+		Result<void, AllocateException> allocate_fences(std::span<VkFence> dst, SourceLocationAtFrame loc) override {
+			auto result = upstream->allocate_fences(dst, loc);
+			fences.insert(fences.end(), dst.begin(), dst.end());
+			return result;
+		}
+
+		void deallocate_fences(std::span<const VkFence>) override {} // linear allocator, noop
+
+		void subsume() && {
+			should_subsume = true;
+		}
+
 		~NLinear() {
+			if (!should_subsume) {
+				if (fences.size() > 0) {
+					vkWaitForFences(device, (uint32_t)fences.size(), fences.data(), true, UINT64_MAX);
+				}
+			}
+			upstream->deallocate_fences(fences);
 			upstream->deallocate_semaphores(semaphores);
 		}
+
+		VkDevice device;
 	};
+
+	template <class ContainerType>
+	concept Container = requires(ContainerType a) {
+		std::begin(a);
+		std::end(a);
+	};
+
 
 	struct NAllocator {
 		explicit NAllocator(VkResource& mr) : mr(&mr) {}
@@ -132,10 +300,125 @@ namespace vuk {
 			return mr->allocate_semaphores(dst, loc);
 		}
 
-		void deallocate_semaphores(std::span<const VkSemaphore> src) {
+		void deallocate_impl(std::span<const VkSemaphore> src) {
 			mr->deallocate_semaphores(src);
+		}
+
+		Result<void, AllocateException> allocate_fences(std::span<VkFence> dst, SourceLocationAtFrame loc) {
+			return mr->allocate_fences(dst, loc);
+		}
+
+		void deallocate_impl(std::span<const VkFence> src) {
+			mr->deallocate_fences(src);
+		}
+
+		template<class T, size_t N>
+		void deallocate(T(&src)[N]) {
+			deallocate_impl(std::span<const T>{ src, N });
+		}
+
+		template<class T>
+		void deallocate(const T& src) requires (!Container<T>) {
+			deallocate_impl(std::span<const T>{ &src, 1 });
+		}
+
+		template<class T>
+		void deallocate(const T& src) requires (Container<T>) {
+			deallocate_impl(std::span(src));
 		}
 
 		VkResource* mr;
 	};
+
+	template <typename Type>
+	class NUnique {
+		NAllocator* allocator;
+		Type payload;
+	public:
+		using element_type = Type;
+
+		explicit NUnique(NAllocator& allocator) : allocator(&allocator), payload{} {}
+		explicit NUnique(NAllocator& allocator, Type payload) : allocator(&allocator), payload(std::move(payload)) {}
+		NUnique(NUnique const&) = delete;
+
+		NUnique(NUnique&& other) noexcept : allocator(other.allocator), payload(other.release()) {}
+
+		~NUnique() noexcept {
+			if (allocator) {
+				allocator->deallocate(payload);
+			}
+		}
+
+		NUnique& operator=(NUnique const&) = delete;
+
+		NUnique& operator=(NUnique&& other) noexcept {
+			auto tmp = other.allocator;
+			reset(other.release());
+			allocator = tmp;
+			return *this;
+		}
+
+		explicit operator bool() const noexcept {
+			return payload.operator bool();
+		}
+
+		Type const* operator->() const noexcept {
+			return &payload;
+		}
+
+		Type* operator->() noexcept {
+			return &payload;
+		}
+
+		Type const& operator*() const noexcept {
+			return payload;
+		}
+
+		Type& operator*() noexcept {
+			return payload;
+		}
+
+		const Type& get() const noexcept {
+			return payload;
+		}
+
+		Type& get() noexcept {
+			return payload;
+		}
+
+		void reset(Type value = Type()) noexcept {
+			if (payload != value) {
+				if (allocator && payload != Type{}) {
+					allocator->deallocate(std::move(payload));
+				}
+				payload = std::move(value);
+			}
+		}
+
+		Type release() noexcept {
+			allocator = nullptr;
+			return std::move(payload);
+		}
+
+		void swap(NUnique<Type>& rhs) noexcept {
+			std::swap(payload, rhs.payload);
+			std::swap(allocator, rhs.allocator);
+		}
+	};
+
+	template <typename Type>
+	inline void swap(NUnique<Type>& lhs, NUnique<Type>& rhs) noexcept {
+		lhs.swap(rhs);
+	}
+
+	template<class T>
+	vuk::Result<vuk::NUnique<T>, vuk::AllocateException> allocate_unique_semaphores(vuk::NAllocator allocator, vuk::SourceLocationAtFrame loc) {
+		vuk::NUnique<T> semas(allocator);
+		if (auto res = allocator.allocate_semaphores(*semas, loc); !res) {
+			return { vuk::expected_error, res.error() };
+		}
+		return { vuk::expected_value, semas };
+	}
+
+#define VUK_DO_OR_RETURN(what) if(auto res = what; !res){ return { expected_error, res.error() }; }
 }
