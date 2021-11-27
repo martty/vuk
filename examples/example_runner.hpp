@@ -34,7 +34,7 @@ namespace vuk {
 		VkQueue graphics_queue;
 		std::optional<Context> context;
 		std::optional<Direct> direct_alloc;
-		std::optional<Global> global_alloc;
+		std::optional<RingFrame> global_alloc;
 		vuk::SwapchainRef swapchain;
 		GLFWwindow* window;
 		VkSurfaceKHR surface;

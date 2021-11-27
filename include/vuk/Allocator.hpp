@@ -182,61 +182,81 @@ namespace vuk {
 		VkDevice device;
 	};
 
-	/// @brief Global is an allocator that defers deallocations based on frames-in-flight & waits on fences
-	struct Global : VkResource {
-		Global(VkDevice device, uint64_t frames_in_flight) : direct(device), frames_in_flight(frames_in_flight) {
-			semaphores_deferred.resize(frames_in_flight);
-			fences_deferred.resize(frames_in_flight);
+
+	struct RingFrame;
+
+	struct FrameResource : VkResourceNested {
+		FrameResource(VkDevice device, RingFrame& upstream);
+
+		std::vector<VkFence> fences;
+		std::vector<VkSemaphore> semaphores;
+
+		void deallocate_semaphores(std::span<const VkSemaphore> src) override {
+			auto& vec = semaphores;
+			vec.insert(vec.end(), src.begin(), src.end());
 		}
 
-		std::vector<std::vector<VkSemaphore>> semaphores_deferred;
+		void deallocate_fences(std::span<const VkFence> src) override {
+			auto& vec = fences;
+			vec.insert(vec.end(), src.begin(), src.end());
+		}
+
+		void wait() {
+			if (fences.size() > 0) {
+				vkWaitForFences(device, (uint32_t)fences.size(), fences.data(), true, UINT64_MAX);
+			}
+		}
+
+		VkDevice device;
+	};
+
+	/// @brief RingFrame is an allocator that gives out Frame allocators, and manages their resources
+	struct RingFrame : VkResource {
+		RingFrame(VkDevice device, uint64_t frames_in_flight) : direct(device), frames_in_flight(frames_in_flight) {
+			frames.resize(frames_in_flight, FrameResource{device, *this});
+		}
+
+		std::vector<FrameResource> frames;
 
 		Result<void, AllocateException> allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) override {
 			return direct.allocate_semaphores(dst, loc);
 		}
 
 		void deallocate_semaphores(std::span<const VkSemaphore> src) override {
-			auto& vec = semaphores_deferred[local_frame];
-			vec.insert(vec.end(), src.begin(), src.end());
+			direct.deallocate_semaphores(src);
 		}
-
-		std::vector<std::vector<VkFence>> fences_deferred;
 
 		Result<void, AllocateException> allocate_fences(std::span<VkFence> dst, SourceLocationAtFrame loc) override {
 			return direct.allocate_fences(dst, loc);
 		}
 
 		void deallocate_fences(std::span<const VkFence> src) override {
-			auto& vec = fences_deferred[local_frame];
-			vec.insert(vec.end(), src.begin(), src.end());
+			direct.deallocate_fences(src);
 		}
 
-		void wait_for_fences(uint64_t frame) {
-			auto& fences = fences_deferred[frame];
-			if (fences.size() > 0) {
-				vkWaitForFences(direct.device, (uint32_t)fences.size(), fences.data(), true, UINT64_MAX);
-			}
-		}
-
-		void next_frame() {
+		FrameResource& get_next_frame() {
 			frame_counter++;
 			local_frame = frame_counter % frames_in_flight;
 
-			wait_for_fences(local_frame);
+			auto& f = frames[local_frame];
+			f.wait();
 
-			direct.deallocate_fences(fences_deferred[local_frame]);
-			fences_deferred[local_frame].clear();
+			direct.deallocate_fences(f.fences);
+			f.fences.clear();
 
-			direct.deallocate_semaphores(semaphores_deferred[local_frame]);
-			semaphores_deferred[local_frame].clear();
+			direct.deallocate_semaphores(f.semaphores);
+			f.semaphores.clear();
+
+			return f;
 		}
 
-		virtual ~Global() {
+		virtual ~RingFrame() {
 			for (auto i = 0; i < frames_in_flight; i++) {
-				auto frame = (frame_counter + i) % frames_in_flight;
-				wait_for_fences(frame);
-				direct.deallocate_fences(fences_deferred[frame]);
-				direct.deallocate_semaphores(semaphores_deferred[frame]);
+				auto lframe = (frame_counter + i) % frames_in_flight;
+				auto& frame = frames[lframe];
+				frame.wait();
+				direct.deallocate_fences(frame.fences);
+				direct.deallocate_semaphores(frame.semaphores);
 			}
 		}
 
@@ -245,6 +265,10 @@ namespace vuk {
 		std::atomic<uint64_t> local_frame;
 		const uint64_t frames_in_flight;
 	};
+
+	
+	inline FrameResource::FrameResource(VkDevice device, RingFrame& upstream) : device(device), VkResourceNested(&upstream) {}
+
 
 	struct NLinear : VkResourceNested {
 		NLinear(VkDevice device, VkResource& upstream) : device(device), VkResourceNested(&upstream) {}
@@ -273,11 +297,15 @@ namespace vuk {
 			should_subsume = true;
 		}
 
+		void wait() {
+			if (fences.size() > 0) {
+				vkWaitForFences(device, (uint32_t)fences.size(), fences.data(), true, UINT64_MAX);
+			}
+		}
+
 		~NLinear() {
 			if (!should_subsume) {
-				if (fences.size() > 0) {
-					vkWaitForFences(device, (uint32_t)fences.size(), fences.data(), true, UINT64_MAX);
-				}
+				wait();
 			}
 			upstream->deallocate_fences(fences);
 			upstream->deallocate_semaphores(semaphores);

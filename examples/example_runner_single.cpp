@@ -63,14 +63,14 @@ vuk::ExampleRunner::ExampleRunner() {
 void vuk::ExampleRunner::render() {
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
-		global_alloc->next_frame();
+		auto& fa = global_alloc->get_next_frame();
 		auto ifc = context->begin();
 		auto rg = examples[0]->render(*this, ifc);
 		auto attachment_name = vuk::Name(std::string(examples[0]->name) + "_final");
 		rg.attach_swapchain(attachment_name, swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
 		auto ptc = ifc.begin();
 		auto erg = std::move(rg).link(ptc, vuk::RenderGraph::CompileOptions{});
-		vuk::NLinear nl(context->device, *global_alloc);
+		vuk::NLinear nl(context->device, fa);
 		execute_submit_and_present_to_one(ptc, NAllocator(nl), std::move(erg), swapchain);
 	}
 }
