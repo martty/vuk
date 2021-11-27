@@ -20,7 +20,7 @@ void vuk::PerThreadContext::destroy(vuk::ImageView image) {
 
 void vuk::PerThreadContext::destroy(vuk::DescriptorSet ds) {
 	// note that since we collect at integer times FC, we are releasing the DS back to the right pool
-	impl->pool_cache.acquire(ds.layout_info).free_sets.enqueue(ds.descriptor_set);
+	ctx.impl->pool_cache.acquire(ds.layout_info, ifc.absolute_frame).free_sets.enqueue(ds.descriptor_set);
 }
 
 vuk::Unique<vuk::PersistentDescriptorSet> vuk::PerThreadContext::create_persistent_descriptorset(DescriptorSetLayoutCreateInfo dslci,
@@ -33,7 +33,7 @@ vuk::Unique<vuk::PersistentDescriptorSet> vuk::PerThreadContext::create_persiste
 		dslbfci.pBindingFlags = dslci.flags.data();
 		dslci.dslci.pNext = &dslbfci;
 	}
-	auto& dslai = ctx.impl->descriptor_set_layouts.acquire(dslci);
+	auto& dslai = ctx.impl->descriptor_set_layouts.acquire(dslci, ifc.absolute_frame);
 	return create_persistent_descriptorset(dslai, num_descriptors);
 }
 
@@ -210,7 +210,7 @@ vuk::SampledImage& vuk::PerThreadContext::make_sampled_image(Name n, vuk::ImageV
 }
 
 vuk::DescriptorSet vuk::PerThreadContext::create(const create_info_t<vuk::DescriptorSet>& cinfo) {
-	auto& pool = impl->pool_cache.acquire(cinfo.layout_info);
+	auto& pool = ctx.impl->pool_cache.acquire(cinfo.layout_info, ifc.absolute_frame);
 	auto ds = pool.acquire(*this, cinfo.layout_info);
 	auto mask = cinfo.used.to_ulong();
 	uint32_t leading_ones = num_leading_ones(mask);
@@ -252,36 +252,28 @@ vuk::LinearAllocator vuk::PerThreadContext::create(const create_info_t<vuk::Line
 	return ctx.impl->allocator.allocate_linear(cinfo.mem_usage, cinfo.buffer_usage);
 }
 
-vuk::RGImage vuk::PerThreadContext::create(const create_info_t<vuk::RGImage>& cinfo) {
+vuk::RGImage vuk::Context::create(const create_info_t<vuk::RGImage>& cinfo) {
 	RGImage res{};
-	res.image = ctx.impl->allocator.create_image_for_rendertarget(cinfo.ici);
+	res.image = impl->allocator.create_image_for_rendertarget(cinfo.ici);
 	auto ivci = cinfo.ivci;
 	ivci.image = res.image;
 	std::string name = std::string("Image: RenderTarget ") + std::string(cinfo.name.to_sv());
-	ctx.debug.set_name(res.image, Name(name));
+	debug.set_name(res.image, Name(name));
 	name = std::string("ImageView: RenderTarget ") + std::string(cinfo.name.to_sv());
 	// skip creating image views for images that can't be viewed
 	if (cinfo.ici.usage & (vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eDepthStencilAttachment | vuk::ImageUsageFlagBits::eInputAttachment | vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage)) {
 		VkImageView iv;
-		vkCreateImageView(ctx.device, (VkImageViewCreateInfo*)&ivci, nullptr, &iv);
-		res.image_view = ctx.wrap(iv, ivci);
-		ctx.debug.set_name(res.image_view.payload, Name(name));
+		vkCreateImageView(device, (VkImageViewCreateInfo*)&ivci, nullptr, &iv);
+		res.image_view = wrap(iv, ivci);
+		debug.set_name(res.image_view.payload, Name(name));
 	}
 	return res;
 }
 
-VkRenderPass vuk::PerThreadContext::create(const create_info_t<VkRenderPass>& cinfo) {
+VkRenderPass vuk::Context::create(const create_info_t<VkRenderPass>& cinfo) {
 	VkRenderPass rp;
-	vkCreateRenderPass(ctx.device, &cinfo, nullptr, &rp);
+	vkCreateRenderPass(device, &cinfo, nullptr, &rp);
 	return rp;
-}
-
-vuk::ShaderModule vuk::PerThreadContext::create(const create_info_t<vuk::ShaderModule>& cinfo) {
-	return ctx.create(cinfo);
-}
-
-vuk::PipelineBaseInfo vuk::PerThreadContext::create(const create_info_t<PipelineBaseInfo>& cinfo) {
-	return ctx.create(cinfo);
 }
 
 template<class T>
@@ -292,7 +284,7 @@ T read(const std::byte*& data_ptr) {
 	return t;
 };
 
-vuk::PipelineInfo vuk::PerThreadContext::create(const create_info_t<PipelineInfo>& cinfo) {
+vuk::PipelineInfo vuk::Context::create(const create_info_t<PipelineInfo>& cinfo) {
 	// create gfx pipeline
 	VkGraphicsPipelineCreateInfo gpci{ .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
 	gpci.renderPass = cinfo.render_pass;
@@ -555,61 +547,49 @@ vuk::PipelineInfo vuk::PerThreadContext::create(const create_info_t<PipelineInfo
 	gpci.pDynamicState = &dynamic_state;
 
 	VkPipeline pipeline;
-	VkResult res = vkCreateGraphicsPipelines(ctx.device, ctx.impl->vk_pipeline_cache, 1, &gpci, nullptr, &pipeline);
+	VkResult res = vkCreateGraphicsPipelines(device, impl->vk_pipeline_cache, 1, &gpci, nullptr, &pipeline);
 	assert(res == VK_SUCCESS);
-	ctx.debug.set_name(pipeline, cinfo.base->pipeline_name);
+	debug.set_name(pipeline, cinfo.base->pipeline_name);
 	return { pipeline, gpci.layout, cinfo.base->layout_info };
 }
 
-vuk::ComputePipelineBaseInfo vuk::PerThreadContext::create(const create_info_t<ComputePipelineBaseInfo>& cinfo) {
-	return ctx.create(cinfo);
-}
-
-vuk::ComputePipelineInfo vuk::PerThreadContext::create(const create_info_t<ComputePipelineInfo>& cinfo) {
+vuk::ComputePipelineInfo vuk::Context::create(const create_info_t<ComputePipelineInfo>& cinfo) {
 	// create compute pipeline
 	VkComputePipelineCreateInfo cpci{ .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO };
 	cpci.layout = cinfo.base->pipeline_layout;
 	cpci.stage = cinfo.base->pssci;
 
 	VkPipeline pipeline;
-	VkResult res = vkCreateComputePipelines(ctx.device, ctx.impl->vk_pipeline_cache, 1, &cpci, nullptr, &pipeline);
+	VkResult res = vkCreateComputePipelines(device, impl->vk_pipeline_cache, 1, &cpci, nullptr, &pipeline);
 	assert(res == VK_SUCCESS);
-	ctx.debug.set_name(pipeline, cinfo.base->pipeline_name);
+	debug.set_name(pipeline, cinfo.base->pipeline_name);
 	return { pipeline, cpci.layout, cinfo.base->layout_info, cinfo.base->reflection_info.local_size };
 }
 
 
-vuk::Unique<VkFramebuffer> vuk::PerThreadContext::create(const create_info_t<VkFramebuffer>& cinfo) {
+vuk::Unique<VkFramebuffer> vuk::Context::create(const create_info_t<VkFramebuffer>& cinfo) {
 	VkFramebuffer fb;
-	vkCreateFramebuffer(ctx.device, &cinfo, nullptr, &fb);
-	return vuk::Unique(ctx, fb);
+	vkCreateFramebuffer(device, &cinfo, nullptr, &fb);
+	return vuk::Unique(*this, fb);
 }
 
-vuk::Sampler vuk::PerThreadContext::create(const create_info_t<vuk::Sampler>& cinfo) {
+vuk::Sampler vuk::Context::create(const create_info_t<vuk::Sampler>& cinfo) {
 	VkSampler s;
-	vkCreateSampler(ctx.device, (VkSamplerCreateInfo*)&cinfo, nullptr, &s);
-	return ctx.wrap(s);
+	vkCreateSampler(device, (VkSamplerCreateInfo*)&cinfo, nullptr, &s);
+	return wrap(s);
 }
 
-vuk::DescriptorSetLayoutAllocInfo vuk::PerThreadContext::create(const create_info_t<vuk::DescriptorSetLayoutAllocInfo>& cinfo) {
-	return ctx.create(cinfo);
-}
-
-VkPipelineLayout vuk::PerThreadContext::create(const create_info_t<VkPipelineLayout>& cinfo) {
-	return ctx.create(cinfo);
-}
-
-vuk::DescriptorPool vuk::PerThreadContext::create(const create_info_t<vuk::DescriptorPool>& cinfo) {
+vuk::DescriptorPool vuk::Context::create(const create_info_t<vuk::DescriptorPool>& cinfo) {
 	return vuk::DescriptorPool{};
 }
 
 vuk::Program vuk::PerThreadContext::get_pipeline_reflection_info(const vuk::PipelineBaseCreateInfo& pci) {
-	auto& res = impl->pipelinebase_cache.acquire(pci);
+	auto& res = ctx.impl->pipelinebase_cache.acquire(pci, ifc.absolute_frame);
 	return res.reflection_info;
 }
 
 vuk::Program vuk::PerThreadContext::get_pipeline_reflection_info(const vuk::ComputePipelineBaseCreateInfo& pci) {
-	auto& res = impl->compute_pipelinebase_cache.acquire(pci);
+	auto& res = ctx.impl->compute_pipelinebase_cache.acquire(pci, ifc.absolute_frame);
 	return res.reflection_info;
 }
 
@@ -633,15 +613,15 @@ VkSemaphore vuk::PerThreadContext::acquire_semaphore() {
 }
 
 VkRenderPass vuk::PerThreadContext::acquire_renderpass(const vuk::RenderPassCreateInfo& rpci) {
-	return impl->renderpass_cache.acquire(rpci);
+	return ctx.impl->renderpass_cache.acquire(rpci, ifc.absolute_frame);
 }
 
-vuk::RGImage vuk::PerThreadContext::acquire_rendertarget(const vuk::RGCI& rgci) {
-	return impl->transient_images.acquire(rgci);
+vuk::RGImage vuk::Context::acquire_rendertarget(const vuk::RGCI& rgci, uint64_t absolute_frame) {
+	return impl->transient_images.acquire(rgci, absolute_frame);
 }
 
 vuk::Sampler vuk::PerThreadContext::acquire_sampler(const vuk::SamplerCreateInfo& sci) {
-	return impl->sampler_cache.acquire(sci);
+	return ctx.impl->sampler_cache.acquire(sci, ifc.absolute_frame);
 }
 
 vuk::DescriptorSet vuk::PerThreadContext::acquire_descriptorset(const vuk::SetBinding& sb) {
@@ -649,11 +629,11 @@ vuk::DescriptorSet vuk::PerThreadContext::acquire_descriptorset(const vuk::SetBi
 }
 
 vuk::PipelineInfo vuk::PerThreadContext::acquire_pipeline(const vuk::PipelineInstanceCreateInfo& pici) {
-	return impl->pipeline_cache.acquire(pici);
+	return ctx.impl->pipeline_cache.acquire(pici, ifc.absolute_frame);
 }
 
 vuk::ComputePipelineInfo vuk::PerThreadContext::acquire_pipeline(const vuk::ComputePipelineInstanceCreateInfo& pici) {
-	return impl->compute_pipeline_cache.acquire(pici);
+	return ctx.impl->compute_pipeline_cache.acquire(pici, ifc.absolute_frame);
 }
 
 const plf::colony<vuk::SampledImage>& vuk::PerThreadContext::get_sampled_images() {

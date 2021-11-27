@@ -21,7 +21,7 @@ auto [present_rdy, render_complete] = *semas.value();
 
 namespace vuk {
 
-	Result<void> execute_submit_and_present_to_one(PerThreadContext& ptc, NAllocator allocator, ExecutableRenderGraph&& rg, SwapchainRef swapchain) {
+	Result<void> execute_submit_and_present_to_one(PerThreadContext& ptc, NAllocator& allocator, ExecutableRenderGraph&& rg, SwapchainRef swapchain) {
 		NUnique<std::array<VkSemaphore, 2>> semas(allocator);
 		VUK_DO_OR_RETURN(allocator.allocate_semaphores(*semas, VUK_HERE_AND_NOW()));
 		auto [present_rdy, render_complete] = *semas;
@@ -42,11 +42,15 @@ namespace vuk {
 
 		std::vector<std::pair<SwapChainRef, size_t>> swapchains_with_indexes = { { swapchain, image_index } };
 
-		auto cb = rg.execute(ptc, swapchains_with_indexes);
+		auto cb = rg.execute(ptc, allocator, swapchains_with_indexes);
+		if (!cb) {
+			return { expected_error, cb.error() };
+		}
+		auto& hl_cbuf = *cb;
 
 		VkSubmitInfo si{ .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO };
 		si.commandBufferCount = 1;
-		si.pCommandBuffers = &cb;
+		si.pCommandBuffers = &hl_cbuf->command_buffer;
 		si.pSignalSemaphores = &render_complete;
 		si.signalSemaphoreCount = 1;
 		si.waitSemaphoreCount = 1;
@@ -73,18 +77,20 @@ namespace vuk {
 		}
 	}
 
-	Result<void> execute_submit_and_wait(PerThreadContext& ptc, NAllocator allocator, ExecutableRenderGraph&& rg) {
-		auto cbuf = rg.execute(ptc, {});
-		// get an unpooled fence
+	Result<void> execute_submit_and_wait(PerThreadContext& ptc, NAllocator& allocator, ExecutableRenderGraph&& rg) {
+		auto cb = rg.execute(ptc, allocator, {});
+		if (!cb) {
+			return { expected_error, cb.error() };
+		}
+		auto& hl_cbuf = *cb;
 		NUnique<VkFence> fence(allocator);
 		VUK_DO_OR_RETURN(allocator.allocate_fences({ &*fence, 1 }, VUK_HERE_AND_NOW()));
-		VkSubmitInfo si{
-		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO
-		};
+		VkSubmitInfo si{ .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO };
 		si.commandBufferCount = 1;
-		si.pCommandBuffers = &cbuf;
+		si.pCommandBuffers = &hl_cbuf->command_buffer;
 
 		ptc.ctx.submit_graphics(si, *fence);
 		vkWaitForFences(ptc.ctx.device, 1, &*fence, VK_TRUE, UINT64_MAX);
+		return { expected_value };
 	}
 }

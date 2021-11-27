@@ -12,32 +12,30 @@ namespace vuk {
 	}
 
 	template<class T>
-	T& Cache<T>::PFPTView::acquire(const create_info_t<T>& ci) {
-		auto& cache = view.cache;
-		std::shared_lock _(cache.cache_mtx);
-		if (auto it = cache.lru_map.find(ci); it != cache.lru_map.end()) {
-			it->second.last_use_frame = ptc.ifc.absolute_frame;
+	T& Cache<T>::acquire(const create_info_t<T>& ci, uint64_t current_frame) {
+		std::shared_lock _(cache_mtx);
+		if (auto it = lru_map.find(ci); it != lru_map.end()) {
+			it->second.last_use_frame = current_frame;
 			return *it->second.ptr;
 		} else {
 			_.unlock();
-			std::unique_lock ulock(cache.cache_mtx);
-			auto pit = cache.pool.emplace(ptc.create(ci));
-			typename Cache::LRUEntry entry{ &*pit, ptc.ifc.absolute_frame };
-			it = cache.lru_map.emplace(ci, entry).first;
+			std::unique_lock ulock(cache_mtx);
+			auto pit = pool.emplace(ctx.create(ci));
+			typename Cache::LRUEntry entry{ &*pit, current_frame };
+			it = lru_map.emplace(ci, entry).first;
 			return *it->second.ptr;
 		}
 	}
 
 	template<class T>
-	void Cache<T>::PFPTView::collect(size_t threshold) {
-		auto& cache = view.cache;
-		std::unique_lock _(cache.cache_mtx);
-		for (auto it = cache.lru_map.begin(); it != cache.lru_map.end();) {
+	void Cache<T>::collect(uint64_t current_frame, size_t threshold) {
+		std::unique_lock _(cache_mtx);
+		for (auto it = lru_map.begin(); it != lru_map.end();) {
 			auto last_use_frame = it->second.last_use_frame;
-			if ((int64_t)ptc.ifc.absolute_frame - (int64_t)last_use_frame > (int64_t)threshold) {
-				ptc.destroy(*it->second.ptr);
-				cache.pool.erase(cache.pool.get_iterator_from_pointer(it->second.ptr));
-				it = cache.lru_map.erase(it);
+			if ((int64_t)current_frame - (int64_t)last_use_frame > (int64_t)threshold) {
+				ctx.destroy(*it->second.ptr);
+				pool.erase(pool.get_iterator_from_pointer(it->second.ptr));
+				it = lru_map.erase(it);
 			} else {
 				++it;
 			}
@@ -121,40 +119,38 @@ namespace vuk {
 	}
 	// unfortunately, we need to manage extended_data lifetime here
 	template<>
-	PipelineInfo& Cache<PipelineInfo>::PFPTView::acquire(const create_info_t<PipelineInfo>& ci) {
-		auto& cache = view.cache;
-		std::shared_lock _(cache.cache_mtx);
-		if (auto it = cache.lru_map.find(ci); it != cache.lru_map.end()) {
-			it->second.last_use_frame = ptc.ifc.absolute_frame;
+	PipelineInfo& Cache<PipelineInfo>::acquire(const create_info_t<PipelineInfo>& ci, uint64_t current_frame) {
+		std::shared_lock _(cache_mtx);
+		if (auto it = lru_map.find(ci); it != lru_map.end()) {
+			it->second.last_use_frame = current_frame;
 			return *it->second.ptr;
 		} else {
 			_.unlock();
-			std::unique_lock ulock(cache.cache_mtx);
+			std::unique_lock ulock(cache_mtx);
 			auto ci_copy = ci;
 			if (!ci_copy.is_inline()) {
 				ci_copy.extended_data = new std::byte[ci_copy.extended_size];
 				memcpy(ci_copy.extended_data, ci.extended_data, ci_copy.extended_size);
 			}
-			auto pit = cache.pool.emplace(ptc.create(ci_copy));
-			typename Cache::LRUEntry entry{ &*pit, ptc.ifc.absolute_frame };
-			it = cache.lru_map.emplace(ci_copy, entry).first;
+			auto pit = pool.emplace(ctx.create(ci_copy));
+			typename Cache::LRUEntry entry{ &*pit, current_frame };
+			it = lru_map.emplace(ci_copy, entry).first;
 			return *it->second.ptr;
 		}
 	}
 
 	template<>
-	void Cache<PipelineInfo>::PFPTView::collect(size_t threshold) {
-		auto& cache = view.cache;
-		std::unique_lock _(cache.cache_mtx);
-		for (auto it = cache.lru_map.begin(); it != cache.lru_map.end();) {
+	void Cache<PipelineInfo>::collect(uint64_t current_frame, size_t threshold) {
+		std::unique_lock _(cache_mtx);
+		for (auto it = lru_map.begin(); it != lru_map.end();) {
 			auto last_use_frame = it->second.last_use_frame;
-			if ((int64_t)ptc.ifc.absolute_frame - (int64_t)last_use_frame > (int64_t)threshold) {
-				ptc.destroy(*it->second.ptr);
+			if ((int64_t)current_frame - (int64_t)last_use_frame > (int64_t)threshold) {
+				ctx.destroy(*it->second.ptr);
 				if (!it->first.is_inline()) {
 					delete it->first.extended_data;
 				}
-				cache.pool.erase(cache.pool.get_iterator_from_pointer(it->second.ptr));
-				it = cache.lru_map.erase(it);
+				pool.erase(pool.get_iterator_from_pointer(it->second.ptr));
+				it = lru_map.erase(it);
 			} else {
 				++it;
 			}

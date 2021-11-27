@@ -92,7 +92,7 @@ namespace vuk {
 
 		/// @brief Return an allocator over the direct resource - resources will be allocated from the Vulkan runtime
 		/// @return 
-		NAllocator get_direct_allocator();
+		NAllocator& get_direct_allocator();
 
 		uint32_t(*get_thread_index)() = nullptr;
 
@@ -192,6 +192,9 @@ namespace vuk {
 
 		void submit_graphics(VkSubmitInfo, VkFence);
 		void submit_transfer(VkSubmitInfo, VkFence);
+
+		Unique<VkFramebuffer> create(const struct FramebufferCreateInfo& cinfo);
+		RGImage acquire_rendertarget(const struct RGCI&, uint64_t absolute_frame);
 	private:
 		struct ContextImpl* impl;
 		std::atomic<size_t> unique_handle_id_counter = 0;
@@ -219,6 +222,12 @@ namespace vuk {
 		ComputePipelineBaseInfo create(const create_info_t<ComputePipelineBaseInfo>& cinfo);
 		VkPipelineLayout create(const create_info_t<VkPipelineLayout>& cinfo);
 		DescriptorSetLayoutAllocInfo create(const create_info_t<DescriptorSetLayoutAllocInfo>& cinfo);
+		DescriptorPool create(const struct DescriptorSetLayoutAllocInfo& cinfo);
+		PipelineInfo create(const struct PipelineInstanceCreateInfo& cinfo);
+		ComputePipelineInfo create(const struct ComputePipelineInstanceCreateInfo& cinfo);
+		VkRenderPass create(const struct RenderPassCreateInfo& cinfo);
+		RGImage create(const struct RGCI& cinfo);
+		Sampler create(const struct SamplerCreateInfo& cinfo);
 
 		friend class InflightContext;
 		friend class PerThreadContext;
@@ -357,6 +366,9 @@ namespace vuk {
 
 		TimestampQuery register_timestamp_query(Query);
 
+		LinearAllocator create(const struct PoolSelect& cinfo);
+		DescriptorSet create(const struct SetBinding& cinfo);
+
 		template<class T>
 		void destroy(const T& t) {
 			ctx.destroy(t);
@@ -370,28 +382,12 @@ namespace vuk {
 		VkCommandBuffer acquire_command_buffer(VkCommandBufferLevel);
 		VkSemaphore acquire_semaphore();
 		VkRenderPass acquire_renderpass(const struct RenderPassCreateInfo&);
-		RGImage acquire_rendertarget(const struct RGCI&);
 		Sampler acquire_sampler(const SamplerCreateInfo&);
 		DescriptorSet acquire_descriptorset(const SetBinding&);
 		PipelineInfo acquire_pipeline(const struct PipelineInstanceCreateInfo&);
 		ComputePipelineInfo acquire_pipeline(const struct ComputePipelineInstanceCreateInfo&);
 
 		const plf::colony<SampledImage>& get_sampled_images();
-
-		PipelineBaseInfo create(const struct PipelineBaseCreateInfo& cinfo);
-		PipelineInfo create(const struct PipelineInstanceCreateInfo& cinfo);
-		ComputePipelineBaseInfo create(const struct ComputePipelineBaseCreateInfo& cinfo);
-		ComputePipelineInfo create(const struct ComputePipelineInstanceCreateInfo& cinfo);
-		ShaderModule create(const struct ShaderModuleCreateInfo& cinfo);
-		VkRenderPass create(const struct RenderPassCreateInfo& cinfo);
-		RGImage create(const struct RGCI& cinfo);
-		LinearAllocator create(const struct PoolSelect& cinfo);
-		DescriptorPool create(const struct DescriptorSetLayoutAllocInfo& cinfo);
-		DescriptorSet create(const struct SetBinding& cinfo);
-		Unique<VkFramebuffer> create(const struct FramebufferCreateInfo& cinfo);
-		Sampler create(const struct SamplerCreateInfo& cinfo);
-		DescriptorSetLayoutAllocInfo create(const struct DescriptorSetLayoutCreateInfo& cinfo);
-		VkPipelineLayout create(const struct PipelineLayoutCreateInfo& cinfo);
 
 	private:
 		friend class InflightContext;
@@ -441,6 +437,6 @@ namespace vuk {
 // utility functions
 namespace vuk {
 	struct ExecutableRenderGraph;
-	Result<void> execute_submit_and_present_to_one(PerThreadContext& ptc, NAllocator nalloc, ExecutableRenderGraph&& rg, SwapchainRef swapchain);
-	Result<void> execute_submit_and_wait(PerThreadContext& ptc, NAllocator nalloc, ExecutableRenderGraph&& rg);
+	Result<void> execute_submit_and_present_to_one(PerThreadContext& ptc, NAllocator& nalloc, ExecutableRenderGraph&& rg, SwapchainRef swapchain);
+	Result<void> execute_submit_and_wait(PerThreadContext& ptc, NAllocator& nalloc, ExecutableRenderGraph&& rg);
 }

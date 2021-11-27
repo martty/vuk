@@ -256,22 +256,8 @@ namespace vuk {
 		}
 
 		T& acquire(const create_info_t<T>& ci);
-
-		struct PFView {
-			InflightContext& ifc;
-			Cache& cache;
-
-			PFView(InflightContext& ifc, Cache<T>& cache) : ifc(ifc), cache(cache) {}
-		};
-
-		struct PFPTView {
-			PerThreadContext& ptc;
-			PFView& view;
-
-			PFPTView(PerThreadContext& ptc, PFView& view) : ptc(ptc), view(view) {}
-			T& acquire(const create_info_t<T>& ci);
-			void collect(size_t threshold);
-		};
+		T& acquire(const create_info_t<T>& ci, uint64_t current_frame);
+		void collect(uint64_t current_frame, size_t threshold);
 	};
 
 	template<class T, size_t FC>

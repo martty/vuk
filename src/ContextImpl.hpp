@@ -76,6 +76,7 @@ namespace vuk {
 		std::vector<plf::colony<TransientSubmitBundle>::iterator> transient_submit_freelist;
 
 		Direct direct_resource;
+		NAllocator direct_allocator;
 
 		TransientSubmitBundle* get_transient_bundle(uint32_t queue_family_index) {
 			std::lock_guard _(transient_submit_lock);
@@ -167,7 +168,8 @@ namespace vuk {
 			shader_modules(ctx),
 			descriptor_set_layouts(ctx),
 			pipeline_layouts(ctx),
-			direct_resource(ctx.device)
+			direct_resource(ctx.device),
+			direct_allocator(direct_resource)
 		{
 			vkGetPhysicalDeviceProperties(ctx.physical_device, &physical_device_properties);
 		}
@@ -410,21 +412,9 @@ namespace vuk {
 		Pool<VkCommandBuffer, Context::FC>::PFView commandbuffer_pools;
 		Pool<TimestampQuery, Context::FC>::PFView tsquery_pools;
 		Pool<VkSemaphore, Context::FC>::PFView semaphore_pools;
-		Cache<PipelineInfo>::PFView pipeline_cache;
-		Cache<PipelineBaseInfo>::PFView pipelinebase_cache;
-		Cache<ComputePipelineBaseInfo>::PFView compute_pipelinebase_cache;
-		Cache<ComputePipelineInfo>::PFView compute_pipeline_cache;
-		Cache<VkRenderPass>::PFView renderpass_cache;
-		Cache<vuk::RGImage>::PFView transient_images;
 		PerFrameCache<LinearAllocator, Context::FC>::PFView scratch_buffers;
 		PerFrameCache<vuk::DescriptorSet, Context::FC>::PFView descriptor_sets;
-		Cache<vuk::Sampler>::PFView sampler_cache;
 		Pool<vuk::SampledImage, Context::FC>::PFView sampled_images;
-		Cache<vuk::DescriptorPool>::PFView pool_cache;
-
-		Cache<vuk::ShaderModule>::PFView shader_modules;
-		Cache<vuk::DescriptorSetLayoutAllocInfo>::PFView descriptor_set_layouts;
-		Cache<VkPipelineLayout>::PFView pipeline_layouts;
 
 		// needs to be mpsc
 		std::mutex transfer_mutex;
@@ -444,20 +434,9 @@ namespace vuk {
 			commandbuffer_pools(ctx.impl->cbuf_pools.get_view(ifc)),
 			tsquery_pools(ctx.impl->tsquery_pools.get_view(ifc)),
 			semaphore_pools(ctx.impl->semaphore_pools.get_view(ifc)),
-			pipelinebase_cache(ifc, ctx.impl->pipelinebase_cache),
-			pipeline_cache(ifc, ctx.impl->pipeline_cache),
-			compute_pipelinebase_cache(ifc, ctx.impl->compute_pipelinebase_cache),
-			compute_pipeline_cache(ifc, ctx.impl->compute_pipeline_cache),
-			renderpass_cache(ifc, ctx.impl->renderpass_cache),
-			transient_images(ifc, ctx.impl->transient_images),
 			scratch_buffers(ifc, ctx.impl->scratch_buffers),
 			descriptor_sets(ifc, ctx.impl->descriptor_sets),
-			sampler_cache(ifc, ctx.impl->sampler_cache),
-			sampled_images(ctx.impl->sampled_images.get_view(ifc)),
-			pool_cache(ifc, ctx.impl->pool_cache),
-			shader_modules(ifc, ctx.impl->shader_modules),
-			descriptor_set_layouts(ifc, ctx.impl->descriptor_set_layouts),
-			pipeline_layouts(ifc, ctx.impl->pipeline_layouts) {
+			sampled_images(ctx.impl->sampled_images.get_view(ifc)){
 		}
 	};
 
@@ -466,20 +445,9 @@ namespace vuk {
 		Pool<VkSemaphore, Context::FC>::PFPTView semaphore_pool;
 		Pool<VkFence, Context::FC>::PFPTView fence_pool;
 		Pool<TimestampQuery, Context::FC>::PFPTView tsquery_pool;
-		Cache<PipelineBaseInfo>::PFPTView pipelinebase_cache;
-		Cache<PipelineInfo>::PFPTView pipeline_cache;
-		Cache<ComputePipelineBaseInfo>::PFPTView compute_pipelinebase_cache;
-		Cache<ComputePipelineInfo>::PFPTView compute_pipeline_cache;
-		Cache<VkRenderPass>::PFPTView renderpass_cache;
-		Cache<vuk::RGImage>::PFPTView transient_images;
 		PerFrameCache<LinearAllocator, Context::FC>::PFPTView scratch_buffers;
 		PerFrameCache<vuk::DescriptorSet, Context::FC>::PFPTView descriptor_sets;
-		Cache<vuk::Sampler>::PFPTView sampler_cache;
 		Pool<vuk::SampledImage, Context::FC>::PFPTView sampled_images;
-		Cache<vuk::DescriptorPool>::PFPTView pool_cache;
-		Cache<vuk::ShaderModule>::PFPTView shader_modules;
-		Cache<vuk::DescriptorSetLayoutAllocInfo>::PFPTView descriptor_set_layouts;
-		Cache<VkPipelineLayout>::PFPTView pipeline_layouts;
 
 		// recycling global objects
 		std::vector<Buffer> buffer_recycle;
@@ -491,20 +459,9 @@ namespace vuk {
 			semaphore_pool(ifc.impl->semaphore_pools.get_view(ptc)),
 			fence_pool(ifc.impl->fence_pools.get_view(ptc)),
 			tsquery_pool(ifc.impl->tsquery_pools.get_view(ptc)),
-			pipelinebase_cache(ptc, ifc.impl->pipelinebase_cache),
-			pipeline_cache(ptc, ifc.impl->pipeline_cache),
-			compute_pipelinebase_cache(ptc, ifc.impl->compute_pipelinebase_cache),
-			compute_pipeline_cache(ptc, ifc.impl->compute_pipeline_cache),
-			renderpass_cache(ptc, ifc.impl->renderpass_cache),
-			transient_images(ptc, ifc.impl->transient_images),
 			scratch_buffers(ptc, ifc.impl->scratch_buffers),
 			descriptor_sets(ptc, ifc.impl->descriptor_sets),
-			sampler_cache(ptc, ifc.impl->sampler_cache),
-			sampled_images(ifc.impl->sampled_images.get_view(ptc)),
-			pool_cache(ptc, ifc.impl->pool_cache),
-			shader_modules(ptc, ifc.impl->shader_modules),
-			descriptor_set_layouts(ptc, ifc.impl->descriptor_set_layouts),
-			pipeline_layouts(ptc, ifc.impl->pipeline_layouts) {
+			sampled_images(ifc.impl->sampled_images.get_view(ptc)){
 		}
 	};
 }

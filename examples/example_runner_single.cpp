@@ -71,7 +71,8 @@ void vuk::ExampleRunner::render() {
 		auto ptc = ifc.begin();
 		auto erg = std::move(rg).link(ptc, vuk::RenderGraph::CompileOptions{});
 		vuk::NLinear nl(context->device, fa);
-		execute_submit_and_present_to_one(ptc, NAllocator(nl), std::move(erg), swapchain);
+		NAllocator alloc(nl);
+		execute_submit_and_present_to_one(ptc, alloc, std::move(erg), swapchain);
 	}
 }
 

@@ -22,7 +22,7 @@ namespace vuk {
 		delete impl;
 	}
 
-	void ExecutableRenderGraph::create_attachment(PerThreadContext& ptc, Name name, AttachmentRPInfo& attachment_info, vuk::Extent2D fb_extent, vuk::SampleCountFlagBits samples) {
+	void ExecutableRenderGraph::create_attachment(Context& ctx, Name name, AttachmentRPInfo& attachment_info, vuk::Extent2D fb_extent, vuk::SampleCountFlagBits samples) {
 		auto& chain = impl->use_chains.at(name);
 		if (attachment_info.type == AttachmentRPInfo::Type::eInternal) {
 			vuk::ImageUsageFlags usage = RenderGraph::compute_usage(std::span(chain));
@@ -65,7 +65,7 @@ namespace vuk {
 			rgci.ici = ici;
 			rgci.ivci = ivci;
 
-			auto rg = ptc.acquire_rendertarget(rgci);
+			auto rg = ctx.acquire_rendertarget(rgci, ctx.frame_counter);
 			attachment_info.iv = rg.image_view;
 			attachment_info.image = rg.image;
 		}
@@ -108,7 +108,7 @@ namespace vuk {
 		cobuf.ongoing_renderpass = rpi;
 	}
 
-	VkCommandBuffer ExecutableRenderGraph::execute(vuk::PerThreadContext& ptc, std::vector<std::pair<SwapChainRef, size_t>> swp_with_index) {
+	Result<NUnique<HLCommandBuffer>> ExecutableRenderGraph::execute(vuk::PerThreadContext& ptc, NAllocator& alloc, std::vector<std::pair<SwapChainRef, size_t>> swp_with_index) {
 		// bind swapchain attachment images & ivs
 		for (auto& [name, bound] : impl->bound_attachments) {
 			if (bound.type == AttachmentRPInfo::Type::eSwapchain) {
@@ -187,7 +187,7 @@ namespace vuk {
 			for (auto& attrpinfo : rp.attachments) {
 				auto& bound = impl->bound_attachments[attrpinfo.name];
 				if (bound.type == AttachmentRPInfo::Type::eInternal) {
-					create_attachment(ptc, attrpinfo.name, bound, fb_extent, (vuk::SampleCountFlagBits)attrpinfo.description.samples);
+					create_attachment(ptc.ctx, attrpinfo.name, bound, fb_extent, (vuk::SampleCountFlagBits)attrpinfo.description.samples);
 				}
 
 				ivs.push_back(bound.iv);
@@ -199,18 +199,22 @@ namespace vuk {
 			rp.fbci.height = fb_extent.height;
 			rp.fbci.attachmentCount = (uint32_t)vkivs.size();
 			rp.fbci.layers = 1;
-			rp.framebuffer = ptc.create(rp.fbci).get(); // queue framebuffer for destruction
+			rp.framebuffer = ptc.ctx.create(rp.fbci).get(); // queue framebuffer for destruction
 		}
 
 		// create non-attachment images
 		for (auto& [name, bound] : impl->bound_attachments) {
 			if (bound.type == AttachmentRPInfo::Type::eInternal && bound.image == VK_NULL_HANDLE) {
-				create_attachment(ptc, name, bound, vuk::Extent2D{ 0,0 }, bound.samples.count);
+				create_attachment(ptc.ctx, name, bound, vuk::Extent2D{ 0,0 }, bound.samples.count);
 			}
 		}
 
 		// actual execution
-		auto cbuf = ptc.acquire_command_buffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY);
+		NUnique<HLCommandBuffer> hl_cbuf(alloc);
+		HLCommandBufferCreateInfo ci{ .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .queue_family_index = ptc.ctx.graphics_queue_family_index };
+		VUK_DO_OR_RETURN(alloc.allocate_commandbuffers_hl(std::span{ &*hl_cbuf, 1 }, std::span{ &ci, 1 }, VUK_HERE_AND_NOW()));
+
+		VkCommandBuffer cbuf = hl_cbuf->command_buffer;
 
 		VkCommandBufferBeginInfo cbi{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
 		vkBeginCommandBuffer(cbuf, &cbi);
@@ -308,7 +312,7 @@ namespace vuk {
 			}
 		}
 		vkEndCommandBuffer(cbuf);
-		return cbuf;
+		return { expected_value, std::move(hl_cbuf) };
 	}
 
 	BufferInfo ExecutableRenderGraph::get_resource_buffer(Name n) {

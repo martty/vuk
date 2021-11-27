@@ -11,6 +11,8 @@
 #include "vuk/Image.hpp"
 #include "vuk/Swapchain.hpp"
 #include "vuk/MapProxy.hpp"
+#include "vuk/Result.hpp"
+#include "vuk/Allocator.hpp"
 
 namespace vuk {
 	struct Resource;
@@ -156,7 +158,7 @@ namespace vuk {
 		ExecutableRenderGraph(ExecutableRenderGraph&&) noexcept;
 		ExecutableRenderGraph& operator=(ExecutableRenderGraph&&) noexcept;
 
-		VkCommandBuffer execute(vuk::PerThreadContext&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
+		Result<NUnique<struct HLCommandBuffer>> execute(PerThreadContext&, struct NAllocator&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
 
 		struct BufferInfo get_resource_buffer(Name);
 		struct AttachmentRPInfo get_resource_image(Name);
@@ -165,7 +167,7 @@ namespace vuk {
 	private:
 		struct RGImpl* impl;
 
-		void create_attachment(PerThreadContext& ptc, Name name, struct AttachmentRPInfo& attachment_info, Extent2D fb_extent, SampleCountFlagBits samples);
+		void create_attachment(Context& ptc, Name name, struct AttachmentRPInfo& attachment_info, Extent2D fb_extent, SampleCountFlagBits samples);
 		void fill_renderpass_info(struct RenderPassInfo& rpass, const size_t& i, class CommandBuffer& cobuf);
 	};
 }
