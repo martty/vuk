@@ -177,7 +177,7 @@ namespace vuk {
 
 	template<class T, size_t FC>
 	PerFrameCache<T, FC>::~PerFrameCache() {
-		for (auto& p : data) {
+		for (auto& p : _data) {
 			for (auto& [k, v] : p.lru_map) {
 				ctx.destroy(v.value);
 			}
@@ -185,23 +185,19 @@ namespace vuk {
 	}
 
 	template<class T, size_t FC>
-	PerFrameCache<T, FC>::PFView::PFView(InflightContext& ifc, PerFrameCache& cache) : ifc(ifc), cache(cache) {}
-
-	template<class T, size_t FC>
-	T& PerFrameCache<T, FC>::PFPTView::acquire(const create_info_t<T>& ci) {
-		auto& cache = view.cache;
-		auto& data = cache.data[ptc.ifc.frame];
+	T& PerFrameCache<T, FC>::acquire(const create_info_t<T>& ci, uint64_t current_frame) {
+		auto& data = _data[current_frame % FC];
 		if (auto it = data.lru_map.find(ci); it != data.lru_map.end()) {
-			it->second.last_use_frame = ptc.ifc.absolute_frame;
+			it->second.last_use_frame = current_frame;
 			return it->second.value;
 		} else {
 			// if the value is not in the cache, we look in our per thread buffers
 			// if it doesn't exist there either, we add it
-			auto& ptv = data.per_thread_append_v[ptc.tid];
-			auto& ptk = data.per_thread_append_k[ptc.tid];
+			auto& ptv = data.per_thread_append_v[0 /*ptc.tid*/];
+			auto& ptk = data.per_thread_append_k[0 /*ptc.tid*/]; // TODO: restore TIDs
 			auto pit = std::find(ptk.begin(), ptk.end(), ci);
 			if (pit == ptk.end()) {
-				ptv.emplace_back(ptc.create(ci));
+				ptv.emplace_back(ctx.create(ci));
 				pit = ptk.insert(ptk.end(), ci);
 			}
 			auto index = std::distance(ptk.begin(), pit);
@@ -210,26 +206,27 @@ namespace vuk {
 	}
 
 	template<class T, size_t FC>
-	void PerFrameCache<T, FC>::PFPTView::collect(size_t threshold) {
-		auto& data = view.cache.data[ptc.ifc.frame];
+	void PerFrameCache<T, FC>::collect(uint64_t current_frame, size_t threshold) {
+		auto local_frame = current_frame % FC;
+		auto& data = _data[local_frame];
 		std::unique_lock _(data.cache_mtx);
 		for (auto it = data.lru_map.begin(); it != data.lru_map.end();) {
-			if (ptc.ifc.absolute_frame - it->second.last_use_frame > threshold) {
-				ptc.destroy(it->second.value);
+			if (current_frame - it->second.last_use_frame > threshold) {
+				ctx.destroy(it->second.value);
 				it = data.lru_map.erase(it);
 			} else {
 				++it;
 			}
 		}
 
-		for (size_t tid = 0; tid < view.cache.data[ptc.ifc.frame].per_thread_append_v.size(); tid++) {
-			auto& vs = view.cache.data[ptc.ifc.frame].per_thread_append_v[tid];
-			auto& ks = view.cache.data[ptc.ifc.frame].per_thread_append_k[tid];
+		for (size_t tid = 0; tid < _data[local_frame].per_thread_append_v.size(); tid++) {
+			auto& vs = _data[local_frame].per_thread_append_v[tid];
+			auto& ks = _data[local_frame].per_thread_append_k[tid];
 			for (size_t i = 0; i < vs.size(); i++) {
 				if (data.lru_map.find(ks[i]) == data.lru_map.end()) {
-					data.lru_map.emplace(ks[i], LRUEntry{ std::move(vs[i]), ptc.ifc.absolute_frame });
+					data.lru_map.emplace(ks[i], LRUEntry{ std::move(vs[i]), current_frame });
 				} else {
-					ptc.destroy(vs[i]);
+					ctx.destroy(vs[i]);
 				}
 			}
 			vs.clear();
@@ -242,7 +239,7 @@ namespace vuk {
 
 	template class Cache<vuk::DescriptorPool>;
 
-	void DescriptorPool::grow(PerThreadContext& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info) {
+	void DescriptorPool::grow(Context& ctx, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info) {
 		if (!grow_mutex.try_lock())
 			return;
 		VkDescriptorPoolCreateInfo dpci{ .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
@@ -260,7 +257,7 @@ namespace vuk {
 		dpci.pPoolSizes = descriptor_counts.data();
 		dpci.poolSizeCount = used_idx;
 		VkDescriptorPool pool;
-		vkCreateDescriptorPool(ptc.ctx.device, &dpci, nullptr, &pool);
+		vkCreateDescriptorPool(ctx.device, &dpci, nullptr, &pool);
 		pools.emplace_back(pool);
 
 		VkDescriptorSetAllocateInfo dsai{ .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
@@ -270,17 +267,17 @@ namespace vuk {
 		dsai.pSetLayouts = layouts.data();
 		// allocate all the descriptorsets
 		std::vector<VkDescriptorSet> sets(dsai.descriptorSetCount);
-		vkAllocateDescriptorSets(ptc.ctx.device, &dsai, sets.data());
+		vkAllocateDescriptorSets(ctx.device, &dsai, sets.data());
 		free_sets.enqueue_bulk(sets.data(), sets.size());
 		sets_allocated = dpci.maxSets;
 
 		grow_mutex.unlock();
 	}
 
-	VkDescriptorSet DescriptorPool::acquire(PerThreadContext& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info) {
+	VkDescriptorSet DescriptorPool::acquire(Context& ctx, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info) {
 		VkDescriptorSet ds;
 		while (!free_sets.try_dequeue(ds)) {
-			grow(ptc, layout_alloc_info);
+			grow(ctx, layout_alloc_info);
 		}
 		return ds;
 	}

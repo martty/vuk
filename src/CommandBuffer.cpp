@@ -13,10 +13,6 @@ namespace vuk {
 	FormatOrIgnore::FormatOrIgnore(vuk::Format format) : ignore(false), format(format), size(format_to_texel_block_size(format)) {}
 	FormatOrIgnore::FormatOrIgnore(Ignore ign) : ignore(true), format(ign.format), size(ign.to_size()) {}
 
-	CommandBuffer::CommandBuffer(vuk::PerThreadContext& ptc) : ptc(ptc) {
-		command_buffer = ptc.acquire_command_buffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY);
-	}
-
 	const CommandBuffer::RenderPassInfo& CommandBuffer::get_ongoing_renderpass() const {
 		return ongoing_renderpass.value();
 	}
@@ -203,7 +199,7 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::bind_graphics_pipeline(Name p) {
-		return bind_graphics_pipeline(ptc.ctx.get_named_pipeline(p));
+		return bind_graphics_pipeline(ctx.get_named_pipeline(p));
 	}
 
 	CommandBuffer& CommandBuffer::bind_compute_pipeline(vuk::ComputePipelineBaseInfo* gpci) {
@@ -213,7 +209,7 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::bind_compute_pipeline(Name p) {
-		return bind_compute_pipeline(ptc.ctx.get_named_compute_pipeline(p));
+		return bind_compute_pipeline(ctx.get_named_compute_pipeline(p));
 	}
 
 	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, const Buffer& buf, unsigned first_attribute, Packed format) {
@@ -283,7 +279,7 @@ namespace vuk {
 	CommandBuffer& CommandBuffer::bind_sampled_image(unsigned set, unsigned binding, vuk::ImageView iv, vuk::SamplerCreateInfo sci, vuk::ImageLayout il) {
 		sets_used[set] = true;
 		set_bindings[set].bindings[binding].type = vuk::DescriptorType::eCombinedImageSampler;
-		set_bindings[set].bindings[binding].image = vuk::DescriptorImageInfo(ptc.acquire_sampler(sci), iv, il);
+		set_bindings[set].bindings[binding].image = vuk::DescriptorImageInfo(ctx.acquire_sampler(sci, ctx.frame_counter), iv, il);
 		set_bindings[set].used.set(binding);
 
 		return *this;
@@ -326,7 +322,7 @@ namespace vuk {
 
 		auto layout = rg->is_resource_image_in_general_layout(name, current_pass) ? vuk::ImageLayout::eGeneral : vuk::ImageLayout::eShaderReadOnlyOptimal;
 
-		vuk::Unique<vuk::ImageView> iv = ptc.ctx.create_image_view(ivci);
+		vuk::Unique<vuk::ImageView> iv = ctx.create_image_view(ivci);
 		return bind_sampled_image(set, binding, *iv, sampler_create_info, layout);
 	}
 
@@ -378,7 +374,7 @@ namespace vuk {
 	}
 
 	void* CommandBuffer::_map_scratch_uniform_binding(unsigned set, unsigned binding, size_t size) {
-		auto buf = ptc.allocate_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eUniformBuffer, size, 1);
+		auto buf = ctx.allocate_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eUniformBuffer, size, 1);
 		bind_uniform_buffer(set, binding, buf);
 		return buf.mapped_ptr;
 	}
@@ -405,7 +401,7 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::draw_indexed_indirect(std::span<vuk::DrawIndexedIndirectCommand> cmds) {
 		_bind_graphics_pipeline_state();
-		auto buf = ptc.allocate_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eIndirectBuffer, cmds.size_bytes(), 1);
+		auto buf = ctx.allocate_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eIndirectBuffer, cmds.size_bytes(), 1);
 		memcpy(buf.mapped_ptr, cmds.data(), cmds.size_bytes());
 		vkCmdDrawIndexedIndirect(command_buffer, buf.buffer, (uint32_t)buf.offset, (uint32_t)cmds.size(), sizeof(vuk::DrawIndexedIndirectCommand));
 		return *this;
@@ -442,9 +438,12 @@ namespace vuk {
 		return *this;
 	}
 
-	SecondaryCommandBuffer CommandBuffer::begin_secondary() {
-		auto nptc = new vuk::PerThreadContext(ptc.ifc.begin());
-		auto scbuf = nptc->acquire_command_buffer(VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+	Result<SecondaryCommandBuffer> CommandBuffer::begin_secondary() {
+		// TODO: hardcoded queue family
+		auto scbuf = allocate_hl_commandbuffer(*allocator, { .level = VK_COMMAND_BUFFER_LEVEL_SECONDARY, .queue_family_index = ctx.graphics_queue_family_index }, VUK_HERE_AND_NOW());
+		if (!scbuf) {
+			return { expected_error, scbuf.error() };
+		}
 		VkCommandBufferBeginInfo cbi{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
 									 .flags = VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT | VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
 		VkCommandBufferInheritanceInfo cbii{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO };
@@ -452,8 +451,10 @@ namespace vuk {
 		cbii.subpass = ongoing_renderpass->subpass;
 		cbii.framebuffer = VK_NULL_HANDLE; //TODO
 		cbi.pInheritanceInfo = &cbii;
-		vkBeginCommandBuffer(scbuf, &cbi);
-		return SecondaryCommandBuffer(rg, *nptc, scbuf, ongoing_renderpass);
+		// TODO: dropping lifetime here
+		scbuf->release();
+		vkBeginCommandBuffer(scbuf->get(), &cbi);
+		return { expected_value, SecondaryCommandBuffer(rg, ctx, scbuf->get(), ongoing_renderpass) };
 	}
 
 	void CommandBuffer::execute(std::span<VkCommandBuffer> scbufs) {
@@ -555,8 +556,9 @@ namespace vuk {
 
 	void CommandBuffer::write_timestamp(Query q, vuk::PipelineStageFlagBits stage) {
 		// TODO: check for duplicate submission of a query
-		auto tsq = ptc.register_timestamp_query(q);
-		vkCmdWriteTimestamp(command_buffer, (VkPipelineStageFlagBits)stage, tsq.pool, tsq.id);
+		// TODO: queries broken
+		/*auto tsq = ptc.register_timestamp_query(q);
+		vkCmdWriteTimestamp(command_buffer, (VkPipelineStageFlagBits)stage, tsq.pool, tsq.id);*/
 	}
 
 	void CommandBuffer::_bind_state(bool graphics) {
@@ -577,7 +579,7 @@ namespace vuk {
 			set_bindings[i].layout_info = graphics ? current_pipeline->layout_info[i] : current_compute_pipeline->layout_info[i];
 			if (!persistent) {
 				set_bindings[i].calculate_hash();
-				auto ds = ptc.acquire_descriptorset(set_bindings[i]);
+				auto ds = ctx.acquire_descriptorset(set_bindings[i], ctx.frame_counter);
 				vkCmdBindDescriptorSets(command_buffer, graphics ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE,
 					graphics ? current_pipeline->pipeline_layout : current_compute_pipeline->pipeline_layout, i, 1, &ds.descriptor_set, 0,
 					nullptr);
@@ -622,7 +624,7 @@ namespace vuk {
 				pi.base->pssci.pSpecializationInfo = &pi.specialization_info;
 			}
 
-			current_compute_pipeline = ptc.acquire_pipeline(pi);
+			current_compute_pipeline = ctx.acquire_pipeline(pi, ctx.frame_counter);
 
 			vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, current_compute_pipeline->pipeline);
 			next_compute_pipeline = nullptr;
@@ -870,7 +872,7 @@ namespace vuk {
 
 			assert(data_ptr - data_start_ptr == pi.extended_size); // sanity check: we wrote all the data we wanted to
 			// acquire_pipeline makes copy of extended_data if it needs to
-			current_pipeline = ptc.acquire_pipeline(pi);
+			current_pipeline = ctx.acquire_pipeline(pi, ctx.frame_counter);
 			if (!pi.is_inline()) {
 				delete pi.extended_data;
 			}
@@ -887,7 +889,6 @@ namespace vuk {
 
 	SecondaryCommandBuffer::~SecondaryCommandBuffer() {
 		vkEndCommandBuffer(command_buffer);
-		delete& ptc;
 	}
 
 } // namespace vuk

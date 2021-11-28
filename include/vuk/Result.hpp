@@ -4,6 +4,7 @@
 
 #include <type_traits>
 #include <vuk/Config.hpp>
+#include <vuk/vuk_fwd.hpp>
 
 #define FWD(x) (static_cast<decltype(x)&&>(x))
 #define MOV(x) (static_cast<std::remove_reference_t<decltype(x)>&&>(x))
@@ -22,7 +23,7 @@ namespace vuk {
 
     constexpr ResultValueTag expected_value;
 
-    template<typename T, typename E = vuk::Exception>
+    template<typename T, typename E>
     struct Result {
     public:
         using value_type = T;
@@ -139,7 +140,7 @@ namespace vuk {
 
         [[nodiscard]] T&& operator*()&& {
             assert(_holds_value && "cannot call operator* on Result that does not hold a value");
-            return _value;
+            return std::move(_value);
         }
 
         [[nodiscard]] T const&& operator*() const&& {

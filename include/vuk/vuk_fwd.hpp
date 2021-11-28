@@ -40,4 +40,12 @@ namespace vuk {
 	constexpr uint64_t idivceil(uint64_t a, uint64_t b) noexcept {
 		return (a + b - 1) / b;
 	}
+
+	struct Exception;
+
+	template<class V, class E = Exception>
+	struct Result;
+
+	template<class T>
+	class NUnique;
 }

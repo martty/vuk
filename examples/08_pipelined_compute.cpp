@@ -56,18 +56,18 @@ namespace {
 			auto doge_image = stbi_load("../../examples/doge.png", &x, &y, &chans, 4);
 
 			auto ptc = ifc.begin();
-			auto [tex, stub] = ptc.create_texture(vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1 }, doge_image);
+			auto [tex, stub] = ptc.ctx.create_texture(vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1 }, doge_image);
 			texture_of_doge = std::move(tex);
 
 			// init scrambling buffer
-			scramble_buf = ptc.allocate_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eTransferDst | vuk::BufferUsageFlagBits::eStorageBuffer, sizeof(unsigned) * x * y, 1);
+			scramble_buf = ptc.ctx.allocate_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eTransferDst | vuk::BufferUsageFlagBits::eStorageBuffer, sizeof(unsigned) * x * y, 1);
 			std::vector<unsigned> indices(x * y);
 			std::iota(indices.begin(), indices.end(), 0);
 			std::shuffle(indices.begin(), indices.end(), g);
 
-			ptc.upload(scramble_buf.get(), std::span(indices.begin(), indices.end()));
+			ptc.ctx.upload(scramble_buf.get(), std::span(indices.begin(), indices.end()));
 
-			ptc.wait_all_transfers();
+			ptc.ctx.wait_all_transfers();
 			stbi_image_free(doge_image);
 		},
 		.render = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
@@ -102,7 +102,7 @@ namespace {
 						.dispatch(1);
 					// We can also customize pipelines by using specialization constants
 					// Here we will apply a tint based on the current frame
-					auto current_frame = command_buffer.get_context().ifc.absolute_frame;
+					auto current_frame = command_buffer.get_context().frame_counter.load();
 					auto mod_frame = current_frame % 100;
 					if (mod_frame == 99) {
 						speed_count += 256;

@@ -19,11 +19,11 @@ namespace vuk {
 		uint64_t absolute_frame;
 	};
 
-#define VUK_HERE_AND_NOW() vuk::SourceLocationAtFrame{vuk::SourceLocation{__FILE__, __LINE__}, (uint64_t)-1LL}
-#define VUK_HERE_AT_FRAME(frame) vuk::SourceLocationAtFrame{vuk::SourceLocation{__FILE__, __LINE__}, frame}
+#define VUK_HERE_AND_NOW() SourceLocationAtFrame{SourceLocation{__FILE__, __LINE__}, (uint64_t)-1LL}
+#define VUK_HERE_AT_FRAME(frame) SourceLocationAtFrame{SourceLocation{__FILE__, __LINE__}, frame}
 #define VUK_DO_OR_RETURN(what) if(auto res = what; !res){ return { expected_error, res.error() }; }
 
-	struct AllocateException : vuk::Exception {
+	struct AllocateException : Exception {
 		AllocateException(VkResult res) {
 			switch (res) {
 			case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -108,6 +108,10 @@ namespace vuk {
 	struct HLCommandBuffer {
 		VkCommandBuffer command_buffer;
 		VkCommandPool command_pool;
+
+		operator VkCommandBuffer() {
+			return command_buffer;
+		}
 	};
 
 	struct VkResource {
@@ -426,7 +430,7 @@ namespace vuk {
 			f.semaphores.clear();
 
 			for (auto& c : f.cmdbuffers_to_free) {
-				direct.deallocate_commandbuffers(c.command_pool, std::span{&c.command_buffer, 1});
+				direct.deallocate_commandbuffers(c.command_pool, std::span{ &c.command_buffer, 1 });
 			}
 			f.cmdbuffers_to_free.clear();
 
@@ -524,7 +528,8 @@ namespace vuk {
 			return { expected_value };
 		}
 
-		void subsume()&& {
+		/// @brief Joins the lifetime of this allocator to the upstream allocator
+		void subsume() {
 			should_subsume = true;
 		}
 
@@ -693,11 +698,27 @@ namespace vuk {
 	}
 
 	template<class T>
-	vuk::Result<vuk::NUnique<T>, vuk::AllocateException> allocate_unique_semaphores(vuk::NAllocator allocator, vuk::SourceLocationAtFrame loc) {
-		vuk::NUnique<T> semas(allocator);
+	Result<NUnique<T>, AllocateException> allocate_semaphores(NAllocator& allocator, SourceLocationAtFrame loc) {
+		NUnique<T> semas(allocator);
 		if (auto res = allocator.allocate_semaphores(*semas, loc); !res) {
-			return { vuk::expected_error, res.error() };
+			return { expected_error, res.error() };
 		}
-		return { vuk::expected_value, semas };
+		return { expected_value, semas };
+	}
+
+	inline Result<NUnique<HLCommandBuffer>, AllocateException> allocate_hl_commandbuffer(NAllocator& allocator, HLCommandBufferCreateInfo cbci, SourceLocationAtFrame loc) {
+		NUnique<HLCommandBuffer> hlcb(allocator);
+		if (auto res = allocator.allocate_commandbuffers_hl(std::span{ &hlcb.get(), 1 }, std::span{ &cbci, 1 }, loc); !res) {
+			return { expected_error, res.error() };
+		}
+		return { expected_value, std::move(hlcb) };
+	}
+
+	inline Result<NUnique<VkFence>, AllocateException> allocate_fence(NAllocator& allocator, SourceLocationAtFrame loc) {
+		NUnique<VkFence> fence(allocator);
+		if (auto res = allocator.allocate_fences(std::span{ &fence.get(), 1 }, loc); !res) {
+			return { expected_error, res.error() };
+		}
+		return { expected_value, std::move(fence) };
 	}
 }

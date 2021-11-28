@@ -3,6 +3,7 @@
 #include <utility>
 #include <optional>
 #include <vuk/Config.hpp>
+#include <vuk/vuk_fwd.hpp>
 #include <../src/Allocator.hpp>
 #include <vuk/FixedVector.hpp>
 #include <vuk/Types.hpp>
@@ -163,12 +164,14 @@ namespace vuk {
 	struct ExecutableRenderGraph;
 	struct PassInfo;
 	struct Query;
+	struct NAllocator;
 
 	class CommandBuffer {
 	protected:
 		friend struct ExecutableRenderGraph;
 		ExecutableRenderGraph* rg = nullptr;
-		PerThreadContext& ptc;
+		Context& ctx;
+		NAllocator* allocator;
 		VkCommandBuffer command_buffer;
 
 		struct RenderPassInfo {
@@ -230,16 +233,14 @@ namespace vuk {
 
 
 		// for rendergraph
-		CommandBuffer(ExecutableRenderGraph& rg, PerThreadContext& ptc, VkCommandBuffer cb) : rg(&rg), ptc(ptc), command_buffer(cb) {}
-		CommandBuffer(ExecutableRenderGraph& rg, PerThreadContext& ptc, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing) : rg(&rg), ptc(ptc), command_buffer(cb), ongoing_renderpass(ongoing) {}
+		CommandBuffer(ExecutableRenderGraph& rg, Context& ctx, NAllocator& alloc, VkCommandBuffer cb) : rg(&rg), ctx(ctx), allocator(&alloc), command_buffer(cb) {}
+		CommandBuffer(ExecutableRenderGraph& rg, Context& ctx, NAllocator& alloc, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing) : rg(&rg), ctx(ctx), allocator(&alloc), command_buffer(cb), ongoing_renderpass(ongoing) {}
 	public:
-		// for one shot
-		CommandBuffer(PerThreadContext& ptc);
 		// for secondary cbufs
-		CommandBuffer(ExecutableRenderGraph* rg, PerThreadContext& ptc, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing) : rg(rg), ptc(ptc), command_buffer(cb), ongoing_renderpass(ongoing) {}
+		CommandBuffer(ExecutableRenderGraph* rg, Context& ctx, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing) : rg(rg), ctx(ctx), command_buffer(cb), ongoing_renderpass(ongoing) {}
 
-		PerThreadContext& get_context() {
-			return ptc;
+		Context& get_context() {
+			return ctx;
 		}
 		const RenderPassInfo& get_ongoing_renderpass() const;
 		Buffer get_resource_buffer(Name) const;
@@ -359,7 +360,7 @@ namespace vuk {
 
 		CommandBuffer& dispatch_indirect(const Buffer& indirect_buffer);
 
-		class SecondaryCommandBuffer begin_secondary();
+		Result<class SecondaryCommandBuffer> begin_secondary();
 		void execute(std::span<VkCommandBuffer>);
 
 		// commands for renderpass-less command buffers

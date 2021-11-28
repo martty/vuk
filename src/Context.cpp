@@ -76,7 +76,7 @@ void vuk::Context::submit_transfer(VkSubmitInfo si, VkFence fence) {
 }
 
 void vuk::PersistentDescriptorSet::update_combined_image_sampler(PerThreadContext& ptc, unsigned binding, unsigned array_index, vuk::ImageView iv, vuk::SamplerCreateInfo sci, vuk::ImageLayout layout) {
-    descriptor_bindings[binding][array_index].image = vuk::DescriptorImageInfo(ptc.acquire_sampler(sci), iv, layout);
+    descriptor_bindings[binding][array_index].image = vuk::DescriptorImageInfo(ptc.ctx.acquire_sampler(sci, ptc.ctx.frame_counter), iv, layout);
     descriptor_bindings[binding][array_index].type = vuk::DescriptorType::eCombinedImageSampler;
 	VkWriteDescriptorSet wds = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
 	wds.descriptorCount = 1;
@@ -582,10 +582,6 @@ bool vuk::Context::poll_upload(TransientSubmitBundle* ur) {
 	} else {
 		return false;
 	}
-}
-
-vuk::Unique<vuk::Buffer> vuk::Context::allocate_buffer(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, size_t size, size_t alignment, bool create_mapped) {
-	return Unique{ *this, impl->allocator.allocate_buffer(mem_usage, buffer_usage, size, alignment, create_mapped) };
 }
 
 vuk::Texture vuk::Context::allocate_texture(vuk::ImageCreateInfo ici) {

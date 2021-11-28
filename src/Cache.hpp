@@ -277,27 +277,13 @@ namespace vuk {
 
 			std::mutex cache_mtx;
 		};
-		std::array<PerFrame, FC> data;
+		std::array<PerFrame, FC> _data;
 
 	public:
 		PerFrameCache(Context& ctx) : ctx(ctx) {}
 		~PerFrameCache();
 
-		struct PFView {
-			InflightContext& ifc;
-			PerFrameCache& cache;
-
-			PFView(InflightContext& ifc, PerFrameCache& cache);
-		};
-
-		struct PFPTView {
-			PerThreadContext& ptc;
-			PFView& view;
-
-			PFPTView(PerThreadContext& ptc, PFView& view) : ptc(ptc), view(view) {}
-			T& acquire(const create_info_t<T>& ci);
-			void collect(size_t threshold);
-		};
-
+		T& acquire(const create_info_t<T>& ci, uint64_t current_frame);
+		void collect(uint64_t current_frame, size_t threshold);
 	};
 }

@@ -24,6 +24,38 @@ namespace vuk {
 		TransientSubmitBundle* next = nullptr;
 	};
 
+	struct BufferCopyCommand {
+		Buffer src;
+		Buffer dst;
+		TransferStub stub;
+	};
+
+	struct BufferImageCopyCommand {
+		Buffer src;
+		vuk::Image dst;
+		vuk::Extent3D extent;
+		uint32_t base_array_layer;
+		uint32_t layer_count;
+		uint32_t mip_level;
+		bool generate_mips;
+		TransferStub stub;
+	};
+
+	struct MipGenerateCommand {
+		vuk::Image dst;
+		vuk::Format format;
+		vuk::Extent3D extent;
+		uint32_t base_array_layer;
+		uint32_t layer_count;
+		uint32_t base_mip_level;
+		TransferStub stub;
+	};
+
+	struct PendingTransfer {
+		size_t last_transfer_id;
+		VkFence fence;
+	};
+
 	struct ContextImpl {
 		Allocator allocator;
 		VkDevice device;
@@ -59,6 +91,13 @@ namespace vuk {
 		std::array<std::vector<vuk::Buffer>, Context::FC> buffer_recycle;
 		std::array<std::vector<vuk::PersistentDescriptorSet>, Context::FC> pds_recycle;
 		std::array<std::vector<VkFramebuffer>, Context::FC> fb_recycle;
+
+		// needs to be mpsc
+		std::mutex transfer_mutex;
+		std::queue<BufferCopyCommand> buffer_transfer_commands;
+		std::queue<BufferImageCopyCommand> bufferimage_transfer_commands;
+		// only accessed by DMAtask
+		std::queue<PendingTransfer> pending_transfers;
 
 		std::mutex named_pipelines_lock;
 		std::unordered_map<Name, vuk::PipelineBaseInfo*> named_pipelines;
@@ -187,33 +226,6 @@ namespace vuk {
 	inline size_t _next(size_t frame, unsigned FC) {
 		return (frame + 1) % FC;
 	}
-
-	struct BufferCopyCommand {
-		Buffer src;
-		Buffer dst;
-		TransferStub stub;
-	};
-
-	struct BufferImageCopyCommand {
-		Buffer src;
-		vuk::Image dst;
-		vuk::Extent3D extent;
-		uint32_t base_array_layer;
-		uint32_t layer_count;
-		uint32_t mip_level;
-		bool generate_mips;
-		TransferStub stub;
-	};
-
-	struct MipGenerateCommand {
-		vuk::Image dst;
-		vuk::Format format;
-		vuk::Extent3D extent;
-		uint32_t base_array_layer;
-		uint32_t layer_count;
-		uint32_t base_mip_level;
-		TransferStub stub;
-	};
 
 	template<class T, size_t FC>
 	typename Pool<T, FC>::PFView Pool<T, FC>::get_view(InflightContext& ctx) {
@@ -402,26 +414,12 @@ inline void record_buffer_image_copy(VkCommandBuffer& cbuf, vuk::BufferImageCopy
 }
 
 namespace vuk {
-	struct PendingTransfer {
-		size_t last_transfer_id;
-		VkFence fence;
-	};
-
 	struct IFCImpl {
 		Pool<VkFence, Context::FC>::PFView fence_pools; // must be first, so we wait for the fences
 		Pool<VkCommandBuffer, Context::FC>::PFView commandbuffer_pools;
 		Pool<TimestampQuery, Context::FC>::PFView tsquery_pools;
 		Pool<VkSemaphore, Context::FC>::PFView semaphore_pools;
-		PerFrameCache<LinearAllocator, Context::FC>::PFView scratch_buffers;
-		PerFrameCache<vuk::DescriptorSet, Context::FC>::PFView descriptor_sets;
 		Pool<vuk::SampledImage, Context::FC>::PFView sampled_images;
-
-		// needs to be mpsc
-		std::mutex transfer_mutex;
-		std::queue<BufferCopyCommand> buffer_transfer_commands;
-		std::queue<BufferImageCopyCommand> bufferimage_transfer_commands;
-		// only accessed by DMAtask
-		std::queue<PendingTransfer> pending_transfers;
 
 		// recycle
 		std::mutex recycle_lock;
@@ -434,8 +432,6 @@ namespace vuk {
 			commandbuffer_pools(ctx.impl->cbuf_pools.get_view(ifc)),
 			tsquery_pools(ctx.impl->tsquery_pools.get_view(ifc)),
 			semaphore_pools(ctx.impl->semaphore_pools.get_view(ifc)),
-			scratch_buffers(ifc, ctx.impl->scratch_buffers),
-			descriptor_sets(ifc, ctx.impl->descriptor_sets),
 			sampled_images(ctx.impl->sampled_images.get_view(ifc)){
 		}
 	};
@@ -445,8 +441,6 @@ namespace vuk {
 		Pool<VkSemaphore, Context::FC>::PFPTView semaphore_pool;
 		Pool<VkFence, Context::FC>::PFPTView fence_pool;
 		Pool<TimestampQuery, Context::FC>::PFPTView tsquery_pool;
-		PerFrameCache<LinearAllocator, Context::FC>::PFPTView scratch_buffers;
-		PerFrameCache<vuk::DescriptorSet, Context::FC>::PFPTView descriptor_sets;
 		Pool<vuk::SampledImage, Context::FC>::PFPTView sampled_images;
 
 		// recycling global objects
@@ -459,8 +453,6 @@ namespace vuk {
 			semaphore_pool(ifc.impl->semaphore_pools.get_view(ptc)),
 			fence_pool(ifc.impl->fence_pools.get_view(ptc)),
 			tsquery_pool(ifc.impl->tsquery_pools.get_view(ptc)),
-			scratch_buffers(ptc, ifc.impl->scratch_buffers),
-			descriptor_sets(ptc, ifc.impl->descriptor_sets),
 			sampled_images(ifc.impl->sampled_images.get_view(ptc)){
 		}
 	};

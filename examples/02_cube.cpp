@@ -37,10 +37,10 @@ namespace {
 			// And enqueues a transfer operation, which will copy the given data
 			// Finally it returns a vuk::Buffer, which holds the info for the allocation
 			// And a TransferStub, which can be used to query for the transfer status
-			auto [bverts, stub1] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eVertexBuffer, std::span(&box.first[0], box.first.size()));
+			auto [bverts, stub1] = ptc.ctx.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eVertexBuffer, std::span(&box.first[0], box.first.size()));
 			// We do this move here so that we can capture this variable later
 			auto verts = std::move(bverts);
-			auto [binds, stub2] = ptc.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eIndexBuffer, std::span(&box.second[0], box.second.size()));
+			auto [binds, stub2] = ptc.ctx.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eIndexBuffer, std::span(&box.second[0], box.second.size()));
 			auto inds = std::move(binds);
 			// This struct will represent the view-projection transform used for the cube
 			struct VP {
@@ -53,10 +53,10 @@ namespace {
 			vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 1.f, 10.f);
 			vp.proj[1][1] *= -1;
 			// Allocate and transfer view-projection transform
-			auto [buboVP, stub3] = ptc.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eUniformBuffer, std::span(&vp, 1));
+			auto [buboVP, stub3] = ptc.ctx.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eUniformBuffer, std::span(&vp, 1));
 			auto uboVP = buboVP;
 			// For this example, we just request that all transfer finish before we continue
-			ptc.wait_all_transfers();
+			ptc.ctx.wait_all_transfers();
 
 			vuk::RenderGraph rg;
 			rg.add_pass({
@@ -93,7 +93,7 @@ namespace {
 
 					// We can also customize pipelines by using specialization constants
 					// Here we will apply a tint based on the current frame
-					auto current_frame = command_buffer.get_context().ifc.absolute_frame;
+					auto current_frame = command_buffer.get_context().frame_counter.load();
 					auto mod_frame = current_frame % 1000;
 					glm::vec3 tint{1.f, 1.f, 1.f};
 					if (mod_frame <= 500 && mod_frame > 250) {

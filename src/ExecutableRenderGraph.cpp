@@ -88,6 +88,7 @@ namespace vuk {
 		vkCmdBeginRenderPass(cbuf, &rbi, use_secondary_command_buffers ? VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS : VK_SUBPASS_CONTENTS_INLINE);
 	}
 
+	// TODO: refactor to return RenderPassInfo
 	void ExecutableRenderGraph::fill_renderpass_info(vuk::RenderPassInfo& rpass, const size_t& i, vuk::CommandBuffer& cobuf) {
 		if (rpass.handle == VK_NULL_HANDLE) {
 			cobuf.ongoing_renderpass = {};
@@ -108,7 +109,7 @@ namespace vuk {
 		cobuf.ongoing_renderpass = rpi;
 	}
 
-	Result<NUnique<HLCommandBuffer>> ExecutableRenderGraph::execute(vuk::PerThreadContext& ptc, NAllocator& alloc, std::vector<std::pair<SwapChainRef, size_t>> swp_with_index) {
+	Result<NUnique<HLCommandBuffer>> ExecutableRenderGraph::execute(Context& ctx, NAllocator& alloc, std::vector<std::pair<SwapChainRef, size_t>> swp_with_index) {
 		// bind swapchain attachment images & ivs
 		for (auto& [name, bound] : impl->bound_attachments) {
 			if (bound.type == AttachmentRPInfo::Type::eSwapchain) {
@@ -187,7 +188,7 @@ namespace vuk {
 			for (auto& attrpinfo : rp.attachments) {
 				auto& bound = impl->bound_attachments[attrpinfo.name];
 				if (bound.type == AttachmentRPInfo::Type::eInternal) {
-					create_attachment(ptc.ctx, attrpinfo.name, bound, fb_extent, (vuk::SampleCountFlagBits)attrpinfo.description.samples);
+					create_attachment(ctx, attrpinfo.name, bound, fb_extent, (vuk::SampleCountFlagBits)attrpinfo.description.samples);
 				}
 
 				ivs.push_back(bound.iv);
@@ -199,19 +200,19 @@ namespace vuk {
 			rp.fbci.height = fb_extent.height;
 			rp.fbci.attachmentCount = (uint32_t)vkivs.size();
 			rp.fbci.layers = 1;
-			rp.framebuffer = ptc.ctx.create(rp.fbci).get(); // queue framebuffer for destruction
+			rp.framebuffer = ctx.create(rp.fbci).get(); // queue framebuffer for destruction
 		}
 
 		// create non-attachment images
 		for (auto& [name, bound] : impl->bound_attachments) {
 			if (bound.type == AttachmentRPInfo::Type::eInternal && bound.image == VK_NULL_HANDLE) {
-				create_attachment(ptc.ctx, name, bound, vuk::Extent2D{ 0,0 }, bound.samples.count);
+				create_attachment(ctx, name, bound, vuk::Extent2D{ 0,0 }, bound.samples.count);
 			}
 		}
 
 		// actual execution
 		NUnique<HLCommandBuffer> hl_cbuf(alloc);
-		HLCommandBufferCreateInfo ci{ .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .queue_family_index = ptc.ctx.graphics_queue_family_index };
+		HLCommandBufferCreateInfo ci{ .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .queue_family_index = ctx.graphics_queue_family_index };
 		VUK_DO_OR_RETURN(alloc.allocate_commandbuffers_hl(std::span{ &*hl_cbuf, 1 }, std::span{ &ci, 1 }, VUK_HERE_AND_NOW()));
 
 		VkCommandBuffer cbuf = hl_cbuf->command_buffer;
@@ -223,7 +224,7 @@ namespace vuk {
 			bool use_secondary_command_buffers = rpass.subpasses[0].use_secondary_command_buffers;
 			bool is_single_pass = rpass.subpasses.size() == 1 && rpass.subpasses[0].passes.size() == 1;
 			if (is_single_pass) {
-				ptc.ctx.debug.begin_region(cbuf, rpass.subpasses[0].passes[0]->pass.name);
+				ctx.debug.begin_region(cbuf, rpass.subpasses[0].passes[0]->pass.name);
 			}
 
 			for (auto dep : rpass.pre_barriers) {
@@ -251,17 +252,18 @@ namespace vuk {
 					}
 				}
 				for (auto& p : sp.passes) {
-					CommandBuffer cobuf(*this, ptc, cbuf);
+					CommandBuffer cobuf(*this, ctx, alloc, cbuf);
 					fill_renderpass_info(rpass, i, cobuf);
 					// if pass requested no secondary cbufs, but due to subpass merging that is what we got
 					if (p->pass.use_secondary_command_buffers == false && use_secondary_command_buffers == true) {
-						auto secondary = cobuf.begin_secondary();
+						// TODO: no error handling here
+						auto secondary = *cobuf.begin_secondary();
 						if (p->pass.execute) {
 							secondary.current_pass = p;
 							if (!p->pass.name.is_invalid() && !is_single_pass) {
-								ptc.ctx.debug.begin_region(cobuf.command_buffer, p->pass.name);
+								ctx.debug.begin_region(cobuf.command_buffer, p->pass.name);
 								p->pass.execute(secondary);
-								ptc.ctx.debug.end_region(cobuf.command_buffer);
+								ctx.debug.end_region(cobuf.command_buffer);
 							} else {
 								p->pass.execute(secondary);
 							}
@@ -272,9 +274,9 @@ namespace vuk {
 						if (p->pass.execute) {
 							cobuf.current_pass = p;
 							if (!p->pass.name.is_invalid() && !is_single_pass) {
-								ptc.ctx.debug.begin_region(cobuf.command_buffer, p->pass.name);
+								ctx.debug.begin_region(cobuf.command_buffer, p->pass.name);
 								p->pass.execute(cobuf);
-								ptc.ctx.debug.end_region(cobuf.command_buffer);
+								ctx.debug.end_region(cobuf.command_buffer);
 							} else {
 								p->pass.execute(cobuf);
 							}
@@ -298,7 +300,7 @@ namespace vuk {
 				}
 			}
 			if (is_single_pass) {
-				ptc.ctx.debug.end_region(cbuf);
+				ctx.debug.end_region(cbuf);
 			}
 			if (rpass.handle != VK_NULL_HANDLE) {
 				vkCmdEndRenderPass(cbuf);

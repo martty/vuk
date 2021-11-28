@@ -125,7 +125,7 @@ namespace vuk {
 		};
 
 		/// @brief Consume this RenderGraph and create an ExecutableRenderGraph
-		struct ExecutableRenderGraph link(PerThreadContext& ptc, const CompileOptions& compile_options)&&;
+		struct ExecutableRenderGraph link(Context& ctx, const CompileOptions& compile_options)&&;
 
 		// reflection functions
  
@@ -158,7 +158,7 @@ namespace vuk {
 		ExecutableRenderGraph(ExecutableRenderGraph&&) noexcept;
 		ExecutableRenderGraph& operator=(ExecutableRenderGraph&&) noexcept;
 
-		Result<NUnique<struct HLCommandBuffer>> execute(PerThreadContext&, struct NAllocator&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
+		Result<NUnique<struct HLCommandBuffer>> execute(Context&, struct NAllocator&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
 
 		struct BufferInfo get_resource_buffer(Name);
 		struct AttachmentRPInfo get_resource_image(Name);

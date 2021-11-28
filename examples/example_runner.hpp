@@ -33,8 +33,7 @@ namespace vuk {
 		VkPhysicalDevice physical_device;
 		VkQueue graphics_queue;
 		std::optional<Context> context;
-		std::optional<Direct> direct_alloc;
-		std::optional<RingFrame> global_alloc;
+		std::optional<RingFrame> rf_alloc;
 		vuk::SwapchainRef swapchain;
 		GLFWwindow* window;
 		VkSurfaceKHR surface;
@@ -58,7 +57,7 @@ namespace vuk {
 			{
 				auto ptc = ifc.begin();
 				imgui_data = util::ImGui_ImplVuk_Init(ptc);
-				ptc.wait_all_transfers();
+				context->wait_all_transfers();
 			}
 			for(auto& ex : examples)
 				ex->setup(*this, ifc);
@@ -84,7 +83,7 @@ namespace vuk {
 
 		~ExampleRunner() {
 			context.reset();
-			global_alloc.reset();
+			rf_alloc.reset();
 			vkDestroySurfaceKHR(vkbinstance.instance, surface, nullptr);
 			destroy_window_glfw(window);
 			vkb::destroy_device(vkbdevice);

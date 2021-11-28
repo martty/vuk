@@ -91,9 +91,9 @@ namespace {
 
 			auto ptc = ifc.begin();
 			// Similarly to buffers, we allocate the image and enqueue the upload
-			auto [tex, _] = ptc.create_texture(vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, doge_image);
+			auto [tex, _] = ptc.ctx.create_texture(vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, doge_image);
 			texture_of_doge = std::move(tex);
-			ptc.wait_all_transfers();
+			ptc.ctx.wait_all_transfers();
 			stbi_image_free(doge_image);
 
 			// Let's create two variants of the doge image (like in example 09)
@@ -149,22 +149,21 @@ namespace {
 			rg.attach_image("10_v1", vuk::ImageAttachment::from_texture(*variant1), vuk::eNone, vuk::eFragmentSampled);
 			rg.attach_image("10_v2", vuk::ImageAttachment::from_texture(*variant2), vuk::eNone, vuk::eFragmentSampled);
 			// The rendergraph is submitted and fence-waited on
-			vuk::NLinear lin_alloc(ifc.ctx.device, *ifc.ctx.get_direct_allocator().mr);
-			execute_submit_and_wait(ptc, ifc.ctx.get_direct_allocator(), std::move(rg).link(ptc, vuk::RenderGraph::CompileOptions{}));
+			execute_submit_and_wait(ifc.ctx, ifc.ctx.get_direct_allocator(), std::move(rg).link(ptc, vuk::RenderGraph::CompileOptions{}));
 
 			// Set up the resources for our renderer
 
 			// Create meshes
 			cube_mesh = Mesh{};
-			cube_mesh->vertex_buffer = ptc.create_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eVertexBuffer, std::span(&box.first[0], box.first.size())).first;
-			cube_mesh->index_buffer = ptc.create_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eIndexBuffer, std::span(&box.second[0], box.second.size())).first;
+			cube_mesh->vertex_buffer = ptc.ctx.create_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eVertexBuffer, std::span(&box.first[0], box.first.size())).first;
+			cube_mesh->index_buffer = ptc.ctx.create_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eIndexBuffer, std::span(&box.second[0], box.second.size())).first;
 			cube_mesh->index_count = (uint32_t)box.second.size();
 
 			quad_mesh = Mesh{};
-			quad_mesh->vertex_buffer = ptc.create_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eVertexBuffer, std::span(&box.first[0], 6)).first;
-			quad_mesh->index_buffer = ptc.create_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eIndexBuffer, std::span(&box.second[0], 6)).first;
+			quad_mesh->vertex_buffer = ptc.ctx.create_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eVertexBuffer, std::span(&box.first[0], 6)).first;
+			quad_mesh->index_buffer = ptc.ctx.create_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eIndexBuffer, std::span(&box.second[0], 6)).first;
 			quad_mesh->index_count = 6;
-			ptc.wait_all_transfers();
+			ptc.ctx.wait_all_transfers();
 
 			// Create the pipelines
 			// A "normal" pipeline
@@ -243,9 +242,9 @@ namespace {
 			vp.proj[1][1] *= -1;
 
 			// Upload view & projection
-			auto [buboVP, stub3] = ptc.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eUniformBuffer, std::span(&vp, 1));
+			auto [buboVP, stub3] = ptc.ctx.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eUniformBuffer, std::span(&vp, 1));
 			auto uboVP = buboVP;
-			ptc.wait_all_transfers();
+			ptc.ctx.wait_all_transfers();
 
 			// Do a terrible simulation step
 			// All objects are attracted to the origin
@@ -256,7 +255,7 @@ namespace {
 			}
 
 			// Upload model matrices to an array
-			auto modelmats = ptc.allocate_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eStorageBuffer, sizeof(glm::mat4) * renderables.size(), 1);
+			auto modelmats = ptc.ctx.allocate_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eStorageBuffer, sizeof(glm::mat4) * renderables.size(), 1);
 			for (auto i = 0; i < renderables.size(); i++) {
 				glm::mat4 model_matrix = glm::translate(glm::mat4(1.f), renderables[i].position);
 				memcpy(reinterpret_cast<glm::mat4*>(modelmats.mapped_ptr) + i, &model_matrix, sizeof(glm::mat4));

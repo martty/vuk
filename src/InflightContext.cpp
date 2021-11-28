@@ -51,14 +51,14 @@ vuk::InflightContext::InflightContext(Context& ctx, size_t absolute_frame, std::
 	}
 	ctx.impl->fb_recycle[frame].clear();
 
-	for (auto& [k, v] : impl->scratch_buffers.cache.data[frame].lru_map) {
+	for (auto& [k, v] : ctx.impl->scratch_buffers._data[frame].lru_map) {
 		ctx.impl->allocator.reset_pool(v.value);
 	}
 
 	auto ptc = begin();
-	ptc.impl->descriptor_sets.collect(Context::FC * 2);
+	ctx.impl->descriptor_sets.collect(absolute_frame, Context::FC * 2);
 	ctx.impl->transient_images.collect(absolute_frame, Context::FC * 2);
-	ptc.impl->scratch_buffers.collect(Context::FC * 2);
+	ctx.impl->scratch_buffers.collect(absolute_frame, Context::FC * 2);
 	// collect rarer resources
 	static constexpr uint32_t cache_collection_frequency = 16;
 	auto remainder = absolute_frame % cache_collection_frequency;
@@ -107,30 +107,19 @@ std::optional<double> vuk::InflightContext::get_duration_query_result(vuk::Query
 	return ns * 1e-9;
 }
 
-vuk::TransferStub vuk::InflightContext::enqueue_transfer(Buffer src, Buffer dst) {
+vuk::TransferStub vuk::Context::enqueue_transfer(Buffer src, Buffer dst) {
 	std::lock_guard _(impl->transfer_mutex);
 	TransferStub stub{ transfer_id++ };
 	impl->buffer_transfer_commands.push({ src, dst, stub });
 	return stub;
 }
 
-vuk::TransferStub vuk::InflightContext::enqueue_transfer(Buffer src, vuk::Image dst, vuk::Extent3D extent, uint32_t base_layer, bool generate_mips) {
+vuk::TransferStub vuk::Context::enqueue_transfer(Buffer src, vuk::Image dst, vuk::Extent3D extent, uint32_t base_layer, bool generate_mips) {
 	std::lock_guard _(impl->transfer_mutex);
 	TransferStub stub{ transfer_id++ };
 	// TODO: expose extra transfer knobs
 	impl->bufferimage_transfer_commands.push({ src, dst, extent, base_layer, 1, 0, generate_mips, stub });
 	return stub;
-}
-
-void vuk::InflightContext::wait_all_transfers() {
-	std::lock_guard _(impl->transfer_mutex);
-
-	while (!impl->pending_transfers.empty()) {
-		vkWaitForFences(ctx.device, 1, &impl->pending_transfers.front().fence, true, UINT64_MAX);
-		auto last = impl->pending_transfers.front();
-		last_transfer_complete = last.last_transfer_id;
-		impl->pending_transfers.pop();
-	}
 }
 
 void vuk::InflightContext::destroy(std::vector<vuk::Image>&& images) {
