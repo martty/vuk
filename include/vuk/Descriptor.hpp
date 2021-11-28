@@ -260,10 +260,10 @@ namespace vuk {
 			return backing_pool == other.backing_pool;
 		}
 
-		void update_combined_image_sampler(PerThreadContext& ptc, unsigned binding, unsigned array_index, vuk::ImageView iv, vuk::SamplerCreateInfo sampler_create_info, vuk::ImageLayout layout);
-		void update_storage_image(PerThreadContext& ptc, unsigned binding, unsigned array_index, vuk::ImageView iv);
-        void update_uniform_buffer(PerThreadContext& ptc, unsigned binding, unsigned array_index, Buffer buf);
-        void update_storage_buffer(PerThreadContext& ptc, unsigned binding, unsigned array_index, Buffer buf);
+		void update_combined_image_sampler(Context& ctx, unsigned binding, unsigned array_index, vuk::ImageView iv, vuk::SamplerCreateInfo sampler_create_info, vuk::ImageLayout layout);
+		void update_storage_image(Context& ctx, unsigned binding, unsigned array_index, vuk::ImageView iv);
+        void update_uniform_buffer(Context& ctx, unsigned binding, unsigned array_index, Buffer buf);
+        void update_storage_buffer(Context& ctx, unsigned binding, unsigned array_index, Buffer buf);
 	};
 }
 

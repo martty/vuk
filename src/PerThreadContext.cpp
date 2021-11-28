@@ -1,29 +1,7 @@
 #include "vuk/Context.hpp"
 #include "ContextImpl.hpp"
 
-vuk::PerThreadContext::PerThreadContext(InflightContext& ifc, unsigned tid) : ctx(ifc.ctx), ifc(ifc), tid(tid), impl(new PTCImpl(ifc, *this)) {
-}
-
-vuk::PerThreadContext::~PerThreadContext() {
-	ifc.destroy(std::move(impl->image_recycle));
-	ifc.destroy(std::move(impl->image_view_recycle));
-	delete impl;
-}
-
-void vuk::PerThreadContext::destroy(vuk::Image image) {
-	impl->image_recycle.push_back(image);
-}
-
-void vuk::PerThreadContext::destroy(vuk::ImageView image) {
-	impl->image_view_recycle.push_back(image.payload);
-}
-
-void vuk::PerThreadContext::destroy(vuk::DescriptorSet ds) {
-	// note that since we collect at integer times FC, we are releasing the DS back to the right pool
-	ctx.impl->pool_cache.acquire(ds.layout_info, ifc.absolute_frame).free_sets.enqueue(ds.descriptor_set);
-}
-
-vuk::Unique<vuk::PersistentDescriptorSet> vuk::PerThreadContext::create_persistent_descriptorset(DescriptorSetLayoutCreateInfo dslci,
+vuk::Unique<vuk::PersistentDescriptorSet> vuk::Context::create_persistent_descriptorset(DescriptorSetLayoutCreateInfo dslci,
 	unsigned num_descriptors) {
 	dslci.dslci.bindingCount = (uint32_t)dslci.bindings.size();
 	dslci.dslci.pBindings = dslci.bindings.data();
@@ -33,11 +11,11 @@ vuk::Unique<vuk::PersistentDescriptorSet> vuk::PerThreadContext::create_persiste
 		dslbfci.pBindingFlags = dslci.flags.data();
 		dslci.dslci.pNext = &dslbfci;
 	}
-	auto& dslai = ctx.impl->descriptor_set_layouts.acquire(dslci, ifc.absolute_frame);
+	auto& dslai = impl->descriptor_set_layouts.acquire(dslci, frame_counter);
 	return create_persistent_descriptorset(dslai, num_descriptors);
 }
 
-vuk::Unique<vuk::PersistentDescriptorSet> vuk::PerThreadContext::create_persistent_descriptorset(const DescriptorSetLayoutAllocInfo& dslai, unsigned num_descriptors) {
+vuk::Unique<vuk::PersistentDescriptorSet> vuk::Context::create_persistent_descriptorset(const DescriptorSetLayoutAllocInfo& dslai, unsigned num_descriptors) {
 	vuk::PersistentDescriptorSet tda;
 	auto dsl = dslai.layout;
 	VkDescriptorPoolCreateInfo dpci = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
@@ -68,7 +46,7 @@ vuk::Unique<vuk::PersistentDescriptorSet> vuk::PerThreadContext::create_persiste
 
 	dpci.pPoolSizes = descriptor_counts.data();
 	dpci.poolSizeCount = used_idx;
-	vkCreateDescriptorPool(ctx.device, &dpci, nullptr, &tda.backing_pool);
+	vkCreateDescriptorPool(device, &dpci, nullptr, &tda.backing_pool);
 	VkDescriptorSetAllocateInfo dsai = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
 	dsai.descriptorPool = tda.backing_pool;
 	dsai.descriptorSetCount = 1;
@@ -78,7 +56,7 @@ vuk::Unique<vuk::PersistentDescriptorSet> vuk::PerThreadContext::create_persiste
 	dsvdcai.pDescriptorCounts = &num_descriptors;
 	dsai.pNext = &dsvdcai;
 
-	vkAllocateDescriptorSets(ctx.device, &dsai, &tda.backing_set);
+	vkAllocateDescriptorSets(device, &dsai, &tda.backing_set);
 	// TODO: we need more information here to handled arrayed bindings properly
 	// for now we assume no arrayed bindings outside of the variable count one
 	for (auto& bindings : tda.descriptor_bindings) {
@@ -87,19 +65,19 @@ vuk::Unique<vuk::PersistentDescriptorSet> vuk::PerThreadContext::create_persiste
 	if (dslai.variable_count_binding != (unsigned)-1) {
 		tda.descriptor_bindings[dslai.variable_count_binding].resize(num_descriptors);
 	}
-	return Unique<PersistentDescriptorSet>(ctx, std::move(tda));
+	return Unique<PersistentDescriptorSet>(*this, std::move(tda));
 }
 
-vuk::Unique<vuk::PersistentDescriptorSet> vuk::PerThreadContext::create_persistent_descriptorset(const PipelineBaseInfo& base, unsigned set, unsigned num_descriptors) {
+vuk::Unique<vuk::PersistentDescriptorSet> vuk::Context::create_persistent_descriptorset(const PipelineBaseInfo& base, unsigned set, unsigned num_descriptors) {
 	return create_persistent_descriptorset(base.layout_info[set], num_descriptors);
 }
 
-vuk::Unique<vuk::PersistentDescriptorSet> vuk::PerThreadContext::create_persistent_descriptorset(const ComputePipelineBaseInfo& base, unsigned set, unsigned num_descriptors) {
+vuk::Unique<vuk::PersistentDescriptorSet> vuk::Context::create_persistent_descriptorset(const ComputePipelineBaseInfo& base, unsigned set, unsigned num_descriptors) {
 	return create_persistent_descriptorset(base.layout_info[set], num_descriptors);
 }
 
-void vuk::PerThreadContext::commit_persistent_descriptorset(vuk::PersistentDescriptorSet& array) {
-	vkUpdateDescriptorSets(ctx.device, (uint32_t)array.pending_writes.size(), array.pending_writes.data(), 0, nullptr);
+void vuk::Context::commit_persistent_descriptorset(vuk::PersistentDescriptorSet& array) {
+	vkUpdateDescriptorSets(device, (uint32_t)array.pending_writes.size(), array.pending_writes.data(), 0, nullptr);
 	array.pending_writes.clear();
 }
 
@@ -177,21 +155,6 @@ void vuk::Context::dma_task() {
 		last_transfer_complete = last.last_transfer_id;
 		impl->pending_transfers.pop();
 	}
-}
-
-vuk::SampledImage& vuk::PerThreadContext::make_sampled_image(vuk::ImageView iv, vuk::SamplerCreateInfo sci) {
-	vuk::SampledImage si(vuk::SampledImage::Global{ iv, sci, vuk::ImageLayout::eShaderReadOnlyOptimal });
-	return impl->sampled_images.acquire(si);
-}
-
-vuk::SampledImage& vuk::PerThreadContext::make_sampled_image(Name n, vuk::SamplerCreateInfo sci) {
-	vuk::SampledImage si(vuk::SampledImage::RenderGraphAttachment{ n, sci, {}, vuk::ImageLayout::eShaderReadOnlyOptimal });
-	return impl->sampled_images.acquire(si);
-}
-
-vuk::SampledImage& vuk::PerThreadContext::make_sampled_image(Name n, vuk::ImageViewCreateInfo ivci, vuk::SamplerCreateInfo sci) {
-	vuk::SampledImage si(vuk::SampledImage::RenderGraphAttachment{ n, sci, ivci, vuk::ImageLayout::eShaderReadOnlyOptimal });
-	return impl->sampled_images.acquire(si);
 }
 
 vuk::DescriptorSet vuk::Context::create(const create_info_t<vuk::DescriptorSet>& cinfo) {
@@ -568,23 +531,6 @@ vuk::DescriptorPool vuk::Context::create(const create_info_t<vuk::DescriptorPool
 	return vuk::DescriptorPool{};
 }
 
-vuk::Program vuk::PerThreadContext::get_pipeline_reflection_info(const vuk::PipelineBaseCreateInfo& pci) {
-	auto& res = ctx.impl->pipelinebase_cache.acquire(pci, ifc.absolute_frame);
-	return res.reflection_info;
-}
-
-vuk::Program vuk::PerThreadContext::get_pipeline_reflection_info(const vuk::ComputePipelineBaseCreateInfo& pci) {
-	auto& res = ctx.impl->compute_pipelinebase_cache.acquire(pci, ifc.absolute_frame);
-	return res.reflection_info;
-}
-
-vuk::TimestampQuery vuk::PerThreadContext::register_timestamp_query(vuk::Query handle) {
-	auto query_slot = impl->tsquery_pool.acquire(1)[0];
-	auto& mapping = impl->tsquery_pool.pool.id_to_value_mapping;
-	mapping.emplace_back(handle.id, query_slot.id);
-	return query_slot;
-}
-
 VkRenderPass vuk::Context::acquire_renderpass(const vuk::RenderPassCreateInfo& rpci, uint64_t absolute_frame) {
 	return impl->renderpass_cache.acquire(rpci, absolute_frame);
 }
@@ -607,10 +553,6 @@ vuk::PipelineInfo vuk::Context::acquire_pipeline(const vuk::PipelineInstanceCrea
 
 vuk::ComputePipelineInfo vuk::Context::acquire_pipeline(const vuk::ComputePipelineInstanceCreateInfo& pici, uint64_t absolute_frame) {
 	return impl->compute_pipeline_cache.acquire(pici, absolute_frame);
-}
-
-const plf::colony<vuk::SampledImage>& vuk::PerThreadContext::get_sampled_images() {
-	return impl->sampled_images.pool.values;
 }
 
 

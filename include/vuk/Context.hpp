@@ -266,6 +266,12 @@ namespace vuk {
 		VkRenderPass acquire_renderpass(const struct RenderPassCreateInfo&, uint64_t absolute_frame);
 		struct PipelineInfo acquire_pipeline(const struct PipelineInstanceCreateInfo&, uint64_t absolute_frame);
 		struct ComputePipelineInfo acquire_pipeline(const struct ComputePipelineInstanceCreateInfo&, uint64_t absolute_frame);
+
+		Unique<PersistentDescriptorSet> create_persistent_descriptorset(const PipelineBaseInfo& base, unsigned set, unsigned num_descriptors);
+		Unique<PersistentDescriptorSet> create_persistent_descriptorset(const ComputePipelineBaseInfo& base, unsigned set, unsigned num_descriptors);
+		Unique<PersistentDescriptorSet> create_persistent_descriptorset(const DescriptorSetLayoutAllocInfo& dslai, unsigned num_descriptors);
+		Unique<PersistentDescriptorSet> create_persistent_descriptorset(DescriptorSetLayoutCreateInfo dslci, unsigned num_descriptors);
+		void commit_persistent_descriptorset(PersistentDescriptorSet& array);
 	private:
 		struct ContextImpl* impl;
 		std::atomic<size_t> unique_handle_id_counter = 0;
@@ -316,8 +322,6 @@ namespace vuk {
 		InflightContext(Context& ctx, size_t absolute_frame, std::lock_guard<std::mutex>&& recycle_guard);
 		~InflightContext();
 
-		PerThreadContext begin();
-
 		std::optional<uint64_t> get_timestamp_query_result(Query);
 		std::optional<double> get_duration_query_result(Query start, Query end);
 		//std::optional<double> get_named_timestamp_query_results(Name);
@@ -330,50 +334,6 @@ namespace vuk {
 
 		void destroy(std::vector<vuk::Image>&& images);
 		void destroy(std::vector<VkImageView>&& images);
-	};
-
-	class PerThreadContext {
-	public:
-		Context& ctx;
-		InflightContext& ifc;
-		const unsigned tid = 0;
-
-		PerThreadContext(InflightContext& ifc, unsigned tid);
-		~PerThreadContext();
-
-		PerThreadContext(const PerThreadContext& o) = delete;
-		PerThreadContext& operator=(const PerThreadContext& o) = delete;
-
-		Unique<PersistentDescriptorSet> create_persistent_descriptorset(const PipelineBaseInfo& base, unsigned set, unsigned num_descriptors);
-		Unique<PersistentDescriptorSet> create_persistent_descriptorset(const ComputePipelineBaseInfo& base, unsigned set, unsigned num_descriptors);
-		Unique<PersistentDescriptorSet> create_persistent_descriptorset(const DescriptorSetLayoutAllocInfo& dslai, unsigned num_descriptors);
-		Unique<PersistentDescriptorSet> create_persistent_descriptorset(DescriptorSetLayoutCreateInfo dslci, unsigned num_descriptors);
-		void commit_persistent_descriptorset(PersistentDescriptorSet& array);
-
-		vuk::SampledImage& make_sampled_image(vuk::ImageView iv, vuk::SamplerCreateInfo sci);
-		vuk::SampledImage& make_sampled_image(Name n, vuk::SamplerCreateInfo sci);
-		vuk::SampledImage& make_sampled_image(Name n, vuk::ImageViewCreateInfo ivci, vuk::SamplerCreateInfo sci);
-
-		Program get_pipeline_reflection_info(const PipelineBaseCreateInfo& pci);
-		Program get_pipeline_reflection_info(const ComputePipelineBaseCreateInfo& pci);
-
-		TimestampQuery register_timestamp_query(Query);
-
-		template<class T>
-		void destroy(const T& t) {
-			ctx.destroy(t);
-		}
-
-		void destroy(vuk::Image image);
-		void destroy(vuk::ImageView image);
-		void destroy(vuk::DescriptorSet ds);
-
-		const plf::colony<SampledImage>& get_sampled_images();
-
-	private:
-		friend class InflightContext;
-
-		struct PTCImpl* impl;
 	};
 
 	template<class T>

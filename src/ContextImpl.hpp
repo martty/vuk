@@ -62,10 +62,7 @@ namespace vuk {
 
 		std::mutex gfx_queue_lock;
 		std::mutex xfer_queue_lock;
-		Pool<VkCommandBuffer, Context::FC> cbuf_pools;
 		Pool<TimestampQuery, Context::FC> tsquery_pools;
-		Pool<VkSemaphore, Context::FC> semaphore_pools;
-		Pool<VkFence, Context::FC> fence_pools;
 		VkPipelineCache vk_pipeline_cache = VK_NULL_HANDLE;
 		Cache<PipelineBaseInfo> pipelinebase_cache;
 		Cache<PipelineInfo> pipeline_cache;
@@ -77,7 +74,6 @@ namespace vuk {
 		Cache<vuk::DescriptorPool> pool_cache;
 		PerFrameCache<vuk::DescriptorSet, Context::FC> descriptor_sets;
 		Cache<vuk::Sampler> sampler_cache;
-		Pool<vuk::SampledImage, Context::FC> sampled_images;
 		Cache<vuk::ShaderModule> shader_modules;
 		Cache<vuk::DescriptorSetLayoutAllocInfo> descriptor_set_layouts;
 		Cache<VkPipelineLayout> pipeline_layouts;
@@ -189,10 +185,7 @@ namespace vuk {
 
 		ContextImpl(Context& ctx) : allocator(ctx.instance, ctx.device, ctx.physical_device, ctx.graphics_queue_family_index, ctx.transfer_queue_family_index),
 			device(ctx.device),
-			cbuf_pools(ctx),
 			tsquery_pools(ctx),
-			semaphore_pools(ctx),
-			fence_pools(ctx),
 			pipelinebase_cache(ctx),
 			pipeline_cache(ctx),
 			compute_pipelinebase_cache(ctx),
@@ -203,7 +196,6 @@ namespace vuk {
 			pool_cache(ctx),
 			descriptor_sets(ctx),
 			sampler_cache(ctx),
-			sampled_images(ctx),
 			shader_modules(ctx),
 			descriptor_set_layouts(ctx),
 			pipeline_layouts(ctx),
@@ -415,11 +407,7 @@ inline void record_buffer_image_copy(VkCommandBuffer& cbuf, vuk::BufferImageCopy
 
 namespace vuk {
 	struct IFCImpl {
-		Pool<VkFence, Context::FC>::PFView fence_pools; // must be first, so we wait for the fences
-		Pool<VkCommandBuffer, Context::FC>::PFView commandbuffer_pools;
 		Pool<TimestampQuery, Context::FC>::PFView tsquery_pools;
-		Pool<VkSemaphore, Context::FC>::PFView semaphore_pools;
-		Pool<vuk::SampledImage, Context::FC>::PFView sampled_images;
 
 		// recycle
 		std::mutex recycle_lock;
@@ -427,34 +415,7 @@ namespace vuk {
 		// query results on host
 		std::unordered_map<uint64_t, uint64_t> query_result_map;
 
-		IFCImpl(Context& ctx, InflightContext& ifc) :
-			fence_pools(ctx.impl->fence_pools.get_view(ifc)), // must be first, so we wait for the fences
-			commandbuffer_pools(ctx.impl->cbuf_pools.get_view(ifc)),
-			tsquery_pools(ctx.impl->tsquery_pools.get_view(ifc)),
-			semaphore_pools(ctx.impl->semaphore_pools.get_view(ifc)),
-			sampled_images(ctx.impl->sampled_images.get_view(ifc)){
-		}
-	};
-
-	struct PTCImpl {
-		Pool<VkCommandBuffer, Context::FC>::PFPTView commandbuffer_pool;
-		Pool<VkSemaphore, Context::FC>::PFPTView semaphore_pool;
-		Pool<VkFence, Context::FC>::PFPTView fence_pool;
-		Pool<TimestampQuery, Context::FC>::PFPTView tsquery_pool;
-		Pool<vuk::SampledImage, Context::FC>::PFPTView sampled_images;
-
-		// recycling global objects
-		std::vector<Buffer> buffer_recycle;
-		std::vector<vuk::Image> image_recycle;
-		std::vector<VkImageView> image_view_recycle;
-
-		PTCImpl(InflightContext& ifc, PerThreadContext& ptc) :
-			commandbuffer_pool(ifc.impl->commandbuffer_pools.get_view(ptc)),
-			semaphore_pool(ifc.impl->semaphore_pools.get_view(ptc)),
-			fence_pool(ifc.impl->fence_pools.get_view(ptc)),
-			tsquery_pool(ifc.impl->tsquery_pools.get_view(ptc)),
-			sampled_images(ifc.impl->sampled_images.get_view(ptc)){
-		}
+		IFCImpl(Context& ctx, InflightContext& ifc) : tsquery_pools(ctx.impl->tsquery_pools.get_view(ifc)) {}
 	};
 }
 

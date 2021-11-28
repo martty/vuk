@@ -19,23 +19,6 @@ namespace vuk {
 		void free(Context& ctx);
 	};
 
-	template<>
-	void PooledType<VkFence>::reset(Context& ctx);
-
-	template<>
-	struct PooledType<VkCommandBuffer> {
-		VkCommandPool pool;
-		std::vector<VkCommandBuffer> p_values;
-		std::vector<VkCommandBuffer> s_values;
-		size_t p_needle = 0;
-		size_t s_needle = 0;
-
-		PooledType(Context&);
-		std::span<VkCommandBuffer> acquire(PerThreadContext& ptc, VkCommandBufferLevel, size_t count);
-		void reset(Context&);
-		void free(Context&);
-	};
-
 	struct TimestampQuery;
 
 	template<>

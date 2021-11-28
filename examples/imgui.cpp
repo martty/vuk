@@ -14,7 +14,7 @@ util::ImGuiData util::ImGui_ImplVuk_Init(vuk::NAllocator& allocator) {
 	io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
 
 	ImGuiData data;
-	auto [tex, stub] = ctx.create_texture(ctx.get_direct_allocator(), vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)width, (unsigned)height, 1u }, pixels);
+	auto [tex, stub] = ctx.create_texture(allocator, vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)width, (unsigned)height, 1u }, pixels);
 	data.font_texture = std::move(tex);
 	ctx.debug.set_name(data.font_texture, "ImGui/font");
 	vuk::SamplerCreateInfo sci;
@@ -72,9 +72,8 @@ void util::ImGui_ImplVuk_Render(vuk::NAllocator& allocator, vuk::RenderGraph& rg
 		auto imindo = *imind;
 		imindo.offset += idx_dst * sizeof(ImDrawIdx);
 
-		// TODO: broke imgui
-		/*ptc.ctx.upload(imverto, std::span(cmd_list->VtxBuffer.Data, cmd_list->VtxBuffer.Size));
-		ptc.ctx.upload(imindo, std::span(cmd_list->IdxBuffer.Data, cmd_list->IdxBuffer.Size));*/
+		ctx.upload(allocator, imverto, std::span(cmd_list->VtxBuffer.Data, cmd_list->VtxBuffer.Size));
+		ctx.upload(allocator, imindo, std::span(cmd_list->IdxBuffer.Data, cmd_list->IdxBuffer.Size));
 		vtx_dst += cmd_list->VtxBuffer.Size;
 		idx_dst += cmd_list->IdxBuffer.Size;
 	}
