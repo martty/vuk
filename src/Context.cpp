@@ -720,12 +720,6 @@ vuk::Context::~Context() {
 	delete impl;
 }
 
-vuk::InflightContext vuk::Context::begin() {
-	std::lock_guard _(impl->begin_frame_lock);
-	std::lock_guard recycle(impl->recycle_locks[_next(frame_counter.load(), FC)]);
-	return InflightContext(*this, ++frame_counter, std::move(recycle));
-}
-
 void vuk::Context::wait_idle() {
 	vkDeviceWaitIdle(device);
 }
@@ -775,4 +769,23 @@ void vuk::Unique<vuk::ImageView>::reset(vuk::ImageView value) noexcept {
 		}
 		payload = std::move(value);
 	}
+}
+
+void vuk::Context::collect(uint64_t frame) {
+	impl->collect(frame);
+}
+
+vuk::TransferStub vuk::Context::enqueue_transfer(Buffer src, Buffer dst) {
+	std::lock_guard _(impl->transfer_mutex);
+	TransferStub stub{ transfer_id++ };
+	impl->buffer_transfer_commands.push({ src, dst, stub });
+	return stub;
+}
+
+vuk::TransferStub vuk::Context::enqueue_transfer(Buffer src, vuk::Image dst, vuk::Extent3D extent, uint32_t base_layer, bool generate_mips) {
+	std::lock_guard _(impl->transfer_mutex);
+	TransferStub stub{ transfer_id++ };
+	// TODO: expose extra transfer knobs
+	impl->bufferimage_transfer_commands.push({ src, dst, extent, base_layer, 1, 0, generate_mips, stub });
+	return stub;
 }

@@ -63,7 +63,6 @@ add_subdirectory(ext/SPIRV-Cross)
 target_sources(vuk PRIVATE 
 	src/Pipeline.cpp
 	src/Program.cpp
-	src/Pool.cpp
 	src/Cache.cpp
 	src/RenderGraph.cpp 
 	src/RenderGraphUtil.cpp
@@ -72,7 +71,6 @@ target_sources(vuk PRIVATE
 	src/Allocator.cpp
 	src/Context.cpp
 	src/CommandBuffer.cpp
-	src/InflightContext.cpp
 	src/PerThreadContext.cpp
 	src/Util.cpp
 	src/Format.cpp

@@ -7,7 +7,6 @@
 #include <math.h>
 
 #include "Allocator.hpp"
-#include "Pool.hpp"
 #include "Cache.hpp"
 #include "RenderPass.hpp"
 #include "vuk/Allocator.hpp"
@@ -62,7 +61,6 @@ namespace vuk {
 
 		std::mutex gfx_queue_lock;
 		std::mutex xfer_queue_lock;
-		Pool<TimestampQuery, Context::FC> tsquery_pools;
 		VkPipelineCache vk_pipeline_cache = VK_NULL_HANDLE;
 		Cache<PipelineBaseInfo> pipelinebase_cache;
 		Cache<PipelineInfo> pipeline_cache;
@@ -183,9 +181,33 @@ namespace vuk {
 			return sema;
 		}
 
+		void collect(uint64_t absolute_frame) {
+			descriptor_sets.collect(absolute_frame, Context::FC * 2);
+			transient_images.collect(absolute_frame, Context::FC * 2);
+			scratch_buffers.collect(absolute_frame, Context::FC * 2);
+			// collect rarer resources
+			static constexpr uint32_t cache_collection_frequency = 16;
+			auto remainder = absolute_frame % cache_collection_frequency;
+			switch (remainder) {
+			case 0:
+				pipeline_cache.collect(absolute_frame, cache_collection_frequency); break;
+			case 1:
+				compute_pipeline_cache.collect(absolute_frame, cache_collection_frequency); break;
+			case 2:
+				renderpass_cache.collect(absolute_frame, cache_collection_frequency); break;
+				/*case 3:
+					ptc.impl->sampler_cache.collect(cache_collection_frequency); break;*/ // sampler cache can't be collected due to persistent descriptor sets
+			case 4:
+				pipeline_layouts.collect(absolute_frame, cache_collection_frequency); break;
+			case 5:
+				pipelinebase_cache.collect(absolute_frame, cache_collection_frequency); break;
+			case 6:
+				compute_pipelinebase_cache.collect(absolute_frame, cache_collection_frequency); break;
+			}
+		}
+
 		ContextImpl(Context& ctx) : allocator(ctx.instance, ctx.device, ctx.physical_device, ctx.graphics_queue_family_index, ctx.transfer_queue_family_index),
 			device(ctx.device),
-			tsquery_pools(ctx),
 			pipelinebase_cache(ctx),
 			pipeline_cache(ctx),
 			compute_pipelinebase_cache(ctx),
@@ -217,16 +239,6 @@ namespace vuk {
 	}
 	inline size_t _next(size_t frame, unsigned FC) {
 		return (frame + 1) % FC;
-	}
-
-	template<class T, size_t FC>
-	typename Pool<T, FC>::PFView Pool<T, FC>::get_view(InflightContext& ctx) {
-		return { ctx, *this, per_frame_storage[ctx.frame] };
-	}
-
-	template<class T, size_t FC>
-	Pool<T, FC>::PFView::PFView(InflightContext& ifc, Pool<T, FC>& storage, plf::colony<PooledType<T>>& fv) : storage(storage), ifc(ifc), frame_values(fv) {
-		storage.reset(ifc.frame);
 	}
 }
 
@@ -404,18 +416,3 @@ inline void record_buffer_image_copy(VkCommandBuffer& cbuf, vuk::BufferImageCopy
 
 	vkCmdPipelineBarrier(cbuf, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &top_mip_use_barrier);
 }
-
-namespace vuk {
-	struct IFCImpl {
-		Pool<TimestampQuery, Context::FC>::PFView tsquery_pools;
-
-		// recycle
-		std::mutex recycle_lock;
-
-		// query results on host
-		std::unordered_map<uint64_t, uint64_t> query_result_map;
-
-		IFCImpl(Context& ctx, InflightContext& ifc) : tsquery_pools(ctx.impl->tsquery_pools.get_view(ifc)) {}
-	};
-}
-

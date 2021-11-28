@@ -478,32 +478,7 @@ namespace vuk {
 			direct.deallocate_buffers(src);
 		}
 
-		FrameResource& get_next_frame() {
-			frame_counter++;
-			local_frame = frame_counter % frames_in_flight;
-
-			auto& f = frames[local_frame];
-			f.wait();
-
-			direct.deallocate_fences(f.fences);
-			f.fences.clear();
-
-			direct.deallocate_semaphores(f.semaphores);
-			f.semaphores.clear();
-
-			for (auto& c : f.cmdbuffers_to_free) {
-				direct.deallocate_commandbuffers(c.command_pool, std::span{ &c.command_buffer, 1 });
-			}
-			f.cmdbuffers_to_free.clear();
-
-			direct.deallocate_commandpools(f.cmdpools_to_free);
-			f.cmdpools_to_free.clear();
-
-			direct.deallocate_buffers(f.buffers);
-			f.buffers.clear();
-
-			return f;
-		}
+		FrameResource& get_next_frame();
 
 		virtual ~RingFrame() {
 			for (auto i = 0; i < frames_in_flight; i++) {

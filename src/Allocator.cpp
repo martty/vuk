@@ -9,6 +9,38 @@ namespace vuk {
 	RingFrame::RingFrame(Context& ctx, uint64_t frames_in_flight) : direct(ctx, ctx.get_gpumem()), frames_in_flight(frames_in_flight) {
 		frames.resize(frames_in_flight, FrameResource{ ctx.device, *this });
 	}
+	
+	FrameResource& RingFrame::get_next_frame() {
+		auto& ctx = direct.get_context();
+		frame_counter++;
+		ctx.frame_counter++; // TODO: temporarily?
+		local_frame = frame_counter % frames_in_flight;
+
+		auto& f = frames[local_frame];
+		f.wait();
+
+		direct.deallocate_fences(f.fences);
+		f.fences.clear();
+
+		direct.deallocate_semaphores(f.semaphores);
+		f.semaphores.clear();
+
+		for (auto& c : f.cmdbuffers_to_free) {
+			direct.deallocate_commandbuffers(c.command_pool, std::span{ &c.command_buffer, 1 });
+		}
+		f.cmdbuffers_to_free.clear();
+
+		direct.deallocate_commandpools(f.cmdpools_to_free);
+		f.cmdpools_to_free.clear();
+
+		direct.deallocate_buffers(f.buffers);
+		f.buffers.clear();
+
+		ctx.collect(frame_counter);
+
+		return f;
+	}
+
 	NLinear::NLinear(VkResource& upstream, SyncScope scope) : ctx(&upstream.get_context()), device(ctx->device), scope(scope), VkResourceNested(&upstream) {}
 
 	PFN_vmaAllocateDeviceMemoryFunction Allocator::real_alloc_callback = nullptr;

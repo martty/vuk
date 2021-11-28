@@ -2,7 +2,6 @@
 
 #include "vuk/Types.hpp"
 #include "vuk/Image.hpp"
-#include "../src/Pool.hpp"
 #include <optional>
 
 namespace vuk {
@@ -46,28 +45,4 @@ namespace vuk {
 			return *this;
 		}
 	};
-
-	// the returned values are pointer stable until the frame gets recycled
-	template<>
-	struct PooledType<vuk::SampledImage> {
-		plf::colony<vuk::SampledImage> values;
-		size_t needle = 0;
-
-		PooledType(Context&) {}
-		vuk::SampledImage& acquire(PerThreadContext& ptc, vuk::SampledImage si);
-		void reset(Context&) { needle = 0; }
-		void free(Context&) {} // nothing to free, this is non-owning
-	};
-
-	inline vuk::SampledImage& PooledType<vuk::SampledImage>::acquire(PerThreadContext&, vuk::SampledImage si) {
-		if (values.size() < (needle + 1)) {
-			needle++;
-			return *values.emplace(std::move(si));
-		} else {
-			auto it = values.begin();
-			values.advance(it, needle++);
-			*it = si;
-			return *it;
-		}
-	}
 }

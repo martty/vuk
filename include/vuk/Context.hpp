@@ -272,6 +272,9 @@ namespace vuk {
 		Unique<PersistentDescriptorSet> create_persistent_descriptorset(const DescriptorSetLayoutAllocInfo& dslai, unsigned num_descriptors);
 		Unique<PersistentDescriptorSet> create_persistent_descriptorset(DescriptorSetLayoutCreateInfo dslci, unsigned num_descriptors);
 		void commit_persistent_descriptorset(PersistentDescriptorSet& array);
+
+		void collect(uint64_t frame);
+
 	private:
 		struct ContextImpl* impl;
 		std::atomic<size_t> unique_handle_id_counter = 0;
@@ -312,28 +315,6 @@ namespace vuk {
 		friend struct PTCImpl;
 		template<class T> friend class Cache; // caches can directly destroy
 		template<class T, size_t FC> friend class PerFrameCache;
-	};
-
-	class InflightContext {
-	public:
-		Context& ctx;
-		const size_t absolute_frame;
-		const unsigned frame;
-		InflightContext(Context& ctx, size_t absolute_frame, std::lock_guard<std::mutex>&& recycle_guard);
-		~InflightContext();
-
-		std::optional<uint64_t> get_timestamp_query_result(Query);
-		std::optional<double> get_duration_query_result(Query start, Query end);
-		//std::optional<double> get_named_timestamp_query_results(Name);
-
-		std::vector<SampledImage> get_sampled_images();
-	private:
-		struct IFCImpl* impl;
-		friend class PerThreadContext;
-		friend struct PTCImpl;
-
-		void destroy(std::vector<vuk::Image>&& images);
-		void destroy(std::vector<VkImageView>&& images);
 	};
 
 	template<class T>
