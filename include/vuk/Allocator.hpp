@@ -7,6 +7,7 @@
 #include <span>
 #include <vector>
 #include <atomic>
+#include <../src/Allocator.hpp>
 
 namespace vuk {
 	struct SourceLocation {
@@ -114,6 +115,13 @@ namespace vuk {
 		}
 	};
 
+	struct BufferCreateInfo {
+		MemoryUsage mem_usage;
+		BufferUsageFlags buffer_usage;
+		size_t size;
+		size_t alignment;
+	};
+
 	struct VkResource {
 		virtual Result<void, AllocateException> allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) = 0;
 		virtual void deallocate_semaphores(std::span<const VkSemaphore> sema) = 0;
@@ -129,6 +137,11 @@ namespace vuk {
 
 		virtual Result<void, AllocateException> allocate_commandpools(std::span<VkCommandPool> dst, std::span<VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) = 0;
 		virtual void deallocate_commandpools(std::span<const VkCommandPool> dst) = 0;
+
+		virtual Result<void, AllocateException> allocate_buffers(std::span<Buffer> dst, std::span<BufferCreateInfo> cis, SourceLocationAtFrame loc) = 0;
+		virtual void deallocate_buffers(std::span<const Buffer> dst) = 0;
+
+		virtual Context& get_context() = 0;
 	};
 
 	struct VkResourceNested : VkResource {
@@ -164,6 +177,14 @@ namespace vuk {
 			upstream->deallocate_commandpools(dst);
 		}
 
+		Result<void, AllocateException> allocate_buffers(std::span<Buffer> dst, std::span<BufferCreateInfo> cis, SourceLocationAtFrame loc) override {
+			return upstream->allocate_buffers(dst, cis, loc);
+		}
+
+		void deallocate_buffers(std::span<const Buffer> dst) override {
+			upstream->deallocate_buffers(dst);
+		}
+
 
 		/*virtual ImageView allocate_image_view(const ImageViewCreateInfo& info, uint64_t frame, SourceLocation loc) { return upstream->allocate_image_view(info, frame, loc); }
 		virtual Sampler allocate_sampler(const SamplerCreateInfo& info, uint64_t frame, SourceLocation loc) { return upstream->allocate_sampler(info, frame, loc); }*/
@@ -188,7 +209,7 @@ namespace vuk {
 	* HL cmdbuffers: 1:1 with pools
 	*/
 	struct Direct final : VkResource {
-		Direct(VkDevice device) : device(device) {}
+		Direct(Context& ctx, Allocator& alloc);
 
 		Result<void, AllocateException> allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) override {
 			VkSemaphoreCreateInfo sci{ .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
@@ -289,6 +310,30 @@ namespace vuk {
 			}
 		}
 
+		Result<void, AllocateException> allocate_buffers(std::span<Buffer> dst, std::span<BufferCreateInfo> cis, SourceLocationAtFrame loc) override {
+			assert(dst.size() == cis.size());
+			for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
+				auto& ci = cis[i];
+				bool create_mapped = ci.mem_usage == MemoryUsage::eCPUonly || ci.mem_usage == MemoryUsage::eCPUtoGPU || ci.mem_usage == MemoryUsage::eGPUtoCPU;
+				dst[i] = gpumem->allocate_buffer(ci.mem_usage, ci.buffer_usage, ci.size, ci.alignment, create_mapped);
+			}
+			return { expected_value };
+		}
+
+		void deallocate_buffers(std::span<const Buffer> src) override {
+			for (auto& v : src) {
+				if (v) {
+					gpumem->free_buffer(v);
+				}
+			}
+		}
+
+		Context& get_context() override {
+			return *ctx;
+		}
+
+		Context* ctx;
+		Allocator* gpumem;
 		VkDevice device;
 	};
 
@@ -358,10 +403,21 @@ namespace vuk {
 			vec.insert(vec.end(), src.begin(), src.end());
 		}
 
+		std::vector<Buffer> buffers;
+
+		void deallocate_buffers(std::span<const Buffer> src) override {
+			auto& vec = buffers;
+			vec.insert(vec.end(), src.begin(), src.end());
+		}
+
 		void wait() {
 			if (fences.size() > 0) {
 				vkWaitForFences(device, (uint32_t)fences.size(), fences.data(), true, UINT64_MAX);
 			}
+		}
+
+		Context& get_context() override {
+			return upstream->get_context();
 		}
 
 		VkDevice device;
@@ -369,9 +425,7 @@ namespace vuk {
 
 	/// @brief RingFrame is an allocator that gives out Frame allocators, and manages their resources
 	struct RingFrame : VkResource {
-		RingFrame(VkDevice device, uint64_t frames_in_flight) : direct(device), frames_in_flight(frames_in_flight) {
-			frames.resize(frames_in_flight, FrameResource{ device, *this });
-		}
+		RingFrame(Context& ctx, uint64_t frames_in_flight);
 
 		std::vector<FrameResource> frames;
 
@@ -416,6 +470,14 @@ namespace vuk {
 			direct.deallocate_commandpools(src);
 		}
 
+		Result<void, AllocateException> allocate_buffers(std::span<Buffer> dst, std::span<BufferCreateInfo> cis, SourceLocationAtFrame loc) override {
+			return direct.allocate_buffers(dst, cis, loc);
+		}
+
+		void deallocate_buffers(std::span<const Buffer> src) override {
+			direct.deallocate_buffers(src);
+		}
+
 		FrameResource& get_next_frame() {
 			frame_counter++;
 			local_frame = frame_counter % frames_in_flight;
@@ -437,6 +499,9 @@ namespace vuk {
 			direct.deallocate_commandpools(f.cmdpools_to_free);
 			f.cmdpools_to_free.clear();
 
+			direct.deallocate_buffers(f.buffers);
+			f.buffers.clear();
+
 			return f;
 		}
 
@@ -454,17 +519,24 @@ namespace vuk {
 			}
 		}
 
+		Context& get_context() override {
+			return *direct.ctx;
+		}
+
 		Direct direct;
 		std::atomic<uint64_t> frame_counter;
 		std::atomic<uint64_t> local_frame;
 		const uint64_t frames_in_flight;
 	};
 
-
 	inline FrameResource::FrameResource(VkDevice device, RingFrame& upstream) : device(device), VkResourceNested(&upstream) {}
 
 	struct NLinear : VkResourceNested {
-		NLinear(VkDevice device, VkResource& upstream) : device(device), VkResourceNested(&upstream) {}
+		enum class SyncScope { eInline, eScope };
+		static constexpr SyncScope eInline = SyncScope::eInline;
+		static constexpr SyncScope eScope = SyncScope::eScope;
+
+		NLinear(VkResource& upstream, SyncScope scope);
 
 		bool should_subsume = false;
 		std::vector<VkSemaphore> semaphores;
@@ -528,10 +600,15 @@ namespace vuk {
 			return { expected_value };
 		}
 
-		/// @brief Joins the lifetime of this allocator to the upstream allocator
-		void subsume() {
-			should_subsume = true;
+		std::vector<Buffer> buffers;
+
+		Result<void, AllocateException> allocate_buffers(std::span<Buffer> dst, std::span<BufferCreateInfo> cis, SourceLocationAtFrame loc) override {
+			auto result = upstream->allocate_buffers(dst, cis, loc);
+			buffers.insert(buffers.end(), dst.begin(), dst.end());
+			return result;
 		}
+
+		void deallocate_buffers(std::span<const Buffer>) override {} // linear allocator, noop
 
 		void wait() {
 			if (fences.size() > 0) {
@@ -539,17 +616,24 @@ namespace vuk {
 			}
 		}
 
+		Context& get_context() override {
+			return *ctx;
+		}
+
 		~NLinear() {
-			if (!should_subsume) {
+			if (scope == SyncScope::eScope) {
 				wait();
 			}
 			upstream->deallocate_fences(fences);
 			upstream->deallocate_semaphores(semaphores);
 			upstream->deallocate_commandpools(command_pools);
 			upstream->deallocate_commandpools(direct_command_pools);
+			upstream->deallocate_buffers(buffers);
 		}
 
+		Context* ctx;
 		VkDevice device;
+		SyncScope scope;
 	};
 
 	template <class ContainerType>
@@ -559,8 +643,9 @@ namespace vuk {
 	};
 
 
-	struct NAllocator {
-		explicit NAllocator(VkResource& mr) : mr(&mr) {}
+	class NAllocator {
+	public:
+		explicit NAllocator(VkResource& mr) : ctx(&mr.get_context()), mr(&mr) {}
 
 		Result<void, AllocateException> allocate(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) {
 			return mr->allocate_semaphores(dst, loc);
@@ -598,6 +683,14 @@ namespace vuk {
 			mr->deallocate_commandbuffers_hl(src);
 		}
 
+		Result<void, AllocateException> allocate_buffers(std::span<Buffer> dst, std::span<BufferCreateInfo> cis, SourceLocationAtFrame loc) {
+			return mr->allocate_buffers(dst, cis, loc);
+		}
+
+		void deallocate_impl(std::span<const Buffer> src) {
+			mr->deallocate_buffers(src);
+		}
+
 		template<class T, size_t N>
 		void deallocate(T(&src)[N]) {
 			deallocate_impl(std::span<const T>{ src, N });
@@ -613,6 +706,16 @@ namespace vuk {
 			deallocate_impl(std::span(src));
 		}
 
+		VkResource& get_memory_resource() {
+			return *mr;
+		}
+
+		Context& get_context() {
+			return *ctx;
+		}
+
+	private:
+		Context* ctx;
 		VkResource* mr;
 	};
 

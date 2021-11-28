@@ -107,20 +107,16 @@ size_t vuk::Context::get_allocation_size(Buffer buf) {
 	return impl->allocator.get_allocation_size(buf);
 }
 
-vuk::Buffer vuk::Context::allocate_scratch_buffer(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, size_t size, size_t alignment) {
+vuk::NUnique<vuk::Buffer> vuk::Context::allocate_buffer(NAllocator& allocator, MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, size_t size, size_t alignment) {
 	bool create_mapped = mem_usage == MemoryUsage::eCPUonly || mem_usage == MemoryUsage::eCPUtoGPU || mem_usage == MemoryUsage::eGPUtoCPU;
-	PoolSelect ps{ mem_usage, buffer_usage };
-	auto& pool = impl->scratch_buffers.acquire(ps, frame_counter);
-	return impl->allocator.allocate_buffer(pool, size, alignment, create_mapped);
-}
-
-vuk::Unique<vuk::Buffer> vuk::Context::allocate_buffer(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, size_t size, size_t alignment) {
-	bool create_mapped = mem_usage == MemoryUsage::eCPUonly || mem_usage == MemoryUsage::eCPUtoGPU || mem_usage == MemoryUsage::eGPUtoCPU;
-	return vuk::Unique<Buffer>(*this, impl->allocator.allocate_buffer(mem_usage, buffer_usage, size, alignment, create_mapped));
+	NUnique<Buffer> buf(allocator);
+	BufferCreateInfo bci{ mem_usage, vuk::BufferUsageFlagBits::eTransferDst | buffer_usage, size, alignment};
+	auto ret = allocator.allocate_buffers(std::span{ &*buf, 1 }, std::span{ &bci, 1 }, VUK_HERE_AND_NOW()); // TODO: dropping error
+	return buf;
 }
 
 
-std::pair<vuk::Texture, vuk::TransferStub> vuk::Context::create_texture(vuk::Format format, vuk::Extent3D extent, void* data, bool generate_mips) {
+std::pair<vuk::Texture, vuk::TransferStub> vuk::Context::create_texture(NAllocator& allocator, vuk::Format format, vuk::Extent3D extent, void* data, bool generate_mips) {
 	vuk::ImageCreateInfo ici;
 	ici.format = format;
 	ici.extent = extent;
@@ -131,7 +127,7 @@ std::pair<vuk::Texture, vuk::TransferStub> vuk::Context::create_texture(vuk::For
 	ici.mipLevels = generate_mips ? (uint32_t)log2f((float)std::max(extent.width, extent.height)) + 1 : 1;
 	ici.arrayLayers = 1;
 	auto tex = allocate_texture(ici);
-	auto stub = upload(*tex.image, format, extent, 0, std::span<std::byte>((std::byte*)data, compute_image_size(format, extent)), generate_mips);
+	auto stub = upload(allocator, *tex.image, format, extent, 0, std::span<std::byte>((std::byte*)data, compute_image_size(format, extent)), generate_mips);
 	return { std::move(tex), stub };
 }
 

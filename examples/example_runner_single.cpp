@@ -55,23 +55,20 @@ vuk::ExampleRunner::ExampleRunner() {
 			device = vkbdevice.device;
 
 			context.emplace(ContextCreateParameters{ instance, device, physical_device, graphics_queue, graphics_queue_family_index });
-			rf_alloc.emplace(context->device, vuk::Context::FC);
+			rf_alloc.emplace(*context, vuk::Context::FC);
 			swapchain = context->add_swapchain(util::make_swapchain(vkbdevice));
 }
 
 void vuk::ExampleRunner::render() {
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
-		auto& frame_alloc = rf_alloc->get_next_frame();
-		auto ifc = context->begin();
-		auto rg = examples[0]->render(*this, ifc);
+		auto& frame_resource = rf_alloc->get_next_frame();
+		NAllocator frame_allocator(frame_resource);
+		auto rg = examples[0]->render(*this, frame_allocator);
 		auto attachment_name = vuk::Name(std::string(examples[0]->name) + "_final");
 		rg.attach_swapchain(attachment_name, swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
 		auto erg = std::move(rg).link(*context, vuk::RenderGraph::CompileOptions{});
-		vuk::NLinear nl(context->device, frame_alloc);
-		NAllocator alloc(nl);
-		execute_submit_and_present_to_one(*context, alloc, std::move(erg), swapchain);
-		nl.subsume();
+		execute_submit_and_present_to_one(*context, frame_allocator, std::move(erg), swapchain);
 	}
 }
 

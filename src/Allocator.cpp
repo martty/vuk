@@ -1,8 +1,16 @@
 #include "Allocator.hpp"
+#include "vuk/Allocator.hpp"
+#include "vuk/Context.hpp"
 #include <string>
 #include <numeric>
 
 namespace vuk {
+	Direct::Direct(Context& ctx, Allocator& alloc) : ctx(&ctx), device(ctx.device), gpumem(&alloc) {}
+	RingFrame::RingFrame(Context& ctx, uint64_t frames_in_flight) : direct(ctx, ctx.get_gpumem()), frames_in_flight(frames_in_flight) {
+		frames.resize(frames_in_flight, FrameResource{ ctx.device, *this });
+	}
+	NLinear::NLinear(VkResource& upstream, SyncScope scope) : ctx(&upstream.get_context()), device(ctx->device), scope(scope), VkResourceNested(&upstream) {}
+
 	PFN_vmaAllocateDeviceMemoryFunction Allocator::real_alloc_callback = nullptr;
 
 	std::string to_string(BufferUsageFlags value) {

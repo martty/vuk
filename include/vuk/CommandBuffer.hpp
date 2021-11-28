@@ -164,7 +164,7 @@ namespace vuk {
 	struct ExecutableRenderGraph;
 	struct PassInfo;
 	struct Query;
-	struct NAllocator;
+	class NAllocator;
 
 	class CommandBuffer {
 	protected:

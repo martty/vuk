@@ -3,7 +3,8 @@
 #include "vuk/CommandBuffer.hpp"
 #include "vuk/RenderGraph.hpp"
 
-util::ImGuiData util::ImGui_ImplVuk_Init(vuk::PerThreadContext& ptc) {
+util::ImGuiData util::ImGui_ImplVuk_Init(vuk::NAllocator& allocator) {
+	vuk::Context& ctx = allocator.get_context();
 	auto& io = ImGui::GetIO();
 	io.BackendRendererName = "imgui_impl_vuk";
 	io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;  // We can honor the ImDrawCmd::VtxOffset field, allowing for large meshes.
@@ -13,9 +14,9 @@ util::ImGuiData util::ImGui_ImplVuk_Init(vuk::PerThreadContext& ptc) {
 	io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
 
 	ImGuiData data;
-	auto [tex, stub] = ptc.ctx.create_texture(vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)width, (unsigned)height, 1u }, pixels);
+	auto [tex, stub] = ctx.create_texture(ctx.get_direct_allocator(), vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)width, (unsigned)height, 1u }, pixels);
 	data.font_texture = std::move(tex);
-	ptc.ctx.debug.set_name(data.font_texture, "ImGui/font");
+	ctx.debug.set_name(data.font_texture, "ImGui/font");
 	vuk::SamplerCreateInfo sci;
 	sci.minFilter = sci.magFilter = vuk::Filter::eLinear;
 	sci.mipmapMode = vuk::SamplerMipmapMode::eLinear;
@@ -31,13 +32,14 @@ util::ImGuiData util::ImGui_ImplVuk_Init(vuk::PerThreadContext& ptc) {
 		auto fpath = "../../examples/imgui.frag.spv";
 		auto fcont = util::read_spirv(fpath);
 		pci.add_spirv(fcont, fpath);
-		ptc.ctx.create_named_pipeline("imgui", pci);
+		ctx.create_named_pipeline("imgui", pci);
 	}
-	ptc.ctx.wait_all_transfers();
+	ctx.wait_all_transfers();
 	return data;
 }
 
-void util::ImGui_ImplVuk_Render(vuk::PerThreadContext& ptc, vuk::RenderGraph& rg, vuk::Name src_target, vuk::Name dst_target, util::ImGuiData& data, ImDrawData* draw_data) {
+void util::ImGui_ImplVuk_Render(vuk::NAllocator& allocator, vuk::RenderGraph& rg, vuk::Name src_target, vuk::Name dst_target, util::ImGuiData& data, ImDrawData* draw_data) {
+	auto& ctx = allocator.get_context();
 	auto reset_render_state = [](const util::ImGuiData& data, vuk::CommandBuffer& command_buffer, ImDrawData* draw_data, vuk::Buffer vertex, vuk::Buffer index) {
 		command_buffer.bind_sampled_image(0, 0, *data.font_texture.view, data.font_sci);
 		if (index.size > 0) {
@@ -59,32 +61,33 @@ void util::ImGui_ImplVuk_Render(vuk::PerThreadContext& ptc, vuk::RenderGraph& rg
 
 	size_t vertex_size = draw_data->TotalVtxCount * sizeof(ImDrawVert);
 	size_t index_size = draw_data->TotalIdxCount * sizeof(ImDrawIdx);
-	auto imvert = ptc.ctx.allocate_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eVertexBuffer | vuk::BufferUsageFlagBits::eTransferDst, vertex_size, 1);
-	auto imind = ptc.ctx.allocate_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eIndexBuffer | vuk::BufferUsageFlagBits::eTransferDst, index_size, 1);
+	auto imvert = ctx.allocate_buffer(allocator, vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eVertexBuffer | vuk::BufferUsageFlagBits::eTransferDst, vertex_size, 1);
+	auto imind = ctx.allocate_buffer(allocator, vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eIndexBuffer | vuk::BufferUsageFlagBits::eTransferDst, index_size, 1);
 
 	size_t vtx_dst = 0, idx_dst = 0;
 	for (int n = 0; n < draw_data->CmdListsCount; n++) {
 		const ImDrawList* cmd_list = draw_data->CmdLists[n];
-		auto imverto = imvert;
+		auto imverto = *imvert;
 		imverto.offset += vtx_dst * sizeof(ImDrawVert);
-		auto imindo = imind;
+		auto imindo = *imind;
 		imindo.offset += idx_dst * sizeof(ImDrawIdx);
 
-		ptc.ctx.upload(imverto, std::span(cmd_list->VtxBuffer.Data, cmd_list->VtxBuffer.Size));
-		ptc.ctx.upload(imindo, std::span(cmd_list->IdxBuffer.Data, cmd_list->IdxBuffer.Size));
+		// TODO: broke imgui
+		/*ptc.ctx.upload(imverto, std::span(cmd_list->VtxBuffer.Data, cmd_list->VtxBuffer.Size));
+		ptc.ctx.upload(imindo, std::span(cmd_list->IdxBuffer.Data, cmd_list->IdxBuffer.Size));*/
 		vtx_dst += cmd_list->VtxBuffer.Size;
 		idx_dst += cmd_list->IdxBuffer.Size;
 	}
 
-	ptc.ctx.wait_all_transfers();
+	ctx.wait_all_transfers();
 	vuk::Pass pass{
 		.name = "imgui",
 		.resources = { vuk::Resource{dst_target, vuk::Resource::Type::eImage, vuk::eColorRW} },
-		.execute = [&data, imvert, imind, draw_data, reset_render_state, src_target](vuk::CommandBuffer& command_buffer) {
+		.execute = [&data, verts = imvert.get(), inds = imind.get(), draw_data, reset_render_state, src_target](vuk::CommandBuffer& command_buffer) {
 			command_buffer.set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor);
 			command_buffer.set_rasterization(vuk::PipelineRasterizationStateCreateInfo{});
 			command_buffer.set_color_blend(src_target, vuk::BlendPreset::eAlphaBlend);
-			reset_render_state(data, command_buffer, draw_data, imvert, imind);
+			reset_render_state(data, command_buffer, draw_data, verts, inds);
 			// Will project scissor/clipping rectangles into framebuffer space
 			ImVec2 clip_off = draw_data->DisplayPos;         // (0,0) unless using multi-viewports
 			ImVec2 clip_scale = draw_data->FramebufferScale; // (1,1) unless using retina display which are often (2,2)
@@ -101,7 +104,7 @@ void util::ImGui_ImplVuk_Render(vuk::PerThreadContext& ptc, vuk::RenderGraph& rg
 						// User callback, registered via ImDrawList::AddCallback()
 						// (ImDrawCallback_ResetRenderState is a special callback value used by the user to request the renderer to reset render state.)
 						if (pcmd->UserCallback == ImDrawCallback_ResetRenderState)
-							reset_render_state(data, command_buffer, draw_data, imvert, imind);
+							reset_render_state(data, command_buffer, draw_data, verts, inds);
 						else
 							pcmd->UserCallback(cmd_list, pcmd);
 					} else {
@@ -155,11 +158,12 @@ void util::ImGui_ImplVuk_Render(vuk::PerThreadContext& ptc, vuk::RenderGraph& rg
 
 	// add rendergraph dependencies to be transitioned
 	// make all rendergraph sampled images available
-	for (auto& si : ptc.get_sampled_images()) {
+	// TODO: broke imgui
+	/*for (auto& si : ptc.get_sampled_images()) {
 		if (!si.is_global) {
 			pass.resources.push_back(vuk::Resource(si.rg_attachment.attachment_name, vuk::Resource::Type::eImage, vuk::Access::eFragmentSampled));
 		}
-	}
+	}*/
 
 	rg.add_pass(std::move(pass));
 	rg.add_alias(dst_target, src_target);

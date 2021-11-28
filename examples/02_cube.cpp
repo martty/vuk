@@ -22,26 +22,30 @@ namespace {
 	vuk::Example x{
 		.name = "02_cube",
 		// Same setup as previously
-		.setup = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
+		.setup = [](vuk::ExampleRunner& runner, vuk::NAllocator& allocator) {
 			vuk::PipelineBaseCreateInfo pci;
 			pci.add_glsl(util::read_entire_file("../../examples/ubo_test.vert"), "ubo_test.vert");
 			pci.add_glsl(util::read_entire_file("../../examples/triangle_depthshaded.frag"), "triangle_depthshaded.frag");
-			runner.context->create_named_pipeline("cube", pci);
+			allocator.get_context().create_named_pipeline("cube", pci);
 		},
-		.render = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
-			// We acquire a context specific to the thread we are on (PerThreadContext)
-			auto ptc = ifc.begin();
+		.render = [](vuk::ExampleRunner& runner, vuk::NAllocator& frame_allocator) {
+			auto& ctx = frame_allocator.get_context();
+			// Create a linear resource to allocate from during this frame (specific to this thread)
+			// We specify an inline linear resource - when the resource is destroyed, it just releases the resources to the upstream allocator 
+			// (in this the frame allocator), but does not force a synchronization point
+			// Frame resources are implicitly inline, they only synchronize when the frame is reused
+			vuk::NLinear linear_res(frame_allocator.get_memory_resource(), vuk::NLinear::eInline);
+			vuk::NAllocator allocator(linear_res);
 
 			// Request a scratch buffer allocation with specific data
 			// The context allocates a buffer which supports the desired use and is from the correct heap
 			// And enqueues a transfer operation, which will copy the given data
 			// Finally it returns a vuk::Buffer, which holds the info for the allocation
 			// And a TransferStub, which can be used to query for the transfer status
-			auto [bverts, stub1] = ptc.ctx.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eVertexBuffer, std::span(&box.first[0], box.first.size()));
-			// We do this move here so that we can capture this variable later
-			auto verts = std::move(bverts);
-			auto [binds, stub2] = ptc.ctx.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eIndexBuffer, std::span(&box.second[0], box.second.size()));
-			auto inds = std::move(binds);
+			auto [bverts, stub1] = ctx.create_buffer(allocator, vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eVertexBuffer, std::span(&box.first[0], box.first.size()));
+			auto verts = *bverts;
+			auto [binds, stub2] = ctx.create_buffer(allocator, vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eIndexBuffer, std::span(&box.second[0], box.second.size()));
+			auto inds = *binds;
 			// This struct will represent the view-projection transform used for the cube
 			struct VP {
 				glm::mat4 view;
@@ -53,10 +57,10 @@ namespace {
 			vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 1.f, 10.f);
 			vp.proj[1][1] *= -1;
 			// Allocate and transfer view-projection transform
-			auto [buboVP, stub3] = ptc.ctx.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eUniformBuffer, std::span(&vp, 1));
-			auto uboVP = buboVP;
+			auto [buboVP, stub3] = ctx.create_buffer(allocator, vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eUniformBuffer, std::span(&vp, 1));
+			auto uboVP = *buboVP;
 			// For this example, we just request that all transfer finish before we continue
-			ptc.ctx.wait_all_transfers();
+			ctx.wait_all_transfers();
 
 			vuk::RenderGraph rg;
 			rg.add_pass({

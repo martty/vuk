@@ -207,7 +207,7 @@ namespace vuk {
 			shader_modules(ctx),
 			descriptor_set_layouts(ctx),
 			pipeline_layouts(ctx),
-			direct_resource(ctx.device),
+			direct_resource(ctx, allocator),
 			direct_allocator(direct_resource)
 		{
 			vkGetPhysicalDeviceProperties(ctx.physical_device, &physical_device_properties);

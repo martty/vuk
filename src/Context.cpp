@@ -75,6 +75,10 @@ void vuk::Context::submit_transfer(VkSubmitInfo si, VkFence fence) {
 	}
 }
 
+vuk::Allocator& vuk::Context::get_gpumem() {
+	return impl->allocator;
+}
+
 void vuk::PersistentDescriptorSet::update_combined_image_sampler(PerThreadContext& ptc, unsigned binding, unsigned array_index, vuk::ImageView iv, vuk::SamplerCreateInfo sci, vuk::ImageLayout layout) {
     descriptor_bindings[binding][array_index].image = vuk::DescriptorImageInfo(ptc.ctx.acquire_sampler(sci, ptc.ctx.frame_counter), iv, layout);
     descriptor_bindings[binding][array_index].type = vuk::DescriptorType::eCombinedImageSampler;
@@ -609,13 +613,11 @@ vuk::Texture vuk::Context::allocate_texture(vuk::ImageCreateInfo ici) {
 
 
 void vuk::Context::enqueue_destroy(vuk::Image i) {
-	std::lock_guard _(impl->recycle_locks[frame_counter % FC]);
-	impl->image_recycle[frame_counter % FC].push_back(i);
+	impl->allocator.destroy_image(i);
 }
 
 void vuk::Context::enqueue_destroy(vuk::ImageView iv) {
-	std::lock_guard _(impl->recycle_locks[frame_counter % FC]);
-	impl->image_view_recycle[frame_counter % FC].push_back(iv.payload);
+	vkDestroyImageView(device, iv.payload, nullptr);
 }
 
 void vuk::Context::enqueue_destroy(VkPipeline p) {
