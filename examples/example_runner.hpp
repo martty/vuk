@@ -76,8 +76,8 @@ namespace vuk {
 		}
 
 		~ExampleRunner() {
-			context.reset();
 			rf_alloc.reset();
+			context.reset();
 			vkDestroySurfaceKHR(vkbinstance.instance, surface, nullptr);
 			destroy_window_glfw(window);
 			vkb::destroy_device(vkbdevice);

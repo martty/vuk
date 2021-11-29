@@ -18,23 +18,7 @@ namespace vuk {
 
 		auto& f = frames[local_frame];
 		f.wait();
-
-		direct.deallocate_fences(f.fences);
-		f.fences.clear();
-
-		direct.deallocate_semaphores(f.semaphores);
-		f.semaphores.clear();
-
-		for (auto& c : f.cmdbuffers_to_free) {
-			direct.deallocate_commandbuffers(c.command_pool, std::span{ &c.command_buffer, 1 });
-		}
-		f.cmdbuffers_to_free.clear();
-
-		direct.deallocate_commandpools(f.cmdpools_to_free);
-		f.cmdpools_to_free.clear();
-
-		direct.deallocate_buffers(f.buffers);
-		f.buffers.clear();
+		deallocate_frame(f);
 
 		ctx.collect(frame_counter);
 

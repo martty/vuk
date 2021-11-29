@@ -200,7 +200,10 @@ namespace vuk {
 			rp.fbci.height = fb_extent.height;
 			rp.fbci.attachmentCount = (uint32_t)vkivs.size();
 			rp.fbci.layers = 1;
-			rp.framebuffer = ctx.create(rp.fbci).get(); // queue framebuffer for destruction
+
+			NUnique<VkFramebuffer> fb(alloc);
+			VUK_DO_OR_RETURN(alloc.allocate_framebuffers(std::span{ &*fb, 1 }, std::span{ &rp.fbci, 1 }, VUK_HERE_AND_NOW()));
+			rp.framebuffer = *fb; // queue framebuffer for destruction
 		}
 
 		// create non-attachment images

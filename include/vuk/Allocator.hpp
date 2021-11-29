@@ -141,6 +141,9 @@ namespace vuk {
 		virtual Result<void, AllocateException> allocate_buffers(std::span<Buffer> dst, std::span<BufferCreateInfo> cis, SourceLocationAtFrame loc) = 0;
 		virtual void deallocate_buffers(std::span<const Buffer> dst) = 0;
 
+		virtual Result<void, AllocateException> allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<vuk::FramebufferCreateInfo> cis, SourceLocationAtFrame loc) = 0;
+		virtual void deallocate_framebuffers(std::span<const VkFramebuffer> dst) = 0;
+
 		virtual Context& get_context() = 0;
 	};
 
@@ -185,11 +188,18 @@ namespace vuk {
 			upstream->deallocate_buffers(dst);
 		}
 
+		Result<void, AllocateException> allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<vuk::FramebufferCreateInfo> cis, SourceLocationAtFrame loc) override {
+			return upstream->allocate_framebuffers(dst, cis, loc);
+		}
+
+		void deallocate_framebuffers(std::span<const VkFramebuffer> dst) {
+			upstream->deallocate_framebuffers(dst);
+		}
+
 
 		/*virtual ImageView allocate_image_view(const ImageViewCreateInfo& info, uint64_t frame, SourceLocation loc) { return upstream->allocate_image_view(info, frame, loc); }
 		virtual Sampler allocate_sampler(const SamplerCreateInfo& info, uint64_t frame, SourceLocation loc) { return upstream->allocate_sampler(info, frame, loc); }*/
 		/*virtual DescriptorSet allocate_descriptorset(const SetBinding&, uint64_t frame, SourceLocation loc);
-		virtual VkFramebuffer allocate_framebuffer(const struct FramebufferCreateInfo&, uint64_t frame, SourceLocation loc);
 		virtual VkRenderPass allocate_renderpass(const struct RenderPassCreateInfo&, uint64_t frame, SourceLocation loc);*/
 
 		/*
@@ -328,6 +338,26 @@ namespace vuk {
 			}
 		}
 
+		Result<void, AllocateException> allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<vuk::FramebufferCreateInfo> cis, SourceLocationAtFrame loc) override {
+			assert(dst.size() == cis.size());
+			for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
+				VkResult res = vkCreateFramebuffer(device, &cis[i], nullptr, &dst[i]);
+				if (res != VK_SUCCESS) {
+					deallocate_framebuffers({ dst.data(), (uint64_t)i });
+					return { expected_error, AllocateException{res} };
+				}
+			}
+			return { expected_value };
+		}
+
+		void deallocate_framebuffers(std::span<const VkFramebuffer> src) override {
+			for (auto& v : src) {
+				if (v != VK_NULL_HANDLE) {
+					vkDestroyFramebuffer(device, v, nullptr);
+				}
+			}
+		}
+
 		Context& get_context() override {
 			return *ctx;
 		}
@@ -410,6 +440,13 @@ namespace vuk {
 			vec.insert(vec.end(), src.begin(), src.end());
 		}
 
+		std::vector<VkFramebuffer> framebuffers;
+
+		void deallocate_framebuffers(std::span<const VkFramebuffer> src) override {
+			auto& vec = framebuffers;
+			vec.insert(vec.end(), src.begin(), src.end());
+		}
+
 		void wait() {
 			if (fences.size() > 0) {
 				vkWaitForFences(device, (uint32_t)fences.size(), fences.data(), true, UINT64_MAX);
@@ -478,19 +515,40 @@ namespace vuk {
 			direct.deallocate_buffers(src);
 		}
 
+		Result<void, AllocateException> allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<vuk::FramebufferCreateInfo> cis, SourceLocationAtFrame loc) override {
+			return direct.allocate_framebuffers(dst, cis, loc);
+		}
+
+		void deallocate_framebuffers(std::span<const VkFramebuffer> src) override {
+			direct.deallocate_framebuffers(src);
+		}
+
 		FrameResource& get_next_frame();
+
+		void deallocate_frame(FrameResource& f) {
+			direct.deallocate_fences(f.fences);
+			direct.deallocate_semaphores(f.semaphores);
+			for (auto& c : f.cmdbuffers_to_free) {
+				direct.deallocate_commandbuffers(c.command_pool, std::span{ &c.command_buffer, 1 });
+			}
+			direct.deallocate_commandpools(f.cmdpools_to_free);
+			direct.deallocate_buffers(f.buffers);
+			direct.deallocate_framebuffers(f.framebuffers);
+
+			f.fences.clear();
+			f.semaphores.clear();
+			f.cmdbuffers_to_free.clear();
+			f.cmdpools_to_free.clear();
+			f.buffers.clear();
+			f.framebuffers.clear();
+		}
 
 		virtual ~RingFrame() {
 			for (auto i = 0; i < frames_in_flight; i++) {
 				auto lframe = (frame_counter + i) % frames_in_flight;
 				auto& f = frames[lframe];
 				f.wait();
-				direct.deallocate_fences(f.fences);
-				direct.deallocate_semaphores(f.semaphores);
-				for (auto& c : f.cmdbuffers_to_free) {
-					direct.deallocate_commandbuffers(c.command_pool, std::span{ &c.command_buffer, 1 });
-				}
-				direct.deallocate_commandpools(f.cmdpools_to_free);
+				deallocate_frame(f);
 			}
 		}
 
@@ -585,6 +643,16 @@ namespace vuk {
 
 		void deallocate_buffers(std::span<const Buffer>) override {} // linear allocator, noop
 
+		std::vector<VkFramebuffer> framebuffers;
+
+		Result<void, AllocateException> allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<vuk::FramebufferCreateInfo> cis, SourceLocationAtFrame loc) override {
+			auto result = upstream->allocate_framebuffers(dst, cis, loc);
+			framebuffers.insert(framebuffers.end(), dst.begin(), dst.end());
+			return result;
+		}
+
+		void deallocate_framebuffers(std::span<const VkFramebuffer>) override {} // linear allocator, noop
+
 		void wait() {
 			if (fences.size() > 0) {
 				vkWaitForFences(device, (uint32_t)fences.size(), fences.data(), true, UINT64_MAX);
@@ -604,6 +672,7 @@ namespace vuk {
 			upstream->deallocate_commandpools(command_pools);
 			upstream->deallocate_commandpools(direct_command_pools);
 			upstream->deallocate_buffers(buffers);
+			upstream->deallocate_framebuffers(framebuffers);
 		}
 
 		Context* ctx;
@@ -658,12 +727,28 @@ namespace vuk {
 			mr->deallocate_commandbuffers_hl(src);
 		}
 
+		Result<void, AllocateException> allocate(std::span<Buffer> dst, std::span<BufferCreateInfo> cis, SourceLocationAtFrame loc) {
+			return mr->allocate_buffers(dst, cis, loc);
+		}
+
 		Result<void, AllocateException> allocate_buffers(std::span<Buffer> dst, std::span<BufferCreateInfo> cis, SourceLocationAtFrame loc) {
 			return mr->allocate_buffers(dst, cis, loc);
 		}
 
 		void deallocate_impl(std::span<const Buffer> src) {
 			mr->deallocate_buffers(src);
+		}
+
+		Result<void, AllocateException> allocate(std::span<VkFramebuffer> dst, std::span<vuk::FramebufferCreateInfo> cis, SourceLocationAtFrame loc) {
+			return mr->allocate_framebuffers(dst, cis, loc);
+		}
+
+		Result<void, AllocateException> allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<vuk::FramebufferCreateInfo> cis, SourceLocationAtFrame loc) {
+			return mr->allocate_framebuffers(dst, cis, loc);
+		}
+
+		void deallocate_impl(std::span<const VkFramebuffer> src) {
+			mr->deallocate_framebuffers(src);
 		}
 
 		template<class T, size_t N>

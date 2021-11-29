@@ -515,12 +515,6 @@ vuk::ComputePipelineInfo vuk::Context::create(const create_info_t<ComputePipelin
 }
 
 
-vuk::Unique<VkFramebuffer> vuk::Context::create(const create_info_t<VkFramebuffer>& cinfo) {
-	VkFramebuffer fb;
-	vkCreateFramebuffer(device, &cinfo, nullptr, &fb);
-	return vuk::Unique(*this, fb);
-}
-
 vuk::Sampler vuk::Context::create(const create_info_t<vuk::Sampler>& cinfo) {
 	VkSampler s;
 	vkCreateSampler(device, (VkSamplerCreateInfo*)&cinfo, nullptr, &s);

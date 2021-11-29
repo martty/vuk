@@ -236,10 +236,6 @@ namespace vuk {
 		/// the swapchain is not destroyed
 		void remove_swapchain(SwapchainRef);
 
-		/// @brief Begin new frame, with a new InflightContext
-		/// @return the new InflightContext
-		InflightContext begin();
-
 		/// @brief Wait for the device to become idle. Useful for only a few synchronisation events, like resizing or shutting down.
 		void wait_idle();
 
@@ -257,8 +253,8 @@ namespace vuk {
 
 		Allocator& get_gpumem();
 
-		Unique<VkFramebuffer> create(const struct FramebufferCreateInfo& cinfo);
 		struct LinearAllocator create(const struct PoolSelect& cinfo);
+		
 		struct DescriptorSet create(const struct SetBinding& cinfo);
 		RGImage acquire_rendertarget(const struct RGCI&, uint64_t absolute_frame);
 		Sampler acquire_sampler(const SamplerCreateInfo&, uint64_t absolute_frame);
