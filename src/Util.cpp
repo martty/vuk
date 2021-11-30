@@ -1,27 +1,9 @@
 #include "vuk/Context.hpp"
 #include "vuk/RenderGraph.hpp"
 
-/*
-template<class T>
-Result<NUnique<T>, AllocateException> allocate_unique_semaphores(NAllocator allocator, SourceLocationAtFrame loc) {
-	NUnique<T> semas(allocator);
-	if (auto res = allocator.allocate_semaphores(*semas, loc); !res) {
-		return { expected_error, res.error() };
-	}
-	return { expected_value, semas };
-}
-
-
-NUnique<std::array<VkSemaphore, 2>> semas = allocate_unique_semaphores<std::array<VkSemaphore, 2>>(allocator, VUK_HERE_AND_NOW());
-if (!semas) {
-	return { expected_error, semas.error() };
-}
-auto [present_rdy, render_complete] = *semas.value();
-*/
-
 namespace vuk {
-
-	Result<void> execute_submit_and_present_to_one(Context& ctx, NAllocator& allocator, ExecutableRenderGraph&& rg, SwapchainRef swapchain) {
+	Result<void> execute_submit_and_present_to_one(NAllocator& allocator, ExecutableRenderGraph&& rg, SwapchainRef swapchain) {
+		Context& ctx = allocator.get_context();
 		NUnique<std::array<VkSemaphore, 2>> semas(allocator);
 		VUK_DO_OR_RETURN(allocator.allocate_semaphores(*semas, VUK_HERE_AND_NOW()));
 		auto [present_rdy, render_complete] = *semas;
@@ -77,7 +59,8 @@ namespace vuk {
 		}
 	}
 
-	Result<void> execute_submit_and_wait(Context& ctx, NAllocator& allocator, ExecutableRenderGraph&& rg) {
+	Result<void> execute_submit_and_wait(NAllocator& allocator, ExecutableRenderGraph&& rg) {
+		Context& ctx = allocator.get_context();
 		auto cb = rg.execute(ctx, allocator, {});
 		if (!cb) {
 			return { expected_error, cb.error() };

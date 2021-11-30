@@ -355,6 +355,6 @@ namespace vuk {
 // utility functions
 namespace vuk {
 	struct ExecutableRenderGraph;
-	Result<void> execute_submit_and_present_to_one(Context& ctx, NAllocator& nalloc, ExecutableRenderGraph&& rg, SwapchainRef swapchain);
-	Result<void> execute_submit_and_wait(Context& ctx, NAllocator& nalloc, ExecutableRenderGraph&& rg);
+	Result<void> execute_submit_and_present_to_one(NAllocator& nalloc, ExecutableRenderGraph&& rg, SwapchainRef swapchain);
+	Result<void> execute_submit_and_wait(NAllocator& nalloc, ExecutableRenderGraph&& rg);
 }
