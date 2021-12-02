@@ -1,5 +1,6 @@
 #pragma once
 
+#include <vuk/vuk_fwd.hpp>
 #include <vuk/Config.hpp>
 #include <vuk/Hash.hpp>
 
@@ -17,29 +18,32 @@ namespace vuk {
 		}
 	};
 
-	class Context;
 	template <typename Type>
 	class Unique {
-		Context* context;
+		NAllocator* allocator;
 		Type payload;
 	public:
 		using element_type = Type;
 
-		Unique() : context(nullptr) {}
-
-		explicit Unique(vuk::Context& ctx, Type payload) : context(&ctx), payload(std::move(payload)) {}
+		explicit Unique() : allocator(nullptr), payload{} {}
+		explicit Unique(NAllocator& allocator) : allocator(&allocator), payload{} {}
+		explicit Unique(NAllocator& allocator, Type payload) : allocator(&allocator), payload(std::move(payload)) {}
 		Unique(Unique const&) = delete;
 
-		Unique(Unique&& other) noexcept : context(other.context), payload(other.release()) {}
+		Unique(Unique&& other) noexcept : allocator(other.allocator), payload(other.release()) {}
 
-		~Unique() noexcept;
+		~Unique() noexcept {
+			if (allocator && payload != Type{}) {
+				allocator->deallocate(payload);
+			}
+		}
 
 		Unique& operator=(Unique const&) = delete;
 
 		Unique& operator=(Unique&& other) noexcept {
-			auto tmp = other.context;
+			auto tmp = other.allocator;
 			reset(other.release());
-			context = tmp;
+			allocator = tmp;
 			return *this;
 		}
 
@@ -71,16 +75,23 @@ namespace vuk {
 			return payload;
 		}
 
-		void reset(Type value = Type()) noexcept;
+		void reset(Type value = Type()) noexcept {
+			if (payload != value) {
+				if (allocator && payload != Type{}) {
+					allocator->deallocate(std::move(payload));
+				}
+				payload = std::move(value);
+			}
+		}
 
 		Type release() noexcept {
-			context = nullptr;
+			allocator = nullptr;
 			return std::move(payload);
 		}
 
 		void swap(Unique<Type>& rhs) noexcept {
 			std::swap(payload, rhs.payload);
-			std::swap(context, rhs.context);
+			std::swap(allocator, rhs.allocator);
 		}
 	};
 

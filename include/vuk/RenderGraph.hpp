@@ -158,7 +158,7 @@ namespace vuk {
 		ExecutableRenderGraph(ExecutableRenderGraph&&) noexcept;
 		ExecutableRenderGraph& operator=(ExecutableRenderGraph&&) noexcept;
 
-		Result<NUnique<struct HLCommandBuffer>> execute(Context&, class NAllocator&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
+		Result<Unique<struct HLCommandBuffer>> execute(Context&, class NAllocator&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
 
 		struct BufferInfo get_resource_buffer(Name);
 		struct AttachmentRPInfo get_resource_image(Name);

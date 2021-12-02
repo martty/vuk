@@ -109,7 +109,7 @@ namespace vuk {
 		cobuf.ongoing_renderpass = rpi;
 	}
 
-	Result<NUnique<HLCommandBuffer>> ExecutableRenderGraph::execute(Context& ctx, NAllocator& alloc, std::vector<std::pair<SwapChainRef, size_t>> swp_with_index) {
+	Result<Unique<HLCommandBuffer>> ExecutableRenderGraph::execute(Context& ctx, NAllocator& alloc, std::vector<std::pair<SwapChainRef, size_t>> swp_with_index) {
 		// bind swapchain attachment images & ivs
 		for (auto& [name, bound] : impl->bound_attachments) {
 			if (bound.type == AttachmentRPInfo::Type::eSwapchain) {
@@ -201,7 +201,7 @@ namespace vuk {
 			rp.fbci.attachmentCount = (uint32_t)vkivs.size();
 			rp.fbci.layers = 1;
 
-			NUnique<VkFramebuffer> fb(alloc);
+			Unique<VkFramebuffer> fb(alloc);
 			VUK_DO_OR_RETURN(alloc.allocate_framebuffers(std::span{ &*fb, 1 }, std::span{ &rp.fbci, 1 }, VUK_HERE_AND_NOW()));
 			rp.framebuffer = *fb; // queue framebuffer for destruction
 		}
@@ -214,7 +214,7 @@ namespace vuk {
 		}
 
 		// actual execution
-		NUnique<HLCommandBuffer> hl_cbuf(alloc);
+		Unique<HLCommandBuffer> hl_cbuf(alloc);
 		HLCommandBufferCreateInfo ci{ .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .queue_family_index = ctx.graphics_queue_family_index };
 		VUK_DO_OR_RETURN(alloc.allocate_commandbuffers_hl(std::span{ &*hl_cbuf, 1 }, std::span{ &ci, 1 }, VUK_HERE_AND_NOW()));
 

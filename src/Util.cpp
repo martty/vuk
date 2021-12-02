@@ -4,7 +4,7 @@
 namespace vuk {
 	Result<void> execute_submit_and_present_to_one(NAllocator& allocator, ExecutableRenderGraph&& rg, SwapchainRef swapchain) {
 		Context& ctx = allocator.get_context();
-		NUnique<std::array<VkSemaphore, 2>> semas(allocator);
+		Unique<std::array<VkSemaphore, 2>> semas(allocator);
 		VUK_DO_OR_RETURN(allocator.allocate_semaphores(*semas, VUK_HERE_AND_NOW()));
 		auto [present_rdy, render_complete] = *semas;
 
@@ -40,7 +40,7 @@ namespace vuk {
 		VkPipelineStageFlags flags = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 		si.pWaitDstStageMask = &flags;
 
-		NUnique<VkFence> fence(allocator);
+		Unique<VkFence> fence(allocator);
 		VUK_DO_OR_RETURN(allocator.allocate_fences({ &*fence, 1 }, VUK_HERE_AND_NOW()));
 
 		ctx.submit_graphics(si, *fence);
@@ -66,7 +66,7 @@ namespace vuk {
 			return { expected_error, cb.error() };
 		}
 		auto& hl_cbuf = *cb;
-		NUnique<VkFence> fence(allocator);
+		Unique<VkFence> fence(allocator);
 		VUK_DO_OR_RETURN(allocator.allocate_fences({ &*fence, 1 }, VUK_HERE_AND_NOW()));
 		VkSubmitInfo si{ .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO };
 		si.commandBufferCount = 1;
@@ -75,5 +75,20 @@ namespace vuk {
 		ctx.submit_graphics(si, *fence);
 		vkWaitForFences(ctx.device, 1, &*fence, VK_TRUE, UINT64_MAX);
 		return { expected_value };
+	}
+
+	Unique<ImageView>::~Unique() noexcept {
+		if (allocator && payload.payload != VK_NULL_HANDLE) {
+			allocator->deallocate(payload);
+		}
+	}
+
+	void Unique<ImageView>::reset(ImageView value) noexcept {
+		if (payload != value) {
+			if (allocator && payload != ImageView{}) {
+				allocator->deallocate(std::move(payload));
+			}
+			payload = std::move(value);
+		}
 	}
 }

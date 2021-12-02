@@ -4,15 +4,14 @@
 
 namespace vuk {
 	class Context;
-	class InflightContext;
-	class PerThreadContext;
+	class NAllocator;
 
 	class CommandBuffer;
 
 	struct Swapchain;
 	using SwapChainRef = Swapchain*;
 
-	class Allocator;
+	class LegacyGPUAllocator;
 
 	struct ShaderSource;
 
@@ -47,5 +46,5 @@ namespace vuk {
 	struct Result;
 
 	template<class T>
-	class NUnique;
+	class Unique;
 }

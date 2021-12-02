@@ -1,7 +1,8 @@
 #include "vuk/Context.hpp"
 #include "ContextImpl.hpp"
+#include "vuk/Allocator.hpp"
 
-vuk::Unique<vuk::PersistentDescriptorSet> vuk::Context::create_persistent_descriptorset(DescriptorSetLayoutCreateInfo dslci,
+vuk::Unique<vuk::PersistentDescriptorSet> vuk::Context::create_persistent_descriptorset(NAllocator& allocator, DescriptorSetLayoutCreateInfo dslci,
 	unsigned num_descriptors) {
 	dslci.dslci.bindingCount = (uint32_t)dslci.bindings.size();
 	dslci.dslci.pBindings = dslci.bindings.data();
@@ -12,68 +13,21 @@ vuk::Unique<vuk::PersistentDescriptorSet> vuk::Context::create_persistent_descri
 		dslci.dslci.pNext = &dslbfci;
 	}
 	auto& dslai = impl->descriptor_set_layouts.acquire(dslci, frame_counter);
-	return create_persistent_descriptorset(dslai, num_descriptors);
+	return create_persistent_descriptorset(allocator, { dslai, num_descriptors });
 }
 
-vuk::Unique<vuk::PersistentDescriptorSet> vuk::Context::create_persistent_descriptorset(const DescriptorSetLayoutAllocInfo& dslai, unsigned num_descriptors) {
-	vuk::PersistentDescriptorSet tda;
-	auto dsl = dslai.layout;
-	VkDescriptorPoolCreateInfo dpci = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
-	dpci.maxSets = 1;
-	std::array<VkDescriptorPoolSize, 12> descriptor_counts = {};
-	uint32_t used_idx = 0;
-	for (auto i = 0; i < descriptor_counts.size(); i++) {
-		bool used = false;
-		// create non-variable count descriptors
-		if (dslai.descriptor_counts[i] > 0) {
-			auto& d = descriptor_counts[used_idx];
-			d.type = VkDescriptorType(i);
-			d.descriptorCount = dslai.descriptor_counts[i];
-			used = true;
-		}
-		// create variable count descriptors
-		if (dslai.variable_count_binding != (unsigned)-1 &&
-			dslai.variable_count_binding_type == vuk::DescriptorType(i)) {
-			auto& d = descriptor_counts[used_idx];
-			d.type = VkDescriptorType(i);
-			d.descriptorCount += num_descriptors;
-			used = true;
-		}
-		if (used) {
-			used_idx++;
-		}
-	}
-
-	dpci.pPoolSizes = descriptor_counts.data();
-	dpci.poolSizeCount = used_idx;
-	vkCreateDescriptorPool(device, &dpci, nullptr, &tda.backing_pool);
-	VkDescriptorSetAllocateInfo dsai = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
-	dsai.descriptorPool = tda.backing_pool;
-	dsai.descriptorSetCount = 1;
-	dsai.pSetLayouts = &dsl;
-	VkDescriptorSetVariableDescriptorCountAllocateInfo dsvdcai = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO };
-	dsvdcai.descriptorSetCount = 1;
-	dsvdcai.pDescriptorCounts = &num_descriptors;
-	dsai.pNext = &dsvdcai;
-
-	vkAllocateDescriptorSets(device, &dsai, &tda.backing_set);
-	// TODO: we need more information here to handled arrayed bindings properly
-	// for now we assume no arrayed bindings outside of the variable count one
-	for (auto& bindings : tda.descriptor_bindings) {
-		bindings.resize(1);
-	}
-	if (dslai.variable_count_binding != (unsigned)-1) {
-		tda.descriptor_bindings[dslai.variable_count_binding].resize(num_descriptors);
-	}
-	return Unique<PersistentDescriptorSet>(*this, std::move(tda));
+vuk::Unique<vuk::PersistentDescriptorSet> vuk::Context::create_persistent_descriptorset(NAllocator& allocator, const PersistentDescriptorSetCreateInfo& ci) {
+	Unique<PersistentDescriptorSet> pds(allocator);
+	allocator.allocate_persistent_descriptor_sets(std::span{ &*pds, 1 }, std::span{ &ci, 1 }, VUK_HERE_AND_NOW());
+	return pds;
 }
 
-vuk::Unique<vuk::PersistentDescriptorSet> vuk::Context::create_persistent_descriptorset(const PipelineBaseInfo& base, unsigned set, unsigned num_descriptors) {
-	return create_persistent_descriptorset(base.layout_info[set], num_descriptors);
+vuk::Unique<vuk::PersistentDescriptorSet> vuk::Context::create_persistent_descriptorset(NAllocator& allocator, const PipelineBaseInfo& base, unsigned set, unsigned num_descriptors) {
+	return create_persistent_descriptorset(allocator, { base.layout_info[set], num_descriptors });
 }
 
-vuk::Unique<vuk::PersistentDescriptorSet> vuk::Context::create_persistent_descriptorset(const ComputePipelineBaseInfo& base, unsigned set, unsigned num_descriptors) {
-	return create_persistent_descriptorset(base.layout_info[set], num_descriptors);
+vuk::Unique<vuk::PersistentDescriptorSet> vuk::Context::create_persistent_descriptorset(NAllocator& allocator, const ComputePipelineBaseInfo& base, unsigned set, unsigned num_descriptors) {
+	return create_persistent_descriptorset(allocator, { base.layout_info[set], num_descriptors });
 }
 
 void vuk::Context::commit_persistent_descriptorset(vuk::PersistentDescriptorSet& array) {
@@ -82,31 +36,15 @@ void vuk::Context::commit_persistent_descriptorset(vuk::PersistentDescriptorSet&
 }
 
 size_t vuk::Context::get_allocation_size(Buffer buf) {
-	return impl->allocator.get_allocation_size(buf);
+	return impl->legacy_gpu_allocator.get_allocation_size(buf);
 }
 
-vuk::NUnique<vuk::Buffer> vuk::Context::allocate_buffer(NAllocator& allocator, MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, size_t size, size_t alignment) {
+vuk::Unique<vuk::Buffer> vuk::Context::allocate_buffer(NAllocator& allocator, MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, size_t size, size_t alignment) {
 	bool create_mapped = mem_usage == MemoryUsage::eCPUonly || mem_usage == MemoryUsage::eCPUtoGPU || mem_usage == MemoryUsage::eGPUtoCPU;
-	NUnique<Buffer> buf(allocator);
+	Unique<Buffer> buf(allocator);
 	BufferCreateInfo bci{ mem_usage, vuk::BufferUsageFlagBits::eTransferDst | buffer_usage, size, alignment};
 	auto ret = allocator.allocate_buffers(std::span{ &*buf, 1 }, std::span{ &bci, 1 }, VUK_HERE_AND_NOW()); // TODO: dropping error
 	return buf;
-}
-
-
-std::pair<vuk::Texture, vuk::TransferStub> vuk::Context::create_texture(NAllocator& allocator, vuk::Format format, vuk::Extent3D extent, void* data, bool generate_mips) {
-	vuk::ImageCreateInfo ici;
-	ici.format = format;
-	ici.extent = extent;
-	ici.samples = vuk::Samples::e1;
-	ici.initialLayout = vuk::ImageLayout::eUndefined;
-	ici.tiling = vuk::ImageTiling::eOptimal;
-	ici.usage = vuk::ImageUsageFlagBits::eTransferSrc | vuk::ImageUsageFlagBits::eTransferDst | vuk::ImageUsageFlagBits::eSampled;
-	ici.mipLevels = generate_mips ? (uint32_t)log2f((float)std::max(extent.width, extent.height)) + 1 : 1;
-	ici.arrayLayers = 1;
-	auto tex = allocate_texture(ici);
-	auto stub = upload(allocator, *tex.image, format, extent, 0, std::span<std::byte>((std::byte*)data, compute_image_size(format, extent)), generate_mips);
-	return { std::move(tex), stub };
 }
 
 void vuk::Context::dma_task() {
@@ -197,12 +135,12 @@ vuk::DescriptorSet vuk::Context::create(const create_info_t<vuk::DescriptorSet>&
 }
 
 vuk::LinearAllocator vuk::Context::create(const create_info_t<vuk::LinearAllocator>& cinfo) {
-	return impl->allocator.allocate_linear(cinfo.mem_usage, cinfo.buffer_usage);
+	return impl->legacy_gpu_allocator.allocate_linear(cinfo.mem_usage, cinfo.buffer_usage);
 }
 
 vuk::RGImage vuk::Context::create(const create_info_t<vuk::RGImage>& cinfo) {
 	RGImage res{};
-	res.image = impl->allocator.create_image_for_rendertarget(cinfo.ici);
+	res.image = impl->legacy_gpu_allocator.create_image_for_rendertarget(cinfo.ici);
 	auto ivci = cinfo.ivci;
 	ivci.image = res.image;
 	std::string name = std::string("Image: RenderTarget ") + std::string(cinfo.name.to_sv());

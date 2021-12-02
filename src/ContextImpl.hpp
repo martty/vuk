@@ -56,7 +56,7 @@ namespace vuk {
 	};
 
 	struct ContextImpl {
-		Allocator allocator;
+		LegacyGPUAllocator legacy_gpu_allocator;
 		VkDevice device;
 
 		std::mutex gfx_queue_lock;
@@ -77,14 +77,6 @@ namespace vuk {
 		Cache<VkPipelineLayout> pipeline_layouts;
 
 		std::mutex begin_frame_lock;
-
-		std::array<std::mutex, Context::FC> recycle_locks;
-		std::array<std::vector<vuk::Image>, Context::FC> image_recycle;
-		std::array<std::vector<VkImageView>, Context::FC> image_view_recycle;
-		std::array<std::vector<VkPipeline>, Context::FC> pipeline_recycle;
-		std::array<std::vector<vuk::Buffer>, Context::FC> buffer_recycle;
-		std::array<std::vector<vuk::PersistentDescriptorSet>, Context::FC> pds_recycle;
-		std::array<std::vector<VkFramebuffer>, Context::FC> fb_recycle;
 
 		// needs to be mpsc
 		std::mutex transfer_mutex;
@@ -141,7 +133,7 @@ namespace vuk {
 				ur->command_buffers.clear();
 			}
 			if (ur->buffer) {
-				allocator.free_buffer(ur->buffer);
+				legacy_gpu_allocator.free_buffer(ur->buffer);
 			}
 			if (ur->fence) {
 				vkDestroyFence(device, ur->fence, nullptr);
@@ -206,7 +198,7 @@ namespace vuk {
 			}
 		}
 
-		ContextImpl(Context& ctx) : allocator(ctx.instance, ctx.device, ctx.physical_device, ctx.graphics_queue_family_index, ctx.transfer_queue_family_index),
+		ContextImpl(Context& ctx) : legacy_gpu_allocator(ctx.instance, ctx.device, ctx.physical_device, ctx.graphics_queue_family_index, ctx.transfer_queue_family_index),
 			device(ctx.device),
 			pipelinebase_cache(ctx),
 			pipeline_cache(ctx),
@@ -221,7 +213,7 @@ namespace vuk {
 			shader_modules(ctx),
 			descriptor_set_layouts(ctx),
 			pipeline_layouts(ctx),
-			direct_resource(ctx, allocator),
+			direct_resource(ctx, legacy_gpu_allocator),
 			direct_allocator(direct_resource)
 		{
 			vkGetPhysicalDeviceProperties(ctx.physical_device, &physical_device_properties);

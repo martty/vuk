@@ -5,7 +5,23 @@
 #include <numeric>
 
 namespace vuk {
-	Direct::Direct(Context& ctx, Allocator& alloc) : ctx(&ctx), device(ctx.device), gpumem(&alloc) {}
+	Direct::Direct(Context& ctx, LegacyGPUAllocator& alloc) : ctx(&ctx), device(ctx.device), legacy_gpu_allocator(&alloc) {}
+	
+	Result<void, AllocateException> Direct::allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) {
+		assert(dst.size() == cis.size());
+		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
+			VkImageViewCreateInfo ci = cis[i];
+			VkImageView iv;
+			VkResult res = vkCreateImageView(device, &ci, nullptr, &iv);
+			if (res != VK_SUCCESS) {
+				deallocate_image_views({ dst.data(), (uint64_t)i });
+				return { expected_error, AllocateException{ res } };
+			}
+			dst[i] = ctx->wrap(iv, cis[i]);
+		}
+		return { expected_value };
+	}
+	
 	RingFrame::RingFrame(Context& ctx, uint64_t frames_in_flight) : direct(ctx, ctx.get_gpumem()), frames_in_flight(frames_in_flight) {
 		frames.resize(frames_in_flight, FrameResource{ ctx.device, *this });
 	}
@@ -27,7 +43,7 @@ namespace vuk {
 
 	NLinear::NLinear(VkResource& upstream, SyncScope scope) : ctx(&upstream.get_context()), device(ctx->device), scope(scope), VkResourceNested(&upstream) {}
 
-	PFN_vmaAllocateDeviceMemoryFunction Allocator::real_alloc_callback = nullptr;
+	PFN_vmaAllocateDeviceMemoryFunction LegacyGPUAllocator::real_alloc_callback = nullptr;
 
 	std::string to_string(BufferUsageFlags value) {
 		if (!value) return "{}";
@@ -62,7 +78,7 @@ namespace vuk {
 		}
 	}
 
-	void Allocator::pool_cb(VmaAllocator allocator, uint32_t memoryType, VkDeviceMemory memory, VkDeviceSize size, void* userdata) {
+	void LegacyGPUAllocator::pool_cb(VmaAllocator allocator, uint32_t memoryType, VkDeviceMemory memory, VkDeviceSize size, void* userdata) {
 		auto& pags = *reinterpret_cast<PoolAllocHelper*>(userdata);
 		pags.bci.size = size;
 		VkBuffer buffer;
@@ -95,7 +111,7 @@ namespace vuk {
 		}
 	}
 
-	void Allocator::noop_cb(VmaAllocator allocator, uint32_t memoryType, VkDeviceMemory memory, VkDeviceSize size, void* userdata) {
+	void LegacyGPUAllocator::noop_cb(VmaAllocator allocator, uint32_t memoryType, VkDeviceMemory memory, VkDeviceSize size, void* userdata) {
 		auto& pags = *reinterpret_cast<PoolAllocHelper*>(userdata);
 		std::string devmem_name = "DeviceMemory (Dedicated [" + std::to_string(memoryType) + "] " + to_human_readable(size) + ")";
 		{
@@ -110,7 +126,7 @@ namespace vuk {
 
 	}
 
-	Allocator::Allocator(VkInstance instance, VkDevice device, VkPhysicalDevice phys_dev, uint32_t graphics_queue_family, uint32_t transfer_queue_family) : device(device) {
+	LegacyGPUAllocator::LegacyGPUAllocator(VkInstance instance, VkDevice device, VkPhysicalDevice phys_dev, uint32_t graphics_queue_family, uint32_t transfer_queue_family) : device(device) {
 		VmaAllocatorCreateInfo allocatorInfo = {};
 		allocatorInfo.instance = instance;
 		allocatorInfo.physicalDevice = phys_dev;
@@ -141,7 +157,7 @@ namespace vuk {
 
 	// not locked, must be called from a locked fn
 
-	VmaPool Allocator::_create_pool(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage) {
+	VmaPool LegacyGPUAllocator::_create_pool(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage) {
 		VmaPoolCreateInfo poolCreateInfo = {};
 		VkBufferCreateInfo bci = { .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
 		bci.size = 1024; // Whatever.
@@ -180,7 +196,7 @@ namespace vuk {
 	}
 
 	// lock-free bump allocation if there is still space
-	Buffer Allocator::_allocate_buffer(LinearAllocator& pool, size_t size, size_t alignment, bool create_mapped) {
+	Buffer LegacyGPUAllocator::_allocate_buffer(LinearAllocator& pool, size_t size, size_t alignment, bool create_mapped) {
 		if (size == 0) {
 			return { .buffer = VK_NULL_HANDLE, .size = 0 };
 		}
@@ -254,7 +270,7 @@ namespace vuk {
 		return b;
 	}
 
-	Buffer Allocator::_allocate_buffer(PoolAllocator& pool, size_t size, size_t alignment, bool create_mapped) {
+	Buffer LegacyGPUAllocator::_allocate_buffer(PoolAllocator& pool, size_t size, size_t alignment, bool create_mapped) {
 		if (size == 0) {
 			return { .buffer = VK_NULL_HANDLE, .size = 0 };
 		}
@@ -301,7 +317,7 @@ namespace vuk {
 		return b;
 	}
 
-	VkMemoryRequirements Allocator::get_memory_requirements(VkBufferCreateInfo& bci) {
+	VkMemoryRequirements LegacyGPUAllocator::get_memory_requirements(VkBufferCreateInfo& bci) {
 		VkBuffer testbuff;
 		vkCreateBuffer(device, &bci, nullptr, &testbuff);
 		VkMemoryRequirements mem_reqs;
@@ -311,7 +327,7 @@ namespace vuk {
 	}
 
 	// allocate an externally managed pool
-	PoolAllocator Allocator::allocate_pool(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage) {
+	PoolAllocator LegacyGPUAllocator::allocate_pool(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage) {
 		std::lock_guard _(mutex);
 
 		VkBufferCreateInfo bci{ .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
@@ -328,7 +344,7 @@ namespace vuk {
 		return pi;
 	}
 
-	LinearAllocator Allocator::allocate_linear(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage) {
+	LinearAllocator LegacyGPUAllocator::allocate_linear(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage) {
 		std::lock_guard _(mutex);
 
 		VkBufferCreateInfo bci{ .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
@@ -342,7 +358,7 @@ namespace vuk {
 	}
 
 	// allocate buffer from an internally managed pool
-	Buffer Allocator::allocate_buffer(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, size_t size, size_t alignment, bool create_mapped) {
+	Buffer LegacyGPUAllocator::allocate_buffer(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, size_t size, size_t alignment, bool create_mapped) {
 		std::lock_guard _(mutex);
 
 		VkBufferCreateInfo bci{ .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
@@ -366,39 +382,39 @@ namespace vuk {
 	}
 
 	// allocate a buffer from an externally managed pool
-	Buffer Allocator::allocate_buffer(PoolAllocator& pool, size_t size, size_t alignment, bool create_mapped) {
+	Buffer LegacyGPUAllocator::allocate_buffer(PoolAllocator& pool, size_t size, size_t alignment, bool create_mapped) {
 		std::lock_guard _(mutex);
 		return _allocate_buffer(pool, size, alignment, create_mapped);
 	}
 
 	// allocate a buffer from an externally managed linear pool
-	Buffer Allocator::allocate_buffer(LinearAllocator& pool, size_t size, size_t alignment, bool create_mapped) {
+	Buffer LegacyGPUAllocator::allocate_buffer(LinearAllocator& pool, size_t size, size_t alignment, bool create_mapped) {
 		return _allocate_buffer(pool, size, alignment, create_mapped);
 	}
 
-	size_t Allocator::get_allocation_size(const Buffer& b) {
+	size_t LegacyGPUAllocator::get_allocation_size(const Buffer& b) {
         return b.allocation_size;
 	}
 
-	void Allocator::reset_pool(PoolAllocator& pool) {
+	void LegacyGPUAllocator::reset_pool(PoolAllocator& pool) {
 		std::lock_guard _(mutex);
 		vmaResetPool(allocator, pool.pool);
 	}
 
-	void Allocator::reset_pool(LinearAllocator& pool) {
+	void LegacyGPUAllocator::reset_pool(LinearAllocator& pool) {
 		std::lock_guard _(mutex);
 		pool.current_buffer = -1;
 		pool.needle = 0;
 	}
 
-	void Allocator::free_buffer(const Buffer& b) {
+	void LegacyGPUAllocator::free_buffer(const Buffer& b) {
 		std::lock_guard _(mutex);
 		vuk::BufferID bufid{ reinterpret_cast<uint64_t>(b.buffer), b.offset };
 		vmaFreeMemory(allocator, buffer_allocations.at(bufid));
 		buffer_allocations.erase(bufid);
 	}
 
-	void Allocator::destroy(const PoolAllocator& pool) {
+	void LegacyGPUAllocator::destroy(const PoolAllocator& pool) {
 		std::lock_guard _(mutex);
 		vmaResetPool(allocator, pool.pool);
 		vmaForceUnmapPool(allocator, pool.pool);
@@ -408,7 +424,7 @@ namespace vuk {
 		vmaDestroyPool(allocator, pool.pool);
 	}
 
-	void Allocator::destroy(const LinearAllocator& pool) {
+	void LegacyGPUAllocator::destroy(const LinearAllocator& pool) {
 		std::lock_guard _(mutex);
 		for (auto& [va, mem, offset, buffer, map] : pool.allocations) {
 			vmaDestroyBuffer(allocator, buffer, va);
@@ -416,7 +432,7 @@ namespace vuk {
 	}
 
 
-	vuk::Image Allocator::create_image_for_rendertarget(vuk::ImageCreateInfo ici) {
+	vuk::Image LegacyGPUAllocator::create_image_for_rendertarget(vuk::ImageCreateInfo ici) {
 		std::lock_guard _(mutex);
 		VmaAllocationCreateInfo db{};
 		db.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
@@ -433,7 +449,7 @@ namespace vuk {
 		images.emplace(reinterpret_cast<uint64_t>(vkimg), vout);
 		return vkimg;
 	}
-	vuk::Image Allocator::create_image(vuk::ImageCreateInfo ici) {
+	vuk::Image LegacyGPUAllocator::create_image(vuk::ImageCreateInfo ici) {
 		std::lock_guard _(mutex);
 		VmaAllocationCreateInfo db{};
 		db.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
@@ -448,13 +464,13 @@ namespace vuk {
 		images.emplace(reinterpret_cast<uint64_t>(vkimg), vout);
 		return vkimg;
 	}
-	void Allocator::destroy_image(vuk::Image image) {
+	void LegacyGPUAllocator::destroy_image(vuk::Image image) {
 		std::lock_guard _(mutex);
 		auto vkimg = (VkImage)image;
 		vmaDestroyImage(allocator, image, images.at(reinterpret_cast<uint64_t>(vkimg)));
 		images.erase(reinterpret_cast<uint64_t>(vkimg));
 	}
-	Allocator::~Allocator() {
+	LegacyGPUAllocator::~LegacyGPUAllocator() {
 		for (auto& [ps, p] : pools) {
 			destroy(p);
 		}

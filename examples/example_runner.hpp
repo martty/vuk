@@ -66,8 +66,6 @@ namespace vuk {
 
 		void cleanup() {
 			context->wait_idle();
-			imgui_data.font_texture.view.reset();
-			imgui_data.font_texture.image.reset();
 			for (auto& ex : examples) {
 				if (ex->cleanup) {
 					ex->cleanup(*this, context->get_direct_allocator());
@@ -76,6 +74,8 @@ namespace vuk {
 		}
 
 		~ExampleRunner() {
+			imgui_data.font_texture.view.reset();
+			imgui_data.font_texture.image.reset();
 			rf_alloc.reset();
 			context.reset();
 			vkDestroySurfaceKHR(vkbinstance.instance, surface, nullptr);

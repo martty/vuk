@@ -144,9 +144,8 @@ namespace vuk {
 		/// @param pending TransientSubmitStub object to check. 
 		bool poll_upload(TransientSubmitStub pending);
 
-		Texture allocate_texture(vuk::ImageCreateInfo ici);
-		Unique<ImageView> create_image_view(vuk::ImageViewCreateInfo);
-		std::pair<vuk::Texture, TransferStub> create_texture(NAllocator&, vuk::Format format, vuk::Extent3D extents, void* data, bool generate_mips = false);
+		Texture allocate_texture(NAllocator& allocator, vuk::ImageCreateInfo ici);
+		std::pair<vuk::Texture, TransferStub> create_texture(NAllocator& allocator, vuk::Format format, vuk::Extent3D extents, void* data, bool generate_mips = false);
 
 
 		size_t get_allocation_size(Buffer);
@@ -157,7 +156,7 @@ namespace vuk {
 		/// @param size Size of the buffer
 		/// @param alignment Alignment of the buffer
 		/// @return The allocated Buffer
-		NUnique<Buffer> allocate_buffer(NAllocator&, MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, size_t size, size_t alignment);
+		Unique<Buffer> allocate_buffer(NAllocator&, MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, size_t size, size_t alignment);
 
 		// temporary stuff
 		std::atomic<size_t> transfer_id = 1;
@@ -172,8 +171,8 @@ namespace vuk {
 		/// @param buffer_usage How this buffer will be used (since data is provided, TransferDst is added to the flags)
 		/// @return The allocated Buffer
 		template<class T>
-		std::pair<NUnique<Buffer>, TransferStub> create_buffer(NAllocator& allocator, MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, std::span<T> data) {
-			NUnique<Buffer> buf(allocator);
+		std::pair<Unique<Buffer>, TransferStub> create_buffer(NAllocator& allocator, MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, std::span<T> data) {
+			Unique<Buffer> buf(allocator);
 			BufferCreateInfo bci{ mem_usage, vuk::BufferUsageFlagBits::eTransferDst | buffer_usage, sizeof(T) * data.size(), 1 };
 			auto ret = allocator.allocate_buffers(std::span{ &*buf, 1 }, std::span{ &bci, 1 }, VUK_HERE_AND_NOW()); // TODO: dropping error
 			auto stub = upload(allocator, *buf, data);
@@ -188,7 +187,7 @@ namespace vuk {
 		template<class T>
 		TransferStub upload(NAllocator& allocator, Buffer dst, std::span<T> data) {
 			if (data.empty()) return { 0 };
-			NUnique<Buffer> staging(allocator);
+			Unique<Buffer> staging(allocator);
 			BufferCreateInfo bci{ MemoryUsage::eCPUonly, vuk::BufferUsageFlagBits::eTransferSrc, sizeof(T) * data.size(), 1 };
 			auto ret = allocator.allocate_buffers(std::span{ &*staging, 1 }, std::span{ &bci, 1 }, VUK_HERE_AND_NOW()); // TODO: dropping error
 			::memcpy(staging->mapped_ptr, data.data(), sizeof(T) * data.size());
@@ -203,7 +202,7 @@ namespace vuk {
 			assert(!data.empty());
 			// compute staging buffer alignment as texel block size
 			size_t alignment = format_to_texel_block_size(format);
-			NUnique<Buffer> staging(allocator);
+			Unique<Buffer> staging(allocator);
 			BufferCreateInfo bci{ MemoryUsage::eCPUonly, vuk::BufferUsageFlagBits::eTransferSrc, sizeof(T) * data.size(), alignment };
 			auto ret = allocator.allocate_buffers(std::span{ &*staging, 1 }, std::span{ &bci, 1 }, VUK_HERE_AND_NOW()); // TODO: dropping error
 			::memcpy(staging->mapped_ptr, data.data(), sizeof(T) * data.size());
@@ -217,17 +216,8 @@ namespace vuk {
 			dma_task();
 		}
 
-		/// @brief Manually request destruction of vuk::Image
-		void enqueue_destroy(vuk::Image);
-		/// @brief Manually request destruction of vuk::ImageView
-		void enqueue_destroy(vuk::ImageView);
-		/// @brief Manually request destruction of vuk::Buffer
-		void enqueue_destroy(vuk::Buffer);
 		/// @brief Manually request destruction of vuk::PersistentDescriptorSet
 		void enqueue_destroy(vuk::PersistentDescriptorSet);
-		/// @brief Manually request destruction of VkFramebuffer
-		void enqueue_destroy(VkFramebuffer fb);
-
 		/// @brief Add a swapchain to be managed by the Context
 		/// @return Reference to the new swapchain that can be used during presentation
 		SwapchainRef add_swapchain(Swapchain);
@@ -251,7 +241,7 @@ namespace vuk {
 		void submit_graphics(VkSubmitInfo, VkFence);
 		void submit_transfer(VkSubmitInfo, VkFence);
 
-		Allocator& get_gpumem();
+		LegacyGPUAllocator& get_gpumem();
 
 		struct LinearAllocator create(const struct PoolSelect& cinfo);
 		
@@ -263,10 +253,10 @@ namespace vuk {
 		struct PipelineInfo acquire_pipeline(const struct PipelineInstanceCreateInfo&, uint64_t absolute_frame);
 		struct ComputePipelineInfo acquire_pipeline(const struct ComputePipelineInstanceCreateInfo&, uint64_t absolute_frame);
 
-		Unique<PersistentDescriptorSet> create_persistent_descriptorset(const PipelineBaseInfo& base, unsigned set, unsigned num_descriptors);
-		Unique<PersistentDescriptorSet> create_persistent_descriptorset(const ComputePipelineBaseInfo& base, unsigned set, unsigned num_descriptors);
-		Unique<PersistentDescriptorSet> create_persistent_descriptorset(const DescriptorSetLayoutAllocInfo& dslai, unsigned num_descriptors);
-		Unique<PersistentDescriptorSet> create_persistent_descriptorset(DescriptorSetLayoutCreateInfo dslci, unsigned num_descriptors);
+		Unique<PersistentDescriptorSet> create_persistent_descriptorset(NAllocator& allocator, DescriptorSetLayoutCreateInfo dslci, unsigned num_descriptors);
+		Unique<PersistentDescriptorSet> create_persistent_descriptorset(NAllocator& allocator, const PipelineBaseInfo& base, unsigned set, unsigned num_descriptors);
+		Unique<PersistentDescriptorSet> create_persistent_descriptorset(NAllocator& allocator, const ComputePipelineBaseInfo& base, unsigned set, unsigned num_descriptors);
+		Unique<PersistentDescriptorSet> create_persistent_descriptorset(NAllocator& allocator, const PersistentDescriptorSetCreateInfo&);
 		void commit_persistent_descriptorset(PersistentDescriptorSet& array);
 
 		void collect(uint64_t frame);
@@ -334,21 +324,6 @@ namespace vuk {
 		}
 		info.objectHandle = reinterpret_cast<uint64_t>(t);
 		setDebugUtilsObjectNameEXT(ctx.device, &info);
-	}
-
-	template<typename Type>
-	inline Unique<Type>::~Unique() noexcept {
-		if (context && payload != Type{})
-			context->enqueue_destroy(std::move(payload));
-	}
-	template<typename Type>
-	inline void Unique<Type>::reset(Type value) noexcept {
-		if (payload != value) {
-			if (context && payload != Type{}) {
-				context->enqueue_destroy(std::move(payload));
-			}
-			payload = std::move(value);
-		}
 	}
 }
 

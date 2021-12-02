@@ -11,6 +11,7 @@
 #include <vuk/RenderGraph.hpp>
 #include <vuk/Program.hpp>
 #include <vuk/Exception.hpp>
+#include "vuk/Allocator.hpp"
 
 vuk::Context::Context(ContextCreateParameters params) :
 	instance(params.instance),
@@ -75,8 +76,8 @@ void vuk::Context::submit_transfer(VkSubmitInfo si, VkFence fence) {
 	}
 }
 
-vuk::Allocator& vuk::Context::get_gpumem() {
-	return impl->allocator;
+vuk::LegacyGPUAllocator& vuk::Context::get_gpumem() {
+	return impl->legacy_gpu_allocator;
 }
 
 void vuk::PersistentDescriptorSet::update_combined_image_sampler(Context& ctx, unsigned binding, unsigned array_index, vuk::ImageView iv, vuk::SamplerCreateInfo sci, vuk::ImageLayout layout) {
@@ -427,7 +428,7 @@ vuk::Context::TransientSubmitStub vuk::Context::fenced_upload(std::span<UploadIt
 	// create 1 big staging buffer
 	// we need to have this aligned for the first upload
 	// as that corresponds to offset = 0
-	bundle->buffer = impl->allocator.allocate_buffer(vuk::MemoryUsage::eCPUonly, vuk::BufferUsageFlagBits::eTransferSrc, size, biggest_align, true);
+	bundle->buffer = impl->legacy_gpu_allocator.allocate_buffer(vuk::MemoryUsage::eCPUonly, vuk::BufferUsageFlagBits::eTransferSrc, size, biggest_align, true);
 	auto staging = bundle->buffer;
 
 	for (auto& upload : uploads) {
@@ -588,14 +589,14 @@ bool vuk::Context::poll_upload(TransientSubmitBundle* ur) {
 	}
 }
 
-vuk::Texture vuk::Context::allocate_texture(vuk::ImageCreateInfo ici) {
+vuk::Texture vuk::Context::allocate_texture(NAllocator& allocator, vuk::ImageCreateInfo ici) {
 	ici.imageType = ici.extent.depth > 1?  vuk::ImageType::e3D :
 	                ici.extent.height > 1? vuk::ImageType::e2D :
 	                vuk::ImageType::e1D;
-	auto dst = impl->allocator.create_image(ici);
+	Unique<Image> dst = allocate_image(allocator, ici, VUK_HERE_AND_NOW()).value(); // TODO: dropping error
 	vuk::ImageViewCreateInfo ivci;
 	ivci.format = ici.format;
-	ivci.image = dst;
+	ivci.image = *dst;
 	ivci.subresourceRange.aspectMask = format_to_aspect(ici.format);
 	ivci.subresourceRange.baseArrayLayer = 0;
 	ivci.subresourceRange.baseMipLevel = 0;
@@ -604,7 +605,7 @@ vuk::Texture vuk::Context::allocate_texture(vuk::ImageCreateInfo ici) {
 	ivci.viewType = ici.imageType == vuk::ImageType::e3D? vuk::ImageViewType::e3D :
 	                ici.imageType == vuk::ImageType::e2D? vuk::ImageViewType::e2D :
 	                vuk::ImageViewType::e1D;
-	vuk::Texture tex{ Unique<Image>(*this, dst), create_image_view(ivci) };
+	vuk::Texture tex{ std::move(dst), allocate_image_view(allocator, ivci, VUK_HERE_AND_NOW()).value() }; // TODO: dropping error
 	tex.extent = ici.extent;
 	tex.format = ici.format;
 	tex.sample_count = ici.samples;
@@ -612,45 +613,32 @@ vuk::Texture vuk::Context::allocate_texture(vuk::ImageCreateInfo ici) {
 }
 
 
-void vuk::Context::enqueue_destroy(vuk::Image i) {
-	impl->allocator.destroy_image(i);
-}
-
-void vuk::Context::enqueue_destroy(vuk::ImageView iv) {
-	vkDestroyImageView(device, iv.payload, nullptr);
-}
-
-void vuk::Context::enqueue_destroy(VkPipeline p) {
-	std::lock_guard _(impl->recycle_locks[frame_counter % FC]);
-	impl->pipeline_recycle[frame_counter % FC].push_back(p);
-}
-
-void vuk::Context::enqueue_destroy(vuk::Buffer b) {
-	std::lock_guard _(impl->recycle_locks[frame_counter % FC]);
-	impl->buffer_recycle[frame_counter % FC].push_back(b);
-}
-
-void vuk::Context::enqueue_destroy(vuk::PersistentDescriptorSet b) {
-	std::lock_guard _(impl->recycle_locks[frame_counter % FC]);
-	impl->pds_recycle[frame_counter % FC].push_back(std::move(b));
-}
-
-void vuk::Context::enqueue_destroy(VkFramebuffer fb) {
-	std::lock_guard _(impl->recycle_locks[frame_counter % FC]);
-	impl->fb_recycle[frame_counter % FC].push_back(fb);
+std::pair<vuk::Texture, vuk::TransferStub> vuk::Context::create_texture(NAllocator& allocator, vuk::Format format, vuk::Extent3D extent, void* data, bool generate_mips) {
+	vuk::ImageCreateInfo ici;
+	ici.format = format;
+	ici.extent = extent;
+	ici.samples = vuk::Samples::e1;
+	ici.initialLayout = vuk::ImageLayout::eUndefined;
+	ici.tiling = vuk::ImageTiling::eOptimal;
+	ici.usage = vuk::ImageUsageFlagBits::eTransferSrc | vuk::ImageUsageFlagBits::eTransferDst | vuk::ImageUsageFlagBits::eSampled;
+	ici.mipLevels = generate_mips ? (uint32_t)log2f((float)std::max(extent.width, extent.height)) + 1 : 1;
+	ici.arrayLayers = 1;
+	auto tex = allocate_texture(allocator, ici);
+	auto stub = upload(allocator, *tex.image, format, extent, 0, std::span<std::byte>((std::byte*)data, compute_image_size(format, extent)), generate_mips);
+	return { std::move(tex), stub };
 }
 
 void vuk::Context::destroy(const RGImage& image) {
 	vkDestroyImageView(device, image.image_view.payload, nullptr);
-	impl->allocator.destroy_image(image.image);
+	impl->legacy_gpu_allocator.destroy_image(image.image);
 }
 
 void vuk::Context::destroy(const PoolAllocator& v) {
-	impl->allocator.destroy(v);
+	impl->legacy_gpu_allocator.destroy(v);
 }
 
 void vuk::Context::destroy(const LinearAllocator& v) {
-	impl->allocator.destroy(v);
+	impl->legacy_gpu_allocator.destroy(v);
 }
 
 void vuk::Context::destroy(const vuk::DescriptorPool& dp) {
@@ -738,12 +726,6 @@ vuk::ImageView vuk::Context::wrap(VkImageView iv, vuk::ImageViewCreateInfo ivci)
     return viv;
 }
 
-vuk::Unique<vuk::ImageView> vuk::Context::create_image_view(vuk::ImageViewCreateInfo ivci) {
-	VkImageView iv;
-	vkCreateImageView(device, (VkImageViewCreateInfo*)&ivci, nullptr, &iv);
-	return vuk::Unique<vuk::ImageView>(*this, wrap(iv, ivci));
-}
-
 vuk::Unique<vuk::ImageView> vuk::Unique<vuk::ImageView>::SubrangeBuilder::apply(){
 	ImageViewCreateInfo ivci;
 	ivci.viewType = type == vuk::ImageViewType(0xdeadbeef) ? iv.type : type;
@@ -755,20 +737,7 @@ vuk::Unique<vuk::ImageView> vuk::Unique<vuk::ImageView>::SubrangeBuilder::apply(
 	ivci.image = iv.image;
 	ivci.format = iv.format;
 	ivci.components = iv.components;
-	return ctx->create_image_view(ivci);
-}
-
-vuk::Unique<vuk::ImageView>::~Unique() noexcept {
-	if (context && payload != vuk::ImageView{})
-		context->enqueue_destroy(std::move(payload));
-}
-void vuk::Unique<vuk::ImageView>::reset(vuk::ImageView value) noexcept {
-	if (payload != value) {
-		if (context && payload != vuk::ImageView{}) {
-			context->enqueue_destroy(std::move(payload));
-		}
-		payload = std::move(value);
-	}
+	return allocate_image_view(*allocator, ivci, VUK_HERE_AND_NOW()).value(); // TODO: dropping error
 }
 
 void vuk::Context::collect(uint64_t frame) {
@@ -788,4 +757,71 @@ vuk::TransferStub vuk::Context::enqueue_transfer(Buffer src, vuk::Image dst, vuk
 	// TODO: expose extra transfer knobs
 	impl->bufferimage_transfer_commands.push({ src, dst, extent, base_layer, 1, 0, generate_mips, stub });
 	return stub;
+}
+namespace vuk {
+	// TODO: no error handling
+	Result<void, AllocateException> Direct::allocate_persistent_descriptor_sets(std::span<PersistentDescriptorSet> dst, std::span<const PersistentDescriptorSetCreateInfo> cis, SourceLocationAtFrame loc) {
+		assert(dst.size() == cis.size());
+		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
+			auto& ci = cis[i];
+			auto& dslai = ci.dslai;
+			vuk::PersistentDescriptorSet& tda = dst[i];
+			auto dsl = dslai.layout;
+			VkDescriptorPoolCreateInfo dpci = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
+			dpci.maxSets = 1;
+			std::array<VkDescriptorPoolSize, 12> descriptor_counts = {};
+			uint32_t used_idx = 0;
+			for (auto i = 0; i < descriptor_counts.size(); i++) {
+				bool used = false;
+				// create non-variable count descriptors
+				if (dslai.descriptor_counts[i] > 0) {
+					auto& d = descriptor_counts[used_idx];
+					d.type = VkDescriptorType(i);
+					d.descriptorCount = dslai.descriptor_counts[i];
+					used = true;
+				}
+				// create variable count descriptors
+				if (dslai.variable_count_binding != (unsigned)-1 &&
+					dslai.variable_count_binding_type == vuk::DescriptorType(i)) {
+					auto& d = descriptor_counts[used_idx];
+					d.type = VkDescriptorType(i);
+					d.descriptorCount += ci.num_descriptors;
+					used = true;
+				}
+				if (used) {
+					used_idx++;
+				}
+			}
+
+			dpci.pPoolSizes = descriptor_counts.data();
+			dpci.poolSizeCount = used_idx;
+			vkCreateDescriptorPool(device, &dpci, nullptr, &tda.backing_pool);
+			VkDescriptorSetAllocateInfo dsai = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
+			dsai.descriptorPool = tda.backing_pool;
+			dsai.descriptorSetCount = 1;
+			dsai.pSetLayouts = &dsl;
+			VkDescriptorSetVariableDescriptorCountAllocateInfo dsvdcai = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO };
+			dsvdcai.descriptorSetCount = 1;
+			dsvdcai.pDescriptorCounts = &ci.num_descriptors;
+			dsai.pNext = &dsvdcai;
+
+			vkAllocateDescriptorSets(device, &dsai, &tda.backing_set);
+			// TODO: we need more information here to handled arrayed bindings properly
+			// for now we assume no arrayed bindings outside of the variable count one
+			for (auto& bindings : tda.descriptor_bindings) {
+				bindings.resize(1);
+			}
+			if (dslai.variable_count_binding != (unsigned)-1) {
+				tda.descriptor_bindings[dslai.variable_count_binding].resize(ci.num_descriptors);
+			}
+		}
+
+		return { expected_value };
+	}
+	
+	void Direct::deallocate_persistent_descriptor_sets(std::span<const PersistentDescriptorSet> src) {
+		for (auto& v : src) {
+			vkDestroyDescriptorPool(ctx->device, v.backing_pool, nullptr);
+		}
+	}
 }

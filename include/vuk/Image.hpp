@@ -340,26 +340,26 @@ namespace vuk {
 
 	template<>
 	class Unique<ImageView> {
-		Context* context;
+		NAllocator* allocator;
 		ImageView payload;
 	public:
 		using element_type = ImageView;
 
-		Unique() : context(nullptr) {}
-
-		explicit Unique(vuk::Context& ctx, ImageView payload) : context(&ctx), payload(std::move(payload)) {}
+		explicit Unique() : allocator(nullptr), payload{} {}
+		explicit Unique(NAllocator& allocator) : allocator(&allocator), payload{} {}
+		explicit Unique(NAllocator& allocator, ImageView payload) : allocator(&allocator), payload(std::move(payload)) {}
 		Unique(Unique const&) = delete;
 
-		Unique(Unique&& other) noexcept : context(other.context), payload(other.release()) {}
+		Unique(Unique&& other) noexcept : allocator(other.allocator), payload(other.release()) {}
 
 		~Unique() noexcept;
 
 		Unique& operator=(Unique const&) = delete;
 
 		Unique& operator=(Unique&& other) noexcept {
-			auto tmp = other.context;
+			auto tmp = other.allocator;
 			reset(other.release());
-			context = tmp;
+			allocator = tmp;
 			return *this;
 		}
 
@@ -394,19 +394,19 @@ namespace vuk {
 		void reset(ImageView value = ImageView()) noexcept;
 
 		ImageView release() noexcept {
-			context = nullptr;
+			allocator = nullptr;
 			return std::move(payload);
 		}
 
 		void swap(Unique<ImageView>& rhs) noexcept {
 			std::swap(payload, rhs.payload);
-			std::swap(context, rhs.context);
+			std::swap(allocator, rhs.allocator);
 		}
 
 		struct SubrangeBuilder {
-			vuk::Context* ctx;
-			vuk::ImageView iv;
-			vuk::ImageViewType type = vuk::ImageViewType(0xdeadbeef);
+			NAllocator* allocator;
+			ImageView iv;
+			ImageViewType type = ImageViewType(0xdeadbeef);
 			uint32_t base_mip = 0xdeadbeef; // 0xdeadbeef is an out of band value for all
 			uint32_t mip_count = 0xdeadbeef;
 			uint32_t base_layer = 0xdeadbeef;
@@ -434,11 +434,11 @@ namespace vuk {
 
 		// external builder fns
 		SubrangeBuilder layer_subrange(uint32_t base_layer, uint32_t layer_count) {
-			return { .ctx = context, .iv = payload, .base_layer = base_layer, .layer_count = layer_count };
+			return { .allocator = allocator, .iv = payload, .base_layer = base_layer, .layer_count = layer_count };
 		}
 
 		SubrangeBuilder mip_subrange(uint32_t base_mip, uint32_t mip_count) {
-			return { .ctx = context, .iv = payload, .base_mip = base_mip, .mip_count = mip_count };
+			return { .allocator = allocator, .iv = payload, .base_mip = base_mip, .mip_count = mip_count };
 		}
 	};
 

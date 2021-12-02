@@ -5,6 +5,7 @@
 #include <type_traits>
 #include <vuk/Config.hpp>
 #include <vuk/vuk_fwd.hpp>
+#include <cassert>
 
 #define FWD(x) (static_cast<decltype(x)&&>(x))
 #define MOV(x) (static_cast<std::remove_reference_t<decltype(x)>&&>(x))
@@ -140,7 +141,7 @@ namespace vuk {
 
         [[nodiscard]] T&& operator*()&& {
             assert(_holds_value && "cannot call operator* on Result that does not hold a value");
-            return std::move(_value);
+            return MOV(_value);
         }
 
         [[nodiscard]] T const&& operator*() const&& {
@@ -160,12 +161,7 @@ namespace vuk {
 
         [[nodiscard]] T&& value()&& {
             assert(_holds_value && "cannot call value() on Result that does not hold a value");
-            return _value;
-        }
-
-        [[nodiscard]] T const&& value() const&& {
-            assert(_holds_value && "cannot call value() on Result that does not hold a value");
-            return _value;
+            return MOV(_value);
         }
 
         [[nodiscard]] E& error()& {
@@ -180,12 +176,7 @@ namespace vuk {
 
         [[nodiscard]] E&& error()&& {
             assert(!_holds_value && "cannot call error() on Result that does not hold a value");
-            return _error;
-        }
-
-        [[nodiscard]] E const&& error() const&& {
-            assert(!_holds_value && "cannot call error() on Result that does not hold a value");
-            return _error;
+            return MOV(_error);
         }
 
         friend void swap(Result& lhs, Result& rhs) {
