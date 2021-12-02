@@ -92,7 +92,7 @@ namespace vuk {
 
 		/// @brief Return an allocator over the direct resource - resources will be allocated from the Vulkan runtime
 		/// @return 
-		NAllocator& get_direct_allocator();
+		Allocator& get_direct_allocator();
 
 		uint32_t(*get_thread_index)() = nullptr;
 
@@ -144,8 +144,8 @@ namespace vuk {
 		/// @param pending TransientSubmitStub object to check. 
 		bool poll_upload(TransientSubmitStub pending);
 
-		Texture allocate_texture(NAllocator& allocator, vuk::ImageCreateInfo ici);
-		std::pair<vuk::Texture, TransferStub> create_texture(NAllocator& allocator, vuk::Format format, vuk::Extent3D extents, void* data, bool generate_mips = false);
+		Texture allocate_texture(Allocator& allocator, vuk::ImageCreateInfo ici);
+		std::pair<vuk::Texture, TransferStub> create_texture(Allocator& allocator, vuk::Format format, vuk::Extent3D extents, void* data, bool generate_mips = false);
 
 
 		size_t get_allocation_size(Buffer);
@@ -156,7 +156,7 @@ namespace vuk {
 		/// @param size Size of the buffer
 		/// @param alignment Alignment of the buffer
 		/// @return The allocated Buffer
-		Unique<Buffer> allocate_buffer(NAllocator&, MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, size_t size, size_t alignment);
+		Unique<Buffer> allocate_buffer(Allocator&, MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, size_t size, size_t alignment);
 
 		// temporary stuff
 		std::atomic<size_t> transfer_id = 1;
@@ -171,7 +171,7 @@ namespace vuk {
 		/// @param buffer_usage How this buffer will be used (since data is provided, TransferDst is added to the flags)
 		/// @return The allocated Buffer
 		template<class T>
-		std::pair<Unique<Buffer>, TransferStub> create_buffer(NAllocator& allocator, MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, std::span<T> data) {
+		std::pair<Unique<Buffer>, TransferStub> create_buffer(Allocator& allocator, MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, std::span<T> data) {
 			Unique<Buffer> buf(allocator);
 			BufferCreateInfo bci{ mem_usage, vuk::BufferUsageFlagBits::eTransferDst | buffer_usage, sizeof(T) * data.size(), 1 };
 			auto ret = allocator.allocate_buffers(std::span{ &*buf, 1 }, std::span{ &bci, 1 }); // TODO: dropping error
@@ -185,7 +185,7 @@ namespace vuk {
 		*/
 
 		template<class T>
-		TransferStub upload(NAllocator& allocator, Buffer dst, std::span<T> data) {
+		TransferStub upload(Allocator& allocator, Buffer dst, std::span<T> data) {
 			if (data.empty()) return { 0 };
 			Unique<Buffer> staging(allocator);
 			BufferCreateInfo bci{ MemoryUsage::eCPUonly, vuk::BufferUsageFlagBits::eTransferSrc, sizeof(T) * data.size(), 1 };
@@ -198,7 +198,7 @@ namespace vuk {
 		}
 
 		template<class T>
-		TransferStub upload(NAllocator& allocator, vuk::Image dst, vuk::Format format, vuk::Extent3D extent, uint32_t base_layer, std::span<T> data, bool generate_mips) {
+		TransferStub upload(Allocator& allocator, vuk::Image dst, vuk::Format format, vuk::Extent3D extent, uint32_t base_layer, std::span<T> data, bool generate_mips) {
 			assert(!data.empty());
 			// compute staging buffer alignment as texel block size
 			size_t alignment = format_to_texel_block_size(format);
@@ -241,7 +241,7 @@ namespace vuk {
 
 		LegacyGPUAllocator& get_gpumem();
 
-		struct LinearAllocator create(const struct PoolSelect& cinfo);
+		struct LegacyLinearAllocator create(const struct PoolSelect& cinfo);
 		
 		struct DescriptorSet create(const struct SetBinding& cinfo);
 		RGImage acquire_rendertarget(const struct RGCI&, uint64_t absolute_frame);
@@ -251,10 +251,10 @@ namespace vuk {
 		struct PipelineInfo acquire_pipeline(const struct PipelineInstanceCreateInfo&, uint64_t absolute_frame);
 		struct ComputePipelineInfo acquire_pipeline(const struct ComputePipelineInstanceCreateInfo&, uint64_t absolute_frame);
 
-		Unique<PersistentDescriptorSet> create_persistent_descriptorset(NAllocator& allocator, DescriptorSetLayoutCreateInfo dslci, unsigned num_descriptors);
-		Unique<PersistentDescriptorSet> create_persistent_descriptorset(NAllocator& allocator, const PipelineBaseInfo& base, unsigned set, unsigned num_descriptors);
-		Unique<PersistentDescriptorSet> create_persistent_descriptorset(NAllocator& allocator, const ComputePipelineBaseInfo& base, unsigned set, unsigned num_descriptors);
-		Unique<PersistentDescriptorSet> create_persistent_descriptorset(NAllocator& allocator, const PersistentDescriptorSetCreateInfo&);
+		Unique<PersistentDescriptorSet> create_persistent_descriptorset(Allocator& allocator, DescriptorSetLayoutCreateInfo dslci, unsigned num_descriptors);
+		Unique<PersistentDescriptorSet> create_persistent_descriptorset(Allocator& allocator, const PipelineBaseInfo& base, unsigned set, unsigned num_descriptors);
+		Unique<PersistentDescriptorSet> create_persistent_descriptorset(Allocator& allocator, const ComputePipelineBaseInfo& base, unsigned set, unsigned num_descriptors);
+		Unique<PersistentDescriptorSet> create_persistent_descriptorset(Allocator& allocator, const PersistentDescriptorSetCreateInfo&);
 		void commit_persistent_descriptorset(PersistentDescriptorSet& array);
 
 		void collect(uint64_t frame);
@@ -266,8 +266,8 @@ namespace vuk {
 		void enqueue_destroy(VkPipeline);
 
 		void destroy(const struct RGImage& image);
-		void destroy(const struct PoolAllocator& v);
-		void destroy(const struct LinearAllocator& v);
+		void destroy(const struct LegacyPoolAllocator& v);
+		void destroy(const struct LegacyLinearAllocator& v);
 		void destroy(const DescriptorPool& dp);
 		void destroy(const struct PipelineInfo& pi);
 		void destroy(const struct ComputePipelineInfo& pi);
@@ -328,6 +328,6 @@ namespace vuk {
 // utility functions
 namespace vuk {
 	struct ExecutableRenderGraph;
-	Result<void> execute_submit_and_present_to_one(NAllocator& nalloc, ExecutableRenderGraph&& rg, SwapchainRef swapchain);
-	Result<void> execute_submit_and_wait(NAllocator& nalloc, ExecutableRenderGraph&& rg);
+	Result<void> execute_submit_and_present_to_one(Allocator& nalloc, ExecutableRenderGraph&& rg, SwapchainRef swapchain);
+	Result<void> execute_submit_and_wait(Allocator& nalloc, ExecutableRenderGraph&& rg);
 }

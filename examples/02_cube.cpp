@@ -22,20 +22,20 @@ namespace {
 	vuk::Example x{
 		.name = "02_cube",
 		// Same setup as previously
-		.setup = [](vuk::ExampleRunner& runner, vuk::NAllocator& allocator) {
+		.setup = [](vuk::ExampleRunner& runner, vuk::Allocator& allocator) {
 			vuk::PipelineBaseCreateInfo pci;
 			pci.add_glsl(util::read_entire_file("../../examples/ubo_test.vert"), "ubo_test.vert");
 			pci.add_glsl(util::read_entire_file("../../examples/triangle_depthshaded.frag"), "triangle_depthshaded.frag");
 			allocator.get_context().create_named_pipeline("cube", pci);
 		},
-		.render = [](vuk::ExampleRunner& runner, vuk::NAllocator& frame_allocator) {
+		.render = [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
 			auto& ctx = frame_allocator.get_context();
 			// Create a linear resource to allocate from during this frame (specific to this thread)
 			// We specify an inline linear resource - when the resource is destroyed, it just releases the resources to the upstream allocator 
 			// (in this the frame allocator), but does not force a synchronization point
 			// Frame resources are implicitly inline, they only synchronize when the frame is reused
-			vuk::NLinear linear_res(frame_allocator.get_memory_resource(), vuk::NLinear::eInline);
-			vuk::NAllocator allocator(linear_res);
+			vuk::LinearGPUResource linear_res(frame_allocator.get_memory_resource(), vuk::LinearGPUResource::eInline);
+			vuk::Allocator allocator(linear_res);
 
 			// Request a scratch buffer allocation with specific data
 			// The context allocates a buffer which supports the desired use and is from the correct heap

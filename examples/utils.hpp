@@ -93,8 +93,8 @@ namespace util {
 		vuk::SamplerCreateInfo font_sci;
 		std::unique_ptr<vuk::SampledImage> font_si;
 	};
-	ImGuiData ImGui_ImplVuk_Init(vuk::NAllocator& allocator);
-	void ImGui_ImplVuk_Render(vuk::NAllocator& allocator, vuk::RenderGraph& rg, vuk::Name src_target, vuk::Name use_target, ImGuiData& data, ImDrawData* draw_data);
+	ImGuiData ImGui_ImplVuk_Init(vuk::Allocator& allocator);
+	void ImGui_ImplVuk_Render(vuk::Allocator& allocator, vuk::RenderGraph& rg, vuk::Name src_target, vuk::Name use_target, ImGuiData& data, ImDrawData* draw_data);
 
 	inline std::string read_entire_file(const std::string& path) {
 		std::ostringstream buf;

@@ -63,7 +63,7 @@ void vuk::ExampleRunner::render() {
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
 		auto& frame_resource = rf_alloc->get_next_frame();
-		NAllocator frame_allocator(frame_resource);
+		Allocator frame_allocator(frame_resource);
 		auto rg = examples[0]->render(*this, frame_allocator);
 		auto attachment_name = vuk::Name(std::string(examples[0]->name) + "_final");
 		rg.attach_swapchain(attachment_name, swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });

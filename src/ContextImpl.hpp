@@ -6,7 +6,7 @@
 #include <string_view>
 #include <math.h>
 
-#include "Allocator.hpp"
+#include "LegacyGPUAllocator.hpp"
 #include "Cache.hpp"
 #include "RenderPass.hpp"
 #include "vuk/Allocator.hpp"
@@ -68,7 +68,7 @@ namespace vuk {
 		Cache<ComputePipelineInfo> compute_pipeline_cache;
 		Cache<VkRenderPass> renderpass_cache;
 		Cache<RGImage> transient_images;
-		PerFrameCache<LinearAllocator, Context::FC> scratch_buffers;
+		PerFrameCache<LegacyLinearAllocator, Context::FC> scratch_buffers;
 		Cache<vuk::DescriptorPool> pool_cache;
 		PerFrameCache<vuk::DescriptorSet, Context::FC> descriptor_sets;
 		Cache<vuk::Sampler> sampler_cache;
@@ -101,7 +101,7 @@ namespace vuk {
 		std::vector<plf::colony<TransientSubmitBundle>::iterator> transient_submit_freelist;
 
 		Direct direct_resource;
-		NAllocator direct_allocator;
+		Allocator direct_allocator;
 
 		TransientSubmitBundle* get_transient_bundle(uint32_t queue_family_index) {
 			std::lock_guard _(transient_submit_lock);

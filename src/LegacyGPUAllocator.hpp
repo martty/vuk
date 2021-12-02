@@ -54,14 +54,14 @@ namespace std {
 
 
 namespace vuk {
-	struct PoolAllocator {
+	struct LegacyPoolAllocator {
 		VmaPool pool;
 		VkMemoryRequirements mem_reqs;
 		vuk::BufferUsageFlags usage;
 		std::vector<VkBuffer> buffers;
 	};
 
-	struct LinearAllocator {
+	struct LegacyLinearAllocator {
 		std::atomic<int> current_buffer = -1;
 		std::atomic<size_t> needle = 0;
 		VkMemoryRequirements mem_reqs;
@@ -71,11 +71,11 @@ namespace vuk {
 
 		size_t block_size = 1024 * 1024 * 16;
 
-		LinearAllocator(VkMemoryRequirements mem_reqs, VmaMemoryUsage mem_usage, vuk::BufferUsageFlags buf_usage)
+		LegacyLinearAllocator(VkMemoryRequirements mem_reqs, VmaMemoryUsage mem_usage, vuk::BufferUsageFlags buf_usage)
 			: mem_reqs(mem_reqs), mem_usage(mem_usage), usage(buf_usage) {
 		}
 
-		LinearAllocator(LinearAllocator&& o) noexcept {
+		LegacyLinearAllocator(LegacyLinearAllocator&& o) noexcept {
 			current_buffer = o.current_buffer.load();
 			needle = o.needle.load();
 			mem_reqs = o.mem_reqs;
@@ -109,7 +109,7 @@ namespace vuk {
 
 		std::unordered_map<uint64_t, VmaAllocation> images;
 		std::unordered_map<BufferID, VmaAllocation> buffer_allocations;
-		std::unordered_map<PoolSelect, PoolAllocator> pools;
+		std::unordered_map<PoolSelect, LegacyPoolAllocator> pools;
 		std::unordered_map<uint64_t, std::pair<VkBuffer, size_t>> buffers;
 
 		VmaAllocator allocator;
@@ -121,24 +121,24 @@ namespace vuk {
 		~LegacyGPUAllocator();
 
 		// allocate an externally managed pool
-		PoolAllocator allocate_pool(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage);
+		LegacyPoolAllocator allocate_pool(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage);
 		// allocate an externally managed linear pool
-		LinearAllocator allocate_linear(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage);
+		LegacyLinearAllocator allocate_linear(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage);
 		// allocate buffer from an internally managed pool
 		Buffer allocate_buffer(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, size_t size, size_t alignment, bool create_mapped);
 		// allocate a buffer from an externally managed pool
-		Buffer allocate_buffer(PoolAllocator& pool, size_t size, size_t alignment, bool create_mapped);
+		Buffer allocate_buffer(LegacyPoolAllocator& pool, size_t size, size_t alignment, bool create_mapped);
 		// allocate a buffer from an externally managed linear pool
-		Buffer allocate_buffer(LinearAllocator& pool, size_t size, size_t alignment, bool create_mapped);
+		Buffer allocate_buffer(LegacyLinearAllocator& pool, size_t size, size_t alignment, bool create_mapped);
 
 		size_t get_allocation_size(const Buffer&);
 
-		void reset_pool(PoolAllocator& pool);
-		void reset_pool(LinearAllocator& pool);
+		void reset_pool(LegacyPoolAllocator& pool);
+		void reset_pool(LegacyLinearAllocator& pool);
 
 		void free_buffer(const Buffer& b);
-		void destroy(const PoolAllocator& pool);
-		void destroy(const LinearAllocator& pool);
+		void destroy(const LegacyPoolAllocator& pool);
+		void destroy(const LegacyLinearAllocator& pool);
 
 		vuk::Image create_image_for_rendertarget(vuk::ImageCreateInfo ici);
 		vuk::Image create_image(vuk::ImageCreateInfo ici);
@@ -147,17 +147,17 @@ namespace vuk {
 	private:
 		// not locked, must be called from a locked fn
 		VmaPool _create_pool(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage);
-		Buffer _allocate_buffer(PoolAllocator& pool, size_t size, size_t alignment, bool create_mapped);
-		Buffer _allocate_buffer(LinearAllocator& pool, size_t size, size_t alignment, bool create_mapped);
+		Buffer _allocate_buffer(LegacyPoolAllocator& pool, size_t size, size_t alignment, bool create_mapped);
+		Buffer _allocate_buffer(LegacyLinearAllocator& pool, size_t size, size_t alignment, bool create_mapped);
 
 		VkMemoryRequirements get_memory_requirements(VkBufferCreateInfo& bci);
 	};
 
-	template<> struct create_info<PoolAllocator> {
+	template<> struct create_info<LegacyPoolAllocator> {
 		using type = PoolSelect;
 	};
 
-	template<> struct create_info<LinearAllocator> {
+	template<> struct create_info<LegacyLinearAllocator> {
 		using type = PoolSelect;
 	};
 };

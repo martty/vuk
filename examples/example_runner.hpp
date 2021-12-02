@@ -2,6 +2,7 @@
 
 #include <VkBootstrap.h>
 #include "vuk/Context.hpp"
+#include "vuk/Allocator.hpp"
 #include <optional>
 #include "utils.hpp"
 #include "glfw.hpp"
@@ -21,9 +22,9 @@ namespace vuk {
 	struct Example {
 		std::string_view name;
 
-		std::function<void(ExampleRunner&, vuk::NAllocator&)> setup;
-		std::function<RenderGraph(ExampleRunner&, vuk::NAllocator&)> render;
-		std::function<void(ExampleRunner&, vuk::NAllocator&)> cleanup;
+		std::function<void(ExampleRunner&, vuk::Allocator&)> setup;
+		std::function<RenderGraph(ExampleRunner&, vuk::Allocator&)> render;
+		std::function<void(ExampleRunner&, vuk::Allocator&)> cleanup;
 	};
 }
 

@@ -2,7 +2,7 @@
 #include "vuk/RenderGraph.hpp"
 
 namespace vuk {
-	Result<void> execute_submit_and_present_to_one(NAllocator& allocator, ExecutableRenderGraph&& rg, SwapchainRef swapchain) {
+	Result<void> execute_submit_and_present_to_one(Allocator& allocator, ExecutableRenderGraph&& rg, SwapchainRef swapchain) {
 		Context& ctx = allocator.get_context();
 		Unique<std::array<VkSemaphore, 2>> semas(allocator);
 		VUK_DO_OR_RETURN(allocator.allocate_semaphores(*semas));
@@ -59,7 +59,7 @@ namespace vuk {
 		}
 	}
 
-	Result<void> execute_submit_and_wait(NAllocator& allocator, ExecutableRenderGraph&& rg) {
+	Result<void> execute_submit_and_wait(Allocator& allocator, ExecutableRenderGraph&& rg) {
 		Context& ctx = allocator.get_context();
 		auto cb = rg.execute(ctx, allocator, {});
 		if (!cb) {

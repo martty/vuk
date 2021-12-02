@@ -5,10 +5,12 @@
 #include <vuk/Result.hpp>
 #include <vuk/Exception.hpp>
 #include <vuk/Types.hpp>
+#include <vuk/Buffer.hpp>
+#include <vuk/Descriptor.hpp>
+#include <../src/RenderPass.hpp>
 #include <span>
 #include <vector>
 #include <atomic>
-#include <../src/Allocator.hpp>
 #include <source_location>
 
 namespace vuk {
@@ -134,8 +136,8 @@ namespace vuk {
 		virtual Result<void, AllocateException> allocate_commandbuffers(std::span<VkCommandBuffer> dst, std::span<const VkCommandBufferAllocateInfo> cis, SourceLocationAtFrame loc) = 0;
 		virtual void deallocate_commandbuffers(VkCommandPool pool, std::span<const VkCommandBuffer> dst) = 0;
 
-		virtual Result<void, AllocateException> allocate_commandbuffers_hl(std::span<HLCommandBuffer> dst, std::span<const HLCommandBufferCreateInfo> cis, SourceLocationAtFrame loc) = 0;
-		virtual void deallocate_commandbuffers_hl(std::span<const HLCommandBuffer> dst) = 0;
+		virtual Result<void, AllocateException> allocate_hl_commandbuffers(std::span<HLCommandBuffer> dst, std::span<const HLCommandBufferCreateInfo> cis, SourceLocationAtFrame loc) = 0;
+		virtual void deallocate_hl_commandbuffers(std::span<const HLCommandBuffer> dst) = 0;
 
 		virtual Result<void, AllocateException> allocate_commandpools(std::span<VkCommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) = 0;
 		virtual void deallocate_commandpools(std::span<const VkCommandPool> dst) = 0;
@@ -175,12 +177,12 @@ namespace vuk {
 			upstream->deallocate_commandbuffers(pool, dst);
 		}
 
-		Result<void, AllocateException> allocate_commandbuffers_hl(std::span<HLCommandBuffer> dst, std::span<const HLCommandBufferCreateInfo> cis, SourceLocationAtFrame loc) override {
-			return upstream->allocate_commandbuffers_hl(dst, cis, loc);
+		Result<void, AllocateException> allocate_hl_commandbuffers(std::span<HLCommandBuffer> dst, std::span<const HLCommandBufferCreateInfo> cis, SourceLocationAtFrame loc) override {
+			return upstream->allocate_hl_commandbuffers(dst, cis, loc);
 		}
 
-		void deallocate_commandbuffers_hl(std::span<const HLCommandBuffer> dst) override {
-			upstream->deallocate_commandbuffers_hl(dst);
+		void deallocate_hl_commandbuffers(std::span<const HLCommandBuffer> dst) override {
+			upstream->deallocate_hl_commandbuffers(dst);
 		}
 
 		Result<void, AllocateException> allocate_commandpools(std::span<VkCommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) override {
@@ -299,7 +301,7 @@ namespace vuk {
 			vkFreeCommandBuffers(device, pool, (uint32_t)dst.size(), dst.data());
 		}
 
-		Result<void, AllocateException> allocate_commandbuffers_hl(std::span<HLCommandBuffer> dst, std::span<const HLCommandBufferCreateInfo> cis, SourceLocationAtFrame loc) override {
+		Result<void, AllocateException> allocate_hl_commandbuffers(std::span<HLCommandBuffer> dst, std::span<const HLCommandBufferCreateInfo> cis, SourceLocationAtFrame loc) override {
 			assert(dst.size() == cis.size());
 
 			for (uint64_t i = 0; i < dst.size(); i++) {
@@ -319,7 +321,7 @@ namespace vuk {
 			return { expected_value };
 		}
 
-		void deallocate_commandbuffers_hl(std::span<const HLCommandBuffer> dst) override {
+		void deallocate_hl_commandbuffers(std::span<const HLCommandBuffer> dst) override {
 			for (auto& c : dst) {
 				deallocate_commandpools(std::span{ &c.command_pool, 1 });
 			}
@@ -345,24 +347,9 @@ namespace vuk {
 			}
 		}
 
-		Result<void, AllocateException> allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) override {
-			assert(dst.size() == cis.size());
-			for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
-				auto& ci = cis[i];
-				bool create_mapped = ci.mem_usage == MemoryUsage::eCPUonly || ci.mem_usage == MemoryUsage::eCPUtoGPU || ci.mem_usage == MemoryUsage::eGPUtoCPU;
-				// TODO: legacy buffer alloc can't signal errors
-				dst[i] = legacy_gpu_allocator->allocate_buffer(ci.mem_usage, ci.buffer_usage, ci.size, ci.alignment, create_mapped);
-			}
-			return { expected_value };
-		}
+		Result<void, AllocateException> allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) override;
 
-		void deallocate_buffers(std::span<const Buffer> src) override {
-			for (auto& v : src) {
-				if (v) {
-					legacy_gpu_allocator->free_buffer(v);
-				}
-			}
-		}
+		void deallocate_buffers(std::span<const Buffer> src) override;
 
 		Result<void, AllocateException> allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) override {
 			assert(dst.size() == cis.size());
@@ -384,23 +371,9 @@ namespace vuk {
 			}
 		}
 
-		Result<void, AllocateException> allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) override {
-			assert(dst.size() == cis.size());
-			for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
-				// TODO: legacy image alloc can't signal errors
+		Result<void, AllocateException> allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) override;
 
-				dst[i] = legacy_gpu_allocator->create_image(cis[i]);
-			}
-			return { expected_value };
-		}
-
-		void deallocate_images(std::span<const Image> src) override {
-			for (auto& v : src) {
-				if (v != VK_NULL_HANDLE) {
-					legacy_gpu_allocator->destroy_image(v);
-				}
-			}
-		}
+		void deallocate_images(std::span<const Image> src) override;
 
 		Result<void, AllocateException> allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) override;
 
@@ -454,7 +427,7 @@ namespace vuk {
 		std::vector<VkCommandPool> cmdpools_to_free;
 
 		// TODO: error propagation
-		Result<void, AllocateException> allocate_commandbuffers_hl(std::span<HLCommandBuffer> dst, std::span<const HLCommandBufferCreateInfo> cis, SourceLocationAtFrame loc) override {
+		Result<void, AllocateException> allocate_hl_commandbuffers(std::span<HLCommandBuffer> dst, std::span<const HLCommandBufferCreateInfo> cis, SourceLocationAtFrame loc) override {
 			assert(dst.size() == cis.size());
 			auto cmdpools_size = cmdpools_to_free.size();
 			cmdpools_to_free.resize(cmdpools_to_free.size() + dst.size());
@@ -477,7 +450,7 @@ namespace vuk {
 			return { expected_value };
 		}
 
-		void deallocate_commandbuffers_hl(std::span<const HLCommandBuffer> src) override {} // no-op, deallocated with pools
+		void deallocate_hl_commandbuffers(std::span<const HLCommandBuffer> src) override {} // no-op, deallocated with pools
 
 		void deallocate_commandbuffers(VkCommandPool pool, std::span<const VkCommandBuffer> src) override {
 			cmdbuffers_to_free.reserve(cmdbuffers_to_free.size() + src.size());
@@ -548,12 +521,12 @@ namespace vuk {
 			direct.deallocate_commandbuffers(pool, dst);
 		}
 
-		Result<void, AllocateException> allocate_commandbuffers_hl(std::span<HLCommandBuffer> dst, std::span<const HLCommandBufferCreateInfo> cis, SourceLocationAtFrame loc) override {
+		Result<void, AllocateException> allocate_hl_commandbuffers(std::span<HLCommandBuffer> dst, std::span<const HLCommandBufferCreateInfo> cis, SourceLocationAtFrame loc) override {
 			assert(0 && "High level command buffers cannot be allocated from RingFrame.");
 			return { expected_error, AllocateException{VK_ERROR_FEATURE_NOT_PRESENT} };
 		}
 
-		void deallocate_commandbuffers_hl(std::span<const HLCommandBuffer> dst) override {
+		void deallocate_hl_commandbuffers(std::span<const HLCommandBuffer> dst) override {
 			assert(0 && "High level command buffers cannot be deallocated from RingFrame.");
 		}
 
@@ -646,12 +619,12 @@ namespace vuk {
 
 	inline FrameResource::FrameResource(VkDevice device, RingFrame& upstream) : device(device), VkResourceNested(&upstream) {}
 
-	struct NLinear : VkResourceNested {
+	struct LinearGPUResource : VkResourceNested {
 		enum class SyncScope { eInline, eScope };
 		static constexpr SyncScope eInline = SyncScope::eInline;
 		static constexpr SyncScope eScope = SyncScope::eScope;
 
-		NLinear(VkResource& upstream, SyncScope scope);
+		LinearGPUResource(VkResource& upstream, SyncScope scope);
 
 		bool should_subsume = false;
 		std::vector<VkSemaphore> semaphores;
@@ -693,7 +666,7 @@ namespace vuk {
 		std::vector<VkCommandPool> direct_command_pools;
 
 		// TODO: error propagation
-		Result<void, AllocateException> allocate_commandbuffers_hl(std::span<HLCommandBuffer> dst, std::span<const HLCommandBufferCreateInfo> cis, SourceLocationAtFrame loc) override {
+		Result<void, AllocateException> allocate_hl_commandbuffers(std::span<HLCommandBuffer> dst, std::span<const HLCommandBufferCreateInfo> cis, SourceLocationAtFrame loc) override {
 			for (uint64_t i = 0; i < dst.size(); i++) {
 				auto& ci = cis[i];
 				direct_command_pools.resize(direct_command_pools.size() < (ci.queue_family_index + 1) ? (ci.queue_family_index + 1) : direct_command_pools.size(), VK_NULL_HANDLE);
@@ -745,7 +718,7 @@ namespace vuk {
 			return *ctx;
 		}
 
-		~NLinear() {
+		~LinearGPUResource() {
 			if (scope == SyncScope::eScope) {
 				wait();
 			}
@@ -769,9 +742,9 @@ namespace vuk {
 	};
 
 
-	class NAllocator {
+	class Allocator {
 	public:
-		explicit NAllocator(VkResource& mr) : ctx(&mr.get_context()), mr(&mr) {}
+		explicit Allocator(VkResource& mr) : ctx(&mr.get_context()), mr(&mr) {}
 
 		Result<void, AllocateException> allocate(std::span<VkSemaphore> dst, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 			return mr->allocate_semaphores(dst, loc);
@@ -798,15 +771,15 @@ namespace vuk {
 		}
 
 		Result<void, AllocateException> allocate(std::span<HLCommandBuffer> dst, std::span<const HLCommandBufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-			return mr->allocate_commandbuffers_hl(dst, cis, loc);
+			return mr->allocate_hl_commandbuffers(dst, cis, loc);
 		}
 
-		Result<void, AllocateException> allocate_commandbuffers_hl(std::span<HLCommandBuffer> dst, std::span<const HLCommandBufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-			return mr->allocate_commandbuffers_hl(dst, cis, loc);
+		Result<void, AllocateException> allocate_hl_commandbuffers(std::span<HLCommandBuffer> dst, std::span<const HLCommandBufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
+			return mr->allocate_hl_commandbuffers(dst, cis, loc);
 		}
 
 		void deallocate_impl(std::span<const HLCommandBuffer> src) {
-			mr->deallocate_commandbuffers_hl(src);
+			mr->deallocate_hl_commandbuffers(src);
 		}
 
 		Result<void, AllocateException> allocate(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
@@ -898,7 +871,7 @@ namespace vuk {
 	};
 
 	template<class T>
-	Result<Unique<T>, AllocateException> allocate_semaphores(NAllocator& allocator, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
+	Result<Unique<T>, AllocateException> allocate_semaphores(Allocator& allocator, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 		Unique<T> semas(allocator);
 		if (auto res = allocator.allocate_semaphores(*semas, loc); !res) {
 			return { expected_error, res.error() };
@@ -906,15 +879,15 @@ namespace vuk {
 		return { expected_value, semas };
 	}
 
-	inline Result<Unique<HLCommandBuffer>, AllocateException> allocate_hl_commandbuffer(NAllocator& allocator, const HLCommandBufferCreateInfo& cbci, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
+	inline Result<Unique<HLCommandBuffer>, AllocateException> allocate_hl_commandbuffer(Allocator& allocator, const HLCommandBufferCreateInfo& cbci, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 		Unique<HLCommandBuffer> hlcb(allocator);
-		if (auto res = allocator.allocate_commandbuffers_hl(std::span{ &hlcb.get(), 1 }, std::span{ &cbci, 1 }, loc); !res) {
+		if (auto res = allocator.allocate_hl_commandbuffers(std::span{ &hlcb.get(), 1 }, std::span{ &cbci, 1 }, loc); !res) {
 			return { expected_error, res.error() };
 		}
 		return { expected_value, std::move(hlcb) };
 	}
 
-	inline Result<Unique<VkFence>, AllocateException> allocate_fence(NAllocator& allocator, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
+	inline Result<Unique<VkFence>, AllocateException> allocate_fence(Allocator& allocator, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 		Unique<VkFence> fence(allocator);
 		if (auto res = allocator.allocate_fences(std::span{ &fence.get(), 1 }, loc); !res) {
 			return { expected_error, res.error() };
@@ -922,7 +895,7 @@ namespace vuk {
 		return { expected_value, std::move(fence) };
 	}
 
-	inline Result<Unique<Image>, AllocateException> allocate_image(NAllocator& allocator, const ImageCreateInfo& ici, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
+	inline Result<Unique<Image>, AllocateException> allocate_image(Allocator& allocator, const ImageCreateInfo& ici, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 		Unique<Image> img(allocator);
 		if (auto res = allocator.allocate_images(std::span{ &img.get(), 1 }, std::span{ &ici, 1 }, loc); !res) {
 			return { expected_error, res.error() };
@@ -930,7 +903,7 @@ namespace vuk {
 		return { expected_value, std::move(img) };
 	}
 
-	inline Result<Unique<ImageView>, AllocateException> allocate_image_view(NAllocator& allocator, const ImageViewCreateInfo& ivci, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
+	inline Result<Unique<ImageView>, AllocateException> allocate_image_view(Allocator& allocator, const ImageViewCreateInfo& ivci, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 		Unique<ImageView> iv(allocator);
 		if (auto res = allocator.allocate_image_views(std::span{ &iv.get(), 1 }, std::span{ &ivci, 1 }, loc); !res) {
 			return { expected_error, res.error() };

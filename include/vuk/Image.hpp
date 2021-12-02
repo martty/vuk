@@ -340,14 +340,14 @@ namespace vuk {
 
 	template<>
 	class Unique<ImageView> {
-		NAllocator* allocator;
+		Allocator* allocator;
 		ImageView payload;
 	public:
 		using element_type = ImageView;
 
 		explicit Unique() : allocator(nullptr), payload{} {}
-		explicit Unique(NAllocator& allocator) : allocator(&allocator), payload{} {}
-		explicit Unique(NAllocator& allocator, ImageView payload) : allocator(&allocator), payload(std::move(payload)) {}
+		explicit Unique(Allocator& allocator) : allocator(&allocator), payload{} {}
+		explicit Unique(Allocator& allocator, ImageView payload) : allocator(&allocator), payload(std::move(payload)) {}
 		Unique(Unique const&) = delete;
 
 		Unique(Unique&& other) noexcept : allocator(other.allocator), payload(other.release()) {}
@@ -404,7 +404,7 @@ namespace vuk {
 		}
 
 		struct SubrangeBuilder {
-			NAllocator* allocator;
+			Allocator* allocator;
 			ImageView iv;
 			ImageViewType type = ImageViewType(0xdeadbeef);
 			uint32_t base_mip = 0xdeadbeef; // 0xdeadbeef is an out of band value for all

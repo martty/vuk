@@ -2,6 +2,7 @@
 
 #include <utility>
 #include <algorithm>
+#include <memory>
 
 namespace vuk {
 	// https://gist.github.com/ThePhD/8153067

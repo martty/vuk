@@ -3,7 +3,6 @@
 #include "Cache.hpp"
 #include "vuk/Context.hpp"
 #include "vuk/CommandBuffer.hpp"
-#include "Allocator.hpp"
 #include "RenderGraphImpl.hpp"
 #include <unordered_set>
 
@@ -109,7 +108,7 @@ namespace vuk {
 		cobuf.ongoing_renderpass = rpi;
 	}
 
-	Result<Unique<HLCommandBuffer>> ExecutableRenderGraph::execute(Context& ctx, NAllocator& alloc, std::vector<std::pair<SwapChainRef, size_t>> swp_with_index) {
+	Result<Unique<HLCommandBuffer>> ExecutableRenderGraph::execute(Context& ctx, Allocator& alloc, std::vector<std::pair<SwapChainRef, size_t>> swp_with_index) {
 		// bind swapchain attachment images & ivs
 		for (auto& [name, bound] : impl->bound_attachments) {
 			if (bound.type == AttachmentRPInfo::Type::eSwapchain) {
@@ -216,7 +215,7 @@ namespace vuk {
 		// actual execution
 		Unique<HLCommandBuffer> hl_cbuf(alloc);
 		HLCommandBufferCreateInfo ci{ .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .queue_family_index = ctx.graphics_queue_family_index };
-		VUK_DO_OR_RETURN(alloc.allocate_commandbuffers_hl(std::span{ &*hl_cbuf, 1 }, std::span{ &ci, 1 }));
+		VUK_DO_OR_RETURN(alloc.allocate_hl_commandbuffers(std::span{ &*hl_cbuf, 1 }, std::span{ &ci, 1 }));
 
 		VkCommandBuffer cbuf = hl_cbuf->command_buffer;
 

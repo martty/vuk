@@ -1,9 +1,10 @@
 #pragma once
 
-#include <vuk/Config.hpp>
-#include <vuk/Hash.hpp>
-#include <../src/CreateInfo.hpp>
-#include <vuk/FixedVector.hpp>
+#include "Pipeline.hpp"
+#include "vuk/Config.hpp"
+#include "vuk/Hash.hpp"
+#include "../src/CreateInfo.hpp"
+#include "vuk/FixedVector.hpp"
 #include <bit>
 
 inline bool operator==(VkSpecializationMapEntry const& lhs, VkSpecializationMapEntry const& rhs) noexcept {

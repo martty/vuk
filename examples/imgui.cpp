@@ -3,7 +3,7 @@
 #include "vuk/CommandBuffer.hpp"
 #include "vuk/RenderGraph.hpp"
 
-util::ImGuiData util::ImGui_ImplVuk_Init(vuk::NAllocator& allocator) {
+util::ImGuiData util::ImGui_ImplVuk_Init(vuk::Allocator& allocator) {
 	vuk::Context& ctx = allocator.get_context();
 	auto& io = ImGui::GetIO();
 	io.BackendRendererName = "imgui_impl_vuk";
@@ -38,7 +38,7 @@ util::ImGuiData util::ImGui_ImplVuk_Init(vuk::NAllocator& allocator) {
 	return data;
 }
 
-void util::ImGui_ImplVuk_Render(vuk::NAllocator& allocator, vuk::RenderGraph& rg, vuk::Name src_target, vuk::Name dst_target, util::ImGuiData& data, ImDrawData* draw_data) {
+void util::ImGui_ImplVuk_Render(vuk::Allocator& allocator, vuk::RenderGraph& rg, vuk::Name src_target, vuk::Name dst_target, util::ImGuiData& data, ImDrawData* draw_data) {
 	auto& ctx = allocator.get_context();
 	auto reset_render_state = [](const util::ImGuiData& data, vuk::CommandBuffer& command_buffer, ImDrawData* draw_data, vuk::Buffer vertex, vuk::Buffer index) {
 		command_buffer.bind_sampled_image(0, 0, *data.font_texture.view, data.font_sci);

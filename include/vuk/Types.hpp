@@ -20,14 +20,14 @@ namespace vuk {
 
 	template <typename Type>
 	class Unique {
-		NAllocator* allocator;
+		Allocator* allocator;
 		Type payload;
 	public:
 		using element_type = Type;
 
 		explicit Unique() : allocator(nullptr), payload{} {}
-		explicit Unique(NAllocator& allocator) : allocator(&allocator), payload{} {}
-		explicit Unique(NAllocator& allocator, Type payload) : allocator(&allocator), payload(std::move(payload)) {}
+		explicit Unique(Allocator& allocator) : allocator(&allocator), payload{} {}
+		explicit Unique(Allocator& allocator, Type payload) : allocator(&allocator), payload(std::move(payload)) {}
 		Unique(Unique const&) = delete;
 
 		Unique(Unique&& other) noexcept : allocator(other.allocator), payload(other.release()) {}

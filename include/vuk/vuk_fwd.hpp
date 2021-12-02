@@ -4,7 +4,7 @@
 
 namespace vuk {
 	class Context;
-	class NAllocator;
+	class Allocator;
 
 	class CommandBuffer;
 

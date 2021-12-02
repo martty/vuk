@@ -4,7 +4,6 @@
 #include <optional>
 #include <vuk/Config.hpp>
 #include <vuk/vuk_fwd.hpp>
-#include <../src/Allocator.hpp>
 #include <vuk/FixedVector.hpp>
 #include <vuk/Types.hpp>
 #include <vuk/Image.hpp>
@@ -164,14 +163,14 @@ namespace vuk {
 	struct ExecutableRenderGraph;
 	struct PassInfo;
 	struct Query;
-	class NAllocator;
+	class Allocator;
 
 	class CommandBuffer {
 	protected:
 		friend struct ExecutableRenderGraph;
 		ExecutableRenderGraph* rg = nullptr;
 		Context& ctx;
-		NAllocator* allocator;
+		Allocator* allocator;
 		VkCommandBuffer command_buffer;
 
 		struct RenderPassInfo {
@@ -233,8 +232,8 @@ namespace vuk {
 
 
 		// for rendergraph
-		CommandBuffer(ExecutableRenderGraph& rg, Context& ctx, NAllocator& alloc, VkCommandBuffer cb) : rg(&rg), ctx(ctx), allocator(&alloc), command_buffer(cb) {}
-		CommandBuffer(ExecutableRenderGraph& rg, Context& ctx, NAllocator& alloc, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing) : rg(&rg), ctx(ctx), allocator(&alloc), command_buffer(cb), ongoing_renderpass(ongoing) {}
+		CommandBuffer(ExecutableRenderGraph& rg, Context& ctx, Allocator& alloc, VkCommandBuffer cb) : rg(&rg), ctx(ctx), allocator(&alloc), command_buffer(cb) {}
+		CommandBuffer(ExecutableRenderGraph& rg, Context& ctx, Allocator& alloc, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing) : rg(&rg), ctx(ctx), allocator(&alloc), command_buffer(cb), ongoing_renderpass(ongoing) {}
 	public:
 		// for secondary cbufs
 		CommandBuffer(ExecutableRenderGraph* rg, Context& ctx, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing) : rg(rg), ctx(ctx), command_buffer(cb), ongoing_renderpass(ongoing) {}

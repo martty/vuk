@@ -1,7 +1,7 @@
 #include "Cache.hpp"
 #include "vuk/Context.hpp"
-#include "Allocator.hpp"
-#include <vuk/PipelineInstance.hpp>
+#include "LegacyGPUAllocator.hpp"
+#include "vuk/PipelineInstance.hpp"
 
 namespace vuk {
 	template<class T>
@@ -235,7 +235,7 @@ namespace vuk {
 	}
 
 	template class PerFrameCache<vuk::DescriptorSet, Context::FC>;
-	template class PerFrameCache<LinearAllocator, Context::FC>;
+	template class PerFrameCache<LegacyLinearAllocator, Context::FC>;
 
 	template class Cache<vuk::DescriptorPool>;
 

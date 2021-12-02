@@ -300,7 +300,7 @@ namespace vuk {
 		return { impl->query_id_counter++ };
 	}
 
-	NAllocator& Context::get_direct_allocator() {
+	Allocator& Context::get_direct_allocator() {
 		return impl->direct_allocator;
 	}
 
@@ -590,7 +590,7 @@ namespace vuk {
 		}
 	}
 
-	Texture Context::allocate_texture(NAllocator& allocator, ImageCreateInfo ici) {
+	Texture Context::allocate_texture(Allocator& allocator, ImageCreateInfo ici) {
 		ici.imageType = ici.extent.depth > 1 ? ImageType::e3D :
 			ici.extent.height > 1 ? ImageType::e2D :
 			ImageType::e1D;
@@ -614,7 +614,7 @@ namespace vuk {
 	}
 
 
-	std::pair<Texture, TransferStub> Context::create_texture(NAllocator& allocator, Format format, Extent3D extent, void* data, bool generate_mips) {
+	std::pair<Texture, TransferStub> Context::create_texture(Allocator& allocator, Format format, Extent3D extent, void* data, bool generate_mips) {
 		ImageCreateInfo ici;
 		ici.format = format;
 		ici.extent = extent;
@@ -634,11 +634,11 @@ namespace vuk {
 		impl->legacy_gpu_allocator.destroy_image(image.image);
 	}
 
-	void Context::destroy(const PoolAllocator& v) {
+	void Context::destroy(const LegacyPoolAllocator& v) {
 		impl->legacy_gpu_allocator.destroy(v);
 	}
 
-	void Context::destroy(const LinearAllocator& v) {
+	void Context::destroy(const LegacyLinearAllocator& v) {
 		impl->legacy_gpu_allocator.destroy(v);
 	}
 
@@ -826,7 +826,7 @@ namespace vuk {
 		}
 	}
 
-	Unique<PersistentDescriptorSet> Context::create_persistent_descriptorset(NAllocator& allocator, DescriptorSetLayoutCreateInfo dslci,
+	Unique<PersistentDescriptorSet> Context::create_persistent_descriptorset(Allocator& allocator, DescriptorSetLayoutCreateInfo dslci,
 		unsigned num_descriptors) {
 		dslci.dslci.bindingCount = (uint32_t)dslci.bindings.size();
 		dslci.dslci.pBindings = dslci.bindings.data();
@@ -840,17 +840,17 @@ namespace vuk {
 		return create_persistent_descriptorset(allocator, { dslai, num_descriptors });
 	}
 
-	Unique<PersistentDescriptorSet> Context::create_persistent_descriptorset(NAllocator& allocator, const PersistentDescriptorSetCreateInfo& ci) {
+	Unique<PersistentDescriptorSet> Context::create_persistent_descriptorset(Allocator& allocator, const PersistentDescriptorSetCreateInfo& ci) {
 		Unique<PersistentDescriptorSet> pds(allocator);
 		allocator.allocate_persistent_descriptor_sets(std::span{ &*pds, 1 }, std::span{ &ci, 1 });
 		return pds;
 	}
 
-	Unique<PersistentDescriptorSet> Context::create_persistent_descriptorset(NAllocator& allocator, const PipelineBaseInfo& base, unsigned set, unsigned num_descriptors) {
+	Unique<PersistentDescriptorSet> Context::create_persistent_descriptorset(Allocator& allocator, const PipelineBaseInfo& base, unsigned set, unsigned num_descriptors) {
 		return create_persistent_descriptorset(allocator, { base.layout_info[set], num_descriptors });
 	}
 
-	Unique<PersistentDescriptorSet> Context::create_persistent_descriptorset(NAllocator& allocator, const ComputePipelineBaseInfo& base, unsigned set, unsigned num_descriptors) {
+	Unique<PersistentDescriptorSet> Context::create_persistent_descriptorset(Allocator& allocator, const ComputePipelineBaseInfo& base, unsigned set, unsigned num_descriptors) {
 		return create_persistent_descriptorset(allocator, { base.layout_info[set], num_descriptors });
 	}
 
@@ -863,7 +863,7 @@ namespace vuk {
 		return impl->legacy_gpu_allocator.get_allocation_size(buf);
 	}
 
-	Unique<Buffer> Context::allocate_buffer(NAllocator& allocator, MemoryUsage mem_usage, BufferUsageFlags buffer_usage, size_t size, size_t alignment) {
+	Unique<Buffer> Context::allocate_buffer(Allocator& allocator, MemoryUsage mem_usage, BufferUsageFlags buffer_usage, size_t size, size_t alignment) {
 		bool create_mapped = mem_usage == MemoryUsage::eCPUonly || mem_usage == MemoryUsage::eCPUtoGPU || mem_usage == MemoryUsage::eGPUtoCPU;
 		Unique<Buffer> buf(allocator);
 		BufferCreateInfo bci{ mem_usage, BufferUsageFlagBits::eTransferDst | buffer_usage, size, alignment };
@@ -958,7 +958,7 @@ namespace vuk {
 		return { ds, cinfo.layout_info };
 	}
 
-	LinearAllocator Context::create(const create_info_t<LinearAllocator>& cinfo) {
+	LegacyLinearAllocator Context::create(const create_info_t<LegacyLinearAllocator>& cinfo) {
 		return impl->legacy_gpu_allocator.allocate_linear(cinfo.mem_usage, cinfo.buffer_usage);
 	}
 
