@@ -216,8 +216,6 @@ namespace vuk {
 			dma_task();
 		}
 
-		/// @brief Manually request destruction of vuk::PersistentDescriptorSet
-		void enqueue_destroy(vuk::PersistentDescriptorSet);
 		/// @brief Add a swapchain to be managed by the Context
 		/// @return Reference to the new swapchain that can be used during presentation
 		SwapchainRef add_swapchain(Swapchain);

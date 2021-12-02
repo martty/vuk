@@ -71,7 +71,6 @@ target_sources(vuk PRIVATE
 	src/Allocator.cpp
 	src/Context.cpp
 	src/CommandBuffer.cpp
-	src/PerThreadContext.cpp
 	src/Util.cpp
 	src/Format.cpp
 	src/Name.cpp
