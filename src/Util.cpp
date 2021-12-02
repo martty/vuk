@@ -5,7 +5,7 @@ namespace vuk {
 	Result<void> execute_submit_and_present_to_one(NAllocator& allocator, ExecutableRenderGraph&& rg, SwapchainRef swapchain) {
 		Context& ctx = allocator.get_context();
 		Unique<std::array<VkSemaphore, 2>> semas(allocator);
-		VUK_DO_OR_RETURN(allocator.allocate_semaphores(*semas, VUK_HERE_AND_NOW()));
+		VUK_DO_OR_RETURN(allocator.allocate_semaphores(*semas));
 		auto [present_rdy, render_complete] = *semas;
 
 		uint32_t image_index = (uint32_t)-1;
@@ -41,7 +41,7 @@ namespace vuk {
 		si.pWaitDstStageMask = &flags;
 
 		Unique<VkFence> fence(allocator);
-		VUK_DO_OR_RETURN(allocator.allocate_fences({ &*fence, 1 }, VUK_HERE_AND_NOW()));
+		VUK_DO_OR_RETURN(allocator.allocate_fences({ &*fence, 1 }));
 
 		ctx.submit_graphics(si, *fence);
 
@@ -67,7 +67,7 @@ namespace vuk {
 		}
 		auto& hl_cbuf = *cb;
 		Unique<VkFence> fence(allocator);
-		VUK_DO_OR_RETURN(allocator.allocate_fences({ &*fence, 1 }, VUK_HERE_AND_NOW()));
+		VUK_DO_OR_RETURN(allocator.allocate_fences({ &*fence, 1 }));
 		VkSubmitInfo si{ .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO };
 		si.commandBufferCount = 1;
 		si.pCommandBuffers = &hl_cbuf->command_buffer;

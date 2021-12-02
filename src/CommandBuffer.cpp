@@ -323,7 +323,7 @@ namespace vuk {
 		auto layout = rg->is_resource_image_in_general_layout(name, current_pass) ? vuk::ImageLayout::eGeneral : vuk::ImageLayout::eShaderReadOnlyOptimal;
 
 		vuk::Unique<vuk::ImageView> iv(*allocator);
-		allocator->allocate_image_views(std::span{ &*iv, 1 }, std::span{ &ivci, 1 }, VUK_HERE_AND_NOW()); // TODO: dropping error
+		allocator->allocate_image_views(std::span{ &*iv, 1 }, std::span{ &ivci, 1 }); // TODO: dropping error
 		return bind_sampled_image(set, binding, *iv, sampler_create_info, layout);
 	}
 
@@ -441,7 +441,7 @@ namespace vuk {
 
 	Result<SecondaryCommandBuffer> CommandBuffer::begin_secondary() {
 		// TODO: hardcoded queue family
-		auto scbuf = allocate_hl_commandbuffer(*allocator, { .level = VK_COMMAND_BUFFER_LEVEL_SECONDARY, .queue_family_index = ctx.graphics_queue_family_index }, VUK_HERE_AND_NOW());
+		auto scbuf = allocate_hl_commandbuffer(*allocator, { .level = VK_COMMAND_BUFFER_LEVEL_SECONDARY, .queue_family_index = ctx.graphics_queue_family_index });
 		if (!scbuf) {
 			return { expected_error, scbuf.error() };
 		}

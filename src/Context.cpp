@@ -594,7 +594,7 @@ namespace vuk {
 		ici.imageType = ici.extent.depth > 1 ? ImageType::e3D :
 			ici.extent.height > 1 ? ImageType::e2D :
 			ImageType::e1D;
-		Unique<Image> dst = allocate_image(allocator, ici, VUK_HERE_AND_NOW()).value(); // TODO: dropping error
+		Unique<Image> dst = allocate_image(allocator, ici).value(); // TODO: dropping error
 		ImageViewCreateInfo ivci;
 		ivci.format = ici.format;
 		ivci.image = *dst;
@@ -606,7 +606,7 @@ namespace vuk {
 		ivci.viewType = ici.imageType == ImageType::e3D ? ImageViewType::e3D :
 			ici.imageType == ImageType::e2D ? ImageViewType::e2D :
 			ImageViewType::e1D;
-		Texture tex{ std::move(dst), allocate_image_view(allocator, ivci, VUK_HERE_AND_NOW()).value() }; // TODO: dropping error
+		Texture tex{ std::move(dst), allocate_image_view(allocator, ivci).value() }; // TODO: dropping error
 		tex.extent = ici.extent;
 		tex.format = ici.format;
 		tex.sample_count = ici.samples;
@@ -738,7 +738,7 @@ namespace vuk {
 		ivci.image = iv.image;
 		ivci.format = iv.format;
 		ivci.components = iv.components;
-		return allocate_image_view(*allocator, ivci, VUK_HERE_AND_NOW()).value(); // TODO: dropping error
+		return allocate_image_view(*allocator, ivci).value(); // TODO: dropping error
 	}
 
 	void Context::collect(uint64_t frame) {
@@ -842,7 +842,7 @@ namespace vuk {
 
 	Unique<PersistentDescriptorSet> Context::create_persistent_descriptorset(NAllocator& allocator, const PersistentDescriptorSetCreateInfo& ci) {
 		Unique<PersistentDescriptorSet> pds(allocator);
-		allocator.allocate_persistent_descriptor_sets(std::span{ &*pds, 1 }, std::span{ &ci, 1 }, VUK_HERE_AND_NOW());
+		allocator.allocate_persistent_descriptor_sets(std::span{ &*pds, 1 }, std::span{ &ci, 1 });
 		return pds;
 	}
 
@@ -867,7 +867,7 @@ namespace vuk {
 		bool create_mapped = mem_usage == MemoryUsage::eCPUonly || mem_usage == MemoryUsage::eCPUtoGPU || mem_usage == MemoryUsage::eGPUtoCPU;
 		Unique<Buffer> buf(allocator);
 		BufferCreateInfo bci{ mem_usage, BufferUsageFlagBits::eTransferDst | buffer_usage, size, alignment };
-		auto ret = allocator.allocate_buffers(std::span{ &*buf, 1 }, std::span{ &bci, 1 }, VUK_HERE_AND_NOW()); // TODO: dropping error
+		auto ret = allocator.allocate_buffers(std::span{ &*buf, 1 }, std::span{ &bci, 1 }); // TODO: dropping error
 		return buf;
 	}
 
@@ -880,7 +880,7 @@ namespace vuk {
 		}
 
 		if (impl->buffer_transfer_commands.empty() && impl->bufferimage_transfer_commands.empty()) return;
-		auto cbuf = *allocate_hl_commandbuffer(get_direct_allocator(), { .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .queue_family_index = transfer_queue_family_index }, VUK_HERE_AND_NOW());
+		auto cbuf = *allocate_hl_commandbuffer(get_direct_allocator(), { .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .queue_family_index = transfer_queue_family_index });
 		VkCommandBufferBeginInfo cbi = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
 		vkBeginCommandBuffer(*cbuf, &cbi);
 		size_t last = 0;
@@ -901,7 +901,7 @@ namespace vuk {
 			last = std::max(last, task.stub.id);
 		}
 		vkEndCommandBuffer(*cbuf);
-		auto fence = *allocate_fence(get_direct_allocator(), VUK_HERE_AND_NOW());
+		auto fence = *allocate_fence(get_direct_allocator());
 		VkSubmitInfo si{ .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO };
 		si.commandBufferCount = 1;
 		si.pCommandBuffers = &cbuf->command_buffer;

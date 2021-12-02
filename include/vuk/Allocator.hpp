@@ -9,20 +9,16 @@
 #include <vector>
 #include <atomic>
 #include <../src/Allocator.hpp>
+#include <source_location>
 
 namespace vuk {
-	struct SourceLocation {
-		const char* file;
-		unsigned line;
-	};
-
 	struct SourceLocationAtFrame {
-		SourceLocation source_location;
+		std::source_location location;
 		uint64_t absolute_frame;
 	};
 
-#define VUK_HERE_AND_NOW() SourceLocationAtFrame{SourceLocation{__FILE__, __LINE__}, (uint64_t)-1LL}
-#define VUK_HERE_AT_FRAME(frame) SourceLocationAtFrame{SourceLocation{__FILE__, __LINE__}, frame}
+#define VUK_HERE_AND_NOW() SourceLocationAtFrame{ std::source_location::current(), (uint64_t)-1LL }
+#define VUK_HERE_AT_FRAME(frame) SourceLocationAtFrame{std::source_location::current(), frame}
 #define VUK_DO_OR_RETURN(what) if(auto res = what; !res){ return { expected_error, res.error() }; }
 
 	struct AllocateException : Exception {
@@ -777,11 +773,11 @@ namespace vuk {
 	public:
 		explicit NAllocator(VkResource& mr) : ctx(&mr.get_context()), mr(&mr) {}
 
-		Result<void, AllocateException> allocate(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) {
+		Result<void, AllocateException> allocate(std::span<VkSemaphore> dst, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 			return mr->allocate_semaphores(dst, loc);
 		}
 
-		Result<void, AllocateException> allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) {
+		Result<void, AllocateException> allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 			return mr->allocate_semaphores(dst, loc);
 		}
 
@@ -789,11 +785,11 @@ namespace vuk {
 			mr->deallocate_semaphores(src);
 		}
 
-		Result<void, AllocateException> allocate(std::span<VkFence> dst, SourceLocationAtFrame loc) {
+		Result<void, AllocateException> allocate(std::span<VkFence> dst, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 			return mr->allocate_fences(dst, loc);
 		}
 
-		Result<void, AllocateException> allocate_fences(std::span<VkFence> dst, SourceLocationAtFrame loc) {
+		Result<void, AllocateException> allocate_fences(std::span<VkFence> dst, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 			return mr->allocate_fences(dst, loc);
 		}
 
@@ -801,11 +797,11 @@ namespace vuk {
 			mr->deallocate_fences(src);
 		}
 
-		Result<void, AllocateException> allocate(std::span<HLCommandBuffer> dst, std::span<const HLCommandBufferCreateInfo> cis, SourceLocationAtFrame loc) {
+		Result<void, AllocateException> allocate(std::span<HLCommandBuffer> dst, std::span<const HLCommandBufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 			return mr->allocate_commandbuffers_hl(dst, cis, loc);
 		}
 
-		Result<void, AllocateException> allocate_commandbuffers_hl(std::span<HLCommandBuffer> dst, std::span<const HLCommandBufferCreateInfo> cis, SourceLocationAtFrame loc) {
+		Result<void, AllocateException> allocate_commandbuffers_hl(std::span<HLCommandBuffer> dst, std::span<const HLCommandBufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 			return mr->allocate_commandbuffers_hl(dst, cis, loc);
 		}
 
@@ -813,11 +809,11 @@ namespace vuk {
 			mr->deallocate_commandbuffers_hl(src);
 		}
 
-		Result<void, AllocateException> allocate(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
+		Result<void, AllocateException> allocate(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 			return mr->allocate_buffers(dst, cis, loc);
 		}
 
-		Result<void, AllocateException> allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
+		Result<void, AllocateException> allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 			return mr->allocate_buffers(dst, cis, loc);
 		}
 
@@ -825,11 +821,11 @@ namespace vuk {
 			mr->deallocate_buffers(src);
 		}
 
-		Result<void, AllocateException> allocate(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) {
+		Result<void, AllocateException> allocate(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 			return mr->allocate_framebuffers(dst, cis, loc);
 		}
 
-		Result<void, AllocateException> allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) {
+		Result<void, AllocateException> allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 			return mr->allocate_framebuffers(dst, cis, loc);
 		}
 
@@ -837,11 +833,11 @@ namespace vuk {
 			mr->deallocate_framebuffers(src);
 		}
 
-		Result<void, AllocateException> allocate(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) {
+		Result<void, AllocateException> allocate(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 			return mr->allocate_images(dst, cis, loc);
 		}
 
-		Result<void, AllocateException> allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) {
+		Result<void, AllocateException> allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 			return mr->allocate_images(dst, cis, loc);
 		}
 
@@ -849,11 +845,11 @@ namespace vuk {
 			mr->deallocate_images(src);
 		}
 
-		Result<void, AllocateException> allocate(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) {
+		Result<void, AllocateException> allocate(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 			return mr->allocate_image_views(dst, cis, loc);
 		}
 
-		Result<void, AllocateException> allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) {
+		Result<void, AllocateException> allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 			return mr->allocate_image_views(dst, cis, loc);
 		}
 
@@ -861,11 +857,11 @@ namespace vuk {
 			mr->deallocate_image_views(src);
 		}
 
-		Result<void, AllocateException> allocate(std::span<PersistentDescriptorSet> dst, std::span<const PersistentDescriptorSetCreateInfo> cis, SourceLocationAtFrame loc) {
+		Result<void, AllocateException> allocate(std::span<PersistentDescriptorSet> dst, std::span<const PersistentDescriptorSetCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 			return mr->allocate_persistent_descriptor_sets(dst, cis, loc);
 		}
 
-		Result<void, AllocateException> allocate_persistent_descriptor_sets(std::span<PersistentDescriptorSet> dst, std::span<const PersistentDescriptorSetCreateInfo> cis, SourceLocationAtFrame loc) {
+		Result<void, AllocateException> allocate_persistent_descriptor_sets(std::span<PersistentDescriptorSet> dst, std::span<const PersistentDescriptorSetCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 			return mr->allocate_persistent_descriptor_sets(dst, cis, loc);
 		}
 
@@ -902,7 +898,7 @@ namespace vuk {
 	};
 
 	template<class T>
-	Result<Unique<T>, AllocateException> allocate_semaphores(NAllocator& allocator, SourceLocationAtFrame loc) {
+	Result<Unique<T>, AllocateException> allocate_semaphores(NAllocator& allocator, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 		Unique<T> semas(allocator);
 		if (auto res = allocator.allocate_semaphores(*semas, loc); !res) {
 			return { expected_error, res.error() };
@@ -910,7 +906,7 @@ namespace vuk {
 		return { expected_value, semas };
 	}
 
-	inline Result<Unique<HLCommandBuffer>, AllocateException> allocate_hl_commandbuffer(NAllocator& allocator, const HLCommandBufferCreateInfo& cbci, SourceLocationAtFrame loc) {
+	inline Result<Unique<HLCommandBuffer>, AllocateException> allocate_hl_commandbuffer(NAllocator& allocator, const HLCommandBufferCreateInfo& cbci, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 		Unique<HLCommandBuffer> hlcb(allocator);
 		if (auto res = allocator.allocate_commandbuffers_hl(std::span{ &hlcb.get(), 1 }, std::span{ &cbci, 1 }, loc); !res) {
 			return { expected_error, res.error() };
@@ -918,7 +914,7 @@ namespace vuk {
 		return { expected_value, std::move(hlcb) };
 	}
 
-	inline Result<Unique<VkFence>, AllocateException> allocate_fence(NAllocator& allocator, SourceLocationAtFrame loc) {
+	inline Result<Unique<VkFence>, AllocateException> allocate_fence(NAllocator& allocator, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 		Unique<VkFence> fence(allocator);
 		if (auto res = allocator.allocate_fences(std::span{ &fence.get(), 1 }, loc); !res) {
 			return { expected_error, res.error() };
@@ -926,7 +922,7 @@ namespace vuk {
 		return { expected_value, std::move(fence) };
 	}
 
-	inline Result<Unique<Image>, AllocateException> allocate_image(NAllocator& allocator, const ImageCreateInfo& ici, SourceLocationAtFrame loc) {
+	inline Result<Unique<Image>, AllocateException> allocate_image(NAllocator& allocator, const ImageCreateInfo& ici, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 		Unique<Image> img(allocator);
 		if (auto res = allocator.allocate_images(std::span{ &img.get(), 1 }, std::span{ &ici, 1 }, loc); !res) {
 			return { expected_error, res.error() };
@@ -934,7 +930,7 @@ namespace vuk {
 		return { expected_value, std::move(img) };
 	}
 
-	inline Result<Unique<ImageView>, AllocateException> allocate_image_view(NAllocator& allocator, const ImageViewCreateInfo& ivci, SourceLocationAtFrame loc) {
+	inline Result<Unique<ImageView>, AllocateException> allocate_image_view(NAllocator& allocator, const ImageViewCreateInfo& ivci, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 		Unique<ImageView> iv(allocator);
 		if (auto res = allocator.allocate_image_views(std::span{ &iv.get(), 1 }, std::span{ &ivci, 1 }, loc); !res) {
 			return { expected_error, res.error() };

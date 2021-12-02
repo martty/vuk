@@ -174,7 +174,7 @@ namespace vuk {
 		std::pair<Unique<Buffer>, TransferStub> create_buffer(NAllocator& allocator, MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, std::span<T> data) {
 			Unique<Buffer> buf(allocator);
 			BufferCreateInfo bci{ mem_usage, vuk::BufferUsageFlagBits::eTransferDst | buffer_usage, sizeof(T) * data.size(), 1 };
-			auto ret = allocator.allocate_buffers(std::span{ &*buf, 1 }, std::span{ &bci, 1 }, VUK_HERE_AND_NOW()); // TODO: dropping error
+			auto ret = allocator.allocate_buffers(std::span{ &*buf, 1 }, std::span{ &bci, 1 }); // TODO: dropping error
 			auto stub = upload(allocator, *buf, data);
 			return { std::move(buf), stub };
 		}
@@ -189,7 +189,7 @@ namespace vuk {
 			if (data.empty()) return { 0 };
 			Unique<Buffer> staging(allocator);
 			BufferCreateInfo bci{ MemoryUsage::eCPUonly, vuk::BufferUsageFlagBits::eTransferSrc, sizeof(T) * data.size(), 1 };
-			auto ret = allocator.allocate_buffers(std::span{ &*staging, 1 }, std::span{ &bci, 1 }, VUK_HERE_AND_NOW()); // TODO: dropping error
+			auto ret = allocator.allocate_buffers(std::span{ &*staging, 1 }, std::span{ &bci, 1 }); // TODO: dropping error
 			::memcpy(staging->mapped_ptr, data.data(), sizeof(T) * data.size());
 
 			auto stub = enqueue_transfer(*staging, dst);
@@ -204,7 +204,7 @@ namespace vuk {
 			size_t alignment = format_to_texel_block_size(format);
 			Unique<Buffer> staging(allocator);
 			BufferCreateInfo bci{ MemoryUsage::eCPUonly, vuk::BufferUsageFlagBits::eTransferSrc, sizeof(T) * data.size(), alignment };
-			auto ret = allocator.allocate_buffers(std::span{ &*staging, 1 }, std::span{ &bci, 1 }, VUK_HERE_AND_NOW()); // TODO: dropping error
+			auto ret = allocator.allocate_buffers(std::span{ &*staging, 1 }, std::span{ &bci, 1 }); // TODO: dropping error
 			::memcpy(staging->mapped_ptr, data.data(), sizeof(T) * data.size());
 
 			auto stub = enqueue_transfer(*staging, dst, extent, base_layer, generate_mips);

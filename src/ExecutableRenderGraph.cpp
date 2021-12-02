@@ -202,7 +202,7 @@ namespace vuk {
 			rp.fbci.layers = 1;
 
 			Unique<VkFramebuffer> fb(alloc);
-			VUK_DO_OR_RETURN(alloc.allocate_framebuffers(std::span{ &*fb, 1 }, std::span{ &rp.fbci, 1 }, VUK_HERE_AND_NOW()));
+			VUK_DO_OR_RETURN(alloc.allocate_framebuffers(std::span{ &*fb, 1 }, std::span{ &rp.fbci, 1 }));
 			rp.framebuffer = *fb; // queue framebuffer for destruction
 		}
 
@@ -216,7 +216,7 @@ namespace vuk {
 		// actual execution
 		Unique<HLCommandBuffer> hl_cbuf(alloc);
 		HLCommandBufferCreateInfo ci{ .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .queue_family_index = ctx.graphics_queue_family_index };
-		VUK_DO_OR_RETURN(alloc.allocate_commandbuffers_hl(std::span{ &*hl_cbuf, 1 }, std::span{ &ci, 1 }, VUK_HERE_AND_NOW()));
+		VUK_DO_OR_RETURN(alloc.allocate_commandbuffers_hl(std::span{ &*hl_cbuf, 1 }, std::span{ &ci, 1 }));
 
 		VkCommandBuffer cbuf = hl_cbuf->command_buffer;
 
