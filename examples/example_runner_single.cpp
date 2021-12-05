@@ -55,15 +55,16 @@ vuk::ExampleRunner::ExampleRunner() {
 			device = vkbdevice.device;
 
 			context.emplace(ContextCreateParameters{ instance, device, physical_device, graphics_queue, graphics_queue_family_index });
-			rf_alloc.emplace(*context, vuk::Context::FC);
+			const unsigned num_inflight_frames = 3;
+			xdev_rf_alloc.emplace(*context, num_inflight_frames);
 			swapchain = context->add_swapchain(util::make_swapchain(vkbdevice));
 }
 
 void vuk::ExampleRunner::render() {
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
-		auto& frame_resource = rf_alloc->get_next_frame();
-		Allocator frame_allocator(frame_resource);
+		auto& xdev_frame_resource = xdev_rf_alloc->get_next_frame();
+		Allocator frame_allocator(xdev_frame_resource);
 		auto rg = examples[0]->render(*this, frame_allocator);
 		auto attachment_name = vuk::Name(std::string(examples[0]->name) + "_final");
 		rg.attach_swapchain(attachment_name, swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });

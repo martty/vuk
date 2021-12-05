@@ -300,8 +300,8 @@ namespace vuk {
 		return { impl->query_id_counter++ };
 	}
 
-	Allocator& Context::get_direct_allocator() {
-		return impl->direct_allocator;
+	Allocator& Context::get_vk_allocator() {
+		return impl->vk_allocator;
 	}
 
 	DescriptorSetLayoutAllocInfo Context::create(const create_info_t<DescriptorSetLayoutAllocInfo>& cinfo) {
@@ -710,6 +710,7 @@ namespace vuk {
 	}
 
 	void Context::wait_idle() {
+		// TODO: need to acquire locks on all queues
 		vkDeviceWaitIdle(device);
 	}
 
@@ -761,7 +762,7 @@ namespace vuk {
 	}
 
 	// TODO: no error handling
-	Result<void, AllocateException> Direct::allocate_persistent_descriptor_sets(std::span<PersistentDescriptorSet> dst, std::span<const PersistentDescriptorSetCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException> CrossDeviceVkAllocator::allocate_persistent_descriptor_sets(std::span<PersistentDescriptorSet> dst, std::span<const PersistentDescriptorSetCreateInfo> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
 			auto& ci = cis[i];
@@ -820,11 +821,57 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	void Direct::deallocate_persistent_descriptor_sets(std::span<const PersistentDescriptorSet> src) {
+	void CrossDeviceVkAllocator::deallocate_persistent_descriptor_sets(std::span<const PersistentDescriptorSet> src) {
 		for (auto& v : src) {
 			vkDestroyDescriptorPool(ctx->device, v.backing_pool, nullptr);
 		}
 	}
+
+	Result<void, AllocateException> CrossDeviceVkAllocator::allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) {
+		assert(dst.size() == cis.size());
+		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
+			auto& cinfo = cis[i];
+			auto& pool = ctx->acquire_descriptor_pool(cinfo.layout_info, ctx->frame_counter);
+			auto ds = pool.acquire(*ctx, cinfo.layout_info);
+			auto mask = cinfo.used.to_ulong();
+			uint32_t leading_ones = num_leading_ones(mask);
+			std::array<VkWriteDescriptorSet, VUK_MAX_BINDINGS> writes = {};
+			int j = 0;
+			for (uint32_t i = 0; i < leading_ones; i++, j++) {
+				if (!cinfo.used.test(i)) {
+					j--;
+					continue;
+				}
+				auto& write = writes[j];
+				write = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+				auto& binding = cinfo.bindings[i];
+				write.descriptorType = (VkDescriptorType)binding.type;
+				write.dstArrayElement = 0;
+				write.descriptorCount = 1;
+				write.dstBinding = i;
+				write.dstSet = ds;
+				switch (binding.type) {
+				case DescriptorType::eUniformBuffer:
+				case DescriptorType::eStorageBuffer:
+					write.pBufferInfo = &binding.buffer;
+					break;
+				case DescriptorType::eSampledImage:
+				case DescriptorType::eSampler:
+				case DescriptorType::eCombinedImageSampler:
+				case DescriptorType::eStorageImage:
+					write.pImageInfo = &binding.image.dii;
+					break;
+				default:
+					assert(0);
+				}
+			}
+			vkUpdateDescriptorSets(device, j, writes.data(), 0, nullptr);
+			dst[i] = { ds, cinfo.layout_info };
+		}
+		return { expected_value };
+	}
+
+	void CrossDeviceVkAllocator::deallocate_descriptor_sets(std::span<const DescriptorSet> src) {} // no-op, desc sets are cached
 
 	Unique<PersistentDescriptorSet> Context::create_persistent_descriptorset(Allocator& allocator, DescriptorSetLayoutCreateInfo dslci,
 		unsigned num_descriptors) {
@@ -863,10 +910,9 @@ namespace vuk {
 		return impl->legacy_gpu_allocator.get_allocation_size(buf);
 	}
 
-	Unique<Buffer> Context::allocate_buffer(Allocator& allocator, MemoryUsage mem_usage, BufferUsageFlags buffer_usage, size_t size, size_t alignment) {
-		bool create_mapped = mem_usage == MemoryUsage::eCPUonly || mem_usage == MemoryUsage::eCPUtoGPU || mem_usage == MemoryUsage::eGPUtoCPU;
-		Unique<Buffer> buf(allocator);
-		BufferCreateInfo bci{ mem_usage, BufferUsageFlagBits::eTransferDst | buffer_usage, size, alignment };
+	Unique<BufferCrossDevice> Context::allocate_buffer(Allocator& allocator, MemoryUsage mem_usage, size_t size, size_t alignment) {
+		Unique<BufferCrossDevice> buf(allocator);
+		BufferCreateInfo bci{ mem_usage, size, alignment };
 		auto ret = allocator.allocate_buffers(std::span{ &*buf, 1 }, std::span{ &bci, 1 }); // TODO: dropping error
 		return buf;
 	}
@@ -880,7 +926,7 @@ namespace vuk {
 		}
 
 		if (impl->buffer_transfer_commands.empty() && impl->bufferimage_transfer_commands.empty()) return;
-		auto cbuf = *allocate_hl_commandbuffer(get_direct_allocator(), { .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .queue_family_index = transfer_queue_family_index });
+		auto cbuf = *allocate_hl_commandbuffer(get_vk_allocator(), { .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .queue_family_index = transfer_queue_family_index });
 		VkCommandBufferBeginInfo cbi = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
 		vkBeginCommandBuffer(*cbuf, &cbi);
 		size_t last = 0;
@@ -901,7 +947,7 @@ namespace vuk {
 			last = std::max(last, task.stub.id);
 		}
 		vkEndCommandBuffer(*cbuf);
-		auto fence = *allocate_fence(get_direct_allocator());
+		auto fence = *allocate_fence(get_vk_allocator());
 		VkSubmitInfo si{ .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO };
 		si.commandBufferCount = 1;
 		si.pCommandBuffers = &cbuf->command_buffer;
@@ -917,49 +963,6 @@ namespace vuk {
 			last_transfer_complete = last.last_transfer_id;
 			impl->pending_transfers.pop();
 		}
-	}
-
-	DescriptorSet Context::create(const create_info_t<DescriptorSet>& cinfo) {
-		auto& pool = impl->pool_cache.acquire(cinfo.layout_info, frame_counter);
-		auto ds = pool.acquire(*this, cinfo.layout_info);
-		auto mask = cinfo.used.to_ulong();
-		uint32_t leading_ones = num_leading_ones(mask);
-		std::array<VkWriteDescriptorSet, VUK_MAX_BINDINGS> writes = {};
-		int j = 0;
-		for (uint32_t i = 0; i < leading_ones; i++, j++) {
-			if (!cinfo.used.test(i)) {
-				j--;
-				continue;
-			}
-			auto& write = writes[j];
-			write = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
-			auto& binding = cinfo.bindings[i];
-			write.descriptorType = (VkDescriptorType)binding.type;
-			write.dstArrayElement = 0;
-			write.descriptorCount = 1;
-			write.dstBinding = i;
-			write.dstSet = ds;
-			switch (binding.type) {
-			case DescriptorType::eUniformBuffer:
-			case DescriptorType::eStorageBuffer:
-				write.pBufferInfo = &binding.buffer;
-				break;
-			case DescriptorType::eSampledImage:
-			case DescriptorType::eSampler:
-			case DescriptorType::eCombinedImageSampler:
-			case DescriptorType::eStorageImage:
-				write.pImageInfo = &binding.image.dii;
-				break;
-			default:
-				assert(0);
-			}
-		}
-		vkUpdateDescriptorSets(device, j, writes.data(), 0, nullptr);
-		return { ds, cinfo.layout_info };
-	}
-
-	LegacyLinearAllocator Context::create(const create_info_t<LegacyLinearAllocator>& cinfo) {
-		return impl->legacy_gpu_allocator.allocate_linear(cinfo.mem_usage, cinfo.buffer_usage);
 	}
 
 	RGImage Context::create(const create_info_t<RGImage>& cinfo) {
@@ -1299,8 +1302,8 @@ namespace vuk {
 		return impl->sampler_cache.acquire(sci, absolute_frame);
 	}
 
-	DescriptorSet Context::acquire_descriptorset(const SetBinding& sb, uint64_t absolute_frame) {
-		return impl->descriptor_sets.acquire(sb, absolute_frame);
+	DescriptorPool& Context::acquire_descriptor_pool(const DescriptorSetLayoutAllocInfo& dslai, uint64_t absolute_frame) {
+		return impl->pool_cache.acquire(dslai, absolute_frame);
 	}
 
 	PipelineInfo Context::acquire_pipeline(const PipelineInstanceCreateInfo& pici, uint64_t absolute_frame) {

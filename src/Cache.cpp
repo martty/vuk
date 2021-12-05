@@ -175,68 +175,6 @@ namespace vuk {
 	template class Cache<vuk::ShaderModule>;
 	template class Cache<vuk::RGImage>;
 
-	template<class T, size_t FC>
-	PerFrameCache<T, FC>::~PerFrameCache() {
-		for (auto& p : _data) {
-			for (auto& [k, v] : p.lru_map) {
-				ctx.destroy(v.value);
-			}
-		}
-	}
-
-	template<class T, size_t FC>
-	T& PerFrameCache<T, FC>::acquire(const create_info_t<T>& ci, uint64_t current_frame) {
-		auto& data = _data[current_frame % FC];
-		if (auto it = data.lru_map.find(ci); it != data.lru_map.end()) {
-			it->second.last_use_frame = current_frame;
-			return it->second.value;
-		} else {
-			// if the value is not in the cache, we look in our per thread buffers
-			// if it doesn't exist there either, we add it
-			auto& ptv = data.per_thread_append_v[0 /*ptc.tid*/];
-			auto& ptk = data.per_thread_append_k[0 /*ptc.tid*/]; // TODO: restore TIDs
-			auto pit = std::find(ptk.begin(), ptk.end(), ci);
-			if (pit == ptk.end()) {
-				ptv.emplace_back(ctx.create(ci));
-				pit = ptk.insert(ptk.end(), ci);
-			}
-			auto index = std::distance(ptk.begin(), pit);
-			return ptv[index];
-		}
-	}
-
-	template<class T, size_t FC>
-	void PerFrameCache<T, FC>::collect(uint64_t current_frame, size_t threshold) {
-		auto local_frame = current_frame % FC;
-		auto& data = _data[local_frame];
-		std::unique_lock _(data.cache_mtx);
-		for (auto it = data.lru_map.begin(); it != data.lru_map.end();) {
-			if (current_frame - it->second.last_use_frame > threshold) {
-				ctx.destroy(it->second.value);
-				it = data.lru_map.erase(it);
-			} else {
-				++it;
-			}
-		}
-
-		for (size_t tid = 0; tid < _data[local_frame].per_thread_append_v.size(); tid++) {
-			auto& vs = _data[local_frame].per_thread_append_v[tid];
-			auto& ks = _data[local_frame].per_thread_append_k[tid];
-			for (size_t i = 0; i < vs.size(); i++) {
-				if (data.lru_map.find(ks[i]) == data.lru_map.end()) {
-					data.lru_map.emplace(ks[i], LRUEntry{ std::move(vs[i]), current_frame });
-				} else {
-					ctx.destroy(vs[i]);
-				}
-			}
-			vs.clear();
-			ks.clear();
-		}
-	}
-
-	template class PerFrameCache<vuk::DescriptorSet, Context::FC>;
-	template class PerFrameCache<LegacyLinearAllocator, Context::FC>;
-
 	template class Cache<vuk::DescriptorPool>;
 
 	void DescriptorPool::grow(Context& ctx, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info) {

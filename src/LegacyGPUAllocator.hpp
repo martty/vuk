@@ -123,6 +123,18 @@ namespace vuk {
 		// allocate an externally managed pool
 		LegacyPoolAllocator allocate_pool(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage);
 		// allocate an externally managed linear pool
+		static constexpr vuk::BufferUsageFlags all_usage =
+			BufferUsageFlagBits::eTransferSrc |
+			BufferUsageFlagBits::eTransferDst |
+			BufferUsageFlagBits::eUniformTexelBuffer |
+			BufferUsageFlagBits::eStorageTexelBuffer |
+			BufferUsageFlagBits::eUniformBuffer |
+			BufferUsageFlagBits::eStorageBuffer |
+			BufferUsageFlagBits::eIndexBuffer |
+			BufferUsageFlagBits::eVertexBuffer |
+			BufferUsageFlagBits::eIndirectBuffer;
+
+		VkMemoryRequirements get_memory_requirements(VkBufferCreateInfo& bci);
 		LegacyLinearAllocator allocate_linear(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage);
 		// allocate buffer from an internally managed pool
 		Buffer allocate_buffer(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, size_t size, size_t alignment, bool create_mapped);
@@ -149,8 +161,6 @@ namespace vuk {
 		VmaPool _create_pool(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage);
 		Buffer _allocate_buffer(LegacyPoolAllocator& pool, size_t size, size_t alignment, bool create_mapped);
 		Buffer _allocate_buffer(LegacyLinearAllocator& pool, size_t size, size_t alignment, bool create_mapped);
-
-		VkMemoryRequirements get_memory_requirements(VkBufferCreateInfo& bci);
 	};
 
 	template<> struct create_info<LegacyPoolAllocator> {

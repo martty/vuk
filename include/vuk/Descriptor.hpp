@@ -208,7 +208,7 @@ namespace vuk {
 		std::vector<VkDescriptorSetLayoutBinding> bindings;
 		std::vector<VkDescriptorBindingFlags> flags;
 
-		bool operator==(const DescriptorSetLayoutCreateInfo& o) const {
+		bool operator==(const DescriptorSetLayoutCreateInfo& o) const noexcept {
 			return std::tie(dslci.flags, bindings, flags) == std::tie(o.dslci.flags, o.bindings, o.flags);
 		}
 	};
@@ -220,6 +220,10 @@ namespace vuk {
 	struct DescriptorSet {
 		VkDescriptorSet descriptor_set = VK_NULL_HANDLE;
 		DescriptorSetLayoutAllocInfo layout_info;
+
+		bool operator==(const DescriptorSet& o) const noexcept {
+			return descriptor_set == o.descriptor_set;
+		}
 	};
 
 	template<> struct create_info<vuk::DescriptorSet> {

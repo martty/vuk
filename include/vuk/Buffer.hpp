@@ -43,6 +43,7 @@ namespace vuk {
 		size_t size = 0;
         size_t allocation_size = 0;
 		std::byte* mapped_ptr = nullptr;
+		MemoryUsage memory_usage;
 
 		bool operator==(const Buffer& o) const noexcept {
 			return device_memory == o.device_memory && buffer == o.buffer && offset == o.offset && size == o.size;
@@ -58,12 +59,16 @@ namespace vuk {
 
 		[[nodiscard]] Buffer add_offset(size_t offset_to_add) {
 			assert(offset_to_add <= size);
-			return { device_memory, buffer, offset + offset_to_add, size - offset_to_add, allocation_size, mapped_ptr != nullptr ? mapped_ptr + offset_to_add : nullptr };
+			return { device_memory, buffer, offset + offset_to_add, size - offset_to_add, allocation_size, mapped_ptr != nullptr ? mapped_ptr + offset_to_add : nullptr, memory_usage };
 		}
 
 		[[nodiscard]] Buffer subrange(size_t new_offset, size_t new_size) {
 			assert(new_offset + new_size <= size);
-			return { device_memory, buffer, offset + new_offset, new_size, allocation_size, mapped_ptr != nullptr ? mapped_ptr + new_offset : nullptr };
+			return { device_memory, buffer, offset + new_offset, new_size, allocation_size, mapped_ptr != nullptr ? mapped_ptr + new_offset : nullptr, memory_usage };
 		}
 	};
+
+	struct BufferGPU : Buffer {};
+	struct BufferCrossDevice : Buffer {};
+	struct BufferCPU : Buffer {};
 }

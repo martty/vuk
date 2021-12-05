@@ -38,7 +38,6 @@ namespace vuk {
 
 	class Context {
 	public:
-		constexpr static size_t FC = 3;
 		VkInstance instance;
 		VkDevice device;
 		VkPhysicalDevice physical_device;
@@ -92,7 +91,7 @@ namespace vuk {
 
 		/// @brief Return an allocator over the direct resource - resources will be allocated from the Vulkan runtime
 		/// @return 
-		Allocator& get_direct_allocator();
+		Allocator& get_vk_allocator();
 
 		uint32_t(*get_thread_index)() = nullptr;
 
@@ -156,9 +155,9 @@ namespace vuk {
 		/// @param size Size of the buffer
 		/// @param alignment Alignment of the buffer
 		/// @return The allocated Buffer
-		Unique<Buffer> allocate_buffer(Allocator&, MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, size_t size, size_t alignment);
+		Unique<BufferCrossDevice> allocate_buffer(Allocator&, MemoryUsage mem_usage, size_t size, size_t alignment);
 
-		// temporary stuff
+		// TODO: temporary stuff
 		std::atomic<size_t> transfer_id = 1;
 		std::atomic<size_t> last_transfer_complete = 0;
 
@@ -171,9 +170,18 @@ namespace vuk {
 		/// @param buffer_usage How this buffer will be used (since data is provided, TransferDst is added to the flags)
 		/// @return The allocated Buffer
 		template<class T>
-		std::pair<Unique<Buffer>, TransferStub> create_buffer(Allocator& allocator, MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage, std::span<T> data) {
-			Unique<Buffer> buf(allocator);
-			BufferCreateInfo bci{ mem_usage, vuk::BufferUsageFlagBits::eTransferDst | buffer_usage, sizeof(T) * data.size(), 1 };
+		std::pair<Unique<BufferCrossDevice>, TransferStub> create_buffer_cross_device(Allocator& allocator, MemoryUsage mem_usage, std::span<T> data) {
+			Unique<BufferCrossDevice> buf(allocator);
+			BufferCreateInfo bci{ mem_usage, sizeof(T) * data.size(), 1 };
+			auto ret = allocator.allocate_buffers(std::span{ &*buf, 1 }, std::span{ &bci, 1 }); // TODO: dropping error
+			memcpy(buf->mapped_ptr, data.data(), data.size_bytes());
+			return { std::move(buf), {0} };
+		}
+
+		template<class T>
+		std::pair<Unique<BufferGPU>, TransferStub> create_buffer_gpu(Allocator& allocator, std::span<T> data) {
+			Unique<BufferGPU> buf(allocator);
+			BufferCreateInfo bci{ vuk::MemoryUsage::eGPUonly, sizeof(T) * data.size(), 1 };
 			auto ret = allocator.allocate_buffers(std::span{ &*buf, 1 }, std::span{ &bci, 1 }); // TODO: dropping error
 			auto stub = upload(allocator, *buf, data);
 			return { std::move(buf), stub };
@@ -187,8 +195,8 @@ namespace vuk {
 		template<class T>
 		TransferStub upload(Allocator& allocator, Buffer dst, std::span<T> data) {
 			if (data.empty()) return { 0 };
-			Unique<Buffer> staging(allocator);
-			BufferCreateInfo bci{ MemoryUsage::eCPUonly, vuk::BufferUsageFlagBits::eTransferSrc, sizeof(T) * data.size(), 1 };
+			Unique<BufferCrossDevice> staging(allocator);
+			BufferCreateInfo bci{ MemoryUsage::eCPUonly, sizeof(T) * data.size(), 1 };
 			auto ret = allocator.allocate_buffers(std::span{ &*staging, 1 }, std::span{ &bci, 1 }); // TODO: dropping error
 			::memcpy(staging->mapped_ptr, data.data(), sizeof(T) * data.size());
 
@@ -202,8 +210,8 @@ namespace vuk {
 			assert(!data.empty());
 			// compute staging buffer alignment as texel block size
 			size_t alignment = format_to_texel_block_size(format);
-			Unique<Buffer> staging(allocator);
-			BufferCreateInfo bci{ MemoryUsage::eCPUonly, vuk::BufferUsageFlagBits::eTransferSrc, sizeof(T) * data.size(), alignment };
+			Unique<BufferCrossDevice> staging(allocator);
+			BufferCreateInfo bci{ MemoryUsage::eCPUonly, sizeof(T) * data.size(), alignment };
 			auto ret = allocator.allocate_buffers(std::span{ &*staging, 1 }, std::span{ &bci, 1 }); // TODO: dropping error
 			::memcpy(staging->mapped_ptr, data.data(), sizeof(T) * data.size());
 
@@ -241,15 +249,12 @@ namespace vuk {
 
 		LegacyGPUAllocator& get_gpumem();
 
-		struct LegacyLinearAllocator create(const struct PoolSelect& cinfo);
-		
-		struct DescriptorSet create(const struct SetBinding& cinfo);
 		RGImage acquire_rendertarget(const struct RGCI&, uint64_t absolute_frame);
 		Sampler acquire_sampler(const SamplerCreateInfo&, uint64_t absolute_frame);
-		DescriptorSet acquire_descriptorset(const SetBinding&, uint64_t absolute_frame);
 		VkRenderPass acquire_renderpass(const struct RenderPassCreateInfo&, uint64_t absolute_frame);
 		struct PipelineInfo acquire_pipeline(const struct PipelineInstanceCreateInfo&, uint64_t absolute_frame);
 		struct ComputePipelineInfo acquire_pipeline(const struct ComputePipelineInstanceCreateInfo&, uint64_t absolute_frame);
+		struct DescriptorPool& acquire_descriptor_pool(const DescriptorSetLayoutAllocInfo& dslai, uint64_t absolute_frame);
 
 		Unique<PersistentDescriptorSet> create_persistent_descriptorset(Allocator& allocator, DescriptorSetLayoutCreateInfo dslci, unsigned num_descriptors);
 		Unique<PersistentDescriptorSet> create_persistent_descriptorset(Allocator& allocator, const PipelineBaseInfo& base, unsigned set, unsigned num_descriptors);
@@ -298,7 +303,6 @@ namespace vuk {
 		friend struct IFCImpl;
 		friend struct PTCImpl;
 		template<class T> friend class Cache; // caches can directly destroy
-		template<class T, size_t FC> friend class PerFrameCache;
 	};
 
 	template<class T>

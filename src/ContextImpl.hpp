@@ -68,9 +68,7 @@ namespace vuk {
 		Cache<ComputePipelineInfo> compute_pipeline_cache;
 		Cache<VkRenderPass> renderpass_cache;
 		Cache<RGImage> transient_images;
-		PerFrameCache<LegacyLinearAllocator, Context::FC> scratch_buffers;
 		Cache<vuk::DescriptorPool> pool_cache;
-		PerFrameCache<vuk::DescriptorSet, Context::FC> descriptor_sets;
 		Cache<vuk::Sampler> sampler_cache;
 		Cache<vuk::ShaderModule> shader_modules;
 		Cache<vuk::DescriptorSetLayoutAllocInfo> descriptor_set_layouts;
@@ -100,8 +98,8 @@ namespace vuk {
 		plf::colony<TransientSubmitBundle> transient_submit_bundles;
 		std::vector<plf::colony<TransientSubmitBundle>::iterator> transient_submit_freelist;
 
-		Direct direct_resource;
-		Allocator direct_allocator;
+		CrossDeviceVkAllocator cross_device_vk_resource;
+		Allocator vk_allocator;
 
 		TransientSubmitBundle* get_transient_bundle(uint32_t queue_family_index) {
 			std::lock_guard _(transient_submit_lock);
@@ -174,9 +172,7 @@ namespace vuk {
 		}
 
 		void collect(uint64_t absolute_frame) {
-			descriptor_sets.collect(absolute_frame, Context::FC * 2);
-			transient_images.collect(absolute_frame, Context::FC * 2);
-			scratch_buffers.collect(absolute_frame, Context::FC * 2);
+			transient_images.collect(absolute_frame, 6);
 			// collect rarer resources
 			static constexpr uint32_t cache_collection_frequency = 16;
 			auto remainder = absolute_frame % cache_collection_frequency;
@@ -206,32 +202,17 @@ namespace vuk {
 			compute_pipeline_cache(ctx),
 			renderpass_cache(ctx),
 			transient_images(ctx),
-			scratch_buffers(ctx),
 			pool_cache(ctx),
-			descriptor_sets(ctx),
 			sampler_cache(ctx),
 			shader_modules(ctx),
 			descriptor_set_layouts(ctx),
 			pipeline_layouts(ctx),
-			direct_resource(ctx, legacy_gpu_allocator),
-			direct_allocator(direct_resource)
+			cross_device_vk_resource(ctx, legacy_gpu_allocator),
+			vk_allocator(cross_device_vk_resource)
 		{
 			vkGetPhysicalDeviceProperties(ctx.physical_device, &physical_device_properties);
 		}
 	};
-
-	inline unsigned _prev(unsigned frame, unsigned amt, unsigned FC) {
-		return ((frame - amt) % FC) + ((frame >= amt) ? 0 : FC - 1);
-	}
-	inline unsigned _next(unsigned frame, unsigned amt, unsigned FC) {
-		return (frame + amt) % FC;
-	}
-	inline unsigned _next(unsigned frame, unsigned FC) {
-		return (frame + 1) % FC;
-	}
-	inline size_t _next(size_t frame, unsigned FC) {
-		return (frame + 1) % FC;
-	}
 }
 
 inline void record_mip_gen(VkCommandBuffer& cbuf, vuk::MipGenerateCommand& task, vuk::ImageLayout last_layout) {

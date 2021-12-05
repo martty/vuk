@@ -259,31 +259,4 @@ namespace vuk {
 		T& acquire(const create_info_t<T>& ci, uint64_t current_frame);
 		void collect(uint64_t current_frame, size_t threshold);
 	};
-
-	template<class T, size_t FC>
-	class PerFrameCache {
-	private:
-		friend class InflightContext;
-		struct LRUEntry {
-			T value;
-			size_t last_use_frame;
-		};
-
-		Context& ctx;
-		struct PerFrame {
-			robin_hood::unordered_map<create_info_t<T>, LRUEntry> lru_map;
-			std::array<std::vector<T>, 32> per_thread_append_v;
-			std::array<std::vector<create_info_t<T>>, 32> per_thread_append_k;
-
-			std::mutex cache_mtx;
-		};
-		std::array<PerFrame, FC> _data;
-
-	public:
-		PerFrameCache(Context& ctx) : ctx(ctx) {}
-		~PerFrameCache();
-
-		T& acquire(const create_info_t<T>& ci, uint64_t current_frame);
-		void collect(uint64_t current_frame, size_t threshold);
-	};
 }

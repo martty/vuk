@@ -34,7 +34,7 @@ namespace vuk {
 		VkPhysicalDevice physical_device;
 		VkQueue graphics_queue;
 		std::optional<Context> context;
-		std::optional<RingFrame> rf_alloc;
+		std::optional<CrossDeviceRingFrameResource> xdev_rf_alloc;
 		vuk::SwapchainRef swapchain;
 		GLFWwindow* window;
 		VkSurfaceKHR surface;
@@ -55,11 +55,11 @@ namespace vuk {
 			// Setup Platform/Renderer bindings
 			ImGui_ImplGlfw_InitForVulkan(window, true);
 			{
-				imgui_data = util::ImGui_ImplVuk_Init(context->get_direct_allocator());
+				imgui_data = util::ImGui_ImplVuk_Init(context->get_vk_allocator());
 				context->wait_all_transfers();
 			}
 			for (auto& ex : examples) {
-				ex->setup(*this, context->get_direct_allocator());
+				ex->setup(*this, context->get_vk_allocator());
 			}
 		}
 
@@ -69,7 +69,7 @@ namespace vuk {
 			context->wait_idle();
 			for (auto& ex : examples) {
 				if (ex->cleanup) {
-					ex->cleanup(*this, context->get_direct_allocator());
+					ex->cleanup(*this, context->get_vk_allocator());
 				}
 			}
 		}
@@ -77,7 +77,7 @@ namespace vuk {
 		~ExampleRunner() {
 			imgui_data.font_texture.view.reset();
 			imgui_data.font_texture.image.reset();
-			rf_alloc.reset();
+			xdev_rf_alloc.reset();
 			context.reset();
 			vkDestroySurfaceKHR(vkbinstance.instance, surface, nullptr);
 			destroy_window_glfw(window);

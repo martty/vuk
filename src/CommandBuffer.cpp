@@ -375,7 +375,7 @@ namespace vuk {
 	}
 
 	void* CommandBuffer::_map_scratch_uniform_binding(unsigned set, unsigned binding, size_t size) {
-		auto buf = ctx.allocate_buffer(*allocator, vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eUniformBuffer, size, 1);
+		auto buf = ctx.allocate_buffer(*allocator, vuk::MemoryUsage::eCPUtoGPU, size, 1);
 		bind_uniform_buffer(set, binding, *buf);
 		return buf->mapped_ptr;
 	}
@@ -402,7 +402,7 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::draw_indexed_indirect(std::span<vuk::DrawIndexedIndirectCommand> cmds) {
 		_bind_graphics_pipeline_state();
-		auto buf = ctx.allocate_buffer(*allocator, vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eIndirectBuffer, cmds.size_bytes(), 1);
+		auto buf = ctx.allocate_buffer(*allocator, vuk::MemoryUsage::eCPUtoGPU, cmds.size_bytes(), 1);
 		memcpy(buf->mapped_ptr, cmds.data(), cmds.size_bytes());
 		vkCmdDrawIndexedIndirect(command_buffer, buf->buffer, (uint32_t)buf->offset, (uint32_t)cmds.size(), sizeof(vuk::DrawIndexedIndirectCommand));
 		return *this;
@@ -580,9 +580,10 @@ namespace vuk {
 			set_bindings[i].layout_info = graphics ? current_pipeline->layout_info[i] : current_compute_pipeline->layout_info[i];
 			if (!persistent) {
 				set_bindings[i].calculate_hash();
-				auto ds = ctx.acquire_descriptorset(set_bindings[i], ctx.frame_counter);
+				Unique<DescriptorSet> ds;
+				allocator->allocate_descriptor_sets(std::span{ &*ds, 1 }, std::span{ &set_bindings[i], 1 }); // TODO: error handling
 				vkCmdBindDescriptorSets(command_buffer, graphics ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE,
-					graphics ? current_pipeline->pipeline_layout : current_compute_pipeline->pipeline_layout, i, 1, &ds.descriptor_set, 0,
+					graphics ? current_pipeline->pipeline_layout : current_compute_pipeline->pipeline_layout, i, 1, &ds->descriptor_set, 0,
 					nullptr);
 			} else {
 				vkCmdBindDescriptorSets(command_buffer, graphics ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE,
