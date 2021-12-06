@@ -910,9 +910,17 @@ namespace vuk {
 		return impl->legacy_gpu_allocator.get_allocation_size(buf);
 	}
 
-	Unique<BufferCrossDevice> Context::allocate_buffer(Allocator& allocator, MemoryUsage mem_usage, size_t size, size_t alignment) {
+	Unique<BufferCrossDevice> Context::allocate_buffer_cross_device(Allocator& allocator, MemoryUsage mem_usage, size_t size, size_t alignment) {
+		assert(mem_usage != vuk::MemoryUsage::eGPUonly);
 		Unique<BufferCrossDevice> buf(allocator);
 		BufferCreateInfo bci{ mem_usage, size, alignment };
+		auto ret = allocator.allocate_buffers(std::span{ &*buf, 1 }, std::span{ &bci, 1 }); // TODO: dropping error
+		return buf;
+	}
+
+	Unique<BufferGPU> Context::allocate_buffer_gpu(Allocator& allocator, size_t size, size_t alignment) {
+		Unique<BufferGPU> buf(allocator);
+		BufferCreateInfo bci{ vuk::MemoryUsage::eGPUonly, size, alignment };
 		auto ret = allocator.allocate_buffers(std::span{ &*buf, 1 }, std::span{ &bci, 1 }); // TODO: dropping error
 		return buf;
 	}

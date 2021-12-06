@@ -20,7 +20,9 @@ namespace {
 
 	vuk::Example x{
 		.name = "06_msaa",
-		.setup = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
+		.setup = [](vuk::ExampleRunner& runner, vuk::Allocator& allocator) {
+			vuk::Context& ctx = allocator.get_context();
+
 			// Same setup as for 04_texture, except we use spirv to create the pipeline
 			// This is a good option is if you don't want to ship shaderc or if you are caching or have your sl -> spirv pipeline
 			{
@@ -33,21 +35,20 @@ namespace {
 			int x, y, chans;
 			auto doge_image = stbi_load("../../examples/doge.png", &x, &y, &chans, 4);
 
-			auto ptc = ifc.begin();
-			auto [tex, stub] = ptc.ctx.create_texture(vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, doge_image);
+			auto [tex, stub] = ctx.create_texture(allocator, vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, doge_image);
 			texture_of_doge = std::move(tex);
-			ptc.ctx.wait_all_transfers();
+			ctx.wait_all_transfers();
 			stbi_image_free(doge_image);
 		},
-		.render = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
-			auto ptc = ifc.begin();
+		.render = [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
+			vuk::Context& ctx = frame_allocator.get_context();
 
 			// We set up the cube data, same as in example 02_cube
 
-			auto [bverts, stub1] = ptc.ctx.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eVertexBuffer, std::span(&box.first[0], box.first.size()));
-			auto verts = std::move(bverts);
-			auto [binds, stub2] = ptc.ctx.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eIndexBuffer, std::span(&box.second[0], box.second.size()));
-			auto inds = std::move(binds);
+			auto [bverts, stub1] = ctx.create_buffer_gpu(frame_allocator, std::span(&box.first[0], box.first.size()));
+			auto verts = *bverts;
+			auto [binds, stub2] = ctx.create_buffer_gpu(frame_allocator, std::span(&box.second[0], box.second.size()));
+			auto inds = *binds;
 			struct VP {
 				glm::mat4 view;
 				glm::mat4 proj;
@@ -56,9 +57,9 @@ namespace {
 			vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 1.f, 10.f);
 			vp.proj[1][1] *= -1;
 
-			auto [buboVP, stub3] = ptc.ctx.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eUniformBuffer, std::span(&vp, 1));
-			auto uboVP = buboVP;
-			ptc.ctx.wait_all_transfers();
+			auto [buboVP, stub3] = ctx.create_buffer_cross_device(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, std::span(&vp, 1));
+			auto uboVP = *buboVP;
+			ctx.wait_all_transfers();
 
 			vuk::RenderGraph rg;
 
@@ -102,7 +103,7 @@ namespace {
 			rg.resolve_resource_into("06_msaa_final", "06_msaa_MS");
 			return rg;
 		},
-		.cleanup = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
+		.cleanup = [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
 			texture_of_doge.reset();
 		}
 

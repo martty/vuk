@@ -14,7 +14,7 @@ namespace {
 		// The display name of this example
 		.name = "01_triangle",
 		// Setup code, ran once in the beginning
-		.setup = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
+		.setup = [](vuk::ExampleRunner& runner, vuk::Allocator& allocator) {
 			// Pipelines are created by filling out a vuk::PipelineCreateInfo
 			// In this case, we only need the shaders, we don't care about the rest of the state
 			vuk::PipelineBaseCreateInfo pci;
@@ -24,9 +24,7 @@ namespace {
 			runner.context->create_named_pipeline("triangle", pci);
 		},
 		// Code ran every frame
-		.render = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
-			// We acquire a context specific to the thread we are on (PerThreadContext)
-			auto ptc = ifc.begin();
+		.render = [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
 			// We start building a rendergraph
 			vuk::RenderGraph rg;
 			// The rendergraph is composed of passes (vuk::Pass)

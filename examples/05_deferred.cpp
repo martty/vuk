@@ -22,7 +22,7 @@ namespace {
 
 	vuk::Example x{
 		.name = "05_deferred",
-		.setup = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
+		.setup = [](vuk::ExampleRunner& runner, vuk::Allocator& allocator) {
 			{
 			vuk::PipelineBaseCreateInfo pci;
 			pci.add_glsl(util::read_entire_file("../../examples/deferred.vert"), "deferred.vert");
@@ -38,15 +38,15 @@ namespace {
 			}
 
 		},
-		.render = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
-			auto ptc = ifc.begin();
+		.render = [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
+			vuk::Context& ctx = frame_allocator.get_context();
 
 			// We set up the cube data, same as in example 02_cube
 
-			auto [bverts, stub1] = ptc.ctx.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eVertexBuffer, std::span(&box.first[0], box.first.size()));
-			auto verts = std::move(bverts);
-			auto [binds, stub2] = ptc.ctx.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eIndexBuffer, std::span(&box.second[0], box.second.size()));
-			auto inds = std::move(binds);
+			auto [bverts, stub1] = ctx.create_buffer_gpu(frame_allocator, std::span(&box.first[0], box.first.size()));
+			auto verts = *bverts;
+			auto [binds, stub2] = ctx.create_buffer_gpu(frame_allocator, std::span(&box.second[0], box.second.size()));
+			auto inds = *binds;
 			struct VP {
 				glm::mat4 view;
 				glm::mat4 proj;
@@ -56,9 +56,9 @@ namespace {
 			vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 1.f, 10.f);
 			vp.proj[1][1] *= -1;
 
-			auto [buboVP, stub3] = ptc.ctx.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eUniformBuffer, std::span(&vp, 1));
-			auto uboVP = buboVP;
-			ptc.ctx.wait_all_transfers();
+			auto [buboVP, stub3] = ctx.create_buffer_cross_device(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, std::span(&vp, 1));
+			auto uboVP = *buboVP;
+			ctx.wait_all_transfers();
 
 			vuk::RenderGraph rg;
 			// Here we will render the cube into 3 offscreen textures

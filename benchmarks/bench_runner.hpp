@@ -51,7 +51,7 @@ namespace vuk {
 			Case(std::string_view label, F&& subcase_template) : CaseBase{ label } {
 				std::apply([this, subcase_template](auto&&... ts) {
 					(subcases.emplace_back(
-						[=](BenchRunner& runner, vuk::InflightContext& ifc, Query start, Query end) { 
+						[=](BenchRunner& runner, vuk::Allocator& frame_allocator, Query start, Query end) { 
 							return subcase_template(runner, ifc, start, end, ts); 
 						}), ...);
 					(subcase_labels.emplace_back(ts.description), ...);

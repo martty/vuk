@@ -25,7 +25,7 @@ namespace {
 		.base = {
 			.name = "Dependent vs. non-dependent texture fetch",
 			// Setup code, ran once in the beginning
-			.setup = [](vuk::BenchRunner& runner, vuk::InflightContext& ifc) {
+			.setup = [](vuk::BenchRunner& runner, vuk::Allocator& frame_allocator) {
 			// Pipelines are created by filling out a vuk::PipelineCreateInfo
 			// In this case, we only need the shaders, we don't care about the rest of the state
 			vuk::PipelineBaseCreateInfo pci;
@@ -34,11 +34,11 @@ namespace {
 			// The pipeline is stored with a user give name for simplicity
 			runner.context->create_named_pipeline("triangle", pci);
 			},
-			.gui = [](vuk::BenchRunner& runner, vuk::InflightContext& ifc) {
+			.gui = [](vuk::BenchRunner& runner, vuk::Allocator& frame_allocator) {
 			}
 		},
 		.cases = {
-			{"Dependent, small image", [](vuk::BenchRunner& runner, vuk::InflightContext& ifc, vuk::Query start, vuk::Query end, auto&& parameters) {
+			{"Dependent, small image", [](vuk::BenchRunner& runner, vuk::Allocator& frame_allocator, vuk::Query start, vuk::Query end, auto&& parameters) {
 			auto ptc = ifc.begin();
 			vuk::RenderGraph rg;
 			rg.add_pass({
@@ -55,7 +55,7 @@ namespace {
 			);
 			return rg;
 		}},
-				{"Non-dependent, small image", [](vuk::BenchRunner& runner, vuk::InflightContext& ifc, vuk::Query start, vuk::Query end, auto&& parameters) {
+				{"Non-dependent, small image", [](vuk::BenchRunner& runner, vuk::Allocator& frame_allocator, vuk::Query start, vuk::Query end, auto&& parameters) {
 			auto ptc = ifc.begin();
 			vuk::RenderGraph rg;
 			rg.add_pass({

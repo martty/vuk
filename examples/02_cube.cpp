@@ -29,23 +29,15 @@ namespace {
 			allocator.get_context().create_named_pipeline("cube", pci);
 		},
 		.render = [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
-			auto& ctx = frame_allocator.get_context();
-			// Create a linear resource to allocate from during this frame (specific to this thread)
-			// We specify an inline linear resource - when the resource is destroyed, it just releases the resources to the upstream allocator 
-			// (in this the frame allocator), but does not force a synchronization point
-			// Frame resources are implicitly inline, they only synchronize when the frame is reused
-			//vuk::CrossDeviceLinearResource linear_res(frame_allocator.get_cross_device_resource(), vuk::CrossDeviceLinearResource::eInline);
-			//vuk::Allocator allocator(linear_res);
-			auto& allocator = frame_allocator;
-
-			// Request a scratch buffer allocation with specific data
-			// The context allocates a buffer which supports the desired use and is from the correct heap
+			vuk::Context& ctx = frame_allocator.get_context();
+			// Request a GPU-only buffer allocation with specific data
+			// The context allocates a buffer in device-local, non-host visible memory
 			// And enqueues a transfer operation, which will copy the given data
 			// Finally it returns a vuk::Buffer, which holds the info for the allocation
 			// And a TransferStub, which can be used to query for the transfer status
-			auto [bverts, stub1] = ctx.create_buffer_gpu(allocator, std::span(&box.first[0], box.first.size()));
+			auto [bverts, stub1] = ctx.create_buffer_gpu(frame_allocator, std::span(&box.first[0], box.first.size()));
 			auto verts = *bverts;
-			auto [binds, stub2] = ctx.create_buffer_gpu(allocator, std::span(&box.second[0], box.second.size()));
+			auto [binds, stub2] = ctx.create_buffer_gpu(frame_allocator, std::span(&box.second[0], box.second.size()));
 			auto inds = *binds;
 			// This struct will represent the view-projection transform used for the cube
 			struct VP {
@@ -58,7 +50,7 @@ namespace {
 			vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 1.f, 10.f);
 			vp.proj[1][1] *= -1;
 			// Allocate and transfer view-projection transform
-			auto [buboVP, stub3] = ctx.create_buffer_cross_device(allocator, vuk::MemoryUsage::eCPUtoGPU, std::span(&vp, 1));
+			auto [buboVP, stub3] = ctx.create_buffer_cross_device(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, std::span(&vp, 1));
 			auto uboVP = *buboVP;
 			// For this example, we just request that all transfer finish before we continue
 			ctx.wait_all_transfers();

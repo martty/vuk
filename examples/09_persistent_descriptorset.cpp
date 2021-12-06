@@ -33,7 +33,7 @@ namespace {
 
 	vuk::Example xample{
 		.name = "09_persistent_descriptorset",
-		.setup = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
+		.setup = [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
 			{
 			vuk::PipelineBaseCreateInfo pci;
 			pci.add_glsl(util::read_entire_file("../../examples/bindless.vert"), "bindless.vert");
@@ -123,14 +123,14 @@ namespace {
 			// Execute the writes
 			ptc.commit_persistent_descriptorset(pda.get());
 		},
-		.render = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
+		.render = [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
 			auto ptc = ifc.begin();
 
 			// We set up the cube data, same as in example 02_cube
-			auto [bverts, stub1] = ptc.ctx.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eVertexBuffer, std::span(&box.first[0], box.first.size()));
-			auto verts = std::move(bverts);
-			auto [binds, stub2] = ptc.ctx.create_scratch_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eIndexBuffer, std::span(&box.second[0], box.second.size()));
-			auto inds = std::move(binds);
+			auto [bverts, stub1] = ctx.create_buffer_gpu(frame_allocator, std::span(&box.first[0], box.first.size()));
+			auto verts = *bverts;
+			auto [binds, stub2] = ctx.create_buffer_gpu(frame_allocator, std::span(&box.second[0], box.second.size()));
+			auto inds = *binds;
 			struct VP {
 				glm::mat4 view;
 				glm::mat4 proj;
@@ -182,7 +182,7 @@ namespace {
 			  return rg;
 		  },
 			// Perform cleanup for the example
-			.cleanup = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
+			.cleanup = [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
 			  // We release the resources manually
 			  texture_of_doge.reset();
 			  variant1.reset();

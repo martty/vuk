@@ -509,7 +509,7 @@ namespace vuk {
 			vec.insert(vec.end(), src.begin(), src.end());
 		}
 
-		
+		// buffers are lockless
 		Result<void, AllocateException> allocate_buffers(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) override;
 
 		void deallocate_buffers(std::span<const BufferCrossDevice> src) override {} // no-op, linear
@@ -518,22 +518,30 @@ namespace vuk {
 
 		void deallocate_buffers(std::span<const BufferGPU> src) override {} // no-op, linear
 
+		std::mutex framebuffer_mutex;
 		std::vector<VkFramebuffer> framebuffers;
 
 		void deallocate_framebuffers(std::span<const VkFramebuffer> src) override {
+			std::unique_lock _(framebuffer_mutex);
 			auto& vec = framebuffers;
 			vec.insert(vec.end(), src.begin(), src.end());
 		}
 
-
+		std::mutex images_mutex;
 		std::vector<Image> images;
+
 		void deallocate_images(std::span<const Image> src) override {
+			std::unique_lock _(images_mutex);
+
 			auto& vec = images;
 			vec.insert(vec.end(), src.begin(), src.end());
 		}
 
+		std::mutex image_views_mutex;
 		std::vector<ImageView> image_views;
 		void deallocate_image_views(std::span<const ImageView> src) override {
+			std::unique_lock _(image_views_mutex);
+
 			auto& vec = image_views;
 			vec.insert(vec.end(), src.begin(), src.end());
 		}
@@ -570,7 +578,7 @@ namespace vuk {
 		}
 
 		VkDevice device;
-		uint64_t current_frame;
+		uint64_t current_frame = 0;
 		LegacyLinearAllocator linear_cpu_only;
 		LegacyLinearAllocator linear_cpu_gpu;
 		LegacyLinearAllocator linear_gpu_cpu;
@@ -728,6 +736,7 @@ namespace vuk {
 		}
 
 		CrossDeviceVkAllocator direct;
+		std::mutex new_frame_mutex;
 		std::atomic<uint64_t> frame_counter;
 		std::atomic<uint64_t> local_frame;
 		const uint64_t frames_in_flight;

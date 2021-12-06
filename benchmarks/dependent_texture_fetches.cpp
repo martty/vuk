@@ -29,7 +29,7 @@ namespace {
 	};
 
 	template<class T>
-	vuk::RenderGraph test_case(vuk::InflightContext& ifc, bool dependent, vuk::Texture& src, vuk::Texture& dst, vuk::Query start, vuk::Query end, T parameters) {
+	vuk::RenderGraph test_case(vuk::Allocator& frame_allocator, bool dependent, vuk::Texture& src, vuk::Texture& dst, vuk::Query start, vuk::Query end, T parameters) {
 		auto ptc = ifc.begin();
 		vuk::RenderGraph rg;
 		rg.add_pass({
@@ -100,7 +100,7 @@ namespace {
 		.base = {
 			.name = "Dependent vs. non-dependent texture fetch",
 			// Setup code, ran once in the beginning
-			.setup = [](vuk::BenchRunner& runner, vuk::InflightContext& ifc) {
+			.setup = [](vuk::BenchRunner& runner, vuk::Allocator& frame_allocator) {
 			// Pipelines are created by filling out a vuk::PipelineCreateInfo
 			// In this case, we only need the shaders, we don't care about the rest of the state
 			{
@@ -143,9 +143,9 @@ namespace {
 			dst4k = ptc.allocate_texture(vuk::ImageCreateInfo{.format = vuk::Format::eR8G8B8A8Srgb, .extent = {.width = 4096, .height = 4096, .depth = 1}, .usage = vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eSampled });
 			dst8k = ptc.allocate_texture(vuk::ImageCreateInfo{.format = vuk::Format::eR8G8B8A8Srgb, .extent = {.width = 8192, .height = 8192, .depth = 1}, .usage = vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eSampled });
 			},
-			.gui = [](vuk::BenchRunner& runner, vuk::InflightContext& ifc) {
+			.gui = [](vuk::BenchRunner& runner, vuk::Allocator& frame_allocator) {
 			},
-			.cleanup = [](vuk::BenchRunner& runner, vuk::InflightContext& ifc) {
+			.cleanup = [](vuk::BenchRunner& runner, vuk::Allocator& frame_allocator) {
 				// We release the texture resources
 				texture_of_doge.reset();
 				tex2k.reset();
@@ -158,28 +158,28 @@ namespace {
 			}
 		},
 		.cases = {
-			{"Dependent 112x112", [](vuk::BenchRunner& runner, vuk::InflightContext& ifc, vuk::Query start, vuk::Query end, auto&& parameters) {
+			{"Dependent 112x112", [](vuk::BenchRunner& runner, vuk::Allocator& frame_allocator, vuk::Query start, vuk::Query end, auto&& parameters) {
 				return test_case(ifc, true, *texture_of_doge, *dstsmall, start, end, parameters);
 		}},
-			{"Non-dependent 112x112", [](vuk::BenchRunner& runner, vuk::InflightContext& ifc, vuk::Query start, vuk::Query end, auto&& parameters) {
+			{"Non-dependent 112x112", [](vuk::BenchRunner& runner, vuk::Allocator& frame_allocator, vuk::Query start, vuk::Query end, auto&& parameters) {
 				return test_case(ifc, false, *texture_of_doge, *dstsmall, start, end, parameters);
 		}},
-			{"Dependent 2K", [](vuk::BenchRunner& runner, vuk::InflightContext& ifc, vuk::Query start, vuk::Query end, auto&& parameters) {
+			{"Dependent 2K", [](vuk::BenchRunner& runner, vuk::Allocator& frame_allocator, vuk::Query start, vuk::Query end, auto&& parameters) {
 				return test_case(ifc, true, *tex2k, *dst2k, start, end, parameters);
 		}},
-			{"Non-dependent 2K", [](vuk::BenchRunner& runner, vuk::InflightContext& ifc, vuk::Query start, vuk::Query end, auto&& parameters) {
+			{"Non-dependent 2K", [](vuk::BenchRunner& runner, vuk::Allocator& frame_allocator, vuk::Query start, vuk::Query end, auto&& parameters) {
 				return test_case(ifc, false, *tex2k, *dst2k, start, end, parameters);
 		}},
-			{"Dependent 4K", [](vuk::BenchRunner& runner, vuk::InflightContext& ifc, vuk::Query start, vuk::Query end, auto&& parameters) {
+			{"Dependent 4K", [](vuk::BenchRunner& runner, vuk::Allocator& frame_allocator, vuk::Query start, vuk::Query end, auto&& parameters) {
 				return test_case(ifc, true, *tex4k, *dst4k, start, end, parameters);
 		}},
-			{"Non-dependent 4K", [](vuk::BenchRunner& runner, vuk::InflightContext& ifc, vuk::Query start, vuk::Query end, auto&& parameters) {
+			{"Non-dependent 4K", [](vuk::BenchRunner& runner, vuk::Allocator& frame_allocator, vuk::Query start, vuk::Query end, auto&& parameters) {
 				return test_case(ifc, false, *tex4k, *dst4k, start, end, parameters);
 		}},
-			{"Dependent 8K", [](vuk::BenchRunner& runner, vuk::InflightContext& ifc, vuk::Query start, vuk::Query end, auto&& parameters) {
+			{"Dependent 8K", [](vuk::BenchRunner& runner, vuk::Allocator& frame_allocator, vuk::Query start, vuk::Query end, auto&& parameters) {
 				return test_case(ifc, true, *tex8k, *dst8k, start, end, parameters);
 		}},
-			{"Non-dependent 8K", [](vuk::BenchRunner& runner, vuk::InflightContext& ifc, vuk::Query start, vuk::Query end, auto&& parameters) {
+			{"Non-dependent 8K", [](vuk::BenchRunner& runner, vuk::Allocator& frame_allocator, vuk::Query start, vuk::Query end, auto&& parameters) {
 				return test_case(ifc, false, *tex8k, *dst8k, start, end, parameters);
 		}},
 		}

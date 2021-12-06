@@ -24,13 +24,15 @@ namespace {
 	int x, y;
 	uint32_t speed_count = 1;
 	std::optional<vuk::Texture> texture_of_doge;
-	vuk::Unique<vuk::Buffer> scramble_buf;
+	vuk::Unique<vuk::BufferGPU> scramble_buf;
 	std::random_device rd;
 	std::mt19937 g(rd());
 
 	vuk::Example xample{
 		.name = "08_pipelined_compute",
-		.setup = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
+		.setup = [](vuk::ExampleRunner& runner, vuk::Allocator& allocator) {
+			vuk::Context& ctx = allocator.get_context();
+
 			{
 			vuk::PipelineBaseCreateInfo pci;
 			pci.add_glsl(util::read_entire_file("../../examples/fullscreen.vert"), "fullscreen.vert");
@@ -55,23 +57,23 @@ namespace {
 			int chans;
 			auto doge_image = stbi_load("../../examples/doge.png", &x, &y, &chans, 4);
 
-			auto ptc = ifc.begin();
-			auto [tex, stub] = ptc.ctx.create_texture(vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1 }, doge_image);
+			auto [tex, stub] = ctx.create_texture(allocator, vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1 }, doge_image);
 			texture_of_doge = std::move(tex);
 
 			// init scrambling buffer
-			scramble_buf = ptc.ctx.allocate_buffer(vuk::MemoryUsage::eGPUonly, vuk::BufferUsageFlagBits::eTransferDst | vuk::BufferUsageFlagBits::eStorageBuffer, sizeof(unsigned) * x * y, 1);
+			scramble_buf = ctx.allocate_buffer_gpu(allocator, sizeof(unsigned) * x * y, 1);
 			std::vector<unsigned> indices(x * y);
 			std::iota(indices.begin(), indices.end(), 0);
 			std::shuffle(indices.begin(), indices.end(), g);
 
-			ptc.ctx.upload(scramble_buf.get(), std::span(indices.begin(), indices.end()));
+			ctx.wait_all_transfers();
+			ctx.upload(allocator, scramble_buf.get(), std::span(indices.begin(), indices.end()));
+			ctx.wait_all_transfers();
 
-			ptc.ctx.wait_all_transfers();
 			stbi_image_free(doge_image);
 		},
-		.render = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
-			auto ptc = ifc.begin();
+		.render = [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
+			vuk::Context& ctx = frame_allocator.get_context();
 
 			vuk::RenderGraph rg;
 
@@ -133,7 +135,7 @@ namespace {
 			rg.attach_buffer("08_scramble", scramble_buf.get(), vuk::eNone, vuk::eNone);
 			return rg;
 		},
-		.cleanup = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
+		.cleanup = [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
 			texture_of_doge.reset();
 			scramble_buf.reset();
 		}

@@ -84,7 +84,7 @@ namespace {
 
 	vuk::Example xample{
 		.name = "10_baby_renderer",
-		.setup = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
+		.setup = [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
 			// Use STBI to load the image
 			int x, y, chans;
 			auto doge_image = stbi_load("../../examples/doge.png", &x, &y, &chans, 4);
@@ -229,7 +229,7 @@ namespace {
 				renderables.emplace_back(Renderable{.mesh = &*cube_mesh, .material = m, .position = pos });
 			}
 	},
-		.render = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
+		.render = [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
 			auto ptc = ifc.begin();
 
 			// We set up VP data, same as in example 02_cube
@@ -305,7 +305,7 @@ namespace {
 			return rg;
 	},
 		// Perform cleanup for the example
-		.cleanup = [](vuk::ExampleRunner& runner, vuk::InflightContext& ifc) {
+		.cleanup = [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
 		// We release the resources manually
 		cube_mesh.reset();
 		quad_mesh.reset();

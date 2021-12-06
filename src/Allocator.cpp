@@ -92,13 +92,14 @@ namespace vuk {
 
 	CrossDeviceRingFrameResource::CrossDeviceRingFrameResource(Context& ctx, uint64_t frames_in_flight) : direct(ctx, ctx.get_gpumem()), frames_in_flight(frames_in_flight) {
 		frames_storage = std::unique_ptr<char[]>(new char[sizeof(CrossDeviceFrameResource) * frames_in_flight]);
-		for (int64_t i = 0; i < frames_in_flight; i++) {
+		for (uint64_t i = 0; i < frames_in_flight; i++) {
 			new(frames_storage.get() + i * sizeof(CrossDeviceFrameResource)) CrossDeviceFrameResource(direct.device, *this);
 		}
 		frames = reinterpret_cast<CrossDeviceFrameResource*>(frames_storage.get());
 	}
 
 	CrossDeviceFrameResource& CrossDeviceRingFrameResource::get_next_frame() {
+		std::unique_lock _(new_frame_mutex);
 		auto& ctx = direct.get_context();
 		frame_counter++;
 		ctx.frame_counter++; // TODO: temporarily

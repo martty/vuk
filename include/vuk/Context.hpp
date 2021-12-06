@@ -62,7 +62,7 @@ namespace vuk {
 			bool enabled();
 
 			DebugUtils(Context& ctx);
-			void set_name(const vuk::Texture& iv, Name name);
+			void set_name(const Texture& iv, Name name);
 			template<class T>
 			void set_name(const T& t, Name name);
 
@@ -70,8 +70,8 @@ namespace vuk {
 			void end_region(const VkCommandBuffer&);
 		} debug;
 
-		void create_named_pipeline(Name name, vuk::PipelineBaseCreateInfo pbci);
-		void create_named_pipeline(Name name, vuk::ComputePipelineBaseCreateInfo pbci);
+		void create_named_pipeline(Name name, PipelineBaseCreateInfo pbci);
+		void create_named_pipeline(Name name, ComputePipelineBaseCreateInfo pbci);
 
 		PipelineBaseInfo* get_named_pipeline(Name name);
 		ComputePipelineBaseInfo* get_named_compute_pipeline(Name name);
@@ -99,7 +99,7 @@ namespace vuk {
 			/// @brief Describes a single upload to a Buffer
 			struct BufferUpload {
 				/// @brief Buffer to upload to
-				vuk::Buffer dst;
+				Buffer dst;
 				/// @brief Data to upload
 				std::span<unsigned char> data;
 			};
@@ -107,11 +107,11 @@ namespace vuk {
 			/// @brief Describes a single upload to an Image
 			struct ImageUpload {
 				/// @brief Image to upload to
-				vuk::Image dst;
+				Image dst;
 				/// @brief Format of the image data
-				vuk::Format format;
+				Format format;
 				/// @brief Extent of the image data
-				vuk::Extent3D extent;
+				Extent3D extent;
 				/// @brief Mip level
 				uint32_t mip_level;
 				/// @brief Base array layer
@@ -143,9 +143,8 @@ namespace vuk {
 		/// @param pending TransientSubmitStub object to check. 
 		bool poll_upload(TransientSubmitStub pending);
 
-		Texture allocate_texture(Allocator& allocator, vuk::ImageCreateInfo ici);
-		std::pair<vuk::Texture, TransferStub> create_texture(Allocator& allocator, vuk::Format format, vuk::Extent3D extents, void* data, bool generate_mips = false);
-
+		Texture allocate_texture(Allocator& allocator, ImageCreateInfo ici);
+		std::pair<Texture, TransferStub> create_texture(Allocator& allocator, Format format, Extent3D extents, void* data, bool generate_mips = false);
 
 		size_t get_allocation_size(Buffer);
 
@@ -155,14 +154,15 @@ namespace vuk {
 		/// @param size Size of the buffer
 		/// @param alignment Alignment of the buffer
 		/// @return The allocated Buffer
-		Unique<BufferCrossDevice> allocate_buffer(Allocator&, MemoryUsage mem_usage, size_t size, size_t alignment);
+		Unique<BufferCrossDevice> allocate_buffer_cross_device(Allocator&, MemoryUsage mem_usage, size_t size, size_t alignment);
+		Unique<BufferGPU> allocate_buffer_gpu(Allocator&, size_t size, size_t alignment);
 
 		// TODO: temporary stuff
 		std::atomic<size_t> transfer_id = 1;
 		std::atomic<size_t> last_transfer_complete = 0;
 
 		TransferStub enqueue_transfer(Buffer src, Buffer dst);
-		TransferStub enqueue_transfer(Buffer src, vuk::Image dst, vuk::Extent3D extent, uint32_t base_layer, bool generate_mips);
+		TransferStub enqueue_transfer(Buffer src, Image dst, Extent3D extent, uint32_t base_layer, bool generate_mips);
 		void dma_task();
 
 		/// @brief Allocates & fills a buffer with explicitly managed lifetime
@@ -181,7 +181,7 @@ namespace vuk {
 		template<class T>
 		std::pair<Unique<BufferGPU>, TransferStub> create_buffer_gpu(Allocator& allocator, std::span<T> data) {
 			Unique<BufferGPU> buf(allocator);
-			BufferCreateInfo bci{ vuk::MemoryUsage::eGPUonly, sizeof(T) * data.size(), 1 };
+			BufferCreateInfo bci{ MemoryUsage::eGPUonly, sizeof(T) * data.size(), 1 };
 			auto ret = allocator.allocate_buffers(std::span{ &*buf, 1 }, std::span{ &bci, 1 }); // TODO: dropping error
 			auto stub = upload(allocator, *buf, data);
 			return { std::move(buf), stub };
@@ -201,12 +201,11 @@ namespace vuk {
 			::memcpy(staging->mapped_ptr, data.data(), sizeof(T) * data.size());
 
 			auto stub = enqueue_transfer(*staging, dst);
-			wait_all_transfers();
 			return stub;
 		}
 
 		template<class T>
-		TransferStub upload(Allocator& allocator, vuk::Image dst, vuk::Format format, vuk::Extent3D extent, uint32_t base_layer, std::span<T> data, bool generate_mips) {
+		TransferStub upload(Allocator& allocator, Image dst, Format format, Extent3D extent, uint32_t base_layer, std::span<T> data, bool generate_mips) {
 			assert(!data.empty());
 			// compute staging buffer alignment as texel block size
 			size_t alignment = format_to_texel_block_size(format);
@@ -216,7 +215,6 @@ namespace vuk {
 			::memcpy(staging->mapped_ptr, data.data(), sizeof(T) * data.size());
 
 			auto stub = enqueue_transfer(*staging, dst, extent, base_layer, generate_mips);
-			wait_all_transfers();
 			return stub;
 		}
 
@@ -235,13 +233,13 @@ namespace vuk {
 		/// @brief Wait for the device to become idle. Useful for only a few synchronisation events, like resizing or shutting down.
 		void wait_idle();
 
-		/// @brief Create a wrapped handle type (eg. a vuk::ImageView) from an externally sourced Vulkan handle
+		/// @brief Create a wrapped handle type (eg. a ImageView) from an externally sourced Vulkan handle
 		/// @tparam T Vulkan handle type to wrap
 		/// @param payload Vulkan handle to wrap
 		/// @return The wrapped handle.
 		template<class T>
 		Handle<T> wrap(T payload);
-		vuk::ImageView wrap(VkImageView payload, vuk::ImageViewCreateInfo);
+		ImageView wrap(VkImageView payload, ImageViewCreateInfo);
 
 
 		void submit_graphics(VkSubmitInfo, VkFence);
@@ -267,8 +265,6 @@ namespace vuk {
 	private:
 		struct ContextImpl* impl;
 		std::atomic<size_t> unique_handle_id_counter = 0;
-
-		void enqueue_destroy(VkPipeline);
 
 		void destroy(const struct RGImage& image);
 		void destroy(const struct LegacyPoolAllocator& v);
