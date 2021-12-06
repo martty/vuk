@@ -15,12 +15,42 @@
 #include <source_location>
 
 namespace vuk {
+#ifndef __cpp_consteval
+	struct source_location {
+		uint_least32_t _Line{};
+		uint_least32_t _Column{};
+		const char* _File = "";
+		const char* _Function = "";
+
+		[[nodiscard]] constexpr source_location() noexcept = default;
+
+		[[nodiscard]] static source_location current(const uint_least32_t _Line_ = __builtin_LINE(),
+			const uint_least32_t _Column_ = __builtin_COLUMN(), const char* const _File_ = __builtin_FILE(),
+			const char* const _Function_ = __builtin_FUNCTION()) noexcept {
+			source_location _Result;
+			_Result._Line = _Line_;
+			_Result._Column = _Column_;
+			_Result._File = _File_;
+			_Result._Function = _Function_;
+			return _Result;
+		}
+	};
+
+	struct SourceLocationAtFrame {
+		source_location location;
+		uint64_t absolute_frame;
+	};
+#else
 	struct SourceLocationAtFrame {
 		std::source_location location;
 		uint64_t absolute_frame;
 	};
-
+#endif
+#ifndef __cpp_consteval
+#define VUK_HERE_AND_NOW() SourceLocationAtFrame{ vuk::source_location::current(), (uint64_t)-1LL }
+#else
 #define VUK_HERE_AND_NOW() SourceLocationAtFrame{ std::source_location::current(), (uint64_t)-1LL }
+#endif
 #define VUK_DO_OR_RETURN(what) if(auto res = what; !res){ return { expected_error, res.error() }; }
 
 	struct AllocateException : Exception {
@@ -85,6 +115,9 @@ namespace vuk {
 	* HL cmdbuffers: 1:1 with pools
 	*/
 	struct HLCommandBuffer {
+		HLCommandBuffer() = default;
+		HLCommandBuffer(VkCommandBuffer command_buffer, VkCommandPool command_pool) : command_buffer(command_buffer), command_pool(command_pool) {}
+
 		VkCommandBuffer command_buffer;
 		VkCommandPool command_pool;
 
@@ -561,11 +594,12 @@ namespace vuk {
 
 			std::mutex cache_mtx;
 
-			T& acquire(const create_info_t<T>& ci);
-			void collect(size_t threshold);
+			T& acquire(uint64_t current_frame, const create_info_t<T>& ci);
+			void collect(uint64_t current_frame, size_t threshold);
 		};
 
 		Cache<DescriptorSet> descriptor_sets;
+		//Result<void, AllocateException> allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) override;
 
 		void wait() {
 			if (fences.size() > 0) {
@@ -1045,6 +1079,23 @@ namespace vuk {
 			return { expected_error, res.error() };
 		}
 		return { expected_value, std::move(iv) };
+	}
+
+	template<typename Type>
+	Unique<Type>::~Unique() noexcept {
+		if (allocator && payload != Type{}) {
+			allocator->deallocate(payload);
+		}
+	}
+
+	template<typename Type>
+	void Unique<Type>::reset(Type value) noexcept {
+		if (payload != value) {
+			if (allocator && payload != Type{}) {
+				allocator->deallocate(std::move(payload));
+			}
+			payload = std::move(value);
+		}
 	}
 }
 

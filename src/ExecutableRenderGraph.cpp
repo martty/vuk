@@ -320,15 +320,18 @@ namespace vuk {
 	}
 
 	BufferInfo ExecutableRenderGraph::get_resource_buffer(Name n) {
-		return impl->bound_buffers.at(n);
+		auto resolved = resolve_name(n, impl->aliases);
+		return impl->bound_buffers.at(resolved);
 	}
 
 	AttachmentRPInfo ExecutableRenderGraph::get_resource_image(Name n) {
-		return impl->bound_attachments.at(n);
+		auto resolved = resolve_name(n, impl->aliases);
+		return impl->bound_attachments.at(resolved);
 	}
 
 	bool ExecutableRenderGraph::is_resource_image_in_general_layout(Name n, PassInfo* pass_info) {
-		auto& chain = impl->use_chains.at(n);
+		auto resolved = resolve_name(n, impl->aliases);
+		auto& chain = impl->use_chains.at(resolved);
 		for (auto& elem : chain) {
 			if (elem.pass == pass_info) {
 				return elem.use.layout == vuk::ImageLayout::eGeneral;

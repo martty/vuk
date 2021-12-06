@@ -32,11 +32,7 @@ namespace vuk {
 
 		Unique(Unique&& other) noexcept : allocator(other.allocator), payload(other.release()) {}
 
-		~Unique() noexcept {
-			if (allocator && payload != Type{}) {
-				allocator->deallocate(payload);
-			}
-		}
+		~Unique() noexcept;
 
 		Unique& operator=(Unique const&) = delete;
 
@@ -75,14 +71,7 @@ namespace vuk {
 			return payload;
 		}
 
-		void reset(Type value = Type()) noexcept {
-			if (payload != value) {
-				if (allocator && payload != Type{}) {
-					allocator->deallocate(std::move(payload));
-				}
-				payload = std::move(value);
-			}
-		}
+		void reset(Type value = Type()) noexcept;
 
 		Type release() noexcept {
 			allocator = nullptr;
@@ -915,9 +904,18 @@ namespace vuk {
 
 	struct Clear {
 		Clear() = default;
-		Clear(ClearColor cc) { c.color = cc.ccv; }
-		Clear(ClearDepthStencil cc) { c.depthStencil = cc.cdsv; }
+		Clear(ClearColor cc) : is_color(true) { c.color = cc.ccv; }
+		Clear(ClearDepthStencil cc) : is_color(false) { c.depthStencil = cc.cdsv; }
 
+		Clear(const Clear& other) {
+			if (other.is_color) {
+				c.color = other.c.color;
+			} else {
+				c.depthStencil = other.c.depthStencil;
+			}
+		}
+
+		bool is_color;
 		VkClearValue c;
 	};
 

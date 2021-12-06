@@ -6,8 +6,7 @@
 #include <unordered_set>
 
 namespace vuk {
-	RenderGraph::RenderGraph() : impl(new RGImpl) {
-	}
+	RenderGraph::RenderGraph() : impl(new RGImpl) {}
 
 	RenderGraph::RenderGraph(RenderGraph&& o) noexcept : impl(std::exchange(o.impl, nullptr)) {}
 	RenderGraph& RenderGraph::operator=(RenderGraph&& o) noexcept {
@@ -362,7 +361,7 @@ namespace vuk {
 							sync_bound_attachment_to_renderpass(rp_att, attachment_info);
 							// we keep last use as finalLayout
 							rp_att.description.finalLayout = (VkImageLayout)left.use.layout;
-	
+
 							// compute attachment store
 							if (right.use.layout == vuk::ImageLayout::eUndefined) {
 								rp_att.description.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -371,11 +370,11 @@ namespace vuk {
 							}
 						}
 						// emit barrier for final resource state
-                        if(!right.pass && right.use.layout != vuk::ImageLayout::eUndefined && (left.use.layout != right.use.layout || (is_write_access(left.use) || is_write_access(right.use)))) { // different layouts, need to have dependency
+						if (!right.pass && right.use.layout != vuk::ImageLayout::eUndefined && (left.use.layout != right.use.layout || (is_write_access(left.use) || is_write_access(right.use)))) { // different layouts, need to have dependency
 							VkImageMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
 							ImageBarrier ib{};
 							barrier.dstAccessMask = (VkAccessFlags)right.use.access;
-                            barrier.srcAccessMask = is_read_access(left.use) ? 0 : (VkAccessFlags)left.use.access;
+							barrier.srcAccessMask = is_read_access(left.use) ? 0 : (VkAccessFlags)left.use.access;
 							barrier.oldLayout = (VkImageLayout)left.use.layout;
 							barrier.newLayout = (VkImageLayout)right.use.layout;
 							barrier.subresourceRange.aspectMask = (VkImageAspectFlags)aspect;
@@ -389,11 +388,10 @@ namespace vuk {
 							ib.dst = right.use.stages;
 							ib.barrier = barrier;
 							ib.image = name;
-                            // attach this barrier to the end of subpass or end of renderpass
+							// attach this barrier to the end of subpass or end of renderpass
 							if (left_rp.framebufferless) {
 								left_rp.subpasses[left.pass->subpass].post_barriers.push_back(ib);
-							}
-							else {
+							} else {
 								left_rp.post_barriers.push_back(ib);
 							}
 						}
@@ -408,10 +406,10 @@ namespace vuk {
 
 							sync_bound_attachment_to_renderpass(rp_att, attachment_info);
 							// 
-							
+
 							rp_att.description.initialLayout = (VkImageLayout)right.use.layout;
-                            assert(rp_att.description.initialLayout != (VkImageLayout)vuk::ImageLayout::eUndefined);
-							
+							assert(rp_att.description.initialLayout != (VkImageLayout)vuk::ImageLayout::eUndefined);
+
 							// compute attachment load
 							if (left.use.layout == vuk::ImageLayout::eUndefined) {
 								rp_att.description.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -425,8 +423,8 @@ namespace vuk {
 						}
 						// we are keeping this weird logic until this is configurable
 						// emit a barrier for now instead of an external subpass dep
-                        if(right.use.layout != left.use.layout ||
-                            (is_write_access(left.use) || is_write_access(right.use))) { // different layouts, need to have dependency
+						if (right.use.layout != left.use.layout ||
+							(is_write_access(left.use) || is_write_access(right.use))) { // different layouts, need to have dependency
 							VkImageMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
 							barrier.dstAccessMask = (VkAccessFlags)right.use.access;
 							barrier.srcAccessMask = is_read_access(left.use) ? 0 : (VkAccessFlags)left.use.access;
@@ -440,11 +438,11 @@ namespace vuk {
 							barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 							barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 							ImageBarrier ib{ .image = name, .barrier = barrier, .src = left.use.stages, .dst = right.use.stages };
-                            if(right_rp.framebufferless) {
-                                right_rp.subpasses[right.pass->subpass].pre_barriers.push_back(ib);
-                            } else {
-                                right_rp.pre_barriers.push_back(ib);
-                            }
+							if (right_rp.framebufferless) {
+								right_rp.subpasses[right.pass->subpass].pre_barriers.push_back(ib);
+							} else {
+								right_rp.pre_barriers.push_back(ib);
+							}
 						}
 					}
 				} else { // subpass-subpass link -> subpass - subpass dependency
@@ -460,19 +458,19 @@ namespace vuk {
 						sd.dstAccessMask = (VkAccessFlags)right.use.access;
 						sd.dstStageMask = (VkPipelineStageFlags)right.use.stages;
 						sd.dstSubpass = right.pass->subpass;
-                        sd.srcAccessMask = is_read_access(left.use) ? 0 : (VkAccessFlags)left.use.access;
+						sd.srcAccessMask = is_read_access(left.use) ? 0 : (VkAccessFlags)left.use.access;
 						sd.srcStageMask = (VkPipelineStageFlags)left.use.stages;
 						sd.srcSubpass = left.pass->subpass;
 						rp.rpci.subpass_dependencies.push_back(sd);
 					}
 					auto& left_rp = impl->rpis[left.pass->render_pass_index];
-                    if(left_rp.framebufferless && (is_write_access(left.use) || is_write_access(right.use))) {
+					if (left_rp.framebufferless && (is_write_access(left.use) || is_write_access(right.use))) {
 						// right layout == Undefined means the chain terminates, no transition/barrier
 						if (right.use.layout == vuk::ImageLayout::eUndefined)
 							continue;
 						VkImageMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
 						barrier.dstAccessMask = (VkAccessFlags)right.use.access;
-                        barrier.srcAccessMask = is_read_access(left.use) ? 0 : (VkAccessFlags)left.use.access;
+						barrier.srcAccessMask = is_read_access(left.use) ? 0 : (VkAccessFlags)left.use.access;
 						barrier.newLayout = (VkImageLayout)right.use.layout;
 						barrier.oldLayout = (VkImageLayout)left.use.layout;
 						barrier.subresourceRange.aspectMask = (VkImageAspectFlags)aspect;
@@ -499,22 +497,22 @@ namespace vuk {
 
 				bool crosses_rpass = (left.pass == nullptr || right.pass == nullptr || left.pass->render_pass_index != right.pass->render_pass_index);
 				if (crosses_rpass) {
-                    if(left.pass && right.use.layout != vuk::ImageLayout::eUndefined && (is_write_access(left.use) || is_write_access(right.use))) { // RenderPass ->
+					if (left.pass && right.use.layout != vuk::ImageLayout::eUndefined && (is_write_access(left.use) || is_write_access(right.use))) { // RenderPass ->
 						auto& left_rp = impl->rpis[left.pass->render_pass_index];
 
 						VkMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER };
 						barrier.dstAccessMask = (VkAccessFlags)right.use.access;
-                        barrier.srcAccessMask = is_read_access(left.use) ? 0 : (VkAccessFlags)left.use.access;
+						barrier.srcAccessMask = is_read_access(left.use) ? 0 : (VkAccessFlags)left.use.access;
 						MemoryBarrier mb{ .barrier = barrier, .src = left.use.stages, .dst = right.use.stages };
 						left_rp.subpasses[left.pass->subpass].post_mem_barriers.push_back(mb);
 					}
 
-					if(right.pass && left.use.layout != vuk::ImageLayout::eUndefined && (is_write_access(left.use) || is_write_access(right.use))) { // -> RenderPass
+					if (right.pass && left.use.layout != vuk::ImageLayout::eUndefined && (is_write_access(left.use) || is_write_access(right.use))) { // -> RenderPass
 						auto& right_rp = impl->rpis[right.pass->render_pass_index];
 
 						VkMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER };
 						barrier.dstAccessMask = (VkAccessFlags)right.use.access;
-                        barrier.srcAccessMask = is_read_access(left.use) ? 0 : (VkAccessFlags)left.use.access;
+						barrier.srcAccessMask = is_read_access(left.use) ? 0 : (VkAccessFlags)left.use.access;
 						MemoryBarrier mb{ .barrier = barrier, .src = left.use.stages, .dst = right.use.stages };
 						if (mb.src == vuk::PipelineStageFlags{}) {
 							mb.src = vuk::PipelineStageFlagBits::eTopOfPipe;
@@ -526,10 +524,10 @@ namespace vuk {
 					if (left.pass->subpass == right.pass->subpass)
 						continue;
 					auto& left_rp = impl->rpis[left.pass->render_pass_index];
-                    if(left_rp.framebufferless && (is_write_access(left.use) || is_write_access(right.use))) {
+					if (left_rp.framebufferless && (is_write_access(left.use) || is_write_access(right.use))) {
 						VkMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER };
 						barrier.dstAccessMask = (VkAccessFlags)right.use.access;
-                        barrier.srcAccessMask = is_read_access(left.use) ? 0 : (VkAccessFlags)left.use.access;
+						barrier.srcAccessMask = is_read_access(left.use) ? 0 : (VkAccessFlags)left.use.access;
 						MemoryBarrier mb{ .barrier = barrier, .src = left.use.stages, .dst = right.use.stages };
 						left_rp.subpasses[left.pass->subpass].post_mem_barriers.push_back(mb);
 					}
@@ -544,7 +542,7 @@ namespace vuk {
 		}
 
 		// we now have enough data to build VkRenderPasses and VkFramebuffers
-		
+
 		// compile attachments
 		// we have to assign the proper attachments to proper slots
 		// the order is given by the resource binding order

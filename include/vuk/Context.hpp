@@ -175,7 +175,7 @@ namespace vuk {
 			BufferCreateInfo bci{ mem_usage, sizeof(T) * data.size(), 1 };
 			auto ret = allocator.allocate_buffers(std::span{ &*buf, 1 }, std::span{ &bci, 1 }); // TODO: dropping error
 			memcpy(buf->mapped_ptr, data.data(), data.size_bytes());
-			return { std::move(buf), {0} };
+			return { std::move(buf), TransferStub{0} };
 		}
 
 		template<class T>

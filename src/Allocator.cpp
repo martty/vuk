@@ -116,7 +116,7 @@ namespace vuk {
 	}
 
 	template<class T>
-	T& CrossDeviceFrameResource::Cache<T>::acquire(const create_info_t<T>& ci) {
+	T& CrossDeviceFrameResource::Cache<T>::acquire(uint64_t current_frame, const create_info_t<T>& ci) {
 		if (auto it = lru_map.find(ci); it != lru_map.end()) {
 			it->second.last_use_frame = current_frame;
 			return it->second.value;
@@ -136,7 +136,7 @@ namespace vuk {
 	}
 
 	template<class T>
-	void CrossDeviceFrameResource::Cache<T>::collect(size_t threshold) {
+	void CrossDeviceFrameResource::Cache<T>::collect(uint64_t current_frame, size_t threshold) {
 		std::unique_lock _(cache_mtx);
 		for (auto it = lru_map.begin(); it != lru_map.end();) {
 			if (current_frame - it->second.last_use_frame > threshold) {
