@@ -1065,6 +1065,22 @@ namespace vuk {
 		return { expected_value, std::move(fence) };
 	}
 
+	inline Result<Unique<BufferCrossDevice>, AllocateException> allocate_buffer_cross_device(Allocator& allocator, const BufferCreateInfo& ici, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
+		Unique<BufferCrossDevice> buf(allocator);
+		if (auto res = allocator.allocate_buffers(std::span{ &buf.get(), 1 }, std::span{ &ici, 1 }, loc); !res) {
+			return { expected_error, res.error() };
+		}
+		return { expected_value, std::move(buf) };
+	}
+
+	inline Result<Unique<BufferGPU>, AllocateException> allocate_buffer_gpu(Allocator& allocator, const BufferCreateInfo& ici, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
+		Unique<BufferGPU> buf(allocator);
+		if (auto res = allocator.allocate_buffers(std::span{ &buf.get(), 1 }, std::span{ &ici, 1 }, loc); !res) {
+			return { expected_error, res.error() };
+		}
+		return { expected_value, std::move(buf) };
+	}
+
 	inline Result<Unique<Image>, AllocateException> allocate_image(Allocator& allocator, const ImageCreateInfo& ici, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 		Unique<Image> img(allocator);
 		if (auto res = allocator.allocate_images(std::span{ &img.get(), 1 }, std::span{ &ici, 1 }, loc); !res) {
