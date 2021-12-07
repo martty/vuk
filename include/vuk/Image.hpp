@@ -560,7 +560,7 @@ namespace vuk {
 		Format format;
 		Samples sample_count;
 	};
-
+	// TODO: move this into format.cpp
 	inline vuk::ImageAspectFlags format_to_aspect(vuk::Format format) noexcept {
 		switch (format) {
 		case vuk::Format::eD16Unorm:

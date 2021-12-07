@@ -106,4 +106,25 @@ namespace vuk {
 			payload = std::move(value);
 		}
 	}
+
+	template<class T>
+	Future<T>::Future(Allocator& alloc, struct RenderGraph& rg, Name output_binding) : alloc(alloc), rg(&rg), output_binding(output_binding) {}
+	template<class T>
+	Future<T>::Future(Allocator& alloc, T&& value) : alloc(alloc), result(std::move(value)) {}
+
+	template<class T>
+	Result<T> Future<T>::get() {
+		ExecutableRenderGraph* erg = new ExecutableRenderGraph(std::move(*rg).link());
+		auto cbr = allocate_hl_commandbuffer(allocator, HLCommandBufferCreateInfo{ VK_COMMAND_BUFFER_LEVEL_PRIMARY, allocator.get_context().graphics_queue_family });
+		if (!cbr) {
+			return { expected_error, cbr.error() };
+		}
+		auto cb = *cbr;
+		cbufs.push_back(erg.execute(*lallocator, {}).command_buffers[0]); // TODO: the waits and signals
+	}
+
+	template struct Future<Image>;
+	template struct Future<Buffer>;
+	template struct Future<BufferGPU>;
+	template struct Future<BufferCrossDevice>;
 }

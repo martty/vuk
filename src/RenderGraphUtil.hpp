@@ -55,7 +55,7 @@ namespace vuk {
 		}
 	}
 
-	inline Resource::Use to_use(Access ia) {
+	inline ResourceUse to_use(Access ia) {
 		switch (ia) {
 		case eColorResolveWrite:
 		case eColorWrite: return { vuk::PipelineStageFlagBits::eColorAttachmentOutput, vuk::AccessFlagBits::eColorAttachmentWrite, vuk::ImageLayout::eColorAttachmentOptimal };
@@ -121,7 +121,7 @@ namespace vuk {
 		}
 	}
 
-	inline bool is_framebuffer_attachment(Resource::Use u) {
+	inline bool is_framebuffer_attachment(ResourceUse u) {
 		switch (u.layout) {
 		case vuk::ImageLayout::eColorAttachmentOptimal:
 		case vuk::ImageLayout::eDepthStencilAttachmentOptimal:
@@ -131,7 +131,7 @@ namespace vuk {
 		}
 	}
 
-	inline bool is_write_access(Resource::Use u) {
+	inline bool is_write_access(ResourceUse u) {
 		if (u.access == vuk::AccessFlagBits{}) return false;
 		if (u.access & vuk::AccessFlagBits::eColorAttachmentWrite) return true;
 		if (u.access & vuk::AccessFlagBits::eDepthStencilAttachmentWrite) return true;
@@ -143,13 +143,13 @@ namespace vuk {
 		return false;
 	}
 
-	inline bool is_read_access(Resource::Use u) {
+	inline bool is_read_access(ResourceUse u) {
 		if (u.access == vuk::AccessFlagBits{}) return false;
 		return !is_write_access(u);
 	}
 
 	struct UseRef {
-		Resource::Use use;
+		ResourceUse use;
 		PassInfo* pass = nullptr;
 	};
 
@@ -178,37 +178,11 @@ namespace vuk {
 		vuk::PipelineStageFlags stage;
 	};
 
-	struct AttachmentRPInfo {
-		Name name;
-
-		vuk::Dimension2D extents;
-		vuk::Samples samples;
-
-		VkAttachmentDescription description = {};
-
-		Resource::Use initial, final;
-
-		enum class Type {
-			eInternal, eExternal, eSwapchain
-		} type;
-
-		vuk::ImageView iv;
-		vuk::Image image = {};
-		// swapchain for swapchain
-		Swapchain* swapchain;
-
-		// optionally set
-		bool should_clear = false;
-		Clear clear_value;
-
-		bool is_resolve_dst = false;
-	};
-
 	struct BufferInfo {
 		Name name;
 
-		Resource::Use initial;
-		Resource::Use final;
+		ResourceUse initial;
+		ResourceUse final;
 
 		vuk::Buffer buffer;
 	};

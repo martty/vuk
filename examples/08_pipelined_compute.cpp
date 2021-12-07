@@ -18,6 +18,35 @@
 * Check out the framework (example_runner_*) files if interested!
 */
 
+namespace vuk {
+	Future<Buffer> copy_to_buffer(Allocator& allocator, Domain copy_domain, Buffer buffer, void* src_data, size_t size) {
+		// host-mapped buffers just get memcpys
+		if (buffer.mapped_ptr) {
+			memcpy(buffer.mapped_ptr, src_data, size);
+			return { allocator, std::move(buffer) };
+		}
+
+		auto src = *allocate_buffer_cross_device(allocator, BufferCreateInfo{ vuk::MemoryUsage::eCPUonly, size, 1 });
+		::memcpy(src->mapped_ptr, src_data, size);
+
+		RenderGraph* rgp = new RenderGraph;
+		auto& rg = *rgp;
+		rg.add_pass({
+			.resources = {"_dst"_buffer(vuk::Access::eTransferDst), "_src"_buffer(vuk::Access::eTransferSrc)},
+			.execute = [size](vuk::CommandBuffer& command_buffer) {
+				command_buffer.copy_buffer("_src", "_dst", VkBufferCopy{.size = size});
+			} });
+		rgp->attach_buffer("_src", *src, vuk::Access::eNone, vuk::Access::eNone);
+		rgp->attach_buffer("_dst", buffer, vuk::Access::eNone, vuk::Access::eNone);
+		return { allocator, *rgp, "_dst"};
+	}
+
+	template<class T>
+	Future<Buffer> copy_to_buffer(Allocator& allocator, Domain copy_domain, Buffer dst, std::span<T> data) {
+		return copy_to_buffer(allocator, copy_domain, dst, data.data(), data.size_bytes());
+	}
+}
+
 namespace {
 	float time = 0.f;
 	auto box = util::generate_cube();
@@ -66,19 +95,21 @@ namespace {
 			std::iota(indices.begin(), indices.end(), 0);
 			std::shuffle(indices.begin(), indices.end(), g);
 
-			ctx.upload(allocator, scramble_buf.get(), std::span(indices.begin(), indices.end()));
-			ctx.wait_all_transfers(allocator);
+			ctx.wait_all_transfers();
+			vuk::copy_to_buffer(allocator, vuk::Domain::eAny, scramble_buf.get(), std::span(indices)).get();
+			//ctx.upload(allocator, scramble_buf.get(), std::span(indices.begin(), indices.end()));
+			ctx.wait_all_transfers();
 
 			stbi_image_free(doge_image);
 		},
 		.render = [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
 			vuk::Context& ctx = frame_allocator.get_context();
 
-			vuk::RenderGraph rg;
+			vuk::RenderGraph rgx;
 
 			// standard render to texture
-			rg.add_pass({
-				.resources = {"08_rtt"_image >> vuk::eColorWrite},
+			rgx.add_pass({
+				.resources = {"08_rttf"_image(vuk::eColorWrite, runner.swapchain->format, vuk::Dimension2D::absolute((unsigned)x, (unsigned)y), vuk::Samples::e1, vuk::ClearColor{ 0.f, 0.f, 0.f, 0.f })},
 				.execute = [](vuk::CommandBuffer& command_buffer) {
 					command_buffer
 						.set_viewport(0, vuk::Rect2D::framebuffer())
@@ -90,6 +121,10 @@ namespace {
 						.draw(3, 1, 0, 0);
 				}
 			});
+
+			vuk::Future<vuk::Image> rttf{ frame_allocator, rgx, "08_rttf" };
+
+			vuk::RenderGraph rg;
 
 			// this pass executes outside of a renderpass
 			// we declare a buffer dependency and dispatch a compute shader
@@ -129,7 +164,7 @@ namespace {
 
 			time += ImGui::GetIO().DeltaTime;
 
-			rg.attach_managed("08_rtt", runner.swapchain->format, vuk::Dimension2D::absolute((unsigned)x, (unsigned)y), vuk::Samples::e1, vuk::ClearColor{ 0.f, 0.f, 0.f, 0.f });
+			rg.attach("08_rtt", std::move(rttf), vuk::eNone);
 			// we bind our externally managed buffer to the rendergraph
 			rg.attach_buffer("08_scramble", scramble_buf.get(), vuk::eNone, vuk::eNone);
 			return rg;

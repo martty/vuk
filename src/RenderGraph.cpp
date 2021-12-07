@@ -19,6 +19,11 @@ namespace vuk {
 	}
 
 	void RenderGraph::add_pass(Pass p) {
+		for (auto& r : p.resources) {
+			if (r.is_create && r.type == Resource::Type::eImage) {
+				attach_managed(r.name, (vuk::Format)r.ici.description.format, r.ici.extents, r.ici.samples, r.ici.clear_value);
+			}
+		}
 		impl->passes.emplace_back(*impl->arena_, std::move(p));
 	}
 
@@ -227,8 +232,8 @@ namespace vuk {
 		attachment_info.should_clear = true;
 		attachment_info.clear_value = c;
 
-		Resource::Use& initial = attachment_info.initial;
-		Resource::Use & final = attachment_info.final;
+		ResourceUse& initial = attachment_info.initial;
+		ResourceUse & final = attachment_info.final;
 		// for WSI, we want to wait for colourattachmentoutput
 		// we don't care about any writes, we will clear
 		initial.access = vuk::AccessFlags{};
@@ -258,8 +263,8 @@ namespace vuk {
 
 		attachment_info.should_clear = true;
 		attachment_info.clear_value = c;
-		Resource::Use& initial = attachment_info.initial;
-		Resource::Use & final = attachment_info.final;
+		ResourceUse& initial = attachment_info.initial;
+		ResourceUse & final = attachment_info.final;
 		initial.access = vuk::AccessFlags{};
 		initial.stages = vuk::PipelineStageFlagBits::eTopOfPipe;
 		// for internal attachments we don't want to preserve previous data
@@ -290,11 +295,19 @@ namespace vuk {
 
 		attachment_info.should_clear = initial_acc == Access::eClear; // if initial access was clear, we will clear
 		attachment_info.clear_value = att.clear_value;
-		Resource::Use& initial = attachment_info.initial;
-		Resource::Use & final = attachment_info.final;
+		ResourceUse& initial = attachment_info.initial;
+		ResourceUse & final = attachment_info.final;
 		initial = to_use(initial_acc);
 		final = to_use(final_acc);
 		impl->bound_attachments.emplace(name, attachment_info);
+	}
+
+	void RenderGraph::attach(Name name, Future<Image>&& fimg, Access final) {
+		auto it = fimg.rg->impl->bound_attachments.find(fimg.output_binding);
+		assert(it != fimg.rg->impl->bound_attachments.end());
+		it->second.final = to_use(final);
+		append(std::move(*fimg.rg));
+		add_alias(name, fimg.output_binding);
 	}
 
 	void sync_bound_attachment_to_renderpass(vuk::AttachmentRPInfo& rp_att, vuk::AttachmentRPInfo& attachment_info) {

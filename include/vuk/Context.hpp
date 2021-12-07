@@ -19,6 +19,25 @@ namespace vuk {
 		size_t id;
 	};
 
+	enum class Domain {
+		eNone = 0,
+		eHost = 1 << 0,
+		eGraphicsQueue = 1 << 1,
+		eGraphicsOperation = 1 << 2,
+		eComputeQueue = 1 << 3,
+		eComputeOperation = 1 << 4,
+		eTransferQueue = 1 << 5,
+		eTransferOperation = 1 << 6,
+		eGraphicsOnGraphics = eGraphicsQueue | eGraphicsOperation,
+		eComputeOnGraphics = eGraphicsQueue | eComputeOperation,
+		eTransferOnGraphics = eGraphicsQueue | eTransferOperation,
+		eComputeOnCompute = eComputeQueue | eComputeOperation,
+		eTransferOnCompute = eComputeQueue | eComputeOperation,
+		eTransferOnTransfer = eTransferQueue | eTransferOperation,
+		eDevice = eGraphicsQueue | eComputeQueue | eTransferQueue,
+		eAny = eDevice | eHost
+	};
+
 	struct ContextCreateParameters {
 		VkInstance instance;
 		VkDevice device;
@@ -327,4 +346,29 @@ namespace vuk {
 	SampledImage make_sampled_image(Name n, SamplerCreateInfo sci);
 
 	SampledImage make_sampled_image(Name n, ImageViewCreateInfo ivci, SamplerCreateInfo sci);
+}
+
+// futures
+
+namespace vuk {
+	template<class T>
+	struct Future {
+		Future(Allocator& alloc, struct RenderGraph& rg, Name output_binding);
+		Future(Allocator& alloc, T&& value);
+
+		Allocator& alloc;
+		T result;
+		Name output_binding;
+
+		RenderGraph* rg;
+
+		enum class Status { initial, value_bound, rg_bound, compiled, submitted, done } status = Status::initial;
+		
+		Allocator& get_allocator();
+
+		Result<void> compile(); // turn RG into ERG
+		Result<void> execute(); // turn ERG into cmdbufs
+		Result<void> submit(); // turn cmdbufs into possibly a TS
+		Result<T> get(); // wait on host for T to be produced by the computation
+	};
 }

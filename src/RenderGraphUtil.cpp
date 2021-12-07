@@ -27,6 +27,10 @@ namespace vuk {
 		BufferResourceInputOnly::operator Resource() {
 			return operator>>(name.append("+"));
 		}
+
+		Resource ImageResource::operator()(Access ia, Format fmt, Dimension2D dim, Samples samp, Clear cv) {
+			return Resource{ name, Resource::Type::eImage, ia, fmt, dim, samp, cv };
+		}
 	}
 
 #define INIT2(x) x(decltype(x)::allocator_type(arena_))

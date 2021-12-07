@@ -15,6 +15,7 @@
 #include "vuk/Allocator.hpp"
 
 namespace vuk {
+	template<class T> struct Future;
 	struct Resource;
 
 	namespace detail {
@@ -30,7 +31,8 @@ namespace vuk {
 
 		struct ImageResource {
 			Name name;
-
+			
+			Resource operator()(Access ia, Format, Dimension2D, Samples, Clear);
 			ImageResourceInputOnly operator>>(Access ia);
 		};
 
@@ -51,27 +53,57 @@ namespace vuk {
 		};
 	}
 
+	struct ResourceUse {
+		vuk::PipelineStageFlags stages;
+		vuk::AccessFlags access;
+		vuk::ImageLayout layout; // ignored for buffers
+	};
+
+	struct AttachmentRPInfo {
+		Name name;
+
+		vuk::Dimension2D extents;
+		vuk::Samples samples;
+
+		VkAttachmentDescription description = {};
+
+		ResourceUse initial, final;
+
+		enum class Type {
+			eInternal, eExternal, eSwapchain
+		} type;
+
+		vuk::ImageView iv;
+		vuk::Image image = {};
+		// swapchain for swapchain
+		Swapchain* swapchain;
+
+		// optionally set
+		bool should_clear = false;
+		Clear clear_value;
+
+		bool is_resolve_dst = false;
+	};
+
 	struct Resource {
 		Name name;
 		enum class Type { eBuffer, eImage } type;
 		Access ia;
 		Name out_name;
+		bool is_create = false;
+		AttachmentRPInfo ici;
+		BufferCreateInfo bci;
 
-		struct Use {
-			vuk::PipelineStageFlags stages;
-			vuk::AccessFlags access;
-			vuk::ImageLayout layout; // ignored for buffers
-		};
-
-		Resource(Name n, Type t, Access ia) : name(n), type(t), ia(ia), out_name{} {}
+		Resource(Name n, Type t, Access ia) : name(n), type(t), ia(ia) {}
 		Resource(Name n, Type t, Access ia, Name out_name) : name(n), type(t), ia(ia), out_name(out_name) {}
+		Resource(Name n, Type t, Access ia, Format fmt, Dimension2D dim, Samples samp, Clear cv) : name(n), type(t), ia(ia), is_create(true), ici{ .extents = dim, .samples = samp, .description{.format = (VkFormat)fmt}, .clear_value = cv} {}
 
 		bool operator==(const Resource& o) const noexcept {
 			return name == o.name;
 		}
 	};
 
-	Resource::Use to_use(Access acc);
+	ResourceUse to_use(Access acc);
 
 	// TODO: infer this from a smart IV
 	struct ImageAttachment {
@@ -141,6 +173,8 @@ namespace vuk {
 		void attach_swapchain(Name, SwapchainRef swp, Clear);
 		void attach_buffer(Name, Buffer, Access initial, Access final);
 		void attach_image(Name, ImageAttachment, Access initial, Access final);
+
+		void attach(Name, Future<Image>&& fimg, Access final);
 
 		void attach_managed(Name, Format, Dimension2D, Samples, Clear);
 
