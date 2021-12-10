@@ -66,9 +66,8 @@ namespace {
 			std::iota(indices.begin(), indices.end(), 0);
 			std::shuffle(indices.begin(), indices.end(), g);
 
-			ctx.wait_all_transfers();
 			ctx.upload(allocator, scramble_buf.get(), std::span(indices.begin(), indices.end()));
-			ctx.wait_all_transfers();
+			ctx.wait_all_transfers(allocator);
 
 			stbi_image_free(doge_image);
 		},

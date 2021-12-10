@@ -53,7 +53,7 @@ namespace {
 			auto [buboVP, stub3] = ctx.create_buffer_cross_device(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, std::span(&vp, 1));
 			auto uboVP = *buboVP;
 			// For this example, we just request that all transfer finish before we continue
-			ctx.wait_all_transfers();
+			ctx.wait_all_transfers(frame_allocator);
 
 			vuk::RenderGraph rg;
 			rg.add_pass({

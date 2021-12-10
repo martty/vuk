@@ -91,7 +91,7 @@ namespace vuk {
 
 		/// @brief Return an allocator over the direct resource - resources will be allocated from the Vulkan runtime
 		/// @return 
-		Allocator& get_vk_allocator();
+		CrossDeviceVkResource& get_vk_resource();
 
 		uint32_t(*get_thread_index)() = nullptr;
 
@@ -163,7 +163,7 @@ namespace vuk {
 
 		TransferStub enqueue_transfer(Buffer src, Buffer dst);
 		TransferStub enqueue_transfer(Buffer src, Image dst, Extent3D extent, uint32_t base_layer, bool generate_mips);
-		void dma_task();
+		void dma_task(Allocator& allocator);
 
 		/// @brief Allocates & fills a buffer with explicitly managed lifetime
 		/// @param mem_usage Where to allocate the buffer (host visible buffers will be automatically mapped)
@@ -218,8 +218,8 @@ namespace vuk {
 			return stub;
 		}
 
-		void wait_all_transfers() {
-			dma_task();
+		void wait_all_transfers(Allocator& allocator) {
+			dma_task(allocator);
 		}
 
 		/// @brief Add a swapchain to be managed by the Context

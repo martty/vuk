@@ -304,8 +304,8 @@ namespace vuk {
 		CrossDeviceResource* upstream = nullptr;
 	};
 
-	struct CrossDeviceVkAllocator final : CrossDeviceResource {
-		CrossDeviceVkAllocator(Context& ctx, LegacyGPUAllocator& alloc);
+	struct CrossDeviceVkResource final : CrossDeviceResource {
+		CrossDeviceVkResource(Context& ctx, LegacyGPUAllocator& alloc);
 
 		Result<void, AllocateException> allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) override {
 			VkSemaphoreCreateInfo sci{ .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
@@ -480,20 +480,28 @@ namespace vuk {
 		std::mutex sema_mutex;
 		std::vector<VkSemaphore> semaphores;
 
-		void deallocate_semaphores(std::span<const VkSemaphore> src) override {
+		Result<void, AllocateException> allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) override {
+			VUK_DO_OR_RETURN(upstream->allocate_semaphores(dst, loc));
 			std::unique_lock _(sema_mutex);
 			auto& vec = semaphores;
-			vec.insert(vec.end(), src.begin(), src.end());
+			vec.insert(vec.end(), dst.begin(), dst.end());
+			return { expected_value };
 		}
+
+		void deallocate_semaphores(std::span<const VkSemaphore> src) override {} // noop
 
 		std::mutex fence_mutex;
 		std::vector<VkFence> fences;
 
-		void deallocate_fences(std::span<const VkFence> src) override {
+		Result<void, AllocateException> allocate_fences(std::span<VkFence> dst, SourceLocationAtFrame loc) override {
+			VUK_DO_OR_RETURN(upstream->allocate_fences(dst, loc));
 			std::unique_lock _(fence_mutex);
 			auto& vec = fences;
-			vec.insert(vec.end(), src.begin(), src.end());
+			vec.insert(vec.end(), dst.begin(), dst.end());
+			return { expected_value };
 		}
+
+		void deallocate_fences(std::span<const VkFence> src) override {} // noop
 
 		std::mutex cbuf_mutex;
 		std::vector<HLCommandBuffer> cmdbuffers_to_free;
@@ -526,21 +534,27 @@ namespace vuk {
 
 		void deallocate_hl_commandbuffers(std::span<const HLCommandBuffer> src) override {} // no-op, deallocated with pools
 
-		void deallocate_commandbuffers(VkCommandPool pool, std::span<const VkCommandBuffer> src) override {
+		Result<void, AllocateException> allocate_commandbuffers(std::span<VkCommandBuffer> dst, std::span<const VkCommandBufferAllocateInfo> cis, SourceLocationAtFrame loc) override {
+			VUK_DO_OR_RETURN(upstream->allocate_commandbuffers(dst, cis, loc));
 			std::unique_lock _(cbuf_mutex);
-
-			cmdbuffers_to_free.reserve(cmdbuffers_to_free.size() + src.size());
-			for (auto& s : src) {
-				cmdbuffers_to_free.emplace_back(s, pool);
+			cmdbuffers_to_free.reserve(cmdbuffers_to_free.size() + dst.size());
+			for (uint64_t i = 0; i < dst.size(); i++) {
+				cmdbuffers_to_free.emplace_back(dst[i], cis[i].commandPool);
 			}
+			return { expected_value };
 		}
 
-		void deallocate_commandpools(std::span<const VkCommandPool> src) override {
+		void deallocate_commandbuffers(VkCommandPool pool, std::span<const VkCommandBuffer> dst) override {} // noop
+
+		Result<void, AllocateException> allocate_commandpools(std::span<VkCommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) override {
+			VUK_DO_OR_RETURN(upstream->allocate_commandpools(dst, cis, loc));
 			std::unique_lock _(cbuf_mutex);
-
 			auto& vec = cmdpools_to_free;
-			vec.insert(vec.end(), src.begin(), src.end());
+			vec.insert(vec.end(), dst.begin(), dst.end());
+			return { expected_value };
 		}
+
+		void deallocate_commandpools(std::span<const VkCommandPool> dst) override {} // no-op
 
 		// buffers are lockless
 		Result<void, AllocateException> allocate_buffers(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) override;
@@ -554,31 +568,76 @@ namespace vuk {
 		std::mutex framebuffer_mutex;
 		std::vector<VkFramebuffer> framebuffers;
 
-		void deallocate_framebuffers(std::span<const VkFramebuffer> src) override {
+		Result<void, AllocateException> allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) override {
+			VUK_DO_OR_RETURN(upstream->allocate_framebuffers(dst, cis, loc));
 			std::unique_lock _(framebuffer_mutex);
 			auto& vec = framebuffers;
-			vec.insert(vec.end(), src.begin(), src.end());
+			vec.insert(vec.end(), dst.begin(), dst.end());
+			return { expected_value };
 		}
+
+		void deallocate_framebuffers(std::span<const VkFramebuffer> src) override {} // noop
 
 		std::mutex images_mutex;
 		std::vector<Image> images;
 
-		void deallocate_images(std::span<const Image> src) override {
+		Result<void, AllocateException> allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) override {
+			VUK_DO_OR_RETURN(upstream->allocate_images(dst, cis, loc));
 			std::unique_lock _(images_mutex);
-
 			auto& vec = images;
-			vec.insert(vec.end(), src.begin(), src.end());
+			vec.insert(vec.end(), dst.begin(), dst.end());
+			return { expected_value };
 		}
+
+		void deallocate_images(std::span<const Image> src) override {} // noop
 
 		std::mutex image_views_mutex;
 		std::vector<ImageView> image_views;
-		void deallocate_image_views(std::span<const ImageView> src) override {
+
+		Result<void, AllocateException> allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) override {
+			VUK_DO_OR_RETURN(upstream->allocate_image_views(dst, cis, loc));
 			std::unique_lock _(image_views_mutex);
 
 			auto& vec = image_views;
-			vec.insert(vec.end(), src.begin(), src.end());
+			vec.insert(vec.end(), dst.begin(), dst.end());
+			return { expected_value };
 		}
 
+		void deallocate_image_views(std::span<const ImageView> src) override {} // noop
+
+		std::mutex pds_mutex;
+		std::vector<PersistentDescriptorSet> persistent_descriptor_sets;
+
+		Result<void, AllocateException> allocate_persistent_descriptor_sets(std::span<PersistentDescriptorSet> dst, std::span<const PersistentDescriptorSetCreateInfo> cis, SourceLocationAtFrame loc) override {
+			VUK_DO_OR_RETURN(upstream->allocate_persistent_descriptor_sets(dst, cis, loc));
+			std::unique_lock _(pds_mutex);
+
+			auto& vec = persistent_descriptor_sets;
+			vec.insert(vec.end(), dst.begin(), dst.end());
+			return { expected_value };
+		}
+
+		void deallocate_persistent_descriptor_sets(std::span<const PersistentDescriptorSet> src) override {} // noop
+
+		std::mutex ds_mutex;
+		std::vector<DescriptorSet> descriptor_sets;
+
+		Result<void, AllocateException> allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) override {
+			VUK_DO_OR_RETURN(upstream->allocate_descriptor_sets(dst, cis, loc));
+
+			std::unique_lock _(ds_mutex);
+
+			auto& vec = descriptor_sets;
+			vec.insert(vec.end(), dst.begin(), dst.end());
+			return { expected_value };
+		}
+
+		void deallocate_descriptor_sets(std::span<const DescriptorSet> src) override {} // noop
+		
+		// only for use via SuperframeAllocator
+		std::mutex buffers_mutex;
+		std::vector<BufferGPU> buffer_gpus;
+		std::vector<BufferCrossDevice> buffer_cross_devices;
 
 		template<class T>
 		struct LRUEntry {
@@ -598,8 +657,7 @@ namespace vuk {
 			void collect(uint64_t current_frame, size_t threshold);
 		};
 
-		Cache<DescriptorSet> descriptor_sets;
-		//Result<void, AllocateException> allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) override;
+		Cache<DescriptorSet> descriptor_set_cache;
 
 		void wait() {
 			if (fences.size() > 0) {
@@ -626,12 +684,19 @@ namespace vuk {
 		std::unique_ptr<char[]> frames_storage;
 		CrossDeviceFrameResource* frames;
 
+		CrossDeviceFrameResource& get_last_frame() {
+			return frames[frame_counter.load() % frames_in_flight];
+		}
+
 		Result<void, AllocateException> allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) override {
 			return direct.allocate_semaphores(dst, loc);
 		}
 
 		void deallocate_semaphores(std::span<const VkSemaphore> src) override {
-			direct.deallocate_semaphores(src);
+			auto& f = get_last_frame();
+			std::unique_lock _(f.sema_mutex);
+			auto& vec = get_last_frame().semaphores;
+			vec.insert(vec.end(), src.begin(), src.end());
 		}
 
 		Result<void, AllocateException> allocate_fences(std::span<VkFence> dst, SourceLocationAtFrame loc) override {
@@ -639,24 +704,41 @@ namespace vuk {
 		}
 
 		void deallocate_fences(std::span<const VkFence> src) override {
-			direct.deallocate_fences(src);
+			auto& f = get_last_frame();
+			std::unique_lock _(f.fence_mutex);
+			auto& vec = f.fences;
+			vec.insert(vec.end(), src.begin(), src.end());
 		}
 
 		Result<void, AllocateException> allocate_commandbuffers(std::span<VkCommandBuffer> dst, std::span<const VkCommandBufferAllocateInfo> cis, SourceLocationAtFrame loc) override {
 			return direct.allocate_commandbuffers(dst, cis, loc);
 		}
 
-		void deallocate_commandbuffers(VkCommandPool pool, std::span<const VkCommandBuffer> dst) override {
-			direct.deallocate_commandbuffers(pool, dst);
+		void deallocate_commandbuffers(VkCommandPool pool, std::span<const VkCommandBuffer> src) override {
+			auto& f = get_last_frame();
+			std::unique_lock _(f.cbuf_mutex);
+			f.cmdbuffers_to_free.reserve(f.cmdbuffers_to_free.size() + src.size());
+			for (auto& s : src) {
+				f.cmdbuffers_to_free.emplace_back(s, pool);
+			}
 		}
 
 		Result<void, AllocateException> allocate_hl_commandbuffers(std::span<HLCommandBuffer> dst, std::span<const HLCommandBufferCreateInfo> cis, SourceLocationAtFrame loc) override {
-			assert(0 && "High level command buffers cannot be allocated from RingFrame.");
-			return { expected_error, AllocateException{VK_ERROR_FEATURE_NOT_PRESENT} };
+			return direct.allocate_hl_commandbuffers(dst, cis, loc);
 		}
 
-		void deallocate_hl_commandbuffers(std::span<const HLCommandBuffer> dst) override {
-			assert(0 && "High level command buffers cannot be deallocated from RingFrame.");
+		void deallocate_hl_commandbuffers(std::span<const HLCommandBuffer> src) override {
+			auto& f = get_last_frame();
+			std::unique_lock _(f.cbuf_mutex);
+			/*f.cmdbuffers_to_free.reserve(f.cmdbuffers_to_free.size() + src.size());
+			for (auto& s : src) {
+				f.cmdbuffers_to_free.emplace_back(s.command_buffer, s.command_pool);
+			}*/
+			auto& vec = f.cmdpools_to_free;
+
+			for (auto& s : src) {
+				vec.push_back(s.command_pool);
+			}
 		}
 
 		Result<void, AllocateException> allocate_commandpools(std::span<VkCommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) override {
@@ -664,7 +746,10 @@ namespace vuk {
 		}
 
 		void deallocate_commandpools(std::span<const VkCommandPool> src) override {
-			direct.deallocate_commandpools(src);
+			auto& f = get_last_frame();
+			std::unique_lock _(f.cbuf_mutex);
+			auto& vec = f.cmdpools_to_free;
+			vec.insert(vec.end(), src.begin(), src.end());
 		}
 
 		Result<void, AllocateException> allocate_buffers(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) override {
@@ -672,7 +757,10 @@ namespace vuk {
 		}
 
 		void deallocate_buffers(std::span<const BufferCrossDevice> src) override {
-			direct.deallocate_buffers(src);
+			auto& f = get_last_frame();
+			std::unique_lock _(f.buffers_mutex);
+			auto& vec = f.buffer_cross_devices;
+			vec.insert(vec.end(), src.begin(), src.end());
 		}
 
 		Result<void, AllocateException> allocate_buffers(std::span<BufferGPU> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) override {
@@ -680,7 +768,10 @@ namespace vuk {
 		}
 
 		void deallocate_buffers(std::span<const BufferGPU> src) override {
-			direct.deallocate_buffers(src);
+			auto& f = get_last_frame();
+			std::unique_lock _(f.buffers_mutex);
+			auto& vec = f.buffer_gpus;
+			vec.insert(vec.end(), src.begin(), src.end());
 		}
 
 		Result<void, AllocateException> allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) override {
@@ -688,7 +779,10 @@ namespace vuk {
 		}
 
 		void deallocate_framebuffers(std::span<const VkFramebuffer> src) override {
-			direct.deallocate_framebuffers(src);
+			auto& f = get_last_frame();
+			std::unique_lock _(f.framebuffer_mutex);
+			auto& vec = f.framebuffers;
+			vec.insert(vec.end(), src.begin(), src.end());
 		}
 
 		Result<void, AllocateException> allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) override {
@@ -696,7 +790,10 @@ namespace vuk {
 		}
 
 		void deallocate_images(std::span<const Image> src) override {
-			direct.deallocate_images(src);
+			auto& f = get_last_frame();
+			std::unique_lock _(f.images_mutex);
+			auto& vec = f.images;
+			vec.insert(vec.end(), src.begin(), src.end());
 		}
 
 		Result<void, AllocateException> allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) override {
@@ -704,7 +801,10 @@ namespace vuk {
 		}
 
 		void deallocate_image_views(std::span<const ImageView> src) override {
-			return direct.deallocate_image_views(src);
+			auto& f = get_last_frame();
+			std::unique_lock _(f.image_views_mutex);
+			auto& vec = f.image_views;
+			vec.insert(vec.end(), src.begin(), src.end());
 		}
 
 		Result<void, AllocateException> allocate_persistent_descriptor_sets(std::span<PersistentDescriptorSet> dst, std::span<const PersistentDescriptorSetCreateInfo> cis, SourceLocationAtFrame loc) override {
@@ -712,7 +812,10 @@ namespace vuk {
 		}
 
 		void deallocate_persistent_descriptor_sets(std::span<const PersistentDescriptorSet> src) override {
-			return direct.deallocate_persistent_descriptor_sets(src);
+			auto& f = get_last_frame();
+			std::unique_lock _(f.pds_mutex);
+			auto& vec = f.persistent_descriptor_sets;
+			vec.insert(vec.end(), src.begin(), src.end());
 		}
 
 		Result<void, AllocateException> allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) override {
@@ -720,7 +823,10 @@ namespace vuk {
 		}
 
 		void deallocate_descriptor_sets(std::span<const DescriptorSet> src) override {
-			direct.deallocate_descriptor_sets(src);
+			auto& f = get_last_frame();
+			std::unique_lock _(f.ds_mutex);
+			auto& vec = f.descriptor_sets;
+			vec.insert(vec.end(), src.begin(), src.end());
 		}
 
 		CrossDeviceFrameResource& get_next_frame();
@@ -732,13 +838,18 @@ namespace vuk {
 				direct.deallocate_commandbuffers(c.command_pool, std::span{ &c.command_buffer, 1 });
 			}
 			direct.deallocate_commandpools(f.cmdpools_to_free);
-			//direct.deallocate_buffers(f.buffers); // TODO: linear allocators don't suballocate :/
+			direct.deallocate_buffers(f.buffer_gpus);
+			direct.deallocate_buffers(f.buffer_cross_devices);
 			direct.deallocate_framebuffers(f.framebuffers);
 			direct.deallocate_images(f.images);
 			direct.deallocate_image_views(f.image_views);
+			direct.deallocate_persistent_descriptor_sets(f.persistent_descriptor_sets);
+			direct.deallocate_descriptor_sets(f.descriptor_sets);
 
 			f.semaphores.clear();
 			f.fences.clear();
+			f.buffer_cross_devices.clear();
+			f.buffer_gpus.clear();
 			f.cmdbuffers_to_free.clear();
 			f.cmdpools_to_free.clear();
 			auto& legacy = direct.legacy_gpu_allocator;
@@ -749,6 +860,8 @@ namespace vuk {
 			f.framebuffers.clear();
 			f.images.clear();
 			f.image_views.clear();
+			f.persistent_descriptor_sets.clear();
+			f.descriptor_sets.clear();
 		}
 
 		virtual ~CrossDeviceRingFrameResource() {
@@ -769,7 +882,7 @@ namespace vuk {
 			return *direct.ctx;
 		}
 
-		CrossDeviceVkAllocator direct;
+		CrossDeviceVkResource direct;
 		std::mutex new_frame_mutex;
 		std::atomic<uint64_t> frame_counter;
 		std::atomic<uint64_t> local_frame;
@@ -885,6 +998,7 @@ namespace vuk {
 	class Allocator {
 	public:
 		explicit Allocator(CrossDeviceResource& cross_device) : ctx(&cross_device.get_context()), cross_device(&cross_device) {}
+		explicit Allocator(CrossDeviceVkResource& cross_device) = delete; // this resource is unsuitable for direct allocation
 
 		Result<void, AllocateException> allocate(std::span<VkSemaphore> dst, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 			return cross_device->allocate_semaphores(dst, loc);

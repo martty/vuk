@@ -34,7 +34,7 @@ util::ImGuiData util::ImGui_ImplVuk_Init(vuk::Allocator& allocator) {
 		pci.add_spirv(fcont, fpath);
 		ctx.create_named_pipeline("imgui", pci);
 	}
-	ctx.wait_all_transfers();
+	ctx.wait_all_transfers(allocator);
 	return data;
 }
 
@@ -78,7 +78,7 @@ void util::ImGui_ImplVuk_Render(vuk::Allocator& allocator, vuk::RenderGraph& rg,
 		idx_dst += cmd_list->IdxBuffer.Size;
 	}
 
-	ctx.wait_all_transfers();
+	ctx.wait_all_transfers(allocator);
 	vuk::Pass pass{
 		.name = "imgui",
 		.resources = { vuk::Resource{dst_target, vuk::Resource::Type::eImage, vuk::eColorRW} },

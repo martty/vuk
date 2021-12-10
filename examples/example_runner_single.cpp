@@ -57,6 +57,7 @@ vuk::ExampleRunner::ExampleRunner() {
 			context.emplace(ContextCreateParameters{ instance, device, physical_device, graphics_queue, graphics_queue_family_index });
 			const unsigned num_inflight_frames = 3;
 			xdev_rf_alloc.emplace(*context, num_inflight_frames);
+			global.emplace(*xdev_rf_alloc);
 			swapchain = context->add_swapchain(util::make_swapchain(vkbdevice));
 }
 

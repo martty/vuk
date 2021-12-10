@@ -35,6 +35,7 @@ namespace vuk {
 		VkQueue graphics_queue;
 		std::optional<Context> context;
 		std::optional<CrossDeviceRingFrameResource> xdev_rf_alloc;
+		std::optional<Allocator> global;
 		vuk::SwapchainRef swapchain;
 		GLFWwindow* window;
 		VkSurfaceKHR surface;
@@ -55,11 +56,11 @@ namespace vuk {
 			// Setup Platform/Renderer bindings
 			ImGui_ImplGlfw_InitForVulkan(window, true);
 			{
-				imgui_data = util::ImGui_ImplVuk_Init(context->get_vk_allocator());
-				context->wait_all_transfers();
+				imgui_data = util::ImGui_ImplVuk_Init(*global);
+				context->wait_all_transfers(*global);
 			}
 			for (auto& ex : examples) {
-				ex->setup(*this, context->get_vk_allocator());
+				ex->setup(*this, *global);
 			}
 		}
 
@@ -69,7 +70,7 @@ namespace vuk {
 			context->wait_idle();
 			for (auto& ex : examples) {
 				if (ex->cleanup) {
-					ex->cleanup(*this, context->get_vk_allocator());
+					ex->cleanup(*this, *global);
 				}
 			}
 		}

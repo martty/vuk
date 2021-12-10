@@ -58,7 +58,7 @@ namespace {
 
 			auto [buboVP, stub3] = ctx.create_buffer_cross_device(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, std::span(&vp, 1));
 			auto uboVP = *buboVP;
-			ctx.wait_all_transfers();
+			ctx.wait_all_transfers(frame_allocator);
 
 			vuk::RenderGraph rg;
 			// Here we will render the cube into 3 offscreen textures

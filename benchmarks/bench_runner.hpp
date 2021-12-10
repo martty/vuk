@@ -34,9 +34,9 @@ namespace vuk {
 
 	struct BenchBase {
 		std::string_view name;
-		std::function<void(BenchRunner&, vuk::InflightContext&)> setup;
-		std::function<void(BenchRunner&, vuk::InflightContext&)> gui;
-		std::function<void(BenchRunner&, vuk::InflightContext&)> cleanup;
+		std::function<void(BenchRunner&, vuk::Allocator&)> setup;
+		std::function<void(BenchRunner&, vuk::Allocator&)> gui;
+		std::function<void(BenchRunner&, vuk::Allocator&)> cleanup;
 		std::function<CaseBase&(unsigned)> get_case;
 		size_t num_cases;
 	};
@@ -52,7 +52,7 @@ namespace vuk {
 				std::apply([this, subcase_template](auto&&... ts) {
 					(subcases.emplace_back(
 						[=](BenchRunner& runner, vuk::Allocator& frame_allocator, Query start, Query end) { 
-							return subcase_template(runner, ifc, start, end, ts); 
+							return subcase_template(runner, frame_allocator, start, end, ts);
 						}), ...);
 					(subcase_labels.emplace_back(ts.description), ...);
 					timings.resize(sizeof...(Args));
@@ -79,6 +79,7 @@ namespace vuk {
 		VkPhysicalDevice physical_device;
 		VkQueue graphics_queue;
 		std::optional<Context> context;
+		std::optional<CrossDeviceRingFrameResource> xdev_rf_alloc;
 		vuk::SwapchainRef swapchain;
 		GLFWwindow* window;
 		VkSurfaceKHR surface;
@@ -108,34 +109,29 @@ namespace vuk {
 
 			start = context->create_timestamp_query();
 			end = context->create_timestamp_query();
-
-			auto ifc = context->begin();
+			Allocator global(*xdev_rf_alloc);
 			{
-				auto ptc = ifc.begin();
-				imgui_data = util::ImGui_ImplVuk_Init(ptc);
-				ptc.wait_all_transfers();
+				imgui_data = util::ImGui_ImplVuk_Init(global);
+				context->wait_all_transfers(global);
 			}
-			bench->setup(*this, ifc);
+			bench->setup(*this, global);
 		}
 
 		void render();
 
 		void cleanup() {
 			context->wait_idle();
-			imgui_data.font_texture.view.reset();
-			imgui_data.font_texture.image.reset();
-			auto ifc = context->begin();
+			Allocator global(*xdev_rf_alloc);
 			if (bench->cleanup) {
-				bench->cleanup(*this, ifc);
+				bench->cleanup(*this, global);
 			}
-
-			// this performs cleanups for all inflight frames
-			for (auto i = 0; i < vuk::Context::FC; i++) {
-				context->begin();
-			}
+			
 		}
 
 		~BenchRunner() {
+			imgui_data.font_texture.view.reset();
+			imgui_data.font_texture.image.reset();
+			xdev_rf_alloc.reset();
 			context.reset();
 			vkDestroySurfaceKHR(vkbinstance.instance, surface, nullptr);
 			destroy_window_glfw(window);

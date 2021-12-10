@@ -41,7 +41,7 @@ namespace {
 
 			auto [tex, stub] = ctx.create_texture(allocator, vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, doge_image);
 			texture_of_doge = std::move(tex);
-			ctx.wait_all_transfers();
+			ctx.wait_all_transfers(allocator);
 			stbi_image_free(doge_image);
 
 			// Init tiles
@@ -66,7 +66,7 @@ namespace {
 
 			auto [buboVP, stub3] = ctx.create_buffer_cross_device(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, std::span(&vp, 1));
 			auto uboVP = *buboVP;
-			ctx.wait_all_transfers();
+			ctx.wait_all_transfers(frame_allocator);
 
 			vuk::RenderGraph rg;
 

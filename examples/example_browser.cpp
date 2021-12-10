@@ -58,7 +58,9 @@ vuk::ExampleRunner::ExampleRunner() {
 			device = vkbdevice.device;
 
 			context.emplace(ContextCreateParameters{ instance, device, physical_device, graphics_queue, graphics_queue_family_index });
-
+			const unsigned num_inflight_frames = 3;
+			xdev_rf_alloc.emplace(*context, num_inflight_frames);
+			global.emplace(*xdev_rf_alloc);
 			swapchain = context->add_swapchain(util::make_swapchain(vkbdevice));
 }
 
@@ -71,8 +73,6 @@ void vuk::ExampleRunner::render() {
 		glfwPollEvents();
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
-
-		auto ifc = context->begin();
 
 		ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 352.f, 2));
 		ImGui::SetNextWindowSize(ImVec2(350, 0));
@@ -95,22 +95,23 @@ void vuk::ExampleRunner::render() {
 		}
 		ImGui::End();
 
+		auto& xdev_frame_resource = xdev_rf_alloc->get_next_frame();
+		Allocator frame_allocator(xdev_frame_resource);
 		if (!render_all) { // render a single full window example
-			auto rg = item_current->render(*this, ifc);
+			
+			auto rg = item_current->render(*this, frame_allocator);
 			ImGui::Render();
-			auto ptc = ifc.begin();
 			vuk::Name attachment_name = vuk::Name(std::string(item_current->name) + "_final");
-			util::ImGui_ImplVuk_Render(ptc, rg, attachment_name, "SWAPCHAIN", imgui_data, ImGui::GetDrawData());
+			util::ImGui_ImplVuk_Render(frame_allocator, rg, attachment_name, "SWAPCHAIN", imgui_data, ImGui::GetDrawData());
 			rg.attach_swapchain(attachment_name, swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
-			execute_submit_and_present_to_one(ptc, std::move(rg).link(ptc, vuk::RenderGraph::CompileOptions{}), swapchain);
+			execute_submit_and_present_to_one(frame_allocator, std::move(rg).link(*context, vuk::RenderGraph::CompileOptions{}), swapchain);
 		} else { // render all examples as imgui windows
 			RenderGraph rg;
-			auto ptc = ifc.begin();
 			plf::colony<vuk::Name> attachment_names;
-
+			
 			size_t i = 0;
 			for (auto& ex : examples) {
-				auto rg_frag = ex->render(*this, ifc);
+				auto rg_frag = ex->render(*this, frame_allocator);
 				auto& attachment_name = *attachment_names.emplace(std::string(ex->name) + "_final");
 				rg_frag.attach_managed(attachment_name, swapchain->format, vuk::Dimension2D::absolute( 300, 300 ), vuk::Samples::e1, vuk::ClearColor(0.1f, 0.2f, 0.3f, 1.f));
 				rg_frag.compile(vuk::RenderGraph::CompileOptions{});
@@ -169,15 +170,15 @@ void vuk::ExampleRunner::render() {
 
 				if (chosen_resource[i].is_invalid())
 					chosen_resource[i] = attachment_name;
-				ImGui::Image(&ptc.make_sampled_image(chosen_resource[i], imgui_data.font_sci), ImVec2(200, 200));
+				//ImGui::Image(&ptc.make_sampled_image(chosen_resource[i], imgui_data.font_sci), ImVec2(200, 200));
 				ImGui::End();
 				i++;
 			}
 
 			ImGui::Render();
-			util::ImGui_ImplVuk_Render(ptc, rg, "SWAPCHAIN", "SWAPCHAIN", imgui_data, ImGui::GetDrawData());
+			util::ImGui_ImplVuk_Render(frame_allocator, rg, "SWAPCHAIN", "SWAPCHAIN", imgui_data, ImGui::GetDrawData());
 			rg.attach_swapchain("SWAPCHAIN", swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
-			execute_submit_and_present_to_one(ptc, std::move(rg).link(ptc, vuk::RenderGraph::CompileOptions{}), swapchain);
+			execute_submit_and_present_to_one(frame_allocator, std::move(rg).link(*context, vuk::RenderGraph::CompileOptions{}), swapchain);
 		}
 	}
 }

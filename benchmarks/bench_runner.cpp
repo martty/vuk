@@ -72,8 +72,6 @@ void vuk::BenchRunner::render() {
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
 
-		auto ifc = context->begin();
-
 		ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 552.f, 2));
 		ImGui::SetNextWindowSize(ImVec2(550, 0));
 		ImGui::Begin("Benchmark", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoResize);

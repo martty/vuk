@@ -33,7 +33,8 @@ namespace {
 
 	vuk::Example xample{
 		.name = "09_persistent_descriptorset",
-		.setup = [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
+		.setup = [](vuk::ExampleRunner& runner, vuk::Allocator& allocator) {
+			vuk::Context& ctx = allocator.get_context();
 			{
 			vuk::PipelineBaseCreateInfo pci;
 			pci.add_glsl(util::read_entire_file("../../examples/bindless.vert"), "bindless.vert");
@@ -56,11 +57,10 @@ namespace {
 			int x, y, chans;
 			auto doge_image = stbi_load("../../examples/doge.png", &x, &y, &chans, 4);
 
-			auto ptc = ifc.begin();
 			// Similarly to buffers, we allocate the image and enqueue the upload
-			auto [tex, _] = ptc.ctx.create_texture(vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, doge_image);
+			auto [tex, _] = ctx.create_texture(allocator, vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, doge_image);
 			texture_of_doge = std::move(tex);
-			ptc.ctx.wait_all_transfers();
+			ctx.wait_all_transfers(allocator);
 			stbi_image_free(doge_image);
 
 			// Let's create two variants of the doge image
@@ -73,10 +73,10 @@ namespace {
 			ici.tiling = vuk::ImageTiling::eOptimal;
 			ici.usage = vuk::ImageUsageFlagBits::eTransferDst | vuk::ImageUsageFlagBits::eSampled;
 			ici.mipLevels = ici.arrayLayers = 1;
-			variant1 = ptc.ctx.allocate_texture(ici);
+			variant1 = ctx.allocate_texture(allocator, ici);
 			ici.format = vuk::Format::eR8G8B8A8Unorm;
 			ici.usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled;
-			variant2 = ptc.ctx.allocate_texture(ici);
+			variant2 = ctx.allocate_texture(allocator, ici);
 			// Make a RenderGraph to process the loaded image
 			vuk::RenderGraph rg;
 			rg.add_pass({
@@ -111,20 +111,20 @@ namespace {
 			rg.attach_image("09_v2", vuk::ImageAttachment::from_texture(*variant2), vuk::eNone, vuk::eFragmentSampled);
 			// The rendergraph is submitted and fence-waited on
 
-			execute_submit_and_wait(ifc.ctx, ifc.ctx.get_vk_allocator(), std::move(rg).link(ptc, vuk::RenderGraph::CompileOptions{}));
+			execute_submit_and_wait(allocator, std::move(rg).link(ctx, vuk::RenderGraph::CompileOptions{}));
 
 			// Create persistent descriptorset for a pipeline and set index
-			pda = ptc.create_persistent_descriptorset(*runner.context->get_named_pipeline("bindless_cube"), 1, 64);
+			pda = ctx.create_persistent_descriptorset(allocator, *runner.context->get_named_pipeline("bindless_cube"), 1, 64);
 			// Enqueue updates to the descriptors in the array
 			// This records the writes internally, but does not execute them
-			pda->update_combined_image_sampler(ptc, 0, 0, texture_of_doge->view.get(), {}, vuk::ImageLayout::eShaderReadOnlyOptimal);
-			pda->update_combined_image_sampler(ptc, 0, 1, variant1->view.get(), {}, vuk::ImageLayout::eShaderReadOnlyOptimal);
-			pda->update_combined_image_sampler(ptc, 0, 2, variant2->view.get(), {}, vuk::ImageLayout::eShaderReadOnlyOptimal);
+			pda->update_combined_image_sampler(ctx, 0, 0, texture_of_doge->view.get(), {}, vuk::ImageLayout::eShaderReadOnlyOptimal);
+			pda->update_combined_image_sampler(ctx, 0, 1, variant1->view.get(), {}, vuk::ImageLayout::eShaderReadOnlyOptimal);
+			pda->update_combined_image_sampler(ctx, 0, 2, variant2->view.get(), {}, vuk::ImageLayout::eShaderReadOnlyOptimal);
 			// Execute the writes
-			ptc.commit_persistent_descriptorset(pda.get());
+			ctx.commit_persistent_descriptorset(pda.get());
 		},
 		.render = [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
-			auto ptc = ifc.begin();
+			vuk::Context& ctx = frame_allocator.get_context();
 
 			// We set up the cube data, same as in example 02_cube
 			auto [bverts, stub1] = ctx.create_buffer_gpu(frame_allocator, std::span(&box.first[0], box.first.size()));
@@ -139,9 +139,9 @@ namespace {
 			vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 1.f, 10.f);
 			vp.proj[1][1] *= -1;
 
-			auto [buboVP, stub3] = ptc.ctx.create_scratch_buffer(vuk::MemoryUsage::eCPUtoGPU, vuk::BufferUsageFlagBits::eUniformBuffer, std::span(&vp, 1));
-			auto uboVP = buboVP;
-			ptc.ctx.wait_all_transfers();
+			auto [buboVP, stub3] = ctx.create_buffer_cross_device(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, std::span(&vp, 1));
+			auto uboVP = *buboVP;
+			ctx.wait_all_transfers(frame_allocator);
 
 			vuk::RenderGraph rg;
 

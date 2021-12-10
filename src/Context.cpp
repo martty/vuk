@@ -300,8 +300,8 @@ namespace vuk {
 		return { impl->query_id_counter++ };
 	}
 
-	Allocator& Context::get_vk_allocator() {
-		return impl->vk_allocator;
+	CrossDeviceVkResource& Context::get_vk_resource() {
+		return impl->cross_device_vk_resource;
 	}
 
 	DescriptorSetLayoutAllocInfo Context::create(const create_info_t<DescriptorSetLayoutAllocInfo>& cinfo) {
@@ -762,7 +762,7 @@ namespace vuk {
 	}
 
 	// TODO: no error handling
-	Result<void, AllocateException> CrossDeviceVkAllocator::allocate_persistent_descriptor_sets(std::span<PersistentDescriptorSet> dst, std::span<const PersistentDescriptorSetCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException> CrossDeviceVkResource::allocate_persistent_descriptor_sets(std::span<PersistentDescriptorSet> dst, std::span<const PersistentDescriptorSetCreateInfo> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
 			auto& ci = cis[i];
@@ -821,13 +821,13 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	void CrossDeviceVkAllocator::deallocate_persistent_descriptor_sets(std::span<const PersistentDescriptorSet> src) {
+	void CrossDeviceVkResource::deallocate_persistent_descriptor_sets(std::span<const PersistentDescriptorSet> src) {
 		for (auto& v : src) {
 			vkDestroyDescriptorPool(ctx->device, v.backing_pool, nullptr);
 		}
 	}
 
-	Result<void, AllocateException> CrossDeviceVkAllocator::allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException> CrossDeviceVkResource::allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
 			auto& cinfo = cis[i];
@@ -871,7 +871,7 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	void CrossDeviceVkAllocator::deallocate_descriptor_sets(std::span<const DescriptorSet> src) {} // no-op, desc sets are cached
+	void CrossDeviceVkResource::deallocate_descriptor_sets(std::span<const DescriptorSet> src) {} // no-op, desc sets are cached
 
 	Unique<PersistentDescriptorSet> Context::create_persistent_descriptorset(Allocator& allocator, DescriptorSetLayoutCreateInfo dslci,
 		unsigned num_descriptors) {
@@ -925,7 +925,7 @@ namespace vuk {
 		return buf;
 	}
 
-	void Context::dma_task() {
+	void Context::dma_task(Allocator& allocator) {
 		std::lock_guard _(impl->transfer_mutex);
 		while (!impl->pending_transfers.empty() && vkGetFenceStatus(device, impl->pending_transfers.front().fence) == VK_SUCCESS) {
 			auto last = impl->pending_transfers.front();
@@ -934,7 +934,7 @@ namespace vuk {
 		}
 
 		if (impl->buffer_transfer_commands.empty() && impl->bufferimage_transfer_commands.empty()) return;
-		auto cbuf = *allocate_hl_commandbuffer(get_vk_allocator(), { .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .queue_family_index = transfer_queue_family_index });
+		auto cbuf = *allocate_hl_commandbuffer(allocator, { .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .queue_family_index = transfer_queue_family_index });
 		VkCommandBufferBeginInfo cbi = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
 		vkBeginCommandBuffer(*cbuf, &cbi);
 		size_t last = 0;
@@ -955,7 +955,7 @@ namespace vuk {
 			last = std::max(last, task.stub.id);
 		}
 		vkEndCommandBuffer(*cbuf);
-		auto fence = *allocate_fence(get_vk_allocator());
+		auto fence = *allocate_fence(allocator);
 		VkSubmitInfo si{ .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO };
 		si.commandBufferCount = 1;
 		si.pCommandBuffers = &cbuf->command_buffer;

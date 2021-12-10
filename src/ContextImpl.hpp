@@ -98,8 +98,7 @@ namespace vuk {
 		plf::colony<TransientSubmitBundle> transient_submit_bundles;
 		std::vector<plf::colony<TransientSubmitBundle>::iterator> transient_submit_freelist;
 
-		CrossDeviceVkAllocator cross_device_vk_resource;
-		Allocator vk_allocator;
+		CrossDeviceVkResource cross_device_vk_resource;
 
 		TransientSubmitBundle* get_transient_bundle(uint32_t queue_family_index) {
 			std::lock_guard _(transient_submit_lock);
@@ -207,8 +206,7 @@ namespace vuk {
 			shader_modules(ctx),
 			descriptor_set_layouts(ctx),
 			pipeline_layouts(ctx),
-			cross_device_vk_resource(ctx, legacy_gpu_allocator),
-			vk_allocator(cross_device_vk_resource)
+			cross_device_vk_resource(ctx, legacy_gpu_allocator)
 		{
 			vkGetPhysicalDeviceProperties(ctx.physical_device, &physical_device_properties);
 		}
