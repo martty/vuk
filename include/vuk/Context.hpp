@@ -90,8 +90,8 @@ namespace vuk {
 		// Allocator support
 
 		/// @brief Return an allocator over the direct resource - resources will be allocated from the Vulkan runtime
-		/// @return 
-		CrossDeviceVkResource& get_vk_resource();
+		/// @return The resource
+		DeviceVkResource& get_vk_resource();
 
 		uint32_t(*get_thread_index)() = nullptr;
 
@@ -245,7 +245,7 @@ namespace vuk {
 		Result<void> submit_graphics(VkSubmitInfo, VkFence);
 		Result<void> submit_transfer(VkSubmitInfo, VkFence);
 
-		LegacyGPUAllocator& get_gpumem();
+		LegacyGPUAllocator& get_legacy_gpu_allocator();
 
 		RGImage acquire_rendertarget(const struct RGCI&, uint64_t absolute_frame);
 		Sampler acquire_sampler(const SamplerCreateInfo&, uint64_t absolute_frame);

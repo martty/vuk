@@ -102,9 +102,9 @@ namespace vuk {
 		CPUResource* upstream = nullptr;
 	};
 
-	/// @brief A CrossDeviceResource represents objects that are used jointly by both CPU and GPU. 
-	/// A CrossDeviceResource must prevent reuse of resources after deallocation until CPU-GPU timelines are synchronized.
-	struct CrossDeviceResource {
+	/// @brief A DeviceResource represents objects that are used jointly by both CPU and GPU. 
+	/// A DeviceResource must prevent reuse of cross-device resources after deallocation until CPU-GPU timelines are synchronized. GPU-only resources may be reused immediately.
+	struct DeviceResource {
 		// missing here: Events (gpu only)
 
 		// gpu only
@@ -154,8 +154,9 @@ namespace vuk {
 		virtual Context& get_context() = 0;
 	};
 
-	struct CrossDeviceNestedResource : CrossDeviceResource {
-		CrossDeviceNestedResource(CrossDeviceResource* upstream) : upstream(upstream) {}
+	/// @brief Helper base class for DeviceResources. Forwards all allocations and deallocations to the upstream DeviceResource.
+	struct DeviceNestedResource : DeviceResource {
+		DeviceNestedResource(DeviceResource* upstream) : upstream(upstream) {}
 
 		Result<void, AllocateException> allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) override {
 			return upstream->allocate_semaphores(dst, loc);
@@ -248,11 +249,12 @@ namespace vuk {
 			upstream->deallocate_descriptor_sets(src);
 		}
 
-		CrossDeviceResource* upstream = nullptr;
+		DeviceResource* upstream = nullptr;
 	};
 
-	struct CrossDeviceVkResource final : CrossDeviceResource {
-		CrossDeviceVkResource(Context& ctx, LegacyGPUAllocator& alloc);
+	/// @brief Device resource that performs direct allocation from the resources from the Vulkan runtime.
+	struct DeviceVkResource final : DeviceResource {
+		DeviceVkResource(Context& ctx, LegacyGPUAllocator& alloc);
 
 		Result<void, AllocateException> allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) override {
 			VkSemaphoreCreateInfo sci{ .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
@@ -413,16 +415,11 @@ namespace vuk {
 	};
 
 
-	struct CrossDeviceRingFrameResource;
+	struct DeviceSuperFrameResource;
 
-	/*
-	* allocates pass through to ring frame, deallocation is retained
-	fence: linear
-	semaphore: linear
-	command buffers & pools: 1:1 buffers-to-pools for easy handout & threading - buffers are not freed individually
-	*/
-	struct CrossDeviceFrameResource : CrossDeviceNestedResource {
-		CrossDeviceFrameResource(VkDevice device, CrossDeviceRingFrameResource& upstream);
+	/// @brief Represents "per-frame" resources - temporary allocations that persist through a frame. Can only be used via the DeviceSuperFrameResource
+	struct DeviceFrameResource : DeviceNestedResource {
+		DeviceFrameResource(VkDevice device, DeviceSuperFrameResource& upstream);
 
 		std::mutex sema_mutex;
 		std::vector<VkSemaphore> semaphores;
@@ -624,14 +621,14 @@ namespace vuk {
 		LegacyLinearAllocator linear_gpu_only;
 	};
 
-	/// @brief RingFrame is an allocator that gives out Frame allocators, and manages their resources
-	struct CrossDeviceRingFrameResource : CrossDeviceResource {
-		CrossDeviceRingFrameResource(Context& ctx, uint64_t frames_in_flight);
+	/// @brief DeviceSuperFrameResource is an allocator that gives out DeviceFrameResource allocators, and manages their resources
+	struct DeviceSuperFrameResource : DeviceResource {
+		DeviceSuperFrameResource(Context& ctx, uint64_t frames_in_flight);
 
 		std::unique_ptr<char[]> frames_storage;
-		CrossDeviceFrameResource* frames;
+		DeviceFrameResource* frames;
 
-		CrossDeviceFrameResource& get_last_frame() {
+		DeviceFrameResource& get_last_frame() {
 			return frames[frame_counter.load() % frames_in_flight];
 		}
 
@@ -772,9 +769,9 @@ namespace vuk {
 			vec.insert(vec.end(), src.begin(), src.end());
 		}
 
-		CrossDeviceFrameResource& get_next_frame();
+		DeviceFrameResource& get_next_frame();
 
-		void deallocate_frame(CrossDeviceFrameResource& f) {
+		void deallocate_frame(DeviceFrameResource& f) {
 			//f.descriptor_set_cache.collect(frame_counter.load(), 16);
 			direct.deallocate_semaphores(f.semaphores);
 			direct.deallocate_fences(f.fences);
@@ -808,7 +805,7 @@ namespace vuk {
 			f.descriptor_sets.clear();
 		}
 
-		virtual ~CrossDeviceRingFrameResource() {
+		virtual ~DeviceSuperFrameResource() {
 			for (auto i = 0; i < frames_in_flight; i++) {
 				auto lframe = (frame_counter + i) % frames_in_flight;
 				auto& f = frames[lframe];
@@ -818,7 +815,7 @@ namespace vuk {
 				direct.legacy_gpu_allocator->destroy(f.linear_cpu_gpu);
 				direct.legacy_gpu_allocator->destroy(f.linear_gpu_cpu);
 				direct.legacy_gpu_allocator->destroy(f.linear_gpu_only);
-				f.~CrossDeviceFrameResource();
+				f.~DeviceFrameResource();
 			}
 		}
 
@@ -826,19 +823,19 @@ namespace vuk {
 			return *direct.ctx;
 		}
 
-		CrossDeviceVkResource direct;
+		DeviceVkResource direct;
 		std::mutex new_frame_mutex;
 		std::atomic<uint64_t> frame_counter;
 		std::atomic<uint64_t> local_frame;
 		const uint64_t frames_in_flight;
 	};
 
-	struct CrossDeviceLinearResource : CrossDeviceNestedResource {
+	struct DeviceLinearResource : DeviceNestedResource {
 		enum class SyncScope { eInline, eScope };
 		static constexpr SyncScope eInline = SyncScope::eInline;
 		static constexpr SyncScope eScope = SyncScope::eScope;
 
-		CrossDeviceLinearResource(CrossDeviceResource& upstream, SyncScope scope);
+		DeviceLinearResource(DeviceResource& upstream, SyncScope scope);
 
 		bool should_subsume = false;
 		std::vector<VkFence> fences;
@@ -913,7 +910,7 @@ namespace vuk {
 			return *ctx;
 		}
 
-		~CrossDeviceLinearResource() {
+		~DeviceLinearResource() {
 			if (scope == SyncScope::eScope) {
 				wait();
 			}
@@ -941,130 +938,130 @@ namespace vuk {
 
 	class Allocator {
 	public:
-		explicit Allocator(CrossDeviceResource& cross_device) : ctx(&cross_device.get_context()), cross_device(&cross_device) {}
-		explicit Allocator(CrossDeviceVkResource& cross_device) = delete; // this resource is unsuitable for direct allocation
+		explicit Allocator(DeviceResource& device_resource) : ctx(&device_resource.get_context()), device_resource(&device_resource) {}
+		explicit Allocator(DeviceVkResource& device_resource) = delete; // this resource is unsuitable for direct allocation
 
 		Result<void, AllocateException> allocate(std::span<VkSemaphore> dst, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-			return cross_device->allocate_semaphores(dst, loc);
+			return device_resource->allocate_semaphores(dst, loc);
 		}
 
 		Result<void, AllocateException> allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-			return cross_device->allocate_semaphores(dst, loc);
+			return device_resource->allocate_semaphores(dst, loc);
 		}
 
 		void deallocate_impl(std::span<const VkSemaphore> src) {
-			cross_device->deallocate_semaphores(src);
+			device_resource->deallocate_semaphores(src);
 		}
 
 		Result<void, AllocateException> allocate(std::span<VkFence> dst, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-			return cross_device->allocate_fences(dst, loc);
+			return device_resource->allocate_fences(dst, loc);
 		}
 
 		Result<void, AllocateException> allocate_fences(std::span<VkFence> dst, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-			return cross_device->allocate_fences(dst, loc);
+			return device_resource->allocate_fences(dst, loc);
 		}
 
 		void deallocate_impl(std::span<const VkFence> src) {
-			cross_device->deallocate_fences(src);
+			device_resource->deallocate_fences(src);
 		}
 
 		Result<void, AllocateException> allocate(std::span<HLCommandBuffer> dst, std::span<const HLCommandBufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-			return cross_device->allocate_hl_commandbuffers(dst, cis, loc);
+			return device_resource->allocate_hl_commandbuffers(dst, cis, loc);
 		}
 
 		Result<void, AllocateException> allocate_hl_commandbuffers(std::span<HLCommandBuffer> dst, std::span<const HLCommandBufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-			return cross_device->allocate_hl_commandbuffers(dst, cis, loc);
+			return device_resource->allocate_hl_commandbuffers(dst, cis, loc);
 		}
 
 		void deallocate_impl(std::span<const HLCommandBuffer> src) {
-			cross_device->deallocate_hl_commandbuffers(src);
+			device_resource->deallocate_hl_commandbuffers(src);
 		}
 
 		Result<void, AllocateException> allocate(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) = delete;
 		Result<void, AllocateException> allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) = delete;
 
 		Result<void, AllocateException> allocate(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-			return cross_device->allocate_buffers(dst, cis, loc);
+			return device_resource->allocate_buffers(dst, cis, loc);
 		}
 
 		Result<void, AllocateException> allocate_buffers(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-			return cross_device->allocate_buffers(dst, cis, loc);
+			return device_resource->allocate_buffers(dst, cis, loc);
 		}
 
 		void deallocate_impl(std::span<const BufferCrossDevice> src) {
-			cross_device->deallocate_buffers(src);
+			device_resource->deallocate_buffers(src);
 		}
 
 		Result<void, AllocateException> allocate(std::span<BufferGPU> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-			return cross_device->allocate_buffers(dst, cis, loc);
+			return device_resource->allocate_buffers(dst, cis, loc);
 		}
 
 		Result<void, AllocateException> allocate_buffers(std::span<BufferGPU> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-			return cross_device->allocate_buffers(dst, cis, loc);
+			return device_resource->allocate_buffers(dst, cis, loc);
 		}
 
 		void deallocate_impl(std::span<const BufferGPU> src) {
-			cross_device->deallocate_buffers(src);
+			device_resource->deallocate_buffers(src);
 		}
 
 		Result<void, AllocateException> allocate(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-			return cross_device->allocate_framebuffers(dst, cis, loc);
+			return device_resource->allocate_framebuffers(dst, cis, loc);
 		}
 
 		Result<void, AllocateException> allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-			return cross_device->allocate_framebuffers(dst, cis, loc);
+			return device_resource->allocate_framebuffers(dst, cis, loc);
 		}
 
 		void deallocate_impl(std::span<const VkFramebuffer> src) {
-			cross_device->deallocate_framebuffers(src);
+			device_resource->deallocate_framebuffers(src);
 		}
 
 		Result<void, AllocateException> allocate(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-			return cross_device->allocate_images(dst, cis, loc);
+			return device_resource->allocate_images(dst, cis, loc);
 		}
 
 		Result<void, AllocateException> allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-			return cross_device->allocate_images(dst, cis, loc);
+			return device_resource->allocate_images(dst, cis, loc);
 		}
 
 		void deallocate_impl(std::span<const Image> src) {
-			cross_device->deallocate_images(src);
+			device_resource->deallocate_images(src);
 		}
 
 		Result<void, AllocateException> allocate(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-			return cross_device->allocate_image_views(dst, cis, loc);
+			return device_resource->allocate_image_views(dst, cis, loc);
 		}
 
 		Result<void, AllocateException> allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-			return cross_device->allocate_image_views(dst, cis, loc);
+			return device_resource->allocate_image_views(dst, cis, loc);
 		}
 
 		void deallocate_impl(std::span<const ImageView> src) {
-			cross_device->deallocate_image_views(src);
+			device_resource->deallocate_image_views(src);
 		}
 
 		Result<void, AllocateException> allocate(std::span<PersistentDescriptorSet> dst, std::span<const PersistentDescriptorSetCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-			return cross_device->allocate_persistent_descriptor_sets(dst, cis, loc);
+			return device_resource->allocate_persistent_descriptor_sets(dst, cis, loc);
 		}
 
 		Result<void, AllocateException> allocate_persistent_descriptor_sets(std::span<PersistentDescriptorSet> dst, std::span<const PersistentDescriptorSetCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-			return cross_device->allocate_persistent_descriptor_sets(dst, cis, loc);
+			return device_resource->allocate_persistent_descriptor_sets(dst, cis, loc);
 		}
 
 		void deallocate_impl(std::span<const PersistentDescriptorSet> src) {
-			cross_device->deallocate_persistent_descriptor_sets(src);
+			device_resource->deallocate_persistent_descriptor_sets(src);
 		}
 
 		Result<void, AllocateException> allocate(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-			return cross_device->allocate_descriptor_sets(dst, cis, loc);
+			return device_resource->allocate_descriptor_sets(dst, cis, loc);
 		}
 
 		Result<void, AllocateException> allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-			return cross_device->allocate_descriptor_sets(dst, cis, loc);
+			return device_resource->allocate_descriptor_sets(dst, cis, loc);
 		}
 
 		void deallocate_impl(std::span<const DescriptorSet> src) {
-			cross_device->deallocate_descriptor_sets(src);
+			device_resource->deallocate_descriptor_sets(src);
 		}
 
 
@@ -1085,8 +1082,8 @@ namespace vuk {
 			deallocate_impl(std::span(src));
 		}
 
-		CrossDeviceResource& get_cross_device_resource() {
-			return *cross_device;
+		DeviceResource& get_cross_device_resource() {
+			return *device_resource;
 		}
 
 		Context& get_context() {
@@ -1095,7 +1092,7 @@ namespace vuk {
 
 	private:
 		Context* ctx;
-		CrossDeviceResource* cross_device;
+		DeviceResource* device_resource;
 	};
 
 	template<class T>

@@ -83,7 +83,7 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	LegacyGPUAllocator& Context::get_gpumem() {
+	LegacyGPUAllocator& Context::get_legacy_gpu_allocator() {
 		return impl->legacy_gpu_allocator;
 	}
 
@@ -306,8 +306,8 @@ namespace vuk {
 		return { impl->query_id_counter++ };
 	}
 
-	CrossDeviceVkResource& Context::get_vk_resource() {
-		return impl->cross_device_vk_resource;
+	DeviceVkResource& Context::get_vk_resource() {
+		return impl->device_vk_resource;
 	}
 
 	DescriptorSetLayoutAllocInfo Context::create(const create_info_t<DescriptorSetLayoutAllocInfo>& cinfo) {
@@ -768,7 +768,7 @@ namespace vuk {
 	}
 
 	// TODO: no error handling
-	Result<void, AllocateException> CrossDeviceVkResource::allocate_persistent_descriptor_sets(std::span<PersistentDescriptorSet> dst, std::span<const PersistentDescriptorSetCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException> DeviceVkResource::allocate_persistent_descriptor_sets(std::span<PersistentDescriptorSet> dst, std::span<const PersistentDescriptorSetCreateInfo> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
 			auto& ci = cis[i];
@@ -827,13 +827,13 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	void CrossDeviceVkResource::deallocate_persistent_descriptor_sets(std::span<const PersistentDescriptorSet> src) {
+	void DeviceVkResource::deallocate_persistent_descriptor_sets(std::span<const PersistentDescriptorSet> src) {
 		for (auto& v : src) {
 			vkDestroyDescriptorPool(ctx->device, v.backing_pool, nullptr);
 		}
 	}
 
-	Result<void, AllocateException> CrossDeviceVkResource::allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException> DeviceVkResource::allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
 			auto& cinfo = cis[i];
@@ -877,7 +877,7 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	void CrossDeviceVkResource::deallocate_descriptor_sets(std::span<const DescriptorSet> src) {
+	void DeviceVkResource::deallocate_descriptor_sets(std::span<const DescriptorSet> src) {
 		for (int64_t i = 0; i < (int64_t)src.size(); i++) {
 			DescriptorPool& pool = ctx->acquire_descriptor_pool(src[i].layout_info, ctx->frame_counter);
 			pool.release(src[i].descriptor_set);

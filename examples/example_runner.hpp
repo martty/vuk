@@ -34,7 +34,7 @@ namespace vuk {
 		VkPhysicalDevice physical_device;
 		VkQueue graphics_queue;
 		std::optional<Context> context;
-		std::optional<CrossDeviceRingFrameResource> xdev_rf_alloc;
+		std::optional<DeviceSuperFrameResource> xdev_rf_alloc;
 		std::optional<Allocator> global;
 		vuk::SwapchainRef swapchain;
 		GLFWwindow* window;

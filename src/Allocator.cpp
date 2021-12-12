@@ -13,9 +13,9 @@
 #include <numeric>
 
 namespace vuk {
-	CrossDeviceVkResource::CrossDeviceVkResource(Context& ctx, LegacyGPUAllocator& alloc) : ctx(&ctx), device(ctx.device), legacy_gpu_allocator(&alloc) {}
+	DeviceVkResource::DeviceVkResource(Context& ctx, LegacyGPUAllocator& alloc) : ctx(&ctx), device(ctx.device), legacy_gpu_allocator(&alloc) {}
 
-	Result<void, AllocateException> CrossDeviceVkResource::allocate_buffers(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException> DeviceVkResource::allocate_buffers(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
 			auto& ci = cis[i];
@@ -28,7 +28,7 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	void CrossDeviceVkResource::deallocate_buffers(std::span<const BufferCrossDevice> src) {
+	void DeviceVkResource::deallocate_buffers(std::span<const BufferCrossDevice> src) {
 		for (auto& v : src) {
 			if (v) {
 				legacy_gpu_allocator->free_buffer(v);
@@ -36,7 +36,7 @@ namespace vuk {
 		}
 	}
 
-	Result<void, AllocateException> CrossDeviceVkResource::allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException> DeviceVkResource::allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
 			// TODO: legacy image alloc can't signal errors
@@ -46,7 +46,7 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	void CrossDeviceVkResource::deallocate_images(std::span<const Image> src) {
+	void DeviceVkResource::deallocate_images(std::span<const Image> src) {
 		for (auto& v : src) {
 			if (v != VK_NULL_HANDLE) {
 				legacy_gpu_allocator->destroy_image(v);
@@ -54,7 +54,7 @@ namespace vuk {
 		}
 	}
 
-	Result<void, AllocateException> CrossDeviceVkResource::allocate_buffers(std::span<BufferGPU> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException> DeviceVkResource::allocate_buffers(std::span<BufferGPU> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
 			auto& ci = cis[i];
@@ -67,7 +67,7 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	void CrossDeviceVkResource::deallocate_buffers(std::span<const BufferGPU> src) {
+	void DeviceVkResource::deallocate_buffers(std::span<const BufferGPU> src) {
 		for (auto& v : src) {
 			if (v) {
 				legacy_gpu_allocator->free_buffer(v);
@@ -75,7 +75,7 @@ namespace vuk {
 		}
 	}
 
-	Result<void, AllocateException> CrossDeviceVkResource::allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException> DeviceVkResource::allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
 			VkImageViewCreateInfo ci = cis[i];
@@ -90,15 +90,15 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	CrossDeviceRingFrameResource::CrossDeviceRingFrameResource(Context& ctx, uint64_t frames_in_flight) : direct(ctx, ctx.get_gpumem()), frames_in_flight(frames_in_flight) {
-		frames_storage = std::unique_ptr<char[]>(new char[sizeof(CrossDeviceFrameResource) * frames_in_flight]);
+	DeviceSuperFrameResource::DeviceSuperFrameResource(Context& ctx, uint64_t frames_in_flight) : direct(ctx, ctx.get_legacy_gpu_allocator()), frames_in_flight(frames_in_flight) {
+		frames_storage = std::unique_ptr<char[]>(new char[sizeof(DeviceFrameResource) * frames_in_flight]);
 		for (uint64_t i = 0; i < frames_in_flight; i++) {
-			new(frames_storage.get() + i * sizeof(CrossDeviceFrameResource)) CrossDeviceFrameResource(direct.device, *this);
+			new(frames_storage.get() + i * sizeof(DeviceFrameResource)) DeviceFrameResource(direct.device, *this);
 		}
-		frames = reinterpret_cast<CrossDeviceFrameResource*>(frames_storage.get());
+		frames = reinterpret_cast<DeviceFrameResource*>(frames_storage.get());
 	}
 
-	CrossDeviceFrameResource& CrossDeviceRingFrameResource::get_next_frame() {
+	DeviceFrameResource& DeviceSuperFrameResource::get_next_frame() {
 		std::unique_lock _(new_frame_mutex);
 		auto& ctx = direct.get_context();
 		frame_counter++;
@@ -115,7 +115,7 @@ namespace vuk {
 		return f;
 	}
 
-	void deallocate(CrossDeviceFrameResource& res, DescriptorSet& ds) {
+	void deallocate(DeviceFrameResource& res, DescriptorSet& ds) {
 		std::unique_lock _{ res.ds_mutex };
 
 		auto& vec = res.descriptor_sets;
@@ -123,7 +123,7 @@ namespace vuk {
 	}
 
 	template<class T>
-	T& CrossDeviceFrameResource::Cache<T>::acquire(uint64_t current_frame, const create_info_t<T>& ci) {
+	T& DeviceFrameResource::Cache<T>::acquire(uint64_t current_frame, const create_info_t<T>& ci) {
 		if (auto it = lru_map.find(ci); it != lru_map.end()) {
 			it->second.last_use_frame = current_frame;
 			return it->second.value;
@@ -143,7 +143,7 @@ namespace vuk {
 	}
 
 	template<class T>
-	void CrossDeviceFrameResource::Cache<T>::collect(uint64_t current_frame, size_t threshold) {
+	void DeviceFrameResource::Cache<T>::collect(uint64_t current_frame, size_t threshold) {
 		std::unique_lock _(cache_mtx);
 		for (auto it = lru_map.begin(); it != lru_map.end();) {
 			if (current_frame - it->second.last_use_frame > threshold) {
@@ -169,24 +169,24 @@ namespace vuk {
 		}
 	}
 
-	CrossDeviceFrameResource::CrossDeviceFrameResource(VkDevice device, CrossDeviceRingFrameResource& upstream) : device(device), CrossDeviceNestedResource(&upstream),
+	DeviceFrameResource::DeviceFrameResource(VkDevice device, DeviceSuperFrameResource& upstream) : device(device), DeviceNestedResource(&upstream),
 		linear_cpu_only(upstream.direct.legacy_gpu_allocator->allocate_linear(vuk::MemoryUsage::eCPUonly, LegacyGPUAllocator::all_usage)),
 		linear_cpu_gpu(upstream.direct.legacy_gpu_allocator->allocate_linear(vuk::MemoryUsage::eCPUtoGPU, LegacyGPUAllocator::all_usage)),
 		linear_gpu_cpu(upstream.direct.legacy_gpu_allocator->allocate_linear(vuk::MemoryUsage::eGPUtoCPU, LegacyGPUAllocator::all_usage)),
 		linear_gpu_only(upstream.direct.legacy_gpu_allocator->allocate_linear(vuk::MemoryUsage::eGPUonly, LegacyGPUAllocator::all_usage)){
 	}
 
-	CrossDeviceLinearResource::CrossDeviceLinearResource(CrossDeviceResource& upstream, SyncScope scope) : CrossDeviceNestedResource(&upstream),
+	DeviceLinearResource::DeviceLinearResource(DeviceResource& upstream, SyncScope scope) : DeviceNestedResource(&upstream),
 		ctx(&upstream.get_context()), device(ctx->device), scope(scope),
-		linear_cpu_only(ctx->get_gpumem().allocate_linear(vuk::MemoryUsage::eCPUonly, LegacyGPUAllocator::all_usage)),
-		linear_cpu_gpu(ctx->get_gpumem().allocate_linear(vuk::MemoryUsage::eCPUtoGPU, LegacyGPUAllocator::all_usage)),
-		linear_gpu_cpu(ctx->get_gpumem().allocate_linear(vuk::MemoryUsage::eGPUtoCPU, LegacyGPUAllocator::all_usage)),
-		linear_gpu_only(ctx->get_gpumem().allocate_linear(vuk::MemoryUsage::eGPUtoCPU, LegacyGPUAllocator::all_usage)) {
+		linear_cpu_only(ctx->get_legacy_gpu_allocator().allocate_linear(vuk::MemoryUsage::eCPUonly, LegacyGPUAllocator::all_usage)),
+		linear_cpu_gpu(ctx->get_legacy_gpu_allocator().allocate_linear(vuk::MemoryUsage::eCPUtoGPU, LegacyGPUAllocator::all_usage)),
+		linear_gpu_cpu(ctx->get_legacy_gpu_allocator().allocate_linear(vuk::MemoryUsage::eGPUtoCPU, LegacyGPUAllocator::all_usage)),
+		linear_gpu_only(ctx->get_legacy_gpu_allocator().allocate_linear(vuk::MemoryUsage::eGPUtoCPU, LegacyGPUAllocator::all_usage)) {
 	}
 
-	Result<void, AllocateException> CrossDeviceFrameResource::allocate_buffers(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException> DeviceFrameResource::allocate_buffers(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
-		auto& rf = *static_cast<CrossDeviceRingFrameResource*>(upstream);
+		auto& rf = *static_cast<DeviceSuperFrameResource*>(upstream);
 		auto& legacy = *rf.direct.legacy_gpu_allocator;
 
 		// TODO: legacy allocator can't signal errors
@@ -207,9 +207,9 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	Result<void, AllocateException> CrossDeviceFrameResource::allocate_buffers(std::span<BufferGPU> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException> DeviceFrameResource::allocate_buffers(std::span<BufferGPU> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
-		auto& rf = *static_cast<CrossDeviceRingFrameResource*>(upstream);
+		auto& rf = *static_cast<DeviceSuperFrameResource*>(upstream);
 		auto& legacy = *rf.direct.legacy_gpu_allocator;
 
 		// TODO: legacy allocator can't signal errors
