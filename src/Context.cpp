@@ -716,9 +716,19 @@ namespace vuk {
 		delete impl;
 	}
 
+	void Context::next_frame() {
+		frame_counter++;
+		collect(frame_counter);
+	}
+
 	void Context::wait_idle() {
-		// TODO: need to acquire locks on all queues
-		vkDeviceWaitIdle(device);
+		if (transfer_queue == graphics_queue) {
+			std::lock_guard _(impl->gfx_queue_lock);
+			vkDeviceWaitIdle(device);
+		} else {
+			std::scoped_lock _(impl->gfx_queue_lock, impl->xfer_queue_lock);
+			vkDeviceWaitIdle(device);
+		}
 	}
 
 	ImageView Context::wrap(VkImageView iv, ImageViewCreateInfo ivci) {
@@ -768,7 +778,6 @@ namespace vuk {
 		return stub;
 	}
 
-	// TODO: no error handling
 	Result<void, AllocateException> DeviceVkResource::allocate_persistent_descriptor_sets(std::span<PersistentDescriptorSet> dst, std::span<const PersistentDescriptorSetCreateInfo> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
@@ -804,7 +813,11 @@ namespace vuk {
 
 			dpci.pPoolSizes = descriptor_counts.data();
 			dpci.poolSizeCount = used_idx;
-			vkCreateDescriptorPool(device, &dpci, nullptr, &tda.backing_pool);
+			VkResult result = vkCreateDescriptorPool(device, &dpci, nullptr, &tda.backing_pool);
+			if (result != VK_SUCCESS) {
+				deallocate_persistent_descriptor_sets({ dst.data(), (uint64_t)i });
+				return { expected_error, AllocateException{result} };
+			}
 			VkDescriptorSetAllocateInfo dsai = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
 			dsai.descriptorPool = tda.backing_pool;
 			dsai.descriptorSetCount = 1;
@@ -815,6 +828,10 @@ namespace vuk {
 			dsai.pNext = &dsvdcai;
 
 			vkAllocateDescriptorSets(device, &dsai, &tda.backing_set);
+			if (result != VK_SUCCESS) {
+				deallocate_persistent_descriptor_sets({ dst.data(), (uint64_t)i });
+				return { expected_error, AllocateException{result} };
+			}
 			// TODO: we need more information here to handled arrayed bindings properly
 			// for now we assume no arrayed bindings outside of the variable count one
 			for (auto& bindings : tda.descriptor_bindings) {
@@ -974,7 +991,7 @@ namespace vuk {
 		submit_graphics(si, *fence);
 		impl->pending_transfers.emplace(PendingTransfer{ last, *fence });
 
-		// TODO:
+		// TODO: replace transfer machinery
 		// wait all transfers, immediately
 
 		while (!impl->pending_transfers.empty()) {

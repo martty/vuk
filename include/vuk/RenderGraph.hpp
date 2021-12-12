@@ -160,10 +160,10 @@ namespace vuk {
 
 		Result<Unique<struct HLCommandBuffer>> execute(Context&, class Allocator&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
 
-		struct BufferInfo get_resource_buffer(Name);
-		struct AttachmentRPInfo get_resource_image(Name);
+		Result<struct BufferInfo, RenderGraphException> get_resource_buffer(Name);
+		Result<struct AttachmentRPInfo, RenderGraphException> get_resource_image(Name);
 
-		bool is_resource_image_in_general_layout(Name n, struct PassInfo* pass_info);
+		Result<bool, RenderGraphException> is_resource_image_in_general_layout(Name n, struct PassInfo* pass_info);
 	private:
 		struct RGImpl* impl;
 

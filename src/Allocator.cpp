@@ -98,15 +98,12 @@ namespace vuk {
 		std::unique_lock _(new_frame_mutex);
 		auto& ctx = direct.get_context();
 		frame_counter++;
-		ctx.frame_counter++; // TODO: temporarily
 		local_frame = frame_counter % frames_in_flight;
 
 		auto& f = frames[local_frame];
 		f.wait();
 		deallocate_frame(f);
 		f.current_frame = frame_counter.load();
-		// TODO: temporarily
-		ctx.collect(frame_counter);
 
 		return f;
 	}

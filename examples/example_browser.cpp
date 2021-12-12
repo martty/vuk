@@ -96,6 +96,7 @@ void vuk::ExampleRunner::render() {
 		ImGui::End();
 
 		auto& xdev_frame_resource = xdev_rf_alloc->get_next_frame();
+		context->next_frame();
 		Allocator frame_allocator(xdev_frame_resource);
 		if (!render_all) { // render a single full window example
 			

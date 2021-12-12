@@ -258,8 +258,11 @@ namespace vuk {
 					fill_renderpass_info(rpass, i, cobuf);
 					// if pass requested no secondary cbufs, but due to subpass merging that is what we got
 					if (p->pass.use_secondary_command_buffers == false && use_secondary_command_buffers == true) {
-						// TODO: no error handling here
-						auto secondary = *cobuf.begin_secondary();
+						auto res = cobuf.begin_secondary();
+						if (!res) {
+							return { expected_error, res.error() };
+						}
+						auto secondary = *res;
 						if (p->pass.execute) {
 							secondary.current_pass = p;
 							if (!p->pass.name.is_invalid() && !is_single_pass) {
@@ -270,8 +273,11 @@ namespace vuk {
 								p->pass.execute(secondary);
 							}
 						}
-						auto result = secondary.get_buffer();
-						cobuf.execute({ &result, 1 });
+						if (secondary.has_error()) {
+							return { expected_error, secondary.error() };
+						}
+						auto secondary_cbuf = secondary.get_buffer();
+						cobuf.execute({ &secondary_cbuf, 1 });
 					} else {
 						if (p->pass.execute) {
 							cobuf.current_pass = p;
@@ -284,7 +290,9 @@ namespace vuk {
 							}
 						}
 					}
-					// TODO: propagate errors from cobuf here
+					if (cobuf.has_error()) {
+						return { expected_error, cobuf.error() };
+					}
 				}
 				if (i < rpass.subpasses.size() - 1 && rpass.handle != VK_NULL_HANDLE) {
 					use_secondary_command_buffers = rpass.subpasses[i + 1].use_secondary_command_buffers;
@@ -323,25 +331,37 @@ namespace vuk {
 		return { expected_value, std::move(hl_cbuf) };
 	}
 
-	BufferInfo ExecutableRenderGraph::get_resource_buffer(Name n) {
+	Result<BufferInfo, RenderGraphException> ExecutableRenderGraph::get_resource_buffer(Name n) {
 		auto resolved = resolve_name(n, impl->aliases);
-		return impl->bound_buffers.at(resolved); // TODO: throw
+		auto it = impl->bound_buffers.find(resolved);
+		if (it == impl->bound_buffers.end()) {
+			return { expected_error, RenderGraphException{"Buffer not found"} };
+		}
+		return { expected_value, it->second };
 	}
 
-	AttachmentRPInfo ExecutableRenderGraph::get_resource_image(Name n) {
+	Result<AttachmentRPInfo, RenderGraphException> ExecutableRenderGraph::get_resource_image(Name n) {
 		auto resolved = resolve_name(n, impl->aliases);
-		return impl->bound_attachments.at(resolved); // TODO: throw
+		auto it = impl->bound_attachments.find(resolved);
+		if (it == impl->bound_attachments.end()) {
+			return { expected_error, RenderGraphException{"Buffer not found"} };
+		}
+		return { expected_value, it->second };
 	}
 
-	bool ExecutableRenderGraph::is_resource_image_in_general_layout(Name n, PassInfo* pass_info) {
+	Result<bool, RenderGraphException> ExecutableRenderGraph::is_resource_image_in_general_layout(Name n, PassInfo* pass_info) {
 		auto resolved = resolve_name(n, impl->aliases);
-		auto& chain = impl->use_chains.at(resolved);  // TODO: throw
+		auto it = impl->use_chains.find(resolved);
+		if (it == impl->use_chains.end()) {
+			return { expected_error, RenderGraphException{"Resource not found"} };
+		}
+		auto& chain = it->second;
 		for (auto& elem : chain) {
 			if (elem.pass == pass_info) {
-				return elem.use.layout == vuk::ImageLayout::eGeneral;
+				return { expected_value, elem.use.layout == vuk::ImageLayout::eGeneral };
 			}
 		}
 		assert(false && "Image resourced was not declared to be used in this pass, but was referred to.");
-		return false;
+		return { expected_error, RenderGraphException{ "Image resourced was not declared to be used in this pass, but was referred to." } };
 	}
 } // namespace vuk

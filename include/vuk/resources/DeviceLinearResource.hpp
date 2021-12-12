@@ -42,7 +42,6 @@ namespace vuk {
 
 		std::vector<VkCommandPool> direct_command_pools;
 
-		// TODO: error propagation
 		Result<void, AllocateException> allocate_hl_commandbuffers(std::span<HLCommandBuffer> dst, std::span<const HLCommandBufferCreateInfo> cis, SourceLocationAtFrame loc) override {
 			for (uint64_t i = 0; i < dst.size(); i++) {
 				auto& ci = cis[i];
@@ -52,7 +51,10 @@ namespace vuk {
 					VkCommandPoolCreateInfo cpci{ .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
 					cpci.queueFamilyIndex = ci.queue_family_index;
 					cpci.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
-					upstream->allocate_commandpools(std::span{ &pool, 1 }, std::span{ &cpci, 1 }, loc);
+					auto res = upstream->allocate_commandpools(std::span{ &pool, 1 }, std::span{ &cpci, 1 }, loc);
+					if (!res) { // if we fail here, we don't need to free - other pools are freed during dtor
+						return { expected_error, res.error() };
+					}
 				}
 
 				dst[i].command_pool = pool;
@@ -60,7 +62,10 @@ namespace vuk {
 				cbai.commandBufferCount = 1;
 				cbai.commandPool = pool;
 				cbai.level = ci.level;
-				upstream->allocate_commandbuffers(std::span{ &dst[i].command_buffer, 1 }, std::span{ &cbai, 1 }, loc);
+				auto res = upstream->allocate_commandbuffers(std::span{ &dst[i].command_buffer, 1 }, std::span{ &cbai, 1 }, loc);
+				if (!res) { // if we fail here, we don't need to free - pools are freed during dtor
+					return { expected_error, res.error() };
+				}
 			}
 			return { expected_value };
 		}

@@ -189,6 +189,7 @@ namespace vuk {
 		mutable bool extracted = false;
 		Exception* current_exception = nullptr;
 		std::optional<AllocateException> allocate_except;
+		std::optional<RenderGraphException> rg_except;
 
 		// Pipeline state
 		// Enabled dynamic state
@@ -247,9 +248,9 @@ namespace vuk {
 			return ctx;
 		}
 		const RenderPassInfo& get_ongoing_renderpass() const;
-		Buffer get_resource_buffer(Name) const;
-		Image get_resource_image(Name) const;
-		ImageView get_resource_image_view(Name) const;
+		Result<Buffer> get_resource_buffer(Name) const;
+		Result<Image> get_resource_image(Name) const;
+		Result<ImageView> get_resource_image_view(Name) const;
 
 		// request dynamic state for the subsequent pipelines
 		CommandBuffer& set_dynamic_state(DynamicStateFlags);
@@ -388,6 +389,10 @@ namespace vuk {
 
 		// queries
 		CommandBuffer& write_timestamp(Query, PipelineStageFlagBits stage = PipelineStageFlagBits::eBottomOfPipe);
+
+		bool has_error() const noexcept {
+			return current_exception != nullptr;
+		}
 
 		[[nodiscard]] Exception& error()&;
 

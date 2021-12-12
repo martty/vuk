@@ -65,6 +65,7 @@ void vuk::ExampleRunner::render() {
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
 		auto& xdev_frame_resource = xdev_rf_alloc->get_next_frame();
+		context->next_frame();
 		Allocator frame_allocator(xdev_frame_resource);
 		auto rg = examples[0]->render(*this, frame_allocator);
 		auto attachment_name = vuk::Name(std::string(examples[0]->name) + "_final");

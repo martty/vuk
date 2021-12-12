@@ -97,7 +97,7 @@ namespace {
 				.resources = {"08_scramble"_buffer(vuk::eComputeRW)},
 				.execute = [](vuk::CommandBuffer& command_buffer) {
 					command_buffer
-						.bind_storage_buffer(0, 0, command_buffer.get_resource_buffer("08_scramble"))
+						.bind_storage_buffer(0, 0, *command_buffer.get_resource_buffer("08_scramble"))
 						.bind_compute_pipeline("stupidsort")
 						.specialize_constants(0, speed_count)
 						.dispatch(1);
@@ -121,7 +121,7 @@ namespace {
 						.set_rasterization({}) // Set the default rasterization state
 						.broadcast_color_blend({}) // Set the default color blend state
 						.bind_sampled_image(0, 0, "08_rtt", {})
-						.bind_storage_buffer(0, 1, command_buffer.get_resource_buffer("08_scramble"))
+						.bind_storage_buffer(0, 1, *command_buffer.get_resource_buffer("08_scramble"))
 						.bind_graphics_pipeline("scrambled_draw")
 						.draw(3, 1, 0, 0);
 				}

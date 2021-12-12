@@ -230,6 +230,9 @@ namespace vuk {
 		/// the swapchain is not destroyed
 		void remove_swapchain(SwapchainRef);
 
+		/// @brief Advance internal counter used for caching and garbage collect caches
+		void next_frame();
+
 		/// @brief Wait for the device to become idle. Useful for only a few synchronisation events, like resizing or shutting down.
 		void wait_idle();
 
