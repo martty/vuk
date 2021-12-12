@@ -16,7 +16,8 @@ namespace vuk {
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
 			auto& ci = cis[i];
 			if (ci.mem_usage != MemoryUsage::eCPUonly && ci.mem_usage != MemoryUsage::eCPUtoGPU && ci.mem_usage != MemoryUsage::eGPUtoCPU) {
-				// TODO: signal error, tried to allocate non-xdev buffer
+				deallocate_buffers(std::span{ dst.data(), i });
+				return { expected_error, AllocateException{VK_ERROR_FEATURE_NOT_PRESENT} }; // tried to allocate gpu only buffer as BufferCrossDevice
 			}
 			// TODO: legacy buffer alloc can't signal errors
 			dst[i] = BufferCrossDevice{ legacy_gpu_allocator->allocate_buffer(ci.mem_usage, LegacyGPUAllocator::all_usage, ci.size, ci.alignment, true) };
@@ -56,7 +57,8 @@ namespace vuk {
 			auto& ci = cis[i];
 			// TODO: legacy buffer alloc can't signal errors
 			if (ci.mem_usage != MemoryUsage::eGPUonly) {
-				// TODO: signal error, tried to allocate non-gpuonly buffer
+				deallocate_buffers(std::span{ dst.data(), i });
+				return { expected_error, AllocateException{VK_ERROR_FEATURE_NOT_PRESENT} }; // tried to allocate cross device buffer as BufferGPU
 			}
 			dst[i] = BufferGPU{ legacy_gpu_allocator->allocate_buffer(ci.mem_usage, LegacyGPUAllocator::all_usage, ci.size, ci.alignment, false) };
 		}
@@ -229,7 +231,7 @@ namespace vuk {
 		return device_resource->allocate_semaphores(dst, loc);
 	}
 
-	void Allocator::deallocate_impl(std::span<const VkSemaphore> src) {
+	void Allocator::deallocate(std::span<const VkSemaphore> src) {
 		device_resource->deallocate_semaphores(src);
 	}
 
@@ -241,7 +243,7 @@ namespace vuk {
 		return device_resource->allocate_fences(dst, loc);
 	}
 
-	void Allocator::deallocate_impl(std::span<const VkFence> src) {
+	void Allocator::deallocate(std::span<const VkFence> src) {
 		device_resource->deallocate_fences(src);
 	}
 
@@ -253,7 +255,7 @@ namespace vuk {
 		return device_resource->allocate_hl_commandbuffers(dst, cis, loc);
 	}
 
-	void Allocator::deallocate_impl(std::span<const HLCommandBuffer> src) {
+	void Allocator::deallocate(std::span<const HLCommandBuffer> src) {
 		device_resource->deallocate_hl_commandbuffers(src);
 	}
 
@@ -265,7 +267,7 @@ namespace vuk {
 		return device_resource->allocate_buffers(dst, cis, loc);
 	}
 
-	void Allocator::deallocate_impl(std::span<const BufferCrossDevice> src) {
+	void Allocator::deallocate(std::span<const BufferCrossDevice> src) {
 		device_resource->deallocate_buffers(src);
 	}
 
@@ -277,7 +279,7 @@ namespace vuk {
 		return device_resource->allocate_buffers(dst, cis, loc);
 	}
 
-	void Allocator::deallocate_impl(std::span<const BufferGPU> src) {
+	void Allocator::deallocate(std::span<const BufferGPU> src) {
 		device_resource->deallocate_buffers(src);
 	}
 
@@ -289,7 +291,7 @@ namespace vuk {
 		return device_resource->allocate_framebuffers(dst, cis, loc);
 	}
 
-	void Allocator::deallocate_impl(std::span<const VkFramebuffer> src) {
+	void Allocator::deallocate(std::span<const VkFramebuffer> src) {
 		device_resource->deallocate_framebuffers(src);
 	}
 
@@ -301,7 +303,7 @@ namespace vuk {
 		return device_resource->allocate_images(dst, cis, loc);
 	}
 
-	void Allocator::deallocate_impl(std::span<const Image> src) {
+	void Allocator::deallocate(std::span<const Image> src) {
 		device_resource->deallocate_images(src);
 	}
 
@@ -313,7 +315,7 @@ namespace vuk {
 		return device_resource->allocate_image_views(dst, cis, loc);
 	}
 
-	void Allocator::deallocate_impl(std::span<const ImageView> src) {
+	void Allocator::deallocate(std::span<const ImageView> src) {
 		device_resource->deallocate_image_views(src);
 	}
 
@@ -325,7 +327,7 @@ namespace vuk {
 		return device_resource->allocate_persistent_descriptor_sets(dst, cis, loc);
 	}
 
-	void Allocator::deallocate_impl(std::span<const PersistentDescriptorSet> src) {
+	void Allocator::deallocate(std::span<const PersistentDescriptorSet> src) {
 		device_resource->deallocate_persistent_descriptor_sets(src);
 	}
 
@@ -337,7 +339,7 @@ namespace vuk {
 		return device_resource->allocate_descriptor_sets(dst, cis, loc);
 	}
 
-	void Allocator::deallocate_impl(std::span<const DescriptorSet> src) {
+	void Allocator::deallocate(std::span<const DescriptorSet> src) {
 		device_resource->deallocate_descriptor_sets(src);
 	}
 

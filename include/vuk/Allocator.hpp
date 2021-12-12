@@ -132,19 +132,19 @@ namespace vuk {
 
 		Result<void, AllocateException> allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
-		void deallocate_impl(std::span<const VkSemaphore> src);
+		void deallocate(std::span<const VkSemaphore> src);
 
 		Result<void, AllocateException> allocate(std::span<VkFence> dst, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
 		Result<void, AllocateException> allocate_fences(std::span<VkFence> dst, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
-		void deallocate_impl(std::span<const VkFence> src);
+		void deallocate(std::span<const VkFence> src);
 
 		Result<void, AllocateException> allocate(std::span<HLCommandBuffer> dst, std::span<const HLCommandBufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
 		Result<void, AllocateException> allocate_hl_commandbuffers(std::span<HLCommandBuffer> dst, std::span<const HLCommandBufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
-		void deallocate_impl(std::span<const HLCommandBuffer> src);
+		void deallocate(std::span<const HLCommandBuffer> src);
 
 		Result<void, AllocateException> allocate(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) = delete;
 		Result<void, AllocateException> allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) = delete;
@@ -153,59 +153,43 @@ namespace vuk {
 
 		Result<void, AllocateException> allocate_buffers(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
-		void deallocate_impl(std::span<const BufferCrossDevice> src);
+		void deallocate(std::span<const BufferCrossDevice> src);
 
 		Result<void, AllocateException> allocate(std::span<BufferGPU> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
 		Result<void, AllocateException> allocate_buffers(std::span<BufferGPU> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
-		void deallocate_impl(std::span<const BufferGPU> src);
+		void deallocate(std::span<const BufferGPU> src);
 
 		Result<void, AllocateException> allocate(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
 		Result<void, AllocateException> allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
-		void deallocate_impl(std::span<const VkFramebuffer> src);
+		void deallocate(std::span<const VkFramebuffer> src);
 
 		Result<void, AllocateException> allocate(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
 		Result<void, AllocateException> allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
-		void deallocate_impl(std::span<const Image> src);
+		void deallocate(std::span<const Image> src);
 
 		Result<void, AllocateException> allocate(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
 		Result<void, AllocateException> allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
-		void deallocate_impl(std::span<const ImageView> src);
+		void deallocate(std::span<const ImageView> src);
 
 		Result<void, AllocateException> allocate(std::span<PersistentDescriptorSet> dst, std::span<const PersistentDescriptorSetCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
 		Result<void, AllocateException> allocate_persistent_descriptor_sets(std::span<PersistentDescriptorSet> dst, std::span<const PersistentDescriptorSetCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
-		void deallocate_impl(std::span<const PersistentDescriptorSet> src);
+		void deallocate(std::span<const PersistentDescriptorSet> src);
 
 		Result<void, AllocateException> allocate(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
 		Result<void, AllocateException> allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
-		void deallocate_impl(std::span<const DescriptorSet> src);
-
-		// TODO: deallocation has to be a customization point
-		template<class T, size_t N>
-		void deallocate(T(&src)[N]) {
-			deallocate_impl(std::span<const T>{ src, N });
-		}
-
-		template<class T>
-		void deallocate(const T& src) requires (!Container<T>) {
-			deallocate_impl(std::span<const T>{ &src, 1 });
-		}
-
-		template<class T>
-		void deallocate(const T& src) requires (Container<T>) {
-			deallocate_impl(std::span(src));
-		}
+		void deallocate(std::span<const DescriptorSet> src);
 
 		DeviceResource& get_cross_device_resource() {
 			return *device_resource;
@@ -220,10 +204,37 @@ namespace vuk {
 		DeviceResource* device_resource;
 	};
 
+	/// @brief Customization point for deallocation of user types
+	/// @tparam T 
+	/// @param allocator 
+	/// @param src 
+	template<class T, size_t N>
+	void deallocate(Allocator& allocator, T(&src)[N]) {
+		allocator.deallocate(std::span<const T>{ src, N });
+	}
+
+	/// @brief Customization point for deallocation of user types
+	/// @tparam T 
+	/// @param allocator 
+	/// @param src 
+	template<class T>
+	void deallocate(Allocator& allocator, const T& src) requires (!Container<T>) {
+		allocator.deallocate(std::span<const T>{ &src, 1 });
+	}
+
+	/// @brief Customization point for deallocation of user types
+	/// @tparam T 
+	/// @param allocator 
+	/// @param src 
+	template<class T>
+	void deallocate(Allocator& allocator, const T& src) requires (Container<T>) {
+		allocator.deallocate(std::span(src));
+	}
+
 	template<typename Type>
 	Unique<Type>::~Unique() noexcept {
 		if (allocator && payload != Type{}) {
-			allocator->deallocate(payload);
+			deallocate(*allocator, payload);
 		}
 	}
 
@@ -231,7 +242,7 @@ namespace vuk {
 	void Unique<Type>::reset(Type value) noexcept {
 		if (payload != value) {
 			if (allocator && payload != Type{}) {
-				allocator->deallocate(std::move(payload));
+				deallocate(*allocator, std::move(payload));
 			}
 			payload = std::move(value);
 		}

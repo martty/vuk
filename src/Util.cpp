@@ -94,14 +94,14 @@ namespace vuk {
 
 	Unique<ImageView>::~Unique() noexcept {
 		if (allocator && payload.payload != VK_NULL_HANDLE) {
-			allocator->deallocate(payload);
+			deallocate(*allocator, payload);
 		}
 	}
 
 	void Unique<ImageView>::reset(ImageView value) noexcept {
 		if (payload != value) {
 			if (allocator && payload != ImageView{}) {
-				allocator->deallocate(std::move(payload));
+				deallocate(*allocator, std::move(payload));
 			}
 			payload = std::move(value);
 		}
