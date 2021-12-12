@@ -961,4 +961,24 @@ namespace vuk {
 	static inline T align_up(T val, T align) {
 		return (val + align - 1) / align * align;
 	}
+
+	struct HLCommandBufferCreateInfo {
+		VkCommandBufferLevel level;
+		uint32_t queue_family_index;
+	};
+
+	/*
+	* HL cmdbuffers: 1:1 with pools
+	*/
+	struct HLCommandBuffer {
+		HLCommandBuffer() = default;
+		HLCommandBuffer(VkCommandBuffer command_buffer, VkCommandPool command_pool) : command_buffer(command_buffer), command_pool(command_pool) {}
+
+		VkCommandBuffer command_buffer;
+		VkCommandPool command_pool;
+
+		operator VkCommandBuffer() {
+			return command_buffer;
+		}
+	};
 }

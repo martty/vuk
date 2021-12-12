@@ -10,6 +10,7 @@
 #include "Cache.hpp"
 #include "RenderPass.hpp"
 #include "vuk/Allocator.hpp"
+#include "vuk/resources/DeviceVkResource.hpp"
 #include "vuk/PipelineInstance.hpp"
 
 namespace vuk {

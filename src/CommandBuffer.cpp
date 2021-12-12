@@ -2,6 +2,7 @@
 #include "RenderGraphUtil.hpp"
 #include "vuk/Context.hpp"
 #include "vuk/RenderGraph.hpp"
+#include "vuk/AllocatorHelpers.hpp"
 
 #define VUK_EARLY_RET() if (current_exception) { return *this; }
 #define VUK_DO_VK_OR_ERROR_RET()

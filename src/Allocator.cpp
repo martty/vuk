@@ -1,14 +1,10 @@
-#include "..\include\vuk\Allocator.hpp"
-#include "..\include\vuk\Allocator.hpp"
-#include "..\include\vuk\Allocator.hpp"
-#include "..\include\vuk\Allocator.hpp"
-#include "..\include\vuk\Allocator.hpp"
-#include "..\include\vuk\Allocator.hpp"
-#include "..\include\vuk\Allocator.hpp"
-#include "..\include\vuk\Allocator.hpp"
 #include "LegacyGPUAllocator.hpp"
 #include "vuk/Allocator.hpp"
+#include "vuk/resources/DeviceVkResource.hpp"
+#include "vuk/resources/DeviceFrameResource.hpp"
+#include "vuk/resources/DeviceLinearResource.hpp"
 #include "vuk/Context.hpp"
+#include "vuk/Exception.hpp"
 #include <string>
 #include <numeric>
 
@@ -224,6 +220,128 @@ namespace vuk {
 		}
 
 		return { expected_value };
+	}
+
+	/****Allocator impls *****/
+
+	Result<void, AllocateException> Allocator::allocate(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) {
+		return device_resource->allocate_semaphores(dst, loc);
+	}
+
+	Result<void, AllocateException> Allocator::allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) {
+		return device_resource->allocate_semaphores(dst, loc);
+	}
+
+	void Allocator::deallocate_impl(std::span<const VkSemaphore> src) {
+		device_resource->deallocate_semaphores(src);
+	}
+
+	Result<void, AllocateException> Allocator::allocate(std::span<VkFence> dst, SourceLocationAtFrame loc) {
+		return device_resource->allocate_fences(dst, loc);
+	}
+
+	Result<void, AllocateException> Allocator::allocate_fences(std::span<VkFence> dst, SourceLocationAtFrame loc) {
+		return device_resource->allocate_fences(dst, loc);
+	}
+
+	void Allocator::deallocate_impl(std::span<const VkFence> src) {
+		device_resource->deallocate_fences(src);
+	}
+
+	Result<void, AllocateException> Allocator::allocate(std::span<HLCommandBuffer> dst, std::span<const HLCommandBufferCreateInfo> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_hl_commandbuffers(dst, cis, loc);
+	}
+
+	Result<void, AllocateException> Allocator::allocate_hl_commandbuffers(std::span<HLCommandBuffer> dst, std::span<const HLCommandBufferCreateInfo> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_hl_commandbuffers(dst, cis, loc);
+	}
+
+	void Allocator::deallocate_impl(std::span<const HLCommandBuffer> src) {
+		device_resource->deallocate_hl_commandbuffers(src);
+	}
+
+	Result<void, AllocateException> Allocator::allocate(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_buffers(dst, cis, loc);
+	}
+
+	Result<void, AllocateException> Allocator::allocate_buffers(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_buffers(dst, cis, loc);
+	}
+
+	void Allocator::deallocate_impl(std::span<const BufferCrossDevice> src) {
+		device_resource->deallocate_buffers(src);
+	}
+
+	Result<void, AllocateException> Allocator::allocate(std::span<BufferGPU> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_buffers(dst, cis, loc);
+	}
+
+	Result<void, AllocateException> Allocator::allocate_buffers(std::span<BufferGPU> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_buffers(dst, cis, loc);
+	}
+
+	void Allocator::deallocate_impl(std::span<const BufferGPU> src) {
+		device_resource->deallocate_buffers(src);
+	}
+
+	Result<void, AllocateException> Allocator::allocate(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_framebuffers(dst, cis, loc);
+	}
+
+	Result<void, AllocateException> Allocator::allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_framebuffers(dst, cis, loc);
+	}
+
+	void Allocator::deallocate_impl(std::span<const VkFramebuffer> src) {
+		device_resource->deallocate_framebuffers(src);
+	}
+
+	Result<void, AllocateException> Allocator::allocate(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_images(dst, cis, loc);
+	}
+
+	Result<void, AllocateException> Allocator::allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_images(dst, cis, loc);
+	}
+
+	void Allocator::deallocate_impl(std::span<const Image> src) {
+		device_resource->deallocate_images(src);
+	}
+
+	Result<void, AllocateException> Allocator::allocate(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_image_views(dst, cis, loc);
+	}
+
+	Result<void, AllocateException> Allocator::allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_image_views(dst, cis, loc);
+	}
+
+	void Allocator::deallocate_impl(std::span<const ImageView> src) {
+		device_resource->deallocate_image_views(src);
+	}
+
+	Result<void, AllocateException> Allocator::allocate(std::span<PersistentDescriptorSet> dst, std::span<const PersistentDescriptorSetCreateInfo> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_persistent_descriptor_sets(dst, cis, loc);
+	}
+
+	Result<void, AllocateException> Allocator::allocate_persistent_descriptor_sets(std::span<PersistentDescriptorSet> dst, std::span<const PersistentDescriptorSetCreateInfo> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_persistent_descriptor_sets(dst, cis, loc);
+	}
+
+	void Allocator::deallocate_impl(std::span<const PersistentDescriptorSet> src) {
+		device_resource->deallocate_persistent_descriptor_sets(src);
+	}
+
+	Result<void, AllocateException> Allocator::allocate(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_descriptor_sets(dst, cis, loc);
+	}
+
+	Result<void, AllocateException> Allocator::allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_descriptor_sets(dst, cis, loc);
+	}
+
+	void Allocator::deallocate_impl(std::span<const DescriptorSet> src) {
+		device_resource->deallocate_descriptor_sets(src);
 	}
 
 	PFN_vmaAllocateDeviceMemoryFunction LegacyGPUAllocator::real_alloc_callback = nullptr;

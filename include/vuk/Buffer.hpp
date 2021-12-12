@@ -71,4 +71,10 @@ namespace vuk {
 	struct BufferGPU : Buffer {};
 	struct BufferCrossDevice : Buffer {};
 	struct BufferCPU : Buffer {};
+
+	struct BufferCreateInfo {
+		MemoryUsage mem_usage;
+		size_t size;
+		size_t alignment;
+	};
 }

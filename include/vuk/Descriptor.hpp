@@ -69,6 +69,11 @@ namespace vuk {
 		}
 	};
 
+	struct PersistentDescriptorSetCreateInfo {
+		DescriptorSetLayoutAllocInfo dslai;
+		uint32_t num_descriptors;
+	};
+
 	struct DescriptorImageInfo {
 		vuk::Sampler sampler;
 		vuk::ImageView image_view;

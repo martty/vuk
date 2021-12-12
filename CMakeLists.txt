@@ -73,8 +73,7 @@ target_sources(vuk PRIVATE
 	src/CommandBuffer.cpp
 	src/Util.cpp
 	src/Format.cpp
-	src/Name.cpp
-	)
+	src/Name.cpp "include/vuk/AllocatorHelpers.hpp")
 
 target_include_directories(vuk PUBLIC ext/plf_colony)
 add_subdirectory(ext/VulkanMemoryAllocator)

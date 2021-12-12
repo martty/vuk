@@ -41,10 +41,21 @@ namespace vuk {
 	}
 
 	struct Exception;
+	struct ShaderCompilationException;
+	struct RenderGraphException;
+	struct AllocateException;
+	struct PresentException;
+	struct VkException;
 
 	template<class V, class E = Exception>
 	struct Result;
 
 	template<class T>
 	class Unique;
+
+	struct FramebufferCreateInfo;
+
+	struct Buffer;
+	struct BufferGPU;
+	struct BufferCrossDevice;
 }

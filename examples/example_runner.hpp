@@ -13,6 +13,7 @@
 #include <vector>
 #include "vuk/RenderGraph.hpp"
 #include "vuk/CommandBuffer.hpp"
+#include "vuk/resources/DeviceFrameResource.hpp"
 #include "examples/imgui_impl_glfw.h"
 
 
