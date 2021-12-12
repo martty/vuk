@@ -330,4 +330,10 @@ namespace vuk {
 	struct ExecutableRenderGraph;
 	Result<void> execute_submit_and_present_to_one(Allocator& nalloc, ExecutableRenderGraph&& rg, SwapchainRef swapchain);
 	Result<void> execute_submit_and_wait(Allocator& nalloc, ExecutableRenderGraph&& rg);
+
+	SampledImage make_sampled_image(ImageView iv, SamplerCreateInfo sci);
+
+	SampledImage make_sampled_image(Name n, SamplerCreateInfo sci);
+
+	SampledImage make_sampled_image(Name n, ImageViewCreateInfo ivci, SamplerCreateInfo sci);
 }

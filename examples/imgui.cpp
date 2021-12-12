@@ -28,17 +28,17 @@ util::ImGuiData util::ImGui_ImplVuk_Init(vuk::Allocator& allocator) {
 		vuk::PipelineBaseCreateInfo pci;
 		auto vpath = "../../examples/imgui.vert.spv";
 		auto vcont = util::read_spirv(vpath);
-		pci.add_spirv(vcont, vpath);
+		pci.add_spirv(std::move(vcont), vpath);
 		auto fpath = "../../examples/imgui.frag.spv";
 		auto fcont = util::read_spirv(fpath);
-		pci.add_spirv(fcont, fpath);
+		pci.add_spirv(std::move(fcont), fpath);
 		ctx.create_named_pipeline("imgui", pci);
 	}
 	ctx.wait_all_transfers(allocator);
 	return data;
 }
 
-void util::ImGui_ImplVuk_Render(vuk::Allocator& allocator, vuk::RenderGraph& rg, vuk::Name src_target, vuk::Name dst_target, util::ImGuiData& data, ImDrawData* draw_data) {
+void util::ImGui_ImplVuk_Render(vuk::Allocator& allocator, vuk::RenderGraph& rg, vuk::Name src_target, vuk::Name dst_target, util::ImGuiData& data, ImDrawData* draw_data, const plf::colony<vuk::SampledImage>& sampled_images) {
 	auto& ctx = allocator.get_context();
 	auto reset_render_state = [](const util::ImGuiData& data, vuk::CommandBuffer& command_buffer, ImDrawData* draw_data, vuk::Buffer vertex, vuk::Buffer index) {
 		command_buffer.bind_sampled_image(0, 0, *data.font_texture.view, data.font_sci);
@@ -79,9 +79,20 @@ void util::ImGui_ImplVuk_Render(vuk::Allocator& allocator, vuk::RenderGraph& rg,
 	}
 
 	ctx.wait_all_transfers(allocator);
+
+	// add rendergraph dependencies to be transitioned
+	// make all rendergraph sampled images available
+	std::vector<vuk::Resource> resources;
+	resources.emplace_back(vuk::Resource{ dst_target, vuk::Resource::Type::eImage, vuk::eColorRW });
+	for (auto& si : sampled_images) {
+		if (!si.is_global) {
+			resources.emplace_back(vuk::Resource{ si.rg_attachment.attachment_name, vuk::Resource::Type::eImage, vuk::Access::eFragmentSampled });
+		}
+	}
+
 	vuk::Pass pass{
 		.name = "imgui",
-		.resources = { vuk::Resource{dst_target, vuk::Resource::Type::eImage, vuk::eColorRW} },
+		.resources = std::move(resources),
 		.execute = [&data, verts = imvert.get(), inds = imind.get(), draw_data, reset_render_state, src_target](vuk::CommandBuffer& command_buffer) {
 			command_buffer.set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor);
 			command_buffer.set_rasterization(vuk::PipelineRasterizationStateCreateInfo{});
@@ -154,15 +165,6 @@ void util::ImGui_ImplVuk_Render(vuk::Allocator& allocator, vuk::RenderGraph& rg,
 			}
 		}
 	};
-
-	// add rendergraph dependencies to be transitioned
-	// make all rendergraph sampled images available
-	// TODO: broke imgui
-	/*for (auto& si : ptc.get_sampled_images()) {
-		if (!si.is_global) {
-			pass.resources.push_back(vuk::Resource(si.rg_attachment.attachment_name, vuk::Resource::Type::eImage, vuk::Access::eFragmentSampled));
-		}
-	}*/
 
 	rg.add_pass(std::move(pass));
 	rg.add_alias(dst_target, src_target);

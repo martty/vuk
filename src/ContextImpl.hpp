@@ -190,6 +190,8 @@ namespace vuk {
 				pipelinebase_cache.collect(absolute_frame, cache_collection_frequency); break;
 			case 6:
 				compute_pipelinebase_cache.collect(absolute_frame, cache_collection_frequency); break;
+			case 7:
+				pool_cache.collect(absolute_frame, cache_collection_frequency); break;
 			}
 		}
 

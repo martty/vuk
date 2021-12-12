@@ -677,10 +677,6 @@ namespace vuk {
 		void deallocate_hl_commandbuffers(std::span<const HLCommandBuffer> src) override {
 			auto& f = get_last_frame();
 			std::unique_lock _(f.cbuf_mutex);
-			/*f.cmdbuffers_to_free.reserve(f.cmdbuffers_to_free.size() + src.size());
-			for (auto& s : src) {
-				f.cmdbuffers_to_free.emplace_back(s.command_buffer, s.command_pool);
-			}*/
 			auto& vec = f.cmdpools_to_free;
 
 			for (auto& s : src) {
@@ -779,6 +775,7 @@ namespace vuk {
 		CrossDeviceFrameResource& get_next_frame();
 
 		void deallocate_frame(CrossDeviceFrameResource& f) {
+			//f.descriptor_set_cache.collect(frame_counter.load(), 16);
 			direct.deallocate_semaphores(f.semaphores);
 			direct.deallocate_fences(f.fences);
 			for (auto& c : f.cmdbuffers_to_free) {

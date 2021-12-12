@@ -79,6 +79,18 @@ namespace vuk {
 		return { expected_value };
 	}
 
+	SampledImage make_sampled_image(ImageView iv, SamplerCreateInfo sci) {
+		return { SampledImage::Global{ iv, sci, ImageLayout::eShaderReadOnlyOptimal } };
+	}
+
+	SampledImage make_sampled_image(Name n, SamplerCreateInfo sci) {
+		return{ SampledImage::RenderGraphAttachment{ n, sci, {}, ImageLayout::eShaderReadOnlyOptimal } };
+	}
+
+	SampledImage make_sampled_image(Name n, ImageViewCreateInfo ivci, SamplerCreateInfo sci) {
+		return { SampledImage::RenderGraphAttachment{ n, sci, ivci, ImageLayout::eShaderReadOnlyOptimal } };
+	}
+
 	Unique<ImageView>::~Unique() noexcept {
 		if (allocator && payload.payload != VK_NULL_HANDLE) {
 			allocator->deallocate(payload);

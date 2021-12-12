@@ -43,6 +43,7 @@ namespace vuk {
 		vkb::Device vkbdevice;
 		util::ImGuiData imgui_data;
 
+		plf::colony<vuk::SampledImage> sampled_images;
 		std::vector<Example*> examples;
 
 		ExampleRunner();

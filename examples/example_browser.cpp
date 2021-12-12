@@ -102,9 +102,10 @@ void vuk::ExampleRunner::render() {
 			auto rg = item_current->render(*this, frame_allocator);
 			ImGui::Render();
 			vuk::Name attachment_name = vuk::Name(std::string(item_current->name) + "_final");
-			util::ImGui_ImplVuk_Render(frame_allocator, rg, attachment_name, "SWAPCHAIN", imgui_data, ImGui::GetDrawData());
+			util::ImGui_ImplVuk_Render(frame_allocator, rg, attachment_name, "SWAPCHAIN", imgui_data, ImGui::GetDrawData(), sampled_images);
 			rg.attach_swapchain(attachment_name, swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
 			execute_submit_and_present_to_one(frame_allocator, std::move(rg).link(*context, vuk::RenderGraph::CompileOptions{}), swapchain);
+			sampled_images.clear();
 		} else { // render all examples as imgui windows
 			RenderGraph rg;
 			plf::colony<vuk::Name> attachment_names;
@@ -170,15 +171,17 @@ void vuk::ExampleRunner::render() {
 
 				if (chosen_resource[i].is_invalid())
 					chosen_resource[i] = attachment_name;
-				//ImGui::Image(&ptc.make_sampled_image(chosen_resource[i], imgui_data.font_sci), ImVec2(200, 200));
+				auto si = vuk::make_sampled_image(chosen_resource[i], imgui_data.font_sci);
+				ImGui::Image(&*sampled_images.emplace(si), ImVec2(200, 200));
 				ImGui::End();
 				i++;
 			}
 
 			ImGui::Render();
-			util::ImGui_ImplVuk_Render(frame_allocator, rg, "SWAPCHAIN", "SWAPCHAIN", imgui_data, ImGui::GetDrawData());
+			util::ImGui_ImplVuk_Render(frame_allocator, rg, "SWAPCHAIN", "SWAPCHAIN", imgui_data, ImGui::GetDrawData(), sampled_images);
 			rg.attach_swapchain("SWAPCHAIN", swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
 			execute_submit_and_present_to_one(frame_allocator, std::move(rg).link(*context, vuk::RenderGraph::CompileOptions{}), swapchain);
+			sampled_images.clear();
 		}
 	}
 }

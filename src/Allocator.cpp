@@ -115,6 +115,13 @@ namespace vuk {
 		return f;
 	}
 
+	void deallocate(CrossDeviceFrameResource& res, DescriptorSet& ds) {
+		std::unique_lock _{ res.ds_mutex };
+
+		auto& vec = res.descriptor_sets;
+		vec.emplace_back(ds);
+	}
+
 	template<class T>
 	T& CrossDeviceFrameResource::Cache<T>::acquire(uint64_t current_frame, const create_info_t<T>& ci) {
 		if (auto it = lru_map.find(ci); it != lru_map.end()) {
