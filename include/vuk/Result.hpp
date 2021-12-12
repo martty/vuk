@@ -166,19 +166,19 @@ namespace vuk {
 
         [[nodiscard]] E& error()& {
             _extracted = true;
-            assert(!_holds_value && "cannot call error() on Result that does not hold a value");
+            assert(!_holds_value && "cannot call error() on Result that does not hold an error");
             return _error;
         }
 
         [[nodiscard]] E const& error() const& {
             _extracted = true;
-            assert(!_holds_value && "cannot call error() on Result that does not hold a value");
+            assert(!_holds_value && "cannot call error() on Result that does not hold an error");
             return _error;
         }
 
         [[nodiscard]] E&& error()&& {
             _extracted = true;
-            assert(!_holds_value && "cannot call error() on Result that does not hold a value");
+            assert(!_holds_value && "cannot call error() on Result that does not hold an error");
             return MOV(_error);
         }
 
@@ -299,19 +299,19 @@ namespace vuk {
         }
 
         [[nodiscard]] E& error()& {
-            assert(!_holds_value && "cannot call error() on Result that does not hold a value");
+            assert(!_holds_value && "cannot call error() on Result that does not hold an error");
             _extracted = true;
             return _error;
         }
 
         [[nodiscard]] E const& error() const& {
-            assert(!_holds_value && "cannot call error() on Result that does not hold a value");
+            assert(!_holds_value && "cannot call error() on Result that does not hold an error");
             _extracted = true;
             return _error;
         }
 
         [[nodiscard]] E&& error()&& {
-            assert(!_holds_value && "cannot call error() on Result that does not hold a value");
+            assert(!_holds_value && "cannot call error() on Result that does not hold an error");
             _extracted = true;
             return MOV(_error);
         }

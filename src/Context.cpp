@@ -59,22 +59,28 @@ namespace vuk {
 		cmdEndDebugUtilsLabelEXT(cb);
 	}
 
-	void Context::submit_graphics(VkSubmitInfo si, VkFence fence) {
+	Result<void> Context::submit_graphics(VkSubmitInfo si, VkFence fence) {
 		std::lock_guard _(impl->gfx_queue_lock);
-		VkResult res = vkQueueSubmit(graphics_queue, 1, &si, fence);
-		assert(res == VK_SUCCESS);
+		VkResult result = vkQueueSubmit(graphics_queue, 1, &si, fence);
+		if (result != VK_SUCCESS) {
+			return { expected_error, VkException{result} };
+		}
+		return { expected_value };
 	}
 
-	void Context::submit_transfer(VkSubmitInfo si, VkFence fence) {
+	Result<void> Context::submit_transfer(VkSubmitInfo si, VkFence fence) {
+		VkResult result;
 		if (transfer_queue == graphics_queue) {
 			std::lock_guard _(impl->gfx_queue_lock);
-			VkResult res = vkQueueSubmit(graphics_queue, 1, &si, fence);
-			assert(res == VK_SUCCESS);
+			result = vkQueueSubmit(graphics_queue, 1, &si, fence);
 		} else {
 			std::lock_guard _(impl->xfer_queue_lock);
-			VkResult res = vkQueueSubmit(transfer_queue, 1, &si, fence);
-			assert(res == VK_SUCCESS);
+			result = vkQueueSubmit(transfer_queue, 1, &si, fence);
 		}
+		if (result != VK_SUCCESS) {
+			return { expected_error, VkException{result} };
+		}
+		return { expected_value };
 	}
 
 	LegacyGPUAllocator& Context::get_gpumem() {

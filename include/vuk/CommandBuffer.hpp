@@ -9,6 +9,7 @@
 #include <vuk/Image.hpp>
 #include <vuk/Query.hpp>
 #include <vuk/PipelineInstance.hpp>
+#include "vuk/Exception.hpp"
 
 namespace vuk {
 	class Context;
@@ -185,6 +186,10 @@ namespace vuk {
 		std::optional<RenderPassInfo> ongoing_renderpass;
 		PassInfo* current_pass = nullptr;
 
+		mutable bool extracted = false;
+		Exception* current_exception = nullptr;
+		std::optional<AllocateException> allocate_except;
+
 		// Pipeline state
 		// Enabled dynamic state
 		DynamicStateFlags dynamic_state_flags = {};
@@ -339,8 +344,18 @@ namespace vuk {
 		CommandBuffer& bind_storage_image(unsigned set, unsigned binding, ImageView image_view);
 		CommandBuffer& bind_storage_image(unsigned set, unsigned binding, Name);
 
+		/// @brief Allocate some CPUtoGPU memory and bind it as a uniform. Return a pointer to the mapped memory.
+		/// @param set The set bind index to be used
+		/// @param binding The descriptor binding to bind the buffer to
+		/// @param size Amount of memory to allocate
+		/// @return pointer to the mapped host-visible memory. Null pointer if the command buffer has errored out previously or the allocation failed
 		void* _map_scratch_uniform_binding(unsigned set, unsigned binding, size_t size);
 
+		/// @brief Allocate some typed CPUtoGPU memory and bind it as a uniform. Return a pointer to the mapped memory.
+		/// @tparam T Type of the uniform to write
+		/// @param set The set bind index to be used
+		/// @param binding The descriptor binding to bind the buffer to
+		/// @return pointer to the mapped host-visible memory. Null pointer if the command buffer has errored out previously or the allocation failed
 		template<class T>
 		T* map_scratch_uniform_binding(unsigned set, unsigned binding);
 
@@ -360,24 +375,30 @@ namespace vuk {
 		CommandBuffer& dispatch_indirect(const Buffer& indirect_buffer);
 
 		Result<class SecondaryCommandBuffer> begin_secondary();
-		void execute(std::span<VkCommandBuffer>);
+		CommandBuffer& execute(std::span<VkCommandBuffer>);
 
 		// commands for renderpass-less command buffers
-		void clear_image(Name src, Clear);
-		void resolve_image(Name src, Name dst);
-		void blit_image(Name src, Name dst, ImageBlit region, Filter filter);
-		void copy_image_to_buffer(Name src, Name dst, BufferImageCopy);
+		CommandBuffer& clear_image(Name src, Clear);
+		CommandBuffer& resolve_image(Name src, Name dst);
+		CommandBuffer& blit_image(Name src, Name dst, ImageBlit region, Filter filter);
+		CommandBuffer& copy_image_to_buffer(Name src, Name dst, BufferImageCopy);
 
 		// explicit synchronisation
-		void image_barrier(Name, Access src_access, Access dst_access);
+		CommandBuffer& image_barrier(Name, Access src_access, Access dst_access);
 
 		// queries
-		void write_timestamp(Query, PipelineStageFlagBits stage = PipelineStageFlagBits::eBottomOfPipe);
+		CommandBuffer& write_timestamp(Query, PipelineStageFlagBits stage = PipelineStageFlagBits::eBottomOfPipe);
+
+		[[nodiscard]] Exception& error()&;
+
+		[[nodiscard]] Exception const& error() const&;
+
+		[[nodiscard]] Exception&& error()&&;
 
 	protected:
-		void _bind_state(bool graphics);
-		void _bind_compute_pipeline_state();
-		void _bind_graphics_pipeline_state();
+		[[nodiscard]] bool _bind_state(bool graphics);
+		[[nodiscard]] bool _bind_compute_pipeline_state();
+		[[nodiscard]] bool _bind_graphics_pipeline_state();
 
 		CommandBuffer& specialize_constants(uint32_t constant_id, void* data, size_t size);
 	};

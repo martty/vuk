@@ -242,8 +242,8 @@ namespace vuk {
 		ImageView wrap(VkImageView payload, ImageViewCreateInfo);
 
 
-		void submit_graphics(VkSubmitInfo, VkFence);
-		void submit_transfer(VkSubmitInfo, VkFence);
+		Result<void> submit_graphics(VkSubmitInfo, VkFence);
+		Result<void> submit_transfer(VkSubmitInfo, VkFence);
 
 		LegacyGPUAllocator& get_gpumem();
 

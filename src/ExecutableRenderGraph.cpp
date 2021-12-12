@@ -284,6 +284,7 @@ namespace vuk {
 							}
 						}
 					}
+					// TODO: propagate errors from cobuf here
 				}
 				if (i < rpass.subpasses.size() - 1 && rpass.handle != VK_NULL_HANDLE) {
 					use_secondary_command_buffers = rpass.subpasses[i + 1].use_secondary_command_buffers;
@@ -315,23 +316,26 @@ namespace vuk {
 				vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 1, &dep.barrier, 0, nullptr, 0, nullptr);
 			}
 		}
-		vkEndCommandBuffer(cbuf);
+		auto result = vkEndCommandBuffer(cbuf);
+		if (result != VK_SUCCESS) {
+			return { expected_error, VkException{result} };
+		}
 		return { expected_value, std::move(hl_cbuf) };
 	}
 
 	BufferInfo ExecutableRenderGraph::get_resource_buffer(Name n) {
 		auto resolved = resolve_name(n, impl->aliases);
-		return impl->bound_buffers.at(resolved);
+		return impl->bound_buffers.at(resolved); // TODO: throw
 	}
 
 	AttachmentRPInfo ExecutableRenderGraph::get_resource_image(Name n) {
 		auto resolved = resolve_name(n, impl->aliases);
-		return impl->bound_attachments.at(resolved);
+		return impl->bound_attachments.at(resolved); // TODO: throw
 	}
 
 	bool ExecutableRenderGraph::is_resource_image_in_general_layout(Name n, PassInfo* pass_info) {
 		auto resolved = resolve_name(n, impl->aliases);
-		auto& chain = impl->use_chains.at(resolved);
+		auto& chain = impl->use_chains.at(resolved);  // TODO: throw
 		for (auto& elem : chain) {
 			if (elem.pass == pass_info) {
 				return elem.use.layout == vuk::ImageLayout::eGeneral;

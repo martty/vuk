@@ -18,7 +18,7 @@ namespace vuk {
 			si.pWaitSemaphores = &present_rdy;
 			VkPipelineStageFlags flags = (VkPipelineStageFlags)PipelineStageFlagBits::eTopOfPipe;
 			si.pWaitDstStageMask = &flags;
-			ctx.submit_graphics(si, VK_NULL_HANDLE);
+			VUK_DO_OR_RETURN(ctx.submit_graphics(si, VK_NULL_HANDLE));
 			return { expected_error, PresentException{acq_result} };
 		}
 
@@ -43,7 +43,7 @@ namespace vuk {
 		Unique<VkFence> fence(allocator);
 		VUK_DO_OR_RETURN(allocator.allocate_fences({ &*fence, 1 }));
 
-		ctx.submit_graphics(si, *fence);
+		VUK_DO_OR_RETURN(ctx.submit_graphics(si, *fence));
 
 		VkPresentInfoKHR pi{ .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
 		pi.swapchainCount = 1;
@@ -52,11 +52,10 @@ namespace vuk {
 		pi.waitSemaphoreCount = 1;
 		pi.pWaitSemaphores = &render_complete;
 		auto present_result = vkQueuePresentKHR(ctx.graphics_queue, &pi);
-		if (present_result == VK_SUCCESS) {
-			return { expected_value };
-		} else {
+		if (present_result != VK_SUCCESS) {
 			return { expected_error, PresentException{present_result} };
 		}
+		return { expected_value };
 	}
 
 	Result<void> execute_submit_and_wait(Allocator& allocator, ExecutableRenderGraph&& rg) {
@@ -72,8 +71,11 @@ namespace vuk {
 		si.commandBufferCount = 1;
 		si.pCommandBuffers = &hl_cbuf->command_buffer;
 
-		ctx.submit_graphics(si, *fence);
-		vkWaitForFences(ctx.device, 1, &*fence, VK_TRUE, UINT64_MAX);
+		VUK_DO_OR_RETURN(ctx.submit_graphics(si, *fence));
+		VkResult result = vkWaitForFences(ctx.device, 1, &*fence, VK_TRUE, UINT64_MAX);
+		if (result != VK_SUCCESS) {
+			return { expected_error, VkException{result} };
+		}
 		return { expected_value };
 	}
 

@@ -3,6 +3,9 @@
 #include "vuk/Context.hpp"
 #include "vuk/RenderGraph.hpp"
 
+#define VUK_EARLY_RET() if (current_exception) { return *this; }
+#define VUK_DO_VK_OR_ERROR_RET()
+
 namespace vuk {
 	uint32_t Ignore::to_size() {
 		if (bytes != 0)
@@ -33,6 +36,8 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::set_dynamic_state(DynamicStateFlags flags) {
+		VUK_EARLY_RET();
+
 		// determine which states change to dynamic now - those states need to be flushed into the command buffer
 		DynamicStateFlags not_enabled = DynamicStateFlags{ ~dynamic_state_flags.m_mask }; // has invalid bits, but doesn't matter
 		auto to_dynamic = not_enabled & flags;
@@ -59,6 +64,7 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::set_viewport(unsigned index, vuk::Viewport vp) {
+		VUK_EARLY_RET();
 		if (viewports.size() < (index + 1)) {
 			viewports.resize(index + 1);
 		}
@@ -71,6 +77,7 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::set_viewport(unsigned index, Rect2D area, float min_depth, float max_depth) {
+		VUK_EARLY_RET();
 		vuk::Viewport vp;
 		if (area.sizing == Sizing::eAbsolute) {
 			vp.x = (float)area.offset.x;
@@ -89,11 +96,11 @@ namespace vuk {
 			vp.minDepth = min_depth;
 			vp.maxDepth = max_depth;
 		}
-		set_viewport(index, vp);
-		return *this;
+		return set_viewport(index, vp);
 	}
 
 	CommandBuffer& CommandBuffer::set_scissor(unsigned index, Rect2D area) {
+		VUK_EARLY_RET();
 		VkRect2D vp;
 		if (area.sizing == Sizing::eAbsolute) {
 			vp = { area.offset, area.extent };
@@ -116,6 +123,7 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::set_rasterization(vuk::PipelineRasterizationStateCreateInfo state) {
+		VUK_EARLY_RET();
 		rasterization_state = state;
 		if (state.depthBiasEnable && (dynamic_state_flags & vuk::DynamicStateFlagBits::eDepthBias)) {
 			vkCmdSetDepthBias(command_buffer, state.depthBiasConstantFactor, state.depthBiasClamp, state.depthBiasSlopeFactor);
@@ -127,6 +135,7 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::set_depth_stencil(vuk::PipelineDepthStencilStateCreateInfo state) {
+		VUK_EARLY_RET();
 		depth_stencil_state = state;
 		if (state.depthBoundsTestEnable && (dynamic_state_flags & vuk::DynamicStateFlagBits::eDepthBounds)) {
 			vkCmdSetDepthBounds(command_buffer, state.minDepthBounds, state.maxDepthBounds);
@@ -156,6 +165,7 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::broadcast_color_blend(vuk::PipelineColorBlendAttachmentState state) {
+		VUK_EARLY_RET();
 		assert(ongoing_renderpass);
 		color_blend_attachments[0] = state;
 		set_color_blend_attachments.set(0, true);
@@ -164,11 +174,12 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::broadcast_color_blend(BlendPreset preset) {
-		broadcast_color_blend(blend_preset_to_pcba(preset));
-		return *this;
+		VUK_EARLY_RET();
+		return broadcast_color_blend(blend_preset_to_pcba(preset));
 	}
 
 	CommandBuffer& CommandBuffer::set_color_blend(Name att, vuk::PipelineColorBlendAttachmentState state) {
+		VUK_EARLY_RET();
 		assert(ongoing_renderpass);
 		auto it = std::find(ongoing_renderpass->color_attachment_names.begin(), ongoing_renderpass->color_attachment_names.end(), att);
 		assert(it != ongoing_renderpass->color_attachment_names.end() && "Color attachment name not found.");
@@ -180,11 +191,12 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::set_color_blend(Name att, BlendPreset preset) {
-		set_color_blend(att, blend_preset_to_pcba(preset));
-		return *this;
+		VUK_EARLY_RET();
+		return set_color_blend(att, blend_preset_to_pcba(preset));
 	}
 
 	CommandBuffer& CommandBuffer::set_blend_constants(std::array<float, 4> constants) {
+		VUK_EARLY_RET();
 		blend_constants = constants;
 		if (dynamic_state_flags & vuk::DynamicStateFlagBits::eBlendConstants) {
 			vkCmdSetBlendConstants(command_buffer, constants.data());
@@ -193,26 +205,31 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::bind_graphics_pipeline(vuk::PipelineBaseInfo* pi) {
+		VUK_EARLY_RET();
 		assert(ongoing_renderpass);
 		next_pipeline = pi;
 		return *this;
 	}
 
 	CommandBuffer& CommandBuffer::bind_graphics_pipeline(Name p) {
+		VUK_EARLY_RET();
 		return bind_graphics_pipeline(ctx.get_named_pipeline(p));
 	}
 
 	CommandBuffer& CommandBuffer::bind_compute_pipeline(vuk::ComputePipelineBaseInfo* gpci) {
+		VUK_EARLY_RET();
 		assert(!ongoing_renderpass);
 		next_compute_pipeline = gpci;
 		return *this;
 	}
 
 	CommandBuffer& CommandBuffer::bind_compute_pipeline(Name p) {
+		VUK_EARLY_RET();
 		return bind_compute_pipeline(ctx.get_named_compute_pipeline(p));
 	}
 
 	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, const Buffer& buf, unsigned first_attribute, Packed format) {
+		VUK_EARLY_RET();
 		assert(binding < VUK_MAX_ATTRIBUTES && "Vertex buffer binding must be smaller than VUK_MAX_ATTRIBUTES.");
 		uint32_t location = first_attribute;
 		uint32_t offset = 0;
@@ -236,7 +253,7 @@ namespace vuk {
 		vibd.binding = binding;
 		vibd.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 		vibd.stride = offset;
-		binding_descriptions[binding] = vibd; 
+		binding_descriptions[binding] = vibd;
 		set_binding_descriptions.set(binding, true);
 
 		if (buf.buffer) {
@@ -247,6 +264,7 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, const Buffer& buf, std::span<vuk::VertexInputAttributeDescription> viads,
 		uint32_t stride) {
+		VUK_EARLY_RET();
 		assert(binding < VUK_MAX_ATTRIBUTES && "Vertex buffer binding must be smaller than VUK_MAX_ATTRIBUTES.");
 		for (auto& viad : viads) {
 			attribute_descriptions[viad.location] = viad;
@@ -267,16 +285,19 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::bind_index_buffer(const Buffer& buf, vuk::IndexType type) {
+		VUK_EARLY_RET();
 		vkCmdBindIndexBuffer(command_buffer, buf.buffer, buf.offset, (VkIndexType)type);
 		return *this;
 	}
 
 	CommandBuffer& CommandBuffer::set_primitive_topology(vuk::PrimitiveTopology topo) {
+		VUK_EARLY_RET();
 		topology = topo;
 		return *this;
 	}
 
 	CommandBuffer& CommandBuffer::bind_sampled_image(unsigned set, unsigned binding, vuk::ImageView iv, vuk::SamplerCreateInfo sci, vuk::ImageLayout il) {
+		VUK_EARLY_RET();
 		sets_used[set] = true;
 		set_bindings[set].bindings[binding].type = vuk::DescriptorType::eCombinedImageSampler;
 		set_bindings[set].bindings[binding].image = vuk::DescriptorImageInfo(ctx.acquire_sampler(sci, ctx.frame_counter), iv, il);
@@ -287,10 +308,12 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::bind_sampled_image(unsigned set, unsigned binding, const vuk::Texture& texture, vuk::SamplerCreateInfo sampler_create_info,
 		vuk::ImageLayout il) {
+		VUK_EARLY_RET();
 		return bind_sampled_image(set, binding, *texture.view, sampler_create_info, il);
 	}
 
 	CommandBuffer& CommandBuffer::bind_sampled_image(unsigned set, unsigned binding, Name name, vuk::SamplerCreateInfo sampler_create_info) {
+		VUK_EARLY_RET();
 		assert(rg);
 
 		auto layout = rg->is_resource_image_in_general_layout(name, current_pass) ? vuk::ImageLayout::eGeneral : vuk::ImageLayout::eShaderReadOnlyOptimal;
@@ -300,6 +323,7 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::bind_sampled_image(unsigned set, unsigned binding, Name name, vuk::ImageViewCreateInfo ivci,
 		vuk::SamplerCreateInfo sampler_create_info) {
+		VUK_EARLY_RET();
 		assert(rg);
 		ivci.image = rg->get_resource_image(name).image;
 		if (ivci.format == vuk::Format{}) {
@@ -323,17 +347,23 @@ namespace vuk {
 		auto layout = rg->is_resource_image_in_general_layout(name, current_pass) ? vuk::ImageLayout::eGeneral : vuk::ImageLayout::eShaderReadOnlyOptimal;
 
 		vuk::Unique<vuk::ImageView> iv(*allocator);
-		allocator->allocate_image_views(std::span{ &*iv, 1 }, std::span{ &ivci, 1 }); // TODO: dropping error
+		if (auto ret = allocator->allocate_image_views(std::span{ &*iv, 1 }, std::span{ &ivci, 1 }); !ret) {
+			allocate_except.emplace(ret.error());
+			current_exception = &allocate_except.value();
+			return *this;
+		}
 		return bind_sampled_image(set, binding, *iv, sampler_create_info, layout);
 	}
 
 	CommandBuffer& CommandBuffer::bind_persistent(unsigned set, PersistentDescriptorSet& pda) {
+		VUK_EARLY_RET();
 		persistent_sets_used[set] = true;
 		persistent_sets[set] = pda.backing_set;
 		return *this;
 	}
 
 	CommandBuffer& CommandBuffer::push_constants(vuk::ShaderStageFlags stages, size_t offset, void* data, size_t size) {
+		VUK_EARLY_RET();
 		pcrs.push_back(VkPushConstantRange{ (VkShaderStageFlags)stages, (uint32_t)offset, (uint32_t)size });
 		void* dst = push_constant_buffer.data() + offset;
 		::memcpy(dst, data, size);
@@ -341,12 +371,14 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::specialize_constants(uint32_t constant_id, void* data, size_t size) {
+		VUK_EARLY_RET();
 		auto v = spec_map_entries.emplace(constant_id, SpecEntry{ size == sizeof(double) });
 		memcpy(&v.first->second.data, data, size);
 		return *this;
 	}
 
 	CommandBuffer& CommandBuffer::bind_uniform_buffer(unsigned set, unsigned binding, const Buffer& buffer) {
+		VUK_EARLY_RET();
 		sets_used[set] = true;
 		set_bindings[set].bindings[binding].type = vuk::DescriptorType::eUniformBuffer;
 		set_bindings[set].bindings[binding].buffer = VkDescriptorBufferInfo{ buffer.buffer, buffer.offset, buffer.size };
@@ -355,6 +387,7 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::bind_storage_buffer(unsigned set, unsigned binding, const Buffer& buffer) {
+		VUK_EARLY_RET();
 		sets_used[set] = true;
 		set_bindings[set].bindings[binding].type = vuk::DescriptorType::eStorageBuffer;
 		set_bindings[set].bindings[binding].buffer = VkDescriptorBufferInfo{ buffer.buffer, buffer.offset, buffer.size };
@@ -363,6 +396,7 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::bind_storage_image(unsigned set, unsigned binding, vuk::ImageView image_view) {
+		VUK_EARLY_RET();
 		sets_used[set] = true;
 		set_bindings[set].bindings[binding].type = vuk::DescriptorType::eStorageImage;
 		set_bindings[set].bindings[binding].image = vuk::DescriptorImageInfo({}, image_view, vuk::ImageLayout::eGeneral);
@@ -371,37 +405,59 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::bind_storage_image(unsigned set, unsigned binding, Name name) {
+		VUK_EARLY_RET();
 		return bind_storage_image(set, binding, get_resource_image_view(name));
 	}
 
 	void* CommandBuffer::_map_scratch_uniform_binding(unsigned set, unsigned binding, size_t size) {
-		auto buf = ctx.allocate_buffer_cross_device(*allocator, vuk::MemoryUsage::eCPUtoGPU, size, 1);
-		bind_uniform_buffer(set, binding, *buf);
-		return buf->mapped_ptr;
+		if (current_exception) {
+			return nullptr;
+		}
+
+		auto res = allocate_buffer_cross_device(*allocator, { vuk::MemoryUsage::eCPUtoGPU, size, 1 });
+		if (!res) {
+			return nullptr;
+		} else {
+			auto& buf = res->get();
+			bind_uniform_buffer(set, binding, buf);
+			return buf.mapped_ptr;
+		}
 	}
 
 	CommandBuffer& CommandBuffer::draw(size_t vertex_count, size_t instance_count, size_t first_vertex, size_t first_instance) {
-		_bind_graphics_pipeline_state();
+		VUK_EARLY_RET();
+		if (!_bind_graphics_pipeline_state()) {
+			return *this;
+		}
 		vkCmdDraw(command_buffer, (uint32_t)vertex_count, (uint32_t)instance_count, (uint32_t)first_vertex, (uint32_t)first_instance);
 		return *this;
 	}
 
 	CommandBuffer& CommandBuffer::draw_indexed(size_t index_count, size_t instance_count, size_t first_index, int32_t vertex_offset, size_t first_instance) {
-		_bind_graphics_pipeline_state();
+		VUK_EARLY_RET();
+		if (!_bind_graphics_pipeline_state()) {
+			return *this;
+		}
 
 		vkCmdDrawIndexed(command_buffer, (uint32_t)index_count, (uint32_t)instance_count, (uint32_t)first_index, vertex_offset, (uint32_t)first_instance);
 		return *this;
 	}
 
 	CommandBuffer& CommandBuffer::draw_indexed_indirect(size_t command_count, const Buffer& indirect_buffer) {
-		_bind_graphics_pipeline_state();
+		VUK_EARLY_RET();
+		if (!_bind_graphics_pipeline_state()) {
+			return *this;
+		}
 		vkCmdDrawIndexedIndirect(command_buffer, indirect_buffer.buffer, (uint32_t)indirect_buffer.offset, (uint32_t)command_count,
 			sizeof(vuk::DrawIndexedIndirectCommand));
 		return *this;
 	}
 
 	CommandBuffer& CommandBuffer::draw_indexed_indirect(std::span<vuk::DrawIndexedIndirectCommand> cmds) {
-		_bind_graphics_pipeline_state();
+		VUK_EARLY_RET();
+		if (!_bind_graphics_pipeline_state()) {
+			return *this;
+		}
 		auto buf = ctx.allocate_buffer_cross_device(*allocator, vuk::MemoryUsage::eCPUtoGPU, cmds.size_bytes(), 1);
 		memcpy(buf->mapped_ptr, cmds.data(), cmds.size_bytes());
 		vkCmdDrawIndexedIndirect(command_buffer, buf->buffer, (uint32_t)buf->offset, (uint32_t)cmds.size(), sizeof(vuk::DrawIndexedIndirectCommand));
@@ -409,20 +465,29 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::draw_indexed_indirect_count(size_t max_draw_count, const Buffer& indirect_buffer, const Buffer& count_buffer) {
-		_bind_graphics_pipeline_state();
+		VUK_EARLY_RET();
+		if (!_bind_graphics_pipeline_state()) {
+			return *this;
+		}
 		vkCmdDrawIndexedIndirectCount(command_buffer, indirect_buffer.buffer, indirect_buffer.offset, count_buffer.buffer, count_buffer.offset,
 			(uint32_t)max_draw_count, sizeof(vuk::DrawIndexedIndirectCommand));
 		return *this;
 	}
 
 	CommandBuffer& CommandBuffer::dispatch(size_t size_x, size_t size_y, size_t size_z) {
-		_bind_compute_pipeline_state();
+		VUK_EARLY_RET();
+		if (!_bind_compute_pipeline_state()) {
+			return *this;
+		}
 		vkCmdDispatch(command_buffer, (uint32_t)size_x, (uint32_t)size_y, (uint32_t)size_z);
 		return *this;
 	}
 
 	CommandBuffer& CommandBuffer::dispatch_invocations(size_t invocation_count_x, size_t invocation_count_y, size_t invocation_count_z) {
-		_bind_compute_pipeline_state();
+		VUK_EARLY_RET();
+		if (!_bind_compute_pipeline_state()) {
+			return *this;
+		}
 		auto local_size = current_compute_pipeline->local_size;
 		// integer div ceil
 		uint32_t x = (uint32_t)(invocation_count_x + local_size[0] - 1) / local_size[0];
@@ -434,12 +499,18 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::dispatch_indirect(const Buffer& indirect_buffer) {
-		_bind_compute_pipeline_state();
+		VUK_EARLY_RET();
+		if (!_bind_compute_pipeline_state()) {
+			return *this;
+		}
 		vkCmdDispatchIndirect(command_buffer, indirect_buffer.buffer, indirect_buffer.offset);
 		return *this;
 	}
 
 	Result<SecondaryCommandBuffer> CommandBuffer::begin_secondary() {
+		if (current_exception) {
+			return { expected_error, *current_exception };
+		}
 		// TODO: hardcoded queue family
 		auto scbuf = allocate_hl_commandbuffer(*allocator, { .level = VK_COMMAND_BUFFER_LEVEL_SECONDARY, .queue_family_index = ctx.graphics_queue_family_index });
 		if (!scbuf) {
@@ -458,13 +529,17 @@ namespace vuk {
 		return { expected_value, SecondaryCommandBuffer(rg, ctx, scbuf->get(), ongoing_renderpass) };
 	}
 
-	void CommandBuffer::execute(std::span<VkCommandBuffer> scbufs) {
+	CommandBuffer& CommandBuffer::execute(std::span<VkCommandBuffer> scbufs) {
+		VUK_EARLY_RET();
 		if (scbufs.size() > 0) {
 			vkCmdExecuteCommands(command_buffer, (uint32_t)scbufs.size(), scbufs.data());
 		}
+
+		return *this;
 	}
 
-	void CommandBuffer::clear_image(Name src, Clear c) {
+	CommandBuffer& CommandBuffer::clear_image(Name src, Clear c) {
+		VUK_EARLY_RET();
 		// TODO: depth images
 		assert(rg);
 		auto att = rg->get_resource_image(src);
@@ -476,9 +551,12 @@ namespace vuk {
 		isr.baseMipLevel = 0;
 		isr.levelCount = VK_REMAINING_MIP_LEVELS;
 		vkCmdClearColorImage(command_buffer, att.image, (VkImageLayout)layout, &c.c.color, 1, &isr);
+
+		return *this;
 	}
 
-	void CommandBuffer::resolve_image(Name src, Name dst) {
+	CommandBuffer& CommandBuffer::resolve_image(Name src, Name dst) {
+		VUK_EARLY_RET();
 		assert(rg);
 		VkImageResolve ir;
 		auto src_image = rg->get_resource_image(src).image;
@@ -505,9 +583,12 @@ namespace vuk {
 		auto dst_layout = rg->is_resource_image_in_general_layout(dst, current_pass) ? vuk::ImageLayout::eGeneral : vuk::ImageLayout::eTransferDstOptimal;
 
 		vkCmdResolveImage(command_buffer, src_image, (VkImageLayout)src_layout, dst_image, (VkImageLayout)dst_layout, 1, &ir);
+
+		return *this;
 	}
 
-	void CommandBuffer::blit_image(Name src, Name dst, vuk::ImageBlit region, vuk::Filter filter) {
+	CommandBuffer& CommandBuffer::blit_image(Name src, Name dst, vuk::ImageBlit region, vuk::Filter filter) {
+		VUK_EARLY_RET();
 		assert(rg);
 		auto src_image = rg->get_resource_image(src).image;
 		auto dst_image = rg->get_resource_image(dst).image;
@@ -516,9 +597,12 @@ namespace vuk {
 		auto dst_layout = rg->is_resource_image_in_general_layout(dst, current_pass) ? vuk::ImageLayout::eGeneral : vuk::ImageLayout::eTransferDstOptimal;
 
 		vkCmdBlitImage(command_buffer, src_image, (VkImageLayout)src_layout, dst_image, (VkImageLayout)dst_layout, 1, (VkImageBlit*)&region, (VkFilter)filter);
+
+		return *this;
 	}
 
-	void CommandBuffer::copy_image_to_buffer(Name src, Name dst, vuk::BufferImageCopy bic) {
+	CommandBuffer& CommandBuffer::copy_image_to_buffer(Name src, Name dst, vuk::BufferImageCopy bic) {
+		VUK_EARLY_RET();
 		assert(rg);
 		auto src_batt = rg->get_resource_image(src);
 		auto dst_bbuf = rg->get_resource_buffer(dst);
@@ -527,9 +611,12 @@ namespace vuk {
 
 		auto src_layout = rg->is_resource_image_in_general_layout(src, current_pass) ? vuk::ImageLayout::eGeneral : vuk::ImageLayout::eTransferSrcOptimal;
 		vkCmdCopyImageToBuffer(command_buffer, src_batt.image, (VkImageLayout)src_layout, dst_bbuf.buffer.buffer, 1, (VkBufferImageCopy*)&bic);
+
+		return *this;
 	}
 
-	void CommandBuffer::image_barrier(Name src, vuk::Access src_acc, vuk::Access dst_acc) {
+	CommandBuffer& CommandBuffer::image_barrier(Name src, vuk::Access src_acc, vuk::Access dst_acc) {
+		VUK_EARLY_RET();
 		assert(rg);
 		auto att = rg->get_resource_image(src);
 
@@ -553,16 +640,38 @@ namespace vuk {
 		}
 		imb.subresourceRange = isr;
 		vkCmdPipelineBarrier(command_buffer, (VkPipelineStageFlags)src_use.stages, (VkPipelineStageFlags)dst_use.stages, {}, 0, nullptr, 0, nullptr, 1, &imb);
+
+		return *this;
 	}
 
-	void CommandBuffer::write_timestamp(Query q, vuk::PipelineStageFlagBits stage) {
+	CommandBuffer& CommandBuffer::write_timestamp(Query q, vuk::PipelineStageFlagBits stage) {
+		VUK_EARLY_RET();
 		// TODO: check for duplicate submission of a query
 		// TODO: queries broken
 		/*auto tsq = ptc.register_timestamp_query(q);
 		vkCmdWriteTimestamp(command_buffer, (VkPipelineStageFlagBits)stage, tsq.pool, tsq.id);*/
+		return *this;
 	}
 
-	void CommandBuffer::_bind_state(bool graphics) {
+	Exception& CommandBuffer::error()& {
+		extracted = true;
+		assert(current_exception && "cannot call error() on CommandBuffer that is not in the error state");
+		return *current_exception;
+	}
+
+	Exception const& CommandBuffer::error() const& {
+		extracted = true;
+		assert(current_exception && "cannot call error() on CommandBuffer that is not in the error state");
+		return *current_exception;
+	}
+
+	Exception&& CommandBuffer::error()&& {
+		extracted = true;
+		assert(current_exception && "cannot call error() on CommandBuffer that is not in the error state");
+		return std::move(*current_exception);
+	}
+
+	bool CommandBuffer::_bind_state(bool graphics) {
 		for (auto& pcr : pcrs) {
 			void* data = push_constant_buffer.data() + pcr.offset;
 			vkCmdPushConstants(command_buffer, graphics ? current_pipeline->pipeline_layout : current_compute_pipeline->pipeline_layout, pcr.stageFlags,
@@ -581,7 +690,11 @@ namespace vuk {
 			if (!persistent) {
 				set_bindings[i].calculate_hash();
 				Unique<DescriptorSet> ds;
-				allocator->allocate_descriptor_sets(std::span{ &*ds, 1 }, std::span{ &set_bindings[i], 1 }); // TODO: error handling
+				if (auto ret = allocator->allocate_descriptor_sets(std::span{ &*ds, 1 }, std::span{ &set_bindings[i], 1 }); !ret) {
+					allocate_except.emplace(ret.error());
+					current_exception = &allocate_except.value();
+					return false;
+				}
 				vkCmdBindDescriptorSets(command_buffer, graphics ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE,
 					graphics ? current_pipeline->pipeline_layout : current_compute_pipeline->pipeline_layout, i, 1, &ds->descriptor_set, 0,
 					nullptr);
@@ -594,9 +707,10 @@ namespace vuk {
 		}
 		sets_used.reset();
 		persistent_sets_used.reset();
+		return true;
 	}
 
-	void CommandBuffer::_bind_compute_pipeline_state() {
+	bool CommandBuffer::_bind_compute_pipeline_state() {
 		if (next_compute_pipeline) {
 			vuk::ComputePipelineInstanceCreateInfo pi;
 			pi.base = next_compute_pipeline;
@@ -632,7 +746,7 @@ namespace vuk {
 			next_compute_pipeline = nullptr;
 		}
 
-		_bind_state(false);
+		return _bind_state(false);
 	}
 
 	template<class T>
@@ -641,7 +755,7 @@ namespace vuk {
 		data_ptr += sizeof(T);
 	};
 
-	void CommandBuffer::_bind_graphics_pipeline_state() {
+	bool CommandBuffer::_bind_graphics_pipeline_state() {
 		if (next_pipeline) {
 			vuk::PipelineInstanceCreateInfo pi;
 			pi.base = next_pipeline;
@@ -882,7 +996,7 @@ namespace vuk {
 			vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, current_pipeline->pipeline);
 			next_pipeline = nullptr;
 		}
-		_bind_state(true);
+		return _bind_state(true);
 	}
 
 	VkCommandBuffer SecondaryCommandBuffer::get_buffer() {
