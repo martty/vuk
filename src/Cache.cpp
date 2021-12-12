@@ -219,4 +219,8 @@ namespace vuk {
 		}
 		return ds;
 	}
+
+	void DescriptorPool::release(VkDescriptorSet ds) {
+		free_sets.enqueue(ds);
+	}
 }

@@ -238,9 +238,10 @@ namespace vuk {
 
 		void grow(Context& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info);
 		VkDescriptorSet acquire(Context& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info);
+		void release(VkDescriptorSet ds);
 
 		DescriptorPool() = default;
-		DescriptorPool(DescriptorPool&& o) {
+		DescriptorPool(DescriptorPool&& o) noexcept {
 			pools = o.pools;
 			sets_allocated = o.sets_allocated;
 		}

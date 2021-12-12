@@ -877,7 +877,12 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	void CrossDeviceVkResource::deallocate_descriptor_sets(std::span<const DescriptorSet> src) {} // no-op, desc sets are cached
+	void CrossDeviceVkResource::deallocate_descriptor_sets(std::span<const DescriptorSet> src) {
+		for (int64_t i = 0; i < (int64_t)src.size(); i++) {
+			DescriptorPool& pool = ctx->acquire_descriptor_pool(src[i].layout_info, ctx->frame_counter);
+			pool.release(src[i].descriptor_set);
+		}
+	}
 
 	Unique<PersistentDescriptorSet> Context::create_persistent_descriptorset(Allocator& allocator, DescriptorSetLayoutCreateInfo dslci,
 		unsigned num_descriptors) {
