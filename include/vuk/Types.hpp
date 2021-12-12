@@ -907,12 +907,13 @@ namespace vuk {
 		Clear(ClearColor cc) : is_color(true) { c.color = cc.ccv; }
 		Clear(ClearDepthStencil cc) : is_color(false) { c.depthStencil = cc.cdsv; }
 
-		Clear(const Clear& other) {
+		Clear(const Clear& other) noexcept {
 			if (other.is_color) {
 				c.color = other.c.color;
 			} else {
 				c.depthStencil = other.c.depthStencil;
 			}
+			is_color = other.is_color;
 		}
 
 		bool is_color;
