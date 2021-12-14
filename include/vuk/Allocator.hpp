@@ -3,6 +3,7 @@
 #include <vuk/vuk_fwd.hpp>
 #include <vuk/Config.hpp>
 #include <vuk/Result.hpp>
+#include <vuk/Image.hpp>
 #include <span>
 #include <source_location>
 

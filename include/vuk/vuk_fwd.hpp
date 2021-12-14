@@ -55,6 +55,8 @@ namespace vuk {
 
 	struct FramebufferCreateInfo;
 
+	struct BufferCreateInfo;
+
 	struct Buffer;
 	struct BufferGPU;
 	struct BufferCrossDevice;
@@ -63,4 +65,12 @@ namespace vuk {
 	struct TimestampQuery;
 	struct TimestampQueryPool;
 	struct TimestampQueryCreateInfo;
+
+	struct HLCommandBufferCreateInfo;
+	struct HLCommandBuffer;
+
+	struct SetBinding;
+	struct DescriptorSet;
+	struct PersistentDescriptorSetCreateInfo;
+	struct PersistentDescriptorSet;
 }
