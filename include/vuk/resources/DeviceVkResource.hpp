@@ -196,6 +196,32 @@ namespace vuk {
 		
 		void deallocate_timestamp_queries(std::span<const TimestampQuery> src) override {} // no-op, deallocate pools
 
+		Result<void, AllocateException> allocate_timeline_semaphores(std::span<TimelineSemaphore> dst, SourceLocationAtFrame loc) override {
+			for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
+				VkSemaphoreCreateInfo sci{ .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
+				VkSemaphoreTypeCreateInfo stci{ .sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO };
+				stci.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
+				stci.initialValue = 0;
+				sci.pNext = &stci;		
+				VkResult res = vkCreateSemaphore(device, &sci, nullptr, &dst[i].semaphore);
+				if (res != VK_SUCCESS) {
+					deallocate_timeline_semaphores({ dst.data(), (uint64_t)i });
+					return { expected_error, AllocateException{res} };
+				}
+				dst[i].value = new uint64_t{0}; // TODO: more sensibly
+			}
+			return { expected_value };
+		}
+
+		void deallocate_timeline_semaphores(std::span<const TimelineSemaphore> src) override {
+			for (auto& v : src) {
+				if (v.semaphore != VK_NULL_HANDLE) {
+					vkDestroySemaphore(device, v.semaphore, nullptr);
+					delete v.value;
+				}
+			}
+		}
+
 		Context& get_context() override {
 			return *ctx;
 		}

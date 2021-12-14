@@ -116,6 +116,14 @@ namespace vuk {
 			upstream->deallocate_timestamp_queries(src);
 		}
 
+		Result<void, AllocateException> allocate_timeline_semaphores(std::span<TimelineSemaphore> dst, SourceLocationAtFrame loc) override {
+			return upstream->allocate_timeline_semaphores(dst, loc);
+		}
+
+		void deallocate_timeline_semaphores(std::span<const TimelineSemaphore> src) override {
+			upstream->deallocate_timeline_semaphores(src);
+		}
+
 		DeviceResource* upstream = nullptr;
 	};
 }

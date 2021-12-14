@@ -41,6 +41,7 @@ namespace vuk {
 		direct.deallocate_descriptor_sets(f.descriptor_sets);
 		direct.ctx->make_timestamp_results_available(f.ts_query_pools);
 		direct.deallocate_timestamp_query_pools(f.ts_query_pools);
+		direct.deallocate_timeline_semaphores(f.tsemas);
 
 		f.semaphores.clear();
 		f.fences.clear();
@@ -60,5 +61,6 @@ namespace vuk {
 		f.descriptor_sets.clear();
 		f.ts_query_pools.clear();
 		f.query_index = 0;
+		f.tsemas.clear();
 	}
 }

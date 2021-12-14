@@ -238,7 +238,7 @@ namespace vuk {
 						vec.emplace_back(p);
 						current_ts_pool = vec.size() - 1;
 					}
-					
+
 					auto& pool = ts_query_pools[current_ts_pool];
 					pool.queries[pool.count++] = ci.query;
 					dst[i].id = pool.count - 1;
@@ -253,9 +253,38 @@ namespace vuk {
 
 		void deallocate_timestamp_queries(std::span<const TimestampQuery> src) override {} // noop
 
+		std::mutex tsema_mutex;
+		std::vector<TimelineSemaphore> tsemas;
+
+		Result<void, AllocateException> allocate_timeline_semaphores(std::span<TimelineSemaphore> dst, SourceLocationAtFrame loc) override {
+			VUK_DO_OR_RETURN(upstream->allocate_timeline_semaphores(dst, loc));
+			std::unique_lock _(tsema_mutex);
+
+			auto& vec = tsemas;
+			vec.insert(vec.end(), dst.begin(), dst.end());
+			return { expected_value };
+		}
+
+		void deallocate_timeline_semaphores(std::span<const TimelineSemaphore> src) override {} // noop
+
 		void wait() {
 			if (fences.size() > 0) {
 				vkWaitForFences(device, (uint32_t)fences.size(), fences.data(), true, UINT64_MAX);
+			}
+			if (tsemas.size() > 0) {
+				VkSemaphoreWaitInfo swi{ VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO };
+
+				std::vector<VkSemaphore> semas(tsemas.size());
+				std::vector<uint64_t> values(tsemas.size());
+
+				for (uint64_t i = 0; i < tsemas.size(); i++) {
+					semas[i] = tsemas[i].semaphore;
+					values[i] = *tsemas[i].value;
+				}
+				swi.pSemaphores = semas.data();
+				swi.pValues = values.data();
+				swi.semaphoreCount = (uint32_t)tsemas.size();
+				vkWaitSemaphores(device, &swi, UINT64_MAX);
 			}
 		}
 
@@ -435,6 +464,17 @@ namespace vuk {
 		}
 
 		void deallocate_timestamp_queries(std::span<const TimestampQuery> src) override {} // noop
+
+		Result<void, AllocateException> allocate_timeline_semaphores(std::span<TimelineSemaphore> dst, SourceLocationAtFrame loc) override {
+			return direct.allocate_timeline_semaphores(dst, loc);
+		}
+
+		void deallocate_timeline_semaphores(std::span<const TimelineSemaphore> src) override {
+			auto& f = get_last_frame();
+			std::unique_lock _(f.tsema_mutex);
+			auto& vec = f.tsemas;
+			vec.insert(vec.end(), src.begin(), src.end());
+		}
 
 		DeviceFrameResource& get_next_frame();
 

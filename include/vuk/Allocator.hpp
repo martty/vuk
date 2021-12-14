@@ -63,6 +63,11 @@ namespace vuk {
 		CPUResource* upstream = nullptr;
 	};
 
+	struct TimelineSemaphore {
+		VkSemaphore semaphore;
+		uint64_t* value;
+	};
+
 	/// @brief A DeviceResource represents objects that are used jointly by both CPU and GPU. 
 	/// A DeviceResource must prevent reuse of cross-device resources after deallocation until CPU-GPU timelines are synchronized. GPU-only resources may be reused immediately.
 	struct DeviceResource {
@@ -112,10 +117,9 @@ namespace vuk {
 
 		virtual Result<void, AllocateException> allocate_timestamp_queries(std::span<TimestampQuery> dst, std::span<const TimestampQueryCreateInfo> cis, SourceLocationAtFrame loc) = 0;
 		virtual void deallocate_timestamp_queries(std::span<const TimestampQuery> src) = 0;
-		/*
-		virtual Result<void, AllocateException> allocate_timeline_semaphore(uint64_t initial_value, uint64_t frame, SourceLocation loc) { return upstream->allocate_timeline_semaphore(initial_value, frame, loc); }
-		virtual void deallocate_timeline_semaphore(VkSemaphore sema) { upstream->deallocate_timeline_semaphore(sema); }
-		*/
+		
+		virtual Result<void, AllocateException> allocate_timeline_semaphores(std::span<TimelineSemaphore> dst, SourceLocationAtFrame loc) = 0;
+		virtual void deallocate_timeline_semaphores(std::span<const TimelineSemaphore> src) = 0;
 
 		virtual Context& get_context() = 0;
 	};
