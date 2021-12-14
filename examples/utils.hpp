@@ -16,7 +16,6 @@
 #include <sstream>
 
 namespace vuk {
-	class PerThreadContext;
 	struct Pass;
 	struct RenderGraph;
 }

@@ -1,6 +1,8 @@
 #pragma once
 
+#include "vuk/vuk_fwd.hpp"
 #include "vuk/Allocator.hpp"
+#include "vuk/Exception.hpp"
 
 namespace vuk {
 	/// @brief Helper base class for DeviceResources. Forwards all allocations and deallocations to the upstream DeviceResource.
@@ -96,6 +98,22 @@ namespace vuk {
 
 		void deallocate_descriptor_sets(std::span<const DescriptorSet> src) override {
 			upstream->deallocate_descriptor_sets(src);
+		}
+
+		Result<void, AllocateException> allocate_timestamp_query_pools(std::span<TimestampQueryPool> dst, std::span<const VkQueryPoolCreateInfo> cis, SourceLocationAtFrame loc) override {
+			return upstream->allocate_timestamp_query_pools(dst, cis, loc);
+		}
+
+		void deallocate_timestamp_query_pools(std::span<const TimestampQueryPool> src) override {
+			upstream->deallocate_timestamp_query_pools(src);
+		}
+
+		Result<void, AllocateException> allocate_timestamp_queries(std::span<TimestampQuery> dst, std::span<const TimestampQueryCreateInfo> cis, SourceLocationAtFrame loc) override {
+			return upstream->allocate_timestamp_queries(dst, cis, loc);
+		}
+
+		void deallocate_timestamp_queries(std::span<const TimestampQuery> src) override {
+			upstream->deallocate_timestamp_queries(src);
 		}
 
 		DeviceResource* upstream = nullptr;

@@ -101,6 +101,9 @@ namespace vuk {
 
 		DeviceVkResource device_vk_resource;
 
+		std::mutex query_lock;
+		robin_hood::unordered_map<Query, uint64_t> timestamp_result_map;
+
 		TransientSubmitBundle* get_transient_bundle(uint32_t queue_family_index) {
 			std::lock_guard _(transient_submit_lock);
 

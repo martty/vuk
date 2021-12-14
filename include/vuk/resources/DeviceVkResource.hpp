@@ -2,6 +2,8 @@
 
 #include "vuk/Allocator.hpp"
 #include "vuk/Exception.hpp"
+#include "vuk/Query.hpp"
+#include "../src/RenderPass.hpp" // TODO: temp
 
 namespace vuk {
 	/// @brief Device resource that performs direct allocation from the resources from the Vulkan runtime.
@@ -69,7 +71,7 @@ namespace vuk {
 				VkCommandPoolCreateInfo cpci{ .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
 				cpci.queueFamilyIndex = ci.queue_family_index;
 				cpci.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
-				allocate_commandpools(std::span{ &dst[i].command_pool, 1 }, std::span{ &cpci, 1 }, loc);
+				allocate_commandpools(std::span{ &dst[i].command_pool, 1 }, std::span{ &cpci, 1 }, loc); // TODO: error handling
 
 				VkCommandBufferAllocateInfo cbai{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
 				cbai.commandBufferCount = 1;
@@ -156,6 +158,43 @@ namespace vuk {
 		Result<void, AllocateException> allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) override;
 
 		void deallocate_descriptor_sets(std::span<const DescriptorSet> src);
+
+		Result<void, AllocateException> allocate_timestamp_query_pools(std::span<TimestampQueryPool> dst, std::span<const VkQueryPoolCreateInfo> cis, SourceLocationAtFrame loc) override {
+			assert(dst.size() == cis.size());
+			for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
+				VkResult res = vkCreateQueryPool(device, &cis[i], nullptr, &dst[i].pool);
+				if (res != VK_SUCCESS) {
+					deallocate_timestamp_query_pools({ dst.data(), (uint64_t)i });
+					return { expected_error, AllocateException{res} };
+				}
+				vkResetQueryPool(device, dst[i].pool, 0, cis[i].queryCount);
+			}
+			return { expected_value };
+		}
+		
+		void deallocate_timestamp_query_pools(std::span<const TimestampQueryPool> src) override {
+			for (auto& v : src) {
+				if (v.pool != VK_NULL_HANDLE) {
+					vkDestroyQueryPool(device, v.pool, nullptr);
+				}
+			}
+		}
+
+		Result<void, AllocateException> allocate_timestamp_queries(std::span<TimestampQuery> dst, std::span<const TimestampQueryCreateInfo> cis, SourceLocationAtFrame loc) override {
+			assert(dst.size() == cis.size());
+
+			for (uint64_t i = 0; i < dst.size(); i++) {
+				auto& ci = cis[i];
+				
+				ci.pool->queries[ci.pool->count++] = ci.query;
+				dst[i].id = ci.pool->count;
+				dst[i].pool = ci.pool->pool;
+			}
+
+			return { expected_value };
+		}
+		
+		void deallocate_timestamp_queries(std::span<const TimestampQuery> src) override {} // no-op, deallocate pools
 
 		Context& get_context() override {
 			return *ctx;

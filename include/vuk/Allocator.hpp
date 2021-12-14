@@ -107,6 +107,11 @@ namespace vuk {
 		virtual Result<void, AllocateException> allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) = 0;
 		virtual void deallocate_descriptor_sets(std::span<const DescriptorSet> src) = 0;
 
+		virtual Result<void, AllocateException> allocate_timestamp_query_pools(std::span<TimestampQueryPool> dst, std::span<const VkQueryPoolCreateInfo> cis, SourceLocationAtFrame loc) = 0;
+		virtual void deallocate_timestamp_query_pools(std::span<const TimestampQueryPool> src) = 0;
+
+		virtual Result<void, AllocateException> allocate_timestamp_queries(std::span<TimestampQuery> dst, std::span<const TimestampQueryCreateInfo> cis, SourceLocationAtFrame loc) = 0;
+		virtual void deallocate_timestamp_queries(std::span<const TimestampQuery> src) = 0;
 		/*
 		virtual Result<void, AllocateException> allocate_timeline_semaphore(uint64_t initial_value, uint64_t frame, SourceLocation loc) { return upstream->allocate_timeline_semaphore(initial_value, frame, loc); }
 		virtual void deallocate_timeline_semaphore(VkSemaphore sema) { upstream->deallocate_timeline_semaphore(sema); }
@@ -190,6 +195,18 @@ namespace vuk {
 		Result<void, AllocateException> allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
 		void deallocate(std::span<const DescriptorSet> src);
+
+		Result<void, AllocateException> allocate(std::span<TimestampQueryPool> dst, std::span<const VkQueryPoolCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+
+		Result<void, AllocateException> allocate_timestamp_query_pools(std::span<TimestampQueryPool> dst, std::span<const VkQueryPoolCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+
+		void deallocate(std::span<const TimestampQueryPool> src);
+
+		Result<void, AllocateException> allocate(std::span<TimestampQuery> dst, std::span<const TimestampQueryCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+
+		Result<void, AllocateException> allocate_timestamp_queries(std::span<TimestampQuery> dst, std::span<const TimestampQueryCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+
+		void deallocate(std::span<const TimestampQuery> src);
 
 		DeviceResource& get_cross_device_resource() {
 			return *device_resource;

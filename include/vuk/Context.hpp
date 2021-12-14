@@ -19,11 +19,6 @@ namespace vuk {
 		size_t id;
 	};
 
-	struct TimestampQuery {
-		VkQueryPool pool;
-		uint32_t id;
-	};
-
 	struct ContextCreateParameters {
 		VkInstance instance;
 		VkDevice device;
@@ -148,23 +143,6 @@ namespace vuk {
 
 		size_t get_allocation_size(Buffer);
 
-		/// @brief Allocates a buffer with explicitly managed lifetime
-		/// @param mem_usage Where to allocate the buffer (host visible buffers will be automatically mapped)
-		/// @param buffer_usage How this buffer will be used
-		/// @param size Size of the buffer
-		/// @param alignment Alignment of the buffer
-		/// @return The allocated Buffer
-		Unique<BufferCrossDevice> allocate_buffer_cross_device(Allocator&, MemoryUsage mem_usage, size_t size, size_t alignment);
-		Unique<BufferGPU> allocate_buffer_gpu(Allocator&, size_t size, size_t alignment);
-
-		// TODO: temporary stuff
-		std::atomic<size_t> transfer_id = 1;
-		std::atomic<size_t> last_transfer_complete = 0;
-
-		TransferStub enqueue_transfer(Buffer src, Buffer dst);
-		TransferStub enqueue_transfer(Buffer src, Image dst, Extent3D extent, uint32_t base_layer, bool generate_mips);
-		void dma_task(Allocator& allocator);
-
 		/// @brief Allocates & fills a buffer with explicitly managed lifetime
 		/// @param mem_usage Where to allocate the buffer (host visible buffers will be automatically mapped)
 		/// @param buffer_usage How this buffer will be used (since data is provided, TransferDst is added to the flags)
@@ -218,9 +196,14 @@ namespace vuk {
 			return stub;
 		}
 
-		void wait_all_transfers(Allocator& allocator) {
-			dma_task(allocator);
-		}
+		// TODO: temporary stuff
+		std::atomic<size_t> transfer_id = 1;
+		std::atomic<size_t> last_transfer_complete = 0;
+
+		TransferStub enqueue_transfer(Buffer src, Buffer dst);
+		TransferStub enqueue_transfer(Buffer src, Image dst, Extent3D extent, uint32_t base_layer, bool generate_mips);
+		void dma_task(Allocator& allocator);
+		void wait_all_transfers(Allocator& allocator);
 
 		/// @brief Add a swapchain to be managed by the Context
 		/// @return Reference to the new swapchain that can be used during presentation
@@ -249,6 +232,15 @@ namespace vuk {
 		Result<void> submit_transfer(VkSubmitInfo, VkFence);
 
 		LegacyGPUAllocator& get_legacy_gpu_allocator();
+
+		// Query functionality
+		bool is_timestamp_available(Query q);
+
+		std::optional<uint64_t> retrieve_timestamp(Query q);
+
+		std::optional<double> retrieve_duration(Query q1, Query q2);
+
+		Result<void> make_timestamp_results_available(std::span<const TimestampQueryPool> pool);
 
 		RGImage acquire_rendertarget(const struct RGCI&, uint64_t absolute_frame);
 		Sampler acquire_sampler(const SamplerCreateInfo&, uint64_t absolute_frame);
@@ -297,10 +289,6 @@ namespace vuk {
 		RGImage create(const struct RGCI& cinfo);
 		Sampler create(const struct SamplerCreateInfo& cinfo);
 
-		friend class InflightContext;
-		friend class PerThreadContext;
-		friend struct IFCImpl;
-		friend struct PTCImpl;
 		template<class T> friend class Cache; // caches can directly destroy
 	};
 

@@ -56,7 +56,9 @@ vuk::BenchRunner::BenchRunner() {
 			device = vkbdevice.device;
 
 			context.emplace(ContextCreateParameters{ instance, device, physical_device, graphics_queue, graphics_queue_family_index });
-
+			const unsigned num_inflight_frames = 3;
+			xdev_rf_alloc.emplace(*context, num_inflight_frames);
+			global.emplace(*xdev_rf_alloc);
 			swapchain = context->add_swapchain(util::make_swapchain(vkbdevice));
 }
 
@@ -69,6 +71,9 @@ constexpr unsigned stage_complete = 4;
 void vuk::BenchRunner::render() {
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
+		auto& xdev_frame_resource = xdev_rf_alloc->get_next_frame();
+		context->next_frame();
+		Allocator frame_allocator(xdev_frame_resource);
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
 
@@ -141,19 +146,20 @@ void vuk::BenchRunner::render() {
 			}
 		}
 
-		bench->gui(*this, ifc);
+		bench->gui(*this, frame_allocator);
 
 		ImGui::End();
 
-		auto rg = bench->get_case(current_case).subcases[current_subcase](*this, ifc, start, end);
+		auto rg = bench->get_case(current_case).subcases[current_subcase](*this, frame_allocator, start, end);
 		ImGui::Render();
-		auto ptc = ifc.begin();
-		vuk::Name attachment_name = "_final";
-		util::ImGui_ImplVuk_Render(ptc, rg, attachment_name, "SWAPCHAIN", imgui_data, ImGui::GetDrawData());
-		rg.attach_swapchain(attachment_name, swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
-		execute_submit_and_present_to_one(ptc, std::move(rg).link(ptc, vuk::RenderGraph::CompileOptions{}), swapchain);
 
-		std::optional<double> duration = ifc.get_duration_query_result(start, end);
+		vuk::Name attachment_name = "_final";
+		util::ImGui_ImplVuk_Render(frame_allocator, rg, attachment_name, "SWAPCHAIN", imgui_data, ImGui::GetDrawData(), sampled_images);
+		rg.attach_swapchain(attachment_name, swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
+		execute_submit_and_present_to_one(frame_allocator, std::move(rg).link(*context, vuk::RenderGraph::CompileOptions{}), swapchain);
+		sampled_images.clear();
+
+		std::optional<double> duration = context->retrieve_duration(start, end);
 		auto& bcase = bench->get_case(current_case);
 		if (!duration) {
 			continue;

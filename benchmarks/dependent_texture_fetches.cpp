@@ -29,8 +29,7 @@ namespace {
 	};
 
 	template<class T>
-	vuk::RenderGraph test_case(vuk::Allocator& frame_allocator, bool dependent, vuk::Texture& src, vuk::Texture& dst, vuk::Query start, vuk::Query end, T parameters) {
-		auto ptc = ifc.begin();
+	vuk::RenderGraph test_case(vuk::Allocator& allocator, bool dependent, vuk::Texture& src, vuk::Texture& dst, vuk::Query start, vuk::Query end, T parameters) {
 		vuk::RenderGraph rg;
 		rg.add_pass({
 			.resources = {"_dst"_image(vuk::eColorWrite)},
@@ -72,7 +71,7 @@ namespace {
 		return rg;
 	}
 
-	void blit(vuk::PerThreadContext& ptc, vuk::Texture& src, vuk::Texture& dst) {
+	void blit(vuk::Allocator& allocator, vuk::Texture& src, vuk::Texture& dst) {
 		vuk::RenderGraph rg;
 		rg.add_pass({
 			.resources = {"dst"_image(vuk::eColorWrite)},
@@ -89,7 +88,7 @@ namespace {
 			}
 		);
 		rg.attach_image("dst", vuk::ImageAttachment::from_texture(dst), vuk::Access::eNone, vuk::Access::eFragmentSampled);
-		vuk::execute_submit_and_wait(ptc, ptc.ctx.get_vk_allocator(), std::move(rg).link(ptc, vuk::RenderGraph::CompileOptions{}));
+		vuk::execute_submit_and_wait(allocator, std::move(rg).link(allocator.get_context(), vuk::RenderGraph::CompileOptions{}));
 	}
 
 	std::optional<vuk::Texture> texture_of_doge, tex2k, tex4k, tex8k;
@@ -100,7 +99,8 @@ namespace {
 		.base = {
 			.name = "Dependent vs. non-dependent texture fetch",
 			// Setup code, ran once in the beginning
-			.setup = [](vuk::BenchRunner& runner, vuk::Allocator& frame_allocator) {
+			.setup = [](vuk::BenchRunner& runner, vuk::Allocator& allocator) {
+			auto& ctx = allocator.get_context();
 			// Pipelines are created by filling out a vuk::PipelineCreateInfo
 			// In this case, we only need the shaders, we don't care about the rest of the state
 			{
@@ -125,27 +125,25 @@ namespace {
 				runner.context->create_named_pipeline("blit", pci);
 			}
 
-			auto ptc = ifc.begin();
-
 			int x, y, chans;
 			auto doge_image = stbi_load("../../examples/doge.png", &x, &y, &chans, 4);
-			auto [tex, _] = ptc.ctx.create_texture(vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, doge_image);
+			auto [tex, _] = ctx.create_texture(allocator, vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, doge_image);
 			texture_of_doge = std::move(tex);
-			ptc.wait_all_transfers();
-			tex2k = ptc.allocate_texture(vuk::ImageCreateInfo{.format = vuk::Format::eR8G8B8A8Srgb, .extent = {.width = 2048, .height = 2048, .depth = 1}, .usage = vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eSampled });
-			tex4k = ptc.allocate_texture(vuk::ImageCreateInfo{.format = vuk::Format::eR8G8B8A8Srgb, .extent = {.width = 4096, .height = 4096, .depth = 1}, .usage = vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eSampled });
-			tex8k = ptc.allocate_texture(vuk::ImageCreateInfo{.format = vuk::Format::eR8G8B8A8Srgb, .extent = {.width = 8192, .height = 8192, .depth = 1}, .usage = vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eSampled });
-			blit(ptc, *texture_of_doge, *tex2k);
-			blit(ptc, *texture_of_doge, *tex4k);
-			blit(ptc, *texture_of_doge, *tex8k);
-			dstsmall = ptc.allocate_texture(vuk::ImageCreateInfo{.format = vuk::Format::eR8G8B8A8Srgb, .extent = {.width = (unsigned)x, .height = (unsigned)y, .depth = 1}, .usage = vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eSampled });
-			dst2k = ptc.allocate_texture(vuk::ImageCreateInfo{.format = vuk::Format::eR8G8B8A8Srgb, .extent = {.width = 2048, .height = 2048, .depth = 1}, .usage = vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eSampled });
-			dst4k = ptc.allocate_texture(vuk::ImageCreateInfo{.format = vuk::Format::eR8G8B8A8Srgb, .extent = {.width = 4096, .height = 4096, .depth = 1}, .usage = vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eSampled });
-			dst8k = ptc.allocate_texture(vuk::ImageCreateInfo{.format = vuk::Format::eR8G8B8A8Srgb, .extent = {.width = 8192, .height = 8192, .depth = 1}, .usage = vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eSampled });
+			ctx.wait_all_transfers(allocator);
+			tex2k = ctx.allocate_texture(allocator, vuk::ImageCreateInfo{.format = vuk::Format::eR8G8B8A8Srgb, .extent = {.width = 2048, .height = 2048, .depth = 1}, .usage = vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eSampled });
+			tex4k = ctx.allocate_texture(allocator, vuk::ImageCreateInfo{.format = vuk::Format::eR8G8B8A8Srgb, .extent = {.width = 4096, .height = 4096, .depth = 1}, .usage = vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eSampled });
+			tex8k = ctx.allocate_texture(allocator, vuk::ImageCreateInfo{.format = vuk::Format::eR8G8B8A8Srgb, .extent = {.width = 8192, .height = 8192, .depth = 1}, .usage = vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eSampled });
+			blit(allocator, *texture_of_doge, *tex2k);
+			blit(allocator, *texture_of_doge, *tex4k);
+			blit(allocator, *texture_of_doge, *tex8k);
+			dstsmall = ctx.allocate_texture(allocator, vuk::ImageCreateInfo{.format = vuk::Format::eR8G8B8A8Srgb, .extent = {.width = (unsigned)x, .height = (unsigned)y, .depth = 1}, .usage = vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eSampled });
+			dst2k = ctx.allocate_texture(allocator, vuk::ImageCreateInfo{.format = vuk::Format::eR8G8B8A8Srgb, .extent = {.width = 2048, .height = 2048, .depth = 1}, .usage = vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eSampled });
+			dst4k = ctx.allocate_texture(allocator, vuk::ImageCreateInfo{.format = vuk::Format::eR8G8B8A8Srgb, .extent = {.width = 4096, .height = 4096, .depth = 1}, .usage = vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eSampled });
+			dst8k = ctx.allocate_texture(allocator, vuk::ImageCreateInfo{.format = vuk::Format::eR8G8B8A8Srgb, .extent = {.width = 8192, .height = 8192, .depth = 1}, .usage = vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eSampled });
 			},
-			.gui = [](vuk::BenchRunner& runner, vuk::Allocator& frame_allocator) {
+			.gui = [](vuk::BenchRunner& runner, vuk::Allocator& allocator) {
 			},
-			.cleanup = [](vuk::BenchRunner& runner, vuk::Allocator& frame_allocator) {
+			.cleanup = [](vuk::BenchRunner& runner, vuk::Allocator& allocator) {
 				// We release the texture resources
 				texture_of_doge.reset();
 				tex2k.reset();
@@ -158,29 +156,29 @@ namespace {
 			}
 		},
 		.cases = {
-			{"Dependent 112x112", [](vuk::BenchRunner& runner, vuk::Allocator& frame_allocator, vuk::Query start, vuk::Query end, auto&& parameters) {
-				return test_case(ifc, true, *texture_of_doge, *dstsmall, start, end, parameters);
+			{"Dependent 112x112", [](vuk::BenchRunner& runner, vuk::Allocator& allocator, vuk::Query start, vuk::Query end, auto&& parameters) {
+				return test_case(allocator, true, *texture_of_doge, *dstsmall, start, end, parameters);
 		}},
-			{"Non-dependent 112x112", [](vuk::BenchRunner& runner, vuk::Allocator& frame_allocator, vuk::Query start, vuk::Query end, auto&& parameters) {
-				return test_case(ifc, false, *texture_of_doge, *dstsmall, start, end, parameters);
+			{"Non-dependent 112x112", [](vuk::BenchRunner& runner, vuk::Allocator& allocator, vuk::Query start, vuk::Query end, auto&& parameters) {
+				return test_case(allocator, false, *texture_of_doge, *dstsmall, start, end, parameters);
 		}},
-			{"Dependent 2K", [](vuk::BenchRunner& runner, vuk::Allocator& frame_allocator, vuk::Query start, vuk::Query end, auto&& parameters) {
-				return test_case(ifc, true, *tex2k, *dst2k, start, end, parameters);
+			{"Dependent 2K", [](vuk::BenchRunner& runner, vuk::Allocator& allocator, vuk::Query start, vuk::Query end, auto&& parameters) {
+				return test_case(allocator, true, *tex2k, *dst2k, start, end, parameters);
 		}},
-			{"Non-dependent 2K", [](vuk::BenchRunner& runner, vuk::Allocator& frame_allocator, vuk::Query start, vuk::Query end, auto&& parameters) {
-				return test_case(ifc, false, *tex2k, *dst2k, start, end, parameters);
+			{"Non-dependent 2K", [](vuk::BenchRunner& runner, vuk::Allocator& allocator, vuk::Query start, vuk::Query end, auto&& parameters) {
+				return test_case(allocator, false, *tex2k, *dst2k, start, end, parameters);
 		}},
-			{"Dependent 4K", [](vuk::BenchRunner& runner, vuk::Allocator& frame_allocator, vuk::Query start, vuk::Query end, auto&& parameters) {
-				return test_case(ifc, true, *tex4k, *dst4k, start, end, parameters);
+			{"Dependent 4K", [](vuk::BenchRunner& runner, vuk::Allocator& allocator, vuk::Query start, vuk::Query end, auto&& parameters) {
+				return test_case(allocator, true, *tex4k, *dst4k, start, end, parameters);
 		}},
-			{"Non-dependent 4K", [](vuk::BenchRunner& runner, vuk::Allocator& frame_allocator, vuk::Query start, vuk::Query end, auto&& parameters) {
-				return test_case(ifc, false, *tex4k, *dst4k, start, end, parameters);
+			{"Non-dependent 4K", [](vuk::BenchRunner& runner, vuk::Allocator& allocator, vuk::Query start, vuk::Query end, auto&& parameters) {
+				return test_case(allocator, false, *tex4k, *dst4k, start, end, parameters);
 		}},
-			{"Dependent 8K", [](vuk::BenchRunner& runner, vuk::Allocator& frame_allocator, vuk::Query start, vuk::Query end, auto&& parameters) {
-				return test_case(ifc, true, *tex8k, *dst8k, start, end, parameters);
+			{"Dependent 8K", [](vuk::BenchRunner& runner, vuk::Allocator& allocator, vuk::Query start, vuk::Query end, auto&& parameters) {
+				return test_case(allocator, true, *tex8k, *dst8k, start, end, parameters);
 		}},
-			{"Non-dependent 8K", [](vuk::BenchRunner& runner, vuk::Allocator& frame_allocator, vuk::Query start, vuk::Query end, auto&& parameters) {
-				return test_case(ifc, false, *tex8k, *dst8k, start, end, parameters);
+			{"Non-dependent 8K", [](vuk::BenchRunner& runner, vuk::Allocator& allocator, vuk::Query start, vuk::Query end, auto&& parameters) {
+				return test_case(allocator, false, *tex8k, *dst8k, start, end, parameters);
 		}},
 		}
 	};

@@ -620,7 +620,6 @@ namespace vuk {
 		return tex;
 	}
 
-
 	std::pair<Texture, TransferStub> Context::create_texture(Allocator& allocator, Format format, Extent3D extent, void* data, bool generate_mips) {
 		ImageCreateInfo ici;
 		ici.format = format;
@@ -939,21 +938,7 @@ namespace vuk {
 		return impl->legacy_gpu_allocator.get_allocation_size(buf);
 	}
 
-	Unique<BufferCrossDevice> Context::allocate_buffer_cross_device(Allocator& allocator, MemoryUsage mem_usage, size_t size, size_t alignment) {
-		assert(mem_usage != vuk::MemoryUsage::eGPUonly);
-		Unique<BufferCrossDevice> buf(allocator);
-		BufferCreateInfo bci{ mem_usage, size, alignment };
-		auto ret = allocator.allocate_buffers(std::span{ &*buf, 1 }, std::span{ &bci, 1 }); // TODO: dropping error
-		return buf;
-	}
-
-	Unique<BufferGPU> Context::allocate_buffer_gpu(Allocator& allocator, size_t size, size_t alignment) {
-		Unique<BufferGPU> buf(allocator);
-		BufferCreateInfo bci{ vuk::MemoryUsage::eGPUonly, size, alignment };
-		auto ret = allocator.allocate_buffers(std::span{ &*buf, 1 }, std::span{ &bci, 1 }); // TODO: dropping error
-		return buf;
-	}
-
+	// TODO: replace transfer machinery
 	void Context::dma_task(Allocator& allocator) {
 		std::lock_guard _(impl->transfer_mutex);
 		while (!impl->pending_transfers.empty() && vkGetFenceStatus(device, impl->pending_transfers.front().fence) == VK_SUCCESS) {
@@ -990,10 +975,11 @@ namespace vuk {
 		si.pCommandBuffers = &cbuf->command_buffer;
 		submit_graphics(si, *fence);
 		impl->pending_transfers.emplace(PendingTransfer{ last, *fence });
+	}
 
-		// TODO: replace transfer machinery
+	void Context::wait_all_transfers(Allocator& allocator) {
 		// wait all transfers, immediately
-
+		dma_task(allocator);
 		while (!impl->pending_transfers.empty()) {
 			vkWaitForFences(device, 1, &impl->pending_transfers.front().fence, true, UINT64_MAX);
 			auto last = impl->pending_transfers.front();
@@ -1351,5 +1337,56 @@ namespace vuk {
 		return impl->compute_pipeline_cache.acquire(pici, absolute_frame);
 	}
 
+	bool Context::is_timestamp_available(Query q) {
+		std::scoped_lock _(impl->query_lock);
+		auto it = impl->timestamp_result_map.find(q);
+		return (it != impl->timestamp_result_map.end());
+	}
+
+	std::optional<uint64_t> Context::retrieve_timestamp(Query q) {
+		std::scoped_lock _(impl->query_lock);
+		auto it = impl->timestamp_result_map.find(q);
+		if (it != impl->timestamp_result_map.end()) {
+			uint64_t res = it->second;
+			impl->timestamp_result_map.erase(it);
+			return res;
+		}
+		return {};
+	}
+
+	std::optional<double> Context::retrieve_duration(Query q1, Query q2) {
+		if (!is_timestamp_available(q1)) {
+			return {};
+		}
+		auto r1 = retrieve_timestamp(q1);
+		auto r2 = retrieve_timestamp(q2);
+		if (!r2) {
+			return {};
+		}
+
+		auto ns = impl->physical_device_properties.limits.timestampPeriod * (r2.value() - r1.value());
+		return ns * 1e-9;
+	}
+
+	Result<void> Context::make_timestamp_results_available(std::span<const TimestampQueryPool> pools) {
+		std::scoped_lock _(impl->query_lock);
+		std::array<uint64_t, TimestampQueryPool::num_queries> host_values;
+
+		for (auto& pool : pools) {
+			if (pool.count == 0) {
+				continue;
+			}
+			auto result = vkGetQueryPoolResults(device, pool.pool, 0, pool.count, sizeof(uint64_t) * pool.count, host_values.data(), sizeof(uint64_t), VkQueryResultFlagBits::VK_QUERY_RESULT_64_BIT | VkQueryResultFlagBits::VK_QUERY_RESULT_WAIT_BIT);
+			if (result != VK_SUCCESS) {
+				return { expected_error, AllocateException{result} };
+			}
+
+			for (uint64_t i = 0; i < pool.count; i++) {
+				impl->timestamp_result_map.emplace(pool.queries[i], host_values[i]);
+			}
+		}
+
+		return { expected_value };
+	}
 }
 

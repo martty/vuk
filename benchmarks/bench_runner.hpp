@@ -12,6 +12,8 @@
 #include <vector>
 #include "vuk/RenderGraph.hpp"
 #include "vuk/CommandBuffer.hpp"
+#include "vuk/resources/DeviceFrameResource.hpp"
+#include "vuk/AllocatorHelpers.hpp"
 #include "examples/imgui_impl_glfw.h"
 
 namespace vuk {
@@ -20,7 +22,7 @@ namespace vuk {
 	struct CaseBase {
 		std::string_view label;
 		std::vector<std::string_view> subcase_labels;
-		std::vector<std::function<RenderGraph(BenchRunner&, vuk::InflightContext&, Query, Query)>> subcases;
+		std::vector<std::function<RenderGraph(BenchRunner&, vuk::Allocator&, Query, Query)>> subcases;
 		std::vector<std::vector<double>> timings;
 		std::vector<std::vector<float>> binned;
 		std::vector<uint32_t> last_stage_ran;
@@ -80,12 +82,14 @@ namespace vuk {
 		VkQueue graphics_queue;
 		std::optional<Context> context;
 		std::optional<DeviceSuperFrameResource> xdev_rf_alloc;
+		std::optional<Allocator> global;
 		vuk::SwapchainRef swapchain;
 		GLFWwindow* window;
 		VkSurfaceKHR surface;
 		vkb::Instance vkbinstance;
 		vkb::Device vkbdevice;
 		util::ImGuiData imgui_data;
+		plf::colony<vuk::SampledImage> sampled_images;
 
 		Query start, end;
 		unsigned current_case = 0;
@@ -109,21 +113,19 @@ namespace vuk {
 
 			start = context->create_timestamp_query();
 			end = context->create_timestamp_query();
-			Allocator global(*xdev_rf_alloc);
 			{
-				imgui_data = util::ImGui_ImplVuk_Init(global);
-				context->wait_all_transfers(global);
+				imgui_data = util::ImGui_ImplVuk_Init(*global);
+				context->wait_all_transfers(*global);
 			}
-			bench->setup(*this, global);
+			bench->setup(*this, *global);
 		}
 
 		void render();
 
 		void cleanup() {
 			context->wait_idle();
-			Allocator global(*xdev_rf_alloc);
 			if (bench->cleanup) {
-				bench->cleanup(*this, global);
+				bench->cleanup(*this, *global);
 			}
 			
 		}

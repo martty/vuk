@@ -463,6 +463,8 @@ namespace vuk {
 
 		auto res = allocate_buffer_cross_device(*allocator, { MemoryUsage::eCPUtoGPU, size, 1 });
 		if (!res) {
+			allocate_except.emplace(res.error());
+			current_exception = &allocate_except.value();
 			return nullptr;
 		} else {
 			auto& buf = res->get();
@@ -505,7 +507,15 @@ namespace vuk {
 		if (!_bind_graphics_pipeline_state()) {
 			return *this;
 		}
-		auto buf = ctx.allocate_buffer_cross_device(*allocator, MemoryUsage::eCPUtoGPU, cmds.size_bytes(), 1);
+
+		auto res = allocate_buffer_cross_device(*allocator, { MemoryUsage::eCPUtoGPU, cmds.size_bytes(), 1 });
+		if (!res) {
+			allocate_except.emplace(res.error());
+			current_exception = &allocate_except.value();
+			return *this;
+		}
+
+		auto& buf = *res;
 		memcpy(buf->mapped_ptr, cmds.data(), cmds.size_bytes());
 		vkCmdDrawIndexedIndirect(command_buffer, buf->buffer, (uint32_t)buf->offset, (uint32_t)cmds.size(), sizeof(DrawIndexedIndirectCommand));
 		return *this;
@@ -787,10 +797,13 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::write_timestamp(Query q, PipelineStageFlagBits stage) {
 		VUK_EARLY_RET();
-		// TODO: check for duplicate submission of a query
-		// TODO: queries broken
-		/*auto tsq = ptc.register_timestamp_query(q);
-		vkCmdWriteTimestamp(command_buffer, (VkPipelineStageFlagBits)stage, tsq.pool, tsq.id);*/
+
+		vuk::TimestampQuery tsq;
+		vuk::TimestampQueryCreateInfo ci{ .query = q };
+		
+		allocator->allocate_timestamp_queries(std::span{ &tsq, 1 }, std::span{ &ci, 1 }); // TODO: error handling
+		
+		vkCmdWriteTimestamp(command_buffer, (VkPipelineStageFlagBits)stage, tsq.pool, tsq.id);
 		return *this;
 	}
 

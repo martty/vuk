@@ -196,6 +196,63 @@ namespace vuk {
 
 		Cache<DescriptorSet> descriptor_set_cache;
 
+		std::vector<TimestampQueryPool> ts_query_pools;
+		std::mutex query_pool_mutex;
+
+		Result<void, AllocateException> allocate_timestamp_query_pools(std::span<TimestampQueryPool> dst, std::span<const VkQueryPoolCreateInfo> cis, SourceLocationAtFrame loc) override {
+			VUK_DO_OR_RETURN(upstream->allocate_timestamp_query_pools(dst, cis, loc));
+			std::unique_lock _(query_pool_mutex);
+
+			auto& vec = ts_query_pools;
+			vec.insert(vec.end(), dst.begin(), dst.end());
+			return { expected_value };
+		}
+
+		void deallocate_timestamp_query_pools(std::span<const TimestampQueryPool> src) override {} // noop
+
+		std::mutex ts_query_mutex;
+		uint64_t query_index = 0;
+		uint64_t current_ts_pool;
+
+		Result<void, AllocateException> allocate_timestamp_queries(std::span<TimestampQuery> dst, std::span<const TimestampQueryCreateInfo> cis, SourceLocationAtFrame loc) override {
+			std::unique_lock _(ts_query_mutex);
+			assert(dst.size() == cis.size());
+
+			for (uint64_t i = 0; i < dst.size(); i++) {
+				auto& ci = cis[i];
+
+				if (ci.pool) { // use given pool to allocate query
+					ci.pool->queries[ci.pool->count++] = ci.query;
+					dst[i].id = ci.pool->count;
+					dst[i].pool = ci.pool->pool;
+				} else { // allocate a pool on demand
+					std::unique_lock _(query_pool_mutex);
+					if (query_index % TimestampQueryPool::num_queries == 0) {
+						VkQueryPoolCreateInfo qpci{ VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO };
+						qpci.queryCount = TimestampQueryPool::num_queries;
+						qpci.queryType = VK_QUERY_TYPE_TIMESTAMP;
+						TimestampQueryPool p;
+						VUK_DO_OR_RETURN(upstream->allocate_timestamp_query_pools(std::span{ &p, 1 }, std::span{ &qpci, 1 }, loc));
+
+						auto& vec = ts_query_pools;
+						vec.emplace_back(p);
+						current_ts_pool = vec.size() - 1;
+					}
+					
+					auto& pool = ts_query_pools[current_ts_pool];
+					pool.queries[pool.count++] = ci.query;
+					dst[i].id = pool.count - 1;
+					dst[i].pool = pool.pool;
+
+					query_index++;
+				}
+			}
+
+			return { expected_value };
+		}
+
+		void deallocate_timestamp_queries(std::span<const TimestampQuery> src) override {} // noop
+
 		void wait() {
 			if (fences.size() > 0) {
 				vkWaitForFences(device, (uint32_t)fences.size(), fences.data(), true, UINT64_MAX);
@@ -207,7 +264,7 @@ namespace vuk {
 		}
 
 		VkDevice device;
-		uint64_t current_frame = 0;
+		uint64_t current_frame = -1;
 		LegacyLinearAllocator linear_cpu_only;
 		LegacyLinearAllocator linear_cpu_gpu;
 		LegacyLinearAllocator linear_gpu_cpu;
@@ -362,41 +419,26 @@ namespace vuk {
 			vec.insert(vec.end(), src.begin(), src.end());
 		}
 
+		Result<void, AllocateException> allocate_timestamp_query_pools(std::span<TimestampQueryPool> dst, std::span<const VkQueryPoolCreateInfo> cis, SourceLocationAtFrame loc) override {
+			return direct.allocate_timestamp_query_pools(dst, cis, loc);
+		}
+
+		void deallocate_timestamp_query_pools(std::span<const TimestampQueryPool> src) override {
+			auto& f = get_last_frame();
+			std::unique_lock _(f.query_pool_mutex);
+			auto& vec = f.ts_query_pools;
+			vec.insert(vec.end(), src.begin(), src.end());
+		}
+
+		Result<void, AllocateException> allocate_timestamp_queries(std::span<TimestampQuery> dst, std::span<const TimestampQueryCreateInfo> cis, SourceLocationAtFrame loc) override {
+			return direct.allocate_timestamp_queries(dst, cis, loc);
+		}
+
+		void deallocate_timestamp_queries(std::span<const TimestampQuery> src) override {} // noop
+
 		DeviceFrameResource& get_next_frame();
 
-		void deallocate_frame(DeviceFrameResource& f) {
-			//f.descriptor_set_cache.collect(frame_counter.load(), 16);
-			direct.deallocate_semaphores(f.semaphores);
-			direct.deallocate_fences(f.fences);
-			for (auto& c : f.cmdbuffers_to_free) {
-				direct.deallocate_commandbuffers(c.command_pool, std::span{ &c.command_buffer, 1 });
-			}
-			direct.deallocate_commandpools(f.cmdpools_to_free);
-			direct.deallocate_buffers(f.buffer_gpus);
-			direct.deallocate_buffers(f.buffer_cross_devices);
-			direct.deallocate_framebuffers(f.framebuffers);
-			direct.deallocate_images(f.images);
-			direct.deallocate_image_views(f.image_views);
-			direct.deallocate_persistent_descriptor_sets(f.persistent_descriptor_sets);
-			direct.deallocate_descriptor_sets(f.descriptor_sets);
-
-			f.semaphores.clear();
-			f.fences.clear();
-			f.buffer_cross_devices.clear();
-			f.buffer_gpus.clear();
-			f.cmdbuffers_to_free.clear();
-			f.cmdpools_to_free.clear();
-			auto& legacy = direct.legacy_gpu_allocator;
-			legacy->reset_pool(f.linear_cpu_only);
-			legacy->reset_pool(f.linear_cpu_gpu);
-			legacy->reset_pool(f.linear_gpu_cpu);
-			legacy->reset_pool(f.linear_gpu_only);
-			f.framebuffers.clear();
-			f.images.clear();
-			f.image_views.clear();
-			f.persistent_descriptor_sets.clear();
-			f.descriptor_sets.clear();
-		}
+		void deallocate_frame(DeviceFrameResource& f);
 
 		virtual ~DeviceSuperFrameResource() {
 			for (auto i = 0; i < frames_in_flight; i++) {

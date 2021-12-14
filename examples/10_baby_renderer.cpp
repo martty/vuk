@@ -256,7 +256,7 @@ namespace {
 			}
 
 			// Upload model matrices to an array
-			auto modelmats = *ctx.allocate_buffer_cross_device(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, sizeof(glm::mat4) * renderables.size(), 1);
+			auto modelmats = **allocate_buffer_cross_device(frame_allocator, { vuk::MemoryUsage::eCPUtoGPU, sizeof(glm::mat4) * renderables.size(), 1 });
 			for (auto i = 0; i < renderables.size(); i++) {
 				glm::mat4 model_matrix = glm::translate(glm::mat4(1.f), renderables[i].position);
 				memcpy(reinterpret_cast<glm::mat4*>(modelmats.mapped_ptr) + i, &model_matrix, sizeof(glm::mat4));

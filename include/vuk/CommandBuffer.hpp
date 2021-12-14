@@ -13,7 +13,6 @@
 
 namespace vuk {
 	class Context;
-	class PerThreadContext;
 
 	struct Ignore {
 		Ignore(size_t bytes) : format(Format::eUndefined), bytes((uint32_t)bytes) {}

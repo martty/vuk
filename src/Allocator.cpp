@@ -16,7 +16,7 @@ namespace vuk {
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
 			auto& ci = cis[i];
 			if (ci.mem_usage != MemoryUsage::eCPUonly && ci.mem_usage != MemoryUsage::eCPUtoGPU && ci.mem_usage != MemoryUsage::eGPUtoCPU) {
-				deallocate_buffers(std::span{ dst.data(), i });
+				deallocate_buffers(std::span{ dst.data(), (uint64_t)i });
 				return { expected_error, AllocateException{VK_ERROR_FEATURE_NOT_PRESENT} }; // tried to allocate gpu only buffer as BufferCrossDevice
 			}
 			// TODO: legacy buffer alloc can't signal errors
@@ -57,7 +57,7 @@ namespace vuk {
 			auto& ci = cis[i];
 			// TODO: legacy buffer alloc can't signal errors
 			if (ci.mem_usage != MemoryUsage::eGPUonly) {
-				deallocate_buffers(std::span{ dst.data(), i });
+				deallocate_buffers(std::span{ dst.data(), (uint64_t)i });
 				return { expected_error, AllocateException{VK_ERROR_FEATURE_NOT_PRESENT} }; // tried to allocate cross device buffer as BufferGPU
 			}
 			dst[i] = BufferGPU{ legacy_gpu_allocator->allocate_buffer(ci.mem_usage, LegacyGPUAllocator::all_usage, ci.size, ci.alignment, false) };
@@ -86,28 +86,6 @@ namespace vuk {
 			dst[i] = ctx->wrap(iv, cis[i]);
 		}
 		return { expected_value };
-	}
-
-	DeviceSuperFrameResource::DeviceSuperFrameResource(Context& ctx, uint64_t frames_in_flight) : direct(ctx, ctx.get_legacy_gpu_allocator()), frames_in_flight(frames_in_flight) {
-		frames_storage = std::unique_ptr<char[]>(new char[sizeof(DeviceFrameResource) * frames_in_flight]);
-		for (uint64_t i = 0; i < frames_in_flight; i++) {
-			new(frames_storage.get() + i * sizeof(DeviceFrameResource)) DeviceFrameResource(direct.device, *this);
-		}
-		frames = reinterpret_cast<DeviceFrameResource*>(frames_storage.get());
-	}
-
-	DeviceFrameResource& DeviceSuperFrameResource::get_next_frame() {
-		std::unique_lock _(new_frame_mutex);
-		auto& ctx = direct.get_context();
-		frame_counter++;
-		local_frame = frame_counter % frames_in_flight;
-
-		auto& f = frames[local_frame];
-		f.wait();
-		deallocate_frame(f);
-		f.current_frame = frame_counter.load();
-
-		return f;
 	}
 
 	void deallocate(DeviceFrameResource& res, DescriptorSet& ds) {
@@ -341,6 +319,30 @@ namespace vuk {
 
 	void Allocator::deallocate(std::span<const DescriptorSet> src) {
 		device_resource->deallocate_descriptor_sets(src);
+	}
+
+	Result<void, AllocateException> Allocator::allocate(std::span<TimestampQueryPool> dst, std::span<const VkQueryPoolCreateInfo> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_timestamp_query_pools(dst, cis, loc);
+	}
+
+	Result<void, AllocateException> Allocator::allocate_timestamp_query_pools(std::span<TimestampQueryPool> dst, std::span<const VkQueryPoolCreateInfo> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_timestamp_query_pools(dst, cis, loc);
+	}
+
+	void Allocator::deallocate(std::span<const TimestampQueryPool> src) {
+		device_resource->deallocate_timestamp_query_pools(src);
+	}
+
+	Result<void, AllocateException> Allocator::allocate(std::span<TimestampQuery> dst, std::span<const TimestampQueryCreateInfo> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_timestamp_queries(dst, cis, loc);
+	}
+
+	Result<void, AllocateException> Allocator::allocate_timestamp_queries(std::span<TimestampQuery> dst, std::span<const TimestampQueryCreateInfo> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_timestamp_queries(dst, cis, loc);
+	}
+
+	void Allocator::deallocate(std::span<const TimestampQuery> src) {
+		device_resource->deallocate_timestamp_queries(src);
 	}
 
 	PFN_vmaAllocateDeviceMemoryFunction LegacyGPUAllocator::real_alloc_callback = nullptr;

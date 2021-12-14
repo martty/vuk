@@ -2,6 +2,7 @@
 #include "vuk/Context.hpp"
 #include "vuk/CommandBuffer.hpp"
 #include "vuk/RenderGraph.hpp"
+#include "vuk/AllocatorHelpers.hpp"
 
 util::ImGuiData util::ImGui_ImplVuk_Init(vuk::Allocator& allocator) {
 	vuk::Context& ctx = allocator.get_context();
@@ -61,8 +62,8 @@ void util::ImGui_ImplVuk_Render(vuk::Allocator& allocator, vuk::RenderGraph& rg,
 
 	size_t vertex_size = draw_data->TotalVtxCount * sizeof(ImDrawVert);
 	size_t index_size = draw_data->TotalIdxCount * sizeof(ImDrawIdx);
-	auto imvert = ctx.allocate_buffer_gpu(allocator, vertex_size, 1);
-	auto imind = ctx.allocate_buffer_gpu(allocator, index_size, 1);
+	auto imvert = *allocate_buffer_gpu(allocator, { vuk::MemoryUsage::eGPUonly, vertex_size, 1 });
+	auto imind = *allocate_buffer_gpu(allocator, { vuk::MemoryUsage::eGPUonly, index_size, 1 });
 
 	size_t vtx_dst = 0, idx_dst = 0;
 	for (int n = 0; n < draw_data->CmdListsCount; n++) {

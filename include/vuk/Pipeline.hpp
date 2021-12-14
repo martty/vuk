@@ -80,7 +80,6 @@ namespace vuk {
 		vuk::fixed_vector<std::string, graphics_stage_count> shader_paths;
 
 		friend struct std::hash<PipelineBaseCreateInfo>;
-		friend class PerThreadContext;
 	public:
 
 		static vuk::fixed_vector<vuk::DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> build_descriptor_layouts(const Program&, const PipelineBaseCreateInfoBase&);

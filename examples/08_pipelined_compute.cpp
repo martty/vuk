@@ -61,7 +61,7 @@ namespace {
 			texture_of_doge = std::move(tex);
 
 			// init scrambling buffer
-			scramble_buf = ctx.allocate_buffer_gpu(allocator, sizeof(unsigned) * x * y, 1);
+			scramble_buf = *allocate_buffer_gpu(allocator, { vuk::MemoryUsage::eGPUonly, sizeof(unsigned) * x * y, 1 });
 			std::vector<unsigned> indices(x * y);
 			std::iota(indices.begin(), indices.end(), 0);
 			std::shuffle(indices.begin(), indices.end(), g);
