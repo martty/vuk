@@ -90,26 +90,6 @@ namespace vuk {
 		std::vector<BufferGPU> buffer_gpus;
 		std::vector<BufferCrossDevice> buffer_cross_devices;
 
-		template<class T>
-		struct LRUEntry {
-			T value;
-			size_t last_use_frame;
-		};
-
-		template<class T>
-		struct Cache {
-			robin_hood::unordered_map<create_info_t<T>, LRUEntry<T>> lru_map;
-			std::array<std::vector<T>, 32> per_thread_append_v;
-			std::array<std::vector<create_info_t<T>>, 32> per_thread_append_k;
-
-			std::mutex cache_mtx;
-
-			T& acquire(uint64_t current_frame, const create_info_t<T>& ci);
-			void collect(uint64_t current_frame, size_t threshold);
-		};
-
-		Cache<DescriptorSet> descriptor_set_cache;
-
 		std::vector<TimestampQueryPool> ts_query_pools;
 		std::mutex query_pool_mutex;
 

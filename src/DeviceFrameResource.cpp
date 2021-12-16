@@ -144,61 +144,6 @@ namespace vuk {
 
 	void DeviceFrameResource::deallocate_descriptor_sets(std::span<const DescriptorSet> src) {} // noop
 
-
-	void deallocate(DeviceFrameResource& res, DescriptorSet& ds) {
-		std::unique_lock _{ res.ds_mutex };
-
-		auto& vec = res.descriptor_sets;
-		vec.emplace_back(ds);
-	}
-
-	template<class T>
-	T& DeviceFrameResource::Cache<T>::acquire(uint64_t current_frame, const create_info_t<T>& ci) {
-		if (auto it = lru_map.find(ci); it != lru_map.end()) {
-			it->second.last_use_frame = current_frame;
-			return it->second.value;
-		} else {
-			// if the value is not in the cache, we look in our per thread buffers
-			// if it doesn't exist there either, we add it
-			auto& ptv = per_thread_append_v[0 /*ptc.tid*/];
-			auto& ptk = per_thread_append_k[0 /*ptc.tid*/]; // TODO: restore TIDs
-			auto pit = std::find(ptk.begin(), ptk.end(), ci);
-			if (pit == ptk.end()) {
-				ptv.emplace_back(allocate(ci));
-				pit = ptk.insert(ptk.end(), ci);
-			}
-			auto index = std::distance(ptk.begin(), pit);
-			return ptv[index];
-		}
-	}
-
-	template<class T>
-	void DeviceFrameResource::Cache<T>::collect(uint64_t current_frame, size_t threshold) {
-		std::unique_lock _(cache_mtx);
-		for (auto it = lru_map.begin(); it != lru_map.end();) {
-			if (current_frame - it->second.last_use_frame > threshold) {
-				deallocate(it->second.value);
-				it = lru_map.erase(it);
-			} else {
-				++it;
-			}
-		}
-
-		for (size_t tid = 0; tid < per_thread_append_v.size(); tid++) {
-			auto& vs = per_thread_append_v[tid];
-			auto& ks = per_thread_append_k[tid];
-			for (size_t i = 0; i < vs.size(); i++) {
-				if (lru_map.find(ks[i]) == lru_map.end()) {
-					lru_map.emplace(ks[i], LRUEntry{ std::move(vs[i]), current_frame });
-				} else {
-					deallocate(vs[i]);
-				}
-			}
-			vs.clear();
-			ks.clear();
-		}
-	}
-
 	Result<void, AllocateException> DeviceFrameResource::allocate_timestamp_query_pools(std::span<TimestampQueryPool> dst, std::span<const VkQueryPoolCreateInfo> cis, SourceLocationAtFrame loc) {
 		VUK_DO_OR_RETURN(upstream->allocate_timestamp_query_pools(dst, cis, loc));
 		std::unique_lock _(query_pool_mutex);
