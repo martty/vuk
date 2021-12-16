@@ -139,4 +139,60 @@ namespace vuk {
 	bool MPI2::operator==(MPI2 const& other) const noexcept {
 		return *reinterpret_cast<M2::iterator const*>(_iter) == *reinterpret_cast<M2::iterator const*>(other._iter);
 	}
+
+	// implement MapProxy for attachment
+	using MP3 = MapProxy<Name, const BufferInfo&>;
+	using MPI3 = ConstMapIterator<Name, const BufferInfo&>;
+	using M3 = robin_hood::unordered_flat_map<Name, BufferInfo>;
+
+	template<>
+	MP3::const_iterator MP3::cbegin() const noexcept {
+		auto& map = *reinterpret_cast<M3*>(_map);
+		return MP3::const_iterator(new M3::const_iterator(map.cbegin()));
+	}
+
+	template<>
+	MP3::const_iterator MP3::cend() const noexcept {
+		auto& map = *reinterpret_cast<M3*>(_map);
+		return MP3::const_iterator(new M3::const_iterator(map.cend()));
+	}
+
+	template<>
+	MP3::const_iterator MP3::find(Name key) const noexcept {
+		auto& map = *reinterpret_cast<M3*>(_map);
+		return MP3::const_iterator(new M3::const_iterator(map.find(key)));
+	}
+
+	template<>
+	size_t MP3::size() const noexcept {
+		auto& map = *reinterpret_cast<M3*>(_map);
+		return map.size();
+	}
+
+	template<>
+	MPI3::~ConstMapIterator() {
+		delete reinterpret_cast<M3::const_iterator*>(_iter);
+	}
+
+	template<>
+	MPI3::ConstMapIterator(const MPI3& other) noexcept {
+		*reinterpret_cast<M3::const_iterator*>(_iter) = *reinterpret_cast<M3::iterator*>(other._iter);
+	}
+
+	template<>
+	MPI3::reference MPI3::operator*() noexcept {
+		const auto& iter = *reinterpret_cast<M3::const_iterator const*>(_iter);
+		return { iter->first, iter->second };
+	}
+
+	template<>
+	MPI3& MPI3::operator++() noexcept {
+		reinterpret_cast<M3::iterator*>(_iter)->operator++();
+		return *this;
+	}
+
+	template<>
+	bool MPI3::operator==(MPI3 const& other) const noexcept {
+		return *reinterpret_cast<M3::iterator const*>(_iter) == *reinterpret_cast<M3::iterator const*>(other._iter);
+	}
 } // namespace vuk
