@@ -801,7 +801,12 @@ namespace vuk {
 		vuk::TimestampQuery tsq;
 		vuk::TimestampQueryCreateInfo ci{ .query = q };
 		
-		allocator->allocate_timestamp_queries(std::span{ &tsq, 1 }, std::span{ &ci, 1 }); // TODO: error handling
+		auto res = allocator->allocate_timestamp_queries(std::span{ &tsq, 1 }, std::span{ &ci, 1 });
+		if (!res) {
+			allocate_except.emplace(res.error());
+			current_exception = &allocate_except.value();
+			return *this;
+		}
 		
 		vkCmdWriteTimestamp(command_buffer, (VkPipelineStageFlagBits)stage, tsq.pool, tsq.id);
 		return *this;
