@@ -383,6 +383,7 @@ namespace vuk {
 		CommandBuffer& resolve_image(Name src, Name dst);
 		CommandBuffer& blit_image(Name src, Name dst, ImageBlit region, Filter filter);
 		CommandBuffer& copy_image_to_buffer(Name src, Name dst, BufferImageCopy);
+		CommandBuffer& copy_buffer(Name src, Name dst, VkBufferCopy bic);
 
 		// explicit synchronisation
 		CommandBuffer& image_barrier(Name, Access src_access, Access dst_access);

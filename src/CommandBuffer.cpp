@@ -752,6 +752,31 @@ namespace vuk {
 		return *this;
 	}
 
+	CommandBuffer& CommandBuffer::copy_buffer(Name src, Name dst, VkBufferCopy bic) {
+		VUK_EARLY_RET();
+		assert(rg);
+		auto src_res = rg->get_resource_buffer(src);
+		if (!src_res) {
+			rg_except.emplace(src_res.error());
+			current_exception = &rg_except.value();
+			return *this;
+		}
+		auto src_bbuf = src_res->buffer;
+		auto dst_res = rg->get_resource_buffer(dst);
+		if (!dst_res) {
+			rg_except.emplace(dst_res.error());
+			current_exception = &rg_except.value();
+			return *this;
+		}
+		auto dst_bbuf = dst_res->buffer;
+
+		bic.srcOffset += src_bbuf.offset;
+		bic.dstOffset += dst_bbuf.offset;
+
+		vkCmdCopyBuffer(command_buffer, src_bbuf.buffer, dst_bbuf.buffer, 1, &bic);
+		return *this;
+	}
+
 	CommandBuffer& CommandBuffer::image_barrier(Name src, Access src_acc, Access dst_acc) {
 		VUK_EARLY_RET();
 		assert(rg);
