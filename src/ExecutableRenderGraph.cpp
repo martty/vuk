@@ -108,7 +108,7 @@ namespace vuk {
 		cobuf.ongoing_renderpass = rpi;
 	}
 
-	Result<Unique<HLCommandBuffer>> ExecutableRenderGraph::execute(Context& ctx, Allocator& alloc, std::vector<std::pair<SwapChainRef, size_t>> swp_with_index) {
+	Result<Unique<CommandBufferAllocation>> ExecutableRenderGraph::execute(Context& ctx, Allocator& alloc, std::vector<std::pair<SwapChainRef, size_t>> swp_with_index) {
 		// bind swapchain attachment images & ivs
 		for (auto& [name, bound] : impl->bound_attachments) {
 			if (bound.type == AttachmentRPInfo::Type::eSwapchain) {
@@ -213,9 +213,14 @@ namespace vuk {
 		}
 
 		// actual execution
-		Unique<HLCommandBuffer> hl_cbuf(alloc);
-		HLCommandBufferCreateInfo ci{ .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .queue_family_index = ctx.graphics_queue_family_index };
-		VUK_DO_OR_RETURN(alloc.allocate_hl_commandbuffers(std::span{ &*hl_cbuf, 1 }, std::span{ &ci, 1 }));
+		Unique<VkCommandPool> cpool(alloc);
+		VkCommandPoolCreateInfo cpci{ VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
+		cpci.flags = VkCommandPoolCreateFlagBits::VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+		cpci.queueFamilyIndex = ctx.graphics_queue_family_index; // TODO: hardcoding queue family index
+		VUK_DO_OR_RETURN(alloc.allocate_command_pools(std::span{ &*cpool, 1 }, std::span{ &cpci, 1 }));
+		Unique<CommandBufferAllocation> hl_cbuf(alloc);
+		CommandBufferAllocationCreateInfo ci{ .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .command_pool = *cpool};
+		VUK_DO_OR_RETURN(alloc.allocate_command_buffers(std::span{ &*hl_cbuf, 1 }, std::span{ &ci, 1 }));
 
 		VkCommandBuffer cbuf = hl_cbuf->command_buffer;
 

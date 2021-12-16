@@ -66,8 +66,8 @@ namespace vuk {
 	struct TimestampQueryPool;
 	struct TimestampQueryCreateInfo;
 
-	struct HLCommandBufferCreateInfo;
-	struct HLCommandBuffer;
+	struct CommandBufferAllocationCreateInfo;
+	struct CommandBufferAllocation;
 
 	struct SetBinding;
 	struct DescriptorSet;

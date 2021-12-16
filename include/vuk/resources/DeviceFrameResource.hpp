@@ -31,17 +31,11 @@ namespace vuk {
 		void deallocate_fences(std::span<const VkFence> src) override; // noop
 
 		std::mutex cbuf_mutex;
-		std::vector<HLCommandBuffer> cmdbuffers_to_free;
 		std::vector<VkCommandPool> cmdpools_to_free;
 
-		// TODO: error propagation
-		Result<void, AllocateException> allocate_hl_commandbuffers(std::span<HLCommandBuffer> dst, std::span<const HLCommandBufferCreateInfo> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException> allocate_command_buffers(std::span<CommandBufferAllocation> dst, std::span<const CommandBufferAllocationCreateInfo> cis, SourceLocationAtFrame loc) override;
 
-		void deallocate_hl_commandbuffers(std::span<const HLCommandBuffer> src) override; // no-op, deallocated with pools
-
-		Result<void, AllocateException> allocate_commandbuffers(std::span<VkCommandBuffer> dst, std::span<const VkCommandBufferAllocateInfo> cis, SourceLocationAtFrame loc) override;
-
-		void deallocate_commandbuffers(VkCommandPool pool, std::span<const VkCommandBuffer> dst) override; // noop
+		void deallocate_command_buffers(std::span<const CommandBufferAllocation> src) override; // no-op, deallocated with pools
 
 		Result<void, AllocateException> allocate_commandpools(std::span<VkCommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) override;
 
@@ -164,13 +158,9 @@ namespace vuk {
 
 		void deallocate_fences(std::span<const VkFence> src) override;
 
-		Result<void, AllocateException> allocate_commandbuffers(std::span<VkCommandBuffer> dst, std::span<const VkCommandBufferAllocateInfo> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException> allocate_command_buffers(std::span<CommandBufferAllocation> dst, std::span<const CommandBufferAllocationCreateInfo> cis, SourceLocationAtFrame loc) override;
 
-		void deallocate_commandbuffers(VkCommandPool pool, std::span<const VkCommandBuffer> src) override;
-
-		Result<void, AllocateException> allocate_hl_commandbuffers(std::span<HLCommandBuffer> dst, std::span<const HLCommandBufferCreateInfo> cis, SourceLocationAtFrame loc) override;
-
-		void deallocate_hl_commandbuffers(std::span<const HLCommandBuffer> src) override;
+		void deallocate_command_buffers(std::span<const CommandBufferAllocation> src) override;
 
 		Result<void, AllocateException> allocate_commandpools(std::span<VkCommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) override;
 

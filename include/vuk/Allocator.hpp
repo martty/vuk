@@ -81,11 +81,8 @@ namespace vuk {
 		virtual Result<void, AllocateException> allocate_fences(std::span<VkFence> dst, SourceLocationAtFrame loc) = 0;
 		virtual void deallocate_fences(std::span<const VkFence> dst) = 0;
 
-		virtual Result<void, AllocateException> allocate_commandbuffers(std::span<VkCommandBuffer> dst, std::span<const VkCommandBufferAllocateInfo> cis, SourceLocationAtFrame loc) = 0;
-		virtual void deallocate_commandbuffers(VkCommandPool pool, std::span<const VkCommandBuffer> dst) = 0;
-
-		virtual Result<void, AllocateException> allocate_hl_commandbuffers(std::span<HLCommandBuffer> dst, std::span<const HLCommandBufferCreateInfo> cis, SourceLocationAtFrame loc) = 0;
-		virtual void deallocate_hl_commandbuffers(std::span<const HLCommandBuffer> dst) = 0;
+		virtual Result<void, AllocateException> allocate_command_buffers(std::span<CommandBufferAllocation> dst, std::span<const CommandBufferAllocationCreateInfo> cis, SourceLocationAtFrame loc) = 0;
+		virtual void deallocate_command_buffers(std::span<const CommandBufferAllocation> dst) = 0;
 
 		virtual Result<void, AllocateException> allocate_commandpools(std::span<VkCommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) = 0;
 		virtual void deallocate_commandpools(std::span<const VkCommandPool> dst) = 0;
@@ -150,11 +147,17 @@ namespace vuk {
 
 		void deallocate(std::span<const VkFence> src);
 
-		Result<void, AllocateException> allocate(std::span<HLCommandBuffer> dst, std::span<const HLCommandBufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+		Result<void, AllocateException> allocate(std::span<VkCommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
-		Result<void, AllocateException> allocate_hl_commandbuffers(std::span<HLCommandBuffer> dst, std::span<const HLCommandBufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+		Result<void, AllocateException> allocate_command_pools(std::span<VkCommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
-		void deallocate(std::span<const HLCommandBuffer> src);
+		void deallocate(std::span<const VkCommandPool> src);
+
+		Result<void, AllocateException> allocate(std::span<CommandBufferAllocation> dst, std::span<const CommandBufferAllocationCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+
+		Result<void, AllocateException> allocate_command_buffers(std::span<CommandBufferAllocation> dst, std::span<const CommandBufferAllocationCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+
+		void deallocate(std::span<const CommandBufferAllocation> src);
 
 		Result<void, AllocateException> allocate(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) = delete;
 		Result<void, AllocateException> allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) = delete;

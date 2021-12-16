@@ -49,40 +49,28 @@ namespace vuk {
 		}
 	}
 
-	Result<void, AllocateException> DeviceVkResource::allocate_commandbuffers(std::span<VkCommandBuffer> dst, std::span<const VkCommandBufferAllocateInfo> cis, SourceLocationAtFrame loc) {
-		assert(dst.size() == cis.size());
-		VkResult res = vkAllocateCommandBuffers(device, cis.data(), dst.data());
-		if (res != VK_SUCCESS) {
-			return { expected_error, AllocateException{ res } };
-		}
-		return { expected_value };
-	}
-
-	void DeviceVkResource::deallocate_commandbuffers(VkCommandPool pool, std::span<const VkCommandBuffer> dst) {
-		vkFreeCommandBuffers(device, pool, (uint32_t)dst.size(), dst.data());
-	}
-
-	Result<void, AllocateException> DeviceVkResource::allocate_hl_commandbuffers(std::span<HLCommandBuffer> dst, std::span<const HLCommandBufferCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException> DeviceVkResource::allocate_command_buffers(std::span<CommandBufferAllocation> dst, std::span<const CommandBufferAllocationCreateInfo> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 
 		for (uint64_t i = 0; i < dst.size(); i++) {
 			auto& ci = cis[i];
-			VkCommandPoolCreateInfo cpci{ .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
-			cpci.queueFamilyIndex = ci.queue_family_index;
-			cpci.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
-			allocate_commandpools(std::span{ &dst[i].command_pool, 1 }, std::span{ &cpci, 1 }, loc); // TODO: error handling
 
 			VkCommandBufferAllocateInfo cbai{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
 			cbai.commandBufferCount = 1;
-			cbai.commandPool = dst[i].command_pool;
+			cbai.commandPool = ci.command_pool;
 			cbai.level = ci.level;
-			allocate_commandbuffers(std::span{ &dst[i].command_buffer, 1 }, std::span{ &cbai, 1 }, loc);
+
+			VkResult res = vkAllocateCommandBuffers(device, &cbai, &dst[i].command_buffer);
+			if (res != VK_SUCCESS) {
+				return { expected_error, AllocateException{ res } };
+			}
+			dst[i].command_pool = ci.command_pool;
 		}
 
 		return { expected_value };
 	}
 
-	void DeviceVkResource::deallocate_hl_commandbuffers(std::span<const HLCommandBuffer> dst) {
+	void DeviceVkResource::deallocate_command_buffers(std::span<const CommandBufferAllocation> dst) {
 		for (auto& c : dst) {
 			deallocate_commandpools(std::span{ &c.command_pool, 1 });
 		}

@@ -17,23 +17,20 @@ namespace vuk {
 			upstream->deallocate_semaphores(sema);
 		}
 
-		Result<void, AllocateException> allocate_fences(std::span<VkFence> dst, SourceLocationAtFrame loc) override { return upstream->allocate_fences(dst, loc); }
-		void deallocate_fences(std::span<const VkFence> dst) override { upstream->deallocate_fences(dst); }
-
-		Result<void, AllocateException> allocate_commandbuffers(std::span<VkCommandBuffer> dst, std::span<const VkCommandBufferAllocateInfo> cis, SourceLocationAtFrame loc) override {
-			return upstream->allocate_commandbuffers(dst, cis, loc);
+		Result<void, AllocateException> allocate_fences(std::span<VkFence> dst, SourceLocationAtFrame loc) override {
+			return upstream->allocate_fences(dst, loc);
 		}
 
-		void deallocate_commandbuffers(VkCommandPool pool, std::span<const VkCommandBuffer> dst) override {
-			upstream->deallocate_commandbuffers(pool, dst);
+		void deallocate_fences(std::span<const VkFence> dst) override {
+			upstream->deallocate_fences(dst);
 		}
 
-		Result<void, AllocateException> allocate_hl_commandbuffers(std::span<HLCommandBuffer> dst, std::span<const HLCommandBufferCreateInfo> cis, SourceLocationAtFrame loc) override {
-			return upstream->allocate_hl_commandbuffers(dst, cis, loc);
+		Result<void, AllocateException> allocate_command_buffers(std::span<CommandBufferAllocation> dst, std::span<const CommandBufferAllocationCreateInfo> cis, SourceLocationAtFrame loc) override {
+			return upstream->allocate_command_buffers(dst, cis, loc);
 		}
 
-		void deallocate_hl_commandbuffers(std::span<const HLCommandBuffer> dst) override {
-			upstream->deallocate_hl_commandbuffers(dst);
+		void deallocate_command_buffers(std::span<const CommandBufferAllocation> dst) override {
+			upstream->deallocate_command_buffers(dst);
 		}
 
 		Result<void, AllocateException> allocate_commandpools(std::span<VkCommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) override {

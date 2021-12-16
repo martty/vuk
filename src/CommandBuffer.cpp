@@ -568,8 +568,8 @@ namespace vuk {
 		if (current_exception) {
 			return { expected_error, *current_exception };
 		}
-		// TODO: hardcoded queue family
-		auto scbuf = allocate_hl_commandbuffer(*allocator, { .level = VK_COMMAND_BUFFER_LEVEL_SECONDARY, .queue_family_index = ctx.graphics_queue_family_index });
+		// TODO: we might want to allocate a pool here
+		auto scbuf = allocate_command_buffer(*allocator, { .level = VK_COMMAND_BUFFER_LEVEL_SECONDARY, .command_pool = command_buffer_allocation.command_pool });
 		if (!scbuf) {
 			return { expected_error, scbuf.error() };
 		}

@@ -171,6 +171,7 @@ namespace vuk {
 		ExecutableRenderGraph* rg = nullptr;
 		Context& ctx;
 		Allocator* allocator;
+		CommandBufferAllocation command_buffer_allocation;
 		VkCommandBuffer command_buffer;
 
 		struct RenderPassInfo {

@@ -2,21 +2,12 @@
 #include "vuk/Allocator.hpp"
 #include "vuk/resources/DeviceVkResource.hpp"
 #include "vuk/resources/DeviceFrameResource.hpp"
-#include "vuk/resources/DeviceLinearResource.hpp"
 #include "vuk/Context.hpp"
 #include "vuk/Exception.hpp"
 #include <string>
 #include <numeric>
 
 namespace vuk {
-	DeviceLinearResource::DeviceLinearResource(DeviceResource& upstream, SyncScope scope) : DeviceNestedResource(&upstream),
-		ctx(&upstream.get_context()), device(ctx->device), scope(scope),
-		linear_cpu_only(ctx->get_legacy_gpu_allocator().allocate_linear(vuk::MemoryUsage::eCPUonly, LegacyGPUAllocator::all_usage)),
-		linear_cpu_gpu(ctx->get_legacy_gpu_allocator().allocate_linear(vuk::MemoryUsage::eCPUtoGPU, LegacyGPUAllocator::all_usage)),
-		linear_gpu_cpu(ctx->get_legacy_gpu_allocator().allocate_linear(vuk::MemoryUsage::eGPUtoCPU, LegacyGPUAllocator::all_usage)),
-		linear_gpu_only(ctx->get_legacy_gpu_allocator().allocate_linear(vuk::MemoryUsage::eGPUtoCPU, LegacyGPUAllocator::all_usage)) {
-	}
-
 	/****Allocator impls *****/
 
 	Result<void, AllocateException> Allocator::allocate(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) {
@@ -43,16 +34,28 @@ namespace vuk {
 		device_resource->deallocate_fences(src);
 	}
 
-	Result<void, AllocateException> Allocator::allocate(std::span<HLCommandBuffer> dst, std::span<const HLCommandBufferCreateInfo> cis, SourceLocationAtFrame loc) {
-		return device_resource->allocate_hl_commandbuffers(dst, cis, loc);
+	Result<void, AllocateException> Allocator::allocate(std::span<VkCommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_commandpools(dst, cis, loc);
 	}
 
-	Result<void, AllocateException> Allocator::allocate_hl_commandbuffers(std::span<HLCommandBuffer> dst, std::span<const HLCommandBufferCreateInfo> cis, SourceLocationAtFrame loc) {
-		return device_resource->allocate_hl_commandbuffers(dst, cis, loc);
+	Result<void, AllocateException> Allocator::allocate_command_pools(std::span<VkCommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_commandpools(dst, cis, loc);
 	}
 
-	void Allocator::deallocate(std::span<const HLCommandBuffer> src) {
-		device_resource->deallocate_hl_commandbuffers(src);
+	void Allocator::deallocate(std::span<const VkCommandPool> src) {
+		device_resource->deallocate_commandpools(src);
+	}
+
+	Result<void, AllocateException> Allocator::allocate(std::span<CommandBufferAllocation> dst, std::span<const CommandBufferAllocationCreateInfo> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_command_buffers(dst, cis, loc);
+	}
+
+	Result<void, AllocateException> Allocator::allocate_command_buffers(std::span<CommandBufferAllocation> dst, std::span<const CommandBufferAllocationCreateInfo> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_command_buffers(dst, cis, loc);
+	}
+
+	void Allocator::deallocate(std::span<const CommandBufferAllocation> src) {
+		device_resource->deallocate_command_buffers(src);
 	}
 
 	Result<void, AllocateException> Allocator::allocate(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {

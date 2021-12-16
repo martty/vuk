@@ -10,18 +10,25 @@
 #endif
 
 namespace vuk {
-	template<class T>
-	Result<Unique<T>, AllocateException> allocate_semaphores(Allocator& allocator, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-		Unique<T> semas(allocator);
-		if (auto res = allocator.allocate_semaphores(*semas, loc); !res) {
+	inline Result<Unique<VkSemaphore>, AllocateException> allocate_semaphore(Allocator& allocator, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
+		Unique<VkSemaphore> sema(allocator);
+		if (auto res = allocator.allocate_semaphores(std::span{ &sema.get(), 1 }, loc); !res) {
 			return { expected_error, res.error() };
 		}
-		return { expected_value, semas };
+		return { expected_value, std::move(sema) };
 	}
 
-	inline Result<Unique<HLCommandBuffer>, AllocateException> allocate_hl_commandbuffer(Allocator& allocator, const HLCommandBufferCreateInfo& cbci, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-		Unique<HLCommandBuffer> hlcb(allocator);
-		if (auto res = allocator.allocate_hl_commandbuffers(std::span{ &hlcb.get(), 1 }, std::span{ &cbci, 1 }, loc); !res) {
+	inline Result<Unique<VkCommandPool>, AllocateException> allocate_command_pool(Allocator& allocator, const VkCommandPoolCreateInfo& cpci, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
+		Unique<VkCommandPool> cp(allocator);
+		if (auto res = allocator.allocate_command_pools(std::span{ &cp.get(), 1 }, std::span{ &cpci, 1 }, loc); !res) {
+			return { expected_error, res.error() };
+		}
+		return { expected_value, std::move(cp) };
+	}
+
+	inline Result<Unique<CommandBufferAllocation>, AllocateException> allocate_command_buffer(Allocator& allocator, const CommandBufferAllocationCreateInfo& cbci, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
+		Unique<CommandBufferAllocation> hlcb(allocator);
+		if (auto res = allocator.allocate_command_buffers(std::span{ &hlcb.get(), 1 }, std::span{ &cbci, 1 }, loc); !res) {
 			return { expected_error, res.error() };
 		}
 		return { expected_value, std::move(hlcb) };

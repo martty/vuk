@@ -824,7 +824,8 @@ namespace vuk {
 		}
 
 		if (impl->buffer_transfer_commands.empty() && impl->bufferimage_transfer_commands.empty()) return;
-		auto cbuf = *allocate_hl_commandbuffer(allocator, { .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .queue_family_index = transfer_queue_family_index });
+		auto cpool = *allocate_command_pool(allocator, { .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT, .queueFamilyIndex = graphics_queue_family_index });
+		auto cbuf = *allocate_command_buffer(allocator, { .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .command_pool = *cpool});
 		VkCommandBufferBeginInfo cbi = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
 		vkBeginCommandBuffer(*cbuf, &cbi);
 		size_t last = 0;

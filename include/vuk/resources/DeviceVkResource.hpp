@@ -15,13 +15,9 @@ namespace vuk {
 
 		void deallocate_fences(std::span<const VkFence> src) override;
 
-		Result<void, AllocateException> allocate_commandbuffers(std::span<VkCommandBuffer> dst, std::span<const VkCommandBufferAllocateInfo> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException> allocate_command_buffers(std::span<CommandBufferAllocation> dst, std::span<const CommandBufferAllocationCreateInfo> cis, SourceLocationAtFrame loc) override;
 
-		void deallocate_commandbuffers(VkCommandPool pool, std::span<const VkCommandBuffer> dst) override;
-
-		Result<void, AllocateException> allocate_hl_commandbuffers(std::span<HLCommandBuffer> dst, std::span<const HLCommandBufferCreateInfo> cis, SourceLocationAtFrame loc) override;
-
-		void deallocate_hl_commandbuffers(std::span<const HLCommandBuffer> dst) override;
+		void deallocate_command_buffers(std::span<const CommandBufferAllocation> dst) override;
 
 		Result<void, AllocateException> allocate_commandpools(std::span<VkCommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) override;
 
@@ -60,7 +56,7 @@ namespace vuk {
 		void deallocate_timestamp_query_pools(std::span<const TimestampQueryPool> src) override;
 
 		Result<void, AllocateException> allocate_timestamp_queries(std::span<TimestampQuery> dst, std::span<const TimestampQueryCreateInfo> cis, SourceLocationAtFrame loc) override;
-		
+
 		void deallocate_timestamp_queries(std::span<const TimestampQuery> src) override; // no-op, deallocate pools
 
 		Result<void, AllocateException> allocate_timeline_semaphores(std::span<TimelineSemaphore> dst, SourceLocationAtFrame loc) override;

@@ -962,17 +962,14 @@ namespace vuk {
 		return (val + align - 1) / align * align;
 	}
 
-	struct HLCommandBufferCreateInfo {
+	struct CommandBufferAllocationCreateInfo {
 		VkCommandBufferLevel level;
-		uint32_t queue_family_index;
+		VkCommandPool command_pool;
 	};
 
-	/*
-	* HL cmdbuffers: 1:1 with pools
-	*/
-	struct HLCommandBuffer {
-		HLCommandBuffer() = default;
-		HLCommandBuffer(VkCommandBuffer command_buffer, VkCommandPool command_pool) : command_buffer(command_buffer), command_pool(command_pool) {}
+	struct CommandBufferAllocation {
+		CommandBufferAllocation() = default;
+		CommandBufferAllocation(VkCommandBuffer command_buffer, VkCommandPool command_pool) : command_buffer(command_buffer), command_pool(command_pool) {}
 
 		VkCommandBuffer command_buffer;
 		VkCommandPool command_pool;

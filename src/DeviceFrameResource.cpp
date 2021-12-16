@@ -28,44 +28,11 @@ namespace vuk {
 
 	void DeviceFrameResource::deallocate_fences(std::span<const VkFence> src) {} // noop
 
-	// TODO: error propagation
-	Result<void, AllocateException> DeviceFrameResource::allocate_hl_commandbuffers(std::span<HLCommandBuffer> dst, std::span<const HLCommandBufferCreateInfo> cis, SourceLocationAtFrame loc) {
-		std::unique_lock _(cbuf_mutex);
-		assert(dst.size() == cis.size());
-		auto cmdpools_size = cmdpools_to_free.size();
-		cmdpools_to_free.resize(cmdpools_to_free.size() + dst.size());
-
-		for (uint64_t i = 0; i < dst.size(); i++) {
-			auto& ci = cis[i];
-			VkCommandPoolCreateInfo cpci{ .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
-			cpci.queueFamilyIndex = ci.queue_family_index;
-			cpci.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
-			upstream->allocate_commandpools(std::span{ cmdpools_to_free.data() + cmdpools_size + i, 1 }, std::span{ &cpci, 1 }, loc);
-
-			dst[i].command_pool = *(cmdpools_to_free.data() + cmdpools_size + i);
-			VkCommandBufferAllocateInfo cbai{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
-			cbai.commandBufferCount = 1;
-			cbai.commandPool = dst[i].command_pool;
-			cbai.level = ci.level;
-			upstream->allocate_commandbuffers(std::span{ &dst[i].command_buffer, 1 }, std::span{ &cbai, 1 }, loc); // do not record cbuf, we deallocate it with the pool
-		}
-
-		return { expected_value };
+	Result<void, AllocateException> DeviceFrameResource::allocate_command_buffers(std::span<CommandBufferAllocation> dst, std::span<const CommandBufferAllocationCreateInfo> cis, SourceLocationAtFrame loc) {
+		return upstream->allocate_command_buffers(dst, cis, loc);
 	}
 
-	void DeviceFrameResource::deallocate_hl_commandbuffers(std::span<const HLCommandBuffer> src) {} // no-op, deallocated with pools
-
-	Result<void, AllocateException> DeviceFrameResource::allocate_commandbuffers(std::span<VkCommandBuffer> dst, std::span<const VkCommandBufferAllocateInfo> cis, SourceLocationAtFrame loc) {
-		VUK_DO_OR_RETURN(upstream->allocate_commandbuffers(dst, cis, loc));
-		std::unique_lock _(cbuf_mutex);
-		cmdbuffers_to_free.reserve(cmdbuffers_to_free.size() + dst.size());
-		for (uint64_t i = 0; i < dst.size(); i++) {
-			cmdbuffers_to_free.emplace_back(dst[i], cis[i].commandPool);
-		}
-		return { expected_value };
-	}
-
-	void DeviceFrameResource::deallocate_commandbuffers(VkCommandPool pool, std::span<const VkCommandBuffer> dst) {} // noop
+	void DeviceFrameResource::deallocate_command_buffers(std::span<const CommandBufferAllocation> src) {} // no-op, deallocated with pools
 
 	Result<void, AllocateException> DeviceFrameResource::allocate_commandpools(std::span<VkCommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) {
 		VUK_DO_OR_RETURN(upstream->allocate_commandpools(dst, cis, loc));
@@ -344,32 +311,11 @@ namespace vuk {
 		vec.insert(vec.end(), src.begin(), src.end());
 	}
 
-	Result<void, AllocateException> DeviceSuperFrameResource::allocate_commandbuffers(std::span<VkCommandBuffer> dst, std::span<const VkCommandBufferAllocateInfo> cis, SourceLocationAtFrame loc) {
-		return direct.allocate_commandbuffers(dst, cis, loc);
+	Result<void, AllocateException> DeviceSuperFrameResource::allocate_command_buffers(std::span<CommandBufferAllocation> dst, std::span<const CommandBufferAllocationCreateInfo> cis, SourceLocationAtFrame loc) {
+		return direct.allocate_command_buffers(dst, cis, loc);
 	}
 
-	void DeviceSuperFrameResource::deallocate_commandbuffers(VkCommandPool pool, std::span<const VkCommandBuffer> src) {
-		auto& f = get_last_frame();
-		std::unique_lock _(f.cbuf_mutex);
-		f.cmdbuffers_to_free.reserve(f.cmdbuffers_to_free.size() + src.size());
-		for (auto& s : src) {
-			f.cmdbuffers_to_free.emplace_back(s, pool);
-		}
-	}
-
-	Result<void, AllocateException> DeviceSuperFrameResource::allocate_hl_commandbuffers(std::span<HLCommandBuffer> dst, std::span<const HLCommandBufferCreateInfo> cis, SourceLocationAtFrame loc) {
-		return direct.allocate_hl_commandbuffers(dst, cis, loc);
-	}
-
-	void DeviceSuperFrameResource::deallocate_hl_commandbuffers(std::span<const HLCommandBuffer> src) {
-		auto& f = get_last_frame();
-		std::unique_lock _(f.cbuf_mutex);
-		auto& vec = f.cmdpools_to_free;
-
-		for (auto& s : src) {
-			vec.push_back(s.command_pool);
-		}
-	}
+	void DeviceSuperFrameResource::deallocate_command_buffers(std::span<const CommandBufferAllocation> src) {} // noop, deallocate pools
 
 	Result<void, AllocateException> DeviceSuperFrameResource::allocate_commandpools(std::span<VkCommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) {
 		return direct.allocate_commandpools(dst, cis, loc);
@@ -509,9 +455,6 @@ namespace vuk {
 		//f.descriptor_set_cache.collect(frame_counter.load(), 16);
 		direct.deallocate_semaphores(f.semaphores);
 		direct.deallocate_fences(f.fences);
-		for (auto& c : f.cmdbuffers_to_free) {
-			direct.deallocate_commandbuffers(c.command_pool, std::span{ &c.command_buffer, 1 });
-		}
 		direct.deallocate_commandpools(f.cmdpools_to_free);
 		direct.deallocate_buffers(f.buffer_gpus);
 		direct.deallocate_buffers(f.buffer_cross_devices);
@@ -528,7 +471,6 @@ namespace vuk {
 		f.fences.clear();
 		f.buffer_cross_devices.clear();
 		f.buffer_gpus.clear();
-		f.cmdbuffers_to_free.clear();
 		f.cmdpools_to_free.clear();
 		auto& legacy = direct.legacy_gpu_allocator;
 		legacy->reset_pool(f.linear_cpu_only);
