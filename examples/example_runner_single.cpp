@@ -52,9 +52,11 @@ vuk::ExampleRunner::ExampleRunner() {
 			vkbdevice = dev_ret.value();
 			graphics_queue = vkbdevice.get_queue(vkb::QueueType::graphics).value();
 			auto graphics_queue_family_index = vkbdevice.get_queue_index(vkb::QueueType::graphics).value();
+			transfer_queue = vkbdevice.get_queue(vkb::QueueType::transfer).value();
+			auto transfer_queue_family_index = vkbdevice.get_queue_index(vkb::QueueType::transfer).value();
 			device = vkbdevice.device;
 
-			context.emplace(ContextCreateParameters{ instance, device, physical_device, graphics_queue, graphics_queue_family_index });
+			context.emplace(ContextCreateParameters{ instance, device, physical_device, graphics_queue, graphics_queue_family_index, transfer_queue, transfer_queue_family_index });
 			const unsigned num_inflight_frames = 3;
 			xdev_rf_alloc.emplace(*context, num_inflight_frames);
 			global.emplace(*xdev_rf_alloc);

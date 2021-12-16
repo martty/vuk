@@ -178,15 +178,6 @@ namespace vuk {
 		vuk::PipelineStageFlags stage;
 	};
 
-	struct BufferInfo {
-		Name name;
-
-		ResourceUse initial;
-		ResourceUse final;
-
-		vuk::Buffer buffer;
-	};
-
 	struct ImageBarrier {
 		Name image;
 		VkImageMemoryBarrier barrier = {};

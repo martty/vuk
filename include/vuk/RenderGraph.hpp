@@ -13,6 +13,7 @@
 #include "vuk/MapProxy.hpp"
 #include "vuk/Result.hpp"
 #include "vuk/Allocator.hpp"
+#include "vuk/Context.hpp"
 
 namespace vuk {
 	template<class T> struct Future;
@@ -85,6 +86,15 @@ namespace vuk {
 		bool is_resolve_dst = false;
 	};
 
+	struct BufferInfo {
+		Name name;
+
+		ResourceUse initial;
+		ResourceUse final;
+
+		vuk::Buffer buffer;
+	};
+
 	struct Resource {
 		Name name;
 		enum class Type { eBuffer, eImage } type;
@@ -127,7 +137,8 @@ namespace vuk {
 
 	struct Pass {
 		Name name;
-		Name executes_on;
+		Domain execute_on;
+		//Domain preferred;
 		bool use_secondary_command_buffers = false;
 
 		std::vector<Resource> resources;
@@ -206,6 +217,23 @@ namespace vuk {
 
 		// determine rendergraph inputs and outputs, and resources that are neither
 		void build_io();
+
+		void schedule_intra_queue(std::vector<struct PassInfo>::iterator start, std::vector<struct PassInfo>::iterator end, const vuk::RenderGraph::CompileOptions& compile_options);
+	};
+
+	struct SubmitInfo {
+		std::vector<TimelineSemaphore> waits;
+		std::vector<VkCommandBuffer> command_buffers;
+		std::vector<TimelineSemaphore> signals;
+	};
+
+	struct SubmitBatch {
+		vuk::Domain domain;
+		std::vector<SubmitInfo> submits;
+	};
+
+	struct SubmitBundle {
+		std::vector<SubmitBatch> batches;
 	};
 
 	struct ExecutableRenderGraph {
@@ -218,7 +246,7 @@ namespace vuk {
 		ExecutableRenderGraph(ExecutableRenderGraph&&) noexcept;
 		ExecutableRenderGraph& operator=(ExecutableRenderGraph&&) noexcept;
 
-		Result<Unique<struct CommandBufferAllocation>> execute(Context&, class Allocator&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
+		Result<SubmitBundle> execute(Allocator&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
 
 		Result<struct BufferInfo, RenderGraphException> get_resource_buffer(Name);
 		Result<struct AttachmentRPInfo, RenderGraphException> get_resource_image(Name);
@@ -231,6 +259,7 @@ namespace vuk {
 
 		void create_attachment(Context& ptc, Name name, struct AttachmentRPInfo& attachment_info, Extent2D fb_extent, SampleCountFlagBits samples);
 		void fill_renderpass_info(struct RenderPassInfo& rpass, const size_t& i, class CommandBuffer& cobuf);
+		Result<SubmitInfo> record_command_buffer(Allocator&, std::span<RenderPassInfo> rpis, vuk::Domain domain);
 	};
 }
 

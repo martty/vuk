@@ -247,8 +247,8 @@ namespace vuk {
 		ImageView wrap(VkImageView payload, ImageViewCreateInfo);
 
 
-		Result<void> submit_graphics(VkSubmitInfo, VkFence);
-		Result<void> submit_transfer(VkSubmitInfo, VkFence);
+		Result<void> submit_graphics(std::span<VkSubmitInfo>, VkFence);
+		Result<void> submit_transfer(std::span<VkSubmitInfo>, VkFence);
 
 		LegacyGPUAllocator& get_legacy_gpu_allocator();
 

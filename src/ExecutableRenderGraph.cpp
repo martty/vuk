@@ -108,126 +108,32 @@ namespace vuk {
 		cobuf.ongoing_renderpass = rpi;
 	}
 
-	Result<Unique<CommandBufferAllocation>> ExecutableRenderGraph::execute(Context& ctx, Allocator& alloc, std::vector<std::pair<SwapChainRef, size_t>> swp_with_index) {
-		// bind swapchain attachment images & ivs
-		for (auto& [name, bound] : impl->bound_attachments) {
-			if (bound.type == AttachmentRPInfo::Type::eSwapchain) {
-				auto it = std::find_if(swp_with_index.begin(), swp_with_index.end(), [boundb = &bound](auto& t) { return t.first == boundb->swapchain; });
-				bound.iv = it->first->image_views[it->second];
-				bound.image = it->first->images[it->second];
-				bound.extents = Dimension2D::absolute(it->first->extent);
-				bound.samples = vuk::Samples::e1;
-			}
-		}
+	Result<SubmitInfo> ExecutableRenderGraph::record_command_buffer(Allocator& alloc, std::span<RenderPassInfo> rpis, vuk::Domain domain) {
+		auto& ctx = alloc.get_context();
+		SubmitInfo si;
 
-		// perform size inference for framebuffers (we need to do this here due to swapchain attachments)
-		// loop through all renderpasses, and attempt to infer any size we can
-		// then loop again, stopping if we have inferred all or have not made progress
-		bool infer_progress = false;
-		bool any_fb_incomplete = false;
-		do {
-			any_fb_incomplete = false;
-			infer_progress = false;
-			for (auto& rp : impl->rpis) {
-				if (rp.attachments.size() == 0) {
-					continue;
-				}
-
-				// an extent is known if it is not 0
-				// 0 sized framebuffers are illegal
-				Extent2D fb_extent = Extent2D{ rp.fbci.width, rp.fbci.height };
-				bool extent_known = !(fb_extent.width == 0 || fb_extent.height == 0);
-
-				if (extent_known) {
-					continue;
-				}
-
-				// see if any attachment has an absolute size
-				for (auto& attrpinfo : rp.attachments) {
-					auto& bound = impl->bound_attachments[attrpinfo.name];
-
-					if (bound.extents.sizing == vuk::Sizing::eAbsolute && bound.extents.extent.width > 0 && bound.extents.extent.height > 0) {
-						fb_extent = bound.extents.extent;
-						extent_known = true;
-						break;
-					}
-				}
-
-				if (extent_known) {
-					rp.fbci.width = fb_extent.width;
-					rp.fbci.height = fb_extent.height;
-
-					for (auto& attrpinfo : rp.attachments) {
-						auto& bound = impl->bound_attachments[attrpinfo.name];
-						bound.extents = Dimension2D::absolute(fb_extent);
-					}
-
-					infer_progress = true; // progress made
-				}
-
-				if (!extent_known) {
-					any_fb_incomplete = true;
-				}
-			}
-		} while (any_fb_incomplete || infer_progress); // stop looping if all attachment have been sized or we made no progress
-
-		assert(!any_fb_incomplete && "Failed to infer size for all attachments.");
-
-		// create framebuffers, create & bind attachments
-		for (auto& rp : impl->rpis) {
-			if (rp.attachments.size() == 0)
-				continue;
-
-			auto& ivs = rp.fbci.attachments;
-			std::vector<VkImageView> vkivs;
-
-			Extent2D fb_extent = Extent2D{ rp.fbci.width, rp.fbci.height };
-
-			// create internal attachments; bind attachments to fb
-			for (auto& attrpinfo : rp.attachments) {
-				auto& bound = impl->bound_attachments[attrpinfo.name];
-				if (bound.type == AttachmentRPInfo::Type::eInternal) {
-					create_attachment(ctx, attrpinfo.name, bound, fb_extent, (vuk::SampleCountFlagBits)attrpinfo.description.samples);
-				}
-
-				ivs.push_back(bound.iv);
-				vkivs.push_back(bound.iv.payload);
-			}
-			rp.fbci.renderPass = rp.handle;
-			rp.fbci.pAttachments = &vkivs[0];
-			rp.fbci.width = fb_extent.width;
-			rp.fbci.height = fb_extent.height;
-			rp.fbci.attachmentCount = (uint32_t)vkivs.size();
-			rp.fbci.layers = 1;
-
-			Unique<VkFramebuffer> fb(alloc);
-			VUK_DO_OR_RETURN(alloc.allocate_framebuffers(std::span{ &*fb, 1 }, std::span{ &rp.fbci, 1 }));
-			rp.framebuffer = *fb; // queue framebuffer for destruction
-		}
-
-		// create non-attachment images
-		for (auto& [name, bound] : impl->bound_attachments) {
-			if (bound.type == AttachmentRPInfo::Type::eInternal && bound.image == VK_NULL_HANDLE) {
-				create_attachment(ctx, name, bound, vuk::Extent2D{ 0,0 }, bound.samples.count);
-			}
-		}
-
-		// actual execution
 		Unique<VkCommandPool> cpool(alloc);
 		VkCommandPoolCreateInfo cpci{ VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
 		cpci.flags = VkCommandPoolCreateFlagBits::VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
-		cpci.queueFamilyIndex = ctx.graphics_queue_family_index; // TODO: hardcoding queue family index
+		if ((int)domain & (int)vuk::Domain::eGraphicsQueue) {
+			cpci.queueFamilyIndex = ctx.graphics_queue_family_index;
+		} else {
+			cpci.queueFamilyIndex = ctx.transfer_queue_family_index;
+		}
 		VUK_DO_OR_RETURN(alloc.allocate_command_pools(std::span{ &*cpool, 1 }, std::span{ &cpci, 1 }));
+
 		Unique<CommandBufferAllocation> hl_cbuf(alloc);
-		CommandBufferAllocationCreateInfo ci{ .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .command_pool = *cpool};
+		CommandBufferAllocationCreateInfo ci{ .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .command_pool = *cpool };
 		VUK_DO_OR_RETURN(alloc.allocate_command_buffers(std::span{ &*hl_cbuf, 1 }, std::span{ &ci, 1 }));
+		si.command_buffers.emplace_back(*hl_cbuf);
 
 		VkCommandBuffer cbuf = hl_cbuf->command_buffer;
 
 		VkCommandBufferBeginInfo cbi{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
 		vkBeginCommandBuffer(cbuf, &cbi);
 
-		for (auto& rpass : impl->rpis) {
+
+		for (auto& rpass : rpis) {
 			bool use_secondary_command_buffers = rpass.subpasses[0].use_secondary_command_buffers;
 			bool is_single_pass = rpass.subpasses.size() == 1 && rpass.subpasses[0].passes.size() == 1;
 			if (is_single_pass) {
@@ -333,7 +239,135 @@ namespace vuk {
 		if (result != VK_SUCCESS) {
 			return { expected_error, VkException{result} };
 		}
-		return { expected_value, std::move(hl_cbuf) };
+
+		return { expected_value, std::move(si)};
+	}
+
+	Result<SubmitBundle> ExecutableRenderGraph::execute(Allocator& alloc, std::vector<std::pair<SwapChainRef, size_t>> swp_with_index) {
+		Context& ctx = alloc.get_context();
+		// bind swapchain attachment images & ivs
+		for (auto& [name, bound] : impl->bound_attachments) {
+			if (bound.type == AttachmentRPInfo::Type::eSwapchain) {
+				auto it = std::find_if(swp_with_index.begin(), swp_with_index.end(), [boundb = &bound](auto& t) { return t.first == boundb->swapchain; });
+				bound.iv = it->first->image_views[it->second];
+				bound.image = it->first->images[it->second];
+				bound.extents = Dimension2D::absolute(it->first->extent);
+				bound.samples = vuk::Samples::e1;
+			}
+		}
+
+		// perform size inference for framebuffers (we need to do this here due to swapchain attachments)
+		// loop through all renderpasses, and attempt to infer any size we can
+		// then loop again, stopping if we have inferred all or have not made progress
+		bool infer_progress = false;
+		bool any_fb_incomplete = false;
+		do {
+			any_fb_incomplete = false;
+			infer_progress = false;
+			for (auto& rp : impl->rpis) {
+				if (rp.attachments.size() == 0) {
+					continue;
+				}
+
+				// an extent is known if it is not 0
+				// 0 sized framebuffers are illegal
+				Extent2D fb_extent = Extent2D{ rp.fbci.width, rp.fbci.height };
+				bool extent_known = !(fb_extent.width == 0 || fb_extent.height == 0);
+
+				if (extent_known) {
+					continue;
+				}
+
+				// see if any attachment has an absolute size
+				for (auto& attrpinfo : rp.attachments) {
+					auto& bound = impl->bound_attachments[attrpinfo.name];
+
+					if (bound.extents.sizing == vuk::Sizing::eAbsolute && bound.extents.extent.width > 0 && bound.extents.extent.height > 0) {
+						fb_extent = bound.extents.extent;
+						extent_known = true;
+						break;
+					}
+				}
+
+				if (extent_known) {
+					rp.fbci.width = fb_extent.width;
+					rp.fbci.height = fb_extent.height;
+
+					for (auto& attrpinfo : rp.attachments) {
+						auto& bound = impl->bound_attachments[attrpinfo.name];
+						bound.extents = Dimension2D::absolute(fb_extent);
+					}
+
+					infer_progress = true; // progress made
+				}
+
+				if (!extent_known) {
+					any_fb_incomplete = true;
+				}
+			}
+		} while (any_fb_incomplete || infer_progress); // stop looping if all attachment have been sized or we made no progress
+
+		assert(!any_fb_incomplete && "Failed to infer size for all attachments.");
+
+		// create framebuffers, create & bind attachments
+		for (auto& rp : impl->rpis) {
+			if (rp.attachments.size() == 0)
+				continue;
+
+			auto& ivs = rp.fbci.attachments;
+			std::vector<VkImageView> vkivs;
+
+			Extent2D fb_extent = Extent2D{ rp.fbci.width, rp.fbci.height };
+
+			// create internal attachments; bind attachments to fb
+			for (auto& attrpinfo : rp.attachments) {
+				auto& bound = impl->bound_attachments[attrpinfo.name];
+				if (bound.type == AttachmentRPInfo::Type::eInternal) {
+					create_attachment(ctx, attrpinfo.name, bound, fb_extent, (vuk::SampleCountFlagBits)attrpinfo.description.samples);
+				}
+
+				ivs.push_back(bound.iv);
+				vkivs.push_back(bound.iv.payload);
+			}
+			rp.fbci.renderPass = rp.handle;
+			rp.fbci.pAttachments = &vkivs[0];
+			rp.fbci.width = fb_extent.width;
+			rp.fbci.height = fb_extent.height;
+			rp.fbci.attachmentCount = (uint32_t)vkivs.size();
+			rp.fbci.layers = 1;
+
+			Unique<VkFramebuffer> fb(alloc);
+			VUK_DO_OR_RETURN(alloc.allocate_framebuffers(std::span{ &*fb, 1 }, std::span{ &rp.fbci, 1 }));
+			rp.framebuffer = *fb; // queue framebuffer for destruction
+		}
+
+		// create non-attachment images
+		for (auto& [name, bound] : impl->bound_attachments) {
+			if (bound.type == AttachmentRPInfo::Type::eInternal && bound.image == VK_NULL_HANDLE) {
+				create_attachment(ctx, name, bound, vuk::Extent2D{ 0,0 }, bound.samples.count);
+			}
+		}
+
+		SubmitBundle sbundle;
+
+		// actual execution
+
+		// record single cbuf
+		auto graphics_rpis = std::span(impl->rpis.begin(), impl->rpis.begin() + impl->num_graphics_rpis);
+		if (graphics_rpis.size() > 0) {
+			SubmitBatch& sbatch_gfx = sbundle.batches.emplace_back(SubmitBatch{ .domain = vuk::Domain::eGraphicsQueue });
+			auto gfx_res = record_command_buffer(alloc, graphics_rpis, vuk::Domain::eGraphicsQueue);
+			sbatch_gfx.submits.emplace_back(*gfx_res); // TODO: error handling
+		}
+
+		auto transfer_rpis = std::span(impl->rpis.begin() + impl->num_graphics_rpis, impl->rpis.end());
+		if (transfer_rpis.size() > 0) {
+			SubmitBatch& sbatch_xfer = sbundle.batches.emplace_back(SubmitBatch{ .domain = vuk::Domain::eTransferQueue });
+			auto xfer_res = record_command_buffer(alloc, transfer_rpis, vuk::Domain::eTransferQueue);
+			sbatch_xfer.submits.emplace_back(*xfer_res); // TODO: error handling
+		}
+
+		return { expected_value, std::move(sbundle) };
 	}
 
 	Result<BufferInfo, RenderGraphException> ExecutableRenderGraph::get_resource_buffer(Name n) {

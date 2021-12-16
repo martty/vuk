@@ -67,10 +67,7 @@ namespace vuk {
 		}
 	}
 
-	void RenderGraph::compile(const vuk::RenderGraph::CompileOptions& compile_options) {
-		// find which reads are graph inputs (not produced by any pass) & outputs (not consumed by any pass)
-		build_io();
-
+	void RenderGraph::schedule_intra_queue(std::vector<PassInfo>::iterator start, std::vector<PassInfo>::iterator end, const vuk::RenderGraph::CompileOptions& compile_options) {
 		// sort passes if requested
 		if (impl->passes.size() > 1 && compile_options.reorder_passes) {
 			topological_sort(impl->passes.begin(), impl->passes.end(), [](const auto& p1, const auto& p2) {
@@ -93,18 +90,18 @@ namespace vuk {
 		}
 
 		if (compile_options.check_pass_ordering) {
-			for (unsigned i = 0; i < impl->passes.size() - 1; i++) {
-				for (unsigned j = i; j < impl->passes.size(); j++) {
-					auto& p1 = impl->passes[i];
-					auto& p2 = impl->passes[j];
+			for (auto it0 = start; it0 != end - 1; ++it0) {
+				for (auto it1 = it0; it1 < end; it1++) {
+					auto& p1 = *it0;
+					auto& p2 = *it1;
 
 					bool could_execute_after = false;
 					bool could_execute_before = false;
 
 					if ((p1.bloom_outputs & p2.bloom_resolved_inputs) != 0) {
 						for (auto& o : p1.output_name_hashes) {
-							for (auto& i : p2.resolved_input_name_hashes) {
-								if (o == i) {
+							for (auto& in : p2.resolved_input_name_hashes) {
+								if (o == in) {
 									could_execute_after = true;
 									break;
 								}
@@ -114,8 +111,8 @@ namespace vuk {
 
 					if ((p2.bloom_outputs & p1.bloom_resolved_inputs) != 0) {
 						for (auto& o : p2.output_name_hashes) {
-							for (auto& i : p1.resolved_input_name_hashes) {
-								if (o == i) {
+							for (auto& in : p1.resolved_input_name_hashes) {
+								if (o == in) {
 									could_execute_before = true;
 									break;
 								}
@@ -129,6 +126,21 @@ namespace vuk {
 				}
 			}
 		}
+	}
+
+	void RenderGraph::compile(const vuk::RenderGraph::CompileOptions& compile_options) {
+		// find which reads are graph inputs (not produced by any pass) & outputs (not consumed by any pass)
+		build_io();
+
+		// partition passes into different queues
+		// TODO: queue inference
+		auto transfer_begin = impl->passes.begin();
+		auto transfer_end = std::partition(impl->passes.begin(), impl->passes.end(), [](const PassInfo& p) { return (int)p.pass.execute_on & (int)vuk::Domain::eTransferQueue; });
+		auto graphics_begin = transfer_end;
+		auto graphics_end = impl->passes.end();
+
+		schedule_intra_queue(transfer_begin, transfer_end, compile_options);
+		schedule_intra_queue(graphics_begin, graphics_end, compile_options);
 
 		impl->use_chains.clear();
 		// assemble use chains
@@ -146,11 +158,12 @@ namespace vuk {
 			}
 		}
 
+		// graphics: assemble renderpasses based on framebuffers
 		// we need to collect passes into framebuffers, which will determine the renderpasses
 		using attachment_set = std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>>;
 		using passinfo_vec = std::vector<PassInfo*, short_alloc<PassInfo*, 16>>;
 		std::vector<std::pair<attachment_set, passinfo_vec>, short_alloc<std::pair<attachment_set, passinfo_vec>, 8>> attachment_sets{ *impl->arena_ };
-		for (auto& passinfo : impl->passes) {
+		for (auto& passinfo : std::span(graphics_begin, graphics_end)) {
 			attachment_set atts{ *impl->arena_ };
 
 			for (auto& res : passinfo.pass.resources) {
@@ -167,10 +180,13 @@ namespace vuk {
 			}
 		}
 
+		impl->num_graphics_rpis = attachment_sets.size();
+		impl->num_transfer_rpis = std::span(transfer_begin, transfer_end).size();
+
 		impl->rpis.clear();
 		// renderpasses are uniquely identified by their index from now on
 		// tell passes in which renderpass/subpass they will execute
-		impl->rpis.reserve(attachment_sets.size());
+		impl->rpis.reserve(impl->num_graphics_rpis + impl->num_transfer_rpis);
 		for (auto& [attachments, passes] : attachment_sets) {
 			RenderPassInfo rpi{ *impl->arena_ };
 			auto rpi_index = impl->rpis.size();
@@ -204,6 +220,23 @@ namespace vuk {
 			if (attachments.size() == 0) {
 				rpi.framebufferless = true;
 			}
+
+			impl->rpis.push_back(rpi);
+		}
+
+		// transfer: just make rpis
+		for (auto& passinfo : std::span(transfer_begin, transfer_end)) {
+			RenderPassInfo rpi{ *impl->arena_ };
+			auto rpi_index = impl->rpis.size();
+
+			passinfo.render_pass_index = rpi_index;
+			passinfo.subpass = 0;
+			rpi.framebufferless = true;
+
+			SubpassInfo si{ *impl->arena_ };
+			si.passes.emplace_back(&passinfo);
+			si.use_secondary_command_buffers = false;
+			rpi.subpasses.push_back(si);
 
 			impl->rpis.push_back(rpi);
 		}
@@ -346,7 +379,7 @@ namespace vuk {
 				continue;
 			}
 			auto& chain = chain_it->second;
-			chain.insert(chain.begin(), UseRef{ std::move(attachment_info.initial), nullptr });
+			chain.insert(chain.begin(), UseRef{ attachment_info.initial, nullptr });
 			chain.emplace_back(UseRef{ attachment_info.final, nullptr });
 
 			vuk::ImageAspectFlags aspect = format_to_aspect((vuk::Format)attachment_info.description.format);
@@ -756,6 +789,10 @@ namespace vuk {
 		return &impl->bound_attachments;
 	}
 
+	MapProxy<Name, const BufferInfo&> RenderGraph::get_bound_buffers() {
+		return &impl->bound_buffers;
+	}
+
 	vuk::ImageUsageFlags RenderGraph::compute_usage(std::span<const UseRef> chain) {
 		vuk::ImageUsageFlags usage;
 		for (const auto& c : chain) {
@@ -770,7 +807,7 @@ namespace vuk {
 				usage |= vuk::ImageUsageFlagBits::eTransferRead; break;
 			case vuk::ImageLayout::eTransferDstOptimal:
 				usage |= vuk::ImageUsageFlagBits::eTransferWrite; break;
-			default:;
+			default: break;
 			}
 			// TODO: this isn't conservative enough, we need more information
 			if (c.use.layout == vuk::ImageLayout::eGeneral) {

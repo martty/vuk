@@ -35,6 +35,7 @@ namespace vuk {
 		VkDevice device;
 		VkPhysicalDevice physical_device;
 		VkQueue graphics_queue;
+		VkQueue transfer_queue;
 		std::optional<Context> context;
 		std::optional<DeviceSuperFrameResource> xdev_rf_alloc;
 		std::optional<Allocator> global;

@@ -32,6 +32,8 @@ namespace vuk {
 		RenderGraph* rgp = new RenderGraph;
 		auto& rg = *rgp;
 		rg.add_pass({
+			.name = "BUFFER COPY UPLOAD",
+			.execute_on = copy_domain,
 			.resources = {"_dst"_buffer(vuk::Access::eTransferDst), "_src"_buffer(vuk::Access::eTransferSrc)},
 			.execute = [size](vuk::CommandBuffer& command_buffer) {
 				command_buffer.copy_buffer("_src", "_dst", VkBufferCopy{.size = size});
@@ -95,10 +97,9 @@ namespace {
 			std::iota(indices.begin(), indices.end(), 0);
 			std::shuffle(indices.begin(), indices.end(), g);
 
-			ctx.wait_all_transfers();
-			vuk::copy_to_buffer(allocator, vuk::Domain::eAny, scramble_buf.get(), std::span(indices)).get();
+			vuk::copy_to_buffer(allocator, vuk::Domain::eTransferOnTransfer, scramble_buf.get(), std::span(indices)).get();
 			//ctx.upload(allocator, scramble_buf.get(), std::span(indices.begin(), indices.end()));
-			ctx.wait_all_transfers();
+			ctx.wait_all_transfers(allocator);
 
 			stbi_image_free(doge_image);
 		},

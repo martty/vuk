@@ -19,21 +19,21 @@ namespace vuk {
 			si.pWaitSemaphores = &present_rdy;
 			VkPipelineStageFlags flags = (VkPipelineStageFlags)PipelineStageFlagBits::eTopOfPipe;
 			si.pWaitDstStageMask = &flags;
-			VUK_DO_OR_RETURN(ctx.submit_graphics(si, VK_NULL_HANDLE));
+			VUK_DO_OR_RETURN(ctx.submit_graphics(std::span{ &si, 1 }, VK_NULL_HANDLE));
 			return { expected_error, PresentException{acq_result} };
 		}
 
 		std::vector<std::pair<SwapChainRef, size_t>> swapchains_with_indexes = { { swapchain, image_index } };
 
-		auto cb = rg.execute(ctx, allocator, swapchains_with_indexes);
-		if (!cb) {
-			return { expected_error, cb.error() };
+		auto sbundle = rg.execute(allocator, swapchains_with_indexes);
+		if (!sbundle) {
+			return { expected_error, sbundle.error() };
 		}
-		auto& hl_cbuf = *cb;
+		auto& hl_cbuf = sbundle->batches.back().submits.back().command_buffers.back();
 
 		VkSubmitInfo si{ .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO };
 		si.commandBufferCount = 1;
-		si.pCommandBuffers = &hl_cbuf->command_buffer;
+		si.pCommandBuffers = &hl_cbuf;
 		si.pSignalSemaphores = &render_complete;
 		si.signalSemaphoreCount = 1;
 		si.waitSemaphoreCount = 1;
@@ -44,7 +44,7 @@ namespace vuk {
 		Unique<VkFence> fence(allocator);
 		VUK_DO_OR_RETURN(allocator.allocate_fences({ &*fence, 1 }));
 
-		VUK_DO_OR_RETURN(ctx.submit_graphics(si, *fence));
+		VUK_DO_OR_RETURN(ctx.submit_graphics(std::span{ &si, 1 }, *fence));
 
 		VkPresentInfoKHR pi{ .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
 		pi.swapchainCount = 1;
@@ -61,18 +61,27 @@ namespace vuk {
 
 	Result<void> execute_submit_and_wait(Allocator& allocator, ExecutableRenderGraph&& rg) {
 		Context& ctx = allocator.get_context();
-		auto cb = rg.execute(ctx, allocator, {});
-		if (!cb) {
-			return { expected_error, cb.error() };
+		auto sbundle = rg.execute(allocator, {});
+		if (!sbundle) {
+			return { expected_error, sbundle.error() };
 		}
-		auto& hl_cbuf = *cb;
+
 		Unique<VkFence> fence(allocator);
 		VUK_DO_OR_RETURN(allocator.allocate_fences({ &*fence, 1 }));
-		VkSubmitInfo si{ .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO };
-		si.commandBufferCount = 1;
-		si.pCommandBuffers = &hl_cbuf->command_buffer;
-
-		VUK_DO_OR_RETURN(ctx.submit_graphics(si, *fence));
+		for (auto& batch : sbundle->batches) {
+			auto domain = batch.domain;
+			for (auto& si : batch.submits) {
+				auto& hl_cbuf = si.command_buffers.back();
+				VkSubmitInfo si{ .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO };
+				si.commandBufferCount = 1;
+				si.pCommandBuffers = &hl_cbuf;
+				if (domain == vuk::Domain::eGraphicsQueue) {
+					VUK_DO_OR_RETURN(ctx.submit_graphics(std::span{ &si, 1 }, *fence));
+				} else {
+					VUK_DO_OR_RETURN(ctx.submit_transfer(std::span{ &si, 1 }, *fence));
+				}
+			}
+		}
 		VkResult result = vkWaitForFences(ctx.device, 1, &*fence, VK_TRUE, UINT64_MAX);
 		if (result != VK_SUCCESS) {
 			return { expected_error, VkException{result} };
@@ -112,15 +121,11 @@ namespace vuk {
 	template<class T>
 	Future<T>::Future(Allocator& alloc, T&& value) : alloc(alloc), result(std::move(value)) {}
 
-	template<class T>
-	Result<T> Future<T>::get() {
-		ExecutableRenderGraph* erg = new ExecutableRenderGraph(std::move(*rg).link());
-		auto cbr = allocate_hl_commandbuffer(allocator, HLCommandBufferCreateInfo{ VK_COMMAND_BUFFER_LEVEL_PRIMARY, allocator.get_context().graphics_queue_family });
-		if (!cbr) {
-			return { expected_error, cbr.error() };
-		}
-		auto cb = *cbr;
-		cbufs.push_back(erg.execute(*lallocator, {}).command_buffers[0]); // TODO: the waits and signals
+	template<>
+	Result<Buffer> Future<Buffer>::get() {
+		auto bufinfo = (*rg->get_bound_buffers().find(output_binding)).second;
+		VUK_DO_OR_RETURN(execute_submit_and_wait(alloc, std::move(*rg).link(alloc.get_context(), {})));
+		return { expected_value, Buffer(bufinfo.buffer) };
 	}
 
 	template struct Future<Image>;

@@ -60,23 +60,23 @@ namespace vuk {
 		cmdEndDebugUtilsLabelEXT(cb);
 	}
 
-	Result<void> Context::submit_graphics(VkSubmitInfo si, VkFence fence) {
+	Result<void> Context::submit_graphics(std::span<VkSubmitInfo> sis, VkFence fence) {
 		std::lock_guard _(impl->gfx_queue_lock);
-		VkResult result = vkQueueSubmit(graphics_queue, 1, &si, fence);
+		VkResult result = vkQueueSubmit(graphics_queue, sis.size(), sis.data(), fence);
 		if (result != VK_SUCCESS) {
 			return { expected_error, VkException{result} };
 		}
 		return { expected_value };
 	}
 
-	Result<void> Context::submit_transfer(VkSubmitInfo si, VkFence fence) {
+	Result<void> Context::submit_transfer(std::span<VkSubmitInfo> sis, VkFence fence) {
 		VkResult result;
 		if (transfer_queue == graphics_queue) {
 			std::lock_guard _(impl->gfx_queue_lock);
-			result = vkQueueSubmit(graphics_queue, 1, &si, fence);
+			result = vkQueueSubmit(graphics_queue, sis.size(), sis.data(), fence);
 		} else {
 			std::lock_guard _(impl->xfer_queue_lock);
-			result = vkQueueSubmit(transfer_queue, 1, &si, fence);
+			result = vkQueueSubmit(transfer_queue, sis.size(), sis.data(), fence);
 		}
 		if (result != VK_SUCCESS) {
 			return { expected_error, VkException{result} };
@@ -561,14 +561,14 @@ namespace vuk {
 		si.pCommandBuffers = &xfercbuf;
 		if (!any_image_transfers) {
 			// only buffers, single submit to transfer, fence waits on single cbuf
-			submit_transfer(si, fence);
+			submit_transfer(std::span{ &si, 1 }, fence);
 		} else {
 			vkEndCommandBuffer(dstcbuf);
 			// buffers and images, submit to transfer, signal sema
 			si.signalSemaphoreCount = 1;
 			auto sema = impl->get_unpooled_sema();
 			si.pSignalSemaphores = &sema;
-			submit_transfer(si, VkFence{ VK_NULL_HANDLE });
+			submit_transfer(std::span{ &si, 1 }, VkFence{ VK_NULL_HANDLE });
 			// second submit, to dst queue ideally, but for now to graphics
 			si.signalSemaphoreCount = 0;
 			si.waitSemaphoreCount = 1;
@@ -580,7 +580,7 @@ namespace vuk {
 			// stash semaphore
 			head_bundle->sema = sema;
 			// submit with fence
-			submit_graphics(si, fence);
+			submit_graphics(std::span{ &si, 1 }, fence);
 		}
 
 		head_bundle->fence = fence;
@@ -850,7 +850,7 @@ namespace vuk {
 		VkSubmitInfo si{ .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO };
 		si.commandBufferCount = 1;
 		si.pCommandBuffers = &cbuf->command_buffer;
-		submit_graphics(si, *fence);
+		submit_graphics(std::span{ &si, 1 }, *fence);
 		impl->pending_transfers.emplace(PendingTransfer{ last, *fence });
 	}
 

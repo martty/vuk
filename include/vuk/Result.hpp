@@ -102,7 +102,7 @@ namespace vuk {
             } else {
                 if (!_extracted) {
                     if constexpr (vuk::use_exceptions) {
-                        throw MOV(_error);
+                        throw _error;
                     } else {
                         std::abort();
                     }

@@ -16,6 +16,8 @@ namespace vuk {
 		robin_hood::unordered_flat_map<Name, std::vector<UseRef, short_alloc<UseRef, 64>>> use_chains;
 
 		std::vector<RenderPassInfo, short_alloc<RenderPassInfo, 64>> rpis;
+		uint32_t num_graphics_rpis;
+		uint32_t num_transfer_rpis;
 
 		robin_hood::unordered_flat_map<Name, AttachmentRPInfo> bound_attachments;
 		robin_hood::unordered_flat_map<Name, BufferInfo> bound_buffers;
