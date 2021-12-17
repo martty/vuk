@@ -216,6 +216,12 @@ namespace vuk {
 
 		void deallocate(std::span<const TimestampQuery> src);
 
+		Result<void, AllocateException> allocate(std::span<TimelineSemaphore> dst, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+
+		Result<void, AllocateException> allocate_timeline_semaphores(std::span<TimelineSemaphore> dst, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+
+		void deallocate(std::span<const TimelineSemaphore> src);
+
 		DeviceResource& get_cross_device_resource() {
 			return *device_resource;
 		}
