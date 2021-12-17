@@ -60,6 +60,8 @@ namespace vuk {
 		VkQueue transfer_queue;
 		uint32_t transfer_queue_family_index;
 
+		PFN_vkQueueSubmit2KHR queueSubmit2KHR;
+
 		std::atomic<size_t> frame_counter = 0;
 
 		/// @brief Create a new Context
@@ -249,6 +251,8 @@ namespace vuk {
 
 		Result<void> submit_graphics(std::span<VkSubmitInfo>, VkFence);
 		Result<void> submit_transfer(std::span<VkSubmitInfo>, VkFence);
+		Result<void> submit_graphics(std::span<VkSubmitInfo2KHR>, VkFence);
+		Result<void> submit_transfer(std::span<VkSubmitInfo2KHR>, VkFence);
 
 		LegacyGPUAllocator& get_legacy_gpu_allocator();
 
@@ -353,16 +357,18 @@ namespace vuk {
 namespace vuk {
 	template<class T>
 	struct Future {
+		Future() = default;
 		Future(Allocator& alloc, struct RenderGraph& rg, Name output_binding);
 		Future(Allocator& alloc, T&& value);
 
-		Allocator& alloc;
+		Allocator* alloc;
 		T result;
 		Name output_binding;
 
 		RenderGraph* rg;
 
 		enum class Status { initial, value_bound, rg_bound, compiled, submitted, done } status = Status::initial;
+		Domain available = Domain::eNone;
 		
 		Allocator& get_allocator();
 

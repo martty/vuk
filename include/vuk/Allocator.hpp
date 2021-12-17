@@ -67,6 +67,10 @@ namespace vuk {
 	struct TimelineSemaphore {
 		VkSemaphore semaphore;
 		uint64_t* value;
+
+		bool operator==(const TimelineSemaphore& other) const noexcept {
+			return semaphore == other.semaphore;
+		}
 	};
 
 	/// @brief A DeviceResource represents objects that are used jointly by both CPU and GPU. 

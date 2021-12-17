@@ -108,7 +108,7 @@ namespace vuk {
 		cobuf.ongoing_renderpass = rpi;
 	}
 
-	Result<SubmitInfo> ExecutableRenderGraph::record_command_buffer(Allocator& alloc, std::span<RenderPassInfo> rpis, vuk::Domain domain) {
+	Result<SubmitInfo> ExecutableRenderGraph::record_command_buffer(Allocator& alloc, std::span<RenderPassInfo> rpis, const std::vector<TimelineSemaphore>& tsemas, vuk::Domain domain) {
 		auto& ctx = alloc.get_context();
 		SubmitInfo si;
 
@@ -167,6 +167,14 @@ namespace vuk {
 				for (auto& p : sp.passes) {
 					CommandBuffer cobuf(*this, ctx, alloc, cbuf);
 					fill_renderpass_info(rpass, i, cobuf);
+					// propagate waits onto SI
+					for (auto& tsema_idx : p->waits) {
+						si.waits.emplace_back(tsemas[tsema_idx]);
+					}
+					// propagate signals onto SI
+					for (auto& tsema_idx : p->signals) {
+						si.signals.emplace_back(tsemas[tsema_idx]);
+					}
 					// if pass requested no secondary cbufs, but due to subpass merging that is what we got
 					if (p->pass.use_secondary_command_buffers == false && use_secondary_command_buffers == true) {
 						auto res = cobuf.begin_secondary();
@@ -351,23 +359,34 @@ namespace vuk {
 		SubmitBundle sbundle;
 
 		// actual execution
+		// allocate the required number of timeline semaphores
+		Unique<std::vector<TimelineSemaphore>> tsemas(alloc);
+		tsemas.get().resize(impl->num_semaphores_required);
+		VUK_DO_OR_RETURN(alloc.allocate_timeline_semaphores(*tsemas));
+
 
 		// record single cbuf
 		auto graphics_rpis = std::span(impl->rpis.begin(), impl->rpis.begin() + impl->num_graphics_rpis);
 		if (graphics_rpis.size() > 0) {
 			SubmitBatch& sbatch_gfx = sbundle.batches.emplace_back(SubmitBatch{ .domain = vuk::Domain::eGraphicsQueue });
-			auto gfx_res = record_command_buffer(alloc, graphics_rpis, vuk::Domain::eGraphicsQueue);
+			auto gfx_res = record_command_buffer(alloc, graphics_rpis, *tsemas, vuk::Domain::eGraphicsQueue);
 			sbatch_gfx.submits.emplace_back(*gfx_res); // TODO: error handling
 		}
 
 		auto transfer_rpis = std::span(impl->rpis.begin() + impl->num_graphics_rpis, impl->rpis.end());
 		if (transfer_rpis.size() > 0) {
 			SubmitBatch& sbatch_xfer = sbundle.batches.emplace_back(SubmitBatch{ .domain = vuk::Domain::eTransferQueue });
-			auto xfer_res = record_command_buffer(alloc, transfer_rpis, vuk::Domain::eTransferQueue);
+			auto xfer_res = record_command_buffer(alloc, transfer_rpis, *tsemas, vuk::Domain::eTransferQueue);
 			sbatch_xfer.submits.emplace_back(*xfer_res); // TODO: error handling
 		}
 
 		return { expected_value, std::move(sbundle) };
+	}
+
+	void ExecutableRenderGraph::make_futures_ready() {
+		for (auto& [name, bf] : impl->to_manage) {
+			bf->status = Future<Buffer>::Status::submitted;
+		}
 	}
 
 	Result<BufferInfo, RenderGraphException> ExecutableRenderGraph::get_resource_buffer(Name n) {

@@ -27,7 +27,7 @@ vuk::ExampleRunner::ExampleRunner() {
 			window = create_window_glfw("Vuk example", false);
 			surface = create_surface_glfw(vkbinstance.instance, window);
 			selector.set_surface(surface)
-				.set_minimum_version(1, 0);
+				.set_minimum_version(1, 0).add_required_extension(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
 			auto phys_ret = selector.select();
 			if (!phys_ret.has_value()) {
 				// error
@@ -37,6 +37,7 @@ vuk::ExampleRunner::ExampleRunner() {
 
 			vkb::DeviceBuilder device_builder{ vkbphysical_device };
 			VkPhysicalDeviceVulkan12Features vk12features{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };
+			vk12features.timelineSemaphore = true;
 			vk12features.descriptorBindingPartiallyBound = true;
 			vk12features.descriptorBindingUpdateUnusedWhilePending = true;
 			vk12features.shaderSampledImageArrayNonUniformIndexing = true;
@@ -45,7 +46,8 @@ vuk::ExampleRunner::ExampleRunner() {
 			vk12features.hostQueryReset = true;
 			VkPhysicalDeviceVulkan11Features vk11features{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES };
 			vk11features.shaderDrawParameters = true;
-			auto dev_ret = device_builder.add_pNext(&vk12features).add_pNext(&vk11features).build();
+			VkPhysicalDeviceSynchronization2FeaturesKHR sync_feat{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR, .synchronization2 = true };
+			auto dev_ret = device_builder.add_pNext(&vk12features).add_pNext(&vk11features).add_pNext(&sync_feat).build();
 			if (!dev_ret.has_value()) {
 				// error
 			}

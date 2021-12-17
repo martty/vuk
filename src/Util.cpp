@@ -29,22 +29,60 @@ namespace vuk {
 		if (!sbundle) {
 			return { expected_error, sbundle.error() };
 		}
-		auto& hl_cbuf = sbundle->batches.back().submits.back().command_buffers.back();
 
-		VkSubmitInfo si{ .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO };
-		si.commandBufferCount = 1;
-		si.pCommandBuffers = &hl_cbuf;
-		si.pSignalSemaphores = &render_complete;
-		si.signalSemaphoreCount = 1;
-		si.waitSemaphoreCount = 1;
-		si.pWaitSemaphores = &present_rdy;
-		VkPipelineStageFlags flags = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-		si.pWaitDstStageMask = &flags;
+		for (auto& batch : sbundle->batches) {
+			auto domain = batch.domain;
+			for (auto& submit_info : batch.submits) {
+				Unique<VkFence> fence(allocator);
+				VUK_DO_OR_RETURN(allocator.allocate_fences({ &*fence, 1 }));
+				auto& hl_cbuf = submit_info.command_buffers.back();
 
-		Unique<VkFence> fence(allocator);
-		VUK_DO_OR_RETURN(allocator.allocate_fences({ &*fence, 1 }));
+				VkSubmitInfo2KHR si{ .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2_KHR };
+				si.commandBufferInfoCount = 1;
+				VkCommandBufferSubmitInfoKHR cbufsi{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO_KHR };
+				cbufsi.commandBuffer = hl_cbuf;
+				si.pCommandBufferInfos = &cbufsi;
 
-		VUK_DO_OR_RETURN(ctx.submit_graphics(std::span{ &si, 1 }, *fence));
+				std::vector<VkSemaphoreSubmitInfoKHR> wait_semas;
+				for (auto& w : submit_info.waits) {
+					VkSemaphoreSubmitInfoKHR ssi{ VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR };
+					ssi.semaphore = w.semaphore;
+					ssi.value = *w.value;
+					ssi.stageMask = (VkPipelineStageFlagBits2KHR)vuk::PipelineStageFlagBits::eAllCommands;
+					wait_semas.emplace_back(ssi);
+				}
+				if (domain == vuk::Domain::eGraphicsQueue) {
+					VkSemaphoreSubmitInfoKHR ssi{ VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR };
+					ssi.semaphore = present_rdy;
+					ssi.stageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+					wait_semas.emplace_back(ssi);
+				}
+				si.pWaitSemaphoreInfos = wait_semas.data();
+				si.waitSemaphoreInfoCount = wait_semas.size();
+
+				std::vector<VkSemaphoreSubmitInfoKHR> signal_semas;
+				for (auto& s : submit_info.signals) {
+					VkSemaphoreSubmitInfoKHR ssi{ VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR };
+					ssi.semaphore = s.semaphore;
+					*s.value += 1;
+					ssi.value = *s.value;
+					ssi.stageMask = (VkPipelineStageFlagBits2KHR)vuk::PipelineStageFlagBits::eAllCommands;
+					signal_semas.emplace_back(ssi);
+				}
+				if (domain == vuk::Domain::eGraphicsQueue) {
+					VkSemaphoreSubmitInfoKHR ssi{ VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR };
+					ssi.semaphore = render_complete;
+					signal_semas.emplace_back(ssi);
+				}
+				si.pSignalSemaphoreInfos = signal_semas.data();
+				si.signalSemaphoreInfoCount = signal_semas.size();
+				if (domain == vuk::Domain::eGraphicsQueue) {
+					VUK_DO_OR_RETURN(ctx.submit_graphics(std::span{ &si, 1 }, *fence));
+				} else {
+					VUK_DO_OR_RETURN(ctx.submit_transfer(std::span{ &si, 1 }, *fence));
+				}
+			}
+		}
 
 		VkPresentInfoKHR pi{ .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
 		pi.swapchainCount = 1;
@@ -117,14 +155,14 @@ namespace vuk {
 	}
 
 	template<class T>
-	Future<T>::Future(Allocator& alloc, struct RenderGraph& rg, Name output_binding) : alloc(alloc), rg(&rg), output_binding(output_binding) {}
+	Future<T>::Future(Allocator& alloc, struct RenderGraph& rg, Name output_binding) : alloc(&alloc), rg(&rg), output_binding(output_binding) {}
 	template<class T>
-	Future<T>::Future(Allocator& alloc, T&& value) : alloc(alloc), result(std::move(value)) {}
+	Future<T>::Future(Allocator& alloc, T&& value) : alloc(&alloc), result(std::move(value)) {}
 
 	template<>
 	Result<Buffer> Future<Buffer>::get() {
 		auto bufinfo = (*rg->get_bound_buffers().find(output_binding)).second;
-		VUK_DO_OR_RETURN(execute_submit_and_wait(alloc, std::move(*rg).link(alloc.get_context(), {})));
+		VUK_DO_OR_RETURN(execute_submit_and_wait(*alloc, std::move(*rg).link(alloc->get_context(), {})));
 		return { expected_value, Buffer(bufinfo.buffer) };
 	}
 

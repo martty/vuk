@@ -58,6 +58,7 @@ namespace {
 	vuk::Unique<vuk::BufferGPU> scramble_buf;
 	std::random_device rd;
 	std::mt19937 g(rd());
+	vuk::Future<vuk::Buffer> scramble_buf_fut;
 
 	vuk::Example xample{
 		.name = "08_pipelined_compute",
@@ -97,9 +98,12 @@ namespace {
 			std::iota(indices.begin(), indices.end(), 0);
 			std::shuffle(indices.begin(), indices.end(), g);
 
-			vuk::copy_to_buffer(allocator, vuk::Domain::eTransferOnTransfer, scramble_buf.get(), std::span(indices)).get();
-			//ctx.upload(allocator, scramble_buf.get(), std::span(indices.begin(), indices.end()));
 			ctx.wait_all_transfers(allocator);
+
+			//// <----------------->
+			// make a GPU future
+			// the copy (written above) is not performed yet, we just record the computation and bind to a result ("_dst")
+			scramble_buf_fut = vuk::copy_to_buffer(allocator, vuk::Domain::eTransferOnTransfer, scramble_buf.get(), std::span(indices));
 
 			stbi_image_free(doge_image);
 		},
@@ -110,6 +114,8 @@ namespace {
 
 			// standard render to texture
 			rgx.add_pass({
+				.name = "08_rtt",
+				.execute_on = vuk::Domain::eGraphicsQueue,
 				.resources = {"08_rttf"_image(vuk::eColorWrite, runner.swapchain->format, vuk::Dimension2D::absolute((unsigned)x, (unsigned)y), vuk::Samples::e1, vuk::ClearColor{ 0.f, 0.f, 0.f, 0.f })},
 				.execute = [](vuk::CommandBuffer& command_buffer) {
 					command_buffer
@@ -122,7 +128,8 @@ namespace {
 						.draw(3, 1, 0, 0);
 				}
 			});
-
+			//// <-----------------> 
+			// make a gpu future of the above graph (render to texture) and bind to an output (rttf)
 			vuk::Future<vuk::Image> rttf{ frame_allocator, rgx, "08_rttf" };
 
 			vuk::RenderGraph rg;
@@ -130,6 +137,8 @@ namespace {
 			// this pass executes outside of a renderpass
 			// we declare a buffer dependency and dispatch a compute shader
 			rg.add_pass({
+				.name = "08_sort",
+				.execute_on = vuk::Domain::eGraphicsQueue,
 				.resources = {"08_scramble"_buffer >> vuk::eComputeRW >> "08_scramble+"},
 				.execute = [](vuk::CommandBuffer& command_buffer) {
 					command_buffer
@@ -149,6 +158,8 @@ namespace {
 
 			// draw the scrambled image, with a buffer dependency on the scramble buffer
 			rg.add_pass({
+				.name = "08_draw",
+				.execute_on = vuk::Domain::eGraphicsQueue,
 				.resources = {"08_scramble+"_buffer >> vuk::eFragmentRead, "08_rtt+"_image >> vuk::eFragmentSampled, "08_pipelined_compute"_image >> vuk::eColorWrite >> "08_pipelined_compute_final"},
 				.execute = [](vuk::CommandBuffer& command_buffer) {
 					command_buffer
@@ -165,9 +176,14 @@ namespace {
 
 			time += ImGui::GetIO().DeltaTime;
 
+			//// <-----------------> 
+			// make the main rendergraph
+			// our two inputs are the futures - they compile into the main rendergraph
 			rg.attach("08_rtt", std::move(rttf), vuk::eNone);
-			// we bind our externally managed buffer to the rendergraph
-			rg.attach_buffer("08_scramble", scramble_buf.get(), vuk::eNone, vuk::eNone);
+			// the copy here in addition will execute on the transfer queue, and will signal the graphics to execute the rest
+			// we created this future in the setup code, so on the first frame it will append the computation
+			// but on the subsequent frames the future becomes ready (on the gpu) and this will only attach a buffer
+			rg.attach("08_scramble", std::move(scramble_buf_fut), vuk::eNone);
 			return rg;
 		},
 		.cleanup = [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {

@@ -151,7 +151,7 @@ namespace vuk {
 				if (it == impl->use_chains.end()) {
 					it = impl->use_chains.emplace(impl->resolve_name(res.name), std::vector<UseRef, short_alloc<UseRef, 64>>{short_alloc<UseRef, 64>{*impl->arena_}}).first;
 				}
-				it->second.emplace_back(UseRef{ to_use(res.ia), &passinfo });
+				it->second.emplace_back(UseRef{ to_use(res.ia), &passinfo, passinfo.pass.execute_on });
 				if (is_write_access(res.ia)) {
 					add_alias(res.out_name, res.name);
 				}
@@ -336,11 +336,28 @@ namespace vuk {
 	}
 
 	void RenderGraph::attach(Name name, Future<Image>&& fimg, Access final) {
+		/*if (fimg.status == Future<Image>::Status::done) {
+			attach_image(name, fimg.result, Access initial_acc, Access final_acc)
+		} */
+
 		auto it = fimg.rg->impl->bound_attachments.find(fimg.output_binding);
 		assert(it != fimg.rg->impl->bound_attachments.end());
 		it->second.final = to_use(final);
 		append(std::move(*fimg.rg));
 		add_alias(name, fimg.output_binding);
+	}
+
+	void RenderGraph::attach(Name name, Future<Buffer>&& fbuf, Access final) {
+		if (!fbuf.rg->impl) { // TODO: at this point this result must be available?
+			attach_buffer(name, fbuf.result, vuk::eNone, final); // TODO: initial acc
+		} else {
+			auto it = fbuf.rg->impl->bound_buffers.find(fbuf.output_binding);
+			assert(it != fbuf.rg->impl->bound_buffers.end());
+			it->second.final = to_use(final);
+			fbuf.result = it->second.buffer; // for now attach here
+			append(std::move(*fbuf.rg));
+			add_alias(name, fbuf.output_binding);
+		}
 	}
 
 	void sync_bound_attachment_to_renderpass(vuk::AttachmentRPInfo& rp_att, vuk::AttachmentRPInfo& attachment_info) {
@@ -371,6 +388,9 @@ namespace vuk {
 		// perform checking if this indeed the case
 		validate();
 
+		impl->num_semaphores_required = 0;
+		uint32_t& xqc = impl->num_semaphores_required;
+
 		for (auto& [raw_name, attachment_info] : impl->bound_attachments) {
 			auto name = impl->resolve_name(raw_name);
 			auto chain_it = impl->use_chains.find(name);
@@ -387,6 +407,15 @@ namespace vuk {
 			for (size_t i = 0; i < chain.size() - 1; i++) {
 				auto& left = chain[i];
 				auto& right = chain[i + 1];
+
+				bool crosses_queue = (left.domain != vuk::Domain::eNone && right.domain != vuk::Domain::eNone && left.domain != right.domain);
+				if (crosses_queue) {
+					left.pass->signals.emplace_back(xqc);
+					right.pass->waits.emplace_back(xqc);
+					xqc++;
+
+					continue;
+				}
 
 				bool crosses_rpass = (left.pass == nullptr || right.pass == nullptr || left.pass->render_pass_index != right.pass->render_pass_index);
 				if (crosses_rpass) {
@@ -532,12 +561,21 @@ namespace vuk {
 				continue;
 			}
 			auto& chain = chain_it->second;
-			chain.insert(chain.begin(), UseRef{ std::move(buffer_info.initial), nullptr });
+			chain.insert(chain.begin(), UseRef{ buffer_info.initial, nullptr });
 			chain.emplace_back(UseRef{ buffer_info.final, nullptr });
 
 			for (size_t i = 0; i < chain.size() - 1; i++) {
 				auto& left = chain[i];
 				auto& right = chain[i + 1];
+
+				bool crosses_queue = (left.domain != vuk::Domain::eNone && right.domain != vuk::Domain::eNone && left.domain != right.domain);
+				if (crosses_queue) {
+					left.pass->signals.emplace_back(xqc);
+					right.pass->waits.emplace_back(xqc);
+					xqc++;
+
+					continue;
+				}
 
 				bool crosses_rpass = (left.pass == nullptr || right.pass == nullptr || left.pass->render_pass_index != right.pass->render_pass_index);
 				if (crosses_rpass) {

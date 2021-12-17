@@ -29,6 +29,7 @@ namespace vuk {
 			transfer_queue_family_index = graphics_queue_family_index;
 		}
 		impl = new ContextImpl(*this);
+		queueSubmit2KHR = (PFN_vkQueueSubmit2KHR)vkGetDeviceProcAddr(device, "vkQueueSubmit2KHR");
 	}
 
 	bool Context::DebugUtils::enabled() {
@@ -69,6 +70,16 @@ namespace vuk {
 		return { expected_value };
 	}
 
+
+	Result<void> Context::submit_graphics(std::span<VkSubmitInfo2KHR> sis, VkFence fence) {
+		std::lock_guard _(impl->gfx_queue_lock);
+		VkResult result = queueSubmit2KHR(graphics_queue, sis.size(), sis.data(), fence);
+		if (result != VK_SUCCESS) {
+			return { expected_error, VkException{result} };
+		}
+		return { expected_value };
+	}
+
 	Result<void> Context::submit_transfer(std::span<VkSubmitInfo> sis, VkFence fence) {
 		VkResult result;
 		if (transfer_queue == graphics_queue) {
@@ -77,6 +88,21 @@ namespace vuk {
 		} else {
 			std::lock_guard _(impl->xfer_queue_lock);
 			result = vkQueueSubmit(transfer_queue, sis.size(), sis.data(), fence);
+		}
+		if (result != VK_SUCCESS) {
+			return { expected_error, VkException{result} };
+		}
+		return { expected_value };
+	}
+
+	Result<void> Context::submit_transfer(std::span<VkSubmitInfo2KHR> sis, VkFence fence) {
+		VkResult result;
+		if (transfer_queue == graphics_queue) {
+			std::lock_guard _(impl->gfx_queue_lock);
+			result = queueSubmit2KHR(graphics_queue, sis.size(), sis.data(), fence);
+		} else {
+			std::lock_guard _(impl->xfer_queue_lock);
+			result = queueSubmit2KHR(transfer_queue, sis.size(), sis.data(), fence);
 		}
 		if (result != VK_SUCCESS) {
 			return { expected_error, VkException{result} };

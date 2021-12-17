@@ -93,6 +93,7 @@ namespace vuk {
 		ResourceUse final;
 
 		vuk::Buffer buffer;
+		vuk::Future<Buffer>* to_signal = nullptr;
 	};
 
 	struct Resource {
@@ -186,6 +187,7 @@ namespace vuk {
 		void attach_image(Name, ImageAttachment, Access initial, Access final);
 
 		void attach(Name, Future<Image>&& fimg, Access final);
+		void attach(Name, Future<Buffer>&& fimg, Access final);
 
 		void attach_managed(Name, Format, Dimension2D, Samples, Clear);
 
@@ -247,6 +249,7 @@ namespace vuk {
 		ExecutableRenderGraph& operator=(ExecutableRenderGraph&&) noexcept;
 
 		Result<SubmitBundle> execute(Allocator&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
+		void make_futures_ready();
 
 		Result<struct BufferInfo, RenderGraphException> get_resource_buffer(Name);
 		Result<struct AttachmentRPInfo, RenderGraphException> get_resource_image(Name);
@@ -259,7 +262,7 @@ namespace vuk {
 
 		void create_attachment(Context& ptc, Name name, struct AttachmentRPInfo& attachment_info, Extent2D fb_extent, SampleCountFlagBits samples);
 		void fill_renderpass_info(struct RenderPassInfo& rpass, const size_t& i, class CommandBuffer& cobuf);
-		Result<SubmitInfo> record_command_buffer(Allocator&, std::span<RenderPassInfo> rpis, vuk::Domain domain);
+		Result<SubmitInfo> record_command_buffer(Allocator&, std::span<RenderPassInfo> rpis, const std::vector<TimelineSemaphore>& tsemas, vuk::Domain domain);
 	};
 }
 
