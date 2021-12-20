@@ -339,7 +339,12 @@ namespace vuk {
 
 		for (auto& [raw_name, attachment_info] : impl->bound_attachments) {
 			auto name = resolve_name(raw_name, impl->aliases);
-			auto& chain = impl->use_chains.at(name);
+			auto chain_it = impl->use_chains.find(name);
+			if (chain_it == impl->use_chains.end()) {
+				// TODO: warning here, if turned on
+				continue;
+			}
+			auto& chain = chain_it->second;
 			chain.insert(chain.begin(), UseRef{ std::move(attachment_info.initial), nullptr });
 			chain.emplace_back(UseRef{ attachment_info.final, nullptr });
 
@@ -487,7 +492,12 @@ namespace vuk {
 
 		for (auto& [raw_name, buffer_info] : impl->bound_buffers) {
 			auto name = resolve_name(raw_name, impl->aliases);
-			auto& chain = impl->use_chains.at(name);
+			auto chain_it = impl->use_chains.find(name);
+			if (chain_it == impl->use_chains.end()) {
+				// TODO: warning here, if turned on
+				continue;
+			}
+			auto& chain = chain_it->second;
 			chain.insert(chain.begin(), UseRef{ std::move(buffer_info.initial), nullptr });
 			chain.emplace_back(UseRef{ buffer_info.final, nullptr });
 
