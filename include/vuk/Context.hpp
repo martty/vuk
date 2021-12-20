@@ -354,6 +354,13 @@ namespace vuk {
 
 // futures
 
+struct QueueResourceUse {
+	vuk::PipelineStageFlags stages;
+	vuk::AccessFlags access;
+	vuk::ImageLayout layout; // ignored for buffers
+	vuk::Domain domain;
+};
+
 namespace vuk {
 	template<class T>
 	struct Future {
@@ -363,11 +370,12 @@ namespace vuk {
 
 		Allocator* alloc;
 		T result;
+		QueueResourceUse last_use;
 		Name output_binding;
 
 		RenderGraph* rg;
 
-		enum class Status { initial, value_bound, rg_bound, compiled, submitted, done } status = Status::initial;
+		enum class Status { initial, value_bound, rg_bound, attached, compiled, submitted, done } status = Status::initial;
 		Domain available = Domain::eNone;
 		
 		Allocator& get_allocator();

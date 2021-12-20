@@ -60,6 +60,8 @@ namespace {
 	std::mt19937 g(rd());
 	vuk::Future<vuk::Buffer> scramble_buf_fut;
 
+	std::array<vuk::RenderGraph, 3> rgs;
+
 	vuk::Example xample{
 		.name = "08_pipelined_compute",
 		.setup = [](vuk::ExampleRunner& runner, vuk::Allocator& allocator) {
@@ -110,6 +112,9 @@ namespace {
 		.render = [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
 			vuk::Context& ctx = frame_allocator.get_context();
 
+			auto& rg = rgs[runner.context->frame_counter.load() % 3];
+			rg.~RenderGraph();
+			new (&rg) vuk::RenderGraph();
 			vuk::RenderGraph rgx;
 
 			// standard render to texture
@@ -132,8 +137,6 @@ namespace {
 			// make a gpu future of the above graph (render to texture) and bind to an output (rttf)
 			vuk::Future<vuk::Image> rttf{ frame_allocator, rgx, "08_rttf" };
 
-			vuk::RenderGraph rg;
-
 			// this pass executes outside of a renderpass
 			// we declare a buffer dependency and dispatch a compute shader
 			rg.add_pass({
@@ -141,8 +144,8 @@ namespace {
 				.execute_on = vuk::Domain::eGraphicsQueue,
 				.resources = {"08_scramble"_buffer >> vuk::eComputeRW >> "08_scramble+"},
 				.execute = [](vuk::CommandBuffer& command_buffer) {
+					command_buffer.bind_storage_buffer(0, 0, *command_buffer.get_resource_buffer("08_scramble"));
 					command_buffer
-						.bind_storage_buffer(0, 0, *command_buffer.get_resource_buffer("08_scramble"))
 						.bind_compute_pipeline("stupidsort")
 						.specialize_constants(0, speed_count)
 						.dispatch(1);
@@ -179,12 +182,15 @@ namespace {
 			//// <-----------------> 
 			// make the main rendergraph
 			// our two inputs are the futures - they compile into the main rendergraph
-			rg.attach("08_rtt", std::move(rttf), vuk::eNone);
+			rg.attach_in("08_rtt", std::move(rttf), vuk::eNone);
 			// the copy here in addition will execute on the transfer queue, and will signal the graphics to execute the rest
 			// we created this future in the setup code, so on the first frame it will append the computation
 			// but on the subsequent frames the future becomes ready (on the gpu) and this will only attach a buffer
-			rg.attach("08_scramble", std::move(scramble_buf_fut), vuk::eNone);
-			return rg;
+			rg.attach_in("08_scramble", std::move(scramble_buf_fut), vuk::eNone);
+			scramble_buf_fut = { *runner.global, rg, "08_scramble" };
+			rg.attach_out("08_scramble", scramble_buf_fut);
+
+			return vuk::Future<vuk::Image>{frame_allocator, rg, "08_pipelined_compute_final"};
 		},
 		.cleanup = [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
 			texture_of_doge.reset();

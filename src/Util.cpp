@@ -81,6 +81,10 @@ namespace vuk {
 				} else {
 					VUK_DO_OR_RETURN(ctx.submit_transfer(std::span{ &si, 1 }, *fence));
 				}
+
+				for (auto& bufsig : submit_info.buf_signals) {
+					bufsig->status = Future<Buffer>::Status::submitted;
+				}
 			}
 		}
 
@@ -155,7 +159,9 @@ namespace vuk {
 	}
 
 	template<class T>
-	Future<T>::Future(Allocator& alloc, struct RenderGraph& rg, Name output_binding) : alloc(&alloc), rg(&rg), output_binding(output_binding) {}
+	Future<T>::Future(Allocator& alloc, struct RenderGraph& rg, Name output_binding) : alloc(&alloc), rg(&rg), output_binding(output_binding) {
+	}
+
 	template<class T>
 	Future<T>::Future(Allocator& alloc, T&& value) : alloc(&alloc), result(std::move(value)) {}
 

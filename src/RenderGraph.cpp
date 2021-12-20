@@ -335,7 +335,7 @@ namespace vuk {
 		impl->bound_attachments.emplace(name, attachment_info);
 	}
 
-	void RenderGraph::attach(Name name, Future<Image>&& fimg, Access final) {
+	void RenderGraph::attach_in(Name name, Future<Image>&& fimg, Access final) {
 		/*if (fimg.status == Future<Image>::Status::done) {
 			attach_image(name, fimg.result, Access initial_acc, Access final_acc)
 		} */
@@ -347,17 +347,35 @@ namespace vuk {
 		add_alias(name, fimg.output_binding);
 	}
 
-	void RenderGraph::attach(Name name, Future<Buffer>&& fbuf, Access final) {
-		if (!fbuf.rg->impl) { // TODO: at this point this result must be available?
-			attach_buffer(name, fbuf.result, vuk::eNone, final); // TODO: initial acc
+	void RenderGraph::attach_in(Name name, Future<Buffer>&& fbuf, Access final) {
+		//assert(fbuf.rg->impl);
+		//assert(fbuf.status == Future<Buffer>::Status::
+		if(fbuf.status == Future<Buffer>::Status::submitted) {
+			BufferInfo buf_info{ .name = name, .initial = {fbuf.last_use.stages, fbuf.last_use.access, fbuf.last_use.layout}, .final = to_use(final), .buffer = fbuf.result };
+			impl->bound_buffers.emplace(name, buf_info);
 		} else {
 			auto it = fbuf.rg->impl->bound_buffers.find(fbuf.output_binding);
 			assert(it != fbuf.rg->impl->bound_buffers.end());
+			//fbuf.result = it->second.buffer; // for now attach here
+			//impl->to_manage.push_back({ name, &fbuf });
+			//it->second.to_signal = &fbuf;
+			fbuf.status = Future<Buffer>::Status::attached;
+			
 			it->second.final = to_use(final);
-			fbuf.result = it->second.buffer; // for now attach here
 			append(std::move(*fbuf.rg));
 			add_alias(name, fbuf.output_binding);
 		}
+	}
+
+	void RenderGraph::attach_out(Name name, Future<Buffer>& fbuf) {
+		auto resolved_name = resolve_name(name, impl->aliases);
+		auto it = impl->bound_buffers.find(resolved_name);
+		assert(it != impl->bound_buffers.end());
+		fbuf.result = it->second.buffer; // for now attach here
+		it->second.final = to_use(vuk::eNone); // no outward sync - we have bound this to a future and sync through that
+		impl->to_manage.push_back({ name, &fbuf });
+		it->second.to_signal = &fbuf;
+		fbuf.status = Future<Buffer>::Status::attached;
 	}
 
 	void sync_bound_attachment_to_renderpass(vuk::AttachmentRPInfo& rp_att, vuk::AttachmentRPInfo& attachment_info) {
@@ -567,6 +585,15 @@ namespace vuk {
 			for (size_t i = 0; i < chain.size() - 1; i++) {
 				auto& left = chain[i];
 				auto& right = chain[i + 1];
+
+				// last use
+				if (right.pass == nullptr) {
+					if (buffer_info.to_signal) {
+						buffer_info.to_signal->last_use = QueueResourceUse{ left.use.stages, left.use.access, left.use.layout, left.domain };
+						buffer_info.to_signal->result = buffer_info.buffer;
+						left.pass->buffer_future_signals.emplace_back(buffer_info.to_signal);
+					}
+				}
 
 				bool crosses_queue = (left.domain != vuk::Domain::eNone && right.domain != vuk::Domain::eNone && left.domain != right.domain);
 				if (crosses_queue) {

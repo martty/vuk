@@ -186,8 +186,10 @@ namespace vuk {
 		void attach_buffer(Name, Buffer, Access initial, Access final);
 		void attach_image(Name, ImageAttachment, Access initial, Access final);
 
-		void attach(Name, Future<Image>&& fimg, Access final);
-		void attach(Name, Future<Buffer>&& fimg, Access final);
+		void attach_in(Name, Future<Image>&& fimg, Access final);
+		void attach_in(Name, Future<Buffer>&& fimg, Access final);
+
+		void attach_out(Name, Future<Buffer>& fimg);
 
 		void attach_managed(Name, Format, Dimension2D, Samples, Clear);
 
@@ -227,6 +229,7 @@ namespace vuk {
 		std::vector<TimelineSemaphore> waits;
 		std::vector<VkCommandBuffer> command_buffers;
 		std::vector<TimelineSemaphore> signals;
+		std::vector<Future<Buffer>*> buf_signals;
 	};
 
 	struct SubmitBatch {

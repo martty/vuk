@@ -175,6 +175,10 @@ namespace vuk {
 					for (auto& tsema_idx : p->signals) {
 						si.signals.emplace_back(tsemas[tsema_idx]);
 					}
+					for (auto& bfs : p->buffer_future_signals) {
+						si.buf_signals.emplace_back(bfs);
+					}
+
 					// if pass requested no secondary cbufs, but due to subpass merging that is what we got
 					if (p->pass.use_secondary_command_buffers == false && use_secondary_command_buffers == true) {
 						auto res = cobuf.begin_secondary();
@@ -385,7 +389,7 @@ namespace vuk {
 
 	void ExecutableRenderGraph::make_futures_ready() {
 		for (auto& [name, bf] : impl->to_manage) {
-			bf->status = Future<Buffer>::Status::submitted;
+			//bf->status = Future<Buffer>::Status::submitted;
 		}
 	}
 
