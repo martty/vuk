@@ -13,7 +13,7 @@ namespace vuk {
 		}
 
 		ImageResourceInputOnly::operator Resource() {
-			return operator>>(Name(std::string(name.to_sv()) + "+"));
+			return operator>>(name.append("+"));
 		}
 
 		BufferResourceInputOnly BufferResource::operator>>(Access ba) {
@@ -25,7 +25,7 @@ namespace vuk {
 		}
 		
 		BufferResourceInputOnly::operator Resource() {
-			return operator>>(Name(std::string(name.to_sv()) + "+"));
+			return operator>>(name.append("+"));
 		}
 	}
 
