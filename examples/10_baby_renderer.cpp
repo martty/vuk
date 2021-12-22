@@ -121,7 +121,7 @@ namespace {
 			vuk::RenderGraph rg;
 			rg.add_pass({
 						.name = "10_preprocess",
-						.resources = {"10_doge"_image(vuk::eMemoryRead), "10_v1"_image(vuk::eTransferDst), "10_v2"_image(vuk::eComputeWrite)},
+						.resources = {"10_doge"_image >> vuk::eMemoryRead, "10_v1"_image >> vuk::eTransferDst, "10_v2"_image >> vuk::eComputeWrite},
 						.execute = [x, y](vuk::CommandBuffer& command_buffer) {
 					// For the first image, flip the image on the Y axis using a blit
 					vuk::ImageBlit blit;
@@ -266,7 +266,7 @@ namespace {
 
 			// Set up the pass to draw the renderables
 			rg.add_pass({
-				.resources = {"10_baby_renderer_final"_image(vuk::eColorWrite), "10_depth"_image(vuk::eDepthStencilRW)},
+				.resources = {"10_baby_renderer"_image >> vuk::eColorWrite >> "10_baby_renderer_final", "10_depth"_image >> vuk::eDepthStencilRW},
 				.execute = [uboVP, modelmats](vuk::CommandBuffer& command_buffer) {
 					command_buffer
 						.set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)

@@ -73,7 +73,7 @@ namespace {
 			// The rendering pass is unchanged by going to multisampled, 
 			// but we will use an offscreen multisampled color attachment
 			rg.add_pass({
-				.resources = {"07_commands_MS"_image(vuk::eColorWrite), "07_commands_depth"_image(vuk::eDepthStencilRW)},
+				.resources = {"07_commands_MS"_image >> vuk::eColorWrite, "07_commands_depth"_image >> vuk::eDepthStencilRW},
 				.execute = [verts, uboVP, inds](vuk::CommandBuffer& command_buffer) {
 					command_buffer
 						.set_viewport(0, vuk::Rect2D::framebuffer())
@@ -102,9 +102,9 @@ namespace {
 			// Hence we can only call commands that are valid outside of a renderpass
 			rg.add_pass({
 				.name = "07_resolve",
-				.resources = {"07_commands_MS"_image(vuk::eTransferSrc), "07_commands_NMS"_image(vuk::eTransferDst)},
+				.resources = {"07_commands_MS+"_image >> vuk::eTransferSrc, "07_commands_NMS"_image >> vuk::eTransferDst},
 				.execute = [](vuk::CommandBuffer& command_buffer) {
-					command_buffer.resolve_image("07_commands_MS", "07_commands_NMS");
+					command_buffer.resolve_image("07_commands_MS+", "07_commands_NMS");
 				}
 			});
 
@@ -116,7 +116,7 @@ namespace {
 			// We will also sort shuf over time, to show a nice animation
 			rg.add_pass({
 				.name = "07_blit",
-				.resources = {"07_commands_NMS"_image(vuk::eTransferSrc), "07_commands_final"_image(vuk::eTransferDst)},
+				.resources = {"07_commands_NMS+"_image >> vuk::eTransferSrc, "07_commands"_image >> vuk::eTransferDst >> "07_commands_final"},
 				.execute = [tile_x_size, tile_y_size](vuk::CommandBuffer& command_buffer) {
 					for (auto i = 0; i < 9; i++) {
 						auto x = i % 3;
@@ -135,7 +135,7 @@ namespace {
 						blit.dstSubresource = blit.srcSubresource;
 						blit.dstOffsets[0] = vuk::Offset3D{ static_cast<int>(sx * tile_x_size), static_cast<int>(sy * tile_y_size), 0 };
 						blit.dstOffsets[1] = vuk::Offset3D{ static_cast<int>((sx + 1) * tile_x_size), static_cast<int>((sy + 1) * tile_y_size), 1 };
-						command_buffer.blit_image("07_commands_NMS", "07_commands_final", blit, vuk::Filter::eLinear);
+						command_buffer.blit_image("07_commands_NMS+", "07_commands_final", blit, vuk::Filter::eLinear);
 					}
 				}
 			});
@@ -166,12 +166,11 @@ namespace {
 			}
 
 			// We mark our MS attachment as multisampled (8 samples)
-			// Since resolving requires equal sized images, we can actually infer the size of the MS attachment
 			// from the final image, and we don't need to specify here
 			// We use the swapchain format & extents, since resolving needs identical formats & extents
 			rg.attach_managed("07_commands_MS", runner.swapchain->format, vuk::Dimension2D::absolute(300, 300), vuk::Samples::e8, vuk::ClearColor{ 0.f, 0.f, 0.f, 0.f });
 			rg.attach_managed("07_commands_depth", vuk::Format::eD32Sfloat, vuk::Dimension2D::framebuffer(), vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
-			rg.attach_managed("07_commands_NMS", runner.swapchain->format, vuk::Dimension2D::absolute(300, 300), vuk::Samples::e1, vuk::ClearColor{ 0.f, 0.f, 0.f, 0.f });
+			rg.attach_managed("07_commands_NMS", runner.swapchain->format, vuk::Dimension2D::absolute(300, 300), vuk::Samples::e1, vuk::ClearColor{0.f, 0.f, 0.f, 0.f});
 			return rg;
 		},
 		.cleanup = [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {

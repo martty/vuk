@@ -78,7 +78,7 @@ namespace {
 
 			// standard render to texture
 			rg.add_pass({
-				.resources = {"08_rtt"_image(vuk::eColorWrite)},
+				.resources = {"08_rtt"_image >> vuk::eColorWrite},
 				.execute = [](vuk::CommandBuffer& command_buffer) {
 					command_buffer
 						.set_viewport(0, vuk::Rect2D::framebuffer())
@@ -94,7 +94,7 @@ namespace {
 			// this pass executes outside of a renderpass
 			// we declare a buffer dependency and dispatch a compute shader
 			rg.add_pass({
-				.resources = {"08_scramble"_buffer(vuk::eComputeRW)},
+				.resources = {"08_scramble"_buffer >> vuk::eComputeRW >> "08_scramble+"},
 				.execute = [](vuk::CommandBuffer& command_buffer) {
 					command_buffer
 						.bind_storage_buffer(0, 0, *command_buffer.get_resource_buffer("08_scramble"))
@@ -113,7 +113,7 @@ namespace {
 
 			// draw the scrambled image, with a buffer dependency on the scramble buffer
 			rg.add_pass({
-				.resources = {"08_scramble"_buffer(vuk::eFragmentRead), "08_rtt"_image(vuk::eFragmentSampled), "08_pipelined_compute_final"_image(vuk::eColorWrite)},
+				.resources = {"08_scramble+"_buffer >> vuk::eFragmentRead, "08_rtt+"_image >> vuk::eFragmentSampled, "08_pipelined_compute"_image >> vuk::eColorWrite >> "08_pipelined_compute_final"},
 				.execute = [](vuk::CommandBuffer& command_buffer) {
 					command_buffer
 						.set_viewport(0, vuk::Rect2D::framebuffer())

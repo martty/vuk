@@ -11,6 +11,7 @@ namespace vuk {
 		std::vector<PassInfo, short_alloc<PassInfo, 64>> passes;
 
 		robin_hood::unordered_flat_map<Name, Name> aliases;
+		robin_hood::unordered_flat_set<Name> poisoned_names;
 
 		robin_hood::unordered_flat_map<Name, std::vector<UseRef, short_alloc<UseRef, 64>>> use_chains;
 
@@ -21,6 +22,14 @@ namespace vuk {
 
 		RGImpl() : arena_(new arena(1024 * 128)), INIT(passes), INIT(rpis) {
 		}
+
+		Name resolve_name(Name in) {
+			auto it = aliases.find(in);
+			if (it == aliases.end())
+				return in;
+			else
+				return resolve_name(it->second);
+		};
 	};
 #undef INIT
 

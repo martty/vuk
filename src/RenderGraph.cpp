@@ -45,16 +45,18 @@ namespace vuk {
 			for (auto& res : pif.pass.resources) {
 				if (is_read_access(res.ia)) {
 					pif.inputs.emplace_back(res);
-					auto resolved_name = resolve_name(res.name, impl->aliases);
+					auto resolved_name = impl->resolve_name(res.name);
 					auto hashed_resolved_name = ::hash::fnv1a::hash(resolved_name.to_sv().data(), resolved_name.to_sv().size(), hash::fnv1a::default_offset_basis);
 					pif.resolved_input_name_hashes.emplace_back(hashed_resolved_name);
 					pif.bloom_resolved_inputs |= hashed_resolved_name;
 				}
 				if (is_write_access(res.ia)) {
-					auto hashed_name = ::hash::fnv1a::hash(res.name.to_sv().data(), res.name.to_sv().size(), hash::fnv1a::default_offset_basis);
+					assert(!impl->poisoned_names.contains(res.name)); // we have poisoned this name because a write has already consumed it
+					auto hashed_name = ::hash::fnv1a::hash(res.out_name.to_sv().data(), res.out_name.to_sv().size(), hash::fnv1a::default_offset_basis);
 					pif.bloom_outputs |= hashed_name;
 					pif.output_name_hashes.emplace_back(hashed_name);
 					pif.outputs.emplace_back(res);
+					impl->poisoned_names.emplace(res.name);
 				}
 			}
 		}
@@ -67,40 +69,21 @@ namespace vuk {
 		// sort passes if requested
 		if (impl->passes.size() > 1 && compile_options.reorder_passes) {
 			topological_sort(impl->passes.begin(), impl->passes.end(), [](const auto& p1, const auto& p2) {
-				bool could_execute_after = false;
-				bool could_execute_before = false;
+				if (&p1 == &p2) {
+					return false;
+				}
 
 				if ((p1.bloom_outputs & p2.bloom_resolved_inputs) != 0) {
 					for (auto& o : p1.output_name_hashes) {
 						for (auto& i : p2.resolved_input_name_hashes) {
 							if (o == i) {
-								could_execute_after = true;
-								break;
+								return true; // p2 is ordered after p1
 							}
 						}
 					}
 				}
 
-				if ((p2.bloom_outputs & p1.bloom_resolved_inputs) != 0) {
-					for (auto& o : p2.output_name_hashes) {
-						for (auto& i : p1.resolved_input_name_hashes) {
-							if (o == i) {
-								could_execute_before = true;
-								break;
-							}
-						}
-					}
-				}
-				if (!could_execute_after && !could_execute_before && p1.outputs == p2.outputs) {
-					return p1.pass.auxiliary_order < p2.pass.auxiliary_order;
-				}
-
-				if (could_execute_after && could_execute_before) {
-					return p1.pass.auxiliary_order < p2.pass.auxiliary_order;
-				} else if (could_execute_after) {
-					return true;
-				} else
-					return false;
+				return false;
 				});
 		}
 
@@ -146,11 +129,15 @@ namespace vuk {
 		// assemble use chains
 		for (auto& passinfo : impl->passes) {
 			for (auto& res : passinfo.pass.resources) {
-				auto it = impl->use_chains.find(resolve_name(res.name, impl->aliases));
+				// for read or write, we add source to use chain
+				auto it = impl->use_chains.find(impl->resolve_name(res.name));
 				if (it == impl->use_chains.end()) {
-					it = impl->use_chains.emplace(resolve_name(res.name, impl->aliases), std::vector<UseRef, short_alloc<UseRef, 64>>{short_alloc<UseRef, 64>{*impl->arena_}}).first;
+					it = impl->use_chains.emplace(impl->resolve_name(res.name), std::vector<UseRef, short_alloc<UseRef, 64>>{short_alloc<UseRef, 64>{*impl->arena_}}).first;
 				}
 				it->second.emplace_back(UseRef{ to_use(res.ia), &passinfo });
+				if (is_write_access(res.ia)) {
+					add_alias(res.out_name, res.name);
+				}
 			}
 		}
 
@@ -205,7 +192,7 @@ namespace vuk {
 			}
 			for (auto& att : attachments) {
 				AttachmentRPInfo info;
-				info.name = resolve_name(att.name, impl->aliases);
+				info.name = impl->resolve_name(att.name);
 				rpi.attachments.push_back(info);
 			}
 
@@ -217,13 +204,13 @@ namespace vuk {
 		}
 	}
 
-	void RenderGraph::resolve_resource_into(Name resolved_name, Name ms_name) {
+	void RenderGraph::resolve_resource_into(Name resolved_name_src, Name resolved_name_dst, Name ms_name) {
 		add_pass({
 			.resources = {
 				vuk::Resource{ms_name, vuk::Resource::Type::eImage, vuk::eColorResolveRead},
-				vuk::Resource{resolved_name, vuk::Resource::Type::eImage, vuk::eColorResolveWrite}
+				vuk::Resource{resolved_name_src, vuk::Resource::Type::eImage, vuk::eColorResolveWrite, resolved_name_dst}
 			},
-			.resolves = {{ms_name, resolved_name}}
+			.resolves = {{ms_name, resolved_name_src}}
 			});
 	}
 
@@ -324,7 +311,8 @@ namespace vuk {
 	void RenderGraph::validate() {
 		// check if all resourced are attached
 		for (const auto& [n, v] : impl->use_chains) {
-			if (!impl->bound_attachments.contains(n) && !impl->bound_buffers.contains(n)) {
+			auto name = impl->resolve_name(n);
+			if (!impl->bound_attachments.contains(name) && !impl->bound_buffers.contains(name)) {
 				throw RenderGraphException{ std::string("Missing resource: \"") + std::string(n.to_sv()) + "\". Did you forget to attach it?" };
 			}
 		}
@@ -338,7 +326,7 @@ namespace vuk {
 		validate();
 
 		for (auto& [raw_name, attachment_info] : impl->bound_attachments) {
-			auto name = resolve_name(raw_name, impl->aliases);
+			auto name = impl->resolve_name(raw_name);
 			auto chain_it = impl->use_chains.find(name);
 			if (chain_it == impl->use_chains.end()) {
 				// TODO: warning here, if turned on
@@ -491,7 +479,7 @@ namespace vuk {
 		}
 
 		for (auto& [raw_name, buffer_info] : impl->bound_buffers) {
-			auto name = resolve_name(raw_name, impl->aliases);
+			auto name = impl->resolve_name(raw_name);
 			auto chain_it = impl->use_chains.find(name);
 			if (chain_it == impl->use_chains.end()) {
 				// TODO: warning here, if turned on
@@ -582,7 +570,7 @@ namespace vuk {
 					continue;
 				VkAttachmentReference attref{};
 
-				auto name = resolve_name(res.name, impl->aliases);
+				auto name = impl->resolve_name(res.name);
 				auto& chain = impl->use_chains.find(name)->second;
 				auto cit = std::find_if(chain.begin(), chain.end(), [&](auto& useref) { return useref.pass == &pass; });
 				assert(cit != chain.end());
@@ -599,7 +587,7 @@ namespace vuk {
 					if (auto it = pass.pass.resolves.find(res.name); it != pass.pass.resolves.end()) {
 						// this a resolve src attachment
 						// get the dst attachment
-						auto& dst_name = it->second;
+						auto dst_name = impl->resolve_name(it->second);
 						rref.layout = (VkImageLayout)vuk::ImageLayout::eColorAttachmentOptimal; // the only possible layout for resolves
 						rref.attachment = (uint32_t)std::distance(rp.attachments.begin(), std::find_if(rp.attachments.begin(), rp.attachments.end(), [&](auto& att) { return dst_name == att.name; }));
 						rp.attachments[rref.attachment].samples = vuk::Samples::e1; // resolve dst must be sample count = 1

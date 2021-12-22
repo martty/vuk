@@ -102,8 +102,8 @@ void vuk::ExampleRunner::render() {
 			
 			auto rg = item_current->render(*this, frame_allocator);
 			ImGui::Render();
-			vuk::Name attachment_name = vuk::Name(std::string(item_current->name) + "_final");
-			util::ImGui_ImplVuk_Render(frame_allocator, rg, attachment_name, "SWAPCHAIN", imgui_data, ImGui::GetDrawData(), sampled_images);
+			vuk::Name attachment_name = item_current->name;
+			util::ImGui_ImplVuk_Render(frame_allocator, rg, vuk::Name(std::string(item_current->name) + "_final"), "SWAPCHAIN", imgui_data, ImGui::GetDrawData(), sampled_images);
 			rg.attach_swapchain(attachment_name, swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
 			execute_submit_and_present_to_one(frame_allocator, std::move(rg).link(*context, vuk::RenderGraph::CompileOptions{}), swapchain);
 			sampled_images.clear();
@@ -114,8 +114,9 @@ void vuk::ExampleRunner::render() {
 			size_t i = 0;
 			for (auto& ex : examples) {
 				auto rg_frag = ex->render(*this, frame_allocator);
-				auto& attachment_name = *attachment_names.emplace(std::string(ex->name) + "_final");
-				rg_frag.attach_managed(attachment_name, swapchain->format, vuk::Dimension2D::absolute( 300, 300 ), vuk::Samples::e1, vuk::ClearColor(0.1f, 0.2f, 0.3f, 1.f));
+				Name attachment_name_in = Name(ex->name);
+				Name& attachment_name_out = *attachment_names.emplace(std::string(ex->name) + "_final");
+				rg_frag.attach_managed(attachment_name_in, swapchain->format, vuk::Dimension2D::absolute( 300, 300 ), vuk::Samples::e1, vuk::ClearColor(0.1f, 0.2f, 0.3f, 1.f));
 				rg_frag.compile(vuk::RenderGraph::CompileOptions{});
 				ImGui::Begin(ex->name.data());
 				if (rg_frag.get_use_chains().size() > 1) {
@@ -137,7 +138,7 @@ void vuk::ExampleRunner::render() {
 							continue;
 						std::string btn_id = "";
 						bool prevent_disable = false;
-						if (key.to_sv() == attachment_name) {
+						if (key.to_sv() == attachment_name_out) {
 							prevent_disable = true;
 							btn_id = "F";
 						} else {
@@ -171,7 +172,7 @@ void vuk::ExampleRunner::render() {
 				rg.append(std::move(rg_frag));
 
 				if (chosen_resource[i].is_invalid())
-					chosen_resource[i] = attachment_name;
+					chosen_resource[i] = attachment_name_out;
 				auto si = vuk::make_sampled_image(chosen_resource[i], imgui_data.font_sci);
 				ImGui::Image(&*sampled_images.emplace(si), ImVec2(200, 200));
 				ImGui::End();

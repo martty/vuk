@@ -154,7 +154,7 @@ void vuk::BenchRunner::render() {
 		ImGui::Render();
 
 		vuk::Name attachment_name = "_final";
-		util::ImGui_ImplVuk_Render(frame_allocator, rg, attachment_name, "SWAPCHAIN", imgui_data, ImGui::GetDrawData(), sampled_images);
+		util::ImGui_ImplVuk_Render(frame_allocator, rg, attachment_name.append("+"), "SWAPCHAIN", imgui_data, ImGui::GetDrawData(), sampled_images);
 		rg.attach_swapchain(attachment_name, swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
 		execute_submit_and_present_to_one(frame_allocator, std::move(rg).link(*context, vuk::RenderGraph::CompileOptions{}), swapchain);
 		sampled_images.clear();

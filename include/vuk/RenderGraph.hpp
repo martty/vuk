@@ -18,15 +18,36 @@ namespace vuk {
 	struct Resource;
 
 	namespace detail {
+		struct BufferResourceInputOnly;
+
 		struct BufferResource {
 			Name name;
 
-			Resource operator()(Access ba);
+			BufferResourceInputOnly operator>>(Access ba);
 		};
+
+		struct ImageResourceInputOnly;
+
 		struct ImageResource {
 			Name name;
 
-			Resource operator()(Access ia);
+			ImageResourceInputOnly operator>>(Access ia);
+		};
+
+		struct ImageResourceInputOnly {
+			Name name;
+			Access ba;
+
+			Resource operator>>(Name output);
+			operator Resource();
+		};
+
+		struct BufferResourceInputOnly {
+			Name name;
+			Access ba;
+
+			Resource operator>>(Name output);
+			operator Resource();
 		};
 	}
 
@@ -34,13 +55,16 @@ namespace vuk {
 		Name name;
 		enum class Type { eBuffer, eImage } type;
 		Access ia;
+		Name out_name;
+
 		struct Use {
 			vuk::PipelineStageFlags stages;
 			vuk::AccessFlags access;
 			vuk::ImageLayout layout; // ignored for buffers
 		};
 
-		Resource(Name n, Type t, Access ia) : name(n), type(t), ia(ia) {}
+		Resource(Name n, Type t, Access ia) : name(n), type(t), ia(ia), out_name{} {}
+		Resource(Name n, Type t, Access ia, Name out_name) : name(n), type(t), ia(ia), out_name(out_name) {}
 
 		bool operator==(const Resource& o) const noexcept {
 			return name == o.name;
@@ -72,7 +96,6 @@ namespace vuk {
 	struct Pass {
 		Name name;
 		Name executes_on;
-		float auxiliary_order = 0.f;
 		bool use_secondary_command_buffers = false;
 
 		std::vector<Resource> resources;
@@ -112,7 +135,8 @@ namespace vuk {
 		/// @brief Add a resolve operation from the image resource `ms_name` to image_resource `resolved_name`
 		/// @param resolved_name 
 		/// @param ms_name 
-		void resolve_resource_into(Name resolved_name, Name ms_name);
+		// TODO: docs
+		void resolve_resource_into(Name resolved_name_src, Name resolved_name_dst, Name ms_name);
 
 		void attach_swapchain(Name, SwapchainRef swp, Clear);
 		void attach_buffer(Name, Buffer, Access initial, Access final);
@@ -166,6 +190,8 @@ namespace vuk {
 		Result<struct AttachmentRPInfo, RenderGraphException> get_resource_image(Name);
 
 		Result<bool, RenderGraphException> is_resource_image_in_general_layout(Name n, struct PassInfo* pass_info);
+
+		Name resolve_name(Name) const noexcept;
 	private:
 		struct RGImpl* impl;
 

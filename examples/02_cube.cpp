@@ -58,8 +58,8 @@ namespace {
 			vuk::RenderGraph rg;
 			rg.add_pass({
 				// For this example, only a color image is needed to write to (our framebuffer)
-				// The name is declared, and the way it will be used (color attachment - write)
-				.resources = {"02_cube_final"_image(vuk::eColorWrite)},
+				// The name is declared, and the way it will be used in the pass (color attachment - write)
+				.resources = {"02_cube"_image >> vuk::eColorWrite >> "02_cube_final"},
 				.execute = [verts, uboVP, inds](vuk::CommandBuffer& command_buffer) {
 					command_buffer
 						// In vuk, all pipeline state (with the exception of the shaders) come from the command buffer

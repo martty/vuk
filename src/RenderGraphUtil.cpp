@@ -4,12 +4,28 @@
 
 namespace vuk {
 	namespace detail {
-		Resource ImageResource::operator()(Access ia) {
-			return Resource{ name, Resource::Type::eImage, ia };
+		ImageResourceInputOnly ImageResource::operator>>(Access ia) {
+			return { name, ia };
 		}
 
-		Resource BufferResource::operator()(Access ba) {
-			return Resource{ name, Resource::Type::eBuffer, ba };
+		Resource ImageResourceInputOnly::operator>>(Name out) {
+			return { name, Resource::Type::eImage, ba, out };
+		}
+
+		ImageResourceInputOnly::operator Resource() {
+			return operator>>(Name(std::string(name.to_sv()) + "+"));
+		}
+
+		BufferResourceInputOnly BufferResource::operator>>(Access ba) {
+			return { name, ba };
+		}
+
+		Resource BufferResourceInputOnly::operator>>(Name out) {
+			return { name, Resource::Type::eBuffer, ba, out };
+		}
+		
+		BufferResourceInputOnly::operator Resource() {
+			return operator>>(Name(std::string(name.to_sv()) + "+"));
 		}
 	}
 

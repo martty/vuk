@@ -15,6 +15,8 @@ namespace vuk {
 		std::string_view to_sv() const noexcept;
 		const char* c_str() const noexcept { return id; }
 
+		Name append(Name other) const noexcept;
+
 		bool is_invalid() const noexcept;
 
 		friend bool operator==(Name a, Name b) noexcept {

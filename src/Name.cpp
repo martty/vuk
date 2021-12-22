@@ -5,7 +5,7 @@
 #include <array>
 #include <vector>
 #include <vuk/Hash.hpp>
-#include <unordered_map>
+#include <robin_hood.h>
 
 namespace {
 	struct Intern {
@@ -64,7 +64,7 @@ namespace {
 
 		// to store the strings
 		std::vector<std::pair<size_t, std::array<char, arr_siz>*>> buffers;
-		std::unordered_map<uint32_t, const char*> map;
+		robin_hood::unordered_flat_map<uint32_t, const char*> map;
 		std::shared_mutex lock;
 	};
 
@@ -86,5 +86,13 @@ namespace vuk {
 
 	bool Name::is_invalid() const noexcept {
 		return id == &invalid_value[0];
+	}
+
+	Name Name::append(Name other) const noexcept {
+		std::string app;
+		app.reserve(strlen(id) + strlen(other.id));
+		app.append(id);
+		app.append(other.id);
+		return Name(app);
 	}
 }

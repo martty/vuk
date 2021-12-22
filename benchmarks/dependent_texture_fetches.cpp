@@ -32,7 +32,7 @@ namespace {
 	vuk::RenderGraph test_case(vuk::Allocator& allocator, bool dependent, vuk::Texture& src, vuk::Texture& dst, vuk::Query start, vuk::Query end, T parameters) {
 		vuk::RenderGraph rg;
 		rg.add_pass({
-			.resources = {"_dst"_image(vuk::eColorWrite)},
+			.resources = {"_dst"_image >> vuk::eColorWrite},
 			.execute = [start, end, parameters, &src, dependent](vuk::CommandBuffer& command_buffer) {
 				command_buffer
 					.set_viewport(0, vuk::Rect2D::framebuffer())
@@ -54,7 +54,7 @@ namespace {
 			}
 			});
 		rg.add_pass({
-			.resources = {"_final"_image(vuk::eColorWrite), "_dst"_image(vuk::eFragmentSampled)},
+			.resources = {"_final"_image >> vuk::eColorWrite, "_dst+"_image >> vuk::eFragmentSampled},
 			.execute = [](vuk::CommandBuffer& command_buffer) {
 				command_buffer
 					.set_viewport(0, vuk::Rect2D::framebuffer())
@@ -74,7 +74,7 @@ namespace {
 	void blit(vuk::Allocator& allocator, vuk::Texture& src, vuk::Texture& dst) {
 		vuk::RenderGraph rg;
 		rg.add_pass({
-			.resources = {"dst"_image(vuk::eColorWrite)},
+			.resources = {"dst"_image >> vuk::eColorWrite},
 			.execute = [&src](vuk::CommandBuffer& command_buffer) {
 				command_buffer
 					.set_viewport(0, vuk::Rect2D::framebuffer())

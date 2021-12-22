@@ -66,7 +66,7 @@ namespace {
 			// The rendering pass is unchanged by going to multisampled, 
 			// but we will use an offscreen multisampled color attachment
 			rg.add_pass({
-				.resources = {"06_msaa_MS"_image(vuk::eColorWrite), "06_msaa_depth"_image(vuk::eDepthStencilRW)},
+				.resources = {"06_msaa_MS"_image >> vuk::eColorWrite, "06_msaa_depth"_image >> vuk::eDepthStencilRW},
 				.execute = [verts, uboVP, inds](vuk::CommandBuffer& command_buffer) {
 					command_buffer
 						.set_viewport(0, vuk::Rect2D::framebuffer())
@@ -100,7 +100,7 @@ namespace {
 			rg.attach_managed("06_msaa_MS", runner.swapchain->format, vuk::Dimension2D::framebuffer(), vuk::Samples::e8, vuk::ClearColor{ 0.f, 0.f, 0.f, 0.f });
 			rg.attach_managed("06_msaa_depth", vuk::Format::eD32Sfloat, vuk::Dimension2D::framebuffer(), vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
 			// We mark our final result "06_msaa_final" attachment to be a result of a resolve from "06_msaa_MS"
-			rg.resolve_resource_into("06_msaa_final", "06_msaa_MS");
+			rg.resolve_resource_into("06_msaa", "06_msaa_final", "06_msaa_MS+");
 			return rg;
 		},
 		.cleanup = [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {

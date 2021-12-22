@@ -153,15 +153,6 @@ namespace vuk {
 		PassInfo* pass = nullptr;
 	};
 
-	template<class T>
-	Name resolve_name(Name in, const T& aliases) {
-		auto it = aliases.find(in);
-		if (it == aliases.end())
-			return in;
-		else
-			return resolve_name(it->second, aliases);
-	};
-
 	struct PassInfo {
 		PassInfo(arena&, Pass&&);
 

@@ -81,7 +81,7 @@ namespace {
 			vuk::RenderGraph rg;
 			rg.add_pass({
 						.name = "09_preprocess",
-						.resources = {"09_doge"_image(vuk::eMemoryRead), "09_v1"_image(vuk::eTransferDst), "09_v2"_image(vuk::eComputeWrite)},
+						.resources = {"09_doge"_image >> vuk::eMemoryRead, "09_v1"_image >> vuk::eTransferDst, "09_v2"_image >> vuk::eComputeWrite},
 						.execute = [x, y](vuk::CommandBuffer& command_buffer) {
 								// For the first image, flip the image on the Y axis using a blit
 								vuk::ImageBlit blit;
@@ -147,7 +147,7 @@ namespace {
 
 			// Set up the pass to draw the textured cube, with a color and a depth attachment
 			rg.add_pass({
-				.resources = {"09_persistent_descriptorset_final"_image(vuk::eColorWrite), "09_depth"_image(vuk::eDepthStencilRW)},
+				.resources = {"09_persistent_descriptorset"_image >> vuk::eColorWrite >> "09_persistent_descriptorset_final", "09_depth"_image >> vuk::eDepthStencilRW},
 				.execute = [verts, uboVP, inds](vuk::CommandBuffer& command_buffer) {
 					command_buffer
 						.set_viewport(0, vuk::Rect2D::framebuffer())

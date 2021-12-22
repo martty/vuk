@@ -32,8 +32,8 @@ namespace {
 			// And it provides a callback which is executed when this pass is being ran
 			rg.add_pass({
 				// For this example, only a color image is needed to write to (our framebuffer)
-				// The name is declared, and the way it will be used (color attachment - write)
-				.resources = {"01_triangle_final"_image(vuk::eColorWrite)},
+				// The name is declared, and the way it will be used in the pass (color attachment - write)
+				.resources = {"01_triangle"_image >> vuk::eColorWrite >> "01_triangle_final"},
 				.execute = [](vuk::CommandBuffer& command_buffer) {
 					// Here commands are recorded into the command buffer for rendering
 					// The commands frequently mimick the Vulkan counterpart, with additional sugar
@@ -45,7 +45,7 @@ namespace {
 					command_buffer.set_scissor(0, vuk::Rect2D::framebuffer());
 					command_buffer
 						.set_rasterization({}) // Set the default rasterization state
-						.set_color_blend("01_triangle_final", {}) // Set the default color blend state
+						.set_color_blend("01_triangle", {}) // Set the default color blend state
 						.bind_graphics_pipeline("triangle") // Recall pipeline for "triangle" and bind
 						.draw(3, 1, 0, 0); // Draw 3 vertices
 					}

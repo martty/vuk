@@ -65,7 +65,7 @@ namespace {
 
 			// Set up the pass to draw the textured cube, with a color and a depth attachment
 			rg.add_pass({
-				.resources = {"04_texture_final"_image(vuk::eColorWrite), "04_texture_depth"_image(vuk::eDepthStencilRW)},
+				.resources = {"04_texture"_image >> vuk::eColorWrite >> "04_texture_final", "04_texture_depth"_image >> vuk::eDepthStencilRW},
 				.execute = [verts, uboVP, inds](vuk::CommandBuffer& command_buffer) {
 					command_buffer
 						.set_viewport(0, vuk::Rect2D::framebuffer())

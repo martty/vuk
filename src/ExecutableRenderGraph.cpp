@@ -337,7 +337,7 @@ namespace vuk {
 	}
 
 	Result<BufferInfo, RenderGraphException> ExecutableRenderGraph::get_resource_buffer(Name n) {
-		auto resolved = resolve_name(n, impl->aliases);
+		auto resolved = impl->resolve_name(n);
 		auto it = impl->bound_buffers.find(resolved);
 		if (it == impl->bound_buffers.end()) {
 			return { expected_error, RenderGraphException{"Buffer not found"} };
@@ -346,7 +346,7 @@ namespace vuk {
 	}
 
 	Result<AttachmentRPInfo, RenderGraphException> ExecutableRenderGraph::get_resource_image(Name n) {
-		auto resolved = resolve_name(n, impl->aliases);
+		auto resolved = impl->resolve_name(n);
 		auto it = impl->bound_attachments.find(resolved);
 		if (it == impl->bound_attachments.end()) {
 			return { expected_error, RenderGraphException{"Buffer not found"} };
@@ -355,7 +355,7 @@ namespace vuk {
 	}
 
 	Result<bool, RenderGraphException> ExecutableRenderGraph::is_resource_image_in_general_layout(Name n, PassInfo* pass_info) {
-		auto resolved = resolve_name(n, impl->aliases);
+		auto resolved = impl->resolve_name(n);
 		auto it = impl->use_chains.find(resolved);
 		if (it == impl->use_chains.end()) {
 			return { expected_error, RenderGraphException{"Resource not found"} };
@@ -368,5 +368,9 @@ namespace vuk {
 		}
 		assert(false && "Image resourced was not declared to be used in this pass, but was referred to.");
 		return { expected_error, RenderGraphException{ "Image resourced was not declared to be used in this pass, but was referred to." } };
+	}
+
+	Name ExecutableRenderGraph::resolve_name(Name name) const noexcept {
+		return impl->resolve_name(name);
 	}
 } // namespace vuk

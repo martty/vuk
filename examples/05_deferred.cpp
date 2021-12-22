@@ -66,7 +66,7 @@ namespace {
 				// Passes can be optionally named, this useful for visualization and debugging
 				.name = "05_deferred_MRT",
 				// Declare our framebuffer
-				.resources = {"05_position"_image(vuk::eColorWrite), "05_normal"_image(vuk::eColorWrite), "05_color"_image(vuk::eColorWrite), "05_depth"_image(vuk::eDepthStencilRW)},
+				.resources = {"05_position"_image >> vuk::eColorWrite, "05_normal"_image >> vuk::eColorWrite, "05_color"_image >> vuk::eColorWrite, "05_depth"_image >> vuk::eDepthStencilRW},
 				.execute = [verts, uboVP, inds](vuk::CommandBuffer& command_buffer) {
 					// Rendering is the same as in the case for forward
 					command_buffer
@@ -101,7 +101,7 @@ namespace {
 				.name = "05_deferred_resolve",
 				// Declare that we are going to render to the final color image
 				// Declare that we are going to sample (in the fragment shader) from the previous attachments
-				.resources = {"05_deferred_final"_image(vuk::eColorWrite), "05_position"_image(vuk::eFragmentSampled), "05_normal"_image(vuk::eFragmentSampled), "05_color"_image(vuk::eFragmentSampled)},
+				.resources = {"05_deferred"_image >> vuk::eColorWrite >> "05_deferred_final", "05_position+"_image >> vuk::eFragmentSampled, "05_normal+"_image >> vuk::eFragmentSampled, "05_color+"_image >> vuk::eFragmentSampled},
 				.execute = [cam_pos](vuk::CommandBuffer& command_buffer) {
 					command_buffer
 						.set_viewport(0, vuk::Rect2D::framebuffer())
@@ -116,9 +116,9 @@ namespace {
 					sci.minFilter = sci.magFilter = vuk::Filter::eNearest;
 					// Bind the previous attachments as sampled images
 					command_buffer
-						.bind_sampled_image(0, 0, "05_position", sci)
-						.bind_sampled_image(0, 1, "05_normal", sci)
-						.bind_sampled_image(0, 2, "05_color", sci)
+						.bind_sampled_image(0, 0, "05_position+", sci)
+						.bind_sampled_image(0, 1, "05_normal+", sci)
+						.bind_sampled_image(0, 2, "05_color+", sci)
 						.draw(3, 1, 0, 0);
 					}
 				}

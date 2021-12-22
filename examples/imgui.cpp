@@ -84,7 +84,7 @@ void util::ImGui_ImplVuk_Render(vuk::Allocator& allocator, vuk::RenderGraph& rg,
 	// add rendergraph dependencies to be transitioned
 	// make all rendergraph sampled images available
 	std::vector<vuk::Resource> resources;
-	resources.emplace_back(vuk::Resource{ dst_target, vuk::Resource::Type::eImage, vuk::eColorRW });
+	resources.emplace_back(vuk::Resource{ src_target, vuk::Resource::Type::eImage, vuk::eColorRW, dst_target });
 	for (auto& si : sampled_images) {
 		if (!si.is_global) {
 			resources.emplace_back(vuk::Resource{ si.rg_attachment.attachment_name, vuk::Resource::Type::eImage, vuk::Access::eFragmentSampled });
@@ -168,5 +168,4 @@ void util::ImGui_ImplVuk_Render(vuk::Allocator& allocator, vuk::RenderGraph& rg,
 	};
 
 	rg.add_pass(std::move(pass));
-	rg.add_alias(dst_target, src_target);
 }

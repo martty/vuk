@@ -54,8 +54,11 @@ namespace {
 
 			vuk::RenderGraph rg;
 			// Add a pass to draw a triangle (from the first example) into the top left corner
+
+			// In this example we want to use this resource after our write, but resource names are consumed by writes
+			// To be able to refer to this resource with the write completed, we assign it a new name ("03_multipass+")
 			rg.add_pass({
-				.resources = {"03_multipass_final"_image(vuk::eColorWrite)},
+				.resources = {"03_multipass"_image >> vuk::eColorWrite >> "03_multipass+"},
 				.execute = [&](vuk::CommandBuffer& command_buffer) {
 					command_buffer
 						.set_viewport(0, vuk::Rect2D::relative(0, 0, 0.2f, 0.2f))
@@ -69,8 +72,11 @@ namespace {
 			);
 
 			// Add a pass to draw a triangle (from the first example) into the bottom right corner
+
+			// If we don't explicitly say what new name we want to give, vuk will give "<input_name>+"
+			// So in this case, 03_multipass++
 			rg.add_pass({
-				.resources = {"03_multipass_final"_image(vuk::eColorWrite)},
+				.resources = {"03_multipass+"_image >> vuk::eColorWrite},
 				.execute = [&](vuk::CommandBuffer& command_buffer) {
 					command_buffer
 						.set_viewport(0, vuk::Rect2D::relative(0.8f, 0.8f, 0.2f, 0.2f))
@@ -88,7 +94,7 @@ namespace {
 				// Here a second resource is added: a depth attachment
 				// The example framework took care of our color image, but this attachment we will need bind later
 				// Depth attachments are denoted by the use vuk::eDepthStencilRW
-				.resources = {"03_multipass_final"_image(vuk::eColorWrite), "03_depth"_image(vuk::eDepthStencilRW)},
+				.resources = {"03_multipass++"_image >> vuk::eColorWrite >> "03_multipass_final", "03_depth"_image >> vuk::eDepthStencilRW},
 				.execute = [verts, uboVP, inds](vuk::CommandBuffer& command_buffer) {
 					command_buffer
 						.set_viewport(0, vuk::Rect2D::framebuffer())
