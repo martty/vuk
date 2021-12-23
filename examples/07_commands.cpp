@@ -102,7 +102,7 @@ namespace {
 			// Hence we can only call commands that are valid outside of a renderpass
 			rg.add_pass({
 				.name = "07_resolve",
-				.resources = {"07_commands_MS+"_image >> vuk::eTransferSrc, "07_commands_NMS"_image >> vuk::eTransferDst},
+				.resources = {"07_commands_MS+"_image >> vuk::eTransferRead, "07_commands_NMS"_image >> vuk::eTransferWrite},
 				.execute = [](vuk::CommandBuffer& command_buffer) {
 					command_buffer.resolve_image("07_commands_MS+", "07_commands_NMS");
 				}
@@ -116,7 +116,7 @@ namespace {
 			// We will also sort shuf over time, to show a nice animation
 			rg.add_pass({
 				.name = "07_blit",
-				.resources = {"07_commands_NMS+"_image >> vuk::eTransferSrc, "07_commands"_image >> vuk::eTransferDst >> "07_commands_final"},
+				.resources = {"07_commands_NMS+"_image >> vuk::eTransferRead, "07_commands"_image >> vuk::eTransferWrite >> "07_commands_final"},
 				.execute = [tile_x_size, tile_y_size](vuk::CommandBuffer& command_buffer) {
 					for (auto i = 0; i < 9; i++) {
 						auto x = i % 3;

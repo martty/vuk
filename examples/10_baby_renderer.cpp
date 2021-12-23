@@ -111,7 +111,7 @@ namespace {
 			ici.imageType = vuk::ImageType::e2D;
 			ici.initialLayout = vuk::ImageLayout::eUndefined;
 			ici.tiling = vuk::ImageTiling::eOptimal;
-			ici.usage = vuk::ImageUsageFlagBits::eTransferDst | vuk::ImageUsageFlagBits::eSampled;
+			ici.usage = vuk::ImageUsageFlagBits::eTransferWrite | vuk::ImageUsageFlagBits::eSampled;
 			ici.mipLevels = ici.arrayLayers = 1;
 			variant1 = ctx.allocate_texture(allocator, ici);
 			ici.format = vuk::Format::eR8G8B8A8Unorm;
@@ -121,7 +121,7 @@ namespace {
 			vuk::RenderGraph rg;
 			rg.add_pass({
 						.name = "10_preprocess",
-						.resources = {"10_doge"_image >> vuk::eMemoryRead, "10_v1"_image >> vuk::eTransferDst, "10_v2"_image >> vuk::eComputeWrite},
+						.resources = {"10_doge"_image >> vuk::eMemoryRead, "10_v1"_image >> vuk::eTransferWrite, "10_v2"_image >> vuk::eComputeWrite},
 						.execute = [x, y](vuk::CommandBuffer& command_buffer) {
 					// For the first image, flip the image on the Y axis using a blit
 					vuk::ImageBlit blit;

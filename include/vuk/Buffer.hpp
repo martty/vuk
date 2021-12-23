@@ -5,8 +5,8 @@
 
 namespace vuk {
 	enum class BufferUsageFlagBits : VkBufferUsageFlags {
-		eTransferSrc = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-		eTransferDst = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+		eTransferRead = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+		eTransferWrite = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 		eUniformTexelBuffer = VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT,
 		eStorageTexelBuffer = VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT,
 		eUniformBuffer = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,

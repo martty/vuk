@@ -124,8 +124,8 @@ namespace vuk {
 		LegacyPoolAllocator allocate_pool(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage);
 		// allocate an externally managed linear pool
 		static constexpr vuk::BufferUsageFlags all_usage =
-			BufferUsageFlagBits::eTransferSrc |
-			BufferUsageFlagBits::eTransferDst |
+			BufferUsageFlagBits::eTransferRead |
+			BufferUsageFlagBits::eTransferWrite |
 			BufferUsageFlagBits::eUniformTexelBuffer |
 			BufferUsageFlagBits::eStorageTexelBuffer |
 			BufferUsageFlagBits::eUniformBuffer |

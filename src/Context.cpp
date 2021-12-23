@@ -436,7 +436,7 @@ namespace vuk {
 		// create 1 big staging buffer
 		// we need to have this aligned for the first upload
 		// as that corresponds to offset = 0
-		bundle->buffer = impl->legacy_gpu_allocator.allocate_buffer(MemoryUsage::eCPUonly, BufferUsageFlagBits::eTransferSrc, size, biggest_align, true);
+		bundle->buffer = impl->legacy_gpu_allocator.allocate_buffer(MemoryUsage::eCPUonly, BufferUsageFlagBits::eTransferRead, size, biggest_align, true);
 		auto staging = bundle->buffer;
 
 		for (auto& upload : uploads) {
@@ -627,7 +627,7 @@ namespace vuk {
 		ici.samples = Samples::e1;
 		ici.initialLayout = ImageLayout::eUndefined;
 		ici.tiling = ImageTiling::eOptimal;
-		ici.usage = ImageUsageFlagBits::eTransferSrc | ImageUsageFlagBits::eTransferDst | ImageUsageFlagBits::eSampled;
+		ici.usage = ImageUsageFlagBits::eTransferRead | ImageUsageFlagBits::eTransferWrite | ImageUsageFlagBits::eSampled;
 		ici.mipLevels = generate_mips ? (uint32_t)log2f((float)std::max(extent.width, extent.height)) + 1 : 1;
 		ici.arrayLayers = 1;
 		auto tex = allocate_texture(allocator, ici);

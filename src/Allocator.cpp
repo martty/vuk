@@ -184,8 +184,8 @@ namespace vuk {
 		if (!value) return "{}";
 		std::string result;
 
-		if (value & BufferUsageFlagBits::eTransferSrc) result += "TransferSrc | ";
-		if (value & BufferUsageFlagBits::eTransferDst) result += "TransferDst | ";
+		if (value & BufferUsageFlagBits::eTransferRead) result += "TransferSrc | ";
+		if (value & BufferUsageFlagBits::eTransferWrite) result += "TransferDst | ";
 		if (value & BufferUsageFlagBits::eUniformTexelBuffer) result += "UniformTexelBuffer | ";
 		if (value & BufferUsageFlagBits::eStorageTexelBuffer) result += "StorageTexelBuffer | ";
 		if (value & BufferUsageFlagBits::eUniformBuffer) result += "UniformBuffer | ";

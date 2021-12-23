@@ -927,7 +927,6 @@ namespace vuk {
 		eColorRW,
 		eColorWrite,
 		eColorRead,
-		eColorResolveRW, // special op to mark renderpass resolve
 		eColorResolveRead, // special op to mark renderpass resolve read
 		eColorResolveWrite, // special op to mark renderpass resolve write
 		eDepthStencilRW,
@@ -941,8 +940,8 @@ namespace vuk {
 		eFragmentSampled,
 		eFragmentRead,
 		eFragmentWrite, // written using image store
-		eTransferSrc,
-		eTransferDst,
+		eTransferRead,
+		eTransferWrite,
 		eComputeRead,
 		eComputeWrite,
 		eComputeRW,

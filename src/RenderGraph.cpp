@@ -754,9 +754,9 @@ namespace vuk {
 			case vuk::ImageLayout::eColorAttachmentOptimal:
 				usage |= vuk::ImageUsageFlagBits::eColorAttachment; break;
 			case vuk::ImageLayout::eTransferSrcOptimal:
-				usage |= vuk::ImageUsageFlagBits::eTransferSrc; break;
+				usage |= vuk::ImageUsageFlagBits::eTransferRead; break;
 			case vuk::ImageLayout::eTransferDstOptimal:
-				usage |= vuk::ImageUsageFlagBits::eTransferDst; break;
+				usage |= vuk::ImageUsageFlagBits::eTransferWrite; break;
 			default:;
 			}
 			// TODO: this isn't conservative enough, we need more information
