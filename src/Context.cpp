@@ -636,6 +636,7 @@ void vuk::Context::enqueue_destroy(vuk::PersistentDescriptorSet b) {
 void vuk::Context::enqueue_destroy(VkSwapchainKHR sc) {
 	std::lock_guard _(impl->recycle_locks[frame_counter % FC]);
 	impl->swapchain_recycle[frame_counter % FC].push_back(std::move(sc));
+}
 	
 void vuk::Context::enqueue_destroy(VkFramebuffer fb) {
 	std::lock_guard _(impl->recycle_locks[frame_counter % FC]);
