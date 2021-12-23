@@ -778,7 +778,8 @@ namespace vuk {
 		return *this;
 	}
 
-	void CommandBuffer::image_barrier(Name src, vuk::Access src_acc, vuk::Access dst_acc, uint32_t mip_level, uint32_t mip_count) {
+
+	CommandBuffer& CommandBuffer::image_barrier(Name src, vuk::Access src_acc, vuk::Access dst_acc, uint32_t mip_level, uint32_t mip_count) {
 		VUK_EARLY_RET();
 		assert(rg);
 		auto src_res = rg->get_resource_image(src);
