@@ -778,7 +778,7 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::image_barrier(Name src, Access src_acc, Access dst_acc) {
+	void CommandBuffer::image_barrier(Name src, vuk::Access src_acc, vuk::Access dst_acc, uint32_t mip_level, uint32_t mip_count) {
 		VUK_EARLY_RET();
 		assert(rg);
 		auto src_res = rg->get_resource_image(src);
@@ -793,8 +793,8 @@ namespace vuk {
 		isr.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		isr.baseArrayLayer = 0;
 		isr.layerCount = VK_REMAINING_ARRAY_LAYERS;
-		isr.baseMipLevel = 0;
-		isr.levelCount = VK_REMAINING_MIP_LEVELS;
+		isr.baseMipLevel = mip_level;
+		isr.levelCount = mip_count;
 		VkImageMemoryBarrier imb{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
 		imb.image = src_image;
 		auto src_use = to_use(src_acc);
