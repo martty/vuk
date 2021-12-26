@@ -368,7 +368,7 @@ namespace vuk {
 	}
 
 	void RenderGraph::attach_out(Name name, Future<Buffer>& fbuf) {
-		auto resolved_name = resolve_name(name, impl->aliases);
+		auto resolved_name = impl->resolve_name(name);
 		auto it = impl->bound_buffers.find(resolved_name);
 		assert(it != impl->bound_buffers.end());
 		fbuf.result = it->second.buffer; // for now attach here
@@ -406,8 +406,7 @@ namespace vuk {
 		// perform checking if this indeed the case
 		validate();
 
-		impl->num_semaphores_required = 0;
-		uint32_t& xqc = impl->num_semaphores_required;
+		std::array<uint64_t, 3> queue_progress;
 
 		for (auto& [raw_name, attachment_info] : impl->bound_attachments) {
 			auto name = impl->resolve_name(raw_name);
@@ -428,9 +427,7 @@ namespace vuk {
 
 				bool crosses_queue = (left.domain != vuk::Domain::eNone && right.domain != vuk::Domain::eNone && left.domain != right.domain);
 				if (crosses_queue) {
-					left.pass->signals.emplace_back(xqc);
-					right.pass->waits.emplace_back(xqc);
-					xqc++;
+					right.pass->relative_waits.emplace_back(left.domain, 1); // TODO: multicbuf
 
 					continue;
 				}
@@ -597,9 +594,7 @@ namespace vuk {
 
 				bool crosses_queue = (left.domain != vuk::Domain::eNone && right.domain != vuk::Domain::eNone && left.domain != right.domain);
 				if (crosses_queue) {
-					left.pass->signals.emplace_back(xqc);
-					right.pass->waits.emplace_back(xqc);
-					xqc++;
+					right.pass->relative_waits.emplace_back(left.domain, 1); // TODO: multicbuf
 
 					continue;
 				}

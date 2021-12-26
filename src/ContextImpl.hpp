@@ -60,8 +60,10 @@ namespace vuk {
 		LegacyGPUAllocator legacy_gpu_allocator;
 		VkDevice device;
 
+		// TODO: gone
 		std::mutex gfx_queue_lock;
 		std::mutex xfer_queue_lock;
+
 		VkPipelineCache vk_pipeline_cache = VK_NULL_HANDLE;
 		Cache<PipelineBaseInfo> pipelinebase_cache;
 		Cache<PipelineInfo> pipeline_cache;

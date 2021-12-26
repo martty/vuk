@@ -753,7 +753,7 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::copy_buffer(Name src, Name dst, VkBufferCopy bic) {
+	CommandBuffer& CommandBuffer::copy_buffer(Name src, Name dst, size_t size) {
 		VUK_EARLY_RET();
 		assert(rg);
 		auto src_res = rg->get_resource_buffer(src);
@@ -770,11 +770,12 @@ namespace vuk {
 			return *this;
 		}
 		auto dst_bbuf = dst_res->buffer;
+		VkBufferCopy bc{};
+		bc.srcOffset += src_bbuf.offset;
+		bc.dstOffset += dst_bbuf.offset;
+		bc.size = size;
 
-		bic.srcOffset += src_bbuf.offset;
-		bic.dstOffset += dst_bbuf.offset;
-
-		vkCmdCopyBuffer(command_buffer, src_bbuf.buffer, dst_bbuf.buffer, 1, &bic);
+		vkCmdCopyBuffer(command_buffer, src_bbuf.buffer, dst_bbuf.buffer, 1, &bc);
 		return *this;
 	}
 

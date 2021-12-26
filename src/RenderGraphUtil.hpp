@@ -162,7 +162,7 @@ namespace vuk {
 		size_t render_pass_index;
 		uint32_t subpass;
 
-		std::vector<uint32_t> waits;
+		std::vector<std::pair<Domain, uint32_t>> relative_waits;
 		std::vector<Resource, short_alloc<Resource, 16>> inputs;
 		uint32_t bloom_resolved_inputs = 0;
 		std::vector<uint32_t, short_alloc<uint32_t, 16>> resolved_input_name_hashes;

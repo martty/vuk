@@ -19,7 +19,7 @@
 */
 
 namespace vuk {
-	Future<Buffer> copy_to_buffer(Allocator& allocator, Domain copy_domain, Buffer buffer, void* src_data, size_t size) {
+	Future<Buffer> host_data_to_buffer(Allocator& allocator, Domain copy_domain, Buffer buffer, void* src_data, size_t size) {
 		// host-mapped buffers just get memcpys
 		if (buffer.mapped_ptr) {
 			memcpy(buffer.mapped_ptr, src_data, size);
@@ -29,23 +29,22 @@ namespace vuk {
 		auto src = *allocate_buffer_cross_device(allocator, BufferCreateInfo{ vuk::MemoryUsage::eCPUonly, size, 1 });
 		::memcpy(src->mapped_ptr, src_data, size);
 
-		RenderGraph* rgp = new RenderGraph;
-		auto& rg = *rgp;
-		rg.add_pass({
+		std::unique_ptr<RenderGraph> rgp = std::make_unique<RenderGraph>();
+		rgp->add_pass({
 			.name = "BUFFER COPY UPLOAD",
 			.execute_on = copy_domain,
-			.resources = {"_dst"_buffer(vuk::Access::eTransferDst), "_src"_buffer(vuk::Access::eTransferSrc)},
+			.resources = {"_dst"_buffer >> vuk::Access::eTransferWrite, "_src"_buffer >> vuk::Access::eTransferRead},
 			.execute = [size](vuk::CommandBuffer& command_buffer) {
-				command_buffer.copy_buffer("_src", "_dst", VkBufferCopy{.size = size});
+				command_buffer.copy_buffer("_src", "_dst", size);
 			} });
 		rgp->attach_buffer("_src", *src, vuk::Access::eNone, vuk::Access::eNone);
 		rgp->attach_buffer("_dst", buffer, vuk::Access::eNone, vuk::Access::eNone);
-		return { allocator, *rgp, "_dst"};
+		return { allocator, std::move(rgp), "_dst"}; // TODO: we should allow this to be dst+
 	}
 
 	template<class T>
-	Future<Buffer> copy_to_buffer(Allocator& allocator, Domain copy_domain, Buffer dst, std::span<T> data) {
-		return copy_to_buffer(allocator, copy_domain, dst, data.data(), data.size_bytes());
+	Future<Buffer> host_data_to_buffer(Allocator& allocator, Domain copy_domain, Buffer dst, std::span<T> data) {
+		return host_data_to_buffer(allocator, copy_domain, dst, data.data(), data.size_bytes());
 	}
 }
 
@@ -59,8 +58,6 @@ namespace {
 	std::random_device rd;
 	std::mt19937 g(rd());
 	vuk::Future<vuk::Buffer> scramble_buf_fut;
-
-	std::array<vuk::RenderGraph, 3> rgs;
 
 	vuk::Example xample{
 		.name = "08_pipelined_compute",
@@ -105,16 +102,13 @@ namespace {
 			//// <----------------->
 			// make a GPU future
 			// the copy (written above) is not performed yet, we just record the computation and bind to a result ("_dst")
-			scramble_buf_fut = vuk::copy_to_buffer(allocator, vuk::Domain::eTransferOnTransfer, scramble_buf.get(), std::span(indices));
+			scramble_buf_fut = vuk::host_data_to_buffer(allocator, vuk::Domain::eTransferOnTransfer, scramble_buf.get(), std::span(indices));
 
 			stbi_image_free(doge_image);
 		},
 		.render = [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
 			vuk::Context& ctx = frame_allocator.get_context();
 
-			auto& rg = rgs[runner.context->frame_counter.load() % 3];
-			rg.~RenderGraph();
-			new (&rg) vuk::RenderGraph();
 			vuk::RenderGraph rgx;
 
 			// standard render to texture
@@ -137,6 +131,8 @@ namespace {
 			// make a gpu future of the above graph (render to texture) and bind to an output (rttf)
 			vuk::Future<vuk::Image> rttf{ frame_allocator, rgx, "08_rttf" };
 
+			std::unique_ptr<vuk::RenderGraph> rgp = std::make_unique<vuk::RenderGraph>();
+			auto& rg = *rgp;
 			// this pass executes outside of a renderpass
 			// we declare a buffer dependency and dispatch a compute shader
 			rg.add_pass({
@@ -163,7 +159,7 @@ namespace {
 			rg.add_pass({
 				.name = "08_draw",
 				.execute_on = vuk::Domain::eGraphicsQueue,
-				.resources = {"08_scramble+"_buffer >> vuk::eFragmentRead, "08_rtt+"_image >> vuk::eFragmentSampled, "08_pipelined_compute"_image >> vuk::eColorWrite >> "08_pipelined_compute_final"},
+				.resources = {"08_scramble+"_buffer >> vuk::eFragmentRead, "08_rtt"_image >> vuk::eFragmentSampled, "08_pipelined_compute"_image >> vuk::eColorWrite >> "08_pipelined_compute_final"},
 				.execute = [](vuk::CommandBuffer& command_buffer) {
 					command_buffer
 						.set_viewport(0, vuk::Rect2D::framebuffer())
@@ -187,7 +183,7 @@ namespace {
 			// we created this future in the setup code, so on the first frame it will append the computation
 			// but on the subsequent frames the future becomes ready (on the gpu) and this will only attach a buffer
 			rg.attach_in("08_scramble", std::move(scramble_buf_fut), vuk::eNone);
-			scramble_buf_fut = { *runner.global, rg, "08_scramble" };
+			scramble_buf_fut = { *runner.global, std::move(rgp), "08_scramble" };
 			rg.attach_out("08_scramble", scramble_buf_fut);
 
 			return vuk::Future<vuk::Image>{frame_allocator, rg, "08_pipelined_compute_final"};

@@ -18,6 +18,14 @@ namespace vuk {
 		return { expected_value, std::move(sema) };
 	}
 
+	inline Result<Unique<TimelineSemaphore>, AllocateException> allocate_timeline_semaphore(Allocator& allocator, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
+		Unique<TimelineSemaphore> sema(allocator);
+		if (auto res = allocator.allocate_timeline_semaphores(std::span{ &sema.get(), 1 }, loc); !res) {
+			return { expected_error, res.error() };
+		}
+		return { expected_value, std::move(sema) };
+	}
+
 	inline Result<Unique<VkCommandPool>, AllocateException> allocate_command_pool(Allocator& allocator, const VkCommandPoolCreateInfo& cpci, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 		Unique<VkCommandPool> cp(allocator);
 		if (auto res = allocator.allocate_command_pools(std::span{ &cp.get(), 1 }, std::span{ &cpci, 1 }, loc); !res) {

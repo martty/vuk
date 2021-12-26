@@ -126,10 +126,6 @@ namespace {
 			// For an internal attachment, we need to provide the format, extents, sample count and clear value
 			// This depth attachment will have extents matching the framebuffer (deduced from the color attachment)
 			rg.attach_managed("03_depth", vuk::Format::eD32Sfloat, vuk::Dimension2D::framebuffer(), vuk::Samples::e1, vuk::ClearDepthStencil{ 1.0f, 0 });
-
-			// Note that the three passes we given here are not ordered with respect to eachother
-			// They all write to the color attachment, which gives no ordering
-			// Since we render with no overlap, this is not a problem
 			return rg;
 		}
 	};

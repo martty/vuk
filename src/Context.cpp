@@ -19,17 +19,80 @@ namespace vuk {
 		instance(params.instance),
 		device(params.device),
 		physical_device(params.physical_device),
-		graphics_queue(params.graphics_queue),
 		graphics_queue_family_index(params.graphics_queue_family_index),
-		transfer_queue(params.transfer_queue),
 		transfer_queue_family_index(params.transfer_queue_family_index),
 		debug(*this) {
-		if (transfer_queue == VK_NULL_HANDLE || transfer_queue_family_index == VK_QUEUE_FAMILY_IGNORED) {
-			transfer_queue = graphics_queue;
-			transfer_queue_family_index = graphics_queue_family_index;
-		}
 		impl = new ContextImpl(*this);
-		queueSubmit2KHR = (PFN_vkQueueSubmit2KHR)vkGetDeviceProcAddr(device, "vkQueueSubmit2KHR");
+		auto queueSubmit2KHR = (PFN_vkQueueSubmit2KHR)vkGetDeviceProcAddr(device, "vkQueueSubmit2KHR");
+		if (params.graphics_queue != VK_NULL_HANDLE && params.graphics_queue_family_index != VK_QUEUE_FAMILY_IGNORED) {
+			TimelineSemaphore ts;
+			impl->device_vk_resource.allocate_timeline_semaphores(std::span{ &ts, 1 }, {});
+			dedicated_graphics_queue.emplace(queueSubmit2KHR, params.graphics_queue, params.graphics_queue_family_index, ts);
+			graphics_queue = &dedicated_graphics_queue.value();
+		}
+		if (params.compute_queue != VK_NULL_HANDLE && params.compute_queue_family_index != VK_QUEUE_FAMILY_IGNORED) {
+			TimelineSemaphore ts;
+			impl->device_vk_resource.allocate_timeline_semaphores(std::span{ &ts, 1 }, {});
+			dedicated_compute_queue.emplace(queueSubmit2KHR, params.compute_queue, params.compute_queue_family_index, ts);
+			compute_queue = &dedicated_compute_queue.value();
+		} else {
+			compute_queue = graphics_queue;
+		}
+
+		if (params.transfer_queue != VK_NULL_HANDLE && params.transfer_queue_family_index != VK_QUEUE_FAMILY_IGNORED) {
+			TimelineSemaphore ts;
+			impl->device_vk_resource.allocate_timeline_semaphores(std::span{ &ts, 1 }, {});
+			dedicated_transfer_queue.emplace(queueSubmit2KHR, params.transfer_queue, params.transfer_queue_family_index, ts);
+			transfer_queue = &dedicated_transfer_queue.value();
+		} else {
+			transfer_queue = compute_queue ? compute_queue : graphics_queue;
+			transfer_queue_family_index = compute_queue ? params.compute_queue_family_index : params.graphics_queue_family_index;
+		}
+	}
+
+	Queue::Queue(PFN_vkQueueSubmit2KHR fn, VkQueue queue, uint32_t queue_family_index, TimelineSemaphore ts) : queueSubmit2KHR(fn), queue(queue), family_index(queue_family_index), submit_sync(ts) {
+	}
+
+	Result<void> Queue::submit(std::span<VkSubmitInfo2KHR> sis, VkFence fence) {
+		std::lock_guard _(queue_lock);
+		VkResult result = queueSubmit2KHR(queue, sis.size(), sis.data(), fence);
+		if (result != VK_SUCCESS) {
+			return { expected_error, VkException{result} };
+		}
+		return { expected_value };
+	}
+
+	Result<void> Queue::submit(std::span<VkSubmitInfo> sis, VkFence fence) {
+		std::lock_guard _(queue_lock);
+		VkResult result = vkQueueSubmit(queue, sis.size(), sis.data(), fence);
+		if (result != VK_SUCCESS) {
+			return { expected_error, VkException{result} };
+		}
+		return { expected_value };
+	}
+	
+	Result<void> Context::wait_for_queues(std::span<std::pair<Queue*, uint64_t>> queue_waits) {
+		std::array<VkSemaphore, 3> queue_timeline_semaphores;
+		std::array<uint64_t, 3> values;
+
+		uint32_t count = 0;
+		for (auto [q, v] : queue_waits) {
+			queue_timeline_semaphores[count] = q->submit_sync.semaphore;
+			values[count] = v;
+		}
+
+		VkSemaphoreWaitInfo swi{ .sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO };
+		swi.pSemaphores = queue_timeline_semaphores.data();
+		swi.pValues = values.data();
+		swi.semaphoreCount = count;
+		VkResult result = vkWaitSemaphores(device, &swi, UINT64_MAX);
+		for (auto [q, v] : queue_waits) {
+			q->last_wait.store(v);
+		}
+		if (result != VK_SUCCESS) {
+			return { expected_error, VkException{result} };
+		}
+		return { expected_value };
 	}
 
 	bool Context::DebugUtils::enabled() {
@@ -62,52 +125,19 @@ namespace vuk {
 	}
 
 	Result<void> Context::submit_graphics(std::span<VkSubmitInfo> sis, VkFence fence) {
-		std::lock_guard _(impl->gfx_queue_lock);
-		VkResult result = vkQueueSubmit(graphics_queue, sis.size(), sis.data(), fence);
-		if (result != VK_SUCCESS) {
-			return { expected_error, VkException{result} };
-		}
-		return { expected_value };
+		return graphics_queue->submit(sis, fence);
 	}
 
-
-	Result<void> Context::submit_graphics(std::span<VkSubmitInfo2KHR> sis, VkFence fence) {
-		std::lock_guard _(impl->gfx_queue_lock);
-		VkResult result = queueSubmit2KHR(graphics_queue, sis.size(), sis.data(), fence);
-		if (result != VK_SUCCESS) {
-			return { expected_error, VkException{result} };
-		}
-		return { expected_value };
+	Result<void> Context::submit_graphics(std::span<VkSubmitInfo2KHR> sis) {
+		return graphics_queue->submit(sis, VK_NULL_HANDLE);
 	}
 
 	Result<void> Context::submit_transfer(std::span<VkSubmitInfo> sis, VkFence fence) {
-		VkResult result;
-		if (transfer_queue == graphics_queue) {
-			std::lock_guard _(impl->gfx_queue_lock);
-			result = vkQueueSubmit(graphics_queue, sis.size(), sis.data(), fence);
-		} else {
-			std::lock_guard _(impl->xfer_queue_lock);
-			result = vkQueueSubmit(transfer_queue, sis.size(), sis.data(), fence);
-		}
-		if (result != VK_SUCCESS) {
-			return { expected_error, VkException{result} };
-		}
-		return { expected_value };
+		return transfer_queue->submit(sis, fence);
 	}
 
-	Result<void> Context::submit_transfer(std::span<VkSubmitInfo2KHR> sis, VkFence fence) {
-		VkResult result;
-		if (transfer_queue == graphics_queue) {
-			std::lock_guard _(impl->gfx_queue_lock);
-			result = queueSubmit2KHR(graphics_queue, sis.size(), sis.data(), fence);
-		} else {
-			std::lock_guard _(impl->xfer_queue_lock);
-			result = queueSubmit2KHR(transfer_queue, sis.size(), sis.data(), fence);
-		}
-		if (result != VK_SUCCESS) {
-			return { expected_error, VkException{result} };
-		}
-		return { expected_value };
+	Result<void> Context::submit_transfer(std::span<VkSubmitInfo2KHR> sis) {
+		return transfer_queue->submit(sis, VK_NULL_HANDLE);
 	}
 
 	LegacyGPUAllocator& Context::get_legacy_gpu_allocator() {

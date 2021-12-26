@@ -42,12 +42,32 @@ namespace vuk {
 		VkInstance instance;
 		VkDevice device;
 		VkPhysicalDevice physical_device;
-		VkQueue graphics_queue;
-		uint32_t graphics_queue_family_index;
+		/// @brief Optional graphics queue
+		VkQueue graphics_queue = VK_NULL_HANDLE;
+		/// @brief Optional graphics queue family index
+		uint32_t graphics_queue_family_index = VK_QUEUE_FAMILY_IGNORED;
+		/// @brief Optional compute queue
+		VkQueue compute_queue = VK_NULL_HANDLE;
+		/// @brief Optional compute queue family index
+		uint32_t compute_queue_family_index = VK_QUEUE_FAMILY_IGNORED;
 		/// @brief Optional transfer queue
 		VkQueue transfer_queue = VK_NULL_HANDLE;
-		/// @brief Optional transfer queue index
+		/// @brief Optional transfer queue family index
 		uint32_t transfer_queue_family_index = VK_QUEUE_FAMILY_IGNORED;
+	};
+
+	struct Queue {
+		Queue(PFN_vkQueueSubmit2KHR fn, VkQueue queue, uint32_t queue_family_index, TimelineSemaphore ts);
+
+		std::mutex queue_lock;
+		PFN_vkQueueSubmit2KHR queueSubmit2KHR;
+		TimelineSemaphore submit_sync;
+		VkQueue queue;
+		std::atomic<uint64_t> last_wait;
+		uint32_t family_index;
+
+		Result<void> submit(std::span<VkSubmitInfo> submit_infos, VkFence fence);
+		Result<void> submit(std::span<VkSubmitInfo2KHR> submit_infos, VkFence fence);
 	};
 
 	class Context {
@@ -55,12 +75,18 @@ namespace vuk {
 		VkInstance instance;
 		VkDevice device;
 		VkPhysicalDevice physical_device;
-		VkQueue graphics_queue;
 		uint32_t graphics_queue_family_index;
-		VkQueue transfer_queue;
 		uint32_t transfer_queue_family_index;
 
-		PFN_vkQueueSubmit2KHR queueSubmit2KHR;
+		std::optional<Queue> dedicated_graphics_queue;
+		std::optional<Queue> dedicated_compute_queue;
+		std::optional<Queue> dedicated_transfer_queue;
+
+		Queue* graphics_queue = nullptr;
+		Queue* compute_queue = nullptr;
+		Queue* transfer_queue = nullptr;
+
+		Result<void> wait_for_queues(std::span<std::pair<Queue*, uint64_t>> queue_waits);
 
 		std::atomic<size_t> frame_counter = 0;
 
@@ -251,8 +277,8 @@ namespace vuk {
 
 		Result<void> submit_graphics(std::span<VkSubmitInfo>, VkFence);
 		Result<void> submit_transfer(std::span<VkSubmitInfo>, VkFence);
-		Result<void> submit_graphics(std::span<VkSubmitInfo2KHR>, VkFence);
-		Result<void> submit_transfer(std::span<VkSubmitInfo2KHR>, VkFence);
+		Result<void> submit_graphics(std::span<VkSubmitInfo2KHR>);
+		Result<void> submit_transfer(std::span<VkSubmitInfo2KHR>);
 
 		LegacyGPUAllocator& get_legacy_gpu_allocator();
 
@@ -365,6 +391,7 @@ namespace vuk {
 	template<class T>
 	struct Future {
 		Future() = default;
+		Future(Allocator& alloc, std::unique_ptr<struct RenderGraph> rg, Name output_binding);
 		Future(Allocator& alloc, struct RenderGraph& rg, Name output_binding);
 		Future(Allocator& alloc, T&& value);
 
@@ -373,7 +400,8 @@ namespace vuk {
 		QueueResourceUse last_use;
 		Name output_binding;
 
-		RenderGraph* rg;
+		std::unique_ptr<RenderGraph> owned_rg;
+		RenderGraph* rg = nullptr;
 
 		enum class Status { initial, value_bound, rg_bound, attached, compiled, submitted, done } status = Status::initial;
 		Domain available = Domain::eNone;

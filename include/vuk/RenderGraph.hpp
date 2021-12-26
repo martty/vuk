@@ -107,7 +107,7 @@ namespace vuk {
 
 		Resource(Name n, Type t, Access ia) : name(n), type(t), ia(ia) {}
 		Resource(Name n, Type t, Access ia, Name out_name) : name(n), type(t), ia(ia), out_name(out_name) {}
-		Resource(Name n, Type t, Access ia, Format fmt, Dimension2D dim, Samples samp, Clear cv) : name(n), type(t), ia(ia), is_create(true), ici{ .extents = dim, .samples = samp, .description{.format = (VkFormat)fmt}, .clear_value = cv} {}
+		Resource(Name n, Type t, Access ia, Format fmt, Dimension2D dim, Samples samp, Clear cv, Name out_name) : name(n), type(t), ia(ia), is_create(true), ici{ .extents = dim, .samples = samp, .description{.format = (VkFormat)fmt}, .clear_value = cv}, out_name(out_name) {}
 
 		bool operator==(const Resource& o) const noexcept {
 			return name == o.name;
@@ -226,9 +226,8 @@ namespace vuk {
 	};
 
 	struct SubmitInfo {
-		std::vector<TimelineSemaphore> waits;
+		std::vector<std::pair<Domain, uint64_t>> relative_waits;
 		std::vector<VkCommandBuffer> command_buffers;
-		std::vector<TimelineSemaphore> signals;
 		std::vector<Future<Buffer>*> buf_signals;
 	};
 
@@ -265,7 +264,7 @@ namespace vuk {
 
 		void create_attachment(Context& ptc, Name name, struct AttachmentRPInfo& attachment_info, Extent2D fb_extent, SampleCountFlagBits samples);
 		void fill_renderpass_info(struct RenderPassInfo& rpass, const size_t& i, class CommandBuffer& cobuf);
-		Result<SubmitInfo> record_command_buffer(Allocator&, std::span<RenderPassInfo> rpis, const std::vector<TimelineSemaphore>& tsemas, vuk::Domain domain);
+		Result<SubmitInfo> record_command_buffer(Allocator&, std::span<RenderPassInfo> rpis, vuk::Domain domain);
 	};
 }
 

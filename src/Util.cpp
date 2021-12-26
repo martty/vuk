@@ -30,8 +30,34 @@ namespace vuk {
 			return { expected_error, sbundle.error() };
 		}
 
+		auto domain_to_queue_index = [](Domain domain) -> uint64_t {
+			if (domain == Domain::eGraphicsQueue) {
+				return 0;
+			} else {
+				return 2; // TODO:
+			}
+		};
+
+		auto domain_to_queue = [](Context& ctx, Domain domain) -> Queue& {
+			if (domain == Domain::eGraphicsQueue) {
+				return *ctx.graphics_queue;
+			} else {
+				return *ctx.transfer_queue; // TODO:
+			}
+		};
+
+		std::array<uint64_t, 3> queue_progress_references;
+		queue_progress_references[domain_to_queue_index(Domain::eGraphicsQueue)] = *ctx.graphics_queue->submit_sync.value;
+		queue_progress_references[domain_to_queue_index(Domain::eTransferQueue)] = *ctx.transfer_queue->submit_sync.value;
+
+		if(sbundle->batches.size() > 1)
+			std::swap(sbundle->batches[0], sbundle->batches[1]);
+
 		for (auto& batch : sbundle->batches) {
 			auto domain = batch.domain;
+			// TODO: proper q sel
+			Queue& queue = domain_to_queue(ctx, domain);
+
 			for (auto& submit_info : batch.submits) {
 				Unique<VkFence> fence(allocator);
 				VUK_DO_OR_RETURN(allocator.allocate_fences({ &*fence, 1 }));
@@ -44,44 +70,39 @@ namespace vuk {
 				si.pCommandBufferInfos = &cbufsi;
 
 				std::vector<VkSemaphoreSubmitInfoKHR> wait_semas;
-				for (auto& w : submit_info.waits) {
+				for (auto& w : submit_info.relative_waits) {
 					VkSemaphoreSubmitInfoKHR ssi{ VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR };
-					ssi.semaphore = w.semaphore;
-					ssi.value = *w.value;
-					ssi.stageMask = (VkPipelineStageFlagBits2KHR)vuk::PipelineStageFlagBits::eAllCommands;
+					auto& wait_queue = domain_to_queue(ctx, w.first).submit_sync;
+					ssi.semaphore = wait_queue.semaphore;
+					ssi.value = queue_progress_references[domain_to_queue_index(w.first)] + w.second;
+					ssi.stageMask = (VkPipelineStageFlagBits2KHR)PipelineStageFlagBits::eAllCommands;
 					wait_semas.emplace_back(ssi);
 				}
-				if (domain == vuk::Domain::eGraphicsQueue) {
+				if (domain == Domain::eGraphicsQueue) { // TODO: for final? only
 					VkSemaphoreSubmitInfoKHR ssi{ VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR };
 					ssi.semaphore = present_rdy;
-					ssi.stageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-					wait_semas.emplace_back(ssi);
+					ssi.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR;
+					//wait_semas.emplace_back(ssi);
 				}
 				si.pWaitSemaphoreInfos = wait_semas.data();
 				si.waitSemaphoreInfoCount = wait_semas.size();
 
 				std::vector<VkSemaphoreSubmitInfoKHR> signal_semas;
-				for (auto& s : submit_info.signals) {
-					VkSemaphoreSubmitInfoKHR ssi{ VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR };
-					ssi.semaphore = s.semaphore;
-					*s.value += 1;
-					ssi.value = *s.value;
-					ssi.stageMask = (VkPipelineStageFlagBits2KHR)vuk::PipelineStageFlagBits::eAllCommands;
-					signal_semas.emplace_back(ssi);
-				}
-				if (domain == vuk::Domain::eGraphicsQueue) {
-					VkSemaphoreSubmitInfoKHR ssi{ VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR };
+				VkSemaphoreSubmitInfoKHR ssi{ VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR };
+				ssi.semaphore = queue.submit_sync.semaphore;
+				*queue.submit_sync.value += 1; // TODO: this should be atomic or we should lock the queue sooner
+				ssi.value = *queue.submit_sync.value;
+				ssi.stageMask = (VkPipelineStageFlagBits2KHR)PipelineStageFlagBits::eAllCommands;
+				signal_semas.emplace_back(ssi);
+				if (domain == Domain::eGraphicsQueue) { // TODO: for final? only
 					ssi.semaphore = render_complete;
+					ssi.value = 0; // binary sema
 					signal_semas.emplace_back(ssi);
 				}
 				si.pSignalSemaphoreInfos = signal_semas.data();
 				si.signalSemaphoreInfoCount = signal_semas.size();
-				if (domain == vuk::Domain::eGraphicsQueue) {
-					VUK_DO_OR_RETURN(ctx.submit_graphics(std::span{ &si, 1 }, *fence));
-				} else {
-					VUK_DO_OR_RETURN(ctx.submit_transfer(std::span{ &si, 1 }, *fence));
-				}
-
+				queue.submit(std::span{ &si, 1 }, *fence);
+				
 				for (auto& bufsig : submit_info.buf_signals) {
 					bufsig->status = Future<Buffer>::Status::submitted;
 				}
@@ -94,7 +115,7 @@ namespace vuk {
 		pi.pImageIndices = &image_index;
 		pi.waitSemaphoreCount = 1;
 		pi.pWaitSemaphores = &render_complete;
-		auto present_result = vkQueuePresentKHR(ctx.graphics_queue, &pi);
+		auto present_result = vkQueuePresentKHR(ctx.graphics_queue->queue, &pi);
 		if (present_result != VK_SUCCESS) {
 			return { expected_error, PresentException{present_result} };
 		}
@@ -117,7 +138,7 @@ namespace vuk {
 				VkSubmitInfo si{ .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO };
 				si.commandBufferCount = 1;
 				si.pCommandBuffers = &hl_cbuf;
-				if (domain == vuk::Domain::eGraphicsQueue) {
+				if (domain == Domain::eGraphicsQueue) {
 					VUK_DO_OR_RETURN(ctx.submit_graphics(std::span{ &si, 1 }, *fence));
 				} else {
 					VUK_DO_OR_RETURN(ctx.submit_transfer(std::span{ &si, 1 }, *fence));
@@ -160,6 +181,10 @@ namespace vuk {
 
 	template<class T>
 	Future<T>::Future(Allocator& alloc, struct RenderGraph& rg, Name output_binding) : alloc(&alloc), rg(&rg), output_binding(output_binding) {
+	}
+
+	template<class T>
+	Future<T>::Future(Allocator& alloc, std::unique_ptr<struct RenderGraph> org, Name output_binding) : alloc(&alloc), owned_rg(std::move(org)), rg(owned_rg.get()), output_binding(output_binding) {
 	}
 
 	template<class T>
