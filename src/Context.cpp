@@ -87,7 +87,7 @@ namespace vuk {
 		swi.semaphoreCount = count;
 		VkResult result = vkWaitSemaphores(device, &swi, UINT64_MAX);
 		for (auto [q, v] : queue_waits) {
-			q->last_wait.store(v);
+			q->last_host_wait.store(v);
 		}
 		if (result != VK_SUCCESS) {
 			return { expected_error, VkException{result} };

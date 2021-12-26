@@ -19,14 +19,14 @@ namespace vuk {
 		size_t id;
 	};
 
-	enum class Domain {
+	enum class DomainFlagBits {
 		eNone = 0,
 		eHost = 1 << 0,
 		eGraphicsQueue = 1 << 1,
-		eGraphicsOperation = 1 << 2,
-		eComputeQueue = 1 << 3,
-		eComputeOperation = 1 << 4,
-		eTransferQueue = 1 << 5,
+		eComputeQueue = 1 << 2,
+		eTransferQueue = 1 << 3,
+		eGraphicsOperation = 1 << 4,
+		eComputeOperation = 1 << 5,
 		eTransferOperation = 1 << 6,
 		eGraphicsOnGraphics = eGraphicsQueue | eGraphicsOperation,
 		eComputeOnGraphics = eGraphicsQueue | eComputeOperation,
@@ -37,6 +37,19 @@ namespace vuk {
 		eDevice = eGraphicsQueue | eComputeQueue | eTransferQueue,
 		eAny = eDevice | eHost
 	};
+
+	using DomainFlags = Flags<DomainFlagBits>;
+	inline constexpr DomainFlags operator|(DomainFlagBits bit0, DomainFlagBits bit1) noexcept {
+		return DomainFlags(bit0) | bit1;
+	}
+
+	inline constexpr DomainFlags operator&(DomainFlagBits bit0, DomainFlagBits bit1) noexcept {
+		return DomainFlags(bit0) & bit1;
+	}
+
+	inline constexpr DomainFlags operator^(DomainFlagBits bit0, DomainFlagBits bit1) noexcept {
+		return DomainFlags(bit0) ^ bit1;
+	}
 
 	struct ContextCreateParameters {
 		VkInstance instance;
@@ -63,7 +76,8 @@ namespace vuk {
 		PFN_vkQueueSubmit2KHR queueSubmit2KHR;
 		TimelineSemaphore submit_sync;
 		VkQueue queue;
-		std::atomic<uint64_t> last_wait;
+		std::array<std::atomic<uint64_t>, 3> last_device_waits;
+		std::atomic<uint64_t> last_host_wait;
 		uint32_t family_index;
 
 		Result<void> submit(std::span<VkSubmitInfo> submit_infos, VkFence fence);
@@ -384,7 +398,7 @@ struct QueueResourceUse {
 	vuk::PipelineStageFlags stages;
 	vuk::AccessFlags access;
 	vuk::ImageLayout layout; // ignored for buffers
-	vuk::Domain domain;
+	vuk::DomainFlagBits domain;
 };
 
 namespace vuk {
@@ -405,7 +419,7 @@ namespace vuk {
 
 		Allocator& get_allocator() { return *allocator; }
 
-		Domain initial_domain = Domain::eNone; // the domain where we submitted this Future to
+		DomainFlagBits initial_domain = DomainFlagBits::eNone; // the domain where we submitted this Future to
 		QueueResourceUse last_use; // the results of the future are available if waited for on the initial_domain
 		uint64_t initial_visibility; // the results of the future are available if waited for {initial_domain, initial_visibility}
 	};

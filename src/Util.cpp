@@ -30,16 +30,16 @@ namespace vuk {
 			return { expected_error, sbundle.error() };
 		}
 
-		auto domain_to_queue_index = [](Domain domain) -> uint64_t {
-			if (domain == Domain::eGraphicsQueue) {
+		auto domain_to_queue_index = [](DomainFlagBits domain) -> uint64_t {
+			if (domain == DomainFlagBits::eGraphicsQueue) {
 				return 0;
 			} else {
 				return 2; // TODO:
 			}
 		};
 
-		auto domain_to_queue = [](Context& ctx, Domain domain) -> Queue& {
-			if (domain == Domain::eGraphicsQueue) {
+		auto domain_to_queue = [](Context& ctx, DomainFlagBits domain) -> Queue& {
+			if (domain == DomainFlagBits::eGraphicsQueue) {
 				return *ctx.graphics_queue;
 			} else {
 				return *ctx.transfer_queue; // TODO:
@@ -47,11 +47,8 @@ namespace vuk {
 		};
 
 		std::array<uint64_t, 3> queue_progress_references;
-		queue_progress_references[domain_to_queue_index(Domain::eGraphicsQueue)] = *ctx.graphics_queue->submit_sync.value;
-		queue_progress_references[domain_to_queue_index(Domain::eTransferQueue)] = *ctx.transfer_queue->submit_sync.value;
-
-		if(sbundle->batches.size() > 1)
-			std::swap(sbundle->batches[0], sbundle->batches[1]);
+		queue_progress_references[domain_to_queue_index(DomainFlagBits::eGraphicsQueue)] = *ctx.graphics_queue->submit_sync.value;
+		queue_progress_references[domain_to_queue_index(DomainFlagBits::eTransferQueue)] = *ctx.transfer_queue->submit_sync.value;
 
 		for (auto& batch : sbundle->batches) {
 			auto domain = batch.domain;
@@ -78,14 +75,14 @@ namespace vuk {
 					ssi.stageMask = (VkPipelineStageFlagBits2KHR)PipelineStageFlagBits::eAllCommands;
 					wait_semas.emplace_back(ssi);
 				}
-				if (domain == Domain::eGraphicsQueue) { // TODO: for final? only
+				if (domain == DomainFlagBits::eGraphicsQueue) { // TODO: for final? only
 					VkSemaphoreSubmitInfoKHR ssi{ VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR };
 					ssi.semaphore = present_rdy;
 					ssi.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR;
-					//wait_semas.emplace_back(ssi);
+					wait_semas.emplace_back(ssi);
 				}
 				si.pWaitSemaphoreInfos = wait_semas.data();
-				si.waitSemaphoreInfoCount = wait_semas.size();
+				si.waitSemaphoreInfoCount = (uint32_t)wait_semas.size();
 
 				std::vector<VkSemaphoreSubmitInfoKHR> signal_semas;
 				VkSemaphoreSubmitInfoKHR ssi{ VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR };
@@ -94,21 +91,17 @@ namespace vuk {
 				ssi.value = *queue.submit_sync.value;
 				ssi.stageMask = (VkPipelineStageFlagBits2KHR)PipelineStageFlagBits::eAllCommands;
 				signal_semas.emplace_back(ssi);
-				if (domain == Domain::eGraphicsQueue) { // TODO: for final? only
+				if (domain == DomainFlagBits::eGraphicsQueue) { // TODO: for final? only
 					ssi.semaphore = render_complete;
 					ssi.value = 0; // binary sema
 					signal_semas.emplace_back(ssi);
 				}
 				si.pSignalSemaphoreInfos = signal_semas.data();
-				si.signalSemaphoreInfoCount = signal_semas.size();
+				si.signalSemaphoreInfoCount = (uint32_t)signal_semas.size();
 				queue.submit(std::span{ &si, 1 }, *fence);
 				
-				for (auto& bufsig : submit_info.buf_signals) {
-					bufsig->status = Future<Buffer>::Status::eSubmitted;
-				}
-
-				for (auto& bufsig : submit_info.image_signals) {
-					bufsig->status = Future<Image>::Status::eSubmitted;
+				for (auto& fut : submit_info.future_signals) {
+					fut->status = FutureBase::Status::eSubmitted;
 				}
 			}
 		}
@@ -142,7 +135,7 @@ namespace vuk {
 				VkSubmitInfo si{ .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO };
 				si.commandBufferCount = 1;
 				si.pCommandBuffers = &hl_cbuf;
-				if (domain == Domain::eGraphicsQueue) {
+				if (domain == DomainFlagBits::eGraphicsQueue) {
 					VUK_DO_OR_RETURN(ctx.submit_graphics(std::span{ &si, 1 }, *fence));
 				} else {
 					VUK_DO_OR_RETURN(ctx.submit_transfer(std::span{ &si, 1 }, *fence));
@@ -200,14 +193,16 @@ namespace vuk {
 		status = Status::eHostAvailable;
 	}
 
-	template<>
-	Result<Buffer> Future<Buffer>::get() {
+	template<class T>
+	Result<T> Future<T>::get() {
 		if (status == Status::eInputAttached || status == Status::eInitial) {
-			return { expected_error };
+			return { expected_error }; // can't get result of future that has not been attached anything or has been attached into a rendergraph
 		} else if (status == Status::eHostAvailable) {
 			return { expected_value, result };
 		} else if (status == Status::eSubmitted) {
+			// TODO:
 			//allocator->get_context().wait_for_queues();
+			return { expected_value, result };
 		} else {
 			VUK_DO_OR_RETURN(execute_submit_and_wait(*allocator, std::move(*rg).link(allocator->get_context(), {})));
 			status = Status::eHostAvailable;
@@ -215,8 +210,19 @@ namespace vuk {
 		}
 	}
 
+	template<class T>
+	Result<void> Future<T>::submit() {
+		if (status == Status::eInputAttached || status == Status::eInitial) {
+			return { expected_error };
+		} else if (status == Status::eHostAvailable || status == Status::eSubmitted) {
+			return { expected_value }; // nothing to do
+		} else {
+			// TODO: only execute & submit
+			VUK_DO_OR_RETURN(execute_submit_and_wait(*allocator, std::move(*rg).link(allocator->get_context(), {})));
+			return { expected_value };
+		}
+	}
+
 	template struct Future<Image>;
 	template struct Future<Buffer>;
-	template struct Future<BufferGPU>;
-	template struct Future<BufferCrossDevice>;
 }

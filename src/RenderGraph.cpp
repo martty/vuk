@@ -135,7 +135,7 @@ namespace vuk {
 		// partition passes into different queues
 		// TODO: queue inference
 		auto transfer_begin = impl->passes.begin();
-		auto transfer_end = std::partition(impl->passes.begin(), impl->passes.end(), [](const PassInfo& p) { return (int)p.pass.execute_on & (int)vuk::Domain::eTransferQueue; });
+		auto transfer_end = std::partition(impl->passes.begin(), impl->passes.end(), [](const PassInfo& p) { return (int)p.pass.execute_on & (int)vuk::DomainFlagBits::eTransferQueue; });
 		auto graphics_begin = transfer_end;
 		auto graphics_end = impl->passes.end();
 
@@ -151,7 +151,7 @@ namespace vuk {
 				if (it == impl->use_chains.end()) {
 					it = impl->use_chains.emplace(impl->resolve_name(res.name), std::vector<UseRef, short_alloc<UseRef, 64>>{short_alloc<UseRef, 64>{*impl->arena_}}).first;
 				}
-				it->second.emplace_back(UseRef{ to_use(res.ia), &passinfo, passinfo.pass.execute_on });
+				it->second.emplace_back(UseRef{ to_use(res.ia), &passinfo, (DomainFlagBits)passinfo.pass.execute_on.m_mask }); // TODO: MQ scheduling must have completed
 				if (is_write_access(res.ia)) {
 					add_alias(res.out_name, res.name);
 				}
@@ -336,43 +336,57 @@ namespace vuk {
 	}
 
 	void RenderGraph::attach_in(Name name, Future<Image>&& fimg, Access final) {
-		/*if (fimg.status == Future<Image>::Status::done) {
-			attach_image(name, fimg.result, Access initial_acc, Access final_acc)
-		} */
-
-		auto it = fimg.rg->impl->bound_attachments.find(fimg.output_binding);
-		assert(it != fimg.rg->impl->bound_attachments.end());
-		it->second.final = to_use(final);
-		append(std::move(*fimg.rg));
-		add_alias(name, fimg.output_binding);
-	}
-
-	void RenderGraph::attach_in(Name name, Future<Buffer>&& fbuf, Access final) {
 		// TODO: handle cross-queue vis
-		if(fbuf.status == Future<Buffer>::Status::eSubmitted) {
-			BufferInfo buf_info{ .name = name, .initial = {fbuf.last_use.stages, fbuf.last_use.access, fbuf.last_use.layout}, .final = to_use(final), .buffer = fbuf.result };
-			impl->bound_buffers.emplace(name, buf_info);
+		if (fimg.status == FutureBase::Status::eSubmitted) {
+			AttachmentRPInfo rp_info{ .name = name, .initial = {fimg.last_use.stages, fimg.last_use.access, fimg.last_use.layout}, .final = to_use(final), .image = fimg.result };
+			impl->bound_attachments.emplace(name, rp_info);
 		} else {
-			auto it = fbuf.rg->impl->bound_buffers.find(fbuf.output_binding);
-			assert(it != fbuf.rg->impl->bound_buffers.end());
+			auto it = fimg.rg->impl->bound_attachments.find(fimg.output_binding);
+			assert(it != fimg.rg->impl->bound_attachments.end());
 
-			fbuf.status = Future<Buffer>::Status::eInputAttached;
-			
+			fimg.status = FutureBase::Status::eInputAttached;
+
 			it->second.final = to_use(final);
-			append(std::move(*fbuf.rg));
-			add_alias(name, fbuf.output_binding);
+			append(std::move(*fimg.rg));
+			add_alias(name, fimg.output_binding);
 		}
 	}
 
-	void RenderGraph::attach_out(Name name, Future<Buffer>& fbuf) {
+	void RenderGraph::attach_in(Name name, Future<Buffer>&& fimg, Access final) {
+		// TODO: handle cross-queue vis
+		if(fimg.status == FutureBase::Status::eSubmitted) {
+			BufferInfo buf_info{ .name = name, .initial = {fimg.last_use.stages, fimg.last_use.access, fimg.last_use.layout}, .final = to_use(final), .buffer = fimg.result };
+			impl->bound_buffers.emplace(name, buf_info);
+		} else {
+			auto it = fimg.rg->impl->bound_buffers.find(fimg.output_binding);
+			assert(it != fimg.rg->impl->bound_buffers.end());
+
+			fimg.status = FutureBase::Status::eInputAttached;
+			
+			it->second.final = to_use(final);
+			append(std::move(*fimg.rg));
+			add_alias(name, fimg.output_binding);
+		}
+	}
+
+	void RenderGraph::attach_out(Name name, Future<Image>& fimg) {
+		auto resolved_name = impl->resolve_name(name);
+		auto it = impl->bound_attachments.find(resolved_name);
+		assert(it != impl->bound_attachments.end());
+		fimg.result = it->second.image; // for now attach here
+		it->second.final = to_use(vuk::eNone); // no outward sync - we have bound this to a future and sync through that
+		it->second.to_signal = &fimg;
+		fimg.status = FutureBase::Status::eOutputAttached;
+	}
+
+	void RenderGraph::attach_out(Name name, Future<Buffer>& fimg) {
 		auto resolved_name = impl->resolve_name(name);
 		auto it = impl->bound_buffers.find(resolved_name);
 		assert(it != impl->bound_buffers.end());
-		fbuf.result = it->second.buffer; // for now attach here
+		fimg.result = it->second.buffer; // for now attach here
 		it->second.final = to_use(vuk::eNone); // no outward sync - we have bound this to a future and sync through that
-		impl->to_manage.push_back({ name, &fbuf });
-		it->second.to_signal = &fbuf;
-		fbuf.status = Future<Buffer>::Status::eOutputAttached;
+		it->second.to_signal = &fimg;
+		fimg.status = FutureBase::Status::eOutputAttached;
 	}
 
 	void sync_bound_attachment_to_renderpass(vuk::AttachmentRPInfo& rp_att, vuk::AttachmentRPInfo& attachment_info) {
@@ -422,7 +436,7 @@ namespace vuk {
 				auto& left = chain[i];
 				auto& right = chain[i + 1];
 
-				bool crosses_queue = (left.domain != vuk::Domain::eNone && right.domain != vuk::Domain::eNone && left.domain != right.domain);
+				bool crosses_queue = (left.domain != vuk::DomainFlagBits::eNone && right.domain != vuk::DomainFlagBits::eNone && left.domain != right.domain);
 				if (crosses_queue) {
 					right.pass->relative_waits.emplace_back(left.domain, 1); // TODO: multicbuf
 
@@ -589,7 +603,7 @@ namespace vuk {
 					}
 				}
 
-				bool crosses_queue = (left.domain != vuk::Domain::eNone && right.domain != vuk::Domain::eNone && left.domain != right.domain);
+				bool crosses_queue = (left.domain != vuk::DomainFlagBits::eNone && right.domain != vuk::DomainFlagBits::eNone && left.domain != right.domain);
 				if (crosses_queue) {
 					right.pass->relative_waits.emplace_back(left.domain, 1); // TODO: multicbuf
 

@@ -84,6 +84,8 @@ namespace vuk {
 		Clear clear_value;
 
 		bool is_resolve_dst = false;
+
+		vuk::Future<Image>* to_signal = nullptr;
 	};
 
 	struct BufferInfo {
@@ -138,7 +140,7 @@ namespace vuk {
 
 	struct Pass {
 		Name name;
-		Domain execute_on;
+		DomainFlags execute_on;
 		//Domain preferred;
 		bool use_secondary_command_buffers = false;
 
@@ -189,7 +191,8 @@ namespace vuk {
 		void attach_in(Name, Future<Image>&& fimg, Access final);
 		void attach_in(Name, Future<Buffer>&& fimg, Access final);
 
-		void attach_out(Name, Future<Buffer>& fimg);
+		void attach_out(Name, Future<Image>& fimg);
+		void attach_out(Name, Future<Buffer>& fbuf);
 
 		void attach_managed(Name, Format, Dimension2D, Samples, Clear);
 
@@ -226,14 +229,13 @@ namespace vuk {
 	};
 
 	struct SubmitInfo {
-		std::vector<std::pair<Domain, uint64_t>> relative_waits;
+		std::vector<std::pair<DomainFlagBits, uint64_t>> relative_waits;
 		std::vector<VkCommandBuffer> command_buffers;
-		std::vector<Future<Buffer>*> buf_signals;
-		std::vector<Future<Image>*> image_signals;
+		std::vector<FutureBase*> future_signals;
 	};
 
 	struct SubmitBatch {
-		vuk::Domain domain;
+		vuk::DomainFlagBits domain;
 		std::vector<SubmitInfo> submits;
 	};
 
@@ -252,7 +254,6 @@ namespace vuk {
 		ExecutableRenderGraph& operator=(ExecutableRenderGraph&&) noexcept;
 
 		Result<SubmitBundle> execute(Allocator&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
-		void make_futures_ready();
 
 		Result<struct BufferInfo, RenderGraphException> get_resource_buffer(Name);
 		Result<struct AttachmentRPInfo, RenderGraphException> get_resource_image(Name);
@@ -265,7 +266,7 @@ namespace vuk {
 
 		void create_attachment(Context& ptc, Name name, struct AttachmentRPInfo& attachment_info, Extent2D fb_extent, SampleCountFlagBits samples);
 		void fill_renderpass_info(struct RenderPassInfo& rpass, const size_t& i, class CommandBuffer& cobuf);
-		Result<SubmitInfo> record_command_buffer(Allocator&, std::span<RenderPassInfo> rpis, vuk::Domain domain);
+		Result<SubmitInfo> record_command_buffer(Allocator&, std::span<RenderPassInfo> rpis, DomainFlagBits domain);
 	};
 }
 

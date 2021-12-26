@@ -19,7 +19,7 @@
 */
 
 namespace vuk {
-	Future<Buffer> host_data_to_buffer(Allocator& allocator, Domain copy_domain, Buffer buffer, void* src_data, size_t size) {
+	Future<Buffer> host_data_to_buffer(Allocator& allocator, DomainFlagBits copy_domain, Buffer buffer, void* src_data, size_t size) {
 		// host-mapped buffers just get memcpys
 		if (buffer.mapped_ptr) {
 			memcpy(buffer.mapped_ptr, src_data, size);
@@ -43,7 +43,7 @@ namespace vuk {
 	}
 
 	template<class T>
-	Future<Buffer> host_data_to_buffer(Allocator& allocator, Domain copy_domain, Buffer dst, std::span<T> data) {
+	Future<Buffer> host_data_to_buffer(Allocator& allocator, DomainFlagBits copy_domain, Buffer dst, std::span<T> data) {
 		return host_data_to_buffer(allocator, copy_domain, dst, data.data(), data.size_bytes());
 	}
 }
@@ -102,7 +102,7 @@ namespace {
 			//// <----------------->
 			// make a GPU future
 			// the copy (written above) is not performed yet, we just record the computation and bind to a result ("_dst")
-			scramble_buf_fut = vuk::host_data_to_buffer(allocator, vuk::Domain::eTransferOnTransfer, scramble_buf.get(), std::span(indices));
+			scramble_buf_fut = vuk::host_data_to_buffer(allocator, vuk::DomainFlagBits::eTransferOnTransfer, scramble_buf.get(), std::span(indices));
 
 			stbi_image_free(doge_image);
 		},
@@ -114,7 +114,7 @@ namespace {
 			// standard render to texture
 			rgx.add_pass({
 				.name = "08_rtt",
-				.execute_on = vuk::Domain::eGraphicsQueue,
+				.execute_on = vuk::DomainFlagBits::eGraphicsQueue,
 				.resources = {"08_rttf"_image(vuk::eColorWrite, runner.swapchain->format, vuk::Dimension2D::absolute((unsigned)x, (unsigned)y), vuk::Samples::e1, vuk::ClearColor{ 0.f, 0.f, 0.f, 0.f })},
 				.execute = [](vuk::CommandBuffer& command_buffer) {
 					command_buffer
@@ -137,7 +137,7 @@ namespace {
 			// we declare a buffer dependency and dispatch a compute shader
 			rg.add_pass({
 				.name = "08_sort",
-				.execute_on = vuk::Domain::eGraphicsQueue,
+				.execute_on = vuk::DomainFlagBits::eGraphicsQueue,
 				.resources = {"08_scramble"_buffer >> vuk::eComputeRW >> "08_scramble+"},
 				.execute = [](vuk::CommandBuffer& command_buffer) {
 					command_buffer.bind_storage_buffer(0, 0, *command_buffer.get_resource_buffer("08_scramble"));
@@ -158,7 +158,7 @@ namespace {
 			// draw the scrambled image, with a buffer dependency on the scramble buffer
 			rg.add_pass({
 				.name = "08_draw",
-				.execute_on = vuk::Domain::eGraphicsQueue,
+				.execute_on = vuk::DomainFlagBits::eGraphicsQueue,
 				.resources = {"08_scramble+"_buffer >> vuk::eFragmentRead, "08_rtt"_image >> vuk::eFragmentSampled, "08_pipelined_compute"_image >> vuk::eColorWrite >> "08_pipelined_compute_final"},
 				.execute = [](vuk::CommandBuffer& command_buffer) {
 					command_buffer

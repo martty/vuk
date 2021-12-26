@@ -108,14 +108,14 @@ namespace vuk {
 		cobuf.ongoing_renderpass = rpi;
 	}
 
-	Result<SubmitInfo> ExecutableRenderGraph::record_command_buffer(Allocator& alloc, std::span<RenderPassInfo> rpis, vuk::Domain domain) {
+	Result<SubmitInfo> ExecutableRenderGraph::record_command_buffer(Allocator& alloc, std::span<RenderPassInfo> rpis, vuk::DomainFlagBits domain) {
 		auto& ctx = alloc.get_context();
 		SubmitInfo si;
 
 		Unique<VkCommandPool> cpool(alloc);
 		VkCommandPoolCreateInfo cpci{ VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
 		cpci.flags = VkCommandPoolCreateFlagBits::VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
-		if ((int)domain & (int)vuk::Domain::eGraphicsQueue) {
+		if (domain & vuk::DomainFlagBits::eGraphicsQueue) {
 			cpci.queueFamilyIndex = ctx.graphics_queue_family_index;
 		} else {
 			cpci.queueFamilyIndex = ctx.transfer_queue_family_index;
@@ -136,7 +136,7 @@ namespace vuk {
 		for (auto& rpass : rpis) {
 			bool use_secondary_command_buffers = rpass.subpasses[0].use_secondary_command_buffers;
 			bool is_single_pass = rpass.subpasses.size() == 1 && rpass.subpasses[0].passes.size() == 1;
-			if (is_single_pass) {
+			if (is_single_pass) { // TODO: check if name is valid
 				ctx.debug.begin_region(cbuf, rpass.subpasses[0].passes[0]->pass.name);
 			}
 
@@ -167,12 +167,15 @@ namespace vuk {
 				for (auto& p : sp.passes) {
 					CommandBuffer cobuf(*this, ctx, alloc, cbuf);
 					fill_renderpass_info(rpass, i, cobuf);
-					// propagate waits onto SI
+					// propagate waits & signals onto SI
 					for (auto& w : p->relative_waits) {
 						si.relative_waits.emplace_back(w);
 					}
 					for (auto& bfs : p->buffer_future_signals) {
-						si.buf_signals.emplace_back(bfs);
+						si.future_signals.emplace_back(bfs);
+					}
+					for (auto& ifs : p->image_future_signals) {
+						si.future_signals.emplace_back(ifs);
 					}
 
 					// if pass requested no secondary cbufs, but due to subpass merging that is what we got
@@ -361,25 +364,19 @@ namespace vuk {
 		// record single cbuf
 		auto graphics_rpis = std::span(impl->rpis.begin(), impl->rpis.begin() + impl->num_graphics_rpis);
 		if (graphics_rpis.size() > 0) {
-			SubmitBatch& sbatch_gfx = sbundle.batches.emplace_back(SubmitBatch{ .domain = vuk::Domain::eGraphicsQueue });
-			auto gfx_res = record_command_buffer(alloc, graphics_rpis, vuk::Domain::eGraphicsQueue);
+			SubmitBatch& sbatch_gfx = sbundle.batches.emplace_back(SubmitBatch{ .domain = vuk::DomainFlagBits::eGraphicsQueue });
+			auto gfx_res = record_command_buffer(alloc, graphics_rpis, vuk::DomainFlagBits::eGraphicsQueue);
 			sbatch_gfx.submits.emplace_back(*gfx_res); // TODO: error handling
 		}
 
 		auto transfer_rpis = std::span(impl->rpis.begin() + impl->num_graphics_rpis, impl->rpis.end());
 		if (transfer_rpis.size() > 0) {
-			SubmitBatch& sbatch_xfer = sbundle.batches.emplace_back(SubmitBatch{ .domain = vuk::Domain::eTransferQueue });
-			auto xfer_res = record_command_buffer(alloc, transfer_rpis, vuk::Domain::eTransferQueue);
+			SubmitBatch& sbatch_xfer = sbundle.batches.emplace_back(SubmitBatch{ .domain = vuk::DomainFlagBits::eTransferQueue });
+			auto xfer_res = record_command_buffer(alloc, transfer_rpis, vuk::DomainFlagBits::eTransferQueue);
 			sbatch_xfer.submits.emplace_back(*xfer_res); // TODO: error handling
 		}
 
 		return { expected_value, std::move(sbundle) };
-	}
-
-	void ExecutableRenderGraph::make_futures_ready() {
-		for (auto& [name, bf] : impl->to_manage) {
-			//bf->status = Future<Buffer>::Status::submitted;
-		}
 	}
 
 	Result<BufferInfo, RenderGraphException> ExecutableRenderGraph::get_resource_buffer(Name n) {

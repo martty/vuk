@@ -151,7 +151,7 @@ namespace vuk {
 	struct UseRef {
 		ResourceUse use;
 		PassInfo* pass = nullptr;
-		Domain domain;
+		DomainFlagBits domain;
 	};
 
 	struct PassInfo {
@@ -162,7 +162,7 @@ namespace vuk {
 		size_t render_pass_index;
 		uint32_t subpass;
 
-		std::vector<std::pair<Domain, uint32_t>> relative_waits;
+		std::vector<std::pair<DomainFlagBits, uint32_t>> relative_waits;
 		std::vector<Resource, short_alloc<Resource, 16>> inputs;
 		uint32_t bloom_resolved_inputs = 0;
 		std::vector<uint32_t, short_alloc<uint32_t, 16>> resolved_input_name_hashes;
@@ -172,6 +172,7 @@ namespace vuk {
 		std::vector<uint32_t> signals;
 
 		std::vector<Future<Buffer>*> buffer_future_signals;
+		std::vector<Future<Image>*> image_future_signals;
 
 		bool is_head_pass = false;
 		bool is_tail_pass = false;
