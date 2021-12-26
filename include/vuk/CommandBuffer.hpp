@@ -238,8 +238,8 @@ namespace vuk {
 
 
 		// for rendergraph
-		CommandBuffer(ExecutableRenderGraph& rg, Context& ctx, Allocator& alloc, VkCommandBuffer cb) : rg(&rg), ctx(ctx), allocator(&alloc), command_buffer(cb) {}
-		CommandBuffer(ExecutableRenderGraph& rg, Context& ctx, Allocator& alloc, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing) : rg(&rg), ctx(ctx), allocator(&alloc), command_buffer(cb), ongoing_renderpass(ongoing) {}
+		CommandBuffer(ExecutableRenderGraph& rg, Context& ctx, Allocator& allocator, VkCommandBuffer cb) : rg(&rg), ctx(ctx), allocator(&allocator), command_buffer(cb) {}
+		CommandBuffer(ExecutableRenderGraph& rg, Context& ctx, Allocator& allocator, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing) : rg(&rg), ctx(ctx), allocator(&allocator), command_buffer(cb), ongoing_renderpass(ongoing) {}
 	public:
 		// for secondary cbufs
 		CommandBuffer(ExecutableRenderGraph* rg, Context& ctx, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing) : rg(rg), ctx(ctx), command_buffer(cb), ongoing_renderpass(ongoing) {}

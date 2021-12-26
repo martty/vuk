@@ -229,6 +229,7 @@ namespace vuk {
 		std::vector<std::pair<Domain, uint64_t>> relative_waits;
 		std::vector<VkCommandBuffer> command_buffers;
 		std::vector<Future<Buffer>*> buf_signals;
+		std::vector<Future<Image>*> image_signals;
 	};
 
 	struct SubmitBatch {

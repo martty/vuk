@@ -7,7 +7,7 @@
 #include "vuk/Query.hpp"
 
 namespace vuk {
-	DeviceVkResource::DeviceVkResource(Context& ctx, LegacyGPUAllocator& alloc) : ctx(&ctx), device(ctx.device), legacy_gpu_allocator(&alloc) {}
+	DeviceVkResource::DeviceVkResource(Context& ctx, LegacyGPUAllocator& allocator) : ctx(&ctx), device(ctx.device), legacy_gpu_allocator(&allocator) {}
 
 	Result<void, AllocateException> DeviceVkResource::allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) {
 		VkSemaphoreCreateInfo sci{ .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };

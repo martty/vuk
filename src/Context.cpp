@@ -55,7 +55,7 @@ namespace vuk {
 
 	Result<void> Queue::submit(std::span<VkSubmitInfo2KHR> sis, VkFence fence) {
 		std::lock_guard _(queue_lock);
-		VkResult result = queueSubmit2KHR(queue, sis.size(), sis.data(), fence);
+		VkResult result = queueSubmit2KHR(queue, (uint32_t)sis.size(), sis.data(), fence);
 		if (result != VK_SUCCESS) {
 			return { expected_error, VkException{result} };
 		}
@@ -64,7 +64,7 @@ namespace vuk {
 
 	Result<void> Queue::submit(std::span<VkSubmitInfo> sis, VkFence fence) {
 		std::lock_guard _(queue_lock);
-		VkResult result = vkQueueSubmit(queue, sis.size(), sis.data(), fence);
+		VkResult result = vkQueueSubmit(queue, (uint32_t)sis.size(), sis.data(), fence);
 		if (result != VK_SUCCESS) {
 			return { expected_error, VkException{result} };
 		}
@@ -756,6 +756,7 @@ namespace vuk {
 
 	Context::~Context() {
 		vkDeviceWaitIdle(device);
+
 		for (auto& s : impl->swapchains) {
 			for (auto& swiv : s.image_views) {
 				vkDestroyImageView(device, swiv.payload, nullptr);
@@ -768,6 +769,19 @@ namespace vuk {
 			}
 		}
 		vkDestroyPipelineCache(device, impl->vk_pipeline_cache, nullptr);
+
+		if (dedicated_graphics_queue) {
+			impl->device_vk_resource.deallocate_timeline_semaphores(std::span{ &dedicated_graphics_queue->submit_sync, 1 });
+		}
+
+		if (dedicated_compute_queue) {
+			impl->device_vk_resource.deallocate_timeline_semaphores(std::span{ &dedicated_compute_queue->submit_sync, 1 });
+		}
+
+		if (dedicated_transfer_queue) {
+			impl->device_vk_resource.deallocate_timeline_semaphores(std::span{ &dedicated_transfer_queue->submit_sync, 1 });
+		}
+
 		delete impl;
 	}
 

@@ -104,7 +104,11 @@ namespace vuk {
 				queue.submit(std::span{ &si, 1 }, *fence);
 				
 				for (auto& bufsig : submit_info.buf_signals) {
-					bufsig->status = Future<Buffer>::Status::submitted;
+					bufsig->status = Future<Buffer>::Status::eSubmitted;
+				}
+
+				for (auto& bufsig : submit_info.image_signals) {
+					bufsig->status = Future<Image>::Status::eSubmitted;
 				}
 			}
 		}
@@ -179,22 +183,36 @@ namespace vuk {
 		}
 	}
 
+	FutureBase::FutureBase(Allocator& alloc) : allocator(&alloc) {}
+
 	template<class T>
-	Future<T>::Future(Allocator& alloc, struct RenderGraph& rg, Name output_binding) : alloc(&alloc), rg(&rg), output_binding(output_binding) {
+	Future<T>::Future(Allocator& alloc, struct RenderGraph& rg, Name output_binding) : FutureBase(alloc), rg(&rg), output_binding(output_binding) {
+		status = Status::eRenderGraphBound;
 	}
 
 	template<class T>
-	Future<T>::Future(Allocator& alloc, std::unique_ptr<struct RenderGraph> org, Name output_binding) : alloc(&alloc), owned_rg(std::move(org)), rg(owned_rg.get()), output_binding(output_binding) {
+	Future<T>::Future(Allocator& alloc, std::unique_ptr<struct RenderGraph> org, Name output_binding) : FutureBase(alloc), owned_rg(std::move(org)), rg(owned_rg.get()), output_binding(output_binding) {
+		status = Status::eRenderGraphBound;
 	}
 
 	template<class T>
-	Future<T>::Future(Allocator& alloc, T&& value) : alloc(&alloc), result(std::move(value)) {}
+	Future<T>::Future(Allocator& alloc, T&& value) : FutureBase(alloc), result(std::move(value)) {
+		status = Status::eHostAvailable;
+	}
 
 	template<>
 	Result<Buffer> Future<Buffer>::get() {
-		auto bufinfo = (*rg->get_bound_buffers().find(output_binding)).second;
-		VUK_DO_OR_RETURN(execute_submit_and_wait(*alloc, std::move(*rg).link(alloc->get_context(), {})));
-		return { expected_value, Buffer(bufinfo.buffer) };
+		if (status == Status::eInputAttached || status == Status::eInitial) {
+			return { expected_error };
+		} else if (status == Status::eHostAvailable) {
+			return { expected_value, result };
+		} else if (status == Status::eSubmitted) {
+			//allocator->get_context().wait_for_queues();
+		} else {
+			VUK_DO_OR_RETURN(execute_submit_and_wait(*allocator, std::move(*rg).link(allocator->get_context(), {})));
+			status = Status::eHostAvailable;
+			return { expected_value, result };
+		}
 	}
 
 	template struct Future<Image>;

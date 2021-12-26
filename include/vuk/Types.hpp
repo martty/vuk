@@ -921,7 +921,8 @@ namespace vuk {
 	};
 
 	enum Access {
-		eNone,
+		eNone, // as initial use: resource available without synchronization, as final use: resource does not need synchronizing
+		eInfer, // as final use only: this use must be overwritten/inferred before compiling
 		eClear, // general clearing
 		eTransferClear, // vkCmdClearXXX
 		eColorRW,
