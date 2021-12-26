@@ -54,7 +54,6 @@ namespace vuk {
 	}
 
 	Result<void> Queue::submit(std::span<VkSubmitInfo2KHR> sis, VkFence fence) {
-		std::lock_guard _(queue_lock);
 		VkResult result = queueSubmit2KHR(queue, (uint32_t)sis.size(), sis.data(), fence);
 		if (result != VK_SUCCESS) {
 			return { expected_error, VkException{result} };

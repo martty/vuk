@@ -23,7 +23,7 @@ namespace vuk {
 			return { expected_error, PresentException{acq_result} };
 		}
 
-		std::vector<std::pair<SwapChainRef, size_t>> swapchains_with_indexes = { { swapchain, image_index } };
+		std::vector<std::pair<SwapchainRef, size_t>> swapchains_with_indexes = { { swapchain, image_index } };
 
 		auto sbundle = rg.execute(allocator, swapchains_with_indexes);
 		if (!sbundle) {
@@ -31,40 +31,71 @@ namespace vuk {
 		}
 
 		auto domain_to_queue_index = [](DomainFlagBits domain) -> uint64_t {
-			if (domain == DomainFlagBits::eGraphicsQueue) {
+			auto queue_only = (DomainFlagBits)(domain & DomainFlagBits::eQueueMask).m_mask;
+			switch (queue_only) {
+			case DomainFlagBits::eGraphicsQueue:
 				return 0;
-			} else {
-				return 2; // TODO:
+			case DomainFlagBits::eComputeQueue:
+				return 1;
+			case DomainFlagBits::eTransferQueue:
+				return 2;
+			default:
+				assert(0);
+				return 0;
 			}
 		};
 
 		auto domain_to_queue = [](Context& ctx, DomainFlagBits domain) -> Queue& {
-			if (domain == DomainFlagBits::eGraphicsQueue) {
+			auto queue_only = (DomainFlagBits)(domain & DomainFlagBits::eQueueMask).m_mask;
+			switch (queue_only) {
+			case DomainFlagBits::eGraphicsQueue:
 				return *ctx.graphics_queue;
-			} else {
-				return *ctx.transfer_queue; // TODO:
+			case DomainFlagBits::eComputeQueue:
+				return *ctx.compute_queue;
+			case DomainFlagBits::eTransferQueue:
+				return *ctx.transfer_queue;
+			default:
+				assert(0);
+				return *ctx.transfer_queue;
 			}
 		};
 
-		std::array<uint64_t, 3> queue_progress_references;
-		queue_progress_references[domain_to_queue_index(DomainFlagBits::eGraphicsQueue)] = *ctx.graphics_queue->submit_sync.value;
-		queue_progress_references[domain_to_queue_index(DomainFlagBits::eTransferQueue)] = *ctx.transfer_queue->submit_sync.value;
-
+		vuk::DomainFlags used_domains;
 		for (auto& batch : sbundle->batches) {
-			auto domain = batch.domain;
-			// TODO: proper q sel
-			Queue& queue = domain_to_queue(ctx, domain);
+			used_domains |= batch.domain;
+		}
 
-			for (auto& submit_info : batch.submits) {
+		std::array<uint64_t, 3> queue_progress_references;
+		std::unique_lock<std::mutex> gfx_lock;
+		if (used_domains & DomainFlagBits::eGraphicsQueue) {
+			queue_progress_references[domain_to_queue_index(DomainFlagBits::eGraphicsQueue)] = *ctx.graphics_queue->submit_sync.value;
+			gfx_lock = std::unique_lock{ ctx.graphics_queue->queue_lock };
+		}
+		std::unique_lock<std::mutex> compute_lock;
+		if (used_domains & DomainFlagBits::eComputeQueue) {
+			queue_progress_references[domain_to_queue_index(DomainFlagBits::eComputeQueue)] = *ctx.compute_queue->submit_sync.value;
+			compute_lock = std::unique_lock{ ctx.compute_queue->queue_lock };
+		}
+		std::unique_lock<std::mutex> transfer_lock;
+		if (used_domains & DomainFlagBits::eTransferQueue) {
+			queue_progress_references[domain_to_queue_index(DomainFlagBits::eTransferQueue)] = *ctx.transfer_queue->submit_sync.value;
+			transfer_lock = std::unique_lock{ ctx.transfer_queue->queue_lock };
+		}
+
+		for (SubmitBatch& batch : sbundle->batches) {
+			auto domain = batch.domain;
+			Queue& queue = domain_to_queue(ctx, domain);
+			for (SubmitInfo& submit_info : batch.submits) {
 				Unique<VkFence> fence(allocator);
 				VUK_DO_OR_RETURN(allocator.allocate_fences({ &*fence, 1 }));
-				auto& hl_cbuf = submit_info.command_buffers.back();
 
 				VkSubmitInfo2KHR si{ .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2_KHR };
-				si.commandBufferInfoCount = 1;
-				VkCommandBufferSubmitInfoKHR cbufsi{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO_KHR };
-				cbufsi.commandBuffer = hl_cbuf;
-				si.pCommandBufferInfos = &cbufsi;
+				si.commandBufferInfoCount = (uint32_t)submit_info.command_buffers.size();
+				std::vector<VkCommandBufferSubmitInfoKHR> cbufsis(si.commandBufferInfoCount);
+				for (uint64_t i = 0; i < si.commandBufferInfoCount; i++) {
+					cbufsis[i] = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO_KHR, .commandBuffer = submit_info.command_buffers[i] };
+				}
+				si.pCommandBufferInfos = cbufsis.data();
 
 				std::vector<VkSemaphoreSubmitInfoKHR> wait_semas;
 				for (auto& w : submit_info.relative_waits) {
@@ -75,7 +106,7 @@ namespace vuk {
 					ssi.stageMask = (VkPipelineStageFlagBits2KHR)PipelineStageFlagBits::eAllCommands;
 					wait_semas.emplace_back(ssi);
 				}
-				if (domain == DomainFlagBits::eGraphicsQueue) { // TODO: for final? only
+				if (domain == DomainFlagBits::eGraphicsQueue) { // TODO: for first cbuf only that refs the swapchain attment
 					VkSemaphoreSubmitInfoKHR ssi{ VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR };
 					ssi.semaphore = present_rdy;
 					ssi.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR;
@@ -87,11 +118,11 @@ namespace vuk {
 				std::vector<VkSemaphoreSubmitInfoKHR> signal_semas;
 				VkSemaphoreSubmitInfoKHR ssi{ VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR };
 				ssi.semaphore = queue.submit_sync.semaphore;
-				*queue.submit_sync.value += 1; // TODO: this should be atomic or we should lock the queue sooner
-				ssi.value = *queue.submit_sync.value;
+				ssi.value = ++*queue.submit_sync.value;
+
 				ssi.stageMask = (VkPipelineStageFlagBits2KHR)PipelineStageFlagBits::eAllCommands;
 				signal_semas.emplace_back(ssi);
-				if (domain == DomainFlagBits::eGraphicsQueue) { // TODO: for final? only
+				if (domain == DomainFlagBits::eGraphicsQueue) { // TODO: for final cbuf only that refs the swapchain attment
 					ssi.semaphore = render_complete;
 					ssi.value = 0; // binary sema
 					signal_semas.emplace_back(ssi);
@@ -99,7 +130,7 @@ namespace vuk {
 				si.pSignalSemaphoreInfos = signal_semas.data();
 				si.signalSemaphoreInfoCount = (uint32_t)signal_semas.size();
 				queue.submit(std::span{ &si, 1 }, *fence);
-				
+
 				for (auto& fut : submit_info.future_signals) {
 					fut->status = FutureBase::Status::eSubmitted;
 				}
@@ -116,6 +147,7 @@ namespace vuk {
 		if (present_result != VK_SUCCESS) {
 			return { expected_error, PresentException{present_result} };
 		}
+
 		return { expected_value };
 	}
 

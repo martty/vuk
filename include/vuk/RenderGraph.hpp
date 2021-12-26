@@ -77,7 +77,7 @@ namespace vuk {
 		vuk::ImageView iv;
 		vuk::Image image = {};
 		// swapchain for swapchain
-		Swapchain* swapchain;
+		Swapchain* swapchain = nullptr;
 
 		// optionally set
 		bool should_clear = false;
@@ -232,6 +232,7 @@ namespace vuk {
 		std::vector<std::pair<DomainFlagBits, uint64_t>> relative_waits;
 		std::vector<VkCommandBuffer> command_buffers;
 		std::vector<FutureBase*> future_signals;
+		std::vector<SwapchainRef> used_swapchains;
 	};
 
 	struct SubmitBatch {
@@ -266,7 +267,7 @@ namespace vuk {
 
 		void create_attachment(Context& ptc, Name name, struct AttachmentRPInfo& attachment_info, Extent2D fb_extent, SampleCountFlagBits samples);
 		void fill_renderpass_info(struct RenderPassInfo& rpass, const size_t& i, class CommandBuffer& cobuf);
-		Result<SubmitInfo> record_command_buffer(Allocator&, std::span<RenderPassInfo> rpis, DomainFlagBits domain);
+		Result<SubmitInfo> record_single_submit(Allocator&, std::span<RenderPassInfo> rpis, DomainFlagBits domain);
 	};
 }
 

@@ -135,9 +135,18 @@ namespace vuk {
 		// partition passes into different queues
 		// TODO: queue inference
 		auto transfer_begin = impl->passes.begin();
-		auto transfer_end = std::partition(impl->passes.begin(), impl->passes.end(), [](const PassInfo& p) { return (int)p.pass.execute_on & (int)vuk::DomainFlagBits::eTransferQueue; });
+		auto transfer_end = std::partition(impl->passes.begin(), impl->passes.end(), [](const PassInfo& p) { return p.pass.execute_on & vuk::DomainFlagBits::eTransferQueue; });
 		auto graphics_begin = transfer_end;
 		auto graphics_end = impl->passes.end();
+
+		// for now, just use what the passes requested as domain
+		for (auto& p : std::span(transfer_begin, transfer_end)) {
+			p.domain = p.pass.execute_on;
+		}
+
+		for (auto& p : std::span(graphics_begin, graphics_end)) {
+			p.domain = p.pass.execute_on;
+		}
 
 		schedule_intra_queue(transfer_begin, transfer_end, compile_options);
 		schedule_intra_queue(graphics_begin, graphics_end, compile_options);
@@ -194,7 +203,7 @@ namespace vuk {
 			int32_t subpass = -1;
 			for (auto& p : passes) {
 				p->render_pass_index = rpi_index;
-				if (rpi.subpasses.size() > 0) {
+				if (rpi.subpasses.size() > 0) { 
 					auto& last_pass = rpi.subpasses.back().passes[0];
 					// if the pass has the same inputs and outputs, we execute them on the same subpass
 					if (last_pass->inputs == p->inputs && last_pass->outputs == p->outputs) {
@@ -654,6 +663,26 @@ namespace vuk {
 		for (auto& rp : impl->rpis) {
 			rp.rpci.color_ref_offsets.resize(rp.subpasses.size());
 			rp.rpci.ds_refs.resize(rp.subpasses.size());
+		}
+
+		// assign passes to command buffers and batches (within a single queue)
+		uint64_t batch_index = 0;
+		DomainFlags current_domain = DomainFlagBits::eNone;
+		for (auto& rp : impl->rpis) {
+			bool needs_split = false;
+			for (auto& sp : rp.subpasses) {
+				for (auto& passinfo : sp.passes) {
+					if ((passinfo->domain & DomainFlagBits::eQueueMask) != (current_domain & DomainFlagBits::eQueueMask)) { // if we go into a new queue, reset batch index
+						current_domain = passinfo->domain;
+						batch_index = 0;
+					}
+					if (passinfo->relative_waits.size() > 0 && batch_index > 0) {
+						needs_split = true;
+					}
+				}
+			}
+			rp.command_buffer_index = 0; // we don't split command buffers within batches, for now
+			rp.batch_index = needs_split ? ++batch_index : batch_index;
 		}
 
 		// we now have enough data to build VkRenderPasses and VkFramebuffers

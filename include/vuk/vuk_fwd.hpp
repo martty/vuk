@@ -9,7 +9,7 @@ namespace vuk {
 	class CommandBuffer;
 
 	struct Swapchain;
-	using SwapChainRef = Swapchain*;
+	using SwapchainRef = Swapchain*;
 
 	class LegacyGPUAllocator;
 

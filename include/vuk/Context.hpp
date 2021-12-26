@@ -28,6 +28,8 @@ namespace vuk {
 		eGraphicsOperation = 1 << 4,
 		eComputeOperation = 1 << 5,
 		eTransferOperation = 1 << 6,
+		eQueueMask = 0b1110,
+		eOpMask = 0b1110000,
 		eGraphicsOnGraphics = eGraphicsQueue | eGraphicsOperation,
 		eComputeOnGraphics = eGraphicsQueue | eComputeOperation,
 		eTransferOnGraphics = eGraphicsQueue | eTransferOperation,

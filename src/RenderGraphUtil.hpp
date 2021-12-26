@@ -161,6 +161,7 @@ namespace vuk {
 
 		size_t render_pass_index;
 		uint32_t subpass;
+		DomainFlags domain;
 
 		std::vector<std::pair<DomainFlagBits, uint32_t>> relative_waits;
 		std::vector<Resource, short_alloc<Resource, 16>> inputs;
@@ -207,6 +208,8 @@ namespace vuk {
 
 	struct RenderPassInfo {
 		RenderPassInfo(arena&);
+		uint64_t command_buffer_index;
+		uint64_t batch_index;
 		std::vector<SubpassInfo, short_alloc<SubpassInfo, 64>> subpasses;
 		std::vector<AttachmentRPInfo, short_alloc<AttachmentRPInfo, 16>> attachments;
 		vuk::RenderPassCreateInfo rpci;

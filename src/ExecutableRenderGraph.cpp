@@ -108,19 +108,23 @@ namespace vuk {
 		cobuf.ongoing_renderpass = rpi;
 	}
 
-	Result<SubmitInfo> ExecutableRenderGraph::record_command_buffer(Allocator& alloc, std::span<RenderPassInfo> rpis, vuk::DomainFlagBits domain) {
+	Result<SubmitInfo> ExecutableRenderGraph::record_single_submit(Allocator& alloc, std::span<RenderPassInfo> rpis, vuk::DomainFlagBits domain) {
+		assert(rpis.size() > 0);
+
 		auto& ctx = alloc.get_context();
 		SubmitInfo si;
 
 		Unique<VkCommandPool> cpool(alloc);
 		VkCommandPoolCreateInfo cpci{ VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
 		cpci.flags = VkCommandPoolCreateFlagBits::VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
-		if (domain & vuk::DomainFlagBits::eGraphicsQueue) {
+		if (domain & vuk::DomainFlagBits::eGraphicsQueue) { // TODO: proper qfamsel
 			cpci.queueFamilyIndex = ctx.graphics_queue_family_index;
 		} else {
 			cpci.queueFamilyIndex = ctx.transfer_queue_family_index;
 		}
 		VUK_DO_OR_RETURN(alloc.allocate_command_pools(std::span{ &*cpool, 1 }, std::span{ &cpci, 1 }));
+
+		robin_hood::unordered_set<SwapchainRef> used_swapchains;
 
 		Unique<CommandBufferAllocation> hl_cbuf(alloc);
 		CommandBufferAllocationCreateInfo ci{ .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .command_pool = *cpool };
@@ -132,8 +136,22 @@ namespace vuk {
 		VkCommandBufferBeginInfo cbi{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
 		vkBeginCommandBuffer(cbuf, &cbi);
 
-
+		uint64_t command_buffer_index = rpis[0].command_buffer_index;
 		for (auto& rpass : rpis) {
+			if (rpass.command_buffer_index != command_buffer_index) { // end old cb and start new one
+				if (auto result = vkEndCommandBuffer(cbuf); result != VK_SUCCESS) {
+					return { expected_error, VkException{result} };
+				}
+
+				VUK_DO_OR_RETURN(alloc.allocate_command_buffers(std::span{ &*hl_cbuf, 1 }, std::span{ &ci, 1 }));
+				si.command_buffers.emplace_back(*hl_cbuf);
+
+				cbuf = hl_cbuf->command_buffer;
+
+				VkCommandBufferBeginInfo cbi{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
+				vkBeginCommandBuffer(cbuf, &cbi);
+			}
+
 			bool use_secondary_command_buffers = rpass.subpasses[0].use_secondary_command_buffers;
 			bool is_single_pass = rpass.subpasses.size() == 1 && rpass.subpasses[0].passes.size() == 1;
 			if (is_single_pass) { // TODO: check if name is valid
@@ -150,6 +168,12 @@ namespace vuk {
 
 			if (rpass.handle != VK_NULL_HANDLE) {
 				begin_renderpass(rpass, cbuf, use_secondary_command_buffers);
+			}
+
+			for (auto& att : rpass.attachments) {
+				if (att.type == AttachmentRPInfo::Type::eSwapchain) {
+					used_swapchains.emplace(impl->bound_attachments.at(att.name).swapchain);
+				}
 			}
 
 			for (size_t i = 0; i < rpass.subpasses.size(); i++) {
@@ -246,15 +270,17 @@ namespace vuk {
 				vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 1, &dep.barrier, 0, nullptr, 0, nullptr);
 			}
 		}
-		auto result = vkEndCommandBuffer(cbuf);
-		if (result != VK_SUCCESS) {
+
+		if (auto result = vkEndCommandBuffer(cbuf); result != VK_SUCCESS) {
 			return { expected_error, VkException{result} };
 		}
 
-		return { expected_value, std::move(si)};
+		si.used_swapchains.insert(si.used_swapchains.end(), used_swapchains.begin(), used_swapchains.end());
+
+		return { expected_value, std::move(si) };
 	}
 
-	Result<SubmitBundle> ExecutableRenderGraph::execute(Allocator& alloc, std::vector<std::pair<SwapChainRef, size_t>> swp_with_index) {
+	Result<SubmitBundle> ExecutableRenderGraph::execute(Allocator& alloc, std::vector<std::pair<SwapchainRef, size_t>> swp_with_index) {
 		Context& ctx = alloc.get_context();
 		// bind swapchain attachment images & ivs
 		for (auto& [name, bound] : impl->bound_attachments) {
@@ -361,19 +387,31 @@ namespace vuk {
 
 		SubmitBundle sbundle;
 
-		// record single cbuf
+		auto record_batch = [&alloc, this](std::span<RenderPassInfo> rpis, DomainFlagBits domain) {
+			SubmitBatch sbatch{ .domain = domain };
+			auto batch_index = rpis[0].batch_index;
+			auto partition_it = rpis.begin();
+			while (partition_it != rpis.end()) {
+				auto new_partition_it = std::partition_point(partition_it, rpis.end(), [batch_index](const RenderPassInfo& rpi) { return rpi.batch_index == batch_index; });
+				auto partition_span = std::span(partition_it, new_partition_it);
+				auto si = record_single_submit(alloc, partition_span, domain);
+				sbatch.submits.emplace_back(*si); // TODO: error handling
+				partition_it = new_partition_it;
+			}
+			return sbatch;
+		};
+
+		// record cbufs
+		// assume that rpis are partitioned wrt batch_index
+		
 		auto graphics_rpis = std::span(impl->rpis.begin(), impl->rpis.begin() + impl->num_graphics_rpis);
 		if (graphics_rpis.size() > 0) {
-			SubmitBatch& sbatch_gfx = sbundle.batches.emplace_back(SubmitBatch{ .domain = vuk::DomainFlagBits::eGraphicsQueue });
-			auto gfx_res = record_command_buffer(alloc, graphics_rpis, vuk::DomainFlagBits::eGraphicsQueue);
-			sbatch_gfx.submits.emplace_back(*gfx_res); // TODO: error handling
+			sbundle.batches.emplace_back(record_batch(graphics_rpis, DomainFlagBits::eGraphicsQueue));
 		}
 
 		auto transfer_rpis = std::span(impl->rpis.begin() + impl->num_graphics_rpis, impl->rpis.end());
 		if (transfer_rpis.size() > 0) {
-			SubmitBatch& sbatch_xfer = sbundle.batches.emplace_back(SubmitBatch{ .domain = vuk::DomainFlagBits::eTransferQueue });
-			auto xfer_res = record_command_buffer(alloc, transfer_rpis, vuk::DomainFlagBits::eTransferQueue);
-			sbatch_xfer.submits.emplace_back(*xfer_res); // TODO: error handling
+			sbundle.batches.emplace_back(record_batch(transfer_rpis, DomainFlagBits::eTransferQueue));
 		}
 
 		return { expected_value, std::move(sbundle) };
@@ -392,7 +430,7 @@ namespace vuk {
 		auto resolved = impl->resolve_name(n);
 		auto it = impl->bound_attachments.find(resolved);
 		if (it == impl->bound_attachments.end()) {
-			return { expected_error, RenderGraphException{"Buffer not found"} };
+			return { expected_error, RenderGraphException{"Image not found"} };
 		}
 		return { expected_value, it->second };
 	}
