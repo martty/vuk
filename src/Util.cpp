@@ -85,7 +85,8 @@ namespace vuk {
 		for (SubmitBatch& batch : sbundle->batches) {
 			auto domain = batch.domain;
 			Queue& queue = domain_to_queue(ctx, domain);
-			for (SubmitInfo& submit_info : batch.submits) {
+			for (uint64_t i = 0; i < batch.submits.size(); i++) {
+				SubmitInfo& submit_info = batch.submits[i];
 				Unique<VkFence> fence(allocator);
 				VUK_DO_OR_RETURN(allocator.allocate_fences({ &*fence, 1 }));
 
@@ -106,11 +107,11 @@ namespace vuk {
 					ssi.stageMask = (VkPipelineStageFlagBits2KHR)PipelineStageFlagBits::eAllCommands;
 					wait_semas.emplace_back(ssi);
 				}
-				if (domain == DomainFlagBits::eGraphicsQueue) { // TODO: for first cbuf only that refs the swapchain attment
+				if (domain == DomainFlagBits::eGraphicsQueue && i == 0) { // TODO: for first cbuf only that refs the swapchain attment
 					VkSemaphoreSubmitInfoKHR ssi{ VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR };
 					ssi.semaphore = present_rdy;
 					ssi.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR;
-					wait_semas.emplace_back(ssi);
+					//wait_semas.emplace_back(ssi);
 				}
 				si.pWaitSemaphoreInfos = wait_semas.data();
 				si.waitSemaphoreInfoCount = (uint32_t)wait_semas.size();
@@ -122,7 +123,7 @@ namespace vuk {
 
 				ssi.stageMask = (VkPipelineStageFlagBits2KHR)PipelineStageFlagBits::eAllCommands;
 				signal_semas.emplace_back(ssi);
-				if (domain == DomainFlagBits::eGraphicsQueue) { // TODO: for final cbuf only that refs the swapchain attment
+				if (domain == DomainFlagBits::eGraphicsQueue && i == batch.submits.size() - 1) { // TODO: for final cbuf only that refs the swapchain attment
 					ssi.semaphore = render_complete;
 					ssi.value = 0; // binary sema
 					signal_semas.emplace_back(ssi);

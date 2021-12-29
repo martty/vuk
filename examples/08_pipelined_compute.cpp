@@ -39,7 +39,7 @@ namespace vuk {
 			} });
 		rgp->attach_buffer("_src", *src, vuk::Access::eNone, vuk::Access::eNone);
 		rgp->attach_buffer("_dst", buffer, vuk::Access::eNone, vuk::Access::eNone);
-		return { allocator, std::move(rgp), "_dst"}; // TODO: we should allow this to be dst+
+		return { allocator, std::move(rgp), "_dst" }; // TODO: we should allow this to be dst+
 	}
 
 	template<class T>
@@ -155,11 +155,20 @@ namespace {
 				}
 			});
 
+			rg.add_pass({
+				.name = "08_copy",
+				.execute_on = vuk::DomainFlagBits::eTransferQueue,
+				.resources = {"08_scramble+"_buffer >> vuk::eTransferRead, "08_scramble++"_buffer >> vuk::eTransferWrite >> "08_scramble+++"},
+				.execute = [](vuk::CommandBuffer& command_buffer) {
+						command_buffer.copy_buffer("08_scramble+", "08_scramble++", sizeof(unsigned) * x * y);
+				}
+			});
+
 			// draw the scrambled image, with a buffer dependency on the scramble buffer
 			rg.add_pass({
 				.name = "08_draw",
 				.execute_on = vuk::DomainFlagBits::eGraphicsQueue,
-				.resources = {"08_scramble+"_buffer >> vuk::eFragmentRead, "08_rtt"_image >> vuk::eFragmentSampled, "08_pipelined_compute"_image >> vuk::eColorWrite >> "08_pipelined_compute_final"},
+				.resources = {"08_scramble+++"_buffer >> vuk::eFragmentRead, "08_rtt"_image >> vuk::eFragmentSampled, "08_pipelined_compute"_image >> vuk::eColorWrite >> "08_pipelined_compute_final"},
 				.execute = [](vuk::CommandBuffer& command_buffer) {
 					command_buffer
 						.set_viewport(0, vuk::Rect2D::framebuffer())
@@ -183,6 +192,7 @@ namespace {
 			// we created this future in the setup code, so on the first frame it will append the computation
 			// but on the subsequent frames the future becomes ready (on the gpu) and this will only attach a buffer
 			rg.attach_in("08_scramble", std::move(scramble_buf_fut), vuk::eNone);
+			rg.attach_buffer("08_scramble++", **allocate_buffer_gpu(frame_allocator, {vuk::MemoryUsage::eGPUonly, sizeof(unsigned) * x * y, 1}), vuk::Access::eNone, vuk::Access::eNone);
 			scramble_buf_fut = { *runner.global, std::move(rgp), "08_scramble" };
 			rg.attach_out("08_scramble", scramble_buf_fut);
 

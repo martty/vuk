@@ -67,10 +67,10 @@ namespace vuk {
 		}
 	}
 
-	void RenderGraph::schedule_intra_queue(std::vector<PassInfo>::iterator start, std::vector<PassInfo>::iterator end, const vuk::RenderGraph::CompileOptions& compile_options) {
+	void RenderGraph::schedule_intra_queue(std::span<PassInfo> passes, const vuk::RenderGraph::CompileOptions& compile_options) {
 		// sort passes if requested
-		if (impl->passes.size() > 1 && compile_options.reorder_passes) {
-			topological_sort(impl->passes.begin(), impl->passes.end(), [](const auto& p1, const auto& p2) {
+		if (passes.size() > 1 && compile_options.reorder_passes) {
+			topological_sort(passes.begin(), passes.end(), [](const auto& p1, const auto& p2) {
 				if (&p1 == &p2) {
 					return false;
 				}
@@ -90,8 +90,8 @@ namespace vuk {
 		}
 
 		if (compile_options.check_pass_ordering) {
-			for (auto it0 = start; it0 != end - 1; ++it0) {
-				for (auto it1 = it0; it1 < end; it1++) {
+			for (auto it0 = passes.begin(); it0 != passes.end() - 1; ++it0) {
+				for (auto it1 = it0; it1 < passes.end(); it1++) {
 					auto& p1 = *it0;
 					auto& p2 = *it1;
 
@@ -132,6 +132,20 @@ namespace vuk {
 		// find which reads are graph inputs (not produced by any pass) & outputs (not consumed by any pass)
 		build_io();
 
+		// run global pass ordering - once we split per-queue we don't see enough inputs to order within a queue
+		schedule_intra_queue(impl->passes, compile_options);
+		
+		// gather name alias info now - once we partition, we might encounter unresolved aliases
+		for (auto& passinfo : impl->passes) {
+			for (auto& res : passinfo.pass.resources) {
+				// for read or write, we add source to use chain
+				auto resolved_name = impl->resolve_name(res.name);
+				if (is_write_access(res.ia)) {
+					add_alias(res.out_name, res.name);
+				}
+			}
+		}
+
 		// partition passes into different queues
 		// TODO: queue inference
 		auto transfer_begin = impl->passes.begin();
@@ -147,23 +161,22 @@ namespace vuk {
 		for (auto& p : std::span(graphics_begin, graphics_end)) {
 			p.domain = p.pass.execute_on;
 		}
-
-		schedule_intra_queue(transfer_begin, transfer_end, compile_options);
-		schedule_intra_queue(graphics_begin, graphics_end, compile_options);
+		std::span transfer_passes = { transfer_begin, transfer_end };
+		//schedule_intra_queue(transfer_passes, compile_options);
+		std::span graphics_passes = { graphics_begin, graphics_end };
+		//schedule_intra_queue(graphics_passes, compile_options);
 
 		impl->use_chains.clear();
 		// assemble use chains
 		for (auto& passinfo : impl->passes) {
 			for (auto& res : passinfo.pass.resources) {
 				// for read or write, we add source to use chain
-				auto it = impl->use_chains.find(impl->resolve_name(res.name));
+				auto resolved_name = impl->resolve_name(res.name);
+				auto it = impl->use_chains.find(resolved_name);
 				if (it == impl->use_chains.end()) {
-					it = impl->use_chains.emplace(impl->resolve_name(res.name), std::vector<UseRef, short_alloc<UseRef, 64>>{short_alloc<UseRef, 64>{*impl->arena_}}).first;
+					it = impl->use_chains.emplace(resolved_name, std::vector<UseRef, short_alloc<UseRef, 64>>{short_alloc<UseRef, 64>{*impl->arena_}}).first;
 				}
 				it->second.emplace_back(UseRef{ to_use(res.ia), &passinfo, (DomainFlagBits)passinfo.pass.execute_on.m_mask }); // TODO: MQ scheduling must have completed
-				if (is_write_access(res.ia)) {
-					add_alias(res.out_name, res.name);
-				}
 			}
 		}
 
@@ -234,7 +247,7 @@ namespace vuk {
 		}
 
 		// transfer: just make rpis
-		for (auto& passinfo : std::span(transfer_begin, transfer_end)) {
+		for (auto& passinfo : transfer_passes) {
 			RenderPassInfo rpi{ *impl->arena_ };
 			auto rpi_index = impl->rpis.size();
 
@@ -666,7 +679,7 @@ namespace vuk {
 		}
 
 		// assign passes to command buffers and batches (within a single queue)
-		uint64_t batch_index = 0;
+		uint64_t batch_index = -1;
 		DomainFlags current_domain = DomainFlagBits::eNone;
 		for (auto& rp : impl->rpis) {
 			bool needs_split = false;
@@ -674,15 +687,15 @@ namespace vuk {
 				for (auto& passinfo : sp.passes) {
 					if ((passinfo->domain & DomainFlagBits::eQueueMask) != (current_domain & DomainFlagBits::eQueueMask)) { // if we go into a new queue, reset batch index
 						current_domain = passinfo->domain;
-						batch_index = 0;
+						batch_index = -1;
 					}
-					if (passinfo->relative_waits.size() > 0 && batch_index > 0) {
+					if (passinfo->relative_waits.size() > 0) {
 						needs_split = true;
 					}
 				}
 			}
 			rp.command_buffer_index = 0; // we don't split command buffers within batches, for now
-			rp.batch_index = needs_split ? ++batch_index : batch_index;
+			rp.batch_index = (needs_split || (batch_index == -1)) ? ++batch_index : batch_index;
 		}
 
 		// we now have enough data to build VkRenderPasses and VkFramebuffers

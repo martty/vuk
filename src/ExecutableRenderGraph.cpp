@@ -393,10 +393,10 @@ namespace vuk {
 			auto partition_it = rpis.begin();
 			while (partition_it != rpis.end()) {
 				auto new_partition_it = std::partition_point(partition_it, rpis.end(), [batch_index](const RenderPassInfo& rpi) { return rpi.batch_index == batch_index; });
-				auto partition_span = std::span(partition_it, new_partition_it);
+				auto partition_span = new_partition_it == partition_it ? std::span(partition_it, rpis.end()) : std::span(partition_it, new_partition_it);
 				auto si = record_single_submit(alloc, partition_span, domain);
 				sbatch.submits.emplace_back(*si); // TODO: error handling
-				partition_it = new_partition_it;
+				partition_it = new_partition_it == partition_it ? rpis.end() : new_partition_it;
 			}
 			return sbatch;
 		};

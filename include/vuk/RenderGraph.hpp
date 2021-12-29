@@ -225,7 +225,7 @@ namespace vuk {
 		// determine rendergraph inputs and outputs, and resources that are neither
 		void build_io();
 
-		void schedule_intra_queue(std::vector<struct PassInfo>::iterator start, std::vector<struct PassInfo>::iterator end, const vuk::RenderGraph::CompileOptions& compile_options);
+		void schedule_intra_queue(std::span<struct PassInfo> passes, const vuk::RenderGraph::CompileOptions& compile_options);
 	};
 
 	struct SubmitInfo {
