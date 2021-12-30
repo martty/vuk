@@ -395,15 +395,36 @@ namespace vuk {
 }
 
 // futures
-
-struct QueueResourceUse {
-	vuk::PipelineStageFlags stages;
-	vuk::AccessFlags access;
-	vuk::ImageLayout layout; // ignored for buffers
-	vuk::DomainFlagBits domain;
-};
-
 namespace vuk {
+
+	struct QueueResourceUse {
+		vuk::Access original;
+		vuk::PipelineStageFlags stages;
+		vuk::AccessFlags access;
+		vuk::ImageLayout layout; // ignored for buffers
+		vuk::DomainFlagBits domain;
+	};
+	// TODO: temporary things
+	// TODO: infer this from a smart IV
+	struct ImageAttachment {
+		vuk::Image image;
+		vuk::ImageView image_view;
+
+		vuk::Extent2D extent;
+		vuk::Format format;
+		vuk::Samples sample_count = vuk::Samples::e1;
+		Clear clear_value;
+
+		static ImageAttachment from_texture(const vuk::Texture& t, Clear clear_value) {
+			return ImageAttachment{
+				.image = t.image.get(), .image_view = t.view.get(), .extent = {t.extent.width, t.extent.height}, .format = t.format, .sample_count = {t.sample_count}, .clear_value = clear_value };
+		}
+		static ImageAttachment from_texture(const vuk::Texture& t) {
+			return ImageAttachment{
+				.image = t.image.get(), .image_view = t.view.get(), .extent = {t.extent.width, t.extent.height}, .format = t.format, .sample_count = {t.sample_count} };
+		}
+	};
+
 	struct FutureBase {
 		FutureBase() = default;
 		FutureBase(Allocator&);
@@ -424,10 +445,26 @@ namespace vuk {
 		DomainFlagBits initial_domain = DomainFlagBits::eNone; // the domain where we submitted this Future to
 		QueueResourceUse last_use; // the results of the future are available if waited for on the initial_domain
 		uint64_t initial_visibility; // the results of the future are available if waited for {initial_domain, initial_visibility}
+
+		ImageAttachment result_image;
+		Buffer result_buffer;
+
+		template<class T>
+		T& get_result();
+
+		template<>
+		ImageAttachment& get_result() {
+			return result_image;
+		}
+
+		template<>
+		Buffer& get_result() {
+			return result_buffer;
+		}
 	};
 
 	template<class T>
-	struct Future : FutureBase {
+	struct Future {
 		Future() = default;
 		/// @brief Create a Future with ownership of a RenderGraph and bind to an output
 		/// @param allocator 
@@ -444,11 +481,16 @@ namespace vuk {
 		/// @param value 
 		Future(Allocator& allocator, T&& value);
 
-		T result;
 		Name output_binding;
 
 		std::unique_ptr<RenderGraph> owned_rg;
 		RenderGraph* rg = nullptr;
+
+		std::unique_ptr<FutureBase> control;
+
+		FutureBase::Status& get_status() {
+			return control->status;
+		}
 
 		Result<void> submit(); // turn cmdbufs into possibly a TS
 		Result<T> get(); // wait on host for T to be produced by the computation

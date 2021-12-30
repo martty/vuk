@@ -3,28 +3,8 @@
 #include "vuk/AllocatorHelpers.hpp"
 
 namespace vuk {
-	Result<void> execute_submit_and_present_to_one(Allocator& allocator, ExecutableRenderGraph&& rg, SwapchainRef swapchain) {
+	Result<void> execute_submit(Allocator& allocator, ExecutableRenderGraph&& rg, std::vector<std::pair<SwapchainRef, size_t>> swapchains_with_indexes, VkSemaphore present_rdy, VkSemaphore render_complete) {
 		Context& ctx = allocator.get_context();
-		Unique<std::array<VkSemaphore, 2>> semas(allocator);
-		VUK_DO_OR_RETURN(allocator.allocate_semaphores(*semas));
-		auto [present_rdy, render_complete] = *semas;
-
-		uint32_t image_index = (uint32_t)-1;
-		VkResult acq_result = vkAcquireNextImageKHR(ctx.device, swapchain->swapchain, UINT64_MAX, present_rdy, VK_NULL_HANDLE, &image_index);
-		if (acq_result != VK_SUCCESS) {
-			VkSubmitInfo si{ .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO };
-			si.commandBufferCount = 0;
-			si.pCommandBuffers = nullptr;
-			si.waitSemaphoreCount = 1;
-			si.pWaitSemaphores = &present_rdy;
-			VkPipelineStageFlags flags = (VkPipelineStageFlags)PipelineStageFlagBits::eTopOfPipe;
-			si.pWaitDstStageMask = &flags;
-			VUK_DO_OR_RETURN(ctx.submit_graphics(std::span{ &si, 1 }, VK_NULL_HANDLE));
-			return { expected_error, PresentException{acq_result} };
-		}
-
-		std::vector<std::pair<SwapchainRef, size_t>> swapchains_with_indexes = { { swapchain, image_index } };
-
 		auto sbundle = rg.execute(allocator, swapchains_with_indexes);
 		if (!sbundle) {
 			return { expected_error, sbundle.error() };
@@ -107,11 +87,11 @@ namespace vuk {
 					ssi.stageMask = (VkPipelineStageFlagBits2KHR)PipelineStageFlagBits::eAllCommands;
 					wait_semas.emplace_back(ssi);
 				}
-				if (domain == DomainFlagBits::eGraphicsQueue && i == 0) { // TODO: for first cbuf only that refs the swapchain attment
+				if (domain == DomainFlagBits::eGraphicsQueue && i == 0 && present_rdy != VK_NULL_HANDLE) { // TODO: for first cbuf only that refs the swapchain attment
 					VkSemaphoreSubmitInfoKHR ssi{ VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR };
 					ssi.semaphore = present_rdy;
 					ssi.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR;
-					//wait_semas.emplace_back(ssi);
+					wait_semas.emplace_back(ssi);
 				}
 				si.pWaitSemaphoreInfos = wait_semas.data();
 				si.waitSemaphoreInfoCount = (uint32_t)wait_semas.size();
@@ -119,24 +99,51 @@ namespace vuk {
 				std::vector<VkSemaphoreSubmitInfoKHR> signal_semas;
 				VkSemaphoreSubmitInfoKHR ssi{ VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR };
 				ssi.semaphore = queue.submit_sync.semaphore;
-				ssi.value = ++*queue.submit_sync.value;
+				ssi.value = ++ * queue.submit_sync.value;
 
 				ssi.stageMask = (VkPipelineStageFlagBits2KHR)PipelineStageFlagBits::eAllCommands;
 				signal_semas.emplace_back(ssi);
-				if (domain == DomainFlagBits::eGraphicsQueue && i == batch.submits.size() - 1) { // TODO: for final cbuf only that refs the swapchain attment
+				if (domain == DomainFlagBits::eGraphicsQueue && i == batch.submits.size() - 1 && render_complete != VK_NULL_HANDLE) { // TODO: for final cbuf only that refs the swapchain attment
 					ssi.semaphore = render_complete;
 					ssi.value = 0; // binary sema
 					signal_semas.emplace_back(ssi);
 				}
 				si.pSignalSemaphoreInfos = signal_semas.data();
 				si.signalSemaphoreInfoCount = (uint32_t)signal_semas.size();
-				queue.submit(std::span{ &si, 1 }, *fence);
+				VUK_DO_OR_RETURN(queue.submit(std::span{ &si, 1 }, *fence));
 
 				for (auto& fut : submit_info.future_signals) {
 					fut->status = FutureBase::Status::eSubmitted;
 				}
 			}
 		}
+
+		return { expected_value };
+	}
+
+	Result<void> execute_submit_and_present_to_one(Allocator& allocator, ExecutableRenderGraph&& rg, SwapchainRef swapchain) {
+		Context& ctx = allocator.get_context();
+		Unique<std::array<VkSemaphore, 2>> semas(allocator);
+		VUK_DO_OR_RETURN(allocator.allocate_semaphores(*semas));
+		auto [present_rdy, render_complete] = *semas;
+
+		uint32_t image_index = (uint32_t)-1;
+		VkResult acq_result = vkAcquireNextImageKHR(ctx.device, swapchain->swapchain, UINT64_MAX, present_rdy, VK_NULL_HANDLE, &image_index);
+		if (acq_result != VK_SUCCESS) {
+			VkSubmitInfo si{ .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO };
+			si.commandBufferCount = 0;
+			si.pCommandBuffers = nullptr;
+			si.waitSemaphoreCount = 1;
+			si.pWaitSemaphores = &present_rdy;
+			VkPipelineStageFlags flags = (VkPipelineStageFlags)PipelineStageFlagBits::eTopOfPipe;
+			si.pWaitDstStageMask = &flags;
+			VUK_DO_OR_RETURN(ctx.submit_graphics(std::span{ &si, 1 }, VK_NULL_HANDLE));
+			return { expected_error, PresentException{acq_result} };
+		}
+
+		std::vector<std::pair<SwapchainRef, size_t>> swapchains_with_indexes = { { swapchain, image_index } };
+
+		VUK_DO_OR_RETURN(execute_submit(allocator, std::move(rg), swapchains_with_indexes, present_rdy, render_complete));
 
 		VkPresentInfoKHR pi{ .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
 		pi.swapchainCount = 1;
@@ -212,50 +219,53 @@ namespace vuk {
 	FutureBase::FutureBase(Allocator& alloc) : allocator(&alloc) {}
 
 	template<class T>
-	Future<T>::Future(Allocator& alloc, struct RenderGraph& rg, Name output_binding) : FutureBase(alloc), rg(&rg), output_binding(output_binding) {
-		status = Status::eRenderGraphBound;
+	Future<T>::Future(Allocator& alloc, struct RenderGraph& rg, Name output_binding) : control(std::make_unique<FutureBase>(alloc)), rg(&rg), output_binding(output_binding) {
+		control->status = FutureBase::Status::eRenderGraphBound;
+		this->rg->attach_out(output_binding, *this);
 	}
 
 	template<class T>
-	Future<T>::Future(Allocator& alloc, std::unique_ptr<struct RenderGraph> org, Name output_binding) : FutureBase(alloc), owned_rg(std::move(org)), rg(owned_rg.get()), output_binding(output_binding) {
-		status = Status::eRenderGraphBound;
+	Future<T>::Future(Allocator& alloc, std::unique_ptr<struct RenderGraph> org, Name output_binding) : control(std::make_unique<FutureBase>(alloc)), owned_rg(std::move(org)), rg(owned_rg.get()), output_binding(output_binding) {
+		control->status = FutureBase::Status::eRenderGraphBound;
+		rg->attach_out(output_binding, *this);
 	}
 
 	template<class T>
-	Future<T>::Future(Allocator& alloc, T&& value) : FutureBase(alloc), result(std::move(value)) {
-		status = Status::eHostAvailable;
+	Future<T>::Future(Allocator& alloc, T&& value) : control(std::make_unique<FutureBase>(alloc)) {
+		control->get_result<T>() = std::move(value);
+		control->status = FutureBase::Status::eHostAvailable;
 	}
 
 	template<class T>
 	Result<T> Future<T>::get() {
-		if (status == Status::eInputAttached || status == Status::eInitial) {
+		if (control->status == FutureBase::Status::eInputAttached || control->status == FutureBase::Status::eInitial) {
 			return { expected_error }; // can't get result of future that has not been attached anything or has been attached into a rendergraph
-		} else if (status == Status::eHostAvailable) {
-			return { expected_value, result };
-		} else if (status == Status::eSubmitted) {
+		} else if (control->status == FutureBase::Status::eHostAvailable) {
+			return { expected_value, control->get_result<T>()};
+		} else if (control->status == FutureBase::Status::eSubmitted) {
 			// TODO:
 			//allocator->get_context().wait_for_queues();
-			return { expected_value, result };
+			return { expected_value, control->get_result<T>() };
 		} else {
-			VUK_DO_OR_RETURN(execute_submit_and_wait(*allocator, std::move(*rg).link(allocator->get_context(), {})));
-			status = Status::eHostAvailable;
-			return { expected_value, result };
+			VUK_DO_OR_RETURN(execute_submit_and_wait(*control->allocator, std::move(*rg).link(control->allocator->get_context(), {})));
+			control->status = FutureBase::Status::eHostAvailable;
+			return { expected_value, control->get_result<T>() };
 		}
 	}
 
 	template<class T>
 	Result<void> Future<T>::submit() {
-		if (status == Status::eInputAttached || status == Status::eInitial) {
+		if (control->status == FutureBase::Status::eInputAttached || control->status == FutureBase::Status::eInitial) {
 			return { expected_error };
-		} else if (status == Status::eHostAvailable || status == Status::eSubmitted) {
+		} else if (control->status == FutureBase::Status::eHostAvailable || control->status == FutureBase::Status::eSubmitted) {
 			return { expected_value }; // nothing to do
 		} else {
-			// TODO: only execute & submit
-			VUK_DO_OR_RETURN(execute_submit_and_wait(*allocator, std::move(*rg).link(allocator->get_context(), {})));
+			control->status = FutureBase::Status::eSubmitted;
+			VUK_DO_OR_RETURN(execute_submit(*control->allocator, std::move(*rg).link(control->allocator->get_context(), {}), {}, {}, {}));
 			return { expected_value };
 		}
 	}
 
-	template struct Future<Image>;
+	template struct Future<ImageAttachment>;
 	template struct Future<Buffer>;
 }

@@ -55,6 +55,7 @@ namespace vuk {
 	}
 
 	struct ResourceUse {
+		vuk::Access original = vuk::eNone;
 		vuk::PipelineStageFlags stages;
 		vuk::AccessFlags access;
 		vuk::ImageLayout layout; // ignored for buffers
@@ -84,8 +85,7 @@ namespace vuk {
 		Clear clear_value;
 
 		bool is_resolve_dst = false;
-
-		vuk::Future<Image>* to_signal = nullptr;
+		FutureBase* attached_future = nullptr;
 	};
 
 	struct BufferInfo {
@@ -94,8 +94,8 @@ namespace vuk {
 		ResourceUse initial;
 		ResourceUse final;
 
-		vuk::Buffer buffer;
-		vuk::Future<Buffer>* to_signal = nullptr;
+		Buffer buffer;
+		FutureBase* attached_future = nullptr;
 	};
 
 	struct Resource {
@@ -118,26 +118,6 @@ namespace vuk {
 
 	ResourceUse to_use(Access acc);
 
-	// TODO: infer this from a smart IV
-	struct ImageAttachment {
-		vuk::Image image;
-		vuk::ImageView image_view;
-
-		vuk::Extent2D extent;
-		vuk::Format format;
-		vuk::Samples sample_count = vuk::Samples::e1;
-		Clear clear_value;
-
-		static ImageAttachment from_texture(const vuk::Texture& t, Clear clear_value) {
-			return ImageAttachment{
-				.image = t.image.get(), .image_view = t.view.get(), .extent = {t.extent.width, t.extent.height}, .format = t.format, .sample_count = {t.sample_count}, .clear_value = clear_value };
-		}
-		static ImageAttachment from_texture(const vuk::Texture& t) {
-			return ImageAttachment{
-				.image = t.image.get(), .image_view = t.view.get(), .extent = {t.extent.width, t.extent.height}, .format = t.format, .sample_count = {t.sample_count} };
-		}
-	};
-
 	struct Pass {
 		Name name;
 		DomainFlags execute_on;
@@ -146,6 +126,9 @@ namespace vuk {
 
 		std::vector<Resource> resources;
 		robin_hood::unordered_flat_map<Name, Name> resolves; // src -> dst
+
+		std::unique_ptr<FutureBase> wait;
+		FutureBase* signal;
 
 		std::function<void(vuk::CommandBuffer&)> execute;
 	};
@@ -188,10 +171,10 @@ namespace vuk {
 		void attach_buffer(Name, Buffer, Access initial, Access final);
 		void attach_image(Name, ImageAttachment, Access initial, Access final);
 
-		void attach_in(Name, Future<Image>&& fimg, Access final);
+		void attach_in(Name, Future<ImageAttachment>&& fimg, Access final);
 		void attach_in(Name, Future<Buffer>&& fimg, Access final);
 
-		void attach_out(Name, Future<Image>& fimg);
+		void attach_out(Name, Future<ImageAttachment>& fimg);
 		void attach_out(Name, Future<Buffer>& fbuf);
 
 		void attach_managed(Name, Format, Dimension2D, Samples, Clear);

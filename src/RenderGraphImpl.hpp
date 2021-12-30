@@ -14,6 +14,7 @@ namespace vuk {
 	struct RGImpl {
 		std::unique_ptr<arena> arena_;
 		std::vector<PassInfo, short_alloc<PassInfo, 64>> passes;
+		std::vector<PassInfo*, short_alloc<PassInfo*, 64>> ordered_passes;
 
 		robin_hood::unordered_flat_map<Name, Name> aliases;
 		robin_hood::unordered_flat_set<Name> poisoned_names;
@@ -24,14 +25,12 @@ namespace vuk {
 		size_t num_graphics_rpis = 0;
 		size_t num_transfer_rpis = 0;
 
-		std::vector<std::pair<Name, Future<Buffer>*>> to_manage;
-
 		std::vector<CommandBundle> command_bundles;
 
 		robin_hood::unordered_flat_map<Name, AttachmentRPInfo> bound_attachments;
 		robin_hood::unordered_flat_map<Name, BufferInfo> bound_buffers;
 
-		RGImpl() : arena_(new arena(1024 * 128)), INIT(passes), INIT(rpis) {
+		RGImpl() : arena_(new arena(1024 * 128)), INIT(passes), INIT(rpis), INIT(ordered_passes) {
 		}
 
 		Name resolve_name(Name in) {

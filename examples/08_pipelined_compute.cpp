@@ -39,7 +39,7 @@ namespace vuk {
 			} });
 		rgp->attach_buffer("_src", *src, vuk::Access::eNone, vuk::Access::eNone);
 		rgp->attach_buffer("_dst", buffer, vuk::Access::eNone, vuk::Access::eNone);
-		return { allocator, std::move(rgp), "_dst" }; // TODO: we should allow this to be dst+
+		return { allocator, std::move(rgp), "_dst+" };
 	}
 
 	template<class T>
@@ -129,7 +129,7 @@ namespace {
 			});
 			//// <-----------------> 
 			// make a gpu future of the above graph (render to texture) and bind to an output (rttf)
-			vuk::Future<vuk::Image> rttf{ frame_allocator, rgx, "08_rttf" };
+			vuk::Future<vuk::ImageAttachment> rttf{ frame_allocator, rgx, "08_rttf+" };
 
 			std::unique_ptr<vuk::RenderGraph> rgp = std::make_unique<vuk::RenderGraph>();
 			auto& rg = *rgp;
@@ -183,7 +183,7 @@ namespace {
 			});
 
 			time += ImGui::GetIO().DeltaTime;
-
+			//rttf.submit();
 			//// <-----------------> 
 			// make the main rendergraph
 			// our two inputs are the futures - they compile into the main rendergraph
@@ -193,10 +193,9 @@ namespace {
 			// but on the subsequent frames the future becomes ready (on the gpu) and this will only attach a buffer
 			rg.attach_in("08_scramble", std::move(scramble_buf_fut), vuk::eNone);
 			rg.attach_buffer("08_scramble++", **allocate_buffer_gpu(frame_allocator, {vuk::MemoryUsage::eGPUonly, sizeof(unsigned) * x * y, 1}), vuk::Access::eNone, vuk::Access::eNone);
-			scramble_buf_fut = { *runner.global, std::move(rgp), "08_scramble" };
-			rg.attach_out("08_scramble", scramble_buf_fut);
+			scramble_buf_fut = { *runner.global, std::move(rgp), "08_scramble+++" };
 
-			return vuk::Future<vuk::Image>{frame_allocator, rg, "08_pipelined_compute_final"};
+			return vuk::Future<vuk::ImageAttachment>{frame_allocator, rg, "08_pipelined_compute_final"};
 		},
 		.cleanup = [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
 			texture_of_doge.reset();

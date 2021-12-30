@@ -176,6 +176,10 @@ namespace vuk {
 				}
 			}
 
+			for (auto& w : rpass.waits) {
+				si.relative_waits.emplace_back(w);
+			}
+
 			for (size_t i = 0; i < rpass.subpasses.size(); i++) {
 				auto& sp = rpass.subpasses[i];
 				// insert image pre-barriers
@@ -192,14 +196,8 @@ namespace vuk {
 					CommandBuffer cobuf(*this, ctx, alloc, cbuf);
 					fill_renderpass_info(rpass, i, cobuf);
 					// propagate waits & signals onto SI
-					for (auto& w : p->relative_waits) {
-						si.relative_waits.emplace_back(w);
-					}
-					for (auto& bfs : p->buffer_future_signals) {
-						si.future_signals.emplace_back(bfs);
-					}
-					for (auto& ifs : p->image_future_signals) {
-						si.future_signals.emplace_back(ifs);
+					if(p->pass.signal) {
+						si.future_signals.emplace_back(p->pass.signal);
 					}
 
 					// if pass requested no secondary cbufs, but due to subpass merging that is what we got
@@ -385,18 +383,30 @@ namespace vuk {
 			}
 		}
 
+		for (auto& [name, attachment_info] : impl->bound_attachments) {
+			if (attachment_info.attached_future) {
+				ImageAttachment att;
+				att.extent = attachment_info.extents.extent;
+				att.format = (Format)attachment_info.description.format;
+				att.image = attachment_info.image;
+				att.image_view = attachment_info.iv;
+				att.sample_count = attachment_info.samples;
+				attachment_info.attached_future->get_result<ImageAttachment>() = att;
+			}
+		}
+
 		SubmitBundle sbundle;
 
 		auto record_batch = [&alloc, this](std::span<RenderPassInfo> rpis, DomainFlagBits domain) {
 			SubmitBatch sbatch{ .domain = domain };
-			auto batch_index = rpis[0].batch_index;
 			auto partition_it = rpis.begin();
 			while (partition_it != rpis.end()) {
+				auto batch_index = partition_it->batch_index;
 				auto new_partition_it = std::partition_point(partition_it, rpis.end(), [batch_index](const RenderPassInfo& rpi) { return rpi.batch_index == batch_index; });
-				auto partition_span = new_partition_it == partition_it ? std::span(partition_it, rpis.end()) : std::span(partition_it, new_partition_it);
+				auto partition_span = std::span(partition_it, new_partition_it);
 				auto si = record_single_submit(alloc, partition_span, domain);
 				sbatch.submits.emplace_back(*si); // TODO: error handling
-				partition_it = new_partition_it == partition_it ? rpis.end() : new_partition_it;
+				partition_it = new_partition_it;
 			}
 			return sbatch;
 		};

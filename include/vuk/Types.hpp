@@ -930,6 +930,8 @@ namespace vuk {
 		eColorRead,
 		eColorResolveRead, // special op to mark renderpass resolve read
 		eColorResolveWrite, // special op to mark renderpass resolve write
+		eRelease, // release a resource into a future
+		eAcquire, // acquire a resource from a future
 		eDepthStencilRW,
 		eDepthStencilRead,
 		eInputRead,

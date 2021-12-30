@@ -21,7 +21,7 @@ namespace vuk {
 	void RenderGraph::add_pass(Pass p) {
 		for (auto& r : p.resources) {
 			if (r.is_create && r.type == Resource::Type::eImage) {
-				attach_managed(r.name, (vuk::Format)r.ici.description.format, r.ici.extents, r.ici.samples, r.ici.clear_value);
+				attach_managed(r.name, (Format)r.ici.description.format, r.ici.extents, r.ici.samples, r.ici.clear_value);
 			}
 		}
 		impl->passes.emplace_back(*impl->arena_, std::move(p));
@@ -31,7 +31,7 @@ namespace vuk {
 		// TODO:
 		// this code is written weird because of wonky allocators
 		for (auto& p : other.impl->passes) {
-			impl->passes.emplace_back(*impl->arena_, Pass{}) = p;
+			impl->passes.emplace_back(*impl->arena_, Pass{}) = std::move(p);
 		}
 
 		impl->bound_attachments.insert(std::make_move_iterator(other.impl->bound_attachments.begin()), std::make_move_iterator(other.impl->bound_attachments.end()));
@@ -48,18 +48,21 @@ namespace vuk {
 	void RenderGraph::build_io() {
 		for (auto& pif : impl->passes) {
 			for (auto& res : pif.pass.resources) {
-				if (is_read_access(res.ia)) {
+				if (is_read_access(res.ia) || res.ia == eAcquire || res.ia == eRelease) {
 					pif.inputs.emplace_back(res);
-					auto resolved_name = impl->resolve_name(res.name);
+					auto resolved_name = res.name; //impl->resolve_name(res.name);
 					auto hashed_resolved_name = ::hash::fnv1a::hash(resolved_name.to_sv().data(), resolved_name.to_sv().size(), hash::fnv1a::default_offset_basis);
 					pif.resolved_input_name_hashes.emplace_back(hashed_resolved_name);
 					pif.bloom_resolved_inputs |= hashed_resolved_name;
 				}
-				if (is_write_access(res.ia)) {
+				if (is_write_access(res.ia) || res.ia == eAcquire || res.ia == eRelease) {
 					assert(!impl->poisoned_names.contains(res.name)); // we have poisoned this name because a write has already consumed it
-					auto hashed_name = ::hash::fnv1a::hash(res.out_name.to_sv().data(), res.out_name.to_sv().size(), hash::fnv1a::default_offset_basis);
-					pif.bloom_outputs |= hashed_name;
-					pif.output_name_hashes.emplace_back(hashed_name);
+					auto hashed_out_name = ::hash::fnv1a::hash(res.out_name.to_sv().data(), res.out_name.to_sv().size(), hash::fnv1a::default_offset_basis);
+					auto hashed_in_name = ::hash::fnv1a::hash(res.name.to_sv().data(), res.name.to_sv().size(), hash::fnv1a::default_offset_basis);
+					pif.bloom_outputs |= hashed_out_name;
+					pif.bloom_write_inputs |= hashed_in_name;
+					pif.output_name_hashes.emplace_back(hashed_out_name);
+					pif.write_input_name_hashes.emplace_back(hashed_in_name);
 					pif.outputs.emplace_back(res);
 					impl->poisoned_names.emplace(res.name);
 				}
@@ -67,17 +70,27 @@ namespace vuk {
 		}
 	}
 
-	void RenderGraph::schedule_intra_queue(std::span<PassInfo> passes, const vuk::RenderGraph::CompileOptions& compile_options) {
+	void RenderGraph::schedule_intra_queue(std::span<PassInfo> passes, const RenderGraph::CompileOptions& compile_options) {
 		// sort passes if requested
 		if (passes.size() > 1 && compile_options.reorder_passes) {
 			topological_sort(passes.begin(), passes.end(), [](const auto& p1, const auto& p2) {
 				if (&p1 == &p2) {
 					return false;
 				}
-
+				// p2 uses an input of p1 -> p2 after p1
 				if ((p1.bloom_outputs & p2.bloom_resolved_inputs) != 0) {
 					for (auto& o : p1.output_name_hashes) {
 						for (auto& i : p2.resolved_input_name_hashes) {
+							if (o == i) {
+								return true; // p2 is ordered after p1
+							}
+						}
+					}
+				}
+				// p2 writes to an input and p1 reads from the same input -> p2 after p1
+				if ((p1.bloom_resolved_inputs & p2.bloom_write_inputs) != 0) {
+					for (auto& o : p1.resolved_input_name_hashes) {
+						for (auto& i : p2.write_input_name_hashes) {
 							if (o == i) {
 								return true; // p2 is ordered after p1
 							}
@@ -128,47 +141,32 @@ namespace vuk {
 		}
 	}
 
-	void RenderGraph::compile(const vuk::RenderGraph::CompileOptions& compile_options) {
+	void RenderGraph::compile(const RenderGraph::CompileOptions& compile_options) {
 		// find which reads are graph inputs (not produced by any pass) & outputs (not consumed by any pass)
 		build_io();
 
 		// run global pass ordering - once we split per-queue we don't see enough inputs to order within a queue
 		schedule_intra_queue(impl->passes, compile_options);
-		
+
 		// gather name alias info now - once we partition, we might encounter unresolved aliases
 		for (auto& passinfo : impl->passes) {
 			for (auto& res : passinfo.pass.resources) {
 				// for read or write, we add source to use chain
 				auto resolved_name = impl->resolve_name(res.name);
-				if (is_write_access(res.ia)) {
+				if (is_write_access(res.ia) || res.ia == eAcquire || res.ia == eRelease) {
 					add_alias(res.out_name, res.name);
 				}
 			}
 		}
 
-		// partition passes into different queues
-		// TODO: queue inference
-		auto transfer_begin = impl->passes.begin();
-		auto transfer_end = std::partition(impl->passes.begin(), impl->passes.end(), [](const PassInfo& p) { return p.pass.execute_on & vuk::DomainFlagBits::eTransferQueue; });
-		auto graphics_begin = transfer_end;
-		auto graphics_end = impl->passes.end();
-
 		// for now, just use what the passes requested as domain
-		for (auto& p : std::span(transfer_begin, transfer_end)) {
+		for (auto& p : impl->passes) {
 			p.domain = p.pass.execute_on;
 		}
-
-		for (auto& p : std::span(graphics_begin, graphics_end)) {
-			p.domain = p.pass.execute_on;
-		}
-		std::span transfer_passes = { transfer_begin, transfer_end };
-		//schedule_intra_queue(transfer_passes, compile_options);
-		std::span graphics_passes = { graphics_begin, graphics_end };
-		//schedule_intra_queue(graphics_passes, compile_options);
 
 		impl->use_chains.clear();
 		// assemble use chains
-		for (auto& passinfo : impl->passes) {
+		for (PassInfo& passinfo : impl->passes) {
 			for (auto& res : passinfo.pass.resources) {
 				// for read or write, we add source to use chain
 				auto resolved_name = impl->resolve_name(res.name);
@@ -176,28 +174,54 @@ namespace vuk {
 				if (it == impl->use_chains.end()) {
 					it = impl->use_chains.emplace(resolved_name, std::vector<UseRef, short_alloc<UseRef, 64>>{short_alloc<UseRef, 64>{*impl->arena_}}).first;
 				}
-				it->second.emplace_back(UseRef{ to_use(res.ia), &passinfo, (DomainFlagBits)passinfo.pass.execute_on.m_mask }); // TODO: MQ scheduling must have completed
+				if (it->second.size() > 0 && it->second.back().use.original == Access::eAcquire) { // acquire of resource - this must happen on the next use domain
+					it->second.back().domain = (DomainFlagBits)passinfo.domain.m_mask;
+					it->second.back().pass->domain = passinfo.domain;
+				}
+				if (res.ia == Access::eRelease) { // release of resource - this must happen on the previous use domain
+					passinfo.domain = it->second.back().domain;
+					it->second.emplace_back(UseRef{ to_use(res.ia), &passinfo, (DomainFlagBits)it->second.back().domain });
+				} else {
+					it->second.emplace_back(UseRef{ to_use(res.ia), &passinfo, (DomainFlagBits)passinfo.domain.m_mask });
+				}
 			}
 		}
+
+		impl->ordered_passes.reserve(impl->passes.size());
+		for (auto& p : impl->passes) {
+			impl->ordered_passes.push_back(&p);
+		}
+
+		// partition passes into different queues
+		// TODO: queue inference
+		auto transfer_begin = impl->ordered_passes.begin();
+		auto transfer_end = std::stable_partition(impl->ordered_passes.begin(), impl->ordered_passes.end(), [](const PassInfo* p) { return p->domain & DomainFlagBits::eTransferQueue; });
+		auto graphics_begin = transfer_end;
+		auto graphics_end = impl->ordered_passes.end();
+		std::span transfer_passes = { transfer_begin, transfer_end };
+		std::span graphics_passes = { graphics_begin, graphics_end };
+
+		//schedule_intra_queue(transfer_passes, compile_options);
+		//schedule_intra_queue(graphics_passes, compile_options);
 
 		// graphics: assemble renderpasses based on framebuffers
 		// we need to collect passes into framebuffers, which will determine the renderpasses
 		using attachment_set = std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>>;
 		using passinfo_vec = std::vector<PassInfo*, short_alloc<PassInfo*, 16>>;
 		std::vector<std::pair<attachment_set, passinfo_vec>, short_alloc<std::pair<attachment_set, passinfo_vec>, 8>> attachment_sets{ *impl->arena_ };
-		for (auto& passinfo : std::span(graphics_begin, graphics_end)) {
+		for (auto& passinfo : graphics_passes) {
 			attachment_set atts{ *impl->arena_ };
 
-			for (auto& res : passinfo.pass.resources) {
+			for (auto& res : passinfo->pass.resources) {
 				if (is_framebuffer_attachment(res))
 					atts.insert(res);
 			}
 
 			if (auto p = attachment_sets.size() > 0 && attachment_sets.back().first == atts ? &attachment_sets.back() : nullptr) {
-				p->second.push_back(&passinfo);
+				p->second.push_back(passinfo);
 			} else {
 				passinfo_vec pv{ *impl->arena_ };
-				pv.push_back(&passinfo);
+				pv.push_back(passinfo);
 				attachment_sets.emplace_back(atts, pv);
 			}
 		}
@@ -216,7 +240,7 @@ namespace vuk {
 			int32_t subpass = -1;
 			for (auto& p : passes) {
 				p->render_pass_index = rpi_index;
-				if (rpi.subpasses.size() > 0) { 
+				if (rpi.subpasses.size() > 0) {
 					auto& last_pass = rpi.subpasses.back().passes[0];
 					// if the pass has the same inputs and outputs, we execute them on the same subpass
 					if (last_pass->inputs == p->inputs && last_pass->outputs == p->outputs) {
@@ -251,12 +275,12 @@ namespace vuk {
 			RenderPassInfo rpi{ *impl->arena_ };
 			auto rpi_index = impl->rpis.size();
 
-			passinfo.render_pass_index = rpi_index;
-			passinfo.subpass = 0;
+			passinfo->render_pass_index = rpi_index;
+			passinfo->subpass = 0;
 			rpi.framebufferless = true;
 
 			SubpassInfo si{ *impl->arena_ };
-			si.passes.emplace_back(&passinfo);
+			si.passes.emplace_back(passinfo);
 			si.use_secondary_command_buffers = false;
 			rpi.subpasses.push_back(si);
 
@@ -267,8 +291,8 @@ namespace vuk {
 	void RenderGraph::resolve_resource_into(Name resolved_name_src, Name resolved_name_dst, Name ms_name) {
 		add_pass({
 			.resources = {
-				vuk::Resource{ms_name, vuk::Resource::Type::eImage, vuk::eColorResolveRead},
-				vuk::Resource{resolved_name_src, vuk::Resource::Type::eImage, vuk::eColorResolveWrite, resolved_name_dst}
+				Resource{ms_name, Resource::Type::eImage, eColorResolveRead},
+				Resource{resolved_name_src, Resource::Type::eImage, eColorResolveWrite, resolved_name_dst}
 			},
 			.resolves = {{ms_name, resolved_name_src}}
 			});
@@ -276,7 +300,7 @@ namespace vuk {
 
 	void RenderGraph::attach_swapchain(Name name, SwapchainRef swp, Clear c) {
 		AttachmentRPInfo attachment_info;
-		attachment_info.extents = vuk::Dimension2D::absolute(swp->extent);
+		attachment_info.extents = Dimension2D::absolute(swp->extent);
 		attachment_info.iv = {};
 		// directly presented
 		attachment_info.description.format = (VkFormat)swp->format;
@@ -291,23 +315,23 @@ namespace vuk {
 		ResourceUse & final = attachment_info.final;
 		// for WSI, we want to wait for colourattachmentoutput
 		// we don't care about any writes, we will clear
-		initial.access = vuk::AccessFlags{};
-		initial.stages = vuk::PipelineStageFlagBits::eColorAttachmentOutput;
+		initial.access = AccessFlags{};
+		initial.stages = PipelineStageFlagBits::eColorAttachmentOutput;
 		// clear
-		initial.layout = vuk::ImageLayout::ePreinitialized;
+		initial.layout = ImageLayout::ePreinitialized;
 		/* Normally, we would need an external dependency at the end as well since we are changing layout in finalLayout,
    but since we are signalling a semaphore, we can rely on Vulkan's default behavior,
    which injects an external dependency here with
    dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
    dstAccessMask = 0. */
-		final.access = vuk::AccessFlagBits{};
-		final.layout = vuk::ImageLayout::ePresentSrcKHR;
-		final.stages = vuk::PipelineStageFlagBits::eBottomOfPipe;
+		final.access = AccessFlagBits{};
+		final.layout = ImageLayout::ePresentSrcKHR;
+		final.stages = PipelineStageFlagBits::eBottomOfPipe;
 
 		impl->bound_attachments.emplace(name, attachment_info);
 	}
 
-	void RenderGraph::attach_managed(Name name, vuk::Format format, vuk::Dimension2D extent, vuk::Samples samp, Clear c) {
+	void RenderGraph::attach_managed(Name name, Format format, Dimension2D extent, Samples samp, Clear c) {
 		AttachmentRPInfo attachment_info;
 		attachment_info.extents = extent;
 		attachment_info.iv = {};
@@ -320,27 +344,27 @@ namespace vuk {
 		attachment_info.clear_value = c;
 		ResourceUse& initial = attachment_info.initial;
 		ResourceUse & final = attachment_info.final;
-		initial.access = vuk::AccessFlags{};
-		initial.stages = vuk::PipelineStageFlagBits::eTopOfPipe;
+		initial.access = AccessFlags{};
+		initial.stages = PipelineStageFlagBits::eTopOfPipe;
 		// for internal attachments we don't want to preserve previous data
-		initial.layout = vuk::ImageLayout::ePreinitialized;
+		initial.layout = ImageLayout::ePreinitialized;
 
 		// with an undefined final layout, there will be no final sync
-		final.layout = vuk::ImageLayout::eUndefined;
-		final.access = vuk::AccessFlagBits{};
-		final.stages = vuk::PipelineStageFlagBits::eBottomOfPipe;
+		final.layout = ImageLayout::eUndefined;
+		final.access = AccessFlagBits{};
+		final.stages = PipelineStageFlagBits::eBottomOfPipe;
 
 		impl->bound_attachments.emplace(name, attachment_info);
 	}
 
-	void RenderGraph::attach_buffer(Name name, vuk::Buffer buf, Access initial, Access final) {
+	void RenderGraph::attach_buffer(Name name, Buffer buf, Access initial, Access final) {
 		BufferInfo buf_info{ .name = name, .initial = to_use(initial), .final = to_use(final), .buffer = buf };
 		impl->bound_buffers.emplace(name, buf_info);
 	}
 
 	void RenderGraph::attach_image(Name name, ImageAttachment att, Access initial_acc, Access final_acc) {
 		AttachmentRPInfo attachment_info;
-		attachment_info.extents = vuk::Dimension2D::absolute(att.extent);
+		attachment_info.extents = Dimension2D::absolute(att.extent);
 		attachment_info.image = att.image;
 		attachment_info.iv = att.image_view;
 
@@ -357,61 +381,84 @@ namespace vuk {
 		impl->bound_attachments.emplace(name, attachment_info);
 	}
 
-	void RenderGraph::attach_in(Name name, Future<Image>&& fimg, Access final) {
+	void RenderGraph::attach_in(Name name, Future<ImageAttachment>&& fimg, Access final) {
 		// TODO: handle cross-queue vis
-		if (fimg.status == FutureBase::Status::eSubmitted) {
-			AttachmentRPInfo rp_info{ .name = name, .initial = {fimg.last_use.stages, fimg.last_use.access, fimg.last_use.layout}, .final = to_use(final), .image = fimg.result };
-			impl->bound_attachments.emplace(name, rp_info);
-		} else {
-			auto it = fimg.rg->impl->bound_attachments.find(fimg.output_binding);
-			assert(it != fimg.rg->impl->bound_attachments.end());
+		if (fimg.get_status() == FutureBase::Status::eSubmitted) {
+			auto att = fimg.control->get_result<ImageAttachment>();
+			AttachmentRPInfo attachment_info;
+			attachment_info.extents = Dimension2D::absolute(att.extent);
+			attachment_info.image = att.image;
+			attachment_info.iv = att.image_view;
 
-			fimg.status = FutureBase::Status::eInputAttached;
+			attachment_info.type = AttachmentRPInfo::Type::eExternal;
+			attachment_info.description.format = (VkFormat)att.format;
+			attachment_info.samples = att.sample_count;
 
-			it->second.final = to_use(final);
+			attachment_info.should_clear = false;
+			attachment_info.clear_value = att.clear_value;
+			attachment_info.initial = { fimg.control->last_use.original, fimg.control->last_use.stages, fimg.control->last_use.access, fimg.control->last_use.layout };
+			attachment_info.final = to_use(final);
+			impl->bound_attachments.emplace(name, attachment_info);
+		} else if (fimg.get_status() == FutureBase::Status::eRenderGraphBound || fimg.get_status() == FutureBase::Status::eOutputAttached) {
+			fimg.get_status() = FutureBase::Status::eInputAttached;
+			add_pass({
+				.name = fimg.output_binding.append("_ACQUIRE"),
+				.resources = {
+					Resource{fimg.output_binding.append("+"), Resource::Type::eImage, eAcquire, name}
+				},
+				.wait = std::move(fimg.control)
+				});
 			append(std::move(*fimg.rg));
 			add_alias(name, fimg.output_binding);
+		} else {
+			assert(0);
 		}
 	}
 
 	void RenderGraph::attach_in(Name name, Future<Buffer>&& fimg, Access final) {
 		// TODO: handle cross-queue vis
-		if(fimg.status == FutureBase::Status::eSubmitted) {
-			BufferInfo buf_info{ .name = name, .initial = {fimg.last_use.stages, fimg.last_use.access, fimg.last_use.layout}, .final = to_use(final), .buffer = fimg.result };
+		if (fimg.get_status() == FutureBase::Status::eSubmitted) {
+			BufferInfo buf_info{ .name = name, .initial = {fimg.control->last_use.original, fimg.control->last_use.stages, fimg.control->last_use.access, fimg.control->last_use.layout}, .final = to_use(final), .buffer = fimg.control->get_result<Buffer>() };
 			impl->bound_buffers.emplace(name, buf_info);
-		} else {
-			auto it = fimg.rg->impl->bound_buffers.find(fimg.output_binding);
-			assert(it != fimg.rg->impl->bound_buffers.end());
-
-			fimg.status = FutureBase::Status::eInputAttached;
-			
-			it->second.final = to_use(final);
+		} else if (fimg.get_status() == FutureBase::Status::eRenderGraphBound || fimg.get_status() == FutureBase::Status::eOutputAttached) {
+			fimg.get_status() = FutureBase::Status::eInputAttached;
+			add_pass({
+				.name = fimg.output_binding.append("_ACQUIRE"),
+				.resources = {
+					Resource{fimg.output_binding.append("+"), Resource::Type::eBuffer, eAcquire, name}
+				},
+				.wait = std::move(fimg.control)
+				});
 			append(std::move(*fimg.rg));
 			add_alias(name, fimg.output_binding);
+		} else {
+			assert(0);
 		}
 	}
 
-	void RenderGraph::attach_out(Name name, Future<Image>& fimg) {
-		auto resolved_name = impl->resolve_name(name);
-		auto it = impl->bound_attachments.find(resolved_name);
-		assert(it != impl->bound_attachments.end());
-		fimg.result = it->second.image; // for now attach here
-		it->second.final = to_use(vuk::eNone); // no outward sync - we have bound this to a future and sync through that
-		it->second.to_signal = &fimg;
-		fimg.status = FutureBase::Status::eOutputAttached;
+	void RenderGraph::attach_out(Name name, Future<ImageAttachment>& fimg) {
+		fimg.get_status() = FutureBase::Status::eOutputAttached;
+		add_pass({
+			.name = name.append("_RELEASE"),
+			.resources = {
+				Resource{name, Resource::Type::eImage, eRelease, name.append("+")}
+			},
+			.signal = fimg.control.get()
+			});
 	}
 
-	void RenderGraph::attach_out(Name name, Future<Buffer>& fimg) {
-		auto resolved_name = impl->resolve_name(name);
-		auto it = impl->bound_buffers.find(resolved_name);
-		assert(it != impl->bound_buffers.end());
-		fimg.result = it->second.buffer; // for now attach here
-		it->second.final = to_use(vuk::eNone); // no outward sync - we have bound this to a future and sync through that
-		it->second.to_signal = &fimg;
-		fimg.status = FutureBase::Status::eOutputAttached;
+	void RenderGraph::attach_out(Name name, Future<Buffer>& fbuf) {
+		fbuf.get_status() = FutureBase::Status::eOutputAttached;
+		add_pass({
+			.name = name.append("_RELEASE"),
+			.resources = {
+				Resource{name, Resource::Type::eBuffer, eRelease, name.append("+")}
+			},
+			.signal = fbuf.control.get()
+			});
 	}
 
-	void sync_bound_attachment_to_renderpass(vuk::AttachmentRPInfo& rp_att, vuk::AttachmentRPInfo& attachment_info) {
+	void sync_bound_attachment_to_renderpass(AttachmentRPInfo& rp_att, AttachmentRPInfo& attachment_info) {
 		rp_att.description.format = attachment_info.description.format;
 		rp_att.samples = attachment_info.samples;
 		rp_att.description.samples = (VkSampleCountFlagBits)attachment_info.samples.count;
@@ -432,14 +479,29 @@ namespace vuk {
 		}
 	}
 
-	ExecutableRenderGraph RenderGraph::link(Context& ctx, const vuk::RenderGraph::CompileOptions& compile_options)&& {
+	auto domain_to_queue_index = [](DomainFlagBits domain) -> uint64_t {
+		auto queue_only = (DomainFlagBits)(domain & DomainFlagBits::eQueueMask).m_mask;
+		switch (queue_only) {
+		case DomainFlagBits::eGraphicsQueue:
+			return 0;
+		case DomainFlagBits::eComputeQueue:
+			return 1;
+		case DomainFlagBits::eTransferQueue:
+			return 2;
+		default:
+			assert(0);
+			return 0;
+		}
+	};
+
+	ExecutableRenderGraph RenderGraph::link(Context& ctx, const RenderGraph::CompileOptions& compile_options)&& {
 		compile(compile_options);
 
 		// at this point the graph is built, we know of all the resources and everything should have been attached
 		// perform checking if this indeed the case
 		validate();
 
-		std::array<uint64_t, 3> queue_progress;
+		std::array<uint64_t, 3> queue_progress = {};
 
 		for (auto& [raw_name, attachment_info] : impl->bound_attachments) {
 			auto name = impl->resolve_name(raw_name);
@@ -452,15 +514,28 @@ namespace vuk {
 			chain.insert(chain.begin(), UseRef{ attachment_info.initial, nullptr });
 			chain.emplace_back(UseRef{ attachment_info.final, nullptr });
 
-			vuk::ImageAspectFlags aspect = format_to_aspect((vuk::Format)attachment_info.description.format);
+			ImageAspectFlags aspect = format_to_aspect((Format)attachment_info.description.format);
 
 			for (size_t i = 0; i < chain.size() - 1; i++) {
 				auto& left = chain[i];
 				auto& right = chain[i + 1];
 
-				bool crosses_queue = (left.domain != vuk::DomainFlagBits::eNone && right.domain != vuk::DomainFlagBits::eNone && left.domain != right.domain);
+				// release - acquire pair
+				if (left.use.original == eRelease && right.use.original == eAcquire) {
+					// noop
+				} else if (right.use.original == eRelease && (i + 1 == (chain.size() - 2))) {
+					// release without acquire - must be last in chain
+					auto& fut = *right.pass->pass.signal;
+					fut.last_use = QueueResourceUse{ left.use.original, left.use.stages, left.use.access, left.use.layout, left.domain };
+					attachment_info.attached_future = &fut;
+				}
+
+				bool crosses_queue = (left.domain != DomainFlagBits::eNone && right.domain != DomainFlagBits::eNone && left.domain != right.domain);
 				if (crosses_queue) {
-					right.pass->relative_waits.emplace_back(left.domain, 1); // TODO: multicbuf
+					uint32_t queue_idx = domain_to_queue_index(left.domain);
+
+					left.pass->is_waited_on = true;
+					right.pass->waits.emplace_back((DomainFlagBits)(left.domain & DomainFlagBits::eQueueMask).m_mask, left.pass);
 
 					continue;
 				}
@@ -479,14 +554,14 @@ namespace vuk {
 							rp_att.description.finalLayout = (VkImageLayout)left.use.layout;
 
 							// compute attachment store
-							if (right.use.layout == vuk::ImageLayout::eUndefined) {
+							if (right.use.layout == ImageLayout::eUndefined) {
 								rp_att.description.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 							} else {
 								rp_att.description.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 							}
 						}
 						// emit barrier for final resource state
-						if (!right.pass && right.use.layout != vuk::ImageLayout::eUndefined && (left.use.layout != right.use.layout || (is_write_access(left.use) || is_write_access(right.use)))) { // different layouts, need to have dependency
+						if (!right.pass && right.use.layout != ImageLayout::eUndefined && (left.use.layout != right.use.layout || (is_write_access(left.use) || is_write_access(right.use)))) { // different layouts, need to have dependency
 							VkImageMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
 							ImageBarrier ib{};
 							barrier.dstAccessMask = (VkAccessFlags)right.use.access;
@@ -524,14 +599,14 @@ namespace vuk {
 							// 
 
 							rp_att.description.initialLayout = (VkImageLayout)right.use.layout;
-							assert(rp_att.description.initialLayout != (VkImageLayout)vuk::ImageLayout::eUndefined);
+							assert(rp_att.description.initialLayout != (VkImageLayout)ImageLayout::eUndefined);
 
 							// compute attachment load
-							if (left.use.layout == vuk::ImageLayout::eUndefined) {
+							if (left.use.layout == ImageLayout::eUndefined) {
 								rp_att.description.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-							} else if (left.use.layout == vuk::ImageLayout::ePreinitialized) {
+							} else if (left.use.layout == ImageLayout::ePreinitialized) {
 								// preinit means clear
-								rp_att.description.initialLayout = (VkImageLayout)vuk::ImageLayout::eUndefined;
+								rp_att.description.initialLayout = (VkImageLayout)ImageLayout::eUndefined;
 								rp_att.description.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 							} else {
 								rp_att.description.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
@@ -544,7 +619,7 @@ namespace vuk {
 							VkImageMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
 							barrier.dstAccessMask = (VkAccessFlags)right.use.access;
 							barrier.srcAccessMask = is_read_access(left.use) ? 0 : (VkAccessFlags)left.use.access;
-							barrier.oldLayout = left.use.layout == vuk::ImageLayout::ePreinitialized ? (VkImageLayout)vuk::ImageLayout::eUndefined : (VkImageLayout)left.use.layout;
+							barrier.oldLayout = left.use.layout == ImageLayout::ePreinitialized ? (VkImageLayout)ImageLayout::eUndefined : (VkImageLayout)left.use.layout;
 							barrier.newLayout = (VkImageLayout)right.use.layout;
 							barrier.subresourceRange.aspectMask = (VkImageAspectFlags)aspect;
 							barrier.subresourceRange.baseArrayLayer = 0;
@@ -582,7 +657,7 @@ namespace vuk {
 					auto& left_rp = impl->rpis[left.pass->render_pass_index];
 					if (left_rp.framebufferless && (is_write_access(left.use) || is_write_access(right.use))) {
 						// right layout == Undefined means the chain terminates, no transition/barrier
-						if (right.use.layout == vuk::ImageLayout::eUndefined)
+						if (right.use.layout == ImageLayout::eUndefined)
 							continue;
 						VkImageMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
 						barrier.dstAccessMask = (VkAccessFlags)right.use.access;
@@ -616,25 +691,29 @@ namespace vuk {
 				auto& left = chain[i];
 				auto& right = chain[i + 1];
 
-				// last use
-				if (right.pass == nullptr) {
-					if (buffer_info.to_signal) {
-						buffer_info.to_signal->last_use = QueueResourceUse{ left.use.stages, left.use.access, left.use.layout, left.domain };
-						buffer_info.to_signal->result = buffer_info.buffer;
-						left.pass->buffer_future_signals.emplace_back(buffer_info.to_signal);
-					}
+				// release - acquire pair
+				if (left.use.original == eRelease && right.use.original == eAcquire) {
+					// noop
+				} else if (right.use.original == eRelease && (i + 1 == (chain.size() - 2))) {
+					// release without acquire - must be last in chain
+					auto& fut = *right.pass->pass.signal;
+					fut.last_use = QueueResourceUse{ left.use.original, left.use.stages, left.use.access, left.use.layout, left.domain };
+					fut.get_result<Buffer>() = buffer_info.buffer; // TODO: when we have managed buffers, then this is too soon to attach
 				}
 
-				bool crosses_queue = (left.domain != vuk::DomainFlagBits::eNone && right.domain != vuk::DomainFlagBits::eNone && left.domain != right.domain);
+				bool crosses_queue = (left.domain != DomainFlagBits::eNone && right.domain != DomainFlagBits::eNone && left.domain != right.domain);
 				if (crosses_queue) {
-					right.pass->relative_waits.emplace_back(left.domain, 1); // TODO: multicbuf
+					uint32_t queue_idx = domain_to_queue_index(left.domain);
+
+					left.pass->is_waited_on = true;
+					right.pass->waits.emplace_back((DomainFlagBits)(left.domain & DomainFlagBits::eQueueMask).m_mask, left.pass);
 
 					continue;
 				}
 
 				bool crosses_rpass = (left.pass == nullptr || right.pass == nullptr || left.pass->render_pass_index != right.pass->render_pass_index);
 				if (crosses_rpass) {
-					if (left.pass && right.use.layout != vuk::ImageLayout::eUndefined && (is_write_access(left.use) || is_write_access(right.use))) { // RenderPass ->
+					if (left.pass && right.use.layout != ImageLayout::eUndefined && (is_write_access(left.use) || is_write_access(right.use))) { // RenderPass ->
 						auto& left_rp = impl->rpis[left.pass->render_pass_index];
 
 						VkMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER };
@@ -644,15 +723,15 @@ namespace vuk {
 						left_rp.subpasses[left.pass->subpass].post_mem_barriers.push_back(mb);
 					}
 
-					if (right.pass && left.use.layout != vuk::ImageLayout::eUndefined && (is_write_access(left.use) || is_write_access(right.use))) { // -> RenderPass
+					if (right.pass && left.use.layout != ImageLayout::eUndefined && (is_write_access(left.use) || is_write_access(right.use))) { // -> RenderPass
 						auto& right_rp = impl->rpis[right.pass->render_pass_index];
 
 						VkMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER };
 						barrier.dstAccessMask = (VkAccessFlags)right.use.access;
 						barrier.srcAccessMask = is_read_access(left.use) ? 0 : (VkAccessFlags)left.use.access;
 						MemoryBarrier mb{ .barrier = barrier, .src = left.use.stages, .dst = right.use.stages };
-						if (mb.src == vuk::PipelineStageFlags{}) {
-							mb.src = vuk::PipelineStageFlagBits::eTopOfPipe;
+						if (mb.src == PipelineStageFlags{}) {
+							mb.src = PipelineStageFlagBits::eTopOfPipe;
 							mb.barrier.srcAccessMask = {};
 						}
 						right_rp.subpasses[right.pass->subpass].pre_mem_barriers.push_back(mb);
@@ -681,21 +760,38 @@ namespace vuk {
 		// assign passes to command buffers and batches (within a single queue)
 		uint64_t batch_index = -1;
 		DomainFlags current_domain = DomainFlagBits::eNone;
+		bool needs_split = false;
 		for (auto& rp : impl->rpis) {
-			bool needs_split = false;
+			bool needs_split_next = false;
 			for (auto& sp : rp.subpasses) {
 				for (auto& passinfo : sp.passes) {
 					if ((passinfo->domain & DomainFlagBits::eQueueMask) != (current_domain & DomainFlagBits::eQueueMask)) { // if we go into a new queue, reset batch index
-						current_domain = passinfo->domain;
+						current_domain = passinfo->domain & DomainFlagBits::eQueueMask;
 						batch_index = -1;
 					}
-					if (passinfo->relative_waits.size() > 0) {
+					if (passinfo->waits.size() > 0) {
 						needs_split = true;
+					}
+					if (passinfo->is_waited_on) {
+						needs_split_next = true;
 					}
 				}
 			}
 			rp.command_buffer_index = 0; // we don't split command buffers within batches, for now
 			rp.batch_index = (needs_split || (batch_index == -1)) ? ++batch_index : batch_index;
+			needs_split = needs_split_next;
+		}
+
+		// build waits, now that we have fixed the batches
+		for (auto& rp : impl->rpis) {
+			bool needs_split = false;
+			for (auto& sp : rp.subpasses) {
+				for (auto& passinfo : sp.passes) {
+					for (auto& wait : passinfo->waits) {
+						rp.waits.emplace_back(wait.first, impl->rpis[wait.second->render_pass_index].batch_index + 1); // 0 = means previous
+					}
+				}
+			}
 		}
 
 		// we now have enough data to build VkRenderPasses and VkFramebuffers
@@ -725,7 +821,7 @@ namespace vuk {
 			for (auto& res : pass.pass.resources) {
 				if (!is_framebuffer_attachment(res))
 					continue;
-				if (res.ia == vuk::Access::eColorResolveWrite) // resolve attachment are added when processing the color attachment
+				if (res.ia == Access::eColorResolveWrite) // resolve attachment are added when processing the color attachment
 					continue;
 				VkAttachmentReference attref{};
 
@@ -736,8 +832,8 @@ namespace vuk {
 				attref.layout = (VkImageLayout)cit->use.layout;
 				attref.attachment = (uint32_t)std::distance(rp.attachments.begin(), std::find_if(rp.attachments.begin(), rp.attachments.end(), [&](auto& att) { return name == att.name; }));
 
-				if (attref.layout != (VkImageLayout)vuk::ImageLayout::eColorAttachmentOptimal) {
-					if (attref.layout == (VkImageLayout)vuk::ImageLayout::eDepthStencilAttachmentOptimal) {
+				if (attref.layout != (VkImageLayout)ImageLayout::eColorAttachmentOptimal) {
+					if (attref.layout == (VkImageLayout)ImageLayout::eDepthStencilAttachmentOptimal) {
 						ds_attrefs[subpass_index] = attref;
 					}
 				} else {
@@ -747,9 +843,9 @@ namespace vuk {
 						// this a resolve src attachment
 						// get the dst attachment
 						auto dst_name = impl->resolve_name(it->second);
-						rref.layout = (VkImageLayout)vuk::ImageLayout::eColorAttachmentOptimal; // the only possible layout for resolves
+						rref.layout = (VkImageLayout)ImageLayout::eColorAttachmentOptimal; // the only possible layout for resolves
 						rref.attachment = (uint32_t)std::distance(rp.attachments.begin(), std::find_if(rp.attachments.begin(), rp.attachments.end(), [&](auto& att) { return dst_name == att.name; }));
-						rp.attachments[rref.attachment].samples = vuk::Samples::e1; // resolve dst must be sample count = 1
+						rp.attachments[rref.attachment].samples = Samples::e1; // resolve dst must be sample count = 1
 						rp.attachments[rref.attachment].is_resolve_dst = true;
 					}
 
@@ -784,7 +880,7 @@ namespace vuk {
 
 			// subpasses
 			for (size_t i = 0; i < rp.subpasses.size(); i++) {
-				vuk::SubpassDescription sd;
+				SubpassDescription sd;
 				size_t color_count = 0;
 				if (i < rp.subpasses.size() - 1) {
 					color_count = color_ref_offsets[i + 1] - color_ref_offsets[i];
@@ -834,8 +930,8 @@ namespace vuk {
 					continue;
 				}
 
-				vuk::Samples fb_samples = rp.fbci.sample_count;
-				bool samples_known = fb_samples != vuk::Samples::eInfer;
+				Samples fb_samples = rp.fbci.sample_count;
+				bool samples_known = fb_samples != Samples::eInfer;
 
 				if (samples_known) {
 					continue;
@@ -845,7 +941,7 @@ namespace vuk {
 				for (auto& attrpinfo : rp.attachments) {
 					auto& bound = impl->bound_attachments[attrpinfo.name];
 
-					if (bound.samples != vuk::Samples::eInfer && !attrpinfo.is_resolve_dst) {
+					if (bound.samples != Samples::eInfer && !attrpinfo.is_resolve_dst) {
 						fb_samples = bound.samples;
 						samples_known = true;
 						break;
@@ -906,28 +1002,28 @@ namespace vuk {
 		return &impl->bound_buffers;
 	}
 
-	vuk::ImageUsageFlags RenderGraph::compute_usage(std::span<const UseRef> chain) {
-		vuk::ImageUsageFlags usage;
+	ImageUsageFlags RenderGraph::compute_usage(std::span<const UseRef> chain) {
+		ImageUsageFlags usage;
 		for (const auto& c : chain) {
 			switch (c.use.layout) {
-			case vuk::ImageLayout::eDepthStencilAttachmentOptimal:
-				usage |= vuk::ImageUsageFlagBits::eDepthStencilAttachment; break;
-			case vuk::ImageLayout::eShaderReadOnlyOptimal: // TODO: more complex analysis
-				usage |= vuk::ImageUsageFlagBits::eSampled; break;
-			case vuk::ImageLayout::eColorAttachmentOptimal:
-				usage |= vuk::ImageUsageFlagBits::eColorAttachment; break;
-			case vuk::ImageLayout::eTransferSrcOptimal:
-				usage |= vuk::ImageUsageFlagBits::eTransferRead; break;
-			case vuk::ImageLayout::eTransferDstOptimal:
-				usage |= vuk::ImageUsageFlagBits::eTransferWrite; break;
+			case ImageLayout::eDepthStencilAttachmentOptimal:
+				usage |= ImageUsageFlagBits::eDepthStencilAttachment; break;
+			case ImageLayout::eShaderReadOnlyOptimal: // TODO: more complex analysis
+				usage |= ImageUsageFlagBits::eSampled; break;
+			case ImageLayout::eColorAttachmentOptimal:
+				usage |= ImageUsageFlagBits::eColorAttachment; break;
+			case ImageLayout::eTransferSrcOptimal:
+				usage |= ImageUsageFlagBits::eTransferRead; break;
+			case ImageLayout::eTransferDstOptimal:
+				usage |= ImageUsageFlagBits::eTransferWrite; break;
 			default: break;
 			}
 			// TODO: this isn't conservative enough, we need more information
-			if (c.use.layout == vuk::ImageLayout::eGeneral) {
-				if (c.use.stages & (vuk::PipelineStageFlagBits::eComputeShader | vuk::PipelineStageFlagBits::eVertexShader |
-					vuk::PipelineStageFlagBits::eTessellationControlShader | vuk::PipelineStageFlagBits::eTessellationEvaluationShader |
-					vuk::PipelineStageFlagBits::eGeometryShader | vuk::PipelineStageFlagBits::eFragmentShader)) {
-					usage |= vuk::ImageUsageFlagBits::eStorage;
+			if (c.use.layout == ImageLayout::eGeneral) {
+				if (c.use.stages & (PipelineStageFlagBits::eComputeShader | PipelineStageFlagBits::eVertexShader |
+					PipelineStageFlagBits::eTessellationControlShader | PipelineStageFlagBits::eTessellationEvaluationShader |
+					PipelineStageFlagBits::eGeometryShader | PipelineStageFlagBits::eFragmentShader)) {
+					usage |= ImageUsageFlagBits::eStorage;
 				}
 			}
 		}
