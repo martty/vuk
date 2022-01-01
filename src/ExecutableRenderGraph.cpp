@@ -427,8 +427,8 @@ namespace vuk {
 		return { expected_value, std::move(sbundle) };
 	}
 
-	Result<BufferInfo, RenderGraphException> ExecutableRenderGraph::get_resource_buffer(Name n) {
-		auto resolved = impl->resolve_name(n);
+	Result<BufferInfo, RenderGraphException> ExecutableRenderGraph::get_resource_buffer(Name n, PassInfo* pass_info) {
+		auto resolved = resolve_name(n, pass_info);
 		auto it = impl->bound_buffers.find(resolved);
 		if (it == impl->bound_buffers.end()) {
 			return { expected_error, RenderGraphException{"Buffer not found"} };
@@ -436,8 +436,8 @@ namespace vuk {
 		return { expected_value, it->second };
 	}
 
-	Result<AttachmentRPInfo, RenderGraphException> ExecutableRenderGraph::get_resource_image(Name n) {
-		auto resolved = impl->resolve_name(n);
+	Result<AttachmentRPInfo, RenderGraphException> ExecutableRenderGraph::get_resource_image(Name n, PassInfo* pass_info) {
+		auto resolved = resolve_name(n, pass_info);
 		auto it = impl->bound_attachments.find(resolved);
 		if (it == impl->bound_attachments.end()) {
 			return { expected_error, RenderGraphException{"Image not found"} };
@@ -446,7 +446,7 @@ namespace vuk {
 	}
 
 	Result<bool, RenderGraphException> ExecutableRenderGraph::is_resource_image_in_general_layout(Name n, PassInfo* pass_info) {
-		auto resolved = impl->resolve_name(n);
+		auto resolved = resolve_name(n, pass_info);
 		auto it = impl->use_chains.find(resolved);
 		if (it == impl->use_chains.end()) {
 			return { expected_error, RenderGraphException{"Resource not found"} };
@@ -461,7 +461,8 @@ namespace vuk {
 		return { expected_error, RenderGraphException{ "Image resourced was not declared to be used in this pass, but was referred to." } };
 	}
 
-	Name ExecutableRenderGraph::resolve_name(Name name) const noexcept {
-		return impl->resolve_name(name);
+	Name ExecutableRenderGraph::resolve_name(Name name, PassInfo* pass_info) const noexcept {
+		auto qualified_name = pass_info->prefix.is_invalid() ? name : pass_info->prefix.append(name);
+		return impl->resolve_name(qualified_name);
 	}
 } // namespace vuk

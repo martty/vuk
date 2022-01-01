@@ -27,15 +27,31 @@ namespace vuk {
 		impl->passes.emplace_back(*impl->arena_, std::move(p));
 	}
 
-	void RenderGraph::append(RenderGraph other) {
+	void RenderGraph::append(Name subgraph_name, RenderGraph other) {
+		Name joiner = subgraph_name.append("::");
 		// TODO:
 		// this code is written weird because of wonky allocators
 		for (auto& p : other.impl->passes) {
+			p.prefix = p.prefix.is_invalid() ? joiner : joiner.append(p.prefix);
+			p.pass.name = joiner.append(p.pass.name);
+			for (auto& r : p.pass.resources) {
+				r.name = joiner.append(r.name);
+				r.out_name = joiner.append(r.out_name);
+			}
+			for (auto& [n1, n2] : p.pass.resolves) {
+				n1 = joiner.append(n1);
+				n2 = joiner.append(n2);
+			}
 			impl->passes.emplace_back(*impl->arena_, Pass{}) = std::move(p);
 		}
 
-		impl->bound_attachments.insert(std::make_move_iterator(other.impl->bound_attachments.begin()), std::make_move_iterator(other.impl->bound_attachments.end()));
-		impl->bound_buffers.insert(std::make_move_iterator(other.impl->bound_buffers.begin()), std::make_move_iterator(other.impl->bound_buffers.end()));
+		for (auto& [name, att] : other.impl->bound_attachments) {
+			impl->bound_attachments.emplace(joiner.append(name), std::move(att));
+
+		}
+		for (auto& [name, buf] : other.impl->bound_buffers) {
+			impl->bound_buffers.emplace(joiner.append(name), std::move(buf));
+		}
 	}
 
 	void RenderGraph::add_alias(Name new_name, Name old_name) {
@@ -48,20 +64,18 @@ namespace vuk {
 	void RenderGraph::build_io() {
 		for (auto& pif : impl->passes) {
 			for (auto& res : pif.pass.resources) {
-				if (is_read_access(res.ia) || res.ia == eAcquire || res.ia == eRelease) {
-					pif.inputs.emplace_back(res);
-					auto resolved_name = res.name; //impl->resolve_name(res.name);
-					auto hashed_resolved_name = ::hash::fnv1a::hash(resolved_name.to_sv().data(), resolved_name.to_sv().size(), hash::fnv1a::default_offset_basis);
-					pif.resolved_input_name_hashes.emplace_back(hashed_resolved_name);
-					pif.bloom_resolved_inputs |= hashed_resolved_name;
-				}
+				auto hashed_out_name = ::hash::fnv1a::hash(res.out_name.to_sv().data(), res.out_name.to_sv().size(), hash::fnv1a::default_offset_basis);
+				auto hashed_in_name = ::hash::fnv1a::hash(res.name.to_sv().data(), res.name.to_sv().size(), hash::fnv1a::default_offset_basis);
+
+				pif.inputs.emplace_back(res);
+				pif.resolved_input_name_hashes.emplace_back(hashed_in_name);
+				pif.bloom_resolved_inputs |= hashed_in_name;
+				pif.bloom_outputs |= hashed_out_name;
+				pif.output_name_hashes.emplace_back(hashed_out_name);
+
 				if (is_write_access(res.ia) || res.ia == eAcquire || res.ia == eRelease) {
 					assert(!impl->poisoned_names.contains(res.name)); // we have poisoned this name because a write has already consumed it
-					auto hashed_out_name = ::hash::fnv1a::hash(res.out_name.to_sv().data(), res.out_name.to_sv().size(), hash::fnv1a::default_offset_basis);
-					auto hashed_in_name = ::hash::fnv1a::hash(res.name.to_sv().data(), res.name.to_sv().size(), hash::fnv1a::default_offset_basis);
-					pif.bloom_outputs |= hashed_out_name;
 					pif.bloom_write_inputs |= hashed_in_name;
-					pif.output_name_hashes.emplace_back(hashed_out_name);
 					pif.write_input_name_hashes.emplace_back(hashed_in_name);
 					pif.outputs.emplace_back(res);
 					impl->poisoned_names.emplace(res.name);
@@ -153,9 +167,7 @@ namespace vuk {
 			for (auto& res : passinfo.pass.resources) {
 				// for read or write, we add source to use chain
 				auto resolved_name = impl->resolve_name(res.name);
-				if (is_write_access(res.ia) || res.ia == eAcquire || res.ia == eRelease) {
-					add_alias(res.out_name, res.name);
-				}
+				add_alias(res.out_name, res.name);
 			}
 		}
 
@@ -174,15 +186,23 @@ namespace vuk {
 				if (it == impl->use_chains.end()) {
 					it = impl->use_chains.emplace(resolved_name, std::vector<UseRef, short_alloc<UseRef, 64>>{short_alloc<UseRef, 64>{*impl->arena_}}).first;
 				}
-				if (it->second.size() > 0 && it->second.back().use.original == Access::eAcquire) { // acquire of resource - this must happen on the next use domain
-					it->second.back().domain = (DomainFlagBits)passinfo.domain.m_mask;
-					it->second.back().pass->domain = passinfo.domain;
-				}
-				if (res.ia == Access::eRelease) { // release of resource - this must happen on the previous use domain
+				auto& chain = it->second;
+
+				if (chain.size() > 0 && chain.back().use.original == Access::eAcquire) { // acquire of resource - this must happen on the next use domain
+					chain.back().domain = (DomainFlagBits)passinfo.domain.m_mask;
+					chain.back().pass->domain = passinfo.domain;
+				} else if (chain.size() > 0 && chain.back().use.original == Access::eRelease && res.ia == Access::eAcquire){
+					// release-acquire pair
+					chain.pop_back(); // remove both
+				} else if (res.ia == Access::eRelease) { // release of resource - this must happen on the previous use domain
+					assert(chain.size() > 0); // release cannot head a use chain
 					passinfo.domain = it->second.back().domain;
-					it->second.emplace_back(UseRef{ to_use(res.ia), &passinfo, (DomainFlagBits)it->second.back().domain });
+					// only release -> propagate previous domain and use onto release
+					ResourceUse last_use = chain.back().use;
+					last_use.original = Access::eRelease;
+					chain.emplace_back(UseRef{ last_use, &passinfo, (DomainFlagBits)chain.back().domain });
 				} else {
-					it->second.emplace_back(UseRef{ to_use(res.ia), &passinfo, (DomainFlagBits)passinfo.domain.m_mask });
+					chain.emplace_back(UseRef{ to_use(res.ia), &passinfo, (DomainFlagBits)passinfo.domain.m_mask });
 				}
 			}
 		}
@@ -197,9 +217,10 @@ namespace vuk {
 		auto transfer_begin = impl->ordered_passes.begin();
 		auto transfer_end = std::stable_partition(impl->ordered_passes.begin(), impl->ordered_passes.end(), [](const PassInfo* p) { return p->domain & DomainFlagBits::eTransferQueue; });
 		auto graphics_begin = transfer_end;
-		auto graphics_end = impl->ordered_passes.end();
+		auto graphics_end = std::stable_partition(transfer_end, impl->ordered_passes.end(), [](const PassInfo* p) { return p->domain & DomainFlagBits::eGraphicsQueue; });
 		std::span transfer_passes = { transfer_begin, transfer_end };
 		std::span graphics_passes = { graphics_begin, graphics_end };
+		impl->ordered_passes.erase(graphics_end, impl->ordered_passes.end());
 
 		//schedule_intra_queue(transfer_passes, compile_options);
 		//schedule_intra_queue(graphics_passes, compile_options);
@@ -227,7 +248,7 @@ namespace vuk {
 		}
 
 		impl->num_graphics_rpis = attachment_sets.size();
-		impl->num_transfer_rpis = std::span(transfer_begin, transfer_end).size();
+		impl->num_transfer_rpis = transfer_passes.size();
 
 		impl->rpis.clear();
 		// renderpasses are uniquely identified by their index from now on
@@ -383,7 +404,7 @@ namespace vuk {
 
 	void RenderGraph::attach_in(Name name, Future<ImageAttachment>&& fimg, Access final) {
 		// TODO: handle cross-queue vis
-		if (fimg.get_status() == FutureBase::Status::eSubmitted) {
+		if (fimg.get_status() == FutureBase::Status::eSubmitted || fimg.get_status() == FutureBase::Status::eHostAvailable) {
 			auto att = fimg.control->get_result<ImageAttachment>();
 			AttachmentRPInfo attachment_info;
 			attachment_info.extents = Dimension2D::absolute(att.extent);
@@ -401,15 +422,15 @@ namespace vuk {
 			impl->bound_attachments.emplace(name, attachment_info);
 		} else if (fimg.get_status() == FutureBase::Status::eRenderGraphBound || fimg.get_status() == FutureBase::Status::eOutputAttached) {
 			fimg.get_status() = FutureBase::Status::eInputAttached;
+			append(name, std::move(*fimg.rg));
 			add_pass({
 				.name = fimg.output_binding.append("_ACQUIRE"),
 				.resources = {
-					Resource{fimg.output_binding.append("+"), Resource::Type::eImage, eAcquire, name}
+					Resource{name.append("::").append(fimg.output_binding).append("+"), Resource::Type::eImage, eAcquire, name}
 				},
 				.wait = std::move(fimg.control)
 				});
-			append(std::move(*fimg.rg));
-			add_alias(name, fimg.output_binding);
+			add_alias(name, name.append("::").append(fimg.output_binding));
 		} else {
 			assert(0);
 		}
@@ -417,20 +438,20 @@ namespace vuk {
 
 	void RenderGraph::attach_in(Name name, Future<Buffer>&& fimg, Access final) {
 		// TODO: handle cross-queue vis
-		if (fimg.get_status() == FutureBase::Status::eSubmitted) {
+		if (fimg.get_status() == FutureBase::Status::eSubmitted || fimg.get_status() == FutureBase::Status::eHostAvailable) {
 			BufferInfo buf_info{ .name = name, .initial = {fimg.control->last_use.original, fimg.control->last_use.stages, fimg.control->last_use.access, fimg.control->last_use.layout}, .final = to_use(final), .buffer = fimg.control->get_result<Buffer>() };
 			impl->bound_buffers.emplace(name, buf_info);
 		} else if (fimg.get_status() == FutureBase::Status::eRenderGraphBound || fimg.get_status() == FutureBase::Status::eOutputAttached) {
 			fimg.get_status() = FutureBase::Status::eInputAttached;
+			append(name, std::move(*fimg.rg));
 			add_pass({
 				.name = fimg.output_binding.append("_ACQUIRE"),
 				.resources = {
-					Resource{fimg.output_binding.append("+"), Resource::Type::eBuffer, eAcquire, name}
+					Resource{name.append("::").append(fimg.output_binding).append("+"), Resource::Type::eBuffer, eAcquire, name}
 				},
 				.wait = std::move(fimg.control)
 				});
-			append(std::move(*fimg.rg));
-			add_alias(name, fimg.output_binding);
+			add_alias(name, name.append("::").append(fimg.output_binding));
 		} else {
 			assert(0);
 		}
@@ -501,8 +522,6 @@ namespace vuk {
 		// perform checking if this indeed the case
 		validate();
 
-		std::array<uint64_t, 3> queue_progress = {};
-
 		for (auto& [raw_name, attachment_info] : impl->bound_attachments) {
 			auto name = impl->resolve_name(raw_name);
 			auto chain_it = impl->use_chains.find(name);
@@ -528,6 +547,7 @@ namespace vuk {
 					auto& fut = *right.pass->pass.signal;
 					fut.last_use = QueueResourceUse{ left.use.original, left.use.stages, left.use.access, left.use.layout, left.domain };
 					attachment_info.attached_future = &fut;
+					continue;
 				}
 
 				bool crosses_queue = (left.domain != DomainFlagBits::eNone && right.domain != DomainFlagBits::eNone && left.domain != right.domain);
@@ -628,7 +648,18 @@ namespace vuk {
 							barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
 							barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 							barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-							ImageBarrier ib{ .image = name, .barrier = barrier, .src = left.use.stages, .dst = right.use.stages };
+
+							auto src_stages = left.use.stages;
+							auto dst_stages = right.use.stages;
+							//assert((left.domain & DomainFlagBits::eQueueMask) == (right.domain & DomainFlagBits::eQueueMask));
+							scope_to_domain(src_stages, dst_stages, right.domain & DomainFlagBits::eQueueMask);
+							if (src_stages == PipelineStageFlags{}) {
+								barrier.srcAccessMask = {};
+							}
+							if (dst_stages == PipelineStageFlags{}) {
+								barrier.dstAccessMask = {};
+							}
+							ImageBarrier ib{ .image = name, .barrier = barrier, .src = src_stages, .dst = dst_stages };
 							if (right_rp.framebufferless) {
 								right_rp.subpasses[right.pass->subpass].pre_barriers.push_back(ib);
 							} else {
@@ -765,6 +796,10 @@ namespace vuk {
 			bool needs_split_next = false;
 			for (auto& sp : rp.subpasses) {
 				for (auto& passinfo : sp.passes) {
+					if (passinfo->domain == DomainFlagBits::eNone) {
+						continue;
+					}
+
 					if ((passinfo->domain & DomainFlagBits::eQueueMask) != (current_domain & DomainFlagBits::eQueueMask)) { // if we go into a new queue, reset batch index
 						current_domain = passinfo->domain & DomainFlagBits::eQueueMask;
 						batch_index = -1;
@@ -802,7 +837,8 @@ namespace vuk {
 
 		size_t previous_rp = -1;
 		uint32_t previous_sp = -1;
-		for (auto& pass : impl->passes) {
+		for (auto& pass_p : impl->ordered_passes) {
+			auto& pass = *pass_p;
 			auto& rp = impl->rpis[pass.render_pass_index];
 			auto subpass_index = pass.subpass;
 			auto& color_attrefs = rp.rpci.color_refs;

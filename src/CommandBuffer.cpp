@@ -23,7 +23,7 @@ namespace vuk {
 
 	Result<Buffer> CommandBuffer::get_resource_buffer(Name n) const {
 		assert(rg);
-		auto res = rg->get_resource_buffer(n);
+		auto res = rg->get_resource_buffer(n, current_pass);
 		if (!res) {
 			return { expected_error, res.error() };
 		}
@@ -32,7 +32,7 @@ namespace vuk {
 
 	Result<Image> CommandBuffer::get_resource_image(Name n) const {
 		assert(rg);
-		auto res = rg->get_resource_image(n);
+		auto res = rg->get_resource_image(n, current_pass);
 		if (!res) {
 			return { expected_error, res.error() };
 		}
@@ -41,7 +41,7 @@ namespace vuk {
 
 	Result<ImageView> CommandBuffer::get_resource_image_view(Name n) const {
 		assert(rg);
-		auto res = rg->get_resource_image(n);
+		auto res = rg->get_resource_image(n, current_pass);
 		if (!res) {
 			return { expected_error, res.error() };
 		}
@@ -194,7 +194,7 @@ namespace vuk {
 	CommandBuffer& CommandBuffer::set_color_blend(Name att, PipelineColorBlendAttachmentState state) {
 		VUK_EARLY_RET();
 		assert(ongoing_renderpass);
-		auto resolved_name = rg->resolve_name(att);
+		auto resolved_name = rg->resolve_name(att, current_pass);
 		auto it = std::find(ongoing_renderpass->color_attachment_names.begin(), ongoing_renderpass->color_attachment_names.end(), resolved_name);
 		assert(it != ongoing_renderpass->color_attachment_names.end() && "Color attachment name not found.");
 		auto idx = std::distance(ongoing_renderpass->color_attachment_names.begin(), it);
@@ -339,7 +339,7 @@ namespace vuk {
 
 		auto layout = *res_gl ? ImageLayout::eGeneral : ImageLayout::eShaderReadOnlyOptimal;
 
-		auto res = rg->get_resource_image(name);
+		auto res = rg->get_resource_image(name, current_pass);
 		if (!res) {
 			rg_except.emplace(res.error());
 			current_exception = &rg_except.value();
@@ -354,7 +354,7 @@ namespace vuk {
 		VUK_EARLY_RET();
 		assert(rg);
 
-		auto res = rg->get_resource_image(name);
+		auto res = rg->get_resource_image(name, current_pass);
 		if (!res) {
 			rg_except.emplace(res.error());
 			current_exception = &rg_except.value();
@@ -448,7 +448,7 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::bind_storage_image(unsigned set, unsigned binding, Name name) {
 		VUK_EARLY_RET();
-		auto res = rg->get_resource_image(name);
+		auto res = rg->get_resource_image(name, current_pass);
 		if (!res) {
 			rg_except.emplace(res.error());
 			current_exception = &rg_except.value();
@@ -598,7 +598,7 @@ namespace vuk {
 		VUK_EARLY_RET();
 		// TODO: depth images
 		assert(rg);
-		auto res = rg->get_resource_image(src);
+		auto res = rg->get_resource_image(src, current_pass);
 		if (!res) {
 			rg_except.emplace(res.error());
 			current_exception = &rg_except.value();
@@ -628,14 +628,14 @@ namespace vuk {
 		VUK_EARLY_RET();
 		assert(rg);
 		VkImageResolve ir;
-		auto src_res = rg->get_resource_image(src);
+		auto src_res = rg->get_resource_image(src, current_pass);
 		if (!src_res) {
 			rg_except.emplace(src_res.error());
 			current_exception = &rg_except.value();
 			return *this;
 		}
 		auto src_image = src_res->image;
-		auto dst_res = rg->get_resource_image(dst);
+		auto dst_res = rg->get_resource_image(dst, current_pass);
 		if (!dst_res) {
 			rg_except.emplace(dst_res.error());
 			current_exception = &rg_except.value();
@@ -684,14 +684,14 @@ namespace vuk {
 	CommandBuffer& CommandBuffer::blit_image(Name src, Name dst, ImageBlit region, Filter filter) {
 		VUK_EARLY_RET();
 		assert(rg);
-		auto src_res = rg->get_resource_image(src);
+		auto src_res = rg->get_resource_image(src, current_pass);
 		if (!src_res) {
 			rg_except.emplace(src_res.error());
 			current_exception = &rg_except.value();
 			return *this;
 		}
 		auto src_image = src_res->image;
-		auto dst_res = rg->get_resource_image(dst);
+		auto dst_res = rg->get_resource_image(dst, current_pass);
 		if (!dst_res) {
 			rg_except.emplace(dst_res.error());
 			current_exception = &rg_except.value();
@@ -721,17 +721,49 @@ namespace vuk {
 		return *this;
 	}
 
+	CommandBuffer& CommandBuffer::copy_buffer_to_image(Name src, Name dst, BufferImageCopy bic) {
+		VUK_EARLY_RET();
+		assert(rg);
+		auto src_res = rg->get_resource_buffer(src, current_pass);
+		if (!src_res) {
+			rg_except.emplace(src_res.error());
+			current_exception = &rg_except.value();
+			return *this;
+		}
+		auto src_bbuf = src_res->buffer;
+		bic.bufferOffset += src_bbuf.offset;
+
+		auto dst_res = rg->get_resource_image(dst, current_pass);
+		if (!dst_res) {
+			rg_except.emplace(dst_res.error());
+			current_exception = &rg_except.value();
+			return *this;
+		}
+		auto dst_image = dst_res->image;
+
+		auto res_gl = rg->is_resource_image_in_general_layout(dst, current_pass);
+		if (!res_gl) {
+			rg_except.emplace(res_gl.error());
+			current_exception = &rg_except.value();
+			return *this;
+		}
+		auto dst_layout = *res_gl ? ImageLayout::eGeneral : ImageLayout::eTransferDstOptimal;
+		vkCmdCopyBufferToImage(command_buffer, src_bbuf.buffer, dst_image, (VkImageLayout)dst_layout, 1, (VkBufferImageCopy*)&bic);
+
+		return *this;
+	}
+
 	CommandBuffer& CommandBuffer::copy_image_to_buffer(Name src, Name dst, BufferImageCopy bic) {
 		VUK_EARLY_RET();
 		assert(rg);
-		auto src_res = rg->get_resource_image(src);
+		auto src_res = rg->get_resource_image(src, current_pass);
 		if (!src_res) {
 			rg_except.emplace(src_res.error());
 			current_exception = &rg_except.value();
 			return *this;
 		}
 		auto src_image = src_res->image;
-		auto dst_res = rg->get_resource_buffer(dst);
+		auto dst_res = rg->get_resource_buffer(dst, current_pass);
 		if (!dst_res) {
 			rg_except.emplace(dst_res.error());
 			current_exception = &rg_except.value();
@@ -756,14 +788,14 @@ namespace vuk {
 	CommandBuffer& CommandBuffer::copy_buffer(Name src, Name dst, size_t size) {
 		VUK_EARLY_RET();
 		assert(rg);
-		auto src_res = rg->get_resource_buffer(src);
+		auto src_res = rg->get_resource_buffer(src, current_pass);
 		if (!src_res) {
 			rg_except.emplace(src_res.error());
 			current_exception = &rg_except.value();
 			return *this;
 		}
 		auto src_bbuf = src_res->buffer;
-		auto dst_res = rg->get_resource_buffer(dst);
+		auto dst_res = rg->get_resource_buffer(dst, current_pass);
 		if (!dst_res) {
 			rg_except.emplace(dst_res.error());
 			current_exception = &rg_except.value();
@@ -783,7 +815,7 @@ namespace vuk {
 	CommandBuffer& CommandBuffer::image_barrier(Name src, vuk::Access src_acc, vuk::Access dst_acc, uint32_t mip_level, uint32_t mip_count) {
 		VUK_EARLY_RET();
 		assert(rg);
-		auto src_res = rg->get_resource_image(src);
+		auto src_res = rg->get_resource_image(src, current_pass);
 		if (!src_res) {
 			rg_except.emplace(src_res.error());
 			current_exception = &rg_except.value();

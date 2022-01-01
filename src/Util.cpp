@@ -91,7 +91,7 @@ namespace vuk {
 					VkSemaphoreSubmitInfoKHR ssi{ VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR };
 					ssi.semaphore = present_rdy;
 					ssi.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR;
-					wait_semas.emplace_back(ssi);
+					//wait_semas.emplace_back(ssi);
 				}
 				si.pWaitSemaphoreInfos = wait_semas.data();
 				si.waitSemaphoreInfoCount = (uint32_t)wait_semas.size();
@@ -161,31 +161,8 @@ namespace vuk {
 
 	Result<void> execute_submit_and_wait(Allocator& allocator, ExecutableRenderGraph&& rg) {
 		Context& ctx = allocator.get_context();
-		auto sbundle = rg.execute(allocator, {});
-		if (!sbundle) {
-			return { expected_error, sbundle.error() };
-		}
 
-		Unique<VkFence> fence(allocator);
-		VUK_DO_OR_RETURN(allocator.allocate_fences({ &*fence, 1 }));
-		for (auto& batch : sbundle->batches) {
-			auto domain = batch.domain;
-			for (auto& si : batch.submits) {
-				auto& hl_cbuf = si.command_buffers.back();
-				VkSubmitInfo si{ .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO };
-				si.commandBufferCount = 1;
-				si.pCommandBuffers = &hl_cbuf;
-				if (domain == DomainFlagBits::eGraphicsQueue) {
-					VUK_DO_OR_RETURN(ctx.submit_graphics(std::span{ &si, 1 }, *fence));
-				} else {
-					VUK_DO_OR_RETURN(ctx.submit_transfer(std::span{ &si, 1 }, *fence));
-				}
-			}
-		}
-		VkResult result = vkWaitForFences(ctx.device, 1, &*fence, VK_TRUE, UINT64_MAX);
-		if (result != VK_SUCCESS) {
-			return { expected_error, VkException{result} };
-		}
+		assert(0);
 		return { expected_value };
 	}
 
@@ -247,7 +224,8 @@ namespace vuk {
 			//allocator->get_context().wait_for_queues();
 			return { expected_value, control->get_result<T>() };
 		} else {
-			VUK_DO_OR_RETURN(execute_submit_and_wait(*control->allocator, std::move(*rg).link(control->allocator->get_context(), {})));
+			VUK_DO_OR_RETURN(execute_submit(*control->allocator, std::move(*rg).link(control->allocator->get_context(), {}), {}, {}, {}));
+			control->allocator->get_context().wait_idle(); // TODO:
 			control->status = FutureBase::Status::eHostAvailable;
 			return { expected_value, control->get_result<T>() };
 		}

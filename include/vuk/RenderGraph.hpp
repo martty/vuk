@@ -154,7 +154,7 @@ namespace vuk {
 
 		// append the other RenderGraph onto this one
 		// will copy or move passes and attachments
-		void append(RenderGraph other);
+		void append(Name subgraph_name, RenderGraph other);
 
 		/// @brief Add an alias for a resource
 		/// @param new_name 
@@ -239,12 +239,12 @@ namespace vuk {
 
 		Result<SubmitBundle> execute(Allocator&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
 
-		Result<struct BufferInfo, RenderGraphException> get_resource_buffer(Name);
-		Result<struct AttachmentRPInfo, RenderGraphException> get_resource_image(Name);
+		Result<struct BufferInfo, RenderGraphException> get_resource_buffer(Name, struct PassInfo*);
+		Result<struct AttachmentRPInfo, RenderGraphException> get_resource_image(Name, struct PassInfo*);
 
 		Result<bool, RenderGraphException> is_resource_image_in_general_layout(Name n, struct PassInfo* pass_info);
 
-		Name resolve_name(Name) const noexcept;
+		Name resolve_name(Name, struct PassInfo*) const noexcept;
 	private:
 		struct RGImpl* impl;
 

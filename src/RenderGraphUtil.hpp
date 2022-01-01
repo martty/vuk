@@ -108,6 +108,29 @@ namespace vuk {
 
 	}
 
+	// not all domains can support all stages, this function corrects stage flags
+	inline void scope_to_domain(PipelineStageFlags& src, PipelineStageFlags& dst, DomainFlags flags) {
+		DomainFlags remove;
+		// if no graphics in domain, remove all graphics
+		if ((flags & DomainFlagBits::eGraphicsQueue) == DomainFlags{}) {
+			remove |= DomainFlagBits::eGraphicsQueue;
+
+			// if no graphics & compute in domain, remove all compute
+			if ((flags & DomainFlagBits::eComputeQueue) == DomainFlags{}) {
+				remove |= DomainFlagBits::eComputeQueue;
+			}
+		}
+		
+		if (remove & DomainFlagBits::eGraphicsQueue) {
+			src &= (PipelineStageFlags)~0b11111111110;
+			dst &= (PipelineStageFlags)~0b11111111110;
+		}
+		if (remove & DomainFlagBits::eComputeQueue) {
+			src &= (PipelineStageFlags)~0b100000000000;
+			dst &= (PipelineStageFlags)~0b100000000000;
+		}
+	}
+
 	inline bool is_framebuffer_attachment(const Resource& r) {
 		if (r.type == Resource::Type::eBuffer) return false;
 		switch (r.ia) {
@@ -165,6 +188,8 @@ namespace vuk {
 		size_t render_pass_index;
 		uint32_t subpass;
 		DomainFlags domain;
+
+		Name prefix;
 
 		std::vector<std::pair<DomainFlagBits, PassInfo*>> waits;
 		bool is_waited_on = false;

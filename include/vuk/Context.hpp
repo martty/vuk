@@ -415,13 +415,19 @@ namespace vuk {
 		vuk::Samples sample_count = vuk::Samples::e1;
 		Clear clear_value;
 
+		uint32_t base_level = 0;
+		uint32_t level_count = VK_REMAINING_MIP_LEVELS;
+
+		uint32_t base_layer = 0;
+		uint32_t layer_count = VK_REMAINING_ARRAY_LAYERS;
+
 		static ImageAttachment from_texture(const vuk::Texture& t, Clear clear_value) {
 			return ImageAttachment{
 				.image = t.image.get(), .image_view = t.view.get(), .extent = {t.extent.width, t.extent.height}, .format = t.format, .sample_count = {t.sample_count}, .clear_value = clear_value };
 		}
 		static ImageAttachment from_texture(const vuk::Texture& t) {
 			return ImageAttachment{
-				.image = t.image.get(), .image_view = t.view.get(), .extent = {t.extent.width, t.extent.height}, .format = t.format, .sample_count = {t.sample_count} };
+				.image = t.image.get(), .image_view = t.view.get(), .extent = {t.extent.width, t.extent.height}, .format = t.format, .sample_count = {t.sample_count}, .layer_count = t.view->layer_count };
 		}
 	};
 
@@ -491,6 +497,8 @@ namespace vuk {
 		FutureBase::Status& get_status() {
 			return control->status;
 		}
+
+		Allocator& get_allocator() { return *control->allocator; }
 
 		Result<void> submit(); // turn cmdbufs into possibly a TS
 		Result<T> get(); // wait on host for T to be produced by the computation

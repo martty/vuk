@@ -31,7 +31,7 @@ namespace vuk {
 
 		std::unique_ptr<RenderGraph> rgp = std::make_unique<RenderGraph>();
 		rgp->add_pass({
-			.name = "BUFFER COPY UPLOAD",
+			.name = "BUFFER UPLOAD",
 			.execute_on = copy_domain,
 			.resources = {"_dst"_buffer >> vuk::Access::eTransferWrite, "_src"_buffer >> vuk::Access::eTransferRead},
 			.execute = [size](vuk::CommandBuffer& command_buffer) {
@@ -46,6 +46,47 @@ namespace vuk {
 	Future<Buffer> host_data_to_buffer(Allocator& allocator, DomainFlagBits copy_domain, Buffer dst, std::span<T> data) {
 		return host_data_to_buffer(allocator, copy_domain, dst, data.data(), data.size_bytes());
 	}
+
+	Future<ImageAttachment> host_data_to_image(Allocator& allocator, DomainFlagBits copy_domain, ImageAttachment image, void* src_data) {
+		size_t alignment = format_to_texel_block_size(image.format);
+		size_t size = compute_image_size(image.format, static_cast<Extent3D>(image.extent));
+		auto src = *allocate_buffer_cross_device(allocator, BufferCreateInfo{ vuk::MemoryUsage::eCPUonly, size, alignment });
+		::memcpy(src->mapped_ptr, src_data, size);
+
+		BufferImageCopy bc;
+		bc.imageOffset = { 0, 0, 0 };
+		bc.bufferRowLength = 0;
+		bc.bufferImageHeight = 0;
+		bc.imageExtent = static_cast<Extent3D>(image.extent);
+		bc.imageSubresource.aspectMask = format_to_aspect(image.format);
+		bc.imageSubresource.mipLevel = image.base_level;
+		bc.imageSubresource.baseArrayLayer = image.base_layer;
+		assert(image.layer_count == 1); // unsupported yet
+		bc.imageSubresource.layerCount = image.layer_count;
+
+		std::unique_ptr<RenderGraph> rgp = std::make_unique<RenderGraph>();
+		rgp->add_pass({
+			.name = "IMAGE UPLOAD",
+			.execute_on = copy_domain,
+			.resources = {"_dst"_image >> vuk::Access::eTransferWrite, "_src"_buffer >> vuk::Access::eTransferRead},
+			.execute = [bc](vuk::CommandBuffer& command_buffer) {
+				command_buffer.copy_buffer_to_image("_src", "_dst", bc);
+			} });
+		rgp->attach_buffer("_src", *src, vuk::Access::eNone, vuk::Access::eNone);
+		rgp->attach_image("_dst", image, vuk::Access::eNone, vuk::Access::eNone);
+		return { allocator, std::move(rgp), "_dst+" };
+	}
+
+	Future<ImageAttachment> transition(DomainFlagBits domain, Future<ImageAttachment> image, Access dst_access) {
+		auto& allocator = image.get_allocator();
+		std::unique_ptr<RenderGraph> rgp = std::make_unique<RenderGraph>();
+		rgp->add_pass({
+			.name = "TRANSITION",
+			.execute_on = domain,
+			.resources = {"_src"_image >> dst_access >> "_src+"}});
+		rgp->attach_in("_src", std::move(image), vuk::Access::eNone);
+		return { allocator, std::move(rgp), "_src+"};
+	}
 }
 
 namespace {
@@ -58,6 +99,7 @@ namespace {
 	std::random_device rd;
 	std::mt19937 g(rd());
 	vuk::Future<vuk::Buffer> scramble_buf_fut;
+	vuk::Future<vuk::ImageAttachment> texture_of_doge_fut;
 
 	vuk::Example xample{
 		.name = "08_pipelined_compute",
@@ -88,16 +130,20 @@ namespace {
 			int chans;
 			auto doge_image = stbi_load("../../examples/doge.png", &x, &y, &chans, 4);
 
-			auto [tex, stub] = ctx.create_texture(allocator, vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1 }, doge_image);
-			texture_of_doge = std::move(tex);
+			vuk::ImageCreateInfo ici{
+				.format = vuk::Format::eR8G8B8A8Srgb,
+				.extent = { (unsigned)x, (unsigned)y, 1 },
+				.usage = vuk::ImageUsageFlagBits::eTransferWrite | vuk::ImageUsageFlagBits::eSampled
+			};
+			texture_of_doge.emplace(ctx.allocate_texture(allocator, ici));
+			texture_of_doge_fut = vuk::transition(vuk::DomainFlagBits::eTransferOnTransfer, vuk::host_data_to_image(allocator, vuk::DomainFlagBits::eTransferOnTransfer, vuk::ImageAttachment::from_texture(*texture_of_doge), doge_image), vuk::Access::eFragmentSampled);
+			texture_of_doge_fut.get();
 
 			// init scrambling buffer
 			scramble_buf = *allocate_buffer_gpu(allocator, { vuk::MemoryUsage::eGPUonly, sizeof(unsigned) * x * y, 1 });
 			std::vector<unsigned> indices(x * y);
 			std::iota(indices.begin(), indices.end(), 0);
 			std::shuffle(indices.begin(), indices.end(), g);
-
-			ctx.wait_all_transfers(allocator);
 
 			//// <----------------->
 			// make a GPU future
@@ -158,7 +204,7 @@ namespace {
 			rg.add_pass({
 				.name = "08_copy",
 				.execute_on = vuk::DomainFlagBits::eTransferQueue,
-				.resources = {"08_scramble+"_buffer >> vuk::eTransferRead, "08_scramble++"_buffer >> vuk::eTransferWrite >> "08_scramble+++"},
+				.resources = {"08_scramble+"_buffer >> vuk::eTransferRead >> "_", "08_scramble++"_buffer >> vuk::eTransferWrite >> "08_scramble+++"},
 				.execute = [](vuk::CommandBuffer& command_buffer) {
 						command_buffer.copy_buffer("08_scramble+", "08_scramble++", sizeof(unsigned) * x * y);
 				}

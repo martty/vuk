@@ -382,6 +382,7 @@ namespace vuk {
 		CommandBuffer& clear_image(Name src, Clear);
 		CommandBuffer& resolve_image(Name src, Name dst);
 		CommandBuffer& blit_image(Name src, Name dst, ImageBlit region, Filter filter);
+		CommandBuffer& copy_buffer_to_image(Name src, Name dst, BufferImageCopy);
 		CommandBuffer& copy_image_to_buffer(Name src, Name dst, BufferImageCopy);
 		CommandBuffer& copy_buffer(Name src, Name dst, size_t size);
 
