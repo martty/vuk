@@ -13,6 +13,9 @@ namespace vuk {
 		}
 
 		ImageResourceInputOnly::operator Resource() {
+			if (!is_write_access(ba)) { // do not produce a name by default it is read-only
+				return operator>>(Name{});
+			}
 			return operator>>(name.append("+"));
 		}
 
@@ -25,6 +28,9 @@ namespace vuk {
 		}
 		
 		BufferResourceInputOnly::operator Resource() {
+			if (is_read_access(ba)) { // do not produce a name by default it is read-only
+				return operator>>(Name{});
+			}
 			return operator>>(name.append("+"));
 		}
 

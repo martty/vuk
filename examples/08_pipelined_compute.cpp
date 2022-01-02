@@ -136,7 +136,9 @@ namespace {
 				.usage = vuk::ImageUsageFlagBits::eTransferWrite | vuk::ImageUsageFlagBits::eSampled
 			};
 			texture_of_doge.emplace(ctx.allocate_texture(allocator, ici));
-			texture_of_doge_fut = vuk::transition(vuk::DomainFlagBits::eTransferOnTransfer, vuk::host_data_to_image(allocator, vuk::DomainFlagBits::eTransferOnTransfer, vuk::ImageAttachment::from_texture(*texture_of_doge), doge_image), vuk::Access::eFragmentSampled);
+
+			auto upload_doge = vuk::host_data_to_image(allocator, vuk::DomainFlagBits::eTransferOnTransfer, vuk::ImageAttachment::from_texture(*texture_of_doge), doge_image);
+			texture_of_doge_fut = vuk::transition(vuk::DomainFlagBits::eTransferOnTransfer, std::move(upload_doge), vuk::Access::eFragmentSampled);
 			texture_of_doge_fut.get();
 
 			// init scrambling buffer
@@ -147,7 +149,6 @@ namespace {
 
 			//// <----------------->
 			// make a GPU future
-			// the copy (written above) is not performed yet, we just record the computation and bind to a result ("_dst")
 			scramble_buf_fut = vuk::host_data_to_buffer(allocator, vuk::DomainFlagBits::eTransferOnTransfer, scramble_buf.get(), std::span(indices));
 
 			stbi_image_free(doge_image);
@@ -204,7 +205,7 @@ namespace {
 			rg.add_pass({
 				.name = "08_copy",
 				.execute_on = vuk::DomainFlagBits::eTransferQueue,
-				.resources = {"08_scramble+"_buffer >> vuk::eTransferRead >> "_", "08_scramble++"_buffer >> vuk::eTransferWrite >> "08_scramble+++"},
+				.resources = {"08_scramble+"_buffer >> vuk::eTransferRead, "08_scramble++"_buffer >> vuk::eTransferWrite >> "08_scramble+++"},
 				.execute = [](vuk::CommandBuffer& command_buffer) {
 						command_buffer.copy_buffer("08_scramble+", "08_scramble++", sizeof(unsigned) * x * y);
 				}

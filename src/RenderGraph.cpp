@@ -70,8 +70,10 @@ namespace vuk {
 				pif.inputs.emplace_back(res);
 				pif.resolved_input_name_hashes.emplace_back(hashed_in_name);
 				pif.bloom_resolved_inputs |= hashed_in_name;
-				pif.bloom_outputs |= hashed_out_name;
-				pif.output_name_hashes.emplace_back(hashed_out_name);
+				if (!res.out_name.is_invalid()) {
+					pif.bloom_outputs |= hashed_out_name;
+					pif.output_name_hashes.emplace_back(hashed_out_name);
+				}
 
 				if (is_write_access(res.ia) || res.ia == eAcquire || res.ia == eRelease) {
 					assert(!impl->poisoned_names.contains(res.name)); // we have poisoned this name because a write has already consumed it
