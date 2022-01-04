@@ -15,16 +15,38 @@ namespace vuk {
 		return execute_submit(allocator, std::span(ptrvec), {}, {}, {});
 	}
 
-	Result<SubmitBundle> execute(std::span<std::pair<Allocator*, ExecutableRenderGraph*>> ergs, std::vector<std::pair<SwapchainRef, size_t>> swapchains_with_indexes) {
-		SubmitBundle bundle;
+	Result<std::vector<SubmitBundle>> execute(std::span<std::pair<Allocator*, ExecutableRenderGraph*>> ergs, std::vector<std::pair<SwapchainRef, size_t>> swapchains_with_indexes) {
+		std::vector<SubmitBundle> bundles;
 		for (auto& [alloc, rg] : ergs) {
 			auto sbundle = rg->execute(*alloc, swapchains_with_indexes);
 			if (!sbundle) {
 				return { expected_error, sbundle.error() };
 			}
-			bundle.batches.insert(bundle.batches.end(), sbundle->batches.begin(), sbundle->batches.end()); // TODO: this is incorrect
+			bool has_waits = false;
+			for (auto& batch : sbundle->batches) {
+				for (auto& s : batch.submits) {
+					if (s.relative_waits.size() > 0) {
+						has_waits = true;
+					}
+				}
+			}
+			// in the case where there are no waits in the entire bundle, we can merge all the submits together
+			if (!has_waits && bundles.size() > 0) {
+				auto& last = bundles.back();
+				for (auto& batch : sbundle->batches) {
+					auto tgt_domain = batch.domain;
+					auto it = std::find_if(last.batches.begin(), last.batches.end(), [=](auto& batch) {return batch.domain == tgt_domain; });
+					if (it != last.batches.end()) {
+						it->submits.insert(it->submits.end(), batch.submits.begin(), batch.submits.end());
+					} else {
+						last.batches.emplace_back(batch);
+					}
+				}
+			} else {
+				bundles.push_back(*sbundle);
+			}
 		}
-		return { expected_value, bundle };
+		return { expected_value, bundles };
 	}
 
 	Result<void> submit(Allocator& allocator, SubmitBundle bundle, VkSemaphore present_rdy, VkSemaphore render_complete) {
@@ -85,20 +107,42 @@ namespace vuk {
 		for (SubmitBatch& batch : bundle.batches) {
 			auto domain = batch.domain;
 			Queue& queue = domain_to_queue(ctx, domain);
+			Unique<VkFence> fence(allocator);
+			VUK_DO_OR_RETURN(allocator.allocate_fences({ &*fence, 1 }));
+
+			uint64_t num_cbufs = 0;
+			uint64_t num_waits = 1; // 1 extra for present_rdy
 			for (uint64_t i = 0; i < batch.submits.size(); i++) {
 				SubmitInfo& submit_info = batch.submits[i];
-				Unique<VkFence> fence(allocator);
-				VUK_DO_OR_RETURN(allocator.allocate_fences({ &*fence, 1 }));
+				num_cbufs += submit_info.command_buffers.size();
+				num_waits += submit_info.relative_waits.size();
+			}
 
-				VkSubmitInfo2KHR si{ .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2_KHR };
-				si.commandBufferInfoCount = (uint32_t)submit_info.command_buffers.size();
-				std::vector<VkCommandBufferSubmitInfoKHR> cbufsis(si.commandBufferInfoCount);
-				for (uint64_t i = 0; i < si.commandBufferInfoCount; i++) {
-					cbufsis[i] = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO_KHR, .commandBuffer = submit_info.command_buffers[i] };
+			std::vector<VkSubmitInfo2KHR> sis;
+			std::vector<VkCommandBufferSubmitInfoKHR> cbufsis;
+			cbufsis.reserve(num_cbufs);
+			std::vector<VkSemaphoreSubmitInfoKHR> wait_semas;
+			wait_semas.reserve(num_waits);
+			std::vector<VkSemaphoreSubmitInfoKHR> signal_semas;
+			signal_semas.reserve(batch.submits.size() + 1); // 1 extra for render_complete
+
+
+			for (uint64_t i = 0; i < batch.submits.size(); i++) {
+				SubmitInfo& submit_info = batch.submits[i];
+
+				for (auto& fut : submit_info.future_signals) {
+					fut->status = FutureBase::Status::eSubmitted;
 				}
-				si.pCommandBufferInfos = cbufsis.data();
 
-				std::vector<VkSemaphoreSubmitInfoKHR> wait_semas;
+				if (submit_info.command_buffers.size() == 0) {
+					continue;
+				}
+
+				for (uint64_t i = 0; i < submit_info.command_buffers.size(); i++) {
+					cbufsis.emplace_back(VkCommandBufferSubmitInfoKHR{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO_KHR, .commandBuffer = submit_info.command_buffers[i] });
+				}
+
+				uint32_t wait_sema_count = 0;
 				for (auto& w : submit_info.relative_waits) {
 					VkSemaphoreSubmitInfoKHR ssi{ VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR };
 					auto& wait_queue = domain_to_queue(ctx, w.first).submit_sync;
@@ -106,36 +150,45 @@ namespace vuk {
 					ssi.value = queue_progress_references[domain_to_queue_index(w.first)] + w.second;
 					ssi.stageMask = (VkPipelineStageFlagBits2KHR)PipelineStageFlagBits::eAllCommands;
 					wait_semas.emplace_back(ssi);
+					wait_sema_count++;
 				}
 				if (domain == DomainFlagBits::eGraphicsQueue && i == 0 && present_rdy != VK_NULL_HANDLE) { // TODO: for first cbuf only that refs the swapchain attment
 					VkSemaphoreSubmitInfoKHR ssi{ VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR };
 					ssi.semaphore = present_rdy;
 					ssi.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR;
 					//wait_semas.emplace_back(ssi);
+					//wait_sema_count++;
 				}
-				si.pWaitSemaphoreInfos = wait_semas.data();
-				si.waitSemaphoreInfoCount = (uint32_t)wait_semas.size();
 
-				std::vector<VkSemaphoreSubmitInfoKHR> signal_semas;
 				VkSemaphoreSubmitInfoKHR ssi{ VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR };
 				ssi.semaphore = queue.submit_sync.semaphore;
-				ssi.value = ++ * queue.submit_sync.value;
+				ssi.value = ++(*queue.submit_sync.value);
 
 				ssi.stageMask = (VkPipelineStageFlagBits2KHR)PipelineStageFlagBits::eAllCommands;
+
+				uint32_t signal_sema_count = 1;
 				signal_semas.emplace_back(ssi);
 				if (domain == DomainFlagBits::eGraphicsQueue && i == batch.submits.size() - 1 && render_complete != VK_NULL_HANDLE) { // TODO: for final cbuf only that refs the swapchain attment
 					ssi.semaphore = render_complete;
 					ssi.value = 0; // binary sema
 					signal_semas.emplace_back(ssi);
+					signal_sema_count++;
 				}
-				si.pSignalSemaphoreInfos = signal_semas.data();
-				si.signalSemaphoreInfoCount = (uint32_t)signal_semas.size();
-				VUK_DO_OR_RETURN(queue.submit(std::span{ &si, 1 }, *fence)); // TODO: one submit per batch
 
-				for (auto& fut : submit_info.future_signals) {
-					fut->status = FutureBase::Status::eSubmitted;
-				}
+				VkSubmitInfo2KHR& si = sis.emplace_back(VK_STRUCTURE_TYPE_SUBMIT_INFO_2_KHR);
+				VkCommandBufferSubmitInfoKHR* p_cbuf_infos = &cbufsis.back() - (submit_info.command_buffers.size() - 1);
+				VkSemaphoreSubmitInfoKHR* p_wait_semas = wait_sema_count > 0 ? &wait_semas.back() - (wait_sema_count - 1) : nullptr;
+				VkSemaphoreSubmitInfoKHR* p_signal_semas = &signal_semas.back() - (signal_sema_count - 1);
+
+				si.pWaitSemaphoreInfos = p_wait_semas;
+				si.waitSemaphoreInfoCount = wait_sema_count;
+				si.pCommandBufferInfos = p_cbuf_infos;
+				si.commandBufferInfoCount = (uint32_t)submit_info.command_buffers.size();
+				si.pSignalSemaphoreInfos = p_signal_semas;
+				si.signalSemaphoreInfoCount = signal_sema_count;
 			}
+
+			VUK_DO_OR_RETURN(queue.submit(std::span{ sis }, *fence));
 		}
 
 		return { expected_value };
@@ -144,11 +197,16 @@ namespace vuk {
 
 	// assume rgs are independent - they don't reference eachother
 	Result<void> execute_submit(Allocator& allocator, std::span<std::pair<Allocator*, ExecutableRenderGraph*>> rgs, std::vector<std::pair<SwapchainRef, size_t>> swapchains_with_indexes, VkSemaphore present_rdy, VkSemaphore render_complete) {
-		auto bundle = execute(rgs, swapchains_with_indexes);
-		if (!bundle) {
-			return { expected_error, bundle.error() };
+		auto bundles = execute(rgs, swapchains_with_indexes);
+		if (!bundles) {
+			return { expected_error, bundles.error() };
 		}
-		return submit(allocator, *bundle, present_rdy, render_complete);
+		assert(bundles->size() < 2); // can't handle this yet
+		for (auto& bundle : *bundles) {
+			VUK_DO_OR_RETURN(submit(allocator, bundle, present_rdy, render_complete));
+		}
+
+		return { expected_value };
 	}
 
 	Result<void> execute_submit_and_present_to_one(Allocator& allocator, ExecutableRenderGraph&& rg, SwapchainRef swapchain) {
@@ -250,7 +308,7 @@ namespace vuk {
 		if (control->status == FutureBase::Status::eInputAttached || control->status == FutureBase::Status::eInitial) {
 			return { expected_error }; // can't get result of future that has not been attached anything or has been attached into a rendergraph
 		} else if (control->status == FutureBase::Status::eHostAvailable) {
-			return { expected_value, control->get_result<T>()};
+			return { expected_value, control->get_result<T>() };
 		} else if (control->status == FutureBase::Status::eSubmitted) {
 			// TODO:
 			//allocator->get_context().wait_for_queues();
