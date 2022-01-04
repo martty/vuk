@@ -279,7 +279,6 @@ namespace vuk {
 			auto& source = command_pools[ci.queueFamilyIndex];
 			if (source.size() > 0) {
 				dst[i] = { source.back(), ci.queueFamilyIndex };
-				vkResetCommandPool(direct.device, dst[i].command_pool, {});
 				source.pop_back();
 			} else {
 				VUK_DO_OR_RETURN(direct.allocate_command_pools(std::span{ &dst[i], 1 }, std::span{ &ci, 1 }, loc));
@@ -406,6 +405,7 @@ namespace vuk {
 
 	DeviceFrameResource& DeviceSuperFrameResource::get_next_frame() {
 		std::unique_lock _(new_frame_mutex);
+
 		auto& ctx = direct.get_context();
 		frame_counter++;
 		local_frame = frame_counter % frames_in_flight;
@@ -423,6 +423,9 @@ namespace vuk {
 		direct.deallocate_semaphores(f.semaphores);
 		direct.deallocate_fences(f.fences);
 		direct.deallocate_command_buffers(f.cmdbuffers_to_free);
+		for (auto& pool : f.cmdpools_to_free) {
+			vkResetCommandPool(direct.device, pool.command_pool, {});
+		}
 		deallocate_command_pools(f.cmdpools_to_free);
 		direct.deallocate_buffers(f.buffer_gpus);
 		direct.deallocate_buffers(f.buffer_cross_devices);
