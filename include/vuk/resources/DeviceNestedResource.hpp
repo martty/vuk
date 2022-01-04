@@ -33,12 +33,12 @@ namespace vuk {
 			upstream->deallocate_command_buffers(dst);
 		}
 
-		Result<void, AllocateException> allocate_commandpools(std::span<VkCommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) override {
-			return upstream->allocate_commandpools(dst, cis, loc);
+		Result<void, AllocateException> allocate_command_pools(std::span<CommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) override {
+			return upstream->allocate_command_pools(dst, cis, loc);
 		}
 
-		void deallocate_commandpools(std::span<const VkCommandPool> dst) override {
-			upstream->deallocate_commandpools(dst);
+		void deallocate_command_pools(std::span<const CommandPool> dst) override {
+			upstream->deallocate_command_pools(dst);
 		}
 
 		Result<void, AllocateException> allocate_buffers(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) override {

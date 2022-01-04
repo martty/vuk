@@ -57,7 +57,7 @@ namespace vuk {
 
 			VkCommandBufferAllocateInfo cbai{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
 			cbai.commandBufferCount = 1;
-			cbai.commandPool = ci.command_pool;
+			cbai.commandPool = ci.command_pool.command_pool;
 			cbai.level = ci.level;
 
 			VkResult res = vkAllocateCommandBuffers(device, &cbai, &dst[i].command_buffer);
@@ -72,26 +72,27 @@ namespace vuk {
 
 	void DeviceVkResource::deallocate_command_buffers(std::span<const CommandBufferAllocation> dst) {
 		for (auto& c : dst) {
-			deallocate_commandpools(std::span{ &c.command_pool, 1 });
+			vkFreeCommandBuffers(device, c.command_pool.command_pool, 1, &c.command_buffer);
 		}
 	}
 
-	Result<void, AllocateException> DeviceVkResource::allocate_commandpools(std::span<VkCommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException> DeviceVkResource::allocate_command_pools(std::span<CommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
-			VkResult res = vkCreateCommandPool(device, &cis[i], nullptr, &dst[i]);
+			VkResult res = vkCreateCommandPool(device, &cis[i], nullptr, &dst[i].command_pool);
+			dst[i].queue_family_index = cis[i].queueFamilyIndex;
 			if (res != VK_SUCCESS) {
-				deallocate_commandpools({ dst.data(), (uint64_t)i });
+				deallocate_command_pools({ dst.data(), (uint64_t)i });
 				return { expected_error, AllocateException{ res } };
 			}
 		}
 		return { expected_value };
 	}
 
-	void DeviceVkResource::deallocate_commandpools(std::span<const VkCommandPool> src) {
+	void DeviceVkResource::deallocate_command_pools(std::span<const CommandPool> src) {
 		for (auto& v : src) {
-			if (v != VK_NULL_HANDLE) {
-				vkDestroyCommandPool(device, v, nullptr);
+			if (v.command_pool != VK_NULL_HANDLE) {
+				vkDestroyCommandPool(device, v.command_pool, nullptr);
 			}
 		}
 	}

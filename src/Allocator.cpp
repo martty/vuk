@@ -34,16 +34,16 @@ namespace vuk {
 		device_resource->deallocate_fences(src);
 	}
 
-	Result<void, AllocateException> Allocator::allocate(std::span<VkCommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) {
-		return device_resource->allocate_commandpools(dst, cis, loc);
+	Result<void, AllocateException> Allocator::allocate(std::span<CommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_command_pools(dst, cis, loc);
 	}
 
-	Result<void, AllocateException> Allocator::allocate_command_pools(std::span<VkCommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) {
-		return device_resource->allocate_commandpools(dst, cis, loc);
+	Result<void, AllocateException> Allocator::allocate_command_pools(std::span<CommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_command_pools(dst, cis, loc);
 	}
 
-	void Allocator::deallocate(std::span<const VkCommandPool> src) {
-		device_resource->deallocate_commandpools(src);
+	void Allocator::deallocate(std::span<const CommandPool> src) {
+		device_resource->deallocate_command_pools(src);
 	}
 
 	Result<void, AllocateException> Allocator::allocate(std::span<CommandBufferAllocation> dst, std::span<const CommandBufferAllocationCreateInfo> cis, SourceLocationAtFrame loc) {

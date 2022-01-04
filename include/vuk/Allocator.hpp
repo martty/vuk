@@ -88,8 +88,8 @@ namespace vuk {
 		virtual Result<void, AllocateException> allocate_command_buffers(std::span<CommandBufferAllocation> dst, std::span<const CommandBufferAllocationCreateInfo> cis, SourceLocationAtFrame loc) = 0;
 		virtual void deallocate_command_buffers(std::span<const CommandBufferAllocation> dst) = 0;
 
-		virtual Result<void, AllocateException> allocate_commandpools(std::span<VkCommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) = 0;
-		virtual void deallocate_commandpools(std::span<const VkCommandPool> dst) = 0;
+		virtual Result<void, AllocateException> allocate_command_pools(std::span<CommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) = 0;
+		virtual void deallocate_command_pools(std::span<const CommandPool> dst) = 0;
 
 		virtual Result<void, AllocateException> allocate_buffers(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) = 0;
 		virtual void deallocate_buffers(std::span<const BufferCrossDevice> dst) = 0;
@@ -151,11 +151,11 @@ namespace vuk {
 
 		void deallocate(std::span<const VkFence> src);
 
-		Result<void, AllocateException> allocate(std::span<VkCommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+		Result<void, AllocateException> allocate(std::span<CommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
-		Result<void, AllocateException> allocate_command_pools(std::span<VkCommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+		Result<void, AllocateException> allocate_command_pools(std::span<CommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
-		void deallocate(std::span<const VkCommandPool> src);
+		void deallocate(std::span<const CommandPool> src);
 
 		Result<void, AllocateException> allocate(std::span<CommandBufferAllocation> dst, std::span<const CommandBufferAllocationCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 

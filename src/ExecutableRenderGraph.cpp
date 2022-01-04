@@ -114,7 +114,7 @@ namespace vuk {
 		auto& ctx = alloc.get_context();
 		SubmitInfo si;
 
-		Unique<VkCommandPool> cpool(alloc);
+		Unique<CommandPool> cpool(alloc);
 		VkCommandPoolCreateInfo cpci{ VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
 		cpci.flags = VkCommandPoolCreateFlagBits::VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
 		if (domain & vuk::DomainFlagBits::eGraphicsQueue) { // TODO: proper qfamsel

@@ -965,17 +965,26 @@ namespace vuk {
 		return (val + align - 1) / align * align;
 	}
 
+	struct CommandPool {
+		VkCommandPool command_pool;
+		uint32_t queue_family_index;
+
+		constexpr bool operator==(const CommandPool& other) const {
+			return command_pool == other.command_pool;
+		}
+	};
+
 	struct CommandBufferAllocationCreateInfo {
 		VkCommandBufferLevel level;
-		VkCommandPool command_pool;
+		CommandPool command_pool;
 	};
 
 	struct CommandBufferAllocation {
 		CommandBufferAllocation() = default;
-		CommandBufferAllocation(VkCommandBuffer command_buffer, VkCommandPool command_pool) : command_buffer(command_buffer), command_pool(command_pool) {}
+		CommandBufferAllocation(VkCommandBuffer command_buffer, CommandPool command_pool) : command_buffer(command_buffer), command_pool(command_pool) {}
 
 		VkCommandBuffer command_buffer;
-		VkCommandPool command_pool;
+		CommandPool command_pool;
 
 		operator VkCommandBuffer() {
 			return command_buffer;

@@ -26,8 +26,8 @@ namespace vuk {
 		return { expected_value, std::move(sema) };
 	}
 
-	inline Result<Unique<VkCommandPool>, AllocateException> allocate_command_pool(Allocator& allocator, const VkCommandPoolCreateInfo& cpci, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-		Unique<VkCommandPool> cp(allocator);
+	inline Result<Unique<CommandPool>, AllocateException> allocate_command_pool(Allocator& allocator, const VkCommandPoolCreateInfo& cpci, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
+		Unique<CommandPool> cp(allocator);
 		if (auto res = allocator.allocate_command_pools(std::span{ &cp.get(), 1 }, std::span{ &cpci, 1 }, loc); !res) {
 			return { expected_error, res.error() };
 		}

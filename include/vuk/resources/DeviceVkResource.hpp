@@ -19,9 +19,9 @@ namespace vuk {
 
 		void deallocate_command_buffers(std::span<const CommandBufferAllocation> dst) override;
 
-		Result<void, AllocateException> allocate_commandpools(std::span<VkCommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException> allocate_command_pools(std::span<CommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) override;
 
-		void deallocate_commandpools(std::span<const VkCommandPool> src) override;
+		void deallocate_command_pools(std::span<const CommandPool> src) override;
 
 		Result<void, AllocateException> allocate_buffers(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) override;
 
