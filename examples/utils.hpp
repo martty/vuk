@@ -111,7 +111,7 @@ namespace util {
 		size_t file_size = (size_t)input.tellg();
 		std::vector<uint32_t> buffer(file_size / sizeof(uint32_t));
 		input.seekg(0);
-		input.read(reinterpret_cast<char *>(buffer.data()), file_size);
+		input.read(reinterpret_cast<char*>(buffer.data()), file_size);
 		return buffer;
 	}
 }

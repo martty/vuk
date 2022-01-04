@@ -19,6 +19,9 @@ namespace vuk {
 		size_t id;
 	};
 
+	template<class T>
+	struct Future;
+
 	enum class DomainFlagBits {
 		eNone = 0,
 		eHost = 1 << 0,
@@ -202,36 +205,8 @@ namespace vuk {
 		bool poll_upload(TransientSubmitStub pending);
 
 		Texture allocate_texture(Allocator& allocator, ImageCreateInfo ici);
-		std::pair<Texture, TransferStub> create_texture(Allocator& allocator, Format format, Extent3D extents, void* data, bool generate_mips = false);
 
 		size_t get_allocation_size(Buffer);
-
-		/// @brief Allocates & fills a buffer with explicitly managed lifetime
-		/// @param mem_usage Where to allocate the buffer (host visible buffers will be automatically mapped)
-		/// @param buffer_usage How this buffer will be used (since data is provided, TransferDst is added to the flags)
-		/// @return The allocated Buffer
-		template<class T>
-		std::pair<Unique<BufferCrossDevice>, TransferStub> create_buffer_cross_device(Allocator& allocator, MemoryUsage mem_usage, std::span<T> data) {
-			Unique<BufferCrossDevice> buf(allocator);
-			BufferCreateInfo bci{ mem_usage, sizeof(T) * data.size(), 1 };
-			auto ret = allocator.allocate_buffers(std::span{ &*buf, 1 }, std::span{ &bci, 1 }); // TODO: dropping error
-			memcpy(buf->mapped_ptr, data.data(), data.size_bytes());
-			return { std::move(buf), TransferStub{0} };
-		}
-
-		template<class T>
-		std::pair<Unique<BufferGPU>, TransferStub> create_buffer_gpu(Allocator& allocator, std::span<T> data) {
-			Unique<BufferGPU> buf(allocator);
-			BufferCreateInfo bci{ MemoryUsage::eGPUonly, sizeof(T) * data.size(), 1 };
-			auto ret = allocator.allocate_buffers(std::span{ &*buf, 1 }, std::span{ &bci, 1 }); // TODO: dropping error
-			auto stub = upload(allocator, *buf, data);
-			return { std::move(buf), stub };
-		}
-
-		/*
-		*  These uploads should also put the fence/sync onto the allocator, otherwise what happens here is not safe
-		*  For now we just immediately wait, which is also safe but bad
-		*/
 
 		template<class T>
 		TransferStub upload(Allocator& allocator, Buffer dst, std::span<T> data) {
@@ -381,11 +356,43 @@ namespace vuk {
 	}
 }
 
+#include "vuk/Exception.hpp"
 // utility functions
 namespace vuk {
 	struct ExecutableRenderGraph;
+	Result<void> link_execute_submit(Allocator& allocator, std::span<std::pair<Allocator*, struct RenderGraph*>> rgs);
+	Result<void> execute_submit(Allocator& allocator, std::span<std::pair<Allocator*, ExecutableRenderGraph*>> rgs, std::vector<std::pair<SwapchainRef, size_t>> swapchains_with_indexes, VkSemaphore present_rdy, VkSemaphore render_complete);
 	Result<void> execute_submit_and_present_to_one(Allocator& nalloc, ExecutableRenderGraph&& rg, SwapchainRef swapchain);
 	Result<void> execute_submit_and_wait(Allocator& nalloc, ExecutableRenderGraph&& rg);
+
+	struct FutureBase;
+
+	template<class T>
+	int get_allocator(T&) {
+		return 0;
+	}
+
+	template<class... Args>
+	Result<void> wait_for_futures(Allocator& alloc, Args&... futs) {
+		std::array controls = { futs.control.get()...};
+		std::array rgs = { futs.rg... };
+		std::vector<std::pair<Allocator*, RenderGraph*>> rgs_to_run;
+		for (uint64_t i = 0; i < controls.size(); i++) {
+			auto& control = controls[i];
+			if (control->status == FutureBase::Status::eInputAttached || control->status == FutureBase::Status::eInitial) {
+				return { expected_error };
+			} else if (control->status == FutureBase::Status::eHostAvailable || control->status == FutureBase::Status::eSubmitted) {
+				continue;
+			} else {
+				rgs_to_run.emplace_back(&control->get_allocator(), rgs[i]);
+				control->status = FutureBase::Status::eSubmitted;
+			}
+		}
+
+		VUK_DO_OR_RETURN(link_execute_submit(alloc, std::span(rgs_to_run)));
+		alloc.get_context().wait_idle();
+		return { expected_value };
+	}
 
 	SampledImage make_sampled_image(ImageView iv, SamplerCreateInfo sci);
 

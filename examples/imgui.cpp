@@ -3,6 +3,7 @@
 #include "vuk/CommandBuffer.hpp"
 #include "vuk/RenderGraph.hpp"
 #include "vuk/AllocatorHelpers.hpp"
+#include "vuk/Partials.hpp"
 
 util::ImGuiData util::ImGui_ImplVuk_Init(vuk::Allocator& allocator) {
 	vuk::Context& ctx = allocator.get_context();
@@ -15,8 +16,9 @@ util::ImGuiData util::ImGui_ImplVuk_Init(vuk::Allocator& allocator) {
 	io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
 
 	ImGuiData data;
-	auto [tex, stub] = ctx.create_texture(allocator, vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)width, (unsigned)height, 1u }, pixels);
+	auto [tex, stub] = create_texture(allocator, vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)width, (unsigned)height, 1u }, pixels, false);
 	data.font_texture = std::move(tex);
+	stub.get();
 	ctx.debug.set_name(data.font_texture, "ImGui/font");
 	vuk::SamplerCreateInfo sci;
 	sci.minFilter = sci.magFilter = vuk::Filter::eLinear;
@@ -35,7 +37,6 @@ util::ImGuiData util::ImGui_ImplVuk_Init(vuk::Allocator& allocator) {
 		pci.add_spirv(std::move(fcont), fpath);
 		ctx.create_named_pipeline("imgui", pci);
 	}
-	ctx.wait_all_transfers(allocator);
 	return data;
 }
 
@@ -90,7 +91,6 @@ void util::ImGui_ImplVuk_Render(vuk::Allocator& allocator, vuk::RenderGraph& rg,
 			resources.emplace_back(vuk::Resource{ si.rg_attachment.attachment_name, vuk::Resource::Type::eImage, vuk::Access::eFragmentSampled });
 		}
 	}
-
 	vuk::Pass pass{
 		.name = "imgui",
 		.resources = std::move(resources),

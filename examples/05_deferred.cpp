@@ -43,10 +43,11 @@ namespace {
 
 			// We set up the cube data, same as in example 02_cube
 
-			auto [bverts, stub1] = ctx.create_buffer_gpu(frame_allocator, std::span(&box.first[0], box.first.size()));
-			auto verts = *bverts;
-			auto [binds, stub2] = ctx.create_buffer_gpu(frame_allocator, std::span(&box.second[0], box.second.size()));
-			auto inds = *binds;
+			auto [vert_buf, vert_fut] = create_buffer_gpu(frame_allocator, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.first));
+			auto verts = *vert_buf;
+			auto [ind_buf, ind_fut] = create_buffer_gpu(frame_allocator, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.second));
+			auto inds = *ind_buf;
+
 			struct VP {
 				glm::mat4 view;
 				glm::mat4 proj;
@@ -56,9 +57,10 @@ namespace {
 			vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 1.f, 10.f);
 			vp.proj[1][1] *= -1;
 
-			auto [buboVP, stub3] = ctx.create_buffer_cross_device(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, std::span(&vp, 1));
+			auto [buboVP, uboVP_fut] = create_buffer_cross_device(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, std::span(&vp, 1));
 			auto uboVP = *buboVP;
-			ctx.wait_all_transfers(frame_allocator);
+
+			vuk::wait_for_futures(frame_allocator, vert_fut, ind_fut, uboVP_fut);
 
 			vuk::RenderGraph rg;
 			// Here we will render the cube into 3 offscreen textures
@@ -126,12 +128,12 @@ namespace {
 
 			// The intermediate offscreen textures need to be bound
 			// The "internal" rendering resolution is set here for one attachment, the rest infers from it
-			rg.attach_managed("05_position", vuk::Format::eR16G16B16A16Sfloat, vuk::Dimension2D::absolute(300, 300), vuk::Samples::e1, vuk::ClearColor{ 1.f,0.f,0.f,0.f });
-			rg.attach_managed("05_normal", vuk::Format::eR16G16B16A16Sfloat, vuk::Dimension2D::framebuffer(), vuk::Samples::e1, vuk::ClearColor{ 0.f, 1.f, 0.f, 0.f });
-			rg.attach_managed("05_color", vuk::Format::eR8G8B8A8Unorm, vuk::Dimension2D::framebuffer(), vuk::Samples::e1, vuk::ClearColor{ 0.f, 0.f, 1.f, 0.f });
+			rg.attach_managed("05_position", vuk::Format::eR16G16B16A16Sfloat, vuk::Dimension2D::absolute(300, 300), vuk::Samples::e1, vuk::ClearColor{ 1.f, 0.f, 0.f, 0.f });
+			rg.attach_managed("05_normal", vuk::Format::eR16G16B16A16Sfloat, vuk::Dimension2D::framebuffer(), vuk::Samples::Framebuffer{}, vuk::ClearColor{ 0.f, 1.f, 0.f, 0.f });
+			rg.attach_managed("05_color", vuk::Format::eR8G8B8A8Unorm, vuk::Dimension2D::framebuffer(), vuk::Samples::Framebuffer{}, vuk::ClearColor{ 0.f, 0.f, 1.f, 0.f });
 			rg.attach_managed("05_depth", vuk::Format::eD32Sfloat, vuk::Dimension2D::framebuffer(), vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
 
-			return rg;
+			return vuk::Future<vuk::ImageAttachment>{frame_allocator, std::make_unique<vuk::RenderGraph>(std::move(rg)), "05_deferred_final"};
 		}
 	};
 

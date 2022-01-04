@@ -3,12 +3,32 @@
 #include "vuk/AllocatorHelpers.hpp"
 
 namespace vuk {
-	Result<void> execute_submit(Allocator& allocator, ExecutableRenderGraph&& rg, std::vector<std::pair<SwapchainRef, size_t>> swapchains_with_indexes, VkSemaphore present_rdy, VkSemaphore render_complete) {
-		Context& ctx = allocator.get_context();
-		auto sbundle = rg.execute(allocator, swapchains_with_indexes);
-		if (!sbundle) {
-			return { expected_error, sbundle.error() };
+	Result<void> link_execute_submit(Allocator& allocator, std::span<std::pair<Allocator*, RenderGraph*>> rgs) {
+		std::vector<ExecutableRenderGraph> ergs;
+		std::vector<std::pair<Allocator*, ExecutableRenderGraph*>> ptrvec;
+		ergs.reserve(rgs.size());
+		for (auto& [alloc, rg] : rgs) {
+			ergs.emplace_back(std::move(*rg).link(alloc->get_context(), {}));
+			ptrvec.emplace_back(alloc, &ergs.back());
 		}
+
+		return execute_submit(allocator, std::span(ptrvec), {}, {}, {});
+	}
+
+	Result<SubmitBundle> execute(std::span<std::pair<Allocator*, ExecutableRenderGraph*>> ergs, std::vector<std::pair<SwapchainRef, size_t>> swapchains_with_indexes) {
+		SubmitBundle bundle;
+		for (auto& [alloc, rg] : ergs) {
+			auto sbundle = rg->execute(*alloc, swapchains_with_indexes);
+			if (!sbundle) {
+				return { expected_error, sbundle.error() };
+			}
+			bundle.batches.insert(bundle.batches.end(), sbundle->batches.begin(), sbundle->batches.end()); // TODO: this is incorrect
+		}
+		return { expected_value, bundle };
+	}
+
+	Result<void> submit(Allocator& allocator, SubmitBundle bundle, VkSemaphore present_rdy, VkSemaphore render_complete) {
+		Context& ctx = allocator.get_context();
 
 		auto domain_to_queue_index = [](DomainFlagBits domain) -> uint64_t {
 			auto queue_only = (DomainFlagBits)(domain & DomainFlagBits::eQueueMask).m_mask;
@@ -41,7 +61,7 @@ namespace vuk {
 		};
 
 		vuk::DomainFlags used_domains;
-		for (auto& batch : sbundle->batches) {
+		for (auto& batch : bundle.batches) {
 			used_domains |= batch.domain;
 		}
 
@@ -62,7 +82,7 @@ namespace vuk {
 			transfer_lock = std::unique_lock{ ctx.transfer_queue->queue_lock };
 		}
 
-		for (SubmitBatch& batch : sbundle->batches) {
+		for (SubmitBatch& batch : bundle.batches) {
 			auto domain = batch.domain;
 			Queue& queue = domain_to_queue(ctx, domain);
 			for (uint64_t i = 0; i < batch.submits.size(); i++) {
@@ -110,7 +130,7 @@ namespace vuk {
 				}
 				si.pSignalSemaphoreInfos = signal_semas.data();
 				si.signalSemaphoreInfoCount = (uint32_t)signal_semas.size();
-				VUK_DO_OR_RETURN(queue.submit(std::span{ &si, 1 }, *fence));
+				VUK_DO_OR_RETURN(queue.submit(std::span{ &si, 1 }, *fence)); // TODO: one submit per batch
 
 				for (auto& fut : submit_info.future_signals) {
 					fut->status = FutureBase::Status::eSubmitted;
@@ -119,6 +139,16 @@ namespace vuk {
 		}
 
 		return { expected_value };
+	}
+
+
+	// assume rgs are independent - they don't reference eachother
+	Result<void> execute_submit(Allocator& allocator, std::span<std::pair<Allocator*, ExecutableRenderGraph*>> rgs, std::vector<std::pair<SwapchainRef, size_t>> swapchains_with_indexes, VkSemaphore present_rdy, VkSemaphore render_complete) {
+		auto bundle = execute(rgs, swapchains_with_indexes);
+		if (!bundle) {
+			return { expected_error, bundle.error() };
+		}
+		return submit(allocator, *bundle, present_rdy, render_complete);
 	}
 
 	Result<void> execute_submit_and_present_to_one(Allocator& allocator, ExecutableRenderGraph&& rg, SwapchainRef swapchain) {
@@ -143,7 +173,8 @@ namespace vuk {
 
 		std::vector<std::pair<SwapchainRef, size_t>> swapchains_with_indexes = { { swapchain, image_index } };
 
-		VUK_DO_OR_RETURN(execute_submit(allocator, std::move(rg), swapchains_with_indexes, present_rdy, render_complete));
+		std::pair v = { &allocator, &rg };
+		VUK_DO_OR_RETURN(execute_submit(allocator, std::span{ &v, 1 }, swapchains_with_indexes, present_rdy, render_complete));
 
 		VkPresentInfoKHR pi{ .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
 		pi.swapchainCount = 1;
@@ -161,8 +192,9 @@ namespace vuk {
 
 	Result<void> execute_submit_and_wait(Allocator& allocator, ExecutableRenderGraph&& rg) {
 		Context& ctx = allocator.get_context();
-
-		assert(0);
+		std::pair v = { &allocator, &rg };
+		VUK_DO_OR_RETURN(execute_submit(allocator, std::span{ &v, 1 }, {}, {}, {}));
+		ctx.wait_idle(); // TODO:
 		return { expected_value };
 	}
 
@@ -224,7 +256,9 @@ namespace vuk {
 			//allocator->get_context().wait_for_queues();
 			return { expected_value, control->get_result<T>() };
 		} else {
-			VUK_DO_OR_RETURN(execute_submit(*control->allocator, std::move(*rg).link(control->allocator->get_context(), {}), {}, {}, {}));
+			auto erg = std::move(*rg).link(control->allocator->get_context(), {});
+			std::pair v = { control->allocator, &erg };
+			VUK_DO_OR_RETURN(execute_submit(*control->allocator, std::span{ &v, 1 }, {}, {}, {}));
 			control->allocator->get_context().wait_idle(); // TODO:
 			control->status = FutureBase::Status::eHostAvailable;
 			return { expected_value, control->get_result<T>() };
@@ -239,7 +273,9 @@ namespace vuk {
 			return { expected_value }; // nothing to do
 		} else {
 			control->status = FutureBase::Status::eSubmitted;
-			VUK_DO_OR_RETURN(execute_submit(*control->allocator, std::move(*rg).link(control->allocator->get_context(), {}), {}, {}, {}));
+			auto erg = std::move(*rg).link(control->allocator->get_context(), {});
+			std::pair v = { control->allocator, &erg };
+			VUK_DO_OR_RETURN(execute_submit(*control->allocator, std::span{ &v, 1 }, {}, {}, {}));
 			return { expected_value };
 		}
 	}

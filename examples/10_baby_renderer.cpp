@@ -92,9 +92,9 @@ namespace {
 			auto doge_image = stbi_load("../../examples/doge.png", &x, &y, &chans, 4);
 
 			// Similarly to buffers, we allocate the image and enqueue the upload
-			auto [tex, _] = ctx.create_texture(allocator, vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, doge_image);
+			auto [tex, tex_fut] = create_texture(allocator, vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, doge_image, false);
 			texture_of_doge = std::move(tex);
-			ctx.wait_all_transfers(allocator);
+			tex_fut.get();
 			stbi_image_free(doge_image);
 
 			// Let's create two variants of the doge image (like in example 09)
@@ -156,15 +156,20 @@ namespace {
 
 			// Create meshes
 			cube_mesh.emplace();
-			cube_mesh->vertex_buffer = ctx.create_buffer_gpu(allocator, std::span(&box.first[0], box.first.size())).first;
-			cube_mesh->index_buffer = ctx.create_buffer_gpu(allocator, std::span(&box.second[0], box.second.size())).first;
+			auto [vert_buf, vert_fut] = create_buffer_gpu(allocator, vuk::DomainFlagBits::eTransferOnTransfer, std::span(box.first));
+			cube_mesh->vertex_buffer = std::move(vert_buf);
+			auto [idx_buf, idx_fut] = create_buffer_gpu(allocator, vuk::DomainFlagBits::eTransferOnTransfer, std::span(box.second));
+			cube_mesh->index_buffer = std::move(idx_buf);
 			cube_mesh->index_count = (uint32_t)box.second.size();
 
 			quad_mesh.emplace();
-			quad_mesh->vertex_buffer = ctx.create_buffer_gpu(allocator, std::span(&box.first[0], 6)).first;
-			quad_mesh->index_buffer = ctx.create_buffer_gpu(allocator, std::span(&box.second[0], 6)).first;
+			auto [vert_buf2, vert_fut2] = create_buffer_gpu(allocator, vuk::DomainFlagBits::eTransferOnTransfer, std::span(&box.first[0], 6));
+			quad_mesh->vertex_buffer = std::move(vert_buf2);
+			auto [idx_buf2, idx_fut2] = create_buffer_gpu(allocator, vuk::DomainFlagBits::eTransferOnTransfer, std::span(&box.second[0], 6));
+			quad_mesh->index_buffer = std::move(idx_buf2);
 			quad_mesh->index_count = 6;
-			ctx.wait_all_transfers(allocator);
+			
+			vuk::wait_for_futures(allocator, vert_fut, idx_fut, vert_fut2, idx_fut2);
 
 			// Create the pipelines
 			// A "normal" pipeline
@@ -243,9 +248,9 @@ namespace {
 			vp.proj[1][1] *= -1;
 
 			// Upload view & projection
-			auto [buboVP, stub3] = ctx.create_buffer_cross_device(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, std::span(&vp, 1));
+			auto [buboVP, uboVP_fut] = create_buffer_cross_device(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, std::span(&vp, 1));
 			auto uboVP = *buboVP;
-			ctx.wait_all_transfers(frame_allocator);
+			uboVP_fut.get(); // no-op
 
 			// Do a terrible simulation step
 			// All objects are attracted to the origin
@@ -303,7 +308,8 @@ namespace {
 			angle += 10.f * ImGui::GetIO().DeltaTime;
 
 			rg.attach_managed("10_depth", vuk::Format::eD32Sfloat, vuk::Dimension2D::framebuffer(), vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
-			return rg;
+			
+			return vuk::Future<vuk::ImageAttachment>{frame_allocator, std::make_unique<vuk::RenderGraph>(std::move(rg)), "10_baby_renderer_final"};
 	},
 		// Perform cleanup for the example
 		.cleanup = [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {

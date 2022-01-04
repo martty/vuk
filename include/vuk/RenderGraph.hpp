@@ -120,8 +120,8 @@ namespace vuk {
 
 	struct Pass {
 		Name name;
-		DomainFlags execute_on;
-		//Domain preferred;
+		DomainFlags execute_on = DomainFlagBits::eGraphicsOnGraphics; // TODO: default or not?
+
 		bool use_secondary_command_buffers = false;
 
 		std::vector<Resource> resources;

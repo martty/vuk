@@ -24,6 +24,7 @@ namespace vuk {
 		debug(*this) {
 		impl = new ContextImpl(*this);
 		auto queueSubmit2KHR = (PFN_vkQueueSubmit2KHR)vkGetDeviceProcAddr(device, "vkQueueSubmit2KHR");
+		assert(queueSubmit2KHR != nullptr);
 		if (params.graphics_queue != VK_NULL_HANDLE && params.graphics_queue_family_index != VK_QUEUE_FAMILY_IGNORED) {
 			TimelineSemaphore ts;
 			impl->device_vk_resource.allocate_timeline_semaphores(std::span{ &ts, 1 }, {});
@@ -673,21 +674,6 @@ namespace vuk {
 		tex.format = ici.format;
 		tex.sample_count = ici.samples;
 		return tex;
-	}
-
-	std::pair<Texture, TransferStub> Context::create_texture(Allocator& allocator, Format format, Extent3D extent, void* data, bool generate_mips) {
-		ImageCreateInfo ici;
-		ici.format = format;
-		ici.extent = extent;
-		ici.samples = Samples::e1;
-		ici.initialLayout = ImageLayout::eUndefined;
-		ici.tiling = ImageTiling::eOptimal;
-		ici.usage = ImageUsageFlagBits::eTransferRead | ImageUsageFlagBits::eTransferWrite | ImageUsageFlagBits::eSampled;
-		ici.mipLevels = generate_mips ? (uint32_t)log2f((float)std::max(extent.width, extent.height)) + 1 : 1;
-		ici.arrayLayers = 1;
-		auto tex = allocate_texture(allocator, ici);
-		auto stub = upload(allocator, *tex.image, format, extent, 0, std::span<std::byte>((std::byte*)data, compute_image_size(format, extent)), generate_mips);
-		return { std::move(tex), stub };
 	}
 
 	void Context::destroy(const RGImage& image) {

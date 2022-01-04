@@ -18,77 +18,6 @@
 * Check out the framework (example_runner_*) files if interested!
 */
 
-namespace vuk {
-	Future<Buffer> host_data_to_buffer(Allocator& allocator, DomainFlagBits copy_domain, Buffer buffer, void* src_data, size_t size) {
-		// host-mapped buffers just get memcpys
-		if (buffer.mapped_ptr) {
-			memcpy(buffer.mapped_ptr, src_data, size);
-			return { allocator, std::move(buffer) };
-		}
-
-		auto src = *allocate_buffer_cross_device(allocator, BufferCreateInfo{ vuk::MemoryUsage::eCPUonly, size, 1 });
-		::memcpy(src->mapped_ptr, src_data, size);
-
-		std::unique_ptr<RenderGraph> rgp = std::make_unique<RenderGraph>();
-		rgp->add_pass({
-			.name = "BUFFER UPLOAD",
-			.execute_on = copy_domain,
-			.resources = {"_dst"_buffer >> vuk::Access::eTransferWrite, "_src"_buffer >> vuk::Access::eTransferRead},
-			.execute = [size](vuk::CommandBuffer& command_buffer) {
-				command_buffer.copy_buffer("_src", "_dst", size);
-			} });
-		rgp->attach_buffer("_src", *src, vuk::Access::eNone, vuk::Access::eNone);
-		rgp->attach_buffer("_dst", buffer, vuk::Access::eNone, vuk::Access::eNone);
-		return { allocator, std::move(rgp), "_dst+" };
-	}
-
-	template<class T>
-	Future<Buffer> host_data_to_buffer(Allocator& allocator, DomainFlagBits copy_domain, Buffer dst, std::span<T> data) {
-		return host_data_to_buffer(allocator, copy_domain, dst, data.data(), data.size_bytes());
-	}
-
-	Future<ImageAttachment> host_data_to_image(Allocator& allocator, DomainFlagBits copy_domain, ImageAttachment image, void* src_data) {
-		size_t alignment = format_to_texel_block_size(image.format);
-		size_t size = compute_image_size(image.format, static_cast<Extent3D>(image.extent));
-		auto src = *allocate_buffer_cross_device(allocator, BufferCreateInfo{ vuk::MemoryUsage::eCPUonly, size, alignment });
-		::memcpy(src->mapped_ptr, src_data, size);
-
-		BufferImageCopy bc;
-		bc.imageOffset = { 0, 0, 0 };
-		bc.bufferRowLength = 0;
-		bc.bufferImageHeight = 0;
-		bc.imageExtent = static_cast<Extent3D>(image.extent);
-		bc.imageSubresource.aspectMask = format_to_aspect(image.format);
-		bc.imageSubresource.mipLevel = image.base_level;
-		bc.imageSubresource.baseArrayLayer = image.base_layer;
-		assert(image.layer_count == 1); // unsupported yet
-		bc.imageSubresource.layerCount = image.layer_count;
-
-		std::unique_ptr<RenderGraph> rgp = std::make_unique<RenderGraph>();
-		rgp->add_pass({
-			.name = "IMAGE UPLOAD",
-			.execute_on = copy_domain,
-			.resources = {"_dst"_image >> vuk::Access::eTransferWrite, "_src"_buffer >> vuk::Access::eTransferRead},
-			.execute = [bc](vuk::CommandBuffer& command_buffer) {
-				command_buffer.copy_buffer_to_image("_src", "_dst", bc);
-			} });
-		rgp->attach_buffer("_src", *src, vuk::Access::eNone, vuk::Access::eNone);
-		rgp->attach_image("_dst", image, vuk::Access::eNone, vuk::Access::eNone);
-		return { allocator, std::move(rgp), "_dst+" };
-	}
-
-	Future<ImageAttachment> transition(DomainFlagBits domain, Future<ImageAttachment> image, Access dst_access) {
-		auto& allocator = image.get_allocator();
-		std::unique_ptr<RenderGraph> rgp = std::make_unique<RenderGraph>();
-		rgp->add_pass({
-			.name = "TRANSITION",
-			.execute_on = domain,
-			.resources = {"_src"_image >> dst_access >> "_src+"}});
-		rgp->attach_in("_src", std::move(image), vuk::Access::eNone);
-		return { allocator, std::move(rgp), "_src+"};
-	}
-}
-
 namespace {
 	float time = 0.f;
 	auto box = util::generate_cube();
@@ -130,22 +59,16 @@ namespace {
 			int chans;
 			auto doge_image = stbi_load("../../examples/doge.png", &x, &y, &chans, 4);
 
-			vuk::ImageCreateInfo ici{
-				.format = vuk::Format::eR8G8B8A8Srgb,
-				.extent = { (unsigned)x, (unsigned)y, 1 },
-				.usage = vuk::ImageUsageFlagBits::eTransferWrite | vuk::ImageUsageFlagBits::eSampled
-			};
-			texture_of_doge.emplace(ctx.allocate_texture(allocator, ici));
-
-			auto upload_doge = vuk::host_data_to_image(allocator, vuk::DomainFlagBits::eTransferOnTransfer, vuk::ImageAttachment::from_texture(*texture_of_doge), doge_image);
-			texture_of_doge_fut = vuk::transition(vuk::DomainFlagBits::eTransferOnTransfer, std::move(upload_doge), vuk::Access::eFragmentSampled);
-			texture_of_doge_fut.get();
+			auto [tex, tex_fut] = create_texture(allocator, vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, doge_image, false);
+			texture_of_doge = std::move(tex);
+			tex_fut.get();
 
 			// init scrambling buffer
-			scramble_buf = *allocate_buffer_gpu(allocator, { vuk::MemoryUsage::eGPUonly, sizeof(unsigned) * x * y, 1 });
-			std::vector<unsigned> indices(x * y);
+			std::vector<unsigned> indices(x* y);
 			std::iota(indices.begin(), indices.end(), 0);
 			std::shuffle(indices.begin(), indices.end(), g);
+
+			scramble_buf = *allocate_buffer_gpu(allocator, { vuk::MemoryUsage::eGPUonly, sizeof(unsigned) * x * y, 1 });
 
 			//// <----------------->
 			// make a GPU future

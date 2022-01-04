@@ -195,12 +195,12 @@ namespace vuk {
 		bool is_waited_on = false;
 		std::vector<Resource, short_alloc<Resource, 16>> inputs;
 		uint32_t bloom_resolved_inputs = 0;
-		std::vector<uint32_t, short_alloc<uint32_t, 16>> resolved_input_name_hashes;
+		std::vector<Name, short_alloc<Name, 16>> input_names;
 		uint32_t bloom_outputs = 0;
 		uint32_t bloom_write_inputs = 0;
 		std::vector<Resource, short_alloc<Resource, 16>> outputs;
-		std::vector<uint32_t, short_alloc<uint32_t, 16>> output_name_hashes;
-		std::vector<uint32_t, short_alloc<uint32_t, 16>> write_input_name_hashes;
+		std::vector<Name, short_alloc<Name, 16>> output_names;
+		std::vector<Name, short_alloc<Name, 16>> write_input_names;
 
 		std::vector<FutureBase*> future_signals;
 

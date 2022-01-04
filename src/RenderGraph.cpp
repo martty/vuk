@@ -36,12 +36,13 @@ namespace vuk {
 			p.pass.name = joiner.append(p.pass.name);
 			for (auto& r : p.pass.resources) {
 				r.name = joiner.append(r.name);
-				r.out_name = joiner.append(r.out_name);
+				r.out_name = r.out_name.is_invalid() ? Name{} : joiner.append(r.out_name);
 			}
+			robin_hood::unordered_flat_map<Name, Name> resolves;
 			for (auto& [n1, n2] : p.pass.resolves) {
-				n1 = joiner.append(n1);
-				n2 = joiner.append(n2);
+				resolves.emplace(joiner.append(n1), joiner.append(n2));
 			}
+			p.pass.resolves = resolves;
 			impl->passes.emplace_back(*impl->arena_, Pass{}) = std::move(p);
 		}
 
@@ -68,17 +69,17 @@ namespace vuk {
 				auto hashed_in_name = ::hash::fnv1a::hash(res.name.to_sv().data(), res.name.to_sv().size(), hash::fnv1a::default_offset_basis);
 
 				pif.inputs.emplace_back(res);
-				pif.resolved_input_name_hashes.emplace_back(hashed_in_name);
+				pif.input_names.emplace_back(res.name);
 				pif.bloom_resolved_inputs |= hashed_in_name;
 				if (!res.out_name.is_invalid()) {
 					pif.bloom_outputs |= hashed_out_name;
-					pif.output_name_hashes.emplace_back(hashed_out_name);
+					pif.output_names.emplace_back(res.out_name);
 				}
 
 				if (is_write_access(res.ia) || res.ia == eAcquire || res.ia == eRelease) {
 					assert(!impl->poisoned_names.contains(res.name)); // we have poisoned this name because a write has already consumed it
 					pif.bloom_write_inputs |= hashed_in_name;
-					pif.write_input_name_hashes.emplace_back(hashed_in_name);
+					pif.write_input_names.emplace_back(res.name);
 					pif.outputs.emplace_back(res);
 					impl->poisoned_names.emplace(res.name);
 				}
@@ -88,6 +89,7 @@ namespace vuk {
 
 	void RenderGraph::schedule_intra_queue(std::span<PassInfo> passes, const RenderGraph::CompileOptions& compile_options) {
 		// sort passes if requested
+		//printf("-------------");
 		if (passes.size() > 1 && compile_options.reorder_passes) {
 			topological_sort(passes.begin(), passes.end(), [](const auto& p1, const auto& p2) {
 				if (&p1 == &p2) {
@@ -95,9 +97,10 @@ namespace vuk {
 				}
 				// p2 uses an input of p1 -> p2 after p1
 				if ((p1.bloom_outputs & p2.bloom_resolved_inputs) != 0) {
-					for (auto& o : p1.output_name_hashes) {
-						for (auto& i : p2.resolved_input_name_hashes) {
+					for (auto& o : p1.output_names) {
+						for (auto& i : p2.input_names) {
 							if (o == i) {
+								//printf("\"%s\" -> \"%s\" [label=\"%s\"];\n", p1.pass.name.c_str(), p2.pass.name.c_str(), i.c_str());
 								return true; // p2 is ordered after p1
 							}
 						}
@@ -105,9 +108,10 @@ namespace vuk {
 				}
 				// p2 writes to an input and p1 reads from the same input -> p2 after p1
 				if ((p1.bloom_resolved_inputs & p2.bloom_write_inputs) != 0) {
-					for (auto& o : p1.resolved_input_name_hashes) {
-						for (auto& i : p2.write_input_name_hashes) {
+					for (auto& o : p1.input_names) {
+						for (auto& i : p2.write_input_names) {
 							if (o == i) {
+								//printf("\"%s\" -> \"%s\" [label=\"%s\"];\n", p1.pass.name.c_str(), p2.pass.name.c_str(), i.c_str());
 								return true; // p2 is ordered after p1
 							}
 						}
@@ -128,8 +132,8 @@ namespace vuk {
 					bool could_execute_before = false;
 
 					if ((p1.bloom_outputs & p2.bloom_resolved_inputs) != 0) {
-						for (auto& o : p1.output_name_hashes) {
-							for (auto& in : p2.resolved_input_name_hashes) {
+						for (auto& o : p1.output_names) {
+							for (auto& in : p2.input_names) {
 								if (o == in) {
 									could_execute_after = true;
 									break;
@@ -139,8 +143,8 @@ namespace vuk {
 					}
 
 					if ((p2.bloom_outputs & p1.bloom_resolved_inputs) != 0) {
-						for (auto& o : p2.output_name_hashes) {
-							for (auto& in : p1.resolved_input_name_hashes) {
+						for (auto& o : p2.output_names) {
+							for (auto& in : p1.input_names) {
 								if (o == in) {
 									could_execute_before = true;
 									break;
@@ -169,7 +173,9 @@ namespace vuk {
 			for (auto& res : passinfo.pass.resources) {
 				// for read or write, we add source to use chain
 				auto resolved_name = impl->resolve_name(res.name);
-				add_alias(res.out_name, res.name);
+				if (!res.out_name.is_invalid()) {
+					add_alias(res.out_name, res.name);
+				}
 			}
 		}
 
@@ -195,7 +201,10 @@ namespace vuk {
 					chain.back().pass->domain = passinfo.domain;
 				} else if (chain.size() > 0 && chain.back().use.original == Access::eRelease && res.ia == Access::eAcquire){
 					// release-acquire pair
-					chain.pop_back(); // remove both
+					// mark these passes to be excluded
+					chain.back().pass->domain = DomainFlagBits::eNone;
+					passinfo.domain = DomainFlagBits::eNone;
+					chain.pop_back(); // remove both from use chain
 				} else if (res.ia == Access::eRelease) { // release of resource - this must happen on the previous use domain
 					assert(chain.size() > 0); // release cannot head a use chain
 					passinfo.domain = it->second.back().domain;
@@ -314,7 +323,7 @@ namespace vuk {
 	void RenderGraph::resolve_resource_into(Name resolved_name_src, Name resolved_name_dst, Name ms_name) {
 		add_pass({
 			.resources = {
-				Resource{ms_name, Resource::Type::eImage, eColorResolveRead},
+				Resource{ms_name, Resource::Type::eImage, eColorResolveRead, {}},
 				Resource{resolved_name_src, Resource::Type::eImage, eColorResolveWrite, resolved_name_dst}
 			},
 			.resolves = {{ms_name, resolved_name_src}}
@@ -552,7 +561,7 @@ namespace vuk {
 					continue;
 				}
 
-				bool crosses_queue = (left.domain != DomainFlagBits::eNone && right.domain != DomainFlagBits::eNone && left.domain != right.domain);
+				bool crosses_queue = (left.domain != DomainFlagBits::eNone && right.domain != DomainFlagBits::eNone && (left.domain & DomainFlagBits::eQueueMask) != (right.domain & DomainFlagBits::eQueueMask));
 				if (crosses_queue) {
 					uint32_t queue_idx = domain_to_queue_index(left.domain);
 
@@ -734,7 +743,7 @@ namespace vuk {
 					fut.get_result<Buffer>() = buffer_info.buffer; // TODO: when we have managed buffers, then this is too soon to attach
 				}
 
-				bool crosses_queue = (left.domain != DomainFlagBits::eNone && right.domain != DomainFlagBits::eNone && left.domain != right.domain);
+				bool crosses_queue = (left.domain != DomainFlagBits::eNone && right.domain != DomainFlagBits::eNone && (left.domain & DomainFlagBits::eQueueMask) != (right.domain & DomainFlagBits::eQueueMask));
 				if (crosses_queue) {
 					uint32_t queue_idx = domain_to_queue_index(left.domain);
 

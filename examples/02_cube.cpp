@@ -34,11 +34,11 @@ namespace {
 			// The context allocates a buffer in device-local, non-host visible memory
 			// And enqueues a transfer operation, which will copy the given data
 			// Finally it returns a vuk::Buffer, which holds the info for the allocation
-			// And a TransferStub, which can be used to query for the transfer status
-			auto [bverts, stub1] = ctx.create_buffer_gpu(frame_allocator, std::span(&box.first[0], box.first.size()));
-			auto verts = *bverts;
-			auto [binds, stub2] = ctx.create_buffer_gpu(frame_allocator, std::span(&box.second[0], box.second.size()));
-			auto inds = *binds;
+			auto [vert_buf, vert_fut] = create_buffer_gpu(frame_allocator, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.first));
+			auto verts = *vert_buf;
+			auto [ind_buf, ind_fut] = create_buffer_gpu(frame_allocator, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.second));
+			auto inds = *ind_buf;
+			
 			// This struct will represent the view-projection transform used for the cube
 			struct VP {
 				glm::mat4 view;
@@ -50,10 +50,10 @@ namespace {
 			vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 1.f, 10.f);
 			vp.proj[1][1] *= -1;
 			// Allocate and transfer view-projection transform
-			auto [buboVP, stub3] = ctx.create_buffer_cross_device(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, std::span(&vp, 1));
+			auto [buboVP, uboVP_fut] = create_buffer_cross_device(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, std::span(&vp, 1));
 			auto uboVP = *buboVP;
-			// For this example, we just request that all transfer finish before we continue
-			ctx.wait_all_transfers(frame_allocator);
+
+			vuk::wait_for_futures(frame_allocator, vert_fut, ind_fut, uboVP_fut);
 
 			vuk::RenderGraph rg;
 			rg.add_pass({
@@ -114,7 +114,7 @@ namespace {
 			// The angle is update to rotate the cube
 			angle += 360.f * ImGui::GetIO().DeltaTime;
 
-			return rg;
+			return vuk::Future<vuk::ImageAttachment>{frame_allocator, std::make_unique<vuk::RenderGraph>(std::move(rg)), "02_cube_final"};
 		}
 	};
 

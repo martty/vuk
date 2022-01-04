@@ -399,7 +399,7 @@ namespace vuk {
 		b.device_memory = std::get<VkDeviceMemory>(current_alloc);
 		b.offset = offset;
 		b.size = size;
-		b.mapped_ptr = std::get<std::byte*>(current_alloc) + offset;
+		b.mapped_ptr = std::get<std::byte*>(current_alloc) != nullptr ? std::get<std::byte*>(current_alloc) + offset : nullptr;
 		b.allocation_size = pool.block_size;
 
 		return b;

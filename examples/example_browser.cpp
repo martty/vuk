@@ -30,7 +30,7 @@ vuk::ExampleRunner::ExampleRunner() {
 			window = create_window_glfw("Vuk All Examples", false);
 			surface = create_surface_glfw(vkbinstance.instance, window);
 			selector.set_surface(surface)
-				.set_minimum_version(1, 0);
+				.set_minimum_version(1, 0).add_required_extension(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
 			auto phys_ret = selector.select();
 			if (!phys_ret.has_value()) {
 				// error
@@ -40,6 +40,7 @@ vuk::ExampleRunner::ExampleRunner() {
 
 			vkb::DeviceBuilder device_builder{ vkbphysical_device };
 			VkPhysicalDeviceVulkan12Features vk12features{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };
+			vk12features.timelineSemaphore = true;
 			vk12features.descriptorBindingPartiallyBound = true;
 			vk12features.descriptorBindingUpdateUnusedWhilePending = true;
 			vk12features.shaderSampledImageArrayNonUniformIndexing = true;
@@ -48,16 +49,19 @@ vuk::ExampleRunner::ExampleRunner() {
 			vk12features.hostQueryReset = true;
 			VkPhysicalDeviceVulkan11Features vk11features{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES };
 			vk11features.shaderDrawParameters = true;
-			auto dev_ret = device_builder.add_pNext(&vk12features).add_pNext(&vk11features).build();
+			VkPhysicalDeviceSynchronization2FeaturesKHR sync_feat{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR, .synchronization2 = true };
+			auto dev_ret = device_builder.add_pNext(&vk12features).add_pNext(&vk11features).add_pNext(&sync_feat).build();
 			if (!dev_ret.has_value()) {
 				// error
 			}
 			vkbdevice = dev_ret.value();
 			graphics_queue = vkbdevice.get_queue(vkb::QueueType::graphics).value();
 			auto graphics_queue_family_index = vkbdevice.get_queue_index(vkb::QueueType::graphics).value();
+			transfer_queue = vkbdevice.get_queue(vkb::QueueType::transfer).value();
+			auto transfer_queue_family_index = vkbdevice.get_queue_index(vkb::QueueType::transfer).value();
 			device = vkbdevice.device;
 
-			context.emplace(ContextCreateParameters{ instance, device, physical_device, graphics_queue, graphics_queue_family_index });
+			context.emplace(ContextCreateParameters{ instance, device, physical_device, graphics_queue, graphics_queue_family_index, VK_NULL_HANDLE, VK_QUEUE_FAMILY_IGNORED, transfer_queue, transfer_queue_family_index });
 			const unsigned num_inflight_frames = 3;
 			xdev_rf_alloc.emplace(*context, num_inflight_frames);
 			global.emplace(*xdev_rf_alloc);
@@ -80,7 +84,7 @@ void vuk::ExampleRunner::render() {
 		ImGui::Checkbox("All", &render_all);
 		ImGui::SameLine();
 
-		static vuk::Example* item_current = examples[0];            // Here our selection is a single pointer stored outside the object.
+		static vuk::Example* item_current = examples[7];            // Here our selection is a single pointer stored outside the object.
 		if (!render_all) {
 			if (ImGui::BeginCombo("Examples", item_current->name.data(), ImGuiComboFlags_None)) {
 				for (int n = 0; n < examples.size(); n++) {
@@ -100,12 +104,15 @@ void vuk::ExampleRunner::render() {
 		Allocator frame_allocator(xdev_frame_resource);
 		if (!render_all) { // render a single full window example
 			
-			auto rg = item_current->render(*this, frame_allocator);
+			auto fut = item_current->render(*this, frame_allocator);
 			ImGui::Render();
 			vuk::Name attachment_name = item_current->name;
-			util::ImGui_ImplVuk_Render(frame_allocator, rg, vuk::Name(std::string(item_current->name) + "_final"), "SWAPCHAIN", imgui_data, ImGui::GetDrawData(), sampled_images);
-			rg.attach_swapchain(attachment_name, swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
-			execute_submit_and_present_to_one(frame_allocator, std::move(rg).link(*context, vuk::RenderGraph::CompileOptions{}), swapchain);
+			fut.rg->attach_swapchain(attachment_name, swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
+			RenderGraph rg;
+			rg.attach_in("result", std::move(fut), vuk::eNone);
+			util::ImGui_ImplVuk_Render(frame_allocator, rg, "result", "SWAPCHAIN", imgui_data, ImGui::GetDrawData(), sampled_images);
+			auto erg = std::move(rg).link(*context, vuk::RenderGraph::CompileOptions{});
+			execute_submit_and_present_to_one(frame_allocator, std::move(erg), swapchain);
 			sampled_images.clear();
 		} else { // render all examples as imgui windows
 			RenderGraph rg;
@@ -113,9 +120,10 @@ void vuk::ExampleRunner::render() {
 			
 			size_t i = 0;
 			for (auto& ex : examples) {
-				auto rg_frag = ex->render(*this, frame_allocator);
+				auto rg_frag_fut = ex->render(*this, frame_allocator);
 				Name attachment_name_in = Name(ex->name);
 				Name& attachment_name_out = *attachment_names.emplace(std::string(ex->name) + "_final");
+				auto& rg_frag = *rg_frag_fut.rg;
 				rg_frag.attach_managed(attachment_name_in, swapchain->format, vuk::Dimension2D::absolute( 300, 300 ), vuk::Samples::e1, vuk::ClearColor(0.1f, 0.2f, 0.3f, 1.f));
 				rg_frag.compile(vuk::RenderGraph::CompileOptions{});
 				ImGui::Begin(ex->name.data());
@@ -169,18 +177,20 @@ void vuk::ExampleRunner::render() {
 					}
 					ImGui::NewLine();
 				}
-				rg.append(std::move(rg_frag));
-
 				if (chosen_resource[i].is_invalid())
 					chosen_resource[i] = attachment_name_out;
-				auto si = vuk::make_sampled_image(chosen_resource[i], imgui_data.font_sci);
+
+				Name result = chosen_resource[i].append("_result");
+				rg.attach_in(result, std::move(rg_frag_fut), vuk::eNone);
+				
+				auto si = vuk::make_sampled_image(result, imgui_data.font_sci);
 				ImGui::Image(&*sampled_images.emplace(si), ImVec2(200, 200));
 				ImGui::End();
 				i++;
 			}
 
 			ImGui::Render();
-			util::ImGui_ImplVuk_Render(frame_allocator, rg, "SWAPCHAIN", "SWAPCHAIN", imgui_data, ImGui::GetDrawData(), sampled_images);
+			util::ImGui_ImplVuk_Render(frame_allocator, rg, "SWAPCHAIN", "SWAPCHAIN+", imgui_data, ImGui::GetDrawData(), sampled_images);
 			rg.attach_swapchain("SWAPCHAIN", swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
 			execute_submit_and_present_to_one(frame_allocator, std::move(rg).link(*context, vuk::RenderGraph::CompileOptions{}), swapchain);
 			sampled_images.clear();

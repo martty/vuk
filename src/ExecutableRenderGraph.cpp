@@ -356,9 +356,10 @@ namespace vuk {
 
 			// create internal attachments; bind attachments to fb
 			for (auto& attrpinfo : rp.attachments) {
-				auto& bound = impl->bound_attachments[attrpinfo.name];
+				auto resolved_name = impl->resolve_name(attrpinfo.name);
+				auto& bound = impl->bound_attachments[resolved_name];
 				if (bound.type == AttachmentRPInfo::Type::eInternal) {
-					create_attachment(ctx, attrpinfo.name, bound, fb_extent, (vuk::SampleCountFlagBits)attrpinfo.description.samples);
+					create_attachment(ctx, resolved_name, bound, fb_extent, (vuk::SampleCountFlagBits)attrpinfo.description.samples);
 				}
 
 				ivs.push_back(bound.iv);

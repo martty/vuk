@@ -36,10 +36,11 @@ namespace {
 			vuk::Context& ctx = frame_allocator.get_context();
 
 			// We set up the cube data, same as in example 02_cube
-			auto [bverts, stub1] = ctx.create_buffer_gpu(frame_allocator, std::span(&box.first[0], box.first.size()));
-			auto verts = *bverts;
-			auto [binds, stub2] = ctx.create_buffer_gpu(frame_allocator, std::span(&box.second[0], box.second.size()));
-			auto inds = *binds;
+			auto [vert_buf, vert_fut] = create_buffer_gpu(frame_allocator, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.first));
+			auto verts = *vert_buf;
+			auto [ind_buf, ind_fut] = create_buffer_gpu(frame_allocator, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.second));
+			auto inds = *ind_buf;
+
 			struct VP {
 				glm::mat4 view;
 				glm::mat4 proj;
@@ -48,9 +49,10 @@ namespace {
 			vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 1.f, 10.f);
 			vp.proj[1][1] *= -1;
 
-			auto [buboVP, stub3] = ctx.create_buffer_cross_device(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, std::span(&vp, 1));
+			auto [buboVP, uboVP_fut] = create_buffer_cross_device(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, std::span(&vp, 1));
 			auto uboVP = *buboVP;
-			ctx.wait_all_transfers(frame_allocator);
+
+			vuk::wait_for_futures(frame_allocator, vert_fut, ind_fut, uboVP_fut);
 
 			vuk::RenderGraph rg;
 			// Add a pass to draw a triangle (from the first example) into the top left corner
@@ -103,14 +105,14 @@ namespace {
 						// Set the depth/stencil state
 						.set_depth_stencil(vuk::PipelineDepthStencilStateCreateInfo{
 							.depthTestEnable = true,
+							.depthWriteEnable = true,
 							.depthCompareOp = vuk::CompareOp::eLessOrEqual
 						})
 						.broadcast_color_blend({}) // Set the default color blend state
 						.bind_index_buffer(inds, vuk::IndexType::eUint32)
 						.bind_graphics_pipeline("cube")
 						.bind_vertex_buffer(0, verts, 0, vuk::Packed{vuk::Format::eR32G32B32Sfloat, vuk::Ignore{sizeof(util::Vertex) - sizeof(util::Vertex::position)}})
-						.bind_uniform_buffer(0, 0, uboVP)
-						.set_depth_stencil(vuk::PipelineDepthStencilStateCreateInfo{});
+						.bind_uniform_buffer(0, 0, uboVP);
 					glm::mat4* model = command_buffer.map_scratch_uniform_binding<glm::mat4>(0, 1);
 					*model = static_cast<glm::mat4>(glm::angleAxis(glm::radians(angle), glm::vec3(0.f, 1.f, 0.f)));
 					command_buffer.draw_indexed(box.second.size(), 1, 0, 0, 0);
@@ -126,7 +128,8 @@ namespace {
 			// For an internal attachment, we need to provide the format, extents, sample count and clear value
 			// This depth attachment will have extents matching the framebuffer (deduced from the color attachment)
 			rg.attach_managed("03_depth", vuk::Format::eD32Sfloat, vuk::Dimension2D::framebuffer(), vuk::Samples::e1, vuk::ClearDepthStencil{ 1.0f, 0 });
-			return rg;
+			
+			return vuk::Future<vuk::ImageAttachment>{frame_allocator, std::make_unique<vuk::RenderGraph>(std::move(rg)), "03_multipass_final"};
 		}
 	};
 
