@@ -105,7 +105,7 @@ namespace vuk {
 		Queue* compute_queue = nullptr;
 		Queue* transfer_queue = nullptr;
 
-		Result<void> wait_for_queues(std::span<std::pair<Queue*, uint64_t>> queue_waits);
+		Result<void> wait_for_domains(std::span<std::pair<DomainFlags, uint64_t>> queue_waits);
 
 		std::atomic<size_t> frame_counter = 0;
 
@@ -145,6 +145,9 @@ namespace vuk {
 
 		bool load_pipeline_cache(std::span<std::byte> data);
 		std::vector<std::byte> save_pipeline_cache();
+
+		Queue& domain_to_queue(DomainFlags);
+		uint32_t domain_to_queue_index(DomainFlags);
 
 		Query create_timestamp_query();
 
@@ -385,12 +388,21 @@ namespace vuk {
 				continue;
 			} else {
 				rgs_to_run.emplace_back(&control->get_allocator(), rgs[i]);
-				control->status = FutureBase::Status::eSubmitted;
 			}
 		}
 
 		VUK_DO_OR_RETURN(link_execute_submit(alloc, std::span(rgs_to_run)));
-		alloc.get_context().wait_idle();
+
+		std::vector<std::pair<DomainFlags, uint64_t>> waits;
+		for (uint64_t i = 0; i < controls.size(); i++) {
+			auto& control = controls[i];
+			if (control->status != FutureBase::Status::eSubmitted) {
+				continue;
+			}
+			waits.emplace_back(control->initial_domain, control->initial_visibility);
+		}
+		alloc.get_context().wait_for_domains(std::span(waits));
+
 		return { expected_value };
 	}
 
@@ -411,8 +423,7 @@ namespace vuk {
 		vuk::ImageLayout layout; // ignored for buffers
 		vuk::DomainFlagBits domain;
 	};
-	// TODO: temporary things
-	// TODO: infer this from a smart IV
+
 	struct ImageAttachment {
 		vuk::Image image;
 		vuk::ImageView image_view;

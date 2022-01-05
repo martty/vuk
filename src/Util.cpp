@@ -52,36 +52,6 @@ namespace vuk {
 	Result<void> submit(Allocator& allocator, SubmitBundle bundle, VkSemaphore present_rdy, VkSemaphore render_complete) {
 		Context& ctx = allocator.get_context();
 
-		auto domain_to_queue_index = [](DomainFlagBits domain) -> uint64_t {
-			auto queue_only = (DomainFlagBits)(domain & DomainFlagBits::eQueueMask).m_mask;
-			switch (queue_only) {
-			case DomainFlagBits::eGraphicsQueue:
-				return 0;
-			case DomainFlagBits::eComputeQueue:
-				return 1;
-			case DomainFlagBits::eTransferQueue:
-				return 2;
-			default:
-				assert(0);
-				return 0;
-			}
-		};
-
-		auto domain_to_queue = [](Context& ctx, DomainFlagBits domain) -> Queue& {
-			auto queue_only = (DomainFlagBits)(domain & DomainFlagBits::eQueueMask).m_mask;
-			switch (queue_only) {
-			case DomainFlagBits::eGraphicsQueue:
-				return *ctx.graphics_queue;
-			case DomainFlagBits::eComputeQueue:
-				return *ctx.compute_queue;
-			case DomainFlagBits::eTransferQueue:
-				return *ctx.transfer_queue;
-			default:
-				assert(0);
-				return *ctx.transfer_queue;
-			}
-		};
-
 		vuk::DomainFlags used_domains;
 		for (auto& batch : bundle.batches) {
 			used_domains |= batch.domain;
@@ -90,23 +60,23 @@ namespace vuk {
 		std::array<uint64_t, 3> queue_progress_references;
 		std::unique_lock<std::mutex> gfx_lock;
 		if (used_domains & DomainFlagBits::eGraphicsQueue) {
-			queue_progress_references[domain_to_queue_index(DomainFlagBits::eGraphicsQueue)] = *ctx.graphics_queue->submit_sync.value;
+			queue_progress_references[ctx.domain_to_queue_index(DomainFlagBits::eGraphicsQueue)] = *ctx.graphics_queue->submit_sync.value;
 			gfx_lock = std::unique_lock{ ctx.graphics_queue->queue_lock };
 		}
 		std::unique_lock<std::mutex> compute_lock;
 		if (used_domains & DomainFlagBits::eComputeQueue) {
-			queue_progress_references[domain_to_queue_index(DomainFlagBits::eComputeQueue)] = *ctx.compute_queue->submit_sync.value;
+			queue_progress_references[ctx.domain_to_queue_index(DomainFlagBits::eComputeQueue)] = *ctx.compute_queue->submit_sync.value;
 			compute_lock = std::unique_lock{ ctx.compute_queue->queue_lock };
 		}
 		std::unique_lock<std::mutex> transfer_lock;
 		if (used_domains & DomainFlagBits::eTransferQueue) {
-			queue_progress_references[domain_to_queue_index(DomainFlagBits::eTransferQueue)] = *ctx.transfer_queue->submit_sync.value;
+			queue_progress_references[ctx.domain_to_queue_index(DomainFlagBits::eTransferQueue)] = *ctx.transfer_queue->submit_sync.value;
 			transfer_lock = std::unique_lock{ ctx.transfer_queue->queue_lock };
 		}
 
 		for (SubmitBatch& batch : bundle.batches) {
 			auto domain = batch.domain;
-			Queue& queue = domain_to_queue(ctx, domain);
+			Queue& queue = ctx.domain_to_queue(domain);
 			Unique<VkFence> fence(allocator);
 			VUK_DO_OR_RETURN(allocator.allocate_fences({ &*fence, 1 }));
 
@@ -145,9 +115,9 @@ namespace vuk {
 				uint32_t wait_sema_count = 0;
 				for (auto& w : submit_info.relative_waits) {
 					VkSemaphoreSubmitInfoKHR ssi{ VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR };
-					auto& wait_queue = domain_to_queue(ctx, w.first).submit_sync;
+					auto& wait_queue = ctx.domain_to_queue(w.first).submit_sync;
 					ssi.semaphore = wait_queue.semaphore;
-					ssi.value = queue_progress_references[domain_to_queue_index(w.first)] + w.second;
+					ssi.value = queue_progress_references[ctx.domain_to_queue_index(w.first)] + w.second;
 					ssi.stageMask = (VkPipelineStageFlagBits2KHR)PipelineStageFlagBits::eAllCommands;
 					wait_semas.emplace_back(ssi);
 					wait_sema_count++;
@@ -165,6 +135,12 @@ namespace vuk {
 				ssi.value = ++(*queue.submit_sync.value);
 
 				ssi.stageMask = (VkPipelineStageFlagBits2KHR)PipelineStageFlagBits::eAllCommands;
+
+				for (auto& fut : submit_info.future_signals) {
+					fut->status = FutureBase::Status::eSubmitted;
+					fut->initial_domain = domain;
+					fut->initial_visibility = ssi.value;
+				}
 
 				uint32_t signal_sema_count = 1;
 				signal_semas.emplace_back(ssi);
@@ -310,14 +286,15 @@ namespace vuk {
 		} else if (control->status == FutureBase::Status::eHostAvailable) {
 			return { expected_value, control->get_result<T>() };
 		} else if (control->status == FutureBase::Status::eSubmitted) {
-			// TODO:
-			//allocator->get_context().wait_for_queues();
+			std::pair w = { (DomainFlags)control->initial_domain, control->initial_visibility };
+			control->allocator->get_context().wait_for_domains(std::span{ &w, 1 });
 			return { expected_value, control->get_result<T>() };
 		} else {
 			auto erg = std::move(*rg).link(control->allocator->get_context(), {});
 			std::pair v = { control->allocator, &erg };
 			VUK_DO_OR_RETURN(execute_submit(*control->allocator, std::span{ &v, 1 }, {}, {}, {}));
-			control->allocator->get_context().wait_idle(); // TODO:
+			std::pair w = { (DomainFlags)control->initial_domain, control->initial_visibility };
+			control->allocator->get_context().wait_for_domains(std::span{ &w, 1 });
 			control->status = FutureBase::Status::eHostAvailable;
 			return { expected_value, control->get_result<T>() };
 		}

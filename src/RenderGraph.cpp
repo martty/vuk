@@ -563,8 +563,6 @@ namespace vuk {
 
 				bool crosses_queue = (left.domain != DomainFlagBits::eNone && right.domain != DomainFlagBits::eNone && (left.domain & DomainFlagBits::eQueueMask) != (right.domain & DomainFlagBits::eQueueMask));
 				if (crosses_queue) {
-					uint32_t queue_idx = domain_to_queue_index(left.domain);
-
 					left.pass->is_waited_on = true;
 					right.pass->waits.emplace_back((DomainFlagBits)(left.domain & DomainFlagBits::eQueueMask).m_mask, left.pass);
 
@@ -745,8 +743,6 @@ namespace vuk {
 
 				bool crosses_queue = (left.domain != DomainFlagBits::eNone && right.domain != DomainFlagBits::eNone && (left.domain & DomainFlagBits::eQueueMask) != (right.domain & DomainFlagBits::eQueueMask));
 				if (crosses_queue) {
-					uint32_t queue_idx = domain_to_queue_index(left.domain);
-
 					left.pass->is_waited_on = true;
 					right.pass->waits.emplace_back((DomainFlagBits)(left.domain & DomainFlagBits::eQueueMask).m_mask, left.pass);
 
@@ -800,7 +796,7 @@ namespace vuk {
 		}
 
 		// assign passes to command buffers and batches (within a single queue)
-		uint64_t batch_index = -1;
+		uint32_t batch_index = -1;
 		DomainFlags current_domain = DomainFlagBits::eNone;
 		bool needs_split = false;
 		for (auto& rp : impl->rpis) {

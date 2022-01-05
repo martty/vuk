@@ -71,14 +71,21 @@ namespace vuk {
 		return { expected_value };
 	}
 	
-	Result<void> Context::wait_for_queues(std::span<std::pair<Queue*, uint64_t>> queue_waits) {
+	Result<void> Context::wait_for_domains(std::span<std::pair<DomainFlags, uint64_t>> queue_waits) {
+		std::array<uint32_t, 3> domain_to_sema_index = {~0u, ~0u, ~0u};
 		std::array<VkSemaphore, 3> queue_timeline_semaphores;
-		std::array<uint64_t, 3> values;
+		std::array<uint64_t, 3> values = {};
 
 		uint32_t count = 0;
-		for (auto [q, v] : queue_waits) {
-			queue_timeline_semaphores[count] = q->submit_sync.semaphore;
-			values[count] = v;
+		for (auto [domain, v] : queue_waits) {
+			auto idx = domain_to_queue_index(domain);
+			auto& mapping = domain_to_sema_index[idx];
+			if (mapping == -1) {
+				mapping = count++;
+			}
+			auto& q = domain_to_queue(domain);
+			queue_timeline_semaphores[mapping] = q.submit_sync.semaphore;
+			values[mapping] = values[mapping] > v ? values[mapping] : v;
 		}
 
 		VkSemaphoreWaitInfo swi{ .sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO };
@@ -86,8 +93,9 @@ namespace vuk {
 		swi.pValues = values.data();
 		swi.semaphoreCount = count;
 		VkResult result = vkWaitSemaphores(device, &swi, UINT64_MAX);
-		for (auto [q, v] : queue_waits) {
-			q->last_host_wait.store(v);
+		for (auto [domain, v] : queue_waits) {
+			auto& q = domain_to_queue(domain);
+			q.last_host_wait.store(v);
 		}
 		if (result != VK_SUCCESS) {
 			return { expected_error, VkException{result} };
@@ -358,6 +366,36 @@ namespace vuk {
 		vkGetPipelineCacheData(device, impl->vk_pipeline_cache, &size, data.data());
 		return data;
 	}
+
+	Queue& Context::domain_to_queue(DomainFlags domain) {
+		auto queue_only = (DomainFlagBits)(domain & DomainFlagBits::eQueueMask).m_mask;
+		switch (queue_only) {
+		case DomainFlagBits::eGraphicsQueue:
+			return *graphics_queue;
+		case DomainFlagBits::eComputeQueue:
+			return *compute_queue;
+		case DomainFlagBits::eTransferQueue:
+			return *transfer_queue;
+		default:
+			assert(0);
+			return *transfer_queue;
+		}
+	};
+
+	uint32_t Context::domain_to_queue_index(DomainFlags domain) {
+		auto queue_only = (DomainFlagBits)(domain & DomainFlagBits::eQueueMask).m_mask;
+		switch (queue_only) {
+		case DomainFlagBits::eGraphicsQueue:
+			return 0;
+		case DomainFlagBits::eComputeQueue:
+			return 1;
+		case DomainFlagBits::eTransferQueue:
+			return 2;
+		default:
+			assert(0);
+			return 0;
+		}
+	};
 
 	Query Context::create_timestamp_query() {
 		return { impl->query_id_counter++ };

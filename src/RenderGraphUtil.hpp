@@ -237,8 +237,8 @@ namespace vuk {
 
 	struct RenderPassInfo {
 		RenderPassInfo(arena&);
-		uint64_t command_buffer_index;
-		uint64_t batch_index;
+		uint32_t command_buffer_index;
+		uint32_t batch_index;
 		std::vector<SubpassInfo, short_alloc<SubpassInfo, 64>> subpasses;
 		std::vector<AttachmentRPInfo, short_alloc<AttachmentRPInfo, 16>> attachments;
 		vuk::RenderPassCreateInfo rpci;
