@@ -827,8 +827,8 @@ namespace vuk {
 		ImageView viv{ .payload = iv };
 		viv.base_layer = ivci.subresourceRange.baseArrayLayer;
 		viv.layer_count = ivci.subresourceRange.layerCount;
-		viv.base_mip = ivci.subresourceRange.baseMipLevel;
-		viv.mip_count = ivci.subresourceRange.levelCount;
+		viv.base_level = ivci.subresourceRange.baseMipLevel;
+		viv.level_count = ivci.subresourceRange.levelCount;
 		viv.format = ivci.format;
 		viv.type = ivci.viewType;
 		viv.image = ivci.image;
@@ -840,8 +840,8 @@ namespace vuk {
 	Unique<ImageView> Unique<ImageView>::SubrangeBuilder::apply() {
 		ImageViewCreateInfo ivci;
 		ivci.viewType = type == ImageViewType(0xdeadbeef) ? iv.type : type;
-		ivci.subresourceRange.baseMipLevel = base_mip == 0xdeadbeef ? iv.base_mip : base_mip;
-		ivci.subresourceRange.levelCount = mip_count == 0xdeadbeef ? iv.mip_count : mip_count;
+		ivci.subresourceRange.baseMipLevel = base_level == 0xdeadbeef ? iv.base_level : base_level;
+		ivci.subresourceRange.levelCount = level_count == 0xdeadbeef ? iv.level_count : level_count;
 		ivci.subresourceRange.baseArrayLayer = base_layer == 0xdeadbeef ? iv.base_layer : base_layer;
 		ivci.subresourceRange.layerCount = layer_count == 0xdeadbeef ? iv.layer_count : layer_count;
 		ivci.subresourceRange.aspectMask = format_to_aspect(iv.format);

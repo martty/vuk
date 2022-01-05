@@ -325,8 +325,8 @@ namespace vuk {
 		Format format; //32 bits
 		uint32_t id : 29;
 		ImageViewType type : 3;
-		uint32_t base_mip : 4;
-		uint32_t mip_count : 4;
+		uint32_t base_level : 4;
+		uint32_t level_count : 4;
 		uint32_t base_layer : 11;
 		uint32_t layer_count : 11;
 		ComponentMapping components;
@@ -407,8 +407,8 @@ namespace vuk {
 			Allocator* allocator;
 			ImageView iv;
 			ImageViewType type = ImageViewType(0xdeadbeef);
-			uint32_t base_mip = 0xdeadbeef; // 0xdeadbeef is an out of band value for all
-			uint32_t mip_count = 0xdeadbeef;
+			uint32_t base_level = 0xdeadbeef; // 0xdeadbeef is an out of band value for all
+			uint32_t level_count = 0xdeadbeef;
 			uint32_t base_layer = 0xdeadbeef;
 			uint32_t layer_count = 0xdeadbeef;
 
@@ -418,9 +418,9 @@ namespace vuk {
 				return *this;
 			}
 
-			SubrangeBuilder& mip_subrange(uint32_t base_mip, uint32_t mip_count) {
-				this->base_mip = base_mip;
-				this->mip_count = mip_count;
+			SubrangeBuilder& level_subrange(uint32_t base_level, uint32_t level_count) {
+				this->base_level = base_level;
+				this->level_count = level_count;
 				return *this;
 			}
 
@@ -437,8 +437,8 @@ namespace vuk {
 			return { .allocator = allocator, .iv = payload, .base_layer = base_layer, .layer_count = layer_count };
 		}
 
-		SubrangeBuilder mip_subrange(uint32_t base_mip, uint32_t mip_count) {
-			return { .allocator = allocator, .iv = payload, .base_mip = base_mip, .mip_count = mip_count };
+		SubrangeBuilder level_subrange(uint32_t base_level, uint32_t level_count) {
+			return { .allocator = allocator, .iv = payload, .base_level = base_level, .level_count = level_count };
 		}
 	};
 

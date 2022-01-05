@@ -387,7 +387,7 @@ namespace vuk {
 		CommandBuffer& copy_buffer(Name src, Name dst, size_t size);
 
 		// explicit synchronisation
-		CommandBuffer& image_barrier(Name, Access src_access, Access dst_access, uint32_t mip_level = 0, uint32_t mip_count = VK_REMAINING_MIP_LEVELS);
+		CommandBuffer& image_barrier(Name, Access src_access, Access dst_access, uint32_t mip_level = 0, uint32_t level_count = VK_REMAINING_MIP_LEVELS);
 
 		// queries
 		CommandBuffer& write_timestamp(Query, PipelineStageFlagBits stage = PipelineStageFlagBits::eBottomOfPipe);
