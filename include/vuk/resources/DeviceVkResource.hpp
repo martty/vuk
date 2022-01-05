@@ -63,6 +63,8 @@ namespace vuk {
 
 		void deallocate_timeline_semaphores(std::span<const TimelineSemaphore> src) override;
 
+		void deallocate_swapchains(std::span<const VkSwapchainKHR> src) override;
+
 		Context& get_context() override {
 			return *ctx;
 		}

@@ -388,4 +388,12 @@ namespace vuk {
 			}
 		}
 	}
+
+	void DeviceVkResource::deallocate_swapchains(std::span<const VkSwapchainKHR> src) {
+		for (auto& v : src) {
+			if (v != VK_NULL_HANDLE) {
+				vkDestroySwapchainKHR(device, v, nullptr);
+			}
+		}
+	}
 }

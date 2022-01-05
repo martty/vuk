@@ -209,6 +209,13 @@ namespace vuk {
 
 	void DeviceFrameResource::deallocate_timeline_semaphores(std::span<const TimelineSemaphore> src) {} // noop
 
+	void DeviceFrameResource::deallocate_swapchains(std::span<const VkSwapchainKHR> src) {
+		std::scoped_lock _(swapchain_mutex);
+
+		auto& vec = swapchains;
+		vec.insert(vec.end(), src.begin(), src.end());
+	}
+
 	void DeviceFrameResource::wait() {
 		if (fences.size() > 0) {
 			vkWaitForFences(device, (uint32_t)fences.size(), fences.data(), true, UINT64_MAX);
@@ -399,6 +406,13 @@ namespace vuk {
 		vec.insert(vec.end(), src.begin(), src.end());
 	}
 
+	void DeviceSuperFrameResource::deallocate_swapchains(std::span<const VkSwapchainKHR> src) {
+		auto& f = get_last_frame();
+		std::unique_lock _(f.swapchain_mutex);
+		auto& vec = f.swapchains;
+		vec.insert(vec.end(), src.begin(), src.end());
+	}
+
 	DeviceFrameResource& DeviceSuperFrameResource::get_last_frame() {
 		return frames[frame_counter.load() % frames_in_flight];
 	}
@@ -437,6 +451,7 @@ namespace vuk {
 		direct.ctx->make_timestamp_results_available(f.ts_query_pools);
 		direct.deallocate_timestamp_query_pools(f.ts_query_pools);
 		direct.deallocate_timeline_semaphores(f.tsemas);
+		direct.deallocate_swapchains(f.swapchains);
 
 		f.semaphores.clear();
 		f.fences.clear();
@@ -457,6 +472,7 @@ namespace vuk {
 		f.ts_query_pools.clear();
 		f.query_index = 0;
 		f.tsemas.clear();
+		f.swapchains.clear();
 	}
 
 	DeviceSuperFrameResource::~DeviceSuperFrameResource() {

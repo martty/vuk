@@ -121,6 +121,10 @@ namespace vuk {
 			upstream->deallocate_timeline_semaphores(src);
 		}
 
+		void deallocate_swapchains(std::span<const VkSwapchainKHR> src) override {
+			upstream->deallocate_swapchains(src);
+		}
+
 		DeviceResource* upstream = nullptr;
 	};
 }

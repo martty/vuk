@@ -113,6 +113,11 @@ namespace vuk {
 
 		void deallocate_timeline_semaphores(std::span<const TimelineSemaphore> src) override; // noop
 
+		std::mutex swapchain_mutex;
+		std::vector<VkSwapchainKHR> swapchains;
+
+		void deallocate_swapchains(std::span<const VkSwapchainKHR> src) override; 
+
 		void wait();
 
 		Context& get_context() override {
@@ -186,6 +191,8 @@ namespace vuk {
 		Result<void, AllocateException> allocate_timeline_semaphores(std::span<TimelineSemaphore> dst, SourceLocationAtFrame loc) override;
 
 		void deallocate_timeline_semaphores(std::span<const TimelineSemaphore> src) override;
+
+		void deallocate_swapchains(std::span<const VkSwapchainKHR> src) override;
 
 		DeviceFrameResource& get_next_frame();
 

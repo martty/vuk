@@ -123,6 +123,8 @@ namespace vuk {
 		virtual Result<void, AllocateException> allocate_timeline_semaphores(std::span<TimelineSemaphore> dst, SourceLocationAtFrame loc) = 0;
 		virtual void deallocate_timeline_semaphores(std::span<const TimelineSemaphore> src) = 0;
 
+		virtual void deallocate_swapchains(std::span<const VkSwapchainKHR> src) = 0;
+
 		virtual Context& get_context() = 0;
 	};
 
@@ -225,6 +227,8 @@ namespace vuk {
 		Result<void, AllocateException> allocate_timeline_semaphores(std::span<TimelineSemaphore> dst, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
 		void deallocate(std::span<const TimelineSemaphore> src);
+
+		void deallocate(std::span<const VkSwapchainKHR> src);
 
 		DeviceResource& get_cross_device_resource() {
 			return *device_resource;
