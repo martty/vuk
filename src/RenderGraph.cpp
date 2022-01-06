@@ -643,8 +643,8 @@ namespace vuk {
 						if (!right.pass && right.use.layout != ImageLayout::eUndefined && (left.use.layout != right.use.layout || (is_write_access(left.use) || is_write_access(right.use)))) { // different layouts, need to have dependency
 							VkImageMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
 							ImageBarrier ib{};
-							barrier.dstAccessMask = (VkAccessFlags)right.use.access;
 							barrier.srcAccessMask = is_read_access(left.use) ? 0 : (VkAccessFlags)left.use.access;
+							barrier.dstAccessMask = (VkAccessFlags)right.use.access;
 							barrier.oldLayout = (VkImageLayout)left.use.layout;
 							barrier.newLayout = (VkImageLayout)right.use.layout;
 							barrier.subresourceRange.aspectMask = (VkImageAspectFlags)aspect;
@@ -696,8 +696,8 @@ namespace vuk {
 						if (right.use.layout != left.use.layout ||
 							(is_write_access(left.use) || is_write_access(right.use))) { // different layouts, need to have dependency
 							VkImageMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
-							barrier.dstAccessMask = (VkAccessFlags)right.use.access;
 							barrier.srcAccessMask = is_read_access(left.use) ? 0 : (VkAccessFlags)left.use.access;
+							barrier.dstAccessMask = (VkAccessFlags)right.use.access;
 							barrier.oldLayout = left.use.layout == ImageLayout::ePreinitialized ? (VkImageLayout)ImageLayout::eUndefined : (VkImageLayout)left.use.layout;
 							barrier.newLayout = (VkImageLayout)right.use.layout;
 							barrier.subresourceRange.aspectMask = (VkImageAspectFlags)aspect;
@@ -750,8 +750,8 @@ namespace vuk {
 						if (right.use.layout == ImageLayout::eUndefined)
 							continue;
 						VkImageMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
-						barrier.dstAccessMask = (VkAccessFlags)right.use.access;
 						barrier.srcAccessMask = is_read_access(left.use) ? 0 : (VkAccessFlags)left.use.access;
+						barrier.dstAccessMask = (VkAccessFlags)right.use.access;
 						barrier.newLayout = (VkImageLayout)right.use.layout;
 						barrier.oldLayout = (VkImageLayout)left.use.layout;
 						barrier.subresourceRange.aspectMask = (VkImageAspectFlags)aspect;
@@ -805,8 +805,8 @@ namespace vuk {
 						auto& left_rp = impl->rpis[left.pass->render_pass_index];
 
 						VkMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER };
-						barrier.dstAccessMask = (VkAccessFlags)right.use.access;
 						barrier.srcAccessMask = is_read_access(left.use) ? 0 : (VkAccessFlags)left.use.access;
+						barrier.dstAccessMask = (VkAccessFlags)right.use.access;
 						MemoryBarrier mb{ .barrier = barrier, .src = left.use.stages, .dst = right.use.stages };
 						left_rp.subpasses[left.pass->subpass].post_mem_barriers.push_back(mb);
 					}
@@ -815,8 +815,8 @@ namespace vuk {
 						auto& right_rp = impl->rpis[right.pass->render_pass_index];
 
 						VkMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER };
-						barrier.dstAccessMask = (VkAccessFlags)right.use.access;
 						barrier.srcAccessMask = is_read_access(left.use) ? 0 : (VkAccessFlags)left.use.access;
+						barrier.dstAccessMask = (VkAccessFlags)right.use.access;
 						MemoryBarrier mb{ .barrier = barrier, .src = left.use.stages, .dst = right.use.stages };
 						if (mb.src == PipelineStageFlags{}) {
 							mb.src = PipelineStageFlagBits::eTopOfPipe;
@@ -830,8 +830,8 @@ namespace vuk {
 					auto& left_rp = impl->rpis[left.pass->render_pass_index];
 					if (left_rp.framebufferless && (is_write_access(left.use) || is_write_access(right.use))) {
 						VkMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER };
-						barrier.dstAccessMask = (VkAccessFlags)right.use.access;
 						barrier.srcAccessMask = is_read_access(left.use) ? 0 : (VkAccessFlags)left.use.access;
+						barrier.dstAccessMask = (VkAccessFlags)right.use.access;
 						MemoryBarrier mb{ .barrier = barrier, .src = left.use.stages, .dst = right.use.stages };
 						left_rp.subpasses[left.pass->subpass].post_mem_barriers.push_back(mb);
 					}
