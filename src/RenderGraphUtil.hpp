@@ -88,9 +88,9 @@ namespace vuk {
 		case eHostRW:
 			return { ia, vuk::PipelineStageFlagBits::eHost, vuk::AccessFlagBits::eHostRead | vuk::AccessFlagBits::eHostWrite, vuk::ImageLayout::eGeneral };
 
-		case eMemoryRead: return { ia, vuk::PipelineStageFlagBits::eBottomOfPipe, vuk::AccessFlagBits::eMemoryRead, vuk::ImageLayout::eGeneral };
-		case eMemoryWrite: return { ia, vuk::PipelineStageFlagBits::eBottomOfPipe, vuk::AccessFlagBits::eMemoryWrite, vuk::ImageLayout::eGeneral };
-		case eMemoryRW: return { ia, vuk::PipelineStageFlagBits::eBottomOfPipe, vuk::AccessFlagBits::eMemoryRead | vuk::AccessFlagBits::eMemoryWrite, vuk::ImageLayout::eGeneral };
+		case eMemoryRead: return { ia, vuk::PipelineStageFlagBits::eAllCommands, vuk::AccessFlagBits::eMemoryRead, vuk::ImageLayout::eGeneral };
+		case eMemoryWrite: return { ia, vuk::PipelineStageFlagBits::eAllCommands, vuk::AccessFlagBits::eMemoryWrite, vuk::ImageLayout::eGeneral };
+		case eMemoryRW: return { ia, vuk::PipelineStageFlagBits::eAllCommands, vuk::AccessFlagBits::eMemoryRead | vuk::AccessFlagBits::eMemoryWrite, vuk::ImageLayout::eGeneral };
 
 		case eNone:
 			return { ia, vuk::PipelineStageFlagBits::eTopOfPipe, vuk::AccessFlagBits{}, vuk::ImageLayout::eUndefined };
