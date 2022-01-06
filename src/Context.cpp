@@ -398,6 +398,10 @@ namespace vuk {
 		}
 	};
 
+	uint32_t Context::domain_to_queue_family_index(DomainFlags domain) {
+		return domain_to_queue_index(domain);
+	}
+
 	Query Context::create_timestamp_query() {
 		return { impl->query_id_counter++ };
 	}

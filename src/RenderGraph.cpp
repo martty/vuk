@@ -569,6 +569,53 @@ namespace vuk {
 					left.pass->is_waited_on = true;
 					right.pass->waits.emplace_back((DomainFlagBits)(left.domain & DomainFlagBits::eQueueMask).m_mask, left.pass);
 
+					assert(left.use.layout != ImageLayout::ePreinitialized);
+					assert(right.use.layout != ImageLayout::eUndefined);
+					// all the images are exclusive -> QFOT
+
+					{
+						ImageBarrier release_barrier;
+						VkImageMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+						barrier.srcAccessMask = is_read_access(left.use) ? 0 : (VkAccessFlags)left.use.access;
+						barrier.dstAccessMask = 0; // ignored
+						barrier.oldLayout = (VkImageLayout)left.use.layout;
+						barrier.newLayout = (VkImageLayout)right.use.layout;
+						barrier.subresourceRange.aspectMask = (VkImageAspectFlags)aspect;
+						barrier.subresourceRange.baseArrayLayer = 0;
+						barrier.subresourceRange.baseMipLevel = 0;
+						barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
+						barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
+						barrier.dstQueueFamilyIndex = ctx.domain_to_queue_family_index(left.domain);
+						barrier.srcQueueFamilyIndex = ctx.domain_to_queue_family_index(right.domain);
+						release_barrier.src = left.use.stages;
+						release_barrier.dst = PipelineStageFlagBits::eBottomOfPipe; // NONE
+						release_barrier.barrier = barrier;
+						release_barrier.image = name;
+						auto& left_rp = impl->rpis[left.pass->render_pass_index];
+						left_rp.post_barriers.emplace_back(release_barrier);
+					}
+					{
+						ImageBarrier acquire_barrier;
+						VkImageMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+						barrier.srcAccessMask = 0; // ignored
+						barrier.dstAccessMask = (VkAccessFlags)right.use.access;
+						barrier.oldLayout = (VkImageLayout)left.use.layout;
+						barrier.newLayout = (VkImageLayout)right.use.layout;
+						barrier.subresourceRange.aspectMask = (VkImageAspectFlags)aspect;
+						barrier.subresourceRange.baseArrayLayer = 0;
+						barrier.subresourceRange.baseMipLevel = 0;
+						barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
+						barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
+						barrier.dstQueueFamilyIndex = ctx.domain_to_queue_family_index(left.domain);
+						barrier.srcQueueFamilyIndex = ctx.domain_to_queue_family_index(right.domain);
+						acquire_barrier.src = PipelineStageFlagBits::eTopOfPipe; // NONE
+						acquire_barrier.dst = right.use.stages;
+						acquire_barrier.barrier = barrier;
+						acquire_barrier.image = name;
+						auto& right_rp = impl->rpis[right.pass->render_pass_index];
+						right_rp.pre_barriers.emplace_back(acquire_barrier);
+					}
+
 					continue;
 				}
 

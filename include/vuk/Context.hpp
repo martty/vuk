@@ -149,6 +149,7 @@ namespace vuk {
 
 		Queue& domain_to_queue(DomainFlags);
 		uint32_t domain_to_queue_index(DomainFlags);
+		uint32_t domain_to_queue_family_index(DomainFlags);
 
 		Query create_timestamp_query();
 
