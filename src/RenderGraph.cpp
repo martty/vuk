@@ -227,14 +227,14 @@ namespace vuk {
 		// TODO: queue inference
 		auto transfer_begin = impl->ordered_passes.begin();
 		auto transfer_end = std::stable_partition(impl->ordered_passes.begin(), impl->ordered_passes.end(), [](const PassInfo* p) { return p->domain & DomainFlagBits::eTransferQueue; });
-		auto graphics_begin = transfer_end;
-		auto graphics_end = std::stable_partition(transfer_end, impl->ordered_passes.end(), [](const PassInfo* p) { return p->domain & DomainFlagBits::eGraphicsQueue; });
+		auto compute_begin = transfer_end;
+		auto compute_end = std::stable_partition(transfer_end, impl->ordered_passes.end(), [](const PassInfo* p) { return p->domain & DomainFlagBits::eComputeQueue; });
+		auto graphics_begin = compute_end;
+		auto graphics_end = std::stable_partition(compute_end, impl->ordered_passes.end(), [](const PassInfo* p) { return p->domain & DomainFlagBits::eGraphicsQueue; });
 		std::span transfer_passes = { transfer_begin, transfer_end };
+		std::span compute_passes = { compute_begin, compute_end };
 		std::span graphics_passes = { graphics_begin, graphics_end };
 		impl->ordered_passes.erase(graphics_end, impl->ordered_passes.end());
-
-		//schedule_intra_queue(transfer_passes, compile_options);
-		//schedule_intra_queue(graphics_passes, compile_options);
 
 		// graphics: assemble renderpasses based on framebuffers
 		// we need to collect passes into framebuffers, which will determine the renderpasses
@@ -259,12 +259,13 @@ namespace vuk {
 		}
 
 		impl->num_graphics_rpis = attachment_sets.size();
+		impl->num_compute_rpis = compute_passes.size();
 		impl->num_transfer_rpis = transfer_passes.size();
 
 		impl->rpis.clear();
 		// renderpasses are uniquely identified by their index from now on
 		// tell passes in which renderpass/subpass they will execute
-		impl->rpis.reserve(impl->num_graphics_rpis + impl->num_transfer_rpis);
+		impl->rpis.reserve(impl->num_graphics_rpis + impl->num_compute_rpis + impl->num_transfer_rpis);
 		for (auto& [attachments, passes] : attachment_sets) {
 			RenderPassInfo rpi{ *impl->arena_ };
 			auto rpi_index = impl->rpis.size();
@@ -298,6 +299,23 @@ namespace vuk {
 			if (attachments.size() == 0) {
 				rpi.framebufferless = true;
 			}
+
+			impl->rpis.push_back(rpi);
+		}
+
+		// compute: just make rpis
+		for (auto& passinfo : compute_passes) {
+			RenderPassInfo rpi{ *impl->arena_ };
+			auto rpi_index = impl->rpis.size();
+
+			passinfo->render_pass_index = rpi_index;
+			passinfo->subpass = 0;
+			rpi.framebufferless = true;
+
+			SubpassInfo si{ *impl->arena_ };
+			si.passes.emplace_back(passinfo);
+			si.use_secondary_command_buffers = false;
+			rpi.subpasses.push_back(si);
 
 			impl->rpis.push_back(rpi);
 		}
@@ -510,21 +528,6 @@ namespace vuk {
 			}
 		}
 	}
-
-	auto domain_to_queue_index = [](DomainFlagBits domain) -> uint64_t {
-		auto queue_only = (DomainFlagBits)(domain & DomainFlagBits::eQueueMask).m_mask;
-		switch (queue_only) {
-		case DomainFlagBits::eGraphicsQueue:
-			return 0;
-		case DomainFlagBits::eComputeQueue:
-			return 1;
-		case DomainFlagBits::eTransferQueue:
-			return 2;
-		default:
-			assert(0);
-			return 0;
-		}
-	};
 
 	ExecutableRenderGraph RenderGraph::link(Context& ctx, const RenderGraph::CompileOptions& compile_options)&& {
 		compile(compile_options);

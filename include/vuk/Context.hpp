@@ -95,6 +95,7 @@ namespace vuk {
 		VkDevice device;
 		VkPhysicalDevice physical_device;
 		uint32_t graphics_queue_family_index;
+		uint32_t compute_queue_family_index;
 		uint32_t transfer_queue_family_index;
 
 		std::optional<Queue> dedicated_graphics_queue;

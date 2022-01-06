@@ -20,6 +20,7 @@ namespace vuk {
 		device(params.device),
 		physical_device(params.physical_device),
 		graphics_queue_family_index(params.graphics_queue_family_index),
+		compute_queue_family_index(params.compute_queue_family_index),
 		transfer_queue_family_index(params.transfer_queue_family_index),
 		debug(*this) {
 		impl = new ContextImpl(*this);
@@ -814,13 +815,20 @@ namespace vuk {
 	}
 
 	void Context::wait_idle() {
-		if (transfer_queue == graphics_queue) {
-			std::lock_guard _(impl->gfx_queue_lock);
-			vkDeviceWaitIdle(device);
-		} else {
-			std::scoped_lock _(impl->gfx_queue_lock, impl->xfer_queue_lock);
-			vkDeviceWaitIdle(device);
+		std::unique_lock<std::mutex> graphics_lock;
+		if (dedicated_graphics_queue) {
+			graphics_lock = std::unique_lock{ graphics_queue->queue_lock };
 		}
+		std::unique_lock<std::mutex> compute_lock;
+		if (dedicated_compute_queue) {
+			compute_lock = std::unique_lock{ compute_queue->queue_lock };
+		}
+		std::unique_lock<std::mutex> transfer_lock;
+		if (dedicated_transfer_queue) {
+			transfer_lock = std::unique_lock{ transfer_queue->queue_lock };
+		}
+
+		vkDeviceWaitIdle(device);
 	}
 
 	ImageView Context::wrap(VkImageView iv, ImageViewCreateInfo ivci) {

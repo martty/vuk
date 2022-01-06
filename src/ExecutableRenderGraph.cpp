@@ -117,11 +117,8 @@ namespace vuk {
 		Unique<CommandPool> cpool(alloc);
 		VkCommandPoolCreateInfo cpci{ VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
 		cpci.flags = VkCommandPoolCreateFlagBits::VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
-		if (domain & vuk::DomainFlagBits::eGraphicsQueue) { // TODO: proper qfamsel
-			cpci.queueFamilyIndex = ctx.graphics_queue_family_index;
-		} else {
-			cpci.queueFamilyIndex = ctx.transfer_queue_family_index;
-		}
+		cpci.queueFamilyIndex = ctx.domain_to_queue_index(domain); // currently queue family idx = queue idx
+		
 		VUK_DO_OR_RETURN(alloc.allocate_command_pools(std::span{ &*cpool, 1 }, std::span{ &cpci, 1 }));
 
 		robin_hood::unordered_set<SwapchainRef> used_swapchains;
@@ -420,7 +417,12 @@ namespace vuk {
 			sbundle.batches.emplace_back(record_batch(graphics_rpis, DomainFlagBits::eGraphicsQueue));
 		}
 
-		auto transfer_rpis = std::span(impl->rpis.begin() + impl->num_graphics_rpis, impl->rpis.end());
+		auto compute_rpis = std::span(impl->rpis.begin() + impl->num_graphics_rpis, impl->rpis.begin() + impl->num_graphics_rpis + impl->num_compute_rpis);
+		if (compute_rpis.size() > 0) {
+			sbundle.batches.emplace_back(record_batch(compute_rpis, DomainFlagBits::eComputeQueue));
+		}
+
+		auto transfer_rpis = std::span(impl->rpis.begin() + impl->num_graphics_rpis + impl->num_compute_rpis, impl->rpis.end());
 		if (transfer_rpis.size() > 0) {
 			sbundle.batches.emplace_back(record_batch(transfer_rpis, DomainFlagBits::eTransferQueue));
 		}

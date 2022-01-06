@@ -23,6 +23,7 @@ namespace vuk {
 
 		std::vector<RenderPassInfo, short_alloc<RenderPassInfo, 64>> rpis;
 		size_t num_graphics_rpis = 0;
+		size_t num_compute_rpis = 0;
 		size_t num_transfer_rpis = 0;
 
 		std::vector<CommandBundle> command_bundles;
