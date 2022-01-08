@@ -21,7 +21,6 @@ namespace vuk {
 		eSpirv
 	};
 
-#if VUK_USE_DXC
 	/// @brief Specifies the HLSL Shader Stage for a given HLSL shader.
 	enum class HlslShaderStage {
 		/// @brief Will infer the Shader Stage from the filename.
@@ -35,7 +34,6 @@ namespace vuk {
 		eDomain,
 		eAmplification
 	};
-#endif
 
 	/// @brief Wrapper over either a GLSL, HLSL, or SPIR-V source
 	struct ShaderSource {
@@ -77,9 +75,7 @@ namespace vuk {
 
 		std::vector<uint32_t> data;
 		ShaderSourceLanguage language;
-#if VUK_USE_DXC
 		HlslShaderStage hlsl_stage;
-#endif
 	};
 
 	inline bool operator==(const ShaderSource& a, const ShaderSource& b) noexcept {
