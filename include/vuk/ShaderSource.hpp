@@ -12,12 +12,8 @@ namespace spirv_cross {
 };
 namespace vuk {
 	enum class ShaderSourceLanguage {
-#if VUK_USE_SHADERC
 		eGlsl,
-#endif
-#if VUK_USE_DXC
 		eHlsl,
-#endif
 		eSpirv
 	};
 
