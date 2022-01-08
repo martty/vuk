@@ -802,6 +802,11 @@ namespace vuk {
 			return *this;
 		}
 		auto dst_bbuf = dst_res->buffer;
+		if (src_bbuf.buffer == dst_bbuf.buffer) {
+			bool overlap_a = src_bbuf.offset > dst_bbuf.offset && src_bbuf.offset < (dst_bbuf.offset + dst_bbuf.size);
+			bool overlap_b = dst_bbuf.offset > src_bbuf.offset && dst_bbuf.offset < (src_bbuf.offset + src_bbuf.size);
+			assert(!overlap_a && !overlap_b);
+		} 
 		VkBufferCopy bc{};
 		bc.srcOffset += src_bbuf.offset;
 		bc.dstOffset += dst_bbuf.offset;

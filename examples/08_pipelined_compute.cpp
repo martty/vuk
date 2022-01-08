@@ -133,6 +133,15 @@ namespace {
 						command_buffer.copy_buffer("08_scramble+", "08_scramble++", sizeof(unsigned) * x * y);
 				}
 			});
+			// put it back into the persistent buffer
+			rg.add_pass({
+				.name = "08_copy_2",
+				.execute_on = vuk::DomainFlagBits::eTransferQueue,
+				.resources = {"08_scramble+++"_buffer >> vuk::eTransferRead, "08_scramble++++"_buffer >> vuk::eTransferWrite >> "08_scramble+++++"},
+				.execute = [](vuk::CommandBuffer& command_buffer) {
+						command_buffer.copy_buffer("08_scramble+++", "08_scramble++++", sizeof(unsigned) * x * y);
+				}
+			});
 
 			// draw the scrambled image, with a buffer dependency on the scramble buffer
 			rg.add_pass({
@@ -162,8 +171,11 @@ namespace {
 			// we created this future in the setup code, so on the first frame it will append the computation
 			// but on the subsequent frames the future becomes ready (on the gpu) and this will only attach a buffer
 			rg.attach_in("08_scramble", std::move(scramble_buf_fut), vuk::eNone);
+			// temporary buffer used for copying
 			rg.attach_buffer("08_scramble++", **allocate_buffer_gpu(frame_allocator, {vuk::MemoryUsage::eGPUonly, sizeof(unsigned) * x * y, 1}), vuk::Access::eNone, vuk::Access::eNone);
-			scramble_buf_fut = { *runner.global, std::move(rgp), "08_scramble+++" };
+			// permanent buffer to keep state
+			rg.attach_buffer("08_scramble++++", *scramble_buf, vuk::Access::eNone, vuk::Access::eNone);
+			scramble_buf_fut = { *runner.global, std::move(rgp), "08_scramble+++++" };
 
 			return vuk::Future<vuk::ImageAttachment>{frame_allocator, rg, "08_pipelined_compute_final"};
 		},
