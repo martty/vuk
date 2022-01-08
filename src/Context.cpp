@@ -441,11 +441,11 @@ namespace vuk {
 		auto queue_only = (DomainFlagBits)(domain & DomainFlagBits::eQueueMask).m_mask;
 		switch (queue_only) {
 		case DomainFlagBits::eGraphicsQueue:
-			return 0;
+			return graphics_queue_family_index;
 		case DomainFlagBits::eComputeQueue:
-			return 1;
+			return compute_queue_family_index;
 		case DomainFlagBits::eTransferQueue:
-			return 2;
+			return transfer_queue_family_index;
 		default:
 			assert(0);
 			return 0;
