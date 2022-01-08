@@ -52,11 +52,11 @@ namespace vuk {
 #if VUK_USE_DXC
 		static ShaderSource hlsl(std::string_view source, HlslShaderStage stage = HlslShaderStage::eInferred) {
 			ShaderSource shader;
-            shader.data.resize(idivceil(source.size() + 1, sizeof(uint32_t)));
-            memcpy(shader.data.data(), source.data(), source.size() * sizeof(std::string_view::value_type));
-            shader.language = ShaderSourceLanguage::eHlsl;
-            shader.hlsl_stage = HlslShaderStage::eInferred;
-            return shader;
+			shader.data.resize(idivceil(source.size() + 1, sizeof(uint32_t)));
+			memcpy(shader.data.data(), source.data(), source.size() * sizeof(std::string_view::value_type));
+			shader.language = ShaderSourceLanguage::eHlsl;
+			shader.hlsl_stage = HlslShaderStage::eInferred;
+			return shader;
 		}
 #endif
 
@@ -78,7 +78,7 @@ namespace vuk {
 		std::vector<uint32_t> data;
 		ShaderSourceLanguage language;
 #if VUK_USE_DXC
-        HlslShaderStage hlsl_stage;
+		HlslShaderStage hlsl_stage;
 #endif
 	};
 

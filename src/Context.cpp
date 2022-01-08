@@ -219,7 +219,7 @@ namespace vuk {
 
 		switch (cinfo.source.language) {
 #if VUK_USE_SHADERC
-            case ShaderSourceLanguage::eGlsl: {
+			case ShaderSourceLanguage::eGlsl: {
 
 				shaderc::Compiler compiler;
 				shaderc::CompileOptions options;
@@ -235,18 +235,18 @@ namespace vuk {
 				spirv = std::vector<uint32_t>{result.cbegin(), result.cend()};
 
 				break;
-            }
+			}
 #endif
 #if VUK_USE_DXC
-            case ShaderSourceLanguage::eHlsl: {
+			case ShaderSourceLanguage::eHlsl: {
 				std::vector<LPCWSTR> arguments;
-                arguments.push_back(L"-E");
-                arguments.push_back(L"main");
-                arguments.push_back(L"-spirv");
+				arguments.push_back(L"-E");
+				arguments.push_back(L"main");
+				arguments.push_back(L"-spirv");
 				arguments.push_back(L"-fspv-reflect");
-                arguments.push_back(L"-fspv-target-env=vulkan1.1");
-                arguments.push_back(L"-fvk-use-gl-layout");
-                arguments.push_back(L"-no-warnings");
+				arguments.push_back(L"-fspv-target-env=vulkan1.1");
+				arguments.push_back(L"-fvk-use-gl-layout");
+				arguments.push_back(L"-no-warnings");
 				
 				static const std::pair<const char*, HlslShaderStage> inferred[] = {
 					{ ".vert.", HlslShaderStage::eVertex },
@@ -256,7 +256,7 @@ namespace vuk {
 					{ ".mesh.", HlslShaderStage::eMesh },
 					{ ".hull.", HlslShaderStage::eHull },
 					{ ".dom.", HlslShaderStage::eDomain },
-                    { ".amp.", HlslShaderStage::eAmplification }
+					{ ".amp.", HlslShaderStage::eAmplification }
 				};
 
 				static const std::unordered_map<HlslShaderStage, LPCWSTR> stage_mappings{
@@ -272,51 +272,51 @@ namespace vuk {
 
 				HlslShaderStage shader_stage = cinfo.source.hlsl_stage;
 				if (shader_stage == HlslShaderStage::eInferred) {
-                    for (const auto& [ext, stage] : inferred) {
-                        if (cinfo.filename.contains(ext)) {
-                            shader_stage = stage;
-                            break;
-                        }
-                    }
-                }
+					for (const auto& [ext, stage] : inferred) {
+						if (cinfo.filename.contains(ext)) {
+							shader_stage = stage;
+							break;
+						}
+					}
+				}
 
 				assert((shader_stage != HlslShaderStage::eInferred) && "Failed to infer HLSL shader stage");
 
 				arguments.push_back(L"-T");
-                arguments.push_back(stage_mappings.at(shader_stage));
+				arguments.push_back(stage_mappings.at(shader_stage));
 
 				DxcBuffer source_buf;
-                source_buf.Ptr = cinfo.source.as_c_str();
-                source_buf.Size = cinfo.source.data.size() * 4;
-                source_buf.Encoding = 0;
+				source_buf.Ptr = cinfo.source.as_c_str();
+				source_buf.Size = cinfo.source.data.size() * 4;
+				source_buf.Encoding = 0;
 
 				CComPtr<IDxcCompiler3> compiler = nullptr;
-                DXC_HR(DxcCreateInstance(CLSID_DxcCompiler, __uuidof(IDxcCompiler3), (void**)&compiler), "Failed to create DXC compiler");
+				DXC_HR(DxcCreateInstance(CLSID_DxcCompiler, __uuidof(IDxcCompiler3), (void**)&compiler), "Failed to create DXC compiler");
 				
 				CComPtr<IDxcResult> result = nullptr;
-                DXC_HR(compiler->Compile(&source_buf, arguments.data(), arguments.size(), nullptr, __uuidof(IDxcResult), (void**)&result), "Failed to compile with DXC");
+				DXC_HR(compiler->Compile(&source_buf, arguments.data(), arguments.size(), nullptr, __uuidof(IDxcResult), (void**)&result), "Failed to compile with DXC");
 				
 				CComPtr<IDxcBlobUtf8> errors = nullptr;
-                DXC_HR(result->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&errors), nullptr), "Failed to get DXC compile errors");
+				DXC_HR(result->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&errors), nullptr), "Failed to get DXC compile errors");
 				if (errors && errors->GetStringLength() > 0) {
-                    std::string message = errors->GetStringPointer();
-                    throw ShaderCompilationException{ message };
+					std::string message = errors->GetStringPointer();
+					throw ShaderCompilationException{ message };
 				}
 
 				CComPtr<IDxcBlob> output = nullptr;
-                DXC_HR(result->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&output), nullptr), "Failed to get DXC output");
-                assert(output != nullptr);
+				DXC_HR(result->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&output), nullptr), "Failed to get DXC output");
+				assert(output != nullptr);
 
 				const uint32_t* begin = (const uint32_t*)output->GetBufferPointer();
-                const uint32_t* end = begin + (output->GetBufferSize() / 4);
+				const uint32_t* end = begin + (output->GetBufferSize() / 4);
 
 				spirv = std::vector<uint32_t>{ begin, end };
 
-                break;
+				break;
 			}
 #endif
-            case ShaderSourceLanguage::eSpirv: {
-                spirv = cinfo.source.data;
+			case ShaderSourceLanguage::eSpirv: {
+				spirv = cinfo.source.data;
 				break;
 			}
 		}
