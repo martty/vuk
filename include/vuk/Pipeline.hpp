@@ -74,8 +74,8 @@ namespace vuk {
 #endif
 
 #if VUK_USE_DXC
-		void add_hlsl(std::string_view source, std::string filename) {
-			shaders.emplace_back(ShaderSource::hlsl(source));
+		void add_hlsl(std::string_view source, std::string filename, HlslShaderStage stage = HlslShaderStage::eInferred) {
+			shaders.emplace_back(ShaderSource::hlsl(source, stage));
             shader_paths.emplace_back(std::move(filename));
 		}
 #endif

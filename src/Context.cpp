@@ -240,10 +240,50 @@ namespace vuk {
 #if VUK_USE_DXC
             case ShaderSourceLanguage::eHlsl: {
 				std::vector<LPCWSTR> arguments;
+                arguments.push_back(L"-E");
+                arguments.push_back(L"main");
                 arguments.push_back(L"-spirv");
 				arguments.push_back(L"-fspv-reflect");
                 arguments.push_back(L"-fspv-target-env=vulkan1.1");
                 arguments.push_back(L"-fvk-use-gl-layout");
+                arguments.push_back(L"-no-warnings");
+				
+				static const std::pair<const char*, HlslShaderStage> inferred[] = {
+					{ ".vert.", HlslShaderStage::eVertex },
+					{ ".frag.", HlslShaderStage::ePixel },
+					{ ".comp.", HlslShaderStage::eCompute },
+					{ ".geom.", HlslShaderStage::eGeometry },
+					{ ".mesh.", HlslShaderStage::eMesh },
+					{ ".hull.", HlslShaderStage::eHull },
+					{ ".dom.", HlslShaderStage::eDomain },
+                    { ".amp.", HlslShaderStage::eAmplification }
+				};
+
+				static const std::unordered_map<HlslShaderStage, LPCWSTR> stage_mappings{
+					{ HlslShaderStage::eVertex, L"vs_6_7" },
+					{ HlslShaderStage::ePixel, L"ps_6_7" },
+					{ HlslShaderStage::eCompute, L"cs_6_7" },
+					{ HlslShaderStage::eGeometry, L"gs_6_7" },
+					{ HlslShaderStage::eMesh, L"ms_6_7" },
+					{ HlslShaderStage::eHull, L"hs_6_7" },
+					{ HlslShaderStage::eDomain, L"ds_6_7" },
+					{ HlslShaderStage::eAmplification, L"as_6_7" }
+				};
+
+				HlslShaderStage shader_stage = cinfo.source.hlsl_stage;
+				if (shader_stage == HlslShaderStage::eInferred) {
+                    for (const auto& [ext, stage] : inferred) {
+                        if (cinfo.filename.contains(ext)) {
+                            shader_stage = stage;
+                            break;
+                        }
+                    }
+                }
+
+				assert((shader_stage != HlslShaderStage::eInferred) && "Failed to infer HLSL shader stage");
+
+				arguments.push_back(L"-T");
+                arguments.push_back(stage_mappings.at(shader_stage));
 
 				DxcBuffer source_buf;
                 source_buf.Ptr = cinfo.source.as_c_str();
