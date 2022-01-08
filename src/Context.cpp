@@ -1,6 +1,15 @@
 #if VUK_USE_SHADERC
 #include <shaderc/shaderc.hpp>
 #endif
+#if VUK_USE_DXC
+#ifdef _WIN32
+// dxcapi.h expects the COM API to be present on Windows.
+// On other platforms, the Vulkan SDK will have WinAdapter.h alongside dxcapi.h that is automatically included to stand in for the COM API.
+#include <atlbase.h>
+#endif
+#include <dxc/dxcapi.h>
+#define DXC_HR(hr, msg) if (FAILED(hr)) { throw ShaderCompilationException{msg}; }
+#endif
 #include <algorithm>
 #include <fstream>
 #include <sstream>
@@ -206,27 +215,72 @@ namespace vuk {
 	}
 
 	ShaderModule Context::create(const create_info_t<ShaderModule>& cinfo) {
-		// given source is GLSL, compile it via shaderc
+		std::vector<uint32_t> spirv;
+
+		switch (cinfo.source.language) {
 #if VUK_USE_SHADERC
-		shaderc::SpvCompilationResult result;
-		if (!cinfo.source.is_spirv) {
-			shaderc::Compiler compiler;
-			shaderc::CompileOptions options;
-			options.SetTargetEnvironment(shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_1);
+            case ShaderSourceLanguage::eGlsl: {
 
-			result = compiler.CompileGlslToSpv(cinfo.source.as_glsl(), shaderc_glsl_infer_from_source, cinfo.filename.c_str(), options);
+				shaderc::Compiler compiler;
+				shaderc::CompileOptions options;
+				options.SetTargetEnvironment(shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_1);
 
-			if (result.GetCompilationStatus() != shaderc_compilation_status_success) {
-				std::string message = result.GetErrorMessage().c_str();
-				throw ShaderCompilationException{ message };
+				const auto result = compiler.CompileGlslToSpv(cinfo.source.as_c_str(), shaderc_glsl_infer_from_source, cinfo.filename.c_str(), options);
+
+				if (result.GetCompilationStatus() != shaderc_compilation_status_success) {
+					std::string message = result.GetErrorMessage().c_str();
+					throw ShaderCompilationException{ message };
+				}
+
+				spirv = std::vector<uint32_t>{result.cbegin(), result.cend()};
+
+				break;
+            }
+#endif
+#if VUK_USE_DXC
+            case ShaderSourceLanguage::eHlsl: {
+				std::vector<LPCWSTR> arguments;
+                arguments.push_back(L"-spirv");
+				arguments.push_back(L"-fspv-reflect");
+                arguments.push_back(L"-fspv-target-env=vulkan1.1");
+                arguments.push_back(L"-fvk-use-gl-layout");
+
+				DxcBuffer source_buf;
+                source_buf.Ptr = cinfo.source.as_c_str();
+                source_buf.Size = cinfo.source.data.size() * 4;
+                source_buf.Encoding = 0;
+
+				CComPtr<IDxcCompiler3> compiler = nullptr;
+                DXC_HR(DxcCreateInstance(CLSID_DxcCompiler, __uuidof(IDxcCompiler3), (void**)&compiler), "Failed to create DXC compiler");
+				
+				CComPtr<IDxcResult> result = nullptr;
+                DXC_HR(compiler->Compile(&source_buf, arguments.data(), arguments.size(), nullptr, __uuidof(IDxcResult), (void**)&result), "Failed to compile with DXC");
+				
+				CComPtr<IDxcBlobUtf8> errors = nullptr;
+                DXC_HR(result->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&errors), nullptr), "Failed to get DXC compile errors");
+				if (errors && errors->GetStringLength() > 0) {
+                    std::string message = errors->GetStringPointer();
+                    throw ShaderCompilationException{ message };
+				}
+
+				CComPtr<IDxcBlob> output = nullptr;
+                DXC_HR(result->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&output), nullptr), "Failed to get DXC output");
+                assert(output != nullptr);
+
+				const uint32_t* begin = (const uint32_t*)output->GetBufferPointer();
+                const uint32_t* end = begin + (output->GetBufferSize() / 4);
+
+				spirv = std::vector<uint32_t>{ begin, end };
+
+                break;
+			}
+#endif
+            case ShaderSourceLanguage::eSpirv: {
+                spirv = cinfo.source.data;
+				break;
 			}
 		}
 
-		const std::vector<uint32_t>& spirv = cinfo.source.is_spirv ? cinfo.source.data : std::vector<uint32_t>(result.cbegin(), result.cend());
-#else
-		assert(cinfo.source.is_spirv && "Shaderc not enabled (VUK_USE_SHADERC == OFF), no runtime compilation possible.");
-		const std::vector<uint32_t>& spirv = cinfo.source.data;
-#endif
 		spirv_cross::Compiler refl(spirv.data(), spirv.size());
 		Program p;
 		auto stage = p.introspect(refl);

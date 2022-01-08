@@ -66,10 +66,19 @@ namespace vuk {
 			shader_paths.emplace_back(std::move(filename));
 		}
 
+#if VUK_USE_SHADERC
 		void add_glsl(std::string_view source, std::string filename) {
 			shaders.emplace_back(ShaderSource::glsl(source));
 			shader_paths.emplace_back(std::move(filename));
 		}
+#endif
+
+#if VUK_USE_DXC
+		void add_hlsl(std::string_view source, std::string filename) {
+			shaders.emplace_back(ShaderSource::hlsl(source));
+            shader_paths.emplace_back(std::move(filename));
+		}
+#endif
 
 		void add_spirv(std::vector<uint32_t> source, std::string filename) {
 			shaders.emplace_back(ShaderSource::spirv(std::move(source)));
@@ -191,7 +200,7 @@ namespace std {
 	struct hash<vuk::ShaderSource> {
 		size_t operator()(vuk::ShaderSource const& x) const noexcept {
 			size_t h = 0;
-			hash_combine(h, x.is_spirv, x.data);
+			hash_combine(h, x.language, x.data);
 			return h;
 		}
 	};
