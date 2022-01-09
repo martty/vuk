@@ -273,7 +273,7 @@ namespace vuk {
 				HlslShaderStage shader_stage = cinfo.source.hlsl_stage;
 				if (shader_stage == HlslShaderStage::eInferred) {
 					for (const auto& [ext, stage] : inferred) {
-						if (cinfo.filename.contains(ext)) {
+						if (cinfo.filename.find(ext) != std::string::npos) {
 							shader_stage = stage;
 							break;
 						}
