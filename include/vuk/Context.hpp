@@ -161,94 +161,9 @@ namespace vuk {
 
 		uint32_t (*get_thread_index)() = nullptr;
 
-		struct UploadItem {
-			/// @brief Describes a single upload to a Buffer
-			struct BufferUpload {
-				/// @brief Buffer to upload to
-				Buffer dst;
-				/// @brief Data to upload
-				std::span<unsigned char> data;
-			};
-
-			/// @brief Describes a single upload to an Image
-			struct ImageUpload {
-				/// @brief Image to upload to
-				Image dst;
-				/// @brief Format of the image data
-				Format format;
-				/// @brief Extent of the image data
-				Extent3D extent;
-				/// @brief Mip level
-				uint32_t mip_level;
-				/// @brief Base array layer
-				uint32_t base_array_layer;
-				/// @brief Should mips be automatically generated for levels higher than mip_level
-				bool generate_mips;
-				/// @brief Image data
-				std::span<unsigned char> data;
-			};
-
-			UploadItem(BufferUpload bu) : buffer(std::move(bu)), is_buffer(true) {}
-			UploadItem(ImageUpload bu) : image(std::move(bu)), is_buffer(false) {}
-
-			union {
-				BufferUpload buffer = {};
-				ImageUpload image;
-			};
-			bool is_buffer;
-		};
-
-		using TransientSubmitStub = struct TransientSubmitBundle*;
-
-		/// @brief Enqueue buffer or image data for upload
-		/// @param uploads UploadItem structures describing the upload parameters
-		/// @param dst_queue_family The queue family where the uploads will be used (ignored for buffers)
-		TransientSubmitStub fenced_upload(std::span<UploadItem> uploads, uint32_t dst_queue_family);
-
-		/// @brief Check if the upload has finished. If the upload has finished, resources will be reclaimed automatically. If this function returns true you must
-		/// not poll again.
-		/// @param pending TransientSubmitStub object to check.
-		bool poll_upload(TransientSubmitStub pending);
-
 		Texture allocate_texture(Allocator& allocator, ImageCreateInfo ici);
 
 		size_t get_allocation_size(Buffer);
-
-		template<class T>
-		TransferStub upload(Allocator& allocator, Buffer dst, std::span<T> data) {
-			if (data.empty())
-				return { 0 };
-			Unique<BufferCrossDevice> staging(allocator);
-			BufferCreateInfo bci{ MemoryUsage::eCPUonly, sizeof(T) * data.size(), 1 };
-			auto ret = allocator.allocate_buffers(std::span{ &*staging, 1 }, std::span{ &bci, 1 }); // TODO: dropping error
-			::memcpy(staging->mapped_ptr, data.data(), sizeof(T) * data.size());
-
-			auto stub = enqueue_transfer(*staging, dst);
-			return stub;
-		}
-
-		template<class T>
-		TransferStub upload(Allocator& allocator, Image dst, Format format, Extent3D extent, uint32_t base_layer, std::span<T> data, bool generate_mips) {
-			assert(!data.empty());
-			// compute staging buffer alignment as texel block size
-			size_t alignment = format_to_texel_block_size(format);
-			Unique<BufferCrossDevice> staging(allocator);
-			BufferCreateInfo bci{ MemoryUsage::eCPUonly, sizeof(T) * data.size(), alignment };
-			auto ret = allocator.allocate_buffers(std::span{ &*staging, 1 }, std::span{ &bci, 1 }); // TODO: dropping error
-			::memcpy(staging->mapped_ptr, data.data(), sizeof(T) * data.size());
-
-			auto stub = enqueue_transfer(*staging, dst, extent, base_layer, generate_mips);
-			return stub;
-		}
-
-		// TODO: temporary stuff
-		std::atomic<size_t> transfer_id = 1;
-		std::atomic<size_t> last_transfer_complete = 0;
-
-		TransferStub enqueue_transfer(Buffer src, Buffer dst);
-		TransferStub enqueue_transfer(Buffer src, Image dst, Extent3D extent, uint32_t base_layer, bool generate_mips);
-		void dma_task(Allocator& allocator);
-		void wait_all_transfers(Allocator& allocator);
 
 		/// @brief Add a swapchain to be managed by the Context
 		/// @return Reference to the new swapchain that can be used during presentation

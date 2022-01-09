@@ -2,6 +2,8 @@
 
 #include <exception>
 #include <string>
+#include <cassert>
+#include "vuk/Config.hpp"
 
 namespace vuk {
 	struct Exception : std::exception {

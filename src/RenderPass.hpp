@@ -5,6 +5,7 @@
 #include "vuk/Types.hpp"
 #include "vuk/vuk_fwd.hpp"
 #include <optional>
+#include <vector>
 
 inline bool operator==(VkAttachmentDescription const& lhs, VkAttachmentDescription const& rhs) noexcept {
 	return (lhs.flags == rhs.flags) && (lhs.format == rhs.format) && (lhs.samples == rhs.samples) && (lhs.loadOp == rhs.loadOp) && (lhs.storeOp == rhs.storeOp) &&

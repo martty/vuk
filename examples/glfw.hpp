@@ -1,10 +1,12 @@
 #pragma once
+#include "vuk/Config.hpp"
 #include <GLFW/glfw3.h>
 
 inline GLFWwindow* create_window_glfw(const char* title, bool resize = true) {
 	glfwInit();
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-	if (!resize) glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+	if (!resize)
+		glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
 	return glfwCreateWindow(1024, 1024, title, NULL, NULL);
 }

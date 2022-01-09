@@ -2,6 +2,7 @@
 
 #include "vuk/Allocator.hpp"
 #include "vuk/Exception.hpp"
+#include "vuk/Buffer.hpp"
 
 #ifndef __cpp_consteval
 #define VUK_HERE_AND_NOW()                                                                                                                                     \

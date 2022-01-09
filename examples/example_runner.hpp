@@ -1,6 +1,5 @@
 #pragma once
 
-#include "examples/imgui_impl_glfw.h"
 #include "glfw.hpp"
 #include "utils.hpp"
 #include "vuk/Allocator.hpp"
@@ -17,6 +16,8 @@
 #include <string>
 #include <string_view>
 #include <vector>
+
+#include "examples/imgui_impl_glfw.h"
 
 namespace vuk {
 	struct ExampleRunner;
@@ -59,10 +60,7 @@ namespace vuk {
 			ImGui::StyleColorsDark();
 			// Setup Platform/Renderer bindings
 			ImGui_ImplGlfw_InitForVulkan(window, true);
-			{
-				imgui_data = util::ImGui_ImplVuk_Init(*global);
-				context->wait_all_transfers(*global);
-			}
+			{ imgui_data = util::ImGui_ImplVuk_Init(*global); }
 			for (auto& ex : examples) {
 				ex->setup(*this, *global);
 			}

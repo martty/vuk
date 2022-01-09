@@ -14,16 +14,6 @@
 #include "vuk/resources/DeviceVkResource.hpp"
 
 namespace vuk {
-	struct TransientSubmitBundle {
-		uint32_t queue_family_index;
-		VkCommandPool cpool = VK_NULL_HANDLE;
-		std::vector<VkCommandBuffer> command_buffers;
-		Buffer buffer;
-		VkFence fence = VK_NULL_HANDLE;
-		VkSemaphore sema = VK_NULL_HANDLE;
-		TransientSubmitBundle* next = nullptr;
-	};
-
 	struct BufferCopyCommand {
 		Buffer src;
 		Buffer dst;
@@ -60,10 +50,6 @@ namespace vuk {
 		LegacyGPUAllocator legacy_gpu_allocator;
 		VkDevice device;
 
-		// TODO: gone
-		std::mutex gfx_queue_lock;
-		std::mutex xfer_queue_lock;
-
 		VkPipelineCache vk_pipeline_cache = VK_NULL_HANDLE;
 		Cache<PipelineBaseInfo> pipelinebase_cache;
 		Cache<PipelineInfo> pipeline_cache;
@@ -79,13 +65,6 @@ namespace vuk {
 
 		std::mutex begin_frame_lock;
 
-		// needs to be mpsc
-		std::mutex transfer_mutex;
-		std::queue<BufferCopyCommand> buffer_transfer_commands;
-		std::queue<BufferImageCopyCommand> bufferimage_transfer_commands;
-		// only accessed by DMAtask
-		std::queue<PendingTransfer> pending_transfers;
-
 		std::mutex named_pipelines_lock;
 		std::unordered_map<Name, PipelineBaseInfo*> named_pipelines;
 		std::unordered_map<Name, ComputePipelineBaseInfo*> named_compute_pipelines;
@@ -95,86 +74,11 @@ namespace vuk {
 
 		std::mutex swapchains_lock;
 		plf::colony<Swapchain> swapchains;
-
-		std::mutex transient_submit_lock;
-		/// @brief with stable addresses, so we can hand out opaque pointers
-		plf::colony<TransientSubmitBundle> transient_submit_bundles;
-		std::vector<plf::colony<TransientSubmitBundle>::iterator> transient_submit_freelist;
-
+		
 		DeviceVkResource device_vk_resource;
 
 		std::mutex query_lock;
 		robin_hood::unordered_map<Query, uint64_t> timestamp_result_map;
-
-		TransientSubmitBundle* get_transient_bundle(uint32_t queue_family_index) {
-			std::lock_guard _(transient_submit_lock);
-
-			plf::colony<TransientSubmitBundle>::iterator it = transient_submit_bundles.end();
-			for (auto fit = transient_submit_freelist.begin(); fit != transient_submit_freelist.end(); fit++) {
-				if ((*fit)->queue_family_index == queue_family_index) {
-					it = *fit;
-					transient_submit_freelist.erase(fit);
-					break;
-				}
-			}
-			if (it == transient_submit_bundles.end()) { // didn't find suitable bundle
-				it = transient_submit_bundles.emplace();
-				auto& bundle = *it;
-
-				VkCommandPoolCreateInfo cpci{ .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
-				cpci.queueFamilyIndex = queue_family_index;
-				cpci.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
-				vkCreateCommandPool(device, &cpci, nullptr, &bundle.cpool);
-			}
-			return &*it;
-		}
-
-		void cleanup_transient_bundle_recursively(TransientSubmitBundle* ur) {
-			if (ur->cpool) {
-				vkResetCommandPool(device, ur->cpool, 0);
-				vkFreeCommandBuffers(device, ur->cpool, (uint32_t)ur->command_buffers.size(), ur->command_buffers.data());
-				ur->command_buffers.clear();
-			}
-			if (ur->buffer) {
-				legacy_gpu_allocator.free_buffer(ur->buffer);
-			}
-			if (ur->fence) {
-				vkDestroyFence(device, ur->fence, nullptr);
-				ur->fence = VK_NULL_HANDLE;
-			}
-			if (ur->sema) {
-				vkDestroySemaphore(device, ur->sema, nullptr);
-				ur->sema = VK_NULL_HANDLE;
-			}
-			if (ur->next) {
-				cleanup_transient_bundle_recursively(ur->next);
-			}
-		}
-
-		VkCommandBuffer get_command_buffer(TransientSubmitBundle* bundle) {
-			VkCommandBuffer cbuf;
-			VkCommandBufferAllocateInfo cbai{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
-			cbai.commandPool = bundle->cpool;
-			cbai.commandBufferCount = 1;
-
-			vkAllocateCommandBuffers(device, &cbai, &cbuf);
-			bundle->command_buffers.push_back(cbuf);
-			return cbuf;
-		}
-
-		VkFence get_unpooled_fence() {
-			VkFenceCreateInfo fci{ .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
-			VkFence fence;
-			vkCreateFence(device, &fci, nullptr, &fence);
-			return fence;
-		}
-
-		VkSemaphore get_unpooled_sema() {
-			VkSemaphoreCreateInfo sci{ .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
-			VkSemaphore sema;
-			vkCreateSemaphore(device, &sci, nullptr, &sema);
-			return sema;
-		}
 
 		void collect(uint64_t absolute_frame) {
 			transient_images.collect(absolute_frame, 6);

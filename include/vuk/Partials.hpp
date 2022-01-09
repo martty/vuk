@@ -1,6 +1,7 @@
 #pragma once
 
 #include "vuk/Context.hpp"
+#include "vuk/RenderGraph.hpp"
 #include <span>
 
 namespace vuk {

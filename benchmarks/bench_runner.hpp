@@ -117,7 +117,6 @@ namespace vuk {
 			end = context->create_timestamp_query();
 			{
 				imgui_data = util::ImGui_ImplVuk_Init(*global);
-				context->wait_all_transfers(*global);
 			}
 			bench->setup(*this, *global);
 		}
