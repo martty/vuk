@@ -28,12 +28,13 @@ namespace vuk {
 		TimestampQueryPool* pool = nullptr;
 		Query query;
 	};
-}
+} // namespace vuk
 
 namespace std {
-	template<> struct hash<vuk::Query> {
+	template<>
+	struct hash<vuk::Query> {
 		size_t operator()(vuk::Query const& s) const {
 			return hash<uint64_t>()(s.id);
 		}
 	};
-}
+} // namespace std

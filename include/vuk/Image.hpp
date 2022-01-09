@@ -1,7 +1,7 @@
 #pragma once
 
-#include "Types.hpp"
 #include "../src/CreateInfo.hpp"
+#include "Types.hpp"
 
 namespace vuk {
 	using Image = VkImage;
@@ -13,11 +13,7 @@ namespace vuk {
 		eDrmFormatModifierEXT = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT
 	};
 
-	enum class ImageType {
-		e1D = VK_IMAGE_TYPE_1D,
-		e2D = VK_IMAGE_TYPE_2D,
-		e3D = VK_IMAGE_TYPE_3D
-	};
+	enum class ImageType { e1D = VK_IMAGE_TYPE_1D, e2D = VK_IMAGE_TYPE_2D, e3D = VK_IMAGE_TYPE_3D };
 
 	enum class ImageUsageFlagBits : VkImageUsageFlags {
 		eTransferRead = VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
@@ -110,10 +106,7 @@ namespace vuk {
 		eStencilReadOnlyOptimalKHR = VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL_KHR
 	};
 
-	enum class SharingMode {
-		eExclusive = VK_SHARING_MODE_EXCLUSIVE,
-		eConcurrent = VK_SHARING_MODE_CONCURRENT
-	};
+	enum class SharingMode { eExclusive = VK_SHARING_MODE_EXCLUSIVE, eConcurrent = VK_SHARING_MODE_CONCURRENT };
 
 	struct ImageCreateInfo {
 		static constexpr VkStructureType structureType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -134,30 +127,19 @@ namespace vuk {
 		const uint32_t* pQueueFamilyIndices = {};
 		ImageLayout initialLayout = ImageLayout::eUndefined;
 
-		operator VkImageCreateInfo const& () const noexcept {
+		operator VkImageCreateInfo const&() const noexcept {
 			return *reinterpret_cast<const VkImageCreateInfo*>(this);
 		}
 
-		operator VkImageCreateInfo& () noexcept {
+		operator VkImageCreateInfo&() noexcept {
 			return *reinterpret_cast<VkImageCreateInfo*>(this);
 		}
 
 		bool operator==(ImageCreateInfo const& rhs) const noexcept {
-			return (sType == rhs.sType)
-				&& (pNext == rhs.pNext)
-				&& (flags == rhs.flags)
-				&& (imageType == rhs.imageType)
-				&& (format == rhs.format)
-				&& (extent == rhs.extent)
-				&& (mipLevels == rhs.mipLevels)
-				&& (arrayLayers == rhs.arrayLayers)
-				&& (samples == rhs.samples)
-				&& (tiling == rhs.tiling)
-				&& (usage == rhs.usage)
-				&& (sharingMode == rhs.sharingMode)
-				&& (queueFamilyIndexCount == rhs.queueFamilyIndexCount)
-				&& (pQueueFamilyIndices == rhs.pQueueFamilyIndices)
-				&& (initialLayout == rhs.initialLayout);
+			return (sType == rhs.sType) && (pNext == rhs.pNext) && (flags == rhs.flags) && (imageType == rhs.imageType) && (format == rhs.format) &&
+			       (extent == rhs.extent) && (mipLevels == rhs.mipLevels) && (arrayLayers == rhs.arrayLayers) && (samples == rhs.samples) && (tiling == rhs.tiling) &&
+			       (usage == rhs.usage) && (sharingMode == rhs.sharingMode) && (queueFamilyIndexCount == rhs.queueFamilyIndexCount) &&
+			       (pQueueFamilyIndices == rhs.pQueueFamilyIndices) && (initialLayout == rhs.initialLayout);
 		}
 
 		bool operator!=(ImageCreateInfo const& rhs) const noexcept {
@@ -167,9 +149,7 @@ namespace vuk {
 	static_assert(sizeof(ImageCreateInfo) == sizeof(VkImageCreateInfo), "struct and wrapper have different size!");
 	static_assert(std::is_standard_layout<ImageCreateInfo>::value, "struct wrapper is not a standard layout!");
 
-	enum class ImageViewCreateFlagBits : VkImageViewCreateFlags {
-		eFragmentDensityMapDynamicEXT = VK_IMAGE_VIEW_CREATE_FRAGMENT_DENSITY_MAP_DYNAMIC_BIT_EXT
-	};
+	enum class ImageViewCreateFlagBits : VkImageViewCreateFlags { eFragmentDensityMapDynamicEXT = VK_IMAGE_VIEW_CREATE_FRAGMENT_DENSITY_MAP_DYNAMIC_BIT_EXT };
 
 	enum class ImageViewType {
 		e1D = VK_IMAGE_VIEW_TYPE_1D,
@@ -197,19 +177,16 @@ namespace vuk {
 		ComponentSwizzle b = ComponentSwizzle::eIdentity;
 		ComponentSwizzle a = ComponentSwizzle::eIdentity;
 
-		operator VkComponentMapping const& () const noexcept {
+		operator VkComponentMapping const&() const noexcept {
 			return *reinterpret_cast<const VkComponentMapping*>(this);
 		}
 
-		operator VkComponentMapping& () noexcept {
+		operator VkComponentMapping&() noexcept {
 			return *reinterpret_cast<VkComponentMapping*>(this);
 		}
 
 		bool operator==(ComponentMapping const& rhs) const noexcept {
-			return (r == rhs.r)
-				&& (g == rhs.g)
-				&& (b == rhs.b)
-				&& (a == rhs.a);
+			return (r == rhs.r) && (g == rhs.g) && (b == rhs.b) && (a == rhs.a);
 		}
 
 		bool operator!=(ComponentMapping const& rhs) const noexcept {
@@ -256,20 +233,17 @@ namespace vuk {
 		uint32_t baseArrayLayer = 0;
 		uint32_t layerCount = 1;
 
-		operator VkImageSubresourceRange const& () const noexcept {
+		operator VkImageSubresourceRange const&() const noexcept {
 			return *reinterpret_cast<const VkImageSubresourceRange*>(this);
 		}
 
-		operator VkImageSubresourceRange& () noexcept {
+		operator VkImageSubresourceRange&() noexcept {
 			return *reinterpret_cast<VkImageSubresourceRange*>(this);
 		}
 
 		bool operator==(ImageSubresourceRange const& rhs) const noexcept {
-			return (aspectMask == rhs.aspectMask)
-				&& (baseMipLevel == rhs.baseMipLevel)
-				&& (levelCount == rhs.levelCount)
-				&& (baseArrayLayer == rhs.baseArrayLayer)
-				&& (layerCount == rhs.layerCount);
+			return (aspectMask == rhs.aspectMask) && (baseMipLevel == rhs.baseMipLevel) && (levelCount == rhs.levelCount) && (baseArrayLayer == rhs.baseArrayLayer) &&
+			       (layerCount == rhs.layerCount);
 		}
 
 		bool operator!=(ImageSubresourceRange const& rhs) const noexcept {
@@ -278,7 +252,6 @@ namespace vuk {
 	};
 	static_assert(sizeof(ImageSubresourceRange) == sizeof(VkImageSubresourceRange), "struct and wrapper have different size!");
 	static_assert(std::is_standard_layout<ImageSubresourceRange>::value, "struct wrapper is not a standard layout!");
-
 
 	struct ImageViewCreateInfo {
 		static constexpr VkStructureType structureType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -292,23 +265,17 @@ namespace vuk {
 		ComponentMapping components = {};
 		ImageSubresourceRange subresourceRange = {};
 
-		operator VkImageViewCreateInfo const& () const noexcept {
+		operator VkImageViewCreateInfo const&() const noexcept {
 			return *reinterpret_cast<const VkImageViewCreateInfo*>(this);
 		}
 
-		operator VkImageViewCreateInfo& () noexcept {
+		operator VkImageViewCreateInfo&() noexcept {
 			return *reinterpret_cast<VkImageViewCreateInfo*>(this);
 		}
 
 		bool operator==(ImageViewCreateInfo const& rhs) const noexcept {
-			return (sType == rhs.sType)
-				&& (pNext == rhs.pNext)
-				&& (flags == rhs.flags)
-				&& (image == rhs.image)
-				&& (viewType == rhs.viewType)
-				&& (format == rhs.format)
-				&& (components == rhs.components)
-				&& (subresourceRange == rhs.subresourceRange);
+			return (sType == rhs.sType) && (pNext == rhs.pNext) && (flags == rhs.flags) && (image == rhs.image) && (viewType == rhs.viewType) &&
+			       (format == rhs.format) && (components == rhs.components) && (subresourceRange == rhs.subresourceRange);
 		}
 
 		bool operator!=(ImageViewCreateInfo const& rhs) const noexcept {
@@ -322,7 +289,7 @@ namespace vuk {
 		VkImageView payload = VK_NULL_HANDLE;
 
 		VkImage image; // 64 bits
-		Format format; //32 bits
+		Format format; // 32 bits
 		uint32_t id : 29;
 		ImageViewType type : 3;
 		uint32_t base_level : 4;
@@ -336,12 +303,13 @@ namespace vuk {
 		}
 	};
 
-	//static_assert(sizeof(ImageView) == 64);
+	// static_assert(sizeof(ImageView) == 64);
 
 	template<>
 	class Unique<ImageView> {
 		Allocator* allocator;
 		ImageView payload;
+
 	public:
 		using element_type = ImageView;
 
@@ -448,17 +416,9 @@ namespace vuk {
 	};
 
 	using SamplerCreateFlags = Flags<SamplerCreateFlagBits>;
-	enum class Filter {
-		eNearest = VK_FILTER_NEAREST,
-		eLinear = VK_FILTER_LINEAR,
-		eCubicIMG = VK_FILTER_CUBIC_IMG,
-		eCubicEXT = VK_FILTER_CUBIC_EXT
-	};
+	enum class Filter { eNearest = VK_FILTER_NEAREST, eLinear = VK_FILTER_LINEAR, eCubicIMG = VK_FILTER_CUBIC_IMG, eCubicEXT = VK_FILTER_CUBIC_EXT };
 
-	enum class SamplerMipmapMode {
-		eNearest = VK_SAMPLER_MIPMAP_MODE_NEAREST,
-		eLinear = VK_SAMPLER_MIPMAP_MODE_LINEAR
-	};
+	enum class SamplerMipmapMode { eNearest = VK_SAMPLER_MIPMAP_MODE_NEAREST, eLinear = VK_SAMPLER_MIPMAP_MODE_LINEAR };
 
 	enum class SamplerAddressMode {
 		eRepeat = VK_SAMPLER_ADDRESS_MODE_REPEAT,
@@ -513,33 +473,20 @@ namespace vuk {
 		BorderColor borderColor = BorderColor::eFloatTransparentBlack;
 		Bool32 unnormalizedCoordinates = {};
 
-		operator VkSamplerCreateInfo const& () const noexcept {
+		operator VkSamplerCreateInfo const&() const noexcept {
 			return *reinterpret_cast<const VkSamplerCreateInfo*>(this);
 		}
 
-		operator VkSamplerCreateInfo& () noexcept {
+		operator VkSamplerCreateInfo&() noexcept {
 			return *reinterpret_cast<VkSamplerCreateInfo*>(this);
 		}
 
 		bool operator==(SamplerCreateInfo const& rhs) const noexcept {
-			return (sType == rhs.sType)
-				&& (pNext == rhs.pNext)
-				&& (flags == rhs.flags)
-				&& (magFilter == rhs.magFilter)
-				&& (minFilter == rhs.minFilter)
-				&& (mipmapMode == rhs.mipmapMode)
-				&& (addressModeU == rhs.addressModeU)
-				&& (addressModeV == rhs.addressModeV)
-				&& (addressModeW == rhs.addressModeW)
-				&& (mipLodBias == rhs.mipLodBias)
-				&& (anisotropyEnable == rhs.anisotropyEnable)
-				&& (maxAnisotropy == rhs.maxAnisotropy)
-				&& (compareEnable == rhs.compareEnable)
-				&& (compareOp == rhs.compareOp)
-				&& (minLod == rhs.minLod)
-				&& (maxLod == rhs.maxLod)
-				&& (borderColor == rhs.borderColor)
-				&& (unnormalizedCoordinates == rhs.unnormalizedCoordinates);
+			return (sType == rhs.sType) && (pNext == rhs.pNext) && (flags == rhs.flags) && (magFilter == rhs.magFilter) && (minFilter == rhs.minFilter) &&
+			       (mipmapMode == rhs.mipmapMode) && (addressModeU == rhs.addressModeU) && (addressModeV == rhs.addressModeV) && (addressModeW == rhs.addressModeW) &&
+			       (mipLodBias == rhs.mipLodBias) && (anisotropyEnable == rhs.anisotropyEnable) && (maxAnisotropy == rhs.maxAnisotropy) &&
+			       (compareEnable == rhs.compareEnable) && (compareOp == rhs.compareOp) && (minLod == rhs.minLod) && (maxLod == rhs.maxLod) &&
+			       (borderColor == rhs.borderColor) && (unnormalizedCoordinates == rhs.unnormalizedCoordinates);
 		}
 
 		bool operator!=(SamplerCreateInfo const& rhs) const noexcept {
@@ -549,7 +496,8 @@ namespace vuk {
 	static_assert(sizeof(SamplerCreateInfo) == sizeof(VkSamplerCreateInfo), "struct and wrapper have different size!");
 	static_assert(std::is_standard_layout<SamplerCreateInfo>::value, "struct wrapper is not a standard layout!");
 
-	template<> struct create_info<Sampler> {
+	template<>
+	struct create_info<Sampler> {
 		using type = vuk::SamplerCreateInfo;
 	};
 
@@ -577,7 +525,7 @@ namespace vuk {
 			return vuk::ImageAspectFlagBits::eColor;
 		}
 	}
-};
+}; // namespace vuk
 
 namespace std {
 	template<>
@@ -588,4 +536,4 @@ namespace std {
 			return h;
 		}
 	};
-}
+} // namespace std

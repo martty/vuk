@@ -1,8 +1,8 @@
 #pragma once
 
-#include <utility>
 #include <algorithm>
 #include <memory>
+#include <utility>
 
 namespace vuk {
 	// https://gist.github.com/ThePhD/8153067
@@ -19,7 +19,7 @@ namespace vuk {
 		typedef const pointer_type const_iterator;
 
 	private:
-		typename std::aligned_storage<sizeof(T)* n, a>::type items;
+		typename std::aligned_storage<sizeof(T) * n, a>::type items;
 		std::size_t len;
 
 		T* ptrat(std::size_t idx) {
@@ -52,7 +52,7 @@ namespace vuk {
 		}
 
 		template<std::size_t c>
-		fixed_vector(const T(&arr)[c]) : len(c) {
+		fixed_vector(const T (&arr)[c]) : len(c) {
 			memset(&items, 0, sizeof(T) * n);
 			static_assert(c < n, "Array too large to initialize fixed_vector");
 			std::copy(std::addressof(arr[0]), std::addressof(arr[c]), data());
@@ -76,7 +76,6 @@ namespace vuk {
 			resize(o.len);
 			return *this;
 		}
-
 
 		fixed_vector(fixed_vector&& o) {
 			memset(&items, 0, sizeof(T) * n);
@@ -113,16 +112,16 @@ namespace vuk {
 		}
 
 		void push_back(const T& item) {
-			new(ptrat(len++)) T(item);
+			new (ptrat(len++)) T(item);
 		}
 
 		void push_back(T&& item) {
-			new(ptrat(len++)) T(std::move(item));
+			new (ptrat(len++)) T(std::move(item));
 		}
 
 		template<typename... Tn>
 		T& emplace_back(Tn&&... argn) {
-			return *(new(ptrat(len++)) T(std::forward<Tn>(argn)...));
+			return *(new (ptrat(len++)) T(std::forward<Tn>(argn)...));
 		}
 
 		void pop_back() {
@@ -253,4 +252,4 @@ namespace vuk {
 			return std::equal(begin(), end(), o.begin(), o.end());
 		}
 	};
-}
+} // namespace vuk

@@ -1,15 +1,15 @@
 #pragma once
 
-#include <utility>
-#include <optional>
-#include <vuk/Config.hpp>
-#include <vuk/vuk_fwd.hpp>
-#include <vuk/FixedVector.hpp>
-#include <vuk/Types.hpp>
-#include <vuk/Image.hpp>
-#include <vuk/Query.hpp>
-#include <vuk/PipelineInstance.hpp>
 #include "vuk/Exception.hpp"
+#include <optional>
+#include <utility>
+#include <vuk/Config.hpp>
+#include <vuk/FixedVector.hpp>
+#include <vuk/Image.hpp>
+#include <vuk/PipelineInstance.hpp>
+#include <vuk/Query.hpp>
+#include <vuk/Types.hpp>
+#include <vuk/vuk_fwd.hpp>
 
 namespace vuk {
 	class Context;
@@ -45,20 +45,17 @@ namespace vuk {
 		int32_t vertexOffset = {};
 		uint32_t firstInstance = {};
 
-		operator VkDrawIndexedIndirectCommand const& () const noexcept {
+		operator VkDrawIndexedIndirectCommand const&() const noexcept {
 			return *reinterpret_cast<const VkDrawIndexedIndirectCommand*>(this);
 		}
 
-		operator VkDrawIndexedIndirectCommand& () noexcept {
+		operator VkDrawIndexedIndirectCommand&() noexcept {
 			return *reinterpret_cast<VkDrawIndexedIndirectCommand*>(this);
 		}
 
 		bool operator==(DrawIndexedIndirectCommand const& rhs) const noexcept {
-			return (indexCount == rhs.indexCount)
-				&& (instanceCount == rhs.instanceCount)
-				&& (firstIndex == rhs.firstIndex)
-				&& (vertexOffset == rhs.vertexOffset)
-				&& (firstInstance == rhs.firstInstance);
+			return (indexCount == rhs.indexCount) && (instanceCount == rhs.instanceCount) && (firstIndex == rhs.firstIndex) && (vertexOffset == rhs.vertexOffset) &&
+			       (firstInstance == rhs.firstInstance);
 		}
 
 		bool operator!=(DrawIndexedIndirectCommand const& rhs) const noexcept {
@@ -74,29 +71,24 @@ namespace vuk {
 		uint32_t baseArrayLayer = 0;
 		uint32_t layerCount = 1;
 
-		operator VkImageSubresourceLayers const& () const noexcept {
+		operator VkImageSubresourceLayers const&() const noexcept {
 			return *reinterpret_cast<const VkImageSubresourceLayers*>(this);
 		}
 
-		operator VkImageSubresourceLayers& () noexcept {
+		operator VkImageSubresourceLayers&() noexcept {
 			return *reinterpret_cast<VkImageSubresourceLayers*>(this);
 		}
 
 		bool operator==(ImageSubresourceLayers const& rhs) const noexcept {
-			return (aspectMask == rhs.aspectMask)
-				&& (mipLevel == rhs.mipLevel)
-				&& (baseArrayLayer == rhs.baseArrayLayer)
-				&& (layerCount == rhs.layerCount);
+			return (aspectMask == rhs.aspectMask) && (mipLevel == rhs.mipLevel) && (baseArrayLayer == rhs.baseArrayLayer) && (layerCount == rhs.layerCount);
 		}
 
 		bool operator!=(ImageSubresourceLayers const& rhs) const noexcept {
 			return !operator==(rhs);
 		}
-
 	};
 	static_assert(sizeof(ImageSubresourceLayers) == sizeof(VkImageSubresourceLayers), "struct and wrapper have different size!");
 	static_assert(std::is_standard_layout<ImageSubresourceLayers>::value, "struct wrapper is not a standard layout!");
-
 
 	struct ImageBlit {
 		ImageSubresourceLayers srcSubresource = {};
@@ -104,19 +96,17 @@ namespace vuk {
 		ImageSubresourceLayers dstSubresource = {};
 		std::array<Offset3D, 2> dstOffsets = {};
 
-		operator VkImageBlit const& () const noexcept {
+		operator VkImageBlit const&() const noexcept {
 			return *reinterpret_cast<const VkImageBlit*>(this);
 		}
 
-		operator VkImageBlit& () noexcept {
+		operator VkImageBlit&() noexcept {
 			return *reinterpret_cast<VkImageBlit*>(this);
 		}
 
 		bool operator==(ImageBlit const& rhs) const noexcept {
-			return (srcSubresource == rhs.srcSubresource)
-				&& (srcOffsets == rhs.srcOffsets)
-				&& (dstSubresource == rhs.dstSubresource)
-				&& (dstOffsets == rhs.dstOffsets);
+			return (srcSubresource == rhs.srcSubresource) && (srcOffsets == rhs.srcOffsets) && (dstSubresource == rhs.dstSubresource) &&
+			       (dstOffsets == rhs.dstOffsets);
 		}
 
 		bool operator!=(ImageBlit const& rhs) const noexcept {
@@ -134,22 +124,17 @@ namespace vuk {
 		Offset3D imageOffset = {};
 		Extent3D imageExtent = {};
 
-
-		operator VkBufferImageCopy const& () const noexcept {
+		operator VkBufferImageCopy const&() const noexcept {
 			return *reinterpret_cast<const VkBufferImageCopy*>(this);
 		}
 
-		operator VkBufferImageCopy& () noexcept {
+		operator VkBufferImageCopy&() noexcept {
 			return *reinterpret_cast<VkBufferImageCopy*>(this);
 		}
 
 		bool operator==(BufferImageCopy const& rhs) const noexcept {
-			return (bufferOffset == rhs.bufferOffset)
-				&& (bufferRowLength == rhs.bufferRowLength)
-				&& (bufferImageHeight == rhs.bufferImageHeight)
-				&& (imageSubresource == rhs.imageSubresource)
-				&& (imageOffset == rhs.imageOffset)
-				&& (imageExtent == rhs.imageExtent);
+			return (bufferOffset == rhs.bufferOffset) && (bufferRowLength == rhs.bufferRowLength) && (bufferImageHeight == rhs.bufferImageHeight) &&
+			       (imageSubresource == rhs.imageSubresource) && (imageOffset == rhs.imageOffset) && (imageExtent == rhs.imageExtent);
 		}
 
 		bool operator!=(BufferImageCopy const& rhs) const noexcept {
@@ -158,7 +143,6 @@ namespace vuk {
 	};
 	static_assert(sizeof(BufferImageCopy) == sizeof(VkBufferImageCopy), "struct and wrapper have different size!");
 	static_assert(std::is_standard_layout<BufferImageCopy>::value, "struct wrapper is not a standard layout!");
-
 
 	struct ExecutableRenderGraph;
 	struct PassInfo;
@@ -236,13 +220,26 @@ namespace vuk {
 		std::bitset<VUK_MAX_SETS> persistent_sets_used = {};
 		std::array<VkDescriptorSet, VUK_MAX_SETS> persistent_sets = {};
 
-
 		// for rendergraph
-		CommandBuffer(ExecutableRenderGraph& rg, Context& ctx, Allocator& allocator, VkCommandBuffer cb) : rg(&rg), ctx(ctx), allocator(&allocator), command_buffer(cb) {}
-		CommandBuffer(ExecutableRenderGraph& rg, Context& ctx, Allocator& allocator, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing) : rg(&rg), ctx(ctx), allocator(&allocator), command_buffer(cb), ongoing_renderpass(ongoing) {}
+		CommandBuffer(ExecutableRenderGraph& rg, Context& ctx, Allocator& allocator, VkCommandBuffer cb) :
+		    rg(&rg),
+		    ctx(ctx),
+		    allocator(&allocator),
+		    command_buffer(cb) {}
+		CommandBuffer(ExecutableRenderGraph& rg, Context& ctx, Allocator& allocator, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing) :
+		    rg(&rg),
+		    ctx(ctx),
+		    allocator(&allocator),
+		    command_buffer(cb),
+		    ongoing_renderpass(ongoing) {}
+
 	public:
 		// for secondary cbufs
-		CommandBuffer(ExecutableRenderGraph* rg, Context& ctx, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing) : rg(rg), ctx(ctx), command_buffer(cb), ongoing_renderpass(ongoing) {}
+		CommandBuffer(ExecutableRenderGraph* rg, Context& ctx, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing) :
+		    rg(rg),
+		    ctx(ctx),
+		    command_buffer(cb),
+		    ongoing_renderpass(ongoing) {}
 
 		Context& get_context() {
 			return ctx;
@@ -277,25 +274,33 @@ namespace vuk {
 
 		CommandBuffer& set_primitive_topology(PrimitiveTopology);
 
-		/// @brief Binds a vertex buffer to the given binding point and configures attributes sourced from this buffer based on a packed format list, the attribute locations are offset with first_location
+		/// @brief Binds a vertex buffer to the given binding point and configures attributes sourced from this buffer based on a packed format list, the attribute
+		/// locations are offset with first_location
 		/// @param binding The binding point of the buffer
 		/// @param buffer The buffer to be bound
 		/// @param first_location First location assigned to the attributes
 		/// @param format_list List of formats packed in buffer to generate attributes from
 		CommandBuffer& bind_vertex_buffer(unsigned binding, const Buffer& buffer, unsigned first_location, Packed format_list);
-		/// @brief Binds a vertex buffer to the given binding point and configures attributes sourced from this buffer based on a span of attribute descriptions and stride
+		/// @brief Binds a vertex buffer to the given binding point and configures attributes sourced from this buffer based on a span of attribute descriptions and
+		/// stride
 		/// @param binding The binding point of the buffer
 		/// @param buffer The buffer to be bound
 		/// @param attribute_descriptions Attributes that are sourced from this buffer
 		/// @param stride Stride of a vertex sourced from this buffer
-		CommandBuffer& bind_vertex_buffer(unsigned binding, const Buffer& buffer, std::span<VertexInputAttributeDescription> attribute_descriptions, uint32_t stride);
+		CommandBuffer&
+		bind_vertex_buffer(unsigned binding, const Buffer& buffer, std::span<VertexInputAttributeDescription> attribute_descriptions, uint32_t stride);
 		/// @brief Binds an index buffer with the given type
 		/// @param buffer The buffer to be bound
 		/// @param type The index type in the buffer
 		CommandBuffer& bind_index_buffer(const Buffer& buffer, IndexType type);
 
-		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, ImageView iv, SamplerCreateInfo sampler_create_info, ImageLayout = ImageLayout::eShaderReadOnlyOptimal);
-		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, const Texture&, SamplerCreateInfo sampler_create_info, ImageLayout = ImageLayout::eShaderReadOnlyOptimal);
+		CommandBuffer&
+		bind_sampled_image(unsigned set, unsigned binding, ImageView iv, SamplerCreateInfo sampler_create_info, ImageLayout = ImageLayout::eShaderReadOnlyOptimal);
+		CommandBuffer& bind_sampled_image(unsigned set,
+		                                  unsigned binding,
+		                                  const Texture&,
+		                                  SamplerCreateInfo sampler_create_info,
+		                                  ImageLayout = ImageLayout::eShaderReadOnlyOptimal);
 		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, Name, SamplerCreateInfo sampler_create_info);
 		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, Name, ImageViewCreateInfo ivci, SamplerCreateInfo sampler_create_info);
 
@@ -396,11 +401,11 @@ namespace vuk {
 			return current_exception != nullptr;
 		}
 
-		[[nodiscard]] Exception& error()&;
+		[[nodiscard]] Exception& error() &;
 
 		[[nodiscard]] Exception const& error() const&;
 
-		[[nodiscard]] Exception&& error()&&;
+		[[nodiscard]] Exception&& error() &&;
 
 	protected:
 		[[nodiscard]] bool _bind_state(bool graphics);
@@ -466,4 +471,4 @@ namespace vuk {
 		Query a;
 		Query b;
 	};
-}
+} // namespace vuk

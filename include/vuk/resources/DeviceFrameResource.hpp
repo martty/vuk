@@ -1,11 +1,11 @@
 #pragma once
 
-#include "vuk/Allocator.hpp"
-#include "vuk/resources/DeviceNestedResource.hpp"
-#include "vuk/resources/DeviceVkResource.hpp"
 #include "../src/LegacyGPUAllocator.hpp"
+#include "vuk/Allocator.hpp"
 #include "vuk/Exception.hpp"
 #include "vuk/Query.hpp"
+#include "vuk/resources/DeviceNestedResource.hpp"
+#include "vuk/resources/DeviceVkResource.hpp"
 
 #include <atomic>
 
@@ -34,16 +34,20 @@ namespace vuk {
 		std::vector<CommandBufferAllocation> cmdbuffers_to_free;
 		std::vector<CommandPool> cmdpools_to_free;
 
-		Result<void, AllocateException> allocate_command_buffers(std::span<CommandBufferAllocation> dst, std::span<const CommandBufferAllocationCreateInfo> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException> allocate_command_buffers(std::span<CommandBufferAllocation> dst,
+		                                                         std::span<const CommandBufferAllocationCreateInfo> cis,
+		                                                         SourceLocationAtFrame loc) override;
 
 		void deallocate_command_buffers(std::span<const CommandBufferAllocation> src) override; // no-op, deallocated with pools
 
-		Result<void, AllocateException> allocate_command_pools(std::span<CommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException>
+		allocate_command_pools(std::span<CommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) override;
 
 		void deallocate_command_pools(std::span<const CommandPool> dst) override; // no-op
 
 		// buffers are lockless
-		Result<void, AllocateException> allocate_buffers(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException>
+		allocate_buffers(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) override;
 
 		void deallocate_buffers(std::span<const BufferCrossDevice> src) override; // no-op, linear
 
@@ -54,7 +58,8 @@ namespace vuk {
 		std::mutex framebuffer_mutex;
 		std::vector<VkFramebuffer> framebuffers;
 
-		Result<void, AllocateException> allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException>
+		allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) override;
 
 		void deallocate_framebuffers(std::span<const VkFramebuffer> src) override; // noop
 
@@ -68,14 +73,17 @@ namespace vuk {
 		std::mutex image_views_mutex;
 		std::vector<ImageView> image_views;
 
-		Result<void, AllocateException> allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException>
+		allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) override;
 
 		void deallocate_image_views(std::span<const ImageView> src) override; // noop
 
 		std::mutex pds_mutex;
 		std::vector<PersistentDescriptorSet> persistent_descriptor_sets;
 
-		Result<void, AllocateException> allocate_persistent_descriptor_sets(std::span<PersistentDescriptorSet> dst, std::span<const PersistentDescriptorSetCreateInfo> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException> allocate_persistent_descriptor_sets(std::span<PersistentDescriptorSet> dst,
+		                                                                    std::span<const PersistentDescriptorSetCreateInfo> cis,
+		                                                                    SourceLocationAtFrame loc) override;
 
 		void deallocate_persistent_descriptor_sets(std::span<const PersistentDescriptorSet> src) override; // noop
 
@@ -94,7 +102,8 @@ namespace vuk {
 		std::vector<TimestampQueryPool> ts_query_pools;
 		std::mutex query_pool_mutex;
 
-		Result<void, AllocateException> allocate_timestamp_query_pools(std::span<TimestampQueryPool> dst, std::span<const VkQueryPoolCreateInfo> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException>
+		allocate_timestamp_query_pools(std::span<TimestampQueryPool> dst, std::span<const VkQueryPoolCreateInfo> cis, SourceLocationAtFrame loc) override;
 
 		void deallocate_timestamp_query_pools(std::span<const TimestampQueryPool> src) override; // noop
 
@@ -102,7 +111,8 @@ namespace vuk {
 		uint64_t query_index = 0;
 		uint64_t current_ts_pool;
 
-		Result<void, AllocateException> allocate_timestamp_queries(std::span<TimestampQuery> dst, std::span<const TimestampQueryCreateInfo> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException>
+		allocate_timestamp_queries(std::span<TimestampQuery> dst, std::span<const TimestampQueryCreateInfo> cis, SourceLocationAtFrame loc) override;
 
 		void deallocate_timestamp_queries(std::span<const TimestampQuery> src) override; // noop
 
@@ -116,7 +126,7 @@ namespace vuk {
 		std::mutex swapchain_mutex;
 		std::vector<VkSwapchainKHR> swapchains;
 
-		void deallocate_swapchains(std::span<const VkSwapchainKHR> src) override; 
+		void deallocate_swapchains(std::span<const VkSwapchainKHR> src) override;
 
 		void wait();
 
@@ -144,15 +154,19 @@ namespace vuk {
 
 		void deallocate_fences(std::span<const VkFence> src) override;
 
-		Result<void, AllocateException> allocate_command_buffers(std::span<CommandBufferAllocation> dst, std::span<const CommandBufferAllocationCreateInfo> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException> allocate_command_buffers(std::span<CommandBufferAllocation> dst,
+		                                                         std::span<const CommandBufferAllocationCreateInfo> cis,
+		                                                         SourceLocationAtFrame loc) override;
 
 		void deallocate_command_buffers(std::span<const CommandBufferAllocation> src) override;
 
-		Result<void, AllocateException> allocate_command_pools(std::span<CommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException>
+		allocate_command_pools(std::span<CommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) override;
 
 		void deallocate_command_pools(std::span<const CommandPool> src) override;
 
-		Result<void, AllocateException> allocate_buffers(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException>
+		allocate_buffers(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) override;
 
 		void deallocate_buffers(std::span<const BufferCrossDevice> src) override;
 
@@ -160,7 +174,8 @@ namespace vuk {
 
 		void deallocate_buffers(std::span<const BufferGPU> src) override;
 
-		Result<void, AllocateException> allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException>
+		allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) override;
 
 		void deallocate_framebuffers(std::span<const VkFramebuffer> src) override;
 
@@ -168,11 +183,14 @@ namespace vuk {
 
 		void deallocate_images(std::span<const Image> src) override;
 
-		Result<void, AllocateException> allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException>
+		allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) override;
 
 		void deallocate_image_views(std::span<const ImageView> src) override;
 
-		Result<void, AllocateException> allocate_persistent_descriptor_sets(std::span<PersistentDescriptorSet> dst, std::span<const PersistentDescriptorSetCreateInfo> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException> allocate_persistent_descriptor_sets(std::span<PersistentDescriptorSet> dst,
+		                                                                    std::span<const PersistentDescriptorSetCreateInfo> cis,
+		                                                                    SourceLocationAtFrame loc) override;
 
 		void deallocate_persistent_descriptor_sets(std::span<const PersistentDescriptorSet> src) override;
 
@@ -180,11 +198,13 @@ namespace vuk {
 
 		void deallocate_descriptor_sets(std::span<const DescriptorSet> src) override;
 
-		Result<void, AllocateException> allocate_timestamp_query_pools(std::span<TimestampQueryPool> dst, std::span<const VkQueryPoolCreateInfo> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException>
+		allocate_timestamp_query_pools(std::span<TimestampQueryPool> dst, std::span<const VkQueryPoolCreateInfo> cis, SourceLocationAtFrame loc) override;
 
 		void deallocate_timestamp_query_pools(std::span<const TimestampQueryPool> src) override;
 
-		Result<void, AllocateException> allocate_timestamp_queries(std::span<TimestampQuery> dst, std::span<const TimestampQueryCreateInfo> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException>
+		allocate_timestamp_queries(std::span<TimestampQuery> dst, std::span<const TimestampQueryCreateInfo> cis, SourceLocationAtFrame loc) override;
 
 		void deallocate_timestamp_queries(std::span<const TimestampQuery> src) override; // noop
 
@@ -218,4 +238,4 @@ namespace vuk {
 		std::mutex command_pool_mutex;
 		std::array<std::vector<VkCommandPool>, 3> command_pools;
 	};
-}
+} // namespace vuk

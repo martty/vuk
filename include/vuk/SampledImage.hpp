@@ -1,7 +1,7 @@
 #pragma once
 
-#include "vuk/Types.hpp"
 #include "vuk/Image.hpp"
+#include "vuk/Types.hpp"
 #include <optional>
 
 namespace vuk {
@@ -45,4 +45,4 @@ namespace vuk {
 			return *this;
 		}
 	};
-}
+} // namespace vuk

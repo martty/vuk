@@ -1,6 +1,6 @@
-#include "vuk/RenderGraph.hpp"
-#include "RenderGraphImpl.hpp"
 #include "RenderGraphUtil.hpp"
+#include "RenderGraphImpl.hpp"
+#include "vuk/RenderGraph.hpp"
 
 namespace vuk {
 	namespace detail {
@@ -26,7 +26,7 @@ namespace vuk {
 		Resource BufferResourceInputOnly::operator>>(Name out) {
 			return { name, Resource::Type::eBuffer, ba, out };
 		}
-		
+
 		BufferResourceInputOnly::operator Resource() {
 			if (is_read_access(ba)) { // do not produce a name by default it is read-only
 				return operator>>(Name{});
@@ -35,16 +35,21 @@ namespace vuk {
 		}
 
 		Resource ImageResource::operator()(Access ia, Format fmt, Dimension2D dim, Samples samp, Clear cv) {
-			return Resource{ name, Resource::Type::eImage, ia, fmt, dim, samp, cv, name.append("+")};
+			return Resource{ name, Resource::Type::eImage, ia, fmt, dim, samp, cv, name.append("+") };
 		}
-	}
+	} // namespace detail
 
 #define INIT2(x) x(decltype(x)::allocator_type(arena_))
 
-	RenderPassInfo::RenderPassInfo(arena& arena_) : INIT2(subpasses), INIT2(attachments) {
-	}
+	RenderPassInfo::RenderPassInfo(arena& arena_) : INIT2(subpasses), INIT2(attachments) {}
 
-	PassInfo::PassInfo(arena& arena_, Pass&& p) : pass(std::move(p)), INIT2(inputs), INIT2(input_names), INIT2(outputs), INIT2(output_names), INIT2(write_input_names) {}
+	PassInfo::PassInfo(arena& arena_, Pass&& p) :
+	    pass(std::move(p)),
+	    INIT2(inputs),
+	    INIT2(input_names),
+	    INIT2(outputs),
+	    INIT2(output_names),
+	    INIT2(write_input_names) {}
 
 	SubpassInfo::SubpassInfo(arena& arena_) : INIT2(passes) {}
 
@@ -108,7 +113,6 @@ namespace vuk {
 	bool MPI1::operator==(MPI1 const& other) const noexcept {
 		return *reinterpret_cast<M1::iterator const*>(_iter) == *reinterpret_cast<M1::iterator const*>(other._iter);
 	}
-
 
 	// implement MapProxy for attachment
 	using MP2 = MapProxy<Name, const AttachmentRPInfo&>;

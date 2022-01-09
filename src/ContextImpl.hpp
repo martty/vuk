@@ -1,17 +1,17 @@
-#include "vuk/Context.hpp"
 #include "RGImage.hpp"
+#include "vuk/Context.hpp"
 
+#include <math.h>
 #include <mutex>
 #include <queue>
 #include <string_view>
-#include <math.h>
 
-#include "LegacyGPUAllocator.hpp"
 #include "Cache.hpp"
+#include "LegacyGPUAllocator.hpp"
 #include "RenderPass.hpp"
 #include "vuk/Allocator.hpp"
-#include "vuk/resources/DeviceVkResource.hpp"
 #include "vuk/PipelineInstance.hpp"
+#include "vuk/resources/DeviceVkResource.hpp"
 
 namespace vuk {
 	struct TransientSubmitBundle {
@@ -183,42 +183,49 @@ namespace vuk {
 			auto remainder = absolute_frame % cache_collection_frequency;
 			switch (remainder) {
 			case 0:
-				pipeline_cache.collect(absolute_frame, cache_collection_frequency); break;
+				pipeline_cache.collect(absolute_frame, cache_collection_frequency);
+				break;
 			case 1:
-				compute_pipeline_cache.collect(absolute_frame, cache_collection_frequency); break;
+				compute_pipeline_cache.collect(absolute_frame, cache_collection_frequency);
+				break;
 			case 2:
-				renderpass_cache.collect(absolute_frame, cache_collection_frequency); break;
+				renderpass_cache.collect(absolute_frame, cache_collection_frequency);
+				break;
 				/*case 3:
-					ptc.impl->sampler_cache.collect(cache_collection_frequency); break;*/ // sampler cache can't be collected due to persistent descriptor sets
+				  ptc.impl->sampler_cache.collect(cache_collection_frequency); break;*/ // sampler cache can't be collected due to persistent descriptor sets
 			case 4:
-				pipeline_layouts.collect(absolute_frame, cache_collection_frequency); break;
+				pipeline_layouts.collect(absolute_frame, cache_collection_frequency);
+				break;
 			case 5:
-				pipelinebase_cache.collect(absolute_frame, cache_collection_frequency); break;
+				pipelinebase_cache.collect(absolute_frame, cache_collection_frequency);
+				break;
 			case 6:
-				compute_pipelinebase_cache.collect(absolute_frame, cache_collection_frequency); break;
+				compute_pipelinebase_cache.collect(absolute_frame, cache_collection_frequency);
+				break;
 			case 7:
-				pool_cache.collect(absolute_frame, cache_collection_frequency); break;
+				pool_cache.collect(absolute_frame, cache_collection_frequency);
+				break;
 			}
 		}
 
-		ContextImpl(Context& ctx) : legacy_gpu_allocator(ctx.instance, ctx.device, ctx.physical_device, ctx.graphics_queue_family_index, ctx.transfer_queue_family_index),
-			device(ctx.device),
-			pipelinebase_cache(ctx),
-			pipeline_cache(ctx),
-			compute_pipelinebase_cache(ctx),
-			compute_pipeline_cache(ctx),
-			renderpass_cache(ctx),
-			transient_images(ctx),
-			pool_cache(ctx),
-			sampler_cache(ctx),
-			shader_modules(ctx),
-			descriptor_set_layouts(ctx),
-			pipeline_layouts(ctx),
-			device_vk_resource(ctx, legacy_gpu_allocator) {
+		ContextImpl(Context& ctx) :
+		    legacy_gpu_allocator(ctx.instance, ctx.device, ctx.physical_device, ctx.graphics_queue_family_index, ctx.transfer_queue_family_index),
+		    device(ctx.device),
+		    pipelinebase_cache(ctx),
+		    pipeline_cache(ctx),
+		    compute_pipelinebase_cache(ctx),
+		    compute_pipeline_cache(ctx),
+		    renderpass_cache(ctx),
+		    transient_images(ctx),
+		    pool_cache(ctx),
+		    sampler_cache(ctx),
+		    shader_modules(ctx),
+		    descriptor_set_layouts(ctx),
+		    pipeline_layouts(ctx),
+		    device_vk_resource(ctx, legacy_gpu_allocator) {
 			vkGetPhysicalDeviceProperties(ctx.physical_device, &physical_device_properties);
 		}
 	};
-
 
 	inline void record_mip_gen(VkCommandBuffer& cbuf, MipGenerateCommand& task, ImageLayout last_layout) {
 		// transition top mip to transfersrc
@@ -263,7 +270,8 @@ namespace vuk {
 		top_mip_use_barrier.subresourceRange = top_mip_to_barrier.subresourceRange;
 
 		// transition rest of the mips to SROO
-		VkImageMemoryBarrier use_barrier = { .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };;
+		VkImageMemoryBarrier use_barrier = { .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+		;
 		use_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 		use_barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT; // TODO: maybe memory read?
 		use_barrier.oldLayout = (VkImageLayout)last_layout;
@@ -274,7 +282,6 @@ namespace vuk {
 		use_barrier.subresourceRange = top_mip_to_barrier.subresourceRange;
 		use_barrier.subresourceRange.baseMipLevel = task.base_mip_level + 1;
 		use_barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
-
 
 		VkImageMemoryBarrier to_bars[] = { top_mip_to_barrier, rest_mip_to_barrier };
 		vkCmdPipelineBarrier(cbuf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 2, to_bars);
@@ -351,7 +358,8 @@ namespace vuk {
 		top_mip_use_barrier.subresourceRange.levelCount = 1;
 
 		// transition rest of the mips to SROO
-		VkImageMemoryBarrier use_barrier = { .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };;
+		VkImageMemoryBarrier use_barrier = { .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+		;
 		use_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 		use_barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 		use_barrier.oldLayout = (VkImageLayout)ImageLayout::eTransferSrcOptimal;
@@ -378,11 +386,15 @@ namespace vuk {
 				blit.srcSubresource.layerCount = task.layer_count;
 				blit.srcSubresource.mipLevel = miplevel - 1;
 				blit.srcOffsets[0] = VkOffset3D{ 0 };
-				blit.srcOffsets[1] = VkOffset3D{ std::max((int32_t)task.extent.width >> (dmiplevel - 1), 1), std::max((int32_t)task.extent.height >> (dmiplevel - 1), 1), (int32_t)task.extent.depth };
+				blit.srcOffsets[1] = VkOffset3D{ std::max((int32_t)task.extent.width >> (dmiplevel - 1), 1),
+					                               std::max((int32_t)task.extent.height >> (dmiplevel - 1), 1),
+					                               (int32_t)task.extent.depth };
 				blit.dstSubresource = blit.srcSubresource;
 				blit.dstSubresource.mipLevel = miplevel;
 				blit.dstOffsets[0] = VkOffset3D{ 0 };
-				blit.dstOffsets[1] = VkOffset3D{ std::max((int32_t)task.extent.width >> dmiplevel, 1), std::max((int32_t)task.extent.height >> dmiplevel, 1), (int32_t)task.extent.depth };
+				blit.dstOffsets[1] = VkOffset3D{ std::max((int32_t)task.extent.width >> dmiplevel, 1),
+					                               std::max((int32_t)task.extent.height >> dmiplevel, 1),
+					                               (int32_t)task.extent.depth };
 				vkCmdBlitImage(cbuf, task.dst, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, task.dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
 
 				mip_to_src_barrier.subresourceRange.baseMipLevel = miplevel;
@@ -394,4 +406,4 @@ namespace vuk {
 
 		vkCmdPipelineBarrier(cbuf, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &top_mip_use_barrier);
 	}
-}
+} // namespace vuk

@@ -1,17 +1,17 @@
 #pragma once
 
-#include <vector>
-#include <vuk/Config.hpp>
-#include <vuk/Hash.hpp>
 #include <../src/CreateInfo.hpp>
-#include <vuk/Descriptor.hpp>
-#include <vuk/ShaderSource.hpp>
-#include <vuk/Program.hpp>
-#include <vuk/FixedVector.hpp>
-#include <vuk/Image.hpp>
-#include <vuk/Bitset.hpp>
-#include <vuk/PipelineTypes.hpp>
 #include <bit>
+#include <vector>
+#include <vuk/Bitset.hpp>
+#include <vuk/Config.hpp>
+#include <vuk/Descriptor.hpp>
+#include <vuk/FixedVector.hpp>
+#include <vuk/Hash.hpp>
+#include <vuk/Image.hpp>
+#include <vuk/PipelineTypes.hpp>
+#include <vuk/Program.hpp>
+#include <vuk/ShaderSource.hpp>
 
 namespace vuk {
 	static constexpr uint32_t graphics_stage_count = 5;
@@ -26,13 +26,14 @@ namespace vuk {
 		}
 	};
 
-	template<> struct create_info<VkPipelineLayout> {
+	template<>
+	struct create_info<VkPipelineLayout> {
 		using type = vuk::PipelineLayoutCreateInfo;
 	};
 
 	struct PipelineBaseCreateInfoBase {
 		// 4 valid flags
-		Bitset<4 * VUK_MAX_SETS * VUK_MAX_BINDINGS> binding_flags = {};
+		Bitset<4 * VUK_MAX_SETS* VUK_MAX_BINDINGS> binding_flags = {};
 		// set flags on specific descriptor in specific set
 		void set_binding_flags(unsigned set, unsigned binding, vuk::DescriptorBindingFlags flags) noexcept {
 			unsigned f = static_cast<unsigned>(flags);
@@ -60,6 +61,7 @@ namespace vuk {
 	struct PipelineBaseCreateInfo : PipelineBaseCreateInfoBase {
 		friend class CommandBuffer;
 		friend class Context;
+
 	public:
 		void add_shader(ShaderSource source, std::string filename) {
 			shaders.emplace_back(std::move(source));
@@ -89,8 +91,8 @@ namespace vuk {
 		vuk::fixed_vector<std::string, graphics_stage_count> shader_paths;
 
 		friend struct std::hash<PipelineBaseCreateInfo>;
-	public:
 
+	public:
 		static vuk::fixed_vector<vuk::DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> build_descriptor_layouts(const Program&, const PipelineBaseCreateInfoBase&);
 		bool operator==(const PipelineBaseCreateInfo& o) const noexcept {
 			return shaders == o.shaders && binding_flags == o.binding_flags && variable_count_max == o.variable_count_max;
@@ -105,18 +107,20 @@ namespace vuk {
 		std::array<DescriptorSetLayoutAllocInfo, VUK_MAX_SETS> layout_info;
 
 		// 4 valid flags
-		Bitset<4 * VUK_MAX_SETS * VUK_MAX_BINDINGS> binding_flags = {};
+		Bitset<4 * VUK_MAX_SETS* VUK_MAX_BINDINGS> binding_flags = {};
 		// if the set has a variable count binding, the maximum number of bindings possible
 		std::array<uint32_t, VUK_MAX_SETS> variable_count_max = {};
 	};
 
-	template<> struct create_info<PipelineBaseInfo> {
+	template<>
+	struct create_info<PipelineBaseInfo> {
 		using type = vuk::PipelineBaseCreateInfo;
 	};
 
 	struct ComputePipelineBaseCreateInfo : PipelineBaseCreateInfoBase {
 		friend class CommandBuffer;
 		friend class Context;
+
 	public:
 		void add_shader(ShaderSource source, std::string filename) {
 			shader = std::move(source);
@@ -135,6 +139,7 @@ namespace vuk {
 
 		friend struct std::hash<ComputePipelineBaseCreateInfo>;
 		friend class PerThreadContext;
+
 	private:
 		ShaderSource shader;
 		std::string shader_path;
@@ -153,28 +158,28 @@ namespace vuk {
 		std::array<DescriptorSetLayoutAllocInfo, VUK_MAX_SETS> layout_info;
 
 		// 4 valid flags
-		Bitset<4 * VUK_MAX_SETS * VUK_MAX_BINDINGS> binding_flags = {};
+		Bitset<4 * VUK_MAX_SETS* VUK_MAX_BINDINGS> binding_flags = {};
 		// if the set has a variable count binding, the maximum number of bindings possible
 		std::array<uint32_t, VUK_MAX_SETS> variable_count_max = {};
 	};
 
-	template<> struct create_info<ComputePipelineBaseInfo> {
+	template<>
+	struct create_info<ComputePipelineBaseInfo> {
 		using type = vuk::ComputePipelineBaseCreateInfo;
 	};
-}
-
+} // namespace vuk
 
 namespace std {
-	template <class BitType>
+	template<class BitType>
 	struct hash<vuk::Flags<BitType>> {
 		size_t operator()(vuk::Flags<BitType> const& x) const noexcept {
 			return std::hash<typename vuk::Flags<BitType>::MaskType>()((typename vuk::Flags<BitType>::MaskType)x);
 		}
 	};
-};
+}; // namespace std
 
 namespace std {
-	template <class T>
+	template<class T>
 	struct hash<std::vector<T>> {
 		size_t operator()(std::vector<T> const& x) const noexcept {
 			size_t h = 0;
@@ -185,7 +190,7 @@ namespace std {
 		}
 	};
 
-	template <class T, size_t N>
+	template<class T, size_t N>
 	struct hash<vuk::fixed_vector<T, N>> {
 		size_t operator()(vuk::fixed_vector<T, N> const& x) const noexcept {
 			size_t h = 0;
@@ -196,7 +201,7 @@ namespace std {
 		}
 	};
 
-	template <>
+	template<>
 	struct hash<vuk::ShaderSource> {
 		size_t operator()(vuk::ShaderSource const& x) const noexcept {
 			size_t h = 0;
@@ -205,7 +210,7 @@ namespace std {
 		}
 	};
 
-	template <>
+	template<>
 	struct hash<vuk::PipelineBaseCreateInfo> {
 		size_t operator()(vuk::PipelineBaseCreateInfo const& x) const noexcept {
 			size_t h = 0;
@@ -214,7 +219,7 @@ namespace std {
 		}
 	};
 
-	template <>
+	template<>
 	struct hash<vuk::ComputePipelineBaseCreateInfo> {
 		size_t operator()(vuk::ComputePipelineBaseCreateInfo const& x) const noexcept {
 			size_t h = 0;
@@ -222,4 +227,4 @@ namespace std {
 			return h;
 		}
 	};
-};
+}; // namespace std

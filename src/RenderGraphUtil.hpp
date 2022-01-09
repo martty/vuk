@@ -4,12 +4,13 @@
 #include <vuk/ShortAlloc.hpp>
 
 namespace std {
-	template<> struct hash<vuk::Resource> {
+	template<>
+	struct hash<vuk::Resource> {
 		std::size_t operator()(vuk::Resource const& s) const noexcept {
 			return (size_t)((uintptr_t)s.name.c_str());
 		}
 	};
-}
+} // namespace std
 
 namespace vuk {
 	inline bool is_write_access(Access ia) {
@@ -58,28 +59,51 @@ namespace vuk {
 	inline ResourceUse to_use(Access ia) {
 		switch (ia) {
 		case eColorResolveWrite:
-		case eColorWrite: return { ia, vuk::PipelineStageFlagBits::eColorAttachmentOutput, vuk::AccessFlagBits::eColorAttachmentWrite, vuk::ImageLayout::eColorAttachmentOptimal };
-		case eColorRW: return { ia, vuk::PipelineStageFlagBits::eColorAttachmentOutput, vuk::AccessFlagBits::eColorAttachmentWrite | vuk::AccessFlagBits::eColorAttachmentRead, vuk::ImageLayout::eColorAttachmentOptimal };
+		case eColorWrite:
+			return { ia, vuk::PipelineStageFlagBits::eColorAttachmentOutput, vuk::AccessFlagBits::eColorAttachmentWrite, vuk::ImageLayout::eColorAttachmentOptimal };
+		case eColorRW:
+			return { ia,
+				       vuk::PipelineStageFlagBits::eColorAttachmentOutput,
+				       vuk::AccessFlagBits::eColorAttachmentWrite | vuk::AccessFlagBits::eColorAttachmentRead,
+				       vuk::ImageLayout::eColorAttachmentOptimal };
 		case eColorResolveRead:
-		case eColorRead: return { ia, vuk::PipelineStageFlagBits::eColorAttachmentOutput, vuk::AccessFlagBits::eColorAttachmentRead, vuk::ImageLayout::eColorAttachmentOptimal };
-		case eDepthStencilRW: return { ia, vuk::PipelineStageFlagBits::eEarlyFragmentTests | vuk::PipelineStageFlagBits::eLateFragmentTests, vuk::AccessFlagBits::eDepthStencilAttachmentRead | vuk::AccessFlagBits::eDepthStencilAttachmentWrite, vuk::ImageLayout::eDepthStencilAttachmentOptimal };
+		case eColorRead:
+			return { ia, vuk::PipelineStageFlagBits::eColorAttachmentOutput, vuk::AccessFlagBits::eColorAttachmentRead, vuk::ImageLayout::eColorAttachmentOptimal };
+		case eDepthStencilRW:
+			return { ia,
+				       vuk::PipelineStageFlagBits::eEarlyFragmentTests | vuk::PipelineStageFlagBits::eLateFragmentTests,
+				       vuk::AccessFlagBits::eDepthStencilAttachmentRead | vuk::AccessFlagBits::eDepthStencilAttachmentWrite,
+				       vuk::ImageLayout::eDepthStencilAttachmentOptimal };
 
-		case eFragmentSampled: return { ia, vuk::PipelineStageFlagBits::eFragmentShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eShaderReadOnlyOptimal };
-		case eFragmentRead: return { ia, vuk::PipelineStageFlagBits::eFragmentShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eShaderReadOnlyOptimal };
+		case eFragmentSampled:
+			return { ia, vuk::PipelineStageFlagBits::eFragmentShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eShaderReadOnlyOptimal };
+		case eFragmentRead:
+			return { ia, vuk::PipelineStageFlagBits::eFragmentShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eShaderReadOnlyOptimal };
 
-		case eTransferRead: return { ia, vuk::PipelineStageFlagBits::eTransfer, vuk::AccessFlagBits::eTransferRead, vuk::ImageLayout::eTransferSrcOptimal };
-		case eTransferWrite: return { ia, vuk::PipelineStageFlagBits::eTransfer, vuk::AccessFlagBits::eTransferWrite, vuk::ImageLayout::eTransferDstOptimal };
+		case eTransferRead:
+			return { ia, vuk::PipelineStageFlagBits::eTransfer, vuk::AccessFlagBits::eTransferRead, vuk::ImageLayout::eTransferSrcOptimal };
+		case eTransferWrite:
+			return { ia, vuk::PipelineStageFlagBits::eTransfer, vuk::AccessFlagBits::eTransferWrite, vuk::ImageLayout::eTransferDstOptimal };
 
-		case eComputeRead: return { ia, vuk::PipelineStageFlagBits::eComputeShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eGeneral };
-		case eComputeWrite: return { ia, vuk::PipelineStageFlagBits::eComputeShader, vuk::AccessFlagBits::eShaderWrite, vuk::ImageLayout::eGeneral };
-		case eComputeRW: return { ia, vuk::PipelineStageFlagBits::eComputeShader, vuk::AccessFlagBits::eShaderRead | vuk::AccessFlagBits::eShaderWrite, vuk::ImageLayout::eGeneral };
-		case eComputeSampled: return { ia, vuk::PipelineStageFlagBits::eComputeShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eShaderReadOnlyOptimal };
+		case eComputeRead:
+			return { ia, vuk::PipelineStageFlagBits::eComputeShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eGeneral };
+		case eComputeWrite:
+			return { ia, vuk::PipelineStageFlagBits::eComputeShader, vuk::AccessFlagBits::eShaderWrite, vuk::ImageLayout::eGeneral };
+		case eComputeRW:
+			return {
+				ia, vuk::PipelineStageFlagBits::eComputeShader, vuk::AccessFlagBits::eShaderRead | vuk::AccessFlagBits::eShaderWrite, vuk::ImageLayout::eGeneral
+			};
+		case eComputeSampled:
+			return { ia, vuk::PipelineStageFlagBits::eComputeShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eShaderReadOnlyOptimal };
 
-		case eAttributeRead: return { ia, vuk::PipelineStageFlagBits::eVertexInput, vuk::AccessFlagBits::eVertexAttributeRead, vuk::ImageLayout::eGeneral /* ignored */ };
+		case eAttributeRead:
+			return { ia, vuk::PipelineStageFlagBits::eVertexInput, vuk::AccessFlagBits::eVertexAttributeRead, vuk::ImageLayout::eGeneral /* ignored */ };
 		case eVertexRead:
 			return { ia, vuk::PipelineStageFlagBits::eVertexShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eGeneral /* ignored */ };
-		case eIndexRead: return { ia, vuk::PipelineStageFlagBits::eVertexInput, vuk::AccessFlagBits::eIndexRead, vuk::ImageLayout::eGeneral /* ignored */ };
-		case eIndirectRead: return { ia, vuk::PipelineStageFlagBits::eDrawIndirect, vuk::AccessFlagBits::eIndirectCommandRead, vuk::ImageLayout::eGeneral /* ignored */ };
+		case eIndexRead:
+			return { ia, vuk::PipelineStageFlagBits::eVertexInput, vuk::AccessFlagBits::eIndexRead, vuk::ImageLayout::eGeneral /* ignored */ };
+		case eIndirectRead:
+			return { ia, vuk::PipelineStageFlagBits::eDrawIndirect, vuk::AccessFlagBits::eIndirectCommandRead, vuk::ImageLayout::eGeneral /* ignored */ };
 
 		case eHostRead:
 			return { ia, vuk::PipelineStageFlagBits::eHost, vuk::AccessFlagBits::eHostRead, vuk::ImageLayout::eGeneral };
@@ -88,9 +112,12 @@ namespace vuk {
 		case eHostRW:
 			return { ia, vuk::PipelineStageFlagBits::eHost, vuk::AccessFlagBits::eHostRead | vuk::AccessFlagBits::eHostWrite, vuk::ImageLayout::eGeneral };
 
-		case eMemoryRead: return { ia, vuk::PipelineStageFlagBits::eAllCommands, vuk::AccessFlagBits::eMemoryRead, vuk::ImageLayout::eGeneral };
-		case eMemoryWrite: return { ia, vuk::PipelineStageFlagBits::eAllCommands, vuk::AccessFlagBits::eMemoryWrite, vuk::ImageLayout::eGeneral };
-		case eMemoryRW: return { ia, vuk::PipelineStageFlagBits::eAllCommands, vuk::AccessFlagBits::eMemoryRead | vuk::AccessFlagBits::eMemoryWrite, vuk::ImageLayout::eGeneral };
+		case eMemoryRead:
+			return { ia, vuk::PipelineStageFlagBits::eAllCommands, vuk::AccessFlagBits::eMemoryRead, vuk::ImageLayout::eGeneral };
+		case eMemoryWrite:
+			return { ia, vuk::PipelineStageFlagBits::eAllCommands, vuk::AccessFlagBits::eMemoryWrite, vuk::ImageLayout::eGeneral };
+		case eMemoryRW:
+			return { ia, vuk::PipelineStageFlagBits::eAllCommands, vuk::AccessFlagBits::eMemoryRead | vuk::AccessFlagBits::eMemoryWrite, vuk::ImageLayout::eGeneral };
 
 		case eNone:
 			return { ia, vuk::PipelineStageFlagBits::eTopOfPipe, vuk::AccessFlagBits{}, vuk::ImageLayout::eUndefined };
@@ -105,7 +132,6 @@ namespace vuk {
 			assert(0 && "NYI");
 			return {};
 		}
-
 	}
 
 	// not all domains can support all stages, this function corrects stage flags
@@ -120,7 +146,7 @@ namespace vuk {
 				remove |= DomainFlagBits::eComputeQueue;
 			}
 		}
-		
+
 		if (remove & DomainFlagBits::eGraphicsQueue) {
 			src &= (PipelineStageFlags)~0b11111111110;
 			dst &= (PipelineStageFlags)~0b11111111110;
@@ -132,7 +158,8 @@ namespace vuk {
 	}
 
 	inline bool is_framebuffer_attachment(const Resource& r) {
-		if (r.type == Resource::Type::eBuffer) return false;
+		if (r.type == Resource::Type::eBuffer)
+			return false;
 		switch (r.ia) {
 		case eColorWrite:
 		case eColorRW:
@@ -158,19 +185,28 @@ namespace vuk {
 	}
 
 	inline bool is_write_access(ResourceUse u) {
-		if (u.access == vuk::AccessFlagBits{}) return false;
-		if (u.access & vuk::AccessFlagBits::eColorAttachmentWrite) return true;
-		if (u.access & vuk::AccessFlagBits::eDepthStencilAttachmentWrite) return true;
-		if (u.access & vuk::AccessFlagBits::eShaderWrite) return true;
-		if (u.access & vuk::AccessFlagBits::eTransferWrite) return true;
-		if (u.access & vuk::AccessFlagBits::eHostWrite) return true;
-		if (u.access & vuk::AccessFlagBits::eMemoryWrite) return true;
-		if (u.access & vuk::AccessFlagBits::eAccelerationStructureWriteKHR) return true;
+		if (u.access == vuk::AccessFlagBits{})
+			return false;
+		if (u.access & vuk::AccessFlagBits::eColorAttachmentWrite)
+			return true;
+		if (u.access & vuk::AccessFlagBits::eDepthStencilAttachmentWrite)
+			return true;
+		if (u.access & vuk::AccessFlagBits::eShaderWrite)
+			return true;
+		if (u.access & vuk::AccessFlagBits::eTransferWrite)
+			return true;
+		if (u.access & vuk::AccessFlagBits::eHostWrite)
+			return true;
+		if (u.access & vuk::AccessFlagBits::eMemoryWrite)
+			return true;
+		if (u.access & vuk::AccessFlagBits::eAccelerationStructureWriteKHR)
+			return true;
 		return false;
 	}
 
 	inline bool is_read_access(ResourceUse u) {
-		if (u.access == vuk::AccessFlagBits{}) return false;
+		if (u.access == vuk::AccessFlagBits{})
+			return false;
 		return !is_write_access(u);
 	}
 

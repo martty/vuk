@@ -5,61 +5,59 @@ std::vector<std::string> chosen_resource;
 
 vuk::BenchRunner::BenchRunner() {
 	vkb::InstanceBuilder builder;
-	builder
-		.request_validation_layers()
-		.set_debug_callback([](VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-			VkDebugUtilsMessageTypeFlagsEXT messageType,
-			const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-			void* pUserData) -> VkBool32 {
-				auto ms = vkb::to_string_message_severity(messageSeverity);
-				auto mt = vkb::to_string_message_type(messageType);
-				printf("[%s: %s](user defined)\n%s\n", ms, mt, pCallbackData->pMessage);
-				return VK_FALSE;
-			})
-		.set_app_name("vuk_bench")
-				.set_engine_name("vuk")
-				.require_api_version(1, 2, 0)
-				.set_app_version(0, 1, 0);
-			auto inst_ret = builder.build();
-			if (!inst_ret.has_value()) {
-				// error
-			}
-			vkbinstance = inst_ret.value();
-			auto instance = vkbinstance.instance;
-			vkb::PhysicalDeviceSelector selector{ vkbinstance };
-			window = create_window_glfw("vuk-benchmarker", false);
-			surface = create_surface_glfw(vkbinstance.instance, window);
-			selector.set_surface(surface)
-				.set_minimum_version(1, 0);
-			auto phys_ret = selector.select();
-			if (!phys_ret.has_value()) {
-				// error
-			}
-			vkb::PhysicalDevice vkbphysical_device = phys_ret.value();
-			physical_device = vkbphysical_device.physical_device;
+	builder.request_validation_layers()
+	    .set_debug_callback([](VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+	                           VkDebugUtilsMessageTypeFlagsEXT messageType,
+	                           const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+	                           void* pUserData) -> VkBool32 {
+		    auto ms = vkb::to_string_message_severity(messageSeverity);
+		    auto mt = vkb::to_string_message_type(messageType);
+		    printf("[%s: %s](user defined)\n%s\n", ms, mt, pCallbackData->pMessage);
+		    return VK_FALSE;
+	    })
+	    .set_app_name("vuk_bench")
+	    .set_engine_name("vuk")
+	    .require_api_version(1, 2, 0)
+	    .set_app_version(0, 1, 0);
+	auto inst_ret = builder.build();
+	if (!inst_ret.has_value()) {
+		// error
+	}
+	vkbinstance = inst_ret.value();
+	auto instance = vkbinstance.instance;
+	vkb::PhysicalDeviceSelector selector{ vkbinstance };
+	window = create_window_glfw("vuk-benchmarker", false);
+	surface = create_surface_glfw(vkbinstance.instance, window);
+	selector.set_surface(surface).set_minimum_version(1, 0);
+	auto phys_ret = selector.select();
+	if (!phys_ret.has_value()) {
+		// error
+	}
+	vkb::PhysicalDevice vkbphysical_device = phys_ret.value();
+	physical_device = vkbphysical_device.physical_device;
 
-			vkb::DeviceBuilder device_builder{ vkbphysical_device };
-			VkPhysicalDeviceVulkan12Features vk12features{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };
-			vk12features.descriptorBindingPartiallyBound = true;
-			vk12features.descriptorBindingUpdateUnusedWhilePending = true;
-			vk12features.shaderSampledImageArrayNonUniformIndexing = true;
-			vk12features.runtimeDescriptorArray = true;
-			vk12features.descriptorBindingVariableDescriptorCount = true;
-			vk12features.hostQueryReset = true;
-			auto dev_ret = device_builder.add_pNext(&vk12features).build();
-			if (!dev_ret.has_value()) {
-				// error
-			}
-			vkbdevice = dev_ret.value();
-			graphics_queue = vkbdevice.get_queue(vkb::QueueType::graphics).value();
-			auto graphics_queue_family_index = vkbdevice.get_queue_index(vkb::QueueType::graphics).value();
-			device = vkbdevice.device;
+	vkb::DeviceBuilder device_builder{ vkbphysical_device };
+	VkPhysicalDeviceVulkan12Features vk12features{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };
+	vk12features.descriptorBindingPartiallyBound = true;
+	vk12features.descriptorBindingUpdateUnusedWhilePending = true;
+	vk12features.shaderSampledImageArrayNonUniformIndexing = true;
+	vk12features.runtimeDescriptorArray = true;
+	vk12features.descriptorBindingVariableDescriptorCount = true;
+	vk12features.hostQueryReset = true;
+	auto dev_ret = device_builder.add_pNext(&vk12features).build();
+	if (!dev_ret.has_value()) {
+		// error
+	}
+	vkbdevice = dev_ret.value();
+	graphics_queue = vkbdevice.get_queue(vkb::QueueType::graphics).value();
+	auto graphics_queue_family_index = vkbdevice.get_queue_index(vkb::QueueType::graphics).value();
+	device = vkbdevice.device;
 
-			context.emplace(ContextCreateParameters{ instance, device, physical_device, graphics_queue, graphics_queue_family_index });
-			const unsigned num_inflight_frames = 3;
-			xdev_rf_alloc.emplace(*context, num_inflight_frames);
-			global.emplace(*xdev_rf_alloc);
-			swapchain = context->add_swapchain(util::make_swapchain(vkbdevice));
+	context.emplace(ContextCreateParameters{ instance, device, physical_device, graphics_queue, graphics_queue_family_index });
+	const unsigned num_inflight_frames = 3;
+	xdev_rf_alloc.emplace(*context, num_inflight_frames);
+	global.emplace(*xdev_rf_alloc);
+	swapchain = context->add_swapchain(util::make_swapchain(vkbdevice));
 }
 
 constexpr unsigned stage_wait = 0;
@@ -112,7 +110,7 @@ void vuk::BenchRunner::render() {
 
 					ImGui::Selectable(bcase.subcase_labels[j].data(), &sel, sel ? 0 : ImGuiSelectableFlags_Disabled, size);
 					ImGui::Indent();
-					
+
 					auto& lsr = bcase.last_stage_ran[j];
 					bool w = sel && current_stage == stage_warmup;
 					std::string l1 = "Warmup";
@@ -127,7 +125,8 @@ void vuk::BenchRunner::render() {
 					if (w) {
 						l2 = "Estimating variance (" + std::to_string(num_runs) + " / " + std::to_string(runs) + ")";
 					} else if (lsr > stage_variance) {
-						l2 = "Estimate (mu=" + std::to_string(bcase.est_mean[j] * 1e6) + " us, sigma=" + std::to_string(bcase.est_variance[j] * 1e12) + " us2, runs: " + std::to_string(bcase.runs_required[j]) + ")";
+						l2 = "Estimate (mu=" + std::to_string(bcase.est_mean[j] * 1e6) + " us, sigma=" + std::to_string(bcase.est_variance[j] * 1e12) +
+						     " us2, runs: " + std::to_string(bcase.runs_required[j]) + ")";
 					}
 					ImGui::Selectable(l2.c_str(), &w, w ? 0 : ImGuiSelectableFlags_Disabled);
 					w = sel && current_stage == stage_live;
@@ -135,7 +134,8 @@ void vuk::BenchRunner::render() {
 					if (w) {
 						l3 = "Sampling (" + std::to_string(num_runs) + " / " + std::to_string(runs) + ")";
 					} else if (lsr > stage_live) {
-						l3 = "Result (mu=" + std::to_string(bcase.mean[j] * 1e6) + " us, sigma=" + std::to_string(bcase.variance[j] * 1e12) + " us2, SEM = " + std::to_string(sqrt(bcase.variance[j] * 1e12 / bcase.runs_required[j])) + " us)";
+						l3 = "Result (mu=" + std::to_string(bcase.mean[j] * 1e6) + " us, sigma=" + std::to_string(bcase.variance[j] * 1e12) +
+						     " us2, SEM = " + std::to_string(sqrt(bcase.variance[j] * 1e12 / bcase.runs_required[j])) + " us)";
 					}
 					ImGui::Selectable(l3.c_str(), &w, w ? 0 : ImGuiSelectableFlags_Disabled);
 					if (lsr > stage_live) {

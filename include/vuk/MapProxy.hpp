@@ -2,7 +2,7 @@
 
 namespace vuk {
 	// generic iterator for both const_iterator and iterator.
-	template <class Key, class Value>
+	template<class Key, class Value>
 	class ConstMapIterator {
 	public:
 		using difference_type = std::ptrdiff_t;
@@ -39,6 +39,7 @@ namespace vuk {
 		bool operator!=(ConstMapIterator<Key, Value> const& o) const noexcept {
 			return !(*this == o);
 		}
+
 	private:
 		void* _iter;
 	};
@@ -61,7 +62,8 @@ namespace vuk {
 
 		size_t size() const noexcept;
 		const_iterator find(Key) const noexcept;
+
 	private:
 		void* _map;
 	};
-}
+} // namespace vuk

@@ -6,4 +6,4 @@ namespace vuk {
 
 	template<class T>
 	using create_info_t = typename create_info<T>::type;
-}
+} // namespace vuk

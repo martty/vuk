@@ -1,16 +1,14 @@
 #pragma once
 
+#include "../src/CreateInfo.hpp"
 #include "Pipeline.hpp"
 #include "vuk/Config.hpp"
-#include "vuk/Hash.hpp"
-#include "../src/CreateInfo.hpp"
 #include "vuk/FixedVector.hpp"
+#include "vuk/Hash.hpp"
 #include <bit>
 
 inline bool operator==(VkSpecializationMapEntry const& lhs, VkSpecializationMapEntry const& rhs) noexcept {
-	return (lhs.constantID == rhs.constantID)
-		&& (lhs.offset == rhs.offset)
-		&& (lhs.size == rhs.size);
+	return (lhs.constantID == rhs.constantID) && (lhs.offset == rhs.offset) && (lhs.size == rhs.size);
 }
 
 namespace vuk {
@@ -115,7 +113,8 @@ namespace vuk {
 #pragma pack(pop)
 
 		bool operator==(const PipelineInstanceCreateInfo& o) const noexcept {
-			return base == o.base && render_pass == o.render_pass && extended_size == o.extended_size && (is_inline() ? (memcmp(inline_data, o.inline_data, extended_size) == 0) : (memcmp(extended_data, o.extended_data, extended_size) == 0));
+			return base == o.base && render_pass == o.render_pass && extended_size == o.extended_size &&
+			       (is_inline() ? (memcmp(inline_data, o.inline_data, extended_size) == 0) : (memcmp(extended_data, o.extended_data, extended_size) == 0));
 		}
 
 		bool is_inline() const noexcept {
@@ -129,7 +128,8 @@ namespace vuk {
 		std::array<DescriptorSetLayoutAllocInfo, VUK_MAX_SETS> layout_info;
 	};
 
-	template<> struct create_info<PipelineInfo> {
+	template<>
+	struct create_info<PipelineInfo> {
 		using type = vuk::PipelineInstanceCreateInfo;
 	};
 
@@ -141,7 +141,8 @@ namespace vuk {
 		VkSpecializationInfo specialization_info = {};
 
 		bool operator==(const ComputePipelineInstanceCreateInfo& o) const noexcept {
-			return base == o.base && specialization_map_entries == o.specialization_map_entries && specialization_info.dataSize == o.specialization_info.dataSize && memcmp(specialization_constant_data.data(), o.specialization_constant_data.data(), specialization_info.dataSize) == 0;
+			return base == o.base && specialization_map_entries == o.specialization_map_entries && specialization_info.dataSize == o.specialization_info.dataSize &&
+			       memcmp(specialization_constant_data.data(), o.specialization_constant_data.data(), specialization_info.dataSize) == 0;
 		}
 	};
 
@@ -149,13 +150,14 @@ namespace vuk {
 		std::array<unsigned, 3> local_size;
 	};
 
-	template<> struct create_info<ComputePipelineInfo> {
+	template<>
+	struct create_info<ComputePipelineInfo> {
 		using type = vuk::ComputePipelineInstanceCreateInfo;
 	};
-}
+} // namespace vuk
 
 namespace std {
-	template <>
+	template<>
 	struct hash<vuk::PipelineInstanceCreateInfo> {
 		size_t operator()(vuk::PipelineInstanceCreateInfo const& x) const noexcept {
 			size_t h = 0;
@@ -165,7 +167,7 @@ namespace std {
 		}
 	};
 
-	template <>
+	template<>
 	struct hash<VkSpecializationMapEntry> {
 		size_t operator()(VkSpecializationMapEntry const& x) const noexcept {
 			size_t h = 0;
@@ -174,7 +176,7 @@ namespace std {
 		}
 	};
 
-	template <>
+	template<>
 	struct hash<vuk::ComputePipelineInstanceCreateInfo> {
 		size_t operator()(vuk::ComputePipelineInstanceCreateInfo const& x) const noexcept {
 			size_t h = 0;
@@ -183,7 +185,7 @@ namespace std {
 		}
 	};
 
-	template <>
+	template<>
 	struct hash<VkPushConstantRange> {
 		size_t operator()(VkPushConstantRange const& x) const noexcept {
 			size_t h = 0;
@@ -192,8 +194,7 @@ namespace std {
 		}
 	};
 
-
-	template <>
+	template<>
 	struct hash<vuk::PipelineLayoutCreateInfo> {
 		size_t operator()(vuk::PipelineLayoutCreateInfo const& x) const noexcept {
 			size_t h = 0;
@@ -201,4 +202,4 @@ namespace std {
 			return h;
 		}
 	};
-};
+}; // namespace std

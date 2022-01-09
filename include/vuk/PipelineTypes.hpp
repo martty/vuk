@@ -93,15 +93,13 @@ namespace vuk {
 		eBlueEXT = VK_BLEND_OP_BLUE_EXT*/
 	};
 
-	enum class BlendPreset {
-		eOff, eAlphaBlend, ePremultipliedAlphaBlend
-	};
+	enum class BlendPreset { eOff, eAlphaBlend, ePremultipliedAlphaBlend };
 
 	enum class PolygonMode {
 		eFill = VK_POLYGON_MODE_FILL,
 		eLine = VK_POLYGON_MODE_LINE,
 		ePoint = VK_POLYGON_MODE_POINT,
-		//eFillRectangleNV = VK_POLYGON_MODE_FILL_RECTANGLE_NV
+		// eFillRectangleNV = VK_POLYGON_MODE_FILL_RECTANGLE_NV
 	};
 
 	enum class CullModeFlagBits : VkCullModeFlags {
@@ -111,25 +109,16 @@ namespace vuk {
 		eFrontAndBack = VK_CULL_MODE_FRONT_AND_BACK
 	};
 
-	enum class FrontFace {
-		eCounterClockwise = VK_FRONT_FACE_COUNTER_CLOCKWISE,
-		eClockwise = VK_FRONT_FACE_CLOCKWISE
-	};
+	enum class FrontFace { eCounterClockwise = VK_FRONT_FACE_COUNTER_CLOCKWISE, eClockwise = VK_FRONT_FACE_CLOCKWISE };
 
 	using CullModeFlags = Flags<CullModeFlagBits>;
 
 	struct PipelineRasterizationStateCreateInfo {
 		bool operator==(PipelineRasterizationStateCreateInfo const& rhs) const noexcept {
-			return (depthClampEnable == rhs.depthClampEnable)
-				&& (rasterizerDiscardEnable == rhs.rasterizerDiscardEnable)
-				&& (polygonMode == rhs.polygonMode)
-				&& (cullMode == rhs.cullMode)
-				&& (frontFace == rhs.frontFace)
-				&& (depthBiasEnable == rhs.depthBiasEnable)
-				&& (depthBiasConstantFactor == rhs.depthBiasConstantFactor)
-				&& (depthBiasClamp == rhs.depthBiasClamp)
-				&& (depthBiasSlopeFactor == rhs.depthBiasSlopeFactor)
-				&& (lineWidth == rhs.lineWidth);
+			return (depthClampEnable == rhs.depthClampEnable) && (rasterizerDiscardEnable == rhs.rasterizerDiscardEnable) && (polygonMode == rhs.polygonMode) &&
+			       (cullMode == rhs.cullMode) && (frontFace == rhs.frontFace) && (depthBiasEnable == rhs.depthBiasEnable) &&
+			       (depthBiasConstantFactor == rhs.depthBiasConstantFactor) && (depthBiasClamp == rhs.depthBiasClamp) &&
+			       (depthBiasSlopeFactor == rhs.depthBiasSlopeFactor) && (lineWidth == rhs.lineWidth);
 		}
 
 		bool operator!=(PipelineRasterizationStateCreateInfo const& rhs) const noexcept {
@@ -171,14 +160,9 @@ namespace vuk {
 
 	struct PipelineColorBlendAttachmentState {
 		bool operator==(PipelineColorBlendAttachmentState const& rhs) const noexcept {
-			return (blendEnable == rhs.blendEnable)
-				&& (srcColorBlendFactor == rhs.srcColorBlendFactor)
-				&& (dstColorBlendFactor == rhs.dstColorBlendFactor)
-				&& (colorBlendOp == rhs.colorBlendOp)
-				&& (srcAlphaBlendFactor == rhs.srcAlphaBlendFactor)
-				&& (dstAlphaBlendFactor == rhs.dstAlphaBlendFactor)
-				&& (alphaBlendOp == rhs.alphaBlendOp)
-				&& (colorWriteMask == rhs.colorWriteMask);
+			return (blendEnable == rhs.blendEnable) && (srcColorBlendFactor == rhs.srcColorBlendFactor) && (dstColorBlendFactor == rhs.dstColorBlendFactor) &&
+			       (colorBlendOp == rhs.colorBlendOp) && (srcAlphaBlendFactor == rhs.srcAlphaBlendFactor) && (dstAlphaBlendFactor == rhs.dstAlphaBlendFactor) &&
+			       (alphaBlendOp == rhs.alphaBlendOp) && (colorWriteMask == rhs.colorWriteMask);
 		}
 
 		bool operator!=(PipelineColorBlendAttachmentState const& rhs) const noexcept {
@@ -193,7 +177,7 @@ namespace vuk {
 		BlendFactor dstAlphaBlendFactor = BlendFactor::eZero;
 		BlendOp alphaBlendOp = BlendOp::eAdd;
 		ColorComponentFlags colorWriteMask =
-			vuk::ColorComponentFlagBits::eR | vuk::ColorComponentFlagBits::eG | vuk::ColorComponentFlagBits::eB | vuk::ColorComponentFlagBits::eA;
+		    vuk::ColorComponentFlagBits::eR | vuk::ColorComponentFlagBits::eG | vuk::ColorComponentFlagBits::eB | vuk::ColorComponentFlagBits::eA;
 	};
 
 	enum class LogicOp {
@@ -217,11 +201,8 @@ namespace vuk {
 
 	struct PipelineColorBlendStateCreateInfo {
 		bool operator==(PipelineColorBlendStateCreateInfo const& rhs) const noexcept {
-			return (logicOpEnable == rhs.logicOpEnable)
-				&& (logicOp == rhs.logicOp)
-				&& (attachmentCount == rhs.attachmentCount)
-				&& (pAttachments == rhs.pAttachments)
-				&& (blendConstants == rhs.blendConstants);
+			return (logicOpEnable == rhs.logicOpEnable) && (logicOp == rhs.logicOp) && (attachmentCount == rhs.attachmentCount) &&
+			       (pAttachments == rhs.pAttachments) && (blendConstants == rhs.blendConstants);
 		}
 
 		bool operator!=(PipelineColorBlendStateCreateInfo const& rhs) const noexcept {
@@ -247,23 +228,17 @@ namespace vuk {
 	};
 
 	struct StencilOpState {
-
-		operator VkStencilOpState const& () const noexcept {
+		operator VkStencilOpState const&() const noexcept {
 			return *reinterpret_cast<const VkStencilOpState*>(this);
 		}
 
-		operator VkStencilOpState& () noexcept {
+		operator VkStencilOpState&() noexcept {
 			return *reinterpret_cast<VkStencilOpState*>(this);
 		}
 
 		bool operator==(StencilOpState const& rhs) const noexcept {
-			return (failOp == rhs.failOp)
-				&& (passOp == rhs.passOp)
-				&& (depthFailOp == rhs.depthFailOp)
-				&& (compareOp == rhs.compareOp)
-				&& (compareMask == rhs.compareMask)
-				&& (writeMask == rhs.writeMask)
-				&& (reference == rhs.reference);
+			return (failOp == rhs.failOp) && (passOp == rhs.passOp) && (depthFailOp == rhs.depthFailOp) && (compareOp == rhs.compareOp) &&
+			       (compareMask == rhs.compareMask) && (writeMask == rhs.writeMask) && (reference == rhs.reference);
 		}
 
 		bool operator!=(StencilOpState const& rhs) const noexcept {
@@ -283,15 +258,9 @@ namespace vuk {
 
 	struct PipelineDepthStencilStateCreateInfo {
 		bool operator==(PipelineDepthStencilStateCreateInfo const& rhs) const noexcept {
-			return (depthTestEnable == rhs.depthTestEnable)
-				&& (depthWriteEnable == rhs.depthWriteEnable)
-				&& (depthCompareOp == rhs.depthCompareOp)
-				&& (depthBoundsTestEnable == rhs.depthBoundsTestEnable)
-				&& (stencilTestEnable == rhs.stencilTestEnable)
-				&& (front == rhs.front)
-				&& (back == rhs.back)
-				&& (minDepthBounds == rhs.minDepthBounds)
-				&& (maxDepthBounds == rhs.maxDepthBounds);
+			return (depthTestEnable == rhs.depthTestEnable) && (depthWriteEnable == rhs.depthWriteEnable) && (depthCompareOp == rhs.depthCompareOp) &&
+			       (depthBoundsTestEnable == rhs.depthBoundsTestEnable) && (stencilTestEnable == rhs.stencilTestEnable) && (front == rhs.front) &&
+			       (back == rhs.back) && (minDepthBounds == rhs.minDepthBounds) && (maxDepthBounds == rhs.maxDepthBounds);
 		}
 
 		bool operator!=(PipelineDepthStencilStateCreateInfo const& rhs) const noexcept {
@@ -311,10 +280,7 @@ namespace vuk {
 
 	struct VertexInputAttributeDescription {
 		bool operator==(VertexInputAttributeDescription const& rhs) const noexcept {
-			return (location == rhs.location)
-				&& (binding == rhs.binding)
-				&& (format == rhs.format)
-				&& (offset == rhs.offset);
+			return (location == rhs.location) && (binding == rhs.binding) && (format == rhs.format) && (offset == rhs.offset);
 		}
 
 		bool operator!=(VertexInputAttributeDescription const& rhs) const noexcept {
@@ -381,10 +347,8 @@ namespace vuk {
 	inline constexpr DynamicStateFlags operator^(DynamicStateFlagBits bit0, DynamicStateFlagBits bit1) noexcept {
 		return (DynamicStateFlags)bit0 ^ bit1;
 	}
-};
+}; // namespace vuk
 
 inline bool operator==(VkPushConstantRange const& lhs, VkPushConstantRange const& rhs) noexcept {
-	return (lhs.stageFlags == rhs.stageFlags)
-		&& (lhs.offset == rhs.offset)
-		&& (lhs.size == rhs.size);
+	return (lhs.stageFlags == rhs.stageFlags) && (lhs.offset == rhs.offset) && (lhs.size == rhs.size);
 }

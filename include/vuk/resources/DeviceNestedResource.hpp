@@ -1,8 +1,8 @@
 #pragma once
 
-#include "vuk/vuk_fwd.hpp"
 #include "vuk/Allocator.hpp"
 #include "vuk/Exception.hpp"
+#include "vuk/vuk_fwd.hpp"
 
 namespace vuk {
 	/// @brief Helper base class for DeviceResources. Forwards all allocations and deallocations to the upstream DeviceResource.
@@ -25,7 +25,9 @@ namespace vuk {
 			upstream->deallocate_fences(dst);
 		}
 
-		Result<void, AllocateException> allocate_command_buffers(std::span<CommandBufferAllocation> dst, std::span<const CommandBufferAllocationCreateInfo> cis, SourceLocationAtFrame loc) override {
+		Result<void, AllocateException> allocate_command_buffers(std::span<CommandBufferAllocation> dst,
+		                                                         std::span<const CommandBufferAllocationCreateInfo> cis,
+		                                                         SourceLocationAtFrame loc) override {
 			return upstream->allocate_command_buffers(dst, cis, loc);
 		}
 
@@ -33,7 +35,8 @@ namespace vuk {
 			upstream->deallocate_command_buffers(dst);
 		}
 
-		Result<void, AllocateException> allocate_command_pools(std::span<CommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) override {
+		Result<void, AllocateException>
+		allocate_command_pools(std::span<CommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) override {
 			return upstream->allocate_command_pools(dst, cis, loc);
 		}
 
@@ -41,7 +44,8 @@ namespace vuk {
 			upstream->deallocate_command_pools(dst);
 		}
 
-		Result<void, AllocateException> allocate_buffers(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) override {
+		Result<void, AllocateException>
+		allocate_buffers(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) override {
 			return upstream->allocate_buffers(dst, cis, loc);
 		}
 
@@ -57,7 +61,8 @@ namespace vuk {
 			upstream->deallocate_buffers(src);
 		}
 
-		Result<void, AllocateException> allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) override {
+		Result<void, AllocateException>
+		allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) override {
 			return upstream->allocate_framebuffers(dst, cis, loc);
 		}
 
@@ -73,7 +78,8 @@ namespace vuk {
 			upstream->deallocate_images(src);
 		}
 
-		Result<void, AllocateException> allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) override {
+		Result<void, AllocateException>
+		allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) override {
 			return upstream->allocate_image_views(dst, cis, loc);
 		}
 
@@ -81,7 +87,9 @@ namespace vuk {
 			upstream->deallocate_image_views(src);
 		}
 
-		Result<void, AllocateException> allocate_persistent_descriptor_sets(std::span<PersistentDescriptorSet> dst, std::span<const PersistentDescriptorSetCreateInfo> cis, SourceLocationAtFrame loc) override {
+		Result<void, AllocateException> allocate_persistent_descriptor_sets(std::span<PersistentDescriptorSet> dst,
+		                                                                    std::span<const PersistentDescriptorSetCreateInfo> cis,
+		                                                                    SourceLocationAtFrame loc) override {
 			return upstream->allocate_persistent_descriptor_sets(dst, cis, loc);
 		}
 
@@ -89,7 +97,8 @@ namespace vuk {
 			upstream->deallocate_persistent_descriptor_sets(src);
 		}
 
-		Result<void, AllocateException> allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) override {
+		Result<void, AllocateException>
+		allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) override {
 			return upstream->allocate_descriptor_sets(dst, cis, loc);
 		}
 
@@ -97,7 +106,8 @@ namespace vuk {
 			upstream->deallocate_descriptor_sets(src);
 		}
 
-		Result<void, AllocateException> allocate_timestamp_query_pools(std::span<TimestampQueryPool> dst, std::span<const VkQueryPoolCreateInfo> cis, SourceLocationAtFrame loc) override {
+		Result<void, AllocateException>
+		allocate_timestamp_query_pools(std::span<TimestampQueryPool> dst, std::span<const VkQueryPoolCreateInfo> cis, SourceLocationAtFrame loc) override {
 			return upstream->allocate_timestamp_query_pools(dst, cis, loc);
 		}
 
@@ -105,7 +115,8 @@ namespace vuk {
 			upstream->deallocate_timestamp_query_pools(src);
 		}
 
-		Result<void, AllocateException> allocate_timestamp_queries(std::span<TimestampQuery> dst, std::span<const TimestampQueryCreateInfo> cis, SourceLocationAtFrame loc) override {
+		Result<void, AllocateException>
+		allocate_timestamp_queries(std::span<TimestampQuery> dst, std::span<const TimestampQueryCreateInfo> cis, SourceLocationAtFrame loc) override {
 			return upstream->allocate_timestamp_queries(dst, cis, loc);
 		}
 
@@ -127,4 +138,4 @@ namespace vuk {
 
 		DeviceResource* upstream = nullptr;
 	};
-}
+} // namespace vuk

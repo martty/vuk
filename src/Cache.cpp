@@ -1,6 +1,6 @@
 #include "Cache.hpp"
-#include "vuk/Context.hpp"
 #include "LegacyGPUAllocator.hpp"
+#include "vuk/Context.hpp"
 #include "vuk/PipelineInstance.hpp"
 
 namespace vuk {
@@ -86,7 +86,6 @@ namespace vuk {
 			return *it->second.ptr;
 		}
 	}
-
 
 	template<>
 	DescriptorSetLayoutAllocInfo& Cache<DescriptorSetLayoutAllocInfo>::acquire(const create_info_t<DescriptorSetLayoutAllocInfo>& ci) {
@@ -223,4 +222,4 @@ namespace vuk {
 	void DescriptorPool::release(VkDescriptorSet ds) {
 		free_sets.enqueue(ds);
 	}
-}
+} // namespace vuk

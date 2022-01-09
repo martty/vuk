@@ -73,4 +73,4 @@ namespace vuk {
 	struct DescriptorSet;
 	struct PersistentDescriptorSetCreateInfo;
 	struct PersistentDescriptorSet;
-}
+} // namespace vuk

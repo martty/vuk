@@ -1,11 +1,11 @@
-#include "LegacyGPUAllocator.hpp"
 #include "vuk/Allocator.hpp"
-#include "vuk/resources/DeviceVkResource.hpp"
-#include "vuk/resources/DeviceFrameResource.hpp"
+#include "LegacyGPUAllocator.hpp"
 #include "vuk/Context.hpp"
 #include "vuk/Exception.hpp"
-#include <string>
+#include "vuk/resources/DeviceFrameResource.hpp"
+#include "vuk/resources/DeviceVkResource.hpp"
 #include <numeric>
+#include <string>
 
 namespace vuk {
 	/****Allocator impls *****/
@@ -38,7 +38,8 @@ namespace vuk {
 		return device_resource->allocate_command_pools(dst, cis, loc);
 	}
 
-	Result<void, AllocateException> Allocator::allocate_command_pools(std::span<CommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException>
+	Allocator::allocate_command_pools(std::span<CommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) {
 		return device_resource->allocate_command_pools(dst, cis, loc);
 	}
 
@@ -46,11 +47,14 @@ namespace vuk {
 		device_resource->deallocate_command_pools(src);
 	}
 
-	Result<void, AllocateException> Allocator::allocate(std::span<CommandBufferAllocation> dst, std::span<const CommandBufferAllocationCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException>
+	Allocator::allocate(std::span<CommandBufferAllocation> dst, std::span<const CommandBufferAllocationCreateInfo> cis, SourceLocationAtFrame loc) {
 		return device_resource->allocate_command_buffers(dst, cis, loc);
 	}
 
-	Result<void, AllocateException> Allocator::allocate_command_buffers(std::span<CommandBufferAllocation> dst, std::span<const CommandBufferAllocationCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException> Allocator::allocate_command_buffers(std::span<CommandBufferAllocation> dst,
+	                                                                    std::span<const CommandBufferAllocationCreateInfo> cis,
+	                                                                    SourceLocationAtFrame loc) {
 		return device_resource->allocate_command_buffers(dst, cis, loc);
 	}
 
@@ -62,7 +66,8 @@ namespace vuk {
 		return device_resource->allocate_buffers(dst, cis, loc);
 	}
 
-	Result<void, AllocateException> Allocator::allocate_buffers(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException>
+	Allocator::allocate_buffers(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
 		return device_resource->allocate_buffers(dst, cis, loc);
 	}
 
@@ -86,7 +91,8 @@ namespace vuk {
 		return device_resource->allocate_framebuffers(dst, cis, loc);
 	}
 
-	Result<void, AllocateException> Allocator::allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException>
+	Allocator::allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) {
 		return device_resource->allocate_framebuffers(dst, cis, loc);
 	}
 
@@ -110,7 +116,8 @@ namespace vuk {
 		return device_resource->allocate_image_views(dst, cis, loc);
 	}
 
-	Result<void, AllocateException> Allocator::allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException>
+	Allocator::allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) {
 		return device_resource->allocate_image_views(dst, cis, loc);
 	}
 
@@ -118,11 +125,14 @@ namespace vuk {
 		device_resource->deallocate_image_views(src);
 	}
 
-	Result<void, AllocateException> Allocator::allocate(std::span<PersistentDescriptorSet> dst, std::span<const PersistentDescriptorSetCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException>
+	Allocator::allocate(std::span<PersistentDescriptorSet> dst, std::span<const PersistentDescriptorSetCreateInfo> cis, SourceLocationAtFrame loc) {
 		return device_resource->allocate_persistent_descriptor_sets(dst, cis, loc);
 	}
 
-	Result<void, AllocateException> Allocator::allocate_persistent_descriptor_sets(std::span<PersistentDescriptorSet> dst, std::span<const PersistentDescriptorSetCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException> Allocator::allocate_persistent_descriptor_sets(std::span<PersistentDescriptorSet> dst,
+	                                                                               std::span<const PersistentDescriptorSetCreateInfo> cis,
+	                                                                               SourceLocationAtFrame loc) {
 		return device_resource->allocate_persistent_descriptor_sets(dst, cis, loc);
 	}
 
@@ -134,7 +144,8 @@ namespace vuk {
 		return device_resource->allocate_descriptor_sets(dst, cis, loc);
 	}
 
-	Result<void, AllocateException> Allocator::allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException>
+	Allocator::allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) {
 		return device_resource->allocate_descriptor_sets(dst, cis, loc);
 	}
 
@@ -142,11 +153,13 @@ namespace vuk {
 		device_resource->deallocate_descriptor_sets(src);
 	}
 
-	Result<void, AllocateException> Allocator::allocate(std::span<TimestampQueryPool> dst, std::span<const VkQueryPoolCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException>
+	Allocator::allocate(std::span<TimestampQueryPool> dst, std::span<const VkQueryPoolCreateInfo> cis, SourceLocationAtFrame loc) {
 		return device_resource->allocate_timestamp_query_pools(dst, cis, loc);
 	}
 
-	Result<void, AllocateException> Allocator::allocate_timestamp_query_pools(std::span<TimestampQueryPool> dst, std::span<const VkQueryPoolCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException>
+	Allocator::allocate_timestamp_query_pools(std::span<TimestampQueryPool> dst, std::span<const VkQueryPoolCreateInfo> cis, SourceLocationAtFrame loc) {
 		return device_resource->allocate_timestamp_query_pools(dst, cis, loc);
 	}
 
@@ -158,7 +171,8 @@ namespace vuk {
 		return device_resource->allocate_timestamp_queries(dst, cis, loc);
 	}
 
-	Result<void, AllocateException> Allocator::allocate_timestamp_queries(std::span<TimestampQuery> dst, std::span<const TimestampQueryCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException>
+	Allocator::allocate_timestamp_queries(std::span<TimestampQuery> dst, std::span<const TimestampQueryCreateInfo> cis, SourceLocationAtFrame loc) {
 		return device_resource->allocate_timestamp_queries(dst, cis, loc);
 	}
 
@@ -181,22 +195,36 @@ namespace vuk {
 	PFN_vmaAllocateDeviceMemoryFunction LegacyGPUAllocator::real_alloc_callback = nullptr;
 
 	std::string to_string(BufferUsageFlags value) {
-		if (!value) return "{}";
+		if (!value)
+			return "{}";
 		std::string result;
 
-		if (value & BufferUsageFlagBits::eTransferRead) result += "TransferSrc | ";
-		if (value & BufferUsageFlagBits::eTransferWrite) result += "TransferDst | ";
-		if (value & BufferUsageFlagBits::eUniformTexelBuffer) result += "UniformTexelBuffer | ";
-		if (value & BufferUsageFlagBits::eStorageTexelBuffer) result += "StorageTexelBuffer | ";
-		if (value & BufferUsageFlagBits::eUniformBuffer) result += "UniformBuffer | ";
-		if (value & BufferUsageFlagBits::eStorageBuffer) result += "StorageBuffer | ";
-		if (value & BufferUsageFlagBits::eIndexBuffer) result += "IndexBuffer | ";
-		if (value & BufferUsageFlagBits::eVertexBuffer) result += "VertexBuffer | ";
-		if (value & BufferUsageFlagBits::eIndirectBuffer) result += "IndirectBuffer | ";
-		if (value & BufferUsageFlagBits::eShaderDeviceAddress) result += "ShaderDeviceAddress | ";
-		if (value & BufferUsageFlagBits::eTransformFeedbackBufferEXT) result += "TransformFeedbackBufferEXT | ";
-		if (value & BufferUsageFlagBits::eTransformFeedbackCounterBufferEXT) result += "TransformFeedbackCounterBufferEXT | ";
-		if (value & BufferUsageFlagBits::eConditionalRenderingEXT) result += "ConditionalRenderingEXT | ";
+		if (value & BufferUsageFlagBits::eTransferRead)
+			result += "TransferSrc | ";
+		if (value & BufferUsageFlagBits::eTransferWrite)
+			result += "TransferDst | ";
+		if (value & BufferUsageFlagBits::eUniformTexelBuffer)
+			result += "UniformTexelBuffer | ";
+		if (value & BufferUsageFlagBits::eStorageTexelBuffer)
+			result += "StorageTexelBuffer | ";
+		if (value & BufferUsageFlagBits::eUniformBuffer)
+			result += "UniformBuffer | ";
+		if (value & BufferUsageFlagBits::eStorageBuffer)
+			result += "StorageBuffer | ";
+		if (value & BufferUsageFlagBits::eIndexBuffer)
+			result += "IndexBuffer | ";
+		if (value & BufferUsageFlagBits::eVertexBuffer)
+			result += "VertexBuffer | ";
+		if (value & BufferUsageFlagBits::eIndirectBuffer)
+			result += "IndirectBuffer | ";
+		if (value & BufferUsageFlagBits::eShaderDeviceAddress)
+			result += "ShaderDeviceAddress | ";
+		if (value & BufferUsageFlagBits::eTransformFeedbackBufferEXT)
+			result += "TransformFeedbackBufferEXT | ";
+		if (value & BufferUsageFlagBits::eTransformFeedbackCounterBufferEXT)
+			result += "TransformFeedbackCounterBufferEXT | ";
+		if (value & BufferUsageFlagBits::eConditionalRenderingEXT)
+			result += "ConditionalRenderingEXT | ";
 		return "{ " + result.substr(0, result.size() - 3) + " }";
 	}
 
@@ -258,10 +286,14 @@ namespace vuk {
 			info.objectHandle = reinterpret_cast<uint64_t>(memory);
 			pags.setDebugUtilsObjectNameEXT(pags.device, &info);
 		}
-
 	}
 
-	LegacyGPUAllocator::LegacyGPUAllocator(VkInstance instance, VkDevice device, VkPhysicalDevice phys_dev, uint32_t graphics_queue_family, uint32_t transfer_queue_family) : device(device) {
+	LegacyGPUAllocator::LegacyGPUAllocator(VkInstance instance,
+	                                       VkDevice device,
+	                                       VkPhysicalDevice phys_dev,
+	                                       uint32_t graphics_queue_family,
+	                                       uint32_t transfer_queue_family) :
+	    device(device) {
 		VmaAllocatorCreateInfo allocatorInfo = {};
 		allocatorInfo.instance = instance;
 		allocatorInfo.physicalDevice = phys_dev;
@@ -380,8 +412,7 @@ namespace vuk {
 				std::lock_guard _(mutex);
 				auto result = vmaCreateBuffer(allocator, &bci, &vaci, &vkbuffer, &res, &vai);
 				assert(result == VK_SUCCESS);
-				pool.allocations[next_index] =
-					std::tuple(res, vai.deviceMemory, vai.offset, vkbuffer, (std::byte*)vai.pMappedData);
+				pool.allocations[next_index] = std::tuple(res, vai.deviceMemory, vai.offset, vkbuffer, (std::byte*)vai.pMappedData);
 				buffers.emplace(reinterpret_cast<uint64_t>(vai.deviceMemory), std::pair(vkbuffer, bci.size));
 			}
 			pool.current_buffer++;
@@ -391,7 +422,8 @@ namespace vuk {
 			}
 		}
 		// wait for the buffer to be allocated
-		while (pool.current_buffer.load() < buffer) {};
+		while (pool.current_buffer.load() < buffer) {
+		};
 		auto offset = VmaAlignDown(new_needle - size, alignment) % pool.block_size;
 		auto& current_alloc = pool.allocations[buffer];
 		Buffer b;
@@ -566,7 +598,6 @@ namespace vuk {
 		}
 	}
 
-
 	vuk::Image LegacyGPUAllocator::create_image_for_rendertarget(vuk::ImageCreateInfo ici) {
 		std::lock_guard _(mutex);
 		VmaAllocationCreateInfo db{};
@@ -611,4 +642,4 @@ namespace vuk {
 		}
 		vmaDestroyAllocator(allocator);
 	}
-}
+} // namespace vuk

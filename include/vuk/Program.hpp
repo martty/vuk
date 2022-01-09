@@ -1,24 +1,37 @@
 #pragma once
+#include <../src/CreateInfo.hpp>
+#include <array>
 #include <unordered_map>
 #include <vector>
-#include <array>
-#include <../src/CreateInfo.hpp>
 #include <vuk/Config.hpp>
 #include <vuk/vuk_fwd.hpp>
 
 namespace spirv_cross {
 	struct SPIRType;
 	class Compiler;
-};
+}; // namespace spirv_cross
 namespace vuk {
 	struct Program {
 		enum class Type {
-			euint, eint, efloat, edouble,
-			euvec2, euvec3, euvec4,
-			eivec2, eivec3, eivec4,
-			evec2, evec3, evec4,
-			edvec2, edvec3, edvec4,
-			emat4, edmat4, estruct
+			euint,
+			eint,
+			efloat,
+			edouble,
+			euvec2,
+			euvec3,
+			euvec4,
+			eivec2,
+			eivec3,
+			eivec4,
+			evec2,
+			evec3,
+			evec4,
+			edvec2,
+			edvec3,
+			edvec4,
+			emat4,
+			edmat4,
+			estruct
 		};
 
 		struct Attribute {
@@ -65,7 +78,6 @@ namespace vuk {
 			std::vector<Member> members;
 
 			VkShaderStageFlags stage;
-
 		};
 
 		struct StorageImage {
@@ -138,14 +150,15 @@ namespace vuk {
 
 	struct ShaderModuleCreateInfo;
 
-	template<> struct create_info<vuk::ShaderModule> {
+	template<>
+	struct create_info<vuk::ShaderModule> {
 		using type = vuk::ShaderModuleCreateInfo;
 	};
-}
+} // namespace vuk
 
 namespace std {
-	template <>
+	template<>
 	struct hash<vuk::ShaderModuleCreateInfo> {
 		size_t operator()(vuk::ShaderModuleCreateInfo const& x) const noexcept;
 	};
-};
+}; // namespace std

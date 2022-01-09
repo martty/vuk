@@ -31,62 +31,49 @@ namespace {
 	template<class T>
 	vuk::RenderGraph test_case(vuk::Allocator& allocator, bool dependent, vuk::Texture& src, vuk::Texture& dst, vuk::Query start, vuk::Query end, T parameters) {
 		vuk::RenderGraph rg;
-		rg.add_pass({
-			.resources = {"_dst"_image >> vuk::eColorWrite},
-			.execute = [start, end, parameters, &src, dependent](vuk::CommandBuffer& command_buffer) {
-				command_buffer
-					.set_viewport(0, vuk::Rect2D::framebuffer())
-					.set_scissor(0, vuk::Rect2D::framebuffer())
-					.set_rasterization({})
-					.broadcast_color_blend({})
-					.bind_sampled_image(0, 0, src, vuk::SamplerCreateInfo{.magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear });
-				if (dependent) {
-					command_buffer.bind_graphics_pipeline("dependent");
-					command_buffer.push_constants<unsigned>(vuk::ShaderStageFlagBits::eFragment, 0, 112);
-				} else {
-					command_buffer.bind_graphics_pipeline("nondependent");
-				}
+		rg.add_pass({ .resources = { "_dst"_image >> vuk::eColorWrite }, .execute = [start, end, parameters, &src, dependent](vuk::CommandBuffer& command_buffer) {
+			             command_buffer.set_viewport(0, vuk::Rect2D::framebuffer())
+			                 .set_scissor(0, vuk::Rect2D::framebuffer())
+			                 .set_rasterization({})
+			                 .broadcast_color_blend({})
+			                 .bind_sampled_image(0, 0, src, vuk::SamplerCreateInfo{ .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear });
+			             if (dependent) {
+				             command_buffer.bind_graphics_pipeline("dependent");
+				             command_buffer.push_constants<unsigned>(vuk::ShaderStageFlagBits::eFragment, 0, 112);
+			             } else {
+				             command_buffer.bind_graphics_pipeline("nondependent");
+			             }
 
-				vuk::TimedScope _{ command_buffer, start, end };
-				for (auto i = 0; i < parameters.n_draws; i++) {
-					command_buffer.draw(3 * parameters.n_tris, 1, 0, 0);
-				}
-			}
-			});
-		rg.add_pass({
-			.resources = {"_final"_image >> vuk::eColorWrite, "_dst+"_image >> vuk::eFragmentSampled},
-			.execute = [](vuk::CommandBuffer& command_buffer) {
-				command_buffer
-					.set_viewport(0, vuk::Rect2D::framebuffer())
-					.set_scissor(0, vuk::Rect2D::framebuffer())
-					.set_rasterization({})
-					.broadcast_color_blend({})
-					.bind_graphics_pipeline("blit")
-					.bind_sampled_image(0, 0, "_dst", vuk::SamplerCreateInfo{.magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear });
-				command_buffer.draw(3, 1, 0, 0);
-				}
-			}
-		);
+			             vuk::TimedScope _{ command_buffer, start, end };
+			             for (auto i = 0; i < parameters.n_draws; i++) {
+				             command_buffer.draw(3 * parameters.n_tris, 1, 0, 0);
+			             }
+		             } });
+		rg.add_pass(
+		    { .resources = { "_final"_image >> vuk::eColorWrite, "_dst+"_image >> vuk::eFragmentSampled }, .execute = [](vuk::CommandBuffer& command_buffer) {
+			     command_buffer.set_viewport(0, vuk::Rect2D::framebuffer())
+			         .set_scissor(0, vuk::Rect2D::framebuffer())
+			         .set_rasterization({})
+			         .broadcast_color_blend({})
+			         .bind_graphics_pipeline("blit")
+			         .bind_sampled_image(0, 0, "_dst", vuk::SamplerCreateInfo{ .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear });
+			     command_buffer.draw(3, 1, 0, 0);
+		     } });
 		rg.attach_image("_dst", vuk::ImageAttachment::from_texture(dst), vuk::Access::eNone, vuk::Access::eNone);
 		return rg;
 	}
 
 	void blit(vuk::Allocator& allocator, vuk::Texture& src, vuk::Texture& dst) {
 		vuk::RenderGraph rg;
-		rg.add_pass({
-			.resources = {"dst"_image >> vuk::eColorWrite},
-			.execute = [&src](vuk::CommandBuffer& command_buffer) {
-				command_buffer
-					.set_viewport(0, vuk::Rect2D::framebuffer())
-					.set_scissor(0, vuk::Rect2D::framebuffer())
-					.set_rasterization({})
-					.broadcast_color_blend({})
-					.bind_graphics_pipeline("blit")
-					.bind_sampled_image(0, 0, src, vuk::SamplerCreateInfo{.magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear });
-				command_buffer.draw(3, 1, 0, 0);
-				}
-			}
-		);
+		rg.add_pass({ .resources = { "dst"_image >> vuk::eColorWrite }, .execute = [&src](vuk::CommandBuffer& command_buffer) {
+			             command_buffer.set_viewport(0, vuk::Rect2D::framebuffer())
+			                 .set_scissor(0, vuk::Rect2D::framebuffer())
+			                 .set_rasterization({})
+			                 .broadcast_color_blend({})
+			                 .bind_graphics_pipeline("blit")
+			                 .bind_sampled_image(0, 0, src, vuk::SamplerCreateInfo{ .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear });
+			             command_buffer.draw(3, 1, 0, 0);
+		             } });
 		rg.attach_image("dst", vuk::ImageAttachment::from_texture(dst), vuk::Access::eNone, vuk::Access::eFragmentSampled);
 		vuk::execute_submit_and_wait(allocator, std::move(rg).link(allocator.get_context(), vuk::RenderGraph::CompileOptions{}));
 	}
@@ -184,4 +171,4 @@ namespace {
 	};
 
 	REGISTER_BENCH(x);
-}
+} // namespace

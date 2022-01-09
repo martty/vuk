@@ -1,8 +1,8 @@
 #pragma once
 
-#include <vuk/vuk_fwd.hpp>
 #include <vuk/Config.hpp>
 #include <vuk/Hash.hpp>
+#include <vuk/vuk_fwd.hpp>
 
 namespace vuk {
 	struct HandleBase {
@@ -18,10 +18,11 @@ namespace vuk {
 		}
 	};
 
-	template <typename Type>
+	template<typename Type>
 	class Unique {
 		Allocator* allocator;
 		Type payload;
+
 	public:
 		using element_type = Type;
 
@@ -84,11 +85,11 @@ namespace vuk {
 		}
 	};
 
-	template <typename Type>
+	template<typename Type>
 	inline void swap(Unique<Type>& lhs, Unique<Type>& rhs) noexcept {
 		lhs.swap(rhs);
 	}
-}
+} // namespace vuk
 
 namespace std {
 	template<class T>
@@ -99,7 +100,7 @@ namespace std {
 			return h;
 		}
 	};
-}
+} // namespace std
 
 namespace vuk {
 	enum class SampleCountFlagBits : VkSampleCountFlags {
@@ -142,19 +143,18 @@ namespace vuk {
 		int32_t y = {};
 
 		bool operator==(Offset2D const& rhs) const noexcept {
-			return (x == rhs.x)
-				&& (y == rhs.y);
+			return (x == rhs.x) && (y == rhs.y);
 		}
 
 		bool operator!=(Offset2D const& rhs) const noexcept {
 			return !operator==(rhs);
 		}
 
-		operator VkOffset2D const& () const noexcept {
+		operator VkOffset2D const&() const noexcept {
 			return *reinterpret_cast<const VkOffset2D*>(this);
 		}
 
-		operator VkOffset2D& () noexcept {
+		operator VkOffset2D&() noexcept {
 			return *reinterpret_cast<VkOffset2D*>(this);
 		}
 
@@ -167,19 +167,18 @@ namespace vuk {
 		uint32_t height = {};
 
 		bool operator==(Extent2D const& rhs) const noexcept {
-			return (width == rhs.width)
-				&& (height == rhs.height);
+			return (width == rhs.width) && (height == rhs.height);
 		}
 
 		bool operator!=(Extent2D const& rhs) const noexcept {
 			return !operator==(rhs);
 		}
 
-		operator VkExtent2D const& () const noexcept {
+		operator VkExtent2D const&() const noexcept {
 			return *reinterpret_cast<const VkExtent2D*>(this);
 		}
 
-		operator VkExtent2D& () noexcept {
+		operator VkExtent2D&() noexcept {
 			return *reinterpret_cast<VkExtent2D*>(this);
 		}
 
@@ -192,20 +191,18 @@ namespace vuk {
 		int32_t z = {};
 
 		bool operator==(Offset3D const& rhs) const noexcept {
-			return (x == rhs.x)
-				&& (y == rhs.y)
-				&& (z == rhs.z);
+			return (x == rhs.x) && (y == rhs.y) && (z == rhs.z);
 		}
 
 		bool operator!=(Offset3D const& rhs) const noexcept {
 			return !operator==(rhs);
 		}
 
-		operator VkOffset3D const& () const noexcept {
+		operator VkOffset3D const&() const noexcept {
 			return *reinterpret_cast<const VkOffset3D*>(this);
 		}
 
-		operator VkOffset3D& () noexcept {
+		operator VkOffset3D&() noexcept {
 			return *reinterpret_cast<VkOffset3D*>(this);
 		}
 	};
@@ -220,20 +217,18 @@ namespace vuk {
 		uint32_t depth = {};
 
 		bool operator==(Extent3D const& rhs) const noexcept {
-			return (width == rhs.width)
-				&& (height == rhs.height)
-				&& (depth == rhs.depth);
+			return (width == rhs.width) && (height == rhs.height) && (depth == rhs.depth);
 		}
 
 		bool operator!=(Extent3D const& rhs) const noexcept {
 			return !operator==(rhs);
 		}
 
-		operator VkExtent3D const& () const noexcept {
+		operator VkExtent3D const&() const noexcept {
 			return *reinterpret_cast<const VkExtent3D*>(this);
 		}
 
-		operator VkExtent3D& () noexcept {
+		operator VkExtent3D&() noexcept {
 			return *reinterpret_cast<VkExtent3D*>(this);
 		}
 	};
@@ -250,21 +245,16 @@ namespace vuk {
 		float minDepth = 0.f;
 		float maxDepth = 1.f;
 
-		operator VkViewport const& () const noexcept {
+		operator VkViewport const&() const noexcept {
 			return *reinterpret_cast<const VkViewport*>(this);
 		}
 
-		operator VkViewport& () noexcept {
+		operator VkViewport&() noexcept {
 			return *reinterpret_cast<VkViewport*>(this);
 		}
 
 		bool operator==(Viewport const& rhs) const noexcept {
-			return (x == rhs.x)
-				&& (y == rhs.y)
-				&& (width == rhs.width)
-				&& (height == rhs.height)
-				&& (minDepth == rhs.minDepth)
-				&& (maxDepth == rhs.maxDepth);
+			return (x == rhs.x) && (y == rhs.y) && (width == rhs.width) && (height == rhs.height) && (minDepth == rhs.minDepth) && (maxDepth == rhs.maxDepth);
 		}
 
 		bool operator!=(Viewport const& rhs) const noexcept {
@@ -287,13 +277,13 @@ namespace vuk {
 		} _relative;
 
 		static Dimension2D absolute(uint32_t width, uint32_t height) {
-			return Dimension2D{ .extent = {width, height} };
+			return Dimension2D{ .extent = { width, height } };
 		}
 		static Dimension2D absolute(Extent2D extent) {
 			return Dimension2D{ .extent = extent };
 		}
 		static Dimension2D relative(float width, float height) {
-			return Dimension2D{ .sizing = Sizing::eRelative, ._relative = {.width = width, .height = height} };
+			return Dimension2D{ .sizing = Sizing::eRelative, ._relative = { .width = width, .height = height } };
 		}
 		static Dimension2D framebuffer() {
 			return Dimension2D{ .sizing = Sizing::eRelative };
@@ -314,13 +304,13 @@ namespace vuk {
 		} _relative;
 
 		static Rect2D absolute(int32_t x, int32_t y, uint32_t width, uint32_t height) {
-			return Rect2D{ .offset = {x, y}, .extent = {width, height} };
+			return Rect2D{ .offset = { x, y }, .extent = { width, height } };
 		}
 		static Rect2D absolute(Offset2D offset, Extent2D extent) {
 			return Rect2D{ .offset = offset, .extent = extent };
 		}
 		static Rect2D relative(float x, float y, float width, float height) {
-			return Rect2D{ .sizing = Sizing::eRelative, ._relative = {.x = x, .y = y, .width = width, .height = height } };
+			return Rect2D{ .sizing = Sizing::eRelative, ._relative = { .x = x, .y = y, .width = width, .height = height } };
 		}
 		static Rect2D framebuffer() {
 			return Rect2D{ .sizing = Sizing::eRelative };
@@ -620,27 +610,19 @@ namespace vuk {
 		eNoneNV = VK_INDEX_TYPE_NONE_NV
 	};
 
-	template <typename BitType>
+	template<typename BitType>
 	class Flags {
 	public:
 		using MaskType = typename std::underlying_type_t<BitType>;
 
 		// constructors
-		constexpr Flags() noexcept
-			: m_mask(0) {
-		}
+		constexpr Flags() noexcept : m_mask(0) {}
 
-		constexpr Flags(BitType bit) noexcept
-			: m_mask(static_cast<MaskType>(bit)) {
-		}
+		constexpr Flags(BitType bit) noexcept : m_mask(static_cast<MaskType>(bit)) {}
 
-		constexpr Flags(Flags<BitType> const& rhs) noexcept
-			: m_mask(rhs.m_mask) {
-		}
+		constexpr Flags(Flags<BitType> const& rhs) noexcept : m_mask(rhs.m_mask) {}
 
-		constexpr explicit Flags(MaskType flags) noexcept
-			: m_mask(flags) {
-		}
+		constexpr explicit Flags(MaskType flags) noexcept : m_mask(flags) {}
 
 		constexpr bool operator<(Flags<BitType> const& rhs) const noexcept {
 			return m_mask < rhs.m_mask;
@@ -859,10 +841,10 @@ namespace vuk {
 	}
 
 	enum class MemoryUsage {
-		eGPUonly = 1/*VMA_MEMORY_USAGE_GPU_ONLY*/,
-		eCPUtoGPU = 3/*VMA_MEMORY_USAGE_CPU_TO_GPU*/,
-		eCPUonly = 2/*VMA_MEMORY_USAGE_CPU_ONLY*/,
-		eGPUtoCPU = 4/*VMA_MEMORY_USAGE_GPU_TO_CPU*/
+		eGPUonly = 1 /*VMA_MEMORY_USAGE_GPU_ONLY*/,
+		eCPUtoGPU = 3 /*VMA_MEMORY_USAGE_CPU_TO_GPU*/,
+		eCPUonly = 2 /*VMA_MEMORY_USAGE_CPU_ONLY*/,
+		eGPUtoCPU = 4 /*VMA_MEMORY_USAGE_GPU_TO_CPU*/
 	};
 
 	using Bool32 = uint32_t;
@@ -892,10 +874,13 @@ namespace vuk {
 		VkClearDepthStencilValue cdsv;
 	};
 
-
 	struct PreserveOrClear {
-		PreserveOrClear(ClearColor cc) : clear(true) { c.color = cc.ccv; }
-		PreserveOrClear(ClearDepthStencil cc) : clear(true) { c.depthStencil = cc.cdsv; }
+		PreserveOrClear(ClearColor cc) : clear(true) {
+			c.color = cc.ccv;
+		}
+		PreserveOrClear(ClearDepthStencil cc) : clear(true) {
+			c.depthStencil = cc.cdsv;
+		}
 		PreserveOrClear(Preserve) : clear(false) {}
 
 		bool clear;
@@ -904,8 +889,12 @@ namespace vuk {
 
 	struct Clear {
 		Clear() = default;
-		Clear(ClearColor cc) : is_color(true) { c.color = cc.ccv; }
-		Clear(ClearDepthStencil cc) : is_color(false) { c.depthStencil = cc.cdsv; }
+		Clear(ClearColor cc) : is_color(true) {
+			c.color = cc.ccv;
+		}
+		Clear(ClearDepthStencil cc) : is_color(false) {
+			c.depthStencil = cc.cdsv;
+		}
 
 		Clear(const Clear& other) noexcept {
 			if (other.is_color) {
@@ -921,17 +910,17 @@ namespace vuk {
 	};
 
 	enum Access {
-		eNone, // as initial use: resource available without synchronization, as final use: resource does not need synchronizing
-		eInfer, // as final use only: this use must be overwritten/inferred before compiling
-		eClear, // general clearing
+		eNone,          // as initial use: resource available without synchronization, as final use: resource does not need synchronizing
+		eInfer,         // as final use only: this use must be overwritten/inferred before compiling
+		eClear,         // general clearing
 		eTransferClear, // vkCmdClearXXX
 		eColorRW,
 		eColorWrite,
 		eColorRead,
-		eColorResolveRead, // special op to mark renderpass resolve read
+		eColorResolveRead,  // special op to mark renderpass resolve read
 		eColorResolveWrite, // special op to mark renderpass resolve write
-		eRelease, // release a resource into a future
-		eAcquire, // acquire a resource from a future
+		eRelease,           // release a resource into a future
+		eAcquire,           // acquire a resource from a future
 		eDepthStencilRW,
 		eDepthStencilRead,
 		eInputRead,
@@ -960,7 +949,7 @@ namespace vuk {
 	// Aligns given value up to nearest multiply of align value. For example: VmaAlignUp(11, 8) = 16.
 	// Use types like uint32_t, uint64_t as T.
 	// Source: VMA
-	template <typename T>
+	template<typename T>
 	static inline T align_up(T val, T align) {
 		return (val + align - 1) / align * align;
 	}
@@ -990,4 +979,4 @@ namespace vuk {
 			return command_buffer;
 		}
 	};
-}
+} // namespace vuk

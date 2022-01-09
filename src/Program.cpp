@@ -1,12 +1,16 @@
-#include <spirv_cross.hpp>
 #include <regex>
+#include <spirv_cross.hpp>
 
-#include <vuk/ShaderSource.hpp>
-#include <vuk/Program.hpp>
 #include <vuk/Hash.hpp>
+#include <vuk/Program.hpp>
+#include <vuk/ShaderSource.hpp>
 
-static auto binding_cmp = [](auto& s1, auto& s2) { return s1.binding < s2.binding; };
-static auto binding_eq = [](auto& s1, auto& s2) { return s1.binding == s2.binding; };
+static auto binding_cmp = [](auto& s1, auto& s2) {
+	return s1.binding < s2.binding;
+};
+static auto binding_eq = [](auto& s1, auto& s2) {
+	return s1.binding == s2.binding;
+};
 
 template<class T>
 void unq(T& s) {
@@ -31,7 +35,6 @@ void unq(T& s) {
 	s.erase(std::unique(s.begin(), s.end(), binding_eq), s.end());
 }
 
-
 vuk::Program::Type to_type(spirv_cross::SPIRType s) {
 	using namespace spirv_cross;
 	using namespace vuk;
@@ -41,45 +44,84 @@ vuk::Program::Type to_type(spirv_cross::SPIRType s) {
 		switch (s.columns) {
 		case 1:
 			switch (s.vecsize) {
-			case 1:	return Program::Type::efloat; break;
-			case 2: return Program::Type::evec2; break;
-			case 3: return Program::Type::evec3; break;
-			case 4: return Program::Type::evec4; break;
-			default: assert("NYI" && 0);
+			case 1:
+				return Program::Type::efloat;
+				break;
+			case 2:
+				return Program::Type::evec2;
+				break;
+			case 3:
+				return Program::Type::evec3;
+				break;
+			case 4:
+				return Program::Type::evec4;
+				break;
+			default:
+				assert("NYI" && 0);
 			}
 		case 4:
-			return Program::Type::emat4; break;
+			return Program::Type::emat4;
+			break;
 		}
 	case SPIRType::Double:
 		switch (s.columns) {
 		case 1:
 			switch (s.vecsize) {
-			case 1:	return Program::Type::edouble; break;
-			case 2: return Program::Type::edvec2; break;
-			case 3: return Program::Type::edvec3; break;
-			case 4: return Program::Type::edvec4; break;
-			default: assert("NYI" && 0);
+			case 1:
+				return Program::Type::edouble;
+				break;
+			case 2:
+				return Program::Type::edvec2;
+				break;
+			case 3:
+				return Program::Type::edvec3;
+				break;
+			case 4:
+				return Program::Type::edvec4;
+				break;
+			default:
+				assert("NYI" && 0);
 			}
 		case 4:
-			return Program::Type::edmat4; break;
+			return Program::Type::edmat4;
+			break;
 		}
 	case SPIRType::Int:
 		switch (s.vecsize) {
-		case 1:	return Program::Type::eint; break;
-		case 2: return Program::Type::eivec2; break;
-		case 3: return Program::Type::eivec3; break;
-		case 4: return Program::Type::eivec4; break;
-		default: assert("NYI" && 0);
+		case 1:
+			return Program::Type::eint;
+			break;
+		case 2:
+			return Program::Type::eivec2;
+			break;
+		case 3:
+			return Program::Type::eivec3;
+			break;
+		case 4:
+			return Program::Type::eivec4;
+			break;
+		default:
+			assert("NYI" && 0);
 		}
 	case SPIRType::UInt:
 		switch (s.vecsize) {
-		case 1:	return Program::Type::euint; break;
-		case 2: return Program::Type::euvec2; break;
-		case 3: return Program::Type::euvec3; break;
-		case 4: return Program::Type::euvec4; break;
-		default: assert("NYI" && 0);
+		case 1:
+			return Program::Type::euint;
+			break;
+		case 2:
+			return Program::Type::euvec2;
+			break;
+		case 3:
+			return Program::Type::euvec3;
+			break;
+		case 4:
+			return Program::Type::euvec4;
+			break;
+		default:
+			assert("NYI" && 0);
 		}
-	case SPIRType::Struct: return Program::Type::estruct;
+	case SPIRType::Struct:
+		return Program::Type::estruct;
 	default:
 		assert("NYI" && 0);
 		return Program::Type::estruct;
@@ -93,9 +135,9 @@ void reflect_members(const spirv_cross::Compiler& refl, const spirv_cross::SPIRT
 		auto spirtype = refl.get_type(t);
 		m.type = to_type(spirtype);
 		if (m.type == vuk::Program::Type::estruct) {
-            m.type_name = refl.get_name(t);
+			m.type_name = refl.get_name(t);
 			if (m.type_name == "") {
-                m.type_name = refl.get_name(spirtype.parent_type);
+				m.type_name = refl.get_name(spirtype.parent_type);
 			}
 		}
 		m.name = refl.get_member_name(type.self, i);
@@ -124,13 +166,20 @@ VkShaderStageFlagBits vuk::Program::introspect(const spirv_cross::Compiler& refl
 	auto model = entry_point.model;
 	auto stage = [=]() {
 		switch (model) {
-		case spv::ExecutionModel::ExecutionModelVertex: return VK_SHADER_STAGE_VERTEX_BIT;
-		case spv::ExecutionModel::ExecutionModelTessellationControl: return VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
-		case spv::ExecutionModel::ExecutionModelTessellationEvaluation: return VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
-		case spv::ExecutionModel::ExecutionModelGeometry: return VK_SHADER_STAGE_GEOMETRY_BIT;
-		case spv::ExecutionModel::ExecutionModelFragment: return VK_SHADER_STAGE_FRAGMENT_BIT;
-		case spv::ExecutionModel::ExecutionModelGLCompute: return VK_SHADER_STAGE_COMPUTE_BIT;
-		default: return VK_SHADER_STAGE_VERTEX_BIT;
+		case spv::ExecutionModel::ExecutionModelVertex:
+			return VK_SHADER_STAGE_VERTEX_BIT;
+		case spv::ExecutionModel::ExecutionModelTessellationControl:
+			return VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+		case spv::ExecutionModel::ExecutionModelTessellationEvaluation:
+			return VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+		case spv::ExecutionModel::ExecutionModelGeometry:
+			return VK_SHADER_STAGE_GEOMETRY_BIT;
+		case spv::ExecutionModel::ExecutionModelFragment:
+			return VK_SHADER_STAGE_FRAGMENT_BIT;
+		case spv::ExecutionModel::ExecutionModelGLCompute:
+			return VK_SHADER_STAGE_COMPUTE_BIT;
+		default:
+			return VK_SHADER_STAGE_VERTEX_BIT;
 		}
 	}();
 	stages = stage;
@@ -220,7 +269,7 @@ VkShaderStageFlagBits vuk::Program::introspect(const spirv_cross::Compiler& refl
 	}
 
 	for (auto& sc : refl.get_specialization_constants()) {
-		spec_constants.emplace_back(SpecConstant{ sc.constant_id, to_type(refl.get_type(refl.get_constant(sc.id).constant_type)), (VkShaderStageFlags)stage});
+		spec_constants.emplace_back(SpecConstant{ sc.constant_id, to_type(refl.get_type(refl.get_constant(sc.id).constant_type)), (VkShaderStageFlags)stage });
 	}
 
 	// remove duplicated bindings (aliased bindings)
@@ -268,8 +317,8 @@ VkShaderStageFlagBits vuk::Program::introspect(const spirv_cross::Compiler& refl
 
 	if (stage == VK_SHADER_STAGE_COMPUTE_BIT) {
 		local_size = { refl.get_execution_mode_argument(spv::ExecutionMode::ExecutionModeLocalSize, 0),
-					   refl.get_execution_mode_argument(spv::ExecutionMode::ExecutionModeLocalSize, 1),
-					   refl.get_execution_mode_argument(spv::ExecutionMode::ExecutionModeLocalSize, 2) };
+			             refl.get_execution_mode_argument(spv::ExecutionMode::ExecutionModeLocalSize, 1),
+			             refl.get_execution_mode_argument(spv::ExecutionMode::ExecutionModeLocalSize, 2) };
 	}
 
 	return stage;

@@ -1,7 +1,7 @@
 #pragma once
-//http://howardhinnant.github.io/stack_alloc.html
-//https://codereview.stackexchange.com/a/31575
-// but modified to use a heap arena
+// http://howardhinnant.github.io/stack_alloc.html
+// https://codereview.stackexchange.com/a/31575
+//  but modified to use a heap arena
 #include <cassert>
 #include <cstddef>
 #include <new>
@@ -22,7 +22,7 @@ class arena {
 
 public:
 	arena(std::size_t N) noexcept {
-		buf_ = (char*) operator new[](N, (std::align_val_t{ alignment }));
+		buf_ = (char*)operator new[](N, (std::align_val_t{ alignment }));
 		ptr_ = buf_;
 		size_ = N;
 	}
@@ -32,13 +32,13 @@ public:
 	}
 	arena(const arena& o) {
 		size_ = o.size_;
-		buf_ = (char*) operator new[](size_, (std::align_val_t{ alignment }));
+		buf_ = (char*)operator new[](size_, (std::align_val_t{ alignment }));
 		ptr_ = buf_;
 	}
 	arena& operator=(const arena& o) {
 		::operator delete[](buf_, std::align_val_t{ alignment });
 		size_ = o.size_;
-		buf_ = (char*) operator new[](size_, (std::align_val_t{ alignment }));
+		buf_ = (char*)operator new[](size_, (std::align_val_t{ alignment }));
 		ptr_ = buf_;
 		return *this;
 	};
@@ -81,6 +81,7 @@ inline void arena::deallocate(char* p, std::size_t n) noexcept {
 template<class T, std::size_t N>
 class short_alloc {
 	arena& a_;
+
 public:
 	typedef T value_type;
 
@@ -89,7 +90,6 @@ public:
 	struct rebind {
 		typedef short_alloc<_Up, N> other;
 	};
-
 
 	short_alloc(arena& a) : a_(a) {}
 	template<class U>

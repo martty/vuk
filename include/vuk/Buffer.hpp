@@ -41,7 +41,7 @@ namespace vuk {
 		VkBuffer buffer = VK_NULL_HANDLE;
 		size_t offset = 0;
 		size_t size = 0;
-        size_t allocation_size = 0;
+		size_t allocation_size = 0;
 		std::byte* mapped_ptr = nullptr;
 		MemoryUsage memory_usage;
 
@@ -59,7 +59,9 @@ namespace vuk {
 
 		[[nodiscard]] Buffer add_offset(size_t offset_to_add) {
 			assert(offset_to_add <= size);
-			return { device_memory, buffer, offset + offset_to_add, size - offset_to_add, allocation_size, mapped_ptr != nullptr ? mapped_ptr + offset_to_add : nullptr, memory_usage };
+			return { device_memory,        buffer,          offset + offset_to_add,
+				       size - offset_to_add, allocation_size, mapped_ptr != nullptr ? mapped_ptr + offset_to_add : nullptr,
+				       memory_usage };
 		}
 
 		[[nodiscard]] Buffer subrange(size_t new_offset, size_t new_size) {
@@ -77,4 +79,4 @@ namespace vuk {
 		size_t size;
 		size_t alignment;
 	};
-}
+} // namespace vuk

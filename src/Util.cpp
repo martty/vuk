@@ -1,6 +1,6 @@
+#include "vuk/AllocatorHelpers.hpp"
 #include "vuk/Context.hpp"
 #include "vuk/RenderGraph.hpp"
-#include "vuk/AllocatorHelpers.hpp"
 
 namespace vuk {
 	Result<void> link_execute_submit(Allocator& allocator, std::span<std::pair<Allocator*, RenderGraph*>> rgs) {
@@ -15,7 +15,8 @@ namespace vuk {
 		return execute_submit(allocator, std::span(ptrvec), {}, {}, {});
 	}
 
-	Result<std::vector<SubmitBundle>> execute(std::span<std::pair<Allocator*, ExecutableRenderGraph*>> ergs, std::vector<std::pair<SwapchainRef, size_t>> swapchains_with_indexes) {
+	Result<std::vector<SubmitBundle>> execute(std::span<std::pair<Allocator*, ExecutableRenderGraph*>> ergs,
+	                                          std::vector<std::pair<SwapchainRef, size_t>> swapchains_with_indexes) {
 		std::vector<SubmitBundle> bundles;
 		for (auto& [alloc, rg] : ergs) {
 			auto sbundle = rg->execute(*alloc, swapchains_with_indexes);
@@ -35,7 +36,7 @@ namespace vuk {
 				auto& last = bundles.back();
 				for (auto& batch : sbundle->batches) {
 					auto tgt_domain = batch.domain;
-					auto it = std::find_if(last.batches.begin(), last.batches.end(), [=](auto& batch) {return batch.domain == tgt_domain; });
+					auto it = std::find_if(last.batches.begin(), last.batches.end(), [=](auto& batch) { return batch.domain == tgt_domain; });
 					if (it != last.batches.end()) {
 						it->submits.insert(it->submits.end(), batch.submits.begin(), batch.submits.end());
 					} else {
@@ -96,7 +97,6 @@ namespace vuk {
 			std::vector<VkSemaphoreSubmitInfoKHR> signal_semas;
 			signal_semas.reserve(batch.submits.size() + 1); // 1 extra for render_complete
 
-
 			for (uint64_t i = 0; i < batch.submits.size(); i++) {
 				SubmitInfo& submit_info = batch.submits[i];
 
@@ -109,7 +109,8 @@ namespace vuk {
 				}
 
 				for (uint64_t i = 0; i < submit_info.command_buffers.size(); i++) {
-					cbufsis.emplace_back(VkCommandBufferSubmitInfoKHR{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO_KHR, .commandBuffer = submit_info.command_buffers[i] });
+					cbufsis.emplace_back(
+					    VkCommandBufferSubmitInfoKHR{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO_KHR, .commandBuffer = submit_info.command_buffers[i] });
 				}
 
 				uint32_t wait_sema_count = 0;
@@ -126,8 +127,8 @@ namespace vuk {
 					VkSemaphoreSubmitInfoKHR ssi{ VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR };
 					ssi.semaphore = present_rdy;
 					ssi.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR;
-					//wait_semas.emplace_back(ssi);
-					//wait_sema_count++;
+					// wait_semas.emplace_back(ssi);
+					// wait_sema_count++;
 				}
 
 				VkSemaphoreSubmitInfoKHR ssi{ VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR };
@@ -144,7 +145,8 @@ namespace vuk {
 
 				uint32_t signal_sema_count = 1;
 				signal_semas.emplace_back(ssi);
-				if (domain == DomainFlagBits::eGraphicsQueue && i == batch.submits.size() - 1 && render_complete != VK_NULL_HANDLE) { // TODO: for final cbuf only that refs the swapchain attment
+				if (domain == DomainFlagBits::eGraphicsQueue && i == batch.submits.size() - 1 &&
+				    render_complete != VK_NULL_HANDLE) { // TODO: for final cbuf only that refs the swapchain attment
 					ssi.semaphore = render_complete;
 					ssi.value = 0; // binary sema
 					signal_semas.emplace_back(ssi);
@@ -170,9 +172,12 @@ namespace vuk {
 		return { expected_value };
 	}
 
-
 	// assume rgs are independent - they don't reference eachother
-	Result<void> execute_submit(Allocator& allocator, std::span<std::pair<Allocator*, ExecutableRenderGraph*>> rgs, std::vector<std::pair<SwapchainRef, size_t>> swapchains_with_indexes, VkSemaphore present_rdy, VkSemaphore render_complete) {
+	Result<void> execute_submit(Allocator& allocator,
+	                            std::span<std::pair<Allocator*, ExecutableRenderGraph*>> rgs,
+	                            std::vector<std::pair<SwapchainRef, size_t>> swapchains_with_indexes,
+	                            VkSemaphore present_rdy,
+	                            VkSemaphore render_complete) {
 		auto bundles = execute(rgs, swapchains_with_indexes);
 		if (!bundles) {
 			return { expected_error, bundles.error() };
@@ -202,7 +207,7 @@ namespace vuk {
 			VkPipelineStageFlags flags = (VkPipelineStageFlags)PipelineStageFlagBits::eTopOfPipe;
 			si.pWaitDstStageMask = &flags;
 			VUK_DO_OR_RETURN(ctx.submit_graphics(std::span{ &si, 1 }, VK_NULL_HANDLE));
-			return { expected_error, PresentException{acq_result} };
+			return { expected_error, PresentException{ acq_result } };
 		}
 
 		std::vector<std::pair<SwapchainRef, size_t>> swapchains_with_indexes = { { swapchain, image_index } };
@@ -218,7 +223,7 @@ namespace vuk {
 		pi.pWaitSemaphores = &render_complete;
 		auto present_result = vkQueuePresentKHR(ctx.graphics_queue->queue, &pi);
 		if (present_result != VK_SUCCESS) {
-			return { expected_error, PresentException{present_result} };
+			return { expected_error, PresentException{ present_result } };
 		}
 
 		return { expected_value };
@@ -237,7 +242,7 @@ namespace vuk {
 	}
 
 	SampledImage make_sampled_image(Name n, SamplerCreateInfo sci) {
-		return{ SampledImage::RenderGraphAttachment{ n, sci, {}, ImageLayout::eShaderReadOnlyOptimal } };
+		return { SampledImage::RenderGraphAttachment{ n, sci, {}, ImageLayout::eShaderReadOnlyOptimal } };
 	}
 
 	SampledImage make_sampled_image(Name n, ImageViewCreateInfo ivci, SamplerCreateInfo sci) {
@@ -262,13 +267,20 @@ namespace vuk {
 	FutureBase::FutureBase(Allocator& alloc) : allocator(&alloc) {}
 
 	template<class T>
-	Future<T>::Future(Allocator& alloc, struct RenderGraph& rg, Name output_binding) : control(std::make_unique<FutureBase>(alloc)), rg(&rg), output_binding(output_binding) {
+	Future<T>::Future(Allocator& alloc, struct RenderGraph& rg, Name output_binding) :
+	    control(std::make_unique<FutureBase>(alloc)),
+	    rg(&rg),
+	    output_binding(output_binding) {
 		control->status = FutureBase::Status::eRenderGraphBound;
 		this->rg->attach_out(output_binding, *this);
 	}
 
 	template<class T>
-	Future<T>::Future(Allocator& alloc, std::unique_ptr<struct RenderGraph> org, Name output_binding) : control(std::make_unique<FutureBase>(alloc)), owned_rg(std::move(org)), rg(owned_rg.get()), output_binding(output_binding) {
+	Future<T>::Future(Allocator& alloc, std::unique_ptr<struct RenderGraph> org, Name output_binding) :
+	    control(std::make_unique<FutureBase>(alloc)),
+	    owned_rg(std::move(org)),
+	    rg(owned_rg.get()),
+	    output_binding(output_binding) {
 		control->status = FutureBase::Status::eRenderGraphBound;
 		rg->attach_out(output_binding, *this);
 	}
@@ -317,4 +329,4 @@ namespace vuk {
 
 	template struct Future<ImageAttachment>;
 	template struct Future<Buffer>;
-}
+} // namespace vuk

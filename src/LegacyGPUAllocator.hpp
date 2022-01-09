@@ -1,15 +1,15 @@
 #pragma once
 
-#include <vk_mem_alloc.h>
-#include <mutex>
-#include <unordered_map>
-#include <atomic>
-#include <vuk/Hash.hpp>
 #include <../src/Cache.hpp> // for the hashes
 #include <../src/CreateInfo.hpp>
-#include <vuk/Types.hpp>
+#include <atomic>
+#include <mutex>
+#include <unordered_map>
+#include <vk_mem_alloc.h>
 #include <vuk/Buffer.hpp>
+#include <vuk/Hash.hpp>
 #include <vuk/Image.hpp>
+#include <vuk/Types.hpp>
 
 namespace vuk {
 	struct PoolSelect {
@@ -30,10 +30,10 @@ namespace vuk {
 		}
 	};
 
-};
+}; // namespace vuk
 
 namespace std {
-	template <>
+	template<>
 	struct hash<vuk::PoolSelect> {
 		size_t operator()(vuk::PoolSelect const& x) const noexcept {
 			size_t h = 0;
@@ -42,7 +42,7 @@ namespace std {
 		}
 	};
 
-	template <>
+	template<>
 	struct hash<vuk::BufferID> {
 		size_t operator()(vuk::BufferID const& x) const noexcept {
 			size_t h = 0;
@@ -50,8 +50,7 @@ namespace std {
 			return h;
 		}
 	};
-};
-
+}; // namespace std
 
 namespace vuk {
 	struct LegacyPoolAllocator {
@@ -71,9 +70,10 @@ namespace vuk {
 
 		size_t block_size = 1024 * 1024 * 16;
 
-		LegacyLinearAllocator(VkMemoryRequirements mem_reqs, VmaMemoryUsage mem_usage, vuk::BufferUsageFlags buf_usage)
-			: mem_reqs(mem_reqs), mem_usage(mem_usage), usage(buf_usage) {
-		}
+		LegacyLinearAllocator(VkMemoryRequirements mem_reqs, VmaMemoryUsage mem_usage, vuk::BufferUsageFlags buf_usage) :
+		    mem_reqs(mem_reqs),
+		    mem_usage(mem_usage),
+		    usage(buf_usage) {}
 
 		LegacyLinearAllocator(LegacyLinearAllocator&& o) noexcept {
 			current_buffer = o.current_buffer.load();
@@ -116,6 +116,7 @@ namespace vuk {
 		VkPhysicalDeviceProperties properties;
 		std::vector<uint32_t> all_queue_families;
 		uint32_t queue_family_count;
+
 	public:
 		LegacyGPUAllocator(VkInstance instance, VkDevice device, VkPhysicalDevice phys_dev, uint32_t graphics_queue_family, uint32_t transfer_queue_family);
 		~LegacyGPUAllocator();
@@ -124,15 +125,9 @@ namespace vuk {
 		LegacyPoolAllocator allocate_pool(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage);
 		// allocate an externally managed linear pool
 		static constexpr vuk::BufferUsageFlags all_usage =
-			BufferUsageFlagBits::eTransferRead |
-			BufferUsageFlagBits::eTransferWrite |
-			BufferUsageFlagBits::eUniformTexelBuffer |
-			BufferUsageFlagBits::eStorageTexelBuffer |
-			BufferUsageFlagBits::eUniformBuffer |
-			BufferUsageFlagBits::eStorageBuffer |
-			BufferUsageFlagBits::eIndexBuffer |
-			BufferUsageFlagBits::eVertexBuffer |
-			BufferUsageFlagBits::eIndirectBuffer;
+		    BufferUsageFlagBits::eTransferRead | BufferUsageFlagBits::eTransferWrite | BufferUsageFlagBits::eUniformTexelBuffer |
+		    BufferUsageFlagBits::eStorageTexelBuffer | BufferUsageFlagBits::eUniformBuffer | BufferUsageFlagBits::eStorageBuffer |
+		    BufferUsageFlagBits::eIndexBuffer | BufferUsageFlagBits::eVertexBuffer | BufferUsageFlagBits::eIndirectBuffer;
 
 		VkMemoryRequirements get_memory_requirements(VkBufferCreateInfo& bci);
 		LegacyLinearAllocator allocate_linear(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage);
@@ -163,11 +158,13 @@ namespace vuk {
 		Buffer _allocate_buffer(LegacyLinearAllocator& pool, size_t size, size_t alignment, bool create_mapped);
 	};
 
-	template<> struct create_info<LegacyPoolAllocator> {
+	template<>
+	struct create_info<LegacyPoolAllocator> {
 		using type = PoolSelect;
 	};
 
-	template<> struct create_info<LegacyLinearAllocator> {
+	template<>
+	struct create_info<LegacyLinearAllocator> {
 		using type = PoolSelect;
 	};
-};
+}; // namespace vuk

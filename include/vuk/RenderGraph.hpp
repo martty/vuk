@@ -1,22 +1,23 @@
 #pragma once
 
-#include <vector>
-#include <string_view>
-#include <optional>
-#include <functional>
-#include "vuk/Hash.hpp"
-#include "vuk/vuk_fwd.hpp"
 #include "../src/RenderPass.hpp"
+#include "vuk/Allocator.hpp"
 #include "vuk/Buffer.hpp"
+#include "vuk/Context.hpp"
+#include "vuk/Hash.hpp"
 #include "vuk/Image.hpp"
-#include "vuk/Swapchain.hpp"
 #include "vuk/MapProxy.hpp"
 #include "vuk/Result.hpp"
-#include "vuk/Allocator.hpp"
-#include "vuk/Context.hpp"
+#include "vuk/Swapchain.hpp"
+#include "vuk/vuk_fwd.hpp"
+#include <functional>
+#include <optional>
+#include <string_view>
+#include <vector>
 
 namespace vuk {
-	template<class T> struct Future;
+	template<class T>
+	struct Future;
 	struct Resource;
 
 	namespace detail {
@@ -32,7 +33,7 @@ namespace vuk {
 
 		struct ImageResource {
 			Name name;
-			
+
 			Resource operator()(Access ia, Format, Dimension2D, Samples, Clear);
 			ImageResourceInputOnly operator>>(Access ia);
 		};
@@ -52,7 +53,7 @@ namespace vuk {
 			Resource operator>>(Name output);
 			operator Resource();
 		};
-	}
+	} // namespace detail
 
 	struct ResourceUse {
 		vuk::Access original = vuk::eNone;
@@ -71,9 +72,7 @@ namespace vuk {
 
 		ResourceUse initial, final;
 
-		enum class Type {
-			eInternal, eExternal, eSwapchain
-		} type;
+		enum class Type { eInternal, eExternal, eSwapchain } type;
 
 		vuk::ImageView iv;
 		vuk::Image image = {};
@@ -109,7 +108,13 @@ namespace vuk {
 
 		Resource(Name n, Type t, Access ia) : name(n), type(t), ia(ia) {}
 		Resource(Name n, Type t, Access ia, Name out_name) : name(n), type(t), ia(ia), out_name(out_name) {}
-		Resource(Name n, Type t, Access ia, Format fmt, Dimension2D dim, Samples samp, Clear cv, Name out_name) : name(n), type(t), ia(ia), is_create(true), ici{ .extents = dim, .samples = samp, .description{.format = (VkFormat)fmt}, .clear_value = cv}, out_name(out_name) {}
+		Resource(Name n, Type t, Access ia, Format fmt, Dimension2D dim, Samples samp, Clear cv, Name out_name) :
+		    name(n),
+		    type(t),
+		    ia(ia),
+		    is_create(true),
+		    ici{ .extents = dim, .samples = samp, .description{ .format = (VkFormat)fmt }, .clear_value = cv },
+		    out_name(out_name) {}
 
 		bool operator==(const Resource& o) const noexcept {
 			return name == o.name;
@@ -134,9 +139,12 @@ namespace vuk {
 	};
 
 	// declare these specializations for GCC
-	template<> ConstMapIterator<Name, std::span<const struct UseRef>>::~ConstMapIterator();
-	template<> ConstMapIterator<Name, const struct AttachmentRPInfo&>::~ConstMapIterator();
-	template<> ConstMapIterator<Name, const struct BufferInfo&>::~ConstMapIterator();
+	template<>
+	ConstMapIterator<Name, std::span<const struct UseRef>>::~ConstMapIterator();
+	template<>
+	ConstMapIterator<Name, const struct AttachmentRPInfo&>::~ConstMapIterator();
+	template<>
+	ConstMapIterator<Name, const struct BufferInfo&>::~ConstMapIterator();
 
 	struct RenderGraph {
 		RenderGraph();
@@ -148,8 +156,8 @@ namespace vuk {
 		RenderGraph(RenderGraph&&) noexcept;
 		RenderGraph& operator=(RenderGraph&&) noexcept;
 
-		/// @brief 
-		/// @param the Pass to add to the RenderGraph 
+		/// @brief
+		/// @param the Pass to add to the RenderGraph
 		void add_pass(Pass);
 
 		// append the other RenderGraph onto this one
@@ -157,13 +165,13 @@ namespace vuk {
 		void append(Name subgraph_name, RenderGraph other);
 
 		/// @brief Add an alias for a resource
-		/// @param new_name 
-		/// @param old_name 
+		/// @param new_name
+		/// @param old_name
 		void add_alias(Name new_name, Name old_name);
 
 		/// @brief Add a resolve operation from the image resource `ms_name` to image_resource `resolved_name`
-		/// @param resolved_name 
-		/// @param ms_name 
+		/// @param resolved_name
+		/// @param ms_name
 		// TODO: docs
 		void resolve_resource_into(Name resolved_name_src, Name resolved_name_dst, Name ms_name);
 
@@ -180,15 +188,15 @@ namespace vuk {
 		void attach_managed(Name, Format, Dimension2D, Samples, Clear);
 
 		struct CompileOptions {
-			bool reorder_passes = true; // reorder passes according to resources
+			bool reorder_passes = true;       // reorder passes according to resources
 			bool check_pass_ordering = false; // check that pass ordering does not violate resource constraints (not needed when reordering passes)
 		};
 
 		/// @brief Consume this RenderGraph and create an ExecutableRenderGraph
-		struct ExecutableRenderGraph link(Context& ctx, const CompileOptions& compile_options)&&;
+		struct ExecutableRenderGraph link(Context& ctx, const CompileOptions& compile_options) &&;
 
 		// reflection functions
- 
+
 		/// @brief Build the graph, assign framebuffers, renderpasses and subpasses
 		///	link automatically calls this, only needed if you want to use the reflection functions
 		void compile(const CompileOptions& compile_options);
@@ -197,6 +205,7 @@ namespace vuk {
 		MapProxy<Name, const struct AttachmentRPInfo&> get_bound_attachments();
 		MapProxy<Name, const struct BufferInfo&> get_bound_buffers();
 		static vuk::ImageUsageFlags compute_usage(std::span<const UseRef> chain);
+
 	private:
 		struct RGImpl* impl;
 		friend struct ExecutableRenderGraph;
@@ -245,6 +254,7 @@ namespace vuk {
 		Result<bool, RenderGraphException> is_resource_image_in_general_layout(Name n, struct PassInfo* pass_info);
 
 		Name resolve_name(Name, struct PassInfo*) const noexcept;
+
 	private:
 		struct RGImpl* impl;
 
@@ -252,12 +262,12 @@ namespace vuk {
 		void fill_renderpass_info(struct RenderPassInfo& rpass, const size_t& i, class CommandBuffer& cobuf);
 		Result<SubmitInfo> record_single_submit(Allocator&, std::span<RenderPassInfo> rpis, DomainFlagBits domain);
 	};
-}
+} // namespace vuk
 
-inline vuk::detail::ImageResource operator "" _image(const char* name, size_t) {
+inline vuk::detail::ImageResource operator"" _image(const char* name, size_t) {
 	return { name };
 }
 
-inline vuk::detail::BufferResource operator "" _buffer(const char* name, size_t) {
+inline vuk::detail::BufferResource operator"" _buffer(const char* name, size_t) {
 	return { name };
 }

@@ -4,13 +4,13 @@
 #include <span>
 #include <string_view>
 
-#include "vuk_fwd.hpp"
-#include "vuk/Pipeline.hpp"
-#include "vuk/SampledImage.hpp"
-#include "vuk/Image.hpp"
 #include "vuk/Buffer.hpp"
-#include "vuk/Swapchain.hpp"
+#include "vuk/Image.hpp"
+#include "vuk/Pipeline.hpp"
 #include "vuk/Query.hpp"
+#include "vuk/SampledImage.hpp"
+#include "vuk/Swapchain.hpp"
+#include "vuk_fwd.hpp"
 
 #include <vuk/Allocator.hpp>
 
@@ -128,7 +128,7 @@ namespace vuk {
 			template<class T>
 			void set_name(const T& t, Name name);
 
-			void begin_region(const VkCommandBuffer&, Name name, std::array<float, 4> color = { 1,1,1,1 });
+			void begin_region(const VkCommandBuffer&, Name name, std::array<float, 4> color = { 1, 1, 1, 1 });
 			void end_region(const VkCommandBuffer&);
 		} debug;
 
@@ -159,7 +159,7 @@ namespace vuk {
 		/// @return The resource
 		DeviceVkResource& get_vk_resource();
 
-		uint32_t(*get_thread_index)() = nullptr;
+		uint32_t (*get_thread_index)() = nullptr;
 
 		struct UploadItem {
 			/// @brief Describes a single upload to a Buffer
@@ -205,8 +205,9 @@ namespace vuk {
 		/// @param dst_queue_family The queue family where the uploads will be used (ignored for buffers)
 		TransientSubmitStub fenced_upload(std::span<UploadItem> uploads, uint32_t dst_queue_family);
 
-		/// @brief Check if the upload has finished. If the upload has finished, resources will be reclaimed automatically. If this function returns true you must not poll again.
-		/// @param pending TransientSubmitStub object to check. 
+		/// @brief Check if the upload has finished. If the upload has finished, resources will be reclaimed automatically. If this function returns true you must
+		/// not poll again.
+		/// @param pending TransientSubmitStub object to check.
 		bool poll_upload(TransientSubmitStub pending);
 
 		Texture allocate_texture(Allocator& allocator, ImageCreateInfo ici);
@@ -215,7 +216,8 @@ namespace vuk {
 
 		template<class T>
 		TransferStub upload(Allocator& allocator, Buffer dst, std::span<T> data) {
-			if (data.empty()) return { 0 };
+			if (data.empty())
+				return { 0 };
 			Unique<BufferCrossDevice> staging(allocator);
 			BufferCreateInfo bci{ MemoryUsage::eCPUonly, sizeof(T) * data.size(), 1 };
 			auto ret = allocator.allocate_buffers(std::span{ &*staging, 1 }, std::span{ &bci, 1 }); // TODO: dropping error
@@ -270,7 +272,6 @@ namespace vuk {
 		Handle<T> wrap(T payload);
 		ImageView wrap(VkImageView payload, ImageViewCreateInfo);
 
-
 		Result<void> submit_graphics(std::span<VkSubmitInfo>, VkFence);
 		Result<void> submit_transfer(std::span<VkSubmitInfo>, VkFence);
 		Result<void> submit_graphics(std::span<VkSubmitInfo2KHR>);
@@ -296,7 +297,8 @@ namespace vuk {
 
 		Unique<PersistentDescriptorSet> create_persistent_descriptorset(Allocator& allocator, DescriptorSetLayoutCreateInfo dslci, unsigned num_descriptors);
 		Unique<PersistentDescriptorSet> create_persistent_descriptorset(Allocator& allocator, const PipelineBaseInfo& base, unsigned set, unsigned num_descriptors);
-		Unique<PersistentDescriptorSet> create_persistent_descriptorset(Allocator& allocator, const ComputePipelineBaseInfo& base, unsigned set, unsigned num_descriptors);
+		Unique<PersistentDescriptorSet>
+		create_persistent_descriptorset(Allocator& allocator, const ComputePipelineBaseInfo& base, unsigned set, unsigned num_descriptors);
 		Unique<PersistentDescriptorSet> create_persistent_descriptorset(Allocator& allocator, const PersistentDescriptorSetCreateInfo&);
 		void commit_persistent_descriptorset(PersistentDescriptorSet& array);
 
@@ -334,7 +336,8 @@ namespace vuk {
 		RGImage create(const struct RGCI& cinfo);
 		Sampler create(const struct SamplerCreateInfo& cinfo);
 
-		template<class T> friend class Cache; // caches can directly destroy
+		template<class T>
+		friend class Cache; // caches can directly destroy
 	};
 
 	template<class T>
@@ -344,7 +347,8 @@ namespace vuk {
 
 	template<class T>
 	void Context::DebugUtils::set_name(const T& t, Name name) {
-		if (!enabled()) return;
+		if (!enabled())
+			return;
 		VkDebugUtilsObjectNameInfoEXT info = { .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT };
 		info.pObjectName = name.c_str();
 		if constexpr (std::is_same_v<T, VkImage>) {
@@ -359,14 +363,18 @@ namespace vuk {
 		info.objectHandle = reinterpret_cast<uint64_t>(t);
 		setDebugUtilsObjectNameEXT(ctx.device, &info);
 	}
-}
+} // namespace vuk
 
 #include "vuk/Exception.hpp"
 // utility functions
 namespace vuk {
 	struct ExecutableRenderGraph;
 	Result<void> link_execute_submit(Allocator& allocator, std::span<std::pair<Allocator*, struct RenderGraph*>> rgs);
-	Result<void> execute_submit(Allocator& allocator, std::span<std::pair<Allocator*, ExecutableRenderGraph*>> rgs, std::vector<std::pair<SwapchainRef, size_t>> swapchains_with_indexes, VkSemaphore present_rdy, VkSemaphore render_complete);
+	Result<void> execute_submit(Allocator& allocator,
+	                            std::span<std::pair<Allocator*, ExecutableRenderGraph*>> rgs,
+	                            std::vector<std::pair<SwapchainRef, size_t>> swapchains_with_indexes,
+	                            VkSemaphore present_rdy,
+	                            VkSemaphore render_complete);
 	Result<void> execute_submit_and_present_to_one(Allocator& nalloc, ExecutableRenderGraph&& rg, SwapchainRef swapchain);
 	Result<void> execute_submit_and_wait(Allocator& nalloc, ExecutableRenderGraph&& rg);
 
@@ -379,7 +387,7 @@ namespace vuk {
 
 	template<class... Args>
 	Result<void> wait_for_futures(Allocator& alloc, Args&... futs) {
-		std::array controls = { futs.control.get()...};
+		std::array controls = { futs.control.get()... };
 		std::array rgs = { futs.rg... };
 		std::vector<std::pair<Allocator*, RenderGraph*>> rgs_to_run;
 		for (uint64_t i = 0; i < controls.size(); i++) {
@@ -413,7 +421,7 @@ namespace vuk {
 	SampledImage make_sampled_image(Name n, SamplerCreateInfo sci);
 
 	SampledImage make_sampled_image(Name n, ImageViewCreateInfo ivci, SamplerCreateInfo sci);
-}
+} // namespace vuk
 
 // futures
 namespace vuk {
@@ -442,12 +450,20 @@ namespace vuk {
 		uint32_t layer_count = VK_REMAINING_ARRAY_LAYERS;
 
 		static ImageAttachment from_texture(const vuk::Texture& t, Clear clear_value) {
-			return ImageAttachment{
-				.image = t.image.get(), .image_view = t.view.get(), .extent = {t.extent.width, t.extent.height}, .format = t.format, .sample_count = {t.sample_count}, .clear_value = clear_value };
+			return ImageAttachment{ .image = t.image.get(),
+				                      .image_view = t.view.get(),
+				                      .extent = { t.extent.width, t.extent.height },
+				                      .format = t.format,
+				                      .sample_count = { t.sample_count },
+				                      .clear_value = clear_value };
 		}
 		static ImageAttachment from_texture(const vuk::Texture& t) {
-			return ImageAttachment{
-				.image = t.image.get(), .image_view = t.view.get(), .extent = {t.extent.width, t.extent.height}, .format = t.format, .sample_count = {t.sample_count}, .layer_count = t.view->layer_count };
+			return ImageAttachment{ .image = t.image.get(),
+				                      .image_view = t.view.get(),
+				                      .extent = { t.extent.width, t.extent.height },
+				                      .format = t.format,
+				                      .sample_count = { t.sample_count },
+				                      .layer_count = t.view->layer_count };
 		}
 	};
 
@@ -458,19 +474,21 @@ namespace vuk {
 		Allocator* allocator;
 
 		enum class Status {
-			eInitial, // default-constructed future
+			eInitial,          // default-constructed future
 			eRenderGraphBound, // a rendergraph was bound to this future
-			eInputAttached, // this future was attached to a rendergraph as input
-			eOutputAttached, // this future was attached to a rendergraph as output
-			eSubmitted, // the rendergraph referenced by this future was submitted (result is available on device with appropriate sync)
-			eHostAvailable // the result is available on host, available on device without sync
+			eInputAttached,    // this future was attached to a rendergraph as input
+			eOutputAttached,   // this future was attached to a rendergraph as output
+			eSubmitted,        // the rendergraph referenced by this future was submitted (result is available on device with appropriate sync)
+			eHostAvailable     // the result is available on host, available on device without sync
 		} status = Status::eInitial;
 
-		Allocator& get_allocator() { return *allocator; }
+		Allocator& get_allocator() {
+			return *allocator;
+		}
 
 		DomainFlagBits initial_domain = DomainFlagBits::eNone; // the domain where we submitted this Future to
-		QueueResourceUse last_use; // the results of the future are available if waited for on the initial_domain
-		uint64_t initial_visibility; // the results of the future are available if waited for {initial_domain, initial_visibility}
+		QueueResourceUse last_use;                             // the results of the future are available if waited for on the initial_domain
+		uint64_t initial_visibility;                           // the results of the future are available if waited for {initial_domain, initial_visibility}
 
 		ImageAttachment result_image;
 		Buffer result_buffer;
@@ -493,18 +511,18 @@ namespace vuk {
 	struct Future {
 		Future() = default;
 		/// @brief Create a Future with ownership of a RenderGraph and bind to an output
-		/// @param allocator 
-		/// @param rg 
-		/// @param output_binding 
+		/// @param allocator
+		/// @param rg
+		/// @param output_binding
 		Future(Allocator& allocator, std::unique_ptr<struct RenderGraph> rg, Name output_binding);
 		/// @brief Create a Future without ownership of a RenderGraph and bind to an output
-		/// @param allocator 
-		/// @param rg 
-		/// @param output_binding 
+		/// @param allocator
+		/// @param rg
+		/// @param output_binding
 		Future(Allocator& allocator, struct RenderGraph& rg, Name output_binding);
 		/// @brief Create a Future from a value, automatically making it host available
-		/// @param allocator 
-		/// @param value 
+		/// @param allocator
+		/// @param value
 		Future(Allocator& allocator, T&& value);
 
 		Name output_binding;
@@ -518,9 +536,11 @@ namespace vuk {
 			return control->status;
 		}
 
-		Allocator& get_allocator() { return *control->allocator; }
+		Allocator& get_allocator() {
+			return *control->allocator;
+		}
 
 		Result<void> submit(); // turn cmdbufs into possibly a TS
-		Result<T> get(); // wait on host for T to be produced by the computation
+		Result<T> get();       // wait on host for T to be produced by the computation
 	};
-}
+} // namespace vuk

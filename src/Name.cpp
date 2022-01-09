@@ -1,11 +1,11 @@
-#include <vuk/Name.hpp>
-#include <shared_mutex>
-#include <string_view>
-#include <string>
 #include <array>
+#include <robin_hood.h>
+#include <shared_mutex>
+#include <string>
+#include <string_view>
 #include <vector>
 #include <vuk/Hash.hpp>
-#include <robin_hood.h>
+#include <vuk/Name.hpp>
 
 namespace {
 	struct Intern {
@@ -69,7 +69,7 @@ namespace {
 	};
 
 	static Intern g_intern;
-}
+} // namespace
 
 namespace vuk {
 	Name::Name(const char* str) noexcept {
@@ -95,4 +95,4 @@ namespace vuk {
 		app.append(other.id);
 		return Name(app);
 	}
-}
+} // namespace vuk

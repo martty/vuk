@@ -13,7 +13,9 @@ namespace vuk {
 		Name(std::string_view str) noexcept;
 
 		std::string_view to_sv() const noexcept;
-		const char* c_str() const noexcept { return id; }
+		const char* c_str() const noexcept {
+			return id;
+		}
 
 		Name append(Name other) const noexcept;
 
@@ -37,13 +39,13 @@ namespace vuk {
 
 		friend struct std::hash<vuk::Name>;
 	};
-}
+} // namespace vuk
 
 namespace std {
-	template<> struct hash<vuk::Name> {
+	template<>
+	struct hash<vuk::Name> {
 		size_t operator()(vuk::Name const& s) const {
 			return hash<const char*>()(s.id);
 		}
 	};
-}
-
+} // namespace std

@@ -6,8 +6,7 @@ namespace vuk {
 	template<uint64_t Count>
 	struct Bitset {
 		static constexpr uint64_t bitmask(uint64_t const onecount) {
-			return static_cast<uint64_t>(-(onecount != 0))
-				& (static_cast<uint64_t>(-1) >> ((sizeof(uint64_t)) - onecount));
+			return static_cast<uint64_t>(-(onecount != 0)) & (static_cast<uint64_t>(-1) >> ((sizeof(uint64_t)) - onecount));
 		}
 
 		static constexpr uint64_t n_bits = sizeof(uint64_t) * 8;
@@ -59,4 +58,4 @@ namespace vuk {
 			return true;
 		}
 	};
-}
+} // namespace vuk

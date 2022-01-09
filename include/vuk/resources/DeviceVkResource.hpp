@@ -15,15 +15,19 @@ namespace vuk {
 
 		void deallocate_fences(std::span<const VkFence> src) override;
 
-		Result<void, AllocateException> allocate_command_buffers(std::span<CommandBufferAllocation> dst, std::span<const CommandBufferAllocationCreateInfo> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException> allocate_command_buffers(std::span<CommandBufferAllocation> dst,
+		                                                         std::span<const CommandBufferAllocationCreateInfo> cis,
+		                                                         SourceLocationAtFrame loc) override;
 
 		void deallocate_command_buffers(std::span<const CommandBufferAllocation> dst) override;
 
-		Result<void, AllocateException> allocate_command_pools(std::span<CommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException>
+		allocate_command_pools(std::span<CommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) override;
 
 		void deallocate_command_pools(std::span<const CommandPool> src) override;
 
-		Result<void, AllocateException> allocate_buffers(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException>
+		allocate_buffers(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) override;
 
 		void deallocate_buffers(std::span<const BufferCrossDevice> src);
 
@@ -31,7 +35,8 @@ namespace vuk {
 
 		void deallocate_buffers(std::span<const BufferGPU> src) override;
 
-		Result<void, AllocateException> allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException>
+		allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) override;
 
 		void deallocate_framebuffers(std::span<const VkFramebuffer> src) override;
 
@@ -39,11 +44,14 @@ namespace vuk {
 
 		void deallocate_images(std::span<const Image> src) override;
 
-		Result<void, AllocateException> allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException>
+		allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) override;
 
 		void deallocate_image_views(std::span<const ImageView> src) override;
 
-		Result<void, AllocateException> allocate_persistent_descriptor_sets(std::span<PersistentDescriptorSet> dst, std::span<const PersistentDescriptorSetCreateInfo> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException> allocate_persistent_descriptor_sets(std::span<PersistentDescriptorSet> dst,
+		                                                                    std::span<const PersistentDescriptorSetCreateInfo> cis,
+		                                                                    SourceLocationAtFrame loc) override;
 
 		void deallocate_persistent_descriptor_sets(std::span<const PersistentDescriptorSet> src) override;
 
@@ -51,11 +59,13 @@ namespace vuk {
 
 		void deallocate_descriptor_sets(std::span<const DescriptorSet> src);
 
-		Result<void, AllocateException> allocate_timestamp_query_pools(std::span<TimestampQueryPool> dst, std::span<const VkQueryPoolCreateInfo> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException>
+		allocate_timestamp_query_pools(std::span<TimestampQueryPool> dst, std::span<const VkQueryPoolCreateInfo> cis, SourceLocationAtFrame loc) override;
 
 		void deallocate_timestamp_query_pools(std::span<const TimestampQueryPool> src) override;
 
-		Result<void, AllocateException> allocate_timestamp_queries(std::span<TimestampQuery> dst, std::span<const TimestampQueryCreateInfo> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException>
+		allocate_timestamp_queries(std::span<TimestampQuery> dst, std::span<const TimestampQueryCreateInfo> cis, SourceLocationAtFrame loc) override;
 
 		void deallocate_timestamp_queries(std::span<const TimestampQuery> src) override; // no-op, deallocate pools
 
@@ -73,4 +83,4 @@ namespace vuk {
 		LegacyGPUAllocator* legacy_gpu_allocator;
 		VkDevice device;
 	};
-}
+} // namespace vuk

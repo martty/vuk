@@ -16,13 +16,14 @@ namespace vuk {
 			return std::tie(name, ici, ivci) == std::tie(other.name, other.ici, other.ivci);
 		}
 	};
-	template<> struct create_info<RGImage> {
+	template<>
+	struct create_info<RGImage> {
 		using type = RGCI;
 	};
-}
+} // namespace vuk
 
 namespace std {
-	template <>
+	template<>
 	struct hash<vuk::RGCI> {
 		size_t operator()(vuk::RGCI const& x) const noexcept {
 			size_t h = 0;
@@ -30,4 +31,4 @@ namespace std {
 			return h;
 		}
 	};
-};
+}; // namespace std

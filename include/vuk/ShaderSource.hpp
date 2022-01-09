@@ -1,21 +1,17 @@
 #pragma once
+#include <../src/CreateInfo.hpp>
+#include <array>
 #include <unordered_map>
 #include <vector>
-#include <array>
-#include <../src/CreateInfo.hpp>
 #include <vuk/Config.hpp>
 #include <vuk/vuk_fwd.hpp>
 
 namespace spirv_cross {
 	struct SPIRType;
 	class Compiler;
-};
+}; // namespace spirv_cross
 namespace vuk {
-	enum class ShaderSourceLanguage {
-		eGlsl,
-		eHlsl,
-		eSpirv
-	};
+	enum class ShaderSourceLanguage { eGlsl, eHlsl, eSpirv };
 
 	/// @brief Specifies the HLSL Shader Stage for a given HLSL shader.
 	enum class HlslShaderStage {
@@ -86,4 +82,4 @@ namespace vuk {
 			return source == o.source;
 		}
 	};
-}
+} // namespace vuk

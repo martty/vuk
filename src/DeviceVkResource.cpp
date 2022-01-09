@@ -1,8 +1,8 @@
 #include "vuk/resources/DeviceVkResource.hpp"
+#include "../src/LegacyGPUAllocator.hpp"
 #include "../src/RenderPass.hpp"
 #include "vuk/Buffer.hpp"
 #include "vuk/Context.hpp"
-#include "../src/LegacyGPUAllocator.hpp"
 #include "vuk/Exception.hpp"
 #include "vuk/Query.hpp"
 
@@ -49,7 +49,9 @@ namespace vuk {
 		}
 	}
 
-	Result<void, AllocateException> DeviceVkResource::allocate_command_buffers(std::span<CommandBufferAllocation> dst, std::span<const CommandBufferAllocationCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException> DeviceVkResource::allocate_command_buffers(std::span<CommandBufferAllocation> dst,
+	                                                                           std::span<const CommandBufferAllocationCreateInfo> cis,
+	                                                                           SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 
 		for (uint64_t i = 0; i < dst.size(); i++) {
@@ -76,7 +78,8 @@ namespace vuk {
 		}
 	}
 
-	Result<void, AllocateException> DeviceVkResource::allocate_command_pools(std::span<CommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException>
+	DeviceVkResource::allocate_command_pools(std::span<CommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
 			VkResult res = vkCreateCommandPool(device, &cis[i], nullptr, &dst[i].command_pool);
@@ -97,7 +100,8 @@ namespace vuk {
 		}
 	}
 
-	Result<void, AllocateException> DeviceVkResource::allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException>
+	DeviceVkResource::allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
 			VkResult res = vkCreateFramebuffer(device, &cis[i], nullptr, &dst[i]);
@@ -117,7 +121,8 @@ namespace vuk {
 		}
 	}
 
-	Result<void, AllocateException> DeviceVkResource::allocate_buffers(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException>
+	DeviceVkResource::allocate_buffers(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
 			auto& ci = cis[i];
@@ -139,7 +144,8 @@ namespace vuk {
 		}
 	}
 
-	Result<void, AllocateException> DeviceVkResource::allocate_buffers(std::span<BufferGPU> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException>
+	DeviceVkResource::allocate_buffers(std::span<BufferGPU> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
 			auto& ci = cis[i];
@@ -179,7 +185,8 @@ namespace vuk {
 		}
 	}
 
-	Result<void, AllocateException> DeviceVkResource::allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException>
+	DeviceVkResource::allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
 			VkImageViewCreateInfo ci = cis[i];
@@ -194,7 +201,9 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	Result<void, AllocateException> DeviceVkResource::allocate_persistent_descriptor_sets(std::span<PersistentDescriptorSet> dst, std::span<const PersistentDescriptorSetCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException> DeviceVkResource::allocate_persistent_descriptor_sets(std::span<PersistentDescriptorSet> dst,
+	                                                                                      std::span<const PersistentDescriptorSetCreateInfo> cis,
+	                                                                                      SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
 			auto& ci = cis[i];
@@ -215,8 +224,7 @@ namespace vuk {
 					used = true;
 				}
 				// create variable count descriptors
-				if (dslai.variable_count_binding != (unsigned)-1 &&
-					dslai.variable_count_binding_type == DescriptorType(i)) {
+				if (dslai.variable_count_binding != (unsigned)-1 && dslai.variable_count_binding_type == DescriptorType(i)) {
 					auto& d = descriptor_counts[used_idx];
 					d.type = VkDescriptorType(i);
 					d.descriptorCount += ci.num_descriptors;
@@ -267,7 +275,8 @@ namespace vuk {
 		}
 	}
 
-	Result<void, AllocateException> DeviceVkResource::allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException>
+	DeviceVkResource::allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
 			auto& cinfo = cis[i];
@@ -326,7 +335,8 @@ namespace vuk {
 		}
 	}
 
-	Result<void, AllocateException> DeviceVkResource::allocate_timestamp_query_pools(std::span<TimestampQueryPool> dst, std::span<const VkQueryPoolCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException>
+	DeviceVkResource::allocate_timestamp_query_pools(std::span<TimestampQueryPool> dst, std::span<const VkQueryPoolCreateInfo> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
 			VkResult res = vkCreateQueryPool(device, &cis[i], nullptr, &dst[i].pool);
@@ -347,7 +357,8 @@ namespace vuk {
 		}
 	}
 
-	Result<void, AllocateException> DeviceVkResource::allocate_timestamp_queries(std::span<TimestampQuery> dst, std::span<const TimestampQueryCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException>
+	DeviceVkResource::allocate_timestamp_queries(std::span<TimestampQuery> dst, std::span<const TimestampQueryCreateInfo> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 
 		for (uint64_t i = 0; i < dst.size(); i++) {
@@ -396,4 +407,4 @@ namespace vuk {
 			}
 		}
 	}
-}
+} // namespace vuk

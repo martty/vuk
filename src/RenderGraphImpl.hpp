@@ -1,8 +1,8 @@
 #pragma once
 
-#include <vuk/ShortAlloc.hpp>
-#include <robin_hood.h>
 #include "RenderGraphUtil.hpp"
+#include <robin_hood.h>
+#include <vuk/ShortAlloc.hpp>
 
 namespace vuk {
 	struct CommandBundle {
@@ -31,8 +31,7 @@ namespace vuk {
 		robin_hood::unordered_flat_map<Name, AttachmentRPInfo> bound_attachments;
 		robin_hood::unordered_flat_map<Name, BufferInfo> bound_buffers;
 
-		RGImpl() : arena_(new arena(1024 * 128)), INIT(passes), INIT(rpis), INIT(ordered_passes) {
-		}
+		RGImpl() : arena_(new arena(1024 * 128)), INIT(passes), INIT(rpis), INIT(ordered_passes) {}
 
 		Name resolve_name(Name in) {
 			auto it = aliases.find(in);
@@ -47,32 +46,36 @@ namespace vuk {
 	template<class T, class A, class F>
 	T* contains_if(std::vector<T, A>& v, F&& f) {
 		auto it = std::find_if(v.begin(), v.end(), f);
-		if (it != v.end()) return &(*it);
-		else return nullptr;
+		if (it != v.end())
+			return &(*it);
+		else
+			return nullptr;
 	}
 
 	template<class T, class A, class F>
 	T const* contains_if(const std::vector<T, A>& v, F&& f) {
 		auto it = std::find_if(v.begin(), v.end(), f);
-		if (it != v.end()) return &(*it);
-		else return nullptr;
+		if (it != v.end())
+			return &(*it);
+		else
+			return nullptr;
 	}
 
 	template<class T, class A>
 	T const* contains(const std::vector<T, A>& v, const T& f) {
 		auto it = std::find(v.begin(), v.end(), f);
-		if (it != v.end()) return &(*it);
-		else return nullptr;
+		if (it != v.end())
+			return &(*it);
+		else
+			return nullptr;
 	}
 
-	template <typename Iterator, typename Compare>
+	template<typename Iterator, typename Compare>
 	void topological_sort(Iterator begin, Iterator end, Compare cmp) {
 		while (begin != end) {
-			auto const new_begin = std::partition(begin, end, [&](auto const& a) {
-				return std::none_of(begin, end, [&](auto const& b) { return cmp(b, a); });
-				});
+			auto const new_begin = std::partition(begin, end, [&](auto const& a) { return std::none_of(begin, end, [&](auto const& b) { return cmp(b, a); }); });
 			assert(new_begin != begin && "not a partial ordering");
 			begin = new_begin;
 		}
 	}
-};
+}; // namespace vuk

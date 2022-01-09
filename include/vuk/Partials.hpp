@@ -15,13 +15,12 @@ namespace vuk {
 		::memcpy(src->mapped_ptr, src_data, size);
 
 		std::unique_ptr<RenderGraph> rgp = std::make_unique<RenderGraph>();
-		rgp->add_pass({
-			.name = "BUFFER UPLOAD",
-			.execute_on = copy_domain,
-			.resources = {"_dst"_buffer >> vuk::Access::eTransferWrite, "_src"_buffer >> vuk::Access::eTransferRead},
-			.execute = [size](vuk::CommandBuffer& command_buffer) {
-				command_buffer.copy_buffer("_src", "_dst", size);
-			} });
+		rgp->add_pass({ .name = "BUFFER UPLOAD",
+		                .execute_on = copy_domain,
+		                .resources = { "_dst"_buffer >> vuk::Access::eTransferWrite, "_src"_buffer >> vuk::Access::eTransferRead },
+		                .execute = [size](vuk::CommandBuffer& command_buffer) {
+			                command_buffer.copy_buffer("_src", "_dst", size);
+		                } });
 		rgp->attach_buffer("_src", *src, vuk::Access::eNone, vuk::Access::eNone);
 		rgp->attach_buffer("_dst", buffer, vuk::Access::eNone, vuk::Access::eNone);
 		return { allocator, std::move(rgp), "_dst+" };
@@ -50,13 +49,12 @@ namespace vuk {
 		bc.imageSubresource.layerCount = image.layer_count;
 
 		std::unique_ptr<RenderGraph> rgp = std::make_unique<RenderGraph>();
-		rgp->add_pass({
-			.name = "IMAGE UPLOAD",
-			.execute_on = copy_domain,
-			.resources = {"_dst"_image >> vuk::Access::eTransferWrite, "_src"_buffer >> vuk::Access::eTransferRead},
-			.execute = [bc](vuk::CommandBuffer& command_buffer) {
-				command_buffer.copy_buffer_to_image("_src", "_dst", bc);
-			} });
+		rgp->add_pass({ .name = "IMAGE UPLOAD",
+		                .execute_on = copy_domain,
+		                .resources = { "_dst"_image >> vuk::Access::eTransferWrite, "_src"_buffer >> vuk::Access::eTransferRead },
+		                .execute = [bc](vuk::CommandBuffer& command_buffer) {
+			                command_buffer.copy_buffer_to_image("_src", "_dst", bc);
+		                } });
 		rgp->attach_buffer("_src", *src, vuk::Access::eNone, vuk::Access::eNone);
 		rgp->attach_image("_dst", image, vuk::Access::eNone, vuk::Access::eNone);
 		return { allocator, std::move(rgp), "_dst+" };
@@ -65,10 +63,7 @@ namespace vuk {
 	inline Future<ImageAttachment> transition(DomainFlagBits domain, Future<ImageAttachment> image, Access dst_access) {
 		auto& allocator = image.get_allocator();
 		std::unique_ptr<RenderGraph> rgp = std::make_unique<RenderGraph>();
-		rgp->add_pass({
-			.name = "TRANSITION",
-			.execute_on = domain,
-			.resources = {"_src"_image >> dst_access >> "_src+"} });
+		rgp->add_pass({ .name = "TRANSITION", .execute_on = domain, .resources = { "_src"_image >> dst_access >> "_src+" } });
 		rgp->attach_in("_src", std::move(image), vuk::Access::eNone);
 		return { allocator, std::move(rgp), "_src+" };
 	}
@@ -84,7 +79,7 @@ namespace vuk {
 		auto ret = allocator.allocate_buffers(std::span{ &*buf, 1 }, std::span{ &bci, 1 }); // TODO: dropping error
 		memcpy(buf->mapped_ptr, data.data(), data.size_bytes());
 		Buffer b = buf.get();
-		return { std::move(buf), Future<Buffer>{allocator, std::move(b)}};
+		return { std::move(buf), Future<Buffer>{ allocator, std::move(b) } };
 	}
 
 	template<class T>
@@ -113,4 +108,4 @@ namespace vuk {
 
 		return { std::move(tex), std::move(transition_fut) };
 	}
-}
+} // namespace vuk

@@ -1,5 +1,5 @@
-#include <vuk/Image.hpp>
 #include <cassert>
+#include <vuk/Image.hpp>
 
 namespace vuk {
 	uint32_t format_to_texel_block_size(vuk::Format format) noexcept {
@@ -415,78 +415,78 @@ namespace vuk {
 		case vuk::Format::eR64G64B64A64Uint:
 		case vuk::Format::eR64G64B64A64Sint:
 		case vuk::Format::eR64G64B64A64Sfloat:
-			return { 1,1,1 };
+			return { 1, 1, 1 };
 		case vuk::Format::eBc1RgbUnormBlock:
 		case vuk::Format::eBc1RgbSrgbBlock:
-			return { 4,4,1 };
+			return { 4, 4, 1 };
 		case vuk::Format::eBc1RgbaUnormBlock:
 		case vuk::Format::eBc1RgbaSrgbBlock:
-			return { 4,4,1 };
+			return { 4, 4, 1 };
 		case vuk::Format::eBc2UnormBlock:
 		case vuk::Format::eBc2SrgbBlock:
-			return { 4,4,1 };
+			return { 4, 4, 1 };
 		case vuk::Format::eBc3UnormBlock:
 		case vuk::Format::eBc3SrgbBlock:
-			return { 4,4,1 };
+			return { 4, 4, 1 };
 		case vuk::Format::eBc4UnormBlock:
 		case vuk::Format::eBc4SnormBlock:
-			return { 4,4,1 };
+			return { 4, 4, 1 };
 		case vuk::Format::eBc5UnormBlock:
 		case vuk::Format::eBc5SnormBlock:
-			return{ 4,4,1 };
+			return { 4, 4, 1 };
 		case vuk::Format::eBc6HUfloatBlock:
 		case vuk::Format::eBc6HSfloatBlock:
-			return{ 4,4,1 };
+			return { 4, 4, 1 };
 		case vuk::Format::eBc7UnormBlock:
 		case vuk::Format::eBc7SrgbBlock:
-			return { 4,4,1 };
+			return { 4, 4, 1 };
 		case vuk::Format::eEtc2R8G8B8UnormBlock:
 		case vuk::Format::eEtc2R8G8B8SrgbBlock:
-			return { 4,4,1 };
+			return { 4, 4, 1 };
 		case vuk::Format::eEtc2R8G8B8A1UnormBlock:
 		case vuk::Format::eEtc2R8G8B8A1SrgbBlock:
-			return { 4,4,1 };
+			return { 4, 4, 1 };
 		case vuk::Format::eEtc2R8G8B8A8UnormBlock:
 		case vuk::Format::eEtc2R8G8B8A8SrgbBlock:
-			return { 4,4,1 };
+			return { 4, 4, 1 };
 		case vuk::Format::eEacR11UnormBlock:
 		case vuk::Format::eEacR11SnormBlock:
-			return { 4,4,1 };
+			return { 4, 4, 1 };
 		case vuk::Format::eEacR11G11UnormBlock:
 		case vuk::Format::eEacR11G11SnormBlock:
-			return { 4,4,1 };
+			return { 4, 4, 1 };
 		case vuk::Format::eAstc4x4UnormBlock:
 		case vuk::Format::eAstc4x4SfloatBlockEXT:
 		case vuk::Format::eAstc4x4SrgbBlock:
-			return { 4,4,1 };
+			return { 4, 4, 1 };
 		case vuk::Format::eAstc5x4UnormBlock:
 		case vuk::Format::eAstc5x4SfloatBlockEXT:
 		case vuk::Format::eAstc5x4SrgbBlock:
-			return { 5,4,1 };
+			return { 5, 4, 1 };
 		case vuk::Format::eAstc5x5UnormBlock:
 		case vuk::Format::eAstc5x5SfloatBlockEXT:
 		case vuk::Format::eAstc5x5SrgbBlock:
-			return { 5,5,1 };
+			return { 5, 5, 1 };
 		case vuk::Format::eAstc6x5UnormBlock:
 		case vuk::Format::eAstc6x5SfloatBlockEXT:
 		case vuk::Format::eAstc6x5SrgbBlock:
-			return { 6,5,1 };
+			return { 6, 5, 1 };
 		case vuk::Format::eAstc6x6UnormBlock:
 		case vuk::Format::eAstc6x6SfloatBlockEXT:
 		case vuk::Format::eAstc6x6SrgbBlock:
-			return { 6,6,1 };
+			return { 6, 6, 1 };
 		case vuk::Format::eAstc8x5UnormBlock:
 		case vuk::Format::eAstc8x5SfloatBlockEXT:
 		case vuk::Format::eAstc8x5SrgbBlock:
-			return { 8,5,1 };
+			return { 8, 5, 1 };
 		case vuk::Format::eAstc8x6UnormBlock:
 		case vuk::Format::eAstc8x6SfloatBlockEXT:
 		case vuk::Format::eAstc8x6SrgbBlock:
-			return { 8,6,1 };
+			return { 8, 6, 1 };
 		case vuk::Format::eAstc8x8UnormBlock:
 		case vuk::Format::eAstc8x8SfloatBlockEXT:
 		case vuk::Format::eAstc8x8SrgbBlock:
-			return { 8,8,1 };
+			return { 8, 8, 1 };
 		case vuk::Format::eAstc10x5UnormBlock:
 		case vuk::Format::eAstc10x5SfloatBlockEXT:
 		case vuk::Format::eAstc10x5SrgbBlock:
@@ -518,21 +518,19 @@ namespace vuk {
 		case vuk::Format::eD16UnormS8Uint:
 		case vuk::Format::eD24UnormS8Uint:
 		case vuk::Format::eD32SfloatS8Uint:
-			return { 1,1,1 };
+			return { 1, 1, 1 };
 		default:
 			assert(0 && "format cannot be used with this function.");
-			return { 0,0,0 };
+			return { 0, 0, 0 };
 		}
 	}
 
 	uint32_t compute_image_size(vuk::Format format, vuk::Extent3D extent) noexcept {
 		auto block_extent = format_to_texel_block_extent(format);
-		auto extent_in_blocks = Extent3D{
-			(extent.width + block_extent.width - 1) / block_extent.width,
-			(extent.height + block_extent.height - 1) / block_extent.height,
-			(extent.depth + block_extent.depth - 1) / block_extent.depth
-		};
+		auto extent_in_blocks = Extent3D{ (extent.width + block_extent.width - 1) / block_extent.width,
+			                                (extent.height + block_extent.height - 1) / block_extent.height,
+			                                (extent.depth + block_extent.depth - 1) / block_extent.depth };
 		return extent_in_blocks.width * extent_in_blocks.height * extent_in_blocks.depth * format_to_texel_block_size(format);
 	}
 
-}
+} // namespace vuk

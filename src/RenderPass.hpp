@@ -1,49 +1,37 @@
 #pragma once
 
-#include "vuk/vuk_fwd.hpp"
+#include "Cache.hpp"
 #include "CreateInfo.hpp"
 #include "vuk/Types.hpp"
-#include "Cache.hpp"
+#include "vuk/vuk_fwd.hpp"
 #include <optional>
 
 inline bool operator==(VkAttachmentDescription const& lhs, VkAttachmentDescription const& rhs) noexcept {
-	return (lhs.flags == rhs.flags)
-		&& (lhs.format == rhs.format)
-		&& (lhs.samples == rhs.samples)
-		&& (lhs.loadOp == rhs.loadOp)
-		&& (lhs.storeOp == rhs.storeOp)
-		&& (lhs.stencilLoadOp == rhs.stencilLoadOp)
-		&& (lhs.stencilStoreOp == rhs.stencilStoreOp)
-		&& (lhs.initialLayout == rhs.initialLayout)
-		&& (lhs.finalLayout == rhs.finalLayout);
+	return (lhs.flags == rhs.flags) && (lhs.format == rhs.format) && (lhs.samples == rhs.samples) && (lhs.loadOp == rhs.loadOp) && (lhs.storeOp == rhs.storeOp) &&
+	       (lhs.stencilLoadOp == rhs.stencilLoadOp) && (lhs.stencilStoreOp == rhs.stencilStoreOp) && (lhs.initialLayout == rhs.initialLayout) &&
+	       (lhs.finalLayout == rhs.finalLayout);
 }
 
 inline bool operator==(VkSubpassDependency const& lhs, VkSubpassDependency const& rhs) noexcept {
-	return (lhs.srcSubpass == rhs.srcSubpass)
-		&& (lhs.dstSubpass == rhs.dstSubpass)
-		&& (lhs.srcStageMask == rhs.srcStageMask)
-		&& (lhs.dstStageMask == rhs.dstStageMask)
-		&& (lhs.srcAccessMask == rhs.srcAccessMask)
-		&& (lhs.dstAccessMask == rhs.dstAccessMask)
-		&& (lhs.dependencyFlags == rhs.dependencyFlags);
+	return (lhs.srcSubpass == rhs.srcSubpass) && (lhs.dstSubpass == rhs.dstSubpass) && (lhs.srcStageMask == rhs.srcStageMask) &&
+	       (lhs.dstStageMask == rhs.dstStageMask) && (lhs.srcAccessMask == rhs.srcAccessMask) && (lhs.dstAccessMask == rhs.dstAccessMask) &&
+	       (lhs.dependencyFlags == rhs.dependencyFlags);
 }
 
 inline bool operator==(VkAttachmentReference const& lhs, VkAttachmentReference const& rhs) noexcept {
-	return (lhs.attachment == rhs.attachment)
-		&& (lhs.layout == rhs.layout);
+	return (lhs.attachment == rhs.attachment) && (lhs.layout == rhs.layout);
 }
 
 namespace vuk {
 	struct SubpassDescription : public VkSubpassDescription {
 		SubpassDescription() : VkSubpassDescription{} {}
 		bool operator==(const SubpassDescription& o) const {
-			return std::tie(flags, pipelineBindPoint) ==
-				std::tie(o.flags, o.pipelineBindPoint);
+			return std::tie(flags, pipelineBindPoint) == std::tie(o.flags, o.pipelineBindPoint);
 		}
 	};
 
 	struct RenderPassCreateInfo : public VkRenderPassCreateInfo {
-		RenderPassCreateInfo() : VkRenderPassCreateInfo{.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO } {}
+		RenderPassCreateInfo() : VkRenderPassCreateInfo{ .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO } {}
 		std::vector<VkAttachmentDescription> attachments;
 		std::vector<vuk::SubpassDescription> subpass_descriptions;
 		std::vector<VkSubpassDependency> subpass_dependencies;
@@ -54,32 +42,35 @@ namespace vuk {
 
 		bool operator==(const RenderPassCreateInfo& o) const {
 			return std::forward_as_tuple(flags, attachments, subpass_descriptions, subpass_dependencies, color_refs, color_ref_offsets, ds_refs, resolve_refs) ==
-				std::forward_as_tuple(o.flags, o.attachments, o.subpass_descriptions, o.subpass_dependencies, o.color_refs, o.color_ref_offsets, o.ds_refs, o.resolve_refs);
+			       std::forward_as_tuple(
+			           o.flags, o.attachments, o.subpass_descriptions, o.subpass_dependencies, o.color_refs, o.color_ref_offsets, o.ds_refs, o.resolve_refs);
 		}
 	};
 
-	template<> struct create_info<VkRenderPass> {
+	template<>
+	struct create_info<VkRenderPass> {
 		using type = vuk::RenderPassCreateInfo;
 	};
 
 	struct FramebufferCreateInfo : public VkFramebufferCreateInfo {
-		FramebufferCreateInfo() : VkFramebufferCreateInfo{.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO } {}
+		FramebufferCreateInfo() : VkFramebufferCreateInfo{ .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO } {}
 		std::vector<vuk::ImageView> attachments;
 		vuk::Samples sample_count = vuk::Samples::eInfer;
 
 		bool operator==(const FramebufferCreateInfo& o) const {
 			return std::tie(flags, attachments, width, height, renderPass, layers, sample_count) ==
-				std::tie(o.flags, o.attachments, o.width, o.height, o.renderPass, o.layers, o.sample_count);
+			       std::tie(o.flags, o.attachments, o.width, o.height, o.renderPass, o.layers, o.sample_count);
 		}
 	};
 
-	template<> struct create_info<VkFramebuffer> {
+	template<>
+	struct create_info<VkFramebuffer> {
 		using type = vuk::FramebufferCreateInfo;
 	};
-}
+} // namespace vuk
 
 namespace std {
-	template <>
+	template<>
 	struct hash<vuk::SubpassDescription> {
 		size_t operator()(vuk::SubpassDescription const& x) const noexcept {
 			size_t h = 0;
@@ -88,7 +79,7 @@ namespace std {
 		}
 	};
 
-	template <>
+	template<>
 	struct hash<vuk::RenderPassCreateInfo> {
 		size_t operator()(vuk::RenderPassCreateInfo const& x) const noexcept {
 			size_t h = 0;
@@ -97,7 +88,7 @@ namespace std {
 		}
 	};
 
-	template <>
+	template<>
 	struct hash<vuk::FramebufferCreateInfo> {
 		size_t operator()(vuk::FramebufferCreateInfo const& x) const noexcept {
 			size_t h = 0;
@@ -105,4 +96,4 @@ namespace std {
 			return h;
 		}
 	};
-}
+} // namespace std

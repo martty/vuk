@@ -2,7 +2,8 @@
 #include "vuk/Program.hpp"
 
 namespace vuk {
-	vuk::fixed_vector<vuk::DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> PipelineBaseCreateInfo::build_descriptor_layouts(const Program& program, const PipelineBaseCreateInfoBase& bci) {
+	vuk::fixed_vector<vuk::DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> PipelineBaseCreateInfo::build_descriptor_layouts(const Program& program,
+	                                                                                                                     const PipelineBaseCreateInfoBase& bci) {
 		vuk::fixed_vector<vuk::DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> dslcis;
 
 		for (const auto& [index, set] : program.sets) {
@@ -96,4 +97,4 @@ namespace vuk {
 		}
 		return dslcis;
 	}
-}
+} // namespace vuk

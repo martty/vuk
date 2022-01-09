@@ -8,30 +8,33 @@
 #include <atlbase.h>
 #endif
 #include <dxc/dxcapi.h>
-#define DXC_HR(hr, msg) if (FAILED(hr)) { throw ShaderCompilationException{msg}; }
+#define DXC_HR(hr, msg)                                                                                                                                        \
+	if (FAILED(hr)) {                                                                                                                                            \
+		throw ShaderCompilationException{ msg };                                                                                                                   \
+	}
 #endif
 #include <algorithm>
 #include <fstream>
-#include <sstream>
 #include <spirv_cross.hpp>
+#include <sstream>
 
-#include "vuk/Context.hpp"
 #include "../src/ContextImpl.hpp"
-#include "vuk/RenderGraph.hpp"
-#include "vuk/Program.hpp"
-#include "vuk/Exception.hpp"
 #include "vuk/Allocator.hpp"
 #include "vuk/AllocatorHelpers.hpp"
+#include "vuk/Context.hpp"
+#include "vuk/Exception.hpp"
+#include "vuk/Program.hpp"
+#include "vuk/RenderGraph.hpp"
 
 namespace vuk {
 	Context::Context(ContextCreateParameters params) :
-		instance(params.instance),
-		device(params.device),
-		physical_device(params.physical_device),
-		graphics_queue_family_index(params.graphics_queue_family_index),
-		compute_queue_family_index(params.compute_queue_family_index),
-		transfer_queue_family_index(params.transfer_queue_family_index),
-		debug(*this) {
+	    instance(params.instance),
+	    device(params.device),
+	    physical_device(params.physical_device),
+	    graphics_queue_family_index(params.graphics_queue_family_index),
+	    compute_queue_family_index(params.compute_queue_family_index),
+	    transfer_queue_family_index(params.transfer_queue_family_index),
+	    debug(*this) {
 		impl = new ContextImpl(*this);
 		auto queueSubmit2KHR = (PFN_vkQueueSubmit2KHR)vkGetDeviceProcAddr(device, "vkQueueSubmit2KHR");
 		assert(queueSubmit2KHR != nullptr);
@@ -61,13 +64,16 @@ namespace vuk {
 		}
 	}
 
-	Queue::Queue(PFN_vkQueueSubmit2KHR fn, VkQueue queue, uint32_t queue_family_index, TimelineSemaphore ts) : queueSubmit2KHR(fn), queue(queue), family_index(queue_family_index), submit_sync(ts) {
-	}
+	Queue::Queue(PFN_vkQueueSubmit2KHR fn, VkQueue queue, uint32_t queue_family_index, TimelineSemaphore ts) :
+	    queueSubmit2KHR(fn),
+	    queue(queue),
+	    family_index(queue_family_index),
+	    submit_sync(ts) {}
 
 	Result<void> Queue::submit(std::span<VkSubmitInfo2KHR> sis, VkFence fence) {
 		VkResult result = queueSubmit2KHR(queue, (uint32_t)sis.size(), sis.data(), fence);
 		if (result != VK_SUCCESS) {
-			return { expected_error, VkException{result} };
+			return { expected_error, VkException{ result } };
 		}
 		return { expected_value };
 	}
@@ -76,13 +82,13 @@ namespace vuk {
 		std::lock_guard _(queue_lock);
 		VkResult result = vkQueueSubmit(queue, (uint32_t)sis.size(), sis.data(), fence);
 		if (result != VK_SUCCESS) {
-			return { expected_error, VkException{result} };
+			return { expected_error, VkException{ result } };
 		}
 		return { expected_value };
 	}
-	
+
 	Result<void> Context::wait_for_domains(std::span<std::pair<DomainFlags, uint64_t>> queue_waits) {
-		std::array<uint32_t, 3> domain_to_sema_index = {~0u, ~0u, ~0u};
+		std::array<uint32_t, 3> domain_to_sema_index = { ~0u, ~0u, ~0u };
 		std::array<VkSemaphore, 3> queue_timeline_semaphores;
 		std::array<uint64_t, 3> values = {};
 
@@ -108,7 +114,7 @@ namespace vuk {
 			q.last_host_wait.store(v);
 		}
 		if (result != VK_SUCCESS) {
-			return { expected_error, VkException{result} };
+			return { expected_error, VkException{ result } };
 		}
 		return { expected_value };
 	}
@@ -124,13 +130,15 @@ namespace vuk {
 	}
 
 	void Context::DebugUtils::set_name(const Texture& tex, Name name) {
-		if (!enabled()) return;
+		if (!enabled())
+			return;
 		set_name(tex.image.get(), name);
 		set_name(tex.view.get().payload, name);
 	}
 
 	void Context::DebugUtils::begin_region(const VkCommandBuffer& cb, Name name, std::array<float, 4> color) {
-		if (!enabled()) return;
+		if (!enabled())
+			return;
 		VkDebugUtilsLabelEXT label = { .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT };
 		label.pLabelName = name.c_str();
 		::memcpy(label.color, color.data(), sizeof(float) * 4);
@@ -138,7 +146,8 @@ namespace vuk {
 	}
 
 	void Context::DebugUtils::end_region(const VkCommandBuffer& cb) {
-		if (!enabled()) return;
+		if (!enabled())
+			return;
 		cmdEndDebugUtilsLabelEXT(cb);
 	}
 
@@ -162,7 +171,12 @@ namespace vuk {
 		return impl->legacy_gpu_allocator;
 	}
 
-	void PersistentDescriptorSet::update_combined_image_sampler(Context& ctx, unsigned binding, unsigned array_index, ImageView iv, SamplerCreateInfo sci, ImageLayout layout) {
+	void PersistentDescriptorSet::update_combined_image_sampler(Context& ctx,
+	                                                            unsigned binding,
+	                                                            unsigned array_index,
+	                                                            ImageView iv,
+	                                                            SamplerCreateInfo sci,
+	                                                            ImageLayout layout) {
 		descriptor_bindings[binding][array_index].image = DescriptorImageInfo(ctx.acquire_sampler(sci, ctx.frame_counter), iv, layout);
 		descriptor_bindings[binding][array_index].type = DescriptorType::eCombinedImageSampler;
 		VkWriteDescriptorSet wds = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
@@ -219,105 +233,94 @@ namespace vuk {
 
 		switch (cinfo.source.language) {
 #if VUK_USE_SHADERC
-			case ShaderSourceLanguage::eGlsl: {
+		case ShaderSourceLanguage::eGlsl: {
+			shaderc::Compiler compiler;
+			shaderc::CompileOptions options;
+			options.SetTargetEnvironment(shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_1);
 
-				shaderc::Compiler compiler;
-				shaderc::CompileOptions options;
-				options.SetTargetEnvironment(shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_1);
+			const auto result = compiler.CompileGlslToSpv(cinfo.source.as_c_str(), shaderc_glsl_infer_from_source, cinfo.filename.c_str(), options);
 
-				const auto result = compiler.CompileGlslToSpv(cinfo.source.as_c_str(), shaderc_glsl_infer_from_source, cinfo.filename.c_str(), options);
-
-				if (result.GetCompilationStatus() != shaderc_compilation_status_success) {
-					std::string message = result.GetErrorMessage().c_str();
-					throw ShaderCompilationException{ message };
-				}
-
-				spirv = std::vector<uint32_t>{result.cbegin(), result.cend()};
-
-				break;
+			if (result.GetCompilationStatus() != shaderc_compilation_status_success) {
+				std::string message = result.GetErrorMessage().c_str();
+				throw ShaderCompilationException{ message };
 			}
+
+			spirv = std::vector<uint32_t>{ result.cbegin(), result.cend() };
+
+			break;
+		}
 #endif
 #if VUK_USE_DXC
-			case ShaderSourceLanguage::eHlsl: {
-				std::vector<LPCWSTR> arguments;
-				arguments.push_back(L"-E");
-				arguments.push_back(L"main");
-				arguments.push_back(L"-spirv");
-				arguments.push_back(L"-fspv-target-env=vulkan1.1");
-				arguments.push_back(L"-fvk-use-gl-layout");
-				arguments.push_back(L"-no-warnings");
-				
-				static const std::pair<const char*, HlslShaderStage> inferred[] = {
-					{ ".vert.", HlslShaderStage::eVertex },
-					{ ".frag.", HlslShaderStage::ePixel },
-					{ ".comp.", HlslShaderStage::eCompute },
-					{ ".geom.", HlslShaderStage::eGeometry },
-					{ ".mesh.", HlslShaderStage::eMesh },
-					{ ".hull.", HlslShaderStage::eHull },
-					{ ".dom.", HlslShaderStage::eDomain },
-					{ ".amp.", HlslShaderStage::eAmplification }
-				};
+		case ShaderSourceLanguage::eHlsl: {
+			std::vector<LPCWSTR> arguments;
+			arguments.push_back(L"-E");
+			arguments.push_back(L"main");
+			arguments.push_back(L"-spirv");
+			arguments.push_back(L"-fspv-target-env=vulkan1.1");
+			arguments.push_back(L"-fvk-use-gl-layout");
+			arguments.push_back(L"-no-warnings");
 
-				static const std::unordered_map<HlslShaderStage, LPCWSTR> stage_mappings{
-					{ HlslShaderStage::eVertex, L"vs_6_7" },
-					{ HlslShaderStage::ePixel, L"ps_6_7" },
-					{ HlslShaderStage::eCompute, L"cs_6_7" },
-					{ HlslShaderStage::eGeometry, L"gs_6_7" },
-					{ HlslShaderStage::eMesh, L"ms_6_7" },
-					{ HlslShaderStage::eHull, L"hs_6_7" },
-					{ HlslShaderStage::eDomain, L"ds_6_7" },
-					{ HlslShaderStage::eAmplification, L"as_6_7" }
-				};
+			static const std::pair<const char*, HlslShaderStage> inferred[] = {
+				{ ".vert.", HlslShaderStage::eVertex },   { ".frag.", HlslShaderStage::ePixel },       { ".comp.", HlslShaderStage::eCompute },
+				{ ".geom.", HlslShaderStage::eGeometry }, { ".mesh.", HlslShaderStage::eMesh },        { ".hull.", HlslShaderStage::eHull },
+				{ ".dom.", HlslShaderStage::eDomain },    { ".amp.", HlslShaderStage::eAmplification }
+			};
 
-				HlslShaderStage shader_stage = cinfo.source.hlsl_stage;
-				if (shader_stage == HlslShaderStage::eInferred) {
-					for (const auto& [ext, stage] : inferred) {
-						if (cinfo.filename.find(ext) != std::string::npos) {
-							shader_stage = stage;
-							break;
-						}
+			static const std::unordered_map<HlslShaderStage, LPCWSTR> stage_mappings{
+				{ HlslShaderStage::eVertex, L"vs_6_7" },   { HlslShaderStage::ePixel, L"ps_6_7" },        { HlslShaderStage::eCompute, L"cs_6_7" },
+				{ HlslShaderStage::eGeometry, L"gs_6_7" }, { HlslShaderStage::eMesh, L"ms_6_7" },         { HlslShaderStage::eHull, L"hs_6_7" },
+				{ HlslShaderStage::eDomain, L"ds_6_7" },   { HlslShaderStage::eAmplification, L"as_6_7" }
+			};
+
+			HlslShaderStage shader_stage = cinfo.source.hlsl_stage;
+			if (shader_stage == HlslShaderStage::eInferred) {
+				for (const auto& [ext, stage] : inferred) {
+					if (cinfo.filename.find(ext) != std::string::npos) {
+						shader_stage = stage;
+						break;
 					}
 				}
-
-				assert((shader_stage != HlslShaderStage::eInferred) && "Failed to infer HLSL shader stage");
-
-				arguments.push_back(L"-T");
-				arguments.push_back(stage_mappings.at(shader_stage));
-
-				DxcBuffer source_buf;
-				source_buf.Ptr = cinfo.source.as_c_str();
-				source_buf.Size = cinfo.source.data.size() * 4;
-				source_buf.Encoding = 0;
-
-				CComPtr<IDxcCompiler3> compiler = nullptr;
-				DXC_HR(DxcCreateInstance(CLSID_DxcCompiler, __uuidof(IDxcCompiler3), (void**)&compiler), "Failed to create DXC compiler");
-				
-				CComPtr<IDxcResult> result = nullptr;
-				DXC_HR(compiler->Compile(&source_buf, arguments.data(), arguments.size(), nullptr, __uuidof(IDxcResult), (void**)&result), "Failed to compile with DXC");
-				
-				CComPtr<IDxcBlobUtf8> errors = nullptr;
-				DXC_HR(result->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&errors), nullptr), "Failed to get DXC compile errors");
-				if (errors && errors->GetStringLength() > 0) {
-					std::string message = errors->GetStringPointer();
-					throw ShaderCompilationException{ message };
-				}
-
-				CComPtr<IDxcBlob> output = nullptr;
-				DXC_HR(result->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&output), nullptr), "Failed to get DXC output");
-				assert(output != nullptr);
-
-				const uint32_t* begin = (const uint32_t*)output->GetBufferPointer();
-				const uint32_t* end = begin + (output->GetBufferSize() / 4);
-
-				spirv = std::vector<uint32_t>{ begin, end };
-
-				break;
 			}
+
+			assert((shader_stage != HlslShaderStage::eInferred) && "Failed to infer HLSL shader stage");
+
+			arguments.push_back(L"-T");
+			arguments.push_back(stage_mappings.at(shader_stage));
+
+			DxcBuffer source_buf;
+			source_buf.Ptr = cinfo.source.as_c_str();
+			source_buf.Size = cinfo.source.data.size() * 4;
+			source_buf.Encoding = 0;
+
+			CComPtr<IDxcCompiler3> compiler = nullptr;
+			DXC_HR(DxcCreateInstance(CLSID_DxcCompiler, __uuidof(IDxcCompiler3), (void**)&compiler), "Failed to create DXC compiler");
+
+			CComPtr<IDxcResult> result = nullptr;
+			DXC_HR(compiler->Compile(&source_buf, arguments.data(), arguments.size(), nullptr, __uuidof(IDxcResult), (void**)&result), "Failed to compile with DXC");
+
+			CComPtr<IDxcBlobUtf8> errors = nullptr;
+			DXC_HR(result->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&errors), nullptr), "Failed to get DXC compile errors");
+			if (errors && errors->GetStringLength() > 0) {
+				std::string message = errors->GetStringPointer();
+				throw ShaderCompilationException{ message };
+			}
+
+			CComPtr<IDxcBlob> output = nullptr;
+			DXC_HR(result->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&output), nullptr), "Failed to get DXC output");
+			assert(output != nullptr);
+
+			const uint32_t* begin = (const uint32_t*)output->GetBufferPointer();
+			const uint32_t* end = begin + (output->GetBufferSize() / 4);
+
+			spirv = std::vector<uint32_t>{ begin, end };
+
+			break;
+		}
 #endif
-			case ShaderSourceLanguage::eSpirv: {
-				spirv = cinfo.source.data;
-				break;
-			}
+		case ShaderSourceLanguage::eSpirv: {
+			spirv = cinfo.source.data;
+			break;
+		}
 		}
 
 		spirv_cross::Compiler refl(spirv.data(), spirv.size());
@@ -349,12 +352,12 @@ namespace vuk {
 			shader_stage.pSpecializationInfo = nullptr;
 			shader_stage.stage = sm.stage;
 			shader_stage.module = sm.shader_module;
-			shader_stage.pName = "main"; //TODO: make param
+			shader_stage.pName = "main"; // TODO: make param
 			psscis.push_back(shader_stage);
 			accumulated_reflection.append(sm.reflection_info);
 			pipe_name += cinfo.shader_paths[i] + "+";
 		}
-		pipe_name = pipe_name.substr(0, pipe_name.size() - 1); //trim off last "+"
+		pipe_name = pipe_name.substr(0, pipe_name.size() - 1); // trim off last "+"
 
 		// acquire descriptor set layouts (1 per set)
 		// acquire pipeline layout
@@ -403,7 +406,7 @@ namespace vuk {
 		shader_stage.pSpecializationInfo = nullptr;
 		shader_stage.stage = sm.stage;
 		shader_stage.module = sm.shader_module;
-		shader_stage.pName = "main"; //TODO: make param
+		shader_stage.pName = "main"; // TODO: make param
 		pipe_name += cinfo.shader_path;
 
 		PipelineLayoutCreateInfo plci;
@@ -679,7 +682,8 @@ namespace vuk {
 
 				if (!upload.image.generate_mips) {
 					// transition the mips to SROO on xfer & release to dst_queue_family
-					VkImageMemoryBarrier release_barrier = { .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };;
+					VkImageMemoryBarrier release_barrier = { .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+					;
 					release_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 					release_barrier.dstAccessMask = 0; // ignored
 					release_barrier.oldLayout = (VkImageLayout)ImageLayout::eTransferDstOptimal;
@@ -691,8 +695,9 @@ namespace vuk {
 					vkCmdPipelineBarrier(xfercbuf, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, nullptr, 0, nullptr, 1, &release_barrier);
 
 					// acquire on dst_queue_family
-					VkImageMemoryBarrier acq_barrier = { .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };;
-					acq_barrier.srcAccessMask = 0; // ignored
+					VkImageMemoryBarrier acq_barrier = { .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+					;
+					acq_barrier.srcAccessMask = 0;                         // ignored
 					acq_barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT; // TODO: maybe memory read?
 					acq_barrier.oldLayout = (VkImageLayout)ImageLayout::eTransferDstOptimal;
 					acq_barrier.newLayout = (VkImageLayout)ImageLayout::eShaderReadOnlyOptimal;
@@ -706,7 +711,8 @@ namespace vuk {
 					// for now, we blit, which requires the gfx queue
 					assert(dst_queue_family == graphics_queue_family_index);
 					// release to dst_queue_family
-					VkImageMemoryBarrier release_barrier = { .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };;
+					VkImageMemoryBarrier release_barrier = { .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+					;
 					release_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 					release_barrier.dstAccessMask = 0; // ignored
 					release_barrier.oldLayout = (VkImageLayout)ImageLayout::eTransferDstOptimal;
@@ -718,7 +724,8 @@ namespace vuk {
 					vkCmdPipelineBarrier(xfercbuf, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, nullptr, 0, nullptr, 1, &release_barrier);
 
 					// acquire on dst_queue_family
-					VkImageMemoryBarrier acq_barrier = { .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };;
+					VkImageMemoryBarrier acq_barrier = { .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+					;
 					acq_barrier.srcAccessMask = 0; // ignored
 					acq_barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
 					acq_barrier.oldLayout = (VkImageLayout)ImageLayout::eTransferDstOptimal;
@@ -790,9 +797,7 @@ namespace vuk {
 	}
 
 	Texture Context::allocate_texture(Allocator& allocator, ImageCreateInfo ici) {
-		ici.imageType = ici.extent.depth > 1 ? ImageType::e3D :
-			ici.extent.height > 1 ? ImageType::e2D :
-			ImageType::e1D;
+		ici.imageType = ici.extent.depth > 1 ? ImageType::e3D : ici.extent.height > 1 ? ImageType::e2D : ImageType::e1D;
 		Unique<Image> dst = allocate_image(allocator, ici).value(); // TODO: dropping error
 		ImageViewCreateInfo ivci;
 		ivci.format = ici.format;
@@ -802,9 +807,7 @@ namespace vuk {
 		ivci.subresourceRange.baseMipLevel = 0;
 		ivci.subresourceRange.layerCount = 1;
 		ivci.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
-		ivci.viewType = ici.imageType == ImageType::e3D ? ImageViewType::e3D :
-			ici.imageType == ImageType::e2D ? ImageViewType::e2D :
-			ImageViewType::e1D;
+		ivci.viewType = ici.imageType == ImageType::e3D ? ImageViewType::e3D : ici.imageType == ImageType::e2D ? ImageViewType::e2D : ImageViewType::e1D;
 		Texture tex{ std::move(dst), allocate_image_view(allocator, ivci).value() }; // TODO: dropping error
 		tex.extent = ici.extent;
 		tex.format = ici.format;
@@ -975,8 +978,8 @@ namespace vuk {
 		return stub;
 	}
 
-	Unique<PersistentDescriptorSet> Context::create_persistent_descriptorset(Allocator& allocator, DescriptorSetLayoutCreateInfo dslci,
-		unsigned num_descriptors) {
+	Unique<PersistentDescriptorSet>
+	Context::create_persistent_descriptorset(Allocator& allocator, DescriptorSetLayoutCreateInfo dslci, unsigned num_descriptors) {
 		dslci.dslci.bindingCount = (uint32_t)dslci.bindings.size();
 		dslci.dslci.pBindings = dslci.bindings.data();
 		VkDescriptorSetLayoutBindingFlagsCreateInfo dslbfci{ .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO };
@@ -995,11 +998,13 @@ namespace vuk {
 		return pds;
 	}
 
-	Unique<PersistentDescriptorSet> Context::create_persistent_descriptorset(Allocator& allocator, const PipelineBaseInfo& base, unsigned set, unsigned num_descriptors) {
+	Unique<PersistentDescriptorSet>
+	Context::create_persistent_descriptorset(Allocator& allocator, const PipelineBaseInfo& base, unsigned set, unsigned num_descriptors) {
 		return create_persistent_descriptorset(allocator, { base.layout_info[set], num_descriptors });
 	}
 
-	Unique<PersistentDescriptorSet> Context::create_persistent_descriptorset(Allocator& allocator, const ComputePipelineBaseInfo& base, unsigned set, unsigned num_descriptors) {
+	Unique<PersistentDescriptorSet>
+	Context::create_persistent_descriptorset(Allocator& allocator, const ComputePipelineBaseInfo& base, unsigned set, unsigned num_descriptors) {
 		return create_persistent_descriptorset(allocator, { base.layout_info[set], num_descriptors });
 	}
 
@@ -1021,9 +1026,13 @@ namespace vuk {
 			impl->pending_transfers.pop();
 		}
 
-		if (impl->buffer_transfer_commands.empty() && impl->bufferimage_transfer_commands.empty()) return;
-		auto cpool = *allocate_command_pool(allocator, { .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT, .queueFamilyIndex = graphics_queue_family_index });
-		auto cbuf = *allocate_command_buffer(allocator, { .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .command_pool = *cpool});
+		if (impl->buffer_transfer_commands.empty() && impl->bufferimage_transfer_commands.empty())
+			return;
+		auto cpool = *allocate_command_pool(allocator,
+		                                    { .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+		                                      .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
+		                                      .queueFamilyIndex = graphics_queue_family_index });
+		auto cbuf = *allocate_command_buffer(allocator, { .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .command_pool = *cpool });
 		VkCommandBufferBeginInfo cbi = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
 		vkBeginCommandBuffer(*cbuf, &cbi);
 		size_t last = 0;
@@ -1072,7 +1081,8 @@ namespace vuk {
 		debug.set_name(res.image, Name(name));
 		name = std::string("ImageView: RenderTarget ") + std::string(cinfo.name.to_sv());
 		// skip creating image views for images that can't be viewed
-		if (cinfo.ici.usage & (ImageUsageFlagBits::eColorAttachment | ImageUsageFlagBits::eDepthStencilAttachment | ImageUsageFlagBits::eInputAttachment | ImageUsageFlagBits::eSampled | ImageUsageFlagBits::eStorage)) {
+		if (cinfo.ici.usage & (ImageUsageFlagBits::eColorAttachment | ImageUsageFlagBits::eDepthStencilAttachment | ImageUsageFlagBits::eInputAttachment |
+		                       ImageUsageFlagBits::eSampled | ImageUsageFlagBits::eStorage)) {
 			VkImageView iv;
 			vkCreateImageView(device, (VkImageViewCreateInfo*)&ivci, nullptr, &iv);
 			res.image_view = wrap(iv, ivci);
@@ -1113,7 +1123,9 @@ namespace vuk {
 		}
 
 		// INPUT ASSEMBLY
-		VkPipelineInputAssemblyStateCreateInfo input_assembly_state{ .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO, .topology = cinfo.topology, .primitiveRestartEnable = cinfo.primitive_restart_enable };
+		VkPipelineInputAssemblyStateCreateInfo input_assembly_state{ .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+			                                                           .topology = cinfo.topology,
+			                                                           .primitiveRestartEnable = cinfo.primitive_restart_enable };
 		gpci.pInputAssemblyState = &input_assembly_state;
 		// VERTEX INPUT
 		fixed_vector<VkVertexInputBindingDescription, VUK_MAX_ATTRIBUTES> vibds;
@@ -1143,45 +1155,35 @@ namespace vuk {
 		}
 		gpci.pVertexInputState = &vertex_input_state;
 		// PIPELINE COLOR BLEND ATTACHMENTS
-		VkPipelineColorBlendStateCreateInfo color_blend_state{
-			.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-			.attachmentCount = cinfo.attachmentCount
-		};
+		VkPipelineColorBlendStateCreateInfo color_blend_state{ .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+			                                                     .attachmentCount = cinfo.attachmentCount };
 		auto default_writemask = ColorComponentFlagBits::eR | ColorComponentFlagBits::eG | ColorComponentFlagBits::eB | ColorComponentFlagBits::eA;
-		std::vector<VkPipelineColorBlendAttachmentState> pcbas(cinfo.attachmentCount,
-			VkPipelineColorBlendAttachmentState{
-				.blendEnable = false,
-				.colorWriteMask = (VkColorComponentFlags)default_writemask
-			}
-		);
+		std::vector<VkPipelineColorBlendAttachmentState> pcbas(
+		    cinfo.attachmentCount, VkPipelineColorBlendAttachmentState{ .blendEnable = false, .colorWriteMask = (VkColorComponentFlags)default_writemask });
 		if (cinfo.records.color_blend_attachments) {
 			if (!cinfo.records.broadcast_color_blend_attachment_0) {
 				for (auto& pcba : pcbas) {
 					auto compressed = read<PipelineInstanceCreateInfo::PipelineColorBlendAttachmentState>(data_ptr);
-					pcba = {
-						compressed.blendEnable,
-						(VkBlendFactor)compressed.srcColorBlendFactor,
-						(VkBlendFactor)compressed.dstColorBlendFactor,
-						(VkBlendOp)compressed.colorBlendOp,
-						(VkBlendFactor)compressed.srcAlphaBlendFactor,
-						(VkBlendFactor)compressed.dstAlphaBlendFactor,
-						(VkBlendOp)compressed.alphaBlendOp,
-						compressed.colorWriteMask
-					};
+					pcba = { compressed.blendEnable,
+						       (VkBlendFactor)compressed.srcColorBlendFactor,
+						       (VkBlendFactor)compressed.dstColorBlendFactor,
+						       (VkBlendOp)compressed.colorBlendOp,
+						       (VkBlendFactor)compressed.srcAlphaBlendFactor,
+						       (VkBlendFactor)compressed.dstAlphaBlendFactor,
+						       (VkBlendOp)compressed.alphaBlendOp,
+						       compressed.colorWriteMask };
 				}
 			} else { // handle broadcast
 				auto compressed = read<PipelineInstanceCreateInfo::PipelineColorBlendAttachmentState>(data_ptr);
 				for (auto& pcba : pcbas) {
-					pcba = {
-						compressed.blendEnable,
-						(VkBlendFactor)compressed.srcColorBlendFactor,
-						(VkBlendFactor)compressed.dstColorBlendFactor,
-						(VkBlendOp)compressed.colorBlendOp,
-						(VkBlendFactor)compressed.srcAlphaBlendFactor,
-						(VkBlendFactor)compressed.dstAlphaBlendFactor,
-						(VkBlendOp)compressed.alphaBlendOp,
-						compressed.colorWriteMask
-					};
+					pcba = { compressed.blendEnable,
+						       (VkBlendFactor)compressed.srcColorBlendFactor,
+						       (VkBlendFactor)compressed.dstColorBlendFactor,
+						       (VkBlendOp)compressed.colorBlendOp,
+						       (VkBlendFactor)compressed.srcAlphaBlendFactor,
+						       (VkBlendFactor)compressed.dstAlphaBlendFactor,
+						       (VkBlendOp)compressed.alphaBlendOp,
+						       compressed.colorWriteMask };
 				}
 			}
 		}
@@ -1227,11 +1229,7 @@ namespace vuk {
 					auto& sc = cinfo.base->reflection_info.spec_constants[i];
 					auto size = sc.type == Program::Type::edouble ? sizeof(double) : 4;
 					if (sc.stage & pssci.stage) {
-						specialization_map_entries.emplace_back(VkSpecializationMapEntry{
-							sc.binding,
-							data_offset,
-							size
-							});
+						specialization_map_entries.emplace_back(VkSpecializationMapEntry{ sc.binding, data_offset, size });
 						data_offset += (uint16_t)size;
 						entry_offset++;
 					}
@@ -1250,24 +1248,20 @@ namespace vuk {
 		}
 
 		// RASTER STATE
-		VkPipelineRasterizationStateCreateInfo rasterization_state{
-			.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-			.polygonMode = VK_POLYGON_MODE_FILL,
-			.cullMode = cinfo.cullMode,
-			.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
-			.lineWidth = 1.f
-		};
+		VkPipelineRasterizationStateCreateInfo rasterization_state{ .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+			                                                          .polygonMode = VK_POLYGON_MODE_FILL,
+			                                                          .cullMode = cinfo.cullMode,
+			                                                          .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+			                                                          .lineWidth = 1.f };
 		if (cinfo.records.non_trivial_raster_state) {
 			auto rs = read<PipelineInstanceCreateInfo::RasterizationState>(data_ptr);
-			rasterization_state = {
-			.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-			.depthClampEnable = rs.depthClampEnable,
-			.rasterizerDiscardEnable = rs.rasterizerDiscardEnable,
-			.polygonMode = (VkPolygonMode)rs.polygonMode,
-			.cullMode = cinfo.cullMode,
-			.frontFace = (VkFrontFace)rs.frontFace,
-			.lineWidth = 1.f
-			};
+			rasterization_state = { .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+				                      .depthClampEnable = rs.depthClampEnable,
+				                      .rasterizerDiscardEnable = rs.rasterizerDiscardEnable,
+				                      .polygonMode = (VkPolygonMode)rs.polygonMode,
+				                      .cullMode = cinfo.cullMode,
+				                      .frontFace = (VkFrontFace)rs.frontFace,
+				                      .lineWidth = 1.f };
 		}
 		if (cinfo.records.depth_bias) {
 			auto db = read<PipelineInstanceCreateInfo::DepthBias>(data_ptr);
@@ -1304,7 +1298,8 @@ namespace vuk {
 		}
 
 		// MULTISAMPLE STATE
-		VkPipelineMultisampleStateCreateInfo multisample_state{ .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO, .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT };
+		VkPipelineMultisampleStateCreateInfo multisample_state{ .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+			                                                      .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT };
 		if (cinfo.records.more_than_one_sample) {
 			auto ms = read<PipelineInstanceCreateInfo::Multisample>(data_ptr);
 			multisample_state.rasterizationSamples = ms.rasterization_samples;
@@ -1376,7 +1371,6 @@ namespace vuk {
 		debug.set_name(pipeline, cinfo.base->pipeline_name);
 		return { pipeline, cpci.layout, cinfo.base->layout_info, cinfo.base->reflection_info.local_size };
 	}
-
 
 	Sampler Context::create(const create_info_t<Sampler>& cinfo) {
 		VkSampler s;
@@ -1451,9 +1445,16 @@ namespace vuk {
 			if (pool.count == 0) {
 				continue;
 			}
-			auto result = vkGetQueryPoolResults(device, pool.pool, 0, pool.count, sizeof(uint64_t) * pool.count, host_values.data(), sizeof(uint64_t), VkQueryResultFlagBits::VK_QUERY_RESULT_64_BIT | VkQueryResultFlagBits::VK_QUERY_RESULT_WAIT_BIT);
+			auto result = vkGetQueryPoolResults(device,
+			                                    pool.pool,
+			                                    0,
+			                                    pool.count,
+			                                    sizeof(uint64_t) * pool.count,
+			                                    host_values.data(),
+			                                    sizeof(uint64_t),
+			                                    VkQueryResultFlagBits::VK_QUERY_RESULT_64_BIT | VkQueryResultFlagBits::VK_QUERY_RESULT_WAIT_BIT);
 			if (result != VK_SUCCESS) {
-				return { expected_error, AllocateException{result} };
+				return { expected_error, AllocateException{ result } };
 			}
 
 			for (uint64_t i = 0; i < pool.count; i++) {
@@ -1463,5 +1464,4 @@ namespace vuk {
 
 		return { expected_value };
 	}
-}
-
+} // namespace vuk

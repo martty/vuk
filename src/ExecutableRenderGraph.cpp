@@ -1,14 +1,14 @@
-#include "vuk/RenderGraph.hpp"
-#include "vuk/Hash.hpp" // for create
 #include "Cache.hpp"
-#include "vuk/Context.hpp"
-#include "vuk/CommandBuffer.hpp"
 #include "RenderGraphImpl.hpp"
+#include "vuk/CommandBuffer.hpp"
+#include "vuk/Context.hpp"
+#include "vuk/Hash.hpp" // for create
+#include "vuk/RenderGraph.hpp"
 #include <unordered_set>
 
 namespace vuk {
 	ExecutableRenderGraph::ExecutableRenderGraph(RenderGraph&& rg) : impl(rg.impl) {
-		rg.impl = nullptr; //pilfered
+		rg.impl = nullptr; // pilfered
 	}
 
 	ExecutableRenderGraph::ExecutableRenderGraph(ExecutableRenderGraph&& o) noexcept : impl(std::exchange(o.impl, nullptr)) {}
@@ -21,7 +21,11 @@ namespace vuk {
 		delete impl;
 	}
 
-	void ExecutableRenderGraph::create_attachment(Context& ctx, Name name, AttachmentRPInfo& attachment_info, vuk::Extent2D fb_extent, vuk::SampleCountFlagBits samples) {
+	void ExecutableRenderGraph::create_attachment(Context& ctx,
+	                                              Name name,
+	                                              AttachmentRPInfo& attachment_info,
+	                                              vuk::Extent2D fb_extent,
+	                                              vuk::SampleCountFlagBits samples) {
 		auto& chain = impl->use_chains.at(name);
 		if (attachment_info.type == AttachmentRPInfo::Type::eInternal) {
 			vuk::ImageUsageFlags usage = RenderGraph::compute_usage(std::span(chain));
@@ -32,7 +36,9 @@ namespace vuk {
 			// compute extent
 			if (attachment_info.extents.sizing == Sizing::eRelative) {
 				assert(fb_extent.width > 0 && fb_extent.height > 0);
-				ici.extent = vuk::Extent3D{ static_cast<uint32_t>(attachment_info.extents._relative.width * fb_extent.width), static_cast<uint32_t>(attachment_info.extents._relative.height * fb_extent.height), 1u };
+				ici.extent = vuk::Extent3D{ static_cast<uint32_t>(attachment_info.extents._relative.width * fb_extent.width),
+					                          static_cast<uint32_t>(attachment_info.extents._relative.height * fb_extent.height),
+					                          1u };
 			} else {
 				ici.extent = static_cast<vuk::Extent3D>(attachment_info.extents.extent);
 			}
@@ -118,7 +124,7 @@ namespace vuk {
 		VkCommandPoolCreateInfo cpci{ VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
 		cpci.flags = VkCommandPoolCreateFlagBits::VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
 		cpci.queueFamilyIndex = ctx.domain_to_queue_family_index(domain); // currently queue family idx = queue idx
-		
+
 		VUK_DO_OR_RETURN(alloc.allocate_command_pools(std::span{ &*cpool, 1 }, std::span{ &cpci, 1 }));
 
 		robin_hood::unordered_set<SwapchainRef> used_swapchains;
@@ -137,7 +143,7 @@ namespace vuk {
 		for (auto& rpass : rpis) {
 			if (rpass.command_buffer_index != command_buffer_index) { // end old cb and start new one
 				if (auto result = vkEndCommandBuffer(cbuf); result != VK_SUCCESS) {
-					return { expected_error, VkException{result} };
+					return { expected_error, VkException{ result } };
 				}
 
 				VUK_DO_OR_RETURN(alloc.allocate_command_buffers(std::span{ &*hl_cbuf, 1 }, std::span{ &ci, 1 }));
@@ -193,7 +199,7 @@ namespace vuk {
 					CommandBuffer cobuf(*this, ctx, alloc, cbuf);
 					fill_renderpass_info(rpass, i, cobuf);
 					// propagate waits & signals onto SI
-					if(p->pass.signal) {
+					if (p->pass.signal) {
 						si.future_signals.emplace_back(p->pass.signal);
 					}
 
@@ -267,7 +273,7 @@ namespace vuk {
 		}
 
 		if (auto result = vkEndCommandBuffer(cbuf); result != VK_SUCCESS) {
-			return { expected_error, VkException{result} };
+			return { expected_error, VkException{ result } };
 		}
 
 		si.used_swapchains.insert(si.used_swapchains.end(), used_swapchains.begin(), used_swapchains.end());
@@ -377,7 +383,7 @@ namespace vuk {
 		// create non-attachment images
 		for (auto& [name, bound] : impl->bound_attachments) {
 			if (bound.type == AttachmentRPInfo::Type::eInternal && bound.image == VK_NULL_HANDLE) {
-				create_attachment(ctx, name, bound, vuk::Extent2D{ 0,0 }, bound.samples.count);
+				create_attachment(ctx, name, bound, vuk::Extent2D{ 0, 0 }, bound.samples.count);
 			}
 		}
 
@@ -400,7 +406,8 @@ namespace vuk {
 			auto partition_it = rpis.begin();
 			while (partition_it != rpis.end()) {
 				auto batch_index = partition_it->batch_index;
-				auto new_partition_it = std::partition_point(partition_it, rpis.end(), [batch_index](const RenderPassInfo& rpi) { return rpi.batch_index == batch_index; });
+				auto new_partition_it =
+				    std::partition_point(partition_it, rpis.end(), [batch_index](const RenderPassInfo& rpi) { return rpi.batch_index == batch_index; });
 				auto partition_span = std::span(partition_it, new_partition_it);
 				auto si = record_single_submit(alloc, partition_span, domain);
 				sbatch.submits.emplace_back(*si); // TODO: error handling
@@ -411,7 +418,7 @@ namespace vuk {
 
 		// record cbufs
 		// assume that rpis are partitioned wrt batch_index
-		
+
 		auto graphics_rpis = std::span(impl->rpis.begin(), impl->rpis.begin() + impl->num_graphics_rpis);
 		if (graphics_rpis.size() > 0) {
 			sbundle.batches.emplace_back(record_batch(graphics_rpis, DomainFlagBits::eGraphicsQueue));
@@ -434,7 +441,7 @@ namespace vuk {
 		auto resolved = resolve_name(n, pass_info);
 		auto it = impl->bound_buffers.find(resolved);
 		if (it == impl->bound_buffers.end()) {
-			return { expected_error, RenderGraphException{"Buffer not found"} };
+			return { expected_error, RenderGraphException{ "Buffer not found" } };
 		}
 		return { expected_value, it->second };
 	}
@@ -443,7 +450,7 @@ namespace vuk {
 		auto resolved = resolve_name(n, pass_info);
 		auto it = impl->bound_attachments.find(resolved);
 		if (it == impl->bound_attachments.end()) {
-			return { expected_error, RenderGraphException{"Image not found"} };
+			return { expected_error, RenderGraphException{ "Image not found" } };
 		}
 		return { expected_value, it->second };
 	}
@@ -452,7 +459,7 @@ namespace vuk {
 		auto resolved = resolve_name(n, pass_info);
 		auto it = impl->use_chains.find(resolved);
 		if (it == impl->use_chains.end()) {
-			return { expected_error, RenderGraphException{"Resource not found"} };
+			return { expected_error, RenderGraphException{ "Resource not found" } };
 		}
 		auto& chain = it->second;
 		for (auto& elem : chain) {

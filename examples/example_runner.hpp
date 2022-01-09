@@ -1,23 +1,22 @@
 #pragma once
 
-#include <VkBootstrap.h>
-#include "vuk/Context.hpp"
-#include "vuk/Allocator.hpp"
-#include <optional>
-#include "utils.hpp"
-#include "glfw.hpp"
-#include <string_view>
-#include <functional>
-#include <string>
-#include <stdio.h>
-#include <vector>
-#include "vuk/RenderGraph.hpp"
-#include "vuk/CommandBuffer.hpp"
-#include "vuk/resources/DeviceFrameResource.hpp"
-#include "vuk/AllocatorHelpers.hpp"
-#include "vuk/Partials.hpp"
 #include "examples/imgui_impl_glfw.h"
-
+#include "glfw.hpp"
+#include "utils.hpp"
+#include "vuk/Allocator.hpp"
+#include "vuk/AllocatorHelpers.hpp"
+#include "vuk/CommandBuffer.hpp"
+#include "vuk/Context.hpp"
+#include "vuk/Partials.hpp"
+#include "vuk/RenderGraph.hpp"
+#include "vuk/resources/DeviceFrameResource.hpp"
+#include <VkBootstrap.h>
+#include <functional>
+#include <optional>
+#include <stdio.h>
+#include <string>
+#include <string_view>
+#include <vector>
 
 namespace vuk {
 	struct ExampleRunner;
@@ -29,7 +28,7 @@ namespace vuk {
 		std::function<vuk::Future<vuk::ImageAttachment>(ExampleRunner&, vuk::Allocator&)> render;
 		std::function<void(ExampleRunner&, vuk::Allocator&)> cleanup;
 	};
-}
+} // namespace vuk
 
 namespace vuk {
 	struct ExampleRunner {
@@ -96,7 +95,7 @@ namespace vuk {
 			return runner;
 		}
 	};
-}
+} // namespace vuk
 
 namespace util {
 	struct Register {
@@ -104,8 +103,8 @@ namespace util {
 			vuk::ExampleRunner::get_runner().examples.push_back(&x);
 		}
 	};
-}
+} // namespace util
 
-#define CONCAT_IMPL( x, y ) x##y
-#define MACRO_CONCAT( x, y ) CONCAT_IMPL( x, y )
-#define REGISTER_EXAMPLE(x) util::Register MACRO_CONCAT(_reg_, __LINE__) (x)
+#define CONCAT_IMPL(x, y)   x##y
+#define MACRO_CONCAT(x, y)  CONCAT_IMPL(x, y)
+#define REGISTER_EXAMPLE(x) util::Register MACRO_CONCAT(_reg_, __LINE__)(x)

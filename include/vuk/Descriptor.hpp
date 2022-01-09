@@ -1,21 +1,18 @@
 #pragma once
 
 #include <bitset>
-#include <vector>
-#include <vuk/Config.hpp>
-#include <vuk/vuk_fwd.hpp>
-#include <vuk/Types.hpp>
 #include <concurrentqueue.h>
 #include <mutex>
-#include <vuk/Image.hpp>
 #include <robin_hood.h>
+#include <vector>
+#include <vuk/Config.hpp>
+#include <vuk/Image.hpp>
+#include <vuk/Types.hpp>
+#include <vuk/vuk_fwd.hpp>
 
 inline bool operator==(VkDescriptorSetLayoutBinding const& lhs, VkDescriptorSetLayoutBinding const& rhs) noexcept {
-	return (lhs.binding == rhs.binding)
-		&& (lhs.descriptorType == rhs.descriptorType)
-		&& (lhs.descriptorCount == rhs.descriptorCount)
-		&& (lhs.stageFlags == rhs.stageFlags)
-		&& (lhs.pImmutableSamplers == rhs.pImmutableSamplers);
+	return (lhs.binding == rhs.binding) && (lhs.descriptorType == rhs.descriptorType) && (lhs.descriptorCount == rhs.descriptorCount) &&
+	       (lhs.stageFlags == rhs.stageFlags) && (lhs.pImmutableSamplers == rhs.pImmutableSamplers);
 }
 
 namespace vuk {
@@ -79,7 +76,7 @@ namespace vuk {
 		vuk::ImageView image_view;
 		VkDescriptorImageInfo dii;
 
-		DescriptorImageInfo(vuk::Sampler s, vuk::ImageView iv, vuk::ImageLayout il) : sampler(s), image_view(iv), dii{ s.payload, iv.payload, (VkImageLayout)il } {		}
+		DescriptorImageInfo(vuk::Sampler s, vuk::ImageView iv, vuk::ImageLayout il) : sampler(s), image_view(iv), dii{ s.payload, iv.payload, (VkImageLayout)il } {}
 
 		bool operator==(const DescriptorImageInfo& o) const {
 			return std::tie(sampler, image_view, dii.imageLayout) == std::tie(o.sampler, o.image_view, o.dii.imageLayout);
@@ -103,7 +100,8 @@ namespace vuk {
 		};
 
 		bool operator==(const DescriptorBinding& o) const {
-			if (type != o.type) return false;
+			if (type != o.type)
+				return false;
 			switch (type) {
 			case vuk::DescriptorType::eUniformBuffer:
 			case vuk::DescriptorType::eStorageBuffer:
@@ -202,14 +200,15 @@ namespace vuk {
 		}
 
 		bool operator==(const SetBinding& o) const noexcept {
-			if (layout_info != o.layout_info) return false;
+			if (layout_info != o.layout_info)
+				return false;
 			return memcmp(compressed_bindings.data(), o.compressed_bindings.data(), count * sizeof(DescriptorBinding)) == 0;
 		}
 	};
 
 	struct DescriptorSetLayoutCreateInfo {
 		VkDescriptorSetLayoutCreateInfo dslci = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
-        size_t index; // index of the descriptor set when used in a pipeline layout
+		size_t index; // index of the descriptor set when used in a pipeline layout
 		std::vector<VkDescriptorSetLayoutBinding> bindings;
 		std::vector<VkDescriptorBindingFlags> flags;
 
@@ -218,7 +217,8 @@ namespace vuk {
 		}
 	};
 
-	template<> struct create_info<vuk::DescriptorSetLayoutAllocInfo> {
+	template<>
+	struct create_info<vuk::DescriptorSetLayoutAllocInfo> {
 		using type = vuk::DescriptorSetLayoutCreateInfo;
 	};
 
@@ -231,7 +231,8 @@ namespace vuk {
 		}
 	};
 
-	template<> struct create_info<vuk::DescriptorSet> {
+	template<>
+	struct create_info<vuk::DescriptorSet> {
 		using type = vuk::SetBinding;
 	};
 
@@ -252,7 +253,8 @@ namespace vuk {
 		}
 	};
 
-	template<> struct create_info<vuk::DescriptorPool> {
+	template<>
+	struct create_info<vuk::DescriptorPool> {
 		using type = vuk::DescriptorSetLayoutAllocInfo;
 	};
 
@@ -262,7 +264,7 @@ namespace vuk {
 		VkDescriptorPool backing_pool;
 		VkDescriptorSet backing_set;
 
-        std::array<std::vector<DescriptorBinding>, VUK_MAX_BINDINGS> descriptor_bindings;
+		std::array<std::vector<DescriptorBinding>, VUK_MAX_BINDINGS> descriptor_bindings;
 
 		std::vector<VkWriteDescriptorSet> pending_writes;
 
@@ -270,12 +272,17 @@ namespace vuk {
 			return backing_pool == other.backing_pool;
 		}
 
-		void update_combined_image_sampler(Context& ctx, unsigned binding, unsigned array_index, vuk::ImageView iv, vuk::SamplerCreateInfo sampler_create_info, vuk::ImageLayout layout);
+		void update_combined_image_sampler(Context& ctx,
+		                                   unsigned binding,
+		                                   unsigned array_index,
+		                                   vuk::ImageView iv,
+		                                   vuk::SamplerCreateInfo sampler_create_info,
+		                                   vuk::ImageLayout layout);
 		void update_storage_image(Context& ctx, unsigned binding, unsigned array_index, vuk::ImageView iv);
-        void update_uniform_buffer(Context& ctx, unsigned binding, unsigned array_index, Buffer buf);
-        void update_storage_buffer(Context& ctx, unsigned binding, unsigned array_index, Buffer buf);
+		void update_uniform_buffer(Context& ctx, unsigned binding, unsigned array_index, Buffer buf);
+		void update_storage_buffer(Context& ctx, unsigned binding, unsigned array_index, Buffer buf);
 	};
-}
+} // namespace vuk
 
 namespace robin_hood {
 	template<>
@@ -284,27 +291,30 @@ namespace robin_hood {
 			return x.hash;
 		}
 	};
-}
+} // namespace robin_hood
 
 namespace std {
-	template <>
+	template<>
 	struct hash<vuk::SetBinding> {
 		size_t operator()(vuk::SetBinding const& x) const noexcept {
 			return x.hash;
 		}
 	};
 
-	template <>
+	template<>
 	struct hash<vuk::DescriptorSetLayoutAllocInfo> {
 		size_t operator()(vuk::DescriptorSetLayoutAllocInfo const& x) const noexcept {
 			size_t h = 0;
 			// TODO: should use vuk::DescriptorSetLayout here
-			hash_combine(h, ::hash::fnv1a::hash((const char*)&x.descriptor_counts[0], x.descriptor_counts.size() * sizeof(x.descriptor_counts[0]), ::hash::fnv1a::default_offset_basis), (VkDescriptorSetLayout)x.layout);
+			hash_combine(h,
+			             ::hash::fnv1a::hash(
+			                 (const char*)&x.descriptor_counts[0], x.descriptor_counts.size() * sizeof(x.descriptor_counts[0]), ::hash::fnv1a::default_offset_basis),
+			             (VkDescriptorSetLayout)x.layout);
 			return h;
 		}
 	};
 
-	template <>
+	template<>
 	struct hash<VkDescriptorSetLayoutBinding> {
 		size_t operator()(VkDescriptorSetLayoutBinding const& x) const noexcept {
 			size_t h = 0;
@@ -314,8 +324,7 @@ namespace std {
 		}
 	};
 
-
-	template <>
+	template<>
 	struct hash<vuk::DescriptorSetLayoutCreateInfo> {
 		size_t operator()(vuk::DescriptorSetLayoutCreateInfo const& x) const noexcept {
 			size_t h = 0;
@@ -323,4 +332,4 @@ namespace std {
 			return h;
 		}
 	};
-};
+}; // namespace std

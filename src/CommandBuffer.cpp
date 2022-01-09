@@ -1,10 +1,13 @@
 #include "vuk/CommandBuffer.hpp"
 #include "RenderGraphUtil.hpp"
+#include "vuk/AllocatorHelpers.hpp"
 #include "vuk/Context.hpp"
 #include "vuk/RenderGraph.hpp"
-#include "vuk/AllocatorHelpers.hpp"
 
-#define VUK_EARLY_RET() if (current_exception) { return *this; }
+#define VUK_EARLY_RET()                                                                                                                                        \
+	if (current_exception) {                                                                                                                                     \
+		return *this;                                                                                                                                              \
+	}
 #define VUK_IS_IMAGE_IN_GENERAL_LAYOUT()
 
 namespace vuk {
@@ -64,7 +67,8 @@ namespace vuk {
 			vkCmdSetLineWidth(command_buffer, line_width);
 		}
 		if (to_dynamic & DynamicStateFlagBits::eDepthBias && rasterization_state) {
-			vkCmdSetDepthBias(command_buffer, rasterization_state->depthBiasConstantFactor, rasterization_state->depthBiasClamp, rasterization_state->depthBiasSlopeFactor);
+			vkCmdSetDepthBias(
+			    command_buffer, rasterization_state->depthBiasConstantFactor, rasterization_state->depthBiasClamp, rasterization_state->depthBiasSlopeFactor);
 		}
 		if (to_dynamic & DynamicStateFlagBits::eBlendConstants && blend_constants) {
 			vkCmdSetBlendConstants(command_buffer, blend_constants.value().data());
@@ -276,8 +280,7 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, const Buffer& buf, std::span<VertexInputAttributeDescription> viads,
-		uint32_t stride) {
+	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, const Buffer& buf, std::span<VertexInputAttributeDescription> viads, uint32_t stride) {
 		VUK_EARLY_RET();
 		assert(binding < VUK_MAX_ATTRIBUTES && "Vertex buffer binding must be smaller than VUK_MAX_ATTRIBUTES.");
 		for (auto& viad : viads) {
@@ -320,8 +323,8 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::bind_sampled_image(unsigned set, unsigned binding, const Texture& texture, SamplerCreateInfo sampler_create_info,
-		ImageLayout il) {
+	CommandBuffer&
+	CommandBuffer::bind_sampled_image(unsigned set, unsigned binding, const Texture& texture, SamplerCreateInfo sampler_create_info, ImageLayout il) {
 		VUK_EARLY_RET();
 		return bind_sampled_image(set, binding, *texture.view, sampler_create_info, il);
 	}
@@ -349,8 +352,7 @@ namespace vuk {
 		return bind_sampled_image(set, binding, res->iv, sampler_create_info, layout);
 	}
 
-	CommandBuffer& CommandBuffer::bind_sampled_image(unsigned set, unsigned binding, Name name, ImageViewCreateInfo ivci,
-		SamplerCreateInfo sampler_create_info) {
+	CommandBuffer& CommandBuffer::bind_sampled_image(unsigned set, unsigned binding, Name name, ImageViewCreateInfo ivci, SamplerCreateInfo sampler_create_info) {
 		VUK_EARLY_RET();
 		assert(rg);
 
@@ -498,8 +500,8 @@ namespace vuk {
 		if (!_bind_graphics_pipeline_state()) {
 			return *this;
 		}
-		vkCmdDrawIndexedIndirect(command_buffer, indirect_buffer.buffer, (uint32_t)indirect_buffer.offset, (uint32_t)command_count,
-			sizeof(DrawIndexedIndirectCommand));
+		vkCmdDrawIndexedIndirect(
+		    command_buffer, indirect_buffer.buffer, (uint32_t)indirect_buffer.offset, (uint32_t)command_count, sizeof(DrawIndexedIndirectCommand));
 		return *this;
 	}
 
@@ -527,8 +529,13 @@ namespace vuk {
 		if (!_bind_graphics_pipeline_state()) {
 			return *this;
 		}
-		vkCmdDrawIndexedIndirectCount(command_buffer, indirect_buffer.buffer, indirect_buffer.offset, count_buffer.buffer, count_buffer.offset,
-			(uint32_t)max_draw_count, sizeof(DrawIndexedIndirectCommand));
+		vkCmdDrawIndexedIndirectCount(command_buffer,
+		                              indirect_buffer.buffer,
+		                              indirect_buffer.offset,
+		                              count_buffer.buffer,
+		                              count_buffer.offset,
+		                              (uint32_t)max_draw_count,
+		                              sizeof(DrawIndexedIndirectCommand));
 		return *this;
 	}
 
@@ -575,11 +582,11 @@ namespace vuk {
 			return { expected_error, scbuf.error() };
 		}
 		VkCommandBufferBeginInfo cbi{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-									 .flags = VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT | VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
+			                            .flags = VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT | VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
 		VkCommandBufferInheritanceInfo cbii{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO };
 		cbii.renderPass = ongoing_renderpass->renderpass;
 		cbii.subpass = ongoing_renderpass->subpass;
-		cbii.framebuffer = VK_NULL_HANDLE; //TODO
+		cbii.framebuffer = VK_NULL_HANDLE; // TODO
 		cbi.pInheritanceInfo = &cbii;
 		vkBeginCommandBuffer(scbuf->get(), &cbi);
 		return { expected_value, SecondaryCommandBuffer(rg, ctx, scbuf->get(), ongoing_renderpass) };
@@ -672,7 +679,7 @@ namespace vuk {
 			current_exception = &rg_except.value();
 			return *this;
 		}
-		
+
 		auto src_layout = *res_gl_src ? ImageLayout::eGeneral : ImageLayout::eTransferSrcOptimal;
 		auto dst_layout = *res_gl_dst ? ImageLayout::eGeneral : ImageLayout::eTransferDstOptimal;
 
@@ -698,7 +705,6 @@ namespace vuk {
 			return *this;
 		}
 		auto dst_image = dst_res->image;
-
 
 		auto res_gl_src = rg->is_resource_image_in_general_layout(src, current_pass);
 		if (!res_gl_src) {
@@ -806,7 +812,7 @@ namespace vuk {
 			bool overlap_a = src_bbuf.offset > dst_bbuf.offset && src_bbuf.offset < (dst_bbuf.offset + dst_bbuf.size);
 			bool overlap_b = dst_bbuf.offset > src_bbuf.offset && dst_bbuf.offset < (src_bbuf.offset + src_bbuf.size);
 			assert(!overlap_a && !overlap_b);
-		} 
+		}
 		VkBufferCopy bc{};
 		bc.srcOffset += src_bbuf.offset;
 		bc.dstOffset += dst_bbuf.offset;
@@ -815,7 +821,6 @@ namespace vuk {
 		vkCmdCopyBuffer(command_buffer, src_bbuf.buffer, dst_bbuf.buffer, 1, &bc);
 		return *this;
 	}
-
 
 	CommandBuffer& CommandBuffer::image_barrier(Name src, vuk::Access src_acc, vuk::Access dst_acc, uint32_t mip_level, uint32_t level_count) {
 		VUK_EARLY_RET();
@@ -865,19 +870,19 @@ namespace vuk {
 
 		vuk::TimestampQuery tsq;
 		vuk::TimestampQueryCreateInfo ci{ .query = q };
-		
+
 		auto res = allocator->allocate_timestamp_queries(std::span{ &tsq, 1 }, std::span{ &ci, 1 });
 		if (!res) {
 			allocate_except.emplace(res.error());
 			current_exception = &allocate_except.value();
 			return *this;
 		}
-		
+
 		vkCmdWriteTimestamp(command_buffer, (VkPipelineStageFlagBits)stage, tsq.pool, tsq.id);
 		return *this;
 	}
 
-	Exception& CommandBuffer::error()& {
+	Exception& CommandBuffer::error() & {
 		extracted = true;
 		assert(current_exception && "cannot call error() on CommandBuffer that is not in the error state");
 		return *current_exception;
@@ -889,7 +894,7 @@ namespace vuk {
 		return *current_exception;
 	}
 
-	Exception&& CommandBuffer::error()&& {
+	Exception&& CommandBuffer::error() && {
 		extracted = true;
 		assert(current_exception && "cannot call error() on CommandBuffer that is not in the error state");
 		return std::move(*current_exception);
@@ -898,8 +903,8 @@ namespace vuk {
 	bool CommandBuffer::_bind_state(bool graphics) {
 		for (auto& pcr : pcrs) {
 			void* data = push_constant_buffer.data() + pcr.offset;
-			vkCmdPushConstants(command_buffer, graphics ? current_pipeline->pipeline_layout : current_compute_pipeline->pipeline_layout, pcr.stageFlags,
-				pcr.offset, pcr.size, data);
+			vkCmdPushConstants(
+			    command_buffer, graphics ? current_pipeline->pipeline_layout : current_compute_pipeline->pipeline_layout, pcr.stageFlags, pcr.offset, pcr.size, data);
 		}
 		pcrs.clear();
 
@@ -919,13 +924,23 @@ namespace vuk {
 					current_exception = &allocate_except.value();
 					return false;
 				}
-				vkCmdBindDescriptorSets(command_buffer, graphics ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE,
-					graphics ? current_pipeline->pipeline_layout : current_compute_pipeline->pipeline_layout, i, 1, &ds->descriptor_set, 0,
-					nullptr);
+				vkCmdBindDescriptorSets(command_buffer,
+				                        graphics ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE,
+				                        graphics ? current_pipeline->pipeline_layout : current_compute_pipeline->pipeline_layout,
+				                        i,
+				                        1,
+				                        &ds->descriptor_set,
+				                        0,
+				                        nullptr);
 			} else {
-				vkCmdBindDescriptorSets(command_buffer, graphics ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE,
-					graphics ? current_pipeline->pipeline_layout : current_compute_pipeline->pipeline_layout, i, 1, &persistent_sets[i], 0,
-					nullptr);
+				vkCmdBindDescriptorSets(command_buffer,
+				                        graphics ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE,
+				                        graphics ? current_pipeline->pipeline_layout : current_compute_pipeline->pipeline_layout,
+				                        i,
+				                        1,
+				                        &persistent_sets[i],
+				                        0,
+				                        nullptr);
 			}
 			set_bindings[i].used.reset();
 		}
@@ -1024,7 +1039,8 @@ namespace vuk {
 						pi.extended_size += sizeof(PipelineInstanceCreateInfo::PipelineColorBlendAttachmentState);
 					}
 				} else {
-					assert(set_color_blend_attachments.count() >= pi.attachmentCount && "If color blend state is not broadcast, you must set it for each color attachment.");
+					assert(set_color_blend_attachments.count() >= pi.attachmentCount &&
+					       "If color blend state is not broadcast, you must set it for each color attachment.");
 					records.color_blend_attachments = true;
 					pi.extended_size += pi.attachmentCount * sizeof(PipelineInstanceCreateInfo::PipelineColorBlendAttachmentState);
 				}
@@ -1080,7 +1096,7 @@ namespace vuk {
 				records.depth_stencil = true;
 				pi.extended_size += sizeof(PipelineInstanceCreateInfo::Depth);
 
-				assert(depth_stencil_state->stencilTestEnable == false); // TODO: stencil unsupported
+				assert(depth_stencil_state->stencilTestEnable == false);     // TODO: stencil unsupported
 				assert(depth_stencil_state->depthBoundsTestEnable == false); // TODO: depth bounds unsupported
 			}
 
@@ -1121,14 +1137,18 @@ namespace vuk {
 				for (unsigned i = 0; i < pi.base->reflection_info.attributes.size(); i++) {
 					auto& attr = pi.base->reflection_info.attributes[i];
 					auto& att = attribute_descriptions[i];
-					PipelineInstanceCreateInfo::VertexInputAttributeDescription viad{ .format = att.format, .offset = att.offset, .location = (uint8_t)att.location, .binding = (uint8_t)att.binding };
+					PipelineInstanceCreateInfo::VertexInputAttributeDescription viad{
+						.format = att.format, .offset = att.offset, .location = (uint8_t)att.location, .binding = (uint8_t)att.binding
+					};
 					write(data_ptr, viad);
 				}
 				write<uint8_t>(data_ptr, (uint8_t)used_bindings.count());
 				for (unsigned i = 0; i < VUK_MAX_ATTRIBUTES; i++) {
 					if (used_bindings.test(i)) {
 						auto& bin = binding_descriptions[i];
-						PipelineInstanceCreateInfo::VertexInputBindingDescription vibd{ .stride = bin.stride, .inputRate = (uint32_t)bin.inputRate, .binding = (uint8_t)bin.binding };
+						PipelineInstanceCreateInfo::VertexInputBindingDescription vibd{ .stride = bin.stride,
+							                                                              .inputRate = (uint32_t)bin.inputRate,
+							                                                              .binding = (uint8_t)bin.binding };
 						write(data_ptr, vibd);
 					}
 				}
@@ -1138,16 +1158,14 @@ namespace vuk {
 				uint32_t num_pcba_to_write = records.broadcast_color_blend_attachment_0 ? 1 : (uint32_t)color_blend_attachments.size();
 				for (uint32_t i = 0; i < num_pcba_to_write; i++) {
 					auto& cba = color_blend_attachments[i];
-					PipelineInstanceCreateInfo::PipelineColorBlendAttachmentState pcba{
-						.blendEnable = cba.blendEnable,
-						.srcColorBlendFactor = cba.srcColorBlendFactor,
-						.dstColorBlendFactor = cba.dstColorBlendFactor,
-						.colorBlendOp = cba.colorBlendOp,
-						.srcAlphaBlendFactor = cba.srcAlphaBlendFactor,
-						.dstAlphaBlendFactor = cba.dstAlphaBlendFactor,
-						.alphaBlendOp = cba.alphaBlendOp,
-						.colorWriteMask = (uint32_t)cba.colorWriteMask
-					};
+					PipelineInstanceCreateInfo::PipelineColorBlendAttachmentState pcba{ .blendEnable = cba.blendEnable,
+						                                                                  .srcColorBlendFactor = cba.srcColorBlendFactor,
+						                                                                  .dstColorBlendFactor = cba.dstColorBlendFactor,
+						                                                                  .colorBlendOp = cba.colorBlendOp,
+						                                                                  .srcAlphaBlendFactor = cba.srcAlphaBlendFactor,
+						                                                                  .dstAlphaBlendFactor = cba.dstAlphaBlendFactor,
+						                                                                  .alphaBlendOp = cba.alphaBlendOp,
+						                                                                  .colorWriteMask = (uint32_t)cba.colorWriteMask };
 					write(data_ptr, pcba);
 				}
 			}
@@ -1171,21 +1189,18 @@ namespace vuk {
 			}
 
 			if (records.non_trivial_raster_state) {
-				PipelineInstanceCreateInfo::RasterizationState rs{
-					.depthClampEnable = (bool)rasterization_state->depthClampEnable,
-					.rasterizerDiscardEnable = (bool)rasterization_state->rasterizerDiscardEnable,
-					.polygonMode = (uint8_t)rasterization_state->polygonMode,
-					.frontFace = (uint8_t)rasterization_state->frontFace };
+				PipelineInstanceCreateInfo::RasterizationState rs{ .depthClampEnable = (bool)rasterization_state->depthClampEnable,
+					                                                 .rasterizerDiscardEnable = (bool)rasterization_state->rasterizerDiscardEnable,
+					                                                 .polygonMode = (uint8_t)rasterization_state->polygonMode,
+					                                                 .frontFace = (uint8_t)rasterization_state->frontFace };
 				write(data_ptr, rs);
 				// TODO: support depth bias
 			}
 
 			if (ongoing_renderpass->depth_stencil_attachment) {
-				PipelineInstanceCreateInfo::Depth ds = {
-					.depthTestEnable = (bool)depth_stencil_state->depthTestEnable,
-					.depthWriteEnable = (bool)depth_stencil_state->depthWriteEnable,
-					.depthCompareOp = (uint8_t)depth_stencil_state->depthCompareOp
-				};
+				PipelineInstanceCreateInfo::Depth ds = { .depthTestEnable = (bool)depth_stencil_state->depthTestEnable,
+					                                       .depthWriteEnable = (bool)depth_stencil_state->depthWriteEnable,
+					                                       .depthCompareOp = (uint8_t)depth_stencil_state->depthCompareOp };
 				write(data_ptr, ds);
 				// TODO: support stencil
 				// TODO: support depth bounds

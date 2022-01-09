@@ -1,20 +1,20 @@
 #pragma once
 
-#include <VkBootstrap.h>
-#include "vuk/Context.hpp"
-#include <optional>
-#include "../examples/utils.hpp"
 #include "../examples/glfw.hpp"
-#include <string_view>
-#include <functional>
-#include <string>
-#include <stdio.h>
-#include <vector>
-#include "vuk/RenderGraph.hpp"
-#include "vuk/CommandBuffer.hpp"
-#include "vuk/resources/DeviceFrameResource.hpp"
-#include "vuk/AllocatorHelpers.hpp"
+#include "../examples/utils.hpp"
 #include "examples/imgui_impl_glfw.h"
+#include "vuk/AllocatorHelpers.hpp"
+#include "vuk/CommandBuffer.hpp"
+#include "vuk/Context.hpp"
+#include "vuk/RenderGraph.hpp"
+#include "vuk/resources/DeviceFrameResource.hpp"
+#include <VkBootstrap.h>
+#include <functional>
+#include <optional>
+#include <stdio.h>
+#include <string>
+#include <string_view>
+#include <vector>
 
 namespace vuk {
 	struct BenchRunner;
@@ -51,28 +51,30 @@ namespace vuk {
 		struct Case : CaseBase {
 			template<class F>
 			Case(std::string_view label, F&& subcase_template) : CaseBase{ label } {
-				std::apply([this, subcase_template](auto&&... ts) {
-					(subcases.emplace_back(
-						[=](BenchRunner& runner, vuk::Allocator& frame_allocator, Query start, Query end) { 
-							return subcase_template(runner, frame_allocator, start, end, ts);
-						}), ...);
-					(subcase_labels.emplace_back(ts.description), ...);
-					timings.resize(sizeof...(Args));
-					runs_required.resize(sizeof...(Args));
-					mean.resize(sizeof...(Args));
-					variance.resize(sizeof...(Args));
-					est_mean.resize(sizeof...(Args));
-					est_variance.resize(sizeof...(Args));
-					last_stage_ran.resize(sizeof...(Args));
-					min_max.resize(sizeof...(Args));
-					binned.resize(sizeof...(Args));
-				}, Params{});
+				std::apply(
+				    [this, subcase_template](auto&&... ts) {
+					    (subcases.emplace_back([=](BenchRunner& runner, vuk::Allocator& frame_allocator, Query start, Query end) {
+						    return subcase_template(runner, frame_allocator, start, end, ts);
+					    }),
+					     ...);
+					    (subcase_labels.emplace_back(ts.description), ...);
+					    timings.resize(sizeof...(Args));
+					    runs_required.resize(sizeof...(Args));
+					    mean.resize(sizeof...(Args));
+					    variance.resize(sizeof...(Args));
+					    est_mean.resize(sizeof...(Args));
+					    est_variance.resize(sizeof...(Args));
+					    last_stage_ran.resize(sizeof...(Args));
+					    min_max.resize(sizeof...(Args));
+					    binned.resize(sizeof...(Args));
+				    },
+				    Params{});
 			}
 		};
 
 		std::vector<Case> cases;
 	};
-}
+} // namespace vuk
 
 namespace vuk {
 
@@ -127,7 +129,6 @@ namespace vuk {
 			if (bench->cleanup) {
 				bench->cleanup(*this, *global);
 			}
-			
 		}
 
 		~BenchRunner() {
@@ -146,19 +147,21 @@ namespace vuk {
 			return runner;
 		}
 	};
-}
+} // namespace vuk
 
 namespace util {
 	struct Register {
 		template<class... Args>
 		Register(vuk::Bench<Args...>& x) {
 			vuk::BenchRunner::get_runner().bench = &x.base;
-			vuk::BenchRunner::get_runner().bench->get_case = [&x](unsigned i) -> vuk::CaseBase& { return x.cases[i]; };
+			vuk::BenchRunner::get_runner().bench->get_case = [&x](unsigned i) -> vuk::CaseBase& {
+				return x.cases[i];
+			};
 			vuk::BenchRunner::get_runner().bench->num_cases = x.cases.size();
 		}
 	};
-}
+} // namespace util
 
-#define CONCAT_IMPL( x, y ) x##y
-#define MACRO_CONCAT( x, y ) CONCAT_IMPL( x, y )
-#define REGISTER_BENCH(x) util::Register MACRO_CONCAT(_reg_, __LINE__) (x)
+#define CONCAT_IMPL(x, y)  x##y
+#define MACRO_CONCAT(x, y) CONCAT_IMPL(x, y)
+#define REGISTER_BENCH(x)  util::Register MACRO_CONCAT(_reg_, __LINE__)(x)
