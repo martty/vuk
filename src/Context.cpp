@@ -243,7 +243,6 @@ namespace vuk {
 				arguments.push_back(L"-E");
 				arguments.push_back(L"main");
 				arguments.push_back(L"-spirv");
-				arguments.push_back(L"-fspv-reflect");
 				arguments.push_back(L"-fspv-target-env=vulkan1.1");
 				arguments.push_back(L"-fvk-use-gl-layout");
 				arguments.push_back(L"-no-warnings");
