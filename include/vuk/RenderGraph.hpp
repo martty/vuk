@@ -182,8 +182,10 @@ namespace vuk {
 		void attach_in(Name, Future<ImageAttachment>&& fimg, Access final);
 		void attach_in(Name, Future<Buffer>&& fimg, Access final);
 
-		void attach_out(Name, Future<ImageAttachment>& fimg);
-		void attach_out(Name, Future<Buffer>& fbuf);
+		void attach_out(Name, Future<ImageAttachment>& fimg, DomainFlags dst_domain);
+		void attach_out(Name, Future<Buffer>& fbuf, DomainFlags dst_domain);
+
+		void release_to_domain(Name in, Name out, DomainFlagBits dst_domain);
 
 		void attach_managed(Name, Format, Dimension2D, Samples, Clear);
 

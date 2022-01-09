@@ -75,9 +75,8 @@ namespace vuk {
 					pif.output_names.emplace_back(res.out_name);
 				}
 
-				if (is_write_access(res.ia) || res.ia == eAcquire || res.ia == eRelease) {
-					assert(!impl->poisoned_names.contains(res.name)); // we have poisoned this name because a write has
-					                                                  // already consumed it
+				if (is_write_access(res.ia) || is_acquire(res.ia) || is_release(res.ia)) {
+					assert(!impl->poisoned_names.contains(res.name)); // we have poisoned this name because a write has already consumed it
 					pif.bloom_write_inputs |= hashed_in_name;
 					pif.write_input_names.emplace_back(res.name);
 					pif.outputs.emplace_back(res);
@@ -202,32 +201,65 @@ namespace vuk {
 				}
 				auto& chain = it->second;
 
-				if (chain.size() > 0 && chain.back().use.original == Access::eAcquire) { // acquire of resource - this must happen on
-					                                                                       // the next use domain
-					chain.back().domain = (DomainFlagBits)passinfo.domain.m_mask;
+				if (chain.size() > 0 && is_acquire(chain.back().use.original)) { // acquire of resource - this must happen on the next use domain
+					// propagate subsequent use back onto the acquire
 					chain.back().pass->domain = passinfo.domain;
-				} else if (chain.size() > 0 && chain.back().use.original == Access::eRelease && res.ia == Access::eAcquire) {
+					ResourceUse current_use = to_use(Access::eNone);
+					current_use.original = chain.back().use.original;
+					chain.back().use = current_use;
+					chain.emplace_back(UseRef{ to_use(res.ia), &passinfo });
+				} else if (chain.size() > 0 && is_release(chain.back().use.original) && is_acquire(res.ia)) {
 					// release-acquire pair
 					// mark these passes to be excluded
 					chain.back().pass->domain = DomainFlagBits::eNone;
 					passinfo.domain = DomainFlagBits::eNone;
-					chain.pop_back();                      // remove both from use chain
-				} else if (res.ia == Access::eRelease) { // release of resource - this must happen
-					                                       // on the previous use domain
-					assert(chain.size() > 0);              // release cannot head a use chain
-					passinfo.domain = it->second.back().domain;
-					// only release -> propagate previous domain and use onto release
-					ResourceUse last_use = chain.back().use;
-					last_use.original = Access::eRelease;
-					chain.emplace_back(UseRef{ last_use, &passinfo, (DomainFlagBits)chain.back().domain });
+					chain.pop_back(); // remove both from use chain
+				} else if (is_release(res.ia)) { // release of resource - this must happen on the previous use domain
+					assert(chain.size() > 0); // release cannot head a use chain
+					// only release -> propagate previous use onto release
+					ResourceUse last_use = to_use(Access::eNone);
+					last_use.original = res.ia;
+					chain.emplace_back(UseRef{ last_use, &passinfo });
 				} else {
-					chain.emplace_back(UseRef{ to_use(res.ia), &passinfo, (DomainFlagBits)passinfo.domain.m_mask });
+					chain.emplace_back(UseRef{ to_use(res.ia), &passinfo });
+				}
+			}
+		}
+
+		for (auto& [name, chain] : impl->use_chains) {
+			DomainFlags last_domain = DomainFlagBits::eDevice;
+
+			// forward inference
+			for (uint64_t i = 0; i < chain.size(); i++) {
+				auto& use = chain[i];
+				auto domain = use.pass->domain;
+				if (domain != last_domain && domain != DomainFlagBits::eDevice && domain != DomainFlagBits::eAny) {
+					last_domain = use.pass->domain;
+				}
+				if ((last_domain != DomainFlagBits::eDevice && last_domain != DomainFlagBits::eAny) && (domain == DomainFlagBits::eDevice || domain == DomainFlagBits::eAny)) {
+					use.pass->domain = last_domain;
+				}
+			}
+			last_domain = DomainFlagBits::eDevice;
+			// backward inference
+			for (int64_t i = chain.size() - 1; i > 0; i--) {
+				auto& use = chain[i];
+				auto domain = use.pass->domain;
+
+				if (domain != last_domain && domain != DomainFlagBits::eDevice && domain != DomainFlagBits::eAny) {
+					last_domain = use.pass->domain;
+				}
+				if ((last_domain != DomainFlagBits::eDevice && last_domain != DomainFlagBits::eAny) && (domain == DomainFlagBits::eDevice || domain == DomainFlagBits::eAny)) {
+					use.pass->domain = last_domain;
 				}
 			}
 		}
 
 		impl->ordered_passes.reserve(impl->passes.size());
 		for (auto& p : impl->passes) {
+			if (p.domain == DomainFlagBits::eDevice || p.domain == DomainFlagBits::eAny) { // couldn't infer, set pass as graphics
+				p.domain = DomainFlagBits::eGraphicsOnGraphics;
+			}
 			impl->ordered_passes.push_back(&p);
 		}
 
@@ -441,7 +473,6 @@ namespace vuk {
 	}
 
 	void RenderGraph::attach_in(Name name, Future<ImageAttachment>&& fimg, Access final) {
-		// TODO: handle cross-queue vis
 		if (fimg.get_status() == FutureBase::Status::eSubmitted || fimg.get_status() == FutureBase::Status::eHostAvailable) {
 			auto att = fimg.control->get_result<ImageAttachment>();
 			AttachmentRPInfo attachment_info;
@@ -459,13 +490,25 @@ namespace vuk {
 				fimg.control->last_use.original, fimg.control->last_use.stages, fimg.control->last_use.access, fimg.control->last_use.layout
 			};
 			attachment_info.final = to_use(final);
-			impl->bound_attachments.emplace(name, attachment_info);
+
+			add_pass({
+				.name = fimg.output_binding.append("_ACQUIRE"),
+				.resources = {
+					Resource{name.append("_"), Resource::Type::eImage, eAcquire, name}
+				},
+				.wait = std::move(fimg.control)
+				});
+
+			impl->bound_attachments.emplace(name.append("_"), attachment_info);
 		} else if (fimg.get_status() == FutureBase::Status::eRenderGraphBound || fimg.get_status() == FutureBase::Status::eOutputAttached) {
 			fimg.get_status() = FutureBase::Status::eInputAttached;
 			append(name, std::move(*fimg.rg));
-			add_pass({ .name = fimg.output_binding.append("_ACQUIRE"),
-			           .resources = { Resource{ name.append("::").append(fimg.output_binding).append("+"), Resource::Type::eImage, eAcquire, name } },
-			           .wait = std::move(fimg.control) });
+			add_pass({
+				.name = fimg.output_binding.append("_ACQUIRE"),
+				.resources = {
+					Resource{name.append("::").append(fimg.output_binding).append("+"), Resource::Type::eImage, eAcquire, name}
+				}
+				});
 			add_alias(name, name.append("::").append(fimg.output_binding));
 		} else {
 			assert(0);
@@ -473,39 +516,78 @@ namespace vuk {
 	}
 
 	void RenderGraph::attach_in(Name name, Future<Buffer>&& fimg, Access final) {
-		// TODO: handle cross-queue vis
 		if (fimg.get_status() == FutureBase::Status::eSubmitted || fimg.get_status() == FutureBase::Status::eHostAvailable) {
-			BufferInfo buf_info{
-				.name = name,
-				.initial = { fimg.control->last_use.original, fimg.control->last_use.stages, fimg.control->last_use.access, fimg.control->last_use.layout },
-				.final = to_use(final),
-				.buffer = fimg.control->get_result<Buffer>()
-			};
-			impl->bound_buffers.emplace(name, buf_info);
+			BufferInfo buf_info{ .name = name, .initial = {fimg.control->last_use.original, fimg.control->last_use.stages, fimg.control->last_use.access, fimg.control->last_use.layout}, .final = to_use(final), .buffer = fimg.control->get_result<Buffer>() };
+			add_pass({
+				.name = fimg.output_binding.append("_FUTURE_ACQUIRE"),
+				.resources = {
+					Resource{name.append("_"), Resource::Type::eBuffer, eAcquire, name}
+				},
+				.wait = std::move(fimg.control)
+				});
+			impl->bound_buffers.emplace(name.append("_"), buf_info);
 		} else if (fimg.get_status() == FutureBase::Status::eRenderGraphBound || fimg.get_status() == FutureBase::Status::eOutputAttached) {
 			fimg.get_status() = FutureBase::Status::eInputAttached;
 			append(name, std::move(*fimg.rg));
-			add_pass({ .name = fimg.output_binding.append("_ACQUIRE"),
-			           .resources = { Resource{ name.append("::").append(fimg.output_binding).append("+"), Resource::Type::eBuffer, eAcquire, name } },
-			           .wait = std::move(fimg.control) });
+			add_pass({
+				.name = fimg.output_binding.append("_FUTURE_ACQUIRE"),
+				.resources = {
+					Resource{name.append("::").append(fimg.output_binding).append("+"), Resource::Type::eBuffer, eAcquire, name}
+				}
+				});
 			add_alias(name, name.append("::").append(fimg.output_binding));
 		} else {
 			assert(0);
 		}
 	}
 
-	void RenderGraph::attach_out(Name name, Future<ImageAttachment>& fimg) {
+	void RenderGraph::attach_out(Name name, Future<ImageAttachment>& fimg, DomainFlags dst_domain) {
 		fimg.get_status() = FutureBase::Status::eOutputAttached;
-		add_pass({ .name = name.append("_RELEASE"),
-		           .resources = { Resource{ name, Resource::Type::eImage, eRelease, name.append("+") } },
-		           .signal = fimg.control.get() });
+		add_pass({
+			.name = name.append("_RELEASE"),
+			.execute_on = DomainFlagBits::eDevice,
+			.resources = {
+				Resource{name, Resource::Type::eImage, domain_to_release_access(dst_domain), name.append("+")}
+			},
+			.signal = fimg.control.get()
+			});
 	}
 
-	void RenderGraph::attach_out(Name name, Future<Buffer>& fbuf) {
+	void RenderGraph::attach_out(Name name, Future<Buffer>& fbuf, DomainFlags dst_domain) {
 		fbuf.get_status() = FutureBase::Status::eOutputAttached;
-		add_pass({ .name = name.append("_RELEASE"),
-		           .resources = { Resource{ name, Resource::Type::eBuffer, eRelease, name.append("+") } },
-		           .signal = fbuf.control.get() });
+		add_pass({
+			.name = name.append("_RELEASE"),
+			.execute_on = DomainFlagBits::eDevice,
+			.resources = {
+				Resource{name, Resource::Type::eBuffer, domain_to_release_access(dst_domain), name.append("+")}
+			},
+			.signal = fbuf.control.get()
+			});
+	}
+
+	void RenderGraph::release_to_domain(Name in, Name out, DomainFlagBits dst_domain) {
+		/*	Access acc;
+			switch (dst_domain) {
+			case vuk::DomainFlagBits::eGraphicsQueue:
+				acc = eReleaseToGraphics;
+				break;
+			case vuk::DomainFlagBits::eComputeQueue:
+				acc = eReleaseToCompute;
+				break;
+			case vuk::DomainFlagBits::eTransferQueue:
+				acc = eReleaseToTransfer;
+				break;
+			default:
+				assert(0);
+				break;
+			}
+
+			add_pass({
+				.name = in.append("_RELEASE_2_DOMAIN"),
+				.resources = {
+					Resource{in, Resource::Type::eImage, acc, out}
+				},
+				});*/
 	}
 
 	void sync_bound_attachment_to_renderpass(AttachmentRPInfo& rp_att, AttachmentRPInfo& attachment_info) {
@@ -545,8 +627,14 @@ namespace vuk {
 				continue;
 			}
 			auto& chain = chain_it->second;
-			chain.insert(chain.begin(), UseRef{ attachment_info.initial, nullptr });
-			chain.emplace_back(UseRef{ attachment_info.final, nullptr });
+			if (is_acquire(chain[0].use.original)) {
+			} else {
+				chain.insert(chain.begin(), UseRef{ attachment_info.initial, nullptr });
+			}
+			if (is_release(chain.back().use.original)) {
+			} else {
+				chain.emplace_back(UseRef{ attachment_info.final, nullptr });
+			}
 
 			ImageAspectFlags aspect = format_to_aspect((Format)attachment_info.description.format);
 
@@ -554,22 +642,122 @@ namespace vuk {
 				auto& left = chain[i];
 				auto& right = chain[i + 1];
 
-				// release - acquire pair
-				if (left.use.original == eRelease && right.use.original == eAcquire) {
-					// noop
-				} else if (right.use.original == eRelease && (i + 1 == (chain.size() - 2))) {
+				DomainFlags left_domain = left.pass ? left.pass->domain : DomainFlagBits::eNone;
+				DomainFlags right_domain = right.pass ? right.pass->domain : DomainFlagBits::eNone;
+
+				auto src_stages = left.use.stages;
+				auto dst_stages = right.use.stages;
+
+				if (is_acquire(left.use.original)) {
+					// acquire without release - must be first in chain
+					assert(i == 0);
+					// we are acquiring from a future
+					auto wait_fut = left.pass->pass.wait.get();
+					if (wait_fut) {
+						left.pass->absolute_waits.emplace_back(wait_fut->initial_domain, wait_fut->initial_visibility);
+
+						left_domain = wait_fut->initial_domain;
+						src_stages = wait_fut->last_use.stages;
+						left.use.layout = wait_fut->last_use.layout;
+						left.use.access = wait_fut->last_use.access;
+					} else {
+						// we are acquiring from a queue
+						DomainFlags src_domain;
+						switch (left.use.original) {
+						case eAcquireFromGraphics:
+							src_domain = DomainFlagBits::eGraphicsQueue; break;
+						case eAcquireFromCompute:
+							src_domain = DomainFlagBits::eComputeQueue; break;
+						case eAcquireFromTransfer:
+							src_domain = DomainFlagBits::eTransferQueue; break;
+						default:
+							assert(0 && "Acquire from queue without Queue");
+						}
+
+						left_domain = src_domain;
+					}
+				}
+
+				scope_to_domain(src_stages, left_domain & DomainFlagBits::eQueueMask);
+				scope_to_domain(dst_stages, right_domain & DomainFlagBits::eQueueMask);
+
+				bool crosses_queue = (left_domain != DomainFlagBits::eNone && right_domain != DomainFlagBits::eNone && (left_domain & DomainFlagBits::eQueueMask) != (right_domain & DomainFlagBits::eQueueMask));
+
+				if (is_acquire(left.use.original)) {
+					if(crosses_queue) {
+						ImageBarrier acquire_barrier;
+						VkImageMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+						barrier.srcAccessMask = 0; // ignored
+						barrier.dstAccessMask = (VkAccessFlags)right.use.access;
+						barrier.oldLayout = (VkImageLayout)left.use.layout;
+						barrier.newLayout = (VkImageLayout)right.use.layout;
+						barrier.subresourceRange.aspectMask = (VkImageAspectFlags)aspect;
+						barrier.subresourceRange.baseArrayLayer = 0;
+						barrier.subresourceRange.baseMipLevel = 0;
+						barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
+						barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
+						barrier.srcQueueFamilyIndex = ctx.domain_to_queue_family_index(left_domain);
+						barrier.dstQueueFamilyIndex = ctx.domain_to_queue_family_index(right_domain);
+						acquire_barrier.src = PipelineStageFlagBits::eTopOfPipe; // NONE
+						acquire_barrier.dst = dst_stages;
+						acquire_barrier.barrier = barrier;
+						acquire_barrier.image = name;
+						auto& right_rp = impl->rpis[right.pass->render_pass_index];
+						right_rp.pre_barriers.emplace_back(acquire_barrier);
+					}
+				}
+
+				if (is_release(right.use.original)) {
 					// release without acquire - must be last in chain
-					auto& fut = *right.pass->pass.signal;
-					fut.last_use = QueueResourceUse{ left.use.original, left.use.stages, left.use.access, left.use.layout, left.domain };
-					attachment_info.attached_future = &fut;
+					assert(i + 1 == (chain.size() - 1));
+					if (right.pass->pass.signal) {
+						auto& fut = *right.pass->pass.signal;
+						fut.last_use = QueueResourceUse{ left.use.original, left.use.stages, left.use.access, left.use.layout, (DomainFlagBits)(left_domain & DomainFlagBits::eQueueMask).m_mask };
+						attachment_info.attached_future = &fut;
+					}
+
+					DomainFlags dst_domain;
+					switch (right.use.original) {
+					case eReleaseToGraphics:
+						dst_domain = DomainFlagBits::eGraphicsQueue; break;
+					case eReleaseToCompute:
+						dst_domain = DomainFlagBits::eComputeQueue; break;
+					case eReleaseToTransfer:
+						dst_domain = DomainFlagBits::eTransferQueue; break;
+					default:
+						dst_domain = left.pass->domain; // no domain change
+					}
+
+					bool release_to_different_queue = (left.pass->domain & DomainFlagBits::eQueueMask) != dst_domain;
+
+					if (release_to_different_queue) { // release half of QFOT
+						ImageBarrier release_barrier;
+						VkImageMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+						barrier.srcAccessMask = is_read_access(left.use) ? 0 : (VkAccessFlags)left.use.access;
+						barrier.dstAccessMask = 0; // ignored
+						barrier.oldLayout = (VkImageLayout)left.use.layout; // no layout transition - we don't know
+						barrier.newLayout = (VkImageLayout)left.use.layout;
+						barrier.subresourceRange.aspectMask = (VkImageAspectFlags)aspect;
+						barrier.subresourceRange.baseArrayLayer = 0;
+						barrier.subresourceRange.baseMipLevel = 0;
+						barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
+						barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
+						barrier.srcQueueFamilyIndex = ctx.domain_to_queue_family_index(left_domain);
+						barrier.dstQueueFamilyIndex = ctx.domain_to_queue_family_index(dst_domain);
+						release_barrier.src = src_stages;
+						release_barrier.dst = PipelineStageFlagBits::eBottomOfPipe; // NONE
+						release_barrier.barrier = barrier;
+						release_barrier.image = name;
+						auto& left_rp = impl->rpis[left.pass->render_pass_index];
+						left_rp.post_barriers.emplace_back(release_barrier);
+					}
+
 					continue;
 				}
 
-				bool crosses_queue = (left.domain != DomainFlagBits::eNone && right.domain != DomainFlagBits::eNone &&
-				                      (left.domain & DomainFlagBits::eQueueMask) != (right.domain & DomainFlagBits::eQueueMask));
 				if (crosses_queue) {
 					left.pass->is_waited_on = true;
-					right.pass->waits.emplace_back((DomainFlagBits)(left.domain & DomainFlagBits::eQueueMask).m_mask, left.pass);
+					right.pass->waits.emplace_back((DomainFlagBits)(left_domain & DomainFlagBits::eQueueMask).m_mask, left.pass);
 
 					assert(left.use.layout != ImageLayout::ePreinitialized);
 					assert(right.use.layout != ImageLayout::eUndefined);
@@ -587,9 +775,9 @@ namespace vuk {
 						barrier.subresourceRange.baseMipLevel = 0;
 						barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
 						barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
-						barrier.dstQueueFamilyIndex = ctx.domain_to_queue_family_index(left.domain);
-						barrier.srcQueueFamilyIndex = ctx.domain_to_queue_family_index(right.domain);
-						release_barrier.src = left.use.stages;
+						barrier.srcQueueFamilyIndex = ctx.domain_to_queue_family_index(left_domain);
+						barrier.dstQueueFamilyIndex = ctx.domain_to_queue_family_index(right_domain);
+						release_barrier.src = src_stages;
 						release_barrier.dst = PipelineStageFlagBits::eBottomOfPipe; // NONE
 						release_barrier.barrier = barrier;
 						release_barrier.image = name;
@@ -608,10 +796,10 @@ namespace vuk {
 						barrier.subresourceRange.baseMipLevel = 0;
 						barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
 						barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
-						barrier.dstQueueFamilyIndex = ctx.domain_to_queue_family_index(left.domain);
-						barrier.srcQueueFamilyIndex = ctx.domain_to_queue_family_index(right.domain);
+						barrier.srcQueueFamilyIndex = ctx.domain_to_queue_family_index(left_domain);
+						barrier.dstQueueFamilyIndex = ctx.domain_to_queue_family_index(right_domain);
 						acquire_barrier.src = PipelineStageFlagBits::eTopOfPipe; // NONE
-						acquire_barrier.dst = right.use.stages;
+						acquire_barrier.dst = dst_stages;
 						acquire_barrier.barrier = barrier;
 						acquire_barrier.image = name;
 						auto& right_rp = impl->rpis[right.pass->render_pass_index];
@@ -712,11 +900,6 @@ namespace vuk {
 							barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 							barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 
-							auto src_stages = left.use.stages;
-							auto dst_stages = right.use.stages;
-							// assert((left.domain & DomainFlagBits::eQueueMask) ==
-							// (right.domain & DomainFlagBits::eQueueMask));
-							scope_to_domain(src_stages, dst_stages, right.domain & DomainFlagBits::eQueueMask);
 							if (src_stages == PipelineStageFlags{}) {
 								barrier.srcAccessMask = {};
 							}
@@ -787,22 +970,23 @@ namespace vuk {
 				auto& left = chain[i];
 				auto& right = chain[i + 1];
 
+				DomainFlags left_domain = left.pass ? left.pass->domain : DomainFlagBits::eNone;
+				DomainFlags right_domain = right.pass ? right.pass->domain : DomainFlagBits::eNone;
+
 				// release - acquire pair
 				if (left.use.original == eRelease && right.use.original == eAcquire) {
 					// noop
 				} else if (right.use.original == eRelease && (i + 1 == (chain.size() - 2))) {
 					// release without acquire - must be last in chain
 					auto& fut = *right.pass->pass.signal;
-					fut.last_use = QueueResourceUse{ left.use.original, left.use.stages, left.use.access, left.use.layout, left.domain };
-					fut.get_result<Buffer>() = buffer_info.buffer; // TODO: when we have managed buffers, then
-					                                               // this is too soon to attach
+					fut.last_use = QueueResourceUse{ left.use.original, left.use.stages, left.use.access, left.use.layout, (DomainFlagBits)(left_domain & DomainFlagBits::eQueueMask).m_mask };
+					fut.get_result<Buffer>() = buffer_info.buffer; // TODO: when we have managed buffers, then this is too soon to attach
 				}
 
-				bool crosses_queue = (left.domain != DomainFlagBits::eNone && right.domain != DomainFlagBits::eNone &&
-				                      (left.domain & DomainFlagBits::eQueueMask) != (right.domain & DomainFlagBits::eQueueMask));
+				bool crosses_queue = (left_domain != DomainFlagBits::eNone && right_domain != DomainFlagBits::eNone && (left_domain & DomainFlagBits::eQueueMask) != (right_domain & DomainFlagBits::eQueueMask));
 				if (crosses_queue) {
 					left.pass->is_waited_on = true;
-					right.pass->waits.emplace_back((DomainFlagBits)(left.domain & DomainFlagBits::eQueueMask).m_mask, left.pass);
+					right.pass->waits.emplace_back((DomainFlagBits)(left_domain & DomainFlagBits::eQueueMask).m_mask, left.pass);
 
 					continue;
 				}

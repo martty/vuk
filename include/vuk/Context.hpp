@@ -426,15 +426,15 @@ namespace vuk {
 	struct Future {
 		Future() = default;
 		/// @brief Create a Future with ownership of a RenderGraph and bind to an output
-		/// @param allocator
-		/// @param rg
-		/// @param output_binding
-		Future(Allocator& allocator, std::unique_ptr<struct RenderGraph> rg, Name output_binding);
+		/// @param allocator 
+		/// @param rg 
+		/// @param output_binding 
+		Future(Allocator& allocator, std::unique_ptr<struct RenderGraph> rg, Name output_binding, DomainFlags dst_domain = DomainFlagBits::eDevice);
 		/// @brief Create a Future without ownership of a RenderGraph and bind to an output
-		/// @param allocator
-		/// @param rg
-		/// @param output_binding
-		Future(Allocator& allocator, struct RenderGraph& rg, Name output_binding);
+		/// @param allocator 
+		/// @param rg 
+		/// @param output_binding 
+		Future(Allocator& allocator, struct RenderGraph& rg, Name output_binding, DomainFlags dst_domain = DomainFlagBits::eDevice);
 		/// @brief Create a Future from a value, automatically making it host available
 		/// @param allocator
 		/// @param value

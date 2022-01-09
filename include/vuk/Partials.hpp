@@ -12,7 +12,7 @@ namespace vuk {
 			return { allocator, std::move(buffer) };
 		}
 
-		auto src = *allocate_buffer_cross_device(allocator, BufferCreateInfo{ vuk::MemoryUsage::eCPUonly, size, 1 });
+		auto src = *allocate_buffer_cross_device(allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, 1 });
 		::memcpy(src->mapped_ptr, src_data, size);
 
 		std::unique_ptr<RenderGraph> rgp = std::make_unique<RenderGraph>();
@@ -35,7 +35,7 @@ namespace vuk {
 	inline Future<ImageAttachment> host_data_to_image(Allocator& allocator, DomainFlagBits copy_domain, ImageAttachment image, void* src_data) {
 		size_t alignment = format_to_texel_block_size(image.format);
 		size_t size = compute_image_size(image.format, static_cast<Extent3D>(image.extent));
-		auto src = *allocate_buffer_cross_device(allocator, BufferCreateInfo{ vuk::MemoryUsage::eCPUonly, size, alignment });
+		auto src = *allocate_buffer_cross_device(allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 		::memcpy(src->mapped_ptr, src_data, size);
 
 		BufferImageCopy bc;
@@ -61,13 +61,23 @@ namespace vuk {
 		return { allocator, std::move(rgp), "_dst+" };
 	}
 
-	inline Future<ImageAttachment> transition(DomainFlagBits domain, Future<ImageAttachment> image, Access dst_access) {
+	inline Future<ImageAttachment> transition(Future<ImageAttachment> image, Access dst_access) {
 		auto& allocator = image.get_allocator();
 		std::unique_ptr<RenderGraph> rgp = std::make_unique<RenderGraph>();
-		rgp->add_pass({ .name = "TRANSITION", .execute_on = domain, .resources = { "_src"_image >> dst_access >> "_src+" } });
-		rgp->attach_in("_src", std::move(image), vuk::Access::eNone);
+		rgp->add_pass({
+			.name = "TRANSITION",
+			.execute_on = DomainFlagBits::eDevice,
+			.resources = {"_src"_image >> dst_access >> "_src+"} });
+		rgp->attach_in("_src", std::move(image), Access::eNone);
 		return { allocator, std::move(rgp), "_src+" };
 	}
+
+	/*inline Future<ImageAttachment> acquire_to_queue(Future<ImageAttachment> image, DomainFlagBits dst_domain) {
+		auto& allocator = image.get_allocator();
+		std::unique_ptr<RenderGraph> rgp = std::make_unique<RenderGraph>();
+		rgp->attach_in("_src", std::move(image), Access::eNone);
+		return { allocator, std::move(rgp), "_src+" };
+	}*/
 
 	/// @brief Allocates & fills a buffer with explicitly managed lifetime
 	/// @param mem_usage Where to allocate the buffer (host visible buffers will be automatically mapped)
@@ -89,7 +99,7 @@ namespace vuk {
 		BufferCreateInfo bci{ MemoryUsage::eGPUonly, sizeof(T) * data.size(), 1 };
 		auto ret = allocator.allocate_buffers(std::span{ &*buf, 1 }, std::span{ &bci, 1 }); // TODO: dropping error
 		Buffer b = buf.get();
-		return { std::move(buf), vuk::host_data_to_buffer(allocator, domain, b, data) };
+		return { std::move(buf), host_data_to_buffer(allocator, domain, b, data) };
 	}
 
 	inline std::pair<Texture, Future<ImageAttachment>> create_texture(Allocator& allocator, Format format, Extent3D extent, void* data, bool generate_mips) {
@@ -104,9 +114,15 @@ namespace vuk {
 		ici.arrayLayers = 1;
 		auto tex = allocator.get_context().allocate_texture(allocator, ici);
 
-		auto upload_fut = vuk::host_data_to_image(allocator, vuk::DomainFlagBits::eTransferOnTransfer, vuk::ImageAttachment::from_texture(tex), data);
-		auto transition_fut = vuk::transition(vuk::DomainFlagBits::eTransferOnTransfer, std::move(upload_fut), vuk::Access::eFragmentSampled);
-
-		return { std::move(tex), std::move(transition_fut) };
+		auto upload_fut = host_data_to_image(allocator, DomainFlagBits::eTransferQueue, ImageAttachment::from_texture(tex), data);
+		std::unique_ptr<RenderGraph> rgp = std::make_unique<RenderGraph>();
+		rgp->add_pass({
+			.name = "TRANSITION",
+			.execute_on = DomainFlagBits::eGraphicsQueue,
+			.resources = {"_src"_image >> Access::eFragmentSampled >> "_src+"} });
+		rgp->attach_in("_src", std::move(upload_fut), Access::eNone);
+		auto on_gfx = Future<ImageAttachment>{ allocator, std::move(rgp), "_src+" };
+		
+		return { std::move(tex), std::move(on_gfx) };
 	}
 } // namespace vuk

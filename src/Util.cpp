@@ -75,6 +75,9 @@ namespace vuk {
 			transfer_lock = std::unique_lock{ ctx.transfer_queue->queue_lock };
 		}
 
+		if (bundle.batches.size() > 1) {
+			std::swap(bundle.batches[0], bundle.batches[1]); // FIXME: silence some false positive validation
+		}
 		for (SubmitBatch& batch : bundle.batches) {
 			auto domain = batch.domain;
 			Queue& queue = ctx.domain_to_queue(domain);
@@ -267,22 +270,15 @@ namespace vuk {
 	FutureBase::FutureBase(Allocator& alloc) : allocator(&alloc) {}
 
 	template<class T>
-	Future<T>::Future(Allocator& alloc, struct RenderGraph& rg, Name output_binding) :
-	    control(std::make_unique<FutureBase>(alloc)),
-	    rg(&rg),
-	    output_binding(output_binding) {
+	Future<T>::Future(Allocator& alloc, struct RenderGraph& rg, Name output_binding, DomainFlags dst_domain) : control(std::make_unique<FutureBase>(alloc)), rg(&rg), output_binding(output_binding) {
 		control->status = FutureBase::Status::eRenderGraphBound;
-		this->rg->attach_out(output_binding, *this);
+		this->rg->attach_out(output_binding, *this, dst_domain);
 	}
 
 	template<class T>
-	Future<T>::Future(Allocator& alloc, std::unique_ptr<struct RenderGraph> org, Name output_binding) :
-	    control(std::make_unique<FutureBase>(alloc)),
-	    owned_rg(std::move(org)),
-	    rg(owned_rg.get()),
-	    output_binding(output_binding) {
+	Future<T>::Future(Allocator& alloc, std::unique_ptr<struct RenderGraph> org, Name output_binding, DomainFlags dst_domain) : control(std::make_unique<FutureBase>(alloc)), owned_rg(std::move(org)), rg(owned_rg.get()), output_binding(output_binding) {
 		control->status = FutureBase::Status::eRenderGraphBound;
-		rg->attach_out(output_binding, *this);
+		rg->attach_out(output_binding, *this, dst_domain);
 	}
 
 	template<class T>

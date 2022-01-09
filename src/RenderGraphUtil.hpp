@@ -126,7 +126,13 @@ namespace vuk {
 		case eTransferClear:
 			return { ia, vuk::PipelineStageFlagBits::eTransfer, vuk::AccessFlagBits::eTransferWrite, vuk::ImageLayout::eTransferDstOptimal };
 		case eRelease:
+		case eReleaseToGraphics:
+		case eReleaseToCompute:
+		case eReleaseToTransfer:
 		case eAcquire:
+		case eAcquireFromGraphics:
+		case eAcquireFromCompute:
+		case eAcquireFromTransfer:
 			return { ia, vuk::PipelineStageFlagBits::eTopOfPipe, vuk::AccessFlagBits{}, vuk::ImageLayout::eGeneral }; // ignored
 		default:
 			assert(0 && "NYI");
@@ -134,8 +140,52 @@ namespace vuk {
 		}
 	}
 
+	inline bool is_acquire(Access a) {
+		switch (a) {
+		case eAcquire:
+		case eAcquireFromGraphics:
+		case eAcquireFromCompute:
+		case eAcquireFromTransfer:
+			return true;
+		default:
+			return false;
+		}
+	}
+
+	inline bool is_release(Access a) {
+		switch (a) {
+		case eRelease:
+		case eReleaseToGraphics:
+		case eReleaseToCompute:
+		case eReleaseToTransfer:
+			return true;
+		default:
+			return false;
+		}
+	}
+
+	inline Access domain_to_release_access(DomainFlags dst) {
+		auto queue = (DomainFlagBits)(dst & DomainFlagBits::eQueueMask).m_mask;
+		switch (queue) {
+		case DomainFlagBits::eGraphicsQueue: return Access::eReleaseToGraphics;
+		case DomainFlagBits::eComputeQueue: return Access::eReleaseToCompute;
+		case DomainFlagBits::eTransferQueue: return Access::eReleaseToTransfer;
+		default: return Access::eRelease;
+		}
+	}
+
+	inline Access domain_to_acquire_access(DomainFlags dst) {
+		auto queue = (DomainFlagBits)(dst & DomainFlagBits::eQueueMask).m_mask;
+		switch (queue) {
+		case DomainFlagBits::eGraphicsQueue: return Access::eAcquireFromGraphics;
+		case DomainFlagBits::eComputeQueue: return Access::eAcquireFromCompute;
+		case DomainFlagBits::eTransferQueue: return Access::eAcquireFromTransfer;
+		default: return Access::eAcquire;
+		}
+	}
+
 	// not all domains can support all stages, this function corrects stage flags
-	inline void scope_to_domain(PipelineStageFlags& src, PipelineStageFlags& dst, DomainFlags flags) {
+	inline void scope_to_domain(PipelineStageFlags& src, DomainFlags flags) {
 		DomainFlags remove;
 		// if no graphics in domain, remove all graphics
 		if ((flags & DomainFlagBits::eGraphicsQueue) == DomainFlags{}) {
@@ -149,11 +199,9 @@ namespace vuk {
 
 		if (remove & DomainFlagBits::eGraphicsQueue) {
 			src &= (PipelineStageFlags)~0b11111111110;
-			dst &= (PipelineStageFlags)~0b11111111110;
 		}
 		if (remove & DomainFlagBits::eComputeQueue) {
 			src &= (PipelineStageFlags)~0b100000000000;
-			dst &= (PipelineStageFlags)~0b100000000000;
 		}
 	}
 
@@ -213,7 +261,6 @@ namespace vuk {
 	struct UseRef {
 		ResourceUse use;
 		PassInfo* pass = nullptr;
-		DomainFlagBits domain;
 	};
 
 	struct PassInfo {
@@ -228,6 +275,7 @@ namespace vuk {
 		Name prefix;
 
 		std::vector<std::pair<DomainFlagBits, PassInfo*>> waits;
+		std::vector<std::pair<DomainFlagBits, uint64_t>> absolute_waits;
 		bool is_waited_on = false;
 		std::vector<Resource, short_alloc<Resource, 16>> inputs;
 		uint32_t bloom_resolved_inputs = 0;

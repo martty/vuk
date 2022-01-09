@@ -919,8 +919,6 @@ namespace vuk {
 		eColorRead,
 		eColorResolveRead,  // special op to mark renderpass resolve read
 		eColorResolveWrite, // special op to mark renderpass resolve write
-		eRelease,           // release a resource into a future
-		eAcquire,           // acquire a resource from a future
 		eDepthStencilRW,
 		eDepthStencilRead,
 		eInputRead,
@@ -943,7 +941,15 @@ namespace vuk {
 		eHostRW,
 		eMemoryRead,
 		eMemoryWrite,
-		eMemoryRW
+		eMemoryRW,
+		eRelease, // release a resource into a future
+		eReleaseToGraphics,
+		eReleaseToCompute,
+		eReleaseToTransfer,
+		eAcquire, // acquire a resource from a future
+		eAcquireFromGraphics,
+		eAcquireFromCompute,
+		eAcquireFromTransfer
 	};
 
 	// Aligns given value up to nearest multiply of align value. For example: VmaAlignUp(11, 8) = 16.
