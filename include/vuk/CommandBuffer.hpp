@@ -145,6 +145,7 @@ namespace vuk {
 	static_assert(std::is_standard_layout<BufferImageCopy>::value, "struct wrapper is not a standard layout!");
 
 	struct ExecutableRenderGraph;
+	struct ImageAttachment;
 	struct PassInfo;
 	struct Query;
 	class Allocator;
@@ -248,6 +249,7 @@ namespace vuk {
 		Result<Buffer> get_resource_buffer(Name) const;
 		Result<Image> get_resource_image(Name) const;
 		Result<ImageView> get_resource_image_view(Name) const;
+		Result<ImageAttachment> get_resource_image_attachment(Name) const;
 
 		// request dynamic state for the subsequent pipelines
 		CommandBuffer& set_dynamic_state(DynamicStateFlags);

@@ -34,7 +34,8 @@ namespace vuk {
 
 	inline Future<ImageAttachment> host_data_to_image(Allocator& allocator, DomainFlagBits copy_domain, ImageAttachment image, void* src_data) {
 		size_t alignment = format_to_texel_block_size(image.format);
-		size_t size = compute_image_size(image.format, static_cast<Extent3D>(image.extent));
+		assert(image.extent.sizing == Sizing::eAbsolute);
+		size_t size = compute_image_size(image.format, static_cast<Extent3D>(image.extent.extent));
 		auto src = *allocate_buffer_cross_device(allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 		::memcpy(src->mapped_ptr, src_data, size);
 
@@ -42,7 +43,7 @@ namespace vuk {
 		bc.imageOffset = { 0, 0, 0 };
 		bc.bufferRowLength = 0;
 		bc.bufferImageHeight = 0;
-		bc.imageExtent = static_cast<Extent3D>(image.extent);
+		bc.imageExtent = static_cast<Extent3D>(image.extent.extent);
 		bc.imageSubresource.aspectMask = format_to_aspect(image.format);
 		bc.imageSubresource.mipLevel = image.base_level;
 		bc.imageSubresource.baseArrayLayer = image.base_layer;

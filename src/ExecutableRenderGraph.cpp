@@ -34,16 +34,16 @@ namespace vuk {
 			ici.usage = usage;
 			ici.arrayLayers = 1;
 			// compute extent
-			if (attachment_info.extents.sizing == Sizing::eRelative) {
+			if (attachment_info.attachment.extent.sizing == Sizing::eRelative) {
 				assert(fb_extent.width > 0 && fb_extent.height > 0);
-				ici.extent = vuk::Extent3D{ static_cast<uint32_t>(attachment_info.extents._relative.width * fb_extent.width),
-					                          static_cast<uint32_t>(attachment_info.extents._relative.height * fb_extent.height),
+				ici.extent = vuk::Extent3D{ static_cast<uint32_t>(attachment_info.attachment.extent._relative.width * fb_extent.width),
+					                          static_cast<uint32_t>(attachment_info.attachment.extent._relative.height * fb_extent.height),
 					                          1u };
 			} else {
-				ici.extent = static_cast<vuk::Extent3D>(attachment_info.extents.extent);
+				ici.extent = static_cast<vuk::Extent3D>(attachment_info.attachment.extent.extent);
 			}
 			// concretize attachment size
-			attachment_info.extents = Dimension2D::absolute(ici.extent.width, ici.extent.height);
+			attachment_info.attachment.extent = Dimension2D::absolute(ici.extent.width, ici.extent.height);
 			ici.imageType = vuk::ImageType::e2D;
 			ici.format = vuk::Format(attachment_info.description.format);
 			ici.mipLevels = 1;
@@ -71,8 +71,8 @@ namespace vuk {
 			rgci.ivci = ivci;
 
 			auto rg = ctx.acquire_rendertarget(rgci, ctx.frame_counter);
-			attachment_info.iv = rg.image_view;
-			attachment_info.image = rg.image;
+			attachment_info.attachment.image_view = rg.image_view;
+			attachment_info.attachment.image = rg.image;
 		}
 	}
 
@@ -85,7 +85,7 @@ namespace vuk {
 		for (size_t i = 0; i < rpass.attachments.size(); i++) {
 			auto& att = rpass.attachments[i];
 			if (att.should_clear)
-				clears.push_back(att.clear_value.c);
+				clears.push_back(att.attachment.clear_value.c);
 		}
 		rbi.pClearValues = clears.data();
 		rbi.clearValueCount = (uint32_t)clears.size();
@@ -162,7 +162,7 @@ namespace vuk {
 			}
 
 			for (auto dep : rpass.pre_barriers) {
-				dep.barrier.image = impl->bound_attachments[dep.image].image;
+				dep.barrier.image = impl->bound_attachments[dep.image].attachment.image;
 				vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
 			}
 			for (const auto& dep : rpass.pre_mem_barriers) {
@@ -188,7 +188,7 @@ namespace vuk {
 				// insert image pre-barriers
 				if (rpass.handle == VK_NULL_HANDLE) {
 					for (auto dep : sp.pre_barriers) {
-						dep.barrier.image = impl->bound_attachments[dep.image].image;
+						dep.barrier.image = impl->bound_attachments[dep.image].attachment.image;
 						vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
 					}
 					for (const auto& dep : sp.pre_mem_barriers) {
@@ -249,7 +249,7 @@ namespace vuk {
 				// insert image post-barriers
 				if (rpass.handle == VK_NULL_HANDLE) {
 					for (auto dep : sp.post_barriers) {
-						dep.barrier.image = impl->bound_attachments[dep.image].image;
+						dep.barrier.image = impl->bound_attachments[dep.image].attachment.image;
 						vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
 					}
 					for (const auto& dep : sp.post_mem_barriers) {
@@ -264,7 +264,7 @@ namespace vuk {
 				vkCmdEndRenderPass(cbuf);
 			}
 			for (auto dep : rpass.post_barriers) {
-				dep.barrier.image = impl->bound_attachments[dep.image].image;
+				dep.barrier.image = impl->bound_attachments[dep.image].attachment.image;
 				vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
 			}
 			for (const auto& dep : rpass.post_mem_barriers) {
@@ -287,10 +287,10 @@ namespace vuk {
 		for (auto& [name, bound] : impl->bound_attachments) {
 			if (bound.type == AttachmentRPInfo::Type::eSwapchain) {
 				auto it = std::find_if(swp_with_index.begin(), swp_with_index.end(), [boundb = &bound](auto& t) { return t.first == boundb->swapchain; });
-				bound.iv = it->first->image_views[it->second];
-				bound.image = it->first->images[it->second];
-				bound.extents = Dimension2D::absolute(it->first->extent);
-				bound.samples = vuk::Samples::e1;
+				bound.attachment.image_view = it->first->image_views[it->second];
+				bound.attachment.image = it->first->images[it->second];
+				bound.attachment.extent = Dimension2D::absolute(it->first->extent);
+				bound.attachment.sample_count = vuk::Samples::e1;
 			}
 		}
 
@@ -320,8 +320,9 @@ namespace vuk {
 				for (auto& attrpinfo : rp.attachments) {
 					auto& bound = impl->bound_attachments[attrpinfo.name];
 
-					if (bound.extents.sizing == vuk::Sizing::eAbsolute && bound.extents.extent.width > 0 && bound.extents.extent.height > 0) {
-						fb_extent = bound.extents.extent;
+					if (bound.attachment.extent.sizing == vuk::Sizing::eAbsolute && bound.attachment.extent.extent.width > 0 &&
+					    bound.attachment.extent.extent.height > 0) {
+						fb_extent = bound.attachment.extent.extent;
 						extent_known = true;
 						break;
 					}
@@ -333,7 +334,7 @@ namespace vuk {
 
 					for (auto& attrpinfo : rp.attachments) {
 						auto& bound = impl->bound_attachments[attrpinfo.name];
-						bound.extents = Dimension2D::absolute(fb_extent);
+						bound.attachment.extent = Dimension2D::absolute(fb_extent);
 					}
 
 					infer_progress = true; // progress made
@@ -365,8 +366,8 @@ namespace vuk {
 					create_attachment(ctx, resolved_name, bound, fb_extent, (vuk::SampleCountFlagBits)attrpinfo.description.samples);
 				}
 
-				ivs.push_back(bound.iv);
-				vkivs.push_back(bound.iv.payload);
+				ivs.push_back(bound.attachment.image_view);
+				vkivs.push_back(bound.attachment.image_view.payload);
 			}
 			rp.fbci.renderPass = rp.handle;
 			rp.fbci.pAttachments = &vkivs[0];
@@ -382,19 +383,14 @@ namespace vuk {
 
 		// create non-attachment images
 		for (auto& [name, bound] : impl->bound_attachments) {
-			if (bound.type == AttachmentRPInfo::Type::eInternal && bound.image == VK_NULL_HANDLE) {
-				create_attachment(ctx, name, bound, vuk::Extent2D{ 0, 0 }, bound.samples.count);
+			if (bound.type == AttachmentRPInfo::Type::eInternal && bound.attachment.image == VK_NULL_HANDLE) {
+				create_attachment(ctx, name, bound, vuk::Extent2D{ 0, 0 }, bound.attachment.sample_count.count);
 			}
 		}
 
 		for (auto& [name, attachment_info] : impl->bound_attachments) {
 			if (attachment_info.attached_future) {
-				ImageAttachment att;
-				att.extent = attachment_info.extents.extent;
-				att.format = (Format)attachment_info.description.format;
-				att.image = attachment_info.image;
-				att.image_view = attachment_info.iv;
-				att.sample_count = attachment_info.samples;
+				ImageAttachment att = attachment_info.attachment;
 				attachment_info.attached_future->get_result<ImageAttachment>() = att;
 			}
 		}

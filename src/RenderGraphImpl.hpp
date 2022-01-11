@@ -5,9 +5,12 @@
 #include <vuk/ShortAlloc.hpp>
 
 namespace vuk {
-	struct CommandBundle {
-		uint32_t pass_start;
-		uint32_t pass_end;
+	struct PartialImageAlias {
+		Name dst;
+		uint32_t base_level;
+		uint32_t level_count;
+		uint32_t base_layer;
+		uint32_t layer_count;
 	};
 
 #define INIT(x) x(decltype(x)::allocator_type(*arena_))
@@ -17,6 +20,7 @@ namespace vuk {
 		std::vector<PassInfo*, short_alloc<PassInfo*, 64>> ordered_passes;
 
 		robin_hood::unordered_flat_map<Name, Name> aliases;
+		robin_hood::unordered_flat_map<Name, PartialImageAlias> partial_image_aliases;
 		robin_hood::unordered_flat_set<Name> poisoned_names;
 
 		robin_hood::unordered_flat_map<Name, std::vector<UseRef, short_alloc<UseRef, 64>>> use_chains;
@@ -25,8 +29,6 @@ namespace vuk {
 		size_t num_graphics_rpis = 0;
 		size_t num_compute_rpis = 0;
 		size_t num_transfer_rpis = 0;
-
-		std::vector<CommandBundle> command_bundles;
 
 		robin_hood::unordered_flat_map<Name, AttachmentRPInfo> bound_attachments;
 		robin_hood::unordered_flat_map<Name, BufferInfo> bound_buffers;

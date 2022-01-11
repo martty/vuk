@@ -21,7 +21,7 @@ namespace vuk {
 	void RenderGraph::add_pass(Pass p) {
 		for (auto& r : p.resources) {
 			if (r.is_create && r.type == Resource::Type::eImage) {
-				attach_managed(r.name, (Format)r.ici.description.format, r.ici.extents, r.ici.samples, r.ici.clear_value);
+				attach_managed(r.name, (Format)r.ici.description.format, r.ici.attachment.extent, r.ici.attachment.sample_count, r.ici.attachment.clear_value);
 			}
 		}
 		impl->passes.emplace_back(*impl->arena_, std::move(p));
@@ -58,6 +58,20 @@ namespace vuk {
 		if (new_name != old_name) {
 			impl->aliases[new_name] = old_name;
 		}
+	}
+
+	/*
+	* partial aliases: we allow late binding to an image subresource (a span of mips & a span of layers)
+	* both mips and layers may be "all"
+	* for graph ordering, they are independent from the parent resource
+	* 
+	* partial images aliases are materialized into imageviews by the rendergraph
+	*/
+
+
+	void RenderGraph::add_partial_image_alias(Name new_name, Name old_name, uint32_t base_level, uint32_t level_count, uint32_t base_layer, uint32_t layer_count) {
+		assert(new_name != old_name);
+		impl->partial_image_aliases.emplace(new_name, PartialImageAlias{ old_name, base_level, level_count, base_layer, layer_count });
 	}
 
 	// determine rendergraph inputs and outputs, and resources that are neither
@@ -391,16 +405,15 @@ namespace vuk {
 
 	void RenderGraph::attach_swapchain(Name name, SwapchainRef swp, Clear c) {
 		AttachmentRPInfo attachment_info;
-		attachment_info.extents = Dimension2D::absolute(swp->extent);
-		attachment_info.iv = {};
+		attachment_info.attachment.extent = Dimension2D::absolute(swp->extent);
 		// directly presented
 		attachment_info.description.format = (VkFormat)swp->format;
-		attachment_info.samples = Samples::e1;
+		attachment_info.attachment.sample_count = Samples::e1;
 
 		attachment_info.type = AttachmentRPInfo::Type::eSwapchain;
 		attachment_info.swapchain = swp;
 		attachment_info.should_clear = true;
-		attachment_info.clear_value = c;
+		attachment_info.attachment.clear_value = c;
 
 		ResourceUse& initial = attachment_info.initial;
 		ResourceUse& final = attachment_info.final;
@@ -424,15 +437,14 @@ namespace vuk {
 
 	void RenderGraph::attach_managed(Name name, Format format, Dimension2D extent, Samples samp, Clear c) {
 		AttachmentRPInfo attachment_info;
-		attachment_info.extents = extent;
-		attachment_info.iv = {};
+		attachment_info.attachment.extent = extent;
 
 		attachment_info.type = AttachmentRPInfo::Type::eInternal;
 		attachment_info.description.format = (VkFormat)format;
-		attachment_info.samples = samp;
+		attachment_info.attachment.sample_count = samp;
 
 		attachment_info.should_clear = true;
-		attachment_info.clear_value = c;
+		attachment_info.attachment.clear_value = c;
 		ResourceUse& initial = attachment_info.initial;
 		ResourceUse& final = attachment_info.final;
 		initial.access = AccessFlags{};
@@ -455,16 +467,12 @@ namespace vuk {
 
 	void RenderGraph::attach_image(Name name, ImageAttachment att, Access initial_acc, Access final_acc) {
 		AttachmentRPInfo attachment_info;
-		attachment_info.extents = Dimension2D::absolute(att.extent);
-		attachment_info.image = att.image;
-		attachment_info.iv = att.image_view;
+		attachment_info.attachment = att;
 
 		attachment_info.type = AttachmentRPInfo::Type::eExternal;
 		attachment_info.description.format = (VkFormat)att.format;
-		attachment_info.samples = att.sample_count;
 
 		attachment_info.should_clear = initial_acc == Access::eClear; // if initial access was clear, we will clear
-		attachment_info.clear_value = att.clear_value;
 		ResourceUse& initial = attachment_info.initial;
 		ResourceUse& final = attachment_info.final;
 		initial = to_use(initial_acc);
@@ -476,16 +484,12 @@ namespace vuk {
 		if (fimg.get_status() == FutureBase::Status::eSubmitted || fimg.get_status() == FutureBase::Status::eHostAvailable) {
 			auto att = fimg.control->get_result<ImageAttachment>();
 			AttachmentRPInfo attachment_info;
-			attachment_info.extents = Dimension2D::absolute(att.extent);
-			attachment_info.image = att.image;
-			attachment_info.iv = att.image_view;
+			attachment_info.attachment = att;
 
 			attachment_info.type = AttachmentRPInfo::Type::eExternal;
 			attachment_info.description.format = (VkFormat)att.format;
-			attachment_info.samples = att.sample_count;
 
 			attachment_info.should_clear = false;
-			attachment_info.clear_value = att.clear_value;
 			attachment_info.initial = {
 				fimg.control->last_use.original, fimg.control->last_use.stages, fimg.control->last_use.access, fimg.control->last_use.layout
 			};
@@ -592,11 +596,8 @@ namespace vuk {
 
 	void sync_bound_attachment_to_renderpass(AttachmentRPInfo& rp_att, AttachmentRPInfo& attachment_info) {
 		rp_att.description.format = attachment_info.description.format;
-		rp_att.samples = attachment_info.samples;
-		rp_att.description.samples = (VkSampleCountFlagBits)attachment_info.samples.count;
-		rp_att.iv = attachment_info.iv;
-		rp_att.extents = attachment_info.extents;
-		rp_att.clear_value = attachment_info.clear_value;
+		rp_att.attachment = attachment_info.attachment;
+		rp_att.description.samples = (VkSampleCountFlagBits)attachment_info.attachment.sample_count.count;
 		rp_att.should_clear = attachment_info.should_clear;
 		rp_att.type = attachment_info.type;
 	}
@@ -1135,7 +1136,7 @@ namespace vuk {
 						                                                                   // layout for resolves
 						rref.attachment = (uint32_t)std::distance(
 						    rp.attachments.begin(), std::find_if(rp.attachments.begin(), rp.attachments.end(), [&](auto& att) { return dst_name == att.name; }));
-						rp.attachments[rref.attachment].samples = Samples::e1; // resolve dst must be sample count = 1
+						rp.attachments[rref.attachment].attachment.sample_count = Samples::e1; // resolve dst must be sample count = 1
 						rp.attachments[rref.attachment].is_resolve_dst = true;
 					}
 
@@ -1233,8 +1234,8 @@ namespace vuk {
 				for (auto& attrpinfo : rp.attachments) {
 					auto& bound = impl->bound_attachments[attrpinfo.name];
 
-					if (bound.samples != Samples::eInfer && !attrpinfo.is_resolve_dst) {
-						fb_samples = bound.samples;
+					if (bound.attachment.sample_count != Samples::eInfer && !attrpinfo.is_resolve_dst) {
+						fb_samples = bound.attachment.sample_count;
 						samples_known = true;
 						break;
 					}
@@ -1245,7 +1246,7 @@ namespace vuk {
 					for (auto& attrpinfo : rp.attachments) {
 						auto& bound = impl->bound_attachments[attrpinfo.name];
 						if (!attrpinfo.is_resolve_dst) {
-							bound.samples = fb_samples;
+							bound.attachment.sample_count = fb_samples;
 						}
 					}
 					rp.fbci.sample_count = fb_samples;

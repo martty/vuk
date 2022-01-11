@@ -39,7 +39,7 @@ namespace vuk {
 		if (!res) {
 			return { expected_error, res.error() };
 		}
-		return { expected_value, res->image };
+		return { expected_value, res->attachment.image };
 	}
 
 	Result<ImageView> CommandBuffer::get_resource_image_view(Name n) const {
@@ -48,7 +48,16 @@ namespace vuk {
 		if (!res) {
 			return { expected_error, res.error() };
 		}
-		return { expected_value, res->iv };
+		return { expected_value, res->attachment.image_view };
+	}
+
+	Result<ImageAttachment> CommandBuffer::get_resource_image_attachment(Name n) const {
+		assert(rg);
+		auto res = rg->get_resource_image(n, current_pass);
+		if (!res) {
+			return { expected_error, res.error() };
+		}
+		return { expected_value, res->attachment };
 	}
 
 	CommandBuffer& CommandBuffer::set_dynamic_state(DynamicStateFlags flags) {
@@ -351,7 +360,7 @@ namespace vuk {
 			return *this;
 		}
 
-		return bind_sampled_image(set, binding, res->iv, sampler_create_info, layout);
+		return bind_sampled_image(set, binding, res->attachment.image_view, sampler_create_info, layout);
 	}
 
 	CommandBuffer& CommandBuffer::bind_sampled_image(unsigned set, unsigned binding, Name name, ImageViewCreateInfo ivci, SamplerCreateInfo sampler_create_info) {
@@ -364,7 +373,7 @@ namespace vuk {
 			current_exception = &rg_except.value();
 			return *this;
 		}
-		ivci.image = res->image;
+		ivci.image = res->attachment.image;
 		if (ivci.format == Format{}) {
 			ivci.format = Format(res->description.format);
 		}
@@ -458,7 +467,7 @@ namespace vuk {
 			current_exception = &rg_except.value();
 			return *this;
 		}
-		return bind_storage_image(set, binding, res->iv);
+		return bind_storage_image(set, binding, res->attachment.image_view);
 	}
 
 	void* CommandBuffer::_map_scratch_uniform_binding(unsigned set, unsigned binding, size_t size) {
@@ -649,14 +658,14 @@ namespace vuk {
 			current_exception = &rg_except.value();
 			return *this;
 		}
-		auto src_image = src_res->image;
+		auto src_image = src_res->attachment.image;
 		auto dst_res = rg->get_resource_image(dst, current_pass);
 		if (!dst_res) {
 			rg_except.emplace(dst_res.error());
 			current_exception = &rg_except.value();
 			return *this;
 		}
-		auto dst_image = dst_res->image;
+		auto dst_image = dst_res->attachment.image;
 		ImageSubresourceLayers isl;
 		ImageAspectFlagBits aspect;
 		if (dst_res->description.format == (VkFormat)Format::eD32Sfloat) {
@@ -673,7 +682,7 @@ namespace vuk {
 		ir.srcSubresource = isl;
 		ir.dstOffset = Offset3D{};
 		ir.dstSubresource = isl;
-		ir.extent = static_cast<Extent3D>(src_res->extents.extent);
+		ir.extent = static_cast<Extent3D>(src_res->attachment.extent.extent);
 
 		auto res_gl_src = rg->is_resource_image_in_general_layout(src, current_pass);
 		if (!res_gl_src) {
@@ -705,14 +714,14 @@ namespace vuk {
 			current_exception = &rg_except.value();
 			return *this;
 		}
-		auto src_image = src_res->image;
+		auto src_image = src_res->attachment.image;
 		auto dst_res = rg->get_resource_image(dst, current_pass);
 		if (!dst_res) {
 			rg_except.emplace(dst_res.error());
 			current_exception = &rg_except.value();
 			return *this;
 		}
-		auto dst_image = dst_res->image;
+		auto dst_image = dst_res->attachment.image;
 
 		auto res_gl_src = rg->is_resource_image_in_general_layout(src, current_pass);
 		if (!res_gl_src) {
@@ -753,7 +762,7 @@ namespace vuk {
 			current_exception = &rg_except.value();
 			return *this;
 		}
-		auto dst_image = dst_res->image;
+		auto dst_image = dst_res->attachment.image;
 
 		auto res_gl = rg->is_resource_image_in_general_layout(dst, current_pass);
 		if (!res_gl) {
@@ -776,7 +785,7 @@ namespace vuk {
 			current_exception = &rg_except.value();
 			return *this;
 		}
-		auto src_image = src_res->image;
+		auto src_image = src_res->attachment.image;
 		auto dst_res = rg->get_resource_buffer(dst, current_pass);
 		if (!dst_res) {
 			rg_except.emplace(dst_res.error());
@@ -849,7 +858,7 @@ namespace vuk {
 			current_exception = &rg_except.value();
 			return *this;
 		}
-		auto src_image = src_res->image;
+		auto src_image = src_res->attachment.image;
 
 		VkImageSubresourceRange isr = {};
 		isr.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;

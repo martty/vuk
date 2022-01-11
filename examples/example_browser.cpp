@@ -143,8 +143,8 @@ void vuk::ExampleRunner::render() {
 						if (bound_it == bound_attachments.end())
 							continue;
 						auto samples = vuk::SampleCountFlagBits::e1;
-						if ((*bound_it).second.samples != vuk::Samples::eInfer)
-							samples = (*bound_it).second.samples.count;
+						if ((*bound_it).second.attachment.sample_count != vuk::Samples::eInfer)
+							samples = (*bound_it).second.attachment.sample_count.count;
 						disable = disable || (samples != vuk::SampleCountFlagBits::e1);
 					}
 

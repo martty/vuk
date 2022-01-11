@@ -65,8 +65,7 @@ namespace vuk {
 	struct AttachmentRPInfo {
 		Name name;
 
-		vuk::Dimension2D extents;
-		vuk::Samples samples;
+		ImageAttachment attachment = {};
 
 		VkAttachmentDescription description = {};
 
@@ -74,14 +73,11 @@ namespace vuk {
 
 		enum class Type { eInternal, eExternal, eSwapchain } type;
 
-		vuk::ImageView iv;
-		vuk::Image image = {};
 		// swapchain for swapchain
 		Swapchain* swapchain = nullptr;
 
 		// optionally set
 		bool should_clear = false;
-		Clear clear_value;
 
 		bool is_resolve_dst = false;
 		FutureBase* attached_future = nullptr;
@@ -113,7 +109,7 @@ namespace vuk {
 		    type(t),
 		    ia(ia),
 		    is_create(true),
-		    ici{ .extents = dim, .samples = samp, .description{ .format = (VkFormat)fmt }, .clear_value = cv },
+		    ici{ .attachment = { .extent = dim, .format = fmt, .sample_count = samp, .clear_value = cv }, .description{ .format = (VkFormat)fmt } },
 		    out_name(out_name) {}
 
 		bool operator==(const Resource& o) const noexcept {
@@ -168,6 +164,8 @@ namespace vuk {
 		/// @param new_name
 		/// @param old_name
 		void add_alias(Name new_name, Name old_name);
+
+		void add_partial_image_alias(Name new_name, Name old_name, uint32_t base_level, uint32_t level_count, uint32_t base_layer, uint32_t layer_count);
 
 		/// @brief Add a resolve operation from the image resource `ms_name` to image_resource `resolved_name`
 		/// @param resolved_name
