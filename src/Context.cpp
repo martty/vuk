@@ -399,55 +399,6 @@ namespace vuk {
 		return pbi;
 	}
 
-	ComputePipelineBaseInfo Context::create(const create_info_t<ComputePipelineBaseInfo>& cinfo) {
-		VkPipelineShaderStageCreateInfo shader_stage{ .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
-		std::string pipe_name = "Compute:";
-		auto& sm = impl->shader_modules.acquire({ cinfo.shader, cinfo.shader_path });
-		shader_stage.pSpecializationInfo = nullptr;
-		shader_stage.stage = sm.stage;
-		shader_stage.module = sm.shader_module;
-		shader_stage.pName = "main"; // TODO: make param
-		pipe_name += cinfo.shader_path;
-
-		PipelineLayoutCreateInfo plci;
-		plci.dslcis = PipelineBaseCreateInfo::build_descriptor_layouts(sm.reflection_info, cinfo);
-		// use explicit descriptor layouts if there are any
-		for (auto& l : cinfo.explicit_set_layouts) {
-			plci.dslcis[l.index] = l;
-		}
-		plci.pcrs.insert(plci.pcrs.begin(), sm.reflection_info.push_constant_ranges.begin(), sm.reflection_info.push_constant_ranges.end());
-		plci.plci.pushConstantRangeCount = (uint32_t)sm.reflection_info.push_constant_ranges.size();
-		plci.plci.pPushConstantRanges = sm.reflection_info.push_constant_ranges.data();
-		std::array<DescriptorSetLayoutAllocInfo, VUK_MAX_SETS> dslai;
-		std::vector<VkDescriptorSetLayout> dsls;
-		for (auto& dsl : plci.dslcis) {
-			dsl.dslci.bindingCount = (uint32_t)dsl.bindings.size();
-			dsl.dslci.pBindings = dsl.bindings.data();
-			VkDescriptorSetLayoutBindingFlagsCreateInfo dslbfci{ .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO };
-			if (dsl.flags.size() > 0) {
-				dslbfci.bindingCount = (uint32_t)dsl.bindings.size();
-				dslbfci.pBindingFlags = dsl.flags.data();
-				dsl.dslci.pNext = &dslbfci;
-			}
-			auto descset_layout_alloc_info = impl->descriptor_set_layouts.acquire(dsl);
-			dslai[dsl.index] = descset_layout_alloc_info;
-			dsls.push_back(dslai[dsl.index].layout);
-		}
-		plci.plci.pSetLayouts = dsls.data();
-		plci.plci.setLayoutCount = (uint32_t)dsls.size();
-
-		ComputePipelineBaseInfo cpbi;
-		cpbi.pssci = shader_stage;
-		cpbi.layout_info = dslai;
-		cpbi.pipeline_layout = impl->pipeline_layouts.acquire(plci);
-		cpbi.pipeline_name = Name(pipe_name);
-		cpbi.reflection_info = sm.reflection_info;
-		cpbi.binding_flags = cinfo.binding_flags;
-		cpbi.variable_count_max = cinfo.variable_count_max;
-
-		return cpbi;
-	}
-
 	bool Context::load_pipeline_cache(std::span<std::byte> data) {
 		VkPipelineCacheCreateInfo pcci{ .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO, .initialDataSize = data.size_bytes(), .pInitialData = data.data() };
 		vkDestroyPipelineCache(device, impl->vk_pipeline_cache, nullptr);
@@ -549,36 +500,17 @@ namespace vuk {
 		impl->named_pipelines.insert_or_assign(name, &impl->pipelinebase_cache.acquire(std::move(ci)));
 	}
 
-	void Context::create_named_pipeline(Name name, ComputePipelineBaseCreateInfo ci) {
-		std::lock_guard _(impl->named_pipelines_lock);
-		impl->named_compute_pipelines.insert_or_assign(name, &impl->compute_pipelinebase_cache.acquire(std::move(ci)));
-	}
-
 	PipelineBaseInfo* Context::get_named_pipeline(Name name) {
 		std::lock_guard _(impl->named_pipelines_lock);
 		return impl->named_pipelines.at(name);
-	}
-
-	ComputePipelineBaseInfo* Context::get_named_compute_pipeline(Name name) {
-		std::lock_guard _(impl->named_pipelines_lock);
-		return impl->named_compute_pipelines.at(name);
 	}
 
 	PipelineBaseInfo* Context::get_pipeline(const PipelineBaseCreateInfo& pbci) {
 		return &impl->pipelinebase_cache.acquire(pbci);
 	}
 
-	ComputePipelineBaseInfo* Context::get_pipeline(const ComputePipelineBaseCreateInfo& pbci) {
-		return &impl->compute_pipelinebase_cache.acquire(pbci);
-	}
-
 	Program Context::get_pipeline_reflection_info(const PipelineBaseCreateInfo& pci) {
 		auto& res = impl->pipelinebase_cache.acquire(pci);
-		return res.reflection_info;
-	}
-
-	Program Context::get_pipeline_reflection_info(const ComputePipelineBaseCreateInfo& pci) {
-		auto& res = impl->compute_pipelinebase_cache.acquire(pci);
 		return res.reflection_info;
 	}
 
@@ -668,10 +600,6 @@ namespace vuk {
 	}
 
 	void Context::destroy(const PipelineBaseInfo& pbi) {
-		// no-op, we don't own device objects
-	}
-
-	void Context::destroy(const ComputePipelineBaseInfo& pbi) {
 		// no-op, we don't own device objects
 	}
 
@@ -778,11 +706,6 @@ namespace vuk {
 
 	Unique<PersistentDescriptorSet>
 	Context::create_persistent_descriptorset(Allocator& allocator, const PipelineBaseInfo& base, unsigned set, unsigned num_descriptors) {
-		return create_persistent_descriptorset(allocator, { base.layout_info[set], num_descriptors });
-	}
-
-	Unique<PersistentDescriptorSet>
-	Context::create_persistent_descriptorset(Allocator& allocator, const ComputePipelineBaseInfo& base, unsigned set, unsigned num_descriptors) {
 		return create_persistent_descriptorset(allocator, { base.layout_info[set], num_descriptors });
 	}
 
@@ -1086,7 +1009,7 @@ namespace vuk {
 		// create compute pipeline
 		VkComputePipelineCreateInfo cpci{ .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO };
 		cpci.layout = cinfo.base->pipeline_layout;
-		cpci.stage = cinfo.base->pssci;
+		cpci.stage = cinfo.base->psscis[0];
 
 		VkPipeline pipeline;
 		VkResult res = vkCreateComputePipelines(device, impl->vk_pipeline_cache, 1, &cpci, nullptr, &pipeline);

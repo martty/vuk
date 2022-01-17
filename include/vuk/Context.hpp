@@ -133,15 +133,11 @@ namespace vuk {
 		} debug;
 
 		void create_named_pipeline(Name name, PipelineBaseCreateInfo pbci);
-		void create_named_pipeline(Name name, ComputePipelineBaseCreateInfo pbci);
 
 		PipelineBaseInfo* get_named_pipeline(Name name);
-		ComputePipelineBaseInfo* get_named_compute_pipeline(Name name);
 
 		PipelineBaseInfo* get_pipeline(const PipelineBaseCreateInfo& pbci);
-		ComputePipelineBaseInfo* get_pipeline(const ComputePipelineBaseCreateInfo& pbci);
 		Program get_pipeline_reflection_info(const PipelineBaseCreateInfo& pbci);
-		Program get_pipeline_reflection_info(const ComputePipelineBaseCreateInfo& pbci);
 		ShaderModule compile_shader(ShaderSource source, std::string path);
 
 		bool load_pipeline_cache(std::span<std::byte> data);
@@ -212,8 +208,6 @@ namespace vuk {
 
 		Unique<PersistentDescriptorSet> create_persistent_descriptorset(Allocator& allocator, DescriptorSetLayoutCreateInfo dslci, unsigned num_descriptors);
 		Unique<PersistentDescriptorSet> create_persistent_descriptorset(Allocator& allocator, const PipelineBaseInfo& base, unsigned set, unsigned num_descriptors);
-		Unique<PersistentDescriptorSet>
-		create_persistent_descriptorset(Allocator& allocator, const ComputePipelineBaseInfo& base, unsigned set, unsigned num_descriptors);
 		Unique<PersistentDescriptorSet> create_persistent_descriptorset(Allocator& allocator, const PersistentDescriptorSetCreateInfo&);
 		void commit_persistent_descriptorset(PersistentDescriptorSet& array);
 
@@ -237,11 +231,9 @@ namespace vuk {
 		void destroy(const VkFramebuffer& fb);
 		void destroy(const Sampler& sa);
 		void destroy(const PipelineBaseInfo& pbi);
-		void destroy(const ComputePipelineBaseInfo& pbi);
 
 		ShaderModule create(const create_info_t<ShaderModule>& cinfo);
 		PipelineBaseInfo create(const create_info_t<PipelineBaseInfo>& cinfo);
-		ComputePipelineBaseInfo create(const create_info_t<ComputePipelineBaseInfo>& cinfo);
 		VkPipelineLayout create(const create_info_t<VkPipelineLayout>& cinfo);
 		DescriptorSetLayoutAllocInfo create(const create_info_t<DescriptorSetLayoutAllocInfo>& cinfo);
 		DescriptorPool create(const struct DescriptorSetLayoutAllocInfo& cinfo);
@@ -426,14 +418,14 @@ namespace vuk {
 	struct Future {
 		Future() = default;
 		/// @brief Create a Future with ownership of a RenderGraph and bind to an output
-		/// @param allocator 
-		/// @param rg 
-		/// @param output_binding 
+		/// @param allocator
+		/// @param rg
+		/// @param output_binding
 		Future(Allocator& allocator, std::unique_ptr<struct RenderGraph> rg, Name output_binding, DomainFlags dst_domain = DomainFlagBits::eDevice);
 		/// @brief Create a Future without ownership of a RenderGraph and bind to an output
-		/// @param allocator 
-		/// @param rg 
-		/// @param output_binding 
+		/// @param allocator
+		/// @param rg
+		/// @param output_binding
 		Future(Allocator& allocator, struct RenderGraph& rg, Name output_binding, DomainFlags dst_domain = DomainFlagBits::eDevice);
 		/// @brief Create a Future from a value, automatically making it host available
 		/// @param allocator
