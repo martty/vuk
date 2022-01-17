@@ -52,7 +52,7 @@ namespace {
 
 		      // creating a compute pipeline is the same as creating a graphics pipeline
 		      {
-			      vuk::ComputePipelineBaseCreateInfo pbci;
+			      vuk::PipelineBaseCreateInfo pbci;
 			      pbci.add_glsl(util::read_entire_file("../../examples/stupidsort.comp"), "stupidsort.comp");
 			      runner.context->create_named_pipeline("stupidsort", pbci);
 		      }

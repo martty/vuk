@@ -234,7 +234,7 @@ namespace vuk {
 		return bind_graphics_pipeline(ctx.get_named_pipeline(p));
 	}
 
-	CommandBuffer& CommandBuffer::bind_compute_pipeline(ComputePipelineBaseInfo* gpci) {
+	CommandBuffer& CommandBuffer::bind_compute_pipeline(PipelineBaseInfo* gpci) {
 		VUK_EARLY_RET();
 		assert(!ongoing_renderpass);
 		next_compute_pipeline = gpci;
@@ -243,7 +243,7 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::bind_compute_pipeline(Name p) {
 		VUK_EARLY_RET();
-		return bind_compute_pipeline(ctx.get_named_compute_pipeline(p));
+		return bind_compute_pipeline(ctx.get_named_pipeline(p));
 	}
 
 	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, const Buffer& buf, unsigned first_attribute, Packed format) {
@@ -976,7 +976,7 @@ namespace vuk {
 				si.pData = pi.specialization_constant_data.data();
 				si.dataSize = pi.specialization_constant_data.size();
 
-				pi.base->pssci.pSpecializationInfo = &pi.specialization_info;
+				pi.base->psscis[0].pSpecializationInfo = &pi.specialization_info;
 			}
 
 			current_compute_pipeline = ctx.acquire_pipeline(pi, ctx.frame_counter);

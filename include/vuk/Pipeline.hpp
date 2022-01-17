@@ -116,57 +116,6 @@ namespace vuk {
 	struct create_info<PipelineBaseInfo> {
 		using type = vuk::PipelineBaseCreateInfo;
 	};
-
-	struct ComputePipelineBaseCreateInfo : PipelineBaseCreateInfoBase {
-		friend class CommandBuffer;
-		friend class Context;
-
-	public:
-		void add_shader(ShaderSource source, std::string filename) {
-			shader = std::move(source);
-			shader_path = std::move(filename);
-		}
-
-		void add_glsl(std::string source, std::string filename) {
-			shader = ShaderSource::glsl(std::move(source));
-			shader_path = std::move(filename);
-		}
-
-		void add_spirv(std::vector<uint32_t> source, std::string filename) {
-			shader = ShaderSource::spirv(std::move(source));
-			shader_path = std::move(filename);
-		}
-
-		friend struct std::hash<ComputePipelineBaseCreateInfo>;
-		friend class PerThreadContext;
-
-	private:
-		ShaderSource shader;
-		std::string shader_path;
-
-	public:
-		bool operator==(const ComputePipelineBaseCreateInfo& o) const noexcept {
-			return shader == o.shader && binding_flags == o.binding_flags && variable_count_max == o.variable_count_max;
-		}
-	};
-
-	struct ComputePipelineBaseInfo {
-		Name pipeline_name;
-		vuk::Program reflection_info;
-		VkPipelineShaderStageCreateInfo pssci;
-		VkPipelineLayout pipeline_layout;
-		std::array<DescriptorSetLayoutAllocInfo, VUK_MAX_SETS> layout_info;
-
-		// 4 valid flags
-		Bitset<4 * VUK_MAX_SETS* VUK_MAX_BINDINGS> binding_flags = {};
-		// if the set has a variable count binding, the maximum number of bindings possible
-		std::array<uint32_t, VUK_MAX_SETS> variable_count_max = {};
-	};
-
-	template<>
-	struct create_info<ComputePipelineBaseInfo> {
-		using type = vuk::ComputePipelineBaseCreateInfo;
-	};
 } // namespace vuk
 
 namespace std {
@@ -215,15 +164,6 @@ namespace std {
 		size_t operator()(vuk::PipelineBaseCreateInfo const& x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, x.shaders);
-			return h;
-		}
-	};
-
-	template<>
-	struct hash<vuk::ComputePipelineBaseCreateInfo> {
-		size_t operator()(vuk::ComputePipelineBaseCreateInfo const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.shader);
 			return h;
 		}
 	};

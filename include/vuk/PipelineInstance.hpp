@@ -134,7 +134,7 @@ namespace vuk {
 	};
 
 	struct ComputePipelineInstanceCreateInfo {
-		ComputePipelineBaseInfo* base;
+		PipelineBaseInfo* base;
 
 		std::array<std::byte, VUK_MAX_SPECIALIZATIONCONSTANT_DATA> specialization_constant_data;
 		vuk::fixed_vector<VkSpecializationMapEntry, VUK_MAX_SPECIALIZATIONCONSTANT_RANGES> specialization_map_entries;

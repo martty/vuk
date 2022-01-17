@@ -53,7 +53,6 @@ namespace vuk {
 		VkPipelineCache vk_pipeline_cache = VK_NULL_HANDLE;
 		Cache<PipelineBaseInfo> pipelinebase_cache;
 		Cache<PipelineInfo> pipeline_cache;
-		Cache<ComputePipelineBaseInfo> compute_pipelinebase_cache;
 		Cache<ComputePipelineInfo> compute_pipeline_cache;
 		Cache<VkRenderPass> renderpass_cache;
 		Cache<RGImage> transient_images;
@@ -67,14 +66,13 @@ namespace vuk {
 
 		std::mutex named_pipelines_lock;
 		std::unordered_map<Name, PipelineBaseInfo*> named_pipelines;
-		std::unordered_map<Name, ComputePipelineBaseInfo*> named_compute_pipelines;
 
 		std::atomic<uint64_t> query_id_counter = 0;
 		VkPhysicalDeviceProperties physical_device_properties;
 
 		std::mutex swapchains_lock;
 		plf::colony<Swapchain> swapchains;
-		
+
 		DeviceVkResource device_vk_resource;
 
 		std::mutex query_lock;
@@ -104,9 +102,6 @@ namespace vuk {
 				pipelinebase_cache.collect(absolute_frame, cache_collection_frequency);
 				break;
 			case 6:
-				compute_pipelinebase_cache.collect(absolute_frame, cache_collection_frequency);
-				break;
-			case 7:
 				pool_cache.collect(absolute_frame, cache_collection_frequency);
 				break;
 			}
@@ -117,7 +112,6 @@ namespace vuk {
 		    device(ctx.device),
 		    pipelinebase_cache(ctx),
 		    pipeline_cache(ctx),
-		    compute_pipelinebase_cache(ctx),
 		    compute_pipeline_cache(ctx),
 		    renderpass_cache(ctx),
 		    transient_images(ctx),

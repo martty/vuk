@@ -45,7 +45,7 @@ namespace vuk {
 		int32_t vertexOffset = {};
 		uint32_t firstInstance = {};
 
-		operator VkDrawIndexedIndirectCommand const&() const noexcept {
+		operator VkDrawIndexedIndirectCommand const &() const noexcept {
 			return *reinterpret_cast<const VkDrawIndexedIndirectCommand*>(this);
 		}
 
@@ -71,7 +71,7 @@ namespace vuk {
 		uint32_t baseArrayLayer = 0;
 		uint32_t layerCount = 1;
 
-		operator VkImageSubresourceLayers const&() const noexcept {
+		operator VkImageSubresourceLayers const &() const noexcept {
 			return *reinterpret_cast<const VkImageSubresourceLayers*>(this);
 		}
 
@@ -96,7 +96,7 @@ namespace vuk {
 		ImageSubresourceLayers dstSubresource = {};
 		std::array<Offset3D, 2> dstOffsets = {};
 
-		operator VkImageBlit const&() const noexcept {
+		operator VkImageBlit const &() const noexcept {
 			return *reinterpret_cast<const VkImageBlit*>(this);
 		}
 
@@ -124,7 +124,7 @@ namespace vuk {
 		Offset3D imageOffset = {};
 		Extent3D imageExtent = {};
 
-		operator VkBufferImageCopy const&() const noexcept {
+		operator VkBufferImageCopy const &() const noexcept {
 			return *reinterpret_cast<const VkBufferImageCopy*>(this);
 		}
 
@@ -181,7 +181,7 @@ namespace vuk {
 
 		// Current & next graphics & compute pipelines
 		PipelineBaseInfo* next_pipeline = nullptr;
-		ComputePipelineBaseInfo* next_compute_pipeline = nullptr;
+		PipelineBaseInfo* next_compute_pipeline = nullptr;
 		std::optional<PipelineInfo> current_pipeline;
 		std::optional<ComputePipelineInfo> current_compute_pipeline;
 
@@ -269,7 +269,7 @@ namespace vuk {
 		CommandBuffer& bind_graphics_pipeline(PipelineBaseInfo*);
 		CommandBuffer& bind_graphics_pipeline(Name);
 
-		CommandBuffer& bind_compute_pipeline(ComputePipelineBaseInfo*);
+		CommandBuffer& bind_compute_pipeline(PipelineBaseInfo*);
 		CommandBuffer& bind_compute_pipeline(Name);
 
 		CommandBuffer& set_primitive_topology(PrimitiveTopology);
