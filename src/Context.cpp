@@ -295,8 +295,15 @@ namespace vuk {
 			CComPtr<IDxcCompiler3> compiler = nullptr;
 			DXC_HR(DxcCreateInstance(CLSID_DxcCompiler, __uuidof(IDxcCompiler3), (void**)&compiler), "Failed to create DXC compiler");
 
+			CComPtr<IDxcUtils> utils = nullptr;
+			DXC_HR(DxcCreateInstance(CLSID_DxcUtils, __uuidof(IDxcUtils), (void**)&utils), "Failed to create DXC utils");
+
+			CComPtr<IDxcIncludeHandler> include_handler = nullptr;
+			DXC_HR(utils->CreateDefaultIncludeHandler(&include_handler), "Failed to create include handler");
+
 			CComPtr<IDxcResult> result = nullptr;
-			DXC_HR(compiler->Compile(&source_buf, arguments.data(), arguments.size(), nullptr, __uuidof(IDxcResult), (void**)&result), "Failed to compile with DXC");
+			DXC_HR(compiler->Compile(&source_buf, arguments.data(), arguments.size(), &*include_handler, __uuidof(IDxcResult), (void**)&result),
+			       "Failed to compile with DXC");
 
 			CComPtr<IDxcBlobUtf8> errors = nullptr;
 			DXC_HR(result->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&errors), nullptr), "Failed to get DXC compile errors");
@@ -321,6 +328,8 @@ namespace vuk {
 			spirv = cinfo.source.data;
 			break;
 		}
+		default:
+			break;
 		}
 
 		spirv_cross::Compiler refl(spirv.data(), spirv.size());
