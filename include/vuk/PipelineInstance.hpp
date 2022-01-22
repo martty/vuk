@@ -30,6 +30,7 @@ namespace vuk {
 			uint32_t non_trivial_raster_state : 1;
 			uint32_t depth_stencil : 1;
 			uint32_t depth_bias : 1;
+			uint32_t depth_bias_enable : 1;
 			uint32_t depth_bounds : 1;
 			uint32_t stencil_state : 1;
 			uint32_t line_width_not_1 : 1;

@@ -1084,6 +1084,7 @@ namespace vuk {
 					assert(rasterization_state->depthBiasClamp == def.depthBiasClamp);
 					assert(rasterization_state->depthBiasSlopeFactor == def.depthBiasSlopeFactor);
 				}
+				records.depth_bias_enable = rasterization_state->depthBiasEnable; // the enable itself is not dynamic state in core
 				if (*rasterization_state != def) {
 					records.non_trivial_raster_state = true;
 					pi.extended_size += sizeof(PipelineInstanceCreateInfo::RasterizationState);

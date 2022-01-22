@@ -918,9 +918,9 @@ namespace vuk {
 				                      .frontFace = (VkFrontFace)rs.frontFace,
 				                      .lineWidth = 1.f };
 		}
+		rasterization_state.depthBiasEnable = cinfo.records.depth_bias_enable;
 		if (cinfo.records.depth_bias) {
 			auto db = read<PipelineInstanceCreateInfo::DepthBias>(data_ptr);
-			rasterization_state.depthBiasEnable = true;
 			rasterization_state.depthBiasClamp = db.depthBiasClamp;
 			rasterization_state.depthBiasConstantFactor = db.depthBiasConstantFactor;
 			rasterization_state.depthBiasSlopeFactor = db.depthBiasSlopeFactor;
