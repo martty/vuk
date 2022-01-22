@@ -77,6 +77,6 @@ namespace vuk {
 	struct BufferCreateInfo {
 		MemoryUsage mem_usage;
 		size_t size;
-		size_t alignment;
+		size_t alignment = 1;
 	};
 } // namespace vuk

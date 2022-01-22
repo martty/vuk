@@ -307,8 +307,9 @@ namespace vuk {
 				rgs_to_run.emplace_back(&control->get_allocator(), rgs[i]);
 			}
 		}
-
-		VUK_DO_OR_RETURN(link_execute_submit(alloc, std::span(rgs_to_run)));
+		if (rgs_to_run.size() != 0) {
+			VUK_DO_OR_RETURN(link_execute_submit(alloc, std::span(rgs_to_run)));
+		}
 
 		std::vector<std::pair<DomainFlags, uint64_t>> waits;
 		for (uint64_t i = 0; i < controls.size(); i++) {
@@ -318,7 +319,9 @@ namespace vuk {
 			}
 			waits.emplace_back(control->initial_domain, control->initial_visibility);
 		}
-		alloc.get_context().wait_for_domains(std::span(waits));
+		if (waits.size() > 0) {
+			alloc.get_context().wait_for_domains(std::span(waits));
+		}
 
 		return { expected_value };
 	}
