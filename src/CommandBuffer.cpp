@@ -822,6 +822,16 @@ namespace vuk {
 		return *this;
 	}
 
+	CommandBuffer& CommandBuffer::memory_barrier(Access src_access, Access dst_access) {
+		VkMemoryBarrier mb{ .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER };
+		auto src_use = to_use(src_access);
+		auto dst_use = to_use(dst_access);
+		mb.srcAccessMask = is_read_access(src_use) ? 0 : (VkAccessFlags)src_use.access;
+		mb.dstAccessMask = (VkAccessFlags)dst_use.access;
+		vkCmdPipelineBarrier(command_buffer, (VkPipelineStageFlags)src_use.stages, (VkPipelineStageFlags)dst_use.stages, {}, 1, &mb, 0, nullptr, 0, nullptr);
+		return *this;
+	}
+
 	CommandBuffer& CommandBuffer::image_barrier(Name src, vuk::Access src_acc, vuk::Access dst_acc, uint32_t mip_level, uint32_t level_count) {
 		VUK_EARLY_RET();
 		assert(rg);
