@@ -20,6 +20,7 @@ namespace vuk {
 		case eColorRW:
 		case eDepthStencilRW:
 		case eFragmentWrite:
+		case eFragmentRW:
 		case eTransferWrite:
 		case eComputeWrite:
 		case eComputeRW:
@@ -41,6 +42,7 @@ namespace vuk {
 		case eDepthStencilRead:
 		case eDepthStencilRW:
 		case eFragmentRead:
+		case eFragmentRW:
 		case eFragmentSampled:
 		case eTransferRead:
 		case eComputeRead:
@@ -78,7 +80,11 @@ namespace vuk {
 		case eFragmentSampled:
 			return { ia, vuk::PipelineStageFlagBits::eFragmentShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eShaderReadOnlyOptimal };
 		case eFragmentRead:
-			return { ia, vuk::PipelineStageFlagBits::eFragmentShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eShaderReadOnlyOptimal };
+			return { ia, vuk::PipelineStageFlagBits::eFragmentShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eGeneral };
+		case eFragmentWrite:
+			return { ia, vuk::PipelineStageFlagBits::eFragmentShader, vuk::AccessFlagBits::eShaderWrite, vuk::ImageLayout::eGeneral };
+		case eFragmentRW:
+			return { ia, vuk::PipelineStageFlagBits::eFragmentShader, vuk::AccessFlagBits::eShaderRead | vuk::AccessFlagBits::eShaderWrite, vuk::ImageLayout::eGeneral };
 
 		case eTransferRead:
 			return { ia, vuk::PipelineStageFlagBits::eTransfer, vuk::AccessFlagBits::eTransferRead, vuk::ImageLayout::eTransferSrcOptimal };
@@ -99,7 +105,7 @@ namespace vuk {
 		case eAttributeRead:
 			return { ia, vuk::PipelineStageFlagBits::eVertexInput, vuk::AccessFlagBits::eVertexAttributeRead, vuk::ImageLayout::eGeneral /* ignored */ };
 		case eVertexRead:
-			return { ia, vuk::PipelineStageFlagBits::eVertexShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eGeneral /* ignored */ };
+			return { ia, vuk::PipelineStageFlagBits::eVertexShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eGeneral };
 		case eIndexRead:
 			return { ia, vuk::PipelineStageFlagBits::eVertexInput, vuk::AccessFlagBits::eIndexRead, vuk::ImageLayout::eGeneral /* ignored */ };
 		case eIndirectRead:

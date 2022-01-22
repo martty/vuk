@@ -930,6 +930,7 @@ namespace vuk {
 		eFragmentSampled,
 		eFragmentRead,
 		eFragmentWrite, // written using image store
+		eFragmentRW,
 		eTransferRead,
 		eTransferWrite,
 		eComputeRead,
