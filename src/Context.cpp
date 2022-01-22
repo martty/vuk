@@ -971,8 +971,10 @@ namespace vuk {
 		uint8_t num_viewports = 1;
 		if (cinfo.records.viewports) {
 			num_viewports = read<uint8_t>(data_ptr);
-			viewports = reinterpret_cast<const VkViewport*>(data_ptr);
-			data_ptr += num_viewports * sizeof(VkViewport);
+			if (!(cinfo.dynamic_state_flags & vuk::DynamicStateFlagBits::eViewport)) {
+				viewports = reinterpret_cast<const VkViewport*>(data_ptr);
+				data_ptr += num_viewports * sizeof(VkViewport);
+			}
 		}
 
 		// SCISSORS
@@ -980,8 +982,10 @@ namespace vuk {
 		uint8_t num_scissors = 1;
 		if (cinfo.records.scissors) {
 			num_scissors = read<uint8_t>(data_ptr);
-			scissors = reinterpret_cast<const VkRect2D*>(data_ptr);
-			data_ptr += num_scissors * sizeof(VkRect2D);
+			if (!(cinfo.dynamic_state_flags & vuk::DynamicStateFlagBits::eScissor)) {
+				scissors = reinterpret_cast<const VkRect2D*>(data_ptr);
+				data_ptr += num_scissors * sizeof(VkRect2D);
+			}
 		}
 
 		VkPipelineViewportStateCreateInfo viewport_state{ VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO };

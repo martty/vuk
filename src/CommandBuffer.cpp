@@ -83,6 +83,7 @@ namespace vuk {
 	CommandBuffer& CommandBuffer::set_viewport(unsigned index, Viewport vp) {
 		VUK_EARLY_RET();
 		if (viewports.size() < (index + 1)) {
+			assert(index + 1 <= VUK_MAX_VIEWPORTS);
 			viewports.resize(index + 1);
 		}
 		viewports[index] = vp;
@@ -130,6 +131,7 @@ namespace vuk {
 			vp.extent.height = static_cast<int32_t>(area._relative.height * fb_dimensions.height);
 		}
 		if (scissors.size() < (index + 1)) {
+			assert(index + 1 <= VUK_MAX_SCISSORS);
 			scissors.resize(index + 1);
 		}
 		scissors[index] = vp;
@@ -1116,18 +1118,28 @@ namespace vuk {
 				pi.extended_size += sizeof(PipelineInstanceCreateInfo::Multisample);
 			}
 
-			if (rasterization && !(dynamic_state_flags & DynamicStateFlagBits::eViewport)) {
-				assert(viewports.size() > 0 && "If a pass has a depth/stencil or color attachment, you must set at least one viewport.");
-				records.viewports = true;
-				pi.extended_size += sizeof(uint8_t);
-				pi.extended_size += (uint16_t)viewports.size() * sizeof(VkViewport);
+			if (rasterization) {
+				if (viewports.size() > 0) {
+					records.viewports = true;
+					pi.extended_size += sizeof(uint8_t);
+					if (!(dynamic_state_flags & DynamicStateFlagBits::eViewport)) {
+						pi.extended_size += (uint16_t)viewports.size() * sizeof(VkViewport);
+					}
+				} else if (!(dynamic_state_flags & DynamicStateFlagBits::eViewport)) {
+					assert("If a pass has a depth/stencil or color attachment, you must set at least one viewport.");
+				}
 			}
 
-			if (rasterization && !(dynamic_state_flags & DynamicStateFlagBits::eScissor)) {
-				assert(scissors.size() > 0 && "If a pass has a depth/stencil or color attachment, you must set at least one scissor.");
-				records.scissors = true;
-				pi.extended_size += sizeof(uint8_t);
-				pi.extended_size += (uint16_t)scissors.size() * sizeof(VkRect2D);
+			if (rasterization) {
+				if (scissors.size() > 0) {
+					records.scissors = true;
+					pi.extended_size += sizeof(uint8_t);
+					if (!(dynamic_state_flags & DynamicStateFlagBits::eScissor)) {
+						pi.extended_size += (uint16_t)scissors.size() * sizeof(VkRect2D);
+					}
+				} else if (!(dynamic_state_flags & DynamicStateFlagBits::eScissor)) {
+					assert("If a pass has a depth/stencil or color attachment, you must set at least one scissor.");
+				}
 			}
 			// small buffer optimization:
 			// if the extended data fits, then we put it inline in the key
@@ -1222,17 +1234,21 @@ namespace vuk {
 				write(data_ptr, ms);
 			}
 
-			if (viewports.size() > 0 && !(dynamic_state_flags & DynamicStateFlagBits::eViewport)) {
+			if (viewports.size() > 0) {
 				write<uint8_t>(data_ptr, (uint8_t)viewports.size());
-				for (const auto& vp : viewports) {
-					write(data_ptr, vp);
+				if (!(dynamic_state_flags & DynamicStateFlagBits::eViewport)) {
+					for (const auto& vp : viewports) {
+						write(data_ptr, vp);
+					}
 				}
 			}
 
-			if (scissors.size() > 0 && !(dynamic_state_flags & DynamicStateFlagBits::eScissor)) {
+			if (scissors.size() > 0) {
 				write<uint8_t>(data_ptr, (uint8_t)scissors.size());
-				for (const auto& sc : scissors) {
-					write(data_ptr, sc);
+				if (!(dynamic_state_flags & DynamicStateFlagBits::eScissor)) {
+					for (const auto& sc : scissors) {
+						write(data_ptr, sc);
+					}
 				}
 			}
 
