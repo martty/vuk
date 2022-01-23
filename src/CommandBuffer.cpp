@@ -605,7 +605,7 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::clear_image(Name src, Clear c) {
 		VUK_EARLY_RET();
-		// TODO: depth images
+
 		assert(rg);
 		auto res = rg->get_resource_image(src, current_pass);
 		if (!res) {
@@ -623,12 +623,18 @@ namespace vuk {
 		auto layout = *res_gl ? ImageLayout::eGeneral : ImageLayout::eTransferDstOptimal;
 
 		VkImageSubresourceRange isr = {};
-		isr.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		auto aspect = format_to_aspect((Format)res->description.format);
+		isr.aspectMask = (VkImageAspectFlags)aspect;
 		isr.baseArrayLayer = 0;
 		isr.layerCount = VK_REMAINING_ARRAY_LAYERS;
 		isr.baseMipLevel = 0;
 		isr.levelCount = VK_REMAINING_MIP_LEVELS;
-		vkCmdClearColorImage(command_buffer, res->image, (VkImageLayout)layout, &c.c.color, 1, &isr);
+
+		if (aspect == ImageAspectFlagBits::eColor) {
+			vkCmdClearColorImage(command_buffer, res->image, (VkImageLayout)layout, &c.c.color, 1, &isr);
+		} else if (aspect & (ImageAspectFlagBits::eDepth | ImageAspectFlagBits::eStencil)) {
+			vkCmdClearDepthStencilImage(command_buffer, res->image, (VkImageLayout)layout, &c.c.depthStencil, 1, &isr);
+		}
 
 		return *this;
 	}
