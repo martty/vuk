@@ -348,6 +348,7 @@ void vuk::Program::append(const Program& o) {
 	}
 
 	stages |= o.stages;
+	local_size = o.local_size;
 }
 
 size_t std::hash<vuk::ShaderModuleCreateInfo>::operator()(vuk::ShaderModuleCreateInfo const& x) const noexcept {
