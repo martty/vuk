@@ -71,6 +71,11 @@ namespace vuk {
 		case eColorResolveRead:
 		case eColorRead:
 			return { ia, vuk::PipelineStageFlagBits::eColorAttachmentOutput, vuk::AccessFlagBits::eColorAttachmentRead, vuk::ImageLayout::eColorAttachmentOptimal };
+		case eDepthStencilRead:
+			return { ia,
+				       vuk::PipelineStageFlagBits::eEarlyFragmentTests | vuk::PipelineStageFlagBits::eLateFragmentTests,
+				       vuk::AccessFlagBits::eDepthStencilAttachmentRead,
+				       vuk::ImageLayout::eDepthStencilAttachmentOptimal };
 		case eDepthStencilRW:
 			return { ia,
 				       vuk::PipelineStageFlagBits::eEarlyFragmentTests | vuk::PipelineStageFlagBits::eLateFragmentTests,
@@ -84,7 +89,9 @@ namespace vuk {
 		case eFragmentWrite:
 			return { ia, vuk::PipelineStageFlagBits::eFragmentShader, vuk::AccessFlagBits::eShaderWrite, vuk::ImageLayout::eGeneral };
 		case eFragmentRW:
-			return { ia, vuk::PipelineStageFlagBits::eFragmentShader, vuk::AccessFlagBits::eShaderRead | vuk::AccessFlagBits::eShaderWrite, vuk::ImageLayout::eGeneral };
+			return {
+				ia, vuk::PipelineStageFlagBits::eFragmentShader, vuk::AccessFlagBits::eShaderRead | vuk::AccessFlagBits::eShaderWrite, vuk::ImageLayout::eGeneral
+			};
 
 		case eTransferRead:
 			return { ia, vuk::PipelineStageFlagBits::eTransfer, vuk::AccessFlagBits::eTransferRead, vuk::ImageLayout::eTransferSrcOptimal };
@@ -173,20 +180,28 @@ namespace vuk {
 	inline Access domain_to_release_access(DomainFlags dst) {
 		auto queue = (DomainFlagBits)(dst & DomainFlagBits::eQueueMask).m_mask;
 		switch (queue) {
-		case DomainFlagBits::eGraphicsQueue: return Access::eReleaseToGraphics;
-		case DomainFlagBits::eComputeQueue: return Access::eReleaseToCompute;
-		case DomainFlagBits::eTransferQueue: return Access::eReleaseToTransfer;
-		default: return Access::eRelease;
+		case DomainFlagBits::eGraphicsQueue:
+			return Access::eReleaseToGraphics;
+		case DomainFlagBits::eComputeQueue:
+			return Access::eReleaseToCompute;
+		case DomainFlagBits::eTransferQueue:
+			return Access::eReleaseToTransfer;
+		default:
+			return Access::eRelease;
 		}
 	}
 
 	inline Access domain_to_acquire_access(DomainFlags dst) {
 		auto queue = (DomainFlagBits)(dst & DomainFlagBits::eQueueMask).m_mask;
 		switch (queue) {
-		case DomainFlagBits::eGraphicsQueue: return Access::eAcquireFromGraphics;
-		case DomainFlagBits::eComputeQueue: return Access::eAcquireFromCompute;
-		case DomainFlagBits::eTransferQueue: return Access::eAcquireFromTransfer;
-		default: return Access::eAcquire;
+		case DomainFlagBits::eGraphicsQueue:
+			return Access::eAcquireFromGraphics;
+		case DomainFlagBits::eComputeQueue:
+			return Access::eAcquireFromCompute;
+		case DomainFlagBits::eTransferQueue:
+			return Access::eAcquireFromTransfer;
+		default:
+			return Access::eAcquire;
 		}
 	}
 
