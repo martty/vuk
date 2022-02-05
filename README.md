@@ -2,6 +2,8 @@
 
 ### **vuk** - A rendergraph-based abstraction for Vulkan
 
+![Discord Banner 2](https://discordapp.com/api/guilds/939539624039186432/widget.png?style=banner2)
+
 ### Quick Start
 1. Grab the vuk repository
 2. Compile the examples
@@ -22,12 +24,12 @@ cmake --build .
 (if building with a multi-config generator, do not make the `debug` folder)
 
 ### Overview of using **vuk**
-3. Initialize your window(s) and Vulkan device
-3. Create a `vuk::Context` object
-4. Each frame:
+1. Initialize your window(s) and Vulkan device
+2. Create a `vuk::Context` object
+3. Each frame:
   1. Each frame, prepare high level description of your rendering, in the form of `vuk::Pass`
   2. Bind concrete resources as inputs and outputs
-  3. Bind managed resources (temporary resources used by the 
+  3. Bind managed resources (temporary resources used by the rendergraph)
   4. Record the execution your rendergraph into a command buffer
   5. Submit and present
 
