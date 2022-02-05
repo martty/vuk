@@ -56,7 +56,6 @@ namespace vuk {
 	} // namespace detail
 
 	struct ResourceUse {
-		vuk::Access original = vuk::eNone;
 		vuk::PipelineStageFlags stages;
 		vuk::AccessFlags access;
 		vuk::ImageLayout layout; // ignored for buffers
