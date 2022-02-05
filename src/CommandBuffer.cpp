@@ -640,9 +640,9 @@ namespace vuk {
 		isr.levelCount = VK_REMAINING_MIP_LEVELS;
 
 		if (aspect == ImageAspectFlagBits::eColor) {
-			vkCmdClearColorImage(command_buffer, res->image, (VkImageLayout)layout, &c.c.color, 1, &isr);
+			vkCmdClearColorImage(command_buffer, res->attachment.image, (VkImageLayout)layout, &c.c.color, 1, &isr);
 		} else if (aspect & (ImageAspectFlagBits::eDepth | ImageAspectFlagBits::eStencil)) {
-			vkCmdClearDepthStencilImage(command_buffer, res->image, (VkImageLayout)layout, &c.c.depthStencil, 1, &isr);
+			vkCmdClearDepthStencilImage(command_buffer, res->attachment.image, (VkImageLayout)layout, &c.c.depthStencil, 1, &isr);
 		}
 
 		return *this;
