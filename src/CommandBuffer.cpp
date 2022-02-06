@@ -839,6 +839,25 @@ namespace vuk {
 		return *this;
 	}
 
+	CommandBuffer& CommandBuffer::copy_buffer(const Buffer& src, const Buffer& dst) {
+		VUK_EARLY_RET();
+
+		assert(src.size == dst.size);
+		if (src.buffer == dst.buffer) {
+			bool overlap_a = src.offset > dst.offset && src.offset < (dst.offset + dst.size);
+			bool overlap_b = dst.offset > src.offset && dst.offset < (src.offset + src.size);
+			assert(!overlap_a && !overlap_b);
+		}
+
+		VkBufferCopy bc{};
+		bc.srcOffset += src.offset;
+		bc.dstOffset += dst.offset;
+		bc.size = src.size;
+
+		vkCmdCopyBuffer(command_buffer, src.buffer, dst.buffer, 1, &bc);
+		return *this;
+	}
+
 	CommandBuffer& CommandBuffer::memory_barrier(Access src_access, Access dst_access) {
 		VkMemoryBarrier mb{ .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER };
 		auto src_use = to_use(src_access);

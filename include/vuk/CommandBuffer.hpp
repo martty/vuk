@@ -392,6 +392,7 @@ namespace vuk {
 		CommandBuffer& copy_buffer_to_image(Name src, Name dst, BufferImageCopy);
 		CommandBuffer& copy_image_to_buffer(Name src, Name dst, BufferImageCopy);
 		CommandBuffer& copy_buffer(Name src, Name dst, size_t size);
+		CommandBuffer& copy_buffer(const Buffer& src, const Buffer& dst);
 
 		// explicit synchronisation
 		CommandBuffer& memory_barrier(Access src_access, Access dst_access);
