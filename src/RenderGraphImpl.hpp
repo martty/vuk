@@ -5,14 +5,6 @@
 #include <vuk/ShortAlloc.hpp>
 
 namespace vuk {
-	struct PartialImageAlias {
-		Name dst;
-		uint32_t base_level;
-		uint32_t level_count;
-		uint32_t base_layer;
-		uint32_t layer_count;
-	};
-
 #define INIT(x) x(decltype(x)::allocator_type(*arena_))
 	struct RGImpl {
 		std::unique_ptr<arena> arena_;

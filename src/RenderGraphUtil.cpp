@@ -45,9 +45,7 @@ namespace vuk {
 
 	PassInfo::PassInfo(arena& arena_, Pass&& p) :
 	    pass(std::move(p)),
-	    INIT2(inputs),
 	    INIT2(input_names),
-	    INIT2(outputs),
 	    INIT2(output_names),
 	    INIT2(write_input_names) {}
 

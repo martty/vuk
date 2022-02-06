@@ -82,6 +82,15 @@ namespace vuk {
 		FutureBase* attached_future = nullptr;
 	};
 
+	struct PartialImageAlias {
+		Name src;
+		Name dst;
+		uint32_t base_level;
+		uint32_t level_count;
+		uint32_t base_layer;
+		uint32_t layer_count;
+	};
+
 	struct BufferInfo {
 		Name name;
 
@@ -100,6 +109,34 @@ namespace vuk {
 		bool is_create = false;
 		AttachmentRPInfo ici;
 		BufferCreateInfo bci;
+		union Subrange {
+			struct Image {
+				uint32_t base_layer = 0;
+				uint32_t base_level = 0;
+
+				uint32_t layer_count = VK_REMAINING_ARRAY_LAYERS;
+				uint32_t level_count = VK_REMAINING_MIP_LEVELS;
+
+				constexpr bool operator==(const Image& o) const {
+					return base_level == o.base_level && level_count == o.level_count && base_layer == o.base_layer && layer_count == o.layer_count;
+				}
+
+				Name combine_name(Name prefix) {
+					std::string suffix = std::string(prefix.to_sv());
+					suffix += "[" + std::to_string(base_layer) + ":" + std::to_string(base_layer + layer_count - 1) + "]";
+					suffix += "[" + std::to_string(base_level) + ":" + std::to_string(base_level + level_count - 1) + "]";
+					return Name(suffix.c_str());
+				}
+
+				bool operator<(const Image& o) const {
+					return std::tie(base_layer, base_level, layer_count, level_count) < std::tie(o.base_layer, o.base_level, o.layer_count, o.level_count);
+				}
+			} image = {};
+			struct Buffer {
+				uint64_t offset = 0;
+				uint64_t size = VK_WHOLE_SIZE;
+			} buffer;
+		} subrange = {};
 
 		Resource(Name n, Type t, Access ia) : name(n), type(t), ia(ia) {}
 		Resource(Name n, Type t, Access ia, Name out_name) : name(n), type(t), ia(ia), out_name(out_name) {}
@@ -115,7 +152,20 @@ namespace vuk {
 			return name == o.name;
 		}
 	};
+} // namespace vuk
 
+namespace std {
+	template<>
+	struct hash<vuk::Resource::Subrange::Image> {
+		size_t operator()(vuk::Resource::Subrange::Image const& x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, x.base_layer, x.base_level, x.layer_count, x.level_count);
+			return h;
+		}
+	};
+}; // namespace std
+
+namespace vuk {
 	ResourceUse to_use(Access acc);
 
 	struct Pass {
@@ -164,7 +214,8 @@ namespace vuk {
 		/// @param old_name
 		void add_alias(Name new_name, Name old_name);
 
-		void add_partial_image_alias(Name new_name, Name old_name, uint32_t base_level, uint32_t level_count, uint32_t base_layer, uint32_t layer_count);
+		/// @brief Reconverge image. Prevents diverged use moving before pre_diverge or after post_diverge.
+		void converge_image(Name pre_diverge, Name post_diverge);
 
 		/// @brief Add a resolve operation from the image resource `ms_name` to image_resource `resolved_name`
 		/// @param resolved_name
@@ -181,8 +232,6 @@ namespace vuk {
 
 		void attach_out(Name, Future<ImageAttachment>& fimg, DomainFlags dst_domain);
 		void attach_out(Name, Future<Buffer>& fbuf, DomainFlags dst_domain);
-
-		void release_to_domain(Name in, Name out, DomainFlagBits dst_domain);
 
 		void attach_managed(Name, Format, Dimension2D, Samples, Clear);
 

@@ -911,7 +911,10 @@ namespace vuk {
 
 	enum Access {
 		eNone,          // as initial use: resource available without synchronization, as final use: resource does not need synchronizing
-		eInfer,         // as final use only: this use must be overwritten/inferred before compiling
+		eInfer,         // as final use only: this use must be overwritten/inferred before compiling (internal)
+		eConsume,		// must be overwritten before compiling: this access consumes this name (internal)
+		eConverge,		// converge previous uses (internal)
+		eManual,		// provided explictly (internal)
 		eClear,         // general clearing
 		eTransferClear, // vkCmdClearXXX
 		eColorRW,
@@ -943,11 +946,11 @@ namespace vuk {
 		eMemoryRead,
 		eMemoryWrite,
 		eMemoryRW,
-		eRelease, // release a resource into a future
+		eRelease, // release a resource into a future (internal)
 		eReleaseToGraphics,
 		eReleaseToCompute,
 		eReleaseToTransfer,
-		eAcquire, // acquire a resource from a future
+		eAcquire, // acquire a resource from a future (internal)
 		eAcquireFromGraphics,
 		eAcquireFromCompute,
 		eAcquireFromTransfer

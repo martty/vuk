@@ -276,6 +276,8 @@ namespace vuk {
 		vuk::Access original = vuk::eNone;
 		vuk::Access high_level_access;
 		ResourceUse use;
+		Resource::Type type;
+		Resource::Subrange subrange;
 		PassInfo* pass = nullptr;
 	};
 
@@ -293,12 +295,10 @@ namespace vuk {
 		std::vector<std::pair<DomainFlagBits, PassInfo*>> waits;
 		std::vector<std::pair<DomainFlagBits, uint64_t>> absolute_waits;
 		bool is_waited_on = false;
-		std::vector<Resource, short_alloc<Resource, 16>> inputs;
 		uint32_t bloom_resolved_inputs = 0;
 		std::vector<Name, short_alloc<Name, 16>> input_names;
 		uint32_t bloom_outputs = 0;
 		uint32_t bloom_write_inputs = 0;
-		std::vector<Resource, short_alloc<Resource, 16>> outputs;
 		std::vector<Name, short_alloc<Name, 16>> output_names;
 		std::vector<Name, short_alloc<Name, 16>> write_input_names;
 

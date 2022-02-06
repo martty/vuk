@@ -65,20 +65,61 @@ namespace vuk {
 	inline Future<ImageAttachment> transition(Future<ImageAttachment> image, Access dst_access) {
 		auto& allocator = image.get_allocator();
 		std::unique_ptr<RenderGraph> rgp = std::make_unique<RenderGraph>();
-		rgp->add_pass({
-			.name = "TRANSITION",
-			.execute_on = DomainFlagBits::eDevice,
-			.resources = {"_src"_image >> dst_access >> "_src+"} });
+		rgp->add_pass({ .name = "TRANSITION", .execute_on = DomainFlagBits::eDevice, .resources = { "_src"_image >> dst_access >> "_src+" } });
 		rgp->attach_in("_src", std::move(image), Access::eNone);
 		return { allocator, std::move(rgp), "_src+" };
 	}
 
-	/*inline Future<ImageAttachment> acquire_to_queue(Future<ImageAttachment> image, DomainFlagBits dst_domain) {
+	inline Future<ImageAttachment> generate_mips(Future<ImageAttachment> image, uint32_t base_mip, uint32_t num_mips) {
 		auto& allocator = image.get_allocator();
+
 		std::unique_ptr<RenderGraph> rgp = std::make_unique<RenderGraph>();
+		std::vector<PartialImageAlias> named_mips;
+		for (uint32_t miplevel = base_mip + 1; miplevel < (base_mip + num_mips); miplevel++) {
+			uint32_t dmiplevel = miplevel - base_mip;
+			Name mip_src = Name(std::to_string(miplevel - 1));
+			Name mip_dst = Name(std::to_string(miplevel));
+			Name src = Name("_src");
+			if (miplevel != base_mip + 1) {
+				src = src.append("p");
+			}
+			Resource src_res(src, Resource::Type::eImage, Access::eTransferRead);
+			src_res.subrange.image.base_level = miplevel - 1;
+			src_res.subrange.image.level_count = 1;
+			Resource dst_res("_src", Resource::Type::eImage, Access::eTransferWrite, "_srcp");
+			dst_res.subrange.image.base_level = miplevel;
+			dst_res.subrange.image.level_count = 1;
+			rgp->add_pass({ .name = Name("MIP").append(mip_dst),
+			                .execute_on = DomainFlagBits::eGraphicsOnGraphics,
+			                .resources = { src_res, dst_res },
+			                .execute = [src, dmiplevel, miplevel](CommandBuffer& command_buffer) {
+				                ImageBlit blit;
+				                auto src_ia = *command_buffer.get_resource_image_attachment(src);
+				                auto dim = src_ia.extent;
+				                assert(dim.sizing == Sizing::eAbsolute);
+				                auto extent = dim.extent;
+				                blit.srcSubresource.aspectMask = format_to_aspect(src_ia.format);
+				                blit.srcSubresource.baseArrayLayer = src_ia.base_layer;
+				                blit.srcSubresource.layerCount = src_ia.layer_count;
+				                blit.srcSubresource.mipLevel = miplevel - 1;
+				                blit.srcOffsets[0] = Offset3D{ 0 };
+				                blit.srcOffsets[1] = Offset3D{ std::max((int32_t)extent.width >> (dmiplevel - 1), 1),
+					                                             std::max((int32_t)extent.height >> (dmiplevel - 1), 1),
+					                                             (int32_t)1 };
+				                blit.dstSubresource = blit.srcSubresource;
+				                blit.dstSubresource.mipLevel = miplevel;
+				                blit.dstOffsets[0] = Offset3D{ 0 };
+				                blit.dstOffsets[1] =
+				                    Offset3D{ std::max((int32_t)extent.width >> (dmiplevel), 1), std::max((int32_t)extent.height >> (dmiplevel), 1), (int32_t)1 };
+				                command_buffer.blit_image(src, "_srcp", blit, Filter::eLinear);
+			                } });
+		}
+
+		rgp->converge_image("_src", "_src+");
+
 		rgp->attach_in("_src", std::move(image), Access::eNone);
 		return { allocator, std::move(rgp), "_src+" };
-	}*/
+	}
 
 	/// @brief Allocates & fills a buffer with explicitly managed lifetime
 	/// @param mem_usage Where to allocate the buffer (host visible buffers will be automatically mapped)
@@ -103,7 +144,8 @@ namespace vuk {
 		return { std::move(buf), host_data_to_buffer(allocator, domain, b, data) };
 	}
 
-	inline std::pair<Texture, Future<ImageAttachment>> create_texture(Allocator& allocator, Format format, Extent3D extent, void* data, bool generate_mips) {
+	inline std::pair<Texture, Future<ImageAttachment>>
+	create_texture(Allocator& allocator, Format format, Extent3D extent, void* data, bool should_generate_mips) {
 		ImageCreateInfo ici;
 		ici.format = format;
 		ici.extent = extent;
@@ -111,19 +153,17 @@ namespace vuk {
 		ici.initialLayout = ImageLayout::eUndefined;
 		ici.tiling = ImageTiling::eOptimal;
 		ici.usage = ImageUsageFlagBits::eTransferRead | ImageUsageFlagBits::eTransferWrite | ImageUsageFlagBits::eSampled;
-		ici.mipLevels = generate_mips ? (uint32_t)log2f((float)std::max(extent.width, extent.height)) + 1 : 1;
+		ici.mipLevels = should_generate_mips ? (uint32_t)log2f((float)std::max(extent.width, extent.height)) + 1 : 1;
 		ici.arrayLayers = 1;
 		auto tex = allocator.get_context().allocate_texture(allocator, ici);
 
 		auto upload_fut = host_data_to_image(allocator, DomainFlagBits::eTransferQueue, ImageAttachment::from_texture(tex), data);
+		auto mipgen_fut = should_generate_mips ? generate_mips(std::move(upload_fut), 0, ici.mipLevels) : std::move(upload_fut);
 		std::unique_ptr<RenderGraph> rgp = std::make_unique<RenderGraph>();
-		rgp->add_pass({
-			.name = "TRANSITION",
-			.execute_on = DomainFlagBits::eGraphicsQueue,
-			.resources = {"_src"_image >> Access::eFragmentSampled >> "_src+"} });
-		rgp->attach_in("_src", std::move(upload_fut), Access::eNone);
+		rgp->add_pass({ .name = "TRANSITION", .execute_on = DomainFlagBits::eGraphicsQueue, .resources = { "_src"_image >> Access::eFragmentSampled >> "_src+" } });
+		rgp->attach_in("_src", std::move(mipgen_fut), Access::eNone);
 		auto on_gfx = Future<ImageAttachment>{ allocator, std::move(rgp), "_src+" };
-		
+
 		return { std::move(tex), std::move(on_gfx) };
 	}
 } // namespace vuk

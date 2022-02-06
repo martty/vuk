@@ -3,7 +3,14 @@
 #include "RenderGraphUtil.hpp"
 #include "vuk/Context.hpp"
 #include "vuk/Exception.hpp"
+#include <set>
 #include <unordered_set>
+
+// intrinsics
+namespace {
+	void diverge(vuk::CommandBuffer&) {}
+	void converge(vuk::CommandBuffer&) {}
+} // namespace
 
 namespace vuk {
 	RenderGraph::RenderGraph() : impl(new RGImpl) {}
@@ -60,41 +67,56 @@ namespace vuk {
 		}
 	}
 
-	/*
-	* partial aliases: we allow late binding to an image subresource (a span of mips & a span of layers)
-	* both mips and layers may be "all"
-	* for graph ordering, they are independent from the parent resource
-	* 
-	* partial images aliases are materialized into imageviews by the rendergraph
-	*/
+	void RenderGraph::converge_image(Name pre_diverge, Name post_diverge) {
+		// pass that consumes pre_diverge name
+		add_pass({ .name = pre_diverge.append("_DIVERGE"),
+		           .resources = { Resource{ pre_diverge, Resource::Type::eImage, Access::eConsume, pre_diverge.append("d") } },
+		           .execute = diverge });
 
-
-	void RenderGraph::add_partial_image_alias(Name new_name, Name old_name, uint32_t base_level, uint32_t level_count, uint32_t base_layer, uint32_t layer_count) {
-		assert(new_name != old_name);
-		impl->partial_image_aliases.emplace(new_name, PartialImageAlias{ old_name, base_level, level_count, base_layer, layer_count });
+		add_pass({ .name = post_diverge.append("_CONVERGE"),
+		           .resources = { Resource{ pre_diverge.append("d"), Resource::Type::eImage, Access::eConverge, post_diverge },  },
+		           .execute = converge });
 	}
 
 	// determine rendergraph inputs and outputs, and resources that are neither
 	void RenderGraph::build_io() {
 		for (auto& pif : impl->passes) {
-			for (auto& res : pif.pass.resources) {
-				auto hashed_out_name = ::hash::fnv1a::hash(res.out_name.to_sv().data(), res.out_name.to_sv().size(), hash::fnv1a::default_offset_basis);
-				auto hashed_in_name = ::hash::fnv1a::hash(res.name.to_sv().data(), res.name.to_sv().size(), hash::fnv1a::default_offset_basis);
-
-				pif.inputs.emplace_back(res);
-				pif.input_names.emplace_back(res.name);
-				pif.bloom_resolved_inputs |= hashed_in_name;
-				if (!res.out_name.is_invalid()) {
-					pif.bloom_outputs |= hashed_out_name;
-					pif.output_names.emplace_back(res.out_name);
+			for (Resource& res : pif.pass.resources) {
+				Name in_name;
+				Name out_name;
+				if (res.type == Resource::Type::eImage && res.subrange.image != Resource::Subrange::Image{}) {
+					in_name = res.subrange.image.combine_name(res.name);
+					out_name = res.out_name.is_invalid() ? Name{} : res.subrange.image.combine_name(res.out_name);
+				} else {
+					in_name = res.name;
+					out_name = res.out_name;
 				}
 
-				if (is_write_access(res.ia) || is_acquire(res.ia) || is_release(res.ia)) {
-					assert(!impl->poisoned_names.contains(res.name)); // we have poisoned this name because a write has already consumed it
+				auto hashed_in_name = ::hash::fnv1a::hash(in_name.to_sv().data(), res.name.to_sv().size(), hash::fnv1a::default_offset_basis);
+				auto hashed_out_name = ::hash::fnv1a::hash(out_name.to_sv().data(), res.out_name.to_sv().size(), hash::fnv1a::default_offset_basis);
+
+				pif.input_names.emplace_back(in_name);
+				pif.bloom_resolved_inputs |= hashed_in_name;
+
+				if (!res.out_name.is_invalid()) {
+					pif.bloom_outputs |= hashed_out_name;
+					pif.output_names.emplace_back(out_name);
+				}
+
+				if (is_write_access(res.ia) || is_acquire(res.ia) || is_release(res.ia) || res.ia == Access::eConsume || res.ia == Access::eConverge) {
+					assert(!impl->poisoned_names.contains(in_name)); // we have poisoned this name because a write has already consumed it
 					pif.bloom_write_inputs |= hashed_in_name;
-					pif.write_input_names.emplace_back(res.name);
-					pif.outputs.emplace_back(res);
-					impl->poisoned_names.emplace(res.name);
+					pif.write_input_names.emplace_back(in_name);
+					impl->poisoned_names.emplace(in_name);
+				}
+
+				// for image subranges, we additionally add a dependency on the diverged original resource
+				// this resource is created by the diverged pass and consumed by the converge pass, thereby constraining all the passes who refer to these
+				if (res.type == Resource::Type::eImage && res.subrange.image != Resource::Subrange::Image{}) {
+					auto hashed_name = ::hash::fnv1a::hash(res.name.append("d").to_sv().data(), res.name.to_sv().size(), hash::fnv1a::default_offset_basis);
+
+					pif.input_names.emplace_back(res.name.append("d"));
+					pif.bloom_resolved_inputs |= hashed_name;
 				}
 			}
 		}
@@ -206,7 +228,7 @@ namespace vuk {
 		// use chains pass
 		impl->use_chains.clear();
 		for (PassInfo& passinfo : impl->passes) {
-			for (auto& res : passinfo.pass.resources) {
+			for (Resource& res : passinfo.pass.resources) {
 				// for read or write, we add source to use chain
 				auto resolved_name = impl->resolve_name(res.name);
 				auto it = impl->use_chains.find(resolved_name);
@@ -219,7 +241,7 @@ namespace vuk {
 					// propagate subsequent use back onto the acquire
 					chain.back().pass->domain = passinfo.domain;
 					chain.back().high_level_access = Access::eNone;
-					chain.emplace_back(UseRef{ res.ia, res.ia, {}, &passinfo });
+					chain.emplace_back(UseRef{ res.ia, res.ia, {}, res.type, res.subrange, &passinfo });
 				} else if (chain.size() > 0 && is_release(chain.back().original) && is_acquire(res.ia)) {
 					// release-acquire pair
 					// mark these passes to be excluded
@@ -229,15 +251,15 @@ namespace vuk {
 				} else if (is_release(res.ia)) { // release of resource - this must happen on the previous use domain
 					assert(chain.size() > 0);      // release cannot head a use chain
 					// only release -> propagate previous use onto release
-					chain.emplace_back(UseRef{ res.ia, Access::eNone, {}, &passinfo });
+					chain.emplace_back(UseRef{ res.ia, Access::eNone, {}, res.type, res.subrange, &passinfo });
+				} else if (res.ia == Access::eConsume) { // is not a use
 				} else {
-					chain.emplace_back(UseRef{ res.ia, res.ia, {}, &passinfo });
+					chain.emplace_back(UseRef{ res.ia, res.ia, {}, res.type, res.subrange, &passinfo });
 				}
 			}
 		}
 
 		// queue inference pass
-		// we also lower high level accesses to usages in this pass
 		for (auto& [name, chain] : impl->use_chains) {
 			DomainFlags last_domain = DomainFlagBits::eDevice;
 
@@ -252,9 +274,6 @@ namespace vuk {
 				    (domain == DomainFlagBits::eDevice || domain == DomainFlagBits::eAny)) {
 					use_ref.pass->domain = last_domain;
 				}
-
-				// lower high level access
-				use_ref.use = to_use(use_ref.high_level_access);
 			}
 			last_domain = DomainFlagBits::eDevice;
 			// backward inference
@@ -339,7 +358,7 @@ namespace vuk {
 					auto& last_pass = rpi.subpasses.back().passes[0];
 					// if the pass has the same inputs and outputs, we execute them on the
 					// same subpass
-					if (last_pass->inputs == p->inputs && last_pass->outputs == p->outputs) {
+					if (last_pass->input_names == p->input_names && last_pass->output_names == p->output_names) {
 						p->subpass = last_pass->subpass;
 						rpi.subpasses.back().passes.push_back(p);
 						// potentially upgrade to secondary cbufs
@@ -550,31 +569,6 @@ namespace vuk {
 		           .signal = fbuf.control.get() });
 	}
 
-	void RenderGraph::release_to_domain(Name in, Name out, DomainFlagBits dst_domain) {
-		/*	Access acc;
-		  switch (dst_domain) {
-		  case vuk::DomainFlagBits::eGraphicsQueue:
-		    acc = eReleaseToGraphics;
-		    break;
-		  case vuk::DomainFlagBits::eComputeQueue:
-		    acc = eReleaseToCompute;
-		    break;
-		  case vuk::DomainFlagBits::eTransferQueue:
-		    acc = eReleaseToTransfer;
-		    break;
-		  default:
-		    assert(0);
-		    break;
-		  }
-
-		  add_pass({
-		    .name = in.append("_RELEASE_2_DOMAIN"),
-		    .resources = {
-		      Resource{in, Resource::Type::eImage, acc, out}
-		    },
-		    });*/
-	}
-
 	void sync_bound_attachment_to_renderpass(AttachmentRPInfo& rp_att, AttachmentRPInfo& attachment_info) {
 		rp_att.description.format = attachment_info.description.format;
 		rp_att.attachment = attachment_info.attachment;
@@ -611,15 +605,17 @@ namespace vuk {
 			auto& chain = chain_it->second;
 			if (is_acquire(chain[0].original)) {
 			} else {
-				chain.insert(chain.begin(), UseRef{ vuk::eNone, vuk::eNone, attachment_info.initial, nullptr });
+				chain.insert(chain.begin(), UseRef{ vuk::eManual, vuk::eManual, attachment_info.initial, Resource::Type::eImage, {}, nullptr });
 			}
 			if (is_release(chain.back().original)) {
 			} else {
-				chain.emplace_back(UseRef{ vuk::eNone, vuk::eNone, attachment_info.final, nullptr });
+				chain.emplace_back(UseRef{ vuk::eManual, vuk::eManual, attachment_info.final, Resource::Type::eImage, {}, nullptr });
 			}
 
 			ImageAspectFlags aspect = format_to_aspect((Format)attachment_info.description.format);
 
+			bool is_diverged = false;
+			ResourceUse original;
 			for (size_t i = 0; i < chain.size() - 1; i++) {
 				auto& left = chain[i];
 				auto& right = chain[i + 1];
@@ -627,8 +623,164 @@ namespace vuk {
 				DomainFlags left_domain = left.pass ? left.pass->domain : DomainFlagBits::eNone;
 				DomainFlags right_domain = right.pass ? right.pass->domain : DomainFlagBits::eNone;
 
-				auto src_stages = left.use.stages;
-				auto dst_stages = right.use.stages;
+				if (right.high_level_access == Access::eConverge) {
+					continue;
+				}
+				if (left.high_level_access == Access::eConverge) {
+					auto dst_use = to_use(right.high_level_access);
+					auto& left_rp = impl->rpis[left.pass->render_pass_index];
+					ResourceUse original;
+					// we need to reconverge this diverged image
+					// to do this we will walk backwards, and any use we find that is diverged, we will converge it into the dst_access
+					std::unordered_set<Resource::Subrange::Image> layer_level_visited;
+					for (int64_t j = i - 1; j >= 0; j--) {
+						auto& ch = chain[j];
+						if (ch.subrange.image != Resource::Subrange::Image{}) { // diverged
+							// check if we have already visited these layer x level combinations
+							if (auto [iter, new_elem] = layer_level_visited.emplace(ch.subrange.image); !new_elem) {
+								continue;
+							}
+							// if not, then emit convergence barrier
+							VkImageMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+							ImageBarrier ib{};
+							barrier.srcAccessMask = is_read_access(ch.use) ? 0 : (VkAccessFlags)ch.use.access;
+							barrier.dstAccessMask = (VkAccessFlags)dst_use.access;
+							barrier.oldLayout = (VkImageLayout)ch.use.layout;
+							barrier.newLayout = (VkImageLayout)dst_use.layout;
+							barrier.subresourceRange.aspectMask = (VkImageAspectFlags)aspect;
+							barrier.subresourceRange.baseArrayLayer = ch.subrange.image.base_layer;
+							barrier.subresourceRange.baseMipLevel = ch.subrange.image.base_level;
+							barrier.subresourceRange.layerCount = ch.subrange.image.layer_count;
+							barrier.subresourceRange.levelCount = ch.subrange.image.level_count;
+							barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+							barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+							ib.src = ch.use.stages;
+							ib.dst = dst_use.stages;
+							ib.barrier = barrier;
+							ib.image = name;
+							// attach this barrier to the end of subpass or end of renderpass
+							if (left_rp.framebufferless) {
+								left_rp.subpasses[left.pass->subpass].post_barriers.push_back(ib);
+							} else {
+								left_rp.post_barriers.push_back(ib);
+							}
+						} else {
+							// found the last converged use, remember the use there and stop looping
+							original = ch.use;
+							break;
+						}
+					}
+					std::vector<Resource::Subrange::Image> ll_vec;
+					std::copy(layer_level_visited.begin(), layer_level_visited.end(), std::back_inserter(ll_vec));
+					// sort layers/levels
+					std::sort(ll_vec.begin(), ll_vec.end());
+					if (ll_vec[0].base_layer > 0) {
+						// emit a global pre-barrier: all full layers before the first visited
+						assert("NYI"); // TODO: non-zero based layers
+					}
+					// merge into ranges
+					for (uint64_t i = 1; i < ll_vec.size();) {
+						auto& prev = ll_vec[i - 1];
+						auto& curr = ll_vec[i];
+						// TODO: not doing layer merging
+						assert(prev.base_layer == curr.base_layer && prev.layer_count == curr.layer_count);
+						if (prev.base_level + prev.level_count == curr.base_level) { // merge
+							prev.level_count += curr.level_count;
+							ll_vec.erase(ll_vec.begin() + i);
+						} else { // no merge
+							i++;
+						}
+					}
+
+					for (auto& ll : ll_vec) {
+						// TODO: not emitting pre-post barriers yet
+						continue;
+						if (ll.base_level > 0) { // pre-barrier: all mips before first
+							VkImageMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+							ImageBarrier ib{};
+							barrier.srcAccessMask = is_read_access(original) ? 0 : (VkAccessFlags)original.access;
+							barrier.dstAccessMask = (VkAccessFlags)dst_use.access;
+							barrier.oldLayout = (VkImageLayout)original.layout;
+							barrier.newLayout = (VkImageLayout)dst_use.layout;
+							barrier.subresourceRange.aspectMask = (VkImageAspectFlags)aspect;
+							barrier.subresourceRange.baseArrayLayer = ll.base_layer;
+							barrier.subresourceRange.baseMipLevel = 0;
+							barrier.subresourceRange.layerCount = ll.layer_count;
+							barrier.subresourceRange.levelCount = ll.base_level;
+							barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+							barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+							ib.src = original.stages;
+							ib.dst = dst_use.stages;
+							ib.barrier = barrier;
+							ib.image = name;
+							// attach this barrier to the end of subpass or end of renderpass
+							if (left_rp.framebufferless) {
+								left_rp.subpasses[left.pass->subpass].post_barriers.push_back(ib);
+							} else {
+								left_rp.post_barriers.push_back(ib);
+							}
+						}
+						// post-barrier: remaining mips after last
+						VkImageMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+						ImageBarrier ib{};
+						barrier.srcAccessMask = is_read_access(original) ? 0 : (VkAccessFlags)original.access;
+						barrier.dstAccessMask = (VkAccessFlags)dst_use.access;
+						barrier.oldLayout = (VkImageLayout)original.layout;
+						barrier.newLayout = (VkImageLayout)dst_use.layout;
+						barrier.subresourceRange.aspectMask = (VkImageAspectFlags)aspect;
+						barrier.subresourceRange.baseArrayLayer = ll.base_layer;
+						barrier.subresourceRange.baseMipLevel = ll.level_count;
+						barrier.subresourceRange.layerCount = ll.layer_count;
+						barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
+						barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+						barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+						ib.src = original.stages;
+						ib.dst = dst_use.stages;
+						ib.barrier = barrier;
+						ib.image = name;
+						// attach this barrier to the end of subpass or end of renderpass
+						if (left_rp.framebufferless) {
+							left_rp.subpasses[left.pass->subpass].post_barriers.push_back(ib);
+						} else {
+							left_rp.post_barriers.push_back(ib);
+						}
+					}
+					// emit a global post-barrier: remaining full layers after the last visited
+					if (ll_vec[ll_vec.size() - 1].layer_count != VK_REMAINING_ARRAY_LAYERS) {
+						assert("NYI"); // TODO: non-full layers
+					}
+					is_diverged = true;
+					continue;
+				}
+
+				// first divergence
+				if (left.subrange.image == Resource::Subrange::Image{} && right.subrange.image != Resource::Subrange::Image{}) {
+					is_diverged = true;
+				}
+
+				ResourceUse prev_use;
+				prev_use = left.use = left.high_level_access == Access::eManual ? left.use : to_use(left.high_level_access);
+				ResourceUse next_use;
+				next_use = right.use = right.high_level_access == Access::eManual ? right.use : to_use(right.high_level_access);
+				auto subrange = right.subrange.image;
+
+				auto src_stages = prev_use.stages;
+				auto dst_stages = next_use.stages;
+
+				// if the image is diverged, then we need to find a matching previous use in the chain - either a use whose range intersects or the undiverged use
+				if (is_diverged) {
+					for (int64_t j = i; j >= 0; j--) {
+						auto& ch = chain[j];
+						if (ch.subrange.image == right.subrange.image) { // TODO: we want subset not equality
+							prev_use = ch.use;
+							break;
+						}
+						if (ch.subrange.image == Resource::Subrange::Image{}) { // TODO: subset covers this case
+							prev_use = ch.use;
+							break;
+						}
+					}
+				}
 
 				if (is_acquire(left.original)) {
 					// acquire without release - must be first in chain
@@ -640,8 +792,8 @@ namespace vuk {
 
 						left_domain = wait_fut->initial_domain;
 						src_stages = wait_fut->last_use.stages;
-						left.use.layout = wait_fut->last_use.layout;
-						left.use.access = wait_fut->last_use.access;
+						prev_use.layout = wait_fut->last_use.layout;
+						prev_use.access = wait_fut->last_use.access;
 					} else {
 						// we are acquiring from a queue
 						DomainFlags src_domain;
@@ -674,9 +826,9 @@ namespace vuk {
 						ImageBarrier acquire_barrier;
 						VkImageMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
 						barrier.srcAccessMask = 0; // ignored
-						barrier.dstAccessMask = (VkAccessFlags)right.use.access;
-						barrier.oldLayout = (VkImageLayout)left.use.layout;
-						barrier.newLayout = (VkImageLayout)right.use.layout;
+						barrier.dstAccessMask = (VkAccessFlags)next_use.access;
+						barrier.oldLayout = (VkImageLayout)prev_use.layout;
+						barrier.newLayout = (VkImageLayout)next_use.layout;
 						barrier.subresourceRange.aspectMask = (VkImageAspectFlags)aspect;
 						barrier.subresourceRange.baseArrayLayer = 0;
 						barrier.subresourceRange.baseMipLevel = 0;
@@ -699,7 +851,7 @@ namespace vuk {
 					if (right.pass->pass.signal) {
 						auto& fut = *right.pass->pass.signal;
 						fut.last_use = QueueResourceUse{
-							left.original, left.use.stages, left.use.access, left.use.layout, (DomainFlagBits)(left_domain & DomainFlagBits::eQueueMask).m_mask
+							left.original, prev_use.stages, prev_use.access, prev_use.layout, (DomainFlagBits)(left_domain & DomainFlagBits::eQueueMask).m_mask
 						};
 						attachment_info.attached_future = &fut;
 					}
@@ -724,10 +876,10 @@ namespace vuk {
 					if (release_to_different_queue) { // release half of QFOT
 						ImageBarrier release_barrier;
 						VkImageMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
-						barrier.srcAccessMask = is_read_access(left.use) ? 0 : (VkAccessFlags)left.use.access;
+						barrier.srcAccessMask = is_read_access(prev_use) ? 0 : (VkAccessFlags)prev_use.access;
 						barrier.dstAccessMask = 0;                          // ignored
-						barrier.oldLayout = (VkImageLayout)left.use.layout; // no layout transition - we don't know
-						barrier.newLayout = (VkImageLayout)left.use.layout;
+						barrier.oldLayout = (VkImageLayout)prev_use.layout; // no layout transition - we don't know
+						barrier.newLayout = (VkImageLayout)prev_use.layout;
 						barrier.subresourceRange.aspectMask = (VkImageAspectFlags)aspect;
 						barrier.subresourceRange.baseArrayLayer = 0;
 						barrier.subresourceRange.baseMipLevel = 0;
@@ -750,22 +902,22 @@ namespace vuk {
 					left.pass->is_waited_on = true;
 					right.pass->waits.emplace_back((DomainFlagBits)(left_domain & DomainFlagBits::eQueueMask).m_mask, left.pass);
 
-					assert(left.use.layout != ImageLayout::ePreinitialized);
-					assert(right.use.layout != ImageLayout::eUndefined);
+					assert(prev_use.layout != ImageLayout::ePreinitialized);
+					assert(next_use.layout != ImageLayout::eUndefined);
 					// all the images are exclusive -> QFOT
 
 					{
 						ImageBarrier release_barrier;
 						VkImageMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
-						barrier.srcAccessMask = is_read_access(left.use) ? 0 : (VkAccessFlags)left.use.access;
+						barrier.srcAccessMask = is_read_access(prev_use) ? 0 : (VkAccessFlags)prev_use.access;
 						barrier.dstAccessMask = 0; // ignored
-						barrier.oldLayout = (VkImageLayout)left.use.layout;
-						barrier.newLayout = (VkImageLayout)right.use.layout;
+						barrier.oldLayout = (VkImageLayout)prev_use.layout;
+						barrier.newLayout = (VkImageLayout)next_use.layout;
 						barrier.subresourceRange.aspectMask = (VkImageAspectFlags)aspect;
-						barrier.subresourceRange.baseArrayLayer = 0;
-						barrier.subresourceRange.baseMipLevel = 0;
-						barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
-						barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
+						barrier.subresourceRange.baseArrayLayer = subrange.base_layer;
+						barrier.subresourceRange.baseMipLevel = subrange.base_level;
+						barrier.subresourceRange.layerCount = subrange.layer_count;
+						barrier.subresourceRange.levelCount = subrange.level_count;
 						barrier.srcQueueFamilyIndex = ctx.domain_to_queue_family_index(left_domain);
 						barrier.dstQueueFamilyIndex = ctx.domain_to_queue_family_index(right_domain);
 						release_barrier.src = src_stages;
@@ -779,14 +931,14 @@ namespace vuk {
 						ImageBarrier acquire_barrier;
 						VkImageMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
 						barrier.srcAccessMask = 0; // ignored
-						barrier.dstAccessMask = (VkAccessFlags)right.use.access;
-						barrier.oldLayout = (VkImageLayout)left.use.layout;
-						barrier.newLayout = (VkImageLayout)right.use.layout;
+						barrier.dstAccessMask = (VkAccessFlags)next_use.access;
+						barrier.oldLayout = (VkImageLayout)prev_use.layout;
+						barrier.newLayout = (VkImageLayout)next_use.layout;
 						barrier.subresourceRange.aspectMask = (VkImageAspectFlags)aspect;
-						barrier.subresourceRange.baseArrayLayer = 0;
-						barrier.subresourceRange.baseMipLevel = 0;
-						barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
-						barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
+						barrier.subresourceRange.baseArrayLayer = subrange.base_layer;
+						barrier.subresourceRange.baseMipLevel = subrange.base_level;
+						barrier.subresourceRange.layerCount = subrange.layer_count;
+						barrier.subresourceRange.levelCount = subrange.level_count;
 						barrier.srcQueueFamilyIndex = ctx.domain_to_queue_family_index(left_domain);
 						barrier.dstQueueFamilyIndex = ctx.domain_to_queue_family_index(right_domain);
 						acquire_barrier.src = PipelineStageFlagBits::eTopOfPipe; // NONE
@@ -805,40 +957,40 @@ namespace vuk {
 					if (left.pass) { // RenderPass ->
 						auto& left_rp = impl->rpis[left.pass->render_pass_index];
 						// if this is an attachment, we specify layout
-						if (is_framebuffer_attachment(left.use)) {
+						if (is_framebuffer_attachment(prev_use)) {
 							assert(!left_rp.framebufferless);
 							auto& rp_att = *contains_if(left_rp.attachments, [name](auto& att) { return att.name == name; });
 
 							sync_bound_attachment_to_renderpass(rp_att, attachment_info);
 							// we keep last use as finalLayout
-							rp_att.description.finalLayout = (VkImageLayout)left.use.layout;
+							rp_att.description.finalLayout = (VkImageLayout)prev_use.layout;
 
 							// compute attachment store
-							if (right.use.layout == ImageLayout::eUndefined) {
+							if (next_use.layout == ImageLayout::eUndefined) {
 								rp_att.description.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 							} else {
 								rp_att.description.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 							}
 						}
 						// emit barrier for final resource state
-						if (!right.pass && right.use.layout != ImageLayout::eUndefined &&
-						    (left.use.layout != right.use.layout || (is_write_access(left.use) || is_write_access(right.use)))) { // different layouts, need to
-							                                                                                                        // have dependency
+						if (!right.pass && next_use.layout != ImageLayout::eUndefined &&
+						    (prev_use.layout != next_use.layout || (is_write_access(prev_use) || is_write_access(next_use)))) { // different layouts, need to
+							                                                                                                      // have dependency
 							VkImageMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
 							ImageBarrier ib{};
-							barrier.srcAccessMask = is_read_access(left.use) ? 0 : (VkAccessFlags)left.use.access;
-							barrier.dstAccessMask = (VkAccessFlags)right.use.access;
-							barrier.oldLayout = (VkImageLayout)left.use.layout;
-							barrier.newLayout = (VkImageLayout)right.use.layout;
+							barrier.srcAccessMask = is_read_access(prev_use) ? 0 : (VkAccessFlags)prev_use.access;
+							barrier.dstAccessMask = (VkAccessFlags)next_use.access;
+							barrier.oldLayout = (VkImageLayout)prev_use.layout;
+							barrier.newLayout = (VkImageLayout)next_use.layout;
 							barrier.subresourceRange.aspectMask = (VkImageAspectFlags)aspect;
-							barrier.subresourceRange.baseArrayLayer = 0;
-							barrier.subresourceRange.baseMipLevel = 0;
-							barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
-							barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
+							barrier.subresourceRange.baseArrayLayer = subrange.base_layer;
+							barrier.subresourceRange.baseMipLevel = subrange.base_level;
+							barrier.subresourceRange.layerCount = subrange.layer_count;
+							barrier.subresourceRange.levelCount = subrange.level_count;
 							barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 							barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-							ib.src = left.use.stages;
-							ib.dst = right.use.stages;
+							ib.src = prev_use.stages;
+							ib.dst = next_use.stages;
 							ib.barrier = barrier;
 							ib.image = name;
 							// attach this barrier to the end of subpass or end of renderpass
@@ -853,20 +1005,20 @@ namespace vuk {
 					if (right.pass) { // -> RenderPass
 						auto& right_rp = impl->rpis[right.pass->render_pass_index];
 						// if this is an attachment, we specify layout
-						if (is_framebuffer_attachment(right.use)) {
+						if (is_framebuffer_attachment(next_use)) {
 							assert(!right_rp.framebufferless);
 							auto& rp_att = *contains_if(right_rp.attachments, [name](auto& att) { return att.name == name; });
 
 							sync_bound_attachment_to_renderpass(rp_att, attachment_info);
 							//
 
-							rp_att.description.initialLayout = (VkImageLayout)right.use.layout;
+							rp_att.description.initialLayout = (VkImageLayout)next_use.layout;
 							assert(rp_att.description.initialLayout != (VkImageLayout)ImageLayout::eUndefined);
 
 							// compute attachment load
-							if (left.use.layout == ImageLayout::eUndefined) {
+							if (prev_use.layout == ImageLayout::eUndefined) {
 								rp_att.description.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-							} else if (left.use.layout == ImageLayout::ePreinitialized) {
+							} else if (prev_use.layout == ImageLayout::ePreinitialized) {
 								// preinit means clear
 								rp_att.description.initialLayout = (VkImageLayout)ImageLayout::eUndefined;
 								rp_att.description.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
@@ -876,18 +1028,18 @@ namespace vuk {
 						}
 						// we are keeping this weird logic until this is configurable
 						// emit a barrier for now instead of an external subpass dep
-						if (right.use.layout != left.use.layout || (is_write_access(left.use) || is_write_access(right.use))) { // different layouts, need to
-							                                                                                                      // have dependency
+						if (next_use.layout != prev_use.layout || (is_write_access(prev_use) || is_write_access(next_use))) { // different layouts, need to
+							                                                                                                    // have dependency
 							VkImageMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
-							barrier.srcAccessMask = is_read_access(left.use) ? 0 : (VkAccessFlags)left.use.access;
-							barrier.dstAccessMask = (VkAccessFlags)right.use.access;
-							barrier.oldLayout = left.use.layout == ImageLayout::ePreinitialized ? (VkImageLayout)ImageLayout::eUndefined : (VkImageLayout)left.use.layout;
-							barrier.newLayout = (VkImageLayout)right.use.layout;
+							barrier.srcAccessMask = is_read_access(prev_use) ? 0 : (VkAccessFlags)prev_use.access;
+							barrier.dstAccessMask = (VkAccessFlags)next_use.access;
+							barrier.oldLayout = prev_use.layout == ImageLayout::ePreinitialized ? (VkImageLayout)ImageLayout::eUndefined : (VkImageLayout)prev_use.layout;
+							barrier.newLayout = (VkImageLayout)next_use.layout;
 							barrier.subresourceRange.aspectMask = (VkImageAspectFlags)aspect;
-							barrier.subresourceRange.baseArrayLayer = 0;
-							barrier.subresourceRange.baseMipLevel = 0;
-							barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
-							barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
+							barrier.subresourceRange.baseArrayLayer = subrange.base_layer;
+							barrier.subresourceRange.baseMipLevel = subrange.base_level;
+							barrier.subresourceRange.layerCount = subrange.layer_count;
+							barrier.subresourceRange.levelCount = subrange.level_count;
 							barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 							barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 
@@ -911,35 +1063,35 @@ namespace vuk {
 					// if we merged the passes into a subpass, no sync is needed
 					if (left.pass->subpass == right.pass->subpass)
 						continue;
-					if (is_framebuffer_attachment(left.use) && (is_write_access(left.use) || is_write_access(right.use))) {
+					if (is_framebuffer_attachment(prev_use) && (is_write_access(prev_use) || is_write_access(next_use))) {
 						assert(left.pass->render_pass_index == right.pass->render_pass_index);
 						auto& rp = impl->rpis[right.pass->render_pass_index];
 						VkSubpassDependency sd{};
-						sd.dstAccessMask = (VkAccessFlags)right.use.access;
-						sd.dstStageMask = (VkPipelineStageFlags)right.use.stages;
+						sd.dstAccessMask = (VkAccessFlags)next_use.access;
+						sd.dstStageMask = (VkPipelineStageFlags)next_use.stages;
 						sd.dstSubpass = right.pass->subpass;
-						sd.srcAccessMask = is_read_access(left.use) ? 0 : (VkAccessFlags)left.use.access;
-						sd.srcStageMask = (VkPipelineStageFlags)left.use.stages;
+						sd.srcAccessMask = is_read_access(prev_use) ? 0 : (VkAccessFlags)prev_use.access;
+						sd.srcStageMask = (VkPipelineStageFlags)prev_use.stages;
 						sd.srcSubpass = left.pass->subpass;
 						rp.rpci.subpass_dependencies.push_back(sd);
 					}
 					auto& left_rp = impl->rpis[left.pass->render_pass_index];
-					if (left_rp.framebufferless && (is_write_access(left.use) || is_write_access(right.use))) {
+					if (left_rp.framebufferless && (is_write_access(prev_use) || is_write_access(next_use))) {
 						// right layout == Undefined means the chain terminates, no
 						// transition/barrier
-						if (right.use.layout == ImageLayout::eUndefined)
+						if (next_use.layout == ImageLayout::eUndefined)
 							continue;
 						VkImageMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
-						barrier.srcAccessMask = is_read_access(left.use) ? 0 : (VkAccessFlags)left.use.access;
-						barrier.dstAccessMask = (VkAccessFlags)right.use.access;
-						barrier.newLayout = (VkImageLayout)right.use.layout;
-						barrier.oldLayout = (VkImageLayout)left.use.layout;
+						barrier.srcAccessMask = is_read_access(prev_use) ? 0 : (VkAccessFlags)prev_use.access;
+						barrier.dstAccessMask = (VkAccessFlags)next_use.access;
+						barrier.newLayout = (VkImageLayout)next_use.layout;
+						barrier.oldLayout = (VkImageLayout)prev_use.layout;
 						barrier.subresourceRange.aspectMask = (VkImageAspectFlags)aspect;
-						barrier.subresourceRange.baseArrayLayer = 0;
-						barrier.subresourceRange.baseMipLevel = 0;
-						barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
-						barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
-						ImageBarrier ib{ .image = name, .barrier = barrier, .src = left.use.stages, .dst = right.use.stages };
+						barrier.subresourceRange.baseArrayLayer = subrange.base_layer;
+						barrier.subresourceRange.baseMipLevel = subrange.base_level;
+						barrier.subresourceRange.layerCount = subrange.layer_count;
+						barrier.subresourceRange.levelCount = subrange.level_count;
+						ImageBarrier ib{ .image = name, .barrier = barrier, .src = prev_use.stages, .dst = next_use.stages };
 						left_rp.subpasses[left.pass->subpass].post_barriers.push_back(ib);
 					}
 				}
@@ -954,12 +1106,16 @@ namespace vuk {
 				continue;
 			}
 			auto& chain = chain_it->second;
-			chain.insert(chain.begin(), UseRef{ vuk::eNone, vuk::eNone, buffer_info.initial, nullptr });
-			chain.emplace_back(UseRef{ vuk::eNone, vuk::eNone, buffer_info.final, nullptr });
+			chain.insert(chain.begin(),
+			             UseRef{ vuk::eManual, vuk::eManual, buffer_info.initial, Resource::Type::eBuffer, Resource::Subrange{ .buffer = {} }, nullptr });
+			chain.emplace_back(UseRef{ vuk::eManual, vuk::eManual, buffer_info.final, Resource::Type::eBuffer, Resource::Subrange{ .buffer = {} }, nullptr });
 
 			for (size_t i = 0; i < chain.size() - 1; i++) {
 				auto& left = chain[i];
 				auto& right = chain[i + 1];
+
+				left.use = left.high_level_access == Access::eManual ? left.use : to_use(left.high_level_access);
+				right.use = right.high_level_access == Access::eManual ? right.use : to_use(right.high_level_access);
 
 				DomainFlags left_domain = left.pass ? left.pass->domain : DomainFlagBits::eNone;
 				DomainFlags right_domain = right.pass ? right.pass->domain : DomainFlagBits::eNone;
