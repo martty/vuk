@@ -2,7 +2,7 @@
 
 ### **vuk** - A rendergraph-based abstraction for Vulkan
 
-![Discord Banner 2](https://img.shields.io/discord/939539624039186432?style=for-the-badge)
+[![Discord Server](https://img.shields.io/discord/939539624039186432?style=for-the-badge)](https://discord.gg/UNkJMHgUmZ)
 
 ### Quick Start
 1. Grab the vuk repository
