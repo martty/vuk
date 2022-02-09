@@ -162,7 +162,11 @@ namespace vuk {
 			}
 
 			for (auto dep : rpass.pre_barriers) {
-				dep.barrier.image = impl->bound_attachments[dep.image].attachment.image;
+				auto& bound = impl->bound_attachments[dep.image];
+				dep.barrier.image = bound.attachment.image;
+				// turn base_{layer, level} into absolute values wrt the image
+				dep.barrier.subresourceRange.baseArrayLayer += bound.attachment.base_layer;
+				dep.barrier.subresourceRange.baseMipLevel += bound.attachment.base_level;
 				vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
 			}
 			for (const auto& dep : rpass.pre_mem_barriers) {
@@ -249,7 +253,11 @@ namespace vuk {
 				// insert image post-barriers
 				if (rpass.handle == VK_NULL_HANDLE) {
 					for (auto dep : sp.post_barriers) {
-						dep.barrier.image = impl->bound_attachments[dep.image].attachment.image;
+						auto& bound = impl->bound_attachments[dep.image];
+						dep.barrier.image = bound.attachment.image;
+						// turn base_{layer, level} into absolute values wrt the image
+						dep.barrier.subresourceRange.baseArrayLayer += bound.attachment.base_layer;
+						dep.barrier.subresourceRange.baseMipLevel += bound.attachment.base_level;
 						vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
 					}
 					for (const auto& dep : sp.post_mem_barriers) {
@@ -264,7 +272,11 @@ namespace vuk {
 				vkCmdEndRenderPass(cbuf);
 			}
 			for (auto dep : rpass.post_barriers) {
-				dep.barrier.image = impl->bound_attachments[dep.image].attachment.image;
+				auto& bound = impl->bound_attachments[dep.image];
+				dep.barrier.image = bound.attachment.image;
+				// turn base_{layer, level} into absolute values wrt the image
+				dep.barrier.subresourceRange.baseArrayLayer += bound.attachment.base_layer;
+				dep.barrier.subresourceRange.baseMipLevel += bound.attachment.base_level;
 				vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
 			}
 			for (const auto& dep : rpass.post_mem_barriers) {
