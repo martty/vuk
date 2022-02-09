@@ -157,7 +157,7 @@ namespace vuk {
 
 			bool use_secondary_command_buffers = rpass.subpasses[0].use_secondary_command_buffers;
 			bool is_single_pass = rpass.subpasses.size() == 1 && rpass.subpasses[0].passes.size() == 1;
-			if (is_single_pass) { // TODO: check if name is valid
+			if (is_single_pass && !rpass.subpasses[0].passes[0]->pass.name.is_invalid() && rpass.subpasses[0].passes[0]->pass.execute) {
 				ctx.debug.begin_region(cbuf, rpass.subpasses[0].passes[0]->pass.name);
 			}
 
@@ -265,7 +265,7 @@ namespace vuk {
 					}
 				}
 			}
-			if (is_single_pass) {
+			if (is_single_pass && !rpass.subpasses[0].passes[0]->pass.name.is_invalid() && rpass.subpasses[0].passes[0]->pass.execute) {
 				ctx.debug.end_region(cbuf);
 			}
 			if (rpass.handle != VK_NULL_HANDLE) {
