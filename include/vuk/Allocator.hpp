@@ -56,23 +56,6 @@ namespace vuk {
 		return { expected_error, res.error() };                                                                                                                    \
 	}
 
-	struct CPUResource {
-		virtual void* allocate(size_t bytes, size_t alignment, SourceLocationAtFrame loc) = 0;
-		// virtual void allocate_at_least(size_t bytes, size_t alignment, SourceLocationAtFrame loc) = 0;
-		virtual void deallocate(void* ptr, size_t bytes, size_t alignment) = 0;
-	};
-
-	struct CPUNestedResource : CPUResource {
-		virtual void* allocate(size_t bytes, size_t alignment, SourceLocationAtFrame loc) {
-			return upstream->allocate(bytes, alignment, loc);
-		}
-		virtual void deallocate(void* ptr, size_t bytes, size_t alignment) {
-			return upstream->deallocate(ptr, bytes, alignment);
-		}
-
-		CPUResource* upstream = nullptr;
-	};
-
 	struct TimelineSemaphore {
 		VkSemaphore semaphore;
 		uint64_t* value;
@@ -82,7 +65,7 @@ namespace vuk {
 		}
 	};
 
-	/// @brief A DeviceResource represents objects that are used jointly by both CPU and GPU.
+	/// @brief DeviceResource is a polymorphic interface over allocation of GPU resources.
 	/// A DeviceResource must prevent reuse of cross-device resources after deallocation until CPU-GPU timelines are synchronized. GPU-only resources may be
 	/// reused immediately.
 	struct DeviceResource {
@@ -148,46 +131,91 @@ namespace vuk {
 		virtual Context& get_context() = 0;
 	};
 
-	template<class ContainerType>
-	concept Container = requires(ContainerType a) {
-		std::begin(a);
-		std::end(a);
-	};
-
 	struct DeviceVkResource;
 
+	/// @brief Interface for allocating device resources
+	/// 
+	/// The Allocator is a concrete value type wrapping over a polymorphic DeviceResource, forwarding allocations and deallocations to it.
+	/// The allocation functions take spans of creation parameters and output values, reporting error through the return value of Result<void, AllocateException>.
+	/// The deallocation functions can't fail.
 	class Allocator {
 	public:
+		/// @brief Create new Allocator that wraps a DeviceResource
+		/// @param device_resource The DeviceResource to allocate from
 		explicit Allocator(DeviceResource& device_resource) : ctx(&device_resource.get_context()), device_resource(&device_resource) {}
 		explicit Allocator(DeviceVkResource& device_resource) = delete; // this resource is unsuitable for direct allocation
 
+		/// @brief Allocate semaphores from this Allocator
+		/// @param dst Destination span to place allocated semaphores into
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
 		Result<void, AllocateException> allocate(std::span<VkSemaphore> dst, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
+		/// @brief Allocate semaphores from this Allocator
+		/// @param dst Destination span to place allocated semaphores into
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
 		Result<void, AllocateException> allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
+		/// @brief Deallocate semaphores previously allocated from this Allocator
+		/// @param src Span of semaphores to be deallocated
 		void deallocate(std::span<const VkSemaphore> src);
 
+		/// @brief Allocate fences from this Allocator
+		/// @param dst Destination span to place allocated fences into
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
 		Result<void, AllocateException> allocate(std::span<VkFence> dst, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
+		/// @brief Allocate fences from this Allocator
+		/// @param dst Destination span to place allocated fences into
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
 		Result<void, AllocateException> allocate_fences(std::span<VkFence> dst, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
+		/// @brief Deallocate fences previously allocated from this Allocator
+		/// @param src Span of fences to be deallocated
 		void deallocate(std::span<const VkFence> src);
 
+		/// @brief Allocate command pools from this Allocator
+		/// @param dst Destination span to place allocated command pools into
+		/// @param cis Per-element construction info
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
 		Result<void, AllocateException>
 		allocate(std::span<CommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
+		/// @brief Allocate command pools from this Allocator
+		/// @param dst Destination span to place allocated command pools into
+		/// @param cis Per-element construction info
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
 		Result<void, AllocateException>
 		allocate_command_pools(std::span<CommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
+		/// @brief Deallocate command pools previously allocated from this Allocator
+		/// @param src Span of command pools to be deallocated
 		void deallocate(std::span<const CommandPool> src);
 
+		/// @brief Allocate command buffers from this Allocator
+		/// @param dst Destination span to place allocated command buffers into
+		/// @param cis Per-element construction info
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
 		Result<void, AllocateException>
 		allocate(std::span<CommandBufferAllocation> dst, std::span<const CommandBufferAllocationCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
+		/// @brief Allocate command buffers from this Allocator
+		/// @param dst Destination span to place allocated command buffers into
+		/// @param cis Per-element construction info
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
 		Result<void, AllocateException> allocate_command_buffers(std::span<CommandBufferAllocation> dst,
 		                                                         std::span<const CommandBufferAllocationCreateInfo> cis,
 		                                                         SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
+		/// @brief Deallocate command buffers previously allocated from this Allocator
+		/// @param src Span of command buffers to be deallocated
 		void deallocate(std::span<const CommandBufferAllocation> src);
 
 		Result<void, AllocateException>
@@ -195,88 +223,214 @@ namespace vuk {
 		Result<void, AllocateException>
 		allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) = delete;
 
+		/// @brief Allocate cross-device buffers from this Allocator
+		/// @param dst Destination span to place allocated cross-device buffers into
+		/// @param cis Per-element construction info
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
 		Result<void, AllocateException>
 		allocate(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
+		/// @brief Allocate cross-device buffers from this Allocator
+		/// @param dst Destination span to place allocated cross-device buffers into
+		/// @param cis Per-element construction info
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
 		Result<void, AllocateException>
 		allocate_buffers(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
+		/// @brief Deallocate cross-device buffers previously allocated from this Allocator
+		/// @param src Span of cross-device buffers to be deallocated
 		void deallocate(std::span<const BufferCrossDevice> src);
 
+		/// @brief Allocate GPU-only buffers from this Allocator
+		/// @param dst Destination span to place allocated GPU-only buffers into
+		/// @param cis Per-element construction info
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
 		Result<void, AllocateException> allocate(std::span<BufferGPU> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
+		/// @brief Allocate GPU-only buffers from this Allocator
+		/// @param dst Destination span to place allocated GPU-only buffers into
+		/// @param cis Per-element construction info
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
 		Result<void, AllocateException>
 		allocate_buffers(std::span<BufferGPU> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
+		/// @brief Deallocate GPU-only buffers previously allocated from this Allocator
+		/// @param src Span of GPU-only buffers to be deallocated
 		void deallocate(std::span<const BufferGPU> src);
 
+		/// @brief Allocate framebuffers from this Allocator
+		/// @param dst Destination span to place allocated framebuffers into
+		/// @param cis Per-element construction info
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
 		Result<void, AllocateException>
 		allocate(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
+		/// @brief Allocate framebuffers from this Allocator
+		/// @param dst Destination span to place allocated framebuffers into
+		/// @param cis Per-element construction info
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
 		Result<void, AllocateException>
 		allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
+		/// @brief Deallocate framebuffers previously allocated from this Allocator
+		/// @param src Span of framebuffers to be deallocated
 		void deallocate(std::span<const VkFramebuffer> src);
 
+		/// @brief Allocate images from this Allocator
+		/// @param dst Destination span to place allocated images into
+		/// @param cis Per-element construction info
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
 		Result<void, AllocateException> allocate(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
-
+		
+		/// @brief Allocate images from this Allocator
+		/// @param dst Destination span to place allocated images into
+		/// @param cis Per-element construction info
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
 		Result<void, AllocateException> allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
+		/// @brief Deallocate images previously allocated from this Allocator
+		/// @param src Span of images to be deallocated
 		void deallocate(std::span<const Image> src);
 
+		/// @brief Allocate image views from this Allocator
+		/// @param dst Destination span to place allocated image views into
+		/// @param cis Per-element construction info
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
 		Result<void, AllocateException>
 		allocate(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
+		/// @brief Allocate image views from this Allocator
+		/// @param dst Destination span to place allocated image views into
+		/// @param cis Per-element construction info
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
 		Result<void, AllocateException>
 		allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
+		/// @brief Deallocate image views previously allocated from this Allocator
+		/// @param src Span of image views to be deallocated
 		void deallocate(std::span<const ImageView> src);
 
+		/// @brief Allocate persistent descriptor sets from this Allocator
+		/// @param dst Destination span to place allocated persistent descriptor sets into
+		/// @param cis Per-element construction info
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
 		Result<void, AllocateException>
 		allocate(std::span<PersistentDescriptorSet> dst, std::span<const PersistentDescriptorSetCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
-
+		
+		/// @brief Allocate persistent descriptor sets from this Allocator
+		/// @param dst Destination span to place allocated persistent descriptor sets into
+		/// @param cis Per-element construction info
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
 		Result<void, AllocateException> allocate_persistent_descriptor_sets(std::span<PersistentDescriptorSet> dst,
 		                                                                    std::span<const PersistentDescriptorSetCreateInfo> cis,
 		                                                                    SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
+		/// @brief Deallocate persistent descriptor sets previously allocated from this Allocator
+		/// @param src Span of persistent descriptor sets to be deallocated
 		void deallocate(std::span<const PersistentDescriptorSet> src);
 
+		/// @brief Allocate descriptor sets from this Allocator
+		/// @param dst Destination span to place allocated descriptor sets into
+		/// @param cis Per-element construction info
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
 		Result<void, AllocateException> allocate(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
+		/// @brief Allocate descriptor sets from this Allocator
+		/// @param dst Destination span to place allocated descriptor sets into
+		/// @param cis Per-element construction info
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
 		Result<void, AllocateException>
 		allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
+		/// @brief Deallocate descriptor sets previously allocated from this Allocator
+		/// @param src Span of descriptor sets to be deallocated
 		void deallocate(std::span<const DescriptorSet> src);
 
+		/// @brief Allocate timestamp query pools from this Allocator
+		/// @param dst Destination span to place allocated timestamp query pools into
+		/// @param cis Per-element construction info
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
 		Result<void, AllocateException>
 		allocate(std::span<TimestampQueryPool> dst, std::span<const VkQueryPoolCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
+		/// @brief Allocate timestamp query pools from this Allocator
+		/// @param dst Destination span to place allocated timestamp query pools into
+		/// @param cis Per-element construction info
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
 		Result<void, AllocateException> allocate_timestamp_query_pools(std::span<TimestampQueryPool> dst,
 		                                                               std::span<const VkQueryPoolCreateInfo> cis,
 		                                                               SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
+		/// @brief Deallocate timestamp query pools previously allocated from this Allocator
+		/// @param src Span of timestamp query pools to be deallocated
 		void deallocate(std::span<const TimestampQueryPool> src);
 
+		/// @brief Allocate timestamp queries from this Allocator
+		/// @param dst Destination span to place allocated timestamp queries into
+		/// @param cis Per-element construction info
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
 		Result<void, AllocateException>
 		allocate(std::span<TimestampQuery> dst, std::span<const TimestampQueryCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
+		/// @brief Allocate timestamp queries from this Allocator
+		/// @param dst Destination span to place allocated timestamp queries into
+		/// @param cis Per-element construction info
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
 		Result<void, AllocateException>
 		allocate_timestamp_queries(std::span<TimestampQuery> dst, std::span<const TimestampQueryCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
+		/// @brief Deallocate timestamp queries previously allocated from this Allocator
+		/// @param src Span of timestamp queries to be deallocated
 		void deallocate(std::span<const TimestampQuery> src);
 
+		/// @brief Allocate timeline semaphores from this Allocator
+		/// @param dst Destination span to place allocated timeline semaphores into
+		/// @param cis Per-element construction info
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
 		Result<void, AllocateException> allocate(std::span<TimelineSemaphore> dst, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
+		/// @brief Allocate timeline semaphores from this Allocator
+		/// @param dst Destination span to place allocated timeline semaphores into
+		/// @param cis Per-element construction info
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
 		Result<void, AllocateException> allocate_timeline_semaphores(std::span<TimelineSemaphore> dst, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
+		/// @brief Deallocate timeline semaphores previously allocated from this Allocator
+		/// @param src Span of timeline semaphores to be deallocated
 		void deallocate(std::span<const TimelineSemaphore> src);
 
+		/// @brief Deallocate swapchains previously allocated from this Allocator
+		/// @param src Span of swapchains to be deallocated
 		void deallocate(std::span<const VkSwapchainKHR> src);
 
-		DeviceResource& get_cross_device_resource() {
+		/// @brief Get the underlying DeviceResource
+		/// @return the underlying DeviceResource
+		DeviceResource& get_device_resource() {
 			return *device_resource;
 		}
 
+		/// @brief Get the parent Context
+		/// @return the parent Context
 		Context& get_context() {
 			return *ctx;
 		}
@@ -284,6 +438,12 @@ namespace vuk {
 	private:
 		Context* ctx;
 		DeviceResource* device_resource;
+	};
+
+	template<class ContainerType>
+	concept Container = requires(ContainerType a) {
+		std::begin(a);
+		std::end(a);
 	};
 
 	/// @brief Customization point for deallocation of user types

@@ -119,6 +119,39 @@
           "type": "BOOL"
         }
       ]
+    },
+    {
+      "name": "x64-Docs",
+      "generator": "Ninja",
+      "configurationType": "Debug",
+      "buildRoot": "${projectDir}\\build\\${name}",
+      "installRoot": "${projectDir}\\out\\install\\${name}",
+      "cmakeCommandArgs": "",
+      "buildCommandArgs": "",
+      "ctestCommandArgs": "",
+      "inheritEnvironments": [ "msvc_x64_x64" ],
+      "variables": [
+        {
+          "name": "VUK_BUILD_EXAMPLES",
+          "value": "True",
+          "type": "BOOL"
+        },
+        {
+          "name": "VUK_BUILD_BENCHMARKS",
+          "value": "True",
+          "type": "BOOL"
+        },
+        {
+          "name": "VUK_USE_DXC",
+          "value": "False",
+          "type": "BOOL"
+        },
+        {
+          "name": "VUK_BUILD_DOCS",
+          "value": "True",
+          "type": "BOOL"
+        }
+      ]
     }
   ]
 }

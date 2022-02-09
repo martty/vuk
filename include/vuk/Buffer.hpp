@@ -36,6 +36,7 @@ namespace vuk {
 		return BufferUsageFlags(bit0) ^ bit1;
 	}
 
+	/// @brief A contiguous portion of GPU-visible memory that can be used for storing buffer-type data
 	struct Buffer {
 		VkDeviceMemory device_memory = VK_NULL_HANDLE;
 		VkBuffer buffer = VK_NULL_HANDLE;
@@ -57,6 +58,7 @@ namespace vuk {
 			return buffer != VK_NULL_HANDLE;
 		}
 
+		/// @brief Create a new Buffer by offsetting
 		[[nodiscard]] Buffer add_offset(size_t offset_to_add) {
 			assert(offset_to_add <= size);
 			return { device_memory,        buffer,          offset + offset_to_add,
@@ -64,19 +66,25 @@ namespace vuk {
 				       memory_usage };
 		}
 
+		/// @brief Create a new Buffer that is a subset of the original
 		[[nodiscard]] Buffer subrange(size_t new_offset, size_t new_size) {
 			assert(new_offset + new_size <= size);
 			return { device_memory, buffer, offset + new_offset, new_size, allocation_size, mapped_ptr != nullptr ? mapped_ptr + new_offset : nullptr, memory_usage };
 		}
 	};
 
+	/// @brief A buffer that has GPU-only scope (only accessed from the device timeline)
 	struct BufferGPU : Buffer {};
+	/// @brief A buffer with cross-device scope (accessed both from device and host timeline)
 	struct BufferCrossDevice : Buffer {};
-	struct BufferCPU : Buffer {};
 
+	/// @brief Buffer creation parameters
 	struct BufferCreateInfo {
+		/// @brief Memory usage to determine which heap to allocate the memory from
 		MemoryUsage mem_usage;
+		/// @brief Size of the Buffer in bytes
 		size_t size;
+		/// @brief Alignment of the allocated Buffer in bytes
 		size_t alignment = 1;
 	};
 } // namespace vuk

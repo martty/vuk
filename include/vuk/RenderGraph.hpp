@@ -201,7 +201,7 @@ namespace vuk {
 		RenderGraph(RenderGraph&&) noexcept;
 		RenderGraph& operator=(RenderGraph&&) noexcept;
 
-		/// @brief
+		/// @brief Add a pass to the rendergraph
 		/// @param the Pass to add to the RenderGraph
 		void add_pass(Pass);
 
@@ -217,24 +217,31 @@ namespace vuk {
 		/// @brief Reconverge image. Prevents diverged use moving before pre_diverge or after post_diverge.
 		void converge_image(Name pre_diverge, Name post_diverge);
 
-		/// @brief Add a resolve operation from the image resource `ms_name` to image_resource `resolved_name`
-		/// @param resolved_name
-		/// @param ms_name
-		// TODO: docs
+		/// @brief Add a resolve operation from the image resource `ms_name` that consumes `resolved_name_src` and produces `resolved_name_dst`
+		/// @param resolved_name_src Image resource name consumed (single-sampled)
+		/// @param resolved_name_dst Image resource name created (single-sampled)
+		/// @param ms_name Image resource to resolve from (multisampled)
 		void resolve_resource_into(Name resolved_name_src, Name resolved_name_dst, Name ms_name);
 
-		void attach_swapchain(Name, SwapchainRef swp, Clear);
-		void attach_buffer(Name, Buffer, Access initial, Access final);
-		void attach_image(Name, ImageAttachment, Access initial, Access final);
+		/// @brief Attach a swapchain to the given name
+		void attach_swapchain(Name name, SwapchainRef swp, Clear);
+		
+		/// @brief Attach a buffer to the given name
+		void attach_buffer(Name name, Buffer, Access initial, Access final);
 
-		void attach_in(Name, Future<ImageAttachment>&& fimg, Access final);
-		void attach_in(Name, Future<Buffer>&& fimg, Access final);
+		/// @brief Attach an image to the given name
+		void attach_image(Name name, ImageAttachment, Access initial, Access final);
 
-		void attach_out(Name, Future<ImageAttachment>& fimg, DomainFlags dst_domain);
-		void attach_out(Name, Future<Buffer>& fbuf, DomainFlags dst_domain);
+		/// @brief Attach a future of an image to the given name
+		void attach_in(Name name, Future<ImageAttachment>&& fimg, Access final);
 
-		void attach_managed(Name, Format, Dimension2D, Samples, Clear);
+		/// @brief Attach a future of a buffer to the given name
+		void attach_in(Name name, Future<Buffer>&& fimg, Access final);
 
+		/// @brief Request the rendergraph 
+		void attach_managed(Name name, Format format, Dimension2D dimension, Samples samples, Clear clear_value);
+
+		/// @brief Control compilation options when compiling the rendergraph
 		struct CompileOptions {
 			bool reorder_passes = true;       // reorder passes according to resources
 			bool check_pass_ordering = false; // check that pass ordering does not violate resource constraints (not needed when reordering passes)
@@ -266,6 +273,12 @@ namespace vuk {
 		void build_io();
 
 		void schedule_intra_queue(std::span<struct PassInfo> passes, const vuk::RenderGraph::CompileOptions& compile_options);
+
+		// future support functions
+		friend struct Future<ImageAttachment>;
+		friend struct Future<Buffer>;
+		void attach_out(Name, Future<ImageAttachment>& fimg, DomainFlags dst_domain);
+		void attach_out(Name, Future<Buffer>& fbuf, DomainFlags dst_domain);
 	};
 
 	struct SubmitInfo {

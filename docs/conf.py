@@ -32,7 +32,7 @@ read_the_docs_build = os.environ.get('READTHEDOCS', None) == 'True'
 # -- Project information -----------------------------------------------------
 
 project = 'vuk'
-copyright = '2020, Marcell Kiss'
+copyright = '2022, Marcell Kiss'
 author = 'Marcell Kiss'
 
 

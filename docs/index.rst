@@ -27,7 +27,6 @@ Docs
 ====
 
 .. doxygenindex::
-   :outline:
 
 
 
