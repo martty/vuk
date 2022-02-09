@@ -102,7 +102,7 @@ breathe_domain_by_extension = {"h" : "cpp"}
 breathe_projects = {}
 
 if read_the_docs_build:
-    input_dir = '../include/vuk'
+    input_dir = '../include/vuk ../include/vuk/resources'
     output_dir = 'build'
     configureDoxyfile(input_dir, output_dir)
     subprocess.call('doxygen', shell=True)
