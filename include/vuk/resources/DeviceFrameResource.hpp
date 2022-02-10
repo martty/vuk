@@ -10,12 +10,11 @@
 #include <atomic>
 
 namespace vuk {
-	struct DeviceSuperFrameResource;
-
-	/// @brief Represents "per-frame" resources - temporary allocations that persist through a frame. Can only be used via the DeviceSuperFrameResource
+	/// @brief Represents "per-frame" resources - temporary allocations that persist through a frame. Handed out by DeviceSuperFrameResource, cannot be constructed directly.
+	///
+	/// Allocations from this resource are tied to the "frame" - all allocations recycled when a DeviceFrameResource is recycled.
+	/// Furthermore all resources allocated are also deallocated at recycle time - it is not necessary (but not an error) to deallocate them.
 	struct DeviceFrameResource : DeviceNestedResource {
-		DeviceFrameResource(VkDevice device, DeviceSuperFrameResource& upstream);
-
 		std::mutex sema_mutex;
 		std::vector<VkSemaphore> semaphores;
 
@@ -128,21 +127,36 @@ namespace vuk {
 
 		void deallocate_swapchains(std::span<const VkSwapchainKHR> src) override;
 
+		/// @brief Wait for the fences / timeline semaphores referencing this frame to complete
+		///
+		/// Called automatically when recycled
 		void wait();
 
+		/// @brief Retrieve the parent Context
+		/// @return the parent Context
 		Context& get_context() override {
 			return upstream->get_context();
 		}
 
+	private:
 		VkDevice device;
 		uint64_t current_frame = -1;
 		LegacyLinearAllocator linear_cpu_only;
 		LegacyLinearAllocator linear_cpu_gpu;
 		LegacyLinearAllocator linear_gpu_cpu;
 		LegacyLinearAllocator linear_gpu_only;
+
+		friend struct DeviceSuperFrameResource;
+
+		DeviceFrameResource(VkDevice device, DeviceSuperFrameResource& upstream);
 	};
 
 	/// @brief DeviceSuperFrameResource is an allocator that gives out DeviceFrameResource allocators, and manages their resources
+	///
+	/// DeviceSuperFrameResource models resource lifetimes that span multiple frames - these can be allocated directly from this resource
+	/// Allocation of these resources are persistent, and they can be deallocated at any time - they will be recycled when the current frame is recycled
+	/// This resource also hands out DeviceFrameResources in a round-robin fashion.
+	/// The lifetime of resources allocated from those allocators is frames_in_flight number of frames (until the DeviceFrameResource is recycled).
 	struct DeviceSuperFrameResource : DeviceResource {
 		DeviceSuperFrameResource(Context& ctx, uint64_t frames_in_flight);
 
@@ -214,9 +228,9 @@ namespace vuk {
 
 		void deallocate_swapchains(std::span<const VkSwapchainKHR> src) override;
 
+		/// @brief Recycle the least-recently-used frame and return it to be used again
+		/// @return DeviceFrameResource for use
 		DeviceFrameResource& get_next_frame();
-
-		void deallocate_frame(DeviceFrameResource& f);
 
 		virtual ~DeviceSuperFrameResource();
 
@@ -232,6 +246,8 @@ namespace vuk {
 
 	private:
 		DeviceFrameResource& get_last_frame();
+		void deallocate_frame(DeviceFrameResource& f);
+
 		std::unique_ptr<char[]> frames_storage;
 		DeviceFrameResource* frames;
 

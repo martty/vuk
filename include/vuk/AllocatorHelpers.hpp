@@ -1,9 +1,10 @@
 #pragma once
 
 #include "vuk/Allocator.hpp"
-#include "vuk/Exception.hpp"
 #include "vuk/Buffer.hpp"
+#include "vuk/Exception.hpp"
 
+/// @cond INTERNAL
 #ifndef __cpp_consteval
 #define VUK_HERE_AND_NOW()                                                                                                                                     \
 	SourceLocationAtFrame {                                                                                                                                      \
@@ -15,8 +16,13 @@
 		std::source_location::current(), (uint64_t)-1LL                                                                                                            \
 	}
 #endif
+/// @endcond
 
 namespace vuk {
+	/// @brief Allocate a single semaphore from an Allocator
+	/// @param allocator Allocator to use
+	/// @param loc Source location information
+	/// @return Semaphore in a RAII wrapper (Unique<T>) or AllocateException on error
 	inline Result<Unique<VkSemaphore>, AllocateException> allocate_semaphore(Allocator& allocator, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 		Unique<VkSemaphore> sema(allocator);
 		if (auto res = allocator.allocate_semaphores(std::span{ &sema.get(), 1 }, loc); !res) {
@@ -25,6 +31,10 @@ namespace vuk {
 		return { expected_value, std::move(sema) };
 	}
 
+	/// @brief Allocate a single timeline semaphore from an Allocator
+	/// @param allocator Allocator to use
+	/// @param loc Source location information
+	/// @return Timeline semaphore in a RAII wrapper (Unique<T>) or AllocateException on error
 	inline Result<Unique<TimelineSemaphore>, AllocateException> allocate_timeline_semaphore(Allocator& allocator,
 	                                                                                        SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 		Unique<TimelineSemaphore> sema(allocator);
@@ -34,6 +44,11 @@ namespace vuk {
 		return { expected_value, std::move(sema) };
 	}
 
+	/// @brief Allocate a single command pool from an Allocator
+	/// @param allocator Allocator to use
+	/// @param cpci Command pool creation parameters
+	/// @param loc Source location information
+	/// @return Command pool in a RAII wrapper (Unique<T>) or AllocateException on error
 	inline Result<Unique<CommandPool>, AllocateException>
 	allocate_command_pool(Allocator& allocator, const VkCommandPoolCreateInfo& cpci, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 		Unique<CommandPool> cp(allocator);
@@ -43,6 +58,11 @@ namespace vuk {
 		return { expected_value, std::move(cp) };
 	}
 
+	/// @brief Allocate a single command buffer from an Allocator
+	/// @param allocator Allocator to use
+	/// @param cbci Command buffer creation parameters
+	/// @param loc Source location information
+	/// @return Command buffer in a RAII wrapper (Unique<T>) or AllocateException on error
 	inline Result<Unique<CommandBufferAllocation>, AllocateException>
 	allocate_command_buffer(Allocator& allocator, const CommandBufferAllocationCreateInfo& cbci, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 		Unique<CommandBufferAllocation> hlcb(allocator);
@@ -52,6 +72,10 @@ namespace vuk {
 		return { expected_value, std::move(hlcb) };
 	}
 
+	/// @brief Allocate a single fence from an Allocator
+	/// @param allocator Allocator to use
+	/// @param loc Source location information
+	/// @return Fence in a RAII wrapper (Unique<T>) or AllocateException on error
 	inline Result<Unique<VkFence>, AllocateException> allocate_fence(Allocator& allocator, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 		Unique<VkFence> fence(allocator);
 		if (auto res = allocator.allocate_fences(std::span{ &fence.get(), 1 }, loc); !res) {
@@ -60,24 +84,39 @@ namespace vuk {
 		return { expected_value, std::move(fence) };
 	}
 
+	/// @brief Allocate a single cross-device buffer from an Allocator
+	/// @param allocator Allocator to use
+	/// @param bci Buffer creation parameters
+	/// @param loc Source location information
+	/// @return Cross-device buffer in a RAII wrapper (Unique<T>) or AllocateException on error
 	inline Result<Unique<BufferCrossDevice>, AllocateException>
-	allocate_buffer_cross_device(Allocator& allocator, const BufferCreateInfo& ici, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
+	allocate_buffer_cross_device(Allocator& allocator, const BufferCreateInfo& bci, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 		Unique<BufferCrossDevice> buf(allocator);
-		if (auto res = allocator.allocate_buffers(std::span{ &buf.get(), 1 }, std::span{ &ici, 1 }, loc); !res) {
+		if (auto res = allocator.allocate_buffers(std::span{ &buf.get(), 1 }, std::span{ &bci, 1 }, loc); !res) {
 			return { expected_error, res.error() };
 		}
 		return { expected_value, std::move(buf) };
 	}
 
+	/// @brief Allocate a single GPU-only buffer from an Allocator
+	/// @param allocator Allocator to use
+	/// @param bci Buffer creation parameters
+	/// @param loc Source location information
+	/// @return GPU-only buffer in a RAII wrapper (Unique<T>) or AllocateException on error
 	inline Result<Unique<BufferGPU>, AllocateException>
-	allocate_buffer_gpu(Allocator& allocator, const BufferCreateInfo& ici, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
+	allocate_buffer_gpu(Allocator& allocator, const BufferCreateInfo& bci, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 		Unique<BufferGPU> buf(allocator);
-		if (auto res = allocator.allocate_buffers(std::span{ &buf.get(), 1 }, std::span{ &ici, 1 }, loc); !res) {
+		if (auto res = allocator.allocate_buffers(std::span{ &buf.get(), 1 }, std::span{ &bci, 1 }, loc); !res) {
 			return { expected_error, res.error() };
 		}
 		return { expected_value, std::move(buf) };
 	}
 
+	/// @brief Allocate a single image from an Allocator
+	/// @param allocator Allocator to use
+	/// @param ici Image creation parameters
+	/// @param loc Source location information
+	/// @return Image in a RAII wrapper (Unique<T>) or AllocateException on error
 	inline Result<Unique<Image>, AllocateException>
 	allocate_image(Allocator& allocator, const ImageCreateInfo& ici, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 		Unique<Image> img(allocator);
@@ -87,6 +126,11 @@ namespace vuk {
 		return { expected_value, std::move(img) };
 	}
 
+	/// @brief Allocate a single image view from an Allocator
+	/// @param allocator Allocator to use
+	/// @param ivci Image view creation parameters
+	/// @param loc Source location information
+	/// @return Image view in a RAII wrapper (Unique<T>) or AllocateException on error
 	inline Result<Unique<ImageView>, AllocateException>
 	allocate_image_view(Allocator& allocator, const ImageViewCreateInfo& ivci, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 		Unique<ImageView> iv(allocator);

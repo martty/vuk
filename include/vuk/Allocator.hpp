@@ -8,6 +8,7 @@
 #include <vuk/vuk_fwd.hpp>
 
 namespace vuk {
+	/// @cond INTERNAL
 #ifndef __cpp_consteval
 	struct source_location {
 		uint_least32_t _Line{};
@@ -55,6 +56,7 @@ namespace vuk {
 	if (auto res = what; !res) {                                                                                                                                 \
 		return { expected_error, res.error() };                                                                                                                    \
 	}
+	/// @endcond
 
 	struct TimelineSemaphore {
 		VkSemaphore semaphore;
@@ -134,7 +136,7 @@ namespace vuk {
 	struct DeviceVkResource;
 
 	/// @brief Interface for allocating device resources
-	/// 
+	///
 	/// The Allocator is a concrete value type wrapping over a polymorphic DeviceResource, forwarding allocations and deallocations to it.
 	/// The allocation functions take spans of creation parameters and output values, reporting error through the return value of Result<void, AllocateException>.
 	/// The deallocation functions can't fail.
@@ -288,7 +290,7 @@ namespace vuk {
 		/// @param loc Source location information
 		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
 		Result<void, AllocateException> allocate(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
-		
+
 		/// @brief Allocate images from this Allocator
 		/// @param dst Destination span to place allocated images into
 		/// @param cis Per-element construction info
@@ -327,7 +329,7 @@ namespace vuk {
 		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
 		Result<void, AllocateException>
 		allocate(std::span<PersistentDescriptorSet> dst, std::span<const PersistentDescriptorSetCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
-		
+
 		/// @brief Allocate persistent descriptor sets from this Allocator
 		/// @param dst Destination span to place allocated persistent descriptor sets into
 		/// @param cis Per-element construction info
