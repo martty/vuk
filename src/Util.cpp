@@ -130,8 +130,8 @@ namespace vuk {
 					VkSemaphoreSubmitInfoKHR ssi{ VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR };
 					ssi.semaphore = present_rdy;
 					ssi.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR;
-					// wait_semas.emplace_back(ssi);
-					// wait_sema_count++;
+					wait_semas.emplace_back(ssi);
+					wait_sema_count++;
 				}
 
 				VkSemaphoreSubmitInfoKHR ssi{ VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR };
