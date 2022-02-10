@@ -7,6 +7,7 @@
 #include "vuk/CommandBuffer.hpp"
 #include "vuk/Context.hpp"
 #include "vuk/RenderGraph.hpp"
+#include "vuk/SampledImage.hpp"
 #include "vuk/resources/DeviceFrameResource.hpp"
 #include <VkBootstrap.h>
 #include <functional>
@@ -115,9 +116,7 @@ namespace vuk {
 
 			start = context->create_timestamp_query();
 			end = context->create_timestamp_query();
-			{
-				imgui_data = util::ImGui_ImplVuk_Init(*global);
-			}
+			{ imgui_data = util::ImGui_ImplVuk_Init(*global); }
 			bench->setup(*this, *global);
 		}
 

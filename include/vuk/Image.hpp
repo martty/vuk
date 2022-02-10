@@ -141,10 +141,6 @@ namespace vuk {
 			       (usage == rhs.usage) && (sharingMode == rhs.sharingMode) && (queueFamilyIndexCount == rhs.queueFamilyIndexCount) &&
 			       (pQueueFamilyIndices == rhs.pQueueFamilyIndices) && (initialLayout == rhs.initialLayout);
 		}
-
-		bool operator!=(ImageCreateInfo const& rhs) const noexcept {
-			return !operator==(rhs);
-		}
 	};
 	static_assert(sizeof(ImageCreateInfo) == sizeof(VkImageCreateInfo), "struct and wrapper have different size!");
 	static_assert(std::is_standard_layout<ImageCreateInfo>::value, "struct wrapper is not a standard layout!");
@@ -508,23 +504,8 @@ namespace vuk {
 		Format format;
 		Samples sample_count;
 	};
-	// TODO: move this into format.cpp
-	inline vuk::ImageAspectFlags format_to_aspect(vuk::Format format) noexcept {
-		switch (format) {
-		case vuk::Format::eD16Unorm:
-		case vuk::Format::eD32Sfloat:
-		case vuk::Format::eX8D24UnormPack32:
-			return vuk::ImageAspectFlagBits::eDepth;
-		case vuk::Format::eD16UnormS8Uint:
-		case vuk::Format::eD24UnormS8Uint:
-		case vuk::Format::eD32SfloatS8Uint:
-			return vuk::ImageAspectFlagBits::eDepth | vuk::ImageAspectFlagBits::eStencil;
-		case vuk::Format::eS8Uint:
-			return vuk::ImageAspectFlagBits::eStencil;
-		default:
-			return vuk::ImageAspectFlagBits::eColor;
-		}
-	}
+
+	ImageAspectFlags format_to_aspect(Format format) noexcept;
 }; // namespace vuk
 
 namespace std {

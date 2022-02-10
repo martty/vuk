@@ -14,6 +14,7 @@
 	}
 #endif
 #include <algorithm>
+#include <atomic>
 #include <fstream>
 #include <spirv_cross.hpp>
 #include <sstream>
@@ -24,6 +25,7 @@
 #include "vuk/Context.hpp"
 #include "vuk/Exception.hpp"
 #include "vuk/Program.hpp"
+#include "vuk/Query.hpp"
 #include "vuk/RenderGraph.hpp"
 
 namespace vuk {
@@ -62,61 +64,6 @@ namespace vuk {
 			transfer_queue = compute_queue ? compute_queue : graphics_queue;
 			transfer_queue_family_index = compute_queue ? params.compute_queue_family_index : params.graphics_queue_family_index;
 		}
-	}
-
-	Queue::Queue(PFN_vkQueueSubmit2KHR fn, VkQueue queue, uint32_t queue_family_index, TimelineSemaphore ts) :
-	    queueSubmit2KHR(fn),
-	    queue(queue),
-	    family_index(queue_family_index),
-	    submit_sync(ts) {}
-
-	Result<void> Queue::submit(std::span<VkSubmitInfo2KHR> sis, VkFence fence) {
-		VkResult result = queueSubmit2KHR(queue, (uint32_t)sis.size(), sis.data(), fence);
-		if (result != VK_SUCCESS) {
-			return { expected_error, VkException{ result } };
-		}
-		return { expected_value };
-	}
-
-	Result<void> Queue::submit(std::span<VkSubmitInfo> sis, VkFence fence) {
-		std::lock_guard _(queue_lock);
-		VkResult result = vkQueueSubmit(queue, (uint32_t)sis.size(), sis.data(), fence);
-		if (result != VK_SUCCESS) {
-			return { expected_error, VkException{ result } };
-		}
-		return { expected_value };
-	}
-
-	Result<void> Context::wait_for_domains(std::span<std::pair<DomainFlags, uint64_t>> queue_waits) {
-		std::array<uint32_t, 3> domain_to_sema_index = { ~0u, ~0u, ~0u };
-		std::array<VkSemaphore, 3> queue_timeline_semaphores;
-		std::array<uint64_t, 3> values = {};
-
-		uint32_t count = 0;
-		for (auto [domain, v] : queue_waits) {
-			auto idx = domain_to_queue_index(domain);
-			auto& mapping = domain_to_sema_index[idx];
-			if (mapping == -1) {
-				mapping = count++;
-			}
-			auto& q = domain_to_queue(domain);
-			queue_timeline_semaphores[mapping] = q.submit_sync.semaphore;
-			values[mapping] = values[mapping] > v ? values[mapping] : v;
-		}
-
-		VkSemaphoreWaitInfo swi{ .sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO };
-		swi.pSemaphores = queue_timeline_semaphores.data();
-		swi.pValues = values.data();
-		swi.semaphoreCount = count;
-		VkResult result = vkWaitSemaphores(device, &swi, UINT64_MAX);
-		for (auto [domain, v] : queue_waits) {
-			auto& q = domain_to_queue(domain);
-			q.last_host_wait.store(v);
-		}
-		if (result != VK_SUCCESS) {
-			return { expected_error, VkException{ result } };
-		}
-		return { expected_value };
 	}
 
 	bool Context::DebugUtils::enabled() {
@@ -177,7 +124,7 @@ namespace vuk {
 	                                                            ImageView iv,
 	                                                            SamplerCreateInfo sci,
 	                                                            ImageLayout layout) {
-		descriptor_bindings[binding][array_index].image = DescriptorImageInfo(ctx.acquire_sampler(sci, ctx.frame_counter), iv, layout);
+		descriptor_bindings[binding][array_index].image = DescriptorImageInfo(ctx.acquire_sampler(sci, ctx.get_frame_count()), iv, layout);
 		descriptor_bindings[binding][array_index].type = DescriptorType::eCombinedImageSampler;
 		VkWriteDescriptorSet wds = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
 		wds.descriptorCount = 1;
@@ -504,6 +451,10 @@ namespace vuk {
 		}
 	}
 
+	uint64_t Context::get_frame_count() {
+		return impl->frame_counter;
+	}
+
 	void Context::create_named_pipeline(Name name, PipelineBaseCreateInfo ci) {
 		std::lock_guard _(impl->named_pipelines_lock);
 		impl->named_pipelines.insert_or_assign(name, &impl->pipelinebase_cache.acquire(std::move(ci)));
@@ -625,37 +576,41 @@ namespace vuk {
 		vkDestroyPipelineCache(device, impl->vk_pipeline_cache, nullptr);
 
 		if (dedicated_graphics_queue) {
-			impl->device_vk_resource.deallocate_timeline_semaphores(std::span{ &dedicated_graphics_queue->submit_sync, 1 });
+			impl->device_vk_resource.deallocate_timeline_semaphores(std::span{ &dedicated_graphics_queue->get_submit_sync(), 1 });
 		}
 
 		if (dedicated_compute_queue) {
-			impl->device_vk_resource.deallocate_timeline_semaphores(std::span{ &dedicated_compute_queue->submit_sync, 1 });
+			impl->device_vk_resource.deallocate_timeline_semaphores(std::span{ &dedicated_compute_queue->get_submit_sync(), 1 });
 		}
 
 		if (dedicated_transfer_queue) {
-			impl->device_vk_resource.deallocate_timeline_semaphores(std::span{ &dedicated_transfer_queue->submit_sync, 1 });
+			impl->device_vk_resource.deallocate_timeline_semaphores(std::span{ &dedicated_transfer_queue->get_submit_sync(), 1 });
 		}
 
 		delete impl;
 	}
 
+	uint64_t Context::get_unique_handle_id() {
+		return impl->unique_handle_id_counter++;
+	}
+
 	void Context::next_frame() {
-		frame_counter++;
-		collect(frame_counter);
+		impl->frame_counter++;
+		collect(impl->frame_counter);
 	}
 
 	void Context::wait_idle() {
 		std::unique_lock<std::mutex> graphics_lock;
 		if (dedicated_graphics_queue) {
-			graphics_lock = std::unique_lock{ graphics_queue->queue_lock };
+			graphics_lock = std::unique_lock{ graphics_queue->get_queue_lock() };
 		}
 		std::unique_lock<std::mutex> compute_lock;
 		if (dedicated_compute_queue) {
-			compute_lock = std::unique_lock{ compute_queue->queue_lock };
+			compute_lock = std::unique_lock{ compute_queue->get_queue_lock() };
 		}
 		std::unique_lock<std::mutex> transfer_lock;
 		if (dedicated_transfer_queue) {
-			transfer_lock = std::unique_lock{ transfer_queue->queue_lock };
+			transfer_lock = std::unique_lock{ transfer_queue->get_queue_lock() };
 		}
 
 		vkDeviceWaitIdle(device);
@@ -671,7 +626,7 @@ namespace vuk {
 		viv.type = ivci.viewType;
 		viv.image = ivci.image;
 		viv.components = ivci.components;
-		viv.id = unique_handle_id_counter++;
+		viv.id = impl->unique_handle_id_counter++;
 		return viv;
 	}
 
@@ -703,7 +658,7 @@ namespace vuk {
 			dslbfci.pBindingFlags = dslci.flags.data();
 			dslci.dslci.pNext = &dslbfci;
 		}
-		auto& dslai = impl->descriptor_set_layouts.acquire(dslci, frame_counter);
+		auto& dslai = impl->descriptor_set_layouts.acquire(dslci, impl->frame_counter);
 		return create_persistent_descriptorset(allocator, { dslai, num_descriptors });
 	}
 

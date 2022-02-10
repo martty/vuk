@@ -280,7 +280,7 @@ namespace vuk {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
 			auto& cinfo = cis[i];
-			auto& pool = ctx->acquire_descriptor_pool(cinfo.layout_info, ctx->frame_counter);
+			auto& pool = ctx->acquire_descriptor_pool(cinfo.layout_info, ctx->get_frame_count());
 			auto ds = pool.acquire(*ctx, cinfo.layout_info);
 			auto mask = cinfo.used.to_ulong();
 			uint32_t leading_ones = num_leading_ones(mask);
@@ -322,7 +322,7 @@ namespace vuk {
 
 	void DeviceVkResource::deallocate_descriptor_sets(std::span<const DescriptorSet> src) {
 		for (int64_t i = 0; i < (int64_t)src.size(); i++) {
-			DescriptorPool& pool = ctx->acquire_descriptor_pool(src[i].layout_info, ctx->frame_counter);
+			DescriptorPool& pool = ctx->acquire_descriptor_pool(src[i].layout_info, ctx->get_frame_count());
 			pool.release(src[i].descriptor_set);
 		}
 	}

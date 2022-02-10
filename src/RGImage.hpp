@@ -12,7 +12,7 @@ namespace vuk {
 		vuk::ImageCreateInfo ici;
 		vuk::ImageViewCreateInfo ivci;
 
-		bool operator==(const RGCI& other) const {
+		bool operator==(const RGCI& other) const noexcept {
 			return std::tie(name, ici, ivci) == std::tie(other.name, other.ici, other.ivci);
 		}
 	};

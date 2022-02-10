@@ -116,7 +116,7 @@ namespace {
 			                    command_buffer.bind_compute_pipeline("stupidsort").specialize_constants(0, speed_count).dispatch(1);
 			                    // We can also customize pipelines by using specialization constants
 			                    // Here we will apply a tint based on the current frame
-			                    auto current_frame = command_buffer.get_context().frame_counter.load();
+			                    auto current_frame = command_buffer.get_context().get_frame_count();
 			                    auto mod_frame = current_frame % 100;
 			                    if (mod_frame == 99) {
 				                    speed_count += 256;

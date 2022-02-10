@@ -61,7 +61,7 @@ namespace vuk {
 		vuk::DescriptorType variable_count_binding_type;
 		unsigned variable_count_binding_max_size;
 
-		bool operator==(const DescriptorSetLayoutAllocInfo& o) const {
+		bool operator==(const DescriptorSetLayoutAllocInfo& o) const noexcept {
 			return layout == o.layout && descriptor_counts == o.descriptor_counts;
 		}
 	};
@@ -78,7 +78,7 @@ namespace vuk {
 
 		DescriptorImageInfo(vuk::Sampler s, vuk::ImageView iv, vuk::ImageLayout il) : sampler(s), image_view(iv), dii{ s.payload, iv.payload, (VkImageLayout)il } {}
 
-		bool operator==(const DescriptorImageInfo& o) const {
+		bool operator==(const DescriptorImageInfo& o) const noexcept {
 			return std::tie(sampler, image_view, dii.imageLayout) == std::tie(o.sampler, o.image_view, o.dii.imageLayout);
 		}
 
@@ -99,7 +99,7 @@ namespace vuk {
 			vuk::DescriptorImageInfo image;
 		};
 
-		bool operator==(const DescriptorBinding& o) const {
+		bool operator==(const DescriptorBinding& o) const noexcept {
 			if (type != o.type)
 				return false;
 			switch (type) {

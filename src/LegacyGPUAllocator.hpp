@@ -16,7 +16,7 @@ namespace vuk {
 		MemoryUsage mem_usage;
 		vuk::BufferUsageFlags buffer_usage;
 
-		bool operator==(const PoolSelect& o) const {
+		bool operator==(const PoolSelect& o) const noexcept {
 			return std::tie(mem_usage, buffer_usage) == std::tie(o.mem_usage, o.buffer_usage);
 		}
 	};

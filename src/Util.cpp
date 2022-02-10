@@ -1,8 +1,88 @@
 #include "vuk/AllocatorHelpers.hpp"
 #include "vuk/Context.hpp"
 #include "vuk/RenderGraph.hpp"
+#include "vuk/SampledImage.hpp"
 
 namespace vuk {
+	struct QueueImpl {
+		std::mutex queue_lock;
+		PFN_vkQueueSubmit2KHR queueSubmit2KHR;
+		TimelineSemaphore submit_sync;
+		VkQueue queue;
+		std::array<std::atomic<uint64_t>, 3> last_device_waits;
+		std::atomic<uint64_t> last_host_wait;
+		uint32_t family_index;
+
+		QueueImpl(PFN_vkQueueSubmit2KHR fn, VkQueue queue, uint32_t queue_family_index, TimelineSemaphore ts) :
+		    queueSubmit2KHR(fn),
+		    queue(queue),
+		    family_index(queue_family_index),
+		    submit_sync(ts) {}
+	};
+
+	Queue::Queue(PFN_vkQueueSubmit2KHR fn, VkQueue queue, uint32_t queue_family_index, TimelineSemaphore ts) :
+	    impl(new QueueImpl(fn, queue, queue_family_index, ts)) {}
+	Queue::~Queue() {
+		delete impl;
+	}
+
+	TimelineSemaphore& Queue::get_submit_sync() {
+		return impl->submit_sync;
+	}
+
+	std::mutex& Queue::get_queue_lock() {
+		return impl->queue_lock;
+	}
+
+	Result<void> Queue::submit(std::span<VkSubmitInfo2KHR> sis, VkFence fence) {
+		VkResult result = impl->queueSubmit2KHR(impl->queue, (uint32_t)sis.size(), sis.data(), fence);
+		if (result != VK_SUCCESS) {
+			return { expected_error, VkException{ result } };
+		}
+		return { expected_value };
+	}
+
+	Result<void> Queue::submit(std::span<VkSubmitInfo> sis, VkFence fence) {
+		std::lock_guard _(impl->queue_lock);
+		VkResult result = vkQueueSubmit(impl->queue, (uint32_t)sis.size(), sis.data(), fence);
+		if (result != VK_SUCCESS) {
+			return { expected_error, VkException{ result } };
+		}
+		return { expected_value };
+	}
+
+	Result<void> Context::wait_for_domains(std::span<std::pair<DomainFlags, uint64_t>> queue_waits) {
+		std::array<uint32_t, 3> domain_to_sema_index = { ~0u, ~0u, ~0u };
+		std::array<VkSemaphore, 3> queue_timeline_semaphores;
+		std::array<uint64_t, 3> values = {};
+
+		uint32_t count = 0;
+		for (auto [domain, v] : queue_waits) {
+			auto idx = domain_to_queue_index(domain);
+			auto& mapping = domain_to_sema_index[idx];
+			if (mapping == -1) {
+				mapping = count++;
+			}
+			auto& q = domain_to_queue(domain);
+			queue_timeline_semaphores[mapping] = q.impl->submit_sync.semaphore;
+			values[mapping] = values[mapping] > v ? values[mapping] : v;
+		}
+
+		VkSemaphoreWaitInfo swi{ .sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO };
+		swi.pSemaphores = queue_timeline_semaphores.data();
+		swi.pValues = values.data();
+		swi.semaphoreCount = count;
+		VkResult result = vkWaitSemaphores(device, &swi, UINT64_MAX);
+		for (auto [domain, v] : queue_waits) {
+			auto& q = domain_to_queue(domain);
+			q.impl->last_host_wait.store(v);
+		}
+		if (result != VK_SUCCESS) {
+			return { expected_error, VkException{ result } };
+		}
+		return { expected_value };
+	}
+
 	Result<void> link_execute_submit(Allocator& allocator, std::span<std::pair<Allocator*, RenderGraph*>> rgs) {
 		std::vector<ExecutableRenderGraph> ergs;
 		std::vector<std::pair<Allocator*, ExecutableRenderGraph*>> ptrvec;
@@ -61,18 +141,18 @@ namespace vuk {
 		std::array<uint64_t, 3> queue_progress_references;
 		std::unique_lock<std::mutex> gfx_lock;
 		if (used_domains & DomainFlagBits::eGraphicsQueue) {
-			queue_progress_references[ctx.domain_to_queue_index(DomainFlagBits::eGraphicsQueue)] = *ctx.graphics_queue->submit_sync.value;
-			gfx_lock = std::unique_lock{ ctx.graphics_queue->queue_lock };
+			queue_progress_references[ctx.domain_to_queue_index(DomainFlagBits::eGraphicsQueue)] = *ctx.graphics_queue->impl->submit_sync.value;
+			gfx_lock = std::unique_lock{ ctx.graphics_queue->impl->queue_lock };
 		}
 		std::unique_lock<std::mutex> compute_lock;
 		if (used_domains & DomainFlagBits::eComputeQueue) {
-			queue_progress_references[ctx.domain_to_queue_index(DomainFlagBits::eComputeQueue)] = *ctx.compute_queue->submit_sync.value;
-			compute_lock = std::unique_lock{ ctx.compute_queue->queue_lock };
+			queue_progress_references[ctx.domain_to_queue_index(DomainFlagBits::eComputeQueue)] = *ctx.compute_queue->impl->submit_sync.value;
+			compute_lock = std::unique_lock{ ctx.compute_queue->impl->queue_lock };
 		}
 		std::unique_lock<std::mutex> transfer_lock;
 		if (used_domains & DomainFlagBits::eTransferQueue) {
-			queue_progress_references[ctx.domain_to_queue_index(DomainFlagBits::eTransferQueue)] = *ctx.transfer_queue->submit_sync.value;
-			transfer_lock = std::unique_lock{ ctx.transfer_queue->queue_lock };
+			queue_progress_references[ctx.domain_to_queue_index(DomainFlagBits::eTransferQueue)] = *ctx.transfer_queue->impl->submit_sync.value;
+			transfer_lock = std::unique_lock{ ctx.transfer_queue->impl->queue_lock };
 		}
 
 		if (bundle.batches.size() > 1) {
@@ -119,7 +199,7 @@ namespace vuk {
 				uint32_t wait_sema_count = 0;
 				for (auto& w : submit_info.relative_waits) {
 					VkSemaphoreSubmitInfoKHR ssi{ VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR };
-					auto& wait_queue = ctx.domain_to_queue(w.first).submit_sync;
+					auto& wait_queue = ctx.domain_to_queue(w.first).impl->submit_sync;
 					ssi.semaphore = wait_queue.semaphore;
 					ssi.value = queue_progress_references[ctx.domain_to_queue_index(w.first)] + w.second;
 					ssi.stageMask = (VkPipelineStageFlagBits2KHR)PipelineStageFlagBits::eAllCommands;
@@ -135,8 +215,8 @@ namespace vuk {
 				}
 
 				VkSemaphoreSubmitInfoKHR ssi{ VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR };
-				ssi.semaphore = queue.submit_sync.semaphore;
-				ssi.value = ++(*queue.submit_sync.value);
+				ssi.semaphore = queue.impl->submit_sync.semaphore;
+				ssi.value = ++(*queue.impl->submit_sync.value);
 
 				ssi.stageMask = (VkPipelineStageFlagBits2KHR)PipelineStageFlagBits::eAllCommands;
 
@@ -224,7 +304,7 @@ namespace vuk {
 		pi.pImageIndices = &image_index;
 		pi.waitSemaphoreCount = 1;
 		pi.pWaitSemaphores = &render_complete;
-		auto present_result = vkQueuePresentKHR(ctx.graphics_queue->queue, &pi);
+		auto present_result = vkQueuePresentKHR(ctx.graphics_queue->impl->queue, &pi);
 		if (present_result != VK_SUCCESS) {
 			return { expected_error, PresentException{ present_result } };
 		}
@@ -270,13 +350,20 @@ namespace vuk {
 	FutureBase::FutureBase(Allocator& alloc) : allocator(&alloc) {}
 
 	template<class T>
-	Future<T>::Future(Allocator& alloc, struct RenderGraph& rg, Name output_binding, DomainFlags dst_domain) : control(std::make_unique<FutureBase>(alloc)), rg(&rg), output_binding(output_binding) {
+	Future<T>::Future(Allocator& alloc, struct RenderGraph& rg, Name output_binding, DomainFlags dst_domain) :
+	    control(std::make_unique<FutureBase>(alloc)),
+	    rg(&rg),
+	    output_binding(output_binding) {
 		control->status = FutureBase::Status::eRenderGraphBound;
 		this->rg->attach_out(output_binding, *this, dst_domain);
 	}
 
 	template<class T>
-	Future<T>::Future(Allocator& alloc, std::unique_ptr<struct RenderGraph> org, Name output_binding, DomainFlags dst_domain) : control(std::make_unique<FutureBase>(alloc)), owned_rg(std::move(org)), rg(owned_rg.get()), output_binding(output_binding) {
+	Future<T>::Future(Allocator& alloc, std::unique_ptr<struct RenderGraph> org, Name output_binding, DomainFlags dst_domain) :
+	    control(std::make_unique<FutureBase>(alloc)),
+	    owned_rg(std::move(org)),
+	    rg(owned_rg.get()),
+	    output_binding(output_binding) {
 		control->status = FutureBase::Status::eRenderGraphBound;
 		rg->attach_out(output_binding, *this, dst_domain);
 	}

@@ -94,7 +94,7 @@ namespace {
 
 			                                  // We can also customize pipelines by using specialization constants
 			                                  // Here we will apply a tint based on the current frame
-			                                  auto current_frame = command_buffer.get_context().frame_counter.load();
+			                                  auto current_frame = command_buffer.get_context().get_frame_count();
 			                                  auto mod_frame = current_frame % 1000;
 			                                  glm::vec3 tint{ 1.f, 1.f, 1.f };
 			                                  if (mod_frame <= 500 && mod_frame > 250) {

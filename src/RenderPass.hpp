@@ -26,7 +26,7 @@ inline bool operator==(VkAttachmentReference const& lhs, VkAttachmentReference c
 namespace vuk {
 	struct SubpassDescription : public VkSubpassDescription {
 		SubpassDescription() : VkSubpassDescription{} {}
-		bool operator==(const SubpassDescription& o) const {
+		bool operator==(const SubpassDescription& o) const noexcept {
 			return std::tie(flags, pipelineBindPoint) == std::tie(o.flags, o.pipelineBindPoint);
 		}
 	};
@@ -41,7 +41,7 @@ namespace vuk {
 		std::vector<std::optional<VkAttachmentReference>> ds_refs;
 		std::vector<size_t> color_ref_offsets;
 
-		bool operator==(const RenderPassCreateInfo& o) const {
+		bool operator==(const RenderPassCreateInfo& o) const noexcept {
 			return std::forward_as_tuple(flags, attachments, subpass_descriptions, subpass_dependencies, color_refs, color_ref_offsets, ds_refs, resolve_refs) ==
 			       std::forward_as_tuple(
 			           o.flags, o.attachments, o.subpass_descriptions, o.subpass_dependencies, o.color_refs, o.color_ref_offsets, o.ds_refs, o.resolve_refs);
@@ -58,7 +58,7 @@ namespace vuk {
 		std::vector<vuk::ImageView> attachments;
 		vuk::Samples sample_count = vuk::Samples::eInfer;
 
-		bool operator==(const FramebufferCreateInfo& o) const {
+		bool operator==(const FramebufferCreateInfo& o) const noexcept {
 			return std::tie(flags, attachments, width, height, renderPass, layers, sample_count) ==
 			       std::tie(o.flags, o.attachments, o.width, o.height, o.renderPass, o.layers, o.sample_count);
 		}

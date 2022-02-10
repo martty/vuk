@@ -912,9 +912,9 @@ namespace vuk {
 	enum Access {
 		eNone,          // as initial use: resource available without synchronization, as final use: resource does not need synchronizing
 		eInfer,         // as final use only: this use must be overwritten/inferred before compiling (internal)
-		eConsume,		// must be overwritten before compiling: this access consumes this name (internal)
-		eConverge,		// converge previous uses (internal)
-		eManual,		// provided explictly (internal)
+		eConsume,       // must be overwritten before compiling: this access consumes this name (internal)
+		eConverge,      // converge previous uses (internal)
+		eManual,        // provided explictly (internal)
 		eClear,         // general clearing
 		eTransferClear, // vkCmdClearXXX
 		eColorRW,
@@ -956,6 +956,40 @@ namespace vuk {
 		eAcquireFromTransfer
 	};
 
+	enum class DomainFlagBits {
+		eNone = 0,
+		eHost = 1 << 0,
+		eGraphicsQueue = 1 << 1,
+		eComputeQueue = 1 << 2,
+		eTransferQueue = 1 << 3,
+		eGraphicsOperation = 1 << 4,
+		eComputeOperation = 1 << 5,
+		eTransferOperation = 1 << 6,
+		eQueueMask = 0b1110,
+		eOpMask = 0b1110000,
+		eGraphicsOnGraphics = eGraphicsQueue | eGraphicsOperation,
+		eComputeOnGraphics = eGraphicsQueue | eComputeOperation,
+		eTransferOnGraphics = eGraphicsQueue | eTransferOperation,
+		eComputeOnCompute = eComputeQueue | eComputeOperation,
+		eTransferOnCompute = eComputeQueue | eComputeOperation,
+		eTransferOnTransfer = eTransferQueue | eTransferOperation,
+		eDevice = eGraphicsQueue | eComputeQueue | eTransferQueue,
+		eAny = eDevice | eHost
+	};
+
+	using DomainFlags = Flags<DomainFlagBits>;
+	inline constexpr DomainFlags operator|(DomainFlagBits bit0, DomainFlagBits bit1) noexcept {
+		return DomainFlags(bit0) | bit1;
+	}
+
+	inline constexpr DomainFlags operator&(DomainFlagBits bit0, DomainFlagBits bit1) noexcept {
+		return DomainFlags(bit0) & bit1;
+	}
+
+	inline constexpr DomainFlags operator^(DomainFlagBits bit0, DomainFlagBits bit1) noexcept {
+		return DomainFlags(bit0) ^ bit1;
+	}
+
 	// Aligns given value up to nearest multiply of align value. For example: VmaAlignUp(11, 8) = 16.
 	// Use types like uint32_t, uint64_t as T.
 	// Source: VMA
@@ -968,7 +1002,7 @@ namespace vuk {
 		VkCommandPool command_pool;
 		uint32_t queue_family_index;
 
-		constexpr bool operator==(const CommandPool& other) const {
+		constexpr bool operator==(const CommandPool& other) const noexcept {
 			return command_pool == other.command_pool;
 		}
 	};

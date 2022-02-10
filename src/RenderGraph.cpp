@@ -1427,7 +1427,7 @@ namespace vuk {
 			rp.rpci.attachmentCount = (uint32_t)rp.rpci.attachments.size();
 			rp.rpci.pAttachments = rp.rpci.attachments.data();
 
-			rp.handle = ctx.acquire_renderpass(rp.rpci, ctx.frame_counter);
+			rp.handle = ctx.acquire_renderpass(rp.rpci, ctx.get_frame_count());
 		}
 
 		return { std::move(*this) };

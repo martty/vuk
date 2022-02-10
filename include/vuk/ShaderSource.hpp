@@ -78,7 +78,7 @@ namespace vuk {
 		ShaderSource source;
 		std::string filename;
 
-		bool operator==(const ShaderModuleCreateInfo& o) const {
+		bool operator==(const ShaderModuleCreateInfo& o) const noexcept {
 			return source == o.source;
 		}
 	};

@@ -73,4 +73,11 @@ namespace vuk {
 	struct DescriptorSet;
 	struct PersistentDescriptorSetCreateInfo;
 	struct PersistentDescriptorSet;
+
+	struct ShaderModule;
+	struct PipelineBaseCreateInfo;
+	struct PipelineBaseInfo;
+	struct Program;
+
+	struct PersistentDescriptorSet;
 } // namespace vuk

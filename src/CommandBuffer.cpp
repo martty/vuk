@@ -328,7 +328,7 @@ namespace vuk {
 		VUK_EARLY_RET();
 		sets_used[set] = true;
 		set_bindings[set].bindings[binding].type = DescriptorType::eCombinedImageSampler;
-		set_bindings[set].bindings[binding].image = DescriptorImageInfo(ctx.acquire_sampler(sci, ctx.frame_counter), iv, il);
+		set_bindings[set].bindings[binding].image = DescriptorImageInfo(ctx.acquire_sampler(sci, ctx.get_frame_count()), iv, il);
 		set_bindings[set].used.set(binding);
 
 		return *this;
@@ -1025,7 +1025,7 @@ namespace vuk {
 				pi.base->psscis[0].pSpecializationInfo = &pi.specialization_info;
 			}
 
-			current_compute_pipeline = ctx.acquire_pipeline(pi, ctx.frame_counter);
+			current_compute_pipeline = ctx.acquire_pipeline(pi, ctx.get_frame_count());
 
 			vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, current_compute_pipeline->pipeline);
 			next_compute_pipeline = nullptr;
@@ -1288,7 +1288,7 @@ namespace vuk {
 
 			assert(data_ptr - data_start_ptr == pi.extended_size); // sanity check: we wrote all the data we wanted to
 			// acquire_pipeline makes copy of extended_data if it needs to
-			current_pipeline = ctx.acquire_pipeline(pi, ctx.frame_counter);
+			current_pipeline = ctx.acquire_pipeline(pi, ctx.get_frame_count());
 			if (!pi.is_inline()) {
 				delete pi.extended_data;
 			}

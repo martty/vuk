@@ -117,18 +117,18 @@ namespace vuk {
 				uint32_t layer_count = VK_REMAINING_ARRAY_LAYERS;
 				uint32_t level_count = VK_REMAINING_MIP_LEVELS;
 
-				constexpr bool operator==(const Image& o) const {
+				constexpr bool operator==(const Image& o) const noexcept {
 					return base_level == o.base_level && level_count == o.level_count && base_layer == o.base_layer && layer_count == o.layer_count;
 				}
 
-				Name combine_name(Name prefix) {
+				Name combine_name(Name prefix) const {
 					std::string suffix = std::string(prefix.to_sv());
 					suffix += "[" + std::to_string(base_layer) + ":" + std::to_string(base_layer + layer_count - 1) + "]";
 					suffix += "[" + std::to_string(base_level) + ":" + std::to_string(base_level + level_count - 1) + "]";
 					return Name(suffix.c_str());
 				}
 
-				bool operator<(const Image& o) const {
+				bool operator<(const Image& o) const noexcept {
 					return std::tie(base_layer, base_level, layer_count, level_count) < std::tie(o.base_layer, o.base_level, o.layer_count, o.level_count);
 				}
 			} image = {};
@@ -225,7 +225,7 @@ namespace vuk {
 
 		/// @brief Attach a swapchain to the given name
 		void attach_swapchain(Name name, SwapchainRef swp, Clear);
-		
+
 		/// @brief Attach a buffer to the given name
 		void attach_buffer(Name name, Buffer, Access initial, Access final);
 
@@ -238,7 +238,7 @@ namespace vuk {
 		/// @brief Attach a future of a buffer to the given name
 		void attach_in(Name name, Future<Buffer>&& fimg, Access final);
 
-		/// @brief Request the rendergraph 
+		/// @brief Request the rendergraph
 		void attach_managed(Name name, Format format, Dimension2D dimension, Samples samples, Clear clear_value);
 
 		/// @brief Control compilation options when compiling the rendergraph

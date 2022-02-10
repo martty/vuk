@@ -4,6 +4,7 @@
 #include "vuk/Context.hpp"
 #include "vuk/Partials.hpp"
 #include "vuk/RenderGraph.hpp"
+#include "vuk/SampledImage.hpp"
 
 util::ImGuiData util::ImGui_ImplVuk_Init(vuk::Allocator& allocator) {
 	vuk::Context& ctx = allocator.get_context();

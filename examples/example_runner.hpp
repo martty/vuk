@@ -8,6 +8,7 @@
 #include "vuk/Context.hpp"
 #include "vuk/Partials.hpp"
 #include "vuk/RenderGraph.hpp"
+#include "vuk/SampledImage.hpp"
 #include "vuk/resources/DeviceFrameResource.hpp"
 #include <VkBootstrap.h>
 #include <functional>

@@ -248,7 +248,7 @@ namespace vuk {
 			return pos;
 		}
 
-		bool operator==(const fixed_vector& o) const {
+		bool operator==(const fixed_vector& o) const noexcept {
 			return std::equal(begin(), end(), o.begin(), o.end());
 		}
 	};

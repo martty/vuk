@@ -70,7 +70,7 @@ namespace vuk {
 			rgci.ici = ici;
 			rgci.ivci = ivci;
 
-			auto rg = ctx.acquire_rendertarget(rgci, ctx.frame_counter);
+			auto rg = ctx.acquire_rendertarget(rgci, ctx.get_frame_count());
 			attachment_info.attachment.image_view = rg.image_view;
 			attachment_info.attachment.image = rg.image;
 		}

@@ -1,64 +1,29 @@
 #pragma once
 
-#include <atomic>
+#include <array>
+#include <optional>
 #include <span>
 #include <string_view>
+#include <vector>
 
+#include "vuk/Allocator.hpp"
 #include "vuk/Buffer.hpp"
 #include "vuk/Image.hpp"
-#include "vuk/Pipeline.hpp"
-#include "vuk/Query.hpp"
-#include "vuk/SampledImage.hpp"
 #include "vuk/Swapchain.hpp"
 #include "vuk_fwd.hpp"
 
-#include <vuk/Allocator.hpp>
+namespace std {
+	class mutex;
+}
 
 namespace vuk {
-	struct TransferStub {
-		size_t id;
-	};
-
-	template<class T>
-	struct Future;
-
-	enum class DomainFlagBits {
-		eNone = 0,
-		eHost = 1 << 0,
-		eGraphicsQueue = 1 << 1,
-		eComputeQueue = 1 << 2,
-		eTransferQueue = 1 << 3,
-		eGraphicsOperation = 1 << 4,
-		eComputeOperation = 1 << 5,
-		eTransferOperation = 1 << 6,
-		eQueueMask = 0b1110,
-		eOpMask = 0b1110000,
-		eGraphicsOnGraphics = eGraphicsQueue | eGraphicsOperation,
-		eComputeOnGraphics = eGraphicsQueue | eComputeOperation,
-		eTransferOnGraphics = eGraphicsQueue | eTransferOperation,
-		eComputeOnCompute = eComputeQueue | eComputeOperation,
-		eTransferOnCompute = eComputeQueue | eComputeOperation,
-		eTransferOnTransfer = eTransferQueue | eTransferOperation,
-		eDevice = eGraphicsQueue | eComputeQueue | eTransferQueue,
-		eAny = eDevice | eHost
-	};
-
-	using DomainFlags = Flags<DomainFlagBits>;
-	inline constexpr DomainFlags operator|(DomainFlagBits bit0, DomainFlagBits bit1) noexcept {
-		return DomainFlags(bit0) | bit1;
-	}
-
-	inline constexpr DomainFlags operator&(DomainFlagBits bit0, DomainFlagBits bit1) noexcept {
-		return DomainFlags(bit0) & bit1;
-	}
-
-	inline constexpr DomainFlags operator^(DomainFlagBits bit0, DomainFlagBits bit1) noexcept {
-		return DomainFlags(bit0) ^ bit1;
-	}
-
+	/// @brief Parameters used for creating a Context
 	struct ContextCreateParameters {
+		/// @brief Vulkan instance
 		VkInstance instance;
+		/// @brief Vulkan device
 		VkDevice device;
+		/// @brief Vulkan physical device
 		VkPhysicalDevice physical_device;
 		/// @brief Optional graphics queue
 		VkQueue graphics_queue = VK_NULL_HANDLE;
@@ -74,19 +39,18 @@ namespace vuk {
 		uint32_t transfer_queue_family_index = VK_QUEUE_FAMILY_IGNORED;
 	};
 
+	/// @brief Abstraction of a device queue in Vulkan
 	struct Queue {
 		Queue(PFN_vkQueueSubmit2KHR fn, VkQueue queue, uint32_t queue_family_index, TimelineSemaphore ts);
+		~Queue();
 
-		std::mutex queue_lock;
-		PFN_vkQueueSubmit2KHR queueSubmit2KHR;
-		TimelineSemaphore submit_sync;
-		VkQueue queue;
-		std::array<std::atomic<uint64_t>, 3> last_device_waits;
-		std::atomic<uint64_t> last_host_wait;
-		uint32_t family_index;
+		TimelineSemaphore& get_submit_sync();
+		std::mutex& get_queue_lock();
 
 		Result<void> submit(std::span<VkSubmitInfo> submit_infos, VkFence fence);
 		Result<void> submit(std::span<VkSubmitInfo2KHR> submit_infos, VkFence fence);
+
+		struct QueueImpl* impl;
 	};
 
 	class Context {
@@ -108,7 +72,7 @@ namespace vuk {
 
 		Result<void> wait_for_domains(std::span<std::pair<DomainFlags, uint64_t>> queue_waits);
 
-		std::atomic<size_t> frame_counter = 0;
+		uint64_t get_frame_count();
 
 		/// @brief Create a new Context
 		/// @param params Vulkan parameters initialized beforehand
@@ -155,8 +119,6 @@ namespace vuk {
 		/// @return The resource
 		DeviceVkResource& get_vk_resource();
 
-		uint32_t (*get_thread_index)() = nullptr;
-
 		Texture allocate_texture(Allocator& allocator, ImageCreateInfo ici);
 
 		size_t get_allocation_size(Buffer);
@@ -191,10 +153,21 @@ namespace vuk {
 		LegacyGPUAllocator& get_legacy_gpu_allocator();
 
 		// Query functionality
+
+		/// @brief Checks if a timestamp query is available
+		/// @param q the Query to check
+		/// @return true if the timestamp is available
 		bool is_timestamp_available(Query q);
 
+		/// @brief Retrieve a timestamp if available
+		/// @param q the Query to check
+		/// @return the timestamp value if it was available, null optional otherwise
 		std::optional<uint64_t> retrieve_timestamp(Query q);
 
+		/// @brief Retrive a duration if available
+		/// @param q1 the start timestamp Query
+		/// @param q2 the end timestamp Query
+		/// @return the duration in seconds if both timestamps were available, null optional otherwise
 		std::optional<double> retrieve_duration(Query q1, Query q2);
 
 		Result<void> make_timestamp_results_available(std::span<const TimestampQueryPool> pool);
@@ -204,23 +177,24 @@ namespace vuk {
 		VkRenderPass acquire_renderpass(const struct RenderPassCreateInfo&, uint64_t absolute_frame);
 		struct PipelineInfo acquire_pipeline(const struct PipelineInstanceCreateInfo&, uint64_t absolute_frame);
 		struct ComputePipelineInfo acquire_pipeline(const struct ComputePipelineInstanceCreateInfo&, uint64_t absolute_frame);
-		struct DescriptorPool& acquire_descriptor_pool(const DescriptorSetLayoutAllocInfo& dslai, uint64_t absolute_frame);
+		struct DescriptorPool& acquire_descriptor_pool(const struct DescriptorSetLayoutAllocInfo& dslai, uint64_t absolute_frame);
 
-		Unique<PersistentDescriptorSet> create_persistent_descriptorset(Allocator& allocator, DescriptorSetLayoutCreateInfo dslci, unsigned num_descriptors);
+		Unique<PersistentDescriptorSet> create_persistent_descriptorset(Allocator& allocator, struct DescriptorSetLayoutCreateInfo dslci, unsigned num_descriptors);
 		Unique<PersistentDescriptorSet> create_persistent_descriptorset(Allocator& allocator, const PipelineBaseInfo& base, unsigned set, unsigned num_descriptors);
 		Unique<PersistentDescriptorSet> create_persistent_descriptorset(Allocator& allocator, const PersistentDescriptorSetCreateInfo&);
 		void commit_persistent_descriptorset(PersistentDescriptorSet& array);
 
 		void collect(uint64_t frame);
 
+		uint64_t get_unique_handle_id();
+
 	private:
 		struct ContextImpl* impl;
-		std::atomic<size_t> unique_handle_id_counter = 0;
 
 		void destroy(const struct RGImage& image);
 		void destroy(const struct LegacyPoolAllocator& v);
 		void destroy(const struct LegacyLinearAllocator& v);
-		void destroy(const DescriptorPool& dp);
+		void destroy(const struct DescriptorPool& dp);
 		void destroy(const struct PipelineInfo& pi);
 		void destroy(const struct ComputePipelineInfo& pi);
 		void destroy(const ShaderModule& sm);
@@ -232,10 +206,10 @@ namespace vuk {
 		void destroy(const Sampler& sa);
 		void destroy(const PipelineBaseInfo& pbi);
 
-		ShaderModule create(const create_info_t<ShaderModule>& cinfo);
-		PipelineBaseInfo create(const create_info_t<PipelineBaseInfo>& cinfo);
-		VkPipelineLayout create(const create_info_t<VkPipelineLayout>& cinfo);
-		DescriptorSetLayoutAllocInfo create(const create_info_t<DescriptorSetLayoutAllocInfo>& cinfo);
+		ShaderModule create(const struct ShaderModuleCreateInfo& cinfo);
+		PipelineBaseInfo create(const struct PipelineBaseCreateInfo& cinfo);
+		VkPipelineLayout create(const struct PipelineLayoutCreateInfo& cinfo);
+		DescriptorSetLayoutAllocInfo create(const struct DescriptorSetLayoutCreateInfo& cinfo);
 		DescriptorPool create(const struct DescriptorSetLayoutAllocInfo& cinfo);
 		PipelineInfo create(const struct PipelineInstanceCreateInfo& cinfo);
 		ComputePipelineInfo create(const struct ComputePipelineInstanceCreateInfo& cinfo);
@@ -249,7 +223,7 @@ namespace vuk {
 
 	template<class T>
 	Handle<T> Context::wrap(T payload) {
-		return { { unique_handle_id_counter++ }, payload };
+		return { { get_unique_handle_id() }, payload };
 	}
 
 	template<class T>
@@ -286,6 +260,9 @@ namespace vuk {
 	Result<void> execute_submit_and_wait(Allocator& nalloc, ExecutableRenderGraph&& rg);
 
 	struct FutureBase;
+
+	template<class T>
+	struct Future;
 
 	template<class T>
 	int get_allocator(T&) {
@@ -326,13 +303,14 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	SampledImage make_sampled_image(ImageView iv, SamplerCreateInfo sci);
+	struct SampledImage make_sampled_image(ImageView iv, SamplerCreateInfo sci);
 
-	SampledImage make_sampled_image(Name n, SamplerCreateInfo sci);
+	struct SampledImage make_sampled_image(Name n, SamplerCreateInfo sci);
 
-	SampledImage make_sampled_image(Name n, ImageViewCreateInfo ivci, SamplerCreateInfo sci);
+	struct SampledImage make_sampled_image(Name n, ImageViewCreateInfo ivci, SamplerCreateInfo sci);
 } // namespace vuk
 
+#include <memory>
 // futures
 namespace vuk {
 
