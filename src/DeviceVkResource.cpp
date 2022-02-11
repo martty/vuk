@@ -280,8 +280,8 @@ namespace vuk {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
 			auto& cinfo = cis[i];
-			auto& pool = ctx->acquire_descriptor_pool(cinfo.layout_info, ctx->get_frame_count());
-			auto ds = pool.acquire(*ctx, cinfo.layout_info);
+			auto& pool = ctx->acquire_descriptor_pool(*cinfo.layout_info, ctx->get_frame_count());
+			auto ds = pool.acquire(*ctx, *cinfo.layout_info);
 			auto mask = cinfo.used.to_ulong();
 			uint32_t leading_ones = num_leading_ones(mask);
 			std::array<VkWriteDescriptorSet, VUK_MAX_BINDINGS> writes = {};
@@ -315,7 +315,7 @@ namespace vuk {
 				}
 			}
 			vkUpdateDescriptorSets(device, j, writes.data(), 0, nullptr);
-			dst[i] = { ds, cinfo.layout_info };
+			dst[i] = { ds, *cinfo.layout_info };
 		}
 		return { expected_value };
 	}

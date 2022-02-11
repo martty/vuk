@@ -179,34 +179,33 @@ namespace vuk {
 	}
 
 	struct SetBinding {
-		uint32_t mask = 0;
-		uint32_t count = 0;
 		std::bitset<VUK_MAX_BINDINGS> used = {};
 		std::array<DescriptorBinding, VUK_MAX_BINDINGS> bindings;
-		std::array<DescriptorBinding, VUK_MAX_BINDINGS> compressed_bindings; // TODO: remove bindings and uncompress on use
-		DescriptorSetLayoutAllocInfo layout_info = {};
+		DescriptorSetLayoutAllocInfo* layout_info = nullptr;
 		uint64_t hash = 0;
 
-		void calculate_hash() {
-			mask = used.to_ulong();
-			unsigned long leading_ones = vuk::num_leading_ones(mask);
-			hash = hash_bytes(reinterpret_cast<const char*>(&bindings[0]), leading_ones * sizeof(DescriptorBinding));
-			hash_combine(hash, layout_info.layout);
-			count = 0;
+		SetBinding finalize() {
+			SetBinding final;
+			final.used = used;
+			final.layout_info = layout_info;
+			uint32_t mask = used.to_ulong();
 			for (size_t i = 0; i < VUK_MAX_BINDINGS; i++) {
 				if ((mask & (1 << i)) == 0) {
 					continue;
 				} else {
-					*(compressed_bindings.data() + count) = *(bindings.data() + i); // ugly, but fast in debug
-					count++;
+					final.bindings[i] = bindings[i];
 				}
 			}
+			
+			final.hash = hash_bytes(reinterpret_cast<const char*>(&final.bindings[0]), VUK_MAX_BINDINGS * sizeof(DescriptorBinding));
+			hash_combine(final.hash, layout_info->layout);
+			return final;
 		}
 
 		bool operator==(const SetBinding& o) const noexcept {
 			if (layout_info != o.layout_info)
 				return false;
-			return memcmp(compressed_bindings.data(), o.compressed_bindings.data(), count * sizeof(DescriptorBinding)) == 0;
+			return memcmp(bindings.data(), o.bindings.data(), VUK_MAX_BINDINGS * sizeof(DescriptorBinding)) == 0;
 		}
 	};
 

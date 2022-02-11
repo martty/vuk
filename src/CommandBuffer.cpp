@@ -961,11 +961,11 @@ namespace vuk {
 			bool persistent = persistent_sets_mask & (1 << i);
 			if (!set_used && !persistent)
 				continue;
-			set_bindings[i].layout_info = graphics ? current_pipeline->layout_info[i] : current_compute_pipeline->layout_info[i];
+			set_bindings[i].layout_info = graphics ? &current_pipeline->layout_info[i] : &current_compute_pipeline->layout_info[i];
 			if (!persistent) {
-				set_bindings[i].calculate_hash();
+				auto sb = set_bindings[i].finalize();
 				Unique<DescriptorSet> ds;
-				if (auto ret = allocator->allocate_descriptor_sets(std::span{ &*ds, 1 }, std::span{ &set_bindings[i], 1 }); !ret) {
+				if (auto ret = allocator->allocate_descriptor_sets(std::span{ &*ds, 1 }, std::span{ &sb, 1 }); !ret) {
 					allocate_except.emplace(ret.error());
 					current_exception = &allocate_except.value();
 					return false;
