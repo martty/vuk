@@ -72,14 +72,18 @@ namespace vuk {
 	};
 
 	struct DescriptorImageInfo {
-		vuk::Sampler sampler;
-		vuk::ImageView image_view;
 		VkDescriptorImageInfo dii;
+		decltype(ImageView::id) image_view_id;
+		decltype(Sampler::id) sampler_id;
 
-		DescriptorImageInfo(vuk::Sampler s, vuk::ImageView iv, vuk::ImageLayout il) : sampler(s), image_view(iv), dii{ s.payload, iv.payload, (VkImageLayout)il } {}
+		DescriptorImageInfo(vuk::Sampler s, vuk::ImageView iv, vuk::ImageLayout il) :
+		    dii{ s.payload, iv.payload, (VkImageLayout)il },
+		    image_view_id(iv.id),
+		    sampler_id(s.id) {}
 
 		bool operator==(const DescriptorImageInfo& o) const noexcept {
-			return std::tie(sampler, image_view, dii.imageLayout) == std::tie(o.sampler, o.image_view, o.dii.imageLayout);
+			return std::tie(dii.sampler, dii.imageView, dii.imageLayout, image_view_id, sampler_id) ==
+			       std::tie(o.dii.sampler, o.dii.imageView, o.dii.imageLayout, o.image_view_id, o.dii.imageLayout);
 		}
 
 		operator VkDescriptorImageInfo() const {
@@ -96,7 +100,7 @@ namespace vuk {
 		vuk::DescriptorType type = vuk::DescriptorType(-1);
 		union {
 			VkDescriptorBufferInfo buffer;
-			vuk::DescriptorImageInfo image;
+			DescriptorImageInfo image;
 		};
 
 		bool operator==(const DescriptorBinding& o) const noexcept {
