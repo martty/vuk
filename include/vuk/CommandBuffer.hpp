@@ -1,15 +1,16 @@
 #pragma once
 
+#include "vuk/Config.hpp"
 #include "vuk/Exception.hpp"
+#include "vuk/FixedVector.hpp"
+#include "vuk/Image.hpp"
+#include "vuk/PipelineInstance.hpp"
+#include "vuk/Query.hpp"
+#include "vuk/Types.hpp"
+#include "vuk/vuk_fwd.hpp"
+
 #include <optional>
 #include <utility>
-#include <vuk/Config.hpp>
-#include <vuk/FixedVector.hpp>
-#include <vuk/Image.hpp>
-#include <vuk/PipelineInstance.hpp>
-#include <vuk/Query.hpp>
-#include <vuk/Types.hpp>
-#include <vuk/vuk_fwd.hpp>
 
 namespace vuk {
 	class Context;
@@ -45,7 +46,7 @@ namespace vuk {
 		int32_t vertexOffset = {};
 		uint32_t firstInstance = {};
 
-		operator VkDrawIndexedIndirectCommand const &() const noexcept {
+		operator VkDrawIndexedIndirectCommand const&() const noexcept {
 			return *reinterpret_cast<const VkDrawIndexedIndirectCommand*>(this);
 		}
 
@@ -71,7 +72,7 @@ namespace vuk {
 		uint32_t baseArrayLayer = 0;
 		uint32_t layerCount = 1;
 
-		operator VkImageSubresourceLayers const &() const noexcept {
+		operator VkImageSubresourceLayers const&() const noexcept {
 			return *reinterpret_cast<const VkImageSubresourceLayers*>(this);
 		}
 
@@ -96,7 +97,7 @@ namespace vuk {
 		ImageSubresourceLayers dstSubresource = {};
 		std::array<Offset3D, 2> dstOffsets = {};
 
-		operator VkImageBlit const &() const noexcept {
+		operator VkImageBlit const&() const noexcept {
 			return *reinterpret_cast<const VkImageBlit*>(this);
 		}
 
@@ -124,7 +125,7 @@ namespace vuk {
 		Offset3D imageOffset = {};
 		Extent3D imageExtent = {};
 
-		operator VkBufferImageCopy const &() const noexcept {
+		operator VkBufferImageCopy const&() const noexcept {
 			return *reinterpret_cast<const VkBufferImageCopy*>(this);
 		}
 

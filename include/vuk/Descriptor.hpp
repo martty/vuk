@@ -1,14 +1,15 @@
 #pragma once
 
+#include "vuk/Config.hpp"
+#include "vuk/Image.hpp"
+#include "vuk/Types.hpp"
+#include "vuk/vuk_fwd.hpp"
+
 #include <bitset>
 #include <concurrentqueue.h>
 #include <mutex>
 #include <robin_hood.h>
 #include <vector>
-#include <vuk/Config.hpp>
-#include <vuk/Image.hpp>
-#include <vuk/Types.hpp>
-#include <vuk/vuk_fwd.hpp>
 
 inline bool operator==(VkDescriptorSetLayoutBinding const& lhs, VkDescriptorSetLayoutBinding const& rhs) noexcept {
 	return (lhs.binding == rhs.binding) && (lhs.descriptorType == rhs.descriptorType) && (lhs.descriptorCount == rhs.descriptorCount) &&

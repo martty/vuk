@@ -1,11 +1,12 @@
 #pragma once
 
+#include "vuk/Config.hpp"
+#include "vuk/Image.hpp"
+#include "vuk/Result.hpp"
+#include "vuk/vuk_fwd.hpp"
+
 #include <source_location>
 #include <span>
-#include <vuk/Config.hpp>
-#include <vuk/Image.hpp>
-#include <vuk/Result.hpp>
-#include <vuk/vuk_fwd.hpp>
 
 namespace vuk {
 	/// @cond INTERNAL

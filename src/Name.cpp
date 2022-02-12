@@ -4,8 +4,8 @@
 #include <string>
 #include <string_view>
 #include <vector>
-#include <vuk/Hash.hpp>
-#include <vuk/Name.hpp>
+#include "vuk/Hash.hpp"
+#include "vuk/Name.hpp"
 
 namespace {
 	struct Intern {

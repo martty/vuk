@@ -1,8 +1,9 @@
 #pragma once
 
+#include "vuk/Config.hpp"
+#include "vuk/Types.hpp"
+
 #include <vector>
-#include <vuk/Config.hpp>
-#include <vuk/Types.hpp>
 
 namespace vuk {
 	enum class ColorSpaceKHR {

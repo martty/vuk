@@ -1,5 +1,5 @@
 #include <cassert>
-#include <vuk/Image.hpp>
+#include "vuk/Image.hpp"
 
 namespace vuk {
 	uint32_t format_to_texel_block_size(Format format) noexcept {

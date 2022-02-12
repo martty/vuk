@@ -1,6 +1,6 @@
 #pragma once
 
-#include <vuk/Config.hpp>
+#include "vuk/Config.hpp"
 
 namespace vuk {
 	enum class PrimitiveTopology {
