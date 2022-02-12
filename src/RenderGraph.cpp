@@ -3,6 +3,8 @@
 #include "RenderGraphUtil.hpp"
 #include "vuk/Context.hpp"
 #include "vuk/Exception.hpp"
+#include "vuk/Future.hpp"
+
 #include <set>
 #include <unordered_set>
 
@@ -13,6 +15,13 @@ namespace {
 } // namespace
 
 namespace vuk {
+	Name Resource::Subrange::Image::combine_name(Name prefix) const {
+		std::string suffix = std::string(prefix.to_sv());
+		suffix += "[" + std::to_string(base_layer) + ":" + std::to_string(base_layer + layer_count - 1) + "]";
+		suffix += "[" + std::to_string(base_level) + ":" + std::to_string(base_level + level_count - 1) + "]";
+		return Name(suffix.c_str());
+	}
+
 	RenderGraph::RenderGraph() : impl(new RGImpl) {}
 
 	RenderGraph::RenderGraph(RenderGraph&& o) noexcept : impl(std::exchange(o.impl, nullptr)) {}
@@ -45,7 +54,8 @@ namespace vuk {
 				r.name = joiner.append(r.name);
 				r.out_name = r.out_name.is_invalid() ? Name{} : joiner.append(r.out_name);
 			}
-			robin_hood::unordered_flat_map<Name, Name> resolves;
+
+			decltype(p.pass.resolves) resolves;
 			for (auto& [n1, n2] : p.pass.resolves) {
 				resolves.emplace(joiner.append(n1), joiner.append(n2));
 			}

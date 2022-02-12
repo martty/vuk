@@ -335,20 +335,4 @@ namespace vuk {
 		std::vector<MemoryBarrier> pre_mem_barriers, post_mem_barriers;
 	};
 
-	struct RenderPassInfo {
-		RenderPassInfo(arena&);
-		uint32_t command_buffer_index;
-		uint32_t batch_index;
-		std::vector<SubpassInfo, short_alloc<SubpassInfo, 64>> subpasses;
-		std::vector<AttachmentRPInfo, short_alloc<AttachmentRPInfo, 16>> attachments;
-		vuk::RenderPassCreateInfo rpci;
-		vuk::FramebufferCreateInfo fbci;
-		bool framebufferless = false;
-		VkRenderPass handle = {};
-		VkFramebuffer framebuffer;
-		std::vector<ImageBarrier> pre_barriers, post_barriers;
-		std::vector<MemoryBarrier> pre_mem_barriers, post_mem_barriers;
-		std::vector<std::pair<DomainFlagBits, uint32_t>> waits;
-	};
-
 } // namespace vuk

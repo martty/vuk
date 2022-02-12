@@ -1,6 +1,7 @@
 #pragma once
 
 #include "RenderGraphUtil.hpp"
+#include "RenderPass.hpp"
 #include <robin_hood.h>
 #include <vuk/ShortAlloc.hpp>
 
@@ -12,7 +13,6 @@ namespace vuk {
 		std::vector<PassInfo*, short_alloc<PassInfo*, 64>> ordered_passes;
 
 		robin_hood::unordered_flat_map<Name, Name> aliases;
-		robin_hood::unordered_flat_map<Name, PartialImageAlias> partial_image_aliases;
 		robin_hood::unordered_flat_set<Name> poisoned_names;
 
 		robin_hood::unordered_flat_map<Name, std::vector<UseRef, short_alloc<UseRef, 64>>> use_chains;
@@ -72,4 +72,21 @@ namespace vuk {
 			begin = new_begin;
 		}
 	}
+
+	
+	struct RenderPassInfo {
+		RenderPassInfo(arena&);
+		uint32_t command_buffer_index;
+		uint32_t batch_index;
+		std::vector<SubpassInfo, short_alloc<SubpassInfo, 64>> subpasses;
+		std::vector<AttachmentRPInfo, short_alloc<AttachmentRPInfo, 16>> attachments;
+		vuk::RenderPassCreateInfo rpci;
+		vuk::FramebufferCreateInfo fbci;
+		bool framebufferless = false;
+		VkRenderPass handle = {};
+		VkFramebuffer framebuffer;
+		std::vector<ImageBarrier> pre_barriers, post_barriers;
+		std::vector<MemoryBarrier> pre_mem_barriers, post_mem_barriers;
+		std::vector<std::pair<DomainFlagBits, uint32_t>> waits;
+	};
 }; // namespace vuk

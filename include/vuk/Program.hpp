@@ -1,10 +1,12 @@
 #pragma once
-#include <../src/CreateInfo.hpp>
+
+#include "../src/CreateInfo.hpp"
+#include "vuk/Config.hpp"
+#include "vuk/vuk_fwd.hpp"
+
 #include <array>
 #include <unordered_map>
 #include <vector>
-#include <vuk/Config.hpp>
-#include <vuk/vuk_fwd.hpp>
 
 namespace spirv_cross {
 	struct SPIRType;

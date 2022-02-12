@@ -1,6 +1,3 @@
-#include "RGImage.hpp"
-#include "vuk/Context.hpp"
-
 #include <atomic>
 #include <math.h>
 #include <mutex>
@@ -9,8 +6,10 @@
 
 #include "Cache.hpp"
 #include "LegacyGPUAllocator.hpp"
+#include "RGImage.hpp"
 #include "RenderPass.hpp"
 #include "vuk/Allocator.hpp"
+#include "vuk/Context.hpp"
 #include "vuk/PipelineInstance.hpp"
 #include "vuk/Query.hpp"
 #include "vuk/resources/DeviceVkResource.hpp"

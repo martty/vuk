@@ -1,7 +1,10 @@
 #include "vuk/AllocatorHelpers.hpp"
 #include "vuk/Context.hpp"
+#include "vuk/Future.hpp"
 #include "vuk/RenderGraph.hpp"
 #include "vuk/SampledImage.hpp"
+
+#include <mutex>
 
 namespace vuk {
 	struct QueueImpl {

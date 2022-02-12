@@ -2,6 +2,7 @@
 #include "RenderGraphImpl.hpp"
 #include "vuk/CommandBuffer.hpp"
 #include "vuk/Context.hpp"
+#include "vuk/Future.hpp"
 #include "vuk/Hash.hpp" // for create
 #include "vuk/RenderGraph.hpp"
 #include <unordered_set>

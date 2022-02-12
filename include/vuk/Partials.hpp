@@ -1,7 +1,7 @@
 #pragma once
 
-#include "vuk/Context.hpp"
 #include "vuk/RenderGraph.hpp"
+#include "vuk/Future.hpp"
 #include <span>
 
 namespace vuk {
@@ -74,7 +74,6 @@ namespace vuk {
 		auto& allocator = image.get_allocator();
 
 		std::unique_ptr<RenderGraph> rgp = std::make_unique<RenderGraph>();
-		std::vector<PartialImageAlias> named_mips;
 		for (uint32_t miplevel = base_mip + 1; miplevel < (base_mip + num_mips); miplevel++) {
 			uint32_t dmiplevel = miplevel - base_mip;
 			Name mip_src = Name(std::to_string(miplevel - 1));

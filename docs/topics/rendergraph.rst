@@ -1,10 +1,10 @@
 Rendergraph
 ===========
 
-.. doxygenstruct:: vuk::RenderGraph
+.. doxygenstruct:: vuk::Resource
   :members:
 
-.. doxygenstruct:: vuk::Resource
+.. doxygenstruct:: vuk::RenderGraph
   :members:
 
 .. doxygenstruct:: vuk::ExecutableRenderGraph

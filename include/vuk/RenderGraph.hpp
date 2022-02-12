@@ -1,23 +1,22 @@
 #pragma once
 
-#include "../src/RenderPass.hpp"
-#include "vuk/Allocator.hpp"
 #include "vuk/Buffer.hpp"
-#include "vuk/Context.hpp"
 #include "vuk/Hash.hpp"
 #include "vuk/Image.hpp"
 #include "vuk/MapProxy.hpp"
 #include "vuk/Result.hpp"
 #include "vuk/Swapchain.hpp"
+#include "vuk/ImageAttachment.hpp"
+#include "vuk/Future.hpp"
 #include "vuk/vuk_fwd.hpp"
+
 #include <functional>
 #include <optional>
 #include <string_view>
 #include <vector>
 
 namespace vuk {
-	template<class T>
-	struct Future;
+	struct FutureBase;
 	struct Resource;
 
 	namespace detail {
@@ -56,9 +55,9 @@ namespace vuk {
 	} // namespace detail
 
 	struct ResourceUse {
-		vuk::PipelineStageFlags stages;
-		vuk::AccessFlags access;
-		vuk::ImageLayout layout; // ignored for buffers
+		PipelineStageFlags stages;
+		AccessFlags access;
+		ImageLayout layout; // ignored for buffers
 	};
 
 	struct AttachmentRPInfo {
@@ -80,15 +79,6 @@ namespace vuk {
 
 		bool is_resolve_dst = false;
 		FutureBase* attached_future = nullptr;
-	};
-
-	struct PartialImageAlias {
-		Name src;
-		Name dst;
-		uint32_t base_level;
-		uint32_t level_count;
-		uint32_t base_layer;
-		uint32_t layer_count;
 	};
 
 	struct BufferInfo {
@@ -121,12 +111,7 @@ namespace vuk {
 					return base_level == o.base_level && level_count == o.level_count && base_layer == o.base_layer && layer_count == o.layer_count;
 				}
 
-				Name combine_name(Name prefix) const {
-					std::string suffix = std::string(prefix.to_sv());
-					suffix += "[" + std::to_string(base_layer) + ":" + std::to_string(base_layer + layer_count - 1) + "]";
-					suffix += "[" + std::to_string(base_level) + ":" + std::to_string(base_level + level_count - 1) + "]";
-					return Name(suffix.c_str());
-				}
+				Name combine_name(Name prefix) const;
 
 				bool operator<(const Image& o) const noexcept {
 					return std::tie(base_layer, base_level, layer_count, level_count) < std::tie(o.base_layer, o.base_level, o.layer_count, o.level_count);
@@ -152,35 +137,23 @@ namespace vuk {
 			return name == o.name;
 		}
 	};
-} // namespace vuk
 
-namespace std {
-	template<>
-	struct hash<vuk::Resource::Subrange::Image> {
-		size_t operator()(vuk::Resource::Subrange::Image const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.base_layer, x.base_level, x.layer_count, x.level_count);
-			return h;
-		}
-	};
-}; // namespace std
-
-namespace vuk {
 	ResourceUse to_use(Access acc);
 
+	/// @brief Fundamental unit of execution and scheduling. Refers to resources
 	struct Pass {
 		Name name;
-		DomainFlags execute_on = DomainFlagBits::eGraphicsOnGraphics; // TODO: default or not?
+		DomainFlags execute_on = DomainFlagBits::eDevice;
 
 		bool use_secondary_command_buffers = false;
 
 		std::vector<Resource> resources;
-		robin_hood::unordered_flat_map<Name, Name> resolves; // src -> dst
+		std::unordered_map<Name, Name> resolves; // src -> dst
 
 		std::unique_ptr<FutureBase> wait;
 		FutureBase* signal;
 
-		std::function<void(vuk::CommandBuffer&)> execute;
+		std::function<void(CommandBuffer&)> execute;
 	};
 
 	// declare these specializations for GCC
@@ -202,16 +175,16 @@ namespace vuk {
 		RenderGraph& operator=(RenderGraph&&) noexcept;
 
 		/// @brief Add a pass to the rendergraph
-		/// @param the Pass to add to the RenderGraph
-		void add_pass(Pass);
+		/// @param pass the Pass to add to the RenderGraph
+		void add_pass(Pass pass);
 
-		// append the other RenderGraph onto this one
-		// will copy or move passes and attachments
+		/// @brief Append the other RenderGraph onto this one (by copy or move of passes and attachments)
+		/// @param subgraph_name the prefix used for the names in other
 		void append(Name subgraph_name, RenderGraph other);
 
 		/// @brief Add an alias for a resource
-		/// @param new_name
-		/// @param old_name
+		/// @param new_name Additional name to refer to the resource
+		/// @param old_name Old name used to refere to the resource
 		void add_alias(Name new_name, Name old_name);
 
 		/// @brief Reconverge image. Prevents diverged use moving before pre_diverge or after post_diverge.
@@ -224,42 +197,67 @@ namespace vuk {
 		void resolve_resource_into(Name resolved_name_src, Name resolved_name_dst, Name ms_name);
 
 		/// @brief Attach a swapchain to the given name
+		/// @param name Name of the resource to attach to
 		void attach_swapchain(Name name, SwapchainRef swp, Clear);
 
 		/// @brief Attach a buffer to the given name
-		void attach_buffer(Name name, Buffer, Access initial, Access final);
+		/// @param name Name of the resource to attach to 
+		/// @param buffer Buffer to attach
+		/// @param initial Access to the resource prior to this rendergraph
+		/// @param final Desired Access to the resource after this rendergraph
+		void attach_buffer(Name name, Buffer buffer, Access initial, Access final);
 
 		/// @brief Attach an image to the given name
-		void attach_image(Name name, ImageAttachment, Access initial, Access final);
+		/// @param name Name of the resource to attach to
+		/// @param image_attachment ImageAttachment to attach
+		/// @param initial Access to the resource prior to this rendergraph
+		/// @param final Desired Access to the resource after this rendergraph
+		void attach_image(Name name, ImageAttachment image_attachment, Access initial, Access final);
 
 		/// @brief Attach a future of an image to the given name
-		void attach_in(Name name, Future<ImageAttachment>&& fimg, Access final);
+		/// @param name Name of the resource to attach to
+		/// @param future Future to be consumed into this rendergraph
+		/// @param final Desired Access to the resource after this rendergraph
+		void attach_in(Name name, Future<ImageAttachment>&& future, Access final);
 
 		/// @brief Attach a future of a buffer to the given name
-		void attach_in(Name name, Future<Buffer>&& fimg, Access final);
+		/// @param name Name of the resource to attach to
+		/// @param future Future to be consumed into this rendergraph
+		/// @param final Desired Access to the resource after this rendergraph
+		void attach_in(Name name, Future<Buffer>&& future, Access final);
 
-		/// @brief Request the rendergraph
+		/// @brief Request the rendergraph to allocate an image and attach it to the given name
+		/// @param name Name of the resource to attach to
 		void attach_managed(Name name, Format format, Dimension2D dimension, Samples samples, Clear clear_value);
 
 		/// @brief Control compilation options when compiling the rendergraph
 		struct CompileOptions {
-			bool reorder_passes = true;       // reorder passes according to resources
-			bool check_pass_ordering = false; // check that pass ordering does not violate resource constraints (not needed when reordering passes)
+			/// @brief reorder passes according to dependencies
+			bool reorder_passes = true;
+			/// @brief check that pass ordering does not violate resource constraints (not needed when reordering passes)
+			bool check_pass_ordering = false;
 		};
 
 		/// @brief Consume this RenderGraph and create an ExecutableRenderGraph
+		/// @param ctx Context
+		/// @param compile_options CompileOptions controlling compilation behaviour
 		struct ExecutableRenderGraph link(Context& ctx, const CompileOptions& compile_options) &&;
 
 		// reflection functions
 
 		/// @brief Build the graph, assign framebuffers, renderpasses and subpasses
 		///	link automatically calls this, only needed if you want to use the reflection functions
+		/// @param compile_options CompileOptions controlling compilation behaviour
 		void compile(const CompileOptions& compile_options);
 
+		/// @brief retrieve usages of resource in the RenderGraph
 		MapProxy<Name, std::span<const struct UseRef>> get_use_chains();
+		/// @brief retrieve bound image attachments in the RenderGraph
 		MapProxy<Name, const struct AttachmentRPInfo&> get_bound_attachments();
+		/// @brief retrieve bound buffers in the RenderGraph
 		MapProxy<Name, const struct BufferInfo&> get_bound_buffers();
-		static vuk::ImageUsageFlags compute_usage(std::span<const UseRef> chain);
+		/// @brief compute ImageUsageFlags for given use chains
+		static ImageUsageFlags compute_usage(std::span<const UseRef> chain);
 
 	private:
 		struct RGImpl* impl;
@@ -272,7 +270,7 @@ namespace vuk {
 		// determine rendergraph inputs and outputs, and resources that are neither
 		void build_io();
 
-		void schedule_intra_queue(std::span<struct PassInfo> passes, const vuk::RenderGraph::CompileOptions& compile_options);
+		void schedule_intra_queue(std::span<struct PassInfo> passes, const RenderGraph::CompileOptions& compile_options);
 
 		// future support functions
 		friend struct Future<ImageAttachment>;
@@ -289,7 +287,7 @@ namespace vuk {
 	};
 
 	struct SubmitBatch {
-		vuk::DomainFlagBits domain;
+		DomainFlagBits domain;
 		std::vector<SubmitInfo> submits;
 	};
 
@@ -332,3 +330,14 @@ inline vuk::detail::ImageResource operator"" _image(const char* name, size_t) {
 inline vuk::detail::BufferResource operator"" _buffer(const char* name, size_t) {
 	return { name };
 }
+
+namespace std {
+	template<>
+	struct hash<vuk::Resource::Subrange::Image> {
+		size_t operator()(vuk::Resource::Subrange::Image const& x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, x.base_layer, x.base_level, x.layer_count, x.level_count);
+			return h;
+		}
+	};
+}; // namespace std
