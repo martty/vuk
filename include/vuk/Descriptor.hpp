@@ -1,19 +1,23 @@
 #pragma once
 
 #include "vuk/Config.hpp"
+#include "vuk/Hash.hpp"
 #include "vuk/Image.hpp"
 #include "vuk/Types.hpp"
 #include "vuk/vuk_fwd.hpp"
 
+#include <array>
 #include <bitset>
-#include <concurrentqueue.h>
-#include <mutex>
-#include <robin_hood.h>
+#include <cassert>
 #include <vector>
 
 inline bool operator==(VkDescriptorSetLayoutBinding const& lhs, VkDescriptorSetLayoutBinding const& rhs) noexcept {
 	return (lhs.binding == rhs.binding) && (lhs.descriptorType == rhs.descriptorType) && (lhs.descriptorCount == rhs.descriptorCount) &&
 	       (lhs.stageFlags == rhs.stageFlags) && (lhs.pImmutableSamplers == rhs.pImmutableSamplers);
+}
+
+namespace robin_hood {
+	size_t hash_bytes(void const* ptr, size_t len) noexcept;
 }
 
 namespace vuk {
@@ -124,61 +128,6 @@ namespace vuk {
 	};
 #pragma pack(pop)
 
-	// from robin_hood
-	inline size_t hash_bytes(void const* ptr, size_t len) noexcept {
-		static constexpr uint64_t m = UINT64_C(0xc6a4a7935bd1e995);
-		static constexpr uint64_t seed = UINT64_C(0xe17a1465);
-		static constexpr unsigned int r = 47;
-
-		auto const* const data64 = static_cast<uint64_t const*>(ptr);
-		uint64_t h = seed ^ (len * m);
-
-		size_t const n_blocks = len / 8;
-		for (size_t i = 0; i < n_blocks; ++i) {
-			auto k = *(data64 + i);
-
-			k *= m;
-			k ^= k >> r;
-			k *= m;
-
-			h ^= k;
-			h *= m;
-		}
-
-		auto const* const data8 = reinterpret_cast<uint8_t const*>(data64 + n_blocks);
-		switch (len & 7U) {
-		case 7:
-			h ^= static_cast<uint64_t>(data8[6]) << 48U;
-			ROBIN_HOOD(FALLTHROUGH); // FALLTHROUGH
-		case 6:
-			h ^= static_cast<uint64_t>(data8[5]) << 40U;
-			ROBIN_HOOD(FALLTHROUGH); // FALLTHROUGH
-		case 5:
-			h ^= static_cast<uint64_t>(data8[4]) << 32U;
-			ROBIN_HOOD(FALLTHROUGH); // FALLTHROUGH
-		case 4:
-			h ^= static_cast<uint64_t>(data8[3]) << 24U;
-			ROBIN_HOOD(FALLTHROUGH); // FALLTHROUGH
-		case 3:
-			h ^= static_cast<uint64_t>(data8[2]) << 16U;
-			ROBIN_HOOD(FALLTHROUGH); // FALLTHROUGH
-		case 2:
-			h ^= static_cast<uint64_t>(data8[1]) << 8U;
-			ROBIN_HOOD(FALLTHROUGH); // FALLTHROUGH
-		case 1:
-			h ^= static_cast<uint64_t>(data8[0]);
-			h *= m;
-			ROBIN_HOOD(FALLTHROUGH); // FALLTHROUGH
-		default:
-			break;
-		}
-
-		h ^= h >> r;
-		h *= m;
-		h ^= h >> r;
-		return static_cast<size_t>(h);
-	}
-
 	struct SetBinding {
 		std::bitset<VUK_MAX_BINDINGS> used = {};
 		std::array<DescriptorBinding, VUK_MAX_BINDINGS> bindings;
@@ -197,8 +146,8 @@ namespace vuk {
 					final.bindings[i] = bindings[i];
 				}
 			}
-			
-			final.hash = hash_bytes(reinterpret_cast<const char*>(&final.bindings[0]), VUK_MAX_BINDINGS * sizeof(DescriptorBinding));
+
+			final.hash = robin_hood::hash_bytes(reinterpret_cast<const char*>(&final.bindings[0]), VUK_MAX_BINDINGS * sizeof(DescriptorBinding));
 			hash_combine(final.hash, layout_info->layout);
 			return final;
 		}
@@ -241,20 +190,17 @@ namespace vuk {
 	};
 
 	struct DescriptorPool {
-		std::mutex grow_mutex;
-		std::vector<VkDescriptorPool> pools;
-		uint32_t sets_allocated = 0;
-		moodycamel::ConcurrentQueue<VkDescriptorSet> free_sets{ 1024 };
-
 		void grow(Context& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info);
 		VkDescriptorSet acquire(Context& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info);
 		void release(VkDescriptorSet ds);
+		void destroy(VkDevice) const;
 
-		DescriptorPool() = default;
-		DescriptorPool(DescriptorPool&& o) noexcept {
-			pools = o.pools;
-			sets_allocated = o.sets_allocated;
-		}
+		DescriptorPool();
+		~DescriptorPool();
+		DescriptorPool(DescriptorPool&& o) noexcept;
+
+	private:
+		struct DescriptorPoolImpl* impl = nullptr;
 	};
 
 	template<>
@@ -287,15 +233,6 @@ namespace vuk {
 		void update_storage_buffer(Context& ctx, unsigned binding, unsigned array_index, Buffer buf);
 	};
 } // namespace vuk
-
-namespace robin_hood {
-	template<>
-	struct hash<vuk::SetBinding, std::true_type> {
-		size_t operator()(vuk::SetBinding const& x) const noexcept {
-			return x.hash;
-		}
-	};
-} // namespace robin_hood
 
 namespace std {
 	template<>
@@ -332,7 +269,7 @@ namespace std {
 	struct hash<vuk::DescriptorSetLayoutCreateInfo> {
 		size_t operator()(vuk::DescriptorSetLayoutCreateInfo const& x) const noexcept {
 			size_t h = 0;
-			hash_combine(h, x.bindings);
+			hash_combine(h, std::span(x.bindings));
 			return h;
 		}
 	};

@@ -199,7 +199,7 @@ namespace vuk {
 			bool is_double;
 			std::byte data[sizeof(double)];
 		};
-		robin_hood::unordered_flat_map<uint32_t, SpecEntry> spec_map_entries; // constantID -> SpecEntry
+		std::unordered_map<uint32_t, SpecEntry> spec_map_entries; // constantID -> SpecEntry
 
 		// Individual pipeline states
 		std::optional<PipelineRasterizationStateCreateInfo> rasterization_state;

@@ -160,47 +160,26 @@ namespace vuk {
 namespace std {
 	template<>
 	struct hash<vuk::PipelineInstanceCreateInfo> {
-		size_t operator()(vuk::PipelineInstanceCreateInfo const& x) const noexcept {
-			size_t h = 0;
-			auto ext_hash = x.is_inline() ? robin_hood::hash_bytes(x.inline_data, x.extended_size) : robin_hood::hash_bytes(x.extended_data, x.extended_size);
-			hash_combine(h, x.base, reinterpret_cast<uint64_t>((VkRenderPass)x.render_pass), x.extended_size, ext_hash);
-			return h;
-		}
+		size_t operator()(vuk::PipelineInstanceCreateInfo const& x) const noexcept;
 	};
 
 	template<>
 	struct hash<VkSpecializationMapEntry> {
-		size_t operator()(VkSpecializationMapEntry const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.constantID, x.offset, x.size);
-			return h;
-		}
+		size_t operator()(VkSpecializationMapEntry const& x) const noexcept;
 	};
 
 	template<>
 	struct hash<vuk::ComputePipelineInstanceCreateInfo> {
-		size_t operator()(vuk::ComputePipelineInstanceCreateInfo const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.base, robin_hood::hash_bytes(x.specialization_constant_data.data(), x.specialization_info.dataSize), x.specialization_map_entries);
-			return h;
-		}
+		size_t operator()(vuk::ComputePipelineInstanceCreateInfo const& x) const noexcept;
 	};
 
 	template<>
 	struct hash<VkPushConstantRange> {
-		size_t operator()(VkPushConstantRange const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.offset, x.size, (VkShaderStageFlags)x.stageFlags);
-			return h;
-		}
+		size_t operator()(VkPushConstantRange const& x) const noexcept;
 	};
 
 	template<>
 	struct hash<vuk::PipelineLayoutCreateInfo> {
-		size_t operator()(vuk::PipelineLayoutCreateInfo const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.pcrs, x.dslcis);
-			return h;
-		}
+		size_t operator()(vuk::PipelineLayoutCreateInfo const& x) const noexcept;
 	};
 }; // namespace std

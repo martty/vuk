@@ -2,6 +2,8 @@
 
 #include "vuk/Config.hpp"
 
+#include <array>
+
 namespace vuk {
 	enum class PrimitiveTopology {
 		ePointList = VK_PRIMITIVE_TOPOLOGY_POINT_LIST,

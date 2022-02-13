@@ -518,9 +518,7 @@ namespace vuk {
 	}
 
 	void Context::destroy(const DescriptorPool& dp) {
-		for (auto& p : dp.pools) {
-			vkDestroyDescriptorPool(device, p, nullptr);
-		}
+		dp.destroy(device);
 	}
 
 	void Context::destroy(const PipelineInfo& pi) {
