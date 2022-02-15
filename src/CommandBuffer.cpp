@@ -413,7 +413,7 @@ namespace vuk {
 	CommandBuffer& CommandBuffer::bind_persistent(unsigned set, PersistentDescriptorSet& pda) {
 		VUK_EARLY_RET();
 		persistent_sets_to_bind[set] = true;
-		persistent_sets[set] = pda.backing_set;
+		persistent_sets[set] = { pda.backing_set, pda.set_layout };
 		return *this;
 	}
 
@@ -956,20 +956,43 @@ namespace vuk {
 
 		auto sets_mask = sets_to_bind.to_ulong();
 		auto persistent_sets_mask = persistent_sets_to_bind.to_ulong();
+		uint32_t highest_undisturbed_binding_required = 0;
+		uint32_t lowest_disturbed_binding = VUK_MAX_SETS;
 		for (unsigned i = 0; i < VUK_MAX_SETS; i++) {
-			bool set_used = sets_mask & (1 << i);
-			bool persistent = persistent_sets_mask & (1 << i);
-			if (!sets_used[i]) {                // not set in the cbuf
-				if (set_bindings[i].layout_info) { // but set in the layout
-					assert(false && "Set layout contains set, but never set in CommandBuffer");
+			bool set_to_bind = sets_mask & (1 << i);
+			bool persistent_set_to_bind = persistent_sets_mask & (1 << i);
+
+			// binding validation
+			auto& pipeline_set_layout = graphics ? current_pipeline->layout_info[i].layout : current_compute_pipeline->layout_info[i].layout;
+			if (pipeline_set_layout != VK_NULL_HANDLE) {                                        // set in the layout
+				if (!sets_used[i] && !set_to_bind && !persistent_set_to_bind) { // never set in the cbuf & not requested to bind now
+					assert(false && "Pipeline layout contains set, but never set in CommandBuffer or disturbed by a previous set composition or binding.");
+					return false;
+				} else if (!set_to_bind && !persistent_set_to_bind) { // but not requested to bind now
+					// validate that current set is compatible (== same set layout)
+					assert(set_layouts_used[i] == pipeline_set_layout && "Previously bound set is incompatible with currently bound pipeline.");
+					// this set is compatible, but we require it to be undisturbed
+					highest_undisturbed_binding_required = std::max(highest_undisturbed_binding_required, i);
+					// detect if during this binding we disturb a set that we depend on
+					assert(highest_undisturbed_binding_required < lowest_disturbed_binding &&
+					       "Set composition disturbs previously bound set that is not recomposed or bound for this drawcall.");
+					continue;
+				}
+			} else {                                         // not set in the layout
+				if (!set_to_bind && !persistent_set_to_bind) { // not requested to bind now, noop
+					continue;
+				} else { // requested to bind now
+					assert(false && "Set layout doesn't contain set, but set in CommandBuffer.");
 					return false;
 				}
 			}
-			if (!set_used && !persistent) {
-				continue;
+			// if the newly bound DS has a different set layout than the previously bound set, then it disturbs all the sets at higher indices
+			bool is_disturbing = set_layouts_used[i] != pipeline_set_layout;
+			if (is_disturbing) {
+				lowest_disturbed_binding = std::min(lowest_disturbed_binding, i + 1);
 			}
 			set_bindings[i].layout_info = graphics ? &current_pipeline->layout_info[i] : &current_compute_pipeline->layout_info[i];
-			if (!persistent) {
+			if (!persistent_set_to_bind) {
 				auto sb = set_bindings[i].finalize();
 				auto& pipeline_set_bindings = graphics ? current_pipeline->base->dslcis[i].bindings : current_compute_pipeline->base->dslcis[i].bindings;
 				for (uint64_t j = 0; j < pipeline_set_bindings.size(); j++) {
@@ -995,19 +1018,25 @@ namespace vuk {
 				                        &ds->descriptor_set,
 				                        0,
 				                        nullptr);
+				set_layouts_used[i] = ds->layout_info.layout;
 			} else {
 				vkCmdBindDescriptorSets(command_buffer,
 				                        graphics ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE,
 				                        graphics ? current_pipeline->pipeline_layout : current_compute_pipeline->pipeline_layout,
 				                        i,
 				                        1,
-				                        &persistent_sets[i],
+				                        &persistent_sets[i].first,
 				                        0,
 				                        nullptr);
+				set_layouts_used[i] = persistent_sets[i].second;
 			}
 			set_bindings[i].used.reset();
 		}
-		sets_used |= sets_to_bind | persistent_sets_to_bind;
+		auto sets_bound = sets_to_bind | persistent_sets_to_bind; // these sets we bound freshly, valid
+		for (unsigned i = lowest_disturbed_binding; i < VUK_MAX_SETS; i++) {  // clear the slots where the binding was disturbed
+			sets_used.set(i, false);
+		}
+		sets_used |= sets_bound;
 		sets_to_bind.reset();
 		persistent_sets_to_bind.reset();
 		return true;

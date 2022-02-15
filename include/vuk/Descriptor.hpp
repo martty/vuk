@@ -212,6 +212,7 @@ namespace vuk {
 
 	struct PersistentDescriptorSet {
 		VkDescriptorPool backing_pool;
+		VkDescriptorSetLayout set_layout;
 		VkDescriptorSet backing_set;
 
 		std::array<std::vector<DescriptorBinding>, VUK_MAX_BINDINGS> descriptor_bindings;

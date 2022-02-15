@@ -264,6 +264,8 @@ namespace vuk {
 			if (dslai.variable_count_binding != (unsigned)-1) {
 				tda.descriptor_bindings[dslai.variable_count_binding].resize(ci.num_descriptors);
 			}
+
+			tda.set_layout = dsl;
 		}
 
 		return { expected_value };
