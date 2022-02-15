@@ -105,7 +105,8 @@ namespace vuk {
 		vuk::Program reflection_info;
 		vuk::fixed_vector<VkPipelineShaderStageCreateInfo, vuk::graphics_stage_count> psscis;
 		VkPipelineLayout pipeline_layout;
-		std::array<DescriptorSetLayoutAllocInfo, VUK_MAX_SETS> layout_info;
+		std::array<DescriptorSetLayoutAllocInfo, VUK_MAX_SETS> layout_info = {};
+		fixed_vector<DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> dslcis = {}; // saved for debug purposes
 
 		// 4 valid flags
 		Bitset<4 * VUK_MAX_SETS* VUK_MAX_BINDINGS> binding_flags = {};

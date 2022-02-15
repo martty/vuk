@@ -218,8 +218,9 @@ namespace vuk {
 
 		// Descriptor sets
 		std::bitset<VUK_MAX_SETS> sets_used = {};
+		std::bitset<VUK_MAX_SETS> sets_to_bind = {};
 		std::array<SetBinding, VUK_MAX_SETS> set_bindings = {};
-		std::bitset<VUK_MAX_SETS> persistent_sets_used = {};
+		std::bitset<VUK_MAX_SETS> persistent_sets_to_bind = {};
 		std::array<VkDescriptorSet, VUK_MAX_SETS> persistent_sets = {};
 
 		// for rendergraph

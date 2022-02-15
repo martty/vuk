@@ -70,9 +70,9 @@ namespace vuk {
 			case 4:
 				pipeline_layouts.collect(absolute_frame, cache_collection_frequency);
 				break;
-			case 5:
+			/* case 5:
 				pipelinebase_cache.collect(absolute_frame, cache_collection_frequency);
-				break;
+				break;*/ // can't be collected since we keep the pointer around in PipelineInfos
 			case 6:
 				pool_cache.collect(absolute_frame, cache_collection_frequency);
 				break;

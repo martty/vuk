@@ -124,9 +124,10 @@ namespace vuk {
 	};
 
 	struct PipelineInfo {
+		PipelineBaseInfo* base;
 		VkPipeline pipeline;
 		VkPipelineLayout pipeline_layout;
-		std::array<DescriptorSetLayoutAllocInfo, VUK_MAX_SETS> layout_info;
+		std::array<DescriptorSetLayoutAllocInfo, VUK_MAX_SETS> layout_info = {};
 	};
 
 	template<>

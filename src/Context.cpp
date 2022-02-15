@@ -326,7 +326,7 @@ namespace vuk {
 		plci.pcrs.insert(plci.pcrs.begin(), accumulated_reflection.push_constant_ranges.begin(), accumulated_reflection.push_constant_ranges.end());
 		plci.plci.pushConstantRangeCount = (uint32_t)accumulated_reflection.push_constant_ranges.size();
 		plci.plci.pPushConstantRanges = accumulated_reflection.push_constant_ranges.data();
-		std::array<DescriptorSetLayoutAllocInfo, VUK_MAX_SETS> dslai;
+		std::array<DescriptorSetLayoutAllocInfo, VUK_MAX_SETS> dslai = {};
 		std::vector<VkDescriptorSetLayout> dsls;
 		for (auto& dsl : plci.dslcis) {
 			dsl.dslci.bindingCount = (uint32_t)dsl.bindings.size();
@@ -348,6 +348,10 @@ namespace vuk {
 		pbi.psscis = std::move(psscis);
 		pbi.layout_info = dslai;
 		pbi.pipeline_layout = impl->pipeline_layouts.acquire(plci);
+		pbi.dslcis = std::move(plci.dslcis);
+		for (auto& dslci : pbi.dslcis) {
+			std::sort(dslci.bindings.begin(), dslci.bindings.end(), [](auto& a, auto& b) { return a.binding < b.binding; });
+		}
 		pbi.pipeline_name = Name(pipe_name);
 		pbi.reflection_info = accumulated_reflection;
 		pbi.binding_flags = cinfo.binding_flags;
@@ -968,7 +972,7 @@ namespace vuk {
 		VkResult res = vkCreateGraphicsPipelines(device, impl->vk_pipeline_cache, 1, &gpci, nullptr, &pipeline);
 		assert(res == VK_SUCCESS);
 		debug.set_name(pipeline, cinfo.base->pipeline_name);
-		return { pipeline, gpci.layout, cinfo.base->layout_info };
+		return { cinfo.base, pipeline, gpci.layout, cinfo.base->layout_info };
 	}
 
 	ComputePipelineInfo Context::create(const create_info_t<ComputePipelineInfo>& cinfo) {
@@ -981,7 +985,7 @@ namespace vuk {
 		VkResult res = vkCreateComputePipelines(device, impl->vk_pipeline_cache, 1, &cpci, nullptr, &pipeline);
 		assert(res == VK_SUCCESS);
 		debug.set_name(pipeline, cinfo.base->pipeline_name);
-		return { pipeline, cpci.layout, cinfo.base->layout_info, cinfo.base->reflection_info.local_size };
+		return { cinfo.base, pipeline, cpci.layout, cinfo.base->layout_info, cinfo.base->reflection_info.local_size };
 	}
 
 	Sampler Context::create(const create_info_t<Sampler>& cinfo) {

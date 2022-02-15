@@ -326,7 +326,7 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::bind_sampled_image(unsigned set, unsigned binding, ImageView iv, SamplerCreateInfo sci, ImageLayout il) {
 		VUK_EARLY_RET();
-		sets_used[set] = true;
+		sets_to_bind[set] = true;
 		set_bindings[set].bindings[binding].type = DescriptorType::eCombinedImageSampler;
 		set_bindings[set].bindings[binding].image = DescriptorImageInfo(ctx.acquire_sampler(sci, ctx.get_frame_count()), iv, il);
 		set_bindings[set].used.set(binding);
@@ -412,7 +412,7 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::bind_persistent(unsigned set, PersistentDescriptorSet& pda) {
 		VUK_EARLY_RET();
-		persistent_sets_used[set] = true;
+		persistent_sets_to_bind[set] = true;
 		persistent_sets[set] = pda.backing_set;
 		return *this;
 	}
@@ -434,7 +434,7 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::bind_uniform_buffer(unsigned set, unsigned binding, const Buffer& buffer) {
 		VUK_EARLY_RET();
-		sets_used[set] = true;
+		sets_to_bind[set] = true;
 		set_bindings[set].bindings[binding].type = DescriptorType::eUniformBuffer;
 		set_bindings[set].bindings[binding].buffer = VkDescriptorBufferInfo{ buffer.buffer, buffer.offset, buffer.size };
 		set_bindings[set].used.set(binding);
@@ -443,7 +443,7 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::bind_storage_buffer(unsigned set, unsigned binding, const Buffer& buffer) {
 		VUK_EARLY_RET();
-		sets_used[set] = true;
+		sets_to_bind[set] = true;
 		set_bindings[set].bindings[binding].type = DescriptorType::eStorageBuffer;
 		set_bindings[set].bindings[binding].buffer = VkDescriptorBufferInfo{ buffer.buffer, buffer.offset, buffer.size };
 		set_bindings[set].used.set(binding);
@@ -452,7 +452,7 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::bind_storage_image(unsigned set, unsigned binding, ImageView image_view) {
 		VUK_EARLY_RET();
-		sets_used[set] = true;
+		sets_to_bind[set] = true;
 		set_bindings[set].bindings[binding].type = DescriptorType::eStorageImage;
 		set_bindings[set].bindings[binding].image = DescriptorImageInfo({}, image_view, ImageLayout::eGeneral);
 		set_bindings[set].used.set(binding);
@@ -954,16 +954,33 @@ namespace vuk {
 		}
 		pcrs.clear();
 
-		auto sets_mask = sets_used.to_ulong();
-		auto persistent_sets_mask = persistent_sets_used.to_ulong();
+		auto sets_mask = sets_to_bind.to_ulong();
+		auto persistent_sets_mask = persistent_sets_to_bind.to_ulong();
 		for (unsigned i = 0; i < VUK_MAX_SETS; i++) {
 			bool set_used = sets_mask & (1 << i);
 			bool persistent = persistent_sets_mask & (1 << i);
-			if (!set_used && !persistent)
+			if (!sets_used[i]) {                // not set in the cbuf
+				if (set_bindings[i].layout_info) { // but set in the layout
+					assert(false && "Set layout contains set, but never set in CommandBuffer");
+					return false;
+				}
+			}
+			if (!set_used && !persistent) {
 				continue;
+			}
 			set_bindings[i].layout_info = graphics ? &current_pipeline->layout_info[i] : &current_compute_pipeline->layout_info[i];
 			if (!persistent) {
 				auto sb = set_bindings[i].finalize();
+				auto& pipeline_set_bindings = graphics ? current_pipeline->base->dslcis[i].bindings : current_compute_pipeline->base->dslcis[i].bindings;
+				for (uint64_t j = 0; j < pipeline_set_bindings.size(); j++) {
+					auto& pipe_binding = pipeline_set_bindings[j];
+					auto& cbuf_binding = sb.bindings[j];
+					if (pipe_binding.descriptorType != (VkDescriptorType)cbuf_binding.type) {
+						assert(false && "Attempting to bind the wrong descriptor type.");
+						return false;
+					}
+				}
+
 				Unique<DescriptorSet> ds;
 				if (auto ret = allocator->allocate_descriptor_sets(std::span{ &*ds, 1 }, std::span{ &sb, 1 }); !ret) {
 					allocate_except.emplace(ret.error());
@@ -990,8 +1007,9 @@ namespace vuk {
 			}
 			set_bindings[i].used.reset();
 		}
-		sets_used.reset();
-		persistent_sets_used.reset();
+		sets_used |= sets_to_bind | persistent_sets_to_bind;
+		sets_to_bind.reset();
+		persistent_sets_to_bind.reset();
 		return true;
 	}
 
