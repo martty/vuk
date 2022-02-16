@@ -1,9 +1,3 @@
-#include <atomic>
-#include <math.h>
-#include <mutex>
-#include <queue>
-#include <string_view>
-
 #include "Cache.hpp"
 #include "LegacyGPUAllocator.hpp"
 #include "RGImage.hpp"
@@ -13,6 +7,14 @@
 #include "vuk/PipelineInstance.hpp"
 #include "vuk/Query.hpp"
 #include "vuk/resources/DeviceVkResource.hpp"
+
+#include <atomic>
+#include <math.h>
+#include <mutex>
+#include <queue>
+#include <string_view>
+#include <plf_colony.h>
+#include <robin_hood.h>
 
 namespace vuk {
 	struct ContextImpl {

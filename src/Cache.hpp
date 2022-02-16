@@ -3,7 +3,6 @@
 #include "CreateInfo.hpp"
 #include "RGImage.hpp"
 #include "RenderPass.hpp"
-#include "robin_hood.h"
 #include "vuk/Hash.hpp"
 #include "vuk/Pipeline.hpp"
 #include "vuk/Program.hpp"
@@ -11,8 +10,6 @@
 
 #include <atomic>
 #include <optional>
-#include <plf_colony.h>
-#include <shared_mutex>
 #include <span>
 #include <unordered_map>
 #include <utility>
@@ -220,70 +217,28 @@ namespace std {
 }; // namespace std
 
 namespace vuk {
+	template<class U>
+	struct CacheImpl;
+
 	template<class T>
 	class Cache {
 	private:
+		Context& ctx;
+
+		CacheImpl<T>* impl = nullptr;
+
+	public:
+		Cache(Context& ctx);
+		~Cache();
+
 		struct LRUEntry {
 			T* ptr;
 			size_t last_use_frame;
 		};
 
-		Context& ctx;
-		plf::colony<T> pool;
-		robin_hood::unordered_map<create_info_t<T>, LRUEntry> lru_map; // possibly vector_map or an intrusive map
-		std::shared_mutex cache_mtx;
+		std::optional<T> remove(const create_info_t<T>& ci);
 
-	public:
-		Cache(Context& ctx) : ctx(ctx) {}
-		~Cache();
-
-		std::optional<T> remove(const create_info_t<T>& ci) {
-			std::unique_lock _(cache_mtx);
-			auto it = lru_map.find(ci);
-			if (it != lru_map.end()) {
-				auto res = std::move(*it->second.ptr);
-				pool.erase(pool.get_iterator_from_pointer(it->second.ptr));
-				lru_map.erase(it);
-				return res;
-			}
-			return {};
-		}
-
-		template<class Compare>
-		std::optional<T> remove(Compare cmp) {
-			std::unique_lock _(cache_mtx);
-			for (auto it = lru_map.begin(); it != lru_map.end(); ++it) {
-				if (cmp(it->first, it->second)) {
-					auto res = std::move(*it->second.ptr);
-					pool.erase(pool.get_iterator_from_pointer(it->second.ptr));
-					lru_map.erase(it);
-					return res;
-				}
-			}
-			return {};
-		}
-
-		void remove_ptr(const T* ptr) {
-			std::unique_lock _(cache_mtx);
-			for (auto it = lru_map.begin(); it != lru_map.end(); ++it) {
-				if (ptr == it->second.ptr) {
-					pool.erase(pool.get_iterator_from_pointer(it->second.ptr));
-					lru_map.erase(it);
-					return;
-				}
-			}
-		}
-
-		template<class Compare>
-		const T* find(Compare cmp) {
-			std::unique_lock _(cache_mtx);
-			for (auto it = lru_map.begin(); it != lru_map.end(); ++it) {
-				if (cmp(it->first, it->second)) {
-					return it->second.ptr;
-				}
-			}
-			return nullptr;
-		}
+		void remove_ptr(const T* ptr);
 
 		T& acquire(const create_info_t<T>& ci);
 		T& acquire(const create_info_t<T>& ci, uint64_t current_frame);

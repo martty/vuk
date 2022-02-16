@@ -983,7 +983,7 @@ namespace vuk {
 		VkResult res = vkCreateComputePipelines(device, impl->vk_pipeline_cache, 1, &cpci, nullptr, &pipeline);
 		assert(res == VK_SUCCESS);
 		debug.set_name(pipeline, cinfo.base->pipeline_name);
-		return { cinfo.base, pipeline, cpci.layout, cinfo.base->layout_info, cinfo.base->reflection_info.local_size };
+		return { { cinfo.base, pipeline, cpci.layout, cinfo.base->layout_info }, cinfo.base->reflection_info.local_size };
 	}
 
 	Sampler Context::create(const create_info_t<Sampler>& cinfo) {
