@@ -4,8 +4,10 @@
 #include "vuk/Exception.hpp"
 #include "vuk/resources/DeviceFrameResource.hpp"
 #include "vuk/resources/DeviceVkResource.hpp"
+
 #include <numeric>
 #include <string>
+#include <utility>
 
 namespace vuk {
 	/****Allocator impls *****/

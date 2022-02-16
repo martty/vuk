@@ -1,11 +1,11 @@
+#include "vuk/Name.hpp"
+#include "vuk/Hash.hpp"
 #include <array>
 #include <robin_hood.h>
 #include <shared_mutex>
 #include <string>
 #include <string_view>
 #include <vector>
-#include "vuk/Hash.hpp"
-#include "vuk/Name.hpp"
 
 namespace {
 	struct Intern {
@@ -96,3 +96,9 @@ namespace vuk {
 		return Name(app);
 	}
 } // namespace vuk
+
+namespace std {
+	size_t hash<vuk::Name>::operator()(vuk::Name const& s) const {
+		return hash<const char*>()(s.id);
+	}
+} // namespace std

@@ -8,10 +8,6 @@
 #include <unordered_map>
 #include <vector>
 
-namespace spirv_cross {
-	struct SPIRType;
-	class Compiler;
-}; // namespace spirv_cross
 namespace vuk {
 	struct Program {
 		enum class Type {
@@ -122,7 +118,7 @@ namespace vuk {
 			VkShaderStageFlags stage;
 		};
 
-		VkShaderStageFlagBits introspect(const spirv_cross::Compiler& refl);
+		VkShaderStageFlagBits introspect(const uint32_t* ir, size_t word_count);
 
 		std::array<unsigned, 3> local_size;
 

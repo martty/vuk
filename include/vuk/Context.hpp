@@ -264,45 +264,6 @@ namespace vuk {
 	template<class T>
 	struct Future;
 
-	template<class T>
-	int get_allocator(T&) {
-		return 0;
-	}
-
-	template<class... Args>
-	Result<void> wait_for_futures(Allocator& alloc, Args&... futs) {
-		std::array controls = { futs.control.get()... };
-		std::array rgs = { futs.rg... };
-		std::vector<std::pair<Allocator*, RenderGraph*>> rgs_to_run;
-		for (uint64_t i = 0; i < controls.size(); i++) {
-			auto& control = controls[i];
-			if (control->status == FutureBase::Status::eInputAttached || control->status == FutureBase::Status::eInitial) {
-				return { expected_error };
-			} else if (control->status == FutureBase::Status::eHostAvailable || control->status == FutureBase::Status::eSubmitted) {
-				continue;
-			} else {
-				rgs_to_run.emplace_back(&control->get_allocator(), rgs[i]);
-			}
-		}
-		if (rgs_to_run.size() != 0) {
-			VUK_DO_OR_RETURN(link_execute_submit(alloc, std::span(rgs_to_run)));
-		}
-
-		std::vector<std::pair<DomainFlags, uint64_t>> waits;
-		for (uint64_t i = 0; i < controls.size(); i++) {
-			auto& control = controls[i];
-			if (control->status != FutureBase::Status::eSubmitted) {
-				continue;
-			}
-			waits.emplace_back(control->initial_domain, control->initial_visibility);
-		}
-		if (waits.size() > 0) {
-			alloc.get_context().wait_for_domains(std::span(waits));
-		}
-
-		return { expected_value };
-	}
-
 	struct SampledImage make_sampled_image(ImageView iv, SamplerCreateInfo sci);
 
 	struct SampledImage make_sampled_image(Name n, SamplerCreateInfo sci);

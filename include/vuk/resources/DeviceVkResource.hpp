@@ -29,7 +29,7 @@ namespace vuk {
 		Result<void, AllocateException>
 		allocate_buffers(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) override;
 
-		void deallocate_buffers(std::span<const BufferCrossDevice> src);
+		void deallocate_buffers(std::span<const BufferCrossDevice> src) override;
 
 		Result<void, AllocateException> allocate_buffers(std::span<BufferGPU> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) override;
 
@@ -57,7 +57,7 @@ namespace vuk {
 
 		Result<void, AllocateException> allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) override;
 
-		void deallocate_descriptor_sets(std::span<const DescriptorSet> src);
+		void deallocate_descriptor_sets(std::span<const DescriptorSet> src) override;
 
 		Result<void, AllocateException>
 		allocate_timestamp_query_pools(std::span<TimestampQueryPool> dst, std::span<const VkQueryPoolCreateInfo> cis, SourceLocationAtFrame loc) override;

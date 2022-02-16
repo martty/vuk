@@ -236,8 +236,6 @@ namespace {
 		    },
 		.render =
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
-		      vuk::Context& ctx = frame_allocator.get_context();
-
 		      // We set up VP data, same as in example 02_cube
 		      struct VP {
 			      glm::mat4 view;

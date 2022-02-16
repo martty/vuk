@@ -1,5 +1,4 @@
 #pragma once
-#include <span>
 #include <stdint.h>
 
 namespace std {
@@ -45,27 +44,14 @@ inline void hash_combine(size_t& seed, const T& v) {
 	std::hash<T> hasher;
 	seed ^= hasher(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
 }
+
+#define FWD(x) (static_cast<decltype(x)&&>(x))
+
 template<typename T, typename... Rest>
 inline void hash_combine(size_t& seed, const T& v, Rest&&... rest) {
 	std::hash<T> hasher;
 	seed ^= hasher(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-	hash_combine(seed, std::forward<Rest>(rest)...);
+	hash_combine(seed, FWD(rest)...);
 }
 
-template<typename E>
-constexpr auto to_integral(E e) -> typename std::underlying_type<E>::type {
-	return static_cast<typename std::underlying_type<E>::type>(e);
-}
-
-namespace std {
-	template<class T, size_t E>
-	struct hash<std::span<T, E>> {
-		size_t operator()(std::span<T, E> const& x) const noexcept {
-			size_t h = 0;
-			for (auto& e : x) {
-				hash_combine(h, e);
-			}
-			return h;
-		}
-	};
-}; // namespace std
+#undef FWD

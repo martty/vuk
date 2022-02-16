@@ -7,6 +7,22 @@
 #include <robin_hood.h>
 
 namespace vuk {
+	struct RenderPassInfo {
+		RenderPassInfo(arena&);
+		uint32_t command_buffer_index;
+		uint32_t batch_index;
+		std::vector<SubpassInfo, short_alloc<SubpassInfo, 64>> subpasses;
+		std::vector<AttachmentRPInfo, short_alloc<AttachmentRPInfo, 16>> attachments;
+		vuk::RenderPassCreateInfo rpci;
+		vuk::FramebufferCreateInfo fbci;
+		bool framebufferless = false;
+		VkRenderPass handle = {};
+		VkFramebuffer framebuffer;
+		std::vector<ImageBarrier> pre_barriers, post_barriers;
+		std::vector<MemoryBarrier> pre_mem_barriers, post_mem_barriers;
+		std::vector<std::pair<DomainFlagBits, uint32_t>> waits;
+	};
+
 #define INIT(x) x(decltype(x)::allocator_type(*arena_))
 	struct RGImpl {
 		std::unique_ptr<arena> arena_;
@@ -26,7 +42,7 @@ namespace vuk {
 		robin_hood::unordered_flat_map<Name, AttachmentRPInfo> bound_attachments;
 		robin_hood::unordered_flat_map<Name, BufferInfo> bound_buffers;
 
-		RGImpl() : arena_(new arena(1024 * 128)), INIT(passes), INIT(rpis), INIT(ordered_passes) {}
+		RGImpl() : arena_(new arena(1024 * 128)), INIT(passes), INIT(ordered_passes), INIT(rpis) {}
 
 		Name resolve_name(Name in) {
 			auto it = aliases.find(in);
@@ -73,21 +89,4 @@ namespace vuk {
 			begin = new_begin;
 		}
 	}
-
-	
-	struct RenderPassInfo {
-		RenderPassInfo(arena&);
-		uint32_t command_buffer_index;
-		uint32_t batch_index;
-		std::vector<SubpassInfo, short_alloc<SubpassInfo, 64>> subpasses;
-		std::vector<AttachmentRPInfo, short_alloc<AttachmentRPInfo, 16>> attachments;
-		vuk::RenderPassCreateInfo rpci;
-		vuk::FramebufferCreateInfo fbci;
-		bool framebufferless = false;
-		VkRenderPass handle = {};
-		VkFramebuffer framebuffer;
-		std::vector<ImageBarrier> pre_barriers, post_barriers;
-		std::vector<MemoryBarrier> pre_mem_barriers, post_mem_barriers;
-		std::vector<std::pair<DomainFlagBits, uint32_t>> waits;
-	};
 }; // namespace vuk

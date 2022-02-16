@@ -2,6 +2,7 @@
 #include "../src/LegacyGPUAllocator.hpp"
 #include "vuk/Context.hpp"
 #include "vuk/Query.hpp"
+#include "vuk/Descriptor.hpp"
 
 #include <atomic>
 
@@ -73,8 +74,8 @@ namespace vuk {
 	};
 
 	DeviceFrameResource::DeviceFrameResource(VkDevice device, DeviceSuperFrameResource& upstream) :
-	    device(device),
 	    DeviceNestedResource(&upstream),
+	    device(device),
 	    impl(new DeviceFrameResourceImpl(device, upstream)) {}
 
 	DeviceFrameResource::~DeviceFrameResource() {
@@ -324,8 +325,8 @@ namespace vuk {
 	}
 
 	DeviceSuperFrameResource::DeviceSuperFrameResource(Context& ctx, uint64_t frames_in_flight) :
-	    direct(ctx, ctx.get_legacy_gpu_allocator()),
 	    frames_in_flight(frames_in_flight),
+	    direct(ctx, ctx.get_legacy_gpu_allocator()),
 	    impl(new DeviceSuperFrameResourceImpl(*this, frames_in_flight)) {}
 
 	Result<void, AllocateException> DeviceSuperFrameResource::allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) {
@@ -518,7 +519,6 @@ namespace vuk {
 	DeviceFrameResource& DeviceSuperFrameResource::get_next_frame() {
 		std::unique_lock _(impl->new_frame_mutex);
 
-		auto& ctx = direct.get_context();
 		impl->frame_counter++;
 		impl->local_frame = impl->frame_counter % frames_in_flight;
 
@@ -583,7 +583,7 @@ namespace vuk {
 			direct.legacy_gpu_allocator->destroy(f.impl->linear_cpu_gpu);
 			direct.legacy_gpu_allocator->destroy(f.impl->linear_gpu_cpu);
 			direct.legacy_gpu_allocator->destroy(f.impl->linear_gpu_only);
-			f.~DeviceFrameResource();
+			f.DeviceFrameResource::~DeviceFrameResource();
 		}
 		for (uint32_t i = 0; i < (uint32_t)impl->command_pools.size(); i++) {
 			for (auto& cpool : impl->command_pools[i]) {

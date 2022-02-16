@@ -1,8 +1,8 @@
 #pragma once
 
-#include "vuk/vuk_fwd.hpp"
-#include "vuk/Image.hpp"
 #include "vuk/Buffer.hpp"
+#include "vuk/Image.hpp"
+#include "vuk/vuk_fwd.hpp"
 
 namespace vuk {
 	struct ImageAttachment {
@@ -23,7 +23,7 @@ namespace vuk {
 		static ImageAttachment from_texture(const vuk::Texture& t, Clear clear_value) {
 			return ImageAttachment{ .image = t.image.get(),
 				                      .image_view = t.view.get(),
-				                      .extent = { Sizing::eAbsolute, t.extent.width, t.extent.height },
+				                      .extent = { Sizing::eAbsolute, { t.extent.width, t.extent.height } },
 				                      .format = t.format,
 				                      .sample_count = { t.sample_count },
 				                      .clear_value = clear_value };
@@ -31,7 +31,7 @@ namespace vuk {
 		static ImageAttachment from_texture(const vuk::Texture& t) {
 			return ImageAttachment{ .image = t.image.get(),
 				                      .image_view = t.view.get(),
-				                      .extent = { Sizing::eAbsolute, t.extent.width, t.extent.height },
+				                      .extent = { Sizing::eAbsolute, { t.extent.width, t.extent.height } },
 				                      .format = t.format,
 				                      .sample_count = { t.sample_count },
 				                      .layer_count = t.view->layer_count };

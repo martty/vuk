@@ -1,17 +1,18 @@
 #pragma once
 
 #include "vuk/Buffer.hpp"
+#include "vuk/Future.hpp"
 #include "vuk/Hash.hpp"
 #include "vuk/Image.hpp"
+#include "vuk/ImageAttachment.hpp"
 #include "vuk/MapProxy.hpp"
 #include "vuk/Result.hpp"
 #include "vuk/Swapchain.hpp"
-#include "vuk/ImageAttachment.hpp"
-#include "vuk/Future.hpp"
 #include "vuk/vuk_fwd.hpp"
 
 #include <functional>
 #include <optional>
+#include <span>
 #include <string_view>
 #include <vector>
 
@@ -129,9 +130,9 @@ namespace vuk {
 		    name(n),
 		    type(t),
 		    ia(ia),
+		    out_name(out_name),
 		    is_create(true),
-		    ici{ .attachment = { .extent = dim, .format = fmt, .sample_count = samp, .clear_value = cv }, .description{ .format = (VkFormat)fmt } },
-		    out_name(out_name) {}
+		    ici{ .attachment = { .extent = dim, .format = fmt, .sample_count = samp, .clear_value = cv }, .description{ .format = (VkFormat)fmt } } {}
 
 		bool operator==(const Resource& o) const noexcept {
 			return name == o.name;
@@ -201,7 +202,7 @@ namespace vuk {
 		void attach_swapchain(Name name, SwapchainRef swp, Clear);
 
 		/// @brief Attach a buffer to the given name
-		/// @param name Name of the resource to attach to 
+		/// @param name Name of the resource to attach to
 		/// @param buffer Buffer to attach
 		/// @param initial Access to the resource prior to this rendergraph
 		/// @param final Desired Access to the resource after this rendergraph

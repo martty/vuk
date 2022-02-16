@@ -223,7 +223,6 @@ namespace vuk {
 		for (auto& passinfo : impl->passes) {
 			for (auto& res : passinfo.pass.resources) {
 				// for read or write, we add source to use chain
-				auto resolved_name = impl->resolve_name(res.name);
 				if (!res.out_name.is_invalid()) {
 					add_alias(res.out_name, res.name);
 				}
@@ -1228,7 +1227,6 @@ namespace vuk {
 
 		// build waits, now that we have fixed the batches
 		for (auto& rp : impl->rpis) {
-			bool needs_split = false;
 			for (auto& sp : rp.subpasses) {
 				for (auto& passinfo : sp.passes) {
 					for (auto& wait : passinfo->waits) {

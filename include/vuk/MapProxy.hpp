@@ -1,5 +1,7 @@
 #pragma once
 
+#include <iterator>
+
 namespace vuk {
 	// generic iterator for both const_iterator and iterator.
 	template<class Key, class Value>

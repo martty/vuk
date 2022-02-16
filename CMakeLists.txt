@@ -83,7 +83,6 @@ target_sources(vuk PRIVATE
 	src/RenderGraph.cpp 
 	src/RenderGraphUtil.cpp
 	src/ExecutableRenderGraph.cpp
-	src/VMA.cpp
 	src/Allocator.cpp
 	src/Context.cpp
 	src/CommandBuffer.cpp

@@ -1,4 +1,5 @@
 #pragma once
+#include "../src/ToIntegral.hpp"
 #include "CreateInfo.hpp"
 #include "RGImage.hpp"
 #include "RenderPass.hpp"
@@ -7,12 +8,14 @@
 #include "vuk/Pipeline.hpp"
 #include "vuk/Program.hpp"
 #include "vuk/Types.hpp"
+
 #include <atomic>
 #include <optional>
 #include <plf_colony.h>
 #include <shared_mutex>
 #include <span>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace std {

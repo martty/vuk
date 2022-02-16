@@ -10,6 +10,7 @@
 #include <bitset>
 #include <cassert>
 #include <vector>
+#include <span>
 
 inline bool operator==(VkDescriptorSetLayoutBinding const& lhs, VkDescriptorSetLayoutBinding const& rhs) noexcept {
 	return (lhs.binding == rhs.binding) && (lhs.descriptorType == rhs.descriptorType) && (lhs.descriptorCount == rhs.descriptorCount) &&
@@ -19,6 +20,19 @@ inline bool operator==(VkDescriptorSetLayoutBinding const& lhs, VkDescriptorSetL
 namespace robin_hood {
 	size_t hash_bytes(void const* ptr, size_t len) noexcept;
 }
+
+namespace std {
+	template<class T, size_t E>
+	struct hash<std::span<T, E>> {
+		size_t operator()(std::span<T, E> const& x) const noexcept {
+			size_t h = 0;
+			for (auto& e : x) {
+				hash_combine(h, e);
+			}
+			return h;
+		}
+	};
+}; // namespace std
 
 namespace vuk {
 	enum class DescriptorType {

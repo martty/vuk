@@ -76,7 +76,6 @@ namespace vuk {
 		std::unique_ptr<RenderGraph> rgp = std::make_unique<RenderGraph>();
 		for (uint32_t miplevel = base_mip + 1; miplevel < (base_mip + num_mips); miplevel++) {
 			uint32_t dmiplevel = miplevel - base_mip;
-			Name mip_src = Name(std::to_string(miplevel - 1));
 			Name mip_dst = Name(std::to_string(miplevel));
 			Name src = Name("_src");
 			if (miplevel != base_mip + 1) {

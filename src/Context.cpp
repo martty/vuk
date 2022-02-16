@@ -16,7 +16,6 @@
 #include <algorithm>
 #include <atomic>
 #include <fstream>
-#include <spirv_cross.hpp>
 #include <sstream>
 
 #include "../src/ContextImpl.hpp"
@@ -279,9 +278,8 @@ namespace vuk {
 			break;
 		}
 
-		spirv_cross::Compiler refl(spirv.data(), spirv.size());
 		Program p;
-		auto stage = p.introspect(refl);
+		auto stage = p.introspect(spirv.data(), spirv.size());
 
 		VkShaderModuleCreateInfo moduleCreateInfo{ .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO };
 		moduleCreateInfo.codeSize = spirv.size() * sizeof(uint32_t);

@@ -121,15 +121,6 @@ namespace vuk {
 } // namespace vuk
 
 namespace std {
-	template<class BitType>
-	struct hash<vuk::Flags<BitType>> {
-		size_t operator()(vuk::Flags<BitType> const& x) const noexcept {
-			return std::hash<typename vuk::Flags<BitType>::MaskType>()((typename vuk::Flags<BitType>::MaskType)x);
-		}
-	};
-}; // namespace std
-
-namespace std {
 	template<class T>
 	struct hash<std::vector<T>> {
 		size_t operator()(std::vector<T> const& x) const noexcept {

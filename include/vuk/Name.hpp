@@ -1,7 +1,14 @@
 #pragma once
 
-#include <string_view>
 #include "vuk/Hash.hpp"
+
+namespace std {
+	template<class CharT>
+	struct char_traits;
+	template<class CharT, class Traits>
+	class basic_string_view;
+	using string_view = basic_string_view<char, std::char_traits<char>>;
+}
 
 namespace vuk {
 	class Name {
@@ -44,8 +51,6 @@ namespace vuk {
 namespace std {
 	template<>
 	struct hash<vuk::Name> {
-		size_t operator()(vuk::Name const& s) const {
-			return hash<const char*>()(s.id);
-		}
+		size_t operator()(vuk::Name const& s) const;
 	};
 } // namespace std

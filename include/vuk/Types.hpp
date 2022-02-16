@@ -4,6 +4,10 @@
 #include "vuk/Hash.hpp"
 #include "vuk/vuk_fwd.hpp"
 
+#include <type_traits>
+
+#define MOV(x) (static_cast<std::remove_reference_t<decltype(x)>&&>(x))
+
 namespace vuk {
 	struct HandleBase {
 		size_t id = UINT64_MAX;
@@ -28,7 +32,7 @@ namespace vuk {
 
 		explicit Unique() : allocator(nullptr), payload{} {}
 		explicit Unique(Allocator& allocator) : allocator(&allocator), payload{} {}
-		explicit Unique(Allocator& allocator, Type payload) : allocator(&allocator), payload(std::move(payload)) {}
+		explicit Unique(Allocator& allocator, Type payload) : allocator(&allocator), payload(MOV(payload)) {}
 		Unique(Unique const&) = delete;
 
 		Unique(Unique&& other) noexcept : allocator(other.allocator), payload(other.release()) {}
@@ -76,7 +80,7 @@ namespace vuk {
 
 		Type release() noexcept {
 			allocator = nullptr;
-			return std::move(payload);
+			return MOV(payload);
 		}
 
 		void swap(Unique<Type>& rhs) noexcept {
@@ -1024,3 +1028,14 @@ namespace vuk {
 		}
 	};
 } // namespace vuk
+
+namespace std {
+	template<class BitType>
+	struct hash<vuk::Flags<BitType>> {
+		size_t operator()(vuk::Flags<BitType> const& x) const noexcept {
+			return std::hash<typename vuk::Flags<BitType>::MaskType>()((typename vuk::Flags<BitType>::MaskType)x);
+		}
+	};
+}; // namespace std
+
+#undef MOV

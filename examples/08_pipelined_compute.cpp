@@ -34,8 +34,6 @@ namespace {
 		.name = "08_pipelined_compute",
 		.setup =
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator) {
-		      vuk::Context& ctx = allocator.get_context();
-
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
 			      pci.add_glsl(util::read_entire_file("../../examples/fullscreen.vert"), "fullscreen.vert");
@@ -79,8 +77,6 @@ namespace {
 		    },
 		.render =
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
-		      vuk::Context& ctx = frame_allocator.get_context();
-
 		      vuk::RenderGraph rgx;
 
 		      // standard render to texture

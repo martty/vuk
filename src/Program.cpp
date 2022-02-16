@@ -158,7 +158,8 @@ void reflect_members(const spirv_cross::Compiler& refl, const spirv_cross::SPIRT
 	}
 }
 
-VkShaderStageFlagBits vuk::Program::introspect(const spirv_cross::Compiler& refl) {
+VkShaderStageFlagBits vuk::Program::introspect(const uint32_t* ir, size_t word_count) {
+	spirv_cross::Compiler refl(ir, word_count);
 	auto resources = refl.get_shader_resources();
 	auto entry_name = refl.get_entry_points_and_stages()[0];
 	auto entry_point = refl.get_entry_point(entry_name.name, entry_name.execution_model);

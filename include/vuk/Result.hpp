@@ -4,12 +4,22 @@
 
 #include "vuk/Config.hpp"
 #include "vuk/vuk_fwd.hpp"
+#include "vuk/Exception.hpp"
 
 #include <cassert>
 #include <type_traits>
 
-#define FWD(x) (static_cast<decltype(x)&&>(x))
-#define MOV(x) (static_cast<std::remove_reference_t<decltype(x)>&&>(x))
+#define FWD(x)               (static_cast<decltype(x)&&>(x))
+#define MOV(x)               (static_cast<std::remove_reference_t<decltype(x)>&&>(x))
+#define CONSTRUCT_AT(p, ...) ::new (const_cast<void*>(static_cast<const volatile void*>(p))) decltype (*p)(__VA_ARGS__)
+#define DESTROY_AT(p)                                                                                                                                          \
+	if constexpr (std::is_array_v<decltype(*p)>) {                                                                                                               \
+		for (auto& elem : *p) {                                                                                                                                    \
+			(&elem)->~decltype (*p)();                                                                                                                               \
+		}                                                                                                                                                          \
+	} else {                                                                                                                                                     \
+		p->~decltype (*p)();                                                                                                                                       \
+	}
 
 namespace vuk {
 	struct Exception;
@@ -39,17 +49,17 @@ namespace vuk {
 
 		Result(Result const& other) : _holds_value(other._holds_value), _null_state() {
 			if (other._holds_value) {
-				std::construct_at(&_value, other._value);
+				CONSTRUCT_AT(&_value, other._value);
 			} else {
-				std::construct_at(&_error, other._error);
+				CONSTRUCT_AT(&_error, other._error);
 			}
 		}
 
 		Result(Result&& other) : _holds_value(other._holds_value), _null_state() {
 			if (other._holds_value) {
-				std::construct_at(&_value, MOV(other._value));
+				CONSTRUCT_AT(&_value, MOV(other._value));
 			} else {
-				std::construct_at(&_error, MOV(other._error));
+				CONSTRUCT_AT(&_error, MOV(other._error));
 			}
 		}
 
@@ -58,14 +68,14 @@ namespace vuk {
 				if (other._holds_value) {
 					_value = other._value;
 				} else {
-					std::destroy_at(&_value);
-					std::construct_at(&_error, other._error);
+					DESTROY_AT(&_value);
+					CONSTRUCT_AT(&_error, other._error);
 					_holds_value = false;
 				}
 			} else {
 				if (other._holds_value) {
-					std::destroy_at(&_error);
-					std::construct_at(&_value, other._value);
+					DESTROY_AT(&_error);
+					CONSTRUCT_AT(&_value, other._value);
 					_holds_value = true;
 				} else {
 					_error = other._error;
@@ -80,14 +90,14 @@ namespace vuk {
 				if (other._holds_value) {
 					_value = MOV(other._value);
 				} else {
-					std::destroy_at(&_value);
-					std::construct_at(&_error, MOV(other._error));
+					DESTROY_AT(&_value);
+					CONSTRUCT_AT(&_error, MOV(other._error));
 					_holds_value = false;
 				}
 			} else {
 				if (other._holds_value) {
-					std::destroy_at(&_error);
-					std::construct_at(&_value, MOV(other._value));
+					DESTROY_AT(&_error);
+					CONSTRUCT_AT(&_value, MOV(other._value));
 					_holds_value = true;
 				} else {
 					_error = MOV(other._error);
@@ -188,18 +198,18 @@ namespace vuk {
 				if (rhs._holds_value) {
 					swap(lhs._value, rhs._value);
 				} else {
-					std::construct_at(&rhs._value, MOV(lhs._value));
-					std::destroy_at(&lhs._value);
-					std::construct_at(&lhs._error, MOV(rhs._error));
-					std::destroy_at(&rhs._error);
+					CONSTRUCT_AT(&rhs._value, MOV(lhs._value));
+					DESTROY_AT(&lhs._value);
+					CONSTRUCT_AT(&lhs._error, MOV(rhs._error));
+					DESTROY_AT(&rhs._error);
 					std::swap(lhs._holds_value, rhs._holds_value);
 				}
 			} else {
 				if (rhs._holds_value) {
-					std::construct_at(&rhs._error, MOV(lhs._error));
-					std::destroy_at(&lhs._error);
-					std::construct_at(&lhs._value, MOV(rhs._value));
-					std::destroy_at(&rhs._value);
+					CONSTRUCT_AT(&rhs._error, MOV(lhs._error));
+					DESTROY_AT(&lhs._error);
+					CONSTRUCT_AT(&lhs._value, MOV(rhs._value));
+					DESTROY_AT(&rhs._value);
 					std::swap(lhs._holds_value, rhs._holds_value);
 				} else {
 					swap(lhs._error, rhs._error);
@@ -230,26 +240,26 @@ namespace vuk {
 
 		Result(Result const& other) : _holds_value(other._holds_value), _null_state() {
 			if (!other._holds_value) {
-				std::construct_at(&_error, other._error);
+				CONSTRUCT_AT(&_error, other._error);
 			}
 		}
 
 		Result(Result&& other) : _holds_value(other._holds_value), _null_state() {
 			if (!other._holds_value) {
-				std::construct_at(&_error, MOV(other._error));
+				CONSTRUCT_AT(&_error, MOV(other._error));
 			}
 		}
 
 		Result& operator=(Result const& other) {
 			if (_holds_value) {
 				if (!other._holds_value) {
-					std::construct_at(&_error, other._error);
-					std::destroy_at(&other._error);
+					CONSTRUCT_AT(&_error, other._error);
+					DESTROY_AT(&other._error);
 					_holds_value = false;
 				}
 			} else {
 				if (other._holds_value) {
-					std::destroy_at(&_error);
+					DESTROY_AT(&_error);
 					_holds_value = true;
 				} else {
 					_error = other._error;
@@ -262,13 +272,13 @@ namespace vuk {
 		Result& operator=(Result&& other) {
 			if (_holds_value) {
 				if (!other._holds_value) {
-					std::construct_at(&_error, MOV(other._error));
-					std::destroy_at(&other._error);
+					CONSTRUCT_AT(&_error, MOV(other._error));
+					DESTROY_AT(&other._error);
 					_holds_value = false;
 				}
 			} else {
 				if (other._holds_value) {
-					std::destroy_at(&_error);
+					DESTROY_AT(&_error);
 					_holds_value = true;
 				} else {
 					_error = MOV(other._error);
@@ -320,14 +330,14 @@ namespace vuk {
 		friend void swap(Result& lhs, Result& rhs) {
 			if (lhs._holds_value) {
 				if (!rhs._holds_value) {
-					std::construct_at(&lhs._error, MOV(rhs._error));
-					std::destroy_at(&rhs._error);
+					CONSTRUCT_AT(&lhs._error, MOV(rhs._error));
+					DESTROY_AT(&rhs._error);
 					swap(lhs._holds_value, rhs._holds_value);
 				}
 			} else {
 				if (rhs._holds_value) {
-					std::construct_at(&rhs._error, MOV(lhs._error));
-					std::destroy_at(&lhs._error);
+					CONSTRUCT_AT(&rhs._error, MOV(lhs._error));
+					DESTROY_AT(&lhs._error);
 					swap(lhs._holds_value, rhs._holds_value);
 				}
 			}
@@ -343,5 +353,7 @@ namespace vuk {
 	};
 } // namespace vuk
 
+#undef DESTROY_AT
+#undef CONSTRUCT_AT
 #undef FWD
 #undef MOV

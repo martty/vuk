@@ -1,16 +1,18 @@
 #pragma once
 
-#include "../src/Cache.hpp" // for the hashes
 #include "../src/CreateInfo.hpp"
+#include "../src/ToIntegral.hpp"
 
 #include "vuk/Buffer.hpp"
 #include "vuk/Hash.hpp"
 #include "vuk/Image.hpp"
 #include "vuk/Types.hpp"
 
+#include <array>
 #include <atomic>
 #include <mutex>
 #include <unordered_map>
+#include <utility>
 #include <vk_mem_alloc.h>
 
 namespace vuk {

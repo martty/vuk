@@ -1,7 +1,9 @@
 #pragma once
 
-#include <cstdint>
 #include "vuk_fwd.hpp"
+
+#include <bit>
+#include <cstdint>
 
 namespace vuk {
 	template<uint64_t Count>

@@ -18,9 +18,9 @@ namespace vuk {
 
 		QueueImpl(PFN_vkQueueSubmit2KHR fn, VkQueue queue, uint32_t queue_family_index, TimelineSemaphore ts) :
 		    queueSubmit2KHR(fn),
+		    submit_sync(ts),
 		    queue(queue),
-		    family_index(queue_family_index),
-		    submit_sync(ts) {}
+		    family_index(queue_family_index) {}
 	};
 
 	Queue::Queue(PFN_vkQueueSubmit2KHR fn, VkQueue queue, uint32_t queue_family_index, TimelineSemaphore ts) :
@@ -239,7 +239,7 @@ namespace vuk {
 					signal_sema_count++;
 				}
 
-				VkSubmitInfo2KHR& si = sis.emplace_back(VK_STRUCTURE_TYPE_SUBMIT_INFO_2_KHR);
+				VkSubmitInfo2KHR& si = sis.emplace_back(VkSubmitInfo2KHR{ VK_STRUCTURE_TYPE_SUBMIT_INFO_2_KHR });
 				VkCommandBufferSubmitInfoKHR* p_cbuf_infos = &cbufsis.back() - (submit_info.command_buffers.size() - 1);
 				VkSemaphoreSubmitInfoKHR* p_wait_semas = wait_sema_count > 0 ? &wait_semas.back() - (wait_sema_count - 1) : nullptr;
 				VkSemaphoreSubmitInfoKHR* p_signal_semas = &signal_semas.back() - (signal_sema_count - 1);
@@ -354,19 +354,19 @@ namespace vuk {
 
 	template<class T>
 	Future<T>::Future(Allocator& alloc, struct RenderGraph& rg, Name output_binding, DomainFlags dst_domain) :
-	    control(std::make_unique<FutureBase>(alloc)),
+	    output_binding(output_binding),
 	    rg(&rg),
-	    output_binding(output_binding) {
+	    control(std::make_unique<FutureBase>(alloc)) {
 		control->status = FutureBase::Status::eRenderGraphBound;
 		this->rg->attach_out(output_binding, *this, dst_domain);
 	}
 
 	template<class T>
 	Future<T>::Future(Allocator& alloc, std::unique_ptr<struct RenderGraph> org, Name output_binding, DomainFlags dst_domain) :
-	    control(std::make_unique<FutureBase>(alloc)),
+	    output_binding(output_binding),
 	    owned_rg(std::move(org)),
 	    rg(owned_rg.get()),
-	    output_binding(output_binding) {
+	    control(std::make_unique<FutureBase>(alloc)) {
 		control->status = FutureBase::Status::eRenderGraphBound;
 		rg->attach_out(output_binding, *this, dst_domain);
 	}

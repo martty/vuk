@@ -22,8 +22,6 @@ namespace {
 		.name = "06_msaa",
 		.setup =
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator) {
-		      vuk::Context& ctx = allocator.get_context();
-
 		      // Same setup as for 04_texture, except we use spirv to create the pipeline
 		      // This is a good option is if you don't want to ship shaderc or if you are caching or have your sl -> spirv pipeline
 		      {
@@ -43,8 +41,6 @@ namespace {
 		    },
 		.render =
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
-		      vuk::Context& ctx = frame_allocator.get_context();
-
 		      // We set up the cube data, same as in example 02_cube
 		      auto [vert_buf, vert_fut] = create_buffer_gpu(frame_allocator, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.first));
 		      auto verts = *vert_buf;
