@@ -42,7 +42,7 @@ namespace vuk {
 		robin_hood::unordered_flat_map<Name, AttachmentRPInfo> bound_attachments;
 		robin_hood::unordered_flat_map<Name, BufferInfo> bound_buffers;
 
-		RGImpl() : arena_(new arena(1024 * 128)), INIT(passes), INIT(ordered_passes), INIT(rpis) {}
+		RGImpl() : arena_(new arena(1024 * 1024)), INIT(passes), INIT(ordered_passes), INIT(rpis) {}
 
 		Name resolve_name(Name in) {
 			auto it = aliases.find(in);

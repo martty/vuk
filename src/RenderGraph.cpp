@@ -250,7 +250,7 @@ namespace vuk {
 					// propagate subsequent use back onto the acquire
 					chain.back().pass->domain = passinfo.domain;
 					chain.back().high_level_access = Access::eNone;
-					chain.emplace_back(UseRef{ res.ia, res.ia, {}, res.type, res.subrange, &passinfo });
+					chain.emplace_back(UseRef{ res.name, res.out_name, res.ia, res.ia, {}, res.type, res.subrange, &passinfo });
 				} else if (chain.size() > 0 && is_release(chain.back().original) && is_acquire(res.ia)) {
 					// release-acquire pair
 					// mark these passes to be excluded
@@ -260,10 +260,10 @@ namespace vuk {
 				} else if (is_release(res.ia)) { // release of resource - this must happen on the previous use domain
 					assert(chain.size() > 0);      // release cannot head a use chain
 					// only release -> propagate previous use onto release
-					chain.emplace_back(UseRef{ res.ia, Access::eNone, {}, res.type, res.subrange, &passinfo });
+					chain.emplace_back(UseRef{ res.name, res.out_name, res.ia, chain.back().high_level_access, {}, res.type, res.subrange, &passinfo });
 				} else if (res.ia == Access::eConsume) { // is not a use
 				} else {
-					chain.emplace_back(UseRef{ res.ia, res.ia, {}, res.type, res.subrange, &passinfo });
+					chain.emplace_back(UseRef{ res.name, res.out_name, res.ia, res.ia, {}, res.type, res.subrange, &passinfo });
 				}
 			}
 		}
@@ -614,11 +614,11 @@ namespace vuk {
 			auto& chain = chain_it->second;
 			if (is_acquire(chain[0].original)) {
 			} else {
-				chain.insert(chain.begin(), UseRef{ vuk::eManual, vuk::eManual, attachment_info.initial, Resource::Type::eImage, {}, nullptr });
+				chain.insert(chain.begin(), UseRef{ {}, {}, vuk::eManual, vuk::eManual, attachment_info.initial, Resource::Type::eImage, {}, nullptr });
 			}
 			if (is_release(chain.back().original)) {
 			} else {
-				chain.emplace_back(UseRef{ vuk::eManual, vuk::eManual, attachment_info.final, Resource::Type::eImage, {}, nullptr });
+				chain.emplace_back(UseRef{ {}, {}, vuk::eManual, vuk::eManual, attachment_info.final, Resource::Type::eImage, {}, nullptr });
 			}
 
 			ImageAspectFlags aspect = format_to_aspect((Format)attachment_info.description.format);
@@ -904,6 +904,24 @@ namespace vuk {
 						left_rp.post_barriers.emplace_back(release_barrier);
 					}
 
+					auto& left_rp = impl->rpis[left.pass->render_pass_index];
+					if (is_framebuffer_attachment(prev_use)) {
+						assert(!left_rp.framebufferless);
+						auto& rp_att = *contains_if(left_rp.attachments, [name](auto& att) { return att.name == name; });
+
+						sync_bound_attachment_to_renderpass(rp_att, attachment_info);
+						// we keep last use as finalLayout
+						assert(prev_use.layout != ImageLayout::eUndefined && prev_use.layout != ImageLayout::ePreinitialized);
+						rp_att.description.finalLayout = (VkImageLayout)prev_use.layout;
+
+						// compute attachment store
+						if (next_use.layout == ImageLayout::eUndefined) {
+							rp_att.description.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+						} else {
+							rp_att.description.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+						}
+					}
+
 					continue;
 				}
 
@@ -972,6 +990,7 @@ namespace vuk {
 
 							sync_bound_attachment_to_renderpass(rp_att, attachment_info);
 							// we keep last use as finalLayout
+							assert(prev_use.layout != ImageLayout::eUndefined && prev_use.layout != ImageLayout::ePreinitialized);
 							rp_att.description.finalLayout = (VkImageLayout)prev_use.layout;
 
 							// compute attachment store
@@ -1116,8 +1135,8 @@ namespace vuk {
 			}
 			auto& chain = chain_it->second;
 			chain.insert(chain.begin(),
-			             UseRef{ vuk::eManual, vuk::eManual, buffer_info.initial, Resource::Type::eBuffer, Resource::Subrange{ .buffer = {} }, nullptr });
-			chain.emplace_back(UseRef{ vuk::eManual, vuk::eManual, buffer_info.final, Resource::Type::eBuffer, Resource::Subrange{ .buffer = {} }, nullptr });
+			             UseRef{ {}, {}, vuk::eManual, vuk::eManual, buffer_info.initial, Resource::Type::eBuffer, Resource::Subrange{ .buffer = {} }, nullptr });
+			chain.emplace_back(UseRef{ {}, {}, vuk::eManual, vuk::eManual, buffer_info.final, Resource::Type::eBuffer, Resource::Subrange{ .buffer = {} }, nullptr });
 
 			for (size_t i = 0; i < chain.size() - 1; i++) {
 				auto& left = chain[i];
@@ -1456,31 +1475,33 @@ namespace vuk {
 	ImageUsageFlags RenderGraph::compute_usage(std::span<const UseRef> chain) {
 		ImageUsageFlags usage;
 		for (const auto& c : chain) {
-			switch (c.use.layout) {
-			case ImageLayout::eDepthStencilAttachmentOptimal:
-				usage |= ImageUsageFlagBits::eDepthStencilAttachment;
-				break;
-			case ImageLayout::eShaderReadOnlyOptimal: // TODO: more complex analysis
-				usage |= ImageUsageFlagBits::eSampled;
-				break;
-			case ImageLayout::eColorAttachmentOptimal:
-				usage |= ImageUsageFlagBits::eColorAttachment;
-				break;
-			case ImageLayout::eTransferSrcOptimal:
-				usage |= ImageUsageFlagBits::eTransferRead;
-				break;
-			case ImageLayout::eTransferDstOptimal:
-				usage |= ImageUsageFlagBits::eTransferWrite;
-				break;
-			default:
-				break;
-			}
-			// TODO: this isn't conservative enough, we need more information
-			if (c.use.layout == ImageLayout::eGeneral) {
-				if (c.use.stages &
-				    (PipelineStageFlagBits::eComputeShader | PipelineStageFlagBits::eVertexShader | PipelineStageFlagBits::eTessellationControlShader |
-				     PipelineStageFlagBits::eTessellationEvaluationShader | PipelineStageFlagBits::eGeometryShader | PipelineStageFlagBits::eFragmentShader)) {
-					usage |= ImageUsageFlagBits::eStorage;
+			if (c.high_level_access != Access::eManual) {
+				switch (to_use(c.high_level_access).layout) {
+				case ImageLayout::eDepthStencilAttachmentOptimal:
+					usage |= ImageUsageFlagBits::eDepthStencilAttachment;
+					break;
+				case ImageLayout::eShaderReadOnlyOptimal: // TODO: more complex analysis
+					usage |= ImageUsageFlagBits::eSampled;
+					break;
+				case ImageLayout::eColorAttachmentOptimal:
+					usage |= ImageUsageFlagBits::eColorAttachment;
+					break;
+				case ImageLayout::eTransferSrcOptimal:
+					usage |= ImageUsageFlagBits::eTransferRead;
+					break;
+				case ImageLayout::eTransferDstOptimal:
+					usage |= ImageUsageFlagBits::eTransferWrite;
+					break;
+				default:
+					break;
+				}
+				// TODO: this isn't conservative enough, we need more information
+				if (c.use.layout == ImageLayout::eGeneral) {
+					if (c.use.stages &
+					    (PipelineStageFlagBits::eComputeShader | PipelineStageFlagBits::eVertexShader | PipelineStageFlagBits::eTessellationControlShader |
+					     PipelineStageFlagBits::eTessellationEvaluationShader | PipelineStageFlagBits::eGeometryShader | PipelineStageFlagBits::eFragmentShader)) {
+						usage |= ImageUsageFlagBits::eStorage;
+					}
 				}
 			}
 		}

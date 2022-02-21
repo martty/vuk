@@ -273,6 +273,8 @@ namespace vuk {
 	}
 
 	struct UseRef {
+		Name name;
+		Name out_name;
 		vuk::Access original = vuk::eNone;
 		vuk::Access high_level_access;
 		ResourceUse use;

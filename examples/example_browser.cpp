@@ -176,7 +176,12 @@ void vuk::ExampleRunner::render() {
 							ImGui::TextDisabled("%s", btn_id.c_str());
 						} else {
 							if (ImGui::Button(btn_id.c_str())) {
-								chosen_resource[i] = key.to_sv();
+								if (key.to_sv() == ex->name) {
+									chosen_resource[i] = attachment_name_out;
+								} else {
+									Name last_use = use_refs.back().out_name.is_invalid() ? use_refs.back().name : use_refs.back().out_name;
+									chosen_resource[i] = last_use;
+								}
 							}
 						}
 						if (ImGui::IsItemHovered())
@@ -188,8 +193,13 @@ void vuk::ExampleRunner::render() {
 				if (chosen_resource[i].is_invalid())
 					chosen_resource[i] = attachment_name_out;
 
-				Name result = chosen_resource[i].append("_result");
-				rg.attach_in(result, std::move(rg_frag_fut), vuk::eNone);
+				Name result = attachment_name_out.append("_result");
+				if (chosen_resource[i] != attachment_name_out) {
+					auto othfut = Future<ImageAttachment>(frame_allocator, rg_frag, chosen_resource[i]);
+					rg.attach_in(result, std::move(othfut), vuk::eNone);
+				} else {
+					rg.attach_in(result, std::move(rg_frag_fut), vuk::eNone);
+				}
 
 				auto si = vuk::make_sampled_image(result, imgui_data.font_sci);
 				ImGui::Image(&*sampled_images.emplace(si), ImVec2(200, 200));

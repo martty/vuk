@@ -476,7 +476,7 @@ namespace vuk {
 				return { expected_value, elem.use.layout == vuk::ImageLayout::eGeneral };
 			}
 		}
-		assert(false && "Image resourced was not declared to be used in this pass, but was referred to.");
+		assert(false && "Image resource was not declared to be used in this pass, but was referred to.");
 		return { expected_error, RenderGraphException{ "Image resourced was not declared to be used in this pass, but was referred to." } };
 	}
 
