@@ -10,13 +10,15 @@ layout (location = 0) out vec4 FragmentColor;
 layout(binding = 0) uniform sampler2D image;
 
 layout(push_constant) uniform PC {
-    uint image_size;
+    float image_size_rcp;
 };
 
 void main() {
     FragmentColor = textureLod(image, uv, 0) * weight[0];
+	float offset = 0;
     for (int i=1; i<5; i++) {
-        FragmentColor += textureLod(image, uv + vec2(0.0, float(i) / image_size), 0) * weight[i];
-        FragmentColor += textureLod(image, uv - vec2(0.0, float(i) / image_size), 0) * weight[i];
+		offset += image_size_rcp;
+        FragmentColor += textureLod(image, uv + vec2(0.0, offset), 0) * weight[i];
+        FragmentColor += textureLod(image, uv - vec2(0.0, offset), 0) * weight[i];
     }
 }

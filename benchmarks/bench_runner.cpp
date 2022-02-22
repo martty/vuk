@@ -5,7 +5,7 @@ std::vector<std::string> chosen_resource;
 
 vuk::BenchRunner::BenchRunner() {
 	vkb::InstanceBuilder builder;
-	builder.request_validation_layers()
+	builder
 	    .set_debug_callback([](VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
 	                           VkDebugUtilsMessageTypeFlagsEXT messageType,
 	                           const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
@@ -28,7 +28,7 @@ vuk::BenchRunner::BenchRunner() {
 	vkb::PhysicalDeviceSelector selector{ vkbinstance };
 	window = create_window_glfw("vuk-benchmarker", false);
 	surface = create_surface_glfw(vkbinstance.instance, window);
-	selector.set_surface(surface).set_minimum_version(1, 0);
+	selector.set_surface(surface).set_minimum_version(1, 0).add_required_extension(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
 	auto phys_ret = selector.select();
 	if (!phys_ret.has_value()) {
 		// error
@@ -38,13 +38,15 @@ vuk::BenchRunner::BenchRunner() {
 
 	vkb::DeviceBuilder device_builder{ vkbphysical_device };
 	VkPhysicalDeviceVulkan12Features vk12features{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };
+	vk12features.timelineSemaphore = true;
 	vk12features.descriptorBindingPartiallyBound = true;
 	vk12features.descriptorBindingUpdateUnusedWhilePending = true;
 	vk12features.shaderSampledImageArrayNonUniformIndexing = true;
 	vk12features.runtimeDescriptorArray = true;
 	vk12features.descriptorBindingVariableDescriptorCount = true;
 	vk12features.hostQueryReset = true;
-	auto dev_ret = device_builder.add_pNext(&vk12features).build();
+	VkPhysicalDeviceSynchronization2FeaturesKHR sync_feat{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR, .synchronization2 = true };
+	auto dev_ret = device_builder.add_pNext(&vk12features).add_pNext(&sync_feat).build();
 	if (!dev_ret.has_value()) {
 		// error
 	}
@@ -150,7 +152,9 @@ void vuk::BenchRunner::render() {
 
 		ImGui::End();
 
-		auto rg = bench->get_case(current_case).subcases[current_subcase](*this, frame_allocator, start, end);
+		auto& bench_case = bench->get_case(current_case);
+		auto& subcase = bench_case.subcases[current_subcase];
+		auto rg = subcase(*this, frame_allocator, start, end);
 		ImGui::Render();
 
 		vuk::Name attachment_name = "_final";

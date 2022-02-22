@@ -1,4 +1,5 @@
 #include "bench_runner.hpp"
+#include "vuk/Partials.hpp"
 #include <stb_image.h>
 
 namespace {
@@ -39,7 +40,7 @@ namespace {
 			                 .bind_sampled_image(0, 0, src, vuk::SamplerCreateInfo{ .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear });
 			             if (dependent) {
 				             command_buffer.bind_graphics_pipeline("dependent");
-				             command_buffer.push_constants<unsigned>(vuk::ShaderStageFlagBits::eFragment, 0, 112);
+				             command_buffer.push_constants<unsigned>(vuk::ShaderStageFlagBits::eFragment, 0, 1.0f/(float)src.extent.width);
 			             } else {
 				             command_buffer.bind_graphics_pipeline("nondependent");
 			             }
@@ -114,9 +115,10 @@ namespace {
 
 			int x, y, chans;
 			auto doge_image = stbi_load("../../examples/doge.png", &x, &y, &chans, 4);
-			auto [tex, _] = ctx.create_texture(allocator, vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, doge_image);
+			auto [tex, tex_fut] = create_texture(allocator, vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, doge_image, false);
 			texture_of_doge = std::move(tex);
-			ctx.wait_all_transfers(allocator);
+			tex_fut.get();
+			stbi_image_free(doge_image);
 			tex2k = ctx.allocate_texture(allocator, vuk::ImageCreateInfo{.format = vuk::Format::eR8G8B8A8Srgb, .extent = {.width = 2048, .height = 2048, .depth = 1}, .usage = vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eSampled });
 			tex4k = ctx.allocate_texture(allocator, vuk::ImageCreateInfo{.format = vuk::Format::eR8G8B8A8Srgb, .extent = {.width = 4096, .height = 4096, .depth = 1}, .usage = vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eSampled });
 			tex8k = ctx.allocate_texture(allocator, vuk::ImageCreateInfo{.format = vuk::Format::eR8G8B8A8Srgb, .extent = {.width = 8192, .height = 8192, .depth = 1}, .usage = vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eSampled });
@@ -161,12 +163,12 @@ namespace {
 			{"Non-dependent 4K", [](vuk::BenchRunner& runner, vuk::Allocator& allocator, vuk::Query start, vuk::Query end, auto&& parameters) {
 				return test_case(allocator, false, *tex4k, *dst4k, start, end, parameters);
 		}},
-			{"Dependent 8K", [](vuk::BenchRunner& runner, vuk::Allocator& allocator, vuk::Query start, vuk::Query end, auto&& parameters) {
+			/*{"Dependent 8K", [](vuk::BenchRunner& runner, vuk::Allocator& allocator, vuk::Query start, vuk::Query end, auto&& parameters) {
 				return test_case(allocator, true, *tex8k, *dst8k, start, end, parameters);
 		}},
 			{"Non-dependent 8K", [](vuk::BenchRunner& runner, vuk::Allocator& allocator, vuk::Query start, vuk::Query end, auto&& parameters) {
 				return test_case(allocator, false, *tex8k, *dst8k, start, end, parameters);
-		}},
+		}},*/
 		}
 	};
 
