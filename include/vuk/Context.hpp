@@ -14,6 +14,7 @@
 
 namespace std {
 	class mutex;
+	class recursive_mutex;
 }
 
 namespace vuk {
@@ -45,7 +46,7 @@ namespace vuk {
 		~Queue();
 
 		TimelineSemaphore& get_submit_sync();
-		std::mutex& get_queue_lock();
+		std::recursive_mutex& get_queue_lock();
 
 		Result<void> submit(std::span<VkSubmitInfo> submit_infos, VkFence fence);
 		Result<void> submit(std::span<VkSubmitInfo2KHR> submit_infos, VkFence fence);

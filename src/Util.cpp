@@ -8,7 +8,8 @@
 
 namespace vuk {
 	struct QueueImpl {
-		std::mutex queue_lock;
+		// TODO: this recursive mutex should be changed to better queue handling
+		std::recursive_mutex queue_lock;
 		PFN_vkQueueSubmit2KHR queueSubmit2KHR;
 		TimelineSemaphore submit_sync;
 		VkQueue queue;
@@ -33,7 +34,7 @@ namespace vuk {
 		return impl->submit_sync;
 	}
 
-	std::mutex& Queue::get_queue_lock() {
+	std::recursive_mutex& Queue::get_queue_lock() {
 		return impl->queue_lock;
 	}
 
@@ -142,17 +143,17 @@ namespace vuk {
 		}
 
 		std::array<uint64_t, 3> queue_progress_references;
-		std::unique_lock<std::mutex> gfx_lock;
+		std::unique_lock<std::recursive_mutex> gfx_lock;
 		if (used_domains & DomainFlagBits::eGraphicsQueue) {
 			queue_progress_references[ctx.domain_to_queue_index(DomainFlagBits::eGraphicsQueue)] = *ctx.graphics_queue->impl->submit_sync.value;
 			gfx_lock = std::unique_lock{ ctx.graphics_queue->impl->queue_lock };
 		}
-		std::unique_lock<std::mutex> compute_lock;
+		std::unique_lock<std::recursive_mutex> compute_lock;
 		if (used_domains & DomainFlagBits::eComputeQueue) {
 			queue_progress_references[ctx.domain_to_queue_index(DomainFlagBits::eComputeQueue)] = *ctx.compute_queue->impl->submit_sync.value;
 			compute_lock = std::unique_lock{ ctx.compute_queue->impl->queue_lock };
 		}
-		std::unique_lock<std::mutex> transfer_lock;
+		std::unique_lock<std::recursive_mutex> transfer_lock;
 		if (used_domains & DomainFlagBits::eTransferQueue) {
 			queue_progress_references[ctx.domain_to_queue_index(DomainFlagBits::eTransferQueue)] = *ctx.transfer_queue->impl->submit_sync.value;
 			transfer_lock = std::unique_lock{ ctx.transfer_queue->impl->queue_lock };

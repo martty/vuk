@@ -294,6 +294,7 @@ namespace vuk {
 	                                       VkDevice device,
 	                                       VkPhysicalDevice phys_dev,
 	                                       uint32_t graphics_queue_family,
+	                                       uint32_t compute_queue_family,
 	                                       uint32_t transfer_queue_family) :
 	    device(device) {
 		VmaAllocatorCreateInfo allocatorInfo = {};
@@ -316,8 +317,12 @@ namespace vuk {
 
 		pool_helper->device = device;
 
-		if (transfer_queue_family != graphics_queue_family) {
+		if (transfer_queue_family != graphics_queue_family && compute_queue_family != graphics_queue_family) {
+			all_queue_families = { graphics_queue_family, compute_queue_family, transfer_queue_family };
+		} else if (transfer_queue_family != graphics_queue_family) {
 			all_queue_families = { graphics_queue_family, transfer_queue_family };
+		} else if (compute_queue_family != graphics_queue_family) {
+			all_queue_families = { graphics_queue_family, compute_queue_family };
 		} else {
 			all_queue_families = { graphics_queue_family };
 		}

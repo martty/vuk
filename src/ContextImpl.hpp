@@ -11,10 +11,10 @@
 #include <atomic>
 #include <math.h>
 #include <mutex>
-#include <queue>
-#include <string_view>
 #include <plf_colony.h>
+#include <queue>
 #include <robin_hood.h>
+#include <string_view>
 
 namespace vuk {
 	struct ContextImpl {
@@ -82,7 +82,12 @@ namespace vuk {
 		}
 
 		ContextImpl(Context& ctx) :
-		    legacy_gpu_allocator(ctx.instance, ctx.device, ctx.physical_device, ctx.graphics_queue_family_index, ctx.transfer_queue_family_index),
+		    legacy_gpu_allocator(ctx.instance,
+		                         ctx.device,
+		                         ctx.physical_device,
+		                         ctx.graphics_queue_family_index,
+		                         ctx.compute_queue_family_index,
+		                         ctx.transfer_queue_family_index),
 		    device(ctx.device),
 		    pipelinebase_cache(ctx),
 		    pipeline_cache(ctx),

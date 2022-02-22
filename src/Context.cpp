@@ -36,16 +36,38 @@ namespace vuk {
 	    compute_queue_family_index(params.compute_queue_family_index),
 	    transfer_queue_family_index(params.transfer_queue_family_index),
 	    debug(*this) {
-		impl = new ContextImpl(*this);
+
 		auto queueSubmit2KHR = (PFN_vkQueueSubmit2KHR)vkGetDeviceProcAddr(device, "vkQueueSubmit2KHR");
 		assert(queueSubmit2KHR != nullptr);
+
+		bool dedicated_graphics_queue_ = false;
+		bool dedicated_compute_queue_ = false;
+		bool dedicated_transfer_queue_ = false;
+
 		if (params.graphics_queue != VK_NULL_HANDLE && params.graphics_queue_family_index != VK_QUEUE_FAMILY_IGNORED) {
+			dedicated_graphics_queue_ = true;
+		}
+
+		if (params.compute_queue != VK_NULL_HANDLE && params.compute_queue_family_index != VK_QUEUE_FAMILY_IGNORED) {
+			dedicated_compute_queue_ = true;
+		} else {
+			compute_queue_family_index = params.graphics_queue_family_index;
+		}
+
+		if (params.transfer_queue != VK_NULL_HANDLE && params.transfer_queue_family_index != VK_QUEUE_FAMILY_IGNORED) {
+			dedicated_transfer_queue_ = true;
+		} else {
+			transfer_queue_family_index = compute_queue ? params.compute_queue_family_index : params.graphics_queue_family_index;
+		}
+		impl = new ContextImpl(*this);
+
+		{
 			TimelineSemaphore ts;
 			impl->device_vk_resource.allocate_timeline_semaphores(std::span{ &ts, 1 }, {});
 			dedicated_graphics_queue.emplace(queueSubmit2KHR, params.graphics_queue, params.graphics_queue_family_index, ts);
 			graphics_queue = &dedicated_graphics_queue.value();
 		}
-		if (params.compute_queue != VK_NULL_HANDLE && params.compute_queue_family_index != VK_QUEUE_FAMILY_IGNORED) {
+		if (dedicated_compute_queue_) {
 			TimelineSemaphore ts;
 			impl->device_vk_resource.allocate_timeline_semaphores(std::span{ &ts, 1 }, {});
 			dedicated_compute_queue.emplace(queueSubmit2KHR, params.compute_queue, params.compute_queue_family_index, ts);
@@ -53,15 +75,13 @@ namespace vuk {
 		} else {
 			compute_queue = graphics_queue;
 		}
-
-		if (params.transfer_queue != VK_NULL_HANDLE && params.transfer_queue_family_index != VK_QUEUE_FAMILY_IGNORED) {
+		if (dedicated_transfer_queue) {
 			TimelineSemaphore ts;
 			impl->device_vk_resource.allocate_timeline_semaphores(std::span{ &ts, 1 }, {});
 			dedicated_transfer_queue.emplace(queueSubmit2KHR, params.transfer_queue, params.transfer_queue_family_index, ts);
 			transfer_queue = &dedicated_transfer_queue.value();
 		} else {
 			transfer_queue = compute_queue ? compute_queue : graphics_queue;
-			transfer_queue_family_index = compute_queue ? params.compute_queue_family_index : params.graphics_queue_family_index;
 		}
 	}
 
@@ -600,15 +620,15 @@ namespace vuk {
 	}
 
 	void Context::wait_idle() {
-		std::unique_lock<std::mutex> graphics_lock;
+		std::unique_lock<std::recursive_mutex> graphics_lock;
 		if (dedicated_graphics_queue) {
 			graphics_lock = std::unique_lock{ graphics_queue->get_queue_lock() };
 		}
-		std::unique_lock<std::mutex> compute_lock;
+		std::unique_lock<std::recursive_mutex> compute_lock;
 		if (dedicated_compute_queue) {
 			compute_lock = std::unique_lock{ compute_queue->get_queue_lock() };
 		}
-		std::unique_lock<std::mutex> transfer_lock;
+		std::unique_lock<std::recursive_mutex> transfer_lock;
 		if (dedicated_transfer_queue) {
 			transfer_lock = std::unique_lock{ transfer_queue->get_queue_lock() };
 		}

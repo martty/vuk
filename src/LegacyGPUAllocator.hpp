@@ -122,7 +122,12 @@ namespace vuk {
 		uint32_t queue_family_count;
 
 	public:
-		LegacyGPUAllocator(VkInstance instance, VkDevice device, VkPhysicalDevice phys_dev, uint32_t graphics_queue_family, uint32_t transfer_queue_family);
+		LegacyGPUAllocator(VkInstance instance,
+		                   VkDevice device,
+		                   VkPhysicalDevice phys_dev,
+		                   uint32_t graphics_queue_family,
+		                   uint32_t compute_queue_family,
+		                   uint32_t transfer_queue_family);
 		~LegacyGPUAllocator();
 
 		// allocate an externally managed pool
