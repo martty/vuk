@@ -78,4 +78,22 @@ namespace vuk {
 			vkDestroyDescriptorPool(device, p, nullptr);
 		}
 	}
+
+	SetBinding SetBinding::finalize() {
+		SetBinding final;
+		final.used = used;
+		final.layout_info = layout_info;
+		uint32_t mask = used.to_ulong();
+		for (size_t i = 0; i < VUK_MAX_BINDINGS; i++) {
+			if ((mask & (1 << i)) == 0) {
+				continue;
+			} else {
+				final.bindings[i] = bindings[i];
+			}
+		}
+
+		final.hash = robin_hood::hash_bytes(reinterpret_cast<const char*>(&final.bindings[0]), VUK_MAX_BINDINGS * sizeof(DescriptorBinding));
+		hash_combine(final.hash, layout_info->layout);
+		return final;
+	}
 } // namespace vuk

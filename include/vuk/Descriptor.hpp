@@ -17,10 +17,6 @@ inline bool operator==(VkDescriptorSetLayoutBinding const& lhs, VkDescriptorSetL
 	       (lhs.stageFlags == rhs.stageFlags) && (lhs.pImmutableSamplers == rhs.pImmutableSamplers);
 }
 
-namespace robin_hood {
-	size_t hash_bytes(void const* ptr, size_t len) noexcept;
-}
-
 namespace std {
 	template<class T, size_t E>
 	struct hash<std::span<T, E>> {
@@ -148,23 +144,7 @@ namespace vuk {
 		DescriptorSetLayoutAllocInfo* layout_info = nullptr;
 		uint64_t hash = 0;
 
-		SetBinding finalize() {
-			SetBinding final;
-			final.used = used;
-			final.layout_info = layout_info;
-			uint32_t mask = used.to_ulong();
-			for (size_t i = 0; i < VUK_MAX_BINDINGS; i++) {
-				if ((mask & (1 << i)) == 0) {
-					continue;
-				} else {
-					final.bindings[i] = bindings[i];
-				}
-			}
-
-			final.hash = robin_hood::hash_bytes(reinterpret_cast<const char*>(&final.bindings[0]), VUK_MAX_BINDINGS * sizeof(DescriptorBinding));
-			hash_combine(final.hash, layout_info->layout);
-			return final;
-		}
+		SetBinding finalize();
 
 		bool operator==(const SetBinding& o) const noexcept {
 			if (layout_info != o.layout_info)
