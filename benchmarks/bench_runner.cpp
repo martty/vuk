@@ -137,7 +137,7 @@ void vuk::BenchRunner::render() {
 						l3 = "Sampling (" + std::to_string(num_runs) + " / " + std::to_string(runs) + ")";
 					} else if (lsr > stage_live) {
 						l3 = "Result (mu=" + std::to_string(bcase.mean[j] * 1e6) + " us, sigma=" + std::to_string(bcase.variance[j] * 1e12) +
-						     " us2, SEM = " + std::to_string(sqrt(bcase.variance[j] * 1e12 / bcase.runs_required[j])) + " us)";
+						     " us2, SEM = " + std::to_string(sqrt(bcase.variance[j] * 1e12 / sqrt(bcase.runs_required[j]))) + " us)";
 					}
 					ImGui::Selectable(l3.c_str(), &w, w ? 0 : ImGuiSelectableFlags_Disabled);
 					if (lsr > stage_live) {
@@ -236,6 +236,8 @@ void vuk::BenchRunner::render() {
 
 			bcase.last_stage_ran[current_subcase]++;
 
+			//TODO: https://en.wikipedia.org/wiki/Jarque%E2%80%93Bera_test
+
 			if (bcase.subcases.size() > current_subcase + 1) {
 				current_subcase++;
 				current_stage = 1;
@@ -249,7 +251,9 @@ void vuk::BenchRunner::render() {
 				num_runs = 0;
 				continue;
 			}
-			current_stage++;
+			current_stage = 0;
+			current_case = 0;
+			current_subcase = 0;
 		}
 	}
 }
