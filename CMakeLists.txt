@@ -94,7 +94,9 @@ target_sources(vuk PRIVATE
 	src/DeviceVkResource.cpp)
 
 target_include_directories(vuk PUBLIC ext/plf_colony)
-add_subdirectory(ext/VulkanMemoryAllocator)
+if (NOT TARGET VulkanMemoryAllocator)
+	add_subdirectory(ext/VulkanMemoryAllocator)
+endif()
 add_subdirectory(ext/robin-hood-hashing)
 target_include_directories(vuk PRIVATE ext/concurrentqueue)
 target_include_directories(vuk PUBLIC include)
