@@ -406,14 +406,12 @@ namespace vuk {
 
 		/// @brief Allocate timeline semaphores from this Allocator
 		/// @param dst Destination span to place allocated timeline semaphores into
-		/// @param cis Per-element construction info
 		/// @param loc Source location information
 		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
 		Result<void, AllocateException> allocate(std::span<TimelineSemaphore> dst, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
 		/// @brief Allocate timeline semaphores from this Allocator
 		/// @param dst Destination span to place allocated timeline semaphores into
-		/// @param cis Per-element construction info
 		/// @param loc Source location information
 		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
 		Result<void, AllocateException> allocate_timeline_semaphores(std::span<TimelineSemaphore> dst, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());

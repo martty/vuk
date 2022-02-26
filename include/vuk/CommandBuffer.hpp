@@ -245,40 +245,84 @@ namespace vuk {
 		    command_buffer(cb),
 		    ongoing_renderpass(ongoing) {}
 
+		/// @brief Retrieve parent context
 		Context& get_context() {
 			return ctx;
 		}
+
+		/// @brief Retrieve information about the current renderpass
 		const RenderPassInfo& get_ongoing_renderpass() const;
-		Result<Buffer> get_resource_buffer(Name) const;
-		Result<Image> get_resource_image(Name) const;
-		Result<ImageView> get_resource_image_view(Name) const;
-		Result<ImageAttachment> get_resource_image_attachment(Name) const;
+		/// @brief Retrieve Buffer attached to given name
+		/// @return the attached Buffer or RenderGraphException
+		Result<Buffer> get_resource_buffer(Name resource_name) const;
+		/// @brief Retrieve Image attached to given name
+		/// @return the attached Image or RenderGraphException
+		Result<Image> get_resource_image(Name resource_name) const;
+		/// @brief Retrieve ImageView attached to given name
+		/// @return the attached ImageView or RenderGraphException
+		Result<ImageView> get_resource_image_view(Name resource_name) const;
+		/// @brief Retrieve ImageAttachment attached to given name
+		/// @return the attached ImageAttachment or RenderGraphException
+		Result<ImageAttachment> get_resource_image_attachment(Name resource_name) const;
 
-		// request dynamic state for the subsequent pipelines
-		CommandBuffer& set_dynamic_state(DynamicStateFlags);
 		// command buffer state setting
-		// when a state is set it is persistent for a pass - similar to vulkan dynamic state
+		// when a state is set it is persistent for a pass (similar to Vulkan dynamic state) - see documentation
+
+		/// @brief Set mask of dynamic state in CommandBuffer
+		/// @param dynamic_state_flags Mask of states (flag set = dynamic, flag clear = static)
+		CommandBuffer& set_dynamic_state(DynamicStateFlags dynamic_state_flags);
+		
+		/// @brief Set the viewport transformation for the specified viewport index
+		/// @param index viewport index to modify
+		/// @param vp Viewport to be set
 		CommandBuffer& set_viewport(unsigned index, Viewport vp);
+		/// @brief Set the viewport transformation for the specified viewport index from a rect
+		/// @param index viewport index to modify
+		/// @param area Rect2D extents of the Viewport
+		/// @param min_depth Minimum depth of Viewport
+		/// @param max_depth Maximum depth of Viewport
 		CommandBuffer& set_viewport(unsigned index, Rect2D area, float min_depth = 0.f, float max_depth = 1.f);
-		CommandBuffer& set_scissor(unsigned index, Rect2D vp);
+		/// @brief Set the scissor for the specified scissor index from a rect
+		/// @param index scissor index to modify
+		/// @param area Rect2D extents of the scissor
+		CommandBuffer& set_scissor(unsigned index, Rect2D area);
 
-		CommandBuffer& set_rasterization(PipelineRasterizationStateCreateInfo);
-		CommandBuffer& set_depth_stencil(PipelineDepthStencilStateCreateInfo);
+		/// @brief Set the rasterization state
+		CommandBuffer& set_rasterization(PipelineRasterizationStateCreateInfo rasterization_state);
+		/// @brief Set the depth/stencil state
+		CommandBuffer& set_depth_stencil(PipelineDepthStencilStateCreateInfo depth_stencil_state);
 
-		CommandBuffer& broadcast_color_blend(PipelineColorBlendAttachmentState);
-		CommandBuffer& broadcast_color_blend(BlendPreset);
-		CommandBuffer& set_color_blend(Name color_attachment, PipelineColorBlendAttachmentState);
-		CommandBuffer& set_color_blend(Name color_attachment, BlendPreset);
-		CommandBuffer& set_blend_constants(std::array<float, 4> constants);
+		/// @brief Set one color blend state to use for all color attachments
+		CommandBuffer& broadcast_color_blend(PipelineColorBlendAttachmentState color_blend_state);
+		/// @brief Set one color blend preset to use for all color attachments
+		CommandBuffer& broadcast_color_blend(BlendPreset blend_preset);
+		/// @brief Set color blend state for a specific color attachment
+		/// @param color_attachment the Name of the color_attachment to set the blend state for
+		/// @param color_blend_state PipelineColorBlendAttachmentState to use
+		CommandBuffer& set_color_blend(Name color_attachment, PipelineColorBlendAttachmentState color_blend_state);
+		/// @brief Set color blend preset for a specific color attachment
+		/// @param color_attachment the Name of the color_attachment to set the blend preset for
+		/// @param blend_preset BlendPreset to use
+		CommandBuffer& set_color_blend(Name color_attachment, BlendPreset blend_preset);
+		/// @brief Set blend constants
+		CommandBuffer& set_blend_constants(std::array<float, 4> blend_constants);
 
-		CommandBuffer& bind_graphics_pipeline(PipelineBaseInfo*);
-		CommandBuffer& bind_graphics_pipeline(Name);
+		/// @brief Bind a graphics pipeline for subsequent draws
+		/// @param pipeline_base pointer to a pipeline base to bind
+		CommandBuffer& bind_graphics_pipeline(PipelineBaseInfo* pipeline_base);
+		/// @brief Bind a named graphics pipeline for subsequent draws
+		/// @param named_pipeline graphics pipeline name
+		CommandBuffer& bind_graphics_pipeline(Name named_pipeline);
 
-		CommandBuffer& bind_compute_pipeline(PipelineBaseInfo*);
-		CommandBuffer& bind_compute_pipeline(Name);
+		/// @brief Bind a compute pipeline for subsequent dispatches
+		/// @param pipeline_base pointer to a pipeline base to bind
+		CommandBuffer& bind_compute_pipeline(PipelineBaseInfo* pipeline_base);
+		/// @brief Bind a named graphics pipeline for subsequent dispatches
+		/// @param named_pipeline compute pipeline name
+		CommandBuffer& bind_compute_pipeline(Name named_pipeline);
 
-		CommandBuffer& set_primitive_topology(PrimitiveTopology);
-
+		/// @brief Set primitive topology
+		CommandBuffer& set_primitive_topology(PrimitiveTopology primitive_topology);
 		/// @brief Binds a vertex buffer to the given binding point and configures attributes sourced from this buffer based on a packed format list, the attribute
 		/// locations are offset with first_location
 		/// @param binding The binding point of the buffer
@@ -306,8 +350,8 @@ namespace vuk {
 		                                  const Texture&,
 		                                  SamplerCreateInfo sampler_create_info,
 		                                  ImageLayout = ImageLayout::eShaderReadOnlyOptimal);
-		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, Name, SamplerCreateInfo sampler_create_info);
-		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, Name, ImageViewCreateInfo ivci, SamplerCreateInfo sampler_create_info);
+		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, Name resource_name, SamplerCreateInfo sampler_create_info);
+		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, Name resource_name, ImageViewCreateInfo ivci, SamplerCreateInfo sampler_create_info);
 
 		/// @brief Bind a persistent descriptor set to the command buffer
 		/// @param set The set bind index to be used
@@ -351,9 +395,16 @@ namespace vuk {
 		/// @param binding The descriptor binding to bind the buffer to
 		/// @param buffer The buffer to be bound
 		CommandBuffer& bind_storage_buffer(unsigned set, unsigned binding, const Buffer& buffer);
-
+		/// @brief Bind a storage image to the command buffer
+		/// @param set The set bind index to be used
+		/// @param binding The descriptor binding to bind the image to
+		/// @param image_view The ImageView to be bound
 		CommandBuffer& bind_storage_image(unsigned set, unsigned binding, ImageView image_view);
-		CommandBuffer& bind_storage_image(unsigned set, unsigned binding, Name);
+		/// @brief Bind a storage image to the command buffer from a Resource
+		/// @param set The set bind index to be used
+		/// @param binding The descriptor binding to bind the image to
+		/// @param resource_name The Name of the Resource to be bound
+		CommandBuffer& bind_storage_image(unsigned set, unsigned binding, Name resource_name);
 
 		/// @brief Allocate some CPUtoGPU memory and bind it as a uniform. Return a pointer to the mapped memory.
 		/// @param set The set bind index to be used
@@ -370,39 +421,112 @@ namespace vuk {
 		template<class T>
 		T* map_scratch_uniform_binding(unsigned set, unsigned binding);
 
+		/// @brief Issue a non-indexed draw
+		/// @param vertex_count Number of vertices to draw
+		/// @param instance_count Number of instances to draw
+		/// @param first_vertex Index of the first vertex to draw
+		/// @param first_instance Index of the first instance to draw
 		CommandBuffer& draw(size_t vertex_count, size_t instance_count, size_t first_vertex, size_t first_instance);
+		/// @brief Isuse an indexed draw
+		/// @param index_count Number of vertices to draw
+		/// @param instance_count Number of instances to draw
+		/// @param first_index Index of the first index in the index buffer
+		/// @param vertex_offset value added to the vertex index before indexing into the vertex buffer(s)
+		/// @param first_instance Index of the first instance to draw
 		CommandBuffer& draw_indexed(size_t index_count, size_t instance_count, size_t first_index, int32_t vertex_offset, size_t first_instance);
 
+		/// @brief Issue an indirect indexed draw
+		/// @param command_count Number of indirect commands to be used
+		/// @param indirect_buffer Buffer of indirect commands
 		CommandBuffer& draw_indexed_indirect(size_t command_count, const Buffer& indirect_buffer);
-		CommandBuffer& draw_indexed_indirect(std::span<DrawIndexedIndirectCommand>);
+		/// @brief Issue an indirect indexed draw
+		/// @param commands Indirect commands to be uploaded and used for this draw
+		CommandBuffer& draw_indexed_indirect(std::span<DrawIndexedIndirectCommand> commands);
 
-		CommandBuffer& draw_indexed_indirect_count(size_t max_draw_count, const Buffer& indirect_buffer, const Buffer& count_buffer);
+		/// @brief Issue an indirect indexed draw with count
+		/// @param max_command_count Upper limit of commands that can be drawn
+		/// @param indirect_buffer Buffer of indirect commands
+		/// @param count_buffer Buffer of command count
+		CommandBuffer& draw_indexed_indirect_count(size_t max_command_count, const Buffer& indirect_buffer, const Buffer& count_buffer);
 
+		/// @brief Issue a compute dispatch
+		/// @param group_count_x Number of groups on the x-axis
+		/// @param group_count_y Number of groups on the y-axis
+		/// @param group_count_z Number of groups on the z-axis
 		CommandBuffer& dispatch(size_t group_count_x, size_t group_count_y = 1, size_t group_count_z = 1);
-		// Perform a dispatch while specifying the minimum invocation count
-		// Actual invocation count will be rounded up to be a multiple of local_size_{x,y,z}
+
+		/// @brief Perform a dispatch while specifying the minimum invocation count
+		/// Actual invocation count will be rounded up to be a multiple of local_size_{x,y,z}
+		/// @param invocation_count_x Number of invocations on the x-axis
+		/// @param invocation_count_y Number of invocations on the y-axis
+		/// @param invocation_count_z Number of invocations on the z-axis
 		CommandBuffer& dispatch_invocations(size_t invocation_count_x, size_t invocation_count_y = 1, size_t invocation_count_z = 1);
 
+		/// @brief Issue an indirect compute dispatch
+		/// @param indirect_buffer Buffer of workgroup counts
 		CommandBuffer& dispatch_indirect(const Buffer& indirect_buffer);
 
 		Result<class SecondaryCommandBuffer> begin_secondary();
 		CommandBuffer& execute(std::span<VkCommandBuffer>);
 
 		// commands for renderpass-less command buffers
-		CommandBuffer& clear_image(Name src, Clear);
+
+		/// @brief Clear an image
+		/// @param src the Name of the Resource to be cleared
+		/// @param clear_value value to clear with
+		CommandBuffer& clear_image(Name src, Clear clear_value);
+		/// @brief Resolve an image
+		/// @param src the Name of the multisampled Resource
+		/// @param dst the Name of the singlesampled Resource
 		CommandBuffer& resolve_image(Name src, Name dst);
+		/// @brief Perform an image blit
+		/// @param src the Name of the source Resource
+		/// @param dst the Name of the destination Resource
+		/// @param region parameters of the blit
+		/// @param filter Filter to use if the src and dst extents differ
 		CommandBuffer& blit_image(Name src, Name dst, ImageBlit region, Filter filter);
-		CommandBuffer& copy_buffer_to_image(Name src, Name dst, BufferImageCopy);
-		CommandBuffer& copy_image_to_buffer(Name src, Name dst, BufferImageCopy);
+		/// @brief Copy a buffer resource into an image resource
+		/// @param src the Name of the source Resource
+		/// @param dst the Name of the destination Resource
+		/// @param copy_params parameters of the copy
+		CommandBuffer& copy_buffer_to_image(Name src, Name dst, BufferImageCopy copy_params);
+		/// @brief Copy an image resource into a buffer resource
+		/// @param src the Name of the source Resource
+		/// @param dst the Name of the destination Resource
+		/// @param copy_params parameters of the copy
+		CommandBuffer& copy_image_to_buffer(Name src, Name dst, BufferImageCopy copy_params);
+		/// @brief Copy between two buffer resource
+		/// @param src the Name of the source Resource
+		/// @param dst the Name of the destination Resource
+		/// @param size number of bytes to copy
 		CommandBuffer& copy_buffer(Name src, Name dst, size_t size);
+		/// @brief Copy between two Buffers
+		/// @param src the source Buffer
+		/// @param dst the destination Buffer
 		CommandBuffer& copy_buffer(const Buffer& src, const Buffer& dst);
 
 		// explicit synchronisation
+
+		/// @brief Issue a memory barrier
+		/// @param src_access previous Access
+		/// @param dst_access subsequent Access
 		CommandBuffer& memory_barrier(Access src_access, Access dst_access);
-		CommandBuffer& image_barrier(Name, Access src_access, Access dst_access, uint32_t mip_level = 0, uint32_t level_count = VK_REMAINING_MIP_LEVELS);
+		/// @brief Issue an image barrier for an image resource
+		/// @param resource_name the Name of the image Resource
+		/// @param src_access previous Access
+		/// @param dst_access subsequent Access
+		/// @param base_level base mip level affected by the barrier
+		/// @param level_count number of mip levels affected by the barrier
+		CommandBuffer& image_barrier(Name resource_name, Access src_access, Access dst_access, uint32_t base_level = 0, uint32_t level_count = VK_REMAINING_MIP_LEVELS);
 
 		// queries
-		CommandBuffer& write_timestamp(Query, PipelineStageFlagBits stage = PipelineStageFlagBits::eBottomOfPipe);
+		
+		/// @brief Write a timestamp to given Query
+		/// @param query the Query to hold the result
+		/// @param stage the pipeline stage where the timestamp should latch the earliest
+		CommandBuffer& write_timestamp(Query query, PipelineStageFlagBits stage = PipelineStageFlagBits::eBottomOfPipe);
+
+		// error handling
 
 		bool has_error() const noexcept {
 			return current_exception != nullptr;
