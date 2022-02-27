@@ -85,7 +85,7 @@ namespace {
 			                                      .bind_index_buffer(inds, vuk::IndexType::eUint32)
 			                                      .bind_graphics_pipeline("cube")
 			                                      // Bind the uniform buffer we allocated to (set = 0, binding = 0)
-			                                      .bind_uniform_buffer(0, 0, uboVP);
+			                                      .bind_buffer(0, 0, uboVP);
 			                                  // For the model matrix, we will take a shorter route
 			                                  // Frequently updated uniform buffers should be in CPUtoGPU type memory, which is mapped
 			                                  // So we create a typed mapping directly and write the model matrix

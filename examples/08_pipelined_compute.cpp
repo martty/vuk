@@ -92,7 +92,8 @@ namespace {
 			                         .set_scissor(0, vuk::Rect2D::framebuffer())
 			                         .set_rasterization({})     // Set the default rasterization state
 			                         .broadcast_color_blend({}) // Set the default color blend state
-			                         .bind_sampled_image(0, 0, *texture_of_doge, {})
+			                         .bind_image(0, 0, *texture_of_doge->view)
+			                         .bind_sampler(0, 0, {})
 			                         .bind_graphics_pipeline("rtt")
 			                         .draw(3, 1, 0, 0);
 		                     } });
@@ -108,7 +109,7 @@ namespace {
 		                    .execute_on = vuk::DomainFlagBits::eGraphicsQueue,
 		                    .resources = { "08_scramble"_buffer >> vuk::eComputeRW >> "08_scramble+" },
 		                    .execute = [](vuk::CommandBuffer& command_buffer) {
-			                    command_buffer.bind_storage_buffer(0, 0, *command_buffer.get_resource_buffer("08_scramble"));
+			                    command_buffer.bind_buffer(0, 0, *command_buffer.get_resource_buffer("08_scramble"));
 			                    command_buffer.bind_compute_pipeline("stupidsort").specialize_constants(0, speed_count).dispatch(1);
 			                    // We can also customize pipelines by using specialization constants
 			                    // Here we will apply a tint based on the current frame
@@ -144,8 +145,9 @@ namespace {
 			                        .set_scissor(0, vuk::Rect2D::framebuffer())
 			                        .set_rasterization({})     // Set the default rasterization state
 			                        .broadcast_color_blend({}) // Set the default color blend state
-			                        .bind_sampled_image(0, 0, "08_rtt", {})
-			                        .bind_storage_buffer(0, 1, *command_buffer.get_resource_buffer("08_scramble"))
+			                        .bind_image(0, 0, "08_rtt")
+			                        .bind_sampler(0, 0, {})
+			                        .bind_buffer(0, 1, *command_buffer.get_resource_buffer("08_scramble"))
 			                        .bind_graphics_pipeline("scrambled_draw")
 			                        .draw(3, 1, 0, 0);
 		                    } });

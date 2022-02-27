@@ -96,8 +96,9 @@ namespace {
 			                    blit.dstOffsets[1] = vuk::Offset3D{ 0, 0, 1 };
 			                    command_buffer.blit_image("09_doge", "09_v1", blit, vuk::Filter::eLinear);
 			                    // For the second image, invert the colours in compute
-			                    command_buffer.bind_sampled_image(0, 0, "09_doge", {})
-			                        .bind_storage_image(0, 1, "09_v2")
+			                    command_buffer.bind_image(0, 0, "09_doge")
+			                        .bind_sampler(0, 0, {})
+			                        .bind_image(0, 1, "09_v2")
 			                        .bind_compute_pipeline("invert")
 			                        .dispatch_invocations(x, y);
 		                    } });
@@ -168,7 +169,7 @@ namespace {
 			                        .bind_index_buffer(inds, vuk::IndexType::eUint32)
 			                        .bind_persistent(1, pda.get())
 			                        .bind_graphics_pipeline("bindless_cube")
-			                        .bind_uniform_buffer(0, 0, uboVP);
+			                        .bind_buffer(0, 0, uboVP);
 			                    glm::mat4* model = command_buffer.map_scratch_uniform_binding<glm::mat4>(0, 1);
 			                    *model = static_cast<glm::mat4>(glm::angleAxis(glm::radians(angle), glm::vec3(0.f, 1.f, 0.f)));
 			                    // Draw 3 cubes, assign them different base instance to identify them in the shader

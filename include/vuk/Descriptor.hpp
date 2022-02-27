@@ -9,8 +9,8 @@
 #include <array>
 #include <bitset>
 #include <cassert>
-#include <vector>
 #include <span>
+#include <vector>
 
 inline bool operator==(VkDescriptorSetLayoutBinding const& lhs, VkDescriptorSetLayoutBinding const& rhs) noexcept {
 	return (lhs.binding == rhs.binding) && (lhs.descriptorType == rhs.descriptorType) && (lhs.descriptorCount == rhs.descriptorCount) &&
@@ -91,14 +91,21 @@ namespace vuk {
 		decltype(ImageView::id) image_view_id;
 		decltype(Sampler::id) sampler_id;
 
-		DescriptorImageInfo(vuk::Sampler s, vuk::ImageView iv, vuk::ImageLayout il) :
-		    dii{ s.payload, iv.payload, (VkImageLayout)il },
-		    image_view_id(iv.id),
-		    sampler_id(s.id) {}
+		DescriptorImageInfo(Sampler s, ImageView iv, ImageLayout il) : dii{ s.payload, iv.payload, (VkImageLayout)il }, image_view_id(iv.id), sampler_id(s.id) {}
+
+		void set_sampler(Sampler s) {
+			dii.sampler = s.payload;
+			sampler_id = s.id;
+		}
+
+		void set_image_view(ImageView iv) {
+			dii.imageView = iv.payload;
+			image_view_id = iv.id;
+		}
 
 		bool operator==(const DescriptorImageInfo& o) const noexcept {
 			return std::tie(dii.sampler, dii.imageView, dii.imageLayout, image_view_id, sampler_id) ==
-			       std::tie(o.dii.sampler, o.dii.imageView, o.dii.imageLayout, o.image_view_id, o.dii.imageLayout);
+			       std::tie(o.dii.sampler, o.dii.imageView, o.dii.imageLayout, o.image_view_id, o.sampler_id);
 		}
 
 		operator VkDescriptorImageInfo() const {

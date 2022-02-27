@@ -72,7 +72,7 @@ namespace {
 			                 .set_rasterization({})
 			                 .broadcast_color_blend({})
 			                 .bind_graphics_pipeline("blit")
-			                 .bind_sampled_image(0, 0, src, vuk::SamplerCreateInfo{ .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear });
+			                 .bind_image(0, 0, *src.view).bind_sampler(0, 0, { .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear });
 			             command_buffer.draw(3, 1, 0, 0);
 		             } });
 		rg.attach_image("dst", vuk::ImageAttachment::from_texture(dst), vuk::Access::eNone, vuk::Access::eFragmentSampled);

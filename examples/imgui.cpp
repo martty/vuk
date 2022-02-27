@@ -50,7 +50,7 @@ void util::ImGui_ImplVuk_Render(vuk::Allocator& allocator,
                                 const plf::colony<vuk::SampledImage>& sampled_images) {
 	auto& ctx = allocator.get_context();
 	auto reset_render_state = [](const util::ImGuiData& data, vuk::CommandBuffer& command_buffer, ImDrawData* draw_data, vuk::Buffer vertex, vuk::Buffer index) {
-		command_buffer.bind_sampled_image(0, 0, *data.font_texture.view, data.font_sci);
+		command_buffer.bind_image(0, 0, *data.font_texture.view).bind_sampler(0, 0, data.font_sci);
 		if (index.size > 0) {
 			command_buffer.bind_index_buffer(index, sizeof(ImDrawIdx) == 2 ? vuk::IndexType::eUint16 : vuk::IndexType::eUint32);
 		}
@@ -76,7 +76,7 @@ void util::ImGui_ImplVuk_Render(vuk::Allocator& allocator,
 	size_t vtx_dst = 0, idx_dst = 0;
 	for (int n = 0; n < draw_data->CmdListsCount; n++) {
 		const ImDrawList* cmd_list = draw_data->CmdLists[n];
-		auto imverto = imvert->add_offset(vtx_dst * sizeof(ImDrawVert));		
+		auto imverto = imvert->add_offset(vtx_dst * sizeof(ImDrawVert));
 		auto imindo = imind->add_offset(idx_dst * sizeof(ImDrawIdx));
 
 		vuk::host_data_to_buffer(allocator, vuk::DomainFlagBits{}, imverto, std::span(cmd_list->VtxBuffer.Data, cmd_list->VtxBuffer.Size)).get();
@@ -96,7 +96,8 @@ void util::ImGui_ImplVuk_Render(vuk::Allocator& allocator,
 	}
 	vuk::Pass pass{ .name = "imgui",
 		              .resources = std::move(resources),
-		              .execute = [&data, verts = imvert.get(), inds = imind.get(), draw_data, reset_render_state, src_target](vuk::CommandBuffer& command_buffer) {
+		              .execute = [&data, &allocator, verts = imvert.get(), inds = imind.get(), draw_data, reset_render_state, src_target](
+		                             vuk::CommandBuffer& command_buffer) {
 		                command_buffer.set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor);
 		                command_buffer.set_rasterization(vuk::PipelineRasterizationStateCreateInfo{});
 		                command_buffer.set_color_blend(src_target, vuk::BlendPreset::eAlphaBlend);
@@ -149,12 +150,16 @@ void util::ImGui_ImplVuk_Render(vuk::Allocator& allocator,
 						                if (pcmd->TextureId) {
 							                auto& si = *reinterpret_cast<vuk::SampledImage*>(pcmd->TextureId);
 							                if (si.is_global) {
-								                command_buffer.bind_sampled_image(0, 0, si.global.iv, si.global.sci);
+								                command_buffer.bind_image(0, 0, si.global.iv).bind_sampler(0, 0, si.global.sci);
 							                } else {
 								                if (si.rg_attachment.ivci) {
-									                command_buffer.bind_sampled_image(0, 0, si.rg_attachment.attachment_name, *si.rg_attachment.ivci, si.rg_attachment.sci);
+									                auto ivci = *si.rg_attachment.ivci;
+									                auto res_img = command_buffer.get_resource_image(si.rg_attachment.attachment_name);
+									                ivci.image = *res_img;
+									                auto iv = vuk::allocate_image_view(allocator, ivci);
+									                command_buffer.bind_image(0, 0, **iv).bind_sampler(0, 0, si.rg_attachment.sci);
 								                } else {
-									                command_buffer.bind_sampled_image(0, 0, si.rg_attachment.attachment_name, si.rg_attachment.sci);
+									                command_buffer.bind_image(0, 0, si.rg_attachment.attachment_name).bind_sampler(0, 0, si.rg_attachment.sci);
 								                }
 							                }
 						                }

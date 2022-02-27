@@ -96,7 +96,7 @@ namespace {
 			                                                         vuk::Format::eR32G32Sfloat })
 			                        .bind_index_buffer(inds, vuk::IndexType::eUint32)
 			                        .bind_graphics_pipeline("cube_deferred")
-			                        .bind_uniform_buffer(0, 0, uboVP);
+			                        .bind_buffer(0, 0, uboVP);
 			                    glm::mat4* model = command_buffer.map_scratch_uniform_binding<glm::mat4>(0, 1);
 			                    *model = static_cast<glm::mat4>(glm::angleAxis(glm::radians(angle), glm::vec3(0.f, 1.f, 0.f)));
 			                    command_buffer.draw_indexed(box.second.size(), 1, 0, 0, 0);
@@ -124,9 +124,12 @@ namespace {
 			                    vuk::SamplerCreateInfo sci;
 			                    sci.minFilter = sci.magFilter = vuk::Filter::eNearest;
 			                    // Bind the previous attachments as sampled images
-			                    command_buffer.bind_sampled_image(0, 0, "05_position+", sci)
-			                        .bind_sampled_image(0, 1, "05_normal+", sci)
-			                        .bind_sampled_image(0, 2, "05_color+", sci)
+			                    command_buffer.bind_image(0, 0, "05_position+")
+			                        .bind_sampler(0, 0, sci)
+			                        .bind_image(0, 1, "05_normal+")
+			                        .bind_sampler(0, 1, sci)
+			                        .bind_image(0, 2, "05_color+")
+			                        .bind_sampler(0, 2, sci)
 			                        .draw(3, 1, 0, 0);
 		                    } });
 

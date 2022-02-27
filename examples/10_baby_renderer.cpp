@@ -45,7 +45,7 @@ namespace {
 		vuk::ImageView texture;
 
 		void bind_textures(vuk::CommandBuffer& cbuf) override {
-			cbuf.bind_sampled_image(0, 2, texture, {});
+			cbuf.bind_image(0, 2, texture).bind_sampler(0, 2, {});
 		}
 	};
 
@@ -54,7 +54,7 @@ namespace {
 		glm::vec4 tint_color = glm::vec4(0);
 
 		void bind_textures(vuk::CommandBuffer& cbuf) override {
-			cbuf.bind_sampled_image(0, 2, texture, {});
+			cbuf.bind_image(0, 2, texture).bind_sampler(0, 2, {});
 		}
 
 		void bind_parameters(vuk::CommandBuffer& cbuf) override {
@@ -136,8 +136,9 @@ namespace {
 			                    blit.dstOffsets[1] = vuk::Offset3D{ 0, 0, 1 };
 			                    command_buffer.blit_image("10_doge", "10_v1", blit, vuk::Filter::eLinear);
 			                    // For the second image, invert the colours in compute
-			                    command_buffer.bind_sampled_image(0, 0, "10_doge", {})
-			                        .bind_storage_image(0, 1, "10_v2")
+			                    command_buffer.bind_image(0, 0, "10_doge")
+			                        .bind_sampler(0, 0, {})
+			                        .bind_image(0, 1, "10_v2")
 			                        .bind_compute_pipeline("invert")
 			                        .dispatch_invocations(x, y);
 		                    } });
@@ -294,8 +295,8 @@ namespace {
 				                                                         vuk::Format::eR32G32Sfloat })
 				                        .bind_index_buffer(r.mesh->index_buffer.get(), vuk::IndexType::eUint32)
 				                        .bind_graphics_pipeline(r.material->pipeline)
-				                        .bind_uniform_buffer(0, 0, uboVP)
-				                        .bind_storage_buffer(0, 1, modelmats);
+				                        .bind_buffer(0, 0, uboVP)
+				                        .bind_buffer(0, 1, modelmats);
 
 				                    r.material->bind_parameters(command_buffer);
 				                    r.material->bind_textures(command_buffer);

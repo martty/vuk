@@ -324,92 +324,6 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::bind_sampled_image(unsigned set, unsigned binding, ImageView iv, SamplerCreateInfo sci, ImageLayout il) {
-		VUK_EARLY_RET();
-		sets_to_bind[set] = true;
-		set_bindings[set].bindings[binding].type = DescriptorType::eCombinedImageSampler;
-		set_bindings[set].bindings[binding].image = DescriptorImageInfo(ctx.acquire_sampler(sci, ctx.get_frame_count()), iv, il);
-		set_bindings[set].used.set(binding);
-
-		return *this;
-	}
-
-	CommandBuffer&
-	CommandBuffer::bind_sampled_image(unsigned set, unsigned binding, const Texture& texture, SamplerCreateInfo sampler_create_info, ImageLayout il) {
-		VUK_EARLY_RET();
-		return bind_sampled_image(set, binding, *texture.view, sampler_create_info, il);
-	}
-
-	CommandBuffer& CommandBuffer::bind_sampled_image(unsigned set, unsigned binding, Name name, SamplerCreateInfo sampler_create_info) {
-		VUK_EARLY_RET();
-		assert(rg);
-
-		auto res_gl = rg->is_resource_image_in_general_layout(name, current_pass);
-		if (!res_gl) {
-			rg_except.emplace(res_gl.error());
-			current_exception = &rg_except.value();
-			return *this;
-		}
-
-		auto layout = *res_gl ? ImageLayout::eGeneral : ImageLayout::eShaderReadOnlyOptimal;
-
-		auto res = rg->get_resource_image(name, current_pass);
-		if (!res) {
-			rg_except.emplace(res.error());
-			current_exception = &rg_except.value();
-			return *this;
-		}
-
-		return bind_sampled_image(set, binding, res->attachment.image_view, sampler_create_info, layout);
-	}
-
-	CommandBuffer& CommandBuffer::bind_sampled_image(unsigned set, unsigned binding, Name name, ImageViewCreateInfo ivci, SamplerCreateInfo sampler_create_info) {
-		VUK_EARLY_RET();
-		assert(rg);
-
-		auto res = rg->get_resource_image(name, current_pass);
-		if (!res) {
-			rg_except.emplace(res.error());
-			current_exception = &rg_except.value();
-			return *this;
-		}
-		ivci.image = res->attachment.image;
-		if (ivci.format == Format{}) {
-			ivci.format = Format(res->description.format);
-		}
-		ivci.viewType = ImageViewType::e2D;
-		ImageSubresourceRange isr;
-		ImageAspectFlagBits aspect;
-		if (ivci.format == Format::eD32Sfloat) {
-			aspect = ImageAspectFlagBits::eDepth;
-		} else {
-			aspect = ImageAspectFlagBits::eColor;
-		}
-		isr.aspectMask = aspect;
-		isr.baseArrayLayer = 0;
-		isr.layerCount = 1;
-		isr.baseMipLevel = 0;
-		isr.levelCount = 1;
-		ivci.subresourceRange = isr;
-
-		auto res_gl = rg->is_resource_image_in_general_layout(name, current_pass);
-		if (!res_gl) {
-			rg_except.emplace(res_gl.error());
-			current_exception = &rg_except.value();
-			return *this;
-		}
-
-		auto layout = *res_gl ? ImageLayout::eGeneral : ImageLayout::eShaderReadOnlyOptimal;
-
-		Unique<ImageView> iv(*allocator);
-		if (auto ret = allocator->allocate_image_views(std::span{ &*iv, 1 }, std::span{ &ivci, 1 }); !ret) {
-			allocate_except.emplace(ret.error());
-			current_exception = &allocate_except.value();
-			return *this;
-		}
-		return bind_sampled_image(set, binding, *iv, sampler_create_info, layout);
-	}
-
 	CommandBuffer& CommandBuffer::bind_persistent(unsigned set, PersistentDescriptorSet& pda) {
 		VUK_EARLY_RET();
 		persistent_sets_to_bind[set] = true;
@@ -432,42 +346,77 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::bind_uniform_buffer(unsigned set, unsigned binding, const Buffer& buffer) {
+	CommandBuffer& CommandBuffer::bind_buffer(unsigned set, unsigned binding, const Buffer& buffer) {
 		VUK_EARLY_RET();
 		sets_to_bind[set] = true;
-		set_bindings[set].bindings[binding].type = DescriptorType::eUniformBuffer;
+		set_bindings[set].bindings[binding].type = DescriptorType::eUniformBuffer; // just means buffer
 		set_bindings[set].bindings[binding].buffer = VkDescriptorBufferInfo{ buffer.buffer, buffer.offset, buffer.size };
 		set_bindings[set].used.set(binding);
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::bind_storage_buffer(unsigned set, unsigned binding, const Buffer& buffer) {
+	CommandBuffer& CommandBuffer::bind_buffer(unsigned set, unsigned binding, Name name) {
 		VUK_EARLY_RET();
-		sets_to_bind[set] = true;
-		set_bindings[set].bindings[binding].type = DescriptorType::eStorageBuffer;
-		set_bindings[set].bindings[binding].buffer = VkDescriptorBufferInfo{ buffer.buffer, buffer.offset, buffer.size };
-		set_bindings[set].used.set(binding);
-		return *this;
-	}
-
-	CommandBuffer& CommandBuffer::bind_storage_image(unsigned set, unsigned binding, ImageView image_view) {
-		VUK_EARLY_RET();
-		sets_to_bind[set] = true;
-		set_bindings[set].bindings[binding].type = DescriptorType::eStorageImage;
-		set_bindings[set].bindings[binding].image = DescriptorImageInfo({}, image_view, ImageLayout::eGeneral);
-		set_bindings[set].used.set(binding);
-		return *this;
-	}
-
-	CommandBuffer& CommandBuffer::bind_storage_image(unsigned set, unsigned binding, Name name) {
-		VUK_EARLY_RET();
-		auto res = rg->get_resource_image(name, current_pass);
+		auto res = rg->get_resource_buffer(name, current_pass);
 		if (!res) {
 			rg_except.emplace(res.error());
 			current_exception = &rg_except.value();
 			return *this;
 		}
-		return bind_storage_image(set, binding, res->attachment.image_view);
+		return bind_buffer(set, binding, res->buffer);
+	}
+
+	CommandBuffer& CommandBuffer::bind_image(unsigned set, unsigned binding, Name resource_name) {
+		VUK_EARLY_RET();
+		auto res = rg->get_resource_image(resource_name, current_pass);
+		if (!res) {
+			rg_except.emplace(res.error());
+			current_exception = &rg_except.value();
+			return *this;
+		}
+		auto res_gl = rg->is_resource_image_in_general_layout(resource_name, current_pass);
+		if (!res_gl) {
+			rg_except.emplace(res_gl.error());
+			current_exception = &rg_except.value();
+			return *this;
+		}
+
+		auto layout = *res_gl ? ImageLayout::eGeneral : ImageLayout::eShaderReadOnlyOptimal;
+
+		return bind_image(set, binding, res->attachment.image_view, layout);
+	}
+
+	CommandBuffer& CommandBuffer::bind_image(unsigned set, unsigned binding, ImageView image_view, ImageLayout layout) {
+		VUK_EARLY_RET();
+		sets_to_bind[set] = true;
+		auto& db = set_bindings[set].bindings[binding];
+		// if previous descriptor was not an image, we reset the DescriptorImageInfo
+		if (db.type != DescriptorType::eStorageImage && db.type != DescriptorType::eSampledImage && db.type != DescriptorType::eSampler &&
+		    db.type != DescriptorType::eCombinedImageSampler) {
+			db.image = { {}, {}, {} };
+		}
+		db.image.set_image_view(image_view);
+		db.image.dii.imageLayout = (VkImageLayout)layout;
+		// if it was just a sampler, we upgrade to combined (has both image and sampler) - otherwise just image
+		db.type = db.type == DescriptorType::eSampler ? DescriptorType::eCombinedImageSampler : DescriptorType::eSampledImage;
+		set_bindings[set].used.set(binding);
+		return *this;
+	}
+
+	CommandBuffer& CommandBuffer::bind_sampler(unsigned set, unsigned binding, SamplerCreateInfo sci) {
+		VUK_EARLY_RET();
+		sets_to_bind[set] = true;
+		auto& db = set_bindings[set].bindings[binding];
+		// if previous descriptor was not an image, we reset the DescriptorImageInfo
+		if (db.type != DescriptorType::eStorageImage && db.type != DescriptorType::eSampledImage && db.type != DescriptorType::eSampler &&
+		    db.type != DescriptorType::eCombinedImageSampler) {
+			db.image = { {}, {}, {} };
+		}
+		db.image.set_sampler(ctx.acquire_sampler(sci, ctx.get_frame_count()));
+		// if it was just an image, we upgrade to combined (has both image and sampler) - otherwise just sampler
+		db.type = db.type == DescriptorType::eSampledImage ? DescriptorType::eCombinedImageSampler : DescriptorType::eSampler;
+		set_bindings[set].used.set(binding);
+		return *this;
 	}
 
 	void* CommandBuffer::_map_scratch_uniform_binding(unsigned set, unsigned binding, size_t size) {
@@ -482,7 +431,7 @@ namespace vuk {
 			return nullptr;
 		} else {
 			auto& buf = res->get();
-			bind_uniform_buffer(set, binding, buf);
+			bind_buffer(set, binding, buf);
 			return buf.mapped_ptr;
 		}
 	}
@@ -964,7 +913,7 @@ namespace vuk {
 
 			// binding validation
 			auto& pipeline_set_layout = graphics ? current_pipeline->layout_info[i].layout : current_compute_pipeline->layout_info[i].layout;
-			if (pipeline_set_layout != VK_NULL_HANDLE) {                                        // set in the layout
+			if (pipeline_set_layout != VK_NULL_HANDLE) {                      // set in the layout
 				if (!sets_used[i] && !set_to_bind && !persistent_set_to_bind) { // never set in the cbuf & not requested to bind now
 					assert(false && "Pipeline layout contains set, but never set in CommandBuffer or disturbed by a previous set composition or binding.");
 					return false;
@@ -998,7 +947,41 @@ namespace vuk {
 				for (uint64_t j = 0; j < pipeline_set_bindings.size(); j++) {
 					auto& pipe_binding = pipeline_set_bindings[j];
 					auto& cbuf_binding = sb.bindings[j];
-					if (pipe_binding.descriptorType != (VkDescriptorType)cbuf_binding.type) {
+
+					auto pipe_dtype = (DescriptorType)pipe_binding.descriptorType;
+					auto cbuf_dtype = cbuf_binding.type;
+
+					// untyped buffer descriptor inference
+					if (cbuf_dtype == DescriptorType::eUniformBuffer && pipe_dtype == DescriptorType::eStorageBuffer) {
+						cbuf_binding.type = DescriptorType::eStorageBuffer;
+						continue;
+					}
+					// storage image from any image
+					if ((cbuf_dtype == DescriptorType::eSampledImage || cbuf_dtype == DescriptorType::eCombinedImageSampler) &&
+					    pipe_dtype == DescriptorType::eStorageImage) {
+						cbuf_binding.type = DescriptorType::eStorageImage;
+						continue;
+					}
+					// just sampler -> fine to have image and sampler
+					if (cbuf_dtype == DescriptorType::eCombinedImageSampler && pipe_dtype == DescriptorType::eSampler) {
+						cbuf_binding.type = DescriptorType::eSampler;
+						continue;
+					}
+					// just image -> fine to have image and sampler
+					if (cbuf_dtype == DescriptorType::eCombinedImageSampler && pipe_dtype == DescriptorType::eSampledImage) {
+						cbuf_binding.type = DescriptorType::eSampledImage;
+						continue;
+					}
+					// diagnose missing sampler or image
+					if (cbuf_dtype == DescriptorType::eSampler && pipe_dtype == DescriptorType::eCombinedImageSampler) {
+						assert(false && "Descriptor is combined image-sampler, but only sampler was bound.");
+						return false;
+					}
+					if (cbuf_dtype == DescriptorType::eSampledImage && pipe_dtype == DescriptorType::eCombinedImageSampler) {
+						assert(false && "Descriptor is combined image-sampler, but only image was bound.");
+						return false;
+					}
+					if (pipe_dtype != cbuf_dtype) {
 						assert(false && "Attempting to bind the wrong descriptor type.");
 						return false;
 					}
@@ -1032,8 +1015,8 @@ namespace vuk {
 			}
 			set_bindings[i].used.reset();
 		}
-		auto sets_bound = sets_to_bind | persistent_sets_to_bind; // these sets we bound freshly, valid
-		for (unsigned i = lowest_disturbed_binding; i < VUK_MAX_SETS; i++) {  // clear the slots where the binding was disturbed
+		auto sets_bound = sets_to_bind | persistent_sets_to_bind;            // these sets we bound freshly, valid
+		for (unsigned i = lowest_disturbed_binding; i < VUK_MAX_SETS; i++) { // clear the slots where the binding was disturbed
 			sets_used.set(i, false);
 		}
 		sets_used |= sets_bound;

@@ -271,7 +271,7 @@ namespace vuk {
 		/// @brief Set mask of dynamic state in CommandBuffer
 		/// @param dynamic_state_flags Mask of states (flag set = dynamic, flag clear = static)
 		CommandBuffer& set_dynamic_state(DynamicStateFlags dynamic_state_flags);
-		
+
 		/// @brief Set the viewport transformation for the specified viewport index
 		/// @param index viewport index to modify
 		/// @param vp Viewport to be set
@@ -321,49 +321,6 @@ namespace vuk {
 		/// @param named_pipeline compute pipeline name
 		CommandBuffer& bind_compute_pipeline(Name named_pipeline);
 
-		/// @brief Set primitive topology
-		CommandBuffer& set_primitive_topology(PrimitiveTopology primitive_topology);
-		/// @brief Binds a vertex buffer to the given binding point and configures attributes sourced from this buffer based on a packed format list, the attribute
-		/// locations are offset with first_location
-		/// @param binding The binding point of the buffer
-		/// @param buffer The buffer to be bound
-		/// @param first_location First location assigned to the attributes
-		/// @param format_list List of formats packed in buffer to generate attributes from
-		CommandBuffer& bind_vertex_buffer(unsigned binding, const Buffer& buffer, unsigned first_location, Packed format_list);
-		/// @brief Binds a vertex buffer to the given binding point and configures attributes sourced from this buffer based on a span of attribute descriptions and
-		/// stride
-		/// @param binding The binding point of the buffer
-		/// @param buffer The buffer to be bound
-		/// @param attribute_descriptions Attributes that are sourced from this buffer
-		/// @param stride Stride of a vertex sourced from this buffer
-		CommandBuffer&
-		bind_vertex_buffer(unsigned binding, const Buffer& buffer, std::span<VertexInputAttributeDescription> attribute_descriptions, uint32_t stride);
-		/// @brief Binds an index buffer with the given type
-		/// @param buffer The buffer to be bound
-		/// @param type The index type in the buffer
-		CommandBuffer& bind_index_buffer(const Buffer& buffer, IndexType type);
-
-		CommandBuffer&
-		bind_sampled_image(unsigned set, unsigned binding, ImageView iv, SamplerCreateInfo sampler_create_info, ImageLayout = ImageLayout::eShaderReadOnlyOptimal);
-		CommandBuffer& bind_sampled_image(unsigned set,
-		                                  unsigned binding,
-		                                  const Texture&,
-		                                  SamplerCreateInfo sampler_create_info,
-		                                  ImageLayout = ImageLayout::eShaderReadOnlyOptimal);
-		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, Name resource_name, SamplerCreateInfo sampler_create_info);
-		CommandBuffer& bind_sampled_image(unsigned set, unsigned binding, Name resource_name, ImageViewCreateInfo ivci, SamplerCreateInfo sampler_create_info);
-
-		/// @brief Bind a persistent descriptor set to the command buffer
-		/// @param set The set bind index to be used
-		/// @param desc_set The persistent descriptor set to be bound
-		CommandBuffer& bind_persistent(unsigned set, PersistentDescriptorSet& desc_set);
-
-		CommandBuffer& push_constants(ShaderStageFlags stages, size_t offset, void* data, size_t size);
-		template<class T>
-		CommandBuffer& push_constants(ShaderStageFlags stages, size_t offset, std::span<T> span);
-		template<class T>
-		CommandBuffer& push_constants(ShaderStageFlags stages, size_t offset, T value);
-
 		/// @brief Set specialization constants for the command buffer
 		/// @param constant_id ID of the constant. All stages form a single namespace for IDs.
 		/// @param value Value of the specialization constant
@@ -385,26 +342,56 @@ namespace vuk {
 		/// @param value Value of the specialization constant
 		CommandBuffer& specialize_constants(uint32_t constant_id, double value);
 
-		/// @brief Bind a uniform buffer to the command buffer
+		/// @brief Set primitive topology
+		CommandBuffer& set_primitive_topology(PrimitiveTopology primitive_topology);
+		/// @brief Binds an index buffer with the given type
+		/// @param buffer The buffer to be bound
+		/// @param type The index type in the buffer
+		CommandBuffer& bind_index_buffer(const Buffer& buffer, IndexType type);
+		/// @brief Binds a vertex buffer to the given binding point and configures attributes sourced from this buffer based on a packed format list, the attribute
+		/// locations are offset with first_location
+		/// @param binding The binding point of the buffer
+		/// @param buffer The buffer to be bound
+		/// @param first_location First location assigned to the attributes
+		/// @param format_list List of formats packed in buffer to generate attributes from
+		CommandBuffer& bind_vertex_buffer(unsigned binding, const Buffer& buffer, unsigned first_location, Packed format_list);
+		/// @brief Binds a vertex buffer to the given binding point and configures attributes sourced from this buffer based on a span of attribute descriptions and
+		/// stride
+		/// @param binding The binding point of the buffer
+		/// @param buffer The buffer to be bound
+		/// @param attribute_descriptions Attributes that are sourced from this buffer
+		/// @param stride Stride of a vertex sourced from this buffer
+		CommandBuffer&
+		bind_vertex_buffer(unsigned binding, const Buffer& buffer, std::span<VertexInputAttributeDescription> attribute_descriptions, uint32_t stride);
+
+		CommandBuffer& push_constants(ShaderStageFlags stages, size_t offset, void* data, size_t size);
+		template<class T>
+		CommandBuffer& push_constants(ShaderStageFlags stages, size_t offset, std::span<T> span);
+		template<class T>
+		CommandBuffer& push_constants(ShaderStageFlags stages, size_t offset, T value);
+
+		/// @brief Bind a persistent descriptor set to the command buffer
+		/// @param set The set bind index to be used
+		/// @param desc_set The persistent descriptor set to be bound
+		CommandBuffer& bind_persistent(unsigned set, PersistentDescriptorSet& desc_set);
+
+		/// @brief Bind a buffer to the command buffer
 		/// @param set The set bind index to be used
 		/// @param binding The descriptor binding to bind the buffer to
 		/// @param buffer The buffer to be bound
-		CommandBuffer& bind_uniform_buffer(unsigned set, unsigned binding, const Buffer& buffer);
-		/// @brief Bind a storage buffer to the command buffer
+		CommandBuffer& bind_buffer(unsigned set, unsigned binding, const Buffer& buffer);
+
+		/// @brief Bind a buffer to the command buffer from a Resource
 		/// @param set The set bind index to be used
 		/// @param binding The descriptor binding to bind the buffer to
-		/// @param buffer The buffer to be bound
-		CommandBuffer& bind_storage_buffer(unsigned set, unsigned binding, const Buffer& buffer);
-		/// @brief Bind a storage image to the command buffer
-		/// @param set The set bind index to be used
-		/// @param binding The descriptor binding to bind the image to
-		/// @param image_view The ImageView to be bound
-		CommandBuffer& bind_storage_image(unsigned set, unsigned binding, ImageView image_view);
-		/// @brief Bind a storage image to the command buffer from a Resource
-		/// @param set The set bind index to be used
-		/// @param binding The descriptor binding to bind the image to
-		/// @param resource_name The Name of the Resource to be bound
-		CommandBuffer& bind_storage_image(unsigned set, unsigned binding, Name resource_name);
+		/// @param buffer The Name of the Resource to be bound
+		CommandBuffer& bind_buffer(unsigned set, unsigned binding, Name resource_name);
+
+		CommandBuffer& bind_image(unsigned set, unsigned binding, Name resource_name);
+
+		CommandBuffer& bind_image(unsigned set, unsigned binding, ImageView image_view, ImageLayout layout = ImageLayout::eShaderReadOnlyOptimal);
+
+		CommandBuffer& bind_sampler(unsigned set, unsigned binding, SamplerCreateInfo sampler_create_info);
 
 		/// @brief Allocate some CPUtoGPU memory and bind it as a uniform. Return a pointer to the mapped memory.
 		/// @param set The set bind index to be used
@@ -517,10 +504,11 @@ namespace vuk {
 		/// @param dst_access subsequent Access
 		/// @param base_level base mip level affected by the barrier
 		/// @param level_count number of mip levels affected by the barrier
-		CommandBuffer& image_barrier(Name resource_name, Access src_access, Access dst_access, uint32_t base_level = 0, uint32_t level_count = VK_REMAINING_MIP_LEVELS);
+		CommandBuffer&
+		image_barrier(Name resource_name, Access src_access, Access dst_access, uint32_t base_level = 0, uint32_t level_count = VK_REMAINING_MIP_LEVELS);
 
 		// queries
-		
+
 		/// @brief Write a timestamp to given Query
 		/// @param query the Query to hold the result
 		/// @param stage the pipeline stage where the timestamp should latch the earliest
