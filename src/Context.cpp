@@ -75,7 +75,7 @@ namespace vuk {
 		} else {
 			compute_queue = graphics_queue;
 		}
-		if (dedicated_transfer_queue) {
+		if (dedicated_transfer_queue_) {
 			TimelineSemaphore ts;
 			impl->device_vk_resource.allocate_timeline_semaphores(std::span{ &ts, 1 }, {});
 			dedicated_transfer_queue.emplace(queueSubmit2KHR, params.transfer_queue, params.transfer_queue_family_index, ts);
