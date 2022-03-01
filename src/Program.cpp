@@ -1,5 +1,5 @@
-#include "vuk/Hash.hpp"
 #include "vuk/Program.hpp"
+#include "vuk/Hash.hpp"
 #include "vuk/ShaderSource.hpp"
 
 #include <spirv_cross.hpp>
@@ -233,14 +233,41 @@ VkShaderStageFlagBits vuk::Program::introspect(const uint32_t* ir, size_t word_c
 		auto type = refl.get_type(si.type_id);
 		auto binding = refl.get_decoration(si.id, spv::DecorationBinding);
 		auto set = refl.get_decoration(si.id, spv::DecorationDescriptorSet);
-		Sampler t;
+		CombinedImageSampler t;
 		t.binding = binding;
 		t.name = std::string(si.name.c_str());
 		t.stage = stage;
 		// maybe spirv cross bug?
 		t.array_size = type.array.size() == 1 ? (type.array[0] == 1 ? 0 : type.array[0]) : -1;
 		t.shadow = type.image.depth;
+		sets[set].combined_image_samplers.push_back(t);
+	}
+
+	for (auto& sa : resources.separate_samplers) {
+		auto type = refl.get_type(sa.type_id);
+		auto binding = refl.get_decoration(sa.id, spv::DecorationBinding);
+		auto set = refl.get_decoration(sa.id, spv::DecorationDescriptorSet);
+		Sampler t;
+		t.binding = binding;
+		t.name = std::string(sa.name.c_str());
+		t.stage = stage;
+		// maybe spirv cross bug?
+		t.array_size = type.array.size() == 1 ? (type.array[0] == 1 ? 0 : type.array[0]) : -1;
+		t.shadow = type.image.depth;
 		sets[set].samplers.push_back(t);
+	}
+
+	for (auto& si : resources.separate_images) {
+		auto type = refl.get_type(si.type_id);
+		auto binding = refl.get_decoration(si.id, spv::DecorationBinding);
+		auto set = refl.get_decoration(si.id, spv::DecorationDescriptorSet);
+		SampledImage t;
+		t.binding = binding;
+		t.name = std::string(si.name.c_str());
+		t.stage = stage;
+		// maybe spirv cross bug?
+		t.array_size = type.array.size() == 1 ? (type.array[0] == 1 ? 0 : type.array[0]) : -1;
+		sets[set].sampled_images.push_back(t);
 	}
 
 	for (auto& sb : resources.storage_images) {
@@ -276,6 +303,8 @@ VkShaderStageFlagBits vuk::Program::introspect(const uint32_t* ir, size_t word_c
 	// TODO: we need to preserve this information somewhere
 	for (auto& [index, set] : sets) {
 		unq(set.samplers);
+		unq(set.sampled_images);
+		unq(set.combined_image_samplers);
 		unq(set.uniform_buffers);
 		unq(set.storage_buffers);
 		unq(set.texel_buffers);
@@ -294,6 +323,12 @@ VkShaderStageFlagBits vuk::Program::introspect(const uint32_t* ir, size_t word_c
 			max_binding = std::max(max_binding, ub.binding);
 		}
 		for (auto& ub : set.samplers) {
+			max_binding = std::max(max_binding, ub.binding);
+		}
+		for (auto& ub : set.sampled_images) {
+			max_binding = std::max(max_binding, ub.binding);
+		}
+		for (auto& ub : set.combined_image_samplers) {
 			max_binding = std::max(max_binding, ub.binding);
 		}
 		for (auto& ub : set.subpass_inputs) {
@@ -332,6 +367,8 @@ void vuk::Program::append(const Program& o) {
 	for (auto& [index, os] : o.sets) {
 		auto& s = sets[index];
 		s.samplers.insert(s.samplers.end(), os.samplers.begin(), os.samplers.end());
+		s.sampled_images.insert(s.sampled_images.end(), os.sampled_images.begin(), os.sampled_images.end());
+		s.combined_image_samplers.insert(s.combined_image_samplers.end(), os.combined_image_samplers.begin(), os.combined_image_samplers.end());
 		s.uniform_buffers.insert(s.uniform_buffers.end(), os.uniform_buffers.begin(), os.uniform_buffers.end());
 		s.storage_buffers.insert(s.storage_buffers.end(), os.storage_buffers.begin(), os.storage_buffers.end());
 		s.texel_buffers.insert(s.texel_buffers.end(), os.texel_buffers.begin(), os.texel_buffers.end());
@@ -339,6 +376,8 @@ void vuk::Program::append(const Program& o) {
 		s.storage_images.insert(s.storage_images.end(), os.storage_images.begin(), os.storage_images.end());
 
 		unq(s.samplers);
+		unq(s.sampled_images);
+		unq(s.combined_image_samplers);
 		unq(s.uniform_buffers);
 		unq(s.storage_buffers);
 		unq(s.texel_buffers);

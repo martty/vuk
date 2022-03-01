@@ -86,13 +86,32 @@ namespace vuk {
 			VkShaderStageFlags stage;
 		};
 
-		struct Sampler {
+		struct SampledImage {
+			std::string name;
+
+			unsigned array_size;
+			unsigned binding;
+			VkShaderStageFlags stage;
+		};
+
+		struct CombinedImageSampler {
 			std::string name;
 
 			unsigned array_size;
 			unsigned binding;
 
 			bool shadow; // if this is a samplerXXXShadow
+
+			VkShaderStageFlags stage;
+		};
+
+		struct Sampler {
+			std::string name;
+
+			unsigned array_size;
+			unsigned binding;
+
+			bool shadow; // if this is a samplerShadow
 
 			VkShaderStageFlags stage;
 		};
@@ -130,6 +149,8 @@ namespace vuk {
 			std::vector<StorageBuffer> storage_buffers;
 			std::vector<StorageImage> storage_images;
 			std::vector<TexelBuffer> texel_buffers;
+			std::vector<CombinedImageSampler> combined_image_samplers;
+			std::vector<SampledImage> sampled_images;
 			std::vector<Sampler> samplers;
 			std::vector<SubpassInput> subpass_inputs;
 
