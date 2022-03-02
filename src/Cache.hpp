@@ -234,6 +234,10 @@ namespace vuk {
 		struct LRUEntry {
 			T* ptr;
 			size_t last_use_frame;
+			std::atomic<uint8_t> load_cnt;
+
+			LRUEntry(T* ptr, size_t last_use_frame) : ptr(ptr), last_use_frame(last_use_frame), load_cnt(0) {}
+			LRUEntry(const LRUEntry& other) : ptr(other.ptr), last_use_frame(other.last_use_frame), load_cnt(other.load_cnt.load()) {}
 		};
 
 		std::optional<T> remove(const create_info_t<T>& ci);

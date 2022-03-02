@@ -11,7 +11,7 @@ namespace vuk {
 	template<class T>
 	struct CacheImpl {
 		plf::colony<T> pool;
-		robin_hood::unordered_map<create_info_t<T>, typename Cache<T>::LRUEntry> lru_map; // possibly vector_map or an intrusive map
+		robin_hood::unordered_node_map<create_info_t<T>, typename Cache<T>::LRUEntry> lru_map;
 		std::shared_mutex cache_mtx;
 	};
 
@@ -60,13 +60,19 @@ namespace vuk {
 	ShaderModule& Cache<ShaderModule>::acquire(const create_info_t<ShaderModule>& ci) {
 		std::shared_lock _(impl->cache_mtx);
 		if (auto it = impl->lru_map.find(ci); it != impl->lru_map.end()) {
+			if (it->second.load_cnt.load(std::memory_order_relaxed) == 0) { // perform a relaxed load to skip the atomic_wait path
+				std::atomic_wait(&it->second.load_cnt, 0);
+			}
 			return *it->second.ptr;
 		} else {
 			_.unlock();
 			std::unique_lock ulock(impl->cache_mtx);
-			auto pit = impl->pool.emplace(ctx.create(ci));
-			typename Cache::LRUEntry entry{ &*pit, INT64_MAX };
+			typename Cache::LRUEntry entry{ nullptr, INT64_MAX };
 			it = impl->lru_map.emplace(ci, entry).first;
+			ulock.unlock();
+			auto pit = impl->pool.emplace(ctx.create(ci));
+			it->second.ptr = &*pit;
+			it->second.load_cnt.store(1);
 			return *it->second.ptr;
 		}
 	}
@@ -121,18 +127,24 @@ namespace vuk {
 		std::shared_lock _(impl->cache_mtx);
 		if (auto it = impl->lru_map.find(ci); it != impl->lru_map.end()) {
 			it->second.last_use_frame = current_frame;
+			if (it->second.load_cnt.load(std::memory_order_relaxed) == 0) { // perform a relaxed load to skip the atomic_wait path
+				std::atomic_wait(&it->second.load_cnt, 0);
+			}
 			return *it->second.ptr;
 		} else {
 			_.unlock();
-			std::unique_lock ulock(impl->cache_mtx);
 			auto ci_copy = ci;
 			if (!ci_copy.is_inline()) {
 				ci_copy.extended_data = new std::byte[ci_copy.extended_size];
 				memcpy(ci_copy.extended_data, ci.extended_data, ci_copy.extended_size);
 			}
-			auto pit = impl->pool.emplace(ctx.create(ci_copy));
-			typename Cache::LRUEntry entry{ &*pit, current_frame };
+			std::unique_lock ulock(impl->cache_mtx);
+			typename Cache::LRUEntry entry{ nullptr, current_frame };
 			it = impl->lru_map.emplace(ci_copy, entry).first;
+			ulock.unlock();
+			auto pit = impl->pool.emplace(ctx.create(ci_copy));
+			it->second.ptr = &*pit;
+			it->second.load_cnt.store(1);
 			return *it->second.ptr;
 		}
 	}
