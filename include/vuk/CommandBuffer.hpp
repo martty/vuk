@@ -364,9 +364,24 @@ namespace vuk {
 		CommandBuffer&
 		bind_vertex_buffer(unsigned binding, const Buffer& buffer, std::span<VertexInputAttributeDescription> attribute_descriptions, uint32_t stride);
 
+		/// @brief Update push constants for the specified stages with bytes
+		/// @param stages Pipeline stages that can see the updated bytes
+		/// @param offset Offset into the push constant buffer
+		/// @param data Pointer to data to be copied into push constants
+		/// @param size Size of data
 		CommandBuffer& push_constants(ShaderStageFlags stages, size_t offset, void* data, size_t size);
+		/// @brief Update push constants for the specified stages with a span of values
+		/// @tparam T type of values
+		/// @param stages Pipeline stages that can see the updated bytes
+		/// @param offset Offset into the push constant buffer
+		/// @param span Values to write
 		template<class T>
 		CommandBuffer& push_constants(ShaderStageFlags stages, size_t offset, std::span<T> span);
+		/// @brief Update push constants for the specified stages with a single value
+		/// @tparam T type of value
+		/// @param stages Pipeline stages that can see the updated bytes
+		/// @param offset Offset into the push constant buffer
+		/// @param value Value to write
 		template<class T>
 		CommandBuffer& push_constants(ShaderStageFlags stages, size_t offset, T value);
 
@@ -387,10 +402,23 @@ namespace vuk {
 		/// @param buffer The Name of the Resource to be bound
 		CommandBuffer& bind_buffer(unsigned set, unsigned binding, Name resource_name);
 
+		/// @brief Bind an image to the command buffer
+		/// @param set The set bind index to be used
+		/// @param binding The descriptor binding to bind the image to
+		/// @param image_view The ImageView to bind
+		/// @param layout layout of the image when the affected draws execute
+		CommandBuffer& bind_image(unsigned set, unsigned binding, ImageView image_view, ImageLayout layout = ImageLayout::eShaderReadOnlyOptimal);
+		
+		/// @brief Bind an image to the command buffer from a Resource
+		/// @param set The set bind index to be used
+		/// @param binding The descriptor binding to bind the image to
+		/// @param resource_name The Name of the Resource to be bound
 		CommandBuffer& bind_image(unsigned set, unsigned binding, Name resource_name);
 
-		CommandBuffer& bind_image(unsigned set, unsigned binding, ImageView image_view, ImageLayout layout = ImageLayout::eShaderReadOnlyOptimal);
-
+		/// @brief Bind a sampler to the command buffer from a Resource
+		/// @param set The set bind index to be used
+		/// @param binding The descriptor binding to bind the sampler to
+		/// @param sampler_create_info Parameters of the sampler
 		CommandBuffer& bind_sampler(unsigned set, unsigned binding, SamplerCreateInfo sampler_create_info);
 
 		/// @brief Allocate some CPUtoGPU memory and bind it as a uniform. Return a pointer to the mapped memory.
