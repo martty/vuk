@@ -3,6 +3,7 @@
 ### **vuk** - A rendergraph-based abstraction for Vulkan
 
 [![Discord Server](https://img.shields.io/discord/939539624039186432?style=for-the-badge)](https://discord.gg/UNkJMHgUmZ)
+[![Documentation](https://img.shields.io/readthedocs/vuk/v0.3?style=for-the-badge)](https://vuk.readthedocs.io/en/v0.3/)
 
 ### Quick Start
 1. Grab the vuk repository
@@ -39,7 +40,7 @@ cmake --build .
    - [x] including buffers
    - [x] images
    - [x] and rendertargets.
-  - [ ] for multiple queues
+  - [x] for multiple queues
   - [ ] using fine grained synchronization when possible (events)
 - [x] Automatically transitions images into proper layouts
   - [x] for renderpasses
