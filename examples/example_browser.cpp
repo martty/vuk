@@ -114,7 +114,7 @@ void vuk::ExampleRunner::render() {
 			auto fut = item_current->render(*this, frame_allocator);
 			ImGui::Render();
 			vuk::Name attachment_name = item_current->name;
-			fut.rg->attach_swapchain(attachment_name, swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
+			fut.get_render_graph()->attach_swapchain(attachment_name, swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
 			RenderGraph rg;
 			rg.attach_in("result", std::move(fut), vuk::eNone);
 			util::ImGui_ImplVuk_Render(frame_allocator, rg, "result", "SWAPCHAIN", imgui_data, ImGui::GetDrawData(), sampled_images);
@@ -130,7 +130,7 @@ void vuk::ExampleRunner::render() {
 				auto rg_frag_fut = ex->render(*this, frame_allocator);
 				Name attachment_name_in = Name(ex->name);
 				Name& attachment_name_out = *attachment_names.emplace(std::string(ex->name) + "_final");
-				auto& rg_frag = *rg_frag_fut.rg;
+				auto& rg_frag = *rg_frag_fut.get_render_graph();
 				rg_frag.attach_managed(
 				    attachment_name_in, swapchain->format, vuk::Dimension2D::absolute(300, 300), vuk::Samples::e1, vuk::ClearColor(0.1f, 0.2f, 0.3f, 1.f));
 				rg_frag.compile(vuk::RenderGraph::CompileOptions{});

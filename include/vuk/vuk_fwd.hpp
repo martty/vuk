@@ -80,7 +80,8 @@ namespace vuk {
 	struct Program;
 
 	struct PersistentDescriptorSet;
-
+	
+	struct FutureBase;
 	template<class T>
-	struct Future;
+	class Future;
 } // namespace vuk

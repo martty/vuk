@@ -171,14 +171,25 @@ namespace vuk {
 		/// @return the duration in seconds if both timestamps were available, null optional otherwise
 		std::optional<double> retrieve_duration(Query q1, Query q2);
 
-		Result<void> make_timestamp_results_available(std::span<const TimestampQueryPool> pool);
+		/// @brief Retrieve results from `TimestampQueryPool`s and make them available to retrieve_timestamp and retrieve_duration
+		Result<void> make_timestamp_results_available(std::span<const TimestampQueryPool> pools);
 
-		RGImage acquire_rendertarget(const struct RGCI&, uint64_t absolute_frame);
-		Sampler acquire_sampler(const SamplerCreateInfo&, uint64_t absolute_frame);
-		VkRenderPass acquire_renderpass(const struct RenderPassCreateInfo&, uint64_t absolute_frame);
-		struct PipelineInfo acquire_pipeline(const struct PipelineInstanceCreateInfo&, uint64_t absolute_frame);
-		struct ComputePipelineInfo acquire_pipeline(const struct ComputePipelineInstanceCreateInfo&, uint64_t absolute_frame);
+		// Caches
+
+		/// @brief Acquire a cached rendertarget
+		RGImage acquire_rendertarget(const struct RGCI& ci, uint64_t absolute_frame);
+		/// @brief Acquire a cached sampler
+		Sampler acquire_sampler(const SamplerCreateInfo& cu, uint64_t absolute_frame);
+		/// @brief Acquire a cached VkRenderPass
+		VkRenderPass acquire_renderpass(const struct RenderPassCreateInfo& ci, uint64_t absolute_frame);
+		/// @brief Acquire a cached pipeline
+		struct PipelineInfo acquire_pipeline(const struct PipelineInstanceCreateInfo& ci, uint64_t absolute_frame);
+		/// @brief Acquire a cached compute pipeline
+		struct ComputePipelineInfo acquire_pipeline(const struct ComputePipelineInstanceCreateInfo& ci, uint64_t absolute_frame);
+		/// @brief Acquire a cached descriptor pool
 		struct DescriptorPool& acquire_descriptor_pool(const struct DescriptorSetLayoutAllocInfo& dslai, uint64_t absolute_frame);
+
+		// Persistent descriptor sets
 
 		Unique<PersistentDescriptorSet> create_persistent_descriptorset(Allocator& allocator, struct DescriptorSetLayoutCreateInfo dslci, unsigned num_descriptors);
 		Unique<PersistentDescriptorSet> create_persistent_descriptorset(Allocator& allocator, const PipelineBaseInfo& base, unsigned set, unsigned num_descriptors);
@@ -251,19 +262,31 @@ namespace vuk {
 // utility functions
 namespace vuk {
 	struct ExecutableRenderGraph;
-	Result<void> link_execute_submit(Allocator& allocator, std::span<std::pair<Allocator*, struct RenderGraph*>> rgs);
+
+	/// @brief Compile & link given `RenderGraph`s, then execute them into API VkCommandBuffers, then submit them to queues
+	/// @param allocator Allocator to use for submission resources
+	/// @param rendergraphs `RenderGraph`s for compilation
+	Result<void> link_execute_submit(Allocator& allocator, std::span<std::pair<Allocator*, struct RenderGraph*>> rendergraphs);
+	/// @brief Execute given `ExecutableRenderGraph`s into API VkCommandBuffers, then submit them to queues
+	/// @param allocator Allocator to use for submission resources
+	/// @param executable_rendergraphs `ExecutableRenderGraph`s for execution
+	/// @param swapchains_with_indexes Swapchains references by the rendergraphs
+	/// @param present_rdy Semaphore used to gate device-side execution
+	/// @param render_complete Semaphore used to gate presentation
 	Result<void> execute_submit(Allocator& allocator,
-	                            std::span<std::pair<Allocator*, ExecutableRenderGraph*>> rgs,
+	                            std::span<std::pair<Allocator*, ExecutableRenderGraph*>> executable_rendergraphs,
 	                            std::vector<std::pair<SwapchainRef, size_t>> swapchains_with_indexes,
 	                            VkSemaphore present_rdy,
 	                            VkSemaphore render_complete);
-	Result<void> execute_submit_and_present_to_one(Allocator& nalloc, ExecutableRenderGraph&& rg, SwapchainRef swapchain);
-	Result<void> execute_submit_and_wait(Allocator& nalloc, ExecutableRenderGraph&& rg);
-
-	struct FutureBase;
-
-	template<class T>
-	struct Future;
+	/// @brief Execute given `ExecutableRenderGraph` into API VkCommandBuffers, then submit them to queues, presenting to a single swapchain
+	/// @param allocator Allocator to use for submission resources
+	/// @param executable_rendergraph `ExecutableRenderGraph`s for execution
+	/// @param swapchain Swapchain referenced by the rendergraph
+	Result<void> execute_submit_and_present_to_one(Allocator& allocator, ExecutableRenderGraph&& executable_rendergraph, SwapchainRef swapchain);
+	/// @brief Execute given `ExecutableRenderGraph` into API VkCommandBuffers, then submit them to queues, then blocking-wait for the submission to complete
+	/// @param allocator Allocator to use for submission resources
+	/// @param executable_rendergraph `ExecutableRenderGraph`s for execution
+	Result<void> execute_submit_and_wait(Allocator& allocator, ExecutableRenderGraph&& executable_rendergraph);
 
 	struct SampledImage make_sampled_image(ImageView iv, SamplerCreateInfo sci);
 

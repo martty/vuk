@@ -274,8 +274,8 @@ namespace vuk {
 		void schedule_intra_queue(std::span<struct PassInfo> passes, const RenderGraph::CompileOptions& compile_options);
 
 		// future support functions
-		friend struct Future<ImageAttachment>;
-		friend struct Future<Buffer>;
+		friend class Future<ImageAttachment>;
+		friend class Future<Buffer>;
 		void attach_out(Name, Future<ImageAttachment>& fimg, DomainFlags dst_domain);
 		void attach_out(Name, Future<Buffer>& fbuf, DomainFlags dst_domain);
 	};

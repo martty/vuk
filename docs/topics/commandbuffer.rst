@@ -41,3 +41,4 @@ The CommandBuffer implements "monadic" error handling, because operations that a
 
 .. doxygenclass:: vuk::CommandBuffer
    :members:
+   :allow-dot-graphs:

@@ -10,6 +10,9 @@ Overview
 
 .. doxygenstruct:: vuk::DeviceResource
 
+To facilitate ownership, a RAII wrapper type is provided, that wraps an Allocator and a payload:
+
+.. doxygenclass:: vuk::Unique
 
 Built-in resources
 ------------------

@@ -59,7 +59,8 @@ namespace vuk {
 	};
 
 	template<class T>
-	struct Future {
+	class Future {
+	public:
 		Future() = default;
 		/// @brief Create a Future with ownership of a RenderGraph and bind to an output
 		/// @param allocator
@@ -71,11 +72,35 @@ namespace vuk {
 		/// @param rg
 		/// @param output_binding
 		Future(Allocator& allocator, struct RenderGraph& rg, Name output_binding, DomainFlags dst_domain = DomainFlagBits::eDevice);
-		/// @brief Create a Future from a value, automatically making it host available
+		/// @brief Create a Future from a value, automatically making the result available on the host
 		/// @param allocator
 		/// @param value
 		Future(Allocator& allocator, T&& value);
 
+		/// @brief Get status of the Future
+		FutureBase::Status& get_status() {
+			return control->status;
+		}
+
+		/// @brief Get associated Allocator
+		Allocator& get_allocator() {
+			return *control->allocator;
+		}
+		
+		/// @brief Get the referenced RenderGraph
+		RenderGraph* get_render_graph() {
+			return rg;
+		}
+
+		/// @brief Submit Future for execution
+		Result<void> submit();
+		/// @brief Wait and retrieve the result of the Future on the host
+		Result<T> get();
+		/// @brief Get control block for Future
+		FutureBase* get_control() {
+			return control.get();
+		}
+	private:
 		Name output_binding;
 
 		std::unique_ptr<RenderGraph> owned_rg;
@@ -83,22 +108,13 @@ namespace vuk {
 
 		std::unique_ptr<FutureBase> control;
 
-		FutureBase::Status& get_status() {
-			return control->status;
-		}
-
-		Allocator& get_allocator() {
-			return *control->allocator;
-		}
-
-		Result<void> submit(); // turn cmdbufs into possibly a TS
-		Result<T> get();       // wait on host for T to be produced by the computation
+		friend struct RenderGraph;
 	};
 
 	template<class... Args>
 	Result<void> wait_for_futures(Allocator& alloc, Args&... futs) {
-		std::array controls = { futs.control.get()... };
-		std::array rgs = { futs.rg... };
+		std::array controls = { futs.get_control()... };
+		std::array rgs = { futs.get_render_graph()... };
 		std::vector<std::pair<Allocator*, RenderGraph*>> rgs_to_run;
 		for (uint64_t i = 0; i < controls.size(); i++) {
 			auto& control = controls[i];

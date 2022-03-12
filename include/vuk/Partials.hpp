@@ -5,11 +5,17 @@
 #include <span>
 
 namespace vuk {
-	inline Future<Buffer> host_data_to_buffer(Allocator& allocator, DomainFlagBits copy_domain, Buffer buffer, void* src_data, size_t size) {
+	/// @brief Fill a buffer with host data
+	/// @param allocator Allocator to use for temporary allocations
+	/// @param copy_domain The domain where the copy should happen (when dst is mapped, the copy happens on host)
+	/// @param buffer Buffer to fill
+	/// @param src_data pointer to source data
+	/// @param size size of source data
+	inline Future<Buffer> host_data_to_buffer(Allocator& allocator, DomainFlagBits copy_domain, Buffer dst, void* src_data, size_t size) {
 		// host-mapped buffers just get memcpys
-		if (buffer.mapped_ptr) {
-			memcpy(buffer.mapped_ptr, src_data, size);
-			return { allocator, std::move(buffer) };
+		if (dst.mapped_ptr) {
+			memcpy(dst.mapped_ptr, src_data, size);
+			return { allocator, std::move(dst) };
 		}
 
 		auto src = *allocate_buffer_cross_device(allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, 1 });
@@ -23,15 +29,25 @@ namespace vuk {
 			                command_buffer.copy_buffer("_src", "_dst", size);
 		                } });
 		rgp->attach_buffer("_src", *src, vuk::Access::eNone, vuk::Access::eNone);
-		rgp->attach_buffer("_dst", buffer, vuk::Access::eNone, vuk::Access::eNone);
+		rgp->attach_buffer("_dst", dst, vuk::Access::eNone, vuk::Access::eNone);
 		return { allocator, std::move(rgp), "_dst+" };
 	}
 
+	/// @brief Fill a buffer with host data
+	/// @param allocator Allocator to use for temporary allocations
+	/// @param copy_domain The domain where the copy should happen (when dst is mapped, the copy happens on host)
+	/// @param dst Buffer to fill
+	/// @param data source data
 	template<class T>
 	Future<Buffer> host_data_to_buffer(Allocator& allocator, DomainFlagBits copy_domain, Buffer dst, std::span<T> data) {
 		return host_data_to_buffer(allocator, copy_domain, dst, data.data(), data.size_bytes());
 	}
 
+	/// @brief Fill an image with host data
+	/// @param allocator Allocator to use for temporary allocations
+	/// @param copy_domain The domain where the copy should happen (when dst is mapped, the copy happens on host)
+	/// @param image ImageAttachment to fill
+	/// @param src_data pointer to source data
 	inline Future<ImageAttachment> host_data_to_image(Allocator& allocator, DomainFlagBits copy_domain, ImageAttachment image, void* src_data) {
 		size_t alignment = format_to_texel_block_size(image.format);
 		assert(image.extent.sizing == Sizing::eAbsolute);
@@ -62,6 +78,9 @@ namespace vuk {
 		return { allocator, std::move(rgp), "_dst+" };
 	}
 
+	/// @brief Transition image for given access - useful to force certain access across different RenderGraphs linked by Futures
+	/// @param image input Future of ImageAttachment
+	/// @param dst_access Access to have in the future
 	inline Future<ImageAttachment> transition(Future<ImageAttachment> image, Access dst_access) {
 		auto& allocator = image.get_allocator();
 		std::unique_ptr<RenderGraph> rgp = std::make_unique<RenderGraph>();
@@ -70,6 +89,10 @@ namespace vuk {
 		return { allocator, std::move(rgp), "_src+" };
 	}
 
+	/// @brief Generate mips for given ImageAttachment
+	/// @param image input Future of ImageAttachment
+	/// @param base_mip source mip level
+	/// @param num_mips number of mip levels to generate
 	inline Future<ImageAttachment> generate_mips(Future<ImageAttachment> image, uint32_t base_mip, uint32_t num_mips) {
 		auto& allocator = image.get_allocator();
 
@@ -119,10 +142,9 @@ namespace vuk {
 		return { allocator, std::move(rgp), "_src+" };
 	}
 
-	/// @brief Allocates & fills a buffer with explicitly managed lifetime
+	/// @brief Allocates & fills a buffer with explicitly managed lifetime (cross-device scope)
+	/// @param allocator Allocator to allocate this Buffer from
 	/// @param mem_usage Where to allocate the buffer (host visible buffers will be automatically mapped)
-	/// @param buffer_usage How this buffer will be used (since data is provided, TransferDst is added to the flags)
-	/// @return The allocated Buffer
 	template<class T>
 	std::pair<Unique<BufferCrossDevice>, Future<Buffer>> create_buffer_cross_device(Allocator& allocator, MemoryUsage mem_usage, std::span<T> data) {
 		Unique<BufferCrossDevice> buf(allocator);
@@ -133,6 +155,9 @@ namespace vuk {
 		return { std::move(buf), Future<Buffer>{ allocator, std::move(b) } };
 	}
 
+	/// @brief Allocates & fills a buffer with explicitly managed lifetime (device-only scope)
+	/// @param allocator Allocator to allocate this Buffer from
+	/// @param mem_usage Where to allocate the buffer (host visible buffers will be automatically mapped)
 	template<class T>
 	std::pair<Unique<BufferGPU>, Future<Buffer>> create_buffer_gpu(Allocator& allocator, DomainFlagBits domain, std::span<T> data) {
 		Unique<BufferGPU> buf(allocator);
@@ -142,6 +167,12 @@ namespace vuk {
 		return { std::move(buf), host_data_to_buffer(allocator, domain, b, data) };
 	}
 
+	/// @brief Allocates & fills an image, creates default ImageView for it (legacy)
+	/// @param allocator Allocator to allocate this Texture from
+	/// @param format Format of the image
+	/// @param extent Extent3D of the image
+	/// @param data pointer to data to fill the image with
+	/// @param should_generate_mips if true, all mip levels are generated from the 0th level
 	inline std::pair<Texture, Future<ImageAttachment>>
 	create_texture(Allocator& allocator, Format format, Extent3D extent, void* data, bool should_generate_mips) {
 		ImageCreateInfo ici;

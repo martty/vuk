@@ -3,6 +3,7 @@
 #include <stdint.h>
 
 namespace vuk {
+	/// @brief Handle to a query result
 	struct Query {
 		uint64_t id;
 

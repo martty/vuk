@@ -414,6 +414,6 @@ namespace vuk {
 		}
 	}
 
-	template struct Future<ImageAttachment>;
-	template struct Future<Buffer>;
+	template class Future<ImageAttachment>;
+	template class Future<Buffer>;
 } // namespace vuk
