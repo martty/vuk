@@ -48,7 +48,7 @@ namespace vuk {
 			auto last_use_frame = it->second.last_use_frame;
 			if ((int64_t)current_frame - (int64_t)last_use_frame > (int64_t)threshold) {
 				ctx.destroy(*it->second.ptr);
-				impl->pool.erase(impl->pool.get_iterator_from_pointer(it->second.ptr));
+				impl->pool.erase(impl->pool.get_iterator(it->second.ptr));
 				it = impl->lru_map.erase(it);
 			} else {
 				++it;
@@ -159,7 +159,7 @@ namespace vuk {
 				if (!it->first.is_inline()) {
 					delete it->first.extended_data;
 				}
-				impl->pool.erase(impl->pool.get_iterator_from_pointer(it->second.ptr));
+				impl->pool.erase(impl->pool.get_iterator(it->second.ptr));
 				it = impl->lru_map.erase(it);
 			} else {
 				++it;
@@ -173,7 +173,7 @@ namespace vuk {
 		auto it = impl->lru_map.find(ci);
 		if (it != impl->lru_map.end()) {
 			auto res = std::move(*it->second.ptr);
-			impl->pool.erase(impl->pool.get_iterator_from_pointer(it->second.ptr));
+			impl->pool.erase(impl->pool.get_iterator(it->second.ptr));
 			impl->lru_map.erase(it);
 			return res;
 		}
@@ -185,7 +185,7 @@ namespace vuk {
 		std::unique_lock _(impl->cache_mtx);
 		for (auto it = impl->lru_map.begin(); it != impl->lru_map.end(); ++it) {
 			if (ptr == it->second.ptr) {
-				impl->pool.erase(impl->pool.get_iterator_from_pointer(it->second.ptr));
+				impl->pool.erase(impl->pool.get_iterator(it->second.ptr));
 				impl->lru_map.erase(it);
 				return;
 			}

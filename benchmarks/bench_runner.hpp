@@ -2,7 +2,6 @@
 
 #include "../examples/glfw.hpp"
 #include "../examples/utils.hpp"
-#include "examples/imgui_impl_glfw.h"
 #include "vuk/AllocatorHelpers.hpp"
 #include "vuk/CommandBuffer.hpp"
 #include "vuk/Context.hpp"
@@ -10,6 +9,7 @@
 #include "vuk/SampledImage.hpp"
 #include "vuk/resources/DeviceFrameResource.hpp"
 #include <VkBootstrap.h>
+#include <backends/imgui_impl_glfw.h>
 #include <functional>
 #include <optional>
 #include <stdio.h>

@@ -14,7 +14,7 @@ set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(
   glfw 
   GIT_REPOSITORY https://github.com/glfw/glfw
-  GIT_TAG        3.3.2
+  GIT_TAG        3.3.6
 )
 FetchContent_MakeAvailable(glfw)
 
@@ -25,7 +25,7 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(glm)
 
-SET(imgui_sources ../ext/imgui/imgui.cpp ../ext/imgui/imgui_draw.cpp ../ext/imgui/imgui_demo.cpp ../ext/imgui/imgui_widgets.cpp ../ext/imgui/examples/imgui_impl_glfw.cpp)
+SET(imgui_sources ../ext/imgui/imgui.cpp ../ext/imgui/imgui_draw.cpp ../ext/imgui/imgui_demo.cpp ../ext/imgui/imgui_widgets.cpp ../ext/imgui/imgui_tables.cpp ../ext/imgui/backends/imgui_impl_glfw.cpp)
 
 add_executable(vuk_all_examples)
 target_include_directories(vuk_all_examples SYSTEM PRIVATE ../ext/stb ../ext/imgui)
