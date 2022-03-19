@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.7)
 project(vuk-examples)
 
+if(NOT VUK_USE_SHADERC)
+    message(FATAL_ERROR "Building vuk examples require shaderc for building shaders, enable VUK_USE_SHADERC")
+endif()
+
 FetchContent_Declare(
   vk-bootstrap 
   GIT_REPOSITORY https://github.com/charles-lunarg/vk-bootstrap
