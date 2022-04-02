@@ -15,13 +15,13 @@
 #define CONSTRUCT_AT(p, ...) ::new (const_cast<void*>(static_cast<const volatile void*>(p))) decltype (*p)(__VA_ARGS__)
 #define DESTROY_AT(p)                                                                                                                                          \
 	do {                                                                                                                                                         \
-		using T = decltype(*p);                                                                                                                                    \
-		if constexpr (std::is_array_v<T>) {                                                                                                                        \
+		using U = decltype(*p);                                                                                                                                    \
+		if constexpr (std::is_array_v<U>) {                                                                                                                        \
 			for (auto& elem : *p) {                                                                                                                                  \
-				(&elem)->~T();                                                                                                                                         \
+				(&elem)->~U();                                                                                                                                         \
 			}                                                                                                                                                        \
 		} else {                                                                                                                                                   \
-			p->~T();                                                                                                                                                 \
+			p->~U();                                                                                                                                                 \
 		}                                                                                                                                                          \
 	} while (0)
 

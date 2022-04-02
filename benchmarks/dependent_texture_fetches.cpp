@@ -37,10 +37,11 @@ namespace {
 			                 .set_scissor(0, vuk::Rect2D::framebuffer())
 			                 .set_rasterization({})
 			                 .broadcast_color_blend({})
-			                 .bind_sampled_image(0, 0, src, vuk::SamplerCreateInfo{ .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear });
+			                 .bind_image(0, 0, *src.view)
+			                 .bind_sampler(0, 0, vuk::SamplerCreateInfo{ .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear });
 			             if (dependent) {
 				             command_buffer.bind_graphics_pipeline("dependent");
-				             command_buffer.push_constants<unsigned>(vuk::ShaderStageFlagBits::eFragment, 0, 1.0f/(float)src.extent.width);
+				             command_buffer.push_constants<unsigned>(vuk::ShaderStageFlagBits::eFragment, 0, 1.0f / (float)src.extent.width);
 			             } else {
 				             command_buffer.bind_graphics_pipeline("nondependent");
 			             }
@@ -57,7 +58,8 @@ namespace {
 			         .set_rasterization({})
 			         .broadcast_color_blend({})
 			         .bind_graphics_pipeline("blit")
-			         .bind_sampled_image(0, 0, "_dst", vuk::SamplerCreateInfo{ .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear });
+			         .bind_image(0, 0, "_dst")
+			         .bind_sampler(0, 0, vuk::SamplerCreateInfo{ .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear });
 			     command_buffer.draw(3, 1, 0, 0);
 		     } });
 		rg.attach_image("_dst", vuk::ImageAttachment::from_texture(dst), vuk::Access::eNone, vuk::Access::eNone);
@@ -72,7 +74,8 @@ namespace {
 			                 .set_rasterization({})
 			                 .broadcast_color_blend({})
 			                 .bind_graphics_pipeline("blit")
-			                 .bind_image(0, 0, *src.view).bind_sampler(0, 0, { .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear });
+			                 .bind_image(0, 0, *src.view)
+			                 .bind_sampler(0, 0, { .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear });
 			             command_buffer.draw(3, 1, 0, 0);
 		             } });
 		rg.attach_image("dst", vuk::ImageAttachment::from_texture(dst), vuk::Access::eNone, vuk::Access::eFragmentSampled);

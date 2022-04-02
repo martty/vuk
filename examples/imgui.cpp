@@ -48,7 +48,6 @@ void util::ImGui_ImplVuk_Render(vuk::Allocator& allocator,
                                 util::ImGuiData& data,
                                 ImDrawData* draw_data,
                                 const plf::colony<vuk::SampledImage>& sampled_images) {
-	auto& ctx = allocator.get_context();
 	auto reset_render_state = [](const util::ImGuiData& data, vuk::CommandBuffer& command_buffer, ImDrawData* draw_data, vuk::Buffer vertex, vuk::Buffer index) {
 		command_buffer.bind_image(0, 0, *data.font_texture.view).bind_sampler(0, 0, data.font_sci);
 		if (index.size > 0) {
