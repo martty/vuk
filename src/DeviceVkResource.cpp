@@ -5,6 +5,7 @@
 #include "vuk/Context.hpp"
 #include "vuk/Exception.hpp"
 #include "vuk/Query.hpp"
+#include "vuk/resources/DeviceNestedResource.hpp"
 
 namespace vuk {
 	DeviceVkResource::DeviceVkResource(Context& ctx, LegacyGPUAllocator& allocator) : ctx(&ctx), device(ctx.device), legacy_gpu_allocator(&allocator) {}
@@ -408,5 +409,134 @@ namespace vuk {
 				vkDestroySwapchainKHR(device, v, nullptr);
 			}
 		}
+	}
+
+	Result<void, AllocateException> DeviceNestedResource::allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) {
+		return upstream->allocate_semaphores(dst, loc);
+	}
+
+	void DeviceNestedResource::deallocate_semaphores(std::span<const VkSemaphore> sema) {
+		upstream->deallocate_semaphores(sema);
+	}
+
+	Result<void, AllocateException> DeviceNestedResource::allocate_fences(std::span<VkFence> dst, SourceLocationAtFrame loc) {
+		return upstream->allocate_fences(dst, loc);
+	}
+
+	void DeviceNestedResource::deallocate_fences(std::span<const VkFence> dst) {
+		upstream->deallocate_fences(dst);
+	}
+
+	Result<void, AllocateException> DeviceNestedResource::allocate_command_buffers(std::span<CommandBufferAllocation> dst,
+	                                                                               std::span<const CommandBufferAllocationCreateInfo> cis,
+	                                                                               SourceLocationAtFrame loc) {
+		return upstream->allocate_command_buffers(dst, cis, loc);
+	}
+
+	void DeviceNestedResource::deallocate_command_buffers(std::span<const CommandBufferAllocation> dst) {
+		upstream->deallocate_command_buffers(dst);
+	}
+
+	Result<void, AllocateException>
+	DeviceNestedResource::allocate_command_pools(std::span<CommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) {
+		return upstream->allocate_command_pools(dst, cis, loc);
+	}
+
+	void DeviceNestedResource::deallocate_command_pools(std::span<const CommandPool> dst) {
+		upstream->deallocate_command_pools(dst);
+	}
+
+	Result<void, AllocateException>
+	DeviceNestedResource::allocate_buffers(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
+		return upstream->allocate_buffers(dst, cis, loc);
+	}
+
+	void DeviceNestedResource::deallocate_buffers(std::span<const BufferCrossDevice> src) {
+		upstream->deallocate_buffers(src);
+	}
+
+	Result<void, AllocateException>
+	DeviceNestedResource::allocate_buffers(std::span<BufferGPU> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
+		return upstream->allocate_buffers(dst, cis, loc);
+	}
+
+	void DeviceNestedResource::deallocate_buffers(std::span<const BufferGPU> src) {
+		upstream->deallocate_buffers(src);
+	}
+
+	Result<void, AllocateException>
+	DeviceNestedResource::allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) {
+		return upstream->allocate_framebuffers(dst, cis, loc);
+	}
+
+	void DeviceNestedResource::deallocate_framebuffers(std::span<const VkFramebuffer> src) {
+		upstream->deallocate_framebuffers(src);
+	}
+
+	Result<void, AllocateException> DeviceNestedResource::allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) {
+		return upstream->allocate_images(dst, cis, loc);
+	}
+
+	void DeviceNestedResource::deallocate_images(std::span<const Image> src) {
+		upstream->deallocate_images(src);
+	}
+
+	Result<void, AllocateException>
+	DeviceNestedResource::allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) {
+		return upstream->allocate_image_views(dst, cis, loc);
+	}
+
+	void DeviceNestedResource::deallocate_image_views(std::span<const ImageView> src) {
+		upstream->deallocate_image_views(src);
+	}
+
+	Result<void, AllocateException> DeviceNestedResource::allocate_persistent_descriptor_sets(std::span<PersistentDescriptorSet> dst,
+	                                                                                          std::span<const PersistentDescriptorSetCreateInfo> cis,
+	                                                                                          SourceLocationAtFrame loc) {
+		return upstream->allocate_persistent_descriptor_sets(dst, cis, loc);
+	}
+
+	void DeviceNestedResource::deallocate_persistent_descriptor_sets(std::span<const PersistentDescriptorSet> src) {
+		upstream->deallocate_persistent_descriptor_sets(src);
+	}
+
+	Result<void, AllocateException>
+	DeviceNestedResource::allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) {
+		return upstream->allocate_descriptor_sets(dst, cis, loc);
+	}
+
+	void DeviceNestedResource::deallocate_descriptor_sets(std::span<const DescriptorSet> src) {
+		upstream->deallocate_descriptor_sets(src);
+	}
+
+	Result<void, AllocateException> DeviceNestedResource::allocate_timestamp_query_pools(std::span<TimestampQueryPool> dst,
+	                                                                                     std::span<const VkQueryPoolCreateInfo> cis,
+	                                                                                     SourceLocationAtFrame loc) {
+		return upstream->allocate_timestamp_query_pools(dst, cis, loc);
+	}
+
+	void DeviceNestedResource::deallocate_timestamp_query_pools(std::span<const TimestampQueryPool> src) {
+		upstream->deallocate_timestamp_query_pools(src);
+	}
+
+	Result<void, AllocateException>
+	DeviceNestedResource::allocate_timestamp_queries(std::span<TimestampQuery> dst, std::span<const TimestampQueryCreateInfo> cis, SourceLocationAtFrame loc) {
+		return upstream->allocate_timestamp_queries(dst, cis, loc);
+	}
+
+	void DeviceNestedResource::deallocate_timestamp_queries(std::span<const TimestampQuery> src) {
+		upstream->deallocate_timestamp_queries(src);
+	}
+
+	Result<void, AllocateException> DeviceNestedResource::allocate_timeline_semaphores(std::span<TimelineSemaphore> dst, SourceLocationAtFrame loc) {
+		return upstream->allocate_timeline_semaphores(dst, loc);
+	}
+
+	void DeviceNestedResource::deallocate_timeline_semaphores(std::span<const TimelineSemaphore> src) {
+		upstream->deallocate_timeline_semaphores(src);
+	}
+
+	void DeviceNestedResource::deallocate_swapchains(std::span<const VkSwapchainKHR> src) {
+		upstream->deallocate_swapchains(src);
 	}
 } // namespace vuk
