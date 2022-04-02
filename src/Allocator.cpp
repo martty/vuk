@@ -304,6 +304,26 @@ namespace vuk {
 		allocatorInfo.physicalDevice = phys_dev;
 		allocatorInfo.device = device;
 		allocatorInfo.flags = VMA_ALLOCATOR_CREATE_EXTERNALLY_SYNCHRONIZED_BIT;
+		
+		VmaVulkanFunctions vulkanFunctions = {};
+		vulkanFunctions.vkGetPhysicalDeviceProperties = vkGetPhysicalDeviceProperties;
+		vulkanFunctions.vkGetPhysicalDeviceMemoryProperties = vkGetPhysicalDeviceMemoryProperties;
+		vulkanFunctions.vkAllocateMemory = vkAllocateMemory;
+		vulkanFunctions.vkFreeMemory = vkFreeMemory;
+		vulkanFunctions.vkMapMemory = vkMapMemory;
+		vulkanFunctions.vkUnmapMemory = vkUnmapMemory;
+		vulkanFunctions.vkFlushMappedMemoryRanges = vkFlushMappedMemoryRanges;
+		vulkanFunctions.vkInvalidateMappedMemoryRanges = vkInvalidateMappedMemoryRanges;
+		vulkanFunctions.vkBindBufferMemory = vkBindBufferMemory;
+		vulkanFunctions.vkBindImageMemory = vkBindImageMemory;
+		vulkanFunctions.vkGetBufferMemoryRequirements = vkGetBufferMemoryRequirements;
+		vulkanFunctions.vkGetImageMemoryRequirements = vkGetImageMemoryRequirements;
+		vulkanFunctions.vkCreateBuffer = vkCreateBuffer;
+		vulkanFunctions.vkDestroyBuffer = vkDestroyBuffer;
+		vulkanFunctions.vkCreateImage = vkCreateImage;
+		vulkanFunctions.vkDestroyImage = vkDestroyImage;
+		vulkanFunctions.vkCmdCopyBuffer = vkCmdCopyBuffer;
+		allocatorInfo.pVulkanFunctions = &vulkanFunctions;
 
 		VmaDeviceMemoryCallbacks cbs;
 		cbs.pfnFree = nullptr;
