@@ -5,6 +5,7 @@
 #include "vuk/SampledImage.hpp"
 
 #include <mutex>
+#include <atomic>
 
 namespace vuk {
 	struct QueueImpl {

@@ -8,11 +8,13 @@
 #include "vuk/Image.hpp"
 #include "vuk/Types.hpp"
 
+#include <string.h>
 #include <array>
 #include <atomic>
 #include <mutex>
 #include <unordered_map>
 #include <utility>
+#include <memory>
 #include <vk_mem_alloc.h>
 
 namespace vuk {

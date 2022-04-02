@@ -6,6 +6,7 @@
 #include "vuk/Types.hpp"
 #include "vuk/vuk_fwd.hpp"
 
+#include <string.h>
 #include <array>
 #include <bitset>
 #include <cassert>

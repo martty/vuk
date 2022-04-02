@@ -47,16 +47,17 @@ namespace vuk {
 		template<class T>
 		T& get_result();
 
-		template<>
-		ImageAttachment& get_result() {
-			return result_image;
-		}
-
-		template<>
-		Buffer& get_result() {
-			return result_buffer;
-		}
 	};
+
+	template<>
+	inline ImageAttachment& FutureBase::get_result() {
+		return result_image;
+	}
+
+	template<>
+	inline Buffer& FutureBase::get_result() {
+		return result_buffer;
+	}
 
 	template<class T>
 	class Future {

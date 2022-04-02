@@ -3,6 +3,7 @@
 #include "vuk/Context.hpp"
 #include "vuk/Query.hpp"
 #include "vuk/Descriptor.hpp"
+#include "RenderPass.hpp"
 
 #include <atomic>
 

@@ -5,6 +5,8 @@
 #include "vuk/resources/DeviceVkResource.hpp"
 
 namespace vuk {
+	struct DeviceSuperFrameResource;
+	
 	/// @brief Represents "per-frame" resources - temporary allocations that persist through a frame. Handed out by DeviceSuperFrameResource, cannot be constructed directly.
 	///
 	/// Allocations from this resource are tied to the "frame" - all allocations recycled when a DeviceFrameResource is recycled.
