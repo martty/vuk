@@ -4,6 +4,8 @@
 #include "vuk/Exception.hpp"
 #include "vuk/resources/DeviceFrameResource.hpp"
 #include "vuk/resources/DeviceVkResource.hpp"
+#include "RenderPass.hpp"
+#include "vuk/Query.hpp"
 
 #include <numeric>
 #include <string>

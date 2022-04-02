@@ -1,10 +1,6 @@
 #pragma once
 #include <stdint.h>
-
-namespace std {
-	template<class T>
-	struct hash; // this is UB, but <functional> is heavy
-}
+#include <functional>
 
 // https://gist.github.com/filsinger/1255697/21762ea83a2d3c17561c8e6a29f44249a4626f9e
 

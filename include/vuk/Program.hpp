@@ -4,6 +4,7 @@
 #include "vuk/Config.hpp"
 #include "vuk/vuk_fwd.hpp"
 
+#include <string>
 #include <array>
 #include <unordered_map>
 #include <vector>

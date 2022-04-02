@@ -2,6 +2,7 @@
 
 #include "vuk/RenderGraph.hpp"
 #include "vuk/Future.hpp"
+#include <math.h>
 #include <span>
 
 namespace vuk {

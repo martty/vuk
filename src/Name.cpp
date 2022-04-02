@@ -3,6 +3,7 @@
 #include <array>
 #include <robin_hood.h>
 #include <shared_mutex>
+#include <mutex>
 #include <string>
 #include <string_view>
 #include <vector>
