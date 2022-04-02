@@ -3,23 +3,27 @@
 // based on https://github.com/kociap/anton_core/blob/master/public/anton/expected.hpp
 
 #include "vuk/Config.hpp"
-#include "vuk/vuk_fwd.hpp"
 #include "vuk/Exception.hpp"
+#include "vuk/vuk_fwd.hpp"
 
 #include <cassert>
 #include <type_traits>
+#include <utility>
 
 #define FWD(x)               (static_cast<decltype(x)&&>(x))
 #define MOV(x)               (static_cast<std::remove_reference_t<decltype(x)>&&>(x))
 #define CONSTRUCT_AT(p, ...) ::new (const_cast<void*>(static_cast<const volatile void*>(p))) decltype (*p)(__VA_ARGS__)
 #define DESTROY_AT(p)                                                                                                                                          \
-	if constexpr (std::is_array_v<decltype(*p)>) {                                                                                                               \
-		for (auto& elem : *p) {                                                                                                                                    \
-			(&elem)->~decltype (*p)();                                                                                                                               \
+	do {                                                                                                                                                         \
+		using T = decltype(*p);                                                                                                                                    \
+		if constexpr (std::is_array_v<T>) {                                                                                                                        \
+			for (auto& elem : *p) {                                                                                                                                  \
+				(&elem)->~T();                                                                                                                                         \
+			}                                                                                                                                                        \
+		} else {                                                                                                                                                   \
+			p->~T();                                                                                                                                                 \
 		}                                                                                                                                                          \
-	} else {                                                                                                                                                     \
-		p->~decltype (*p)();                                                                                                                                       \
-	}
+	} while (0)
 
 namespace vuk {
 	struct Exception;
@@ -194,6 +198,7 @@ namespace vuk {
 		}
 
 		friend void swap(Result& lhs, Result& rhs) {
+			using std::swap;
 			if (lhs._holds_value) {
 				if (rhs._holds_value) {
 					swap(lhs._value, rhs._value);
@@ -202,7 +207,7 @@ namespace vuk {
 					DESTROY_AT(&lhs._value);
 					CONSTRUCT_AT(&lhs._error, MOV(rhs._error));
 					DESTROY_AT(&rhs._error);
-					std::swap(lhs._holds_value, rhs._holds_value);
+					swap(lhs._holds_value, rhs._holds_value);
 				}
 			} else {
 				if (rhs._holds_value) {
@@ -210,7 +215,7 @@ namespace vuk {
 					DESTROY_AT(&lhs._error);
 					CONSTRUCT_AT(&lhs._value, MOV(rhs._value));
 					DESTROY_AT(&rhs._value);
-					std::swap(lhs._holds_value, rhs._holds_value);
+					swap(lhs._holds_value, rhs._holds_value);
 				} else {
 					swap(lhs._error, rhs._error);
 				}
@@ -328,6 +333,7 @@ namespace vuk {
 		}
 
 		friend void swap(Result& lhs, Result& rhs) {
+			using std::swap;
 			if (lhs._holds_value) {
 				if (!rhs._holds_value) {
 					CONSTRUCT_AT(&lhs._error, MOV(rhs._error));
