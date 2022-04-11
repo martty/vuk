@@ -5,10 +5,9 @@
 #include "vuk/RenderGraph.hpp"
 
 #define VUK_EARLY_RET()                                                                                                                                        \
-	if (current_exception) {                                                                                                                                     \
+	if (!current_error) {                                                                                                                                        \
 		return *this;                                                                                                                                              \
 	}
-#define VUK_IS_IMAGE_IN_GENERAL_LAYOUT()
 
 namespace vuk {
 	uint32_t Ignore::to_size() {
@@ -359,8 +358,7 @@ namespace vuk {
 		VUK_EARLY_RET();
 		auto res = rg->get_resource_buffer(name, current_pass);
 		if (!res) {
-			rg_except.emplace(res.error());
-			current_exception = &rg_except.value();
+			current_error = std::move(res);
 			return *this;
 		}
 		return bind_buffer(set, binding, res->buffer);
@@ -370,14 +368,12 @@ namespace vuk {
 		VUK_EARLY_RET();
 		auto res = rg->get_resource_image(resource_name, current_pass);
 		if (!res) {
-			rg_except.emplace(res.error());
-			current_exception = &rg_except.value();
+			current_error = std::move(res);
 			return *this;
 		}
 		auto res_gl = rg->is_resource_image_in_general_layout(resource_name, current_pass);
 		if (!res_gl) {
-			rg_except.emplace(res_gl.error());
-			current_exception = &rg_except.value();
+			current_error = std::move(res);
 			return *this;
 		}
 
@@ -420,14 +416,13 @@ namespace vuk {
 	}
 
 	void* CommandBuffer::_map_scratch_uniform_binding(unsigned set, unsigned binding, size_t size) {
-		if (current_exception) {
+		if (!current_error) {
 			return nullptr;
 		}
 
 		auto res = allocate_buffer_cross_device(*allocator, { MemoryUsage::eCPUtoGPU, size, 1 });
 		if (!res) {
-			allocate_except.emplace(res.error());
-			current_exception = &allocate_except.value();
+			current_error = std::move(res);
 			return nullptr;
 		} else {
 			auto& buf = res->get();
@@ -473,8 +468,7 @@ namespace vuk {
 
 		auto res = allocate_buffer_cross_device(*allocator, { MemoryUsage::eCPUtoGPU, cmds.size_bytes(), 1 });
 		if (!res) {
-			allocate_except.emplace(res.error());
-			current_exception = &allocate_except.value();
+			current_error = std::move(res);
 			return *this;
 		}
 
@@ -532,50 +526,19 @@ namespace vuk {
 		return *this;
 	}
 
-	Result<SecondaryCommandBuffer> CommandBuffer::begin_secondary() {
-		if (current_exception) {
-			return { expected_error, *current_exception };
-		}
-		// TODO: we might want to allocate a pool here
-		auto scbuf = allocate_command_buffer(*allocator, { .level = VK_COMMAND_BUFFER_LEVEL_SECONDARY, .command_pool = command_buffer_allocation.command_pool });
-		if (!scbuf) {
-			return { expected_error, scbuf.error() };
-		}
-		VkCommandBufferBeginInfo cbi{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-			                            .flags = VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT | VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
-		VkCommandBufferInheritanceInfo cbii{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO };
-		cbii.renderPass = ongoing_renderpass->renderpass;
-		cbii.subpass = ongoing_renderpass->subpass;
-		cbii.framebuffer = VK_NULL_HANDLE; // TODO
-		cbi.pInheritanceInfo = &cbii;
-		vkBeginCommandBuffer(scbuf->get(), &cbi);
-		return { expected_value, SecondaryCommandBuffer(rg, ctx, scbuf->get(), ongoing_renderpass) };
-	}
-
-	CommandBuffer& CommandBuffer::execute(std::span<VkCommandBuffer> scbufs) {
-		VUK_EARLY_RET();
-		if (scbufs.size() > 0) {
-			vkCmdExecuteCommands(command_buffer, (uint32_t)scbufs.size(), scbufs.data());
-		}
-
-		return *this;
-	}
-
 	CommandBuffer& CommandBuffer::clear_image(Name src, Clear c) {
 		VUK_EARLY_RET();
 
 		assert(rg);
 		auto res = rg->get_resource_image(src, current_pass);
 		if (!res) {
-			rg_except.emplace(res.error());
-			current_exception = &rg_except.value();
+			current_error = std::move(res);
 			return *this;
 		}
 
 		auto res_gl = rg->is_resource_image_in_general_layout(src, current_pass);
 		if (!res_gl) {
-			rg_except.emplace(res_gl.error());
-			current_exception = &rg_except.value();
+			current_error = std::move(res_gl);
 			return *this;
 		}
 		auto layout = *res_gl ? ImageLayout::eGeneral : ImageLayout::eTransferDstOptimal;
@@ -603,15 +566,13 @@ namespace vuk {
 		VkImageResolve ir;
 		auto src_res = rg->get_resource_image(src, current_pass);
 		if (!src_res) {
-			rg_except.emplace(src_res.error());
-			current_exception = &rg_except.value();
+			current_error = std::move(src_res);
 			return *this;
 		}
 		auto src_image = src_res->attachment.image;
 		auto dst_res = rg->get_resource_image(dst, current_pass);
 		if (!dst_res) {
-			rg_except.emplace(dst_res.error());
-			current_exception = &rg_except.value();
+			current_error = std::move(dst_res);
 			return *this;
 		}
 		auto dst_image = dst_res->attachment.image;
@@ -635,14 +596,12 @@ namespace vuk {
 
 		auto res_gl_src = rg->is_resource_image_in_general_layout(src, current_pass);
 		if (!res_gl_src) {
-			rg_except.emplace(res_gl_src.error());
-			current_exception = &rg_except.value();
+			current_error = std::move(res_gl_src);
 			return *this;
 		}
 		auto res_gl_dst = rg->is_resource_image_in_general_layout(dst, current_pass);
 		if (!res_gl_dst) {
-			rg_except.emplace(res_gl_dst.error());
-			current_exception = &rg_except.value();
+			current_error = std::move(res_gl_dst);
 			return *this;
 		}
 
@@ -659,29 +618,25 @@ namespace vuk {
 		assert(rg);
 		auto src_res = rg->get_resource_image(src, current_pass);
 		if (!src_res) {
-			rg_except.emplace(src_res.error());
-			current_exception = &rg_except.value();
+			current_error = std::move(src_res);
 			return *this;
 		}
 		auto src_image = src_res->attachment.image;
 		auto dst_res = rg->get_resource_image(dst, current_pass);
 		if (!dst_res) {
-			rg_except.emplace(dst_res.error());
-			current_exception = &rg_except.value();
+			current_error = std::move(dst_res);
 			return *this;
 		}
 		auto dst_image = dst_res->attachment.image;
 
 		auto res_gl_src = rg->is_resource_image_in_general_layout(src, current_pass);
 		if (!res_gl_src) {
-			rg_except.emplace(res_gl_src.error());
-			current_exception = &rg_except.value();
+			current_error = std::move(res_gl_src);
 			return *this;
 		}
 		auto res_gl_dst = rg->is_resource_image_in_general_layout(dst, current_pass);
 		if (!res_gl_dst) {
-			rg_except.emplace(res_gl_dst.error());
-			current_exception = &rg_except.value();
+			current_error = std::move(res_gl_dst);
 			return *this;
 		}
 
@@ -698,8 +653,7 @@ namespace vuk {
 		assert(rg);
 		auto src_res = rg->get_resource_buffer(src, current_pass);
 		if (!src_res) {
-			rg_except.emplace(src_res.error());
-			current_exception = &rg_except.value();
+			current_error = std::move(src_res);
 			return *this;
 		}
 		auto src_bbuf = src_res->buffer;
@@ -707,16 +661,14 @@ namespace vuk {
 
 		auto dst_res = rg->get_resource_image(dst, current_pass);
 		if (!dst_res) {
-			rg_except.emplace(dst_res.error());
-			current_exception = &rg_except.value();
+			current_error = std::move(dst_res);
 			return *this;
 		}
 		auto dst_image = dst_res->attachment.image;
 
 		auto res_gl = rg->is_resource_image_in_general_layout(dst, current_pass);
 		if (!res_gl) {
-			rg_except.emplace(res_gl.error());
-			current_exception = &rg_except.value();
+			current_error = std::move(res_gl);
 			return *this;
 		}
 		auto dst_layout = *res_gl ? ImageLayout::eGeneral : ImageLayout::eTransferDstOptimal;
@@ -730,15 +682,13 @@ namespace vuk {
 		assert(rg);
 		auto src_res = rg->get_resource_image(src, current_pass);
 		if (!src_res) {
-			rg_except.emplace(src_res.error());
-			current_exception = &rg_except.value();
+			current_error = std::move(src_res);
 			return *this;
 		}
 		auto src_image = src_res->attachment.image;
 		auto dst_res = rg->get_resource_buffer(dst, current_pass);
 		if (!dst_res) {
-			rg_except.emplace(dst_res.error());
-			current_exception = &rg_except.value();
+			current_error = std::move(dst_res);
 			return *this;
 		}
 		auto dst_bbuf = dst_res->buffer;
@@ -747,8 +697,7 @@ namespace vuk {
 
 		auto res_gl = rg->is_resource_image_in_general_layout(src, current_pass);
 		if (!res_gl) {
-			rg_except.emplace(res_gl.error());
-			current_exception = &rg_except.value();
+			current_error = std::move(res_gl);
 			return *this;
 		}
 		auto src_layout = *res_gl ? ImageLayout::eGeneral : ImageLayout::eTransferSrcOptimal;
@@ -762,15 +711,13 @@ namespace vuk {
 		assert(rg);
 		auto src_res = rg->get_resource_buffer(src, current_pass);
 		if (!src_res) {
-			rg_except.emplace(src_res.error());
-			current_exception = &rg_except.value();
+			current_error = std::move(src_res);
 			return *this;
 		}
 		auto src_bbuf = src_res->buffer;
 		auto dst_res = rg->get_resource_buffer(dst, current_pass);
 		if (!dst_res) {
-			rg_except.emplace(dst_res.error());
-			current_exception = &rg_except.value();
+			current_error = std::move(dst_res);
 			return *this;
 		}
 		auto dst_bbuf = dst_res->buffer;
@@ -822,8 +769,7 @@ namespace vuk {
 		assert(rg);
 		auto src_res = rg->get_resource_image(src, current_pass);
 		if (!src_res) {
-			rg_except.emplace(src_res.error());
-			current_exception = &rg_except.value();
+			current_error = std::move(src_res);
 			return *this;
 		}
 		auto src_image = src_res->attachment.image;
@@ -843,8 +789,7 @@ namespace vuk {
 
 		auto res_gl = rg->is_resource_image_in_general_layout(src, current_pass);
 		if (!res_gl) {
-			rg_except.emplace(res_gl.error());
-			current_exception = &rg_except.value();
+			current_error = std::move(res_gl);
 			return *this;
 		}
 
@@ -868,8 +813,7 @@ namespace vuk {
 
 		auto res = allocator->allocate_timestamp_queries(std::span{ &tsq, 1 }, std::span{ &ci, 1 });
 		if (!res) {
-			allocate_except.emplace(res.error());
-			current_exception = &allocate_except.value();
+			current_error = std::move(res);
 			return *this;
 		}
 
@@ -877,22 +821,8 @@ namespace vuk {
 		return *this;
 	}
 
-	Exception& CommandBuffer::error() & {
-		extracted = true;
-		assert(current_exception && "cannot call error() on CommandBuffer that is not in the error state");
-		return *current_exception;
-	}
-
-	Exception const& CommandBuffer::error() const& {
-		extracted = true;
-		assert(current_exception && "cannot call error() on CommandBuffer that is not in the error state");
-		return *current_exception;
-	}
-
-	Exception&& CommandBuffer::error() && {
-		extracted = true;
-		assert(current_exception && "cannot call error() on CommandBuffer that is not in the error state");
-		return std::move(*current_exception);
+	Result<void> CommandBuffer::result() {
+		return std::move(current_error);
 	}
 
 	bool CommandBuffer::_bind_state(bool graphics) {
@@ -989,8 +919,7 @@ namespace vuk {
 
 				Unique<DescriptorSet> ds;
 				if (auto ret = allocator->allocate_descriptor_sets(std::span{ &*ds, 1 }, std::span{ &sb, 1 }); !ret) {
-					allocate_except.emplace(ret.error());
-					current_exception = &allocate_except.value();
+					current_error = std::move(ret);
 					return false;
 				}
 				vkCmdBindDescriptorSets(command_buffer,
@@ -1327,14 +1256,6 @@ namespace vuk {
 			next_pipeline = nullptr;
 		}
 		return _bind_state(true);
-	}
-
-	VkCommandBuffer SecondaryCommandBuffer::get_buffer() {
-		return command_buffer;
-	}
-
-	SecondaryCommandBuffer::~SecondaryCommandBuffer() {
-		vkEndCommandBuffer(command_buffer);
 	}
 
 } // namespace vuk

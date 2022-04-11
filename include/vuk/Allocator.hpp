@@ -55,7 +55,7 @@ namespace vuk {
 #endif
 #define VUK_DO_OR_RETURN(what)                                                                                                                                 \
 	if (auto res = what; !res) {                                                                                                                                 \
-		return { expected_error, res.error() };                                                                                                                    \
+		return std::move(res);                                                                                                                                     \
 	}
 	/// @endcond
 

@@ -120,7 +120,7 @@ namespace vuk {
 		for (uint64_t i = 0; i < controls.size(); i++) {
 			auto& control = controls[i];
 			if (control->status == FutureBase::Status::eInputAttached || control->status == FutureBase::Status::eInitial) {
-				return { expected_error };
+				return { expected_error, RenderGraphException{} };
 			} else if (control->status == FutureBase::Status::eHostAvailable || control->status == FutureBase::Status::eSubmitted) {
 				continue;
 			} else {

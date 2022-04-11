@@ -15,14 +15,24 @@ namespace vuk {
 		const char* what() const noexcept override {
 			return error_message.c_str();
 		}
+
+		virtual void throw_this() = 0;
 	};
 
 	struct ShaderCompilationException : Exception {
 		using Exception::Exception;
+
+		void throw_this() override {
+			throw *this;
+		}
 	};
 
 	struct RenderGraphException : Exception {
 		using Exception::Exception;
+
+		void throw_this() override {
+			throw *this;
+		}
 	};
 
 	struct VkException : Exception {
@@ -88,6 +98,10 @@ namespace vuk {
 		}
 		
 		VkResult code() const { return error_code; }
+
+		void throw_this() override {
+			throw *this;
+		}
 	};
 
 	struct PresentException : VkException {
@@ -107,6 +121,10 @@ namespace vuk {
 				assert(0 && "Unimplemented error.");
 				break;
 			}
+		}
+
+		void throw_this() override {
+			throw *this;
 		}
 	};
 
@@ -163,6 +181,10 @@ namespace vuk {
 				assert(0 && "Unimplemented error.");
 				break;
 			}
+		}
+
+		void throw_this() override {
+			throw *this;
 		}
 	};
 } // namespace vuk

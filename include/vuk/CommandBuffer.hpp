@@ -6,6 +6,7 @@
 #include "vuk/Image.hpp"
 #include "vuk/PipelineInstance.hpp"
 #include "vuk/Query.hpp"
+#include "vuk/Result.hpp"
 #include "vuk/Types.hpp"
 #include "vuk/vuk_fwd.hpp"
 
@@ -172,10 +173,7 @@ namespace vuk {
 		std::optional<RenderPassInfo> ongoing_renderpass;
 		PassInfo* current_pass = nullptr;
 
-		mutable bool extracted = false;
-		Exception* current_exception = nullptr;
-		std::optional<AllocateException> allocate_except;
-		std::optional<RenderGraphException> rg_except;
+		Result<void> current_error = { expected_value };
 
 		// Pipeline state
 		// Enabled dynamic state
@@ -408,7 +406,7 @@ namespace vuk {
 		/// @param image_view The ImageView to bind
 		/// @param layout layout of the image when the affected draws execute
 		CommandBuffer& bind_image(unsigned set, unsigned binding, ImageView image_view, ImageLayout layout = ImageLayout::eShaderReadOnlyOptimal);
-		
+
 		/// @brief Bind an image to the command buffer from a Resource
 		/// @param set The set bind index to be used
 		/// @param binding The descriptor binding to bind the image to
@@ -481,9 +479,6 @@ namespace vuk {
 		/// @param indirect_buffer Buffer of workgroup counts
 		CommandBuffer& dispatch_indirect(const Buffer& indirect_buffer);
 
-		Result<class SecondaryCommandBuffer> begin_secondary();
-		CommandBuffer& execute(std::span<VkCommandBuffer>);
-
 		// commands for renderpass-less command buffers
 
 		/// @brief Clear an image
@@ -543,16 +538,7 @@ namespace vuk {
 		CommandBuffer& write_timestamp(Query query, PipelineStageFlagBits stage = PipelineStageFlagBits::eBottomOfPipe);
 
 		// error handling
-
-		bool has_error() const noexcept {
-			return current_exception != nullptr;
-		}
-
-		[[nodiscard]] Exception& error() &;
-
-		[[nodiscard]] Exception const& error() const&;
-
-		[[nodiscard]] Exception&& error() &&;
+		[[nodiscard]] Result<void> result();
 
 	protected:
 		[[nodiscard]] bool _bind_state(bool graphics);
@@ -560,14 +546,6 @@ namespace vuk {
 		[[nodiscard]] bool _bind_graphics_pipeline_state();
 
 		CommandBuffer& specialize_constants(uint32_t constant_id, void* data, size_t size);
-	};
-
-	class SecondaryCommandBuffer : public CommandBuffer {
-	public:
-		using CommandBuffer::CommandBuffer;
-		VkCommandBuffer get_buffer();
-
-		~SecondaryCommandBuffer();
 	};
 
 	template<class T>

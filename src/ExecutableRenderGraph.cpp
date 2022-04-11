@@ -208,42 +208,19 @@ namespace vuk {
 						si.future_signals.emplace_back(p->pass.signal);
 					}
 
-					// if pass requested no secondary cbufs, but due to subpass merging that is what we got
-					if (p->pass.use_secondary_command_buffers == false && use_secondary_command_buffers == true) {
-						auto res = cobuf.begin_secondary();
-						if (!res) {
-							return { expected_error, res.error() };
-						}
-						auto secondary = *res;
-						if (p->pass.execute) {
-							secondary.current_pass = p;
-							if (!p->pass.name.is_invalid() && !is_single_pass) {
-								ctx.debug.begin_region(cobuf.command_buffer, p->pass.name);
-								p->pass.execute(secondary);
-								ctx.debug.end_region(cobuf.command_buffer);
-							} else {
-								p->pass.execute(secondary);
-							}
-						}
-						if (secondary.has_error()) {
-							return { expected_error, secondary.error() };
-						}
-						auto secondary_cbuf = secondary.get_buffer();
-						cobuf.execute({ &secondary_cbuf, 1 });
-					} else {
-						if (p->pass.execute) {
-							cobuf.current_pass = p;
-							if (!p->pass.name.is_invalid() && !is_single_pass) {
-								ctx.debug.begin_region(cobuf.command_buffer, p->pass.name);
-								p->pass.execute(cobuf);
-								ctx.debug.end_region(cobuf.command_buffer);
-							} else {
-								p->pass.execute(cobuf);
-							}
+					if (p->pass.execute) {
+						cobuf.current_pass = p;
+						if (!p->pass.name.is_invalid() && !is_single_pass) {
+							ctx.debug.begin_region(cobuf.command_buffer, p->pass.name);
+							p->pass.execute(cobuf);
+							ctx.debug.end_region(cobuf.command_buffer);
+						} else {
+							p->pass.execute(cobuf);
 						}
 					}
-					if (cobuf.has_error()) {
-						return { expected_error, cobuf.error() };
+
+					if (auto res = cobuf.result(); !res) {
+						return res;
 					}
 				}
 				if (i < rpass.subpasses.size() - 1 && rpass.handle != VK_NULL_HANDLE) {
