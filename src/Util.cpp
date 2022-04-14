@@ -286,15 +286,8 @@ namespace vuk {
 
 		uint32_t image_index = (uint32_t)-1;
 		VkResult acq_result = vkAcquireNextImageKHR(ctx.device, swapchain->swapchain, UINT64_MAX, present_rdy, VK_NULL_HANDLE, &image_index);
-		if (acq_result != VK_SUCCESS) {
-			VkSubmitInfo si{ .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO };
-			si.commandBufferCount = 0;
-			si.pCommandBuffers = nullptr;
-			si.waitSemaphoreCount = 1;
-			si.pWaitSemaphores = &present_rdy;
-			VkPipelineStageFlags flags = (VkPipelineStageFlags)PipelineStageFlagBits::eTopOfPipe;
-			si.pWaitDstStageMask = &flags;
-			VUK_DO_OR_RETURN(ctx.submit_graphics(std::span{ &si, 1 }, VK_NULL_HANDLE));
+		// VK_SUBOPTIMAL_KHR shouldn't stop presentation; it is handled at the end
+		if (acq_result != VK_SUCCESS && acq_result != VK_SUBOPTIMAL_KHR) {
 			return { expected_error, PresentException{ acq_result } };
 		}
 
@@ -314,6 +307,9 @@ namespace vuk {
 			return { expected_error, PresentException{ present_result } };
 		}
 
+		if (acq_result == VK_SUBOPTIMAL_KHR) {
+			return { expected_error, PresentException{ acq_result } };
+		}
 		return { expected_value };
 	}
 
