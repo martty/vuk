@@ -18,7 +18,7 @@ mkdir build
 cd build
 mkdir debug
 cd debug
-cmake ../.. -G Ninja
+cmake ../.. -G Ninja -DCMAKE_BUILD_TYPE=Debug -DVUK_BUILD_EXAMPLES=ON # prefix with CC=clang CXX=clang++ if your default compiler isn't Clang or M$VC
 cmake --build .
 ./vuk_all_examples
 ```
