@@ -4,6 +4,8 @@
 #include "vuk/Config.hpp"
 #include "vuk/vuk_fwd.hpp"
 
+#include <cstring>
+#include <string>
 #include <vector>
 
 namespace spirv_cross {
