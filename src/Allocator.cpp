@@ -1,11 +1,11 @@
 #include "vuk/Allocator.hpp"
 #include "LegacyGPUAllocator.hpp"
+#include "RenderPass.hpp"
 #include "vuk/Context.hpp"
 #include "vuk/Exception.hpp"
+#include "vuk/Query.hpp"
 #include "vuk/resources/DeviceFrameResource.hpp"
 #include "vuk/resources/DeviceVkResource.hpp"
-#include "RenderPass.hpp"
-#include "vuk/Query.hpp"
 
 #include <numeric>
 #include <string>
@@ -304,7 +304,7 @@ namespace vuk {
 		allocatorInfo.physicalDevice = phys_dev;
 		allocatorInfo.device = device;
 		allocatorInfo.flags = VMA_ALLOCATOR_CREATE_EXTERNALLY_SYNCHRONIZED_BIT;
-		
+
 		VmaVulkanFunctions vulkanFunctions = {};
 		vulkanFunctions.vkGetPhysicalDeviceProperties = vkGetPhysicalDeviceProperties;
 		vulkanFunctions.vkGetPhysicalDeviceMemoryProperties = vkGetPhysicalDeviceMemoryProperties;
@@ -488,8 +488,8 @@ namespace vuk {
 		pool_helper->result = VK_NULL_HANDLE;
 		auto mem_reqs = pool.mem_reqs;
 		mem_reqs.size = size;
-		mem_reqs.alignment = std::max(1ull, mem_reqs.alignment);
-		alignment = std::max(1ull, alignment);
+		mem_reqs.alignment = std::max((size_t)1ull, mem_reqs.alignment);
+		alignment = std::max((size_t)1ull, alignment);
 		mem_reqs.alignment = std::lcm(mem_reqs.alignment, alignment);
 		VkMemoryRequirements vkmem_reqs = mem_reqs;
 		auto result = vmaAllocateMemory(allocator, &vkmem_reqs, &vaci, &res, &vai);
