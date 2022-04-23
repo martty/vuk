@@ -488,8 +488,8 @@ namespace vuk {
 		pool_helper->result = VK_NULL_HANDLE;
 		auto mem_reqs = pool.mem_reqs;
 		mem_reqs.size = size;
-		mem_reqs.alignment = std::max((size_t)1ull, mem_reqs.alignment);
-		alignment = std::max((size_t)1ull, alignment);
+		mem_reqs.alignment = std::max(static_cast<size_t>(1), mem_reqs.alignment);
+		alignment = std::max(static_cast<size_t>(1), alignment);
 		mem_reqs.alignment = std::lcm(mem_reqs.alignment, alignment);
 		VkMemoryRequirements vkmem_reqs = mem_reqs;
 		auto result = vmaAllocateMemory(allocator, &vkmem_reqs, &vaci, &res, &vai);
