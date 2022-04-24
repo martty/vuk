@@ -85,7 +85,7 @@ namespace vuk {
 		}
 	}
 
-	bool Context::DebugUtils::enabled() {
+	bool Context::DebugUtils::enabled() const {
 		return setDebugUtilsObjectNameEXT != nullptr;
 	}
 
@@ -473,7 +473,7 @@ namespace vuk {
 		}
 	}
 
-	uint64_t Context::get_frame_count() {
+	uint64_t Context::get_frame_count() const {
 		return impl->frame_counter;
 	}
 

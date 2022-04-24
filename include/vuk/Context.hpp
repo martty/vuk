@@ -15,7 +15,7 @@
 namespace std {
 	class mutex;
 	class recursive_mutex;
-}
+} // namespace std
 
 namespace vuk {
 	/// @brief Parameters used for creating a Context
@@ -73,7 +73,7 @@ namespace vuk {
 
 		Result<void> wait_for_domains(std::span<std::pair<DomainFlags, uint64_t>> queue_waits);
 
-		uint64_t get_frame_count();
+		uint64_t get_frame_count() const;
 
 		/// @brief Create a new Context
 		/// @param params Vulkan parameters initialized beforehand
@@ -86,7 +86,7 @@ namespace vuk {
 			PFN_vkCmdBeginDebugUtilsLabelEXT cmdBeginDebugUtilsLabelEXT;
 			PFN_vkCmdEndDebugUtilsLabelEXT cmdEndDebugUtilsLabelEXT;
 
-			bool enabled();
+			bool enabled() const;
 
 			DebugUtils(Context& ctx);
 			void set_name(const Texture& iv, Name name);
