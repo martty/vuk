@@ -49,7 +49,7 @@ namespace vuk {
 		}
 
 		explicit operator bool() const noexcept {
-			return payload.operator bool();
+			return static_cast<bool>(payload);
 		}
 
 		Type const* operator->() const noexcept {
