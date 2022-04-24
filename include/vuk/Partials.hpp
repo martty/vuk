@@ -1,5 +1,6 @@
 #pragma once
 
+#include "vuk/AllocatorHelpers.hpp"
 #include "vuk/RenderGraph.hpp"
 #include "vuk/Future.hpp"
 #include <math.h>
@@ -12,7 +13,7 @@ namespace vuk {
 	/// @param buffer Buffer to fill
 	/// @param src_data pointer to source data
 	/// @param size size of source data
-	inline Future<Buffer> host_data_to_buffer(Allocator& allocator, DomainFlagBits copy_domain, Buffer dst, void* src_data, size_t size) {
+	inline Future<Buffer> host_data_to_buffer(Allocator& allocator, DomainFlagBits copy_domain, Buffer dst, const void* src_data, size_t size) {
 		// host-mapped buffers just get memcpys
 		if (dst.mapped_ptr) {
 			memcpy(dst.mapped_ptr, src_data, size);

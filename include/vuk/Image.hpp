@@ -330,7 +330,7 @@ namespace vuk {
 		}
 
 		explicit operator bool() const noexcept {
-			return payload.payload == VK_NULL_HANDLE;
+			return payload.payload != VK_NULL_HANDLE;
 		}
 
 		ImageView const* operator->() const noexcept {
