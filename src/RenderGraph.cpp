@@ -525,7 +525,7 @@ namespace vuk {
 			attachment_info.initial = { fimg.control->last_use.stages, fimg.control->last_use.access, fimg.control->last_use.layout };
 			attachment_info.final = to_use(final);
 
-			add_pass({ .name = fimg.output_binding.append("_ACQUIRE"),
+			add_pass({ .name = fimg.output_binding.append("_FUTURE_ACQUIRE"),
 			           .resources = { Resource{ name.append("_"), Resource::Type::eImage, eAcquire, name } },
 			           .wait = std::move(fimg.control) });
 
@@ -533,7 +533,7 @@ namespace vuk {
 		} else if (fimg.get_status() == FutureBase::Status::eRenderGraphBound || fimg.get_status() == FutureBase::Status::eOutputAttached) {
 			fimg.get_status() = FutureBase::Status::eInputAttached;
 			append(name, std::move(*fimg.rg));
-			add_pass({ .name = fimg.output_binding.append("_ACQUIRE"),
+			add_pass({ .name = fimg.output_binding.append("_FUTURE_ACQUIRE"),
 			           .resources = { Resource{ name.append("::").append(fimg.output_binding).append("+"), Resource::Type::eImage, eAcquire, name } } });
 			add_alias(name, name.append("::").append(fimg.output_binding));
 		} else {
@@ -879,7 +879,7 @@ namespace vuk {
 						dst_domain = DomainFlagBits::eTransferQueue;
 						break;
 					default:
-						dst_domain = left->pass->domain; // no domain change
+						dst_domain = left->pass->domain & DomainFlagBits::eQueueMask; // no domain change
 					}
 
 					bool release_to_different_queue = (left->pass->domain & DomainFlagBits::eQueueMask) != dst_domain;
@@ -1107,7 +1107,7 @@ namespace vuk {
 					}
 					auto& left_rp = impl->rpis[left->pass->render_pass_index];
 					auto& right_rp = impl->rpis[right.pass->render_pass_index];
-					if (left_rp.framebufferless && (is_write_access(prev_use) || is_write_access(next_use))) {
+					if (left_rp.framebufferless && (next_use.layout != prev_use.layout || is_write_access(prev_use) || is_write_access(next_use))) {
 						// right layout == Undefined means the chain terminates, no
 						// transition/barrier
 						if (next_use.layout == ImageLayout::eUndefined)

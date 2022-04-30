@@ -48,6 +48,11 @@
           "name": "VUK_BUILD_BENCHMARKS",
           "value": "True",
           "type": "BOOL"
+        },
+        {
+          "name": "VUK_USE_DXC",
+          "value": "False",
+          "type": "BOOL"
         }
       ]
     },

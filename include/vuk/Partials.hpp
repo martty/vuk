@@ -50,7 +50,7 @@ namespace vuk {
 	/// @param copy_domain The domain where the copy should happen (when dst is mapped, the copy happens on host)
 	/// @param image ImageAttachment to fill
 	/// @param src_data pointer to source data
-	inline Future<ImageAttachment> host_data_to_image(Allocator& allocator, DomainFlagBits copy_domain, ImageAttachment image, void* src_data) {
+	inline Future<ImageAttachment> host_data_to_image(Allocator& allocator, DomainFlagBits copy_domain, ImageAttachment image, const void* src_data) {
 		size_t alignment = format_to_texel_block_size(image.format);
 		assert(image.extent.sizing == Sizing::eAbsolute);
 		size_t size = compute_image_size(image.format, static_cast<Extent3D>(image.extent.extent));
