@@ -38,7 +38,7 @@ namespace {
 		      // Similarly to buffers, we allocate the image and enqueue the upload
 		      auto [tex, tex_fut] = create_texture(allocator, vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, doge_image, true);
 		      texture_of_doge = std::move(tex);
-		      tex_fut.get();
+		      runner.enqueue_setup(std::move(tex_fut));
 		      stbi_image_free(doge_image);
 		    },
 		.render =

@@ -512,7 +512,7 @@ namespace vuk {
 		impl->bound_attachments.emplace(name, attachment_info);
 	}
 
-	void RenderGraph::attach_in(Name name, Future<ImageAttachment>&& fimg, Access final) {
+	void RenderGraph::attach_in(Name name, Future<ImageAttachment>&& fimg) {
 		if (fimg.get_status() == FutureBase::Status::eSubmitted || fimg.get_status() == FutureBase::Status::eHostAvailable) {
 			auto att = fimg.control->get_result<ImageAttachment>();
 			AttachmentRPInfo attachment_info;
@@ -523,7 +523,7 @@ namespace vuk {
 
 			attachment_info.should_clear = false;
 			attachment_info.initial = { fimg.control->last_use.stages, fimg.control->last_use.access, fimg.control->last_use.layout };
-			attachment_info.final = to_use(final);
+			attachment_info.final = to_use(vuk::Access::eNone);
 
 			add_pass({ .name = fimg.output_binding.append("_FUTURE_ACQUIRE"),
 			           .resources = { Resource{ name.append("_"), Resource::Type::eImage, eAcquire, name } },
@@ -541,11 +541,11 @@ namespace vuk {
 		}
 	}
 
-	void RenderGraph::attach_in(Name name, Future<Buffer>&& fimg, Access final) {
+	void RenderGraph::attach_in(Name name, Future<Buffer>&& fimg) {
 		if (fimg.get_status() == FutureBase::Status::eSubmitted || fimg.get_status() == FutureBase::Status::eHostAvailable) {
 			BufferInfo buf_info{ .name = name,
 				                   .initial = { fimg.control->last_use.stages, fimg.control->last_use.access, fimg.control->last_use.layout },
-				                   .final = to_use(final),
+				                   .final = to_use(vuk::Access::eNone),
 				                   .buffer = fimg.control->get_result<Buffer>() };
 			add_pass({ .name = fimg.output_binding.append("_FUTURE_ACQUIRE"),
 			           .resources = { Resource{ name.append("_"), Resource::Type::eBuffer, eAcquire, name } },
@@ -617,6 +617,11 @@ namespace vuk {
 				chain.insert(chain.begin(), UseRef{ {}, {}, vuk::eManual, vuk::eManual, attachment_info.initial, Resource::Type::eImage, {}, nullptr });
 			}
 			if (is_release(chain.back().original)) {
+				assert(chain.size() > 2); // single chain of release is not valid
+				auto& last_use_before_release = *(chain.end() - 1);
+				if (attachment_info.final.layout != ImageLayout::eUndefined) {
+					chain.insert(chain.end() - 1, UseRef{ {}, {}, vuk::eManual, vuk::eManual, attachment_info.final, Resource::Type::eImage, {}, last_use_before_release.pass });
+				}
 			} else {
 				chain.emplace_back(UseRef{ {}, {}, vuk::eManual, vuk::eManual, attachment_info.final, Resource::Type::eImage, {}, nullptr });
 			}

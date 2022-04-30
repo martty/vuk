@@ -145,4 +145,35 @@ namespace vuk {
 
 		return { expected_value };
 	}
+
+	inline Result<void> wait_for_futures_explicit(Allocator& alloc, std::span<FutureBase*> controls, std::span<RenderGraph*> render_graphs) {
+		std::vector<std::pair<Allocator*, RenderGraph*>> rgs_to_run;
+		for (uint64_t i = 0; i < controls.size(); i++) {
+			auto& control = controls[i];
+			if (control->status == FutureBase::Status::eInputAttached || control->status == FutureBase::Status::eInitial) {
+				return { expected_error, RenderGraphException{} };
+			} else if (control->status == FutureBase::Status::eHostAvailable || control->status == FutureBase::Status::eSubmitted) {
+				continue;
+			} else {
+				rgs_to_run.emplace_back(&control->get_allocator(), render_graphs[i]);
+			}
+		}
+		if (rgs_to_run.size() != 0) {
+			VUK_DO_OR_RETURN(link_execute_submit(alloc, std::span(rgs_to_run)));
+		}
+
+		std::vector<std::pair<DomainFlags, uint64_t>> waits;
+		for (uint64_t i = 0; i < controls.size(); i++) {
+			auto& control = controls[i];
+			if (control->status != FutureBase::Status::eSubmitted) {
+				continue;
+			}
+			waits.emplace_back(control->initial_domain, control->initial_visibility);
+		}
+		if (waits.size() > 0) {
+			alloc.get_context().wait_for_domains(std::span(waits));
+		}
+
+		return { expected_value };
+	}
 } // namespace vuk

@@ -60,7 +60,7 @@ namespace {
 
 		      auto [tex, tex_fut] = create_texture(allocator, vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, doge_image, true);
 		      texture_of_doge = std::move(tex);
-		      tex_fut.get();
+		      runner.enqueue_setup(std::move(tex_fut));
 
 		      // init scrambling buffer
 		      std::vector<unsigned> indices(x * y);
@@ -157,11 +157,11 @@ namespace {
 		      //// <----------------->
 		      // make the main rendergraph
 		      // our two inputs are the futures - they compile into the main rendergraph
-		      rg.attach_in("08_rtt", std::move(rttf), vuk::eNone);
+		      rg.attach_in("08_rtt", std::move(rttf));
 		      // the copy here in addition will execute on the transfer queue, and will signal the graphics to execute the rest
 		      // we created this future in the setup code, so on the first frame it will append the computation
 		      // but on the subsequent frames the future becomes ready (on the gpu) and this will only attach a buffer
-		      rg.attach_in("08_scramble", std::move(scramble_buf_fut), vuk::eNone);
+		      rg.attach_in("08_scramble", std::move(scramble_buf_fut));
 		      // temporary buffer used for copying
 		      rg.attach_buffer("08_scramble++",
 		                       **allocate_buffer_gpu(frame_allocator, { vuk::MemoryUsage::eGPUonly, sizeof(unsigned) * x * y, 1 }),

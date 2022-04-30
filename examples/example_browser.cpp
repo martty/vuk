@@ -79,6 +79,19 @@ bool render_all = false;
 void vuk::ExampleRunner::render() {
 	chosen_resource.resize(examples.size());
 
+	std::vector<FutureBase*> controls;
+	std::vector<RenderGraph*> rendergraphs;
+	for (auto& f : ia_futures) {
+		controls.emplace_back(f.get_control());
+		rendergraphs.emplace_back(f.get_render_graph());
+	}
+	for (auto& f : buf_futures) {
+		controls.emplace_back(f.get_control());
+		rendergraphs.emplace_back(f.get_render_graph());
+	}
+	vuk::wait_for_futures_explicit(*global, controls, rendergraphs);
+	ia_futures.clear();
+
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
 		ImGui_ImplGlfw_NewFrame();
@@ -116,7 +129,7 @@ void vuk::ExampleRunner::render() {
 			vuk::Name attachment_name = item_current->name;
 			fut.get_render_graph()->attach_swapchain(attachment_name, swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
 			RenderGraph rg;
-			rg.attach_in("result", std::move(fut), vuk::eNone);
+			rg.attach_in("result", std::move(fut));
 			util::ImGui_ImplVuk_Render(frame_allocator, rg, "result", "SWAPCHAIN", imgui_data, ImGui::GetDrawData(), sampled_images);
 			auto erg = std::move(rg).link(*context, vuk::RenderGraph::CompileOptions{});
 			execute_submit_and_present_to_one(frame_allocator, std::move(erg), swapchain);
@@ -196,9 +209,9 @@ void vuk::ExampleRunner::render() {
 				Name result = attachment_name_out.append("_result");
 				if (chosen_resource[i] != attachment_name_out) {
 					auto othfut = Future<ImageAttachment>(frame_allocator, rg_frag, chosen_resource[i]);
-					rg.attach_in(result, std::move(othfut), vuk::eNone);
+					rg.attach_in(result, std::move(othfut));
 				} else {
-					rg.attach_in(result, std::move(rg_frag_fut), vuk::eNone);
+					rg.attach_in(result, std::move(rg_frag_fut));
 				}
 
 				auto si = vuk::make_sampled_image(result, imgui_data.font_sci);

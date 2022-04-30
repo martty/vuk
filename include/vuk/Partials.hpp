@@ -87,7 +87,7 @@ namespace vuk {
 		auto& allocator = image.get_allocator();
 		std::unique_ptr<RenderGraph> rgp = std::make_unique<RenderGraph>();
 		rgp->add_pass({ .name = "TRANSITION", .execute_on = DomainFlagBits::eDevice, .resources = { "_src"_image >> dst_access >> "_src+" } });
-		rgp->attach_in("_src", std::move(image), Access::eNone);
+		rgp->attach_in("_src", std::move(image));
 		return { allocator, std::move(rgp), "_src+" };
 	}
 
@@ -140,7 +140,7 @@ namespace vuk {
 
 		rgp->converge_image("_src", "_src+");
 
-		rgp->attach_in("_src", std::move(image), Access::eNone);
+		rgp->attach_in("_src", std::move(image));
 		return { allocator, std::move(rgp), "_src+" };
 	}
 
@@ -192,7 +192,7 @@ namespace vuk {
 		auto mipgen_fut = should_generate_mips ? generate_mips(std::move(upload_fut), 0, ici.mipLevels) : std::move(upload_fut);
 		std::unique_ptr<RenderGraph> rgp = std::make_unique<RenderGraph>();
 		rgp->add_pass({ .name = "TRANSITION", .execute_on = DomainFlagBits::eGraphicsQueue, .resources = { "_src"_image >> Access::eFragmentSampled >> "_src+" } });
-		rgp->attach_in("_src", std::move(mipgen_fut), Access::eNone);
+		rgp->attach_in("_src", std::move(mipgen_fut));
 		auto on_gfx = Future<ImageAttachment>{ allocator, std::move(rgp), "_src+" };
 
 		return { std::move(tex), std::move(on_gfx) };

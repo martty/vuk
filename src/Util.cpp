@@ -270,7 +270,7 @@ namespace vuk {
 		if (!bundles) {
 			return bundles;
 		}
-		assert(bundles->size() < 2); // can't handle this yet
+
 		for (auto& bundle : *bundles) {
 			VUK_DO_OR_RETURN(submit(allocator, bundle, present_rdy, render_complete));
 		}

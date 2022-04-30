@@ -41,7 +41,7 @@ namespace {
 
 		      auto [tex, tex_fut] = create_texture(allocator, vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, doge_image, false);
 		      texture_of_doge = std::move(tex);
-		      tex_fut.get();
+		      runner.enqueue_setup(std::move(tex_fut));
 
 		      // Init tiles
 		      std::iota(shuf.begin(), shuf.end(), 0);

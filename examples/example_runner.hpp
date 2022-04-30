@@ -30,9 +30,7 @@ namespace vuk {
 		std::function<vuk::Future<vuk::ImageAttachment>(ExampleRunner&, vuk::Allocator&)> render;
 		std::function<void(ExampleRunner&, vuk::Allocator&)> cleanup;
 	};
-} // namespace vuk
 
-namespace vuk {
 	struct ExampleRunner {
 		VkDevice device;
 		VkPhysicalDevice physical_device;
@@ -47,6 +45,18 @@ namespace vuk {
 		vkb::Instance vkbinstance;
 		vkb::Device vkbdevice;
 		util::ImGuiData imgui_data;
+		std::vector<Future<ImageAttachment>> ia_futures;
+		std::vector<Future<Buffer>> buf_futures;
+
+		// when called during setup, enqueues a device-side operation to be completed before rendering begins
+		void enqueue_setup(Future<ImageAttachment>&& fut) {
+			ia_futures.emplace_back(std::move(fut));
+		}
+		
+		// when called during setup, enqueues a device-side operation to be completed before rendering begins
+		void enqueue_setup(Future<Buffer>&& fut) {
+			buf_futures.emplace_back(std::move(fut));
+		}
 
 		plf::colony<vuk::SampledImage> sampled_images;
 		std::vector<Example*> examples;

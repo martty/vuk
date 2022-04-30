@@ -61,7 +61,6 @@ namespace {
 		      // Similarly to buffers, we allocate the image and enqueue the upload
 		      auto [tex, tex_fut] = create_texture(allocator, vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, doge_image, false);
 		      texture_of_doge = std::move(tex);
-		      tex_fut.get();
 		      stbi_image_free(doge_image);
 
 		      // Let's create two variants of the doge image
@@ -106,12 +105,14 @@ namespace {
 		      // We specify the initial and final access
 		      // The texture we have created is already in ShaderReadOptimal, but we need it in General during the pass, and we need it back to ShaderReadOptimal
 		      // afterwards
-		      rg.attach_image("09_doge", vuk::ImageAttachment::from_texture(*texture_of_doge), vuk::eFragmentSampled, vuk::eFragmentSampled);
+		      rg.attach_in("09_doge", std::move(tex_fut));
 		      rg.attach_image("09_v1", vuk::ImageAttachment::from_texture(*variant1), vuk::eNone, vuk::eFragmentSampled);
 		      rg.attach_image("09_v2", vuk::ImageAttachment::from_texture(*variant2), vuk::eNone, vuk::eFragmentSampled);
-		      // The rendergraph is submitted and fence-waited on
 
-		      execute_submit_and_wait(allocator, std::move(rg).link(ctx, vuk::RenderGraph::CompileOptions{}));
+		      // enqueue running the preprocessing rendergraph and force 09_doge to be sampleable later
+		      auto fut = vuk::transition(vuk::Future<vuk::ImageAttachment>{ allocator, std::make_unique<vuk::RenderGraph>(std::move(rg)), "09_doge" },
+		                                 vuk::eFragmentSampled);
+		      runner.enqueue_setup(std::move(fut));
 
 		      // Create persistent descriptorset for a pipeline and set index
 		      pda = ctx.create_persistent_descriptorset(allocator, *runner.context->get_named_pipeline("bindless_cube"), 1, 64);

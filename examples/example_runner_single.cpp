@@ -72,6 +72,19 @@ vuk::ExampleRunner::ExampleRunner() {
 }
 
 void vuk::ExampleRunner::render() {
+	std::vector<FutureBase*> controls;
+	std::vector<RenderGraph*> rendergraphs;
+	for (auto& f : ia_futures) {
+		controls.emplace_back(f.get_control());
+		rendergraphs.emplace_back(f.get_render_graph());
+	}
+	for (auto& f : buf_futures) {
+		controls.emplace_back(f.get_control());
+		rendergraphs.emplace_back(f.get_render_graph());
+	}
+	vuk::wait_for_futures_explicit(*global, controls, rendergraphs);
+	ia_futures.clear();
+
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
 		auto& xdev_frame_resource = xdev_rf_alloc->get_next_frame();
@@ -81,7 +94,7 @@ void vuk::ExampleRunner::render() {
 		auto attachment_name = vuk::Name(examples[0]->name);
 		fut.get_render_graph()->attach_swapchain(attachment_name, swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
 		RenderGraph rg;
-		rg.attach_in("result", std::move(fut), vuk::eNone);
+		rg.attach_in("result", std::move(fut));
 		auto erg = std::move(rg).link(*context, vuk::RenderGraph::CompileOptions{});
 		execute_submit_and_present_to_one(frame_allocator, std::move(erg), swapchain);
 	}
