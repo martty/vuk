@@ -22,7 +22,11 @@ namespace vuk {
 		return Name(suffix.c_str());
 	}
 
-	RenderGraph::RenderGraph() : impl(new RGImpl) {}
+	RenderGraph::RenderGraph() : impl(new RGImpl) {
+		name = Name(std::to_string(reinterpret_cast<uintptr_t>(impl)));
+	}
+
+	RenderGraph::RenderGraph(Name name) : impl(new RGImpl), name(name) {}
 
 	RenderGraph::RenderGraph(RenderGraph&& o) noexcept : impl(std::exchange(o.impl, nullptr)) {}
 	RenderGraph& RenderGraph::operator=(RenderGraph&& o) noexcept {
@@ -532,10 +536,12 @@ namespace vuk {
 			impl->bound_attachments.emplace(name.append("_"), attachment_info);
 		} else if (fimg.get_status() == FutureBase::Status::eRenderGraphBound || fimg.get_status() == FutureBase::Status::eOutputAttached) {
 			fimg.get_status() = FutureBase::Status::eInputAttached;
-			append(name, std::move(*fimg.rg));
+			if (fimg.rg->impl) {
+				append(this->name, std::move(*fimg.rg));
+			}
 			add_pass({ .name = fimg.output_binding.append("_FUTURE_ACQUIRE"),
-			           .resources = { Resource{ name.append("::").append(fimg.output_binding).append("+"), Resource::Type::eImage, eAcquire, name } } });
-			add_alias(name, name.append("::").append(fimg.output_binding));
+			           .resources = { Resource{ this->name.append("::").append(fimg.output_binding).append("+"), Resource::Type::eImage, eAcquire, name } } });
+			add_alias(name, this->name.append("::").append(fimg.output_binding));
 		} else {
 			assert(0);
 		}
@@ -552,11 +558,13 @@ namespace vuk {
 			           .wait = std::move(fimg.control) });
 			impl->bound_buffers.emplace(name.append("_"), buf_info);
 		} else if (fimg.get_status() == FutureBase::Status::eRenderGraphBound || fimg.get_status() == FutureBase::Status::eOutputAttached) {
+			if (fimg.rg->impl) {
+				append(this->name, std::move(*fimg.rg));
+			}
 			fimg.get_status() = FutureBase::Status::eInputAttached;
-			append(name, std::move(*fimg.rg));
 			add_pass({ .name = fimg.output_binding.append("_FUTURE_ACQUIRE"),
-			           .resources = { Resource{ name.append("::").append(fimg.output_binding).append("+"), Resource::Type::eBuffer, eAcquire, name } } });
-			add_alias(name, name.append("::").append(fimg.output_binding));
+			           .resources = { Resource{ this->name.append("::").append(fimg.output_binding).append("+"), Resource::Type::eBuffer, eAcquire, name } } });
+			add_alias(name, this->name.append("::").append(fimg.output_binding));
 		} else {
 			assert(0);
 		}
@@ -620,7 +628,8 @@ namespace vuk {
 				assert(chain.size() > 2); // single chain of release is not valid
 				auto& last_use_before_release = *(chain.end() - 1);
 				if (attachment_info.final.layout != ImageLayout::eUndefined) {
-					chain.insert(chain.end() - 1, UseRef{ {}, {}, vuk::eManual, vuk::eManual, attachment_info.final, Resource::Type::eImage, {}, last_use_before_release.pass });
+					chain.insert(chain.end() - 1,
+					             UseRef{ {}, {}, vuk::eManual, vuk::eManual, attachment_info.final, Resource::Type::eImage, {}, last_use_before_release.pass });
 				}
 			} else {
 				chain.emplace_back(UseRef{ {}, {}, vuk::eManual, vuk::eManual, attachment_info.final, Resource::Type::eImage, {}, nullptr });

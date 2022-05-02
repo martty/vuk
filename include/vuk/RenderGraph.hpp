@@ -152,7 +152,7 @@ namespace vuk {
 		std::unordered_map<Name, Name> resolves; // src -> dst
 
 		std::unique_ptr<FutureBase> wait;
-		FutureBase* signal;
+		FutureBase* signal = nullptr;
 
 		std::function<void(CommandBuffer&)> execute;
 	};
@@ -167,6 +167,7 @@ namespace vuk {
 
 	struct RenderGraph {
 		RenderGraph();
+		RenderGraph(Name name);
 		~RenderGraph();
 
 		RenderGraph(const RenderGraph&) = delete;
@@ -260,6 +261,7 @@ namespace vuk {
 
 	private:
 		struct RGImpl* impl;
+		Name name;
 		friend struct ExecutableRenderGraph;
 
 		/// @brief Check if this rendergraph is valid.
