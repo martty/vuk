@@ -371,7 +371,7 @@ namespace vuk {
 
 	template<class T>
 	Future<T>::Future(Allocator& alloc, T&& value) : control(std::make_unique<FutureBase>(alloc)) {
-		control->get_result<T>() = std::move(value);
+		get_result() = std::move(value);
 		control->status = FutureBase::Status::eHostAvailable;
 	}
 
@@ -381,11 +381,11 @@ namespace vuk {
 			return { expected_error,
 				       RenderGraphException{} }; // can't get result of future that has not been attached anything or has been attached into a rendergraph
 		} else if (control->status == FutureBase::Status::eHostAvailable) {
-			return { expected_value, control->get_result<T>() };
+			return { expected_value, get_result() };
 		} else if (control->status == FutureBase::Status::eSubmitted) {
 			std::pair w = { (DomainFlags)control->initial_domain, control->initial_visibility };
 			control->allocator->get_context().wait_for_domains(std::span{ &w, 1 });
-			return { expected_value, control->get_result<T>() };
+			return { expected_value, get_result() };
 		} else {
 			auto erg = std::move(*rg).link(control->allocator->get_context(), {});
 			std::pair v = { control->allocator, &erg };
@@ -393,7 +393,7 @@ namespace vuk {
 			std::pair w = { (DomainFlags)control->initial_domain, control->initial_visibility };
 			control->allocator->get_context().wait_for_domains(std::span{ &w, 1 });
 			control->status = FutureBase::Status::eHostAvailable;
-			return { expected_value, control->get_result<T>() };
+			return { expected_value, get_result() };
 		}
 	}
 

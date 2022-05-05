@@ -46,7 +46,6 @@ namespace vuk {
 
 		template<class T>
 		T& get_result();
-
 	};
 
 	template<>
@@ -87,7 +86,7 @@ namespace vuk {
 		Allocator& get_allocator() {
 			return *control->allocator;
 		}
-		
+
 		/// @brief Get the referenced RenderGraph
 		RenderGraph* get_render_graph() {
 			return rg;
@@ -101,6 +100,11 @@ namespace vuk {
 		FutureBase* get_control() {
 			return control.get();
 		}
+
+		T& get_result() {
+			return control->get_result<T>();
+		}
+
 	private:
 		Name output_binding;
 

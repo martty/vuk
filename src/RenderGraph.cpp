@@ -518,7 +518,7 @@ namespace vuk {
 
 	void RenderGraph::attach_in(Name name, Future<ImageAttachment>&& fimg) {
 		if (fimg.get_status() == FutureBase::Status::eSubmitted || fimg.get_status() == FutureBase::Status::eHostAvailable) {
-			auto att = fimg.control->get_result<ImageAttachment>();
+			auto att = fimg.get_result();
 			AttachmentRPInfo attachment_info;
 			attachment_info.attachment = att;
 
@@ -552,7 +552,7 @@ namespace vuk {
 			BufferInfo buf_info{ .name = name,
 				                   .initial = { fimg.control->last_use.stages, fimg.control->last_use.access, fimg.control->last_use.layout },
 				                   .final = to_use(vuk::Access::eNone),
-				                   .buffer = fimg.control->get_result<Buffer>() };
+				                   .buffer = fimg.get_result() };
 			add_pass({ .name = fimg.output_binding.append("_FUTURE_ACQUIRE"),
 			           .resources = { Resource{ name.append("_"), Resource::Type::eBuffer, eAcquire, name } },
 			           .wait = std::move(fimg.control) });
