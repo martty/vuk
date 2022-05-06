@@ -373,6 +373,7 @@ namespace vuk {
 	Future<T>::Future(Allocator& alloc, T&& value) : control(std::make_unique<FutureBase>(alloc)) {
 		get_result() = std::move(value);
 		control->status = FutureBase::Status::eHostAvailable;
+		control->last_use.layout = vuk::ImageLayout::eUndefined;
 	}
 
 	template<class T>

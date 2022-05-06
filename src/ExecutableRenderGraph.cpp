@@ -82,11 +82,12 @@ namespace vuk {
 		rbi.renderPass = rpass.handle;
 		rbi.framebuffer = rpass.framebuffer;
 		rbi.renderArea = VkRect2D{ vuk::Offset2D{}, vuk::Extent2D{ rpass.fbci.width, rpass.fbci.height } };
-		std::vector<VkClearValue> clears;
+		std::vector<VkClearValue> clears(rpass.attachments.size());
 		for (size_t i = 0; i < rpass.attachments.size(); i++) {
 			auto& att = rpass.attachments[i];
-			if (att.should_clear)
-				clears.push_back(att.attachment.clear_value.c);
+			if (att.should_clear) {
+				clears[i] = att.attachment.clear_value.c;
+			}
 		}
 		rbi.pClearValues = clears.data();
 		rbi.clearValueCount = (uint32_t)clears.size();
