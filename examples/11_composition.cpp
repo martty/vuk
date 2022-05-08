@@ -114,9 +114,9 @@ namespace {
 		          "11_color", vuk::Format::eR8G8B8A8Unorm, vuk::Dimension2D::framebuffer(), vuk::Samples::Framebuffer{}, vuk::ClearColor{ 0.f, 0.f, 1.f, 0.f });
 		      rg.attach_managed(
 		          "11_depth", vuk::Format::eD32Sfloat, vuk::Dimension2D::framebuffer(), vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
-		      vuk::Future<vuk::ImageAttachment> pos_fut = { frame_allocator, rg, "11_position+" };
-		      vuk::Future<vuk::ImageAttachment> norm_fut = { frame_allocator, rg, "11_normal+" };
-		      vuk::Future<vuk::ImageAttachment> col_fut = { frame_allocator, rg, "11_color+" };
+		      vuk::Future pos_fut = { frame_allocator, rg, "11_position+" };
+		      vuk::Future norm_fut = { frame_allocator, rg, "11_normal+" };
+		      vuk::Future col_fut = { frame_allocator, rg, "11_color+" };
 
 		      angle += 360.f * ImGui::GetIO().DeltaTime;
 
@@ -153,7 +153,7 @@ namespace {
 			                                .draw(3, 1, 0, 0);
 		                            } });
 
-		      return vuk::Future<vuk::ImageAttachment>{ frame_allocator, std::make_unique<vuk::RenderGraph>(std::move(rg_resolve)), "11_deferred_final" };
+		      return vuk::Future{ frame_allocator, std::make_unique<vuk::RenderGraph>(std::move(rg_resolve)), "11_deferred_final" };
 		    }
 	};
 

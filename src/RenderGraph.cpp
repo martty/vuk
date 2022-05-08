@@ -516,74 +516,58 @@ namespace vuk {
 		impl->bound_attachments.emplace(name, attachment_info);
 	}
 
-	void RenderGraph::attach_in(Name name, Future<ImageAttachment>&& fimg) {
+	void RenderGraph::attach_in(Name name, Future&& fimg) {
 		if (fimg.get_status() == FutureBase::Status::eSubmitted || fimg.get_status() == FutureBase::Status::eHostAvailable) {
-			auto att = fimg.get_result();
-			AttachmentRPInfo attachment_info;
-			attachment_info.attachment = att;
+			if (fimg.is_image()) {
+				auto att = fimg.get_result<ImageAttachment>();
+				AttachmentRPInfo attachment_info;
+				attachment_info.attachment = att;
 
-			attachment_info.type = AttachmentRPInfo::Type::eExternal;
-			attachment_info.description.format = (VkFormat)att.format;
+				attachment_info.type = AttachmentRPInfo::Type::eExternal;
+				attachment_info.description.format = (VkFormat)att.format;
 
-			attachment_info.should_clear = false;
-			attachment_info.initial = { fimg.control->last_use.stages, fimg.control->last_use.access, fimg.control->last_use.layout };
-			attachment_info.final = to_use(vuk::Access::eNone);
+				attachment_info.should_clear = false;
+				attachment_info.initial = { fimg.control->last_use.stages, fimg.control->last_use.access, fimg.control->last_use.layout };
+				attachment_info.final = to_use(vuk::Access::eNone);
 
-			add_pass({ .name = fimg.output_binding.append("_FUTURE_ACQUIRE"),
-			           .resources = { Resource{ name.append("_"), Resource::Type::eImage, eAcquire, name } },
-			           .wait = std::move(fimg.control) });
+				add_pass({ .name = fimg.output_binding.append("_FUTURE_ACQUIRE"),
+				           .resources = { Resource{ name.append("_"), Resource::Type::eImage, eAcquire, name } },
+				           .wait = std::move(fimg.control) });
 
-			impl->bound_attachments.emplace(name.append("_"), attachment_info);
+				impl->bound_attachments.emplace(name.append("_"), attachment_info);
+			} else {
+				BufferInfo buf_info{ .name = name,
+					                   .initial = { fimg.control->last_use.stages, fimg.control->last_use.access, fimg.control->last_use.layout },
+					                   .final = to_use(vuk::Access::eNone),
+					                   .buffer = fimg.get_result<Buffer>() };
+				add_pass({ .name = fimg.output_binding.append("_FUTURE_ACQUIRE"),
+				           .resources = { Resource{ name.append("_"), Resource::Type::eBuffer, eAcquire, name } },
+				           .wait = std::move(fimg.control) });
+				impl->bound_buffers.emplace(name.append("_"), buf_info);
+			}
 		} else if (fimg.get_status() == FutureBase::Status::eRenderGraphBound || fimg.get_status() == FutureBase::Status::eOutputAttached) {
 			fimg.get_status() = FutureBase::Status::eInputAttached;
 			if (fimg.rg->impl) {
 				append(this->name, std::move(*fimg.rg));
 			}
 			add_pass({ .name = fimg.output_binding.append("_FUTURE_ACQUIRE"),
-			           .resources = { Resource{ this->name.append("::").append(fimg.output_binding).append("+"), Resource::Type::eImage, eAcquire, name } } });
+			           .resources = { Resource{ this->name.append("::").append(fimg.output_binding).append("+"),
+			                                    fimg.is_image() ? Resource::Type::eImage : Resource::Type::eBuffer,
+			                                    eAcquire,
+			                                    name } } });
 			add_alias(name, this->name.append("::").append(fimg.output_binding));
 		} else {
 			assert(0);
 		}
 	}
 
-	void RenderGraph::attach_in(Name name, Future<Buffer>&& fimg) {
-		if (fimg.get_status() == FutureBase::Status::eSubmitted || fimg.get_status() == FutureBase::Status::eHostAvailable) {
-			BufferInfo buf_info{ .name = name,
-				                   .initial = { fimg.control->last_use.stages, fimg.control->last_use.access, fimg.control->last_use.layout },
-				                   .final = to_use(vuk::Access::eNone),
-				                   .buffer = fimg.get_result() };
-			add_pass({ .name = fimg.output_binding.append("_FUTURE_ACQUIRE"),
-			           .resources = { Resource{ name.append("_"), Resource::Type::eBuffer, eAcquire, name } },
-			           .wait = std::move(fimg.control) });
-			impl->bound_buffers.emplace(name.append("_"), buf_info);
-		} else if (fimg.get_status() == FutureBase::Status::eRenderGraphBound || fimg.get_status() == FutureBase::Status::eOutputAttached) {
-			if (fimg.rg->impl) {
-				append(this->name, std::move(*fimg.rg));
-			}
-			fimg.get_status() = FutureBase::Status::eInputAttached;
-			add_pass({ .name = fimg.output_binding.append("_FUTURE_ACQUIRE"),
-			           .resources = { Resource{ this->name.append("::").append(fimg.output_binding).append("+"), Resource::Type::eBuffer, eAcquire, name } } });
-			add_alias(name, this->name.append("::").append(fimg.output_binding));
-		} else {
-			assert(0);
-		}
-	}
-
-	void RenderGraph::attach_out(Name name, Future<ImageAttachment>& fimg, DomainFlags dst_domain) {
+	void RenderGraph::attach_out(Name name, Future& fimg, DomainFlags dst_domain) {
 		fimg.get_status() = FutureBase::Status::eOutputAttached;
 		add_pass({ .name = name.append("_RELEASE"),
 		           .execute_on = DomainFlagBits::eDevice,
-		           .resources = { Resource{ name, Resource::Type::eImage, domain_to_release_access(dst_domain), name.append("+") } },
+		           .resources = { Resource{
+		               name, fimg.is_image() ? Resource::Type::eImage : Resource::Type::eBuffer, domain_to_release_access(dst_domain), name.append("+") } },
 		           .signal = fimg.control.get() });
-	}
-
-	void RenderGraph::attach_out(Name name, Future<Buffer>& fbuf, DomainFlags dst_domain) {
-		fbuf.get_status() = FutureBase::Status::eOutputAttached;
-		add_pass({ .name = name.append("_RELEASE"),
-		           .execute_on = DomainFlagBits::eDevice,
-		           .resources = { Resource{ name, Resource::Type::eBuffer, domain_to_release_access(dst_domain), name.append("+") } },
-		           .signal = fbuf.control.get() });
 	}
 
 	void sync_bound_attachment_to_renderpass(AttachmentRPInfo& rp_att, AttachmentRPInfo& attachment_info) {
@@ -1174,7 +1158,7 @@ namespace vuk {
 					fut.last_use = QueueResourceUse{
 						left.original, left.use.stages, left.use.access, left.use.layout, (DomainFlagBits)(left_domain & DomainFlagBits::eQueueMask).m_mask
 					};
-					fut.get_result<Buffer>() = buffer_info.buffer; // TODO: when we have managed buffers, then this is too soon to attach
+					fut.result = buffer_info.buffer; // TODO: when we have managed buffers, then this is too soon to attach
 				}
 
 				bool crosses_queue = (left_domain != DomainFlagBits::eNone && right_domain != DomainFlagBits::eNone &&

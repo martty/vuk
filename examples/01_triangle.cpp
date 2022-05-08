@@ -52,7 +52,7 @@ namespace {
 
 		                    // The rendergraph is given to a Future, which takes ownership and binds to the result ("01_triangle_final")
 		                    // The example framework takes care of the busywork (submission, presenting)
-		                    return vuk::Future<vuk::ImageAttachment>{ frame_allocator, std::make_unique<vuk::RenderGraph>(std::move(rg)), "01_triangle_final" };
+		                    return vuk::Future{ frame_allocator, std::make_unique<vuk::RenderGraph>(std::move(rg)), "01_triangle_final" };
 		                  }
 	};
 

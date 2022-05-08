@@ -82,6 +82,5 @@ namespace vuk {
 	struct PersistentDescriptorSet;
 	
 	struct FutureBase;
-	template<class T>
 	class Future;
 } // namespace vuk

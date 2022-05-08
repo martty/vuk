@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <span>
+#include <variant>
 
 // futures
 namespace vuk {
@@ -41,24 +42,14 @@ namespace vuk {
 		QueueResourceUse last_use;                             // the results of the future are available if waited for on the initial_domain
 		uint64_t initial_visibility;                           // the results of the future are available if waited for {initial_domain, initial_visibility}
 
-		ImageAttachment result_image;
-		Buffer result_buffer;
+		std::variant<ImageAttachment, Buffer> result;
 
 		template<class T>
-		T& get_result();
+		T& get_result() {
+			return std::get<T>(result);
+		}
 	};
 
-	template<>
-	inline ImageAttachment& FutureBase::get_result() {
-		return result_image;
-	}
-
-	template<>
-	inline Buffer& FutureBase::get_result() {
-		return result_buffer;
-	}
-
-	template<class T>
 	class Future {
 	public:
 		Future() = default;
@@ -75,7 +66,12 @@ namespace vuk {
 		/// @brief Create a Future from a value, automatically making the result available on the host
 		/// @param allocator
 		/// @param value
-		Future(Allocator& allocator, T&& value);
+		template<class T>
+		Future(Allocator& allocator, T&& value) : control(std::make_unique<FutureBase>(allocator)) {
+			control->result = std::move(value);
+			control->status = FutureBase::Status::eHostAvailable;
+			control->last_use.layout = vuk::ImageLayout::eUndefined;
+		}
 
 		/// @brief Get status of the Future
 		FutureBase::Status& get_status() {
@@ -94,13 +90,25 @@ namespace vuk {
 
 		/// @brief Submit Future for execution
 		Result<void> submit();
+		/// @brief Wait for Future to complete execution on host
+		Result<void> wait();
 		/// @brief Wait and retrieve the result of the Future on the host
-		Result<T> get();
+		template<class T>
+		[[nodiscard]] Result<T> get();
 		/// @brief Get control block for Future
 		FutureBase* get_control() {
 			return control.get();
 		}
 
+		bool is_image() const {
+			return control->result.index() == 0;
+		}
+
+		bool is_buffer() const {
+			return control->result.index() == 1;
+		}
+
+		template<class T>
 		T& get_result() {
 			return control->get_result<T>();
 		}
@@ -150,16 +158,16 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	inline Result<void> wait_for_futures_explicit(Allocator& alloc, std::span<FutureBase*> controls, std::span<RenderGraph*> render_graphs) {
+	inline Result<void> wait_for_futures_explicit(Allocator& alloc, std::span<Future> futures) {
 		std::vector<std::pair<Allocator*, RenderGraph*>> rgs_to_run;
-		for (uint64_t i = 0; i < controls.size(); i++) {
-			auto& control = controls[i];
+		for (uint64_t i = 0; i < futures.size(); i++) {
+			auto control = futures[i].get_control();
 			if (control->status == FutureBase::Status::eInputAttached || control->status == FutureBase::Status::eInitial) {
 				return { expected_error, RenderGraphException{} };
 			} else if (control->status == FutureBase::Status::eHostAvailable || control->status == FutureBase::Status::eSubmitted) {
 				continue;
 			} else {
-				rgs_to_run.emplace_back(&control->get_allocator(), render_graphs[i]);
+				rgs_to_run.emplace_back(&control->get_allocator(), futures[i].get_render_graph());
 			}
 		}
 		if (rgs_to_run.size() != 0) {
@@ -167,8 +175,8 @@ namespace vuk {
 		}
 
 		std::vector<std::pair<DomainFlags, uint64_t>> waits;
-		for (uint64_t i = 0; i < controls.size(); i++) {
-			auto& control = controls[i];
+		for (uint64_t i = 0; i < futures.size(); i++) {
+			auto control = futures[i].get_control();
 			if (control->status != FutureBase::Status::eSubmitted) {
 				continue;
 			}

@@ -216,15 +216,10 @@ namespace vuk {
 		/// @param final Desired Access to the resource after this rendergraph
 		void attach_image(Name name, ImageAttachment image_attachment, Access initial, Access final);
 
-		/// @brief Attach a future of an image to the given name
+		/// @brief Attach a future to the given name
 		/// @param name Name of the resource to attach to
 		/// @param future Future to be consumed into this rendergraph
-		void attach_in(Name name, Future<ImageAttachment>&& future);
-
-		/// @brief Attach a future of a buffer to the given name
-		/// @param name Name of the resource to attach to
-		/// @param future Future to be consumed into this rendergraph
-		void attach_in(Name name, Future<Buffer>&& future);
+		void attach_in(Name name, Future&& future);
 
 		/// @brief Request the rendergraph to allocate an image and attach it to the given name
 		/// @param name Name of the resource to attach to
@@ -274,10 +269,8 @@ namespace vuk {
 		void schedule_intra_queue(std::span<struct PassInfo> passes, const RenderGraph::CompileOptions& compile_options);
 
 		// future support functions
-		friend class Future<ImageAttachment>;
-		friend class Future<Buffer>;
-		void attach_out(Name, Future<ImageAttachment>& fimg, DomainFlags dst_domain);
-		void attach_out(Name, Future<Buffer>& fbuf, DomainFlags dst_domain);
+		friend class Future;
+		void attach_out(Name, Future& fimg, DomainFlags dst_domain);
 	};
 
 	struct SubmitInfo {

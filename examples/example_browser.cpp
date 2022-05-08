@@ -79,18 +79,8 @@ bool render_all = false;
 void vuk::ExampleRunner::render() {
 	chosen_resource.resize(examples.size());
 
-	std::vector<FutureBase*> controls;
-	std::vector<RenderGraph*> rendergraphs;
-	for (auto& f : ia_futures) {
-		controls.emplace_back(f.get_control());
-		rendergraphs.emplace_back(f.get_render_graph());
-	}
-	for (auto& f : buf_futures) {
-		controls.emplace_back(f.get_control());
-		rendergraphs.emplace_back(f.get_render_graph());
-	}
-	vuk::wait_for_futures_explicit(*global, controls, rendergraphs);
-	ia_futures.clear();
+	vuk::wait_for_futures_explicit(*global, futures);
+	futures.clear();
 
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
@@ -208,7 +198,7 @@ void vuk::ExampleRunner::render() {
 
 				Name result = attachment_name_out.append("_result");
 				if (chosen_resource[i] != attachment_name_out) {
-					auto othfut = Future<ImageAttachment>(frame_allocator, rg_frag, chosen_resource[i]);
+					auto othfut = Future(frame_allocator, rg_frag, chosen_resource[i]);
 					rg.attach_in(result, std::move(othfut));
 					rg.attach_in("_", std::move(rg_frag_fut));
 				} else {

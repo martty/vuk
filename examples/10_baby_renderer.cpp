@@ -150,7 +150,7 @@ namespace {
 		      rg.attach_image("10_v2", vuk::ImageAttachment::from_texture(*variant2), vuk::eNone, vuk::eFragmentSampled);
 		      
 			  // enqueue running the preprocessing rendergraph and force 10_doge to be sampleable later
-			  auto fut = vuk::transition(vuk::Future<vuk::ImageAttachment>{ allocator, std::make_unique<vuk::RenderGraph>(std::move(rg)), "10_doge" },
+			  auto fut = vuk::transition(vuk::Future{ allocator, std::make_unique<vuk::RenderGraph>(std::move(rg)), "10_doge" },
 		                                 vuk::eFragmentSampled);
 		      runner.enqueue_setup(std::move(fut));
 
@@ -254,7 +254,7 @@ namespace {
 		      // Upload view & projection
 		      auto [buboVP, uboVP_fut] = create_buffer_cross_device(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, std::span(&vp, 1));
 		      auto uboVP = *buboVP;
-		      uboVP_fut.get(); // no-op
+		      uboVP_fut.wait(); // no-op
 
 		      // Do a terrible simulation step
 		      // All objects are attracted to the origin
@@ -316,7 +316,7 @@ namespace {
 		      rg.attach_managed(
 		          "10_depth", vuk::Format::eD32Sfloat, vuk::Dimension2D::framebuffer(), vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
 
-		      return vuk::Future<vuk::ImageAttachment>{ frame_allocator, std::make_unique<vuk::RenderGraph>(std::move(rg)), "10_baby_renderer_final" };
+		      return vuk::Future{ frame_allocator, std::make_unique<vuk::RenderGraph>(std::move(rg)), "10_baby_renderer_final" };
 		    },
 		// Perform cleanup for the example
 		.cleanup =

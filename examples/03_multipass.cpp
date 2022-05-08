@@ -116,7 +116,7 @@ namespace {
 		      // This depth attachment will have extents matching the framebuffer (deduced from the color attachment)
 		      rg.attach_managed("03_depth", vuk::Format::eD32Sfloat, vuk::Dimension2D::framebuffer(), vuk::Samples::e1, vuk::ClearDepthStencil{ 1.0f, 0 });
 
-		      return vuk::Future<vuk::ImageAttachment>{ frame_allocator, std::make_unique<vuk::RenderGraph>(std::move(rg)), "03_multipass_final" };
+		      return vuk::Future{ frame_allocator, std::make_unique<vuk::RenderGraph>(std::move(rg)), "03_multipass_final" };
 		    }
 	};
 

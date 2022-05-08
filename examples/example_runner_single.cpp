@@ -72,18 +72,8 @@ vuk::ExampleRunner::ExampleRunner() {
 }
 
 void vuk::ExampleRunner::render() {
-	std::vector<FutureBase*> controls;
-	std::vector<RenderGraph*> rendergraphs;
-	for (auto& f : ia_futures) {
-		controls.emplace_back(f.get_control());
-		rendergraphs.emplace_back(f.get_render_graph());
-	}
-	for (auto& f : buf_futures) {
-		controls.emplace_back(f.get_control());
-		rendergraphs.emplace_back(f.get_render_graph());
-	}
-	vuk::wait_for_futures_explicit(*global, controls, rendergraphs);
-	ia_futures.clear();
+	vuk::wait_for_futures_explicit(*global, futures);
+	futures.clear();
 
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();

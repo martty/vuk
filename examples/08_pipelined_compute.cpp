@@ -27,8 +27,8 @@ namespace {
 	vuk::Unique<vuk::BufferGPU> scramble_buf;
 	std::random_device rd;
 	std::mt19937 g(rd());
-	vuk::Future<vuk::Buffer> scramble_buf_fut;
-	vuk::Future<vuk::ImageAttachment> texture_of_doge_fut;
+	vuk::Future scramble_buf_fut;
+	vuk::Future texture_of_doge_fut;
 
 	vuk::Example xample{
 		.name = "08_pipelined_compute",
@@ -99,7 +99,7 @@ namespace {
 		                     } });
 		      //// <----------------->
 		      // make a gpu future of the above graph (render to texture) and bind to an output (rttf)
-		      vuk::Future<vuk::ImageAttachment> rttf{ frame_allocator, rgx, "08_rttf+" };
+		      vuk::Future rttf{ frame_allocator, rgx, "08_rttf+" };
 
 		      std::unique_ptr<vuk::RenderGraph> rgp = std::make_unique<vuk::RenderGraph>();
 		      auto& rg = *rgp;
@@ -171,7 +171,7 @@ namespace {
 		      rg.attach_buffer("08_scramble++++", *scramble_buf, vuk::Access::eNone, vuk::Access::eNone);
 		      scramble_buf_fut = { *runner.global, std::move(rgp), "08_scramble+++++" };
 
-		      return vuk::Future<vuk::ImageAttachment>{ frame_allocator, rg, "08_pipelined_compute_final" };
+		      return vuk::Future{ frame_allocator, rg, "08_pipelined_compute_final" };
 		    },
 		.cleanup =
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {

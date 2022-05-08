@@ -100,7 +100,7 @@ namespace {
 
 		      rg.attach_managed(
 		          "04_texture_depth", vuk::Format::eD32Sfloat, vuk::Dimension2D::framebuffer(), vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
-		      return vuk::Future<vuk::ImageAttachment>{ frame_allocator, std::make_unique<vuk::RenderGraph>(std::move(rg)), "04_texture_final" };
+		      return vuk::Future{ frame_allocator, std::make_unique<vuk::RenderGraph>(std::move(rg)), "04_texture_final" };
 		    },
 
 		// Perform cleanup for the example

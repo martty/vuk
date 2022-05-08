@@ -382,7 +382,7 @@ namespace vuk {
 		for (auto& [name, attachment_info] : impl->bound_attachments) {
 			if (attachment_info.attached_future) {
 				ImageAttachment att = attachment_info.attachment;
-				attachment_info.attached_future->get_result<ImageAttachment>() = att;
+				attachment_info.attached_future->result = att;
 			}
 		}
 
