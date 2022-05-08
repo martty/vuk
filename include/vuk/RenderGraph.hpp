@@ -221,6 +221,10 @@ namespace vuk {
 		/// @param future Future to be consumed into this rendergraph
 		void attach_in(Name name, Future&& future);
 
+		/// @brief Attach multiple futures - the names are matched to future bound names
+		/// @param futures Futures to be consumed into this rendergraph
+		void attach_in(std::span<Future> futures);
+
 		/// @brief Request the rendergraph to allocate an image and attach it to the given name
 		/// @param name Name of the resource to attach to
 		void attach_managed(Name name, Format format, Dimension2D dimension, Samples samples, Clear clear_value);

@@ -561,6 +561,13 @@ namespace vuk {
 		}
 	}
 
+	void RenderGraph::attach_in(std::span<Future> futures) {
+		for (auto& f : futures) {
+			auto name = f.get_bound_name();
+			attach_in(name, std::move(f));
+		}
+	}
+
 	void RenderGraph::attach_out(Name name, Future& fimg, DomainFlags dst_domain) {
 		fimg.get_status() = FutureBase::Status::eOutputAttached;
 		add_pass({ .name = name.append("_RELEASE"),

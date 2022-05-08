@@ -121,9 +121,8 @@ namespace {
 		      angle += 360.f * ImGui::GetIO().DeltaTime;
 
 		      vuk::RenderGraph rg_resolve("resolve");
-		      rg_resolve.attach_in("11_position+", std::move(pos_fut));
-		      rg_resolve.attach_in("11_normal+", std::move(norm_fut));
-		      rg_resolve.attach_in("11_color+", std::move(col_fut));
+		      std::array futs = { std::move(pos_fut), std::move(norm_fut), std::move(col_fut) };
+		      rg_resolve.attach_in(futs);
 		      // The shading pass for the deferred rendering
 		      rg_resolve.add_pass({ .name = "11_deferred_resolve",
 		                            // Declare that we are going to render to the final color image

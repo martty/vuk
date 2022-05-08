@@ -88,6 +88,10 @@ namespace vuk {
 			return rg;
 		}
 
+		Name get_bound_name() {
+			return output_binding;
+		}
+
 		/// @brief Submit Future for execution
 		Result<void> submit();
 		/// @brief Wait for Future to complete execution on host
