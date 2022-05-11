@@ -1,6 +1,7 @@
 #pragma once
 
 #include "vuk/AllocatorHelpers.hpp"
+#include "vuk/CommandBuffer.hpp"
 #include "vuk/RenderGraph.hpp"
 #include "vuk/Future.hpp"
 #include <math.h>
