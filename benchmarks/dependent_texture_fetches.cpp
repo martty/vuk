@@ -79,7 +79,7 @@ namespace {
 			             command_buffer.draw(3, 1, 0, 0);
 		             } });
 		rg.attach_image("dst", vuk::ImageAttachment::from_texture(dst), vuk::Access::eNone, vuk::Access::eFragmentSampled);
-		vuk::execute_submit_and_wait(allocator, std::move(rg).link(allocator.get_context(), vuk::RenderGraph::CompileOptions{}));
+		vuk::execute_submit_and_wait(allocator, std::move(rg).link(vuk::RenderGraph::CompileOptions{}));
 	}
 
 	std::optional<vuk::Texture> texture_of_doge, tex2k, tex4k, tex8k;
