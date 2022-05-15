@@ -238,9 +238,8 @@ namespace vuk {
 		};
 
 		/// @brief Consume this RenderGraph and create an ExecutableRenderGraph
-		/// @param ctx Context
 		/// @param compile_options CompileOptions controlling compilation behaviour
-		struct ExecutableRenderGraph link(Context& ctx, const CompileOptions& compile_options) &&;
+		struct ExecutableRenderGraph link(const CompileOptions& compile_options) &&;
 
 		// reflection functions
 

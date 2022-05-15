@@ -36,7 +36,6 @@ namespace vuk {
 	    compute_queue_family_index(params.compute_queue_family_index),
 	    transfer_queue_family_index(params.transfer_queue_family_index),
 	    debug(*this) {
-
 		auto queueSubmit2KHR = (PFN_vkQueueSubmit2KHR)vkGetDeviceProcAddr(device, "vkQueueSubmit2KHR");
 		assert(queueSubmit2KHR != nullptr);
 
@@ -393,7 +392,7 @@ namespace vuk {
 		return data;
 	}
 
-	Queue& Context::domain_to_queue(DomainFlags domain) {
+	Queue& Context::domain_to_queue(DomainFlags domain) const {
 		auto queue_only = (DomainFlagBits)(domain & DomainFlagBits::eQueueMask).m_mask;
 		switch (queue_only) {
 		case DomainFlagBits::eGraphicsQueue:
@@ -408,7 +407,7 @@ namespace vuk {
 		}
 	};
 
-	uint32_t Context::domain_to_queue_index(DomainFlags domain) {
+	uint32_t Context::domain_to_queue_index(DomainFlags domain) const {
 		auto queue_only = (DomainFlagBits)(domain & DomainFlagBits::eQueueMask).m_mask;
 		switch (queue_only) {
 		case DomainFlagBits::eGraphicsQueue:
@@ -423,7 +422,7 @@ namespace vuk {
 		}
 	};
 
-	uint32_t Context::domain_to_queue_family_index(DomainFlags domain) {
+	uint32_t Context::domain_to_queue_family_index(DomainFlags domain) const {
 		return domain_to_queue_index(domain);
 	}
 

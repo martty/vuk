@@ -595,7 +595,7 @@ namespace vuk {
 		}
 	}
 
-	ExecutableRenderGraph RenderGraph::link(Context& ctx, const RenderGraph::CompileOptions& compile_options) && {
+	ExecutableRenderGraph RenderGraph::link(const RenderGraph::CompileOptions& compile_options) && {
 		compile(compile_options);
 
 		// at this point the graph is built, we know of all the resources and
@@ -850,8 +850,8 @@ namespace vuk {
 						barrier.subresourceRange.baseMipLevel = 0;
 						barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
 						barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
-						barrier.srcQueueFamilyIndex = ctx.domain_to_queue_family_index(left_domain);
-						barrier.dstQueueFamilyIndex = ctx.domain_to_queue_family_index(right_domain);
+						barrier.srcQueueFamilyIndex = static_cast<uint32_t>(left_domain.m_mask);
+						barrier.dstQueueFamilyIndex = static_cast<uint32_t>(right_domain.m_mask);
 						acquire_barrier.src = PipelineStageFlagBits::eTopOfPipe; // NONE
 						acquire_barrier.dst = dst_stages;
 						acquire_barrier.barrier = barrier;
@@ -901,8 +901,8 @@ namespace vuk {
 						barrier.subresourceRange.baseMipLevel = 0;
 						barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
 						barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
-						barrier.srcQueueFamilyIndex = ctx.domain_to_queue_family_index(left_domain);
-						barrier.dstQueueFamilyIndex = ctx.domain_to_queue_family_index(dst_domain);
+						barrier.srcQueueFamilyIndex = static_cast<uint32_t>(left_domain.m_mask);
+						barrier.dstQueueFamilyIndex = static_cast<uint32_t>(dst_domain.m_mask);
 						release_barrier.src = src_stages;
 						release_barrier.dst = PipelineStageFlagBits::eBottomOfPipe; // NONE
 						release_barrier.barrier = barrier;
@@ -952,8 +952,8 @@ namespace vuk {
 						barrier.subresourceRange.baseMipLevel = subrange.base_level;
 						barrier.subresourceRange.layerCount = subrange.layer_count;
 						barrier.subresourceRange.levelCount = subrange.level_count;
-						barrier.srcQueueFamilyIndex = ctx.domain_to_queue_family_index(left_domain);
-						barrier.dstQueueFamilyIndex = ctx.domain_to_queue_family_index(right_domain);
+						barrier.srcQueueFamilyIndex = static_cast<uint32_t>(left_domain.m_mask);
+						barrier.dstQueueFamilyIndex = static_cast<uint32_t>(right_domain.m_mask);
 						release_barrier.src = src_stages;
 						release_barrier.dst = PipelineStageFlagBits::eBottomOfPipe; // NONE
 						release_barrier.barrier = barrier;
@@ -973,8 +973,8 @@ namespace vuk {
 						barrier.subresourceRange.baseMipLevel = subrange.base_level;
 						barrier.subresourceRange.layerCount = subrange.layer_count;
 						barrier.subresourceRange.levelCount = subrange.level_count;
-						barrier.srcQueueFamilyIndex = ctx.domain_to_queue_family_index(left_domain);
-						barrier.dstQueueFamilyIndex = ctx.domain_to_queue_family_index(right_domain);
+						barrier.srcQueueFamilyIndex = static_cast<uint32_t>(left_domain.m_mask);
+						barrier.dstQueueFamilyIndex = static_cast<uint32_t>(right_domain.m_mask);
 						acquire_barrier.src = PipelineStageFlagBits::eTopOfPipe; // NONE
 						acquire_barrier.dst = dst_stages;
 						acquire_barrier.barrier = barrier;
@@ -1127,6 +1127,8 @@ namespace vuk {
 						barrier.subresourceRange.baseMipLevel = subrange.base_level;
 						barrier.subresourceRange.layerCount = subrange.layer_count;
 						barrier.subresourceRange.levelCount = subrange.level_count;
+						barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+						barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 						ImageBarrier ib{ .image = name, .barrier = barrier, .src = prev_use.stages, .dst = next_use.stages };
 						right_rp.subpasses[right.pass->subpass].pre_barriers.push_back(ib);
 					}
@@ -1389,80 +1391,6 @@ namespace vuk {
 
 			rp.rpci.dependencyCount = (uint32_t)rp.rpci.subpass_dependencies.size();
 			rp.rpci.pDependencies = rp.rpci.subpass_dependencies.data();
-		}
-
-		// perform sample count inference for framebuffers
-		// loop through all renderpasses, and attempt to infer any sample count we
-		// can then loop again, stopping if we have inferred all or have not made
-		// progress resolve images are always sample count 1 and are excluded from
-		// the inference
-
-		bool infer_progress = false;
-		bool any_fb_incomplete = false;
-		do {
-			any_fb_incomplete = false;
-			infer_progress = false;
-			for (auto& rp : impl->rpis) {
-				if (rp.attachments.size() == 0) {
-					continue;
-				}
-
-				Samples fb_samples = rp.fbci.sample_count;
-				bool samples_known = fb_samples != Samples::eInfer;
-
-				if (samples_known) {
-					continue;
-				}
-
-				// see if any attachment has a set sample count
-				for (auto& attrpinfo : rp.attachments) {
-					auto& bound = impl->bound_attachments[attrpinfo.name];
-
-					if (bound.attachment.sample_count != Samples::eInfer && !attrpinfo.is_resolve_dst) {
-						fb_samples = bound.attachment.sample_count;
-						samples_known = true;
-						break;
-					}
-				}
-
-				// propagate known sample count onto attachments
-				if (samples_known) {
-					for (auto& attrpinfo : rp.attachments) {
-						auto& bound = impl->bound_attachments[attrpinfo.name];
-						if (!attrpinfo.is_resolve_dst) {
-							bound.attachment.sample_count = fb_samples;
-						}
-					}
-					rp.fbci.sample_count = fb_samples;
-					infer_progress = true; // progress made
-				} else {
-					any_fb_incomplete = true;
-				}
-			}
-		} while (any_fb_incomplete && infer_progress); // stop looping if all attachment have been sized
-		                                               // or we made no progress
-
-		assert(!any_fb_incomplete && "Failed to infer sample count for all attachments.");
-
-		// finish by acquiring the renderpasses
-		for (auto& rp : impl->rpis) {
-			if (rp.attachments.size() == 0) {
-				continue;
-			}
-
-			for (auto& attrpinfo : rp.attachments) {
-				if (attrpinfo.is_resolve_dst) {
-					attrpinfo.description.samples = VK_SAMPLE_COUNT_1_BIT;
-				} else {
-					attrpinfo.description.samples = (VkSampleCountFlagBits)rp.fbci.sample_count.count;
-				}
-				rp.rpci.attachments.push_back(attrpinfo.description);
-			}
-
-			rp.rpci.attachmentCount = (uint32_t)rp.rpci.attachments.size();
-			rp.rpci.pAttachments = rp.rpci.attachments.data();
-
-			rp.handle = ctx.acquire_renderpass(rp.rpci, ctx.get_frame_count());
 		}
 
 		return { std::move(*this) };

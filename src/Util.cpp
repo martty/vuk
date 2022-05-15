@@ -93,7 +93,7 @@ namespace vuk {
 		std::vector<std::pair<Allocator*, ExecutableRenderGraph*>> ptrvec;
 		ergs.reserve(rgs.size());
 		for (auto& [alloc, rg] : rgs) {
-			ergs.emplace_back(std::move(*rg).link(alloc->get_context(), {}));
+			ergs.emplace_back(std::move(*rg).link({}));
 			ptrvec.emplace_back(alloc, &ergs.back());
 		}
 
@@ -378,7 +378,7 @@ namespace vuk {
 			control->allocator->get_context().wait_for_domains(std::span{ &w, 1 });
 			return { expected_value };
 		} else {
-			auto erg = std::move(*rg).link(control->allocator->get_context(), {});
+			auto erg = std::move(*rg).link({});
 			std::pair v = { control->allocator, &erg };
 			VUK_DO_OR_RETURN(execute_submit(*control->allocator, std::span{ &v, 1 }, {}, {}, {}));
 			std::pair w = { (DomainFlags)control->initial_domain, control->initial_visibility };
@@ -404,7 +404,7 @@ namespace vuk {
 			return { expected_value }; // nothing to do
 		} else {
 			control->status = FutureBase::Status::eSubmitted;
-			auto erg = std::move(*rg).link(control->allocator->get_context(), {});
+			auto erg = std::move(*rg).link({});
 			std::pair v = { control->allocator, &erg };
 			VUK_DO_OR_RETURN(execute_submit(*control->allocator, std::span{ &v, 1 }, {}, {}, {}));
 			return { expected_value };

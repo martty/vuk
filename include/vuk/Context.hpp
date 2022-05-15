@@ -108,9 +108,9 @@ namespace vuk {
 		bool load_pipeline_cache(std::span<std::byte> data);
 		std::vector<std::byte> save_pipeline_cache();
 
-		Queue& domain_to_queue(DomainFlags);
-		uint32_t domain_to_queue_index(DomainFlags);
-		uint32_t domain_to_queue_family_index(DomainFlags);
+		Queue& domain_to_queue(DomainFlags) const;
+		uint32_t domain_to_queue_index(DomainFlags) const;
+		uint32_t domain_to_queue_family_index(DomainFlags) const;
 
 		Query create_timestamp_query();
 

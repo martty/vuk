@@ -121,7 +121,7 @@ void vuk::ExampleRunner::render() {
 			RenderGraph rg;
 			rg.attach_in("result", std::move(fut));
 			util::ImGui_ImplVuk_Render(frame_allocator, rg, "result", "SWAPCHAIN", imgui_data, ImGui::GetDrawData(), sampled_images);
-			auto erg = std::move(rg).link(*context, vuk::RenderGraph::CompileOptions{});
+			auto erg = std::move(rg).link(vuk::RenderGraph::CompileOptions{});
 			execute_submit_and_present_to_one(frame_allocator, std::move(erg), swapchain);
 			sampled_images.clear();
 		} else { // render all examples as imgui windows
@@ -214,7 +214,7 @@ void vuk::ExampleRunner::render() {
 			ImGui::Render();
 			util::ImGui_ImplVuk_Render(frame_allocator, rg, "SWAPCHAIN", "SWAPCHAIN+", imgui_data, ImGui::GetDrawData(), sampled_images);
 			rg.attach_swapchain("SWAPCHAIN", swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
-			execute_submit_and_present_to_one(frame_allocator, std::move(rg).link(*context, vuk::RenderGraph::CompileOptions{}), swapchain);
+			execute_submit_and_present_to_one(frame_allocator, std::move(rg).link(vuk::RenderGraph::CompileOptions{}), swapchain);
 			sampled_images.clear();
 		}
 	}

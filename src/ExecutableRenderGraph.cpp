@@ -95,6 +95,19 @@ namespace vuk {
 		vkCmdBeginRenderPass(cbuf, &rbi, use_secondary_command_buffers ? VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS : VK_SUBPASS_CONTENTS_INLINE);
 	}
 
+	void resolve_image_barrier(const Context& ctx, ImageBarrier& dep, const AttachmentRPInfo& bound) {
+		dep.barrier.image = bound.attachment.image;
+		// turn base_{layer, level} into absolute values wrt the image
+		dep.barrier.subresourceRange.baseArrayLayer += bound.attachment.base_layer;
+		dep.barrier.subresourceRange.baseMipLevel += bound.attachment.base_level;
+		if (dep.barrier.srcQueueFamilyIndex != VK_QUEUE_FAMILY_IGNORED) {
+			dep.barrier.srcQueueFamilyIndex = ctx.domain_to_queue_family_index(static_cast<vuk::DomainFlags>(dep.barrier.srcQueueFamilyIndex));
+		}
+		if (dep.barrier.dstQueueFamilyIndex != VK_QUEUE_FAMILY_IGNORED) {
+			dep.barrier.dstQueueFamilyIndex = ctx.domain_to_queue_family_index(static_cast<vuk::DomainFlags>(dep.barrier.dstQueueFamilyIndex));
+		}
+	}
+
 	// TODO: refactor to return RenderPassInfo
 	void ExecutableRenderGraph::fill_renderpass_info(vuk::RenderPassInfo& rpass, const size_t& i, vuk::CommandBuffer& cobuf) {
 		if (rpass.handle == VK_NULL_HANDLE) {
@@ -166,9 +179,7 @@ namespace vuk {
 			for (auto dep : rpass.pre_barriers) {
 				auto& bound = impl->bound_attachments[dep.image];
 				dep.barrier.image = bound.attachment.image;
-				// turn base_{layer, level} into absolute values wrt the image
-				dep.barrier.subresourceRange.baseArrayLayer += bound.attachment.base_layer;
-				dep.barrier.subresourceRange.baseMipLevel += bound.attachment.base_level;
+				resolve_image_barrier(ctx, dep, bound);
 				vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
 			}
 			for (const auto& dep : rpass.pre_mem_barriers) {
@@ -194,10 +205,11 @@ namespace vuk {
 				// insert image pre-barriers
 				if (rpass.handle == VK_NULL_HANDLE) {
 					for (auto dep : sp.pre_barriers) {
-						dep.barrier.image = impl->bound_attachments[dep.image].attachment.image;
+						auto& bound = impl->bound_attachments[dep.image];
+						resolve_image_barrier(ctx, dep, bound);
 						vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
 					}
-					for (const auto& dep : sp.pre_mem_barriers) {
+					for (auto dep : sp.pre_mem_barriers) {
 						vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 1, &dep.barrier, 0, nullptr, 0, nullptr);
 					}
 				}
@@ -233,10 +245,7 @@ namespace vuk {
 				if (rpass.handle == VK_NULL_HANDLE) {
 					for (auto dep : sp.post_barriers) {
 						auto& bound = impl->bound_attachments[dep.image];
-						dep.barrier.image = bound.attachment.image;
-						// turn base_{layer, level} into absolute values wrt the image
-						dep.barrier.subresourceRange.baseArrayLayer += bound.attachment.base_layer;
-						dep.barrier.subresourceRange.baseMipLevel += bound.attachment.base_level;
+						resolve_image_barrier(ctx, dep, bound);
 						vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
 					}
 					for (const auto& dep : sp.post_mem_barriers) {
@@ -252,10 +261,7 @@ namespace vuk {
 			}
 			for (auto dep : rpass.post_barriers) {
 				auto& bound = impl->bound_attachments[dep.image];
-				dep.barrier.image = bound.attachment.image;
-				// turn base_{layer, level} into absolute values wrt the image
-				dep.barrier.subresourceRange.baseArrayLayer += bound.attachment.base_layer;
-				dep.barrier.subresourceRange.baseMipLevel += bound.attachment.base_level;
+				resolve_image_barrier(ctx, dep, bound);
 				vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
 			}
 			for (const auto& dep : rpass.post_mem_barriers) {
@@ -274,6 +280,80 @@ namespace vuk {
 
 	Result<SubmitBundle> ExecutableRenderGraph::execute(Allocator& alloc, std::vector<std::pair<SwapchainRef, size_t>> swp_with_index) {
 		Context& ctx = alloc.get_context();
+
+		// perform sample count inference for framebuffers
+		// loop through all renderpasses, and attempt to infer any sample count we
+		// can then loop again, stopping if we have inferred all or have not made
+		// progress resolve images are always sample count 1 and are excluded from
+		// the inference
+		bool infer_progress = false;
+		bool any_fb_incomplete = false;
+		do {
+			any_fb_incomplete = false;
+			infer_progress = false;
+			for (auto& rp : impl->rpis) {
+				if (rp.attachments.size() == 0) {
+					continue;
+				}
+
+				Samples fb_samples = rp.fbci.sample_count;
+				bool samples_known = fb_samples != Samples::eInfer;
+
+				if (samples_known) {
+					continue;
+				}
+
+				// see if any attachment has a set sample count
+				for (auto& attrpinfo : rp.attachments) {
+					auto& bound = impl->bound_attachments[attrpinfo.name];
+
+					if (bound.attachment.sample_count != Samples::eInfer && !attrpinfo.is_resolve_dst) {
+						fb_samples = bound.attachment.sample_count;
+						samples_known = true;
+						break;
+					}
+				}
+
+				// propagate known sample count onto attachments
+				if (samples_known) {
+					for (auto& attrpinfo : rp.attachments) {
+						auto& bound = impl->bound_attachments[attrpinfo.name];
+						if (!attrpinfo.is_resolve_dst) {
+							bound.attachment.sample_count = fb_samples;
+						}
+					}
+					rp.fbci.sample_count = fb_samples;
+					infer_progress = true; // progress made
+				} else {
+					any_fb_incomplete = true;
+				}
+			}
+		} while (any_fb_incomplete && infer_progress); // stop looping if all attachment have been sized
+		                                               // or we made no progress
+
+		assert(!any_fb_incomplete && "Failed to infer sample count for all attachments.");
+
+		// finish by acquiring the renderpasses
+		for (auto& rp : impl->rpis) {
+			if (rp.attachments.size() == 0) {
+				continue;
+			}
+
+			for (auto& attrpinfo : rp.attachments) {
+				if (attrpinfo.is_resolve_dst) {
+					attrpinfo.description.samples = VK_SAMPLE_COUNT_1_BIT;
+				} else {
+					attrpinfo.description.samples = (VkSampleCountFlagBits)rp.fbci.sample_count.count;
+				}
+				rp.rpci.attachments.push_back(attrpinfo.description);
+			}
+
+			rp.rpci.attachmentCount = (uint32_t)rp.rpci.attachments.size();
+			rp.rpci.pAttachments = rp.rpci.attachments.data();
+
+			rp.handle = ctx.acquire_renderpass(rp.rpci, ctx.get_frame_count());
+		}
+
 		// bind swapchain attachment images & ivs
 		for (auto& [name, bound] : impl->bound_attachments) {
 			if (bound.type == AttachmentRPInfo::Type::eSwapchain) {
@@ -288,8 +368,6 @@ namespace vuk {
 		// perform size inference for framebuffers (we need to do this here due to swapchain attachments)
 		// loop through all renderpasses, and attempt to infer any size we can
 		// then loop again, stopping if we have inferred all or have not made progress
-		bool infer_progress = false;
-		bool any_fb_incomplete = false;
 		do {
 			any_fb_incomplete = false;
 			infer_progress = false;
