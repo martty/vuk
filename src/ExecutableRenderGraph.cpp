@@ -73,8 +73,47 @@ namespace vuk {
 
 			auto rg = ctx.acquire_rendertarget(rgci, ctx.get_frame_count());
 			attachment_info.attachment.image_view = rg.image_view;
+			attachment_info.attachment.layer_count = 1;
+			attachment_info.attachment.level_count = 1;
 			attachment_info.attachment.image = rg.image;
 		}
+	}
+
+	Result<void> create_image(Allocator& alloc, ImageAttachment& attachment, vuk::Extent2D fb_extent, vuk::SampleCountFlagBits samples) {
+		ImageCreateInfo ici;
+		ici.format = vuk::Format(attachment.format);
+		ici.imageType = attachment.imageType;
+		ici.flags = attachment.image_flags;
+		ici.arrayLayers = attachment.layer_count;
+		if (attachment.extent.sizing == Sizing::eRelative) {
+			assert(fb_extent.width > 0 && fb_extent.height > 0);
+			ici.extent = vuk::Extent3D{ static_cast<uint32_t>(attachment.extent._relative.width * fb_extent.width),
+				                          static_cast<uint32_t>(attachment.extent._relative.height * fb_extent.height),
+				                          1u };
+		} else {
+			ici.extent = static_cast<vuk::Extent3D>(attachment.extent.extent);
+		}
+
+		return alloc.allocate_images(std::span{ &attachment.image, 1 }, std::span{ &ici, 1 });
+	}
+
+	Result<void> create_image_view(Allocator& alloc, ImageAttachment& attachment) {
+		ImageViewCreateInfo ivci;
+		ivci.image = attachment.image;
+		ivci.format = vuk::Format(attachment.format);
+		ivci.viewType = attachment.viewType;
+		ivci.flags = attachment.image_view_flags;
+		ivci.viewType = attachment.viewType;
+
+		ImageSubresourceRange isr;
+		isr.aspectMask = format_to_aspect(ivci.format);
+		isr.baseArrayLayer = attachment.base_layer;
+		isr.layerCount = attachment.layer_count;
+		isr.baseMipLevel = attachment.base_level;
+		isr.levelCount = attachment.level_count;
+		ivci.subresourceRange = isr;
+
+		return alloc.allocate_image_views(std::span{ &attachment.image_view, 1 }, std::span{ &ivci, 1 });
 	}
 
 	void begin_renderpass(vuk::RenderPassInfo& rpass, VkCommandBuffer& cbuf, bool use_secondary_command_buffers) {
@@ -85,8 +124,8 @@ namespace vuk {
 		std::vector<VkClearValue> clears(rpass.attachments.size());
 		for (size_t i = 0; i < rpass.attachments.size(); i++) {
 			auto& att = rpass.attachments[i];
-			if (att.should_clear) {
-				clears[i] = att.attachment.clear_value.c;
+			if (att.clear_value) {
+				clears[i] = att.clear_value->c;
 			}
 		}
 		rbi.pClearValues = clears.data();
@@ -95,17 +134,48 @@ namespace vuk {
 		vkCmdBeginRenderPass(cbuf, &rbi, use_secondary_command_buffers ? VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS : VK_SUBPASS_CONTENTS_INLINE);
 	}
 
-	void resolve_image_barrier(const Context& ctx, ImageBarrier& dep, const AttachmentRPInfo& bound) {
+	[[nodiscard]] bool resolve_image_barrier(const Context& ctx, ImageBarrier& dep, const AttachmentRPInfo& bound) {
 		dep.barrier.image = bound.attachment.image;
 		// turn base_{layer, level} into absolute values wrt the image
 		dep.barrier.subresourceRange.baseArrayLayer += bound.attachment.base_layer;
 		dep.barrier.subresourceRange.baseMipLevel += bound.attachment.base_level;
+		// clamp arrays and levels to actual accessible range in image, return false if the barrier would refer to no levels or layers
+		assert(bound.attachment.layer_count != VK_REMAINING_ARRAY_LAYERS);
+		if (dep.barrier.subresourceRange.layerCount != VK_REMAINING_ARRAY_LAYERS) {
+			if (dep.barrier.subresourceRange.baseArrayLayer + dep.barrier.subresourceRange.layerCount > bound.attachment.base_layer + bound.attachment.layer_count) {
+				int count = static_cast<int32_t>(bound.attachment.layer_count) - (dep.barrier.subresourceRange.baseArrayLayer - bound.attachment.base_layer);
+				if (count < 1) {
+					return false;
+				}
+				dep.barrier.subresourceRange.layerCount = static_cast<uint32_t>(count);
+			}
+		} else {
+			if (dep.barrier.subresourceRange.baseArrayLayer > bound.attachment.base_layer + bound.attachment.layer_count) {
+				return false;
+			}
+		}
+		assert(bound.attachment.level_count != VK_REMAINING_MIP_LEVELS);
+		if (dep.barrier.subresourceRange.levelCount != VK_REMAINING_MIP_LEVELS) {
+			if (dep.barrier.subresourceRange.baseMipLevel + dep.barrier.subresourceRange.levelCount > bound.attachment.base_level + bound.attachment.level_count) {
+				int count = static_cast<int32_t>(bound.attachment.level_count) - (dep.barrier.subresourceRange.baseMipLevel - bound.attachment.base_level);
+				if (count < 1)
+					return false;
+				dep.barrier.subresourceRange.levelCount = static_cast<uint32_t>(count);
+			}
+		} else {
+			if (dep.barrier.subresourceRange.baseMipLevel > bound.attachment.base_level + bound.attachment.level_count) {
+				return false;
+			}
+		}
+
 		if (dep.barrier.srcQueueFamilyIndex != VK_QUEUE_FAMILY_IGNORED) {
 			dep.barrier.srcQueueFamilyIndex = ctx.domain_to_queue_family_index(static_cast<vuk::DomainFlags>(dep.barrier.srcQueueFamilyIndex));
 		}
 		if (dep.barrier.dstQueueFamilyIndex != VK_QUEUE_FAMILY_IGNORED) {
 			dep.barrier.dstQueueFamilyIndex = ctx.domain_to_queue_family_index(static_cast<vuk::DomainFlags>(dep.barrier.dstQueueFamilyIndex));
 		}
+
+		return true;
 	}
 
 	// TODO: refactor to return RenderPassInfo
@@ -179,7 +249,9 @@ namespace vuk {
 			for (auto dep : rpass.pre_barriers) {
 				auto& bound = impl->bound_attachments[dep.image];
 				dep.barrier.image = bound.attachment.image;
-				resolve_image_barrier(ctx, dep, bound);
+				if (!resolve_image_barrier(ctx, dep, bound)) {
+					continue;
+				}
 				vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
 			}
 			for (const auto& dep : rpass.pre_mem_barriers) {
@@ -206,10 +278,12 @@ namespace vuk {
 				if (rpass.handle == VK_NULL_HANDLE) {
 					for (auto dep : sp.pre_barriers) {
 						auto& bound = impl->bound_attachments[dep.image];
-						resolve_image_barrier(ctx, dep, bound);
+						if (!resolve_image_barrier(ctx, dep, bound)) {
+							continue;
+						}
 						vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
 					}
-					for (auto dep : sp.pre_mem_barriers) {
+					for (auto& dep : sp.pre_mem_barriers) {
 						vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 1, &dep.barrier, 0, nullptr, 0, nullptr);
 					}
 				}
@@ -245,7 +319,9 @@ namespace vuk {
 				if (rpass.handle == VK_NULL_HANDLE) {
 					for (auto dep : sp.post_barriers) {
 						auto& bound = impl->bound_attachments[dep.image];
-						resolve_image_barrier(ctx, dep, bound);
+						if (!resolve_image_barrier(ctx, dep, bound)) {
+							continue;
+						}
 						vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
 					}
 					for (const auto& dep : sp.post_mem_barriers) {
@@ -261,7 +337,9 @@ namespace vuk {
 			}
 			for (auto dep : rpass.post_barriers) {
 				auto& bound = impl->bound_attachments[dep.image];
-				resolve_image_barrier(ctx, dep, bound);
+				if (!resolve_image_barrier(ctx, dep, bound)) {
+					continue;
+				}
 				vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
 			}
 			for (const auto& dep : rpass.post_mem_barriers) {

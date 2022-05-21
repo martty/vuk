@@ -516,7 +516,7 @@ namespace vuk {
 		ivci.subresourceRange.baseArrayLayer = 0;
 		ivci.subresourceRange.baseMipLevel = 0;
 		ivci.subresourceRange.layerCount = 1;
-		ivci.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
+		ivci.subresourceRange.levelCount = ici.mipLevels;
 		ivci.viewType = ici.imageType == ImageType::e3D ? ImageViewType::e3D : ici.imageType == ImageType::e2D ? ImageViewType::e2D : ImageViewType::e1D;
 		Texture tex{ std::move(dst), allocate_image_view(allocator, ivci).value() }; // TODO: dropping error
 		tex.extent = ici.extent;

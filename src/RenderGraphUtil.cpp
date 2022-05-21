@@ -34,8 +34,8 @@ namespace vuk {
 			return operator>>(name.append("+"));
 		}
 
-		Resource ImageResource::operator()(Access ia, Format fmt, Dimension2D dim, Samples samp, Clear cv) {
-			return Resource{ name, Resource::Type::eImage, ia, fmt, dim, samp, cv, name.append("+") };
+		Resource ImageResource::operator()(Access ia, Format fmt, Dimension2D dim, Samples samp) {
+			return Resource{ name, Resource::Type::eImage, ia, fmt, dim, samp, name.append("+") };
 		}
 	} // namespace detail
 

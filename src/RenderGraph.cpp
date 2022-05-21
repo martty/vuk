@@ -12,6 +12,7 @@
 namespace {
 	void diverge(vuk::CommandBuffer&) {}
 	void converge(vuk::CommandBuffer&) {}
+	void image_clear(vuk::CommandBuffer&) {}
 } // namespace
 
 namespace vuk {
@@ -42,7 +43,7 @@ namespace vuk {
 	void RenderGraph::add_pass(Pass p) {
 		for (auto& r : p.resources) {
 			if (r.is_create && r.type == Resource::Type::eImage) {
-				attach_managed(r.name, (Format)r.ici.description.format, r.ici.attachment.extent, r.ici.attachment.sample_count, r.ici.attachment.clear_value);
+				attach_image(r.name, r.ici, vuk::Access::eNone, vuk::Access::eNone);
 			}
 		}
 		impl->passes.emplace_back(*impl->arena_, std::move(p));
@@ -440,17 +441,23 @@ namespace vuk {
 		           .resolves = { { ms_name, resolved_name_src } } });
 	}
 
-	void RenderGraph::attach_swapchain(Name name, SwapchainRef swp, Clear c) {
+	void RenderGraph::clear_image(Name image_name, Name image_name_out, Clear clear_value) {
+		std::vector<std::byte> args(sizeof(Clear));
+		std::memcpy(args.data(), &clear_value, sizeof(Clear));
+		add_pass({ .resources = { Resource{ image_name, Resource::Type::eImage, eClear, image_name_out } }, .execute = image_clear, .arguments = std::move(args) });
+	}
+
+	void RenderGraph::attach_swapchain(Name name, SwapchainRef swp) {
 		AttachmentRPInfo attachment_info;
 		attachment_info.attachment.extent = Dimension2D::absolute(swp->extent);
 		// directly presented
 		attachment_info.description.format = (VkFormat)swp->format;
 		attachment_info.attachment.sample_count = Samples::e1;
+		attachment_info.attachment.layer_count = 1;
+		attachment_info.attachment.level_count = 1;
 
 		attachment_info.type = AttachmentRPInfo::Type::eSwapchain;
 		attachment_info.swapchain = swp;
-		attachment_info.should_clear = true;
-		attachment_info.attachment.clear_value = c;
 
 		ResourceUse& initial = attachment_info.initial;
 		ResourceUse& final = attachment_info.final;
@@ -458,8 +465,8 @@ namespace vuk {
 		// we don't care about any writes, we will clear
 		initial.access = AccessFlags{};
 		initial.stages = PipelineStageFlagBits::eColorAttachmentOutput;
-		// clear
-		initial.layout = ImageLayout::ePreinitialized;
+		// discard
+		initial.layout = ImageLayout::eUndefined;
 		/* Normally, we would need an external dependency at the end as well since
 	 we are changing layout in finalLayout, but since we are signalling a
 	 semaphore, we can rely on Vulkan's default behavior, which injects an
@@ -467,31 +474,6 @@ namespace vuk {
 	 VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, dstAccessMask = 0. */
 		final.access = AccessFlagBits{};
 		final.layout = ImageLayout::ePresentSrcKHR;
-		final.stages = PipelineStageFlagBits::eBottomOfPipe;
-
-		impl->bound_attachments.emplace(name, attachment_info);
-	}
-
-	void RenderGraph::attach_managed(Name name, Format format, Dimension2D extent, Samples samp, Clear c) {
-		AttachmentRPInfo attachment_info;
-		attachment_info.attachment.extent = extent;
-
-		attachment_info.type = AttachmentRPInfo::Type::eInternal;
-		attachment_info.description.format = (VkFormat)format;
-		attachment_info.attachment.sample_count = samp;
-
-		attachment_info.should_clear = true;
-		attachment_info.attachment.clear_value = c;
-		ResourceUse& initial = attachment_info.initial;
-		ResourceUse& final = attachment_info.final;
-		initial.access = AccessFlags{};
-		initial.stages = PipelineStageFlagBits::eTopOfPipe;
-		// for internal attachments we don't want to preserve previous data
-		initial.layout = ImageLayout::ePreinitialized;
-
-		// with an undefined final layout, there will be no final sync
-		final.layout = ImageLayout::eUndefined;
-		final.access = AccessFlagBits{};
 		final.stages = PipelineStageFlagBits::eBottomOfPipe;
 
 		impl->bound_attachments.emplace(name, attachment_info);
@@ -506,10 +488,13 @@ namespace vuk {
 		AttachmentRPInfo attachment_info;
 		attachment_info.attachment = att;
 
-		attachment_info.type = AttachmentRPInfo::Type::eExternal;
+		if (att.has_concrete_image() && att.has_concrete_image_view()) {
+			attachment_info.type = AttachmentRPInfo::Type::eExternal;
+		} else {
+			attachment_info.type = AttachmentRPInfo::Type::eInternal;
+		}
 		attachment_info.description.format = (VkFormat)att.format;
 
-		attachment_info.should_clear = initial_acc == Access::eClear; // if initial access was clear, we will clear
 		ResourceUse& initial = attachment_info.initial;
 		ResourceUse& final = attachment_info.final;
 		initial = to_use(initial_acc);
@@ -527,7 +512,6 @@ namespace vuk {
 				attachment_info.type = AttachmentRPInfo::Type::eExternal;
 				attachment_info.description.format = (VkFormat)att.format;
 
-				attachment_info.should_clear = false;
 				attachment_info.initial = { fimg.control->last_use.stages, fimg.control->last_use.access, fimg.control->last_use.layout };
 				attachment_info.final = to_use(vuk::Access::eNone);
 
@@ -583,7 +567,6 @@ namespace vuk {
 		rp_att.description.format = attachment_info.description.format;
 		rp_att.attachment = attachment_info.attachment;
 		rp_att.description.samples = (VkSampleCountFlagBits)attachment_info.attachment.sample_count.count;
-		rp_att.should_clear = attachment_info.should_clear;
 		rp_att.type = attachment_info.type;
 	}
 
@@ -605,6 +588,10 @@ namespace vuk {
 		// case
 		validate();
 
+		// handle clears
+		// if we are going into a Clear, see if the subsequent use is a framebuffer use
+		// in this case we propagate the clear onto the renderpass of the next use, and we drop the clear pass
+		// if we can't do this (subsequent use not fb use), then we will emit CmdClear when recording
 		for (auto& [raw_name, attachment_info] : impl->bound_attachments) {
 			auto name = impl->resolve_name(raw_name);
 			auto chain_it = impl->use_chains.find(name);
@@ -613,6 +600,41 @@ namespace vuk {
 				continue;
 			}
 			auto& chain = chain_it->second;
+			for (size_t i = 0; i < chain.size() - 1; i++) {
+				auto& left = chain[i];
+				auto& right = chain[i + 1];
+				if (left.original == eClear) {
+					// next use is as fb attachment
+					if ((i < chain.size() - 1) && is_framebuffer_attachment(to_use(right.original))) {
+						auto& next_rpi = impl->rpis[right.pass->render_pass_index];
+						for (auto& rpi_att : next_rpi.attachments) {
+							if (rpi_att.name == name) {
+								assert(left.pass->pass.arguments.size() == sizeof(Clear));
+								rpi_att.clear_value = Clear{};
+								std::memcpy(&rpi_att.clear_value, left.pass->pass.arguments.data(), sizeof(Clear));
+								break;
+							}
+						}
+						auto& sp = impl->rpis[left.pass->render_pass_index].subpasses[left.pass->subpass];
+						sp.passes.erase(std::find(sp.passes.begin(), sp.passes.end(), left.pass));
+						impl->ordered_passes.erase(std::find(impl->ordered_passes.begin(), impl->ordered_passes.end(), left.pass));
+						left.pass->render_pass_index = static_cast<size_t>(-1);
+						chain.erase(chain.begin() + i); // remove the clear from the use chain
+					}
+				}
+			}
+		}
+
+		for (auto& [raw_name, attachment_info] : impl->bound_attachments) {
+			auto name = impl->resolve_name(raw_name);
+			auto chain_it = impl->use_chains.find(name);
+			if (chain_it == impl->use_chains.end()) {
+				// TODO: warning here, if turned on
+				continue;
+			}
+			auto& chain = chain_it->second;
+			// insert initial usage if we need to synchronize against it
+			// || (chain[0].original == eClear && attachment_info.initial.layout == ImageLayout::eUndefined)
 			if (is_acquire(chain[0].original)) {
 			} else {
 				chain.insert(chain.begin(), UseRef{ {}, {}, vuk::eManual, vuk::eManual, attachment_info.initial, Resource::Type::eImage, {}, nullptr });
@@ -1053,12 +1075,10 @@ namespace vuk {
 							assert(rp_att.description.initialLayout != (VkImageLayout)ImageLayout::eUndefined);
 
 							// compute attachment load
-							if (prev_use.layout == ImageLayout::eUndefined) {
-								rp_att.description.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-							} else if (prev_use.layout == ImageLayout::ePreinitialized) {
-								// preinit means clear
-								rp_att.description.initialLayout = (VkImageLayout)ImageLayout::eUndefined;
+							if (rp_att.clear_value) {
 								rp_att.description.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+							} else if (prev_use.layout == ImageLayout::eUndefined) {
+								rp_att.description.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 							} else {
 								rp_att.description.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
 							}

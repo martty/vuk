@@ -117,7 +117,8 @@ void vuk::ExampleRunner::render() {
 			auto fut = item_current->render(*this, frame_allocator);
 			ImGui::Render();
 			vuk::Name attachment_name = item_current->name;
-			fut.get_render_graph()->attach_swapchain(attachment_name, swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
+			fut.get_render_graph()->attach_swapchain("_swp", swapchain);
+			fut.get_render_graph()->clear_image("_swp", attachment_name, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
 			RenderGraph rg("runner");
 			rg.attach_in("result", std::move(fut));
 			util::ImGui_ImplVuk_Render(frame_allocator, rg, "result", "SWAPCHAIN", imgui_data, ImGui::GetDrawData(), sampled_images);
@@ -134,8 +135,9 @@ void vuk::ExampleRunner::render() {
 				Name attachment_name_in = Name(ex->name);
 				Name& attachment_name_out = *attachment_names.emplace(std::string(ex->name) + "_final");
 				auto& rg_frag = *rg_frag_fut.get_render_graph();
-				rg_frag.attach_managed(
-				    attachment_name_in, swapchain->format, vuk::Dimension2D::absolute(300, 300), vuk::Samples::e1, vuk::ClearColor(0.1f, 0.2f, 0.3f, 1.f));
+				//rg_frag.clear_image(, vuk::ClearColor(0.1f, 0.2f, 0.3f, 1.f));
+				rg_frag.attach_image(
+				    attachment_name_in, vuk::ImageAttachment::managed(swapchain->format, vuk::Dimension2D::absolute(300, 300), vuk::Samples::e1));
 				rg_frag.compile(vuk::RenderGraph::CompileOptions{});
 				ImGui::Begin(ex->name.data());
 				if (rg_frag.get_use_chains().size() > 1) {
@@ -212,8 +214,9 @@ void vuk::ExampleRunner::render() {
 			}
 
 			ImGui::Render();
-			util::ImGui_ImplVuk_Render(frame_allocator, rg, "SWAPCHAIN", "SWAPCHAIN+", imgui_data, ImGui::GetDrawData(), sampled_images);
-			rg.attach_swapchain("SWAPCHAIN", swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
+			util::ImGui_ImplVuk_Render(frame_allocator, rg, "SWAPCHAIN+", "SWAPCHAIN++", imgui_data, ImGui::GetDrawData(), sampled_images);
+			rg.clear_image("SWAPCHAIN", "SWAPCHAIN+", vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
+			rg.attach_swapchain("SWAPCHAIN", swapchain);
 			execute_submit_and_present_to_one(frame_allocator, std::move(rg).link(vuk::RenderGraph::CompileOptions{}), swapchain);
 			sampled_images.clear();
 		}

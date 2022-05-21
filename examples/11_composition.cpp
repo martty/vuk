@@ -67,14 +67,26 @@ namespace {
 
 		      vuk::RenderGraph rg("MRT");
 		      // Here we will render the cube into 3 offscreen textures
+		      // The intermediate offscreen textures need to be bound
+		      // The "internal" rendering resolution is set here for one attachment, the rest infers from it
+		      rg.attach_image("11_position",
+		                      vuk::ImageAttachment::managed(vuk::Format::eR16G16B16A16Sfloat, vuk::Dimension2D::absolute(300, 300), vuk::Samples::e1));
+		      rg.attach_image("11_normal", { .format = vuk::Format::eR16G16B16A16Sfloat });
+		      rg.attach_image("11_color", { .format = vuk::Format::eR8G8B8A8Unorm });
+		      rg.attach_image("11_depth", { .format = vuk::Format::eD32Sfloat });
+		      // These textures need to be cleared
+		      rg.clear_image("11_position", "11_position+", vuk::ClearColor{ 1.f, 0.f, 0.f, 0.f });
+		      rg.clear_image("11_normal", "11_normal+", vuk::ClearColor{ 0.f, 1.f, 0.f, 0.f });
+		      rg.clear_image("11_color", "11_color+", vuk::ClearColor{ 0.f, 0.f, 1.f, 0.f });
+		      rg.clear_image("11_depth", "11_depth+", vuk::ClearDepthStencil{ 1.0f, 0 });
 		      rg.add_pass({ // Passes can be optionally named, this useful for visualization and debugging
 		                    .name = "deferred_MRT",
 		                    // Declare our framebuffer
-		                    .resources = { "11_position"_image >> vuk::eColorWrite,
-		                                   "11_normal"_image >> vuk::eColorWrite,
-		                                   "11_color"_image >> vuk::eColorWrite,
-		                                   "11_depth"_image >> vuk::eDepthStencilRW },
-		                    .execute = [uboVP](vuk::CommandBuffer& command_buffer) {
+		                    .resources = { "11_position+"_image >> vuk::eColorWrite,
+		                                   "11_normal+"_image >> vuk::eColorWrite,
+		                                   "11_color+"_image >> vuk::eColorWrite,
+		                                   "11_depth+"_image >> vuk::eDepthStencilRW },
+		                    .execute = [verts, uboVP, inds](vuk::CommandBuffer& command_buffer) {
 			                    // Rendering is the same as in the case for forward
 			                    command_buffer.set_viewport(0, vuk::Rect2D::framebuffer())
 			                        .set_scissor(0, vuk::Rect2D::framebuffer())
@@ -85,10 +97,7 @@ namespace {
 			                            .depthWriteEnable = true,
 			                            .depthCompareOp = vuk::CompareOp::eLessOrEqual,
 			                        })
-			                        .set_color_blend("11_position", {}) // Set the default color blend state individually for demonstration
-			                        .set_color_blend("11_normal",
-			                                         {}) // If you want to use different blending state per attachment, you must enable the independentBlend feature
-			                        .set_color_blend("11_color", {})
+			                        .broadcast_color_blend({})
 			                        .bind_vertex_buffer(0,
 			                                            verts,
 			                                            0,
@@ -103,22 +112,9 @@ namespace {
 			                    *model = static_cast<glm::mat4>(glm::angleAxis(glm::radians(angle), glm::vec3(0.f, 1.f, 0.f)));
 			                    command_buffer.draw_indexed(box.second.size(), 1, 0, 0, 0);
 		                    } });
-		      // The intermediate offscreen textures need to be bound
-		      // The "internal" rendering resolution is set here for one attachment, the rest infers from it
-		      rg.attach_managed(
-		          "11_position", vuk::Format::eR16G16B16A16Sfloat, vuk::Dimension2D::absolute(300, 300), vuk::Samples::e1, vuk::ClearColor{ 1.f, 0.f, 0.f, 0.f });
-		      rg.attach_managed("11_normal",
-		                        vuk::Format::eR16G16B16A16Sfloat,
-		                        vuk::Dimension2D::framebuffer(),
-		                        vuk::Samples::Framebuffer{},
-		                        vuk::ClearColor{ 0.f, 1.f, 0.f, 0.f });
-		      rg.attach_managed(
-		          "11_color", vuk::Format::eR8G8B8A8Unorm, vuk::Dimension2D::framebuffer(), vuk::Samples::Framebuffer{}, vuk::ClearColor{ 0.f, 0.f, 1.f, 0.f });
-		      rg.attach_managed(
-		          "11_depth", vuk::Format::eD32Sfloat, vuk::Dimension2D::framebuffer(), vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
-		      vuk::Future pos_fut = { rg, "11_position+" };
-		      vuk::Future norm_fut = { rg, "11_normal+" };
-		      vuk::Future col_fut = { rg, "11_color+" };
+		      vuk::Future pos_fut = { frame_allocator, rg, "11_position++" };
+		      vuk::Future norm_fut = { frame_allocator, rg, "11_normal++" };
+		      vuk::Future col_fut = { frame_allocator, rg, "11_color++" };
 
 		      angle += 360.f * ImGui::GetIO().DeltaTime;
 
@@ -130,9 +126,9 @@ namespace {
 		                            // Declare that we are going to render to the final color image
 		                            // Declare that we are going to sample (in the fragment shader) from the previous attachments
 		                            .resources = { "11_deferred"_image >> vuk::eColorWrite >> "11_deferred_final",
-		                                           "11_position+"_image >> vuk::eFragmentSampled,
-		                                           "11_normal+"_image >> vuk::eFragmentSampled,
-		                                           "11_color+"_image >> vuk::eFragmentSampled },
+		                                           "11_position++"_image >> vuk::eFragmentSampled,
+		                                           "11_normal++"_image >> vuk::eFragmentSampled,
+		                                           "11_color++"_image >> vuk::eFragmentSampled },
 		                            .execute = [cam_pos](vuk::CommandBuffer& command_buffer) {
 			                            command_buffer.set_viewport(0, vuk::Rect2D::framebuffer())
 			                                .set_scissor(0, vuk::Rect2D::framebuffer())
@@ -145,11 +141,11 @@ namespace {
 			                            vuk::SamplerCreateInfo sci;
 			                            sci.minFilter = sci.magFilter = vuk::Filter::eNearest;
 			                            // Bind the previous attachments as sampled images
-			                            command_buffer.bind_image(0, 0, "11_position+")
+			                            command_buffer.bind_image(0, 0, "11_position++")
 			                                .bind_sampler(0, 0, sci)
-			                                .bind_image(0, 1, "11_normal+")
+			                                .bind_image(0, 1, "11_normal++")
 			                                .bind_sampler(0, 1, sci)
-			                                .bind_image(0, 2, "11_color+")
+			                                .bind_image(0, 2, "11_color++")
 			                                .bind_sampler(0, 2, sci)
 			                                .draw(3, 1, 0, 0);
 		                            } });

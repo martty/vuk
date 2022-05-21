@@ -34,7 +34,7 @@ namespace vuk {
 		struct ImageResource {
 			Name name;
 
-			Resource operator()(Access ia, Format, Dimension2D, Samples, Clear);
+			Resource operator()(Access ia, Format, Dimension2D, Samples);
 			ImageResourceInputOnly operator>>(Access ia);
 		};
 
@@ -75,8 +75,7 @@ namespace vuk {
 		// swapchain for swapchain
 		Swapchain* swapchain = nullptr;
 
-		// optionally set
-		bool should_clear = false;
+		std::optional<Clear> clear_value;
 
 		bool is_resolve_dst = false;
 		FutureBase* attached_future = nullptr;
@@ -98,7 +97,7 @@ namespace vuk {
 		Access ia;
 		Name out_name;
 		bool is_create = false;
-		AttachmentRPInfo ici;
+		ImageAttachment ici;
 		BufferCreateInfo bci;
 		union Subrange {
 			struct Image {
@@ -126,13 +125,13 @@ namespace vuk {
 
 		Resource(Name n, Type t, Access ia) : name(n), type(t), ia(ia) {}
 		Resource(Name n, Type t, Access ia, Name out_name) : name(n), type(t), ia(ia), out_name(out_name) {}
-		Resource(Name n, Type t, Access ia, Format fmt, Dimension2D dim, Samples samp, Clear cv, Name out_name) :
+		Resource(Name n, Type t, Access ia, Format fmt, Dimension2D dim, Samples samp, Name out_name) :
 		    name(n),
 		    type(t),
 		    ia(ia),
 		    out_name(out_name),
 		    is_create(true),
-		    ici{ .attachment = { .extent = dim, .format = fmt, .sample_count = samp, .clear_value = cv }, .description{ .format = (VkFormat)fmt } } {}
+		    ici{ .extent = dim, .format = fmt, .sample_count = samp } {}
 
 		bool operator==(const Resource& o) const noexcept {
 			return name == o.name;
@@ -155,6 +154,7 @@ namespace vuk {
 		FutureBase* signal = nullptr;
 
 		std::function<void(CommandBuffer&)> execute;
+		std::vector<std::byte> arguments; // internal use
 	};
 
 	// declare these specializations for GCC
@@ -198,23 +198,29 @@ namespace vuk {
 		/// @param ms_name Image resource to resolve from (multisampled)
 		void resolve_resource_into(Name resolved_name_src, Name resolved_name_dst, Name ms_name);
 
+		/// @brief Clear image attachment
+		/// @param image_name_in Name of the image resource to clear
+		/// @param image_name_out Name of the cleared image resource
+		/// @param clear_value Value used for the clear
+		void clear_image(Name image_name_in, Name image_name_out, Clear clear_value);
+
 		/// @brief Attach a swapchain to the given name
 		/// @param name Name of the resource to attach to
-		void attach_swapchain(Name name, SwapchainRef swp, Clear);
+		void attach_swapchain(Name name, SwapchainRef swp);
 
 		/// @brief Attach a buffer to the given name
 		/// @param name Name of the resource to attach to
 		/// @param buffer Buffer to attach
 		/// @param initial Access to the resource prior to this rendergraph
 		/// @param final Desired Access to the resource after this rendergraph
-		void attach_buffer(Name name, Buffer buffer, Access initial, Access final);
+		void attach_buffer(Name name, Buffer buffer, Access initial = eNone, Access final = eNone);
 
 		/// @brief Attach an image to the given name
 		/// @param name Name of the resource to attach to
 		/// @param image_attachment ImageAttachment to attach
 		/// @param initial Access to the resource prior to this rendergraph
 		/// @param final Desired Access to the resource after this rendergraph
-		void attach_image(Name name, ImageAttachment image_attachment, Access initial, Access final);
+		void attach_image(Name name, ImageAttachment image_attachment, Access initial = eNone, Access final = eNone);
 
 		/// @brief Attach a future to the given name
 		/// @param name Name of the resource to attach to
@@ -224,10 +230,6 @@ namespace vuk {
 		/// @brief Attach multiple futures - the names are matched to future bound names
 		/// @param futures Futures to be consumed into this rendergraph
 		void attach_in(std::span<Future> futures);
-
-		/// @brief Request the rendergraph to allocate an image and attach it to the given name
-		/// @param name Name of the resource to attach to
-		void attach_managed(Name name, Format format, Dimension2D dimension, Samples samples, Clear clear_value);
 
 		/// @brief Control compilation options when compiling the rendergraph
 		struct CompileOptions {

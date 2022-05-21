@@ -12,10 +12,11 @@ namespace vuk {
 	enum class ImageTiling {
 		eOptimal = VK_IMAGE_TILING_OPTIMAL,
 		eLinear = VK_IMAGE_TILING_LINEAR,
-		eDrmFormatModifierEXT = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT
+		eDrmFormatModifierEXT = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT,
+		eInfer
 	};
 
-	enum class ImageType { e1D = VK_IMAGE_TYPE_1D, e2D = VK_IMAGE_TYPE_2D, e3D = VK_IMAGE_TYPE_3D };
+	enum class ImageType { e1D = VK_IMAGE_TYPE_1D, e2D = VK_IMAGE_TYPE_2D, e3D = VK_IMAGE_TYPE_3D, eInfer };
 
 	enum class ImageUsageFlagBits : VkImageUsageFlags {
 		eTransferSrc = VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
@@ -27,7 +28,8 @@ namespace vuk {
 		eTransientAttachment = VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT,
 		eInputAttachment = VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
 		eShadingRateImageNV = VK_IMAGE_USAGE_SHADING_RATE_IMAGE_BIT_NV,
-		eFragmentDensityMapEXT = VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT
+		eFragmentDensityMapEXT = VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT,
+		eInfer = 1024
 	};
 
 	using ImageUsageFlags = Flags<ImageUsageFlagBits>;
@@ -156,7 +158,8 @@ namespace vuk {
 		eCube = VK_IMAGE_VIEW_TYPE_CUBE,
 		e1DArray = VK_IMAGE_VIEW_TYPE_1D_ARRAY,
 		e2DArray = VK_IMAGE_VIEW_TYPE_2D_ARRAY,
-		eCubeArray = VK_IMAGE_VIEW_TYPE_CUBE_ARRAY
+		eCubeArray = VK_IMAGE_VIEW_TYPE_CUBE_ARRAY,
+		eInfer
 	};
 
 	using ImageViewCreateFlags = Flags<ImageViewCreateFlagBits>;
@@ -167,7 +170,8 @@ namespace vuk {
 		eR = VK_COMPONENT_SWIZZLE_R,
 		eG = VK_COMPONENT_SWIZZLE_G,
 		eB = VK_COMPONENT_SWIZZLE_B,
-		eA = VK_COMPONENT_SWIZZLE_A
+		eA = VK_COMPONENT_SWIZZLE_A,
+		eInfer
 	};
 	struct ComponentMapping {
 		ComponentSwizzle r = ComponentSwizzle::eIdentity;
@@ -296,7 +300,7 @@ namespace vuk {
 		uint32_t layer_count : 11;
 		ComponentMapping components;
 
-		bool operator==(const ImageView& other) const noexcept {
+		constexpr bool operator==(const ImageView& other) const noexcept {
 			return payload == other.payload;
 		}
 	};
