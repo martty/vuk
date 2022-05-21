@@ -154,6 +154,7 @@ namespace vuk {
 
 	class CommandBuffer {
 	protected:
+		friend struct RenderGraph;
 		friend struct ExecutableRenderGraph;
 		ExecutableRenderGraph* rg = nullptr;
 		Context& ctx;

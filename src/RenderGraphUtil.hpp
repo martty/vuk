@@ -128,8 +128,6 @@ namespace vuk {
 		case eNone:
 			return { vuk::PipelineStageFlagBits::eTopOfPipe, vuk::AccessFlagBits{}, vuk::ImageLayout::eUndefined };
 		case eClear:
-			return { vuk::PipelineStageFlagBits::eColorAttachmentOutput, vuk::AccessFlagBits::eColorAttachmentWrite, vuk::ImageLayout::eTransferDstOptimal };
-		case eTransferClear:
 			return { vuk::PipelineStageFlagBits::eTransfer, vuk::AccessFlagBits::eTransferWrite, vuk::ImageLayout::eTransferDstOptimal };
 		case eRelease:
 		case eReleaseToGraphics:

@@ -202,7 +202,8 @@ namespace vuk {
 		/// @param image_name_in Name of the image resource to clear
 		/// @param image_name_out Name of the cleared image resource
 		/// @param clear_value Value used for the clear
-		void clear_image(Name image_name_in, Name image_name_out, Clear clear_value);
+		/// @param subrange Range of image cleared
+		void clear_image(Name image_name_in, Name image_name_out, Clear clear_value, Resource::Subrange::Image subrange = {});
 
 		/// @brief Attach a swapchain to the given name
 		/// @param name Name of the resource to attach to

@@ -1,6 +1,7 @@
 #include "vuk/RenderGraph.hpp"
 #include "RenderGraphImpl.hpp"
 #include "RenderGraphUtil.hpp"
+#include "vuk/CommandBuffer.hpp"
 #include "vuk/Context.hpp"
 #include "vuk/Exception.hpp"
 #include "vuk/Future.hpp"
@@ -12,7 +13,6 @@
 namespace {
 	void diverge(vuk::CommandBuffer&) {}
 	void converge(vuk::CommandBuffer&) {}
-	void image_clear(vuk::CommandBuffer&) {}
 } // namespace
 
 namespace vuk {
@@ -441,10 +441,14 @@ namespace vuk {
 		           .resolves = { { ms_name, resolved_name_src } } });
 	}
 
-	void RenderGraph::clear_image(Name image_name, Name image_name_out, Clear clear_value) {
+	void RenderGraph::clear_image(Name image_name, Name image_name_out, Clear clear_value, Resource::Subrange::Image subrange) {
 		std::vector<std::byte> args(sizeof(Clear));
 		std::memcpy(args.data(), &clear_value, sizeof(Clear));
-		add_pass({ .resources = { Resource{ image_name, Resource::Type::eImage, eClear, image_name_out } }, .execute = image_clear, .arguments = std::move(args) });
+		Resource res{ image_name, Resource::Type::eImage, eClear, image_name_out };
+		res.subrange.image = subrange;
+		add_pass({ .resources = { std::move(res) },
+		           .execute = [image_name, clear_value](CommandBuffer& cbuf) { cbuf.clear_image(image_name, clear_value); },
+		           .arguments = std::move(args) });
 	}
 
 	void RenderGraph::attach_swapchain(Name name, SwapchainRef swp) {

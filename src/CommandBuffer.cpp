@@ -546,10 +546,10 @@ namespace vuk {
 		VkImageSubresourceRange isr = {};
 		auto aspect = format_to_aspect((Format)res->description.format);
 		isr.aspectMask = (VkImageAspectFlags)aspect;
-		isr.baseArrayLayer = 0;
-		isr.layerCount = VK_REMAINING_ARRAY_LAYERS;
-		isr.baseMipLevel = 0;
-		isr.levelCount = VK_REMAINING_MIP_LEVELS;
+		isr.baseArrayLayer = res->attachment.base_layer;
+		isr.layerCount = res->attachment.layer_count;
+		isr.baseMipLevel = res->attachment.base_level;
+		isr.levelCount = res->attachment.level_count;
 
 		if (aspect == ImageAspectFlagBits::eColor) {
 			vkCmdClearColorImage(command_buffer, res->attachment.image, (VkImageLayout)layout, &c.c.color, 1, &isr);
