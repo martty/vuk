@@ -91,6 +91,7 @@ namespace vuk {
 				} else {
 					detail::destroy_at(&_value);
 					CONSTRUCT_AT(&_error, MOV(other._error));
+					other._error = nullptr;
 					_holds_value = false;
 				}
 			} else {
@@ -260,7 +261,7 @@ namespace vuk {
 			if (_holds_value) {
 				if (!other._holds_value) {
 					_error = MOV(other._error);
-					delete other._error;
+					other._error = nullptr;
 					_holds_value = false;
 				}
 			} else {
