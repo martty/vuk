@@ -19,6 +19,7 @@
 namespace {
 	float angle = 0.f;
 	auto box = util::generate_cube();
+	vuk::BufferGPU verts, inds;
 
 	vuk::Example x{
 		.name = "05_deferred",
@@ -37,18 +38,19 @@ namespace {
 			      pci.add_glsl(util::read_entire_file("../../examples/deferred_resolve.frag"), "deferred_resolve.frag");
 			      runner.context->create_named_pipeline("deferred_resolve", pci);
 		      }
+
+		      // We set up the cube data, same as in example 02_cube
+		      auto [vert_buf, vert_fut] = create_buffer_gpu(allocator, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.first));
+		      verts = *vert_buf;
+		      auto [ind_buf, ind_fut] = create_buffer_gpu(allocator, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.second));
+		      inds = *ind_buf;
+		      // For the example, we just ask these that these uploads complete before moving on to rendering
+		      // In an engine, you would integrate these uploads into some explicit system
+		      runner.enqueue_setup(std::move(vert_fut));
+		      runner.enqueue_setup(std::move(ind_fut));
 		    },
 		.render =
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
-		      vuk::Context& ctx = frame_allocator.get_context();
-
-		      // We set up the cube data, same as in example 02_cube
-
-		      auto [vert_buf, vert_fut] = create_buffer_gpu(frame_allocator, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.first));
-		      auto verts = *vert_buf;
-		      auto [ind_buf, ind_fut] = create_buffer_gpu(frame_allocator, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.second));
-		      auto inds = *ind_buf;
-
 		      struct VP {
 			      glm::mat4 view;
 			      glm::mat4 proj;
@@ -61,7 +63,7 @@ namespace {
 		      auto [buboVP, uboVP_fut] = create_buffer_cross_device(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, std::span(&vp, 1));
 		      auto uboVP = *buboVP;
 
-		      vuk::wait_for_futures(frame_allocator, vert_fut, ind_fut, uboVP_fut);
+		      vuk::wait_for_futures(frame_allocator, uboVP_fut);
 
 		      vuk::RenderGraph rg("05");
 		      // Here we will render the cube into 3 offscreen textures
@@ -72,7 +74,7 @@ namespace {
 		                                   "05_normal"_image >> vuk::eColorWrite,
 		                                   "05_color"_image >> vuk::eColorWrite,
 		                                   "05_depth"_image >> vuk::eDepthStencilRW },
-		                    .execute = [verts, uboVP, inds](vuk::CommandBuffer& command_buffer) {
+		                    .execute = [uboVP](vuk::CommandBuffer& command_buffer) {
 			                    // Rendering is the same as in the case for forward
 			                    command_buffer.set_viewport(0, vuk::Rect2D::framebuffer())
 			                        .set_scissor(0, vuk::Rect2D::framebuffer())

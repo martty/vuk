@@ -148,10 +148,9 @@ namespace {
 		      rg.attach_in("10_doge", std::move(tex_fut));
 		      rg.attach_image("10_v1", vuk::ImageAttachment::from_texture(*variant1), vuk::eNone, vuk::eFragmentSampled);
 		      rg.attach_image("10_v2", vuk::ImageAttachment::from_texture(*variant2), vuk::eNone, vuk::eFragmentSampled);
-		      
-			  // enqueue running the preprocessing rendergraph and force 10_doge to be sampleable later
-			  auto fut = vuk::transition(vuk::Future{ std::make_unique<vuk::RenderGraph>(std::move(rg)), "10_doge" },
-		                                 vuk::eFragmentSampled);
+
+		      // enqueue running the preprocessing rendergraph and force 10_doge to be sampleable later
+		      auto fut = vuk::transition(vuk::Future{ std::make_unique<vuk::RenderGraph>(std::move(rg)), "10_doge" }, vuk::eFragmentSampled);
 		      runner.enqueue_setup(std::move(fut));
 
 		      // Set up the resources for our renderer
@@ -275,7 +274,7 @@ namespace {
 
 		      // Set up the pass to draw the renderables
 		      rg.add_pass({ .name = "forward",
-							.resources = { "10_baby_renderer"_image >> vuk::eColorWrite >> "10_baby_renderer_final", "10_depth"_image >> vuk::eDepthStencilRW },
+		                    .resources = { "10_baby_renderer"_image >> vuk::eColorWrite >> "10_baby_renderer_final", "10_depth"_image >> vuk::eDepthStencilRW },
 		                    .execute = [uboVP, modelmats](vuk::CommandBuffer& command_buffer) {
 			                    command_buffer.set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
 			                        .set_viewport(0, vuk::Rect2D::framebuffer())

@@ -16,6 +16,7 @@
 namespace {
 	float angle = 0.f;
 	auto box = util::generate_cube();
+	vuk::BufferGPU verts, inds;
 	std::optional<vuk::Texture> texture_of_doge;
 
 	vuk::Example x{
@@ -38,15 +39,19 @@ namespace {
 		      texture_of_doge = std::move(tex);
 		      runner.enqueue_setup(std::move(tex_fut));
 		      stbi_image_free(doge_image);
+
+		      // We set up the cube data, same as in example 02_cube
+		      auto [vert_buf, vert_fut] = create_buffer_gpu(allocator, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.first));
+		      verts = *vert_buf;
+		      auto [ind_buf, ind_fut] = create_buffer_gpu(allocator, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.second));
+		      inds = *ind_buf;
+		      // For the example, we just ask these that these uploads complete before moving on to rendering
+		      // In an engine, you would integrate these uploads into some explicit system
+		      runner.enqueue_setup(std::move(vert_fut));
+		      runner.enqueue_setup(std::move(ind_fut));
 		    },
 		.render =
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
-		      // We set up the cube data, same as in example 02_cube
-		      auto [vert_buf, vert_fut] = create_buffer_gpu(frame_allocator, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.first));
-		      auto verts = *vert_buf;
-		      auto [ind_buf, ind_fut] = create_buffer_gpu(frame_allocator, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.second));
-		      auto inds = *ind_buf;
-
 		      struct VP {
 			      glm::mat4 view;
 			      glm::mat4 proj;
@@ -58,14 +63,14 @@ namespace {
 		      auto [buboVP, uboVP_fut] = create_buffer_cross_device(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, std::span(&vp, 1));
 		      auto uboVP = *buboVP;
 
-		      vuk::wait_for_futures(frame_allocator, vert_fut, ind_fut, uboVP_fut);
+		      vuk::wait_for_futures(frame_allocator, uboVP_fut);
 
 		      vuk::RenderGraph rg("06");
 
 		      // The rendering pass is unchanged by going to multisampled,
 		      // but we will use an offscreen multisampled color attachment
 		      rg.add_pass({ .resources = { "06_msaa_MS"_image >> vuk::eColorWrite, "06_msaa_depth"_image >> vuk::eDepthStencilRW },
-		                    .execute = [verts, uboVP, inds](vuk::CommandBuffer& command_buffer) {
+		                    .execute = [uboVP](vuk::CommandBuffer& command_buffer) {
 			                    command_buffer.set_viewport(0, vuk::Rect2D::framebuffer())
 			                        .set_scissor(0, vuk::Rect2D::framebuffer())
 			                        .set_rasterization({}) // Set the default rasterization state
