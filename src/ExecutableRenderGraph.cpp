@@ -413,7 +413,7 @@ namespace vuk {
 					any_fb_incomplete = true;
 				}
 			}
-		} while (any_fb_incomplete || infer_progress); // stop looping if all attachment have been sized or we made no progress
+		} while (any_fb_incomplete && infer_progress); // stop looping if all attachment have been sized or we made no progress
 
 		assert(!any_fb_incomplete && "Failed to infer size for all attachments.");
 
