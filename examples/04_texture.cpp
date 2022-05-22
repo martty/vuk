@@ -100,8 +100,7 @@ namespace {
 
 		      angle += 180.f * ImGui::GetIO().DeltaTime;
 
-		      rg.attach_managed(
-		          "04_texture_depth", vuk::Format::eD32Sfloat, vuk::Dimension2D::framebuffer(), vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
+		      rg.attach_and_clear_image("04_texture_depth", { .format = vuk::Format::eD32Sfloat }, vuk::ClearDepthStencil{ 1.0f, 0 });
 		      return vuk::Future{ std::make_unique<vuk::RenderGraph>(std::move(rg)), "04_texture_final" };
 		    },
 

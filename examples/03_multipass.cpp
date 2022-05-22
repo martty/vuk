@@ -33,8 +33,8 @@ namespace {
 			      pci.add_glsl(util::read_entire_file("../../examples/triangle_depthshaded.frag"), "triangle_depthshaded.frag");
 			      runner.context->create_named_pipeline("cube", pci);
 		      }
-		      
-			  // We set up the cube data, same as in example 02_cube
+
+		      // We set up the cube data, same as in example 02_cube
 		      auto [vert_buf, vert_fut] = create_buffer_gpu(allocator, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.first));
 		      verts = *vert_buf;
 		      auto [ind_buf, ind_fut] = create_buffer_gpu(allocator, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.second));
@@ -117,7 +117,7 @@ namespace {
 		      // we don't provide an input texture, nor do we want to save the results later
 		      // For an internal attachment, we need to provide the format, extents, sample count and clear value
 		      // This depth attachment will have extents matching the framebuffer (deduced from the color attachment)
-		      rg.attach_managed("03_depth", vuk::Format::eD32Sfloat, vuk::Dimension2D::framebuffer(), vuk::Samples::e1, vuk::ClearDepthStencil{ 1.0f, 0 });
+		      rg.attach_and_clear_image("03_depth", { .format = vuk::Format::eD32Sfloat }, vuk::ClearDepthStencil{ 1.0f, 0 });
 
 		      return vuk::Future{ std::make_unique<vuk::RenderGraph>(std::move(rg)), "03_multipass_final" };
 		    }

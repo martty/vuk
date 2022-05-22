@@ -59,7 +59,6 @@ namespace {
 		    },
 		.render =
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
-
 		      struct VP {
 			      glm::mat4 view;
 			      glm::mat4 proj;
@@ -171,12 +170,12 @@ namespace {
 		      // We mark our MS attachment as multisampled (8 samples)
 		      // from the final image, and we don't need to specify here
 		      // We use the swapchain format & extents, since resolving needs identical formats & extents
-		      rg.attach_managed(
-		          "07_commands_MS", runner.swapchain->format, vuk::Dimension2D::absolute(300, 300), vuk::Samples::e8, vuk::ClearColor{ 0.f, 0.f, 0.f, 0.f });
-		      rg.attach_managed(
-		          "07_commands_depth", vuk::Format::eD32Sfloat, vuk::Dimension2D::framebuffer(), vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
-		      rg.attach_managed(
-		          "07_commands_NMS", runner.swapchain->format, vuk::Dimension2D::absolute(300, 300), vuk::Samples::e1, vuk::ClearColor{ 0.f, 0.f, 0.f, 0.f });
+		      rg.attach_and_clear_image("07_commands_MS",
+		                                { .extent = vuk::Dimension2D::absolute(300, 300), .format = runner.swapchain->format, .sample_count = vuk::Samples::e8 },
+		                                vuk::ClearColor{ 0.f, 0.f, 0.f, 1.f });
+		      rg.attach_and_clear_image("07_commands_depth", { .format = vuk::Format::eD32Sfloat }, vuk::ClearDepthStencil{ 1.0f, 0 });
+		      rg.attach_image("07_commands_NMS",
+		                      { .extent = vuk::Dimension2D::absolute(300, 300), .format = runner.swapchain->format, .sample_count = vuk::Samples::e1 });
 
 		      return vuk::Future{ std::make_unique<vuk::RenderGraph>(std::move(rg)), "07_commands_final" };
 		    },

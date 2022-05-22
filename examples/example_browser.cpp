@@ -135,9 +135,9 @@ void vuk::ExampleRunner::render() {
 				Name attachment_name_in = Name(ex->name);
 				Name& attachment_name_out = *attachment_names.emplace(std::string(ex->name) + "_final");
 				auto& rg_frag = *rg_frag_fut.get_render_graph();
-				//rg_frag.clear_image(, vuk::ClearColor(0.1f, 0.2f, 0.3f, 1.f));
-				rg_frag.attach_image(
-				    attachment_name_in, vuk::ImageAttachment::managed(swapchain->format, vuk::Dimension2D::absolute(300, 300), vuk::Samples::e1));
+				rg_frag.attach_and_clear_image(attachment_name_in,
+				                               { .extent = vuk::Dimension2D::absolute(300, 300), .format = swapchain->format, .sample_count = vuk::Samples::e1 },
+				                               vuk::ClearColor(0.1f, 0.2f, 0.3f, 1.f));
 				rg_frag.compile(vuk::RenderGraph::CompileOptions{});
 				ImGui::Begin(ex->name.data());
 				if (rg_frag.get_use_chains().size() > 1) {

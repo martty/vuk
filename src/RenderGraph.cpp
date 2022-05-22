@@ -507,6 +507,12 @@ namespace vuk {
 		impl->bound_attachments.emplace(name, attachment_info);
 	}
 
+	void RenderGraph::attach_and_clear_image(Name name, ImageAttachment att, Clear clear_value, Access initial_acc, Access final_acc) {
+		Name tmp_name = name.append(get_temporary_name());
+		attach_image(tmp_name, att, initial_acc, final_acc);
+		clear_image(tmp_name, name, clear_value);
+	}
+
 	void RenderGraph::attach_in(Name name, Future&& fimg) {
 		if (fimg.get_status() == FutureBase::Status::eSubmitted || fimg.get_status() == FutureBase::Status::eHostAvailable) {
 			if (fimg.is_image()) {
@@ -566,6 +572,10 @@ namespace vuk {
 		           .resources = { Resource{
 		               name, fimg.is_image() ? Resource::Type::eImage : Resource::Type::eBuffer, domain_to_release_access(dst_domain), name.append("+") } },
 		           .signal = fimg.control.get() });
+	}
+
+	Name RenderGraph::get_temporary_name() {
+		return impl->temporary_name.append(Name(std::to_string(impl->temporary_name_counter++)));
 	}
 
 	void sync_bound_attachment_to_renderpass(AttachmentRPInfo& rp_att, AttachmentRPInfo& attachment_info) {

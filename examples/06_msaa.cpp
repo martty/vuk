@@ -103,9 +103,9 @@ namespace {
 		      // Since resolving requires equal sized images, we can actually infer the size of the MS attachment
 		      // from the final image, and we don't need to specify here
 		      // We use the swapchain format, since resolving needs identical formats
-		      rg.attach_managed("06_msaa_MS", runner.swapchain->format, vuk::Dimension2D::framebuffer(), vuk::Samples::e8, vuk::ClearColor{ 0.f, 0.f, 0.f, 0.f });
-		      rg.attach_managed(
-		          "06_msaa_depth", vuk::Format::eD32Sfloat, vuk::Dimension2D::framebuffer(), vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
+		      rg.attach_and_clear_image(
+		          "06_msaa_MS", { .format = runner.swapchain->format, .sample_count = vuk::Samples::e8 }, vuk::ClearColor{ 0.f, 0.f, 0.f, 0.f });
+		      rg.attach_and_clear_image("06_msaa_depth", { .format = vuk::Format::eD32Sfloat }, vuk::ClearDepthStencil{ 1.0f, 0 });
 		      // We mark our final result "06_msaa_final" attachment to be a result of a resolve from "06_msaa_MS"
 		      rg.resolve_resource_into("06_msaa", "06_msaa_final", "06_msaa_MS+");
 

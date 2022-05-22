@@ -51,6 +51,9 @@ namespace vuk {
 			else
 				return resolve_name(it->second);
 		};
+
+		size_t temporary_name_counter = 0;
+		Name temporary_name = "_temporary";
 	};
 #undef INIT
 

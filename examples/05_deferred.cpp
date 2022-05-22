@@ -137,17 +137,13 @@ namespace {
 
 		      // The intermediate offscreen textures need to be bound
 		      // The "internal" rendering resolution is set here for one attachment, the rest infers from it
-		      rg.attach_managed(
-		          "05_position", vuk::Format::eR16G16B16A16Sfloat, vuk::Dimension2D::absolute(300, 300), vuk::Samples::e1, vuk::ClearColor{ 1.f, 0.f, 0.f, 0.f });
-		      rg.attach_managed("05_normal",
-		                        vuk::Format::eR16G16B16A16Sfloat,
-		                        vuk::Dimension2D::framebuffer(),
-		                        vuk::Samples::Framebuffer{},
-		                        vuk::ClearColor{ 0.f, 1.f, 0.f, 0.f });
-		      rg.attach_managed(
-		          "05_color", vuk::Format::eR8G8B8A8Unorm, vuk::Dimension2D::framebuffer(), vuk::Samples::Framebuffer{}, vuk::ClearColor{ 0.f, 0.f, 1.f, 0.f });
-		      rg.attach_managed(
-		          "05_depth", vuk::Format::eD32Sfloat, vuk::Dimension2D::framebuffer(), vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
+		      rg.attach_and_clear_image(
+		          "05_position",
+		          { .extent = vuk::Dimension2D::absolute(300, 300), .format = vuk::Format::eR16G16B16A16Sfloat, .sample_count = vuk::Samples::e1 },
+		          vuk::ClearColor{ 1.f, 0.f, 0.f, 0.f });
+		      rg.attach_and_clear_image("05_normal", { .format = vuk::Format::eR16G16B16A16Sfloat }, vuk::ClearColor{ 0.f, 1.f, 0.f, 0.f });
+		      rg.attach_and_clear_image("05_color", { .format = vuk::Format::eR8G8B8A8Unorm }, vuk::ClearColor{ 0.f, 0.f, 1.f, 0.f });
+		      rg.attach_and_clear_image("05_depth", { .format = vuk::Format::eD32Sfloat }, vuk::ClearDepthStencil{ 1.0f, 0 });
 
 		      return vuk::Future{ std::make_unique<vuk::RenderGraph>(std::move(rg)), "05_deferred_final" };
 		    }

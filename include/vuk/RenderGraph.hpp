@@ -34,7 +34,6 @@ namespace vuk {
 		struct ImageResource {
 			Name name;
 
-			Resource operator()(Access ia, Format, Dimension2D, Samples);
 			ImageResourceInputOnly operator>>(Access ia);
 		};
 
@@ -226,6 +225,14 @@ namespace vuk {
 		/// @param final Desired Access to the resource after this rendergraph
 		void attach_image(Name name, ImageAttachment image_attachment, Access initial = eNone, Access final = eNone);
 
+		/// @brief Attach an image to the given name
+		/// @param name Name of the resource to attach to
+		/// @param image_attachment ImageAttachment to attach
+		/// @param clear_value Value used for the clear
+		/// @param initial Access to the resource prior to this rendergraph
+		/// @param final Desired Access to the resource after this rendergraph
+		void attach_and_clear_image(Name name, ImageAttachment image_attachment, Clear clear_value, Access initial = eNone, Access final = eNone);
+
 		/// @brief Attach a future to the given name
 		/// @param name Name of the resource to attach to
 		/// @param future Future to be consumed into this rendergraph
@@ -280,6 +287,8 @@ namespace vuk {
 		// future support functions
 		friend class Future;
 		void attach_out(Name, Future& fimg, DomainFlags dst_domain);
+
+		Name get_temporary_name();
 	};
 
 	struct SubmitInfo {

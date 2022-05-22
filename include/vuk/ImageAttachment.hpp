@@ -36,10 +36,6 @@ namespace vuk {
 				                      .layer_count = t.view->layer_count };
 		}
 
-		static ImageAttachment managed(Format format, Dimension2D dimension, Samples samples) {
-			return ImageAttachment{ .extent = dimension, .format = format, .sample_count = samples, .level_count = 1, .layer_count = 1 };
-		}
-
 		constexpr bool has_concrete_image() const noexcept {
 			return image != Image{};
 		}

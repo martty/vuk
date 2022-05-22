@@ -79,14 +79,15 @@ namespace {
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
 		      vuk::RenderGraph rgx("RTT");
 
+		      rgx.attach_and_clear_image(
+		          "08_rttf",
+		          { .extent = vuk::Dimension2D::absolute((unsigned)x, (unsigned)y), .format = runner.swapchain->format, .sample_count = vuk::Samples::e1 },
+		          vuk::ClearColor{ 0.f, 0.f, 0.f, 1.f });
+
 		      // standard render to texture
 		      rgx.add_pass({ .name = "rtt",
 		                     .execute_on = vuk::DomainFlagBits::eGraphicsQueue,
-		                     .resources = { "08_rttf"_image(vuk::eColorWrite,
-		                                                    runner.swapchain->format,
-		                                                    vuk::Dimension2D::absolute((unsigned)x, (unsigned)y),
-		                                                    vuk::Samples::e1,
-		                                                    vuk::ClearColor{ 0.f, 0.f, 0.f, 0.f }) },
+		                     .resources = { "08_rttf"_image >> vuk::eColorWrite },
 		                     .execute = [](vuk::CommandBuffer& command_buffer) {
 			                     command_buffer.set_viewport(0, vuk::Rect2D::framebuffer())
 			                         .set_scissor(0, vuk::Rect2D::framebuffer())
@@ -97,7 +98,7 @@ namespace {
 			                         .bind_graphics_pipeline("rtt")
 			                         .draw(3, 1, 0, 0);
 		                     } });
-		      //// <----------------->
+
 		      // make a gpu future of the above graph (render to texture) and bind to an output (rttf)
 		      vuk::Future rttf{ rgx, "08_rttf+" };
 
@@ -153,8 +154,6 @@ namespace {
 		                    } });
 
 		      time += ImGui::GetIO().DeltaTime;
-		      // rttf.submit();
-		      //// <----------------->
 		      // make the main rendergraph
 		      // our two inputs are the futures - they compile into the main rendergraph
 		      rg.attach_in("08_rtt", std::move(rttf));
