@@ -77,10 +77,10 @@ namespace {
 		    },
 		.render =
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
-		      vuk::RenderGraph rgx;
+		      vuk::RenderGraph rgx("RTT");
 
 		      // standard render to texture
-		      rgx.add_pass({ .name = "08_rtt",
+		      rgx.add_pass({ .name = "rtt",
 		                     .execute_on = vuk::DomainFlagBits::eGraphicsQueue,
 		                     .resources = { "08_rttf"_image(vuk::eColorWrite,
 		                                                    runner.swapchain->format,
@@ -101,11 +101,11 @@ namespace {
 		      // make a gpu future of the above graph (render to texture) and bind to an output (rttf)
 		      vuk::Future rttf{ frame_allocator, rgx, "08_rttf+" };
 
-		      std::unique_ptr<vuk::RenderGraph> rgp = std::make_unique<vuk::RenderGraph>();
+		      std::unique_ptr<vuk::RenderGraph> rgp = std::make_unique<vuk::RenderGraph>("08");
 		      auto& rg = *rgp;
 		      // this pass executes outside of a renderpass
 		      // we declare a buffer dependency and dispatch a compute shader
-		      rg.add_pass({ .name = "08_sort",
+		      rg.add_pass({ .name = "sort",
 		                    .execute_on = vuk::DomainFlagBits::eGraphicsQueue,
 		                    .resources = { "08_scramble"_buffer >> vuk::eComputeRW >> "08_scramble+" },
 		                    .execute = [](vuk::CommandBuffer& command_buffer) {
@@ -120,14 +120,14 @@ namespace {
 			                    }
 		                    } });
 
-		      rg.add_pass({ .name = "08_copy",
+		      rg.add_pass({ .name = "copy",
 		                    .execute_on = vuk::DomainFlagBits::eTransferQueue,
 		                    .resources = { "08_scramble+"_buffer >> vuk::eTransferRead, "08_scramble++"_buffer >> vuk::eTransferWrite >> "08_scramble+++" },
 		                    .execute = [](vuk::CommandBuffer& command_buffer) {
 			                    command_buffer.copy_buffer("08_scramble+", "08_scramble++", sizeof(unsigned) * x * y);
 		                    } });
 		      // put it back into the persistent buffer
-		      rg.add_pass({ .name = "08_copy_2",
+		      rg.add_pass({ .name = "copy_2",
 		                    .execute_on = vuk::DomainFlagBits::eTransferQueue,
 		                    .resources = { "08_scramble+++"_buffer >> vuk::eTransferRead, "08_scramble++++"_buffer >> vuk::eTransferWrite >> "08_scramble+++++" },
 		                    .execute = [](vuk::CommandBuffer& command_buffer) {
@@ -135,7 +135,7 @@ namespace {
 		                    } });
 
 		      // draw the scrambled image, with a buffer dependency on the scramble buffer
-		      rg.add_pass({ .name = "08_draw",
+		      rg.add_pass({ .name = "draw",
 		                    .execute_on = vuk::DomainFlagBits::eGraphicsQueue,
 		                    .resources = { "08_scramble+++"_buffer >> vuk::eFragmentRead,
 		                                   "08_rtt"_image >> vuk::eFragmentSampled,

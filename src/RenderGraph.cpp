@@ -28,9 +28,10 @@ namespace vuk {
 
 	RenderGraph::RenderGraph(Name name) : impl(new RGImpl), name(name) {}
 
-	RenderGraph::RenderGraph(RenderGraph&& o) noexcept : impl(std::exchange(o.impl, nullptr)) {}
+	RenderGraph::RenderGraph(RenderGraph&& o) noexcept : impl(std::exchange(o.impl, nullptr)), name(o.name) {}
 	RenderGraph& RenderGraph::operator=(RenderGraph&& o) noexcept {
 		impl = std::exchange(o.impl, nullptr);
+		name = o.name;
 		return *this;
 	}
 
@@ -548,14 +549,15 @@ namespace vuk {
 		} else if (fimg.get_status() == FutureBase::Status::eRenderGraphBound || fimg.get_status() == FutureBase::Status::eOutputAttached) {
 			fimg.get_status() = FutureBase::Status::eInputAttached;
 			if (fimg.rg->impl) {
-				append(this->name, std::move(*fimg.rg));
+				Name sg_name = fimg.rg->name;
+				append(sg_name, std::move(*fimg.rg));
 			}
 			add_pass({ .name = fimg.output_binding.append("_FUTURE_ACQUIRE"),
-			           .resources = { Resource{ this->name.append("::").append(fimg.output_binding).append("+"),
+			           .resources = { Resource{ fimg.rg->name.append("::").append(fimg.output_binding).append("+"),
 			                                    fimg.is_image() ? Resource::Type::eImage : Resource::Type::eBuffer,
 			                                    eAcquire,
 			                                    name } } });
-			add_alias(name, this->name.append("::").append(fimg.output_binding));
+			add_alias(name, fimg.rg->name.append("::").append(fimg.output_binding));
 		} else {
 			assert(0);
 		}

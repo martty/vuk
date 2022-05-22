@@ -78,8 +78,8 @@ namespace {
 		      ici.usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled;
 		      variant2 = ctx.allocate_texture(allocator, ici);
 		      // Make a RenderGraph to process the loaded image
-		      vuk::RenderGraph rg;
-		      rg.add_pass({ .name = "09_preprocess",
+		      vuk::RenderGraph rg("PP");
+		      rg.add_pass({ .name = "preprocess",
 		                    .resources = { "09_doge"_image >> vuk::eMemoryRead, "09_v1"_image >> vuk::eTransferWrite, "09_v2"_image >> vuk::eComputeWrite },
 		                    .execute = [x, y](vuk::CommandBuffer& command_buffer) {
 			                    // For the first image, flip the image on the Y axis using a blit
@@ -110,8 +110,7 @@ namespace {
 		      rg.attach_image("09_v2", vuk::ImageAttachment::from_texture(*variant2), vuk::eNone, vuk::eFragmentSampled);
 
 		      // enqueue running the preprocessing rendergraph and force 09_doge to be sampleable later
-		      auto fut = vuk::transition(vuk::Future{ allocator, std::make_unique<vuk::RenderGraph>(std::move(rg)), "09_doge" },
-		                                 vuk::eFragmentSampled);
+		      auto fut = vuk::transition(vuk::Future{ allocator, std::make_unique<vuk::RenderGraph>(std::move(rg)), "09_doge" }, vuk::eFragmentSampled);
 		      runner.enqueue_setup(std::move(fut));
 
 		      // Create persistent descriptorset for a pipeline and set index
@@ -145,10 +144,11 @@ namespace {
 
 		      vuk::wait_for_futures(frame_allocator, vert_fut, ind_fut, uboVP_fut);
 
-		      vuk::RenderGraph rg;
+		      vuk::RenderGraph rg("09");
 
 		      // Set up the pass to draw the textured cube, with a color and a depth attachment
-		      rg.add_pass({ .resources = { "09_persistent_descriptorset"_image >> vuk::eColorWrite >> "09_persistent_descriptorset_final",
+		      rg.add_pass({ .name = "forward",
+		                    .resources = { "09_persistent_descriptorset"_image >> vuk::eColorWrite >> "09_persistent_descriptorset_final",
 		                                   "09_depth"_image >> vuk::eDepthStencilRW },
 		                    .execute = [verts, uboVP, inds](vuk::CommandBuffer& command_buffer) {
 			                    command_buffer.set_viewport(0, vuk::Rect2D::framebuffer())

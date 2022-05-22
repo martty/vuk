@@ -67,7 +67,7 @@ namespace {
 
 		      vuk::wait_for_futures(frame_allocator, vert_fut, ind_fut, uboVP_fut);
 
-		      vuk::RenderGraph rg;
+		      vuk::RenderGraph rg("07");
 
 		      // The rendering pass is unchanged by going to multisampled,
 		      // but we will use an offscreen multisampled color attachment
@@ -101,7 +101,7 @@ namespace {
 		      // Add a pass where we resolve our multisampled image
 		      // Since we didn't declare any framebuffer forming resources, this pass will execute outside of a renderpass
 		      // Hence we can only call commands that are valid outside of a renderpass
-		      rg.add_pass({ .name = "07_resolve",
+		      rg.add_pass({ .name = "resolve",
 		                    .resources = { "07_commands_MS+"_image >> vuk::eTransferRead, "07_commands_NMS"_image >> vuk::eTransferWrite },
 		                    .execute = [](vuk::CommandBuffer& command_buffer) {
 			                    command_buffer.resolve_image("07_commands_MS+", "07_commands_NMS");
@@ -113,7 +113,7 @@ namespace {
 		      // Here we demonstrate blitting by splitting up the resolved image into 09 tiles
 		      // And blitting those tiles in the order dictated by 'shuf'
 		      // We will also sort shuf over time, to show a nice animation
-		      rg.add_pass({ .name = "07_blit",
+		      rg.add_pass({ .name = "blit",
 		                    .resources = { "07_commands_NMS+"_image >> vuk::eTransferRead, "07_commands"_image >> vuk::eTransferWrite >> "07_commands_final" },
 		                    .execute = [tile_x_size, tile_y_size](vuk::CommandBuffer& command_buffer) {
 			                    for (auto i = 0; i < 9; i++) {

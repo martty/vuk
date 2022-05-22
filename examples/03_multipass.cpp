@@ -56,7 +56,7 @@ namespace {
 
 		      vuk::wait_for_futures(frame_allocator, vert_fut, ind_fut, uboVP_fut);
 
-		      vuk::RenderGraph rg;
+		      vuk::RenderGraph rg("03");
 		      // Add a pass to draw a triangle (from the first example) into the top left corner
 
 		      // In this example we want to use this resource after our write, but resource names are consumed by writes

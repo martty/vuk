@@ -66,7 +66,7 @@ namespace {
 		      vuk::RenderGraph rg("MRT");
 		      // Here we will render the cube into 3 offscreen textures
 		      rg.add_pass({ // Passes can be optionally named, this useful for visualization and debugging
-		                    .name = "11_deferred_MRT",
+		                    .name = "deferred_MRT",
 		                    // Declare our framebuffer
 		                    .resources = { "11_position"_image >> vuk::eColorWrite,
 		                                   "11_normal"_image >> vuk::eColorWrite,
@@ -120,11 +120,11 @@ namespace {
 
 		      angle += 360.f * ImGui::GetIO().DeltaTime;
 
-		      vuk::RenderGraph rg_resolve("resolve");
+		      vuk::RenderGraph rg_resolve("11");
 		      std::array futs = { std::move(pos_fut), std::move(norm_fut), std::move(col_fut) };
 		      rg_resolve.attach_in(futs);
 		      // The shading pass for the deferred rendering
-		      rg_resolve.add_pass({ .name = "11_deferred_resolve",
+		      rg_resolve.add_pass({ .name = "deferred_resolve",
 		                            // Declare that we are going to render to the final color image
 		                            // Declare that we are going to sample (in the fragment shader) from the previous attachments
 		                            .resources = { "11_deferred"_image >> vuk::eColorWrite >> "11_deferred_final",

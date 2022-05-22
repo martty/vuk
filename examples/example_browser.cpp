@@ -118,14 +118,14 @@ void vuk::ExampleRunner::render() {
 			ImGui::Render();
 			vuk::Name attachment_name = item_current->name;
 			fut.get_render_graph()->attach_swapchain(attachment_name, swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
-			RenderGraph rg;
+			RenderGraph rg("runner");
 			rg.attach_in("result", std::move(fut));
 			util::ImGui_ImplVuk_Render(frame_allocator, rg, "result", "SWAPCHAIN", imgui_data, ImGui::GetDrawData(), sampled_images);
 			auto erg = std::move(rg).link(vuk::RenderGraph::CompileOptions{});
 			execute_submit_and_present_to_one(frame_allocator, std::move(erg), swapchain);
 			sampled_images.clear();
 		} else { // render all examples as imgui windows
-			RenderGraph rg;
+			RenderGraph rg("runner");
 			plf::colony<vuk::Name> attachment_names;
 
 			size_t i = 0;

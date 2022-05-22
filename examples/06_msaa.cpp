@@ -60,7 +60,7 @@ namespace {
 
 		      vuk::wait_for_futures(frame_allocator, vert_fut, ind_fut, uboVP_fut);
 
-		      vuk::RenderGraph rg;
+		      vuk::RenderGraph rg("06");
 
 		      // The rendering pass is unchanged by going to multisampled,
 		      // but we will use an offscreen multisampled color attachment

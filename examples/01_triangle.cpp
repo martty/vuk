@@ -27,7 +27,7 @@ namespace {
 		              .render =
 		                  [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
 		                    // We start building a rendergraph
-		                    vuk::RenderGraph rg;
+		                    vuk::RenderGraph rg("01");
 		                    // The rendergraph is composed of passes (vuk::Pass)
 		                    // Each pass declares which resources are used
 		                    // And it provides a callback which is executed when this pass is being ran

@@ -56,7 +56,7 @@ namespace {
 
 		                    vuk::wait_for_futures(frame_allocator, vert_fut, ind_fut, uboVP_fut);
 
-		                    vuk::RenderGraph rg;
+		                    vuk::RenderGraph rg("02");
 		                    rg.add_pass({ // For this example, only a color image is needed to write to (our framebuffer)
 		                                  // The name is declared, and the way it will be used in the pass (color attachment - write)
 		                                  .resources = { "02_cube"_image >> vuk::eColorWrite >> "02_cube_final" },

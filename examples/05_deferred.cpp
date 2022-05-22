@@ -63,7 +63,7 @@ namespace {
 
 		      vuk::wait_for_futures(frame_allocator, vert_fut, ind_fut, uboVP_fut);
 
-		      vuk::RenderGraph rg;
+		      vuk::RenderGraph rg("05");
 		      // Here we will render the cube into 3 offscreen textures
 		      rg.add_pass({ // Passes can be optionally named, this useful for visualization and debugging
 		                    .name = "05_deferred_MRT",

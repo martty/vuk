@@ -83,7 +83,7 @@ void vuk::ExampleRunner::render() {
 		auto fut = examples[0]->render(*this, frame_allocator);
 		auto attachment_name = vuk::Name(examples[0]->name);
 		fut.get_render_graph()->attach_swapchain(attachment_name, swapchain, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
-		RenderGraph rg;
+		RenderGraph rg("runner");
 		rg.attach_in("result", std::move(fut));
 		auto erg = std::move(rg).link(vuk::RenderGraph::CompileOptions{});
 		execute_submit_and_present_to_one(frame_allocator, std::move(erg), swapchain);

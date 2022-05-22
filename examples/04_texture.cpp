@@ -64,7 +64,7 @@ namespace {
 
 		      vuk::wait_for_futures(frame_allocator, vert_fut, ind_fut, uboVP_fut);
 
-		      vuk::RenderGraph rg;
+		      vuk::RenderGraph rg("04");
 
 		      // Set up the pass to draw the textured cube, with a color and a depth attachment
 		      rg.add_pass({ .resources = { "04_texture"_image >> vuk::eColorWrite >> "04_texture_final", "04_texture_depth"_image >> vuk::eDepthStencilRW },

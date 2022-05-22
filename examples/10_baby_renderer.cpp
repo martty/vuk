@@ -118,8 +118,8 @@ namespace {
 		      ici.usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled;
 		      variant2 = ctx.allocate_texture(allocator, ici);
 		      // Make a RenderGraph to process the loaded image
-		      vuk::RenderGraph rg;
-		      rg.add_pass({ .name = "10_preprocess",
+		      vuk::RenderGraph rg("PP");
+		      rg.add_pass({ .name = "preprocess",
 		                    .resources = { "10_doge"_image >> vuk::eMemoryRead, "10_v1"_image >> vuk::eTransferWrite, "10_v2"_image >> vuk::eComputeWrite },
 		                    .execute = [x, y](vuk::CommandBuffer& command_buffer) {
 			                    // For the first image, flip the image on the Y axis using a blit
@@ -271,10 +271,11 @@ namespace {
 			      memcpy(reinterpret_cast<glm::mat4*>(modelmats.mapped_ptr) + i, &model_matrix, sizeof(glm::mat4));
 		      }
 
-		      vuk::RenderGraph rg;
+		      vuk::RenderGraph rg("10");
 
 		      // Set up the pass to draw the renderables
-		      rg.add_pass({ .resources = { "10_baby_renderer"_image >> vuk::eColorWrite >> "10_baby_renderer_final", "10_depth"_image >> vuk::eDepthStencilRW },
+		      rg.add_pass({ .name = "forward",
+							.resources = { "10_baby_renderer"_image >> vuk::eColorWrite >> "10_baby_renderer_final", "10_depth"_image >> vuk::eDepthStencilRW },
 		                    .execute = [uboVP, modelmats](vuk::CommandBuffer& command_buffer) {
 			                    command_buffer.set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
 			                        .set_viewport(0, vuk::Rect2D::framebuffer())
