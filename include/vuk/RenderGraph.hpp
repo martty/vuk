@@ -155,6 +155,9 @@ namespace vuk {
 
 		std::function<void(CommandBuffer&)> execute;
 		std::vector<std::byte> arguments; // internal use
+		enum class Type {
+			eUserPass, eClear
+		} type = Type::eUserPass;
 	};
 
 	// declare these specializations for GCC

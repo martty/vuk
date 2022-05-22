@@ -448,7 +448,8 @@ namespace vuk {
 		res.subrange.image = subrange;
 		add_pass({ .resources = { std::move(res) },
 		           .execute = [image_name, clear_value](CommandBuffer& cbuf) { cbuf.clear_image(image_name, clear_value); },
-		           .arguments = std::move(args) });
+		           .arguments = std::move(args),
+		           .type = Pass::Type::eClear });
 	}
 
 	void RenderGraph::attach_swapchain(Name name, SwapchainRef swp) {
@@ -607,7 +608,7 @@ namespace vuk {
 			for (size_t i = 0; i < chain.size() - 1; i++) {
 				auto& left = chain[i];
 				auto& right = chain[i + 1];
-				if (left.original == eClear) {
+				if (left.original == eClear && left.pass->pass.type == Pass::Type::eClear) {
 					// next use is as fb attachment
 					if ((i < chain.size() - 1) && is_framebuffer_attachment(to_use(right.original))) {
 						auto& next_rpi = impl->rpis[right.pass->render_pass_index];
@@ -638,7 +639,6 @@ namespace vuk {
 			}
 			auto& chain = chain_it->second;
 			// insert initial usage if we need to synchronize against it
-			// || (chain[0].original == eClear && attachment_info.initial.layout == ImageLayout::eUndefined)
 			if (is_acquire(chain[0].original)) {
 			} else {
 				chain.insert(chain.begin(), UseRef{ {}, {}, vuk::eManual, vuk::eManual, attachment_info.initial, Resource::Type::eImage, {}, nullptr });
