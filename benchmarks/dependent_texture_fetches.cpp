@@ -120,7 +120,7 @@ namespace {
 			auto doge_image = stbi_load("../../examples/doge.png", &x, &y, &chans, 4);
 			auto [tex, tex_fut] = create_texture(allocator, vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, doge_image, false);
 			texture_of_doge = std::move(tex);
-			tex_fut.wait();
+			tex_fut.wait(allocator);
 			stbi_image_free(doge_image);
 			tex2k = ctx.allocate_texture(allocator, vuk::ImageCreateInfo{.format = vuk::Format::eR8G8B8A8Srgb, .extent = {.width = 2048, .height = 2048, .depth = 1}, .usage = vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eSampled });
 			tex4k = ctx.allocate_texture(allocator, vuk::ImageCreateInfo{.format = vuk::Format::eR8G8B8A8Srgb, .extent = {.width = 4096, .height = 4096, .depth = 1}, .usage = vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eSampled });

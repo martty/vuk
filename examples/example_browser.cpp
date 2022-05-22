@@ -198,7 +198,7 @@ void vuk::ExampleRunner::render() {
 
 				Name result = attachment_name_out.append("_result");
 				if (chosen_resource[i] != attachment_name_out) {
-					auto othfut = Future(frame_allocator, rg_frag, chosen_resource[i]);
+					auto othfut = Future(rg_frag, chosen_resource[i]);
 					rg.attach_in(result, std::move(othfut));
 					rg.attach_in("_", std::move(rg_frag_fut));
 				} else {

@@ -18,7 +18,7 @@ namespace vuk {
 		// host-mapped buffers just get memcpys
 		if (dst.mapped_ptr) {
 			memcpy(dst.mapped_ptr, src_data, size);
-			return { allocator, std::move(dst) };
+			return { std::move(dst) };
 		}
 
 		auto src = *allocate_buffer_cross_device(allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, 1 });
@@ -33,7 +33,7 @@ namespace vuk {
 		                } });
 		rgp->attach_buffer("_src", *src, vuk::Access::eNone, vuk::Access::eNone);
 		rgp->attach_buffer("_dst", dst, vuk::Access::eNone, vuk::Access::eNone);
-		return { allocator, std::move(rgp), "_dst+" };
+		return { std::move(rgp), "_dst+" };
 	}
 
 	/// @brief Fill a buffer with host data
@@ -78,18 +78,17 @@ namespace vuk {
 		                } });
 		rgp->attach_buffer("_src", *src, vuk::Access::eNone, vuk::Access::eNone);
 		rgp->attach_image("_dst", image, vuk::Access::eNone, vuk::Access::eNone);
-		return { allocator, std::move(rgp), "_dst+" };
+		return { std::move(rgp), "_dst+" };
 	}
 
 	/// @brief Transition image for given access - useful to force certain access across different RenderGraphs linked by Futures
 	/// @param image input Future of ImageAttachment
 	/// @param dst_access Access to have in the future
 	inline Future transition(Future image, Access dst_access) {
-		auto& allocator = image.get_allocator();
 		std::unique_ptr<RenderGraph> rgp = std::make_unique<RenderGraph>();
 		rgp->add_pass({ .name = "TRANSITION", .execute_on = DomainFlagBits::eDevice, .resources = { "_src"_image >> dst_access >> "_src+" } });
 		rgp->attach_in("_src", std::move(image));
-		return { allocator, std::move(rgp), "_src+" };
+		return { std::move(rgp), "_src+" };
 	}
 
 	/// @brief Generate mips for given ImageAttachment
@@ -97,8 +96,6 @@ namespace vuk {
 	/// @param base_mip source mip level
 	/// @param num_mips number of mip levels to generate
 	inline Future generate_mips(Future image, uint32_t base_mip, uint32_t num_mips) {
-		auto& allocator = image.get_allocator();
-
 		std::unique_ptr<RenderGraph> rgp = std::make_unique<RenderGraph>();
 		for (uint32_t miplevel = base_mip + 1; miplevel < (base_mip + num_mips); miplevel++) {
 			uint32_t dmiplevel = miplevel - base_mip;
@@ -142,7 +139,7 @@ namespace vuk {
 		rgp->converge_image("_src", "_src+");
 
 		rgp->attach_in("_src", std::move(image));
-		return { allocator, std::move(rgp), "_src+" };
+		return { std::move(rgp), "_src+" };
 	}
 
 	/// @brief Allocates & fills a buffer with explicitly managed lifetime (cross-device scope)
@@ -155,7 +152,7 @@ namespace vuk {
 		auto ret = allocator.allocate_buffers(std::span{ &*buf, 1 }, std::span{ &bci, 1 }); // TODO: dropping error
 		memcpy(buf->mapped_ptr, data.data(), data.size_bytes());
 		Buffer b = buf.get();
-		return { std::move(buf), Future{ allocator, std::move(b) } };
+		return { std::move(buf), Future{ std::move(b) } };
 	}
 
 	/// @brief Allocates & fills a buffer with explicitly managed lifetime (device-only scope)
@@ -194,7 +191,7 @@ namespace vuk {
 		std::unique_ptr<RenderGraph> rgp = std::make_unique<RenderGraph>();
 		rgp->add_pass({ .name = "TRANSITION", .execute_on = DomainFlagBits::eGraphicsQueue, .resources = { "_src"_image >> Access::eFragmentSampled >> "_src+" } });
 		rgp->attach_in("_src", std::move(mipgen_fut));
-		auto on_gfx = Future{ allocator, std::move(rgp), "_src+" };
+		auto on_gfx = Future{ std::move(rgp), "_src+" };
 
 		return { std::move(tex), std::move(on_gfx) };
 	}

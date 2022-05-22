@@ -348,26 +348,24 @@ namespace vuk {
 		}
 	}
 
-	FutureBase::FutureBase(Allocator& alloc) : allocator(&alloc) {}
-
-	Future::Future(Allocator& alloc, struct RenderGraph& rg, Name output_binding, DomainFlags dst_domain) :
+	Future::Future(struct RenderGraph& rg, Name output_binding, DomainFlags dst_domain) :
 	    output_binding(output_binding),
 	    rg(&rg),
-	    control(std::make_unique<FutureBase>(alloc)) {
+	    control(std::make_unique<FutureBase>()) {
 		control->status = FutureBase::Status::eRenderGraphBound;
 		this->rg->attach_out(output_binding, *this, dst_domain);
 	}
 
-	Future::Future(Allocator& alloc, std::unique_ptr<struct RenderGraph> org, Name output_binding, DomainFlags dst_domain) :
+	Future::Future(std::unique_ptr<struct RenderGraph> org, Name output_binding, DomainFlags dst_domain) :
 	    output_binding(output_binding),
 	    owned_rg(std::move(org)),
 	    rg(owned_rg.get()),
-	    control(std::make_unique<FutureBase>(alloc)) {
+	    control(std::make_unique<FutureBase>()) {
 		control->status = FutureBase::Status::eRenderGraphBound;
 		rg->attach_out(output_binding, *this, dst_domain);
 	}
 
-	Result<void> Future::wait() {
+	Result<void> Future::wait(Allocator& allocator) {
 		if (control->status == FutureBase::Status::eInputAttached || control->status == FutureBase::Status::eInitial) {
 			return { expected_error,
 				       RenderGraphException{} }; // can't get wait for future that has not been attached anything or has been attached into a rendergraph
@@ -375,29 +373,29 @@ namespace vuk {
 			return { expected_value };
 		} else if (control->status == FutureBase::Status::eSubmitted) {
 			std::pair w = { (DomainFlags)control->initial_domain, control->initial_visibility };
-			control->allocator->get_context().wait_for_domains(std::span{ &w, 1 });
+			allocator.get_context().wait_for_domains(std::span{ &w, 1 });
 			return { expected_value };
 		} else {
 			auto erg = std::move(*rg).link({});
-			std::pair v = { control->allocator, &erg };
-			VUK_DO_OR_RETURN(execute_submit(*control->allocator, std::span{ &v, 1 }, {}, {}, {}));
+			std::pair v = { &allocator, &erg };
+			VUK_DO_OR_RETURN(execute_submit(allocator, std::span{ &v, 1 }, {}, {}, {}));
 			std::pair w = { (DomainFlags)control->initial_domain, control->initial_visibility };
-			control->allocator->get_context().wait_for_domains(std::span{ &w, 1 });
+			allocator.get_context().wait_for_domains(std::span{ &w, 1 });
 			control->status = FutureBase::Status::eHostAvailable;
 			return { expected_value };
 		}
 	}
 
 	template<class T>
-	Result<T> Future::get() {
-		if (auto result = wait()) {
+	Result<T> Future::get(Allocator& allocator) {
+		if (auto result = wait(allocator)) {
 			return { expected_value, get_result<T>() };
 		} else {
 			return result;
 		}
 	}
 
-	Result<void> Future::submit() {
+	Result<void> Future::submit(Allocator& allocator) {
 		if (control->status == FutureBase::Status::eInputAttached || control->status == FutureBase::Status::eInitial) {
 			return { expected_error, RenderGraphException{} };
 		} else if (control->status == FutureBase::Status::eHostAvailable || control->status == FutureBase::Status::eSubmitted) {
@@ -405,12 +403,12 @@ namespace vuk {
 		} else {
 			control->status = FutureBase::Status::eSubmitted;
 			auto erg = std::move(*rg).link({});
-			std::pair v = { control->allocator, &erg };
-			VUK_DO_OR_RETURN(execute_submit(*control->allocator, std::span{ &v, 1 }, {}, {}, {}));
+			std::pair v = { &allocator, &erg };
+			VUK_DO_OR_RETURN(execute_submit(allocator, std::span{ &v, 1 }, {}, {}, {}));
 			return { expected_value };
 		}
 	}
 
-	template Result<Buffer> Future::get();
-	template Result<ImageAttachment> Future::get();
+	template Result<Buffer> Future::get(Allocator&);
+	template Result<ImageAttachment> Future::get(Allocator&);
 } // namespace vuk

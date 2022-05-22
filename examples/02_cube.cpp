@@ -112,7 +112,7 @@ namespace {
 		                    // The angle is update to rotate the cube
 		                    angle += 360.f * ImGui::GetIO().DeltaTime;
 
-		                    return vuk::Future{ frame_allocator, std::make_unique<vuk::RenderGraph>(std::move(rg)), "02_cube_final" };
+		                    return vuk::Future{ std::make_unique<vuk::RenderGraph>(std::move(rg)), "02_cube_final" };
 		                  } };
 
 	REGISTER_EXAMPLE(x);

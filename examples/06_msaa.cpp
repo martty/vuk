@@ -104,7 +104,7 @@ namespace {
 		      // We mark our final result "06_msaa_final" attachment to be a result of a resolve from "06_msaa_MS"
 		      rg.resolve_resource_into("06_msaa", "06_msaa_final", "06_msaa_MS+");
 
-		      return vuk::Future{ frame_allocator, std::make_unique<vuk::RenderGraph>(std::move(rg)), "06_msaa_final" };
+		      return vuk::Future{ std::make_unique<vuk::RenderGraph>(std::move(rg)), "06_msaa_final" };
 		    },
 		.cleanup =
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {

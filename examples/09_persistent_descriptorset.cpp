@@ -110,7 +110,7 @@ namespace {
 		      rg.attach_image("09_v2", vuk::ImageAttachment::from_texture(*variant2), vuk::eNone, vuk::eFragmentSampled);
 
 		      // enqueue running the preprocessing rendergraph and force 09_doge to be sampleable later
-		      auto fut = vuk::transition(vuk::Future{ allocator, std::make_unique<vuk::RenderGraph>(std::move(rg)), "09_doge" }, vuk::eFragmentSampled);
+		      auto fut = vuk::transition(vuk::Future{ std::make_unique<vuk::RenderGraph>(std::move(rg)), "09_doge" }, vuk::eFragmentSampled);
 		      runner.enqueue_setup(std::move(fut));
 
 		      // Create persistent descriptorset for a pipeline and set index
@@ -184,7 +184,7 @@ namespace {
 		      rg.attach_managed(
 		          "09_depth", vuk::Format::eD32Sfloat, vuk::Dimension2D::framebuffer(), vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
 
-		      return vuk::Future{ frame_allocator, std::make_unique<vuk::RenderGraph>(std::move(rg)), "09_persistent_descriptorset_final" };
+		      return vuk::Future{ std::make_unique<vuk::RenderGraph>(std::move(rg)), "09_persistent_descriptorset_final" };
 		    },
 
 		// Perform cleanup for the example

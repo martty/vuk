@@ -147,7 +147,7 @@ namespace {
 		      rg.attach_managed(
 		          "05_depth", vuk::Format::eD32Sfloat, vuk::Dimension2D::framebuffer(), vuk::Samples::Framebuffer{}, vuk::ClearDepthStencil{ 1.0f, 0 });
 
-		      return vuk::Future{ frame_allocator, std::make_unique<vuk::RenderGraph>(std::move(rg)), "05_deferred_final" };
+		      return vuk::Future{ std::make_unique<vuk::RenderGraph>(std::move(rg)), "05_deferred_final" };
 		    }
 	};
 

@@ -172,7 +172,7 @@ namespace {
 		      rg.attach_managed(
 		          "07_commands_NMS", runner.swapchain->format, vuk::Dimension2D::absolute(300, 300), vuk::Samples::e1, vuk::ClearColor{ 0.f, 0.f, 0.f, 0.f });
 
-		      return vuk::Future{ frame_allocator, std::make_unique<vuk::RenderGraph>(std::move(rg)), "07_commands_final" };
+		      return vuk::Future{ std::make_unique<vuk::RenderGraph>(std::move(rg)), "07_commands_final" };
 		    },
 		.cleanup =
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {

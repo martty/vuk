@@ -23,8 +23,6 @@ namespace vuk {
 		FutureBase() = default;
 		FutureBase(Allocator&);
 
-		Allocator* allocator;
-
 		enum class Status {
 			eInitial,          // default-constructed future
 			eRenderGraphBound, // a rendergraph was bound to this future
@@ -33,10 +31,6 @@ namespace vuk {
 			eSubmitted,        // the rendergraph referenced by this future was submitted (result is available on device with appropriate sync)
 			eHostAvailable     // the result is available on host, available on device without sync
 		} status = Status::eInitial;
-
-		Allocator& get_allocator() {
-			return *allocator;
-		}
 
 		DomainFlagBits initial_domain = DomainFlagBits::eNone; // the domain where we submitted this Future to
 		QueueResourceUse last_use;                             // the results of the future are available if waited for on the initial_domain
@@ -57,17 +51,17 @@ namespace vuk {
 		/// @param allocator
 		/// @param rg
 		/// @param output_binding
-		Future(Allocator& allocator, std::unique_ptr<struct RenderGraph> rg, Name output_binding, DomainFlags dst_domain = DomainFlagBits::eDevice);
+		Future(std::unique_ptr<struct RenderGraph> rg, Name output_binding, DomainFlags dst_domain = DomainFlagBits::eDevice);
 		/// @brief Create a Future without ownership of a RenderGraph and bind to an output
 		/// @param allocator
 		/// @param rg
 		/// @param output_binding
-		Future(Allocator& allocator, struct RenderGraph& rg, Name output_binding, DomainFlags dst_domain = DomainFlagBits::eDevice);
+		Future(struct RenderGraph& rg, Name output_binding, DomainFlags dst_domain = DomainFlagBits::eDevice);
 		/// @brief Create a Future from a value, automatically making the result available on the host
 		/// @param allocator
 		/// @param value
 		template<class T>
-		Future(Allocator& allocator, T&& value) : control(std::make_unique<FutureBase>(allocator)) {
+		Future(T&& value) : control(std::make_unique<FutureBase>()) {
 			control->result = std::move(value);
 			control->status = FutureBase::Status::eHostAvailable;
 			control->last_use.layout = vuk::ImageLayout::eUndefined;
@@ -76,11 +70,6 @@ namespace vuk {
 		/// @brief Get status of the Future
 		FutureBase::Status& get_status() {
 			return control->status;
-		}
-
-		/// @brief Get associated Allocator
-		Allocator& get_allocator() {
-			return *control->allocator;
 		}
 
 		/// @brief Get the referenced RenderGraph
@@ -93,12 +82,13 @@ namespace vuk {
 		}
 
 		/// @brief Submit Future for execution
-		Result<void> submit();
+		Result<void> submit(Allocator& allocator);
 		/// @brief Wait for Future to complete execution on host
-		Result<void> wait();
+		Result<void> wait(Allocator& allocator);
 		/// @brief Wait and retrieve the result of the Future on the host
 		template<class T>
-		[[nodiscard]] Result<T> get();
+		[[nodiscard]] Result<T> get(Allocator& allocator);
+
 		/// @brief Get control block for Future
 		FutureBase* get_control() {
 			return control.get();
@@ -140,7 +130,7 @@ namespace vuk {
 			} else if (control->status == FutureBase::Status::eHostAvailable || control->status == FutureBase::Status::eSubmitted) {
 				continue;
 			} else {
-				rgs_to_run.emplace_back(&control->get_allocator(), rgs[i]);
+				rgs_to_run.emplace_back(&alloc, rgs[i]);
 			}
 		}
 		if (rgs_to_run.size() != 0) {
@@ -171,7 +161,7 @@ namespace vuk {
 			} else if (control->status == FutureBase::Status::eHostAvailable || control->status == FutureBase::Status::eSubmitted) {
 				continue;
 			} else {
-				rgs_to_run.emplace_back(&control->get_allocator(), futures[i].get_render_graph());
+				rgs_to_run.emplace_back(&alloc, futures[i].get_render_graph());
 			}
 		}
 		if (rgs_to_run.size() != 0) {
