@@ -44,7 +44,7 @@ namespace {
 		      runner.enqueue_setup(std::move(ind_fut));
 		    },
 		.render =
-		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
+		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator, vuk::Future target) {
 		      // This struct will represent the view-projection transform used for the cube
 		      struct VP {
 			      glm::mat4 view;
@@ -63,6 +63,7 @@ namespace {
 		                            uboVP_fut); // wait until the upload completes. since this memory is CPU visible (MemoryUsage::eCPUtoGPU), this is a no-op
 
 		      vuk::RenderGraph rg("02");
+		      rg.attach_in("02_cube", std::move(target));
 		      rg.add_pass(
 		          { // For this example, only a color image is needed to write to (our framebuffer)
 		            // The name is declared, and the way it will be used in the pass (color attachment - write)

@@ -113,16 +113,15 @@ void vuk::ExampleRunner::render() {
 		context->next_frame();
 		Allocator frame_allocator(xdev_frame_resource);
 		if (!render_all) { // render a single full window example
-
-			auto fut = item_current->render(*this, frame_allocator);
-			ImGui::Render();
-			vuk::Name attachment_name = item_current->name;
-			fut.get_render_graph()->attach_swapchain("_swp", swapchain);
-			fut.get_render_graph()->clear_image("_swp", attachment_name, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
 			RenderGraph rg("runner");
-			rg.attach_in("result", std::move(fut));
-			util::ImGui_ImplVuk_Render(frame_allocator, rg, "result", "SWAPCHAIN", imgui_data, ImGui::GetDrawData(), sampled_images);
-			auto erg = std::move(rg).link(vuk::RenderGraph::CompileOptions{});
+			vuk::Name attachment_name = item_current->name;
+			rg.attach_swapchain("_swp", swapchain);
+			rg.clear_image("_swp", attachment_name, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
+			auto fut = item_current->render(*this, frame_allocator, Future{ rg, attachment_name });
+			ImGui::Render();
+
+			fut = util::ImGui_ImplVuk_Render(frame_allocator, std::move(fut), imgui_data, ImGui::GetDrawData(), sampled_images);
+			auto erg = std::move(*fut.get_render_graph()).link(vuk::RenderGraph::CompileOptions{});
 			execute_submit_and_present_to_one(frame_allocator, std::move(erg), swapchain);
 			sampled_images.clear();
 		} else { // render all examples as imgui windows
@@ -131,13 +130,14 @@ void vuk::ExampleRunner::render() {
 
 			size_t i = 0;
 			for (auto& ex : examples) {
-				auto rg_frag_fut = ex->render(*this, frame_allocator);
+				RenderGraph rgx(ex->name);
+				rgx.attach_and_clear_image("_img",
+				                           { .extent = vuk::Dimension2D::absolute(300, 300), .format = swapchain->format, .sample_count = vuk::Samples::e1 },
+				                           vuk::ClearColor(0.1f, 0.2f, 0.3f, 1.f));
+				auto rg_frag_fut = ex->render(*this, frame_allocator, Future{ rgx, "_img" });
 				Name attachment_name_in = Name(ex->name);
 				Name& attachment_name_out = *attachment_names.emplace(std::string(ex->name) + "_final");
 				auto& rg_frag = *rg_frag_fut.get_render_graph();
-				rg_frag.attach_and_clear_image(attachment_name_in,
-				                               { .extent = vuk::Dimension2D::absolute(300, 300), .format = swapchain->format, .sample_count = vuk::Samples::e1 },
-				                               vuk::ClearColor(0.1f, 0.2f, 0.3f, 1.f));
 				rg_frag.compile(vuk::RenderGraph::CompileOptions{});
 				ImGui::Begin(ex->name.data());
 				if (rg_frag.get_use_chains().size() > 1) {
@@ -198,26 +198,26 @@ void vuk::ExampleRunner::render() {
 				if (chosen_resource[i].is_invalid())
 					chosen_resource[i] = attachment_name_out;
 
-				Name result = attachment_name_out.append("_result");
 				if (chosen_resource[i] != attachment_name_out) {
 					auto othfut = Future(rg_frag, chosen_resource[i]);
-					rg.attach_in(result, std::move(othfut));
+					rg.attach_in(attachment_name_out, std::move(othfut));
 					rg.attach_in("_", std::move(rg_frag_fut));
 				} else {
-					rg.attach_in(result, std::move(rg_frag_fut));
+					rg.attach_in(attachment_name_out, std::move(rg_frag_fut));
 				}
-
-				auto si = vuk::make_sampled_image(result, imgui_data.font_sci);
+				// hacky way to reference image in the subgraph
+				// TODO: a proper way to do this?
+				auto si = vuk::make_sampled_image(rg.name.append("::").append(attachment_name_out), imgui_data.font_sci);
 				ImGui::Image(&*sampled_images.emplace(si), ImVec2(200, 200));
 				ImGui::End();
 				i++;
 			}
 
 			ImGui::Render();
-			util::ImGui_ImplVuk_Render(frame_allocator, rg, "SWAPCHAIN+", "SWAPCHAIN++", imgui_data, ImGui::GetDrawData(), sampled_images);
 			rg.clear_image("SWAPCHAIN", "SWAPCHAIN+", vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
 			rg.attach_swapchain("SWAPCHAIN", swapchain);
-			execute_submit_and_present_to_one(frame_allocator, std::move(rg).link(vuk::RenderGraph::CompileOptions{}), swapchain);
+			auto fut = util::ImGui_ImplVuk_Render(frame_allocator, Future{ rg, "SWAPCHAIN+" }, imgui_data, ImGui::GetDrawData(), sampled_images);
+			execute_submit_and_present_to_one(frame_allocator, std::move(*fut.get_render_graph()).link(vuk::RenderGraph::CompileOptions{}), swapchain);
 			sampled_images.clear();
 		}
 	}

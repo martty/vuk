@@ -50,7 +50,7 @@ namespace {
 		      runner.enqueue_setup(std::move(ind_fut));
 		    },
 		.render =
-		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
+		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator, vuk::Future target) {
 		      struct VP {
 			      glm::mat4 view;
 			      glm::mat4 proj;
@@ -66,6 +66,7 @@ namespace {
 		      vuk::wait_for_futures(frame_allocator, uboVP_fut);
 
 		      vuk::RenderGraph rg("05");
+		      rg.attach_in("05_deferred", std::move(target));
 		      // Here we will render the cube into 3 offscreen textures
 		      rg.add_pass({ // Passes can be optionally named, this useful for visualization and debugging
 		                    .name = "05_deferred_MRT",

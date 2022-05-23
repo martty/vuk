@@ -25,9 +25,12 @@ namespace {
 		                  },
 		              // Code ran every frame
 		              .render =
-		                  [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
+		                  [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator, vuk::Future target) {
 		                    // We start building a rendergraph
 		                    vuk::RenderGraph rg("01");
+							// The framework provides us with an image to render to in "target"
+							// We attach this to the rendergraph named as "01_triangle"
+		                    rg.attach_in("01_triangle", std::move(target));
 		                    // The rendergraph is composed of passes (vuk::Pass)
 		                    // Each pass declares which resources are used
 		                    // And it provides a callback which is executed when this pass is being ran

@@ -41,10 +41,8 @@ util::ImGuiData util::ImGui_ImplVuk_Init(vuk::Allocator& allocator) {
 	return data;
 }
 
-void util::ImGui_ImplVuk_Render(vuk::Allocator& allocator,
-                                vuk::RenderGraph& rg,
-                                vuk::Name src_target,
-                                vuk::Name dst_target,
+vuk::Future util::ImGui_ImplVuk_Render(vuk::Allocator& allocator,
+                                vuk::Future target,
                                 util::ImGuiData& data,
                                 ImDrawData* draw_data,
                                 const plf::colony<vuk::SampledImage>& sampled_images) {
@@ -83,11 +81,12 @@ void util::ImGui_ImplVuk_Render(vuk::Allocator& allocator,
 		vtx_dst += cmd_list->VtxBuffer.Size;
 		idx_dst += cmd_list->IdxBuffer.Size;
 	}
-
+	std::unique_ptr<vuk::RenderGraph> rg = std::make_unique<vuk::RenderGraph>("imgui");
+	rg->attach_in("target", std::move(target));
 	// add rendergraph dependencies to be transitioned
 	// make all rendergraph sampled images available
 	std::vector<vuk::Resource> resources;
-	resources.emplace_back(vuk::Resource{ src_target, vuk::Resource::Type::eImage, vuk::eColorRW, dst_target });
+	resources.emplace_back(vuk::Resource{ "target", vuk::Resource::Type::eImage, vuk::eColorRW, "target+" });
 	for (auto& si : sampled_images) {
 		if (!si.is_global) {
 			resources.emplace_back(vuk::Resource{ si.rg_attachment.attachment_name, vuk::Resource::Type::eImage, vuk::Access::eFragmentSampled });
@@ -95,11 +94,11 @@ void util::ImGui_ImplVuk_Render(vuk::Allocator& allocator,
 	}
 	vuk::Pass pass{ .name = "imgui",
 		              .resources = std::move(resources),
-		              .execute = [&data, &allocator, verts = imvert.get(), inds = imind.get(), draw_data, reset_render_state, src_target](
+		              .execute = [&data, &allocator, verts = imvert.get(), inds = imind.get(), draw_data, reset_render_state](
 		                             vuk::CommandBuffer& command_buffer) {
 		                command_buffer.set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor);
 		                command_buffer.set_rasterization(vuk::PipelineRasterizationStateCreateInfo{});
-		                command_buffer.set_color_blend(src_target, vuk::BlendPreset::eAlphaBlend);
+		                command_buffer.set_color_blend("target", vuk::BlendPreset::eAlphaBlend);
 		                reset_render_state(data, command_buffer, draw_data, verts, inds);
 		                // Will project scissor/clipping rectangles into framebuffer space
 		                ImVec2 clip_off = draw_data->DisplayPos;         // (0,0) unless using multi-viewports
@@ -172,5 +171,7 @@ void util::ImGui_ImplVuk_Render(vuk::Allocator& allocator,
 		                }
 		              } };
 
-	rg.add_pass(std::move(pass));
+	rg->add_pass(std::move(pass));
+
+	return { std::move(rg), "target+" };
 }

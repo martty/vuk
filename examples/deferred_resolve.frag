@@ -12,7 +12,7 @@ struct Light {
     vec3 Position;
     vec3 Color;
 };
-const int NR_LIGHTS = 32;
+
 const Light l = Light(vec3(1,1,1), vec3(0.5, 0.7, 0.9));
 
 layout(binding = 3) uniform V {

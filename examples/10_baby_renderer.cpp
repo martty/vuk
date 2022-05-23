@@ -240,7 +240,7 @@ namespace {
 		      }
 		    },
 		.render =
-		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
+		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator, vuk::Future target) {
 		      // We set up VP data, same as in example 02_cube
 		      struct VP {
 			      glm::mat4 view;
@@ -271,7 +271,7 @@ namespace {
 		      }
 
 		      vuk::RenderGraph rg("10");
-
+		      rg.attach_in("10_baby_renderer", std::move(target));
 		      // Set up the pass to draw the renderables
 		      rg.add_pass({ .name = "forward",
 		                    .resources = { "10_baby_renderer"_image >> vuk::eColorWrite >> "10_baby_renderer_final", "10_depth"_image >> vuk::eDepthStencilRW },

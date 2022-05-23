@@ -270,9 +270,9 @@ namespace vuk {
 		/// @brief compute ImageUsageFlags for given use chains
 		static ImageUsageFlags compute_usage(std::span<const UseRef> chain);
 
+		Name name;
 	private:
 		struct RGImpl* impl;
-		Name name;
 		friend struct ExecutableRenderGraph;
 
 		/// @brief Check if this rendergraph is valid.

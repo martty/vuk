@@ -158,10 +158,11 @@ void vuk::BenchRunner::render() {
 		ImGui::Render();
 
 		vuk::Name attachment_name = "_final";
-		util::ImGui_ImplVuk_Render(frame_allocator, rg, attachment_name.append("+"), "SWAPCHAIN", imgui_data, ImGui::GetDrawData(), sampled_images);
 		rg.attach_swapchain("_swp", swapchain);
 		rg.clear_image("_swp", attachment_name, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
-		execute_submit_and_present_to_one(frame_allocator, std::move(rg).link(vuk::RenderGraph::CompileOptions{}), swapchain);
+		auto fut = util::ImGui_ImplVuk_Render(frame_allocator, Future{ rg, "_final" }, imgui_data, ImGui::GetDrawData(), sampled_images);
+		
+		execute_submit_and_present_to_one(frame_allocator, std::move(*fut.get_render_graph()).link(vuk::RenderGraph::CompileOptions{}), swapchain);
 		sampled_images.clear();
 
 		std::optional<double> duration = context->retrieve_duration(start, end);

@@ -80,13 +80,12 @@ void vuk::ExampleRunner::render() {
 		auto& xdev_frame_resource = xdev_rf_alloc->get_next_frame();
 		context->next_frame();
 		Allocator frame_allocator(xdev_frame_resource);
-		auto fut = examples[0]->render(*this, frame_allocator);
-		auto attachment_name = vuk::Name(examples[0]->name);
-		fut.get_render_graph()->attach_swapchain("_swp", swapchain);
-		fut.get_render_graph()->clear_image("_swp", attachment_name, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
 		RenderGraph rg("runner");
-		rg.attach_in("result", std::move(fut));
-		auto erg = std::move(rg).link(vuk::RenderGraph::CompileOptions{});
+		auto attachment_name = vuk::Name(examples[0]->name);
+		rg.attach_swapchain("_swp", swapchain);
+		rg.clear_image("_swp", attachment_name, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
+		auto fut = examples[0]->render(*this, frame_allocator, Future{ rg, attachment_name });	
+		auto erg = std::move(*fut.get_render_graph()).link(vuk::RenderGraph::CompileOptions{});
 		execute_submit_and_present_to_one(frame_allocator, std::move(erg), swapchain);
 	}
 }

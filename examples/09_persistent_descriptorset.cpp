@@ -134,7 +134,7 @@ namespace {
 		      ctx.commit_persistent_descriptorset(pda.get());
 		    },
 		.render =
-		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
+		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator, vuk::Future target) {
 		      struct VP {
 			      glm::mat4 view;
 			      glm::mat4 proj;
@@ -149,7 +149,7 @@ namespace {
 		      vuk::wait_for_futures(frame_allocator, uboVP_fut);
 
 		      vuk::RenderGraph rg("09");
-
+		      rg.attach_in("09_persistent_descriptorset", std::move(target));
 		      // Set up the pass to draw the textured cube, with a color and a depth attachment
 		      rg.add_pass({ .name = "forward",
 		                    .resources = { "09_persistent_descriptorset"_image >> vuk::eColorWrite >> "09_persistent_descriptorset_final",

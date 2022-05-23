@@ -76,7 +76,7 @@ namespace {
 		      stbi_image_free(doge_image);
 		    },
 		.render =
-		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
+		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator, vuk::Future target) {
 		      vuk::RenderGraph rgx("RTT");
 
 		      rgx.attach_and_clear_image(
@@ -103,6 +103,7 @@ namespace {
 		      vuk::Future rttf{ rgx, "08_rttf+" };
 
 		      std::unique_ptr<vuk::RenderGraph> rgp = std::make_unique<vuk::RenderGraph>("08");
+		      rgp->attach_in("08_pipelined_compute", std::move(target));
 		      auto& rg = *rgp;
 		      // this pass executes outside of a renderpass
 		      // we declare a buffer dependency and dispatch a compute shader

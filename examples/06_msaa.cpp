@@ -51,7 +51,7 @@ namespace {
 		      runner.enqueue_setup(std::move(ind_fut));
 		    },
 		.render =
-		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
+		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator, vuk::Future target) {
 		      struct VP {
 			      glm::mat4 view;
 			      glm::mat4 proj;
@@ -66,7 +66,7 @@ namespace {
 		      vuk::wait_for_futures(frame_allocator, uboVP_fut);
 
 		      vuk::RenderGraph rg("06");
-
+		      rg.attach_in("06_msaa", std::move(target));
 		      // The rendering pass is unchanged by going to multisampled,
 		      // but we will use an offscreen multisampled color attachment
 		      rg.add_pass({ .resources = { "06_msaa_MS"_image >> vuk::eColorWrite, "06_msaa_depth"_image >> vuk::eDepthStencilRW },
