@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 #include "backends/imgui_impl_glfw.h"
@@ -65,9 +66,12 @@ namespace vuk {
 			ImGui::StyleColorsDark();
 			// Setup Platform/Renderer bindings
 			ImGui_ImplGlfw_InitForVulkan(window, true);
-			{ imgui_data = util::ImGui_ImplVuk_Init(*global); }
-			for (auto& ex : examples) {
-				ex->setup(*this, *global);
+			imgui_data = util::ImGui_ImplVuk_Init(*global);
+			{
+				std::vector<std::jthread> threads;
+				for (auto& ex : examples) {
+					threads.emplace_back(std::jthread([&] { ex->setup(*this, *global); }));
+				}
 			}
 		}
 
