@@ -138,7 +138,7 @@ namespace vuk {
 		}
 	}
 
-	void RenderGraph::schedule_intra_queue(std::span<PassInfo> passes, const RenderGraph::CompileOptions& compile_options) {
+	void RenderGraph::schedule_intra_queue(std::span<PassInfo> passes, const RenderGraphCompileOptions& compile_options) {
 		// sort passes if requested
 		// printf("-------------");
 		if (passes.size() > 1 && compile_options.reorder_passes) {
@@ -215,7 +215,7 @@ namespace vuk {
 		}
 	}
 
-	void RenderGraph::compile(const RenderGraph::CompileOptions& compile_options) {
+	void RenderGraph::compile(const RenderGraphCompileOptions& compile_options) {
 		// find which reads are graph inputs (not produced by any pass) & outputs
 		// (not consumed by any pass)
 		build_io();
@@ -595,7 +595,7 @@ namespace vuk {
 		}
 	}
 
-	ExecutableRenderGraph RenderGraph::link(const RenderGraph::CompileOptions& compile_options) && {
+	ExecutableRenderGraph RenderGraph::link(const RenderGraphCompileOptions& compile_options) && {
 		compile(compile_options);
 
 		// at this point the graph is built, we know of all the resources and

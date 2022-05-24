@@ -121,8 +121,7 @@ void vuk::ExampleRunner::render() {
 			ImGui::Render();
 
 			fut = util::ImGui_ImplVuk_Render(frame_allocator, std::move(fut), imgui_data, ImGui::GetDrawData(), sampled_images);
-			auto erg = std::move(*fut.get_render_graph()).link(vuk::RenderGraph::CompileOptions{});
-			execute_submit_and_present_to_one(frame_allocator, std::move(erg), swapchain);
+			present(frame_allocator, swapchain, std::move(fut));
 			sampled_images.clear();
 		} else { // render all examples as imgui windows
 			RenderGraph rg("runner");
@@ -138,7 +137,7 @@ void vuk::ExampleRunner::render() {
 				Name attachment_name_in = Name(ex->name);
 				Name& attachment_name_out = *attachment_names.emplace(std::string(ex->name) + "_final");
 				auto& rg_frag = *rg_frag_fut.get_render_graph();
-				rg_frag.compile(vuk::RenderGraph::CompileOptions{});
+				rg_frag.compile(vuk::RenderGraphCompileOptions{});
 				ImGui::Begin(ex->name.data());
 				if (rg_frag.get_use_chains().size() > 1) {
 					const auto& bound_attachments = rg_frag.get_bound_attachments();
@@ -217,7 +216,7 @@ void vuk::ExampleRunner::render() {
 			rg.clear_image("SWAPCHAIN", "SWAPCHAIN+", vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
 			rg.attach_swapchain("SWAPCHAIN", swapchain);
 			auto fut = util::ImGui_ImplVuk_Render(frame_allocator, Future{ rg, "SWAPCHAIN+" }, imgui_data, ImGui::GetDrawData(), sampled_images);
-			execute_submit_and_present_to_one(frame_allocator, std::move(*fut.get_render_graph()).link(vuk::RenderGraph::CompileOptions{}), swapchain);
+			present(frame_allocator, swapchain, std::move(fut));
 			sampled_images.clear();
 		}
 	}

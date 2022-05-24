@@ -154,9 +154,7 @@ namespace vuk {
 
 		std::function<void(CommandBuffer&)> execute;
 		std::vector<std::byte> arguments; // internal use
-		enum class Type {
-			eUserPass, eClear
-		} type = Type::eUserPass;
+		enum class Type { eUserPass, eClear } type = Type::eUserPass;
 	};
 
 	// declare these specializations for GCC
@@ -242,24 +240,16 @@ namespace vuk {
 		/// @param futures Futures to be consumed into this rendergraph
 		void attach_in(std::span<Future> futures);
 
-		/// @brief Control compilation options when compiling the rendergraph
-		struct CompileOptions {
-			/// @brief reorder passes according to dependencies
-			bool reorder_passes = true;
-			/// @brief check that pass ordering does not violate resource constraints (not needed when reordering passes)
-			bool check_pass_ordering = false;
-		};
-
 		/// @brief Consume this RenderGraph and create an ExecutableRenderGraph
 		/// @param compile_options CompileOptions controlling compilation behaviour
-		struct ExecutableRenderGraph link(const CompileOptions& compile_options) &&;
+		struct ExecutableRenderGraph link(const RenderGraphCompileOptions& compile_options) &&;
 
 		// reflection functions
 
 		/// @brief Build the graph, assign framebuffers, renderpasses and subpasses
 		///	link automatically calls this, only needed if you want to use the reflection functions
 		/// @param compile_options CompileOptions controlling compilation behaviour
-		void compile(const CompileOptions& compile_options);
+		void compile(const RenderGraphCompileOptions& compile_options);
 
 		/// @brief retrieve usages of resource in the RenderGraph
 		MapProxy<Name, std::span<const struct UseRef>> get_use_chains();
@@ -271,6 +261,7 @@ namespace vuk {
 		static ImageUsageFlags compute_usage(std::span<const UseRef> chain);
 
 		Name name;
+
 	private:
 		struct RGImpl* impl;
 		friend struct ExecutableRenderGraph;
@@ -282,7 +273,7 @@ namespace vuk {
 		// determine rendergraph inputs and outputs, and resources that are neither
 		void build_io();
 
-		void schedule_intra_queue(std::span<struct PassInfo> passes, const RenderGraph::CompileOptions& compile_options);
+		void schedule_intra_queue(std::span<struct PassInfo> passes, const RenderGraphCompileOptions& compile_options);
 
 		// future support functions
 		friend class Future;

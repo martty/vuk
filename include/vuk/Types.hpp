@@ -1027,6 +1027,15 @@ namespace vuk {
 			return command_buffer;
 		}
 	};
+
+	/// @brief Control compilation options when compiling the rendergraph
+	struct RenderGraphCompileOptions {
+		/// @brief reorder passes according to dependencies
+		bool reorder_passes = true;
+		/// @brief check that pass ordering does not violate resource constraints (not needed when reordering passes)
+		bool check_pass_ordering = false;
+	};
+
 } // namespace vuk
 
 namespace std {

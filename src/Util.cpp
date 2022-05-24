@@ -321,6 +321,11 @@ namespace vuk {
 		return { expected_value };
 	}
 
+	Result<void> present(Allocator& allocator, SwapchainRef swapchain, Future&& future, RenderGraphCompileOptions compile_options) {
+		auto erg = std::move(*future.get_render_graph()).link(compile_options);
+		return execute_submit_and_present_to_one(allocator, std::move(erg), swapchain);
+	}
+
 	SampledImage make_sampled_image(ImageView iv, SamplerCreateInfo sci) {
 		return { SampledImage::Global{ iv, sci, ImageLayout::eShaderReadOnlyOptimal } };
 	}

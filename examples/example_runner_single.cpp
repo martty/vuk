@@ -85,8 +85,7 @@ void vuk::ExampleRunner::render() {
 		rg.attach_swapchain("_swp", swapchain);
 		rg.clear_image("_swp", attachment_name, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
 		auto fut = examples[0]->render(*this, frame_allocator, Future{ rg, attachment_name });	
-		auto erg = std::move(*fut.get_render_graph()).link(vuk::RenderGraph::CompileOptions{});
-		execute_submit_and_present_to_one(frame_allocator, std::move(erg), swapchain);
+		present(frame_allocator, swapchain, std::move(fut));
 	}
 }
 

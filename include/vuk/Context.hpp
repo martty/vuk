@@ -288,6 +288,9 @@ namespace vuk {
 	/// @param executable_rendergraph `ExecutableRenderGraph`s for execution
 	Result<void> execute_submit_and_wait(Allocator& allocator, ExecutableRenderGraph&& executable_rendergraph);
 
+	struct RenderGraphCompileOptions;
+	Result<void> present(Allocator& allocator, SwapchainRef swapchain, Future&& future, RenderGraphCompileOptions = {});
+
 	struct SampledImage make_sampled_image(ImageView iv, SamplerCreateInfo sci);
 
 	struct SampledImage make_sampled_image(Name n, SamplerCreateInfo sci);
