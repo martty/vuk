@@ -131,7 +131,11 @@ void vuk::ExampleRunner::render() {
 			for (auto& ex : examples) {
 				RenderGraph rgx(ex->name);
 				rgx.attach_and_clear_image("_img",
-				                           { .extent = vuk::Dimension2D::absolute(300, 300), .format = swapchain->format, .sample_count = vuk::Samples::e1 },
+				                           { .extent = vuk::Dimension2D::absolute(300, 300),
+				                             .format = swapchain->format,
+				                             .sample_count = vuk::Samples::e1,
+				                             .level_count = 1,
+				                             .layer_count = 1 },
 				                           vuk::ClearColor(0.1f, 0.2f, 0.3f, 1.f));
 				auto rg_frag_fut = ex->render(*this, frame_allocator, Future{ rgx, "_img" });
 				Name attachment_name_in = Name(ex->name);
@@ -147,8 +151,9 @@ void vuk::ExampleRunner::render() {
 						if (bound_it == bound_attachments.end())
 							continue;
 						auto samples = vuk::SampleCountFlagBits::e1;
-						if ((*bound_it).second.attachment.sample_count != vuk::Samples::eInfer)
-							samples = (*bound_it).second.attachment.sample_count.count;
+						auto& att_info = (*bound_it).second;
+						if (att_info.attachment.sample_count != vuk::Samples::eInfer)
+							samples = att_info.attachment.sample_count.count;
 						disable = disable || (samples != vuk::SampleCountFlagBits::e1);
 					}
 

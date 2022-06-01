@@ -5,6 +5,7 @@
 #include "vuk/vuk_fwd.hpp"
 
 #include <type_traits>
+#include <compare>
 
 #define MOV(x) (static_cast<std::remove_reference_t<decltype(x)>&&>(x))
 
@@ -275,9 +276,11 @@ namespace vuk {
 
 		Extent2D extent;
 
-		struct {
+		struct Relative {
 			float width = 1.0f;
 			float height = 1.0f;
+
+			auto operator<=>(const Relative&) const = default;
 		} _relative;
 
 		static Dimension2D absolute(uint32_t width, uint32_t height) {
@@ -292,6 +295,8 @@ namespace vuk {
 		static Dimension2D framebuffer() {
 			return Dimension2D{ .sizing = Sizing::eRelative };
 		}
+
+		auto operator<=>(const Dimension2D&) const = default;
 	};
 
 	struct Rect2D {

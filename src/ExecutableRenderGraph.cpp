@@ -24,11 +24,12 @@ namespace vuk {
 
 	void ExecutableRenderGraph::create_attachment(Context& ctx,
 	                                              Name name,
-	                                              AttachmentRPInfo& attachment_info,
+	                                              AttachmentInfo& attachment_info,
 	                                              vuk::Extent2D fb_extent,
 	                                              vuk::SampleCountFlagBits samples) {
+		auto rnbame = impl->resolve_name(name);
 		auto& chain = impl->use_chains.at(name);
-		if (attachment_info.type == AttachmentRPInfo::Type::eInternal) {
+		if (attachment_info.type == AttachmentInfo::Type::eInternal) {
 			vuk::ImageUsageFlags usage = RenderGraph::compute_usage(std::span(chain));
 
 			vuk::ImageCreateInfo ici;
@@ -46,7 +47,7 @@ namespace vuk {
 			// concretize attachment size
 			attachment_info.attachment.extent = Dimension2D::absolute(ici.extent.width, ici.extent.height);
 			ici.imageType = vuk::ImageType::e2D;
-			ici.format = vuk::Format(attachment_info.description.format);
+			ici.format = attachment_info.attachment.format;
 			ici.mipLevels = 1;
 			ici.initialLayout = vuk::ImageLayout::eUndefined;
 			ici.samples = samples;
@@ -55,7 +56,7 @@ namespace vuk {
 
 			vuk::ImageViewCreateInfo ivci;
 			ivci.image = vuk::Image{};
-			ivci.format = vuk::Format(attachment_info.description.format);
+			ivci.format = attachment_info.attachment.format;
 			ivci.viewType = vuk::ImageViewType::e2D;
 			vuk::ImageSubresourceRange isr;
 
@@ -82,7 +83,7 @@ namespace vuk {
 	Result<void> create_image(Allocator& alloc, ImageAttachment& attachment, vuk::Extent2D fb_extent, vuk::SampleCountFlagBits samples) {
 		ImageCreateInfo ici;
 		ici.format = vuk::Format(attachment.format);
-		ici.imageType = attachment.imageType;
+		ici.imageType = attachment.image_type;
 		ici.flags = attachment.image_flags;
 		ici.arrayLayers = attachment.layer_count;
 		if (attachment.extent.sizing == Sizing::eRelative) {
@@ -101,9 +102,8 @@ namespace vuk {
 		ImageViewCreateInfo ivci;
 		ivci.image = attachment.image;
 		ivci.format = vuk::Format(attachment.format);
-		ivci.viewType = attachment.viewType;
+		ivci.viewType = attachment.view_type;
 		ivci.flags = attachment.image_view_flags;
-		ivci.viewType = attachment.viewType;
 
 		ImageSubresourceRange isr;
 		isr.aspectMask = format_to_aspect(ivci.format);
@@ -134,7 +134,7 @@ namespace vuk {
 		vkCmdBeginRenderPass(cbuf, &rbi, use_secondary_command_buffers ? VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS : VK_SUBPASS_CONTENTS_INLINE);
 	}
 
-	[[nodiscard]] bool resolve_image_barrier(const Context& ctx, ImageBarrier& dep, const AttachmentRPInfo& bound) {
+	[[nodiscard]] bool resolve_image_barrier(const Context& ctx, ImageBarrier& dep, const AttachmentInfo& bound) {
 		dep.barrier.image = bound.attachment.image;
 		// turn base_{layer, level} into absolute values wrt the image
 		dep.barrier.subresourceRange.baseArrayLayer += bound.attachment.base_layer;
@@ -193,7 +193,7 @@ namespace vuk {
 		rpi.samples = rpass.fbci.sample_count.count;
 		rpi.depth_stencil_attachment = spdesc.pDepthStencilAttachment;
 		for (uint32_t i = 0; i < spdesc.colorAttachmentCount; i++) {
-			rpi.color_attachment_names[i] = rpass.attachments[spdesc.pColorAttachments[i].attachment].name;
+			rpi.color_attachment_names[i] = rpass.attachments[spdesc.pColorAttachments[i].attachment].attachment_info->name;
 		}
 		cobuf.color_blend_attachments.resize(spdesc.colorAttachmentCount);
 		cobuf.ongoing_renderpass = rpi;
@@ -263,8 +263,8 @@ namespace vuk {
 			}
 
 			for (auto& att : rpass.attachments) {
-				if (att.type == AttachmentRPInfo::Type::eSwapchain) {
-					used_swapchains.emplace(impl->bound_attachments.at(att.name).swapchain);
+				if (att.attachment_info->type == AttachmentInfo::Type::eSwapchain) {
+					used_swapchains.emplace(att.attachment_info->swapchain);
 				}
 			}
 
@@ -359,59 +359,188 @@ namespace vuk {
 	Result<SubmitBundle> ExecutableRenderGraph::execute(Allocator& alloc, std::vector<std::pair<SwapchainRef, size_t>> swp_with_index) {
 		Context& ctx = alloc.get_context();
 
-		// perform sample count inference for framebuffers
-		// loop through all renderpasses, and attempt to infer any sample count we
-		// can then loop again, stopping if we have inferred all or have not made
-		// progress resolve images are always sample count 1 and are excluded from
-		// the inference
-		bool infer_progress = false;
-		bool any_fb_incomplete = false;
-		do {
-			any_fb_incomplete = false;
-			infer_progress = false;
-			for (auto& rp : impl->rpis) {
-				if (rp.attachments.size() == 0) {
-					continue;
-				}
+		// bind swapchain attachment images & ivs
+		for (auto& [name, bound] : impl->bound_attachments) {
+			if (bound.type == AttachmentInfo::Type::eSwapchain) {
+				auto it = std::find_if(swp_with_index.begin(), swp_with_index.end(), [boundb = &bound](auto& t) { return t.first == boundb->swapchain; });
+				bound.attachment.image_view = it->first->image_views[it->second];
+				bound.attachment.image = it->first->images[it->second];
+				bound.attachment.extent = Dimension2D::absolute(it->first->extent);
+				bound.attachment.sample_count = vuk::Samples::e1;
+			}
+		}
 
-				Samples fb_samples = rp.fbci.sample_count;
-				bool samples_known = fb_samples != Samples::eInfer;
+		// pre-inference: which IAs are in which FBs?
+		for (auto& rp : impl->rpis) {
+			for (auto& rp_att : rp.attachments) {
+				auto& att = *rp_att.attachment_info;
+				att.rp_uses.emplace_back(&rp);
 
-				if (samples_known) {
-					continue;
-				}
+				if (!rp.framebufferless) { // framebuffers get extra inference
+					auto& ia = att.attachment;
+					// TODO: image type, image view type, levels and layers from FB
+					ia.image_type = ia.image_type == ImageType::eInfer ? vuk::ImageType::e2D : ia.image_type;
+					ia.view_type = vuk::ImageViewType::e2D; // TODO: check if this is the only legal option
 
-				// see if any attachment has a set sample count
-				for (auto& attrpinfo : rp.attachments) {
-					auto& bound = impl->bound_attachments[attrpinfo.name];
+					ia.base_layer = ia.base_layer == VK_REMAINING_ARRAY_LAYERS ? 0 : ia.base_layer;
+					ia.layer_count = ia.layer_count == VK_REMAINING_ARRAY_LAYERS ? 1 : ia.layer_count; // TODO: test layered fbs
+					ia.base_level = ia.base_level == VK_REMAINING_MIP_LEVELS ? 0 : ia.base_level;
+					ia.level_count = 1; // can only render to a single mip level
 
-					if (bound.attachment.sample_count != Samples::eInfer && !attrpinfo.is_resolve_dst) {
-						fb_samples = bound.attachment.sample_count;
-						samples_known = true;
-						break;
+					// we do an initial IA -> FB, because we won't process complete IAs later, but we need their info
+					if (ia.sample_count != Samples::eInfer && !rp_att.is_resolve_dst) {
+						rp.fbci.sample_count = ia.sample_count;
+					}
+
+					if (ia.extent.sizing == vuk::Sizing::eAbsolute && ia.extent.extent.width > 0 && ia.extent.extent.height > 0) {
+						rp.fbci.width = ia.extent.extent.width;
+						rp.fbci.height = ia.extent.extent.height;
 					}
 				}
 
-				// propagate known sample count onto attachments
-				if (samples_known) {
-					for (auto& attrpinfo : rp.attachments) {
-						auto& bound = impl->bound_attachments[attrpinfo.name];
-						if (!attrpinfo.is_resolve_dst) {
-							bound.attachment.sample_count = fb_samples;
-						}
-					}
-					rp.fbci.sample_count = fb_samples;
-					infer_progress = true; // progress made
-				} else {
-					any_fb_incomplete = true;
+				// resolve images are always sample count 1
+				if (rp_att.is_resolve_dst) {
+					att.attachment.sample_count = Samples::e1;
 				}
 			}
-		} while (any_fb_incomplete && infer_progress); // stop looping if all attachment have been sized
-		                                               // or we made no progress
+		}
 
-		assert(!any_fb_incomplete && "Failed to infer sample count for all attachments.");
+		decltype(impl->ia_inference_rules) resolved_rules;
+		for (auto& [n, rules] : impl->ia_inference_rules) {
+			resolved_rules.emplace(impl->resolve_name(n), std::move(rules));
+		}
 
-		// finish by acquiring the renderpasses
+		std::vector<std::pair<AttachmentInfo*, IAInference*>> attis_to_infer;
+		for (auto& [name, bound] : impl->bound_attachments) {
+			auto& chain = impl->use_chains.at(name);
+			if (bound.type == AttachmentInfo::Type::eInternal) {
+				// compute usage
+				bound.attachment.usage = bound.attachment.usage == ImageUsageFlagBits::eInfer ? RenderGraph::compute_usage(std::span(chain)) : bound.attachment.usage;
+				// if there is no image, then we will infer the base mip and layer to be 0
+				if (bound.attachment.image == VK_NULL_HANDLE) {
+					bound.attachment.base_layer = 0;
+					bound.attachment.base_level = 0;
+				}
+				if (bound.attachment.image_view == ImageView{}) {
+					if (bound.attachment.view_type == ImageViewType::eInfer) {
+						if (bound.attachment.image_type == ImageType::e1D) {
+							if (bound.attachment.layer_count == 1) {
+								bound.attachment.view_type = ImageViewType::e1D;
+							} else {
+								bound.attachment.view_type = ImageViewType::e1DArray;
+							}
+						} else if (bound.attachment.image_type == ImageType::e2D) {
+							if (bound.attachment.layer_count == 1) {
+								bound.attachment.view_type = ImageViewType::e2D;
+							} else {
+								bound.attachment.view_type = ImageViewType::e2DArray;
+							}
+						} else if (bound.attachment.image_type == ImageType::e3D) {
+							if (bound.attachment.layer_count == 1) {
+								bound.attachment.view_type = ImageViewType::e3D;
+							} else {
+								bound.attachment.view_type = ImageViewType::e2DArray;
+							}
+						}
+					}
+				}
+				if (!bound.attachment.is_fully_known()) {
+					IAInference* rules_ptr = nullptr;
+					auto rules_it = resolved_rules.find(name);
+					if (rules_it != resolved_rules.end()) {
+						rules_ptr = &rules_it->second;
+					}
+
+					attis_to_infer.emplace_back(&bound, rules_ptr);
+				}
+			}
+		}
+
+		InferenceContext inf_ctx{ this };
+		bool infer_progress = true;
+		// we provide an upper bound of 100 inference to iteration to catch infinite loops that don't converge to a fixpoint
+		for (size_t i = 0; i < 100 && !attis_to_infer.empty() && infer_progress; i++) {
+			infer_progress = false;
+			for (auto ia_it = attis_to_infer.begin(); ia_it != attis_to_infer.end();) {
+				auto& atti = *ia_it->first;
+				auto& ia = atti.attachment;
+				auto prev = ia;
+				// infer FB -> IA
+				if (ia.sample_count == Samples::eInfer ||
+				    (ia.extent.extent.width == 0 && ia.extent.extent.height == 0)) { // this IA can potentially take inference from an FB
+					for (auto* rpi : atti.rp_uses) {
+						auto& fbci = rpi->fbci;
+						Samples fb_samples = fbci.sample_count;
+						bool samples_known = fb_samples != Samples::eInfer;
+
+						// an extent is known if it is not 0
+						// 0 sized framebuffers are illegal
+						Extent2D fb_extent = Extent2D{ fbci.width, fbci.height };
+						bool extent_known = !(fb_extent.width == 0 || fb_extent.height == 0);
+
+						if (samples_known && ia.sample_count == Samples::eInfer) {
+							ia.sample_count = fb_samples;
+						}
+
+						if (extent_known && ia.extent.extent.width == 0 && ia.extent.extent.height == 0) {
+							ia.extent.extent = fb_extent;
+							ia.extent.sizing = Sizing::eAbsolute;
+						}
+					}
+				}
+				// infer custom rule -> IA
+				if (ia_it->second) {
+					inf_ctx.prefix = ia_it->second->prefix;
+					for (auto& rule : ia_it->second->rules) {
+						rule(inf_ctx, ia);
+					}
+				}
+				if (prev != ia) { // progress made
+					infer_progress = true;
+					// infer IA -> FB
+					if (ia.sample_count == Samples::eInfer && (ia.extent.extent.width == 0 && ia.extent.extent.height == 0)) { // this IA is not helpful for FB inference
+						continue;
+					}
+					for (auto* rpi : atti.rp_uses) {
+						auto& fbci = rpi->fbci;
+						Samples fb_samples = fbci.sample_count;
+						bool samples_known = fb_samples != Samples::eInfer;
+
+						// an extent is known if it is not 0
+						// 0 sized framebuffers are illegal
+						Extent2D fb_extent = Extent2D{ fbci.width, fbci.height };
+						bool extent_known = !(fb_extent.width == 0 || fb_extent.height == 0);
+
+						if (samples_known && extent_known) {
+							continue;
+						}
+
+						if (!samples_known && ia.sample_count != Samples::eInfer) {
+							auto it =
+							    std::find_if(rpi->attachments.begin(), rpi->attachments.end(), [attip = &atti](auto& rp_att) { return rp_att.attachment_info == attip; });
+							assert(it != rpi->attachments.end());
+							if (!it->is_resolve_dst) {
+								fbci.sample_count = ia.sample_count;
+							}
+						}
+
+						if (ia.extent.sizing == vuk::Sizing::eAbsolute && ia.extent.extent.width > 0 && ia.extent.extent.height > 0) {
+							fbci.width = ia.extent.extent.width;
+							fbci.height = ia.extent.extent.height;
+						}
+					}
+				}
+				if (ia.is_fully_known()) {
+					ia_it = attis_to_infer.erase(ia_it);
+				} else {
+					++ia_it;
+				}
+			}
+		}
+
+		assert(attis_to_infer.size() == 0 && "Failed to infer parameters for all attachments.");
+
+		// acquire the renderpasses
 		for (auto& rp : impl->rpis) {
 			if (rp.attachments.size() == 0) {
 				continue;
@@ -432,69 +561,6 @@ namespace vuk {
 			rp.handle = ctx.acquire_renderpass(rp.rpci, ctx.get_frame_count());
 		}
 
-		// bind swapchain attachment images & ivs
-		for (auto& [name, bound] : impl->bound_attachments) {
-			if (bound.type == AttachmentRPInfo::Type::eSwapchain) {
-				auto it = std::find_if(swp_with_index.begin(), swp_with_index.end(), [boundb = &bound](auto& t) { return t.first == boundb->swapchain; });
-				bound.attachment.image_view = it->first->image_views[it->second];
-				bound.attachment.image = it->first->images[it->second];
-				bound.attachment.extent = Dimension2D::absolute(it->first->extent);
-				bound.attachment.sample_count = vuk::Samples::e1;
-			}
-		}
-
-		// perform size inference for framebuffers (we need to do this here due to swapchain attachments)
-		// loop through all renderpasses, and attempt to infer any size we can
-		// then loop again, stopping if we have inferred all or have not made progress
-		do {
-			any_fb_incomplete = false;
-			infer_progress = false;
-			for (auto& rp : impl->rpis) {
-				if (rp.attachments.size() == 0) {
-					continue;
-				}
-
-				// an extent is known if it is not 0
-				// 0 sized framebuffers are illegal
-				Extent2D fb_extent = Extent2D{ rp.fbci.width, rp.fbci.height };
-				bool extent_known = !(fb_extent.width == 0 || fb_extent.height == 0);
-
-				if (extent_known) {
-					continue;
-				}
-
-				// see if any attachment has an absolute size
-				for (auto& attrpinfo : rp.attachments) {
-					auto& bound = impl->bound_attachments[attrpinfo.name];
-
-					if (bound.attachment.extent.sizing == vuk::Sizing::eAbsolute && bound.attachment.extent.extent.width > 0 &&
-					    bound.attachment.extent.extent.height > 0) {
-						fb_extent = bound.attachment.extent.extent;
-						extent_known = true;
-						break;
-					}
-				}
-
-				if (extent_known) {
-					rp.fbci.width = fb_extent.width;
-					rp.fbci.height = fb_extent.height;
-
-					for (auto& attrpinfo : rp.attachments) {
-						auto& bound = impl->bound_attachments[attrpinfo.name];
-						bound.attachment.extent = Dimension2D::absolute(fb_extent);
-					}
-
-					infer_progress = true; // progress made
-				}
-
-				if (!extent_known) {
-					any_fb_incomplete = true;
-				}
-			}
-		} while (any_fb_incomplete && infer_progress); // stop looping if all attachment have been sized or we made no progress
-
-		assert(!any_fb_incomplete && "Failed to infer size for all attachments.");
-
 		// create framebuffers, create & bind attachments
 		for (auto& rp : impl->rpis) {
 			if (rp.attachments.size() == 0)
@@ -507,10 +573,9 @@ namespace vuk {
 
 			// create internal attachments; bind attachments to fb
 			for (auto& attrpinfo : rp.attachments) {
-				auto resolved_name = impl->resolve_name(attrpinfo.name);
-				auto& bound = impl->bound_attachments[resolved_name];
-				if (bound.type == AttachmentRPInfo::Type::eInternal) {
-					create_attachment(ctx, resolved_name, bound, fb_extent, (vuk::SampleCountFlagBits)attrpinfo.description.samples);
+				auto& bound = *attrpinfo.attachment_info;
+				if (bound.type == AttachmentInfo::Type::eInternal) {
+					create_attachment(ctx, bound.name, bound, fb_extent, (vuk::SampleCountFlagBits)attrpinfo.description.samples);
 				}
 
 				ivs.push_back(bound.attachment.image_view);
@@ -530,7 +595,7 @@ namespace vuk {
 
 		// create non-attachment images
 		for (auto& [name, bound] : impl->bound_attachments) {
-			if (bound.type == AttachmentRPInfo::Type::eInternal && bound.attachment.image == VK_NULL_HANDLE) {
+			if (bound.type == AttachmentInfo::Type::eInternal && bound.attachment.image == VK_NULL_HANDLE) {
 				create_attachment(ctx, name, bound, vuk::Extent2D{ 0, 0 }, bound.attachment.sample_count.count);
 			}
 		}
@@ -589,7 +654,7 @@ namespace vuk {
 		return { expected_value, it->second };
 	}
 
-	Result<AttachmentRPInfo, RenderGraphException> ExecutableRenderGraph::get_resource_image(Name n, PassInfo* pass_info) {
+	Result<AttachmentInfo, RenderGraphException> ExecutableRenderGraph::get_resource_image(Name n, PassInfo* pass_info) {
 		auto resolved = resolve_name(n, pass_info);
 		auto it = impl->bound_attachments.find(resolved);
 		if (it == impl->bound_attachments.end()) {
@@ -617,5 +682,11 @@ namespace vuk {
 	Name ExecutableRenderGraph::resolve_name(Name name, PassInfo* pass_info) const noexcept {
 		auto qualified_name = pass_info->prefix.is_invalid() ? name : pass_info->prefix.append(name);
 		return impl->resolve_name(qualified_name);
+	}
+
+	const ImageAttachment& InferenceContext::get_image_attachment(Name name) const {
+		auto fqname = prefix.append(name);
+		auto resolved_name = erg->impl->resolve_name(fqname);
+		return erg->impl->bound_attachments.at(resolved_name).attachment;
 	}
 } // namespace vuk

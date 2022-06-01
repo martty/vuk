@@ -544,17 +544,18 @@ namespace vuk {
 		auto layout = *res_gl ? ImageLayout::eGeneral : ImageLayout::eTransferDstOptimal;
 
 		VkImageSubresourceRange isr = {};
-		auto aspect = format_to_aspect((Format)res->description.format);
+		auto& attachment = res->attachment;
+		auto aspect = format_to_aspect(attachment.format);
 		isr.aspectMask = (VkImageAspectFlags)aspect;
-		isr.baseArrayLayer = res->attachment.base_layer;
-		isr.layerCount = res->attachment.layer_count;
-		isr.baseMipLevel = res->attachment.base_level;
-		isr.levelCount = res->attachment.level_count;
+		isr.baseArrayLayer = attachment.base_layer;
+		isr.layerCount = attachment.layer_count;
+		isr.baseMipLevel = attachment.base_level;
+		isr.levelCount = attachment.level_count;
 
 		if (aspect == ImageAspectFlagBits::eColor) {
-			vkCmdClearColorImage(command_buffer, res->attachment.image, (VkImageLayout)layout, &c.c.color, 1, &isr);
+			vkCmdClearColorImage(command_buffer, attachment.image, (VkImageLayout)layout, &c.c.color, 1, &isr);
 		} else if (aspect & (ImageAspectFlagBits::eDepth | ImageAspectFlagBits::eStencil)) {
-			vkCmdClearDepthStencilImage(command_buffer, res->attachment.image, (VkImageLayout)layout, &c.c.depthStencil, 1, &isr);
+			vkCmdClearDepthStencilImage(command_buffer, attachment.image, (VkImageLayout)layout, &c.c.depthStencil, 1, &isr);
 		}
 
 		return *this;
@@ -578,7 +579,7 @@ namespace vuk {
 		auto dst_image = dst_res->attachment.image;
 		ImageSubresourceLayers isl;
 		ImageAspectFlagBits aspect;
-		if (dst_res->description.format == (VkFormat)Format::eD32Sfloat) {
+		if (dst_res->attachment.format == Format::eD32Sfloat) {
 			aspect = ImageAspectFlagBits::eDepth;
 		} else {
 			aspect = ImageAspectFlagBits::eColor;
@@ -773,7 +774,8 @@ namespace vuk {
 			return *this;
 		}
 		auto src_image = src_res->attachment.image;
-
+		
+		// TODO: fill these out from attachment
 		VkImageSubresourceRange isr = {};
 		isr.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		isr.baseArrayLayer = 0;

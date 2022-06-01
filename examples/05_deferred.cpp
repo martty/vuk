@@ -139,12 +139,13 @@ namespace {
 		      // The intermediate offscreen textures need to be bound
 		      // The "internal" rendering resolution is set here for one attachment, the rest infers from it
 		      rg.attach_and_clear_image(
-		          "05_position",
-		          { .extent = vuk::Dimension2D::absolute(300, 300), .format = vuk::Format::eR16G16B16A16Sfloat, .sample_count = vuk::Samples::e1 },
-		          vuk::ClearColor{ 1.f, 0.f, 0.f, 0.f });
+		          "05_position", { .format = vuk::Format::eR16G16B16A16Sfloat, .sample_count = vuk::Samples::e1 }, vuk::ClearColor{ 1.f, 0.f, 0.f, 0.f });
 		      rg.attach_and_clear_image("05_normal", { .format = vuk::Format::eR16G16B16A16Sfloat }, vuk::ClearColor{ 0.f, 1.f, 0.f, 0.f });
 		      rg.attach_and_clear_image("05_color", { .format = vuk::Format::eR8G8B8A8Unorm }, vuk::ClearColor{ 0.f, 0.f, 1.f, 0.f });
 		      rg.attach_and_clear_image("05_depth", { .format = vuk::Format::eD32Sfloat }, vuk::ClearDepthStencil{ 1.0f, 0 });
+
+		      rg.inference_rule("05_position",
+		                        [](const vuk::InferenceContext& ctx, vuk::ImageAttachment& ia) { ia.extent = ctx.get_image_attachment("05_deferred").extent; });
 
 		      return vuk::Future{ std::make_unique<vuk::RenderGraph>(std::move(rg)), "05_deferred_final" };
 		    }

@@ -109,9 +109,9 @@ namespace vuk {
 	}
 
 	// implement MapProxy for attachment
-	using MP2 = MapProxy<Name, const AttachmentRPInfo&>;
-	using MPI2 = ConstMapIterator<Name, const AttachmentRPInfo&>;
-	using M2 = robin_hood::unordered_flat_map<Name, AttachmentRPInfo>;
+	using MP2 = MapProxy<Name, const AttachmentInfo&>;
+	using MPI2 = ConstMapIterator<Name, const AttachmentInfo&>;
+	using M2 = robin_hood::unordered_flat_map<Name, AttachmentInfo>;
 
 	template<>
 	MP2::const_iterator MP2::cbegin() const noexcept {

@@ -335,4 +335,33 @@ namespace vuk {
 		std::vector<MemoryBarrier> pre_mem_barriers, post_mem_barriers;
 	};
 
+	struct AttachmentInfo {
+		Name name;
+
+		ImageAttachment attachment = {};
+
+		ResourceUse initial, final;
+
+		enum class Type { eInternal, eExternal, eSwapchain } type;
+
+		// swapchain for swapchain
+		Swapchain* swapchain = nullptr;
+
+		std::vector<struct RenderPassInfo*> rp_uses;
+
+		FutureBase* attached_future = nullptr;
+	};
+
+	struct AttachmentRPInfo {
+		AttachmentInfo* attachment_info;
+
+		VkAttachmentDescription description = {};
+
+		ResourceUse initial, final;
+
+		std::optional<Clear> clear_value;
+
+		bool is_resolve_dst = false;
+		AttachmentInfo* resolve_src = nullptr;
+	};
 } // namespace vuk

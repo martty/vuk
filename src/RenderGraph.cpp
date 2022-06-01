@@ -70,10 +70,17 @@ namespace vuk {
 		}
 
 		for (auto& [name, att] : other.impl->bound_attachments) {
+			att.name = joiner.append(name);
 			impl->bound_attachments.emplace(joiner.append(name), std::move(att));
 		}
 		for (auto& [name, buf] : other.impl->bound_buffers) {
+			buf.name = joiner.append(name);
 			impl->bound_buffers.emplace(joiner.append(name), std::move(buf));
+		}
+
+		for (auto& [name, iainf] : other.impl->ia_inference_rules) {
+			iainf.prefix = joiner.append(iainf.prefix);
+			impl->ia_inference_rules.emplace(joiner.append(name), std::move(iainf));
 		}
 	}
 
@@ -388,9 +395,8 @@ namespace vuk {
 				rpi.subpasses.push_back(si);
 			}
 			for (auto& att : attachments) {
-				AttachmentRPInfo info;
-				info.name = impl->resolve_name(att.name);
-				rpi.attachments.push_back(info);
+				auto name = impl->resolve_name(att.name);
+				rpi.attachments.push_back(AttachmentRPInfo{ &impl->bound_attachments.at(name) });
 			}
 
 			if (attachments.size() == 0) {
@@ -453,15 +459,18 @@ namespace vuk {
 	}
 
 	void RenderGraph::attach_swapchain(Name name, SwapchainRef swp) {
-		AttachmentRPInfo attachment_info;
+		AttachmentInfo attachment_info;
+		attachment_info.name = name;
 		attachment_info.attachment.extent = Dimension2D::absolute(swp->extent);
 		// directly presented
-		attachment_info.description.format = (VkFormat)swp->format;
+		attachment_info.attachment.format = swp->format;
 		attachment_info.attachment.sample_count = Samples::e1;
+		attachment_info.attachment.base_layer = 0;
+		attachment_info.attachment.base_level = 0;
 		attachment_info.attachment.layer_count = 1;
 		attachment_info.attachment.level_count = 1;
 
-		attachment_info.type = AttachmentRPInfo::Type::eSwapchain;
+		attachment_info.type = AttachmentInfo::Type::eSwapchain;
 		attachment_info.swapchain = swp;
 
 		ResourceUse& initial = attachment_info.initial;
@@ -490,15 +499,15 @@ namespace vuk {
 	}
 
 	void RenderGraph::attach_image(Name name, ImageAttachment att, Access initial_acc, Access final_acc) {
-		AttachmentRPInfo attachment_info;
+		AttachmentInfo attachment_info;
+		attachment_info.name = name;
 		attachment_info.attachment = att;
-
 		if (att.has_concrete_image() && att.has_concrete_image_view()) {
-			attachment_info.type = AttachmentRPInfo::Type::eExternal;
+			attachment_info.type = AttachmentInfo::Type::eExternal;
 		} else {
-			attachment_info.type = AttachmentRPInfo::Type::eInternal;
+			attachment_info.type = AttachmentInfo::Type::eInternal;
 		}
-		attachment_info.description.format = (VkFormat)att.format;
+		attachment_info.attachment.format = att.format;
 
 		ResourceUse& initial = attachment_info.initial;
 		ResourceUse& final = attachment_info.final;
@@ -517,11 +526,12 @@ namespace vuk {
 		if (fimg.get_status() == FutureBase::Status::eSubmitted || fimg.get_status() == FutureBase::Status::eHostAvailable) {
 			if (fimg.is_image()) {
 				auto att = fimg.get_result<ImageAttachment>();
-				AttachmentRPInfo attachment_info;
+				AttachmentInfo attachment_info;
+				attachment_info.name = name.append("_");
 				attachment_info.attachment = att;
 
-				attachment_info.type = AttachmentRPInfo::Type::eExternal;
-				attachment_info.description.format = (VkFormat)att.format;
+				attachment_info.type = AttachmentInfo::Type::eExternal;
+				attachment_info.attachment.format = att.format;
 
 				attachment_info.initial = { fimg.control->last_use.stages, fimg.control->last_use.access, fimg.control->last_use.layout };
 				attachment_info.final = to_use(vuk::Access::eNone);
@@ -565,6 +575,11 @@ namespace vuk {
 		}
 	}
 
+	void RenderGraph::inference_rule(Name target, std::function<void(const struct InferenceContext&, ImageAttachment&)> rule) {
+		impl->ia_inference_rules[target].prefix = "";
+		impl->ia_inference_rules[target].rules.push_back(std::move(rule));
+	}
+
 	void RenderGraph::attach_out(Name name, Future& fimg, DomainFlags dst_domain) {
 		fimg.get_status() = FutureBase::Status::eOutputAttached;
 		add_pass({ .name = name.append("_RELEASE"),
@@ -578,11 +593,9 @@ namespace vuk {
 		return impl->temporary_name.append(Name(std::to_string(impl->temporary_name_counter++)));
 	}
 
-	void sync_bound_attachment_to_renderpass(AttachmentRPInfo& rp_att, AttachmentRPInfo& attachment_info) {
-		rp_att.description.format = attachment_info.description.format;
-		rp_att.attachment = attachment_info.attachment;
+	void sync_bound_attachment_to_renderpass(AttachmentRPInfo& rp_att, AttachmentInfo& attachment_info) {
+		rp_att.description.format = (VkFormat)attachment_info.attachment.format;
 		rp_att.description.samples = (VkSampleCountFlagBits)attachment_info.attachment.sample_count.count;
-		rp_att.type = attachment_info.type;
 	}
 
 	void RenderGraph::validate() {
@@ -623,7 +636,7 @@ namespace vuk {
 					if ((i < chain.size() - 1) && is_framebuffer_attachment(to_use(right.original))) {
 						auto& next_rpi = impl->rpis[right.pass->render_pass_index];
 						for (auto& rpi_att : next_rpi.attachments) {
-							if (rpi_att.name == name) {
+							if (rpi_att.attachment_info == &attachment_info) {
 								assert(left.pass->pass.arguments.size() == sizeof(Clear));
 								rpi_att.clear_value = Clear{};
 								std::memcpy(&rpi_att.clear_value, left.pass->pass.arguments.data(), sizeof(Clear));
@@ -664,7 +677,7 @@ namespace vuk {
 				chain.emplace_back(UseRef{ {}, {}, vuk::eManual, vuk::eManual, attachment_info.final, Resource::Type::eImage, {}, nullptr });
 			}
 
-			ImageAspectFlags aspect = format_to_aspect((Format)attachment_info.description.format);
+			ImageAspectFlags aspect = format_to_aspect(attachment_info.attachment.format);
 
 			bool is_diverged = false;
 			ResourceUse original;
@@ -726,6 +739,7 @@ namespace vuk {
 					std::copy(layer_level_visited.begin(), layer_level_visited.end(), std::back_inserter(ll_vec));
 					// sort layers/levels
 					std::sort(ll_vec.begin(), ll_vec.end());
+					assert(!ll_vec.empty() && "Converging undiverged attachment");
 					if (ll_vec[0].base_layer > 0) {
 						// emit a global pre-barrier: all full layers before the first visited
 						assert("NYI"); // TODO: non-zero based layers
@@ -952,10 +966,10 @@ namespace vuk {
 					auto& left_rp = impl->rpis[left->pass->render_pass_index];
 					if (is_framebuffer_attachment(prev_use)) {
 						assert(!left_rp.framebufferless);
-						auto& rp_att = *contains_if(left_rp.attachments, [name](auto& att) { return att.name == name; });
+						auto& rp_att = *contains_if(left_rp.attachments, [&](auto& att) { return att.attachment_info == &attachment_info; });
 
-						sync_bound_attachment_to_renderpass(rp_att, attachment_info);
-						// we keep last use as finalLayout
+						// sync_bound_attachment_to_renderpass(rp_att, attachment_info);
+						//  we keep last use as finalLayout
 						assert(prev_use.layout != ImageLayout::eUndefined && prev_use.layout != ImageLayout::ePreinitialized);
 						rp_att.description.finalLayout = (VkImageLayout)prev_use.layout;
 
@@ -1031,7 +1045,7 @@ namespace vuk {
 						// if this is an attachment, we specify layout
 						if (is_framebuffer_attachment(prev_use)) {
 							assert(!left_rp.framebufferless);
-							auto& rp_att = *contains_if(left_rp.attachments, [name](auto& att) { return att.name == name; });
+							auto& rp_att = *contains_if(left_rp.attachments, [&](auto& att) { return att.attachment_info == &attachment_info; });
 
 							sync_bound_attachment_to_renderpass(rp_att, attachment_info);
 							// we keep last use as finalLayout
@@ -1080,7 +1094,7 @@ namespace vuk {
 						// if this is an attachment, we specify layout
 						if (is_framebuffer_attachment(next_use)) {
 							assert(!right_rp.framebufferless);
-							auto& rp_att = *contains_if(right_rp.attachments, [name](auto& att) { return att.name == name; });
+							auto& rp_att = *contains_if(right_rp.attachments, [&](auto& att) { return att.attachment_info == &attachment_info; });
 
 							sync_bound_attachment_to_renderpass(rp_att, attachment_info);
 							//
@@ -1336,12 +1350,13 @@ namespace vuk {
 				VkAttachmentReference attref{};
 
 				auto name = impl->resolve_name(res.name);
+				auto& attachment_info = impl->bound_attachments.at(name);
 				auto& chain = impl->use_chains.find(name)->second;
 				auto cit = std::find_if(chain.begin(), chain.end(), [&](auto& useref) { return useref.pass == &pass; });
 				assert(cit != chain.end());
 				attref.layout = (VkImageLayout)cit->use.layout;
-				attref.attachment = (uint32_t)std::distance(rp.attachments.begin(),
-				                                            std::find_if(rp.attachments.begin(), rp.attachments.end(), [&](auto& att) { return name == att.name; }));
+				attref.attachment = (uint32_t)std::distance(
+				    rp.attachments.begin(), std::find_if(rp.attachments.begin(), rp.attachments.end(), [&](auto& att) { return att.attachment_info == &attachment_info; }));
 
 				if (attref.layout != (VkImageLayout)ImageLayout::eColorAttachmentOptimal) {
 					if (attref.layout == (VkImageLayout)ImageLayout::eDepthStencilAttachmentOptimal) {
@@ -1354,12 +1369,17 @@ namespace vuk {
 						// this a resolve src attachment
 						// get the dst attachment
 						auto dst_name = impl->resolve_name(it->second);
+						auto& dst_att = impl->bound_attachments.at(dst_name);
 						rref.layout = (VkImageLayout)ImageLayout::eColorAttachmentOptimal; // the only possible
 						                                                                   // layout for resolves
-						rref.attachment = (uint32_t)std::distance(
-						    rp.attachments.begin(), std::find_if(rp.attachments.begin(), rp.attachments.end(), [&](auto& att) { return dst_name == att.name; }));
-						rp.attachments[rref.attachment].attachment.sample_count = Samples::e1; // resolve dst must be sample count = 1
+						rref.attachment = (uint32_t)std::distance(rp.attachments.begin(), std::find_if(rp.attachments.begin(), rp.attachments.end(), [&](auto& att) {
+							                                          return att.attachment_info == &dst_att;
+						                                          }));
+						auto& att_rp_info = rp.attachments[rref.attachment];
+
+						att_rp_info.attachment_info->attachment.sample_count = Samples::e1; // resolve dst must be sample count = 1
 						rp.attachments[rref.attachment].is_resolve_dst = true;
+						rp.attachments[rref.attachment].resolve_src = &attachment_info;
 					}
 
 					// we insert the new attachment at the end of the list for current
@@ -1436,7 +1456,7 @@ namespace vuk {
 		return &impl->use_chains;
 	}
 
-	MapProxy<Name, const AttachmentRPInfo&> RenderGraph::get_bound_attachments() {
+	MapProxy<Name, const AttachmentInfo&> RenderGraph::get_bound_attachments() {
 		return &impl->bound_attachments;
 	}
 

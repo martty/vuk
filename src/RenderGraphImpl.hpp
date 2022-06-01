@@ -23,6 +23,12 @@ namespace vuk {
 		std::vector<std::pair<DomainFlagBits, uint32_t>> waits;
 	};
 
+	using IARule = std::function<void(const struct InferenceContext&, ImageAttachment&)>;
+	struct IAInference {
+		Name prefix;
+		std::vector<IARule> rules;
+	};
+
 #define INIT(x) x(decltype(x)::allocator_type(*arena_))
 	struct RGImpl {
 		std::unique_ptr<arena> arena_;
@@ -39,8 +45,10 @@ namespace vuk {
 		size_t num_compute_rpis = 0;
 		size_t num_transfer_rpis = 0;
 
-		robin_hood::unordered_flat_map<Name, AttachmentRPInfo> bound_attachments;
+		robin_hood::unordered_flat_map<Name, AttachmentInfo> bound_attachments;
 		robin_hood::unordered_flat_map<Name, BufferInfo> bound_buffers;
+
+		std::unordered_map<Name, IAInference> ia_inference_rules;
 
 		RGImpl() : arena_(new arena(1024 * 1024)), INIT(passes), INIT(ordered_passes), INIT(rpis) {}
 

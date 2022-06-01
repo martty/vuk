@@ -60,26 +60,6 @@ namespace vuk {
 		ImageLayout layout; // ignored for buffers
 	};
 
-	struct AttachmentRPInfo {
-		Name name;
-
-		ImageAttachment attachment = {};
-
-		VkAttachmentDescription description = {};
-
-		ResourceUse initial, final;
-
-		enum class Type { eInternal, eExternal, eSwapchain } type;
-
-		// swapchain for swapchain
-		Swapchain* swapchain = nullptr;
-
-		std::optional<Clear> clear_value;
-
-		bool is_resolve_dst = false;
-		FutureBase* attached_future = nullptr;
-	};
-
 	struct BufferInfo {
 		Name name;
 
@@ -240,6 +220,8 @@ namespace vuk {
 		/// @param futures Futures to be consumed into this rendergraph
 		void attach_in(std::span<Future> futures);
 
+		void inference_rule(Name target, std::function<void(const struct InferenceContext& ctx, ImageAttachment& ia)>);
+
 		/// @brief Consume this RenderGraph and create an ExecutableRenderGraph
 		/// @param compile_options CompileOptions controlling compilation behaviour
 		struct ExecutableRenderGraph link(const RenderGraphCompileOptions& compile_options) &&;
@@ -254,7 +236,7 @@ namespace vuk {
 		/// @brief retrieve usages of resource in the RenderGraph
 		MapProxy<Name, std::span<const struct UseRef>> get_use_chains();
 		/// @brief retrieve bound image attachments in the RenderGraph
-		MapProxy<Name, const struct AttachmentRPInfo&> get_bound_attachments();
+		MapProxy<Name, const struct AttachmentInfo&> get_bound_attachments();
 		/// @brief retrieve bound buffers in the RenderGraph
 		MapProxy<Name, const struct BufferInfo&> get_bound_buffers();
 		/// @brief compute ImageUsageFlags for given use chains
@@ -298,6 +280,16 @@ namespace vuk {
 		std::vector<SubmitBatch> batches;
 	};
 
+	struct InferenceContext {
+		const ImageAttachment& get_image_attachment(Name name) const;
+		struct Framebuffer {
+
+		};
+
+		struct ExecutableRenderGraph* erg;
+		Name prefix;
+	};
+
 	struct ExecutableRenderGraph {
 		ExecutableRenderGraph(RenderGraph&&);
 		~ExecutableRenderGraph();
@@ -311,7 +303,7 @@ namespace vuk {
 		Result<SubmitBundle> execute(Allocator&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
 
 		Result<struct BufferInfo, RenderGraphException> get_resource_buffer(Name, struct PassInfo*);
-		Result<struct AttachmentRPInfo, RenderGraphException> get_resource_image(Name, struct PassInfo*);
+		Result<struct AttachmentInfo, RenderGraphException> get_resource_image(Name, struct PassInfo*);
 
 		Result<bool, RenderGraphException> is_resource_image_in_general_layout(Name n, struct PassInfo* pass_info);
 
@@ -320,9 +312,11 @@ namespace vuk {
 	private:
 		struct RGImpl* impl;
 
-		void create_attachment(Context& ptc, Name name, struct AttachmentRPInfo& attachment_info, Extent2D fb_extent, SampleCountFlagBits samples);
+		void create_attachment(Context& ptc, Name name, struct AttachmentInfo& attachment_info, Extent2D fb_extent, SampleCountFlagBits samples);
 		void fill_renderpass_info(struct RenderPassInfo& rpass, const size_t& i, class CommandBuffer& cobuf);
 		Result<SubmitInfo> record_single_submit(Allocator&, std::span<RenderPassInfo> rpis, DomainFlagBits domain);
+
+		friend struct InferenceContext;
 	};
 } // namespace vuk
 

@@ -12,8 +12,7 @@ namespace vuk {
 	enum class ImageTiling {
 		eOptimal = VK_IMAGE_TILING_OPTIMAL,
 		eLinear = VK_IMAGE_TILING_LINEAR,
-		eDrmFormatModifierEXT = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT,
-		eInfer
+		eDrmFormatModifierEXT = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT
 	};
 
 	enum class ImageType { e1D = VK_IMAGE_TYPE_1D, e2D = VK_IMAGE_TYPE_2D, e3D = VK_IMAGE_TYPE_3D, eInfer };

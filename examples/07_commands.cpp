@@ -175,7 +175,7 @@ namespace {
 		                                vuk::ClearColor{ 0.f, 0.f, 0.f, 1.f });
 		      rg.attach_and_clear_image("07_commands_depth", { .format = vuk::Format::eD32Sfloat }, vuk::ClearDepthStencil{ 1.0f, 0 });
 		      rg.attach_image("07_commands_NMS",
-		                      { .extent = vuk::Dimension2D::absolute(300, 300), .format = runner.swapchain->format, .sample_count = vuk::Samples::e1 });
+		                      { .extent = vuk::Dimension2D::absolute(300, 300), .format = runner.swapchain->format, .sample_count = vuk::Samples::e1, .level_count = 1, .layer_count = 1 });
 
 		      return vuk::Future{ std::make_unique<vuk::RenderGraph>(std::move(rg)), "07_commands_final" };
 		    },
