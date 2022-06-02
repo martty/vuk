@@ -130,8 +130,10 @@ void vuk::ExampleRunner::render() {
 			size_t i = 0;
 			for (auto& ex : examples) {
 				RenderGraph rgx(ex->name);
+				ImGui::Begin(ex->name.data());
+				auto size = ImGui::GetContentRegionAvail();
 				rgx.attach_and_clear_image("_img",
-				                           { .extent = vuk::Dimension2D::absolute(300, 300),
+				                           { .extent = vuk::Dimension2D::absolute((uint32_t)size.x, (uint32_t)size.y),
 				                             .format = swapchain->format,
 				                             .sample_count = vuk::Samples::e1,
 				                             .level_count = 1,
@@ -142,7 +144,6 @@ void vuk::ExampleRunner::render() {
 				Name& attachment_name_out = *attachment_names.emplace(std::string(ex->name) + "_final");
 				auto& rg_frag = *rg_frag_fut.get_render_graph();
 				rg_frag.compile(vuk::RenderGraphCompileOptions{});
-				ImGui::Begin(ex->name.data());
 				if (rg_frag.get_use_chains().size() > 1) {
 					const auto& bound_attachments = rg_frag.get_bound_attachments();
 					bool disable = false;
@@ -212,7 +213,7 @@ void vuk::ExampleRunner::render() {
 				// hacky way to reference image in the subgraph
 				// TODO: a proper way to do this?
 				auto si = vuk::make_sampled_image(rg.name.append("::").append(attachment_name_out), imgui_data.font_sci);
-				ImGui::Image(&*sampled_images.emplace(si), ImVec2(200, 200));
+				ImGui::Image(&*sampled_images.emplace(si), ImGui::GetContentRegionAvail());
 				ImGui::End();
 				i++;
 			}

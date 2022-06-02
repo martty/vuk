@@ -547,11 +547,8 @@ namespace vuk {
 			}
 
 			for (auto& attrpinfo : rp.attachments) {
-				if (attrpinfo.is_resolve_dst) {
-					attrpinfo.description.samples = VK_SAMPLE_COUNT_1_BIT;
-				} else {
-					attrpinfo.description.samples = (VkSampleCountFlagBits)rp.fbci.sample_count.count;
-				}
+				attrpinfo.description.format = (VkFormat)attrpinfo.attachment_info->attachment.format;
+				attrpinfo.description.samples = (VkSampleCountFlagBits)attrpinfo.attachment_info->attachment.sample_count.count;
 				rp.rpci.attachments.push_back(attrpinfo.description);
 			}
 

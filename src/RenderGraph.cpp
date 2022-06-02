@@ -593,9 +593,52 @@ namespace vuk {
 		return impl->temporary_name.append(Name(std::to_string(impl->temporary_name_counter++)));
 	}
 
-	void sync_bound_attachment_to_renderpass(AttachmentRPInfo& rp_att, AttachmentInfo& attachment_info) {
-		rp_att.description.format = (VkFormat)attachment_info.attachment.format;
-		rp_att.description.samples = (VkSampleCountFlagBits)attachment_info.attachment.sample_count.count;
+	IARule same_extent_as(Name n) {
+		return [=](const InferenceContext& ctx, ImageAttachment& ia) {
+			ia.extent = ctx.get_image_attachment(n).extent;
+		};
+	}
+
+	IARule same_format_as(Name n) {
+		return [=](const InferenceContext& ctx, ImageAttachment& ia) {
+			ia.format = ctx.get_image_attachment(n).format;
+		};
+	}
+
+	IARule same_shape_as(Name n) {
+		return [=](const InferenceContext& ctx, ImageAttachment& ia) {
+			auto& src = ctx.get_image_attachment(n);
+			if (src.base_layer != VK_REMAINING_ARRAY_LAYERS)
+				ia.base_layer = src.base_layer;
+			if (src.layer_count != VK_REMAINING_ARRAY_LAYERS)
+				ia.layer_count = src.layer_count;
+			if (src.base_level != VK_REMAINING_MIP_LEVELS)
+				ia.base_level = src.base_level;
+			if (src.level_count != VK_REMAINING_MIP_LEVELS)
+				ia.level_count = src.level_count;
+			if (src.extent.extent.width != 0 && src.extent.extent.height != 0)
+				ia.extent = src.extent;
+		};
+	}
+
+	IARule similar_to(Name n) {
+		return [=](const InferenceContext& ctx, ImageAttachment& ia) {
+			auto& src = ctx.get_image_attachment(n);
+			if (src.base_layer != VK_REMAINING_ARRAY_LAYERS)
+				ia.base_layer = src.base_layer;
+			if (src.layer_count != VK_REMAINING_ARRAY_LAYERS)
+				ia.layer_count = src.layer_count;
+			if (src.base_level != VK_REMAINING_MIP_LEVELS)
+				ia.base_level = src.base_level;
+			if (src.level_count != VK_REMAINING_MIP_LEVELS)
+				ia.level_count = src.level_count;
+			if (src.extent.extent.width != 0 && src.extent.extent.height != 0)
+				ia.extent = src.extent;
+			if (src.format != Format::eUndefined)
+				ia.format = src.format;
+			if (src.sample_count != Samples::eInfer)
+				ia.sample_count = src.sample_count;
+		};
 	}
 
 	void RenderGraph::validate() {
@@ -968,7 +1011,6 @@ namespace vuk {
 						assert(!left_rp.framebufferless);
 						auto& rp_att = *contains_if(left_rp.attachments, [&](auto& att) { return att.attachment_info == &attachment_info; });
 
-						// sync_bound_attachment_to_renderpass(rp_att, attachment_info);
 						//  we keep last use as finalLayout
 						assert(prev_use.layout != ImageLayout::eUndefined && prev_use.layout != ImageLayout::ePreinitialized);
 						rp_att.description.finalLayout = (VkImageLayout)prev_use.layout;
@@ -1047,7 +1089,6 @@ namespace vuk {
 							assert(!left_rp.framebufferless);
 							auto& rp_att = *contains_if(left_rp.attachments, [&](auto& att) { return att.attachment_info == &attachment_info; });
 
-							sync_bound_attachment_to_renderpass(rp_att, attachment_info);
 							// we keep last use as finalLayout
 							assert(prev_use.layout != ImageLayout::eUndefined && prev_use.layout != ImageLayout::ePreinitialized);
 							rp_att.description.finalLayout = (VkImageLayout)prev_use.layout;
@@ -1095,9 +1136,6 @@ namespace vuk {
 						if (is_framebuffer_attachment(next_use)) {
 							assert(!right_rp.framebufferless);
 							auto& rp_att = *contains_if(right_rp.attachments, [&](auto& att) { return att.attachment_info == &attachment_info; });
-
-							sync_bound_attachment_to_renderpass(rp_att, attachment_info);
-							//
 
 							rp_att.description.initialLayout = (VkImageLayout)next_use.layout;
 							assert(rp_att.description.initialLayout != (VkImageLayout)ImageLayout::eUndefined);

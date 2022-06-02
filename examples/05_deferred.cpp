@@ -10,6 +10,7 @@
  * We will also have depth buffering for this draw.
  * After this, we will compute the shading by using a fullscreen pass, where we sample from these textures.
  * To achieve this, we will need to let the rendergraph know of our image dependencies.
+ * Note that it is generally not a good idea to store position (since it can be reconstructed from depth).
  *
  * These examples are powered by the example framework, which hides some of the code required, as that would be repeated for each example.
  * Furthermore it allows launching individual examples and all examples with the example same code.
@@ -137,15 +138,19 @@ namespace {
 		                    } });
 
 		      // The intermediate offscreen textures need to be bound
-		      // The "internal" rendering resolution is set here for one attachment, the rest infers from it
 		      rg.attach_and_clear_image(
 		          "05_position", { .format = vuk::Format::eR16G16B16A16Sfloat, .sample_count = vuk::Samples::e1 }, vuk::ClearColor{ 1.f, 0.f, 0.f, 0.f });
 		      rg.attach_and_clear_image("05_normal", { .format = vuk::Format::eR16G16B16A16Sfloat }, vuk::ClearColor{ 0.f, 1.f, 0.f, 0.f });
-		      rg.attach_and_clear_image("05_color", { .format = vuk::Format::eR8G8B8A8Unorm }, vuk::ClearColor{ 0.f, 0.f, 1.f, 0.f });
+		      rg.attach_and_clear_image("05_color", { .format = vuk::Format::eR8G8B8A8Srgb }, vuk::ClearColor{ 0.f, 0.f, 1.f, 0.f });
 		      rg.attach_and_clear_image("05_depth", { .format = vuk::Format::eD32Sfloat }, vuk::ClearDepthStencil{ 1.0f, 0 });
 
-		      rg.inference_rule("05_position",
-		                        [](const vuk::InferenceContext& ctx, vuk::ImageAttachment& ia) { ia.extent = ctx.get_image_attachment("05_deferred").extent; });
+		      // The framebuffer for the deferred rendering consists of "05_position", "05_normal", "05_color" and "05_depth" images
+		      // Since these belong to the same framebuffer, vuk can infer the missing parameters that we don't explicitly provide
+		      // For example all images in a framebuffer must be the same extent, hence it is enough to know the extent of one image
+		      // In this case we have not specified any extent - and the second pass does not give any information
+		      // So we provide an additional rule - the extent of "05_position" must match our target extent
+		      // With this rule, all image parameters can be inferred
+		      rg.inference_rule("05_position", vuk::same_extent_as("05_deferred"));
 
 		      return vuk::Future{ std::make_unique<vuk::RenderGraph>(std::move(rg)), "05_deferred_final" };
 		    }

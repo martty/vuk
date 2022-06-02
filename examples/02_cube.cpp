@@ -71,8 +71,8 @@ namespace {
 		            .execute = [uboVP](vuk::CommandBuffer& command_buffer) {
 			            command_buffer
 			                // In vuk, all pipeline state (with the exception of the shaders) come from the command buffer
-			                // Such state can be requested to be dynamic - dynamic state does not form part of the pipeline key, and hence cheap
-			                // to change On desktop, dynamic scissor and viewport is of no extra cost, and worthwhile to set always
+			                // Such state can be requested to be dynamic - dynamic state does not form part of the pipeline key, and hence cheap to change
+			                // On desktop, dynamic scissor and viewport is of no extra cost, and worthwhile to set always
 			                .set_dynamic_state(vuk::DynamicStateFlagBits::eScissor | vuk::DynamicStateFlagBits::eViewport)
 			                .set_viewport(0, vuk::Rect2D::framebuffer()) // Set the viewport to cover the entire framebuffer
 			                .set_scissor(0, vuk::Rect2D::framebuffer())  // Set the scissor area to cover the entire framebuffer

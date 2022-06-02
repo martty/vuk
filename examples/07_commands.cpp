@@ -112,18 +112,21 @@ namespace {
 			                    command_buffer.resolve_image("07_commands_MS+", "07_commands_NMS");
 		                    } });
 
-		      float tile_x_size = 300 / 3;
-		      float tile_y_size = 300 / 3;
-
 		      // Here we demonstrate blitting by splitting up the resolved image into 09 tiles
+		      float tile_x_count = 3;
+		      float tile_y_count = 3;
 		      // And blitting those tiles in the order dictated by 'shuf'
 		      // We will also sort shuf over time, to show a nice animation
 		      rg.add_pass({ .name = "blit",
 		                    .resources = { "07_commands_NMS+"_image >> vuk::eTransferRead, "07_commands"_image >> vuk::eTransferWrite >> "07_commands_final" },
-		                    .execute = [tile_x_size, tile_y_size](vuk::CommandBuffer& command_buffer) {
+		                    .execute = [tile_x_count, tile_y_count](vuk::CommandBuffer& command_buffer) {
 			                    for (auto i = 0; i < 9; i++) {
 				                    auto x = i % 3;
 				                    auto y = i / 3;
+
+				                    auto dst_extent = command_buffer.get_resource_image_attachment("07_commands")->extent;
+				                    float tile_x_size = dst_extent.extent.width / tile_x_count;
+				                    float tile_y_size = dst_extent.extent.height / tile_x_count;
 
 				                    auto sx = shuf[i] % 3;
 				                    auto sy = shuf[i] / 3;
@@ -170,13 +173,14 @@ namespace {
 		      // We mark our MS attachment as multisampled (8 samples)
 		      // from the final image, and we don't need to specify here
 		      // We use the swapchain format & extents, since resolving needs identical formats & extents
-		      rg.attach_and_clear_image("07_commands_MS",
-		                                { .extent = vuk::Dimension2D::absolute(300, 300), .format = runner.swapchain->format, .sample_count = vuk::Samples::e8 },
-		                                vuk::ClearColor{ 0.f, 0.f, 0.f, 1.f });
+		      rg.attach_and_clear_image("07_commands_MS", { .sample_count = vuk::Samples::e8 }, vuk::ClearColor{ 0.f, 0.f, 0.f, 1.f });
 		      rg.attach_and_clear_image("07_commands_depth", { .format = vuk::Format::eD32Sfloat }, vuk::ClearDepthStencil{ 1.0f, 0 });
-		      rg.attach_image("07_commands_NMS",
-		                      { .extent = vuk::Dimension2D::absolute(300, 300), .format = runner.swapchain->format, .sample_count = vuk::Samples::e1, .level_count = 1, .layer_count = 1 });
+		      rg.attach_image("07_commands_NMS", { .sample_count = vuk::Samples::e1, .level_count = 1, .layer_count = 1 });
 
+		      rg.inference_rule("07_commands_MS", vuk::same_extent_as("07_commands"));
+		      rg.inference_rule("07_commands_MS", vuk::same_format_as("07_commands"));
+		      rg.inference_rule("07_commands_NMS", vuk::same_extent_as("07_commands_MS"));
+		      rg.inference_rule("07_commands_NMS", vuk::same_format_as("07_commands_MS"));
 		      return vuk::Future{ std::make_unique<vuk::RenderGraph>(std::move(rg)), "07_commands_final" };
 		    },
 		.cleanup =
