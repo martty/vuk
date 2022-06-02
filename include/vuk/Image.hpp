@@ -18,8 +18,8 @@ namespace vuk {
 	enum class ImageType { e1D = VK_IMAGE_TYPE_1D, e2D = VK_IMAGE_TYPE_2D, e3D = VK_IMAGE_TYPE_3D };
 
 	enum class ImageUsageFlagBits : VkImageUsageFlags {
-		eTransferRead = VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
-		eTransferWrite = VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+		eTransferSrc = VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+		eTransferDst = VK_IMAGE_USAGE_TRANSFER_DST_BIT,
 		eSampled = VK_IMAGE_USAGE_SAMPLED_BIT,
 		eStorage = VK_IMAGE_USAGE_STORAGE_BIT,
 		eColorAttachment = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,

@@ -166,7 +166,7 @@ void vuk::ExampleRunner::render() {
 								btn_id += "C";
 							} else if (usage & vuk::ImageUsageFlagBits::eDepthStencilAttachment) {
 								btn_id += "D";
-							} else if (usage & (vuk::ImageUsageFlagBits::eTransferRead | vuk::ImageUsageFlagBits::eTransferWrite)) {
+							} else if (usage & (vuk::ImageUsageFlagBits::eTransferSrc | vuk::ImageUsageFlagBits::eTransferDst)) {
 								btn_id += "X";
 							}
 						}

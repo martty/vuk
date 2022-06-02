@@ -1425,10 +1425,10 @@ namespace vuk {
 					usage |= ImageUsageFlagBits::eColorAttachment;
 					break;
 				case ImageLayout::eTransferSrcOptimal:
-					usage |= ImageUsageFlagBits::eTransferRead;
+					usage |= ImageUsageFlagBits::eTransferSrc;
 					break;
 				case ImageLayout::eTransferDstOptimal:
-					usage |= ImageUsageFlagBits::eTransferWrite;
+					usage |= ImageUsageFlagBits::eTransferDst;
 					break;
 				default:
 					break;

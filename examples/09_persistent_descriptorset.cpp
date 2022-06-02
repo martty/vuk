@@ -81,7 +81,7 @@ namespace {
 		      ici.imageType = vuk::ImageType::e2D;
 		      ici.initialLayout = vuk::ImageLayout::eUndefined;
 		      ici.tiling = vuk::ImageTiling::eOptimal;
-		      ici.usage = vuk::ImageUsageFlagBits::eTransferWrite | vuk::ImageUsageFlagBits::eSampled;
+		      ici.usage = vuk::ImageUsageFlagBits::eTransferDst | vuk::ImageUsageFlagBits::eSampled;
 		      ici.mipLevels = ici.arrayLayers = 1;
 		      variant1 = ctx.allocate_texture(allocator, ici);
 		      ici.format = vuk::Format::eR8G8B8A8Unorm;
