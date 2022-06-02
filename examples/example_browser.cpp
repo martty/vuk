@@ -133,7 +133,7 @@ void vuk::ExampleRunner::render() {
 				ImGui::Begin(ex->name.data());
 				auto size = ImGui::GetContentRegionAvail();
 				rgx.attach_and_clear_image("_img",
-				                           { .extent = vuk::Dimension2D::absolute((uint32_t)size.x, (uint32_t)size.y),
+				                           { .extent = vuk::Dimension3D::absolute((uint32_t)size.x, (uint32_t)size.y),
 				                             .format = swapchain->format,
 				                             .sample_count = vuk::Samples::e1,
 				                             .level_count = 1,

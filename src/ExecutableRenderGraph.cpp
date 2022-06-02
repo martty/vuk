@@ -45,7 +45,7 @@ namespace vuk {
 				ici.extent = static_cast<vuk::Extent3D>(attachment_info.attachment.extent.extent);
 			}
 			// concretize attachment size
-			attachment_info.attachment.extent = Dimension2D::absolute(ici.extent.width, ici.extent.height);
+			attachment_info.attachment.extent = Dimension3D::absolute(ici.extent.width, ici.extent.height, ici.extent.depth);
 			ici.imageType = vuk::ImageType::e2D;
 			ici.format = attachment_info.attachment.format;
 			ici.mipLevels = 1;
@@ -80,20 +80,18 @@ namespace vuk {
 		}
 	}
 
-	Result<void> create_image(Allocator& alloc, ImageAttachment& attachment, vuk::Extent2D fb_extent, vuk::SampleCountFlagBits samples) {
+	Result<void> create_image(Allocator& alloc, ImageAttachment& attachment) {
 		ImageCreateInfo ici;
 		ici.format = vuk::Format(attachment.format);
 		ici.imageType = attachment.image_type;
 		ici.flags = attachment.image_flags;
 		ici.arrayLayers = attachment.layer_count;
-		if (attachment.extent.sizing == Sizing::eRelative) {
-			assert(fb_extent.width > 0 && fb_extent.height > 0);
-			ici.extent = vuk::Extent3D{ static_cast<uint32_t>(attachment.extent._relative.width * fb_extent.width),
-				                          static_cast<uint32_t>(attachment.extent._relative.height * fb_extent.height),
-				                          1u };
-		} else {
-			ici.extent = static_cast<vuk::Extent3D>(attachment.extent.extent);
-		}
+		ici.samples = attachment.sample_count.count;
+		ici.tiling = attachment.tiling;
+		ici.mipLevels = attachment.level_count;
+		ici.usage = attachment.usage;
+		assert(attachment.extent.sizing == Sizing::eAbsolute);
+		ici.extent = static_cast<vuk::Extent3D>(attachment.extent.extent);
 
 		return alloc.allocate_images(std::span{ &attachment.image, 1 }, std::span{ &ici, 1 });
 	}
@@ -365,7 +363,7 @@ namespace vuk {
 				auto it = std::find_if(swp_with_index.begin(), swp_with_index.end(), [boundb = &bound](auto& t) { return t.first == boundb->swapchain; });
 				bound.attachment.image_view = it->first->image_views[it->second];
 				bound.attachment.image = it->first->images[it->second];
-				bound.attachment.extent = Dimension2D::absolute(it->first->extent);
+				bound.attachment.extent = Dimension3D::absolute(it->first->extent);
 				bound.attachment.sample_count = vuk::Samples::e1;
 			}
 		}
@@ -386,6 +384,7 @@ namespace vuk {
 					ia.layer_count = ia.layer_count == VK_REMAINING_ARRAY_LAYERS ? 1 : ia.layer_count; // TODO: test layered fbs
 					ia.base_level = ia.base_level == VK_REMAINING_MIP_LEVELS ? 0 : ia.base_level;
 					ia.level_count = 1; // can only render to a single mip level
+					ia.extent.extent.depth = 1;
 
 					// we do an initial IA -> FB, because we won't process complete IAs later, but we need their info
 					if (ia.sample_count != Samples::eInfer && !rp_att.is_resolve_dst) {
@@ -475,7 +474,7 @@ namespace vuk {
 
 						// an extent is known if it is not 0
 						// 0 sized framebuffers are illegal
-						Extent2D fb_extent = Extent2D{ fbci.width, fbci.height };
+						Extent3D fb_extent = { fbci.width, fbci.height };
 						bool extent_known = !(fb_extent.width == 0 || fb_extent.height == 0);
 
 						if (samples_known && ia.sample_count == Samples::eInfer) {
@@ -483,7 +482,8 @@ namespace vuk {
 						}
 
 						if (extent_known && ia.extent.extent.width == 0 && ia.extent.extent.height == 0) {
-							ia.extent.extent = fb_extent;
+							ia.extent.extent.width = fb_extent.width;
+							ia.extent.extent.height = fb_extent.height;
 							ia.extent.sizing = Sizing::eAbsolute;
 						}
 					}
@@ -592,8 +592,11 @@ namespace vuk {
 
 		// create non-attachment images
 		for (auto& [name, bound] : impl->bound_attachments) {
-			if (bound.type == AttachmentInfo::Type::eInternal && bound.attachment.image == VK_NULL_HANDLE) {
-				create_attachment(ctx, name, bound, vuk::Extent2D{ 0, 0 }, bound.attachment.sample_count.count);
+			if (bound.attachment.image == Image{}) {
+				create_image(alloc, bound.attachment);
+			}
+			if (bound.attachment.image_view == ImageView{} && bound.attachment.may_require_image_view()) {
+				create_image_view(alloc, bound.attachment);
 			}
 		}
 

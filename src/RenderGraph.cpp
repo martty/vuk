@@ -461,7 +461,7 @@ namespace vuk {
 	void RenderGraph::attach_swapchain(Name name, SwapchainRef swp) {
 		AttachmentInfo attachment_info;
 		attachment_info.name = name;
-		attachment_info.attachment.extent = Dimension2D::absolute(swp->extent);
+		attachment_info.attachment.extent = Dimension3D::absolute(swp->extent);
 		// directly presented
 		attachment_info.attachment.format = swp->format;
 		attachment_info.attachment.sample_count = Samples::e1;

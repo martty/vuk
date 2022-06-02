@@ -271,32 +271,38 @@ namespace vuk {
 
 	enum class Sizing { eAbsolute, eRelative };
 
-	struct Dimension2D {
+	struct Dimension3D {
 		Sizing sizing = Sizing::eAbsolute;
 
-		Extent2D extent;
+		Extent3D extent;
 
 		struct Relative {
 			float width = 1.0f;
 			float height = 1.0f;
+			float depth = 1.0f;
 
 			auto operator<=>(const Relative&) const = default;
 		} _relative;
 
-		static Dimension2D absolute(uint32_t width, uint32_t height) {
-			return Dimension2D{ .extent = { width, height } };
-		}
-		static Dimension2D absolute(Extent2D extent) {
-			return Dimension2D{ .extent = extent };
-		}
-		static Dimension2D relative(float width, float height) {
-			return Dimension2D{ .sizing = Sizing::eRelative, ._relative = { .width = width, .height = height } };
-		}
-		static Dimension2D framebuffer() {
-			return Dimension2D{ .sizing = Sizing::eRelative };
+		static Dimension3D absolute(uint32_t width, uint32_t height) {
+			return Dimension3D{ .extent = { width, height, 1 } };
 		}
 
-		auto operator<=>(const Dimension2D&) const = default;
+		static Dimension3D absolute(uint32_t width, uint32_t height, uint32_t depth) {
+			return Dimension3D{ .extent = { width, height, depth } };
+		}
+
+		static Dimension3D absolute(Extent2D extent) {
+			return Dimension3D{ .extent = static_cast<Extent3D>(extent) };
+		}
+		static Dimension3D relative(float width, float height) {
+			return Dimension3D{ .sizing = Sizing::eRelative, ._relative = { .width = width, .height = height } };
+		}
+		static Dimension3D framebuffer() {
+			return Dimension3D{ .sizing = Sizing::eRelative };
+		}
+
+		auto operator<=>(const Dimension3D&) const = default;
 	};
 
 	struct Rect2D {

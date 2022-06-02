@@ -104,7 +104,7 @@ namespace vuk {
 
 		Resource(Name n, Type t, Access ia) : name(n), type(t), ia(ia) {}
 		Resource(Name n, Type t, Access ia, Name out_name) : name(n), type(t), ia(ia), out_name(out_name) {}
-		Resource(Name n, Type t, Access ia, Format fmt, Dimension2D dim, Samples samp, Name out_name) :
+		Resource(Name n, Type t, Access ia, Format fmt, Dimension3D dim, Samples samp, Name out_name) :
 		    name(n),
 		    type(t),
 		    ia(ia),

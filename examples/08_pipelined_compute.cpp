@@ -81,7 +81,7 @@ namespace {
 
 		      rgx.attach_and_clear_image(
 		          "08_rttf",
-		          { .extent = vuk::Dimension2D::absolute((unsigned)x, (unsigned)y), .format = runner.swapchain->format, .sample_count = vuk::Samples::e1 },
+		          { .extent = vuk::Dimension3D::absolute((unsigned)x, (unsigned)y), .format = runner.swapchain->format, .sample_count = vuk::Samples::e1 },
 		          vuk::ClearColor{ 0.f, 0.f, 0.f, 1.f });
 
 		      // standard render to texture

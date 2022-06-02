@@ -14,7 +14,7 @@ namespace vuk {
 		ImageType image_type = ImageType::e2D;
 		ImageTiling tiling = ImageTiling::eOptimal;
 		ImageUsageFlags usage = ImageUsageFlagBits::eInfer;
-		Dimension2D extent = Dimension2D::framebuffer();
+		Dimension3D extent = Dimension3D::framebuffer();
 		Format format = Format::eUndefined;
 		Samples sample_count = Samples::eInfer;
 		ImageViewCreateFlags image_view_flags = {};
@@ -32,7 +32,7 @@ namespace vuk {
 		static ImageAttachment from_texture(const vuk::Texture& t) {
 			return ImageAttachment{ .image = t.image.get(),
 				                      .image_view = t.view.get(),
-				                      .extent = { Sizing::eAbsolute, { t.extent.width, t.extent.height } },
+				                      .extent = { Sizing::eAbsolute, { t.extent.width, t.extent.height, t.extent.depth } },
 				                      .format = t.format,
 				                      .sample_count = { t.sample_count },
 				                      .base_level = 0,
