@@ -18,6 +18,7 @@
 #include <string_view>
 #include <thread>
 #include <vector>
+#include <mutex>
 
 #include "backends/imgui_impl_glfw.h"
 
@@ -47,9 +48,11 @@ namespace vuk {
 		vkb::Device vkbdevice;
 		util::ImGuiData imgui_data;
 		std::vector<Future> futures;
+		std::mutex setup_lock;
 
 		// when called during setup, enqueues a device-side operation to be completed before rendering begins
 		void enqueue_setup(Future&& fut) {
+			std::scoped_lock _(setup_lock);
 			futures.emplace_back(std::move(fut));
 		}
 
