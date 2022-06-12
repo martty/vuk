@@ -757,8 +757,8 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::memory_barrier(Access src_access, Access dst_access) {
 		VkMemoryBarrier mb{ .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER };
-		auto src_use = to_use(src_access);
-		auto dst_use = to_use(dst_access);
+		auto src_use = to_use(src_access, DomainFlagBits::eAny);
+		auto dst_use = to_use(dst_access, DomainFlagBits::eAny);
 		mb.srcAccessMask = is_read_access(src_use) ? 0 : (VkAccessFlags)src_use.access;
 		mb.dstAccessMask = (VkAccessFlags)dst_use.access;
 		vkCmdPipelineBarrier(command_buffer, (VkPipelineStageFlags)src_use.stages, (VkPipelineStageFlags)dst_use.stages, {}, 1, &mb, 0, nullptr, 0, nullptr);
@@ -784,8 +784,8 @@ namespace vuk {
 		isr.levelCount = level_count;
 		VkImageMemoryBarrier imb{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
 		imb.image = src_image;
-		auto src_use = to_use(src_acc);
-		auto dst_use = to_use(dst_acc);
+		auto src_use = to_use(src_acc, DomainFlagBits::eAny);
+		auto dst_use = to_use(dst_acc, DomainFlagBits::eAny);
 		imb.srcAccessMask = (VkAccessFlags)src_use.access;
 		imb.dstAccessMask = (VkAccessFlags)dst_use.access;
 

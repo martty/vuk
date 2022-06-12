@@ -4,8 +4,8 @@
 #include "vuk/Hash.hpp"
 #include "vuk/vuk_fwd.hpp"
 
-#include <type_traits>
 #include <compare>
+#include <type_traits>
 
 #define MOV(x) (static_cast<std::remove_reference_t<decltype(x)>&&>(x))
 
@@ -1046,7 +1046,6 @@ namespace vuk {
 		/// @brief check that pass ordering does not violate resource constraints (not needed when reordering passes)
 		bool check_pass_ordering = false;
 	};
-
 } // namespace vuk
 
 namespace std {

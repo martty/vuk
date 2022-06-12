@@ -288,10 +288,8 @@ namespace vuk {
 				for (auto& p : sp.passes) {
 					CommandBuffer cobuf(*this, ctx, alloc, cbuf);
 					fill_renderpass_info(rpass, i, cobuf);
-					// propagate waits & signals onto SI
-					if (p->pass.signal) {
-						si.future_signals.emplace_back(p->pass.signal);
-					}
+					// propagate signals onto SI
+					si.future_signals.insert(si.future_signals.end(), p->future_signals.begin(), p->future_signals.end());
 
 					if (p->pass.execute) {
 						cobuf.current_pass = p;
@@ -372,9 +370,9 @@ namespace vuk {
 		for (auto& rp : impl->rpis) {
 			for (auto& rp_att : rp.attachments) {
 				auto& att = *rp_att.attachment_info;
-				att.rp_uses.emplace_back(&rp);
 
 				if (!rp.framebufferless) { // framebuffers get extra inference
+					att.rp_uses.emplace_back(&rp);
 					auto& ia = att.attachment;
 					// TODO: image type, image view type, levels and layers from FB
 					ia.image_type = ia.image_type == ImageType::eInfer ? vuk::ImageType::e2D : ia.image_type;

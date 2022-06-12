@@ -3,6 +3,7 @@
 #include "vuk/Allocator.hpp"
 #include "vuk/Context.hpp"
 #include "vuk/ImageAttachment.hpp"
+#include "vuk/Types.hpp"
 #include "vuk/vuk_fwd.hpp"
 
 #include <memory>
@@ -11,14 +12,6 @@
 
 // futures
 namespace vuk {
-	struct QueueResourceUse {
-		vuk::Access original;
-		vuk::PipelineStageFlags stages;
-		vuk::AccessFlags access;
-		vuk::ImageLayout layout; // ignored for buffers
-		vuk::DomainFlagBits domain;
-	};
-
 	struct FutureBase {
 		FutureBase() = default;
 		FutureBase(Allocator&);

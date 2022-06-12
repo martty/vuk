@@ -35,7 +35,8 @@ namespace vuk {
 		std::vector<PassInfo, short_alloc<PassInfo, 64>> passes;
 		std::vector<PassInfo*, short_alloc<PassInfo*, 64>> ordered_passes;
 
-		robin_hood::unordered_flat_map<Name, Name> aliases;
+		robin_hood::unordered_flat_map<Name, Name> aliases;        // maps resource names to resource names
+		robin_hood::unordered_flat_map<Name, Name> assigned_names; // maps resource names to attachment names
 		robin_hood::unordered_flat_set<Name> poisoned_names;
 
 		robin_hood::unordered_flat_map<Name, std::vector<UseRef, short_alloc<UseRef, 64>>> use_chains;
@@ -50,14 +51,39 @@ namespace vuk {
 
 		std::unordered_map<Name, IAInference> ia_inference_rules;
 
+		struct Release {
+			QueueResourceUse dst_use;
+			FutureBase* signal = nullptr;
+		};
+
+		struct Acquire {
+			QueueResourceUse src_use;
+			DomainFlagBits initial_domain;
+			uint64_t initial_visibility;
+		};
+
+		std::unordered_map<Name, Acquire> acquires;
+
+		std::unordered_map<Name, Release> releases;
+
 		RGImpl() : arena_(new arena(1024 * 1024)), INIT(passes), INIT(ordered_passes), INIT(rpis) {}
 
 		Name resolve_name(Name in) {
-			auto it = aliases.find(in);
-			if (it == aliases.end())
+			auto it = assigned_names.find(in);
+			if (it == assigned_names.end()) {
 				return in;
-			else
-				return resolve_name(it->second);
+			} else {
+				return it->second;
+			}
+		};
+
+		Name resolve_alias(Name in) {
+			auto it = aliases.find(in);
+			if (it == aliases.end()) {
+				return in;
+			} else {
+				return resolve_alias(it->second);
+			}
 		};
 
 		size_t temporary_name_counter = 0;

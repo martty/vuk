@@ -58,77 +58,90 @@ namespace vuk {
 		}
 	}
 
-	inline ResourceUse to_use(Access ia) {
+	inline QueueResourceUse to_use(Access ia, DomainFlags domain) {
 		switch (ia) {
 		case eColorResolveWrite:
 		case eColorWrite:
-			return { vuk::PipelineStageFlagBits::eColorAttachmentOutput, vuk::AccessFlagBits::eColorAttachmentWrite, vuk::ImageLayout::eColorAttachmentOptimal };
+			return {
+				vuk::PipelineStageFlagBits::eColorAttachmentOutput, vuk::AccessFlagBits::eColorAttachmentWrite, vuk::ImageLayout::eColorAttachmentOptimal, domain
+			};
 		case eColorRW:
 			return { vuk::PipelineStageFlagBits::eColorAttachmentOutput,
 				       vuk::AccessFlagBits::eColorAttachmentWrite | vuk::AccessFlagBits::eColorAttachmentRead,
-				       vuk::ImageLayout::eColorAttachmentOptimal };
+				       vuk::ImageLayout::eColorAttachmentOptimal,
+				       domain };
 		case eColorResolveRead:
 		case eColorRead:
-			return { vuk::PipelineStageFlagBits::eColorAttachmentOutput, vuk::AccessFlagBits::eColorAttachmentRead, vuk::ImageLayout::eColorAttachmentOptimal };
+			return {
+				vuk::PipelineStageFlagBits::eColorAttachmentOutput, vuk::AccessFlagBits::eColorAttachmentRead, vuk::ImageLayout::eColorAttachmentOptimal, domain
+			};
 		case eDepthStencilRead:
 			return { vuk::PipelineStageFlagBits::eEarlyFragmentTests | vuk::PipelineStageFlagBits::eLateFragmentTests,
 				       vuk::AccessFlagBits::eDepthStencilAttachmentRead,
-				       vuk::ImageLayout::eDepthStencilAttachmentOptimal };
+				       vuk::ImageLayout::eDepthStencilAttachmentOptimal,
+				       domain };
 		case eDepthStencilRW:
 			return { vuk::PipelineStageFlagBits::eEarlyFragmentTests | vuk::PipelineStageFlagBits::eLateFragmentTests,
 				       vuk::AccessFlagBits::eDepthStencilAttachmentRead | vuk::AccessFlagBits::eDepthStencilAttachmentWrite,
-				       vuk::ImageLayout::eDepthStencilAttachmentOptimal };
+				       vuk::ImageLayout::eDepthStencilAttachmentOptimal,
+				       domain };
 
 		case eFragmentSampled:
-			return { vuk::PipelineStageFlagBits::eFragmentShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eShaderReadOnlyOptimal };
+			return { vuk::PipelineStageFlagBits::eFragmentShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eShaderReadOnlyOptimal, domain };
 		case eFragmentRead:
-			return { vuk::PipelineStageFlagBits::eFragmentShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eGeneral };
+			return { vuk::PipelineStageFlagBits::eFragmentShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eGeneral, domain };
 		case eFragmentWrite:
-			return { vuk::PipelineStageFlagBits::eFragmentShader, vuk::AccessFlagBits::eShaderWrite, vuk::ImageLayout::eGeneral };
+			return { vuk::PipelineStageFlagBits::eFragmentShader, vuk::AccessFlagBits::eShaderWrite, vuk::ImageLayout::eGeneral, domain };
 		case eFragmentRW:
-			return { vuk::PipelineStageFlagBits::eFragmentShader, vuk::AccessFlagBits::eShaderRead | vuk::AccessFlagBits::eShaderWrite, vuk::ImageLayout::eGeneral };
+			return {
+				vuk::PipelineStageFlagBits::eFragmentShader, vuk::AccessFlagBits::eShaderRead | vuk::AccessFlagBits::eShaderWrite, vuk::ImageLayout::eGeneral, domain
+			};
 
 		case eTransferRead:
-			return { vuk::PipelineStageFlagBits::eTransfer, vuk::AccessFlagBits::eTransferRead, vuk::ImageLayout::eTransferSrcOptimal };
+			return { vuk::PipelineStageFlagBits::eTransfer, vuk::AccessFlagBits::eTransferRead, vuk::ImageLayout::eTransferSrcOptimal, domain };
 		case eTransferWrite:
-			return { vuk::PipelineStageFlagBits::eTransfer, vuk::AccessFlagBits::eTransferWrite, vuk::ImageLayout::eTransferDstOptimal };
+			return { vuk::PipelineStageFlagBits::eTransfer, vuk::AccessFlagBits::eTransferWrite, vuk::ImageLayout::eTransferDstOptimal, domain };
 
 		case eComputeRead:
-			return { vuk::PipelineStageFlagBits::eComputeShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eGeneral };
+			return { vuk::PipelineStageFlagBits::eComputeShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eGeneral, domain };
 		case eComputeWrite:
-			return { vuk::PipelineStageFlagBits::eComputeShader, vuk::AccessFlagBits::eShaderWrite, vuk::ImageLayout::eGeneral };
+			return { vuk::PipelineStageFlagBits::eComputeShader, vuk::AccessFlagBits::eShaderWrite, vuk::ImageLayout::eGeneral, domain };
 		case eComputeRW:
-			return { vuk::PipelineStageFlagBits::eComputeShader, vuk::AccessFlagBits::eShaderRead | vuk::AccessFlagBits::eShaderWrite, vuk::ImageLayout::eGeneral };
+			return {
+				vuk::PipelineStageFlagBits::eComputeShader, vuk::AccessFlagBits::eShaderRead | vuk::AccessFlagBits::eShaderWrite, vuk::ImageLayout::eGeneral, domain
+			};
 		case eComputeSampled:
-			return { vuk::PipelineStageFlagBits::eComputeShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eShaderReadOnlyOptimal };
+			return { vuk::PipelineStageFlagBits::eComputeShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eShaderReadOnlyOptimal, domain };
 
 		case eAttributeRead:
-			return { vuk::PipelineStageFlagBits::eVertexInput, vuk::AccessFlagBits::eVertexAttributeRead, vuk::ImageLayout::eGeneral /* ignored */ };
+			return { vuk::PipelineStageFlagBits::eVertexInput, vuk::AccessFlagBits::eVertexAttributeRead, vuk::ImageLayout::eGeneral /* ignored */, domain };
 		case eVertexRead:
-			return { vuk::PipelineStageFlagBits::eVertexShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eGeneral };
+			return { vuk::PipelineStageFlagBits::eVertexShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eGeneral /* ignored */, domain };
 		case eIndexRead:
-			return { vuk::PipelineStageFlagBits::eVertexInput, vuk::AccessFlagBits::eIndexRead, vuk::ImageLayout::eGeneral /* ignored */ };
+			return { vuk::PipelineStageFlagBits::eVertexInput, vuk::AccessFlagBits::eIndexRead, vuk::ImageLayout::eGeneral /* ignored */, domain };
 		case eIndirectRead:
-			return { vuk::PipelineStageFlagBits::eDrawIndirect, vuk::AccessFlagBits::eIndirectCommandRead, vuk::ImageLayout::eGeneral /* ignored */ };
+			return { vuk::PipelineStageFlagBits::eDrawIndirect, vuk::AccessFlagBits::eIndirectCommandRead, vuk::ImageLayout::eGeneral /* ignored */, domain };
 
 		case eHostRead:
-			return { vuk::PipelineStageFlagBits::eHost, vuk::AccessFlagBits::eHostRead, vuk::ImageLayout::eGeneral };
+			return { vuk::PipelineStageFlagBits::eHost, vuk::AccessFlagBits::eHostRead, vuk::ImageLayout::eGeneral, domain };
 		case eHostWrite:
-			return { vuk::PipelineStageFlagBits::eHost, vuk::AccessFlagBits::eHostWrite, vuk::ImageLayout::eGeneral };
+			return { vuk::PipelineStageFlagBits::eHost, vuk::AccessFlagBits::eHostWrite, vuk::ImageLayout::eGeneral, domain };
 		case eHostRW:
-			return { vuk::PipelineStageFlagBits::eHost, vuk::AccessFlagBits::eHostRead | vuk::AccessFlagBits::eHostWrite, vuk::ImageLayout::eGeneral };
+			return { vuk::PipelineStageFlagBits::eHost, vuk::AccessFlagBits::eHostRead | vuk::AccessFlagBits::eHostWrite, vuk::ImageLayout::eGeneral, domain };
 
 		case eMemoryRead:
-			return { vuk::PipelineStageFlagBits::eAllCommands, vuk::AccessFlagBits::eMemoryRead, vuk::ImageLayout::eGeneral };
+			return { vuk::PipelineStageFlagBits::eAllCommands, vuk::AccessFlagBits::eMemoryRead, vuk::ImageLayout::eGeneral, domain };
 		case eMemoryWrite:
-			return { vuk::PipelineStageFlagBits::eAllCommands, vuk::AccessFlagBits::eMemoryWrite, vuk::ImageLayout::eGeneral };
+			return { vuk::PipelineStageFlagBits::eAllCommands, vuk::AccessFlagBits::eMemoryWrite, vuk::ImageLayout::eGeneral, domain };
 		case eMemoryRW:
-			return { vuk::PipelineStageFlagBits::eAllCommands, vuk::AccessFlagBits::eMemoryRead | vuk::AccessFlagBits::eMemoryWrite, vuk::ImageLayout::eGeneral };
+			return {
+				vuk::PipelineStageFlagBits::eAllCommands, vuk::AccessFlagBits::eMemoryRead | vuk::AccessFlagBits::eMemoryWrite, vuk::ImageLayout::eGeneral, domain
+			};
 
 		case eNone:
-			return { vuk::PipelineStageFlagBits::eTopOfPipe, vuk::AccessFlagBits{}, vuk::ImageLayout::eUndefined };
+			return { vuk::PipelineStageFlagBits::eTopOfPipe, vuk::AccessFlagBits{}, vuk::ImageLayout::eUndefined, domain };
 		case eClear:
-			return { vuk::PipelineStageFlagBits::eTransfer, vuk::AccessFlagBits::eTransferWrite, vuk::ImageLayout::eTransferDstOptimal };
+			return { vuk::PipelineStageFlagBits::eTransfer, vuk::AccessFlagBits::eTransferWrite, vuk::ImageLayout::eTransferDstOptimal, domain };
 		case eRelease:
 		case eReleaseToGraphics:
 		case eReleaseToCompute:
@@ -137,7 +150,7 @@ namespace vuk {
 		case eAcquireFromGraphics:
 		case eAcquireFromCompute:
 		case eAcquireFromTransfer:
-			return { vuk::PipelineStageFlagBits::eTopOfPipe, vuk::AccessFlagBits{}, vuk::ImageLayout::eGeneral }; // ignored
+			return { vuk::PipelineStageFlagBits::eTopOfPipe, vuk::AccessFlagBits{}, vuk::ImageLayout::eGeneral, domain }; // ignored
 		default:
 			assert(0 && "NYI");
 			return {};
@@ -234,7 +247,7 @@ namespace vuk {
 		}
 	}
 
-	inline bool is_framebuffer_attachment(ResourceUse u) {
+	inline bool is_framebuffer_attachment(QueueResourceUse u) {
 		switch (u.layout) {
 		case vuk::ImageLayout::eColorAttachmentOptimal:
 		case vuk::ImageLayout::eDepthStencilAttachmentOptimal:
@@ -244,7 +257,7 @@ namespace vuk {
 		}
 	}
 
-	inline bool is_write_access(ResourceUse u) {
+	inline bool is_write_access(QueueResourceUse u) {
 		if (u.access == vuk::AccessFlagBits{})
 			return false;
 		if (u.access & vuk::AccessFlagBits::eColorAttachmentWrite)
@@ -264,7 +277,7 @@ namespace vuk {
 		return false;
 	}
 
-	inline bool is_read_access(ResourceUse u) {
+	inline bool is_read_access(QueueResourceUse u) {
 		if (u.access == vuk::AccessFlagBits{})
 			return false;
 		return !is_write_access(u);
@@ -275,7 +288,7 @@ namespace vuk {
 		Name out_name;
 		vuk::Access original = vuk::eNone;
 		vuk::Access high_level_access;
-		ResourceUse use;
+		QueueResourceUse use;
 		Resource::Type type;
 		Resource::Subrange subrange;
 		PassInfo* pass = nullptr;
@@ -340,7 +353,7 @@ namespace vuk {
 
 		ImageAttachment attachment = {};
 
-		ResourceUse initial, final;
+		QueueResourceUse initial, final;
 
 		enum class Type { eInternal, eExternal, eSwapchain } type;
 
@@ -357,7 +370,7 @@ namespace vuk {
 
 		VkAttachmentDescription description = {};
 
-		ResourceUse initial, final;
+		QueueResourceUse initial, final;
 
 		std::optional<Clear> clear_value;
 

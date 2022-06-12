@@ -132,6 +132,8 @@ void vuk::ExampleRunner::render() {
 				RenderGraph rgx(ex->name);
 				ImGui::Begin(ex->name.data());
 				auto size = ImGui::GetContentRegionAvail();
+				size.x = size.x <= 0 ? 1 : size.x;
+				size.y = size.y <= 0 ? 1 : size.y;
 				rgx.attach_and_clear_image("_img",
 				                           { .extent = vuk::Dimension3D::absolute((uint32_t)size.x, (uint32_t)size.y),
 				                             .format = swapchain->format,
@@ -206,7 +208,6 @@ void vuk::ExampleRunner::render() {
 				if (chosen_resource[i] != attachment_name_out) {
 					auto othfut = Future(rg_frag, chosen_resource[i]);
 					rg.attach_in(attachment_name_out, std::move(othfut));
-					rg.attach_in("_", std::move(rg_frag_fut));
 				} else {
 					rg.attach_in(attachment_name_out, std::move(rg_frag_fut));
 				}

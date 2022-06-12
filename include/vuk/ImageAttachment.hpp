@@ -52,13 +52,21 @@ namespace vuk {
 		constexpr bool may_require_image_view() const noexcept {
 			return usage == ImageUsageFlagBits::eInfer ||
 			       (usage & (ImageUsageFlagBits::eColorAttachment | ImageUsageFlagBits::eDepthStencilAttachment | ImageUsageFlagBits::eSampled |
-			                ImageUsageFlagBits::eStorage | ImageUsageFlagBits::eInputAttachment)) != ImageUsageFlags{};
+			                 ImageUsageFlagBits::eStorage | ImageUsageFlagBits::eInputAttachment)) != ImageUsageFlags{};
 		}
 
 		constexpr bool is_fully_known() const noexcept {
 			return image_type != ImageType::eInfer && usage != ImageUsageFlagBits::eInfer && extent.sizing != Sizing::eRelative && format != Format::eUndefined &&
 			       sample_count != Samples::eInfer && base_level != VK_REMAINING_MIP_LEVELS && level_count != VK_REMAINING_MIP_LEVELS &&
-			       base_layer != VK_REMAINING_ARRAY_LAYERS && layer_count != VK_REMAINING_ARRAY_LAYERS && (!may_require_image_view() || view_type != ImageViewType::eInfer);
+			       base_layer != VK_REMAINING_ARRAY_LAYERS && layer_count != VK_REMAINING_ARRAY_LAYERS &&
+			       (!may_require_image_view() || view_type != ImageViewType::eInfer);
 		}
+	};
+
+	struct QueueResourceUse {
+		PipelineStageFlags stages;
+		AccessFlags access;
+		ImageLayout layout; // ignored for buffers
+		DomainFlags domain = DomainFlagBits::eAny;
 	};
 } // namespace vuk

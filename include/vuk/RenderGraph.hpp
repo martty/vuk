@@ -54,17 +54,11 @@ namespace vuk {
 		};
 	} // namespace detail
 
-	struct ResourceUse {
-		PipelineStageFlags stages;
-		AccessFlags access;
-		ImageLayout layout; // ignored for buffers
-	};
-
 	struct BufferInfo {
 		Name name;
 
-		ResourceUse initial;
-		ResourceUse final;
+		QueueResourceUse initial;
+		QueueResourceUse final;
 
 		Buffer buffer;
 		FutureBase* attached_future = nullptr;
@@ -117,7 +111,7 @@ namespace vuk {
 		}
 	};
 
-	ResourceUse to_use(Access acc);
+	QueueResourceUse to_use(Access acc, DomainFlags domain);
 
 	/// @brief Fundamental unit of execution and scheduling. Refers to resources
 	struct Pass {
@@ -241,6 +235,9 @@ namespace vuk {
 		MapProxy<Name, const struct BufferInfo&> get_bound_buffers();
 		/// @brief compute ImageUsageFlags for given use chains
 		static ImageUsageFlags compute_usage(std::span<const UseRef> chain);
+
+		/// @brief Dump the pass dependency graph in graphviz format
+		std::string dump_graph();
 
 		Name name;
 

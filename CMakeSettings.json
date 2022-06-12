@@ -194,9 +194,9 @@
       ]
     },
     {
-      "name": "x64-Clang-Release",
+      "name": "x64-Clang-RelDeb",
       "generator": "Ninja",
-      "configurationType": "Release",
+      "configurationType": "RelWithDebInfo",
       "buildRoot": "${projectDir}\\build\\${name}",
       "installRoot": "${projectDir}\\out\\install\\${name}",
       "cmakeCommandArgs": "",
@@ -220,6 +220,35 @@
           "type": "BOOL"
         }
       ]
+    },
+    {
+      "name": "x64-RelDeb-ASAN",
+      "generator": "Ninja",
+      "configurationType": "RelWithDebInfo",
+      "buildRoot": "${projectDir}\\build\\${name}",
+      "installRoot": "${projectDir}\\out\\install\\${name}",
+      "cmakeCommandArgs": "",
+      "buildCommandArgs": "",
+      "ctestCommandArgs": "",
+      "inheritEnvironments": [ "msvc_x64_x64" ],
+      "variables": [
+        {
+          "name": "VUK_BUILD_EXAMPLES",
+          "value": "True",
+          "type": "BOOL"
+        },
+        {
+          "name": "VUK_BUILD_BENCHMARKS",
+          "value": "True",
+          "type": "BOOL"
+        },
+        {
+          "name": "VUK_USE_DXC",
+          "value": "False",
+          "type": "BOOL"
+        }
+      ],
+      "addressSanitizerEnabled": true
     }
   ]
 }
