@@ -117,7 +117,15 @@ namespace vuk {
 
 	// determine rendergraph inputs and outputs, and resources that are neither
 	void RenderGraph::build_io() {
+		impl->poisoned_names.clear();
 		for (auto& pif : impl->passes) {
+			pif.input_names.clear();
+			pif.output_names.clear();
+			pif.write_input_names.clear();
+			pif.bloom_write_inputs = {};
+			pif.bloom_outputs = {};
+			pif.bloom_resolved_inputs = {};
+
 			for (Resource& res : pif.pass.resources) {
 				Name in_name;
 				Name out_name;
@@ -623,6 +631,27 @@ namespace vuk {
 	void RenderGraph::inference_rule(Name target, std::function<void(const struct InferenceContext&, ImageAttachment&)> rule) {
 		impl->ia_inference_rules[target].prefix = "";
 		impl->ia_inference_rules[target].rules.push_back(std::move(rule));
+	}
+
+	std::vector<Future> RenderGraph::split() {
+		build_io();
+		robin_hood::unordered_flat_set<Name> outputs;
+		for (auto& pif : impl->passes) {
+			for (auto& in : pif.input_names) {
+				outputs.erase(in);
+			}
+			for (auto& in : pif.write_input_names) {
+				outputs.erase(in);
+			}
+			for (auto& in : pif.output_names) {
+				outputs.emplace(in);
+			}
+		}
+		std::vector<Future> futures;
+		for (auto& elem : outputs) {
+			futures.emplace_back(*this, elem);
+		}
+		return futures;
 	}
 
 	void RenderGraph::attach_out(Name name, Future& fimg, DomainFlags dst_domain) {

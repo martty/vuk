@@ -137,13 +137,10 @@ namespace {
 			                                  *model = static_cast<glm::mat4>(glm::angleAxis(glm::radians(angle), glm::vec3(0.f, 1.f, 0.f)));
 			                                  command_buffer.draw_indexed(box.second.size(), 1, 0, 0, 0);
 		                                  } });
-		                    vuk::Future pos_fut = { rg, "11_position+" };
-		                    vuk::Future norm_fut = { rg, "11_normal+" };
-		                    vuk::Future col_fut = { rg, "11_color+" };
 
 		                    vuk::RenderGraph rg_resolve("11");
-		                    std::array futs = { std::move(pos_fut), std::move(norm_fut), std::move(col_fut) };
-		                    rg_resolve.attach_in(futs);
+		                    std::vector futures = rg.split();
+		                    rg_resolve.attach_in(futures);
 		                    rg_resolve.attach_image("11_deferred", { .format = vuk::Format::eR8G8B8A8Srgb, .sample_count = vuk::Samples::e1 });
 		                    rg_resolve.inference_rule("11_position+", vuk::same_extent_as("11_deferred"));
 		                    // The shading pass for the deferred rendering

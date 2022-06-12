@@ -216,6 +216,9 @@ namespace vuk {
 
 		void inference_rule(Name target, std::function<void(const struct InferenceContext& ctx, ImageAttachment& ia)>);
 
+		/// @brief Compute all the unconsumed resource names and return them as Futures
+		std::vector<Future> split();
+
 		/// @brief Consume this RenderGraph and create an ExecutableRenderGraph
 		/// @param compile_options CompileOptions controlling compilation behaviour
 		struct ExecutableRenderGraph link(const RenderGraphCompileOptions& compile_options) &&;

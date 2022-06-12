@@ -580,6 +580,8 @@ namespace vuk {
 			rp.fbci.pAttachments = &vkivs[0];
 			rp.fbci.width = fb_extent.width;
 			rp.fbci.height = fb_extent.height;
+			assert(fb_extent.width > 0);
+			assert(fb_extent.height > 0);
 			rp.fbci.attachmentCount = (uint32_t)vkivs.size();
 			rp.fbci.layers = 1;
 
