@@ -73,6 +73,7 @@ namespace vuk {
 			auto pit = impl->pool.emplace(ctx.create(ci));
 			it->second.ptr = &*pit;
 			it->second.load_cnt.store(1);
+			it->second.load_cnt.notify_all();
 			return *it->second.ptr;
 		}
 	}
@@ -145,6 +146,7 @@ namespace vuk {
 			auto pit = impl->pool.emplace(ctx.create(ci_copy));
 			it->second.ptr = &*pit;
 			it->second.load_cnt.store(1);
+			it->second.load_cnt.notify_all();
 			return *it->second.ptr;
 		}
 	}
