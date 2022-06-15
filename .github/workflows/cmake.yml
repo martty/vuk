@@ -1,0 +1,75 @@
+name: CMake
+
+on: [push, pull_request, workflow_dispatch]
+
+env:
+  # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
+  BUILD_TYPE: Release
+
+jobs:
+  linux-build:
+    # The CMake configure and build commands are platform agnostic and should work equally well on Windows or Mac.
+    # You can convert this to a matrix build if you need cross-platform coverage.
+    # See: https://docs.github.com/en/free-pro-team@latest/actions/learn-github-actions/managing-complex-workflows#using-a-build-matrix
+    runs-on: ubuntu-latest
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+        - {
+            name: "Ubuntu GCC-11 Release",
+            cc: "gcc-11", cxx: "g++-11"
+          }
+        - {
+            name: "Ubuntu Clang-11 Release",
+            cc: "clang-11", cxx: "clang++-11"
+          }
+
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        submodules: recursive
+
+    - run: |
+        sudo apt-get update
+        sudo apt-get install -y xorg-dev gcc-11 g++-11 clang-11
+
+    - name: Setup Vulkan SDK
+      uses: sjcobb2022/setup-vulkan-sdk@c2612401009bbce8002630e838bf91cc67f8b3c3
+      with:
+           vulkan-query-version: 1.3.204.0
+           vulkan-components: Vulkan-Headers, Vulkan-Loader, shaderc
+           vulkan-use-cache: true
+
+    - name: Configure CMake
+      # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
+      # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DVUK_BUILD_EXAMPLES=ON -DVUK_USE_DXC=OFF -DCMAKE_CXX_COMPILER=${{matrix.config.cxx}} -DCMAKE_C_COMPILER=${{matrix.config.cc}}
+
+    - name: Build
+      # Build your program with the given configuration
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
+
+  windows-build:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        submodules: recursive
+
+    - name: Setup Vulkan SDK
+      uses: sjcobb2022/setup-vulkan-sdk@c2612401009bbce8002630e838bf91cc67f8b3c3
+      with:
+           vulkan-query-version: 1.3.204.0
+           vulkan-components: Vulkan-Headers, Vulkan-Loader, shaderc
+           vulkan-use-cache: true
+
+    - name: Configure CMake
+      # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
+      # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DVUK_BUILD_EXAMPLES=ON -DVUK_USE_DXC=OFF
+
+    - name: Build
+      # Build your program with the given configuration
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
