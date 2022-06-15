@@ -116,9 +116,9 @@ namespace vuk {
 	}
 
 	// determine rendergraph inputs and outputs, and resources that are neither
-	void RenderGraph::build_io() {
-		impl->poisoned_names.clear();
-		for (auto& pif : impl->passes) {
+	void RGImpl::build_io() {
+		poisoned_names.clear();
+		for (auto& pif : passes) {
 			pif.input_names.clear();
 			pif.output_names.clear();
 			pif.write_input_names.clear();
@@ -130,11 +130,11 @@ namespace vuk {
 				Name in_name;
 				Name out_name;
 				if (res.type == Resource::Type::eImage && res.subrange.image != Resource::Subrange::Image{}) {
-					in_name = res.subrange.image.combine_name(impl->resolve_alias(res.name));
-					out_name = res.out_name.is_invalid() ? Name{} : res.subrange.image.combine_name(impl->resolve_alias(res.out_name));
+					in_name = res.subrange.image.combine_name(resolve_alias(res.name));
+					out_name = res.out_name.is_invalid() ? Name{} : res.subrange.image.combine_name(resolve_alias(res.out_name));
 				} else {
-					in_name = impl->resolve_alias(res.name);
-					out_name = impl->resolve_alias(res.out_name);
+					in_name = resolve_alias(res.name);
+					out_name = resolve_alias(res.out_name);
 				}
 
 				auto hashed_in_name = ::hash::fnv1a::hash(in_name.to_sv().data(), res.name.to_sv().size(), hash::fnv1a::default_offset_basis);
@@ -149,10 +149,10 @@ namespace vuk {
 				}
 
 				if (is_write_access(res.ia) || is_acquire(res.ia) || is_release(res.ia) || res.ia == Access::eConsume || res.ia == Access::eConverge) {
-					assert(!impl->poisoned_names.contains(in_name)); // we have poisoned this name because a write has already consumed it
+					assert(!poisoned_names.contains(in_name)); // we have poisoned this name because a write has already consumed it
 					pif.bloom_write_inputs |= hashed_in_name;
 					pif.write_input_names.emplace_back(in_name);
-					impl->poisoned_names.emplace(in_name);
+					poisoned_names.emplace(in_name);
 				}
 
 				// for image subranges, we additionally add a dependency on the diverged original resource
@@ -271,10 +271,24 @@ namespace vuk {
 		return ss.str();
 	}
 
+	void RenderGraph::inline_subgraphs() {
+		for (auto& [sg_ptr, count] : impl->subgraphs) {
+			if (count > 0) {
+				assert(sg_ptr->impl && "Don't support this yet");
+				sg_ptr->inline_subgraphs();
+				append(sg_ptr->name, std::move(*sg_ptr));
+			}
+		}
+		impl->subgraphs.clear();
+	}
+
 	void RenderGraph::compile(const RenderGraphCompileOptions& compile_options) {
+		// inline all the subgraphs into us
+		inline_subgraphs();
+
 		// find which reads are graph inputs (not produced by any pass) & outputs
 		// (not consumed by any pass)
-		build_io();
+		impl->build_io();
 
 		// run global pass ordering - once we split per-queue we don't see enough
 		// inputs to order within a queue
@@ -292,7 +306,6 @@ namespace vuk {
 				}
 			}
 		}
-
 
 		// populate resource name -> attachment map
 		for (auto& [k, v] : name_map) {
@@ -584,7 +597,7 @@ namespace vuk {
 		clear_image(tmp_name, name, clear_value);
 	}
 
-	void RenderGraph::attach_in(Name name, Future&& fimg) {
+	void RenderGraph::attach_in(Name name, Future fimg) {
 		if (fimg.get_status() == FutureBase::Status::eSubmitted || fimg.get_status() == FutureBase::Status::eHostAvailable) {
 			if (fimg.is_image()) {
 				auto att = fimg.get_result<ImageAttachment>();
@@ -605,16 +618,20 @@ namespace vuk {
 				impl->bound_buffers.emplace(name, buf_info);
 			}
 			impl->acquires.emplace(name, RGImpl::Acquire{ fimg.control->last_use, fimg.control->initial_domain, fimg.control->initial_visibility });
+			impl->imported_names.emplace(name);
 		} else if (fimg.get_status() == FutureBase::Status::eRenderGraphBound || fimg.get_status() == FutureBase::Status::eOutputAttached) {
 			fimg.get_status() = FutureBase::Status::eInputAttached;
 			Name sg_name = fimg.rg->name;
 			// an unsubmitted RG is being attached, we remove the release from that RG, and we allow the name to be found in us
 			if (fimg.rg->impl) {
 				fimg.rg->impl->releases.erase(fimg.get_bound_name());
-				append(sg_name, std::move(*fimg.rg));
+				//append(sg_name, std::move(*fimg.rg));
+				impl->subgraphs[fimg.rg]++;
 			} else {
 				impl->releases.erase(sg_name.append("::").append(fimg.get_bound_name()));
 			}
+			fimg.rg.reset();
+			impl->imported_names.emplace(name);
 			add_alias(name, sg_name.append("::").append(fimg.output_binding));
 		} else {
 			assert(0);
@@ -633,10 +650,11 @@ namespace vuk {
 		impl->ia_inference_rules[target].rules.push_back(std::move(rule));
 	}
 
-	std::vector<Future> RenderGraph::split() {
+	robin_hood::unordered_flat_set<Name> RGImpl::get_available_resources() {
 		build_io();
-		robin_hood::unordered_flat_set<Name> outputs;
-		for (auto& pif : impl->passes) {
+		// seed the available names with the names we imported from subgraphs
+		robin_hood::unordered_flat_set<Name> outputs = imported_names;
+		for (auto& pif : passes) {
 			for (auto& in : pif.input_names) {
 				outputs.erase(in);
 			}
@@ -647,9 +665,14 @@ namespace vuk {
 				outputs.emplace(in);
 			}
 		}
+		return outputs;
+	}
+
+	std::vector<Future> RenderGraph::split() {
+		robin_hood::unordered_flat_set<Name> outputs = impl->get_available_resources();
 		std::vector<Future> futures;
 		for (auto& elem : outputs) {
-			futures.emplace_back(*this, elem);
+			futures.emplace_back(this->shared_from_this(), elem);
 		}
 		return futures;
 	}
@@ -657,6 +680,18 @@ namespace vuk {
 	void RenderGraph::attach_out(Name name, Future& fimg, DomainFlags dst_domain) {
 		fimg.get_status() = FutureBase::Status::eOutputAttached;
 		impl->releases.emplace(name, RGImpl::Release{ to_use(Access::eNone, dst_domain), fimg.control.get() });
+	}
+
+	void RenderGraph::detach_out(Name name, Future& fimg) {
+		if (fimg.get_status() == FutureBase::Status::eOutputAttached) {
+			fimg.get_status() = FutureBase::Status::eInitial;
+		}
+		for (auto it = impl->releases.begin(); it != impl->releases.end(); ++it) {
+			if (it->first == name && it->second.signal == fimg.control.get()) {
+				impl->releases.erase(it);
+				return;
+			}
+		}
 	}
 
 	Name RenderGraph::get_temporary_name() {

@@ -24,7 +24,7 @@ namespace vuk {
 		auto src = *allocate_buffer_cross_device(allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, 1 });
 		::memcpy(src->mapped_ptr, src_data, size);
 
-		std::unique_ptr<RenderGraph> rgp = std::make_unique<RenderGraph>();
+		std::shared_ptr<RenderGraph> rgp = std::make_shared<RenderGraph>();
 		rgp->add_pass({ .name = "BUFFER UPLOAD",
 		                .execute_on = copy_domain,
 		                .resources = { "_dst"_buffer >> vuk::Access::eTransferWrite, "_src"_buffer >> vuk::Access::eTransferRead },
@@ -69,7 +69,7 @@ namespace vuk {
 		assert(image.layer_count == 1); // unsupported yet
 		bc.imageSubresource.layerCount = image.layer_count;
 
-		std::unique_ptr<RenderGraph> rgp = std::make_unique<RenderGraph>();
+		std::shared_ptr<RenderGraph> rgp = std::make_shared<RenderGraph>();
 		rgp->add_pass({ .name = "IMAGE UPLOAD",
 		                .execute_on = copy_domain,
 		                .resources = { "_dst"_image >> vuk::Access::eTransferWrite, "_src"_buffer >> vuk::Access::eTransferRead },
@@ -85,7 +85,7 @@ namespace vuk {
 	/// @param image input Future of ImageAttachment
 	/// @param dst_access Access to have in the future
 	inline Future transition(Future image, Access dst_access) {
-		std::unique_ptr<RenderGraph> rgp = std::make_unique<RenderGraph>();
+		std::shared_ptr<RenderGraph> rgp = std::make_shared<RenderGraph>();
 		rgp->add_pass({ .name = "TRANSITION", .execute_on = DomainFlagBits::eDevice, .resources = { "_src"_image >> dst_access >> "_src+" } });
 		rgp->attach_in("_src", std::move(image));
 		return { std::move(rgp), "_src+" };
@@ -96,7 +96,7 @@ namespace vuk {
 	/// @param base_mip source mip level
 	/// @param num_mips number of mip levels to generate
 	inline Future generate_mips(Future image, uint32_t base_mip, uint32_t num_mips) {
-		std::unique_ptr<RenderGraph> rgp = std::make_unique<RenderGraph>();
+		std::shared_ptr<RenderGraph> rgp = std::make_shared<RenderGraph>();
 		for (uint32_t miplevel = base_mip + 1; miplevel < (base_mip + num_mips); miplevel++) {
 			uint32_t dmiplevel = miplevel - base_mip;
 			Name mip_dst = Name(std::to_string(miplevel));
@@ -188,7 +188,7 @@ namespace vuk {
 
 		auto upload_fut = host_data_to_image(allocator, DomainFlagBits::eTransferQueue, ImageAttachment::from_texture(tex), data);
 		auto mipgen_fut = should_generate_mips ? generate_mips(std::move(upload_fut), 0, ici.mipLevels) : std::move(upload_fut);
-		std::unique_ptr<RenderGraph> rgp = std::make_unique<RenderGraph>();
+		std::shared_ptr<RenderGraph> rgp = std::make_shared<RenderGraph>();
 		rgp->add_pass({ .name = "TRANSITION", .execute_on = DomainFlagBits::eGraphicsQueue, .resources = { "_src"_image >> Access::eFragmentSampled >> "_src+" } });
 		rgp->attach_in("_src", std::move(mipgen_fut));
 		auto on_gfx = Future{ std::move(rgp), "_src+" };

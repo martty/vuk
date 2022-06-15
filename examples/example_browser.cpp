@@ -117,24 +117,24 @@ void vuk::ExampleRunner::render() {
 			vuk::Name attachment_name = item_current->name;
 			rg.attach_swapchain("_swp", swapchain);
 			rg.clear_image("_swp", attachment_name, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
-			auto fut = item_current->render(*this, frame_allocator, Future{ rg, attachment_name });
+			auto fut = item_current->render(*this, frame_allocator, Future{ std::make_shared<RenderGraph>(std::move(rg)), attachment_name });
 			ImGui::Render();
 
 			fut = util::ImGui_ImplVuk_Render(frame_allocator, std::move(fut), imgui_data, ImGui::GetDrawData(), sampled_images);
 			present(frame_allocator, swapchain, std::move(fut));
 			sampled_images.clear();
 		} else { // render all examples as imgui windows
-			RenderGraph rg("runner");
+			std::shared_ptr<RenderGraph> rg = std::make_shared<RenderGraph>("runner");
 			plf::colony<vuk::Name> attachment_names;
 
 			size_t i = 0;
 			for (auto& ex : examples) {
-				RenderGraph rgx(ex->name);
+				std::shared_ptr<RenderGraph> rgx = std::make_shared<RenderGraph>(ex->name);
 				ImGui::Begin(ex->name.data());
 				auto size = ImGui::GetContentRegionAvail();
 				size.x = size.x <= 0 ? 1 : size.x;
 				size.y = size.y <= 0 ? 1 : size.y;
-				rgx.attach_and_clear_image("_img",
+				rgx->attach_and_clear_image("_img",
 				                           { .extent = vuk::Dimension3D::absolute((uint32_t)size.x, (uint32_t)size.y),
 				                             .format = swapchain->format,
 				                             .sample_count = vuk::Samples::e1,
@@ -143,12 +143,12 @@ void vuk::ExampleRunner::render() {
 				                           vuk::ClearColor(0.1f, 0.2f, 0.3f, 1.f));
 				auto rg_frag_fut = ex->render(*this, frame_allocator, Future{ rgx, "_img" });
 				Name& attachment_name_out = *attachment_names.emplace(std::string(ex->name) + "_final");
-				auto& rg_frag = *rg_frag_fut.get_render_graph();
-				rg_frag.compile(vuk::RenderGraphCompileOptions{});
-				if (rg_frag.get_use_chains().size() > 1) {
-					const auto& bound_attachments = rg_frag.get_bound_attachments();
+				auto rg_frag = rg_frag_fut.get_render_graph();
+				rg_frag->compile(vuk::RenderGraphCompileOptions{});
+				if (rg_frag->get_use_chains().size() > 1) {
+					const auto& bound_attachments = rg_frag->get_bound_attachments();
 					bool disable = false;
-					for (const auto [key, use_refs] : rg_frag.get_use_chains()) {
+					for (const auto [key, use_refs] : rg_frag->get_use_chains()) {
 						auto bound_it = bound_attachments.find(key);
 						if (bound_it == bound_attachments.end())
 							continue;
@@ -159,7 +159,7 @@ void vuk::ExampleRunner::render() {
 						disable = disable || (samples != vuk::SampleCountFlagBits::e1);
 					}
 
-					for (const auto [key, use_refs] : rg_frag.get_use_chains()) {
+					for (const auto [key, use_refs] : rg_frag->get_use_chains()) {
 						auto bound_it = bound_attachments.find(key);
 						if (bound_it == bound_attachments.end())
 							continue;
@@ -169,7 +169,7 @@ void vuk::ExampleRunner::render() {
 							prevent_disable = true;
 							btn_id = "F";
 						} else {
-							auto usage = rg_frag.compute_usage(use_refs);
+							auto usage = rg_frag->compute_usage(use_refs);
 							if (usage & vuk::ImageUsageFlagBits::eColorAttachment) {
 								btn_id += "C";
 							} else if (usage & vuk::ImageUsageFlagBits::eDepthStencilAttachment) {
@@ -206,22 +206,21 @@ void vuk::ExampleRunner::render() {
 
 				if (chosen_resource[i] != attachment_name_out) {
 					auto othfut = Future(rg_frag, chosen_resource[i]);
-					rg.attach_in(attachment_name_out, std::move(othfut));
-					rg.attach_in("_", std::move(rg_frag_fut));
+					rg->attach_in(attachment_name_out, std::move(othfut));
 				} else {
-					rg.attach_in(attachment_name_out, std::move(rg_frag_fut));
+					rg->attach_in(attachment_name_out, std::move(rg_frag_fut));
 				}
 				// hacky way to reference image in the subgraph
 				// TODO: a proper way to do this?
-				auto si = vuk::make_sampled_image(rg.name.append("::").append(attachment_name_out), imgui_data.font_sci);
+				auto si = vuk::make_sampled_image(rg->name.append("::").append(attachment_name_out), imgui_data.font_sci);
 				ImGui::Image(&*sampled_images.emplace(si), ImGui::GetContentRegionAvail());
 				ImGui::End();
 				i++;
 			}
 
 			ImGui::Render();
-			rg.clear_image("SWAPCHAIN", "SWAPCHAIN+", vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
-			rg.attach_swapchain("SWAPCHAIN", swapchain);
+			rg->clear_image("SWAPCHAIN", "SWAPCHAIN+", vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
+			rg->attach_swapchain("SWAPCHAIN", swapchain);
 			auto fut = util::ImGui_ImplVuk_Render(frame_allocator, Future{ rg, "SWAPCHAIN+" }, imgui_data, ImGui::GetDrawData(), sampled_images);
 			present(frame_allocator, swapchain, std::move(fut));
 			sampled_images.clear();

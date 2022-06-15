@@ -139,7 +139,7 @@ namespace vuk {
 	template<>
 	ConstMapIterator<Name, const struct BufferInfo&>::~ConstMapIterator();
 
-	struct RenderGraph {
+	struct RenderGraph : std::enable_shared_from_this<RenderGraph> {
 		RenderGraph();
 		RenderGraph(Name name);
 		~RenderGraph();
@@ -207,11 +207,11 @@ namespace vuk {
 
 		/// @brief Attach a future to the given name
 		/// @param name Name of the resource to attach to
-		/// @param future Future to be consumed into this rendergraph
-		void attach_in(Name name, Future&& future);
+		/// @param future Future to be attached into this rendergraph
+		void attach_in(Name name, Future future);
 
 		/// @brief Attach multiple futures - the names are matched to future bound names
-		/// @param futures Futures to be consumed into this rendergraph
+		/// @param futures Futures to be attached into this rendergraph
 		void attach_in(std::span<Future> futures);
 
 		void inference_rule(Name target, std::function<void(const struct InferenceContext& ctx, ImageAttachment& ia)>);
@@ -248,18 +248,19 @@ namespace vuk {
 		struct RGImpl* impl;
 		friend struct ExecutableRenderGraph;
 
+		void inline_subgraphs();
+
 		/// @brief Check if this rendergraph is valid.
 		/// \throws RenderGraphException
 		void validate();
-
-		// determine rendergraph inputs and outputs, and resources that are neither
-		void build_io();
 
 		void schedule_intra_queue(std::span<struct PassInfo> passes, const RenderGraphCompileOptions& compile_options);
 
 		// future support functions
 		friend class Future;
 		void attach_out(Name, Future& fimg, DomainFlags dst_domain);
+
+		void detach_out(Name, Future& fimg);
 
 		Name get_temporary_name();
 	};

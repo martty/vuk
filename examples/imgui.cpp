@@ -81,7 +81,7 @@ vuk::Future util::ImGui_ImplVuk_Render(vuk::Allocator& allocator,
 		vtx_dst += cmd_list->VtxBuffer.Size;
 		idx_dst += cmd_list->IdxBuffer.Size;
 	}
-	std::unique_ptr<vuk::RenderGraph> rg = std::make_unique<vuk::RenderGraph>("imgui");
+	std::shared_ptr<vuk::RenderGraph> rg = std::make_shared<vuk::RenderGraph>("imgui");
 	rg->attach_in("target", std::move(target));
 	// add rendergraph dependencies to be transitioned
 	// make all rendergraph sampled images available

@@ -6,6 +6,7 @@
 
 #include <atomic>
 #include <mutex>
+#include <utility>
 
 namespace vuk {
 	struct QueueImpl {
@@ -353,21 +354,31 @@ namespace vuk {
 		}
 	}
 
-	Future::Future(struct RenderGraph& rg, Name output_binding, DomainFlags dst_domain) :
+	Future::Future(std::shared_ptr<struct RenderGraph> org, Name output_binding, DomainFlags dst_domain) :
 	    output_binding(output_binding),
-	    rg(&rg),
-	    control(std::make_unique<FutureBase>()) {
-		control->status = FutureBase::Status::eRenderGraphBound;
-		this->rg->attach_out(output_binding, *this, dst_domain);
-	}
-
-	Future::Future(std::unique_ptr<struct RenderGraph> org, Name output_binding, DomainFlags dst_domain) :
-	    output_binding(output_binding),
-	    owned_rg(std::move(org)),
-	    rg(owned_rg.get()),
+	    rg(std::move(org)),
 	    control(std::make_unique<FutureBase>()) {
 		control->status = FutureBase::Status::eRenderGraphBound;
 		rg->attach_out(output_binding, *this, dst_domain);
+	}
+
+	Future::Future(Future&& o) noexcept :
+	    control{ std::exchange(o.control, nullptr) },
+	    rg{ std::exchange(o.rg, nullptr) },
+	    output_binding{ std::exchange(o.output_binding, Name{}) } {}
+
+	Future& Future::operator=(Future&& o) noexcept {
+		control = std::exchange(o.control, nullptr);
+		rg = std::exchange(o.rg, nullptr);
+		output_binding = std::exchange(o.output_binding, Name{});
+		
+		return *this;
+	}
+
+	Future::~Future() {
+		if (rg && rg->impl) {
+			rg->detach_out(output_binding, *this);
+		}
 	}
 
 	Result<void> Future::wait(Allocator& allocator) {

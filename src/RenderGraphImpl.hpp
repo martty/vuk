@@ -35,6 +35,7 @@ namespace vuk {
 		std::vector<PassInfo, short_alloc<PassInfo, 64>> passes;
 		std::vector<PassInfo*, short_alloc<PassInfo*, 64>> ordered_passes;
 
+		robin_hood::unordered_flat_set<Name> imported_names;       // names coming from subgraphs
 		robin_hood::unordered_flat_map<Name, Name> aliases;        // maps resource names to resource names
 		robin_hood::unordered_flat_map<Name, Name> assigned_names; // maps resource names to attachment names
 		robin_hood::unordered_flat_set<Name> poisoned_names;
@@ -51,6 +52,8 @@ namespace vuk {
 
 		std::unordered_map<Name, IAInference> ia_inference_rules;
 
+		std::unordered_map<std::shared_ptr<RenderGraph>, std::atomic_uint64_t> subgraphs;
+
 		struct Release {
 			QueueResourceUse dst_use;
 			FutureBase* signal = nullptr;
@@ -64,7 +67,7 @@ namespace vuk {
 
 		std::unordered_map<Name, Acquire> acquires;
 
-		std::unordered_map<Name, Release> releases;
+		std::unordered_multimap<Name, Release> releases;
 
 		RGImpl() : arena_(new arena(1024 * 1024)), INIT(passes), INIT(ordered_passes), INIT(rpis) {}
 
@@ -85,6 +88,12 @@ namespace vuk {
 				return resolve_alias(it->second);
 			}
 		};
+
+		// determine rendergraph inputs and outputs, and resources that are neither
+		void build_io();
+
+		robin_hood::unordered_flat_set<Name> get_available_resources();
+
 
 		size_t temporary_name_counter = 0;
 		Name temporary_name = "_temporary";

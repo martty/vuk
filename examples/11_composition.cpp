@@ -93,17 +93,17 @@ namespace {
 
 		                    vuk::wait_for_futures(frame_allocator, uboVP_fut);
 
-		                    vuk::RenderGraph rg("MRT");
+		                    std::shared_ptr<vuk::RenderGraph> rg = std::make_shared<vuk::RenderGraph>("MRT");
 		                    // Here we will render the cube into 3 offscreen textures
 		                    // The intermediate offscreen textures need to be bound
 		                    // The "internal" rendering resolution is set here for one attachment, the rest infers from it
-		                    rg.attach_and_clear_image("11_position",
+		                    rg->attach_and_clear_image("11_position",
 		                                              { .format = vuk::Format::eR16G16B16A16Sfloat, .sample_count = vuk::Samples::e1 },
 		                                              vuk::ClearColor{ 1.f, 0.f, 0.f, 0.f });
-		                    rg.attach_and_clear_image("11_normal", { .format = vuk::Format::eR16G16B16A16Sfloat }, vuk::ClearColor{ 0.f, 1.f, 0.f, 0.f });
-		                    rg.attach_and_clear_image("11_color", { .format = vuk::Format::eR8G8B8A8Srgb }, vuk::ClearColor{ 0.f, 0.f, 1.f, 0.f });
-		                    rg.attach_and_clear_image("11_depth", { .format = vuk::Format::eD32Sfloat }, vuk::ClearDepthStencil{ 1.0f, 0 });
-		                    rg.add_pass({ // Passes can be optionally named, this useful for visualization and debugging
+		                    rg->attach_and_clear_image("11_normal", { .format = vuk::Format::eR16G16B16A16Sfloat }, vuk::ClearColor{ 0.f, 1.f, 0.f, 0.f });
+		                    rg->attach_and_clear_image("11_color", { .format = vuk::Format::eR8G8B8A8Srgb }, vuk::ClearColor{ 0.f, 0.f, 1.f, 0.f });
+		                    rg->attach_and_clear_image("11_depth", { .format = vuk::Format::eD32Sfloat }, vuk::ClearDepthStencil{ 1.0f, 0 });
+		                    rg->add_pass({ // Passes can be optionally named, this useful for visualization and debugging
 		                                  .name = "deferred_MRT",
 		                                  // Declare our framebuffer
 		                                  .resources = { "11_position"_image >> vuk::eColorWrite,
@@ -138,13 +138,13 @@ namespace {
 			                                  command_buffer.draw_indexed(box.second.size(), 1, 0, 0, 0);
 		                                  } });
 
-		                    vuk::RenderGraph rg_resolve("11");
-		                    std::vector futures = rg.split();
-		                    rg_resolve.attach_in(futures);
-		                    rg_resolve.attach_image("11_deferred", { .format = vuk::Format::eR8G8B8A8Srgb, .sample_count = vuk::Samples::e1 });
-		                    rg_resolve.inference_rule("11_position+", vuk::same_extent_as("11_deferred"));
+		                    std::shared_ptr<vuk::RenderGraph> rg_resolve = std::make_shared<vuk::RenderGraph>("11");
+		                    std::vector futures = rg->split();
+		                    rg_resolve->attach_in(futures);
+		                    rg_resolve->attach_image("11_deferred", { .format = vuk::Format::eR8G8B8A8Srgb, .sample_count = vuk::Samples::e1 });
+		                    rg_resolve->inference_rule("11_position+", vuk::same_extent_as("11_deferred"));
 		                    // The shading pass for the deferred rendering
-		                    rg_resolve.add_pass({ .name = "deferred_resolve",
+		                    rg_resolve->add_pass({ .name = "deferred_resolve",
 		                                          // Declare that we are going to render to the final color image
 		                                          // Declare that we are going to sample (in the fragment shader) from the previous attachments
 		                                          .resources = { "11_deferred"_image >> vuk::eColorWrite >> "11_deferred+",
@@ -171,7 +171,7 @@ namespace {
 			                                              .bind_sampler(0, 2, sci)
 			                                              .draw(3, 1, 0, 0);
 		                                          } });
-		                    vuk::Future lit_fut = { rg_resolve, "11_deferred+" };
+		                    vuk::Future lit_fut = { std::move(rg_resolve), "11_deferred+" };
 		                    vuk::Future sm_fut = apply_fxaa(std::move(lit_fut), std::move(target));
 
 		                    angle += 20.f * ImGui::GetIO().DeltaTime;

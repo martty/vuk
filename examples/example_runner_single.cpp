@@ -84,7 +84,7 @@ void vuk::ExampleRunner::render() {
 		auto attachment_name = vuk::Name(examples[0]->name);
 		rg.attach_swapchain("_swp", swapchain);
 		rg.clear_image("_swp", attachment_name, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
-		auto fut = examples[0]->render(*this, frame_allocator, Future{ rg, attachment_name });	
+		auto fut = examples[0]->render(*this, frame_allocator, Future{ std::make_shared<RenderGraph>(std::move(rg)), attachment_name });	
 		present(frame_allocator, swapchain, std::move(fut));
 	}
 }

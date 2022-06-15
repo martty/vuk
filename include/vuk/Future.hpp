@@ -44,12 +44,7 @@ namespace vuk {
 		/// @param allocator
 		/// @param rg
 		/// @param output_binding
-		Future(std::unique_ptr<struct RenderGraph> rg, Name output_binding, DomainFlags dst_domain = DomainFlagBits::eDevice);
-		/// @brief Create a Future without ownership of a RenderGraph and bind to an output
-		/// @param allocator
-		/// @param rg
-		/// @param output_binding
-		Future(struct RenderGraph& rg, Name output_binding, DomainFlags dst_domain = DomainFlagBits::eDevice);
+		Future(std::shared_ptr<RenderGraph> rg, Name output_binding, DomainFlags dst_domain = DomainFlagBits::eDevice);
 		/// @brief Create a Future from a value, automatically making the result available on the host
 		/// @param allocator
 		/// @param value
@@ -60,13 +55,18 @@ namespace vuk {
 			control->last_use.layout = vuk::ImageLayout::eUndefined;
 		}
 
+		Future(Future&&) noexcept;
+		Future& operator=(Future&&) noexcept;
+
+		~Future();
+
 		/// @brief Get status of the Future
 		FutureBase::Status& get_status() {
 			return control->status;
 		}
 
 		/// @brief Get the referenced RenderGraph
-		RenderGraph* get_render_graph() {
+		std::shared_ptr<RenderGraph> get_render_graph() {
 			return rg;
 		}
 
@@ -103,8 +103,7 @@ namespace vuk {
 	private:
 		Name output_binding;
 
-		std::unique_ptr<RenderGraph> owned_rg;
-		RenderGraph* rg = nullptr;
+		std::shared_ptr<RenderGraph> rg;
 
 		std::unique_ptr<FutureBase> control;
 
@@ -114,7 +113,7 @@ namespace vuk {
 	template<class... Args>
 	Result<void> wait_for_futures(Allocator& alloc, Args&... futs) {
 		std::array controls = { futs.get_control()... };
-		std::array rgs = { futs.get_render_graph()... };
+		std::array rgs = { futs.get_render_graph().get()... };
 		std::vector<std::pair<Allocator*, RenderGraph*>> rgs_to_run;
 		for (uint64_t i = 0; i < controls.size(); i++) {
 			auto& control = controls[i];
@@ -154,7 +153,7 @@ namespace vuk {
 			} else if (control->status == FutureBase::Status::eHostAvailable || control->status == FutureBase::Status::eSubmitted) {
 				continue;
 			} else {
-				rgs_to_run.emplace_back(&alloc, futures[i].get_render_graph());
+				rgs_to_run.emplace_back(&alloc, futures[i].get_render_graph().get());
 			}
 		}
 		if (rgs_to_run.size() != 0) {

@@ -77,101 +77,100 @@ namespace {
 		    },
 		.render =
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator, vuk::Future target) {
-		      vuk::RenderGraph rgx("RTT");
+		      std::shared_ptr<vuk::RenderGraph> rgx = std::make_shared<vuk::RenderGraph>("RTT");
 
-		      rgx.attach_and_clear_image(
+		      rgx->attach_and_clear_image(
 		          "08_rttf",
 		          { .extent = vuk::Dimension3D::absolute((unsigned)x, (unsigned)y), .format = runner.swapchain->format, .sample_count = vuk::Samples::e1 },
 		          vuk::ClearColor{ 0.f, 0.f, 0.f, 1.f });
 
 		      // standard render to texture
-		      rgx.add_pass({ .name = "rtt",
-		                     .execute_on = vuk::DomainFlagBits::eGraphicsQueue,
-		                     .resources = { "08_rttf"_image >> vuk::eColorWrite },
-		                     .execute = [](vuk::CommandBuffer& command_buffer) {
-			                     command_buffer.set_viewport(0, vuk::Rect2D::framebuffer())
-			                         .set_scissor(0, vuk::Rect2D::framebuffer())
-			                         .set_rasterization({})     // Set the default rasterization state
-			                         .broadcast_color_blend({}) // Set the default color blend state
-			                         .bind_image(0, 0, *texture_of_doge->view)
-			                         .bind_sampler(0, 0, {})
-			                         .bind_graphics_pipeline("rtt")
-			                         .draw(3, 1, 0, 0);
-		                     } });
+		      rgx->add_pass({ .name = "rtt",
+		                      .execute_on = vuk::DomainFlagBits::eGraphicsQueue,
+		                      .resources = { "08_rttf"_image >> vuk::eColorWrite },
+		                      .execute = [](vuk::CommandBuffer& command_buffer) {
+			                      command_buffer.set_viewport(0, vuk::Rect2D::framebuffer())
+			                          .set_scissor(0, vuk::Rect2D::framebuffer())
+			                          .set_rasterization({})     // Set the default rasterization state
+			                          .broadcast_color_blend({}) // Set the default color blend state
+			                          .bind_image(0, 0, *texture_of_doge->view)
+			                          .bind_sampler(0, 0, {})
+			                          .bind_graphics_pipeline("rtt")
+			                          .draw(3, 1, 0, 0);
+		                      } });
 
 		      // make a gpu future of the above graph (render to texture) and bind to an output (rttf)
 		      vuk::Future rttf{ rgx, "08_rttf+" };
 
-		      std::unique_ptr<vuk::RenderGraph> rgp = std::make_unique<vuk::RenderGraph>("08");
+		      std::shared_ptr<vuk::RenderGraph> rgp = std::make_shared<vuk::RenderGraph>("08");
 		      rgp->attach_in("08_pipelined_compute", std::move(target));
-		      auto& rg = *rgp;
 		      // this pass executes outside of a renderpass
 		      // we declare a buffer dependency and dispatch a compute shader
-		      rg.add_pass({ .name = "sort",
-		                    .execute_on = vuk::DomainFlagBits::eGraphicsQueue,
-		                    .resources = { "08_scramble"_buffer >> vuk::eComputeRW >> "08_scramble+" },
-		                    .execute = [](vuk::CommandBuffer& command_buffer) {
-			                    command_buffer.bind_buffer(0, 0, *command_buffer.get_resource_buffer("08_scramble"));
-			                    command_buffer.bind_compute_pipeline("stupidsort").specialize_constants(0, speed_count).dispatch(1);
-			                    // We can also customize pipelines by using specialization constants
-			                    // Here we will apply a tint based on the current frame
-			                    auto current_frame = command_buffer.get_context().get_frame_count();
-			                    auto mod_frame = current_frame % 100;
-			                    if (mod_frame == 99) {
-				                    speed_count += 256;
-			                    }
-		                    } });
+		      rgp->add_pass({ .name = "sort",
+		                      .execute_on = vuk::DomainFlagBits::eGraphicsQueue,
+		                      .resources = { "08_scramble"_buffer >> vuk::eComputeRW >> "08_scramble+" },
+		                      .execute = [](vuk::CommandBuffer& command_buffer) {
+			                      command_buffer.bind_buffer(0, 0, *command_buffer.get_resource_buffer("08_scramble"));
+			                      command_buffer.bind_compute_pipeline("stupidsort").specialize_constants(0, speed_count).dispatch(1);
+			                      // We can also customize pipelines by using specialization constants
+			                      // Here we will apply a tint based on the current frame
+			                      auto current_frame = command_buffer.get_context().get_frame_count();
+			                      auto mod_frame = current_frame % 100;
+			                      if (mod_frame == 99) {
+				                      speed_count += 256;
+			                      }
+		                      } });
 
-		      rg.add_pass({ .name = "copy",
-		                    .execute_on = vuk::DomainFlagBits::eTransferQueue,
-		                    .resources = { "08_scramble+"_buffer >> vuk::eTransferRead, "08_scramble++"_buffer >> vuk::eTransferWrite >> "08_scramble+++" },
-		                    .execute = [](vuk::CommandBuffer& command_buffer) {
-			                    command_buffer.copy_buffer("08_scramble+", "08_scramble++", sizeof(unsigned) * x * y);
-		                    } });
+		      rgp->add_pass({ .name = "copy",
+		                      .execute_on = vuk::DomainFlagBits::eTransferQueue,
+		                      .resources = { "08_scramble+"_buffer >> vuk::eTransferRead, "08_scramble++"_buffer >> vuk::eTransferWrite >> "08_scramble+++" },
+		                      .execute = [](vuk::CommandBuffer& command_buffer) {
+			                      command_buffer.copy_buffer("08_scramble+", "08_scramble++", sizeof(unsigned) * x * y);
+		                      } });
 		      // put it back into the persistent buffer
-		      rg.add_pass({ .name = "copy_2",
-		                    .execute_on = vuk::DomainFlagBits::eTransferQueue,
-		                    .resources = { "08_scramble+++"_buffer >> vuk::eTransferRead, "08_scramble++++"_buffer >> vuk::eTransferWrite >> "08_scramble+++++" },
-		                    .execute = [](vuk::CommandBuffer& command_buffer) {
-			                    command_buffer.copy_buffer("08_scramble+++", "08_scramble++++", sizeof(unsigned) * x * y);
-		                    } });
+		      rgp->add_pass({ .name = "copy_2",
+		                      .execute_on = vuk::DomainFlagBits::eTransferQueue,
+		                      .resources = { "08_scramble+++"_buffer >> vuk::eTransferRead, "08_scramble++++"_buffer >> vuk::eTransferWrite >> "08_scramble+++++" },
+		                      .execute = [](vuk::CommandBuffer& command_buffer) {
+			                      command_buffer.copy_buffer("08_scramble+++", "08_scramble++++", sizeof(unsigned) * x * y);
+		                      } });
 
 		      // draw the scrambled image, with a buffer dependency on the scramble buffer
-		      rg.add_pass({ .name = "draw",
-		                    .execute_on = vuk::DomainFlagBits::eGraphicsQueue,
-		                    .resources = { "08_scramble+++"_buffer >> vuk::eFragmentRead,
-		                                   "08_rtt"_image >> vuk::eFragmentSampled,
-		                                   "08_pipelined_compute"_image >> vuk::eColorWrite >> "08_pipelined_compute_final" },
-		                    .execute = [](vuk::CommandBuffer& command_buffer) {
-			                    command_buffer.set_viewport(0, vuk::Rect2D::framebuffer())
-			                        .set_scissor(0, vuk::Rect2D::framebuffer())
-			                        .set_rasterization({})     // Set the default rasterization state
-			                        .broadcast_color_blend({}) // Set the default color blend state
-			                        .bind_image(0, 0, "08_rtt")
-			                        .bind_sampler(0, 0, {})
-			                        .bind_buffer(0, 1, *command_buffer.get_resource_buffer("08_scramble"))
-			                        .bind_graphics_pipeline("scrambled_draw")
-			                        .draw(3, 1, 0, 0);
-		                    } });
+		      rgp->add_pass({ .name = "draw",
+		                      .execute_on = vuk::DomainFlagBits::eGraphicsQueue,
+		                      .resources = { "08_scramble+++"_buffer >> vuk::eFragmentRead,
+		                                     "08_rtt"_image >> vuk::eFragmentSampled,
+		                                     "08_pipelined_compute"_image >> vuk::eColorWrite >> "08_pipelined_compute_final" },
+		                      .execute = [](vuk::CommandBuffer& command_buffer) {
+			                      command_buffer.set_viewport(0, vuk::Rect2D::framebuffer())
+			                          .set_scissor(0, vuk::Rect2D::framebuffer())
+			                          .set_rasterization({})     // Set the default rasterization state
+			                          .broadcast_color_blend({}) // Set the default color blend state
+			                          .bind_image(0, 0, "08_rtt")
+			                          .bind_sampler(0, 0, {})
+			                          .bind_buffer(0, 1, *command_buffer.get_resource_buffer("08_scramble"))
+			                          .bind_graphics_pipeline("scrambled_draw")
+			                          .draw(3, 1, 0, 0);
+		                      } });
 
 		      time += ImGui::GetIO().DeltaTime;
 		      // make the main rendergraph
 		      // our two inputs are the futures - they compile into the main rendergraph
-		      rg.attach_in("08_rtt", std::move(rttf));
+		      rgp->attach_in("08_rtt", std::move(rttf));
 		      // the copy here in addition will execute on the transfer queue, and will signal the graphics to execute the rest
 		      // we created this future in the setup code, so on the first frame it will append the computation
 		      // but on the subsequent frames the future becomes ready (on the gpu) and this will only attach a buffer
-		      rg.attach_in("08_scramble", std::move(scramble_buf_fut));
+		      rgp->attach_in("08_scramble", std::move(scramble_buf_fut));
 		      // temporary buffer used for copying
-		      rg.attach_buffer("08_scramble++",
+		      rgp->attach_buffer("08_scramble++",
 		                       **allocate_buffer_gpu(frame_allocator, { vuk::MemoryUsage::eGPUonly, sizeof(unsigned) * x * y, 1 }),
 		                       vuk::Access::eNone,
 		                       vuk::Access::eNone);
 		      // permanent buffer to keep state
-		      rg.attach_buffer("08_scramble++++", *scramble_buf, vuk::Access::eNone, vuk::Access::eNone);
-		      scramble_buf_fut = { std::move(rgp), "08_scramble+++++" };
+		      rgp->attach_buffer("08_scramble++++", *scramble_buf, vuk::Access::eNone, vuk::Access::eNone);
+		      scramble_buf_fut = { rgp, "08_scramble+++++" };
 
-		      return vuk::Future{ rg, "08_pipelined_compute_final" };
+		      return vuk::Future{ rgp, "08_pipelined_compute_final" };
 		    },
 		.cleanup =
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
