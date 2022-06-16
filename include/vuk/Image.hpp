@@ -186,13 +186,7 @@ namespace vuk {
 			return *reinterpret_cast<VkComponentMapping*>(this);
 		}
 
-		bool operator==(ComponentMapping const& rhs) const noexcept {
-			return (r == rhs.r) && (g == rhs.g) && (b == rhs.b) && (a == rhs.a);
-		}
-
-		bool operator!=(ComponentMapping const& rhs) const noexcept {
-			return !operator==(rhs);
-		}
+		constexpr bool operator==(const ComponentMapping&) const = default;
 	};
 	static_assert(sizeof(ComponentMapping) == sizeof(VkComponentMapping), "struct and wrapper have different size!");
 	static_assert(std::is_standard_layout<ComponentMapping>::value, "struct wrapper is not a standard layout!");
@@ -299,9 +293,7 @@ namespace vuk {
 		uint32_t layer_count : 11;
 		ComponentMapping components;
 
-		constexpr bool operator==(const ImageView& other) const noexcept {
-			return payload == other.payload;
-		}
+		constexpr bool operator==(const ImageView&) const = default;
 	};
 
 	// static_assert(sizeof(ImageView) == 64);

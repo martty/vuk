@@ -221,13 +221,7 @@ namespace vuk {
 		uint32_t height = {};
 		uint32_t depth = {};
 
-		bool operator==(Extent3D const& rhs) const noexcept {
-			return (width == rhs.width) && (height == rhs.height) && (depth == rhs.depth);
-		}
-
-		bool operator!=(Extent3D const& rhs) const noexcept {
-			return !operator==(rhs);
-		}
+		auto operator<=>(const Extent3D&) const = default;
 
 		operator VkExtent3D const&() const noexcept {
 			return *reinterpret_cast<const VkExtent3D*>(this);

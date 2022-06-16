@@ -142,7 +142,6 @@ void vuk::ExampleRunner::render() {
 				                             .layer_count = 1 },
 				                           vuk::ClearColor(0.1f, 0.2f, 0.3f, 1.f));
 				auto rg_frag_fut = ex->render(*this, frame_allocator, Future{ rgx, "_img" });
-				Name attachment_name_in = Name(ex->name);
 				Name& attachment_name_out = *attachment_names.emplace(std::string(ex->name) + "_final");
 				auto& rg_frag = *rg_frag_fut.get_render_graph();
 				rg_frag.compile(vuk::RenderGraphCompileOptions{});

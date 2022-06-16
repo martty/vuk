@@ -49,7 +49,7 @@ namespace vuk {
 		using error_type = E;
 
 		template<typename... Args>
-		Result(ResultValueTag, Args&&... args) : _holds_value(true), _value{ FWD(args)... } {}
+		Result(ResultValueTag, Args&&... args) : _value{ FWD(args)... }, _holds_value(true) {}
 
 		template<class U>
 		Result(ResultErrorTag, U&& err_t) : _holds_value(false) {
@@ -61,7 +61,7 @@ namespace vuk {
 		Result(Result const& other) = delete;
 
 		template<class U, class F>
-		Result(Result<U, F>&& other) : _holds_value(other._holds_value), _null_state() {
+		Result(Result<U, F>&& other) : _null_state(), _holds_value(other._holds_value) {
 			static_assert(std::is_convertible_v<F*, E*>, "error must be convertible");
 			if constexpr (!std::is_same_v<U, T>) {
 				assert(!other._holds_value);
@@ -242,7 +242,7 @@ namespace vuk {
 		Result(Result const& other) = delete;
 
 		template<class U, class F>
-		Result(Result<U, F>&& other) : _holds_value(other._holds_value), _null_state() {
+		Result(Result<U, F>&& other) : _null_state(), _holds_value(other._holds_value) {
 			static_assert(std::is_convertible_v<F*, E*>, "error must be convertible");
 			if (!other._holds_value) {
 				_error = other._error;

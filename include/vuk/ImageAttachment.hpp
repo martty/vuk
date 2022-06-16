@@ -27,7 +27,7 @@ namespace vuk {
 		uint32_t base_layer = VK_REMAINING_ARRAY_LAYERS;
 		uint32_t layer_count = VK_REMAINING_ARRAY_LAYERS;
 
-		auto operator<=>(const ImageAttachment&) const = default;
+		bool operator==(const ImageAttachment&) const = default;
 
 		static ImageAttachment from_texture(const vuk::Texture& t) {
 			return ImageAttachment{ .image = t.image.get(),

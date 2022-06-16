@@ -135,7 +135,7 @@ namespace vuk {
 	template<>
 	ConstMapIterator<Name, std::span<const struct UseRef>>::~ConstMapIterator();
 	template<>
-	ConstMapIterator<Name, const struct AttachmentRPInfo&>::~ConstMapIterator();
+	ConstMapIterator<Name, const struct AttachmentInfo&>::~ConstMapIterator();
 	template<>
 	ConstMapIterator<Name, const struct BufferInfo&>::~ConstMapIterator();
 

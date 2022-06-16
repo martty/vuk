@@ -27,7 +27,6 @@ namespace vuk {
 	                                              AttachmentInfo& attachment_info,
 	                                              vuk::Extent2D fb_extent,
 	                                              vuk::SampleCountFlagBits samples) {
-		auto rnbame = impl->resolve_name(name);
 		auto& chain = impl->use_chains.at(name);
 		if (attachment_info.type == AttachmentInfo::Type::eInternal) {
 			vuk::ImageUsageFlags usage = RenderGraph::compute_usage(std::span(chain));

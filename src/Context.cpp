@@ -39,7 +39,7 @@ namespace vuk {
 		auto queueSubmit2KHR = (PFN_vkQueueSubmit2KHR)vkGetDeviceProcAddr(device, "vkQueueSubmit2KHR");
 		assert(queueSubmit2KHR != nullptr);
 
-		bool dedicated_graphics_queue_ = false;
+		[[maybe_unused]] bool dedicated_graphics_queue_ = false;
 		bool dedicated_compute_queue_ = false;
 		bool dedicated_transfer_queue_ = false;
 

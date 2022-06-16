@@ -126,7 +126,7 @@ namespace {
 
 				                    auto dst_extent = command_buffer.get_resource_image_attachment("07_commands")->extent;
 				                    float tile_x_size = dst_extent.extent.width / tile_x_count;
-				                    float tile_y_size = dst_extent.extent.height / tile_x_count;
+				                    float tile_y_size = dst_extent.extent.height / tile_y_count;
 
 				                    auto sx = shuf[i] % 3;
 				                    auto sy = shuf[i] / 3;

@@ -8,7 +8,7 @@
 #include "vuk/resources/DeviceNestedResource.hpp"
 
 namespace vuk {
-	DeviceVkResource::DeviceVkResource(Context& ctx, LegacyGPUAllocator& allocator) : ctx(&ctx), device(ctx.device), legacy_gpu_allocator(&allocator) {}
+	DeviceVkResource::DeviceVkResource(Context& ctx, LegacyGPUAllocator& allocator) : ctx(&ctx), legacy_gpu_allocator(&allocator), device(ctx.device) {}
 
 	Result<void, AllocateException> DeviceVkResource::allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) {
 		VkSemaphoreCreateInfo sci{ .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };

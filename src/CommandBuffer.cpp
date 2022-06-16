@@ -963,7 +963,6 @@ namespace vuk {
 
 			bool empty = true;
 			unsigned offset = 0;
-			unsigned idx = 0;
 			for (auto& sc : pi.base->reflection_info.spec_constants) {
 				auto it = spec_map_entries.find(sc.binding);
 				if (it != spec_map_entries.end()) {
@@ -1020,7 +1019,6 @@ namespace vuk {
 			if (attribute_descriptions.size() > 0 && binding_descriptions.size() > 0 && pi.base->reflection_info.attributes.size() > 0) {
 				records.vertex_input = true;
 				for (unsigned i = 0; i < pi.base->reflection_info.attributes.size(); i++) {
-					auto& attr = pi.base->reflection_info.attributes[i];
 					assert(set_attribute_descriptions.test(i) && "Pipeline expects attribute, but was never set in command buffer.");
 					used_bindings.set(attribute_descriptions[i].binding, true);
 				}
@@ -1153,7 +1151,6 @@ namespace vuk {
 
 			if (records.vertex_input) {
 				for (unsigned i = 0; i < pi.base->reflection_info.attributes.size(); i++) {
-					auto& attr = pi.base->reflection_info.attributes[i];
 					auto& att = attribute_descriptions[i];
 					PipelineInstanceCreateInfo::VertexInputAttributeDescription viad{
 						.format = att.format, .offset = att.offset, .location = (uint8_t)att.location, .binding = (uint8_t)att.binding

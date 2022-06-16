@@ -157,6 +157,11 @@
           "name": "VUK_BUILD_EXAMPLES",
           "value": "True",
           "type": "BOOL"
+        },
+        {
+          "name": "VUK_USE_DXC",
+          "value": "False",
+          "type": "BOOL"
         }
       ]
     },

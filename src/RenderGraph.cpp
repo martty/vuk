@@ -28,9 +28,9 @@ namespace vuk {
 		name = Name(std::to_string(reinterpret_cast<uintptr_t>(impl)));
 	}
 
-	RenderGraph::RenderGraph(Name name) : impl(new RGImpl), name(name) {}
+	RenderGraph::RenderGraph(Name name) : name(name), impl(new RGImpl) {}
 
-	RenderGraph::RenderGraph(RenderGraph&& o) noexcept : impl(std::exchange(o.impl, nullptr)), name(o.name) {}
+	RenderGraph::RenderGraph(RenderGraph&& o) noexcept : name(o.name), impl(std::exchange(o.impl, nullptr)) {}
 	RenderGraph& RenderGraph::operator=(RenderGraph&& o) noexcept {
 		impl = std::exchange(o.impl, nullptr);
 		name = o.name;
@@ -811,7 +811,6 @@ namespace vuk {
 			RGImpl::Release* release = nullptr;
 			if (auto it = res_rels.find(name); it != res_rels.end()) {
 				release = &it->second;
-				auto& last_use_before_release = *(chain.end() - 1);
 				if (attachment_info.final.layout != ImageLayout::eUndefined) {
 					chain.insert(chain.end(), UseRef{ {}, {}, vuk::eManual, vuk::eManual, attachment_info.final, Resource::Type::eImage, {}, nullptr });
 					// propagate domain
