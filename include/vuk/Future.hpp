@@ -18,9 +18,6 @@ namespace vuk {
 
 		enum class Status {
 			eInitial,          // default-constructed future
-			eRenderGraphBound, // a rendergraph was bound to this future
-			eInputAttached,    // this future was attached to a rendergraph as input
-			eOutputAttached,   // this future was attached to a rendergraph as output
 			eSubmitted,        // the rendergraph referenced by this future was submitted (result is available on device with appropriate sync)
 			eHostAvailable     // the result is available on host, available on device without sync
 		} status = Status::eInitial;
@@ -40,16 +37,23 @@ namespace vuk {
 	class Future {
 	public:
 		Future() = default;
+
 		/// @brief Create a Future with ownership of a RenderGraph and bind to an output
-		/// @param allocator
 		/// @param rg
 		/// @param output_binding
 		Future(std::shared_ptr<RenderGraph> rg, Name output_binding, DomainFlags dst_domain = DomainFlagBits::eDevice);
+		
 		/// @brief Create a Future from a value, automatically making the result available on the host
-		/// @param allocator
 		/// @param value
-		template<class T>
-		Future(T&& value) : control(std::make_shared<FutureBase>()) {
+		Future(ImageAttachment value) : control(std::make_shared<FutureBase>()) {
+			control->result = std::move(value);
+			control->status = FutureBase::Status::eHostAvailable;
+			control->last_use.layout = ImageLayout::eUndefined;
+		}
+
+		/// @brief Create a Future from a value, automatically making the result available on the host
+		/// @param value
+		Future(Buffer value) : control(std::make_shared<FutureBase>()) {
 			control->result = std::move(value);
 			control->status = FutureBase::Status::eHostAvailable;
 			control->last_use.layout = ImageLayout::eUndefined;
@@ -119,7 +123,7 @@ namespace vuk {
 		std::vector<std::pair<Allocator*, RenderGraph*>> rgs_to_run;
 		for (uint64_t i = 0; i < controls.size(); i++) {
 			auto& control = controls[i];
-			if (control->status == FutureBase::Status::eInputAttached || control->status == FutureBase::Status::eInitial) {
+			if (control->status == FutureBase::Status::eInitial) {
 				return { expected_error, RenderGraphException{} };
 			} else if (control->status == FutureBase::Status::eHostAvailable || control->status == FutureBase::Status::eSubmitted) {
 				continue;
@@ -150,7 +154,7 @@ namespace vuk {
 		std::vector<std::pair<Allocator*, RenderGraph*>> rgs_to_run;
 		for (uint64_t i = 0; i < futures.size(); i++) {
 			auto control = futures[i].get_control();
-			if (control->status == FutureBase::Status::eInputAttached || control->status == FutureBase::Status::eInitial) {
+			if (control->status == FutureBase::Status::eInitial && !futures[i].get_render_graph()) {
 				return { expected_error, RenderGraphException{} };
 			} else if (control->status == FutureBase::Status::eHostAvailable || control->status == FutureBase::Status::eSubmitted) {
 				continue;

@@ -619,13 +619,11 @@ namespace vuk {
 			}
 			impl->acquires.emplace(name, RGImpl::Acquire{ fimg.control->last_use, fimg.control->initial_domain, fimg.control->initial_visibility });
 			impl->imported_names.emplace(name);
-		} else if (fimg.get_status() == FutureBase::Status::eRenderGraphBound || fimg.get_status() == FutureBase::Status::eOutputAttached) {
-			fimg.get_status() = FutureBase::Status::eInputAttached;
+		} else if (fimg.get_status() == FutureBase::Status::eInitial) {
 			Name sg_name = fimg.rg->name;
 			// an unsubmitted RG is being attached, we remove the release from that RG, and we allow the name to be found in us
 			if (fimg.rg->impl) {
 				fimg.rg->impl->releases.erase(fimg.get_bound_name());
-				//append(sg_name, std::move(*fimg.rg));
 				impl->subgraphs[fimg.rg]++;
 			} else {
 				impl->releases.erase(sg_name.append("::").append(fimg.get_bound_name()));
@@ -678,14 +676,10 @@ namespace vuk {
 	}
 
 	void RenderGraph::attach_out(Name name, Future& fimg, DomainFlags dst_domain) {
-		fimg.get_status() = FutureBase::Status::eOutputAttached;
 		impl->releases.emplace(name, RGImpl::Release{ to_use(Access::eNone, dst_domain), fimg.control.get() });
 	}
 
 	void RenderGraph::detach_out(Name name, Future& fimg) {
-		if (fimg.get_status() == FutureBase::Status::eOutputAttached) {
-			fimg.get_status() = FutureBase::Status::eInitial;
-		}
 		for (auto it = impl->releases.begin(); it != impl->releases.end(); ++it) {
 			if (it->first == name && it->second.signal == fimg.control.get()) {
 				impl->releases.erase(it);

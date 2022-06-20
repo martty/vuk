@@ -138,9 +138,15 @@ namespace {
 			                                  command_buffer.draw_indexed(box.second.size(), 1, 0, 0, 0);
 		                                  } });
 
-		                    std::shared_ptr<vuk::RenderGraph> rg_resolve = std::make_shared<vuk::RenderGraph>("11");
+		                    std::shared_ptr<vuk::RenderGraph> rg_resolve = std::make_shared<vuk::RenderGraph>("resolve");
 		                    std::vector futures = rg->split();
+							// creating an additional future of the same resource is fine
+		                    auto pos_fut = vuk::Future{ rg, "11_position+" };
+		                    auto pos_fut_dup = pos_fut; // duplicating futures is fine
+		                    auto col_fut = vuk::Future{ rg, "11_color+" }; // creating a future that you don't attach later is fine
 		                    rg_resolve->attach_in(futures);
+		                    rg_resolve->attach_in("11_position+", pos_fut);
+		                    rg_resolve->attach_in("11_position++", pos_fut); // attaching the same future twice is fine
 		                    rg_resolve->attach_image("11_deferred", { .format = vuk::Format::eR8G8B8A8Srgb, .sample_count = vuk::Samples::e1 });
 		                    rg_resolve->inference_rule("11_position+", vuk::same_extent_as("11_deferred"));
 		                    // The shading pass for the deferred rendering
