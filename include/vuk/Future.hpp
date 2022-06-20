@@ -49,12 +49,14 @@ namespace vuk {
 		/// @param allocator
 		/// @param value
 		template<class T>
-		Future(T&& value) : control(std::make_unique<FutureBase>()) {
+		Future(T&& value) : control(std::make_shared<FutureBase>()) {
 			control->result = std::move(value);
 			control->status = FutureBase::Status::eHostAvailable;
-			control->last_use.layout = vuk::ImageLayout::eUndefined;
+			control->last_use.layout = ImageLayout::eUndefined;
 		}
 
+		Future(const Future&) noexcept;
+		Future& operator=(const Future&) noexcept;
 		Future(Future&&) noexcept;
 		Future& operator=(Future&&) noexcept;
 
@@ -105,7 +107,7 @@ namespace vuk {
 
 		std::shared_ptr<RenderGraph> rg;
 
-		std::unique_ptr<FutureBase> control;
+		std::shared_ptr<FutureBase> control;
 
 		friend struct RenderGraph;
 	};

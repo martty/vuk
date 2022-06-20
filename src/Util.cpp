@@ -354,10 +354,20 @@ namespace vuk {
 		}
 	}
 
+	Future::Future(const Future& o) noexcept : 
+		control(o.control), rg(o.rg), output_binding(o.output_binding) {}
+
+	Future& Future::operator=(const Future& o) noexcept {
+		control = o.control;
+		rg = o.rg;
+		output_binding = o.output_binding;
+		return *this;
+	}
+
 	Future::Future(std::shared_ptr<struct RenderGraph> org, Name output_binding, DomainFlags dst_domain) :
 	    output_binding(output_binding),
 	    rg(std::move(org)),
-	    control(std::make_unique<FutureBase>()) {
+	    control(std::make_shared<FutureBase>()) {
 		control->status = FutureBase::Status::eRenderGraphBound;
 		rg->attach_out(output_binding, *this, dst_domain);
 	}
