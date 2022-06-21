@@ -892,25 +892,25 @@ namespace vuk {
 	static constexpr ClearColor Transparent = { 0, 0, 0, 0 };
 
 	template<>
-	constexpr ClearColor White<float> = { 1.f, 1.f, 1.f, 1.f };
+	inline constexpr ClearColor White<float> = { 1.f, 1.f, 1.f, 1.f };
 	template<>
-	constexpr ClearColor White<unsigned> = { 1u, 1u, 1u, 1u };
+	inline constexpr ClearColor White<unsigned> = { 1u, 1u, 1u, 1u };
 	template<>
-	constexpr ClearColor White<signed> = { 1, 1, 1, 1 };
+	inline constexpr ClearColor White<signed> = { 1, 1, 1, 1 };
 
 	template<>
-	constexpr ClearColor Black<float> = { 0.f, 0.f, 0.f, 1.f };
+	inline constexpr ClearColor Black<float> = { 0.f, 0.f, 0.f, 1.f };
 	template<>
-	constexpr ClearColor Black<unsigned> = { 0u, 0u, 0u, 1u };
+	inline constexpr ClearColor Black<unsigned> = { 0u, 0u, 0u, 1u };
 	template<>
-	constexpr ClearColor Black<signed> = { 0, 0, 0, 1 };
+	inline constexpr ClearColor Black<signed> = { 0, 0, 0, 1 };
 
 	template<>
-	constexpr ClearColor Transparent<float> = { 0.f, 0.f, 0.f, 0.f };
+	inline constexpr ClearColor Transparent<float> = { 0.f, 0.f, 0.f, 0.f };
 	template<>
-	constexpr ClearColor Transparent<unsigned> = { 0u, 0u, 0u, 0u };
+	inline constexpr ClearColor Transparent<unsigned> = { 0u, 0u, 0u, 0u };
 	template<>
-	constexpr ClearColor Transparent<signed> = { 0, 0, 0, 0 };
+	inline constexpr ClearColor Transparent<signed> = { 0, 0, 0, 0 };
 
 	struct ClearDepthStencil {
 		constexpr ClearDepthStencil(float depth, uint32_t stencil) noexcept : cdsv{ depth, stencil } {}
