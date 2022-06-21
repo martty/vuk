@@ -6,6 +6,7 @@
 #include "vuk/Hash.hpp" // for create
 #include "vuk/RenderGraph.hpp"
 #include <unordered_set>
+#include <sstream>
 
 namespace vuk {
 	ExecutableRenderGraph::ExecutableRenderGraph(RenderGraph&& rg) : impl(rg.impl) {
@@ -535,7 +536,50 @@ namespace vuk {
 			}
 		}
 
-		assert(attis_to_infer.size() == 0 && "Failed to infer parameters for all attachments.");
+		std::stringstream msg;
+		for (auto& [atti, iaref] : attis_to_infer) {
+			msg << "Could not infer attachment [" << atti->name.c_str() << "]:\n";
+			auto& ia = atti->attachment;
+			if (ia.sample_count == Samples::eInfer) {
+				msg << "- sample count unknown\n";
+			}
+			if (ia.extent.extent.width == 0) {
+				msg << "- extent.width unknown\n";
+			}
+			if (ia.extent.extent.height == 0) {
+				msg << "- extent.height unknown\n";
+			}
+			if (ia.extent.extent.depth == 0) {
+				msg << "- extent.depth unknown\n";
+			}
+			if (ia.format == Format::eUndefined) {
+				msg << "- format unknown\n";
+			}
+			if (ia.view_type == ImageViewType::eInfer) {
+				msg << "- view type unknown\n";
+			}
+			if (ia.base_layer == VK_REMAINING_ARRAY_LAYERS) {
+				msg << "- base layer unknown\n";
+			}
+			if (ia.layer_count == VK_REMAINING_ARRAY_LAYERS) {
+				msg << "- layer count unknown\n";
+			}
+			if (ia.base_level == VK_REMAINING_MIP_LEVELS) {
+				msg << "- base level unknown\n";
+			}
+			if (ia.level_count == VK_REMAINING_MIP_LEVELS) {
+				msg << "- level count unknown\n";
+			}
+			msg << "\n";
+		}
+
+		if (attis_to_infer.size() > 0) {
+			#ifndef NDEBUG
+			fprintf(stderr, "%s", msg.str().c_str());
+			assert(false);
+			#endif
+			return { expected_error, RenderGraphException{ std::move(msg.str()) } };
+		}
 
 		// acquire the renderpasses
 		for (auto& rp : impl->rpis) {
