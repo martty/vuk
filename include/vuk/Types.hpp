@@ -5,8 +5,8 @@
 #include "vuk/vuk_fwd.hpp"
 
 #include <compare>
-#include <type_traits>
 #include <string_view>
+#include <type_traits>
 
 #define MOV(x) (static_cast<std::remove_reference_t<decltype(x)>&&>(x))
 
@@ -125,9 +125,9 @@ namespace vuk {
 
 		struct Framebuffer {};
 
-		Samples() : count(SampleCountFlagBits::e1) {}
-		Samples(SampleCountFlagBits samples) : count(samples) {}
-		Samples(Framebuffer) : count(SampleCountFlagBits::eInfer) {}
+		Samples() noexcept : count(SampleCountFlagBits::e1) {}
+		Samples(SampleCountFlagBits samples) noexcept : count(samples) {}
+		Samples(Framebuffer) noexcept : count(SampleCountFlagBits::eInfer) {}
 
 		constexpr static auto e1 = SampleCountFlagBits::e1;
 		constexpr static auto e2 = SampleCountFlagBits::e2;
@@ -279,21 +279,21 @@ namespace vuk {
 			auto operator<=>(const Relative&) const = default;
 		} _relative;
 
-		static Dimension3D absolute(uint32_t width, uint32_t height) {
+		static Dimension3D absolute(uint32_t width, uint32_t height) noexcept {
 			return Dimension3D{ .extent = { width, height, 1 } };
 		}
 
-		static Dimension3D absolute(uint32_t width, uint32_t height, uint32_t depth) {
+		static Dimension3D absolute(uint32_t width, uint32_t height, uint32_t depth) noexcept {
 			return Dimension3D{ .extent = { width, height, depth } };
 		}
 
-		static Dimension3D absolute(Extent2D extent) {
+		static Dimension3D absolute(Extent2D extent) noexcept {
 			return Dimension3D{ .extent = static_cast<Extent3D>(extent) };
 		}
-		static Dimension3D relative(float width, float height) {
+		static Dimension3D relative(float width, float height) noexcept {
 			return Dimension3D{ .sizing = Sizing::eRelative, ._relative = { .width = width, .height = height } };
 		}
-		static Dimension3D framebuffer() {
+		static Dimension3D framebuffer() noexcept {
 			return Dimension3D{ .sizing = Sizing::eRelative };
 		}
 
@@ -313,16 +313,16 @@ namespace vuk {
 			float height = 1.0f;
 		} _relative;
 
-		static Rect2D absolute(int32_t x, int32_t y, uint32_t width, uint32_t height) {
+		static Rect2D absolute(int32_t x, int32_t y, uint32_t width, uint32_t height) noexcept {
 			return Rect2D{ .offset = { x, y }, .extent = { width, height } };
 		}
-		static Rect2D absolute(Offset2D offset, Extent2D extent) {
+		static Rect2D absolute(Offset2D offset, Extent2D extent) noexcept {
 			return Rect2D{ .offset = offset, .extent = extent };
 		}
-		static Rect2D relative(float x, float y, float width, float height) {
+		static Rect2D relative(float x, float y, float width, float height) noexcept {
 			return Rect2D{ .sizing = Sizing::eRelative, ._relative = { .x = x, .y = y, .width = width, .height = height } };
 		}
-		static Rect2D framebuffer() {
+		static Rect2D framebuffer() noexcept {
 			return Rect2D{ .sizing = Sizing::eRelative };
 		}
 	};
@@ -860,16 +860,22 @@ namespace vuk {
 	};
 
 	using Bool32 = uint32_t;
-
-	struct Preserve {};
 	struct ClearColor {
-		ClearColor(uint32_t r, uint32_t g, uint32_t b, uint32_t a) {
+		constexpr ClearColor(uint32_t r, uint32_t g, uint32_t b, uint32_t a) noexcept {
 			ccv.uint32[0] = r;
 			ccv.uint32[1] = g;
 			ccv.uint32[2] = b;
 			ccv.uint32[3] = a;
 		}
-		ClearColor(float r, float g, float b, float a) {
+
+		constexpr ClearColor(int32_t r, int32_t g, int32_t b, int32_t a) noexcept {
+			ccv.int32[0] = r;
+			ccv.int32[1] = g;
+			ccv.int32[2] = b;
+			ccv.int32[3] = a;
+		}
+
+		constexpr ClearColor(float r, float g, float b, float a) noexcept {
 			ccv.float32[0] = r;
 			ccv.float32[1] = g;
 			ccv.float32[2] = b;
@@ -878,37 +884,74 @@ namespace vuk {
 		VkClearColorValue ccv;
 	};
 
+	template<class T>
+	static constexpr ClearColor White = { 1, 1, 1, 1 };
+	template<class T>
+	static constexpr ClearColor Black = { 0, 0, 0, 1 };
+	template<class T>
+	static constexpr ClearColor Transparent = { 0, 0, 0, 0 };
+
+	template<>
+	constexpr ClearColor White<float> = { 1.f, 1.f, 1.f, 1.f };
+	template<>
+	constexpr ClearColor White<unsigned> = { 1u, 1u, 1u, 1u };
+	template<>
+	constexpr ClearColor White<signed> = { 1, 1, 1, 1 };
+
+	template<>
+	constexpr ClearColor Black<float> = { 0.f, 0.f, 0.f, 1.f };
+	template<>
+	constexpr ClearColor Black<unsigned> = { 0u, 0u, 0u, 1u };
+	template<>
+	constexpr ClearColor Black<signed> = { 0, 0, 0, 1 };
+
+	template<>
+	constexpr ClearColor Transparent<float> = { 0.f, 0.f, 0.f, 0.f };
+	template<>
+	constexpr ClearColor Transparent<unsigned> = { 0u, 0u, 0u, 0u };
+	template<>
+	constexpr ClearColor Transparent<signed> = { 0, 0, 0, 0 };
+
 	struct ClearDepthStencil {
-		ClearDepthStencil(float depth, uint32_t stencil) {
-			cdsv.depth = depth;
-			cdsv.stencil = stencil;
-		}
+		constexpr ClearDepthStencil(float depth, uint32_t stencil) noexcept : cdsv{ depth, stencil } {}
 		VkClearDepthStencilValue cdsv;
 	};
 
-	struct PreserveOrClear {
-		PreserveOrClear(ClearColor cc) : clear(true) {
-			c.color = cc.ccv;
-		}
-		PreserveOrClear(ClearDepthStencil cc) : clear(true) {
-			c.depthStencil = cc.cdsv;
-		}
-		PreserveOrClear(Preserve) : clear(false) {}
+	struct ClearDepth {
+		constexpr ClearDepth(float depth) noexcept : depth{ depth } {}
+		float depth;
 
-		bool clear;
-		VkClearValue c;
+		operator ClearDepthStencil() {
+			return ClearDepthStencil(depth, 0);
+		}
 	};
 
+	struct ClearStencil {
+		constexpr ClearStencil(uint32_t stencil) noexcept : stencil{ stencil } {}
+		uint32_t stencil;
+	};
+
+	constexpr inline ClearDepthStencil operator|(ClearDepth d, ClearStencil s) noexcept {
+		return ClearDepthStencil(d.depth, s.stencil);
+	}
+
+	static constexpr ClearDepth DepthOne = { 1.f };
+	static constexpr ClearDepth DepthZero = { 0.f };
+
 	struct Clear {
-		Clear() = default;
-		Clear(ClearColor cc) : is_color(true) {
+		constexpr Clear() = default;
+
+		constexpr Clear(ClearColor cc) noexcept : is_color(true) {
 			c.color = cc.ccv;
 		}
-		Clear(ClearDepthStencil cc) : is_color(false) {
+		constexpr Clear(ClearDepth cc) noexcept : is_color(false) {
+			c.depthStencil.depth = cc.depth;
+		}
+		constexpr Clear(ClearDepthStencil cc) noexcept : is_color(false) {
 			c.depthStencil = cc.cdsv;
 		}
 
-		Clear(const Clear& other) noexcept {
+		constexpr Clear(const Clear& other) noexcept {
 			if (other.is_color) {
 				c.color = other.c.color;
 			} else {
@@ -1006,7 +1049,7 @@ namespace vuk {
 	// Use types like uint32_t, uint64_t as T.
 	// Source: VMA
 	template<typename T>
-	static inline T align_up(T val, T align) {
+	constexpr inline T align_up(T val, T align) noexcept {
 		return (val + align - 1) / align * align;
 	}
 
@@ -1026,12 +1069,12 @@ namespace vuk {
 
 	struct CommandBufferAllocation {
 		CommandBufferAllocation() = default;
-		CommandBufferAllocation(VkCommandBuffer command_buffer, CommandPool command_pool) : command_buffer(command_buffer), command_pool(command_pool) {}
+		CommandBufferAllocation(VkCommandBuffer command_buffer, CommandPool command_pool) noexcept : command_buffer(command_buffer), command_pool(command_pool) {}
 
 		VkCommandBuffer command_buffer;
 		CommandPool command_pool;
 
-		operator VkCommandBuffer() {
+		operator VkCommandBuffer() noexcept {
 			return command_buffer;
 		}
 	};

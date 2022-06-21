@@ -116,8 +116,8 @@ namespace {
 		      // The rendergraph has a reference to "03_depth" resource, so we must provide the attachment
 		      // In this case, the depth attachment is an "internal" attachment:
 		      // we don't provide an input texture, nor do we want to save the results later
-		      // For an internal attachment, we need to provide the format, extents, sample count and clear value
 		      // This depth attachment will have extents matching the framebuffer (deduced from the color attachment)
+			  // but we will need to provide the format
 		      rg.attach_and_clear_image("03_depth", { .format = vuk::Format::eD32Sfloat }, vuk::ClearDepthStencil{ 1.0f, 0 });
 
 		      return vuk::Future{ std::make_unique<vuk::RenderGraph>(std::move(rg)), "03_multipass_final" };
