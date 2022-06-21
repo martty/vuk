@@ -437,21 +437,20 @@ namespace vuk {
 	template Result<ImageAttachment> Future::get(Allocator&);
 
 	std::string_view image_view_type_to_sv(ImageViewType view_type) noexcept {
-		using enum ImageViewType;
 		switch (view_type) {
-		case e1D:
+		case ImageViewType::e1D:
 			return "1D";
-		case e2D:
+		case ImageViewType::e2D:
 			return "2D";
-		case e3D:
+		case ImageViewType::e3D:
 			return "3D";
-		case eCube:
+		case ImageViewType::eCube:
 			return "Cube";
-		case e1DArray:
+		case ImageViewType::e1DArray:
 			return "1DArray";
-		case e2DArray:
+		case ImageViewType::e2DArray:
 			return "2DArray";
-		case eCubeArray:
+		case ImageViewType::eCubeArray:
 			return "CubeArray";
 		default:
 			assert(0 && "not reached.");
