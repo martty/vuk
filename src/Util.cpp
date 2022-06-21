@@ -435,4 +435,27 @@ namespace vuk {
 
 	template Result<Buffer> Future::get(Allocator&);
 	template Result<ImageAttachment> Future::get(Allocator&);
+
+	std::string_view image_view_type_to_sv(ImageViewType view_type) noexcept {
+		using enum ImageViewType;
+		switch (view_type) {
+		case e1D:
+			return "1D";
+		case e2D:
+			return "2D";
+		case e3D:
+			return "3D";
+		case eCube:
+			return "Cube";
+		case e1DArray:
+			return "1DArray";
+		case e2DArray:
+			return "2DArray";
+		case eCubeArray:
+			return "CubeArray";
+		default:
+			assert(0 && "not reached.");
+			return "";
+		}
+	}
 } // namespace vuk

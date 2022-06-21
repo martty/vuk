@@ -6,6 +6,7 @@
 
 #include <compare>
 #include <type_traits>
+#include <string_view>
 
 #define MOV(x) (static_cast<std::remove_reference_t<decltype(x)>&&>(x))
 
@@ -610,6 +611,8 @@ namespace vuk {
 	Extent3D format_to_texel_block_extent(vuk::Format) noexcept;
 	// compute the byte size of an image with given format and extent
 	uint32_t compute_image_size(vuk::Format, vuk::Extent3D) noexcept;
+	// get name of format
+	std::string_view format_to_sv(Format format) noexcept;
 
 	enum class IndexType {
 		eUint16 = VK_INDEX_TYPE_UINT16,

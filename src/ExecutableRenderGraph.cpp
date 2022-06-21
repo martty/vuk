@@ -5,8 +5,8 @@
 #include "vuk/Future.hpp"
 #include "vuk/Hash.hpp" // for create
 #include "vuk/RenderGraph.hpp"
-#include <unordered_set>
 #include <sstream>
+#include <unordered_set>
 
 namespace vuk {
 	ExecutableRenderGraph::ExecutableRenderGraph(RenderGraph&& rg) : impl(rg.impl) {
@@ -441,20 +441,20 @@ namespace vuk {
 						}
 					}
 				}
-				if (!bound.attachment.is_fully_known()) {
-					IAInference* rules_ptr = nullptr;
-					auto rules_it = resolved_rules.find(name);
-					if (rules_it != resolved_rules.end()) {
-						rules_ptr = &rules_it->second;
-					}
-
-					attis_to_infer.emplace_back(&bound, rules_ptr);
+				IAInference* rules_ptr = nullptr;
+				auto rules_it = resolved_rules.find(name);
+				if (rules_it != resolved_rules.end()) {
+					rules_ptr = &rules_it->second;
 				}
+
+				attis_to_infer.emplace_back(&bound, rules_ptr);
 			}
 		}
 
 		InferenceContext inf_ctx{ this };
 		bool infer_progress = true;
+		std::stringstream msg;
+
 		// we provide an upper bound of 100 inference to iteration to catch infinite loops that don't converge to a fixpoint
 		for (size_t i = 0; i < 100 && !attis_to_infer.empty() && infer_progress; i++) {
 			infer_progress = false;
@@ -494,6 +494,60 @@ namespace vuk {
 					}
 				}
 				if (prev != ia) { // progress made
+					// check for broken constraints
+					if (prev.base_layer != ia.base_layer && prev.base_layer != VK_REMAINING_ARRAY_LAYERS) {
+						msg << "Rule broken for attachment[" << atti.name.c_str() << "] :\n ";
+						msg << " base layer was previously known to be " << prev.base_layer << ", but now set to " << ia.base_layer;
+						return { expected_error, RenderGraphException{ std::move(msg.str()) } };
+					}
+					if (prev.layer_count != ia.layer_count && prev.layer_count != VK_REMAINING_ARRAY_LAYERS) {
+						msg << "Rule broken for attachment[" << atti.name.c_str() << "] :\n ";
+						msg << " layer count was previously known to be " << prev.layer_count << ", but now set to " << ia.layer_count;
+						return { expected_error, RenderGraphException{ std::move(msg.str()) } };
+					}
+					if (prev.base_level != ia.base_level && prev.base_level != VK_REMAINING_MIP_LEVELS) {
+						msg << "Rule broken for attachment[" << atti.name.c_str() << "] :\n ";
+						msg << " base level was previously known to be " << prev.base_level << ", but now set to " << ia.base_level;
+						return { expected_error, RenderGraphException{ std::move(msg.str()) } };
+					}
+					if (prev.level_count != ia.level_count && prev.level_count != VK_REMAINING_MIP_LEVELS) {
+						msg << "Rule broken for attachment[" << atti.name.c_str() << "] :\n ";
+						msg << " level count was previously known to be " << prev.level_count << ", but now set to " << ia.level_count;
+						return { expected_error, RenderGraphException{ std::move(msg.str()) } };
+					}
+					if (prev.format != ia.format && prev.format != Format::eUndefined) {
+						msg << "Rule broken for attachment[" << atti.name.c_str() << "] :\n ";
+						msg << " format was previously known to be " << format_to_sv(prev.format) << ", but now set to " << format_to_sv(ia.format);
+						return { expected_error, RenderGraphException{ std::move(msg.str()) } };
+					}
+					if (prev.sample_count != ia.sample_count && prev.sample_count != SampleCountFlagBits::eInfer) {
+						msg << "Rule broken for attachment[" << atti.name.c_str() << "] :\n ";
+						msg << " sample count was previously known to be " << static_cast<uint32_t>(prev.sample_count.count) << ", but now set to "
+						    << static_cast<uint32_t>(ia.sample_count.count);
+						return { expected_error, RenderGraphException{ std::move(msg.str()) } };
+					}
+					if (prev.extent.extent.width != ia.extent.extent.width && prev.extent.extent.width != 0) {
+						msg << "Rule broken for attachment[" << atti.name.c_str() << "] :\n ";
+						msg << " extent.width was previously known to be " << prev.extent.extent.width << ", but now set to " << ia.extent.extent.width;
+						return { expected_error, RenderGraphException{ std::move(msg.str()) } };
+					}
+					if (prev.extent.extent.height != ia.extent.extent.height && prev.extent.extent.height != 0) {
+						msg << "Rule broken for attachment[" << atti.name.c_str() << "] :\n ";
+						msg << " extent.height was previously known to be " << prev.extent.extent.height << ", but now set to " << ia.extent.extent.height;
+						return { expected_error, RenderGraphException{ std::move(msg.str()) } };
+					}
+					if (prev.extent.extent.depth != ia.extent.extent.depth && prev.extent.extent.depth != 0) {
+						msg << "Rule broken for attachment[" << atti.name.c_str() << "] :\n ";
+						msg << " extent.depth was previously known to be " << prev.extent.extent.depth << ", but now set to " << ia.extent.extent.depth;
+						return { expected_error, RenderGraphException{ std::move(msg.str()) } };
+					}
+					if (prev.view_type != ia.view_type && prev.view_type != ImageViewType::eInfer) {
+						msg << "Rule broken for attachment[" << atti.name.c_str() << "] :\n ";
+						msg << " view type was previously known to be " << image_view_type_to_sv(prev.view_type) << ", but now set to "
+						    << image_view_type_to_sv(ia.view_type);
+						return { expected_error, RenderGraphException{ std::move(msg.str()) } };
+					}
+
 					infer_progress = true;
 					// infer IA -> FB
 					if (ia.sample_count == Samples::eInfer && (ia.extent.extent.width == 0 && ia.extent.extent.height == 0)) { // this IA is not helpful for FB inference
@@ -536,7 +590,6 @@ namespace vuk {
 			}
 		}
 
-		std::stringstream msg;
 		for (auto& [atti, iaref] : attis_to_infer) {
 			msg << "Could not infer attachment [" << atti->name.c_str() << "]:\n";
 			auto& ia = atti->attachment;
@@ -574,10 +627,10 @@ namespace vuk {
 		}
 
 		if (attis_to_infer.size() > 0) {
-			#ifndef NDEBUG
+#ifndef NDEBUG
 			fprintf(stderr, "%s", msg.str().c_str());
 			assert(false);
-			#endif
+#endif
 			return { expected_error, RenderGraphException{ std::move(msg.str()) } };
 		}
 

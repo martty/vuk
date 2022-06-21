@@ -1,6 +1,7 @@
 #pragma once
 
 #include <utility>
+#include <string_view>
 
 #include "../src/CreateInfo.hpp"
 #include "Types.hpp"
@@ -160,6 +161,8 @@ namespace vuk {
 		eCubeArray = VK_IMAGE_VIEW_TYPE_CUBE_ARRAY,
 		eInfer
 	};
+
+	std::string_view image_view_type_to_sv(ImageViewType) noexcept;
 
 	using ImageViewCreateFlags = Flags<ImageViewCreateFlagBits>;
 	enum class ComponentSwizzle {
