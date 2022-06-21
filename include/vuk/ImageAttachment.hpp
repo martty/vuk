@@ -56,10 +56,10 @@ namespace vuk {
 		}
 
 		constexpr bool is_fully_known() const noexcept {
-			return image_type != ImageType::eInfer && usage != ImageUsageFlagBits::eInfer && extent.sizing != Sizing::eRelative && format != Format::eUndefined &&
-			       sample_count != Samples::eInfer && base_level != VK_REMAINING_MIP_LEVELS && level_count != VK_REMAINING_MIP_LEVELS &&
-			       base_layer != VK_REMAINING_ARRAY_LAYERS && layer_count != VK_REMAINING_ARRAY_LAYERS &&
-			       (!may_require_image_view() || view_type != ImageViewType::eInfer);
+			return image_type != ImageType::eInfer && usage != ImageUsageFlagBits::eInfer && extent.sizing != Sizing::eRelative && extent.extent.width != 0 &&
+			       extent.extent.height != 0 && extent.extent.depth != 0 && format != Format::eUndefined && sample_count != Samples::eInfer &&
+			       base_level != VK_REMAINING_MIP_LEVELS && level_count != VK_REMAINING_MIP_LEVELS && base_layer != VK_REMAINING_ARRAY_LAYERS &&
+			       layer_count != VK_REMAINING_ARRAY_LAYERS && (!may_require_image_view() || view_type != ImageViewType::eInfer);
 		}
 	};
 

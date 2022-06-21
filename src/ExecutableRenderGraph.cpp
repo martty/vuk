@@ -35,17 +35,8 @@ namespace vuk {
 			vuk::ImageCreateInfo ici;
 			ici.usage = usage;
 			ici.arrayLayers = 1;
-			// compute extent
-			if (attachment_info.attachment.extent.sizing == Sizing::eRelative) {
-				assert(fb_extent.width > 0 && fb_extent.height > 0);
-				ici.extent = vuk::Extent3D{ static_cast<uint32_t>(attachment_info.attachment.extent._relative.width * fb_extent.width),
-					                          static_cast<uint32_t>(attachment_info.attachment.extent._relative.height * fb_extent.height),
-					                          1u };
-			} else {
-				ici.extent = static_cast<vuk::Extent3D>(attachment_info.attachment.extent.extent);
-			}
-			// concretize attachment size
-			attachment_info.attachment.extent = Dimension3D::absolute(ici.extent.width, ici.extent.height, ici.extent.depth);
+			assert(attachment_info.attachment.extent.sizing != Sizing::eRelative);
+			ici.extent = static_cast<vuk::Extent3D>(attachment_info.attachment.extent.extent);
 			ici.imageType = vuk::ImageType::e2D;
 			ici.format = attachment_info.attachment.format;
 			ici.mipLevels = 1;
@@ -463,8 +454,8 @@ namespace vuk {
 				auto& ia = atti.attachment;
 				auto prev = ia;
 				// infer FB -> IA
-				if (ia.sample_count == Samples::eInfer ||
-				    (ia.extent.extent.width == 0 && ia.extent.extent.height == 0)) { // this IA can potentially take inference from an FB
+				if (ia.sample_count == Samples::eInfer || (ia.extent.extent.width == 0 && ia.extent.extent.height == 0) ||
+				    ia.extent.sizing == Sizing::eRelative) { // this IA can potentially take inference from an FB
 					for (auto* rpi : atti.rp_uses) {
 						auto& fbci = rpi->fbci;
 						Samples fb_samples = fbci.sample_count;
@@ -479,9 +470,15 @@ namespace vuk {
 							ia.sample_count = fb_samples;
 						}
 
-						if (extent_known && ia.extent.extent.width == 0 && ia.extent.extent.height == 0) {
-							ia.extent.extent.width = fb_extent.width;
-							ia.extent.extent.height = fb_extent.height;
+						if (extent_known) {
+							if (ia.extent.extent.width == 0 && ia.extent.extent.height == 0) {
+								ia.extent.extent.width = fb_extent.width;
+								ia.extent.extent.height = fb_extent.height;
+							} else if (ia.extent.sizing == Sizing::eRelative) {
+								ia.extent.extent.width = static_cast<uint32_t>(ia.extent._relative.width * fb_extent.width);
+								ia.extent.extent.height = static_cast<uint32_t>(ia.extent._relative.height * fb_extent.height);
+								ia.extent.extent.depth = static_cast<uint32_t>(ia.extent._relative.depth * fb_extent.depth);
+							}
 							ia.extent.sizing = Sizing::eAbsolute;
 						}
 					}
@@ -541,7 +538,7 @@ namespace vuk {
 						msg << " extent.depth was previously known to be " << prev.extent.extent.depth << ", but now set to " << ia.extent.extent.depth;
 						return { expected_error, RenderGraphException{ std::move(msg.str()) } };
 					}
-					if (prev.view_type != ia.view_type && prev.view_type != ImageViewType::eInfer) {
+					if (ia.may_require_image_view() && prev.view_type != ia.view_type && prev.view_type != ImageViewType::eInfer) {
 						msg << "Rule broken for attachment[" << atti.name.c_str() << "] :\n ";
 						msg << " view type was previously known to be " << image_view_type_to_sv(prev.view_type) << ", but now set to "
 						    << image_view_type_to_sv(ia.view_type);
@@ -596,6 +593,9 @@ namespace vuk {
 			if (ia.sample_count == Samples::eInfer) {
 				msg << "- sample count unknown\n";
 			}
+			if (ia.extent.sizing == Sizing::eRelative) {
+				msg << "- relative sizing could not be resolved\n";
+			}
 			if (ia.extent.extent.width == 0) {
 				msg << "- extent.width unknown\n";
 			}
@@ -608,7 +608,7 @@ namespace vuk {
 			if (ia.format == Format::eUndefined) {
 				msg << "- format unknown\n";
 			}
-			if (ia.view_type == ImageViewType::eInfer) {
+			if (ia.may_require_image_view() && ia.view_type == ImageViewType::eInfer) {
 				msg << "- view type unknown\n";
 			}
 			if (ia.base_layer == VK_REMAINING_ARRAY_LAYERS) {
