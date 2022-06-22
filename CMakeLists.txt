@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.7)
-project(vuk)
+project(vuk LANGUAGES CXX)
 
 include(ExternalProject)
 include(FetchContent)

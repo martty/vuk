@@ -19,7 +19,7 @@ mkdir build
 cd build
 mkdir debug
 cd debug
-cmake ../.. -G Ninja -DVUK_BUILD_EXAMPLES=ON
+cmake ../.. -G Ninja -DVUK_BUILD_EXAMPLES=ON -DVUK_USE_DXC=OFF
 cmake --build .
 ./vuk_all_examples
 ```
