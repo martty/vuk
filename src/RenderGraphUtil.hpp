@@ -323,7 +323,6 @@ namespace vuk {
 		Resource::Type type;
 		Resource::Subrange subrange;
 		PassInfo* pass = nullptr;
-		bool converging = false;
 	};
 
 	struct PassInfo {

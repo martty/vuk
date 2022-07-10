@@ -24,7 +24,6 @@ namespace vuk {
 	}
 
 	void ExecutableRenderGraph::create_attachment(Context& ctx, AttachmentInfo& attachment_info) {
-		auto& chain = impl->use_chains.at(attachment_info.name);
 		if (attachment_info.type == AttachmentInfo::Type::eInternal) {
 			vuk::ImageUsageFlags usage = {};
 			for (auto& void_chain : attachment_info.use_chains) {

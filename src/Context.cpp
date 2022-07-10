@@ -89,7 +89,7 @@ namespace vuk {
 		vkGetPhysicalDeviceProperties2(physical_device, &prop2);
 	}
 
-	Context::Context(Context&& o) noexcept : impl(std::exchange(o.impl, nullptr)), debug(o.debug) {
+	Context::Context(Context&& o) noexcept : debug(o.debug), impl(std::exchange(o.impl, nullptr)) {
 		instance = o.instance;
 		device = o.device;
 		physical_device = o.physical_device;

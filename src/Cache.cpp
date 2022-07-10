@@ -16,7 +16,7 @@ namespace vuk {
 	};
 
 	template<class T>
-	Cache<T>::Cache(Context& ctx) : ctx(&ctx), impl(new CacheImpl<T>()) {}
+	Cache<T>::Cache(Context& ctx) : impl(new CacheImpl<T>()), ctx(&ctx) {}
 
 	template<class T>
 	T& Cache<T>::acquire(const create_info_t<T>& ci) {
