@@ -45,6 +45,12 @@ namespace vuk {
 		Queue(PFN_vkQueueSubmit2KHR fn, VkQueue queue, uint32_t queue_family_index, TimelineSemaphore ts);
 		~Queue();
 
+		Queue(const Queue&) = delete;
+		Queue& operator=(const Queue&) = delete;
+
+		Queue(Queue&&) noexcept;
+		Queue& operator=(Queue&&) noexcept;
+
 		TimelineSemaphore& get_submit_sync();
 		std::recursive_mutex& get_queue_lock();
 

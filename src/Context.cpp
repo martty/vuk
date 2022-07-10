@@ -91,6 +91,12 @@ namespace vuk {
 		graphics_queue_family_index = o.graphics_queue_family_index;
 		compute_queue_family_index = o.compute_queue_family_index;
 		transfer_queue_family_index = o.transfer_queue_family_index;
+		dedicated_graphics_queue = std::move(o.dedicated_graphics_queue);
+		graphics_queue = o.graphics_queue;
+		dedicated_compute_queue = std::move(o.dedicated_compute_queue);
+		compute_queue = o.compute_queue;
+		dedicated_transfer_queue = std::move(o.dedicated_transfer_queue);
+		transfer_queue = o.transfer_queue;
 	}
 
 	Context& Context::operator=(Context&& o) noexcept {
@@ -102,6 +108,12 @@ namespace vuk {
 		graphics_queue_family_index = o.graphics_queue_family_index;
 		compute_queue_family_index = o.compute_queue_family_index;
 		transfer_queue_family_index = o.transfer_queue_family_index;
+		dedicated_graphics_queue = std::move(o.dedicated_graphics_queue);
+		graphics_queue = o.graphics_queue;
+		dedicated_compute_queue = std::move(o.dedicated_compute_queue);
+		compute_queue = o.compute_queue;
+		dedicated_transfer_queue = std::move(o.dedicated_transfer_queue);
+		transfer_queue = o.transfer_queue;
 		return *this;
 	}
 

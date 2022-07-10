@@ -32,6 +32,13 @@ namespace vuk {
 		delete impl;
 	}
 
+	Queue::Queue(Queue&& o) noexcept : impl(std::exchange(o.impl, nullptr)) {}
+
+	Queue& Queue::operator=(Queue&& o) noexcept {
+		impl = std::exchange(o.impl, nullptr);
+		return *this;
+	}
+
 	TimelineSemaphore& Queue::get_submit_sync() {
 		return impl->submit_sync;
 	}
