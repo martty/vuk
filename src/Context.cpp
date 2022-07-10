@@ -604,30 +604,32 @@ namespace vuk {
 	}
 
 	Context::~Context() {
-		vkDeviceWaitIdle(device);
+		if (impl) {
+			vkDeviceWaitIdle(device);
 
-		for (auto& s : impl->swapchains) {
-			for (auto& swiv : s.image_views) {
-				vkDestroyImageView(device, swiv.payload, nullptr);
+			for (auto& s : impl->swapchains) {
+				for (auto& swiv : s.image_views) {
+					vkDestroyImageView(device, swiv.payload, nullptr);
+				}
+				vkDestroySwapchainKHR(device, s.swapchain, nullptr);
 			}
-			vkDestroySwapchainKHR(device, s.swapchain, nullptr);
+
+			vkDestroyPipelineCache(device, impl->vk_pipeline_cache, nullptr);
+
+			if (dedicated_graphics_queue) {
+				impl->device_vk_resource.deallocate_timeline_semaphores(std::span{ &dedicated_graphics_queue->get_submit_sync(), 1 });
+			}
+
+			if (dedicated_compute_queue) {
+				impl->device_vk_resource.deallocate_timeline_semaphores(std::span{ &dedicated_compute_queue->get_submit_sync(), 1 });
+			}
+
+			if (dedicated_transfer_queue) {
+				impl->device_vk_resource.deallocate_timeline_semaphores(std::span{ &dedicated_transfer_queue->get_submit_sync(), 1 });
+			}
+
+			delete impl;
 		}
-
-		vkDestroyPipelineCache(device, impl->vk_pipeline_cache, nullptr);
-
-		if (dedicated_graphics_queue) {
-			impl->device_vk_resource.deallocate_timeline_semaphores(std::span{ &dedicated_graphics_queue->get_submit_sync(), 1 });
-		}
-
-		if (dedicated_compute_queue) {
-			impl->device_vk_resource.deallocate_timeline_semaphores(std::span{ &dedicated_compute_queue->get_submit_sync(), 1 });
-		}
-
-		if (dedicated_transfer_queue) {
-			impl->device_vk_resource.deallocate_timeline_semaphores(std::span{ &dedicated_transfer_queue->get_submit_sync(), 1 });
-		}
-
-		delete impl;
 	}
 
 	uint64_t Context::get_unique_handle_id() {
