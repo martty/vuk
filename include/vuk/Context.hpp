@@ -80,8 +80,14 @@ namespace vuk {
 		Context(ContextCreateParameters params);
 		~Context();
 
+		Context(const Context&) = delete;
+		Context& operator=(const Context&) = delete;
+
+		Context(Context&&) noexcept;
+		Context& operator=(Context&&) noexcept;
+
 		struct DebugUtils {
-			Context& ctx;
+			VkDevice device;
 			PFN_vkSetDebugUtilsObjectNameEXT setDebugUtilsObjectNameEXT;
 			PFN_vkCmdBeginDebugUtilsLabelEXT cmdBeginDebugUtilsLabelEXT;
 			PFN_vkCmdEndDebugUtilsLabelEXT cmdEndDebugUtilsLabelEXT;
@@ -254,7 +260,7 @@ namespace vuk {
 			info.objectType = VK_OBJECT_TYPE_PIPELINE;
 		}
 		info.objectHandle = reinterpret_cast<uint64_t>(t);
-		setDebugUtilsObjectNameEXT(ctx.device, &info);
+		setDebugUtilsObjectNameEXT(device, &info);
 	}
 } // namespace vuk
 

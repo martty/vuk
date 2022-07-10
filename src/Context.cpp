@@ -84,11 +84,32 @@ namespace vuk {
 		}
 	}
 
+	Context::Context(Context&& o) noexcept : impl(std::exchange(o.impl, nullptr)), debug(o.debug) {
+		instance = o.instance;
+		device = o.device;
+		physical_device = o.physical_device;
+		graphics_queue_family_index = o.graphics_queue_family_index;
+		compute_queue_family_index = o.compute_queue_family_index;
+		transfer_queue_family_index = o.transfer_queue_family_index;
+	}
+
+	Context& Context::operator=(Context&& o) noexcept {
+		impl = std::exchange(o.impl, nullptr);
+		debug = o.debug;
+		instance = o.instance;
+		device = o.device;
+		physical_device = o.physical_device;
+		graphics_queue_family_index = o.graphics_queue_family_index;
+		compute_queue_family_index = o.compute_queue_family_index;
+		transfer_queue_family_index = o.transfer_queue_family_index;
+		return *this;
+	}
+
 	bool Context::DebugUtils::enabled() const {
 		return setDebugUtilsObjectNameEXT != nullptr;
 	}
 
-	Context::DebugUtils::DebugUtils(Context& ctx) : ctx(ctx) {
+	Context::DebugUtils::DebugUtils(Context& ctx) : device(ctx.device) {
 		setDebugUtilsObjectNameEXT = (PFN_vkSetDebugUtilsObjectNameEXT)vkGetDeviceProcAddr(ctx.device, "vkSetDebugUtilsObjectNameEXT");
 		cmdBeginDebugUtilsLabelEXT = (PFN_vkCmdBeginDebugUtilsLabelEXT)vkGetDeviceProcAddr(ctx.device, "vkCmdBeginDebugUtilsLabelEXT");
 		cmdEndDebugUtilsLabelEXT = (PFN_vkCmdEndDebugUtilsLabelEXT)vkGetDeviceProcAddr(ctx.device, "vkCmdEndDebugUtilsLabelEXT");
