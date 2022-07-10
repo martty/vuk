@@ -23,50 +23,34 @@ namespace vuk {
 		delete impl;
 	}
 
-	void ExecutableRenderGraph::create_attachment(Context& ctx,
-	                                              Name name,
-	                                              AttachmentInfo& attachment_info,
-	                                              vuk::Extent2D fb_extent,
-	                                              vuk::SampleCountFlagBits samples) {
-		auto& chain = impl->use_chains.at(name);
+	void ExecutableRenderGraph::create_attachment(Context& ctx, AttachmentInfo& attachment_info) {
+		auto& chain = impl->use_chains.at(attachment_info.name);
 		if (attachment_info.type == AttachmentInfo::Type::eInternal) {
-			vuk::ImageUsageFlags usage = RenderGraph::compute_usage(std::span(chain));
+			vuk::ImageUsageFlags usage = {};
+			for (auto& void_chain : attachment_info.use_chains) {
+				auto& chain = *reinterpret_cast<std::vector<UseRef, short_alloc<UseRef, 64>>*>(void_chain);
+				usage |= RenderGraph::compute_usage(std::span(chain));
+			}
 
 			vuk::ImageCreateInfo ici;
 			ici.usage = usage;
 			ici.arrayLayers = 1;
 			assert(attachment_info.attachment.extent.sizing != Sizing::eRelative);
 			ici.extent = static_cast<vuk::Extent3D>(attachment_info.attachment.extent.extent);
-			ici.imageType = vuk::ImageType::e2D;
+			ici.imageType = attachment_info.attachment.image_type;
 			ici.format = attachment_info.attachment.format;
-			ici.mipLevels = 1;
+			ici.mipLevels = attachment_info.attachment.level_count;
+			ici.arrayLayers = attachment_info.attachment.layer_count;
 			ici.initialLayout = vuk::ImageLayout::eUndefined;
-			ici.samples = samples;
+			ici.samples = attachment_info.attachment.sample_count.count;
 			ici.sharingMode = vuk::SharingMode::eExclusive;
-			ici.tiling = vuk::ImageTiling::eOptimal;
-
-			vuk::ImageViewCreateInfo ivci;
-			ivci.image = vuk::Image{};
-			ivci.format = attachment_info.attachment.format;
-			ivci.viewType = vuk::ImageViewType::e2D;
-			vuk::ImageSubresourceRange isr;
-
-			isr.aspectMask = format_to_aspect(ici.format);
-			isr.baseArrayLayer = 0;
-			isr.layerCount = 1;
-			isr.baseMipLevel = 0;
-			isr.levelCount = 1;
-			ivci.subresourceRange = isr;
+			ici.tiling = attachment_info.attachment.tiling;
 
 			RGCI rgci;
-			rgci.name = name;
+			rgci.name = attachment_info.name;
 			rgci.ici = ici;
-			rgci.ivci = ivci;
 
 			auto rg = ctx.acquire_rendertarget(rgci, ctx.get_frame_count());
-			attachment_info.attachment.image_view = rg.image_view;
-			attachment_info.attachment.layer_count = 1;
-			attachment_info.attachment.level_count = 1;
 			attachment_info.attachment.image = rg.image;
 		}
 	}
@@ -84,7 +68,11 @@ namespace vuk {
 		assert(attachment.extent.sizing == Sizing::eAbsolute);
 		ici.extent = static_cast<vuk::Extent3D>(attachment.extent.extent);
 
-		return alloc.allocate_images(std::span{ &attachment.image, 1 }, std::span{ &ici, 1 });
+		auto res = alloc.allocate_images(std::span{ &attachment.image, 1 }, std::span{ &ici, 1 });
+		if (res) {
+			alloc.deallocate(std::span{ &attachment.image, 1 });
+		}
+		return res;
 	}
 
 	Result<void> create_image_view(Allocator& alloc, ImageAttachment& attachment) {
@@ -102,7 +90,11 @@ namespace vuk {
 		isr.levelCount = attachment.level_count;
 		ivci.subresourceRange = isr;
 
-		return alloc.allocate_image_views(std::span{ &attachment.image_view, 1 }, std::span{ &ivci, 1 });
+		auto res = alloc.allocate_image_views(std::span{ &attachment.image_view, 1 }, std::span{ &ivci, 1 });
+		if (res) {
+			alloc.deallocate(std::span{ &attachment.image_view, 1 });
+		}
+		return res;
 	}
 
 	void begin_renderpass(vuk::RenderPassInfo& rpass, VkCommandBuffer& cbuf, bool use_secondary_command_buffers) {
@@ -367,11 +359,17 @@ namespace vuk {
 					auto& ia = att.attachment;
 					// TODO: image type, image view type, levels and layers from FB
 					ia.image_type = ia.image_type == ImageType::eInfer ? vuk::ImageType::e2D : ia.image_type;
-					ia.view_type = vuk::ImageViewType::e2D; // TODO: check if this is the only legal option
 
 					ia.base_layer = ia.base_layer == VK_REMAINING_ARRAY_LAYERS ? 0 : ia.base_layer;
 					ia.layer_count = ia.layer_count == VK_REMAINING_ARRAY_LAYERS ? 1 : ia.layer_count; // TODO: test layered fbs
 					ia.base_level = ia.base_level == VK_REMAINING_MIP_LEVELS ? 0 : ia.base_level;
+
+					if (ia.layer_count > 1) {
+						ia.view_type = vuk::ImageViewType::e2DArray;
+					} else {
+						ia.view_type = vuk::ImageViewType::e2D;
+					}
+
 					ia.level_count = 1; // can only render to a single mip level
 					ia.extent.extent.depth = 1;
 
@@ -384,6 +382,8 @@ namespace vuk {
 						rp.fbci.width = ia.extent.extent.width;
 						rp.fbci.height = ia.extent.extent.height;
 					}
+
+					rp.fbci.layers = rp.layer_count;
 				}
 
 				// resolve images are always sample count 1
@@ -400,10 +400,15 @@ namespace vuk {
 
 		std::vector<std::pair<AttachmentInfo*, IAInference*>> attis_to_infer;
 		for (auto& [name, bound] : impl->bound_attachments) {
-			auto& chain = impl->use_chains.at(name);
 			if (bound.type == AttachmentInfo::Type::eInternal) {
-				// compute usage
-				bound.attachment.usage = bound.attachment.usage == ImageUsageFlagBits::eInfer ? RenderGraph::compute_usage(std::span(chain)) : bound.attachment.usage;
+				// compute usage if it is to be inferred
+				if (bound.attachment.usage == ImageUsageFlagBits::eInfer) {
+					bound.attachment.usage = {};
+					for (auto& void_chain : bound.use_chains) {
+						auto& chain = *reinterpret_cast<std::vector<UseRef, short_alloc<UseRef, 64>>*>(void_chain);
+						bound.attachment.usage |= RenderGraph::compute_usage(std::span(chain));
+					}
+				}
 				// if there is no image, then we will infer the base mip and layer to be 0
 				if (bound.attachment.image == VK_NULL_HANDLE) {
 					bound.attachment.base_layer = 0;
@@ -627,6 +632,7 @@ namespace vuk {
 		}
 
 		if (attis_to_infer.size() > 0) {
+			// TODO: error harmonization
 #ifndef NDEBUG
 			fprintf(stderr, "%s", msg.str().c_str());
 			assert(false);
@@ -652,6 +658,22 @@ namespace vuk {
 			rp.handle = ctx.acquire_renderpass(rp.rpci, ctx.get_frame_count());
 		}
 
+		// create non-attachment images
+		for (auto& [name, bound] : impl->bound_attachments) {
+			if (bound.attachment.image == Image{}) {
+				if (bound.rp_uses.size() > 0) { // its an FB attachment
+					create_attachment(ctx, bound);
+				} else {
+					create_image(alloc, bound.attachment);
+				}
+			}
+			if (bound.attachment.image_view == ImageView{} && bound.attachment.may_require_image_view()) {
+				if (bound.rp_uses.size() == 0) { // we create IVs for FB attachments later TODO: incorrect
+					create_image_view(alloc, bound.attachment);
+				}
+			}
+		}
+
 		// create framebuffers, create & bind attachments
 		for (auto& rp : impl->rpis) {
 			if (rp.attachments.size() == 0)
@@ -663,15 +685,40 @@ namespace vuk {
 			Extent2D fb_extent = Extent2D{ rp.fbci.width, rp.fbci.height };
 
 			// create internal attachments; bind attachments to fb
+			std::optional<uint32_t> fb_layer_count;
 			for (auto& attrpinfo : rp.attachments) {
 				auto& bound = *attrpinfo.attachment_info;
-				if (bound.type == AttachmentInfo::Type::eInternal) {
-					create_attachment(ctx, bound.name, bound, fb_extent, (vuk::SampleCountFlagBits)attrpinfo.description.samples);
+				std::optional<uint32_t> base_layer;
+				std::optional<uint32_t> layer_count;
+				for (auto& sp : rp.subpasses) {
+					auto& pass = sp.passes[0]->pass; // all passes should be using the same fb, so we can pick the first
+					for (auto& res : pass.resources) {
+						auto resolved_name = impl->resolve_name(res.name);
+						if (resolved_name == bound.name) {
+							base_layer = res.subrange.image.base_layer;
+							layer_count = res.subrange.image.layer_count;
+						}
+					}
+				}
+				assert(base_layer);
+				assert(layer_count);
+				fb_layer_count = bound.attachment.layer_count;
+
+				auto specific_attachment = bound.attachment;
+				if (specific_attachment.image_view == ImageView{}) {
+					specific_attachment.base_layer = *base_layer;
+					specific_attachment.layer_count = *layer_count;
+					assert(specific_attachment.level_count == 1);
+
+					create_image_view(alloc, specific_attachment);
+					auto name = std::string("ImageView: RenderTarget ") + std::string(bound.name.to_sv());
+					ctx.debug.set_name(specific_attachment.image_view.payload, Name(name));
 				}
 
-				ivs.push_back(bound.attachment.image_view);
-				vkivs.push_back(bound.attachment.image_view.payload);
+				ivs.push_back(specific_attachment.image_view);
+				vkivs.push_back(specific_attachment.image_view.payload);
 			}
+
 			rp.fbci.renderPass = rp.handle;
 			rp.fbci.pAttachments = &vkivs[0];
 			rp.fbci.width = fb_extent.width;
@@ -679,20 +726,18 @@ namespace vuk {
 			assert(fb_extent.width > 0);
 			assert(fb_extent.height > 0);
 			rp.fbci.attachmentCount = (uint32_t)vkivs.size();
-			rp.fbci.layers = 1;
+			if (rp.fbci.layers == VK_REMAINING_ARRAY_LAYERS) {
+				rp.fbci.layers = *fb_layer_count;
+			}
 
 			Unique<VkFramebuffer> fb(alloc);
 			VUK_DO_OR_RETURN(alloc.allocate_framebuffers(std::span{ &*fb, 1 }, std::span{ &rp.fbci, 1 }));
 			rp.framebuffer = *fb; // queue framebuffer for destruction
 		}
 
-		// create non-attachment images
 		for (auto& [name, bound] : impl->bound_attachments) {
-			if (bound.attachment.image == Image{}) {
-				create_image(alloc, bound.attachment);
-			}
 			if (bound.attachment.image_view == ImageView{} && bound.attachment.may_require_image_view()) {
-				create_image_view(alloc, bound.attachment);
+				create_image_view(alloc, bound.attachment); // TODO: filling out remaining attachment IVs, but this assumes 1:1
 			}
 		}
 
@@ -761,6 +806,16 @@ namespace vuk {
 
 	Result<bool, RenderGraphException> ExecutableRenderGraph::is_resource_image_in_general_layout(Name n, PassInfo* pass_info) {
 		auto resolved = resolve_name(n, pass_info);
+		for (auto& res : pass_info->pass.resources) {
+			auto res_res_name = impl->resolve_name(res.name);
+			if (resolved == res_res_name) {
+				if (res.subrange.image != Resource::Subrange::Image{}) {
+					resolved = res.subrange.image.combine_name(res_res_name);
+					break;
+				}
+			}
+		}
+
 		auto it = impl->use_chains.find(resolved);
 		if (it == impl->use_chains.end()) {
 			return { expected_error, RenderGraphException{ "Resource not found" } };

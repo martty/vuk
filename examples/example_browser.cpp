@@ -74,10 +74,10 @@ void vuk::ExampleRunner::render() {
 				Name& attachment_name_out = *attachment_names.emplace(std::string(ex->name) + "_final");
 				auto rg_frag = rg_frag_fut.get_render_graph();
 				rg_frag->compile(vuk::RenderGraphCompileOptions{});
-				if (rg_frag->get_use_chains().size() > 1) {
+				if (auto use_chains = rg_frag->get_use_chains(); use_chains.size() > 1) {
 					const auto& bound_attachments = rg_frag->get_bound_attachments();
 					bool disable = false;
-					for (const auto [key, use_refs] : rg_frag->get_use_chains()) {
+					for (const auto [key, use_refs] : use_chains) {
 						auto bound_it = bound_attachments.find(key);
 						if (bound_it == bound_attachments.end())
 							continue;
@@ -88,7 +88,7 @@ void vuk::ExampleRunner::render() {
 						disable = disable || (samples != vuk::SampleCountFlagBits::e1);
 					}
 
-					for (const auto [key, use_refs] : rg_frag->get_use_chains()) {
+					for (const auto [key, use_refs] : use_chains) {
 						auto bound_it = bound_attachments.find(key);
 						if (bound_it == bound_attachments.end())
 							continue;

@@ -62,6 +62,8 @@ namespace vuk {
 
 		Buffer buffer;
 		FutureBase* attached_future = nullptr;
+
+		std::vector<void*> use_chains;
 	};
 
 	struct Resource {
@@ -93,6 +95,10 @@ namespace vuk {
 			struct Buffer {
 				uint64_t offset = 0;
 				uint64_t size = VK_WHOLE_SIZE;
+
+				constexpr bool operator==(const Buffer& o) const noexcept {
+					return offset == o.offset && size == o.size;
+				}
 			} buffer;
 		} subrange = {};
 
@@ -107,7 +113,7 @@ namespace vuk {
 		    ici{ .extent = dim, .format = fmt, .sample_count = samp } {}
 
 		bool operator==(const Resource& o) const noexcept {
-			return name == o.name;
+			return name == o.name && (type == Type::eBuffer ? subrange.buffer == o.subrange.buffer : subrange.image == o.subrange.image);
 		}
 	};
 
@@ -236,7 +242,7 @@ namespace vuk {
 		MapProxy<Name, const struct AttachmentInfo&> get_bound_attachments();
 		/// @brief retrieve bound buffers in the RenderGraph
 		MapProxy<Name, const struct BufferInfo&> get_bound_buffers();
-		/// @brief compute ImageUsageFlags for given use chains
+		/// @brief compute ImageUsageFlags for given use chain
 		static ImageUsageFlags compute_usage(std::span<const UseRef> chain);
 
 		/// @brief Dump the pass dependency graph in graphviz format
@@ -276,8 +282,8 @@ namespace vuk {
 	using IARule = std::function<void(const struct InferenceContext& ctx, ImageAttachment& ia)>;
 
 	// builtin inference rules for convenience
-	
-	/// @brief Inference target has the same extent as the source 
+
+	/// @brief Inference target has the same extent as the source
 	IARule same_extent_as(Name inference_source);
 
 	/// @brief Inference target has the same format as the source
@@ -327,7 +333,7 @@ namespace vuk {
 	private:
 		struct RGImpl* impl;
 
-		void create_attachment(Context& ptc, Name name, struct AttachmentInfo& attachment_info, Extent2D fb_extent, SampleCountFlagBits samples);
+		void create_attachment(Context& ptc, struct AttachmentInfo& attachment_info);
 		void fill_renderpass_info(struct RenderPassInfo& rpass, const size_t& i, class CommandBuffer& cobuf);
 		Result<SubmitInfo> record_single_submit(Allocator&, std::span<RenderPassInfo> rpis, DomainFlagBits domain);
 

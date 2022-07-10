@@ -608,7 +608,6 @@ namespace vuk {
 	}
 
 	void Context::destroy(const RGImage& image) {
-		vkDestroyImageView(device, image.image_view.payload, nullptr);
 		impl->legacy_gpu_allocator.destroy_image(image.image);
 	}
 
@@ -788,19 +787,8 @@ namespace vuk {
 	RGImage Context::create(const create_info_t<RGImage>& cinfo) {
 		RGImage res{};
 		res.image = impl->legacy_gpu_allocator.create_image_for_rendertarget(cinfo.ici);
-		auto ivci = cinfo.ivci;
-		ivci.image = res.image;
 		std::string name = std::string("Image: RenderTarget ") + std::string(cinfo.name.to_sv());
 		debug.set_name(res.image, Name(name));
-		name = std::string("ImageView: RenderTarget ") + std::string(cinfo.name.to_sv());
-		// skip creating image views for images that can't be viewed
-		if (cinfo.ici.usage & (ImageUsageFlagBits::eColorAttachment | ImageUsageFlagBits::eDepthStencilAttachment | ImageUsageFlagBits::eInputAttachment |
-		                       ImageUsageFlagBits::eSampled | ImageUsageFlagBits::eStorage)) {
-			VkImageView iv;
-			vkCreateImageView(device, (VkImageViewCreateInfo*)&ivci, nullptr, &iv);
-			res.image_view = wrap(iv, ivci);
-			debug.set_name(res.image_view.payload, Name(name));
-		}
 		return res;
 	}
 

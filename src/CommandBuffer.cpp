@@ -396,6 +396,7 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::bind_image(unsigned set, unsigned binding, ImageView image_view, ImageLayout layout) {
 		VUK_EARLY_RET();
+		assert(image_view.payload != VK_NULL_HANDLE);
 		sets_to_bind[set] = true;
 		auto& db = set_bindings[set].bindings[binding];
 		// if previous descriptor was not an image, we reset the DescriptorImageInfo

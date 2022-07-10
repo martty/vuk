@@ -13,6 +13,7 @@ namespace vuk {
 		uint32_t batch_index;
 		std::vector<SubpassInfo, short_alloc<SubpassInfo, 64>> subpasses;
 		std::vector<AttachmentRPInfo, short_alloc<AttachmentRPInfo, 16>> attachments;
+		uint32_t layer_count;
 		vuk::RenderPassCreateInfo rpci;
 		vuk::FramebufferCreateInfo fbci;
 		bool framebufferless = false;
@@ -39,8 +40,9 @@ namespace vuk {
 		robin_hood::unordered_flat_map<Name, Name> aliases;        // maps resource names to resource names
 		robin_hood::unordered_flat_map<Name, Name> assigned_names; // maps resource names to attachment names
 		robin_hood::unordered_flat_set<Name> poisoned_names;
+		robin_hood::unordered_flat_map<Name, uint64_t> sg_name_counter;
 
-		robin_hood::unordered_flat_map<Name, std::vector<UseRef, short_alloc<UseRef, 64>>> use_chains;
+		robin_hood::unordered_node_map<Name, std::vector<UseRef, short_alloc<UseRef, 64>>> use_chains;
 
 		std::vector<RenderPassInfo, short_alloc<RenderPassInfo, 64>> rpis;
 		size_t num_graphics_rpis = 0;
@@ -52,7 +54,12 @@ namespace vuk {
 
 		std::unordered_map<Name, IAInference> ia_inference_rules;
 
-		std::unordered_map<std::shared_ptr<RenderGraph>, std::atomic_uint64_t> subgraphs;
+		struct SGInfo {
+			uint64_t count = 0;
+			std::unordered_map<Name, Name> exported_names;
+		};
+
+		std::unordered_map<std::shared_ptr<RenderGraph>, SGInfo> subgraphs;
 
 		struct Release {
 			QueueResourceUse dst_use;

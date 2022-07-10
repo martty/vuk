@@ -54,7 +54,7 @@ namespace vuk {
 	// implement MapProxy for UseRefs
 	using MP1 = MapProxy<Name, std::span<const UseRef>>;
 	using MPI1 = ConstMapIterator<Name, std::span<const UseRef>>;
-	using M1 = robin_hood::unordered_flat_map<Name, std::vector<UseRef, short_alloc<UseRef, 64>>>;
+	using M1 = robin_hood::unordered_node_map<Name, std::vector<UseRef, short_alloc<UseRef, 64>>>;
 
 	template<>
 	MP1::const_iterator MP1::cbegin() const noexcept {

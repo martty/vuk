@@ -323,6 +323,7 @@ namespace vuk {
 		Resource::Type type;
 		Resource::Subrange subrange;
 		PassInfo* pass = nullptr;
+		bool converging = false;
 	};
 
 	struct PassInfo {
@@ -394,6 +395,8 @@ namespace vuk {
 		std::vector<struct RenderPassInfo*> rp_uses;
 
 		FutureBase* attached_future = nullptr;
+
+		std::vector<void*> use_chains;
 	};
 
 	struct AttachmentRPInfo {

@@ -2,14 +2,11 @@
 #include <glm/glm.hpp>
 #include <glm/gtx/quaternion.hpp>
 #include <glm/mat4x4.hpp>
+#include <stb_image.h>
 
-/* 11_deferred
- * In this example we will take our cube to the next level by rendering it deferred.
- * To achieve this, we will first render the cube to three offscreen textures -
- * one containing the world position, the second the world normals and the third containing colour.
- * We will also have depth buffering for this draw.
- * After this, we will compute the shading by using a fullscreen pass, where we sample from these textures.
- * To achieve this, we will need to let the rendergraph know of our image dependencies.
+/* 11_composition
+ * We expand on example 5 by adding reflections to our deferred cube and FXAA.
+ * To do this we showcase the composition features of vuk: we extensively use Futures to build up the final rendering.
  *
  * These examples are powered by the example framework, which hides some of the code required, as that would be repeated for each example.
  * Furthermore it allows launching individual examples and all examples with the example same code.
@@ -38,20 +35,46 @@ vuk::Future apply_fxaa(vuk::Future source, vuk::Future dst) {
 	return { std::move(rgp), "smooth+" };
 }
 
+std::pair<vuk::Unique<vuk::Image>, vuk::Future> load_hdr_cubemap(vuk::Allocator& allocator, const std::string& path) {
+	int x, y, chans;
+	stbi_set_flip_vertically_on_load(true);
+	auto img = stbi_loadf(path.c_str(), &x, &y, &chans, STBI_rgb_alpha);
+	stbi_set_flip_vertically_on_load(false);
+	assert(img != nullptr);
+
+	vuk::ImageCreateInfo ici;
+	ici.format = vuk::Format::eR32G32B32A32Sfloat;
+	ici.extent = vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u };
+	ici.samples = vuk::Samples::e1;
+	ici.imageType = vuk::ImageType::e2D;
+	ici.tiling = vuk::ImageTiling::eOptimal;
+	ici.usage = vuk::ImageUsageFlagBits::eTransferSrc | vuk::ImageUsageFlagBits::eTransferDst | vuk::ImageUsageFlagBits::eSampled;
+	ici.mipLevels = 1;
+	ici.arrayLayers = 1;
+
+	// TODO: not use create_texture
+	auto [tex, tex_fut] = create_texture(allocator, vuk::Format::eR32G32B32A32Sfloat, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, img, false);
+	stbi_image_free(img);
+
+	return { std::move(tex.image), std::move(tex_fut) };
+}
+
 namespace {
 	float angle = 0.f;
 	auto box = util::generate_cube();
 	vuk::BufferGPU verts, inds;
+	vuk::Unique<vuk::Image> env_cubemap, hdr_image;
+	vuk::Unique<vuk::ImageView> env_cubemap_iv;
 
 	vuk::Example x{
-		.name = "11_deferred",
+		.name = "11_composition",
 		.setup =
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator) {
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
 			      pci.add_glsl(util::read_entire_file("../../examples/deferred.vert"), "deferred.vert");
-			      pci.add_glsl(util::read_entire_file("../../examples/deferred.frag"), "deferred.frag");
-			      runner.context->create_named_pipeline("cube_deferred", pci);
+			      pci.add_glsl(util::read_entire_file("../../examples/deferred_reflective.frag"), "deferred_reflective.frag");
+			      runner.context->create_named_pipeline("cube_deferred_reflective", pci);
 		      }
 
 		      {
@@ -73,10 +96,95 @@ namespace {
 		      verts = *vert_buf;
 		      auto [ind_buf, ind_fut] = create_buffer_gpu(allocator, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.second));
 		      inds = *ind_buf;
-		      // For the example, we just ask these that these uploads complete before moving on to rendering
-		      // In an engine, you would integrate these uploads into some explicit system
-		      runner.enqueue_setup(std::move(vert_fut));
-		      runner.enqueue_setup(std::move(ind_fut));
+
+		      auto hdr_texture = load_hdr_cubemap(allocator, "../../examples/the_sky_is_on_fire_1k.hdr");
+		      hdr_image = std::move(hdr_texture.first);
+		      // cubemap code from @jazzfool
+		      // hdr_texture is a 2:1 equirectangular; it needs to be converted to a cubemap
+
+		      vuk::ImageCreateInfo cube_ici{ .flags = vuk::ImageCreateFlagBits::eCubeCompatible,
+			                                   .imageType = vuk::ImageType::e2D,
+			                                   .format = vuk::Format::eR32G32B32A32Sfloat,
+			                                   .extent = { 1024, 1024, 1 },
+			                                   .arrayLayers = 6,
+			                                   .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eColorAttachment };
+		      env_cubemap = *vuk::allocate_image(allocator, cube_ici);
+		      vuk::ImageAttachment cube_ia{ .image = *env_cubemap,
+			                                  .image_flags = vuk::ImageCreateFlagBits::eCubeCompatible,
+			                                  .image_type = vuk::ImageType::e2D,
+			                                  .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eColorAttachment,
+			                                  .extent = vuk::Dimension3D::absolute(1024, 1024, 1),
+			                                  .format = vuk::Format::eR32G32B32A32Sfloat,
+			                                  .sample_count = vuk::Samples::e1,
+			                                  .layer_count = 6 };
+
+		      vuk::ImageViewCreateInfo cube_ivci{ .image = *env_cubemap,
+			                                        .viewType = vuk::ImageViewType::eCube,
+			                                        .format = vuk::Format::eR32G32B32A32Sfloat,
+			                                        .subresourceRange =
+			                                            vuk::ImageSubresourceRange{ .aspectMask = vuk::ImageAspectFlagBits::eColor, .layerCount = 6 } };
+		      env_cubemap_iv = *vuk::allocate_image_view(allocator, cube_ivci);
+
+		      const glm::mat4 capture_projection = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 10.0f);
+		      const glm::mat4 capture_views[] = { glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f)),
+			                                        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(-1.0f, 0.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f)),
+			                                        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f)),
+			                                        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f)),
+			                                        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f, -1.0f, 0.0f)),
+			                                        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f), glm::vec3(0.0f, -1.0f, 0.0f)) };
+
+		      vuk::PipelineBaseCreateInfo equirectangular_to_cubemap;
+		      equirectangular_to_cubemap.add_glsl(util::read_entire_file("../../examples/cubemap.vert"), "cubemap.vert");
+		      equirectangular_to_cubemap.add_glsl(util::read_entire_file("../../examples/equirectangular_to_cubemap.frag"), "equirectangular_to_cubemap.frag");
+		      runner.context->create_named_pipeline("equirectangular_to_cubemap", equirectangular_to_cubemap);
+
+		      // make cubemap by rendering to individual faces (non-layered FB)
+		      {
+			      vuk::RenderGraph rg("cubegen");
+			      rg.attach_in("hdr_texture", std::move(hdr_texture.second));
+			      rg.attach_in("verts", std::move(vert_fut));
+			      rg.attach_in("inds", std::move(ind_fut));
+			      rg.attach_image("env_cubemap", cube_ia, vuk::Access::eNone, vuk::Access::eNone);
+			      for (unsigned i = 0; i < 6; ++i) {
+				      vuk::Resource cubemap_face("env_cubemap", vuk::Resource::Type::eImage, vuk::Access::eColorWrite, "env_cubemap+");
+				      cubemap_face.subrange.image.base_layer = i;
+				      cubemap_face.subrange.image.layer_count = 1;
+				      rg.add_pass({ .resources = { cubemap_face,
+				                                   "hdr_texture"_image >> vuk::eFragmentSampled,
+				                                   "verts"_buffer >> vuk::eAttributeRead,
+				                                   "inds"_buffer >> vuk::eIndexRead },
+				                    .execute = [=](vuk::CommandBuffer& cbuf) {
+					                    cbuf.set_viewport(0, vuk::Rect2D::framebuffer())
+					                        .set_scissor(0, vuk::Rect2D::framebuffer())
+					                        .broadcast_color_blend(vuk::BlendPreset::eOff)
+					                        .set_rasterization({})
+					                        .bind_vertex_buffer(
+					                            0,
+					                            *cbuf.get_resource_buffer("verts"),
+					                            0,
+					                            vuk::Packed{ vuk::Format::eR32G32B32Sfloat, vuk::Ignore{ sizeof(util::Vertex) - sizeof(util::Vertex::position) } })
+					                        .bind_index_buffer(*cbuf.get_resource_buffer("inds"), vuk::IndexType::eUint32)
+					                        .bind_image(0, 2, "hdr_texture")
+					                        .bind_sampler(0,
+					                                      2,
+					                                      vuk::SamplerCreateInfo{ .magFilter = vuk::Filter::eLinear,
+					                                                              .minFilter = vuk::Filter::eLinear,
+					                                                              .mipmapMode = vuk::SamplerMipmapMode::eLinear,
+					                                                              .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
+					                                                              .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
+					                                                              .addressModeW = vuk::SamplerAddressMode::eClampToEdge })
+					                        .bind_graphics_pipeline("equirectangular_to_cubemap");
+					                    glm::mat4* projection = cbuf.map_scratch_uniform_binding<glm::mat4>(0, 0);
+					                    *projection = capture_projection;
+					                    glm::mat4* view = cbuf.map_scratch_uniform_binding<glm::mat4>(0, 1);
+					                    *view = capture_views[i];
+					                    cbuf.draw_indexed(box.second.size(), 1, 0, 0, 0);
+				                    } });
+			      }
+			      rg.converge_image("env_cubemap", "env_cubemap++");
+			      auto fut_in_layout = vuk::transition(vuk::Future{ std::make_unique<vuk::RenderGraph>(std::move(rg)), "env_cubemap++" }, vuk::eFragmentSampled);
+			      runner.enqueue_setup(std::move(fut_in_layout));
+		      }
 		    },
 		.render =
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator, vuk::Future target) {
@@ -84,7 +192,7 @@ namespace {
 			      glm::mat4 view;
 			      glm::mat4 proj;
 		      } vp;
-		      auto cam_pos = glm::vec3(0, 1.5, 3.5);
+		      auto cam_pos = glm::vec3(0, 0.5, 2.5);
 		      vp.view = glm::lookAt(cam_pos, glm::vec3(0), glm::vec3(0, 1, 0));
 		      vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 1.f, 10.f);
 		      vp.proj[1][1] *= -1;
@@ -109,7 +217,7 @@ namespace {
 		                                    "11_normal"_image >> vuk::eColorWrite,
 		                                    "11_color"_image >> vuk::eColorWrite,
 		                                    "11_depth"_image >> vuk::eDepthStencilRW },
-		                     .execute = [uboVP](vuk::CommandBuffer& command_buffer) {
+		                     .execute = [uboVP, cam_pos](vuk::CommandBuffer& command_buffer) {
 			                     // Rendering is the same as in the case for forward
 			                     command_buffer.set_viewport(0, vuk::Rect2D::framebuffer())
 			                         .set_scissor(0, vuk::Rect2D::framebuffer())
@@ -129,7 +237,10 @@ namespace {
 			                                                          vuk::Ignore{ offsetof(util::Vertex, uv_coordinates) - offsetof(util::Vertex, tangent) },
 			                                                          vuk::Format::eR32G32Sfloat })
 			                         .bind_index_buffer(inds, vuk::IndexType::eUint32)
-			                         .bind_graphics_pipeline("cube_deferred")
+			                         .bind_image(0, 2, *env_cubemap_iv)
+			                         .bind_sampler(0, 2, {})
+			                         .push_constants(vuk::ShaderStageFlagBits::eFragment, 0, cam_pos)
+			                         .bind_graphics_pipeline("cube_deferred_reflective")
 			                         .bind_buffer(0, 0, uboVP);
 			                     glm::mat4* model = command_buffer.map_scratch_uniform_binding<glm::mat4>(0, 1);
 			                     *model = static_cast<glm::mat4>(glm::angleAxis(glm::radians(angle), glm::vec3(0.f, 1.f, 0.f)));
@@ -178,9 +289,16 @@ namespace {
 		      vuk::Future lit_fut = { std::move(rg_resolve), "11_deferred+" };
 		      vuk::Future sm_fut = apply_fxaa(std::move(lit_fut), std::move(target));
 
-		      angle += 20.f * ImGui::GetIO().DeltaTime;
+		      angle += 10.f * ImGui::GetIO().DeltaTime;
 
 		      return sm_fut;
+		    }, // Perform cleanup for the example
+		.cleanup =
+		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
+		      // We release the resources manually
+		      env_cubemap.reset();
+		      env_cubemap_iv.reset();
+		      hdr_image.reset();
 		    }
 	};
 
