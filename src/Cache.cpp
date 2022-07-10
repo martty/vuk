@@ -16,7 +16,7 @@ namespace vuk {
 	};
 
 	template<class T>
-	Cache<T>::Cache(Context& ctx) : ctx(ctx), impl(new CacheImpl<T>()) {}
+	Cache<T>::Cache(Context& ctx) : ctx(&ctx), impl(new CacheImpl<T>()) {}
 
 	template<class T>
 	T& Cache<T>::acquire(const create_info_t<T>& ci) {
@@ -34,7 +34,7 @@ namespace vuk {
 		} else {
 			_.unlock();
 			std::unique_lock ulock(impl->cache_mtx);
-			auto pit = impl->pool.emplace(ctx.create(ci));
+			auto pit = impl->pool.emplace(ctx->create(ci));
 			typename Cache::LRUEntry entry{ &*pit, current_frame };
 			it = impl->lru_map.emplace(ci, entry).first;
 			return *it->second.ptr;
@@ -47,7 +47,7 @@ namespace vuk {
 		for (auto it = impl->lru_map.begin(); it != impl->lru_map.end();) {
 			auto last_use_frame = it->second.last_use_frame;
 			if ((int64_t)current_frame - (int64_t)last_use_frame > (int64_t)threshold) {
-				ctx.destroy(*it->second.ptr);
+				ctx->destroy(*it->second.ptr);
 				impl->pool.erase(impl->pool.get_iterator(it->second.ptr));
 				it = impl->lru_map.erase(it);
 			} else {
@@ -70,7 +70,7 @@ namespace vuk {
 			typename Cache::LRUEntry entry{ nullptr, INT64_MAX };
 			it = impl->lru_map.emplace(ci, entry).first;
 			ulock.unlock();
-			auto pit = impl->pool.emplace(ctx.create(ci));
+			auto pit = impl->pool.emplace(ctx->create(ci));
 			it->second.ptr = &*pit;
 			it->second.load_cnt.store(1);
 			it->second.load_cnt.notify_all();
@@ -86,7 +86,7 @@ namespace vuk {
 		} else {
 			_.unlock();
 			std::unique_lock ulock(impl->cache_mtx);
-			auto pit = impl->pool.emplace(ctx.create(ci));
+			auto pit = impl->pool.emplace(ctx->create(ci));
 			typename Cache::LRUEntry entry{ &*pit, INT64_MAX };
 			it = impl->lru_map.emplace(ci, entry).first;
 			return *it->second.ptr;
@@ -101,7 +101,7 @@ namespace vuk {
 		} else {
 			_.unlock();
 			std::unique_lock ulock(impl->cache_mtx);
-			auto pit = impl->pool.emplace(ctx.create(ci));
+			auto pit = impl->pool.emplace(ctx->create(ci));
 			typename Cache::LRUEntry entry{ &*pit, INT64_MAX };
 			it = impl->lru_map.emplace(ci, entry).first;
 			return *it->second.ptr;
@@ -116,7 +116,7 @@ namespace vuk {
 		} else {
 			_.unlock();
 			std::unique_lock ulock(impl->cache_mtx);
-			auto pit = impl->pool.emplace(ctx.create(ci));
+			auto pit = impl->pool.emplace(ctx->create(ci));
 			typename Cache::LRUEntry entry{ &*pit, INT64_MAX };
 			it = impl->lru_map.emplace(ci, entry).first;
 			return *it->second.ptr;
@@ -143,7 +143,7 @@ namespace vuk {
 			typename Cache::LRUEntry entry{ nullptr, current_frame };
 			it = impl->lru_map.emplace(ci_copy, entry).first;
 			ulock.unlock();
-			auto pit = impl->pool.emplace(ctx.create(ci_copy));
+			auto pit = impl->pool.emplace(ctx->create(ci_copy));
 			it->second.ptr = &*pit;
 			it->second.load_cnt.store(1);
 			it->second.load_cnt.notify_all();
@@ -157,7 +157,7 @@ namespace vuk {
 		for (auto it = impl->lru_map.begin(); it != impl->lru_map.end();) {
 			auto last_use_frame = it->second.last_use_frame;
 			if ((int64_t)current_frame - (int64_t)last_use_frame > (int64_t)threshold) {
-				ctx.destroy(*it->second.ptr);
+				ctx->destroy(*it->second.ptr);
 				if (!it->first.is_inline()) {
 					delete it->first.extended_data;
 				}
@@ -197,7 +197,7 @@ namespace vuk {
 	template<class T>
 	Cache<T>::~Cache() {
 		for (auto& v : impl->pool) {
-			ctx.destroy(v);
+			ctx->destroy(v);
 		}
 		delete impl;
 	}

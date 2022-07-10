@@ -223,8 +223,6 @@ namespace vuk {
 	template<class T>
 	class Cache {
 	private:
-		Context& ctx;
-
 		CacheImpl<T>* impl = nullptr;
 
 	public:
@@ -247,5 +245,7 @@ namespace vuk {
 		T& acquire(const create_info_t<T>& ci);
 		T& acquire(const create_info_t<T>& ci, uint64_t current_frame);
 		void collect(uint64_t current_frame, size_t threshold);
+
+		Context* ctx;
 	};
 } // namespace vuk

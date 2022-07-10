@@ -92,11 +92,31 @@ namespace vuk {
 		compute_queue_family_index = o.compute_queue_family_index;
 		transfer_queue_family_index = o.transfer_queue_family_index;
 		dedicated_graphics_queue = std::move(o.dedicated_graphics_queue);
-		graphics_queue = o.graphics_queue;
+		graphics_queue = &dedicated_graphics_queue.value();
 		dedicated_compute_queue = std::move(o.dedicated_compute_queue);
-		compute_queue = o.compute_queue;
+		if (dedicated_compute_queue) {
+			compute_queue = &o.dedicated_compute_queue.value();
+		} else {
+			compute_queue = graphics_queue;
+		}
 		dedicated_transfer_queue = std::move(o.dedicated_transfer_queue);
-		transfer_queue = o.transfer_queue;
+		if (dedicated_transfer_queue) {
+			transfer_queue = &dedicated_transfer_queue.value();
+		} else {
+			transfer_queue = compute_queue ? compute_queue : graphics_queue;
+		}
+
+		impl->pipelinebase_cache.ctx = this;
+		impl->pipeline_cache.ctx = this;
+		impl->compute_pipeline_cache.ctx = this;
+		impl->renderpass_cache.ctx = this;
+		impl->transient_images.ctx = this;
+		impl->pool_cache.ctx = this;
+		impl->sampler_cache.ctx = this;
+		impl->shader_modules.ctx = this;
+		impl->descriptor_set_layouts.ctx = this;
+		impl->pipeline_layouts.ctx = this;
+		impl->device_vk_resource.ctx = this;
 	}
 
 	Context& Context::operator=(Context&& o) noexcept {
@@ -109,11 +129,32 @@ namespace vuk {
 		compute_queue_family_index = o.compute_queue_family_index;
 		transfer_queue_family_index = o.transfer_queue_family_index;
 		dedicated_graphics_queue = std::move(o.dedicated_graphics_queue);
-		graphics_queue = o.graphics_queue;
+		graphics_queue = &dedicated_graphics_queue.value();
 		dedicated_compute_queue = std::move(o.dedicated_compute_queue);
-		compute_queue = o.compute_queue;
+		if (dedicated_compute_queue) {
+			compute_queue = &o.dedicated_compute_queue.value();
+		} else {
+			compute_queue = graphics_queue;
+		}
 		dedicated_transfer_queue = std::move(o.dedicated_transfer_queue);
-		transfer_queue = o.transfer_queue;
+		if (dedicated_transfer_queue) {
+			transfer_queue = &dedicated_transfer_queue.value();
+		} else {
+			transfer_queue = compute_queue ? compute_queue : graphics_queue;
+		}
+
+		impl->pipelinebase_cache.ctx = this;
+		impl->pipeline_cache.ctx = this;
+		impl->compute_pipeline_cache.ctx = this;
+		impl->renderpass_cache.ctx = this;
+		impl->transient_images.ctx = this;
+		impl->pool_cache.ctx = this;
+		impl->sampler_cache.ctx = this;
+		impl->shader_modules.ctx = this;
+		impl->descriptor_set_layouts.ctx = this;
+		impl->pipeline_layouts.ctx = this;
+		impl->device_vk_resource.ctx = this;
+
 		return *this;
 	}
 
