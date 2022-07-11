@@ -176,6 +176,7 @@ namespace vuk {
 	allocate_image_view(Allocator& allocator, const ImageAttachment& attachment, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 		Unique<ImageView> iv(allocator);
 		ImageViewCreateInfo ivci;
+		assert(attachment.image);
 		ivci.image = attachment.image;
 		ivci.format = vuk::Format(attachment.format);
 		ivci.viewType = attachment.view_type;

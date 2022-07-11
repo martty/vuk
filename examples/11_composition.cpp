@@ -64,7 +64,7 @@ namespace {
 	auto box = util::generate_cube();
 	vuk::BufferGPU verts, inds;
 	vuk::Unique<vuk::Image> env_cubemap, hdr_image;
-	vuk::Unique<vuk::ImageView> env_cubemap_iv;
+	vuk::ImageAttachment env_cubemap_ia;
 
 	vuk::Example x{
 		.name = "11_composition",
@@ -102,28 +102,20 @@ namespace {
 		      // cubemap code from @jazzfool
 		      // hdr_texture is a 2:1 equirectangular; it needs to be converted to a cubemap
 
-		      vuk::ImageCreateInfo cube_ici{ .flags = vuk::ImageCreateFlagBits::eCubeCompatible,
-			                                   .imageType = vuk::ImageType::e2D,
-			                                   .format = vuk::Format::eR32G32B32A32Sfloat,
-			                                   .extent = { 1024, 1024, 1 },
-			                                   .arrayLayers = 6,
-			                                   .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eColorAttachment };
-		      env_cubemap = *vuk::allocate_image(allocator, cube_ici);
-		      vuk::ImageAttachment cube_ia{ .image = *env_cubemap,
+		      env_cubemap_ia = { .image = *env_cubemap,
 			                                  .image_flags = vuk::ImageCreateFlagBits::eCubeCompatible,
 			                                  .image_type = vuk::ImageType::e2D,
 			                                  .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eColorAttachment,
 			                                  .extent = vuk::Dimension3D::absolute(1024, 1024, 1),
 			                                  .format = vuk::Format::eR32G32B32A32Sfloat,
 			                                  .sample_count = vuk::Samples::e1,
+			                                  .view_type = vuk::ImageViewType::eCube,
+			                                  .base_level = 0,
+			                                  .level_count = 1,
+			                                  .base_layer = 0,
 			                                  .layer_count = 6 };
-
-		      vuk::ImageViewCreateInfo cube_ivci{ .image = *env_cubemap,
-			                                        .viewType = vuk::ImageViewType::eCube,
-			                                        .format = vuk::Format::eR32G32B32A32Sfloat,
-			                                        .subresourceRange =
-			                                            vuk::ImageSubresourceRange{ .aspectMask = vuk::ImageAspectFlagBits::eColor, .layerCount = 6 } };
-		      env_cubemap_iv = *vuk::allocate_image_view(allocator, cube_ivci);
+		      env_cubemap = *vuk::allocate_image(allocator, env_cubemap_ia);
+		      env_cubemap_ia.image = *env_cubemap;
 
 		      const glm::mat4 capture_projection = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 10.0f);
 		      const glm::mat4 capture_views[] = { glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f)),
@@ -144,7 +136,7 @@ namespace {
 			      rg.attach_in("hdr_texture", std::move(hdr_texture.second));
 			      rg.attach_in("verts", std::move(vert_fut));
 			      rg.attach_in("inds", std::move(ind_fut));
-			      rg.attach_image("env_cubemap", cube_ia, vuk::Access::eNone, vuk::Access::eNone);
+			      rg.attach_image("env_cubemap", env_cubemap_ia, vuk::Access::eNone, vuk::Access::eNone);
 			      for (unsigned i = 0; i < 6; ++i) {
 				      vuk::Resource cubemap_face("env_cubemap", vuk::Resource::Type::eImage, vuk::Access::eColorWrite, "env_cubemap+");
 				      cubemap_face.subrange.image.base_layer = i;
@@ -237,7 +229,7 @@ namespace {
 			                                                          vuk::Ignore{ offsetof(util::Vertex, uv_coordinates) - offsetof(util::Vertex, tangent) },
 			                                                          vuk::Format::eR32G32Sfloat })
 			                         .bind_index_buffer(inds, vuk::IndexType::eUint32)
-			                         .bind_image(0, 2, *env_cubemap_iv)
+			                         .bind_image(0, 2, env_cubemap_ia)
 			                         .bind_sampler(0, 2, {})
 			                         .push_constants(vuk::ShaderStageFlagBits::eFragment, 0, cam_pos)
 			                         .bind_graphics_pipeline("cube_deferred_reflective")
@@ -297,7 +289,6 @@ namespace {
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
 		      // We release the resources manually
 		      env_cubemap.reset();
-		      env_cubemap_iv.reset();
 		      hdr_image.reset();
 		    }
 	};
