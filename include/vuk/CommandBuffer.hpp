@@ -420,6 +420,13 @@ namespace vuk {
 		/// @param layout layout of the image when the affected draws execute
 		CommandBuffer& bind_image(unsigned set, unsigned binding, ImageView image_view, ImageLayout layout = ImageLayout::eShaderReadOnlyOptimal);
 
+		/// @brief Bind an image to the command buffer
+		/// @param set The set bind index to be used
+		/// @param binding The descriptor binding to bind the image to
+		/// @param image_view The ImageAttachment to bind
+		/// @param layout layout of the image when the affected draws execute
+		CommandBuffer& bind_image(unsigned set, unsigned binding, const ImageAttachment& image, ImageLayout layout = ImageLayout::eShaderReadOnlyOptimal);
+
 		/// @brief Bind an image to the command buffer from a Resource
 		/// @param set The set bind index to be used
 		/// @param binding The descriptor binding to bind the image to

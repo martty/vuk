@@ -3,6 +3,7 @@
 #include "vuk/Allocator.hpp"
 #include "vuk/Buffer.hpp"
 #include "vuk/Exception.hpp"
+#include "vuk/ImageAttachment.hpp"
 
 /// @cond INTERNAL
 #ifndef __cpp_consteval
@@ -126,14 +127,67 @@ namespace vuk {
 		return { expected_value, std::move(img) };
 	}
 
+	/// @brief Allocate a single image from an Allocator
+	/// @param allocator Allocator to use
+	/// @param attachment ImageAttachment to make the Image from
+	/// @param loc Source location information
+	/// @return Image in a RAII wrapper (Unique<T>) or AllocateException on error
+	inline Result<Unique<Image>, AllocateException>
+	allocate_image(Allocator& allocator, const ImageAttachment& attachment, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
+		Unique<Image> img(allocator);
+		ImageCreateInfo ici;
+		ici.format = vuk::Format(attachment.format);
+		ici.imageType = attachment.image_type;
+		ici.flags = attachment.image_flags;
+		ici.arrayLayers = attachment.layer_count;
+		ici.samples = attachment.sample_count.count;
+		ici.tiling = attachment.tiling;
+		ici.mipLevels = attachment.level_count;
+		ici.usage = attachment.usage;
+		assert(attachment.extent.sizing == Sizing::eAbsolute);
+		ici.extent = static_cast<vuk::Extent3D>(attachment.extent.extent);
+
+		if (auto res = allocator.allocate_images(std::span{ &img.get(), 1 }, std::span{ &ici, 1 }, loc); !res) {
+			return { expected_error, res.error() };
+		}
+		return { expected_value, std::move(img) };
+	}
+
 	/// @brief Allocate a single image view from an Allocator
 	/// @param allocator Allocator to use
 	/// @param ivci Image view creation parameters
 	/// @param loc Source location information
-	/// @return Image view in a RAII wrapper (Unique<T>) or AllocateException on error
+	/// @return ImageView in a RAII wrapper (Unique<T>) or AllocateException on error
 	inline Result<Unique<ImageView>, AllocateException>
 	allocate_image_view(Allocator& allocator, const ImageViewCreateInfo& ivci, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 		Unique<ImageView> iv(allocator);
+		if (auto res = allocator.allocate_image_views(std::span{ &iv.get(), 1 }, std::span{ &ivci, 1 }, loc); !res) {
+			return { expected_error, res.error() };
+		}
+		return { expected_value, std::move(iv) };
+	}
+
+	/// @brief Allocate a single image view from an Allocator
+	/// @param allocator Allocator to use
+	/// @param attachment ImageAttachment to make the ImageView from
+	/// @param loc Source location information
+	/// @return ImageView in a RAII wrapper (Unique<T>) or AllocateException on error
+	inline Result<Unique<ImageView>, AllocateException>
+	allocate_image_view(Allocator& allocator, const ImageAttachment& attachment, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
+		Unique<ImageView> iv(allocator);
+		ImageViewCreateInfo ivci;
+		ivci.image = attachment.image;
+		ivci.format = vuk::Format(attachment.format);
+		ivci.viewType = attachment.view_type;
+		ivci.flags = attachment.image_view_flags;
+
+		ImageSubresourceRange& isr = ivci.subresourceRange;
+		isr.aspectMask = format_to_aspect(ivci.format);
+		isr.baseArrayLayer = attachment.base_layer;
+		isr.layerCount = attachment.layer_count;
+		isr.baseMipLevel = attachment.base_level;
+		isr.levelCount = attachment.level_count;
+
 		if (auto res = allocator.allocate_image_views(std::span{ &iv.get(), 1 }, std::span{ &ivci, 1 }, loc); !res) {
 			return { expected_error, res.error() };
 		}

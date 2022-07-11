@@ -378,6 +378,7 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::bind_image(unsigned set, unsigned binding, Name resource_name) {
 		VUK_EARLY_RET();
+		// TODO: handle image subranges
 		auto res = rg->get_resource_image(resource_name, current_pass);
 		if (!res) {
 			current_error = std::move(res);
@@ -391,7 +392,24 @@ namespace vuk {
 
 		auto layout = *res_gl ? ImageLayout::eGeneral : ImageLayout::eShaderReadOnlyOptimal;
 
-		return bind_image(set, binding, res->attachment.image_view, layout);
+		return bind_image(set, binding, res->attachment, layout);
+	}
+
+	CommandBuffer& CommandBuffer::bind_image(unsigned set, unsigned binding, const ImageAttachment& ia, ImageLayout layout) {
+		VUK_EARLY_RET();
+		if (ia.image_view != ImageView{}) {
+			bind_image(set, binding, ia.image_view, layout);
+		} else {
+			assert(ia.image);
+			auto res = allocate_image_view(*allocator, ia);
+			if (!res) {
+				current_error = std::move(res);
+				return *this;
+			} else {
+				bind_image(set, binding, **res, layout);
+			}
+		}
+		return *this;
 	}
 
 	CommandBuffer& CommandBuffer::bind_image(unsigned set, unsigned binding, ImageView image_view, ImageLayout layout) {

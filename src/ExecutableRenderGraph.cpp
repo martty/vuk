@@ -54,6 +54,7 @@ namespace vuk {
 		}
 	}
 
+	// TODO: remove
 	Result<void> create_image(Allocator& alloc, ImageAttachment& attachment) {
 		ImageCreateInfo ici;
 		ici.format = vuk::Format(attachment.format);
@@ -74,6 +75,7 @@ namespace vuk {
 		return res;
 	}
 
+	// TODO: remove
 	Result<void> create_image_view(Allocator& alloc, ImageAttachment& attachment) {
 		ImageViewCreateInfo ivci;
 		ivci.image = attachment.image;
@@ -666,11 +668,6 @@ namespace vuk {
 					create_image(alloc, bound.attachment);
 				}
 			}
-			if (bound.attachment.image_view == ImageView{} && bound.attachment.may_require_image_view()) {
-				if (bound.rp_uses.size() == 0) { // we create IVs for FB attachments later TODO: incorrect
-					create_image_view(alloc, bound.attachment);
-				}
-			}
 		}
 
 		// create framebuffers, create & bind attachments
@@ -732,12 +729,6 @@ namespace vuk {
 			Unique<VkFramebuffer> fb(alloc);
 			VUK_DO_OR_RETURN(alloc.allocate_framebuffers(std::span{ &*fb, 1 }, std::span{ &rp.fbci, 1 }));
 			rp.framebuffer = *fb; // queue framebuffer for destruction
-		}
-
-		for (auto& [name, bound] : impl->bound_attachments) {
-			if (bound.attachment.image_view == ImageView{} && bound.attachment.may_require_image_view()) {
-				create_image_view(alloc, bound.attachment); // TODO: filling out remaining attachment IVs, but this assumes 1:1
-			}
 		}
 
 		for (auto& [name, attachment_info] : impl->bound_attachments) {
