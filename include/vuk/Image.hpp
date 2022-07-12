@@ -283,128 +283,7 @@ namespace vuk {
 	static_assert(sizeof(ImageViewCreateInfo) == sizeof(VkImageViewCreateInfo), "struct and wrapper have different size!");
 	static_assert(std::is_standard_layout<ImageViewCreateInfo>::value, "struct wrapper is not a standard layout!");
 
-	struct ImageView {
-		VkImageView payload = VK_NULL_HANDLE;
-
-		VkImage image; // 64 bits
-		Format format; // 32 bits
-		uint32_t id : 29;
-		ImageViewType type : 3;
-		uint32_t base_level : 4;
-		uint32_t level_count : 4;
-		uint32_t base_layer : 11;
-		uint32_t layer_count : 11;
-		ComponentMapping components;
-
-		constexpr bool operator==(const ImageView&) const = default;
-	};
-
-	// static_assert(sizeof(ImageView) == 64);
-
-	template<>
-	class Unique<ImageView> {
-		Allocator* allocator;
-		ImageView payload;
-
-	public:
-		using element_type = ImageView;
-
-		explicit Unique() : allocator(nullptr), payload{} {}
-		explicit Unique(Allocator& allocator) : allocator(&allocator), payload{} {}
-		explicit Unique(Allocator& allocator, ImageView payload) : allocator(&allocator), payload(std::move(payload)) {}
-		Unique(Unique const&) = delete;
-
-		Unique(Unique&& other) noexcept : allocator(other.allocator), payload(other.release()) {}
-
-		~Unique() noexcept;
-
-		Unique& operator=(Unique const&) = delete;
-
-		Unique& operator=(Unique&& other) noexcept {
-			auto tmp = other.allocator;
-			reset(other.release());
-			allocator = tmp;
-			return *this;
-		}
-
-		explicit operator bool() const noexcept {
-			return payload.payload != VK_NULL_HANDLE;
-		}
-
-		ImageView const* operator->() const noexcept {
-			return &payload;
-		}
-
-		ImageView* operator->() noexcept {
-			return &payload;
-		}
-
-		ImageView const& operator*() const noexcept {
-			return payload;
-		}
-
-		ImageView& operator*() noexcept {
-			return payload;
-		}
-
-		const ImageView& get() const noexcept {
-			return payload;
-		}
-
-		ImageView& get() noexcept {
-			return payload;
-		}
-
-		void reset(ImageView value = ImageView()) noexcept;
-
-		ImageView release() noexcept {
-			allocator = nullptr;
-			return std::move(payload);
-		}
-
-		void swap(Unique<ImageView>& rhs) noexcept {
-			std::swap(payload, rhs.payload);
-			std::swap(allocator, rhs.allocator);
-		}
-
-		struct SubrangeBuilder {
-			Allocator* allocator;
-			ImageView iv;
-			ImageViewType type = ImageViewType(0xdeadbeef);
-			uint32_t base_level = 0xdeadbeef; // 0xdeadbeef is an out of band value for all
-			uint32_t level_count = 0xdeadbeef;
-			uint32_t base_layer = 0xdeadbeef;
-			uint32_t layer_count = 0xdeadbeef;
-
-			SubrangeBuilder& layer_subrange(uint32_t base_layer, uint32_t layer_count) {
-				this->base_layer = base_layer;
-				this->layer_count = layer_count;
-				return *this;
-			}
-
-			SubrangeBuilder& level_subrange(uint32_t base_level, uint32_t level_count) {
-				this->base_level = base_level;
-				this->level_count = level_count;
-				return *this;
-			}
-
-			SubrangeBuilder& view_as(ImageViewType type) {
-				this->type = type;
-				return *this;
-			}
-
-			Unique<ImageView> apply();
-		};
-
-		// external builder fns
-		SubrangeBuilder layer_subrange(uint32_t base_layer, uint32_t layer_count) {
-			return { .allocator = allocator, .iv = payload, .base_layer = base_layer, .layer_count = layer_count };
-		}
-
-		SubrangeBuilder level_subrange(uint32_t base_level, uint32_t level_count) {
-			return { .allocator = allocator, .iv = payload, .base_level = base_level, .level_count = level_count };
-		}
-	};
+	using ImageView = Handle<VkImageView>;
 
 	enum class SamplerCreateFlagBits : VkSamplerCreateFlags {
 		eSubsampledEXT = VK_SAMPLER_CREATE_SUBSAMPLED_BIT_EXT,
@@ -503,6 +382,8 @@ namespace vuk {
 		Extent3D extent;
 		Format format;
 		Samples sample_count;
+		uint32_t level_count;
+		uint32_t layer_count;
 	};
 
 	ImageAspectFlags format_to_aspect(Format format) noexcept;

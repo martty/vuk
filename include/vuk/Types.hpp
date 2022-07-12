@@ -19,7 +19,7 @@ namespace vuk {
 	struct Handle : public HandleBase {
 		T payload;
 
-		bool operator==(const Handle& o) const noexcept {
+		constexpr bool operator==(const Handle& o) const noexcept {
 			return id == o.id;
 		}
 	};

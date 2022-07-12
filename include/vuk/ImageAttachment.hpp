@@ -36,9 +36,9 @@ namespace vuk {
 				                      .format = t.format,
 				                      .sample_count = { t.sample_count },
 				                      .base_level = 0,
-				                      .level_count = t.view->level_count,
+				                      .level_count = t.level_count,
 				                      .base_layer = 0,
-				                      .layer_count = t.view->layer_count };
+				                      .layer_count = t.layer_count };
 		}
 
 		constexpr bool has_concrete_image() const noexcept {

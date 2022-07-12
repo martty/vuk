@@ -346,21 +346,6 @@ namespace vuk {
 		return { SampledImage::RenderGraphAttachment{ n, sci, ivci, ImageLayout::eShaderReadOnlyOptimal } };
 	}
 
-	Unique<ImageView>::~Unique() noexcept {
-		if (allocator && payload.payload != VK_NULL_HANDLE) {
-			deallocate(*allocator, payload);
-		}
-	}
-
-	void Unique<ImageView>::reset(ImageView value) noexcept {
-		if (payload != value) {
-			if (allocator && payload != ImageView{}) {
-				deallocate(*allocator, std::move(payload));
-			}
-			payload = std::move(value);
-		}
-	}
-
 	Future::Future(std::shared_ptr<struct RenderGraph> org, Name output_binding, DomainFlags dst_domain) :
 	    output_binding(output_binding),
 	    rg(std::move(org)),

@@ -604,6 +604,8 @@ namespace vuk {
 		tex.extent = ici.extent;
 		tex.format = ici.format;
 		tex.sample_count = ici.samples;
+		tex.layer_count = 1;
+		tex.level_count = ici.mipLevels;
 		return tex;
 	}
 
@@ -720,30 +722,8 @@ namespace vuk {
 
 	ImageView Context::wrap(VkImageView iv, ImageViewCreateInfo ivci) {
 		ImageView viv{ .payload = iv };
-		viv.base_layer = ivci.subresourceRange.baseArrayLayer;
-		viv.layer_count = ivci.subresourceRange.layerCount;
-		viv.base_level = ivci.subresourceRange.baseMipLevel;
-		viv.level_count = ivci.subresourceRange.levelCount;
-		viv.format = ivci.format;
-		viv.type = ivci.viewType;
-		viv.image = ivci.image;
-		viv.components = ivci.components;
 		viv.id = impl->unique_handle_id_counter++;
 		return viv;
-	}
-
-	Unique<ImageView> Unique<ImageView>::SubrangeBuilder::apply() {
-		ImageViewCreateInfo ivci;
-		ivci.viewType = type == ImageViewType(0xdeadbeef) ? iv.type : type;
-		ivci.subresourceRange.baseMipLevel = base_level == 0xdeadbeef ? iv.base_level : base_level;
-		ivci.subresourceRange.levelCount = level_count == 0xdeadbeef ? iv.level_count : level_count;
-		ivci.subresourceRange.baseArrayLayer = base_layer == 0xdeadbeef ? iv.base_layer : base_layer;
-		ivci.subresourceRange.layerCount = layer_count == 0xdeadbeef ? iv.layer_count : layer_count;
-		ivci.subresourceRange.aspectMask = format_to_aspect(iv.format);
-		ivci.image = iv.image;
-		ivci.format = iv.format;
-		ivci.components = iv.components;
-		return allocate_image_view(*allocator, ivci).value(); // TODO: dropping error
 	}
 
 	void Context::collect(uint64_t frame) {
