@@ -16,8 +16,7 @@ vec2 sample_spherical_map(vec3 v) {
     return uv;
 }
 
-void main()
-{		
+void main() {
     vec2 uv = sample_spherical_map(normalize(in_pos));
     vec3 color = texture(equirectangular_map, uv).rgb;
     

@@ -103,17 +103,17 @@ namespace {
 		      // hdr_texture is a 2:1 equirectangular; it needs to be converted to a cubemap
 
 		      env_cubemap_ia = { .image = *env_cubemap,
-			                                  .image_flags = vuk::ImageCreateFlagBits::eCubeCompatible,
-			                                  .image_type = vuk::ImageType::e2D,
-			                                  .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eColorAttachment,
-			                                  .extent = vuk::Dimension3D::absolute(1024, 1024, 1),
-			                                  .format = vuk::Format::eR32G32B32A32Sfloat,
-			                                  .sample_count = vuk::Samples::e1,
-			                                  .view_type = vuk::ImageViewType::eCube,
-			                                  .base_level = 0,
-			                                  .level_count = 1,
-			                                  .base_layer = 0,
-			                                  .layer_count = 6 };
+			                       .image_flags = vuk::ImageCreateFlagBits::eCubeCompatible,
+			                       .image_type = vuk::ImageType::e2D,
+			                       .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eColorAttachment,
+			                       .extent = vuk::Dimension3D::absolute(1024, 1024, 1),
+			                       .format = vuk::Format::eR32G32B32A32Sfloat,
+			                       .sample_count = vuk::Samples::e1,
+			                       .view_type = vuk::ImageViewType::eCube,
+			                       .base_level = 0,
+			                       .level_count = 1,
+			                       .base_layer = 0,
+			                       .layer_count = 6 };
 		      env_cubemap = *vuk::allocate_image(allocator, env_cubemap_ia);
 		      env_cubemap_ia.image = *env_cubemap;
 
@@ -130,51 +130,46 @@ namespace {
 		      equirectangular_to_cubemap.add_glsl(util::read_entire_file("../../examples/equirectangular_to_cubemap.frag"), "equirectangular_to_cubemap.frag");
 		      runner.context->create_named_pipeline("equirectangular_to_cubemap", equirectangular_to_cubemap);
 
-		      // make cubemap by rendering to individual faces (non-layered FB)
+		      // make cubemap by rendering to individual faces (layered FB)
 		      {
 			      vuk::RenderGraph rg("cubegen");
 			      rg.attach_in("hdr_texture", std::move(hdr_texture.second));
 			      rg.attach_in("verts", std::move(vert_fut));
 			      rg.attach_in("inds", std::move(ind_fut));
 			      rg.attach_image("env_cubemap", env_cubemap_ia, vuk::Access::eNone, vuk::Access::eNone);
-			      for (unsigned i = 0; i < 6; ++i) {
-				      vuk::Resource cubemap_face("env_cubemap", vuk::Resource::Type::eImage, vuk::Access::eColorWrite, "env_cubemap+");
-				      cubemap_face.subrange.image.base_layer = i;
-				      cubemap_face.subrange.image.layer_count = 1;
-				      rg.add_pass({ .resources = { cubemap_face,
-				                                   "hdr_texture"_image >> vuk::eFragmentSampled,
-				                                   "verts"_buffer >> vuk::eAttributeRead,
-				                                   "inds"_buffer >> vuk::eIndexRead },
-				                    .execute = [=](vuk::CommandBuffer& cbuf) {
-					                    cbuf.set_viewport(0, vuk::Rect2D::framebuffer())
-					                        .set_scissor(0, vuk::Rect2D::framebuffer())
-					                        .broadcast_color_blend(vuk::BlendPreset::eOff)
-					                        .set_rasterization({})
-					                        .bind_vertex_buffer(
-					                            0,
-					                            *cbuf.get_resource_buffer("verts"),
-					                            0,
-					                            vuk::Packed{ vuk::Format::eR32G32B32Sfloat, vuk::Ignore{ sizeof(util::Vertex) - sizeof(util::Vertex::position) } })
-					                        .bind_index_buffer(*cbuf.get_resource_buffer("inds"), vuk::IndexType::eUint32)
-					                        .bind_image(0, 2, "hdr_texture")
-					                        .bind_sampler(0,
-					                                      2,
-					                                      vuk::SamplerCreateInfo{ .magFilter = vuk::Filter::eLinear,
-					                                                              .minFilter = vuk::Filter::eLinear,
-					                                                              .mipmapMode = vuk::SamplerMipmapMode::eLinear,
-					                                                              .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
-					                                                              .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
-					                                                              .addressModeW = vuk::SamplerAddressMode::eClampToEdge })
-					                        .bind_graphics_pipeline("equirectangular_to_cubemap");
-					                    glm::mat4* projection = cbuf.map_scratch_uniform_binding<glm::mat4>(0, 0);
-					                    *projection = capture_projection;
-					                    glm::mat4* view = cbuf.map_scratch_uniform_binding<glm::mat4>(0, 1);
-					                    *view = capture_views[i];
-					                    cbuf.draw_indexed(box.second.size(), 1, 0, 0, 0);
-				                    } });
-			      }
-			      rg.converge_image("env_cubemap", "env_cubemap++");
-			      auto fut_in_layout = vuk::transition(vuk::Future{ std::make_unique<vuk::RenderGraph>(std::move(rg)), "env_cubemap++" }, vuk::eFragmentSampled);
+			      rg.add_pass({ .resources = { "env_cubemap"_image >> vuk::eColorWrite,
+			                                   "hdr_texture"_image >> vuk::eFragmentSampled,
+			                                   "verts"_buffer >> vuk::eAttributeRead,
+			                                   "inds"_buffer >> vuk::eIndexRead },
+			                    .execute = [=](vuk::CommandBuffer& cbuf) {
+				                    cbuf.set_viewport(0, vuk::Rect2D::framebuffer())
+				                        .set_scissor(0, vuk::Rect2D::framebuffer())
+				                        .broadcast_color_blend(vuk::BlendPreset::eOff)
+				                        .set_rasterization({})
+				                        .bind_vertex_buffer(
+				                            0,
+				                            *cbuf.get_resource_buffer("verts"),
+				                            0,
+				                            vuk::Packed{ vuk::Format::eR32G32B32Sfloat, vuk::Ignore{ sizeof(util::Vertex) - sizeof(util::Vertex::position) } })
+				                        .bind_index_buffer(*cbuf.get_resource_buffer("inds"), vuk::IndexType::eUint32)
+				                        .bind_image(0, 2, "hdr_texture")
+				                        .bind_sampler(0,
+				                                      2,
+				                                      vuk::SamplerCreateInfo{ .magFilter = vuk::Filter::eLinear,
+				                                                              .minFilter = vuk::Filter::eLinear,
+				                                                              .mipmapMode = vuk::SamplerMipmapMode::eLinear,
+				                                                              .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
+				                                                              .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
+				                                                              .addressModeW = vuk::SamplerAddressMode::eClampToEdge })
+				                        .bind_graphics_pipeline("equirectangular_to_cubemap");
+				                    glm::mat4* projection = cbuf.map_scratch_uniform_binding<glm::mat4>(0, 0);
+				                    *projection = capture_projection;
+				                    using mats = glm::mat4[6];
+				                    mats* view = cbuf.map_scratch_uniform_binding<glm::mat4[6]>(0, 1);
+				                    memcpy(view, capture_views, sizeof(capture_views));
+				                    cbuf.draw_indexed(box.second.size(), 6, 0, 0, 0);
+			                    } });
+			      auto fut_in_layout = vuk::transition(vuk::Future{ std::make_unique<vuk::RenderGraph>(std::move(rg)), "env_cubemap+" }, vuk::eFragmentSampled);
 			      runner.enqueue_setup(std::move(fut_in_layout));
 		      }
 		    },
@@ -186,7 +181,7 @@ namespace {
 		      } vp;
 		      auto cam_pos = glm::vec3(0, 0.5, 2.5);
 		      vp.view = glm::lookAt(cam_pos, glm::vec3(0), glm::vec3(0, 1, 0));
-		      vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 1.f, 10.f);
+		      vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 0.1f, 10.f);
 		      vp.proj[1][1] *= -1;
 
 		      auto [buboVP, uboVP_fut] = create_buffer_cross_device(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, std::span(&vp, 1));
@@ -228,12 +223,16 @@ namespace {
 			                                                          vuk::Format::eR32G32B32Sfloat,
 			                                                          vuk::Ignore{ offsetof(util::Vertex, uv_coordinates) - offsetof(util::Vertex, tangent) },
 			                                                          vuk::Format::eR32G32Sfloat })
-			                         .bind_index_buffer(inds, vuk::IndexType::eUint32)
-			                         .bind_image(0, 2, env_cubemap_ia)
-			                         .bind_sampler(0, 2, {})
-			                         .push_constants(vuk::ShaderStageFlagBits::eFragment, 0, cam_pos)
-			                         .bind_graphics_pipeline("cube_deferred_reflective")
-			                         .bind_buffer(0, 0, uboVP);
+			                         .bind_index_buffer(inds, vuk::IndexType::eUint32);
+			                     command_buffer.push_constants(vuk::ShaderStageFlagBits::eFragment, 0, cam_pos).bind_graphics_pipeline("cube_deferred_reflective");
+			                     for (auto i = 0; i < 64; i++) {
+				                     command_buffer.bind_image(0, 2, env_cubemap_ia).bind_sampler(0, 2, {}).bind_buffer(0, 0, uboVP);
+				                     glm::mat4* model = command_buffer.map_scratch_uniform_binding<glm::mat4>(0, 1);
+				                     *model = glm::scale(glm::mat4(1.f), glm::vec3(0.1f)) *
+				                              glm::translate(glm::mat4(1.f), 4.f * glm::vec3(i % 8 - 4, sinf(0.1 * angle + i), i / 8 - 4));
+				                     command_buffer.draw_indexed(box.second.size(), 1, 0, 0, 0);
+			                     }
+			                     command_buffer.bind_image(0, 2, env_cubemap_ia).bind_sampler(0, 2, {}).bind_buffer(0, 0, uboVP);
 			                     glm::mat4* model = command_buffer.map_scratch_uniform_binding<glm::mat4>(0, 1);
 			                     *model = static_cast<glm::mat4>(glm::angleAxis(glm::radians(angle), glm::vec3(0.f, 1.f, 0.f)));
 			                     command_buffer.draw_indexed(box.second.size(), 1, 0, 0, 0);
