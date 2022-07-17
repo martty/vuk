@@ -59,6 +59,8 @@ namespace vuk {
 		uint64_t current_ts_pool = 0;
 		std::mutex tsema_mutex;
 		std::vector<TimelineSemaphore> tsemas;
+		std::mutex as_mutex;
+		std::vector<VkAccelerationStructureKHR> ass;
 		std::mutex swapchain_mutex;
 		std::vector<VkSwapchainKHR> swapchains;
 
@@ -506,6 +508,19 @@ namespace vuk {
 		vec.insert(vec.end(), src.begin(), src.end());
 	}
 
+	Result<void, AllocateException> DeviceSuperFrameResource::allocate_acceleration_structures(std::span<VkAccelerationStructureKHR> dst,
+		std::span<const VkAccelerationStructureCreateInfoKHR> cis,
+		SourceLocationAtFrame loc) {
+		return direct.allocate_acceleration_structures(dst, cis, loc);
+	}
+
+	void DeviceSuperFrameResource::deallocate_acceleration_structures(std::span<const VkAccelerationStructureKHR> src) {
+		auto& f = get_last_frame();
+		std::unique_lock _(f.impl->as_mutex);
+		auto& vec = f.impl->ass;
+		vec.insert(vec.end(), src.begin(), src.end());
+	}
+
 	void DeviceSuperFrameResource::deallocate_swapchains(std::span<const VkSwapchainKHR> src) {
 		auto& f = get_last_frame();
 		std::unique_lock _(f.impl->swapchain_mutex);
@@ -550,6 +565,7 @@ namespace vuk {
 		direct.ctx->make_timestamp_results_available(f.ts_query_pools);
 		direct.deallocate_timestamp_query_pools(f.ts_query_pools);
 		direct.deallocate_timeline_semaphores(f.tsemas);
+		direct.deallocate_acceleration_structures(f.ass);
 		direct.deallocate_swapchains(f.swapchains);
 
 		f.semaphores.clear();
@@ -571,6 +587,7 @@ namespace vuk {
 		f.ts_query_pools.clear();
 		f.query_index = 0;
 		f.tsemas.clear();
+		f.ass.clear();
 		f.swapchains.clear();
 	}
 

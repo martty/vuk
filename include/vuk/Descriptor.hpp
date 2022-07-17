@@ -71,7 +71,7 @@ namespace vuk {
 	}
 
 	struct DescriptorSetLayoutAllocInfo {
-		std::array<uint32_t, 12> descriptor_counts = {};
+		std::array<uint32_t, 13> descriptor_counts = {};
 		VkDescriptorSetLayout layout;
 		unsigned variable_count_binding = (unsigned)-1;
 		vuk::DescriptorType variable_count_binding_type;
@@ -124,6 +124,7 @@ namespace vuk {
 		union {
 			VkDescriptorBufferInfo buffer;
 			DescriptorImageInfo image;
+			VkAccelerationStructureKHR as;
 		};
 
 		bool operator==(const DescriptorBinding& o) const noexcept {
@@ -138,6 +139,8 @@ namespace vuk {
 			case vuk::DescriptorType::eSampler:
 			case vuk::DescriptorType::eCombinedImageSampler:
 				return image == o.image;
+			case vuk::DescriptorType::eAccelerationStructureKHR:
+				return as == o.as;
 			default:
 				assert(0);
 				return false;

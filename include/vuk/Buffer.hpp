@@ -19,7 +19,10 @@ namespace vuk {
 		eTransformFeedbackCounterBufferEXT = VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_COUNTER_BUFFER_BIT_EXT,
 		eConditionalRenderingEXT = VK_BUFFER_USAGE_CONDITIONAL_RENDERING_BIT_EXT,
 		eShaderDeviceAddressEXT = VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_EXT,
-		eShaderDeviceAddressKHR = VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR
+		eShaderDeviceAddressKHR = VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR,
+		eAccelerationStructureBuildInputReadOnlyKHR = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+		eAccelerationStructureStorageKHR = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR,
+		eShaderBindingTable = VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR
 	};
 
 	using BufferUsageFlags = Flags<BufferUsageFlagBits>;
@@ -43,6 +46,7 @@ namespace vuk {
 		size_t offset = 0;
 		size_t size = 0;
 		size_t allocation_size = 0;
+		uint64_t device_address = 0;
 		std::byte* mapped_ptr = nullptr;
 		MemoryUsage memory_usage;
 
@@ -61,15 +65,27 @@ namespace vuk {
 		/// @brief Create a new Buffer by offsetting
 		[[nodiscard]] Buffer add_offset(size_t offset_to_add) {
 			assert(offset_to_add <= size);
-			return { device_memory,        buffer,          offset + offset_to_add,
-				       size - offset_to_add, allocation_size, mapped_ptr != nullptr ? mapped_ptr + offset_to_add : nullptr,
+			return { device_memory,
+				       buffer,
+				       offset + offset_to_add,
+				       size - offset_to_add,
+				       allocation_size,
+				       device_address != 0 ? device_address + offset_to_add : 0,
+				       mapped_ptr != nullptr ? mapped_ptr + offset_to_add : nullptr,
 				       memory_usage };
 		}
 
 		/// @brief Create a new Buffer that is a subset of the original
 		[[nodiscard]] Buffer subrange(size_t new_offset, size_t new_size) {
 			assert(new_offset + new_size <= size);
-			return { device_memory, buffer, offset + new_offset, new_size, allocation_size, mapped_ptr != nullptr ? mapped_ptr + new_offset : nullptr, memory_usage };
+			return { device_memory,
+				       buffer,
+				       offset + new_offset,
+				       new_size,
+				       allocation_size,
+				       device_address != 0 ? device_address + new_offset : 0,
+				       mapped_ptr != nullptr ? mapped_ptr + new_offset : nullptr,
+				       memory_usage };
 		}
 	};
 

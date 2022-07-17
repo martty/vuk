@@ -129,6 +129,11 @@ namespace vuk {
 		virtual Result<void, AllocateException> allocate_timeline_semaphores(std::span<TimelineSemaphore> dst, SourceLocationAtFrame loc) = 0;
 		virtual void deallocate_timeline_semaphores(std::span<const TimelineSemaphore> src) = 0;
 
+		virtual Result<void, AllocateException> allocate_acceleration_structures(std::span<VkAccelerationStructureKHR> dst,
+		                                                                         std::span<const VkAccelerationStructureCreateInfoKHR> cis,
+		                                                                         SourceLocationAtFrame loc) = 0;
+		virtual void deallocate_acceleration_structures(std::span<const VkAccelerationStructureKHR> src) = 0;
+
 		virtual void deallocate_swapchains(std::span<const VkSwapchainKHR> src) = 0;
 
 		virtual Context& get_context() = 0;
@@ -419,6 +424,26 @@ namespace vuk {
 		/// @brief Deallocate timeline semaphores previously allocated from this Allocator
 		/// @param src Span of timeline semaphores to be deallocated
 		void deallocate(std::span<const TimelineSemaphore> src);
+
+		/// @brief Allocate acceleration structures from this Allocator
+		/// @param dst Destination span to place allocated acceleration structures into
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
+		Result<void, AllocateException> allocate(std::span<VkAccelerationStructureKHR> dst,
+		                                         std::span<const VkAccelerationStructureCreateInfoKHR> cis,
+		                                         SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+
+		/// @brief Allocate acceleration structures from this Allocator
+		/// @param dst Destination span to place allocated acceleration structures into
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
+		Result<void, AllocateException> allocate_acceleration_structures(std::span<VkAccelerationStructureKHR> dst,
+		                                                                 std::span<const VkAccelerationStructureCreateInfoKHR> cis,
+		                                                                 SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+
+		/// @brief Deallocate acceleration structures previously allocated from this Allocator
+		/// @param src Span of acceleration structures to be deallocated
+		void deallocate(std::span<const VkAccelerationStructureKHR> src);
 
 		/// @brief Deallocate swapchains previously allocated from this Allocator
 		/// @param src Span of swapchains to be deallocated

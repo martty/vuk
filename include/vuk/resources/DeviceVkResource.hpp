@@ -73,6 +73,12 @@ namespace vuk {
 
 		void deallocate_timeline_semaphores(std::span<const TimelineSemaphore> src) override;
 
+		Result<void, AllocateException> allocate_acceleration_structures(std::span<VkAccelerationStructureKHR> dst,
+		                                                                         std::span<const VkAccelerationStructureCreateInfoKHR> cis,
+		                                                                         SourceLocationAtFrame loc) override;
+
+		void deallocate_acceleration_structures(std::span<const VkAccelerationStructureKHR> src) override;
+
 		void deallocate_swapchains(std::span<const VkSwapchainKHR> src) override;
 
 		Context& get_context() override {

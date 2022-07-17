@@ -4,8 +4,8 @@
 #include "vuk/Config.hpp"
 #include "vuk/vuk_fwd.hpp"
 
-#include <string>
 #include <array>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -131,6 +131,14 @@ namespace vuk {
 			VkShaderStageFlags stage;
 		};
 
+		struct AccelerationStructure {
+			std::string name;
+
+			unsigned array_size;
+			unsigned binding;
+			VkShaderStageFlags stage;
+		};
+
 		struct SpecConstant {
 			unsigned binding; // constant_id
 			Type type;
@@ -154,6 +162,7 @@ namespace vuk {
 			std::vector<SampledImage> sampled_images;
 			std::vector<Sampler> samplers;
 			std::vector<SubpassInput> subpass_inputs;
+			std::vector<AccelerationStructure> acceleration_structures;
 
 			unsigned highest_descriptor_binding = 0;
 		};

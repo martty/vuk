@@ -117,13 +117,13 @@ namespace vuk {
 	};
 
 	template<class... Args>
-	Result<void> wait_for_futures(Allocator& alloc, Args&... futs) {
+	Result<void> wait_for_futures(Allocator& alloc, Args&&... futs) {
 		std::array controls = { futs.get_control()... };
 		std::array rgs = { futs.get_render_graph().get()... };
 		std::vector<std::pair<Allocator*, RenderGraph*>> rgs_to_run;
 		for (uint64_t i = 0; i < controls.size(); i++) {
 			auto& control = controls[i];
-			if (control->status == FutureBase::Status::eInitial) {
+			if (control->status == FutureBase::Status::eInitial && !rgs[i]) {
 				return { expected_error, RenderGraphException{} };
 			} else if (control->status == FutureBase::Status::eHostAvailable || control->status == FutureBase::Status::eSubmitted) {
 				continue;

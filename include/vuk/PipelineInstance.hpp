@@ -156,6 +156,27 @@ namespace vuk {
 	struct create_info<ComputePipelineInfo> {
 		using type = vuk::ComputePipelineInstanceCreateInfo;
 	};
+
+	struct RayTracingPipelineInstanceCreateInfo {
+		PipelineBaseInfo* base;
+
+		std::array<std::byte, VUK_MAX_SPECIALIZATIONCONSTANT_DATA> specialization_constant_data;
+		vuk::fixed_vector<VkSpecializationMapEntry, VUK_MAX_SPECIALIZATIONCONSTANT_RANGES> specialization_map_entries;
+		VkSpecializationInfo specialization_info = {};
+
+		bool operator==(const RayTracingPipelineInstanceCreateInfo& o) const noexcept {
+			return base == o.base && specialization_map_entries == o.specialization_map_entries && specialization_info.dataSize == o.specialization_info.dataSize &&
+			       memcmp(specialization_constant_data.data(), o.specialization_constant_data.data(), specialization_info.dataSize) == 0;
+		}
+	};
+
+	struct RayTracingPipelineInfo : PipelineInfo {
+	};
+
+	template<>
+	struct create_info<RayTracingPipelineInfo> {
+		using type = vuk::RayTracingPipelineInstanceCreateInfo;
+	};
 } // namespace vuk
 
 namespace std {
@@ -172,6 +193,11 @@ namespace std {
 	template<>
 	struct hash<vuk::ComputePipelineInstanceCreateInfo> {
 		size_t operator()(vuk::ComputePipelineInstanceCreateInfo const& x) const noexcept;
+	};
+
+	template<>
+	struct hash<vuk::RayTracingPipelineInstanceCreateInfo> {
+		size_t operator()(vuk::RayTracingPipelineInstanceCreateInfo const& x) const noexcept;
 	};
 
 	template<>

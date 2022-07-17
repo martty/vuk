@@ -28,6 +28,8 @@ namespace vuk {
 		case eHostRW:
 		case eMemoryWrite:
 		case eMemoryRW:
+		case eRayTracingWrite:
+		case eRayTracingRW:
 			return true;
 		default:
 			return false;
@@ -52,6 +54,8 @@ namespace vuk {
 		case eHostRW:
 		case eMemoryRead:
 		case eMemoryRW:
+		case eRayTracingRead:
+		case eRayTracingSampled:
 			return true;
 		default:
 			return false;
@@ -121,6 +125,18 @@ namespace vuk {
 			return { vuk::PipelineStageFlagBits::eVertexInput, vuk::AccessFlagBits::eIndexRead, vuk::ImageLayout::eGeneral /* ignored */, domain };
 		case eIndirectRead:
 			return { vuk::PipelineStageFlagBits::eDrawIndirect, vuk::AccessFlagBits::eIndirectCommandRead, vuk::ImageLayout::eGeneral /* ignored */, domain };
+
+		case eRayTracingRead:
+			return { vuk::PipelineStageFlagBits::eRayTracingShaderKHR, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eGeneral, domain };
+		case eRayTracingWrite:
+			return { vuk::PipelineStageFlagBits::eRayTracingShaderKHR, vuk::AccessFlagBits::eShaderWrite, vuk::ImageLayout::eGeneral, domain };
+		case eRayTracingRW:
+			return { vuk::PipelineStageFlagBits::eRayTracingShaderKHR,
+				       vuk::AccessFlagBits::eShaderRead | vuk::AccessFlagBits::eShaderWrite,
+				       vuk::ImageLayout::eGeneral,
+				       domain };
+		case eRayTracingSampled:
+			return { vuk::PipelineStageFlagBits::eRayTracingShaderKHR, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eShaderReadOnlyOptimal, domain };
 
 		case eHostRead:
 			return { vuk::PipelineStageFlagBits::eHost, vuk::AccessFlagBits::eHostRead, vuk::ImageLayout::eGeneral, domain };

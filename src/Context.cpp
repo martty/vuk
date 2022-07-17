@@ -29,6 +29,7 @@
 
 namespace vuk {
 	Context::Context(ContextCreateParameters params) :
+	    ContextCreateParameters::FunctionPointers(params.pointers),
 	    instance(params.instance),
 	    device(params.device),
 	    physical_device(params.physical_device),
@@ -82,6 +83,10 @@ namespace vuk {
 		} else {
 			transfer_queue = compute_queue ? compute_queue : graphics_queue;
 		}
+
+		VkPhysicalDeviceProperties2 prop2{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2 };
+		prop2.pNext = &rt_properties;
+		vkGetPhysicalDeviceProperties2(physical_device, &prop2);
 	}
 
 	Context::Context(Context&& o) noexcept : impl(std::exchange(o.impl, nullptr)), debug(o.debug) {
@@ -105,6 +110,7 @@ namespace vuk {
 		} else {
 			transfer_queue = compute_queue ? compute_queue : graphics_queue;
 		}
+		rt_properties = o.rt_properties;
 
 		impl->pipelinebase_cache.ctx = this;
 		impl->pipeline_cache.ctx = this;
@@ -275,7 +281,7 @@ namespace vuk {
 		case ShaderSourceLanguage::eGlsl: {
 			shaderc::Compiler compiler;
 			shaderc::CompileOptions options;
-			options.SetTargetEnvironment(shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_1);
+			options.SetTargetEnvironment(shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_2);
 
 			const auto result = compiler.CompileGlslToSpv(cinfo.source.as_c_str(), shaderc_glsl_infer_from_source, cinfo.filename.c_str(), options);
 
@@ -385,7 +391,7 @@ namespace vuk {
 	}
 
 	PipelineBaseInfo Context::create(const create_info_t<PipelineBaseInfo>& cinfo) {
-		fixed_vector<VkPipelineShaderStageCreateInfo, graphics_stage_count> psscis;
+		std::vector<VkPipelineShaderStageCreateInfo> psscis;
 
 		// accumulate descriptors from all stages
 		Program accumulated_reflection;
@@ -515,7 +521,8 @@ namespace vuk {
 			auto& b = cinfo.bindings[i];
 			// if this is not a variable count binding, add it to the descriptor count
 			if (cinfo.flags.size() <= i || !(cinfo.flags[i] & to_integral(DescriptorBindingFlagBits::eVariableDescriptorCount))) {
-				ret.descriptor_counts[to_integral(b.descriptorType)] += b.descriptorCount;
+				auto index = b.descriptorType == VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR ? 12 : to_integral(b.descriptorType);
+				ret.descriptor_counts[index] += b.descriptorCount;
 			} else { // a variable count binding
 				ret.variable_count_binding = (uint32_t)i;
 				ret.variable_count_binding_type = DescriptorType(b.descriptorType);
@@ -1081,6 +1088,56 @@ namespace vuk {
 		return { { cinfo.base, pipeline, cpci.layout, cinfo.base->layout_info }, cinfo.base->reflection_info.local_size };
 	}
 
+	RayTracingPipelineInfo Context::create(const struct RayTracingPipelineInstanceCreateInfo& cinfo) {
+		// create compute pipeline
+		VkRayTracingPipelineCreateInfoKHR cpci{ .sType = VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR };
+		cpci.layout = cinfo.base->pipeline_layout;
+
+		std::vector<VkRayTracingShaderGroupCreateInfoKHR> groups;
+		VkRayTracingShaderGroupCreateInfoKHR group{ VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR };
+		group.anyHitShader = VK_SHADER_UNUSED_KHR;
+		group.closestHitShader = VK_SHADER_UNUSED_KHR;
+		group.generalShader = VK_SHADER_UNUSED_KHR;
+		group.intersectionShader = VK_SHADER_UNUSED_KHR;
+
+		for (auto& stage : cinfo.base->psscis) {
+			if (stage.stage == VK_SHADER_STAGE_RAYGEN_BIT_KHR) {
+				// Raygen
+				group.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
+				group.generalShader = 0;
+				groups.push_back(group);
+			} else if (stage.stage == VK_SHADER_STAGE_MISS_BIT_KHR) {
+				// Miss
+				group.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
+				group.generalShader = 1;
+				groups.push_back(group);
+			}
+		}
+
+
+
+
+		// closest hit shader
+		/*group.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
+		group.generalShader = VK_SHADER_UNUSED_KHR;
+		group.closestHitShader = 2;
+		groups.push_back(group);*/
+
+		cpci.groupCount = groups.size();
+		cpci.pGroups = groups.data();
+
+		cpci.maxPipelineRayRecursionDepth = 1;
+		cpci.pStages = cinfo.base->psscis.data();
+		cpci.stageCount = cinfo.base->psscis.size();
+
+		VkPipeline pipeline;
+		VkResult res = vkCreateRayTracingPipelinesKHR(
+		    device, {}, impl->vk_pipeline_cache, 1, &cpci, nullptr, &pipeline);
+		assert(res == VK_SUCCESS);
+		debug.set_name(pipeline, cinfo.base->pipeline_name);
+		return { { cinfo.base, pipeline, cpci.layout, cinfo.base->layout_info } };
+	}
+
 	Sampler Context::create(const create_info_t<Sampler>& cinfo) {
 		VkSampler s;
 		vkCreateSampler(device, (VkSamplerCreateInfo*)&cinfo, nullptr, &s);
@@ -1113,6 +1170,10 @@ namespace vuk {
 
 	ComputePipelineInfo Context::acquire_pipeline(const ComputePipelineInstanceCreateInfo& pici, uint64_t absolute_frame) {
 		return impl->compute_pipeline_cache.acquire(pici, absolute_frame);
+	}
+
+	RayTracingPipelineInfo Context::acquire_pipeline(const RayTracingPipelineInstanceCreateInfo& ci, uint64_t absolute_frame) {
+		return impl->ray_tracing_pipeline_cache.acquire(ci, absolute_frame);
 	}
 
 	bool Context::is_timestamp_available(Query q) {

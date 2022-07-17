@@ -213,21 +213,21 @@ namespace vuk {
 			auto dsl = dslai.layout;
 			VkDescriptorPoolCreateInfo dpci = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
 			dpci.maxSets = 1;
-			std::array<VkDescriptorPoolSize, 12> descriptor_counts = {};
+			std::array<VkDescriptorPoolSize, 13> descriptor_counts = {};
 			uint32_t used_idx = 0;
 			for (auto i = 0; i < descriptor_counts.size(); i++) {
 				bool used = false;
 				// create non-variable count descriptors
 				if (dslai.descriptor_counts[i] > 0) {
 					auto& d = descriptor_counts[used_idx];
-					d.type = VkDescriptorType(i);
+					d.type = i == 12 ? VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR : VkDescriptorType(i);
 					d.descriptorCount = dslai.descriptor_counts[i];
 					used = true;
 				}
 				// create variable count descriptors
 				if (dslai.variable_count_binding != (unsigned)-1 && dslai.variable_count_binding_type == DescriptorType(i)) {
 					auto& d = descriptor_counts[used_idx];
-					d.type = VkDescriptorType(i);
+					d.type = i == 12 ? VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR : VkDescriptorType(i);
 					d.descriptorCount += ci.num_descriptors;
 					used = true;
 				}
@@ -288,6 +288,7 @@ namespace vuk {
 			auto mask = cinfo.used.to_ulong();
 			uint32_t leading_ones = num_leading_ones(mask);
 			std::array<VkWriteDescriptorSet, VUK_MAX_BINDINGS> writes = {};
+			std::array<VkWriteDescriptorSetAccelerationStructureKHR, VUK_MAX_BINDINGS> as_writes = {};
 			int j = 0;
 			for (uint32_t i = 0; i < leading_ones; i++, j++) {
 				if (!cinfo.used.test(i)) {
@@ -295,6 +296,7 @@ namespace vuk {
 					continue;
 				}
 				auto& write = writes[j];
+				auto& as_write = as_writes[j];
 				write = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
 				auto& binding = cinfo.bindings[i];
 				write.descriptorType = (VkDescriptorType)binding.type;
@@ -312,6 +314,12 @@ namespace vuk {
 				case DescriptorType::eCombinedImageSampler:
 				case DescriptorType::eStorageImage:
 					write.pImageInfo = &binding.image.dii;
+					break;
+				case DescriptorType::eAccelerationStructureKHR:
+					as_write = { VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR };
+					as_write.pAccelerationStructures = &binding.as;
+					as_write.accelerationStructureCount = 1;
+					write.pNext = &as_write;
 					break;
 				default:
 					assert(0);
@@ -399,6 +407,29 @@ namespace vuk {
 			if (v.semaphore != VK_NULL_HANDLE) {
 				vkDestroySemaphore(device, v.semaphore, nullptr);
 				delete v.value;
+			}
+		}
+	}
+
+	Result<void, AllocateException> DeviceVkResource::allocate_acceleration_structures(std::span<VkAccelerationStructureKHR> dst,
+		std::span<const VkAccelerationStructureCreateInfoKHR> cis,
+		SourceLocationAtFrame loc) {
+		assert(dst.size() == cis.size());
+		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
+			VkAccelerationStructureCreateInfoKHR ci = cis[i];
+			VkResult res = ctx->vkCreateAccelerationStructureKHR(device, &ci, nullptr, &dst[i]);
+			if (res != VK_SUCCESS) {
+				deallocate_acceleration_structures({ dst.data(), (uint64_t)i });
+				return { expected_error, AllocateException{ res } };
+			}
+		}
+		return { expected_value };
+	}
+
+	void DeviceVkResource::deallocate_acceleration_structures(std::span<const VkAccelerationStructureKHR> src) {
+		for (auto& v : src) {
+			if (v != VK_NULL_HANDLE) {
+				ctx->vkDestroyAccelerationStructureKHR(device, v, nullptr);
 			}
 		}
 	}
@@ -534,6 +565,16 @@ namespace vuk {
 
 	void DeviceNestedResource::deallocate_timeline_semaphores(std::span<const TimelineSemaphore> src) {
 		upstream->deallocate_timeline_semaphores(src);
+	}
+
+	Result<void, AllocateException> DeviceNestedResource::allocate_acceleration_structures(std::span<VkAccelerationStructureKHR> dst,
+	                                                                                       std::span<const VkAccelerationStructureCreateInfoKHR> cis,
+	                                                                                       SourceLocationAtFrame loc) {
+		return upstream->allocate_acceleration_structures(dst, cis, loc);
+	}
+
+	void DeviceNestedResource::deallocate_acceleration_structures(std::span<const VkAccelerationStructureKHR> src) {
+		upstream->deallocate_acceleration_structures(src);
 	}
 
 	void DeviceNestedResource::deallocate_swapchains(std::span<const VkSwapchainKHR> src) {

@@ -8,13 +8,13 @@
 #include "vuk/Image.hpp"
 #include "vuk/Types.hpp"
 
-#include <string.h>
 #include <array>
 #include <atomic>
+#include <memory>
 #include <mutex>
+#include <string.h>
 #include <unordered_map>
 #include <utility>
-#include <memory>
 #include <vk_mem_alloc.h>
 
 namespace vuk {
@@ -66,13 +66,20 @@ namespace vuk {
 		std::vector<VkBuffer> buffers;
 	};
 
+	struct BDA {
+		uint64_t value;
+		constexpr operator uint64_t() {
+			return value;
+		}
+	};
+
 	struct LegacyLinearAllocator {
 		std::atomic<int> current_buffer = -1;
 		std::atomic<size_t> needle = 0;
 		VkMemoryRequirements mem_reqs;
 		VmaMemoryUsage mem_usage;
 		vuk::BufferUsageFlags usage;
-		std::array<std::tuple<VmaAllocation, VkDeviceMemory, size_t, VkBuffer, std::byte*>, 32> allocations;
+		std::array<std::tuple<VmaAllocation, VkDeviceMemory, size_t, VkBuffer, std::byte*, BDA>, 32> allocations;
 
 		size_t block_size = 1024 * 1024 * 16;
 
@@ -98,6 +105,7 @@ namespace vuk {
 			VkDevice device;
 			VkBufferCreateInfo bci;
 			VkBuffer result;
+			uint64_t device_address;
 			PFN_vkSetDebugUtilsObjectNameEXT setDebugUtilsObjectNameEXT;
 		};
 		std::unique_ptr<PoolAllocHelper> pool_helper;
@@ -116,7 +124,7 @@ namespace vuk {
 		std::unordered_map<uint64_t, VmaAllocation> images;
 		std::unordered_map<BufferID, VmaAllocation> buffer_allocations;
 		std::unordered_map<PoolSelect, LegacyPoolAllocator> pools;
-		std::unordered_map<uint64_t, std::pair<VkBuffer, size_t>> buffers;
+		std::unordered_map<uint64_t, std::tuple<VkBuffer, size_t, uint64_t>> buffers;
 
 		VmaAllocator allocator;
 		VkPhysicalDeviceProperties properties;
@@ -138,7 +146,9 @@ namespace vuk {
 		static constexpr vuk::BufferUsageFlags all_usage =
 		    BufferUsageFlagBits::eTransferRead | BufferUsageFlagBits::eTransferWrite | BufferUsageFlagBits::eUniformTexelBuffer |
 		    BufferUsageFlagBits::eStorageTexelBuffer | BufferUsageFlagBits::eUniformBuffer | BufferUsageFlagBits::eStorageBuffer |
-		    BufferUsageFlagBits::eIndexBuffer | BufferUsageFlagBits::eVertexBuffer | BufferUsageFlagBits::eIndirectBuffer;
+		    BufferUsageFlagBits::eIndexBuffer | BufferUsageFlagBits::eVertexBuffer | BufferUsageFlagBits::eIndirectBuffer |
+		    BufferUsageFlagBits::eShaderDeviceAddress | BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR |
+		    BufferUsageFlagBits::eAccelerationStructureStorageKHR | BufferUsageFlagBits::eShaderBindingTable;
 
 		VkMemoryRequirements get_memory_requirements(VkBufferCreateInfo& bci);
 		LegacyLinearAllocator allocate_linear(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage);

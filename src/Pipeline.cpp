@@ -113,6 +113,20 @@ namespace vuk {
 				bindings.push_back(layoutBinding);
 			}
 
+			for (auto& si : set.acceleration_structures) {
+				VkDescriptorSetLayoutBinding layoutBinding;
+				layoutBinding.binding = si.binding;
+				layoutBinding.descriptorType = (VkDescriptorType)vuk::DescriptorType::eAccelerationStructureKHR;
+				layoutBinding.descriptorCount = si.array_size == (unsigned)-1 ? 1 : si.array_size;
+				layoutBinding.stageFlags = si.stage;
+				layoutBinding.pImmutableSamplers = nullptr;
+				if (si.array_size == 0) {
+					assert(bci.variable_count_max[index] > 0); // forgot to mark this descriptor as variable count
+					layoutBinding.descriptorCount = bci.variable_count_max[index];
+				}
+				bindings.push_back(layoutBinding);
+			}
+
 			// extract flags from the packed bitset
 			auto set_word_offset = index * VUK_MAX_BINDINGS * 4 / (sizeof(unsigned long long) * 8);
 			for (unsigned i = 0; i <= set.highest_descriptor_binding; i++) {
@@ -145,6 +159,12 @@ namespace std {
 	}
 
 	size_t hash<vuk::ComputePipelineInstanceCreateInfo>::operator()(vuk::ComputePipelineInstanceCreateInfo const& x) const noexcept {
+		size_t h = 0;
+		hash_combine(h, x.base, robin_hood::hash_bytes(x.specialization_constant_data.data(), x.specialization_info.dataSize), x.specialization_map_entries);
+		return h;
+	}
+
+	size_t hash<vuk::RayTracingPipelineInstanceCreateInfo>::operator()(vuk::RayTracingPipelineInstanceCreateInfo const& x) const noexcept {
 		size_t h = 0;
 		hash_combine(h, x.base, robin_hood::hash_bytes(x.specialization_constant_data.data(), x.specialization_info.dataSize), x.specialization_map_entries);
 		return h;

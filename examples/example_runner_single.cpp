@@ -1,5 +1,7 @@
 #include "example_runner.hpp"
 
+#define VUK_EX_LOAD_FP(name) fps.name = (PFN_##name)vkGetDeviceProcAddr(device, #name);
+
 vuk::ExampleRunner::ExampleRunner() {
 	vkb::InstanceBuilder builder;
 	builder.request_validation_layers()
@@ -25,7 +27,12 @@ vuk::ExampleRunner::ExampleRunner() {
 	vkb::PhysicalDeviceSelector selector{ vkbinstance };
 	window = create_window_glfw("Vuk example", false);
 	surface = create_surface_glfw(vkbinstance.instance, window);
-	selector.set_surface(surface).set_minimum_version(1, 0).add_required_extension(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+	selector.set_surface(surface)
+	    .set_minimum_version(1, 0)
+	    .add_required_extension(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME)
+	    .add_desired_extension(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME)
+	    .add_desired_extension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME)
+	    .add_desired_extension(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
 	auto phys_ret = selector.select();
 	if (!phys_ret.has_value()) {
 		// error
@@ -42,10 +49,16 @@ vuk::ExampleRunner::ExampleRunner() {
 	vk12features.runtimeDescriptorArray = true;
 	vk12features.descriptorBindingVariableDescriptorCount = true;
 	vk12features.hostQueryReset = true;
+	vk12features.bufferDeviceAddress = true;
 	VkPhysicalDeviceVulkan11Features vk11features{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES };
 	vk11features.shaderDrawParameters = true;
 	VkPhysicalDeviceSynchronization2FeaturesKHR sync_feat{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR, .synchronization2 = true };
-	auto dev_ret = device_builder.add_pNext(&vk12features).add_pNext(&vk11features).add_pNext(&sync_feat).build();
+	VkPhysicalDeviceAccelerationStructureFeaturesKHR accelFeature{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,
+		                                                             .accelerationStructure = true };
+	VkPhysicalDeviceRayTracingPipelineFeaturesKHR rtPipelineFeature{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR,
+		                                                               .rayTracingPipeline = true };
+	auto dev_ret =
+	    device_builder.add_pNext(&vk12features).add_pNext(&vk11features).add_pNext(&sync_feat).add_pNext(&accelFeature).add_pNext(&rtPipelineFeature).build();
 	if (!dev_ret.has_value()) {
 		// error
 	}
@@ -55,7 +68,14 @@ vuk::ExampleRunner::ExampleRunner() {
 	transfer_queue = vkbdevice.get_queue(vkb::QueueType::transfer).value();
 	auto transfer_queue_family_index = vkbdevice.get_queue_index(vkb::QueueType::transfer).value();
 	device = vkbdevice.device;
-
+	ContextCreateParameters::FunctionPointers fps;
+	VUK_EX_LOAD_FP(vkCmdBuildAccelerationStructuresKHR);
+	VUK_EX_LOAD_FP(vkGetAccelerationStructureBuildSizesKHR);
+	VUK_EX_LOAD_FP(vkCmdTraceRaysKHR);
+	VUK_EX_LOAD_FP(vkCreateAccelerationStructureKHR);
+	VUK_EX_LOAD_FP(vkDestroyAccelerationStructureKHR);
+	VUK_EX_LOAD_FP(vkGetRayTracingShaderGroupHandlesKHR);
+	VUK_EX_LOAD_FP(vkCreateRayTracingPipelinesKHR);
 	context.emplace(ContextCreateParameters{ instance,
 	                                         device,
 	                                         physical_device,
@@ -64,7 +84,8 @@ vuk::ExampleRunner::ExampleRunner() {
 	                                         VK_NULL_HANDLE,
 	                                         VK_QUEUE_FAMILY_IGNORED,
 	                                         transfer_queue,
-	                                         transfer_queue_family_index });
+	                                         transfer_queue_family_index,
+	                                         fps });
 	const unsigned num_inflight_frames = 3;
 	xdev_rf_alloc.emplace(*context, num_inflight_frames);
 	global.emplace(*xdev_rf_alloc);
@@ -84,7 +105,7 @@ void vuk::ExampleRunner::render() {
 		auto attachment_name = vuk::Name(examples[0]->name);
 		rg.attach_swapchain("_swp", swapchain);
 		rg.clear_image("_swp", attachment_name, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
-		auto fut = examples[0]->render(*this, frame_allocator, Future{ std::make_shared<RenderGraph>(std::move(rg)), attachment_name });	
+		auto fut = examples[0]->render(*this, frame_allocator, Future{ std::make_shared<RenderGraph>(std::move(rg)), attachment_name });
 		present(frame_allocator, swapchain, std::move(fut));
 	}
 }

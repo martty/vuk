@@ -183,8 +183,10 @@ namespace vuk {
 		// Current & next graphics & compute pipelines
 		PipelineBaseInfo* next_pipeline = nullptr;
 		PipelineBaseInfo* next_compute_pipeline = nullptr;
+		PipelineBaseInfo* next_ray_tracing_pipeline = nullptr;
 		std::optional<PipelineInfo> current_pipeline;
 		std::optional<ComputePipelineInfo> current_compute_pipeline;
+		std::optional<PipelineInfo> current_ray_tracing_pipeline;
 
 		// Input assembly & fixed-function attributes
 		PrimitiveTopology topology = PrimitiveTopology::eTriangleList;
@@ -249,6 +251,9 @@ namespace vuk {
 			return ctx;
 		}
 
+		VkCommandBuffer get_underlying() const {
+			return command_buffer;
+		}
 		/// @brief Retrieve information about the current renderpass
 		const RenderPassInfo& get_ongoing_renderpass() const;
 		/// @brief Retrieve Buffer attached to given name
@@ -319,6 +324,13 @@ namespace vuk {
 		/// @brief Bind a named graphics pipeline for subsequent dispatches
 		/// @param named_pipeline compute pipeline name
 		CommandBuffer& bind_compute_pipeline(Name named_pipeline);
+
+		/// @brief Bind a ray tracing pipeline for subsequent draws
+		/// @param pipeline_base pointer to a pipeline base to bind
+		CommandBuffer& bind_ray_tracing_pipeline(PipelineBaseInfo* pipeline_base);
+		/// @brief Bind a named ray tracing pipeline for subsequent draws
+		/// @param named_pipeline graphics pipeline name
+		CommandBuffer& bind_ray_tracing_pipeline(Name named_pipeline);
 
 		/// @brief Set specialization constants for the command buffer
 		/// @param constant_id ID of the constant. All stages form a single namespace for IDs.
@@ -435,6 +447,12 @@ namespace vuk {
 		template<class T>
 		T* map_scratch_uniform_binding(unsigned set, unsigned binding);
 
+		/// @brief Bind a sampler to the command buffer from a Resource
+		/// @param set The set bind index to be used
+		/// @param binding The descriptor binding to bind the sampler to
+		/// @param sampler_create_info Parameters of the sampler
+		CommandBuffer& bind_acceleration_structure(unsigned set, unsigned binding, VkAccelerationStructureKHR tlas);
+
 		/// @brief Issue a non-indexed draw
 		/// @param vertex_count Number of vertices to draw
 		/// @param instance_count Number of instances to draw
@@ -479,6 +497,10 @@ namespace vuk {
 		/// @brief Issue an indirect compute dispatch
 		/// @param indirect_buffer Buffer of workgroup counts
 		CommandBuffer& dispatch_indirect(const Buffer& indirect_buffer);
+
+		/// @brief Issue an indirect compute dispatch
+		/// @param indirect_buffer Buffer of workgroup counts
+		CommandBuffer& trace_rays(size_t size_x, size_t size_y, size_t size_z);
 
 		// commands for renderpass-less command buffers
 
@@ -542,9 +564,12 @@ namespace vuk {
 		[[nodiscard]] Result<void> result();
 
 	protected:
-		[[nodiscard]] bool _bind_state(bool graphics);
+		enum class PipeType { eGraphics, eCompute, eRayTracing };
+
+		[[nodiscard]] bool _bind_state(PipeType pipe_type);
 		[[nodiscard]] bool _bind_compute_pipeline_state();
 		[[nodiscard]] bool _bind_graphics_pipeline_state();
+		[[nodiscard]] bool _bind_ray_tracing_pipeline_state();
 
 		CommandBuffer& specialize_constants(uint32_t constant_id, void* data, size_t size);
 	};

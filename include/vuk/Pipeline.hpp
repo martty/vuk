@@ -32,6 +32,10 @@ namespace vuk {
 		using type = vuk::PipelineLayoutCreateInfo;
 	};
 
+	struct RayGroup {
+
+	};
+
 	struct PipelineBaseCreateInfoBase {
 		// 4 valid flags
 		Bitset<4 * VUK_MAX_SETS* VUK_MAX_BINDINGS> binding_flags = {};
@@ -88,8 +92,9 @@ namespace vuk {
 			shader_paths.emplace_back(std::move(filename));
 		}
 
-		vuk::fixed_vector<ShaderSource, graphics_stage_count> shaders;
-		vuk::fixed_vector<std::string, graphics_stage_count> shader_paths;
+		std::vector<ShaderSource> shaders;
+		std::vector<std::string> shader_paths;
+		std::vector<RayGroup> ray_groups;
 
 		friend struct std::hash<PipelineBaseCreateInfo>;
 
@@ -103,7 +108,7 @@ namespace vuk {
 	struct PipelineBaseInfo {
 		Name pipeline_name;
 		vuk::Program reflection_info;
-		vuk::fixed_vector<VkPipelineShaderStageCreateInfo, vuk::graphics_stage_count> psscis;
+		std::vector<VkPipelineShaderStageCreateInfo> psscis;
 		VkPipelineLayout pipeline_layout;
 		std::array<DescriptorSetLayoutAllocInfo, VUK_MAX_SETS> layout_info = {};
 		fixed_vector<DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> dslcis = {}; // saved for debug purposes

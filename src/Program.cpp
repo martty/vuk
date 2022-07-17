@@ -178,6 +178,18 @@ VkShaderStageFlagBits vuk::Program::introspect(const uint32_t* ir, size_t word_c
 			return VK_SHADER_STAGE_FRAGMENT_BIT;
 		case spv::ExecutionModel::ExecutionModelGLCompute:
 			return VK_SHADER_STAGE_COMPUTE_BIT;
+		case spv::ExecutionModel::ExecutionModelAnyHitKHR:
+			return VK_SHADER_STAGE_ANY_HIT_BIT_KHR;
+		case spv::ExecutionModel::ExecutionModelCallableKHR:
+			return VK_SHADER_STAGE_CALLABLE_BIT_KHR;
+		case spv::ExecutionModel::ExecutionModelClosestHitKHR:
+			return VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+		case spv::ExecutionModel::ExecutionModelIntersectionKHR:
+			return VK_SHADER_STAGE_INTERSECTION_BIT_KHR;
+		case spv::ExecutionModel::ExecutionModelMissKHR:
+			return VK_SHADER_STAGE_MISS_BIT_KHR;
+		case spv::ExecutionModel::ExecutionModelRayGenerationKHR:
+			return VK_SHADER_STAGE_RAYGEN_BIT_KHR;
 		default:
 			return VK_SHADER_STAGE_VERTEX_BIT;
 		}
@@ -295,6 +307,19 @@ VkShaderStageFlagBits vuk::Program::introspect(const uint32_t* ir, size_t word_c
 		sets[set].subpass_inputs.push_back(s);
 	}
 
+	// ASs
+	for (auto& as : resources.acceleration_structures) {
+		auto type = refl.get_type(as.type_id);
+		auto binding = refl.get_decoration(as.id, spv::DecorationBinding);
+		auto set = refl.get_decoration(as.id, spv::DecorationDescriptorSet);
+		AccelerationStructure s;
+		s.name = std::string(as.name.c_str());
+		s.binding = binding;
+		s.stage = stage;
+		s.array_size = type.array.size() == 1 ? (type.array[0] == 1 ? 0 : type.array[0]) : -1;
+		sets[set].acceleration_structures.push_back(s);
+	}
+
 	for (auto& sc : refl.get_specialization_constants()) {
 		spec_constants.emplace_back(SpecConstant{ sc.constant_id, to_type(refl.get_type(refl.get_constant(sc.id).constant_type)), (VkShaderStageFlags)stage });
 	}
@@ -310,6 +335,7 @@ VkShaderStageFlagBits vuk::Program::introspect(const uint32_t* ir, size_t word_c
 		unq(set.texel_buffers);
 		unq(set.subpass_inputs);
 		unq(set.storage_images);
+		unq(set.acceleration_structures);
 	}
 
 	std::sort(spec_constants.begin(), spec_constants.end(), binding_cmp);
@@ -335,6 +361,9 @@ VkShaderStageFlagBits vuk::Program::introspect(const uint32_t* ir, size_t word_c
 			max_binding = std::max(max_binding, ub.binding);
 		}
 		for (auto& ub : set.storage_buffers) {
+			max_binding = std::max(max_binding, ub.binding);
+		}
+		for (auto& ub : set.acceleration_structures) {
 			max_binding = std::max(max_binding, ub.binding);
 		}
 		set.highest_descriptor_binding = max_binding;
@@ -374,6 +403,7 @@ void vuk::Program::append(const Program& o) {
 		s.texel_buffers.insert(s.texel_buffers.end(), os.texel_buffers.begin(), os.texel_buffers.end());
 		s.subpass_inputs.insert(s.subpass_inputs.end(), os.subpass_inputs.begin(), os.subpass_inputs.end());
 		s.storage_images.insert(s.storage_images.end(), os.storage_images.begin(), os.storage_images.end());
+		s.acceleration_structures.insert(s.acceleration_structures.end(), os.acceleration_structures.begin(), os.acceleration_structures.end());
 
 		unq(s.samplers);
 		unq(s.sampled_images);
@@ -383,6 +413,7 @@ void vuk::Program::append(const Program& o) {
 		unq(s.texel_buffers);
 		unq(s.subpass_inputs);
 		unq(s.storage_images);
+		unq(s.acceleration_structures);
 		s.highest_descriptor_binding = std::max(s.highest_descriptor_binding, os.highest_descriptor_binding);
 	}
 

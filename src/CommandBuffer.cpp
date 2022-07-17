@@ -256,6 +256,18 @@ namespace vuk {
 		return bind_compute_pipeline(ctx.get_named_pipeline(p));
 	}
 
+	CommandBuffer& CommandBuffer::bind_ray_tracing_pipeline(PipelineBaseInfo* gpci) {
+		VUK_EARLY_RET();
+		assert(!ongoing_renderpass);
+		next_ray_tracing_pipeline = gpci;
+		return *this;
+	}
+
+	CommandBuffer& CommandBuffer::bind_ray_tracing_pipeline(Name p) {
+		VUK_EARLY_RET();
+		return bind_ray_tracing_pipeline(ctx.get_named_pipeline(p));
+	}
+
 	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, const Buffer& buf, unsigned first_attribute, Packed format) {
 		VUK_EARLY_RET();
 		assert(binding < VUK_MAX_ATTRIBUTES && "Vertex buffer binding must be smaller than VUK_MAX_ATTRIBUTES.");
@@ -431,6 +443,16 @@ namespace vuk {
 		}
 	}
 
+	CommandBuffer& CommandBuffer::bind_acceleration_structure(unsigned set, unsigned binding, VkAccelerationStructureKHR tlas) {
+		VUK_EARLY_RET();
+		sets_to_bind[set] = true;
+		auto& db = set_bindings[set].bindings[binding];
+		db.as = tlas;
+		db.type = DescriptorType::eAccelerationStructureKHR;
+		set_bindings[set].used.set(binding);
+		return *this;
+	}
+
 	CommandBuffer& CommandBuffer::draw(size_t vertex_count, size_t instance_count, size_t first_vertex, size_t first_instance) {
 		VUK_EARLY_RET();
 		if (!_bind_graphics_pipeline_state()) {
@@ -523,6 +545,70 @@ namespace vuk {
 			return *this;
 		}
 		vkCmdDispatchIndirect(command_buffer, indirect_buffer.buffer, indirect_buffer.offset);
+		return *this;
+	}
+
+	CommandBuffer& CommandBuffer::trace_rays(size_t size_x, size_t size_y, size_t size_z) {
+		VUK_EARLY_RET();
+		if (!_bind_ray_tracing_pipeline_state()) {
+			return *this;
+		}
+		uint32_t missCount{ 1 };
+		uint32_t hitCount{ 0 };
+		auto handleCount = 1 + missCount + hitCount;
+		uint32_t handleSize = ctx.rt_properties.shaderGroupHandleSize;
+		// The SBT (buffer) need to have starting groups to be aligned and handles in the group to be aligned.
+		uint32_t handleSizeAligned = vuk::align_up(handleSize, ctx.rt_properties.shaderGroupHandleAlignment);
+
+		VkStridedDeviceAddressRegionKHR m_rgenRegion{};
+		VkStridedDeviceAddressRegionKHR m_missRegion{};
+		VkStridedDeviceAddressRegionKHR m_hitRegion{};
+		VkStridedDeviceAddressRegionKHR m_callRegion{};
+
+		m_rgenRegion.stride = vuk::align_up(handleSizeAligned, ctx.rt_properties.shaderGroupBaseAlignment);
+		m_rgenRegion.size = m_rgenRegion.stride; // The size member of pRayGenShaderBindingTable must be equal to its stride member
+		m_missRegion.stride = handleSizeAligned;
+		m_missRegion.size = vuk::align_up(missCount * handleSizeAligned, ctx.rt_properties.shaderGroupBaseAlignment);
+		m_hitRegion.stride = handleSizeAligned;
+		m_hitRegion.size = vuk::align_up(hitCount * handleSizeAligned, ctx.rt_properties.shaderGroupBaseAlignment);
+
+		// Get the shader group handles
+		uint32_t dataSize = handleCount * handleSize;
+		std::vector<uint8_t> handles(dataSize);
+		auto result = ctx.vkGetRayTracingShaderGroupHandlesKHR(ctx.device, current_ray_tracing_pipeline->pipeline, 0, handleCount, dataSize, handles.data());
+		assert(result == VK_SUCCESS);
+
+		VkDeviceSize sbtSize = m_rgenRegion.size + m_missRegion.size + m_hitRegion.size + m_callRegion.size;
+		auto SBT = *vuk::allocate_buffer_cross_device(*allocator, { .mem_usage = vuk::MemoryUsage::eCPUtoGPU, .size = sbtSize });
+		auto sbtAddress = SBT->device_address;
+
+		m_rgenRegion.deviceAddress = sbtAddress;
+		m_missRegion.deviceAddress = sbtAddress + m_rgenRegion.size;
+		m_hitRegion.deviceAddress = sbtAddress + m_rgenRegion.size + m_missRegion.size;
+
+		// Helper to retrieve the handle data
+		auto getHandle = [&](int i) {
+			return handles.data() + i * handleSize;
+		};
+		std::byte* pData{ nullptr };
+		uint32_t handleIdx{ 0 };
+		// Raygen
+		pData = SBT->mapped_ptr;
+		memcpy(pData, getHandle(handleIdx++), handleSize);
+		// Miss
+		pData = SBT->mapped_ptr + m_rgenRegion.size;
+		for (uint32_t c = 0; c < missCount; c++) {
+			memcpy(pData, getHandle(handleIdx++), handleSize);
+			pData += m_missRegion.stride;
+		}
+		// Hit
+		pData = SBT->mapped_ptr + m_rgenRegion.size + m_missRegion.size;
+		for (uint32_t c = 0; c < hitCount; c++) {
+			memcpy(pData, getHandle(handleIdx++), handleSize);
+			pData += m_hitRegion.stride;
+		}
+
+		ctx.vkCmdTraceRaysKHR(command_buffer, &m_rgenRegion, &m_missRegion, &m_hitRegion, &m_callRegion, (uint32_t)size_x, (uint32_t)size_y, (uint32_t)size_z);
 		return *this;
 	}
 
@@ -774,7 +860,7 @@ namespace vuk {
 			return *this;
 		}
 		auto src_image = src_res->attachment.image;
-		
+
 		// TODO: fill these out from attachment
 		VkImageSubresourceRange isr = {};
 		isr.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -827,11 +913,35 @@ namespace vuk {
 		return std::move(current_error);
 	}
 
-	bool CommandBuffer::_bind_state(bool graphics) {
+	bool CommandBuffer::_bind_state(PipeType pipe_type) {
+		VkPipelineLayout current_layout;
+		switch (pipe_type) {
+		case PipeType::eGraphics:
+			current_layout = current_pipeline->pipeline_layout;
+			break;
+		case PipeType::eCompute:
+			current_layout = current_compute_pipeline->pipeline_layout;
+			break;
+		case PipeType::eRayTracing:
+			current_layout = current_ray_tracing_pipeline->pipeline_layout;
+			break;
+		}
+		VkPipelineBindPoint bind_point;
+		switch (pipe_type) {
+		case PipeType::eGraphics:
+			bind_point = VK_PIPELINE_BIND_POINT_GRAPHICS;
+			break;
+		case PipeType::eCompute:
+			bind_point = VK_PIPELINE_BIND_POINT_COMPUTE;
+			break;
+		case PipeType::eRayTracing:
+			bind_point = VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR;
+			break;
+		}
+
 		for (auto& pcr : pcrs) {
 			void* data = push_constant_buffer.data() + pcr.offset;
-			vkCmdPushConstants(
-			    command_buffer, graphics ? current_pipeline->pipeline_layout : current_compute_pipeline->pipeline_layout, pcr.stageFlags, pcr.offset, pcr.size, data);
+			vkCmdPushConstants(command_buffer, current_layout, pcr.stageFlags, pcr.offset, pcr.size, data);
 		}
 		pcrs.clear();
 
@@ -843,8 +953,20 @@ namespace vuk {
 			bool set_to_bind = sets_mask & (1 << i);
 			bool persistent_set_to_bind = persistent_sets_mask & (1 << i);
 
+			VkDescriptorSetLayout pipeline_set_layout;
+			switch (pipe_type) {
+			case PipeType::eGraphics:
+				pipeline_set_layout = current_pipeline->layout_info[i].layout;
+				break;
+			case PipeType::eCompute:
+				pipeline_set_layout = current_compute_pipeline->layout_info[i].layout;
+				break;
+			case PipeType::eRayTracing:
+				pipeline_set_layout = current_ray_tracing_pipeline->layout_info[i].layout;
+				break;
+			}
+
 			// binding validation
-			auto& pipeline_set_layout = graphics ? current_pipeline->layout_info[i].layout : current_compute_pipeline->layout_info[i].layout;
 			if (pipeline_set_layout != VK_NULL_HANDLE) {                      // set in the layout
 				if (!sets_used[i] && !set_to_bind && !persistent_set_to_bind) { // never set in the cbuf & not requested to bind now
 					assert(false && "Pipeline layout contains set, but never set in CommandBuffer or disturbed by a previous set composition or binding.");
@@ -872,10 +994,36 @@ namespace vuk {
 			if (is_disturbing) {
 				lowest_disturbed_binding = std::min(lowest_disturbed_binding, i + 1);
 			}
-			set_bindings[i].layout_info = graphics ? &current_pipeline->layout_info[i] : &current_compute_pipeline->layout_info[i];
+
+			switch (pipe_type) {
+			case PipeType::eGraphics:
+				set_bindings[i].layout_info = &current_pipeline->layout_info[i];
+				break;
+			case PipeType::eCompute:
+				set_bindings[i].layout_info = &current_compute_pipeline->layout_info[i];
+				break;
+			case PipeType::eRayTracing:
+				set_bindings[i].layout_info = &current_ray_tracing_pipeline->layout_info[i];
+				break;
+			}
+
 			if (!persistent_set_to_bind) {
 				auto sb = set_bindings[i].finalize();
-				auto& pipeline_set_bindings = graphics ? current_pipeline->base->dslcis[i].bindings : current_compute_pipeline->base->dslcis[i].bindings;
+
+				std::vector<VkDescriptorSetLayoutBinding>* ppipeline_set_bindings;
+				switch (pipe_type) {
+				case PipeType::eGraphics:
+					ppipeline_set_bindings = &current_pipeline->base->dslcis[i].bindings;
+					break;
+				case PipeType::eCompute:
+					ppipeline_set_bindings = &current_compute_pipeline->base->dslcis[i].bindings;
+					break;
+				case PipeType::eRayTracing:
+					ppipeline_set_bindings = &current_ray_tracing_pipeline->base->dslcis[i].bindings;
+					break;
+				}
+
+				auto& pipeline_set_bindings = *ppipeline_set_bindings;
 				for (uint64_t j = 0; j < pipeline_set_bindings.size(); j++) {
 					auto& pipe_binding = pipeline_set_bindings[j];
 					auto& cbuf_binding = sb.bindings[j];
@@ -924,24 +1072,10 @@ namespace vuk {
 					current_error = std::move(ret);
 					return false;
 				}
-				vkCmdBindDescriptorSets(command_buffer,
-				                        graphics ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE,
-				                        graphics ? current_pipeline->pipeline_layout : current_compute_pipeline->pipeline_layout,
-				                        i,
-				                        1,
-				                        &ds->descriptor_set,
-				                        0,
-				                        nullptr);
+				vkCmdBindDescriptorSets(command_buffer, bind_point, current_layout, i, 1, &ds->descriptor_set, 0, nullptr);
 				set_layouts_used[i] = ds->layout_info.layout;
 			} else {
-				vkCmdBindDescriptorSets(command_buffer,
-				                        graphics ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE,
-				                        graphics ? current_pipeline->pipeline_layout : current_compute_pipeline->pipeline_layout,
-				                        i,
-				                        1,
-				                        &persistent_sets[i].first,
-				                        0,
-				                        nullptr);
+				vkCmdBindDescriptorSets(command_buffer, bind_point, current_layout, i, 1, &persistent_sets[i].first, 0, nullptr);
 				set_layouts_used[i] = persistent_sets[i].second;
 			}
 			set_bindings[i].used.reset();
@@ -991,7 +1125,7 @@ namespace vuk {
 			next_compute_pipeline = nullptr;
 		}
 
-		return _bind_state(false);
+		return _bind_state(PipeType::eCompute);
 	}
 
 	template<class T>
@@ -1254,7 +1388,43 @@ namespace vuk {
 			vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, current_pipeline->pipeline);
 			next_pipeline = nullptr;
 		}
-		return _bind_state(true);
+		return _bind_state(PipeType::eGraphics);
 	}
+	bool CommandBuffer::_bind_ray_tracing_pipeline_state() {
+		if (next_ray_tracing_pipeline) {
+			RayTracingPipelineInstanceCreateInfo pi;
+			pi.base = next_ray_tracing_pipeline;
 
+			bool empty = true;
+			unsigned offset = 0;
+			for (auto& sc : pi.base->reflection_info.spec_constants) {
+				auto it = spec_map_entries.find(sc.binding);
+				if (it != spec_map_entries.end()) {
+					auto& map_e = it->second;
+					unsigned size = map_e.is_double ? (unsigned)sizeof(double) : 4;
+					pi.specialization_map_entries.push_back(VkSpecializationMapEntry{ sc.binding, offset, size });
+					memcpy(pi.specialization_constant_data.data() + offset, map_e.data, size);
+					offset += size;
+					empty = false;
+				}
+			}
+
+			if (!empty) {
+				VkSpecializationInfo& si = pi.specialization_info;
+				si.pMapEntries = pi.specialization_map_entries.data();
+				si.mapEntryCount = (uint32_t)pi.specialization_map_entries.size();
+				si.pData = pi.specialization_constant_data.data();
+				si.dataSize = pi.specialization_constant_data.size();
+
+				pi.base->psscis[0].pSpecializationInfo = &pi.specialization_info;
+			}
+
+			current_ray_tracing_pipeline = ctx.acquire_pipeline(pi, ctx.get_frame_count());
+
+			vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, current_ray_tracing_pipeline->pipeline);
+			next_ray_tracing_pipeline = nullptr;
+		}
+
+		return _bind_state(PipeType::eRayTracing);
+	}
 } // namespace vuk

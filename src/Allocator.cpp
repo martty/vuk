@@ -192,6 +192,20 @@ namespace vuk {
 		return device_resource->allocate_timeline_semaphores(dst, loc);
 	}
 
+	Result<void, AllocateException> Allocator::allocate(std::span<VkAccelerationStructureKHR> dst, std::span<const VkAccelerationStructureCreateInfoKHR> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_acceleration_structures(dst, cis, loc);
+	}
+
+	Result<void, AllocateException> Allocator::allocate_acceleration_structures(std::span<VkAccelerationStructureKHR> dst,
+		std::span<const VkAccelerationStructureCreateInfoKHR> cis,
+		SourceLocationAtFrame loc) {
+		return device_resource->allocate_acceleration_structures(dst, cis, loc);
+	}
+
+	void Allocator::deallocate(std::span<const VkAccelerationStructureKHR> src) {
+		device_resource->deallocate_acceleration_structures(src);
+	}
+
 	void Allocator::deallocate(std::span<const TimelineSemaphore> src) {
 		device_resource->deallocate_timeline_semaphores(src);
 	}
@@ -252,7 +266,8 @@ namespace vuk {
 		vkCreateBuffer(pags.device, &pags.bci, nullptr, &buffer);
 		vkBindBufferMemory(pags.device, buffer, memory, 0);
 		pags.result = buffer;
-
+		VkBufferDeviceAddressInfo bdai{ VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, nullptr, buffer };
+		pags.device_address = vkGetBufferDeviceAddress(pags.device, &bdai);
 		std::string devmem_name = "DeviceMemory (Pool [" + std::to_string(memoryType) + "] " + to_human_readable(size) + ")";
 		std::string buffer_name = "Buffer (Pool ";
 		buffer_name += to_string(vuk::BufferUsageFlags(pags.bci.usage));
@@ -303,7 +318,7 @@ namespace vuk {
 		allocatorInfo.instance = instance;
 		allocatorInfo.physicalDevice = phys_dev;
 		allocatorInfo.device = device;
-		allocatorInfo.flags = VMA_ALLOCATOR_CREATE_EXTERNALLY_SYNCHRONIZED_BIT;
+		allocatorInfo.flags = VMA_ALLOCATOR_CREATE_EXTERNALLY_SYNCHRONIZED_BIT | VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
 
 		VmaVulkanFunctions vulkanFunctions = {};
 		vulkanFunctions.vkGetPhysicalDeviceProperties = vkGetPhysicalDeviceProperties;
@@ -441,8 +456,11 @@ namespace vuk {
 				std::lock_guard _(mutex);
 				auto result = vmaCreateBuffer(allocator, &bci, &vaci, &vkbuffer, &res, &vai);
 				assert(result == VK_SUCCESS);
-				pool.allocations[next_index] = std::tuple(res, vai.deviceMemory, vai.offset, vkbuffer, (std::byte*)vai.pMappedData);
-				buffers.emplace(reinterpret_cast<uint64_t>(vai.deviceMemory), std::pair(vkbuffer, bci.size));
+				VkBufferDeviceAddressInfo bdai{ VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, nullptr, vkbuffer };
+				auto bda = vkGetBufferDeviceAddress(device, &bdai);
+				pool.allocations[next_index] =
+				    std::tuple(res, vai.deviceMemory, vai.offset, vkbuffer, (std::byte*)vai.pMappedData, BDA{ bda });
+				buffers.emplace(reinterpret_cast<uint64_t>(vai.deviceMemory), std::tuple(vkbuffer, bci.size, bda));
 			}
 			pool.current_buffer++;
 			if (base_addr > 0) {
@@ -461,6 +479,7 @@ namespace vuk {
 		b.offset = offset;
 		b.size = size;
 		b.mapped_ptr = std::get<std::byte*>(current_alloc) != nullptr ? std::get<std::byte*>(current_alloc) + offset : nullptr;
+		b.device_address = std::get<BDA>(current_alloc) != 0 ? std::get<BDA>(current_alloc) + offset : 0;
 		b.allocation_size = pool.block_size;
 
 		return b;
@@ -498,16 +517,17 @@ namespace vuk {
 
 		// record if new buffer was used
 		if (pool_helper->result != VK_NULL_HANDLE) {
-			buffers.emplace(reinterpret_cast<uint64_t>(vai.deviceMemory), std::pair(pool_helper->result, pool_helper->bci.size));
+			buffers.emplace(reinterpret_cast<uint64_t>(vai.deviceMemory), std::tuple(pool_helper->result, pool_helper->bci.size, pool_helper->device_address));
 			pool.buffers.emplace_back(pool_helper->result);
 		}
 		Buffer b;
-		auto [vkbuffer, allocation_size] = buffers.at(reinterpret_cast<uint64_t>(vai.deviceMemory));
+		auto [vkbuffer, allocation_size, device_address] = buffers.at(reinterpret_cast<uint64_t>(vai.deviceMemory));
 		b.buffer = vkbuffer;
 		b.device_memory = vai.deviceMemory;
 		b.offset = vai.offset;
 		b.size = vai.size;
 		b.mapped_ptr = (std::byte*)vai.pMappedData;
+		b.device_address = device_address;
 		b.allocation_size = allocation_size;
 		buffer_allocations.emplace(BufferID{ reinterpret_cast<uint64_t>(b.buffer), b.offset }, res);
 		return b;
@@ -622,7 +642,7 @@ namespace vuk {
 
 	void LegacyGPUAllocator::destroy(const LegacyLinearAllocator& pool) {
 		std::lock_guard _(mutex);
-		for (auto& [va, mem, offset, buffer, map] : pool.allocations) {
+		for (auto& [va, mem, offset, buffer, map, bda] : pool.allocations) {
 			vmaDestroyBuffer(allocator, buffer, va);
 		}
 	}

@@ -38,6 +38,16 @@ namespace vuk {
 		VkQueue transfer_queue = VK_NULL_HANDLE;
 		/// @brief Optional transfer queue family index
 		uint32_t transfer_queue_family_index = VK_QUEUE_FAMILY_IGNORED;
+
+		struct FunctionPointers {
+			PFN_vkCmdBuildAccelerationStructuresKHR vkCmdBuildAccelerationStructuresKHR = nullptr;
+			PFN_vkGetAccelerationStructureBuildSizesKHR vkGetAccelerationStructureBuildSizesKHR = nullptr;
+			PFN_vkCmdTraceRaysKHR vkCmdTraceRaysKHR = nullptr;
+			PFN_vkCreateAccelerationStructureKHR vkCreateAccelerationStructureKHR = nullptr;
+			PFN_vkDestroyAccelerationStructureKHR vkDestroyAccelerationStructureKHR = nullptr;
+			PFN_vkGetRayTracingShaderGroupHandlesKHR vkGetRayTracingShaderGroupHandlesKHR = nullptr;
+			PFN_vkCreateRayTracingPipelinesKHR vkCreateRayTracingPipelinesKHR = nullptr;
+		} pointers;
 	};
 
 	/// @brief Abstraction of a device queue in Vulkan
@@ -60,7 +70,7 @@ namespace vuk {
 		struct QueueImpl* impl;
 	};
 
-	class Context {
+	class Context : public ContextCreateParameters::FunctionPointers {
 	public:
 		VkInstance instance;
 		VkDevice device;
@@ -76,6 +86,8 @@ namespace vuk {
 		Queue* graphics_queue = nullptr;
 		Queue* compute_queue = nullptr;
 		Queue* transfer_queue = nullptr;
+
+		VkPhysicalDeviceRayTracingPipelinePropertiesKHR rt_properties{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR };
 
 		Result<void> wait_for_domains(std::span<std::pair<DomainFlags, uint64_t>> queue_waits);
 
@@ -198,6 +210,8 @@ namespace vuk {
 		struct PipelineInfo acquire_pipeline(const struct PipelineInstanceCreateInfo& ci, uint64_t absolute_frame);
 		/// @brief Acquire a cached compute pipeline
 		struct ComputePipelineInfo acquire_pipeline(const struct ComputePipelineInstanceCreateInfo& ci, uint64_t absolute_frame);
+		/// @brief Acquire a cached ray tracing pipeline
+		struct RayTracingPipelineInfo acquire_pipeline(const struct RayTracingPipelineInstanceCreateInfo& ci, uint64_t absolute_frame);
 		/// @brief Acquire a cached descriptor pool
 		struct DescriptorPool& acquire_descriptor_pool(const struct DescriptorSetLayoutAllocInfo& dslai, uint64_t absolute_frame);
 
@@ -237,6 +251,7 @@ namespace vuk {
 		DescriptorPool create(const struct DescriptorSetLayoutAllocInfo& cinfo);
 		PipelineInfo create(const struct PipelineInstanceCreateInfo& cinfo);
 		ComputePipelineInfo create(const struct ComputePipelineInstanceCreateInfo& cinfo);
+		RayTracingPipelineInfo create(const struct RayTracingPipelineInstanceCreateInfo& cinfo);
 		VkRenderPass create(const struct RenderPassCreateInfo& cinfo);
 		RGImage create(const struct RGCI& cinfo);
 		Sampler create(const struct SamplerCreateInfo& cinfo);

@@ -25,6 +25,7 @@ namespace vuk {
 		Cache<PipelineBaseInfo> pipelinebase_cache;
 		Cache<PipelineInfo> pipeline_cache;
 		Cache<ComputePipelineInfo> compute_pipeline_cache;
+		Cache<RayTracingPipelineInfo> ray_tracing_pipeline_cache;
 		Cache<VkRenderPass> renderpass_cache;
 		Cache<RGImage> transient_images;
 		Cache<DescriptorPool> pool_cache;
@@ -92,6 +93,7 @@ namespace vuk {
 		    pipelinebase_cache(ctx),
 		    pipeline_cache(ctx),
 		    compute_pipeline_cache(ctx),
+		    ray_tracing_pipeline_cache(ctx),
 		    renderpass_cache(ctx),
 		    transient_images(ctx),
 		    pool_cache(ctx),
