@@ -453,6 +453,7 @@ namespace vuk {
 		pbi.reflection_info = accumulated_reflection;
 		pbi.binding_flags = cinfo.binding_flags;
 		pbi.variable_count_max = cinfo.variable_count_max;
+		pbi.hit_groups = cinfo.hit_groups;
 		return pbi;
 	}
 
@@ -1146,7 +1147,7 @@ namespace vuk {
 		debug.set_name(pipeline, cinfo.base->pipeline_name);
 
 		
-		auto handleCount = 1 + miss_count + hit_count;
+		auto handleCount = 1 + miss_count + hit_count + callable_count;
 		uint32_t handleSize = rt_properties.shaderGroupHandleSize;
 		// The SBT (buffer) need to have starting groups to be aligned and handles in the group to be aligned.
 		uint32_t handleSizeAligned = vuk::align_up(handleSize, rt_properties.shaderGroupHandleAlignment);

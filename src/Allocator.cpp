@@ -527,7 +527,7 @@ namespace vuk {
 		b.offset = vai.offset;
 		b.size = vai.size;
 		b.mapped_ptr = (std::byte*)vai.pMappedData;
-		b.device_address = device_address;
+		b.device_address = device_address + vai.offset;
 		b.allocation_size = allocation_size;
 		buffer_allocations.emplace(BufferID{ reinterpret_cast<uint64_t>(b.buffer), b.offset }, res);
 		return b;
