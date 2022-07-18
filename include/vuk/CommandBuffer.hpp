@@ -186,7 +186,7 @@ namespace vuk {
 		PipelineBaseInfo* next_ray_tracing_pipeline = nullptr;
 		std::optional<PipelineInfo> current_pipeline;
 		std::optional<ComputePipelineInfo> current_compute_pipeline;
-		std::optional<PipelineInfo> current_ray_tracing_pipeline;
+		std::optional<RayTracingPipelineInfo> current_ray_tracing_pipeline;
 
 		// Input assembly & fixed-function attributes
 		PrimitiveTopology topology = PrimitiveTopology::eTriangleList;

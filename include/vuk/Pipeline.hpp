@@ -32,8 +32,16 @@ namespace vuk {
 		using type = vuk::PipelineLayoutCreateInfo;
 	};
 
-	struct RayGroup {
+	enum class HitGroupType { 
+		eTriangles = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR,
+		eProcedural = VK_RAY_TRACING_SHADER_GROUP_TYPE_PROCEDURAL_HIT_GROUP_KHR
+	};
 
+	struct HitGroup {
+		HitGroupType type;
+		uint32_t closest_hit = VK_SHADER_UNUSED_KHR;
+		uint32_t any_hit = VK_SHADER_UNUSED_KHR;
+		uint32_t intersection = VK_SHADER_UNUSED_KHR;
 	};
 
 	struct PipelineBaseCreateInfoBase {
@@ -92,9 +100,13 @@ namespace vuk {
 			shader_paths.emplace_back(std::move(filename));
 		}
 
+		void add_hit_group(HitGroup hit_group) {
+			hit_groups.emplace_back(hit_group);
+		}
+
 		std::vector<ShaderSource> shaders;
 		std::vector<std::string> shader_paths;
-		std::vector<RayGroup> ray_groups;
+		std::vector<HitGroup> hit_groups;
 
 		friend struct std::hash<PipelineBaseCreateInfo>;
 
@@ -112,6 +124,7 @@ namespace vuk {
 		VkPipelineLayout pipeline_layout;
 		std::array<DescriptorSetLayoutAllocInfo, VUK_MAX_SETS> layout_info = {};
 		fixed_vector<DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> dslcis = {}; // saved for debug purposes
+		std::vector<HitGroup> hit_groups;
 
 		// 4 valid flags
 		Bitset<4 * VUK_MAX_SETS* VUK_MAX_BINDINGS> binding_flags = {};

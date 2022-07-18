@@ -44,6 +44,40 @@ namespace {
 		      runner.enqueue_setup(std::move(tex_fut));
 		      stbi_image_free(doge_image);
 
+		      // We set up the cube data, same as in example 02_cube
+		      auto [vert_buf, vert_fut] = create_buffer_gpu(allocator, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.first));
+		      verts = *vert_buf;
+		      auto [ind_buf, ind_fut] = create_buffer_gpu(allocator, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.second));
+		      inds = *ind_buf;
+
+		      // BLAS building
+		      uint32_t maxPrimitiveCount = box.second.size() / 3;
+
+		      // Describe buffer as array of VertexObj.
+		      VkAccelerationStructureGeometryTrianglesDataKHR triangles{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR };
+		      triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT; // vec3 vertex position data.
+		      triangles.vertexData.deviceAddress = verts.device_address;
+		      triangles.vertexStride = sizeof(util::Vertex);
+		      // Describe index data (32-bit unsigned int)
+		      triangles.indexType = VK_INDEX_TYPE_UINT32;
+		      triangles.indexData.deviceAddress = inds.device_address;
+		      // Indicate identity transform by setting transformData to null device pointer.
+		      // triangles.transformData = {};
+		      triangles.maxVertex = box.first.size();
+
+		      // Identify the above data as containing opaque triangles.
+		      VkAccelerationStructureGeometryKHR asGeom{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR };
+		      asGeom.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+		      asGeom.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
+		      asGeom.geometry.triangles = triangles;
+
+		      // The entire array will be used to build the BLAS.
+		      VkAccelerationStructureBuildRangeInfoKHR offset;
+		      offset.firstVertex = 0;
+		      offset.primitiveCount = maxPrimitiveCount;
+		      offset.primitiveOffset = 0;
+		      offset.transformOffset = 0;
+
 		      // TLAS building
 
 		      VkAccelerationStructureGeometryInstancesDataKHR instancesVk{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR };
@@ -97,11 +131,6 @@ namespace {
 			      ctx.vkCmdBuildAccelerationStructuresKHR(command_buffer.get_underlying(), 1, &buildInfo, &pBuildOffsetInfo);
 		      } });
 		      vuk::wait_for_futures(allocator, vuk::Future(std::make_shared<vuk::RenderGraph>(std::move(tlas_build)), ""));
-		      // We set up the cube data, same as in example 02_cube
-		      auto [vert_buf, vert_fut] = create_buffer_gpu(allocator, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.first));
-		      verts = *vert_buf;
-		      auto [ind_buf, ind_fut] = create_buffer_gpu(allocator, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.second));
-		      inds = *ind_buf;
 		      // For the example, we just ask these that these uploads complete before moving on to rendering
 		      // In an engine, you would integrate these uploads into some explicit system
 		      runner.enqueue_setup(std::move(vert_fut));
@@ -129,8 +158,7 @@ namespace {
 		      //  Set up the pass to draw the textured cube, with a color and a depth attachment
 		      rg.add_pass(
 		          { .resources = { "12_final"_image >> vuk::eRayTracingWrite >> "04_texture_final" }, .execute = [uboVP](vuk::CommandBuffer& command_buffer) {
-			           command_buffer
-			               .bind_acceleration_structure(0, 0, *nulltlas)
+			           command_buffer.bind_acceleration_structure(0, 0, *nulltlas)
 			               .bind_image(0, 1, "12_final")
 			               .bind_buffer(0, 2, uboVP)
 			               .bind_ray_tracing_pipeline("raytracing");

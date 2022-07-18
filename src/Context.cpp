@@ -1100,42 +1100,119 @@ namespace vuk {
 		group.generalShader = VK_SHADER_UNUSED_KHR;
 		group.intersectionShader = VK_SHADER_UNUSED_KHR;
 
-		for (auto& stage : cinfo.base->psscis) {
+		uint32_t miss_count = 0;
+		uint32_t hit_count = 0;
+		uint32_t callable_count = 0;
+
+		for (size_t i = 0; i < cinfo.base->psscis.size(); i++) {
+			auto& stage = cinfo.base->psscis[i];
 			if (stage.stage == VK_SHADER_STAGE_RAYGEN_BIT_KHR) {
-				// Raygen
 				group.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
-				group.generalShader = 0;
+				group.generalShader = (uint32_t)i;
 				groups.push_back(group);
 			} else if (stage.stage == VK_SHADER_STAGE_MISS_BIT_KHR) {
-				// Miss
 				group.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
-				group.generalShader = 1;
+				group.generalShader = (uint32_t)i;
 				groups.push_back(group);
+				miss_count++;
+			} else if (stage.stage == VK_SHADER_STAGE_CALLABLE_BIT_KHR) {
+				group.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
+				group.generalShader = (uint32_t)i;
+				groups.push_back(group);
+				callable_count++;
 			}
 		}
+		for (auto& hg : cinfo.base->hit_groups) {
+			group.type = (VkRayTracingShaderGroupTypeKHR)hg.type;
+			group.generalShader = VK_SHADER_UNUSED_KHR;
+			group.anyHitShader = hg.any_hit;
+			group.intersectionShader = hg.intersection;
+			group.closestHitShader = hg.closest_hit;
+			groups.push_back(group);
+			hit_count++;
+		}
 
-
-
-
-		// closest hit shader
-		/*group.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
-		group.generalShader = VK_SHADER_UNUSED_KHR;
-		group.closestHitShader = 2;
-		groups.push_back(group);*/
-
-		cpci.groupCount = groups.size();
+		cpci.groupCount = (uint32_t)groups.size();
 		cpci.pGroups = groups.data();
 
 		cpci.maxPipelineRayRecursionDepth = 1;
 		cpci.pStages = cinfo.base->psscis.data();
-		cpci.stageCount = cinfo.base->psscis.size();
+		cpci.stageCount = (uint32_t)cinfo.base->psscis.size();
 
 		VkPipeline pipeline;
 		VkResult res = vkCreateRayTracingPipelinesKHR(
 		    device, {}, impl->vk_pipeline_cache, 1, &cpci, nullptr, &pipeline);
 		assert(res == VK_SUCCESS);
 		debug.set_name(pipeline, cinfo.base->pipeline_name);
-		return { { cinfo.base, pipeline, cpci.layout, cinfo.base->layout_info } };
+
+		
+		auto handleCount = 1 + miss_count + hit_count;
+		uint32_t handleSize = rt_properties.shaderGroupHandleSize;
+		// The SBT (buffer) need to have starting groups to be aligned and handles in the group to be aligned.
+		uint32_t handleSizeAligned = vuk::align_up(handleSize, rt_properties.shaderGroupHandleAlignment);
+
+		VkStridedDeviceAddressRegionKHR rgen_region{};
+		VkStridedDeviceAddressRegionKHR miss_region{};
+		VkStridedDeviceAddressRegionKHR hit_region{};
+		VkStridedDeviceAddressRegionKHR call_region{};
+
+		rgen_region.stride = vuk::align_up(handleSizeAligned, rt_properties.shaderGroupBaseAlignment);
+		rgen_region.size = rgen_region.stride; // The size member of pRayGenShaderBindingTable must be equal to its stride member
+		miss_region.stride = handleSizeAligned;
+		miss_region.size = vuk::align_up(miss_count * handleSizeAligned, rt_properties.shaderGroupBaseAlignment);
+		hit_region.stride = handleSizeAligned;
+		hit_region.size = vuk::align_up(hit_count * handleSizeAligned, rt_properties.shaderGroupBaseAlignment);
+		call_region.stride = handleSizeAligned;
+		call_region.size = vuk::align_up(callable_count * handleSizeAligned, rt_properties.shaderGroupBaseAlignment);
+
+		// Get the shader group handles
+		uint32_t dataSize = handleCount * handleSize;
+		std::vector<uint8_t> handles(dataSize);
+		auto result = vkGetRayTracingShaderGroupHandlesKHR(device, pipeline, 0, handleCount, dataSize, handles.data());
+		assert(result == VK_SUCCESS);
+
+		VkDeviceSize sbt_size = rgen_region.size + miss_region.size + hit_region.size + call_region.size;
+		BufferCrossDevice SBT;
+		BufferCreateInfo bci{ .mem_usage = vuk::MemoryUsage::eCPUtoGPU, .size = sbt_size };
+		auto buff_cr_result = impl->device_vk_resource.allocate_buffers(std::span{ &SBT, 1 }, std::span{ &bci, 1 }, {});
+		assert(buff_cr_result);
+
+		// Helper to retrieve the handle data
+		auto get_handle = [&](int i) {
+			return handles.data() + i * handleSize;
+		};
+		std::byte* pData{ nullptr };
+		uint32_t handleIdx{ 0 };
+		// Raygen
+		pData = SBT.mapped_ptr;
+		memcpy(pData, get_handle(handleIdx++), handleSize);
+		// Miss
+		pData = SBT.mapped_ptr + rgen_region.size;
+		for (uint32_t c = 0; c < miss_count; c++) {
+			memcpy(pData, get_handle(handleIdx++), handleSize);
+			pData += miss_region.stride;
+		}
+		// Hit
+		pData = SBT.mapped_ptr + rgen_region.size + miss_region.size;
+		for (uint32_t c = 0; c < hit_count; c++) {
+			memcpy(pData, get_handle(handleIdx++), handleSize);
+			pData += hit_region.stride;
+		}
+		// Call
+		pData = SBT.mapped_ptr + rgen_region.size + miss_region.size + hit_region.size;
+		for (uint32_t c = 0; c < callable_count; c++) {
+			memcpy(pData, get_handle(handleIdx++), handleSize);
+			pData += call_region.stride;
+		}
+		
+		auto sbtAddress = SBT.device_address;
+
+		rgen_region.deviceAddress = sbtAddress;
+		miss_region.deviceAddress = sbtAddress + rgen_region.size;
+		hit_region.deviceAddress = sbtAddress + rgen_region.size + miss_region.size;
+		call_region.deviceAddress = sbtAddress + rgen_region.size + miss_region.size + hit_region.size;
+
+		return { { cinfo.base, pipeline, cpci.layout, cinfo.base->layout_info }, rgen_region, miss_region, hit_region, call_region, SBT };
 	}
 
 	Sampler Context::create(const create_info_t<Sampler>& cinfo) {

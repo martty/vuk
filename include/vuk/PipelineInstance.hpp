@@ -5,6 +5,7 @@
 #include "vuk/Config.hpp"
 #include "vuk/FixedVector.hpp"
 #include "vuk/Hash.hpp"
+#include "vuk/Buffer.hpp"
 #include <bit>
 
 inline bool operator==(VkSpecializationMapEntry const& lhs, VkSpecializationMapEntry const& rhs) noexcept {
@@ -171,6 +172,12 @@ namespace vuk {
 	};
 
 	struct RayTracingPipelineInfo : PipelineInfo {
+		VkStridedDeviceAddressRegionKHR rgen_region{};
+		VkStridedDeviceAddressRegionKHR miss_region{};
+		VkStridedDeviceAddressRegionKHR hit_region{};
+		VkStridedDeviceAddressRegionKHR call_region{};
+
+		BufferCrossDevice sbt;
 	};
 
 	template<>

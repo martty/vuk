@@ -553,62 +553,10 @@ namespace vuk {
 		if (!_bind_ray_tracing_pipeline_state()) {
 			return *this;
 		}
-		uint32_t missCount{ 1 };
-		uint32_t hitCount{ 0 };
-		auto handleCount = 1 + missCount + hitCount;
-		uint32_t handleSize = ctx.rt_properties.shaderGroupHandleSize;
-		// The SBT (buffer) need to have starting groups to be aligned and handles in the group to be aligned.
-		uint32_t handleSizeAligned = vuk::align_up(handleSize, ctx.rt_properties.shaderGroupHandleAlignment);
+		
+		auto& pipe = *current_ray_tracing_pipeline;
 
-		VkStridedDeviceAddressRegionKHR m_rgenRegion{};
-		VkStridedDeviceAddressRegionKHR m_missRegion{};
-		VkStridedDeviceAddressRegionKHR m_hitRegion{};
-		VkStridedDeviceAddressRegionKHR m_callRegion{};
-
-		m_rgenRegion.stride = vuk::align_up(handleSizeAligned, ctx.rt_properties.shaderGroupBaseAlignment);
-		m_rgenRegion.size = m_rgenRegion.stride; // The size member of pRayGenShaderBindingTable must be equal to its stride member
-		m_missRegion.stride = handleSizeAligned;
-		m_missRegion.size = vuk::align_up(missCount * handleSizeAligned, ctx.rt_properties.shaderGroupBaseAlignment);
-		m_hitRegion.stride = handleSizeAligned;
-		m_hitRegion.size = vuk::align_up(hitCount * handleSizeAligned, ctx.rt_properties.shaderGroupBaseAlignment);
-
-		// Get the shader group handles
-		uint32_t dataSize = handleCount * handleSize;
-		std::vector<uint8_t> handles(dataSize);
-		auto result = ctx.vkGetRayTracingShaderGroupHandlesKHR(ctx.device, current_ray_tracing_pipeline->pipeline, 0, handleCount, dataSize, handles.data());
-		assert(result == VK_SUCCESS);
-
-		VkDeviceSize sbtSize = m_rgenRegion.size + m_missRegion.size + m_hitRegion.size + m_callRegion.size;
-		auto SBT = *vuk::allocate_buffer_cross_device(*allocator, { .mem_usage = vuk::MemoryUsage::eCPUtoGPU, .size = sbtSize });
-		auto sbtAddress = SBT->device_address;
-
-		m_rgenRegion.deviceAddress = sbtAddress;
-		m_missRegion.deviceAddress = sbtAddress + m_rgenRegion.size;
-		m_hitRegion.deviceAddress = sbtAddress + m_rgenRegion.size + m_missRegion.size;
-
-		// Helper to retrieve the handle data
-		auto getHandle = [&](int i) {
-			return handles.data() + i * handleSize;
-		};
-		std::byte* pData{ nullptr };
-		uint32_t handleIdx{ 0 };
-		// Raygen
-		pData = SBT->mapped_ptr;
-		memcpy(pData, getHandle(handleIdx++), handleSize);
-		// Miss
-		pData = SBT->mapped_ptr + m_rgenRegion.size;
-		for (uint32_t c = 0; c < missCount; c++) {
-			memcpy(pData, getHandle(handleIdx++), handleSize);
-			pData += m_missRegion.stride;
-		}
-		// Hit
-		pData = SBT->mapped_ptr + m_rgenRegion.size + m_missRegion.size;
-		for (uint32_t c = 0; c < hitCount; c++) {
-			memcpy(pData, getHandle(handleIdx++), handleSize);
-			pData += m_hitRegion.stride;
-		}
-
-		ctx.vkCmdTraceRaysKHR(command_buffer, &m_rgenRegion, &m_missRegion, &m_hitRegion, &m_callRegion, (uint32_t)size_x, (uint32_t)size_y, (uint32_t)size_z);
+		ctx.vkCmdTraceRaysKHR(command_buffer, &pipe.rgen_region, &pipe.miss_region, &pipe.hit_region, &pipe.call_region, (uint32_t)size_x, (uint32_t)size_y, (uint32_t)size_z);
 		return *this;
 	}
 
