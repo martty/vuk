@@ -16,9 +16,6 @@ namespace {
 	float angle = 0.f;
 	auto box = util::generate_cube();
 	vuk::BufferGPU verts, inds;
-	// A vuk::Texture is an owned pair of Image and ImageView
-	// An optional is used here so that we can reset this on cleanup, despite being a global (which is to simplify the code here)
-	std::optional<vuk::Texture> texture_of_doge;
 	vuk::Unique<VkAccelerationStructureKHR> tlas, blas;
 	vuk::Unique<vuk::BufferGPU> tlas_buf, blas_buf, tlas_scratch_buffer;
 
@@ -27,6 +24,11 @@ namespace {
 		.setup =
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator) {
 		      auto& ctx = allocator.get_context();
+
+		      if (!runner.has_rt) {
+			      return;
+		      }
+
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
 			      pci.add_glsl(util::read_entire_file("../../examples/rt.rgen"), "rt.rgen");
@@ -35,16 +37,6 @@ namespace {
 			      pci.add_hit_group(vuk::HitGroup{ .type = vuk::HitGroupType::eTriangles, .closest_hit = 2 });
 			      runner.context->create_named_pipeline("raytracing", pci);
 		      }
-
-		      // Use STBI to load the image
-		      int x, y, chans;
-		      auto doge_image = stbi_load("../../examples/doge.png", &x, &y, &chans, 4);
-
-		      // Similarly to buffers, we allocate the image and enqueue the upload
-		      auto [tex, tex_fut] = create_texture(allocator, vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, doge_image, true);
-		      texture_of_doge = std::move(tex);
-		      runner.enqueue_setup(std::move(tex_fut));
-		      stbi_image_free(doge_image);
 
 		      // We set up the cube data, same as in example 02_cube
 		      auto [vert_buf, vert_fut] = create_buffer_gpu(allocator, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.first));
@@ -198,6 +190,9 @@ namespace {
 		    },
 		.render =
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator, vuk::Future target) {
+		      if (!runner.has_rt) {
+			      return target;
+		      }
 		      auto& ctx = frame_allocator.get_context();
 		      struct VP {
 			      glm::mat4 inv_view;
@@ -258,7 +253,8 @@ namespace {
 			                    command_buffer.build_acceleration_structures(1, &tlas_build_info, &ptlas_offset);
 		                    } });
 
-			  rg.attach_image("12_rt_target", vuk::ImageAttachment{ .format = vuk::Format::eR8G8B8A8Unorm, .sample_count = vuk::SampleCountFlagBits::e1, .layer_count = 1 });
+		      rg.attach_image("12_rt_target",
+		                      vuk::ImageAttachment{ .format = vuk::Format::eR8G8B8A8Unorm, .sample_count = vuk::SampleCountFlagBits::e1, .layer_count = 1 });
 		      rg.inference_rule("12_rt_target", vuk::same_shape_as("12_rt"));
 		      rg.add_pass({ .resources = { "12_rt_target"_image >> vuk::eRayTracingWrite, "tlas+"_buffer >> vuk::eRayTracingRead },
 		                    .execute = [uboVP](vuk::CommandBuffer& command_buffer) {
@@ -266,9 +262,10 @@ namespace {
 			                        .bind_image(0, 1, "12_rt_target")
 			                        .bind_buffer(0, 2, uboVP)
 			                        .bind_ray_tracing_pipeline("raytracing");
-			                    command_buffer.trace_rays(1024, 1024, 1);
+			                    auto extent = command_buffer.get_resource_image_attachment("12_rt_target")->extent;
+			                    command_buffer.trace_rays(extent.extent.width, extent.extent.height, 1);
 		                    } });
-		      rg.add_pass({ .resources = { "12_rt_target+"_image >> vuk::eTransferRead, "12_rt"_image >> vuk::eTransferWrite },
+		      rg.add_pass({ .resources = { "12_rt_target+"_image >> vuk::eTransferRead, "12_rt"_image >> vuk::eTransferWrite >> "12_rt_final" },
 		                    .execute = [uboVP](vuk::CommandBuffer& command_buffer) {
 			                    vuk::ImageBlit blit;
 			                    blit.srcSubresource.aspectMask = vuk::ImageAspectFlagBits::eColor;
@@ -289,8 +286,6 @@ namespace {
 		// Perform cleanup for the example
 		.cleanup =
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator) {
-		      // We release the texture resources
-		      texture_of_doge.reset();
 		      tlas.reset();
 		      tlas_buf.reset();
 		      blas.reset();
