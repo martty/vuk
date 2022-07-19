@@ -4,8 +4,10 @@
 #include <glm/mat4x4.hpp>
 #include <stb_image.h>
 
-/* 04_texture
- * In this example we will build on the previous examples (02_cube and 03_multipass), but we will make the cube textured.
+/* 12_rt_pipeline
+ * This example demonstrates how to build acceleration structures and trace against them using RT pipelines. This example requires that your driver supports
+ * VK_KHR_ray_tracing. While there is no tight integration yet for building acceleration structures, you can already synchronize their building and raytracing
+ * just as graphics and compute workloads.
  *
  * These examples are powered by the example framework, which hides some of the code required, as that would be repeated for each example.
  * Furthermore it allows launching individual examples and all examples with the example same code.
@@ -25,6 +27,7 @@ namespace {
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator) {
 		      auto& ctx = allocator.get_context();
 
+			  // If the runner has detected that there is no RT support, this example won't run
 		      if (!runner.has_rt) {
 			      return;
 		      }
@@ -34,6 +37,8 @@ namespace {
 			      pci.add_glsl(util::read_entire_file("../../examples/rt.rgen"), "rt.rgen");
 			      pci.add_glsl(util::read_entire_file("../../examples/rt.rmiss"), "rt.rmiss");
 			      pci.add_glsl(util::read_entire_file("../../examples/rt.rchit"), "rt.rchit");
+			      // new for RT: a hit group is a collection of shaders identified by their index in the PipelineBaseCreateInfo
+			      // 2 => rt.rchit
 			      pci.add_hit_group(vuk::HitGroup{ .type = vuk::HitGroupType::eTriangles, .closest_hit = 2 });
 			      runner.context->create_named_pipeline("raytracing", pci);
 		      }
@@ -45,9 +50,10 @@ namespace {
 		      inds = *ind_buf;
 
 		      // BLAS building
+		      // We build a BLAS out of our cube.
 		      uint32_t maxPrimitiveCount = (uint32_t)box.second.size() / 3;
 
-		      // Describe buffer as array of VertexObj.
+		      // Describe the mesh
 		      VkAccelerationStructureGeometryTrianglesDataKHR triangles{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR };
 		      triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT; // vec3 vertex position data.
 		      triangles.vertexData.deviceAddress = verts.device_address;
@@ -65,6 +71,7 @@ namespace {
 		      as_geom.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
 		      as_geom.geometry.triangles = triangles;
 
+		      // Find sizes
 		      VkAccelerationStructureBuildGeometryInfoKHR blas_build_info{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR };
 		      blas_build_info.dstAccelerationStructure = *blas;
 		      blas_build_info.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
@@ -78,6 +85,7 @@ namespace {
 		      ctx.vkGetAccelerationStructureBuildSizesKHR(
 		          ctx.device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &blas_build_info, &maxPrimitiveCount, &blas_size_info);
 
+		      // Allocate the BLAS object and a buffer that holds the data
 		      VkAccelerationStructureCreateInfoKHR blas_ci{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR };
 		      blas_ci.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
 		      blas_ci.size = blas_size_info.accelerationStructureSize; // Will be used to allocate memory.
@@ -88,7 +96,7 @@ namespace {
 		      blas = vuk::Unique<VkAccelerationStructureKHR>(allocator);
 		      allocator.allocate_acceleration_structures({ &*blas, 1 }, { &blas_ci, 1 });
 
-		      // Allocate the scratch memory
+		      // Allocate the scratch memory for the BLAS build
 		      auto blas_scratch_buffer =
 		          *vuk::allocate_buffer_gpu(allocator, vuk::BufferCreateInfo{ .mem_usage = vuk::MemoryUsage::eGPUonly, .size = blas_size_info.buildScratchSize });
 
@@ -98,6 +106,7 @@ namespace {
 		      blas_build_info.scratchData.deviceAddress = blas_scratch_buffer->device_address;
 
 		      // TLAS building
+		      // We build a TLAS that refers to the BLAS we build before.
 		      VkAccelerationStructureInstanceKHR rayInst{};
 		      rayInst.transform = {};
 		      rayInst.transform.matrix[0][0] = 1.f;
@@ -134,6 +143,7 @@ namespace {
 		      ctx.vkGetAccelerationStructureBuildSizesKHR(
 		          allocator.get_context().device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &tlas_build_info, &countInstance, &tlas_size_info);
 
+		      // Allocate the TLAS object and a buffer that holds the data
 		      VkAccelerationStructureCreateInfoKHR tlas_ci{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR };
 		      tlas_ci.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
 		      tlas_ci.size = tlas_size_info.accelerationStructureSize;
@@ -153,22 +163,25 @@ namespace {
 		      tlas_build_info.dstAccelerationStructure = *tlas;
 		      tlas_build_info.scratchData.deviceAddress = tlas_scratch_buffer->device_address;
 
-		      // Build the TLAS
+		      // Build the BLAS & TLAS
 		      vuk::RenderGraph as_build("as_build");
+		      // We attach the vertex and index futures, which will be used for the BLAS build
 		      as_build.attach_in("verts", std::move(vert_fut));
 		      as_build.attach_in("inds", std::move(ind_fut));
+		      // Synchronization happens against the AS buffers
 		      as_build.attach_buffer("blas_buf", *blas_buf);
 		      as_build.attach_buffer("tlas_buf", *tlas_buf);
 		      as_build.add_pass({ .resources = { "blas_buf"_buffer >> vuk::eAccelerationStructureBuildWrite,
 		                                         "verts"_buffer >> vuk::eAccelerationStructureBuildRead,
 		                                         "inds"_buffer >> vuk::eAccelerationStructureBuildRead },
 		                          .execute = [maxPrimitiveCount, as_geom, blas_build_info](vuk::CommandBuffer& command_buffer) mutable {
+			                          // We make a copy of the AS geometry to not dangle when this runs.
 			                          blas_build_info.pGeometries = &as_geom;
 
-			                          // The entire array will be used to build the BLAS.
+			                          // Describe what we are building.
 			                          VkAccelerationStructureBuildRangeInfoKHR blas_offset;
-			                          blas_offset.firstVertex = 0;
 			                          blas_offset.primitiveCount = maxPrimitiveCount;
+			                          blas_offset.firstVertex = 0;
 			                          blas_offset.primitiveOffset = 0;
 			                          blas_offset.transformOffset = 0;
 			                          const VkAccelerationStructureBuildRangeInfoKHR* pblas_offset = &blas_offset;
@@ -177,14 +190,15 @@ namespace {
 		      as_build.add_pass(
 		          { .resources = { "blas_buf+"_buffer >> vuk::eAccelerationStructureBuildRead, "tlas_buf"_buffer >> vuk::eAccelerationStructureBuildWrite },
 		            .execute = [countInstance, topASGeometry, tlas_build_info](vuk::CommandBuffer& command_buffer) mutable {
+			            // We make a copy of the AS geometry to not dangle when this runs.
 			            tlas_build_info.pGeometries = &topASGeometry;
 
-			            // Build Offsets info: n instances
+			            // Describe what we are building.
 			            VkAccelerationStructureBuildRangeInfoKHR tlas_offset{ countInstance, 0, 0, 0 };
 			            const VkAccelerationStructureBuildRangeInfoKHR* ptlas_offset = &tlas_offset;
 			            command_buffer.build_acceleration_structures(1, &tlas_build_info, &ptlas_offset);
 		            } });
-		      // For the example, we just ask these that these uploads complete before moving on to rendering
+		      // For the example, we just ask these that these uploads and AS building complete before moving on to rendering
 		      // In an engine, you would integrate these uploads into some explicit system
 		      runner.enqueue_setup(vuk::Future(std::make_shared<vuk::RenderGraph>(std::move(as_build)), "tlas_buf+"));
 		    },
@@ -209,7 +223,7 @@ namespace {
 
 		      vuk::wait_for_futures(frame_allocator, uboVP_fut);
 
-		      // TLAS building
+		      // TLAS update - we make a new buffer of BLAS instances, which we use to update the TLAS later
 		      VkAccelerationStructureInstanceKHR rayInst{};
 		      rayInst.transform = {};
 		      glm::mat4 model_transform = static_cast<glm::mat4>(glm::angleAxis(glm::radians(angle), glm::vec3(0.f, 1.f, 0.f)));
@@ -227,6 +241,7 @@ namespace {
 		      vuk::RenderGraph rg("12");
 		      rg.attach_in("12_rt", std::move(target));
 		      rg.attach_buffer("tlas", *tlas_buf);
+		      // TLAS update pass
 		      rg.add_pass({ .resources = { "tlas"_buffer >> vuk::eAccelerationStructureBuildWrite },
 		                    .execute = [inst_buf = *instances_buffer](vuk::CommandBuffer& command_buffer) {
 			                    // TLAS update
@@ -252,19 +267,24 @@ namespace {
 			                    const VkAccelerationStructureBuildRangeInfoKHR* ptlas_offset = &tlas_offset;
 			                    command_buffer.build_acceleration_structures(1, &tlas_build_info, &ptlas_offset);
 		                    } });
-
+		      // We use a eR8G8B8A8Unorm, as the swapchain is in sRGB which does not support storage use
 		      rg.attach_image("12_rt_target",
 		                      vuk::ImageAttachment{ .format = vuk::Format::eR8G8B8A8Unorm, .sample_count = vuk::SampleCountFlagBits::e1, .layer_count = 1 });
+		      // This intermediate image is the same shape as the swapchain image
 		      rg.inference_rule("12_rt_target", vuk::same_shape_as("12_rt"));
+		      // Synchronize against the TLAS buffer to run this pass after the TLAS update has completed
 		      rg.add_pass({ .resources = { "12_rt_target"_image >> vuk::eRayTracingWrite, "tlas+"_buffer >> vuk::eRayTracingRead },
 		                    .execute = [uboVP](vuk::CommandBuffer& command_buffer) {
 			                    command_buffer.bind_acceleration_structure(0, 0, *tlas)
 			                        .bind_image(0, 1, "12_rt_target")
 			                        .bind_buffer(0, 2, uboVP)
 			                        .bind_ray_tracing_pipeline("raytracing");
+			                    // Launch one ray per pixel in the intermediate image
 			                    auto extent = command_buffer.get_resource_image_attachment("12_rt_target")->extent;
 			                    command_buffer.trace_rays(extent.extent.width, extent.extent.height, 1);
 		                    } });
+		      // Perform a blit of the intermediate image onto the swapchain (this will also do the non-linear encoding for us, although we lost some precision when
+		      // we rendered into Unorm)
 		      rg.add_pass({ .resources = { "12_rt_target+"_image >> vuk::eTransferRead, "12_rt"_image >> vuk::eTransferWrite >> "12_rt_final" },
 		                    .execute = [uboVP](vuk::CommandBuffer& command_buffer) {
 			                    vuk::ImageBlit blit;
