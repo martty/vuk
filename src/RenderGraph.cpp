@@ -1525,9 +1525,9 @@ namespace vuk {
 				}
 				// TODO: this isn't conservative enough, we need more information
 				if (c.use.layout == ImageLayout::eGeneral) {
-					if (c.use.stages &
-					    (PipelineStageFlagBits::eComputeShader | PipelineStageFlagBits::eVertexShader | PipelineStageFlagBits::eTessellationControlShader |
-					     PipelineStageFlagBits::eTessellationEvaluationShader | PipelineStageFlagBits::eGeometryShader | PipelineStageFlagBits::eFragmentShader)) {
+					if (c.use.stages & (PipelineStageFlagBits::eComputeShader | PipelineStageFlagBits::eVertexShader | PipelineStageFlagBits::eTessellationControlShader |
+					                    PipelineStageFlagBits::eTessellationEvaluationShader | PipelineStageFlagBits::eGeometryShader |
+					                    PipelineStageFlagBits::eFragmentShader | PipelineStageFlagBits::eRayTracingShaderKHR)) {
 						usage |= ImageUsageFlagBits::eStorage;
 					}
 				}

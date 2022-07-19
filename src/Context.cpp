@@ -364,7 +364,7 @@ namespace vuk {
 			const uint32_t* begin = (const uint32_t*)output->GetBufferPointer();
 			const uint32_t* end = begin + (output->GetBufferSize() / 4);
 
-			spirv = std::vector<uint32_t>{ begin, end };
+			spirv = std::vector<uint32_t>{ begin, end };        
 
 			break;
 		}

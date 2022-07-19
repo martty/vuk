@@ -857,6 +857,15 @@ namespace vuk {
 		return *this;
 	}
 
+	CommandBuffer& CommandBuffer::build_acceleration_structures(uint32_t info_count,
+		const VkAccelerationStructureBuildGeometryInfoKHR* pInfos,
+		const VkAccelerationStructureBuildRangeInfoKHR* const* ppBuildRangeInfos) {
+		VUK_EARLY_RET();
+
+		ctx.vkCmdBuildAccelerationStructuresKHR(command_buffer, info_count, pInfos, ppBuildRangeInfos);
+		return *this;
+	}
+
 	Result<void> CommandBuffer::result() {
 		return std::move(current_error);
 	}

@@ -498,9 +498,16 @@ namespace vuk {
 		/// @param indirect_buffer Buffer of workgroup counts
 		CommandBuffer& dispatch_indirect(const Buffer& indirect_buffer);
 
-		/// @brief Issue an indirect compute dispatch
-		/// @param indirect_buffer Buffer of workgroup counts
-		CommandBuffer& trace_rays(size_t size_x, size_t size_y, size_t size_z);
+		/// @brief Perform ray trace query with a raytracing pipeline
+		/// @param width width of the ray trace query dimensions
+		/// @param height height of the ray trace query dimensions
+		/// @param depth depth of the ray trace query dimensions
+		CommandBuffer& trace_rays(size_t width, size_t height, size_t depth);
+
+		/// @brief Build acceleration structures
+		CommandBuffer& build_acceleration_structures(uint32_t info_count,
+		                                            const VkAccelerationStructureBuildGeometryInfoKHR* pInfos,
+		                                            const VkAccelerationStructureBuildRangeInfoKHR* const* ppBuildRangeInfos);
 
 		// commands for renderpass-less command buffers
 

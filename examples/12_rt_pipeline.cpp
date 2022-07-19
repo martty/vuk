@@ -20,7 +20,7 @@ namespace {
 	// An optional is used here so that we can reset this on cleanup, despite being a global (which is to simplify the code here)
 	std::optional<vuk::Texture> texture_of_doge;
 	vuk::Unique<VkAccelerationStructureKHR> tlas, blas;
-	vuk::Unique<vuk::BufferGPU> tlas_buf, blas_buf;
+	vuk::Unique<vuk::BufferGPU> tlas_buf, blas_buf, tlas_scratch_buffer;
 
 	vuk::Example x{
 		.name = "12_rt_pipeline",
@@ -52,10 +52,8 @@ namespace {
 		      auto [ind_buf, ind_fut] = create_buffer_gpu(allocator, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.second));
 		      inds = *ind_buf;
 
-		      vuk::wait_for_futures(allocator, vert_fut, ind_fut);
-
 		      // BLAS building
-		      uint32_t maxPrimitiveCount = box.second.size() / 3;
+		      uint32_t maxPrimitiveCount = (uint32_t)box.second.size() / 3;
 
 		      // Describe buffer as array of VertexObj.
 		      VkAccelerationStructureGeometryTrianglesDataKHR triangles{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR };
@@ -67,21 +65,13 @@ namespace {
 		      triangles.indexData.deviceAddress = inds.device_address;
 		      // Indicate identity transform by setting transformData to null device pointer.
 		      triangles.transformData = {};
-		      triangles.maxVertex = box.first.size();
+		      triangles.maxVertex = (uint32_t)box.first.size();
 
 		      // Identify the above data as containing opaque triangles.
-		      VkAccelerationStructureGeometryKHR asGeom{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR };
-		      asGeom.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
-		      asGeom.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
-		      asGeom.geometry.triangles = triangles;
-
-		      // The entire array will be used to build the BLAS.
-		      VkAccelerationStructureBuildRangeInfoKHR blas_offset;
-		      blas_offset.firstVertex = 0;
-		      blas_offset.primitiveCount = maxPrimitiveCount;
-		      blas_offset.primitiveOffset = 0;
-		      blas_offset.transformOffset = 0;
-		      const VkAccelerationStructureBuildRangeInfoKHR* pblas_offset = &blas_offset;
+		      VkAccelerationStructureGeometryKHR as_geom{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR };
+		      as_geom.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+		      as_geom.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
+		      as_geom.geometry.triangles = triangles;
 
 		      VkAccelerationStructureBuildGeometryInfoKHR blas_build_info{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR };
 		      blas_build_info.dstAccelerationStructure = *blas;
@@ -89,7 +79,7 @@ namespace {
 		      blas_build_info.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
 		      blas_build_info.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
 		      blas_build_info.geometryCount = 1;
-		      blas_build_info.pGeometries = &asGeom;
+		      blas_build_info.pGeometries = &as_geom;
 
 		      VkAccelerationStructureBuildSizesInfoKHR blas_size_info{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR };
 
@@ -121,7 +111,7 @@ namespace {
 		      rayInst.transform.matrix[0][0] = 1.f;
 		      rayInst.transform.matrix[1][1] = 1.f;
 		      rayInst.transform.matrix[2][2] = 1.f;
-		      rayInst.instanceCustomIndex = 0;                                                                // gl_InstanceCustomIndexEXT
+		      rayInst.instanceCustomIndex = 0; // gl_InstanceCustomIndexEXT
 		      rayInst.accelerationStructureReference = blas_buf->device_address;
 		      rayInst.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
 		      rayInst.mask = 0xFF;                                //  Only be hit if rayMask & instance.mask != 0
@@ -140,7 +130,7 @@ namespace {
 
 		      // Find sizes
 		      VkAccelerationStructureBuildGeometryInfoKHR tlas_build_info{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR };
-		      tlas_build_info.flags = 0;
+		      tlas_build_info.flags = VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR;
 		      tlas_build_info.geometryCount = 1;
 		      tlas_build_info.pGeometries = &topASGeometry;
 		      tlas_build_info.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
@@ -163,7 +153,7 @@ namespace {
 		      allocator.allocate_acceleration_structures({ &*tlas, 1 }, { &tlas_ci, 1 });
 
 		      // Allocate the scratch memory
-		      auto tlas_scratch_buffer =
+		      tlas_scratch_buffer =
 		          *vuk::allocate_buffer_gpu(allocator, vuk::BufferCreateInfo{ .mem_usage = vuk::MemoryUsage::eGPUonly, .size = tlas_size_info.buildScratchSize });
 
 		      // Update build information
@@ -171,28 +161,44 @@ namespace {
 		      tlas_build_info.dstAccelerationStructure = *tlas;
 		      tlas_build_info.scratchData.deviceAddress = tlas_scratch_buffer->device_address;
 
-		      // Build Offsets info: n instances
-		      VkAccelerationStructureBuildRangeInfoKHR tlas_offset{ countInstance, 0, 0, 0 };
-		      const VkAccelerationStructureBuildRangeInfoKHR* ptlas_offset = &tlas_offset;
-
 		      // Build the TLAS
-		      vuk::RenderGraph blas_build("blas_build");
-		      blas_build.add_pass({ .execute = [&ctx, tlas_build_info, ptlas_offset, blas_build_info, pblas_offset](vuk::CommandBuffer& command_buffer) {
-			      ctx.vkCmdBuildAccelerationStructuresKHR(command_buffer.get_underlying(), 1, &blas_build_info, &pblas_offset);
-		      } });
-		      vuk::wait_for_futures(allocator, vuk::Future(std::make_shared<vuk::RenderGraph>(std::move(blas_build)), ""));
-		      vuk::RenderGraph tlas_build("tlas_build");
-		      tlas_build.add_pass({ .execute = [&ctx, tlas_build_info, ptlas_offset, blas_build_info, pblas_offset](vuk::CommandBuffer& command_buffer) {
-			      ctx.vkCmdBuildAccelerationStructuresKHR(command_buffer.get_underlying(), 1, &tlas_build_info, &ptlas_offset);
-		      } });
-		      vuk::wait_for_futures(allocator, vuk::Future(std::make_shared<vuk::RenderGraph>(std::move(tlas_build)), ""));
+		      vuk::RenderGraph as_build("as_build");
+		      as_build.attach_in("verts", std::move(vert_fut));
+		      as_build.attach_in("inds", std::move(ind_fut));
+		      as_build.attach_buffer("blas_buf", *blas_buf);
+		      as_build.attach_buffer("tlas_buf", *tlas_buf);
+		      as_build.add_pass({ .resources = { "blas_buf"_buffer >> vuk::eAccelerationStructureBuildWrite,
+		                                         "verts"_buffer >> vuk::eAccelerationStructureBuildRead,
+		                                         "inds"_buffer >> vuk::eAccelerationStructureBuildRead },
+		                          .execute = [maxPrimitiveCount, as_geom, blas_build_info](vuk::CommandBuffer& command_buffer) mutable {
+			                          blas_build_info.pGeometries = &as_geom;
+
+			                          // The entire array will be used to build the BLAS.
+			                          VkAccelerationStructureBuildRangeInfoKHR blas_offset;
+			                          blas_offset.firstVertex = 0;
+			                          blas_offset.primitiveCount = maxPrimitiveCount;
+			                          blas_offset.primitiveOffset = 0;
+			                          blas_offset.transformOffset = 0;
+			                          const VkAccelerationStructureBuildRangeInfoKHR* pblas_offset = &blas_offset;
+			                          command_buffer.build_acceleration_structures(1, &blas_build_info, &pblas_offset);
+		                          } });
+		      as_build.add_pass(
+		          { .resources = { "blas_buf+"_buffer >> vuk::eAccelerationStructureBuildRead, "tlas_buf"_buffer >> vuk::eAccelerationStructureBuildWrite },
+		            .execute = [countInstance, topASGeometry, tlas_build_info](vuk::CommandBuffer& command_buffer) mutable {
+			            tlas_build_info.pGeometries = &topASGeometry;
+
+			            // Build Offsets info: n instances
+			            VkAccelerationStructureBuildRangeInfoKHR tlas_offset{ countInstance, 0, 0, 0 };
+			            const VkAccelerationStructureBuildRangeInfoKHR* ptlas_offset = &tlas_offset;
+			            command_buffer.build_acceleration_structures(1, &tlas_build_info, &ptlas_offset);
+		            } });
 		      // For the example, we just ask these that these uploads complete before moving on to rendering
 		      // In an engine, you would integrate these uploads into some explicit system
-		      runner.enqueue_setup(std::move(vert_fut));
-		      runner.enqueue_setup(std::move(ind_fut));
+		      runner.enqueue_setup(vuk::Future(std::make_shared<vuk::RenderGraph>(std::move(as_build)), "tlas_buf+"));
 		    },
 		.render =
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator, vuk::Future target) {
+		      auto& ctx = frame_allocator.get_context();
 		      struct VP {
 			      glm::mat4 inv_view;
 			      glm::mat4 inv_proj;
@@ -208,20 +214,74 @@ namespace {
 
 		      vuk::wait_for_futures(frame_allocator, uboVP_fut);
 
+		      // TLAS building
+		      VkAccelerationStructureInstanceKHR rayInst{};
+		      rayInst.transform = {};
+		      glm::mat4 model_transform = static_cast<glm::mat4>(glm::angleAxis(glm::radians(angle), glm::vec3(0.f, 1.f, 0.f)));
+		      glm::mat3x4 reduced_model_transform = static_cast<glm::mat3x4>(model_transform);
+		      memcpy(&rayInst.transform.matrix, &reduced_model_transform, sizeof(glm::mat3x4));
+		      rayInst.instanceCustomIndex = 0; // gl_InstanceCustomIndexEXT
+		      rayInst.accelerationStructureReference = blas_buf->device_address;
+		      rayInst.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
+		      rayInst.mask = 0xFF;                                //  Only be hit if rayMask & instance.mask != 0
+		      rayInst.instanceShaderBindingTableRecordOffset = 0; // We will use the same hit group for all objects
+
+		      auto [instances_buffer, instances_fut] = vuk::create_buffer_cross_device(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, std::span{ &rayInst, 1 });
+		      vuk::wait_for_futures(frame_allocator, instances_fut); // no-op
+
 		      vuk::RenderGraph rg("12");
 		      rg.attach_in("12_rt", std::move(target));
-		      //  Set up the pass to draw the textured cube, with a color and a depth attachment
-		      rg.add_pass({ .resources = { "12_rt"_image >> vuk::eRayTracingWrite >> "12_rt_final" }, .execute = [uboVP](vuk::CommandBuffer& command_buffer) {
-			                   command_buffer.bind_acceleration_structure(0, 0, *tlas)
-			                       .bind_image(0, 1, "12_rt")
-			                       .bind_buffer(0, 2, uboVP)
-			                       .bind_ray_tracing_pipeline("raytracing");
-			                   /*glm::mat4* model = command_buffer.map_scratch_uniform_binding<glm::mat4>(0, 1);
-			                    *model = static_cast<glm::mat4>(glm::angleAxis(glm::radians(angle), glm::vec3(0.f, 1.f, 0.f)));*/
-			                   command_buffer.trace_rays(1024, 1024, 1);
-		                   } });
+		      rg.attach_buffer("tlas", *tlas_buf);
+		      rg.add_pass({ .resources = { "tlas"_buffer >> vuk::eAccelerationStructureBuildWrite },
+		                    .execute = [inst_buf = *instances_buffer](vuk::CommandBuffer& command_buffer) {
+			                    // TLAS update
+			                    VkAccelerationStructureGeometryInstancesDataKHR instancesVk{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR };
+			                    instancesVk.data.deviceAddress = inst_buf.device_address;
 
-		      angle += 180.f * ImGui::GetIO().DeltaTime;
+			                    VkAccelerationStructureGeometryKHR topASGeometry{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR };
+			                    topASGeometry.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR;
+			                    topASGeometry.geometry.instances = instancesVk;
+
+			                    VkAccelerationStructureBuildGeometryInfoKHR tlas_build_info{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR };
+			                    tlas_build_info.flags = VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR;
+			                    tlas_build_info.geometryCount = 1;
+			                    tlas_build_info.pGeometries = &topASGeometry;
+			                    tlas_build_info.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR;
+			                    tlas_build_info.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+
+			                    tlas_build_info.srcAccelerationStructure = *tlas;
+			                    tlas_build_info.dstAccelerationStructure = *tlas;
+			                    tlas_build_info.scratchData.deviceAddress = tlas_scratch_buffer->device_address;
+
+			                    VkAccelerationStructureBuildRangeInfoKHR tlas_offset{ 1, 0, 0, 0 };
+			                    const VkAccelerationStructureBuildRangeInfoKHR* ptlas_offset = &tlas_offset;
+			                    command_buffer.build_acceleration_structures(1, &tlas_build_info, &ptlas_offset);
+		                    } });
+
+			  rg.attach_image("12_rt_target", vuk::ImageAttachment{ .format = vuk::Format::eR8G8B8A8Unorm, .sample_count = vuk::SampleCountFlagBits::e1, .layer_count = 1 });
+		      rg.inference_rule("12_rt_target", vuk::same_shape_as("12_rt"));
+		      rg.add_pass({ .resources = { "12_rt_target"_image >> vuk::eRayTracingWrite, "tlas+"_buffer >> vuk::eRayTracingRead },
+		                    .execute = [uboVP](vuk::CommandBuffer& command_buffer) {
+			                    command_buffer.bind_acceleration_structure(0, 0, *tlas)
+			                        .bind_image(0, 1, "12_rt_target")
+			                        .bind_buffer(0, 2, uboVP)
+			                        .bind_ray_tracing_pipeline("raytracing");
+			                    command_buffer.trace_rays(1024, 1024, 1);
+		                    } });
+		      rg.add_pass({ .resources = { "12_rt_target+"_image >> vuk::eTransferRead, "12_rt"_image >> vuk::eTransferWrite },
+		                    .execute = [uboVP](vuk::CommandBuffer& command_buffer) {
+			                    vuk::ImageBlit blit;
+			                    blit.srcSubresource.aspectMask = vuk::ImageAspectFlagBits::eColor;
+			                    blit.srcSubresource.baseArrayLayer = 0;
+			                    blit.srcSubresource.layerCount = 1;
+			                    blit.srcSubresource.mipLevel = 0;
+			                    blit.dstSubresource = blit.srcSubresource;
+			                    auto extent = command_buffer.get_resource_image_attachment("12_rt_target+")->extent;
+			                    blit.srcOffsets[1] = vuk::Offset3D{ static_cast<int>(extent.extent.width), static_cast<int>(extent.extent.height), 1 };
+			                    blit.dstOffsets[1] = blit.srcOffsets[1];
+			                    command_buffer.blit_image("12_rt_target+", "12_rt", blit, vuk::Filter::eNearest);
+		                    } });
+		      angle += 20.f * ImGui::GetIO().DeltaTime;
 
 		      return vuk::Future{ std::make_unique<vuk::RenderGraph>(std::move(rg)), "12_rt_final" };
 		    },
@@ -235,6 +295,7 @@ namespace {
 		      tlas_buf.reset();
 		      blas.reset();
 		      blas_buf.reset();
+		      tlas_scratch_buffer.reset();
 		    }
 	};
 

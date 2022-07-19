@@ -1,24 +1,24 @@
 #pragma once
 
+#include <VkBootstrap.h>
+#include <fstream>
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
-#include <vector>
-#include <utility>
-#include <VkBootstrap.h>
 #include <imgui.h>
-#include <vuk/vuk_fwd.hpp>
-#include <vuk/Types.hpp>
+#include <plf_colony.h>
+#include <sstream>
+#include <string_view>
+#include <utility>
+#include <vector>
 #include <vuk/Context.hpp>
 #include <vuk/Swapchain.hpp>
-#include <plf_colony.h>
-#include <string_view>
-#include <fstream>
-#include <sstream>
+#include <vuk/Types.hpp>
+#include <vuk/vuk_fwd.hpp>
 
 namespace vuk {
 	struct Pass;
 	struct RenderGraph;
-}
+} // namespace vuk
 
 namespace util {
 	struct Vertex {
@@ -67,8 +67,7 @@ namespace util {
 		swb.set_desired_format(vuk::SurfaceFormatKHR{ vuk::Format::eR8G8B8A8Srgb, vuk::ColorSpaceKHR::eSrgbNonlinear });
 		swb.add_fallback_format(vuk::SurfaceFormatKHR{ vuk::Format::eB8G8R8A8Srgb, vuk::ColorSpaceKHR::eSrgbNonlinear });
 		swb.set_desired_present_mode((VkPresentModeKHR)vuk::PresentModeKHR::eImmediate);
-		swb.set_image_usage_flags(VkImageUsageFlagBits::VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VkImageUsageFlagBits::VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-		                          VkImageUsageFlagBits::VK_IMAGE_USAGE_STORAGE_BIT);
+		swb.set_image_usage_flags(VkImageUsageFlagBits::VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VkImageUsageFlagBits::VK_IMAGE_USAGE_TRANSFER_DST_BIT);
 		auto vkswapchain = swb.build();
 
 		vuk::Swapchain sw;
@@ -95,7 +94,11 @@ namespace util {
 		std::unique_ptr<vuk::SampledImage> font_si;
 	};
 	ImGuiData ImGui_ImplVuk_Init(vuk::Allocator& allocator);
-	vuk::Future ImGui_ImplVuk_Render(vuk::Allocator& allocator, vuk::Future target, ImGuiData& data, ImDrawData* draw_data, const plf::colony<vuk::SampledImage>& sampled_images);
+	vuk::Future ImGui_ImplVuk_Render(vuk::Allocator& allocator,
+	                                 vuk::Future target,
+	                                 ImGuiData& data,
+	                                 ImDrawData* draw_data,
+	                                 const plf::colony<vuk::SampledImage>& sampled_images);
 
 	inline std::string read_entire_file(const std::string& path) {
 		std::ostringstream buf;
@@ -115,4 +118,4 @@ namespace util {
 		input.read(reinterpret_cast<char*>(buffer.data()), file_size);
 		return buffer;
 	}
-}
+} // namespace util

@@ -30,6 +30,7 @@ namespace vuk {
 		case eMemoryRW:
 		case eRayTracingWrite:
 		case eRayTracingRW:
+		case eAccelerationStructureBuildWrite:
 			return true;
 		default:
 			return false;
@@ -56,6 +57,7 @@ namespace vuk {
 		case eMemoryRW:
 		case eRayTracingRead:
 		case eRayTracingSampled:
+		case eAccelerationStructureBuildRead:
 			return true;
 		default:
 			return false;
@@ -127,17 +129,30 @@ namespace vuk {
 			return { vuk::PipelineStageFlagBits::eDrawIndirect, vuk::AccessFlagBits::eIndirectCommandRead, vuk::ImageLayout::eGeneral /* ignored */, domain };
 
 		case eRayTracingRead:
-			return { vuk::PipelineStageFlagBits::eRayTracingShaderKHR, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eGeneral, domain };
+			return { vuk::PipelineStageFlagBits::eRayTracingShaderKHR,
+				       vuk::AccessFlagBits::eShaderRead | vuk::AccessFlagBits::eAccelerationStructureReadKHR,
+				       vuk::ImageLayout::eGeneral,
+				       domain };
 		case eRayTracingWrite:
 			return { vuk::PipelineStageFlagBits::eRayTracingShaderKHR, vuk::AccessFlagBits::eShaderWrite, vuk::ImageLayout::eGeneral, domain };
 		case eRayTracingRW:
 			return { vuk::PipelineStageFlagBits::eRayTracingShaderKHR,
-				       vuk::AccessFlagBits::eShaderRead | vuk::AccessFlagBits::eShaderWrite,
+				       vuk::AccessFlagBits::eAccelerationStructureReadKHR | vuk::AccessFlagBits::eShaderRead | vuk::AccessFlagBits::eShaderWrite,
 				       vuk::ImageLayout::eGeneral,
 				       domain };
 		case eRayTracingSampled:
 			return { vuk::PipelineStageFlagBits::eRayTracingShaderKHR, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eShaderReadOnlyOptimal, domain };
 
+		case eAccelerationStructureBuildRead:
+			return { vuk::PipelineStageFlagBits::eAccelerationStructureBuildKHR,
+				       vuk::AccessFlagBits::eShaderRead | vuk::AccessFlagBits::eAccelerationStructureReadKHR,
+				       vuk::ImageLayout::eGeneral /* ignored */,
+				       domain };
+		case eAccelerationStructureBuildWrite:
+			return { vuk::PipelineStageFlagBits::eAccelerationStructureBuildKHR,
+				       vuk::AccessFlagBits::eAccelerationStructureWriteKHR,
+				       vuk::ImageLayout::eGeneral /* ignored */,
+				       domain };
 		case eHostRead:
 			return { vuk::PipelineStageFlagBits::eHost, vuk::AccessFlagBits::eHostRead, vuk::ImageLayout::eGeneral, domain };
 		case eHostWrite:

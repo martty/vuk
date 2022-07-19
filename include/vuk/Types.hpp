@@ -999,6 +999,8 @@ namespace vuk {
 		eRayTracingWrite,
 		eRayTracingRW,
 		eRayTracingSampled,
+		eAccelerationStructureBuildRead,
+		eAccelerationStructureBuildWrite,
 		eHostRead,
 		eHostWrite,
 		eHostRW,
