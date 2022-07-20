@@ -254,7 +254,8 @@ namespace vuk {
 		struct RGImpl* impl;
 		friend struct ExecutableRenderGraph;
 
-		void inline_subgraphs();
+		std::unordered_map<std::shared_ptr<RenderGraph>, std::pair<std::string, std::string>> compute_prefixes(bool do_prefix);
+		void inline_subgraphs(const std::unordered_map<std::shared_ptr<RenderGraph>, std::pair<std::string, std::string>>& prefixes);
 
 		/// @brief Check if this rendergraph is valid.
 		/// \throws RenderGraphException
@@ -285,6 +286,9 @@ namespace vuk {
 
 	/// @brief Inference target has the same extent as the source
 	IARule same_extent_as(Name inference_source);
+
+	/// @brief Inference target has the same width & height as the source
+	IARule same_2D_extent_as(Name inference_source);
 
 	/// @brief Inference target has the same format as the source
 	IARule same_format_as(Name inference_source);

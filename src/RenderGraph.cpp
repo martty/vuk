@@ -86,7 +86,7 @@ namespace vuk {
 
 		for (auto& [new_name, old_name] : other.impl->aliases) {
 			new_name = joiner.append(new_name);
-			impl->aliases.emplace(new_name, joiner.append(old_name));
+			impl->aliases.emplace(new_name, old_name);
 		}
 
 		for (auto& [name, v] : other.impl->acquires) {
@@ -271,18 +271,40 @@ namespace vuk {
 		return ss.str();
 	}
 
-	void RenderGraph::inline_subgraphs() {
+	std::unordered_map<std::shared_ptr<RenderGraph>, std::pair<std::string, std::string>> RenderGraph::compute_prefixes(bool do_prefix) {
+		std::unordered_map<std::shared_ptr<RenderGraph>, std::pair<std::string, std::string>> sg_prefixes;
 		for (auto& [sg_ptr, sg_info] : impl->subgraphs) {
 			if (sg_info.count > 0) {
-				assert(sg_ptr->impl && "Don't support this yet");
-				sg_ptr->inline_subgraphs();
 				Name sg_name = sg_ptr->name;
-				if (auto& counter = ++impl->sg_name_counter[sg_name]; counter > 1) {
-					sg_name = sg_name.append(Name(std::string("_") + std::to_string(counter - 1)));
+				if (!sg_ptr->impl) { // we have already inlined this somewhere
+				} else {
+					auto prefixes = sg_ptr->compute_prefixes(true);
+					sg_prefixes.merge(prefixes);
+					if (auto& counter = ++impl->sg_name_counter[sg_name]; counter > 1) {
+						sg_name = sg_name.append(Name(std::string("_") + std::to_string(counter - 1)));
+					}
+					sg_prefixes.emplace(sg_ptr, std::pair{ std::string(sg_name.to_sv()), std::string(sg_name.to_sv()) });
 				}
-				append(sg_name, std::move(*sg_ptr));
+			}
+		}
+		if (do_prefix) {
+			for (auto& [k, v] : sg_prefixes) {
+				v.second = std::string(name.to_sv()) + "::" + v.second;
+			}
+		}
+		return sg_prefixes;
+	}
+
+	void RenderGraph::inline_subgraphs(const std::unordered_map<std::shared_ptr<RenderGraph>, std::pair<std::string, std::string>>& sg_prefixes) {
+		for (auto& [sg_ptr, sg_info] : impl->subgraphs) {
+			if (sg_info.count > 0) {
+				auto& prefix = sg_prefixes.at(sg_ptr);
+				if (sg_ptr->impl) {
+					sg_ptr->inline_subgraphs(sg_prefixes);
+					append(Name(prefix.first), std::move(*sg_ptr));
+				}
 				for (auto& [name_in_parent, name_in_sg] : sg_info.exported_names) {
-					add_alias(name_in_parent, sg_name.append("::").append(name_in_sg));
+					add_alias(name_in_parent, Name(prefix.second).append("::").append(name_in_sg));
 				}
 			}
 		}
@@ -291,7 +313,8 @@ namespace vuk {
 
 	void RenderGraph::compile(const RenderGraphCompileOptions& compile_options) {
 		// inline all the subgraphs into us
-		inline_subgraphs();
+		auto sg_pref = compute_prefixes(false);
+		inline_subgraphs(sg_pref);
 
 		// find which reads are graph inputs (not produced by any pass) & outputs
 		// (not consumed by any pass)
@@ -796,6 +819,15 @@ namespace vuk {
 	IARule same_extent_as(Name n) {
 		return [=](const InferenceContext& ctx, ImageAttachment& ia) {
 			ia.extent = ctx.get_image_attachment(n).extent;
+		};
+	}
+
+	IARule same_2D_extent_as(Name n) {
+		return [=](const InferenceContext& ctx, ImageAttachment& ia) {
+			auto& o = ctx.get_image_attachment(n);
+			ia.extent.sizing = o.extent.sizing;
+			ia.extent.extent.width = o.extent.extent.width;
+			ia.extent.extent.height = o.extent.extent.height;
 		};
 	}
 
