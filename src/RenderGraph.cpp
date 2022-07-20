@@ -115,6 +115,22 @@ namespace vuk {
 		           .execute = converge });
 	}
 
+	void RenderGraph::converge_image_explicit(std::span<Name> pre_diverge, Name post_diverge) {
+		// pass that consumes pre_diverge names
+		Pass pre{ .name = get_temporary_name().append("_DIVERGE"), .execute = diverge };
+		for (auto& name : pre_diverge) {
+			pre.resources.emplace_back(Resource{ name, Resource::Type::eImage, Access::eConsume, name.append("d") });
+		}
+		add_pass(std::move(pre));
+
+		Pass post{ .name = post_diverge.append("_CONVERGE"),
+		           .execute = converge };
+		for (auto& name : pre_diverge) {
+			post.resources.emplace_back(Resource{ name.append("d"), Resource::Type::eImage, Access::eConverge, post_diverge });
+		}
+		add_pass(std::move(post));
+	}
+
 	// determine rendergraph inputs and outputs, and resources that are neither
 	void RGImpl::build_io() {
 		poisoned_names.clear();

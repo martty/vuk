@@ -172,6 +172,9 @@ namespace vuk {
 		/// @brief Reconverge image. Prevents diverged use moving before pre_diverge or after post_diverge.
 		void converge_image(Name pre_diverge, Name post_diverge);
 
+		/// @brief Reconverge image from named parts. Prevents diverged use moving before pre_diverge or after post_diverge.
+		void converge_image_explicit(std::span<Name> pre_diverge, Name post_diverge);
+
 		/// @brief Add a resolve operation from the image resource `ms_name` that consumes `resolved_name_src` and produces `resolved_name_dst`
 		/// @param resolved_name_src Image resource name consumed (single-sampled)
 		/// @param resolved_name_dst Image resource name created (single-sampled)
