@@ -34,6 +34,7 @@ namespace vuk {
 			vuk::ImageCreateInfo ici;
 			ici.usage = usage;
 			ici.arrayLayers = 1;
+			ici.flags = attachment_info.attachment.image_flags;
 			assert(attachment_info.attachment.extent.sizing != Sizing::eRelative);
 			ici.extent = static_cast<vuk::Extent3D>(attachment_info.attachment.extent.extent);
 			ici.imageType = attachment_info.attachment.image_type;
@@ -362,13 +363,15 @@ namespace vuk {
 					ia.image_type = ia.image_type == ImageType::eInfer ? vuk::ImageType::e2D : ia.image_type;
 
 					ia.base_layer = ia.base_layer == VK_REMAINING_ARRAY_LAYERS ? 0 : ia.base_layer;
-					ia.layer_count = ia.layer_count == VK_REMAINING_ARRAY_LAYERS ? 1 : ia.layer_count; // TODO: test layered fbs
+					ia.layer_count = ia.layer_count == VK_REMAINING_ARRAY_LAYERS ? 1 : ia.layer_count;
 					ia.base_level = ia.base_level == VK_REMAINING_MIP_LEVELS ? 0 : ia.base_level;
 
-					if (ia.layer_count > 1) {
-						ia.view_type = vuk::ImageViewType::e2DArray;
-					} else {
-						ia.view_type = vuk::ImageViewType::e2D;
+					if (ia.view_type == ImageViewType::eInfer) {
+						if (ia.layer_count > 1) {
+							ia.view_type = ImageViewType::e2DArray;
+						} else {
+							ia.view_type = ImageViewType::e2D;
+						}
 					}
 
 					ia.level_count = 1; // can only render to a single mip level
@@ -379,7 +382,7 @@ namespace vuk {
 						rp.fbci.sample_count = ia.sample_count;
 					}
 
-					if (ia.extent.sizing == vuk::Sizing::eAbsolute && ia.extent.extent.width > 0 && ia.extent.extent.height > 0) {
+					if (ia.extent.sizing == Sizing::eAbsolute && ia.extent.extent.width > 0 && ia.extent.extent.height > 0) {
 						rp.fbci.width = ia.extent.extent.width;
 						rp.fbci.height = ia.extent.extent.height;
 					}
@@ -703,6 +706,13 @@ namespace vuk {
 				auto specific_attachment = bound.attachment;
 				if (specific_attachment.image_view == ImageView{}) {
 					specific_attachment.base_layer = *base_layer;
+					if (specific_attachment.view_type == ImageViewType::eCube) {
+						if (*layer_count > 1) {
+							specific_attachment.view_type = ImageViewType::e2DArray;
+						} else {
+							specific_attachment.view_type = ImageViewType::e2D;
+						}
+					}
 					specific_attachment.layer_count = *layer_count;
 					assert(specific_attachment.level_count == 1);
 
