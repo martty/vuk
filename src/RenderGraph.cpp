@@ -126,7 +126,7 @@ namespace vuk {
 	}
 
 	void RenderGraph::converge_image_explicit(std::span<Name> pre_diverge, Name post_diverge) {
-		Pass post{ .name = post_diverge.append("_CONVERGE"), .execute = converge, .type = Pass::Type::eConverge };
+		Pass post{ .name = post_diverge.append("_CONVERGE"), .execute = converge, .type = Pass::Type::eConvergeExplicit };
 		for (auto& name : pre_diverge) {
 			post.resources.emplace_back(Resource{ name, Resource::Type::eImage, Access::eConsume });
 		}
@@ -388,7 +388,7 @@ namespace vuk {
 
 		// prepare converge passes
 		for (auto& passinfo : impl->passes) {
-			if (passinfo.pass.type != Pass::Type::eConverge) {
+			if (passinfo.pass.type != Pass::Type::eConvergeExplicit) {
 				continue;
 			}
 

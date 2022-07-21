@@ -107,7 +107,7 @@ namespace vuk {
 
 		std::function<void(CommandBuffer&)> execute;
 		std::vector<std::byte> arguments; // internal use
-		enum class Type { eUserPass, eClear, eConverge } type = Type::eUserPass;
+		enum class Type { eUserPass, eClear, eConverge, eConvergeExplicit } type = Type::eUserPass;
 	};
 
 	// declare these specializations for GCC
