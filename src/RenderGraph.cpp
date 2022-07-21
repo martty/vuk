@@ -17,7 +17,7 @@ namespace {
 } // namespace
 
 namespace vuk {
-	Name Resource::Subrange::Image::combine_name(Name prefix) const {
+	Name Subrange::Image::combine_name(Name prefix) const {
 		std::string suffix = std::string(prefix.to_sv());
 		suffix += "[" + std::to_string(base_layer) + ":" + std::to_string(base_layer + layer_count - 1) + "]";
 		suffix += "[" + std::to_string(base_level) + ":" + std::to_string(base_level + level_count - 1) + "]";
@@ -58,7 +58,9 @@ namespace vuk {
 			p.prefix = p.prefix.is_invalid() ? joiner : joiner.append(p.prefix);
 			p.pass.name = joiner.append(p.pass.name);
 			for (auto& r : p.pass.resources) {
-				r.name = joiner.append(r.name);
+				if (!r.name.is_invalid()) {
+					r.name = joiner.append(r.name);
+				}
 				r.out_name = r.out_name.is_invalid() ? Name{} : joiner.append(r.out_name);
 			}
 
@@ -84,9 +86,8 @@ namespace vuk {
 			impl->ia_inference_rules.emplace(joiner.append(name), std::move(iainf));
 		}
 
-		for (auto& [new_name, old_name] : other.impl->aliases) {
-			new_name = joiner.append(new_name);
-			impl->aliases.emplace(new_name, old_name);
+		for (auto [new_name, old_name] : other.impl->aliases) {
+			impl->aliases.emplace(joiner.append(new_name), old_name);
 		}
 
 		for (auto& [name, v] : other.impl->acquires) {
@@ -96,6 +97,15 @@ namespace vuk {
 		for (auto& [name, v] : other.impl->releases) {
 			impl->releases.emplace(joiner.append(name), std::move(v));
 		}
+
+		for (auto [name, v] : other.impl->diverged_subchain_headers) {
+			v.first = joiner.append(v.first);
+			impl->diverged_subchain_headers.emplace(joiner.append(name), v);
+		}
+
+		for (auto& name : other.impl->whole_names_consumed) {
+			impl->whole_names_consumed.emplace(joiner.append(name));
+		}
 	}
 
 	void RenderGraph::add_alias(Name new_name, Name old_name) {
@@ -104,30 +114,23 @@ namespace vuk {
 		}
 	}
 
-	void RenderGraph::converge_image(Name pre_diverge, Name post_diverge) {
-		// pass that consumes pre_diverge name
-		add_pass({ .name = pre_diverge.append("_DIVERGE"),
-		           .resources = { Resource{ pre_diverge, Resource::Type::eImage, Access::eConsume, pre_diverge.append("d") } },
-		           .execute = diverge });
+	void RenderGraph::diverge_image(Name whole_name, Subrange::Image subrange, Name subrange_name) {
+		impl->diverged_subchain_headers[subrange_name] = std::pair{ whole_name, subrange };
+		impl->whole_names_consumed.emplace(whole_name);
+	}
 
+	void RenderGraph::converge_image(Name pre_diverge, Name post_diverge) {
 		add_pass({ .name = post_diverge.append("_CONVERGE"),
-		           .resources = { Resource{ pre_diverge.append("d"), Resource::Type::eImage, Access::eConverge, post_diverge },  },
-		           .execute = converge });
+		           .resources = { Resource{ pre_diverge.append("__diverged"), Resource::Type::eImage, Access::eConverge, post_diverge },  },
+		           .execute = converge, .type = Pass::Type::eConverge });
 	}
 
 	void RenderGraph::converge_image_explicit(std::span<Name> pre_diverge, Name post_diverge) {
-		// pass that consumes pre_diverge names
-		Pass pre{ .name = get_temporary_name().append("_DIVERGE"), .execute = diverge };
+		Pass post{ .name = post_diverge.append("_CONVERGE"), .execute = converge, .type = Pass::Type::eConverge };
 		for (auto& name : pre_diverge) {
-			pre.resources.emplace_back(Resource{ name, Resource::Type::eImage, Access::eConsume, name.append("d") });
+			post.resources.emplace_back(Resource{ name, Resource::Type::eImage, Access::eConsume });
 		}
-		add_pass(std::move(pre));
-
-		Pass post{ .name = post_diverge.append("_CONVERGE"),
-		           .execute = converge };
-		for (auto& name : pre_diverge) {
-			post.resources.emplace_back(Resource{ name.append("d"), Resource::Type::eImage, Access::eConverge, post_diverge });
-		}
+		post.resources.emplace_back(Resource{ Name{}, Resource::Type::eImage, Access::eConverge, post_diverge });
 		add_pass(std::move(post));
 	}
 
@@ -143,15 +146,8 @@ namespace vuk {
 			pif.bloom_resolved_inputs = {};
 
 			for (Resource& res : pif.pass.resources) {
-				Name in_name;
-				Name out_name;
-				if (res.type == Resource::Type::eImage && res.subrange.image != Resource::Subrange::Image{}) {
-					in_name = res.subrange.image.combine_name(resolve_alias(res.name));
-					out_name = res.out_name.is_invalid() ? Name{} : res.subrange.image.combine_name(resolve_alias(res.out_name));
-				} else {
-					in_name = resolve_alias(res.name);
-					out_name = resolve_alias(res.out_name);
-				}
+				Name in_name = resolve_alias(res.name);
+				Name out_name = resolve_alias(res.out_name);
 
 				auto hashed_in_name = ::hash::fnv1a::hash(in_name.to_sv().data(), res.name.to_sv().size(), hash::fnv1a::default_offset_basis);
 				auto hashed_out_name = ::hash::fnv1a::hash(out_name.to_sv().data(), res.out_name.to_sv().size(), hash::fnv1a::default_offset_basis);
@@ -171,10 +167,10 @@ namespace vuk {
 					poisoned_names.emplace(in_name);
 				}
 
-				// for image subranges, we additionally add a dependency on the diverged original resource
-				// this resource is created by the diverged pass and consumed by the converge pass, thereby constraining all the passes who refer to these
-				if (res.type == Resource::Type::eImage && res.subrange.image != Resource::Subrange::Image{}) {
-					Name dep = res.name.append("d");
+				// if this resource use is the first in a diverged subchain, we additionally add a dependency onto the undiverged subchain
+				if (auto it = diverged_subchain_headers.find(in_name); it != diverged_subchain_headers.end()) {
+					auto& sch_info = it->second;
+					auto dep = sch_info.first.append("__diverged");
 					auto hashed_name = ::hash::fnv1a::hash(dep.to_sv().data(), dep.to_sv().size(), hash::fnv1a::default_offset_basis);
 
 					pif.input_names.emplace_back(dep);
@@ -332,13 +328,11 @@ namespace vuk {
 		auto sg_pref = compute_prefixes(false);
 		inline_subgraphs(sg_pref);
 
-		// find which reads are graph inputs (not produced by any pass) & outputs
-		// (not consumed by any pass)
-		impl->build_io();
-
-		// run global pass ordering - once we split per-queue we don't see enough
-		// inputs to order within a queue
-		schedule_intra_queue(impl->passes, compile_options);
+		for (auto& name : impl->whole_names_consumed) {
+			add_pass({ .name = name.append("_DIVERGE"),
+			           .resources = { Resource{ name, Resource::Type::eImage, Access::eConsume, name.append("__diverged") } },
+			           .execute = diverge });
+		}
 
 		// gather name alias info now - once we partition, we might encounter unresolved aliases
 		robin_hood::unordered_flat_map<Name, Name> name_map;
@@ -347,13 +341,13 @@ namespace vuk {
 		for (auto& passinfo : impl->passes) {
 			for (auto& res : passinfo.pass.resources) {
 				// for read or write, we add source to use chain
-				if (!res.out_name.is_invalid()) {
+				if (!res.name.is_invalid() && !res.out_name.is_invalid()) {
 					name_map.emplace(res.out_name, res.name);
 				}
 			}
 		}
 
-		// populate resource name -> attachment map
+		// populate resource name -> use chain map
 		for (auto& [k, v] : name_map) {
 			auto it = name_map.find(v);
 			Name res = v;
@@ -361,8 +355,19 @@ namespace vuk {
 				res = it->second;
 				it = name_map.find(res);
 			}
+			assert(!res.is_invalid());
 			impl->assigned_names.emplace(k, res);
 		}
+
+		// find which reads are graph inputs (not produced by any pass) & outputs
+		// (not consumed by any pass)
+		impl->build_io();
+
+		// run global pass ordering - once we split per-queue we don't see enough
+		// inputs to order within a queue
+		schedule_intra_queue(impl->passes, compile_options);
+
+		auto foo = dump_graph();
 
 		// for now, just use what the passes requested as domain
 		for (auto& p : impl->passes) {
@@ -381,23 +386,50 @@ namespace vuk {
 			att.use_chains.clear();
 		}
 
+		// prepare converge passes
+		for (auto& passinfo : impl->passes) {
+			if (passinfo.pass.type != Pass::Type::eConverge) {
+				continue;
+			}
+
+			auto post_diverge_name = passinfo.pass.resources.back().out_name;
+
+			// TODO: does this really work or make sense for >1 undiv_names?
+			std::unordered_set<Name> undiv_names;
+			for (int i = 0; i < passinfo.pass.resources.size() - 1; i++) {
+				auto& res = passinfo.pass.resources[i];
+				auto resolved_name = impl->resolve_name(res.name);
+				auto& undiv_name = impl->diverged_subchain_headers.at(resolved_name).first;
+				undiv_names.emplace(undiv_name);
+			}
+
+			passinfo.pass.resources.pop_back();
+
+			for (auto& name : undiv_names) {
+				passinfo.pass.resources.push_back(Resource{ name.append("__diverged"), Resource::Type::eImage, Access::eConverge, post_diverge_name });
+				name_map.emplace(passinfo.pass.resources.back().out_name, passinfo.pass.resources.back().name);
+			}
+		}
+
+		impl->assigned_names.clear();
+		// populate resource name -> use chain map
+		for (auto& [k, v] : name_map) {
+			auto it = name_map.find(v);
+			Name res = v;
+			while (it != name_map.end()) {
+				res = it->second;
+				it = name_map.find(res);
+			}
+			assert(!res.is_invalid());
+			impl->assigned_names.emplace(k, res);
+		}
+
 		// use chains pass
 		impl->use_chains.clear();
 		std::unordered_multimap<Name, Name> diverged_chains;
 		for (PassInfo& passinfo : impl->passes) {
 			for (Resource& res : passinfo.pass.resources) {
-				Name resolved_name;
-				Name undiverged_name;
-				bool diverged_subchain = false;
-				if (res.type == Resource::Type::eImage && res.subrange.image != Resource::Subrange::Image{}) {
-					undiverged_name = impl->resolve_name(res.name);
-					resolved_name = res.subrange.image.combine_name(undiverged_name);
-					// assign diverged resources to attachments
-					impl->assigned_names.emplace(resolved_name, undiverged_name);
-					diverged_subchain = true;
-				} else {
-					undiverged_name = resolved_name = impl->resolve_name(res.name);
-				}
+				Name resolved_name = impl->resolve_name(res.name);
 
 				bool skip = false;
 				// for read or write, we add source to use chain
@@ -405,6 +437,18 @@ namespace vuk {
 				if (it == impl->use_chains.end()) {
 					it = impl->use_chains.emplace(resolved_name, std::vector<UseRef, short_alloc<UseRef, 64>>{ short_alloc<UseRef, 64>{ *impl->arena_ } }).first;
 					auto& chain = it->second;
+
+					bool diverged_subchain = false;
+					Name undiverged_name = resolved_name;
+
+					Subrange sr{};
+					if (auto it = impl->diverged_subchain_headers.find(resolved_name); it != impl->diverged_subchain_headers.end()) {
+						auto& sch_info = it->second;
+						diverged_subchain = true;
+						sr.image = sch_info.second;
+						// find undiverged name
+						undiverged_name = impl->resolve_name(sch_info.first);
+					}
 
 					// we attach this use chain to the appropriate attachment
 					if (res.type == Resource::Type::eImage) {
@@ -441,7 +485,7 @@ namespace vuk {
 					if (auto it = res_acqs.find(resolved_name); it != res_acqs.end()) {
 						RGImpl::Acquire* acquire = &it->second;
 						chain.emplace_back(UseRef{ {}, {}, vuk::eManual, vuk::eManual, acquire->src_use, res.type, {}, nullptr });
-						chain.emplace_back(UseRef{ res.name, res.out_name, res.ia, res.ia, {}, res.type, res.subrange, &passinfo });
+						chain.emplace_back(UseRef{ res.name, res.out_name, res.ia, res.ia, {}, res.type, sr, &passinfo });
 						chain.back().use.domain = passinfo.domain;
 						// make the actually executed first pass wait on the future
 						chain.back().pass->absolute_waits.emplace_back(acquire->initial_domain, acquire->initial_visibility);
@@ -449,17 +493,19 @@ namespace vuk {
 					} else if (is_direct_attachment_use) {
 						chain.insert(chain.begin(), UseRef{ {}, {}, vuk::eManual, vuk::eManual, initial, res.type, {}, nullptr });
 					} else if (diverged_subchain) { // 3. if this is a diverged subchain, we want to put the last undiverged use here (or nothing, if this was first use)
-						auto undiv_name = impl->resolve_name(res.name);
-						auto& undiverged_chain = impl->use_chains.at(undiv_name);
+						auto& undiverged_chain = impl->use_chains.at(undiverged_name);
 						if (undiverged_chain.size() > 0) {
 							chain.emplace_back(undiverged_chain.back());
 						}
-						diverged_chains.emplace(undiv_name, resolved_name);
+						chain.emplace_back(UseRef{ res.name, res.out_name, res.ia, res.ia, {}, res.type, sr, &passinfo });
+						chain.back().use.domain = passinfo.domain;
+						skip = true;
+						diverged_chains.emplace(undiverged_name, resolved_name);
 					}
 				}
 				auto& chain = it->second;
 
-				// we don't want to put the convergence onto the divergence use chains
+				// we don't want to put the convergence onto the divergent use chains
 				// what we want to put is the next use after convergence
 				// if there is no next use after convergence, we'll attempt to pick up a last use from final layout or release, or error
 				if (!chain.empty() && chain.back().high_level_access == Access::eConverge) {
@@ -472,7 +518,11 @@ namespace vuk {
 				}
 
 				if (res.ia != Access::eConsume && !skip) { // eConsume is not a use
-					chain.emplace_back(UseRef{ res.name, res.out_name, res.ia, res.ia, {}, res.type, res.subrange, &passinfo });
+					Subrange sr{};
+					if (!chain.empty()) {
+						sr = chain.back().subrange;
+					}
+					chain.emplace_back(UseRef{ res.name, res.out_name, res.ia, res.ia, {}, res.type, sr, &passinfo });
 					chain.back().use.domain = passinfo.domain;
 				}
 			}
@@ -608,9 +658,11 @@ namespace vuk {
 				rpi.subpasses.push_back(si);
 			}
 			for (auto& att : attachments) {
-				auto name = impl->resolve_name(att.name);
-				rpi.attachments.push_back(AttachmentRPInfo{ &impl->bound_attachments.at(name) });
-				rpi.layer_count = att.subrange.image.layer_count;
+				auto res_name = impl->resolve_name(att.name);
+				auto whole_name = impl->whole_name(res_name);
+				rpi.attachments.push_back(AttachmentRPInfo{ &impl->bound_attachments.at(whole_name) });
+				auto& ch = impl->use_chains.at(res_name);
+				rpi.layer_count = ch[1].subrange.image.layer_count;
 			}
 
 			if (attachments.size() == 0) {
@@ -661,11 +713,10 @@ namespace vuk {
 		           .resolves = { { ms_name, resolved_name_src } } });
 	}
 
-	void RenderGraph::clear_image(Name image_name, Name image_name_out, Clear clear_value, Resource::Subrange::Image subrange) {
+	void RenderGraph::clear_image(Name image_name, Name image_name_out, Clear clear_value) {
 		std::vector<std::byte> args(sizeof(Clear));
 		std::memcpy(args.data(), &clear_value, sizeof(Clear));
 		Resource res{ image_name, Resource::Type::eImage, eClear, image_name_out };
-		res.subrange.image = subrange;
 		add_pass({ .name = image_name.append("_CLEAR"),
 		           .resources = { std::move(res) },
 		           .execute = [image_name, clear_value](CommandBuffer& cbuf) { cbuf.clear_image(image_name, clear_value); },
@@ -815,8 +866,8 @@ namespace vuk {
 		return futures;
 	}
 
-	void RenderGraph::attach_out(Name name, Future& fimg, DomainFlags dst_domain) {
-		impl->releases.emplace(name, RGImpl::Release{ to_use(Access::eNone, dst_domain), fimg.control.get() });
+	void RenderGraph::attach_out(Name name, Future& fimg, DomainFlags dst_domain, Subrange subrange) {
+		impl->releases.emplace(name, RGImpl::Release{ to_use(Access::eNone, dst_domain), subrange, fimg.control.get() });
 	}
 
 	void RenderGraph::detach_out(Name name, Future& fimg) {
@@ -892,8 +943,9 @@ namespace vuk {
 	void RenderGraph::validate() {
 		// check if all resourced are attached
 		for (const auto& [n, v] : impl->use_chains) {
-			auto name = impl->resolve_name(n);
-			if (!impl->bound_attachments.contains(name) && !impl->bound_buffers.contains(name)) {
+			auto resolved_name = impl->resolve_name(n);
+			auto whole_name = impl->whole_name(resolved_name);
+			if (!impl->bound_attachments.contains(whole_name) && !impl->bound_buffers.contains(whole_name)) {
 				throw RenderGraphException{ std::string("Missing resource: \"") + std::string(n.to_sv()) + "\". Did you forget to attach it?" };
 			}
 		}
@@ -950,8 +1002,9 @@ namespace vuk {
 		}
 
 		for (auto& [raw_name, chain] : impl->use_chains) {
-			auto name = impl->resolve_name(raw_name);
-			auto att_it = impl->bound_attachments.find(name);
+			auto resolved_name = impl->resolve_name(raw_name);
+			auto whole_name = impl->whole_name(resolved_name);
+			auto att_it = impl->bound_attachments.find(whole_name);
 			if (att_it == impl->bound_attachments.end()) {
 				continue;
 			}
@@ -959,7 +1012,7 @@ namespace vuk {
 			auto& attachment_info = att_it->second;
 
 			RGImpl::Release* release = nullptr;
-			if (auto it = res_rels.find(name); it != res_rels.end()) {
+			if (auto it = res_rels.find(resolved_name); it != res_rels.end()) {
 				release = &it->second;
 				if (attachment_info.final.layout != ImageLayout::eUndefined) {
 					chain.insert(chain.end(), UseRef{ {}, {}, vuk::eManual, vuk::eManual, attachment_info.final, Resource::Type::eImage, {}, nullptr });
@@ -1039,7 +1092,7 @@ namespace vuk {
 				if (dst_stages == PipelineStageFlags{}) {
 					barrier.dstAccessMask = {};
 				}
-				ImageBarrier ib{ .image = name, .barrier = barrier, .src = src_stages, .dst = dst_stages };
+				ImageBarrier ib{ .image = whole_name, .barrier = barrier, .src = src_stages, .dst = dst_stages };
 
 				// handle signaling & waiting
 				if (right.pass && right.pass->pass.signal) {
@@ -1182,11 +1235,9 @@ namespace vuk {
 			RGImpl::Release* release = nullptr;
 			if (auto it = res_rels.find(name); it != res_rels.end()) {
 				release = &it->second;
-				chain.emplace_back(
-				    UseRef{ {}, {}, vuk::eManual, vuk::eManual, it->second.dst_use, Resource::Type::eBuffer, Resource::Subrange{ .buffer = {} }, nullptr });
+				chain.emplace_back(UseRef{ {}, {}, vuk::eManual, vuk::eManual, it->second.dst_use, Resource::Type::eBuffer, Subrange{ .buffer = {} }, nullptr });
 			} else {
-				chain.emplace_back(
-				    UseRef{ {}, {}, vuk::eManual, vuk::eManual, buffer_info.final, Resource::Type::eBuffer, Resource::Subrange{ .buffer = {} }, nullptr });
+				chain.emplace_back(UseRef{ {}, {}, vuk::eManual, vuk::eManual, buffer_info.final, Resource::Type::eBuffer, Subrange{ .buffer = {} }, nullptr });
 			}
 			{
 				// if the last use did not specify a domain, we'll take domain from previous use
@@ -1344,13 +1395,10 @@ namespace vuk {
 					continue;
 				VkAttachmentReference attref{};
 
-				Name attachment_name = impl->resolve_name(res.name);
-				Name subresource_name = attachment_name;
-				if (res.type == Resource::Type::eImage && res.subrange.image != Resource::Subrange::Image{}) {
-					subresource_name = res.subrange.image.combine_name(impl->resolve_name(res.name));
-				}
+				Name resolved_name = impl->resolve_name(res.name);
+				Name attachment_name = impl->whole_name(resolved_name);
 				auto& attachment_info = impl->bound_attachments.at(attachment_name);
-				auto& chain = impl->use_chains.find(subresource_name)->second;
+				auto& chain = impl->use_chains.find(resolved_name)->second;
 				auto cit = std::find_if(chain.begin(), chain.end(), [&](auto& useref) { return useref.pass == &pass; });
 				assert(cit != chain.end());
 				attref.layout = (VkImageLayout)cit->use.layout;
@@ -1369,7 +1417,8 @@ namespace vuk {
 						// this a resolve src attachment
 						// get the dst attachment
 						auto dst_name = impl->resolve_name(it->second);
-						auto& dst_att = impl->bound_attachments.at(dst_name);
+						auto whole_name = impl->whole_name(dst_name);
+						auto& dst_att = impl->bound_attachments.at(whole_name);
 						rref.layout = (VkImageLayout)ImageLayout::eColorAttachmentOptimal; // the only possible
 						                                                                   // layout for resolves
 						rref.attachment = (uint32_t)std::distance(

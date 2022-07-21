@@ -69,4 +69,32 @@ namespace vuk {
 		ImageLayout layout; // ignored for buffers
 		DomainFlags domain = DomainFlagBits::eAny;
 	};
+
+	union Subrange {
+		struct Image {
+			uint32_t base_layer = 0;
+			uint32_t base_level = 0;
+
+			uint32_t layer_count = VK_REMAINING_ARRAY_LAYERS;
+			uint32_t level_count = VK_REMAINING_MIP_LEVELS;
+
+			constexpr bool operator==(const Image& o) const noexcept {
+				return base_level == o.base_level && level_count == o.level_count && base_layer == o.base_layer && layer_count == o.layer_count;
+			}
+
+			Name combine_name(Name prefix) const;
+
+			constexpr bool operator<(const Image& o) const noexcept {
+				return std::tie(base_layer, base_level, layer_count, level_count) < std::tie(o.base_layer, o.base_level, o.layer_count, o.level_count);
+			}
+		} image = {};
+		struct Buffer {
+			uint64_t offset = 0;
+			uint64_t size = VK_WHOLE_SIZE;
+
+			constexpr bool operator==(const Buffer& o) const noexcept {
+				return offset == o.offset && size == o.size;
+			}
+		} buffer;
+	};
 } // namespace vuk

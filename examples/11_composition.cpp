@@ -200,7 +200,10 @@ namespace {
 		                               .sample_count = vuk::Samples::e1,
 		                               .view_type = vuk::ImageViewType::eCube,
 		                               .layer_count = 6 });
-		      vuk::Future dst_image{ cube_src, "11_cube" };
+		      for (uint32_t i = 0; i < 6; i++) {
+			      cube_src->diverge_image("11_cube", vuk::Subrange::Image{.base_layer = i, .layer_count = 1}, vuk::Name("11_cube_face_").append(vuk::Name(std::to_string(i))));
+		      }
+
 		      std::vector<vuk::Name> cube_face_names;
 		      for (int i = 0; i < 6; i++) {
 			      std::shared_ptr<vuk::RenderGraph> rg = std::make_shared<vuk::RenderGraph>("MRT");
@@ -222,7 +225,7 @@ namespace {
 				                     // Rendering is the same as in the case for forward
 				                     command_buffer.set_viewport(0, vuk::Rect2D::framebuffer())
 				                         .set_scissor(0, vuk::Rect2D::framebuffer())
-				                         .set_rasterization(vuk::PipelineRasterizationStateCreateInfo{}) // Set the default rasterization state
+				                         .set_rasterization(vuk::PipelineRasterizationStateCreateInfo{.cullMode = vuk::CullModeFlagBits::eBack}) // Set the default rasterization state
 				                         // Set the depth/stencil state
 				                         .set_depth_stencil(vuk::PipelineDepthStencilStateCreateInfo{
 				                             .depthTestEnable = true,
@@ -240,27 +243,26 @@ namespace {
 				                         .bind_index_buffer(inds, vuk::IndexType::eUint32);
 				                     command_buffer.push_constants(vuk::ShaderStageFlagBits::eFragment, 0, cam_pos).bind_graphics_pipeline("cube_deferred_reflective");
 				                     for (auto j = 0; j < 64; j++) {
+					                     if (j == 36)
+						                     continue;
 					                     command_buffer.bind_image(0, 2, env_cubemap_ia).bind_sampler(0, 2, {});
 					                     VP* VP_data = command_buffer.map_scratch_uniform_binding<VP>(0, 0);
 					                     VP_data->proj = capture_projection;
 					                     VP_data->view = capture_views[i];
 					                     glm::mat4* model = command_buffer.map_scratch_uniform_binding<glm::mat4>(0, 1);
 					                     *model = glm::scale(glm::mat4(1.f), glm::vec3(0.1f)) *
-					                              glm::translate(glm::mat4(1.f), 4.f * glm::vec3(4 * (j % 8 - 4), sinf(0.1 * angle + j), 4 * (j / 8 - 4)));
+					                              glm::translate(glm::mat4(1.f), 4.f * glm::vec3(4 * (j % 8 - 4), sinf(0.1f * angle + j), 4 * (j / 8 - 4)));
 					                     command_buffer.draw_indexed(box.second.size(), 1, 0, 0, 0);
 				                     }
 			                     } });
 
-			      rg->attach_in("11_cube", dst_image);
-			      rg->inference_rule("11_position+", vuk::same_2D_extent_as("11_cube"));
-			      vuk::Resource cubemap_face("11_cube", vuk::Resource::Type::eImage, vuk::Access::eColorWrite, "11_cube+");
-			      cubemap_face.subrange.image.base_layer = i;
-			      cubemap_face.subrange.image.layer_count = 1;
+			      rg->attach_in("11_cube_face", vuk::Future{ cube_src, vuk::Name("11_cube_face_").append(vuk::Name(std::to_string(i))) });
+			      rg->inference_rule("11_position+", vuk::same_2D_extent_as("11_cube_face"));
 			      // The shading pass for the deferred rendering
 			      rg->add_pass({ .name = "deferred_resolve",
 			                     // Declare that we are going to render to the final color image
 			                     // Declare that we are going to sample (in the fragment shader) from the previous attachments
-			                     .resources = { cubemap_face,
+			                     .resources = { "11_cube_face"_image >> vuk::eColorWrite >> "11_cube_face+",
 			                                    "11_position+"_image >> vuk::eFragmentSampled,
 			                                    "11_normal+"_image >> vuk::eFragmentSampled,
 			                                    "11_color+"_image >> vuk::eFragmentSampled },
@@ -284,7 +286,7 @@ namespace {
 				                         .bind_sampler(0, 2, sci)
 				                         .draw(3, 1, 0, 0);
 			                     } });
-			      vuk::Future lit_fut = { std::move(rg), "11_cube+" };
+			      vuk::Future lit_fut = { std::move(rg), "11_cube_face+" };
 			      auto cube_face_name = vuk::Name("11_deferred_face_").append(vuk::Name(std::to_string(i)));
 			      cube_face_names.emplace_back(cube_face_name);
 			      cube_refl->attach_in(cube_face_name, std::move(lit_fut));
@@ -293,18 +295,18 @@ namespace {
 		      cube_refl->converge_image_explicit(cube_face_names, "11_cuberefl");
 
 		      cube_refl->attach_and_clear_image(
-		          "11_oposition", { .format = vuk::Format::eR16G16B16A16Sfloat, .sample_count = vuk::Samples::e1 }, vuk::White<float>);
-		      cube_refl->attach_and_clear_image("11_onormal", { .format = vuk::Format::eR16G16B16A16Sfloat }, vuk::White<float>);
-		      cube_refl->attach_and_clear_image("11_ocolor", { .format = vuk::Format::eR8G8B8A8Srgb }, vuk::White<float>);
-		      cube_refl->attach_and_clear_image("11_odepth", { .format = vuk::Format::eD32Sfloat }, vuk::DepthOne);
+		          "11_position", { .format = vuk::Format::eR16G16B16A16Sfloat, .sample_count = vuk::Samples::e1 }, vuk::White<float>);
+		      cube_refl->attach_and_clear_image("11_normal", { .format = vuk::Format::eR16G16B16A16Sfloat }, vuk::White<float>);
+		      cube_refl->attach_and_clear_image("11_color", { .format = vuk::Format::eR8G8B8A8Srgb }, vuk::White<float>);
+		      cube_refl->attach_and_clear_image("11_depth", { .format = vuk::Format::eD32Sfloat }, vuk::DepthOne);
 		      cube_refl->add_pass(
 		          { // Passes can be optionally named, this useful for visualization and debugging
 		            .name = "deferred_MRT",
 		            // Declare our framebuffer
-		            .resources = { "11_oposition"_image >> vuk::eColorWrite,
-		                           "11_onormal"_image >> vuk::eColorWrite,
-		                           "11_ocolor"_image >> vuk::eColorWrite,
-		                           "11_odepth"_image >> vuk::eDepthStencilRW,
+		            .resources = { "11_position"_image >> vuk::eColorWrite,
+		                           "11_normal"_image >> vuk::eColorWrite,
+		                           "11_color"_image >> vuk::eColorWrite,
+		                           "11_depth"_image >> vuk::eDepthStencilRW,
 		                           "11_cuberefl"_image >> vuk::eFragmentSampled },
 		            .execute = [uboVP, cam_pos](vuk::CommandBuffer& command_buffer) {
 			            // Rendering is the same as in the case for forward
@@ -332,23 +334,25 @@ namespace {
 			            *model = static_cast<glm::mat4>(glm::angleAxis(glm::radians(angle), glm::vec3(0.f, 1.f, 0.f)));
 			            command_buffer.draw_indexed(box.second.size(), 1, 0, 0, 0);
 			            for (auto i = 0; i < 64; i++) {
+				            if (i == 36)
+					            continue;
 				            command_buffer.bind_image(0, 2, env_cubemap_ia).bind_sampler(0, 2, {}).bind_buffer(0, 0, uboVP);
 				            glm::mat4* model = command_buffer.map_scratch_uniform_binding<glm::mat4>(0, 1);
 				            *model = glm::scale(glm::mat4(1.f), glm::vec3(0.1f)) *
-				                     glm::translate(glm::mat4(1.f), 4.f * glm::vec3(4 * (i % 8 - 4), sinf(0.1 * angle + i), 4 * (i / 8 - 4)));
+				                     glm::translate(glm::mat4(1.f), 4.f * glm::vec3(4 * (i % 8 - 4), sinf(0.1f * angle + i), 4 * (i / 8 - 4)));
 				            command_buffer.draw_indexed(box.second.size(), 1, 0, 0, 0);
 			            }
 		            } });
 		      cube_refl->attach_image("11_deferred", { .format = vuk::Format::eR8G8B8A8Srgb, .sample_count = vuk::Samples::e1 });
-		      cube_refl->inference_rule("11_oposition+", vuk::same_extent_as("11_deferred"));
+		      cube_refl->inference_rule("11_position+", vuk::same_extent_as("11_deferred"));
 		      // The shading pass for the deferred rendering
 		      cube_refl->add_pass({ .name = "deferred_resolve",
 		                            // Declare that we are going to render to the final color image
 		                            // Declare that we are going to sample (in the fragment shader) from the previous attachments
 		                            .resources = { "11_deferred"_image >> vuk::eColorWrite >> "11_deferred+",
-		                                           "11_oposition+"_image >> vuk::eFragmentSampled,
-		                                           "11_onormal+"_image >> vuk::eFragmentSampled,
-		                                           "11_ocolor+"_image >> vuk::eFragmentSampled },
+		                                           "11_position+"_image >> vuk::eFragmentSampled,
+		                                           "11_normal+"_image >> vuk::eFragmentSampled,
+		                                           "11_color+"_image >> vuk::eFragmentSampled },
 		                            .execute = [cam_pos](vuk::CommandBuffer& command_buffer) {
 			                            command_buffer.set_viewport(0, vuk::Rect2D::framebuffer())
 			                                .set_scissor(0, vuk::Rect2D::framebuffer())
@@ -361,11 +365,11 @@ namespace {
 			                            vuk::SamplerCreateInfo sci;
 			                            sci.minFilter = sci.magFilter = vuk::Filter::eNearest;
 			                            // Bind the previous attachments as sampled images
-			                            command_buffer.bind_image(0, 0, "11_oposition+")
+			                            command_buffer.bind_image(0, 0, "11_position+")
 			                                .bind_sampler(0, 0, sci)
-			                                .bind_image(0, 1, "11_onormal+")
+			                                .bind_image(0, 1, "11_normal+")
 			                                .bind_sampler(0, 1, sci)
-			                                .bind_image(0, 2, "11_ocolor+")
+			                                .bind_image(0, 2, "11_color+")
 			                                .bind_sampler(0, 2, sci)
 			                                .draw(3, 1, 0, 0);
 		                            } });

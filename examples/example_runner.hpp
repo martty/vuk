@@ -169,6 +169,7 @@ namespace vuk {
 		vk12features.descriptorBindingVariableDescriptorCount = true;
 		vk12features.hostQueryReset = true;
 		vk12features.bufferDeviceAddress = true;
+		vk12features.shaderOutputLayer = true;
 		VkPhysicalDeviceVulkan11Features vk11features{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES };
 		vk11features.shaderDrawParameters = true;
 		VkPhysicalDeviceSynchronization2FeaturesKHR sync_feat{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR,

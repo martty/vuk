@@ -37,12 +37,15 @@ namespace vuk {
 		std::vector<PassInfo*, short_alloc<PassInfo*, 64>> ordered_passes;
 
 		robin_hood::unordered_flat_set<Name> imported_names;       // names coming from subgraphs
-		robin_hood::unordered_flat_map<Name, Name> aliases;        // maps resource names to resource names
+		std::unordered_map<Name, Name> aliases;        // maps resource names to resource names
 		robin_hood::unordered_flat_map<Name, Name> assigned_names; // maps resource names to attachment names
 		robin_hood::unordered_flat_set<Name> poisoned_names;
 		robin_hood::unordered_flat_map<Name, uint64_t> sg_name_counter;
+		robin_hood::unordered_flat_map<Name, Name> diverged_name_to_undiverged_name;
+		robin_hood::unordered_flat_set<Name> whole_names_consumed;
+		robin_hood::unordered_flat_map<Name, std::pair<Name, Subrange::Image>> diverged_subchain_headers;
 
-		robin_hood::unordered_node_map<Name, std::vector<UseRef, short_alloc<UseRef, 64>>> use_chains;
+		std::unordered_map<Name, std::vector<UseRef, short_alloc<UseRef, 64>>> use_chains;
 
 		std::vector<RenderPassInfo, short_alloc<RenderPassInfo, 64>> rpis;
 		size_t num_graphics_rpis = 0;
@@ -63,6 +66,7 @@ namespace vuk {
 
 		struct Release {
 			QueueResourceUse dst_use;
+			Subrange subrange;
 			FutureBase* signal = nullptr;
 		};
 
@@ -86,6 +90,16 @@ namespace vuk {
 				return it->second;
 			}
 		};
+
+		// note : call it on resolved names only
+		Name whole_name(Name in) {
+			if (auto it = diverged_subchain_headers.find(in); it != diverged_subchain_headers.end()) {
+				auto& sch_info = it->second;
+				return resolve_name(sch_info.first);
+			} else {
+				return in;
+			}
+		}
 
 		Name resolve_alias(Name in) {
 			auto it = aliases.find(in);

@@ -74,33 +74,6 @@ namespace vuk {
 		bool is_create = false;
 		ImageAttachment ici;
 		BufferCreateInfo bci;
-		union Subrange {
-			struct Image {
-				uint32_t base_layer = 0;
-				uint32_t base_level = 0;
-
-				uint32_t layer_count = VK_REMAINING_ARRAY_LAYERS;
-				uint32_t level_count = VK_REMAINING_MIP_LEVELS;
-
-				constexpr bool operator==(const Image& o) const noexcept {
-					return base_level == o.base_level && level_count == o.level_count && base_layer == o.base_layer && layer_count == o.layer_count;
-				}
-
-				Name combine_name(Name prefix) const;
-
-				bool operator<(const Image& o) const noexcept {
-					return std::tie(base_layer, base_level, layer_count, level_count) < std::tie(o.base_layer, o.base_level, o.layer_count, o.level_count);
-				}
-			} image = {};
-			struct Buffer {
-				uint64_t offset = 0;
-				uint64_t size = VK_WHOLE_SIZE;
-
-				constexpr bool operator==(const Buffer& o) const noexcept {
-					return offset == o.offset && size == o.size;
-				}
-			} buffer;
-		} subrange = {};
 
 		Resource(Name n, Type t, Access ia) : name(n), type(t), ia(ia) {}
 		Resource(Name n, Type t, Access ia, Name out_name) : name(n), type(t), ia(ia), out_name(out_name) {}
@@ -113,7 +86,7 @@ namespace vuk {
 		    ici{ .extent = dim, .format = fmt, .sample_count = samp } {}
 
 		bool operator==(const Resource& o) const noexcept {
-			return name == o.name && (type == Type::eBuffer ? subrange.buffer == o.subrange.buffer : subrange.image == o.subrange.image);
+			return name == o.name;
 		}
 	};
 
@@ -134,7 +107,7 @@ namespace vuk {
 
 		std::function<void(CommandBuffer&)> execute;
 		std::vector<std::byte> arguments; // internal use
-		enum class Type { eUserPass, eClear } type = Type::eUserPass;
+		enum class Type { eUserPass, eClear, eConverge } type = Type::eUserPass;
 	};
 
 	// declare these specializations for GCC
@@ -169,6 +142,9 @@ namespace vuk {
 		/// @param old_name Old name used to refere to the resource
 		void add_alias(Name new_name, Name old_name);
 
+		/// @brief Diverge image. subrange is available as subrange_name afterwards.
+		void diverge_image(Name whole_name, Subrange::Image subrange, Name subrange_name);
+
 		/// @brief Reconverge image. Prevents diverged use moving before pre_diverge or after post_diverge.
 		void converge_image(Name pre_diverge, Name post_diverge);
 
@@ -186,7 +162,7 @@ namespace vuk {
 		/// @param image_name_out Name of the cleared image resource
 		/// @param clear_value Value used for the clear
 		/// @param subrange Range of image cleared
-		void clear_image(Name image_name_in, Name image_name_out, Clear clear_value, Resource::Subrange::Image subrange = {});
+		void clear_image(Name image_name_in, Name image_name_out, Clear clear_value);
 
 		/// @brief Attach a swapchain to the given name
 		/// @param name Name of the resource to attach to
@@ -268,7 +244,7 @@ namespace vuk {
 
 		// future support functions
 		friend class Future;
-		void attach_out(Name, Future& fimg, DomainFlags dst_domain);
+		void attach_out(Name, Future& fimg, DomainFlags dst_domain, Subrange subrange);
 
 		void detach_out(Name, Future& fimg);
 
@@ -359,8 +335,8 @@ inline vuk::detail::BufferResource operator"" _buffer(const char* name, size_t) 
 
 namespace std {
 	template<>
-	struct hash<vuk::Resource::Subrange::Image> {
-		size_t operator()(vuk::Resource::Subrange::Image const& x) const noexcept {
+	struct hash<vuk::Subrange::Image> {
+		size_t operator()(vuk::Subrange::Image const& x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, x.base_layer, x.base_level, x.layer_count, x.level_count);
 			return h;

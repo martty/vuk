@@ -346,11 +346,11 @@ namespace vuk {
 		return { SampledImage::RenderGraphAttachment{ n, sci, ivci, ImageLayout::eShaderReadOnlyOptimal } };
 	}
 
-	Future::Future(std::shared_ptr<struct RenderGraph> org, Name output_binding, DomainFlags dst_domain) :
+	Future::Future(std::shared_ptr<struct RenderGraph> org, Name output_binding, DomainFlags dst_domain, Subrange subrange) :
 	    output_binding(output_binding),
 	    rg(std::move(org)),
 	    control(std::make_shared<FutureBase>()) {
-		rg->attach_out(output_binding, *this, dst_domain);
+		rg->attach_out(output_binding, *this, dst_domain, subrange);
 	}
 
 	Future::Future(const Future& o) noexcept : output_binding(o.output_binding), rg(o.rg), control(o.control) {}

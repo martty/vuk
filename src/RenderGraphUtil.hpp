@@ -321,7 +321,7 @@ namespace vuk {
 		vuk::Access high_level_access;
 		QueueResourceUse use;
 		Resource::Type type;
-		Resource::Subrange subrange;
+		Subrange subrange;
 		PassInfo* pass = nullptr;
 	};
 

@@ -2,8 +2,8 @@
 
 #include "vuk/AllocatorHelpers.hpp"
 #include "vuk/CommandBuffer.hpp"
-#include "vuk/RenderGraph.hpp"
 #include "vuk/Future.hpp"
+#include "vuk/RenderGraph.hpp"
 #include <math.h>
 #include <span>
 
@@ -97,25 +97,29 @@ namespace vuk {
 	/// @param num_mips number of mip levels to generate
 	inline Future generate_mips(Future image, uint32_t base_mip, uint32_t num_mips) {
 		std::shared_ptr<RenderGraph> rgp = std::make_shared<RenderGraph>("generate_mips");
+		rgp->attach_in("_src", std::move(image));
+		Name mip = Name("_mip_");
+		for (uint32_t miplevel = base_mip; miplevel < (base_mip + num_mips); miplevel++) {
+			rgp->diverge_image("_src", { .base_level = miplevel, .level_count = 1 }, mip.append(Name(std::to_string(miplevel))));
+		}
+
 		for (uint32_t miplevel = base_mip + 1; miplevel < (base_mip + num_mips); miplevel++) {
 			uint32_t dmiplevel = miplevel - base_mip;
+
+			Name mip_src_name = mip.append(Name(std::to_string(miplevel - 1)));
 			Name mip_dst = Name(std::to_string(miplevel));
-			Name src = Name("_src");
+			Name mip_dst_name = mip.append(Name(std::to_string(miplevel)));
 			if (miplevel != base_mip + 1) {
-				src = src.append("p");
+				mip_src_name = mip_src_name.append("+");
 			}
-			Resource src_res(src, Resource::Type::eImage, Access::eTransferRead);
-			src_res.subrange.image.base_level = miplevel - 1;
-			src_res.subrange.image.level_count = 1;
-			Resource dst_res("_src", Resource::Type::eImage, Access::eTransferWrite, "_srcp");
-			dst_res.subrange.image.base_level = miplevel;
-			dst_res.subrange.image.level_count = 1;
+			Resource src_res(mip_src_name, Resource::Type::eImage, Access::eTransferRead);
+			Resource dst_res(mip_dst_name, Resource::Type::eImage, Access::eTransferWrite, mip_dst_name.append("+"));
 			rgp->add_pass({ .name = Name("MIP").append(mip_dst),
 			                .execute_on = DomainFlagBits::eGraphicsOnGraphics,
 			                .resources = { src_res, dst_res },
-			                .execute = [src, dmiplevel, miplevel](CommandBuffer& command_buffer) {
+			                .execute = [mip_src_name, mip_dst_name, dmiplevel, miplevel](CommandBuffer& command_buffer) {
 				                ImageBlit blit;
-				                auto src_ia = *command_buffer.get_resource_image_attachment(src);
+				                auto src_ia = *command_buffer.get_resource_image_attachment(mip_src_name);
 				                auto dim = src_ia.extent;
 				                assert(dim.sizing == Sizing::eAbsolute);
 				                auto extent = dim.extent;
@@ -132,13 +136,11 @@ namespace vuk {
 				                blit.dstOffsets[0] = Offset3D{ 0 };
 				                blit.dstOffsets[1] =
 				                    Offset3D{ std::max((int32_t)extent.width >> (dmiplevel), 1), std::max((int32_t)extent.height >> (dmiplevel), 1), (int32_t)1 };
-				                command_buffer.blit_image(src, "_srcp", blit, Filter::eLinear);
+				                command_buffer.blit_image(mip_src_name, mip_dst_name, blit, Filter::eLinear);
 			                } });
 		}
 
 		rgp->converge_image("_src", "_src+");
-
-		rgp->attach_in("_src", std::move(image));
 		return { std::move(rgp), "_src+" };
 	}
 
@@ -173,8 +175,7 @@ namespace vuk {
 	/// @param extent Extent3D of the image
 	/// @param data pointer to data to fill the image with
 	/// @param should_generate_mips if true, all mip levels are generated from the 0th level
-	inline std::pair<Texture, Future>
-	create_texture(Allocator& allocator, Format format, Extent3D extent, void* data, bool should_generate_mips) {
+	inline std::pair<Texture, Future> create_texture(Allocator& allocator, Format format, Extent3D extent, void* data, bool should_generate_mips) {
 		ImageCreateInfo ici;
 		ici.format = format;
 		ici.extent = extent;

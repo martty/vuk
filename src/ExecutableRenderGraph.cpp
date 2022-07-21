@@ -693,9 +693,11 @@ namespace vuk {
 					auto& pass = sp.passes[0]->pass; // all passes should be using the same fb, so we can pick the first
 					for (auto& res : pass.resources) {
 						auto resolved_name = impl->resolve_name(res.name);
-						if (resolved_name == bound.name) {
-							base_layer = res.subrange.image.base_layer;
-							layer_count = res.subrange.image.layer_count;
+						auto whole_name = impl->whole_name(resolved_name);
+						if (whole_name == bound.name) {
+							auto& sr = impl->use_chains.at(resolved_name)[1].subrange;
+							base_layer = sr.image.base_layer;
+							layer_count = sr.image.layer_count;
 						}
 					}
 				}
@@ -788,7 +790,8 @@ namespace vuk {
 
 	Result<BufferInfo, RenderGraphException> ExecutableRenderGraph::get_resource_buffer(Name n, PassInfo* pass_info) {
 		auto resolved = resolve_name(n, pass_info);
-		auto it = impl->bound_buffers.find(resolved);
+		auto whole = impl->whole_name(resolved);
+		auto it = impl->bound_buffers.find(whole);
 		if (it == impl->bound_buffers.end()) {
 			return { expected_error, RenderGraphException{ "Buffer not found" } };
 		}
@@ -797,7 +800,8 @@ namespace vuk {
 
 	Result<AttachmentInfo, RenderGraphException> ExecutableRenderGraph::get_resource_image(Name n, PassInfo* pass_info) {
 		auto resolved = resolve_name(n, pass_info);
-		auto it = impl->bound_attachments.find(resolved);
+		auto whole = impl->whole_name(resolved);
+		auto it = impl->bound_attachments.find(whole);
 		if (it == impl->bound_attachments.end()) {
 			return { expected_error, RenderGraphException{ "Image not found" } };
 		}
@@ -806,15 +810,6 @@ namespace vuk {
 
 	Result<bool, RenderGraphException> ExecutableRenderGraph::is_resource_image_in_general_layout(Name n, PassInfo* pass_info) {
 		auto resolved = resolve_name(n, pass_info);
-		for (auto& res : pass_info->pass.resources) {
-			auto res_res_name = impl->resolve_name(res.name);
-			if (resolved == res_res_name) {
-				if (res.subrange.image != Resource::Subrange::Image{}) {
-					resolved = res.subrange.image.combine_name(res_res_name);
-					break;
-				}
-			}
-		}
 
 		auto it = impl->use_chains.find(resolved);
 		if (it == impl->use_chains.end()) {
@@ -838,6 +833,7 @@ namespace vuk {
 	const ImageAttachment& InferenceContext::get_image_attachment(Name name) const {
 		auto fqname = prefix.append(name);
 		auto resolved_name = erg->impl->resolve_name(fqname);
-		return erg->impl->bound_attachments.at(resolved_name).attachment;
+		auto whole_name = erg->impl->whole_name(resolved_name);
+		return erg->impl->bound_attachments.at(whole_name).attachment;
 	}
 } // namespace vuk
