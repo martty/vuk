@@ -378,7 +378,6 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::bind_image(unsigned set, unsigned binding, Name resource_name) {
 		VUK_EARLY_RET();
-		// TODO: handle image subranges
 		auto res = rg->get_resource_image(resource_name, current_pass);
 		if (!res) {
 			current_error = std::move(res);

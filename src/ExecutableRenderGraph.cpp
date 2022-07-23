@@ -5,6 +5,7 @@
 #include "vuk/Future.hpp"
 #include "vuk/Hash.hpp" // for create
 #include "vuk/RenderGraph.hpp"
+#include "vuk/AllocatorHelpers.hpp"
 #include <sstream>
 #include <unordered_set>
 
@@ -53,50 +54,6 @@ namespace vuk {
 			auto rg = ctx.acquire_rendertarget(rgci, ctx.get_frame_count());
 			attachment_info.attachment.image = rg.image;
 		}
-	}
-
-	// TODO: remove
-	Result<void> create_image(Allocator& alloc, ImageAttachment& attachment) {
-		ImageCreateInfo ici;
-		ici.format = vuk::Format(attachment.format);
-		ici.imageType = attachment.image_type;
-		ici.flags = attachment.image_flags;
-		ici.arrayLayers = attachment.layer_count;
-		ici.samples = attachment.sample_count.count;
-		ici.tiling = attachment.tiling;
-		ici.mipLevels = attachment.level_count;
-		ici.usage = attachment.usage;
-		assert(attachment.extent.sizing == Sizing::eAbsolute);
-		ici.extent = static_cast<vuk::Extent3D>(attachment.extent.extent);
-
-		auto res = alloc.allocate_images(std::span{ &attachment.image, 1 }, std::span{ &ici, 1 });
-		if (res) {
-			alloc.deallocate(std::span{ &attachment.image, 1 });
-		}
-		return res;
-	}
-
-	// TODO: remove
-	Result<void> create_image_view(Allocator& alloc, ImageAttachment& attachment) {
-		ImageViewCreateInfo ivci;
-		ivci.image = attachment.image;
-		ivci.format = vuk::Format(attachment.format);
-		ivci.viewType = attachment.view_type;
-		ivci.flags = attachment.image_view_flags;
-
-		ImageSubresourceRange isr;
-		isr.aspectMask = format_to_aspect(ivci.format);
-		isr.baseArrayLayer = attachment.base_layer;
-		isr.layerCount = attachment.layer_count;
-		isr.baseMipLevel = attachment.base_level;
-		isr.levelCount = attachment.level_count;
-		ivci.subresourceRange = isr;
-
-		auto res = alloc.allocate_image_views(std::span{ &attachment.image_view, 1 }, std::span{ &ivci, 1 });
-		if (res) {
-			alloc.deallocate(std::span{ &attachment.image_view, 1 });
-		}
-		return res;
 	}
 
 	void begin_renderpass(vuk::RenderPassInfo& rpass, VkCommandBuffer& cbuf, bool use_secondary_command_buffers) {
@@ -359,7 +316,6 @@ namespace vuk {
 				if (!rp.framebufferless) { // framebuffers get extra inference
 					att.rp_uses.emplace_back(&rp);
 					auto& ia = att.attachment;
-					// TODO: image type, image view type, levels and layers from FB
 					ia.image_type = ia.image_type == ImageType::eInfer ? vuk::ImageType::e2D : ia.image_type;
 
 					ia.base_layer = ia.base_layer == VK_REMAINING_ARRAY_LAYERS ? 0 : ia.base_layer;
@@ -668,7 +624,8 @@ namespace vuk {
 				if (bound.rp_uses.size() > 0) { // its an FB attachment
 					create_attachment(ctx, bound);
 				} else {
-					create_image(alloc, bound.attachment);
+					auto image = *allocate_image(alloc, bound.attachment); // TODO: dropping error
+					bound.attachment.image = *image;
 				}
 			}
 		}
@@ -718,7 +675,8 @@ namespace vuk {
 					specific_attachment.layer_count = *layer_count;
 					assert(specific_attachment.level_count == 1);
 
-					create_image_view(alloc, specific_attachment);
+					auto iv = *allocate_image_view(alloc, specific_attachment); // TODO: dropping error
+					specific_attachment.image_view = *iv;
 					auto name = std::string("ImageView: RenderTarget ") + std::string(bound.name.to_sv());
 					ctx.debug.set_name(specific_attachment.image_view.payload, Name(name));
 				}

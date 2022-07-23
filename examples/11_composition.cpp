@@ -6,7 +6,8 @@
 
 /* 11_composition
  * We expand on example 5 by adding reflections to our deferred cube and FXAA.
- * To do this we showcase the composition features of vuk: we extensively use Futures to build up the final rendering.
+ * To do this we showcase the composition features of vuk: we extensively use Futures to build up the final rendering. Rendering to and using cubemaps/array
+ * images is also shown.
  *
  * These examples are powered by the example framework, which hides some of the code required, as that would be repeated for each example.
  * Furthermore it allows launching individual examples and all examples with the example same code.
@@ -130,7 +131,8 @@ namespace {
 		      equirectangular_to_cubemap.add_glsl(util::read_entire_file("../../examples/equirectangular_to_cubemap.frag"), "equirectangular_to_cubemap.frag");
 		      runner.context->create_named_pipeline("equirectangular_to_cubemap", equirectangular_to_cubemap);
 
-		      // make cubemap by rendering to individual faces (layered FB)
+		      // make cubemap by rendering to individual faces - we use a layered framebuffer to achieve this
+		      // this only requires using an attachment with layers
 		      {
 			      vuk::RenderGraph rg("cubegen");
 			      rg.attach_in("hdr_texture", std::move(hdr_texture.second));
@@ -169,6 +171,8 @@ namespace {
 				                    memcpy(view, capture_views, sizeof(capture_views));
 				                    cbuf.draw_indexed(box.second.size(), 6, 0, 0, 0);
 			                    } });
+
+			      // transition the cubemap for fragment sampling access to complete init
 			      auto fut_in_layout = vuk::transition(vuk::Future{ std::make_unique<vuk::RenderGraph>(std::move(rg)), "env_cubemap+" }, vuk::eFragmentSampled);
 			      runner.enqueue_setup(std::move(fut_in_layout));
 		      }
@@ -189,8 +193,10 @@ namespace {
 
 		      vuk::wait_for_futures(frame_allocator, uboVP_fut);
 
-		      std::shared_ptr<vuk::RenderGraph> cube_refl = std::make_shared<vuk::RenderGraph>("cube_refl");
+		      // we are going to render the scene twice - once into a cubemap, then subsequently, we'll render it again while sampling from the cubemap
 
+		      // this time we will show off rendering to individual cubemap faces
+		      // create the cubemap in a separate rendergraph
 		      std::shared_ptr<vuk::RenderGraph> cube_src = std::make_shared<vuk::RenderGraph>("cube_src");
 		      cube_src->attach_image("11_cube",
 		                             { .image_flags = vuk::ImageCreateFlagBits::eCubeCompatible,
@@ -200,10 +206,17 @@ namespace {
 		                               .sample_count = vuk::Samples::e1,
 		                               .view_type = vuk::ImageViewType::eCube,
 		                               .layer_count = 6 });
+
+		      // we split the cubemap into faces
 		      for (uint32_t i = 0; i < 6; i++) {
-			      cube_src->diverge_image("11_cube", vuk::Subrange::Image{.base_layer = i, .layer_count = 1}, vuk::Name("11_cube_face_").append(vuk::Name(std::to_string(i))));
+			      cube_src->diverge_image(
+			          "11_cube", vuk::Subrange::Image{ .base_layer = i, .layer_count = 1 }, vuk::Name("11_cube_face_").append(vuk::Name(std::to_string(i))));
 		      }
 
+		      std::shared_ptr<vuk::RenderGraph> cube_refl = std::make_shared<vuk::RenderGraph>("cube_refl");
+
+		      // for each face we do standard (example 05) deferred scene rendering
+		      // but we resolve the deferred scene into the appropriate cubemap face
 		      std::vector<vuk::Name> cube_face_names;
 		      for (int i = 0; i < 6; i++) {
 			      std::shared_ptr<vuk::RenderGraph> rg = std::make_shared<vuk::RenderGraph>("MRT");
@@ -214,18 +227,16 @@ namespace {
 			      rg->attach_and_clear_image("11_normal", { .format = vuk::Format::eR16G16B16A16Sfloat }, vuk::White<float>);
 			      rg->attach_and_clear_image("11_color", { .format = vuk::Format::eR8G8B8A8Srgb }, vuk::White<float>);
 			      rg->attach_and_clear_image("11_depth", { .format = vuk::Format::eD32Sfloat }, vuk::DepthOne);
-			      rg->add_pass({ // Passes can be optionally named, this useful for visualization and debugging
-			                     .name = "deferred_MRT",
-			                     // Declare our framebuffer
+			      rg->add_pass({ .name = "deferred_MRT",
 			                     .resources = { "11_position"_image >> vuk::eColorWrite,
 			                                    "11_normal"_image >> vuk::eColorWrite,
 			                                    "11_color"_image >> vuk::eColorWrite,
 			                                    "11_depth"_image >> vuk::eDepthStencilRW },
 			                     .execute = [i, cam_pos](vuk::CommandBuffer& command_buffer) {
-				                     // Rendering is the same as in the case for forward
 				                     command_buffer.set_viewport(0, vuk::Rect2D::framebuffer())
 				                         .set_scissor(0, vuk::Rect2D::framebuffer())
-				                         .set_rasterization(vuk::PipelineRasterizationStateCreateInfo{.cullMode = vuk::CullModeFlagBits::eBack}) // Set the default rasterization state
+				                         .set_rasterization(vuk::PipelineRasterizationStateCreateInfo{
+				                             .cullMode = vuk::CullModeFlagBits::eBack }) // Set the default rasterization state
 				                         // Set the depth/stencil state
 				                         .set_depth_stencil(vuk::PipelineDepthStencilStateCreateInfo{
 				                             .depthTestEnable = true,
@@ -289,27 +300,25 @@ namespace {
 			      vuk::Future lit_fut = { std::move(rg), "11_cube_face+" };
 			      auto cube_face_name = vuk::Name("11_deferred_face_").append(vuk::Name(std::to_string(i)));
 			      cube_face_names.emplace_back(cube_face_name);
+			      // we attach the cubemap face into the final rendegraph
 			      cube_refl->attach_in(cube_face_name, std::move(lit_fut));
 		      }
-
+		      // time to render the final scene
+		      // we collect the cubemap faces
 		      cube_refl->converge_image_explicit(cube_face_names, "11_cuberefl");
-
-		      cube_refl->attach_and_clear_image(
-		          "11_position", { .format = vuk::Format::eR16G16B16A16Sfloat, .sample_count = vuk::Samples::e1 }, vuk::White<float>);
+		      // and do the standard deferred rendering as before, this time using the new cube map for the environment
+		      cube_refl->attach_and_clear_image("11_position", { .format = vuk::Format::eR16G16B16A16Sfloat, .sample_count = vuk::Samples::e1 }, vuk::White<float>);
 		      cube_refl->attach_and_clear_image("11_normal", { .format = vuk::Format::eR16G16B16A16Sfloat }, vuk::White<float>);
 		      cube_refl->attach_and_clear_image("11_color", { .format = vuk::Format::eR8G8B8A8Srgb }, vuk::White<float>);
 		      cube_refl->attach_and_clear_image("11_depth", { .format = vuk::Format::eD32Sfloat }, vuk::DepthOne);
 		      cube_refl->add_pass(
-		          { // Passes can be optionally named, this useful for visualization and debugging
-		            .name = "deferred_MRT",
-		            // Declare our framebuffer
+		          { .name = "deferred_MRT",
 		            .resources = { "11_position"_image >> vuk::eColorWrite,
 		                           "11_normal"_image >> vuk::eColorWrite,
 		                           "11_color"_image >> vuk::eColorWrite,
 		                           "11_depth"_image >> vuk::eDepthStencilRW,
 		                           "11_cuberefl"_image >> vuk::eFragmentSampled },
 		            .execute = [uboVP, cam_pos](vuk::CommandBuffer& command_buffer) {
-			            // Rendering is the same as in the case for forward
 			            command_buffer.set_viewport(0, vuk::Rect2D::framebuffer())
 			                .set_scissor(0, vuk::Rect2D::framebuffer())
 			                .set_rasterization(vuk::PipelineRasterizationStateCreateInfo{}) // Set the default rasterization state

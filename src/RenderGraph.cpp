@@ -52,8 +52,7 @@ namespace vuk {
 
 	void RenderGraph::append(Name subgraph_name, RenderGraph other) {
 		Name joiner = subgraph_name.append("::");
-		// TODO:
-		// this code is written weird because of wonky allocators
+		// TODO: this code is written weird because of wonky allocators
 		for (auto& p : other.impl->passes) {
 			p.prefix = p.prefix.is_invalid() ? joiner : joiner.append(p.prefix);
 			p.pass.name = joiner.append(p.pass.name);
