@@ -213,13 +213,13 @@ namespace {
 			          "11_cube", vuk::Subrange::Image{ .base_layer = i, .layer_count = 1 }, vuk::Name("11_cube_face_").append(vuk::Name(std::to_string(i))));
 		      }
 
-		      std::shared_ptr<vuk::RenderGraph> cube_refl = std::make_shared<vuk::RenderGraph>("cube_refl");
+		      std::shared_ptr<vuk::RenderGraph> cube_refl = std::make_shared<vuk::RenderGraph>("scene");
 
 		      // for each face we do standard (example 05) deferred scene rendering
 		      // but we resolve the deferred scene into the appropriate cubemap face
 		      std::vector<vuk::Name> cube_face_names;
 		      for (int i = 0; i < 6; i++) {
-			      std::shared_ptr<vuk::RenderGraph> rg = std::make_shared<vuk::RenderGraph>("MRT");
+			      std::shared_ptr<vuk::RenderGraph> rg = std::make_shared<vuk::RenderGraph>("single_face_MRT");
 			      // Here we will render the cube into 3 offscreen textures
 			      // The intermediate offscreen textures need to be bound
 			      // The "internal" rendering resolution is set here for one attachment, the rest infers from it
@@ -227,7 +227,7 @@ namespace {
 			      rg->attach_and_clear_image("11_normal", { .format = vuk::Format::eR16G16B16A16Sfloat }, vuk::White<float>);
 			      rg->attach_and_clear_image("11_color", { .format = vuk::Format::eR8G8B8A8Srgb }, vuk::White<float>);
 			      rg->attach_and_clear_image("11_depth", { .format = vuk::Format::eD32Sfloat }, vuk::DepthOne);
-			      rg->add_pass({ .name = "deferred_MRT",
+			      rg->add_pass({ .name = "single_face_MRT",
 			                     .resources = { "11_position"_image >> vuk::eColorWrite,
 			                                    "11_normal"_image >> vuk::eColorWrite,
 			                                    "11_color"_image >> vuk::eColorWrite,
@@ -270,7 +270,7 @@ namespace {
 			      rg->attach_in("11_cube_face", vuk::Future{ cube_src, vuk::Name("11_cube_face_").append(vuk::Name(std::to_string(i))) });
 			      rg->inference_rule("11_position+", vuk::same_2D_extent_as("11_cube_face"));
 			      // The shading pass for the deferred rendering
-			      rg->add_pass({ .name = "deferred_resolve",
+			      rg->add_pass({ .name = "single_face_resolve",
 			                     // Declare that we are going to render to the final color image
 			                     // Declare that we are going to sample (in the fragment shader) from the previous attachments
 			                     .resources = { "11_cube_face"_image >> vuk::eColorWrite >> "11_cube_face+",

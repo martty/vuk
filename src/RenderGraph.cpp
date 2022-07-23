@@ -50,10 +50,10 @@ namespace vuk {
 		impl->passes.emplace_back(*impl->arena_, std::move(p));
 	}
 
-	void RenderGraph::append(Name subgraph_name, RenderGraph other) {
+	void RenderGraph::append(Name subgraph_name, const RenderGraph& other) {
 		Name joiner = subgraph_name.append("::");
 		// TODO: this code is written weird because of wonky allocators
-		for (auto& p : other.impl->passes) {
+		for (auto p : other.impl->passes) {
 			p.prefix = p.prefix.is_invalid() ? joiner : joiner.append(p.prefix);
 			p.pass.name = joiner.append(p.pass.name);
 			for (auto& r : p.pass.resources) {
@@ -68,33 +68,57 @@ namespace vuk {
 				resolves.emplace(joiner.append(n1), joiner.append(n2));
 			}
 			p.pass.resolves = resolves;
-			impl->passes.emplace_back(*impl->arena_, Pass{}) = std::move(p);
+			impl->computed_passes.emplace_back(*impl->arena_, Pass{}) = p;
+		}
+
+		for (auto& p : other.impl->computed_passes) {
+			p.prefix = p.prefix.is_invalid() ? joiner : joiner.append(p.prefix);
+			p.pass.name = joiner.append(p.pass.name);
+			for (auto& r : p.pass.resources) {
+				if (!r.name.is_invalid()) {
+					r.name = joiner.append(r.name);
+				}
+				r.out_name = r.out_name.is_invalid() ? Name{} : joiner.append(r.out_name);
+			}
+
+			decltype(p.pass.resolves) resolves;
+			for (auto& [n1, n2] : p.pass.resolves) {
+				resolves.emplace(joiner.append(n1), joiner.append(n2));
+			}
+			p.pass.resolves = resolves;
+			impl->computed_passes.emplace_back(*impl->arena_, Pass{}) = p;
 		}
 
 		for (auto& [name, att] : other.impl->bound_attachments) {
 			att.name = joiner.append(name);
-			impl->bound_attachments.emplace(joiner.append(name), std::move(att));
+			impl->bound_attachments.emplace(joiner.append(name), att);
 		}
 		for (auto& [name, buf] : other.impl->bound_buffers) {
 			buf.name = joiner.append(name);
-			impl->bound_buffers.emplace(joiner.append(name), std::move(buf));
+			impl->bound_buffers.emplace(joiner.append(name), buf);
 		}
 
 		for (auto& [name, iainf] : other.impl->ia_inference_rules) {
 			iainf.prefix = joiner.append(iainf.prefix);
-			impl->ia_inference_rules.emplace(joiner.append(name), std::move(iainf));
+			impl->ia_inference_rules.emplace(joiner.append(name), iainf);
 		}
 
 		for (auto [new_name, old_name] : other.impl->aliases) {
 			impl->aliases.emplace(joiner.append(new_name), old_name);
 		}
 
+		for (auto [new_name, old_name] : other.impl->computed_aliases) {
+			auto [iter, succ] = impl->computed_aliases.emplace(joiner.append(new_name), old_name);
+			iter->second = old_name;
+			//assert(succ);
+		}
+
 		for (auto& [name, v] : other.impl->acquires) {
-			impl->acquires.emplace(joiner.append(name), std::move(v));
+			impl->acquires.emplace(joiner.append(name), v);
 		}
 
 		for (auto& [name, v] : other.impl->releases) {
-			impl->releases.emplace(joiner.append(name), std::move(v));
+			impl->releases.emplace(joiner.append(name), v);
 		}
 
 		for (auto [name, v] : other.impl->diverged_subchain_headers) {
@@ -115,7 +139,13 @@ namespace vuk {
 
 	void RenderGraph::diverge_image(Name whole_name, Subrange::Image subrange, Name subrange_name) {
 		impl->diverged_subchain_headers[subrange_name] = std::pair{ whole_name, subrange };
-		impl->whole_names_consumed.emplace(whole_name);
+		auto [iter, succ] = impl->whole_names_consumed.emplace(whole_name);
+
+		if (succ) {
+			add_pass({ .name = whole_name.append("_DIVERGE"),
+			           .resources = { Resource{ whole_name, Resource::Type::eImage, Access::eConsume, whole_name.append("__diverged") } },
+			           .execute = diverge });
+		}
 	}
 
 	void RenderGraph::converge_image(Name pre_diverge, Name post_diverge) {
@@ -136,7 +166,7 @@ namespace vuk {
 	// determine rendergraph inputs and outputs, and resources that are neither
 	void RGImpl::build_io() {
 		poisoned_names.clear();
-		for (auto& pif : passes) {
+		for (auto& pif : computed_passes) {
 			pif.input_names.clear();
 			pif.output_names.clear();
 			pif.write_input_names.clear();
@@ -254,12 +284,12 @@ namespace vuk {
 	std::string RenderGraph::dump_graph() {
 		std::stringstream ss;
 		ss << "digraph vuk {\n";
-		for (auto i = 0; i < impl->passes.size(); i++) {
-			for (auto j = 0; j < impl->passes.size(); j++) {
+		for (auto i = 0; i < impl->computed_passes.size(); i++) {
+			for (auto j = 0; j < impl->computed_passes.size(); j++) {
 				if (i == j)
 					continue;
-				auto& p1 = impl->passes[i];
-				auto& p2 = impl->passes[j];
+				auto& p1 = impl->computed_passes[i];
+				auto& p2 = impl->computed_passes[j];
 				for (auto& o : p1.output_names) {
 					for (auto& i : p2.input_names) {
 						if (o == impl->resolve_alias(i)) {
@@ -284,6 +314,8 @@ namespace vuk {
 
 	std::unordered_map<std::shared_ptr<RenderGraph>, std::pair<std::string, std::string>> RenderGraph::compute_prefixes(bool do_prefix) {
 		std::unordered_map<std::shared_ptr<RenderGraph>, std::pair<std::string, std::string>> sg_prefixes;
+		impl->computed_passes.clear();
+		impl->sg_name_counter.clear();
 		for (auto& [sg_ptr, sg_info] : impl->subgraphs) {
 			if (sg_info.count > 0) {
 				Name sg_name = sg_ptr->name;
@@ -298,7 +330,7 @@ namespace vuk {
 				}
 			}
 		}
-		if (do_prefix) {
+		if (do_prefix && sg_prefixes.size() > 0) {
 			for (auto& [k, v] : sg_prefixes) {
 				v.second = std::string(name.to_sv()) + "::" + v.second;
 			}
@@ -306,46 +338,57 @@ namespace vuk {
 		return sg_prefixes;
 	}
 
-	void RenderGraph::inline_subgraphs(const std::unordered_map<std::shared_ptr<RenderGraph>, std::pair<std::string, std::string>>& sg_prefixes) {
+	void RenderGraph::inline_subgraphs(const std::unordered_map<std::shared_ptr<RenderGraph>, std::pair<std::string, std::string>>& sg_prefixes,
+	                                   std::unordered_set<std::shared_ptr<RenderGraph>>& consumed_rgs) {
 		for (auto& [sg_ptr, sg_info] : impl->subgraphs) {
 			if (sg_info.count > 0) {
 				auto& prefix = sg_prefixes.at(sg_ptr);
-				if (sg_ptr->impl) {
-					sg_ptr->inline_subgraphs(sg_prefixes);
-					append(Name(prefix.first), std::move(*sg_ptr));
+				assert(sg_ptr->impl);
+				if (!consumed_rgs.contains(sg_ptr)) {
+					sg_ptr->inline_subgraphs(sg_prefixes, consumed_rgs);
+					append(Name(prefix.first), *sg_ptr);
+					consumed_rgs.emplace(sg_ptr);
 				}
 				for (auto& [name_in_parent, name_in_sg] : sg_info.exported_names) {
-					add_alias(name_in_parent, Name(prefix.second).append("::").append(name_in_sg));
+					auto old_name = Name(prefix.second).append("::").append(name_in_sg);
+					if (name_in_parent != old_name) {
+						impl->computed_aliases[name_in_parent] = old_name;
+					}
 				}
 			}
 		}
-		impl->subgraphs.clear();
 	}
 
 	void RenderGraph::compile(const RenderGraphCompileOptions& compile_options) {
+		impl->computed_aliases.clear();
+		impl->computed_aliases.insert(impl->aliases.begin(), impl->aliases.end());
+
 		// inline all the subgraphs into us
 		auto sg_pref = compute_prefixes(false);
-		inline_subgraphs(sg_pref);
+		std::unordered_set<std::shared_ptr<RenderGraph>> consumed_rgs = {};
+		inline_subgraphs(sg_pref, consumed_rgs);
 
-		for (auto& name : impl->whole_names_consumed) {
-			add_pass({ .name = name.append("_DIVERGE"),
-			           .resources = { Resource{ name, Resource::Type::eImage, Access::eConsume, name.append("__diverged") } },
-			           .execute = diverge });
+		for (auto& p : impl->passes) {
+			Pass cp = p.pass;
+			impl->computed_passes.emplace_back(*impl->arena_, std::move(cp));
 		}
 
 		// gather name alias info now - once we partition, we might encounter unresolved aliases
 		robin_hood::unordered_flat_map<Name, Name> name_map;
-		name_map.insert(impl->aliases.begin(), impl->aliases.end());
 
-		for (auto& passinfo : impl->passes) {
+		for (auto& passinfo : impl->computed_passes) {
 			for (auto& res : passinfo.pass.resources) {
 				// for read or write, we add source to use chain
 				if (!res.name.is_invalid() && !res.out_name.is_invalid()) {
-					name_map.emplace(res.out_name, res.name);
+					auto [iter, succ] = name_map.emplace(res.out_name, res.name);
+					assert(succ);
 				}
 			}
 		}
 
+		name_map.insert(impl->computed_aliases.begin(), impl->computed_aliases.end());
+
+		impl->assigned_names.clear();
 		// populate resource name -> use chain map
 		for (auto& [k, v] : name_map) {
 			auto it = name_map.find(v);
@@ -364,12 +407,12 @@ namespace vuk {
 
 		// run global pass ordering - once we split per-queue we don't see enough
 		// inputs to order within a queue
-		schedule_intra_queue(impl->passes, compile_options);
+		schedule_intra_queue(impl->computed_passes, compile_options);
 
 		auto foo = dump_graph();
 
 		// for now, just use what the passes requested as domain
-		for (auto& p : impl->passes) {
+		for (auto& p : impl->computed_passes) {
 			p.domain = p.pass.execute_on;
 		}
 
@@ -386,7 +429,7 @@ namespace vuk {
 		}
 
 		// prepare converge passes
-		for (auto& passinfo : impl->passes) {
+		for (auto& passinfo : impl->computed_passes) {
 			if (passinfo.pass.type != Pass::Type::eConvergeExplicit) {
 				continue;
 			}
@@ -426,7 +469,7 @@ namespace vuk {
 		// use chains pass
 		impl->use_chains.clear();
 		std::unordered_multimap<Name, Name> diverged_chains;
-		for (PassInfo& passinfo : impl->passes) {
+		for (PassInfo& passinfo : impl->computed_passes) {
 			for (Resource& res : passinfo.pass.resources) {
 				Name resolved_name = impl->resolve_name(res.name);
 
@@ -567,8 +610,8 @@ namespace vuk {
 
 		// queue inference failure fixup pass
 		// we also prepare for pass sorting
-		impl->ordered_passes.reserve(impl->passes.size());
-		for (auto& p : impl->passes) {
+		impl->ordered_passes.reserve(impl->computed_passes.size());
+		for (auto& p : impl->computed_passes) {
 			if (p.domain == DomainFlagBits::eDevice || p.domain == DomainFlagBits::eAny) { // couldn't infer, set pass as graphics
 				p.domain = DomainFlagBits::eGraphicsOnGraphics;
 			}
@@ -842,7 +885,7 @@ namespace vuk {
 		build_io();
 		// seed the available names with the names we imported from subgraphs
 		robin_hood::unordered_flat_set<Name> outputs = imported_names;
-		for (auto& pif : passes) {
+		for (auto& pif : computed_passes) {
 			for (auto& in : pif.input_names) {
 				outputs.erase(in);
 			}

@@ -15,6 +15,7 @@
 #include <span>
 #include <string_view>
 #include <vector>
+#include <unordered_set>
 
 namespace vuk {
 	struct FutureBase;
@@ -102,9 +103,6 @@ namespace vuk {
 		std::vector<Resource> resources;
 		std::unordered_map<Name, Name> resolves; // src -> dst
 
-		std::unique_ptr<FutureBase> wait;
-		FutureBase* signal = nullptr;
-
 		std::function<void(CommandBuffer&)> execute;
 		std::vector<std::byte> arguments; // internal use
 		enum class Type { eUserPass, eClear, eConverge, eConvergeExplicit } type = Type::eUserPass;
@@ -133,9 +131,9 @@ namespace vuk {
 		/// @param pass the Pass to add to the RenderGraph
 		void add_pass(Pass pass);
 
-		/// @brief Append the other RenderGraph onto this one (by copy or move of passes and attachments)
+		/// @brief Append the other RenderGraph onto this one (by copy of passes and attachments)
 		/// @param subgraph_name the prefix used for the names in other
-		void append(Name subgraph_name, RenderGraph other);
+		void append(Name subgraph_name, const RenderGraph& other);
 
 		/// @brief Add an alias for a resource
 		/// @param new_name Additional name to refer to the resource
@@ -234,7 +232,8 @@ namespace vuk {
 		friend struct ExecutableRenderGraph;
 
 		std::unordered_map<std::shared_ptr<RenderGraph>, std::pair<std::string, std::string>> compute_prefixes(bool do_prefix);
-		void inline_subgraphs(const std::unordered_map<std::shared_ptr<RenderGraph>, std::pair<std::string, std::string>>& prefixes);
+		void inline_subgraphs(const std::unordered_map<std::shared_ptr<RenderGraph>, std::pair<std::string, std::string>>& prefixes,
+		                      std::unordered_set<std::shared_ptr<RenderGraph>>& consumed_rgs);
 
 		/// @brief Check if this rendergraph is valid.
 		/// \throws RenderGraphException

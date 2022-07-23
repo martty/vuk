@@ -34,10 +34,12 @@ namespace vuk {
 	struct RGImpl {
 		std::unique_ptr<arena> arena_;
 		std::vector<PassInfo, short_alloc<PassInfo, 64>> passes;
+		std::vector<PassInfo, short_alloc<PassInfo, 64>> computed_passes;
 		std::vector<PassInfo*, short_alloc<PassInfo*, 64>> ordered_passes;
 
 		robin_hood::unordered_flat_set<Name> imported_names;       // names coming from subgraphs
-		std::unordered_map<Name, Name> aliases;        // maps resource names to resource names
+		robin_hood::unordered_flat_map<Name, Name> aliases;         // maps resource names to resource names
+		robin_hood::unordered_flat_map<Name, Name> computed_aliases;        // maps resource names to resource names
 		robin_hood::unordered_flat_map<Name, Name> assigned_names; // maps resource names to attachment names
 		robin_hood::unordered_flat_set<Name> poisoned_names;
 		robin_hood::unordered_flat_map<Name, uint64_t> sg_name_counter;
@@ -45,7 +47,7 @@ namespace vuk {
 		robin_hood::unordered_flat_set<Name> whole_names_consumed;
 		robin_hood::unordered_flat_map<Name, std::pair<Name, Subrange::Image>> diverged_subchain_headers;
 
-		std::unordered_map<Name, std::vector<UseRef, short_alloc<UseRef, 64>>> use_chains;
+		robin_hood::unordered_node_map<Name, std::vector<UseRef, short_alloc<UseRef, 64>>> use_chains;
 
 		std::vector<RenderPassInfo, short_alloc<RenderPassInfo, 64>> rpis;
 		size_t num_graphics_rpis = 0;
@@ -80,7 +82,7 @@ namespace vuk {
 
 		std::unordered_multimap<Name, Release> releases;
 
-		RGImpl() : arena_(new arena(1024 * 1024)), INIT(passes), INIT(ordered_passes), INIT(rpis) {}
+		RGImpl() : arena_(new arena(1024 * 1024)), INIT(passes), INIT(computed_passes), INIT(ordered_passes), INIT(rpis) {}
 
 		Name resolve_name(Name in) {
 			auto it = assigned_names.find(in);
@@ -102,8 +104,8 @@ namespace vuk {
 		}
 
 		Name resolve_alias(Name in) {
-			auto it = aliases.find(in);
-			if (it == aliases.end()) {
+			auto it = computed_aliases.find(in);
+			if (it == computed_aliases.end()) {
 				return in;
 			} else {
 				return resolve_alias(it->second);
