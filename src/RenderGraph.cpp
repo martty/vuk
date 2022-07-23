@@ -1136,13 +1136,6 @@ namespace vuk {
 				}
 				ImageBarrier ib{ .image = whole_name, .barrier = barrier, .src = src_stages, .dst = dst_stages };
 
-				// handle signaling & waiting
-				if (right.pass && right.pass->pass.signal) {
-					auto& fut = *right.pass->pass.signal;
-					fut.last_use = QueueResourceUse{ src_stages, prev_use.access, prev_use.layout, (left->use.domain & DomainFlagBits::eQueueMask) };
-					attachment_info.attached_future = &fut;
-				}
-
 				// the use chain is ending and we have to release this resource
 				// we ignore the last element in the chain if it doesn't specify a valid use
 				if (i + 2 == chain.size() && release) {
@@ -1306,12 +1299,6 @@ namespace vuk {
 				bool crosses_queue = (left_domain != DomainFlagBits::eNone && right_domain != DomainFlagBits::eNone &&
 				                      (left_domain & DomainFlagBits::eQueueMask) != (right_domain & DomainFlagBits::eQueueMask));
 
-				if (right.pass && right.pass->pass.signal) {
-					auto& fut = *right.pass->pass.signal;
-					fut.last_use = QueueResourceUse{ left.use.stages, left.use.access, left.use.layout, (left_domain & DomainFlagBits::eQueueMask) };
-					fut.result = buffer_info.buffer; // TODO: when we have managed buffers, then this is too soon to attach
-				}
-
 				if (i + 2 == chain.size() && release) {
 					auto& fut = *release->signal;
 					fut.last_use = QueueResourceUse{ left.use.stages, left.use.access, left.use.layout, (left_domain & DomainFlagBits::eQueueMask) };
@@ -1337,21 +1324,32 @@ namespace vuk {
 
 				bool crosses_rpass = (left.pass == nullptr || right.pass == nullptr || left.pass->render_pass_index != right.pass->render_pass_index);
 				if (crosses_rpass) {
-					if (left.pass && right.use.layout != ImageLayout::eUndefined && (is_write_access(left.use) || is_write_access(right.use))) { // RenderPass ->
+					if (left.pass && (crosses_queue || (!right.pass && right.use.layout != ImageLayout::eUndefined &&
+					                                    (is_write_access(left.use) || is_write_access(right.use))))) { // RenderPass ->
 						auto& left_rp = impl->rpis[left.pass->render_pass_index];
 						left_rp.subpasses[left.pass->subpass].post_mem_barriers.push_back(mb);
 					}
 
 					if (right.pass && left.use.layout != ImageLayout::eUndefined && (is_write_access(left.use) || is_write_access(right.use))) { // -> RenderPass
 						auto& right_rp = impl->rpis[right.pass->render_pass_index];
-						right_rp.subpasses[right.pass->subpass].pre_mem_barriers.push_back(mb);
+						if (right_rp.framebufferless) {
+							right_rp.subpasses[right.pass->subpass].pre_mem_barriers.push_back(mb);
+						} else {
+							right_rp.pre_mem_barriers.push_back(mb);
+						}
 					}
 				} else { // subpass-subpass link -> subpass - subpass dependency
 					if (left.pass->subpass == right.pass->subpass)
 						continue;
 					auto& left_rp = impl->rpis[left.pass->render_pass_index];
+					auto& right_rp = impl->rpis[right.pass->render_pass_index];
+					// cross-queue is impossible here
+					assert(!crosses_queue);
 					if (left_rp.framebufferless && (is_write_access(left.use) || is_write_access(right.use))) {
-						left_rp.subpasses[left.pass->subpass].post_mem_barriers.push_back(mb);
+						// right layout == Undefined means the chain terminates, no transition/barrier
+						if (right.use.layout == ImageLayout::eUndefined)
+							continue;
+						right_rp.subpasses[right.pass->subpass].pre_mem_barriers.push_back(mb);
 					}
 				}
 			}
