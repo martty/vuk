@@ -885,7 +885,7 @@ namespace vuk {
 		build_io();
 		// seed the available names with the names we imported from subgraphs
 		robin_hood::unordered_flat_set<Name> outputs = imported_names;
-		for (auto& pif : computed_passes) {
+		for (auto& pif : passes) {
 			for (auto& in : pif.input_names) {
 				outputs.erase(in);
 			}
