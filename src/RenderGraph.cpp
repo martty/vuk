@@ -110,7 +110,6 @@ namespace vuk {
 		for (auto [new_name, old_name] : other.impl->computed_aliases) {
 			auto [iter, succ] = impl->computed_aliases.emplace(joiner.append(new_name), old_name);
 			iter->second = old_name;
-			//assert(succ);
 		}
 
 		for (auto& [name, v] : other.impl->acquires) {
@@ -885,6 +884,13 @@ namespace vuk {
 		build_io();
 		// seed the available names with the names we imported from subgraphs
 		robin_hood::unordered_flat_set<Name> outputs = imported_names;
+		for (auto& [name, _] : bound_attachments) {
+			outputs.insert(name);
+		}
+		for (auto& [name, _] : bound_buffers) {
+			outputs.insert(name);
+		}
+
 		for (auto& pif : passes) {
 			for (auto& in : pif.input_names) {
 				outputs.erase(in);
