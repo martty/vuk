@@ -1,18 +1,16 @@
 #include "Cache.hpp"
 #include "RenderGraphImpl.hpp"
+#include "vuk/AllocatorHelpers.hpp"
 #include "vuk/CommandBuffer.hpp"
 #include "vuk/Context.hpp"
 #include "vuk/Future.hpp"
 #include "vuk/Hash.hpp" // for create
 #include "vuk/RenderGraph.hpp"
-#include "vuk/AllocatorHelpers.hpp"
 #include <sstream>
 #include <unordered_set>
 
 namespace vuk {
-	ExecutableRenderGraph::ExecutableRenderGraph(RenderGraph&& rg) : impl(rg.impl) {
-		rg.impl = nullptr; // pilfered
-	}
+	ExecutableRenderGraph::ExecutableRenderGraph(Compiler& rg) : impl(rg.impl) {}
 
 	ExecutableRenderGraph::ExecutableRenderGraph(ExecutableRenderGraph&& o) noexcept : impl(std::exchange(o.impl, nullptr)) {}
 	ExecutableRenderGraph& ExecutableRenderGraph::operator=(ExecutableRenderGraph&& o) noexcept {
@@ -20,16 +18,14 @@ namespace vuk {
 		return *this;
 	}
 
-	ExecutableRenderGraph::~ExecutableRenderGraph() {
-		delete impl;
-	}
+	ExecutableRenderGraph::~ExecutableRenderGraph() {}
 
 	void ExecutableRenderGraph::create_attachment(Context& ctx, AttachmentInfo& attachment_info) {
 		if (attachment_info.type == AttachmentInfo::Type::eInternal) {
 			vuk::ImageUsageFlags usage = {};
 			for (auto& void_chain : attachment_info.use_chains) {
 				auto& chain = *reinterpret_cast<std::vector<UseRef, short_alloc<UseRef, 64>>*>(void_chain);
-				usage |= RenderGraph::compute_usage(std::span(chain));
+				usage |= Compiler::compute_usage(std::span(chain));
 			}
 
 			vuk::ImageCreateInfo ici;
@@ -366,7 +362,7 @@ namespace vuk {
 					bound.attachment.usage = {};
 					for (auto& void_chain : bound.use_chains) {
 						auto& chain = *reinterpret_cast<std::vector<UseRef, short_alloc<UseRef, 64>>*>(void_chain);
-						bound.attachment.usage |= RenderGraph::compute_usage(std::span(chain));
+						bound.attachment.usage |= Compiler::compute_usage(std::span(chain));
 					}
 				}
 				// if there is no image, then we will infer the base mip and layer to be 0

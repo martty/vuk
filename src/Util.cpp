@@ -96,16 +96,10 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	Result<void> link_execute_submit(Allocator& allocator, std::span<std::pair<Allocator*, RenderGraph*>> rgs) {
-		std::vector<ExecutableRenderGraph> ergs;
-		std::vector<std::pair<Allocator*, ExecutableRenderGraph*>> ptrvec;
-		ergs.reserve(rgs.size());
-		for (auto& [alloc, rg] : rgs) {
-			ergs.emplace_back(std::move(*rg).link({}));
-			ptrvec.emplace_back(alloc, &ergs.back());
-		}
-
-		return execute_submit(allocator, std::span(ptrvec), {}, {}, {});
+	Result<void> link_execute_submit(Allocator& allocator, Compiler& compiler, std::span<std::shared_ptr<RenderGraph>> rgs) {
+		auto erg = compiler.link(rgs, {});
+		std::pair erg_and_alloc = std::pair{&allocator, &erg};
+		return execute_submit(allocator, std::span(&erg_and_alloc, 1), {}, {}, {});
 	}
 
 	Result<std::vector<SubmitBundle>> execute(std::span<std::pair<Allocator*, ExecutableRenderGraph*>> ergs,
@@ -329,8 +323,9 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	Result<void> present(Allocator& allocator, SwapchainRef swapchain, Future&& future, RenderGraphCompileOptions compile_options) {
-		auto erg = std::move(*future.get_render_graph()).link(compile_options);
+	Result<void> present(Allocator& allocator, Compiler& compiler, SwapchainRef swapchain, Future&& future, RenderGraphCompileOptions compile_options) {
+		auto ptr = future.get_render_graph();
+		auto erg = compiler.link(std::span{ &ptr, 1 }, compile_options);
 		return execute_submit_and_present_to_one(allocator, std::move(erg), swapchain);
 	}
 
@@ -381,7 +376,7 @@ namespace vuk {
 		}
 	}
 
-	Result<void> Future::wait(Allocator& allocator) {
+	Result<void> Future::wait(Allocator& allocator, Compiler& compiler) {
 		if (control->status == FutureBase::Status::eInitial && !rg) {
 			return { expected_error,
 				       RenderGraphException{} }; // can't get wait for future that has not been attached anything or has been attached into a rendergraph
@@ -392,7 +387,7 @@ namespace vuk {
 			allocator.get_context().wait_for_domains(std::span{ &w, 1 });
 			return { expected_value };
 		} else {
-			auto erg = std::move(*rg).link({});
+			auto erg = compiler.link(std::span{ &rg, 1 }, {});
 			std::pair v = { &allocator, &erg };
 			VUK_DO_OR_RETURN(execute_submit(allocator, std::span{ &v, 1 }, {}, {}, {}));
 			std::pair w = { (DomainFlags)control->initial_domain, control->initial_visibility };
@@ -403,30 +398,30 @@ namespace vuk {
 	}
 
 	template<class T>
-	Result<T> Future::get(Allocator& allocator) {
-		if (auto result = wait(allocator)) {
+	Result<T> Future::get(Allocator& allocator, Compiler& compiler) {
+		if (auto result = wait(allocator, compiler)) {
 			return { expected_value, get_result<T>() };
 		} else {
 			return result;
 		}
 	}
 
-	Result<void> Future::submit(Allocator& allocator) {
+	Result<void> Future::submit(Allocator& allocator, Compiler& compiler) {
 		if (control->status == FutureBase::Status::eInitial && !rg) {
 			return { expected_error, RenderGraphException{} };
 		} else if (control->status == FutureBase::Status::eHostAvailable || control->status == FutureBase::Status::eSubmitted) {
 			return { expected_value }; // nothing to do
 		} else {
 			control->status = FutureBase::Status::eSubmitted;
-			auto erg = std::move(*rg).link({});
+			auto erg = compiler.link(std::span{ &rg, 1 }, {});
 			std::pair v = { &allocator, &erg };
 			VUK_DO_OR_RETURN(execute_submit(allocator, std::span{ &v, 1 }, {}, {}, {}));
 			return { expected_value };
 		}
 	}
 
-	template Result<Buffer> Future::get(Allocator&);
-	template Result<ImageAttachment> Future::get(Allocator&);
+	template Result<Buffer> Future::get(Allocator&, Compiler&);
+	template Result<ImageAttachment> Future::get(Allocator&, Compiler&);
 
 	std::string_view image_view_type_to_sv(ImageViewType view_type) noexcept {
 		switch (view_type) {

@@ -83,4 +83,6 @@ namespace vuk {
 	
 	struct FutureBase;
 	class Future;
+
+	struct Compiler;
 } // namespace vuk

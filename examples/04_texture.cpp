@@ -64,8 +64,6 @@ namespace {
 		      auto [buboVP, uboVP_fut] = create_buffer_cross_device(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, std::span(&vp, 1));
 		      auto uboVP = *buboVP;
 
-		      vuk::wait_for_futures(frame_allocator, uboVP_fut);
-
 		      vuk::RenderGraph rg("04");
 		      rg.attach_in("04_texture", std::move(target));
 		      // Set up the pass to draw the textured cube, with a color and a depth attachment

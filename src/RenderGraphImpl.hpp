@@ -30,29 +30,27 @@ namespace vuk {
 		std::vector<IARule> rules;
 	};
 
+	struct Release {
+		QueueResourceUse dst_use;
+		Subrange subrange;
+		FutureBase* signal = nullptr;
+	};
+
+	struct Acquire {
+		QueueResourceUse src_use;
+		DomainFlagBits initial_domain;
+		uint64_t initial_visibility;
+	};
+
 #define INIT(x) x(decltype(x)::allocator_type(*arena_))
 	struct RGImpl {
 		std::unique_ptr<arena> arena_;
 		std::vector<PassInfo, short_alloc<PassInfo, 64>> passes;
-		std::vector<PassInfo, short_alloc<PassInfo, 64>> computed_passes;
-		std::vector<PassInfo*, short_alloc<PassInfo*, 64>> ordered_passes;
 
-		robin_hood::unordered_flat_set<Name> imported_names;       // names coming from subgraphs
-		robin_hood::unordered_flat_map<Name, Name> aliases;         // maps resource names to resource names
-		robin_hood::unordered_flat_map<Name, Name> computed_aliases;        // maps resource names to resource names
-		robin_hood::unordered_flat_map<Name, Name> assigned_names; // maps resource names to attachment names
-		robin_hood::unordered_flat_set<Name> poisoned_names;
-		robin_hood::unordered_flat_map<Name, uint64_t> sg_name_counter;
-		robin_hood::unordered_flat_map<Name, Name> diverged_name_to_undiverged_name;
+		robin_hood::unordered_flat_set<Name> imported_names; // names coming from subgraphs
+		robin_hood::unordered_flat_map<Name, Name> aliases;  // maps resource names to resource names
 		robin_hood::unordered_flat_set<Name> whole_names_consumed;
 		robin_hood::unordered_flat_map<Name, std::pair<Name, Subrange::Image>> diverged_subchain_headers;
-
-		robin_hood::unordered_node_map<Name, std::vector<UseRef, short_alloc<UseRef, 64>>> use_chains;
-
-		std::vector<RenderPassInfo, short_alloc<RenderPassInfo, 64>> rpis;
-		size_t num_graphics_rpis = 0;
-		size_t num_compute_rpis = 0;
-		size_t num_transfer_rpis = 0;
 
 		robin_hood::unordered_flat_map<Name, AttachmentInfo> bound_attachments;
 		robin_hood::unordered_flat_map<Name, BufferInfo> bound_buffers;
@@ -66,23 +64,52 @@ namespace vuk {
 
 		std::unordered_map<std::shared_ptr<RenderGraph>, SGInfo> subgraphs;
 
-		struct Release {
-			QueueResourceUse dst_use;
-			Subrange subrange;
-			FutureBase* signal = nullptr;
-		};
-
-		struct Acquire {
-			QueueResourceUse src_use;
-			DomainFlagBits initial_domain;
-			uint64_t initial_visibility;
-		};
-
 		std::unordered_map<Name, Acquire> acquires;
 
 		std::unordered_multimap<Name, Release> releases;
 
-		RGImpl() : arena_(new arena(1024 * 1024)), INIT(passes), INIT(computed_passes), INIT(ordered_passes), INIT(rpis) {}
+		RGImpl() : arena_(new arena(sizeof(PassInfo)*64)), INIT(passes) {}
+
+		Name resolve_alias(Name in) {
+			auto it = aliases.find(in);
+			if (it == aliases.end()) {
+				return in;
+			} else {
+				return resolve_alias(it->second);
+			}
+		};
+
+		// determine rendergraph inputs and outputs, and resources that are neither
+		void build_io(std::span<struct PassInfo> passes);
+
+		robin_hood::unordered_flat_set<Name> get_available_resources();
+
+		size_t temporary_name_counter = 0;
+		Name temporary_name = "_temporary";
+	};
+
+	struct RGCImpl {
+		RGCImpl() : arena_(new arena(2 * 1024 * 1024)), INIT(computed_passes), INIT(ordered_passes), INIT(rpis) {}
+		std::unique_ptr<arena> arena_;
+
+		std::vector<PassInfo, short_alloc<PassInfo, 64>> computed_passes;
+		std::vector<PassInfo*, short_alloc<PassInfo*, 64>> ordered_passes;
+		robin_hood::unordered_flat_map<Name, Name> aliases;          // maps resource names to resource names
+		robin_hood::unordered_flat_map<Name, Name> computed_aliases; // maps resource names to resource names
+		robin_hood::unordered_flat_map<Name, Name> assigned_names;   // maps resource names to attachment names
+		robin_hood::unordered_flat_set<Name> whole_names_consumed;
+		robin_hood::unordered_flat_map<Name, uint64_t> sg_name_counter;
+		robin_hood::unordered_node_map<Name, std::vector<UseRef, short_alloc<UseRef, 64>>> use_chains;
+
+		robin_hood::unordered_flat_map<Name, AttachmentInfo> bound_attachments;
+		robin_hood::unordered_flat_map<Name, BufferInfo> bound_buffers;
+
+		std::unordered_map<Name, Acquire> acquires;
+		std::unordered_multimap<Name, Release> releases;
+
+		std::unordered_map<Name, IAInference> ia_inference_rules;
+
+		robin_hood::unordered_flat_map<Name, std::pair<Name, Subrange::Image>> diverged_subchain_headers;
 
 		Name resolve_name(Name in) {
 			auto it = assigned_names.find(in);
@@ -112,14 +139,26 @@ namespace vuk {
 			}
 		};
 
+		std::vector<RenderPassInfo, short_alloc<RenderPassInfo, 64>> rpis;
+		size_t num_graphics_rpis = 0;
+		size_t num_compute_rpis = 0;
+		size_t num_transfer_rpis = 0;
+
+		void append(Name subgraph_name, const RenderGraph& other);
+
 		// determine rendergraph inputs and outputs, and resources that are neither
-		void build_io();
+		void build_io(std::span<struct PassInfo> passes);
 
-		robin_hood::unordered_flat_set<Name> get_available_resources();
+		std::unordered_map<std::shared_ptr<RenderGraph>, std::pair<std::string, std::string>> compute_prefixes(const RenderGraph& rg, bool do_prefix);
+		void inline_subgraphs(const std::shared_ptr<RenderGraph>& rg,
+		                      const std::unordered_map<std::shared_ptr<RenderGraph>, std::pair<std::string, std::string>>& prefixes,
+		                      std::unordered_set<std::shared_ptr<RenderGraph>>& consumed_rgs);
 
+		/// @brief Check if this rendergraph is valid.
+		/// \throws RenderGraphException
+		void validate();
 
-		size_t temporary_name_counter = 0;
-		Name temporary_name = "_temporary";
+		void schedule_intra_queue(std::span<struct PassInfo> passes, const RenderGraphCompileOptions& compile_options);
 	};
 #undef INIT
 

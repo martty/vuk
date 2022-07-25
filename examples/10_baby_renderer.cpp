@@ -253,7 +253,6 @@ namespace {
 		      // Upload view & projection
 		      auto [buboVP, uboVP_fut] = create_buffer_cross_device(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, std::span(&vp, 1));
 		      auto uboVP = *buboVP;
-		      uboVP_fut.wait(frame_allocator); // no-op
 
 		      // Do a terrible simulation step
 		      // All objects are attracted to the origin

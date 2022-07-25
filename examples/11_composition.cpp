@@ -191,8 +191,6 @@ namespace {
 		      auto [buboVP, uboVP_fut] = create_buffer_cross_device(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, std::span(&vp, 1));
 		      auto uboVP = *buboVP;
 
-		      vuk::wait_for_futures(frame_allocator, uboVP_fut);
-
 		      // we are going to render the scene twice - once into a cubemap, then subsequently, we'll render it again while sampling from the cubemap
 
 		      // this time we will show off rendering to individual cubemap faces

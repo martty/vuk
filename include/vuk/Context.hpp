@@ -293,7 +293,7 @@ namespace vuk {
 	/// @brief Compile & link given `RenderGraph`s, then execute them into API VkCommandBuffers, then submit them to queues
 	/// @param allocator Allocator to use for submission resources
 	/// @param rendergraphs `RenderGraph`s for compilation
-	Result<void> link_execute_submit(Allocator& allocator, std::span<std::pair<Allocator*, struct RenderGraph*>> rendergraphs);
+	Result<void> link_execute_submit(Allocator& allocator, Compiler& compiler, std::span<std::shared_ptr<struct RenderGraph>> rendergraphs);
 	/// @brief Execute given `ExecutableRenderGraph`s into API VkCommandBuffers, then submit them to queues
 	/// @param allocator Allocator to use for submission resources
 	/// @param executable_rendergraphs `ExecutableRenderGraph`s for execution
@@ -316,7 +316,7 @@ namespace vuk {
 	Result<void> execute_submit_and_wait(Allocator& allocator, ExecutableRenderGraph&& executable_rendergraph);
 
 	struct RenderGraphCompileOptions;
-	Result<void> present(Allocator& allocator, SwapchainRef swapchain, Future&& future, RenderGraphCompileOptions = {});
+	Result<void> present(Allocator& allocator, Compiler& compiler, SwapchainRef swapchain, Future&& future, RenderGraphCompileOptions = {});
 
 	struct SampledImage make_sampled_image(ImageView iv, SamplerCreateInfo sci);
 

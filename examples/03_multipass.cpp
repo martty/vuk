@@ -57,8 +57,6 @@ namespace {
 		      auto [buboVP, uboVP_fut] = create_buffer_cross_device(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, std::span(&vp, 1));
 		      auto uboVP = *buboVP;
 
-		      vuk::wait_for_futures(frame_allocator, uboVP_fut);
-
 		      vuk::RenderGraph rg("03");
 		      rg.attach_in("03_multipass", std::move(target));
 		      // Add a pass to draw a triangle (from the first example) into the top left corner

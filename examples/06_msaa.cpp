@@ -63,8 +63,6 @@ namespace {
 		      auto [buboVP, uboVP_fut] = create_buffer_cross_device(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, std::span(&vp, 1));
 		      auto uboVP = *buboVP;
 
-		      vuk::wait_for_futures(frame_allocator, uboVP_fut);
-
 		      vuk::RenderGraph rg("06");
 		      rg.attach_in("06_msaa", std::move(target));
 		      // The rendering pass is unchanged by going to multisampled,

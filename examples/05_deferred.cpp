@@ -64,8 +64,6 @@ namespace {
 		      auto [buboVP, uboVP_fut] = create_buffer_cross_device(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, std::span(&vp, 1));
 		      auto uboVP = *buboVP;
 
-		      vuk::wait_for_futures(frame_allocator, uboVP_fut);
-
 		      vuk::RenderGraph rg("05");
 		      rg.attach_in("05_deferred", std::move(target));
 		      // Here we will render the cube into 3 offscreen textures

@@ -14,8 +14,8 @@
 #include <optional>
 #include <span>
 #include <string_view>
-#include <vector>
 #include <unordered_set>
+#include <vector>
 
 namespace vuk {
 	struct FutureBase;
@@ -131,10 +131,6 @@ namespace vuk {
 		/// @param pass the Pass to add to the RenderGraph
 		void add_pass(Pass pass);
 
-		/// @brief Append the other RenderGraph onto this one (by copy of passes and attachments)
-		/// @param subgraph_name the prefix used for the names in other
-		void append(Name subgraph_name, const RenderGraph& other);
-
 		/// @brief Add an alias for a resource
 		/// @param new_name Additional name to refer to the resource
 		/// @param old_name Old name used to refere to the resource
@@ -202,44 +198,13 @@ namespace vuk {
 		/// @brief Compute all the unconsumed resource names and return them as Futures
 		std::vector<Future> split();
 
-		/// @brief Consume this RenderGraph and create an ExecutableRenderGraph
-		/// @param compile_options CompileOptions controlling compilation behaviour
-		struct ExecutableRenderGraph link(const RenderGraphCompileOptions& compile_options) &&;
-
-		// reflection functions
-
-		/// @brief Build the graph, assign framebuffers, renderpasses and subpasses
-		///	link automatically calls this, only needed if you want to use the reflection functions
-		/// @param compile_options CompileOptions controlling compilation behaviour
-		void compile(const RenderGraphCompileOptions& compile_options);
-
-		/// @brief retrieve usages of resource in the RenderGraph
-		MapProxy<Name, std::span<const struct UseRef>> get_use_chains();
-		/// @brief retrieve bound image attachments in the RenderGraph
-		MapProxy<Name, const struct AttachmentInfo&> get_bound_attachments();
-		/// @brief retrieve bound buffers in the RenderGraph
-		MapProxy<Name, const struct BufferInfo&> get_bound_buffers();
-		/// @brief compute ImageUsageFlags for given use chain
-		static ImageUsageFlags compute_usage(std::span<const UseRef> chain);
-
-		/// @brief Dump the pass dependency graph in graphviz format
-		std::string dump_graph();
-
 		Name name;
 
 	private:
 		struct RGImpl* impl;
 		friend struct ExecutableRenderGraph;
-
-		std::unordered_map<std::shared_ptr<RenderGraph>, std::pair<std::string, std::string>> compute_prefixes(bool do_prefix);
-		void inline_subgraphs(const std::unordered_map<std::shared_ptr<RenderGraph>, std::pair<std::string, std::string>>& prefixes,
-		                      std::unordered_set<std::shared_ptr<RenderGraph>>& consumed_rgs);
-
-		/// @brief Check if this rendergraph is valid.
-		/// \throws RenderGraphException
-		void validate();
-
-		void schedule_intra_queue(std::span<struct PassInfo> passes, const RenderGraphCompileOptions& compile_options);
+		friend struct Compiler;
+		friend struct RGCImpl;
 
 		// future support functions
 		friend class Future;
@@ -277,6 +242,39 @@ namespace vuk {
 	/// @brief Inference target is similar to(same shape, same format, same sample count) the source
 	IARule image_similar_to(Name inference_source);
 
+	struct Compiler {
+		Compiler();
+		~Compiler();
+
+		/// @brief Build the graph, assign framebuffers, renderpasses and subpasses
+		///	link automatically calls this, only needed if you want to use the reflection functions
+		/// @param compile_options CompileOptions controlling compilation behaviour
+		void compile(std::span<std::shared_ptr<RenderGraph>> rgs, const RenderGraphCompileOptions& compile_options);
+
+		/// @brief Use this RenderGraph and create an ExecutableRenderGraph
+		/// @param compile_options CompileOptions controlling compilation behaviour
+		struct ExecutableRenderGraph link(std::span<std::shared_ptr<RenderGraph>> rgs, const RenderGraphCompileOptions& compile_options);
+
+		// reflection functions
+
+		/// @brief retrieve usages of resource in the RenderGraph
+		MapProxy<Name, std::span<const struct UseRef>> get_use_chains();
+		/// @brief retrieve bound image attachments in the RenderGraph
+		MapProxy<Name, const struct AttachmentInfo&> get_bound_attachments();
+		/// @brief retrieve bound buffers in the RenderGraph
+		MapProxy<Name, const struct BufferInfo&> get_bound_buffers();
+		/// @brief compute ImageUsageFlags for given use chain
+		static ImageUsageFlags compute_usage(std::span<const UseRef> chain);
+
+		/// @brief Dump the pass dependency graph in graphviz format
+		std::string dump_graph();
+
+	private:
+		struct RGCImpl* impl;
+
+		friend struct ExecutableRenderGraph;
+	};
+
 	struct SubmitInfo {
 		std::vector<std::pair<DomainFlagBits, uint64_t>> relative_waits;
 		std::vector<VkCommandBuffer> command_buffers;
@@ -294,7 +292,7 @@ namespace vuk {
 	};
 
 	struct ExecutableRenderGraph {
-		ExecutableRenderGraph(RenderGraph&&);
+		ExecutableRenderGraph(Compiler&);
 		~ExecutableRenderGraph();
 
 		ExecutableRenderGraph(const ExecutableRenderGraph&) = delete;
@@ -313,7 +311,7 @@ namespace vuk {
 		Name resolve_name(Name, struct PassInfo*) const noexcept;
 
 	private:
-		struct RGImpl* impl;
+		struct RGCImpl* impl;
 
 		void create_attachment(Context& ptc, struct AttachmentInfo& attachment_info);
 		void fill_renderpass_info(struct RenderPassInfo& rpass, const size_t& i, class CommandBuffer& cobuf);

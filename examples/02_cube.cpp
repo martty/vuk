@@ -57,10 +57,8 @@ namespace {
 		      vp.proj[1][1] *= -1;
 		      // Allocate and transfer view-projection transform
 		      auto [buboVP, uboVP_fut] = create_buffer_cross_device(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, std::span(&vp, 1));
+		      // since this memory is CPU visible (MemoryUsage::eCPUtoGPU), we don't need to wait for the future to complete
 		      auto uboVP = *buboVP;
-
-		      vuk::wait_for_futures(frame_allocator,
-		                            uboVP_fut); // wait until the upload completes. since this memory is CPU visible (MemoryUsage::eCPUtoGPU), this is a no-op
 
 		      vuk::RenderGraph rg("02");
 		      rg.attach_in("02_cube", std::move(target));

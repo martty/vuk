@@ -119,7 +119,6 @@ namespace {
 		      rayInst.instanceShaderBindingTableRecordOffset = 0; // We will use the same hit group for all objects
 
 		      auto instances_buffer = vuk::create_buffer_cross_device(allocator, vuk::MemoryUsage::eCPUtoGPU, std::span{ &rayInst, 1 });
-		      vuk::wait_for_futures(allocator, instances_buffer.second); // no-op
 
 		      VkAccelerationStructureGeometryInstancesDataKHR instancesVk{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR };
 		      instancesVk.data.deviceAddress = instances_buffer.first->device_address;
@@ -221,8 +220,6 @@ namespace {
 		      auto [buboVP, uboVP_fut] = create_buffer_cross_device(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, std::span(&vp, 1));
 		      auto uboVP = *buboVP;
 
-		      vuk::wait_for_futures(frame_allocator, uboVP_fut);
-
 		      // TLAS update - we make a new buffer of BLAS instances, which we use to update the TLAS later
 		      VkAccelerationStructureInstanceKHR rayInst{};
 		      rayInst.transform = {};
@@ -236,7 +233,6 @@ namespace {
 		      rayInst.instanceShaderBindingTableRecordOffset = 0; // We will use the same hit group for all objects
 
 		      auto [instances_buffer, instances_fut] = vuk::create_buffer_cross_device(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, std::span{ &rayInst, 1 });
-		      vuk::wait_for_futures(frame_allocator, instances_fut); // no-op
 
 		      vuk::RenderGraph rg("12");
 		      rg.attach_in("12_rt", std::move(target));

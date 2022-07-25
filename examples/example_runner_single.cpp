@@ -1,7 +1,8 @@
 #include "example_runner.hpp"
 
 void vuk::ExampleRunner::render() {
-	vuk::wait_for_futures_explicit(*global, futures);
+	Compiler compiler;
+	vuk::wait_for_futures_explicit(*global, compiler, futures);
 	futures.clear();
 
 	while (!glfwWindowShouldClose(window)) {
@@ -14,7 +15,7 @@ void vuk::ExampleRunner::render() {
 		rg.attach_swapchain("_swp", swapchain);
 		rg.clear_image("_swp", attachment_name, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
 		auto fut = examples[0]->render(*this, frame_allocator, Future{ std::make_shared<RenderGraph>(std::move(rg)), attachment_name });
-		present(frame_allocator, swapchain, std::move(fut));
+		present(frame_allocator, compiler, swapchain, std::move(fut));
 	}
 }
 

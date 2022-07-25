@@ -50,8 +50,8 @@ namespace vuk {
 		impl->passes.emplace_back(*impl->arena_, std::move(p));
 	}
 
-	void RenderGraph::append(Name subgraph_name, const RenderGraph& other) {
-		Name joiner = subgraph_name.append("::");
+	void RGCImpl::append(Name subgraph_name, const RenderGraph& other) {
+		Name joiner = subgraph_name.is_invalid() ? Name("") : subgraph_name.append("::");
 		// TODO: this code is written weird because of wonky allocators
 		for (auto p : other.impl->passes) {
 			p.prefix = p.prefix.is_invalid() ? joiner : joiner.append(p.prefix);
@@ -68,65 +68,42 @@ namespace vuk {
 				resolves.emplace(joiner.append(n1), joiner.append(n2));
 			}
 			p.pass.resolves = resolves;
-			impl->computed_passes.emplace_back(*impl->arena_, Pass{}) = p;
-		}
-
-		for (auto& p : other.impl->computed_passes) {
-			p.prefix = p.prefix.is_invalid() ? joiner : joiner.append(p.prefix);
-			p.pass.name = joiner.append(p.pass.name);
-			for (auto& r : p.pass.resources) {
-				if (!r.name.is_invalid()) {
-					r.name = joiner.append(r.name);
-				}
-				r.out_name = r.out_name.is_invalid() ? Name{} : joiner.append(r.out_name);
-			}
-
-			decltype(p.pass.resolves) resolves;
-			for (auto& [n1, n2] : p.pass.resolves) {
-				resolves.emplace(joiner.append(n1), joiner.append(n2));
-			}
-			p.pass.resolves = resolves;
-			impl->computed_passes.emplace_back(*impl->arena_, Pass{}) = p;
+			computed_passes.emplace_back(*arena_, Pass{}) = p;
 		}
 
 		for (auto& [name, att] : other.impl->bound_attachments) {
 			att.name = joiner.append(name);
-			impl->bound_attachments.emplace(joiner.append(name), att);
+			bound_attachments.emplace(joiner.append(name), att);
 		}
 		for (auto& [name, buf] : other.impl->bound_buffers) {
 			buf.name = joiner.append(name);
-			impl->bound_buffers.emplace(joiner.append(name), buf);
+			bound_buffers.emplace(joiner.append(name), buf);
 		}
 
-		for (auto& [name, iainf] : other.impl->ia_inference_rules) {
+		for (auto [name, iainf] : other.impl->ia_inference_rules) {
 			iainf.prefix = joiner.append(iainf.prefix);
-			impl->ia_inference_rules.emplace(joiner.append(name), iainf);
+			ia_inference_rules.emplace(joiner.append(name), iainf);
 		}
 
 		for (auto [new_name, old_name] : other.impl->aliases) {
-			impl->aliases.emplace(joiner.append(new_name), old_name);
-		}
-
-		for (auto [new_name, old_name] : other.impl->computed_aliases) {
-			auto [iter, succ] = impl->computed_aliases.emplace(joiner.append(new_name), old_name);
-			iter->second = old_name;
+			aliases.emplace(joiner.append(new_name), old_name);
 		}
 
 		for (auto& [name, v] : other.impl->acquires) {
-			impl->acquires.emplace(joiner.append(name), v);
+			acquires.emplace(joiner.append(name), v);
 		}
 
 		for (auto& [name, v] : other.impl->releases) {
-			impl->releases.emplace(joiner.append(name), v);
+			releases.emplace(joiner.append(name), v);
 		}
 
 		for (auto [name, v] : other.impl->diverged_subchain_headers) {
 			v.first = joiner.append(v.first);
-			impl->diverged_subchain_headers.emplace(joiner.append(name), v);
+			diverged_subchain_headers.emplace(joiner.append(name), v);
 		}
 
 		for (auto& name : other.impl->whole_names_consumed) {
-			impl->whole_names_consumed.emplace(joiner.append(name));
+			whole_names_consumed.emplace(joiner.append(name));
 		}
 	}
 
@@ -163,9 +140,10 @@ namespace vuk {
 	}
 
 	// determine rendergraph inputs and outputs, and resources that are neither
-	void RGImpl::build_io() {
-		poisoned_names.clear();
-		for (auto& pif : computed_passes) {
+	void RGImpl::build_io(std::span<struct PassInfo> passes_used) {
+		robin_hood::unordered_flat_set<Name> poisoned_names;
+
+		for (auto& pif : passes_used) {
 			pif.input_names.clear();
 			pif.output_names.clear();
 			pif.write_input_names.clear();
@@ -208,7 +186,54 @@ namespace vuk {
 		}
 	}
 
-	void RenderGraph::schedule_intra_queue(std::span<PassInfo> passes, const RenderGraphCompileOptions& compile_options) {
+	// determine rendergraph inputs and outputs, and resources that are neither
+	void RGCImpl::build_io(std::span<struct PassInfo> passes_used) {
+		robin_hood::unordered_flat_set<Name> poisoned_names;
+
+		for (auto& pif : passes_used) {
+			pif.input_names.clear();
+			pif.output_names.clear();
+			pif.write_input_names.clear();
+			pif.bloom_write_inputs = {};
+			pif.bloom_outputs = {};
+			pif.bloom_resolved_inputs = {};
+
+			for (Resource& res : pif.pass.resources) {
+				Name in_name = resolve_alias(res.name);
+				Name out_name = resolve_alias(res.out_name);
+
+				auto hashed_in_name = ::hash::fnv1a::hash(in_name.to_sv().data(), res.name.to_sv().size(), hash::fnv1a::default_offset_basis);
+				auto hashed_out_name = ::hash::fnv1a::hash(out_name.to_sv().data(), res.out_name.to_sv().size(), hash::fnv1a::default_offset_basis);
+
+				pif.input_names.emplace_back(in_name);
+				pif.bloom_resolved_inputs |= hashed_in_name;
+
+				if (!res.out_name.is_invalid()) {
+					pif.bloom_outputs |= hashed_out_name;
+					pif.output_names.emplace_back(out_name);
+				}
+
+				if (is_write_access(res.ia) || is_acquire(res.ia) || is_release(res.ia) || res.ia == Access::eConsume || res.ia == Access::eConverge) {
+					assert(!poisoned_names.contains(in_name)); // we have poisoned this name because a write has already consumed it
+					pif.bloom_write_inputs |= hashed_in_name;
+					pif.write_input_names.emplace_back(in_name);
+					poisoned_names.emplace(in_name);
+				}
+
+				// if this resource use is the first in a diverged subchain, we additionally add a dependency onto the undiverged subchain
+				if (auto it = diverged_subchain_headers.find(in_name); it != diverged_subchain_headers.end()) {
+					auto& sch_info = it->second;
+					auto dep = sch_info.first.append("__diverged");
+					auto hashed_name = ::hash::fnv1a::hash(dep.to_sv().data(), dep.to_sv().size(), hash::fnv1a::default_offset_basis);
+
+					pif.input_names.emplace_back(dep);
+					pif.bloom_resolved_inputs |= hashed_name;
+				}
+			}
+		}
+	}
+
+	void RGCImpl::schedule_intra_queue(std::span<PassInfo> passes, const RenderGraphCompileOptions& compile_options) {
 		// sort passes if requested
 		if (passes.size() > 1 && compile_options.reorder_passes) {
 			topological_sort(passes.begin(), passes.end(), [this](const auto& p1, const auto& p2) {
@@ -219,7 +244,7 @@ namespace vuk {
 				if ((p1.bloom_outputs & p2.bloom_resolved_inputs) != 0) {
 					for (auto& o : p1.output_names) {
 						for (auto& i : p2.input_names) {
-							if (o == impl->resolve_alias(i)) {
+							if (o == resolve_alias(i)) {
 								return true; // p2 is ordered after p1
 							}
 						}
@@ -230,7 +255,7 @@ namespace vuk {
 				if ((p1.bloom_resolved_inputs & p2.bloom_write_inputs) != 0) {
 					for (auto& o : p1.input_names) {
 						for (auto& i : p2.write_input_names) {
-							if (impl->resolve_alias(o) == impl->resolve_alias(i)) {
+							if (resolve_alias(o) == resolve_alias(i)) {
 								return true; // p2 is ordered after p1
 							}
 						}
@@ -280,7 +305,7 @@ namespace vuk {
 		}
 	}
 
-	std::string RenderGraph::dump_graph() {
+	std::string Compiler::dump_graph() {
 		std::stringstream ss;
 		ss << "digraph vuk {\n";
 		for (auto i = 0; i < impl->computed_passes.size(); i++) {
@@ -311,65 +336,95 @@ namespace vuk {
 		return ss.str();
 	}
 
-	std::unordered_map<std::shared_ptr<RenderGraph>, std::pair<std::string, std::string>> RenderGraph::compute_prefixes(bool do_prefix) {
+	std::unordered_map<std::shared_ptr<RenderGraph>, std::pair<std::string, std::string>> RGCImpl::compute_prefixes(const RenderGraph& rg, bool do_prefix) {
 		std::unordered_map<std::shared_ptr<RenderGraph>, std::pair<std::string, std::string>> sg_prefixes;
-		impl->computed_passes.clear();
-		impl->sg_name_counter.clear();
-		for (auto& [sg_ptr, sg_info] : impl->subgraphs) {
+		for (auto& [sg_ptr, sg_info] : rg.impl->subgraphs) {
 			if (sg_info.count > 0) {
 				Name sg_name = sg_ptr->name;
-				if (!sg_ptr->impl) { // we have already inlined this somewhere
-				} else {
-					auto prefixes = sg_ptr->compute_prefixes(true);
-					sg_prefixes.merge(prefixes);
-					if (auto& counter = ++impl->sg_name_counter[sg_name]; counter > 1) {
-						sg_name = sg_name.append(Name(std::string("_") + std::to_string(counter - 1)));
-					}
-					sg_prefixes.emplace(sg_ptr, std::pair{ std::string(sg_name.to_sv()), std::string(sg_name.to_sv()) });
+				assert(sg_ptr->impl);
+
+				auto prefixes = compute_prefixes(*sg_ptr, true);
+				sg_prefixes.merge(prefixes);
+				if (auto& counter = ++sg_name_counter[sg_name]; counter > 1) {
+					sg_name = sg_name.append(Name(std::string("_") + std::to_string(counter - 1)));
 				}
+				sg_prefixes.emplace(sg_ptr, std::pair{ std::string(sg_name.to_sv()), std::string(sg_name.to_sv()) });
 			}
 		}
 		if (do_prefix && sg_prefixes.size() > 0) {
 			for (auto& [k, v] : sg_prefixes) {
-				v.second = std::string(name.to_sv()) + "::" + v.second;
+				v.second = std::string(rg.name.to_sv()) + "::" + v.second;
 			}
 		}
 		return sg_prefixes;
 	}
 
-	void RenderGraph::inline_subgraphs(const std::unordered_map<std::shared_ptr<RenderGraph>, std::pair<std::string, std::string>>& sg_prefixes,
-	                                   std::unordered_set<std::shared_ptr<RenderGraph>>& consumed_rgs) {
-		for (auto& [sg_ptr, sg_info] : impl->subgraphs) {
+	void RGCImpl::inline_subgraphs(const std::shared_ptr<RenderGraph>& rg,
+	                               const std::unordered_map<std::shared_ptr<RenderGraph>, std::pair<std::string, std::string>>& sg_prefixes,
+	                               std::unordered_set<std::shared_ptr<RenderGraph>>& consumed_rgs) {
+		auto our_prefix = sg_prefixes.at(rg).second;
+		for (auto& [sg_ptr, sg_info] : rg->impl->subgraphs) {
 			if (sg_info.count > 0) {
 				auto& prefix = sg_prefixes.at(sg_ptr);
 				assert(sg_ptr->impl);
 				if (!consumed_rgs.contains(sg_ptr)) {
-					sg_ptr->inline_subgraphs(sg_prefixes, consumed_rgs);
-					append(Name(prefix.first), *sg_ptr);
+					inline_subgraphs(sg_ptr, sg_prefixes, consumed_rgs);
+					append(Name(prefix.second), *sg_ptr);
 					consumed_rgs.emplace(sg_ptr);
 				}
 				for (auto& [name_in_parent, name_in_sg] : sg_info.exported_names) {
 					auto old_name = Name(prefix.second).append("::").append(name_in_sg);
+					auto new_name = our_prefix.empty() ? name_in_parent : Name(our_prefix).append("::").append(name_in_parent);
 					if (name_in_parent != old_name) {
-						impl->computed_aliases[name_in_parent] = old_name;
+						computed_aliases[new_name] = old_name;
 					}
 				}
 			}
 		}
 	}
 
-	void RenderGraph::compile(const RenderGraphCompileOptions& compile_options) {
+	Compiler::Compiler() : impl(new RGCImpl) {}
+	Compiler::~Compiler() {
+		delete impl;
+	}
+
+	void Compiler::compile(std::span<std::shared_ptr<RenderGraph>> rgs, const RenderGraphCompileOptions& compile_options) {
 		impl->computed_aliases.clear();
-		impl->computed_aliases.insert(impl->aliases.begin(), impl->aliases.end());
+		impl->computed_passes.clear();
+		impl->aliases.clear();
+		impl->acquires.clear();
+		impl->releases.clear();
+		impl->assigned_names.clear();
+		impl->bound_attachments.clear();
+		impl->bound_buffers.clear();
+		impl->diverged_subchain_headers.clear();
+		impl->ia_inference_rules.clear();
+		impl->ordered_passes.clear();
+		impl->rpis.clear();
+		impl->use_chains.clear();
+		impl->whole_names_consumed.clear();
+
+		/*for (auto& rg : rgs) {
+			impl->computed_aliases.insert(rg->impl->aliases.begin(), rg->impl->aliases.end());
+		}*/
 
 		// inline all the subgraphs into us
-		auto sg_pref = compute_prefixes(false);
-		std::unordered_set<std::shared_ptr<RenderGraph>> consumed_rgs = {};
-		inline_subgraphs(sg_pref, consumed_rgs);
+		impl->sg_name_counter.clear();
+		std::unordered_map<std::shared_ptr<RenderGraph>, std::pair<std::string, std::string>> sg_pref;
+		for (auto& rg : rgs) {
+			auto prefs = impl->compute_prefixes(*rg, true);
+			auto rg_name = rg->name;
+			if (auto& counter = ++impl->sg_name_counter[rg_name]; counter > 1) {
+				rg_name = rg_name.append(Name(std::string("_") + std::to_string(counter - 1)));
+			}
+			prefs.emplace(rg, std::pair{ std::string{}, std::string{ rg_name.c_str() } });
+			sg_pref.merge(prefs);
+			std::unordered_set<std::shared_ptr<RenderGraph>> consumed_rgs = {};
+			impl->inline_subgraphs(rg, sg_pref, consumed_rgs);
+		}
 
-		for (auto& p : impl->passes) {
-			Pass cp = p.pass;
-			impl->computed_passes.emplace_back(*impl->arena_, std::move(cp));
+		for (auto& rg : rgs) {
+			impl->append(Name{ sg_pref.at(rg).second.c_str() }, *rg);
 		}
 
 		// gather name alias info now - once we partition, we might encounter unresolved aliases
@@ -380,7 +435,7 @@ namespace vuk {
 				// for read or write, we add source to use chain
 				if (!res.name.is_invalid() && !res.out_name.is_invalid()) {
 					auto [iter, succ] = name_map.emplace(res.out_name, res.name);
-					assert(succ);
+					assert(iter->second == res.name);
 				}
 			}
 		}
@@ -402,13 +457,13 @@ namespace vuk {
 
 		// find which reads are graph inputs (not produced by any pass) & outputs
 		// (not consumed by any pass)
-		impl->build_io();
+		impl->build_io(impl->computed_passes);
 
 		// run global pass ordering - once we split per-queue we don't see enough
 		// inputs to order within a queue
-		schedule_intra_queue(impl->computed_passes, compile_options);
+		impl->schedule_intra_queue(impl->computed_passes, compile_options);
 
-		auto foo = dump_graph();
+		// auto dumped_graph = dump_graph();
 
 		// for now, just use what the passes requested as domain
 		for (auto& p : impl->computed_passes) {
@@ -524,7 +579,7 @@ namespace vuk {
 					// otherwise we take initial use from the attachment
 					// insert initial usage if we need to synchronize against it
 					if (auto it = res_acqs.find(resolved_name); it != res_acqs.end()) {
-						RGImpl::Acquire* acquire = &it->second;
+						Acquire* acquire = &it->second;
 						chain.emplace_back(UseRef{ {}, {}, vuk::eManual, vuk::eManual, acquire->src_use, res.type, {}, nullptr });
 						chain.emplace_back(UseRef{ res.name, res.out_name, res.ia, res.ia, {}, res.type, sr, &passinfo });
 						chain.back().use.domain = passinfo.domain;
@@ -849,7 +904,7 @@ namespace vuk {
 				};
 				impl->bound_buffers.emplace(name, buf_info);
 			}
-			impl->acquires.emplace(name, RGImpl::Acquire{ fimg.control->last_use, fimg.control->initial_domain, fimg.control->initial_visibility });
+			impl->acquires.emplace(name, Acquire{ fimg.control->last_use, fimg.control->initial_domain, fimg.control->initial_visibility });
 			impl->imported_names.emplace(name);
 		} else if (fimg.get_status() == FutureBase::Status::eInitial) {
 			Name sg_name = fimg.rg->name;
@@ -881,7 +936,7 @@ namespace vuk {
 	}
 
 	robin_hood::unordered_flat_set<Name> RGImpl::get_available_resources() {
-		build_io();
+		build_io(passes);
 		// seed the available names with the names we imported from subgraphs
 		robin_hood::unordered_flat_set<Name> outputs = imported_names;
 		for (auto& [name, _] : bound_attachments) {
@@ -915,7 +970,7 @@ namespace vuk {
 	}
 
 	void RenderGraph::attach_out(Name name, Future& fimg, DomainFlags dst_domain, Subrange subrange) {
-		impl->releases.emplace(name, RGImpl::Release{ to_use(Access::eNone, dst_domain), subrange, fimg.control.get() });
+		impl->releases.emplace(name, Release{ to_use(Access::eNone, dst_domain), subrange, fimg.control.get() });
 	}
 
 	void RenderGraph::detach_out(Name name, Future& fimg) {
@@ -988,24 +1043,25 @@ namespace vuk {
 		};
 	}
 
-	void RenderGraph::validate() {
+	void RGCImpl::validate() {
 		// check if all resourced are attached
-		for (const auto& [n, v] : impl->use_chains) {
-			auto resolved_name = impl->resolve_name(n);
-			auto whole_name = impl->whole_name(resolved_name);
-			if (!impl->bound_attachments.contains(whole_name) && !impl->bound_buffers.contains(whole_name)) {
+		for (const auto& [n, v] : use_chains) {
+			auto resolved_name = resolve_name(n);
+			auto att_name = whole_name(resolved_name);
+			if (!bound_attachments.contains(att_name) && !bound_buffers.contains(att_name)) {
+				// TODO: error handling
 				throw RenderGraphException{ std::string("Missing resource: \"") + std::string(n.to_sv()) + "\". Did you forget to attach it?" };
 			}
 		}
 	}
 
-	ExecutableRenderGraph RenderGraph::link(const RenderGraphCompileOptions& compile_options) && {
-		compile(compile_options);
+	ExecutableRenderGraph Compiler::link(std::span<std::shared_ptr<RenderGraph>> rgs, const RenderGraphCompileOptions& compile_options) {
+		compile(rgs, compile_options);
 
 		// at this point the graph is built, we know of all the resources and
 		// everything should have been attached perform checking if this indeed the
 		// case
-		validate();
+		impl->validate();
 
 		// handle clears
 		// if we are going into a Clear, see if the subsequent use is a framebuffer use
@@ -1059,7 +1115,7 @@ namespace vuk {
 
 			auto& attachment_info = att_it->second;
 
-			RGImpl::Release* release = nullptr;
+			Release* release = nullptr;
 			if (auto it = res_rels.find(resolved_name); it != res_rels.end()) {
 				release = &it->second;
 				if (attachment_info.final.layout != ImageLayout::eUndefined) {
@@ -1273,7 +1329,7 @@ namespace vuk {
 			}
 			auto& chain = chain_it->second;
 
-			RGImpl::Release* release = nullptr;
+			Release* release = nullptr;
 			if (auto it = res_rels.find(name); it != res_rels.end()) {
 				release = &it->second;
 				chain.emplace_back(UseRef{ {}, {}, vuk::eManual, vuk::eManual, it->second.dst_use, Resource::Type::eBuffer, Subrange{ .buffer = {} }, nullptr });
@@ -1543,22 +1599,22 @@ namespace vuk {
 			rp.rpci.pDependencies = rp.rpci.subpass_dependencies.data();
 		}
 
-		return { std::move(*this) };
+		return { *this };
 	}
 
-	MapProxy<Name, std::span<const UseRef>> RenderGraph::get_use_chains() {
+	MapProxy<Name, std::span<const UseRef>> Compiler::get_use_chains() {
 		return &impl->use_chains;
 	}
 
-	MapProxy<Name, const AttachmentInfo&> RenderGraph::get_bound_attachments() {
+	MapProxy<Name, const AttachmentInfo&> Compiler::get_bound_attachments() {
 		return &impl->bound_attachments;
 	}
 
-	MapProxy<Name, const BufferInfo&> RenderGraph::get_bound_buffers() {
+	MapProxy<Name, const BufferInfo&> Compiler::get_bound_buffers() {
 		return &impl->bound_buffers;
 	}
 
-	ImageUsageFlags RenderGraph::compute_usage(std::span<const UseRef> chain) {
+	ImageUsageFlags Compiler::compute_usage(std::span<const UseRef> chain) {
 		ImageUsageFlags usage;
 		for (const auto& c : chain) {
 			if (c.high_level_access != Access::eManual && c.high_level_access != Access::eConverge) {

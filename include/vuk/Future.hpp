@@ -81,12 +81,12 @@ namespace vuk {
 		}
 
 		/// @brief Submit Future for execution
-		Result<void> submit(Allocator& allocator);
+		Result<void> submit(Allocator& allocator, Compiler& compiler);
 		/// @brief Wait for Future to complete execution on host
-		Result<void> wait(Allocator& allocator);
+		Result<void> wait(Allocator& allocator, Compiler& compiler);
 		/// @brief Wait and retrieve the result of the Future on the host
 		template<class T>
-		[[nodiscard]] Result<T> get(Allocator& allocator);
+		[[nodiscard]] Result<T> get(Allocator& allocator, Compiler& compiler);
 
 		/// @brief Get control block for Future
 		FutureBase* get_control() {
@@ -117,10 +117,10 @@ namespace vuk {
 	};
 
 	template<class... Args>
-	Result<void> wait_for_futures(Allocator& alloc, Args&&... futs) {
+	Result<void> wait_for_futures(Allocator& alloc, Compiler& compiler, Args&&... futs) {
 		std::array controls = { futs.get_control()... };
-		std::array rgs = { futs.get_render_graph().get()... };
-		std::vector<std::pair<Allocator*, RenderGraph*>> rgs_to_run;
+		std::array rgs = { futs.get_render_graph()... };
+		std::vector<std::shared_ptr<RenderGraph>> rgs_to_run;
 		for (uint64_t i = 0; i < controls.size(); i++) {
 			auto& control = controls[i];
 			if (control->status == FutureBase::Status::eInitial && !rgs[i]) {
@@ -132,7 +132,7 @@ namespace vuk {
 			}
 		}
 		if (rgs_to_run.size() != 0) {
-			VUK_DO_OR_RETURN(link_execute_submit(alloc, std::span(rgs_to_run)));
+			VUK_DO_OR_RETURN(link_execute_submit(alloc, compiler, std::span(rgs_to_run)));
 		}
 
 		std::vector<std::pair<DomainFlags, uint64_t>> waits;
@@ -150,8 +150,8 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	inline Result<void> wait_for_futures_explicit(Allocator& alloc, std::span<Future> futures) {
-		std::vector<std::pair<Allocator*, RenderGraph*>> rgs_to_run;
+	inline Result<void> wait_for_futures_explicit(Allocator& alloc, Compiler& compiler, std::span<Future> futures) {
+		std::vector<std::shared_ptr<RenderGraph>> rgs_to_run;
 		for (uint64_t i = 0; i < futures.size(); i++) {
 			auto control = futures[i].get_control();
 			if (control->status == FutureBase::Status::eInitial && !futures[i].get_render_graph()) {
@@ -159,11 +159,11 @@ namespace vuk {
 			} else if (control->status == FutureBase::Status::eHostAvailable || control->status == FutureBase::Status::eSubmitted) {
 				continue;
 			} else {
-				rgs_to_run.emplace_back(&alloc, futures[i].get_render_graph().get());
+				rgs_to_run.emplace_back(futures[i].get_render_graph());
 			}
 		}
 		if (rgs_to_run.size() != 0) {
-			VUK_DO_OR_RETURN(link_execute_submit(alloc, std::span(rgs_to_run)));
+			VUK_DO_OR_RETURN(link_execute_submit(alloc, compiler, std::span(rgs_to_run)));
 		}
 
 		std::vector<std::pair<DomainFlags, uint64_t>> waits;
