@@ -67,19 +67,21 @@ namespace {
 	}
 
 	void blit(vuk::Allocator& allocator, vuk::Texture& src, vuk::Texture& dst) {
-		vuk::RenderGraph rg;
-		rg.add_pass({ .resources = { "dst"_image >> vuk::eColorWrite }, .execute = [&src](vuk::CommandBuffer& command_buffer) {
-			             command_buffer.set_viewport(0, vuk::Rect2D::framebuffer())
-			                 .set_scissor(0, vuk::Rect2D::framebuffer())
-			                 .set_rasterization({})
-			                 .broadcast_color_blend({})
-			                 .bind_graphics_pipeline("blit")
-			                 .bind_image(0, 0, *src.view)
-			                 .bind_sampler(0, 0, { .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear });
-			             command_buffer.draw(3, 1, 0, 0);
-		             } });
-		rg.attach_image("dst", vuk::ImageAttachment::from_texture(dst), vuk::Access::eNone, vuk::Access::eFragmentSampled);
-		vuk::execute_submit_and_wait(allocator, std::move(rg).link(vuk::RenderGraphCompileOptions{}));
+		std::shared_ptr<vuk::RenderGraph> rg = std::make_shared<vuk::RenderGraph>("blit");
+		rg->add_pass({ .resources = { "dst"_image >> vuk::eColorWrite }, .execute = [&src](vuk::CommandBuffer& command_buffer) {
+			              command_buffer.set_viewport(0, vuk::Rect2D::framebuffer())
+			                  .set_scissor(0, vuk::Rect2D::framebuffer())
+			                  .set_rasterization({})
+			                  .broadcast_color_blend({})
+			                  .bind_graphics_pipeline("blit")
+			                  .bind_image(0, 0, *src.view)
+			                  .bind_sampler(0, 0, { .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear });
+			              command_buffer.draw(3, 1, 0, 0);
+		              } });
+		rg->attach_image("dst", vuk::ImageAttachment::from_texture(dst), vuk::Access::eNone, vuk::Access::eFragmentSampled);
+		vuk::Compiler c;
+		auto erg = c.link({ &rg, 1 }, {});
+		vuk::execute_submit_and_wait(allocator, std::move(erg));
 	}
 
 	std::optional<vuk::Texture> texture_of_doge, tex2k, tex4k, tex8k;
@@ -120,7 +122,8 @@ namespace {
 			auto doge_image = stbi_load("../../examples/doge.png", &x, &y, &chans, 4);
 			auto [tex, tex_fut] = create_texture(allocator, vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, doge_image, false);
 			texture_of_doge = std::move(tex);
-			tex_fut.wait(allocator);
+			vuk::Compiler c;
+			tex_fut.wait(allocator, c);
 			stbi_image_free(doge_image);
 			tex2k = ctx.allocate_texture(allocator, vuk::ImageCreateInfo{.format = vuk::Format::eR8G8B8A8Srgb, .extent = {.width = 2048, .height = 2048, .depth = 1}, .usage = vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eSampled });
 			tex4k = ctx.allocate_texture(allocator, vuk::ImageCreateInfo{.format = vuk::Format::eR8G8B8A8Srgb, .extent = {.width = 4096, .height = 4096, .depth = 1}, .usage = vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eSampled });
