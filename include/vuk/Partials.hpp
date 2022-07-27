@@ -86,7 +86,7 @@ namespace vuk {
 	/// @param dst_access Access to have in the future
 	inline Future transition(Future image, Access dst_access) {
 		std::shared_ptr<RenderGraph> rgp = std::make_shared<RenderGraph>("transition");
-		rgp->add_pass({ .name = "TRANSITION", .execute_on = DomainFlagBits::eDevice, .resources = { "_src"_image >> dst_access >> "_src+" } });
+		rgp->add_pass({ .name = "TRANSITION", .execute_on = DomainFlagBits::eDevice, .resources = { "_src"_image >> dst_access >> "_src+" }, .type = Pass::Type::eForcedAccess });
 		rgp->attach_in("_src", std::move(image));
 		return { std::move(rgp), "_src+" };
 	}

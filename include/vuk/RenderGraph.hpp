@@ -101,11 +101,11 @@ namespace vuk {
 		bool use_secondary_command_buffers = false;
 
 		std::vector<Resource> resources;
-		std::unordered_map<Name, Name> resolves; // src -> dst
+		std::vector<std::pair<Name, Name>> resolves; // src -> dst
 
 		std::function<void(CommandBuffer&)> execute;
 		std::vector<std::byte> arguments; // internal use
-		enum class Type { eUserPass, eClear, eConverge, eConvergeExplicit } type = Type::eUserPass;
+		enum class Type { eUserPass, eClear, eConverge, eConvergeExplicit, eForcedAccess } type = Type::eUserPass;
 	};
 
 	// declare these specializations for GCC

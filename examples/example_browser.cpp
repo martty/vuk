@@ -121,7 +121,9 @@ void vuk::ExampleRunner::render() {
 									chosen_resource[i] = attachment_name_out;
 								} else {
 									Name last_use = use_refs.back().out_name.is_invalid() ? use_refs.back().name : use_refs.back().out_name;
-									chosen_resource[i] = last_use;
+									auto sv = last_use.to_sv();
+									sv.remove_prefix(rg_frag->name.to_sv().size() + 2);
+									chosen_resource[i] = sv;
 								}
 							}
 						}

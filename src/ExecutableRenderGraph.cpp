@@ -222,6 +222,9 @@ namespace vuk {
 					for (auto& dep : sp.pre_mem_barriers) {
 						vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 1, &dep.barrier, 0, nullptr, 0, nullptr);
 					}
+				} else {
+					assert(sp.pre_barriers.empty());
+					assert(sp.pre_mem_barriers.empty());
 				}
 				for (auto& p : sp.passes) {
 					CommandBuffer cobuf(*this, ctx, alloc, cbuf);
@@ -261,6 +264,9 @@ namespace vuk {
 					for (const auto& dep : sp.post_mem_barriers) {
 						vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 1, &dep.barrier, 0, nullptr, 0, nullptr);
 					}
+				} else {
+					assert(sp.post_barriers.empty());
+					assert(sp.post_mem_barriers.empty());
 				}
 			}
 			if (is_single_pass && !rpass.subpasses[0].passes[0]->pass.name.is_invalid() && rpass.subpasses[0].passes[0]->pass.execute) {
@@ -621,6 +627,7 @@ namespace vuk {
 					create_attachment(ctx, bound);
 				} else {
 					auto image = *allocate_image(alloc, bound.attachment); // TODO: dropping error
+					ctx.debug.set_name(*image, bound.name);
 					bound.attachment.image = *image;
 				}
 			}

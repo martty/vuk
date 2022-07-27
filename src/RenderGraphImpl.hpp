@@ -89,7 +89,7 @@ namespace vuk {
 	};
 
 	struct RGCImpl {
-		RGCImpl() : arena_(new arena(2 * 1024 * 1024)), INIT(computed_passes), INIT(ordered_passes), INIT(rpis) {}
+		RGCImpl() : arena_(new arena(4 * 1024 * 1024)), INIT(computed_passes), INIT(ordered_passes), INIT(rpis) {}
 		std::unique_ptr<arena> arena_;
 
 		std::vector<PassInfo, short_alloc<PassInfo, 64>> computed_passes;

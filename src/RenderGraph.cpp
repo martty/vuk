@@ -65,7 +65,7 @@ namespace vuk {
 
 			decltype(p.pass.resolves) resolves;
 			for (auto& [n1, n2] : p.pass.resolves) {
-				resolves.emplace(joiner.append(n1), joiner.append(n2));
+				resolves.emplace_back(joiner.append(n1), joiner.append(n2));
 			}
 			p.pass.resolves = resolves;
 			computed_passes.emplace_back(*arena_, Pass{}) = p;
@@ -166,7 +166,8 @@ namespace vuk {
 					pif.output_names.emplace_back(out_name);
 				}
 
-				if (is_write_access(res.ia) || is_acquire(res.ia) || is_release(res.ia) || res.ia == Access::eConsume || res.ia == Access::eConverge) {
+				if (is_write_access(res.ia) || is_acquire(res.ia) || is_release(res.ia) || res.ia == Access::eConsume || res.ia == Access::eConverge ||
+				    pif.pass.type == Pass::Type::eForcedAccess) {
 					assert(!poisoned_names.contains(in_name)); // we have poisoned this name because a write has already consumed it
 					pif.bloom_write_inputs |= hashed_in_name;
 					pif.write_input_names.emplace_back(in_name);
@@ -213,7 +214,8 @@ namespace vuk {
 					pif.output_names.emplace_back(out_name);
 				}
 
-				if (is_write_access(res.ia) || is_acquire(res.ia) || is_release(res.ia) || res.ia == Access::eConsume || res.ia == Access::eConverge) {
+				if (is_write_access(res.ia) || is_acquire(res.ia) || is_release(res.ia) || res.ia == Access::eConsume || res.ia == Access::eConverge ||
+				    pif.pass.type == Pass::Type::eForcedAccess) {
 					assert(!poisoned_names.contains(in_name)); // we have poisoned this name because a write has already consumed it
 					pif.bloom_write_inputs |= hashed_in_name;
 					pif.write_input_names.emplace_back(in_name);
@@ -403,10 +405,6 @@ namespace vuk {
 		impl->rpis.clear();
 		impl->use_chains.clear();
 		impl->whole_names_consumed.clear();
-
-		/*for (auto& rg : rgs) {
-			impl->computed_aliases.insert(rg->impl->aliases.begin(), rg->impl->aliases.end());
-		}*/
 
 		// inline all the subgraphs into us
 		impl->sg_name_counter.clear();
@@ -1515,7 +1513,8 @@ namespace vuk {
 				} else {
 					VkAttachmentReference rref{};
 					rref.attachment = VK_ATTACHMENT_UNUSED;
-					if (auto it = pass.pass.resolves.find(res.name); it != pass.pass.resolves.end()) {
+					if (auto it = std::find_if(pass.pass.resolves.begin(), pass.pass.resolves.end(), [=](auto& p) { return p.first == res.name; });
+					    it != pass.pass.resolves.end()) {
 						// this a resolve src attachment
 						// get the dst attachment
 						auto dst_name = impl->resolve_name(it->second);
