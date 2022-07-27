@@ -428,6 +428,22 @@ namespace vuk {
 		// gather name alias info now - once we partition, we might encounter unresolved aliases
 		robin_hood::unordered_flat_map<Name, Name> name_map;
 
+		name_map.insert(impl->computed_aliases.begin(), impl->computed_aliases.end());
+
+		impl->computed_aliases.clear();
+		// follow aliases and resolve them into a single lookup
+		for (auto& [k, v] : name_map) {
+			auto it = name_map.find(v);
+			Name res = v;
+			while (it != name_map.end()) {
+				res = it->second;
+				it = name_map.find(res);
+			}
+			assert(!res.is_invalid());
+			impl->computed_aliases.emplace(k, res);
+		}
+
+
 		for (auto& passinfo : impl->computed_passes) {
 			for (auto& res : passinfo.pass.resources) {
 				// for read or write, we add source to use chain
@@ -437,8 +453,6 @@ namespace vuk {
 				}
 			}
 		}
-
-		name_map.insert(impl->computed_aliases.begin(), impl->computed_aliases.end());
 
 		impl->assigned_names.clear();
 		// populate resource name -> use chain map

@@ -135,7 +135,7 @@ namespace vuk {
 			if (it == computed_aliases.end()) {
 				return in;
 			} else {
-				return resolve_alias(it->second);
+				return it->second;
 			}
 		};
 
