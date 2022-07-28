@@ -13,7 +13,7 @@ namespace {
 		static constexpr size_t arr_siz = 2048;
 
 		const char* add(std::string_view s) {
-			auto hash = hash::fnv1a::hash(s.data(), (uint32_t)s.size());
+			auto hash = hash::fnv1a::hash(s.data(), (uint32_t)s.size(), hash::fnv1a::default_offset_basis);
 			{
 				std::shared_lock _(lock);
 				if (auto it = map.find(hash); it != map.end()) {
@@ -42,7 +42,8 @@ namespace {
 						map.emplace(hash, bf->data() + osize);
 						return bf->data() + osize;
 					}
-				} else {
+				} else { // for returning tail substrings
+					map.emplace(hash, bf->data() + pos);
 					return bf->data() + pos;
 				}
 			}
@@ -90,8 +91,23 @@ namespace vuk {
 	}
 
 	Name Name::append(Name other) const noexcept {
+		auto ourlen = strlen(id);
+		auto theirlen = strlen(other.id);
+		auto hash = hash::fnv1a::hash(id, (uint32_t)ourlen, hash::fnv1a::default_offset_basis);
+		hash = hash::fnv1a::hash(other.id, (uint32_t)theirlen, hash);
+
+		// speculative
+		{
+			std::shared_lock _(g_intern.lock);
+			if (auto it = g_intern.map.find(hash); it != g_intern.map.end()) {
+				Name n;
+				n.id = it->second;
+				return n;
+			}
+		}
+
 		std::string app;
-		app.reserve(strlen(id) + strlen(other.id));
+		app.reserve(ourlen + theirlen);
 		app.append(id);
 		app.append(other.id);
 		return Name(app);
