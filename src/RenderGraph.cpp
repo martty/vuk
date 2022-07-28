@@ -47,28 +47,28 @@ namespace vuk {
 				attach_image(r.name, r.ici, vuk::Access::eNone, vuk::Access::eNone);
 			}
 		}
-		impl->passes.emplace_back(*impl->arena_, std::move(p));
+		impl->passes.emplace_back(std::move(p));
 	}
 
 	void RGCImpl::append(Name subgraph_name, const RenderGraph& other) {
 		Name joiner = subgraph_name.is_invalid() ? Name("") : subgraph_name.append("::");
 		// TODO: this code is written weird because of wonky allocators
-		for (auto p : other.impl->passes) {
-			p.prefix = p.prefix.is_invalid() ? joiner : joiner.append(p.prefix);
-			p.pass.name = joiner.append(p.pass.name);
-			for (auto& r : p.pass.resources) {
+		for (auto& p : other.impl->passes) {
+			PassInfo pi{*arena_, p};
+			pi.prefix = joiner;
+			pi.qualified_name = joiner.append(p.name);
+			for (auto r : p.resources) {
 				if (!r.name.is_invalid()) {
 					r.name = joiner.append(r.name);
 				}
 				r.out_name = r.out_name.is_invalid() ? Name{} : joiner.append(r.out_name);
+				pi.resources.emplace_back(std::move(r));
 			}
 
-			decltype(p.pass.resolves) resolves;
-			for (auto& [n1, n2] : p.pass.resolves) {
-				resolves.emplace_back(joiner.append(n1), joiner.append(n2));
+			for (auto& [n1, n2] : p.resolves) {
+				pi.resolves.emplace_back(joiner.append(n1), joiner.append(n2));
 			}
-			p.pass.resolves = resolves;
-			computed_passes.emplace_back(*arena_, Pass{}) = p;
+			computed_passes.emplace_back(std::move(pi));
 		}
 
 		for (auto& [name, att] : other.impl->bound_attachments) {
@@ -140,10 +140,15 @@ namespace vuk {
 	}
 
 	// determine rendergraph inputs and outputs, and resources that are neither
-	void RGImpl::build_io(std::span<struct PassInfo> passes_used) {
+	std::vector<PassInfo, short_alloc<PassInfo, 64>> RGImpl::build_io(std::span<struct Pass> passes_used) {
 		robin_hood::unordered_flat_set<Name> poisoned_names;
 
-		for (auto& pif : passes_used) {
+		auto pis = std::vector<PassInfo, short_alloc<PassInfo, 64>>(*arena_);
+		for (auto& pass : passes_used) {
+			pis.emplace_back(*arena_, pass);
+		}
+
+		for (auto& pif : pis) {
 			pif.input_names.clear();
 			pif.output_names.clear();
 			pif.write_input_names.clear();
@@ -151,7 +156,7 @@ namespace vuk {
 			pif.bloom_outputs = {};
 			pif.bloom_resolved_inputs = {};
 
-			for (Resource& res : pif.pass.resources) {
+			for (Resource& res : pif.resources) {
 				Name in_name = resolve_alias(res.name);
 				Name out_name = resolve_alias(res.out_name);
 
@@ -167,7 +172,7 @@ namespace vuk {
 				}
 
 				if (is_write_access(res.ia) || is_acquire(res.ia) || is_release(res.ia) || res.ia == Access::eConsume || res.ia == Access::eConverge ||
-				    pif.pass.type == Pass::Type::eForcedAccess) {
+				    pif.pass->type == Pass::Type::eForcedAccess) {
 					assert(!poisoned_names.contains(in_name)); // we have poisoned this name because a write has already consumed it
 					pif.bloom_write_inputs |= hashed_in_name;
 					pif.write_input_names.emplace_back(in_name);
@@ -185,6 +190,8 @@ namespace vuk {
 				}
 			}
 		}
+
+		return pis;
 	}
 
 	// determine rendergraph inputs and outputs, and resources that are neither
@@ -199,7 +206,7 @@ namespace vuk {
 			pif.bloom_outputs = {};
 			pif.bloom_resolved_inputs = {};
 
-			for (Resource& res : pif.pass.resources) {
+			for (Resource& res : pif.resources) {
 				Name in_name = resolve_alias(res.name);
 				Name out_name = resolve_alias(res.out_name);
 
@@ -215,7 +222,7 @@ namespace vuk {
 				}
 
 				if (is_write_access(res.ia) || is_acquire(res.ia) || is_release(res.ia) || res.ia == Access::eConsume || res.ia == Access::eConverge ||
-				    pif.pass.type == Pass::Type::eForcedAccess) {
+				    pif.pass->type == Pass::Type::eForcedAccess) {
 					assert(!poisoned_names.contains(in_name)); // we have poisoned this name because a write has already consumed it
 					pif.bloom_write_inputs |= hashed_in_name;
 					pif.write_input_names.emplace_back(in_name);
@@ -319,7 +326,7 @@ namespace vuk {
 				for (auto& o : p1.output_names) {
 					for (auto& i : p2.input_names) {
 						if (o == impl->resolve_alias(i)) {
-							ss << "\"" << p1.pass.name.c_str() << "\" -> \"" << p2.pass.name.c_str() << "\" [label=\"" << impl->resolve_alias(i).c_str() << "\"];\n";
+							ss << "\"" << p1.pass->name.c_str() << "\" -> \"" << p2.pass->name.c_str() << "\" [label=\"" << impl->resolve_alias(i).c_str() << "\"];\n";
 							// p2 is ordered after p1
 						}
 					}
@@ -327,7 +334,7 @@ namespace vuk {
 				for (auto& o : p1.input_names) {
 					for (auto& i : p2.write_input_names) {
 						if (impl->resolve_alias(o) == impl->resolve_alias(i)) {
-							ss << "\"" << p1.pass.name.c_str() << "\" -> \"" << p2.pass.name.c_str() << "\" [label=\"" << impl->resolve_alias(i).c_str() << "\"];\n";
+							ss << "\"" << p1.pass->name.c_str() << "\" -> \"" << p2.pass->name.c_str() << "\" [label=\"" << impl->resolve_alias(i).c_str() << "\"];\n";
 							// p2 is ordered after p1
 						}
 					}
@@ -403,11 +410,12 @@ namespace vuk {
 		impl->ia_inference_rules.clear();
 		impl->ordered_passes.clear();
 		impl->rpis.clear();
+		impl->rpis.shrink_to_fit();
 		impl->use_chains.clear();
 		impl->whole_names_consumed.clear();
+		impl->sg_name_counter.clear();
 
 		// inline all the subgraphs into us
-		impl->sg_name_counter.clear();
 		std::unordered_map<std::shared_ptr<RenderGraph>, std::pair<std::string, std::string>> sg_pref;
 		for (auto& rg : rgs) {
 			auto prefs = impl->compute_prefixes(*rg, true);
@@ -445,7 +453,7 @@ namespace vuk {
 
 
 		for (auto& passinfo : impl->computed_passes) {
-			for (auto& res : passinfo.pass.resources) {
+			for (auto& res : passinfo.resources) {
 				// for read or write, we add source to use chain
 				if (!res.name.is_invalid() && !res.out_name.is_invalid()) {
 					auto [iter, succ] = name_map.emplace(res.out_name, res.name);
@@ -479,7 +487,7 @@ namespace vuk {
 
 		// for now, just use what the passes requested as domain
 		for (auto& p : impl->computed_passes) {
-			p.domain = p.pass.execute_on;
+			p.domain = p.pass->execute_on;
 		}
 
 		decltype(impl->acquires) res_acqs;
@@ -496,26 +504,26 @@ namespace vuk {
 
 		// prepare converge passes
 		for (auto& passinfo : impl->computed_passes) {
-			if (passinfo.pass.type != Pass::Type::eConvergeExplicit) {
+			if (passinfo.pass->type != Pass::Type::eConvergeExplicit) {
 				continue;
 			}
 
-			auto post_diverge_name = passinfo.pass.resources.back().out_name;
+			auto post_diverge_name = passinfo.resources.back().out_name;
 
 			// TODO: does this really work or make sense for >1 undiv_names?
 			std::unordered_set<Name> undiv_names;
-			for (int i = 0; i < passinfo.pass.resources.size() - 1; i++) {
-				auto& res = passinfo.pass.resources[i];
+			for (int i = 0; i < passinfo.resources.size() - 1; i++) {
+				auto& res = passinfo.resources[i];
 				auto resolved_name = impl->resolve_name(res.name);
 				auto& undiv_name = impl->diverged_subchain_headers.at(resolved_name).first;
 				undiv_names.emplace(undiv_name);
 			}
 
-			passinfo.pass.resources.pop_back();
+			passinfo.resources.pop_back();
 
 			for (auto& name : undiv_names) {
-				passinfo.pass.resources.push_back(Resource{ name.append("__diverged"), Resource::Type::eImage, Access::eConverge, post_diverge_name });
-				name_map.emplace(passinfo.pass.resources.back().out_name, passinfo.pass.resources.back().name);
+				passinfo.resources.push_back(Resource{ name.append("__diverged"), Resource::Type::eImage, Access::eConverge, post_diverge_name });
+				name_map.emplace(passinfo.resources.back().out_name, passinfo.resources.back().name);
 			}
 		}
 
@@ -536,7 +544,7 @@ namespace vuk {
 		impl->use_chains.clear();
 		std::unordered_multimap<Name, Name> diverged_chains;
 		for (PassInfo& passinfo : impl->computed_passes) {
-			for (Resource& res : passinfo.pass.resources) {
+			for (Resource& res : passinfo.resources) {
 				Name resolved_name = impl->resolve_name(res.name);
 
 				bool skip = false;
@@ -718,7 +726,7 @@ namespace vuk {
 		for (auto& passinfo : graphics_passes) {
 			attachment_set atts{ *impl->arena_ };
 
-			for (auto& res : passinfo->pass.resources) {
+			for (auto& res : passinfo->resources) {
 				if (is_framebuffer_attachment(res))
 					atts.insert(res);
 			}
@@ -755,13 +763,13 @@ namespace vuk {
 						p->subpass = last_pass->subpass;
 						rpi.subpasses.back().passes.push_back(p);
 						// potentially upgrade to secondary cbufs
-						rpi.subpasses.back().use_secondary_command_buffers |= p->pass.use_secondary_command_buffers;
+						rpi.subpasses.back().use_secondary_command_buffers |= p->pass->use_secondary_command_buffers;
 						continue;
 					}
 				}
 				SubpassInfo si{ *impl->arena_ };
 				si.passes = { p };
-				si.use_secondary_command_buffers = p->pass.use_secondary_command_buffers;
+				si.use_secondary_command_buffers = p->pass->use_secondary_command_buffers;
 				p->subpass = ++subpass;
 				rpi.subpasses.push_back(si);
 			}
@@ -948,7 +956,7 @@ namespace vuk {
 	}
 
 	robin_hood::unordered_flat_set<Name> RGImpl::get_available_resources() {
-		build_io(passes);
+		auto pass_infos = build_io(passes);
 		// seed the available names with the names we imported from subgraphs
 		robin_hood::unordered_flat_set<Name> outputs = imported_names;
 		for (auto& [name, _] : bound_attachments) {
@@ -958,7 +966,7 @@ namespace vuk {
 			outputs.insert(name);
 		}
 
-		for (auto& pif : passes) {
+		for (auto& pif : pass_infos) {
 			for (auto& in : pif.input_names) {
 				outputs.erase(in);
 			}
@@ -1090,15 +1098,15 @@ namespace vuk {
 			for (int i = 0; i < (int)chain.size() - 1; i++) {
 				auto& left = chain[i];
 				auto& right = chain[i + 1];
-				if (left.original == eClear && left.pass->pass.type == Pass::Type::eClear) {
+				if (left.original == eClear && left.pass->pass->type == Pass::Type::eClear) {
 					// next use is as fb attachment
 					if ((i < chain.size() - 1) && is_framebuffer_attachment(to_use(right.original, right.use.domain))) {
 						auto& next_rpi = impl->rpis[right.pass->render_pass_index];
 						for (auto& rpi_att : next_rpi.attachments) {
 							if (rpi_att.attachment_info == &attachment_info) {
-								assert(left.pass->pass.arguments.size() == sizeof(Clear));
+								assert(left.pass->pass->arguments.size() == sizeof(Clear));
 								rpi_att.clear_value = Clear{};
-								std::memcpy(&rpi_att.clear_value, left.pass->pass.arguments.data(), sizeof(Clear));
+								std::memcpy(&rpi_att.clear_value, left.pass->pass->arguments.data(), sizeof(Clear));
 								break;
 							}
 						}
@@ -1501,7 +1509,7 @@ namespace vuk {
 				previous_sp = pass.subpass;
 			}
 
-			for (auto& res : pass.pass.resources) {
+			for (auto& res : pass.resources) {
 				if (!is_framebuffer_attachment(res))
 					continue;
 				if (res.ia == Access::eColorResolveWrite) // resolve attachment are added when
@@ -1527,8 +1535,8 @@ namespace vuk {
 				} else {
 					VkAttachmentReference rref{};
 					rref.attachment = VK_ATTACHMENT_UNUSED;
-					if (auto it = std::find_if(pass.pass.resolves.begin(), pass.pass.resolves.end(), [=](auto& p) { return p.first == res.name; });
-					    it != pass.pass.resolves.end()) {
+					if (auto it = std::find_if(pass.resolves.begin(), pass.resolves.end(), [=](auto& p) { return p.first == res.name; });
+					    it != pass.resolves.end()) {
 						// this a resolve src attachment
 						// get the dst attachment
 						auto dst_name = impl->resolve_name(it->second);

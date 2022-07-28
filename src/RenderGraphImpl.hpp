@@ -45,7 +45,7 @@ namespace vuk {
 #define INIT(x) x(decltype(x)::allocator_type(*arena_))
 	struct RGImpl {
 		std::unique_ptr<arena> arena_;
-		std::vector<PassInfo, short_alloc<PassInfo, 64>> passes;
+		std::vector<Pass, short_alloc<Pass, 64>> passes;
 
 		robin_hood::unordered_flat_set<Name> imported_names; // names coming from subgraphs
 		robin_hood::unordered_flat_map<Name, Name> aliases;  // maps resource names to resource names
@@ -68,7 +68,7 @@ namespace vuk {
 
 		std::unordered_multimap<Name, Release> releases;
 
-		RGImpl() : arena_(new arena(sizeof(PassInfo)*64)), INIT(passes) {}
+		RGImpl() : arena_(new arena(sizeof(Pass)*64)), INIT(passes) {}
 
 		Name resolve_alias(Name in) {
 			auto it = aliases.find(in);
@@ -80,7 +80,7 @@ namespace vuk {
 		};
 
 		// determine rendergraph inputs and outputs, and resources that are neither
-		void build_io(std::span<struct PassInfo> passes);
+		std::vector<PassInfo, short_alloc<PassInfo, 64>> build_io(std::span<Pass> passes);
 
 		robin_hood::unordered_flat_set<Name> get_available_resources();
 

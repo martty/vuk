@@ -178,8 +178,8 @@ namespace vuk {
 
 			bool use_secondary_command_buffers = rpass.subpasses[0].use_secondary_command_buffers;
 			bool is_single_pass = rpass.subpasses.size() == 1 && rpass.subpasses[0].passes.size() == 1;
-			if (is_single_pass && !rpass.subpasses[0].passes[0]->pass.name.is_invalid() && rpass.subpasses[0].passes[0]->pass.execute) {
-				ctx.debug.begin_region(cbuf, rpass.subpasses[0].passes[0]->pass.name);
+			if (is_single_pass && !rpass.subpasses[0].passes[0]->qualified_name.is_invalid() && rpass.subpasses[0].passes[0]->pass->execute) {
+				ctx.debug.begin_region(cbuf, rpass.subpasses[0].passes[0]->qualified_name);
 			}
 
 			for (auto dep : rpass.pre_barriers) {
@@ -232,14 +232,14 @@ namespace vuk {
 					// propagate signals onto SI
 					si.future_signals.insert(si.future_signals.end(), p->future_signals.begin(), p->future_signals.end());
 
-					if (p->pass.execute) {
+					if (p->pass->execute) {
 						cobuf.current_pass = p;
-						if (!p->pass.name.is_invalid() && !is_single_pass) {
-							ctx.debug.begin_region(cobuf.command_buffer, p->pass.name);
-							p->pass.execute(cobuf);
+						if (!p->qualified_name.is_invalid() && !is_single_pass) {
+							ctx.debug.begin_region(cobuf.command_buffer, p->qualified_name);
+							p->pass->execute(cobuf);
 							ctx.debug.end_region(cobuf.command_buffer);
 						} else {
-							p->pass.execute(cobuf);
+							p->pass->execute(cobuf);
 						}
 					}
 
@@ -269,7 +269,7 @@ namespace vuk {
 					assert(sp.post_mem_barriers.empty());
 				}
 			}
-			if (is_single_pass && !rpass.subpasses[0].passes[0]->pass.name.is_invalid() && rpass.subpasses[0].passes[0]->pass.execute) {
+			if (is_single_pass && !rpass.subpasses[0].passes[0]->qualified_name.is_invalid() && rpass.subpasses[0].passes[0]->pass->execute) {
 				ctx.debug.end_region(cbuf);
 			}
 			if (rpass.handle != VK_NULL_HANDLE) {
@@ -650,8 +650,8 @@ namespace vuk {
 				std::optional<uint32_t> base_layer;
 				std::optional<uint32_t> layer_count;
 				for (auto& sp : rp.subpasses) {
-					auto& pass = sp.passes[0]->pass; // all passes should be using the same fb, so we can pick the first
-					for (auto& res : pass.resources) {
+					auto& pi = *sp.passes[0]; // all passes should be using the same fb, so we can pick the first
+					for (auto& res : pi.resources) {
 						auto resolved_name = impl->resolve_name(res.name);
 						auto whole_name = impl->whole_name(resolved_name);
 						if (whole_name == bound.name) {

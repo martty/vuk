@@ -326,9 +326,14 @@ namespace vuk {
 	};
 
 	struct PassInfo {
-		PassInfo(arena&, Pass&&);
+		PassInfo(arena&, Pass&);
 
-		Pass pass;
+		Pass* pass;
+
+		Name qualified_name;
+
+		std::vector<Resource> resources;
+		std::vector<std::pair<Name, Name>> resolves; // src -> dst
 
 		size_t render_pass_index;
 		uint32_t subpass;
