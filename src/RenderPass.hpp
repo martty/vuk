@@ -4,6 +4,7 @@
 #include "CreateInfo.hpp"
 #include "vuk/Types.hpp"
 #include "vuk/vuk_fwd.hpp"
+#include "vuk/ShortAlloc.hpp"
 
 #include <optional>
 #include <vector>

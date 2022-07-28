@@ -399,21 +399,10 @@ namespace vuk {
 	}
 
 	void Compiler::compile(std::span<std::shared_ptr<RenderGraph>> rgs, const RenderGraphCompileOptions& compile_options) {
-		impl->computed_aliases.clear();
-		impl->computed_passes.clear();
-		impl->acquires.clear();
-		impl->releases.clear();
-		impl->assigned_names.clear();
-		impl->bound_attachments.clear();
-		impl->bound_buffers.clear();
-		impl->diverged_subchain_headers.clear();
-		impl->ia_inference_rules.clear();
-		impl->ordered_passes.clear();
-		impl->rpis.clear();
-		impl->rpis.shrink_to_fit();
-		impl->use_chains.clear();
-		impl->whole_names_consumed.clear();
-		impl->sg_name_counter.clear();
+		auto arena = impl->arena_.release();
+		delete impl;
+		arena->reset();
+		impl = new RGCImpl(arena);
 
 		// inline all the subgraphs into us
 		std::unordered_map<std::shared_ptr<RenderGraph>, std::pair<std::string, std::string>> sg_pref;
@@ -743,7 +732,6 @@ namespace vuk {
 		impl->num_compute_rpis = compute_passes.size();
 		impl->num_transfer_rpis = transfer_passes.size();
 
-		impl->rpis.clear();
 		// renderpasses are uniquely identified by their index from now on
 		// tell passes in which renderpass/subpass they will execute
 		impl->rpis.reserve(impl->num_graphics_rpis + impl->num_compute_rpis + impl->num_transfer_rpis);

@@ -332,8 +332,8 @@ namespace vuk {
 
 		Name qualified_name;
 
-		std::vector<Resource> resources;
-		std::vector<std::pair<Name, Name>> resolves; // src -> dst
+		std::vector<Resource, short_alloc<Resource, 64>> resources;
+		std::vector<std::pair<Name, Name>, short_alloc<std::pair<Name, Name>, 64>> resolves; // src -> dst
 
 		size_t render_pass_index;
 		uint32_t subpass;
@@ -341,8 +341,8 @@ namespace vuk {
 
 		Name prefix;
 
-		std::vector<std::pair<DomainFlagBits, PassInfo*>> waits;
-		std::vector<std::pair<DomainFlagBits, uint64_t>> absolute_waits;
+		std::vector<std::pair<DomainFlagBits, PassInfo*>, short_alloc<std::pair<DomainFlagBits, PassInfo*>, 16>> waits;
+		std::vector<std::pair<DomainFlagBits, uint64_t>, short_alloc<std::pair<DomainFlagBits, uint64_t>, 16>> absolute_waits;
 		bool is_waited_on = false;
 		uint32_t bloom_resolved_inputs = 0;
 		std::vector<Name, short_alloc<Name, 16>> input_names;
@@ -351,7 +351,7 @@ namespace vuk {
 		std::vector<Name, short_alloc<Name, 16>> output_names;
 		std::vector<Name, short_alloc<Name, 16>> write_input_names;
 
-		std::vector<FutureBase*> future_signals;
+		std::vector<FutureBase*, short_alloc<FutureBase*, 16>> future_signals;
 
 		bool is_head_pass = false;
 		bool is_tail_pass = false;
@@ -380,8 +380,20 @@ namespace vuk {
 		SubpassInfo(arena&);
 		bool use_secondary_command_buffers;
 		std::vector<PassInfo*, short_alloc<PassInfo*, 16>> passes;
-		std::vector<ImageBarrier> pre_barriers, post_barriers;
-		std::vector<MemoryBarrier> pre_mem_barriers, post_mem_barriers;
+		std::vector<ImageBarrier, short_alloc<ImageBarrier, 16>> pre_barriers, post_barriers;
+		std::vector<MemoryBarrier, short_alloc<MemoryBarrier, 16>> pre_mem_barriers, post_mem_barriers;
+	};
+
+	struct BufferInfo {
+		Name name;
+
+		QueueResourceUse initial;
+		QueueResourceUse final;
+
+		Buffer buffer;
+		FutureBase* attached_future = nullptr;
+
+		std::vector<void*> use_chains;
 	};
 
 	struct AttachmentInfo {

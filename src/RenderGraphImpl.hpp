@@ -19,9 +19,9 @@ namespace vuk {
 		bool framebufferless = false;
 		VkRenderPass handle = {};
 		VkFramebuffer framebuffer;
-		std::vector<ImageBarrier> pre_barriers, post_barriers;
-		std::vector<MemoryBarrier> pre_mem_barriers, post_mem_barriers;
-		std::vector<std::pair<DomainFlagBits, uint32_t>> waits;
+		std::vector<ImageBarrier, short_alloc<ImageBarrier, 64>> pre_barriers, post_barriers;
+		std::vector<MemoryBarrier, short_alloc<MemoryBarrier, 64>> pre_mem_barriers, post_mem_barriers;
+		std::vector<std::pair<DomainFlagBits, uint32_t>, short_alloc<std::pair<DomainFlagBits, uint32_t>, 64>> waits;
 	};
 
 	using IARule = std::function<void(const struct InferenceContext&, ImageAttachment&)>;
@@ -68,7 +68,7 @@ namespace vuk {
 
 		std::unordered_multimap<Name, Release> releases;
 
-		RGImpl() : arena_(new arena(sizeof(Pass)*64)), INIT(passes) {}
+		RGImpl() : arena_(new arena(sizeof(Pass) * 64)), INIT(passes) {}
 
 		Name resolve_alias(Name in) {
 			auto it = aliases.find(in);
@@ -90,6 +90,7 @@ namespace vuk {
 
 	struct RGCImpl {
 		RGCImpl() : arena_(new arena(4 * 1024 * 1024)), INIT(computed_passes), INIT(ordered_passes), INIT(rpis) {}
+		RGCImpl(arena* a) : arena_(a), INIT(computed_passes), INIT(ordered_passes), INIT(rpis) {}
 		std::unique_ptr<arena> arena_;
 
 		std::vector<PassInfo, short_alloc<PassInfo, 64>> computed_passes;

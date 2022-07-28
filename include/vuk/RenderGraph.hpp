@@ -55,18 +55,6 @@ namespace vuk {
 		};
 	} // namespace detail
 
-	struct BufferInfo {
-		Name name;
-
-		QueueResourceUse initial;
-		QueueResourceUse final;
-
-		Buffer buffer;
-		FutureBase* attached_future = nullptr;
-
-		std::vector<void*> use_chains;
-	};
-
 	struct Resource {
 		Name name;
 		enum class Type { eBuffer, eImage } type;

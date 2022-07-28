@@ -37,15 +37,32 @@ namespace vuk {
 
 #define INIT2(x) x(decltype(x)::allocator_type(arena_))
 
-	RenderPassInfo::RenderPassInfo(arena& arena_) : INIT2(subpasses), INIT2(attachments) {}
+	RenderPassInfo::RenderPassInfo(arena& arena_) :
+	    INIT2(subpasses),
+	    INIT2(attachments),
+	    INIT2(pre_barriers),
+	    INIT2(post_barriers),
+	    INIT2(pre_mem_barriers),
+	    INIT2(post_mem_barriers),
+	    INIT2(waits) {}
 
 	PassInfo::PassInfo(arena& arena_, Pass& p) :
 	    pass(&p),
+	    INIT2(resources),
+	    INIT2(resolves),
+	    INIT2(waits),
+	    INIT2(absolute_waits),
 	    INIT2(input_names),
 	    INIT2(output_names),
-	    INIT2(write_input_names) {}
+	    INIT2(write_input_names),
+	    INIT2(future_signals) {}
 
-	SubpassInfo::SubpassInfo(arena& arena_) : INIT2(passes) {}
+	SubpassInfo::SubpassInfo(arena& arena_) :
+	    INIT2(passes),
+	    INIT2(pre_barriers),
+	    INIT2(post_barriers),
+	    INIT2(pre_mem_barriers),
+	    INIT2(post_mem_barriers) {}
 
 #undef INIT2
 
