@@ -144,7 +144,7 @@ void vuk::ExampleRunner::render() {
 				}
 				// hacky way to reference image in the subgraph
 				// TODO: a proper way to do this?
-				auto si = vuk::make_sampled_image(rg->name.append("::").append(attachment_name_out), imgui_data.font_sci);
+				auto si = vuk::make_sampled_image(rg->name.append("::").append(attachment_name_out.to_sv()), imgui_data.font_sci);
 				ImGui::Image(&*sampled_images.emplace(si), ImGui::GetContentRegionAvail());
 				ImGui::End();
 				i++;

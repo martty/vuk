@@ -208,7 +208,7 @@ namespace {
 		      // we split the cubemap into faces
 		      for (uint32_t i = 0; i < 6; i++) {
 			      cube_src->diverge_image(
-			          "11_cube", vuk::Subrange::Image{ .base_layer = i, .layer_count = 1 }, vuk::Name("11_cube_face_").append(vuk::Name(std::to_string(i))));
+			          "11_cube", vuk::Subrange::Image{ .base_layer = i, .layer_count = 1 }, vuk::Name("11_cube_face_").append(std::to_string(i)));
 		      }
 
 		      std::shared_ptr<vuk::RenderGraph> cube_refl = std::make_shared<vuk::RenderGraph>("scene");
@@ -265,7 +265,7 @@ namespace {
 				                     }
 			                     } });
 
-			      rg->attach_in("11_cube_face", vuk::Future{ cube_src, vuk::Name("11_cube_face_").append(vuk::Name(std::to_string(i))) });
+			      rg->attach_in("11_cube_face", vuk::Future{ cube_src, vuk::Name("11_cube_face_").append(std::to_string(i)) });
 			      rg->inference_rule("11_position+", vuk::same_2D_extent_as("11_cube_face"));
 			      // The shading pass for the deferred rendering
 			      rg->add_pass({ .name = "single_face_resolve",
@@ -296,7 +296,7 @@ namespace {
 				                         .draw(3, 1, 0, 0);
 			                     } });
 			      vuk::Future lit_fut = { std::move(rg), "11_cube_face+" };
-			      auto cube_face_name = vuk::Name("11_deferred_face_").append(vuk::Name(std::to_string(i)));
+			      auto cube_face_name = vuk::Name("11_deferred_face_").append(std::to_string(i));
 			      cube_face_names.emplace_back(cube_face_name);
 			      // we attach the cubemap face into the final rendegraph
 			      cube_refl->attach_in(cube_face_name, std::move(lit_fut));

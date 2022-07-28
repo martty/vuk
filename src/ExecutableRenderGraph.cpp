@@ -787,12 +787,12 @@ namespace vuk {
 	}
 
 	Name ExecutableRenderGraph::resolve_name(Name name, PassInfo* pass_info) const noexcept {
-		auto qualified_name = pass_info->prefix.is_invalid() ? name : pass_info->prefix.append(name);
+		auto qualified_name = pass_info->prefix.is_invalid() ? name : pass_info->prefix.append(name.to_sv());
 		return impl->resolve_name(qualified_name);
 	}
 
 	const ImageAttachment& InferenceContext::get_image_attachment(Name name) const {
-		auto fqname = prefix.append(name);
+		auto fqname = prefix.append(name.to_sv());
 		auto resolved_name = erg->impl->resolve_name(fqname);
 		auto whole_name = erg->impl->whole_name(resolved_name);
 		return erg->impl->bound_attachments.at(whole_name).attachment;

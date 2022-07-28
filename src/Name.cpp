@@ -90,11 +90,11 @@ namespace vuk {
 		return id == &invalid_value[0];
 	}
 
-	Name Name::append(Name other) const noexcept {
+	Name Name::append(std::string_view other) const noexcept {
 		auto ourlen = strlen(id);
-		auto theirlen = strlen(other.id);
+		auto theirlen = other.size();
 		auto hash = hash::fnv1a::hash(id, (uint32_t)ourlen, hash::fnv1a::default_offset_basis);
-		hash = hash::fnv1a::hash(other.id, (uint32_t)theirlen, hash);
+		hash = hash::fnv1a::hash(other.data(), (uint32_t)theirlen, hash);
 
 		// speculative
 		{
@@ -109,7 +109,7 @@ namespace vuk {
 		std::string app;
 		app.reserve(ourlen + theirlen);
 		app.append(id);
-		app.append(other.id);
+		app.append(other);
 		return Name(app);
 	}
 } // namespace vuk

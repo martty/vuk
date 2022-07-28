@@ -24,7 +24,7 @@ namespace vuk {
 			return id;
 		}
 
-		Name append(Name other) const noexcept;
+		Name append(std::string_view other) const noexcept;
 
 		bool is_invalid() const noexcept;
 

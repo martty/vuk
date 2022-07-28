@@ -100,15 +100,15 @@ namespace vuk {
 		rgp->attach_in("_src", std::move(image));
 		Name mip = Name("_mip_");
 		for (uint32_t miplevel = base_mip; miplevel < (base_mip + num_mips); miplevel++) {
-			rgp->diverge_image("_src", { .base_level = miplevel, .level_count = 1 }, mip.append(Name(std::to_string(miplevel))));
+			rgp->diverge_image("_src", { .base_level = miplevel, .level_count = 1 }, mip.append(std::to_string(miplevel)));
 		}
 
 		for (uint32_t miplevel = base_mip + 1; miplevel < (base_mip + num_mips); miplevel++) {
 			uint32_t dmiplevel = miplevel - base_mip;
 
-			Name mip_src_name = mip.append(Name(std::to_string(miplevel - 1)));
-			Name mip_dst = Name(std::to_string(miplevel));
-			Name mip_dst_name = mip.append(Name(std::to_string(miplevel)));
+			Name mip_src_name = mip.append(std::to_string(miplevel - 1));
+			auto mip_dst = std::to_string(miplevel);
+			Name mip_dst_name = mip.append(std::to_string(miplevel));
 			if (miplevel != base_mip + 1) {
 				mip_src_name = mip_src_name.append("+");
 			}

@@ -54,57 +54,57 @@ namespace vuk {
 		Name joiner = subgraph_name.is_invalid() ? Name("") : subgraph_name.append("::");
 
 		for (auto [new_name, old_name] : other.impl->aliases) {
-			computed_aliases.emplace(joiner.append(new_name), old_name);
+			computed_aliases.emplace(joiner.append(new_name.to_sv()), old_name);
 		}
 
 		// TODO: this code is written weird because of wonky allocators
 		for (auto& p : other.impl->passes) {
 			PassInfo pi{ *arena_, p };
 			pi.prefix = joiner;
-			pi.qualified_name = joiner.append(p.name);
+			pi.qualified_name = joiner.append(p.name.to_sv());
 			for (auto r : p.resources) {
 				if (!r.name.is_invalid()) {
-					r.name = resolve_alias_rec(joiner.append(r.name));
+					r.name = resolve_alias_rec(joiner.append(r.name.to_sv()));
 				}
-				r.out_name = r.out_name.is_invalid() ? Name{} : resolve_alias_rec(joiner.append(r.out_name));
+				r.out_name = r.out_name.is_invalid() ? Name{} : resolve_alias_rec(joiner.append(r.out_name.to_sv()));
 				pi.resources.emplace_back(std::move(r));
 			}
 
 			for (auto& [n1, n2] : p.resolves) {
-				pi.resolves.emplace_back(joiner.append(n1), joiner.append(n2));
+				pi.resolves.emplace_back(joiner.append(n1.to_sv()), joiner.append(n2.to_sv()));
 			}
 			computed_passes.emplace_back(std::move(pi));
 		}
 
 		for (auto [name, att] : other.impl->bound_attachments) {
-			att.name = joiner.append(name);
-			bound_attachments.emplace(joiner.append(name), std::move(att));
+			att.name = joiner.append(name.to_sv());
+			bound_attachments.emplace(joiner.append(name.to_sv()), std::move(att));
 		}
 		for (auto [name, buf] : other.impl->bound_buffers) {
-			buf.name = joiner.append(name);
-			bound_buffers.emplace(joiner.append(name), std::move(buf));
+			buf.name = joiner.append(name.to_sv());
+			bound_buffers.emplace(joiner.append(name.to_sv()), std::move(buf));
 		}
 
 		for (auto [name, iainf] : other.impl->ia_inference_rules) {
-			iainf.prefix = joiner.append(iainf.prefix);
-			ia_inference_rules.emplace(joiner.append(name), iainf);
+			iainf.prefix = joiner.append(iainf.prefix.to_sv());
+			ia_inference_rules.emplace(joiner.append(name.to_sv()), iainf);
 		}
 
 		for (auto& [name, v] : other.impl->acquires) {
-			acquires.emplace(joiner.append(name), v);
+			acquires.emplace(joiner.append(name.to_sv()), v);
 		}
 
 		for (auto& [name, v] : other.impl->releases) {
-			releases.emplace(joiner.append(name), v);
+			releases.emplace(joiner.append(name.to_sv()), v);
 		}
 
 		for (auto [name, v] : other.impl->diverged_subchain_headers) {
-			v.first = joiner.append(v.first);
-			diverged_subchain_headers.emplace(joiner.append(name), v);
+			v.first = joiner.append(v.first.to_sv());
+			diverged_subchain_headers.emplace(joiner.append(name.to_sv()), v);
 		}
 
 		for (auto& name : other.impl->whole_names_consumed) {
-			whole_names_consumed.emplace(joiner.append(name));
+			whole_names_consumed.emplace(joiner.append(name.to_sv()));
 		}
 	}
 
@@ -356,7 +356,7 @@ namespace vuk {
 				auto prefixes = compute_prefixes(*sg_ptr, true);
 				sg_prefixes.merge(prefixes);
 				if (auto& counter = ++sg_name_counter[sg_name]; counter > 1) {
-					sg_name = sg_name.append(Name(std::string("_") + std::to_string(counter - 1)));
+					sg_name = sg_name.append(std::string("_") + std::to_string(counter - 1));
 				}
 				sg_prefixes.emplace(sg_ptr, std::pair{ std::string(sg_name.to_sv()), std::string(sg_name.to_sv()) });
 			}
@@ -378,8 +378,8 @@ namespace vuk {
 				auto& prefix = sg_prefixes.at(sg_ptr);
 				assert(sg_ptr->impl);
 				for (auto& [name_in_parent, name_in_sg] : sg_info.exported_names) {
-					auto old_name = Name(prefix.second).append("::").append(name_in_sg);
-					auto new_name = our_prefix.empty() ? name_in_parent : Name(our_prefix).append("::").append(name_in_parent);
+					auto old_name = Name(prefix.second).append("::").append(name_in_sg.to_sv());
+					auto new_name = our_prefix.empty() ? name_in_parent : Name(our_prefix).append("::").append(name_in_parent.to_sv());
 					if (name_in_parent != old_name) {
 						computed_aliases[new_name] = old_name;
 					}
@@ -410,7 +410,7 @@ namespace vuk {
 			auto prefs = impl->compute_prefixes(*rg, true);
 			auto rg_name = rg->name;
 			if (auto& counter = ++impl->sg_name_counter[rg_name]; counter > 1) {
-				rg_name = rg_name.append(Name(std::string("_") + std::to_string(counter - 1)));
+				rg_name = rg_name.append(std::string("_") + std::to_string(counter - 1));
 			}
 			prefs.emplace(rg, std::pair{ std::string{}, std::string{ rg_name.c_str() } });
 			sg_pref.merge(prefs);
@@ -886,7 +886,7 @@ namespace vuk {
 	}
 
 	void RenderGraph::attach_and_clear_image(Name name, ImageAttachment att, Clear clear_value, Access initial_acc, Access final_acc) {
-		Name tmp_name = name.append(get_temporary_name());
+		Name tmp_name = name.append(get_temporary_name().to_sv());
 		attach_image(tmp_name, att, initial_acc, final_acc);
 		clear_image(tmp_name, name, clear_value);
 	}
@@ -920,7 +920,7 @@ namespace vuk {
 				fimg.rg->impl->releases.erase(fimg.get_bound_name());
 				impl->subgraphs[fimg.rg].count++;
 			} else {
-				impl->releases.erase(sg_name.append("::").append(fimg.get_bound_name()));
+				impl->releases.erase(sg_name.append("::").append(fimg.get_bound_name().to_sv()));
 			}
 			impl->subgraphs[fimg.rg].exported_names.emplace(name, fimg.get_bound_name());
 			impl->imported_names.emplace(name);
@@ -990,7 +990,7 @@ namespace vuk {
 	}
 
 	Name RenderGraph::get_temporary_name() {
-		return impl->temporary_name.append(Name(std::to_string(impl->temporary_name_counter++)));
+		return impl->temporary_name.append(std::to_string(impl->temporary_name_counter++));
 	}
 
 	IARule same_extent_as(Name n) {
