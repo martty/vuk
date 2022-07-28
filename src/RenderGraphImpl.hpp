@@ -158,9 +158,9 @@ namespace vuk {
 		// determine rendergraph inputs and outputs, and resources that are neither
 		void build_io(std::span<struct PassInfo> passes);
 
-		std::unordered_map<std::shared_ptr<RenderGraph>, std::pair<std::string, std::string>> compute_prefixes(const RenderGraph& rg, bool do_prefix);
+		std::unordered_map<std::shared_ptr<RenderGraph>, std::string> compute_prefixes(const RenderGraph& rg, bool do_prefix);
 		void inline_subgraphs(const std::shared_ptr<RenderGraph>& rg,
-		                      const std::unordered_map<std::shared_ptr<RenderGraph>, std::pair<std::string, std::string>>& prefixes,
+		                      const std::unordered_map<std::shared_ptr<RenderGraph>, std::string>& prefixes,
 		                      std::unordered_set<std::shared_ptr<RenderGraph>>& consumed_rgs);
 
 		/// @brief Check if this rendergraph is valid.

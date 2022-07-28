@@ -58,6 +58,7 @@ namespace vuk {
 		}
 
 		// TODO: this code is written weird because of wonky allocators
+		computed_passes.reserve(computed_passes.size() + other.impl->passes.size());
 		for (auto& p : other.impl->passes) {
 			PassInfo pi{ *arena_, p };
 			pi.prefix = joiner;
@@ -346,8 +347,8 @@ namespace vuk {
 		return ss.str();
 	}
 
-	std::unordered_map<std::shared_ptr<RenderGraph>, std::pair<std::string, std::string>> RGCImpl::compute_prefixes(const RenderGraph& rg, bool do_prefix) {
-		std::unordered_map<std::shared_ptr<RenderGraph>, std::pair<std::string, std::string>> sg_prefixes;
+	std::unordered_map<std::shared_ptr<RenderGraph>, std::string> RGCImpl::compute_prefixes(const RenderGraph& rg, bool do_prefix) {
+		std::unordered_map<std::shared_ptr<RenderGraph>, std::string> sg_prefixes;
 		for (auto& [sg_ptr, sg_info] : rg.impl->subgraphs) {
 			if (sg_info.count > 0) {
 				Name sg_name = sg_ptr->name;
@@ -358,27 +359,27 @@ namespace vuk {
 				if (auto& counter = ++sg_name_counter[sg_name]; counter > 1) {
 					sg_name = sg_name.append(std::string("_") + std::to_string(counter - 1));
 				}
-				sg_prefixes.emplace(sg_ptr, std::pair{ std::string(sg_name.to_sv()), std::string(sg_name.to_sv()) });
+				sg_prefixes.emplace(sg_ptr, std::string(sg_name.to_sv()));
 			}
 		}
 		if (do_prefix && sg_prefixes.size() > 0) {
 			for (auto& [k, v] : sg_prefixes) {
-				v.second = std::string(rg.name.to_sv()) + "::" + v.second;
+				v = std::string(rg.name.to_sv()) + "::" + v;
 			}
 		}
 		return sg_prefixes;
 	}
 
 	void RGCImpl::inline_subgraphs(const std::shared_ptr<RenderGraph>& rg,
-	                               const std::unordered_map<std::shared_ptr<RenderGraph>, std::pair<std::string, std::string>>& sg_prefixes,
+	                               const std::unordered_map<std::shared_ptr<RenderGraph>, std::string>& sg_prefixes,
 	                               std::unordered_set<std::shared_ptr<RenderGraph>>& consumed_rgs) {
-		auto our_prefix = sg_prefixes.at(rg).second;
+		auto our_prefix = sg_prefixes.at(rg);
 		for (auto& [sg_ptr, sg_info] : rg->impl->subgraphs) {
 			if (sg_info.count > 0) {
 				auto& prefix = sg_prefixes.at(sg_ptr);
 				assert(sg_ptr->impl);
 				for (auto& [name_in_parent, name_in_sg] : sg_info.exported_names) {
-					auto old_name = Name(prefix.second).append("::").append(name_in_sg.to_sv());
+					auto old_name = Name(prefix).append("::").append(name_in_sg.to_sv());
 					auto new_name = our_prefix.empty() ? name_in_parent : Name(our_prefix).append("::").append(name_in_parent.to_sv());
 					if (name_in_parent != old_name) {
 						computed_aliases[new_name] = old_name;
@@ -386,7 +387,7 @@ namespace vuk {
 				}
 				if (!consumed_rgs.contains(sg_ptr)) {
 					inline_subgraphs(sg_ptr, sg_prefixes, consumed_rgs);
-					append(Name(prefix.second), *sg_ptr);
+					append(Name(prefix), *sg_ptr);
 					consumed_rgs.emplace(sg_ptr);
 				}
 			}
@@ -405,21 +406,21 @@ namespace vuk {
 		impl = new RGCImpl(arena);
 
 		// inline all the subgraphs into us
-		std::unordered_map<std::shared_ptr<RenderGraph>, std::pair<std::string, std::string>> sg_pref;
+		std::unordered_map<std::shared_ptr<RenderGraph>, std::string> sg_pref;
 		for (auto& rg : rgs) {
 			auto prefs = impl->compute_prefixes(*rg, true);
 			auto rg_name = rg->name;
 			if (auto& counter = ++impl->sg_name_counter[rg_name]; counter > 1) {
 				rg_name = rg_name.append(std::string("_") + std::to_string(counter - 1));
 			}
-			prefs.emplace(rg, std::pair{ std::string{}, std::string{ rg_name.c_str() } });
+			prefs.emplace(rg, std::string{ rg_name.c_str() });
 			sg_pref.merge(prefs);
 			std::unordered_set<std::shared_ptr<RenderGraph>> consumed_rgs = {};
 			impl->inline_subgraphs(rg, sg_pref, consumed_rgs);
 		}
 
 		for (auto& rg : rgs) {
-			impl->append(Name{ sg_pref.at(rg).second.c_str() }, *rg);
+			impl->append(Name{ sg_pref.at(rg).c_str() }, *rg);
 		}
 
 		// gather name alias info now - once we partition, we might encounter unresolved aliases
