@@ -52,16 +52,21 @@ namespace vuk {
 
 	void RGCImpl::append(Name subgraph_name, const RenderGraph& other) {
 		Name joiner = subgraph_name.is_invalid() ? Name("") : subgraph_name.append("::");
+
+		for (auto [new_name, old_name] : other.impl->aliases) {
+			computed_aliases.emplace(joiner.append(new_name), old_name);
+		}
+
 		// TODO: this code is written weird because of wonky allocators
 		for (auto& p : other.impl->passes) {
-			PassInfo pi{*arena_, p};
+			PassInfo pi{ *arena_, p };
 			pi.prefix = joiner;
 			pi.qualified_name = joiner.append(p.name);
 			for (auto r : p.resources) {
 				if (!r.name.is_invalid()) {
-					r.name = joiner.append(r.name);
+					r.name = resolve_alias_rec(joiner.append(r.name));
 				}
-				r.out_name = r.out_name.is_invalid() ? Name{} : joiner.append(r.out_name);
+				r.out_name = r.out_name.is_invalid() ? Name{} : resolve_alias_rec(joiner.append(r.out_name));
 				pi.resources.emplace_back(std::move(r));
 			}
 
@@ -71,22 +76,18 @@ namespace vuk {
 			computed_passes.emplace_back(std::move(pi));
 		}
 
-		for (auto& [name, att] : other.impl->bound_attachments) {
+		for (auto [name, att] : other.impl->bound_attachments) {
 			att.name = joiner.append(name);
-			bound_attachments.emplace(joiner.append(name), att);
+			bound_attachments.emplace(joiner.append(name), std::move(att));
 		}
-		for (auto& [name, buf] : other.impl->bound_buffers) {
+		for (auto [name, buf] : other.impl->bound_buffers) {
 			buf.name = joiner.append(name);
-			bound_buffers.emplace(joiner.append(name), buf);
+			bound_buffers.emplace(joiner.append(name), std::move(buf));
 		}
 
 		for (auto [name, iainf] : other.impl->ia_inference_rules) {
 			iainf.prefix = joiner.append(iainf.prefix);
 			ia_inference_rules.emplace(joiner.append(name), iainf);
-		}
-
-		for (auto [new_name, old_name] : other.impl->aliases) {
-			aliases.emplace(joiner.append(new_name), old_name);
 		}
 
 		for (auto& [name, v] : other.impl->acquires) {
@@ -207,8 +208,8 @@ namespace vuk {
 			pif.bloom_resolved_inputs = {};
 
 			for (Resource& res : pif.resources) {
-				Name in_name = resolve_alias(res.name);
-				Name out_name = resolve_alias(res.out_name);
+				Name in_name = res.name; // these names have been alias-resolved already
+				Name out_name = res.out_name;
 
 				auto hashed_in_name = ::hash::fnv1a::hash(in_name.to_sv().data(), res.name.to_sv().size(), hash::fnv1a::default_offset_basis);
 				auto hashed_out_name = ::hash::fnv1a::hash(out_name.to_sv().data(), res.out_name.to_sv().size(), hash::fnv1a::default_offset_basis);
@@ -253,7 +254,7 @@ namespace vuk {
 				if ((p1.bloom_outputs & p2.bloom_resolved_inputs) != 0) {
 					for (auto& o : p1.output_names) {
 						for (auto& i : p2.input_names) {
-							if (o == resolve_alias(i)) {
+							if (o == i) {
 								return true; // p2 is ordered after p1
 							}
 						}
@@ -264,7 +265,7 @@ namespace vuk {
 				if ((p1.bloom_resolved_inputs & p2.bloom_write_inputs) != 0) {
 					for (auto& o : p1.input_names) {
 						for (auto& i : p2.write_input_names) {
-							if (resolve_alias(o) == resolve_alias(i)) {
+							if (o == i) {
 								return true; // p2 is ordered after p1
 							}
 						}
@@ -376,17 +377,17 @@ namespace vuk {
 			if (sg_info.count > 0) {
 				auto& prefix = sg_prefixes.at(sg_ptr);
 				assert(sg_ptr->impl);
-				if (!consumed_rgs.contains(sg_ptr)) {
-					inline_subgraphs(sg_ptr, sg_prefixes, consumed_rgs);
-					append(Name(prefix.second), *sg_ptr);
-					consumed_rgs.emplace(sg_ptr);
-				}
 				for (auto& [name_in_parent, name_in_sg] : sg_info.exported_names) {
 					auto old_name = Name(prefix.second).append("::").append(name_in_sg);
 					auto new_name = our_prefix.empty() ? name_in_parent : Name(our_prefix).append("::").append(name_in_parent);
 					if (name_in_parent != old_name) {
 						computed_aliases[new_name] = old_name;
 					}
+				}
+				if (!consumed_rgs.contains(sg_ptr)) {
+					inline_subgraphs(sg_ptr, sg_prefixes, consumed_rgs);
+					append(Name(prefix.second), *sg_ptr);
+					consumed_rgs.emplace(sg_ptr);
 				}
 			}
 		}
@@ -400,7 +401,6 @@ namespace vuk {
 	void Compiler::compile(std::span<std::shared_ptr<RenderGraph>> rgs, const RenderGraphCompileOptions& compile_options) {
 		impl->computed_aliases.clear();
 		impl->computed_passes.clear();
-		impl->aliases.clear();
 		impl->acquires.clear();
 		impl->releases.clear();
 		impl->assigned_names.clear();
@@ -450,7 +450,6 @@ namespace vuk {
 			assert(!res.is_invalid());
 			impl->computed_aliases.emplace(k, res);
 		}
-
 
 		for (auto& passinfo : impl->computed_passes) {
 			for (auto& res : passinfo.resources) {
@@ -1535,8 +1534,7 @@ namespace vuk {
 				} else {
 					VkAttachmentReference rref{};
 					rref.attachment = VK_ATTACHMENT_UNUSED;
-					if (auto it = std::find_if(pass.resolves.begin(), pass.resolves.end(), [=](auto& p) { return p.first == res.name; });
-					    it != pass.resolves.end()) {
+					if (auto it = std::find_if(pass.resolves.begin(), pass.resolves.end(), [=](auto& p) { return p.first == res.name; }); it != pass.resolves.end()) {
 						// this a resolve src attachment
 						// get the dst attachment
 						auto dst_name = impl->resolve_name(it->second);

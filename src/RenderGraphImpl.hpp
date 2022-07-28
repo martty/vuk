@@ -94,7 +94,6 @@ namespace vuk {
 
 		std::vector<PassInfo, short_alloc<PassInfo, 64>> computed_passes;
 		std::vector<PassInfo*, short_alloc<PassInfo*, 64>> ordered_passes;
-		robin_hood::unordered_flat_map<Name, Name> aliases;          // maps resource names to resource names
 		robin_hood::unordered_flat_map<Name, Name> computed_aliases; // maps resource names to resource names
 		robin_hood::unordered_flat_map<Name, Name> assigned_names;   // maps resource names to attachment names
 		robin_hood::unordered_flat_set<Name> whole_names_consumed;
@@ -136,6 +135,15 @@ namespace vuk {
 				return in;
 			} else {
 				return it->second;
+			}
+		};
+
+		Name resolve_alias_rec(Name in) {
+			auto it = computed_aliases.find(in);
+			if (it == computed_aliases.end()) {
+				return in;
+			} else {
+				return resolve_alias_rec(it->second);
 			}
 		};
 
