@@ -17,6 +17,17 @@
 #include <string_view>
 
 namespace vuk {
+	template<class T>
+	struct FN {
+		static T create_fn(void* ctx, const create_info_t<T>& ci) {
+			return reinterpret_cast<Context*>(ctx)->create(ci);
+		}
+
+		static void destroy_fn(void* ctx, const T& v) {
+			return reinterpret_cast<Context*>(ctx)->destroy(v);
+		}
+	};
+
 	struct ContextImpl {
 		LegacyGPUAllocator legacy_gpu_allocator;
 		VkDevice device;
@@ -90,17 +101,17 @@ namespace vuk {
 		                         ctx.compute_queue_family_index,
 		                         ctx.transfer_queue_family_index),
 		    device(ctx.device),
-		    pipelinebase_cache(ctx),
-		    pipeline_cache(ctx),
-		    compute_pipeline_cache(ctx),
-		    ray_tracing_pipeline_cache(ctx),
-		    renderpass_cache(ctx),
-		    transient_images(ctx),
-		    pool_cache(ctx),
-		    sampler_cache(ctx),
-		    shader_modules(ctx),
-		    descriptor_set_layouts(ctx),
-		    pipeline_layouts(ctx),
+		    pipelinebase_cache(&ctx, &FN<struct PipelineBaseInfo>::create_fn, &FN<struct PipelineBaseInfo>::destroy_fn),
+		    pipeline_cache(&ctx, &FN<struct PipelineInfo>::create_fn, &FN<struct PipelineInfo>::destroy_fn),
+		    compute_pipeline_cache(&ctx, &FN<struct ComputePipelineInfo>::create_fn, &FN<struct ComputePipelineInfo>::destroy_fn),
+		    ray_tracing_pipeline_cache(&ctx, &FN<struct RayTracingPipelineInfo>::create_fn, &FN<struct RayTracingPipelineInfo>::destroy_fn),
+		    renderpass_cache(&ctx, &FN<VkRenderPass>::create_fn, &FN<VkRenderPass>::destroy_fn),
+		    transient_images(&ctx, &FN<struct RGImage>::create_fn, &FN<struct RGImage>::destroy_fn),
+		    pool_cache(&ctx, &FN<struct DescriptorPool>::create_fn, &FN<struct DescriptorPool>::destroy_fn),
+		    sampler_cache(&ctx, &FN<Sampler>::create_fn, &FN<Sampler>::destroy_fn),
+		    shader_modules(&ctx, &FN<struct ShaderModule>::create_fn, &FN<struct ShaderModule>::destroy_fn),
+		    descriptor_set_layouts(&ctx, &FN<struct DescriptorSetLayoutAllocInfo>::create_fn, &FN<struct DescriptorSetLayoutAllocInfo>::destroy_fn),
+		    pipeline_layouts(&ctx, &FN<VkPipelineLayout>::create_fn, &FN<VkPipelineLayout>::destroy_fn),
 		    device_vk_resource(ctx, legacy_gpu_allocator) {
 			vkGetPhysicalDeviceProperties(ctx.physical_device, &physical_device_properties);
 		}

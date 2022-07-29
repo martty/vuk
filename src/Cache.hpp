@@ -164,6 +164,15 @@ namespace std {
 	};
 
 	template<>
+	struct hash<std::pair<vuk::ImageCreateInfo, uint32_t>> {
+		size_t operator()(std::pair<vuk::ImageCreateInfo, uint32_t> const& x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, x.first, x.second);
+			return h;
+		}
+	};
+
+	template<>
 	struct hash<vuk::ImageSubresourceRange> {
 		size_t operator()(vuk::ImageSubresourceRange const& x) const noexcept {
 			size_t h = 0;
@@ -226,7 +235,10 @@ namespace vuk {
 		CacheImpl<T>* impl = nullptr;
 
 	public:
-		Cache(Context& ctx);
+		using create_fn = T (*)(void*, const create_info_t<T>&);
+		using destroy_fn = void (*)(void*, const T&);
+
+		Cache(void* allocator, create_fn create, destroy_fn destroy);
 		~Cache();
 
 		struct LRUEntry {
@@ -245,7 +257,11 @@ namespace vuk {
 		T& acquire(const create_info_t<T>& ci);
 		T& acquire(const create_info_t<T>& ci, uint64_t current_frame);
 		void collect(uint64_t current_frame, size_t threshold);
+		void clear();
 
-		Context* ctx;
+		create_fn create;
+		destroy_fn destroy;
+
+		void* allocator;
 	};
 } // namespace vuk

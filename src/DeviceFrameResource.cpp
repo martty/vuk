@@ -1,14 +1,17 @@
 #include "vuk/resources/DeviceFrameResource.hpp"
 #include "../src/LegacyGPUAllocator.hpp"
-#include "vuk/Context.hpp"
-#include "vuk/Query.hpp"
-#include "vuk/Descriptor.hpp"
+#include "Cache.hpp"
 #include "RenderPass.hpp"
+#include "vuk/Context.hpp"
+#include "vuk/Descriptor.hpp"
+#include "vuk/Query.hpp"
 
 #include <atomic>
 
 namespace vuk {
 	struct DeviceSuperFrameResourceImpl {
+		DeviceSuperFrameResource* sfr;
+
 		std::mutex new_frame_mutex;
 		std::atomic<uint64_t> frame_counter;
 		std::atomic<uint64_t> local_frame;
@@ -19,7 +22,31 @@ namespace vuk {
 		std::mutex command_pool_mutex;
 		std::array<std::vector<VkCommandPool>, 3> command_pools;
 
-		DeviceSuperFrameResourceImpl(DeviceSuperFrameResource& sfr, size_t frames_in_flight) {
+		Cache<ImageWithIdentity> image_cache;
+		Cache<ImageView> image_view_cache;
+
+		DeviceSuperFrameResourceImpl(DeviceSuperFrameResource& sfr, size_t frames_in_flight) :
+		    sfr(&sfr),
+		    image_cache(
+		        this,
+		        +[](void* allocator, const std::pair<ImageCreateInfo, uint32_t>& ici) {
+			        ImageWithIdentity i;
+			        reinterpret_cast<DeviceSuperFrameResourceImpl*>(allocator)->sfr->allocate_images({ &i.image, 1 }, { &ici.first, 1 }, {}); // TODO: dropping error
+			        return i;
+		        },
+		        +[](void* allocator, const ImageWithIdentity& i) {
+			        reinterpret_cast<DeviceSuperFrameResourceImpl*>(allocator)->sfr->deallocate_images({ &i.image, 1 });
+		        }),
+		    image_view_cache(
+		        this,
+		        +[](void* allocator, const ImageViewCreateInfo& ivci) {
+			        ImageView iv;
+			        reinterpret_cast<DeviceSuperFrameResourceImpl*>(allocator)->sfr->allocate_image_views({ &iv, 1 }, { &ivci, 1 }, {}); // TODO: dropping error
+			        return iv;
+		        },
+		        +[](void* allocator, const ImageView& iv) {
+			        reinterpret_cast<DeviceSuperFrameResourceImpl*>(allocator)->sfr->deallocate_image_views({ &iv, 1 });
+		        }) {
 			frames_storage = std::unique_ptr<char[]>(new char[sizeof(DeviceFrameResource) * frames_in_flight]);
 			for (uint64_t i = 0; i < frames_in_flight; i++) {
 				new (frames_storage.get() + i * sizeof(DeviceFrameResource)) DeviceFrameResource(sfr.direct.device, sfr);
@@ -41,6 +68,7 @@ namespace vuk {
 		std::vector<VkFramebuffer> framebuffers;
 		std::mutex images_mutex;
 		std::vector<Image> images;
+		std::unordered_map<ImageCreateInfo, uint32_t> image_identity;
 		std::mutex image_views_mutex;
 		std::vector<ImageView> image_views;
 		std::mutex pds_mutex;
@@ -188,10 +216,13 @@ namespace vuk {
 	void DeviceFrameResource::deallocate_framebuffers(std::span<const VkFramebuffer> src) {} // noop
 
 	Result<void, AllocateException> DeviceFrameResource::allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) {
-		VUK_DO_OR_RETURN(upstream->allocate_images(dst, cis, loc));
 		std::unique_lock _(impl->images_mutex);
-		auto& vec = impl->images;
-		vec.insert(vec.end(), dst.begin(), dst.end());
+		for (uint64_t i = 0; i < dst.size(); i++) {
+			auto& ci = cis[i];
+			auto index = impl->image_identity[ci]++;
+			auto iici = std::pair{ ci, index };
+			VUK_DO_OR_RETURN(static_cast<DeviceSuperFrameResource*>(upstream)->allocate_cached_images({ &dst[i], 1 }, { &iici, 1 }, loc));
+		}
 		return { expected_value };
 	}
 
@@ -199,11 +230,7 @@ namespace vuk {
 
 	Result<void, AllocateException>
 	DeviceFrameResource::allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) {
-		VUK_DO_OR_RETURN(upstream->allocate_image_views(dst, cis, loc));
-		std::unique_lock _(impl->image_views_mutex);
-
-		auto& vec = impl->image_views;
-		vec.insert(vec.end(), dst.begin(), dst.end());
+		VUK_DO_OR_RETURN(static_cast<DeviceSuperFrameResource*>(upstream)->allocate_cached_image_views(dst, cis, loc));
 		return { expected_value };
 	}
 
@@ -440,8 +467,28 @@ namespace vuk {
 	}
 
 	Result<void, AllocateException>
+	DeviceSuperFrameResource::allocate_cached_images(std::span<Image> dst, std::span<const std::pair<ImageCreateInfo, uint32_t>> cis, SourceLocationAtFrame loc) {
+		assert(dst.size() == cis.size());
+		for (uint64_t i = 0; i < dst.size(); i++) {
+			auto& ci = cis[i];
+			dst[i] = impl->image_cache.acquire(ci, impl->frame_counter).image;
+		}
+		return { expected_value };
+	}
+
+	Result<void, AllocateException>
 	DeviceSuperFrameResource::allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) {
 		return direct.allocate_image_views(dst, cis, loc);
+	}
+
+	Result<void, AllocateException>
+	DeviceSuperFrameResource::allocate_cached_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) {
+		assert(dst.size() == cis.size());
+		for (uint64_t i = 0; i < dst.size(); i++) {
+			auto& ci = cis[i];
+			dst[i] = impl->image_view_cache.acquire(ci, impl->frame_counter);
+		}
+		return { expected_value };
 	}
 
 	void DeviceSuperFrameResource::deallocate_image_views(std::span<const ImageView> src) {
@@ -509,8 +556,8 @@ namespace vuk {
 	}
 
 	Result<void, AllocateException> DeviceSuperFrameResource::allocate_acceleration_structures(std::span<VkAccelerationStructureKHR> dst,
-		std::span<const VkAccelerationStructureCreateInfoKHR> cis,
-		SourceLocationAtFrame loc) {
+	                                                                                           std::span<const VkAccelerationStructureCreateInfoKHR> cis,
+	                                                                                           SourceLocationAtFrame loc) {
 		return direct.allocate_acceleration_structures(dst, cis, loc);
 	}
 
@@ -541,6 +588,8 @@ namespace vuk {
 		auto& f = impl->frames[impl->local_frame];
 		f.wait();
 		deallocate_frame(f);
+		impl->image_cache.collect(impl->frame_counter, 16);
+		impl->image_view_cache.collect(impl->frame_counter, 16);
 		f.current_frame = impl->frame_counter.load();
 
 		return f;
@@ -589,9 +638,12 @@ namespace vuk {
 		f.tsemas.clear();
 		f.ass.clear();
 		f.swapchains.clear();
+		f.image_identity.clear();
 	}
 
 	DeviceSuperFrameResource::~DeviceSuperFrameResource() {
+		impl->image_cache.clear();
+		impl->image_view_cache.clear();
 		for (auto i = 0; i < frames_in_flight; i++) {
 			auto lframe = (impl->frame_counter + i) % frames_in_flight;
 			auto& f = impl->frames[lframe];

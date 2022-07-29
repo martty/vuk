@@ -1,7 +1,7 @@
 #pragma once
 
-#include <utility>
 #include <string_view>
+#include <utility>
 
 #include "../src/CreateInfo.hpp"
 #include "Types.hpp"
@@ -149,6 +149,20 @@ namespace vuk {
 	static_assert(sizeof(ImageCreateInfo) == sizeof(VkImageCreateInfo), "struct and wrapper have different size!");
 	static_assert(std::is_standard_layout<ImageCreateInfo>::value, "struct wrapper is not a standard layout!");
 
+	template<>
+	struct create_info<Image> {
+		using type = ImageCreateInfo;
+	};
+
+	struct ImageWithIdentity {
+		Image image;
+	};
+
+	template<>
+	struct create_info<ImageWithIdentity> {
+		using type = std::pair<ImageCreateInfo, uint32_t>;
+	};
+
 	enum class ImageViewCreateFlagBits : VkImageViewCreateFlags { eFragmentDensityMapDynamicEXT = VK_IMAGE_VIEW_CREATE_FRAGMENT_DENSITY_MAP_DYNAMIC_BIT_EXT };
 
 	enum class ImageViewType {
@@ -284,6 +298,11 @@ namespace vuk {
 	static_assert(std::is_standard_layout<ImageViewCreateInfo>::value, "struct wrapper is not a standard layout!");
 
 	using ImageView = Handle<VkImageView>;
+
+	template<>
+	struct create_info<ImageView> {
+		using type = vuk::ImageViewCreateInfo;
+	};
 
 	enum class SamplerCreateFlagBits : VkSamplerCreateFlags {
 		eSubsampledEXT = VK_SAMPLER_CREATE_SUBSAMPLED_BIT_EXT,

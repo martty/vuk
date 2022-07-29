@@ -16,7 +16,7 @@ namespace vuk {
 	};
 
 	template<class T>
-	Cache<T>::Cache(Context& ctx) : impl(new CacheImpl<T>()), ctx(&ctx) {}
+	Cache<T>::Cache(void* allocator, create_fn create, destroy_fn destroy) : impl(new CacheImpl<T>()), allocator(allocator), create(create), destroy(destroy) {}
 
 	template<class T>
 	T& Cache<T>::acquire(const create_info_t<T>& ci) {
@@ -34,7 +34,7 @@ namespace vuk {
 		} else {
 			_.unlock();
 			std::unique_lock ulock(impl->cache_mtx);
-			auto pit = impl->pool.emplace(ctx->create(ci));
+			auto pit = impl->pool.emplace(create(allocator, ci));
 			typename Cache::LRUEntry entry{ &*pit, current_frame };
 			it = impl->lru_map.emplace(ci, entry).first;
 			return *it->second.ptr;
@@ -47,13 +47,23 @@ namespace vuk {
 		for (auto it = impl->lru_map.begin(); it != impl->lru_map.end();) {
 			auto last_use_frame = it->second.last_use_frame;
 			if ((int64_t)current_frame - (int64_t)last_use_frame > (int64_t)threshold) {
-				ctx->destroy(*it->second.ptr);
+				destroy(allocator, *it->second.ptr);
 				impl->pool.erase(impl->pool.get_iterator(it->second.ptr));
 				it = impl->lru_map.erase(it);
 			} else {
 				++it;
 			}
 		}
+	}
+
+	template<class T>
+	void Cache<T>::clear() {
+		std::unique_lock _(impl->cache_mtx);
+		for (auto it = impl->pool.begin(); it != impl->pool.end(); ++it) {
+			destroy(allocator, *it);
+		}
+		impl->pool.clear();
+		impl->lru_map.clear();
 	}
 
 	template<>
@@ -70,7 +80,7 @@ namespace vuk {
 			typename Cache::LRUEntry entry{ nullptr, INT64_MAX };
 			it = impl->lru_map.emplace(ci, entry).first;
 			ulock.unlock();
-			auto pit = impl->pool.emplace(ctx->create(ci));
+			auto pit = impl->pool.emplace(create(allocator, ci));
 			it->second.ptr = &*pit;
 			it->second.load_cnt.store(1);
 			it->second.load_cnt.notify_all();
@@ -86,7 +96,7 @@ namespace vuk {
 		} else {
 			_.unlock();
 			std::unique_lock ulock(impl->cache_mtx);
-			auto pit = impl->pool.emplace(ctx->create(ci));
+			auto pit = impl->pool.emplace(create(allocator, ci));
 			typename Cache::LRUEntry entry{ &*pit, INT64_MAX };
 			it = impl->lru_map.emplace(ci, entry).first;
 			return *it->second.ptr;
@@ -101,7 +111,7 @@ namespace vuk {
 		} else {
 			_.unlock();
 			std::unique_lock ulock(impl->cache_mtx);
-			auto pit = impl->pool.emplace(ctx->create(ci));
+			auto pit = impl->pool.emplace(create(allocator, ci));
 			typename Cache::LRUEntry entry{ &*pit, INT64_MAX };
 			it = impl->lru_map.emplace(ci, entry).first;
 			return *it->second.ptr;
@@ -116,7 +126,7 @@ namespace vuk {
 		} else {
 			_.unlock();
 			std::unique_lock ulock(impl->cache_mtx);
-			auto pit = impl->pool.emplace(ctx->create(ci));
+			auto pit = impl->pool.emplace(create(allocator, ci));
 			typename Cache::LRUEntry entry{ &*pit, INT64_MAX };
 			it = impl->lru_map.emplace(ci, entry).first;
 			return *it->second.ptr;
@@ -143,7 +153,7 @@ namespace vuk {
 			typename Cache::LRUEntry entry{ nullptr, current_frame };
 			it = impl->lru_map.emplace(ci_copy, entry).first;
 			ulock.unlock();
-			auto pit = impl->pool.emplace(ctx->create(ci_copy));
+			auto pit = impl->pool.emplace(create(allocator, ci_copy));
 			it->second.ptr = &*pit;
 			it->second.load_cnt.store(1);
 			it->second.load_cnt.notify_all();
@@ -157,7 +167,7 @@ namespace vuk {
 		for (auto it = impl->lru_map.begin(); it != impl->lru_map.end();) {
 			auto last_use_frame = it->second.last_use_frame;
 			if ((int64_t)current_frame - (int64_t)last_use_frame > (int64_t)threshold) {
-				ctx->destroy(*it->second.ptr);
+				destroy(allocator, *it->second.ptr);
 				if (!it->first.is_inline()) {
 					delete it->first.extended_data;
 				}
@@ -197,7 +207,7 @@ namespace vuk {
 	template<class T>
 	Cache<T>::~Cache() {
 		for (auto& v : impl->pool) {
-			ctx->destroy(v);
+			destroy(allocator, v);
 		}
 		delete impl;
 	}
@@ -213,6 +223,8 @@ namespace vuk {
 	template class Cache<vuk::ShaderModule>;
 	template struct CacheImpl<vuk::ShaderModule>;
 	template class Cache<vuk::RGImage>;
+	template class Cache<vuk::ImageWithIdentity>;
+	template class Cache<vuk::ImageView>;
 
 	template class Cache<vuk::DescriptorPool>;
 } // namespace vuk

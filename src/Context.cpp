@@ -112,16 +112,16 @@ namespace vuk {
 		}
 		rt_properties = o.rt_properties;
 
-		impl->pipelinebase_cache.ctx = this;
-		impl->pipeline_cache.ctx = this;
-		impl->compute_pipeline_cache.ctx = this;
-		impl->renderpass_cache.ctx = this;
-		impl->transient_images.ctx = this;
-		impl->pool_cache.ctx = this;
-		impl->sampler_cache.ctx = this;
-		impl->shader_modules.ctx = this;
-		impl->descriptor_set_layouts.ctx = this;
-		impl->pipeline_layouts.ctx = this;
+		impl->pipelinebase_cache.allocator = this;
+		impl->pipeline_cache.allocator = this;
+		impl->compute_pipeline_cache.allocator = this;
+		impl->renderpass_cache.allocator = this;
+		impl->transient_images.allocator = this;
+		impl->pool_cache.allocator = this;
+		impl->sampler_cache.allocator = this;
+		impl->shader_modules.allocator = this;
+		impl->descriptor_set_layouts.allocator = this;
+		impl->pipeline_layouts.allocator = this;
 		impl->device_vk_resource.ctx = this;
 	}
 
@@ -149,16 +149,16 @@ namespace vuk {
 			transfer_queue = compute_queue ? compute_queue : graphics_queue;
 		}
 
-		impl->pipelinebase_cache.ctx = this;
-		impl->pipeline_cache.ctx = this;
-		impl->compute_pipeline_cache.ctx = this;
-		impl->renderpass_cache.ctx = this;
-		impl->transient_images.ctx = this;
-		impl->pool_cache.ctx = this;
-		impl->sampler_cache.ctx = this;
-		impl->shader_modules.ctx = this;
-		impl->descriptor_set_layouts.ctx = this;
-		impl->pipeline_layouts.ctx = this;
+		impl->pipelinebase_cache.allocator = this;
+		impl->pipeline_cache.allocator = this;
+		impl->compute_pipeline_cache.allocator = this;
+		impl->renderpass_cache.allocator = this;
+		impl->transient_images.allocator = this;
+		impl->pool_cache.allocator = this;
+		impl->sampler_cache.allocator = this;
+		impl->shader_modules.allocator = this;
+		impl->descriptor_set_layouts.allocator = this;
+		impl->pipeline_layouts.allocator = this;
 		impl->device_vk_resource.ctx = this;
 
 		return *this;

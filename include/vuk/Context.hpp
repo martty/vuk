@@ -226,9 +226,7 @@ namespace vuk {
 
 		uint64_t get_unique_handle_id();
 
-	private:
-		struct ContextImpl* impl;
-
+		// internal functions
 		void destroy(const struct RGImage& image);
 		void destroy(const struct LegacyPoolAllocator& v);
 		void destroy(const struct LegacyLinearAllocator& v);
@@ -256,8 +254,8 @@ namespace vuk {
 		RGImage create(const struct RGCI& cinfo);
 		Sampler create(const struct SamplerCreateInfo& cinfo);
 
-		template<class T>
-		friend class Cache; // caches can directly destroy
+	private:
+		struct ContextImpl* impl;
 	};
 
 	template<class T>
