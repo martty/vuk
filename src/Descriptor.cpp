@@ -91,9 +91,6 @@ namespace vuk {
 				final.bindings[i] = bindings[i];
 			}
 		}
-
-		final.hash = robin_hood::hash_bytes(reinterpret_cast<const char*>(&final.bindings[0]), VUK_MAX_BINDINGS * sizeof(DescriptorBinding));
-		hash_combine(final.hash, layout_info->layout);
 		return final;
 	}
 } // namespace vuk
