@@ -1026,7 +1026,7 @@ namespace vuk {
 				auto& pipeline_set_bindings = *ppipeline_set_bindings;
 				for (uint64_t j = 0; j < pipeline_set_bindings.size(); j++) {
 					auto& pipe_binding = pipeline_set_bindings[j];
-					auto& cbuf_binding = sb.bindings[j];
+					auto& cbuf_binding = sb.bindings[pipeline_set_bindings[j].binding];
 
 					auto pipe_dtype = (DescriptorType)pipe_binding.descriptorType;
 					auto cbuf_dtype = cbuf_binding.type;
