@@ -7,6 +7,7 @@
 #include "vuk/Query.hpp"
 
 #include <atomic>
+#include <plf_colony.h>
 
 namespace vuk {
 	struct DeviceSuperFrameResourceImpl {
@@ -21,6 +22,8 @@ namespace vuk {
 
 		std::mutex command_pool_mutex;
 		std::array<std::vector<VkCommandPool>, 3> command_pools;
+		std::mutex ds_pool_mutex;
+		std::vector<VkDescriptorPool> ds_pools;
 
 		Cache<ImageWithIdentity> image_cache;
 		Cache<ImageView> image_view_cache;
@@ -75,6 +78,10 @@ namespace vuk {
 		std::vector<PersistentDescriptorSet> persistent_descriptor_sets;
 		std::mutex ds_mutex;
 		std::vector<DescriptorSet> descriptor_sets;
+		std::atomic<VkDescriptorPool*> last_ds_pool;
+		plf::colony<VkDescriptorPool> ds_pools;
+		std::vector<VkDescriptorPool> ds_pools_to_destroy;
+
 		// only for use via SuperframeAllocator
 		std::mutex buffers_mutex;
 		std::vector<BufferGPU> buffer_gpus;
@@ -250,8 +257,8 @@ namespace vuk {
 	void DeviceFrameResource::deallocate_persistent_descriptor_sets(std::span<const PersistentDescriptorSet> src) {} // noop
 
 	Result<void, AllocateException>
-	DeviceFrameResource::allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) {
-		VUK_DO_OR_RETURN(upstream->allocate_descriptor_sets(dst, cis, loc));
+	DeviceFrameResource::allocate_descriptor_sets_with_value(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) {
+		VUK_DO_OR_RETURN(upstream->allocate_descriptor_sets_with_value(dst, cis, loc));
 
 		std::unique_lock _(impl->ds_mutex);
 
@@ -261,6 +268,59 @@ namespace vuk {
 	}
 
 	void DeviceFrameResource::deallocate_descriptor_sets(std::span<const DescriptorSet> src) {} // noop
+
+	Result<void, AllocateException>
+	DeviceFrameResource::allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const DescriptorSetLayoutAllocInfo> cis, SourceLocationAtFrame loc) {
+		VkDescriptorPoolCreateInfo dpci{ .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
+		dpci.maxSets = 1000;
+		std::array<VkDescriptorPoolSize, 12> descriptor_counts = {};
+		uint32_t used_idx = 0;
+		for (auto i = 0; i < descriptor_counts.size(); i++) {
+			auto& d = descriptor_counts[i];
+			d.type = i == 11 ? VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR : VkDescriptorType(i);
+			d.descriptorCount = 1000;
+		}
+		dpci.pPoolSizes = descriptor_counts.data();
+		dpci.poolSizeCount = (uint32_t)descriptor_counts.size();
+
+		if (impl->ds_pools.size() == 0) {
+			std::unique_lock _(impl->ds_mutex);
+			if (impl->ds_pools.size() == 0) { // this assures only 1 thread gets to do this
+				VkDescriptorPool pool;
+				VUK_DO_OR_RETURN(upstream->allocate_descriptor_pools({ &pool, 1 }, { &dpci, 1 }, loc));
+				impl->last_ds_pool = &*impl->ds_pools.emplace(pool);
+			}
+		}
+
+		// look at last stored pool
+		VkDescriptorPool* last_pool = impl->last_ds_pool.load();
+
+		for (uint64_t i = 0; i < dst.size(); i++) {
+			auto& ci = cis[i];
+			// attempt to allocate a set
+			VkDescriptorSetAllocateInfo dsai = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
+			dsai.descriptorPool = *last_pool;
+			dsai.descriptorSetCount = 1;
+			dsai.pSetLayouts = &ci.layout;
+			dst[i].layout_info = ci;
+			auto result = vkAllocateDescriptorSets(device, &dsai, &dst[i].descriptor_set);
+			// if we fail, we allocate another pool from upstream
+			if (result == VK_ERROR_OUT_OF_POOL_MEMORY || result == VK_ERROR_FRAGMENTED_POOL) { // we potentially run this from multiple threads which results in additional pool allocs
+				{
+					std::unique_lock _(impl->ds_mutex);
+					VkDescriptorPool pool;
+					VUK_DO_OR_RETURN(upstream->allocate_descriptor_pools({ &pool, 1 }, { &dpci, 1 }, loc));
+					last_pool = &*impl->ds_pools.emplace(pool);
+				}
+				dsai.descriptorPool = *last_pool;
+				result = vkAllocateDescriptorSets(device, &dsai, &dst[i].descriptor_set);
+				if (result != VK_SUCCESS) {
+					return { expected_error, AllocateException{ result } };
+				}
+			}
+		}
+		return { expected_value };
+	}
 
 	Result<void, AllocateException> DeviceFrameResource::allocate_timestamp_query_pools(std::span<TimestampQueryPool> dst,
 	                                                                                    std::span<const VkQueryPoolCreateInfo> cis,
@@ -512,7 +572,13 @@ namespace vuk {
 	}
 
 	Result<void, AllocateException>
-	DeviceSuperFrameResource::allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) {
+	DeviceSuperFrameResource::allocate_descriptor_sets_with_value(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) {
+		return direct.allocate_descriptor_sets_with_value(dst, cis, loc);
+	}
+
+	Result<void, AllocateException> DeviceSuperFrameResource::allocate_descriptor_sets(std::span<DescriptorSet> dst,
+	                                                                                   std::span<const DescriptorSetLayoutAllocInfo> cis,
+	                                                                                   SourceLocationAtFrame loc) {
 		return direct.allocate_descriptor_sets(dst, cis, loc);
 	}
 
@@ -520,6 +586,31 @@ namespace vuk {
 		auto& f = get_last_frame();
 		std::unique_lock _(f.impl->ds_mutex);
 		auto& vec = f.impl->descriptor_sets;
+		vec.insert(vec.end(), src.begin(), src.end());
+	}
+
+	Result<void, AllocateException> DeviceSuperFrameResource::allocate_descriptor_pools(std::span<VkDescriptorPool> dst,
+	                                                                                    std::span<const VkDescriptorPoolCreateInfo> cis,
+	                                                                                    SourceLocationAtFrame loc) {
+		std::scoped_lock _(impl->ds_pool_mutex);
+		assert(cis.size() == dst.size());
+		for (uint64_t i = 0; i < dst.size(); i++) {
+			auto& ci = cis[i];
+			auto& source = impl->ds_pools;
+			if (source.size() > 0) {
+				dst[i] = source.back();
+				source.pop_back();
+			} else {
+				VUK_DO_OR_RETURN(direct.allocate_descriptor_pools(std::span{ &dst[i], 1 }, std::span{ &ci, 1 }, loc));
+			}
+		}
+		return { expected_value };
+	}
+
+	void DeviceSuperFrameResource::deallocate_descriptor_pools(std::span<const VkDescriptorPool> src) {
+		auto& f = get_last_frame();
+		std::unique_lock _(f.impl->ds_mutex);
+		auto& vec = f.impl->ds_pools_to_destroy;
 		vec.insert(vec.end(), src.begin(), src.end());
 	}
 
@@ -617,12 +708,18 @@ namespace vuk {
 		direct.deallocate_acceleration_structures(f.ass);
 		direct.deallocate_swapchains(f.swapchains);
 
+		for (auto& p : f.ds_pools) {
+			vkResetDescriptorPool(direct.device, p, {});
+			impl->ds_pools.push_back(p);
+		}
+
 		f.semaphores.clear();
 		f.fences.clear();
 		f.buffer_cross_devices.clear();
 		f.buffer_gpus.clear();
 		f.cmdbuffers_to_free.clear();
 		f.cmdpools_to_free.clear();
+		f.ds_pools.clear();
 		auto& legacy = direct.legacy_gpu_allocator;
 		legacy->reset_pool(f.linear_cpu_only);
 		legacy->reset_pool(f.linear_cpu_gpu);
@@ -660,6 +757,9 @@ namespace vuk {
 				CommandPool p{ cpool, i };
 				direct.deallocate_command_pools(std::span{ &p, 1 });
 			}
+		}
+		for (auto& p : impl->ds_pools) {
+			direct.deallocate_descriptor_pools(std::span{ &p, 1 });
 		}
 		delete impl;
 	}

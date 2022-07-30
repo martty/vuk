@@ -1092,6 +1092,33 @@ namespace vuk {
 		/// @brief check that pass ordering does not violate resource constraints (not needed when reordering passes)
 		bool check_pass_ordering = false;
 	};
+
+	
+	enum class DescriptorSetStrategyFlagBits {
+		eDefault = 0, // implementation choice
+		/* storage */
+		ePerLayout = 1 << 1, // one DS pool per layout
+		eCommon = 1 << 2, // common pool per layout
+		// eCached = 1 << 3,
+		/* update - no flag: standard */
+		// eUpdateAfterBind = 1 << 4,
+		// ePushDescriptor = 1 << 5,
+		/* templating - no flag: no template */
+		// eWithTemplate = 1 << 7
+	};
+
+	using DescriptorSetStrategyFlags = Flags<DescriptorSetStrategyFlagBits>;
+	inline constexpr DescriptorSetStrategyFlags operator|(DescriptorSetStrategyFlagBits bit0, DescriptorSetStrategyFlagBits bit1) noexcept {
+		return DescriptorSetStrategyFlags(bit0) | bit1;
+	}
+
+	inline constexpr DescriptorSetStrategyFlags operator&(DescriptorSetStrategyFlagBits bit0, DescriptorSetStrategyFlagBits bit1) noexcept {
+		return DescriptorSetStrategyFlags(bit0) & bit1;
+	}
+
+	inline constexpr DescriptorSetStrategyFlags operator^(DescriptorSetStrategyFlagBits bit0, DescriptorSetStrategyFlagBits bit1) noexcept {
+		return DescriptorSetStrategyFlags(bit0) ^ bit1;
+	}
 } // namespace vuk
 
 namespace std {

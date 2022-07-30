@@ -19,6 +19,23 @@ namespace vuk {
 	FormatOrIgnore::FormatOrIgnore(Format format) : ignore(false), format(format), size(format_to_texel_block_size(format)) {}
 	FormatOrIgnore::FormatOrIgnore(Ignore ign) : ignore(true), format(ign.format), size(ign.to_size()) {}
 
+	// for rendergraph
+
+	CommandBuffer::CommandBuffer(ExecutableRenderGraph& rg, Context& ctx, Allocator& allocator, VkCommandBuffer cb) :
+	    rg(&rg),
+	    ctx(ctx),
+	    allocator(&allocator),
+	    command_buffer(cb),
+	    ds_strategy_flags(ctx.default_descriptor_set_strategy) {}
+
+	CommandBuffer::CommandBuffer(ExecutableRenderGraph& rg, Context& ctx, Allocator& allocator, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing) :
+	    rg(&rg),
+	    ctx(ctx),
+	    allocator(&allocator),
+	    command_buffer(cb),
+	    ongoing_renderpass(ongoing),
+	    ds_strategy_flags(ctx.default_descriptor_set_strategy) {}
+
 	const CommandBuffer::RenderPassInfo& CommandBuffer::get_ongoing_renderpass() const {
 		return ongoing_renderpass.value();
 	}
@@ -57,6 +74,11 @@ namespace vuk {
 			return { expected_error, res.error() };
 		}
 		return { expected_value, res->attachment };
+	}
+
+	CommandBuffer& CommandBuffer::set_descriptor_set_strategy(DescriptorSetStrategyFlags ds_strategy_flags) {
+		this->ds_strategy_flags = ds_strategy_flags;
+		return *this;
 	}
 
 	CommandBuffer& CommandBuffer::set_dynamic_state(DynamicStateFlags flags) {
@@ -571,10 +593,11 @@ namespace vuk {
 		if (!_bind_ray_tracing_pipeline_state()) {
 			return *this;
 		}
-		
+
 		auto& pipe = *current_ray_tracing_pipeline;
 
-		ctx.vkCmdTraceRaysKHR(command_buffer, &pipe.rgen_region, &pipe.miss_region, &pipe.hit_region, &pipe.call_region, (uint32_t)size_x, (uint32_t)size_y, (uint32_t)size_z);
+		ctx.vkCmdTraceRaysKHR(
+		    command_buffer, &pipe.rgen_region, &pipe.miss_region, &pipe.hit_region, &pipe.call_region, (uint32_t)size_x, (uint32_t)size_y, (uint32_t)size_z);
 		return *this;
 	}
 
@@ -876,8 +899,8 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::build_acceleration_structures(uint32_t info_count,
-		const VkAccelerationStructureBuildGeometryInfoKHR* pInfos,
-		const VkAccelerationStructureBuildRangeInfoKHR* const* ppBuildRangeInfos) {
+	                                                            const VkAccelerationStructureBuildGeometryInfoKHR* pInfos,
+	                                                            const VkAccelerationStructureBuildRangeInfoKHR* const* ppBuildRangeInfos) {
 		VUK_EARLY_RET();
 
 		ctx.vkCmdBuildAccelerationStructuresKHR(command_buffer, info_count, pInfos, ppBuildRangeInfos);
@@ -929,17 +952,19 @@ namespace vuk {
 			bool persistent_set_to_bind = persistent_sets_mask & (1 << i);
 
 			VkDescriptorSetLayout pipeline_set_layout;
+			DescriptorSetLayoutAllocInfo* ds_layout_alloc_info;
 			switch (pipe_type) {
 			case PipeType::eGraphics:
-				pipeline_set_layout = current_pipeline->layout_info[i].layout;
+				ds_layout_alloc_info = &current_pipeline->layout_info[i];
 				break;
 			case PipeType::eCompute:
-				pipeline_set_layout = current_compute_pipeline->layout_info[i].layout;
+				ds_layout_alloc_info = &current_compute_pipeline->layout_info[i];
 				break;
 			case PipeType::eRayTracing:
-				pipeline_set_layout = current_ray_tracing_pipeline->layout_info[i].layout;
+				ds_layout_alloc_info = &current_ray_tracing_pipeline->layout_info[i];
 				break;
 			}
+			pipeline_set_layout = ds_layout_alloc_info->layout;
 
 			// binding validation
 			if (pipeline_set_layout != VK_NULL_HANDLE) {                      // set in the layout
@@ -1042,11 +1067,65 @@ namespace vuk {
 					}
 				}
 
+				auto strategy = ds_strategy_flags.m_mask == 0 ? DescriptorSetStrategyFlagBits::eCommon : ds_strategy_flags;
 				Unique<DescriptorSet> ds;
-				if (auto ret = allocator->allocate_descriptor_sets(std::span{ &*ds, 1 }, std::span{ &sb, 1 }); !ret) {
-					current_error = std::move(ret);
-					return false;
+				if (strategy & DescriptorSetStrategyFlagBits::ePerLayout) {
+					if (auto ret = allocator->allocate_descriptor_sets_with_value(std::span{ &*ds, 1 }, std::span{ &sb, 1 }); !ret) {
+						current_error = std::move(ret);
+						return false;
+					}
+				} else if (strategy & DescriptorSetStrategyFlagBits::eCommon) {
+					if (auto ret = allocator->allocate_descriptor_sets(std::span{ &*ds, 1 }, std::span{ ds_layout_alloc_info, 1 }); !ret) {
+						current_error = std::move(ret);
+						return false;
+					}
+
+					auto& cinfo = sb;
+					auto mask = cinfo.used.to_ulong();
+					uint32_t leading_ones = num_leading_ones(mask);
+					std::array<VkWriteDescriptorSet, VUK_MAX_BINDINGS> writes = {};
+					std::array<VkWriteDescriptorSetAccelerationStructureKHR, VUK_MAX_BINDINGS> as_writes = {};
+					int j = 0;
+					for (uint32_t i = 0; i < leading_ones; i++, j++) {
+						if (!cinfo.used.test(i)) {
+							j--;
+							continue;
+						}
+						auto& write = writes[j];
+						auto& as_write = as_writes[j];
+						write = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+						auto& binding = cinfo.bindings[i];
+						write.descriptorType = (VkDescriptorType)binding.type;
+						write.dstArrayElement = 0;
+						write.descriptorCount = 1;
+						write.dstBinding = i;
+						write.dstSet = ds->descriptor_set;
+						switch (binding.type) {
+						case DescriptorType::eUniformBuffer:
+						case DescriptorType::eStorageBuffer:
+							write.pBufferInfo = &binding.buffer;
+							break;
+						case DescriptorType::eSampledImage:
+						case DescriptorType::eSampler:
+						case DescriptorType::eCombinedImageSampler:
+						case DescriptorType::eStorageImage:
+							write.pImageInfo = &binding.image.dii;
+							break;
+						case DescriptorType::eAccelerationStructureKHR:
+							as_write = { VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR };
+							as_write.pAccelerationStructures = &binding.as;
+							as_write.accelerationStructureCount = 1;
+							write.pNext = &as_write;
+							break;
+						default:
+							assert(0);
+						}
+					}
+					vkUpdateDescriptorSets(allocator->get_context().device, j, writes.data(), 0, nullptr);
+				} else {
+					assert(0 && "Unimplemented DS strategy");
 				}
+
 				vkCmdBindDescriptorSets(command_buffer, bind_point, current_layout, i, 1, &ds->descriptor_set, 0, nullptr);
 				set_layouts_used[i] = ds->layout_info.layout;
 			} else {

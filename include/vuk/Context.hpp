@@ -198,6 +198,8 @@ namespace vuk {
 		/// @brief Retrieve results from `TimestampQueryPool`s and make them available to retrieve_timestamp and retrieve_duration
 		Result<void> make_timestamp_results_available(std::span<const TimestampQueryPool> pools);
 
+		DescriptorSetStrategyFlags default_descriptor_set_strategy = {};
+
 		// Caches
 
 		/// @brief Acquire a cached rendertarget

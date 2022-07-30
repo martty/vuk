@@ -522,7 +522,7 @@ namespace vuk {
 			auto& b = cinfo.bindings[i];
 			// if this is not a variable count binding, add it to the descriptor count
 			if (cinfo.flags.size() <= i || !(cinfo.flags[i] & to_integral(DescriptorBindingFlagBits::eVariableDescriptorCount))) {
-				auto index = b.descriptorType == VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR ? 12 : to_integral(b.descriptorType);
+				auto index = b.descriptorType == VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR ? 11 : to_integral(b.descriptorType);
 				ret.descriptor_counts[index] += b.descriptorCount;
 			} else { // a variable count binding
 				ret.variable_count_binding = (uint32_t)i;

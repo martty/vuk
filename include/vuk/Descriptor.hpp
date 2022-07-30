@@ -71,7 +71,7 @@ namespace vuk {
 	}
 
 	struct DescriptorSetLayoutAllocInfo {
-		std::array<uint32_t, 13> descriptor_counts = {};
+		std::array<uint32_t, 12> descriptor_counts = {};
 		VkDescriptorSetLayout layout;
 		unsigned variable_count_binding = (unsigned)-1;
 		vuk::DescriptorType variable_count_binding_type;

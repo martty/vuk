@@ -115,8 +115,14 @@ namespace vuk {
 		virtual void deallocate_persistent_descriptor_sets(std::span<const PersistentDescriptorSet> src) = 0;
 
 		virtual Result<void, AllocateException>
-		allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) = 0;
+		allocate_descriptor_sets_with_value(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) = 0;
+		virtual Result<void, AllocateException>
+		allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const struct DescriptorSetLayoutAllocInfo> cis, SourceLocationAtFrame loc) = 0;
 		virtual void deallocate_descriptor_sets(std::span<const DescriptorSet> src) = 0;
+
+		virtual Result<void, AllocateException>
+		allocate_descriptor_pools(std::span<VkDescriptorPool> dst, std::span<const VkDescriptorPoolCreateInfo> cis, SourceLocationAtFrame loc) = 0;
+		virtual void deallocate_descriptor_pools(std::span<const VkDescriptorPool> src) = 0;
 
 		virtual Result<void, AllocateException>
 		allocate_timestamp_query_pools(std::span<TimestampQueryPool> dst, std::span<const VkQueryPoolCreateInfo> cis, SourceLocationAtFrame loc) = 0;
@@ -362,7 +368,24 @@ namespace vuk {
 		/// @param loc Source location information
 		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
 		Result<void, AllocateException>
-		allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+		allocate_descriptor_sets_with_value(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+
+		
+		/// @brief Allocate descriptor sets from this Allocator
+		/// @param dst Destination span to place allocated descriptor sets into
+		/// @param cis Per-element construction info
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
+		Result<void, AllocateException> allocate(std::span<DescriptorSet> dst, std::span<const DescriptorSetLayoutAllocInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+
+		/// @brief Allocate descriptor sets from this Allocator
+		/// @param dst Destination span to place allocated descriptor sets into
+		/// @param cis Per-element construction info
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
+		Result<void, AllocateException> allocate_descriptor_sets(std::span<DescriptorSet> dst,
+		                                                                    std::span<const DescriptorSetLayoutAllocInfo> cis,
+		                                                                    SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
 		/// @brief Deallocate descriptor sets previously allocated from this Allocator
 		/// @param src Span of descriptor sets to be deallocated

@@ -145,11 +145,21 @@ namespace vuk {
 	}
 
 	Result<void, AllocateException> Allocator::allocate(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_descriptor_sets_with_value(dst, cis, loc);
+	}
+
+	Result<void, AllocateException>
+	Allocator::allocate_descriptor_sets_with_value(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_descriptor_sets_with_value(dst, cis, loc);
+	}
+
+	Result<void, AllocateException>
+		Allocator::allocate(std::span<DescriptorSet> dst, std::span<const DescriptorSetLayoutAllocInfo> cis, SourceLocationAtFrame loc) {
 		return device_resource->allocate_descriptor_sets(dst, cis, loc);
 	}
 
 	Result<void, AllocateException>
-	Allocator::allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) {
+		Allocator::allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const DescriptorSetLayoutAllocInfo> cis, SourceLocationAtFrame loc) {
 		return device_resource->allocate_descriptor_sets(dst, cis, loc);
 	}
 

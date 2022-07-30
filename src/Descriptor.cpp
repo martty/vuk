@@ -31,12 +31,12 @@ namespace vuk {
 			return;
 		VkDescriptorPoolCreateInfo dpci{ .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
 		dpci.maxSets = impl->sets_allocated == 0 ? 1 : impl->sets_allocated * 2;
-		std::array<VkDescriptorPoolSize, 13> descriptor_counts = {};
+		std::array<VkDescriptorPoolSize, 12> descriptor_counts = {};
 		uint32_t used_idx = 0;
 		for (auto i = 0; i < descriptor_counts.size(); i++) {
 			if (layout_alloc_info.descriptor_counts[i] > 0) {
 				auto& d = descriptor_counts[used_idx];
-				d.type = i == 12 ? VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR : VkDescriptorType(i);
+				d.type = i == 11 ? VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR : VkDescriptorType(i);
 				d.descriptorCount = layout_alloc_info.descriptor_counts[i] * dpci.maxSets;
 				used_idx++;
 			}

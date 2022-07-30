@@ -218,6 +218,7 @@ namespace vuk {
 		fixed_vector<VkPushConstantRange, VUK_MAX_PUSHCONSTANT_RANGES> pcrs;
 
 		// Descriptor sets
+		DescriptorSetStrategyFlags ds_strategy_flags = {};
 		std::bitset<VUK_MAX_SETS> sets_used = {};
 		std::array<VkDescriptorSetLayout, VUK_MAX_SETS> set_layouts_used = {};
 		std::bitset<VUK_MAX_SETS> sets_to_bind = {};
@@ -226,26 +227,10 @@ namespace vuk {
 		std::array<std::pair<VkDescriptorSet, VkDescriptorSetLayout>, VUK_MAX_SETS> persistent_sets = {};
 
 		// for rendergraph
-		CommandBuffer(ExecutableRenderGraph& rg, Context& ctx, Allocator& allocator, VkCommandBuffer cb) :
-		    rg(&rg),
-		    ctx(ctx),
-		    allocator(&allocator),
-		    command_buffer(cb) {}
-		CommandBuffer(ExecutableRenderGraph& rg, Context& ctx, Allocator& allocator, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing) :
-		    rg(&rg),
-		    ctx(ctx),
-		    allocator(&allocator),
-		    command_buffer(cb),
-		    ongoing_renderpass(ongoing) {}
+		CommandBuffer(ExecutableRenderGraph& rg, Context& ctx, Allocator& allocator, VkCommandBuffer cb);
+		CommandBuffer(ExecutableRenderGraph& rg, Context& ctx, Allocator& allocator, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing);
 
 	public:
-		// for secondary cbufs
-		CommandBuffer(ExecutableRenderGraph* rg, Context& ctx, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing) :
-		    rg(rg),
-		    ctx(ctx),
-		    command_buffer(cb),
-		    ongoing_renderpass(ongoing) {}
-
 		/// @brief Retrieve parent context
 		Context& get_context() {
 			return ctx;
@@ -271,6 +256,12 @@ namespace vuk {
 
 		// command buffer state setting
 		// when a state is set it is persistent for a pass (similar to Vulkan dynamic state) - see documentation
+
+		/// @brief Set the strategy for allocating and updating ephemeral descriptor sets
+		/// @param ds_strategy_flags Mask of strategy options
+		///
+		/// The default strategy is taken from the context when entering a new Pass
+		CommandBuffer& set_descriptor_set_strategy(DescriptorSetStrategyFlags ds_strategy_flags);
 
 		/// @brief Set mask of dynamic state in CommandBuffer
 		/// @param dynamic_state_flags Mask of states (flag set = dynamic, flag clear = static)
@@ -513,8 +504,8 @@ namespace vuk {
 
 		/// @brief Build acceleration structures
 		CommandBuffer& build_acceleration_structures(uint32_t info_count,
-		                                            const VkAccelerationStructureBuildGeometryInfoKHR* pInfos,
-		                                            const VkAccelerationStructureBuildRangeInfoKHR* const* ppBuildRangeInfos);
+		                                             const VkAccelerationStructureBuildGeometryInfoKHR* pInfos,
+		                                             const VkAccelerationStructureBuildRangeInfoKHR* const* ppBuildRangeInfos);
 
 		// commands for renderpass-less command buffers
 

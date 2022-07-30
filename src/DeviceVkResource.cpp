@@ -213,21 +213,21 @@ namespace vuk {
 			auto dsl = dslai.layout;
 			VkDescriptorPoolCreateInfo dpci = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
 			dpci.maxSets = 1;
-			std::array<VkDescriptorPoolSize, 13> descriptor_counts = {};
+			std::array<VkDescriptorPoolSize, 12> descriptor_counts = {};
 			uint32_t used_idx = 0;
 			for (auto i = 0; i < descriptor_counts.size(); i++) {
 				bool used = false;
 				// create non-variable count descriptors
 				if (dslai.descriptor_counts[i] > 0) {
 					auto& d = descriptor_counts[used_idx];
-					d.type = i == 12 ? VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR : VkDescriptorType(i);
+					d.type = i == 11 ? VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR : VkDescriptorType(i);
 					d.descriptorCount = dslai.descriptor_counts[i];
 					used = true;
 				}
 				// create variable count descriptors
 				if (dslai.variable_count_binding != (unsigned)-1 && dslai.variable_count_binding_type == DescriptorType(i)) {
 					auto& d = descriptor_counts[used_idx];
-					d.type = i == 12 ? VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR : VkDescriptorType(i);
+					d.type = i == 11 ? VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR : VkDescriptorType(i);
 					d.descriptorCount += ci.num_descriptors;
 					used = true;
 				}
@@ -279,7 +279,7 @@ namespace vuk {
 	}
 
 	Result<void, AllocateException>
-	DeviceVkResource::allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) {
+	DeviceVkResource::allocate_descriptor_sets_with_value(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
 			auto& cinfo = cis[i];
@@ -331,10 +331,41 @@ namespace vuk {
 		return { expected_value };
 	}
 
+	Result<void, AllocateException>
+	DeviceVkResource::allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const DescriptorSetLayoutAllocInfo> cis, SourceLocationAtFrame loc) {
+		assert(dst.size() == cis.size());
+		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
+			auto& cinfo = cis[i];
+			auto& pool = ctx->acquire_descriptor_pool(cinfo, ctx->get_frame_count());
+			dst[i] = { pool.acquire(*ctx, cinfo), cinfo };
+		}
+		return { expected_value };
+	}
+
 	void DeviceVkResource::deallocate_descriptor_sets(std::span<const DescriptorSet> src) {
 		for (int64_t i = 0; i < (int64_t)src.size(); i++) {
 			DescriptorPool& pool = ctx->acquire_descriptor_pool(src[i].layout_info, ctx->get_frame_count());
 			pool.release(src[i].descriptor_set);
+		}
+	}
+
+	Result<void, AllocateException>
+	DeviceVkResource::allocate_descriptor_pools(std::span<VkDescriptorPool> dst, std::span<const VkDescriptorPoolCreateInfo> cis, SourceLocationAtFrame loc) {
+		assert(dst.size() == cis.size());
+		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
+			VkDescriptorPoolCreateInfo ci = cis[i];
+			VkResult res = vkCreateDescriptorPool(device, &ci, nullptr, &dst[i]);
+			if (res != VK_SUCCESS) {
+				deallocate_descriptor_pools({ dst.data(), (uint64_t)i });
+				return { expected_error, AllocateException{ res } };
+			}
+		}
+		return { expected_value };
+	}
+
+	void DeviceVkResource::deallocate_descriptor_pools(std::span<const VkDescriptorPool> src) {
+		for (int64_t i = 0; i < (int64_t)src.size(); i++) {
+			vkDestroyDescriptorPool(device, src[i], nullptr);
 		}
 	}
 
@@ -412,8 +443,8 @@ namespace vuk {
 	}
 
 	Result<void, AllocateException> DeviceVkResource::allocate_acceleration_structures(std::span<VkAccelerationStructureKHR> dst,
-		std::span<const VkAccelerationStructureCreateInfoKHR> cis,
-		SourceLocationAtFrame loc) {
+	                                                                                   std::span<const VkAccelerationStructureCreateInfoKHR> cis,
+	                                                                                   SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
 			VkAccelerationStructureCreateInfoKHR ci = cis[i];
@@ -532,12 +563,26 @@ namespace vuk {
 	}
 
 	Result<void, AllocateException>
-	DeviceNestedResource::allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) {
+	DeviceNestedResource::allocate_descriptor_sets_with_value(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) {
+		return upstream->allocate_descriptor_sets_with_value(dst, cis, loc);
+	}
+
+	Result<void, AllocateException>
+	DeviceNestedResource::allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const DescriptorSetLayoutAllocInfo> cis, SourceLocationAtFrame loc) {
 		return upstream->allocate_descriptor_sets(dst, cis, loc);
 	}
 
 	void DeviceNestedResource::deallocate_descriptor_sets(std::span<const DescriptorSet> src) {
 		upstream->deallocate_descriptor_sets(src);
+	}
+
+	Result<void, AllocateException>
+	DeviceNestedResource::allocate_descriptor_pools(std::span<VkDescriptorPool> dst, std::span<const VkDescriptorPoolCreateInfo> cis, SourceLocationAtFrame loc) {
+		return upstream->allocate_descriptor_pools(dst, cis, loc);
+	}
+
+	void DeviceNestedResource::deallocate_descriptor_pools(std::span<const VkDescriptorPool> src) {
+		upstream->deallocate_descriptor_pools(src);
 	}
 
 	Result<void, AllocateException> DeviceNestedResource::allocate_timestamp_query_pools(std::span<TimestampQueryPool> dst,
