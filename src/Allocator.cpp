@@ -201,6 +201,10 @@ namespace vuk {
 	Result<void, AllocateException> Allocator::allocate_timeline_semaphores(std::span<TimelineSemaphore> dst, SourceLocationAtFrame loc) {
 		return device_resource->allocate_timeline_semaphores(dst, loc);
 	}
+	
+	void Allocator::deallocate(std::span<const TimelineSemaphore> src) {
+		device_resource->deallocate_timeline_semaphores(src);
+	}
 
 	Result<void, AllocateException> Allocator::allocate(std::span<VkAccelerationStructureKHR> dst, std::span<const VkAccelerationStructureCreateInfoKHR> cis, SourceLocationAtFrame loc) {
 		return device_resource->allocate_acceleration_structures(dst, cis, loc);
@@ -216,8 +220,8 @@ namespace vuk {
 		device_resource->deallocate_acceleration_structures(src);
 	}
 
-	void Allocator::deallocate(std::span<const TimelineSemaphore> src) {
-		device_resource->deallocate_timeline_semaphores(src);
+	void Allocator::deallocate(std::span<const VkSwapchainKHR> src) {
+		device_resource->deallocate_swapchains(src);
 	}
 
 	PFN_vmaAllocateDeviceMemoryFunction LegacyGPUAllocator::real_alloc_callback = nullptr;
