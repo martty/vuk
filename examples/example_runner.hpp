@@ -50,6 +50,8 @@ namespace vuk {
 		util::ImGuiData imgui_data;
 		std::vector<Future> futures;
 		std::mutex setup_lock;
+		double old_time = 0;
+		uint32_t num_frames = 0;
 		bool has_rt;
 
 		// when called during setup, enqueues a device-side operation to be completed before rendering begins
@@ -89,6 +91,14 @@ namespace vuk {
 					ex->cleanup(*this, *global);
 				}
 			}
+		}
+
+		void set_window_title(std::string title) {
+			glfwSetWindowTitle(window, title.c_str());
+		}
+
+		double get_time() {
+			return glfwGetTime();
 		}
 
 		~ExampleRunner() {

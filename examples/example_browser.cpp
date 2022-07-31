@@ -157,6 +157,14 @@ void vuk::ExampleRunner::render() {
 			present(frame_allocator, compiler, swapchain, std::move(fut));
 			sampled_images.clear();
 		}
+		if (++num_frames == 16) {
+			auto new_time = get_time();
+			auto delta = new_time - old_time;
+			auto per_frame_time = delta / 16 * 1000;
+			old_time = new_time;
+			num_frames = 0;
+			set_window_title(std::string("Vuk example browser [") + std::to_string(per_frame_time) + " ms]");
+		}
 	}
 }
 
