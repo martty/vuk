@@ -280,7 +280,26 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	Result<void> execute_submit_and_present_to_one(Allocator& allocator, ExecutableRenderGraph&& rg, SwapchainRef swapchain) {
+	
+	Result<void> present_to_one(Allocator& allocator, SingleSwapchainRenderBundle&& bundle) {
+		Context& ctx = allocator.get_context();
+		VkPresentInfoKHR pi{ .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
+		pi.swapchainCount = 1;
+		pi.pSwapchains = &bundle.swapchain->swapchain;
+		pi.pImageIndices = &bundle.image_index;
+		pi.waitSemaphoreCount = 1;
+		pi.pWaitSemaphores = &bundle.render_complete;
+		auto present_result = vkQueuePresentKHR(ctx.graphics_queue->impl->queue, &pi);
+		if (present_result != VK_SUCCESS) {
+			return { expected_error, PresentException{ present_result } };
+		}
+		if (bundle.acquire_result == VK_SUBOPTIMAL_KHR) {
+			return { expected_error, PresentException{ bundle.acquire_result } };
+		}
+		return { expected_value };
+	}
+
+	Result<SingleSwapchainRenderBundle> acquire_one(Allocator& allocator, SwapchainRef swapchain) {
 		Context& ctx = allocator.get_context();
 		Unique<std::array<VkSemaphore, 2>> semas(allocator);
 		VUK_DO_OR_RETURN(allocator.allocate_semaphores(*semas));
@@ -293,25 +312,30 @@ namespace vuk {
 			return { expected_error, PresentException{ acq_result } };
 		}
 
-		std::vector<std::pair<SwapchainRef, size_t>> swapchains_with_indexes = { { swapchain, image_index } };
+		return { expected_value, SingleSwapchainRenderBundle{ swapchain, image_index, present_rdy, render_complete, acq_result } };
+	}
+
+	Result<SingleSwapchainRenderBundle> execute_submit(Allocator& allocator, ExecutableRenderGraph&& rg, SingleSwapchainRenderBundle&& bundle) {
+		Context& ctx = allocator.get_context();
+
+		std::vector<std::pair<SwapchainRef, size_t>> swapchains_with_indexes = { { bundle.swapchain, bundle.image_index } };
 
 		std::pair v = { &allocator, &rg };
-		VUK_DO_OR_RETURN(execute_submit(allocator, std::span{ &v, 1 }, swapchains_with_indexes, present_rdy, render_complete));
+		VUK_DO_OR_RETURN(execute_submit(allocator, std::span{ &v, 1 }, swapchains_with_indexes, bundle.present_ready, bundle.render_complete));
 
-		VkPresentInfoKHR pi{ .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
-		pi.swapchainCount = 1;
-		pi.pSwapchains = &swapchain->swapchain;
-		pi.pImageIndices = &image_index;
-		pi.waitSemaphoreCount = 1;
-		pi.pWaitSemaphores = &render_complete;
-		auto present_result = vkQueuePresentKHR(ctx.graphics_queue->impl->queue, &pi);
-		if (present_result != VK_SUCCESS) {
-			return { expected_error, PresentException{ present_result } };
-		}
+		return { expected_value, bundle };
+	}
 
-		if (acq_result == VK_SUBOPTIMAL_KHR) {
-			return { expected_error, PresentException{ acq_result } };
+	Result<void> execute_submit_and_present_to_one(Allocator& allocator, ExecutableRenderGraph&& rg, SwapchainRef swapchain) {
+		auto bundle = acquire_one(allocator, swapchain);
+		if (!bundle) {
+			return bundle;
 		}
+		auto bundle2 = execute_submit(allocator, std::move(rg), std::move(*bundle));
+		if (!bundle2) {
+			return bundle2;
+		}
+		VUK_DO_OR_RETURN(present_to_one(allocator, std::move(*bundle2)));
 		return { expected_value };
 	}
 

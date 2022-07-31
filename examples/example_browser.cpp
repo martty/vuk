@@ -3,7 +3,9 @@
 
 std::vector<vuk::Name> chosen_resource;
 
-bool render_all = false;
+bool render_all = true;
+std::jthread presentation_thread;
+vuk::SingleSwapchainRenderBundle bundle;
 
 void vuk::ExampleRunner::render() {
 	Compiler compiler;
@@ -11,6 +13,9 @@ void vuk::ExampleRunner::render() {
 
 	vuk::wait_for_futures_explicit(*global, compiler, futures);
 	futures.clear();
+
+	// prime the first image
+	bundle = *vuk::acquire_one(*global, swapchain);
 
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
@@ -51,7 +56,16 @@ void vuk::ExampleRunner::render() {
 			ImGui::Render();
 
 			fut = util::ImGui_ImplVuk_Render(frame_allocator, std::move(fut), imgui_data, ImGui::GetDrawData(), sampled_images);
-			present(frame_allocator, compiler, swapchain, std::move(fut));
+			auto ptr = fut.get_render_graph();
+			auto erg = compiler.link(std::span{ &ptr, 1 }, {});
+			if (presentation_thread.joinable()) {
+				presentation_thread.join();
+			}
+			auto result = *execute_submit(frame_allocator, std::move(erg), std::move(bundle));
+			presentation_thread = std::jthread([=]() mutable {
+				present_to_one(frame_allocator, std::move(result));
+				bundle = *acquire_one(frame_allocator, swapchain);
+			});
 			sampled_images.clear();
 		} else { // render all examples as imgui windows
 			std::shared_ptr<RenderGraph> rg = std::make_shared<RenderGraph>("runner");
@@ -65,12 +79,12 @@ void vuk::ExampleRunner::render() {
 				size.x = size.x <= 0 ? 1 : size.x;
 				size.y = size.y <= 0 ? 1 : size.y;
 				rgx->attach_and_clear_image("_img",
-				                           { .extent = vuk::Dimension3D::absolute((uint32_t)size.x, (uint32_t)size.y),
-				                             .format = swapchain->format,
-				                             .sample_count = vuk::Samples::e1,
-				                             .level_count = 1,
-				                             .layer_count = 1 },
-				                           vuk::ClearColor(0.1f, 0.2f, 0.3f, 1.f));
+				                            { .extent = vuk::Dimension3D::absolute((uint32_t)size.x, (uint32_t)size.y),
+				                              .format = swapchain->format,
+				                              .sample_count = vuk::Samples::e1,
+				                              .level_count = 1,
+				                              .layer_count = 1 },
+				                            vuk::ClearColor(0.1f, 0.2f, 0.3f, 1.f));
 				auto rg_frag_fut = ex->render(*this, frame_allocator, Future{ rgx, "_img" });
 				Name& attachment_name_out = *attachment_names.emplace(std::string(ex->name) + "_final");
 				auto rg_frag = rg_frag_fut.get_render_graph();
@@ -154,7 +168,16 @@ void vuk::ExampleRunner::render() {
 			rg->clear_image("SWAPCHAIN", "SWAPCHAIN+", vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
 			rg->attach_swapchain("SWAPCHAIN", swapchain);
 			auto fut = util::ImGui_ImplVuk_Render(frame_allocator, Future{ rg, "SWAPCHAIN+" }, imgui_data, ImGui::GetDrawData(), sampled_images);
-			present(frame_allocator, compiler, swapchain, std::move(fut));
+			auto ptr = fut.get_render_graph();
+			auto erg = compiler.link(std::span{ &ptr, 1 }, {});
+			if (presentation_thread.joinable()) {
+				presentation_thread.join();
+			}
+			auto result = *execute_submit(frame_allocator, std::move(erg), std::move(bundle));
+			presentation_thread = std::jthread([=]() mutable { 
+				present_to_one(frame_allocator, std::move(result));
+				bundle = *acquire_one(frame_allocator, swapchain);
+			});
 			sampled_images.clear();
 		}
 		if (++num_frames == 16) {
@@ -163,7 +186,7 @@ void vuk::ExampleRunner::render() {
 			auto per_frame_time = delta / 16 * 1000;
 			old_time = new_time;
 			num_frames = 0;
-			set_window_title(std::string("Vuk example browser [") + std::to_string(per_frame_time) + " ms]");
+			set_window_title(std::string("Vuk example browser [") + std::to_string(per_frame_time) + " ms / " + std::to_string(1000/per_frame_time) + " FPS]");
 		}
 	}
 }

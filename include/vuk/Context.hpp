@@ -290,6 +290,14 @@ namespace vuk {
 namespace vuk {
 	struct ExecutableRenderGraph;
 
+	struct SingleSwapchainRenderBundle {
+		SwapchainRef swapchain;
+		uint32_t image_index;
+		VkSemaphore present_ready;
+		VkSemaphore render_complete;
+		VkResult acquire_result;
+	};
+
 	/// @brief Compile & link given `RenderGraph`s, then execute them into API VkCommandBuffers, then submit them to queues
 	/// @param allocator Allocator to use for submission resources
 	/// @param rendergraphs `RenderGraph`s for compilation
@@ -305,6 +313,7 @@ namespace vuk {
 	                            std::vector<std::pair<SwapchainRef, size_t>> swapchains_with_indexes,
 	                            VkSemaphore present_rdy,
 	                            VkSemaphore render_complete);
+
 	/// @brief Execute given `ExecutableRenderGraph` into API VkCommandBuffers, then submit them to queues, presenting to a single swapchain
 	/// @param allocator Allocator to use for submission resources
 	/// @param executable_rendergraph `ExecutableRenderGraph`s for execution
@@ -316,6 +325,10 @@ namespace vuk {
 	Result<void> execute_submit_and_wait(Allocator& allocator, ExecutableRenderGraph&& executable_rendergraph);
 
 	struct RenderGraphCompileOptions;
+
+	Result<SingleSwapchainRenderBundle> acquire_one(Allocator& allocator, SwapchainRef swapchain);
+	Result<SingleSwapchainRenderBundle> execute_submit(Allocator& allocator, ExecutableRenderGraph&& rg, SingleSwapchainRenderBundle&& bundle);
+	Result<void> present_to_one(Allocator& allocator, SingleSwapchainRenderBundle&& bundle);
 	Result<void> present(Allocator& allocator, Compiler& compiler, SwapchainRef swapchain, Future&& future, RenderGraphCompileOptions = {});
 
 	struct SampledImage make_sampled_image(ImageView iv, SamplerCreateInfo sci);
