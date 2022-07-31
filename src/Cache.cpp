@@ -152,8 +152,8 @@ namespace vuk {
 			std::unique_lock ulock(impl->cache_mtx);
 			typename Cache::LRUEntry entry{ nullptr, current_frame };
 			it = impl->lru_map.emplace(ci_copy, entry).first;
-			ulock.unlock();
 			auto pit = impl->pool.emplace(create(allocator, ci_copy));
+			ulock.unlock();
 			it->second.ptr = &*pit;
 			it->second.load_cnt.store(1);
 			it->second.load_cnt.notify_all();
