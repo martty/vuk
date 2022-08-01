@@ -42,10 +42,24 @@ namespace vuk {
 		uint64_t initial_visibility;
 	};
 
+	struct PassWrapper {
+		Name name;
+		DomainFlags execute_on;
+
+		bool use_secondary_command_buffers;
+
+		std::span<Resource> resources;
+		std::span<std::pair<Name, Name>> resolves; // src -> dst
+
+		std::function<void(CommandBuffer&)> execute;
+		std::byte* arguments; // internal use
+		PassType type;
+	};
+
 #define INIT(x) x(decltype(x)::allocator_type(*arena_))
 	struct RGImpl {
 		std::unique_ptr<arena> arena_;
-		std::vector<Pass, short_alloc<Pass, 64>> passes;
+		std::vector<PassWrapper, short_alloc<PassWrapper, 64>> passes;
 
 		robin_hood::unordered_flat_set<Name> imported_names; // names coming from subgraphs
 		robin_hood::unordered_flat_map<Name, Name> aliases;  // maps resource names to resource names
@@ -80,7 +94,7 @@ namespace vuk {
 		};
 
 		// determine rendergraph inputs and outputs, and resources that are neither
-		std::vector<PassInfo, short_alloc<PassInfo, 64>> build_io(std::span<Pass> passes);
+		std::vector<PassInfo, short_alloc<PassInfo, 64>> build_io(std::span<PassWrapper> passes);
 
 		robin_hood::unordered_flat_set<Name> get_available_resources();
 
@@ -171,6 +185,49 @@ namespace vuk {
 	};
 #undef INIT
 
+	struct PassInfo {
+		PassInfo(arena&, PassWrapper&);
+
+		PassWrapper* pass;
+
+		Name qualified_name;
+
+		std::vector<Resource, short_alloc<Resource, 64>> resources;
+		std::vector<std::pair<Name, Name>, short_alloc<std::pair<Name, Name>, 64>> resolves; // src -> dst
+
+		size_t render_pass_index;
+		uint32_t subpass;
+		DomainFlags domain;
+
+		Name prefix;
+
+		std::vector<std::pair<DomainFlagBits, PassInfo*>, short_alloc<std::pair<DomainFlagBits, PassInfo*>, 16>> waits;
+		std::vector<std::pair<DomainFlagBits, uint64_t>, short_alloc<std::pair<DomainFlagBits, uint64_t>, 16>> absolute_waits;
+		bool is_waited_on = false;
+		uint32_t bloom_resolved_inputs = 0;
+		std::vector<Name, short_alloc<Name, 16>> input_names;
+		uint32_t bloom_outputs = 0;
+		uint32_t bloom_write_inputs = 0;
+		std::vector<Name, short_alloc<Name, 16>> output_names;
+		std::vector<Name, short_alloc<Name, 16>> write_input_names;
+
+		std::vector<FutureBase*, short_alloc<FutureBase*, 16>> future_signals;
+
+		bool is_head_pass = false;
+		bool is_tail_pass = false;
+	};
+#define INIT2(x) x(decltype(x)::allocator_type(arena_))
+	inline PassInfo::PassInfo(arena& arena_, PassWrapper& p) :
+	    pass(&p),
+	    INIT2(resources),
+	    INIT2(resolves),
+	    INIT2(waits),
+	    INIT2(absolute_waits),
+	    INIT2(input_names),
+	    INIT2(output_names),
+	    INIT2(write_input_names),
+	    INIT2(future_signals) {}
+#undef INIT2
 	template<class T, class A, class F>
 	T* contains_if(std::vector<T, A>& v, F&& f) {
 		auto it = std::find_if(v.begin(), v.end(), f);

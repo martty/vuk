@@ -325,38 +325,6 @@ namespace vuk {
 		PassInfo* pass = nullptr;
 	};
 
-	struct PassInfo {
-		PassInfo(arena&, Pass&);
-
-		Pass* pass;
-
-		Name qualified_name;
-
-		std::vector<Resource, short_alloc<Resource, 64>> resources;
-		std::vector<std::pair<Name, Name>, short_alloc<std::pair<Name, Name>, 64>> resolves; // src -> dst
-
-		size_t render_pass_index;
-		uint32_t subpass;
-		DomainFlags domain;
-
-		Name prefix;
-
-		std::vector<std::pair<DomainFlagBits, PassInfo*>, short_alloc<std::pair<DomainFlagBits, PassInfo*>, 16>> waits;
-		std::vector<std::pair<DomainFlagBits, uint64_t>, short_alloc<std::pair<DomainFlagBits, uint64_t>, 16>> absolute_waits;
-		bool is_waited_on = false;
-		uint32_t bloom_resolved_inputs = 0;
-		std::vector<Name, short_alloc<Name, 16>> input_names;
-		uint32_t bloom_outputs = 0;
-		uint32_t bloom_write_inputs = 0;
-		std::vector<Name, short_alloc<Name, 16>> output_names;
-		std::vector<Name, short_alloc<Name, 16>> write_input_names;
-
-		std::vector<FutureBase*, short_alloc<FutureBase*, 16>> future_signals;
-
-		bool is_head_pass = false;
-		bool is_tail_pass = false;
-	};
-
 	struct AttachmentSInfo {
 		vuk::ImageLayout layout;
 		vuk::AccessFlags access;

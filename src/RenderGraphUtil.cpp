@@ -46,17 +46,6 @@ namespace vuk {
 	    INIT2(post_mem_barriers),
 	    INIT2(waits) {}
 
-	PassInfo::PassInfo(arena& arena_, Pass& p) :
-	    pass(&p),
-	    INIT2(resources),
-	    INIT2(resolves),
-	    INIT2(waits),
-	    INIT2(absolute_waits),
-	    INIT2(input_names),
-	    INIT2(output_names),
-	    INIT2(write_input_names),
-	    INIT2(future_signals) {}
-
 	SubpassInfo::SubpassInfo(arena& arena_) :
 	    INIT2(passes),
 	    INIT2(pre_barriers),

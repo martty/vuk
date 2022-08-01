@@ -42,12 +42,18 @@ namespace vuk {
 	}
 
 	void RenderGraph::add_pass(Pass p) {
-		for (auto& r : p.resources) {
-			if (r.is_create && r.type == Resource::Type::eImage) {
-				attach_image(r.name, r.ici, vuk::Access::eNone, vuk::Access::eNone);
-			}
-		}
-		impl->passes.emplace_back(std::move(p));
+		PassWrapper pw;
+		pw.arguments = p.arguments;
+		pw.execute = std::move(p.execute);
+		pw.execute_on = p.execute_on;
+		pw.resolves =
+		    std::span{ reinterpret_cast<decltype(pw.resolves)::value_type*>(impl->arena_->allocate(sizeof(p.resolves[0]) * p.resolves.size())), p.resolves.size() };
+		std::copy(p.resolves.begin(), p.resolves.end(), pw.resolves.begin());
+		pw.resources = std::span{ reinterpret_cast<decltype(pw.resources)::value_type*>(impl->arena_->allocate(sizeof(p.resources[0]) * p.resources.size())),
+			                        p.resources.size() };
+		std::copy(p.resources.begin(), p.resources.end(), pw.resources.begin());
+		pw.type = p.type;
+		impl->passes.emplace_back(std::move(pw));
 	}
 
 	void RGCImpl::append(Name subgraph_name, const RenderGraph& other) {
@@ -129,11 +135,11 @@ namespace vuk {
 	void RenderGraph::converge_image(Name pre_diverge, Name post_diverge) {
 		add_pass({ .name = post_diverge.append("_CONVERGE"),
 		           .resources = { Resource{ pre_diverge.append("__diverged"), Resource::Type::eImage, Access::eConverge, post_diverge },  },
-		           .execute = converge, .type = Pass::Type::eConverge });
+		           .execute = converge, .type = PassType::eConverge });
 	}
 
 	void RenderGraph::converge_image_explicit(std::span<Name> pre_diverge, Name post_diverge) {
-		Pass post{ .name = post_diverge.append("_CONVERGE"), .execute = converge, .type = Pass::Type::eConvergeExplicit };
+		Pass post{ .name = post_diverge.append("_CONVERGE"), .execute = converge, .type = PassType::eConvergeExplicit };
 		for (auto& name : pre_diverge) {
 			post.resources.emplace_back(Resource{ name, Resource::Type::eImage, Access::eConsume });
 		}
@@ -142,7 +148,7 @@ namespace vuk {
 	}
 
 	// determine rendergraph inputs and outputs, and resources that are neither
-	std::vector<PassInfo, short_alloc<PassInfo, 64>> RGImpl::build_io(std::span<struct Pass> passes_used) {
+	std::vector<PassInfo, short_alloc<PassInfo, 64>> RGImpl::build_io(std::span<PassWrapper> passes_used) {
 		robin_hood::unordered_flat_set<Name> poisoned_names;
 
 		auto pis = std::vector<PassInfo, short_alloc<PassInfo, 64>>(*arena_);
@@ -174,7 +180,7 @@ namespace vuk {
 				}
 
 				if (is_write_access(res.ia) || is_acquire(res.ia) || is_release(res.ia) || res.ia == Access::eConsume || res.ia == Access::eConverge ||
-				    pif.pass->type == Pass::Type::eForcedAccess) {
+				    pif.pass->type == PassType::eForcedAccess) {
 					assert(!poisoned_names.contains(in_name)); // we have poisoned this name because a write has already consumed it
 					pif.bloom_write_inputs |= hashed_in_name;
 					pif.write_input_names.emplace_back(in_name);
@@ -224,7 +230,7 @@ namespace vuk {
 				}
 
 				if (is_write_access(res.ia) || is_acquire(res.ia) || is_release(res.ia) || res.ia == Access::eConsume || res.ia == Access::eConverge ||
-				    pif.pass->type == Pass::Type::eForcedAccess) {
+				    pif.pass->type == PassType::eForcedAccess) {
 					assert(!poisoned_names.contains(in_name)); // we have poisoned this name because a write has already consumed it
 					pif.bloom_write_inputs |= hashed_in_name;
 					pif.write_input_names.emplace_back(in_name);
@@ -493,7 +499,7 @@ namespace vuk {
 
 		// prepare converge passes
 		for (auto& passinfo : impl->computed_passes) {
-			if (passinfo.pass->type != Pass::Type::eConvergeExplicit) {
+			if (passinfo.pass->type != PassType::eConvergeExplicit) {
 				continue;
 			}
 
@@ -818,14 +824,14 @@ namespace vuk {
 	}
 
 	void RenderGraph::clear_image(Name image_name, Name image_name_out, Clear clear_value) {
-		std::vector<std::byte> args(sizeof(Clear));
-		std::memcpy(args.data(), &clear_value, sizeof(Clear));
+		auto arg_ptr = impl->arena_->allocate(sizeof(Clear));
+		std::memcpy(arg_ptr, &clear_value, sizeof(Clear));
 		Resource res{ image_name, Resource::Type::eImage, eClear, image_name_out };
 		add_pass({ .name = image_name.append("_CLEAR"),
 		           .resources = { std::move(res) },
 		           .execute = [image_name, clear_value](CommandBuffer& cbuf) { cbuf.clear_image(image_name, clear_value); },
-		           .arguments = std::move(args),
-		           .type = Pass::Type::eClear });
+		           .arguments = reinterpret_cast<std::byte*>(arg_ptr),
+		           .type = PassType::eClear });
 	}
 
 	void RenderGraph::attach_swapchain(Name name, SwapchainRef swp) {
@@ -1086,15 +1092,14 @@ namespace vuk {
 			for (int i = 0; i < (int)chain.size() - 1; i++) {
 				auto& left = chain[i];
 				auto& right = chain[i + 1];
-				if (left.original == eClear && left.pass->pass->type == Pass::Type::eClear) {
+				if (left.original == eClear && left.pass->pass->type == PassType::eClear) {
 					// next use is as fb attachment
 					if ((i < chain.size() - 1) && is_framebuffer_attachment(to_use(right.original, right.use.domain))) {
 						auto& next_rpi = impl->rpis[right.pass->render_pass_index];
 						for (auto& rpi_att : next_rpi.attachments) {
 							if (rpi_att.attachment_info == &attachment_info) {
-								assert(left.pass->pass->arguments.size() == sizeof(Clear));
 								rpi_att.clear_value = Clear{};
-								std::memcpy(&rpi_att.clear_value, left.pass->pass->arguments.data(), sizeof(Clear));
+								std::memcpy(&rpi_att.clear_value, left.pass->pass->arguments, sizeof(Clear));
 								break;
 							}
 						}

@@ -60,19 +60,9 @@ namespace vuk {
 		enum class Type { eBuffer, eImage } type;
 		Access ia;
 		Name out_name;
-		bool is_create = false;
-		ImageAttachment ici;
-		BufferCreateInfo bci;
 
 		Resource(Name n, Type t, Access ia) : name(n), type(t), ia(ia) {}
 		Resource(Name n, Type t, Access ia, Name out_name) : name(n), type(t), ia(ia), out_name(out_name) {}
-		Resource(Name n, Type t, Access ia, Format fmt, Dimension3D dim, Samples samp, Name out_name) :
-		    name(n),
-		    type(t),
-		    ia(ia),
-		    out_name(out_name),
-		    is_create(true),
-		    ici{ .extent = dim, .format = fmt, .sample_count = samp } {}
 
 		bool operator==(const Resource& o) const noexcept {
 			return name == o.name;
@@ -80,6 +70,8 @@ namespace vuk {
 	};
 
 	QueueResourceUse to_use(Access acc, DomainFlags domain);
+
+	enum class PassType { eUserPass, eClear, eConverge, eConvergeExplicit, eForcedAccess };
 
 	/// @brief Fundamental unit of execution and scheduling. Refers to resources
 	struct Pass {
@@ -92,8 +84,8 @@ namespace vuk {
 		std::vector<std::pair<Name, Name>> resolves; // src -> dst
 
 		std::function<void(CommandBuffer&)> execute;
-		std::vector<std::byte> arguments; // internal use
-		enum class Type { eUserPass, eClear, eConverge, eConvergeExplicit, eForcedAccess } type = Type::eUserPass;
+		std::byte* arguments; // internal use
+		PassType type = PassType::eUserPass;
 	};
 
 	// declare these specializations for GCC
