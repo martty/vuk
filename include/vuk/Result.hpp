@@ -75,6 +75,8 @@ namespace vuk {
 				_error = MOV(other._error);
 				other._error = nullptr;
 			}
+
+			_extracted = other._extracted;
 		}
 
 		Result& operator=(Result const& other) = delete;
@@ -104,7 +106,7 @@ namespace vuk {
 					other._error = nullptr;
 				}
 			}
-
+			_extracted = other._extracted;
 			return *this;
 		}
 
@@ -112,7 +114,7 @@ namespace vuk {
 			if (_holds_value) {
 				_value.~T();
 			} else {
-				if (!_extracted) {
+				if (!_extracted && _error) {
 					if constexpr (vuk::use_exceptions) {
 						_error->throw_this();
 					} else {
@@ -209,6 +211,7 @@ namespace vuk {
 					swap(lhs._error, rhs._error);
 				}
 			}
+			swap(lhs._extracted, rhs._extracted);
 		}
 
 	private:
@@ -247,6 +250,8 @@ namespace vuk {
 			if (!other._holds_value) {
 				_error = other._error;
 				other._error = nullptr;
+				_extracted = other._extracted;
+				other._holds_value = true;
 			}
 		}
 
@@ -270,15 +275,17 @@ namespace vuk {
 					_holds_value = true;
 				} else {
 					_error = MOV(other._error);
+					other._holds_value = true;
 				}
 			}
+			_extracted = other._extracted;
 
 			return *this;
 		}
 
 		~Result() noexcept(false) {
 			if (!_holds_value) {
-				if (!_extracted) {
+				if (!_extracted && _error) {
 					if constexpr (vuk::use_exceptions) {
 						_error->throw_this();
 					} else {

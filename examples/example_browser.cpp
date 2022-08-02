@@ -174,7 +174,7 @@ void vuk::ExampleRunner::render() {
 				presentation_thread.join();
 			}
 			auto result = *execute_submit(frame_allocator, std::move(erg), std::move(bundle));
-			presentation_thread = std::jthread([=]() mutable { 
+			presentation_thread = std::jthread([=]() mutable {
 				present_to_one(frame_allocator, std::move(result));
 				bundle = *acquire_one(frame_allocator, swapchain);
 			});
@@ -186,7 +186,7 @@ void vuk::ExampleRunner::render() {
 			auto per_frame_time = delta / 16 * 1000;
 			old_time = new_time;
 			num_frames = 0;
-			set_window_title(std::string("Vuk example browser [") + std::to_string(per_frame_time) + " ms / " + std::to_string(1000/per_frame_time) + " FPS]");
+			set_window_title(std::string("Vuk example browser [") + std::to_string(per_frame_time) + " ms / " + std::to_string(1000 / per_frame_time) + " FPS]");
 		}
 	}
 }
