@@ -43,6 +43,8 @@ namespace vuk {
 
 	void RenderGraph::add_pass(Pass p) {
 		PassWrapper pw;
+		pw.name = p.name;
+		pw.use_secondary_command_buffers = p.use_secondary_command_buffers;
 		pw.arguments = p.arguments;
 		pw.execute = std::move(p.execute);
 		pw.execute_on = p.execute_on;
