@@ -360,7 +360,7 @@ namespace vuk {
 			resolved_rules.emplace(impl->resolve_name(n), std::move(rules));
 		}
 
-		std::vector<std::pair<AttachmentInfo*, IAInference*>> attis_to_infer;
+		std::vector<std::pair<AttachmentInfo*, IAInferences*>> attis_to_infer;
 		for (auto& [name, bound] : impl->bound_attachments) {
 			if (bound.type == AttachmentInfo::Type::eInternal) {
 				// compute usage if it is to be inferred
@@ -399,7 +399,7 @@ namespace vuk {
 						}
 					}
 				}
-				IAInference* rules_ptr = nullptr;
+				IAInferences* rules_ptr = nullptr;
 				auto rules_it = resolved_rules.find(name);
 				if (rules_it != resolved_rules.end()) {
 					rules_ptr = &rules_it->second;

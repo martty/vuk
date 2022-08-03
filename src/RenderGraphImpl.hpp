@@ -26,6 +26,12 @@ namespace vuk {
 
 	using IARule = std::function<void(const struct InferenceContext&, ImageAttachment&)>;
 	struct IAInference {
+		Name resource;
+		Name prefix;
+		IARule rule;
+	};
+
+	struct IAInferences {
 		Name prefix;
 		std::vector<IARule> rules;
 	};
@@ -61,31 +67,41 @@ namespace vuk {
 		std::unique_ptr<arena> arena_;
 		std::vector<PassWrapper, short_alloc<PassWrapper, 64>> passes;
 
-		robin_hood::unordered_flat_set<Name> imported_names; // names coming from subgraphs
-		robin_hood::unordered_flat_map<Name, Name> aliases;  // maps resource names to resource names
-		robin_hood::unordered_flat_set<Name> whole_names_consumed;
-		robin_hood::unordered_flat_map<Name, std::pair<Name, Subrange::Image>> diverged_subchain_headers;
+		std::vector<Name, short_alloc<Name, 64>> imported_names;                            // names coming from subgraphs
+		std::vector<std::pair<Name, Name>, short_alloc<std::pair<Name, Name>, 64>> aliases; // maps resource names to resource names
+		std::vector<Name, short_alloc<Name, 64>> whole_names_consumed;
+		std::vector<std::pair<Name, std::pair<Name, Subrange::Image>>, short_alloc<std::pair<Name, std::pair<Name, Subrange::Image>>, 64>>
+		    diverged_subchain_headers;
 
 		robin_hood::unordered_flat_map<Name, AttachmentInfo> bound_attachments;
 		robin_hood::unordered_flat_map<Name, BufferInfo> bound_buffers;
 
-		std::unordered_map<Name, IAInference> ia_inference_rules;
+		std::vector<IAInference, short_alloc<IAInference, 64>> ia_inference_rules;
 
 		struct SGInfo {
 			uint64_t count = 0;
-			std::unordered_map<Name, Name> exported_names;
+			std::span<std::pair<Name, Name>> exported_names = {};
 		};
 
-		std::unordered_map<std::shared_ptr<RenderGraph>, SGInfo> subgraphs;
+		std::vector<std::pair<std::shared_ptr<RenderGraph>, SGInfo>, short_alloc<std::pair<std::shared_ptr<RenderGraph>, SGInfo>, 64>> subgraphs;
 
-		std::unordered_map<Name, Acquire> acquires;
+		std::vector<std::pair<Name, Acquire>, short_alloc<std::pair<Name, Acquire>, 64>> acquires;
+		std::vector<std::pair<Name, Release>, short_alloc<std::pair<Name, Release>, 64>> releases;
 
-		std::unordered_multimap<Name, Release> releases;
-
-		RGImpl() : arena_(new arena(sizeof(Pass) * 64)), INIT(passes) {}
+		RGImpl() :
+		    arena_(new arena(sizeof(Pass) * 64)),
+		    INIT(passes),
+		    INIT(imported_names),
+		    INIT(aliases),
+		    INIT(whole_names_consumed),
+		    INIT(diverged_subchain_headers),
+		    INIT(ia_inference_rules),
+		    INIT(acquires),
+		    INIT(releases),
+		    INIT(subgraphs) {}
 
 		Name resolve_alias(Name in) {
-			auto it = aliases.find(in);
+			auto it = std::find_if(aliases.begin(), aliases.end(), [=](auto& v) { return v.first == in; });
 			if (it == aliases.end()) {
 				return in;
 			} else {
@@ -111,7 +127,6 @@ namespace vuk {
 		std::vector<PassInfo*, short_alloc<PassInfo*, 64>> ordered_passes;
 		robin_hood::unordered_flat_map<Name, Name> computed_aliases; // maps resource names to resource names
 		robin_hood::unordered_flat_map<Name, Name> assigned_names;   // maps resource names to attachment names
-		robin_hood::unordered_flat_set<Name> whole_names_consumed;
 		robin_hood::unordered_flat_map<Name, uint64_t> sg_name_counter;
 		robin_hood::unordered_node_map<Name, std::vector<UseRef, short_alloc<UseRef, 64>>> use_chains;
 
@@ -121,7 +136,7 @@ namespace vuk {
 		std::unordered_map<Name, Acquire> acquires;
 		std::unordered_multimap<Name, Release> releases;
 
-		std::unordered_map<Name, IAInference> ia_inference_rules;
+		std::unordered_map<Name, IAInferences> ia_inference_rules;
 
 		robin_hood::unordered_flat_map<Name, std::pair<Name, Subrange::Image>> diverged_subchain_headers;
 

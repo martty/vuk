@@ -94,9 +94,11 @@ namespace vuk {
 			bound_buffers.emplace(joiner.append(name.to_sv()), std::move(buf));
 		}
 
-		for (auto [name, iainf] : other.impl->ia_inference_rules) {
-			iainf.prefix = joiner.append(iainf.prefix.to_sv());
-			ia_inference_rules.emplace(joiner.append(name.to_sv()), iainf);
+		for (auto [name, prefix, iainf] : other.impl->ia_inference_rules) {
+			prefix = joiner.append(prefix.to_sv());
+			auto& rule = ia_inference_rules[joiner.append(name.to_sv())];
+			rule.prefix = prefix;
+			rule.rules.emplace_back(iainf);
 		}
 
 		for (auto& [name, v] : other.impl->acquires) {
@@ -111,23 +113,21 @@ namespace vuk {
 			v.first = joiner.append(v.first.to_sv());
 			diverged_subchain_headers.emplace(joiner.append(name.to_sv()), v);
 		}
-
-		for (auto& name : other.impl->whole_names_consumed) {
-			whole_names_consumed.emplace(joiner.append(name.to_sv()));
-		}
 	}
 
 	void RenderGraph::add_alias(Name new_name, Name old_name) {
 		if (new_name != old_name) {
-			impl->aliases[new_name] = old_name;
+			impl->aliases.emplace_back(new_name, old_name);
 		}
 	}
 
 	void RenderGraph::diverge_image(Name whole_name, Subrange::Image subrange, Name subrange_name) {
-		impl->diverged_subchain_headers[subrange_name] = std::pair{ whole_name, subrange };
-		auto [iter, succ] = impl->whole_names_consumed.emplace(whole_name);
+		impl->diverged_subchain_headers.emplace_back(subrange_name, std::pair{ whole_name, subrange });
+		auto it = std::find(impl->whole_names_consumed.begin(), impl->whole_names_consumed.end(), whole_name);
+		bool new_divergence = it == impl->whole_names_consumed.end();
 
-		if (succ) {
+		if (new_divergence) {
+			impl->whole_names_consumed.emplace_back(whole_name);
 			add_pass({ .name = whole_name.append("_DIVERGE"),
 			           .resources = { Resource{ whole_name, Resource::Type::eImage, Access::eConsume, whole_name.append("__diverged") } },
 			           .execute = diverge });
@@ -190,7 +190,8 @@ namespace vuk {
 				}
 
 				// if this resource use is the first in a diverged subchain, we additionally add a dependency onto the undiverged subchain
-				if (auto it = diverged_subchain_headers.find(in_name); it != diverged_subchain_headers.end()) {
+				if (auto it = std::find_if(diverged_subchain_headers.begin(), diverged_subchain_headers.end(), [=](auto& item) { return item.first == in_name; });
+				    it != diverged_subchain_headers.end()) {
 					auto& sch_info = it->second;
 					auto dep = sch_info.first.append("__diverged");
 					auto hashed_name = ::hash::fnv1a::hash(dep.to_sv().data(), dep.to_sv().size(), hash::fnv1a::default_offset_basis);
@@ -920,19 +921,28 @@ namespace vuk {
 				};
 				impl->bound_buffers.emplace(name, buf_info);
 			}
-			impl->acquires.emplace(name, Acquire{ fimg.control->last_use, fimg.control->initial_domain, fimg.control->initial_visibility });
-			impl->imported_names.emplace(name);
+			impl->acquires.emplace_back(name, Acquire{ fimg.control->last_use, fimg.control->initial_domain, fimg.control->initial_visibility });
+			impl->imported_names.emplace_back(name);
 		} else if (fimg.get_status() == FutureBase::Status::eInitial) {
 			Name sg_name = fimg.rg->name;
 			// an unsubmitted RG is being attached, we remove the release from that RG, and we allow the name to be found in us
-			if (fimg.rg->impl) {
-				fimg.rg->impl->releases.erase(fimg.get_bound_name());
-				impl->subgraphs[fimg.rg].count++;
-			} else {
-				impl->releases.erase(sg_name.append("::").append(fimg.get_bound_name().to_sv()));
+			assert(fimg.rg->impl);
+			std::erase_if(fimg.rg->impl->releases, [name = fimg.get_bound_name()](auto& item) { return item.first == name; });
+			auto sg_info_it = std::find_if(impl->subgraphs.begin(), impl->subgraphs.end(), [&](auto& it) { return it.first == fimg.rg; });
+			if (sg_info_it == impl->subgraphs.end()) {
+				impl->subgraphs.emplace_back(std::pair{ fimg.rg, RGImpl::SGInfo{} });
+				sg_info_it = impl->subgraphs.end() - 1;
 			}
-			impl->subgraphs[fimg.rg].exported_names.emplace(name, fimg.get_bound_name());
-			impl->imported_names.emplace(name);
+			auto& sg_info = sg_info_it->second;
+			sg_info.count++;
+			auto old_exported_names = sg_info.exported_names;
+			auto current_exported_name_size = sg_info.exported_names.size_bytes();
+			sg_info.exported_names = std::span{ reinterpret_cast<decltype(sg_info.exported_names)::value_type*>(
+				                                      impl->arena_->allocate(current_exported_name_size + sizeof(sg_info.exported_names[0]))),
+				                                  sg_info.exported_names.size() + 1 };
+			std::copy(old_exported_names.begin(), old_exported_names.end(), sg_info.exported_names.begin());
+			sg_info.exported_names.back() = std::pair{ name, fimg.get_bound_name() };
+			impl->imported_names.emplace_back(name);
 			fimg.rg.reset();
 		} else {
 			assert(0);
@@ -947,14 +957,15 @@ namespace vuk {
 	}
 
 	void RenderGraph::inference_rule(Name target, std::function<void(const struct InferenceContext&, ImageAttachment&)> rule) {
-		impl->ia_inference_rules[target].prefix = "";
-		impl->ia_inference_rules[target].rules.push_back(std::move(rule));
+		impl->ia_inference_rules.emplace_back(target, "", std::move(rule));
 	}
 
 	robin_hood::unordered_flat_set<Name> RGImpl::get_available_resources() {
 		auto pass_infos = build_io(passes);
 		// seed the available names with the names we imported from subgraphs
-		robin_hood::unordered_flat_set<Name> outputs = imported_names;
+		robin_hood::unordered_flat_set<Name> outputs;
+		outputs.insert(imported_names.begin(), imported_names.end());
+
 		for (auto& [name, _] : bound_attachments) {
 			outputs.insert(name);
 		}
@@ -986,7 +997,7 @@ namespace vuk {
 	}
 
 	void RenderGraph::attach_out(Name name, Future& fimg, DomainFlags dst_domain, Subrange subrange) {
-		impl->releases.emplace(name, Release{ to_use(Access::eNone, dst_domain), subrange, fimg.control.get() });
+		impl->releases.emplace_back(name, Release{ to_use(Access::eNone, dst_domain), subrange, fimg.control.get() });
 	}
 
 	void RenderGraph::detach_out(Name name, Future& fimg) {
