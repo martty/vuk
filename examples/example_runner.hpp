@@ -53,6 +53,8 @@ namespace vuk {
 		double old_time = 0;
 		uint32_t num_frames = 0;
 		bool has_rt;
+		vuk::Unique<std::array<VkSemaphore, 3>> present_ready;
+		vuk::Unique<std::array<VkSemaphore, 3>> render_complete;
 
 		// when called during setup, enqueues a device-side operation to be completed before rendering begins
 		void enqueue_setup(Future&& fut) {
@@ -102,6 +104,8 @@ namespace vuk {
 		}
 
 		~ExampleRunner() {
+			present_ready.reset();
+			render_complete.reset();
 			imgui_data.font_texture.view.reset();
 			imgui_data.font_texture.image.reset();
 			xdev_rf_alloc.reset();
@@ -227,6 +231,8 @@ namespace vuk {
 		xdev_rf_alloc.emplace(*context, num_inflight_frames);
 		global.emplace(*xdev_rf_alloc);
 		swapchain = context->add_swapchain(util::make_swapchain(vkbdevice));
+		present_ready = vuk::Unique<std::array<VkSemaphore, 3>>(*global);
+		render_complete = vuk::Unique<std::array<VkSemaphore, 3>>(*global);
 	}
 } // namespace vuk
 

@@ -14,8 +14,8 @@ void vuk::ExampleRunner::render() {
 	vuk::wait_for_futures_explicit(*global, compiler, futures);
 	futures.clear();
 
-	// prime the first image
-	bundle = *vuk::acquire_one(*global, swapchain);
+	global->allocate_semaphores(*present_ready);
+	global->allocate_semaphores(*render_complete);
 
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
@@ -46,7 +46,12 @@ void vuk::ExampleRunner::render() {
 
 		auto& xdev_frame_resource = xdev_rf_alloc->get_next_frame();
 		context->next_frame();
+		auto xdp = &xdev_frame_resource;
 		Allocator frame_allocator(xdev_frame_resource);
+		if (!bundle.present_ready) {
+			// prime the first bundle
+			bundle = *vuk::acquire_one(frame_allocator, swapchain);
+		}
 		if (!render_all) { // render a single full window example
 			RenderGraph rg("runner");
 			vuk::Name attachment_name = item_current->name;
@@ -63,8 +68,8 @@ void vuk::ExampleRunner::render() {
 			}
 			auto result = *execute_submit(frame_allocator, std::move(erg), std::move(bundle));
 			presentation_thread = std::jthread([=]() mutable {
-				present_to_one(frame_allocator, std::move(result));
-				bundle = *acquire_one(frame_allocator, swapchain);
+				present_to_one(*context, std::move(result));
+				bundle = *acquire_one(*context, swapchain, (*present_ready)[context->get_frame_count() % 3], (*render_complete)[context->get_frame_count() % 3]);
 			});
 			sampled_images.clear();
 		} else { // render all examples as imgui windows
@@ -175,8 +180,8 @@ void vuk::ExampleRunner::render() {
 			}
 			auto result = *execute_submit(frame_allocator, std::move(erg), std::move(bundle));
 			presentation_thread = std::jthread([=]() mutable {
-				present_to_one(frame_allocator, std::move(result));
-				bundle = *acquire_one(frame_allocator, swapchain);
+				present_to_one(*context, std::move(result));
+				bundle = *acquire_one(*context, swapchain, (*present_ready)[context->get_frame_count() % 3], (*render_complete)[context->get_frame_count() % 3]);
 			});
 			sampled_images.clear();
 		}
@@ -194,5 +199,6 @@ void vuk::ExampleRunner::render() {
 int main() {
 	vuk::ExampleRunner::get_runner().setup();
 	vuk::ExampleRunner::get_runner().render();
+	presentation_thread.join();
 	vuk::ExampleRunner::get_runner().cleanup();
 }

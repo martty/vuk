@@ -281,8 +281,7 @@ namespace vuk {
 	}
 
 	
-	Result<void> present_to_one(Allocator& allocator, SingleSwapchainRenderBundle&& bundle) {
-		Context& ctx = allocator.get_context();
+	Result<void> present_to_one(Context& ctx, SingleSwapchainRenderBundle&& bundle) {
 		VkPresentInfoKHR pi{ .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
 		pi.swapchainCount = 1;
 		pi.pSwapchains = &bundle.swapchain->swapchain;
@@ -315,6 +314,17 @@ namespace vuk {
 		return { expected_value, SingleSwapchainRenderBundle{ swapchain, image_index, present_rdy, render_complete, acq_result } };
 	}
 
+	Result<SingleSwapchainRenderBundle> acquire_one(Context& ctx, SwapchainRef swapchain, VkSemaphore present_ready, VkSemaphore render_complete) {
+		uint32_t image_index = (uint32_t)-1;
+		VkResult acq_result = vkAcquireNextImageKHR(ctx.device, swapchain->swapchain, UINT64_MAX, present_ready, VK_NULL_HANDLE, &image_index);
+		// VK_SUBOPTIMAL_KHR shouldn't stop presentation; it is handled at the end
+		if (acq_result != VK_SUCCESS && acq_result != VK_SUBOPTIMAL_KHR) {
+			return { expected_error, PresentException{ acq_result } };
+		}
+
+		return { expected_value, SingleSwapchainRenderBundle{ swapchain, image_index, present_ready, render_complete, acq_result } };
+	}
+
 	Result<SingleSwapchainRenderBundle> execute_submit(Allocator& allocator, ExecutableRenderGraph&& rg, SingleSwapchainRenderBundle&& bundle) {
 		Context& ctx = allocator.get_context();
 
@@ -323,7 +333,7 @@ namespace vuk {
 		std::pair v = { &allocator, &rg };
 		VUK_DO_OR_RETURN(execute_submit(allocator, std::span{ &v, 1 }, swapchains_with_indexes, bundle.present_ready, bundle.render_complete));
 
-		return { expected_value, bundle };
+		return { expected_value, std::move(bundle) };
 	}
 
 	Result<void> execute_submit_and_present_to_one(Allocator& allocator, ExecutableRenderGraph&& rg, SwapchainRef swapchain) {
@@ -335,7 +345,7 @@ namespace vuk {
 		if (!bundle2) {
 			return bundle2;
 		}
-		VUK_DO_OR_RETURN(present_to_one(allocator, std::move(*bundle2)));
+		VUK_DO_OR_RETURN(present_to_one(allocator.get_context(), std::move(*bundle2)));
 		return { expected_value };
 	}
 

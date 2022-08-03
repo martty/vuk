@@ -327,8 +327,9 @@ namespace vuk {
 	struct RenderGraphCompileOptions;
 
 	Result<SingleSwapchainRenderBundle> acquire_one(Allocator& allocator, SwapchainRef swapchain);
+	Result<SingleSwapchainRenderBundle> acquire_one(Context& ctx, SwapchainRef swapchain, VkSemaphore present_ready, VkSemaphore render_complete);
 	Result<SingleSwapchainRenderBundle> execute_submit(Allocator& allocator, ExecutableRenderGraph&& rg, SingleSwapchainRenderBundle&& bundle);
-	Result<void> present_to_one(Allocator& allocator, SingleSwapchainRenderBundle&& bundle);
+	Result<void> present_to_one(Context& ctx, SingleSwapchainRenderBundle&& bundle);
 	Result<void> present(Allocator& allocator, Compiler& compiler, SwapchainRef swapchain, Future&& future, RenderGraphCompileOptions = {});
 
 	struct SampledImage make_sampled_image(ImageView iv, SamplerCreateInfo sci);
