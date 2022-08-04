@@ -766,6 +766,24 @@ namespace vuk {
 		if (it == impl->bound_attachments.end()) {
 			return { expected_error, RenderGraphException{ "Image not found" } };
 		}
+		auto uc_it = impl->use_chains.find(resolved);
+		if (uc_it == impl->use_chains.end()) {
+			return { expected_error, RenderGraphException{ "Resource not found" } };
+		}
+		auto& chain = uc_it->second;
+		for (auto& elem : chain) {
+			if (elem.pass == pass_info) {
+				// TODO: make this less expensive
+				auto attI = it->second;
+				attI.attachment.base_layer = elem.subrange.image.base_layer;
+				attI.attachment.base_level = elem.subrange.image.base_level;
+				attI.attachment.layer_count =
+				    elem.subrange.image.layer_count == VK_REMAINING_ARRAY_LAYERS ? attI.attachment.layer_count : elem.subrange.image.layer_count;
+				attI.attachment.level_count =
+				    elem.subrange.image.level_count == VK_REMAINING_MIP_LEVELS ? attI.attachment.level_count : elem.subrange.image.level_count;
+				return { expected_value, attI };
+			}
+		}
 		return { expected_value, it->second };
 	}
 
