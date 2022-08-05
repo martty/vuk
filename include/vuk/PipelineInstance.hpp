@@ -139,7 +139,7 @@ namespace vuk {
 	struct ComputePipelineInstanceCreateInfo {
 		PipelineBaseInfo* base;
 
-		std::array<std::byte, VUK_MAX_SPECIALIZATIONCONSTANT_DATA> specialization_constant_data;
+		std::array<std::byte, VUK_MAX_SPECIALIZATIONCONSTANT_DATA> specialization_constant_data = {};
 		vuk::fixed_vector<VkSpecializationMapEntry, VUK_MAX_SPECIALIZATIONCONSTANT_RANGES> specialization_map_entries;
 		VkSpecializationInfo specialization_info = {};
 
@@ -161,7 +161,7 @@ namespace vuk {
 	struct RayTracingPipelineInstanceCreateInfo {
 		PipelineBaseInfo* base;
 
-		std::array<std::byte, VUK_MAX_SPECIALIZATIONCONSTANT_DATA> specialization_constant_data;
+		std::array<std::byte, VUK_MAX_SPECIALIZATIONCONSTANT_DATA> specialization_constant_data = {};
 		vuk::fixed_vector<VkSpecializationMapEntry, VUK_MAX_SPECIALIZATIONCONSTANT_RANGES> specialization_map_entries;
 		VkSpecializationInfo specialization_info = {};
 
