@@ -2,10 +2,10 @@
 
 #include "../src/CreateInfo.hpp"
 #include "Pipeline.hpp"
+#include "vuk/Buffer.hpp"
 #include "vuk/Config.hpp"
 #include "vuk/FixedVector.hpp"
 #include "vuk/Hash.hpp"
-#include "vuk/Buffer.hpp"
 #include <bit>
 
 inline bool operator==(VkSpecializationMapEntry const& lhs, VkSpecializationMapEntry const& rhs) noexcept {
@@ -115,7 +115,8 @@ namespace vuk {
 #pragma pack(pop)
 
 		bool operator==(const PipelineInstanceCreateInfo& o) const noexcept {
-			return base == o.base && render_pass == o.render_pass && extended_size == o.extended_size &&
+			return base == o.base && render_pass == o.render_pass && extended_size == o.extended_size && attachmentCount == o.attachmentCount &&
+			       topology == o.topology && primitive_restart_enable == o.primitive_restart_enable && cullMode == o.cullMode &&
 			       (is_inline() ? (memcmp(inline_data, o.inline_data, extended_size) == 0) : (memcmp(extended_data, o.extended_data, extended_size) == 0));
 		}
 
