@@ -42,8 +42,9 @@ namespace vuk {
 		        }),
 		    image_view_cache(
 		        this,
-		        +[](void* allocator, const ImageViewCreateInfo& ivci) {
+		        +[](void* allocator, const CompressedImageViewCreateInfo& civci) {
 			        ImageView iv;
+			        ImageViewCreateInfo ivci = static_cast<ImageViewCreateInfo>(civci);
 			        reinterpret_cast<DeviceSuperFrameResourceImpl*>(allocator)->sfr->allocate_image_views({ &iv, 1 }, { &ivci, 1 }, {}); // TODO: dropping error
 			        return iv;
 		        },
@@ -546,7 +547,8 @@ namespace vuk {
 		assert(dst.size() == cis.size());
 		for (uint64_t i = 0; i < dst.size(); i++) {
 			auto& ci = cis[i];
-			dst[i] = impl->image_view_cache.acquire(ci, impl->frame_counter);
+			CompressedImageViewCreateInfo civci(ci);
+			dst[i] = impl->image_view_cache.acquire(civci, impl->frame_counter);
 		}
 		return { expected_value };
 	}

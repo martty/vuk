@@ -720,12 +720,6 @@ namespace vuk {
 		vkDeviceWaitIdle(device);
 	}
 
-	ImageView Context::wrap(VkImageView iv, ImageViewCreateInfo ivci) {
-		ImageView viv{ .payload = iv };
-		viv.id = impl->unique_handle_id_counter++;
-		return viv;
-	}
-
 	void Context::collect(uint64_t frame) {
 		impl->collect(frame);
 	}

@@ -197,7 +197,7 @@ namespace vuk {
 				deallocate_image_views({ dst.data(), (uint64_t)i });
 				return { expected_error, AllocateException{ res } };
 			}
-			dst[i] = ctx->wrap(iv, cis[i]);
+			dst[i] = ctx->wrap(iv);
 		}
 		return { expected_value };
 	}

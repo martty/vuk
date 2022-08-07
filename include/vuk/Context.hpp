@@ -168,7 +168,6 @@ namespace vuk {
 		/// @return The wrapped handle.
 		template<class T>
 		Handle<T> wrap(T payload);
-		ImageView wrap(VkImageView payload, ImageViewCreateInfo);
 
 		Result<void> submit_graphics(std::span<VkSubmitInfo>, VkFence);
 		Result<void> submit_transfer(std::span<VkSubmitInfo>, VkFence);

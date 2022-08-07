@@ -14,6 +14,7 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <robin_hood.h>
 
 namespace std {
 	template<>
@@ -196,6 +197,13 @@ namespace std {
 			size_t h = 0;
 			hash_combine(h, x.flags, x.components, to_integral(x.format), reinterpret_cast<uint64_t>((VkImage)x.image), x.subresourceRange, to_integral(x.viewType));
 			return h;
+		}
+	};
+
+	template<>
+	struct hash<vuk::CompressedImageViewCreateInfo> {
+		size_t operator()(vuk::CompressedImageViewCreateInfo const& x) const noexcept {
+			return robin_hood::hash_bytes((const char*)&x, sizeof(vuk::CompressedImageViewCreateInfo));
 		}
 	};
 

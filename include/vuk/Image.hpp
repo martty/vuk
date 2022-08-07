@@ -2,6 +2,7 @@
 
 #include <string_view>
 #include <utility>
+#include <cassert>
 
 #include "../src/CreateInfo.hpp"
 #include "Types.hpp"
@@ -297,11 +298,81 @@ namespace vuk {
 	static_assert(sizeof(ImageViewCreateInfo) == sizeof(VkImageViewCreateInfo), "struct and wrapper have different size!");
 	static_assert(std::is_standard_layout<ImageViewCreateInfo>::value, "struct wrapper is not a standard layout!");
 
+#pragma pack(push, 1)
+	struct CompressedImageViewCreateInfo {
+		uint32_t flags : 2;
+		ImageViewType viewType : 3 = ImageViewType::e2D;
+		ComponentSwizzle r_swizzle : 3 = ComponentSwizzle::eIdentity;
+		ComponentSwizzle g_swizzle : 3 = ComponentSwizzle::eIdentity;
+		ComponentSwizzle b_swizzle : 3 = ComponentSwizzle::eIdentity;
+		ComponentSwizzle a_swizzle : 3 = ComponentSwizzle::eIdentity;
+		uint32_t padding : 4 = 0;
+		uint32_t aspectMask : 11 = {}; // 27 bits ~ pad to 4 bytes
+		uint32_t baseMipLevel : 16 = 0;
+		uint32_t levelCount : 16 = 1;
+		uint32_t baseArrayLayer = 0; // 8 bytes
+		uint32_t layerCount = 1;
+		Image image = {};                   // 16 bytes
+		Format format = Format::eUndefined; // 32 bytes in total
+
+		CompressedImageViewCreateInfo(ImageViewCreateInfo ivci) {
+			assert(ivci.pNext == nullptr && "Compression does not support pNextended IVCIs");
+			flags = ivci.flags.m_mask;
+			viewType = ivci.viewType;
+			r_swizzle = ivci.components.r;
+			g_swizzle = ivci.components.g;
+			b_swizzle = ivci.components.b;
+			a_swizzle = ivci.components.a;
+			aspectMask = ivci.subresourceRange.aspectMask.m_mask;
+			baseMipLevel = ivci.subresourceRange.baseMipLevel;
+			levelCount = ivci.subresourceRange.levelCount;
+			baseArrayLayer = ivci.subresourceRange.baseArrayLayer;
+			layerCount = ivci.subresourceRange.layerCount;
+			image = ivci.image;
+			format = ivci.format;
+		}
+
+		explicit operator VkImageViewCreateInfo() const noexcept {
+			VkImageViewCreateInfo ivci{ .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
+			ivci.flags = flags;
+			ivci.viewType = (VkImageViewType)viewType;
+			ivci.components.r = (VkComponentSwizzle)r_swizzle;
+			ivci.components.g = (VkComponentSwizzle)g_swizzle;
+			ivci.components.b = (VkComponentSwizzle)b_swizzle;
+			ivci.components.a = (VkComponentSwizzle)a_swizzle;
+			ivci.subresourceRange = {
+				.aspectMask = aspectMask, .baseMipLevel = baseMipLevel, .levelCount = levelCount, .baseArrayLayer = baseArrayLayer, .layerCount = layerCount
+			};
+			ivci.image = image;
+			ivci.format = (VkFormat)format;
+			return ivci;
+		}
+
+		explicit operator ImageViewCreateInfo() const noexcept {
+			ImageViewCreateInfo ivci;
+			ivci.flags = (ImageViewCreateFlags)flags;
+			ivci.viewType = (ImageViewType)viewType;
+			ivci.components.r = (ComponentSwizzle)r_swizzle;
+			ivci.components.g = (ComponentSwizzle)g_swizzle;
+			ivci.components.b = (ComponentSwizzle)b_swizzle;
+			ivci.components.a = (ComponentSwizzle)a_swizzle;
+			ivci.subresourceRange = {
+				.aspectMask = (ImageAspectFlags)aspectMask, .baseMipLevel = baseMipLevel, .levelCount = levelCount, .baseArrayLayer = baseArrayLayer, .layerCount = layerCount
+			};
+			ivci.image = image;
+			ivci.format = (Format)format;
+			return ivci;
+		}
+
+		constexpr bool operator==(CompressedImageViewCreateInfo const& rhs) const noexcept = default;
+	};
+#pragma pack(pop)
+
 	using ImageView = Handle<VkImageView>;
 
 	template<>
 	struct create_info<ImageView> {
-		using type = vuk::ImageViewCreateInfo;
+		using type = CompressedImageViewCreateInfo;
 	};
 
 	enum class SamplerCreateFlagBits : VkSamplerCreateFlags {

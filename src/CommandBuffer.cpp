@@ -1083,8 +1083,8 @@ namespace vuk {
 					auto& cinfo = sb;
 					auto mask = cinfo.used.to_ulong();
 					uint32_t leading_ones = num_leading_ones(mask);
-					std::array<VkWriteDescriptorSet, VUK_MAX_BINDINGS> writes = {};
-					std::array<VkWriteDescriptorSetAccelerationStructureKHR, VUK_MAX_BINDINGS> as_writes = {};
+					std::array<VkWriteDescriptorSet, VUK_MAX_BINDINGS> writes;
+					std::array<VkWriteDescriptorSetAccelerationStructureKHR, VUK_MAX_BINDINGS> as_writes;
 					int j = 0;
 					for (uint32_t i = 0; i < leading_ones; i++, j++) {
 						if (!cinfo.used.test(i)) {
