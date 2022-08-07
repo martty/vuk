@@ -256,7 +256,7 @@ namespace vuk {
 	void RGCImpl::schedule_intra_queue(std::span<PassInfo> passes, const RenderGraphCompileOptions& compile_options) {
 		// sort passes if requested
 		if (passes.size() > 1 && compile_options.reorder_passes) {
-			topological_sort(passes.begin(), passes.end(), [this](const auto& p1, const auto& p2) {
+			topological_sort(passes.begin(), passes.end(), [](const auto& p1, const auto& p2) {
 				if (&p1 == &p2) {
 					return false;
 				}
@@ -924,7 +924,6 @@ namespace vuk {
 			impl->acquires.emplace_back(name, Acquire{ fimg.control->last_use, fimg.control->initial_domain, fimg.control->initial_visibility });
 			impl->imported_names.emplace_back(name);
 		} else if (fimg.get_status() == FutureBase::Status::eInitial) {
-			Name sg_name = fimg.rg->name;
 			// an unsubmitted RG is being attached, we remove the release from that RG, and we allow the name to be found in us
 			assert(fimg.rg->impl);
 			std::erase_if(fimg.rg->impl->releases, [name = fimg.get_bound_name()](auto& item) { return item.first == name; });
@@ -957,7 +956,7 @@ namespace vuk {
 	}
 
 	void RenderGraph::inference_rule(Name target, std::function<void(const struct InferenceContext&, ImageAttachment&)> rule) {
-		impl->ia_inference_rules.emplace_back(target, "", std::move(rule));
+		impl->ia_inference_rules.emplace_back(IAInference{ target, Name(""), std::move(rule) });
 	}
 
 	robin_hood::unordered_flat_set<Name> RGImpl::get_available_resources() {
