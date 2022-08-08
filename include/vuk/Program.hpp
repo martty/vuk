@@ -12,8 +12,11 @@
 namespace vuk {
 	struct Program {
 		enum class Type {
+			einvalid,
 			euint,
+			euint64_t,
 			eint,
+			eint64_t,
 			efloat,
 			edouble,
 			euvec2,
@@ -28,8 +31,16 @@ namespace vuk {
 			edvec2,
 			edvec3,
 			edvec4,
+			emat3,
 			emat4,
+			edmat3,
 			edmat4,
+			eu64vec2,
+			eu64vec3,
+			eu64vec4,
+			ei64vec2,
+			ei64vec3,
+			ei64vec4,
 			estruct
 		};
 

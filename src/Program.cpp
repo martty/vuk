@@ -45,86 +45,106 @@ vuk::Program::Type to_type(spirv_cross::SPIRType s) {
 			switch (s.vecsize) {
 			case 1:
 				return Program::Type::efloat;
-				break;
 			case 2:
 				return Program::Type::evec2;
-				break;
 			case 3:
 				return Program::Type::evec3;
-				break;
 			case 4:
 				return Program::Type::evec4;
-				break;
 			default:
 				assert("NYI" && 0);
 			}
+			break;
+		case 3:
+			return Program::Type::emat3;
 		case 4:
 			return Program::Type::emat4;
-			break;
 		}
+		break;
 	case SPIRType::Double:
 		switch (s.columns) {
 		case 1:
 			switch (s.vecsize) {
 			case 1:
 				return Program::Type::edouble;
-				break;
 			case 2:
 				return Program::Type::edvec2;
-				break;
 			case 3:
 				return Program::Type::edvec3;
-				break;
 			case 4:
 				return Program::Type::edvec4;
-				break;
 			default:
 				assert("NYI" && 0);
 			}
+			break;
+		case 3:
+			return Program::Type::edmat3;
 		case 4:
 			return Program::Type::edmat4;
-			break;
 		}
+		break;
 	case SPIRType::Int:
 		switch (s.vecsize) {
 		case 1:
 			return Program::Type::eint;
-			break;
 		case 2:
 			return Program::Type::eivec2;
-			break;
 		case 3:
 			return Program::Type::eivec3;
-			break;
 		case 4:
 			return Program::Type::eivec4;
-			break;
 		default:
 			assert("NYI" && 0);
 		}
+		break;
 	case SPIRType::UInt:
 		switch (s.vecsize) {
 		case 1:
 			return Program::Type::euint;
-			break;
 		case 2:
 			return Program::Type::euvec2;
-			break;
 		case 3:
 			return Program::Type::euvec3;
-			break;
 		case 4:
 			return Program::Type::euvec4;
-			break;
 		default:
 			assert("NYI" && 0);
 		}
+		break;
+	case SPIRType::UInt64:
+		switch (s.vecsize) {
+		case 1:
+			return Program::Type::euint64_t;
+		case 2:
+			return Program::Type::eu64vec2;
+		case 3:
+			return Program::Type::eu64vec3;
+		case 4:
+			return Program::Type::eu64vec4;
+		default:
+			assert("NYI" && 0);
+		}
+		break;
+	case SPIRType::Int64:
+		switch (s.vecsize) {
+		case 1:
+			return Program::Type::eint64_t;
+		case 2:
+			return Program::Type::ei64vec2;
+		case 3:
+			return Program::Type::ei64vec3;
+		case 4:
+			return Program::Type::ei64vec4;
+		default:
+			assert("NYI" && 0);
+		}
+		break;
 	case SPIRType::Struct:
 		return Program::Type::estruct;
 	default:
 		assert("NYI" && 0);
-		return Program::Type::estruct;
 	}
+	return Program::Type::einvalid;
 }
 
 void reflect_members(const spirv_cross::Compiler& refl, const spirv_cross::SPIRType& type, std::vector<vuk::Program::Member>& members) {
