@@ -38,3 +38,6 @@
 [submodule "ext/robin-hood-hashing"]
 	path = ext/robin-hood-hashing
 	url = https://github.com/martinus/robin-hood-hashing
+[submodule "ext/doctest"]
+	path = ext/doctest
+	url = https://github.com/doctest/doctest

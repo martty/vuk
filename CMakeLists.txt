@@ -17,6 +17,7 @@ option(VUK_LINK_TO_LOADER "Link \"statically\" to the loader" ON)
 option(VUK_USE_VULKAN_SDK "Use the Vulkan SDK to locate headers and libraries" ON)
 option(VUK_USE_SHADERC "Link in shaderc for runtime compilation of GLSL shaders" ON)
 option(VUK_USE_DXC "Link in DirectXShaderCompiler for runtime compilation of HLSL shaders" ON)
+option(VUK_BUILD_TESTS "Build tests" OFF)
 
 ##### Using vuk with volk (or a similar library)
 # step 1: turn off VUK_LINK_TO_LOADER and add_subdirectory vuk
@@ -147,4 +148,18 @@ endif()
 
 if(VUK_BUILD_DOCS)
 	add_subdirectory(docs)
+endif()
+
+
+add_subdirectory(ext/doctest)
+target_link_libraries(vuk PRIVATE doctest::doctest)
+
+if(VUK_BUILD_TESTS)
+	include(doctest_force_link_static_lib_in_target) # until we can use cmake 3.24
+	add_executable(vuk-tests src/Test.cpp)
+	target_compile_features(vuk-tests PRIVATE cxx_std_17)
+	target_link_libraries(vuk-tests PRIVATE vuk doctest::doctest)
+	doctest_force_link_static_lib_in_target(vuk-tests vuk)
+else()
+	target_compile_definitions(vuk PRIVATE DOCTEST_CONFIG_DISABLE)
 endif()
