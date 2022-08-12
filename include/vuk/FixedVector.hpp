@@ -20,7 +20,7 @@ namespace vuk {
 		typedef const pointer_type const_iterator;
 
 	private:
-		typename std::aligned_storage<sizeof(T) * n, a>::type items;
+		alignas(a) std::byte items[sizeof(T) * n];
 		std::size_t len;
 
 		T* ptrat(std::size_t idx) {
