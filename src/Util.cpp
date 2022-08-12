@@ -310,9 +310,24 @@ namespace vuk {
 			queue_progress_references[ctx.domain_to_queue_index(DomainFlagBits::eTransferQueue)] = *ctx.transfer_queue->impl->submit_sync.value;
 			transfer_lock = std::unique_lock{ ctx.transfer_queue->impl->queue_lock };
 		}
-
-		if (bundle.batches.size() > 1) {
-			std::swap(bundle.batches[0], bundle.batches[1]); // FIXME: silence some false positive validation
+		bool needs_flatten = (used_domains & DomainFlagBits::eTransferQueue) &&
+		                         (ctx.domain_to_queue_index(DomainFlagBits::eTransferQueue) == ctx.domain_to_queue_index(DomainFlagBits::eGraphicsQueue) ||
+		                          ctx.domain_to_queue_index(DomainFlagBits::eTransferQueue) == ctx.domain_to_queue_index(DomainFlagBits::eComputeQueue)) ||
+		                     (used_domains & DomainFlagBits::eComputeQueue) &&
+		                         (ctx.domain_to_queue_index(DomainFlagBits::eComputeQueue) == ctx.domain_to_queue_index(DomainFlagBits::eGraphicsQueue));
+		if (needs_flatten) {
+			bool needs_transfer_compute_flatten =
+			    ctx.domain_to_queue_index(DomainFlagBits::eTransferQueue) == ctx.domain_to_queue_index(DomainFlagBits::eGraphicsQueue) &&
+			    ctx.domain_to_queue_index(DomainFlagBits::eComputeQueue) == ctx.domain_to_queue_index(DomainFlagBits::eGraphicsQueue);
+			if (needs_transfer_compute_flatten) {
+				flatten_transfer_and_compute_onto_graphics(bundle);
+			} else {
+				assert(false && "NYI");
+			}
+		} else {
+			if (bundle.batches.size() > 1) {
+				std::swap(bundle.batches[0], bundle.batches[1]); // FIXME: silence some false positive validation
+			}
 		}
 		for (SubmitBatch& batch : bundle.batches) {
 			auto domain = batch.domain;
