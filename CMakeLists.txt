@@ -62,7 +62,7 @@ else()
 	endif()
 endif()
 
-target_compile_definitions(vuk PUBLIC VUK_USE_SHADERC=$<BOOL:${VUK_USE_SHADERC}> VUK_USE_DXC=$<BOOL:${VUK_USE_DXC}>)
+target_compile_definitions(vuk PUBLIC VUK_USE_SHADERC=$<BOOL:${VUK_USE_SHADERC}> VUK_USE_DXC=$<BOOL:${VUK_USE_DXC}> VUK_BUILD_TESTS=$<BOOL:${VUK_BUILD_TESTS}>)
 
 set(SPIRV_CROSS_CLI OFF CACHE BOOL "")
 set(SPIRV_CROSS_ENABLE_TESTS OFF CACHE BOOL "")
@@ -152,13 +152,15 @@ endif()
 
 
 add_subdirectory(ext/doctest)
-target_link_libraries(vuk PRIVATE doctest::doctest)
+target_link_libraries(vuk PUBLIC doctest::doctest)
+target_sources(vuk PRIVATE src/Test.cpp)
 
 if(VUK_BUILD_TESTS)
 	include(doctest_force_link_static_lib_in_target) # until we can use cmake 3.24
 	add_executable(vuk-tests src/Test.cpp)
 	target_compile_features(vuk-tests PRIVATE cxx_std_17)
 	target_link_libraries(vuk-tests PRIVATE vuk doctest::doctest)
+	target_compile_definitions(vuk-tests PRIVATE VUK_TEST_RUNNER)
 	doctest_force_link_static_lib_in_target(vuk-tests vuk)
 else()
 	target_compile_definitions(vuk PRIVATE DOCTEST_CONFIG_DISABLE)
