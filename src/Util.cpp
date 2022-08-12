@@ -5,9 +5,10 @@
 #include "vuk/SampledImage.hpp"
 
 #include <atomic>
-#include <mutex>
-#include <utility>
 #include <doctest/doctest.h>
+#include <mutex>
+#include <sstream>
+#include <utility>
 
 namespace vuk {
 	struct QueueImpl {
@@ -99,7 +100,7 @@ namespace vuk {
 
 	Result<void> link_execute_submit(Allocator& allocator, Compiler& compiler, std::span<std::shared_ptr<RenderGraph>> rgs) {
 		auto erg = compiler.link(rgs, {});
-		std::pair erg_and_alloc = std::pair{&allocator, &erg};
+		std::pair erg_and_alloc = std::pair{ &allocator, &erg };
 		return execute_submit(allocator, std::span(&erg_and_alloc, 1), {}, {}, {});
 	}
 
@@ -136,6 +137,153 @@ namespace vuk {
 			}
 		}
 		return { expected_value, bundles };
+	}
+
+	void flatten_transfer_and_compute_onto_graphics(SubmitBundle& bundle) {
+		if (bundle.batches.empty()) {
+			return;
+		}
+		auto domain_to_index = [](vuk::DomainFlagBits d) {
+			switch (d) {
+			case DomainFlagBits::eTransferQueue:
+				return 2;
+			case DomainFlagBits::eGraphicsQueue:
+				return 0;
+			case DomainFlagBits::eComputeQueue:
+				return 1;
+			default:
+				assert(0);
+				return 4;
+			}
+		};
+		size_t num_submits = 0;
+		for (auto& batch : bundle.batches) {
+			num_submits += batch.submits.size();
+		}
+		SubmitBatch dst_batch{ .domain = DomainFlagBits::eGraphicsQueue };
+		uint64_t progress[3] = {};
+		while (true) {
+			for (auto& batch : bundle.batches) {
+				auto queue = (DomainFlagBits)(batch.domain & DomainFlagBits::eQueueMask).m_mask;
+				auto our_id = domain_to_index(queue);
+				for (size_t i = progress[our_id]; i < batch.submits.size(); i++) {
+					auto b = batch.submits[i];
+					bool all_waits_satisfied = true;
+					// check if all waits can be satisfied for this submit
+					for (auto& [queue, wait_id] : b.relative_waits) {
+						auto q_id = domain_to_index((DomainFlagBits)(queue & DomainFlagBits::eQueueMask).m_mask);
+						auto& progress_on_wait_queue = progress[q_id];
+						if (progress_on_wait_queue < wait_id) {
+							all_waits_satisfied = false;
+							break;
+						}
+					}
+					if (all_waits_satisfied) {
+						if (!b.relative_waits.empty()) {
+							b.relative_waits = { { DomainFlagBits::eGraphicsQueue, dst_batch.submits.size() } }; // collapse into a single wait
+						}
+						dst_batch.submits.emplace_back(b);
+						progress[our_id]++; // retire this batch
+					} else {
+						// couldn't make progress
+						// break here is not correct, because there might be multiple waits with the same rank
+					}
+				}
+			}
+			if (dst_batch.submits.size() == num_submits) { // we have moved all the submits to the dst_batch
+				break;
+			}
+		}
+		bundle.batches = { dst_batch };
+	}
+
+	std::string_view to_name(vuk::DomainFlagBits d) {
+		switch (d) {
+		case DomainFlagBits::eTransferQueue:
+			return "Transfer";
+		case DomainFlagBits::eGraphicsQueue:
+			return "Graphics";
+		case DomainFlagBits::eComputeQueue:
+			return "Compute";
+		default:
+			return "Unknown";
+		}
+	}
+
+	std::string to_dot(SubmitBundle& bundle) {
+		std::stringstream ss;
+		ss << "digraph {";
+		for (auto& batch : bundle.batches) {
+			ss << "subgraph cluster_" << to_name(batch.domain) << " {";
+			char name = 'A';
+
+			for (auto& sub : batch.submits) {
+				ss << to_name(batch.domain)[0] << name << ";";
+				name++;
+			}
+			ss << "}";
+		}
+
+		for (auto& batch : bundle.batches) {
+			char name = 'A';
+
+			for (auto& sub : batch.submits) {
+				for (auto& wait : sub.relative_waits) {
+					char dst_name = wait.second == 0 ? 'X' : 'A' + wait.second - 1;
+					ss << to_name(batch.domain)[0] << name << "->" << to_name(wait.first)[0] << dst_name << ";";
+				}
+				name++;
+			}
+		}
+
+		ss << "}";
+		return ss.str();
+	}
+
+	TEST_CASE("testing flattening submit graphs") {
+		{
+			SubmitBundle empty{};
+			auto before = to_dot(empty);
+			flatten_transfer_and_compute_onto_graphics(empty);
+			auto after = to_dot(empty);
+			CHECK(before == after);
+		}
+		{
+			// transfer : TD -> TC -> TB -> TA
+			// everything moved to graphics
+			SubmitBundle only_transfer{ .batches = { SubmitBatch{ .domain = vuk::DomainFlagBits::eTransferQueue,
+				                                                    .submits = { { .relative_waits = {} },
+				                                                                 { .relative_waits = { { vuk::DomainFlagBits::eTransferQueue, 1 } } },
+				                                                                 { .relative_waits = { { vuk::DomainFlagBits::eTransferQueue, 2 } } },
+				                                                                 { .relative_waits = { { vuk::DomainFlagBits::eTransferQueue, 3 } } } } } } };
+
+			auto before = to_dot(only_transfer);
+			flatten_transfer_and_compute_onto_graphics(only_transfer);
+			auto after = to_dot(only_transfer);
+			CHECK(after == "digraph {subgraph cluster_Graphics {GA;GB;GC;GD;}GB->GA;GC->GB;GD->GC;}");
+		}
+		{
+			// transfer : TD  TC -> TB  TA
+			//			   v  ^     v
+			// graphics : GD->GC    GB->GA
+			// flattens to
+			// graphics : TD -> GD -> GC -> TC -> TB -> GB -> GA TA
+			SubmitBundle two_queue{ .batches = { SubmitBatch{ .domain = vuk::DomainFlagBits::eTransferQueue,
+				                                                .submits = { { .relative_waits = {} },
+				                                                             { .relative_waits = { { vuk::DomainFlagBits::eGraphicsQueue, 2 } } },
+				                                                             { .relative_waits = { { vuk::DomainFlagBits::eTransferQueue, 2 } } },
+				                                                             { .relative_waits = { { vuk::DomainFlagBits::eGraphicsQueue, 4 } } } } },
+				                                   SubmitBatch{ .domain = vuk::DomainFlagBits::eGraphicsQueue,
+				                                                .submits = { { .relative_waits = {} },
+				                                                             { .relative_waits = { { vuk::DomainFlagBits::eGraphicsQueue, 1 } } },
+				                                                             { .relative_waits = { { vuk::DomainFlagBits::eTransferQueue, 3 } } },
+				                                                             { .relative_waits = { { vuk::DomainFlagBits::eGraphicsQueue, 3 } } } } } } };
+
+			auto before = to_dot(two_queue);
+			flatten_transfer_and_compute_onto_graphics(two_queue);
+			auto after = to_dot(two_queue);
+			CHECK(after == "digraph {subgraph cluster_Graphics {GA;GB;GC;GD;GE;GF;GG;GH;}GC->GB;GD->GC;GE->GD;GF->GE;GG->GF;GH->GG;}");
+		}
 	}
 
 	Result<void> submit(Allocator& allocator, SubmitBundle bundle, VkSemaphore present_rdy, VkSemaphore render_complete) {
@@ -281,7 +429,6 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	
 	Result<void> present_to_one(Context& ctx, SingleSwapchainRenderBundle&& bundle) {
 		VkPresentInfoKHR pi{ .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
 		pi.swapchainCount = 1;
@@ -478,16 +625,5 @@ namespace vuk {
 			assert(0 && "not reached.");
 			return "";
 		}
-	}
-
-	int factorial(int number) {
-		return number <= 1 ? number : factorial(number - 1) * number;
-	}
-
-	TEST_CASE("testing the factorial function") {
-		CHECK(factorial(1) == 1);
-		CHECK(factorial(2) == 2);
-		CHECK(factorial(3) == 6);
-		CHECK(factorial(10) == 3628800);
 	}
 } // namespace vuk
