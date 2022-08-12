@@ -62,6 +62,7 @@ namespace vuk {
 	struct LegacyPoolAllocator {
 		VmaPool pool;
 		VkMemoryRequirements mem_reqs;
+		vuk::MemoryUsage mem_usage;
 		vuk::BufferUsageFlags usage;
 		std::vector<VkBuffer> buffers;
 	};
@@ -149,6 +150,8 @@ namespace vuk {
 		    BufferUsageFlagBits::eIndexBuffer | BufferUsageFlagBits::eVertexBuffer | BufferUsageFlagBits::eIndirectBuffer |
 		    BufferUsageFlagBits::eShaderDeviceAddress | BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR |
 		    BufferUsageFlagBits::eAccelerationStructureStorageKHR | BufferUsageFlagBits::eShaderBindingTable;
+
+		static constexpr size_t large_allocation_size = 256 * 1024 * 1024;
 
 		VkMemoryRequirements get_memory_requirements(VkBufferCreateInfo& bci);
 		LegacyLinearAllocator allocate_linear(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage);

@@ -526,8 +526,31 @@ namespace vuk {
 		mem_reqs.alignment = std::lcm(mem_reqs.alignment, alignment);
 		VkMemoryRequirements vkmem_reqs = mem_reqs;
 		auto result = vmaAllocateMemory(allocator, &vkmem_reqs, &vaci, &res, &vai);
-		assert(result == VK_SUCCESS);
 		real_alloc_callback = noop_cb;
+		if (result != VK_SUCCESS && size >= large_allocation_size) { // too large to fit in a pool, we allocate a dedicated devmem
+			vaci.pool = VK_NULL_HANDLE;
+			vaci.memoryTypeBits = pool.mem_reqs.memoryTypeBits;
+			vaci.usage = (VmaMemoryUsage)to_integral(pool.mem_usage);
+			vaci.flags |= VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
+			result = vmaAllocateMemory(allocator, &vkmem_reqs, &vaci, &res, &vai);
+			assert(result == VK_SUCCESS);
+			Buffer b;
+			bci.size = size;
+			vkCreateBuffer(device, &bci, nullptr, &b.buffer);
+			vkBindBufferMemory(device, b.buffer, vai.deviceMemory, vai.offset);
+			VkBufferDeviceAddressInfo bdai{ VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, nullptr, b.buffer };
+			uint64_t device_address = vkGetBufferDeviceAddress(device, &bdai);
+			buffers.emplace(reinterpret_cast<uint64_t>(vai.deviceMemory), std::tuple(b.buffer,bci.size, device_address));
+			b.device_memory = vai.deviceMemory;
+			b.offset = 0;
+			b.size = bci.size;
+			b.mapped_ptr = (std::byte*)vai.pMappedData;
+			b.device_address = device_address + vai.offset;
+			b.allocation_size = bci.size;
+			buffer_allocations.emplace(BufferID{ reinterpret_cast<uint64_t>(b.buffer), b.offset }, res);
+			return b;
+		}
+		assert(result == VK_SUCCESS);
 
 		// record if new buffer was used
 		if (pool_helper->result != VK_NULL_HANDLE) {
@@ -570,6 +593,7 @@ namespace vuk {
 		LegacyPoolAllocator pi;
 		pi.mem_reqs = get_memory_requirements(bci);
 		pi.pool = _create_pool(mem_usage, buffer_usage);
+		pi.mem_usage = mem_usage;
 		pi.usage = buffer_usage;
 		return pi;
 	}
@@ -605,6 +629,7 @@ namespace vuk {
 			pi.mem_reqs = get_memory_requirements(bci);
 			pi.pool = _create_pool(mem_usage, buffer_usage);
 			pi.usage = buffer_usage;
+			pi.mem_usage = mem_usage;
 			pool_it = pools.emplace(PoolSelect{ mem_usage, buffer_usage }, pi).first;
 		}
 
@@ -642,6 +667,9 @@ namespace vuk {
 		vuk::BufferID bufid{ reinterpret_cast<uint64_t>(b.buffer), b.offset };
 		vmaFreeMemory(allocator, buffer_allocations.at(bufid));
 		buffer_allocations.erase(bufid);
+		if (b.offset == 0 && b.size > large_allocation_size) {
+			vkDestroyBuffer(device, b.buffer, nullptr);
+		}
 	}
 
 	void LegacyGPUAllocator::destroy(const LegacyPoolAllocator& pool) {
