@@ -79,6 +79,8 @@ void vuk::ExampleRunner::render() {
 			size_t i = 0;
 			for (auto& ex : examples) {
 				std::shared_ptr<RenderGraph> rgx = std::make_shared<RenderGraph>(ex->name);
+				ImGui::SetNextWindowSize(ImVec2(250, 250), ImGuiCond_FirstUseEver);
+				ImGui::SetNextWindowPos(ImVec2((i % 4) * 250, (i / 4) * 250), ImGuiCond_FirstUseEver);
 				ImGui::Begin(ex->name.data());
 				auto size = ImGui::GetContentRegionAvail();
 				size.x = size.x <= 0 ? 1 : size.x;
