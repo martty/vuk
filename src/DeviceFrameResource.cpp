@@ -723,6 +723,12 @@ namespace vuk {
 		f.cmdpools_to_free.clear();
 		f.ds_pools.clear();
 		auto& legacy = direct.legacy_gpu_allocator;
+		if (frame.current_frame % 16 == 0) {
+			legacy->trim_pool(f.linear_cpu_only);
+			legacy->trim_pool(f.linear_cpu_gpu);
+			legacy->trim_pool(f.linear_gpu_cpu);
+			legacy->trim_pool(f.linear_gpu_only);
+		}
 		legacy->reset_pool(f.linear_cpu_only);
 		legacy->reset_pool(f.linear_cpu_gpu);
 		legacy->reset_pool(f.linear_gpu_cpu);

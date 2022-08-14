@@ -166,6 +166,8 @@ namespace vuk {
 
 		void reset_pool(LegacyPoolAllocator& pool);
 		void reset_pool(LegacyLinearAllocator& pool);
+		// trims used buffers to current usage
+		void trim_pool(LegacyLinearAllocator& pool);
 
 		void free_buffer(const Buffer& b);
 		void destroy(const LegacyPoolAllocator& pool);

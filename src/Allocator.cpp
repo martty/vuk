@@ -662,6 +662,19 @@ namespace vuk {
 		pool.needle = 0;
 	}
 
+	void LegacyGPUAllocator::trim_pool(LegacyLinearAllocator& pool) {
+		auto current_used_buffer_count = (pool.needle.load() + pool.block_size - 1) / pool.block_size; // div ceil
+		std::lock_guard _(mutex);
+		for (size_t i = current_used_buffer_count; i < pool.allocations.size(); i++) {
+			auto& alloc = pool.allocations[i];
+			if (std::get<VkBuffer>(alloc) == VK_NULL_HANDLE) {
+				break;
+			} else {
+				vmaDestroyBuffer(allocator, std::get<VkBuffer>(alloc), std::get<VmaAllocation>(alloc));
+			}
+		}
+	}
+
 	void LegacyGPUAllocator::free_buffer(const Buffer& b) {
 		std::lock_guard _(mutex);
 		vuk::BufferID bufid{ reinterpret_cast<uint64_t>(b.buffer), b.offset };
