@@ -671,6 +671,7 @@ namespace vuk {
 				break;
 			} else {
 				vmaDestroyBuffer(allocator, std::get<VkBuffer>(alloc), std::get<VmaAllocation>(alloc));
+				alloc = {};
 			}
 		}
 	}
