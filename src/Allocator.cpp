@@ -154,12 +154,12 @@ namespace vuk {
 	}
 
 	Result<void, AllocateException>
-		Allocator::allocate(std::span<DescriptorSet> dst, std::span<const DescriptorSetLayoutAllocInfo> cis, SourceLocationAtFrame loc) {
+	Allocator::allocate(std::span<DescriptorSet> dst, std::span<const DescriptorSetLayoutAllocInfo> cis, SourceLocationAtFrame loc) {
 		return device_resource->allocate_descriptor_sets(dst, cis, loc);
 	}
 
 	Result<void, AllocateException>
-		Allocator::allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const DescriptorSetLayoutAllocInfo> cis, SourceLocationAtFrame loc) {
+	Allocator::allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const DescriptorSetLayoutAllocInfo> cis, SourceLocationAtFrame loc) {
 		return device_resource->allocate_descriptor_sets(dst, cis, loc);
 	}
 
@@ -201,18 +201,19 @@ namespace vuk {
 	Result<void, AllocateException> Allocator::allocate_timeline_semaphores(std::span<TimelineSemaphore> dst, SourceLocationAtFrame loc) {
 		return device_resource->allocate_timeline_semaphores(dst, loc);
 	}
-	
+
 	void Allocator::deallocate(std::span<const TimelineSemaphore> src) {
 		device_resource->deallocate_timeline_semaphores(src);
 	}
 
-	Result<void, AllocateException> Allocator::allocate(std::span<VkAccelerationStructureKHR> dst, std::span<const VkAccelerationStructureCreateInfoKHR> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException>
+	Allocator::allocate(std::span<VkAccelerationStructureKHR> dst, std::span<const VkAccelerationStructureCreateInfoKHR> cis, SourceLocationAtFrame loc) {
 		return device_resource->allocate_acceleration_structures(dst, cis, loc);
 	}
 
 	Result<void, AllocateException> Allocator::allocate_acceleration_structures(std::span<VkAccelerationStructureKHR> dst,
-		std::span<const VkAccelerationStructureCreateInfoKHR> cis,
-		SourceLocationAtFrame loc) {
+	                                                                            std::span<const VkAccelerationStructureCreateInfoKHR> cis,
+	                                                                            SourceLocationAtFrame loc) {
 		return device_resource->allocate_acceleration_structures(dst, cis, loc);
 	}
 
@@ -420,11 +421,45 @@ namespace vuk {
 		return (val + align - 1) / align * align;
 	}
 
+	void LegacyGPUAllocator::_grow(LegacyLinearAllocator& pool) {
+		VkBufferCreateInfo bci{ .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
+		bci.size = pool.block_size;
+		bci.usage = (VkBufferUsageFlags)pool.usage;
+		bci.queueFamilyIndexCount = queue_family_count;
+		bci.sharingMode = bci.queueFamilyIndexCount > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
+		bci.pQueueFamilyIndices = all_queue_families.data();
+
+		VmaAllocationCreateInfo vaci = {};
+		vaci.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
+		vaci.usage = pool.mem_usage;
+
+		VmaAllocation res;
+		VmaAllocationInfo vai;
+
+		VkBuffer vkbuffer;
+
+		auto curr_index = pool.current_buffer.load();
+		auto next_index = curr_index + 1;
+		if (std::get<VkBuffer>(pool.allocations[next_index]) == VK_NULL_HANDLE) {
+			std::lock_guard _(mutex);
+			if (std::get<VkBuffer>(pool.allocations[next_index]) == VK_NULL_HANDLE) { // check again under lock
+				auto result = vmaCreateBuffer(allocator, &bci, &vaci, &vkbuffer, &res, &vai);
+				assert(result == VK_SUCCESS);
+				VkBufferDeviceAddressInfo bdai{ VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, nullptr, vkbuffer };
+				auto bda = vkGetBufferDeviceAddress(device, &bdai);
+				pool.allocations[next_index] = std::tuple(res, vai.deviceMemory, vai.offset, vkbuffer, (std::byte*)vai.pMappedData, BDA{ bda });
+				buffers.emplace(reinterpret_cast<uint64_t>(vai.deviceMemory), std::tuple(vkbuffer, bci.size, bda));
+			}
+		}
+		std::atomic_compare_exchange_strong(&pool.current_buffer, &curr_index, next_index);
+	}
+
 	// lock-free bump allocation if there is still space
 	Buffer LegacyGPUAllocator::_allocate_buffer(LegacyLinearAllocator& pool, size_t size, size_t alignment, bool create_mapped) {
 		if (size == 0) {
 			return { .buffer = VK_NULL_HANDLE, .size = 0 };
 		}
+
 		alignment = std::lcm(pool.mem_reqs.alignment, alignment);
 		if (pool.usage & vuk::BufferUsageFlagBits::eUniformBuffer) {
 			alignment = std::lcm(alignment, properties.limits.minUniformBufferOffsetAlignment);
@@ -433,50 +468,15 @@ namespace vuk {
 			alignment = std::lcm(alignment, properties.limits.minStorageBufferOffsetAlignment);
 		}
 
-		if ((size + alignment) > pool.block_size) {
-			// we are not handling sizes bigger than the block_size
-			// we could allocate a buffer that is multiple block_sizes big
-			// and fake the entries, but for now this is too much complexity
-			return allocate_buffer((vuk::MemoryUsage)pool.mem_usage, pool.usage, size, alignment, create_mapped);
-		}
-
 		auto new_needle = pool.needle.fetch_add(size + alignment) + size + alignment;
 		auto base_addr = new_needle - size - alignment;
 
-		size_t buffer = new_needle / pool.block_size;
+		int buffer = new_needle / pool.block_size;
 		bool needs_to_create = base_addr == 0 || (base_addr / pool.block_size != new_needle / pool.block_size);
 		if (needs_to_create) {
-			VkBufferCreateInfo bci{ .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
-			bci.size = pool.block_size;
-			bci.usage = (VkBufferUsageFlags)pool.usage;
-			bci.queueFamilyIndexCount = queue_family_count;
-			bci.sharingMode = bci.queueFamilyIndexCount > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
-			bci.pQueueFamilyIndices = all_queue_families.data();
-
-			VmaAllocationCreateInfo vaci = {};
-			if (create_mapped)
-				vaci.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
-			vaci.usage = pool.mem_usage;
-
-			VmaAllocation res;
-			VmaAllocationInfo vai;
-
-			auto mem_reqs = pool.mem_reqs;
-			mem_reqs.size = size;
-			VkBuffer vkbuffer;
-
-			auto next_index = pool.current_buffer.load() + 1;
-			if (std::get<VkBuffer>(pool.allocations[next_index]) == VK_NULL_HANDLE) {
-				std::lock_guard _(mutex);
-				auto result = vmaCreateBuffer(allocator, &bci, &vaci, &vkbuffer, &res, &vai);
-				assert(result == VK_SUCCESS);
-				VkBufferDeviceAddressInfo bdai{ VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, nullptr, vkbuffer };
-				auto bda = vkGetBufferDeviceAddress(device, &bdai);
-				pool.allocations[next_index] =
-				    std::tuple(res, vai.deviceMemory, vai.offset, vkbuffer, (std::byte*)vai.pMappedData, BDA{ bda });
-				buffers.emplace(reinterpret_cast<uint64_t>(vai.deviceMemory), std::tuple(vkbuffer, bci.size, bda));
+			while (pool.current_buffer.load() < buffer) {
+				_grow(pool);
 			}
-			pool.current_buffer++;
 			if (base_addr > 0) {
 				// there is no space in the beginning of this allocation, so we just retry
 				return _allocate_buffer(pool, size, alignment, create_mapped);
@@ -540,7 +540,7 @@ namespace vuk {
 			vkBindBufferMemory(device, b.buffer, vai.deviceMemory, vai.offset);
 			VkBufferDeviceAddressInfo bdai{ VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, nullptr, b.buffer };
 			uint64_t device_address = vkGetBufferDeviceAddress(device, &bdai);
-			buffers.emplace(reinterpret_cast<uint64_t>(vai.deviceMemory), std::tuple(b.buffer,bci.size, device_address));
+			buffers.emplace(reinterpret_cast<uint64_t>(vai.deviceMemory), std::tuple(b.buffer, bci.size, device_address));
 			b.device_memory = vai.deviceMemory;
 			b.offset = 0;
 			b.size = bci.size;

@@ -80,7 +80,7 @@ namespace vuk {
 		VkMemoryRequirements mem_reqs;
 		VmaMemoryUsage mem_usage;
 		vuk::BufferUsageFlags usage;
-		std::array<std::tuple<VmaAllocation, VkDeviceMemory, size_t, VkBuffer, std::byte*, BDA>, 32> allocations;
+		std::array<std::tuple<VmaAllocation, VkDeviceMemory, size_t, VkBuffer, std::byte*, BDA>, 256> allocations; // up to 4 GB of allocations
 
 		size_t block_size = 1024 * 1024 * 16;
 
@@ -180,6 +180,7 @@ namespace vuk {
 		VmaPool _create_pool(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage);
 		Buffer _allocate_buffer(LegacyPoolAllocator& pool, size_t size, size_t alignment, bool create_mapped);
 		Buffer _allocate_buffer(LegacyLinearAllocator& pool, size_t size, size_t alignment, bool create_mapped);
+		void _grow(LegacyLinearAllocator& pool);
 	};
 
 	template<>
