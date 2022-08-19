@@ -1008,22 +1008,23 @@ namespace vuk {
 			}
 
 			if (!persistent_set_to_bind) {
-				auto sb = set_bindings[i].finalize();
-
 				std::vector<VkDescriptorSetLayoutBinding>* ppipeline_set_bindings;
+				DescriptorSetLayoutCreateInfo* dslci;
 				switch (pipe_type) {
 				case PipeType::eGraphics:
-					ppipeline_set_bindings = &current_pipeline->base->dslcis[i].bindings;
+					dslci = &current_pipeline->base->dslcis[i];
 					break;
 				case PipeType::eCompute:
-					ppipeline_set_bindings = &current_compute_pipeline->base->dslcis[i].bindings;
+					dslci = &current_compute_pipeline->base->dslcis[i];
 					break;
 				case PipeType::eRayTracing:
-					ppipeline_set_bindings = &current_ray_tracing_pipeline->base->dslcis[i].bindings;
+					dslci = &current_ray_tracing_pipeline->base->dslcis[i];
 					break;
 				}
-
+				ppipeline_set_bindings = &dslci->bindings;
 				auto& pipeline_set_bindings = *ppipeline_set_bindings;
+				auto sb = set_bindings[i].finalize(dslci->used_bindings);
+
 				for (uint64_t j = 0; j < pipeline_set_bindings.size(); j++) {
 					auto& pipe_binding = pipeline_set_bindings[j];
 					auto& cbuf_binding = sb.bindings[pipeline_set_bindings[j].binding];
@@ -1132,7 +1133,6 @@ namespace vuk {
 				vkCmdBindDescriptorSets(command_buffer, bind_point, current_layout, i, 1, &persistent_sets[i].first, 0, nullptr);
 				set_layouts_used[i] = persistent_sets[i].second;
 			}
-			set_bindings[i].used.reset();
 		}
 		auto sets_bound = sets_to_bind | persistent_sets_to_bind;            // these sets we bound freshly, valid
 		for (unsigned i = lowest_disturbed_binding; i < VUK_MAX_SETS; i++) { // clear the slots where the binding was disturbed

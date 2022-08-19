@@ -79,11 +79,11 @@ namespace vuk {
 		}
 	}
 
-	SetBinding SetBinding::finalize() {
+	SetBinding SetBinding::finalize(std::bitset<VUK_MAX_BINDINGS> used_mask) {
 		SetBinding final;
-		final.used = used;
+		final.used = used_mask;
 		final.layout_info = layout_info;
-		uint32_t mask = used.to_ulong();
+		uint32_t mask = used_mask.to_ulong();
 		for (size_t i = 0; i < VUK_MAX_BINDINGS; i++) {
 			if ((mask & (1 << i)) == 0) {
 				continue;

@@ -286,6 +286,10 @@ namespace {
 			                            .depthCompareOp = vuk::CompareOp::eLessOrEqual,
 			                        })
 			                        .broadcast_color_blend({}); // Set the default color blend state
+			                    
+								// These binds don't change between meshes, so it is sufficient to bind them once
+								command_buffer.bind_buffer(0, 0, uboVP).bind_buffer(0, 1, modelmats);
+
 			                    for (auto i = 0; i < renderables.size(); i++) {
 				                    auto& r = renderables[i];
 
@@ -298,9 +302,7 @@ namespace {
 				                                                         vuk::Ignore{ offsetof(util::Vertex, uv_coordinates) - sizeof(util::Vertex::position) },
 				                                                         vuk::Format::eR32G32Sfloat })
 				                        .bind_index_buffer(r.mesh->index_buffer.get(), vuk::IndexType::eUint32)
-				                        .bind_graphics_pipeline(r.material->pipeline)
-				                        .bind_buffer(0, 0, uboVP)
-				                        .bind_buffer(0, 1, modelmats);
+				                        .bind_graphics_pipeline(r.material->pipeline);
 
 				                    r.material->bind_parameters(command_buffer);
 				                    r.material->bind_textures(command_buffer);

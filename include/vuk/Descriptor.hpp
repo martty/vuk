@@ -155,7 +155,7 @@ namespace vuk {
 		DescriptorSetLayoutAllocInfo* layout_info = nullptr;
 		uint64_t hash = 0;
 
-		SetBinding finalize();
+		SetBinding finalize(std::bitset<VUK_MAX_BINDINGS> used_mask);
 
 		bool operator==(const SetBinding& o) const noexcept {
 			if (layout_info != o.layout_info)
@@ -168,6 +168,7 @@ namespace vuk {
 		VkDescriptorSetLayoutCreateInfo dslci = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
 		size_t index; // index of the descriptor set when used in a pipeline layout
 		std::vector<VkDescriptorSetLayoutBinding> bindings;
+		std::bitset<VUK_MAX_BINDINGS> used_bindings = {}; // used for ephemeral desc sets
 		std::vector<VkDescriptorBindingFlags> flags;
 
 		bool operator==(const DescriptorSetLayoutCreateInfo& o) const noexcept {

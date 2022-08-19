@@ -5,52 +5,61 @@
 #include <robin_hood.h>
 
 namespace vuk {
-	vuk::fixed_vector<vuk::DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> PipelineBaseCreateInfo::build_descriptor_layouts(const Program& program,
+	fixed_vector<DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> PipelineBaseCreateInfo::build_descriptor_layouts(const Program& program,
 	                                                                                                                     const PipelineBaseCreateInfoBase& bci) {
-		vuk::fixed_vector<vuk::DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> dslcis;
+		fixed_vector<DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> dslcis;
 
 		for (const auto& [index, set] : program.sets) {
 			// fill up unused sets, if there are holes in descriptor set order
 			dslcis.resize(std::max(dslcis.size(), index + 1), {});
 
-			vuk::DescriptorSetLayoutCreateInfo dslci;
+			DescriptorSetLayoutCreateInfo dslci;
 			dslci.index = index;
 			auto& bindings = dslci.bindings;
 
 			for (auto& ub : set.uniform_buffers) {
 				VkDescriptorSetLayoutBinding layoutBinding;
 				layoutBinding.binding = ub.binding;
-				layoutBinding.descriptorType = (VkDescriptorType)vuk::DescriptorType::eUniformBuffer;
+				layoutBinding.descriptorType = (VkDescriptorType)DescriptorType::eUniformBuffer;
 				layoutBinding.descriptorCount = 1;
 				layoutBinding.stageFlags = ub.stage;
 				layoutBinding.pImmutableSamplers = nullptr;
 				bindings.push_back(layoutBinding);
+				if (layoutBinding.binding < VUK_MAX_BINDINGS) {
+					dslci.used_bindings[layoutBinding.binding] = true;
+				}
 			}
 
 			for (auto& sb : set.storage_buffers) {
 				VkDescriptorSetLayoutBinding layoutBinding;
 				layoutBinding.binding = sb.binding;
-				layoutBinding.descriptorType = (VkDescriptorType)vuk::DescriptorType::eStorageBuffer;
+				layoutBinding.descriptorType = (VkDescriptorType)DescriptorType::eStorageBuffer;
 				layoutBinding.descriptorCount = 1;
 				layoutBinding.stageFlags = sb.stage;
 				layoutBinding.pImmutableSamplers = nullptr;
 				bindings.push_back(layoutBinding);
+				if (layoutBinding.binding < VUK_MAX_BINDINGS) {
+					dslci.used_bindings[layoutBinding.binding] = true;
+				}
 			}
 
 			for (auto& tb : set.texel_buffers) {
 				VkDescriptorSetLayoutBinding layoutBinding;
 				layoutBinding.binding = tb.binding;
-				layoutBinding.descriptorType = (VkDescriptorType)vuk::DescriptorType::eUniformTexelBuffer;
+				layoutBinding.descriptorType = (VkDescriptorType)DescriptorType::eUniformTexelBuffer;
 				layoutBinding.descriptorCount = 1;
 				layoutBinding.stageFlags = tb.stage;
 				layoutBinding.pImmutableSamplers = nullptr;
 				bindings.push_back(layoutBinding);
+				if (layoutBinding.binding < VUK_MAX_BINDINGS) {
+					dslci.used_bindings[layoutBinding.binding] = true;
+				}
 			}
 
 			for (auto& si : set.combined_image_samplers) {
 				VkDescriptorSetLayoutBinding layoutBinding;
 				layoutBinding.binding = si.binding;
-				layoutBinding.descriptorType = (VkDescriptorType)vuk::DescriptorType::eCombinedImageSampler;
+				layoutBinding.descriptorType = (VkDescriptorType)DescriptorType::eCombinedImageSampler;
 				layoutBinding.descriptorCount = si.array_size == (unsigned)-1 ? 1 : si.array_size;
 				layoutBinding.stageFlags = si.stage;
 				layoutBinding.pImmutableSamplers = nullptr;
@@ -59,12 +68,15 @@ namespace vuk {
 					layoutBinding.descriptorCount = bci.variable_count_max[index];
 				}
 				bindings.push_back(layoutBinding);
+				if (layoutBinding.binding < VUK_MAX_BINDINGS) {
+					dslci.used_bindings[layoutBinding.binding] = true;
+				}
 			}
 
 			for (auto& si : set.samplers) {
 				VkDescriptorSetLayoutBinding layoutBinding;
 				layoutBinding.binding = si.binding;
-				layoutBinding.descriptorType = (VkDescriptorType)vuk::DescriptorType::eSampler;
+				layoutBinding.descriptorType = (VkDescriptorType)DescriptorType::eSampler;
 				layoutBinding.descriptorCount = si.array_size == (unsigned)-1 ? 1 : si.array_size;
 				layoutBinding.stageFlags = si.stage;
 				layoutBinding.pImmutableSamplers = nullptr;
@@ -73,12 +85,15 @@ namespace vuk {
 					layoutBinding.descriptorCount = bci.variable_count_max[index];
 				}
 				bindings.push_back(layoutBinding);
+				if (layoutBinding.binding < VUK_MAX_BINDINGS) {
+					dslci.used_bindings[layoutBinding.binding] = true;
+				}
 			}
 
 			for (auto& si : set.sampled_images) {
 				VkDescriptorSetLayoutBinding layoutBinding;
 				layoutBinding.binding = si.binding;
-				layoutBinding.descriptorType = (VkDescriptorType)vuk::DescriptorType::eSampledImage;
+				layoutBinding.descriptorType = (VkDescriptorType)DescriptorType::eSampledImage;
 				layoutBinding.descriptorCount = si.array_size == (unsigned)-1 ? 1 : si.array_size;
 				layoutBinding.stageFlags = si.stage;
 				layoutBinding.pImmutableSamplers = nullptr;
@@ -87,12 +102,15 @@ namespace vuk {
 					layoutBinding.descriptorCount = bci.variable_count_max[index];
 				}
 				bindings.push_back(layoutBinding);
+				if (layoutBinding.binding < VUK_MAX_BINDINGS) {
+					dslci.used_bindings[layoutBinding.binding] = true;
+				}
 			}
 
 			for (auto& si : set.storage_images) {
 				VkDescriptorSetLayoutBinding layoutBinding;
 				layoutBinding.binding = si.binding;
-				layoutBinding.descriptorType = (VkDescriptorType)vuk::DescriptorType::eStorageImage;
+				layoutBinding.descriptorType = (VkDescriptorType)DescriptorType::eStorageImage;
 				layoutBinding.descriptorCount = si.array_size == (unsigned)-1 ? 1 : si.array_size;
 				layoutBinding.stageFlags = si.stage;
 				layoutBinding.pImmutableSamplers = nullptr;
@@ -101,22 +119,28 @@ namespace vuk {
 					layoutBinding.descriptorCount = bci.variable_count_max[index];
 				}
 				bindings.push_back(layoutBinding);
+				if (layoutBinding.binding < VUK_MAX_BINDINGS) {
+					dslci.used_bindings[layoutBinding.binding] = true;
+				}
 			}
 
 			for (auto& si : set.subpass_inputs) {
 				VkDescriptorSetLayoutBinding layoutBinding;
 				layoutBinding.binding = si.binding;
-				layoutBinding.descriptorType = (VkDescriptorType)vuk::DescriptorType::eInputAttachment;
+				layoutBinding.descriptorType = (VkDescriptorType)DescriptorType::eInputAttachment;
 				layoutBinding.descriptorCount = 1;
 				layoutBinding.stageFlags = si.stage;
 				layoutBinding.pImmutableSamplers = nullptr;
 				bindings.push_back(layoutBinding);
+				if (layoutBinding.binding < VUK_MAX_BINDINGS) {
+					dslci.used_bindings[layoutBinding.binding] = true;
+				}
 			}
 
 			for (auto& si : set.acceleration_structures) {
 				VkDescriptorSetLayoutBinding layoutBinding;
 				layoutBinding.binding = si.binding;
-				layoutBinding.descriptorType = (VkDescriptorType)vuk::DescriptorType::eAccelerationStructureKHR;
+				layoutBinding.descriptorType = (VkDescriptorType)DescriptorType::eAccelerationStructureKHR;
 				layoutBinding.descriptorCount = si.array_size == (unsigned)-1 ? 1 : si.array_size;
 				layoutBinding.stageFlags = si.stage;
 				layoutBinding.pImmutableSamplers = nullptr;
@@ -125,6 +149,9 @@ namespace vuk {
 					layoutBinding.descriptorCount = bci.variable_count_max[index];
 				}
 				bindings.push_back(layoutBinding);
+				if (layoutBinding.binding < VUK_MAX_BINDINGS) {
+					dslci.used_bindings[layoutBinding.binding] = true;
+				}
 			}
 
 			// extract flags from the packed bitset
