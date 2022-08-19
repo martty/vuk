@@ -67,20 +67,27 @@ namespace vuk {
 		std::vector<VkBuffer> buffers;
 	};
 
-	struct BDA {
-		uint64_t value;
-		constexpr operator uint64_t() {
-			return value;
-		}
+	struct LinearAllocSegment {
+		VmaAllocation allocation = nullptr;
+		VkDeviceMemory device_memory;
+		size_t device_memory_offset;
+		VkBuffer buffer = VK_NULL_HANDLE;
+		std::byte* mapped_ptr = nullptr;
+		uint64_t bda;
+		size_t num_blocks;
+		uint64_t base_address = 0;
 	};
 
 	struct LegacyLinearAllocator {
 		std::atomic<int> current_buffer = -1;
-		std::atomic<size_t> needle = 0;
+		std::atomic<uint64_t> needle = 0;
 		VkMemoryRequirements mem_reqs;
 		VmaMemoryUsage mem_usage;
 		vuk::BufferUsageFlags usage;
-		std::array<std::tuple<VmaAllocation, VkDeviceMemory, size_t, VkBuffer, std::byte*, BDA>, 256> allocations; // up to 4 GB of allocations
+		std::array<LinearAllocSegment, 256> available_allocations; // up to 4 GB of allocations
+		std::array<LinearAllocSegment, 256> used_allocations; // up to 4 GB of allocations
+		size_t available_allocation_count = 0;
+		size_t used_allocation_count = 0;
 
 		size_t block_size = 1024 * 1024 * 16;
 
@@ -95,8 +102,11 @@ namespace vuk {
 			mem_reqs = o.mem_reqs;
 			mem_usage = o.mem_usage;
 			usage = o.usage;
-			allocations = o.allocations;
+			used_allocations = o.used_allocations;
+			available_allocations = o.available_allocations;
 			block_size = o.block_size;
+			available_allocation_count = o.available_allocation_count;
+			used_allocation_count = o.used_allocation_count;
 		}
 	};
 
@@ -182,7 +192,7 @@ namespace vuk {
 		VmaPool _create_pool(MemoryUsage mem_usage, vuk::BufferUsageFlags buffer_usage);
 		Buffer _allocate_buffer(LegacyPoolAllocator& pool, size_t size, size_t alignment, bool create_mapped);
 		Buffer _allocate_buffer(LegacyLinearAllocator& pool, size_t size, size_t alignment, bool create_mapped);
-		void _grow(LegacyLinearAllocator& pool);
+		void _grow(LegacyLinearAllocator& pool, size_t num_pool_segs);
 	};
 
 	template<>

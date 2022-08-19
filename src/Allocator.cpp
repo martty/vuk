@@ -421,9 +421,9 @@ namespace vuk {
 		return (val + align - 1) / align * align;
 	}
 
-	void LegacyGPUAllocator::_grow(LegacyLinearAllocator& pool) {
+	void LegacyGPUAllocator::_grow(LegacyLinearAllocator& pool, size_t num_blocks) {
 		VkBufferCreateInfo bci{ .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
-		bci.size = pool.block_size;
+		bci.size = pool.block_size * num_blocks;
 		bci.usage = (VkBufferUsageFlags)pool.usage;
 		bci.queueFamilyIndexCount = queue_family_count;
 		bci.sharingMode = bci.queueFamilyIndexCount > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
@@ -438,20 +438,68 @@ namespace vuk {
 
 		VkBuffer vkbuffer;
 
-		auto curr_index = pool.current_buffer.load();
-		auto next_index = curr_index + 1;
-		if (std::get<VkBuffer>(pool.allocations[next_index]) == VK_NULL_HANDLE) {
-			std::lock_guard _(mutex);
-			if (std::get<VkBuffer>(pool.allocations[next_index]) == VK_NULL_HANDLE) { // check again under lock
-				auto result = vmaCreateBuffer(allocator, &bci, &vaci, &vkbuffer, &res, &vai);
-				assert(result == VK_SUCCESS);
-				VkBufferDeviceAddressInfo bdai{ VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, nullptr, vkbuffer };
-				auto bda = vkGetBufferDeviceAddress(device, &bdai);
-				pool.allocations[next_index] = std::tuple(res, vai.deviceMemory, vai.offset, vkbuffer, (std::byte*)vai.pMappedData, BDA{ bda });
-				buffers.emplace(reinterpret_cast<uint64_t>(vai.deviceMemory), std::tuple(vkbuffer, bci.size, bda));
+		std::lock_guard _(mutex);
+
+		int best_fit_block_size = 1024;
+		int best_fit_index = -1;
+		size_t actual_blocks = num_blocks;
+
+		// find best fit allocation
+		for (size_t i = 0; i < pool.available_allocation_count; i++) {
+			int block_over = (int)pool.available_allocations[i].num_blocks - (int)num_blocks;
+			if (block_over >= 0 && block_over < best_fit_block_size) {
+				best_fit_block_size = block_over;
+				best_fit_index = (int)i;
+				if (block_over == 0) {
+					break;
+				}
 			}
 		}
-		std::atomic_compare_exchange_strong(&pool.current_buffer, &curr_index, next_index);
+
+		if (best_fit_index == -1) { // no allocation suitable, allocate new one
+			auto result = vmaCreateBuffer(allocator, &bci, &vaci, &vkbuffer, &res, &vai);
+			assert(result == VK_SUCCESS);
+			VkBufferDeviceAddressInfo bdai{ VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, nullptr, vkbuffer };
+			auto bda = vkGetBufferDeviceAddress(device, &bdai);
+			std::byte* mapped_ptr = (std::byte*)vai.pMappedData;
+			for (auto i = 0; i < num_blocks; i++) {
+				pool.used_allocations[pool.used_allocation_count + i] = { res, vai.deviceMemory,      vai.offset + i * pool.block_size, vkbuffer, mapped_ptr,
+					                                                        bda, i > 0 ? 0 : num_blocks };
+			}
+			buffers.emplace(reinterpret_cast<uint64_t>(vai.deviceMemory), std::tuple(vkbuffer, bci.size, bda));
+			pool.current_buffer += (int)num_blocks;
+		} else { // we found one, we swap it into the used allocations and compact the available allocations
+			std::swap(pool.used_allocations[pool.used_allocation_count], pool.available_allocations[best_fit_index]);
+			std::swap(pool.available_allocations[best_fit_index], pool.available_allocations[pool.available_allocation_count - 1]);
+			pool.available_allocation_count--;
+			for (auto i = 1; i < pool.used_allocations[pool.used_allocation_count].num_blocks; i++) {
+				auto& alloc = pool.used_allocations[pool.used_allocation_count];
+				// create 1 entry per block in used_allocations
+				pool.used_allocations[pool.used_allocation_count + i] = {
+					alloc.allocation, alloc.device_memory, alloc.device_memory_offset + i * pool.block_size, alloc.buffer, alloc.mapped_ptr, alloc.bda, 0
+				};
+			}
+			pool.current_buffer += (int)pool.used_allocations[pool.used_allocation_count].num_blocks;
+			actual_blocks = pool.used_allocations[pool.used_allocation_count].num_blocks;
+		}
+		pool.used_allocations[0].base_address = 0;
+		for (auto i = 0; i < actual_blocks; i++) {
+			if (pool.used_allocation_count + i == 0) {
+				continue;
+			}
+			if (i == 0) { // the first block will have its based_address calculated, the remaining blocks share this address
+				for (int j = (int)pool.used_allocation_count - 1; j >= 0; j--) {
+					if (pool.used_allocations[j].num_blocks > 0) {
+						pool.used_allocations[pool.used_allocation_count].base_address =
+						    pool.used_allocations[j].base_address + pool.used_allocations[j].num_blocks * pool.block_size;
+						break;
+					}
+				}
+			} else {
+				pool.used_allocations[pool.used_allocation_count + i].base_address = pool.used_allocations[pool.used_allocation_count + i - 1].base_address;
+			}
+		}
+		pool.used_allocation_count += actual_blocks;
 	}
 
 	// lock-free bump allocation if there is still space
@@ -468,33 +516,54 @@ namespace vuk {
 			alignment = std::lcm(alignment, properties.limits.minStorageBufferOffsetAlignment);
 		}
 
-		auto new_needle = pool.needle.fetch_add(size + alignment) + size + alignment;
-		auto base_addr = new_needle - size - alignment;
-
-		int buffer = new_needle / pool.block_size;
-		bool needs_to_create = base_addr == 0 || (base_addr / pool.block_size != new_needle / pool.block_size);
-		if (needs_to_create) {
-			while (pool.current_buffer.load() < buffer) {
-				_grow(pool);
-			}
-			if (base_addr > 0) {
-				// there is no space in the beginning of this allocation, so we just retry
-				return _allocate_buffer(pool, size, alignment, create_mapped);
+		uint64_t old_needle = pool.needle.load();
+		uint64_t new_needle = VmaAlignUp(old_needle, alignment) + size;
+		uint64_t low_buffer = old_needle / pool.block_size;
+		uint64_t high_buffer = new_needle / pool.block_size;
+		bool is_straddling = low_buffer != high_buffer;
+		if (is_straddling) { // boost alignment to place on block start
+			new_needle = VmaAlignUp(old_needle, pool.block_size) + size;
+			low_buffer = old_needle / pool.block_size;
+			high_buffer = new_needle / pool.block_size;
+			is_straddling = low_buffer != high_buffer;
+		}
+		while (!std::atomic_compare_exchange_strong(&pool.needle, &old_needle, new_needle)) { // CAS loop
+			old_needle = pool.needle.load();
+			new_needle = VmaAlignUp(old_needle, alignment) + size;
+			low_buffer = old_needle / pool.block_size;
+			high_buffer = new_needle / pool.block_size;
+			is_straddling = low_buffer != high_buffer;
+			if (is_straddling) { // boost alignment to place on block start
+				new_needle = VmaAlignUp(old_needle, pool.block_size) + size;
+				low_buffer = old_needle / pool.block_size;
+				high_buffer = new_needle / pool.block_size;
+				is_straddling = low_buffer != high_buffer;
 			}
 		}
+
+		uint64_t base = new_needle - size;
+		int base_buffer = (int)(base / pool.block_size);
+		bool needs_to_create = old_needle == 0 || is_straddling;
+		if (needs_to_create) {
+			size_t num_blocks = std::max(high_buffer - low_buffer + (old_needle == 0 ? 1 : 0), static_cast<uint64_t>(1));
+			while (pool.current_buffer.load() < (int)high_buffer) {
+				_grow(pool, num_blocks);
+			}
+			assert(base % pool.block_size == 0);
+		}
 		// wait for the buffer to be allocated
-		while (pool.current_buffer.load() < buffer) {
+		while (pool.current_buffer.load() < (int)high_buffer) {
 		};
-		auto offset = VmaAlignDown(new_needle - size, alignment) % pool.block_size;
-		auto& current_alloc = pool.allocations[buffer];
+		auto& current_alloc = pool.used_allocations[base_buffer];
+		auto offset = base - current_alloc.base_address;
 		Buffer b;
-		b.buffer = std::get<VkBuffer>(current_alloc);
-		b.device_memory = std::get<VkDeviceMemory>(current_alloc);
+		b.buffer = current_alloc.buffer;
+		b.device_memory = current_alloc.device_memory;
 		b.offset = offset;
 		b.size = size;
-		b.mapped_ptr = std::get<std::byte*>(current_alloc) != nullptr ? std::get<std::byte*>(current_alloc) + offset : nullptr;
-		b.device_address = std::get<BDA>(current_alloc) != 0 ? std::get<BDA>(current_alloc) + offset : 0;
-		b.allocation_size = pool.block_size;
+		b.mapped_ptr = current_alloc.mapped_ptr != nullptr ? current_alloc.mapped_ptr + offset : nullptr;
+		b.device_address = current_alloc.bda != 0 ? current_alloc.bda + offset : 0;
+		b.allocation_size = pool.block_size * current_alloc.num_blocks;
 
 		return b;
 	}
@@ -658,22 +727,24 @@ namespace vuk {
 
 	void LegacyGPUAllocator::reset_pool(LegacyLinearAllocator& pool) {
 		std::lock_guard _(mutex);
+		for (size_t i = 0; i < pool.used_allocation_count;) {
+			pool.available_allocations[pool.available_allocation_count++] = pool.used_allocations[i];
+			i += pool.used_allocations[i].num_blocks;
+		}
+		pool.used_allocations = {};
+		pool.used_allocation_count = 0;
 		pool.current_buffer = -1;
 		pool.needle = 0;
 	}
 
+	// we just destroy the buffers that we have left in the available allocations
 	void LegacyGPUAllocator::trim_pool(LegacyLinearAllocator& pool) {
-		auto current_used_buffer_count = (pool.needle.load() + pool.block_size - 1) / pool.block_size; // div ceil
 		std::lock_guard _(mutex);
-		for (size_t i = current_used_buffer_count; i < pool.allocations.size(); i++) {
-			auto& alloc = pool.allocations[i];
-			if (std::get<VkBuffer>(alloc) == VK_NULL_HANDLE) {
-				break;
-			} else {
-				vmaDestroyBuffer(allocator, std::get<VkBuffer>(alloc), std::get<VmaAllocation>(alloc));
-				alloc = {};
-			}
+		for (size_t i = 0; i < pool.available_allocation_count; i++) {
+			auto& alloc = pool.available_allocations[i];
+			vmaDestroyBuffer(allocator, alloc.buffer, alloc.allocation);
 		}
+		pool.available_allocation_count = 0;
 	}
 
 	void LegacyGPUAllocator::free_buffer(const Buffer& b) {
@@ -698,8 +769,17 @@ namespace vuk {
 
 	void LegacyGPUAllocator::destroy(const LegacyLinearAllocator& pool) {
 		std::lock_guard _(mutex);
-		for (auto& [va, mem, offset, buffer, map, bda] : pool.allocations) {
-			vmaDestroyBuffer(allocator, buffer, va);
+		for (size_t i = 0; i < pool.used_allocation_count; i++) {
+			auto& [va, mem, offset, buffer, map, bda, nb_blocks, ba] = pool.used_allocations[i];
+			if (va) {
+				vmaDestroyBuffer(allocator, buffer, va);
+			}
+		}
+		for (size_t i = 0; i < pool.available_allocation_count; i++) {
+			auto& [va, mem, offset, buffer, map, bda, nb_blocks, ba] = pool.available_allocations[i];
+			if (va) {
+				vmaDestroyBuffer(allocator, buffer, va);
+			}
 		}
 	}
 
