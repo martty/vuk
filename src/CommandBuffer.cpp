@@ -324,6 +324,16 @@ namespace vuk {
 		return *this;
 	}
 
+	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, Name resource_name, unsigned first_location, Packed format_list) {
+		VUK_EARLY_RET();
+		auto res = rg->get_resource_buffer(resource_name, current_pass);
+		if (!res) {
+			current_error = std::move(res);
+			return *this;
+		}
+		return bind_vertex_buffer(binding, res->buffer, first_location, format_list);
+	}
+
 	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, const Buffer& buf, std::span<VertexInputAttributeDescription> viads, uint32_t stride) {
 		VUK_EARLY_RET();
 		assert(binding < VUK_MAX_ATTRIBUTES && "Vertex buffer binding must be smaller than VUK_MAX_ATTRIBUTES.");
@@ -345,11 +355,32 @@ namespace vuk {
 		return *this;
 	}
 
+	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, Name resource_name, std::span<VertexInputAttributeDescription> viads, uint32_t stride) {
+		VUK_EARLY_RET();
+		auto res = rg->get_resource_buffer(resource_name, current_pass);
+		if (!res) {
+			current_error = std::move(res);
+			return *this;
+		}
+		return bind_vertex_buffer(binding, res->buffer, viads, stride);
+	}
+
 	CommandBuffer& CommandBuffer::bind_index_buffer(const Buffer& buf, IndexType type) {
 		VUK_EARLY_RET();
 		vkCmdBindIndexBuffer(command_buffer, buf.buffer, buf.offset, (VkIndexType)type);
 		return *this;
 	}
+
+	CommandBuffer& CommandBuffer::bind_index_buffer(Name name, IndexType type) {
+		VUK_EARLY_RET();
+		auto res = rg->get_resource_buffer(name, current_pass);
+		if (!res) {
+			current_error = std::move(res);
+			return *this;
+		}
+		return bind_index_buffer(res->buffer, type);
+	}
+
 
 	CommandBuffer& CommandBuffer::set_primitive_topology(PrimitiveTopology topo) {
 		VUK_EARLY_RET();
@@ -522,6 +553,16 @@ namespace vuk {
 		return *this;
 	}
 
+	CommandBuffer& CommandBuffer::draw_indexed_indirect(size_t command_count, Name resource_name) {
+		VUK_EARLY_RET();
+		auto res = rg->get_resource_buffer(resource_name, current_pass);
+		if (!res) {
+			current_error = std::move(res);
+			return *this;
+		}
+		return draw_indexed_indirect(command_count, res->buffer);
+	}
+
 	CommandBuffer& CommandBuffer::draw_indexed_indirect(std::span<DrawIndexedIndirectCommand> cmds) {
 		VUK_EARLY_RET();
 		if (!_bind_graphics_pipeline_state()) {
@@ -555,6 +596,21 @@ namespace vuk {
 		return *this;
 	}
 
+	CommandBuffer& CommandBuffer::draw_indexed_indirect_count(size_t max_command_count, Name indirect_resource_name, Name count_resource_name) {
+		VUK_EARLY_RET();
+		auto res = rg->get_resource_buffer(indirect_resource_name, current_pass);
+		if (!res) {
+			current_error = std::move(res);
+			return *this;
+		}
+		auto count_res = rg->get_resource_buffer(count_resource_name, current_pass);
+		if (!res) {
+			current_error = std::move(res);
+			return *this;
+		}
+		return draw_indexed_indirect_count(max_command_count, res->buffer, count_res->buffer);
+	}
+
 	CommandBuffer& CommandBuffer::dispatch(size_t size_x, size_t size_y, size_t size_z) {
 		VUK_EARLY_RET();
 		if (!_bind_compute_pipeline_state()) {
@@ -586,6 +642,16 @@ namespace vuk {
 		}
 		vkCmdDispatchIndirect(command_buffer, indirect_buffer.buffer, indirect_buffer.offset);
 		return *this;
+	}
+
+	CommandBuffer& CommandBuffer::dispatch_indirect(Name indirect_resource_name) {
+		VUK_EARLY_RET();
+		auto res = rg->get_resource_buffer(indirect_resource_name, current_pass);
+		if (!res) {
+			current_error = std::move(res);
+			return *this;
+		}
+		return dispatch_indirect(indirect_resource_name);
 	}
 
 	CommandBuffer& CommandBuffer::trace_rays(size_t size_x, size_t size_y, size_t size_z) {

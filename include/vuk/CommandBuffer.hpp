@@ -350,6 +350,10 @@ namespace vuk {
 		/// @param buffer The buffer to be bound
 		/// @param type The index type in the buffer
 		CommandBuffer& bind_index_buffer(const Buffer& buffer, IndexType type);
+		/// @brief Binds an index buffer from a Resource with the given type
+		/// @param resource_name The Name of the Resource to be bound
+		/// @param type The index type in the buffer
+		CommandBuffer& bind_index_buffer(Name resource_name, IndexType type);
 		/// @brief Binds a vertex buffer to the given binding point and configures attributes sourced from this buffer based on a packed format list, the attribute
 		/// locations are offset with first_location
 		/// @param binding The binding point of the buffer
@@ -357,6 +361,13 @@ namespace vuk {
 		/// @param first_location First location assigned to the attributes
 		/// @param format_list List of formats packed in buffer to generate attributes from
 		CommandBuffer& bind_vertex_buffer(unsigned binding, const Buffer& buffer, unsigned first_location, Packed format_list);
+		/// @brief Binds a vertex buffer from a Resource to the given binding point and configures attributes sourced from this buffer based on a packed format
+		/// list, the attribute locations are offset with first_location
+		/// @param binding The binding point of the buffer
+		/// @param resource_name The Name of the Resource to be bound
+		/// @param first_location First location assigned to the attributes
+		/// @param format_list List of formats packed in buffer to generate attributes from
+		CommandBuffer& bind_vertex_buffer(unsigned binding, Name resource_name, unsigned first_location, Packed format_list);
 		/// @brief Binds a vertex buffer to the given binding point and configures attributes sourced from this buffer based on a span of attribute descriptions and
 		/// stride
 		/// @param binding The binding point of the buffer
@@ -365,6 +376,13 @@ namespace vuk {
 		/// @param stride Stride of a vertex sourced from this buffer
 		CommandBuffer&
 		bind_vertex_buffer(unsigned binding, const Buffer& buffer, std::span<VertexInputAttributeDescription> attribute_descriptions, uint32_t stride);
+		/// @brief Binds a vertex buffer from a Resource to the given binding point and configures attributes sourced from this buffer based on a span of attribute
+		/// descriptions and stride
+		/// @param binding The binding point of the buffer
+		/// @param resource_name The Name of the Resource to be bound
+		/// @param attribute_descriptions Attributes that are sourced from this buffer
+		/// @param stride Stride of a vertex sourced from this buffer
+		CommandBuffer& bind_vertex_buffer(unsigned binding, Name resource_name, std::span<VertexInputAttributeDescription> attribute_descriptions, uint32_t stride);
 
 		/// @brief Update push constants for the specified stages with bytes
 		/// @param stages Pipeline stages that can see the updated bytes
@@ -401,7 +419,7 @@ namespace vuk {
 		/// @brief Bind a buffer to the command buffer from a Resource
 		/// @param set The set bind index to be used
 		/// @param binding The descriptor binding to bind the buffer to
-		/// @param buffer The Name of the Resource to be bound
+		/// @param resource_name The Name of the Resource to be bound
 		CommandBuffer& bind_buffer(unsigned set, unsigned binding, Name resource_name);
 
 		/// @brief Bind an image to the command buffer
@@ -470,6 +488,10 @@ namespace vuk {
 		/// @param indirect_buffer Buffer of indirect commands
 		CommandBuffer& draw_indexed_indirect(size_t command_count, const Buffer& indirect_buffer);
 		/// @brief Issue an indirect indexed draw
+		/// @param command_count Number of indirect commands to be used
+		/// @param indirect_resource_name The Name of the Resource to use as indirect buffer
+		CommandBuffer& draw_indexed_indirect(size_t command_count, Name indirect_resource_name);
+		/// @brief Issue an indirect indexed draw
 		/// @param commands Indirect commands to be uploaded and used for this draw
 		CommandBuffer& draw_indexed_indirect(std::span<DrawIndexedIndirectCommand> commands);
 
@@ -478,6 +500,11 @@ namespace vuk {
 		/// @param indirect_buffer Buffer of indirect commands
 		/// @param count_buffer Buffer of command count
 		CommandBuffer& draw_indexed_indirect_count(size_t max_command_count, const Buffer& indirect_buffer, const Buffer& count_buffer);
+		/// @brief Issue an indirect indexed draw with count
+		/// @param max_command_count Upper limit of commands that can be drawn
+		/// @param indirect_resource_name The Name of the Resource to use as indirect buffer
+		/// @param count_resource_name The Name of the Resource to use as count buffer
+		CommandBuffer& draw_indexed_indirect_count(size_t max_command_count, Name indirect_resource_name, Name count_resource_name);
 
 		/// @brief Issue a compute dispatch
 		/// @param group_count_x Number of groups on the x-axis
@@ -495,6 +522,9 @@ namespace vuk {
 		/// @brief Issue an indirect compute dispatch
 		/// @param indirect_buffer Buffer of workgroup counts
 		CommandBuffer& dispatch_indirect(const Buffer& indirect_buffer);
+		/// @brief Issue an indirect compute dispatch
+		/// @param indirect_resource_name The Name of the Resource to use as indirect buffer
+		CommandBuffer& dispatch_indirect(Name indirect_resource_name);
 
 		/// @brief Perform ray trace query with a raytracing pipeline
 		/// @param width width of the ray trace query dimensions
