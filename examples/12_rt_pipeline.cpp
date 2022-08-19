@@ -206,7 +206,7 @@ namespace {
 		      if (!runner.has_rt) {
 			      return target;
 		      }
-		      auto& ctx = frame_allocator.get_context();
+
 		      struct VP {
 			      glm::mat4 inv_view;
 			      glm::mat4 inv_proj;
@@ -282,7 +282,7 @@ namespace {
 		      // Perform a blit of the intermediate image onto the swapchain (this will also do the non-linear encoding for us, although we lost some precision when
 		      // we rendered into Unorm)
 		      rg.add_pass({ .resources = { "12_rt_target+"_image >> vuk::eTransferRead, "12_rt"_image >> vuk::eTransferWrite >> "12_rt_final" },
-		                    .execute = [uboVP](vuk::CommandBuffer& command_buffer) {
+		                    .execute = [](vuk::CommandBuffer& command_buffer) {
 			                    vuk::ImageBlit blit;
 			                    blit.srcSubresource.aspectMask = vuk::ImageAspectFlagBits::eColor;
 			                    blit.srcSubresource.baseArrayLayer = 0;

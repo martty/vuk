@@ -1410,7 +1410,7 @@ namespace vuk {
 			}
 
 			if (ongoing_renderpass->samples != SampleCountFlagBits::e1) {
-				PipelineInstanceCreateInfo::Multisample ms{ .rasterization_samples = (VkSampleCountFlagBits)ongoing_renderpass->samples };
+				PipelineInstanceCreateInfo::Multisample ms{ .rasterization_samples = (uint32_t)ongoing_renderpass->samples };
 				write(data_ptr, ms);
 			}
 

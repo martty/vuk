@@ -16,7 +16,7 @@ namespace vuk {
 	};
 
 	template<class T>
-	Cache<T>::Cache(void* allocator, create_fn create, destroy_fn destroy) : impl(new CacheImpl<T>()), allocator(allocator), create(create), destroy(destroy) {}
+	Cache<T>::Cache(void* allocator, create_fn create, destroy_fn destroy) : impl(new CacheImpl<T>()), create(create), destroy(destroy), allocator(allocator) {}
 
 	template<class T>
 	T& Cache<T>::acquire(const create_info_t<T>& ci) {

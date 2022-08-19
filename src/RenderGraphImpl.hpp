@@ -128,9 +128,9 @@ namespace vuk {
 		    INIT(whole_names_consumed),
 		    INIT(diverged_subchain_headers),
 		    INIT(ia_inference_rules),
+		    INIT(subgraphs),
 		    INIT(acquires),
-		    INIT(releases),
-		    INIT(subgraphs) {}
+		    INIT(releases) {}
 
 		Name resolve_alias(Name in) {
 			auto it = std::find_if(aliases.begin(), aliases.end(), [=](auto& v) { return v.first == in; });

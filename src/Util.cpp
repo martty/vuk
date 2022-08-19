@@ -139,7 +139,7 @@ namespace vuk {
 		return { expected_value, bundles };
 	}
 
-		std::string_view to_name(vuk::DomainFlagBits d) {
+	std::string_view to_name(vuk::DomainFlagBits d) {
 		switch (d) {
 		case DomainFlagBits::eTransferQueue:
 			return "Transfer";
@@ -159,7 +159,7 @@ namespace vuk {
 			ss << "subgraph cluster_" << to_name(batch.domain) << " {";
 			char name = 'A';
 
-			for (auto& sub : batch.submits) {
+			for (size_t i = 0; i < batch.submits.size(); i++) {
 				ss << to_name(batch.domain)[0] << name << ";";
 				name++;
 			}
@@ -312,11 +312,11 @@ namespace vuk {
 			queue_progress_references[ctx.domain_to_queue_index(DomainFlagBits::eTransferQueue)] = *ctx.transfer_queue->impl->submit_sync.value;
 			transfer_lock = std::unique_lock{ ctx.transfer_queue->impl->queue_lock };
 		}
-		bool needs_flatten = (used_domains & DomainFlagBits::eTransferQueue) &&
-		                         (ctx.domain_to_queue_index(DomainFlagBits::eTransferQueue) == ctx.domain_to_queue_index(DomainFlagBits::eGraphicsQueue) ||
-		                          ctx.domain_to_queue_index(DomainFlagBits::eTransferQueue) == ctx.domain_to_queue_index(DomainFlagBits::eComputeQueue)) ||
-		                     (used_domains & DomainFlagBits::eComputeQueue) &&
-		                         (ctx.domain_to_queue_index(DomainFlagBits::eComputeQueue) == ctx.domain_to_queue_index(DomainFlagBits::eGraphicsQueue));
+		bool needs_flatten = ((used_domains & DomainFlagBits::eTransferQueue) &&
+		                      (ctx.domain_to_queue_index(DomainFlagBits::eTransferQueue) == ctx.domain_to_queue_index(DomainFlagBits::eGraphicsQueue) ||
+		                       ctx.domain_to_queue_index(DomainFlagBits::eTransferQueue) == ctx.domain_to_queue_index(DomainFlagBits::eComputeQueue))) ||
+		                     ((used_domains & DomainFlagBits::eComputeQueue) &&
+		                      (ctx.domain_to_queue_index(DomainFlagBits::eComputeQueue) == ctx.domain_to_queue_index(DomainFlagBits::eGraphicsQueue)));
 		if (needs_flatten) {
 			bool needs_transfer_compute_flatten =
 			    ctx.domain_to_queue_index(DomainFlagBits::eTransferQueue) == ctx.domain_to_queue_index(DomainFlagBits::eGraphicsQueue) &&
@@ -491,8 +491,6 @@ namespace vuk {
 	}
 
 	Result<SingleSwapchainRenderBundle> execute_submit(Allocator& allocator, ExecutableRenderGraph&& rg, SingleSwapchainRenderBundle&& bundle) {
-		Context& ctx = allocator.get_context();
-
 		std::vector<std::pair<SwapchainRef, size_t>> swapchains_with_indexes = { { bundle.swapchain, bundle.image_index } };
 
 		std::pair v = { &allocator, &rg };
