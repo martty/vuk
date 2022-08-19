@@ -1193,7 +1193,7 @@ namespace vuk {
 			PipelineInstanceCreateInfo pi;
 			pi.base = next_pipeline;
 			pi.render_pass = ongoing_renderpass->renderpass;
-			pi.dynamic_state_flags = dynamic_state_flags;
+			pi.dynamic_state_flags = dynamic_state_flags.m_mask;
 			auto& records = pi.records;
 			if (ongoing_renderpass->subpass > 0) {
 				records.nonzero_subpass = true;

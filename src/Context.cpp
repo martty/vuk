@@ -364,7 +364,7 @@ namespace vuk {
 			const uint32_t* begin = (const uint32_t*)output->GetBufferPointer();
 			const uint32_t* end = begin + (output->GetBufferSize() / 4);
 
-			spirv = std::vector<uint32_t>{ begin, end };        
+			spirv = std::vector<uint32_t>{ begin, end };
 
 			break;
 		}
@@ -799,7 +799,7 @@ namespace vuk {
 
 		// INPUT ASSEMBLY
 		VkPipelineInputAssemblyStateCreateInfo input_assembly_state{ .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-			                                                           .topology = cinfo.topology,
+			                                                           .topology = static_cast<VkPrimitiveTopology>(cinfo.topology),
 			                                                           .primitiveRestartEnable = cinfo.primitive_restart_enable };
 		gpci.pInputAssemblyState = &input_assembly_state;
 		// VERTEX INPUT
@@ -865,7 +865,7 @@ namespace vuk {
 		if (cinfo.records.logic_op) {
 			auto compressed = read<PipelineInstanceCreateInfo::BlendStateLogicOp>(data_ptr);
 			color_blend_state.logicOpEnable = true;
-			color_blend_state.logicOp = compressed.logic_op;
+			color_blend_state.logicOp = static_cast<VkLogicOp>(compressed.logic_op);
 		}
 		if (cinfo.records.blend_constants) {
 			memcpy(&color_blend_state.blendConstants, data_ptr, sizeof(float) * 4);
@@ -977,7 +977,7 @@ namespace vuk {
 			                                                      .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT };
 		if (cinfo.records.more_than_one_sample) {
 			auto ms = read<PipelineInstanceCreateInfo::Multisample>(data_ptr);
-			multisample_state.rasterizationSamples = ms.rasterization_samples;
+			multisample_state.rasterizationSamples = static_cast<VkSampleCountFlagBits>(ms.rasterization_samples);
 			multisample_state.alphaToCoverageEnable = ms.alpha_to_coverage_enable;
 			multisample_state.alphaToOneEnable = ms.alpha_to_one_enable;
 			multisample_state.minSampleShading = ms.min_sample_shading;
@@ -991,7 +991,7 @@ namespace vuk {
 		uint8_t num_viewports = 1;
 		if (cinfo.records.viewports) {
 			num_viewports = read<uint8_t>(data_ptr);
-			if (!(cinfo.dynamic_state_flags & vuk::DynamicStateFlagBits::eViewport)) {
+			if (!(static_cast<vuk::DynamicStateFlags>(cinfo.dynamic_state_flags) & vuk::DynamicStateFlagBits::eViewport)) {
 				viewports = reinterpret_cast<const VkViewport*>(data_ptr);
 				data_ptr += num_viewports * sizeof(VkViewport);
 			}
@@ -1002,7 +1002,7 @@ namespace vuk {
 		uint8_t num_scissors = 1;
 		if (cinfo.records.scissors) {
 			num_scissors = read<uint8_t>(data_ptr);
-			if (!(cinfo.dynamic_state_flags & vuk::DynamicStateFlagBits::eScissor)) {
+			if (!(static_cast<vuk::DynamicStateFlags>(cinfo.dynamic_state_flags) & vuk::DynamicStateFlagBits::eScissor)) {
 				scissors = reinterpret_cast<const VkRect2D*>(data_ptr);
 				data_ptr += num_scissors * sizeof(VkRect2D);
 			}
@@ -1016,10 +1016,10 @@ namespace vuk {
 		gpci.pViewportState = &viewport_state;
 
 		VkPipelineDynamicStateCreateInfo dynamic_state{ .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO };
-		dynamic_state.dynamicStateCount = std::popcount(cinfo.dynamic_state_flags.m_mask);
+		dynamic_state.dynamicStateCount = std::popcount(cinfo.dynamic_state_flags);
 		fixed_vector<VkDynamicState, VkDynamicState::VK_DYNAMIC_STATE_DEPTH_BOUNDS> dyn_states;
 		uint64_t dyn_state_cnt = 0;
-		uint64_t mask = cinfo.dynamic_state_flags.m_mask;
+		uint16_t mask = cinfo.dynamic_state_flags;
 		while (mask > 0) {
 			bool set = mask & 0x1;
 			if (set) {
@@ -1103,12 +1103,10 @@ namespace vuk {
 		cpci.stageCount = (uint32_t)cinfo.base->psscis.size();
 
 		VkPipeline pipeline;
-		VkResult res = vkCreateRayTracingPipelinesKHR(
-		    device, {}, impl->vk_pipeline_cache, 1, &cpci, nullptr, &pipeline);
+		VkResult res = vkCreateRayTracingPipelinesKHR(device, {}, impl->vk_pipeline_cache, 1, &cpci, nullptr, &pipeline);
 		assert(res == VK_SUCCESS);
 		debug.set_name(pipeline, cinfo.base->pipeline_name);
 
-		
 		auto handleCount = 1 + miss_count + hit_count + callable_count;
 		uint32_t handleSize = rt_properties.shaderGroupHandleSize;
 		// The SBT (buffer) need to have starting groups to be aligned and handles in the group to be aligned.
@@ -1167,7 +1165,7 @@ namespace vuk {
 			memcpy(pData, get_handle(handleIdx++), handleSize);
 			pData += call_region.stride;
 		}
-		
+
 		auto sbtAddress = SBT.device_address;
 
 		rgen_region.deviceAddress = sbtAddress;

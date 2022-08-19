@@ -16,7 +16,7 @@ namespace vuk {
 	struct PipelineInstanceCreateInfo {
 		PipelineBaseInfo* base;
 		VkRenderPass render_pass;
-		DynamicStateFlags dynamic_state_flags;
+		uint16_t dynamic_state_flags : 6;
 		uint16_t extended_size = 0;
 		struct RecordsExist {
 			uint32_t nonzero_subpass : 1;
@@ -37,10 +37,10 @@ namespace vuk {
 			uint32_t line_width_not_1 : 1;
 			uint32_t more_than_one_sample : 1;
 		} records = {};
-		uint8_t attachmentCount : std::bit_width(VUK_MAX_COLOR_ATTACHMENTS); // up to VUK_MAX_COLOR_ATTACHMENTS attachments
+		uint32_t attachmentCount : std::bit_width(VUK_MAX_COLOR_ATTACHMENTS); // up to VUK_MAX_COLOR_ATTACHMENTS attachments
 		// input assembly state
-		VkPrimitiveTopology topology : std::bit_width(10u);
-		bool primitive_restart_enable : 1;
+		uint32_t topology : std::bit_width(10u);
+		uint32_t primitive_restart_enable : 1;
 		VkCullModeFlags cullMode : 2;
 		union {
 			std::byte inline_data[80];
@@ -73,7 +73,7 @@ namespace vuk {
 
 		// blend state
 		struct BlendStateLogicOp {
-			VkLogicOp logic_op : std::bit_width(16u);
+			uint32_t logic_op : std::bit_width(16u);
 		};
 
 		struct RasterizationState {
@@ -104,7 +104,7 @@ namespace vuk {
 		};
 
 		struct Multisample {
-			VkSampleCountFlagBits rasterization_samples : 7;
+			uint32_t rasterization_samples : 7;
 			bool sample_shading_enable : 1;
 			// pSampleMask not yet supported
 			bool alpha_to_coverage_enable : 1;
