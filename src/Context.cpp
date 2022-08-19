@@ -454,6 +454,7 @@ namespace vuk {
 		pbi.binding_flags = cinfo.binding_flags;
 		pbi.variable_count_max = cinfo.variable_count_max;
 		pbi.hit_groups = cinfo.hit_groups;
+		pbi.max_ray_recursion_depth = cinfo.max_ray_recursion_depth;
 		return pbi;
 	}
 
@@ -1098,7 +1099,7 @@ namespace vuk {
 		cpci.groupCount = (uint32_t)groups.size();
 		cpci.pGroups = groups.data();
 
-		cpci.maxPipelineRayRecursionDepth = 1;
+		cpci.maxPipelineRayRecursionDepth = cinfo.base->max_ray_recursion_depth;
 		cpci.pStages = cinfo.base->psscis.data();
 		cpci.stageCount = (uint32_t)cinfo.base->psscis.size();
 

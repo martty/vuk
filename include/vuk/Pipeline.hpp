@@ -107,6 +107,8 @@ namespace vuk {
 		std::vector<ShaderSource> shaders;
 		std::vector<std::string> shader_paths;
 		std::vector<HitGroup> hit_groups;
+		/// @brief Recursion depth for RT pipelines, corresponding to maxPipelineRayRecursionDepth
+		uint32_t max_ray_recursion_depth = 1;
 
 		friend struct std::hash<PipelineBaseCreateInfo>;
 
@@ -125,6 +127,7 @@ namespace vuk {
 		std::array<DescriptorSetLayoutAllocInfo, VUK_MAX_SETS> layout_info = {};
 		fixed_vector<DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> dslcis = {}; // saved for debug purposes
 		std::vector<HitGroup> hit_groups;
+		uint32_t max_ray_recursion_depth;
 
 		// 4 valid flags
 		Bitset<4 * VUK_MAX_SETS* VUK_MAX_BINDINGS> binding_flags = {};
