@@ -26,7 +26,12 @@
 #define VUK_MAX_COLOR_ATTACHMENTS 8u
 #endif
 
-// number of invidual push constant ranges that can be bound to the command buffer
+// size of the push constant buffer
+#ifndef VUK_MAX_PUSHCONSTANT_SIZE
+#define VUK_MAX_PUSHCONSTANT_SIZE 128u
+#endif
+
+// number of individual push constant ranges that can be bound to the command buffer
 #ifndef VUK_MAX_PUSHCONSTANT_RANGES
 #define VUK_MAX_PUSHCONSTANT_RANGES 8u
 #endif
@@ -36,9 +41,9 @@
 #define VUK_MAX_SPECIALIZATIONCONSTANT_RANGES 64u
 #endif
 
-// number of bytes specialization constants can take up for compute pipelines
-#ifndef VUK_MAX_SPECIALIZATIONCONSTANT_DATA
-#define VUK_MAX_SPECIALIZATIONCONSTANT_DATA 32u
+// number of bytes specialization constants can take up for pipelines
+#ifndef VUK_MAX_SPECIALIZATIONCONSTANT_SIZE
+#define VUK_MAX_SPECIALIZATIONCONSTANT_SIZE 32u
 #endif
 
 // number of viewports that can be set on the command buffer

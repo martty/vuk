@@ -390,6 +390,7 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::bind_persistent(unsigned set, PersistentDescriptorSet& pda) {
 		VUK_EARLY_RET();
+		assert(set < VUK_MAX_SETS);
 		persistent_sets_to_bind[set] = true;
 		persistent_sets[set] = { pda.backing_set, pda.set_layout };
 		return *this;
@@ -397,6 +398,7 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::push_constants(ShaderStageFlags stages, size_t offset, void* data, size_t size) {
 		VUK_EARLY_RET();
+		assert(offset + size < VUK_MAX_PUSHCONSTANT_SIZE);
 		pcrs.push_back(VkPushConstantRange{ (VkShaderStageFlags)stages, (uint32_t)offset, (uint32_t)size });
 		void* dst = push_constant_buffer.data() + offset;
 		::memcpy(dst, data, size);
@@ -412,6 +414,8 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::bind_buffer(unsigned set, unsigned binding, const Buffer& buffer) {
 		VUK_EARLY_RET();
+		assert(set < VUK_MAX_SETS);
+		assert(binding < VUK_MAX_BINDINGS);
 		sets_to_bind[set] = true;
 		set_bindings[set].bindings[binding].type = DescriptorType::eUniformBuffer; // just means buffer
 		set_bindings[set].bindings[binding].buffer = VkDescriptorBufferInfo{ buffer.buffer, buffer.offset, buffer.size };
@@ -466,6 +470,8 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::bind_image(unsigned set, unsigned binding, ImageView image_view, ImageLayout layout) {
 		VUK_EARLY_RET();
+		assert(set < VUK_MAX_SETS);
+		assert(binding < VUK_MAX_BINDINGS);
 		assert(image_view.payload != VK_NULL_HANDLE);
 		sets_to_bind[set] = true;
 		auto& db = set_bindings[set].bindings[binding];
@@ -484,6 +490,8 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::bind_sampler(unsigned set, unsigned binding, SamplerCreateInfo sci) {
 		VUK_EARLY_RET();
+		assert(set < VUK_MAX_SETS);
+		assert(binding < VUK_MAX_BINDINGS);
 		sets_to_bind[set] = true;
 		auto& db = set_bindings[set].bindings[binding];
 		// if previous descriptor was not an image, we reset the DescriptorImageInfo
@@ -516,6 +524,8 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::bind_acceleration_structure(unsigned set, unsigned binding, VkAccelerationStructureKHR tlas) {
 		VUK_EARLY_RET();
+		assert(set < VUK_MAX_SETS);
+		assert(binding < VUK_MAX_BINDINGS);
 		sets_to_bind[set] = true;
 		auto& db = set_bindings[set].bindings[binding];
 		db.as = tlas;
@@ -1222,7 +1232,9 @@ namespace vuk {
 				if (it != spec_map_entries.end()) {
 					auto& map_e = it->second;
 					unsigned size = map_e.is_double ? (unsigned)sizeof(double) : 4;
+					assert(pi.specialization_map_entries.size() < VUK_MAX_SPECIALIZATIONCONSTANT_RANGES);
 					pi.specialization_map_entries.push_back(VkSpecializationMapEntry{ sc.binding, offset, size });
+					assert(offset + size < VUK_MAX_SPECIALIZATIONCONSTANT_SIZE);
 					memcpy(pi.specialization_constant_data.data() + offset, map_e.data, size);
 					offset += size;
 					empty = false;
@@ -1313,6 +1325,7 @@ namespace vuk {
 
 			unsigned spec_const_size = 0;
 			Bitset<VUK_MAX_SPECIALIZATIONCONSTANT_RANGES> set_constants = {};
+			assert(pi.base->reflection_info.spec_constants.size() < VUK_MAX_SPECIALIZATIONCONSTANT_RANGES);
 			if (spec_map_entries.size() > 0 && pi.base->reflection_info.spec_constants.size() > 0) {
 				for (unsigned i = 0; i < pi.base->reflection_info.spec_constants.size(); i++) {
 					auto& sc = pi.base->reflection_info.spec_constants[i];
@@ -1324,6 +1337,7 @@ namespace vuk {
 					}
 				}
 				records.specialization_constants = true;
+				assert(spec_const_size < VUK_MAX_SPECIALIZATIONCONSTANT_SIZE);
 				pi.extended_size += (uint16_t)sizeof(set_constants);
 				pi.extended_size += (uint16_t)spec_const_size;
 			}
@@ -1522,7 +1536,9 @@ namespace vuk {
 				if (it != spec_map_entries.end()) {
 					auto& map_e = it->second;
 					unsigned size = map_e.is_double ? (unsigned)sizeof(double) : 4;
+					assert(pi.specialization_map_entries.size() < VUK_MAX_SPECIALIZATIONCONSTANT_RANGES);
 					pi.specialization_map_entries.push_back(VkSpecializationMapEntry{ sc.binding, offset, size });
+					assert(offset + size < VUK_MAX_SPECIALIZATIONCONSTANT_SIZE);
 					memcpy(pi.specialization_constant_data.data() + offset, map_e.data, size);
 					offset += size;
 					empty = false;

@@ -214,7 +214,7 @@ namespace vuk {
 		fixed_vector<VkRect2D, VUK_MAX_SCISSORS> scissors;
 
 		// Push constants
-		std::array<unsigned char, 128> push_constant_buffer;
+		std::array<unsigned char, VUK_MAX_PUSHCONSTANT_SIZE> push_constant_buffer;
 		fixed_vector<VkPushConstantRange, VUK_MAX_PUSHCONSTANT_RANGES> pcrs;
 
 		// Descriptor sets
