@@ -613,6 +613,8 @@ namespace vuk {
 	uint32_t compute_image_size(vuk::Format, vuk::Extent3D) noexcept;
 	// get name of format
 	std::string_view format_to_sv(Format format) noexcept;
+	// true if format performs automatic sRGB conversion
+	bool is_format_srgb(vuk::Format) noexcept;
 
 	enum class IndexType {
 		eUint16 = VK_INDEX_TYPE_UINT16,
