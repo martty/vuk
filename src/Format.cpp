@@ -981,4 +981,45 @@ namespace vuk {
 			return "";
 		}
 	}
+	
+	bool is_format_srgb(Format format) noexcept {
+		switch (format) {
+		case Format::eR8Srgb:
+		case Format::eR8G8Srgb:
+		case Format::eR8G8B8Srgb:
+		case Format::eB8G8R8Srgb:
+		case Format::eR8G8B8A8Srgb:
+		case Format::eB8G8R8A8Srgb:
+		case Format::eA8B8G8R8SrgbPack32:
+		case Format::eBc1RgbSrgbBlock:
+		case Format::eBc1RgbaSrgbBlock:
+		case Format::eBc2SrgbBlock:
+		case Format::eBc3SrgbBlock:
+		case Format::eBc7SrgbBlock:
+		case Format::eEtc2R8G8B8SrgbBlock:
+		case Format::eEtc2R8G8B8A1SrgbBlock:
+		case Format::eEtc2R8G8B8A8SrgbBlock:
+		case Format::eAstc4x4SrgbBlock:
+		case Format::eAstc5x4SrgbBlock:
+		case Format::eAstc5x5SrgbBlock:
+		case Format::eAstc6x5SrgbBlock:
+		case Format::eAstc6x6SrgbBlock:
+		case Format::eAstc8x5SrgbBlock:
+		case Format::eAstc8x6SrgbBlock:
+		case Format::eAstc8x8SrgbBlock:
+		case Format::eAstc10x5SrgbBlock:
+		case Format::eAstc10x6SrgbBlock:
+		case Format::eAstc10x8SrgbBlock:
+		case Format::eAstc10x10SrgbBlock:
+		case Format::eAstc12x10SrgbBlock:
+		case Format::eAstc12x12SrgbBlock:
+		case Format::ePvrtc12BppSrgbBlockIMG:
+		case Format::ePvrtc14BppSrgbBlockIMG:
+		case Format::ePvrtc22BppSrgbBlockIMG:
+		case Format::ePvrtc24BppSrgbBlockIMG:
+			return true;
+		default:
+			return false;
+		}
+	}
 } // namespace vuk
