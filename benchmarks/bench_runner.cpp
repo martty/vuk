@@ -69,6 +69,7 @@ constexpr unsigned stage_live = 3;
 constexpr unsigned stage_complete = 4;
 
 void vuk::BenchRunner::render() {
+	Compiler compiler;
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
 		auto& xdev_frame_resource = xdev_rf_alloc->get_next_frame();
@@ -161,8 +162,7 @@ void vuk::BenchRunner::render() {
 		rg->attach_swapchain("_swp", swapchain);
 		rg->clear_image("_swp", attachment_name, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
 		auto fut = util::ImGui_ImplVuk_Render(frame_allocator, Future{ rg, "_final" }, imgui_data, ImGui::GetDrawData(), sampled_images);
-		
-		execute_submit_and_present_to_one(frame_allocator, std::move(*fut.get_render_graph()).link(vuk::RenderGraphCompileOptions{}), swapchain);
+		present(frame_allocator, compiler, swapchain, std::move(fut));
 		sampled_images.clear();
 
 		std::optional<double> duration = context->retrieve_duration(start, end);

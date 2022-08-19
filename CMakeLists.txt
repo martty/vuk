@@ -117,10 +117,21 @@ else()
   set(VUK_COMPILER_GPP OFF)
 endif()
 
+string(FIND "${CMAKE_CXX_COMPILER}" "clang-cl" VUK_COMPILER_CLANGCL)
+if(VUK_COMPILER_CLANGCL GREATER -1)
+  set(VUK_COMPILER_CLANGCL ON)
+else()
+  set(VUK_COMPILER_CLANGCL OFF)
+endif()
+
 if(VUK_COMPILER_CLANGPP OR VUK_COMPILER_GPP)
 	target_compile_options(vuk PRIVATE -std=c++20 -fno-char8_t)
 elseif(MSVC)
 	target_compile_options(vuk PRIVATE /std:c++latest /permissive- /Zc:char8_t-)
+endif()
+
+if(VUK_COMPILER_CLANGPP OR VUK_COMPILER_CLANGCL)
+	 target_compile_options(vuk PRIVATE -Wno-nullability-completeness)
 endif()
 
 target_link_libraries(vuk PRIVATE spirv-cross-core robin_hood VulkanMemoryAllocator)
@@ -135,7 +146,7 @@ if(VUK_LINK_TO_LOADER)
 endif()
 
 if (WIN32)
-	target_compile_definitions(vuk PUBLIC NOMINMAX VC_EXTRALEAN WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS _SCL_SECURE_NO_WARNINGS _SILENCE_CLANG_CONCEPTS_MESSAGE)
+	target_compile_definitions(vuk PUBLIC NOMINMAX VC_EXTRALEAN WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS _SCL_SECURE_NO_WARNINGS _SILENCE_CLANG_CONCEPTS_MESSAGE _SILENCE_CXX23_ALIGNED_STORAGE_DEPRECATION_WARNING)
 endif()
 
 if(VUK_BUILD_EXAMPLES)

@@ -46,7 +46,7 @@ void vuk::ExampleRunner::render() {
 
 		auto& xdev_frame_resource = xdev_rf_alloc->get_next_frame();
 		context->next_frame();
-		auto xdp = &xdev_frame_resource;
+
 		Allocator frame_allocator(xdev_frame_resource);
 		if (!bundle.present_ready) {
 			// prime the first bundle
