@@ -1212,8 +1212,8 @@ namespace vuk {
 				barrier.subresourceRange.levelCount = subrange.level_count;
 				assert(left->use.domain.m_mask != 0);
 				assert(right.use.domain.m_mask != 0);
-				barrier.srcQueueFamilyIndex = static_cast<uint32_t>(left->use.domain.m_mask);
-				barrier.dstQueueFamilyIndex = static_cast<uint32_t>(right.use.domain.m_mask);
+				barrier.srcQueueFamilyIndex = static_cast<uint32_t>((left->use.domain & DomainFlagBits::eQueueMask).m_mask);
+				barrier.dstQueueFamilyIndex = static_cast<uint32_t>((right.use.domain & DomainFlagBits::eQueueMask).m_mask);
 
 				if (src_stages == PipelineStageFlags{}) {
 					barrier.srcAccessMask = {};

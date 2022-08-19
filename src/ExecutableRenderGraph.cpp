@@ -70,7 +70,7 @@ namespace vuk {
 		vkCmdBeginRenderPass(cbuf, &rbi, use_secondary_command_buffers ? VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS : VK_SUBPASS_CONTENTS_INLINE);
 	}
 
-	[[nodiscard]] bool resolve_image_barrier(const Context& ctx, ImageBarrier& dep, const AttachmentInfo& bound) {
+	[[nodiscard]] bool resolve_image_barrier(const Context& ctx, ImageBarrier& dep, const AttachmentInfo& bound, vuk::DomainFlagBits current_domain) {
 		dep.barrier.image = bound.attachment.image;
 		// turn base_{layer, level} into absolute values wrt the image
 		dep.barrier.subresourceRange.baseArrayLayer += bound.attachment.base_layer;
@@ -105,10 +105,16 @@ namespace vuk {
 		}
 
 		if (dep.barrier.srcQueueFamilyIndex != VK_QUEUE_FAMILY_IGNORED) {
+			assert(dep.barrier.dstQueueFamilyIndex != VK_QUEUE_FAMILY_IGNORED);
+			bool transition = dep.barrier.dstQueueFamilyIndex != dep.barrier.srcQueueFamilyIndex;
+			auto dst_domain = static_cast<vuk::DomainFlagBits>(dep.barrier.dstQueueFamilyIndex);
 			dep.barrier.srcQueueFamilyIndex = ctx.domain_to_queue_family_index(static_cast<vuk::DomainFlags>(dep.barrier.srcQueueFamilyIndex));
-		}
-		if (dep.barrier.dstQueueFamilyIndex != VK_QUEUE_FAMILY_IGNORED) {
 			dep.barrier.dstQueueFamilyIndex = ctx.domain_to_queue_family_index(static_cast<vuk::DomainFlags>(dep.barrier.dstQueueFamilyIndex));
+			if (dep.barrier.srcQueueFamilyIndex == dep.barrier.dstQueueFamilyIndex && transition) {
+				if (dst_domain != current_domain) {
+					return false; // discard release barriers if they map to the same queue
+				}
+			}
 		}
 
 		return true;
@@ -185,7 +191,7 @@ namespace vuk {
 			for (auto dep : rpass.pre_barriers) {
 				auto& bound = impl->bound_attachments[dep.image];
 				dep.barrier.image = bound.attachment.image;
-				if (!resolve_image_barrier(ctx, dep, bound)) {
+				if (!resolve_image_barrier(ctx, dep, bound, domain)) {
 					continue;
 				}
 				vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
@@ -214,7 +220,7 @@ namespace vuk {
 				if (rpass.handle == VK_NULL_HANDLE) {
 					for (auto dep : sp.pre_barriers) {
 						auto& bound = impl->bound_attachments[dep.image];
-						if (!resolve_image_barrier(ctx, dep, bound)) {
+						if (!resolve_image_barrier(ctx, dep, bound, domain)) {
 							continue;
 						}
 						vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
@@ -256,7 +262,7 @@ namespace vuk {
 				if (rpass.handle == VK_NULL_HANDLE) {
 					for (auto dep : sp.post_barriers) {
 						auto& bound = impl->bound_attachments[dep.image];
-						if (!resolve_image_barrier(ctx, dep, bound)) {
+						if (!resolve_image_barrier(ctx, dep, bound, domain)) {
 							continue;
 						}
 						vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
@@ -277,7 +283,7 @@ namespace vuk {
 			}
 			for (auto dep : rpass.post_barriers) {
 				auto& bound = impl->bound_attachments[dep.image];
-				if (!resolve_image_barrier(ctx, dep, bound)) {
+				if (!resolve_image_barrier(ctx, dep, bound, domain)) {
 					continue;
 				}
 				vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);

@@ -139,6 +139,49 @@ namespace vuk {
 		return { expected_value, bundles };
 	}
 
+		std::string_view to_name(vuk::DomainFlagBits d) {
+		switch (d) {
+		case DomainFlagBits::eTransferQueue:
+			return "Transfer";
+		case DomainFlagBits::eGraphicsQueue:
+			return "Graphics";
+		case DomainFlagBits::eComputeQueue:
+			return "Compute";
+		default:
+			return "Unknown";
+		}
+	}
+
+	std::string to_dot(SubmitBundle& bundle) {
+		std::stringstream ss;
+		ss << "digraph {";
+		for (auto& batch : bundle.batches) {
+			ss << "subgraph cluster_" << to_name(batch.domain) << " {";
+			char name = 'A';
+
+			for (auto& sub : batch.submits) {
+				ss << to_name(batch.domain)[0] << name << ";";
+				name++;
+			}
+			ss << "}";
+		}
+
+		for (auto& batch : bundle.batches) {
+			char name = 'A';
+
+			for (auto& sub : batch.submits) {
+				for (auto& wait : sub.relative_waits) {
+					char dst_name = wait.second == 0 ? 'X' : 'A' + wait.second - 1;
+					ss << to_name(batch.domain)[0] << name << "->" << to_name(wait.first)[0] << dst_name << ";";
+				}
+				name++;
+			}
+		}
+
+		ss << "}";
+		return ss.str();
+	}
+
 	void flatten_transfer_and_compute_onto_graphics(SubmitBundle& bundle) {
 		if (bundle.batches.empty()) {
 			return;
@@ -187,6 +230,8 @@ namespace vuk {
 					} else {
 						// couldn't make progress
 						// break here is not correct, because there might be multiple waits with the same rank
+						// TODO: we need to break here anyways for unsorted - we need to sort
+						break;
 					}
 				}
 			}
@@ -195,49 +240,6 @@ namespace vuk {
 			}
 		}
 		bundle.batches = { dst_batch };
-	}
-
-	std::string_view to_name(vuk::DomainFlagBits d) {
-		switch (d) {
-		case DomainFlagBits::eTransferQueue:
-			return "Transfer";
-		case DomainFlagBits::eGraphicsQueue:
-			return "Graphics";
-		case DomainFlagBits::eComputeQueue:
-			return "Compute";
-		default:
-			return "Unknown";
-		}
-	}
-
-	std::string to_dot(SubmitBundle& bundle) {
-		std::stringstream ss;
-		ss << "digraph {";
-		for (auto& batch : bundle.batches) {
-			ss << "subgraph cluster_" << to_name(batch.domain) << " {";
-			char name = 'A';
-
-			for (auto& sub : batch.submits) {
-				ss << to_name(batch.domain)[0] << name << ";";
-				name++;
-			}
-			ss << "}";
-		}
-
-		for (auto& batch : bundle.batches) {
-			char name = 'A';
-
-			for (auto& sub : batch.submits) {
-				for (auto& wait : sub.relative_waits) {
-					char dst_name = wait.second == 0 ? 'X' : 'A' + wait.second - 1;
-					ss << to_name(batch.domain)[0] << name << "->" << to_name(wait.first)[0] << dst_name << ";";
-				}
-				name++;
-			}
-		}
-
-		ss << "}";
-		return ss.str();
 	}
 
 	TEST_CASE("testing flattening submit graphs") {
