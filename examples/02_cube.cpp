@@ -93,7 +93,7 @@ namespace {
 			            // For the model matrix, we will take a shorter route
 			            // Frequently updated uniform buffers should be in CPUtoGPU type memory, which is mapped
 			            // So we create a typed mapping directly and write the model matrix
-			            glm::mat4* model = command_buffer.map_scratch_uniform_binding<glm::mat4>(0, 1);
+			            glm::mat4* model = command_buffer.map_scratch_buffer<glm::mat4>(0, 1);
 			            *model = static_cast<glm::mat4>(glm::angleAxis(glm::radians(angle), glm::vec3(0.f, 1.f, 0.f)));
 
 			            // We can also customize pipelines by using specialization constants

@@ -164,10 +164,10 @@ namespace {
 				                                                              .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
 				                                                              .addressModeW = vuk::SamplerAddressMode::eClampToEdge })
 				                        .bind_graphics_pipeline("equirectangular_to_cubemap");
-				                    glm::mat4* projection = cbuf.map_scratch_uniform_binding<glm::mat4>(0, 0);
+				                    glm::mat4* projection = cbuf.map_scratch_buffer<glm::mat4>(0, 0);
 				                    *projection = capture_projection;
 				                    using mats = glm::mat4[6];
-				                    mats* view = cbuf.map_scratch_uniform_binding<glm::mat4[6]>(0, 1);
+				                    mats* view = cbuf.map_scratch_buffer<glm::mat4[6]>(0, 1);
 				                    memcpy(view, capture_views, sizeof(capture_views));
 				                    cbuf.draw_indexed(box.second.size(), 6, 0, 0, 0);
 			                    } });
@@ -255,10 +255,10 @@ namespace {
 					                     if (j == 36)
 						                     continue;
 					                     command_buffer.bind_image(0, 2, env_cubemap_ia).bind_sampler(0, 2, {});
-					                     VP* VP_data = command_buffer.map_scratch_uniform_binding<VP>(0, 0);
+					                     VP* VP_data = command_buffer.map_scratch_buffer<VP>(0, 0);
 					                     VP_data->proj = capture_projection;
 					                     VP_data->view = capture_views[i];
-					                     glm::mat4* model = command_buffer.map_scratch_uniform_binding<glm::mat4>(0, 1);
+					                     glm::mat4* model = command_buffer.map_scratch_buffer<glm::mat4>(0, 1);
 					                     *model = glm::scale(glm::mat4(1.f), glm::vec3(0.1f)) *
 					                              glm::translate(glm::mat4(1.f), 4.f * glm::vec3(4 * (j % 8 - 4), sinf(0.1f * angle + j), 4 * (j / 8 - 4)));
 					                     command_buffer.draw_indexed(box.second.size(), 1, 0, 0, 0);
@@ -282,7 +282,7 @@ namespace {
 				                         .broadcast_color_blend({}) // Set the default color blend state
 				                         .bind_graphics_pipeline("deferred_resolve");
 				                     // Set camera position so we can do lighting
-				                     *command_buffer.map_scratch_uniform_binding<glm::vec3>(0, 3) = cam_pos;
+				                     *command_buffer.map_scratch_buffer<glm::vec3>(0, 3) = cam_pos;
 				                     // We will sample using nearest neighbour
 				                     vuk::SamplerCreateInfo sci;
 				                     sci.minFilter = sci.magFilter = vuk::Filter::eNearest;
@@ -337,14 +337,14 @@ namespace {
 			                .bind_index_buffer(inds, vuk::IndexType::eUint32);
 			            command_buffer.push_constants(vuk::ShaderStageFlagBits::eFragment, 0, cam_pos).bind_graphics_pipeline("cube_deferred_reflective");
 			            command_buffer.bind_image(0, 2, "11_cuberefl").bind_sampler(0, 2, {}).bind_buffer(0, 0, uboVP);
-			            glm::mat4* model = command_buffer.map_scratch_uniform_binding<glm::mat4>(0, 1);
+			            glm::mat4* model = command_buffer.map_scratch_buffer<glm::mat4>(0, 1);
 			            *model = static_cast<glm::mat4>(glm::angleAxis(glm::radians(angle), glm::vec3(0.f, 1.f, 0.f)));
 			            command_buffer.draw_indexed(box.second.size(), 1, 0, 0, 0);
 			            for (auto i = 0; i < 64; i++) {
 				            if (i == 36)
 					            continue;
 				            command_buffer.bind_image(0, 2, env_cubemap_ia).bind_sampler(0, 2, {}).bind_buffer(0, 0, uboVP);
-				            glm::mat4* model = command_buffer.map_scratch_uniform_binding<glm::mat4>(0, 1);
+				            glm::mat4* model = command_buffer.map_scratch_buffer<glm::mat4>(0, 1);
 				            *model = glm::scale(glm::mat4(1.f), glm::vec3(0.1f)) *
 				                     glm::translate(glm::mat4(1.f), 4.f * glm::vec3(4 * (i % 8 - 4), sinf(0.1f * angle + i), 4 * (i / 8 - 4)));
 				            command_buffer.draw_indexed(box.second.size(), 1, 0, 0, 0);
@@ -367,7 +367,7 @@ namespace {
 			                                .broadcast_color_blend({}) // Set the default color blend state
 			                                .bind_graphics_pipeline("deferred_resolve");
 			                            // Set camera position so we can do lighting
-			                            *command_buffer.map_scratch_uniform_binding<glm::vec3>(0, 3) = cam_pos;
+			                            *command_buffer.map_scratch_buffer<glm::vec3>(0, 3) = cam_pos;
 			                            // We will sample using nearest neighbour
 			                            vuk::SamplerCreateInfo sci;
 			                            sci.minFilter = sci.magFilter = vuk::Filter::eNearest;

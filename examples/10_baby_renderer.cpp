@@ -58,7 +58,7 @@ namespace {
 		}
 
 		void bind_parameters(vuk::CommandBuffer& cbuf) override {
-			*cbuf.map_scratch_uniform_binding<glm::vec4>(0, 3) = tint_color;
+			*cbuf.map_scratch_buffer<glm::vec4>(0, 3) = tint_color;
 		}
 	};
 

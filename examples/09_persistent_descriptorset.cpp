@@ -173,7 +173,7 @@ namespace {
 			                        .bind_persistent(1, pda.get())
 			                        .bind_graphics_pipeline("bindless_cube")
 			                        .bind_buffer(0, 0, uboVP);
-			                    glm::mat4* model = command_buffer.map_scratch_uniform_binding<glm::mat4>(0, 1);
+			                    glm::mat4* model = command_buffer.map_scratch_buffer<glm::mat4>(0, 1);
 			                    *model = static_cast<glm::mat4>(glm::angleAxis(glm::radians(angle), glm::vec3(0.f, 1.f, 0.f)));
 			                    // Draw 3 cubes, assign them different base instance to identify them in the shader
 			                    command_buffer.draw_indexed(box.second.size(), 1, 0, 0, 0)

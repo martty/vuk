@@ -99,7 +99,7 @@ namespace {
 			                        .bind_index_buffer(inds, vuk::IndexType::eUint32)
 			                        .bind_graphics_pipeline("cube_deferred")
 			                        .bind_buffer(0, 0, uboVP);
-			                    glm::mat4* model = command_buffer.map_scratch_uniform_binding<glm::mat4>(0, 1);
+			                    glm::mat4* model = command_buffer.map_scratch_buffer<glm::mat4>(0, 1);
 			                    *model = static_cast<glm::mat4>(glm::angleAxis(glm::radians(angle), glm::vec3(0.f, 1.f, 0.f)));
 			                    command_buffer.draw_indexed(box.second.size(), 1, 0, 0, 0);
 		                    } });
@@ -121,7 +121,7 @@ namespace {
 			                        .broadcast_color_blend({}) // Set the default color blend state
 			                        .bind_graphics_pipeline("deferred_resolve");
 			                    // Set camera position so we can do lighting
-			                    *command_buffer.map_scratch_uniform_binding<glm::vec3>(0, 3) = cam_pos;
+			                    *command_buffer.map_scratch_buffer<glm::vec3>(0, 3) = cam_pos;
 			                    // We will sample using nearest neighbour
 			                    vuk::SamplerCreateInfo sci;
 			                    sci.minFilter = sci.magFilter = vuk::Filter::eNearest;

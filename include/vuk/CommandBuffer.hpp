@@ -430,20 +430,20 @@ namespace vuk {
 		/// @param sampler_create_info Parameters of the sampler
 		CommandBuffer& bind_sampler(unsigned set, unsigned binding, SamplerCreateInfo sampler_create_info);
 
-		/// @brief Allocate some CPUtoGPU memory and bind it as a uniform. Return a pointer to the mapped memory.
+		/// @brief Allocate some CPUtoGPU memory and bind it as a buffer. Return a pointer to the mapped memory.
 		/// @param set The set bind index to be used
 		/// @param binding The descriptor binding to bind the buffer to
 		/// @param size Amount of memory to allocate
 		/// @return pointer to the mapped host-visible memory. Null pointer if the command buffer has errored out previously or the allocation failed
-		void* _map_scratch_uniform_binding(unsigned set, unsigned binding, size_t size);
+		void* _map_scratch_buffer(unsigned set, unsigned binding, size_t size);
 
-		/// @brief Allocate some typed CPUtoGPU memory and bind it as a uniform. Return a pointer to the mapped memory.
+		/// @brief Allocate some typed CPUtoGPU memory and bind it as a buffer. Return a pointer to the mapped memory.
 		/// @tparam T Type of the uniform to write
 		/// @param set The set bind index to be used
 		/// @param binding The descriptor binding to bind the buffer to
 		/// @return pointer to the mapped host-visible memory. Null pointer if the command buffer has errored out previously or the allocation failed
 		template<class T>
-		T* map_scratch_uniform_binding(unsigned set, unsigned binding);
+		T* map_scratch_buffer(unsigned set, unsigned binding);
 
 		/// @brief Bind a sampler to the command buffer from a Resource
 		/// @param set The set bind index to be used
@@ -610,8 +610,8 @@ namespace vuk {
 	}
 
 	template<class T>
-	inline T* CommandBuffer::map_scratch_uniform_binding(unsigned set, unsigned binding) {
-		return static_cast<T*>(_map_scratch_uniform_binding(set, binding, sizeof(T)));
+	inline T* CommandBuffer::map_scratch_buffer(unsigned set, unsigned binding) {
+		return static_cast<T*>(_map_scratch_buffer(set, binding, sizeof(T)));
 	}
 
 	struct TimedScope {

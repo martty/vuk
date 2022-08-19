@@ -467,7 +467,7 @@ namespace vuk {
 		return *this;
 	}
 
-	void* CommandBuffer::_map_scratch_uniform_binding(unsigned set, unsigned binding, size_t size) {
+	void* CommandBuffer::_map_scratch_buffer(unsigned set, unsigned binding, size_t size) {
 		if (!current_error) {
 			return nullptr;
 		}
