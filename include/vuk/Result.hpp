@@ -97,8 +97,8 @@ namespace vuk {
 					_holds_value = false;
 				}
 			} else {
+				delete _error;
 				if (other._holds_value) {
-					delete _error;
 					CONSTRUCT_AT(&_value, MOV(other._value));
 					_holds_value = true;
 				} else {
@@ -251,7 +251,6 @@ namespace vuk {
 				_error = other._error;
 				other._error = nullptr;
 				_extracted = other._extracted;
-				other._holds_value = true;
 			}
 		}
 
@@ -270,12 +269,12 @@ namespace vuk {
 					_holds_value = false;
 				}
 			} else {
+				delete _error;
 				if (other._holds_value) {
-					delete _error;
 					_holds_value = true;
 				} else {
 					_error = MOV(other._error);
-					other._holds_value = true;
+					other._error = nullptr;
 				}
 			}
 			_extracted = other._extracted;
