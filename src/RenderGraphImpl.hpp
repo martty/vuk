@@ -25,6 +25,8 @@ namespace vuk {
 	};
 
 	using IARule = std::function<void(const struct InferenceContext&, ImageAttachment&)>;
+	using BufferRule = std::function<void(const struct InferenceContext&, Buffer&)>;
+
 	struct IAInference {
 		Name resource;
 		Name prefix;
@@ -34,6 +36,17 @@ namespace vuk {
 	struct IAInferences {
 		Name prefix;
 		std::vector<IARule> rules;
+	};
+
+	struct BufferInference {
+		Name resource;
+		Name prefix;
+		BufferRule rule;
+	};
+
+	struct BufferInferences {
+		Name prefix;
+		std::vector<BufferRule> rules;
 	};
 
 	struct Release {
@@ -109,6 +122,7 @@ namespace vuk {
 		robin_hood::unordered_flat_map<Name, BufferInfo> bound_buffers;
 
 		std::vector<IAInference, short_alloc<IAInference, 64>> ia_inference_rules;
+		std::vector<BufferInference, short_alloc<BufferInference, 64>> buf_inference_rules;
 
 		struct SGInfo {
 			uint64_t count = 0;
@@ -128,6 +142,7 @@ namespace vuk {
 		    INIT(whole_names_consumed),
 		    INIT(diverged_subchain_headers),
 		    INIT(ia_inference_rules),
+		    INIT(buf_inference_rules),
 		    INIT(subgraphs),
 		    INIT(acquires),
 		    INIT(releases) {}
@@ -169,6 +184,7 @@ namespace vuk {
 		std::unordered_multimap<Name, Release> releases;
 
 		std::unordered_map<Name, IAInferences> ia_inference_rules;
+		std::unordered_map<Name, BufferInferences> buf_inference_rules;
 
 		robin_hood::unordered_flat_map<Name, std::pair<Name, Subrange::Image>> diverged_subchain_headers;
 

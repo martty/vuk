@@ -327,7 +327,9 @@ namespace vuk {
 					ia.image_type = ia.image_type == ImageType::eInfer ? vuk::ImageType::e2D : ia.image_type;
 
 					ia.base_layer = ia.base_layer == VK_REMAINING_ARRAY_LAYERS ? 0 : ia.base_layer;
-					ia.layer_count = ia.layer_count == VK_REMAINING_ARRAY_LAYERS ? 1 : ia.layer_count; // TODO: this prevents inference later on, so this means we are doing it too early
+					ia.layer_count = ia.layer_count == VK_REMAINING_ARRAY_LAYERS
+					                     ? 1
+					                     : ia.layer_count; // TODO: this prevents inference later on, so this means we are doing it too early
 					ia.base_level = ia.base_level == VK_REMAINING_MIP_LEVELS ? 0 : ia.base_level;
 
 					if (ia.view_type == ImageViewType::eInfer) {
@@ -361,9 +363,14 @@ namespace vuk {
 			}
 		}
 
-		decltype(impl->ia_inference_rules) resolved_rules;
+		decltype(impl->ia_inference_rules) ia_resolved_rules;
 		for (auto& [n, rules] : impl->ia_inference_rules) {
-			resolved_rules.emplace(impl->resolve_name(n), std::move(rules));
+			ia_resolved_rules.emplace(impl->resolve_name(n), std::move(rules));
+		}
+
+		decltype(impl->buf_inference_rules) buf_resolved_rules;
+		for (auto& [n, rules] : impl->buf_inference_rules) {
+			buf_resolved_rules.emplace(impl->resolve_name(n), std::move(rules));
 		}
 
 		std::vector<std::pair<AttachmentInfo*, IAInferences*>> attis_to_infer;
@@ -406,8 +413,8 @@ namespace vuk {
 					}
 				}
 				IAInferences* rules_ptr = nullptr;
-				auto rules_it = resolved_rules.find(name);
-				if (rules_it != resolved_rules.end()) {
+				auto rules_it = ia_resolved_rules.find(name);
+				if (rules_it != ia_resolved_rules.end()) {
 					rules_ptr = &rules_it->second;
 				}
 
@@ -415,11 +422,25 @@ namespace vuk {
 			}
 		}
 
+		std::vector<std::pair<BufferInfo*, BufferInferences*>> bufis_to_infer;
+		for (auto& [name, bound] : impl->bound_buffers) {
+			if (bound.buffer.size != ~(0u))
+				continue;
+
+			BufferInferences* rules_ptr = nullptr;
+			auto rules_it = buf_resolved_rules.find(name);
+			if (rules_it != buf_resolved_rules.end()) {
+				rules_ptr = &rules_it->second;
+			}
+
+			bufis_to_infer.emplace_back(&bound, rules_ptr);
+		}
+
 		InferenceContext inf_ctx{ this };
 		bool infer_progress = true;
 		std::stringstream msg;
 
-		// we provide an upper bound of 100 inference to iteration to catch infinite loops that don't converge to a fixpoint
+		// we provide an upper bound of 100 inference iterations to catch infinite loops that don't converge to a fixpoint
 		for (size_t i = 0; i < 100 && !attis_to_infer.empty() && infer_progress; i++) {
 			infer_progress = false;
 			for (auto ia_it = attis_to_infer.begin(); ia_it != attis_to_infer.end();) {
@@ -608,6 +629,57 @@ namespace vuk {
 			return { expected_error, RenderGraphException{ msg.str() } };
 		}
 
+		infer_progress = true;
+		// we provide an upper bound of 100 inference iterations to catch infinite loops that don't converge to a fixpoint
+		for (size_t i = 0; i < 100 && !bufis_to_infer.empty() && infer_progress; i++) {
+			infer_progress = false;
+			for (auto bufi_it = bufis_to_infer.begin(); bufi_it != bufis_to_infer.end();) {
+				auto& bufi = *bufi_it->first;
+				auto& buff = bufi.buffer;
+				auto prev = buff;
+
+				// infer custom rule -> IA
+				if (bufi_it->second) {
+					inf_ctx.prefix = bufi_it->second->prefix;
+					for (auto& rule : bufi_it->second->rules) {
+						rule(inf_ctx, buff);
+					}
+				}
+				if (prev != buff) { // progress made
+					// check for broken constraints
+					if (prev.size != buff.size && prev.size != ~(0u)) {
+						msg << "Rule broken for buffer[" << bufi.name.c_str() << "] :\n ";
+						msg << " size was previously known to be " << prev.size << ", but now set to " << buff.size;
+						return { expected_error, RenderGraphException{ msg.str() } };
+					}
+
+					infer_progress = true;
+				}
+				if (buff.size != ~(0u)) {
+					bufi_it = bufis_to_infer.erase(bufi_it);
+				} else {
+					++bufi_it;
+				}
+			}
+		}
+
+		for (auto& [buff, bufinfs] : bufis_to_infer) {
+			msg << "Could not infer buffer [" << buff->name.c_str() << "]:\n";
+			if (buff->buffer.size == ~(0u)) {
+				msg << "- size unknown\n";
+			}
+			msg << "\n";
+		}
+
+		if (bufis_to_infer.size() > 0) {
+			// TODO: error harmonization
+#ifndef NDEBUG
+			fprintf(stderr, "%s", msg.str().c_str());
+			assert(false);
+#endif
+			return { expected_error, RenderGraphException{ msg.str() } };
+		}
+
 		// acquire the renderpasses
 		for (auto& rp : impl->rpis) {
 			if (rp.attachments.size() == 0) {
@@ -624,6 +696,16 @@ namespace vuk {
 			rp.rpci.pAttachments = rp.rpci.attachments.data();
 
 			rp.handle = ctx.acquire_renderpass(rp.rpci, ctx.get_frame_count());
+		}
+
+		// create buffers
+		for (auto& [name, bound] : impl->bound_buffers) {
+			if (bound.buffer.buffer == VK_NULL_HANDLE) {
+				BufferCreateInfo bci{ .mem_usage = bound.buffer.memory_usage, .size = bound.buffer.size, .alignment = 1 }; // TODO: alignment?
+				auto buff = bci.mem_usage == MemoryUsage::eGPUonly ? static_cast<Buffer>(**allocate_buffer_gpu(alloc, bci))
+				                                                   : static_cast<Buffer>(**allocate_buffer_cross_device(alloc, bci)); // TODO: dropping error
+				bound.buffer = buff;
+			}
 		}
 
 		// create non-attachment images
@@ -820,5 +902,12 @@ namespace vuk {
 		auto resolved_name = erg->impl->resolve_name(fqname);
 		auto whole_name = erg->impl->whole_name(resolved_name);
 		return erg->impl->bound_attachments.at(whole_name).attachment;
+	}
+
+	const Buffer& InferenceContext::get_buffer(Name name) const {
+		auto fqname = prefix.append(name.to_sv());
+		auto resolved_name = erg->impl->resolve_name(fqname);
+		auto whole_name = erg->impl->whole_name(resolved_name);
+		return erg->impl->bound_buffers.at(whole_name).buffer;
 	}
 } // namespace vuk

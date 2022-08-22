@@ -82,6 +82,9 @@ namespace vuk {
 					threads.emplace_back(std::jthread([&] { ex->setup(*this, *global); }));
 				}
 			}
+			glfwSetWindowSizeCallback(window, [](GLFWwindow* window, int width, int height) {
+
+			});
 		}
 
 		void render();
@@ -186,13 +189,15 @@ namespace vuk {
 		vk12features.shaderOutputLayer = true;
 		VkPhysicalDeviceVulkan11Features vk11features{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES };
 		vk11features.shaderDrawParameters = true;
+		VkPhysicalDeviceFeatures2 vk10features{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR };
+		vk10features.features.shaderInt64 = true;
 		VkPhysicalDeviceSynchronization2FeaturesKHR sync_feat{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR,
 			                                                     .synchronization2 = true };
 		VkPhysicalDeviceAccelerationStructureFeaturesKHR accelFeature{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,
 			                                                             .accelerationStructure = true };
 		VkPhysicalDeviceRayTracingPipelineFeaturesKHR rtPipelineFeature{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR,
 			                                                               .rayTracingPipeline = true };
-		device_builder = device_builder.add_pNext(&vk12features).add_pNext(&vk11features).add_pNext(&sync_feat).add_pNext(&accelFeature);
+		device_builder = device_builder.add_pNext(&vk12features).add_pNext(&vk11features).add_pNext(&sync_feat).add_pNext(&accelFeature).add_pNext(&vk10features);
 		if (has_rt) {
 			device_builder = device_builder.add_pNext(&rtPipelineFeature);
 		}

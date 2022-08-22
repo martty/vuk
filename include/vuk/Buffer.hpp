@@ -41,21 +41,16 @@ namespace vuk {
 
 	/// @brief A contiguous portion of GPU-visible memory that can be used for storing buffer-type data
 	struct Buffer {
-		VkDeviceMemory device_memory = VK_NULL_HANDLE;
 		VkBuffer buffer = VK_NULL_HANDLE;
 		size_t offset = 0;
-		size_t size = 0;
+		size_t size = ~(0u);
 		size_t allocation_size = 0;
 		uint64_t device_address = 0;
 		std::byte* mapped_ptr = nullptr;
 		MemoryUsage memory_usage;
 
 		bool operator==(const Buffer& o) const noexcept {
-			return device_memory == o.device_memory && buffer == o.buffer && offset == o.offset && size == o.size;
-		}
-
-		bool operator!=(const Buffer& o) const noexcept {
-			return device_memory != o.device_memory || buffer != o.buffer || offset != o.offset || size != o.size;
+			return buffer == o.buffer && offset == o.offset && size == o.size;
 		}
 
 		explicit operator bool() const noexcept {
@@ -65,8 +60,7 @@ namespace vuk {
 		/// @brief Create a new Buffer by offsetting
 		[[nodiscard]] Buffer add_offset(size_t offset_to_add) {
 			assert(offset_to_add <= size);
-			return { device_memory,
-				       buffer,
+			return { buffer,
 				       offset + offset_to_add,
 				       size - offset_to_add,
 				       allocation_size,
@@ -78,8 +72,7 @@ namespace vuk {
 		/// @brief Create a new Buffer that is a subset of the original
 		[[nodiscard]] Buffer subrange(size_t new_offset, size_t new_size) {
 			assert(new_offset + new_size <= size);
-			return { device_memory,
-				       buffer,
+			return { buffer,
 				       offset + new_offset,
 				       new_size,
 				       allocation_size,

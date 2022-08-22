@@ -175,6 +175,7 @@ namespace vuk {
 		void attach_in(std::span<Future> futures);
 
 		void inference_rule(Name target, std::function<void(const struct InferenceContext& ctx, ImageAttachment& ia)>);
+		void inference_rule(Name target, std::function<void(const struct InferenceContext& ctx, Buffer& ia)>);
 
 		/// @brief Compute all the unconsumed resource names and return them as Futures
 		std::vector<Future> split();
@@ -198,7 +199,7 @@ namespace vuk {
 
 	struct InferenceContext {
 		const ImageAttachment& get_image_attachment(Name name) const;
-		struct Framebuffer {};
+		const Buffer& get_buffer(Name name) const;
 
 		struct ExecutableRenderGraph* erg;
 		Name prefix;

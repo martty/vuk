@@ -558,7 +558,6 @@ namespace vuk {
 		auto offset = base - current_alloc.base_address;
 		Buffer b;
 		b.buffer = current_alloc.buffer;
-		b.device_memory = current_alloc.device_memory;
 		b.offset = offset;
 		b.size = size;
 		b.mapped_ptr = current_alloc.mapped_ptr != nullptr ? current_alloc.mapped_ptr + offset : nullptr;
@@ -610,7 +609,6 @@ namespace vuk {
 			VkBufferDeviceAddressInfo bdai{ VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, nullptr, b.buffer };
 			uint64_t device_address = vkGetBufferDeviceAddress(device, &bdai);
 			buffers.emplace(reinterpret_cast<uint64_t>(vai.deviceMemory), std::tuple(b.buffer, bci.size, device_address));
-			b.device_memory = vai.deviceMemory;
 			b.offset = 0;
 			b.size = bci.size;
 			b.mapped_ptr = (std::byte*)vai.pMappedData;
@@ -629,7 +627,6 @@ namespace vuk {
 		Buffer b;
 		auto [vkbuffer, allocation_size, device_address] = buffers.at(reinterpret_cast<uint64_t>(vai.deviceMemory));
 		b.buffer = vkbuffer;
-		b.device_memory = vai.deviceMemory;
 		b.offset = vai.offset;
 		b.size = vai.size;
 		b.mapped_ptr = (std::byte*)vai.pMappedData;

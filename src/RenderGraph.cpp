@@ -101,6 +101,13 @@ namespace vuk {
 			rule.rules.emplace_back(iainf);
 		}
 
+		for (auto [name, prefix, bufinf] : other.impl->buf_inference_rules) {
+			prefix = joiner.append(prefix.to_sv());
+			auto& rule = buf_inference_rules[joiner.append(name.to_sv())];
+			rule.prefix = prefix;
+			rule.rules.emplace_back(bufinf);
+		}
+
 		for (auto& [name, v] : other.impl->acquires) {
 			acquires.emplace(joiner.append(name.to_sv()), v);
 		}
@@ -957,6 +964,10 @@ namespace vuk {
 
 	void RenderGraph::inference_rule(Name target, std::function<void(const struct InferenceContext&, ImageAttachment&)> rule) {
 		impl->ia_inference_rules.emplace_back(IAInference{ target, Name(""), std::move(rule) });
+	}
+
+	void RenderGraph::inference_rule(Name target, std::function<void(const struct InferenceContext&, Buffer&)> rule) {
+		impl->buf_inference_rules.emplace_back(BufferInference{ target, Name(""), std::move(rule) });
 	}
 
 	robin_hood::unordered_flat_set<Name> RGImpl::get_available_resources() {

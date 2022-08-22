@@ -18,6 +18,54 @@
  * Check out the framework (example_runner_*) files if interested!
  */
 
+vuk::Future prefix_scan(vuk::Future src, vuk::Future dst) {
+	std::unique_ptr<vuk::RenderGraph> rgp = std::make_unique<vuk::RenderGraph>("prefix_scan");
+	rgp->attach_in("src", std::move(src));
+	rgp->attach_in("dst", std::move(dst));
+	rgp->attach_buffer("temp", vuk::Buffer{ .memory_usage = vuk::MemoryUsage::eGPUonly });
+
+#pragma pack(push, 4)
+	struct PC {
+		uint64_t src_bda;
+		uint64_t dst_bda;
+		uint64_t temp_bda;
+		uint32_t count;
+	};
+#pragma pack(pop)
+
+	rgp->add_pass({ .name = "prefix_scan",
+	                .execute_on = vuk::DomainFlagBits::eGraphicsQueue,
+	                .resources = { "src"_buffer >> vuk::eComputeRead, "dst"_buffer >> vuk::eComputeRW, "temp"_buffer >> vuk::eComputeRW },
+	                .execute = [](vuk::CommandBuffer& command_buffer) {
+		                auto count = command_buffer.get_resource_buffer("dst")->size / 4;
+		                PC pc = { command_buffer.get_resource_buffer("src")->device_address,
+			                        command_buffer.get_resource_buffer("dst")->device_address,
+			                        command_buffer.get_resource_buffer("temp")->device_address,
+			                        count };
+		                command_buffer.push_constants(vuk::ShaderStageFlagBits::eCompute, 0, pc);
+		                command_buffer.bind_compute_pipeline("blelloch_scan");
+		                command_buffer.dispatch((count + 127) / 128);
+	                } });
+
+	rgp->add_pass({ .name = "prefix_scan_add",
+	                .execute_on = vuk::DomainFlagBits::eGraphicsQueue,
+	                .resources = { "dst+"_buffer >> vuk::eComputeRW, "temp+"_buffer >> vuk::eComputeRW },
+	                .execute = [](vuk::CommandBuffer& command_buffer) {
+		                auto count = command_buffer.get_resource_buffer("dst")->size / 4;
+		                PC pc = { command_buffer.get_resource_buffer("dst")->device_address,
+			                        command_buffer.get_resource_buffer("dst")->device_address,
+			                        command_buffer.get_resource_buffer("temp")->device_address,
+			                        count };
+		                command_buffer.push_constants(vuk::ShaderStageFlagBits::eCompute, 0, pc);
+		                command_buffer.bind_compute_pipeline("blelloch_add");
+		                command_buffer.dispatch((count + 127) / 128 - 1);
+	                } });
+
+	// buffer size inference
+	rgp->inference_rule("temp", [](const vuk::InferenceContext& ctx, vuk::Buffer& buf) { buf.size = 2 * 128 * 4 + 4; });
+	return { std::move(rgp), "dst++" };
+}
+
 namespace {
 	float time = 0.f;
 	auto box = util::generate_cube();
@@ -55,6 +103,18 @@ namespace {
 			      runner.context->create_named_pipeline("stupidsort", pbci);
 		      }
 
+		      {
+			      vuk::PipelineBaseCreateInfo pbci;
+			      pbci.add_glsl(util::read_entire_file("../../examples/blelloch_scan.comp"), "blelloch_scan.comp");
+			      runner.context->create_named_pipeline("blelloch_scan", pbci);
+		      }
+
+		      {
+			      vuk::PipelineBaseCreateInfo pbci;
+			      pbci.add_glsl(util::read_entire_file("../../examples/blelloch_add.comp"), "blelloch_add.comp");
+			      runner.context->create_named_pipeline("blelloch_add", pbci);
+		      }
+
 		      int chans;
 		      auto doge_image = stbi_load("../../examples/doge.png", &x, &y, &chans, 4);
 
@@ -69,9 +129,18 @@ namespace {
 
 		      scramble_buf = *allocate_buffer_gpu(allocator, { vuk::MemoryUsage::eGPUonly, sizeof(unsigned) * x * y, 1 });
 
-		      //// <----------------->
 		      // make a GPU future
 		      scramble_buf_fut = vuk::host_data_to_buffer(allocator, vuk::DomainFlagBits::eTransferOnTransfer, scramble_buf.get(), std::span(indices));
+
+		      std::vector<unsigned> numbers(256);
+		      std::iota(numbers.begin(), numbers.end(), 0);
+		      auto iota_buf = *allocate_buffer_gpu(allocator, { vuk::MemoryUsage::eGPUonly, sizeof(unsigned) * 256, 1 });
+		      auto prefix_buf = *allocate_buffer_gpu(allocator, { vuk::MemoryUsage::eGPUonly, sizeof(unsigned) * 256, 1 });
+
+		      auto iota_buf_fut = vuk::host_data_to_buffer(allocator, vuk::DomainFlagBits::eTransferOnTransfer, iota_buf.get(), std::span(numbers));
+
+		      auto prefix_result = prefix_scan(iota_buf_fut, vuk::Future{ *prefix_buf });
+		      runner.enqueue_setup(std::move(prefix_result));
 
 		      stbi_image_free(doge_image);
 		    },
@@ -163,9 +232,9 @@ namespace {
 		      rgp->attach_in("08_scramble", std::move(scramble_buf_fut));
 		      // temporary buffer used for copying
 		      rgp->attach_buffer("08_scramble++",
-		                       **allocate_buffer_gpu(frame_allocator, { vuk::MemoryUsage::eGPUonly, sizeof(unsigned) * x * y, 1 }),
-		                       vuk::Access::eNone,
-		                       vuk::Access::eNone);
+		                         **allocate_buffer_gpu(frame_allocator, { vuk::MemoryUsage::eGPUonly, sizeof(unsigned) * x * y, 1 }),
+		                         vuk::Access::eNone,
+		                         vuk::Access::eNone);
 		      // permanent buffer to keep state
 		      rgp->attach_buffer("08_scramble++++", *scramble_buf, vuk::Access::eNone, vuk::Access::eNone);
 		      scramble_buf_fut = { rgp, "08_scramble+++++" };
