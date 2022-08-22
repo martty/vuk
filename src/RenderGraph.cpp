@@ -1046,6 +1046,8 @@ namespace vuk {
 				ia.level_count = src.level_count;
 			if (src.extent.extent.width != 0 && src.extent.extent.height != 0)
 				ia.extent = src.extent;
+			if (src.view_type != ImageViewType::eInfer)
+				ia.view_type = src.view_type;
 		};
 	}
 

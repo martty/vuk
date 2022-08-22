@@ -383,7 +383,7 @@ namespace vuk {
 					bound.attachment.base_level = 0;
 				}
 				if (bound.attachment.image_view == ImageView{}) {
-					if (bound.attachment.view_type == ImageViewType::eInfer) {
+					if (bound.attachment.view_type == ImageViewType::eInfer && bound.attachment.layer_count != VK_REMAINING_ARRAY_LAYERS) {
 						if (bound.attachment.image_type == ImageType::e1D) {
 							if (bound.attachment.layer_count == 1) {
 								bound.attachment.view_type = ImageViewType::e1D;

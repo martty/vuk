@@ -166,7 +166,7 @@ namespace vuk {
 
 	enum class ImageViewCreateFlagBits : VkImageViewCreateFlags { eFragmentDensityMapDynamicEXT = VK_IMAGE_VIEW_CREATE_FRAGMENT_DENSITY_MAP_DYNAMIC_BIT_EXT };
 
-	enum class ImageViewType {
+	enum class ImageViewType : uint32_t {
 		e1D = VK_IMAGE_VIEW_TYPE_1D,
 		e2D = VK_IMAGE_VIEW_TYPE_2D,
 		e3D = VK_IMAGE_VIEW_TYPE_3D,
@@ -180,7 +180,7 @@ namespace vuk {
 	std::string_view image_view_type_to_sv(ImageViewType) noexcept;
 
 	using ImageViewCreateFlags = Flags<ImageViewCreateFlagBits>;
-	enum class ComponentSwizzle {
+	enum class ComponentSwizzle : uint32_t {
 		eIdentity = VK_COMPONENT_SWIZZLE_IDENTITY,
 		eZero = VK_COMPONENT_SWIZZLE_ZERO,
 		eOne = VK_COMPONENT_SWIZZLE_ONE,
