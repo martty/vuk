@@ -1,14 +1,7 @@
 #pragma once
 
 #include "vuk/Hash.hpp"
-
-namespace std {
-	template<class CharT>
-	struct char_traits;
-	template<class CharT, class Traits>
-	class basic_string_view;
-	using string_view = basic_string_view<char, std::char_traits<char>>;
-}
+#include <string_view>
 
 namespace vuk {
 	class Name {
