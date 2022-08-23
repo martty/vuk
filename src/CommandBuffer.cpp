@@ -915,6 +915,24 @@ namespace vuk {
 		return *this;
 	}
 
+	CommandBuffer& CommandBuffer::update_buffer(Name dst, size_t size, void* data) {
+		VUK_EARLY_RET();
+		assert(rg);
+		auto dst_res = rg->get_resource_buffer(dst, current_pass);
+		if (!dst_res) {
+			current_error = std::move(dst_res);
+			return *this;
+		}
+		auto dst_bbuf = dst_res->buffer;
+
+		return update_buffer(dst_bbuf, size, data);
+	}
+
+	CommandBuffer& CommandBuffer::update_buffer(const Buffer& dst, size_t size, void* data) {
+		vkCmdUpdateBuffer(command_buffer, dst.buffer, dst.offset, size, data);
+		return *this;
+	}
+
 	CommandBuffer& CommandBuffer::memory_barrier(Access src_access, Access dst_access) {
 		VkMemoryBarrier mb{ .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER };
 		auto src_use = to_use(src_access, DomainFlagBits::eAny);

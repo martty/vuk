@@ -583,6 +583,16 @@ namespace vuk {
 		/// @param size number of bytes to fill
 		/// @param data the 4 byte value to fill with
 		CommandBuffer& fill_buffer(const Buffer& dst, size_t size, uint32_t data);
+		/// @brief Fill a buffer with a host values
+		/// @param dst the Name of the destination Resource
+		/// @param size number of bytes to fill
+		/// @param data pointer to host values
+		CommandBuffer& update_buffer(Name dst, size_t size, void* data);
+		/// @brief Fill a buffer with a host values
+		/// @param dst the destination Buffer
+		/// @param size number of bytes to fill
+		/// @param data pointer to host values
+		CommandBuffer& update_buffer(const Buffer& dst, size_t size, void* data);
 
 		// explicit synchronisation
 
