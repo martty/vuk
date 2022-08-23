@@ -566,12 +566,23 @@ namespace vuk {
 		/// @brief Copy between two buffer resource
 		/// @param src the Name of the source Resource
 		/// @param dst the Name of the destination Resource
-		/// @param size number of bytes to copy
+		/// @param size number of bytes to copy (VK_WHOLE_SIZE to copy the entire "src" buffer)
 		CommandBuffer& copy_buffer(Name src, Name dst, size_t size);
 		/// @brief Copy between two Buffers
 		/// @param src the source Buffer
 		/// @param dst the destination Buffer
-		CommandBuffer& copy_buffer(const Buffer& src, const Buffer& dst);
+		/// @param size number of bytes to copy (VK_WHOLE_SIZE to copy the entire "src" buffer)
+		CommandBuffer& copy_buffer(const Buffer& src, const Buffer& dst, size_t size);
+		/// @brief Fill a buffer with a fixed value
+		/// @param dst the Name of the destination Resource
+		/// @param size number of bytes to fill
+		/// @param data the 4 byte value to fill with
+		CommandBuffer& fill_buffer(Name dst, size_t size, uint32_t data);
+		/// @brief Fill a buffer with a fixed value
+		/// @param dst the destination Buffer
+		/// @param size number of bytes to fill
+		/// @param data the 4 byte value to fill with
+		CommandBuffer& fill_buffer(const Buffer& dst, size_t size, uint32_t data);
 
 		// explicit synchronisation
 

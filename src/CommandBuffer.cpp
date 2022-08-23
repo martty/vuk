@@ -873,21 +873,11 @@ namespace vuk {
 			return *this;
 		}
 		auto dst_bbuf = dst_res->buffer;
-		if (src_bbuf.buffer == dst_bbuf.buffer) {
-			bool overlap_a = src_bbuf.offset > dst_bbuf.offset && src_bbuf.offset < (dst_bbuf.offset + dst_bbuf.size);
-			bool overlap_b = dst_bbuf.offset > src_bbuf.offset && dst_bbuf.offset < (src_bbuf.offset + src_bbuf.size);
-			assert(!overlap_a && !overlap_b);
-		}
-		VkBufferCopy bc{};
-		bc.srcOffset += src_bbuf.offset;
-		bc.dstOffset += dst_bbuf.offset;
-		bc.size = size;
 
-		vkCmdCopyBuffer(command_buffer, src_bbuf.buffer, dst_bbuf.buffer, 1, &bc);
-		return *this;
+		return copy_buffer(src_bbuf, dst_bbuf, size);
 	}
 
-	CommandBuffer& CommandBuffer::copy_buffer(const Buffer& src, const Buffer& dst) {
+	CommandBuffer& CommandBuffer::copy_buffer(const Buffer& src, const Buffer& dst, size_t size) {
 		VUK_EARLY_RET();
 
 		assert(src.size == dst.size);
@@ -900,9 +890,28 @@ namespace vuk {
 		VkBufferCopy bc{};
 		bc.srcOffset += src.offset;
 		bc.dstOffset += dst.offset;
-		bc.size = src.size;
+		bc.size = size == VK_WHOLE_SIZE ? src.size : size;
 
 		vkCmdCopyBuffer(command_buffer, src.buffer, dst.buffer, 1, &bc);
+		return *this;
+	}
+
+	CommandBuffer& CommandBuffer::fill_buffer(Name dst, size_t size, uint32_t data) {
+		VUK_EARLY_RET();
+		assert(rg);
+		auto dst_res = rg->get_resource_buffer(dst, current_pass);
+		if (!dst_res) {
+			current_error = std::move(dst_res);
+			return *this;
+		}
+		auto dst_bbuf = dst_res->buffer;
+		
+		
+		return fill_buffer(dst_bbuf, size, data);
+	}
+
+	CommandBuffer& CommandBuffer::fill_buffer(const Buffer& dst, size_t size, uint32_t data) {
+		vkCmdFillBuffer(command_buffer, dst.buffer, dst.offset, size, data);
 		return *this;
 	}
 
