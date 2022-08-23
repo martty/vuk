@@ -1082,6 +1082,13 @@ namespace vuk {
 		};
 	}
 
+	BufferRule same_size_as(Name inference_source) {
+		return [=](const InferenceContext& ctx, Buffer& buf) {
+			auto& src = ctx.get_buffer(inference_source);
+			buf.size = src.size;
+		};
+	}
+
 	void RGCImpl::validate() {
 		// check if all resourced are attached
 		for (const auto& [n, v] : use_chains) {

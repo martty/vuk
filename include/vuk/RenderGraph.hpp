@@ -206,6 +206,7 @@ namespace vuk {
 	};
 
 	using IARule = std::function<void(const struct InferenceContext& ctx, ImageAttachment& ia)>;
+	using BufferRule = std::function<void(const struct InferenceContext& ctx, Buffer& buffer)>;
 
 	// builtin inference rules for convenience
 
@@ -222,7 +223,10 @@ namespace vuk {
 	IARule same_shape_as(Name inference_source);
 
 	/// @brief Inference target is similar to(same shape, same format, same sample count) the source
-	IARule image_similar_to(Name inference_source);
+	IARule similar_to(Name inference_source);
+
+	/// @brief Inference target is the same size as the source
+	BufferRule same_size_as(Name inference_source);
 
 	struct Compiler {
 		Compiler();
