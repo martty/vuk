@@ -35,7 +35,10 @@ namespace vuk {
 		std::shared_ptr<RenderGraph> rgp = std::make_shared<RenderGraph>("generate_mips_spd");
 		rgp->attach_in("_src", std::move(image));
 		rgp->add_pass({ .name = "SPD",
-		                .resources = { "_src"_image >> eComputeRW },
+		                .resources = {
+			                 "_src"_image >> eComputeRW, // transition target
+			                 "_src"_image >> eComputeSampled, // additional usage
+		                },
 		                .execute = [type](CommandBuffer& command_buffer) {
 			                // Collect details about the image
 			                auto src_ia = *command_buffer.get_resource_image_attachment("_src");
