@@ -66,6 +66,10 @@ namespace vuk {
 
 		~Future();
 
+		explicit operator bool() const {
+			return rg.get() == nullptr;
+		}
+
 		/// @brief Get status of the Future
 		FutureBase::Status& get_status() {
 			return control->status;
