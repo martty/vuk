@@ -164,15 +164,32 @@ endif()
 
 add_subdirectory(ext/doctest)
 target_link_libraries(vuk PUBLIC doctest::doctest)
-target_sources(vuk PRIVATE src/Test.cpp)
+target_sources(vuk PRIVATE src/tests/Test.cpp)
 
 if(VUK_BUILD_TESTS)
+	FetchContent_Declare(
+	  vk-bootstrap 
+	  GIT_REPOSITORY https://github.com/charles-lunarg/vk-bootstrap
+	  GIT_TAG        cf8df11a0a071463009031cb474099dacffe90ed
+	)
+	FetchContent_MakeAvailable(vk-bootstrap)
+
 	include(doctest_force_link_static_lib_in_target) # until we can use cmake 3.24
-	add_executable(vuk-tests src/Test.cpp)
-	target_compile_features(vuk-tests PRIVATE cxx_std_17)
-	target_link_libraries(vuk-tests PRIVATE vuk doctest::doctest)
+	add_executable(vuk-tests src/tests/Test.cpp src/tests/buffer_ops.cpp)
+	#target_compile_features(vuk-tests PRIVATE cxx_std_17)
+	target_link_libraries(vuk-tests PRIVATE vuk doctest::doctest vk-bootstrap)
 	target_compile_definitions(vuk-tests PRIVATE VUK_TEST_RUNNER)
 	doctest_force_link_static_lib_in_target(vuk-tests vuk)
+
+	if(VUK_COMPILER_CLANGPP OR VUK_COMPILER_GPP)
+		target_compile_options(vuk-tests PRIVATE -std=c++20 -fno-char8_t)
+	elseif(MSVC)
+		target_compile_options(vuk-tests PRIVATE /std:c++latest /permissive- /Zc:char8_t-)
+	endif()
+
+	if(VUK_COMPILER_CLANGPP OR VUK_COMPILER_CLANGCL)
+		 target_compile_options(vuk-tests PRIVATE -Wno-nullability-completeness)
+	endif()
 else()
 	target_compile_definitions(vuk PRIVATE DOCTEST_CONFIG_DISABLE)
 endif()

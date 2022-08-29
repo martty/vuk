@@ -46,6 +46,20 @@ namespace vuk {
 		return host_data_to_buffer(allocator, copy_domain, dst, data.data(), data.size_bytes());
 	}
 
+	/// @brief Download a buffer to GPUtoCPU memory
+	/// @param buffer_src Buffer to download
+	inline Future download_buffer(Future buffer_src) {
+		std::shared_ptr<RenderGraph> rgp = std::make_shared<RenderGraph>("download_buffer");
+		rgp->attach_in("src", std::move(buffer_src));
+		rgp->attach_buffer("dst", Buffer{ .memory_usage = MemoryUsage::eGPUtoCPU });
+		rgp->inference_rule("dst", same_size_as("src"));
+		rgp->add_pass(
+		    { .name = "copy", .resources = { "src"_buffer >> eTransferRead, "dst"_buffer >> eTransferWrite }, .execute = [](vuk::CommandBuffer& command_buffer) {
+			     command_buffer.copy_buffer("src", "dst", VK_WHOLE_SIZE);
+		     } });
+		return { rgp, "dst" };
+	}
+
 	/// @brief Fill an image with host data
 	/// @param allocator Allocator to use for temporary allocations
 	/// @param copy_domain The domain where the copy should happen (when dst is mapped, the copy happens on host)

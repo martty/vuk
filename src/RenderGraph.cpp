@@ -1409,7 +1409,7 @@ namespace vuk {
 				if (i + 2 == chain.size() && release) {
 					auto& fut = *release->signal;
 					fut.last_use = QueueResourceUse{ left.use.stages, left.use.access, left.use.layout, (left_domain & DomainFlagBits::eQueueMask) };
-					fut.result = buffer_info.buffer;           // TODO: when we have managed buffers, then this is too soon to attach
+					buffer_info.attached_future = &fut;
 					left.pass->future_signals.push_back(&fut); // last executing pass gets to signal this future too
 				}
 

@@ -799,6 +799,13 @@ namespace vuk {
 			}
 		}
 
+		for (auto& [name, buffer_info] : impl->bound_buffers) {
+			if (buffer_info.attached_future) {
+				Buffer buf = buffer_info.buffer;
+				buffer_info.attached_future->result = buf;
+			}
+		}
+
 		SubmitBundle sbundle;
 
 		auto record_batch = [&alloc, this](std::span<RenderPassInfo> rpis, DomainFlagBits domain) {
