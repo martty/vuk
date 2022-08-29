@@ -661,7 +661,7 @@ namespace vuk {
 			current_error = std::move(res);
 			return *this;
 		}
-		return dispatch_indirect(indirect_resource_name);
+		return dispatch_indirect(res->buffer);
 	}
 
 	CommandBuffer& CommandBuffer::trace_rays(size_t size_x, size_t size_y, size_t size_z) {
