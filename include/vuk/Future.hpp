@@ -67,7 +67,7 @@ namespace vuk {
 		~Future();
 
 		explicit operator bool() const {
-			return rg.get() == nullptr;
+			return rg.get() != nullptr;
 		}
 
 		/// @brief Get status of the Future
