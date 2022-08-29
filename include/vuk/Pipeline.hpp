@@ -100,6 +100,11 @@ namespace vuk {
 			shader_paths.emplace_back(std::move(filename));
 		}
 
+		void add_static_spirv(const uint32_t* source, size_t size, std::string identifier) {
+			shaders.emplace_back(ShaderSource::spirv(source, size));
+			shader_paths.emplace_back(std::move(identifier));
+		}
+
 		void add_hit_group(HitGroup hit_group) {
 			hit_groups.emplace_back(hit_group);
 		}

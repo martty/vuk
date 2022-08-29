@@ -275,6 +275,8 @@ namespace vuk {
 
 	ShaderModule Context::create(const create_info_t<ShaderModule>& cinfo) {
 		std::vector<uint32_t> spirv;
+		const uint32_t* spirv_ptr = nullptr;
+		size_t size = 0;
 
 		switch (cinfo.source.language) {
 #if VUK_USE_SHADERC
@@ -291,7 +293,8 @@ namespace vuk {
 			}
 
 			spirv = std::vector<uint32_t>{ result.cbegin(), result.cend() };
-
+			spirv_ptr = spirv.data();
+			size = spirv.size();
 			break;
 		}
 #endif
@@ -365,24 +368,26 @@ namespace vuk {
 			const uint32_t* end = begin + (output->GetBufferSize() / 4);
 
 			spirv = std::vector<uint32_t>{ begin, end };
-
+			spirv_ptr = spirv.data();
+			size = spirv.size();
 			break;
 		}
 #endif
 		case ShaderSourceLanguage::eSpirv: {
-			spirv = cinfo.source.data;
+			spirv_ptr = cinfo.source.data_ptr;
+			size = cinfo.source.size;
 			break;
 		}
 		default:
-			break;
+			assert(0);
 		}
 
 		Program p;
-		auto stage = p.introspect(spirv.data(), spirv.size());
+		auto stage = p.introspect(spirv_ptr, size);
 
 		VkShaderModuleCreateInfo moduleCreateInfo{ .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO };
-		moduleCreateInfo.codeSize = spirv.size() * sizeof(uint32_t);
-		moduleCreateInfo.pCode = spirv.data();
+		moduleCreateInfo.codeSize = size * sizeof(uint32_t);
+		moduleCreateInfo.pCode = spirv_ptr;
 		VkShaderModule sm;
 		vkCreateShaderModule(device, &moduleCreateInfo, nullptr, &sm);
 		std::string name = "ShaderModule: " + cinfo.filename;
@@ -397,9 +402,10 @@ namespace vuk {
 		Program accumulated_reflection;
 		std::string pipe_name = "Pipeline:";
 		for (auto i = 0; i < cinfo.shaders.size(); i++) {
-			auto contents = cinfo.shaders[i];
-			if (contents.data.empty())
+			auto& contents = cinfo.shaders[i];
+			if (contents.data_ptr == nullptr) {
 				continue;
+			}
 			auto& sm = impl->shader_modules.acquire({ contents, cinfo.shader_paths[i] });
 			VkPipelineShaderStageCreateInfo shader_stage{ .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
 			shader_stage.pSpecializationInfo = nullptr;
