@@ -57,7 +57,7 @@ namespace vuk {
 		    { .name = "copy", .resources = { "src"_buffer >> eTransferRead, "dst"_buffer >> eTransferWrite }, .execute = [](vuk::CommandBuffer& command_buffer) {
 			     command_buffer.copy_buffer("src", "dst", VK_WHOLE_SIZE);
 		     } });
-		return { rgp, "dst" };
+		return { rgp, "dst+" };
 	}
 
 	/// @brief Fill an image with host data
