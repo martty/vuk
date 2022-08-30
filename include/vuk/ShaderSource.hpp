@@ -138,7 +138,7 @@ namespace vuk {
 	};
 
 	inline bool operator==(const ShaderSource& a, const ShaderSource& b) noexcept {
-		return a.language == b.language && a.data == b.data;
+		return a.language == b.language && a.data_ptr == b.data_ptr && a.size == b.size;
 	}
 
 	struct ShaderModuleCreateInfo {
