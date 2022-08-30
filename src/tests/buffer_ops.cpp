@@ -50,24 +50,56 @@ TEST_CASE("test buffer upload/download") {
 
 TEST_CASE("test unary map") {
 	REQUIRE(test_context.prepare());
-	if (test_context.rdoc_api)
-		test_context.rdoc_api->StartFrameCapture(NULL, NULL);
 	{
+		if (test_context.rdoc_api)
+			test_context.rdoc_api->StartFrameCapture(NULL, NULL);
 		// src data
 		std::vector data = { 1u, 2u, 3u };
 		// function to apply
 		auto func = [](auto A) {
-			return A * 3;
+			return A * 3u + 33u;
 		};
 		std::vector<uint32_t> expected;
 		// cpu result
 		std::transform(data.begin(), data.end(), std::back_inserter(expected), func);
 
+		// put data on gpu
 		auto [_1, src] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(data));
+		// put count on gpu
 		CountWithIndirect count_data{ (uint32_t)data.size(), 64 };
 		auto [_2, cnt] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(&count_data, 1));
 		
+		// apply function on gpu
 		auto calc = unary_map(src, {}, cnt, func);
+		// bring data back to cpu
+		auto res = download_buffer(calc).get<Buffer>(*test_context.allocator, test_context.compiler);
+		auto out = std::span((uint32_t*)res->mapped_ptr, data.size());
+		if (test_context.rdoc_api)
+			test_context.rdoc_api->EndFrameCapture(NULL, NULL);
+		CHECK(out == std::span(expected));
+	}
+	{
+		if (test_context.rdoc_api)
+			test_context.rdoc_api->StartFrameCapture(NULL, NULL);
+		// src data
+		std::vector data = { 1u, 2u, 3u };
+		// function to apply
+		auto func = [](auto A) {
+			return spirv::select(A > 1u, 1u, 2u);
+		};
+		std::vector<uint32_t> expected;
+		// cpu result
+		std::transform(data.begin(), data.end(), std::back_inserter(expected), func);
+
+		// put data on gpu
+		auto [_1, src] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(data));
+		// put count on gpu
+		CountWithIndirect count_data{ (uint32_t)data.size(), 64 };
+		auto [_2, cnt] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(&count_data, 1));
+
+		// apply function on gpu
+		auto calc = unary_map(src, {}, cnt, func);
+		// bring data back to cpu
 		auto res = download_buffer(calc).get<Buffer>(*test_context.allocator, test_context.compiler);
 		auto out = std::span((uint32_t*)res->mapped_ptr, data.size());
 		if (test_context.rdoc_api)
