@@ -6,7 +6,7 @@
 
 namespace vuk {
 	fixed_vector<DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> PipelineBaseCreateInfo::build_descriptor_layouts(const Program& program,
-	                                                                                                                     const PipelineBaseCreateInfoBase& bci) {
+	                                                                                                           const PipelineBaseCreateInfoBase& bci) {
 		fixed_vector<DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> dslcis;
 
 		for (const auto& [index, set] : program.sets) {
@@ -206,6 +206,12 @@ namespace std {
 	size_t hash<vuk::PipelineLayoutCreateInfo>::operator()(vuk::PipelineLayoutCreateInfo const& x) const noexcept {
 		size_t h = 0;
 		hash_combine(h, x.pcrs, x.dslcis);
+		return h;
+	}
+
+	size_t hash<vuk::ShaderSource>::operator()(vuk::ShaderSource const& x) const noexcept {
+		size_t h = 0;
+		hash_combine(h, x.language, robin_hood::hash_bytes(x.data_ptr, x.size));
 		return h;
 	}
 }; // namespace std

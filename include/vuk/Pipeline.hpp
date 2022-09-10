@@ -171,11 +171,7 @@ namespace std {
 
 	template<>
 	struct hash<vuk::ShaderSource> {
-		size_t operator()(vuk::ShaderSource const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.language, ::hash::fnv1a::hash((char*)x.data_ptr, x.size, ::hash::fnv1a::default_offset_basis));
-			return h;
-		}
+		size_t operator()(vuk::ShaderSource const& x) const noexcept;
 	};
 
 	template<>
