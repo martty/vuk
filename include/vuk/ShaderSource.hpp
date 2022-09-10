@@ -110,6 +110,7 @@ namespace vuk {
 			ShaderSource shader;
 			shader.data = std::move(source);
 			shader.data_ptr = shader.data.data();
+			shader.size = shader.data.size();
 			shader.language = ShaderSourceLanguage::eSpirv;
 			return shader;
 		}
