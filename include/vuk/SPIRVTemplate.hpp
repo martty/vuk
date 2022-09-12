@@ -67,166 +67,265 @@ namespace vuk {
 		struct SPIRVModule {
 			uint32_t counter;
 			std::array<uint32_t, Section8Len> annotations;
-			std::array<uint32_t, Section9Len> type_decls;
+			uint32_t annotation_size = 0;
+			std::array<uint32_t, Section9Len> decls;
+			uint32_t decl_size = 0;
 			std::array<uint32_t, Section11Len> codes;
 
 			std::array<SPIRType, NTypes> types;
 
 			constexpr SPIRVModule(uint32_t id_counter,
 			                      std::array<uint32_t, Section8Len> annotations,
-			                      std::array<uint32_t, Section9Len> type_decls,
+			                      uint32_t annotation_size,
+			                      std::array<uint32_t, Section9Len> decls,
+			                      uint32_t decl_size,
 			                      std::array<uint32_t, Section11Len> codes,
 			                      std::array<SPIRType, NTypes> types) :
 			    counter(id_counter),
 			    annotations(annotations),
-			    type_decls(type_decls),
+			    annotation_size(annotation_size),
+			    decls(decls),
+			    decl_size(decl_size),
 			    codes(codes),
 			    types(types) {}
 
 			template<class T>
-			constexpr auto type_id() {
-				auto tn = type_name<T>();
-				for (auto& t : types) {
-					if (tn == t.type_identifier) {
-						return std::pair(t.spirv_id, *this + SPIRVModule<0, 0, 0, 1>{ counter + 1, no_spirv, no_spirv, no_spirv, {} });
-					}
-				}
-				auto new_types_arr = std::array{ SPIRType{ tn, counter + 1 } };
-				return std::pair(counter + 1, *this + SPIRVModule<0, 0, 0, 1>{ counter + 1, no_spirv, no_spirv, no_spirv, new_types_arr });
-			}
+			constexpr auto type_id();
 
 			template<size_t OSection8Len, size_t OSection9Len, size_t OSection11Len, size_t ONTypes>
 			constexpr auto operator+(SPIRVModule<OSection8Len, OSection9Len, OSection11Len, ONTypes> o) {
+				std::array<uint32_t, Section8Len + OSection8Len> merged_annots = {};
+				{
+					auto endit = std::copy_n(annotations.begin(), annotation_size, merged_annots.begin());
+					std::copy_n(o.annotations.begin(), o.annotation_size, endit);
+				}
+
+				std::array<uint32_t, Section9Len + OSection9Len> merged_decls = {};
+				{
+					auto endit = std::copy_n(decls.begin(), decl_size, merged_decls.begin());
+					std::copy_n(o.decls.begin(), o.decl_size, endit);
+				}
 				return SPIRVModule<Section8Len + OSection8Len, Section9Len + OSection9Len, Section11Len + OSection11Len, NTypes + ONTypes>{
-					std::max(counter, o.counter),
-					concat_array(annotations, o.annotations),
-					concat_array(type_decls, o.type_decls),
-					concat_array(codes, o.codes),
+					std::max(counter, o.counter), merged_annots, annotation_size + o.annotation_size, merged_decls, decl_size + o.decl_size, concat_array(codes, o.codes),
 					concat_array(types, o.types)
 				};
 			}
 
 			template<size_t N>
 			constexpr auto code(uint32_t counter, std::array<uint32_t, N> v) {
-				return *this + SPIRVModule<0, 0, N, 0>{ counter, no_spirv, no_spirv, v, no_types };
+				return std::pair(counter, *this + SPIRVModule<0, 0, N, 0>{ counter, no_spirv, 0, no_spirv, 0, v, no_types });
 			}
 
 			template<size_t N>
 			constexpr auto constant(uint32_t counter, std::array<uint32_t, N> v) {
-				return *this + SPIRVModule<0, N, 0, 0>{ counter, no_spirv, v, no_spirv, no_types };
+				return std::pair(counter, *this + SPIRVModule<0, N, 0, 0>{ counter, no_spirv, 0, v, N, no_spirv, no_types });
 			}
 
 			template<size_t N>
-			constexpr auto annotation(std::array<uint32_t, N> v) {
-				return *this + SPIRVModule<N, 0, 0, 0>{ v, no_spirv, no_spirv, no_types };
+			constexpr auto annotation(uint32_t counter, std::array<uint32_t, N> v) {
+				return *this + SPIRVModule<N, 0, 0, 0>{ counter, v, N, no_spirv, 0, no_spirv, no_types };
 			}
 		};
 
-		/* constexpr uint32_t count(auto v) {
-		  return (uint32_t)v.annotations.size() + (uint32_t)v.type_decls.size() + (uint32_t)v.code.size();
-		}*/
+		template<size_t Section8Len, size_t Section9Len, size_t Section11Len, size_t NTypes>
+		template<class T>
+		constexpr auto SPIRVModule<Section8Len, Section9Len, Section11Len, NTypes>::type_id() {
+			auto tn = type_name<T>();
+			uint32_t id;
+			bool found = false;
+			for (auto& t : types) {
+				if (tn == t.type_identifier) {
+					id = t.spirv_id;
+					found = true;
+					break;
+				}
+			}
+			auto [declid, declmod] = T::to_spirv(*this);
+			auto new_types_arr = std::array{ SPIRType{ tn, declid } };
+			if (!found) {
+				return std::pair(declid, declmod + SPIRVModule<0, 0, 0, 1>{ declid, no_spirv, 0, no_spirv, 0, no_spirv, new_types_arr });
+			} else {
+				declmod.counter = counter;
+				declmod.decl_size = decl_size;
+				return std::pair(id, declmod + SPIRVModule<0, 0, 0, 1>{ id, no_spirv, 0, no_spirv, 0, no_spirv, {} });
+			}
+		}
 
 		template<spv::StorageClass sc, class Pointee>
 		struct ptr {
 			using pointee = Pointee;
-		};
+			static constexpr auto storage_class = sc;
 
-		/* template<class T>
-		constexpr uint32_t type_id() {
-		  if constexpr (std::is_same_v<T, uint32_t>) {
-		    return 6u;
-		  } else if constexpr (std::is_same_v<T, bool>) {
-		    return 58u;
-		  } else if constexpr (std::is_same_v<T, float>) {
-		    return 201u;
-		  } else if constexpr (std::is_same_v<T, ptr<spv::StorageClassStorageBuffer, uint32_t>>) {
-		    return 55u;
-		  } else if constexpr (std::is_same_v<T, ptr<spv::StorageClassStorageBuffer, float>>) {
-		    return 202u;
-		  } else {
-		    assert(0);
-		  }
-		}*/
-
-		template<typename E>
-		struct SpvExpression {
-			constexpr auto to_spirv(uint32_t counter) const {
-				return static_cast<const E*>(this)->to_spirv(counter);
+			pointee operator*() const {
+				return {};
 			}
 		};
 
-		/* template<class T>
-		struct Type : public SpvExpression<Type<T>> {
-		  constexpr auto to_spirv(uint32_t counter) const {
-		    assert(0);
-		    return type_or_constant(no_spirv);
-		  }
+		template<typename T, size_t N>
+		struct Deref {
+			using type = typename Deref<typename T::pointee, N - 1>::type;
+		};
+
+		template<typename T>
+		struct Deref<T, 0> {
+			using type = T;
+		};
+
+		template<typename E>
+		struct SpvExpression {};
+
+		template<class T>
+		struct Type : public SpvExpression<Type<T>> {};
+
+		template<>
+		struct Type<uint32_t> {
+			using type = uint32_t;
+
+			static constexpr auto to_spirv(auto mod) {
+				auto us = std::array{ op(spv::OpTypeInt, 4), mod.counter + 1, 32u, 0u };
+				return mod.constant(mod.counter + 1, us);
+			}
 		};
 
 		template<>
 		struct Type<bool> {
-		  constexpr auto to_spirv(uint32_t counter) const {
-		    auto us = std::array{ op(spv::OpTypeBool, 2), counter };
-		    return type_or_constant(us);
-		  }
+			using type = bool;
+
+			static constexpr auto to_spirv(auto mod) {
+				auto us = std::array{ op(spv::OpTypeBool, 2), mod.counter + 1 };
+				return mod.constant(mod.counter + 1, us);
+			}
 		};
 
 		template<>
 		struct Type<float> {
-		  constexpr auto to_spirv(uint32_t counter) const {
-		    auto us = std::array{ op(spv::OpTypeFloat, 3), counter, 32u };
-		    return type_or_constant(us);
-		  }
+			using type = float;
+
+			static constexpr auto to_spirv(auto mod) {
+				auto us = std::array{ op(spv::OpTypeFloat, 3), mod.counter + 1, 32u };
+				return mod.constant(mod.counter + 1, us);
+			}
 		};
 
 		template<spv::StorageClass sc, class Pointee>
 		struct Type<ptr<sc, Pointee>> {
-		  constexpr auto to_spirv(uint32_t counter) const {
-		    auto us = std::array{ op(spv::OpTypePointer, 4), counter, uint32_t(sc), type_id<Pointee>() };
-		    return type_or_constant(us);
-		  }
+			using type = ptr<sc, Pointee>;
+			static constexpr auto storage_class = sc;
+			using pointee = Pointee;
+
+			static constexpr auto to_spirv(auto mod) {
+				auto [tid, modt] = mod.template type_id<Pointee>();
+				auto us = std::array{ op(spv::OpTypePointer, 4), modt.counter + 1, uint32_t(sc), tid };
+				return modt.constant(modt.counter + 1, us);
+			}
 		};
 
 		template<class T>
 		struct TypeRuntimeArray : public SpvExpression<TypeRuntimeArray<T>> {
-		  constexpr auto to_spirv(uint32_t counter) const {
-		    auto us = std::array{ op(spv::OpTypeRuntimeArray, 3), counter, type_id<T>() };
-		    return type_or_constant(us);
-		  }
+			using pointee = T;
+
+			static constexpr auto to_spirv(auto mod) {
+				auto [tid, modt] = mod.template type_id<T>();
+				auto us = std::array{ op(spv::OpTypeRuntimeArray, 3), modt.counter + 1, tid };
+				auto deco =
+				    std::array{ op(spv::OpDecorate, 4), modt.counter + 1, uint32_t(spv::Decoration::DecorationArrayStride), (uint32_t)sizeof(typename T::type) };
+				return std::pair(modt.counter + 1, modt.annotation(modt.counter + 1, deco) + modt.constant(modt.counter + 1, us).second);
+			}
 		};
 
-		template<class T>
-		struct TypeUStruct : public SpvExpression<TypeUStruct<T>> {
-		  constexpr auto to_spirv(uint32_t counter) const {
-		    auto us = std::array{ op(spv::OpTypeStruct, 3), counter, type_id<T>() };
-		    return type_or_constant(us);
-		  }
+		template<class T, uint32_t Offset>
+		struct Member {
+			using type = T;
+
+			static constexpr auto to_spirv(auto mod, uint32_t parent, uint32_t index) {
+				// auto [tid, modt] = mod.template type_id<T>();
+				auto deco = std::array{ op(spv::OpMemberDecorate, 5), parent, index, uint32_t(spv::Decoration::DecorationOffset), Offset };
+				return mod.annotation(mod.counter, deco);
+			}
 		};
 
-		template<class T>
-		struct Variable : public SpvExpression<TypeRuntimeArray<T>> {
-		  constexpr auto to_spirv(uint32_t counter) const {
-		    auto us = std::array{ op(spv::OpVariable, 4), counter, type_id<T>() };
-		    return type_or_constant(us);
-		  }
-		};*/
+		template<class... Members>
+		struct TypeStruct : public SpvExpression<TypeStruct<Members...>> {
+			using members = std::tuple<Members...>;
+
+			static constexpr auto to_spirv(auto mod) {
+				static_assert(sizeof...(Members) == 1);
+				auto [tid, modt] = mod.template type_id<typename member<0>::type>();
+				auto str_id = modt.counter + 1;
+				auto mod1 = member<0>::to_spirv(modt, str_id, 0);
+				auto deco = std::array{ op(spv::OpDecorate, 3), str_id, uint32_t(spv::Decoration::DecorationBlock) };
+				auto mod2 = mod1.annotation(mod1.counter, deco);
+				auto us = std::array{ op(spv::OpTypeStruct, 3), str_id, tid };
+				return mod2.constant(str_id, us);
+			}
+
+			template<uint32_t idx>
+			using member = typename std::remove_reference_t<decltype(std::get<idx>(std::declval<members>()))>;
+
+			template<uint32_t idx>
+			using deref = typename std::remove_reference_t<decltype(std::get<idx>(std::declval<members>()))>::type;
+		};
+
+		template<class T, spv::StorageClass sc>
+		struct Variable : public SpvExpression<Variable<T, sc>> {
+			using type = T;
+
+			uint32_t descriptor_set;
+			uint32_t binding;
+
+			constexpr Variable(uint32_t descriptor_set, uint32_t binding) : descriptor_set(descriptor_set), binding(binding) {}
+
+			constexpr auto to_spirv(auto mod) const {
+				auto [tid, modt] = mod.template type_id<T>();
+				auto var_id = modt.counter + 1;
+				auto mod1 = modt.annotation(var_id, std::array{ op(spv::OpDecorate, 4), var_id, uint32_t(spv::Decoration::DecorationDescriptorSet), descriptor_set })
+				                .annotation(var_id, std::array{ op(spv::OpDecorate, 4), var_id, uint32_t(spv::Decoration::DecorationBinding), binding });
+				auto us = std::array{ op(spv::OpVariable, 4), tid, var_id, uint32_t(sc) };
+				return mod1.constant(var_id, us);
+			}
+		};
+
+		struct Id : public SpvExpression<Id> {
+			uint32_t id;
+			constexpr Id(uint32_t id) : id(id) {}
+
+			constexpr auto to_spirv(auto mod) const {
+				return std::pair(id, mod);
+			}
+		};
+
+		template<size_t N, typename... Ts>
+		auto _emit_children(auto mod, std::tuple<Ts...> const& children) {
+			if constexpr (N == 0) {
+				auto [resid, resmod] = std::get<N>(children).to_spirv(mod);
+				return std::pair{ std::array{ resid }, resmod };
+			} else {
+				auto r = _emit_children<N - 1>(mod, children);
+				auto [resid, resmod] = std::get<N>(children).to_spirv(r.second);
+				return std::pair{ concat_array(std::array{ resid }, r.first), resmod };
+			}
+		}
+
+		template<class... Ts>
+		auto emit_children(auto mod, std::tuple<Ts...> children) {
+			auto [resids, resmod] = _emit_children<sizeof...(Ts) - 1>(mod, children);
+			return std::pair{ resids, resmod };
+		}
 
 		template<typename E1, typename E2>
 		struct Add : public SpvExpression<Add<E1, E2>> {
 			static_assert(std::is_same_v<typename E1::type, typename E2::type>);
 			using type = typename E1::type;
 
-			E1 e1;
-			E2 e2;
+			std::tuple<E1, E2> children;
 
-			constexpr Add(E1 e1, E2 e2) : e1(e1), e2(e2) {}
+			constexpr Add(E1 e1, E2 e2) : children(e1, e2) {}
 
 		public:
 			constexpr auto to_spirv(auto mod) const {
-				auto mod1 = e1.to_spirv(mod);
-				auto mod2 = e2.to_spirv(mod1);
-				auto [tid, mod3] = mod2.type_id<type>();
-				auto us = std::array{ op(std::is_floating_point_v<type> ? spv::OpFAdd : spv::OpIAdd, 5), tid, mod3.counter + 1, mod1.counter, mod2.counter };
+				auto [eids, resmod] = emit_children(mod, children);
+				auto [tid, mod3] = resmod.template type_id<type>();
+				auto us = std::array{ op(std::is_floating_point_v<type> ? spv::OpFAdd : spv::OpIAdd, 5), tid, mod3.counter + 1 } << eids;
 				return mod3.code(mod3.counter + 1, us);
 			}
 		};
@@ -269,7 +368,7 @@ namespace vuk {
 			constexpr LoadId(const uint32_t& id) : id(id) {}
 
 			constexpr auto to_spirv(auto mod) const {
-				auto [tid, mod1] = mod.type_id<type>();
+				auto [tid, mod1] = mod.template type_id<type>();
 				auto us = std::array{ op(spv::OpLoad, 4), tid, mod1.id_counter + 1, id };
 				return mod1.code(mod1.id_counter + 1, us);
 			}
@@ -277,29 +376,29 @@ namespace vuk {
 
 		template<typename E1>
 		struct Load : public SpvExpression<Load<E1>> {
-			using type = typename E1::type::pointee;
+			using type = typename Deref<typename E1::type, 1u>::type;
 
 			E1 e1;
 			constexpr Load(E1 e1) : e1(e1) {}
 
 			constexpr auto to_spirv(auto mod) const {
-				auto [tid, mod1] = mod.type_id<type>();
-				auto mod2 = e1.to_spirv(mod1);
-				auto us = std::array{ op(spv::OpLoad, 4), tid, mod2.counter + 1, mod2.counter };
-				return mod2.code(mod2.counter + 1, us);
+				auto [tid, modt] = mod.template type_id<type>();
+				auto [e1id, mod1] = e1.to_spirv(modt);
+				auto us = std::array{ op(spv::OpLoad, 4), tid, mod1.counter + 1, e1id };
+				return mod1.code(mod1.counter + 1, us);
 			}
 		};
 
 		template<class T>
 		struct Constant : public SpvExpression<Constant<T>> {
-			using type = T;
+			using type = Type<T>;
 			T value;
 			constexpr Constant(T v) : value(v) {}
 
 			constexpr auto to_spirv(auto mod) const {
 				constexpr size_t num_uints = sizeof(T) / sizeof(uint32_t);
 				auto as_uints = std::bit_cast<std::array<uint32_t, num_uints>>(value);
-				auto [tid, modt] = mod.type_id<T>();
+				auto [tid, modt] = mod.template type_id<type>();
 				auto us = std::array{ op(spv::OpConstant, 3 + num_uints), tid, modt.counter + 1 };
 				auto with_value = concat_array(us, as_uints);
 				return modt.constant(modt.counter + 1, with_value);
@@ -333,20 +432,20 @@ namespace vuk {
 			constexpr StoreId(uint32_t id, E1 e1) : id(id), e1(e1) {}
 
 			constexpr auto to_spirv(auto mod) const {
-				auto mod1 = e1.to_spirv(mod);
-				auto us = std::array{ op(spv::OpStore, 3), id, mod1.counter };
+				auto [e1id, mod1] = e1.to_spirv(mod);
+				auto us = std::array{ op(spv::OpStore, 3), id, e1id };
 				return mod1.code(mod1.counter, us);
 			}
 		};
 
-		template<typename T, typename... Indices>
-		struct AccessChainId : SpvExpression<AccessChainId<T, Indices...>> {
-			using type = T;
+		template<typename T, typename E1, typename... Indices>
+		struct AccessChain : SpvExpression<AccessChain<E1, Indices...>> {
+			using type = T; // typename Deref<typename E1::type, Indices...>::type;
 
-			const uint32_t base;
+			E1 base;
 			std::tuple<Indices...> indices;
 
-			constexpr AccessChainId(uint32_t base, Indices... inds) : base(base), indices(inds...) {}
+			constexpr AccessChain(T type, E1 base, Indices... inds) : base(base), indices(inds...) {}
 
 			/* constexpr auto to_spirv(uint32_t counter) const {
 			  uint32_t base_counter = counter;
@@ -360,13 +459,23 @@ namespace vuk {
 			}*/
 
 			constexpr auto to_spirv(auto mod) const {
-				static_assert(sizeof...(Indices) == 1);
-				auto [tid, modt] = mod.type_id<type>();
-				auto mod1 = std::get<0>(indices).to_spirv(modt);
-				auto us = std::array{ op(spv::OpAccessChain, 5), tid, mod1.counter + 1, base, mod1.counter };
-				return mod1.code(mod1.counter + 1, us);
+				static_assert(sizeof...(Indices) == 2);
+				auto [baseid, modbase] = base.to_spirv(mod);
+				auto [tid, modt] = modbase.template type_id<type>();
+				auto [e1id, mod1] = std::get<0>(indices).to_spirv(modt);
+				auto [e2id, mod2] = std::get<1>(indices).to_spirv(mod1);
+				auto us = std::array{ op(spv::OpAccessChain, sizeof...(Indices) + 4), tid, mod2.counter + 1, baseid, e1id, e2id };
+				return mod2.code(mod2.counter + 1, us);
 			}
 		};
+
+		template<auto CIndex, typename E1, typename... VIndices>
+		constexpr auto access_chain(E1 base, VIndices... inds) {
+			using value_t = typename Deref<typename E1::type, 1>::type;
+			constexpr auto sc = E1::type::storage_class;
+			using deref_t = typename Deref<typename value_t::template deref<CIndex>, sizeof...(VIndices)>::type;
+			return AccessChain(Type<ptr<sc, deref_t>>{}, base, Constant{ CIndex }, inds...);
+		}
 
 		template<typename E1, typename E2>
 		struct Cmp : SpvExpression<Cmp<E1, E2>> {
@@ -447,11 +556,11 @@ namespace vuk {
 
 		template<typename E>
 		constexpr auto compile_to_spirv(const E& expr, uint32_t max_id) {
-			std::array predef_types = { SPIRType{ type_name<uint32_t>(), 6u },
-				                          SPIRType{ type_name<bool>(), 58u },
-				                          SPIRType{ type_name<ptr<spv::StorageClassStorageBuffer, uint32_t>>(), 55u } };
-			SPIRVModule spvmodule{ max_id, no_spirv, no_spirv, no_spirv, predef_types };
-			auto res = expr.to_spirv(spvmodule);
+			std::array predef_types = { SPIRType{ type_name<Type<uint32_t>>(), 6u },
+				                          SPIRType{ type_name<Type<bool>>(), 58u },
+				                          SPIRType{ type_name<Type<ptr<spv::StorageClassStorageBuffer, uint32_t>>>(), 55u } };
+			SPIRVModule spvmodule{ max_id, no_spirv, 0, no_spirv, 0, no_spirv, predef_types };
+			auto res = expr.to_spirv(spvmodule).second;
 			/* auto prologue = Type<float>{}.to_spirv(201u) + Type<ptr<spv::StorageClassStorageBuffer, float>>{}.to_spirv(202u);
 			return prologue + res;*/
 			return res;
@@ -461,12 +570,19 @@ namespace vuk {
 		struct SPIRVTemplate {
 			template<class F>
 			static constexpr auto compile(F&& f) {
-				constexpr auto first_bit = array_copy<0x00000398 / 4>(Derived::template_bytes);
-				constexpr auto second_bit = array_copy<0x0000072c / 4 - 0x00000398 / 4>(Derived::template_bytes + 0x00000398 / 4);
+				constexpr auto prologue = array_copy<0x00000354 / 4>(Derived::template_bytes);
+				constexpr auto builtin_decls = array_copy<0x0000050c / 4 - 0x00000354 / 4>(Derived::template_bytes + 0x00000354 / 4);
+				constexpr auto second_bit = array_copy<0x0000072c / 4 - 0x0000050c / 4>(Derived::template_bytes + 0x0000050c / 4);
 				constexpr auto epilogue = array_copy<6>(Derived::template_bytes + 0x00000738 / 4);
 
 				auto res = compile_to_spirv(Derived::specialize(f), 200);
-				return concat_array(first_bit, res.type_decls, second_bit, res.codes, epilogue);
+				auto arr = concat_array(prologue, res.annotations, builtin_decls, res.decls, second_bit, res.codes, epilogue);
+				auto arr_cpy = arr;
+				std::copy(arr.begin() + prologue.size() + res.annotations.size(), arr.end(), arr_cpy.begin() + prologue.size() + res.annotation_size);
+				std::copy(arr.begin() + prologue.size() + res.annotations.size() + builtin_decls.size() + res.decls.size(),
+				          arr.end(),
+				          arr_cpy.begin() + prologue.size() + res.annotation_size + builtin_decls.size() + res.decl_size);
+				return std::pair(arr.size() - (res.annotations.size() - res.annotation_size + res.decls.size() - res.decl_size), arr_cpy);
 			}
 		};
 	} // namespace spirv
@@ -517,10 +633,16 @@ namespace vuk {
 
 		template<class F>
 		static constexpr auto specialize(F&& f) {
-			constexpr auto ldA = spirv::AccessChainId<spirv::ptr<spv::StorageClassStorageBuffer, T1>, spirv::Constant<uint32_t>>(71u, spirv::Constant(0u));
-			constexpr const auto A = spirv::Load(ldA);
-			constexpr auto ldB = spirv::AccessChainId<spirv::ptr<spv::StorageClassStorageBuffer, T2>, spirv::Constant<uint32_t>>(78u, spirv::Constant(0u));
-			constexpr const auto B = spirv::Load(ldB);
+			using namespace spirv;
+
+			constexpr TypeStruct<Member<TypeRuntimeArray<Type<T1>>, 0>> strT = {};
+			constexpr auto ptr_to_struct = Type<ptr<spv::StorageClassStorageBuffer, decltype(strT)>>{};
+			constexpr auto vA = Variable<decltype(ptr_to_struct), spv::StorageClassStorageBuffer>(0, 0);
+			constexpr auto ldA = access_chain<0u>(vA, Id(112u));
+			constexpr const auto A = Load(ldA);
+			constexpr auto vB = Variable<decltype(ptr_to_struct), spv::StorageClassStorageBuffer>(0, 1);
+			constexpr auto ldB = access_chain<0u>(vB, Id(112u));
+			constexpr const auto B = Load(ldB);
 
 			return spirv::StoreId{ 83u, f(A, B) };
 		}
@@ -537,13 +659,16 @@ namespace vuk {
 	PipelineBaseInfo* static_compute_pbi(const uint32_t* ptr, size_t size, std::string ident) {
 		vuk::PipelineBaseCreateInfo pci;
 		pci.add_static_spirv(ptr, size, std::move(ident));
+		FILE* fo = fopen("dumb.spv", "wb");
+		fwrite(ptr, sizeof(uint32_t), size, fo);
+		fclose(fo);
 		return test_context.context->get_pipeline(pci);
 	}
 
 	template<class T, class F>
 	inline Future unary_map(Future src, Future dst, Future count, const F& fn) {
-		constexpr auto spirv = SPIRVBinaryMap<T, uint32_t>::compile([](auto A, auto B) { return F{}(A); });
-		static auto pbi = static_compute_pbi(spirv.data(), spirv.size(), "unary");
+		auto spv_result = SPIRVBinaryMap<T, uint32_t>::compile([](auto A, auto B) { return F{}(A); });
+		static auto pbi = static_compute_pbi(spv_result.second.data(), spv_result.first, "unary");
 		std::shared_ptr<RenderGraph> rgp = std::make_shared<RenderGraph>("unary_map");
 		rgp->attach_in("src", std::move(src));
 		if (dst) {
