@@ -40,6 +40,7 @@ namespace vuk {
 				bindings.push_back(layoutBinding);
 				if (layoutBinding.binding < VUK_MAX_BINDINGS) {
 					dslci.used_bindings[layoutBinding.binding] = true;
+					dslci.optional[layoutBinding.binding] = sb.is_hlsl_counter_buffer;
 				}
 			}
 

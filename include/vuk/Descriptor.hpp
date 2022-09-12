@@ -169,6 +169,7 @@ namespace vuk {
 		size_t index; // index of the descriptor set when used in a pipeline layout
 		std::vector<VkDescriptorSetLayoutBinding> bindings;
 		std::bitset<VUK_MAX_BINDINGS> used_bindings = {}; // used for ephemeral desc sets
+		std::bitset<VUK_MAX_BINDINGS> optional = {};
 		std::vector<VkDescriptorBindingFlags> flags;
 
 		bool operator==(const DescriptorSetLayoutCreateInfo& o) const noexcept {

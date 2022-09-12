@@ -258,6 +258,7 @@ VkShaderStageFlagBits vuk::Program::introspect(const uint32_t* ir, size_t word_c
 		if (type.basetype == spirv_cross::SPIRType::Struct) {
 			reflect_members(refl, refl.get_type(sb.type_id), un.members);
 		}
+		un.is_hlsl_counter_buffer = refl.buffer_is_hlsl_counter_buffer(sb.id);
 		sets[set].storage_buffers.push_back(un);
 	}
 

@@ -1166,8 +1166,16 @@ namespace vuk {
 						return false;
 					}
 					if (pipe_dtype != cbuf_dtype) {
-						assert(false && "Attempting to bind the wrong descriptor type.");
-						return false;
+						if (dslci->optional[j]) { // this was an optional binding with a mismatched or missing bound resource -> forgo writing
+							sb.used[j] = false;
+						} else {
+							if (cbuf_dtype == vuk::DescriptorType(-1)) {
+								assert(false && "Descriptor layout contains binding that was not bound.");
+							} else {
+								assert(false && "Attempting to bind the wrong descriptor type.");
+							}
+							return false;
+						}
 					}
 				}
 

@@ -85,6 +85,8 @@ namespace vuk {
 			unsigned binding;
 			size_t min_size;
 
+			bool is_hlsl_counter_buffer = false;
+
 			std::vector<Member> members;
 
 			VkShaderStageFlags stage;
