@@ -63,6 +63,25 @@ namespace vuk {
 
 		static constexpr std::array<SPIRType, 0> no_types = {};
 
+		enum TypeClass { eUint = 0, eSint, eFloat, eBool };
+
+		template<class T>
+		TypeClass to_typeclass() {
+			using type = typename T::type;
+			if constexpr (std::is_same_v<type, unsigned>) {
+				return TypeClass::eUint;
+			}
+			if constexpr (std::is_same_v<type, signed>) {
+				return TypeClass::eSint;
+			}
+			if constexpr (std::is_same_v<type, float>) {
+				return TypeClass::eFloat;
+			}
+			if constexpr (std::is_same_v<type, bool>) {
+				return TypeClass::eBool;
+			}
+		}
+
 		template<size_t Section8Len, size_t Section9Len, size_t Section11Len, size_t NTypes>
 		struct SPIRVModule {
 			uint32_t counter;
@@ -152,6 +171,43 @@ namespace vuk {
 			}
 		}
 
+		template<size_t N, typename... Ts>
+		constexpr auto _emit_children(auto mod, std::tuple<Ts...>& children) {
+			if constexpr (N == 0) {
+				auto [resid, resmod] = std::get<N>(children).to_spirv(mod);
+				return std::pair{ std::array{ resid }, resmod };
+			} else {
+				auto r = _emit_children<N - 1>(mod, children);
+				auto [resid, resmod] = std::get<N>(children).to_spirv(r.second);
+				return std::pair{ concat_array(std::array{ resid }, r.first), resmod };
+			}
+		}
+
+		template<class... Ts>
+		constexpr auto emit_children(auto mod, std::tuple<Ts...>& children) {
+			auto [resids, resmod] = _emit_children<sizeof...(Ts) - 1>(mod, children);
+			return std::pair{ resids, resmod };
+		}
+
+		template<size_t N, class F, typename... Ts>
+		constexpr auto visit_children(std::tuple<Ts...>& children, F&& fn) {
+			if constexpr (N == 0) {
+				visit(std::get<0>(children), fn);
+			} else {
+				visit_children<N - 1>(children, fn);
+				visit(std::get<N>(children), fn);
+			}
+		}
+
+		template<class F>
+		constexpr auto visit(auto root, F&& fn) {
+			constexpr auto n_children = std::tuple_size_v<decltype(root.children)>;
+			if constexpr (n_children > 0) {
+				visit_children<n_children - 1>(root.children, fn);
+			}
+			fn(root);
+		}
+
 		template<spv::StorageClass sc, class Pointee>
 		struct ptr {
 			using pointee = Pointee;
@@ -230,7 +286,7 @@ namespace vuk {
 				auto us = std::array{ op(spv::OpTypeRuntimeArray, 3), modt.counter + 1, tid };
 				auto deco =
 				    std::array{ op(spv::OpDecorate, 4), modt.counter + 1, uint32_t(spv::Decoration::DecorationArrayStride), (uint32_t)sizeof(typename T::type) };
-				return std::pair(modt.counter + 1, modt + SPIRVModule{ modt.counter + 1, deco, deco.size(), us, us.size(), no_spirv, no_types });
+				return std::pair(modt.counter + 1, modt + SPIRVModule{ modt.counter + 1, deco, (uint32_t)deco.size(), us, (uint32_t)us.size(), no_spirv, no_types });
 			}
 		};
 
@@ -310,124 +366,6 @@ namespace vuk {
 			}
 		};
 
-		template<size_t N, typename... Ts>
-		constexpr auto _emit_children(auto mod, std::tuple<Ts...>& children) {
-			if constexpr (N == 0) {
-				auto [resid, resmod] = std::get<N>(children).to_spirv(mod);
-				return std::pair{ std::array{ resid }, resmod };
-			} else {
-				auto r = _emit_children<N - 1>(mod, children);
-				auto [resid, resmod] = std::get<N>(children).to_spirv(r.second);
-				return std::pair{ concat_array(std::array{ resid }, r.first), resmod };
-			}
-		}
-
-		template<class... Ts>
-		constexpr auto emit_children(auto mod, std::tuple<Ts...>& children) {
-			auto [resids, resmod] = _emit_children<sizeof...(Ts) - 1>(mod, children);
-			return std::pair{ resids, resmod };
-		}
-
-		template<size_t N, class F, typename... Ts>
-		constexpr auto visit_children(std::tuple<Ts...>& children, F&& fn) {
-			if constexpr (N == 0) {
-				visit(std::get<0>(children), fn);
-			} else {
-				visit_children<N - 1>(children, fn);
-				visit(std::get<N>(children), fn);
-			}
-		}
-
-		template<class F>
-		constexpr auto visit(auto root, F&& fn) {
-			constexpr auto n_children = std::tuple_size_v<decltype(root.children)>;
-			if constexpr (n_children > 0) {
-				visit_children<n_children - 1>(root.children, fn);
-			}
-			fn(root);
-		}
-
-		template<typename E1, typename E2>
-		struct Add : public SpvExpression<Add<E1, E2>> {
-			static_assert(std::is_same_v<typename E1::type, typename E2::type>);
-			using type = typename E1::type;
-
-			std::tuple<E1, E2> children;
-			uint32_t id = 0;
-
-			constexpr Add(E1 e1, E2 e2) : children(e1, e2) {}
-
-		public:
-			constexpr auto to_spirv(auto mod) {
-				auto [eids, resmod] = emit_children(mod, children);
-				auto [tid, mod3] = resmod.template type_id<type>();
-				auto us = std::array{ op(std::is_floating_point_v<typename type::type> ? spv::OpFAdd : spv::OpIAdd, 5), tid, mod3.counter + 1 } << eids;
-				id = mod3.counter + 1;
-				return mod3.code(mod3.counter + 1, us);
-			}
-		};
-
-		template<typename E1, typename E2>
-		Add<E1, E2> constexpr operator+(SpvExpression<E1> const& u, SpvExpression<E2> const& v) {
-			return Add<E1, E2>{ *static_cast<const E1*>(&u), *static_cast<const E2*>(&v) };
-		}
-
-		template<typename E1, typename E2>
-		struct Mul : public SpvExpression<Mul<E1, E2>> {
-			static_assert(std::is_same_v<typename E1::type, typename E2::type>);
-			using type = typename E1::type;
-
-			E1 e1;
-			E2 e2;
-
-			constexpr Mul(E1 e1, E2 e2) : e1(e1), e2(e2) {}
-
-		public:
-			constexpr auto to_spirv(uint32_t counter) const {
-				auto e1id = counter - 1 - count(e2.to_spirv(counter));
-				auto e1m = e1.to_spirv(e1id);
-				auto e2m = e2.to_spirv(counter - 1);
-				auto us = std::array{ op(std::is_floating_point_v<type> ? spv::OpFMul : spv::OpIMul, 5), 6u, counter, counter - 1, e1id };
-				return e1m + e2m + code(us);
-			}
-		};
-
-		template<typename E1, typename E2>
-		Mul<E1, E2> constexpr operator*(SpvExpression<E1> const& u, SpvExpression<E2> const& v) {
-			return Mul<E1, E2>{ *static_cast<const E1*>(&u), *static_cast<const E2*>(&v) };
-		}
-
-		template<class T>
-		struct LoadId : public SpvExpression<LoadId<T>> {
-			using type = T;
-			const uint32_t id;
-
-			constexpr LoadId(const uint32_t& id) : id(id) {}
-
-			constexpr auto to_spirv(auto mod) {
-				auto [tid, mod1] = mod.template type_id<type>();
-				auto us = std::array{ op(spv::OpLoad, 4), tid, mod1.id_counter + 1, id };
-				return mod1.code(mod1.id_counter + 1, us);
-			}
-		};
-
-		template<typename E1>
-		struct Load : public SpvExpression<Load<E1>> {
-			using type = typename Deref<typename E1::type, 1u>::type;
-
-			uint32_t id = 0;
-			std::tuple<E1> children;
-			constexpr Load(E1 e1) : children(e1) {}
-
-			constexpr auto to_spirv(auto mod) {
-				auto [tid, modt] = mod.template type_id<type>();
-				auto [e1id, mod1] = emit_children(modt, children);
-				auto us = std::array{ op(spv::OpLoad, 4), tid, mod1.counter + 1 } << e1id;
-				id = mod1.counter + 1;
-				return mod1.code(mod1.counter + 1, us);
-			}
-		};
-
 		template<class T>
 		struct Constant : public SpvExpression<Constant<T>> {
 			using type = Type<T>;
@@ -447,29 +385,198 @@ namespace vuk {
 			}
 		};
 
+		template<typename E1, typename E2>
+		struct Add : public SpvExpression<Add<E1, E2>> {
+			static_assert(std::is_same_v<typename E1::type, typename E2::type>);
+			using type = typename E1::type;
+
+			std::tuple<E1, E2> children;
+			uint32_t id = 0;
+
+			constexpr Add(E1 e1, E2 e2) : children(e1, e2) {}
+
+		public:
+			constexpr auto to_spirv(auto mod) {
+				auto [eids, resmod] = emit_children(mod, children);
+				auto [tid, mod3] = resmod.template type_id<type>();
+				id = mod3.counter + 1;
+				auto us = std::array{ op(std::is_floating_point_v<typename type::type> ? spv::OpFAdd : spv::OpIAdd, 5), tid, id } << eids;
+				return mod3.code(mod3.counter + 1, us);
+			}
+		};
+
+		template<typename E1, typename E2>
+		Add<E1, E2> constexpr operator+(SpvExpression<E1> const& u, SpvExpression<E2> const& v) {
+			return Add<E1, E2>{ *static_cast<const E1*>(&u), *static_cast<const E2*>(&v) };
+		}
+
 		template<typename E1, typename T>
-		requires numeric<T>
-		Add<E1, Constant<T>> constexpr operator+(SpvExpression<E1> const& u, T const& v) {
-			return Add<E1, Constant<T>>(*static_cast<const E1*>(&u), Constant<T>(v));
+		requires numeric<T> Add<E1, Constant<T>>
+		constexpr operator+(SpvExpression<E1> const& u, T const& v) {
+			return { *static_cast<const E1*>(&u), Constant<T>(v) };
 		}
 
 		template<typename E1, typename T>
 		requires numeric<T> Add<Constant<T>, E1>
 		constexpr operator+(T const& v, SpvExpression<E1> const& u) {
-			return Add<Constant<T>, E1>(Constant<T>(v), *static_cast<const E1*>(&u));
+			return { Constant<T>(v), *static_cast<const E1*>(&u) };
+		}
+
+		template<typename E1, typename E2>
+		struct Sub : public SpvExpression<Sub<E1, E2>> {
+			static_assert(std::is_same_v<typename E1::type, typename E2::type>);
+			using type = typename E1::type;
+
+			std::tuple<E2, E1> children;
+			uint32_t id = 0;
+
+			constexpr Sub(E1 e1, E2 e2) : children(e2, e1) {}
+
+		public:
+			constexpr auto to_spirv(auto mod) {
+				auto [eids, resmod] = emit_children(mod, children);
+				auto [tid, mod3] = resmod.template type_id<type>();
+				id = mod3.counter + 1;
+				auto us = std::array{ op(std::is_floating_point_v<typename type::type> ? spv::OpFSub : spv::OpISub, 5), tid, id } << eids;
+				return mod3.code(mod3.counter + 1, us);
+			}
+		};
+
+		template<typename E1, typename E2>
+		Sub<E1, E2> constexpr operator-(SpvExpression<E1> const& u, SpvExpression<E2> const& v) {
+			return Sub<E1, E2>{ *static_cast<const E1*>(&u), *static_cast<const E2*>(&v) };
+		}
+
+		template<typename E1, typename T>
+		requires numeric<T> Sub<E1, Constant<T>>
+		constexpr operator-(SpvExpression<E1> const& u, T const& v) {
+			return { *static_cast<const E1*>(&u), Constant<T>(v) };
+		}
+
+		template<typename E1, typename T>
+		requires numeric<T> Sub<Constant<T>, E1>
+		constexpr operator-(T const& v, SpvExpression<E1> const& u) {
+			return { Constant<T>(v), *static_cast<const E1*>(&u) };
+		}
+
+		template<typename E1, typename E2>
+		struct Mul : public SpvExpression<Mul<E1, E2>> {
+			static_assert(std::is_same_v<typename E1::type, typename E2::type>);
+			using type = typename E1::type;
+
+			std::tuple<E1, E2> children;
+			uint32_t id = 0;
+
+			constexpr Mul(E1 e1, E2 e2) : children(e1, e2) {}
+
+		public:
+			constexpr auto to_spirv(auto mod) {
+				auto [eids, resmod] = emit_children(mod, children);
+				auto [tid, mod3] = resmod.template type_id<type>();
+				id = mod3.counter + 1;
+				auto us = std::array{ op(std::is_floating_point_v<typename type::type> ? spv::OpFMul : spv::OpIMul, 5), tid, id } << eids;
+				return mod3.code(mod3.counter + 1, us);
+			}
+		};
+
+		template<typename E1, typename E2>
+		Mul<E1, E2> constexpr operator*(SpvExpression<E1> const& u, SpvExpression<E2> const& v) {
+			return Mul<E1, E2>{ *static_cast<const E1*>(&u), *static_cast<const E2*>(&v) };
 		}
 
 		template<typename E1, typename T>
 		requires numeric<T> Mul<E1, Constant<T>>
 		constexpr operator*(SpvExpression<E1> const& u, T const& v) {
-			return Mul<E1, Constant<T>>(*static_cast<const E1*>(&u), Constant<T>(v));
+			return { *static_cast<const E1*>(&u), Constant<T>(v) };
 		}
 
 		template<typename E1, typename T>
-		requires numeric<T>
-		constexpr auto operator*(T const& v, SpvExpression<E1> const& u) {
-			return u * v;
+		requires numeric<T> Mul<Constant<T>, E1>
+		constexpr operator*(T const& v, SpvExpression<E1> const& u) {
+			return { Constant<T>(v), *static_cast<const E1*>(&u) };
 		}
+
+		template<typename E1, typename E2>
+		struct Div : public SpvExpression<Div<E1, E2>> {
+			static_assert(std::is_same_v<typename E1::type, typename E2::type>);
+			using type = typename E1::type;
+
+			std::tuple<E2, E1> children;
+			uint32_t id = 0;
+
+			constexpr Div(E1 e1, E2 e2) : children(e2, e1) {}
+
+			static constexpr spv::Op divs[] = { spv::OpUDiv, spv::OpSDiv, spv::OpFDiv };
+
+		public:
+			constexpr auto to_spirv(auto mod) {
+				auto [eids, resmod] = emit_children(mod, children);
+				auto [tid, mod3] = resmod.template type_id<type>();
+				id = mod3.counter + 1;
+				auto us = std::array{ op(divs[to_typeclass<type>()], 5), tid, id } << eids;
+				return mod3.code(mod3.counter + 1, us);
+			}
+		};
+
+		template<typename E1, typename E2>
+		Div<E1, E2> constexpr operator/(SpvExpression<E1> const& u, SpvExpression<E2> const& v) {
+			return Div<E1, E2>{ *static_cast<const E1*>(&u), *static_cast<const E2*>(&v) };
+		}
+
+		template<typename E1, typename T>
+		requires numeric<T> Div<E1, Constant<T>>
+		constexpr operator/(SpvExpression<E1> const& u, T const& v) {
+			return { *static_cast<const E1*>(&u), Constant<T>(v) };
+		}
+
+		template<typename E1, typename T>
+		requires numeric<T> Div<Constant<T>, E1>
+		constexpr operator/(T const& v, SpvExpression<E1> const& u) {
+			return { Constant<T>(v), *static_cast<const E1*>(&u) };
+		}
+
+		template<typename E1>
+		struct UnaryMinus : public SpvExpression<UnaryMinus<E1>> {
+			using type = typename E1::type;
+
+			static_assert(std::is_signed_v<typename type::type> || std::is_floating_point_v<typename type::type>);
+
+			std::tuple<E1> children;
+			uint32_t id = 0;
+
+			constexpr UnaryMinus(E1 e1) : children(e1) {}
+
+		public:
+			constexpr auto to_spirv(auto mod) {
+				auto [eids, resmod] = emit_children(mod, children);
+				auto [tid, mod3] = resmod.template type_id<type>();
+				id = mod3.counter + 1;
+				auto us = std::array{ op(std::is_floating_point_v<typename type::type> ? spv::OpFNegate : spv::OpSNegate, 4), tid, id } << eids;
+				return mod3.code(mod3.counter + 1, us);
+			}
+		};
+
+		template<typename E1>
+		UnaryMinus<E1> constexpr operator-(SpvExpression<E1> const& u) {
+			return { *static_cast<const E1*>(&u) };
+		}
+
+		template<typename E1>
+		struct Load : public SpvExpression<Load<E1>> {
+			using type = typename Deref<typename E1::type, 1u>::type;
+
+			uint32_t id = 0;
+			std::tuple<E1> children;
+			constexpr Load(E1 e1) : children(e1) {}
+
+			constexpr auto to_spirv(auto mod) {
+				auto [tid, modt] = mod.template type_id<type>();
+				auto [e1id, mod1] = emit_children(modt, children);
+				auto us = std::array{ op(spv::OpLoad, 4), tid, mod1.counter + 1 } << e1id;
+				id = mod1.counter + 1;
+				return mod1.code(mod1.counter + 1, us);
+			}
+		};
 
 		template<typename E1, typename E2>
 		struct Store : SpvExpression<Store<E1, E2>> {
@@ -514,44 +621,7 @@ namespace vuk {
 			return AccessChain(Type<ptr<sc, deref_t>>{}, base, Constant{ CIndex }, inds...);
 		}
 
-		enum CmpOp {
-			eGreaterThan = 0,
-			eGreaterThanEqual,
-			eEqual,
-			eNotEqual,
-			eLessThanEqual,
-			eLessThan
-		};
-
-		enum TypeClass {
-			eUint = 0,
-			eSint,
-			eFloat,
-			eBool
-		};
-
-		template<class T>
-		TypeClass to_typeclass() {
-			using type = T::type;
-			if constexpr (std::is_same_v<type, unsigned>) {
-				return TypeClass::eUint;
-			}
-			if constexpr (std::is_same_v<type, signed>) {
-				return TypeClass::eSint;
-			}
-			if constexpr (std::is_same_v<type, float>) {
-				return TypeClass::eFloat;
-			}
-			if constexpr (std::is_same_v<type, bool>) {
-				return TypeClass::eBool;
-			}
-		}
-
-		static constexpr const std::array<spv::Op, 6> Compares[] = {
-			{ spv::OpUGreaterThan, spv::OpUGreaterThanEqual, spv::OpIEqual, spv::OpINotEqual, spv::OpULessThanEqual, spv::OpULessThan },
-			{ spv::OpSGreaterThan, spv::OpSGreaterThanEqual, spv::OpIEqual, spv::OpINotEqual, spv::OpSLessThanEqual, spv::OpSLessThan },
-			{ spv::OpFOrdGreaterThan, spv::OpFOrdGreaterThanEqual, spv::OpFOrdEqual, spv::OpFOrdNotEqual, spv::OpFOrdLessThanEqual, spv::OpFOrdLessThan }
-		};
+		enum CmpOp { eGreaterThan = 0, eGreaterThanEqual, eEqual, eNotEqual, eLessThanEqual, eLessThan };
 
 		template<CmpOp Op, typename E1, typename E2>
 		struct Cmp : SpvExpression<Cmp<Op, E1, E2>> {
@@ -561,14 +631,20 @@ namespace vuk {
 			std::tuple<E2, E1> children;
 			uint32_t id = 0;
 
+			static constexpr const std::array<spv::Op, 6> compares[] = {
+				{ spv::OpUGreaterThan, spv::OpUGreaterThanEqual, spv::OpIEqual, spv::OpINotEqual, spv::OpULessThanEqual, spv::OpULessThan },
+				{ spv::OpSGreaterThan, spv::OpSGreaterThanEqual, spv::OpIEqual, spv::OpINotEqual, spv::OpSLessThanEqual, spv::OpSLessThan },
+				{ spv::OpFOrdGreaterThan, spv::OpFOrdGreaterThanEqual, spv::OpFOrdEqual, spv::OpFOrdNotEqual, spv::OpFOrdLessThanEqual, spv::OpFOrdLessThan }
+			};
+
 			constexpr Cmp(E1 e1, E2 e2) : children(e2, e1) {}
 
 			constexpr auto to_spirv(auto mod) {
 				auto [eids, resmod] = emit_children(mod, children);
 				auto [tid, modt] = resmod.template type_id<type>();
 				id = modt.counter + 1;
-				auto tc = to_typeclass<E1::type>();
-				auto actualop = Compares[tc][Op];
+				auto tc = to_typeclass<typename E1::type>();
+				auto actualop = compares[tc][Op];
 				auto us = std::array{ op(actualop, 5), tid, id } << eids;
 				return modt.code(modt.counter + 1, us);
 			}
@@ -576,13 +652,68 @@ namespace vuk {
 
 		template<typename E1, typename E2>
 		Cmp<CmpOp::eGreaterThan, E1, E2> constexpr operator>(SpvExpression<E1> const& u, SpvExpression<E2> const& v) {
-			return Cmp<CmpOp::eGreaterThan, E1, E2>(*static_cast<const E1*>(&u), *static_cast<const E2*>(&v));
+			return { *static_cast<const E1*>(&u), *static_cast<const E2*>(&v) };
 		}
 
 		template<typename E1, typename T>
 		requires numeric<T> Cmp<CmpOp::eGreaterThan, E1, Constant<T>>
 		constexpr operator>(SpvExpression<E1> const& u, T const& v) {
-			return Cmp<CmpOp::eGreaterThan, E1, Constant<T>>(*static_cast<const E1*>(&u), Constant<T>(v));
+			return { *static_cast<const E1*>(&u), Constant<T>(v) };
+		}
+
+		template<typename E1, typename E2>
+		Cmp<CmpOp::eGreaterThanEqual, E1, E2> constexpr operator>=(SpvExpression<E1> const& u, SpvExpression<E2> const& v) {
+			return { *static_cast<const E1*>(&u), *static_cast<const E2*>(&v) };
+		}
+
+		template<typename E1, typename T>
+		requires numeric<T> Cmp<CmpOp::eGreaterThanEqual, E1, Constant<T>>
+		constexpr operator>=(SpvExpression<E1> const& u, T const& v) {
+			return { *static_cast<const E1*>(&u), Constant<T>(v) };
+		}
+
+		template<typename E1, typename E2>
+		Cmp<CmpOp::eEqual, E1, E2> constexpr operator==(SpvExpression<E1> const& u, SpvExpression<E2> const& v) {
+			return { *static_cast<const E1*>(&u), *static_cast<const E2*>(&v) };
+		}
+
+		template<typename E1, typename T>
+		requires numeric<T> Cmp<CmpOp::eEqual, E1, Constant<T>>
+		constexpr operator==(SpvExpression<E1> const& u, T const& v) {
+			return { *static_cast<const E1*>(&u), Constant<T>(v) };
+		}
+
+		template<typename E1, typename E2>
+		Cmp<CmpOp::eNotEqual, E1, E2> constexpr operator!=(SpvExpression<E1> const& u, SpvExpression<E2> const& v) {
+			return { *static_cast<const E1*>(&u), *static_cast<const E2*>(&v) };
+		}
+
+		template<typename E1, typename T>
+		requires numeric<T> Cmp<CmpOp::eNotEqual, E1, Constant<T>>
+		constexpr operator!=(SpvExpression<E1> const& u, T const& v) {
+			return { *static_cast<const E1*>(&u), Constant<T>(v) };
+		}
+
+		template<typename E1, typename E2>
+		Cmp<CmpOp::eLessThan, E1, E2> constexpr operator<(SpvExpression<E1> const& u, SpvExpression<E2> const& v) {
+			return { *static_cast<const E1*>(&u), *static_cast<const E2*>(&v) };
+		}
+
+		template<typename E1, typename T>
+		requires numeric<T> Cmp<CmpOp::eLessThan, E1, Constant<T>>
+		constexpr operator<(SpvExpression<E1> const& u, T const& v) {
+			return { *static_cast<const E1*>(&u), Constant<T>(v) };
+		}
+
+		template<typename E1, typename E2>
+		Cmp<CmpOp::eLessThanEqual, E1, E2> constexpr operator<=(SpvExpression<E1> const& u, SpvExpression<E2> const& v) {
+			return { *static_cast<const E1*>(&u), *static_cast<const E2*>(&v) };
+		}
+
+		template<typename E1, typename T>
+		requires numeric<T> Cmp<CmpOp::eLessThanEqual, E1, Constant<T>>
+		constexpr operator<=(SpvExpression<E1> const& u, T const& v) {
+			return { *static_cast<const E1*>(&u), Constant<T>(v) };
 		}
 
 		template<typename Cond, typename E1, typename E2>
@@ -599,7 +730,7 @@ namespace vuk {
 				auto [eids, resmod] = emit_children(mod, children);
 				auto [tid, modt] = resmod.template type_id<type>();
 				id = modt.counter + 1;
-				auto us = std::array{ op(spv::OpSelect, 6), tid, id} << eids;
+				auto us = std::array{ op(spv::OpSelect, 6), tid, id } << eids;
 				return modt.code(modt.counter + 1, us);
 			}
 		};
@@ -636,8 +767,6 @@ namespace vuk {
 				                          SPIRType{ type_name<Type<ptr<spv::StorageClassStorageBuffer, uint32_t>>>(), 55u } };
 			SPIRVModule spvmodule{ max_id, no_spirv, 0, no_spirv, 0, no_spirv, predef_types };
 			auto res = expr.to_spirv(spvmodule).second;
-			/* auto prologue = Type<float>{}.to_spirv(201u) + Type<ptr<spv::StorageClassStorageBuffer, float>>{}.to_spirv(202u);
-			return prologue + res;*/
 			return res;
 		}
 
@@ -671,10 +800,10 @@ namespace vuk {
 				std::array fixed_op_entry = std::array{ op(spv::OpEntryPoint, 5 + (uint32_t)builtin_variables.size() + (uint32_t)variable_ids.size()),
 					                                      uint32_t(spv::ExecutionModelGLCompute),
 					                                      4u }
-				    << maintext << builtin_variables;
+				                            << maintext << builtin_variables;
 				std::vector<uint32_t> op_entry(fixed_op_entry.begin(), fixed_op_entry.end());
 				op_entry.insert(op_entry.end(), variable_ids.begin(), variable_ids.end());
-				
+
 				std::vector<uint32_t> final_bc(prelude.begin(), prelude.end());
 				auto it = final_bc.insert(final_bc.end(), op_entry.begin(), op_entry.end());
 				it = final_bc.insert(final_bc.end(), prologue.begin(), prologue.end());

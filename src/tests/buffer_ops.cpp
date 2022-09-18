@@ -125,7 +125,7 @@ TEST_CASE("test unary map") {
 		std::vector data = { 1.f, 2.f, 3.f };
 		// function to apply
 		auto func = [](auto A) {
-			return spirv::select(A > 1.f, 3.f + A, 4.f);
+			return spirv::select(A > 1.f, 3.f + A, 4.f) * spirv::select(A >= 1.f, 3.f + A, -A);
 		};
 		std::vector<float> expected;
 		// cpu result
