@@ -90,7 +90,7 @@ TEST_CASE("test unary map") {
 			test_context.rdoc_api->EndFrameCapture(NULL, NULL);
 		CHECK(out == std::span(expected));
 	}
-	/* {
+	{
 	  if (test_context.rdoc_api)
 	    test_context.rdoc_api->StartFrameCapture(NULL, NULL);
 	  // src data
@@ -117,7 +117,7 @@ TEST_CASE("test unary map") {
 	  if (test_context.rdoc_api)
 	    test_context.rdoc_api->EndFrameCapture(NULL, NULL);
 	  CHECK(out == std::span(expected));
-	}*/
+	}
 	/*{
 		if (test_context.rdoc_api)
 			test_context.rdoc_api->StartFrameCapture(NULL, NULL);

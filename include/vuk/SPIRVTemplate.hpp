@@ -229,7 +229,7 @@ namespace vuk {
 				auto us = std::array{ op(spv::OpTypeRuntimeArray, 3), modt.counter + 1, tid };
 				auto deco =
 				    std::array{ op(spv::OpDecorate, 4), modt.counter + 1, uint32_t(spv::Decoration::DecorationArrayStride), (uint32_t)sizeof(typename T::type) };
-				return std::pair(modt.counter + 1, modt.annotation(modt.counter + 1, deco) + modt.constant(modt.counter + 1, us).second);
+				return std::pair(modt.counter + 1, modt.annotation(modt.counter + 1, deco).constant(modt.counter + 1, us).second);
 			}
 		};
 
@@ -507,34 +507,38 @@ namespace vuk {
 			return AccessChain(Type<ptr<sc, deref_t>>{}, base, Constant{ CIndex }, inds...);
 		}
 
-		template<typename E1, typename E2>
-		struct Cmp : SpvExpression<Cmp<E1, E2>> {
+		enum class CmpOp {
+			eGreaterThan
+		};
+
+		template<CmpOp Op, typename E1, typename E2>
+		struct Cmp : SpvExpression<Cmp<Op, E1, E2>> {
 			static_assert(std::is_same_v<typename E1::type, typename E2::type>);
-			using type = bool; // TODO: vector types
+			using type = Type<bool>; // TODO: vector types
 
-			E1 e1;
-			E2 e2;
+			std::tuple<E2, E1> children;
+			uint32_t id = 0;
 
-			constexpr Cmp(E1 e1, E2 e2) : e1(e1), e2(e2) {}
+			constexpr Cmp(E1 e1, E2 e2) : children(e2, e1) {}
 
-			constexpr auto to_spirv(uint32_t counter) const {
-				auto e1id = counter - 1 - count(e2.to_spirv(counter));
-				auto e1m = e1.to_spirv(e1id);
-				auto e2m = e2.to_spirv(counter - 1);
-				auto us = std::array{ op(spv::OpUGreaterThan, 5), type_id<type>(), counter, e1id, counter - 1 };
-				return e1m + e2m + code(us);
+			constexpr auto to_spirv(auto mod) {
+				auto [eids, resmod] = emit_children(mod, children);
+				auto [tid, modt] = resmod.template type_id<type>();
+				id = modt.counter + 1;
+				auto us = std::array{ op(spv::OpUGreaterThan, 5), tid, id } << eids;
+				return modt.code(modt.counter + 1, us);
 			}
 		};
 
 		template<typename E1, typename E2>
-		Cmp<E1, E2> constexpr operator>(SpvExpression<E1> const& u, SpvExpression<E2> const& v) {
-			return Cmp<E1, E2>(*static_cast<const E1*>(&u), *static_cast<const E2*>(&v));
+		Cmp<CmpOp::eGreaterThan, E1, E2> constexpr operator>(SpvExpression<E1> const& u, SpvExpression<E2> const& v) {
+			return Cmp<CmpOp::eGreaterThan, E1, E2>(*static_cast<const E1*>(&u), *static_cast<const E2*>(&v));
 		}
 
 		template<typename E1, typename T>
-		requires numeric<T> Cmp<E1, Constant<T>>
+		requires numeric<T> Cmp<CmpOp::eGreaterThan, E1, Constant<T>>
 		constexpr operator>(SpvExpression<E1> const& u, T const& v) {
-			return Cmp<E1, Constant<T>>(*static_cast<const E1*>(&u), Constant<T>(v));
+			return Cmp<CmpOp::eGreaterThan, E1, Constant<T>>(*static_cast<const E1*>(&u), Constant<T>(v));
 		}
 
 		template<typename Cond, typename E1, typename E2>
@@ -542,20 +546,17 @@ namespace vuk {
 			static_assert(std::is_same_v<typename E1::type, typename E2::type>);
 			using type = typename E1::type;
 
-			Cond cond;
-			E1 e1;
-			E2 e2;
+			std::tuple<E2, E1, Cond> children;
+			uint32_t id = 0;
 
-			constexpr Select(Cond cond, E1 e1, E2 e2) : cond(cond), e1(e1), e2(e2) {}
+			constexpr Select(Cond cond, E1 e1, E2 e2) : children(e2, e1, cond) {}
 
-			constexpr auto to_spirv(uint32_t counter) const {
-				auto e1id = counter - 1 - count(e2.to_spirv(counter));
-				auto condid = e1id - count(e1.to_spirv(counter));
-				auto condm = cond.to_spirv(condid);
-				auto e1m = e1.to_spirv(e1id);
-				auto e2m = e2.to_spirv(counter - 1);
-				auto us = std::array{ op(spv::OpSelect, 6), type_id<type>(), counter, condid, e1id, counter - 1 };
-				return condm + e1m + e2m + code(us);
+			constexpr auto to_spirv(auto mod) {
+				auto [eids, resmod] = emit_children(mod, children);
+				auto [tid, modt] = resmod.template type_id<type>();
+				id = modt.counter + 1;
+				auto us = std::array{ op(spv::OpSelect, 6), tid, id} << eids;
+				return modt.code(modt.counter + 1, us);
 			}
 		};
 
@@ -623,8 +624,9 @@ namespace vuk {
 				}
 				std::array builtin_variables = { 15u, 45u, 52u, 66u, 71u, 78u };
 
-				std::array fixed_op_entry =
-				    std::array{ op(spv::OpEntryPoint, 5 + builtin_variables.size() + variable_ids.size()), uint32_t(spv::ExecutionModelGLCompute), 4u }
+				std::array fixed_op_entry = std::array{ op(spv::OpEntryPoint, 5 + (uint32_t)builtin_variables.size() + (uint32_t)variable_ids.size()),
+					                                      uint32_t(spv::ExecutionModelGLCompute),
+					                                      4u }
 				    << maintext << builtin_variables;
 				std::vector<uint32_t> op_entry(fixed_op_entry.begin(), fixed_op_entry.end());
 				op_entry.insert(op_entry.end(), variable_ids.begin(), variable_ids.end());
@@ -725,7 +727,7 @@ namespace vuk {
 
 	template<class T, class F>
 	inline Future unary_map(Future src, Future dst, Future count, const F& fn) {
-		constexpr auto spv_result = SPIRVBinaryMap<T, uint32_t>::compile([](auto A, auto B) { return F{}(A); });
+		auto spv_result = SPIRVBinaryMap<T, uint32_t>::compile([](auto A, auto B) { return F{}(A); });
 		static auto pbi = static_compute_pbi(spv_result.second.data(), spv_result.first, "unary");
 		std::shared_ptr<RenderGraph> rgp = std::make_shared<RenderGraph>("unary_map");
 		rgp->attach_in("src", std::move(src));
