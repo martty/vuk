@@ -66,7 +66,7 @@ namespace vuk {
 		enum TypeClass { eUint = 0, eSint, eFloat, eBool };
 
 		template<class T>
-		TypeClass to_typeclass() {
+		constexpr TypeClass to_typeclass() {
 			using type = typename T::type;
 			if constexpr (std::is_same_v<type, unsigned>) {
 				return TypeClass::eUint;
@@ -631,7 +631,7 @@ namespace vuk {
 			std::tuple<E2, E1> children;
 			uint32_t id = 0;
 
-			static constexpr const std::array<spv::Op, 6> compares[] = {
+			static constexpr const std::array<spv::Op, 6> compares[3] = {
 				{ spv::OpUGreaterThan, spv::OpUGreaterThanEqual, spv::OpIEqual, spv::OpINotEqual, spv::OpULessThanEqual, spv::OpULessThan },
 				{ spv::OpSGreaterThan, spv::OpSGreaterThanEqual, spv::OpIEqual, spv::OpINotEqual, spv::OpSLessThanEqual, spv::OpSLessThan },
 				{ spv::OpFOrdGreaterThan, spv::OpFOrdGreaterThanEqual, spv::OpFOrdEqual, spv::OpFOrdNotEqual, spv::OpFOrdLessThanEqual, spv::OpFOrdLessThan }
@@ -760,28 +760,14 @@ namespace vuk {
 			}
 		}
 
-		template<typename E>
-		constexpr auto compile_to_spirv(E& expr, uint32_t max_id) {
-			std::array predef_types = { SPIRType{ type_name<Type<uint32_t>>(), 6u },
-				                          SPIRType{ type_name<Type<bool>>(), 58u },
-				                          SPIRType{ type_name<Type<ptr<spv::StorageClassStorageBuffer, uint32_t>>>(), 55u } };
-			SPIRVModule spvmodule{ max_id, no_spirv, 0, no_spirv, 0, no_spirv, predef_types };
-			auto res = expr.to_spirv(spvmodule).second;
-			return res;
-		}
-
 		template<class Derived>
 		struct SPIRVTemplate {
 			template<class F>
 			static constexpr auto compile(F&& f) {
-				constexpr auto prelude = array_copy<0x0000040 / 4>(Derived::template_bytes);
-				constexpr auto prologue = array_copy<0x00000354 / 4 - 0x0000006c / 4>(Derived::template_bytes + +0x0000006c / 4);
-				constexpr auto builtin_decls = array_copy<0x0000050c / 4 - 0x00000354 / 4>(Derived::template_bytes + 0x00000354 / 4);
-				constexpr auto second_bit = array_copy<0x0000072c / 4 - 0x0000050c / 4>(Derived::template_bytes + 0x0000050c / 4);
-				constexpr auto epilogue = array_copy<6>(Derived::template_bytes + 0x00000738 / 4);
-
 				auto specialized = Derived::specialize(f);
-				auto res = compile_to_spirv(specialized, 200);
+				SPIRVModule spvmodule{ Derived::max_id, no_spirv, 0, no_spirv, 0, no_spirv, Derived::predef_types };
+				auto res = specialized.to_spirv(spvmodule).second;
+
 				std::vector<uint32_t> variable_ids;
 				visit(specialized, [&]<typename T>(const T& node) {
 					if (is_variable<T>::value) {
@@ -795,25 +781,26 @@ namespace vuk {
 					auto byte = i % sizeof(uint32_t);
 					maintext[word] = maintext[word] | (t[i] << 8 * byte);
 				}
-				std::array builtin_variables = { 15u, 45u, 52u, 66u, 71u, 78u };
-
-				std::array fixed_op_entry = std::array{ op(spv::OpEntryPoint, 5 + (uint32_t)builtin_variables.size() + (uint32_t)variable_ids.size()),
+				std::array fixed_op_entry = std::array{ op(spv::OpEntryPoint, 5 + (uint32_t)Derived::builtin_variables.size() + (uint32_t)variable_ids.size()),
 					                                      uint32_t(spv::ExecutionModelGLCompute),
 					                                      4u }
-				                            << maintext << builtin_variables;
+				                            << maintext << Derived::builtin_variables;
 				std::vector<uint32_t> op_entry(fixed_op_entry.begin(), fixed_op_entry.end());
 				op_entry.insert(op_entry.end(), variable_ids.begin(), variable_ids.end());
 
-				std::vector<uint32_t> final_bc(prelude.begin(), prelude.end());
+				std::vector<uint32_t> final_bc(Derived::prelude.begin(), Derived::prelude.end());
 				auto it = final_bc.insert(final_bc.end(), op_entry.begin(), op_entry.end());
-				it = final_bc.insert(final_bc.end(), prologue.begin(), prologue.end());
+				it = final_bc.insert(final_bc.end(), Derived::prologue.begin(), Derived::prologue.end());
 				it = final_bc.insert(final_bc.end(), res.annotations.begin(), res.annotations.begin() + res.annotation_size);
-				it = final_bc.insert(final_bc.end(), builtin_decls.begin(), builtin_decls.end());
+				it = final_bc.insert(final_bc.end(), Derived::builtin_decls.begin(), Derived::builtin_decls.end());
 				it = final_bc.insert(final_bc.end(), res.decls.begin(), res.decls.begin() + res.decl_size);
-				it = final_bc.insert(final_bc.end(), second_bit.begin(), second_bit.end());
+				it = final_bc.insert(final_bc.end(), Derived::second_bit.begin(), Derived::second_bit.end());
 				it = final_bc.insert(final_bc.end(), res.codes.begin(), res.codes.begin() + res.codes.size());
-				it = final_bc.insert(final_bc.end(), epilogue.begin(), epilogue.end());
-				auto arr = concat_array(prelude, prologue, res.annotations, builtin_decls, res.decls, second_bit, res.codes, epilogue, std::array<uint32_t, 25>{});
+				it = final_bc.insert(final_bc.end(), Derived::epilogue.begin(), Derived::epilogue.end());
+				std::array<uint32_t,
+				           Derived::prelude.size() + Derived::prologue.size() + res.annotations.size() + Derived::builtin_decls.size() + res.decls.size() +
+				               Derived::second_bit.size() + res.codes.size() + Derived::epilogue.size() + 25>
+				    arr{};
 				std::copy(final_bc.begin(), final_bc.end(), arr.begin());
 				return std::pair(final_bc.size(), arr);
 			}
@@ -864,6 +851,19 @@ namespace vuk {
 			0x00000042, 0x00000036, 0x00000070, 0x0003003e, 0x00000053, 0x00000052, 0x000200f9, 0x00000054, 0x000200f8, 0x00000054, 0x000100fd, 0x00010038
 		};
 
+		static constexpr uint32_t max_id = 200;
+		static constexpr std::array builtin_variables = { 15u, 45u, 52u, 66u, 71u, 78u };
+		static constexpr std::array predef_types = { spirv::SPIRType{ spirv::type_name<spirv::Type<uint32_t>>(), 6u },
+			                                           spirv::SPIRType{ spirv::type_name<spirv::Type<bool>>(), 58u },
+			                                           spirv::SPIRType{ spirv::type_name<spirv::Type<spirv::ptr<spv::StorageClassStorageBuffer, uint32_t>>>(),
+			                                                            55u } };
+
+		static constexpr std::span prelude = std::span(template_bytes, 0x0000040 / 4);
+		static constexpr std::span prologue = std::span(template_bytes + 0x0000006c / 4, 0x00000354 / 4 - 0x0000006c / 4);
+		static constexpr std::span builtin_decls = std::span(template_bytes + 0x00000354 / 4, 0x0000050c / 4 - 0x00000354 / 4);
+		static constexpr std::span second_bit = std::span(template_bytes + 0x0000050c / 4, 0x0000072c / 4 - 0x0000050c / 4);
+		static constexpr std::span epilogue = std::span(template_bytes + 0x00000738 / 4, 6);
+
 		template<class F>
 		static constexpr auto specialize(F&& f) {
 			using namespace spirv;
@@ -893,15 +893,15 @@ namespace vuk {
 	PipelineBaseInfo* static_compute_pbi(const uint32_t* ptr, size_t size, std::string ident) {
 		vuk::PipelineBaseCreateInfo pci;
 		pci.add_static_spirv(ptr, size, std::move(ident));
-		FILE* fo = fopen("dumb.spv", "wb");
+		/* FILE* fo = fopen("dumb.spv", "wb");
 		fwrite(ptr, sizeof(uint32_t), size, fo);
-		fclose(fo);
+		fclose(fo);*/
 		return test_context.context->get_pipeline(pci);
 	}
 
 	template<class T, class F>
 	inline Future unary_map(Future src, Future dst, Future count, const F& fn) {
-		auto spv_result = SPIRVBinaryMap<T, uint32_t>::compile([](auto A, auto B) { return F{}(A); });
+		constexpr auto spv_result = SPIRVBinaryMap<T, uint32_t>::compile([](auto A, auto B) { return F{}(A); });
 		static auto pbi = static_compute_pbi(spv_result.second.data(), spv_result.first, "unary");
 		std::shared_ptr<RenderGraph> rgp = std::make_shared<RenderGraph>("unary_map");
 		rgp->attach_in("src", std::move(src));
