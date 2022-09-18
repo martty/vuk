@@ -1,0 +1,118 @@
+#version 450
+#pragma shader_stage(compute)
+
+#extension GL_KHR_shader_subgroup_basic : require
+
+layout (local_size_x = 64) in;
+
+layout (std430, binding = 0) buffer coherent readonly BufferIn {
+	uint[] g_idata;
+};
+
+layout (std430, binding = 1) buffer coherent BufferOut {
+	uint[] g_odata;
+};
+
+layout (std430, binding = 2) buffer coherent Temp {
+	uint[] g_temp;
+};
+
+layout (std430, binding = 4) buffer BufferCount {
+    readonly uint wg_count;
+    uint tmp_wg_counter;
+    uint unused;
+    readonly uint count;
+};
+
+// https://developer.nvidia.com/gpugems/gpugems3/part-vi-gpu-computing/chapter-39-parallel-prefix-sum-scan-cuda
+const uint array_size = 128;
+shared uint temp[array_size];
+
+uint linear_index(uvec3 id){
+	uvec3 mp = gl_NumWorkGroups * gl_WorkGroupSize;
+	return id.z * mp.y * mp.x + id.y * mp.x + id.x * 1;
+}
+
+void main() {
+    // needs: tmp_wg_counter == 1
+    uint gid = linear_index(gl_GlobalInvocationID);
+    uint thid = gl_LocalInvocationIndex;
+    int offset = 1;
+    uint n = array_size;
+    temp[2*thid] = g_idata[2*gid].x; // load input into shared memory
+    temp[2*thid+1] = g_idata[2*gid+1].x;
+
+    for (uint d = n>>1; d > 0; d >>= 1) { // build sum in place up the tree
+        barrier();
+        if (thid < d) {
+            uint ai = offset*(2*thid+1)-1;
+            uint bi = offset*(2*thid+2)-1;
+            temp[bi] += temp[ai];
+        }
+        offset *= 2;
+    } 
+
+    if (thid == 0) {
+        g_temp[gl_WorkGroupID.x] = temp[n - 1];
+        temp[n - 1] = 0;  // clear the last element 
+    }
+ 	
+    for (int d = 1; d < n; d *= 2){ // traverse down tree & build scan 
+        offset >>= 1;      
+        barrier();
+        if (thid < d) {
+            uint ai = offset*(2*thid+1)-1;
+            uint bi = offset*(2*thid+2)-1; 
+            uint t = temp[ai]; 
+            temp[ai] = temp[bi];
+            temp[bi] += t;
+        } 
+    }  
+    barrier();
+
+    g_odata[2*gid].x = temp[2*thid]; // write results to device memory      
+    g_odata[2*gid+1].x = temp[2*thid+1];
+
+    if(gl_LocalInvocationIndex == 0){
+        if(atomicAdd(tmp_wg_counter, 1) != (gl_NumWorkGroups.x))
+            return;
+    }
+    atomicExchange(tmp_wg_counter, 1); // reset tmp counter for future dispatches
+    // surviving WG: reduction over temp (needs loop!)
+    n = count / array_size;
+    gid = gl_LocalInvocationIndex;
+
+    offset = 1;
+    temp[2*thid] = g_temp[2*gid].x; // load input into shared memory
+    temp[2*thid+1] = g_temp[2*gid+1].x;
+
+    for (uint d = n>>1; d > 0; d >>= 1) { // build sum in place up the tree
+        barrier();
+        if (thid < d) {
+            uint ai = offset*(2*thid+1)-1;
+            uint bi = offset*(2*thid+2)-1;
+            temp[bi] += temp[ai];
+        }
+        offset *= 2;
+    } 
+
+    if (thid == 0) {
+        temp[n - 1] = 0;  // clear the last element 
+    }
+ 	
+    for (int d = 1; d < n; d *= 2){ // traverse down tree & build scan 
+        offset >>= 1;      
+        barrier();
+        if (thid < d) {
+            uint ai = offset*(2*thid+1)-1;
+            uint bi = offset*(2*thid+2)-1; 
+            uint t = temp[ai]; 
+            temp[ai] = temp[bi];
+            temp[bi] += t;
+        } 
+    }  
+    barrier();
+
+    g_temp[2*gid + array_size].x = temp[2*thid]; // write results to device memory      
+    g_temp[2*gid + array_size + 1].x = temp[2*thid+1];
+}

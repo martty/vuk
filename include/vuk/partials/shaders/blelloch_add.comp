@@ -1,0 +1,37 @@
+#version 450
+#pragma shader_stage(compute)
+
+layout (std430, binding = 1) buffer BufferOut {
+	uint[] g_odata;
+};
+
+layout (std430, binding = 2) buffer readonly Temp {
+	uint[] g_temp;
+};
+
+layout (std430, binding = 4) buffer readonly BufferCount {
+    readonly uint wg_count;
+    uvec2 unused;
+    readonly uint count;
+};
+
+layout (local_size_x = 64) in;
+
+// https://developer.nvidia.com/gpugems/gpugems3/part-vi-gpu-computing/chapter-39-parallel-prefix-sum-scan-cuda
+const uint array_size = 128;
+
+uint linear_index(uvec3 id){
+	uvec3 mp = gl_NumWorkGroups * gl_WorkGroupSize;
+	return id.z * mp.y * mp.x + id.y * mp.x + id.x * 1;
+}
+
+void main() {
+    if(gl_WorkGroupID.x > wg_count - 1) return; // last WG unused
+	uint gid = linear_index(gl_GlobalInvocationID);
+    uint thid = gl_LocalInvocationIndex;
+    uint a1 = g_odata[2*gid + array_size]; // we don't process the first block
+    uint a2 = g_odata[2*gid+1 + array_size];
+
+    g_odata[2*gid + array_size] = a1 + g_temp[gl_WorkGroupID.x + array_size + 1]; // write results to device memory      
+    g_odata[2*gid+1 + array_size] = a2 + g_temp[gl_WorkGroupID.x + array_size + 1];
+}
