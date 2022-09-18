@@ -1,7 +1,7 @@
 #include "TestContext.hpp"
 #include "vuk/AllocatorHelpers.hpp"
 #include "vuk/Partials.hpp"
-#include "vuk/SPIRVTemplate.hpp"
+#include "vuk/partials/Map.hpp"
 #include <doctest/doctest.h>
 
 using namespace vuk;
@@ -34,6 +34,14 @@ constexpr bool operator==(const std::span<const float>& lhs, const std::span<con
 	return std::equal(begin(lhs), end(lhs), begin(rhs), end(rhs));
 }
 
+struct CountWithIndirect {
+	CountWithIndirect(uint32_t count, uint32_t wg_size) : workgroup_count((uint32_t)idivceil(count, wg_size)), count(count) {}
+
+	uint32_t workgroup_count;
+	uint32_t yz[2] = { 1, 1 };
+	uint32_t count;
+};
+
 TEST_CASE("test buffer harness") {
 	REQUIRE(test_context.prepare());
 	auto data = { 1u, 2u, 3u };
@@ -60,7 +68,7 @@ TEST_CASE("test buffer upload/download") {
 	}
 }
 
-TEST_CASE("test unary map") {
+TEST_CASE("test unary_map") {
 	REQUIRE(test_context.prepare());
 	{
 		if (test_context.rdoc_api)
@@ -82,7 +90,7 @@ TEST_CASE("test unary map") {
 		auto [_2, cnt] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(&count_data, 1));
 
 		// apply function on gpu
-		auto calc = unary_map<uint32_t>(src, {}, cnt, func);
+		auto calc = unary_map<uint32_t>(*test_context.context, src, {}, cnt, func);
 		// bring data back to cpu
 		auto res = download_buffer(calc).get<Buffer>(*test_context.allocator, test_context.compiler);
 		auto out = std::span((uint32_t*)res->mapped_ptr, data.size());
@@ -91,32 +99,32 @@ TEST_CASE("test unary map") {
 		CHECK(out == std::span(expected));
 	}
 	{
-	  if (test_context.rdoc_api)
-	    test_context.rdoc_api->StartFrameCapture(NULL, NULL);
-	  // src data
-	  std::vector data = { 1u, 2u, 3u };
-	  // function to apply
-	  auto func = [](auto A) {
-	    return spirv::select(A > 1u, 1u, 2u);
-	  };
-	  std::vector<uint32_t> expected;
-	  // cpu result
-	  std::transform(data.begin(), data.end(), std::back_inserter(expected), func);
+		if (test_context.rdoc_api)
+			test_context.rdoc_api->StartFrameCapture(NULL, NULL);
+		// src data
+		std::vector data = { 1u, 2u, 3u };
+		// function to apply
+		auto func = [](auto A) {
+			return spirv::select(A > 1u, 1u, 2u);
+		};
+		std::vector<uint32_t> expected;
+		// cpu result
+		std::transform(data.begin(), data.end(), std::back_inserter(expected), func);
 
-	  // put data on gpu
-	  auto [_1, src] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(data));
-	  // put count on gpu
-	  CountWithIndirect count_data{ (uint32_t)data.size(), 64 };
-	  auto [_2, cnt] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(&count_data, 1));
+		// put data on gpu
+		auto [_1, src] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(data));
+		// put count on gpu
+		CountWithIndirect count_data{ (uint32_t)data.size(), 64 };
+		auto [_2, cnt] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(&count_data, 1));
 
-	  // apply function on gpu
-	  auto calc = unary_map<uint32_t>(src, {}, cnt, func);
-	  // bring data back to cpu
-	  auto res = download_buffer(calc).get<Buffer>(*test_context.allocator, test_context.compiler);
-	  auto out = std::span((uint32_t*)res->mapped_ptr, data.size());
-	  if (test_context.rdoc_api)
-	    test_context.rdoc_api->EndFrameCapture(NULL, NULL);
-	  CHECK(out == std::span(expected));
+		// apply function on gpu
+		auto calc = unary_map<uint32_t>(*test_context.context, src, {}, cnt, func);
+		// bring data back to cpu
+		auto res = download_buffer(calc).get<Buffer>(*test_context.allocator, test_context.compiler);
+		auto out = std::span((uint32_t*)res->mapped_ptr, data.size());
+		if (test_context.rdoc_api)
+			test_context.rdoc_api->EndFrameCapture(NULL, NULL);
+		CHECK(out == std::span(expected));
 	}
 	{
 		if (test_context.rdoc_api)
@@ -138,10 +146,44 @@ TEST_CASE("test unary map") {
 		auto [_2, cnt] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(&count_data, 1));
 
 		// apply function on gpu
-		auto calc = unary_map<float>(src, {}, cnt, func);
+		auto calc = unary_map<float>(*test_context.context, src, {}, cnt, func);
 		// bring data back to cpu
 		auto res = download_buffer(calc).get<Buffer>(*test_context.allocator, test_context.compiler);
 		auto out = std::span((float*)res->mapped_ptr, data.size());
+		if (test_context.rdoc_api)
+			test_context.rdoc_api->EndFrameCapture(NULL, NULL);
+		CHECK(out == std::span(expected));
+	}
+}
+
+TEST_CASE("test binary_map") {
+	REQUIRE(test_context.prepare());
+	{
+		if (test_context.rdoc_api)
+			test_context.rdoc_api->StartFrameCapture(NULL, NULL);
+		// src data
+		std::vector data0 = { 1.f, 2.f, 3.f };
+		std::vector data1 = { 1.f, 2.f, 3.f };
+		// function to apply
+		auto func = [](auto A, auto B) {
+			return spirv::select(A > 1.f, 3.f + A, 4.f) * spirv::select(B >= 1.f, 3.f + B, -B);
+		};
+		std::vector<float> expected;
+		// cpu result
+		std::transform(data0.begin(), data0.end(), data1.begin(), std::back_inserter(expected), func);
+
+		// put data on gpu
+		auto [_1, src_a] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(data0));
+		auto [_2, src_b] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(data1));
+		// put count on gpu
+		CountWithIndirect count_data{ (uint32_t)data0.size(), 64 };
+		auto [_3, cnt] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(&count_data, 1));
+
+		// apply function on gpu
+		auto calc = binary_map<float>(*test_context.context, src_a, src_b, {}, cnt, func);
+		// bring data back to cpu
+		auto res = download_buffer(calc).get<Buffer>(*test_context.allocator, test_context.compiler);
+		auto out = std::span((float*)res->mapped_ptr, data0.size());
 		if (test_context.rdoc_api)
 			test_context.rdoc_api->EndFrameCapture(NULL, NULL);
 		CHECK(out == std::span(expected));
