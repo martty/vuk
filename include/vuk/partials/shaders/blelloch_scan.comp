@@ -3,7 +3,8 @@
 
 #extension GL_KHR_shader_subgroup_basic : require
 
-layout (local_size_x = 64) in;
+#define SIZE 256
+layout (local_size_x = SIZE) in;
 
 layout (std430, binding = 0) buffer coherent readonly BufferIn {
 	uint[] g_idata;
@@ -25,7 +26,7 @@ layout (std430, binding = 4) buffer BufferCount {
 };
 
 // https://developer.nvidia.com/gpugems/gpugems3/part-vi-gpu-computing/chapter-39-parallel-prefix-sum-scan-cuda
-const uint array_size = 128;
+const uint array_size = 2*SIZE;
 shared uint temp[array_size];
 
 uint linear_index(uvec3 id){
@@ -54,6 +55,7 @@ void main() {
 
     if (thid == 0) {
         g_temp[gl_WorkGroupID.x] = temp[n - 1];
+        g_temp[gl_WorkGroupID.x + array_size] = 0;
         temp[n - 1] = 0;  // clear the last element 
     }
  	
@@ -68,51 +70,60 @@ void main() {
             temp[bi] += t;
         } 
     }  
-    barrier();
 
     g_odata[2*gid].x = temp[2*thid]; // write results to device memory      
     g_odata[2*gid+1].x = temp[2*thid+1];
 
     if(gl_LocalInvocationIndex == 0){
-        if(atomicAdd(tmp_wg_counter, 1) != (gl_NumWorkGroups.x))
-            return;
+        temp[0] = 0;
+        if(atomicAdd(tmp_wg_counter, 1) != (gl_NumWorkGroups.x)){
+            temp[0] = 1;
+        }
+    }
+    barrier();
+    if(temp[0] == 1){
+        return;
     }
     atomicExchange(tmp_wg_counter, 1); // reset tmp counter for future dispatches
+    memoryBarrier();
     // surviving WG: reduction over temp (needs loop!)
-    n = count / array_size;
-    gid = gl_LocalInvocationIndex;
+    n = array_size;//count / array_size;
+    uint loop_count = 1;//(n + array_size - 1) / array_size;
+    for (uint i = 0; i < loop_count; i++){
+        gid = gl_LocalInvocationIndex + array_size*i;
 
-    offset = 1;
-    temp[2*thid] = g_temp[2*gid].x; // load input into shared memory
-    temp[2*thid+1] = g_temp[2*gid+1].x;
+        offset = 1;
+        temp[2*thid] = g_temp[2*gid].x; // load input into shared memory
+        temp[2*thid+1] = g_temp[2*gid+1].x;
 
-    for (uint d = n>>1; d > 0; d >>= 1) { // build sum in place up the tree
-        barrier();
-        if (thid < d) {
-            uint ai = offset*(2*thid+1)-1;
-            uint bi = offset*(2*thid+2)-1;
-            temp[bi] += temp[ai];
-        }
-        offset *= 2;
-    } 
-
-    if (thid == 0) {
-        temp[n - 1] = 0;  // clear the last element 
-    }
- 	
-    for (int d = 1; d < n; d *= 2){ // traverse down tree & build scan 
-        offset >>= 1;      
-        barrier();
-        if (thid < d) {
-            uint ai = offset*(2*thid+1)-1;
-            uint bi = offset*(2*thid+2)-1; 
-            uint t = temp[ai]; 
-            temp[ai] = temp[bi];
-            temp[bi] += t;
+        for (uint d = n>>1; d > 0; d >>= 1) { // build sum in place up the tree
+            barrier();
+            if (thid < d) {
+                uint ai = offset*(2*thid+1)-1;
+                uint bi = offset*(2*thid+2)-1;
+                temp[bi] += temp[ai];
+            }
+            offset *= 2;
         } 
-    }  
-    barrier();
 
-    g_temp[2*gid + array_size].x = temp[2*thid]; // write results to device memory      
-    g_temp[2*gid + array_size + 1].x = temp[2*thid+1];
+        if (thid == 0) {
+            temp[n - 1] = 0;  // clear the last element 
+        }
+ 	
+        for (int d = 1; d < n; d *= 2){ // traverse down tree & build scan 
+            offset >>= 1;
+            barrier();
+            if (thid < d) {
+                uint ai = offset*(2*thid+1)-1;
+                uint bi = offset*(2*thid+2)-1; 
+                uint t = temp[ai]; 
+                temp[ai] = temp[bi];
+                temp[bi] += t;
+            }
+        }
+        barrier();
+
+        g_temp[2*gid + array_size].x = temp[2*thid]; // write results to device memory      
+        g_temp[2*gid + array_size + 1].x = temp[2*thid+1];
+    }
 }

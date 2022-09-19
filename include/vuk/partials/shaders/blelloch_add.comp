@@ -15,10 +15,11 @@ layout (std430, binding = 4) buffer readonly BufferCount {
     readonly uint count;
 };
 
-layout (local_size_x = 64) in;
+#define SIZE 256
+layout (local_size_x = SIZE) in;
 
 // https://developer.nvidia.com/gpugems/gpugems3/part-vi-gpu-computing/chapter-39-parallel-prefix-sum-scan-cuda
-const uint array_size = 128;
+const uint array_size = 2*SIZE;
 
 uint linear_index(uvec3 id){
 	uvec3 mp = gl_NumWorkGroups * gl_WorkGroupSize;
@@ -26,9 +27,8 @@ uint linear_index(uvec3 id){
 }
 
 void main() {
-    if(gl_WorkGroupID.x > wg_count - 1) return; // last WG unused
+    if(gl_WorkGroupID.x >= wg_count - 1) return; // last WG unused
 	uint gid = linear_index(gl_GlobalInvocationID);
-    uint thid = gl_LocalInvocationIndex;
     uint a1 = g_odata[2*gid + array_size]; // we don't process the first block
     uint a2 = g_odata[2*gid+1 + array_size];
 

@@ -70,7 +70,7 @@ inline Future scan(Context& ctx, Future src, Future dst, Future count, uint32_t 
 		rgp->inference_rule("dst", same_size_as("src"));
 	}
 	rgp->attach_in("count", std::move(count));
-	rgp->attach_buffer("temp", Buffer{ .size = 2 * 128 * 4, .memory_usage = vuk::MemoryUsage::eGPUonly });
+	rgp->attach_buffer("temp", Buffer{ .size = 2 * idivceil(max_size, 512) * 4, .memory_usage = vuk::MemoryUsage::eGPUonly });
 	rgp->add_pass({ .name = "scan",
 	                .resources = { "src"_buffer >> eComputeRead,
 	                               "dst"_buffer >> eComputeWrite,
@@ -105,7 +105,7 @@ TEST_CASE("test scan") {
 		if (test_context.rdoc_api)
 			test_context.rdoc_api->StartFrameCapture(NULL, NULL);
 		// src data
-		std::vector<unsigned> data(128 * 65);
+		std::vector<unsigned> data(512 * 512);
 		std::iota(data.begin(), data.end(), 0);
 		// function to apply
 		auto func = [](auto A, auto B) {
@@ -118,11 +118,11 @@ TEST_CASE("test scan") {
 		// put data on gpu
 		auto [_1, src] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(data));
 		// put count on gpu
-		CountWithIndirect count_data{ (uint32_t)data.size(), 128 };
+		CountWithIndirect count_data{ (uint32_t)data.size(), 512 };
 		auto [_2, cnt] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(&count_data, 1));
 
 		// apply function on gpu
-		auto calc = scan<uint32_t>(*test_context.context, src, {}, cnt, 3, func);
+		auto calc = scan<uint32_t>(*test_context.context, src, {}, cnt, data.size(), func);
 		// bring data back to cpu
 		auto res = download_buffer(calc).get<Buffer>(*test_context.allocator, test_context.compiler);
 		auto out = std::span((uint32_t*)res->mapped_ptr, data.size());
