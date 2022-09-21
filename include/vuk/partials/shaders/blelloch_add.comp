@@ -6,12 +6,15 @@ layout (std430, binding = 1) buffer BufferOut {
 };
 
 layout (std430, binding = 2) buffer readonly Temp {
+    uint out_wg_count;
+    uint out_unused[2];
+    uint out_count;
 	uint[] g_temp;
 };
 
 layout (std430, binding = 4) buffer readonly BufferCount {
     readonly uint wg_count;
-    uvec2 unused;
+    uint unused[2];
     readonly uint count;
 };
 

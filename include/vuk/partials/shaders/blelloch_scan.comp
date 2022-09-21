@@ -15,6 +15,9 @@ layout (std430, binding = 1) buffer coherent BufferOut {
 };
 
 layout (std430, binding = 2) buffer coherent Temp {
+    uint out_wg_count;
+    uint out_unused[2];
+    uint out_count;
 	uint[] g_temp;
 };
 
@@ -55,7 +58,7 @@ void main() {
 
     if (thid == 0) {
         g_temp[gl_WorkGroupID.x] = temp[n - 1];
-        g_temp[gl_WorkGroupID.x + array_size] = 0;
+        //g_temp[gl_WorkGroupID.x + array_size] = 0;
         temp[n - 1] = 0;  // clear the last element 
     }
  	
@@ -86,44 +89,50 @@ void main() {
     }
     atomicExchange(tmp_wg_counter, 1); // reset tmp counter for future dispatches
     memoryBarrier();
+    if(count > 512 * 512) { // threshold for 3 level
+        if(gl_LocalInvocationIndex == 0){
+            out_wg_count = (count + 512 * 512 - 1) / (512 * 512);
+            out_unused[0] = 1;
+            out_unused[1] = 1;
+            out_count = (count + 512 - 1) / 512;
+        }
+        return;
+    }
     // surviving WG: reduction over temp (needs loop!)
     n = array_size;//count / array_size;
-    uint loop_count = 1;//(n + array_size - 1) / array_size;
-    for (uint i = 0; i < loop_count; i++){
-        gid = gl_LocalInvocationIndex + array_size*i;
+    gid = gl_LocalInvocationIndex;
 
-        offset = 1;
-        temp[2*thid] = g_temp[2*gid].x; // load input into shared memory
-        temp[2*thid+1] = g_temp[2*gid+1].x;
+    offset = 1;
+    temp[2*thid] = g_temp[2*gid].x; // load input into shared memory
+    temp[2*thid+1] = g_temp[2*gid+1].x;
 
-        for (uint d = n>>1; d > 0; d >>= 1) { // build sum in place up the tree
-            barrier();
-            if (thid < d) {
-                uint ai = offset*(2*thid+1)-1;
-                uint bi = offset*(2*thid+2)-1;
-                temp[bi] += temp[ai];
-            }
-            offset *= 2;
-        } 
-
-        if (thid == 0) {
-            temp[n - 1] = 0;  // clear the last element 
-        }
- 	
-        for (int d = 1; d < n; d *= 2){ // traverse down tree & build scan 
-            offset >>= 1;
-            barrier();
-            if (thid < d) {
-                uint ai = offset*(2*thid+1)-1;
-                uint bi = offset*(2*thid+2)-1; 
-                uint t = temp[ai]; 
-                temp[ai] = temp[bi];
-                temp[bi] += t;
-            }
-        }
+    for (uint d = n>>1; d > 0; d >>= 1) { // build sum in place up the tree
         barrier();
+        if (thid < d) {
+            uint ai = offset*(2*thid+1)-1;
+            uint bi = offset*(2*thid+2)-1;
+            temp[bi] += temp[ai];
+        }
+        offset *= 2;
+    } 
 
-        g_temp[2*gid + array_size].x = temp[2*thid]; // write results to device memory      
-        g_temp[2*gid + array_size + 1].x = temp[2*thid+1];
+    if (thid == 0) {
+        temp[n - 1] = 0;  // clear the last element 
     }
+ 	
+    for (int d = 1; d < n; d *= 2){ // traverse down tree & build scan 
+        offset >>= 1;
+        barrier();
+        if (thid < d) {
+            uint ai = offset*(2*thid+1)-1;
+            uint bi = offset*(2*thid+2)-1; 
+            uint t = temp[ai]; 
+            temp[ai] = temp[bi];
+            temp[bi] += t;
+        }
+    }
+    barrier();
+
+    g_temp[2*gid + array_size].x = temp[2*thid]; // write results to device memory      
+    g_temp[2*gid + array_size + 1].x = temp[2*thid+1];
 }
