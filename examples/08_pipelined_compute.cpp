@@ -55,18 +55,6 @@ namespace {
 			      runner.context->create_named_pipeline("stupidsort", pbci);
 		      }
 
-		      {
-			      vuk::PipelineBaseCreateInfo pbci;
-			      pbci.add_glsl(util::read_entire_file("../../examples/blelloch_scan.comp"), "blelloch_scan.comp");
-			      runner.context->create_named_pipeline("blelloch_scan", pbci);
-		      }
-
-		      {
-			      vuk::PipelineBaseCreateInfo pbci;
-			      pbci.add_glsl(util::read_entire_file("../../examples/blelloch_add.comp"), "blelloch_add.comp");
-			      runner.context->create_named_pipeline("blelloch_add", pbci);
-		      }
-
 		      int chans;
 		      auto doge_image = stbi_load("../../examples/doge.png", &x, &y, &chans, 4);
 

@@ -120,7 +120,9 @@ namespace {
 		      // Make a RenderGraph to process the loaded image
 		      vuk::RenderGraph rg("PP");
 		      rg.add_pass({ .name = "preprocess",
-		                    .resources = { "10_doge"_image >> vuk::eMemoryRead, "10_v1"_image >> vuk::eTransferWrite, "10_v2"_image >> vuk::eComputeWrite },
+		                    .resources = { "10_doge"_image >> (vuk::eTransferRead | vuk::eComputeSampled),
+		                                   "10_v1"_image >> vuk::eTransferWrite,
+		                                   "10_v2"_image >> vuk::eComputeWrite },
 		                    .execute = [x, y](vuk::CommandBuffer& command_buffer) {
 			                    // For the first image, flip the image on the Y axis using a blit
 			                    vuk::ImageBlit blit;
