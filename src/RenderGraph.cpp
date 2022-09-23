@@ -1663,32 +1663,23 @@ namespace vuk {
 		ImageUsageFlags usage;
 		for (const auto& c : chain) {
 			if (c.high_level_access != Access::eManual && c.high_level_access != Access::eConverge) {
-				switch (to_use(c.high_level_access, DomainFlagBits::eAny).layout) {
-				case ImageLayout::eDepthStencilAttachmentOptimal:
-					usage |= ImageUsageFlagBits::eDepthStencilAttachment;
-					break;
-				case ImageLayout::eShaderReadOnlyOptimal: // TODO: more complex analysis
-					usage |= ImageUsageFlagBits::eSampled;
-					break;
-				case ImageLayout::eColorAttachmentOptimal:
+				if (c.high_level_access & (eMemoryRW | eColorResolveRead | eColorResolveWrite | eColorRW)) {
 					usage |= ImageUsageFlagBits::eColorAttachment;
-					break;
-				case ImageLayout::eTransferSrcOptimal:
-					usage |= ImageUsageFlagBits::eTransferSrc;
-					break;
-				case ImageLayout::eTransferDstOptimal:
-					usage |= ImageUsageFlagBits::eTransferDst;
-					break;
-				default:
-					break;
 				}
-				// TODO: this isn't conservative enough, we need more information
-				if (c.use.layout == ImageLayout::eGeneral) {
-					if (c.use.stages & (PipelineStageFlagBits::eComputeShader | PipelineStageFlagBits::eVertexShader | PipelineStageFlagBits::eTessellationControlShader |
-					                    PipelineStageFlagBits::eTessellationEvaluationShader | PipelineStageFlagBits::eGeometryShader |
-					                    PipelineStageFlagBits::eFragmentShader | PipelineStageFlagBits::eRayTracingShaderKHR)) {
-						usage |= ImageUsageFlagBits::eStorage;
-					}
+				if (c.high_level_access & (eMemoryRW | eFragmentSampled | eComputeSampled | eRayTracingSampled | eVertexSampled)) {
+					usage |= ImageUsageFlagBits::eSampled;
+				}
+				if (c.high_level_access & (eMemoryRW | eDepthStencilRW)) {
+					usage |= ImageUsageFlagBits::eDepthStencilAttachment;
+				}
+				if (c.high_level_access & (eMemoryRW | eTransferRead)) {
+					usage |= ImageUsageFlagBits::eTransferSrc;
+				}
+				if (c.high_level_access & (eMemoryRW | eTransferWrite)) {
+					usage |= ImageUsageFlagBits::eTransferDst;
+				}
+				if (c.high_level_access & (eMemoryRW | eFragmentRW | eComputeRW | eRayTracingRW)) {
+					usage |= ImageUsageFlagBits::eStorage;
 				}
 			}
 		}

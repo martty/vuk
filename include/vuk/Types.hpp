@@ -966,58 +966,65 @@ namespace vuk {
 		VkClearValue c;
 	};
 
-	enum Access {
-		eNone,          // as initial use: resource available without synchronization, as final use: resource does not need synchronizing
-		eInfer,         // as final use only: this use must be overwritten/inferred before compiling (internal)
-		eConsume,       // must be overwritten before compiling: this access consumes this name (internal)
-		eConverge,      // converge previous uses (internal)
-		eManual,        // provided explictly (internal)
-		eClear,         // general clearing
-		eTransferClear, // vkCmdClearXXX
-		eColorRW,
-		eColorWrite,
-		eColorRead,
-		eColorResolveRead,  // special op to mark renderpass resolve read
-		eColorResolveWrite, // special op to mark renderpass resolve write
-		eDepthStencilRW,
-		eDepthStencilRead,
-		eInputRead,
-		eVertexSampled,
-		eVertexRead,
-		eAttributeRead,
-		eIndexRead,
-		eIndirectRead,
-		eFragmentSampled,
-		eFragmentRead,
-		eFragmentWrite, // written using image store
-		eFragmentRW,
-		eTransferRead,
-		eTransferWrite,
-		eComputeRead,
-		eComputeWrite,
-		eComputeRW,
-		eComputeSampled,
-		eRayTracingRead,
-		eRayTracingWrite,
-		eRayTracingRW,
-		eRayTracingSampled,
-		eAccelerationStructureBuildRead,
-		eAccelerationStructureBuildWrite,
-		eHostRead,
-		eHostWrite,
-		eHostRW,
-		eMemoryRead,
-		eMemoryWrite,
-		eMemoryRW,
-		eRelease, // release a resource into a future (internal)
-		eReleaseToGraphics,
-		eReleaseToCompute,
-		eReleaseToTransfer,
-		eAcquire, // acquire a resource from a future (internal)
-		eAcquireFromGraphics,
-		eAcquireFromCompute,
-		eAcquireFromTransfer
+	enum Access : uint64_t {
+		eNone = 1ULL << 0,          // as initial use: resource available without synchronization, as final use: resource does not need synchronizing
+		eInfer = 1ULL << 1, // as final use only: this use must be overwritten/inferred before compiling (internal)
+		eConsume = 1ULL << 2, // must be overwritten before compiling: this access consumes this name (internal)
+		eConverge = 1ULL << 3, // converge previous uses (internal)
+		eManual = 1ULL << 4,   // provided explictly (internal)
+		eClear = 1ULL << 5,    // general clearing
+		eTransferClear = 1ULL << 6, // vkCmdClearXXX
+		eColorWrite = 1ULL << 7,
+		eColorRead = 1ULL << 8,
+		eColorRW = eColorWrite | eColorRead,
+		eColorResolveRead = 1ULL << 10, // special op to mark renderpass resolve read
+		eColorResolveWrite = 1ULL << 11, // special op to mark renderpass resolve write
+		eDepthStencilRead = 1ULL << 12,
+		eDepthStencilWrite = 1ULL << 13,
+		eDepthStencilRW = eDepthStencilWrite | eDepthStencilRead,
+		eInputRead = 1ULL << 14,
+		eVertexSampled = 1ULL << 15,
+		eVertexRead = 1ULL << 16,
+		eAttributeRead = 1ULL << 17,
+		eIndexRead = 1ULL << 18,
+		eIndirectRead = 1ULL << 19,
+		eFragmentSampled = 1ULL << 20,
+		eFragmentRead = 1ULL << 21,
+		eFragmentWrite = 1ULL << 22, // written using image store
+		eFragmentRW = eFragmentRead | eFragmentWrite,
+		eTransferRead = 1ULL << 23,
+		eTransferWrite = 1ULL << 24,
+		eTransferRW = eTransferRead | eTransferWrite,
+		eComputeRead = 1ULL << 25,
+		eComputeWrite = 1ULL << 26,
+		eComputeRW = eComputeRead | eComputeWrite,
+		eComputeSampled = 1ULL << 27,
+		eRayTracingRead = 1ULL << 28,
+		eRayTracingWrite = 1ULL << 29,
+		eRayTracingRW = eRayTracingRead | eRayTracingWrite,
+		eRayTracingSampled = 1ULL << 30,
+		eAccelerationStructureBuildRead = 1ULL << 31,
+		eAccelerationStructureBuildWrite = 1ULL << 32,
+		eAccelerationStructureBuildRW = eAccelerationStructureBuildRead | eAccelerationStructureBuildWrite,
+		eHostRead = 1ULL << 33,
+		eHostWrite = 1ULL << 34,
+		eHostRW = eHostRead | eHostWrite,
+		eMemoryRead = 1ULL << 35,
+		eMemoryWrite = 1ULL << 36,
+		eMemoryRW = eMemoryRead | eMemoryWrite,
+		eRelease = 1ULL << 42, // release a resource into a future (internal)
+		eReleaseToGraphics = 1ULL << 43,
+		eReleaseToCompute = 1ULL << 44,
+		eReleaseToTransfer = 1ULL << 45,
+		eAcquire = 1ULL << 46, // acquire a resource from a future (internal)
+		eAcquireFromGraphics = 1ULL << 47,
+		eAcquireFromCompute = 1ULL << 48,
+		eAcquireFromTransfer = 1ULL << 49
 	};
+
+	inline constexpr Access operator|(Access bit0, Access bit1) noexcept {
+		return Access((uint64_t)bit0 | (uint64_t)bit1);
+	}
 
 	enum class DomainFlagBits {
 		eNone = 0,

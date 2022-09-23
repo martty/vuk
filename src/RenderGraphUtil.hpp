@@ -14,178 +14,151 @@ namespace std {
 
 namespace vuk {
 	inline bool is_write_access(Access ia) {
-		switch (ia) {
-		case eColorResolveWrite:
-		case eColorWrite:
-		case eColorRW:
-		case eDepthStencilRW:
-		case eFragmentWrite:
-		case eFragmentRW:
-		case eTransferWrite:
-		case eComputeWrite:
-		case eComputeRW:
-		case eHostWrite:
-		case eHostRW:
-		case eMemoryWrite:
-		case eMemoryRW:
-		case eRayTracingWrite:
-		case eRayTracingRW:
-		case eAccelerationStructureBuildWrite:
-			return true;
-		default:
-			return false;
-		}
+		constexpr uint64_t write_mask = eColorResolveWrite | eColorWrite | eDepthStencilWrite | eFragmentWrite | eTransferWrite | eComputeWrite | eHostWrite |
+		                                eMemoryWrite | eRayTracingWrite | eAccelerationStructureBuildWrite;
+		return ia & write_mask;
 	}
 
 	inline bool is_read_access(Access ia) {
-		switch (ia) {
-		case eColorResolveRead:
-		case eColorRead:
-		case eColorRW:
-		case eDepthStencilRead:
-		case eDepthStencilRW:
-		case eFragmentRead:
-		case eFragmentRW:
-		case eFragmentSampled:
-		case eTransferRead:
-		case eComputeRead:
-		case eComputeSampled:
-		case eComputeRW:
-		case eHostRead:
-		case eHostRW:
-		case eMemoryRead:
-		case eMemoryRW:
-		case eRayTracingRead:
-		case eRayTracingSampled:
-		case eAccelerationStructureBuildRead:
-			return true;
-		default:
-			return false;
+		constexpr uint64_t read_mask = eColorResolveRead | eColorRead | eDepthStencilRead | eFragmentRead | eFragmentSampled | eTransferRead | eComputeRead |
+		                               eComputeSampled | eHostRead | eMemoryRead | eRayTracingRead | eRayTracingSampled | eAccelerationStructureBuildRead;
+		return ia & read_mask;
+	}
+
+	inline ImageLayout combine_layout(ImageLayout a, ImageLayout b) {
+		if (a == ImageLayout::eUndefined) {
+			return b;
 		}
+		if (b == ImageLayout::eUndefined) {
+			return a;
+		}
+		if (a == b) {
+			return a;
+		}
+		if (a == ImageLayout::eDepthStencilReadOnlyOptimal && b == ImageLayout::eDepthStencilAttachmentOptimal ||
+		    b == ImageLayout::eDepthStencilReadOnlyOptimal && a == ImageLayout::eDepthStencilAttachmentOptimal) {
+			return ImageLayout::eDepthStencilAttachmentOptimal;
+		}
+		assert(a != ImageLayout::ePresentSrcKHR && b != ImageLayout::ePresentSrcKHR);
+		return ImageLayout::eGeneral;
 	}
 
 	inline QueueResourceUse to_use(Access ia, DomainFlags domain) {
-		switch (ia) {
-		case eColorResolveWrite:
-		case eColorWrite:
-			return {
-				vuk::PipelineStageFlagBits::eColorAttachmentOutput, vuk::AccessFlagBits::eColorAttachmentWrite, vuk::ImageLayout::eColorAttachmentOptimal, domain
-			};
-		case eColorRW:
-			return { vuk::PipelineStageFlagBits::eColorAttachmentOutput,
-				       vuk::AccessFlagBits::eColorAttachmentWrite | vuk::AccessFlagBits::eColorAttachmentRead,
-				       vuk::ImageLayout::eColorAttachmentOptimal,
-				       domain };
-		case eColorResolveRead:
-		case eColorRead:
-			return {
-				vuk::PipelineStageFlagBits::eColorAttachmentOutput, vuk::AccessFlagBits::eColorAttachmentRead, vuk::ImageLayout::eColorAttachmentOptimal, domain
-			};
-		case eDepthStencilRead:
-			return { vuk::PipelineStageFlagBits::eEarlyFragmentTests | vuk::PipelineStageFlagBits::eLateFragmentTests,
-				       vuk::AccessFlagBits::eDepthStencilAttachmentRead,
-				       vuk::ImageLayout::eDepthStencilAttachmentOptimal,
-				       domain };
-		case eDepthStencilRW:
-			return { vuk::PipelineStageFlagBits::eEarlyFragmentTests | vuk::PipelineStageFlagBits::eLateFragmentTests,
-				       vuk::AccessFlagBits::eDepthStencilAttachmentRead | vuk::AccessFlagBits::eDepthStencilAttachmentWrite,
-				       vuk::ImageLayout::eDepthStencilAttachmentOptimal,
-				       domain };
+		constexpr uint64_t color_read = eColorResolveRead | eColorRead;
+		constexpr uint64_t color_write = eColorResolveWrite | eColorWrite;
+		constexpr uint64_t color_rw = color_read | color_write;
 
-		case eFragmentSampled:
-			return { vuk::PipelineStageFlagBits::eFragmentShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eShaderReadOnlyOptimal, domain };
-		case eFragmentRead:
-			return { vuk::PipelineStageFlagBits::eFragmentShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eGeneral, domain };
-		case eFragmentWrite:
-			return { vuk::PipelineStageFlagBits::eFragmentShader, vuk::AccessFlagBits::eShaderWrite, vuk::ImageLayout::eGeneral, domain };
-		case eFragmentRW:
-			return {
-				vuk::PipelineStageFlagBits::eFragmentShader, vuk::AccessFlagBits::eShaderRead | vuk::AccessFlagBits::eShaderWrite, vuk::ImageLayout::eGeneral, domain
-			};
-
-		case eTransferRead:
-			return { vuk::PipelineStageFlagBits::eTransfer, vuk::AccessFlagBits::eTransferRead, vuk::ImageLayout::eTransferSrcOptimal, domain };
-		case eTransferWrite:
-			return { vuk::PipelineStageFlagBits::eTransfer, vuk::AccessFlagBits::eTransferWrite, vuk::ImageLayout::eTransferDstOptimal, domain };
-
-		case eComputeRead:
-			return { vuk::PipelineStageFlagBits::eComputeShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eGeneral, domain };
-		case eComputeWrite:
-			return { vuk::PipelineStageFlagBits::eComputeShader, vuk::AccessFlagBits::eShaderWrite, vuk::ImageLayout::eGeneral, domain };
-		case eComputeRW:
-			return {
-				vuk::PipelineStageFlagBits::eComputeShader, vuk::AccessFlagBits::eShaderRead | vuk::AccessFlagBits::eShaderWrite, vuk::ImageLayout::eGeneral, domain
-			};
-		case eComputeSampled:
-			return { vuk::PipelineStageFlagBits::eComputeShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eShaderReadOnlyOptimal, domain };
-
-		case eAttributeRead:
-			return { vuk::PipelineStageFlagBits::eVertexInput, vuk::AccessFlagBits::eVertexAttributeRead, vuk::ImageLayout::eGeneral /* ignored */, domain };
-		case eVertexRead:
-			return { vuk::PipelineStageFlagBits::eVertexShader, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eGeneral /* ignored */, domain };
-		case eIndexRead:
-			return { vuk::PipelineStageFlagBits::eVertexInput, vuk::AccessFlagBits::eIndexRead, vuk::ImageLayout::eGeneral /* ignored */, domain };
-		case eIndirectRead:
-			return { vuk::PipelineStageFlagBits::eDrawIndirect, vuk::AccessFlagBits::eIndirectCommandRead, vuk::ImageLayout::eGeneral /* ignored */, domain };
-
-		case eRayTracingRead:
-			return { vuk::PipelineStageFlagBits::eRayTracingShaderKHR,
-				       vuk::AccessFlagBits::eShaderRead | vuk::AccessFlagBits::eAccelerationStructureReadKHR,
-				       vuk::ImageLayout::eGeneral,
-				       domain };
-		case eRayTracingWrite:
-			return { vuk::PipelineStageFlagBits::eRayTracingShaderKHR, vuk::AccessFlagBits::eShaderWrite, vuk::ImageLayout::eGeneral, domain };
-		case eRayTracingRW:
-			return { vuk::PipelineStageFlagBits::eRayTracingShaderKHR,
-				       vuk::AccessFlagBits::eAccelerationStructureReadKHR | vuk::AccessFlagBits::eShaderRead | vuk::AccessFlagBits::eShaderWrite,
-				       vuk::ImageLayout::eGeneral,
-				       domain };
-		case eRayTracingSampled:
-			return { vuk::PipelineStageFlagBits::eRayTracingShaderKHR, vuk::AccessFlagBits::eShaderRead, vuk::ImageLayout::eShaderReadOnlyOptimal, domain };
-
-		case eAccelerationStructureBuildRead:
-			return { vuk::PipelineStageFlagBits::eAccelerationStructureBuildKHR,
-				       vuk::AccessFlagBits::eShaderRead | vuk::AccessFlagBits::eAccelerationStructureReadKHR,
-				       vuk::ImageLayout::eGeneral /* ignored */,
-				       domain };
-		case eAccelerationStructureBuildWrite:
-			return { vuk::PipelineStageFlagBits::eAccelerationStructureBuildKHR,
-				       vuk::AccessFlagBits::eAccelerationStructureWriteKHR,
-				       vuk::ImageLayout::eGeneral /* ignored */,
-				       domain };
-		case eHostRead:
-			return { vuk::PipelineStageFlagBits::eHost, vuk::AccessFlagBits::eHostRead, vuk::ImageLayout::eGeneral, domain };
-		case eHostWrite:
-			return { vuk::PipelineStageFlagBits::eHost, vuk::AccessFlagBits::eHostWrite, vuk::ImageLayout::eGeneral, domain };
-		case eHostRW:
-			return { vuk::PipelineStageFlagBits::eHost, vuk::AccessFlagBits::eHostRead | vuk::AccessFlagBits::eHostWrite, vuk::ImageLayout::eGeneral, domain };
-
-		case eMemoryRead:
-			return { vuk::PipelineStageFlagBits::eAllCommands, vuk::AccessFlagBits::eMemoryRead, vuk::ImageLayout::eGeneral, domain };
-		case eMemoryWrite:
-			return { vuk::PipelineStageFlagBits::eAllCommands, vuk::AccessFlagBits::eMemoryWrite, vuk::ImageLayout::eGeneral, domain };
-		case eMemoryRW:
-			return {
-				vuk::PipelineStageFlagBits::eAllCommands, vuk::AccessFlagBits::eMemoryRead | vuk::AccessFlagBits::eMemoryWrite, vuk::ImageLayout::eGeneral, domain
-			};
-
-		case eNone:
-			return { vuk::PipelineStageFlagBits::eTopOfPipe, vuk::AccessFlagBits{}, vuk::ImageLayout::eUndefined, domain };
-		case eClear:
-			return { vuk::PipelineStageFlagBits::eTransfer, vuk::AccessFlagBits::eTransferWrite, vuk::ImageLayout::eTransferDstOptimal, domain };
-		case eRelease:
-		case eReleaseToGraphics:
-		case eReleaseToCompute:
-		case eReleaseToTransfer:
-		case eAcquire:
-		case eAcquireFromGraphics:
-		case eAcquireFromCompute:
-		case eAcquireFromTransfer:
-			return { vuk::PipelineStageFlagBits::eTopOfPipe, vuk::AccessFlagBits{}, vuk::ImageLayout::eGeneral, domain }; // ignored
-		default:
-			assert(0 && "NYI");
-			return {};
+		QueueResourceUse qr{};
+		if (ia & color_read) {
+			qr.access |= AccessFlagBits::eColorAttachmentRead;
 		}
+		if (ia & color_write) {
+			qr.access |= AccessFlagBits::eColorAttachmentWrite;
+		}
+		if (ia & color_rw) {
+			qr.stages |= PipelineStageFlagBits::eColorAttachmentOutput;
+			qr.layout = combine_layout(qr.layout, ImageLayout::eColorAttachmentOptimal);
+		}
+		if (ia & eDepthStencilRead) {
+			qr.access |= AccessFlagBits::eDepthStencilAttachmentRead;
+			qr.layout = combine_layout(qr.layout, ImageLayout::eDepthStencilReadOnlyOptimal);
+		}
+		if (ia & eDepthStencilWrite) {
+			qr.access |= AccessFlagBits::eDepthStencilAttachmentWrite;
+			qr.layout = combine_layout(qr.layout, ImageLayout::eDepthStencilAttachmentOptimal);
+		}
+		if (ia & eDepthStencilRW) {
+			qr.stages |= PipelineStageFlagBits::eEarlyFragmentTests | PipelineStageFlagBits::eLateFragmentTests;
+		}
+		if (ia & (eFragmentRead | eComputeRead | eVertexRead | eRayTracingRead)) {
+			qr.access |= AccessFlagBits::eShaderRead | AccessFlagBits::eAccelerationStructureReadKHR;
+			qr.layout = combine_layout(qr.layout, ImageLayout::eGeneral);
+		}
+		if (ia & (eFragmentWrite | eComputeWrite | eRayTracingWrite)) {
+			qr.access |= AccessFlagBits::eShaderWrite;
+			qr.layout = combine_layout(qr.layout, ImageLayout::eGeneral);
+		}
+		if (ia & (eFragmentSampled | eComputeSampled | eRayTracingSampled)) {
+			qr.access |= AccessFlagBits::eShaderRead;
+			qr.layout = combine_layout(qr.layout, ImageLayout::eShaderReadOnlyOptimal);
+		}
+
+		if (ia & (eFragmentRW | eFragmentSampled)) {
+			qr.stages |= PipelineStageFlagBits::eFragmentShader;
+		}
+		if (ia & (eComputeRW | eComputeSampled)) {
+			qr.stages |= PipelineStageFlagBits::eComputeShader;
+		}
+		if (ia & (eRayTracingRW | eRayTracingSampled)) {
+			qr.stages |= PipelineStageFlagBits::eRayTracingShaderKHR;
+		}
+
+		if (ia & eTransferRead) {
+			qr.access |= AccessFlagBits::eTransferRead;
+			qr.layout = combine_layout(qr.layout, ImageLayout::eTransferSrcOptimal);
+		}
+		if (ia & eTransferWrite) {
+			qr.access |= AccessFlagBits::eTransferWrite;
+			qr.layout = combine_layout(qr.layout, ImageLayout::eTransferDstOptimal);
+		}
+		if (ia & eTransferRW) {
+			qr.stages |= PipelineStageFlagBits::eTransfer;
+		}
+
+		if (ia & eAttributeRead) {
+			qr.access |= AccessFlagBits::eVertexAttributeRead;
+			qr.stages |= PipelineStageFlagBits::eVertexInput;
+		}
+		if (ia & eIndexRead) {
+			qr.access |= AccessFlagBits::eIndexRead;
+			qr.stages |= PipelineStageFlagBits::eVertexInput;
+		}
+		if (ia & eIndirectRead) {
+			qr.access |= AccessFlagBits::eIndirectCommandRead;
+			qr.stages |= PipelineStageFlagBits::eDrawIndirect;
+		}
+
+		if (ia & eAccelerationStructureBuildRead) {
+			qr.stages |= PipelineStageFlagBits::eAccelerationStructureBuildKHR;
+			qr.access |= AccessFlagBits::eShaderRead | AccessFlagBits::eAccelerationStructureReadKHR;
+		}
+		if (ia & eAccelerationStructureBuildWrite) {
+			qr.stages |= PipelineStageFlagBits::eAccelerationStructureBuildKHR;
+			qr.access |= AccessFlagBits::eAccelerationStructureWriteKHR;
+		}
+
+		if (ia & eHostRead) {
+			qr.access |= AccessFlagBits::eHostRead;
+			qr.layout = combine_layout(qr.layout, ImageLayout::eGeneral);
+		}
+		if (ia & eHostWrite) {
+			qr.access |= AccessFlagBits::eHostWrite;
+			qr.layout = combine_layout(qr.layout, ImageLayout::eGeneral);
+		}
+		if (ia & eHostRW) {
+			qr.stages |= PipelineStageFlagBits::eHost;
+		}
+
+		if (ia & eMemoryRead) {
+			qr.access |= AccessFlagBits::eMemoryRead;
+			qr.layout = combine_layout(qr.layout, ImageLayout::eGeneral);
+		}
+		if (ia & eMemoryWrite) {
+			qr.access |= AccessFlagBits::eMemoryWrite;
+			qr.layout = combine_layout(qr.layout, ImageLayout::eGeneral);
+		}
+		if (ia & eMemoryRW) {
+			qr.stages |= PipelineStageFlagBits::eAllCommands;
+		}
+
+		if (ia & eClear) {
+			qr.stages |= PipelineStageFlagBits::eTransfer;
+			qr.access |= AccessFlagBits::eTransferWrite;
+			qr.layout = combine_layout(qr.layout, ImageLayout::eTransferDstOptimal);
+		}
+
+		qr.domain = domain;
+		return qr;
 	}
 
 	inline bool is_acquire(Access a) {
