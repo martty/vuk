@@ -105,7 +105,7 @@ namespace vuk {
 		rgp->attach_in("count", std::move(count));
 		rgp->add_pass(
 		    { .name = "unary_map",
-		      .resources = { "src"_buffer >> eComputeRead, "dst"_buffer >> eComputeWrite, "count"_buffer >> eComputeRead, "count"_buffer >> eIndirectRead },
+		      .resources = { "src"_buffer >> eComputeRead, "dst"_buffer >> eComputeWrite, "count"_buffer >> (eComputeRead | eIndirectRead)},
 		      .execute = [](CommandBuffer& command_buffer) {
 			      command_buffer.bind_buffer(0, 0, "src");
 			      command_buffer.bind_buffer(0, 1, "dst");
@@ -136,8 +136,7 @@ namespace vuk {
 		                .resources = { "src_a"_buffer >> eComputeRead,
 		                               "src_b"_buffer >> eComputeRead,
 		                               "dst"_buffer >> eComputeWrite,
-		                               "count"_buffer >> eComputeRead,
-		                               "count"_buffer >> eIndirectRead },
+		                               "count"_buffer >> (eComputeRead | eIndirectRead)},
 		      .execute = [](CommandBuffer& command_buffer) {
 			      command_buffer.bind_buffer(0, 0, "src_a");
 			      command_buffer.bind_buffer(0, 1, "dst");

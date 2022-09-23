@@ -77,8 +77,7 @@ inline Future scan(Context& ctx, Future src, Future dst, Future count, uint32_t 
 		                .resources = { "src"_buffer >> eComputeRead,
 		                               "dst"_buffer >> eComputeWrite,
 		                               "temp"_buffer >> eComputeWrite,
-		                               "count"_buffer >> eComputeRW,
-		                               "count"_buffer >> eIndirectRead },
+		                               "count"_buffer >> (eComputeRW | eIndirectRead) },
 		                .execute = [](CommandBuffer& command_buffer) {
 			                command_buffer.bind_buffer(0, 0, "src");
 			                command_buffer.bind_buffer(0, 1, "dst");
@@ -87,17 +86,16 @@ inline Future scan(Context& ctx, Future src, Future dst, Future count, uint32_t 
 			                command_buffer.bind_compute_pipeline(pbi_u);
 			                command_buffer.dispatch_indirect("count");
 		                } });
-		rgp->add_pass(
-		    { .name = "add",
-		      .resources = { "dst+"_buffer >> eComputeRW, "temp+"_buffer >> eComputeRead, "count+"_buffer >> eComputeRead, "count+"_buffer >> eIndirectRead },
-		      .execute = [](CommandBuffer& command_buffer) {
-			      command_buffer.bind_buffer(0, 0, "src");
-			      command_buffer.bind_buffer(0, 1, "dst+");
-			      command_buffer.bind_buffer(0, 2, "temp+");
-			      command_buffer.bind_buffer(0, 4, "count");
-			      command_buffer.bind_compute_pipeline(pbi_a);
-			      command_buffer.dispatch_indirect("count");
-		      } });
+		rgp->add_pass({ .name = "add",
+		                .resources = { "dst+"_buffer >> eComputeRW, "temp+"_buffer >> eComputeRead, "count+"_buffer >> (eComputeRW | eIndirectRead) },
+		                .execute = [](CommandBuffer& command_buffer) {
+			                command_buffer.bind_buffer(0, 0, "src");
+			                command_buffer.bind_buffer(0, 1, "dst+");
+			                command_buffer.bind_buffer(0, 2, "temp+");
+			                command_buffer.bind_buffer(0, 4, "count");
+			                command_buffer.bind_compute_pipeline(pbi_a);
+			                command_buffer.dispatch_indirect("count");
+		                } });
 		return { rgp, "dst++" };
 	} else {
 		rgp->attach_buffer("tempup", Buffer{ .size = 513 * sizeof(uint32_t) + sizeof(CountWithIndirect), .memory_usage = vuk::MemoryUsage::eGPUonly });
@@ -106,8 +104,7 @@ inline Future scan(Context& ctx, Future src, Future dst, Future count, uint32_t 
 		                .resources = { "src"_buffer >> eComputeRead,
 		                               "dst"_buffer >> eComputeWrite,
 		                               "tempup"_buffer >> eComputeWrite,
-		                               "count"_buffer >> eComputeRW,
-		                               "count"_buffer >> eIndirectRead },
+		                               "count"_buffer >> (eComputeRW | eIndirectRead) },
 		                .execute = [](CommandBuffer& command_buffer) {
 			                command_buffer.bind_buffer(0, 0, "src");
 			                command_buffer.bind_buffer(0, 1, "dst");
@@ -117,17 +114,15 @@ inline Future scan(Context& ctx, Future src, Future dst, Future count, uint32_t 
 			                command_buffer.dispatch_indirect("count");
 		                } });
 		rgp->attach_buffer(
-		    "temp2", Buffer{ .size = (idivceil(max_size, 512 * 512) + 512) * sizeof(uint32_t) + sizeof(CountWithIndirect), .memory_usage = vuk::MemoryUsage::eGPUonly });
+		    "temp2",
+		    Buffer{ .size = (idivceil(max_size, 512 * 512) + 512) * sizeof(uint32_t) + sizeof(CountWithIndirect), .memory_usage = vuk::MemoryUsage::eGPUonly });
 		// if we are doing 3-pass (can handle up to 512 * 512 * 512), we skip final WG trick and run a new dispatch instead (which uses final WG trick)
 		// we write out the third level count in the final WG trick
 		// new dispatch reads from temp and uses temp2 as temporary
 		// we then do one add pass into temp (temp2 -> temp)
 		// then another pass into dst (temp -> dst)
 		rgp->add_pass({ .name = "scan2",
-		                .resources = { "tempup+"_buffer >> eComputeRead,
-		                               "tempdown"_buffer >> eComputeWrite,
-		                               "temp2"_buffer >> eComputeRW,
-		                               "tempup+"_buffer >> eIndirectRead },
+		                .resources = { "tempup+"_buffer >> (eComputeRead | eIndirectRead), "tempdown"_buffer >> eComputeWrite, "temp2"_buffer >> eComputeRW },
 		                .execute = [](CommandBuffer& command_buffer) {
 			                command_buffer.bind_buffer(0, 0, command_buffer.get_resource_buffer("tempup+")->add_offset(sizeof(CountWithIndirect)));
 			                command_buffer.bind_buffer(0, 1, command_buffer.get_resource_buffer("tempdown+")->add_offset(sizeof(CountWithIndirect)));
@@ -137,10 +132,7 @@ inline Future scan(Context& ctx, Future src, Future dst, Future count, uint32_t 
 			                command_buffer.dispatch_indirect("tempup+");
 		                } });
 		rgp->add_pass({ .name = "add2",
-		                .resources = { "tempdown+"_buffer >> eComputeRW,
-		                               "temp2+"_buffer >> eComputeRead,
-		                               "tempup+"_buffer >> eComputeRead,
-		                               "tempup+"_buffer >> eIndirectRead },
+		                .resources = { "tempdown+"_buffer >> eComputeRW, "temp2+"_buffer >> eComputeRead, "tempup+"_buffer >> (eComputeRead | eIndirectRead) },
 		                .execute = [](CommandBuffer& command_buffer) {
 			                command_buffer.bind_buffer(0, 1, command_buffer.get_resource_buffer("tempdown+")->add_offset(sizeof(CountWithIndirect)));
 			                command_buffer.bind_buffer(0, 2, "temp2+");
@@ -148,16 +140,15 @@ inline Future scan(Context& ctx, Future src, Future dst, Future count, uint32_t 
 			                command_buffer.bind_compute_pipeline(pbi_a);
 			                command_buffer.dispatch_indirect("tempup+");
 		                } });
-		rgp->add_pass(
-		    { .name = "add",
-		      .resources = { "dst+"_buffer >> eComputeRW, "tempdown++"_buffer >> eComputeRead, "count+"_buffer >> eComputeRead, "count+"_buffer >> eIndirectRead },
-		      .execute = [](CommandBuffer& command_buffer) {
-			      command_buffer.bind_buffer(0, 1, "dst+");
-			      command_buffer.bind_buffer(0, 2, "tempdown++");
-			      command_buffer.bind_buffer(0, 4, "count+");
-			      command_buffer.bind_compute_pipeline(pbi_a);
-			      command_buffer.dispatch_indirect("count+");
-		      } });
+		rgp->add_pass({ .name = "add",
+		                .resources = { "dst+"_buffer >> eComputeRW, "tempdown++"_buffer >> eComputeRead, "count+"_buffer >> (eComputeRead | eIndirectRead) },
+		                .execute = [](CommandBuffer& command_buffer) {
+			                command_buffer.bind_buffer(0, 1, "dst+");
+			                command_buffer.bind_buffer(0, 2, "tempdown++");
+			                command_buffer.bind_buffer(0, 4, "count+");
+			                command_buffer.bind_compute_pipeline(pbi_a);
+			                command_buffer.dispatch_indirect("count+");
+		                } });
 		return { rgp, "dst++" };
 	}
 }
