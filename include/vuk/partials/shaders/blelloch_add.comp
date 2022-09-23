@@ -24,6 +24,8 @@ layout (local_size_x = SIZE) in;
 // https://developer.nvidia.com/gpugems/gpugems3/part-vi-gpu-computing/chapter-39-parallel-prefix-sum-scan-cuda
 const uint array_size = 2*SIZE;
 
+layout(constant_id = 0) const uint temp_offset = array_size;
+
 uint linear_index(uvec3 id){
 	uvec3 mp = gl_NumWorkGroups * gl_WorkGroupSize;
 	return id.z * mp.y * mp.x + id.y * mp.x + id.x * 1;
@@ -35,6 +37,6 @@ void main() {
     uint a1 = g_odata[2*gid + array_size]; // we don't process the first block
     uint a2 = g_odata[2*gid+1 + array_size];
 
-    g_odata[2*gid + array_size] = a1 + g_temp[gl_WorkGroupID.x + array_size + 1]; // write results to device memory      
-    g_odata[2*gid+1 + array_size] = a2 + g_temp[gl_WorkGroupID.x + array_size + 1];
+    g_odata[2*gid + array_size] = a1 + g_temp[gl_WorkGroupID.x + temp_offset + 1]; // write results to device memory      
+    g_odata[2*gid+1 + array_size] = a2 + g_temp[gl_WorkGroupID.x + temp_offset + 1];
 }

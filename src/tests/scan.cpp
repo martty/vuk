@@ -98,8 +98,11 @@ inline Future scan(Context& ctx, Future src, Future dst, Future count, uint32_t 
 		                } });
 		return { rgp, "dst++" };
 	} else {
-		rgp->attach_buffer("tempup", Buffer{ .size = 513 * sizeof(uint32_t) + sizeof(CountWithIndirect), .memory_usage = vuk::MemoryUsage::eGPUonly });
-		rgp->attach_buffer("tempdown", Buffer{ .size = 513 * sizeof(uint32_t) + sizeof(CountWithIndirect), .memory_usage = vuk::MemoryUsage::eGPUonly });
+		rgp->attach_buffer(
+		    "tempup", Buffer{ .size = (idivceil(max_size, 512) + 512) * sizeof(uint32_t) + sizeof(CountWithIndirect), .memory_usage = vuk::MemoryUsage::eGPUonly });
+		rgp->attach_buffer(
+		    "tempdown",
+		    Buffer{ .size = (idivceil(max_size, 512) + 512) * sizeof(uint32_t) + sizeof(CountWithIndirect), .memory_usage = vuk::MemoryUsage::eGPUonly });
 		rgp->add_pass({ .name = "scan",
 		                .resources = { "src"_buffer >> eComputeRead,
 		                               "dst"_buffer >> eComputeWrite,
@@ -147,6 +150,7 @@ inline Future scan(Context& ctx, Future src, Future dst, Future count, uint32_t 
 			                command_buffer.bind_buffer(0, 2, "tempdown++");
 			                command_buffer.bind_buffer(0, 4, "count+");
 			                command_buffer.bind_compute_pipeline(pbi_a);
+			                command_buffer.specialize_constants(0, 0);
 			                command_buffer.dispatch_indirect("count+");
 		                } });
 		return { rgp, "dst++" };
@@ -159,7 +163,36 @@ TEST_CASE("test scan") {
 		if (test_context.rdoc_api)
 			test_context.rdoc_api->StartFrameCapture(NULL, NULL);
 		// src data
-		std::vector<unsigned> data(20 * 512);
+		std::vector<unsigned> data(25);
+		std::fill(data.begin(), data.end(), 1u);
+		// function to apply
+		auto func = [](auto A, auto B) {
+			return A + B;
+		};
+		std::vector<uint32_t> expected;
+		// cpu result
+		std::exclusive_scan(data.begin(), data.end(), std::back_inserter(expected), 0, func);
+
+		// put data on gpu
+		auto [_1, src] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(data));
+		// put count on gpu
+		CountWithIndirect count_data{ (uint32_t)15, 512 };
+		auto [_2, cnt] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(&count_data, 1));
+
+		// apply function on gpu
+		auto calc = scan<uint32_t>(*test_context.context, src, {}, cnt, 15, func);
+		// bring data back to cpu
+		auto res = download_buffer(calc).get<Buffer>(*test_context.allocator, test_context.compiler);
+		auto out = std::span((uint32_t*)res->mapped_ptr, 15);
+		if (test_context.rdoc_api)
+			test_context.rdoc_api->EndFrameCapture(NULL, NULL);
+		CHECK(out == std::span(expected));
+	}
+	{
+		if (test_context.rdoc_api)
+			test_context.rdoc_api->StartFrameCapture(NULL, NULL);
+		// src data
+		std::vector<unsigned> data(512 * 512);
 		std::fill(data.begin(), data.end(), 1u);
 		// function to apply
 		auto func = [](auto A, auto B) {
@@ -188,7 +221,7 @@ TEST_CASE("test scan") {
 		if (test_context.rdoc_api)
 			test_context.rdoc_api->StartFrameCapture(NULL, NULL);
 		// src data
-		std::vector<unsigned> data(512 * 513);
+		std::vector<unsigned> data(512 * 512 * 2);
 		std::fill(data.begin(), data.end(), 1u);
 		// function to apply
 		auto func = [](auto A, auto B) {
