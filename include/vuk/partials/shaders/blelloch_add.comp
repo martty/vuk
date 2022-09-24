@@ -34,6 +34,7 @@ uint linear_index(uvec3 id){
 void main() {
     if(gl_WorkGroupID.x >= wg_count - 1) return; // last WG unused
 	uint gid = linear_index(gl_GlobalInvocationID);
+    if(gid >= count) return;
     uint a1 = g_odata[2*gid + array_size]; // we don't process the first block
     uint a2 = g_odata[2*gid+1 + array_size];
 

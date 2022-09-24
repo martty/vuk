@@ -159,7 +159,8 @@ inline Future scan(Context& ctx, Future src, Future dst, Future count, uint32_t 
 
 TEST_CASE("test scan") {
 	REQUIRE(test_context.prepare());
-	{
+	SUBCASE("smaller than 1 WG scan") {
+		// fill a buffer with 25 elements, but then only scan 15
 		if (test_context.rdoc_api)
 			test_context.rdoc_api->StartFrameCapture(NULL, NULL);
 		// src data
@@ -171,7 +172,7 @@ TEST_CASE("test scan") {
 		};
 		std::vector<uint32_t> expected;
 		// cpu result
-		std::exclusive_scan(data.begin(), data.end(), std::back_inserter(expected), 0, func);
+		std::exclusive_scan(data.begin(), data.begin() + 15, std::back_inserter(expected), 0, func);
 
 		// put data on gpu
 		auto [_1, src] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(data));
@@ -188,7 +189,7 @@ TEST_CASE("test scan") {
 			test_context.rdoc_api->EndFrameCapture(NULL, NULL);
 		CHECK(out == std::span(expected));
 	}
-	{
+	SUBCASE("2-level scan") {
 		if (test_context.rdoc_api)
 			test_context.rdoc_api->StartFrameCapture(NULL, NULL);
 		// src data
@@ -217,7 +218,7 @@ TEST_CASE("test scan") {
 			test_context.rdoc_api->EndFrameCapture(NULL, NULL);
 		CHECK(out == std::span(expected));
 	}
-	{
+	SUBCASE("3-level scan") {
 		if (test_context.rdoc_api)
 			test_context.rdoc_api->StartFrameCapture(NULL, NULL);
 		// src data

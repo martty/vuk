@@ -43,8 +43,14 @@ void main() {
     uint thid = gl_LocalInvocationIndex;
     int offset = 1;
     uint n = array_size;
-    temp[2*thid] = g_idata[2*gid].x; // load input into shared memory
-    temp[2*thid+1] = g_idata[2*gid+1].x;
+    if(2*gid < count)
+        temp[2*thid] = g_idata[2*gid].x; // load input into shared memory
+    else
+        temp[2*thid] = 0;
+    if(2*gid + 1 < count)
+        temp[2*thid+1] = g_idata[2*gid+1].x;
+    else
+        temp[2*thid+1] = 0;
 
     for (uint d = n>>1; d > 0; d >>= 1) { // build sum in place up the tree
         barrier();
@@ -58,7 +64,6 @@ void main() {
 
     if (thid == 0) {
         g_temp[gl_WorkGroupID.x] = temp[n - 1];
-        //g_temp[gl_WorkGroupID.x + array_size] = 0;
         temp[n - 1] = 0;  // clear the last element 
     }
  	
@@ -74,8 +79,10 @@ void main() {
         } 
     }  
 
-    g_odata[2*gid].x = temp[2*thid]; // write results to device memory      
-    g_odata[2*gid+1].x = temp[2*thid+1];
+    if(2*gid < count)
+        g_odata[2*gid].x = temp[2*thid]; // write results to device memory      
+    if(2*gid + 1 < count)
+        g_odata[2*gid+1].x = temp[2*thid+1];
 
     if(gl_LocalInvocationIndex == 0){
         temp[0] = 0;
@@ -99,7 +106,7 @@ void main() {
         return;
     }
     // surviving WG: reduction over temp (needs loop!)
-    n = array_size;//count / array_size;
+    n = count / array_size;
     gid = gl_LocalInvocationIndex;
 
     offset = 1;
