@@ -61,8 +61,6 @@ namespace vuk {
 			uint32_t spirv_id;
 		};
 
-		static constexpr std::array<SPIRType, 0> no_types = {};
-
 		enum TypeClass { eUint = 0, eSint, eFloat, eBool };
 
 		template<class T>
@@ -82,7 +80,7 @@ namespace vuk {
 			}
 		}
 
-		template<size_t Section8Len, size_t Section9Len, size_t Section11Len, size_t NTypes>
+		template<size_t Section8Len, size_t Section9Len, size_t Section11Len>
 		struct SPIRVModule {
 			uint32_t counter;
 			std::array<uint32_t, Section8Len> annotations;
@@ -91,7 +89,7 @@ namespace vuk {
 			uint32_t decl_size = 0;
 			std::array<uint32_t, Section11Len> codes;
 
-			std::array<SPIRType, NTypes> types;
+			std::vector<SPIRType> types;
 
 			constexpr SPIRVModule(uint32_t id_counter,
 			                      std::array<uint32_t, Section8Len> annotations,
@@ -99,7 +97,7 @@ namespace vuk {
 			                      std::array<uint32_t, Section9Len> decls,
 			                      uint32_t decl_size,
 			                      std::array<uint32_t, Section11Len> codes,
-			                      std::array<SPIRType, NTypes> types) :
+			                      std::vector<SPIRType> types) :
 			    counter(id_counter),
 			    annotations(annotations),
 			    annotation_size(annotation_size),
@@ -111,8 +109,8 @@ namespace vuk {
 			template<class T>
 			constexpr auto type_id();
 
-			template<size_t OSection8Len, size_t OSection9Len, size_t OSection11Len, size_t ONTypes>
-			constexpr auto operator+(SPIRVModule<OSection8Len, OSection9Len, OSection11Len, ONTypes> o) {
+			template<size_t OSection8Len, size_t OSection9Len, size_t OSection11Len>
+			constexpr auto operator+(SPIRVModule<OSection8Len, OSection9Len, OSection11Len> o) {
 				std::array<uint32_t, Section8Len + OSection8Len> merged_annots = {};
 				{
 					auto endit = std::copy_n(annotations.begin(), annotation_size, merged_annots.begin());
@@ -124,31 +122,33 @@ namespace vuk {
 					auto endit = std::copy_n(decls.begin(), decl_size, merged_decls.begin());
 					std::copy_n(o.decls.begin(), o.decl_size, endit);
 				}
-				return SPIRVModule<Section8Len + OSection8Len, Section9Len + OSection9Len, Section11Len + OSection11Len, NTypes + ONTypes>{
-					std::max(counter, o.counter), merged_annots, annotation_size + o.annotation_size, merged_decls, decl_size + o.decl_size, concat_array(codes, o.codes),
-					concat_array(types, o.types)
+				auto ntypes = types;
+				ntypes.insert(ntypes.end(), o.types.begin(), o.types.end());
+				return SPIRVModule<Section8Len + OSection8Len, Section9Len + OSection9Len, Section11Len + OSection11Len>{
+					std::max(counter, o.counter), merged_annots, annotation_size + o.annotation_size, merged_decls, decl_size + o.decl_size,
+					concat_array(codes, o.codes), ntypes
 				};
 			}
 
 			template<size_t N>
 			constexpr auto code(uint32_t counter, std::array<uint32_t, N> v) {
-				return std::pair(counter, *this + SPIRVModule<0, 0, N, 0>{ counter, no_spirv, 0, no_spirv, 0, v, no_types });
+				return std::pair(counter, *this + SPIRVModule<0, 0, N>{ counter, no_spirv, 0, no_spirv, 0, v, {} });
 			}
 
 			template<size_t N>
 			constexpr auto constant(uint32_t counter, std::array<uint32_t, N> v) {
-				return std::pair(counter, *this + SPIRVModule<0, N, 0, 0>{ counter, no_spirv, 0, v, N, no_spirv, no_types });
+				return std::pair(counter, *this + SPIRVModule<0, N, 0>{ counter, no_spirv, 0, v, N, no_spirv, {} });
 			}
 
 			template<size_t N>
 			constexpr auto annotation(uint32_t counter, std::array<uint32_t, N> v) {
-				return *this + SPIRVModule<N, 0, 0, 0>{ counter, v, N, no_spirv, 0, no_spirv, no_types };
+				return *this + SPIRVModule<N, 0, 0>{ counter, v, N, no_spirv, 0, no_spirv, {} };
 			}
 		};
 
-		template<size_t Section8Len, size_t Section9Len, size_t Section11Len, size_t NTypes>
+		template<size_t Section8Len, size_t Section9Len, size_t Section11Len>
 		template<class T>
-		constexpr auto SPIRVModule<Section8Len, Section9Len, Section11Len, NTypes>::type_id() {
+		constexpr auto SPIRVModule<Section8Len, Section9Len, Section11Len>::type_id() {
 			auto tn = type_name<T>();
 			uint32_t id;
 			bool found = false;
@@ -160,14 +160,14 @@ namespace vuk {
 				}
 			}
 			auto [declid, declmod] = T::to_spirv(*this);
-			auto new_types_arr = std::array{ SPIRType{ tn, declid } };
+			auto new_types_arr = std::vector{ SPIRType{ tn, declid } };
 			if (!found) {
-				return std::pair(declid, declmod + SPIRVModule<0, 0, 0, 1>{ declid, no_spirv, 0, no_spirv, 0, no_spirv, new_types_arr });
+				return std::pair(declid, declmod + SPIRVModule<0, 0, 0>{ declid, no_spirv, 0, no_spirv, 0, no_spirv, new_types_arr });
 			} else {
 				declmod.counter = counter;
 				declmod.decl_size = decl_size;
 				declmod.annotation_size = annotation_size;
-				return std::pair(id, declmod + SPIRVModule<0, 0, 0, 1>{ id, no_spirv, 0, no_spirv, 0, no_spirv, {} });
+				return std::pair(id, declmod + SPIRVModule<0, 0, 0>{ id, no_spirv, 0, no_spirv, 0, no_spirv, {} });
 			}
 		}
 
@@ -286,7 +286,7 @@ namespace vuk {
 				auto us = std::array{ op(spv::OpTypeRuntimeArray, 3), modt.counter + 1, tid };
 				auto deco =
 				    std::array{ op(spv::OpDecorate, 4), modt.counter + 1, uint32_t(spv::Decoration::DecorationArrayStride), (uint32_t)sizeof(typename T::type) };
-				return std::pair(modt.counter + 1, modt + SPIRVModule{ modt.counter + 1, deco, (uint32_t)deco.size(), us, (uint32_t)us.size(), no_spirv, no_types });
+				return std::pair(modt.counter + 1, modt + SPIRVModule{ modt.counter + 1, deco, (uint32_t)deco.size(), us, (uint32_t)us.size(), no_spirv, {} });
 			}
 		};
 
