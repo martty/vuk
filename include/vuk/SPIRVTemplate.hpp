@@ -35,8 +35,6 @@ namespace vuk {
 		template<class T>
 		concept numeric = std::is_integral_v<T> || std::is_floating_point_v<T>;
 
-		static constexpr std::array<uint32_t, 0> no_spirv = {};
-
 		constexpr uint32_t op(spv::Op inop, uint32_t word_count) {
 			uint32_t lower = inop & spv::OpCodeMask;
 			uint32_t upper = (word_count << spv::WordCountShift) & 0xFFFF0000u;
@@ -83,66 +81,66 @@ namespace vuk {
 		template<size_t Section8Len, size_t Section9Len, size_t Section11Len>
 		struct SPIRVModule {
 			uint32_t counter;
-			std::array<uint32_t, Section8Len> annotations;
-			uint32_t annotation_size = 0;
-			std::array<uint32_t, Section9Len> decls;
-			uint32_t decl_size = 0;
-			std::array<uint32_t, Section11Len> codes;
+			static constexpr size_t static_annotation_size = Section8Len;
+			std::vector<uint32_t> annotations;
+			static constexpr size_t static_decl_size = Section9Len;
+			std::vector<uint32_t> decls;
+			static constexpr size_t static_code_size = Section11Len;
+			std::vector<uint32_t> codes;
 
 			std::vector<SPIRType> types;
 
 			constexpr SPIRVModule(uint32_t id_counter,
-			                      std::array<uint32_t, Section8Len> annotations,
-			                      uint32_t annotation_size,
-			                      std::array<uint32_t, Section9Len> decls,
-			                      uint32_t decl_size,
-			                      std::array<uint32_t, Section11Len> codes,
+			                      std::vector<uint32_t> annotations,
+			                      std::vector<uint32_t> decls,
+			                      std::vector<uint32_t> codes,
 			                      std::vector<SPIRType> types) :
 			    counter(id_counter),
-			    annotations(annotations),
-			    annotation_size(annotation_size),
-			    decls(decls),
-			    decl_size(decl_size),
-			    codes(codes),
-			    types(types) {}
+			    annotations(std::move(annotations)),
+			    decls(std::move(decls)),
+			    codes(std::move(codes)),
+			    types(std::move(types)) {}
 
 			template<class T>
 			constexpr auto type_id();
 
 			template<size_t OSection8Len, size_t OSection9Len, size_t OSection11Len>
-			constexpr auto operator+(SPIRVModule<OSection8Len, OSection9Len, OSection11Len> o) {
-				std::array<uint32_t, Section8Len + OSection8Len> merged_annots = {};
-				{
-					auto endit = std::copy_n(annotations.begin(), annotation_size, merged_annots.begin());
-					std::copy_n(o.annotations.begin(), o.annotation_size, endit);
-				}
+			constexpr auto operator+(SPIRVModule<OSection8Len, OSection9Len, OSection11Len>&& o) {
+				annotations.insert(annotations.end(), o.annotations.begin(), o.annotations.end());
+				decls.insert(decls.end(), o.decls.begin(), o.decls.end());
+				codes.insert(codes.end(), o.codes.begin(), o.codes.end());
+				types.insert(types.end(), o.types.begin(), o.types.end());
 
-				std::array<uint32_t, Section9Len + OSection9Len> merged_decls = {};
-				{
-					auto endit = std::copy_n(decls.begin(), decl_size, merged_decls.begin());
-					std::copy_n(o.decls.begin(), o.decl_size, endit);
-				}
-				auto ntypes = types;
-				ntypes.insert(ntypes.end(), o.types.begin(), o.types.end());
 				return SPIRVModule<Section8Len + OSection8Len, Section9Len + OSection9Len, Section11Len + OSection11Len>{
-					std::max(counter, o.counter), merged_annots, annotation_size + o.annotation_size, merged_decls, decl_size + o.decl_size,
-					concat_array(codes, o.codes), ntypes
+					std::max(counter, o.counter), std::move(annotations), std::move(decls), std::move(codes), std::move(types)
 				};
 			}
 
 			template<size_t N>
-			constexpr auto code(uint32_t counter, std::array<uint32_t, N> v) {
-				return std::pair(counter, *this + SPIRVModule<0, 0, N>{ counter, no_spirv, 0, no_spirv, 0, v, {} });
+			constexpr auto code(uint32_t counter, const std::array<uint32_t, N>& v) {
+				codes.insert(codes.end(), v.begin(), v.end());
+
+				return std::pair(counter,
+				                 SPIRVModule<static_annotation_size, static_decl_size, static_code_size + N>{
+				                     counter, std::move(annotations), std::move(decls), std::move(codes), std::move(types) });
 			}
 
 			template<size_t N>
-			constexpr auto constant(uint32_t counter, std::array<uint32_t, N> v) {
-				return std::pair(counter, *this + SPIRVModule<0, N, 0>{ counter, no_spirv, 0, v, N, no_spirv, {} });
+			constexpr auto constant(uint32_t counter, const std::array<uint32_t, N>& v) {
+				decls.insert(decls.end(), v.begin(), v.end());
+
+				return std::pair(counter,
+				                 SPIRVModule<static_annotation_size, static_decl_size + N, static_code_size>{
+				                     counter, std::move(annotations), std::move(decls), std::move(codes), std::move(types) });
 			}
 
 			template<size_t N>
-			constexpr auto annotation(uint32_t counter, std::array<uint32_t, N> v) {
-				return *this + SPIRVModule<N, 0, 0>{ counter, v, N, no_spirv, 0, no_spirv, {} };
+			constexpr auto annotation(uint32_t counter, const std::array<uint32_t, N>& v) {
+				annotations.insert(annotations.end(), v.begin(), v.end());
+
+				return SPIRVModule<static_annotation_size + N, static_decl_size, static_code_size>{
+					counter, std::move(annotations), std::move(decls), std::move(codes), std::move(types)
+				}; 
 			}
 		};
 
@@ -160,19 +158,20 @@ namespace vuk {
 				}
 			}
 			auto [declid, declmod] = T::to_spirv(*this);
-			auto new_types_arr = std::vector{ SPIRType{ tn, declid } };
 			if (!found) {
-				return std::pair(declid, declmod + SPIRVModule<0, 0, 0>{ declid, no_spirv, 0, no_spirv, 0, no_spirv, new_types_arr });
+				declmod.counter = declid;
+				declmod.types.push_back(SPIRType{ tn, declid });
+				return std::pair(declid, declmod);
 			} else {
 				declmod.counter = counter;
-				declmod.decl_size = decl_size;
-				declmod.annotation_size = annotation_size;
-				return std::pair(id, declmod + SPIRVModule<0, 0, 0>{ id, no_spirv, 0, no_spirv, 0, no_spirv, {} });
+				declmod.decls.resize(decls.size());
+				declmod.annotations.resize(annotations.size());
+				return std::pair(id, declmod);
 			}
 		}
 
 		template<size_t N, typename... Ts>
-		constexpr auto _emit_children(auto mod, std::tuple<Ts...>& children) {
+		constexpr auto _emit_children(auto& mod, std::tuple<Ts...>& children) {
 			if constexpr (N == 0) {
 				auto [resid, resmod] = std::get<N>(children).to_spirv(mod);
 				return std::pair{ std::array{ resid }, resmod };
@@ -184,7 +183,7 @@ namespace vuk {
 		}
 
 		template<class... Ts>
-		constexpr auto emit_children(auto mod, std::tuple<Ts...>& children) {
+		constexpr auto emit_children(auto& mod, std::tuple<Ts...>& children) {
 			auto [resids, resmod] = _emit_children<sizeof...(Ts) - 1>(mod, children);
 			return std::pair{ resids, resmod };
 		}
@@ -238,7 +237,7 @@ namespace vuk {
 		struct Type<uint32_t> {
 			using type = uint32_t;
 
-			static constexpr auto to_spirv(auto mod) {
+			static constexpr auto to_spirv(auto& mod) {
 				auto us = std::array{ op(spv::OpTypeInt, 4), mod.counter + 1, 32u, 0u };
 				return mod.constant(mod.counter + 1, us);
 			}
@@ -248,7 +247,7 @@ namespace vuk {
 		struct Type<bool> {
 			using type = bool;
 
-			static constexpr auto to_spirv(auto mod) {
+			static constexpr auto to_spirv(auto& mod) {
 				auto us = std::array{ op(spv::OpTypeBool, 2), mod.counter + 1 };
 				return mod.constant(mod.counter + 1, us);
 			}
@@ -258,7 +257,7 @@ namespace vuk {
 		struct Type<float> {
 			using type = float;
 
-			static constexpr auto to_spirv(auto mod) {
+			static constexpr auto to_spirv(auto& mod) {
 				auto us = std::array{ op(spv::OpTypeFloat, 3), mod.counter + 1, 32u };
 				return mod.constant(mod.counter + 1, us);
 			}
@@ -270,7 +269,7 @@ namespace vuk {
 			static constexpr auto storage_class = sc;
 			using pointee = Pointee;
 
-			static constexpr auto to_spirv(auto mod) {
+			static constexpr auto to_spirv(auto& mod) {
 				auto [tid, modt] = mod.template type_id<Pointee>();
 				auto us = std::array{ op(spv::OpTypePointer, 4), modt.counter + 1, uint32_t(sc), tid };
 				return modt.constant(modt.counter + 1, us);
@@ -281,12 +280,12 @@ namespace vuk {
 		struct TypeRuntimeArray : public SpvExpression<TypeRuntimeArray<T>> {
 			using pointee = T;
 
-			static constexpr auto to_spirv(auto mod) {
+			static constexpr auto to_spirv(auto& mod) {
 				auto [tid, modt] = mod.template type_id<T>();
-				auto us = std::array{ op(spv::OpTypeRuntimeArray, 3), modt.counter + 1, tid };
+				auto us = std::vector{ op(spv::OpTypeRuntimeArray, 3), modt.counter + 1, tid };
 				auto deco =
-				    std::array{ op(spv::OpDecorate, 4), modt.counter + 1, uint32_t(spv::Decoration::DecorationArrayStride), (uint32_t)sizeof(typename T::type) };
-				return std::pair(modt.counter + 1, modt + SPIRVModule{ modt.counter + 1, deco, (uint32_t)deco.size(), us, (uint32_t)us.size(), no_spirv, {} });
+				    std::vector{ op(spv::OpDecorate, 4), modt.counter + 1, uint32_t(spv::Decoration::DecorationArrayStride), (uint32_t)sizeof(typename T::type) };
+				return std::pair(modt.counter + 1, modt + SPIRVModule<4, 3, 0>{ modt.counter + 1, deco, us, {}, {} });
 			}
 		};
 
@@ -305,7 +304,7 @@ namespace vuk {
 		struct TypeStruct : public SpvExpression<TypeStruct<Members...>> {
 			using members = std::tuple<Members...>;
 
-			static constexpr auto to_spirv(auto mod) {
+			static constexpr auto to_spirv(auto& mod) {
 				static_assert(sizeof...(Members) == 1);
 				auto [tid, modt] = mod.template type_id<typename member<0>::type>();
 				auto str_id = modt.counter + 1;
@@ -335,7 +334,7 @@ namespace vuk {
 
 			constexpr Variable(uint32_t descriptor_set, uint32_t binding) : descriptor_set(descriptor_set), binding(binding) {}
 
-			constexpr auto to_spirv(auto mod) {
+			constexpr auto to_spirv(auto& mod) {
 				auto [tid, modt] = mod.template type_id<T>();
 				id = modt.counter + 1;
 				auto mod1 = modt.annotation(id, std::array{ op(spv::OpDecorate, 4), id, uint32_t(spv::Decoration::DecorationDescriptorSet), descriptor_set })
@@ -361,7 +360,7 @@ namespace vuk {
 
 			constexpr Id(uint32_t id) : id(id) {}
 
-			constexpr auto to_spirv(auto mod) {
+			constexpr auto to_spirv(auto& mod) {
 				return std::pair(id, mod);
 			}
 		};
@@ -374,7 +373,7 @@ namespace vuk {
 			uint32_t id = 0;
 			constexpr Constant(T v) : value(v) {}
 
-			constexpr auto to_spirv(auto mod) {
+			constexpr auto to_spirv(auto& mod) {
 				constexpr size_t num_uints = sizeof(T) / sizeof(uint32_t);
 				auto as_uints = std::bit_cast<std::array<uint32_t, num_uints>>(value);
 				auto [tid, modt] = mod.template type_id<type>();
@@ -396,7 +395,7 @@ namespace vuk {
 			constexpr Add(E1 e1, E2 e2) : children(e1, e2) {}
 
 		public:
-			constexpr auto to_spirv(auto mod) {
+			constexpr auto to_spirv(auto& mod) {
 				auto [eids, resmod] = emit_children(mod, children);
 				auto [tid, mod3] = resmod.template type_id<type>();
 				id = mod3.counter + 1;
@@ -433,7 +432,7 @@ namespace vuk {
 			constexpr Sub(E1 e1, E2 e2) : children(e2, e1) {}
 
 		public:
-			constexpr auto to_spirv(auto mod) {
+			constexpr auto to_spirv(auto& mod) {
 				auto [eids, resmod] = emit_children(mod, children);
 				auto [tid, mod3] = resmod.template type_id<type>();
 				id = mod3.counter + 1;
@@ -470,7 +469,7 @@ namespace vuk {
 			constexpr Mul(E1 e1, E2 e2) : children(e1, e2) {}
 
 		public:
-			constexpr auto to_spirv(auto mod) {
+			constexpr auto to_spirv(auto& mod) {
 				auto [eids, resmod] = emit_children(mod, children);
 				auto [tid, mod3] = resmod.template type_id<type>();
 				id = mod3.counter + 1;
@@ -509,7 +508,7 @@ namespace vuk {
 			static constexpr spv::Op divs[] = { spv::OpUDiv, spv::OpSDiv, spv::OpFDiv };
 
 		public:
-			constexpr auto to_spirv(auto mod) {
+			constexpr auto to_spirv(auto& mod) {
 				auto [eids, resmod] = emit_children(mod, children);
 				auto [tid, mod3] = resmod.template type_id<type>();
 				id = mod3.counter + 1;
@@ -547,7 +546,7 @@ namespace vuk {
 			constexpr UnaryMinus(E1 e1) : children(e1) {}
 
 		public:
-			constexpr auto to_spirv(auto mod) {
+			constexpr auto to_spirv(auto& mod) {
 				auto [eids, resmod] = emit_children(mod, children);
 				auto [tid, mod3] = resmod.template type_id<type>();
 				id = mod3.counter + 1;
@@ -569,7 +568,7 @@ namespace vuk {
 			std::tuple<E1> children;
 			constexpr Load(E1 e1) : children(e1) {}
 
-			constexpr auto to_spirv(auto mod) {
+			constexpr auto to_spirv(auto& mod) {
 				auto [tid, modt] = mod.template type_id<type>();
 				auto [e1id, mod1] = emit_children(modt, children);
 				auto us = std::array{ op(spv::OpLoad, 4), tid, mod1.counter + 1 } << e1id;
@@ -587,7 +586,7 @@ namespace vuk {
 
 			constexpr Store(E1 ptr, E2 value) : children(value, ptr) {}
 
-			constexpr auto to_spirv(auto mod) {
+			constexpr auto to_spirv(auto& mod) {
 				auto [e1id, mod1] = emit_children(mod, children);
 				auto us = std::array{ op(spv::OpStore, 3) } << e1id;
 				return mod1.code(mod1.counter, us);
@@ -603,7 +602,7 @@ namespace vuk {
 
 			constexpr AccessChain(T type, E1 base, Indices... inds) : children(base, inds...) {}
 
-			constexpr auto to_spirv(auto mod) {
+			constexpr auto to_spirv(auto& mod) {
 				auto [eids, resmod] = emit_children(mod, children);
 				auto [tid, modt] = resmod.template type_id<type>();
 				std::reverse(eids.begin(), eids.end());
@@ -639,7 +638,7 @@ namespace vuk {
 
 			constexpr Cmp(E1 e1, E2 e2) : children(e2, e1) {}
 
-			constexpr auto to_spirv(auto mod) {
+			constexpr auto to_spirv(auto& mod) {
 				auto [eids, resmod] = emit_children(mod, children);
 				auto [tid, modt] = resmod.template type_id<type>();
 				id = modt.counter + 1;
@@ -726,7 +725,7 @@ namespace vuk {
 
 			constexpr Select(Cond cond, E1 e1, E2 e2) : children(e2, e1, cond) {}
 
-			constexpr auto to_spirv(auto mod) {
+			constexpr auto to_spirv(auto& mod) {
 				auto [eids, resmod] = emit_children(mod, children);
 				auto [tid, modt] = resmod.template type_id<type>();
 				id = modt.counter + 1;
@@ -765,7 +764,9 @@ namespace vuk {
 			template<class F>
 			static constexpr auto compile(F&& f) {
 				auto specialized = Derived::specialize(f);
-				SPIRVModule spvmodule{ Derived::max_id, no_spirv, 0, no_spirv, 0, no_spirv, Derived::predef_types };
+
+				SPIRVModule<0, 0, 0> spvmodule{ Derived::max_id, {}, {}, {}, std::vector<SPIRType>(Derived::predef_types.begin(), Derived::predef_types.end()) };
+				spvmodule.types.reserve(100);
 				auto res = specialized.to_spirv(spvmodule).second;
 
 				std::vector<uint32_t> variable_ids;
@@ -791,15 +792,15 @@ namespace vuk {
 				std::vector<uint32_t> final_bc(Derived::prelude.begin(), Derived::prelude.end());
 				auto it = final_bc.insert(final_bc.end(), op_entry.begin(), op_entry.end());
 				it = final_bc.insert(final_bc.end(), Derived::prologue.begin(), Derived::prologue.end());
-				it = final_bc.insert(final_bc.end(), res.annotations.begin(), res.annotations.begin() + res.annotation_size);
+				it = final_bc.insert(final_bc.end(), res.annotations.begin(), res.annotations.end());
 				it = final_bc.insert(final_bc.end(), Derived::builtin_decls.begin(), Derived::builtin_decls.end());
-				it = final_bc.insert(final_bc.end(), res.decls.begin(), res.decls.begin() + res.decl_size);
+				it = final_bc.insert(final_bc.end(), res.decls.begin(), res.decls.end());
 				it = final_bc.insert(final_bc.end(), Derived::second_bit.begin(), Derived::second_bit.end());
-				it = final_bc.insert(final_bc.end(), res.codes.begin(), res.codes.begin() + res.codes.size());
+				it = final_bc.insert(final_bc.end(), res.codes.begin(), res.codes.end());
 				it = final_bc.insert(final_bc.end(), Derived::epilogue.begin(), Derived::epilogue.end());
 				std::array<uint32_t,
-				           Derived::prelude.size() + Derived::prologue.size() + res.annotations.size() + Derived::builtin_decls.size() + res.decls.size() +
-				               Derived::second_bit.size() + res.codes.size() + Derived::epilogue.size() + 25>
+				           Derived::prelude.size() + Derived::prologue.size() + res.static_annotation_size + Derived::builtin_decls.size() + res.static_decl_size +
+				               Derived::second_bit.size() + res.static_code_size + Derived::epilogue.size() + 25>
 				    arr{};
 				std::copy(final_bc.begin(), final_bc.end(), arr.begin());
 				return std::pair(final_bc.size(), arr);
