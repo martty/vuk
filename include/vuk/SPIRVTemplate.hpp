@@ -248,6 +248,8 @@ namespace vuk {
 		struct Type<uint32_t> {
 			using type = uint32_t;
 
+			static constexpr uint32_t count = 4;
+
 			static constexpr auto to_spirv(auto& mod) {
 				auto us = std::array{ op(spv::OpTypeInt, 4), mod.counter + 1, 32u, 0u };
 				return mod.constant(mod.counter + 1, us);
@@ -258,6 +260,8 @@ namespace vuk {
 		struct Type<bool> {
 			using type = bool;
 
+			static constexpr uint32_t count = 2;
+
 			static constexpr auto to_spirv(auto& mod) {
 				auto us = std::array{ op(spv::OpTypeBool, 2), mod.counter + 1 };
 				return mod.constant(mod.counter + 1, us);
@@ -267,6 +271,8 @@ namespace vuk {
 		template<>
 		struct Type<float> {
 			using type = float;
+
+			static constexpr uint32_t count = 3;
 
 			static constexpr auto to_spirv(auto& mod) {
 				auto us = std::array{ op(spv::OpTypeFloat, 3), mod.counter + 1, 32u };
@@ -280,6 +286,8 @@ namespace vuk {
 			static constexpr auto storage_class = sc;
 			using pointee = Pointee;
 
+			static constexpr uint32_t count = pointee::count + 4;
+
 			static constexpr auto to_spirv(auto& mod) {
 				auto [tid, modt] = mod.template type_id<Pointee>();
 				auto us = std::array{ op(spv::OpTypePointer, 4), modt.counter + 1, uint32_t(sc), tid };
@@ -290,6 +298,8 @@ namespace vuk {
 		template<class T>
 		struct TypeRuntimeArray : public SpvExpression<TypeRuntimeArray<T>> {
 			using pointee = T;
+
+			static constexpr uint32_t count = pointee::count + 3 + 4;
 
 			static constexpr auto to_spirv(auto& mod) {
 				auto [tid, modt] = mod.template type_id<T>();
@@ -304,8 +314,9 @@ namespace vuk {
 		struct Member {
 			using type = T;
 
+			static constexpr uint32_t count = type::count + 5;
+
 			static constexpr auto to_spirv(auto mod, uint32_t parent, uint32_t index) {
-				// auto [tid, modt] = mod.template type_id<T>();
 				auto deco = std::array{ op(spv::OpMemberDecorate, 5), parent, index, uint32_t(spv::Decoration::DecorationOffset), Offset };
 				return mod.annotation(mod.counter, deco);
 			}
@@ -314,6 +325,8 @@ namespace vuk {
 		template<class... Members>
 		struct TypeStruct : public SpvExpression<TypeStruct<Members...>> {
 			using members = std::tuple<Members...>;
+
+			static constexpr uint32_t count = 3 + 3 + (Members::count + ...);
 
 			static constexpr auto to_spirv(auto& mod) {
 				static_assert(sizeof...(Members) == 1);
@@ -342,6 +355,7 @@ namespace vuk {
 
 			std::tuple<> children;
 			uint32_t id = 0;
+			static constexpr uint32_t count = 4 + 4 + 4;
 
 			constexpr Variable(uint32_t descriptor_set, uint32_t binding) : descriptor_set(descriptor_set), binding(binding) {}
 
@@ -368,6 +382,7 @@ namespace vuk {
 		struct Id : public SpvExpression<Id> {
 			uint32_t id;
 			std::tuple<> children;
+			static constexpr uint32_t count = 0;
 
 			constexpr Id(uint32_t id) : id(id) {}
 
@@ -382,10 +397,12 @@ namespace vuk {
 			T value;
 			std::tuple<> children;
 			uint32_t id = 0;
+			static constexpr size_t num_uints = sizeof(T) / sizeof(uint32_t);
+			static constexpr uint32_t count = 3 + num_uints;
+
 			constexpr Constant(T v) : value(v) {}
 
 			constexpr auto to_spirv(auto& mod) {
-				constexpr size_t num_uints = sizeof(T) / sizeof(uint32_t);
 				auto as_uints = std::bit_cast<std::array<uint32_t, num_uints>>(value);
 				auto [tid, modt] = mod.template type_id<type>();
 				auto us = std::array{ op(spv::OpConstant, 3 + num_uints), tid, modt.counter + 1 };
@@ -402,6 +419,7 @@ namespace vuk {
 
 			std::tuple<E1, E2> children;
 			uint32_t id = 0;
+			static constexpr uint32_t count = E1::count + E2::count + 5;
 
 			constexpr Add(E1 e1, E2 e2) : children(e1, e2) {}
 
@@ -439,6 +457,7 @@ namespace vuk {
 
 			std::tuple<E2, E1> children;
 			uint32_t id = 0;
+			static constexpr uint32_t count = type::count + E1::count + E2::count + 5;
 
 			constexpr Sub(E1 e1, E2 e2) : children(e2, e1) {}
 
@@ -475,6 +494,7 @@ namespace vuk {
 			using type = typename E1::type;
 
 			std::tuple<E1, E2> children;
+			static constexpr uint32_t count = type::count + E1::count + E2::count + 5;
 			uint32_t id = 0;
 
 			constexpr Mul(E1 e1, E2 e2) : children(e1, e2) {}
@@ -513,6 +533,7 @@ namespace vuk {
 
 			std::tuple<E2, E1> children;
 			uint32_t id = 0;
+			static constexpr uint32_t count = type::count + E1::count + E2::count + 5;
 
 			constexpr Div(E1 e1, E2 e2) : children(e2, e1) {}
 
@@ -553,6 +574,7 @@ namespace vuk {
 
 			std::tuple<E1> children;
 			uint32_t id = 0;
+			static constexpr uint32_t count = type::count + E1::count + 4;
 
 			constexpr UnaryMinus(E1 e1) : children(e1) {}
 
@@ -577,6 +599,8 @@ namespace vuk {
 
 			uint32_t id = 0;
 			std::tuple<E1> children;
+			static constexpr uint32_t count = type::count + E1::count + 4;
+
 			constexpr Load(E1 e1) : children(e1) {}
 
 			constexpr auto to_spirv(auto& mod) {
@@ -594,6 +618,7 @@ namespace vuk {
 
 			const uint32_t id = ~0u;
 			std::tuple<E2, E1> children;
+			static constexpr uint32_t count = E1::count + E2::count + 3;
 
 			constexpr Store(E1 ptr, E2 value) : children(value, ptr) {}
 
@@ -610,6 +635,7 @@ namespace vuk {
 
 			std::tuple<E1, Indices...> children;
 			uint32_t id = 0;
+			static constexpr uint32_t count = sizeof...(Indices) + 4 + type::count + E1::count + (Indices::count + ...);
 
 			constexpr AccessChain(T type, E1 base, Indices... inds) : children(base, inds...) {}
 
@@ -640,6 +666,7 @@ namespace vuk {
 
 			std::tuple<E2, E1> children;
 			uint32_t id = 0;
+			static constexpr uint32_t count = type::count + E1::count + E2::count + 5;
 
 			static constexpr const std::array<spv::Op, 6> compares[3] = {
 				{ spv::OpUGreaterThan, spv::OpUGreaterThanEqual, spv::OpIEqual, spv::OpINotEqual, spv::OpULessThanEqual, spv::OpULessThan },
@@ -733,6 +760,7 @@ namespace vuk {
 
 			std::tuple<E2, E1, Cond> children;
 			uint32_t id = 0;
+			static constexpr uint32_t count = type::count + Cond::count + E1::count + E2::count + 6;
 
 			constexpr Select(Cond cond, E1 e1, E2 e2) : children(e2, e1, cond) {}
 
