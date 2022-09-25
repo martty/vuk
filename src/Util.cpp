@@ -1,3 +1,4 @@
+#include "vuk/Util.hpp"
 #include "vuk/AllocatorHelpers.hpp"
 #include "vuk/Context.hpp"
 #include "vuk/Future.hpp"
