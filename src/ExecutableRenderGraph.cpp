@@ -6,6 +6,8 @@
 #include "vuk/Future.hpp"
 #include "vuk/Hash.hpp" // for create
 #include "vuk/RenderGraph.hpp"
+#include "vuk/Util.hpp"
+
 #include <sstream>
 #include <unordered_set>
 
