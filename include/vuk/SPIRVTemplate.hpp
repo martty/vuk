@@ -97,91 +97,90 @@ namespace vuk {
 			    codes(std::move(codes)),
 			    types(std::move(types)) {}
 
-			template<class T>
-			constexpr auto type_id();
+			SPIRVModule(SPIRVModule&) = delete;
 
-			constexpr auto operator+(SPIRVModule&& o) {
+			template<class T>
+			constexpr uint32_t type_id() {
+				auto tn = type_name<T>();
+				uint32_t id;
+				bool found = false;
+				for (auto& t : types) {
+					if (tn == t.type_identifier) {
+						id = t.spirv_id;
+						found = true;
+						break;
+					}
+				}
+				auto old_counter = counter;
+				auto old_declsize = decls.size();
+				auto old_annsize = annotations.size();
+				auto declid = T::to_spirv(*this);
+				if (!found) {
+					types.push_back(SPIRType{ tn, declid });
+					id = declid;
+				} else {
+					counter = old_counter;
+					decls.resize(old_declsize);
+					annotations.resize(old_annsize);
+				}
+				return id;
+			}
+
+			constexpr SPIRVModule& operator+(SPIRVModule&& o) {
 				annotations.insert(annotations.end(), o.annotations.begin(), o.annotations.end());
 				decls.insert(decls.end(), o.decls.begin(), o.decls.end());
 				codes.insert(codes.end(), o.codes.begin(), o.codes.end());
 				types.insert(types.end(), o.types.begin(), o.types.end());
+				counter = std::max(counter, o.counter);
 
-				return SPIRVModule{ std::max(counter, o.counter), std::move(annotations), std::move(decls), std::move(codes), std::move(types) };
+				return *this;
 			}
 
 			template<size_t N>
-			constexpr auto code(uint32_t counter, const std::array<uint32_t, N>& v) {
+			constexpr uint32_t code(uint32_t counter, const std::array<uint32_t, N>& v) {
 				codes.insert(codes.end(), v.begin(), v.end());
-
-				return std::pair(counter, SPIRVModule{ counter, std::move(annotations), std::move(decls), std::move(codes), std::move(types) });
+				this->counter = counter;
+				return counter;
 			}
 
 			template<size_t N>
-			constexpr auto constant(uint32_t counter, const std::array<uint32_t, N>& v) {
+			constexpr uint32_t constant(uint32_t counter, const std::array<uint32_t, N>& v) {
 				decls.insert(decls.end(), v.begin(), v.end());
-
-				return std::pair(counter, SPIRVModule{ counter, std::move(annotations), std::move(decls), std::move(codes), std::move(types) });
+				this->counter = counter;
+				return counter;
 			}
 
 			template<size_t N>
-			constexpr auto annotation(uint32_t counter, const std::array<uint32_t, N>& v) {
+			constexpr void annotation(uint32_t counter, const std::array<uint32_t, N>& v) {
 				annotations.insert(annotations.end(), v.begin(), v.end());
-
-				return SPIRVModule{ counter, std::move(annotations), std::move(decls), std::move(codes), std::move(types) };
+				this->counter = counter;
 			}
 		};
-
-		template<class T>
-		constexpr auto SPIRVModule::type_id() {
-			auto tn = type_name<T>();
-			uint32_t id;
-			bool found = false;
-			for (auto& t : types) {
-				if (tn == t.type_identifier) {
-					id = t.spirv_id;
-					found = true;
-					break;
-				}
-			}
-			auto old_declsize = decls.size();
-			auto old_annsize = annotations.size();
-			auto [declid, declmod] = T::to_spirv(*this);
-			if (!found) {
-				declmod.counter = declid;
-				declmod.types.push_back(SPIRType{ tn, declid });
-				return std::pair(declid, declmod);
-			} else {
-				declmod.counter = counter;
-				declmod.decls.resize(old_declsize);
-				declmod.annotations.resize(old_annsize);
-				return std::pair(id, declmod);
-			}
-		}
 
 		template<size_t N, typename... Ts>
 		constexpr auto _emit_children(auto& mod, std::tuple<Ts...>& children) {
 			if constexpr (N == 0) {
-				auto [resid, resmod] = std::get<N>(children).to_spirv(mod);
-				return std::pair{ std::array{ resid }, resmod };
+				auto resid = std::get<N>(children).to_spirv(mod);
+				return std::array{ resid };
 			} else {
 				auto r = _emit_children<N - 1>(mod, children);
-				auto [resid, resmod] = std::get<N>(children).to_spirv(r.second);
-				return std::pair{ concat_array(std::array{ resid }, r.first), resmod };
+				auto resid = std::get<N>(children).to_spirv(mod);
+				return concat_array(std::array{ resid }, r);
 			}
 		}
 
 		template<class... Ts>
 		constexpr auto emit_children(auto& mod, std::tuple<Ts...>& children) {
 			if constexpr (sizeof...(Ts) == 1) {
-				auto [resid, resmod] = std::get<0>(children).to_spirv(mod);
-				return std::pair{ std::array{ resid }, resmod };
+				auto resid = std::get<0>(children).to_spirv(mod);
+				return std::array{ resid };
 			} else if constexpr (sizeof...(Ts) == 2) {
-				auto [resid1, resmod1] = std::get<0>(children).to_spirv(mod);
-				auto [resid2, resmod2] = std::get<1>(children).to_spirv(resmod1);
-				return std::pair{ std::array{ resid2, resid1 }, resmod2 };
+				auto resid1 = std::get<0>(children).to_spirv(mod);
+				auto resid2 = std::get<1>(children).to_spirv(mod);
+				return std::array{ resid2, resid1 };
 			} else {
-				auto [resids, resmod] = _emit_children<sizeof...(Ts) - 1>(mod, children);
-				return std::pair{ resids, resmod };
+				auto resids = _emit_children<sizeof...(Ts) - 1>(mod, children);
+				return resids;
 			}
 		}
 
@@ -236,7 +235,7 @@ namespace vuk {
 
 			static constexpr uint32_t count = 4;
 
-			static constexpr auto to_spirv(SPIRVModule& mod) {
+			static constexpr uint32_t to_spirv(SPIRVModule& mod) {
 				auto us = std::array{ op(spv::OpTypeInt, 4), mod.counter + 1, 32u, 0u };
 				return mod.constant(mod.counter + 1, us);
 			}
@@ -248,7 +247,7 @@ namespace vuk {
 
 			static constexpr uint32_t count = 2;
 
-			static constexpr auto to_spirv(SPIRVModule& mod) {
+			static constexpr uint32_t to_spirv(SPIRVModule& mod) {
 				auto us = std::array{ op(spv::OpTypeBool, 2), mod.counter + 1 };
 				return mod.constant(mod.counter + 1, us);
 			}
@@ -260,7 +259,7 @@ namespace vuk {
 
 			static constexpr uint32_t count = 3;
 
-			static constexpr auto to_spirv(SPIRVModule& mod) {
+			static constexpr uint32_t to_spirv(SPIRVModule& mod) {
 				auto us = std::array{ op(spv::OpTypeFloat, 3), mod.counter + 1, 32u };
 				return mod.constant(mod.counter + 1, us);
 			}
@@ -274,10 +273,10 @@ namespace vuk {
 
 			static constexpr uint32_t count = pointee::count + 4;
 
-			static constexpr auto to_spirv(SPIRVModule& mod) {
-				auto [tid, modt] = mod.template type_id<Pointee>();
-				auto us = std::array{ op(spv::OpTypePointer, 4), modt.counter + 1, uint32_t(sc), tid };
-				return modt.constant(modt.counter + 1, us);
+			static constexpr uint32_t to_spirv(SPIRVModule& mod) {
+				auto tid = mod.template type_id<Pointee>();
+				auto us = std::array{ op(spv::OpTypePointer, 4), mod.counter + 1, uint32_t(sc), tid };
+				return mod.constant(mod.counter + 1, us);
 			}
 		};
 
@@ -287,12 +286,13 @@ namespace vuk {
 
 			static constexpr uint32_t count = pointee::count + 3 + 4;
 
-			static constexpr auto to_spirv(SPIRVModule& mod) {
-				auto [tid, modt] = mod.template type_id<T>();
-				auto us = std::vector{ op(spv::OpTypeRuntimeArray, 3), modt.counter + 1, tid };
+			static constexpr uint32_t to_spirv(SPIRVModule& mod) {
+				auto tid = mod.template type_id<T>();
+				auto us = std::vector{ op(spv::OpTypeRuntimeArray, 3), mod.counter + 1, tid };
 				auto deco =
-				    std::vector{ op(spv::OpDecorate, 4), modt.counter + 1, uint32_t(spv::Decoration::DecorationArrayStride), (uint32_t)sizeof(typename T::type) };
-				return std::pair(modt.counter + 1, modt + SPIRVModule{ modt.counter + 1, deco, us, {}, {} });
+				    std::vector{ op(spv::OpDecorate, 4), mod.counter + 1, uint32_t(spv::Decoration::DecorationArrayStride), (uint32_t)sizeof(typename T::type) };
+				mod + SPIRVModule{ mod.counter + 1, deco, us, {}, {} };
+				return mod.counter; 
 			}
 		};
 
@@ -302,9 +302,9 @@ namespace vuk {
 
 			static constexpr uint32_t count = type::count + 5;
 
-			static constexpr auto to_spirv(auto mod, uint32_t parent, uint32_t index) {
+			static constexpr void to_spirv(SPIRVModule& mod, uint32_t parent, uint32_t index) {
 				auto deco = std::array{ op(spv::OpMemberDecorate, 5), parent, index, uint32_t(spv::Decoration::DecorationOffset), Offset };
-				return mod.annotation(mod.counter, deco);
+				mod.annotation(mod.counter, deco);
 			}
 		};
 
@@ -314,15 +314,15 @@ namespace vuk {
 
 			static constexpr uint32_t count = 3 + 3 + (Members::count + ...);
 
-			static constexpr auto to_spirv(SPIRVModule& mod) {
+			static constexpr uint32_t to_spirv(SPIRVModule& mod) {
 				static_assert(sizeof...(Members) == 1);
-				auto [tid, modt] = mod.template type_id<typename member<0>::type>();
-				auto str_id = modt.counter + 1;
-				auto mod1 = member<0>::to_spirv(modt, str_id, 0);
+				auto tid = mod.template type_id<typename member<0>::type>();
+				auto str_id = mod.counter + 1;
+				member<0>::to_spirv(mod, str_id, 0);
 				auto deco = std::array{ op(spv::OpDecorate, 3), str_id, uint32_t(spv::Decoration::DecorationBlock) };
-				auto mod2 = mod1.annotation(mod1.counter, deco);
+				mod.annotation(mod.counter, deco);
 				auto us = std::array{ op(spv::OpTypeStruct, 3), str_id, tid };
-				return mod2.constant(str_id, us);
+				return mod.constant(str_id, us);
 			}
 
 			template<uint32_t idx>
@@ -345,13 +345,13 @@ namespace vuk {
 
 			constexpr Variable(uint32_t descriptor_set, uint32_t binding) : descriptor_set(descriptor_set), binding(binding) {}
 
-			constexpr auto to_spirv(SPIRVModule& mod) {
-				auto [tid, modt] = mod.template type_id<T>();
-				id = modt.counter + 1;
-				auto mod1 = modt.annotation(id, std::array{ op(spv::OpDecorate, 4), id, uint32_t(spv::Decoration::DecorationDescriptorSet), descriptor_set })
-				                .annotation(id, std::array{ op(spv::OpDecorate, 4), id, uint32_t(spv::Decoration::DecorationBinding), binding });
+			constexpr uint32_t to_spirv(SPIRVModule& mod) {
+				auto tid = mod.template type_id<T>();
+				id = mod.counter + 1;
+				mod.annotation(id, std::array{ op(spv::OpDecorate, 4), id, uint32_t(spv::Decoration::DecorationDescriptorSet), descriptor_set });
+				mod.annotation(id, std::array{ op(spv::OpDecorate, 4), id, uint32_t(spv::Decoration::DecorationBinding), binding });
 				auto us = std::array{ op(spv::OpVariable, 4), tid, id, uint32_t(sc) };
-				return mod1.constant(id, us);
+				return mod.constant(id, us);
 			}
 		};
 
@@ -372,8 +372,8 @@ namespace vuk {
 
 			constexpr Id(uint32_t id) : id(id) {}
 
-			constexpr auto to_spirv(SPIRVModule& mod) {
-				return std::pair(id, mod);
+			constexpr uint32_t to_spirv(SPIRVModule& mod) {
+				return id;
 			}
 		};
 
@@ -388,13 +388,13 @@ namespace vuk {
 
 			constexpr Constant(T v) : value(v) {}
 
-			constexpr auto to_spirv(SPIRVModule& mod) {
+			constexpr uint32_t to_spirv(SPIRVModule& mod) {
 				auto as_uints = std::bit_cast<std::array<uint32_t, num_uints>>(value);
-				auto [tid, modt] = mod.template type_id<type>();
-				auto us = std::array{ op(spv::OpConstant, 3 + num_uints), tid, modt.counter + 1 };
+				auto tid = mod.template type_id<type>();
+				auto us = std::array{ op(spv::OpConstant, 3 + num_uints), tid, mod.counter + 1 };
 				auto with_value = concat_array(us, as_uints);
-				id = modt.counter + 1;
-				return modt.constant(modt.counter + 1, with_value);
+				id = mod.counter + 1;
+				return mod.constant(mod.counter + 1, with_value);
 			}
 		};
 
@@ -410,12 +410,12 @@ namespace vuk {
 			constexpr Add(E1 e1, E2 e2) : children(e1, e2) {}
 
 		public:
-			constexpr auto to_spirv(SPIRVModule& mod) {
-				auto [eids, resmod] = emit_children(mod, children);
-				auto [tid, mod3] = resmod.template type_id<type>();
-				id = mod3.counter + 1;
+			constexpr uint32_t to_spirv(SPIRVModule& mod) {
+				auto eids = emit_children(mod, children);
+				auto tid = mod.template type_id<type>();
+				id = mod.counter + 1;
 				auto us = std::array{ op(std::is_floating_point_v<typename type::type> ? spv::OpFAdd : spv::OpIAdd, 5), tid, id } << eids;
-				return mod3.code(mod3.counter + 1, us);
+				return mod.code(mod.counter + 1, us);
 			}
 		};
 
@@ -448,12 +448,12 @@ namespace vuk {
 			constexpr Sub(E1 e1, E2 e2) : children(e2, e1) {}
 
 		public:
-			constexpr auto to_spirv(SPIRVModule& mod) {
-				auto [eids, resmod] = emit_children(mod, children);
-				auto [tid, mod3] = resmod.template type_id<type>();
-				id = mod3.counter + 1;
+			constexpr uint32_t to_spirv(SPIRVModule& mod) {
+				auto eids = emit_children(mod, children);
+				auto tid = mod.template type_id<type>();
+				id = mod.counter + 1;
 				auto us = std::array{ op(std::is_floating_point_v<typename type::type> ? spv::OpFSub : spv::OpISub, 5), tid, id } << eids;
-				return mod3.code(mod3.counter + 1, us);
+				return mod.code(mod.counter + 1, us);
 			}
 		};
 
@@ -486,12 +486,12 @@ namespace vuk {
 			constexpr Mul(E1 e1, E2 e2) : children(e1, e2) {}
 
 		public:
-			constexpr auto to_spirv(SPIRVModule& mod) {
-				auto [eids, resmod] = emit_children(mod, children);
-				auto [tid, mod3] = resmod.template type_id<type>();
-				id = mod3.counter + 1;
+			constexpr uint32_t to_spirv(SPIRVModule& mod) {
+				auto eids = emit_children(mod, children);
+				auto tid = mod.template type_id<type>();
+				id = mod.counter + 1;
 				auto us = std::array{ op(std::is_floating_point_v<typename type::type> ? spv::OpFMul : spv::OpIMul, 5), tid, id } << eids;
-				return mod3.code(mod3.counter + 1, us);
+				return mod.code(mod.counter + 1, us);
 			}
 		};
 
@@ -526,12 +526,12 @@ namespace vuk {
 			static constexpr spv::Op divs[] = { spv::OpUDiv, spv::OpSDiv, spv::OpFDiv };
 
 		public:
-			constexpr auto to_spirv(SPIRVModule& mod) {
-				auto [eids, resmod] = emit_children(mod, children);
-				auto [tid, mod3] = resmod.template type_id<type>();
-				id = mod3.counter + 1;
+			constexpr uint32_t to_spirv(SPIRVModule& mod) {
+				auto eids = emit_children(mod, children);
+				auto tid = mod.template type_id<type>();
+				id = mod.counter + 1;
 				auto us = std::array{ op(divs[to_typeclass<type>()], 5), tid, id } << eids;
-				return mod3.code(mod3.counter + 1, us);
+				return mod.code(mod.counter + 1, us);
 			}
 		};
 
@@ -565,12 +565,12 @@ namespace vuk {
 			constexpr UnaryMinus(E1 e1) : children(e1) {}
 
 		public:
-			constexpr auto to_spirv(SPIRVModule& mod) {
-				auto [eids, resmod] = emit_children(mod, children);
-				auto [tid, mod3] = resmod.template type_id<type>();
-				id = mod3.counter + 1;
+			constexpr uint32_t to_spirv(SPIRVModule& mod) {
+				auto eids = emit_children(mod, children);
+				auto tid = mod.template type_id<type>();
+				id = mod.counter + 1;
 				auto us = std::array{ op(std::is_floating_point_v<typename type::type> ? spv::OpFNegate : spv::OpSNegate, 4), tid, id } << eids;
-				return mod3.code(mod3.counter + 1, us);
+				return mod.code(mod.counter + 1, us);
 			}
 		};
 
@@ -589,12 +589,12 @@ namespace vuk {
 
 			constexpr Load(E1 e1) : children(e1) {}
 
-			constexpr auto to_spirv(SPIRVModule& mod) {
-				auto [tid, modt] = mod.template type_id<type>();
-				auto [e1id, mod1] = emit_children(modt, children);
-				auto us = std::array{ op(spv::OpLoad, 4), tid, mod1.counter + 1 } << e1id;
-				id = mod1.counter + 1;
-				return mod1.code(mod1.counter + 1, us);
+			constexpr uint32_t to_spirv(SPIRVModule& mod) {
+				auto tid = mod.template type_id<type>();
+				auto e1id = emit_children(mod, children);
+				auto us = std::array{ op(spv::OpLoad, 4), tid, mod.counter + 1 } << e1id;
+				id = mod.counter + 1;
+				return mod.code(mod.counter + 1, us);
 			}
 		};
 
@@ -608,10 +608,10 @@ namespace vuk {
 
 			constexpr Store(E1 ptr, E2 value) : children(value, ptr) {}
 
-			constexpr auto to_spirv(SPIRVModule& mod) {
-				auto [e1id, mod1] = emit_children(mod, children);
+			constexpr uint32_t to_spirv(SPIRVModule& mod) {
+				auto e1id = emit_children(mod, children);
 				auto us = std::array{ op(spv::OpStore, 3) } << e1id;
-				return mod1.code(mod1.counter, us);
+				return mod.code(mod.counter, us);
 			}
 		};
 
@@ -625,13 +625,13 @@ namespace vuk {
 
 			constexpr AccessChain(T type, E1 base, Indices... inds) : children(base, inds...) {}
 
-			constexpr auto to_spirv(SPIRVModule& mod) {
-				auto [eids, resmod] = emit_children(mod, children);
-				auto [tid, modt] = resmod.template type_id<type>();
+			constexpr uint32_t to_spirv(SPIRVModule& mod) {
+				auto eids = emit_children(mod, children);
+				auto tid = mod.template type_id<type>();
 				std::reverse(eids.begin(), eids.end());
-				auto us = std::array{ op(spv::OpAccessChain, sizeof...(Indices) + 4), tid, modt.counter + 1 } << eids;
-				id = modt.counter + 1;
-				return modt.code(modt.counter + 1, us);
+				auto us = std::array{ op(spv::OpAccessChain, sizeof...(Indices) + 4), tid, mod.counter + 1 } << eids;
+				id = mod.counter + 1;
+				return mod.code(mod.counter + 1, us);
 			}
 		};
 
@@ -662,14 +662,14 @@ namespace vuk {
 
 			constexpr Cmp(E1 e1, E2 e2) : children(e2, e1) {}
 
-			constexpr auto to_spirv(SPIRVModule& mod) {
-				auto [eids, resmod] = emit_children(mod, children);
-				auto [tid, modt] = resmod.template type_id<type>();
-				id = modt.counter + 1;
+			constexpr uint32_t to_spirv(SPIRVModule& mod) {
+				auto eids = emit_children(mod, children);
+				auto tid = mod.template type_id<type>();
+				id = mod.counter + 1;
 				auto tc = to_typeclass<typename E1::type>();
 				auto actualop = compares[tc][Op];
 				auto us = std::array{ op(actualop, 5), tid, id } << eids;
-				return modt.code(modt.counter + 1, us);
+				return mod.code(mod.counter + 1, us);
 			}
 		};
 
@@ -750,12 +750,12 @@ namespace vuk {
 
 			constexpr Select(Cond cond, E1 e1, E2 e2) : children(e2, e1, cond) {}
 
-			constexpr auto to_spirv(SPIRVModule& mod) {
-				auto [eids, resmod] = emit_children(mod, children);
-				auto [tid, modt] = resmod.template type_id<type>();
-				id = modt.counter + 1;
+			constexpr uint32_t to_spirv(SPIRVModule& mod) {
+				auto eids = emit_children(mod, children);
+				auto tid = mod.template type_id<type>();
+				id = mod.counter + 1;
 				auto us = std::array{ op(spv::OpSelect, 6), tid, id } << eids;
-				return modt.code(modt.counter + 1, us);
+				return mod.code(mod.counter + 1, us);
 			}
 		};
 
@@ -792,7 +792,8 @@ namespace vuk {
 
 				SPIRVModule spvmodule{ Derived::max_id, {}, {}, {}, std::vector<SPIRType>(Derived::predef_types.begin(), Derived::predef_types.end()) };
 				spvmodule.types.reserve(100);
-				auto res = specialized.to_spirv(spvmodule).second;
+				specialized.to_spirv(spvmodule);
+				const auto& res = spvmodule;
 
 				std::vector<uint32_t> variable_ids;
 				visit(specialized, [&]<typename T>(const T& node) {
