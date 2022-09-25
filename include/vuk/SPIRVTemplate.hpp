@@ -140,7 +140,7 @@ namespace vuk {
 
 				return SPIRVModule<static_annotation_size + N, static_decl_size, static_code_size>{
 					counter, std::move(annotations), std::move(decls), std::move(codes), std::move(types)
-				}; 
+				};
 			}
 		};
 
@@ -157,6 +157,8 @@ namespace vuk {
 					break;
 				}
 			}
+			auto old_declsize = decls.size();
+			auto old_annsize = annotations.size();
 			auto [declid, declmod] = T::to_spirv(*this);
 			if (!found) {
 				declmod.counter = declid;
@@ -164,8 +166,8 @@ namespace vuk {
 				return std::pair(declid, declmod);
 			} else {
 				declmod.counter = counter;
-				declmod.decls.resize(decls.size());
-				declmod.annotations.resize(annotations.size());
+				declmod.decls.resize(old_declsize);
+				declmod.annotations.resize(old_annsize);
 				return std::pair(id, declmod);
 			}
 		}
@@ -184,8 +186,17 @@ namespace vuk {
 
 		template<class... Ts>
 		constexpr auto emit_children(auto& mod, std::tuple<Ts...>& children) {
-			auto [resids, resmod] = _emit_children<sizeof...(Ts) - 1>(mod, children);
-			return std::pair{ resids, resmod };
+			if constexpr (sizeof...(Ts) == 1) {
+				auto [resid, resmod] = std::get<0>(children).to_spirv(mod);
+				return std::pair{ std::array{ resid }, resmod };
+			} else if constexpr (sizeof...(Ts) == 2) {
+				auto [resid1, resmod1] = std::get<0>(children).to_spirv(mod);
+				auto [resid2, resmod2] = std::get<1>(children).to_spirv(resmod1);
+				return std::pair{ std::array{ resid2, resid1 }, resmod2 };
+			} else {
+				auto [resids, resmod] = _emit_children<sizeof...(Ts) - 1>(mod, children);
+				return std::pair{ resids, resmod };
+			}
 		}
 
 		template<size_t N, class F, typename... Ts>
