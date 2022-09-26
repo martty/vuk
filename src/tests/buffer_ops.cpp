@@ -189,3 +189,57 @@ TEST_CASE("test binary_map") {
 		CHECK(out == std::span(expected));
 	}
 }
+
+struct POD {
+	unsigned foo;
+	unsigned bar;
+};
+
+template<>
+struct spirv::Type<POD> : spirv::TypeStruct<spirv::Member<spirv::Type<unsigned>, 0>, spirv::Member<spirv::Type<unsigned>, sizeof(unsigned)>> {
+	using type = POD;
+};
+
+template<class Ctx>
+struct spirv::TypeContext<Ctx, spirv::Type<POD>> {
+	static constexpr uint32_t count = 4;
+	constexpr CompositeExtract<Type<unsigned>, Ctx, Id> foo() {
+		return CompositeExtract(Type<unsigned>{}, static_cast<Ctx&>(*this), Id(0u));
+	}
+	constexpr CompositeExtract<Type<unsigned>, Ctx, Id> bar() {
+		return CompositeExtract(Type<unsigned>{}, static_cast<Ctx&>(*this), Id(1u));
+	}
+};
+
+TEST_CASE("test unary_map, custom type") {
+	REQUIRE(test_context.prepare());
+	{
+		if (test_context.rdoc_api)
+			test_context.rdoc_api->StartFrameCapture(NULL, NULL);
+		// src data
+
+		std::vector data = { POD{ 1, 2 }, POD{ 1, 3 }, POD{ 1, 4 } };
+		// function to apply
+		auto func = [](auto A) {
+			return 2u * A.foo() + A.bar(); // () :(
+		};
+		std::vector<uint32_t> expected;
+		// cpu result
+		std::transform(data.begin(), data.end(), std::back_inserter(expected), [](auto A) { return 2u * A.foo + A.bar; });
+
+		// put data on gpu
+		auto [_1, src] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(data));
+		// put count on gpu
+		CountWithIndirect count_data{ (uint32_t)data.size(), 64 };
+		auto [_2, cnt] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(&count_data, 1));
+
+		// apply function on gpu
+		auto calc = unary_map<POD>(*test_context.context, src, {}, cnt, func);
+		// bring data back to cpu
+		auto res = download_buffer(calc).get<Buffer>(*test_context.allocator, test_context.compiler);
+		auto out = std::span((uint32_t*)res->mapped_ptr, data.size());
+		if (test_context.rdoc_api)
+			test_context.rdoc_api->EndFrameCapture(NULL, NULL);
+		CHECK(out == std::span(expected));
+	}
+}

@@ -74,7 +74,9 @@ namespace vuk {
 				constexpr auto vB = Variable<decltype(ptr_to_struct), spv::StorageClassStorageBuffer>(0, 2);
 				constexpr auto ldB = access_chain<0u>(vB, Id(112u));
 				constexpr auto B = Load(ldB);
-				constexpr auto vDst = Variable<decltype(ptr_to_struct), spv::StorageClassStorageBuffer>(0, 1);
+				constexpr TypeStruct<Member<TypeRuntimeArray<typename decltype(f(A, B))::type>, 0>> dstT = {};
+				constexpr auto ptr_to_dst_struct = Type<ptr<spv::StorageClassStorageBuffer, decltype(dstT)>>{};
+				constexpr auto vDst = Variable<decltype(ptr_to_dst_struct), spv::StorageClassStorageBuffer>(0, 1);
 				constexpr auto stDst = access_chain<0u>(vDst, Id(112u));
 				return spirv::Store{ stDst, f(A, B) };
 			}

@@ -292,7 +292,7 @@ namespace vuk {
 				auto deco =
 				    std::vector{ op(spv::OpDecorate, 4), mod.counter + 1, uint32_t(spv::Decoration::DecorationArrayStride), (uint32_t)sizeof(typename T::type) };
 				mod + SPIRVModule{ mod.counter + 1, deco, us, {}, {} };
-				return mod.counter; 
+				return mod.counter;
 			}
 		};
 
@@ -314,14 +314,21 @@ namespace vuk {
 
 			static constexpr uint32_t count = 3 + 3 + (Members::count + ...);
 
+			template<class T, uint32_t Offset>
+			static constexpr void member_to_spirv(Member<T, Offset> memb, SPIRVModule& mod, uint32_t parent, uint32_t& index) {
+				auto deco = std::array{ op(spv::OpMemberDecorate, 5), parent, index++, uint32_t(spv::Decoration::DecorationOffset), Offset };
+				mod.annotation(mod.counter, deco);
+			}
+
 			static constexpr uint32_t to_spirv(SPIRVModule& mod) {
-				static_assert(sizeof...(Members) == 1);
-				auto tid = mod.template type_id<typename member<0>::type>();
+				std::array tids = { mod.template type_id<typename Members::type>()... }; // emit all member types
 				auto str_id = mod.counter + 1;
-				member<0>::to_spirv(mod, str_id, 0);
+
+				uint32_t member_index = 0;
+				((void)member_to_spirv(Members{}, mod, str_id, member_index), ...); // emit offset decorations for all members
 				auto deco = std::array{ op(spv::OpDecorate, 3), str_id, uint32_t(spv::Decoration::DecorationBlock) };
 				mod.annotation(mod.counter, deco);
-				auto us = std::array{ op(spv::OpTypeStruct, 3), str_id, tid };
+				auto us = std::array{ op(spv::OpTypeStruct, 2 + sizeof...(Members)), str_id } << tids;
 				return mod.constant(str_id, us);
 			}
 
@@ -579,9 +586,15 @@ namespace vuk {
 			return { *static_cast<const E1*>(&u) };
 		}
 
+		template<class Context, class Type>
+		struct TypeContext {
+			static constexpr int baz = 1;
+		};
+
 		template<typename E1>
-		struct Load : public SpvExpression<Load<E1>> {
+		struct Load : public SpvExpression<Load<E1>>, public TypeContext<Load<E1>, typename Deref<typename E1::type, 1u>::type> {
 			using type = typename Deref<typename E1::type, 1u>::type;
+			using tct = TypeContext<E1, typename Deref<typename E1::type, 1u>::type>;
 
 			uint32_t id = 0;
 			std::tuple<E1> children;
@@ -642,6 +655,26 @@ namespace vuk {
 			using deref_t = typename Deref<typename value_t::template deref<CIndex>, sizeof...(VIndices)>::type;
 			return AccessChain(Type<ptr<sc, deref_t>>{}, base, Constant{ CIndex }, inds...);
 		}
+
+		template<typename T, typename E1, typename... Indices>
+		struct CompositeExtract : SpvExpression<CompositeExtract<T, E1, Indices...>> {
+			using type = T; // typename Deref<typename E1::type, Indices...>::type;
+
+			std::tuple<E1, Indices...> children;
+			uint32_t id = 0;
+			static constexpr uint32_t count = sizeof...(Indices) + 4 + type::count + E1::count + (Indices::count + ...);
+
+			constexpr CompositeExtract(T type, E1 base, Indices... inds) : children(base, inds...) {}
+
+			constexpr uint32_t to_spirv(SPIRVModule& mod) {
+				auto eids = emit_children(mod, children);
+				auto tid = mod.template type_id<type>();
+				std::reverse(eids.begin(), eids.end());
+				auto us = std::array{ op(spv::OpCompositeExtract, sizeof...(Indices) + 4), tid, mod.counter + 1 } << eids;
+				id = mod.counter + 1;
+				return mod.code(mod.counter + 1, us);
+			}
+		};
 
 		enum CmpOp { eGreaterThan = 0, eGreaterThanEqual, eEqual, eNotEqual, eLessThanEqual, eLessThan };
 
