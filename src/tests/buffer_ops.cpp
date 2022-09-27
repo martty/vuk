@@ -200,15 +200,24 @@ struct spirv::Type<POD> : spirv::TypeStruct<spirv::Member<spirv::Type<unsigned>,
 	using type = POD;
 };
 
+namespace vuk::spirv {
+	template<class Base>
+	struct SpvExpression<CompositeExtract<Type<unsigned>, Base, Id>> {
+		Base& ctx;
+		uint32_t index;
+
+		constexpr SpvExpression(Base& ctx, uint32_t index) : ctx(ctx), index(index) {}
+
+		constexpr operator CompositeExtract<Type<unsigned>, Base, Id>() const {
+			return CompositeExtract<Type<unsigned>, Base, Id>({}, ctx, Id(index));
+		}
+	};
+	
+} // namespace spirv
 template<class Ctx>
 struct spirv::TypeContext<Ctx, spirv::Type<POD>> {
-	static constexpr uint32_t count = 4;
-	constexpr CompositeExtract<Type<unsigned>, Ctx, Id> foo() {
-		return CompositeExtract(Type<unsigned>{}, static_cast<Ctx&>(*this), Id(0u));
-	}
-	constexpr CompositeExtract<Type<unsigned>, Ctx, Id> bar() {
-		return CompositeExtract(Type<unsigned>{}, static_cast<Ctx&>(*this), Id(1u));
-	}
+	SpvExpression<CompositeExtract<Type<unsigned>, Ctx, Id>> foo = { static_cast<Ctx&>(*this), 0u };
+	SpvExpression<CompositeExtract<Type<unsigned>, Ctx, Id>> bar = { static_cast<Ctx&>(*this), 1u };
 };
 
 TEST_CASE("test unary_map, custom type") {
@@ -221,11 +230,11 @@ TEST_CASE("test unary_map, custom type") {
 		std::vector data = { POD{ 1, 2 }, POD{ 1, 3 }, POD{ 1, 4 } };
 		// function to apply
 		auto func = [](auto A) {
-			return 2u * A.foo() + A.bar(); // () :(
+			return A.foo * 2u + A.bar + A.foo + A.bar * 2u;
 		};
 		std::vector<uint32_t> expected;
 		// cpu result
-		std::transform(data.begin(), data.end(), std::back_inserter(expected), [](auto A) { return 2u * A.foo + A.bar; });
+		std::transform(data.begin(), data.end(), std::back_inserter(expected), func);
 
 		// put data on gpu
 		auto [_1, src] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(data));
