@@ -220,7 +220,7 @@ struct spirv::TypeContext<Ctx, spirv::Type<POD>> {
 	SpvExpression<CompositeExtract<Type<float>, Ctx, Id>> bar = { static_cast<Ctx&>(*this), 1u };
 };
 
-TEST_CASE("test unary_map, custom type") {
+TEST_CASE("test unary_map, custom type, casting") {
 	REQUIRE(test_context.prepare());
 	{
 		if (test_context.rdoc_api)
@@ -230,7 +230,7 @@ TEST_CASE("test unary_map, custom type") {
 		std::vector data = { POD{ 1, 2.f }, POD{ 1, 3.f }, POD{ 1, 4.f } };
 		// function to apply
 		auto func = [](auto A) {
-			return spirv::make<POD>(A.foo * 2u + spirv::cast<uint32_t>(A.bar), spirv::cast<float>(A.foo) + A.bar * 2.f);
+			return spirv::make<POD>(spirv::cast<uint32_t>(A.foo) * 2u + spirv::cast<uint32_t>(A.bar), spirv::cast<float>(A.foo) + spirv::cast<float>(A.bar) * 2.f);
 		};
 		std::vector<POD> expected;
 		// cpu result

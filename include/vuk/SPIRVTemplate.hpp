@@ -852,6 +852,9 @@ namespace vuk {
 				auto src_tc = to_typeclass<typename E1::type>();
 				auto dst_tc = to_typeclass<To>();
 				auto actualop = convs[src_tc][dst_tc];
+				if constexpr (std::is_same_v<typename E1::type, To>) { // no-op conversion become copyobject, because U/SConvert complains
+					actualop = spv::OpCopyObject;
+				}
 				auto us = std::array{ op(actualop, 4), tid, id } << eids;
 				return mod.code(mod.counter + 1, us);
 			}
