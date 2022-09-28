@@ -246,6 +246,18 @@ namespace vuk {
 		};
 
 		template<>
+		struct Type<int32_t> {
+			using type = int32_t;
+
+			static constexpr uint32_t count = 4;
+
+			static constexpr uint32_t to_spirv(SPIRVModule& mod) {
+				auto us = std::array{ op(spv::OpTypeInt, 4), mod.counter + 1, 32u, 1u };
+				return mod.constant(mod.counter + 1, us);
+			}
+		};
+
+		template<>
 		struct Type<bool> {
 			using type = bool;
 
@@ -849,9 +861,12 @@ namespace vuk {
 				auto eids = emit_children(mod, children);
 				auto tid = mod.template type_id<type>();
 				id = mod.counter + 1;
-				auto src_tc = to_typeclass<typename E1::type>();
-				auto dst_tc = to_typeclass<To>();
+				constexpr auto src_tc = to_typeclass<typename E1::type>();
+				constexpr auto dst_tc = to_typeclass<To>();
 				auto actualop = convs[src_tc][dst_tc];
+				if constexpr (src_tc != dst_tc) {
+					assert(sizeof(typename E1::type::type) == sizeof(typename To::type)); // here we would need to emit 2 Converts
+				}
 				if constexpr (std::is_same_v<typename E1::type, To>) { // no-op conversion become copyobject, because U/SConvert complains
 					actualop = spv::OpCopyObject;
 				}
