@@ -680,6 +680,18 @@ namespace vuk {
 			}
 		};
 
+		template<class T, class Base>
+		struct SpvExpression<CompositeExtract<Type<T>, Base, Id>> {
+			Base& ctx;
+			uint32_t index;
+
+			constexpr SpvExpression(Base& ctx, uint32_t index) : ctx(ctx), index(index) {}
+
+			constexpr operator CompositeExtract<Type<T>, Base, Id>() const {
+				return CompositeExtract<Type<T>, Base, Id>({}, ctx, Id(index));
+			}
+		};
+
 		template<typename T, typename... Values>
 		struct CompositeConstruct : SpvExpression<CompositeConstruct<T, Values...>> {
 			using type = T;
@@ -815,6 +827,45 @@ namespace vuk {
 				return mod.code(mod.counter + 1, us);
 			}
 		};
+
+		template<typename To, typename E1>
+		struct Convert : SpvExpression<Convert<To, E1>> {
+			using type = To;
+			static_assert(std::is_same_v<typename To::type, uint32_t> || std::is_same_v<typename To::type, int32_t> || std::is_same_v<typename To::type, float>);
+
+			std::tuple<E1> children;
+			uint32_t id = 0;
+			static constexpr uint32_t count = type::count + E1::count + 4;
+
+			static constexpr const std::array<spv::Op, 3> convs[3] = {
+				{ spv::OpUConvert, spv::OpBitcast, spv::OpConvertUToF },
+				{ spv::OpBitcast, spv::OpSConvert, spv::OpConvertSToF },
+				{ spv::OpConvertFToU, spv::OpConvertFToS, spv::OpCopyObject },
+			};
+
+			constexpr Convert(E1 e1) : children(e1) {}
+
+			constexpr uint32_t to_spirv(SPIRVModule& mod) {
+				auto eids = emit_children(mod, children);
+				auto tid = mod.template type_id<type>();
+				id = mod.counter + 1;
+				auto src_tc = to_typeclass<typename E1::type>();
+				auto dst_tc = to_typeclass<To>();
+				auto actualop = convs[src_tc][dst_tc];
+				auto us = std::array{ op(actualop, 4), tid, id } << eids;
+				return mod.code(mod.counter + 1, us);
+			}
+		};
+
+		template<class T, class E>
+		constexpr auto cast(SpvExpression<E> e) {
+			return Convert<Type<T>, E>(e);
+		}
+
+		template<class T, class E>
+		constexpr auto cast(E e) {
+			return static_cast<T>(e);
+		}
 
 		template<class T>
 		requires std::derived_from<T, SpvExpression<T>>

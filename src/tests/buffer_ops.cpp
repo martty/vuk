@@ -192,7 +192,7 @@ TEST_CASE("test binary_map") {
 
 struct POD {
 	unsigned foo;
-	unsigned bar;
+	float bar;
 
 	bool operator==(const POD&) const = default;
 };
@@ -210,28 +210,14 @@ constexpr bool operator==(const std::span<const POD>& lhs, const std::span<const
 }
 
 template<>
-struct spirv::Type<POD> : spirv::TypeStruct<spirv::Member<spirv::Type<unsigned>, 0>, spirv::Member<spirv::Type<unsigned>, sizeof(unsigned)>> {
+struct spirv::Type<POD> : spirv::TypeStruct<spirv::Member<spirv::Type<uint32_t>, 0>, spirv::Member<spirv::Type<float>, sizeof(uint32_t)>> {
 	using type = POD;
 };
 
-namespace vuk::spirv {
-	template<class Base>
-	struct SpvExpression<CompositeExtract<Type<unsigned>, Base, Id>> {
-		Base& ctx;
-		uint32_t index;
-
-		constexpr SpvExpression(Base& ctx, uint32_t index) : ctx(ctx), index(index) {}
-
-		constexpr operator CompositeExtract<Type<unsigned>, Base, Id>() const {
-			return CompositeExtract<Type<unsigned>, Base, Id>({}, ctx, Id(index));
-		}
-	};
-
-} // namespace vuk::spirv
 template<class Ctx>
 struct spirv::TypeContext<Ctx, spirv::Type<POD>> {
-	SpvExpression<CompositeExtract<Type<unsigned>, Ctx, Id>> foo = { static_cast<Ctx&>(*this), 0u };
-	SpvExpression<CompositeExtract<Type<unsigned>, Ctx, Id>> bar = { static_cast<Ctx&>(*this), 1u };
+	SpvExpression<CompositeExtract<Type<uint32_t>, Ctx, Id>> foo = { static_cast<Ctx&>(*this), 0u };
+	SpvExpression<CompositeExtract<Type<float>, Ctx, Id>> bar = { static_cast<Ctx&>(*this), 1u };
 };
 
 TEST_CASE("test unary_map, custom type") {
@@ -241,10 +227,10 @@ TEST_CASE("test unary_map, custom type") {
 			test_context.rdoc_api->StartFrameCapture(NULL, NULL);
 		// src data
 
-		std::vector data = { POD{ 1, 2 }, POD{ 1, 3 }, POD{ 1, 4 } };
+		std::vector data = { POD{ 1, 2.f }, POD{ 1, 3.f }, POD{ 1, 4.f } };
 		// function to apply
 		auto func = [](auto A) {
-			return spirv::make<POD>(A.foo * 2u + A.bar, A.foo + A.bar * 2u);
+			return spirv::make<POD>(A.foo * 2u + spirv::cast<uint32_t>(A.bar), spirv::cast<float>(A.foo) + A.bar * 2.f);
 		};
 		std::vector<POD> expected;
 		// cpu result
