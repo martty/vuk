@@ -444,7 +444,7 @@ namespace vuk {
 		template<typename E1, typename T>
 		requires numeric<T> Add<Constant<T>, E1>
 		constexpr operator+(T const& v, SpvExpression<E1> const& u) {
-			return { Constant<T>(v),static_cast<E1>(u) };
+			return { Constant<T>(v), static_cast<E1>(u) };
 		}
 
 		template<typename E1, typename E2>
@@ -470,19 +470,19 @@ namespace vuk {
 
 		template<typename E1, typename E2>
 		Sub<E1, E2> constexpr operator-(SpvExpression<E1> const& u, SpvExpression<E2> const& v) {
-			return Sub<E1, E2>{static_cast<E1>(u), static_cast<E2>(v) };
+			return Sub<E1, E2>{ static_cast<E1>(u), static_cast<E2>(v) };
 		}
 
 		template<typename E1, typename T>
 		requires numeric<T> Sub<E1, Constant<T>>
 		constexpr operator-(SpvExpression<E1> const& u, T const& v) {
-			return {static_cast<E1>(u), Constant<T>(v) };
+			return { static_cast<E1>(u), Constant<T>(v) };
 		}
 
 		template<typename E1, typename T>
 		requires numeric<T> Sub<Constant<T>, E1>
 		constexpr operator-(T const& v, SpvExpression<E1> const& u) {
-			return { Constant<T>(v),static_cast<E1>(u) };
+			return { Constant<T>(v), static_cast<E1>(u) };
 		}
 
 		template<typename E1, typename E2>
@@ -508,7 +508,7 @@ namespace vuk {
 
 		template<typename E1, typename E2>
 		Mul<E1, E2> constexpr operator*(SpvExpression<E1> const& u, SpvExpression<E2> const& v) {
-			return Mul<E1, E2>{static_cast<E1>(u), static_cast<E2>(v) };
+			return Mul<E1, E2>{ static_cast<E1>(u), static_cast<E2>(v) };
 		}
 
 		template<typename E1, typename T>
@@ -520,7 +520,7 @@ namespace vuk {
 		template<typename E1, typename T>
 		requires numeric<T> Mul<Constant<T>, E1>
 		constexpr operator*(T const& v, SpvExpression<E1> const& u) {
-			return { Constant<T>(v),static_cast<E1>(u) };
+			return { Constant<T>(v), static_cast<E1>(u) };
 		}
 
 		template<typename E1, typename E2>
@@ -548,19 +548,19 @@ namespace vuk {
 
 		template<typename E1, typename E2>
 		Div<E1, E2> constexpr operator/(SpvExpression<E1> const& u, SpvExpression<E2> const& v) {
-			return Div<E1, E2>{static_cast<E1>(u), static_cast<E2>(v) };
+			return Div<E1, E2>{ static_cast<E1>(u), static_cast<E2>(v) };
 		}
 
 		template<typename E1, typename T>
 		requires numeric<T> Div<E1, Constant<T>>
 		constexpr operator/(SpvExpression<E1> const& u, T const& v) {
-			return {static_cast<E1>(u), Constant<T>(v) };
+			return { static_cast<E1>(u), Constant<T>(v) };
 		}
 
 		template<typename E1, typename T>
 		requires numeric<T> Div<Constant<T>, E1>
 		constexpr operator/(T const& v, SpvExpression<E1> const& u) {
-			return { Constant<T>(v),static_cast<E1>(u) };
+			return { Constant<T>(v), static_cast<E1>(u) };
 		}
 
 		template<typename E1>
@@ -587,7 +587,7 @@ namespace vuk {
 
 		template<typename E1>
 		UnaryMinus<E1> constexpr operator-(SpvExpression<E1> const& u) {
-			return {static_cast<E1>(u) };
+			return { static_cast<E1>(u) };
 		}
 
 		template<class Context, class Type>
@@ -662,11 +662,11 @@ namespace vuk {
 
 		template<typename T, typename E1, typename... Indices>
 		struct CompositeExtract : SpvExpression<CompositeExtract<T, E1, Indices...>> {
-			using type = T; // typename Deref<typename E1::type, Indices...>::type;
+			using type = T;
 
 			std::tuple<E1, Indices...> children;
 			uint32_t id = 0;
-			static constexpr uint32_t count = sizeof...(Indices) + 4 + type::count + std::remove_reference_t<E1>::count + (Indices::count + ...);
+			static constexpr uint32_t count = sizeof...(Indices) + 4 + type::count + E1::count + (Indices::count + ...);
 
 			constexpr CompositeExtract(T type, E1 base, Indices... inds) : SpvExpression<CompositeExtract<T, E1, Indices...>>(base, 0u), children(base, inds...) {}
 
@@ -675,6 +675,26 @@ namespace vuk {
 				auto tid = mod.template type_id<type>();
 				std::reverse(eids.begin(), eids.end());
 				auto us = std::array{ op(spv::OpCompositeExtract, sizeof...(Indices) + 4), tid, mod.counter + 1 } << eids;
+				id = mod.counter + 1;
+				return mod.code(mod.counter + 1, us);
+			}
+		};
+
+		template<typename T, typename... Values>
+		struct CompositeConstruct : SpvExpression<CompositeConstruct<T, Values...>> {
+			using type = T;
+
+			std::tuple<Values...> children;
+			uint32_t id = 0;
+			static constexpr uint32_t count = sizeof...(Values) + 3 + type::count + (Values::count + ...);
+
+			constexpr CompositeConstruct(T type, Values... inds) : children(inds...) {}
+
+			constexpr uint32_t to_spirv(SPIRVModule& mod) {
+				auto eids = emit_children(mod, children);
+				auto tid = mod.template type_id<type>();
+				std::reverse(eids.begin(), eids.end());
+				auto us = std::array{ op(spv::OpCompositeConstruct, sizeof...(Values) + 3), tid, mod.counter + 1 } << eids;
 				id = mod.counter + 1;
 				return mod.code(mod.counter + 1, us);
 			}
@@ -712,68 +732,68 @@ namespace vuk {
 
 		template<typename E1, typename E2>
 		Cmp<CmpOp::eGreaterThan, E1, E2> constexpr operator>(SpvExpression<E1> const& u, SpvExpression<E2> const& v) {
-			return {static_cast<E1>(u), static_cast<E2>(v) };
+			return { static_cast<E1>(u), static_cast<E2>(v) };
 		}
 
 		template<typename E1, typename T>
 		requires numeric<T> Cmp<CmpOp::eGreaterThan, E1, Constant<T>>
 		constexpr operator>(SpvExpression<E1> const& u, T const& v) {
-			return {static_cast<E1>(u), Constant<T>(v) };
+			return { static_cast<E1>(u), Constant<T>(v) };
 		}
 
 		template<typename E1, typename E2>
 		Cmp<CmpOp::eGreaterThanEqual, E1, E2> constexpr operator>=(SpvExpression<E1> const& u, SpvExpression<E2> const& v) {
-			return {static_cast<E1>(u), static_cast<E2>(v) };
+			return { static_cast<E1>(u), static_cast<E2>(v) };
 		}
 
 		template<typename E1, typename T>
 		requires numeric<T> Cmp<CmpOp::eGreaterThanEqual, E1, Constant<T>>
 		constexpr operator>=(SpvExpression<E1> const& u, T const& v) {
-			return {static_cast<E1>(u), Constant<T>(v) };
+			return { static_cast<E1>(u), Constant<T>(v) };
 		}
 
 		template<typename E1, typename E2>
 		Cmp<CmpOp::eEqual, E1, E2> constexpr operator==(SpvExpression<E1> const& u, SpvExpression<E2> const& v) {
-			return {static_cast<E1>(u), static_cast<E2>(v) };
+			return { static_cast<E1>(u), static_cast<E2>(v) };
 		}
 
 		template<typename E1, typename T>
 		requires numeric<T> Cmp<CmpOp::eEqual, E1, Constant<T>>
 		constexpr operator==(SpvExpression<E1> const& u, T const& v) {
-			return {static_cast<E1>(u), Constant<T>(v) };
+			return { static_cast<E1>(u), Constant<T>(v) };
 		}
 
 		template<typename E1, typename E2>
 		Cmp<CmpOp::eNotEqual, E1, E2> constexpr operator!=(SpvExpression<E1> const& u, SpvExpression<E2> const& v) {
-			return {static_cast<E1>(u), static_cast<E2>(v) };
+			return { static_cast<E1>(u), static_cast<E2>(v) };
 		}
 
 		template<typename E1, typename T>
 		requires numeric<T> Cmp<CmpOp::eNotEqual, E1, Constant<T>>
 		constexpr operator!=(SpvExpression<E1> const& u, T const& v) {
-			return {static_cast<E1>(u), Constant<T>(v) };
+			return { static_cast<E1>(u), Constant<T>(v) };
 		}
 
 		template<typename E1, typename E2>
 		Cmp<CmpOp::eLessThan, E1, E2> constexpr operator<(SpvExpression<E1> const& u, SpvExpression<E2> const& v) {
-			return {static_cast<E1>(u), static_cast<E2>(v) };
+			return { static_cast<E1>(u), static_cast<E2>(v) };
 		}
 
 		template<typename E1, typename T>
 		requires numeric<T> Cmp<CmpOp::eLessThan, E1, Constant<T>>
 		constexpr operator<(SpvExpression<E1> const& u, T const& v) {
-			return {static_cast<E1>(u), Constant<T>(v) };
+			return { static_cast<E1>(u), Constant<T>(v) };
 		}
 
 		template<typename E1, typename E2>
 		Cmp<CmpOp::eLessThanEqual, E1, E2> constexpr operator<=(SpvExpression<E1> const& u, SpvExpression<E2> const& v) {
-			return {static_cast<E1>(u), static_cast<E2>(v) };
+			return { static_cast<E1>(u), static_cast<E2>(v) };
 		}
 
 		template<typename E1, typename T>
 		requires numeric<T> Cmp<CmpOp::eLessThanEqual, E1, Constant<T>>
 		constexpr operator<=(SpvExpression<E1> const& u, T const& v) {
-			return {static_cast<E1>(u), Constant<T>(v) };
+			return { static_cast<E1>(u), Constant<T>(v) };
 		}
 
 		template<typename Cond, typename E1, typename E2>
@@ -818,6 +838,15 @@ namespace vuk {
 				return Select(fwd(cond), fwd(e1), fwd(e2));
 			} else {
 				return cond ? e1 : e2;
+			}
+		}
+
+		template<class T, class... Args>
+		constexpr auto make(Args... args) {
+			if constexpr (any_spir(args...)) {
+				return CompositeConstruct(Type<T>{}, args...);
+			} else {
+				return T{ std::forward<Args>(args)... };
 			}
 		}
 

@@ -193,7 +193,21 @@ TEST_CASE("test binary_map") {
 struct POD {
 	unsigned foo;
 	unsigned bar;
+
+	bool operator==(const POD&) const = default;
 };
+
+constexpr bool operator==(const std::span<POD>& lhs, const std::span<POD>& rhs) {
+	return std::equal(begin(lhs), end(lhs), begin(rhs), end(rhs));
+}
+
+constexpr bool operator==(const std::span<POD>& lhs, const std::span<const POD>& rhs) {
+	return std::equal(begin(lhs), end(lhs), begin(rhs), end(rhs));
+}
+
+constexpr bool operator==(const std::span<const POD>& lhs, const std::span<const POD>& rhs) {
+	return std::equal(begin(lhs), end(lhs), begin(rhs), end(rhs));
+}
 
 template<>
 struct spirv::Type<POD> : spirv::TypeStruct<spirv::Member<spirv::Type<unsigned>, 0>, spirv::Member<spirv::Type<unsigned>, sizeof(unsigned)>> {
@@ -212,8 +226,8 @@ namespace vuk::spirv {
 			return CompositeExtract<Type<unsigned>, Base, Id>({}, ctx, Id(index));
 		}
 	};
-	
-} // namespace spirv
+
+} // namespace vuk::spirv
 template<class Ctx>
 struct spirv::TypeContext<Ctx, spirv::Type<POD>> {
 	SpvExpression<CompositeExtract<Type<unsigned>, Ctx, Id>> foo = { static_cast<Ctx&>(*this), 0u };
@@ -230,9 +244,9 @@ TEST_CASE("test unary_map, custom type") {
 		std::vector data = { POD{ 1, 2 }, POD{ 1, 3 }, POD{ 1, 4 } };
 		// function to apply
 		auto func = [](auto A) {
-			return A.foo * 2u + A.bar + A.foo + A.bar * 2u;
+			return spirv::make<POD>(A.foo * 2u + A.bar, A.foo + A.bar * 2u);
 		};
-		std::vector<uint32_t> expected;
+		std::vector<POD> expected;
 		// cpu result
 		std::transform(data.begin(), data.end(), std::back_inserter(expected), func);
 
@@ -246,7 +260,7 @@ TEST_CASE("test unary_map, custom type") {
 		auto calc = unary_map<POD>(*test_context.context, src, {}, cnt, func);
 		// bring data back to cpu
 		auto res = download_buffer(calc).get<Buffer>(*test_context.allocator, test_context.compiler);
-		auto out = std::span((uint32_t*)res->mapped_ptr, data.size());
+		auto out = std::span((POD*)res->mapped_ptr, data.size());
 		if (test_context.rdoc_api)
 			test_context.rdoc_api->EndFrameCapture(NULL, NULL);
 		CHECK(out == std::span(expected));
