@@ -210,7 +210,7 @@ constexpr bool operator==(const std::span<const POD>& lhs, const std::span<const
 }
 
 template<>
-struct spirv::Type<POD> : spirv::TypeStruct<spirv::Member<spirv::Type<uint32_t>, 0>, spirv::Member<spirv::Type<float>, sizeof(uint32_t)>> {
+struct spirv::Type<POD> : spirv::TypeStruct<spirv::Member<Type<uint32_t>>, spirv::Member<Type<float>>> {
 	using type = POD;
 };
 

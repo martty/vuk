@@ -299,6 +299,7 @@ namespace vuk {
 		template<class T>
 		struct TypeRuntimeArray : public SpvExpression<TypeRuntimeArray<T>> {
 			using pointee = T;
+			using type = T[0];
 
 			static constexpr uint32_t count = pointee::count + 3 + 4;
 
@@ -312,16 +313,11 @@ namespace vuk {
 			}
 		};
 
-		template<class T, uint32_t Offset>
+		template<class T, uint32_t Offset = ~0u>
 		struct Member {
 			using type = T;
 
 			static constexpr uint32_t count = type::count + 5;
-
-			static constexpr void to_spirv(SPIRVModule& mod, uint32_t parent, uint32_t index) {
-				auto deco = std::array{ op(spv::OpMemberDecorate, 5), parent, index, uint32_t(spv::Decoration::DecorationOffset), Offset };
-				mod.annotation(mod.counter, deco);
-			}
 		};
 
 		template<class... Members>
@@ -331,8 +327,13 @@ namespace vuk {
 			static constexpr uint32_t count = 3 + 3 + (Members::count + ...);
 
 			template<class T, uint32_t Offset>
-			static constexpr void member_to_spirv(Member<T, Offset> memb, SPIRVModule& mod, uint32_t parent, uint32_t& index) {
-				auto deco = std::array{ op(spv::OpMemberDecorate, 5), parent, index++, uint32_t(spv::Decoration::DecorationOffset), Offset };
+			static constexpr void member_to_spirv(Member<T, Offset> memb, SPIRVModule& mod, uint32_t parent, uint32_t& index, uint32_t& offset_cnt) {
+				uint32_t offset = Offset;
+				if (Offset == ~0u) {
+					offset = offset_cnt;
+				}
+				auto deco = std::array{ op(spv::OpMemberDecorate, 5), parent, index++, uint32_t(spv::Decoration::DecorationOffset), offset};				
+				offset_cnt += sizeof(typename T::type);
 				mod.annotation(mod.counter, deco);
 			}
 
@@ -341,7 +342,8 @@ namespace vuk {
 				auto str_id = mod.counter + 1;
 
 				uint32_t member_index = 0;
-				((void)member_to_spirv(Members{}, mod, str_id, member_index), ...); // emit offset decorations for all members
+				uint32_t offset_cnt = 0;
+				((void)member_to_spirv(Members{}, mod, str_id, member_index, offset_cnt), ...); // emit offset decorations for all members
 				auto deco = std::array{ op(spv::OpDecorate, 3), str_id, uint32_t(spv::Decoration::DecorationBlock) };
 				mod.annotation(mod.counter, deco);
 				auto us = std::array{ op(spv::OpTypeStruct, 2 + sizeof...(Members)), str_id } << tids;
