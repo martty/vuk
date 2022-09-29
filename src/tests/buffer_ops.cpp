@@ -216,8 +216,9 @@ struct spirv::Type<POD> : spirv::TypeStruct<spirv::Member<Type<uint32_t>>, spirv
 
 template<class Ctx>
 struct spirv::TypeContext<Ctx, spirv::Type<POD>> {
-	SpvExpression<CompositeExtract<Type<uint32_t>, Ctx, Id>> foo = { static_cast<Ctx&>(*this), 0u };
-	SpvExpression<CompositeExtract<Type<float>, Ctx, Id>> bar = { static_cast<Ctx&>(*this), 1u };
+	uint32_t cnt = 0;
+	SpvExpression<CompositeExtract<Type<uint32_t>, Ctx, Id>> foo = { static_cast<Ctx&>(*this), cnt++ };
+	SpvExpression<CompositeExtract<Type<float>, Ctx, Id>> bar = { static_cast<Ctx&>(*this), cnt++ };
 };
 
 TEST_CASE("test unary_map, custom type, casting") {

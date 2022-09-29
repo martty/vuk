@@ -299,7 +299,7 @@ namespace vuk {
 		template<class T>
 		struct TypeRuntimeArray : public SpvExpression<TypeRuntimeArray<T>> {
 			using pointee = T;
-			using type = T[0];
+			using type = T[1];
 
 			static constexpr uint32_t count = pointee::count + 3 + 4;
 
