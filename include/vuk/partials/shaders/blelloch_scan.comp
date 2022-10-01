@@ -7,18 +7,18 @@
 layout (local_size_x = SIZE) in;
 
 layout (std430, binding = 0) buffer coherent readonly BufferIn {
-	uint[] g_idata;
+	float[] g_idata;
 };
 
 layout (std430, binding = 1) buffer coherent BufferOut {
-	uint[] g_odata;
+	float[] g_odata;
 };
 
 layout (std430, binding = 2) buffer coherent Temp {
     uint out_wg_count;
     uint out_unused[2];
     uint out_count;
-	uint[] g_temp;
+	float[] g_temp;
 };
 
 layout (std430, binding = 4) buffer BufferCount {
@@ -30,11 +30,19 @@ layout (std430, binding = 4) buffer BufferCount {
 
 // https://developer.nvidia.com/gpugems/gpugems3/part-vi-gpu-computing/chapter-39-parallel-prefix-sum-scan-cuda
 const uint array_size = 2*SIZE;
-shared uint temp[array_size];
+shared float temp[array_size];
+
+layout(push_constant) uniform PCs{
+    uint use_fn;
+};
 
 uint linear_index(uvec3 id){
 	uvec3 mp = gl_NumWorkGroups * gl_WorkGroupSize;
 	return id.z * mp.y * mp.x + id.y * mp.x + id.x * 1;
+}
+
+float load(uint idx) {
+    return g_idata[idx];
 }
 
 void main() {
@@ -44,11 +52,19 @@ void main() {
     int offset = 1;
     uint n = array_size;
     if(2*gid < count)
-        temp[2*thid] = g_idata[2*gid].x; // load input into shared memory
+        if(use_fn == 1){
+            temp[2*thid] = load(2*gid); // load input into shared memory
+        } else {
+            temp[2*thid] = g_idata[2*gid];
+        }
     else
         temp[2*thid] = 0;
     if(2*gid + 1 < count)
-        temp[2*thid+1] = g_idata[2*gid+1].x;
+        if(use_fn == 1){
+            temp[2*thid+1] = load(2*gid + 1);
+        } else {
+             temp[2*thid+1] = g_idata[2*gid + 1];
+        }
     else
         temp[2*thid+1] = 0;
 
@@ -73,16 +89,16 @@ void main() {
         if (thid < d) {
             uint ai = offset*(2*thid+1)-1;
             uint bi = offset*(2*thid+2)-1; 
-            uint t = temp[ai]; 
+            float t = temp[ai]; 
             temp[ai] = temp[bi];
             temp[bi] += t;
         } 
     }  
 
     if(2*gid < count)
-        g_odata[2*gid].x = temp[2*thid]; // write results to device memory      
+        g_odata[2*gid] = temp[2*thid]; // write results to device memory      
     if(2*gid + 1 < count)
-        g_odata[2*gid+1].x = temp[2*thid+1];
+        g_odata[2*gid+1] = temp[2*thid+1];
 
     if(gl_LocalInvocationIndex == 0){
         temp[0] = 0;
@@ -110,8 +126,8 @@ void main() {
     gid = gl_LocalInvocationIndex;
 
     offset = 1;
-    temp[2*thid] = g_temp[2*gid].x; // load input into shared memory
-    temp[2*thid+1] = g_temp[2*gid+1].x;
+    temp[2*thid] = g_temp[2*gid]; // load input into shared memory
+    temp[2*thid+1] = g_temp[2*gid+1];
 
     for (uint d = n>>1; d > 0; d >>= 1) { // build sum in place up the tree
         barrier();
@@ -133,13 +149,13 @@ void main() {
         if (thid < d) {
             uint ai = offset*(2*thid+1)-1;
             uint bi = offset*(2*thid+2)-1; 
-            uint t = temp[ai]; 
+            float t = temp[ai]; 
             temp[ai] = temp[bi];
             temp[bi] += t;
         }
     }
     barrier();
 
-    g_temp[2*gid + array_size].x = temp[2*thid]; // write results to device memory      
-    g_temp[2*gid + array_size + 1].x = temp[2*thid+1];
+    g_temp[2*gid + array_size] = temp[2*thid]; // write results to device memory      
+    g_temp[2*gid + array_size + 1] = temp[2*thid+1];
 }

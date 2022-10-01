@@ -80,21 +80,28 @@ namespace vuk {
 				constexpr auto stDst = access_chain<0u>(vDst, Id(112u));
 				return spirv::Store{ stDst, f(A, B) };
 			}
+
+			template<class F>
+			constexpr auto compile(F&& f) {
+				auto [count, spirv] = spirv::SPIRVTemplate<SPIRVBinaryMap<T1, T2>>::compile(f);
+
+				return std::pair(count, spirv);
+			}
 		};
 
-		PipelineBaseInfo* static_compute_pbi(Context& ctx, const uint32_t* ptr, size_t size, std::string ident) {
+		inline PipelineBaseInfo* static_compute_pbi(Context& ctx, const uint32_t* ptr, size_t size, std::string ident) {
 			vuk::PipelineBaseCreateInfo pci;
 			pci.add_static_spirv(ptr, size, std::move(ident));
-			/* FILE* fo = fopen("dumb.spv", "wb");
+			FILE* fo = fopen("dumb.spv", "wb");
 			fwrite(ptr, sizeof(uint32_t), size, fo);
-			fclose(fo);*/
+			fclose(fo);
 			return ctx.get_pipeline(pci);
 		}
 	} // namespace detail
 
 	template<class T, class F>
 	inline Future unary_map(Context& ctx, Future src, Future dst, Future count, const F& fn) {
-		constexpr auto spv_result = detail::SPIRVBinaryMap<T, uint32_t>::compile([](auto A, auto B) { return F{}(A); });
+		constexpr auto spv_result = detail::SPIRVBinaryMap<T, uint32_t>().compile([](auto A, auto B) { return F{}(A); });
 		static auto pbi = detail::static_compute_pbi(ctx, spv_result.second.data(), spv_result.first, "unary");
 		std::shared_ptr<RenderGraph> rgp = std::make_shared<RenderGraph>("unary_map");
 		rgp->attach_in("src", std::move(src));
@@ -121,7 +128,7 @@ namespace vuk {
 
 	template<class T, class F>
 	inline Future binary_map(Context& ctx, Future src_a, Future src_b, Future dst, Future count, const F& fn) {
-		constexpr auto spv_result = detail::SPIRVBinaryMap<T, uint32_t>::compile([](auto A, auto B) { return F{}(A, B); });
+		constexpr auto spv_result = detail::SPIRVBinaryMap<T, uint32_t>().compile([](auto A, auto B) { return F{}(A, B); });
 		static auto pbi = detail::static_compute_pbi(ctx, spv_result.second.data(), spv_result.first, "binary");
 		std::shared_ptr<RenderGraph> rgp = std::make_shared<RenderGraph>("binary_map");
 		rgp->attach_in("src_a", std::move(src_a));

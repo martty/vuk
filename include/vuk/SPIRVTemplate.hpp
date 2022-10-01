@@ -324,7 +324,7 @@ namespace vuk {
 		struct TypeStruct : public SpvExpression<TypeStruct<Members...>> {
 			using members = std::tuple<Members...>;
 
-			static constexpr uint32_t count = 3 + 3 + (Members::count + ...);
+			static constexpr uint32_t count = 3 + 2 + sizeof...(Members) + (Members::count + ...);
 
 			template<class T, uint32_t Offset>
 			static constexpr void member_to_spirv(Member<T, Offset> memb, SPIRVModule& mod, uint32_t parent, uint32_t& index, uint32_t& offset_cnt) {
@@ -366,7 +366,7 @@ namespace vuk {
 
 			std::tuple<> children;
 			uint32_t id = 0;
-			static constexpr uint32_t count = 4 + 4 + 4;
+			static constexpr uint32_t count = type::count + 4 + 4 + 4;
 
 			constexpr Variable(uint32_t descriptor_set, uint32_t binding) : descriptor_set(descriptor_set), binding(binding) {}
 
@@ -409,7 +409,7 @@ namespace vuk {
 			std::tuple<> children;
 			uint32_t id = 0;
 			static constexpr size_t num_uints = sizeof(T) / sizeof(uint32_t);
-			static constexpr uint32_t count = 3 + num_uints;
+			static constexpr uint32_t count = type::count + 3 + num_uints;
 
 			constexpr Constant(T v) : value(v) {}
 
@@ -642,6 +642,23 @@ namespace vuk {
 			constexpr uint32_t to_spirv(SPIRVModule& mod) {
 				auto e1id = emit_children(mod, children);
 				auto us = std::array{ op(spv::OpStore, 3) } << e1id;
+				return mod.code(mod.counter, us);
+			}
+		};
+
+		template<typename E1>
+		struct ReturnValue : SpvExpression<ReturnValue<E1>> {
+			using type = void;
+
+			const uint32_t id = ~0u;
+			std::tuple<E1> children;
+			static constexpr uint32_t count = E1::count + 2;
+
+			constexpr ReturnValue(E1 value) : children(value) {}
+
+			constexpr uint32_t to_spirv(SPIRVModule& mod) {
+				auto e1id = emit_children(mod, children);
+				auto us = std::array{ op(spv::OpReturnValue, 2) } << e1id;
 				return mod.code(mod.counter, us);
 			}
 		};
@@ -923,11 +940,12 @@ namespace vuk {
 
 		template<class Derived>
 		struct SPIRVTemplate {
+			SPIRVModule spvmodule{ Derived::max_id, {}, {}, {}, std::vector<SPIRType>(Derived::predef_types.begin(), Derived::predef_types.end()) };
+
 			template<class F>
-			static constexpr auto compile(F&& f) {
+			constexpr auto compile(F&& f) {
 				auto specialized = Derived::specialize(f);
 
-				SPIRVModule spvmodule{ Derived::max_id, {}, {}, {}, std::vector<SPIRType>(Derived::predef_types.begin(), Derived::predef_types.end()) };
 				spvmodule.types.reserve(100);
 				specialized.to_spirv(spvmodule);
 				const auto& res = spvmodule;
