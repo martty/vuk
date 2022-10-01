@@ -3,6 +3,7 @@
 #include "vuk/Future.hpp"
 #include "vuk/SPIRVTemplate.hpp"
 #include "vuk/partials/StaticComputePBI.hpp"
+#include "vuk/partials/CountWithIndirect.hpp"
 
 namespace vuk {
 	namespace detail {
@@ -475,14 +476,6 @@ namespace vuk {
 			}
 		};
 	} // namespace detail
-
-	struct CountWithIndirect {
-		CountWithIndirect(uint32_t count, uint32_t wg_size) : workgroup_count((uint32_t)idivceil(count, wg_size)), count(count) {}
-
-		uint32_t workgroup_count;
-		uint32_t yz[2] = { 1, 1 };
-		uint32_t count;
-	};
 
 	template<class T, class F>
 	inline Future scan(Context& ctx, Future src, Future dst, Future count, uint32_t max_size, const F& fn) {

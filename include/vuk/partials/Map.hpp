@@ -3,6 +3,7 @@
 #include "vuk/Future.hpp"
 #include "vuk/SPIRVTemplate.hpp"
 #include "vuk/partials/StaticComputePBI.hpp"
+#include "vuk/partials/CountWithIndirect.hpp"
 
 namespace vuk {
 	namespace detail {

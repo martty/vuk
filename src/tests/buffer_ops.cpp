@@ -34,14 +34,6 @@ constexpr bool operator==(const std::span<const float>& lhs, const std::span<con
 	return std::equal(begin(lhs), end(lhs), begin(rhs), end(rhs));
 }
 
-struct CountWithIndirect {
-	CountWithIndirect(uint32_t count, uint32_t wg_size) : workgroup_count((uint32_t)idivceil(count, wg_size)), count(count) {}
-
-	uint32_t workgroup_count;
-	uint32_t yz[2] = { 1, 1 };
-	uint32_t count;
-};
-
 TEST_CASE("test buffer harness") {
 	REQUIRE(test_context.prepare());
 	auto data = { 1u, 2u, 3u };
