@@ -50,7 +50,6 @@ namespace vuk {
 			};
 
 			static constexpr uint32_t max_id = 200;
-			static constexpr std::array builtin_variables = { 15u, 45u, 52u, 66u, 71u, 78u };
 			static constexpr std::array predef_types = { spirv::SPIRType{ spirv::type_name<spirv::Type<uint32_t>>(), 6u },
 				                                           spirv::SPIRType{ spirv::type_name<spirv::Type<bool>>(), 58u },
 				                                           spirv::SPIRType{ spirv::type_name<spirv::Type<spirv::ptr<spv::StorageClassStorageBuffer, uint32_t>>>(),

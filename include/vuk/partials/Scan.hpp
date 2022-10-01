@@ -257,7 +257,6 @@ namespace vuk {
 				0x00010038
 			};
 			static constexpr uint32_t max_id = 500;
-			static constexpr std::array builtin_variables = { 21u, 52u, 62u, 68u, 79u, 90u, 99u, 211u, 212u, 285u };
 			static constexpr std::array predef_types = { spirv::SPIRType{ spirv::type_name<spirv::Type<uint32_t>>(), 6u },
 				                                           spirv::SPIRType{ spirv::type_name<spirv::Type<bool>>(), 84u } };
 

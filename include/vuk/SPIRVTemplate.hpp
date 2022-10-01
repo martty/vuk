@@ -332,7 +332,7 @@ namespace vuk {
 				if (Offset == ~0u) {
 					offset = offset_cnt;
 				}
-				auto deco = std::array{ op(spv::OpMemberDecorate, 5), parent, index++, uint32_t(spv::Decoration::DecorationOffset), offset};				
+				auto deco = std::array{ op(spv::OpMemberDecorate, 5), parent, index++, uint32_t(spv::Decoration::DecorationOffset), offset };
 				offset_cnt += sizeof(typename T::type);
 				mod.annotation(mod.counter, deco);
 			}
@@ -941,16 +941,35 @@ namespace vuk {
 		template<class Derived>
 		struct SPIRVTemplate {
 			SPIRVModule spvmodule{ Derived::max_id, {}, {}, {}, std::vector<SPIRType>(Derived::predef_types.begin(), Derived::predef_types.end()) };
+			std::vector<uint32_t> variable_ids;
+
+			constexpr void extract_builtin_variables(std::span<const uint32_t> words) {
+				for (size_t i = 5; i < words.size();) {
+					auto& word = words[i];
+					auto opcode = (spv::Op)(word & spv::OpCodeMask);
+					auto word_count = word >> spv::WordCountShift;
+
+					switch (opcode) {
+					case spv::OpEntryPoint:
+						uint32_t var_count = word_count - 5;
+						variable_ids.insert(variable_ids.end(), &words[i + 5], &words[i + 5 + var_count]);
+						return;
+					}
+
+					i += word_count;
+				}
+			}
 
 			template<class F>
 			constexpr auto compile(F&& f) {
+				std::span words = std::span(std::begin(Derived::template_bytes), std::end(Derived::template_bytes));
+				extract_builtin_variables(words);
 				auto specialized = Derived::specialize(f);
 
 				spvmodule.types.reserve(100);
 				specialized.to_spirv(spvmodule);
 				const auto& res = spvmodule;
 
-				std::vector<uint32_t> variable_ids;
 				visit(specialized, [&]<typename T>(const T& node) {
 					if (is_variable<T>::value) {
 						variable_ids.push_back(node.id);
@@ -963,10 +982,8 @@ namespace vuk {
 					auto byte = i % sizeof(uint32_t);
 					maintext[word] = maintext[word] | (t[i] << 8 * byte);
 				}
-				std::array fixed_op_entry = std::array{ op(spv::OpEntryPoint, 5 + (uint32_t)Derived::builtin_variables.size() + (uint32_t)variable_ids.size()),
-					                                      uint32_t(spv::ExecutionModelGLCompute),
-					                                      4u }
-				                            << maintext << Derived::builtin_variables;
+				std::array fixed_op_entry = std::array{ op(spv::OpEntryPoint, 5 + (uint32_t)variable_ids.size()), uint32_t(spv::ExecutionModelGLCompute), 4u }
+				                            << maintext;
 				std::vector<uint32_t> op_entry(fixed_op_entry.begin(), fixed_op_entry.end());
 				op_entry.insert(op_entry.end(), variable_ids.begin(), variable_ids.end());
 
@@ -981,7 +998,7 @@ namespace vuk {
 				it = final_bc.insert(final_bc.end(), Derived::epilogue.begin(), Derived::epilogue.end());
 				std::array<uint32_t,
 				           Derived::prelude.size() + Derived::prologue.size() + specialized.count + Derived::builtin_decls.size() + Derived::second_bit.size() +
-				               Derived::epilogue.size() + 25>
+				               Derived::epilogue.size() + 50>
 				    arr{};
 				std::copy(final_bc.begin(), final_bc.end(), arr.begin());
 				return std::pair(final_bc.size(), arr);
