@@ -1,7 +1,8 @@
 #pragma once
 
-#include "vuk/SPIRVTemplate.hpp"
 #include "vuk/Future.hpp"
+#include "vuk/SPIRVTemplate.hpp"
+#include "vuk/partials/StaticComputePBI.hpp"
 
 namespace vuk {
 	namespace detail {
@@ -79,23 +80,7 @@ namespace vuk {
 				constexpr auto stDst = access_chain<0u>(vDst, Id(112u));
 				return spirv::Store{ stDst, f(A, B) };
 			}
-
-			template<class F>
-			constexpr auto compile(F&& f) {
-				auto [count, spirv] = spirv::SPIRVTemplate<SPIRVBinaryMap<T1, T2>>::compile(f);
-
-				return std::pair(count, spirv);
-			}
 		};
-
-		inline PipelineBaseInfo* static_compute_pbi(Context& ctx, const uint32_t* ptr, size_t size, std::string ident) {
-			vuk::PipelineBaseCreateInfo pci;
-			pci.add_static_spirv(ptr, size, std::move(ident));
-			FILE* fo = fopen("dumb.spv", "wb");
-			fwrite(ptr, sizeof(uint32_t), size, fo);
-			fclose(fo);
-			return ctx.get_pipeline(pci);
-		}
 	} // namespace detail
 
 	template<class T, class F>
@@ -111,17 +96,16 @@ namespace vuk {
 			rgp->inference_rule("dst", same_size_as("src"));
 		}
 		rgp->attach_in("count", std::move(count));
-		rgp->add_pass(
-		    { .name = "unary_map",
-		      .resources = { "src"_buffer >> eComputeRead, "dst"_buffer >> eComputeWrite, "count"_buffer >> (eComputeRead | eIndirectRead)},
-		      .execute = [](CommandBuffer& command_buffer) {
-			      command_buffer.bind_buffer(0, 0, "src");
-			      command_buffer.bind_buffer(0, 1, "dst");
-			      command_buffer.bind_buffer(0, 2, "src");
-			      command_buffer.bind_buffer(0, 4, "count");
-			      command_buffer.bind_compute_pipeline(pbi);
-			      command_buffer.dispatch_indirect("count");
-		      } });
+		rgp->add_pass({ .name = "unary_map",
+		                .resources = { "src"_buffer >> eComputeRead, "dst"_buffer >> eComputeWrite, "count"_buffer >> (eComputeRead | eIndirectRead) },
+		                .execute = [](CommandBuffer& command_buffer) {
+			                command_buffer.bind_buffer(0, 0, "src");
+			                command_buffer.bind_buffer(0, 1, "dst");
+			                command_buffer.bind_buffer(0, 2, "src");
+			                command_buffer.bind_buffer(0, 4, "count");
+			                command_buffer.bind_compute_pipeline(pbi);
+			                command_buffer.dispatch_indirect("count");
+		                } });
 		return { rgp, "dst+" };
 	}
 
@@ -139,20 +123,19 @@ namespace vuk {
 			rgp->inference_rule("dst", same_size_as("src_a"));
 		}
 		rgp->attach_in("count", std::move(count));
-		rgp->add_pass(
-		    { .name = "unary_map",
+		rgp->add_pass({ .name = "unary_map",
 		                .resources = { "src_a"_buffer >> eComputeRead,
 		                               "src_b"_buffer >> eComputeRead,
 		                               "dst"_buffer >> eComputeWrite,
-		                               "count"_buffer >> (eComputeRead | eIndirectRead)},
-		      .execute = [](CommandBuffer& command_buffer) {
-			      command_buffer.bind_buffer(0, 0, "src_a");
-			      command_buffer.bind_buffer(0, 1, "dst");
-			      command_buffer.bind_buffer(0, 2, "src_b");
-			      command_buffer.bind_buffer(0, 4, "count");
-			      command_buffer.bind_compute_pipeline(pbi);
-			      command_buffer.dispatch_indirect("count");
-		      } });
+		                               "count"_buffer >> (eComputeRead | eIndirectRead) },
+		                .execute = [](CommandBuffer& command_buffer) {
+			                command_buffer.bind_buffer(0, 0, "src_a");
+			                command_buffer.bind_buffer(0, 1, "dst");
+			                command_buffer.bind_buffer(0, 2, "src_b");
+			                command_buffer.bind_buffer(0, 4, "count");
+			                command_buffer.bind_compute_pipeline(pbi);
+			                command_buffer.dispatch_indirect("count");
+		                } });
 		return { rgp, "dst+" };
 	}
 } // namespace vuk

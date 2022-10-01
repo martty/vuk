@@ -938,6 +938,14 @@ namespace vuk {
 			}
 		}
 
+		inline constexpr void replace_all_ids(std::span<uint32_t> words, uint32_t old_id, uint32_t new_id) {
+			for (auto& word : words) {
+				if (word == old_id) {
+					word = new_id;
+				}
+			}
+		}
+
 		template<class Derived>
 		struct SPIRVTemplate {
 			SPIRVModule spvmodule{ Derived::max_id, {}, {}, {}, std::vector<SPIRType>(Derived::predef_types.begin(), Derived::predef_types.end()) };
@@ -951,9 +959,9 @@ namespace vuk {
 
 					switch (opcode) {
 					case spv::OpEntryPoint:
-						uint32_t var_count = word_count - 5;
-						variable_ids.insert(variable_ids.end(), &words[i + 5], &words[i + 5 + var_count]);
+						variable_ids.insert(variable_ids.end(), &words[i + 5], &words[i + 5 + word_count - 5]);
 						return;
+					default:;
 					}
 
 					i += word_count;

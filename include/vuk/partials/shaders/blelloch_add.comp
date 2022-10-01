@@ -2,14 +2,14 @@
 #pragma shader_stage(compute)
 
 layout (std430, binding = 1) buffer BufferOut {
-	uint[] g_odata;
+	float[] g_odata;
 };
 
 layout (std430, binding = 2) buffer readonly Temp {
     uint out_wg_count;
     uint out_unused[2];
     uint out_count;
-	uint[] g_temp;
+	float[] g_temp;
 };
 
 layout (std430, binding = 4) buffer readonly BufferCount {
@@ -35,8 +35,8 @@ void main() {
     if(gl_WorkGroupID.x >= wg_count - 1) return; // last WG unused
 	uint gid = linear_index(gl_GlobalInvocationID);
     if(gid >= count) return;
-    uint a1 = g_odata[2*gid + array_size]; // we don't process the first block
-    uint a2 = g_odata[2*gid+1 + array_size];
+    float a1 = g_odata[2*gid + array_size]; // we don't process the first block
+    float a2 = g_odata[2*gid+1 + array_size];
 
     g_odata[2*gid + array_size] = a1 + g_temp[gl_WorkGroupID.x + temp_offset + 1]; // write results to device memory      
     g_odata[2*gid+1 + array_size] = a2 + g_temp[gl_WorkGroupID.x + temp_offset + 1];

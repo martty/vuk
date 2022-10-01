@@ -126,4 +126,34 @@ TEST_CASE("test scan") {
 			test_context.rdoc_api->EndFrameCapture(NULL, NULL);
 		CHECK(out == std::span(expected));
 	}
+	SUBCASE("3-level scan, float") {
+		if (test_context.rdoc_api)
+			test_context.rdoc_api->StartFrameCapture(NULL, NULL);
+		// src data
+		std::vector<float> data(512 * 512 * 2);
+		std::fill(data.begin(), data.end(), 1.f);
+		// function to apply
+		auto func = [](auto A) {
+			return spirv::select(A > 513.f, A, 1.f);
+		};
+		std::vector<float> expected, temp;
+		std::transform(data.begin(), data.end(), std::back_inserter(temp), func);
+		// cpu result
+		std::exclusive_scan(data.begin(), data.end(), std::back_inserter(expected), 0.f);
+
+		// put data on gpu
+		auto [_1, src] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(data));
+		// put count on gpu
+		CountWithIndirect count_data{ (uint32_t)data.size(), 512 };
+		auto [_2, cnt] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(&count_data, 1));
+
+		// apply function on gpu
+		auto calc = scan<float>(*test_context.context, src, {}, cnt, (uint32_t)data.size(), func);
+		// bring data back to cpu
+		auto res = download_buffer(calc).get<Buffer>(*test_context.allocator, test_context.compiler);
+		auto out = std::span((float*)res->mapped_ptr, data.size());
+		if (test_context.rdoc_api)
+			test_context.rdoc_api->EndFrameCapture(NULL, NULL);
+		CHECK(out == std::span(expected));
+	}
 }
