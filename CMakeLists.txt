@@ -19,6 +19,8 @@ option(VUK_USE_SHADERC "Link in shaderc for runtime compilation of GLSL shaders"
 option(VUK_USE_DXC "Link in DirectXShaderCompiler for runtime compilation of HLSL shaders" ON)
 option(VUK_BUILD_TESTS "Build tests" OFF)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
+
 ##### Using vuk with volk (or a similar library)
 # step 1: turn off VUK_LINK_TO_LOADER and add_subdirectory vuk
 # set(VUK_LINK_TO_LOADER OFF)
@@ -175,7 +177,7 @@ if(VUK_BUILD_TESTS)
 	FetchContent_MakeAvailable(vk-bootstrap)
 
 	include(doctest_force_link_static_lib_in_target) # until we can use cmake 3.24
-	add_executable(vuk-tests src/tests/Test.cpp src/tests/buffer_ops.cpp src/tests/scan.cpp src/tests/scatter.cpp)
+	add_executable(vuk-tests src/tests/Test.cpp src/tests/buffer_ops.cpp src/tests/scan.cpp src/tests/scatter.cpp src/tests/compact.cpp)
 	#target_compile_features(vuk-tests PRIVATE cxx_std_17)
 	target_include_directories(vuk-tests PRIVATE ext/renderdoc)
 	target_link_libraries(vuk-tests PRIVATE vuk doctest::doctest vk-bootstrap)
