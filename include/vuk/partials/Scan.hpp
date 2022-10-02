@@ -2,8 +2,8 @@
 
 #include "vuk/Future.hpp"
 #include "vuk/SPIRVTemplate.hpp"
-#include "vuk/partials/StaticComputePBI.hpp"
 #include "vuk/partials/CountWithIndirect.hpp"
+#include "vuk/partials/StaticComputePBI.hpp"
 
 namespace vuk {
 	namespace detail {
@@ -477,8 +477,13 @@ namespace vuk {
 		};
 	} // namespace detail
 
+	struct ScanResult {
+		Future result;
+		Future count;
+	};
+
 	template<class T, class F>
-	inline Future scan(Context& ctx, Future src, Future dst, Future count, uint32_t max_size, const F& fn) {
+	inline ScanResult scan(Context& ctx, Future src, Future dst, Future&& count, uint32_t max_size, const F& fn) {
 		constexpr auto scan_spv_result = detail::SPIRVScan<T>().compile([](auto A) { return F{}(A); });
 		static auto pbi_u = detail::static_compute_pbi(ctx, scan_spv_result.second.data(), scan_spv_result.first, "scan");
 		constexpr auto scanadd_spv_result = detail::SPIRVScanAdd<T>().compile();
@@ -510,16 +515,16 @@ namespace vuk {
 				                command_buffer.dispatch_indirect("count");
 			                } });
 			rgp->add_pass({ .name = "add",
-			                .resources = { "dst+"_buffer >> eComputeRW, "temp+"_buffer >> eComputeRead, "count+"_buffer >> (eComputeRW | eIndirectRead) },
+			                .resources = { "dst+"_buffer >> eComputeRW, "temp+"_buffer >> eComputeRead, "count+"_buffer >> (eComputeRead | eIndirectRead) },
 			                .execute = [](CommandBuffer& command_buffer) {
 				                command_buffer.bind_buffer(0, 0, "src");
 				                command_buffer.bind_buffer(0, 1, "dst+");
 				                command_buffer.bind_buffer(0, 2, "temp+");
-				                command_buffer.bind_buffer(0, 4, "count");
+				                command_buffer.bind_buffer(0, 4, "count+");
 				                command_buffer.bind_compute_pipeline(pbi_a);
-				                command_buffer.dispatch_indirect("count");
+				                command_buffer.dispatch_indirect("count+");
 			                } });
-			return { rgp, "dst++" };
+			return { { rgp, "dst++" }, { rgp, "count+" } };
 		} else {
 			rgp->attach_buffer(
 			    "tempup",
@@ -579,7 +584,7 @@ namespace vuk {
 				                command_buffer.specialize_constants(0, 0);
 				                command_buffer.dispatch_indirect("count+");
 			                } });
-			return { rgp, "dst++" };
+			return { { rgp, "dst++" }, { rgp, "count+" } };
 		}
 	}
 } // namespace vuk

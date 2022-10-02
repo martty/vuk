@@ -32,7 +32,7 @@ TEST_CASE("test scan") {
 		auto [_2, cnt] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(&count_data, 1));
 
 		// apply function on gpu
-		auto calc = scan<uint32_t>(*test_context.context, src, {}, cnt, 15u, func);
+		auto [calc, cnt_p] = scan<uint32_t>(*test_context.context, src, {}, std::move(cnt), 15u, func);
 		// bring data back to cpu
 		auto res = download_buffer(calc).get<Buffer>(*test_context.allocator, test_context.compiler);
 		auto out = std::span((uint32_t*)res->mapped_ptr, 15);
@@ -62,7 +62,7 @@ TEST_CASE("test scan") {
 		auto [_2, cnt] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(&count_data, 1));
 
 		// apply function on gpu
-		auto calc = scan<uint32_t>(*test_context.context, src, {}, cnt, (uint32_t)data.size(), func);
+		auto [calc, cnt_p] = scan<uint32_t>(*test_context.context, src, {}, std::move(cnt), (uint32_t)data.size(), func);
 		// bring data back to cpu
 		auto res = download_buffer(calc).get<Buffer>(*test_context.allocator, test_context.compiler);
 		auto out = std::span((uint32_t*)res->mapped_ptr, data.size());
@@ -92,7 +92,7 @@ TEST_CASE("test scan") {
 		auto [_2, cnt] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(&count_data, 1));
 
 		// apply function on gpu
-		auto calc = scan<uint32_t>(*test_context.context, src, {}, cnt, (uint32_t)data.size(), func);
+		auto [calc, cnt_p] = scan<uint32_t>(*test_context.context, src, {}, std::move(cnt), (uint32_t)data.size(), func);
 		// bring data back to cpu
 		auto res = download_buffer(calc).get<Buffer>(*test_context.allocator, test_context.compiler);
 		auto out = std::span((uint32_t*)res->mapped_ptr, data.size());
@@ -122,7 +122,7 @@ TEST_CASE("test scan") {
 		auto [_2, cnt] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(&count_data, 1));
 
 		// apply function on gpu
-		auto calc = scan<float>(*test_context.context, src, {}, cnt, (uint32_t)data.size(), func);
+		auto [calc, cnt_p] = scan<float>(*test_context.context, src, {}, std::move(cnt), (uint32_t)data.size(), func);
 		// bring data back to cpu
 		auto res = download_buffer(calc).get<Buffer>(*test_context.allocator, test_context.compiler);
 		auto out = std::span((float*)res->mapped_ptr, data.size());
