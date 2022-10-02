@@ -170,3 +170,29 @@ namespace vuk {
 
 	extern TestContext test_context;
 } // namespace vuk
+
+// helpers for testing
+
+constexpr bool operator==(const std::span<uint32_t>& lhs, const std::span<uint32_t>& rhs) {
+	return std::equal(begin(lhs), end(lhs), begin(rhs), end(rhs));
+}
+
+constexpr bool operator==(const std::span<uint32_t>& lhs, const std::span<const uint32_t>& rhs) {
+	return std::equal(begin(lhs), end(lhs), begin(rhs), end(rhs));
+}
+
+constexpr bool operator==(const std::span<const uint32_t>& lhs, const std::span<const uint32_t>& rhs) {
+	return std::equal(begin(lhs), end(lhs), begin(rhs), end(rhs));
+}
+
+constexpr bool operator==(const std::span<float>& lhs, const std::span<float>& rhs) {
+	return std::equal(begin(lhs), end(lhs), begin(rhs), end(rhs));
+}
+
+constexpr bool operator==(const std::span<float>& lhs, const std::span<const float>& rhs) {
+	return std::equal(begin(lhs), end(lhs), begin(rhs), end(rhs));
+}
+
+constexpr bool operator==(const std::span<const float>& lhs, const std::span<const float>& rhs) {
+	return std::equal(begin(lhs), end(lhs), begin(rhs), end(rhs));
+}

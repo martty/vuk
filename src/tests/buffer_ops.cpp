@@ -10,30 +10,6 @@ TEST_CASE("test text_context preparation") {
 	REQUIRE(test_context.prepare());
 }
 
-constexpr bool operator==(const std::span<uint32_t>& lhs, const std::span<uint32_t>& rhs) {
-	return std::equal(begin(lhs), end(lhs), begin(rhs), end(rhs));
-}
-
-constexpr bool operator==(const std::span<uint32_t>& lhs, const std::span<const uint32_t>& rhs) {
-	return std::equal(begin(lhs), end(lhs), begin(rhs), end(rhs));
-}
-
-constexpr bool operator==(const std::span<const uint32_t>& lhs, const std::span<const uint32_t>& rhs) {
-	return std::equal(begin(lhs), end(lhs), begin(rhs), end(rhs));
-}
-
-constexpr bool operator==(const std::span<float>& lhs, const std::span<float>& rhs) {
-	return std::equal(begin(lhs), end(lhs), begin(rhs), end(rhs));
-}
-
-constexpr bool operator==(const std::span<float>& lhs, const std::span<const float>& rhs) {
-	return std::equal(begin(lhs), end(lhs), begin(rhs), end(rhs));
-}
-
-constexpr bool operator==(const std::span<const float>& lhs, const std::span<const float>& rhs) {
-	return std::equal(begin(lhs), end(lhs), begin(rhs), end(rhs));
-}
-
 TEST_CASE("test buffer harness") {
 	REQUIRE(test_context.prepare());
 	auto data = { 1u, 2u, 3u };

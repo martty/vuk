@@ -1,0 +1,33 @@
+#version 450
+#pragma shader_stage(compute)
+
+layout (std430, binding = 0) buffer readonly BufferIn {
+	float[] data_in;
+};
+
+layout (std430, binding = 1) buffer BufferOut {
+	float[] data_out;
+};
+
+layout (std430, binding = 2) buffer readonly BufferInd {
+	uint[] indirs;
+};
+
+layout (std430, binding = 3) buffer readonly BufferCount {
+    readonly uint wg_count;
+    uint unused[2];
+    readonly uint count;
+};
+
+layout (local_size_x = 64) in;
+
+uint linear_index(uvec3 id){
+	uvec3 mp = gl_NumWorkGroups * gl_WorkGroupSize;
+	return id.z * mp.y * mp.x + id.y * mp.x + id.x * 1;
+}
+
+void main() {
+	uint idx = linear_index(gl_GlobalInvocationID);
+	if(idx >= count) return;
+	data_out[indirs[idx]] = data_in[idx];
+}
