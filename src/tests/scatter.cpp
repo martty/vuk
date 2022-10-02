@@ -28,7 +28,7 @@ TEST_CASE("test scatter") {
 	auto [_1, src] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(data));
 	auto [_2, indir] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(indirection));
 	// put count on gpu
-	CountWithIndirect count_data{ (uint32_t)data.size(), 64 };
+	CountWithIndirect count_data{ (uint32_t)data.size(), 512 };
 	auto [_3, cnt] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(&count_data, 1));
 
 	// apply function on gpu
