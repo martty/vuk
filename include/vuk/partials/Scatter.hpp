@@ -79,10 +79,7 @@ namespace vuk {
 				                                           spirv::SPIRType{ spirv::type_name<spirv::Type<bool>>(), 59u },
 				                                           spirv::SPIRType{ spirv::type_name<spirv::Type<float>>(), 64u } };
 
-			static constexpr std::span prelude = std::span(template_bytes, 0x0000040 / 4);
-			static constexpr std::span<const uint32_t> prologue = std::span(std::begin(template_bytes) + 0x000006c / 4, std::end(template_bytes));
-			static constexpr std::span<const uint32_t> builtin_decls = {};
-			static constexpr std::span<const uint32_t> second_bit = {};
+			static constexpr std::span<const uint32_t> second_bit = std::span(std::begin(template_bytes) + 0x00000650 / 4, std::end(template_bytes));
 			static constexpr std::span<const uint32_t> epilogue = {};
 
 			template<class F>
@@ -146,7 +143,7 @@ namespace vuk {
 
 	template<class T>
 	inline Future scatter(Context& ctx, Future src, Future dst, Future indirection, Future count) {
-		constexpr auto scatter_spv_result = detail::SPIRVScatter<T>().compile();
+		auto scatter_spv_result = detail::SPIRVScatter<T>().compile();
 		static auto pbi = detail::static_compute_pbi(ctx, scatter_spv_result.second.data(), scatter_spv_result.first, "scatter");
 		std::shared_ptr<RenderGraph> rgp = std::make_shared<RenderGraph>("scatter");
 		rgp->attach_in("src", std::move(src));

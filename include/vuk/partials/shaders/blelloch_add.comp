@@ -38,6 +38,6 @@ void main() {
     float a1 = g_odata[2*gid + array_size]; // we don't process the first block
     float a2 = g_odata[2*gid+1 + array_size];
 
-    g_odata[2*gid + array_size] = a1 + g_temp[gl_WorkGroupID.x + temp_offset + 1]; // write results to device memory      
+    g_odata[2*gid + array_size] = a1 + g_temp[gl_WorkGroupID.x + temp_offset + 1]; // write results to device memory
     g_odata[2*gid+1 + array_size] = a2 + g_temp[gl_WorkGroupID.x + temp_offset + 1];
 }

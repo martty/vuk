@@ -403,6 +403,22 @@ namespace vuk {
 		};
 
 		template<class T>
+		struct TypeReference : public SpvExpression<Id> {
+			using type = T;
+
+			uint32_t id = ~0;
+			std::tuple<> children;
+			static constexpr uint32_t count = type::count;
+
+			constexpr TypeReference() {}
+
+			constexpr uint32_t to_spirv(SPIRVModule& mod) {
+				auto tid = mod.template type_id<type>();
+				return tid;
+			}
+		};
+
+		template<class T>
 		struct Constant : public SpvExpression<Constant<T>> {
 			using type = Type<T>;
 			T value;
@@ -648,7 +664,7 @@ namespace vuk {
 
 		template<typename E1>
 		struct ReturnValue : SpvExpression<ReturnValue<E1>> {
-			using type = void;
+			using type = typename E1::type;
 
 			const uint32_t id = ~0u;
 			std::tuple<E1> children;
@@ -951,6 +967,58 @@ namespace vuk {
 			SPIRVModule spvmodule{ Derived::max_id, {}, {}, {}, std::vector<SPIRType>(Derived::predef_types.begin(), Derived::predef_types.end()) };
 			std::vector<uint32_t> variable_ids;
 
+			constexpr uint32_t word_count(uint32_t word) {
+				return word >> spv::WordCountShift;
+			}
+
+			template<spv::Op Opcode>
+			constexpr uint32_t find_first_opcode(std::span<const uint32_t> words) {
+				for (uint32_t i = 5; i < words.size();) {
+					auto& word = words[i];
+					auto opcode = (spv::Op)(word & spv::OpCodeMask);
+					auto word_count = word >> spv::WordCountShift;
+
+					switch (opcode) {
+					case Opcode:
+						return i;
+					default:;
+					}
+
+					i += word_count;
+				}
+				assert(0);
+				return 0;
+			}
+
+			struct Decls {
+				std::vector<uint32_t> primitive_type_decls;
+				std::vector<uint32_t> rest;
+			};
+
+			constexpr Decls partition_declarations(std::span<const uint32_t> words) {
+				Decls decls;
+				for (size_t i = 0; i < words.size();) {
+					auto& word = words[i];
+					auto opcode = (spv::Op)(word & spv::OpCodeMask);
+					auto word_count = word >> spv::WordCountShift;
+
+					switch (opcode) {
+					case spv::OpTypeVoid:
+					case spv::OpTypeBool:
+					case spv::OpTypeInt:
+					case spv::OpTypeFloat:
+						decls.primitive_type_decls.insert(decls.primitive_type_decls.end(), &word, &word + word_count);
+						break;
+					default:
+						decls.rest.insert(decls.rest.end(), &word, &word + word_count);
+						break;
+					}
+
+					i += word_count;
+				}
+				return decls;
+			}
+
 			constexpr void extract_builtin_variables(std::span<const uint32_t> words) {
 				for (size_t i = 5; i < words.size();) {
 					auto& word = words[i];
@@ -970,7 +1038,8 @@ namespace vuk {
 
 			template<class F>
 			constexpr auto compile(F&& f) {
-				std::span words = std::span(std::begin(Derived::template_bytes), std::end(Derived::template_bytes));
+				auto byte_it = std::begin(Derived::template_bytes);
+				std::span words = std::span(byte_it, std::end(Derived::template_bytes));
 				extract_builtin_variables(words);
 				auto specialized = Derived::specialize(f);
 
@@ -983,6 +1052,8 @@ namespace vuk {
 						variable_ids.push_back(node.id);
 					}
 				});
+
+				uint32_t prelude_end = find_first_opcode<spv::OpEntryPoint>(words);
 				constexpr std::string_view t = "main";
 				std::array<uint32_t, (t.size() + sizeof(uint32_t) + 1 - 1) / sizeof(uint32_t)> maintext = {};
 				for (int i = 0; i < t.size(); i++) {
@@ -995,19 +1066,23 @@ namespace vuk {
 				std::vector<uint32_t> op_entry(fixed_op_entry.begin(), fixed_op_entry.end());
 				op_entry.insert(op_entry.end(), variable_ids.begin(), variable_ids.end());
 
-				std::vector<uint32_t> final_bc(Derived::prelude.begin(), Derived::prelude.end());
+				uint32_t prologue_start = prelude_end + word_count(words[prelude_end]);
+				uint32_t prologue_end = find_first_opcode<spv::OpTypeVoid>(words);
+				uint32_t builtin_decls_start = prologue_end;
+				uint32_t builtin_decls_end = find_first_opcode<spv::OpFunction>(words);
+				Decls decls = partition_declarations(std::span(byte_it + builtin_decls_start, byte_it + builtin_decls_end));
+
+				std::vector<uint32_t> final_bc(byte_it, byte_it + prelude_end);
 				auto it = final_bc.insert(final_bc.end(), op_entry.begin(), op_entry.end());
-				it = final_bc.insert(final_bc.end(), Derived::prologue.begin(), Derived::prologue.end());
+				it = final_bc.insert(final_bc.end(), byte_it + prologue_start, byte_it + prologue_end);
 				it = final_bc.insert(final_bc.end(), res.annotations.begin(), res.annotations.end());
-				it = final_bc.insert(final_bc.end(), Derived::builtin_decls.begin(), Derived::builtin_decls.end());
+				it = final_bc.insert(final_bc.end(), decls.primitive_type_decls.begin(), decls.primitive_type_decls.end());
 				it = final_bc.insert(final_bc.end(), res.decls.begin(), res.decls.end());
+				it = final_bc.insert(final_bc.end(), decls.rest.begin(), decls.rest.end());
 				it = final_bc.insert(final_bc.end(), Derived::second_bit.begin(), Derived::second_bit.end());
 				it = final_bc.insert(final_bc.end(), res.codes.begin(), res.codes.end());
 				it = final_bc.insert(final_bc.end(), Derived::epilogue.begin(), Derived::epilogue.end());
-				std::array<uint32_t,
-				           Derived::prelude.size() + Derived::prologue.size() + specialized.count + Derived::builtin_decls.size() + Derived::second_bit.size() +
-				               Derived::epilogue.size() + 50>
-				    arr{};
+				std::array<uint32_t, std::size(Derived::template_bytes) + specialized.count + 50> arr{};
 				std::copy(final_bc.begin(), final_bc.end(), arr.begin());
 				return std::pair(final_bc.size(), arr);
 			}

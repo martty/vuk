@@ -6,11 +6,15 @@
 #define SIZE 256
 layout (local_size_x = SIZE) in;
 
-layout (std430, binding = 0) buffer coherent readonly BufferIn {
-	float[] g_idata;
+layout (std430, binding = 0) buffer readonly BufferIn {
+	double[] g_idata;
 };
 
-layout (std430, binding = 1) buffer coherent BufferOut {
+layout (std430, binding = 0) buffer readonly UnconvBufferIn {
+	float[] g_ifdata;
+};
+
+layout (std430, binding = 1) buffer BufferOut {
 	float[] g_odata;
 };
 
@@ -42,7 +46,7 @@ uint linear_index(uvec3 id){
 }
 
 float load(uint idx) {
-    return g_idata[idx];
+    return float(g_idata[idx]);
 }
 
 void main() {
@@ -55,7 +59,7 @@ void main() {
         if(use_fn == 1){
             temp[2*thid] = load(2*gid); // load input into shared memory
         } else {
-            temp[2*thid] = g_idata[2*gid];
+            temp[2*thid] = g_ifdata[2*gid];
         }
     else
         temp[2*thid] = 0;
@@ -63,7 +67,7 @@ void main() {
         if(use_fn == 1){
             temp[2*thid+1] = load(2*gid + 1);
         } else {
-             temp[2*thid+1] = g_idata[2*gid + 1];
+             temp[2*thid+1] = g_ifdata[2*gid + 1];
         }
     else
         temp[2*thid+1] = 0;
