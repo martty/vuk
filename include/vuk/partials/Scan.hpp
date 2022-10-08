@@ -269,13 +269,13 @@ namespace vuk {
 			static constexpr std::span epilogue = std::span(template_bytes + 0x000002eac / 4, 1);
 
 			template<class F>
-			static constexpr auto specialize(F&& f) {
+			static constexpr auto specialize(spirv::SPIRVModule& mod, F&& f) {
 				using namespace spirv;
 
 				constexpr TypeStruct<Member<TypeRuntimeArray<Type<T1>>, 0>> strT = {};
 				constexpr auto ptr_to_struct = Type<ptr<spv::StorageClassStorageBuffer, decltype(strT)>>{};
-				constexpr auto vA = Variable<decltype(ptr_to_struct), spv::StorageClassStorageBuffer>(0, 0);
-				constexpr auto ldA = access_chain<0u>(vA, Id(55u));
+				auto vA = Variable<decltype(ptr_to_struct), spv::StorageClassStorageBuffer>(mod, 0, 0);
+				auto ldA = access_chain<0u>(vA, Id(55u));
 				auto A = Load(ldA);
 				return spirv::ReturnValue{ f(A) };
 			}
@@ -326,7 +326,7 @@ namespace vuk {
 			template<class F>
 			constexpr auto compile(F&& f) {
 				auto [count, spirv] = spirv::SPIRVTemplate<SPIRVScan<T1>>::compile(f);
-				using result_type = typename decltype(specialize(f))::type;
+				using result_type = typename decltype(this->specialize(this->spvmodule, f))::type;
 
 				auto new_src_tid = this->spvmodule.template type_id<spirv::Type<T1>>();
 				auto placeholder_src_tid = 49; // double is the placeholder for the source type
@@ -431,7 +431,7 @@ namespace vuk {
 			static constexpr std::span<const uint32_t> epilogue = {};
 
 			template<class F>
-			static constexpr auto specialize(F&& f) {
+			static constexpr auto specialize(spirv::SPIRVModule&, F&& f) {
 				using namespace spirv;
 
 				return TypeReference<Type<T1>>(); // we don't embed spirv for this one
@@ -498,7 +498,8 @@ namespace vuk {
 	inline ScanResult scan(Context& ctx, Future src, Future dst, Future&& count, uint32_t max_size, const F& fn) {
 		auto scan_spv_result = detail::SPIRVScan<T>().compile([](auto A) { return F{}(A); });
 		static auto pbi_u = detail::static_compute_pbi(ctx, scan_spv_result.second.data(), scan_spv_result.first, "scan");
-		using scan_lambda_result_type = typename decltype(detail::SPIRVScan<T>().specialize([](auto A) { return F{}(A); }))::type::type;
+		spirv::SPIRVModule spvmodule(200);
+		using scan_lambda_result_type = typename decltype(detail::SPIRVScan<T>().specialize(spvmodule, [](auto A) { return F{}(A); }))::type::type;
 		constexpr auto scanadd_spv_result = detail::SPIRVScanAdd<scan_lambda_result_type>().compile();
 		static auto pbi_a = detail::static_compute_pbi(ctx, scanadd_spv_result.second.data(), scanadd_spv_result.first, "add");
 		std::shared_ptr<RenderGraph> rgp = std::make_shared<RenderGraph>("scan");

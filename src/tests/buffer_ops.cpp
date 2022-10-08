@@ -294,30 +294,29 @@ TEST_CASE("test unary_map, impure (buffer)") {
 			test_context.rdoc_api->StartFrameCapture(NULL, NULL);
 		// src data
 		std::vector data = { 1u, 2u, 3u };
-		uint32_t uni_data = 55u;
+		uint32_t initial_data = 0u;
 		// function to apply
 		auto func = [](auto A, spirv::Buffer<uint32_t>& v) {
-			spirv::AtomicIncrement(&v, spirv::Scope{}, spirv::MemorySemantics{});
-			return A + 3u;
+			spirv::AtomicIncrement(&v, spirv::Scope{spv::ScopeDevice}, spirv::MemorySemantics{spv::MemorySemanticsAcquireReleaseMask});
+			return A;
 		};
-		std::vector<uint32_t> expected;
+		uint32_t expected = data.size();
 		// cpu result
-		std::transform(data.begin(), data.end(), std::back_inserter(expected), [=](auto A) { return A + 3u + uni_data; });
 
 		// put data on gpu
 		auto [_1, src] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(data));
-		auto [_2, unif] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span<uint32_t>(&uni_data, 1));
+		auto [_2, buff] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span<uint32_t>(&initial_data, 1));
 		// put count on gpu
 		CountWithIndirect count_data{ (uint32_t)data.size(), 64 };
 		auto [_3, cnt] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(&count_data, 1));
 
 		// apply function on gpu
-		auto calc = unary_map<uint32_t>(*test_context.context, func, src, {}, cnt, unif);
+		auto calc = unary_map<uint32_t>(*test_context.context, func, src, {}, cnt, buff);
 		// bring data back to cpu
-		auto res = download_buffer(calc).get<Buffer>(*test_context.allocator, test_context.compiler);
-		auto out = std::span((uint32_t*)res->mapped_ptr, data.size());
+		auto res = download_buffer(buff).get<Buffer>(*test_context.allocator, test_context.compiler);
+		auto out = *(uint32_t*)res->mapped_ptr;
 		if (test_context.rdoc_api)
 			test_context.rdoc_api->EndFrameCapture(NULL, NULL);
-		CHECK(out == std::span(expected));
+		CHECK(out == expected);
 	}
 }

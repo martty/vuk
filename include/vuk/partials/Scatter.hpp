@@ -83,7 +83,7 @@ namespace vuk {
 			static constexpr std::span<const uint32_t> epilogue = {};
 
 			template<class F>
-			static constexpr auto specialize(F&& f) {
+			static constexpr auto specialize(spirv::SPIRVModule&, F&& f) {
 				using namespace spirv;
 
 				return spirv::Id{ 0 }; // we don't embed spirv for this one

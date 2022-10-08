@@ -90,16 +90,16 @@ namespace vuk {
 			static constexpr std::span epilogue = std::span(template_bytes + 0x00000738 / 4, 6);
 
 			template<class F>
-			static constexpr auto specialize(F& f) {
+			static constexpr auto specialize(spirv::SPIRVModule& mod, F& f) {
 				using namespace spirv;
 
 				constexpr TypeStruct<Member<TypeRuntimeArray<Type<T1>>, 0>> strT = {};
 				constexpr auto ptr_to_struct = Type<ptr<spv::StorageClassStorageBuffer, decltype(strT)>>{};
-				constexpr auto vA = Variable<decltype(ptr_to_struct), spv::StorageClassStorageBuffer>(0, 0);
-				constexpr auto ldA = access_chain<0u>(vA, Id(112u));
+				auto vA = Variable<decltype(ptr_to_struct), spv::StorageClassStorageBuffer>(mod, 0, 0);
+				auto ldA = access_chain<0u>(vA, Id(112u));
 				auto A = Load(ldA);
-				constexpr auto vB = Variable<decltype(ptr_to_struct), spv::StorageClassStorageBuffer>(0, 2);
-				constexpr auto ldB = access_chain<0u>(vB, Id(112u));
+				auto vB = Variable<decltype(ptr_to_struct), spv::StorageClassStorageBuffer>(mod, 0, 2);
+				auto ldB = access_chain<0u>(vB, Id(112u));
 				auto B = Load(ldB);
 
 				// process remaining arguments
@@ -111,8 +111,8 @@ namespace vuk {
 
 				constexpr TypeStruct<Member<TypeRuntimeArray<typename decltype(f(A, B))::type>, 0>> dstT = {};
 				constexpr auto ptr_to_dst_struct = Type<ptr<spv::StorageClassStorageBuffer, decltype(dstT)>>{};
-				constexpr auto vDst = Variable<decltype(ptr_to_dst_struct), spv::StorageClassStorageBuffer>(0, 1);
-				constexpr auto stDst = access_chain<0u>(vDst, Id(112u));
+				auto vDst = Variable<decltype(ptr_to_dst_struct), spv::StorageClassStorageBuffer>(mod, 0, 1);
+				auto stDst = access_chain<0u>(vDst, Id(112u));
 				return spirv::Store{ stDst, f(A, B) };
 			}
 		};
@@ -171,13 +171,13 @@ namespace vuk {
 			static constexpr std::span epilogue = std::span(template_bytes + 0x00000738 / 4, 6);
 			static constexpr std::span second_bit = std::span(template_bytes + 0x0000050c / 4, 0x0000072c / 4 - 0x0000050c / 4);
 
-			static constexpr auto specialize(F f) {
+			static constexpr auto specialize(spirv::SPIRVModule& mod, F f) {
 				using namespace spirv;
 
 				constexpr TypeStruct<Member<TypeRuntimeArray<Type<T1>>, 0>> strT = {};
 				constexpr auto ptr_to_struct = Type<ptr<spv::StorageClassStorageBuffer, decltype(strT)>>{};
-				constexpr auto vA = Variable<decltype(ptr_to_struct), spv::StorageClassStorageBuffer>(0, 0);
-				constexpr auto ldA = access_chain<0u>(vA, Id(112u));
+				auto vA = Variable<decltype(ptr_to_struct), spv::StorageClassStorageBuffer>(mod, 0, 0);
+				auto ldA = access_chain<0u>(vA, Id(112u));
 				auto A = Load(ldA);
 
 				// process remaining arguments
@@ -186,13 +186,13 @@ namespace vuk {
 
 				constexpr TypeStruct<Member<TypeRuntimeArray<typename traits::result_type::type>, 0>> dstT = {};
 				constexpr auto ptr_to_dst_struct = Type<ptr<spv::StorageClassStorageBuffer, decltype(dstT)>>{};
-				constexpr auto vDst = Variable<decltype(ptr_to_dst_struct), spv::StorageClassStorageBuffer>(0, 1);
-				constexpr auto stDst = access_chain<0u>(vDst, Id(112u));
+				auto vDst = Variable<decltype(ptr_to_dst_struct), spv::StorageClassStorageBuffer>(mod, 0, 1);
+				auto stDst = access_chain<0u>(vDst, Id(112u));
 				if constexpr (count > 1) {
 					using third_arg = std::remove_reference_t<decltype(std::get<1>(std::declval<typename traits::types>()))>;					
-					constexpr auto vt = typename third_arg::Variable(0, 5);
-					constexpr auto mac = MemberAccessChain<0, typename third_arg::Variable>(vt);
-					constexpr auto lv = Load(mac);
+					auto vt = typename third_arg::Variable(mod, 0, 5);
+					auto mac = MemberAccessChain<0, typename third_arg::Variable>(vt);
+					auto lv = Load(mac);
 					auto unibuf = third_arg(lv);
 					return spirv::Store{ stDst, f(A, unibuf) };
 				} else {
@@ -204,7 +204,7 @@ namespace vuk {
 
 	template<class T, class F, class... Args>
 	inline Future unary_map(Context& ctx, const F& fn, Future src, Future dst, Future count, Args&&... extra_params) {
-		constexpr auto spv_result = detail::SPIRVUnaryMap<T, F>().compile(F{});
+		auto spv_result = detail::SPIRVUnaryMap<T, F>().compile(F{});
 		static auto pbi = detail::static_compute_pbi(ctx, spv_result.second.data(), spv_result.first, "unary");
 		std::shared_ptr<RenderGraph> rgp = std::make_shared<RenderGraph>("unary_map");
 		rgp->attach_in("src", std::move(src));
@@ -216,8 +216,13 @@ namespace vuk {
 		}
 		rgp->attach_in("count", std::move(count));
 		((void)rgp->attach_in("arg0", std::move(extra_params)), ...);
+
+		std::vector<vuk::Resource> resources = { "src"_buffer >> eComputeRead, "dst"_buffer >> eComputeWrite, "count"_buffer >> (eComputeRead | eIndirectRead) };
+		if constexpr (sizeof...(Args) > 0) {
+			resources.push_back("arg0"_buffer >> eComputeRW);
+		}
 		rgp->add_pass({ .name = "unary_map",
-		                .resources = { "src"_buffer >> eComputeRead, "dst"_buffer >> eComputeWrite, "count"_buffer >> (eComputeRead | eIndirectRead) },
+		                .resources = std::move(resources),
 		                .execute = [](CommandBuffer& command_buffer) {
 			                command_buffer.bind_buffer(0, 0, "src");
 			                command_buffer.bind_buffer(0, 1, "dst");
@@ -229,6 +234,9 @@ namespace vuk {
 			                command_buffer.bind_compute_pipeline(pbi);
 			                command_buffer.dispatch_indirect("count");
 		                } });
+		if constexpr (sizeof...(Args) > 0) {
+			((extra_params = Future{ rgp, "arg0+" }), ...);
+		}
 		return { rgp, "dst+" };
 	}
 

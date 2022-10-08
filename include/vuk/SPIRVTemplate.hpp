@@ -84,6 +84,8 @@ namespace vuk {
 			std::vector<uint32_t> decls;
 			std::vector<uint32_t> codes;
 
+			std::vector<uint32_t> variable_ids;
+
 			std::vector<SPIRType> types;
 
 			constexpr SPIRVModule(uint32_t id_counter,
@@ -133,6 +135,7 @@ namespace vuk {
 				decls.insert(decls.end(), o.decls.begin(), o.decls.end());
 				codes.insert(codes.end(), o.codes.begin(), o.codes.end());
 				types.insert(types.end(), o.types.begin(), o.types.end());
+				variable_ids.insert(variable_ids.end(), o.variable_ids.begin(), o.variable_ids.end());
 				counter = std::max(counter, o.counter);
 
 				return *this;
@@ -197,7 +200,7 @@ namespace vuk {
 		}
 
 		template<class F>
-		constexpr auto visit(auto root, F&& fn) {
+		constexpr auto visit(auto& root, F&& fn) {
 			constexpr auto n_children = std::tuple_size_v<decltype(root.children)>;
 			if constexpr (n_children > 0) {
 				visit_children<n_children - 1>(root.children, fn);
@@ -363,7 +366,7 @@ namespace vuk {
 		struct Variable : public SpvExpression<Variable<T, sc>> {
 			using type = T;
 
-			//SPIRVModule spvmodule;
+			SPIRVModule& spvmodule;
 
 			uint32_t descriptor_set;
 			uint32_t binding;
@@ -372,7 +375,7 @@ namespace vuk {
 			uint32_t id = 0;
 			static constexpr uint32_t count = type::count + 4 + 4 + 4;
 
-			constexpr Variable(uint32_t descriptor_set, uint32_t binding) : descriptor_set(descriptor_set), binding(binding) {} //, spvmodule(300) {}
+			constexpr Variable(SPIRVModule& module, uint32_t descriptor_set, uint32_t binding) : spvmodule(module), descriptor_set(descriptor_set), binding(binding) {}
 
 			constexpr uint32_t to_spirv(SPIRVModule& mod) {
 				auto tid = mod.template type_id<T>();
@@ -380,6 +383,7 @@ namespace vuk {
 				mod.annotation(id, std::array{ op(spv::OpDecorate, 4), id, uint32_t(spv::Decoration::DecorationDescriptorSet), descriptor_set });
 				mod.annotation(id, std::array{ op(spv::OpDecorate, 4), id, uint32_t(spv::Decoration::DecorationBinding), binding });
 				auto us = std::array{ op(spv::OpVariable, 4), tid, id, uint32_t(sc) };
+				mod.variable_ids.push_back(id);
 				return mod.constant(id, us);
 			}
 		};
@@ -707,17 +711,17 @@ namespace vuk {
 		struct MemberAccessChain : SpvExpression<MemberAccessChain<index, E1>> {
 			using type = Type<ptr<E1::type::storage_class, typename Deref<typename E1::type, 1>::type::template member<index>::type>>;
 
-			std::tuple<E1> children;
+			std::tuple<E1, Constant<uint32_t>> children;
 			uint32_t id = 0;
 			static constexpr uint32_t count = 4 + type::count + E1::count + 1;
 
-			constexpr MemberAccessChain(E1 base) : children(base) {}
+			constexpr MemberAccessChain(E1 base) : children(base, Constant<uint32_t>{ index }) {}
 
 			constexpr uint32_t to_spirv(SPIRVModule& mod) {
 				auto eids = emit_children(mod, children);
 				auto tid = mod.template type_id<type>();
 				std::reverse(eids.begin(), eids.end());
-				auto us = std::array{ op(spv::OpAccessChain, 4 + 1), tid, mod.counter + 1 } << eids << std::array{ index };
+				auto us = std::array{ op(spv::OpAccessChain, 4 + 1), tid, mod.counter + 1 } << eids;
 				id = mod.counter + 1;
 				return mod.code(mod.counter + 1, us);
 			}
@@ -936,8 +940,11 @@ namespace vuk {
 			}
 		};
 
-		struct Scope {};
-		struct MemorySemantics {};
+		struct Scope : Constant<uint32_t> {
+		};
+
+		struct MemorySemantics : Constant<uint32_t> {
+		};
 
 		template<typename E1>
 		struct AtomicIncrement : SpvExpression<E1> {
@@ -958,7 +965,14 @@ namespace vuk {
 			}
 
 			constexpr ~AtomicIncrement() {
-				
+				if (id == 0) {
+					visit(*this, [&]<typename T>(const T& node) {
+						if constexpr (is_variable<T>::value) {
+							auto& mod = node.spvmodule;
+							this->to_spirv(mod);
+						}
+					});
+				}
 			}
 		};
 
@@ -1017,7 +1031,6 @@ namespace vuk {
 		template<class Derived>
 		struct SPIRVTemplate {
 			SPIRVModule spvmodule{ Derived::max_id, {}, {}, {}, std::vector<SPIRType>(Derived::predef_types.begin(), Derived::predef_types.end()) };
-			std::vector<uint32_t> variable_ids;
 
 			constexpr uint32_t word_count(uint32_t word) {
 				return word >> spv::WordCountShift;
@@ -1079,7 +1092,7 @@ namespace vuk {
 
 					switch (opcode) {
 					case spv::OpEntryPoint:
-						variable_ids.insert(variable_ids.end(), &words[i + 5], &words[i + 5 + word_count - 5]);
+						spvmodule.variable_ids.insert(spvmodule.variable_ids.end(), &words[i + 5], &words[i + 5 + word_count - 5]);
 						return;
 					default:;
 					}
@@ -1092,18 +1105,19 @@ namespace vuk {
 			constexpr auto compile(F&& f) {
 				auto byte_it = std::begin(Derived::template_bytes);
 				std::span words = std::span(byte_it, std::end(Derived::template_bytes));
-				extract_builtin_variables(words);
-				auto specialized = Derived::specialize(f);
 
 				spvmodule.types.reserve(100);
+				extract_builtin_variables(words);
+				auto specialized = Derived::specialize(spvmodule, f);
 				specialized.to_spirv(spvmodule);
+
 				const auto& res = spvmodule;
 
-				visit(specialized, [&]<typename T>(const T& node) {
+				/* visit(specialized, [&]<typename T>(const T& node) {
 					if (is_variable<T>::value) {
 						variable_ids.push_back(node.id);
 					}
-				});
+				});*/
 
 				uint32_t prelude_end = find_first_opcode<spv::OpEntryPoint>(words);
 				constexpr std::string_view t = "main";
@@ -1113,10 +1127,10 @@ namespace vuk {
 					auto byte = i % sizeof(uint32_t);
 					maintext[word] = maintext[word] | (t[i] << 8 * byte);
 				}
-				std::array fixed_op_entry = std::array{ op(spv::OpEntryPoint, 5 + (uint32_t)variable_ids.size()), uint32_t(spv::ExecutionModelGLCompute), 4u }
+				std::array fixed_op_entry = std::array{ op(spv::OpEntryPoint, 5 + (uint32_t)res.variable_ids.size()), uint32_t(spv::ExecutionModelGLCompute), 4u }
 				                            << maintext;
 				std::vector<uint32_t> op_entry(fixed_op_entry.begin(), fixed_op_entry.end());
-				op_entry.insert(op_entry.end(), variable_ids.begin(), variable_ids.end());
+				op_entry.insert(op_entry.end(), res.variable_ids.begin(), res.variable_ids.end());
 
 				uint32_t prologue_start = prelude_end + word_count(words[prelude_end]);
 				uint32_t prologue_end = find_first_opcode<spv::OpTypeVoid>(words);
