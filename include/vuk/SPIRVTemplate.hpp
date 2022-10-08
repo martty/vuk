@@ -97,6 +97,8 @@ namespace vuk {
 			    codes(std::move(codes)),
 			    types(std::move(types)) {}
 
+			constexpr SPIRVModule(uint32_t id_counter) : counter(id_counter) {}
+
 			SPIRVModule(SPIRVModule&) = delete;
 
 			template<class T>
@@ -361,6 +363,8 @@ namespace vuk {
 		struct Variable : public SpvExpression<Variable<T, sc>> {
 			using type = T;
 
+			//SPIRVModule spvmodule;
+
 			uint32_t descriptor_set;
 			uint32_t binding;
 
@@ -368,7 +372,7 @@ namespace vuk {
 			uint32_t id = 0;
 			static constexpr uint32_t count = type::count + 4 + 4 + 4;
 
-			constexpr Variable(uint32_t descriptor_set, uint32_t binding) : descriptor_set(descriptor_set), binding(binding) {}
+			constexpr Variable(uint32_t descriptor_set, uint32_t binding) : descriptor_set(descriptor_set), binding(binding) {} //, spvmodule(300) {}
 
 			constexpr uint32_t to_spirv(SPIRVModule& mod) {
 				auto tid = mod.template type_id<T>();
@@ -680,7 +684,7 @@ namespace vuk {
 		};
 
 		template<typename T, typename E1, typename... Indices>
-		struct AccessChain : SpvExpression<AccessChain<E1, Indices...>> {
+		struct AccessChain : SpvExpression<AccessChain<T, E1, Indices...>> {
 			using type = T; // typename Deref<typename E1::type, Indices...>::type;
 
 			std::tuple<E1, Indices...> children;
@@ -694,6 +698,26 @@ namespace vuk {
 				auto tid = mod.template type_id<type>();
 				std::reverse(eids.begin(), eids.end());
 				auto us = std::array{ op(spv::OpAccessChain, sizeof...(Indices) + 4), tid, mod.counter + 1 } << eids;
+				id = mod.counter + 1;
+				return mod.code(mod.counter + 1, us);
+			}
+		};
+
+		template<uint32_t index, typename E1>
+		struct MemberAccessChain : SpvExpression<MemberAccessChain<index, E1>> {
+			using type = Type<ptr<E1::type::storage_class, typename Deref<typename E1::type, 1>::type::template member<index>::type>>;
+
+			std::tuple<E1> children;
+			uint32_t id = 0;
+			static constexpr uint32_t count = 4 + type::count + E1::count + 1;
+
+			constexpr MemberAccessChain(E1 base) : children(base) {}
+
+			constexpr uint32_t to_spirv(SPIRVModule& mod) {
+				auto eids = emit_children(mod, children);
+				auto tid = mod.template type_id<type>();
+				std::reverse(eids.begin(), eids.end());
+				auto us = std::array{ op(spv::OpAccessChain, 4 + 1), tid, mod.counter + 1 } << eids << std::array{ index };
 				id = mod.counter + 1;
 				return mod.code(mod.counter + 1, us);
 			}
@@ -715,7 +739,9 @@ namespace vuk {
 			uint32_t id = 0;
 			static constexpr uint32_t count = sizeof...(Indices) + 4 + type::count + E1::count + (Indices::count + ...);
 
-			constexpr CompositeExtract(T type, E1 base, Indices... inds) : SpvExpression<CompositeExtract<T, E1, Indices...>>(base, 0u), children(base, inds...) {}
+			constexpr CompositeExtract(T type, E1 base, Indices... inds) :
+			    SpvExpression<CompositeExtract<T, E1, Indices...>>(std::get<0>(children), 0u),
+			    children(base, inds...) {}
 
 			constexpr uint32_t to_spirv(SPIRVModule& mod) {
 				auto eids = emit_children(mod, children);
@@ -729,10 +755,10 @@ namespace vuk {
 
 		template<class T, class Base>
 		struct SpvExpression<CompositeExtract<Type<T>, Base, Id>> {
-			Base& ctx;
+			const Base& ctx;
 			uint32_t index;
 
-			constexpr SpvExpression(Base& ctx, uint32_t index) : ctx(ctx), index(index) {}
+			constexpr SpvExpression(const Base& ctx, uint32_t index) : ctx(ctx), index(index) {}
 
 			constexpr operator CompositeExtract<Type<T>, Base, Id>() const {
 				return CompositeExtract<Type<T>, Base, Id>({}, ctx, Id(index));
@@ -907,6 +933,32 @@ namespace vuk {
 				}
 				auto us = std::array{ op(actualop, 4), tid, id } << eids;
 				return mod.code(mod.counter + 1, us);
+			}
+		};
+
+		struct Scope {};
+		struct MemorySemantics {};
+
+		template<typename E1>
+		struct AtomicIncrement : SpvExpression<E1> {
+			using type = typename Deref<typename E1::type, 1u>::type;
+
+			std::tuple<MemorySemantics, Scope, E1> children;
+			uint32_t id = 0;
+			static constexpr uint32_t count = type::count + E1::count + 4;
+
+			constexpr AtomicIncrement(E1 e1, Scope scope, MemorySemantics sem) : children(sem, scope, e1) {}
+
+			constexpr uint32_t to_spirv(SPIRVModule& mod) {
+				auto eids = emit_children(mod, children);
+				auto tid = mod.template type_id<type>();
+				id = mod.counter + 1;
+				auto us = std::array{ op(spv::OpAtomicIIncrement, 6), tid, id } << eids;
+				return mod.code(id, us);
+			}
+
+			constexpr ~AtomicIncrement() {
+				
 			}
 		};
 

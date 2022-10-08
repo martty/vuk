@@ -58,7 +58,7 @@ TEST_CASE("test unary_map") {
 		auto [_2, cnt] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(&count_data, 1));
 
 		// apply function on gpu
-		auto calc = unary_map<uint32_t>(*test_context.context, src, {}, cnt, func);
+		auto calc = unary_map<uint32_t>(*test_context.context, func, src, {}, cnt);
 		// bring data back to cpu
 		auto res = download_buffer(calc).get<Buffer>(*test_context.allocator, test_context.compiler);
 		auto out = std::span((uint32_t*)res->mapped_ptr, data.size());
@@ -86,7 +86,7 @@ TEST_CASE("test unary_map") {
 		auto [_2, cnt] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(&count_data, 1));
 
 		// apply function on gpu
-		auto calc = unary_map<uint32_t>(*test_context.context, src, {}, cnt, func);
+		auto calc = unary_map<uint32_t>(*test_context.context, func, src, {}, cnt);
 		// bring data back to cpu
 		auto res = download_buffer(calc).get<Buffer>(*test_context.allocator, test_context.compiler);
 		auto out = std::span((uint32_t*)res->mapped_ptr, data.size());
@@ -114,7 +114,7 @@ TEST_CASE("test unary_map") {
 		auto [_2, cnt] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(&count_data, 1));
 
 		// apply function on gpu
-		auto calc = unary_map<float>(*test_context.context, src, {}, cnt, func);
+		auto calc = unary_map<float>(*test_context.context, func, src, {}, cnt);
 		// bring data back to cpu
 		auto res = download_buffer(calc).get<Buffer>(*test_context.allocator, test_context.compiler);
 		auto out = std::span((float*)res->mapped_ptr, data.size());
@@ -212,10 +212,110 @@ TEST_CASE("test unary_map, custom type, casting") {
 		auto [_2, cnt] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(&count_data, 1));
 
 		// apply function on gpu
-		auto calc = unary_map<POD>(*test_context.context, src, {}, cnt, func);
+		auto calc = unary_map<POD>(*test_context.context, func, src, {}, cnt);
 		// bring data back to cpu
 		auto res = download_buffer(calc).get<Buffer>(*test_context.allocator, test_context.compiler);
 		auto out = std::span((POD*)res->mapped_ptr, data.size());
+		if (test_context.rdoc_api)
+			test_context.rdoc_api->EndFrameCapture(NULL, NULL);
+		CHECK(out == std::span(expected));
+	}
+}
+
+namespace vuk::spirv {
+	template<class T,
+	         class WT = TypeStruct<Member<Type<T>>>,
+	         class VT = Variable<Type<ptr<spv::StorageClassUniform, WT>>, spv::StorageClassUniform>,
+	         class MAC = MemberAccessChain<0, VT>,
+	         class LV = Load<MAC>>
+	struct Uniform : LV {
+		using Variable = VT;
+
+		constexpr Uniform(LV ce) : LV(ce) {}
+	};
+
+	template<class T,
+	         class WT = TypeStruct<Member<Type<T>>>,
+	         class VT = Variable<Type<ptr<spv::StorageClassStorageBuffer, WT>>, spv::StorageClassStorageBuffer>,
+	         class MAC = MemberAccessChain<0, VT>,
+	         class LV = Load<MAC>>
+	struct Buffer : LV {
+		using Variable = VT;
+
+		//constexpr Buffer(uint32_t id_counter, LV ce) : LV(ce), spvmodule(id_counter) {}
+		constexpr Buffer(LV ce) : LV(ce) {}
+
+		constexpr auto& operator&() {
+			auto& vt = std::get<0>(this->children);
+			return vt;
+		}
+	};
+} // namespace vuk::spirv
+
+TEST_CASE("test unary_map, impure (uniform)") {
+	REQUIRE(test_context.prepare());
+	{
+		if (test_context.rdoc_api)
+			test_context.rdoc_api->StartFrameCapture(NULL, NULL);
+		// src data
+		std::vector data = { 1u, 2u, 3u };
+		uint32_t uni_data = 55u;
+		// function to apply
+		auto func = [](auto A, spirv::Uniform<uint32_t> v) {
+			return A + 3u + v;
+		};
+		std::vector<uint32_t> expected;
+		// cpu result
+		std::transform(data.begin(), data.end(), std::back_inserter(expected), [=](auto A) { return A + 3u + uni_data; });
+
+		// put data on gpu
+		auto [_1, src] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(data));
+		auto [_2, unif] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span<uint32_t>(&uni_data, 1));
+		// put count on gpu
+		CountWithIndirect count_data{ (uint32_t)data.size(), 64 };
+		auto [_3, cnt] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(&count_data, 1));
+
+		// apply function on gpu
+		auto calc = unary_map<uint32_t>(*test_context.context, func, src, {}, cnt, unif);
+		// bring data back to cpu
+		auto res = download_buffer(calc).get<Buffer>(*test_context.allocator, test_context.compiler);
+		auto out = std::span((uint32_t*)res->mapped_ptr, data.size());
+		if (test_context.rdoc_api)
+			test_context.rdoc_api->EndFrameCapture(NULL, NULL);
+		CHECK(out == std::span(expected));
+	}
+}
+
+
+TEST_CASE("test unary_map, impure (buffer)") {
+	REQUIRE(test_context.prepare());
+	{
+		if (test_context.rdoc_api)
+			test_context.rdoc_api->StartFrameCapture(NULL, NULL);
+		// src data
+		std::vector data = { 1u, 2u, 3u };
+		uint32_t uni_data = 55u;
+		// function to apply
+		auto func = [](auto A, spirv::Buffer<uint32_t>& v) {
+			spirv::AtomicIncrement(&v, spirv::Scope{}, spirv::MemorySemantics{});
+			return A + 3u;
+		};
+		std::vector<uint32_t> expected;
+		// cpu result
+		std::transform(data.begin(), data.end(), std::back_inserter(expected), [=](auto A) { return A + 3u + uni_data; });
+
+		// put data on gpu
+		auto [_1, src] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(data));
+		auto [_2, unif] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span<uint32_t>(&uni_data, 1));
+		// put count on gpu
+		CountWithIndirect count_data{ (uint32_t)data.size(), 64 };
+		auto [_3, cnt] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(&count_data, 1));
+
+		// apply function on gpu
+		auto calc = unary_map<uint32_t>(*test_context.context, func, src, {}, cnt, unif);
+		// bring data back to cpu
+		auto res = download_buffer(calc).get<Buffer>(*test_context.allocator, test_context.compiler);
+		auto out = std::span((uint32_t*)res->mapped_ptr, data.size());
 		if (test_context.rdoc_api)
 			test_context.rdoc_api->EndFrameCapture(NULL, NULL);
 		CHECK(out == std::span(expected));
