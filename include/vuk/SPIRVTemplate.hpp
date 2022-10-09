@@ -634,13 +634,15 @@ namespace vuk {
 			return { static_cast<E1>(u) };
 		}
 
-		template<class Context, class Type>
+		template<class Ctx, class Type>
 		struct TypeContext {
-			static constexpr int baz = 1;
+			Ctx& ctx;
+
+			constexpr TypeContext(Ctx& ctx) : ctx(ctx) {}
 		};
 
 		template<typename E1>
-		struct Load : public SpvExpression<Load<E1>>, public TypeContext<Load<E1>, typename Deref<typename E1::type, 1u>::type> {
+		struct Load : public SpvExpression<Load<E1>>, public TypeContext<E1, typename Deref<typename E1::type, 1u>::type> {
 			using type = typename Deref<typename E1::type, 1u>::type;
 			using tct = TypeContext<E1, typename Deref<typename E1::type, 1u>::type>;
 
@@ -648,7 +650,7 @@ namespace vuk {
 			std::tuple<E1> children;
 			static constexpr uint32_t count = type::count + E1::count + 4;
 
-			constexpr Load(E1 e1) : children(e1) {}
+			constexpr Load(E1 e1) : tct(e1), children(e1) {}
 
 			constexpr uint32_t to_spirv(SPIRVModule& mod) {
 				auto tid = mod.template type_id<type>();
@@ -1014,16 +1016,6 @@ namespace vuk {
 			return spirv::AtomicIncrement(e1, spirv::Scope(scope), spirv::MemorySemantics(sem));
 		}
 
-		template<class T, class E>
-		constexpr auto cast(SpvExpression<E> e) {
-			return Convert<Type<T>, E>(e);
-		}
-
-		template<class T, class E>
-		constexpr auto cast(E e) {
-			return static_cast<T>(e);
-		}
-
 		template<class T>
 		requires std::derived_from<T, SpvExpression<T>>
 		constexpr auto fwd(T t) {
@@ -1038,6 +1030,15 @@ namespace vuk {
 		template<class... Ts>
 		constexpr bool any_spir(const Ts&... ts) {
 			return std::disjunction_v<std::is_base_of<SpvExpression<Ts>, Ts>...>;
+		}
+
+		template<class T, class E>
+		constexpr auto cast(E e) {
+			if constexpr (any_spir(e)) {
+				return Convert<Type<T>, E>(e);
+			} else {
+				return static_cast<T>(e);
+			}
 		}
 
 		template<typename Cond, typename E1, typename E2>

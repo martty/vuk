@@ -184,9 +184,12 @@ struct spirv::Type<POD> : spirv::TypeStruct<spirv::Member<Type<uint32_t>>, spirv
 
 template<class Ctx>
 struct spirv::TypeContext<Ctx, spirv::Type<POD>> {
-	uint32_t cnt = 0;
-	SpvExpression<CompositeExtract<Type<uint32_t>, Ctx, Id>> foo = { static_cast<Ctx&>(*this), cnt++ };
-	SpvExpression<CompositeExtract<Type<float>, Ctx, Id>> bar = { static_cast<Ctx&>(*this), cnt++ };
+	Ctx& ctx;
+
+	constexpr TypeContext(Ctx& ctx) : ctx(ctx) {}
+
+	Load<MemberAccessChain<0, Ctx>> foo = Load(MemberAccessChain<0, Ctx>(ctx));
+	Load<MemberAccessChain<1, Ctx>> bar = Load(MemberAccessChain<1, Ctx>(ctx));
 };
 
 TEST_CASE("test unary_map, custom type, casting") {
@@ -242,7 +245,6 @@ namespace vuk::spirv {
 	struct Buffer : LV {
 		using Variable = VT;
 
-		//constexpr Buffer(uint32_t id_counter, LV ce) : LV(ce), spvmodule(id_counter) {}
 		constexpr Buffer(LV ce) : LV(ce) {}
 
 		constexpr auto& operator&() {
@@ -285,7 +287,6 @@ TEST_CASE("test unary_map, impure (uniform)") {
 		CHECK(out == std::span(expected));
 	}
 }
-
 
 TEST_CASE("test unary_map, impure (buffer, multiple variadics)") {
 	REQUIRE(test_context.prepare());
