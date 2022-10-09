@@ -217,7 +217,7 @@ namespace vuk {
 			struct variadic_input_helper<std::tuple<Args...>> {
 				using type = make_index_type_tuple<Args...>;
 
-				static auto apply(spirv::SPIRVModule& mod) {
+				static constexpr auto apply(spirv::SPIRVModule& mod) {
 					return std::tuple{ std::remove_reference_t<typename Args::type>(
 						  spirv::Load(spirv::MemberAccessChain<0, typename std::remove_reference_t<typename Args::type>::Variable>(
 						      typename std::remove_reference_t<typename Args::type>::Variable(mod, 0, 5 + Args::index))))... };

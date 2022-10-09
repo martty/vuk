@@ -952,7 +952,7 @@ namespace vuk {
 
 			std::tuple<MemorySemantics, Scope, E1> children;
 			uint32_t id = 0;
-			static constexpr uint32_t count = type::count + E1::count + 4;
+			static constexpr uint32_t count = type::count + E1::count + 6;
 
 			constexpr AtomicIncrement(E1 e1, Scope scope, MemorySemantics sem) : children(sem, scope, e1) {}
 
@@ -975,6 +975,11 @@ namespace vuk {
 				}
 			}
 		};
+
+		template<class E1>
+		constexpr auto atomicIncrement(E1 e1, spv::Scope scope = spv::ScopeDevice, spv::MemorySemanticsMask sem = spv::MemorySemanticsAcquireReleaseMask) {
+			return spirv::AtomicIncrement(e1, spirv::Scope{ scope }, spirv::MemorySemantics{ sem });
+		}
 
 		template<class T, class E>
 		constexpr auto cast(SpvExpression<E> e) {
@@ -1112,12 +1117,6 @@ namespace vuk {
 				specialized.to_spirv(spvmodule);
 
 				const auto& res = spvmodule;
-
-				/* visit(specialized, [&]<typename T>(const T& node) {
-					if (is_variable<T>::value) {
-						variable_ids.push_back(node.id);
-					}
-				});*/
 
 				uint32_t prelude_end = find_first_opcode<spv::OpEntryPoint>(words);
 				constexpr std::string_view t = "main";
