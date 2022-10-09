@@ -287,7 +287,7 @@ TEST_CASE("test unary_map, impure (uniform)") {
 }
 
 
-TEST_CASE("test unary_map, impure (buffer)") {
+TEST_CASE("test unary_map, impure (buffer, multiple variadics)") {
 	REQUIRE(test_context.prepare());
 	{
 		if (test_context.rdoc_api)
@@ -295,28 +295,36 @@ TEST_CASE("test unary_map, impure (buffer)") {
 		// src data
 		std::vector data = { 1u, 2u, 3u };
 		uint32_t initial_data = 0u;
+		uint32_t uni_data = 32u;
 		// function to apply
-		auto func = [](auto A, spirv::Buffer<uint32_t>& v) {
+		auto func = [](auto A, spirv::Buffer<uint32_t>& v, spirv::Uniform<uint32_t> vv) {
 			spirv::AtomicIncrement(&v, spirv::Scope{spv::ScopeDevice}, spirv::MemorySemantics{spv::MemorySemanticsAcquireReleaseMask});
-			return A;
+			return A + vv;
 		};
-		uint32_t expected = data.size();
+
+		std::vector<uint32_t> expected;
 		// cpu result
+		std::transform(data.begin(), data.end(), std::back_inserter(expected), [=](auto A) { return A + uni_data; });
+		uint32_t atomic_expected = data.size();
 
 		// put data on gpu
 		auto [_1, src] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(data));
 		auto [_2, buff] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span<uint32_t>(&initial_data, 1));
+		auto [_3, unif] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span<uint32_t>(&uni_data, 1));
 		// put count on gpu
 		CountWithIndirect count_data{ (uint32_t)data.size(), 64 };
-		auto [_3, cnt] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(&count_data, 1));
+		auto [_4, cnt] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(&count_data, 1));
 
 		// apply function on gpu
-		auto calc = unary_map<uint32_t>(*test_context.context, func, src, {}, cnt, buff);
+		auto calc = unary_map<uint32_t>(*test_context.context, func, src, {}, cnt, buff, unif);
 		// bring data back to cpu
-		auto res = download_buffer(buff).get<Buffer>(*test_context.allocator, test_context.compiler);
-		auto out = *(uint32_t*)res->mapped_ptr;
+		auto res = download_buffer(calc).get<Buffer>(*test_context.allocator, test_context.compiler);
+		auto out = std::span((uint32_t*)res->mapped_ptr, data.size());
+		auto atomic_res = download_buffer(buff).get<Buffer>(*test_context.allocator, test_context.compiler);
+		auto atomic_out = *(uint32_t*)atomic_res->mapped_ptr;
 		if (test_context.rdoc_api)
 			test_context.rdoc_api->EndFrameCapture(NULL, NULL);
-		CHECK(out == expected);
+		CHECK(atomic_out == atomic_expected);
+		CHECK(out == std::span(expected));
 	}
 }

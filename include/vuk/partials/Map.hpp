@@ -35,6 +35,44 @@ namespace vuk {
 #undef SPEC
 #undef REM_CTOR
 
+		template<size_t i, typename T>
+		struct IndexTypePair {
+			static constexpr size_t index{ i };
+			using type = T;
+		};
+
+		template<int i, typename T>
+		struct drop {
+			using type = T;
+		};
+
+		template<typename T>
+		struct drop<0, T> {
+			using type = T;
+		};
+
+		template<int i, typename T, typename... Ts>
+		requires(i > 0) struct drop<i, std::tuple<T, Ts...>> {
+			using type = typename drop<i - 1, std::tuple<Ts...>>::type;
+		};
+
+		// from: https://stackoverflow.com/a/38746757
+		template<typename... T>
+		struct make_index_type_tuple_helper {
+			template<typename V>
+			struct idx;
+
+			template<size_t... Indices>
+			struct idx<std::index_sequence<Indices...>> {
+				using tuple_type = std::tuple<IndexTypePair<Indices, T>...>;
+			};
+
+			using tuple_type = typename idx<std::make_index_sequence<sizeof...(T)>>::tuple_type;
+		};
+
+		template<typename... T>
+		using make_index_type_tuple = typename make_index_type_tuple_helper<T...>::tuple_type;
+
 		template<class T1, class T2>
 		struct SPIRVBinaryMap : public spirv::SPIRVTemplate<SPIRVBinaryMap<T1, T2>> {
 			static constexpr const uint32_t template_bytes[] = {
@@ -161,6 +199,7 @@ namespace vuk {
 				0x00000042, 0x00000036, 0x00000070, 0x0003003e, 0x00000053, 0x00000052, 0x000200f9, 0x00000054, 0x000200f8, 0x00000054, 0x000100fd, 0x00010038
 			};
 
+			static constexpr uint32_t num_inputs = 1;
 			static constexpr uint32_t max_id = 200;
 			static constexpr std::array predef_types = { spirv::SPIRType{ spirv::type_name<spirv::Type<uint32_t>>(), 6u },
 				                                           spirv::SPIRType{ spirv::type_name<spirv::Type<bool>>(), 58u },
@@ -171,36 +210,57 @@ namespace vuk {
 			static constexpr std::span epilogue = std::span(template_bytes + 0x00000738 / 4, 6);
 			static constexpr std::span second_bit = std::span(template_bytes + 0x0000050c / 4, 0x0000072c / 4 - 0x0000050c / 4);
 
+			template<typename>
+			struct variadic_input_helper;
+
+			template<typename... Args>
+			struct variadic_input_helper<std::tuple<Args...>> {
+				using type = make_index_type_tuple<Args...>;
+
+				static auto apply(spirv::SPIRVModule& mod) {
+					return std::tuple{ std::remove_reference_t<typename Args::type>(
+						  spirv::Load(spirv::MemberAccessChain<0, typename std::remove_reference_t<typename Args::type>::Variable>(
+						      typename std::remove_reference_t<typename Args::type>::Variable(mod, 0, 5 + Args::index))))... };
+				}
+			};
+
 			static constexpr auto specialize(spirv::SPIRVModule& mod, F f) {
 				using namespace spirv;
 
+				// make fixed inputs
 				constexpr TypeStruct<Member<TypeRuntimeArray<Type<T1>>, 0>> strT = {};
 				constexpr auto ptr_to_struct = Type<ptr<spv::StorageClassStorageBuffer, decltype(strT)>>{};
 				auto vA = Variable<decltype(ptr_to_struct), spv::StorageClassStorageBuffer>(mod, 0, 0);
 				auto ldA = access_chain<0u>(vA, Id(112u));
 				auto A = Load(ldA);
 
-				// process remaining arguments
-				using traits = closure_traits<decltype(&F::template operator()<decltype(A)>)>;
-				constexpr auto count = traits::count;
+				auto fixed_inputs = std::tuple{ A };
 
+				using traits = closure_traits<decltype(&F::template operator()<decltype(A)>)>;
+				// make output
 				constexpr TypeStruct<Member<TypeRuntimeArray<typename traits::result_type::type>, 0>> dstT = {};
 				constexpr auto ptr_to_dst_struct = Type<ptr<spv::StorageClassStorageBuffer, decltype(dstT)>>{};
 				auto vDst = Variable<decltype(ptr_to_dst_struct), spv::StorageClassStorageBuffer>(mod, 0, 1);
 				auto stDst = access_chain<0u>(vDst, Id(112u));
-				if constexpr (count > 1) {
-					using third_arg = std::remove_reference_t<decltype(std::get<1>(std::declval<typename traits::types>()))>;					
-					auto vt = typename third_arg::Variable(mod, 0, 5);
-					auto mac = MemberAccessChain<0, typename third_arg::Variable>(vt);
-					auto lv = Load(mac);
-					auto unibuf = third_arg(lv);
-					return spirv::Store{ stDst, f(A, unibuf) };
-				} else {
-					return spirv::Store{ stDst, f(A) };
-				}
+				
+				// make variadic inputs
+				using itt = typename variadic_input_helper<typename drop<num_inputs, typename traits::types>::type>::type;
+				auto variadic_inputs = variadic_input_helper<itt>::apply(mod);
+
+				auto inputs = std::tuple_cat(fixed_inputs, variadic_inputs);
+				return spirv::Store{ stDst, std::apply(f, inputs) };
 			}
 		};
 	} // namespace detail
+
+	template<size_t N>
+	std::array<Name, N> unique_names(Name prefix = "arg_") {
+		std::array<Name, N> names = {};
+		for (auto i = 0; i < N; i++) {
+			names[i] = prefix.append(std::to_string(i));
+		}
+		return names;
+	}
 
 	template<class T, class F, class... Args>
 	inline Future unary_map(Context& ctx, const F& fn, Future src, Future dst, Future count, Args&&... extra_params) {
@@ -215,27 +275,29 @@ namespace vuk {
 			rgp->inference_rule("dst", same_size_as("src"));
 		}
 		rgp->attach_in("count", std::move(count));
-		((void)rgp->attach_in("arg0", std::move(extra_params)), ...);
+		auto unq_names = unique_names<sizeof...(Args)>();
+		std::array<Future, sizeof...(Args)> futs = { std::move(extra_params)... };
 
 		std::vector<vuk::Resource> resources = { "src"_buffer >> eComputeRead, "dst"_buffer >> eComputeWrite, "count"_buffer >> (eComputeRead | eIndirectRead) };
-		if constexpr (sizeof...(Args) > 0) {
-			resources.push_back("arg0"_buffer >> eComputeRW);
+		for (size_t i = 0; i < sizeof...(Args); i++) {
+			rgp->attach_in(unq_names[i], std::move(futs[i]));
+			resources.emplace_back(unq_names[i], vuk::Resource::Type::eBuffer, eComputeRW, unq_names[i].append("+"));
 		}
-		rgp->add_pass({ .name = "unary_map",
-		                .resources = std::move(resources),
-		                .execute = [](CommandBuffer& command_buffer) {
-			                command_buffer.bind_buffer(0, 0, "src");
-			                command_buffer.bind_buffer(0, 1, "dst");
-			                command_buffer.bind_buffer(0, 2, "src");
-			                command_buffer.bind_buffer(0, 4, "count");
-			                if constexpr (sizeof...(Args) > 0) {
-				                command_buffer.bind_buffer(0, 5, "arg0");
-			                }
-			                command_buffer.bind_compute_pipeline(pbi);
-			                command_buffer.dispatch_indirect("count");
-		                } });
-		if constexpr (sizeof...(Args) > 0) {
-			((extra_params = Future{ rgp, "arg0+" }), ...);
+		rgp->add_pass({ .name = "unary_map", .resources = std::move(resources), .execute = [=](CommandBuffer& command_buffer) {
+			               command_buffer.bind_buffer(0, 0, "src");
+			               command_buffer.bind_buffer(0, 1, "dst");
+			               command_buffer.bind_buffer(0, 2, "src");
+			               command_buffer.bind_buffer(0, 4, "count");
+			               for (size_t i = 0; i < sizeof...(Args); i++) {
+				               command_buffer.bind_buffer(0, 5 + i, unq_names[i]);
+			               }
+			               command_buffer.bind_compute_pipeline(pbi);
+			               command_buffer.dispatch_indirect("count");
+		               } });
+
+		std::array<Future*, sizeof...(Args)> futps = { &extra_params... };
+		for (size_t i = 0; i < sizeof...(Args); i++) {
+			*futps[i] = Future{ rgp, unq_names[i].append("+") };
 		}
 		return { rgp, "dst+" };
 	}
