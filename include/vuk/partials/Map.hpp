@@ -224,7 +224,7 @@ namespace vuk {
 				}
 			};
 
-			static constexpr auto specialize(spirv::SPIRVModule& mod, F f) {
+			static constexpr auto specialize(spirv::SPIRVModule& mod, F& f) {
 				using namespace spirv;
 
 				// make fixed inputs
@@ -264,7 +264,7 @@ namespace vuk {
 
 	template<class T, class F, class... Args>
 	inline Future unary_map(Context& ctx, const F& fn, Future src, Future dst, Future count, Args&&... extra_params) {
-		auto spv_result = detail::SPIRVUnaryMap<T, F>().compile(F{});
+		constexpr auto spv_result = detail::SPIRVUnaryMap<T, F>().compile(F{});
 		static auto pbi = detail::static_compute_pbi(ctx, spv_result.second.data(), spv_result.first, "unary");
 		std::shared_ptr<RenderGraph> rgp = std::make_shared<RenderGraph>("unary_map");
 		rgp->attach_in("src", std::move(src));

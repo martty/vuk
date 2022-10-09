@@ -86,6 +86,9 @@ namespace vuk {
 
 			std::vector<uint32_t> variable_ids;
 
+			std::vector<std::pair<uint32_t, uint32_t>> rmw_results;
+			uint32_t rmw_counter = 0;
+
 			std::vector<SPIRType> types;
 
 			constexpr SPIRVModule(uint32_t id_counter,
@@ -375,7 +378,10 @@ namespace vuk {
 			uint32_t id = 0;
 			static constexpr uint32_t count = type::count + 4 + 4 + 4;
 
-			constexpr Variable(SPIRVModule& module, uint32_t descriptor_set, uint32_t binding) : spvmodule(module), descriptor_set(descriptor_set), binding(binding) {}
+			constexpr Variable(SPIRVModule& module, uint32_t descriptor_set, uint32_t binding) :
+			    spvmodule(module),
+			    descriptor_set(descriptor_set),
+			    binding(binding) {}
 
 			constexpr uint32_t to_spirv(SPIRVModule& mod) {
 				auto tid = mod.template type_id<T>();
@@ -941,31 +947,58 @@ namespace vuk {
 		};
 
 		struct Scope : Constant<uint32_t> {
+			constexpr Scope(spv::Scope v) : Constant<uint32_t>(static_cast<uint32_t>(v)) {}
 		};
 
 		struct MemorySemantics : Constant<uint32_t> {
+			constexpr MemorySemantics(spv::MemorySemanticsMask v) : Constant<uint32_t>(static_cast<uint32_t>(v)) {}
 		};
 
 		template<typename E1>
-		struct AtomicIncrement : SpvExpression<E1> {
+		struct AtomicIncrement : SpvExpression<AtomicIncrement<E1>> {
 			using type = typename Deref<typename E1::type, 1u>::type;
 
 			std::tuple<MemorySemantics, Scope, E1> children;
 			uint32_t id = 0;
+			uint32_t rmw_id = 0;
 			static constexpr uint32_t count = type::count + E1::count + 6;
 
-			constexpr AtomicIncrement(E1 e1, Scope scope, MemorySemantics sem) : children(sem, scope, e1) {}
+			constexpr AtomicIncrement(E1 e1, Scope scope, MemorySemantics sem) : children(sem, scope, e1) {
+				visit(*this, [&]<typename T>(const T& node) {
+					if constexpr (is_variable<T>::value) {
+						auto& mod = node.spvmodule;
+						rmw_id = mod.rmw_counter++;
+					}
+				});
+			}
+
+			constexpr uint32_t get_existing_id(SPIRVModule& mod) {
+				uint32_t existing_id = 0;
+				auto it = std::find_if(mod.rmw_results.begin(), mod.rmw_results.end(), [&](auto& v) { return v.first == rmw_id; });
+				if (it != mod.rmw_results.end()) {
+					existing_id = it->second;
+				}
+				return existing_id;
+			}
 
 			constexpr uint32_t to_spirv(SPIRVModule& mod) {
-				auto eids = emit_children(mod, children);
-				auto tid = mod.template type_id<type>();
-				id = mod.counter + 1;
-				auto us = std::array{ op(spv::OpAtomicIIncrement, 6), tid, id } << eids;
-				return mod.code(id, us);
+				uint32_t existing_id = get_existing_id(mod);
+				if (existing_id == 0) {
+					auto eids = emit_children(mod, children);
+					auto tid = mod.template type_id<type>();
+					id = mod.counter + 1;
+					auto us = std::array{ op(spv::OpAtomicIIncrement, 6), tid, id } << eids;
+					mod.rmw_results.emplace_back(rmw_id, id);
+					return mod.code(id, us);
+				} else {
+					id = existing_id;
+					return id;
+				}
 			}
 
 			constexpr ~AtomicIncrement() {
 				if (id == 0) {
+					id = 0;
 					visit(*this, [&]<typename T>(const T& node) {
 						if constexpr (is_variable<T>::value) {
 							auto& mod = node.spvmodule;
@@ -978,7 +1011,7 @@ namespace vuk {
 
 		template<class E1>
 		constexpr auto atomicIncrement(E1 e1, spv::Scope scope = spv::ScopeDevice, spv::MemorySemanticsMask sem = spv::MemorySemanticsAcquireReleaseMask) {
-			return spirv::AtomicIncrement(e1, spirv::Scope{ scope }, spirv::MemorySemantics{ sem });
+			return spirv::AtomicIncrement(e1, spirv::Scope(scope), spirv::MemorySemantics(sem));
 		}
 
 		template<class T, class E>
