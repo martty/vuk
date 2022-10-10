@@ -352,8 +352,6 @@ namespace vuk {
 				uint32_t member_index = 0;
 				uint32_t offset_cnt = 0;
 				((void)member_to_spirv(Members{}, mod, str_id, member_index, offset_cnt), ...); // emit offset decorations for all members
-				auto deco = std::array{ op(spv::OpDecorate, 3), str_id, uint32_t(spv::Decoration::DecorationBlock) };
-				mod.annotation(mod.counter, deco);
 				auto us = std::array{ op(spv::OpTypeStruct, 2 + sizeof...(Members)), str_id } << tids;
 				return mod.constant(str_id, us);
 			}
@@ -368,6 +366,7 @@ namespace vuk {
 		template<class T, spv::StorageClass sc>
 		struct Variable : public SpvExpression<Variable<T, sc>> {
 			using type = T;
+			using value_type = typename T::pointee;
 
 			SPIRVModule& spvmodule;
 
@@ -385,7 +384,10 @@ namespace vuk {
 
 			constexpr uint32_t to_spirv(SPIRVModule& mod) {
 				auto tid = mod.template type_id<T>();
+				auto str_id = mod.template type_id<value_type>();
 				id = mod.counter + 1;
+				auto deco = std::array{ op(spv::OpDecorate, 3), str_id, uint32_t(spv::Decoration::DecorationBlock) };
+				mod.annotation(mod.counter, deco);
 				mod.annotation(id, std::array{ op(spv::OpDecorate, 4), id, uint32_t(spv::Decoration::DecorationDescriptorSet), descriptor_set });
 				mod.annotation(id, std::array{ op(spv::OpDecorate, 4), id, uint32_t(spv::Decoration::DecorationBinding), binding });
 				auto us = std::array{ op(spv::OpVariable, 4), tid, id, uint32_t(sc) };
