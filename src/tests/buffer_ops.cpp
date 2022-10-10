@@ -246,11 +246,6 @@ namespace vuk::spirv {
 		using Variable = VT;
 
 		constexpr Buffer(LV ce) : LV(ce) {}
-
-		constexpr auto& operator&() {
-			auto& vt = std::get<0>(this->children);
-			return vt;
-		}
 	};
 } // namespace vuk::spirv
 
@@ -349,7 +344,7 @@ TEST_CASE("test sideeffects") {
 		std::vector<uint32_t> expected;
 		// cpu result
 		std::transform(data.begin(), data.end(), std::back_inserter(expected), [=](auto A) { return A + uni_data; });
-		uint32_t atomic_expected = 2*data.size();
+		uint32_t atomic_expected = 2 * data.size();
 
 		// put data on gpu
 		auto [_1, src] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(data));
@@ -396,6 +391,70 @@ TEST_CASE("test sideeffects 2") {
 		// put data on gpu
 		auto [_1, src] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(data));
 		auto [_2, buff] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span<uint32_t>(&initial_data, 1));
+		auto [_3, unif] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span<uint32_t>(&uni_data, 1));
+		// put count on gpu
+		CountWithIndirect count_data{ (uint32_t)data.size(), 64 };
+		auto [_4, cnt] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(&count_data, 1));
+
+		// apply function on gpu
+		auto calc = unary_map<uint32_t>(*test_context.context, func, src, {}, cnt, buff, unif);
+		// bring data back to cpu
+		auto res = download_buffer(calc).get<Buffer>(*test_context.allocator, test_context.compiler);
+		auto out = std::span((uint32_t*)res->mapped_ptr, data.size());
+		auto atomic_res = download_buffer(buff).get<Buffer>(*test_context.allocator, test_context.compiler);
+		auto atomic_out = *(uint32_t*)atomic_res->mapped_ptr;
+		if (test_context.rdoc_api)
+			test_context.rdoc_api->EndFrameCapture(NULL, NULL);
+		CHECK(atomic_out == atomic_cnt);
+		CHECK(out == std::span(expected));
+	}
+}
+
+/*void incr_CWI(spirv::Buffer<uint32_t>& v) {
+
+}*/
+
+template<>
+struct spirv::Type<vuk::CountWithIndirect>
+    : spirv::TypeStruct<spirv::Member<Type<uint32_t>>, spirv::Member<Type<uint32_t>>, spirv::Member<Type<uint32_t>>, spirv::Member<Type<uint32_t>>> {
+	using type = vuk::CountWithIndirect;
+};
+
+template<class Ctx>
+struct spirv::TypeContext<Ctx, spirv::Type<vuk::CountWithIndirect>> {
+	Ctx& ctx;
+
+	constexpr TypeContext(Ctx& ctx) : ctx(ctx) {}
+
+	Load<MemberAccessChain<0, Ctx>> workgroup_count = Load(MemberAccessChain<0, Ctx>(ctx));
+	Load<MemberAccessChain<3, Ctx>> cnt = Load(MemberAccessChain<3, Ctx>(ctx));
+};
+
+TEST_CASE("test Buffer with struct") {
+	REQUIRE(test_context.prepare());
+	{
+		if (test_context.rdoc_api)
+			test_context.rdoc_api->StartFrameCapture(NULL, NULL);
+		// src data
+		std::vector<uint32_t> data(1024);
+		uint32_t initial_data = 0u;
+		uint32_t uni_data = 32u;
+		// function to apply
+		auto func = [](auto A, spirv::Buffer<CountWithIndirect>& v) {
+			auto res = spirv::atomicIncrement(&v.cnt);
+			spirv::atomicAdd(&v.workgroup_count, spirv::select(res % 512u == 0u, 1u, 0u));
+			return A;
+		};
+
+		std::vector<uint32_t> expected;
+		// cpu result
+		uint32_t atomic_cnt = 0;
+		std::transform(data.begin(), data.end(), std::back_inserter(expected), [&](auto A) { return atomic_cnt++, A; });
+
+		// put data on gpu
+		auto [_1, src] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(data));
+		CountWithIndirect dst_count_data{ 0u, 64 };
+		auto [_2, buff] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(&dst_count_data, 1));
 		auto [_3, unif] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span<uint32_t>(&uni_data, 1));
 		// put count on gpu
 		CountWithIndirect count_data{ (uint32_t)data.size(), 64 };

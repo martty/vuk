@@ -609,6 +609,46 @@ namespace vuk {
 			return { Constant<T>(v), static_cast<E1>(u) };
 		}
 
+		template<typename E1, typename E2>
+		struct Mod : public SpvExpression<Mod<E1, E2>> {
+			static_assert(std::is_same_v<typename E1::type, typename E2::type>);
+			using type = typename E1::type;
+
+			std::tuple<E2, E1> children;
+			uint32_t id = 0;
+			static constexpr uint32_t count = type::count + E1::count + E2::count + 5;
+
+			constexpr Mod(E1 e1, E2 e2) : children(e2, e1) {}
+
+			static constexpr spv::Op Mods[3] = { spv::OpUMod, spv::OpSMod, spv::OpFMod };
+
+		public:
+			constexpr uint32_t to_spirv(SPIRVModule& mod) {
+				auto eids = emit_children(mod, children);
+				auto tid = mod.template type_id<type>();
+				id = mod.counter + 1;
+				auto us = std::array{ op(Mods[to_typeclass<type>()], 5), tid, id } << eids;
+				return mod.code(mod.counter + 1, us);
+			}
+		};
+
+		template<typename E1, typename E2>
+		Mod<E1, E2> constexpr operator%(SpvExpression<E1> const& u, SpvExpression<E2> const& v) {
+			return Mod<E1, E2>{ static_cast<E1>(u), static_cast<E2>(v) };
+		}
+
+		template<typename E1, typename T>
+		requires numeric<T> Mod<E1, Constant<T>>
+		constexpr operator%(SpvExpression<E1> const& u, T const& v) {
+			return { static_cast<E1>(u), Constant<T>(v) };
+		}
+
+		template<typename E1, typename T>
+		requires numeric<T> Mod<Constant<T>, E1>
+		constexpr operator%(T const& v, SpvExpression<E1> const& u) {
+			return { Constant<T>(v), static_cast<E1>(u) };
+		}
+
 		template<typename E1>
 		struct UnaryMinus : public SpvExpression<UnaryMinus<E1>> {
 			using type = typename E1::type;
@@ -660,6 +700,11 @@ namespace vuk {
 				auto us = std::array{ op(spv::OpLoad, 4), tid, mod.counter + 1 } << e1id;
 				id = mod.counter + 1;
 				return mod.code(mod.counter + 1, us);
+			}
+
+			constexpr auto& operator&() {
+				auto& vt = std::get<0>(this->children);
+				return vt;
 			}
 		};
 
@@ -1016,6 +1061,66 @@ namespace vuk {
 		template<class E1>
 		constexpr auto atomicIncrement(E1 e1, spv::Scope scope = spv::ScopeDevice, spv::MemorySemanticsMask sem = spv::MemorySemanticsAcquireReleaseMask) {
 			return spirv::AtomicIncrement(e1, spirv::Scope(scope), spirv::MemorySemantics(sem));
+		}
+
+		template<typename E1, typename E2>
+		struct AtomicAdd : SpvExpression<AtomicAdd<E1, E2>> {
+			using type = typename Deref<typename E1::type, 1u>::type;
+
+			std::tuple<MemorySemantics, Scope, E2, E1> children;
+			uint32_t id = 0;
+			uint32_t rmw_id = 0;
+			static constexpr uint32_t count = type::count + E1::count + E2::count + 7;
+
+			constexpr AtomicAdd(E1 e1, E2 e2, Scope scope, MemorySemantics sem) : children(sem, scope, e2, e1) {
+				visit(*this, [&]<typename T>(const T& node) {
+					if constexpr (is_variable<T>::value) {
+						auto& mod = node.spvmodule;
+						rmw_id = mod.rmw_counter++;
+					}
+				});
+			}
+
+			constexpr uint32_t get_existing_id(SPIRVModule& mod) {
+				uint32_t existing_id = 0;
+				auto it = std::find_if(mod.rmw_results.begin(), mod.rmw_results.end(), [&](auto& v) { return v.first == rmw_id; });
+				if (it != mod.rmw_results.end()) {
+					existing_id = it->second;
+				}
+				return existing_id;
+			}
+
+			constexpr uint32_t to_spirv(SPIRVModule& mod) {
+				uint32_t existing_id = get_existing_id(mod);
+				if (existing_id == 0) {
+					auto eids = emit_children(mod, children);
+					auto tid = mod.template type_id<type>();
+					id = mod.counter + 1;
+					auto us = std::array{ op(spv::OpAtomicIAdd, 7), tid, id } << eids;
+					mod.rmw_results.emplace_back(rmw_id, id);
+					return mod.code(id, us);
+				} else {
+					id = existing_id;
+					return id;
+				}
+			}
+
+			constexpr ~AtomicAdd() {
+				if (id == 0) {
+					id = 0;
+					visit(*this, [&]<typename T>(const T& node) {
+						if constexpr (is_variable<T>::value) {
+							auto& mod = node.spvmodule;
+							this->to_spirv(mod);
+						}
+					});
+				}
+			}
+		};
+
+		template<class E1, class E2>
+		constexpr auto atomicAdd(E1 e1, E2 e2, spv::Scope scope = spv::ScopeDevice, spv::MemorySemanticsMask sem = spv::MemorySemanticsAcquireReleaseMask) {
+			return spirv::AtomicAdd(e1, e2, spirv::Scope(scope), spirv::MemorySemantics(sem));
 		}
 
 		template<class T>
