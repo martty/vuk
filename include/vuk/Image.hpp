@@ -1,6 +1,5 @@
 #pragma once
 
-#include <utility>
 #include <cassert>
 
 #include "../src/CreateInfo.hpp"
