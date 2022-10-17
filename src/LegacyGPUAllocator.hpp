@@ -148,7 +148,8 @@ namespace vuk {
 		                   VkPhysicalDevice phys_dev,
 		                   uint32_t graphics_queue_family,
 		                   uint32_t compute_queue_family,
-		                   uint32_t transfer_queue_family);
+		                   uint32_t transfer_queue_family,
+		                   PFN_vkSetDebugUtilsObjectNameEXT pfn_vkSetDebugUtilsObjectNameEXT);
 		~LegacyGPUAllocator();
 
 		// allocate an externally managed pool

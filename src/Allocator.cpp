@@ -295,7 +295,9 @@ namespace vuk {
 			info.pObjectName = devmem_name.c_str();
 			info.objectType = VK_OBJECT_TYPE_DEVICE_MEMORY;
 			info.objectHandle = reinterpret_cast<uint64_t>(memory);
-			pags.setDebugUtilsObjectNameEXT(pags.device, &info);
+			if (pags.setDebugUtilsObjectNameEXT) {
+				pags.setDebugUtilsObjectNameEXT(pags.device, &info);
+			}
 		}
 		{
 			VkDebugUtilsObjectNameInfoEXT info;
@@ -304,7 +306,9 @@ namespace vuk {
 			info.pObjectName = buffer_name.c_str();
 			info.objectType = VK_OBJECT_TYPE_BUFFER;
 			info.objectHandle = reinterpret_cast<uint64_t>((VkBuffer)buffer);
-			pags.setDebugUtilsObjectNameEXT(pags.device, &info);
+			if (pags.setDebugUtilsObjectNameEXT) {
+				pags.setDebugUtilsObjectNameEXT(pags.device, &info);
+			}
 		}
 	}
 
@@ -318,7 +322,9 @@ namespace vuk {
 			info.pObjectName = devmem_name.c_str();
 			info.objectType = VK_OBJECT_TYPE_DEVICE_MEMORY;
 			info.objectHandle = reinterpret_cast<uint64_t>(memory);
-			pags.setDebugUtilsObjectNameEXT(pags.device, &info);
+			if (pags.setDebugUtilsObjectNameEXT) {
+				pags.setDebugUtilsObjectNameEXT(pags.device, &info);
+			}
 		}
 	}
 
@@ -327,7 +333,8 @@ namespace vuk {
 	                                       VkPhysicalDevice phys_dev,
 	                                       uint32_t graphics_queue_family,
 	                                       uint32_t compute_queue_family,
-	                                       uint32_t transfer_queue_family) :
+	                                       uint32_t transfer_queue_family,
+	                                       PFN_vkSetDebugUtilsObjectNameEXT pfn_vkSetDebugUtilsObjectNameEXT) :
 	    device(device) {
 		VmaAllocatorCreateInfo allocatorInfo = {};
 		allocatorInfo.instance = instance;
@@ -360,7 +367,7 @@ namespace vuk {
 		real_alloc_callback = noop_cb;
 		cbs.pfnAllocate = allocation_cb;
 		pool_helper = std::make_unique<PoolAllocHelper>();
-		pool_helper->setDebugUtilsObjectNameEXT = (PFN_vkSetDebugUtilsObjectNameEXT)vkGetDeviceProcAddr(device, "vkSetDebugUtilsObjectNameEXT");
+		pool_helper->setDebugUtilsObjectNameEXT = pfn_vkSetDebugUtilsObjectNameEXT;
 		cbs.pUserData = pool_helper.get();
 		allocatorInfo.pDeviceMemoryCallbacks = &cbs;
 
