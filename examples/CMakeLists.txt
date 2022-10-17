@@ -8,7 +8,7 @@ endif()
 FetchContent_Declare(
   vk-bootstrap 
   GIT_REPOSITORY https://github.com/charles-lunarg/vk-bootstrap
-  GIT_TAG        cf8df11a0a071463009031cb474099dacffe90ed
+  GIT_TAG        01de71738cd206eefe2537882888dc741881ec0b
 )
 FetchContent_MakeAvailable(vk-bootstrap)
 
