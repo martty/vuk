@@ -35,8 +35,7 @@ namespace vuk {
 	    physical_device(params.physical_device),
 	    graphics_queue_family_index(params.graphics_queue_family_index),
 	    compute_queue_family_index(params.compute_queue_family_index),
-	    transfer_queue_family_index(params.transfer_queue_family_index),
-	    debug(*this) {
+	    transfer_queue_family_index(params.transfer_queue_family_index) {
 		auto queueSubmit2KHR = (PFN_vkQueueSubmit2KHR)vkGetDeviceProcAddr(device, "vkQueueSubmit2KHR");
 		assert(queueSubmit2KHR != nullptr);
 
@@ -89,7 +88,7 @@ namespace vuk {
 		vkGetPhysicalDeviceProperties2(physical_device, &prop2);
 	}
 
-	Context::Context(Context&& o) noexcept : debug(o.debug), impl(std::exchange(o.impl, nullptr)) {
+	Context::Context(Context&& o) noexcept : impl(std::exchange(o.impl, nullptr)) {
 		instance = o.instance;
 		device = o.device;
 		physical_device = o.physical_device;
@@ -127,7 +126,6 @@ namespace vuk {
 
 	Context& Context::operator=(Context&& o) noexcept {
 		impl = std::exchange(o.impl, nullptr);
-		debug = o.debug;
 		instance = o.instance;
 		device = o.device;
 		physical_device = o.physical_device;
@@ -164,36 +162,28 @@ namespace vuk {
 		return *this;
 	}
 
-	bool Context::DebugUtils::enabled() const {
-		return setDebugUtilsObjectNameEXT != nullptr;
+	bool Context::debug_enabled() const {
+		return vkSetDebugUtilsObjectNameEXT != nullptr;
 	}
 
-	Context::DebugUtils::DebugUtils(Context& ctx) : device(ctx.device) {
-		setDebugUtilsObjectNameEXT = (PFN_vkSetDebugUtilsObjectNameEXT)vkGetDeviceProcAddr(ctx.device, "vkSetDebugUtilsObjectNameEXT");
-		cmdBeginDebugUtilsLabelEXT = (PFN_vkCmdBeginDebugUtilsLabelEXT)vkGetDeviceProcAddr(ctx.device, "vkCmdBeginDebugUtilsLabelEXT");
-		cmdEndDebugUtilsLabelEXT = (PFN_vkCmdEndDebugUtilsLabelEXT)vkGetDeviceProcAddr(ctx.device, "vkCmdEndDebugUtilsLabelEXT");
-	}
-
-	void Context::DebugUtils::set_name(const Texture& tex, Name name) {
-		if (!enabled())
+	void Context::set_name(const Texture& tex, Name name) {
+		if (!debug_enabled())
 			return;
 		set_name(tex.image.get(), name);
 		set_name(tex.view.get().payload, name);
 	}
 
-	void Context::DebugUtils::begin_region(const VkCommandBuffer& cb, Name name, std::array<float, 4> color) {
-		if (!enabled())
+	void Context::begin_region(const VkCommandBuffer& cb, Name name, std::array<float, 4> color) {
+		if (!debug_enabled())
 			return;
 		VkDebugUtilsLabelEXT label = { .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT };
 		label.pLabelName = name.c_str();
 		::memcpy(label.color, color.data(), sizeof(float) * 4);
-		cmdBeginDebugUtilsLabelEXT(cb, &label);
+		vkCmdBeginDebugUtilsLabelEXT(cb, &label);
 	}
 
-	void Context::DebugUtils::end_region(const VkCommandBuffer& cb) {
-		if (!enabled())
-			return;
-		cmdEndDebugUtilsLabelEXT(cb);
+	void Context::end_region(const VkCommandBuffer& cb) {
+		vkCmdEndDebugUtilsLabelEXT(cb);
 	}
 
 	Result<void> Context::submit_graphics(std::span<VkSubmitInfo> sis, VkFence fence) {
@@ -391,7 +381,7 @@ namespace vuk {
 		VkShaderModule sm;
 		vkCreateShaderModule(device, &moduleCreateInfo, nullptr, &sm);
 		std::string name = "ShaderModule: " + cinfo.filename;
-		debug.set_name(sm, Name(name));
+		set_name(sm, Name(name));
 		return { sm, p, stage };
 	}
 
@@ -769,7 +759,7 @@ namespace vuk {
 		RGImage res{};
 		res.image = impl->legacy_gpu_allocator.create_image_for_rendertarget(cinfo.ici);
 		std::string name = std::string("Image: RenderTarget ") + std::string(cinfo.name.to_sv());
-		debug.set_name(res.image, Name(name));
+		set_name(res.image, Name(name));
 		return res;
 	}
 
@@ -1041,7 +1031,7 @@ namespace vuk {
 		VkPipeline pipeline;
 		VkResult res = vkCreateGraphicsPipelines(device, impl->vk_pipeline_cache, 1, &gpci, nullptr, &pipeline);
 		assert(res == VK_SUCCESS);
-		debug.set_name(pipeline, cinfo.base->pipeline_name);
+		set_name(pipeline, cinfo.base->pipeline_name);
 		return { cinfo.base, pipeline, gpci.layout, cinfo.base->layout_info };
 	}
 
@@ -1054,7 +1044,7 @@ namespace vuk {
 		VkPipeline pipeline;
 		VkResult res = vkCreateComputePipelines(device, impl->vk_pipeline_cache, 1, &cpci, nullptr, &pipeline);
 		assert(res == VK_SUCCESS);
-		debug.set_name(pipeline, cinfo.base->pipeline_name);
+		set_name(pipeline, cinfo.base->pipeline_name);
 		return { { cinfo.base, pipeline, cpci.layout, cinfo.base->layout_info }, cinfo.base->reflection_info.local_size };
 	}
 
@@ -1112,7 +1102,7 @@ namespace vuk {
 		VkPipeline pipeline;
 		VkResult res = vkCreateRayTracingPipelinesKHR(device, {}, impl->vk_pipeline_cache, 1, &cpci, nullptr, &pipeline);
 		assert(res == VK_SUCCESS);
-		debug.set_name(pipeline, cinfo.base->pipeline_name);
+		set_name(pipeline, cinfo.base->pipeline_name);
 
 		auto handleCount = 1 + miss_count + hit_count + callable_count;
 		uint32_t handleSize = rt_properties.shaderGroupHandleSize;

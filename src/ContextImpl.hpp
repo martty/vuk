@@ -100,7 +100,7 @@ namespace vuk {
 		                         ctx.graphics_queue_family_index,
 		                         ctx.compute_queue_family_index,
 		                         ctx.transfer_queue_family_index,
-		                         ctx.debug.setDebugUtilsObjectNameEXT),
+		                         ctx.vkSetDebugUtilsObjectNameEXT),
 		    device(ctx.device),
 		    pipelinebase_cache(&ctx, &FN<struct PipelineBaseInfo>::create_fn, &FN<struct PipelineBaseInfo>::destroy_fn),
 		    pipeline_cache(&ctx, &FN<struct PipelineInfo>::create_fn, &FN<struct PipelineInfo>::destroy_fn),

@@ -187,7 +187,7 @@ namespace vuk {
 			bool use_secondary_command_buffers = rpass.subpasses[0].use_secondary_command_buffers;
 			bool is_single_pass = rpass.subpasses.size() == 1 && rpass.subpasses[0].passes.size() == 1;
 			if (is_single_pass && !rpass.subpasses[0].passes[0]->qualified_name.is_invalid() && rpass.subpasses[0].passes[0]->pass->execute) {
-				ctx.debug.begin_region(cbuf, rpass.subpasses[0].passes[0]->qualified_name);
+				ctx.begin_region(cbuf, rpass.subpasses[0].passes[0]->qualified_name);
 			}
 
 			for (auto dep : rpass.pre_barriers) {
@@ -243,9 +243,9 @@ namespace vuk {
 					if (p->pass->execute) {
 						cobuf.current_pass = p;
 						if (!p->qualified_name.is_invalid() && !is_single_pass) {
-							ctx.debug.begin_region(cobuf.command_buffer, p->qualified_name);
+							ctx.begin_region(cobuf.command_buffer, p->qualified_name);
 							p->pass->execute(cobuf);
-							ctx.debug.end_region(cobuf.command_buffer);
+							ctx.end_region(cobuf.command_buffer);
 						} else {
 							p->pass->execute(cobuf);
 						}
@@ -278,7 +278,7 @@ namespace vuk {
 				}
 			}
 			if (is_single_pass && !rpass.subpasses[0].passes[0]->qualified_name.is_invalid() && rpass.subpasses[0].passes[0]->pass->execute) {
-				ctx.debug.end_region(cbuf);
+				ctx.end_region(cbuf);
 			}
 			if (rpass.handle != VK_NULL_HANDLE) {
 				vkCmdEndRenderPass(cbuf);
@@ -717,7 +717,7 @@ namespace vuk {
 					create_attachment(ctx, bound);
 				} else {
 					auto image = *allocate_image(alloc, bound.attachment); // TODO: dropping error
-					ctx.debug.set_name(*image, bound.name);
+					ctx.set_name(*image, bound.name);
 					bound.attachment.image = *image;
 				}
 			}
@@ -771,7 +771,7 @@ namespace vuk {
 					auto iv = *allocate_image_view(alloc, specific_attachment); // TODO: dropping error
 					specific_attachment.image_view = *iv;
 					auto name = std::string("ImageView: RenderTarget ") + std::string(bound.name.to_sv());
-					ctx.debug.set_name(specific_attachment.image_view.payload, Name(name));
+					ctx.set_name(specific_attachment.image_view.payload, Name(name));
 				}
 
 				ivs.push_back(specific_attachment.image_view);

@@ -40,6 +40,10 @@ namespace vuk {
 		uint32_t transfer_queue_family_index = VK_QUEUE_FAMILY_IGNORED;
 
 		struct FunctionPointers {
+			PFN_vkSetDebugUtilsObjectNameEXT vkSetDebugUtilsObjectNameEXT = nullptr;
+			PFN_vkCmdBeginDebugUtilsLabelEXT vkCmdBeginDebugUtilsLabelEXT = nullptr;
+			PFN_vkCmdEndDebugUtilsLabelEXT vkCmdEndDebugUtilsLabelEXT = nullptr;
+
 			PFN_vkCmdBuildAccelerationStructuresKHR vkCmdBuildAccelerationStructuresKHR = nullptr;
 			PFN_vkGetAccelerationStructureBuildSizesKHR vkGetAccelerationStructureBuildSizesKHR = nullptr;
 			PFN_vkCmdTraceRaysKHR vkCmdTraceRaysKHR = nullptr;
@@ -104,22 +108,14 @@ namespace vuk {
 		Context(Context&&) noexcept;
 		Context& operator=(Context&&) noexcept;
 
-		struct DebugUtils {
-			VkDevice device;
-			PFN_vkSetDebugUtilsObjectNameEXT setDebugUtilsObjectNameEXT;
-			PFN_vkCmdBeginDebugUtilsLabelEXT cmdBeginDebugUtilsLabelEXT;
-			PFN_vkCmdEndDebugUtilsLabelEXT cmdEndDebugUtilsLabelEXT;
+		bool debug_enabled() const;
 
-			bool enabled() const;
+		void set_name(const Texture& iv, Name name);
+		template<class T>
+		void set_name(const T& t, Name name);
 
-			DebugUtils(Context& ctx);
-			void set_name(const Texture& iv, Name name);
-			template<class T>
-			void set_name(const T& t, Name name);
-
-			void begin_region(const VkCommandBuffer&, Name name, std::array<float, 4> color = { 1, 1, 1, 1 });
-			void end_region(const VkCommandBuffer&);
-		} debug;
+		void begin_region(const VkCommandBuffer&, Name name, std::array<float, 4> color = { 1, 1, 1, 1 });
+		void end_region(const VkCommandBuffer&);
 
 		void create_named_pipeline(Name name, PipelineBaseCreateInfo pbci);
 
@@ -265,8 +261,8 @@ namespace vuk {
 	}
 
 	template<class T>
-	void Context::DebugUtils::set_name(const T& t, Name name) {
-		if (!enabled())
+	void Context::set_name(const T& t, Name name) {
+		if (!debug_enabled())
 			return;
 		VkDebugUtilsObjectNameInfoEXT info = { .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT };
 		info.pObjectName = name.c_str();
@@ -280,7 +276,7 @@ namespace vuk {
 			info.objectType = VK_OBJECT_TYPE_PIPELINE;
 		}
 		info.objectHandle = reinterpret_cast<uint64_t>(t);
-		setDebugUtilsObjectNameEXT(device, &info);
+		vkSetDebugUtilsObjectNameEXT(device, &info);
 	}
 } // namespace vuk
 
