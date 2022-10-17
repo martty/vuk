@@ -1348,7 +1348,7 @@ namespace vuk {
 					assert(set_color_blend_attachments.count() >= pi.attachmentCount &&
 					       "If color blend state is not broadcast, you must set it for each color attachment.");
 					records.color_blend_attachments = true;
-					pi.extended_size += pi.attachmentCount * sizeof(PipelineInstanceCreateInfo::PipelineColorBlendAttachmentState);
+					pi.extended_size += (uint16_t)(pi.attachmentCount * sizeof(PipelineInstanceCreateInfo::PipelineColorBlendAttachmentState));
 				}
 			}
 

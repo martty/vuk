@@ -1675,7 +1675,7 @@ namespace vuk {
 				if (c.high_level_access & (eMemoryRW | eTransferRead)) {
 					usage |= ImageUsageFlagBits::eTransferSrc;
 				}
-				if (c.high_level_access & (eMemoryRW | eTransferWrite)) {
+				if (c.high_level_access & (eMemoryRW | eTransferWrite | eClear)) {
 					usage |= ImageUsageFlagBits::eTransferDst;
 				}
 				if (c.high_level_access & (eMemoryRW | eFragmentRW | eComputeRW | eRayTracingRW)) {

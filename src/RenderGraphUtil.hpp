@@ -35,8 +35,8 @@ namespace vuk {
 		if (a == b) {
 			return a;
 		}
-		if (a == ImageLayout::eDepthStencilReadOnlyOptimal && b == ImageLayout::eDepthStencilAttachmentOptimal ||
-		    b == ImageLayout::eDepthStencilReadOnlyOptimal && a == ImageLayout::eDepthStencilAttachmentOptimal) {
+		if ((a == ImageLayout::eDepthStencilReadOnlyOptimal && b == ImageLayout::eDepthStencilAttachmentOptimal) ||
+		    (b == ImageLayout::eDepthStencilReadOnlyOptimal && a == ImageLayout::eDepthStencilAttachmentOptimal)) {
 			return ImageLayout::eDepthStencilAttachmentOptimal;
 		}
 		assert(a != ImageLayout::ePresentSrcKHR && b != ImageLayout::ePresentSrcKHR);

@@ -172,7 +172,7 @@ namespace vuk {
 
 			for (auto& sub : batch.submits) {
 				for (auto& wait : sub.relative_waits) {
-					char dst_name = wait.second == 0 ? 'X' : 'A' + wait.second - 1;
+					char dst_name = wait.second == 0 ? 'X' : 'A' + (char)wait.second - 1;
 					ss << to_name(batch.domain)[0] << name << "->" << to_name(wait.first)[0] << dst_name << ";";
 				}
 				name++;
