@@ -15,6 +15,7 @@
 #include <string.h>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 #include <vk_mem_alloc.h>
 
 namespace vuk {
@@ -85,7 +86,7 @@ namespace vuk {
 		VmaMemoryUsage mem_usage;
 		vuk::BufferUsageFlags usage;
 		std::array<LinearAllocSegment, 256> available_allocations; // up to 4 GB of allocations
-		std::array<LinearAllocSegment, 256> used_allocations; // up to 4 GB of allocations
+		std::array<LinearAllocSegment, 256> used_allocations;      // up to 4 GB of allocations
 		size_t available_allocation_count = 0;
 		size_t used_allocation_count = 0;
 
