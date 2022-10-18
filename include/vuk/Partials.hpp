@@ -21,7 +21,7 @@ namespace vuk {
 			return { std::move(dst) };
 		}
 
-		auto src = *allocate_buffer_cross_device(allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, 1 });
+		auto src = *allocate_buffer(allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, 1 });
 		::memcpy(src->mapped_ptr, src_data, size);
 
 		std::shared_ptr<RenderGraph> rgp = std::make_shared<RenderGraph>("host_data_to_buffer");
@@ -69,7 +69,7 @@ namespace vuk {
 		size_t alignment = format_to_texel_block_size(image.format);
 		assert(image.extent.sizing == Sizing::eAbsolute);
 		size_t size = compute_image_size(image.format, static_cast<Extent3D>(image.extent.extent));
-		auto src = *allocate_buffer_cross_device(allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
+		auto src = *allocate_buffer(allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 		::memcpy(src->mapped_ptr, src_data, size);
 
 		BufferImageCopy bc;
@@ -158,25 +158,12 @@ namespace vuk {
 		return { std::move(rgp), "_src+" };
 	}
 
-	/// @brief Allocates & fills a buffer with explicitly managed lifetime (cross-device scope)
+	/// @brief Allocates & fills a buffer with explicitly managed lifetime
 	/// @param allocator Allocator to allocate this Buffer from
 	/// @param mem_usage Where to allocate the buffer (host visible buffers will be automatically mapped)
 	template<class T>
-	std::pair<Unique<BufferCrossDevice>, Future> create_buffer_cross_device(Allocator& allocator, MemoryUsage mem_usage, std::span<T> data) {
-		Unique<BufferCrossDevice> buf(allocator);
-		BufferCreateInfo bci{ mem_usage, sizeof(T) * data.size(), 1 };
-		auto ret = allocator.allocate_buffers(std::span{ &*buf, 1 }, std::span{ &bci, 1 }); // TODO: dropping error
-		memcpy(buf->mapped_ptr, data.data(), data.size_bytes());
-		Buffer b = buf.get();
-		return { std::move(buf), Future{ std::move(b) } };
-	}
-
-	/// @brief Allocates & fills a buffer with explicitly managed lifetime (device-only scope)
-	/// @param allocator Allocator to allocate this Buffer from
-	/// @param mem_usage Where to allocate the buffer (host visible buffers will be automatically mapped)
-	template<class T>
-	std::pair<Unique<BufferGPU>, Future> create_buffer_gpu(Allocator& allocator, DomainFlagBits domain, std::span<T> data) {
-		Unique<BufferGPU> buf(allocator);
+	std::pair<Unique<Buffer>, Future> create_buffer(Allocator& allocator, vuk::MemoryUsage memory_usage, DomainFlagBits domain, std::span<T> data) {
+		Unique<Buffer> buf(allocator);
 		BufferCreateInfo bci{ MemoryUsage::eGPUonly, sizeof(T) * data.size(), 1 };
 		auto ret = allocator.allocate_buffers(std::span{ &*buf, 1 }, std::span{ &bci, 1 }); // TODO: dropping error
 		Buffer b = buf.get();

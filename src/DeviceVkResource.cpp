@@ -123,44 +123,17 @@ namespace vuk {
 	}
 
 	Result<void, AllocateException>
-	DeviceVkResource::allocate_buffers(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
-		assert(dst.size() == cis.size());
-		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
-			auto& ci = cis[i];
-			if (ci.mem_usage != MemoryUsage::eCPUonly && ci.mem_usage != MemoryUsage::eCPUtoGPU && ci.mem_usage != MemoryUsage::eGPUtoCPU) {
-				deallocate_buffers(std::span{ dst.data(), (uint64_t)i });
-				return { expected_error, AllocateException{ VK_ERROR_FEATURE_NOT_PRESENT } }; // tried to allocate gpu only buffer as BufferCrossDevice
-			}
-			// TODO: legacy buffer alloc can't signal errors
-			dst[i] = BufferCrossDevice{ legacy_gpu_allocator->allocate_buffer(ci.mem_usage, LegacyGPUAllocator::all_usage, ci.size, ci.alignment, true) };
-		}
-		return { expected_value };
-	}
-
-	void DeviceVkResource::deallocate_buffers(std::span<const BufferCrossDevice> src) {
-		for (auto& v : src) {
-			if (v) {
-				legacy_gpu_allocator->free_buffer(v);
-			}
-		}
-	}
-
-	Result<void, AllocateException>
-	DeviceVkResource::allocate_buffers(std::span<BufferGPU> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
+	DeviceVkResource::allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
 			auto& ci = cis[i];
 			// TODO: legacy buffer alloc can't signal errors
-			if (ci.mem_usage != MemoryUsage::eGPUonly) {
-				deallocate_buffers(std::span{ dst.data(), (uint64_t)i });
-				return { expected_error, AllocateException{ VK_ERROR_FEATURE_NOT_PRESENT } }; // tried to allocate cross device buffer as BufferGPU
-			}
-			dst[i] = BufferGPU{ legacy_gpu_allocator->allocate_buffer(ci.mem_usage, LegacyGPUAllocator::all_usage, ci.size, ci.alignment, false) };
+			dst[i] = Buffer{ legacy_gpu_allocator->allocate_buffer(ci.mem_usage, LegacyGPUAllocator::all_usage, ci.size, ci.alignment, false) };
 		}
 		return { expected_value };
 	}
 
-	void DeviceVkResource::deallocate_buffers(std::span<const BufferGPU> src) {
+	void DeviceVkResource::deallocate_buffers(std::span<const Buffer> src) {
 		for (auto& v : src) {
 			if (v) {
 				legacy_gpu_allocator->free_buffer(v);
@@ -509,20 +482,11 @@ namespace vuk {
 	}
 
 	Result<void, AllocateException>
-	DeviceNestedResource::allocate_buffers(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
+	DeviceNestedResource::allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
 		return upstream->allocate_buffers(dst, cis, loc);
 	}
 
-	void DeviceNestedResource::deallocate_buffers(std::span<const BufferCrossDevice> src) {
-		upstream->deallocate_buffers(src);
-	}
-
-	Result<void, AllocateException>
-	DeviceNestedResource::allocate_buffers(std::span<BufferGPU> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
-		return upstream->allocate_buffers(dst, cis, loc);
-	}
-
-	void DeviceNestedResource::deallocate_buffers(std::span<const BufferGPU> src) {
+	void DeviceNestedResource::deallocate_buffers(std::span<const Buffer> src) {
 		upstream->deallocate_buffers(src);
 	}
 

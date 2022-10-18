@@ -24,7 +24,7 @@ namespace {
 	int x, y;
 	uint32_t speed_count = 1;
 	std::optional<vuk::Texture> texture_of_doge;
-	vuk::Unique<vuk::BufferGPU> scramble_buf;
+	vuk::Unique<vuk::Buffer> scramble_buf;
 	std::random_device rd;
 	std::mt19937 g(rd());
 	vuk::Future scramble_buf_fut;
@@ -67,7 +67,7 @@ namespace {
 		      std::iota(indices.begin(), indices.end(), 0);
 		      std::shuffle(indices.begin(), indices.end(), g);
 
-		      scramble_buf = *allocate_buffer_gpu(allocator, { vuk::MemoryUsage::eGPUonly, sizeof(unsigned) * x * y, 1 });
+		      scramble_buf = *allocate_buffer(allocator, { vuk::MemoryUsage::eGPUonly, sizeof(unsigned) * x * y, 1 });
 
 		      // make a GPU future
 		      scramble_buf_fut = vuk::host_data_to_buffer(allocator, vuk::DomainFlagBits::eTransferOnTransfer, scramble_buf.get(), std::span(indices));
@@ -162,7 +162,7 @@ namespace {
 		      rgp->attach_in("08_scramble", std::move(scramble_buf_fut));
 		      // temporary buffer used for copying
 		      rgp->attach_buffer("08_scramble++",
-		                         **allocate_buffer_gpu(frame_allocator, { vuk::MemoryUsage::eGPUonly, sizeof(unsigned) * x * y, 1 }),
+		                         **allocate_buffer(frame_allocator, { vuk::MemoryUsage::eGPUonly, sizeof(unsigned) * x * y, 1 }),
 		                         vuk::Access::eNone,
 		                         vuk::Access::eNone);
 		      // permanent buffer to keep state

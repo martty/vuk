@@ -24,7 +24,7 @@ constexpr bool operator==(const std::span<const uint32_t>& lhs, const std::span<
 TEST_CASE("test buffer harness") {
 	REQUIRE(test_context.prepare());
 	auto data = { 1u, 2u, 3u };
-	auto [buf, fut] = create_buffer_cross_device(*test_context.allocator, MemoryUsage::eCPUtoGPU, std::span(data));
+	auto [buf, fut] = create_buffer(*test_context.allocator, MemoryUsage::eCPUtoGPU, vuk::DomainFlagBits::eTransferOnTransfer, std::span(data));
 	auto res = fut.get<Buffer>(*test_context.allocator, test_context.compiler);
 	CHECK(std::span((uint32_t*)res->mapped_ptr, 3) == std::span(data));
 }
@@ -33,14 +33,14 @@ TEST_CASE("test buffer upload/download") {
 	REQUIRE(test_context.prepare());
 	{
 		auto data = { 1u, 2u, 3u };
-		auto [buf, fut] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(data));
+		auto [buf, fut] = create_buffer(*test_context.allocator, MemoryUsage::eGPUonly, DomainFlagBits::eAny, std::span(data));
 
 		auto res = download_buffer(fut).get<Buffer>(*test_context.allocator, test_context.compiler);
 		CHECK(std::span((uint32_t*)res->mapped_ptr, 3) == std::span(data));
 	}
 	{
 		auto data = { 1u, 2u, 3u, 4u, 5u };
-		auto [buf, fut] = create_buffer_gpu(*test_context.allocator, DomainFlagBits::eAny, std::span(data));
+		auto [buf, fut] = create_buffer(*test_context.allocator, MemoryUsage::eGPUonly, DomainFlagBits::eAny, std::span(data));
 
 		auto res = download_buffer(fut).get<Buffer>(*test_context.allocator, test_context.compiler);
 		CHECK(std::span((uint32_t*)res->mapped_ptr, 5) == std::span(data));

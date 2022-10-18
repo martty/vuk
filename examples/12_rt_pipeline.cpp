@@ -17,9 +17,9 @@
 namespace {
 	float angle = 0.f;
 	auto box = util::generate_cube();
-	vuk::BufferGPU verts, inds;
+	vuk::Buffer verts, inds;
 	vuk::Unique<VkAccelerationStructureKHR> tlas, blas;
-	vuk::Unique<vuk::BufferGPU> tlas_buf, blas_buf, tlas_scratch_buffer;
+	vuk::Unique<vuk::Buffer> tlas_buf, blas_buf, tlas_scratch_buffer;
 
 	vuk::Example x{
 		.name = "12_rt_pipeline",
@@ -27,7 +27,7 @@ namespace {
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator) {
 		      auto& ctx = allocator.get_context();
 
-			  // If the runner has detected that there is no RT support, this example won't run
+		      // If the runner has detected that there is no RT support, this example won't run
 		      if (!runner.has_rt) {
 			      return;
 		      }
@@ -44,9 +44,9 @@ namespace {
 		      }
 
 		      // We set up the cube data, same as in example 02_cube
-		      auto [vert_buf, vert_fut] = create_buffer_gpu(allocator, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.first));
+		      auto [vert_buf, vert_fut] = create_buffer(allocator, vuk::MemoryUsage::eGPUonly, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.first));
 		      verts = *vert_buf;
-		      auto [ind_buf, ind_fut] = create_buffer_gpu(allocator, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.second));
+		      auto [ind_buf, ind_fut] = create_buffer(allocator, vuk::MemoryUsage::eGPUonly, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.second));
 		      inds = *ind_buf;
 
 		      // BLAS building
@@ -89,7 +89,7 @@ namespace {
 		      VkAccelerationStructureCreateInfoKHR blas_ci{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR };
 		      blas_ci.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
 		      blas_ci.size = blas_size_info.accelerationStructureSize; // Will be used to allocate memory.
-		      blas_buf = *vuk::allocate_buffer_gpu(allocator, { .mem_usage = vuk::MemoryUsage::eGPUonly, .size = blas_size_info.accelerationStructureSize });
+		      blas_buf = *vuk::allocate_buffer(allocator, { .mem_usage = vuk::MemoryUsage::eGPUonly, .size = blas_size_info.accelerationStructureSize });
 		      blas_ci.buffer = blas_buf->buffer;
 		      blas_ci.offset = blas_buf->offset;
 
@@ -98,7 +98,7 @@ namespace {
 
 		      // Allocate the scratch memory for the BLAS build
 		      auto blas_scratch_buffer =
-		          *vuk::allocate_buffer_gpu(allocator, vuk::BufferCreateInfo{ .mem_usage = vuk::MemoryUsage::eGPUonly, .size = blas_size_info.buildScratchSize });
+		          *vuk::allocate_buffer(allocator, vuk::BufferCreateInfo{ .mem_usage = vuk::MemoryUsage::eGPUonly, .size = blas_size_info.buildScratchSize });
 
 		      // Update build information
 		      blas_build_info.srcAccelerationStructure = VK_NULL_HANDLE;
@@ -118,7 +118,8 @@ namespace {
 		      rayInst.mask = 0xFF;                                //  Only be hit if rayMask & instance.mask != 0
 		      rayInst.instanceShaderBindingTableRecordOffset = 0; // We will use the same hit group for all objects
 
-		      auto instances_buffer = vuk::create_buffer_cross_device(allocator, vuk::MemoryUsage::eCPUtoGPU, std::span{ &rayInst, 1 });
+		      auto instances_buffer =
+		          vuk::create_buffer(allocator, vuk::MemoryUsage::eCPUtoGPU, vuk::DomainFlagBits::eTransferOnGraphics, std::span{ &rayInst, 1 });
 
 		      VkAccelerationStructureGeometryInstancesDataKHR instancesVk{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR };
 		      instancesVk.data.deviceAddress = instances_buffer.first->device_address;
@@ -146,7 +147,7 @@ namespace {
 		      VkAccelerationStructureCreateInfoKHR tlas_ci{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR };
 		      tlas_ci.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
 		      tlas_ci.size = tlas_size_info.accelerationStructureSize;
-		      tlas_buf = *vuk::allocate_buffer_gpu(allocator, { .mem_usage = vuk::MemoryUsage::eGPUonly, .size = tlas_size_info.accelerationStructureSize });
+		      tlas_buf = *vuk::allocate_buffer(allocator, { .mem_usage = vuk::MemoryUsage::eGPUonly, .size = tlas_size_info.accelerationStructureSize });
 		      tlas_ci.buffer = tlas_buf->buffer;
 		      tlas_ci.offset = tlas_buf->offset;
 
@@ -155,7 +156,7 @@ namespace {
 
 		      // Allocate the scratch memory
 		      tlas_scratch_buffer =
-		          *vuk::allocate_buffer_gpu(allocator, vuk::BufferCreateInfo{ .mem_usage = vuk::MemoryUsage::eGPUonly, .size = tlas_size_info.buildScratchSize });
+		          *vuk::allocate_buffer(allocator, vuk::BufferCreateInfo{ .mem_usage = vuk::MemoryUsage::eGPUonly, .size = tlas_size_info.buildScratchSize });
 
 		      // Update build information
 		      tlas_build_info.srcAccelerationStructure = VK_NULL_HANDLE;
@@ -217,7 +218,7 @@ namespace {
 		      vp.inv_view = glm::inverse(vp.inv_view);
 		      vp.inv_proj = glm::inverse(vp.inv_proj);
 
-		      auto [buboVP, uboVP_fut] = create_buffer_cross_device(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, std::span(&vp, 1));
+		      auto [buboVP, uboVP_fut] = create_buffer(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, vuk::DomainFlagBits::eTransferOnGraphics, std::span(&vp, 1));
 		      auto uboVP = *buboVP;
 
 		      // TLAS update - we make a new buffer of BLAS instances, which we use to update the TLAS later
@@ -232,7 +233,8 @@ namespace {
 		      rayInst.mask = 0xFF;                                //  Only be hit if rayMask & instance.mask != 0
 		      rayInst.instanceShaderBindingTableRecordOffset = 0; // We will use the same hit group for all objects
 
-		      auto [instances_buffer, instances_fut] = vuk::create_buffer_cross_device(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, std::span{ &rayInst, 1 });
+		      auto [instances_buffer, instances_fut] =
+		          vuk::create_buffer(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, vuk::DomainFlagBits::eTransferOnGraphics, std::span{ &rayInst, 1 });
 
 		      vuk::RenderGraph rg("12");
 		      rg.attach_in("12_rt", std::move(target));

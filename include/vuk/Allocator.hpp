@@ -89,13 +89,8 @@ namespace vuk {
 		allocate_command_pools(std::span<CommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) = 0;
 		virtual void deallocate_command_pools(std::span<const CommandPool> dst) = 0;
 
-		virtual Result<void, AllocateException>
-		allocate_buffers(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) = 0;
-		virtual void deallocate_buffers(std::span<const BufferCrossDevice> dst) = 0;
-
-		// gpu only
-		virtual Result<void, AllocateException> allocate_buffers(std::span<BufferGPU> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) = 0;
-		virtual void deallocate_buffers(std::span<const BufferGPU> dst) = 0;
+		virtual Result<void, AllocateException> allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) = 0;
+		virtual void deallocate_buffers(std::span<const Buffer> dst) = 0;
 
 		virtual Result<void, AllocateException>
 		allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) = 0;
@@ -232,49 +227,24 @@ namespace vuk {
 		/// @param src Span of command buffers to be deallocated
 		void deallocate(std::span<const CommandBufferAllocation> src);
 
-		Result<void, AllocateException>
-		allocate(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) = delete;
-		Result<void, AllocateException>
-		allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) = delete;
+		/// @brief Allocate buffers from this Allocator
+		/// @param dst Destination span to place allocated buffers into
+		/// @param cis Per-element construction info
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
+		Result<void, AllocateException> allocate(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
-		/// @brief Allocate cross-device buffers from this Allocator
-		/// @param dst Destination span to place allocated cross-device buffers into
+		/// @brief Allocate buffers from this Allocator
+		/// @param dst Destination span to place allocated buffers into
 		/// @param cis Per-element construction info
 		/// @param loc Source location information
 		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
 		Result<void, AllocateException>
-		allocate(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+		allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
-		/// @brief Allocate cross-device buffers from this Allocator
-		/// @param dst Destination span to place allocated cross-device buffers into
-		/// @param cis Per-element construction info
-		/// @param loc Source location information
-		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
-		Result<void, AllocateException>
-		allocate_buffers(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
-
-		/// @brief Deallocate cross-device buffers previously allocated from this Allocator
-		/// @param src Span of cross-device buffers to be deallocated
-		void deallocate(std::span<const BufferCrossDevice> src);
-
-		/// @brief Allocate GPU-only buffers from this Allocator
-		/// @param dst Destination span to place allocated GPU-only buffers into
-		/// @param cis Per-element construction info
-		/// @param loc Source location information
-		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
-		Result<void, AllocateException> allocate(std::span<BufferGPU> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
-
-		/// @brief Allocate GPU-only buffers from this Allocator
-		/// @param dst Destination span to place allocated GPU-only buffers into
-		/// @param cis Per-element construction info
-		/// @param loc Source location information
-		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
-		Result<void, AllocateException>
-		allocate_buffers(std::span<BufferGPU> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
-
-		/// @brief Deallocate GPU-only buffers previously allocated from this Allocator
-		/// @param src Span of GPU-only buffers to be deallocated
-		void deallocate(std::span<const BufferGPU> src);
+		/// @brief Deallocate buffers previously allocated from this Allocator
+		/// @param src Span of buffers to be deallocated
+		void deallocate(std::span<const Buffer> src);
 
 		/// @brief Allocate framebuffers from this Allocator
 		/// @param dst Destination span to place allocated framebuffers into

@@ -68,8 +68,8 @@ vuk::Future util::ImGui_ImplVuk_Render(vuk::Allocator& allocator,
 
 	size_t vertex_size = draw_data->TotalVtxCount * sizeof(ImDrawVert);
 	size_t index_size = draw_data->TotalIdxCount * sizeof(ImDrawIdx);
-	auto imvert = *allocate_buffer_cross_device(allocator, { vuk::MemoryUsage::eCPUtoGPU, vertex_size, 1 });
-	auto imind = *allocate_buffer_cross_device(allocator, { vuk::MemoryUsage::eCPUtoGPU, index_size, 1 });
+	auto imvert = *allocate_buffer(allocator, { vuk::MemoryUsage::eCPUtoGPU, vertex_size, 1 });
+	auto imind = *allocate_buffer(allocator, { vuk::MemoryUsage::eCPUtoGPU, index_size, 1 });
 
 	size_t vtx_dst = 0, idx_dst = 0;
 	vuk::Compiler comp;

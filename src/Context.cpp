@@ -1130,7 +1130,7 @@ namespace vuk {
 		assert(result == VK_SUCCESS);
 
 		VkDeviceSize sbt_size = rgen_region.size + miss_region.size + hit_region.size + call_region.size;
-		BufferCrossDevice SBT;
+		Buffer SBT;
 		BufferCreateInfo bci{ .mem_usage = vuk::MemoryUsage::eCPUtoGPU, .size = sbt_size };
 		auto buff_cr_result = impl->device_vk_resource.allocate_buffers(std::span{ &SBT, 1 }, std::span{ &bci, 1 }, {});
 		assert(buff_cr_result);

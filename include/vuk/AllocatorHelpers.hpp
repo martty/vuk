@@ -85,28 +85,14 @@ namespace vuk {
 		return { expected_value, std::move(fence) };
 	}
 
-	/// @brief Allocate a single cross-device buffer from an Allocator
-	/// @param allocator Allocator to use
-	/// @param bci Buffer creation parameters
-	/// @param loc Source location information
-	/// @return Cross-device buffer in a RAII wrapper (Unique<T>) or AllocateException on error
-	inline Result<Unique<BufferCrossDevice>, AllocateException>
-	allocate_buffer_cross_device(Allocator& allocator, const BufferCreateInfo& bci, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-		Unique<BufferCrossDevice> buf(allocator);
-		if (auto res = allocator.allocate_buffers(std::span{ &buf.get(), 1 }, std::span{ &bci, 1 }, loc); !res) {
-			return { expected_error, res.error() };
-		}
-		return { expected_value, std::move(buf) };
-	}
-
 	/// @brief Allocate a single GPU-only buffer from an Allocator
 	/// @param allocator Allocator to use
 	/// @param bci Buffer creation parameters
 	/// @param loc Source location information
 	/// @return GPU-only buffer in a RAII wrapper (Unique<T>) or AllocateException on error
-	inline Result<Unique<BufferGPU>, AllocateException>
-	allocate_buffer_gpu(Allocator& allocator, const BufferCreateInfo& bci, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-		Unique<BufferGPU> buf(allocator);
+	inline Result<Unique<Buffer>, AllocateException>
+	allocate_buffer(Allocator& allocator, const BufferCreateInfo& bci, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
+		Unique<Buffer> buf(allocator);
 		if (auto res = allocator.allocate_buffers(std::span{ &buf.get(), 1 }, std::span{ &bci, 1 }, loc); !res) {
 			return { expected_error, res.error() };
 		}

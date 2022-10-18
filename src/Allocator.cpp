@@ -66,28 +66,15 @@ namespace vuk {
 		device_resource->deallocate_command_buffers(src);
 	}
 
-	Result<void, AllocateException> Allocator::allocate(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException> Allocator::allocate(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
 		return device_resource->allocate_buffers(dst, cis, loc);
 	}
 
-	Result<void, AllocateException>
-	Allocator::allocate_buffers(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException> Allocator::allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
 		return device_resource->allocate_buffers(dst, cis, loc);
 	}
 
-	void Allocator::deallocate(std::span<const BufferCrossDevice> src) {
-		device_resource->deallocate_buffers(src);
-	}
-
-	Result<void, AllocateException> Allocator::allocate(std::span<BufferGPU> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
-		return device_resource->allocate_buffers(dst, cis, loc);
-	}
-
-	Result<void, AllocateException> Allocator::allocate_buffers(std::span<BufferGPU> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
-		return device_resource->allocate_buffers(dst, cis, loc);
-	}
-
-	void Allocator::deallocate(std::span<const BufferGPU> src) {
+	void Allocator::deallocate(std::span<const Buffer> src) {
 		device_resource->deallocate_buffers(src);
 	}
 

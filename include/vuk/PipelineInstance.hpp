@@ -178,7 +178,7 @@ namespace vuk {
 		VkStridedDeviceAddressRegionKHR hit_region{};
 		VkStridedDeviceAddressRegionKHR call_region{};
 
-		BufferCrossDevice sbt;
+		Buffer sbt;
 	};
 
 	template<>

@@ -704,9 +704,7 @@ namespace vuk {
 		for (auto& [name, bound] : impl->bound_buffers) {
 			if (bound.buffer.buffer == VK_NULL_HANDLE) {
 				BufferCreateInfo bci{ .mem_usage = bound.buffer.memory_usage, .size = bound.buffer.size, .alignment = 1 }; // TODO: alignment?
-				auto buff = bci.mem_usage == MemoryUsage::eGPUonly ? static_cast<Buffer>(**allocate_buffer_gpu(alloc, bci))
-				                                                   : static_cast<Buffer>(**allocate_buffer_cross_device(alloc, bci)); // TODO: dropping error
-				bound.buffer = buff;
+				bound.buffer = **allocate_buffer(alloc, bci);                                                              // TODO: dropping error
 			}
 		}
 

@@ -30,8 +30,8 @@ namespace {
 	auto box = util::generate_cube();
 
 	struct Mesh {
-		vuk::Unique<vuk::BufferGPU> vertex_buffer;
-		vuk::Unique<vuk::BufferGPU> index_buffer;
+		vuk::Unique<vuk::Buffer> vertex_buffer;
+		vuk::Unique<vuk::Buffer> index_buffer;
 		uint32_t index_count;
 	};
 
@@ -159,16 +159,18 @@ namespace {
 
 		      // Create meshes
 		      cube_mesh.emplace();
-		      auto [vert_buf, vert_fut] = create_buffer_gpu(allocator, vuk::DomainFlagBits::eTransferOnTransfer, std::span(box.first));
+		      auto [vert_buf, vert_fut] = create_buffer(allocator, vuk::MemoryUsage::eGPUonly, vuk::DomainFlagBits::eTransferOnTransfer, std::span(box.first));
 		      cube_mesh->vertex_buffer = std::move(vert_buf);
-		      auto [idx_buf, idx_fut] = create_buffer_gpu(allocator, vuk::DomainFlagBits::eTransferOnTransfer, std::span(box.second));
+		      auto [idx_buf, idx_fut] = create_buffer(allocator, vuk::MemoryUsage::eGPUonly, vuk::DomainFlagBits::eTransferOnTransfer, std::span(box.second));
 		      cube_mesh->index_buffer = std::move(idx_buf);
 		      cube_mesh->index_count = (uint32_t)box.second.size();
 
 		      quad_mesh.emplace();
-		      auto [vert_buf2, vert_fut2] = create_buffer_gpu(allocator, vuk::DomainFlagBits::eTransferOnTransfer, std::span(&box.first[0], 6));
+		      auto [vert_buf2, vert_fut2] =
+		          create_buffer(allocator, vuk::MemoryUsage::eGPUonly, vuk::DomainFlagBits::eTransferOnTransfer, std::span(&box.first[0], 6));
 		      quad_mesh->vertex_buffer = std::move(vert_buf2);
-		      auto [idx_buf2, idx_fut2] = create_buffer_gpu(allocator, vuk::DomainFlagBits::eTransferOnTransfer, std::span(&box.second[0], 6));
+		      auto [idx_buf2, idx_fut2] =
+		          create_buffer(allocator, vuk::MemoryUsage::eGPUonly, vuk::DomainFlagBits::eTransferOnTransfer, std::span(&box.second[0], 6));
 		      quad_mesh->index_buffer = std::move(idx_buf2);
 		      quad_mesh->index_count = 6;
 
@@ -253,7 +255,7 @@ namespace {
 		      vp.proj[1][1] *= -1;
 
 		      // Upload view & projection
-		      auto [buboVP, uboVP_fut] = create_buffer_cross_device(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, std::span(&vp, 1));
+		      auto [buboVP, uboVP_fut] = create_buffer(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, vuk::DomainFlagBits::eTransferOnGraphics, std::span(&vp, 1));
 		      auto uboVP = *buboVP;
 
 		      // Do a terrible simulation step
@@ -265,7 +267,7 @@ namespace {
 		      }
 
 		      // Upload model matrices to an array
-		      auto modelmats = **allocate_buffer_cross_device(frame_allocator, { vuk::MemoryUsage::eCPUtoGPU, sizeof(glm::mat4) * renderables.size(), 1 });
+		      auto modelmats = **allocate_buffer(frame_allocator, { vuk::MemoryUsage::eCPUtoGPU, sizeof(glm::mat4) * renderables.size(), 1 });
 		      for (auto i = 0; i < renderables.size(); i++) {
 			      glm::mat4 model_matrix = glm::translate(glm::mat4(1.f), renderables[i].position);
 			      memcpy(reinterpret_cast<glm::mat4*>(modelmats.mapped_ptr) + i, &model_matrix, sizeof(glm::mat4));

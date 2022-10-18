@@ -58,8 +58,6 @@ namespace vuk {
 	struct BufferCreateInfo;
 
 	struct Buffer;
-	struct BufferGPU;
-	struct BufferCrossDevice;
 
 	struct Query;
 	struct TimestampQuery;

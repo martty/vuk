@@ -82,11 +82,6 @@ namespace vuk {
 		}
 	};
 
-	/// @brief A buffer that has GPU-only scope (only accessed from the device timeline)
-	struct BufferGPU : Buffer {};
-	/// @brief A buffer with cross-device scope (accessed both from device and host timeline)
-	struct BufferCrossDevice : Buffer {};
-
 	/// @brief Buffer creation parameters
 	struct BufferCreateInfo {
 		/// @brief Memory usage to determine which heap to allocate the memory from

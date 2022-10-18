@@ -33,14 +33,9 @@ namespace vuk {
 		void deallocate_command_pools(std::span<const CommandPool> dst) override; // no-op
 
 		// buffers are lockless
-		Result<void, AllocateException>
-		allocate_buffers(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException> allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) override;
 
-		void deallocate_buffers(std::span<const BufferCrossDevice> src) override; // no-op, linear
-
-		Result<void, AllocateException> allocate_buffers(std::span<BufferGPU> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) override;
-
-		void deallocate_buffers(std::span<const BufferGPU> src) override; // no-op, linear
+		void deallocate_buffers(std::span<const Buffer> src) override; // no-op, linear
 
 		Result<void, AllocateException>
 		allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) override;
@@ -143,14 +138,9 @@ namespace vuk {
 
 		void deallocate_command_pools(std::span<const CommandPool> src) override;
 
-		Result<void, AllocateException>
-		allocate_buffers(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException> allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) override;
 
-		void deallocate_buffers(std::span<const BufferCrossDevice> src) override;
-
-		Result<void, AllocateException> allocate_buffers(std::span<BufferGPU> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) override;
-
-		void deallocate_buffers(std::span<const BufferGPU> src) override;
+		void deallocate_buffers(std::span<const Buffer> src) override;
 
 		Result<void, AllocateException>
 		allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) override;

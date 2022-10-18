@@ -85,8 +85,7 @@ namespace vuk {
 
 		// only for use via SuperframeAllocator
 		std::mutex buffers_mutex;
-		std::vector<BufferGPU> buffer_gpus;
-		std::vector<BufferCrossDevice> buffer_cross_devices;
+		std::vector<Buffer> buffer_gpus;
 
 		std::vector<TimestampQueryPool> ts_query_pools;
 		std::mutex query_pool_mutex;
@@ -165,33 +164,7 @@ namespace vuk {
 	void DeviceFrameResource::deallocate_command_pools(std::span<const CommandPool> dst) {} // no-op
 
 	Result<void, AllocateException>
-	DeviceFrameResource::allocate_buffers(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
-		assert(dst.size() == cis.size());
-		auto& rf = *static_cast<DeviceSuperFrameResource*>(upstream);
-		auto& legacy = *rf.direct.legacy_gpu_allocator;
-
-		// TODO: legacy allocator can't signal errors
-		// TODO: legacy linear allocators don't nest
-		for (uint64_t i = 0; i < dst.size(); i++) {
-			auto& ci = cis[i];
-			if (ci.mem_usage == MemoryUsage::eCPUonly) {
-				dst[i] = BufferCrossDevice{ legacy.allocate_buffer(impl->linear_cpu_only, ci.size, ci.alignment, true) };
-			} else if (ci.mem_usage == MemoryUsage::eCPUtoGPU) {
-				dst[i] = BufferCrossDevice{ legacy.allocate_buffer(impl->linear_cpu_gpu, ci.size, ci.alignment, true) };
-			} else if (ci.mem_usage == MemoryUsage::eGPUtoCPU) {
-				dst[i] = BufferCrossDevice{ legacy.allocate_buffer(impl->linear_gpu_cpu, ci.size, ci.alignment, true) };
-			} else {
-				return { expected_error, AllocateException{ VK_ERROR_FEATURE_NOT_PRESENT } }; // tried to allocate gpu only buffer as BufferCrossDevice
-			}
-		}
-
-		return { expected_value };
-	}
-
-	void DeviceFrameResource::deallocate_buffers(std::span<const BufferCrossDevice> src) {} // no-op, linear
-
-	Result<void, AllocateException>
-	DeviceFrameResource::allocate_buffers(std::span<BufferGPU> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
+	DeviceFrameResource::allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		auto& rf = *static_cast<DeviceSuperFrameResource*>(upstream);
 		auto& legacy = *rf.direct.legacy_gpu_allocator;
@@ -201,16 +174,20 @@ namespace vuk {
 		for (uint64_t i = 0; i < dst.size(); i++) {
 			auto& ci = cis[i];
 			if (ci.mem_usage == MemoryUsage::eGPUonly) {
-				dst[i] = BufferGPU{ legacy.allocate_buffer(impl->linear_gpu_only, ci.size, ci.alignment, false) };
-			} else {
-				return { expected_error, AllocateException{ VK_ERROR_FEATURE_NOT_PRESENT } }; // tried to allocate xdev buffer as BufferGPU
+				dst[i] = Buffer{ legacy.allocate_buffer(impl->linear_gpu_only, ci.size, ci.alignment, false) };
+			} else if (ci.mem_usage == MemoryUsage::eCPUonly) {
+				dst[i] = Buffer{ legacy.allocate_buffer(impl->linear_cpu_only, ci.size, ci.alignment, true) };
+			} else if (ci.mem_usage == MemoryUsage::eCPUtoGPU) {
+				dst[i] = Buffer{ legacy.allocate_buffer(impl->linear_cpu_gpu, ci.size, ci.alignment, true) };
+			} else if (ci.mem_usage == MemoryUsage::eGPUtoCPU) {
+				dst[i] = Buffer{ legacy.allocate_buffer(impl->linear_gpu_cpu, ci.size, ci.alignment, true) };
 			}
 		}
 
 		return { expected_value };
 	}
 
-	void DeviceFrameResource::deallocate_buffers(std::span<const BufferGPU> src) {} // no-op, linear
+	void DeviceFrameResource::deallocate_buffers(std::span<const Buffer> src) {} // no-op, linear
 
 	Result<void, AllocateException>
 	DeviceFrameResource::allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) {
@@ -305,7 +282,8 @@ namespace vuk {
 			dst[i].layout_info = ci;
 			auto result = vkAllocateDescriptorSets(device, &dsai, &dst[i].descriptor_set);
 			// if we fail, we allocate another pool from upstream
-			if (result == VK_ERROR_OUT_OF_POOL_MEMORY || result == VK_ERROR_FRAGMENTED_POOL) { // we potentially run this from multiple threads which results in additional pool allocs
+			if (result == VK_ERROR_OUT_OF_POOL_MEMORY ||
+			    result == VK_ERROR_FRAGMENTED_POOL) { // we potentially run this from multiple threads which results in additional pool allocs
 				{
 					std::unique_lock _(impl->ds_mutex);
 					VkDescriptorPool pool;
@@ -479,23 +457,11 @@ namespace vuk {
 	}
 
 	Result<void, AllocateException>
-	DeviceSuperFrameResource::allocate_buffers(std::span<BufferCrossDevice> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
+	DeviceSuperFrameResource::allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
 		return direct.allocate_buffers(dst, cis, loc);
 	}
 
-	void DeviceSuperFrameResource::deallocate_buffers(std::span<const BufferCrossDevice> src) {
-		auto& f = get_last_frame();
-		std::unique_lock _(f.impl->buffers_mutex);
-		auto& vec = f.impl->buffer_cross_devices;
-		vec.insert(vec.end(), src.begin(), src.end());
-	}
-
-	Result<void, AllocateException>
-	DeviceSuperFrameResource::allocate_buffers(std::span<BufferGPU> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
-		return direct.allocate_buffers(dst, cis, loc);
-	}
-
-	void DeviceSuperFrameResource::deallocate_buffers(std::span<const BufferGPU> src) {
+	void DeviceSuperFrameResource::deallocate_buffers(std::span<const Buffer> src) {
 		auto& f = get_last_frame();
 		std::unique_lock _(f.impl->buffers_mutex);
 		auto& vec = f.impl->buffer_gpus;
@@ -697,7 +663,6 @@ namespace vuk {
 		}
 		deallocate_command_pools(f.cmdpools_to_free);
 		direct.deallocate_buffers(f.buffer_gpus);
-		direct.deallocate_buffers(f.buffer_cross_devices);
 		direct.deallocate_framebuffers(f.framebuffers);
 		direct.deallocate_images(f.images);
 		direct.deallocate_image_views(f.image_views);
@@ -716,7 +681,6 @@ namespace vuk {
 
 		f.semaphores.clear();
 		f.fences.clear();
-		f.buffer_cross_devices.clear();
 		f.buffer_gpus.clear();
 		f.cmdbuffers_to_free.clear();
 		f.cmdpools_to_free.clear();

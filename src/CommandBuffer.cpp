@@ -511,7 +511,7 @@ namespace vuk {
 			return nullptr;
 		}
 
-		auto res = allocate_buffer_cross_device(*allocator, { MemoryUsage::eCPUtoGPU, size, 1 });
+		auto res = allocate_buffer(*allocator, { MemoryUsage::eCPUtoGPU, size, 1 });
 		if (!res) {
 			current_error = std::move(res);
 			return nullptr;
@@ -579,7 +579,7 @@ namespace vuk {
 			return *this;
 		}
 
-		auto res = allocate_buffer_cross_device(*allocator, { MemoryUsage::eCPUtoGPU, cmds.size_bytes(), 1 });
+		auto res = allocate_buffer(*allocator, { MemoryUsage::eCPUtoGPU, cmds.size_bytes(), 1 });
 		if (!res) {
 			current_error = std::move(res);
 			return *this;

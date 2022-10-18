@@ -71,7 +71,7 @@ const glm::mat4 capture_views[] = { glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm
 namespace {
 	float angle = 0.f;
 	auto box = util::generate_cube();
-	vuk::BufferGPU verts, inds;
+	vuk::Buffer verts, inds;
 	vuk::Unique<vuk::Image> env_cubemap, hdr_image;
 	vuk::ImageAttachment env_cubemap_ia;
 
@@ -101,9 +101,9 @@ namespace {
 		      }
 
 		      // We set up the cube data, same as in example 02_cube
-		      auto [vert_buf, vert_fut] = create_buffer_gpu(allocator, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.first));
+		      auto [vert_buf, vert_fut] = create_buffer(allocator, vuk::MemoryUsage::eGPUonly, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.first));
 		      verts = *vert_buf;
-		      auto [ind_buf, ind_fut] = create_buffer_gpu(allocator, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.second));
+		      auto [ind_buf, ind_fut] = create_buffer(allocator, vuk::MemoryUsage::eGPUonly, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.second));
 		      inds = *ind_buf;
 
 		      auto hdr_texture = load_hdr_cubemap(allocator, "../../examples/the_sky_is_on_fire_1k.hdr");
@@ -188,7 +188,7 @@ namespace {
 		      vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 0.1f, 30.f);
 		      vp.proj[1][1] *= -1;
 
-		      auto [buboVP, uboVP_fut] = create_buffer_cross_device(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, std::span(&vp, 1));
+		      auto [buboVP, uboVP_fut] = create_buffer(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, vuk::DomainFlagBits::eTransferOnGraphics, std::span(&vp, 1));
 		      auto uboVP = *buboVP;
 
 		      // we are going to render the scene twice - once into a cubemap, then subsequently, we'll render it again while sampling from the cubemap

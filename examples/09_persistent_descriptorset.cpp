@@ -27,7 +27,7 @@ namespace {
 	float angle = 0.f;
 	// Generate vertices and indices for the cube
 	auto box = util::generate_cube();
-	vuk::BufferGPU verts, inds;
+	vuk::Buffer verts, inds;
 	std::optional<vuk::Texture> texture_of_doge, variant1, variant2;
 	vuk::Unique<vuk::PersistentDescriptorSet> pda;
 
@@ -64,9 +64,9 @@ namespace {
 		      stbi_image_free(doge_image);
 
 		      // We set up the cube data, same as in example 02_cube
-		      auto [vert_buf, vert_fut] = create_buffer_gpu(allocator, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.first));
+		      auto [vert_buf, vert_fut] = create_buffer(allocator, vuk::MemoryUsage::eGPUonly, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.first));
 		      verts = *vert_buf;
-		      auto [ind_buf, ind_fut] = create_buffer_gpu(allocator, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.second));
+		      auto [ind_buf, ind_fut] = create_buffer(allocator, vuk::MemoryUsage::eGPUonly, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.second));
 		      inds = *ind_buf;
 		      // For the example, we just ask these that these uploads complete before moving on to rendering
 		      // In an engine, you would integrate these uploads into some explicit system
@@ -143,7 +143,7 @@ namespace {
 		      vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 1.f, 10.f);
 		      vp.proj[1][1] *= -1;
 
-		      auto [buboVP, uboVP_fut] = create_buffer_cross_device(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, std::span(&vp, 1));
+		      auto [buboVP, uboVP_fut] = create_buffer(frame_allocator, vuk::MemoryUsage::eGPUonly, vuk::DomainFlagBits::eTransferOnGraphics, std::span(&vp, 1));
 		      auto uboVP = *buboVP;
 
 		      vuk::RenderGraph rg("09");
