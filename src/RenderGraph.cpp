@@ -884,8 +884,34 @@ namespace vuk {
 		impl->bound_buffers.emplace(name, buf_info);
 	}
 
+	void RenderGraph::attach_buffer_from_allocator(Name name, Buffer buf, Allocator allocator, Access initial, Access final) {
+		BufferInfo buf_info{
+			.name = name, .initial = to_use(initial, DomainFlagBits::eAny), .final = to_use(final, DomainFlagBits::eAny), .buffer = buf, .allocator = allocator
+		};
+		impl->bound_buffers.emplace(name, buf_info);
+	}
+
 	void RenderGraph::attach_image(Name name, ImageAttachment att, Access initial_acc, Access final_acc) {
 		AttachmentInfo attachment_info;
+		attachment_info.name = name;
+		attachment_info.attachment = att;
+		if (att.has_concrete_image() && att.has_concrete_image_view()) {
+			attachment_info.type = AttachmentInfo::Type::eExternal;
+		} else {
+			attachment_info.type = AttachmentInfo::Type::eInternal;
+		}
+		attachment_info.attachment.format = att.format;
+
+		QueueResourceUse& initial = attachment_info.initial;
+		QueueResourceUse& final = attachment_info.final;
+		initial = to_use(initial_acc, DomainFlagBits::eAny);
+		final = to_use(final_acc, DomainFlagBits::eAny);
+		impl->bound_attachments.emplace(name, attachment_info);
+	}
+
+	void RenderGraph::attach_image_from_allocator(Name name, ImageAttachment att, Allocator allocator, Access initial_acc, Access final_acc) {
+		AttachmentInfo attachment_info;
+		attachment_info.allocator = allocator;
 		attachment_info.name = name;
 		attachment_info.attachment = att;
 		if (att.has_concrete_image() && att.has_concrete_image_view()) {

@@ -704,7 +704,11 @@ namespace vuk {
 		for (auto& [name, bound] : impl->bound_buffers) {
 			if (bound.buffer.buffer == VK_NULL_HANDLE) {
 				BufferCreateInfo bci{ .mem_usage = bound.buffer.memory_usage, .size = bound.buffer.size, .alignment = 1 }; // TODO: alignment?
-				bound.buffer = **allocate_buffer(alloc, bci);                                                              // TODO: dropping error
+				if (bound.allocator) {
+					bound.buffer = **allocate_buffer(*bound.allocator, bci); // TODO: dropping error
+				} else {
+					bound.buffer = **allocate_buffer(alloc, bci); // TODO: dropping error
+				}
 			}
 		}
 
@@ -714,9 +718,12 @@ namespace vuk {
 				if (bound.rp_uses.size() > 0) { // its an FB attachment
 					create_attachment(ctx, bound);
 				} else {
-					auto image = *allocate_image(alloc, bound.attachment); // TODO: dropping error
-					ctx.set_name(*image, bound.name);
-					bound.attachment.image = *image;
+					if (bound.allocator) {
+						bound.attachment.image = **allocate_image(*bound.allocator, bound.attachment); // TODO: dropping error
+					} else {
+						bound.attachment.image = **allocate_image(alloc, bound.attachment); // TODO: dropping error
+					}
+					ctx.set_name(bound.attachment.image, bound.name);
 				}
 			}
 		}
@@ -766,8 +773,11 @@ namespace vuk {
 					specific_attachment.layer_count = *layer_count;
 					assert(specific_attachment.level_count == 1);
 
-					auto iv = *allocate_image_view(alloc, specific_attachment); // TODO: dropping error
-					specific_attachment.image_view = *iv;
+					if (bound.allocator) {
+						specific_attachment.image_view = **allocate_image_view(*bound.allocator, specific_attachment); // TODO: dropping error
+					} else {
+						specific_attachment.image_view = **allocate_image_view(alloc, specific_attachment); // TODO: dropping error
+					}
 					auto name = std::string("ImageView: RenderTarget ") + std::string(bound.name.to_sv());
 					ctx.set_name(specific_attachment.image_view.payload, Name(name));
 				}

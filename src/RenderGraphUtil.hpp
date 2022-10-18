@@ -2,6 +2,7 @@
 
 #include "vuk/RenderGraph.hpp"
 #include "vuk/ShortAlloc.hpp"
+#include <optional>
 
 namespace std {
 	template<>
@@ -335,6 +336,7 @@ namespace vuk {
 		FutureBase* attached_future = nullptr;
 
 		std::vector<void*> use_chains;
+		std::optional<Allocator> allocator = {};
 	};
 
 	struct AttachmentInfo {
@@ -354,6 +356,7 @@ namespace vuk {
 		FutureBase* attached_future = nullptr;
 
 		std::vector<void*> use_chains;
+		std::optional<Allocator> allocator = {};
 	};
 
 	struct AttachmentRPInfo {
