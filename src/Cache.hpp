@@ -165,10 +165,10 @@ namespace std {
 	};
 
 	template<>
-	struct hash<std::pair<vuk::ImageCreateInfo, uint32_t>> {
-		size_t operator()(std::pair<vuk::ImageCreateInfo, uint32_t> const& x) const noexcept {
+	struct hash<vuk::CachedImageIdentifier> {
+		size_t operator()(vuk::CachedImageIdentifier const& x) const noexcept {
 			size_t h = 0;
-			hash_combine(h, x.first, x.second);
+			hash_combine(h, x.ici, x.id, x.multi_frame_index);
 			return h;
 		}
 	};

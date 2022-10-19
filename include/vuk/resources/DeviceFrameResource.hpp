@@ -65,11 +65,6 @@ namespace vuk {
 
 		void deallocate_descriptor_sets(std::span<const DescriptorSet> src) override;
 
-		/*Result<void, AllocateException>
-		allocate_descriptor_pools(std::span<VkDescriptorPool> dst, std::span<const VkDescriptorPoolCreateInfo> cis, SourceLocationAtFrame loc) override;
-
-		void deallocate_descriptor_pools(std::span<const VkDescriptorPool> src) override;*/
-
 		Result<void, AllocateException>
 		allocate_timestamp_query_pools(std::span<TimestampQueryPool> dst, std::span<const VkQueryPoolCreateInfo> cis, SourceLocationAtFrame loc) override;
 
@@ -99,15 +94,35 @@ namespace vuk {
 
 		~DeviceFrameResource();
 
-	private:
+	protected:
 		VkDevice device;
-		uint64_t current_frame = -1;
+		uint64_t construction_frame = -1;
 		struct DeviceFrameResourceImpl* impl;
 
 		friend struct DeviceSuperFrameResource;
 		friend struct DeviceSuperFrameResourceImpl;
 
 		DeviceFrameResource(VkDevice device, DeviceSuperFrameResource& upstream);
+	};
+
+	/// @brief Represents temporary allocations that persist through multiple frames, eg. history buffers. Handed out by DeviceSuperFrameResource, cannot be
+	/// constructed directly.
+	///
+	/// Allocations from this resource are tied to the "multi-frame" - all allocations recycled when a DeviceMultiFrameResource is recycled.
+	/// All resources allocated are also deallocated at recycle time - it is not necessary (but not an error) to deallocate them.
+	struct DeviceMultiFrameResource : DeviceFrameResource {
+
+		Result<void, AllocateException> allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) override;
+
+	private:
+		uint32_t frame_lifetime;
+		uint32_t remaining_lifetime;
+		uint32_t multiframe_id;
+
+		friend struct DeviceSuperFrameResource;
+		friend struct DeviceSuperFrameResourceImpl;
+
+		DeviceMultiFrameResource(VkDevice device, DeviceSuperFrameResource& upstream, uint32_t frame_lifetime);
 	};
 
 	/// @brief DeviceSuperFrameResource is an allocator that gives out DeviceFrameResource allocators, and manages their resources
@@ -151,8 +166,7 @@ namespace vuk {
 
 		void deallocate_images(std::span<const Image> src) override;
 
-		Result<void, AllocateException>
-		allocate_cached_images(std::span<Image> dst, std::span<const std::pair<ImageCreateInfo, uint32_t>> cis, SourceLocationAtFrame loc);
+		Result<void, AllocateException> allocate_cached_images(std::span<Image> dst, std::span<const CachedImageIdentifier> cis, SourceLocationAtFrame loc);
 
 		Result<void, AllocateException>
 		allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) override;
@@ -206,6 +220,10 @@ namespace vuk {
 		/// @return DeviceFrameResource for use
 		DeviceFrameResource& get_next_frame();
 
+		/// @brief Get a multiframe resource for the current frame with the specified frame lifetime count
+		/// The returned resource ensures that any resource allocated from it will be usable for at least `frame_lifetime_count`
+		DeviceMultiFrameResource& get_multiframe_allocator(uint32_t frame_lifetime_count);
+
 		virtual ~DeviceSuperFrameResource();
 
 		Context& get_context() override {
@@ -217,7 +235,8 @@ namespace vuk {
 
 	private:
 		DeviceFrameResource& get_last_frame();
-		void deallocate_frame(DeviceFrameResource& f);
+		template<class T>
+		void deallocate_frame(T& f);
 
 		struct DeviceSuperFrameResourceImpl* impl;
 	};

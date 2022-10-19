@@ -19,6 +19,7 @@ namespace vuk {
 
 		std::unique_ptr<char[]> frames_storage;
 		DeviceFrameResource* frames;
+		std::vector<DeviceMultiFrameResource> multi_frames;
 
 		std::mutex command_pool_mutex;
 		std::array<std::vector<VkCommandPool>, 3> command_pools;
@@ -32,9 +33,9 @@ namespace vuk {
 		    sfr(&sfr),
 		    image_cache(
 		        this,
-		        +[](void* allocator, const std::pair<ImageCreateInfo, uint32_t>& ici) {
+		        +[](void* allocator, const CachedImageIdentifier& cii) {
 			        ImageWithIdentity i;
-			        reinterpret_cast<DeviceSuperFrameResourceImpl*>(allocator)->sfr->allocate_images({ &i.image, 1 }, { &ici.first, 1 }, {}); // TODO: dropping error
+			        reinterpret_cast<DeviceSuperFrameResourceImpl*>(allocator)->sfr->allocate_images({ &i.image, 1 }, { &cii.ici, 1 }, {}); // TODO: dropping error
 			        return i;
 		        },
 		        +[](void* allocator, const ImageWithIdentity& i) {
@@ -205,7 +206,7 @@ namespace vuk {
 		for (uint64_t i = 0; i < dst.size(); i++) {
 			auto& ci = cis[i];
 			auto index = impl->image_identity[ci]++;
-			auto iici = std::pair{ ci, index };
+			CachedImageIdentifier iici = { ci, index, 0 };
 			VUK_DO_OR_RETURN(static_cast<DeviceSuperFrameResource*>(upstream)->allocate_cached_images({ &dst[i], 1 }, { &iici, 1 }, loc));
 		}
 		return { expected_value };
@@ -392,6 +393,22 @@ namespace vuk {
 		}
 	}
 
+	DeviceMultiFrameResource::DeviceMultiFrameResource(VkDevice device, DeviceSuperFrameResource& upstream, uint32_t frame_lifetime) :
+	    DeviceFrameResource(device, upstream),
+	    frame_lifetime(frame_lifetime), remaining_lifetime(frame_lifetime), multiframe_id((uint32_t)(construction_frame % frame_lifetime)) {}
+
+	Result<void, AllocateException>
+	DeviceMultiFrameResource::allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) {
+		std::unique_lock _(impl->images_mutex);
+		for (uint64_t i = 0; i < dst.size(); i++) {
+			auto& ci = cis[i];
+			auto index = impl->image_identity[ci]++;
+			CachedImageIdentifier iici = { ci, index, multiframe_id };
+			VUK_DO_OR_RETURN(static_cast<DeviceSuperFrameResource*>(upstream)->allocate_cached_images({ &dst[i], 1 }, { &iici, 1 }, loc));
+		}
+		return { expected_value };
+	}
+
 	DeviceSuperFrameResource::DeviceSuperFrameResource(Context& ctx, uint64_t frames_in_flight) :
 	    frames_in_flight(frames_in_flight),
 	    direct(ctx, ctx.get_legacy_gpu_allocator()),
@@ -493,7 +510,7 @@ namespace vuk {
 	}
 
 	Result<void, AllocateException>
-	DeviceSuperFrameResource::allocate_cached_images(std::span<Image> dst, std::span<const std::pair<ImageCreateInfo, uint32_t>> cis, SourceLocationAtFrame loc) {
+	DeviceSuperFrameResource::allocate_cached_images(std::span<Image> dst, std::span<const CachedImageIdentifier> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		for (uint64_t i = 0; i < dst.size(); i++) {
 			auto& ci = cis[i];
@@ -646,14 +663,32 @@ namespace vuk {
 		auto& f = impl->frames[impl->local_frame];
 		f.wait();
 		deallocate_frame(f);
+		for (auto it = impl->multi_frames.begin(); it != impl->multi_frames.end();) {
+			auto& multi_frame = *it;
+			multi_frame.remaining_lifetime--;
+			if (multi_frame.remaining_lifetime == 0) {
+				multi_frame.wait();
+				deallocate_frame(multi_frame);
+				it = impl->multi_frames.erase(it);
+			} else {
+				++it;
+			}
+		}
 		impl->image_cache.collect(impl->frame_counter, 16);
 		impl->image_view_cache.collect(impl->frame_counter, 16);
-		f.current_frame = impl->frame_counter.load();
+		f.construction_frame = impl->frame_counter.load();
 
 		return f;
 	}
 
-	void DeviceSuperFrameResource::deallocate_frame(DeviceFrameResource& frame) {
+	DeviceMultiFrameResource& DeviceSuperFrameResource::get_multiframe_allocator(uint32_t frame_lifetime_count) {
+		std::unique_lock _(impl->new_frame_mutex);
+
+		return impl->multi_frames.emplace_back(DeviceMultiFrameResource(direct.device, *this, frame_lifetime_count));
+	}
+
+	template<class T>
+	void DeviceSuperFrameResource::deallocate_frame(T& frame) {
 		auto& f = *frame.impl;
 		direct.deallocate_semaphores(f.semaphores);
 		direct.deallocate_fences(f.fences);
@@ -686,7 +721,7 @@ namespace vuk {
 		f.cmdpools_to_free.clear();
 		f.ds_pools.clear();
 		auto& legacy = direct.legacy_gpu_allocator;
-		if (frame.current_frame % 16 == 0) {
+		if (frame.construction_frame % 16 == 0) {
 			legacy->trim_pool(f.linear_cpu_only);
 			legacy->trim_pool(f.linear_cpu_gpu);
 			legacy->trim_pool(f.linear_gpu_cpu);

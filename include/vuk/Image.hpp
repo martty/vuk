@@ -157,9 +157,17 @@ namespace vuk {
 		Image image;
 	};
 
+	struct CachedImageIdentifier {
+		ImageCreateInfo ici;
+		uint32_t id;
+		uint32_t multi_frame_index;
+
+		bool operator==(const CachedImageIdentifier&) const = default;
+	};
+
 	template<>
 	struct create_info<ImageWithIdentity> {
-		using type = std::pair<ImageCreateInfo, uint32_t>;
+		using type = CachedImageIdentifier;
 	};
 
 	enum class ImageViewCreateFlagBits : VkImageViewCreateFlags { eFragmentDensityMapDynamicEXT = VK_IMAGE_VIEW_CREATE_FRAGMENT_DENSITY_MAP_DYNAMIC_BIT_EXT };
