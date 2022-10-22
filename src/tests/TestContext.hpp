@@ -108,6 +108,9 @@ namespace vuk {
 			device = vkbdevice.device;
 			ContextCreateParameters::FunctionPointers fps;
 #define VUK_EX_LOAD_FP(name) fps.name = (PFN_##name)vkGetDeviceProcAddr(device, #name);
+			VUK_EX_LOAD_FP(vkSetDebugUtilsObjectNameEXT);
+			VUK_EX_LOAD_FP(vkCmdBeginDebugUtilsLabelEXT);
+			VUK_EX_LOAD_FP(vkCmdEndDebugUtilsLabelEXT);
 			if (has_rt) {
 				VUK_EX_LOAD_FP(vkCmdBuildAccelerationStructuresKHR);
 				VUK_EX_LOAD_FP(vkGetAccelerationStructureBuildSizesKHR);

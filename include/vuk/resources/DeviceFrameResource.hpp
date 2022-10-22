@@ -131,20 +131,12 @@ namespace vuk {
 	/// Allocation of these resources are persistent, and they can be deallocated at any time - they will be recycled when the current frame is recycled
 	/// This resource also hands out DeviceFrameResources in a round-robin fashion.
 	/// The lifetime of resources allocated from those allocators is frames_in_flight number of frames (until the DeviceFrameResource is recycled).
-	struct DeviceSuperFrameResource : DeviceResource {
+	struct DeviceSuperFrameResource : DeviceNestedResource {
 		DeviceSuperFrameResource(Context& ctx, uint64_t frames_in_flight);
-
-		Result<void, AllocateException> allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) override;
 
 		void deallocate_semaphores(std::span<const VkSemaphore> src) override;
 
-		Result<void, AllocateException> allocate_fences(std::span<VkFence> dst, SourceLocationAtFrame loc) override;
-
 		void deallocate_fences(std::span<const VkFence> src) override;
-
-		Result<void, AllocateException> allocate_command_buffers(std::span<CommandBufferAllocation> dst,
-		                                                         std::span<const CommandBufferAllocationCreateInfo> cis,
-		                                                         SourceLocationAtFrame loc) override;
 
 		void deallocate_command_buffers(std::span<const CommandBufferAllocation> src) override;
 
@@ -153,39 +145,19 @@ namespace vuk {
 
 		void deallocate_command_pools(std::span<const CommandPool> src) override;
 
-		Result<void, AllocateException> allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) override;
-
 		void deallocate_buffers(std::span<const Buffer> src) override;
 
-		Result<void, AllocateException>
-		allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) override;
-
 		void deallocate_framebuffers(std::span<const VkFramebuffer> src) override;
-
-		Result<void, AllocateException> allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) override;
 
 		void deallocate_images(std::span<const Image> src) override;
 
 		Result<void, AllocateException> allocate_cached_images(std::span<Image> dst, std::span<const CachedImageIdentifier> cis, SourceLocationAtFrame loc);
 
-		Result<void, AllocateException>
-		allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) override;
-
 		Result<void, AllocateException> allocate_cached_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc);
 
 		void deallocate_image_views(std::span<const ImageView> src) override;
 
-		Result<void, AllocateException> allocate_persistent_descriptor_sets(std::span<PersistentDescriptorSet> dst,
-		                                                                    std::span<const PersistentDescriptorSetCreateInfo> cis,
-		                                                                    SourceLocationAtFrame loc) override;
-
 		void deallocate_persistent_descriptor_sets(std::span<const PersistentDescriptorSet> src) override;
-
-		Result<void, AllocateException>
-		allocate_descriptor_sets_with_value(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) override;
-
-		Result<void, AllocateException>
-		allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const DescriptorSetLayoutAllocInfo> cis, SourceLocationAtFrame loc) override;
 
 		void deallocate_descriptor_sets(std::span<const DescriptorSet> src) override;
 
@@ -194,23 +166,11 @@ namespace vuk {
 
 		void deallocate_descriptor_pools(std::span<const VkDescriptorPool> src) override;
 
-		Result<void, AllocateException>
-		allocate_timestamp_query_pools(std::span<TimestampQueryPool> dst, std::span<const VkQueryPoolCreateInfo> cis, SourceLocationAtFrame loc) override;
-
 		void deallocate_timestamp_query_pools(std::span<const TimestampQueryPool> src) override;
-
-		Result<void, AllocateException>
-		allocate_timestamp_queries(std::span<TimestampQuery> dst, std::span<const TimestampQueryCreateInfo> cis, SourceLocationAtFrame loc) override;
 
 		void deallocate_timestamp_queries(std::span<const TimestampQuery> src) override; // noop
 
-		Result<void, AllocateException> allocate_timeline_semaphores(std::span<TimelineSemaphore> dst, SourceLocationAtFrame loc) override;
-
 		void deallocate_timeline_semaphores(std::span<const TimelineSemaphore> src) override;
-
-		Result<void, AllocateException> allocate_acceleration_structures(std::span<VkAccelerationStructureKHR> dst,
-		                                                                 std::span<const VkAccelerationStructureCreateInfoKHR> cis,
-		                                                                 SourceLocationAtFrame loc) override;
 
 		void deallocate_acceleration_structures(std::span<const VkAccelerationStructureKHR> src) override;
 
@@ -226,12 +186,8 @@ namespace vuk {
 
 		virtual ~DeviceSuperFrameResource();
 
-		Context& get_context() override {
-			return *direct.ctx;
-		}
-
 		const uint64_t frames_in_flight;
-		DeviceVkResource direct;
+		DeviceVkResource* direct = nullptr;
 
 	private:
 		DeviceFrameResource& get_last_frame();

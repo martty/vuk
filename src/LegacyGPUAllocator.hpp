@@ -92,10 +92,40 @@ namespace vuk {
 
 		size_t block_size = 1024 * 1024 * 16;
 
+		LegacyLinearAllocator() = default;
+
 		LegacyLinearAllocator(VkMemoryRequirements mem_reqs, VmaMemoryUsage mem_usage, vuk::BufferUsageFlags buf_usage) :
 		    mem_reqs(mem_reqs),
 		    mem_usage(mem_usage),
 		    usage(buf_usage) {}
+
+		LegacyLinearAllocator(const LegacyLinearAllocator& o) noexcept {
+			current_buffer = o.current_buffer.load();
+			needle = o.needle.load();
+			mem_reqs = o.mem_reqs;
+			mem_usage = o.mem_usage;
+			usage = o.usage;
+			used_allocations = o.used_allocations;
+			available_allocations = o.available_allocations;
+			block_size = o.block_size;
+			available_allocation_count = o.available_allocation_count;
+			used_allocation_count = o.used_allocation_count;
+		}
+
+		LegacyLinearAllocator& operator=(const LegacyLinearAllocator& o) noexcept {
+			current_buffer = o.current_buffer.load();
+			needle = o.needle.load();
+			mem_reqs = o.mem_reqs;
+			mem_usage = o.mem_usage;
+			usage = o.usage;
+			used_allocations = o.used_allocations;
+			available_allocations = o.available_allocations;
+			block_size = o.block_size;
+			available_allocation_count = o.available_allocation_count;
+			used_allocation_count = o.used_allocation_count;
+
+			return *this;
+		}
 
 		LegacyLinearAllocator(LegacyLinearAllocator&& o) noexcept {
 			current_buffer = o.current_buffer.load();

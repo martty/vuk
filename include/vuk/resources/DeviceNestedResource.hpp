@@ -86,6 +86,10 @@ namespace vuk {
 
 		void deallocate_swapchains(std::span<const VkSwapchainKHR> src) override;
 
+		Context& get_context() override {
+			return upstream->get_context();
+		}
+
 		DeviceResource* upstream = nullptr;
 	};
 } // namespace vuk

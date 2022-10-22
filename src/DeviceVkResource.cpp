@@ -128,7 +128,7 @@ namespace vuk {
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
 			auto& ci = cis[i];
 			// TODO: legacy buffer alloc can't signal errors
-			dst[i] = Buffer{ legacy_gpu_allocator->allocate_buffer(ci.mem_usage, LegacyGPUAllocator::all_usage, ci.size, ci.alignment, false) };
+			dst[i] = Buffer{ legacy_gpu_allocator->allocate_buffer(ci.mem_usage, LegacyGPUAllocator::all_usage, ci.size, ci.alignment, true) };
 		}
 		return { expected_value };
 	}

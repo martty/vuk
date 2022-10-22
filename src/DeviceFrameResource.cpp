@@ -54,7 +54,7 @@ namespace vuk {
 		        }) {
 			frames_storage = std::unique_ptr<char[]>(new char[sizeof(DeviceFrameResource) * frames_in_flight]);
 			for (uint64_t i = 0; i < frames_in_flight; i++) {
-				new (frames_storage.get() + i * sizeof(DeviceFrameResource)) DeviceFrameResource(sfr.direct.device, sfr);
+				new (frames_storage.get() + i * sizeof(DeviceFrameResource)) DeviceFrameResource(sfr.get_context().device, sfr);
 			}
 			frames = reinterpret_cast<DeviceFrameResource*>(frames_storage.get());
 		}
@@ -105,11 +105,14 @@ namespace vuk {
 		LegacyLinearAllocator linear_gpu_cpu;
 		LegacyLinearAllocator linear_gpu_only;
 
-		DeviceFrameResourceImpl(VkDevice device, DeviceSuperFrameResource& upstream) :
-		    linear_cpu_only(upstream.direct.legacy_gpu_allocator->allocate_linear(vuk::MemoryUsage::eCPUonly, LegacyGPUAllocator::all_usage)),
-		    linear_cpu_gpu(upstream.direct.legacy_gpu_allocator->allocate_linear(vuk::MemoryUsage::eCPUtoGPU, LegacyGPUAllocator::all_usage)),
-		    linear_gpu_cpu(upstream.direct.legacy_gpu_allocator->allocate_linear(vuk::MemoryUsage::eGPUtoCPU, LegacyGPUAllocator::all_usage)),
-		    linear_gpu_only(upstream.direct.legacy_gpu_allocator->allocate_linear(vuk::MemoryUsage::eGPUonly, LegacyGPUAllocator::all_usage)) {}
+		DeviceFrameResourceImpl(VkDevice device, DeviceSuperFrameResource& upstream) {
+			if (upstream.direct) {
+				linear_cpu_only = upstream.direct->legacy_gpu_allocator->allocate_linear(vuk::MemoryUsage::eCPUonly, LegacyGPUAllocator::all_usage);
+				linear_cpu_gpu = upstream.direct->legacy_gpu_allocator->allocate_linear(vuk::MemoryUsage::eCPUtoGPU, LegacyGPUAllocator::all_usage);
+				linear_gpu_cpu = upstream.direct->legacy_gpu_allocator->allocate_linear(vuk::MemoryUsage::eGPUtoCPU, LegacyGPUAllocator::all_usage);
+				linear_gpu_only = upstream.direct->legacy_gpu_allocator->allocate_linear(vuk::MemoryUsage::eGPUonly, LegacyGPUAllocator::all_usage);
+			}
+		}
 	};
 
 	DeviceFrameResource::DeviceFrameResource(VkDevice device, DeviceSuperFrameResource& upstream) :
@@ -167,25 +170,28 @@ namespace vuk {
 	Result<void, AllocateException>
 	DeviceFrameResource::allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
-		auto& rf = *static_cast<DeviceSuperFrameResource*>(upstream);
-		auto& legacy = *rf.direct.legacy_gpu_allocator;
+		auto& sf = *static_cast<DeviceSuperFrameResource*>(upstream);
+		if (sf.direct) {
+			auto& legacy = *sf.direct->legacy_gpu_allocator;
 
-		// TODO: legacy allocator can't signal errors
-		// TODO: legacy linear allocators don't nest
-		for (uint64_t i = 0; i < dst.size(); i++) {
-			auto& ci = cis[i];
-			if (ci.mem_usage == MemoryUsage::eGPUonly) {
-				dst[i] = Buffer{ legacy.allocate_buffer(impl->linear_gpu_only, ci.size, ci.alignment, false) };
-			} else if (ci.mem_usage == MemoryUsage::eCPUonly) {
-				dst[i] = Buffer{ legacy.allocate_buffer(impl->linear_cpu_only, ci.size, ci.alignment, true) };
-			} else if (ci.mem_usage == MemoryUsage::eCPUtoGPU) {
-				dst[i] = Buffer{ legacy.allocate_buffer(impl->linear_cpu_gpu, ci.size, ci.alignment, true) };
-			} else if (ci.mem_usage == MemoryUsage::eGPUtoCPU) {
-				dst[i] = Buffer{ legacy.allocate_buffer(impl->linear_gpu_cpu, ci.size, ci.alignment, true) };
+			// TODO: legacy allocator can't signal errors
+			// TODO: legacy linear allocators don't nest
+			for (uint64_t i = 0; i < dst.size(); i++) {
+				auto& ci = cis[i];
+				if (ci.mem_usage == MemoryUsage::eGPUonly) {
+					dst[i] = Buffer{ legacy.allocate_buffer(impl->linear_gpu_only, ci.size, ci.alignment, false) };
+				} else if (ci.mem_usage == MemoryUsage::eCPUonly) {
+					dst[i] = Buffer{ legacy.allocate_buffer(impl->linear_cpu_only, ci.size, ci.alignment, true) };
+				} else if (ci.mem_usage == MemoryUsage::eCPUtoGPU) {
+					dst[i] = Buffer{ legacy.allocate_buffer(impl->linear_cpu_gpu, ci.size, ci.alignment, true) };
+				} else if (ci.mem_usage == MemoryUsage::eGPUtoCPU) {
+					dst[i] = Buffer{ legacy.allocate_buffer(impl->linear_gpu_cpu, ci.size, ci.alignment, true) };
+				}
 			}
+			return { expected_value };
+		} else {
+			return sf.allocate_buffers(dst, cis, loc);
 		}
-
-		return { expected_value };
 	}
 
 	void DeviceFrameResource::deallocate_buffers(std::span<const Buffer> src) {} // no-op, linear
@@ -395,7 +401,9 @@ namespace vuk {
 
 	DeviceMultiFrameResource::DeviceMultiFrameResource(VkDevice device, DeviceSuperFrameResource& upstream, uint32_t frame_lifetime) :
 	    DeviceFrameResource(device, upstream),
-	    frame_lifetime(frame_lifetime), remaining_lifetime(frame_lifetime), multiframe_id((uint32_t)(construction_frame % frame_lifetime)) {}
+	    frame_lifetime(frame_lifetime),
+	    remaining_lifetime(frame_lifetime),
+	    multiframe_id((uint32_t)(construction_frame % frame_lifetime)) {}
 
 	Result<void, AllocateException>
 	DeviceMultiFrameResource::allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) {
@@ -410,13 +418,10 @@ namespace vuk {
 	}
 
 	DeviceSuperFrameResource::DeviceSuperFrameResource(Context& ctx, uint64_t frames_in_flight) :
+	    DeviceNestedResource(&ctx.get_vk_resource()),
+	    direct(static_cast<DeviceVkResource*>(upstream)),
 	    frames_in_flight(frames_in_flight),
-	    direct(ctx, ctx.get_legacy_gpu_allocator()),
 	    impl(new DeviceSuperFrameResourceImpl(*this, frames_in_flight)) {}
-
-	Result<void, AllocateException> DeviceSuperFrameResource::allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) {
-		return direct.allocate_semaphores(dst, loc);
-	}
 
 	void DeviceSuperFrameResource::deallocate_semaphores(std::span<const VkSemaphore> src) {
 		auto& f = get_last_frame();
@@ -425,21 +430,11 @@ namespace vuk {
 		vec.insert(vec.end(), src.begin(), src.end());
 	}
 
-	Result<void, AllocateException> DeviceSuperFrameResource::allocate_fences(std::span<VkFence> dst, SourceLocationAtFrame loc) {
-		return direct.allocate_fences(dst, loc);
-	}
-
 	void DeviceSuperFrameResource::deallocate_fences(std::span<const VkFence> src) {
 		auto& f = get_last_frame();
 		std::unique_lock _(f.impl->fence_mutex);
 		auto& vec = f.impl->fences;
 		vec.insert(vec.end(), src.begin(), src.end());
-	}
-
-	Result<void, AllocateException> DeviceSuperFrameResource::allocate_command_buffers(std::span<CommandBufferAllocation> dst,
-	                                                                                   std::span<const CommandBufferAllocationCreateInfo> cis,
-	                                                                                   SourceLocationAtFrame loc) {
-		return direct.allocate_command_buffers(dst, cis, loc);
 	}
 
 	void DeviceSuperFrameResource::deallocate_command_buffers(std::span<const CommandBufferAllocation> src) {
@@ -460,7 +455,7 @@ namespace vuk {
 				dst[i] = { source.back(), ci.queueFamilyIndex };
 				source.pop_back();
 			} else {
-				VUK_DO_OR_RETURN(direct.allocate_command_pools(std::span{ &dst[i], 1 }, std::span{ &ci, 1 }, loc));
+				VUK_DO_OR_RETURN(upstream->allocate_command_pools(std::span{ &dst[i], 1 }, std::span{ &ci, 1 }, loc));
 			}
 		}
 		return { expected_value };
@@ -473,11 +468,6 @@ namespace vuk {
 		}
 	}
 
-	Result<void, AllocateException>
-	DeviceSuperFrameResource::allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
-		return direct.allocate_buffers(dst, cis, loc);
-	}
-
 	void DeviceSuperFrameResource::deallocate_buffers(std::span<const Buffer> src) {
 		auto& f = get_last_frame();
 		std::unique_lock _(f.impl->buffers_mutex);
@@ -485,21 +475,11 @@ namespace vuk {
 		vec.insert(vec.end(), src.begin(), src.end());
 	}
 
-	Result<void, AllocateException>
-	DeviceSuperFrameResource::allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) {
-		return direct.allocate_framebuffers(dst, cis, loc);
-	}
-
 	void DeviceSuperFrameResource::deallocate_framebuffers(std::span<const VkFramebuffer> src) {
 		auto& f = get_last_frame();
 		std::unique_lock _(f.impl->framebuffer_mutex);
 		auto& vec = f.impl->framebuffers;
 		vec.insert(vec.end(), src.begin(), src.end());
-	}
-
-	Result<void, AllocateException>
-	DeviceSuperFrameResource::allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) {
-		return direct.allocate_images(dst, cis, loc);
 	}
 
 	void DeviceSuperFrameResource::deallocate_images(std::span<const Image> src) {
@@ -520,11 +500,6 @@ namespace vuk {
 	}
 
 	Result<void, AllocateException>
-	DeviceSuperFrameResource::allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) {
-		return direct.allocate_image_views(dst, cis, loc);
-	}
-
-	Result<void, AllocateException>
 	DeviceSuperFrameResource::allocate_cached_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		for (uint64_t i = 0; i < dst.size(); i++) {
@@ -542,28 +517,11 @@ namespace vuk {
 		vec.insert(vec.end(), src.begin(), src.end());
 	}
 
-	Result<void, AllocateException> DeviceSuperFrameResource::allocate_persistent_descriptor_sets(std::span<PersistentDescriptorSet> dst,
-	                                                                                              std::span<const PersistentDescriptorSetCreateInfo> cis,
-	                                                                                              SourceLocationAtFrame loc) {
-		return direct.allocate_persistent_descriptor_sets(dst, cis, loc);
-	}
-
 	void DeviceSuperFrameResource::deallocate_persistent_descriptor_sets(std::span<const PersistentDescriptorSet> src) {
 		auto& f = get_last_frame();
 		std::unique_lock _(f.impl->pds_mutex);
 		auto& vec = f.impl->persistent_descriptor_sets;
 		vec.insert(vec.end(), src.begin(), src.end());
-	}
-
-	Result<void, AllocateException>
-	DeviceSuperFrameResource::allocate_descriptor_sets_with_value(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) {
-		return direct.allocate_descriptor_sets_with_value(dst, cis, loc);
-	}
-
-	Result<void, AllocateException> DeviceSuperFrameResource::allocate_descriptor_sets(std::span<DescriptorSet> dst,
-	                                                                                   std::span<const DescriptorSetLayoutAllocInfo> cis,
-	                                                                                   SourceLocationAtFrame loc) {
-		return direct.allocate_descriptor_sets(dst, cis, loc);
 	}
 
 	void DeviceSuperFrameResource::deallocate_descriptor_sets(std::span<const DescriptorSet> src) {
@@ -585,7 +543,7 @@ namespace vuk {
 				dst[i] = source.back();
 				source.pop_back();
 			} else {
-				VUK_DO_OR_RETURN(direct.allocate_descriptor_pools(std::span{ &dst[i], 1 }, std::span{ &ci, 1 }, loc));
+				VUK_DO_OR_RETURN(upstream->allocate_descriptor_pools(std::span{ &dst[i], 1 }, std::span{ &ci, 1 }, loc));
 			}
 		}
 		return { expected_value };
@@ -598,12 +556,6 @@ namespace vuk {
 		vec.insert(vec.end(), src.begin(), src.end());
 	}
 
-	Result<void, AllocateException> DeviceSuperFrameResource::allocate_timestamp_query_pools(std::span<TimestampQueryPool> dst,
-	                                                                                         std::span<const VkQueryPoolCreateInfo> cis,
-	                                                                                         SourceLocationAtFrame loc) {
-		return direct.allocate_timestamp_query_pools(dst, cis, loc);
-	}
-
 	void DeviceSuperFrameResource::deallocate_timestamp_query_pools(std::span<const TimestampQueryPool> src) {
 		auto& f = get_last_frame();
 		std::unique_lock _(f.impl->query_pool_mutex);
@@ -611,29 +563,13 @@ namespace vuk {
 		vec.insert(vec.end(), src.begin(), src.end());
 	}
 
-	Result<void, AllocateException> DeviceSuperFrameResource::allocate_timestamp_queries(std::span<TimestampQuery> dst,
-	                                                                                     std::span<const TimestampQueryCreateInfo> cis,
-	                                                                                     SourceLocationAtFrame loc) {
-		return direct.allocate_timestamp_queries(dst, cis, loc);
-	}
-
 	void DeviceSuperFrameResource::deallocate_timestamp_queries(std::span<const TimestampQuery> src) {} // noop
-
-	Result<void, AllocateException> DeviceSuperFrameResource::allocate_timeline_semaphores(std::span<TimelineSemaphore> dst, SourceLocationAtFrame loc) {
-		return direct.allocate_timeline_semaphores(dst, loc);
-	}
 
 	void DeviceSuperFrameResource::deallocate_timeline_semaphores(std::span<const TimelineSemaphore> src) {
 		auto& f = get_last_frame();
 		std::unique_lock _(f.impl->tsema_mutex);
 		auto& vec = f.impl->tsemas;
 		vec.insert(vec.end(), src.begin(), src.end());
-	}
-
-	Result<void, AllocateException> DeviceSuperFrameResource::allocate_acceleration_structures(std::span<VkAccelerationStructureKHR> dst,
-	                                                                                           std::span<const VkAccelerationStructureCreateInfoKHR> cis,
-	                                                                                           SourceLocationAtFrame loc) {
-		return direct.allocate_acceleration_structures(dst, cis, loc);
 	}
 
 	void DeviceSuperFrameResource::deallocate_acceleration_structures(std::span<const VkAccelerationStructureKHR> src) {
@@ -660,9 +596,13 @@ namespace vuk {
 		impl->frame_counter++;
 		impl->local_frame = impl->frame_counter % frames_in_flight;
 
+		// handle FrameResource
 		auto& f = impl->frames[impl->local_frame];
 		f.wait();
 		deallocate_frame(f);
+		f.construction_frame = impl->frame_counter.load();
+
+		// handle MultiFrameResources
 		for (auto it = impl->multi_frames.begin(); it != impl->multi_frames.end();) {
 			auto& multi_frame = *it;
 			multi_frame.remaining_lifetime--;
@@ -674,9 +614,10 @@ namespace vuk {
 				++it;
 			}
 		}
+
+		// garbage collect caches
 		impl->image_cache.collect(impl->frame_counter, 16);
 		impl->image_view_cache.collect(impl->frame_counter, 16);
-		f.construction_frame = impl->frame_counter.load();
 
 		return f;
 	}
@@ -684,33 +625,33 @@ namespace vuk {
 	DeviceMultiFrameResource& DeviceSuperFrameResource::get_multiframe_allocator(uint32_t frame_lifetime_count) {
 		std::unique_lock _(impl->new_frame_mutex);
 
-		return impl->multi_frames.emplace_back(DeviceMultiFrameResource(direct.device, *this, frame_lifetime_count));
+		return impl->multi_frames.emplace_back(DeviceMultiFrameResource(get_context().device, *this, frame_lifetime_count));
 	}
 
 	template<class T>
 	void DeviceSuperFrameResource::deallocate_frame(T& frame) {
 		auto& f = *frame.impl;
-		direct.deallocate_semaphores(f.semaphores);
-		direct.deallocate_fences(f.fences);
-		direct.deallocate_command_buffers(f.cmdbuffers_to_free);
+		direct->deallocate_semaphores(f.semaphores);
+		direct->deallocate_fences(f.fences);
+		direct->deallocate_command_buffers(f.cmdbuffers_to_free);
 		for (auto& pool : f.cmdpools_to_free) {
-			vkResetCommandPool(direct.device, pool.command_pool, {});
+			vkResetCommandPool(direct->device, pool.command_pool, {});
 		}
 		deallocate_command_pools(f.cmdpools_to_free);
-		direct.deallocate_buffers(f.buffer_gpus);
-		direct.deallocate_framebuffers(f.framebuffers);
-		direct.deallocate_images(f.images);
-		direct.deallocate_image_views(f.image_views);
-		direct.deallocate_persistent_descriptor_sets(f.persistent_descriptor_sets);
-		direct.deallocate_descriptor_sets(f.descriptor_sets);
-		direct.ctx->make_timestamp_results_available(f.ts_query_pools);
-		direct.deallocate_timestamp_query_pools(f.ts_query_pools);
-		direct.deallocate_timeline_semaphores(f.tsemas);
-		direct.deallocate_acceleration_structures(f.ass);
-		direct.deallocate_swapchains(f.swapchains);
+		direct->deallocate_buffers(f.buffer_gpus);
+		direct->deallocate_framebuffers(f.framebuffers);
+		direct->deallocate_images(f.images);
+		direct->deallocate_image_views(f.image_views);
+		direct->deallocate_persistent_descriptor_sets(f.persistent_descriptor_sets);
+		direct->deallocate_descriptor_sets(f.descriptor_sets);
+		direct->ctx->make_timestamp_results_available(f.ts_query_pools);
+		direct->deallocate_timestamp_query_pools(f.ts_query_pools);
+		direct->deallocate_timeline_semaphores(f.tsemas);
+		direct->deallocate_acceleration_structures(f.ass);
+		direct->deallocate_swapchains(f.swapchains);
 
 		for (auto& p : f.ds_pools) {
-			vkResetDescriptorPool(direct.device, p, {});
+			vkResetDescriptorPool(direct->device, p, {});
 			impl->ds_pools.push_back(p);
 		}
 
@@ -720,17 +661,19 @@ namespace vuk {
 		f.cmdbuffers_to_free.clear();
 		f.cmdpools_to_free.clear();
 		f.ds_pools.clear();
-		auto& legacy = direct.legacy_gpu_allocator;
-		if (frame.construction_frame % 16 == 0) {
-			legacy->trim_pool(f.linear_cpu_only);
-			legacy->trim_pool(f.linear_cpu_gpu);
-			legacy->trim_pool(f.linear_gpu_cpu);
-			legacy->trim_pool(f.linear_gpu_only);
+		if (direct) {
+			auto& legacy = direct->legacy_gpu_allocator;
+			if (frame.construction_frame % 16 == 0) {
+				legacy->trim_pool(f.linear_cpu_only);
+				legacy->trim_pool(f.linear_cpu_gpu);
+				legacy->trim_pool(f.linear_gpu_cpu);
+				legacy->trim_pool(f.linear_gpu_only);
+			}
+			legacy->reset_pool(f.linear_cpu_only);
+			legacy->reset_pool(f.linear_cpu_gpu);
+			legacy->reset_pool(f.linear_gpu_cpu);
+			legacy->reset_pool(f.linear_gpu_only);
 		}
-		legacy->reset_pool(f.linear_cpu_only);
-		legacy->reset_pool(f.linear_cpu_gpu);
-		legacy->reset_pool(f.linear_gpu_cpu);
-		legacy->reset_pool(f.linear_gpu_only);
 		f.framebuffers.clear();
 		f.images.clear();
 		f.image_views.clear();
@@ -752,20 +695,22 @@ namespace vuk {
 			auto& f = impl->frames[lframe];
 			f.wait();
 			deallocate_frame(f);
-			direct.legacy_gpu_allocator->destroy(f.impl->linear_cpu_only);
-			direct.legacy_gpu_allocator->destroy(f.impl->linear_cpu_gpu);
-			direct.legacy_gpu_allocator->destroy(f.impl->linear_gpu_cpu);
-			direct.legacy_gpu_allocator->destroy(f.impl->linear_gpu_only);
+			if (direct) {
+				direct->legacy_gpu_allocator->destroy(f.impl->linear_cpu_only);
+				direct->legacy_gpu_allocator->destroy(f.impl->linear_cpu_gpu);
+				direct->legacy_gpu_allocator->destroy(f.impl->linear_gpu_cpu);
+				direct->legacy_gpu_allocator->destroy(f.impl->linear_gpu_only);
+			}
 			f.DeviceFrameResource::~DeviceFrameResource();
 		}
 		for (uint32_t i = 0; i < (uint32_t)impl->command_pools.size(); i++) {
 			for (auto& cpool : impl->command_pools[i]) {
 				CommandPool p{ cpool, i };
-				direct.deallocate_command_pools(std::span{ &p, 1 });
+				upstream->deallocate_command_pools(std::span{ &p, 1 });
 			}
 		}
 		for (auto& p : impl->ds_pools) {
-			direct.deallocate_descriptor_pools(std::span{ &p, 1 });
+			direct->deallocate_descriptor_pools(std::span{ &p, 1 });
 		}
 		delete impl;
 	}
