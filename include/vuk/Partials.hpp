@@ -164,7 +164,7 @@ namespace vuk {
 	template<class T>
 	std::pair<Unique<Buffer>, Future> create_buffer(Allocator& allocator, vuk::MemoryUsage memory_usage, DomainFlagBits domain, std::span<T> data) {
 		Unique<Buffer> buf(allocator);
-		BufferCreateInfo bci{ MemoryUsage::eGPUonly, sizeof(T) * data.size(), 1 };
+		BufferCreateInfo bci{ memory_usage, sizeof(T) * data.size(), 1 };
 		auto ret = allocator.allocate_buffers(std::span{ &*buf, 1 }, std::span{ &bci, 1 }); // TODO: dropping error
 		Buffer b = buf.get();
 		return { std::move(buf), host_data_to_buffer(allocator, domain, b, data) };
