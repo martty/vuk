@@ -295,4 +295,8 @@ namespace vuk {
 			begin = new_begin;
 		}
 	}
+
+	namespace errors {
+		RenderGraphException make_missing_resource_exception(PassInfo& pass_info, Resource& resource, Name undiverged_name);
+	}
 }; // namespace vuk

@@ -239,7 +239,7 @@ namespace vuk {
 		/// @brief Build the graph, assign framebuffers, renderpasses and subpasses
 		///	link automatically calls this, only needed if you want to use the reflection functions
 		/// @param compile_options CompileOptions controlling compilation behaviour
-		void compile(std::span<std::shared_ptr<RenderGraph>> rgs, const RenderGraphCompileOptions& compile_options);
+		Result<void> compile(std::span<std::shared_ptr<RenderGraph>> rgs, const RenderGraphCompileOptions& compile_options);
 
 		/// @brief Use this RenderGraph and create an ExecutableRenderGraph
 		/// @param compile_options CompileOptions controlling compilation behaviour

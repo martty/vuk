@@ -415,7 +415,7 @@ namespace vuk {
 		delete impl;
 	}
 
-	void Compiler::compile(std::span<std::shared_ptr<RenderGraph>> rgs, const RenderGraphCompileOptions& compile_options) {
+	Result<void> Compiler::compile(std::span<std::shared_ptr<RenderGraph>> rgs, const RenderGraphCompileOptions& compile_options) {
 		auto arena = impl->arena_.release();
 		delete impl;
 		arena->reset();
@@ -574,11 +574,15 @@ namespace vuk {
 					// we attach this use chain to the appropriate attachment
 					if (res.type == Resource::Type::eImage) {
 						auto undiv_att_it = impl->bound_attachments.find(undiverged_name);
-						assert(undiv_att_it != impl->bound_attachments.end());
+						if (undiv_att_it == impl->bound_attachments.end()) {
+							return { expected_error, errors::make_missing_resource_exception(passinfo, res, undiverged_name) };
+						}
 						undiv_att_it->second.use_chains.emplace_back(&chain);
 					} else {
 						auto undiv_att_it = impl->bound_buffers.find(undiverged_name);
-						assert(undiv_att_it != impl->bound_buffers.end());
+						if (undiv_att_it == impl->bound_buffers.end()) {
+							return { expected_error, errors::make_missing_resource_exception(passinfo, res, undiverged_name) };
+						}
 						undiv_att_it->second.use_chains.emplace_back(&chain);
 					}
 
@@ -825,6 +829,8 @@ namespace vuk {
 
 			impl->rpis.push_back(rpi);
 		}
+
+		return { expected_value };
 	}
 
 	void RenderGraph::resolve_resource_into(Name resolved_name_src, Name resolved_name_dst, Name ms_name) {

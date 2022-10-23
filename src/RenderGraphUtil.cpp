@@ -1,6 +1,7 @@
 #include "RenderGraphUtil.hpp"
 #include "RenderGraphImpl.hpp"
 #include "vuk/RenderGraph.hpp"
+#include <format>
 
 namespace vuk {
 	namespace detail {
@@ -224,5 +225,16 @@ namespace vuk {
 	template<>
 	bool MPI3::operator==(MPI3 const& other) const noexcept {
 		return *reinterpret_cast<M3::iterator const*>(_iter) == *reinterpret_cast<M3::iterator const*>(other._iter);
+	}
+
+
+	namespace errors {
+		RenderGraphException make_missing_resource_exception(PassInfo& pass_info, Resource& resource, Name undiverged_name) {
+			const char* type = resource.type == Resource::Type::eBuffer ? "buffer" : "image";
+
+			std::string message =
+			    std::format("Failed to compile: Pass <{}> references {} <{}>, also known as <{}>, which was never attached (did you forget an attach_* call?).", pass_info.pass->name.c_str(), type, resource.name.c_str(), undiverged_name.c_str());
+			return RenderGraphException(std::move(message));
+		}
 	}
 } // namespace vuk
