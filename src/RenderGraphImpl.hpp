@@ -3,6 +3,7 @@
 #include "RenderGraphUtil.hpp"
 #include "RenderPass.hpp"
 #include "vuk/ShortAlloc.hpp"
+#include "vuk/SourceLocation.hpp"
 
 #include <robin_hood.h>
 
@@ -73,6 +74,7 @@ namespace vuk {
 		std::function<void(CommandBuffer&)> execute;
 		std::byte* arguments; // internal use
 		PassType type;
+		source_location source;
 	};
 
 	struct PassInfo {

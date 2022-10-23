@@ -229,11 +229,19 @@ namespace vuk {
 
 
 	namespace errors {
+		std::string format_source_location(PassInfo& pass_info) {
+			return std::format("{}({})", pass_info.pass->source.file_name(), pass_info.pass->source.line());
+		}
+
 		RenderGraphException make_missing_resource_exception(PassInfo& pass_info, Resource& resource, Name undiverged_name) {
 			const char* type = resource.type == Resource::Type::eBuffer ? "buffer" : "image";
 
-			std::string message =
-			    std::format("Failed to compile: Pass <{}> references {} <{}>, also known as <{}>, which was never attached (did you forget an attach_* call?).", pass_info.pass->name.c_str(), type, resource.name.c_str(), undiverged_name.c_str());
+			std::string message = std::format("{}: Pass <{}> references {} <{}> (also known as <{}>), which was never attached.\n(did you forget an attach_* call?).",
+			                                  format_source_location(pass_info),
+			                                  pass_info.pass->name.c_str(),
+			                                  type,
+			                                  resource.name.c_str(),
+			                                  undiverged_name.c_str());
 			return RenderGraphException(std::move(message));
 		}
 	}

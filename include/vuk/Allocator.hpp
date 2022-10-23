@@ -4,55 +4,11 @@
 #include "vuk/Image.hpp"
 #include "vuk/Result.hpp"
 #include "vuk/vuk_fwd.hpp"
+#include "vuk/SourceLocation.hpp"
 
-#include <source_location>
 #include <span>
 
 namespace vuk {
-	/// @cond INTERNAL
-#ifndef __cpp_consteval
-	struct source_location {
-		uint_least32_t _Line{};
-		uint_least32_t _Column{};
-		const char* _File = "";
-		const char* _Function = "";
-
-		[[nodiscard]] constexpr source_location() noexcept = default;
-
-		[[nodiscard]] static source_location current(const uint_least32_t _Line_ = __builtin_LINE(),
-		                                             const uint_least32_t _Column_ = __builtin_COLUMN(),
-		                                             const char* const _File_ = __builtin_FILE(),
-		                                             const char* const _Function_ = __builtin_FUNCTION()) noexcept {
-			source_location _Result;
-			_Result._Line = _Line_;
-			_Result._Column = _Column_;
-			_Result._File = _File_;
-			_Result._Function = _Function_;
-			return _Result;
-		}
-	};
-
-	struct SourceLocationAtFrame {
-		source_location location;
-		uint64_t absolute_frame;
-	};
-#else
-	struct SourceLocationAtFrame {
-		std::source_location location;
-		uint64_t absolute_frame;
-	};
-#endif
-#ifndef __cpp_consteval
-#define VUK_HERE_AND_NOW()                                                                                                                                     \
-	SourceLocationAtFrame {                                                                                                                                      \
-		vuk::source_location::current(), (uint64_t)-1LL                                                                                                            \
-	}
-#else
-#define VUK_HERE_AND_NOW()                                                                                                                                     \
-	SourceLocationAtFrame {                                                                                                                                      \
-		std::source_location::current(), (uint64_t)-1LL                                                                                                            \
-	}
-#endif
 #define VUK_DO_OR_RETURN(what)                                                                                                                                 \
 	if (auto res = what; !res) {                                                                                                                                 \
 		return std::move(res);                                                                                                                                     \

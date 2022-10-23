@@ -41,7 +41,7 @@ namespace vuk {
 		delete impl;
 	}
 
-	void RenderGraph::add_pass(Pass p) {
+	void RenderGraph::add_pass(Pass p, source_location source) {
 		PassWrapper pw;
 		pw.name = p.name;
 		pw.use_secondary_command_buffers = p.use_secondary_command_buffers;
@@ -55,6 +55,7 @@ namespace vuk {
 			                        p.resources.size() };
 		std::copy(p.resources.begin(), p.resources.end(), pw.resources.begin());
 		pw.type = p.type;
+		pw.source = std::move(source);
 		impl->passes.emplace_back(std::move(pw));
 	}
 

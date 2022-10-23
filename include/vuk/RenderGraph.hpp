@@ -109,7 +109,7 @@ namespace vuk {
 
 		/// @brief Add a pass to the rendergraph
 		/// @param pass the Pass to add to the RenderGraph
-		void add_pass(Pass pass);
+		void add_pass(Pass pass, source_location location = source_location::current());
 
 		/// @brief Add an alias for a resource
 		/// @param new_name Additional name to refer to the resource
