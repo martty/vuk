@@ -19,13 +19,15 @@ namespace vuk {
 
 		std::unique_ptr<char[]> frames_storage;
 		DeviceFrameResource* frames;
-		std::vector<DeviceMultiFrameResource> multi_frames;
+		plf::colony<DeviceMultiFrameResource> multi_frames;
 
 		std::mutex command_pool_mutex;
 		std::array<std::vector<VkCommandPool>, 3> command_pools;
 		std::mutex ds_pool_mutex;
 		std::vector<VkDescriptorPool> ds_pools;
 
+		std::mutex images_mutex;
+		std::unordered_map<ImageCreateInfo, uint32_t> image_identity;
 		Cache<ImageWithIdentity> image_cache;
 		Cache<ImageView> image_view_cache;
 
@@ -63,7 +65,8 @@ namespace vuk {
 	struct DeviceFrameResourceImpl {
 		std::mutex sema_mutex;
 		std::vector<VkSemaphore> semaphores;
-
+		std::mutex buf_mutex;
+		std::vector<Buffer> buffers;
 		std::mutex fence_mutex;
 		std::vector<VkFence> fences;
 		std::mutex cbuf_mutex;
@@ -73,7 +76,6 @@ namespace vuk {
 		std::vector<VkFramebuffer> framebuffers;
 		std::mutex images_mutex;
 		std::vector<Image> images;
-		std::unordered_map<ImageCreateInfo, uint32_t> image_identity;
 		std::mutex image_views_mutex;
 		std::vector<ImageView> image_views;
 		std::mutex pds_mutex;
@@ -115,14 +117,10 @@ namespace vuk {
 		}
 	};
 
-	DeviceFrameResource::DeviceFrameResource(VkDevice device, DeviceSuperFrameResource& upstream) :
-	    DeviceNestedResource(&upstream),
+	DeviceFrameResource::DeviceFrameResource(VkDevice device, DeviceSuperFrameResource& pstream) :
+	    DeviceNestedResource(static_cast<DeviceResource&>(pstream)),
 	    device(device),
-	    impl(new DeviceFrameResourceImpl(device, upstream)) {}
-
-	DeviceFrameResource::~DeviceFrameResource() {
-		delete impl;
-	}
+	    impl(new DeviceFrameResourceImpl(device, pstream)) {}
 
 	Result<void, AllocateException> DeviceFrameResource::allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) {
 		VUK_DO_OR_RETURN(upstream->allocate_semaphores(dst, loc));
@@ -190,7 +188,11 @@ namespace vuk {
 			}
 			return { expected_value };
 		} else {
-			return sf.allocate_buffers(dst, cis, loc);
+			VUK_DO_OR_RETURN(sf.allocate_buffers(dst, cis, loc));
+			std::unique_lock _(impl->buf_mutex);
+			auto& vec = impl->buffers;
+			vec.insert(vec.end(), dst.begin(), dst.end());
+			return { expected_value };
 		}
 	}
 
@@ -208,13 +210,7 @@ namespace vuk {
 	void DeviceFrameResource::deallocate_framebuffers(std::span<const VkFramebuffer> src) {} // noop
 
 	Result<void, AllocateException> DeviceFrameResource::allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) {
-		std::unique_lock _(impl->images_mutex);
-		for (uint64_t i = 0; i < dst.size(); i++) {
-			auto& ci = cis[i];
-			auto index = impl->image_identity[ci]++;
-			CachedImageIdentifier iici = { ci, index, 0 };
-			VUK_DO_OR_RETURN(static_cast<DeviceSuperFrameResource*>(upstream)->allocate_cached_images({ &dst[i], 1 }, { &iici, 1 }, loc));
-		}
+		VUK_DO_OR_RETURN(static_cast<DeviceSuperFrameResource*>(upstream)->allocate_cached_images(dst, cis, loc));
 		return { expected_value };
 	}
 
@@ -407,19 +403,19 @@ namespace vuk {
 
 	Result<void, AllocateException>
 	DeviceMultiFrameResource::allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) {
-		std::unique_lock _(impl->images_mutex);
-		for (uint64_t i = 0; i < dst.size(); i++) {
-			auto& ci = cis[i];
-			auto index = impl->image_identity[ci]++;
-			CachedImageIdentifier iici = { ci, index, multiframe_id };
-			VUK_DO_OR_RETURN(static_cast<DeviceSuperFrameResource*>(upstream)->allocate_cached_images({ &dst[i], 1 }, { &iici, 1 }, loc));
-		}
+		VUK_DO_OR_RETURN(static_cast<DeviceSuperFrameResource*>(upstream)->allocate_cached_images(dst, cis, loc));
 		return { expected_value };
 	}
 
 	DeviceSuperFrameResource::DeviceSuperFrameResource(Context& ctx, uint64_t frames_in_flight) :
-	    DeviceNestedResource(&ctx.get_vk_resource()),
+	    DeviceNestedResource(ctx.get_vk_resource()),
 	    direct(static_cast<DeviceVkResource*>(upstream)),
+	    frames_in_flight(frames_in_flight),
+	    impl(new DeviceSuperFrameResourceImpl(*this, frames_in_flight)) {}
+
+	DeviceSuperFrameResource::DeviceSuperFrameResource(DeviceResource& upstream, uint64_t frames_in_flight) :
+	    DeviceNestedResource(upstream),
+	    direct(dynamic_cast<DeviceVkResource*>(this->upstream)),
 	    frames_in_flight(frames_in_flight),
 	    impl(new DeviceSuperFrameResourceImpl(*this, frames_in_flight)) {}
 
@@ -490,11 +486,14 @@ namespace vuk {
 	}
 
 	Result<void, AllocateException>
-	DeviceSuperFrameResource::allocate_cached_images(std::span<Image> dst, std::span<const CachedImageIdentifier> cis, SourceLocationAtFrame loc) {
+	DeviceSuperFrameResource::allocate_cached_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) {
+		std::unique_lock _(impl->images_mutex);
 		assert(dst.size() == cis.size());
 		for (uint64_t i = 0; i < dst.size(); i++) {
 			auto& ci = cis[i];
-			dst[i] = impl->image_cache.acquire(ci, impl->frame_counter).image;
+			auto index = impl->image_identity[ci]++;
+			CachedImageIdentifier iici = { ci, index, 0 };
+			dst[i] = impl->image_cache.acquire(iici, impl->frame_counter).image;
 		}
 		return { expected_value };
 	}
@@ -618,6 +617,7 @@ namespace vuk {
 		// garbage collect caches
 		impl->image_cache.collect(impl->frame_counter, 16);
 		impl->image_view_cache.collect(impl->frame_counter, 16);
+		impl->image_identity.clear();
 
 		return f;
 	}
@@ -625,33 +625,35 @@ namespace vuk {
 	DeviceMultiFrameResource& DeviceSuperFrameResource::get_multiframe_allocator(uint32_t frame_lifetime_count) {
 		std::unique_lock _(impl->new_frame_mutex);
 
-		return impl->multi_frames.emplace_back(DeviceMultiFrameResource(get_context().device, *this, frame_lifetime_count));
+		auto it = impl->multi_frames.emplace(DeviceMultiFrameResource(get_context().device, *this, frame_lifetime_count));
+		return *it;
 	}
 
 	template<class T>
 	void DeviceSuperFrameResource::deallocate_frame(T& frame) {
 		auto& f = *frame.impl;
-		direct->deallocate_semaphores(f.semaphores);
-		direct->deallocate_fences(f.fences);
-		direct->deallocate_command_buffers(f.cmdbuffers_to_free);
+		upstream->deallocate_semaphores(f.semaphores);
+		upstream->deallocate_fences(f.fences);
+		upstream->deallocate_command_buffers(f.cmdbuffers_to_free);
 		for (auto& pool : f.cmdpools_to_free) {
-			vkResetCommandPool(direct->device, pool.command_pool, {});
+			vkResetCommandPool(get_context().device, pool.command_pool, {});
 		}
 		deallocate_command_pools(f.cmdpools_to_free);
-		direct->deallocate_buffers(f.buffer_gpus);
-		direct->deallocate_framebuffers(f.framebuffers);
-		direct->deallocate_images(f.images);
-		direct->deallocate_image_views(f.image_views);
-		direct->deallocate_persistent_descriptor_sets(f.persistent_descriptor_sets);
-		direct->deallocate_descriptor_sets(f.descriptor_sets);
-		direct->ctx->make_timestamp_results_available(f.ts_query_pools);
-		direct->deallocate_timestamp_query_pools(f.ts_query_pools);
-		direct->deallocate_timeline_semaphores(f.tsemas);
-		direct->deallocate_acceleration_structures(f.ass);
-		direct->deallocate_swapchains(f.swapchains);
+		upstream->deallocate_buffers(f.buffer_gpus);
+		upstream->deallocate_framebuffers(f.framebuffers);
+		upstream->deallocate_images(f.images);
+		upstream->deallocate_image_views(f.image_views);
+		upstream->deallocate_persistent_descriptor_sets(f.persistent_descriptor_sets);
+		upstream->deallocate_descriptor_sets(f.descriptor_sets);
+		get_context().make_timestamp_results_available(f.ts_query_pools);
+		upstream->deallocate_timestamp_query_pools(f.ts_query_pools);
+		upstream->deallocate_timeline_semaphores(f.tsemas);
+		upstream->deallocate_acceleration_structures(f.ass);
+		upstream->deallocate_swapchains(f.swapchains);
+		upstream->deallocate_buffers(f.buffers);
 
 		for (auto& p : f.ds_pools) {
-			vkResetDescriptorPool(direct->device, p, {});
+			vkResetDescriptorPool(get_context().device, p, {});
 			impl->ds_pools.push_back(p);
 		}
 
@@ -684,7 +686,12 @@ namespace vuk {
 		f.tsemas.clear();
 		f.ass.clear();
 		f.swapchains.clear();
-		f.image_identity.clear();
+		f.buffers.clear();
+	}
+
+	void DeviceSuperFrameResource::force_collect() {
+		impl->image_cache.collect(impl->frame_counter, 0);
+		impl->image_view_cache.collect(impl->frame_counter, 0);
 	}
 
 	DeviceSuperFrameResource::~DeviceSuperFrameResource() {

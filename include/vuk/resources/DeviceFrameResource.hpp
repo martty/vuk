@@ -4,6 +4,8 @@
 #include "vuk/resources/DeviceNestedResource.hpp"
 #include "vuk/resources/DeviceVkResource.hpp"
 
+#include <memory>
+
 namespace vuk {
 	struct DeviceSuperFrameResource;
 
@@ -92,12 +94,10 @@ namespace vuk {
 			return upstream->get_context();
 		}
 
-		~DeviceFrameResource();
-
 	protected:
 		VkDevice device;
 		uint64_t construction_frame = -1;
-		struct DeviceFrameResourceImpl* impl;
+		std::unique_ptr<struct DeviceFrameResourceImpl> impl;
 
 		friend struct DeviceSuperFrameResource;
 		friend struct DeviceSuperFrameResourceImpl;
@@ -133,6 +133,7 @@ namespace vuk {
 	/// The lifetime of resources allocated from those allocators is frames_in_flight number of frames (until the DeviceFrameResource is recycled).
 	struct DeviceSuperFrameResource : DeviceNestedResource {
 		DeviceSuperFrameResource(Context& ctx, uint64_t frames_in_flight);
+		DeviceSuperFrameResource(DeviceResource& upstream, uint64_t frames_in_flight);
 
 		void deallocate_semaphores(std::span<const VkSemaphore> src) override;
 
@@ -151,7 +152,7 @@ namespace vuk {
 
 		void deallocate_images(std::span<const Image> src) override;
 
-		Result<void, AllocateException> allocate_cached_images(std::span<Image> dst, std::span<const CachedImageIdentifier> cis, SourceLocationAtFrame loc);
+		Result<void, AllocateException> allocate_cached_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc);
 
 		Result<void, AllocateException> allocate_cached_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc);
 
@@ -183,6 +184,8 @@ namespace vuk {
 		/// @brief Get a multiframe resource for the current frame with the specified frame lifetime count
 		/// The returned resource ensures that any resource allocated from it will be usable for at least `frame_lifetime_count`
 		DeviceMultiFrameResource& get_multiframe_allocator(uint32_t frame_lifetime_count);
+
+		void force_collect();
 
 		virtual ~DeviceSuperFrameResource();
 

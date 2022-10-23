@@ -7,7 +7,7 @@
 namespace vuk {
 	/// @brief Helper base class for DeviceResources. Forwards all allocations and deallocations to the upstream DeviceResource.
 	struct DeviceNestedResource : DeviceResource {
-		DeviceNestedResource(DeviceResource* upstream) : upstream(upstream) {}
+		explicit DeviceNestedResource(DeviceResource& upstream) : upstream(&upstream) {}
 
 		Result<void, AllocateException> allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) override;
 
