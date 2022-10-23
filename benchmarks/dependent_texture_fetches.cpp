@@ -80,7 +80,7 @@ namespace {
 		              } });
 		rg->attach_image("dst", vuk::ImageAttachment::from_texture(dst), vuk::Access::eNone, vuk::Access::eFragmentSampled);
 		vuk::Compiler c;
-		auto erg = c.link({ &rg, 1 }, {});
+		auto erg = *c.link({ &rg, 1 }, {});
 		vuk::execute_submit_and_wait(allocator, std::move(erg));
 	}
 

@@ -243,7 +243,7 @@ namespace vuk {
 
 		/// @brief Use this RenderGraph and create an ExecutableRenderGraph
 		/// @param compile_options CompileOptions controlling compilation behaviour
-		struct ExecutableRenderGraph link(std::span<std::shared_ptr<RenderGraph>> rgs, const RenderGraphCompileOptions& compile_options);
+		Result<struct ExecutableRenderGraph> link(std::span<std::shared_ptr<RenderGraph>> rgs, const RenderGraphCompileOptions& compile_options);
 
 		// reflection functions
 

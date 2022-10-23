@@ -243,8 +243,7 @@ namespace vuk {
 		                      std::unordered_set<std::shared_ptr<RenderGraph>>& consumed_rgs);
 
 		/// @brief Check if this rendergraph is valid.
-		/// \throws RenderGraphException
-		void validate();
+		Result<void> validate();
 
 		void schedule_intra_queue(std::span<struct PassInfo> passes, const RenderGraphCompileOptions& compile_options);
 	};
@@ -299,6 +298,8 @@ namespace vuk {
 	}
 
 	namespace errors {
-		RenderGraphException make_missing_resource_exception(PassInfo& pass_info, Resource& resource, Name undiverged_name);
+		RenderGraphException make_unattached_resource_exception(PassInfo& pass_info, Resource& resource, Name undiverged_name);
+		RenderGraphException make_cbuf_references_unknown_resource(PassInfo& pass_info, Resource::Type type, Name name);
+		RenderGraphException make_cbuf_references_undeclared_resource(PassInfo& pass_info, Resource::Type type, Name name);
 	}
 }; // namespace vuk

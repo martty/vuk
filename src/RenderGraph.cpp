@@ -576,13 +576,13 @@ namespace vuk {
 					if (res.type == Resource::Type::eImage) {
 						auto undiv_att_it = impl->bound_attachments.find(undiverged_name);
 						if (undiv_att_it == impl->bound_attachments.end()) {
-							return { expected_error, errors::make_missing_resource_exception(passinfo, res, undiverged_name) };
+							return { expected_error, errors::make_unattached_resource_exception(passinfo, res, undiverged_name) };
 						}
 						undiv_att_it->second.use_chains.emplace_back(&chain);
 					} else {
 						auto undiv_att_it = impl->bound_buffers.find(undiverged_name);
 						if (undiv_att_it == impl->bound_buffers.end()) {
-							return { expected_error, errors::make_missing_resource_exception(passinfo, res, undiverged_name) };
+							return { expected_error, errors::make_unattached_resource_exception(passinfo, res, undiverged_name) };
 						}
 						undiv_att_it->second.use_chains.emplace_back(&chain);
 					}
@@ -1122,7 +1122,7 @@ namespace vuk {
 		};
 	}
 
-	void RGCImpl::validate() {
+	Result<void> RGCImpl::validate() {
 		// check if all resourced are attached
 		for (const auto& [n, v] : use_chains) {
 			auto resolved_name = resolve_name(n);
@@ -1134,13 +1134,13 @@ namespace vuk {
 		}
 	}
 
-	ExecutableRenderGraph Compiler::link(std::span<std::shared_ptr<RenderGraph>> rgs, const RenderGraphCompileOptions& compile_options) {
-		compile(rgs, compile_options);
+	Result<ExecutableRenderGraph> Compiler::link(std::span<std::shared_ptr<RenderGraph>> rgs, const RenderGraphCompileOptions& compile_options) {
+		VUK_DO_OR_RETURN(compile(rgs, compile_options));
 
 		// at this point the graph is built, we know of all the resources and
 		// everything should have been attached perform checking if this indeed the
 		// case
-		impl->validate();
+		VUK_DO_OR_RETURN(impl->validate());
 
 		// handle clears
 		// if we are going into a Clear, see if the subsequent use is a framebuffer use
@@ -1677,7 +1677,7 @@ namespace vuk {
 			rp.rpci.pDependencies = rp.rpci.subpass_dependencies.data();
 		}
 
-		return { *this };
+		return { expected_value, *this };
 	}
 
 	MapProxy<Name, std::span<const UseRef>> Compiler::get_use_chains() {

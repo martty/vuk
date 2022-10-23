@@ -818,7 +818,7 @@ namespace vuk {
 
 		SubmitBundle sbundle;
 
-		auto record_batch = [&alloc, this](std::span<RenderPassInfo> rpis, DomainFlagBits domain) {
+		auto record_batch = [&alloc, this](std::span<RenderPassInfo> rpis, DomainFlagBits domain) -> Result<SubmitBatch> {
 			SubmitBatch sbatch{ .domain = domain };
 			auto partition_it = rpis.begin();
 			while (partition_it != rpis.end()) {
@@ -827,10 +827,13 @@ namespace vuk {
 				    std::partition_point(partition_it, rpis.end(), [batch_index](const RenderPassInfo& rpi) { return rpi.batch_index == batch_index; });
 				auto partition_span = std::span(partition_it, new_partition_it);
 				auto si = record_single_submit(alloc, partition_span, domain);
-				sbatch.submits.emplace_back(*si); // TODO: error handling
+				if (!si) {
+					return si;
+				}
+				sbatch.submits.emplace_back(*si);
 				partition_it = new_partition_it;
 			}
-			return sbatch;
+			return { expected_value, sbatch };
 		};
 
 		// record cbufs
@@ -838,17 +841,29 @@ namespace vuk {
 
 		auto graphics_rpis = std::span(impl->rpis.begin(), impl->rpis.begin() + impl->num_graphics_rpis);
 		if (graphics_rpis.size() > 0) {
-			sbundle.batches.emplace_back(record_batch(graphics_rpis, DomainFlagBits::eGraphicsQueue));
+			auto batch = record_batch(graphics_rpis, DomainFlagBits::eGraphicsQueue);
+			if (!batch) {
+				return batch;
+			}
+			sbundle.batches.emplace_back(std::move(*batch));
 		}
 
 		auto compute_rpis = std::span(impl->rpis.begin() + impl->num_graphics_rpis, impl->rpis.begin() + impl->num_graphics_rpis + impl->num_compute_rpis);
 		if (compute_rpis.size() > 0) {
-			sbundle.batches.emplace_back(record_batch(compute_rpis, DomainFlagBits::eComputeQueue));
+			auto batch = record_batch(compute_rpis, DomainFlagBits::eComputeQueue);
+			if (!batch) {
+				return batch;
+			}
+			sbundle.batches.emplace_back(std::move(*batch));
 		}
 
 		auto transfer_rpis = std::span(impl->rpis.begin() + impl->num_graphics_rpis + impl->num_compute_rpis, impl->rpis.end());
 		if (transfer_rpis.size() > 0) {
-			sbundle.batches.emplace_back(record_batch(transfer_rpis, DomainFlagBits::eTransferQueue));
+			auto batch = record_batch(transfer_rpis, DomainFlagBits::eTransferQueue);
+			if (!batch) {
+				return batch;
+			}
+			sbundle.batches.emplace_back(std::move(*batch));
 		}
 
 		return { expected_value, std::move(sbundle) };
@@ -859,7 +874,7 @@ namespace vuk {
 		auto whole = impl->whole_name(resolved);
 		auto it = impl->bound_buffers.find(whole);
 		if (it == impl->bound_buffers.end()) {
-			return { expected_error, RenderGraphException{ "Buffer not found" } };
+			return { expected_error, errors::make_cbuf_references_unknown_resource(*pass_info, Resource::Type::eBuffer, n) };
 		}
 		return { expected_value, it->second };
 	}
@@ -869,11 +884,13 @@ namespace vuk {
 		auto whole = impl->whole_name(resolved);
 		auto it = impl->bound_attachments.find(whole);
 		if (it == impl->bound_attachments.end()) {
-			return { expected_error, RenderGraphException{ "Image not found" } };
+			return {
+				expected_error, errors::make_cbuf_references_unknown_resource(*pass_info, Resource::Type::eImage, n)
+			}; // TODO: can both errors be hit? what has been already checked?
 		}
 		auto uc_it = impl->use_chains.find(resolved);
 		if (uc_it == impl->use_chains.end()) {
-			return { expected_error, RenderGraphException{ "Resource not found" } };
+			return { expected_error, errors::make_cbuf_references_unknown_resource(*pass_info, Resource::Type::eImage, n) };
 		}
 		auto& chain = uc_it->second;
 		for (auto& elem : chain) {
@@ -897,7 +914,7 @@ namespace vuk {
 
 		auto it = impl->use_chains.find(resolved);
 		if (it == impl->use_chains.end()) {
-			return { expected_error, RenderGraphException{ "Resource not found" } };
+			return { expected_error, errors::make_cbuf_references_unknown_resource(*pass_info, Resource::Type::eImage, n) };
 		}
 		auto& chain = it->second;
 		for (auto& elem : chain) {
@@ -905,8 +922,7 @@ namespace vuk {
 				return { expected_value, elem.use.layout == vuk::ImageLayout::eGeneral };
 			}
 		}
-		assert(false && "Image resource was not declared to be used in this pass, but was referred to.");
-		return { expected_error, RenderGraphException{ "Image resourced was not declared to be used in this pass, but was referred to." } };
+		return { expected_error, errors::make_cbuf_references_undeclared_resource(*pass_info, Resource::Type::eImage, n) };
 	}
 
 	Name ExecutableRenderGraph::resolve_name(Name name, PassInfo* pass_info) const noexcept {

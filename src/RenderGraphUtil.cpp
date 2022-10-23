@@ -47,12 +47,7 @@ namespace vuk {
 	    INIT2(post_mem_barriers),
 	    INIT2(waits) {}
 
-	SubpassInfo::SubpassInfo(arena& arena_) :
-	    INIT2(passes),
-	    INIT2(pre_barriers),
-	    INIT2(post_barriers),
-	    INIT2(pre_mem_barriers),
-	    INIT2(post_mem_barriers) {}
+	SubpassInfo::SubpassInfo(arena& arena_) : INIT2(passes), INIT2(pre_barriers), INIT2(post_barriers), INIT2(pre_mem_barriers), INIT2(post_mem_barriers) {}
 
 #undef INIT2
 
@@ -227,13 +222,12 @@ namespace vuk {
 		return *reinterpret_cast<M3::iterator const*>(_iter) == *reinterpret_cast<M3::iterator const*>(other._iter);
 	}
 
-
 	namespace errors {
 		std::string format_source_location(PassInfo& pass_info) {
 			return std::format("{}({})", pass_info.pass->source.file_name(), pass_info.pass->source.line());
 		}
 
-		RenderGraphException make_missing_resource_exception(PassInfo& pass_info, Resource& resource, Name undiverged_name) {
+		RenderGraphException make_unattached_resource_exception(PassInfo& pass_info, Resource& resource, Name undiverged_name) {
 			const char* type = resource.type == Resource::Type::eBuffer ? "buffer" : "image";
 
 			std::string message = std::format("{}: Pass <{}> references {} <{}> (also known as <{}>), which was never attached.\n(did you forget an attach_* call?).",
@@ -244,5 +238,25 @@ namespace vuk {
 			                                  undiverged_name.c_str());
 			return RenderGraphException(std::move(message));
 		}
-	}
+
+		RenderGraphException make_cbuf_references_unknown_resource(PassInfo& pass_info, Resource::Type res_type, Name name) {
+			const char* type = res_type == Resource::Type::eBuffer ? "buffer" : "image";
+			std::string message = std::format("{}: Pass <{}> has attempted to reference {} <{}>, but this name is not known to the rendergraph.",
+			                                  format_source_location(pass_info),
+			                                  pass_info.pass->name.c_str(),
+			                                  type,
+			                                  name.c_str());
+			return RenderGraphException(std::move(message));
+		}
+
+		RenderGraphException make_cbuf_references_undeclared_resource(PassInfo& pass_info, Resource::Type res_type, Name name) {
+			const char* type = res_type == Resource::Type::eBuffer ? "buffer" : "image";
+			std::string message = std::format("{}: In pass <{}>, attempted to bind {} <{}>, but this pass did not declare this name for use.",
+			                                  format_source_location(pass_info),
+			                                  pass_info.pass->name.c_str(),
+			                                  type,
+			                                  name.c_str());
+			return RenderGraphException(std::move(message));
+		}
+	} // namespace errors
 } // namespace vuk

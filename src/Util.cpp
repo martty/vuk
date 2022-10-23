@@ -101,7 +101,10 @@ namespace vuk {
 
 	Result<void> link_execute_submit(Allocator& allocator, Compiler& compiler, std::span<std::shared_ptr<RenderGraph>> rgs) {
 		auto erg = compiler.link(rgs, {});
-		std::pair erg_and_alloc = std::pair{ &allocator, &erg };
+		if (!erg) {
+			return erg;
+		}
+		std::pair erg_and_alloc = std::pair{ &allocator, &*erg };
 		return execute_submit(allocator, std::span(&erg_and_alloc, 1), {}, {}, {});
 	}
 
@@ -524,7 +527,10 @@ namespace vuk {
 	Result<void> present(Allocator& allocator, Compiler& compiler, SwapchainRef swapchain, Future&& future, RenderGraphCompileOptions compile_options) {
 		auto ptr = future.get_render_graph();
 		auto erg = compiler.link(std::span{ &ptr, 1 }, compile_options);
-		return execute_submit_and_present_to_one(allocator, std::move(erg), swapchain);
+		if (!erg) {
+			return erg;
+		}
+		return execute_submit_and_present_to_one(allocator, std::move(*erg), swapchain);
 	}
 
 	SampledImage make_sampled_image(ImageView iv, SamplerCreateInfo sci) {
@@ -586,7 +592,10 @@ namespace vuk {
 			return { expected_value };
 		} else {
 			auto erg = compiler.link(std::span{ &rg, 1 }, {});
-			std::pair v = { &allocator, &erg };
+			if (!erg) {
+				return erg;
+			}
+			std::pair v = { &allocator, &*erg };
 			VUK_DO_OR_RETURN(execute_submit(allocator, std::span{ &v, 1 }, {}, {}, {}));
 			std::pair w = { (DomainFlags)control->initial_domain, control->initial_visibility };
 			allocator.get_context().wait_for_domains(std::span{ &w, 1 });
@@ -612,7 +621,10 @@ namespace vuk {
 		} else {
 			control->status = FutureBase::Status::eSubmitted;
 			auto erg = compiler.link(std::span{ &rg, 1 }, {});
-			std::pair v = { &allocator, &erg };
+			if (!erg) {
+				return erg;
+			}
+			std::pair v = { &allocator, &*erg };
 			VUK_DO_OR_RETURN(execute_submit(allocator, std::span{ &v, 1 }, {}, {}, {}));
 			return { expected_value };
 		}

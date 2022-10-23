@@ -62,7 +62,7 @@ void vuk::ExampleRunner::render() {
 
 			fut = util::ImGui_ImplVuk_Render(frame_allocator, std::move(fut), imgui_data, ImGui::GetDrawData(), sampled_images);
 			auto ptr = fut.get_render_graph();
-			auto erg = compiler.link(std::span{ &ptr, 1 }, {});
+			auto erg = *compiler.link(std::span{ &ptr, 1 }, {});
 			if (presentation_thread.joinable()) {
 				presentation_thread.join();
 			}
@@ -176,7 +176,7 @@ void vuk::ExampleRunner::render() {
 			rg->attach_swapchain("SWAPCHAIN", swapchain);
 			auto fut = util::ImGui_ImplVuk_Render(frame_allocator, Future{ rg, "SWAPCHAIN+" }, imgui_data, ImGui::GetDrawData(), sampled_images);
 			auto ptr = fut.get_render_graph();
-			auto erg = compiler.link(std::span{ &ptr, 1 }, {});
+			auto erg = *compiler.link(std::span{ &ptr, 1 }, {});
 			if (presentation_thread.joinable()) {
 				presentation_thread.join();
 			}
