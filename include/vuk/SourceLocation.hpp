@@ -6,23 +6,31 @@ namespace vuk {
 /// @cond INTERNAL
 #ifndef __cpp_consteval
 	struct source_location {
-		uint_least32_t _Line{};
-		uint_least32_t _Column{};
-		const char* _File = "";
-		const char* _Function = "";
+		uint_least32_t line_{};
+		uint_least32_t column{};
+		const char* file = "";
+		const char* function = "";
 
 		[[nodiscard]] constexpr source_location() noexcept = default;
 
-		[[nodiscard]] static source_location current(const uint_least32_t _Line_ = __builtin_LINE(),
-		                                             const uint_least32_t _Column_ = __builtin_COLUMN(),
-		                                             const char* const _File_ = __builtin_FILE(),
-		                                             const char* const _Function_ = __builtin_FUNCTION()) noexcept {
-			source_location _Result;
-			_Result._Line = _Line_;
-			_Result._Column = _Column_;
-			_Result._File = _File_;
-			_Result._Function = _Function_;
-			return _Result;
+		[[nodiscard]] static source_location current(const uint_least32_t line_ = __builtin_LINE(),
+		                                             const uint_least32_t column_ = __builtin_COLUMN(),
+		                                             const char* const file_ = __builtin_FILE(),
+		                                             const char* const function_ = __builtin_FUNCTION()) noexcept {
+			source_location result;
+			result.line_ = line_;
+			result.column = column_;
+			result.file = file_;
+			result.function = function_;
+			return result;
+		}
+
+		[[nodiscard]] constexpr uint_least32_t line() const noexcept {
+			return line_;
+		}
+
+		[[nodiscard]] constexpr const char* file_name() const noexcept {
+			return file;
 		}
 	};
 
