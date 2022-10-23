@@ -1,7 +1,7 @@
 #include "RenderGraphUtil.hpp"
 #include "RenderGraphImpl.hpp"
 #include "vuk/RenderGraph.hpp"
-#include <format>
+#include <fmt/format.h>
 
 namespace vuk {
 	namespace detail {
@@ -224,13 +224,13 @@ namespace vuk {
 
 	namespace errors {
 		std::string format_source_location(PassInfo& pass_info) {
-			return std::format("{}({})", pass_info.pass->source.file_name(), pass_info.pass->source.line());
+			return fmt::format("{}({})", pass_info.pass->source.file_name(), pass_info.pass->source.line());
 		}
 
 		RenderGraphException make_unattached_resource_exception(PassInfo& pass_info, Resource& resource, Name undiverged_name) {
 			const char* type = resource.type == Resource::Type::eBuffer ? "buffer" : "image";
 
-			std::string message = std::format("{}: Pass <{}> references {} <{}> (also known as <{}>), which was never attached.\n(did you forget an attach_* call?).",
+			std::string message = fmt::format("{}: Pass <{}> references {} <{}> (also known as <{}>), which was never attached.\n(did you forget an attach_* call?).",
 			                                  format_source_location(pass_info),
 			                                  pass_info.pass->name.c_str(),
 			                                  type,
@@ -241,7 +241,7 @@ namespace vuk {
 
 		RenderGraphException make_cbuf_references_unknown_resource(PassInfo& pass_info, Resource::Type res_type, Name name) {
 			const char* type = res_type == Resource::Type::eBuffer ? "buffer" : "image";
-			std::string message = std::format("{}: Pass <{}> has attempted to reference {} <{}>, but this name is not known to the rendergraph.",
+			std::string message = fmt::format("{}: Pass <{}> has attempted to reference {} <{}>, but this name is not known to the rendergraph.",
 			                                  format_source_location(pass_info),
 			                                  pass_info.pass->name.c_str(),
 			                                  type,
@@ -251,7 +251,7 @@ namespace vuk {
 
 		RenderGraphException make_cbuf_references_undeclared_resource(PassInfo& pass_info, Resource::Type res_type, Name name) {
 			const char* type = res_type == Resource::Type::eBuffer ? "buffer" : "image";
-			std::string message = std::format("{}: In pass <{}>, attempted to bind {} <{}>, but this pass did not declare this name for use.",
+			std::string message = fmt::format("{}: In pass <{}>, attempted to bind {} <{}>, but this pass did not declare this name for use.",
 			                                  format_source_location(pass_info),
 			                                  pass_info.pass->name.c_str(),
 			                                  type,

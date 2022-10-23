@@ -1132,6 +1132,8 @@ namespace vuk {
 				throw RenderGraphException{ std::string("Missing resource: \"") + std::string(n.to_sv()) + "\". Did you forget to attach it?" };
 			}
 		}
+
+		return { expected_value };
 	}
 
 	Result<ExecutableRenderGraph> Compiler::link(std::span<std::shared_ptr<RenderGraph>> rgs, const RenderGraphCompileOptions& compile_options) {

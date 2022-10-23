@@ -41,3 +41,6 @@
 [submodule "ext/doctest"]
 	path = ext/doctest
 	url = https://github.com/doctest/doctest
+[submodule "ext/fmt"]
+	path = ext/fmt
+	url = https://github.com/fmtlib/fmt
