@@ -313,7 +313,7 @@ namespace vuk {
 	/// @param allocator Allocator to use for submission resources
 	/// @param executable_rendergraph `ExecutableRenderGraph`s for execution
 	/// @param swapchain Swapchain referenced by the rendergraph
-	Result<void> execute_submit_and_present_to_one(Allocator& allocator, ExecutableRenderGraph&& executable_rendergraph, SwapchainRef swapchain);
+	Result<VkResult> execute_submit_and_present_to_one(Allocator& allocator, ExecutableRenderGraph&& executable_rendergraph, SwapchainRef swapchain);
 	/// @brief Execute given `ExecutableRenderGraph` into API VkCommandBuffers, then submit them to queues, then blocking-wait for the submission to complete
 	/// @param allocator Allocator to use for submission resources
 	/// @param executable_rendergraph `ExecutableRenderGraph`s for execution
@@ -324,8 +324,8 @@ namespace vuk {
 	Result<SingleSwapchainRenderBundle> acquire_one(Allocator& allocator, SwapchainRef swapchain);
 	Result<SingleSwapchainRenderBundle> acquire_one(Context& ctx, SwapchainRef swapchain, VkSemaphore present_ready, VkSemaphore render_complete);
 	Result<SingleSwapchainRenderBundle> execute_submit(Allocator& allocator, ExecutableRenderGraph&& rg, SingleSwapchainRenderBundle&& bundle);
-	Result<void> present_to_one(Context& ctx, SingleSwapchainRenderBundle&& bundle);
-	Result<void> present(Allocator& allocator, Compiler& compiler, SwapchainRef swapchain, Future&& future, RenderGraphCompileOptions = {});
+	Result<VkResult> present_to_one(Context& ctx, SingleSwapchainRenderBundle&& bundle);
+	Result<VkResult> present(Allocator& allocator, Compiler& compiler, SwapchainRef swapchain, Future&& future, RenderGraphCompileOptions = {});
 
 	struct SampledImage make_sampled_image(ImageView iv, SamplerCreateInfo sci);
 

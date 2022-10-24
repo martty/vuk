@@ -450,7 +450,7 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	Result<void> present_to_one(Context& ctx, SingleSwapchainRenderBundle&& bundle) {
+	Result<VkResult> present_to_one(Context& ctx, SingleSwapchainRenderBundle&& bundle) {
 		VkPresentInfoKHR pi{ .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
 		pi.swapchainCount = 1;
 		pi.pSwapchains = &bundle.swapchain->swapchain;
@@ -458,13 +458,13 @@ namespace vuk {
 		pi.waitSemaphoreCount = 1;
 		pi.pWaitSemaphores = &bundle.render_complete;
 		auto present_result = vkQueuePresentKHR(ctx.graphics_queue->impl->queue, &pi);
-		if (present_result != VK_SUCCESS) {
-			return { expected_error, PresentException{ present_result } };
+		if (present_result != VK_SUCCESS && present_result != VK_SUBOPTIMAL_KHR) {
+			return { expected_error, VkException{ present_result } };
 		}
-		if (bundle.acquire_result == VK_SUBOPTIMAL_KHR) {
-			return { expected_error, PresentException{ bundle.acquire_result } };
+		if (present_result == VK_SUBOPTIMAL_KHR || bundle.acquire_result == VK_SUBOPTIMAL_KHR) {
+			return { expected_value, VK_SUBOPTIMAL_KHR };
 		}
-		return { expected_value };
+		return { expected_value, VK_SUCCESS };
 	}
 
 	Result<SingleSwapchainRenderBundle> acquire_one(Allocator& allocator, SwapchainRef swapchain) {
@@ -477,7 +477,7 @@ namespace vuk {
 		VkResult acq_result = vkAcquireNextImageKHR(ctx.device, swapchain->swapchain, UINT64_MAX, present_rdy, VK_NULL_HANDLE, &image_index);
 		// VK_SUBOPTIMAL_KHR shouldn't stop presentation; it is handled at the end
 		if (acq_result != VK_SUCCESS && acq_result != VK_SUBOPTIMAL_KHR) {
-			return { expected_error, PresentException{ acq_result } };
+			return { expected_error, VkException{ acq_result } };
 		}
 
 		return { expected_value, SingleSwapchainRenderBundle{ swapchain, image_index, present_rdy, render_complete, acq_result } };
@@ -488,7 +488,7 @@ namespace vuk {
 		VkResult acq_result = vkAcquireNextImageKHR(ctx.device, swapchain->swapchain, UINT64_MAX, present_ready, VK_NULL_HANDLE, &image_index);
 		// VK_SUBOPTIMAL_KHR shouldn't stop presentation; it is handled at the end
 		if (acq_result != VK_SUCCESS && acq_result != VK_SUBOPTIMAL_KHR) {
-			return { expected_error, PresentException{ acq_result } };
+			return { expected_error, VkException{ acq_result } };
 		}
 
 		return { expected_value, SingleSwapchainRenderBundle{ swapchain, image_index, present_ready, render_complete, acq_result } };
@@ -503,7 +503,7 @@ namespace vuk {
 		return { expected_value, std::move(bundle) };
 	}
 
-	Result<void> execute_submit_and_present_to_one(Allocator& allocator, ExecutableRenderGraph&& rg, SwapchainRef swapchain) {
+	Result<VkResult> execute_submit_and_present_to_one(Allocator& allocator, ExecutableRenderGraph&& rg, SwapchainRef swapchain) {
 		auto bundle = acquire_one(allocator, swapchain);
 		if (!bundle) {
 			return bundle;
@@ -512,8 +512,7 @@ namespace vuk {
 		if (!bundle2) {
 			return bundle2;
 		}
-		VUK_DO_OR_RETURN(present_to_one(allocator.get_context(), std::move(*bundle2)));
-		return { expected_value };
+		return present_to_one(allocator.get_context(), std::move(*bundle2));
 	}
 
 	Result<void> execute_submit_and_wait(Allocator& allocator, ExecutableRenderGraph&& rg) {
@@ -524,7 +523,7 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	Result<void> present(Allocator& allocator, Compiler& compiler, SwapchainRef swapchain, Future&& future, RenderGraphCompileOptions compile_options) {
+	Result<VkResult> present(Allocator& allocator, Compiler& compiler, SwapchainRef swapchain, Future&& future, RenderGraphCompileOptions compile_options) {
 		auto ptr = future.get_render_graph();
 		auto erg = compiler.link(std::span{ &ptr, 1 }, compile_options);
 		if (!erg) {

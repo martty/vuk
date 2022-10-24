@@ -91,24 +91,6 @@ namespace vuk {
 				error_message = "Error unknown.";
 				break;
 			}
-			default:
-				assert(0 && "Unimplemented error.");
-				break;
-			}
-		}
-		
-		VkResult code() const { return error_code; }
-
-		void throw_this() override {
-			throw *this;
-		}
-	};
-
-	struct PresentException : VkException {
-		PresentException(VkResult res) {
-			error_code = res;
-			
-			switch (res) {
 			case VK_SUBOPTIMAL_KHR: {
 				error_message = "Suboptimal.";
 				break;
@@ -122,6 +104,8 @@ namespace vuk {
 				break;
 			}
 		}
+		
+		VkResult code() const { return error_code; }
 
 		void throw_this() override {
 			throw *this;
