@@ -1122,27 +1122,8 @@ namespace vuk {
 		};
 	}
 
-	Result<void> RGCImpl::validate() {
-		// check if all resourced are attached
-		for (const auto& [n, v] : use_chains) {
-			auto resolved_name = resolve_name(n);
-			auto att_name = whole_name(resolved_name);
-			if (!bound_attachments.contains(att_name) && !bound_buffers.contains(att_name)) {
-				// TODO: error handling
-				throw RenderGraphException{ std::string("Missing resource: \"") + std::string(n.to_sv()) + "\". Did you forget to attach it?" };
-			}
-		}
-
-		return { expected_value };
-	}
-
 	Result<ExecutableRenderGraph> Compiler::link(std::span<std::shared_ptr<RenderGraph>> rgs, const RenderGraphCompileOptions& compile_options) {
 		VUK_DO_OR_RETURN(compile(rgs, compile_options));
-
-		// at this point the graph is built, we know of all the resources and
-		// everything should have been attached perform checking if this indeed the
-		// case
-		VUK_DO_OR_RETURN(impl->validate());
 
 		// handle clears
 		// if we are going into a Clear, see if the subsequent use is a framebuffer use

@@ -242,9 +242,6 @@ namespace vuk {
 		                      const std::unordered_map<std::shared_ptr<RenderGraph>, std::string>& prefixes,
 		                      std::unordered_set<std::shared_ptr<RenderGraph>>& consumed_rgs);
 
-		/// @brief Check if this rendergraph is valid.
-		Result<void> validate();
-
 		void schedule_intra_queue(std::span<struct PassInfo> passes, const RenderGraphCompileOptions& compile_options);
 	};
 #undef INIT
