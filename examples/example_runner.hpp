@@ -241,6 +241,9 @@ namespace vuk {
 		swapchain = context->add_swapchain(util::make_swapchain(vkbdevice));
 		present_ready = vuk::Unique<std::array<VkSemaphore, 3>>(*global);
 		render_complete = vuk::Unique<std::array<VkSemaphore, 3>>(*global);
+
+		global->allocate_semaphores(*present_ready);
+		global->allocate_semaphores(*render_complete);
 	}
 } // namespace vuk
 

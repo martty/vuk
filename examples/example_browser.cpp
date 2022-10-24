@@ -4,7 +4,6 @@
 std::vector<vuk::Name> chosen_resource;
 
 bool render_all = true;
-std::jthread presentation_thread;
 vuk::SingleSwapchainRenderBundle bundle;
 
 void vuk::ExampleRunner::render() {
@@ -13,9 +12,6 @@ void vuk::ExampleRunner::render() {
 
 	vuk::wait_for_futures_explicit(*global, compiler, futures);
 	futures.clear();
-
-	global->allocate_semaphores(*present_ready);
-	global->allocate_semaphores(*render_complete);
 
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
@@ -48,10 +44,6 @@ void vuk::ExampleRunner::render() {
 		context->next_frame();
 
 		Allocator frame_allocator(xdev_frame_resource);
-		if (!bundle.present_ready) {
-			// prime the first bundle
-			bundle = *vuk::acquire_one(frame_allocator, swapchain);
-		}
 		if (!render_all) { // render a single full window example
 			RenderGraph rg("runner");
 			vuk::Name attachment_name = item_current->name;
@@ -63,14 +55,9 @@ void vuk::ExampleRunner::render() {
 			fut = util::ImGui_ImplVuk_Render(frame_allocator, std::move(fut), imgui_data, ImGui::GetDrawData(), sampled_images);
 			auto ptr = fut.get_render_graph();
 			auto erg = *compiler.link(std::span{ &ptr, 1 }, {});
-			if (presentation_thread.joinable()) {
-				presentation_thread.join();
-			}
+			bundle = *acquire_one(*context, swapchain, (*present_ready)[context->get_frame_count() % 3], (*render_complete)[context->get_frame_count() % 3]);
 			auto result = *execute_submit(frame_allocator, std::move(erg), std::move(bundle));
-			presentation_thread = std::jthread([=, this]() mutable {
-				present_to_one(*context, std::move(result));
-				bundle = *acquire_one(*context, swapchain, (*present_ready)[context->get_frame_count() % 3], (*render_complete)[context->get_frame_count() % 3]);
-			});
+			present_to_one(*context, std::move(result));
 			sampled_images.clear();
 		} else { // render all examples as imgui windows
 			std::shared_ptr<RenderGraph> rg = std::make_shared<RenderGraph>("runner");
@@ -177,14 +164,9 @@ void vuk::ExampleRunner::render() {
 			auto fut = util::ImGui_ImplVuk_Render(frame_allocator, Future{ rg, "SWAPCHAIN+" }, imgui_data, ImGui::GetDrawData(), sampled_images);
 			auto ptr = fut.get_render_graph();
 			auto erg = *compiler.link(std::span{ &ptr, 1 }, {});
-			if (presentation_thread.joinable()) {
-				presentation_thread.join();
-			}
+			bundle = *acquire_one(*context, swapchain, (*present_ready)[context->get_frame_count() % 3], (*render_complete)[context->get_frame_count() % 3]);
 			auto result = *execute_submit(frame_allocator, std::move(erg), std::move(bundle));
-			presentation_thread = std::jthread([=, this]() mutable {
-				present_to_one(*context, std::move(result));
-				bundle = *acquire_one(*context, swapchain, (*present_ready)[context->get_frame_count() % 3], (*render_complete)[context->get_frame_count() % 3]);
-			});
+			present_to_one(*context, std::move(result));
 			sampled_images.clear();
 		}
 		if (++num_frames == 16) {
@@ -201,6 +183,5 @@ void vuk::ExampleRunner::render() {
 int main() {
 	vuk::ExampleRunner::get_runner().setup();
 	vuk::ExampleRunner::get_runner().render();
-	presentation_thread.join();
 	vuk::ExampleRunner::get_runner().cleanup();
 }
