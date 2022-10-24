@@ -18,6 +18,7 @@ option(VUK_USE_VULKAN_SDK "Use the Vulkan SDK to locate headers and libraries" O
 option(VUK_USE_SHADERC "Link in shaderc for runtime compilation of GLSL shaders" ON)
 option(VUK_USE_DXC "Link in DirectXShaderCompiler for runtime compilation of HLSL shaders" ON)
 option(VUK_BUILD_TESTS "Build tests" OFF)
+option(VUK_FAIL_FAST "Trigger an assert upon encountering an error instead of propagating" OFF)
 
 ##### Using vuk with volk (or a similar library)
 # step 1: turn off VUK_LINK_TO_LOADER and add_subdirectory vuk
@@ -62,7 +63,7 @@ else()
 	endif()
 endif()
 
-target_compile_definitions(vuk PUBLIC VUK_USE_SHADERC=$<BOOL:${VUK_USE_SHADERC}> VUK_USE_DXC=$<BOOL:${VUK_USE_DXC}> VUK_BUILD_TESTS=$<BOOL:${VUK_BUILD_TESTS}>)
+target_compile_definitions(vuk PUBLIC VUK_USE_SHADERC=$<BOOL:${VUK_USE_SHADERC}> VUK_USE_DXC=$<BOOL:${VUK_USE_DXC}> VUK_BUILD_TESTS=$<BOOL:${VUK_BUILD_TESTS}> VUK_FAIL_FAST=$<BOOL:${VUK_FAIL_FAST}>)
 
 set(SPIRV_CROSS_CLI OFF CACHE BOOL "")
 set(SPIRV_CROSS_ENABLE_TESTS OFF CACHE BOOL "")

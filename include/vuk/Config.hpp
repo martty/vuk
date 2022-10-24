@@ -56,6 +56,8 @@
 #define VUK_MAX_SCISSORS 1u
 #endif
 
-namespace vuk {
-	static constexpr bool use_exceptions = true;
-}
+#ifndef VUK_DISABLE_EXCEPTIONS
+#define VUK_USE_EXCEPTIONS 1
+#else
+#define VUK_USE_EXCEPTIONS 0
+#endif

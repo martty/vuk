@@ -7,9 +7,9 @@
 #include "vuk/vuk_fwd.hpp"
 
 #include <cassert>
+#include <memory>
 #include <type_traits>
 #include <utility>
-#include <memory>
 
 #define FWD(x)               (static_cast<decltype(x)&&>(x))
 #define MOV(x)               (static_cast<std::remove_reference_t<decltype(x)>&&>(x))
@@ -27,7 +27,7 @@ namespace vuk {
 				p->~U();
 			}
 		}
-	}
+	} // namespace detail
 
 	struct Exception;
 	struct ResultErrorTag {
@@ -55,6 +55,10 @@ namespace vuk {
 		Result(ResultErrorTag, U&& err_t) : _holds_value(false) {
 			using V = std::remove_reference_t<U>;
 			static_assert(std::is_base_of_v<E, V>, "Concrete error must derive from E");
+#if VUK_FAIL_FAST
+			fprintf(stderr, "%s", err_t.what());
+			assert(0);
+#endif
 			_error = new V(MOV(err_t));
 		}
 
@@ -70,7 +74,7 @@ namespace vuk {
 					CONSTRUCT_AT(&_value, MOV(other._value));
 				}
 			}
-			
+
 			if (!other._holds_value) {
 				_error = MOV(other._error);
 				other._error = nullptr;
@@ -115,11 +119,11 @@ namespace vuk {
 				_value.~T();
 			} else {
 				if (!_extracted && _error) {
-					if constexpr (vuk::use_exceptions) {
-						_error->throw_this();
-					} else {
-						std::abort();
-					}
+#if VUK_USE_EXCEPTIONS
+					_error->throw_this();
+#else
+					std::abort();
+#endif
 				}
 				delete _error;
 			}
@@ -239,6 +243,10 @@ namespace vuk {
 		Result(ResultErrorTag, U&& err_t) : _holds_value(false) {
 			using V = std::remove_reference_t<U>;
 			static_assert(std::is_base_of_v<E, V>, "Concrete error must derive from E");
+#if VUK_FAIL_FAST
+			fprintf(stderr, "%s", err_t.what());
+			assert(0);
+#endif
 			_error = new V(MOV(err_t));
 		}
 
@@ -285,11 +293,11 @@ namespace vuk {
 		~Result() noexcept(false) {
 			if (!_holds_value) {
 				if (!_extracted && _error) {
-					if constexpr (vuk::use_exceptions) {
-						_error->throw_this();
-					} else {
-						std::abort();
-					}
+#if VUK_USE_EXCEPTIONS
+					_error->throw_this();
+#else
+					std::abort();
+#endif
 				}
 				delete _error;
 			}
