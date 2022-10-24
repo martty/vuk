@@ -62,22 +62,25 @@ namespace util {
 		// clang-format on
 	}
 
-	inline vuk::Swapchain make_swapchain(vkb::Device vkbdevice) {
+	inline vuk::Swapchain make_swapchain(vkb::Device vkbdevice, std::optional<VkSwapchainKHR> old_swapchain) {
 		vkb::SwapchainBuilder swb(vkbdevice);
 		swb.set_desired_format(vuk::SurfaceFormatKHR{ vuk::Format::eR8G8B8A8Srgb, vuk::ColorSpaceKHR::eSrgbNonlinear });
 		swb.add_fallback_format(vuk::SurfaceFormatKHR{ vuk::Format::eB8G8R8A8Srgb, vuk::ColorSpaceKHR::eSrgbNonlinear });
 		swb.set_desired_present_mode((VkPresentModeKHR)vuk::PresentModeKHR::eImmediate);
 		swb.set_image_usage_flags(VkImageUsageFlagBits::VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VkImageUsageFlagBits::VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+		if (old_swapchain) {
+			swb.set_old_swapchain(*old_swapchain);
+		}
 		auto vkswapchain = swb.build();
 
-		vuk::Swapchain sw;
-		auto images = vkswapchain->get_images();
-		auto views = vkswapchain->get_image_views();
+		vuk::Swapchain sw{};
+		auto images = *vkswapchain->get_images();
+		auto views = *vkswapchain->get_image_views();
 
-		for (auto& i : *images) {
+		for (auto& i : images) {
 			sw.images.push_back(i);
 		}
-		for (auto& i : *views) {
+		for (auto& i : views) {
 			sw.image_views.emplace_back();
 			sw.image_views.back().payload = i;
 		}

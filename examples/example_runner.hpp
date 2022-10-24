@@ -83,7 +83,14 @@ namespace vuk {
 				}
 			}
 			glfwSetWindowSizeCallback(window, [](GLFWwindow* window, int width, int height) {
-
+				ExampleRunner& runner = *reinterpret_cast<ExampleRunner*>(glfwGetWindowUserPointer(window));
+				runner.xdev_rf_alloc->deallocate_swapchains(std::span{ &runner.swapchain->swapchain, 1 });
+				runner.xdev_rf_alloc->deallocate_image_views(runner.swapchain->image_views);
+				runner.context->remove_swapchain(runner.swapchain);
+				runner.swapchain = runner.context->add_swapchain(util::make_swapchain(runner.vkbdevice, runner.swapchain->swapchain));
+				for (auto& iv : runner.swapchain->image_views) {
+					runner.context->set_name(iv.payload, "swiv");
+				}
 			});
 		}
 
@@ -151,7 +158,8 @@ namespace vuk {
 		vkbinstance = inst_ret.value();
 		auto instance = vkbinstance.instance;
 		vkb::PhysicalDeviceSelector selector{ vkbinstance };
-		window = create_window_glfw("Vuk example", false);
+		window = create_window_glfw("Vuk example", true);
+		glfwSetWindowUserPointer(window, this);
 		surface = create_surface_glfw(vkbinstance.instance, window);
 		selector.set_surface(surface)
 		    .set_minimum_version(1, 0)
@@ -238,7 +246,7 @@ namespace vuk {
 		const unsigned num_inflight_frames = 3;
 		xdev_rf_alloc.emplace(*context, num_inflight_frames);
 		global.emplace(*xdev_rf_alloc);
-		swapchain = context->add_swapchain(util::make_swapchain(vkbdevice));
+		swapchain = context->add_swapchain(util::make_swapchain(vkbdevice, {}));
 		present_ready = vuk::Unique<std::array<VkSemaphore, 3>>(*global);
 		render_complete = vuk::Unique<std::array<VkSemaphore, 3>>(*global);
 
