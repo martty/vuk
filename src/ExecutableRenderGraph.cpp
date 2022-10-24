@@ -623,11 +623,6 @@ namespace vuk {
 		}
 
 		if (attis_to_infer.size() > 0) {
-			// TODO: error harmonization
-#ifndef NDEBUG
-			fprintf(stderr, "%s", msg.str().c_str());
-			assert(false);
-#endif
 			return { expected_error, RenderGraphException{ msg.str() } };
 		}
 
@@ -674,11 +669,6 @@ namespace vuk {
 		}
 
 		if (bufis_to_infer.size() > 0) {
-			// TODO: error harmonization
-#ifndef NDEBUG
-			fprintf(stderr, "%s", msg.str().c_str());
-			assert(false);
-#endif
 			return { expected_error, RenderGraphException{ msg.str() } };
 		}
 
@@ -704,11 +694,12 @@ namespace vuk {
 		for (auto& [name, bound] : impl->bound_buffers) {
 			if (bound.buffer.buffer == VK_NULL_HANDLE) {
 				BufferCreateInfo bci{ .mem_usage = bound.buffer.memory_usage, .size = bound.buffer.size, .alignment = 1 }; // TODO: alignment?
-				if (bound.allocator) {
-					bound.buffer = **allocate_buffer(*bound.allocator, bci); // TODO: dropping error
-				} else {
-					bound.buffer = **allocate_buffer(alloc, bci); // TODO: dropping error
+				auto allocator = bound.allocator ? *bound.allocator : alloc;
+				auto buf = allocate_buffer(allocator, bci);
+				if (!buf) {
+					return buf;
 				}
+				bound.buffer = **buf;
 			}
 		}
 
@@ -718,11 +709,12 @@ namespace vuk {
 				if (bound.rp_uses.size() > 0) { // its an FB attachment
 					create_attachment(ctx, bound);
 				} else {
-					if (bound.allocator) {
-						bound.attachment.image = **allocate_image(*bound.allocator, bound.attachment); // TODO: dropping error
-					} else {
-						bound.attachment.image = **allocate_image(alloc, bound.attachment); // TODO: dropping error
+					auto allocator = bound.allocator ? *bound.allocator : alloc;
+					auto img = allocate_image(allocator, bound.attachment);
+					if (!img) {
+						return img;
 					}
+					bound.attachment.image = **img;
 					ctx.set_name(bound.attachment.image, bound.name);
 				}
 			}
@@ -773,11 +765,12 @@ namespace vuk {
 					specific_attachment.layer_count = *layer_count;
 					assert(specific_attachment.level_count == 1);
 
-					if (bound.allocator) {
-						specific_attachment.image_view = **allocate_image_view(*bound.allocator, specific_attachment); // TODO: dropping error
-					} else {
-						specific_attachment.image_view = **allocate_image_view(alloc, specific_attachment); // TODO: dropping error
+					auto allocator = bound.allocator ? *bound.allocator : alloc;
+					auto iv = allocate_image_view(allocator, specific_attachment);
+					if (!iv) {
+						return iv;
 					}
+					specific_attachment.image_view = **iv;
 					auto name = std::string("ImageView: RenderTarget ") + std::string(bound.name.to_sv());
 					ctx.set_name(specific_attachment.image_view.payload, Name(name));
 				}
