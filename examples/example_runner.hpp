@@ -42,6 +42,7 @@ namespace vuk {
 		std::optional<Context> context;
 		std::optional<DeviceSuperFrameResource> xdev_rf_alloc;
 		std::optional<Allocator> global;
+		bool suspend = false;
 		vuk::SwapchainRef swapchain;
 		GLFWwindow* window;
 		VkSurfaceKHR surface;
@@ -84,12 +85,17 @@ namespace vuk {
 			}
 			glfwSetWindowSizeCallback(window, [](GLFWwindow* window, int width, int height) {
 				ExampleRunner& runner = *reinterpret_cast<ExampleRunner*>(glfwGetWindowUserPointer(window));
-				runner.xdev_rf_alloc->deallocate_swapchains(std::span{ &runner.swapchain->swapchain, 1 });
-				runner.xdev_rf_alloc->deallocate_image_views(runner.swapchain->image_views);
-				runner.context->remove_swapchain(runner.swapchain);
-				runner.swapchain = runner.context->add_swapchain(util::make_swapchain(runner.vkbdevice, runner.swapchain->swapchain));
-				for (auto& iv : runner.swapchain->image_views) {
-					runner.context->set_name(iv.payload, "swiv");
+				if (width == 0 && height == 0) {
+					runner.suspend = true;
+				} else {
+					runner.xdev_rf_alloc->deallocate_swapchains(std::span{ &runner.swapchain->swapchain, 1 });
+					runner.xdev_rf_alloc->deallocate_image_views(runner.swapchain->image_views);
+					runner.context->remove_swapchain(runner.swapchain);
+					runner.swapchain = runner.context->add_swapchain(util::make_swapchain(runner.vkbdevice, runner.swapchain->swapchain));
+					for (auto& iv : runner.swapchain->image_views) {
+						runner.context->set_name(iv.payload, "Swapchain ImageView");
+					}
+					runner.suspend = false;
 				}
 			});
 		}

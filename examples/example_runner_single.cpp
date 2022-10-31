@@ -9,6 +9,9 @@ void vuk::ExampleRunner::render() {
 
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
+		while (suspend) {
+			glfwWaitEvents();
+		}
 		auto& xdev_frame_resource = xdev_rf_alloc->get_next_frame();
 		context->next_frame();
 		Allocator frame_allocator(xdev_frame_resource);

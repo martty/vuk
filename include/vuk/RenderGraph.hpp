@@ -150,6 +150,12 @@ namespace vuk {
 		/// @param final Desired Access to the resource after this rendergraph
 		void attach_buffer(Name name, Buffer buffer, Access initial = eNone, Access final = eNone);
 
+		/// @brief Attach a buffer to be allocated from the specified allocator
+		/// @param name Name of the resource to attach to
+		/// @param buffer Buffer to attach
+		/// @param allocator Allocator the Buffer will be allocated from
+		/// @param initial Access to the resource prior to this rendergraph
+		/// @param final Desired Access to the resource after this rendergraph
 		void attach_buffer_from_allocator(Name name, Buffer buffer, Allocator allocator, Access initial = eNone, Access final = eNone);
 
 		/// @brief Attach an image to the given name
@@ -159,6 +165,12 @@ namespace vuk {
 		/// @param final Desired Access to the resource after this rendergraph
 		void attach_image(Name name, ImageAttachment image_attachment, Access initial = eNone, Access final = eNone);
 
+		/// @brief Attach an image to be allocated from the specified allocator
+		/// @param name Name of the resource to attach to
+		/// @param image_attachment ImageAttachment to attach
+		/// @param buffer Buffer to attach
+		/// @param initial Access to the resource prior to this rendergraph
+		/// @param final Desired Access to the resource after this rendergraph
 		void attach_image_from_allocator(Name name, ImageAttachment image_attachment, Allocator allocator, Access initial = eNone, Access final = eNone);
 
 		/// @brief Attach an image to the given name

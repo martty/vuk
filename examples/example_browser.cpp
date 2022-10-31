@@ -15,6 +15,9 @@ void vuk::ExampleRunner::render() {
 
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
+		while (suspend) {
+			glfwWaitEvents();
+		}
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
 
