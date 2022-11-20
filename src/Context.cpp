@@ -182,6 +182,8 @@ namespace vuk {
 	}
 
 	void Context::end_region(const VkCommandBuffer& cb) {
+		if (!debug_enabled())
+			return;
 		vkCmdEndDebugUtilsLabelEXT(cb);
 	}
 
