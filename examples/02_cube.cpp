@@ -26,8 +26,8 @@ namespace {
 		.setup =
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator) {
 		      vuk::PipelineBaseCreateInfo pci;
-		      pci.add_glsl(util::read_entire_file("../../examples/ubo_test.vert"), "ubo_test.vert");
-		      pci.add_glsl(util::read_entire_file("../../examples/triangle_depthshaded.frag"), "triangle_depthshaded.frag");
+		      pci.add_glsl(util::read_entire_file("../../examples/ubo_test.vert"), "../../examples/ubo_test.vert");
+		      pci.add_glsl(util::read_entire_file("../../examples/triangle_depthshaded.frag"), "../../examples/triangle_depthshaded.frag");
 		      allocator.get_context().create_named_pipeline("cube", pci);
 
 		      // Request a GPU-only buffer allocation with specific data

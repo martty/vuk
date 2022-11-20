@@ -1,4 +1,5 @@
 #if VUK_USE_SHADERC
+#include "../src/ShadercIncluder.hpp"
 #include <shaderc/shaderc.hpp>
 #endif
 #if VUK_USE_DXC
@@ -15,8 +16,6 @@
 #endif
 #include <algorithm>
 #include <atomic>
-#include <fstream>
-#include <sstream>
 
 #include "../src/ContextImpl.hpp"
 #include "vuk/Allocator.hpp"
@@ -274,7 +273,7 @@ namespace vuk {
 			shaderc::Compiler compiler;
 			shaderc::CompileOptions options;
 			options.SetTargetEnvironment(shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_2);
-
+			options.SetIncluder(std::make_unique<ShadercDefaultIncluder>());
 			const auto result = compiler.CompileGlslToSpv(cinfo.source.as_c_str(), shaderc_glsl_infer_from_source, cinfo.filename.c_str(), options);
 
 			if (result.GetCompilationStatus() != shaderc_compilation_status_success) {

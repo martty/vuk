@@ -1,16 +1,8 @@
 #version 450
 #pragma shader_stage(vertex)
+#include "ubo.glsl"
 
 layout(location = 0) in vec3 ipos;
-
-layout(binding = 0) uniform VP {
-	mat4 view;
-	mat4 projection;
-};
-
-layout(binding = 1) uniform Model {
-	mat4 model;
-};
 
 out gl_PerVertex 
 {
