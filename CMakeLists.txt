@@ -99,6 +99,12 @@ target_sources(vuk PRIVATE
 target_include_directories(vuk PUBLIC ext/plf_colony)
 if (NOT TARGET VulkanMemoryAllocator)
 	add_subdirectory(ext/VulkanMemoryAllocator)
+    # it seems like when building as a shared lib, VMA needs vulkan statically linked
+    # adding this in as a workaround until VMA is updated
+    if(${BUILD_SHARED_LIBS})
+        cmake_policy(SET CMP0079 NEW)
+        target_link_libraries(VulkanMemoryAllocator PRIVATE Vulkan::Vulkan)
+    endif()
 endif()
 add_subdirectory(ext/robin-hood-hashing)
 add_subdirectory(ext/fmt)
