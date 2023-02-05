@@ -161,7 +161,7 @@ void vuk::BenchRunner::render() {
 		vuk::Name attachment_name = "_final";
 		rg->attach_swapchain("_swp", swapchain);
 		rg->clear_image("_swp", attachment_name, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
-		auto fut = util::ImGui_ImplVuk_Render(frame_allocator, Future{ rg, "_final" }, imgui_data, ImGui::GetDrawData(), sampled_images);
+		auto fut = util::ImGui_ImplVuk_Render(frame_allocator, Future{ rg, "_final+" }, imgui_data, ImGui::GetDrawData(), sampled_images);
 		present(frame_allocator, compiler, swapchain, std::move(fut));
 		sampled_images.clear();
 
