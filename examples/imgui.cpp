@@ -31,10 +31,10 @@ util::ImGuiData util::ImGui_ImplVuk_Init(vuk::Allocator& allocator) {
 	io.Fonts->TexID = (ImTextureID)data.font_si.get();
 	{
 		vuk::PipelineBaseCreateInfo pci;
-		auto vpath = "../../examples/imgui.vert.spv";
+		auto vpath = VUK_EX_PATH_TO_ROOT "examples/imgui.vert.spv";
 		auto vcont = util::read_spirv(vpath);
 		pci.add_spirv(std::move(vcont), vpath);
-		auto fpath = "../../examples/imgui.frag.spv";
+		auto fpath = VUK_EX_PATH_TO_ROOT "examples/imgui.frag.spv";
 		auto fcont = util::read_spirv(fpath);
 		pci.add_spirv(std::move(fcont), fpath);
 		ctx.create_named_pipeline("imgui", pci);

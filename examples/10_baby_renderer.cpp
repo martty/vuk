@@ -90,7 +90,7 @@ namespace {
 
 		      // Use STBI to load the image
 		      int x, y, chans;
-		      auto doge_image = stbi_load("../../examples/doge.png", &x, &y, &chans, 4);
+		      auto doge_image = stbi_load(VUK_EX_PATH_TO_ROOT "examples/doge.png", &x, &y, &chans, 4);
 
 		      // Similarly to buffers, we allocate the image and enqueue the upload
 		      auto [tex, tex_fut] = create_texture(allocator, vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, doge_image, false);
@@ -101,7 +101,7 @@ namespace {
 		      // Creating a compute pipeline that inverts an image
 		      {
 			      vuk::PipelineBaseCreateInfo pbci;
-			      pbci.add_glsl(util::read_entire_file("../../examples/invert.comp"), "invert.comp");
+			      pbci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/invert.comp"), VUK_EX_PATH_TO_ROOT "examples/invert.comp");
 			      runner.context->create_named_pipeline("invert", pbci);
 		      }
 		      vuk::ImageCreateInfo ici;
@@ -184,8 +184,9 @@ namespace {
 		      vuk::PipelineBaseInfo* pipe1;
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
-			      pci.add_glsl(util::read_entire_file("../../examples/baby_renderer.vert"), "baby_renderer.vert");
-			      pci.add_glsl(util::read_entire_file("../../examples/triangle_depthshaded_tex.frag"), "triangle_depthshaded_tex.frag");
+			      pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/baby_renderer.vert"), VUK_EX_PATH_TO_ROOT "examples/baby_renderer.vert");
+			      pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/triangle_depthshaded_tex.frag"),
+			                   VUK_EX_PATH_TO_ROOT "examples/triangle_depthshaded_tex.frag");
 			      pipe1 = runner.context->get_pipeline(pci);
 		      }
 
@@ -193,8 +194,9 @@ namespace {
 		      vuk::PipelineBaseInfo* pipe2;
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
-			      pci.add_glsl(util::read_entire_file("../../examples/baby_renderer.vert"), "baby_renderer.vert");
-			      pci.add_glsl(util::read_entire_file("../../examples/triangle_tinted_tex.frag"), "triangle_tinted_tex.frag");
+			      pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/baby_renderer.vert"), VUK_EX_PATH_TO_ROOT "examples/baby_renderer.vert");
+			      pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/triangle_tinted_tex.frag"),
+			                   VUK_EX_PATH_TO_ROOT "examples/triangle_tinted_tex.frag");
 			      pipe2 = runner.context->get_pipeline(pci);
 		      }
 

@@ -38,8 +38,9 @@ namespace {
 		      vuk::Context& ctx = allocator.get_context();
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
-			      pci.add_glsl(util::read_entire_file("../../examples/bindless.vert"), "bindless.vert");
-			      pci.add_glsl(util::read_entire_file("../../examples/triangle_tex_bindless.frag"), "triange_tex_bindless.frag");
+			      pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/bindless.vert"), VUK_EX_PATH_TO_ROOT "examples/bindless.vert");
+			      pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/triangle_tex_bindless.frag"),
+			                   VUK_EX_PATH_TO_ROOT "examples/triangle_tex_bindless.frag");
 			      // Flag this binding as partially bound, so that we don't need to set all the array elements
 			      pci.set_binding_flags(1, 0, vuk::DescriptorBindingFlagBits::ePartiallyBound);
 			      // Set the binding #0 in set #1 as a variable count binding, and set the maximum number of descriptors
@@ -50,13 +51,13 @@ namespace {
 		      // creating a compute pipeline that inverts an image
 		      {
 			      vuk::PipelineBaseCreateInfo pbci;
-			      pbci.add_glsl(util::read_entire_file("../../examples/invert.comp"), "invert.comp");
+			      pbci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/invert.comp"), VUK_EX_PATH_TO_ROOT "examples/invert.comp");
 			      runner.context->create_named_pipeline("invert", pbci);
 		      }
 
 		      // Use STBI to load the image
 		      int x, y, chans;
-		      auto doge_image = stbi_load("../../examples/doge.png", &x, &y, &chans, 4);
+		      auto doge_image = stbi_load(VUK_EX_PATH_TO_ROOT "examples/doge.png", &x, &y, &chans, 4);
 
 		      // Similarly to buffers, we allocate the image and enqueue the upload
 		      auto [tex, tex_fut] = create_texture(allocator, vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, doge_image, false);

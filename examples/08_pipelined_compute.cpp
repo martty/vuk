@@ -36,27 +36,27 @@ namespace {
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator) {
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
-			      pci.add_glsl(util::read_entire_file("../../examples/fullscreen.vert"), "fullscreen.vert");
-			      pci.add_glsl(util::read_entire_file("../../examples/rtt.frag"), "rtt.frag");
+			      pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/fullscreen.vert"), VUK_EX_PATH_TO_ROOT "examples/fullscreen.vert");
+			      pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/rtt.frag"), VUK_EX_PATH_TO_ROOT "examples/rtt.frag");
 			      runner.context->create_named_pipeline("rtt", pci);
 		      }
 
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
-			      pci.add_glsl(util::read_entire_file("../../examples/fullscreen.vert"), "fullscreen.vert");
-			      pci.add_glsl(util::read_entire_file("../../examples/scrambled_draw.frag"), "scrambled_draw.frag");
+			      pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/fullscreen.vert"), VUK_EX_PATH_TO_ROOT "examples/fullscreen.vert");
+			      pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/scrambled_draw.frag"), VUK_EX_PATH_TO_ROOT "examples/scrambled_draw.frag");
 			      runner.context->create_named_pipeline("scrambled_draw", pci);
 		      }
 
 		      // creating a compute pipeline is the same as creating a graphics pipeline
 		      {
 			      vuk::PipelineBaseCreateInfo pbci;
-			      pbci.add_glsl(util::read_entire_file("../../examples/stupidsort.comp"), "stupidsort.comp");
+			      pbci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/stupidsort.comp"), VUK_EX_PATH_TO_ROOT "examples/stupidsort.comp");
 			      runner.context->create_named_pipeline("stupidsort", pbci);
 		      }
 
 		      int chans;
-		      auto doge_image = stbi_load("../../examples/doge.png", &x, &y, &chans, 4);
+		      auto doge_image = stbi_load(VUK_EX_PATH_TO_ROOT "examples/doge.png", &x, &y, &chans, 4);
 
 		      auto [tex, tex_fut] = create_texture(allocator, vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, doge_image, true);
 		      texture_of_doge = std::move(tex);

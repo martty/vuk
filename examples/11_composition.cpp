@@ -81,22 +81,22 @@ namespace {
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator) {
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
-			      pci.add_glsl(util::read_entire_file("../../examples/deferred.vert"), "deferred.vert");
-			      pci.add_glsl(util::read_entire_file("../../examples/deferred_reflective.frag"), "deferred_reflective.frag");
+			      pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/deferred.vert"), "deferred.vert");
+			      pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/deferred_reflective.frag"), "deferred_reflective.frag");
 			      runner.context->create_named_pipeline("cube_deferred_reflective", pci);
 		      }
 
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
-			      pci.add_glsl(util::read_entire_file("../../examples/fullscreen.vert"), "fullscreen.vert");
-			      pci.add_glsl(util::read_entire_file("../../examples/deferred_resolve.frag"), "deferred_resolve.frag");
+			      pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/fullscreen.vert"), "fullscreen.vert");
+			      pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/deferred_resolve.frag"), "deferred_resolve.frag");
 			      runner.context->create_named_pipeline("deferred_resolve", pci);
 		      }
 
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
-			      pci.add_glsl(util::read_entire_file("../../examples/fullscreen.vert"), "fullscreen.vert");
-			      pci.add_glsl(util::read_entire_file("../../examples/fxaa.frag"), "fxaa.frag");
+			      pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/fullscreen.vert"), "fullscreen.vert");
+			      pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/fxaa.frag"), "fxaa.frag");
 			      runner.context->create_named_pipeline("fxaa", pci);
 		      }
 
@@ -106,7 +106,7 @@ namespace {
 		      auto [ind_buf, ind_fut] = create_buffer(allocator, vuk::MemoryUsage::eGPUonly, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.second));
 		      inds = *ind_buf;
 
-		      auto hdr_texture = load_hdr_cubemap(allocator, "../../examples/the_sky_is_on_fire_1k.hdr");
+		      auto hdr_texture = load_hdr_cubemap(allocator, VUK_EX_PATH_TO_ROOT "examples/the_sky_is_on_fire_1k.hdr");
 		      hdr_image = std::move(hdr_texture.first);
 		      // cubemap code from @jazzfool
 		      // hdr_texture is a 2:1 equirectangular; it needs to be converted to a cubemap
@@ -127,8 +127,9 @@ namespace {
 		      env_cubemap_ia.image = *env_cubemap;
 
 		      vuk::PipelineBaseCreateInfo equirectangular_to_cubemap;
-		      equirectangular_to_cubemap.add_glsl(util::read_entire_file("../../examples/cubemap.vert"), "cubemap.vert");
-		      equirectangular_to_cubemap.add_glsl(util::read_entire_file("../../examples/equirectangular_to_cubemap.frag"), "equirectangular_to_cubemap.frag");
+		      equirectangular_to_cubemap.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/cubemap.vert"), VUK_EX_PATH_TO_ROOT "examples/cubemap.vert");
+		      equirectangular_to_cubemap.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/equirectangular_to_cubemap.frag"),
+		                                          VUK_EX_PATH_TO_ROOT "examples/equirectangular_to_cubemap.frag");
 		      runner.context->create_named_pipeline("equirectangular_to_cubemap", equirectangular_to_cubemap);
 
 		      // make cubemap by rendering to individual faces - we use a layered framebuffer to achieve this

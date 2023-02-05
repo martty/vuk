@@ -34,12 +34,15 @@ FetchContent_MakeAvailable(volk)
 
 SET(imgui_sources ../ext/imgui/imgui.cpp ../ext/imgui/imgui_draw.cpp ../ext/imgui/imgui_demo.cpp ../ext/imgui/imgui_widgets.cpp ../ext/imgui/imgui_tables.cpp ../ext/imgui/backends/imgui_impl_glfw.cpp)
 
+file(RELATIVE_PATH binary_to_source ${CMAKE_BINARY_DIR} ${CMAKE_SOURCE_DIR})
+
 function(ADD_BENCH name)
     set(FULL_NAME "vuk_bench_${name}")
     add_executable(${FULL_NAME})
     target_sources(${FULL_NAME} PRIVATE "${name}.cpp" bench_runner.cpp ../examples/imgui.cpp ../examples/stbi.cpp ${imgui_sources})
     target_include_directories(${FULL_NAME} SYSTEM PRIVATE ../ext/stb ../ext/imgui)
     target_compile_definitions(${FULL_NAME} PRIVATE GLM_FORCE_SIZE_FUNC GLM_FORCE_EXPLICIT_CTOR GLM_ENABLE_EXPERIMENTAL GLM_FORCE_RADIANS GLM_FORCE_DEPTH_ZERO_TO_ONE)
+    target_compile_definitions(${FULL_NAME} PUBLIC VUK_EX_PATH_TO_ROOT="${binary_to_source}")
     target_link_libraries(${FULL_NAME} PRIVATE vuk)
     target_link_libraries(${FULL_NAME} PRIVATE vk-bootstrap glfw glm)
     set_target_properties(${FULL_NAME}

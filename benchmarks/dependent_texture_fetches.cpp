@@ -98,28 +98,30 @@ namespace {
 			// In this case, we only need the shaders, we don't care about the rest of the state
 			{
 				vuk::PipelineBaseCreateInfo pci;
-				pci.add_glsl(util::read_entire_file("../../benchmarks/fullscreen.vert"), "fullscreen.vert");
-				pci.add_glsl(util::read_entire_file("../../benchmarks/dependent_texture_fetch_explicit_lod.frag"), "dependent_texture_fetch_explicit_lod.frag");
+				pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "benchmarks/fullscreen.vert"), VUK_EX_PATH_TO_ROOT "examples/fullscreen.vert");
+				pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "benchmarks/dependent_texture_fetch_explicit_lod.frag"),
+			               VUK_EX_PATH_TO_ROOT "examples/dependent_texture_fetch_explicit_lod.frag");
 
 				runner.context->create_named_pipeline("dependent", pci);
 			}
 			{
 				vuk::PipelineBaseCreateInfo pci;
-				pci.add_glsl(util::read_entire_file("../../benchmarks/fullscreen.vert"), "fullscreen.vert");
-				pci.add_glsl(util::read_entire_file("../../benchmarks/nondependent_texture_fetch_explicit_lod.frag"), "nondependent_texture_fetch_explicit_lod.frag");
+				pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "benchmarks/fullscreen.vert"), VUK_EX_PATH_TO_ROOT "examples/fullscreen.vert");
+				pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "benchmarks/nondependent_texture_fetch_explicit_lod.frag"),
+			               VUK_EX_PATH_TO_ROOT "examples/nondependent_texture_fetch_explicit_lod.frag");
 
 				runner.context->create_named_pipeline("nondependent", pci);
 			}
 			{
 				vuk::PipelineBaseCreateInfo pci;
-				pci.add_glsl(util::read_entire_file("../../benchmarks/fullscreen.vert"), "fullscreen.vert");
-				pci.add_glsl(util::read_entire_file("../../benchmarks/blit.frag"), "blit.frag");
+				pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "benchmarks/fullscreen.vert"), VUK_EX_PATH_TO_ROOT "examples/fullscreen.vert");
+				pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "benchmarks/blit.frag"), VUK_EX_PATH_TO_ROOT "examples/blit.frag");
 
 				runner.context->create_named_pipeline("blit", pci);
 			}
 
 			int x, y, chans;
-			auto doge_image = stbi_load("../../examples/doge.png", &x, &y, &chans, 4);
+			auto doge_image = stbi_load(VUK_EX_PATH_TO_ROOT "examples/doge.png", &x, &y, &chans, 4);
 			auto [tex, tex_fut] = create_texture(allocator, vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, doge_image, false);
 			texture_of_doge = std::move(tex);
 			vuk::Compiler c;

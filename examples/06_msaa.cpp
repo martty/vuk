@@ -27,13 +27,14 @@ namespace {
 		      // This is a good option is if you don't want to ship shaderc or if you are caching or have your sl -> spirv pipeline
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
-			      pci.add_spirv(util::read_spirv("../../examples/ubo_test_tex.vert.spv"), "ubo_test_tex.vert");
-			      pci.add_spirv(util::read_spirv("../../examples/triangle_depthshaded_tex.frag.spv"), "triangle_depthshaded_text.frag");
+			      pci.add_spirv(util::read_spirv(VUK_EX_PATH_TO_ROOT "examples/ubo_test_tex.vert.spv"), VUK_EX_PATH_TO_ROOT "examples/ubo_test_tex.vert");
+			      pci.add_spirv(util::read_spirv(VUK_EX_PATH_TO_ROOT "examples/triangle_depthshaded_tex.frag.spv"),
+			                    VUK_EX_PATH_TO_ROOT "examples/triangle_depthshaded_text.frag");
 			      runner.context->create_named_pipeline("textured_cube", pci);
 		      }
 
 		      int x, y, chans;
-		      auto doge_image = stbi_load("../../examples/doge.png", &x, &y, &chans, 4);
+		      auto doge_image = stbi_load(VUK_EX_PATH_TO_ROOT "examples/doge.png", &x, &y, &chans, 4);
 
 		      auto [tex, tex_fut] = create_texture(allocator, vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, doge_image, false);
 		      texture_of_doge = std::move(tex);

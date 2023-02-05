@@ -29,9 +29,9 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(glm)
 
-file(RELATIVE_PATH binary_to_source ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR})
+file(RELATIVE_PATH binary_to_source ${CMAKE_BINARY_DIR} ${CMAKE_SOURCE_DIR})
 add_library(vuk-example-framework)
-target_compile_definitions(vuk-example-framework PUBLIC PATH_TO_ROOT="${binary_to_source}")
+target_compile_definitions(vuk-example-framework PUBLIC VUK_EX_PATH_TO_ROOT="${binary_to_source}")
 SET(imgui_sources ../ext/imgui/imgui.cpp ../ext/imgui/imgui_draw.cpp ../ext/imgui/imgui_demo.cpp ../ext/imgui/imgui_widgets.cpp ../ext/imgui/imgui_tables.cpp ../ext/imgui/backends/imgui_impl_glfw.cpp)
 target_sources(vuk-example-framework PRIVATE imgui.cpp stbi.cpp ${imgui_sources})
 target_include_directories(vuk-example-framework SYSTEM PUBLIC ../ext/stb ../ext/imgui)

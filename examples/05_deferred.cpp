@@ -28,15 +28,15 @@ namespace {
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator) {
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
-			      pci.add_glsl(util::read_entire_file("../../examples/deferred.vert"), "deferred.vert");
-			      pci.add_glsl(util::read_entire_file("../../examples/deferred.frag"), "deferred.frag");
+			      pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/deferred.vert"), VUK_EX_PATH_TO_ROOT "examples/deferred.vert");
+			      pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/deferred.frag"), VUK_EX_PATH_TO_ROOT "examples/deferred.frag");
 			      runner.context->create_named_pipeline("cube_deferred", pci);
 		      }
 
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
-			      pci.add_glsl(util::read_entire_file("../../examples/fullscreen.vert"), "fullscreen.vert");
-			      pci.add_glsl(util::read_entire_file("../../examples/deferred_resolve.frag"), "deferred_resolve.frag");
+			      pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/fullscreen.vert"), VUK_EX_PATH_TO_ROOT "examples/fullscreen.vert");
+			      pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/deferred_resolve.frag"), VUK_EX_PATH_TO_ROOT "examples/deferred_resolve.frag");
 			      runner.context->create_named_pipeline("deferred_resolve", pci);
 		      }
 
