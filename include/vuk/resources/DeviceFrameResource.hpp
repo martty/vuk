@@ -110,7 +110,7 @@ namespace vuk {
 	///
 	/// Allocations from this resource are tied to the "multi-frame" - all allocations recycled when a DeviceMultiFrameResource is recycled.
 	/// All resources allocated are also deallocated at recycle time - it is not necessary (but not an error) to deallocate them.
-	struct DeviceMultiFrameResource : DeviceFrameResource {
+	struct DeviceMultiFrameResource final : DeviceFrameResource {
 
 		Result<void, AllocateException> allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) override;
 

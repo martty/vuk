@@ -409,14 +409,14 @@ namespace vuk {
 
 	DeviceSuperFrameResource::DeviceSuperFrameResource(Context& ctx, uint64_t frames_in_flight) :
 	    DeviceNestedResource(ctx.get_vk_resource()),
-	    direct(static_cast<DeviceVkResource*>(upstream)),
 	    frames_in_flight(frames_in_flight),
+	    direct(static_cast<DeviceVkResource*>(upstream)),
 	    impl(new DeviceSuperFrameResourceImpl(*this, frames_in_flight)) {}
 
 	DeviceSuperFrameResource::DeviceSuperFrameResource(DeviceResource& upstream, uint64_t frames_in_flight) :
 	    DeviceNestedResource(upstream),
-	    direct(dynamic_cast<DeviceVkResource*>(this->upstream)),
 	    frames_in_flight(frames_in_flight),
+	    direct(dynamic_cast<DeviceVkResource*>(this->upstream)),
 	    impl(new DeviceSuperFrameResourceImpl(*this, frames_in_flight)) {}
 
 	void DeviceSuperFrameResource::deallocate_semaphores(std::span<const VkSemaphore> src) {
