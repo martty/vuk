@@ -16,7 +16,7 @@ option(VUK_BUILD_DOCS "Build docs" OFF)
 option(VUK_LINK_TO_LOADER "Link \"statically\" to the loader" ON)
 option(VUK_USE_VULKAN_SDK "Use the Vulkan SDK to locate headers and libraries" ON)
 option(VUK_USE_SHADERC "Link in shaderc for runtime compilation of GLSL shaders" ON)
-option(VUK_USE_DXC "Link in DirectXShaderCompiler for runtime compilation of HLSL shaders" ON)
+option(VUK_USE_DXC "Link in DirectXShaderCompiler for runtime compilation of HLSL shaders" OFF)
 option(VUK_BUILD_TESTS "Build tests" OFF)
 option(VUK_FAIL_FAST "Trigger an assert upon encountering an error instead of propagating" OFF)
 
