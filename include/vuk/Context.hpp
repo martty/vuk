@@ -224,6 +224,7 @@ namespace vuk {
 		void destroy(const struct DescriptorPool& dp);
 		void destroy(const struct PipelineInfo& pi);
 		void destroy(const struct ComputePipelineInfo& pi);
+		void destroy(const struct RayTracingPipelineInfo& pi);
 		void destroy(const ShaderModule& sm);
 		void destroy(const DescriptorSetLayoutAllocInfo& ds);
 		void destroy(const VkPipelineLayout& pl);

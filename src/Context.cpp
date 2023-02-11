@@ -619,6 +619,11 @@ namespace vuk {
 		vkDestroyPipeline(device, pi.pipeline, nullptr);
 	}
 
+	void Context::destroy(const RayTracingPipelineInfo& pi) {
+		impl->device_vk_resource->deallocate_buffers(std::span{ &pi.sbt, 1 });
+		vkDestroyPipeline(device, pi.pipeline, nullptr);
+	}
+
 	void Context::destroy(const ShaderModule& sm) {
 		vkDestroyShaderModule(device, sm.shader_module, nullptr);
 	}
