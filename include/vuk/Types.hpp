@@ -763,7 +763,8 @@ namespace vuk {
 		return ShaderStageFlags(bit0) ^ bit1;
 	}
 
-	enum class PipelineStageFlagBits : VkPipelineStageFlags {
+	enum class PipelineStageFlagBits : uint32_t {
+		eNone = VK_PIPELINE_STAGE_NONE,
 		eTopOfPipe = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
 		eDrawIndirect = VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT,
 		eVertexInput = VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,

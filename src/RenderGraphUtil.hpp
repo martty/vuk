@@ -215,7 +215,7 @@ namespace vuk {
 	}
 
 	// not all domains can support all stages, this function corrects stage flags
-	inline void scope_to_domain(PipelineStageFlags& src, DomainFlags flags) {
+	inline void scope_to_domain(VkPipelineStageFlags2KHR& src, DomainFlags flags) {
 		DomainFlags remove;
 		// if no graphics in domain, remove all graphics
 		if ((flags & DomainFlagBits::eGraphicsQueue) == DomainFlags{}) {
@@ -228,10 +228,10 @@ namespace vuk {
 		}
 
 		if (remove & DomainFlagBits::eGraphicsQueue) {
-			src &= (PipelineStageFlags)~0b11111111110;
+			src &= (VkPipelineStageFlags2KHR)~0b11111111110;
 		}
 		if (remove & DomainFlagBits::eComputeQueue) {
-			src &= (PipelineStageFlags)~0b100000000000;
+			src &= (VkPipelineStageFlags2KHR)~0b100000000000;
 		}
 	}
 
@@ -305,25 +305,12 @@ namespace vuk {
 		vuk::PipelineStageFlags stage;
 	};
 
-	struct ImageBarrier {
-		Name image;
-		VkImageMemoryBarrier barrier = {};
-		vuk::PipelineStageFlags src;
-		vuk::PipelineStageFlags dst;
-	};
-
-	struct MemoryBarrier {
-		VkMemoryBarrier barrier = {};
-		vuk::PipelineStageFlags src;
-		vuk::PipelineStageFlags dst;
-	};
-
 	struct SubpassInfo {
 		SubpassInfo(arena&);
 		bool use_secondary_command_buffers;
 		std::vector<PassInfo*, short_alloc<PassInfo*, 16>> passes;
-		std::vector<ImageBarrier, short_alloc<ImageBarrier, 16>> pre_barriers, post_barriers;
-		std::vector<MemoryBarrier, short_alloc<MemoryBarrier, 16>> pre_mem_barriers, post_mem_barriers;
+		std::vector<VkImageMemoryBarrier2KHR, short_alloc<VkImageMemoryBarrier2KHR, 64>> pre_barriers, post_barriers;
+		std::vector<VkMemoryBarrier2KHR, short_alloc<VkMemoryBarrier2KHR, 64>> pre_mem_barriers, post_mem_barriers;
 	};
 
 	struct BufferInfo {
