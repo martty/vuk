@@ -156,7 +156,7 @@ vuk::Future util::ImGui_ImplVuk_Render(vuk::Allocator& allocator,
 								                if (si.rg_attachment.ivci) {
 									                auto ivci = *si.rg_attachment.ivci;
 									                auto res_img = command_buffer.get_resource_image(si.rg_attachment.attachment_name);
-									                ivci.image = *res_img;
+									                ivci.image = res_img->image;
 									                auto iv = vuk::allocate_image_view(allocator, ivci);
 									                command_buffer.bind_image(0, 0, **iv).bind_sampler(0, 0, si.rg_attachment.sci);
 								                } else {

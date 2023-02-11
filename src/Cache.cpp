@@ -1,5 +1,4 @@
 #include "Cache.hpp"
-#include "LegacyGPUAllocator.hpp"
 #include "vuk/Context.hpp"
 #include "vuk/PipelineInstance.hpp"
 

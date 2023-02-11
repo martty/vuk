@@ -5,7 +5,8 @@
 namespace vuk {
 	/// @brief Device resource that performs direct allocation from the resources from the Vulkan runtime.
 	struct DeviceVkResource final : DeviceResource {
-		DeviceVkResource(Context& ctx, LegacyGPUAllocator& alloc);
+		DeviceVkResource(Context& ctx);
+		~DeviceVkResource();
 
 		Result<void, AllocateException> allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) override;
 
@@ -50,7 +51,8 @@ namespace vuk {
 
 		void deallocate_persistent_descriptor_sets(std::span<const PersistentDescriptorSet> src) override;
 
-		Result<void, AllocateException> allocate_descriptor_sets_with_value(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException>
+		allocate_descriptor_sets_with_value(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) override;
 
 		Result<void, AllocateException>
 		allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const DescriptorSetLayoutAllocInfo> cis, SourceLocationAtFrame loc) override;
@@ -77,8 +79,8 @@ namespace vuk {
 		void deallocate_timeline_semaphores(std::span<const TimelineSemaphore> src) override;
 
 		Result<void, AllocateException> allocate_acceleration_structures(std::span<VkAccelerationStructureKHR> dst,
-		                                                                         std::span<const VkAccelerationStructureCreateInfoKHR> cis,
-		                                                                         SourceLocationAtFrame loc) override;
+		                                                                 std::span<const VkAccelerationStructureCreateInfoKHR> cis,
+		                                                                 SourceLocationAtFrame loc) override;
 
 		void deallocate_acceleration_structures(std::span<const VkAccelerationStructureKHR> src) override;
 
@@ -89,7 +91,9 @@ namespace vuk {
 		}
 
 		Context* ctx;
-		LegacyGPUAllocator* legacy_gpu_allocator;
 		VkDevice device;
+
+	private:
+		struct DeviceVkResourceImpl* impl;
 	};
 } // namespace vuk

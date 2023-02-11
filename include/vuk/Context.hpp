@@ -142,8 +142,6 @@ namespace vuk {
 
 		Texture allocate_texture(Allocator& allocator, ImageCreateInfo ici);
 
-		size_t get_allocation_size(Buffer);
-
 		/// @brief Add a swapchain to be managed by the Context
 		/// @return Reference to the new swapchain that can be used during presentation
 		SwapchainRef add_swapchain(Swapchain);
@@ -169,8 +167,6 @@ namespace vuk {
 		Result<void> submit_transfer(std::span<VkSubmitInfo>, VkFence);
 		Result<void> submit_graphics(std::span<VkSubmitInfo2KHR>);
 		Result<void> submit_transfer(std::span<VkSubmitInfo2KHR>);
-
-		LegacyGPUAllocator& get_legacy_gpu_allocator();
 
 		// Query functionality
 
@@ -225,8 +221,6 @@ namespace vuk {
 
 		// internal functions
 		void destroy(const struct RGImage& image);
-		void destroy(const struct LegacyPoolAllocator& v);
-		void destroy(const struct LegacyLinearAllocator& v);
 		void destroy(const struct DescriptorPool& dp);
 		void destroy(const struct PipelineInfo& pi);
 		void destroy(const struct ComputePipelineInfo& pi);

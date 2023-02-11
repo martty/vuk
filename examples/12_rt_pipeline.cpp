@@ -17,7 +17,7 @@
 namespace {
 	float angle = 0.f;
 	auto box = util::generate_cube();
-	vuk::Buffer verts, inds;
+	vuk::Unique<vuk::Buffer> verts, inds;
 	vuk::Unique<VkAccelerationStructureKHR> tlas, blas;
 	vuk::Unique<vuk::Buffer> tlas_buf, blas_buf, tlas_scratch_buffer;
 
@@ -45,9 +45,9 @@ namespace {
 
 		      // We set up the cube data, same as in example 02_cube
 		      auto [vert_buf, vert_fut] = create_buffer(allocator, vuk::MemoryUsage::eGPUonly, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.first));
-		      verts = *vert_buf;
+		      verts = std::move(vert_buf);
 		      auto [ind_buf, ind_fut] = create_buffer(allocator, vuk::MemoryUsage::eGPUonly, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.second));
-		      inds = *ind_buf;
+		      inds = std::move(ind_buf);
 
 		      // BLAS building
 		      // We build a BLAS out of our cube.
@@ -56,11 +56,11 @@ namespace {
 		      // Describe the mesh
 		      VkAccelerationStructureGeometryTrianglesDataKHR triangles{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR };
 		      triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT; // vec3 vertex position data.
-		      triangles.vertexData.deviceAddress = verts.device_address;
+		      triangles.vertexData.deviceAddress = verts->device_address;
 		      triangles.vertexStride = sizeof(util::Vertex);
 		      // Describe index data (32-bit unsigned int)
 		      triangles.indexType = VK_INDEX_TYPE_UINT32;
-		      triangles.indexData.deviceAddress = inds.device_address;
+		      triangles.indexData.deviceAddress = inds->device_address;
 		      // Indicate identity transform by setting transformData to null device pointer.
 		      triangles.transformData = {};
 		      triangles.maxVertex = (uint32_t)box.first.size();
@@ -304,6 +304,8 @@ namespace {
 		// Perform cleanup for the example
 		.cleanup =
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator) {
+		      verts.reset();
+		      inds.reset();
 		      tlas.reset();
 		      tlas_buf.reset();
 		      blas.reset();

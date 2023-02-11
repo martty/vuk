@@ -20,7 +20,7 @@
 namespace {
 	float angle = 0.f;
 	auto box = util::generate_cube();
-	vuk::Buffer verts, inds;
+	vuk::Unique<vuk::Buffer> verts, inds;
 
 	vuk::Example x{
 		.name = "05_deferred",
@@ -42,9 +42,9 @@ namespace {
 
 		      // We set up the cube data, same as in example 02_cube
 		      auto [vert_buf, vert_fut] = create_buffer(allocator, vuk::MemoryUsage::eGPUonly, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.first));
-		      verts = *vert_buf;
+		      verts = std::move(vert_buf);
 		      auto [ind_buf, ind_fut] = create_buffer(allocator, vuk::MemoryUsage::eGPUonly, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.second));
-		      inds = *ind_buf;
+		      inds = std::move(ind_buf);
 		      // For the example, we just ask these that these uploads complete before moving on to rendering
 		      // In an engine, you would integrate these uploads into some explicit system
 		      runner.enqueue_setup(std::move(vert_fut));
@@ -90,13 +90,13 @@ namespace {
 			                                         {}) // If you want to use different blending state per attachment, you must enable the independentBlend feature
 			                        .set_color_blend("05_color", {})
 			                        .bind_vertex_buffer(0,
-			                                            verts,
+			                                            *verts,
 			                                            0,
 			                                            vuk::Packed{ vuk::Format::eR32G32B32Sfloat,
 			                                                         vuk::Format::eR32G32B32Sfloat,
 			                                                         vuk::Ignore{ offsetof(util::Vertex, uv_coordinates) - offsetof(util::Vertex, tangent) },
 			                                                         vuk::Format::eR32G32Sfloat })
-			                        .bind_index_buffer(inds, vuk::IndexType::eUint32)
+			                        .bind_index_buffer(*inds, vuk::IndexType::eUint32)
 			                        .bind_graphics_pipeline("cube_deferred")
 			                        .bind_buffer(0, 0, uboVP);
 			                    glm::mat4* model = command_buffer.map_scratch_buffer<glm::mat4>(0, 1);
@@ -151,6 +151,11 @@ namespace {
 		      rg.inference_rule("05_position", vuk::same_extent_as("05_deferred"));
 
 		      return vuk::Future{ std::make_unique<vuk::RenderGraph>(std::move(rg)), "05_deferred_final" };
+		    },
+		.cleanup =
+		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
+		      verts.reset();
+		      inds.reset();
 		    }
 	};
 

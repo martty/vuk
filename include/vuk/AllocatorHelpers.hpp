@@ -164,7 +164,7 @@ namespace vuk {
 		ImageViewCreateInfo ivci;
 		assert(attachment.image);
 		ivci.flags = attachment.image_view_flags;
-		ivci.image = attachment.image;
+		ivci.image = attachment.image.image;
 		ivci.viewType = attachment.view_type;
 		ivci.format = vuk::Format(attachment.format);
 		ivci.components = attachment.components;

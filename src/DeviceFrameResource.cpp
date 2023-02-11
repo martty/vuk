@@ -1,12 +1,13 @@
 #include "vuk/resources/DeviceFrameResource.hpp"
-#include "../src/LegacyGPUAllocator.hpp"
 #include "Cache.hpp"
+#include "LinearBufferAllocator.hpp"
 #include "RenderPass.hpp"
 #include "vuk/Context.hpp"
 #include "vuk/Descriptor.hpp"
 #include "vuk/Query.hpp"
 
 #include <atomic>
+#include <mutex>
 #include <plf_colony.h>
 
 namespace vuk {
@@ -102,19 +103,16 @@ namespace vuk {
 		std::mutex swapchain_mutex;
 		std::vector<VkSwapchainKHR> swapchains;
 
-		LegacyLinearAllocator linear_cpu_only;
-		LegacyLinearAllocator linear_cpu_gpu;
-		LegacyLinearAllocator linear_gpu_cpu;
-		LegacyLinearAllocator linear_gpu_only;
+		LinearBufferAllocator linear_cpu_only;
+		LinearBufferAllocator linear_cpu_gpu;
+		LinearBufferAllocator linear_gpu_cpu;
+		LinearBufferAllocator linear_gpu_only;
 
-		DeviceFrameResourceImpl(VkDevice device, DeviceSuperFrameResource& upstream) {
-			if (upstream.direct) {
-				linear_cpu_only = upstream.direct->legacy_gpu_allocator->allocate_linear(vuk::MemoryUsage::eCPUonly, LegacyGPUAllocator::all_usage);
-				linear_cpu_gpu = upstream.direct->legacy_gpu_allocator->allocate_linear(vuk::MemoryUsage::eCPUtoGPU, LegacyGPUAllocator::all_usage);
-				linear_gpu_cpu = upstream.direct->legacy_gpu_allocator->allocate_linear(vuk::MemoryUsage::eGPUtoCPU, LegacyGPUAllocator::all_usage);
-				linear_gpu_only = upstream.direct->legacy_gpu_allocator->allocate_linear(vuk::MemoryUsage::eGPUonly, LegacyGPUAllocator::all_usage);
-			}
-		}
+		DeviceFrameResourceImpl(VkDevice device, DeviceSuperFrameResource& upstream) :
+		    linear_cpu_only(upstream, vuk::MemoryUsage::eCPUonly, all_buffer_usage_flags),
+		    linear_cpu_gpu(upstream, vuk::MemoryUsage::eCPUtoGPU, all_buffer_usage_flags),
+		    linear_gpu_cpu(upstream, vuk::MemoryUsage::eGPUtoCPU, all_buffer_usage_flags),
+		    linear_gpu_only(upstream, vuk::MemoryUsage::eGPUonly, all_buffer_usage_flags) {}
 	};
 
 	DeviceFrameResource::DeviceFrameResource(VkDevice device, DeviceSuperFrameResource& pstream) :
@@ -168,32 +166,26 @@ namespace vuk {
 	Result<void, AllocateException>
 	DeviceFrameResource::allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
-		auto& sf = *static_cast<DeviceSuperFrameResource*>(upstream);
-		if (sf.direct) {
-			auto& legacy = *sf.direct->legacy_gpu_allocator;
-
-			// TODO: legacy allocator can't signal errors
-			// TODO: legacy linear allocators don't nest
-			for (uint64_t i = 0; i < dst.size(); i++) {
-				auto& ci = cis[i];
-				if (ci.mem_usage == MemoryUsage::eGPUonly) {
-					dst[i] = Buffer{ legacy.allocate_buffer(impl->linear_gpu_only, ci.size, ci.alignment, false) };
-				} else if (ci.mem_usage == MemoryUsage::eCPUonly) {
-					dst[i] = Buffer{ legacy.allocate_buffer(impl->linear_cpu_only, ci.size, ci.alignment, true) };
-				} else if (ci.mem_usage == MemoryUsage::eCPUtoGPU) {
-					dst[i] = Buffer{ legacy.allocate_buffer(impl->linear_cpu_gpu, ci.size, ci.alignment, true) };
-				} else if (ci.mem_usage == MemoryUsage::eGPUtoCPU) {
-					dst[i] = Buffer{ legacy.allocate_buffer(impl->linear_gpu_cpu, ci.size, ci.alignment, true) };
-				}
+		
+		for (uint64_t i = 0; i < dst.size(); i++) {
+			auto& ci = cis[i];
+			Result<Buffer, AllocateException> result{ expected_value };
+			if (ci.mem_usage == MemoryUsage::eGPUonly) {
+				result = impl->linear_gpu_only.allocate_buffer(ci.size, ci.alignment, loc);
+			} else if (ci.mem_usage == MemoryUsage::eCPUonly) {
+				result = impl->linear_cpu_only.allocate_buffer(ci.size, ci.alignment, loc);
+			} else if (ci.mem_usage == MemoryUsage::eCPUtoGPU) {
+				result = impl->linear_cpu_gpu.allocate_buffer(ci.size, ci.alignment, loc);
+			} else if (ci.mem_usage == MemoryUsage::eGPUtoCPU) {
+				result = impl->linear_gpu_cpu.allocate_buffer(ci.size, ci.alignment, loc);
 			}
-			return { expected_value };
-		} else {
-			VUK_DO_OR_RETURN(sf.allocate_buffers(dst, cis, loc));
-			std::unique_lock _(impl->buf_mutex);
-			auto& vec = impl->buffers;
-			vec.insert(vec.end(), dst.begin(), dst.end());
-			return { expected_value };
+			if (!result) {
+				deallocate_buffers({ dst.data(), (uint64_t)i });
+				return result;
+			}
+			dst[i] = result.value();
 		}
+		return { expected_value };
 	}
 
 	void DeviceFrameResource::deallocate_buffers(std::span<const Buffer> src) {} // no-op, linear
@@ -664,17 +656,16 @@ namespace vuk {
 		f.cmdpools_to_free.clear();
 		f.ds_pools.clear();
 		if (direct) {
-			auto& legacy = direct->legacy_gpu_allocator;
 			if (frame.construction_frame % 16 == 0) {
-				legacy->trim_pool(f.linear_cpu_only);
-				legacy->trim_pool(f.linear_cpu_gpu);
-				legacy->trim_pool(f.linear_gpu_cpu);
-				legacy->trim_pool(f.linear_gpu_only);
+				f.linear_cpu_only.trim();
+				f.linear_cpu_gpu.trim();
+				f.linear_gpu_cpu.trim();
+				f.linear_gpu_only.trim();
 			}
-			legacy->reset_pool(f.linear_cpu_only);
-			legacy->reset_pool(f.linear_cpu_gpu);
-			legacy->reset_pool(f.linear_gpu_cpu);
-			legacy->reset_pool(f.linear_gpu_only);
+			f.linear_cpu_only.reset();
+			f.linear_cpu_gpu.reset();
+			f.linear_gpu_cpu.reset();
+			f.linear_gpu_only.reset();
 		}
 		f.framebuffers.clear();
 		f.images.clear();
@@ -701,13 +692,17 @@ namespace vuk {
 			auto lframe = (impl->frame_counter + i) % frames_in_flight;
 			auto& f = impl->frames[lframe];
 			f.wait();
+			// free the resources manually, because we are destroying the individual FAs
+			f.impl->linear_cpu_gpu.free();
+			f.impl->linear_gpu_cpu.free();
+			f.impl->linear_cpu_only.free();
+			f.impl->linear_gpu_only.free();
+		}
+
+		for (auto i = 0; i < frames_in_flight; i++) {
+			auto lframe = (impl->frame_counter + i) % frames_in_flight;
+			auto& f = impl->frames[lframe];
 			deallocate_frame(f);
-			if (direct) {
-				direct->legacy_gpu_allocator->destroy(f.impl->linear_cpu_only);
-				direct->legacy_gpu_allocator->destroy(f.impl->linear_cpu_gpu);
-				direct->legacy_gpu_allocator->destroy(f.impl->linear_gpu_cpu);
-				direct->legacy_gpu_allocator->destroy(f.impl->linear_gpu_only);
-			}
 			f.DeviceFrameResource::~DeviceFrameResource();
 		}
 		for (uint32_t i = 0; i < (uint32_t)impl->command_pools.size(); i++) {

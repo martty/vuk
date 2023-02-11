@@ -78,7 +78,7 @@ namespace util {
 		auto views = *vkswapchain->get_image_views();
 
 		for (auto& i : images) {
-			sw.images.push_back(i);
+			sw.images.push_back(vuk::Image{ i, nullptr });
 		}
 		for (auto& i : views) {
 			sw.image_views.emplace_back();

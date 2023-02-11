@@ -94,7 +94,7 @@ target_sources(vuk PRIVATE
 	src/Format.cpp
 	src/Name.cpp 
 	src/DeviceFrameResource.cpp
-	src/DeviceVkResource.cpp)
+	src/DeviceVkResource.cpp "src/LinearBufferAllocator.cpp")
 
 target_include_directories(vuk PUBLIC ext/plf_colony)
 if (NOT TARGET VulkanMemoryAllocator)

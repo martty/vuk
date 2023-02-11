@@ -108,7 +108,6 @@ namespace vuk {
 		/// @brief Create new Allocator that wraps a DeviceResource
 		/// @param device_resource The DeviceResource to allocate from
 		explicit Allocator(DeviceResource& device_resource) : ctx(&device_resource.get_context()), device_resource(&device_resource) {}
-		explicit Allocator(DeviceVkResource& device_resource) = delete; // this resource is unsuitable for direct allocation
 
 		/// @brief Allocate semaphores from this Allocator
 		/// @param dst Destination span to place allocated semaphores into

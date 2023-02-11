@@ -13,7 +13,6 @@
 
 #define FWD(x)               (static_cast<decltype(x)&&>(x))
 #define MOV(x)               (static_cast<std::remove_reference_t<decltype(x)>&&>(x))
-#define CONSTRUCT_AT(p, ...) ::new (const_cast<void*>(static_cast<const volatile void*>(p))) decltype (*p)(__VA_ARGS__)
 
 namespace vuk {
 	namespace detail {
@@ -71,7 +70,7 @@ namespace vuk {
 				assert(!other._holds_value);
 			} else {
 				if (other._holds_value) {
-					CONSTRUCT_AT(&_value, MOV(other._value));
+					std::construct_at(&_value, MOV(other._value));
 				}
 			}
 
@@ -96,14 +95,14 @@ namespace vuk {
 					_value = MOV(other._value);
 				} else {
 					detail::destroy_at(&_value);
-					CONSTRUCT_AT(&_error, MOV(other._error));
+					std::construct_at(&_error, MOV(other._error));
 					other._error = nullptr;
 					_holds_value = false;
 				}
 			} else {
 				delete _error;
 				if (other._holds_value) {
-					CONSTRUCT_AT(&_value, MOV(other._value));
+					std::construct_at(&_value, MOV(other._value));
 					_holds_value = true;
 				} else {
 					_error = MOV(other._error);
@@ -200,15 +199,15 @@ namespace vuk {
 				if (rhs._holds_value) {
 					swap(lhs._value, rhs._value);
 				} else {
-					CONSTRUCT_AT(&rhs._value, MOV(lhs._value));
+					std::construct_at(&rhs._value, MOV(lhs._value));
 					detail::destroy_at(&lhs._value);
-					CONSTRUCT_AT(&lhs._error, MOV(rhs._error));
+					std::construct_at(&lhs._error, MOV(rhs._error));
 					swap(lhs._holds_value, rhs._holds_value);
 				}
 			} else {
 				if (rhs._holds_value) {
-					CONSTRUCT_AT(&rhs._error, MOV(lhs._error));
-					CONSTRUCT_AT(&lhs._value, MOV(rhs._value));
+					std::construct_at(&rhs._error, MOV(lhs._error));
+					std::construct_at(&lhs._value, MOV(rhs._value));
 					detail::destroy_at(&rhs._value);
 					swap(lhs._holds_value, rhs._holds_value);
 				} else {
@@ -327,13 +326,13 @@ namespace vuk {
 			using std::swap;
 			if (lhs._holds_value) {
 				if (!rhs._holds_value) {
-					CONSTRUCT_AT(&lhs._error, MOV(rhs._error));
+					std::construct_at(&lhs._error, MOV(rhs._error));
 					delete rhs._error;
 					swap(lhs._holds_value, rhs._holds_value);
 				}
 			} else {
 				if (rhs._holds_value) {
-					CONSTRUCT_AT(&rhs._error, MOV(lhs._error));
+					std::construct_at(&rhs._error, MOV(lhs._error));
 					swap(lhs._holds_value, rhs._holds_value);
 				}
 			}
@@ -352,6 +351,5 @@ namespace vuk {
 	};
 } // namespace vuk
 
-#undef CONSTRUCT_AT
 #undef FWD
 #undef MOV

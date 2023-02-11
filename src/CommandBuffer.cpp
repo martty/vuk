@@ -704,9 +704,9 @@ namespace vuk {
 		isr.levelCount = attachment.level_count;
 
 		if (aspect == ImageAspectFlagBits::eColor) {
-			vkCmdClearColorImage(command_buffer, attachment.image, (VkImageLayout)layout, &c.c.color, 1, &isr);
+			vkCmdClearColorImage(command_buffer, attachment.image.image, (VkImageLayout)layout, &c.c.color, 1, &isr);
 		} else if (aspect & (ImageAspectFlagBits::eDepth | ImageAspectFlagBits::eStencil)) {
-			vkCmdClearDepthStencilImage(command_buffer, attachment.image, (VkImageLayout)layout, &c.c.depthStencil, 1, &isr);
+			vkCmdClearDepthStencilImage(command_buffer, attachment.image.image, (VkImageLayout)layout, &c.c.depthStencil, 1, &isr);
 		}
 
 		return *this;
@@ -760,7 +760,7 @@ namespace vuk {
 		auto src_layout = *res_gl_src ? ImageLayout::eGeneral : ImageLayout::eTransferSrcOptimal;
 		auto dst_layout = *res_gl_dst ? ImageLayout::eGeneral : ImageLayout::eTransferDstOptimal;
 
-		vkCmdResolveImage(command_buffer, src_image, (VkImageLayout)src_layout, dst_image, (VkImageLayout)dst_layout, 1, &ir);
+		vkCmdResolveImage(command_buffer, src_image.image, (VkImageLayout)src_layout, dst_image.image, (VkImageLayout)dst_layout, 1, &ir);
 
 		return *this;
 	}
@@ -795,7 +795,8 @@ namespace vuk {
 		auto src_layout = *res_gl_src ? ImageLayout::eGeneral : ImageLayout::eTransferSrcOptimal;
 		auto dst_layout = *res_gl_dst ? ImageLayout::eGeneral : ImageLayout::eTransferDstOptimal;
 
-		vkCmdBlitImage(command_buffer, src_image, (VkImageLayout)src_layout, dst_image, (VkImageLayout)dst_layout, 1, (VkImageBlit*)&region, (VkFilter)filter);
+		vkCmdBlitImage(
+		    command_buffer, src_image.image, (VkImageLayout)src_layout, dst_image.image, (VkImageLayout)dst_layout, 1, (VkImageBlit*)&region, (VkFilter)filter);
 
 		return *this;
 	}
@@ -824,7 +825,7 @@ namespace vuk {
 			return *this;
 		}
 		auto dst_layout = *res_gl ? ImageLayout::eGeneral : ImageLayout::eTransferDstOptimal;
-		vkCmdCopyBufferToImage(command_buffer, src_bbuf.buffer, dst_image, (VkImageLayout)dst_layout, 1, (VkBufferImageCopy*)&bic);
+		vkCmdCopyBufferToImage(command_buffer, src_bbuf.buffer, dst_image.image, (VkImageLayout)dst_layout, 1, (VkBufferImageCopy*)&bic);
 
 		return *this;
 	}
@@ -853,7 +854,7 @@ namespace vuk {
 			return *this;
 		}
 		auto src_layout = *res_gl ? ImageLayout::eGeneral : ImageLayout::eTransferSrcOptimal;
-		vkCmdCopyImageToBuffer(command_buffer, src_image, (VkImageLayout)src_layout, dst_bbuf.buffer, 1, (VkBufferImageCopy*)&bic);
+		vkCmdCopyImageToBuffer(command_buffer, src_image.image, (VkImageLayout)src_layout, dst_bbuf.buffer, 1, (VkBufferImageCopy*)&bic);
 
 		return *this;
 	}
@@ -961,7 +962,7 @@ namespace vuk {
 		isr.baseMipLevel = mip_level;
 		isr.levelCount = level_count;
 		VkImageMemoryBarrier imb{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
-		imb.image = src_image;
+		imb.image = src_image.image;
 		auto src_use = to_use(src_acc, DomainFlagBits::eAny);
 		auto dst_use = to_use(dst_acc, DomainFlagBits::eAny);
 		imb.srcAccessMask = (VkAccessFlags)src_use.access;

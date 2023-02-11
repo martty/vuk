@@ -18,7 +18,7 @@ namespace {
 	float angle = 0.f;
 	// Generate vertices and indices for the cube
 	auto box = util::generate_cube();
-	vuk::Buffer verts, inds;
+	vuk::Unique<vuk::Buffer> verts, inds;
 
 	vuk::Example x{
 		.name = "02_cube",
@@ -27,7 +27,8 @@ namespace {
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator) {
 		      vuk::PipelineBaseCreateInfo pci;
 		      pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/ubo_test.vert"), VUK_EX_PATH_TO_ROOT "examples/ubo_test.vert");
-		      pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/triangle_depthshaded.frag"), VUK_EX_PATH_TO_ROOT "examples/triangle_depthshaded.frag");
+		      pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/triangle_depthshaded.frag"),
+		                   VUK_EX_PATH_TO_ROOT "examples/triangle_depthshaded.frag");
 		      allocator.get_context().create_named_pipeline("cube", pci);
 
 		      // Request a GPU-only buffer allocation with specific data
@@ -35,9 +36,9 @@ namespace {
 		      // And enqueues a transfer operation on the graphics queue, which will copy the given data
 		      // Finally it returns a vuk::Buffer, which holds the info for the allocation and a Future that represents the upload being completed
 		      auto [vert_buf, vert_fut] = create_buffer(allocator, vuk::MemoryUsage::eGPUonly, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.first));
-		      verts = *vert_buf;
+		      verts = std::move(vert_buf);
 		      auto [ind_buf, ind_fut] = create_buffer(allocator, vuk::MemoryUsage::eGPUonly, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.second));
-		      inds = *ind_buf;
+		      inds = std::move(ind_buf);
 		      // For the example, we just ask these that these uploads complete before moving on to rendering
 		      // In an engine, you would integrate these uploads into some explicit system
 		      runner.enqueue_setup(std::move(vert_fut));
@@ -83,9 +84,9 @@ namespace {
 			                // In this case, we will bind vuk::Format::eR32G32B32Sfloat to the first location (0)
 			                // And use the remaining vuk::Ignore-d bytes to establish the stride of the buffer
 			                .bind_vertex_buffer(
-			                    0, verts, 0, vuk::Packed{ vuk::Format::eR32G32B32Sfloat, vuk::Ignore{ sizeof(util::Vertex) - sizeof(util::Vertex::position) } })
+			                    0, *verts, 0, vuk::Packed{ vuk::Format::eR32G32B32Sfloat, vuk::Ignore{ sizeof(util::Vertex) - sizeof(util::Vertex::position) } })
 			                // Bind the index buffer
-			                .bind_index_buffer(inds, vuk::IndexType::eUint32)
+			                .bind_index_buffer(*inds, vuk::IndexType::eUint32)
 			                .bind_graphics_pipeline("cube")
 			                // Bind the uniform buffer we allocated to (set = 0, binding = 0)
 			                .bind_buffer(0, 0, uboVP)
@@ -117,6 +118,11 @@ namespace {
 		      angle += 20.f * ImGui::GetIO().DeltaTime;
 
 		      return vuk::Future{ std::make_unique<vuk::RenderGraph>(std::move(rg)), "02_cube_final" };
+		    },
+		.cleanup =
+		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
+		      verts.reset();
+		      inds.reset();
 		    }
 	};
 

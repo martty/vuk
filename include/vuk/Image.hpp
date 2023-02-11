@@ -6,7 +6,17 @@
 #include "Types.hpp"
 
 namespace vuk {
-	using Image = VkImage;
+	struct Image {
+		VkImage image = VK_NULL_HANDLE;
+		void* allocation = nullptr;
+
+		constexpr explicit operator bool() const noexcept {
+			return image != VK_NULL_HANDLE;
+		}
+
+		constexpr bool operator==(const Image&) const = default;
+	};
+
 	using Sampler = Handle<VkSampler>;
 
 	enum class ImageTiling {
@@ -276,7 +286,7 @@ namespace vuk {
 		VkStructureType sType = structureType;
 		const void* pNext = {};
 		ImageViewCreateFlags flags = {};
-		Image image = {};
+		VkImage image = {};
 		ImageViewType viewType = ImageViewType::e2D;
 		Format format = Format::eUndefined;
 		ComponentMapping components = {};
@@ -316,7 +326,7 @@ namespace vuk {
 		uint32_t levelCount : 16 = 1;
 		uint32_t baseArrayLayer = 0; // 8 bytes
 		uint32_t layerCount = 1;
-		Image image = {};                   // 16 bytes
+		VkImage image = {};                   // 16 bytes
 		Format format = Format::eUndefined; // 32 bytes in total
 
 		CompressedImageViewCreateInfo(ImageViewCreateInfo ivci) {

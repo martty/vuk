@@ -16,7 +16,7 @@
 namespace {
 	float angle = 0.f;
 	auto box = util::generate_cube();
-	vuk::Buffer verts, inds;
+	vuk::Unique<vuk::Buffer> verts, inds;
 	std::optional<vuk::Texture> texture_of_doge;
 
 	vuk::Example x{
@@ -43,9 +43,9 @@ namespace {
 
 		      // We set up the cube data, same as in example 02_cube
 		      auto [vert_buf, vert_fut] = create_buffer(allocator, vuk::MemoryUsage::eGPUonly, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.first));
-		      verts = *vert_buf;
+		      verts = std::move(vert_buf);
 		      auto [ind_buf, ind_fut] = create_buffer(allocator, vuk::MemoryUsage::eGPUonly, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.second));
-		      inds = *ind_buf;
+		      inds = std::move(ind_buf);
 		      // For the example, we just ask these that these uploads complete before moving on to rendering
 		      // In an engine, you would integrate these uploads into some explicit system
 		      runner.enqueue_setup(std::move(vert_fut));
@@ -81,12 +81,12 @@ namespace {
 			                        })
 			                        .broadcast_color_blend({}) // Set the default color blend state
 			                        .bind_vertex_buffer(0,
-			                                            verts,
+			                                            *verts,
 			                                            0,
 			                                            vuk::Packed{ vuk::Format::eR32G32B32Sfloat,
 			                                                         vuk::Ignore{ offsetof(util::Vertex, uv_coordinates) - sizeof(util::Vertex::position) },
 			                                                         vuk::Format::eR32G32Sfloat })
-			                        .bind_index_buffer(inds, vuk::IndexType::eUint32)
+			                        .bind_index_buffer(*inds, vuk::IndexType::eUint32)
 			                        .bind_image(0, 2, *texture_of_doge->view)
 			                        .bind_sampler(0, 2, {})
 			                        .bind_graphics_pipeline("textured_cube")
@@ -112,6 +112,8 @@ namespace {
 		    },
 		.cleanup =
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
+		      verts.reset();
+		      inds.reset();
 		      texture_of_doge.reset();
 		    }
 

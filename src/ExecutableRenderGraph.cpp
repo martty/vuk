@@ -73,7 +73,7 @@ namespace vuk {
 	}
 
 	[[nodiscard]] bool resolve_image_barrier(const Context& ctx, ImageBarrier& dep, const AttachmentInfo& bound, vuk::DomainFlagBits current_domain) {
-		dep.barrier.image = bound.attachment.image;
+		dep.barrier.image = bound.attachment.image.image;
 		// turn base_{layer, level} into absolute values wrt the image
 		dep.barrier.subresourceRange.baseArrayLayer += bound.attachment.base_layer;
 		dep.barrier.subresourceRange.baseMipLevel += bound.attachment.base_level;
@@ -192,7 +192,7 @@ namespace vuk {
 
 			for (auto dep : rpass.pre_barriers) {
 				auto& bound = impl->bound_attachments[dep.image];
-				dep.barrier.image = bound.attachment.image;
+				dep.barrier.image = bound.attachment.image.image;
 				if (!resolve_image_barrier(ctx, dep, bound, domain)) {
 					continue;
 				}
@@ -387,7 +387,7 @@ namespace vuk {
 					}
 				}
 				// if there is no image, then we will infer the base mip and layer to be 0
-				if (bound.attachment.image == VK_NULL_HANDLE) {
+				if (!bound.attachment.image) {
 					bound.attachment.base_layer = 0;
 					bound.attachment.base_level = 0;
 				}
@@ -705,7 +705,7 @@ namespace vuk {
 
 		// create non-attachment images
 		for (auto& [name, bound] : impl->bound_attachments) {
-			if (bound.attachment.image == Image{}) {
+			if (!bound.attachment.image) {
 				if (bound.rp_uses.size() > 0) { // its an FB attachment
 					create_attachment(ctx, bound);
 				} else {
@@ -715,7 +715,7 @@ namespace vuk {
 						return img;
 					}
 					bound.attachment.image = **img;
-					ctx.set_name(bound.attachment.image, bound.name);
+					ctx.set_name(bound.attachment.image.image, bound.name);
 				}
 			}
 		}

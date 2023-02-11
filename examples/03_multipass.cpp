@@ -15,7 +15,7 @@
 namespace {
 	float angle = 0.f;
 	auto box = util::generate_cube();
-	vuk::Buffer verts, inds;
+	vuk::Unique<vuk::Buffer> verts, inds;
 
 	vuk::Example x{
 		.name = "03_multipass",
@@ -37,9 +37,9 @@ namespace {
 
 		      // We set up the cube data, same as in example 02_cube
 		      auto [vert_buf, vert_fut] = create_buffer(allocator, vuk::MemoryUsage::eGPUonly, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.first));
-		      verts = *vert_buf;
+		      verts = std::move(vert_buf);
 		      auto [ind_buf, ind_fut] = create_buffer(allocator, vuk::MemoryUsage::eGPUonly, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.second));
-		      inds = *ind_buf;
+		      inds = std::move(ind_buf);
 		      // For the example, we just ask these that these uploads complete before moving on to rendering
 		      // In an engine, you would integrate these uploads into some explicit system
 		      runner.enqueue_setup(std::move(vert_fut));
@@ -100,10 +100,10 @@ namespace {
 			                .set_depth_stencil(vuk::PipelineDepthStencilStateCreateInfo{
 			                    .depthTestEnable = true, .depthWriteEnable = true, .depthCompareOp = vuk::CompareOp::eLessOrEqual })
 			                .broadcast_color_blend({}) // Set the default color blend state
-			                .bind_index_buffer(inds, vuk::IndexType::eUint32)
+			                .bind_index_buffer(*inds, vuk::IndexType::eUint32)
 			                .bind_graphics_pipeline("cube")
 			                .bind_vertex_buffer(
-			                    0, verts, 0, vuk::Packed{ vuk::Format::eR32G32B32Sfloat, vuk::Ignore{ sizeof(util::Vertex) - sizeof(util::Vertex::position) } })
+			                    0, *verts, 0, vuk::Packed{ vuk::Format::eR32G32B32Sfloat, vuk::Ignore{ sizeof(util::Vertex) - sizeof(util::Vertex::position) } })
 			                .bind_buffer(0, 0, uboVP);
 			            glm::mat4* model = command_buffer.map_scratch_buffer<glm::mat4>(0, 1);
 			            *model = static_cast<glm::mat4>(glm::angleAxis(glm::radians(angle), glm::vec3(0.f, 1.f, 0.f)));
@@ -120,6 +120,11 @@ namespace {
 		      rg.attach_and_clear_image("03_depth", { .format = vuk::Format::eD32Sfloat }, vuk::ClearDepthStencil{ 1.0f, 0 });
 
 		      return vuk::Future{ std::make_unique<vuk::RenderGraph>(std::move(rg)), "03_multipass_final" };
+		    },
+		.cleanup =
+		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
+		      verts.reset();
+		      inds.reset();
 		    }
 	};
 

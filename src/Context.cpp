@@ -61,13 +61,13 @@ namespace vuk {
 
 		{
 			TimelineSemaphore ts;
-			impl->device_vk_resource.allocate_timeline_semaphores(std::span{ &ts, 1 }, {});
+			impl->device_vk_resource->allocate_timeline_semaphores(std::span{ &ts, 1 }, {});
 			dedicated_graphics_queue.emplace(queueSubmit2KHR, params.graphics_queue, params.graphics_queue_family_index, ts);
 			graphics_queue = &dedicated_graphics_queue.value();
 		}
 		if (dedicated_compute_queue_) {
 			TimelineSemaphore ts;
-			impl->device_vk_resource.allocate_timeline_semaphores(std::span{ &ts, 1 }, {});
+			impl->device_vk_resource->allocate_timeline_semaphores(std::span{ &ts, 1 }, {});
 			dedicated_compute_queue.emplace(queueSubmit2KHR, params.compute_queue, params.compute_queue_family_index, ts);
 			compute_queue = &dedicated_compute_queue.value();
 		} else {
@@ -75,7 +75,7 @@ namespace vuk {
 		}
 		if (dedicated_transfer_queue_) {
 			TimelineSemaphore ts;
-			impl->device_vk_resource.allocate_timeline_semaphores(std::span{ &ts, 1 }, {});
+			impl->device_vk_resource->allocate_timeline_semaphores(std::span{ &ts, 1 }, {});
 			dedicated_transfer_queue.emplace(queueSubmit2KHR, params.transfer_queue, params.transfer_queue_family_index, ts);
 			transfer_queue = &dedicated_transfer_queue.value();
 		} else {
@@ -120,7 +120,7 @@ namespace vuk {
 		impl->shader_modules.allocator = this;
 		impl->descriptor_set_layouts.allocator = this;
 		impl->pipeline_layouts.allocator = this;
-		impl->device_vk_resource.ctx = this;
+		impl->device_vk_resource->ctx = this;
 	}
 
 	Context& Context::operator=(Context&& o) noexcept {
@@ -156,7 +156,7 @@ namespace vuk {
 		impl->shader_modules.allocator = this;
 		impl->descriptor_set_layouts.allocator = this;
 		impl->pipeline_layouts.allocator = this;
-		impl->device_vk_resource.ctx = this;
+		impl->device_vk_resource->ctx = this;
 
 		return *this;
 	}
@@ -168,8 +168,8 @@ namespace vuk {
 	void Context::set_name(const Texture& tex, Name name) {
 		if (!debug_enabled())
 			return;
-		set_name(tex.image.get(), name);
-		set_name(tex.view.get().payload, name);
+		set_name(tex.image->image, name);
+		set_name(tex.view->payload, name);
 	}
 
 	void Context::begin_region(const VkCommandBuffer& cb, Name name, std::array<float, 4> color) {
@@ -201,10 +201,6 @@ namespace vuk {
 
 	Result<void> Context::submit_transfer(std::span<VkSubmitInfo2KHR> sis) {
 		return transfer_queue->submit(sis, VK_NULL_HANDLE);
-	}
-
-	LegacyGPUAllocator& Context::get_legacy_gpu_allocator() {
-		return impl->legacy_gpu_allocator;
 	}
 
 	void PersistentDescriptorSet::update_combined_image_sampler(Context& ctx,
@@ -510,7 +506,7 @@ namespace vuk {
 	}
 
 	DeviceVkResource& Context::get_vk_resource() {
-		return impl->device_vk_resource;
+		return *impl->device_vk_resource;
 	}
 
 	DescriptorSetLayoutAllocInfo Context::create(const create_info_t<DescriptorSetLayoutAllocInfo>& cinfo) {
@@ -591,7 +587,7 @@ namespace vuk {
 		Unique<Image> dst = allocate_image(allocator, ici).value(); // TODO: dropping error
 		ImageViewCreateInfo ivci;
 		ivci.format = ici.format;
-		ivci.image = *dst;
+		ivci.image = dst->image;
 		ivci.subresourceRange.aspectMask = format_to_aspect(ici.format);
 		ivci.subresourceRange.baseArrayLayer = 0;
 		ivci.subresourceRange.baseMipLevel = 0;
@@ -608,15 +604,7 @@ namespace vuk {
 	}
 
 	void Context::destroy(const RGImage& image) {
-		impl->legacy_gpu_allocator.destroy_image(image.image);
-	}
-
-	void Context::destroy(const LegacyPoolAllocator& v) {
-		impl->legacy_gpu_allocator.destroy(v);
-	}
-
-	void Context::destroy(const LegacyLinearAllocator& v) {
-		impl->legacy_gpu_allocator.destroy(v);
+		deallocate(impl->direct_allocator, image.image);
 	}
 
 	void Context::destroy(const DescriptorPool& dp) {
@@ -677,15 +665,15 @@ namespace vuk {
 			vkDestroyPipelineCache(device, impl->vk_pipeline_cache, nullptr);
 
 			if (dedicated_graphics_queue) {
-				impl->device_vk_resource.deallocate_timeline_semaphores(std::span{ &dedicated_graphics_queue->get_submit_sync(), 1 });
+				impl->device_vk_resource->deallocate_timeline_semaphores(std::span{ &dedicated_graphics_queue->get_submit_sync(), 1 });
 			}
 
 			if (dedicated_compute_queue) {
-				impl->device_vk_resource.deallocate_timeline_semaphores(std::span{ &dedicated_compute_queue->get_submit_sync(), 1 });
+				impl->device_vk_resource->deallocate_timeline_semaphores(std::span{ &dedicated_compute_queue->get_submit_sync(), 1 });
 			}
 
 			if (dedicated_transfer_queue) {
-				impl->device_vk_resource.deallocate_timeline_semaphores(std::span{ &dedicated_transfer_queue->get_submit_sync(), 1 });
+				impl->device_vk_resource->deallocate_timeline_semaphores(std::span{ &dedicated_transfer_queue->get_submit_sync(), 1 });
 			}
 
 			delete impl;
@@ -752,15 +740,11 @@ namespace vuk {
 		array.pending_writes.clear();
 	}
 
-	size_t Context::get_allocation_size(Buffer buf) {
-		return impl->legacy_gpu_allocator.get_allocation_size(buf);
-	}
-
 	RGImage Context::create(const create_info_t<RGImage>& cinfo) {
 		RGImage res{};
-		res.image = impl->legacy_gpu_allocator.create_image_for_rendertarget(cinfo.ici);
+		res.image = allocate_image(impl->direct_allocator, cinfo.ici)->release();
 		std::string name = std::string("Image: RenderTarget ") + std::string(cinfo.name.to_sv());
-		set_name(res.image, Name(name));
+		set_name(res.image.image, Name(name));
 		return res;
 	}
 
@@ -1133,7 +1117,7 @@ namespace vuk {
 		VkDeviceSize sbt_size = rgen_region.size + miss_region.size + hit_region.size + call_region.size;
 		Buffer SBT;
 		BufferCreateInfo bci{ .mem_usage = vuk::MemoryUsage::eCPUtoGPU, .size = sbt_size };
-		auto buff_cr_result = impl->device_vk_resource.allocate_buffers(std::span{ &SBT, 1 }, std::span{ &bci, 1 }, {});
+		auto buff_cr_result = impl->device_vk_resource->allocate_buffers(std::span{ &SBT, 1 }, std::span{ &bci, 1 }, {});
 		assert(buff_cr_result);
 
 		// Helper to retrieve the handle data

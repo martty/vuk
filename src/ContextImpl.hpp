@@ -1,5 +1,4 @@
 #include "Cache.hpp"
-#include "LegacyGPUAllocator.hpp"
 #include "RGImage.hpp"
 #include "RenderPass.hpp"
 #include "vuk/Allocator.hpp"
@@ -29,8 +28,10 @@ namespace vuk {
 	};
 
 	struct ContextImpl {
-		LegacyGPUAllocator legacy_gpu_allocator;
 		VkDevice device;
+
+		std::unique_ptr<DeviceVkResource> device_vk_resource;
+		Allocator direct_allocator;
 
 		VkPipelineCache vk_pipeline_cache = VK_NULL_HANDLE;
 		Cache<PipelineBaseInfo> pipelinebase_cache;
@@ -58,8 +59,6 @@ namespace vuk {
 
 		std::mutex swapchains_lock;
 		plf::colony<Swapchain> swapchains;
-
-		DeviceVkResource device_vk_resource;
 
 		std::mutex query_lock;
 		robin_hood::unordered_map<Query, uint64_t> timestamp_result_map;
@@ -94,14 +93,9 @@ namespace vuk {
 		}
 
 		ContextImpl(Context& ctx) :
-		    legacy_gpu_allocator(ctx.instance,
-		                         ctx.device,
-		                         ctx.physical_device,
-		                         ctx.graphics_queue_family_index,
-		                         ctx.compute_queue_family_index,
-		                         ctx.transfer_queue_family_index,
-		                         ctx.vkSetDebugUtilsObjectNameEXT),
 		    device(ctx.device),
+		    device_vk_resource(std::make_unique<DeviceVkResource>(ctx)),
+		    direct_allocator(*device_vk_resource.get()),
 		    pipelinebase_cache(&ctx, &FN<struct PipelineBaseInfo>::create_fn, &FN<struct PipelineBaseInfo>::destroy_fn),
 		    pipeline_cache(&ctx, &FN<struct PipelineInfo>::create_fn, &FN<struct PipelineInfo>::destroy_fn),
 		    compute_pipeline_cache(&ctx, &FN<struct ComputePipelineInfo>::create_fn, &FN<struct ComputePipelineInfo>::destroy_fn),
@@ -112,8 +106,7 @@ namespace vuk {
 		    sampler_cache(&ctx, &FN<Sampler>::create_fn, &FN<Sampler>::destroy_fn),
 		    shader_modules(&ctx, &FN<struct ShaderModule>::create_fn, &FN<struct ShaderModule>::destroy_fn),
 		    descriptor_set_layouts(&ctx, &FN<struct DescriptorSetLayoutAllocInfo>::create_fn, &FN<struct DescriptorSetLayoutAllocInfo>::destroy_fn),
-		    pipeline_layouts(&ctx, &FN<VkPipelineLayout>::create_fn, &FN<VkPipelineLayout>::destroy_fn),
-		    device_vk_resource(ctx, legacy_gpu_allocator) {
+		    pipeline_layouts(&ctx, &FN<VkPipelineLayout>::create_fn, &FN<VkPipelineLayout>::destroy_fn) {
 			vkGetPhysicalDeviceProperties(ctx.physical_device, &physical_device_properties);
 		}
 	};

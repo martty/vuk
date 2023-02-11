@@ -1,14 +1,81 @@
 #include "vuk/resources/DeviceVkResource.hpp"
-#include "../src/LegacyGPUAllocator.hpp"
 #include "../src/RenderPass.hpp"
 #include "vuk/Buffer.hpp"
 #include "vuk/Context.hpp"
 #include "vuk/Exception.hpp"
 #include "vuk/Query.hpp"
 #include "vuk/resources/DeviceNestedResource.hpp"
+#include <vk_mem_alloc.h>
+#include <mutex>
 
 namespace vuk {
-	DeviceVkResource::DeviceVkResource(Context& ctx, LegacyGPUAllocator& allocator) : ctx(&ctx), legacy_gpu_allocator(&allocator), device(ctx.device) {}
+	std::string to_human_readable(uint64_t in) {
+		/*       k       M      G */
+		if (in >= 1024 * 1024 * 1024) {
+			return std::to_string(in / (1024 * 1024 * 1024)) + " GiB";
+		} else if (in >= 1024 * 1024) {
+			return std::to_string(in / (1024 * 1024)) + " MiB";
+		} else if (in >= 1024) {
+			return std::to_string(in / (1024)) + " kiB";
+		} else {
+			return std::to_string(in) + " B";
+		}
+	}
+
+	struct DeviceVkResourceImpl {
+		std::mutex mutex;
+		VmaAllocator allocator;
+		VkPhysicalDeviceProperties properties;
+		std::vector<uint32_t> all_queue_families;
+		uint32_t queue_family_count;
+	};
+
+	DeviceVkResource::DeviceVkResource(Context& ctx) : ctx(&ctx), impl(new DeviceVkResourceImpl), device(ctx.device) {
+		VmaAllocatorCreateInfo allocatorInfo = {};
+		allocatorInfo.instance = ctx.instance;
+		allocatorInfo.physicalDevice = ctx.physical_device;
+		allocatorInfo.device = device;
+		allocatorInfo.flags = VMA_ALLOCATOR_CREATE_EXTERNALLY_SYNCHRONIZED_BIT | VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
+
+		VmaVulkanFunctions vulkanFunctions = {};
+		vulkanFunctions.vkGetPhysicalDeviceProperties = vkGetPhysicalDeviceProperties;
+		vulkanFunctions.vkGetPhysicalDeviceMemoryProperties = vkGetPhysicalDeviceMemoryProperties;
+		vulkanFunctions.vkAllocateMemory = vkAllocateMemory;
+		vulkanFunctions.vkFreeMemory = vkFreeMemory;
+		vulkanFunctions.vkMapMemory = vkMapMemory;
+		vulkanFunctions.vkUnmapMemory = vkUnmapMemory;
+		vulkanFunctions.vkFlushMappedMemoryRanges = vkFlushMappedMemoryRanges;
+		vulkanFunctions.vkInvalidateMappedMemoryRanges = vkInvalidateMappedMemoryRanges;
+		vulkanFunctions.vkBindBufferMemory = vkBindBufferMemory;
+		vulkanFunctions.vkBindImageMemory = vkBindImageMemory;
+		vulkanFunctions.vkGetBufferMemoryRequirements = vkGetBufferMemoryRequirements;
+		vulkanFunctions.vkGetImageMemoryRequirements = vkGetImageMemoryRequirements;
+		vulkanFunctions.vkCreateBuffer = vkCreateBuffer;
+		vulkanFunctions.vkDestroyBuffer = vkDestroyBuffer;
+		vulkanFunctions.vkCreateImage = vkCreateImage;
+		vulkanFunctions.vkDestroyImage = vkDestroyImage;
+		vulkanFunctions.vkCmdCopyBuffer = vkCmdCopyBuffer;
+		allocatorInfo.pVulkanFunctions = &vulkanFunctions;
+
+		vmaCreateAllocator(&allocatorInfo, &impl->allocator);
+		vkGetPhysicalDeviceProperties(ctx.physical_device, &impl->properties);
+
+		if (ctx.transfer_queue_family_index != ctx.graphics_queue_family_index && ctx.compute_queue_family_index != ctx.graphics_queue_family_index) {
+			impl->all_queue_families = { ctx.graphics_queue_family_index, ctx.compute_queue_family_index, ctx.transfer_queue_family_index };
+		} else if (ctx.transfer_queue_family_index != ctx.graphics_queue_family_index) {
+			impl->all_queue_families = { ctx.graphics_queue_family_index, ctx.transfer_queue_family_index };
+		} else if (ctx.compute_queue_family_index != ctx.graphics_queue_family_index) {
+			impl->all_queue_families = { ctx.graphics_queue_family_index, ctx.compute_queue_family_index };
+		} else {
+			impl->all_queue_families = { ctx.graphics_queue_family_index };
+		}
+		impl->queue_family_count = (uint32_t)impl->all_queue_families.size();
+	}
+
+	DeviceVkResource::~DeviceVkResource() {
+		vmaDestroyAllocator(impl->allocator);
+		delete impl;
+	}
 
 	Result<void, AllocateException> DeviceVkResource::allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) {
 		VkSemaphoreCreateInfo sci{ .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
@@ -122,13 +189,32 @@ namespace vuk {
 		}
 	}
 
-	Result<void, AllocateException>
-	DeviceVkResource::allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException> DeviceVkResource::allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
 			auto& ci = cis[i];
-			// TODO: legacy buffer alloc can't signal errors
-			dst[i] = Buffer{ legacy_gpu_allocator->allocate_buffer(ci.mem_usage, LegacyGPUAllocator::all_usage, ci.size, ci.alignment, true) };
+			VkBufferCreateInfo bci{ .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
+			bci.size = ci.size;
+			bci.usage = (VkBufferUsageFlags)all_buffer_usage_flags;
+			bci.queueFamilyIndexCount = impl->queue_family_count;
+			bci.sharingMode = bci.queueFamilyIndexCount > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
+			bci.pQueueFamilyIndices = impl->all_queue_families.data();
+
+			VmaAllocationCreateInfo aci = {};
+			aci.usage = VmaMemoryUsage(to_integral(ci.mem_usage));
+			aci.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
+			VkBuffer buffer;
+			VmaAllocation allocation;
+			VmaAllocationInfo allocation_info;
+			auto res = vmaCreateBufferWithAlignment(impl->allocator, &bci, &aci, ci.alignment, &buffer, &allocation, &allocation_info);
+			if (res != VK_SUCCESS) {
+				deallocate_buffers({ dst.data(), (uint64_t)i });
+				return { expected_error, AllocateException{ res } };
+			}
+			VkBufferDeviceAddressInfo bdai{ VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, nullptr, buffer };
+			uint64_t device_address = vkGetBufferDeviceAddress(device, &bdai);
+			dst[i] = Buffer{ allocation, buffer, 0, ci.size, device_address, static_cast<std::byte*>(allocation_info.pMappedData), ci.mem_usage};
 		}
 		return { expected_value };
 	}
@@ -136,7 +222,7 @@ namespace vuk {
 	void DeviceVkResource::deallocate_buffers(std::span<const Buffer> src) {
 		for (auto& v : src) {
 			if (v) {
-				legacy_gpu_allocator->free_buffer(v);
+				vmaDestroyBuffer(impl->allocator, v.buffer, static_cast<VmaAllocation>(v.allocation));
 			}
 		}
 	}
@@ -144,17 +230,34 @@ namespace vuk {
 	Result<void, AllocateException> DeviceVkResource::allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
-			// TODO: legacy image alloc can't signal errors
+			std::lock_guard _(impl->mutex);
+			VmaAllocationCreateInfo aci{};
+			aci.usage = VMA_MEMORY_USAGE_GPU_ONLY;
 
-			dst[i] = legacy_gpu_allocator->create_image(cis[i]);
+			VkImage vkimg;
+			VmaAllocation allocation;
+			VkImageCreateInfo vkici = cis[i];
+			if (cis[i].usage & (vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eDepthStencilAttachment)) {
+				// this is a rendertarget, put it into the dedicated memory
+				aci.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
+			}
+
+			auto res = vmaCreateImage(impl->allocator, &vkici, &aci, &vkimg, &allocation, nullptr);
+
+			if (res != VK_SUCCESS) {
+				deallocate_images({ dst.data(), (uint64_t)i });
+				return { expected_error, AllocateException{ res } };
+			}
+
+			dst[i] = Image{ vkimg, allocation };
 		}
 		return { expected_value };
 	}
 
 	void DeviceVkResource::deallocate_images(std::span<const Image> src) {
 		for (auto& v : src) {
-			if (v != VK_NULL_HANDLE) {
-				legacy_gpu_allocator->destroy_image(v);
+			if (v) {
+				vmaDestroyImage(impl->allocator, v.image, static_cast<VmaAllocation>(v.allocation));
 			}
 		}
 	}

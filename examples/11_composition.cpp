@@ -71,7 +71,7 @@ const glm::mat4 capture_views[] = { glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm
 namespace {
 	float angle = 0.f;
 	auto box = util::generate_cube();
-	vuk::Buffer verts, inds;
+	vuk::Unique<vuk::Buffer> verts, inds;
 	vuk::Unique<vuk::Image> env_cubemap, hdr_image;
 	vuk::ImageAttachment env_cubemap_ia;
 
@@ -102,9 +102,9 @@ namespace {
 
 		      // We set up the cube data, same as in example 02_cube
 		      auto [vert_buf, vert_fut] = create_buffer(allocator, vuk::MemoryUsage::eGPUonly, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.first));
-		      verts = *vert_buf;
+		      verts = std::move(vert_buf);
 		      auto [ind_buf, ind_fut] = create_buffer(allocator, vuk::MemoryUsage::eGPUonly, vuk::DomainFlagBits::eTransferOnGraphics, std::span(box.second));
-		      inds = *ind_buf;
+		      inds = std::move(ind_buf);
 
 		      auto hdr_texture = load_hdr_cubemap(allocator, VUK_EX_PATH_TO_ROOT "examples/the_sky_is_on_fire_1k.hdr");
 		      hdr_image = std::move(hdr_texture.first);
@@ -208,8 +208,7 @@ namespace {
 
 		      // we split the cubemap into faces
 		      for (uint32_t i = 0; i < 6; i++) {
-			      cube_src->diverge_image(
-			          "11_cube", vuk::Subrange::Image{ .base_layer = i, .layer_count = 1 }, vuk::Name("11_cube_face_").append(std::to_string(i)));
+			      cube_src->diverge_image("11_cube", vuk::Subrange::Image{ .base_layer = i, .layer_count = 1 }, vuk::Name("11_cube_face_").append(std::to_string(i)));
 		      }
 
 		      std::shared_ptr<vuk::RenderGraph> cube_refl = std::make_shared<vuk::RenderGraph>("scene");
@@ -244,13 +243,13 @@ namespace {
 				                         })
 				                         .broadcast_color_blend({})
 				                         .bind_vertex_buffer(0,
-				                                             verts,
+				                                             *verts,
 				                                             0,
 				                                             vuk::Packed{ vuk::Format::eR32G32B32Sfloat,
 				                                                          vuk::Format::eR32G32B32Sfloat,
 				                                                          vuk::Ignore{ offsetof(util::Vertex, uv_coordinates) - offsetof(util::Vertex, tangent) },
 				                                                          vuk::Format::eR32G32Sfloat })
-				                         .bind_index_buffer(inds, vuk::IndexType::eUint32);
+				                         .bind_index_buffer(*inds, vuk::IndexType::eUint32);
 				                     command_buffer.push_constants(vuk::ShaderStageFlagBits::eFragment, 0, cam_pos).bind_graphics_pipeline("cube_deferred_reflective");
 				                     for (auto j = 0; j < 64; j++) {
 					                     if (j == 36)
@@ -329,13 +328,13 @@ namespace {
 			                })
 			                .broadcast_color_blend({})
 			                .bind_vertex_buffer(0,
-			                                    verts,
+			                                    *verts,
 			                                    0,
 			                                    vuk::Packed{ vuk::Format::eR32G32B32Sfloat,
 			                                                 vuk::Format::eR32G32B32Sfloat,
 			                                                 vuk::Ignore{ offsetof(util::Vertex, uv_coordinates) - offsetof(util::Vertex, tangent) },
 			                                                 vuk::Format::eR32G32Sfloat })
-			                .bind_index_buffer(inds, vuk::IndexType::eUint32);
+			                .bind_index_buffer(*inds, vuk::IndexType::eUint32);
 			            command_buffer.push_constants(vuk::ShaderStageFlagBits::eFragment, 0, cam_pos).bind_graphics_pipeline("cube_deferred_reflective");
 			            command_buffer.bind_image(0, 2, "11_cuberefl").bind_sampler(0, 2, {}).bind_buffer(0, 0, uboVP);
 			            glm::mat4* model = command_buffer.map_scratch_buffer<glm::mat4>(0, 1);
@@ -391,6 +390,8 @@ namespace {
 		.cleanup =
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
 		      // We release the resources manually
+		      verts.reset();
+		      inds.reset();
 		      env_cubemap.reset();
 		      hdr_image.reset();
 		    }
