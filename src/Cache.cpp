@@ -5,6 +5,7 @@
 #include <plf_colony.h>
 #include <robin_hood.h>
 #include <shared_mutex>
+#include <mutex>
 
 namespace vuk {
 	template<class T>
