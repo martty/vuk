@@ -1,4 +1,4 @@
-#include "LinearBufferAllocator.hpp"
+#include "BufferAllocator.hpp"
 #include "vuk/Allocator.hpp"
 #include "vuk/Result.hpp"
 #include "vuk/SourceLocation.hpp"
@@ -18,7 +18,7 @@ static inline T VmaAlignUp(T val, T align) {
 }
 
 namespace vuk {
-	Result<void, AllocateException> LinearBufferAllocator::grow(size_t num_blocks, SourceLocationAtFrame source) {
+	Result<void, AllocateException> BufferLinearAllocator::grow(size_t num_blocks, SourceLocationAtFrame source) {
 		std::lock_guard _(mutex);
 
 		int best_fit_block_size = 1024;
@@ -81,7 +81,7 @@ namespace vuk {
 	}
 
 	// lock-free bump allocation if there is still space
-	Result<Buffer, AllocateException> LinearBufferAllocator::allocate_buffer(size_t size, size_t alignment, SourceLocationAtFrame source) {
+	Result<Buffer, AllocateException> BufferLinearAllocator::allocate_buffer(size_t size, size_t alignment, SourceLocationAtFrame source) {
 		if (size == 0) {
 			return { expected_value, Buffer{ .buffer = VK_NULL_HANDLE, .size = 0 } };
 		}
@@ -135,7 +135,7 @@ namespace vuk {
 		return { expected_value, b };
 	}
 
-	void LinearBufferAllocator::reset() {
+	void BufferLinearAllocator::reset() {
 		std::lock_guard _(mutex);
 		for (size_t i = 0; i < used_allocation_count;) {
 			available_allocations[available_allocation_count++] = used_allocations[i];
@@ -148,7 +148,7 @@ namespace vuk {
 	}
 
 	// we just destroy the buffers that we have left in the available allocations
-	void LinearBufferAllocator::trim() {
+	void BufferLinearAllocator::trim() {
 		std::lock_guard _(mutex);
 		for (size_t i = 0; i < available_allocation_count; i++) {
 			auto& alloc = available_allocations[i];
@@ -157,11 +157,11 @@ namespace vuk {
 		available_allocation_count = 0;
 	}
 
-	LinearBufferAllocator::~LinearBufferAllocator() {
+	BufferLinearAllocator::~BufferLinearAllocator() {
 		free();
 	}
 
-	void LinearBufferAllocator::free() {
+	void BufferLinearAllocator::free() {
 		for (size_t i = 0; i < used_allocation_count; i++) {
 			auto& buf = used_allocations[i].buffer;
 			if (buf) {
@@ -237,7 +237,7 @@ namespace vuk {
 		delete sa;
 	}
 
-	void BufferSubAllocator::reset() {
+	void BufferSubAllocator::free() {
 		for (auto& bb : blocks) {
 			if (bb.buffer) {
 				upstream->deallocate_buffers(std::span{ &bb.buffer, 1 });
@@ -248,7 +248,7 @@ namespace vuk {
 	}
 
 	BufferSubAllocator::~BufferSubAllocator() {
-		reset();
+		free();
 	}
 
 } // namespace vuk

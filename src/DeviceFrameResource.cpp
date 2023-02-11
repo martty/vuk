@@ -1,6 +1,6 @@
 #include "vuk/resources/DeviceFrameResource.hpp"
 #include "Cache.hpp"
-#include "LinearBufferAllocator.hpp"
+#include "BufferAllocator.hpp"
 #include "RenderPass.hpp"
 #include "vuk/Context.hpp"
 #include "vuk/Descriptor.hpp"
@@ -104,10 +104,10 @@ namespace vuk {
 		std::mutex swapchain_mutex;
 		std::vector<VkSwapchainKHR> swapchains;
 
-		LinearBufferAllocator linear_cpu_only;
-		LinearBufferAllocator linear_cpu_gpu;
-		LinearBufferAllocator linear_gpu_cpu;
-		LinearBufferAllocator linear_gpu_only;
+		BufferLinearAllocator linear_cpu_only;
+		BufferLinearAllocator linear_cpu_gpu;
+		BufferLinearAllocator linear_gpu_cpu;
+		BufferLinearAllocator linear_gpu_only;
 
 		DeviceFrameResourceImpl(VkDevice device, DeviceSuperFrameResource& upstream) :
 		    linear_cpu_only(upstream, vuk::MemoryUsage::eCPUonly, all_buffer_usage_flags),

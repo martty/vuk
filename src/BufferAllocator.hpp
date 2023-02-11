@@ -15,43 +15,33 @@
 namespace vuk {
 	struct DeviceResource;
 
-	struct LinearAllocSegment {
-		VmaAllocation allocation = nullptr;
-		VkDeviceMemory device_memory;
-		size_t device_memory_offset;
-		VkBuffer buffer = VK_NULL_HANDLE;
-		std::byte* mapped_ptr = nullptr;
-		uint64_t bda;
-		size_t num_blocks;
-		uint64_t base_address = 0;
-	};
-
 	struct LinearSegment {
 		Buffer buffer;
 		size_t num_blocks;
 		uint64_t base_address = 0;
 	};
 
-	struct LinearBufferAllocator {
+	struct BufferLinearAllocator {
 		DeviceResource* upstream;
 		std::mutex mutex;
 		std::atomic<int> current_buffer = -1;
 		std::atomic<uint64_t> needle = 0;
 		MemoryUsage mem_usage;
 		BufferUsageFlags usage;
-		std::array<LinearSegment, 256> available_allocations; // up to 4 GB of allocations
-		std::array<LinearSegment, 256> used_allocations;      // up to 4 GB of allocations
+		// TODO: convert to deque
+		std::array<LinearSegment, 256> available_allocations; // up to 4 GB of allocations with the default block_size
+		std::array<LinearSegment, 256> used_allocations;      // up to 4 GB of allocations with the default block_size
 		size_t available_allocation_count = 0;
 		size_t used_allocation_count = 0;
 
 		size_t block_size;
 
-		LinearBufferAllocator(DeviceResource& upstream, MemoryUsage mem_usage, BufferUsageFlags buf_usage, size_t block_size = 1024 * 1024 * 16) :
+		BufferLinearAllocator(DeviceResource& upstream, MemoryUsage mem_usage, BufferUsageFlags buf_usage, size_t block_size = 1024 * 1024 * 16) :
 		    upstream(&upstream),
 		    mem_usage(mem_usage),
 		    usage(buf_usage),
 		    block_size(block_size) {}
-		~LinearBufferAllocator();
+		~BufferLinearAllocator();
 
 		Result<void, AllocateException> grow(size_t num_blocks, SourceLocationAtFrame source);
 		Result<Buffer, AllocateException> allocate_buffer(size_t size, size_t alignment, SourceLocationAtFrame source);
@@ -61,18 +51,6 @@ namespace vuk {
 		void reset();
 		// explicitly release resources
 		void free();
-
-		LinearBufferAllocator(LinearBufferAllocator&& o) noexcept {
-			current_buffer = o.current_buffer.load();
-			needle = o.needle.load();
-			mem_usage = o.mem_usage;
-			usage = o.usage;
-			used_allocations = o.used_allocations;
-			available_allocations = o.available_allocations;
-			block_size = o.block_size;
-			available_allocation_count = o.available_allocation_count;
-			used_allocation_count = o.used_allocation_count;
-		}
 	};
 
 	struct BufferBlock {
@@ -103,7 +81,7 @@ namespace vuk {
 		Result<void, AllocateException> grow(size_t num_blocks, size_t alignment, SourceLocationAtFrame source);
 		Result<Buffer, AllocateException> allocate_buffer(size_t size, size_t alignment, SourceLocationAtFrame source);
 		void deallocate_buffer(const Buffer& buf);
-
-		void reset();
+		// explicitly release resources
+		void free();
 	};
 }; // namespace vuk
