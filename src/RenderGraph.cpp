@@ -1229,14 +1229,14 @@ namespace vuk {
 				auto& src_stages = prev_use.stages;
 				auto& dst_stages = next_use.stages;
 
-				scope_to_domain(src_stages, left->use.domain & DomainFlagBits::eQueueMask);
-				scope_to_domain(dst_stages, right.use.domain & DomainFlagBits::eQueueMask);
+				scope_to_domain((VkPipelineStageFlagBits2KHR&)src_stages, left->use.domain & DomainFlagBits::eQueueMask);
+				scope_to_domain((VkPipelineStageFlagBits2KHR&)dst_stages, right.use.domain & DomainFlagBits::eQueueMask);
 
 				bool crosses_queue = (left->use.domain != DomainFlagBits::eNone && right.use.domain != DomainFlagBits::eNone &&
 				                      (left->use.domain & DomainFlagBits::eQueueMask) != (right.use.domain & DomainFlagBits::eQueueMask));
 
 				// compute image barrier for this access -> access
-				VkImageMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+				VkImageMemoryBarrier2KHR barrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2_KHR };
 				barrier.srcAccessMask = is_read_access(prev_use) ? 0 : (VkAccessFlags)prev_use.access;
 				barrier.dstAccessMask = (VkAccessFlags)next_use.access;
 				barrier.oldLayout = (VkImageLayout)prev_use.layout;
@@ -1257,7 +1257,9 @@ namespace vuk {
 				if (dst_stages == PipelineStageFlags{}) {
 					barrier.dstAccessMask = {};
 				}
-				ImageBarrier ib{ .image = whole_name, .barrier = barrier, .src = src_stages, .dst = dst_stages };
+				std::memcpy(&barrier.pNext, &whole_name, sizeof(Name));
+				barrier.srcStageMask = (VkPipelineStageFlags2)src_stages.m_mask;
+				barrier.dstStageMask = (VkPipelineStageFlags2)dst_stages.m_mask;
 
 				// the use chain is ending and we have to release this resource
 				// we ignore the last element in the chain if it doesn't specify a valid use
@@ -1300,9 +1302,9 @@ namespace vuk {
 						     (prev_use.layout != next_use.layout || (is_write_access(prev_use) || is_write_access(next_use))))) { // different layouts, need to
 							                                                                                                        // have dependency
 							// attach this barrier to the end of subpass or end of renderpass
-							auto ib_l = ib;
-							scope_to_domain(ib_l.src, left->use.domain & DomainFlagBits::eQueueMask);
-							scope_to_domain(ib_l.dst, left->use.domain & DomainFlagBits::eQueueMask);
+							auto ib_l = barrier;
+							scope_to_domain(ib_l.srcStageMask, left->use.domain & DomainFlagBits::eQueueMask);
+							scope_to_domain(ib_l.dstStageMask, left->use.domain & DomainFlagBits::eQueueMask);
 							if (left_rp.framebufferless) {
 								left_rp.subpasses[left->pass->subpass].post_barriers.push_back(ib_l);
 							} else {
@@ -1334,12 +1336,12 @@ namespace vuk {
 						// emit a barrier for now instead of an external subpass dep
 						if (crosses_queue || next_use.layout != prev_use.layout || (is_write_access(prev_use) || is_write_access(next_use))) { // different layouts, need
 							                                                                                                                     // to have dependency
-							scope_to_domain(ib.src, right.use.domain & DomainFlagBits::eQueueMask);
-							scope_to_domain(ib.dst, right.use.domain & DomainFlagBits::eQueueMask);
+							scope_to_domain(barrier.srcStageMask, right.use.domain & DomainFlagBits::eQueueMask);
+							scope_to_domain(barrier.dstStageMask, right.use.domain & DomainFlagBits::eQueueMask);
 							if (right_rp.framebufferless) {
-								right_rp.subpasses[right.pass->subpass].pre_barriers.push_back(ib);
+								right_rp.subpasses[right.pass->subpass].pre_barriers.push_back(barrier);
 							} else {
-								right_rp.pre_barriers.push_back(ib);
+								right_rp.pre_barriers.push_back(barrier);
 							}
 						}
 					}
@@ -1369,7 +1371,7 @@ namespace vuk {
 						// right layout == Undefined means the chain terminates, no transition/barrier
 						if (next_use.layout == ImageLayout::eUndefined)
 							continue;
-						right_rp.subpasses[right.pass->subpass].pre_barriers.push_back(ib);
+						right_rp.subpasses[right.pass->subpass].pre_barriers.push_back(barrier);
 					}
 				}
 			}
@@ -1416,8 +1418,8 @@ namespace vuk {
 				left.use = left.high_level_access == Access::eManual ? left.use : to_use(left.high_level_access, left_domain);
 				right.use = right.high_level_access == Access::eManual ? right.use : to_use(right.high_level_access, right_domain);
 
-				scope_to_domain(left.use.stages, left_domain & DomainFlagBits::eQueueMask);
-				scope_to_domain(right.use.stages, right_domain & DomainFlagBits::eQueueMask);
+				scope_to_domain((VkPipelineStageFlags2&)left.use.stages, left_domain & DomainFlagBits::eQueueMask);
+				scope_to_domain((VkPipelineStageFlags2&)right.use.stages, right_domain & DomainFlagBits::eQueueMask);
 
 				bool crosses_queue = (left_domain != DomainFlagBits::eNone && right_domain != DomainFlagBits::eNone &&
 				                      (left_domain & DomainFlagBits::eQueueMask) != (right_domain & DomainFlagBits::eQueueMask));
@@ -1436,13 +1438,14 @@ namespace vuk {
 					continue;
 				}
 
-				VkMemoryBarrier barrier{ .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER };
+				VkMemoryBarrier2KHR barrier{ .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2_KHR };
 				barrier.srcAccessMask = is_read_access(left.use) ? 0 : (VkAccessFlags)left.use.access;
 				barrier.dstAccessMask = (VkAccessFlags)right.use.access;
-				MemoryBarrier mb{ .barrier = barrier, .src = left.use.stages, .dst = right.use.stages };
-				if (mb.src == PipelineStageFlags{}) {
-					mb.src = PipelineStageFlagBits::eTopOfPipe;
-					mb.barrier.srcAccessMask = {};
+				barrier.srcStageMask = (VkPipelineStageFlagBits2) left.use.stages.m_mask;
+				barrier.dstStageMask = (VkPipelineStageFlagBits2) right.use.stages.m_mask;
+				if (barrier.srcStageMask == 0) {
+					barrier.srcStageMask = (VkPipelineStageFlagBits2)PipelineStageFlagBits::eNone;
+					barrier.srcAccessMask = {};
 				}
 
 				bool crosses_rpass = (left.pass == nullptr || right.pass == nullptr || left.pass->render_pass_index != right.pass->render_pass_index);
@@ -1450,15 +1453,15 @@ namespace vuk {
 					if (left.pass && (crosses_queue || (!right.pass && right.use.layout != ImageLayout::eUndefined &&
 					                                    (is_write_access(left.use) || is_write_access(right.use))))) { // RenderPass ->
 						auto& left_rp = impl->rpis[left.pass->render_pass_index];
-						left_rp.subpasses[left.pass->subpass].post_mem_barriers.push_back(mb);
+						left_rp.subpasses[left.pass->subpass].post_mem_barriers.push_back(barrier);
 					}
 
 					if (right.pass && left.use.layout != ImageLayout::eUndefined && (is_write_access(left.use) || is_write_access(right.use))) { // -> RenderPass
 						auto& right_rp = impl->rpis[right.pass->render_pass_index];
 						if (right_rp.framebufferless) {
-							right_rp.subpasses[right.pass->subpass].pre_mem_barriers.push_back(mb);
+							right_rp.subpasses[right.pass->subpass].pre_mem_barriers.push_back(barrier);
 						} else {
-							right_rp.pre_mem_barriers.push_back(mb);
+							right_rp.pre_mem_barriers.push_back(barrier);
 						}
 					}
 				} else { // subpass-subpass link -> subpass - subpass dependency
@@ -1472,7 +1475,7 @@ namespace vuk {
 						// right layout == Undefined means the chain terminates, no transition/barrier
 						if (right.use.layout == ImageLayout::eUndefined)
 							continue;
-						right_rp.subpasses[right.pass->subpass].pre_mem_barriers.push_back(mb);
+						right_rp.subpasses[right.pass->subpass].pre_mem_barriers.push_back(barrier);
 					}
 				}
 			}

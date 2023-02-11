@@ -118,3 +118,5 @@ VUK_X(vkCmdDrawIndexedIndirectCount)
 VUK_X(vkResetQueryPool)
 
 // sync2 or 1.3
+VUK_X(vkCmdPipelineBarrier2KHR)
+VUK_X(vkQueueSubmit2KHR)

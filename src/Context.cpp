@@ -98,9 +98,6 @@ namespace vuk {
 		bool pfn_load_success = load_pfns(params, *this);
 		assert(pfn_load_success);
 
-		auto queueSubmit2KHR = (PFN_vkQueueSubmit2KHR)vkGetDeviceProcAddr(device, "vkQueueSubmit2KHR");
-		assert(queueSubmit2KHR != nullptr);
-
 		[[maybe_unused]] bool dedicated_graphics_queue_ = false;
 		bool dedicated_compute_queue_ = false;
 		bool dedicated_transfer_queue_ = false;
@@ -125,13 +122,13 @@ namespace vuk {
 		{
 			TimelineSemaphore ts;
 			impl->device_vk_resource->allocate_timeline_semaphores(std::span{ &ts, 1 }, {});
-			dedicated_graphics_queue.emplace(this->vkQueueSubmit, queueSubmit2KHR, params.graphics_queue, params.graphics_queue_family_index, ts);
+			dedicated_graphics_queue.emplace(this->vkQueueSubmit, this->vkQueueSubmit2KHR, params.graphics_queue, params.graphics_queue_family_index, ts);
 			graphics_queue = &dedicated_graphics_queue.value();
 		}
 		if (dedicated_compute_queue_) {
 			TimelineSemaphore ts;
 			impl->device_vk_resource->allocate_timeline_semaphores(std::span{ &ts, 1 }, {});
-			dedicated_compute_queue.emplace(this->vkQueueSubmit, queueSubmit2KHR, params.compute_queue, params.compute_queue_family_index, ts);
+			dedicated_compute_queue.emplace(this->vkQueueSubmit, this->vkQueueSubmit2KHR, params.compute_queue, params.compute_queue_family_index, ts);
 			compute_queue = &dedicated_compute_queue.value();
 		} else {
 			compute_queue = graphics_queue;
@@ -139,7 +136,7 @@ namespace vuk {
 		if (dedicated_transfer_queue_) {
 			TimelineSemaphore ts;
 			impl->device_vk_resource->allocate_timeline_semaphores(std::span{ &ts, 1 }, {});
-			dedicated_transfer_queue.emplace(this->vkQueueSubmit, queueSubmit2KHR, params.transfer_queue, params.transfer_queue_family_index, ts);
+			dedicated_transfer_queue.emplace(this->vkQueueSubmit, this->vkQueueSubmit2KHR, params.transfer_queue, params.transfer_queue_family_index, ts);
 			transfer_queue = &dedicated_transfer_queue.value();
 		} else {
 			transfer_queue = compute_queue ? compute_queue : graphics_queue;

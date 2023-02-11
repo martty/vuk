@@ -20,8 +20,8 @@ namespace vuk {
 		bool framebufferless = false;
 		VkRenderPass handle = {};
 		VkFramebuffer framebuffer;
-		std::vector<ImageBarrier, short_alloc<ImageBarrier, 64>> pre_barriers, post_barriers;
-		std::vector<MemoryBarrier, short_alloc<MemoryBarrier, 64>> pre_mem_barriers, post_mem_barriers;
+		std::vector<VkImageMemoryBarrier2KHR, short_alloc<VkImageMemoryBarrier2KHR, 64>> pre_barriers, post_barriers;
+		std::vector<VkMemoryBarrier2KHR, short_alloc<VkMemoryBarrier2KHR, 64>> pre_mem_barriers, post_mem_barriers;
 		std::vector<std::pair<DomainFlagBits, uint32_t>, short_alloc<std::pair<DomainFlagBits, uint32_t>, 64>> waits;
 	};
 
