@@ -82,6 +82,9 @@ namespace vuk {
 			transfer_queue = compute_queue ? compute_queue : graphics_queue;
 		}
 
+		vkGetPhysicalDeviceProperties(physical_device, &physical_device_properties);
+		min_buffer_alignment =
+		    std::max(physical_device_properties.limits.minUniformBufferOffsetAlignment, physical_device_properties.limits.minStorageBufferOffsetAlignment);
 		VkPhysicalDeviceProperties2 prop2{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2 };
 		prop2.pNext = &rt_properties;
 		vkGetPhysicalDeviceProperties2(physical_device, &prop2);

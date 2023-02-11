@@ -9,6 +9,7 @@
 #include <atomic>
 #include <mutex>
 #include <plf_colony.h>
+#include <numeric>
 
 namespace vuk {
 	struct DeviceSuperFrameResourceImpl {
@@ -170,14 +171,15 @@ namespace vuk {
 		for (uint64_t i = 0; i < dst.size(); i++) {
 			auto& ci = cis[i];
 			Result<Buffer, AllocateException> result{ expected_value };
+			auto alignment = std::lcm(ci.alignment, get_context().min_buffer_alignment);
 			if (ci.mem_usage == MemoryUsage::eGPUonly) {
-				result = impl->linear_gpu_only.allocate_buffer(ci.size, ci.alignment, loc);
+				result = impl->linear_gpu_only.allocate_buffer(ci.size, alignment, loc);
 			} else if (ci.mem_usage == MemoryUsage::eCPUonly) {
-				result = impl->linear_cpu_only.allocate_buffer(ci.size, ci.alignment, loc);
+				result = impl->linear_cpu_only.allocate_buffer(ci.size, alignment, loc);
 			} else if (ci.mem_usage == MemoryUsage::eCPUtoGPU) {
-				result = impl->linear_cpu_gpu.allocate_buffer(ci.size, ci.alignment, loc);
+				result = impl->linear_cpu_gpu.allocate_buffer(ci.size, alignment, loc);
 			} else if (ci.mem_usage == MemoryUsage::eGPUtoCPU) {
-				result = impl->linear_gpu_cpu.allocate_buffer(ci.size, ci.alignment, loc);
+				result = impl->linear_gpu_cpu.allocate_buffer(ci.size, alignment, loc);
 			}
 			if (!result) {
 				deallocate_buffers({ dst.data(), (uint64_t)i });

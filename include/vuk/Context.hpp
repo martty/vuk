@@ -91,7 +91,9 @@ namespace vuk {
 		Queue* compute_queue = nullptr;
 		Queue* transfer_queue = nullptr;
 
+		VkPhysicalDeviceProperties physical_device_properties;
 		VkPhysicalDeviceRayTracingPipelinePropertiesKHR rt_properties{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR };
+		size_t min_buffer_alignment;
 
 		Result<void> wait_for_domains(std::span<std::pair<DomainFlags, uint64_t>> queue_waits);
 

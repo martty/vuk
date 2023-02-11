@@ -7,6 +7,7 @@
 #include "vuk/resources/DeviceNestedResource.hpp"
 #include <vk_mem_alloc.h>
 #include <mutex>
+#include <numeric>
 
 namespace vuk {
 	std::string to_human_readable(uint64_t in) {
@@ -207,7 +208,8 @@ namespace vuk {
 			VkBuffer buffer;
 			VmaAllocation allocation;
 			VmaAllocationInfo allocation_info;
-			auto res = vmaCreateBufferWithAlignment(impl->allocator, &bci, &aci, ci.alignment, &buffer, &allocation, &allocation_info);
+			auto alignment = std::lcm(ci.alignment, get_context().min_buffer_alignment);
+			auto res = vmaCreateBufferWithAlignment(impl->allocator, &bci, &aci, alignment, &buffer, &allocation, &allocation_info);
 			if (res != VK_SUCCESS) {
 				deallocate_buffers({ dst.data(), (uint64_t)i });
 				return { expected_error, AllocateException{ res } };
