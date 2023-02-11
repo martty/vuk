@@ -67,7 +67,6 @@ namespace vuk {
 		}
 
 		// TODO: this code is written weird because of wonky allocators
-		computed_passes.reserve(computed_passes.size() + other.impl->passes.size());
 		for (auto& p : other.impl->passes) {
 			PassInfo pi{ *arena_, p };
 			pi.prefix = joiner;
