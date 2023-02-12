@@ -78,6 +78,8 @@ namespace vuk {
 			}
 		}
 		used_allocation_count += actual_blocks;
+
+		return {expected_value};
 	}
 
 	// lock-free bump allocation if there is still space
