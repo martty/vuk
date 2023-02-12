@@ -60,66 +60,77 @@ namespace vuk {
 	}
 
 	void RGCImpl::append(Name subgraph_name, const RenderGraph& other) {
-		Name joiner = subgraph_name.is_invalid() ? Name("") : subgraph_name.append("::");
+		Name joiner = subgraph_name.is_invalid() ? Name("") : subgraph_name;
 
 		for (auto [new_name, old_name] : other.impl->aliases) {
-			computed_aliases.emplace(joiner.append(new_name.to_sv()), old_name);
+			computed_aliases.emplace(QualifiedName{ joiner, new_name }, old_name);
 		}
 
 		for (auto& p : other.impl->passes) {
 			PassInfo& pi = computed_passes.emplace_back(*arena_, p);
-			pi.prefix = joiner;
-			pi.qualified_name = joiner.append(p.name.to_sv());
+			pi.qualified_name = { joiner, p.name };
 			pi.resources.offset0 = resources.size();
 			for (auto r : p.resources) {
-				if (!r.name.is_invalid()) {
-					r.name = resolve_alias_rec(joiner.append(r.name.to_sv()));
+				if (r.foreign) {
+					auto prefix = Name{ sg_prefixes.at(r.foreign) };
+					auto res_name = resolve_alias_rec({ prefix, r.name.name });
+					auto res_out_name = r.out_name.name.is_invalid() ? QualifiedName{} : resolve_alias_rec({ prefix, r.out_name.name });
+					computed_aliases.emplace(QualifiedName{ joiner, r.name.name }, res_name);
+					r.name = res_name;
+					if (!r.out_name.is_invalid()) {
+						computed_aliases.emplace(QualifiedName{ joiner, r.out_name.name }, res_out_name);
+						r.out_name = res_out_name;
+					}
+				} else {
+					if (!r.name.name.is_invalid()) {
+						r.name = resolve_alias_rec({ joiner, r.name.name });
+					}
+					r.out_name = r.out_name.name.is_invalid() ? QualifiedName{} : resolve_alias_rec({ joiner, r.out_name.name });
 				}
-				r.out_name = r.out_name.is_invalid() ? Name{} : resolve_alias_rec(joiner.append(r.out_name.to_sv()));
 				resources.emplace_back(std::move(r));
 			}
 			pi.resources.offset1 = resources.size();
 			pi.resolves.offset0 = resolves.size();
 			for (auto& [n1, n2] : p.resolves) {
-				resolves.emplace_back(joiner.append(n1.to_sv()), joiner.append(n2.to_sv()));
+				resolves.emplace_back(QualifiedName{ joiner, n1 }, QualifiedName{ joiner, n2 });
 			}
 			pi.resolves.offset1 = resolves.size();
 		}
 
 		for (auto [name, att] : other.impl->bound_attachments) {
-			att.name = joiner.append(name.to_sv());
-			bound_attachments.emplace(joiner.append(name.to_sv()), std::move(att));
+			att.name = { joiner, name.name };
+			bound_attachments.emplace(QualifiedName{ joiner, name.name }, std::move(att));
 		}
 		for (auto [name, buf] : other.impl->bound_buffers) {
-			buf.name = joiner.append(name.to_sv());
-			bound_buffers.emplace(joiner.append(name.to_sv()), std::move(buf));
+			buf.name = { joiner, name.name };
+			bound_buffers.emplace(QualifiedName{ joiner, name.name }, std::move(buf));
 		}
 
 		for (auto [name, prefix, iainf] : other.impl->ia_inference_rules) {
 			prefix = joiner.append(prefix.to_sv());
-			auto& rule = ia_inference_rules[joiner.append(name.to_sv())];
+			auto& rule = ia_inference_rules[{ joiner, name }];
 			rule.prefix = prefix;
 			rule.rules.emplace_back(iainf);
 		}
 
 		for (auto [name, prefix, bufinf] : other.impl->buf_inference_rules) {
 			prefix = joiner.append(prefix.to_sv());
-			auto& rule = buf_inference_rules[joiner.append(name.to_sv())];
+			auto& rule = buf_inference_rules[{ joiner, name }];
 			rule.prefix = prefix;
 			rule.rules.emplace_back(bufinf);
 		}
 
 		for (auto& [name, v] : other.impl->acquires) {
-			acquires.emplace(joiner.append(name.to_sv()), v);
+			acquires.emplace(QualifiedName{ joiner, name.name }, v);
 		}
 
 		for (auto& [name, v] : other.impl->releases) {
-			releases.emplace(joiner.append(name.to_sv()), v);
+			releases.emplace(QualifiedName{ joiner, name.name }, v);
 		}
 
 		for (auto [name, v] : other.impl->diverged_subchain_headers) {
-			v.first = joiner.append(v.first.to_sv());
-			diverged_subchain_headers.emplace(joiner.append(name.to_sv()), v);
+			v.first.prefix = joiner;
+			diverged_subchain_headers.emplace(QualifiedName{ joiner, name.name }, v);
 		}
 	}
 
@@ -130,7 +141,7 @@ namespace vuk {
 	}
 
 	void RenderGraph::diverge_image(Name whole_name, Subrange::Image subrange, Name subrange_name) {
-		impl->diverged_subchain_headers.emplace_back(subrange_name, std::pair{ whole_name, subrange });
+		impl->diverged_subchain_headers.emplace_back(QualifiedName{ Name{}, subrange_name }, std::pair{ QualifiedName{ Name{}, whole_name }, subrange });
 		auto it = std::find(impl->whole_names_consumed.begin(), impl->whole_names_consumed.end(), whole_name);
 		bool new_divergence = it == impl->whole_names_consumed.end();
 
@@ -179,16 +190,19 @@ namespace vuk {
 			pif.write_input_names.offset0 = write_input_names.size();
 
 			for (Resource& res : pif.resources.to_span(resources)) {
-				Name in_name = resolve_alias(res.name);
-				Name out_name = resolve_alias(res.out_name);
+				if (res.foreign) {
+					continue;
+				}
+				Name in_name = resolve_alias(res.name.name);
+				Name out_name = resolve_alias(res.out_name.name);
 
-				auto hashed_in_name = ::hash::fnv1a::hash(in_name.to_sv().data(), res.name.to_sv().size(), hash::fnv1a::default_offset_basis);
-				auto hashed_out_name = ::hash::fnv1a::hash(out_name.to_sv().data(), res.out_name.to_sv().size(), hash::fnv1a::default_offset_basis);
+				auto hashed_in_name = ::hash::fnv1a::hash(in_name.to_sv().data(), res.name.name.to_sv().size(), hash::fnv1a::default_offset_basis);
+				auto hashed_out_name = ::hash::fnv1a::hash(out_name.to_sv().data(), res.out_name.name.to_sv().size(), hash::fnv1a::default_offset_basis);
 
 				input_names.emplace_back(in_name);
 				pif.bloom_resolved_inputs |= hashed_in_name;
 
-				if (!res.out_name.is_invalid()) {
+				if (!res.out_name.name.is_invalid()) {
 					pif.bloom_outputs |= hashed_out_name;
 					output_names.emplace_back(out_name);
 				}
@@ -202,10 +216,10 @@ namespace vuk {
 				}
 
 				// if this resource use is the first in a diverged subchain, we additionally add a dependency onto the undiverged subchain
-				if (auto it = std::find_if(diverged_subchain_headers.begin(), diverged_subchain_headers.end(), [=](auto& item) { return item.first == in_name; });
+				if (auto it = std::find_if(diverged_subchain_headers.begin(), diverged_subchain_headers.end(), [=](auto& item) { return item.first.name == in_name; });
 				    it != diverged_subchain_headers.end()) {
 					auto& sch_info = it->second;
-					auto dep = sch_info.first.append("__diverged");
+					auto dep = sch_info.first.name.append("__diverged");
 					auto hashed_name = ::hash::fnv1a::hash(dep.to_sv().data(), dep.to_sv().size(), hash::fnv1a::default_offset_basis);
 
 					input_names.emplace_back(dep);
@@ -223,7 +237,7 @@ namespace vuk {
 
 	// determine rendergraph inputs and outputs, and resources that are neither
 	void RGCImpl::build_io(std::span<struct PassInfo> passes_used) {
-		robin_hood::unordered_flat_set<Name> poisoned_names;
+		robin_hood::unordered_flat_set<QualifiedName> poisoned_names;
 		input_names.clear();
 		output_names.clear();
 		write_input_names.clear();
@@ -237,11 +251,14 @@ namespace vuk {
 			pif.write_input_names.offset0 = write_input_names.size();
 
 			for (Resource& res : pif.resources.to_span(resources)) {
-				Name in_name = res.name; // these names have been alias-resolved already
-				Name out_name = res.out_name;
+				auto in_name = res.name; // these names have been alias-resolved already
+				auto out_name = res.out_name;
 
-				auto hashed_in_name = ::hash::fnv1a::hash(in_name.to_sv().data(), res.name.to_sv().size(), hash::fnv1a::default_offset_basis);
-				auto hashed_out_name = ::hash::fnv1a::hash(out_name.to_sv().data(), res.out_name.to_sv().size(), hash::fnv1a::default_offset_basis);
+				auto hashed_in_name = ::hash::fnv1a::hash(in_name.prefix.to_sv().data(), in_name.prefix.to_sv().size(), hash::fnv1a::default_offset_basis);
+				hash_combine_direct(hashed_in_name, ::hash::fnv1a::hash(in_name.name.to_sv().data(), in_name.name.to_sv().size(), hash::fnv1a::default_offset_basis));
+				auto hashed_out_name = ::hash::fnv1a::hash(out_name.prefix.to_sv().data(), out_name.prefix.to_sv().size(), hash::fnv1a::default_offset_basis);
+				hash_combine_direct(hashed_out_name,
+				                    ::hash::fnv1a::hash(out_name.name.to_sv().data(), out_name.name.to_sv().size(), hash::fnv1a::default_offset_basis));
 
 				input_names.emplace_back(in_name);
 				pif.bloom_resolved_inputs |= hashed_in_name;
@@ -262,7 +279,7 @@ namespace vuk {
 				// if this resource use is the first in a diverged subchain, we additionally add a dependency onto the undiverged subchain
 				if (auto it = diverged_subchain_headers.find(in_name); it != diverged_subchain_headers.end()) {
 					auto& sch_info = it->second;
-					auto dep = sch_info.first.append("__diverged");
+					auto dep = sch_info.first.name.append("__diverged");
 					auto hashed_name = ::hash::fnv1a::hash(dep.to_sv().data(), dep.to_sv().size(), hash::fnv1a::default_offset_basis);
 
 					input_names.emplace_back(dep);
@@ -360,7 +377,7 @@ namespace vuk {
 				for (auto& o : p1.output_names.to_span(impl->output_names)) {
 					for (auto& i : p2.input_names.to_span(impl->input_names)) {
 						if (o == impl->resolve_alias(i)) {
-							ss << "\"" << p1.pass->name.c_str() << "\" -> \"" << p2.pass->name.c_str() << "\" [label=\"" << impl->resolve_alias(i).c_str() << "\"];\n";
+							ss << "\"" << p1.pass->name.c_str() << "\" -> \"" << p2.pass->name.c_str() << "\" [label=\"" << impl->resolve_alias(i).name.c_str() << "\"];\n";
 							// p2 is ordered after p1
 						}
 					}
@@ -368,7 +385,7 @@ namespace vuk {
 				for (auto& o : p1.input_names.to_span(impl->input_names)) {
 					for (auto& i : p2.write_input_names.to_span(impl->write_input_names)) {
 						if (impl->resolve_alias(o) == impl->resolve_alias(i)) {
-							ss << "\"" << p1.pass->name.c_str() << "\" -> \"" << p2.pass->name.c_str() << "\" [label=\"" << impl->resolve_alias(i).c_str() << "\"];\n";
+							ss << "\"" << p1.pass->name.c_str() << "\" -> \"" << p2.pass->name.c_str() << "\" [label=\"" << impl->resolve_alias(i).name.c_str() << "\"];\n";
 							// p2 is ordered after p1
 						}
 					}
@@ -379,8 +396,8 @@ namespace vuk {
 		return ss.str();
 	}
 
-	std::unordered_map<std::shared_ptr<RenderGraph>, std::string> RGCImpl::compute_prefixes(const RenderGraph& rg, bool do_prefix) {
-		std::unordered_map<std::shared_ptr<RenderGraph>, std::string> sg_prefixes;
+	std::unordered_map<RenderGraph*, std::string> RGCImpl::compute_prefixes(const RenderGraph& rg, bool do_prefix) {
+		std::unordered_map<RenderGraph*, std::string> sg_prefixes;
 		for (auto& [sg_ptr, sg_info] : rg.impl->subgraphs) {
 			if (sg_info.count > 0) {
 				Name sg_name = sg_ptr->name;
@@ -391,7 +408,7 @@ namespace vuk {
 				if (auto& counter = ++sg_name_counter[sg_name]; counter > 1) {
 					sg_name = sg_name.append(std::string("_") + std::to_string(counter - 1));
 				}
-				sg_prefixes.emplace(sg_ptr, std::string(sg_name.to_sv()));
+				sg_prefixes.emplace(sg_ptr.get(), std::string(sg_name.to_sv()));
 			}
 		}
 		if (do_prefix && sg_prefixes.size() > 0) {
@@ -402,23 +419,19 @@ namespace vuk {
 		return sg_prefixes;
 	}
 
-	void RGCImpl::inline_subgraphs(const std::shared_ptr<RenderGraph>& rg,
-	                               const std::unordered_map<std::shared_ptr<RenderGraph>, std::string>& sg_prefixes,
-	                               std::unordered_set<std::shared_ptr<RenderGraph>>& consumed_rgs) {
-		auto our_prefix = sg_prefixes.at(rg);
+	void RGCImpl::inline_subgraphs(const std::shared_ptr<RenderGraph>& rg, std::unordered_set<std::shared_ptr<RenderGraph>>& consumed_rgs) {
+		auto our_prefix = sg_prefixes.at(rg.get());
 		for (auto& [sg_ptr, sg_info] : rg->impl->subgraphs) {
 			if (sg_info.count > 0) {
-				auto& prefix = sg_prefixes.at(sg_ptr);
+				auto& prefix = sg_prefixes.at(sg_ptr.get());
 				assert(sg_ptr->impl);
 				for (auto& [name_in_parent, name_in_sg] : sg_info.exported_names) {
-					auto old_name = Name(prefix).append("::").append(name_in_sg.to_sv());
-					auto new_name = our_prefix.empty() ? name_in_parent : Name(our_prefix).append("::").append(name_in_parent.to_sv());
-					if (name_in_parent != old_name) {
-						computed_aliases[new_name] = old_name;
-					}
+					auto old_name = QualifiedName{ Name(prefix), name_in_sg };
+					auto new_name = QualifiedName{ our_prefix.empty() ? Name{} : Name(our_prefix), name_in_parent };
+					computed_aliases[new_name] = old_name;
 				}
 				if (!consumed_rgs.contains(sg_ptr)) {
-					inline_subgraphs(sg_ptr, sg_prefixes, consumed_rgs);
+					inline_subgraphs(sg_ptr, consumed_rgs);
 					append(Name(prefix), *sg_ptr);
 					consumed_rgs.emplace(sg_ptr);
 				}
@@ -438,25 +451,23 @@ namespace vuk {
 		impl = new RGCImpl(arena);
 
 		// inline all the subgraphs into us
-		std::unordered_map<std::shared_ptr<RenderGraph>, std::string> sg_pref;
 		for (auto& rg : rgs) {
-			auto prefs = impl->compute_prefixes(*rg, true);
+			impl->sg_prefixes.merge(impl->compute_prefixes(*rg, true));
 			auto rg_name = rg->name;
 			if (auto& counter = ++impl->sg_name_counter[rg_name]; counter > 1) {
 				rg_name = rg_name.append(std::string("_") + std::to_string(counter - 1));
 			}
-			prefs.emplace(rg, std::string{ rg_name.c_str() });
-			sg_pref.merge(prefs);
+			impl->sg_prefixes.emplace(rg.get(), std::string{ rg_name.c_str() });
 			std::unordered_set<std::shared_ptr<RenderGraph>> consumed_rgs = {};
-			impl->inline_subgraphs(rg, sg_pref, consumed_rgs);
+			impl->inline_subgraphs(rg, consumed_rgs);
 		}
 
 		for (auto& rg : rgs) {
-			impl->append(Name{ sg_pref.at(rg).c_str() }, *rg);
+			impl->append(Name{ impl->sg_prefixes.at(rg.get()).c_str() }, *rg);
 		}
 
 		// gather name alias info now - once we partition, we might encounter unresolved aliases
-		robin_hood::unordered_flat_map<Name, Name> name_map;
+		robin_hood::unordered_flat_map<QualifiedName, QualifiedName> name_map;
 
 		name_map.insert(impl->computed_aliases.begin(), impl->computed_aliases.end());
 
@@ -464,7 +475,7 @@ namespace vuk {
 		// follow aliases and resolve them into a single lookup
 		for (auto& [k, v] : name_map) {
 			auto it = name_map.find(v);
-			Name res = v;
+			auto res = v;
 			while (it != name_map.end()) {
 				res = it->second;
 				it = name_map.find(res);
@@ -487,7 +498,7 @@ namespace vuk {
 		// populate resource name -> use chain map
 		for (auto& [k, v] : name_map) {
 			auto it = name_map.find(v);
-			Name res = v;
+			auto res = v;
 			while (it != name_map.end()) {
 				res = it->second;
 				it = name_map.find(res);
@@ -533,7 +544,7 @@ namespace vuk {
 			auto post_diverge_name = pass_resources.back().out_name;
 
 			// TODO: does this really work or make sense for >1 undiv_names?
-			std::unordered_set<Name> undiv_names;
+			std::unordered_set<QualifiedName> undiv_names;
 			for (int i = 0; i < pass_resources.size() - 1; i++) {
 				auto& res = pass_resources[i];
 				auto resolved_name = impl->resolve_name(res.name);
@@ -551,8 +562,11 @@ namespace vuk {
 			}
 
 			for (auto& name : undiv_names) {
-				Name pre_name = name.append("__diverged");
-				impl->resources.push_back(Resource{ pre_name, Resource::Type::eImage, Access::eConverge, post_diverge_name });
+				QualifiedName pre_name = { name.prefix, name.name.append("__diverged") };
+				Resource res{ {}, Resource::Type::eImage, Access::eConverge, {} };
+				res.name = pre_name;
+				res.out_name = post_diverge_name;
+				impl->resources.push_back(res);
 				name_map.emplace(post_diverge_name, pre_name);
 			}
 			new_resources.offset1 = impl->resources.size();
@@ -563,7 +577,7 @@ namespace vuk {
 		// populate resource name -> use chain map
 		for (auto& [k, v] : name_map) {
 			auto it = name_map.find(v);
-			Name res = v;
+			auto res = v;
 			while (it != name_map.end()) {
 				res = it->second;
 				it = name_map.find(res);
@@ -574,10 +588,10 @@ namespace vuk {
 
 		// use chains pass
 		impl->use_chains.clear();
-		std::unordered_multimap<Name, Name> diverged_chains;
+		std::unordered_multimap<QualifiedName, QualifiedName> diverged_chains;
 		for (PassInfo& passinfo : impl->computed_passes) {
 			for (Resource& res : passinfo.resources.to_span(impl->resources)) {
-				Name resolved_name = impl->resolve_name(res.name);
+				auto resolved_name = impl->resolve_name(res.name);
 
 				bool skip = false;
 				// for read or write, we add source to use chain
@@ -587,7 +601,7 @@ namespace vuk {
 					auto& chain = it->second;
 
 					bool diverged_subchain = false;
-					Name undiverged_name = resolved_name;
+					auto undiverged_name = resolved_name;
 
 					Subrange sr{};
 					if (auto it = impl->diverged_subchain_headers.find(resolved_name); it != impl->diverged_subchain_headers.end()) {
@@ -880,7 +894,7 @@ namespace vuk {
 
 	void RenderGraph::attach_swapchain(Name name, SwapchainRef swp) {
 		AttachmentInfo attachment_info;
-		attachment_info.name = name;
+		attachment_info.name = { Name{}, name };
 		attachment_info.attachment.extent = Dimension3D::absolute(swp->extent);
 		// directly presented
 		attachment_info.attachment.format = swp->format;
@@ -910,24 +924,28 @@ namespace vuk {
 		final.layout = ImageLayout::ePresentSrcKHR;
 		final.stages = PipelineStageFlagBits::eBottomOfPipe;
 
-		impl->bound_attachments.emplace(name, attachment_info);
+		impl->bound_attachments.emplace(attachment_info.name, attachment_info);
 	}
 
 	void RenderGraph::attach_buffer(Name name, Buffer buf, Access initial, Access final) {
-		BufferInfo buf_info{ .name = name, .initial = to_use(initial, DomainFlagBits::eAny), .final = to_use(final, DomainFlagBits::eAny), .buffer = buf };
-		impl->bound_buffers.emplace(name, buf_info);
+		BufferInfo buf_info{
+			.name = { Name{}, name }, .initial = to_use(initial, DomainFlagBits::eAny), .final = to_use(final, DomainFlagBits::eAny), .buffer = buf
+		};
+		impl->bound_buffers.emplace(buf_info.name, buf_info);
 	}
 
 	void RenderGraph::attach_buffer_from_allocator(Name name, Buffer buf, Allocator allocator, Access initial, Access final) {
-		BufferInfo buf_info{
-			.name = name, .initial = to_use(initial, DomainFlagBits::eAny), .final = to_use(final, DomainFlagBits::eAny), .buffer = buf, .allocator = allocator
-		};
-		impl->bound_buffers.emplace(name, buf_info);
+		BufferInfo buf_info{ .name = { Name{}, name },
+			                   .initial = to_use(initial, DomainFlagBits::eAny),
+			                   .final = to_use(final, DomainFlagBits::eAny),
+			                   .buffer = buf,
+			                   .allocator = allocator };
+		impl->bound_buffers.emplace(buf_info.name, buf_info);
 	}
 
 	void RenderGraph::attach_image(Name name, ImageAttachment att, Access initial_acc, Access final_acc) {
 		AttachmentInfo attachment_info;
-		attachment_info.name = name;
+		attachment_info.name = { Name{}, name };
 		attachment_info.attachment = att;
 		if (att.has_concrete_image() && att.has_concrete_image_view()) {
 			attachment_info.type = AttachmentInfo::Type::eExternal;
@@ -940,13 +958,13 @@ namespace vuk {
 		QueueResourceUse& final = attachment_info.final;
 		initial = to_use(initial_acc, DomainFlagBits::eAny);
 		final = to_use(final_acc, DomainFlagBits::eAny);
-		impl->bound_attachments.emplace(name, attachment_info);
+		impl->bound_attachments.emplace(attachment_info.name, attachment_info);
 	}
 
 	void RenderGraph::attach_image_from_allocator(Name name, ImageAttachment att, Allocator allocator, Access initial_acc, Access final_acc) {
 		AttachmentInfo attachment_info;
 		attachment_info.allocator = allocator;
-		attachment_info.name = name;
+		attachment_info.name = { Name{}, name };
 		attachment_info.attachment = att;
 		if (att.has_concrete_image() && att.has_concrete_image_view()) {
 			attachment_info.type = AttachmentInfo::Type::eExternal;
@@ -959,7 +977,7 @@ namespace vuk {
 		QueueResourceUse& final = attachment_info.final;
 		initial = to_use(initial_acc, DomainFlagBits::eAny);
 		final = to_use(final_acc, DomainFlagBits::eAny);
-		impl->bound_attachments.emplace(name, attachment_info);
+		impl->bound_attachments.emplace(attachment_info.name, attachment_info);
 	}
 
 	void RenderGraph::attach_and_clear_image(Name name, ImageAttachment att, Clear clear_value, Access initial_acc, Access final_acc) {
@@ -973,7 +991,7 @@ namespace vuk {
 			if (fimg.is_image()) {
 				auto att = fimg.get_result<ImageAttachment>();
 				AttachmentInfo attachment_info;
-				attachment_info.name = name;
+				attachment_info.name = { Name{}, name };
 				attachment_info.attachment = att;
 
 				attachment_info.type = AttachmentInfo::Type::eExternal;
@@ -981,19 +999,21 @@ namespace vuk {
 				attachment_info.initial = fimg.control->last_use;
 				attachment_info.final = to_use(vuk::Access::eNone, DomainFlagBits::eAny);
 
-				impl->bound_attachments.emplace(name, attachment_info);
+				impl->bound_attachments.emplace(attachment_info.name, attachment_info);
 			} else {
-				BufferInfo buf_info{
-					.name = name, .initial = fimg.control->last_use, .final = to_use(vuk::Access::eNone, DomainFlagBits::eAny), .buffer = fimg.get_result<Buffer>()
-				};
-				impl->bound_buffers.emplace(name, buf_info);
+				BufferInfo buf_info{ .name = { Name{}, name },
+					                   .initial = fimg.control->last_use,
+					                   .final = to_use(vuk::Access::eNone, DomainFlagBits::eAny),
+					                   .buffer = fimg.get_result<Buffer>() };
+				impl->bound_buffers.emplace(buf_info.name, buf_info);
 			}
-			impl->acquires.emplace_back(name, Acquire{ fimg.control->last_use, fimg.control->initial_domain, fimg.control->initial_visibility });
+			impl->acquires.emplace_back(QualifiedName{ Name{}, name },
+			                            Acquire{ fimg.control->last_use, fimg.control->initial_domain, fimg.control->initial_visibility });
 			impl->imported_names.emplace_back(name);
 		} else if (fimg.get_status() == FutureBase::Status::eInitial) {
 			// an unsubmitted RG is being attached, we remove the release from that RG, and we allow the name to be found in us
 			assert(fimg.rg->impl);
-			std::erase_if(fimg.rg->impl->releases, [name = fimg.get_bound_name()](auto& item) { return item.first == name; });
+			std::erase_if(fimg.rg->impl->releases, [name = fimg.get_bound_name()](auto& item) { return item.first.name == name; });
 			auto sg_info_it = std::find_if(impl->subgraphs.begin(), impl->subgraphs.end(), [&](auto& it) { return it.first == fimg.rg; });
 			if (sg_info_it == impl->subgraphs.end()) {
 				impl->subgraphs.emplace_back(std::pair{ fimg.rg, RGImpl::SGInfo{} });
@@ -1037,21 +1057,21 @@ namespace vuk {
 		outputs.insert(imported_names.begin(), imported_names.end());
 
 		for (auto& [name, _] : bound_attachments) {
-			outputs.insert(name);
+			outputs.insert(name.name);
 		}
 		for (auto& [name, _] : bound_buffers) {
-			outputs.insert(name);
+			outputs.insert(name.name);
 		}
 
 		for (auto& pif : pass_infos) {
 			for (auto& in : pif.input_names.to_span(input_names)) {
-				outputs.erase(in);
+				outputs.erase(in.name);
 			}
 			for (auto& in : pif.write_input_names.to_span(write_input_names)) {
-				outputs.erase(in);
+				outputs.erase(in.name);
 			}
 			for (auto& in : pif.output_names.to_span(output_names)) {
-				outputs.emplace(in);
+				outputs.emplace(in.name);
 			}
 		}
 		return outputs;
@@ -1067,12 +1087,12 @@ namespace vuk {
 	}
 
 	void RenderGraph::attach_out(Name name, Future& fimg, DomainFlags dst_domain, Subrange subrange) {
-		impl->releases.emplace_back(name, Release{ to_use(Access::eNone, dst_domain), subrange, fimg.control.get() });
+		impl->releases.emplace_back(QualifiedName{ Name{}, name }, Release{ to_use(Access::eNone, dst_domain), subrange, fimg.control.get() });
 	}
 
 	void RenderGraph::detach_out(Name name, Future& fimg) {
 		for (auto it = impl->releases.begin(); it != impl->releases.end(); ++it) {
-			if (it->first == name && it->second.signal == fimg.control.get()) {
+			if (it->first.name == name && it->second.signal == fimg.control.get()) {
 				impl->releases.erase(it);
 				return;
 			}
@@ -1284,7 +1304,8 @@ namespace vuk {
 				if (dst_stages == PipelineStageFlags{}) {
 					barrier.dstAccessMask = {};
 				}
-				std::memcpy(&barrier.pNext, &whole_name, sizeof(Name));
+				auto qfref = &impl->qfname_references.emplace_back(whole_name);
+				std::memcpy(&barrier.pNext, &qfref, sizeof(void*));
 				barrier.srcStageMask = (VkPipelineStageFlags2)src_stages.m_mask;
 				barrier.dstStageMask = (VkPipelineStageFlags2)dst_stages.m_mask;
 
@@ -1588,8 +1609,8 @@ namespace vuk {
 					continue;
 				VkAttachmentReference attref{};
 
-				Name resolved_name = impl->resolve_name(res.name);
-				Name attachment_name = impl->whole_name(resolved_name);
+				auto resolved_name = impl->resolve_name(res.name);
+				auto attachment_name = impl->whole_name(resolved_name);
 				auto& attachment_info = impl->bound_attachments.at(attachment_name);
 				auto& chain = impl->use_chains.find(resolved_name)->second;
 				auto cit = std::find_if(chain.begin(), chain.end(), [&](auto& useref) { return useref.pass == &pass; });
@@ -1694,15 +1715,15 @@ namespace vuk {
 		return { expected_value, *this };
 	}
 
-	MapProxy<Name, std::span<const UseRef>> Compiler::get_use_chains() {
+	MapProxy<QualifiedName, std::span<const UseRef>> Compiler::get_use_chains() {
 		return &impl->use_chains;
 	}
 
-	MapProxy<Name, const AttachmentInfo&> Compiler::get_bound_attachments() {
+	MapProxy<QualifiedName, const AttachmentInfo&> Compiler::get_bound_attachments() {
 		return &impl->bound_attachments;
 	}
 
-	MapProxy<Name, const BufferInfo&> Compiler::get_bound_buffers() {
+	MapProxy<QualifiedName, const BufferInfo&> Compiler::get_bound_buffers() {
 		return &impl->bound_buffers;
 	}
 

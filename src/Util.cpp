@@ -538,11 +538,11 @@ namespace vuk {
 		return { SampledImage::Global{ iv, sci, ImageLayout::eShaderReadOnlyOptimal } };
 	}
 
-	SampledImage make_sampled_image(Name n, SamplerCreateInfo sci) {
+	SampledImage make_sampled_image(NameReference n, SamplerCreateInfo sci) {
 		return { SampledImage::RenderGraphAttachment{ n, sci, {}, ImageLayout::eShaderReadOnlyOptimal } };
 	}
 
-	SampledImage make_sampled_image(Name n, ImageViewCreateInfo ivci, SamplerCreateInfo sci) {
+	SampledImage make_sampled_image(NameReference n, ImageViewCreateInfo ivci, SamplerCreateInfo sci) {
 		return { SampledImage::RenderGraphAttachment{ n, sci, ivci, ImageLayout::eShaderReadOnlyOptimal } };
 	}
 

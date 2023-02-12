@@ -811,7 +811,7 @@ namespace vuk {
 	RGImage Context::create(const create_info_t<RGImage>& cinfo) {
 		RGImage res{};
 		res.image = allocate_image(impl->direct_allocator, cinfo.ici)->release();
-		std::string name = std::string("Image: RenderTarget ") + std::string(cinfo.name.to_sv());
+		std::string name = std::string("Image: RenderTarget ") + std::string(cinfo.name.name.to_sv());
 		set_name(res.image.image, Name(name));
 		return res;
 	}

@@ -36,15 +36,19 @@ inline constexpr uint32_t operator"" _fnv1a(const char* aString, const size_t aS
 }
 
 template<typename T>
-inline void hash_combine(size_t& seed, const T& v) {
+inline void hash_combine(size_t& seed, const T& v) noexcept {
 	std::hash<T> hasher;
 	seed ^= hasher(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+}
+
+inline constexpr void hash_combine_direct(uint32_t& seed, uint32_t v) noexcept {
+	seed ^= v + 0x9e3779b9 + (seed << 6) + (seed >> 2);
 }
 
 #define FWD(x) (static_cast<decltype(x)&&>(x))
 
 template<typename T, typename... Rest>
-inline void hash_combine(size_t& seed, const T& v, Rest&&... rest) {
+inline void hash_combine(size_t& seed, const T& v, Rest&&... rest) noexcept {
 	std::hash<T> hasher;
 	seed ^= hasher(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
 	hash_combine(seed, FWD(rest)...);

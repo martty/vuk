@@ -330,7 +330,7 @@ namespace vuk {
 
 	struct SampledImage make_sampled_image(ImageView iv, SamplerCreateInfo sci);
 
-	struct SampledImage make_sampled_image(Name n, SamplerCreateInfo sci);
+	struct SampledImage make_sampled_image(struct NameReference n, SamplerCreateInfo sci);
 
-	struct SampledImage make_sampled_image(Name n, ImageViewCreateInfo ivci, SamplerCreateInfo sci);
+	struct SampledImage make_sampled_image(struct NameReference n, ImageViewCreateInfo ivci, SamplerCreateInfo sci);
 } // namespace vuk

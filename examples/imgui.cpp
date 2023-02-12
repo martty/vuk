@@ -43,10 +43,10 @@ util::ImGuiData util::ImGui_ImplVuk_Init(vuk::Allocator& allocator) {
 }
 
 vuk::Future util::ImGui_ImplVuk_Render(vuk::Allocator& allocator,
-                                vuk::Future target,
-                                util::ImGuiData& data,
-                                ImDrawData* draw_data,
-                                const plf::colony<vuk::SampledImage>& sampled_images) {
+                                       vuk::Future target,
+                                       util::ImGuiData& data,
+                                       ImDrawData* draw_data,
+                                       const plf::colony<vuk::SampledImage>& sampled_images) {
 	auto reset_render_state = [](const util::ImGuiData& data, vuk::CommandBuffer& command_buffer, ImDrawData* draw_data, vuk::Buffer vertex, vuk::Buffer index) {
 		command_buffer.bind_image(0, 0, *data.font_texture.view).bind_sampler(0, 0, data.font_sci);
 		if (index.size > 0) {
@@ -92,13 +92,13 @@ vuk::Future util::ImGui_ImplVuk_Render(vuk::Allocator& allocator,
 	resources.emplace_back(vuk::Resource{ "target", vuk::Resource::Type::eImage, vuk::eColorRW, "target+" });
 	for (auto& si : sampled_images) {
 		if (!si.is_global) {
-			resources.emplace_back(vuk::Resource{ si.rg_attachment.attachment_name, vuk::Resource::Type::eImage, vuk::Access::eFragmentSampled });
+			resources.emplace_back(
+			    vuk::Resource{ si.rg_attachment.reference.rg, si.rg_attachment.reference.name, vuk::Resource::Type::eImage, vuk::Access::eFragmentSampled });
 		}
 	}
 	vuk::Pass pass{ .name = "imgui",
 		              .resources = std::move(resources),
-		              .execute = [&data, &allocator, verts = imvert.get(), inds = imind.get(), draw_data, reset_render_state](
-		                             vuk::CommandBuffer& command_buffer) {
+		              .execute = [&data, &allocator, verts = imvert.get(), inds = imind.get(), draw_data, reset_render_state](vuk::CommandBuffer& command_buffer) {
 		                command_buffer.set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor);
 		                command_buffer.set_rasterization(vuk::PipelineRasterizationStateCreateInfo{});
 		                command_buffer.set_color_blend("target", vuk::BlendPreset::eAlphaBlend);
@@ -155,12 +155,12 @@ vuk::Future util::ImGui_ImplVuk_Render(vuk::Allocator& allocator,
 							                } else {
 								                if (si.rg_attachment.ivci) {
 									                auto ivci = *si.rg_attachment.ivci;
-									                auto res_img = command_buffer.get_resource_image(si.rg_attachment.attachment_name);
+									                auto res_img = command_buffer.get_resource_image(si.rg_attachment.reference.name);
 									                ivci.image = res_img->image;
 									                auto iv = vuk::allocate_image_view(allocator, ivci);
 									                command_buffer.bind_image(0, 0, **iv).bind_sampler(0, 0, si.rg_attachment.sci);
 								                } else {
-									                command_buffer.bind_image(0, 0, si.rg_attachment.attachment_name).bind_sampler(0, 0, si.rg_attachment.sci);
+									                command_buffer.bind_image(0, 0, si.rg_attachment.reference.name).bind_sampler(0, 0, si.rg_attachment.sci);
 								                }
 							                }
 						                }

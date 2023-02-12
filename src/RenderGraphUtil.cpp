@@ -54,8 +54,8 @@ namespace vuk {
 	// implement MapProxy for relevant types
 
 	// implement MapProxy for UseRefs
-	using MP1 = MapProxy<Name, std::span<const UseRef>>;
-	using MPI1 = ConstMapIterator<Name, std::span<const UseRef>>;
+	using MP1 = MapProxy<QualifiedName, std::span<const UseRef>>;
+	using MPI1 = ConstMapIterator<QualifiedName, std::span<const UseRef>>;
 	using M1 = decltype(RGCImpl::use_chains);
 
 	template<>
@@ -71,7 +71,7 @@ namespace vuk {
 	}
 
 	template<>
-	MP1::const_iterator MP1::find(Name key) const noexcept {
+	MP1::const_iterator MP1::find(QualifiedName key) const noexcept {
 		auto& map = *reinterpret_cast<M1*>(_map);
 		return MP1::const_iterator(new M1::const_iterator(map.find(key)));
 	}
@@ -95,7 +95,7 @@ namespace vuk {
 	template<>
 	MPI1::reference MPI1::operator*() noexcept {
 		const auto& iter = *reinterpret_cast<M1::const_iterator const*>(_iter);
-		std::pair<const Name&, std::span<const UseRef>> result(iter->first, std::span(iter->second));
+		std::pair<const QualifiedName&, std::span<const UseRef>> result(iter->first, std::span(iter->second));
 		return result;
 	}
 
@@ -111,9 +111,9 @@ namespace vuk {
 	}
 
 	// implement MapProxy for attachment
-	using MP2 = MapProxy<Name, const AttachmentInfo&>;
-	using MPI2 = ConstMapIterator<Name, const AttachmentInfo&>;
-	using M2 = robin_hood::unordered_flat_map<Name, AttachmentInfo>;
+	using MP2 = MapProxy<QualifiedName, const AttachmentInfo&>;
+	using MPI2 = ConstMapIterator<QualifiedName, const AttachmentInfo&>;
+	using M2 = robin_hood::unordered_flat_map<QualifiedName, AttachmentInfo>;
 
 	template<>
 	MP2::const_iterator MP2::cbegin() const noexcept {
@@ -128,7 +128,7 @@ namespace vuk {
 	}
 
 	template<>
-	MP2::const_iterator MP2::find(Name key) const noexcept {
+	MP2::const_iterator MP2::find(QualifiedName key) const noexcept {
 		auto& map = *reinterpret_cast<M2*>(_map);
 		return MP2::const_iterator(new M2::const_iterator(map.find(key)));
 	}
@@ -167,9 +167,9 @@ namespace vuk {
 	}
 
 	// implement MapProxy for attachment
-	using MP3 = MapProxy<Name, const BufferInfo&>;
-	using MPI3 = ConstMapIterator<Name, const BufferInfo&>;
-	using M3 = robin_hood::unordered_flat_map<Name, BufferInfo>;
+	using MP3 = MapProxy<QualifiedName, const BufferInfo&>;
+	using MPI3 = ConstMapIterator<QualifiedName, const BufferInfo&>;
+	using M3 = robin_hood::unordered_flat_map<QualifiedName, BufferInfo>;
 
 	template<>
 	MP3::const_iterator MP3::cbegin() const noexcept {
@@ -184,7 +184,7 @@ namespace vuk {
 	}
 
 	template<>
-	MP3::const_iterator MP3::find(Name key) const noexcept {
+	MP3::const_iterator MP3::find(QualifiedName key) const noexcept {
 		auto& map = *reinterpret_cast<M3*>(_map);
 		return MP3::const_iterator(new M3::const_iterator(map.find(key)));
 	}
@@ -227,15 +227,17 @@ namespace vuk {
 			return fmt::format("{}({})", pass_info.pass->source.file_name(), pass_info.pass->source.line());
 		}
 
-		RenderGraphException make_unattached_resource_exception(PassInfo& pass_info, Resource& resource, Name undiverged_name) {
+		RenderGraphException make_unattached_resource_exception(PassInfo& pass_info, Resource& resource, QualifiedName undiverged_name) {
 			const char* type = resource.type == Resource::Type::eBuffer ? "buffer" : "image";
 
-			std::string message = fmt::format("{}: Pass <{}> references {} <{}> (also known as <{}>), which was never attached.\n(did you forget an attach_* call?).",
-			                                  format_source_location(pass_info),
-			                                  pass_info.pass->name.c_str(),
-			                                  type,
-			                                  resource.name.c_str(),
-			                                  undiverged_name.c_str());
+			std::string message =
+			    fmt::format("{}: Pass <{}> references {} <{}> (also known as <{}::{}>), which was never attached.\n(did you forget an attach_* call?).",
+			                format_source_location(pass_info),
+			                pass_info.pass->name.c_str(),
+			                type,
+			                resource.name.name.c_str(),
+			                undiverged_name.prefix.c_str(),
+			                undiverged_name.name.c_str());
 			return RenderGraphException(std::move(message));
 		}
 
