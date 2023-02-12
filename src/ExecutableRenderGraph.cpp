@@ -146,16 +146,16 @@ namespace vuk {
 	void emit_barriers(Context& ctx,
 	                   VkCommandBuffer cbuf,
 	                   vuk::DomainFlagBits domain,
-	                   const robin_hood::unordered_flat_map<Name, AttachmentInfo>& bound_attachments,
+	                   const robin_hood::unordered_flat_map<QualifiedName, AttachmentInfo>& bound_attachments,
 	                   std::vector<VkMemoryBarrier2KHR, short_alloc<VkMemoryBarrier2KHR, 64>>& mem_bars,
 	                   std::vector<VkImageMemoryBarrier2KHR, short_alloc<VkImageMemoryBarrier2KHR, 64>>& im_bars) {
 		// resolve and compact image barriers in place
 		uint32_t imbar_dst_index = 0;
 		for (auto src_index = 0; src_index < im_bars.size(); src_index++) {
 			auto dep = im_bars[src_index];
-			Name n;
-			std::memcpy(&n, &dep.pNext, sizeof(Name));
-			auto& bound = bound_attachments.at(n);
+			QualifiedName* np;
+			std::memcpy(&np, &dep.pNext, sizeof(void*));
+			auto& bound = bound_attachments.at(*np);
 			dep.pNext = 0;
 			if (!resolve_image_barrier(ctx, dep, bound, domain)) {
 				continue;
@@ -225,7 +225,7 @@ namespace vuk {
 			bool use_secondary_command_buffers = rpass.subpasses[0].use_secondary_command_buffers;
 			bool is_single_pass = rpass.subpasses.size() == 1 && rpass.subpasses[0].passes.size() == 1;
 			if (is_single_pass && !rpass.subpasses[0].passes[0]->qualified_name.is_invalid() && rpass.subpasses[0].passes[0]->pass->execute) {
-				ctx.begin_region(cbuf, rpass.subpasses[0].passes[0]->qualified_name);
+				ctx.begin_region(cbuf, rpass.subpasses[0].passes[0]->qualified_name.name);
 			}
 
 			emit_barriers(ctx, cbuf, domain, impl->bound_attachments, rpass.pre_mem_barriers, rpass.pre_barriers);
@@ -263,7 +263,7 @@ namespace vuk {
 					if (p->pass->execute) {
 						cobuf.current_pass = p;
 						if (!p->qualified_name.is_invalid() && !is_single_pass) {
-							ctx.begin_region(cobuf.command_buffer, p->qualified_name);
+							ctx.begin_region(cobuf.command_buffer, p->qualified_name.name);
 							p->pass->execute(cobuf);
 							ctx.end_region(cobuf.command_buffer);
 						} else {
@@ -492,53 +492,53 @@ namespace vuk {
 				if (prev != ia) { // progress made
 					// check for broken constraints
 					if (prev.base_layer != ia.base_layer && prev.base_layer != VK_REMAINING_ARRAY_LAYERS) {
-						msg << "Rule broken for attachment[" << atti.name.c_str() << "] :\n ";
+						msg << "Rule broken for attachment[" << atti.name.name.c_str() << "] :\n ";
 						msg << " base layer was previously known to be " << prev.base_layer << ", but now set to " << ia.base_layer;
 						return { expected_error, RenderGraphException{ msg.str() } };
 					}
 					if (prev.layer_count != ia.layer_count && prev.layer_count != VK_REMAINING_ARRAY_LAYERS) {
-						msg << "Rule broken for attachment[" << atti.name.c_str() << "] :\n ";
+						msg << "Rule broken for attachment[" << atti.name.name.c_str() << "] :\n ";
 						msg << " layer count was previously known to be " << prev.layer_count << ", but now set to " << ia.layer_count;
 						return { expected_error, RenderGraphException{ msg.str() } };
 					}
 					if (prev.base_level != ia.base_level && prev.base_level != VK_REMAINING_MIP_LEVELS) {
-						msg << "Rule broken for attachment[" << atti.name.c_str() << "] :\n ";
+						msg << "Rule broken for attachment[" << atti.name.name.c_str() << "] :\n ";
 						msg << " base level was previously known to be " << prev.base_level << ", but now set to " << ia.base_level;
 						return { expected_error, RenderGraphException{ msg.str() } };
 					}
 					if (prev.level_count != ia.level_count && prev.level_count != VK_REMAINING_MIP_LEVELS) {
-						msg << "Rule broken for attachment[" << atti.name.c_str() << "] :\n ";
+						msg << "Rule broken for attachment[" << atti.name.name.c_str() << "] :\n ";
 						msg << " level count was previously known to be " << prev.level_count << ", but now set to " << ia.level_count;
 						return { expected_error, RenderGraphException{ msg.str() } };
 					}
 					if (prev.format != ia.format && prev.format != Format::eUndefined) {
-						msg << "Rule broken for attachment[" << atti.name.c_str() << "] :\n ";
+						msg << "Rule broken for attachment[" << atti.name.name.c_str() << "] :\n ";
 						msg << " format was previously known to be " << format_to_sv(prev.format) << ", but now set to " << format_to_sv(ia.format);
 						return { expected_error, RenderGraphException{ msg.str() } };
 					}
 					if (prev.sample_count != ia.sample_count && prev.sample_count != SampleCountFlagBits::eInfer) {
-						msg << "Rule broken for attachment[" << atti.name.c_str() << "] :\n ";
+						msg << "Rule broken for attachment[" << atti.name.name.c_str() << "] :\n ";
 						msg << " sample count was previously known to be " << static_cast<uint32_t>(prev.sample_count.count) << ", but now set to "
 						    << static_cast<uint32_t>(ia.sample_count.count);
 						return { expected_error, RenderGraphException{ msg.str() } };
 					}
 					if (prev.extent.extent.width != ia.extent.extent.width && prev.extent.extent.width != 0) {
-						msg << "Rule broken for attachment[" << atti.name.c_str() << "] :\n ";
+						msg << "Rule broken for attachment[" << atti.name.name.c_str() << "] :\n ";
 						msg << " extent.width was previously known to be " << prev.extent.extent.width << ", but now set to " << ia.extent.extent.width;
 						return { expected_error, RenderGraphException{ msg.str() } };
 					}
 					if (prev.extent.extent.height != ia.extent.extent.height && prev.extent.extent.height != 0) {
-						msg << "Rule broken for attachment[" << atti.name.c_str() << "] :\n ";
+						msg << "Rule broken for attachment[" << atti.name.name.c_str() << "] :\n ";
 						msg << " extent.height was previously known to be " << prev.extent.extent.height << ", but now set to " << ia.extent.extent.height;
 						return { expected_error, RenderGraphException{ msg.str() } };
 					}
 					if (prev.extent.extent.depth != ia.extent.extent.depth && prev.extent.extent.depth != 0) {
-						msg << "Rule broken for attachment[" << atti.name.c_str() << "] :\n ";
+						msg << "Rule broken for attachment[" << atti.name.name.c_str() << "] :\n ";
 						msg << " extent.depth was previously known to be " << prev.extent.extent.depth << ", but now set to " << ia.extent.extent.depth;
 						return { expected_error, RenderGraphException{ msg.str() } };
 					}
 					if (ia.may_require_image_view() && prev.view_type != ia.view_type && prev.view_type != ImageViewType::eInfer) {
-						msg << "Rule broken for attachment[" << atti.name.c_str() << "] :\n ";
+						msg << "Rule broken for attachment[" << atti.name.name.c_str() << "] :\n ";
 						msg << " view type was previously known to be " << image_view_type_to_sv(prev.view_type) << ", but now set to "
 						    << image_view_type_to_sv(ia.view_type);
 						return { expected_error, RenderGraphException{ msg.str() } };
@@ -587,7 +587,7 @@ namespace vuk {
 		}
 
 		for (auto& [atti, iaref] : attis_to_infer) {
-			msg << "Could not infer attachment [" << atti->name.c_str() << "]:\n";
+			msg << "Could not infer attachment [" << atti->name.name.c_str() << "]:\n";
 			auto& ia = atti->attachment;
 			if (ia.sample_count == Samples::eInfer) {
 				msg << "- sample count unknown\n";
@@ -648,7 +648,7 @@ namespace vuk {
 				if (prev != buff) { // progress made
 					// check for broken constraints
 					if (prev.size != buff.size && prev.size != ~(0u)) {
-						msg << "Rule broken for buffer[" << bufi.name.c_str() << "] :\n ";
+						msg << "Rule broken for buffer[" << bufi.name.name.c_str() << "] :\n ";
 						msg << " size was previously known to be " << prev.size << ", but now set to " << buff.size;
 						return { expected_error, RenderGraphException{ msg.str() } };
 					}
@@ -664,7 +664,7 @@ namespace vuk {
 		}
 
 		for (auto& [buff, bufinfs] : bufis_to_infer) {
-			msg << "Could not infer buffer [" << buff->name.c_str() << "]:\n";
+			msg << "Could not infer buffer [" << buff->name.name.c_str() << "]:\n";
 			if (buff->buffer.size == ~(0u)) {
 				msg << "- size unknown\n";
 			}
@@ -718,7 +718,7 @@ namespace vuk {
 						return img;
 					}
 					bound.attachment.image = **img;
-					ctx.set_name(bound.attachment.image.image, bound.name);
+					ctx.set_name(bound.attachment.image.image, bound.name.name);
 				}
 			}
 		}
@@ -774,7 +774,7 @@ namespace vuk {
 						return iv;
 					}
 					specific_attachment.image_view = **iv;
-					auto name = std::string("ImageView: RenderTarget ") + std::string(bound.name.to_sv());
+					auto name = std::string("ImageView: RenderTarget ") + std::string(bound.name.name.to_sv());
 					ctx.set_name(specific_attachment.image_view.payload, Name(name));
 				}
 
@@ -921,20 +921,20 @@ namespace vuk {
 		return { expected_error, errors::make_cbuf_references_undeclared_resource(*pass_info, Resource::Type::eImage, n) };
 	}
 
-	Name ExecutableRenderGraph::resolve_name(Name name, PassInfo* pass_info) const noexcept {
-		auto qualified_name = pass_info->prefix.is_invalid() ? name : pass_info->prefix.append(name.to_sv());
+	QualifiedName ExecutableRenderGraph::resolve_name(Name name, PassInfo* pass_info) const noexcept {
+		auto qualified_name = QualifiedName{ pass_info->qualified_name.prefix, name };
 		return impl->resolve_name(qualified_name);
 	}
 
 	const ImageAttachment& InferenceContext::get_image_attachment(Name name) const {
-		auto fqname = prefix.append(name.to_sv());
+		auto fqname = QualifiedName{ prefix, name };
 		auto resolved_name = erg->impl->resolve_name(fqname);
 		auto whole_name = erg->impl->whole_name(resolved_name);
 		return erg->impl->bound_attachments.at(whole_name).attachment;
 	}
 
 	const Buffer& InferenceContext::get_buffer(Name name) const {
-		auto fqname = prefix.append(name.to_sv());
+		auto fqname = QualifiedName{ prefix, name };
 		auto resolved_name = erg->impl->resolve_name(fqname);
 		auto whole_name = erg->impl->whole_name(resolved_name);
 		return erg->impl->bound_buffers.at(whole_name).buffer;

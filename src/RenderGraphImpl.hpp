@@ -1,11 +1,12 @@
 #pragma once
 
+#include "RelSpan.hpp"
 #include "RenderGraphUtil.hpp"
 #include "RenderPass.hpp"
 #include "vuk/ShortAlloc.hpp"
 #include "vuk/SourceLocation.hpp"
-#include "RelSpan.hpp"
 
+#include <deque>
 #include <robin_hood.h>
 
 namespace vuk {
@@ -83,19 +84,17 @@ namespace vuk {
 
 		PassWrapper* pass;
 
-		Name qualified_name;
+		QualifiedName qualified_name;
 
 		size_t render_pass_index;
 		uint32_t subpass;
 		DomainFlags domain;
 
-		Name prefix;
-
 		RelSpan<Resource> resources;
-		RelSpan<std::pair<Name, Name>> resolves; // src -> dst
-		RelSpan<Name> input_names;
-		RelSpan<Name> output_names;
-		RelSpan<Name> write_input_names;
+		RelSpan<std::pair<QualifiedName, QualifiedName>> resolves; // src -> dst
+		RelSpan<QualifiedName> input_names;
+		RelSpan<QualifiedName> output_names;
+		RelSpan<QualifiedName> write_input_names;
 
 		RelSpan<std::pair<DomainFlagBits, PassInfo*>> waits;
 		RelSpan<std::pair<DomainFlagBits, uint64_t>> absolute_waits;
@@ -119,20 +118,21 @@ namespace vuk {
 		std::vector<Name, short_alloc<Name, 64>> imported_names;                            // names coming from subgraphs
 		std::vector<std::pair<Name, Name>, short_alloc<std::pair<Name, Name>, 64>> aliases; // maps resource names to resource names
 		std::vector<Name, short_alloc<Name, 64>> whole_names_consumed;
-		std::vector<std::pair<Name, std::pair<Name, Subrange::Image>>, short_alloc<std::pair<Name, std::pair<Name, Subrange::Image>>, 64>>
+		std::vector<std::pair<QualifiedName, std::pair<QualifiedName, Subrange::Image>>,
+		            short_alloc<std::pair<QualifiedName, std::pair<QualifiedName, Subrange::Image>>, 64>>
 		    diverged_subchain_headers;
 
-		robin_hood::unordered_flat_map<Name, AttachmentInfo> bound_attachments;
-		robin_hood::unordered_flat_map<Name, BufferInfo> bound_buffers;
+		robin_hood::unordered_flat_map<QualifiedName, AttachmentInfo> bound_attachments;
+		robin_hood::unordered_flat_map<QualifiedName, BufferInfo> bound_buffers;
 
 		std::vector<IAInference, short_alloc<IAInference, 64>> ia_inference_rules;
 		std::vector<BufferInference, short_alloc<BufferInference, 64>> buf_inference_rules;
 
 		std::vector<Resource> resources;
 		std::vector<std::pair<Name, Name>> resolves; // src -> dst
-		std::vector<Name> input_names;
-		std::vector<Name> output_names;
-		std::vector<Name> write_input_names;
+		std::vector<QualifiedName> input_names;
+		std::vector<QualifiedName> output_names;
+		std::vector<QualifiedName> write_input_names;
 
 		struct SGInfo {
 			uint64_t count = 0;
@@ -141,8 +141,8 @@ namespace vuk {
 
 		std::vector<std::pair<std::shared_ptr<RenderGraph>, SGInfo>, short_alloc<std::pair<std::shared_ptr<RenderGraph>, SGInfo>, 64>> subgraphs;
 
-		std::vector<std::pair<Name, Acquire>, short_alloc<std::pair<Name, Acquire>, 64>> acquires;
-		std::vector<std::pair<Name, Release>, short_alloc<std::pair<Name, Release>, 64>> releases;
+		std::vector<std::pair<QualifiedName, Acquire>, short_alloc<std::pair<QualifiedName, Acquire>, 64>> acquires;
+		std::vector<std::pair<QualifiedName, Release>, short_alloc<std::pair<QualifiedName, Release>, 64>> releases;
 
 		RGImpl() :
 		    arena_(new arena(sizeof(Pass) * 64)),
@@ -182,37 +182,39 @@ namespace vuk {
 
 		// per PassInfo
 		std::vector<Resource> resources;
-		std::vector<std::pair<Name, Name>> resolves; // src -> dst
-		std::vector<Name> input_names;
-		std::vector<Name> output_names;
-		std::vector<Name> write_input_names;
+		std::vector<std::pair<QualifiedName, QualifiedName>> resolves; // src -> dst
+		std::vector<QualifiedName> input_names;
+		std::vector<QualifiedName> output_names;
+		std::vector<QualifiedName> write_input_names;
 
 		std::vector<std::pair<DomainFlagBits, PassInfo*>> waits;
 		std::vector<std::pair<DomainFlagBits, uint64_t>> absolute_waits;
 		std::vector<FutureBase*> future_signals;
+		std::deque<QualifiedName> qfname_references;
 		// /per PassInfo
 
 		std::vector<PassInfo, short_alloc<PassInfo, 64>> computed_passes;
 		std::vector<PassInfo*, short_alloc<PassInfo*, 64>> ordered_passes;
-		robin_hood::unordered_flat_map<Name, Name> computed_aliases; // maps resource names to resource names
-		robin_hood::unordered_flat_map<Name, Name> assigned_names;   // maps resource names to attachment names
+		robin_hood::unordered_flat_map<QualifiedName, QualifiedName> computed_aliases; // maps resource names to resource names
+		robin_hood::unordered_flat_map<QualifiedName, QualifiedName> assigned_names;   // maps resource names to attachment names
 		robin_hood::unordered_flat_map<Name, uint64_t> sg_name_counter;
-		robin_hood::unordered_node_map<Name, std::vector<UseRef, short_alloc<UseRef, 64>>> use_chains;
+		std::unordered_map<RenderGraph*, std::string> sg_prefixes;
+		robin_hood::unordered_node_map<QualifiedName, std::vector<UseRef, short_alloc<UseRef, 64>>> use_chains;
 
-		robin_hood::unordered_flat_map<Name, AttachmentInfo> bound_attachments;
-		robin_hood::unordered_flat_map<Name, BufferInfo> bound_buffers;
+		robin_hood::unordered_flat_map<QualifiedName, AttachmentInfo> bound_attachments;
+		robin_hood::unordered_flat_map<QualifiedName, BufferInfo> bound_buffers;
 		std::vector<void*> attachment_use_chain_references;
 		std::vector<RenderPassInfo*> attachment_rp_references;
 
-		std::unordered_map<Name, Acquire> acquires;
-		std::unordered_multimap<Name, Release> releases;
+		std::unordered_map<QualifiedName, Acquire> acquires;
+		std::unordered_multimap<QualifiedName, Release> releases;
 
-		std::unordered_map<Name, IAInferences> ia_inference_rules;
-		std::unordered_map<Name, BufferInferences> buf_inference_rules;
+		std::unordered_map<QualifiedName, IAInferences> ia_inference_rules;
+		std::unordered_map<QualifiedName, BufferInferences> buf_inference_rules;
 
-		robin_hood::unordered_flat_map<Name, std::pair<Name, Subrange::Image>> diverged_subchain_headers;
+		robin_hood::unordered_flat_map<QualifiedName, std::pair<QualifiedName, Subrange::Image>> diverged_subchain_headers;
 
-		Name resolve_name(Name in) {
+		QualifiedName resolve_name(QualifiedName in) {
 			auto it = assigned_names.find(in);
 			if (it == assigned_names.end()) {
 				return in;
@@ -222,7 +224,7 @@ namespace vuk {
 		};
 
 		// note : call it on resolved names only
-		Name whole_name(Name in) {
+		QualifiedName whole_name(QualifiedName in) {
 			if (auto it = diverged_subchain_headers.find(in); it != diverged_subchain_headers.end()) {
 				auto& sch_info = it->second;
 				return resolve_name(sch_info.first);
@@ -231,7 +233,7 @@ namespace vuk {
 			}
 		}
 
-		Name resolve_alias(Name in) {
+		QualifiedName resolve_alias(QualifiedName in) {
 			auto it = computed_aliases.find(in);
 			if (it == computed_aliases.end()) {
 				return in;
@@ -240,7 +242,7 @@ namespace vuk {
 			}
 		};
 
-		Name resolve_alias_rec(Name in) {
+		QualifiedName resolve_alias_rec(QualifiedName in) {
 			auto it = computed_aliases.find(in);
 			if (it == computed_aliases.end()) {
 				return in;
@@ -259,10 +261,8 @@ namespace vuk {
 		// determine rendergraph inputs and outputs, and resources that are neither
 		void build_io(std::span<struct PassInfo> passes);
 
-		std::unordered_map<std::shared_ptr<RenderGraph>, std::string> compute_prefixes(const RenderGraph& rg, bool do_prefix);
-		void inline_subgraphs(const std::shared_ptr<RenderGraph>& rg,
-		                      const std::unordered_map<std::shared_ptr<RenderGraph>, std::string>& prefixes,
-		                      std::unordered_set<std::shared_ptr<RenderGraph>>& consumed_rgs);
+		std::unordered_map<RenderGraph*, std::string> compute_prefixes(const RenderGraph& rg, bool do_prefix);
+		void inline_subgraphs(const std::shared_ptr<RenderGraph>& rg, std::unordered_set<std::shared_ptr<RenderGraph>>& consumed_rgs);
 
 		void schedule_intra_queue(std::span<struct PassInfo> passes, const RenderGraphCompileOptions& compile_options);
 	};
@@ -308,7 +308,7 @@ namespace vuk {
 	}
 
 	namespace errors {
-		RenderGraphException make_unattached_resource_exception(PassInfo& pass_info, Resource& resource, Name undiverged_name);
+		RenderGraphException make_unattached_resource_exception(PassInfo& pass_info, Resource& resource, QualifiedName undiverged_name);
 		RenderGraphException make_cbuf_references_unknown_resource(PassInfo& pass_info, Resource::Type type, Name name);
 		RenderGraphException make_cbuf_references_undeclared_resource(PassInfo& pass_info, Resource::Type type, Name name);
 	} // namespace errors

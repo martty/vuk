@@ -1,15 +1,15 @@
 #pragma once
 
+#include "RelSpan.hpp"
 #include "vuk/RenderGraph.hpp"
 #include "vuk/ShortAlloc.hpp"
-#include "RelSpan.hpp"
 #include <optional>
 
 namespace std {
 	template<>
 	struct hash<vuk::Resource> {
 		std::size_t operator()(vuk::Resource const& s) const noexcept {
-			return (size_t)((uintptr_t)s.name.c_str());
+			return (size_t)((uintptr_t)s.name.name.c_str());
 		}
 	};
 } // namespace std
@@ -290,8 +290,8 @@ namespace vuk {
 	}
 
 	struct UseRef {
-		Name name;
-		Name out_name;
+		QualifiedName name;
+		QualifiedName out_name;
 		vuk::Access original = vuk::eNone;
 		vuk::Access high_level_access;
 		QueueResourceUse use;
@@ -315,7 +315,7 @@ namespace vuk {
 	};
 
 	struct BufferInfo {
-		Name name;
+		QualifiedName name;
 
 		QueueResourceUse initial;
 		QueueResourceUse final;
@@ -328,7 +328,7 @@ namespace vuk {
 	};
 
 	struct AttachmentInfo {
-		Name name;
+		QualifiedName name;
 
 		ImageAttachment attachment = {};
 

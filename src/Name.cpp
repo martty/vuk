@@ -118,4 +118,10 @@ namespace std {
 	size_t hash<vuk::Name>::operator()(vuk::Name const& s) const {
 		return hash<const char*>()(s.id);
 	}
+
+	size_t hash<vuk::QualifiedName>::operator()(vuk::QualifiedName const& s) const {
+		uint32_t h = hash<vuk::Name>()(s.prefix);
+		::hash_combine_direct(h, hash<vuk::Name>()(s.name));
+		return h;
+	}
 } // namespace std

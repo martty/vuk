@@ -168,7 +168,7 @@ namespace vuk {
 			Extent2D extent;
 			SampleCountFlagBits samples;
 			VkAttachmentReference const* depth_stencil_attachment;
-			std::array<Name, VUK_MAX_COLOR_ATTACHMENTS> color_attachment_names;
+			std::array<QualifiedName, VUK_MAX_COLOR_ATTACHMENTS> color_attachment_names;
 			std::span<const VkAttachmentReference> color_attachments;
 		};
 		std::optional<RenderPassInfo> ongoing_renderpass;

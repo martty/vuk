@@ -9,7 +9,7 @@ namespace vuk {
 		vuk::Image image;
 	};
 	struct RGCI {
-		Name name;
+		QualifiedName name;
 		vuk::ImageCreateInfo ici;
 
 		bool operator==(const RGCI& other) const noexcept {

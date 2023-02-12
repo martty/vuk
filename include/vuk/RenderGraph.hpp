@@ -56,13 +56,15 @@ namespace vuk {
 	} // namespace detail
 
 	struct Resource {
-		Name name;
-		enum class Type { eBuffer, eImage } type;
+		QualifiedName name;
+		enum class Type { eBuffer, eImage, eForeign } type;
 		Access ia;
-		Name out_name;
+		QualifiedName out_name;
+		struct RenderGraph* foreign = nullptr;
 
-		Resource(Name n, Type t, Access ia) : name(n), type(t), ia(ia) {}
-		Resource(Name n, Type t, Access ia, Name out_name) : name(n), type(t), ia(ia), out_name(out_name) {}
+		Resource(Name n, Type t, Access ia) : name{ Name{}, n }, type(t), ia(ia) {}
+		Resource(Name n, Type t, Access ia, Name out_name) : name{ Name{}, n }, type(t), ia(ia), out_name{ Name{}, out_name } {}
+		Resource(RenderGraph* foreign, Name n, Type t, Access ia) : name{ Name{}, n }, type(t), ia(ia), foreign(foreign) {}
 
 		bool operator==(const Resource& o) const noexcept {
 			return name == o.name;
@@ -90,11 +92,11 @@ namespace vuk {
 
 	// declare these specializations for GCC
 	template<>
-	ConstMapIterator<Name, std::span<const struct UseRef>>::~ConstMapIterator();
+	ConstMapIterator<QualifiedName, std::span<const struct UseRef>>::~ConstMapIterator();
 	template<>
-	ConstMapIterator<Name, const struct AttachmentInfo&>::~ConstMapIterator();
+	ConstMapIterator<QualifiedName, const struct AttachmentInfo&>::~ConstMapIterator();
 	template<>
-	ConstMapIterator<Name, const struct BufferInfo&>::~ConstMapIterator();
+	ConstMapIterator<QualifiedName, const struct BufferInfo&>::~ConstMapIterator();
 
 	struct RenderGraph : std::enable_shared_from_this<RenderGraph> {
 		RenderGraph();
@@ -260,11 +262,11 @@ namespace vuk {
 		// reflection functions
 
 		/// @brief retrieve usages of resource in the RenderGraph
-		MapProxy<Name, std::span<const struct UseRef>> get_use_chains();
+		MapProxy<QualifiedName, std::span<const struct UseRef>> get_use_chains();
 		/// @brief retrieve bound image attachments in the RenderGraph
-		MapProxy<Name, const struct AttachmentInfo&> get_bound_attachments();
+		MapProxy<QualifiedName, const struct AttachmentInfo&> get_bound_attachments();
 		/// @brief retrieve bound buffers in the RenderGraph
-		MapProxy<Name, const struct BufferInfo&> get_bound_buffers();
+		MapProxy<QualifiedName, const struct BufferInfo&> get_bound_buffers();
 		/// @brief compute ImageUsageFlags for given use chain
 		static ImageUsageFlags compute_usage(std::span<const UseRef> chain);
 
@@ -310,7 +312,7 @@ namespace vuk {
 
 		Result<bool, RenderGraphException> is_resource_image_in_general_layout(Name n, struct PassInfo* pass_info);
 
-		Name resolve_name(Name, struct PassInfo*) const noexcept;
+		QualifiedName resolve_name(Name, struct PassInfo*) const noexcept;
 
 	private:
 		struct RGCImpl* impl;

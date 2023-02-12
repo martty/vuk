@@ -106,7 +106,7 @@ void vuk::ExampleRunner::render() {
 							continue;
 						std::string btn_id = "";
 						bool prevent_disable = false;
-						if (key.to_sv() == attachment_name_out) {
+						if (key.name.to_sv() == attachment_name_out) {
 							prevent_disable = true;
 							btn_id = "F";
 						} else {
@@ -122,16 +122,16 @@ void vuk::ExampleRunner::render() {
 						if (disable && !prevent_disable) {
 							btn_id += " (MS)";
 						} else {
-							btn_id += "##" + std::string(key.to_sv());
+							btn_id += "##" + std::string(key.name.to_sv());
 						}
 						if (disable && !prevent_disable) {
 							ImGui::TextDisabled("%s", btn_id.c_str());
 						} else {
 							if (ImGui::Button(btn_id.c_str())) {
-								if (key.to_sv() == ex->name) {
+								if (key.name.to_sv() == ex->name) {
 									chosen_resource[i] = attachment_name_out;
 								} else {
-									Name last_use = use_refs.back().out_name.is_invalid() ? use_refs.back().name : use_refs.back().out_name;
+									Name last_use = use_refs.back().out_name.is_invalid() ? use_refs.back().name.name : use_refs.back().out_name.name;
 									auto sv = last_use.to_sv();
 									sv.remove_prefix(rg_frag->name.to_sv().size() + 2);
 									chosen_resource[i] = sv;
@@ -139,7 +139,7 @@ void vuk::ExampleRunner::render() {
 							}
 						}
 						if (ImGui::IsItemHovered())
-							ImGui::SetTooltip("%s", key.c_str());
+							ImGui::SetTooltip("%s", key.name.c_str());
 						ImGui::SameLine();
 					}
 					ImGui::NewLine();
@@ -155,7 +155,8 @@ void vuk::ExampleRunner::render() {
 				}
 				// hacky way to reference image in the subgraph
 				// TODO: a proper way to do this?
-				auto si = vuk::make_sampled_image(rg->name.append("::").append(attachment_name_out.to_sv()), imgui_data.font_sci);
+
+				auto si = vuk::make_sampled_image(NameReference{ rg.get(), attachment_name_out }, imgui_data.font_sci);
 				ImGui::Image(&*sampled_images.emplace(si), ImGui::GetContentRegionAvail());
 				ImGui::End();
 				i++;

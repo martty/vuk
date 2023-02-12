@@ -5,6 +5,12 @@
 #include <optional>
 
 namespace vuk {
+	// a stable Name that can refer to an arbitrary subgraph Name
+	struct NameReference {
+		struct RenderGraph* rg;
+		Name name;
+	};
+
 	// high level type around binding a sampled image with a sampler
 	struct SampledImage {
 		struct Global {
@@ -14,7 +20,7 @@ namespace vuk {
 		};
 
 		struct RenderGraphAttachment {
-			Name attachment_name;
+			NameReference reference;
 			vuk::SamplerCreateInfo sci = {};
 			std::optional<vuk::ImageViewCreateInfo> ivci = {};
 			vuk::ImageLayout image_layout;

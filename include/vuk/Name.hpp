@@ -39,11 +39,26 @@ namespace vuk {
 
 		friend struct std::hash<vuk::Name>;
 	};
+
+	struct QualifiedName {
+		Name prefix;
+		Name name;
+
+		bool operator==(const QualifiedName&) const noexcept = default;
+		bool is_invalid() const noexcept {
+			return name.is_invalid();
+		}
+	};
 } // namespace vuk
 
 namespace std {
 	template<>
 	struct hash<vuk::Name> {
 		size_t operator()(vuk::Name const& s) const;
+	};
+
+	template<>
+	struct hash<vuk::QualifiedName> {
+		size_t operator()(vuk::QualifiedName const& s) const;
 	};
 } // namespace std
