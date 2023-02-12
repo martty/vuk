@@ -2,6 +2,7 @@
 
 #include "vuk/RenderGraph.hpp"
 #include "vuk/ShortAlloc.hpp"
+#include "RelSpan.hpp"
 #include <optional>
 
 namespace std {
@@ -322,7 +323,7 @@ namespace vuk {
 		Buffer buffer;
 		FutureBase* attached_future = nullptr;
 
-		std::vector<void*> use_chains;
+		RelSpan<void*> use_chains;
 		std::optional<Allocator> allocator = {};
 	};
 
@@ -338,11 +339,11 @@ namespace vuk {
 		// swapchain for swapchain
 		Swapchain* swapchain = nullptr;
 
-		std::vector<struct RenderPassInfo*> rp_uses;
+		RelSpan<struct RenderPassInfo*> rp_uses;
 
 		FutureBase* attached_future = nullptr;
 
-		std::vector<void*> use_chains;
+		RelSpan<void*> use_chains;
 		std::optional<Allocator> allocator = {};
 	};
 

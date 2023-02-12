@@ -25,7 +25,7 @@ namespace vuk {
 	void ExecutableRenderGraph::create_attachment(Context& ctx, AttachmentInfo& attachment_info) {
 		if (attachment_info.type == AttachmentInfo::Type::eInternal) {
 			vuk::ImageUsageFlags usage = {};
-			for (auto& void_chain : attachment_info.use_chains) {
+			for (auto& void_chain : attachment_info.use_chains.to_span(impl->attachment_use_chain_references)) {
 				auto& chain = *reinterpret_cast<std::vector<UseRef, short_alloc<UseRef, 64>>*>(void_chain);
 				usage |= Compiler::compute_usage(std::span(chain));
 			}
@@ -257,7 +257,8 @@ namespace vuk {
 					CommandBuffer cobuf(*this, ctx, alloc, cbuf);
 					fill_renderpass_info(rpass, i, cobuf);
 					// propagate signals onto SI
-					si.future_signals.insert(si.future_signals.end(), p->future_signals.begin(), p->future_signals.end());
+					auto pass_fut_signals = p->future_signals.to_span(impl->future_signals);
+					si.future_signals.insert(si.future_signals.end(), pass_fut_signals.begin(), pass_fut_signals.end());
 
 					if (p->pass->execute) {
 						cobuf.current_pass = p;
@@ -326,7 +327,7 @@ namespace vuk {
 				auto& att = *rp_att.attachment_info;
 
 				if (!rp.framebufferless) { // framebuffers get extra inference
-					att.rp_uses.emplace_back(&rp);
+					att.rp_uses.append(impl->attachment_rp_references, &rp);
 					auto& ia = att.attachment;
 					ia.image_type = ia.image_type == ImageType::eInfer ? vuk::ImageType::e2D : ia.image_type;
 
@@ -383,7 +384,7 @@ namespace vuk {
 				// compute usage if it is to be inferred
 				if (bound.attachment.usage == ImageUsageFlagBits::eInfer) {
 					bound.attachment.usage = {};
-					for (auto& void_chain : bound.use_chains) {
+					for (auto& void_chain : bound.use_chains.to_span(impl->attachment_use_chain_references)) {
 						auto& chain = *reinterpret_cast<std::vector<UseRef, short_alloc<UseRef, 64>>*>(void_chain);
 						bound.attachment.usage |= Compiler::compute_usage(std::span(chain));
 					}
@@ -454,7 +455,7 @@ namespace vuk {
 				// infer FB -> IA
 				if (ia.sample_count == Samples::eInfer || (ia.extent.extent.width == 0 && ia.extent.extent.height == 0) ||
 				    ia.extent.sizing == Sizing::eRelative) { // this IA can potentially take inference from an FB
-					for (auto* rpi : atti.rp_uses) {
+					for (auto* rpi : atti.rp_uses.to_span(impl->attachment_rp_references)) {
 						auto& fbci = rpi->fbci;
 						Samples fb_samples = fbci.sample_count;
 						bool samples_known = fb_samples != Samples::eInfer;
@@ -548,7 +549,7 @@ namespace vuk {
 					if (ia.sample_count == Samples::eInfer && (ia.extent.extent.width == 0 && ia.extent.extent.height == 0)) { // this IA is not helpful for FB inference
 						continue;
 					}
-					for (auto* rpi : atti.rp_uses) {
+					for (auto* rpi : atti.rp_uses.to_span(impl->attachment_rp_references)) {
 						auto& fbci = rpi->fbci;
 						Samples fb_samples = fbci.sample_count;
 						bool samples_known = fb_samples != Samples::eInfer;
@@ -740,7 +741,7 @@ namespace vuk {
 				std::optional<uint32_t> layer_count;
 				for (auto& sp : rp.subpasses) {
 					auto& pi = *sp.passes[0]; // all passes should be using the same fb, so we can pick the first
-					for (auto& res : pi.resources) {
+					for (auto& res : pi.resources.to_span(impl->resources)) {
 						auto resolved_name = impl->resolve_name(res.name);
 						auto whole_name = impl->whole_name(resolved_name);
 						if (whole_name == bound.name) {

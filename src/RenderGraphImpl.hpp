@@ -4,6 +4,7 @@
 #include "RenderPass.hpp"
 #include "vuk/ShortAlloc.hpp"
 #include "vuk/SourceLocation.hpp"
+#include "RelSpan.hpp"
 
 #include <robin_hood.h>
 
@@ -84,26 +85,27 @@ namespace vuk {
 
 		Name qualified_name;
 
-		std::vector<Resource, short_alloc<Resource, 64>> resources;
-		std::vector<std::pair<Name, Name>, short_alloc<std::pair<Name, Name>, 64>> resolves; // src -> dst
-
 		size_t render_pass_index;
 		uint32_t subpass;
 		DomainFlags domain;
 
 		Name prefix;
 
-		std::vector<std::pair<DomainFlagBits, PassInfo*>, short_alloc<std::pair<DomainFlagBits, PassInfo*>, 16>> waits;
-		std::vector<std::pair<DomainFlagBits, uint64_t>, short_alloc<std::pair<DomainFlagBits, uint64_t>, 16>> absolute_waits;
+		RelSpan<Resource> resources;
+		RelSpan<std::pair<Name, Name>> resolves; // src -> dst
+		RelSpan<Name> input_names;
+		RelSpan<Name> output_names;
+		RelSpan<Name> write_input_names;
+
+		RelSpan<std::pair<DomainFlagBits, PassInfo*>> waits;
+		RelSpan<std::pair<DomainFlagBits, uint64_t>> absolute_waits;
+		RelSpan<FutureBase*> future_signals;
+
 		bool is_waited_on = false;
 		uint32_t bloom_resolved_inputs = 0;
-		std::vector<Name, short_alloc<Name, 16>> input_names;
+
 		uint32_t bloom_outputs = 0;
 		uint32_t bloom_write_inputs = 0;
-		std::vector<Name, short_alloc<Name, 16>> output_names;
-		std::vector<Name, short_alloc<Name, 16>> write_input_names;
-
-		std::vector<FutureBase*, short_alloc<FutureBase*, 16>> future_signals;
 
 		bool is_head_pass = false;
 		bool is_tail_pass = false;
@@ -125,6 +127,12 @@ namespace vuk {
 
 		std::vector<IAInference, short_alloc<IAInference, 64>> ia_inference_rules;
 		std::vector<BufferInference, short_alloc<BufferInference, 64>> buf_inference_rules;
+
+		std::vector<Resource> resources;
+		std::vector<std::pair<Name, Name>> resolves; // src -> dst
+		std::vector<Name> input_names;
+		std::vector<Name> output_names;
+		std::vector<Name> write_input_names;
 
 		struct SGInfo {
 			uint64_t count = 0;
@@ -172,6 +180,18 @@ namespace vuk {
 		RGCImpl(arena* a) : arena_(a), INIT(computed_passes), INIT(ordered_passes), INIT(rpis) {}
 		std::unique_ptr<arena> arena_;
 
+		// per PassInfo
+		std::vector<Resource> resources;
+		std::vector<std::pair<Name, Name>> resolves; // src -> dst
+		std::vector<Name> input_names;
+		std::vector<Name> output_names;
+		std::vector<Name> write_input_names;
+
+		std::vector<std::pair<DomainFlagBits, PassInfo*>> waits;
+		std::vector<std::pair<DomainFlagBits, uint64_t>> absolute_waits;
+		std::vector<FutureBase*> future_signals;
+		// /per PassInfo
+
 		std::vector<PassInfo, short_alloc<PassInfo, 64>> computed_passes;
 		std::vector<PassInfo*, short_alloc<PassInfo*, 64>> ordered_passes;
 		robin_hood::unordered_flat_map<Name, Name> computed_aliases; // maps resource names to resource names
@@ -181,6 +201,8 @@ namespace vuk {
 
 		robin_hood::unordered_flat_map<Name, AttachmentInfo> bound_attachments;
 		robin_hood::unordered_flat_map<Name, BufferInfo> bound_buffers;
+		std::vector<void*> attachment_use_chain_references;
+		std::vector<RenderPassInfo*> attachment_rp_references;
 
 		std::unordered_map<Name, Acquire> acquires;
 		std::unordered_multimap<Name, Release> releases;
@@ -247,16 +269,7 @@ namespace vuk {
 #undef INIT
 
 #define INIT2(x) x(decltype(x)::allocator_type(arena_))
-	inline PassInfo::PassInfo(arena& arena_, PassWrapper& p) :
-	    pass(&p),
-	    INIT2(resources),
-	    INIT2(resolves),
-	    INIT2(waits),
-	    INIT2(absolute_waits),
-	    INIT2(input_names),
-	    INIT2(output_names),
-	    INIT2(write_input_names),
-	    INIT2(future_signals) {}
+	inline PassInfo::PassInfo(arena& arena_, PassWrapper& p) : pass(&p) {}
 #undef INIT2
 	template<class T, class A, class F>
 	T* contains_if(std::vector<T, A>& v, F&& f) {
@@ -298,5 +311,5 @@ namespace vuk {
 		RenderGraphException make_unattached_resource_exception(PassInfo& pass_info, Resource& resource, Name undiverged_name);
 		RenderGraphException make_cbuf_references_unknown_resource(PassInfo& pass_info, Resource::Type type, Name name);
 		RenderGraphException make_cbuf_references_undeclared_resource(PassInfo& pass_info, Resource::Type type, Name name);
-	}
-}; // namespace vuk
+	} // namespace errors
+};  // namespace vuk
