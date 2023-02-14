@@ -1,6 +1,7 @@
 #pragma once
 
 #include "vuk/Buffer.hpp"
+#include "vuk/Config.hpp"
 #include "vuk/SourceLocation.hpp"
 #include "vuk/Types.hpp"
 

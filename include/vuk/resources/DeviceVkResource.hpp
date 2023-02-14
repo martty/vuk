@@ -1,6 +1,7 @@
 #pragma once
 
 #include "vuk/Allocator.hpp"
+#include "vuk/Config.hpp"
 
 namespace vuk {
 	/// @brief Device resource that performs direct allocation from the resources from the Vulkan runtime.
