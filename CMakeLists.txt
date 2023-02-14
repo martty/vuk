@@ -109,7 +109,7 @@ if (NOT TARGET VulkanMemoryAllocator)
 endif()
 add_subdirectory(ext/robin-hood-hashing)
 add_subdirectory(ext/fmt)
-target_include_directories(vuk PRIVATE ext/concurrentqueue)
+target_include_directories(vuk PRIVATE ext/concurrentqueue ext/VulkanMemoryAllocator/include)
 target_include_directories(vuk PUBLIC include)
 
 string(FIND "${CMAKE_CXX_COMPILER}" "clang++" VUK_COMPILER_CLANGPP)
@@ -143,7 +143,7 @@ if(VUK_COMPILER_CLANGPP OR VUK_COMPILER_CLANGCL)
 	 target_compile_options(vuk PRIVATE -Wno-nullability-completeness)
 endif()
 
-target_link_libraries(vuk PRIVATE spirv-cross-core robin_hood VulkanMemoryAllocator fmt::fmt)
+target_link_libraries(vuk PRIVATE spirv-cross-core robin_hood fmt::fmt)
 
 if(VUK_LINK_TO_LOADER)
 	if (VUK_USE_VULKAN_SDK)

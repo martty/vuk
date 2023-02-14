@@ -5,6 +5,7 @@
 #include "vuk/Exception.hpp"
 #include "vuk/Query.hpp"
 #include "vuk/resources/DeviceNestedResource.hpp"
+#define VMA_IMPLEMENTATION
 #include <vk_mem_alloc.h>
 #include <mutex>
 #include <numeric>
