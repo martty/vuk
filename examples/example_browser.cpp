@@ -10,7 +10,7 @@ void vuk::ExampleRunner::render() {
 	Compiler compiler;
 	chosen_resource.resize(examples.size());
 
-	vuk::wait_for_futures_explicit(*global, compiler, futures);
+	vuk::wait_for_futures_explicit(*superframe_allocator, compiler, futures);
 	futures.clear();
 
 	while (!glfwWindowShouldClose(window)) {
@@ -43,10 +43,10 @@ void vuk::ExampleRunner::render() {
 		}
 		ImGui::End();
 
-		auto& xdev_frame_resource = xdev_rf_alloc->get_next_frame();
+		auto& frame_resource = superframe_resource->get_next_frame();
 		context->next_frame();
 
-		Allocator frame_allocator(xdev_frame_resource);
+		Allocator frame_allocator(frame_resource);
 		if (!render_all) { // render a single full window example
 			RenderGraph rg("runner");
 			vuk::Name attachment_name = item_current->name;

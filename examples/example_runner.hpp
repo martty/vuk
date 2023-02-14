@@ -40,8 +40,8 @@ namespace vuk {
 		VkQueue graphics_queue;
 		VkQueue transfer_queue;
 		std::optional<Context> context;
-		std::optional<DeviceSuperFrameResource> xdev_rf_alloc;
-		std::optional<Allocator> global;
+		std::optional<DeviceSuperFrameResource> superframe_resource;
+		std::optional<Allocator> superframe_allocator;
 		bool suspend = false;
 		vuk::SwapchainRef swapchain;
 		GLFWwindow* window;
@@ -76,11 +76,11 @@ namespace vuk {
 			ImGui::StyleColorsDark();
 			// Setup Platform/Renderer bindings
 			ImGui_ImplGlfw_InitForVulkan(window, true);
-			imgui_data = util::ImGui_ImplVuk_Init(*global);
+			imgui_data = util::ImGui_ImplVuk_Init(*superframe_allocator);
 			{
 				std::vector<std::jthread> threads;
 				for (auto& ex : examples) {
-					threads.emplace_back(std::jthread([&] { ex->setup(*this, *global); }));
+					threads.emplace_back(std::jthread([&] { ex->setup(*this, *superframe_allocator); }));
 				}
 			}
 			glfwSetWindowSizeCallback(window, [](GLFWwindow* window, int width, int height) {
@@ -88,8 +88,8 @@ namespace vuk {
 				if (width == 0 && height == 0) {
 					runner.suspend = true;
 				} else {
-					runner.xdev_rf_alloc->deallocate_swapchains(std::span{ &runner.swapchain->swapchain, 1 });
-					runner.xdev_rf_alloc->deallocate_image_views(runner.swapchain->image_views);
+					runner.superframe_allocator->deallocate(std::span{ &runner.swapchain->swapchain, 1 });
+					runner.superframe_allocator->deallocate(runner.swapchain->image_views);
 					runner.context->remove_swapchain(runner.swapchain);
 					runner.swapchain = runner.context->add_swapchain(util::make_swapchain(runner.vkbdevice, runner.swapchain->swapchain));
 					for (auto& iv : runner.swapchain->image_views) {
@@ -106,7 +106,7 @@ namespace vuk {
 			context->wait_idle();
 			for (auto& ex : examples) {
 				if (ex->cleanup) {
-					ex->cleanup(*this, *global);
+					ex->cleanup(*this, *superframe_allocator);
 				}
 			}
 		}
@@ -124,7 +124,7 @@ namespace vuk {
 			render_complete.reset();
 			imgui_data.font_texture.view.reset();
 			imgui_data.font_texture.image.reset();
-			xdev_rf_alloc.reset();
+			superframe_resource.reset();
 			context.reset();
 			vkDestroySurfaceKHR(vkbinstance.instance, surface, nullptr);
 			destroy_window_glfw(window);
@@ -250,14 +250,14 @@ namespace vuk {
 		                                         transfer_queue_family_index,
 		                                         fps });
 		const unsigned num_inflight_frames = 3;
-		xdev_rf_alloc.emplace(*context, num_inflight_frames);
-		global.emplace(*xdev_rf_alloc);
+		superframe_resource.emplace(*context, num_inflight_frames);
+		superframe_allocator.emplace(*superframe_resource);
 		swapchain = context->add_swapchain(util::make_swapchain(vkbdevice, {}));
-		present_ready = vuk::Unique<std::array<VkSemaphore, 3>>(*global);
-		render_complete = vuk::Unique<std::array<VkSemaphore, 3>>(*global);
+		present_ready = vuk::Unique<std::array<VkSemaphore, 3>>(*superframe_allocator);
+		render_complete = vuk::Unique<std::array<VkSemaphore, 3>>(*superframe_allocator);
 
-		global->allocate_semaphores(*present_ready);
-		global->allocate_semaphores(*render_complete);
+		superframe_allocator->allocate_semaphores(*present_ready);
+		superframe_allocator->allocate_semaphores(*render_complete);
 	}
 } // namespace vuk
 
