@@ -57,10 +57,12 @@ namespace vuk {
 
 	struct Resource {
 		QualifiedName name;
-		enum class Type { eBuffer, eImage, eForeign } type;
+		enum class Type { eBuffer, eImage } type;
 		Access ia;
 		QualifiedName out_name;
 		struct RenderGraph* foreign = nullptr;
+		int32_t reference = 0;
+		bool promoted_to_general = false;
 
 		Resource(Name n, Type t, Access ia) : name{ Name{}, n }, type(t), ia(ia) {}
 		Resource(Name n, Type t, Access ia, Name out_name) : name{ Name{}, n }, type(t), ia(ia), out_name{ Name{}, out_name } {}
@@ -73,7 +75,7 @@ namespace vuk {
 
 	QueueResourceUse to_use(Access acc, DomainFlags domain);
 
-	enum class PassType { eUserPass, eClear, eConverge, eConvergeExplicit, eForcedAccess };
+	enum class PassType { eUserPass, eClear, eDiverge, eConverge, eForcedAccess };
 
 	/// @brief Fundamental unit of execution and scheduling. Refers to resources
 	struct Pass {
@@ -121,9 +123,6 @@ namespace vuk {
 		/// @brief Diverge image. subrange is available as subrange_name afterwards.
 		void diverge_image(Name whole_name, Subrange::Image subrange, Name subrange_name);
 
-		/// @brief Reconverge image. Prevents diverged use moving before pre_diverge or after post_diverge.
-		void converge_image(Name pre_diverge, Name post_diverge);
-
 		/// @brief Reconverge image from named parts. Prevents diverged use moving before pre_diverge or after post_diverge.
 		void converge_image_explicit(std::span<Name> pre_diverge, Name post_diverge);
 
@@ -149,39 +148,34 @@ namespace vuk {
 		/// @param name Name of the resource to attach to
 		/// @param buffer Buffer to attach
 		/// @param initial Access to the resource prior to this rendergraph
-		/// @param final Desired Access to the resource after this rendergraph
-		void attach_buffer(Name name, Buffer buffer, Access initial = eNone, Access final = eNone);
+		void attach_buffer(Name name, Buffer buffer, Access initial = eNone);
 
 		/// @brief Attach a buffer to be allocated from the specified allocator
 		/// @param name Name of the resource to attach to
 		/// @param buffer Buffer to attach
 		/// @param allocator Allocator the Buffer will be allocated from
 		/// @param initial Access to the resource prior to this rendergraph
-		/// @param final Desired Access to the resource after this rendergraph
-		void attach_buffer_from_allocator(Name name, Buffer buffer, Allocator allocator, Access initial = eNone, Access final = eNone);
+		void attach_buffer_from_allocator(Name name, Buffer buffer, Allocator allocator, Access initial = eNone);
 
 		/// @brief Attach an image to the given name
 		/// @param name Name of the resource to attach to
 		/// @param image_attachment ImageAttachment to attach
 		/// @param initial Access to the resource prior to this rendergraph
-		/// @param final Desired Access to the resource after this rendergraph
-		void attach_image(Name name, ImageAttachment image_attachment, Access initial = eNone, Access final = eNone);
+		void attach_image(Name name, ImageAttachment image_attachment, Access initial = eNone);
 
 		/// @brief Attach an image to be allocated from the specified allocator
 		/// @param name Name of the resource to attach to
 		/// @param image_attachment ImageAttachment to attach
 		/// @param buffer Buffer to attach
 		/// @param initial Access to the resource prior to this rendergraph
-		/// @param final Desired Access to the resource after this rendergraph
-		void attach_image_from_allocator(Name name, ImageAttachment image_attachment, Allocator allocator, Access initial = eNone, Access final = eNone);
+		void attach_image_from_allocator(Name name, ImageAttachment image_attachment, Allocator allocator, Access initial = eNone);
 
 		/// @brief Attach an image to the given name
 		/// @param name Name of the resource to attach to
 		/// @param image_attachment ImageAttachment to attach
 		/// @param clear_value Value used for the clear
 		/// @param initial Access to the resource prior to this rendergraph
-		/// @param final Desired Access to the resource after this rendergraph
-		void attach_and_clear_image(Name name, ImageAttachment image_attachment, Clear clear_value, Access initial = eNone, Access final = eNone);
+		void attach_and_clear_image(Name name, ImageAttachment image_attachment, Clear clear_value, Access initial = eNone);
 
 		/// @brief Attach a future to the given name
 		/// @param name Name of the resource to attach to
@@ -198,6 +192,9 @@ namespace vuk {
 		/// @brief Compute all the unconsumed resource names and return them as Futures
 		std::vector<Future> split();
 
+		void release(Name name, Access final);
+		void release_for_present(Name name);
+
 		Name name;
 
 	private:
@@ -208,7 +205,7 @@ namespace vuk {
 
 		// future support functions
 		friend class Future;
-		void attach_out(Name, Future& fimg, DomainFlags dst_domain, Subrange subrange);
+		void attach_out(Name, Future& fimg, DomainFlags dst_domain);
 
 		void detach_out(Name, Future& fimg);
 
@@ -268,7 +265,7 @@ namespace vuk {
 		/// @brief retrieve bound buffers in the RenderGraph
 		MapProxy<QualifiedName, const struct BufferInfo&> get_bound_buffers();
 		/// @brief compute ImageUsageFlags for given use chain
-		static ImageUsageFlags compute_usage(std::span<const UseRef> chain);
+		ImageUsageFlags compute_usage(struct ChainLink* chain);
 
 		/// @brief Dump the pass dependency graph in graphviz format
 		std::string dump_graph();
@@ -319,7 +316,7 @@ namespace vuk {
 
 		void create_attachment(Context& ptc, struct AttachmentInfo& attachment_info);
 		void fill_renderpass_info(struct RenderPassInfo& rpass, const size_t& i, class CommandBuffer& cobuf);
-		Result<SubmitInfo> record_single_submit(Allocator&, std::span<RenderPassInfo> rpis, DomainFlagBits domain);
+		Result<SubmitInfo> record_single_submit(Allocator&, std::span<PassInfo*> passes, DomainFlagBits domain);
 
 		friend struct InferenceContext;
 	};

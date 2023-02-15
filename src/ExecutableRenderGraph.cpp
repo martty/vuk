@@ -25,9 +25,8 @@ namespace vuk {
 	void ExecutableRenderGraph::create_attachment(Context& ctx, AttachmentInfo& attachment_info) {
 		if (attachment_info.type == AttachmentInfo::Type::eInternal) {
 			vuk::ImageUsageFlags usage = {};
-			for (auto& void_chain : attachment_info.use_chains.to_span(impl->attachment_use_chain_references)) {
-				auto& chain = *reinterpret_cast<std::vector<UseRef, short_alloc<UseRef, 64>>*>(void_chain);
-				usage |= Compiler::compute_usage(std::span(chain));
+			for (auto& chain : attachment_info.use_chains.to_span(impl->attachment_use_chain_references)) {
+				usage |= impl->compute_usage(chain);
 			}
 
 			vuk::ImageCreateInfo ici;
@@ -109,6 +108,7 @@ namespace vuk {
 		if (dep.srcQueueFamilyIndex != VK_QUEUE_FAMILY_IGNORED) {
 			assert(dep.dstQueueFamilyIndex != VK_QUEUE_FAMILY_IGNORED);
 			bool transition = dep.dstQueueFamilyIndex != dep.srcQueueFamilyIndex;
+			auto src_domain = static_cast<vuk::DomainFlagBits>(dep.srcQueueFamilyIndex);
 			auto dst_domain = static_cast<vuk::DomainFlagBits>(dep.dstQueueFamilyIndex);
 			dep.srcQueueFamilyIndex = ctx.domain_to_queue_family_index(static_cast<vuk::DomainFlags>(dep.srcQueueFamilyIndex));
 			dep.dstQueueFamilyIndex = ctx.domain_to_queue_family_index(static_cast<vuk::DomainFlags>(dep.dstQueueFamilyIndex));
@@ -143,39 +143,42 @@ namespace vuk {
 		cobuf.ongoing_renderpass = rpi;
 	}
 
-	void emit_barriers(Context& ctx,
-	                   VkCommandBuffer cbuf,
-	                   vuk::DomainFlagBits domain,
-	                   const robin_hood::unordered_flat_map<QualifiedName, AttachmentInfo>& bound_attachments,
-	                   std::vector<VkMemoryBarrier2KHR, short_alloc<VkMemoryBarrier2KHR, 64>>& mem_bars,
-	                   std::vector<VkImageMemoryBarrier2KHR, short_alloc<VkImageMemoryBarrier2KHR, 64>>& im_bars) {
+	void RGCImpl::emit_barriers(Context& ctx,
+	                            VkCommandBuffer cbuf,
+	                            vuk::DomainFlagBits domain,
+	                            RelSpan<VkMemoryBarrier2KHR> mem_bars,
+	                            RelSpan<VkImageMemoryBarrier2KHR> im_bars) {
 		// resolve and compact image barriers in place
+		auto im_span = im_bars.to_span(image_barriers);
+
 		uint32_t imbar_dst_index = 0;
 		for (auto src_index = 0; src_index < im_bars.size(); src_index++) {
-			auto dep = im_bars[src_index];
-			QualifiedName* np;
-			std::memcpy(&np, &dep.pNext, sizeof(void*));
-			auto& bound = bound_attachments.at(*np);
+			auto dep = im_span[src_index];
+			int32_t def_pass_idx;
+			std::memcpy(&def_pass_idx, &dep.pNext, sizeof(def_pass_idx));
 			dep.pNext = 0;
+			auto& bound = get_bound_attachment(def_pass_idx);
 			if (!resolve_image_barrier(ctx, dep, bound, domain)) {
 				continue;
 			}
-			im_bars[imbar_dst_index++] = dep;
+			im_span[imbar_dst_index++] = dep;
 		}
 
+		auto mem_span = mem_bars.to_span(mem_barriers);
+
 		VkDependencyInfoKHR dependency_info{ .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO_KHR,
-			                                   .memoryBarrierCount = (uint32_t)mem_bars.size(),
-			                                   .pMemoryBarriers = mem_bars.data(),
+			                                   .memoryBarrierCount = (uint32_t)mem_span.size(),
+			                                   .pMemoryBarriers = mem_span.data(),
 			                                   .imageMemoryBarrierCount = imbar_dst_index,
-			                                   .pImageMemoryBarriers = im_bars.data() };
+			                                   .pImageMemoryBarriers = im_span.data() };
 
 		if (mem_bars.size() > 0 || imbar_dst_index > 0) {
 			ctx.vkCmdPipelineBarrier2KHR(cbuf, &dependency_info);
 		}
 	}
 
-	Result<SubmitInfo> ExecutableRenderGraph::record_single_submit(Allocator& alloc, std::span<RenderPassInfo> rpis, vuk::DomainFlagBits domain) {
-		assert(rpis.size() > 0);
+	Result<SubmitInfo> ExecutableRenderGraph::record_single_submit(Allocator& alloc, std::span<PassInfo*> passes, vuk::DomainFlagBits domain) {
+		assert(passes.size() > 0);
 
 		auto& ctx = alloc.get_context();
 		SubmitInfo si;
@@ -222,81 +225,62 @@ namespace vuk {
 				ctx.vkBeginCommandBuffer(cbuf, &cbi);
 			}
 
-			bool use_secondary_command_buffers = rpass.subpasses[0].use_secondary_command_buffers;
-			bool is_single_pass = rpass.subpasses.size() == 1 && rpass.subpasses[0].passes.size() == 1;
-			if (is_single_pass && !rpass.subpasses[0].passes[0]->qualified_name.is_invalid() && rpass.subpasses[0].passes[0]->pass->execute) {
-				ctx.begin_region(cbuf, rpass.subpasses[0].passes[0]->qualified_name.name);
-			}
-
-			emit_barriers(ctx, cbuf, domain, impl->bound_attachments, rpass.pre_mem_barriers, rpass.pre_barriers);
-
-			if (rpass.handle != VK_NULL_HANDLE) {
-				begin_renderpass(ctx, rpass, cbuf, use_secondary_command_buffers);
-			}
-
-			for (auto& att : rpass.attachments) {
-				if (att.attachment_info->type == AttachmentInfo::Type::eSwapchain) {
-					used_swapchains.emplace(att.attachment_info->swapchain);
-				}
-			}
-
-			for (auto& w : rpass.waits) {
-				si.relative_waits.emplace_back(w);
-			}
-
-			for (size_t i = 0; i < rpass.subpasses.size(); i++) {
-				auto& sp = rpass.subpasses[i];
-				// insert image pre-barriers
-				if (rpass.handle == VK_NULL_HANDLE) {
-					emit_barriers(ctx, cbuf, domain, impl->bound_attachments, sp.pre_mem_barriers, sp.pre_barriers);
-				} else {
-					assert(sp.pre_barriers.empty());
-					assert(sp.pre_mem_barriers.empty());
-				}
-				for (auto& p : sp.passes) {
-					CommandBuffer cobuf(*this, ctx, alloc, cbuf);
-					fill_renderpass_info(rpass, i, cobuf);
-					// propagate signals onto SI
-					auto pass_fut_signals = p->future_signals.to_span(impl->future_signals);
-					si.future_signals.insert(si.future_signals.end(), pass_fut_signals.begin(), pass_fut_signals.end());
-
-					if (p->pass->execute) {
-						cobuf.current_pass = p;
-						if (!p->qualified_name.is_invalid() && !is_single_pass) {
-							ctx.begin_region(cobuf.command_buffer, p->qualified_name.name);
-							p->pass->execute(cobuf);
-							ctx.end_region(cobuf.command_buffer);
-						} else {
-							p->pass->execute(cobuf);
-						}
-					}
-
-					if (auto res = cobuf.result(); !res) {
-						return res;
-					}
-				}
-				if (i < rpass.subpasses.size() - 1 && rpass.handle != VK_NULL_HANDLE) {
-					use_secondary_command_buffers = rpass.subpasses[i + 1].use_secondary_command_buffers;
-					ctx.vkCmdNextSubpass(cbuf, use_secondary_command_buffers ? VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS : VK_SUBPASS_CONTENTS_INLINE);
-				}
-
-				// insert image post-barriers
-				if (rpass.handle == VK_NULL_HANDLE) {
-					emit_barriers(ctx, cbuf, domain, impl->bound_attachments, sp.post_mem_barriers, sp.post_barriers);
-				} else {
-					assert(sp.post_barriers.empty());
-					assert(sp.post_mem_barriers.empty());
-				}
-			}
-			if (is_single_pass && !rpass.subpasses[0].passes[0]->qualified_name.is_invalid() && rpass.subpasses[0].passes[0]->pass->execute) {
-				ctx.end_region(cbuf);
-			}
-			if (rpass.handle != VK_NULL_HANDLE) {
+			// if we had a render pass running, but now it changes
+			if (pass->render_pass_index != render_pass_index && render_pass_index != -1) {
 				ctx.vkCmdEndRenderPass(cbuf);
 			}
 
-			emit_barriers(ctx, cbuf, domain, impl->bound_attachments, rpass.post_mem_barriers, rpass.post_barriers);
+			if (i > 1) {
+				// insert post-barriers
+				impl->emit_barriers(ctx, cbuf, domain, passes[i - 1]->post_memory_barriers, passes[i - 1]->post_image_barriers);
+			}
+			// insert pre-barriers
+			impl->emit_barriers(ctx, cbuf, domain, pass->pre_memory_barriers, pass->pre_image_barriers);
+
+			// if renderpass is changing and new pass uses one
+			if (pass->render_pass_index != render_pass_index && pass->render_pass_index != -1) {
+				begin_renderpass(ctx, impl->rpis[pass->render_pass_index], cbuf, false);
+			}
+
+			render_pass_index = pass->render_pass_index;
+
+			for (auto& w : pass->relative_waits.to_span(impl->waits)) {
+				si.relative_waits.emplace_back(w);
+			}
+
+			CommandBuffer cobuf(*this, ctx, alloc, cbuf);
+			if (render_pass_index >= 0) {
+				fill_renderpass_info(impl->rpis[pass->render_pass_index], 0, cobuf);
+			} else {
+				cobuf.ongoing_renderpass = {};
+			}
+
+			// propagate signals onto SI
+			auto pass_fut_signals = pass->future_signals.to_span(impl->future_signals);
+			si.future_signals.insert(si.future_signals.end(), pass_fut_signals.begin(), pass_fut_signals.end());
+
+			if (pass->pass->execute) {
+				cobuf.current_pass = pass;
+				if (!pass->qualified_name.is_invalid()) {
+					ctx.begin_region(cobuf.command_buffer, pass->qualified_name.name);
+					pass->pass->execute(cobuf);
+					ctx.end_region(cobuf.command_buffer);
+				} else {
+					pass->pass->execute(cobuf);
+				}
+			}
+
+			if (auto res = cobuf.result(); !res) {
+				return res;
+			}
 		}
+
+		if (render_pass_index != -1) {
+			ctx.vkCmdEndRenderPass(cbuf);
+		}
+
+		// insert post-barriers
+		impl->emit_barriers(ctx, cbuf, domain, passes.back()->post_memory_barriers, passes.back()->post_image_barriers);
 
 		if (auto result = ctx.vkEndCommandBuffer(cbuf); result != VK_SUCCESS) {
 			return { expected_error, VkException{ result } };
@@ -326,40 +310,37 @@ namespace vuk {
 			for (auto& rp_att : rp.attachments) {
 				auto& att = *rp_att.attachment_info;
 
-				if (!rp.framebufferless) { // framebuffers get extra inference
-					att.rp_uses.append(impl->attachment_rp_references, &rp);
-					auto& ia = att.attachment;
-					ia.image_type = ia.image_type == ImageType::eInfer ? vuk::ImageType::e2D : ia.image_type;
+				att.rp_uses.append(impl->attachment_rp_references, &rp);
+				auto& ia = att.attachment;
+				ia.image_type = ia.image_type == ImageType::eInfer ? vuk::ImageType::e2D : ia.image_type;
 
-					ia.base_layer = ia.base_layer == VK_REMAINING_ARRAY_LAYERS ? 0 : ia.base_layer;
-					ia.layer_count = ia.layer_count == VK_REMAINING_ARRAY_LAYERS
-					                     ? 1
-					                     : ia.layer_count; // TODO: this prevents inference later on, so this means we are doing it too early
-					ia.base_level = ia.base_level == VK_REMAINING_MIP_LEVELS ? 0 : ia.base_level;
+				ia.base_layer = ia.base_layer == VK_REMAINING_ARRAY_LAYERS ? 0 : ia.base_layer;
+				ia.layer_count =
+				    ia.layer_count == VK_REMAINING_ARRAY_LAYERS ? 1 : ia.layer_count; // TODO: this prevents inference later on, so this means we are doing it too early
+				ia.base_level = ia.base_level == VK_REMAINING_MIP_LEVELS ? 0 : ia.base_level;
 
-					if (ia.view_type == ImageViewType::eInfer) {
-						if (ia.layer_count > 1) {
-							ia.view_type = ImageViewType::e2DArray;
-						} else {
-							ia.view_type = ImageViewType::e2D;
-						}
+				if (ia.view_type == ImageViewType::eInfer) {
+					if (ia.layer_count > 1) {
+						ia.view_type = ImageViewType::e2DArray;
+					} else {
+						ia.view_type = ImageViewType::e2D;
 					}
-
-					ia.level_count = 1; // can only render to a single mip level
-					ia.extent.extent.depth = 1;
-
-					// we do an initial IA -> FB, because we won't process complete IAs later, but we need their info
-					if (ia.sample_count != Samples::eInfer && !rp_att.is_resolve_dst) {
-						rp.fbci.sample_count = ia.sample_count;
-					}
-
-					if (ia.extent.sizing == Sizing::eAbsolute && ia.extent.extent.width > 0 && ia.extent.extent.height > 0) {
-						rp.fbci.width = ia.extent.extent.width;
-						rp.fbci.height = ia.extent.extent.height;
-					}
-
-					rp.fbci.layers = rp.layer_count;
 				}
+
+				ia.level_count = 1; // can only render to a single mip level
+				ia.extent.extent.depth = 1;
+
+				// we do an initial IA -> FB, because we won't process complete IAs later, but we need their info
+				if (ia.sample_count != Samples::eInfer && !rp_att.is_resolve_dst) {
+					rp.fbci.sample_count = ia.sample_count;
+				}
+
+				if (ia.extent.sizing == Sizing::eAbsolute && ia.extent.extent.width > 0 && ia.extent.extent.height > 0) {
+					rp.fbci.width = ia.extent.extent.width;
+					rp.fbci.height = ia.extent.extent.height;
+				}
+
+				rp.fbci.layers = rp.layer_count;
 
 				// resolve images are always sample count 1
 				if (rp_att.is_resolve_dst) {
@@ -384,9 +365,8 @@ namespace vuk {
 				// compute usage if it is to be inferred
 				if (bound.attachment.usage == ImageUsageFlagBits::eInfer) {
 					bound.attachment.usage = {};
-					for (auto& void_chain : bound.use_chains.to_span(impl->attachment_use_chain_references)) {
-						auto& chain = *reinterpret_cast<std::vector<UseRef, short_alloc<UseRef, 64>>*>(void_chain);
-						bound.attachment.usage |= Compiler::compute_usage(std::span(chain));
+					for (auto& chain : bound.use_chains.to_span(impl->attachment_use_chain_references)) {
+						bound.attachment.usage |= impl->compute_usage(chain);
 					}
 				}
 				// if there is no image, then we will infer the base mip and layer to be 0
@@ -737,35 +717,23 @@ namespace vuk {
 			std::optional<uint32_t> fb_layer_count;
 			for (auto& attrpinfo : rp.attachments) {
 				auto& bound = *attrpinfo.attachment_info;
-				std::optional<uint32_t> base_layer;
-				std::optional<uint32_t> layer_count;
-				for (auto& sp : rp.subpasses) {
-					auto& pi = *sp.passes[0]; // all passes should be using the same fb, so we can pick the first
-					for (auto& res : pi.resources.to_span(impl->resources)) {
-						auto resolved_name = impl->resolve_name(res.name);
-						auto whole_name = impl->whole_name(resolved_name);
-						if (whole_name == bound.name) {
-							auto& sr = impl->use_chains.at(resolved_name)[1].subrange;
-							base_layer = sr.image.base_layer;
-							layer_count = sr.image.layer_count;
-						}
-					}
-				}
-				assert(base_layer);
-				assert(layer_count);
-				fb_layer_count = bound.attachment.layer_count;
+				// TODO: cleanup
+				uint32_t base_layer = bound.attachment.base_layer + bound.image_subrange.base_layer;
+				uint32_t layer_count = bound.image_subrange.layer_count == VK_REMAINING_ARRAY_LAYERS ? bound.attachment.layer_count : bound.image_subrange.layer_count;
+				assert(base_layer + layer_count <= bound.attachment.base_layer + bound.attachment.layer_count);
+				fb_layer_count = layer_count;
 
 				auto specific_attachment = bound.attachment;
 				if (specific_attachment.image_view == ImageView{}) {
-					specific_attachment.base_layer = *base_layer;
+					specific_attachment.base_layer = base_layer;
 					if (specific_attachment.view_type == ImageViewType::eCube) {
-						if (*layer_count > 1) {
+						if (layer_count > 1) {
 							specific_attachment.view_type = ImageViewType::e2DArray;
 						} else {
 							specific_attachment.view_type = ImageViewType::e2D;
 						}
 					}
-					specific_attachment.layer_count = *layer_count;
+					specific_attachment.layer_count = layer_count;
 					assert(specific_attachment.level_count == 1);
 
 					auto allocator = bound.allocator ? *bound.allocator : alloc;
@@ -789,9 +757,7 @@ namespace vuk {
 			assert(fb_extent.width > 0);
 			assert(fb_extent.height > 0);
 			rp.fbci.attachmentCount = (uint32_t)vkivs.size();
-			if (rp.fbci.layers == VK_REMAINING_ARRAY_LAYERS) {
-				rp.fbci.layers = *fb_layer_count;
-			}
+			rp.fbci.layers = *fb_layer_count;
 
 			Unique<VkFramebuffer> fb(alloc);
 			VUK_DO_OR_RETURN(alloc.allocate_framebuffers(std::span{ &*fb, 1 }, std::span{ &rp.fbci, 1 }));
@@ -814,13 +780,12 @@ namespace vuk {
 
 		SubmitBundle sbundle;
 
-		auto record_batch = [&alloc, this](std::span<RenderPassInfo> rpis, DomainFlagBits domain) -> Result<SubmitBatch> {
+		auto record_batch = [&alloc, this](std::span<PassInfo*> passes, DomainFlagBits domain) -> Result<SubmitBatch> {
 			SubmitBatch sbatch{ .domain = domain };
-			auto partition_it = rpis.begin();
-			while (partition_it != rpis.end()) {
-				auto batch_index = partition_it->batch_index;
-				auto new_partition_it =
-				    std::partition_point(partition_it, rpis.end(), [batch_index](const RenderPassInfo& rpi) { return rpi.batch_index == batch_index; });
+			auto partition_it = passes.begin();
+			while (partition_it != passes.end()) {
+				auto batch_index = (*partition_it)->batch_index;
+				auto new_partition_it = std::partition_point(partition_it, passes.end(), [batch_index](PassInfo* rpi) { return rpi->batch_index == batch_index; });
 				auto partition_span = std::span(partition_it, new_partition_it);
 				auto si = record_single_submit(alloc, partition_span, domain);
 				if (!si) {
@@ -835,27 +800,24 @@ namespace vuk {
 		// record cbufs
 		// assume that rpis are partitioned wrt batch_index
 
-		auto graphics_rpis = std::span(impl->rpis.begin(), impl->rpis.begin() + impl->num_graphics_rpis);
-		if (graphics_rpis.size() > 0) {
-			auto batch = record_batch(graphics_rpis, DomainFlagBits::eGraphicsQueue);
+		if (impl->graphics_passes.size() > 0) {
+			auto batch = record_batch(impl->graphics_passes, DomainFlagBits::eGraphicsQueue);
 			if (!batch) {
 				return batch;
 			}
 			sbundle.batches.emplace_back(std::move(*batch));
 		}
 
-		auto compute_rpis = std::span(impl->rpis.begin() + impl->num_graphics_rpis, impl->rpis.begin() + impl->num_graphics_rpis + impl->num_compute_rpis);
-		if (compute_rpis.size() > 0) {
-			auto batch = record_batch(compute_rpis, DomainFlagBits::eComputeQueue);
+		if (impl->compute_passes.size() > 0) {
+			auto batch = record_batch(impl->compute_passes, DomainFlagBits::eComputeQueue);
 			if (!batch) {
 				return batch;
 			}
 			sbundle.batches.emplace_back(std::move(*batch));
 		}
 
-		auto transfer_rpis = std::span(impl->rpis.begin() + impl->num_graphics_rpis + impl->num_compute_rpis, impl->rpis.end());
-		if (transfer_rpis.size() > 0) {
-			auto batch = record_batch(transfer_rpis, DomainFlagBits::eTransferQueue);
+		if (impl->transfer_passes.size() > 0) {
+			auto batch = record_batch(impl->transfer_passes, DomainFlagBits::eTransferQueue);
 			if (!batch) {
 				return batch;
 			}
@@ -866,58 +828,34 @@ namespace vuk {
 	}
 
 	Result<BufferInfo, RenderGraphException> ExecutableRenderGraph::get_resource_buffer(Name n, PassInfo* pass_info) {
-		auto resolved = resolve_name(n, pass_info);
-		auto whole = impl->whole_name(resolved);
-		auto it = impl->bound_buffers.find(whole);
-		if (it == impl->bound_buffers.end()) {
-			return { expected_error, errors::make_cbuf_references_unknown_resource(*pass_info, Resource::Type::eBuffer, n) };
+		for (auto& r : pass_info->resources.to_span(impl->resources)) {
+			if (r.type == Resource::Type::eBuffer && r.name.name == n) {
+				auto& att = impl->get_bound_buffer(r.reference);
+				return { expected_value, att };
+			}
 		}
-		return { expected_value, it->second };
+
+		return { expected_error, errors::make_cbuf_references_undeclared_resource(*pass_info, Resource::Type::eImage, n) };
 	}
 
 	Result<AttachmentInfo, RenderGraphException> ExecutableRenderGraph::get_resource_image(Name n, PassInfo* pass_info) {
-		auto resolved = resolve_name(n, pass_info);
-		auto whole = impl->whole_name(resolved);
-		auto it = impl->bound_attachments.find(whole);
-		if (it == impl->bound_attachments.end()) {
-			return {
-				expected_error, errors::make_cbuf_references_unknown_resource(*pass_info, Resource::Type::eImage, n)
-			}; // TODO: can both errors be hit? what has been already checked?
-		}
-		auto uc_it = impl->use_chains.find(resolved);
-		if (uc_it == impl->use_chains.end()) {
-			return { expected_error, errors::make_cbuf_references_unknown_resource(*pass_info, Resource::Type::eImage, n) };
-		}
-		auto& chain = uc_it->second;
-		for (auto& elem : chain) {
-			if (elem.pass == pass_info) {
-				// TODO: make this less expensive
-				auto attI = it->second;
-				attI.attachment.base_layer = elem.subrange.image.base_layer;
-				attI.attachment.base_level = elem.subrange.image.base_level;
-				attI.attachment.layer_count =
-				    elem.subrange.image.layer_count == VK_REMAINING_ARRAY_LAYERS ? attI.attachment.layer_count : elem.subrange.image.layer_count;
-				attI.attachment.level_count =
-				    elem.subrange.image.level_count == VK_REMAINING_MIP_LEVELS ? attI.attachment.level_count : elem.subrange.image.level_count;
-				return { expected_value, attI };
+		for (auto& r : pass_info->resources.to_span(impl->resources)) {
+			if (r.type == Resource::Type::eImage && r.name.name == n) {
+				auto& att = impl->get_bound_attachment(r.reference);
+				return { expected_value, att };
 			}
 		}
-		return { expected_value, it->second };
+
+		return { expected_error, errors::make_cbuf_references_undeclared_resource(*pass_info, Resource::Type::eImage, n) };
 	}
 
 	Result<bool, RenderGraphException> ExecutableRenderGraph::is_resource_image_in_general_layout(Name n, PassInfo* pass_info) {
-		auto resolved = resolve_name(n, pass_info);
-
-		auto it = impl->use_chains.find(resolved);
-		if (it == impl->use_chains.end()) {
-			return { expected_error, errors::make_cbuf_references_unknown_resource(*pass_info, Resource::Type::eImage, n) };
-		}
-		auto& chain = it->second;
-		for (auto& elem : chain) {
-			if (elem.pass == pass_info) {
-				return { expected_value, elem.use.layout == vuk::ImageLayout::eGeneral };
+		for (auto& r : pass_info->resources.to_span(impl->resources)) {
+			if (r.type == Resource::Type::eImage && r.name.name == n) {
+				return { expected_value, r.promoted_to_general };
 			}
 		}
+
 		return { expected_error, errors::make_cbuf_references_undeclared_resource(*pass_info, Resource::Type::eImage, n) };
 	}
 

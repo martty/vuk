@@ -41,7 +41,7 @@ namespace vuk {
 		/// @brief Create a Future with ownership of a RenderGraph and bind to an output
 		/// @param rg
 		/// @param output_binding
-		Future(std::shared_ptr<RenderGraph> rg, Name output_binding, DomainFlags dst_domain = DomainFlagBits::eDevice, Subrange subrange = {});
+		Future(std::shared_ptr<RenderGraph> rg, Name output_binding, DomainFlags dst_domain = DomainFlagBits::eDevice);
 		
 		/// @brief Create a Future from a value, automatically making the result available on the host
 		/// @param value
