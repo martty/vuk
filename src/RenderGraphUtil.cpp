@@ -38,16 +38,7 @@ namespace vuk {
 
 #define INIT2(x) x(decltype(x)::allocator_type(arena_))
 
-	RenderPassInfo::RenderPassInfo(arena& arena_) :
-	    INIT2(subpasses),
-	    INIT2(attachments),
-	    INIT2(pre_barriers),
-	    INIT2(post_barriers),
-	    INIT2(pre_mem_barriers),
-	    INIT2(post_mem_barriers),
-	    INIT2(waits) {}
-
-	SubpassInfo::SubpassInfo(arena& arena_) : INIT2(passes), INIT2(pre_barriers), INIT2(post_barriers), INIT2(pre_mem_barriers), INIT2(post_mem_barriers) {}
+	RenderPassInfo::RenderPassInfo(arena& arena_) : INIT2(attachments) {}
 
 #undef INIT2
 

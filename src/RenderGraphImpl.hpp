@@ -12,19 +12,13 @@
 namespace vuk {
 	struct RenderPassInfo {
 		RenderPassInfo(arena&);
-		uint32_t command_buffer_index;
 		uint32_t batch_index;
-		std::vector<SubpassInfo, short_alloc<SubpassInfo, 64>> subpasses;
 		std::vector<AttachmentRPInfo, short_alloc<AttachmentRPInfo, 16>> attachments;
 		uint32_t layer_count;
 		vuk::RenderPassCreateInfo rpci;
 		vuk::FramebufferCreateInfo fbci;
-		bool framebufferless = false;
 		VkRenderPass handle = {};
 		VkFramebuffer framebuffer;
-		std::vector<VkImageMemoryBarrier2KHR, short_alloc<VkImageMemoryBarrier2KHR, 64>> pre_barriers, post_barriers;
-		std::vector<VkMemoryBarrier2KHR, short_alloc<VkMemoryBarrier2KHR, 64>> pre_mem_barriers, post_mem_barriers;
-		std::vector<std::pair<DomainFlagBits, uint32_t>, short_alloc<std::pair<DomainFlagBits, uint32_t>, 64>> waits;
 	};
 
 	using IARule = std::function<void(const struct InferenceContext&, ImageAttachment&)>;
@@ -54,23 +48,14 @@ namespace vuk {
 
 	struct Release {
 		QueueResourceUse dst_use;
-		Subrange subrange;
 		FutureBase* signal = nullptr;
-	};
-
-	struct Acquire {
-		QueueResourceUse src_use;
-		DomainFlagBits initial_domain;
-		uint64_t initial_visibility;
 	};
 
 	struct PassWrapper {
 		Name name;
-		DomainFlags execute_on;
+		DomainFlags execute_on = DomainFlagBits::eAny;
 
-		bool use_secondary_command_buffers;
-
-		std::span<Resource> resources;
+		RelSpan<Resource> resources;
 		std::span<std::pair<Name, Name>> resolves; // src -> dst
 
 		std::function<void(CommandBuffer&)> execute;
@@ -86,9 +71,11 @@ namespace vuk {
 
 		QualifiedName qualified_name;
 
-		size_t render_pass_index;
+		size_t batch_index;
+		size_t command_buffer_index = 0;
+		int32_t render_pass_index = -1;
 		uint32_t subpass;
-		DomainFlags domain;
+		DomainFlags domain = DomainFlagBits::eAny;
 
 		RelSpan<Resource> resources;
 		RelSpan<std::pair<QualifiedName, QualifiedName>> resolves; // src -> dst
@@ -96,18 +83,19 @@ namespace vuk {
 		RelSpan<QualifiedName> output_names;
 		RelSpan<QualifiedName> write_input_names;
 
-		RelSpan<std::pair<DomainFlagBits, PassInfo*>> waits;
+		RelSpan<VkImageMemoryBarrier2KHR> pre_image_barriers, post_image_barriers;
+		RelSpan<VkMemoryBarrier2KHR> pre_memory_barriers, post_memory_barriers;
+		RelSpan<std::pair<DomainFlagBits, uint64_t>> relative_waits;
 		RelSpan<std::pair<DomainFlagBits, uint64_t>> absolute_waits;
 		RelSpan<FutureBase*> future_signals;
+		RelSpan<int32_t> referenced_swapchains; // TODO: maybe not the best place for it
 
 		bool is_waited_on = false;
+
 		uint32_t bloom_resolved_inputs = 0;
 
 		uint32_t bloom_outputs = 0;
 		uint32_t bloom_write_inputs = 0;
-
-		bool is_head_pass = false;
-		bool is_tail_pass = false;
 	};
 
 #define INIT(x) x(decltype(x)::allocator_type(*arena_))
@@ -175,19 +163,30 @@ namespace vuk {
 		Name temporary_name = "_temporary";
 	};
 
+	struct ChainAccess {
+		int32_t pass;
+		int32_t resource = -1;
+	};
+
+	struct ChainLink {
+		ChainLink* prev = nullptr; // if this came from a previous undef, we link them together
+		std::optional<ChainAccess> def;
+		RelSpan<ChainAccess> reads;
+		Resource::Type type;
+		std::optional<ChainAccess> undef;
+		ChainLink* next = nullptr; // if this links to a def, we link them together
+	};
+
 	struct RGCImpl {
-		RGCImpl() : arena_(new arena(4 * 1024 * 1024)), INIT(computed_passes), INIT(ordered_passes), INIT(rpis) {}
-		RGCImpl(arena* a) : arena_(a), INIT(computed_passes), INIT(ordered_passes), INIT(rpis) {}
+		RGCImpl() : arena_(new arena(4 * 1024 * 1024)), INIT(computed_passes), INIT(ordered_passes), INIT(partitioned_passes), INIT(rpis) {}
+		RGCImpl(arena* a) : arena_(a), INIT(computed_passes), INIT(ordered_passes), INIT(partitioned_passes), INIT(rpis) {}
 		std::unique_ptr<arena> arena_;
 
 		// per PassInfo
 		std::vector<Resource> resources;
 		std::vector<std::pair<QualifiedName, QualifiedName>> resolves; // src -> dst
-		std::vector<QualifiedName> input_names;
-		std::vector<QualifiedName> output_names;
-		std::vector<QualifiedName> write_input_names;
 
-		std::vector<std::pair<DomainFlagBits, PassInfo*>> waits;
+		std::vector<std::pair<DomainFlagBits, uint64_t>> waits;
 		std::vector<std::pair<DomainFlagBits, uint64_t>> absolute_waits;
 		std::vector<FutureBase*> future_signals;
 		std::deque<QualifiedName> qfname_references;
@@ -195,19 +194,56 @@ namespace vuk {
 
 		std::vector<PassInfo, short_alloc<PassInfo, 64>> computed_passes;
 		std::vector<PassInfo*, short_alloc<PassInfo*, 64>> ordered_passes;
+		std::vector<size_t> computed_pass_idx_to_ordered_idx;
+		std::vector<size_t> ordered_idx_to_computed_pass_idx;
+		std::vector<PassInfo*, short_alloc<PassInfo*, 64>> partitioned_passes;
+		std::vector<size_t> computed_pass_idx_to_partitioned_idx;
+
 		robin_hood::unordered_flat_map<QualifiedName, QualifiedName> computed_aliases; // maps resource names to resource names
 		robin_hood::unordered_flat_map<QualifiedName, QualifiedName> assigned_names;   // maps resource names to attachment names
 		robin_hood::unordered_flat_map<Name, uint64_t> sg_name_counter;
 		std::unordered_map<RenderGraph*, std::string> sg_prefixes;
 		robin_hood::unordered_node_map<QualifiedName, std::vector<UseRef, short_alloc<UseRef, 64>>> use_chains;
 
+		std::vector<VkImageMemoryBarrier2KHR> image_barriers;
+		std::vector<VkMemoryBarrier2KHR> mem_barriers;
+
+		std::unordered_map<QualifiedName, ChainLink> res_to_links;
+		std::vector<ChainAccess> pass_idx_helper;
+		Resource& get_resource(ChainAccess& ca) {
+			return resources[computed_passes[ca.pass].resources.offset0 + ca.resource];
+		}
+
+		PassInfo& get_pass(ChainAccess& ca) {
+			return computed_passes[ca.pass];
+		}
+
+		PassInfo& get_pass(int32_t ordered_pass_idx) {
+			assert(ordered_pass_idx >= 0);
+			return *ordered_passes[ordered_pass_idx];
+		}
+
+		std::vector<ChainLink*> chains;
+		std::vector<int32_t> swapchain_references;
+
 		robin_hood::unordered_flat_map<QualifiedName, AttachmentInfo> bound_attachments;
 		robin_hood::unordered_flat_map<QualifiedName, BufferInfo> bound_buffers;
-		std::vector<void*> attachment_use_chain_references;
+		AttachmentInfo& get_bound_attachment(int32_t idx) {
+			assert(idx < 0);
+			return (&*bound_attachments.begin() + (-1 * idx - 1))->second;
+		}
+		BufferInfo& get_bound_buffer(int32_t idx) {
+			assert(idx < 0);
+			return (&*bound_buffers.begin() + (-1 * idx - 1))->second;
+		}
+
+		std::vector<ChainLink*> attachment_use_chain_references;
 		std::vector<RenderPassInfo*> attachment_rp_references;
 
-		std::unordered_map<QualifiedName, Acquire> acquires;
-		std::unordered_multimap<QualifiedName, Release> releases;
+		std::vector<std::pair<QualifiedName, Release>> releases;
+		Release& get_release(int64_t idx) {
+			return releases[-1 * (idx)-1].second;
+		}
 
 		std::unordered_map<QualifiedName, IAInferences> ia_inference_rules;
 		std::unordered_map<QualifiedName, BufferInferences> buf_inference_rules;
@@ -252,19 +288,33 @@ namespace vuk {
 		};
 
 		std::vector<RenderPassInfo, short_alloc<RenderPassInfo, 64>> rpis;
-		size_t num_graphics_rpis = 0;
-		size_t num_compute_rpis = 0;
-		size_t num_transfer_rpis = 0;
+		std::span<PassInfo*> transfer_passes, compute_passes, graphics_passes;
 
 		void append(Name subgraph_name, const RenderGraph& other);
 
-		// determine rendergraph inputs and outputs, and resources that are neither
-		void build_io(std::span<struct PassInfo> passes);
+		void merge_diverge_passes(std::vector<PassInfo, short_alloc<PassInfo, 64>>& passes);
 
 		std::unordered_map<RenderGraph*, std::string> compute_prefixes(const RenderGraph& rg, bool do_prefix);
 		void inline_subgraphs(const std::shared_ptr<RenderGraph>& rg, std::unordered_set<std::shared_ptr<RenderGraph>>& consumed_rgs);
 
 		void schedule_intra_queue(std::span<struct PassInfo> passes, const RenderGraphCompileOptions& compile_options);
+
+		void emit_image_barrier(RelSpan<VkImageMemoryBarrier2KHR>&,
+		                        int32_t bound_attachment,
+		                        QueueResourceUse last_use,
+		                        QueueResourceUse current_use,
+		                        Subrange::Image& subrange,
+		                        ImageAspectFlags aspect,
+		                        bool is_release = false);
+		void emit_memory_barrier(RelSpan<VkMemoryBarrier2KHR>&, QueueResourceUse last_use, QueueResourceUse current_use);
+
+		void emit_barriers(Context& ctx,
+		                   VkCommandBuffer cbuf,
+		                   vuk::DomainFlagBits domain,
+		                   RelSpan<VkMemoryBarrier2KHR> mem_bars,
+		                   RelSpan<VkImageMemoryBarrier2KHR> im_bars);
+
+		ImageUsageFlags compute_usage(ChainLink* head);
 	};
 #undef INIT
 

@@ -17,7 +17,7 @@ namespace std {
 namespace vuk {
 	inline bool is_write_access(Access ia) {
 		constexpr uint64_t write_mask = eColorResolveWrite | eColorWrite | eDepthStencilWrite | eFragmentWrite | eTransferWrite | eComputeWrite | eHostWrite |
-		                                eMemoryWrite | eRayTracingWrite | eAccelerationStructureBuildWrite;
+		                                eMemoryWrite | eRayTracingWrite | eAccelerationStructureBuildWrite | eClear;
 		return ia & write_mask;
 	}
 
@@ -41,6 +41,10 @@ namespace vuk {
 		    (b == ImageLayout::eDepthStencilReadOnlyOptimal && a == ImageLayout::eDepthStencilAttachmentOptimal)) {
 			return ImageLayout::eDepthStencilAttachmentOptimal;
 		}
+		if ((a == ImageLayout::eReadOnlyOptimalKHR && b == ImageLayout::eAttachmentOptimalKHR) ||
+		    (b == ImageLayout::eReadOnlyOptimalKHR && a == ImageLayout::eAttachmentOptimalKHR)) {
+			return ImageLayout::eAttachmentOptimalKHR;
+		}
 		assert(a != ImageLayout::ePresentSrcKHR && b != ImageLayout::ePresentSrcKHR);
 		return ImageLayout::eGeneral;
 	}
@@ -59,15 +63,15 @@ namespace vuk {
 		}
 		if (ia & color_rw) {
 			qr.stages |= PipelineStageFlagBits::eColorAttachmentOutput;
-			qr.layout = combine_layout(qr.layout, ImageLayout::eColorAttachmentOptimal);
+			qr.layout = combine_layout(qr.layout, ImageLayout::eAttachmentOptimalKHR);
 		}
 		if (ia & eDepthStencilRead) {
 			qr.access |= AccessFlagBits::eDepthStencilAttachmentRead;
-			qr.layout = combine_layout(qr.layout, ImageLayout::eDepthStencilReadOnlyOptimal);
+			qr.layout = combine_layout(qr.layout, ImageLayout::eReadOnlyOptimalKHR);
 		}
 		if (ia & eDepthStencilWrite) {
 			qr.access |= AccessFlagBits::eDepthStencilAttachmentWrite;
-			qr.layout = combine_layout(qr.layout, ImageLayout::eDepthStencilAttachmentOptimal);
+			qr.layout = combine_layout(qr.layout, ImageLayout::eAttachmentOptimalKHR);
 		}
 		if (ia & eDepthStencilRW) {
 			qr.stages |= PipelineStageFlagBits::eEarlyFragmentTests | PipelineStageFlagBits::eLateFragmentTests;
@@ -82,7 +86,7 @@ namespace vuk {
 		}
 		if (ia & (eFragmentSampled | eComputeSampled | eRayTracingSampled)) {
 			qr.access |= AccessFlagBits::eShaderRead;
-			qr.layout = combine_layout(qr.layout, ImageLayout::eShaderReadOnlyOptimal);
+			qr.layout = combine_layout(qr.layout, ImageLayout::eReadOnlyOptimalKHR);
 		}
 
 		if (ia & (eFragmentRW | eFragmentSampled)) {
@@ -289,6 +293,35 @@ namespace vuk {
 		return !is_write_access(u);
 	}
 
+	inline bool is_transfer_access(Access a) {
+		switch (a) {
+		case eTransferRead:
+		case eTransferWrite:
+		case eTransferRW:
+			return true;
+		default:
+			return false;
+		}
+	}
+
+	inline bool is_storage_access(Access a) {
+		switch (a) {
+		case eComputeRead:
+		case eComputeRW:
+		case eComputeWrite:
+		case eVertexRead:
+		case eFragmentRead:
+		case eFragmentWrite:
+		case eFragmentRW:
+		case eRayTracingRead:
+		case eRayTracingWrite:
+		case eRayTracingRW:
+			return true;
+		default:
+			return false;
+		}
+	}
+
 	struct UseRef {
 		QualifiedName name;
 		QualifiedName out_name;
@@ -306,24 +339,20 @@ namespace vuk {
 		vuk::PipelineStageFlags stage;
 	};
 
-	struct SubpassInfo {
-		SubpassInfo(arena&);
-		bool use_secondary_command_buffers;
-		std::vector<PassInfo*, short_alloc<PassInfo*, 16>> passes;
-		std::vector<VkImageMemoryBarrier2KHR, short_alloc<VkImageMemoryBarrier2KHR, 64>> pre_barriers, post_barriers;
-		std::vector<VkMemoryBarrier2KHR, short_alloc<VkMemoryBarrier2KHR, 64>> pre_mem_barriers, post_mem_barriers;
+	struct Acquire {
+		QueueResourceUse src_use;
+		DomainFlagBits initial_domain = DomainFlagBits::eAny;
+		uint64_t initial_visibility;
 	};
 
 	struct BufferInfo {
 		QualifiedName name;
 
-		QueueResourceUse initial;
-		QueueResourceUse final;
-
 		Buffer buffer;
 		FutureBase* attached_future = nullptr;
+		Acquire acquire;
 
-		RelSpan<void*> use_chains;
+		RelSpan<ChainLink*> use_chains;
 		std::optional<Allocator> allocator = {};
 	};
 
@@ -331,8 +360,6 @@ namespace vuk {
 		QualifiedName name;
 
 		ImageAttachment attachment = {};
-
-		QueueResourceUse initial, final;
 
 		enum class Type { eInternal, eExternal, eSwapchain } type;
 
@@ -342,8 +369,12 @@ namespace vuk {
 		RelSpan<struct RenderPassInfo*> rp_uses;
 
 		FutureBase* attached_future = nullptr;
+		Acquire acquire;
+		Subrange::Image image_subrange;
 
-		RelSpan<void*> use_chains;
+		RelSpan<ChainLink*> use_chains = {};
+		int32_t predecessor = -1;
+		uint32_t depth = 0;
 		std::optional<Allocator> allocator = {};
 	};
 

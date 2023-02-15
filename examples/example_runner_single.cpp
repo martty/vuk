@@ -35,9 +35,12 @@ void vuk::ExampleRunner::render() {
 		Future cleared_image_to_render_into{ std::move(rg), "example_target_image" };
 		// invoke the render method of the example with the cleared image
 		Future example_result = examples[0]->render(*this, frame_allocator, std::move(cleared_image_to_render_into));
-		// compile the Future that contains all the rendering of the example
-		auto ptr = example_result.get_render_graph();
-		auto erg = *compiler.link(std::span{ &ptr, 1 }, {});
+		// make a new RG that will take care of putting the swapchain image into present and releasing it from the rg
+		std::shared_ptr<RenderGraph> rg_p(std::make_shared<RenderGraph>("presenter"));
+		rg_p->attach_in("_src", std::move(example_result));
+		rg_p->release_for_present("_src");
+		// compile the RG that contains all the rendering of the example
+		auto erg = *compiler.link(std::span{ &rg_p, 1 }, {});
 		// submit the compiled commands
 		auto result = *execute_submit(frame_allocator, std::move(erg), std::move(bundle));
 		// present the results

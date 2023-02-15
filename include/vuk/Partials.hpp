@@ -31,8 +31,8 @@ namespace vuk {
 		                .execute = [size](vuk::CommandBuffer& command_buffer) {
 			                command_buffer.copy_buffer("_src", "_dst", size);
 		                } });
-		rgp->attach_buffer("_src", *src, vuk::Access::eNone, vuk::Access::eNone);
-		rgp->attach_buffer("_dst", dst, vuk::Access::eNone, vuk::Access::eNone);
+		rgp->attach_buffer("_src", *src, vuk::Access::eNone);
+		rgp->attach_buffer("_dst", dst, vuk::Access::eNone);
 		return { std::move(rgp), "_dst+" };
 	}
 
@@ -90,8 +90,8 @@ namespace vuk {
 		                .execute = [bc](vuk::CommandBuffer& command_buffer) {
 			                command_buffer.copy_buffer_to_image("_src", "_dst", bc);
 		                } });
-		rgp->attach_buffer("_src", *src, vuk::Access::eNone, vuk::Access::eNone);
-		rgp->attach_image("_dst", image, vuk::Access::eNone, vuk::Access::eNone);
+		rgp->attach_buffer("_src", *src, vuk::Access::eNone);
+		rgp->attach_image("_dst", image, vuk::Access::eNone);
 		return { std::move(rgp), "_dst+" };
 	}
 
@@ -116,8 +116,16 @@ namespace vuk {
 		std::shared_ptr<RenderGraph> rgp = std::make_shared<RenderGraph>("generate_mips");
 		rgp->attach_in("_src", std::move(image));
 		Name mip = Name("_mip_");
+
+		std::vector<Name> diverged_names;
 		for (uint32_t miplevel = base_mip; miplevel < (base_mip + num_mips); miplevel++) {
-			rgp->diverge_image("_src", { .base_level = miplevel, .level_count = 1 }, mip.append(std::to_string(miplevel)));
+			Name div_name = mip.append(std::to_string(miplevel));
+			if (miplevel != base_mip) {
+				diverged_names.push_back(div_name.append("+"));
+			} else {
+				diverged_names.push_back(div_name);
+			}
+			rgp->diverge_image("_src", { .base_level = miplevel, .level_count = 1 }, div_name);
 		}
 
 		for (uint32_t miplevel = base_mip + 1; miplevel < (base_mip + num_mips); miplevel++) {
@@ -157,7 +165,7 @@ namespace vuk {
 			                } });
 		}
 
-		rgp->converge_image("_src", "_src+");
+		rgp->converge_image_explicit(diverged_names, "_src+");
 		return { std::move(rgp), "_src+" };
 	}
 
@@ -194,7 +202,10 @@ namespace vuk {
 		auto upload_fut = host_data_to_image(allocator, DomainFlagBits::eTransferQueue, ImageAttachment::from_texture(tex), data);
 		auto mipgen_fut = should_generate_mips ? generate_mips(std::move(upload_fut), 0, ici.mipLevels) : std::move(upload_fut);
 		std::shared_ptr<RenderGraph> rgp = std::make_shared<RenderGraph>("create_texture");
-		rgp->add_pass({ .name = "TRANSITION", .execute_on = DomainFlagBits::eGraphicsQueue, .resources = { "_src"_image >> Access::eFragmentSampled >> "_src+" } });
+		rgp->add_pass({ .name = "TRANSITION",
+		                .execute_on = DomainFlagBits::eGraphicsQueue,
+		                .resources = { "_src"_image >> Access::eFragmentSampled >> "_src+" },
+		                .type = PassType::eForcedAccess });
 		rgp->attach_in("_src", std::move(mipgen_fut));
 		auto on_gfx = Future{ std::move(rgp), "_src+" };
 
