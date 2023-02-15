@@ -328,6 +328,21 @@ namespace vuk {
 					rp.fbci.height = ia.extent.extent.height;
 				}
 
+				ia.level_count = 1; // can only render to a single mip level
+				ia.extent.extent.depth = 1;
+
+				// we do an initial IA -> FB, because we won't process complete IAs later, but we need their info
+				if (ia.sample_count != Samples::eInfer && !rp_att.is_resolve_dst) {
+					rp.fbci.sample_count = ia.sample_count;
+				}
+
+				if (ia.extent.sizing == Sizing::eAbsolute && ia.extent.extent.width > 0 && ia.extent.extent.height > 0) {
+					rp.fbci.width = ia.extent.extent.width;
+					rp.fbci.height = ia.extent.extent.height;
+				}
+
+				rp.fbci.layers = rp.layer_count;
+
 				// resolve images are always sample count 1
 				if (rp_att.is_resolve_dst) {
 					att.attachment.sample_count = Samples::e1;
