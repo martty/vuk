@@ -57,6 +57,10 @@ namespace vuk {
 			computed_aliases.emplace(QualifiedName{ joiner, new_name }, QualifiedName{ Name{}, old_name });
 		}
 
+		/* for (auto old_name : other.impl->imported_names) {
+		  computed_aliases.emplace(QualifiedName{ joiner, old_name }, QualifiedName{ Name{}, old_name });
+		}*/
+
 		for (auto& p : other.impl->passes) {
 			PassInfo& pi = computed_passes.emplace_back(p);
 			pi.qualified_name = { joiner, p.name };
