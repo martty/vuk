@@ -63,7 +63,7 @@ namespace vuk {
 		Name joiner = subgraph_name.is_invalid() ? Name("") : subgraph_name;
 
 		for (auto [new_name, old_name] : other.impl->aliases) {
-			computed_aliases.emplace(QualifiedName{ joiner, new_name }, old_name);
+			computed_aliases.emplace(QualifiedName{ joiner, new_name }, QualifiedName{ Name{}, old_name });
 		}
 
 		for (auto& p : other.impl->passes) {
@@ -199,19 +199,19 @@ namespace vuk {
 				auto hashed_in_name = ::hash::fnv1a::hash(in_name.to_sv().data(), res.name.name.to_sv().size(), hash::fnv1a::default_offset_basis);
 				auto hashed_out_name = ::hash::fnv1a::hash(out_name.to_sv().data(), res.out_name.name.to_sv().size(), hash::fnv1a::default_offset_basis);
 
-				input_names.emplace_back(in_name);
+				input_names.emplace_back(QualifiedName{ Name{}, in_name });
 				pif.bloom_resolved_inputs |= hashed_in_name;
 
 				if (!res.out_name.name.is_invalid()) {
 					pif.bloom_outputs |= hashed_out_name;
-					output_names.emplace_back(out_name);
+					output_names.emplace_back(QualifiedName{ Name{}, out_name });
 				}
 
 				if (is_write_access(res.ia) || is_acquire(res.ia) || is_release(res.ia) || res.ia == Access::eConsume || res.ia == Access::eConverge ||
 				    pif.pass->type == PassType::eForcedAccess) {
 					assert(!poisoned_names.contains(in_name)); // we have poisoned this name because a write has already consumed it
 					pif.bloom_write_inputs |= hashed_in_name;
-					write_input_names.emplace_back(in_name);
+					write_input_names.emplace_back(QualifiedName{ Name{}, in_name });
 					poisoned_names.emplace(in_name);
 				}
 
@@ -222,7 +222,7 @@ namespace vuk {
 					auto dep = sch_info.first.name.append("__diverged");
 					auto hashed_name = ::hash::fnv1a::hash(dep.to_sv().data(), dep.to_sv().size(), hash::fnv1a::default_offset_basis);
 
-					input_names.emplace_back(dep);
+					input_names.emplace_back(QualifiedName{ Name{}, dep });
 					pif.bloom_resolved_inputs |= hashed_name;
 				}
 			}
