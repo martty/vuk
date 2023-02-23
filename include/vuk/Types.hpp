@@ -1013,14 +1013,6 @@ namespace vuk {
 		eMemoryRead = 1ULL << 35,
 		eMemoryWrite = 1ULL << 36,
 		eMemoryRW = eMemoryRead | eMemoryWrite,
-		eRelease = 1ULL << 42, // release a resource into a future (internal)
-		eReleaseToGraphics = 1ULL << 43,
-		eReleaseToCompute = 1ULL << 44,
-		eReleaseToTransfer = 1ULL << 45,
-		eAcquire = 1ULL << 46, // acquire a resource from a future (internal)
-		eAcquireFromGraphics = 1ULL << 47,
-		eAcquireFromCompute = 1ULL << 48,
-		eAcquireFromTransfer = 1ULL << 49
 	};
 
 	inline constexpr Access operator|(Access bit0, Access bit1) noexcept {

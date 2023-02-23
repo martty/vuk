@@ -140,7 +140,7 @@ namespace {
 				                    blit.dstSubresource = blit.srcSubresource;
 				                    blit.dstOffsets[0] = vuk::Offset3D{ static_cast<int>(sx * tile_x_size), static_cast<int>(sy * tile_y_size), 0 };
 				                    blit.dstOffsets[1] = vuk::Offset3D{ static_cast<int>((sx + 1) * tile_x_size), static_cast<int>((sy + 1) * tile_y_size), 1 };
-				                    command_buffer.blit_image("07_commands_NMS+", "07_commands_final", blit, vuk::Filter::eLinear);
+				                    command_buffer.blit_image("07_commands_NMS+", "07_commands", blit, vuk::Filter::eLinear);
 			                    }
 		                    } });
 

@@ -158,8 +158,14 @@ namespace vuk {
 			std::memcpy(&def_pass_idx, &dep.pNext, sizeof(def_pass_idx));
 			dep.pNext = 0;
 			auto& bound = get_bound_attachment(def_pass_idx);
-			if (!resolve_image_barrier(ctx, dep, bound, domain)) {
-				continue;
+			if (bound.parent_attachment < 0) {
+				if (!resolve_image_barrier(ctx, dep, get_bound_attachment(bound.parent_attachment), domain)) {
+					continue;
+				}
+			} else {
+				if (!resolve_image_barrier(ctx, dep, bound, domain)) {
+					continue;
+				}
 			}
 			im_span[imbar_dst_index++] = dep;
 		}
@@ -248,6 +254,10 @@ namespace vuk {
 				si.relative_waits.emplace_back(w);
 			}
 
+			for (auto& w : pass->absolute_waits.to_span(impl->absolute_waits)) {
+				si.absolute_waits.emplace_back(w);
+			}
+
 			CommandBuffer cobuf(*this, ctx, alloc, cbuf);
 			if (render_pass_index >= 0) {
 				fill_renderpass_info(impl->rpis[pass->render_pass_index], 0, cobuf);
@@ -259,15 +269,15 @@ namespace vuk {
 			auto pass_fut_signals = pass->future_signals.to_span(impl->future_signals);
 			si.future_signals.insert(si.future_signals.end(), pass_fut_signals.begin(), pass_fut_signals.end());
 
+			if (!pass->qualified_name.is_invalid()) {
+				ctx.begin_region(cobuf.command_buffer, pass->qualified_name.name);
+			}
 			if (pass->pass->execute) {
 				cobuf.current_pass = pass;
-				if (!pass->qualified_name.is_invalid()) {
-					ctx.begin_region(cobuf.command_buffer, pass->qualified_name.name);
-					pass->pass->execute(cobuf);
-					ctx.end_region(cobuf.command_buffer);
-				} else {
-					pass->pass->execute(cobuf);
-				}
+				pass->pass->execute(cobuf);
+			}
+			if (!pass->qualified_name.is_invalid()) {
+				ctx.end_region(cobuf.command_buffer);
 			}
 
 			if (auto res = cobuf.result(); !res) {
@@ -295,8 +305,8 @@ namespace vuk {
 		Context& ctx = alloc.get_context();
 
 		// bind swapchain attachment images & ivs
-		for (auto& [name, bound] : impl->bound_attachments) {
-			if (bound.type == AttachmentInfo::Type::eSwapchain) {
+		for (auto& bound : impl->bound_attachments) {
+			if (bound.type == AttachmentInfo::Type::eSwapchain && bound.parent_attachment == 0) {
 				auto it = std::find_if(swp_with_index.begin(), swp_with_index.end(), [boundb = &bound](auto& t) { return t.first == boundb->swapchain; });
 				bound.attachment.image_view = it->first->image_views[it->second];
 				bound.attachment.image = it->first->images[it->second];
@@ -360,8 +370,8 @@ namespace vuk {
 		}
 
 		std::vector<std::pair<AttachmentInfo*, IAInferences*>> attis_to_infer;
-		for (auto& [name, bound] : impl->bound_attachments) {
-			if (bound.type == AttachmentInfo::Type::eInternal) {
+		for (auto& bound : impl->bound_attachments) {
+			if (bound.type == AttachmentInfo::Type::eInternal && bound.parent_attachment == 0) {
 				// compute usage if it is to be inferred
 				if (bound.attachment.usage == ImageUsageFlagBits::eInfer) {
 					bound.attachment.usage = {};
@@ -398,7 +408,7 @@ namespace vuk {
 					}
 				}
 				IAInferences* rules_ptr = nullptr;
-				auto rules_it = ia_resolved_rules.find(name);
+				auto rules_it = ia_resolved_rules.find(bound.name);
 				if (rules_it != ia_resolved_rules.end()) {
 					rules_ptr = &rules_it->second;
 				}
@@ -408,12 +418,12 @@ namespace vuk {
 		}
 
 		std::vector<std::pair<BufferInfo*, BufferInferences*>> bufis_to_infer;
-		for (auto& [name, bound] : impl->bound_buffers) {
+		for (auto& bound : impl->bound_buffers) {
 			if (bound.buffer.size != ~(0u))
 				continue;
 
 			BufferInferences* rules_ptr = nullptr;
-			auto rules_it = buf_resolved_rules.find(name);
+			auto rules_it = buf_resolved_rules.find(bound.name);
 			if (rules_it != buf_resolved_rules.end()) {
 				rules_ptr = &rules_it->second;
 			}
@@ -620,7 +630,6 @@ namespace vuk {
 
 				// infer custom rule -> IA
 				if (bufi_it->second) {
-					inf_ctx.prefix = bufi_it->second->prefix;
 					for (auto& rule : bufi_it->second->rules) {
 						rule(inf_ctx, buff);
 					}
@@ -674,7 +683,7 @@ namespace vuk {
 		}
 
 		// create buffers
-		for (auto& [name, bound] : impl->bound_buffers) {
+		for (auto& bound : impl->bound_buffers) {
 			if (bound.buffer.buffer == VK_NULL_HANDLE) {
 				BufferCreateInfo bci{ .mem_usage = bound.buffer.memory_usage, .size = bound.buffer.size, .alignment = 1 }; // TODO: alignment?
 				auto allocator = bound.allocator ? *bound.allocator : alloc;
@@ -687,12 +696,13 @@ namespace vuk {
 		}
 
 		// create non-attachment images
-		for (auto& [name, bound] : impl->bound_attachments) {
-			if (!bound.attachment.image) {
+		for (auto& bound : impl->bound_attachments) {
+			if (!bound.attachment.image && bound.parent_attachment == 0) {
 				if (bound.rp_uses.size() > 0) { // its an FB attachment
 					create_attachment(ctx, bound);
 				} else {
 					auto allocator = bound.allocator ? *bound.allocator : alloc;
+					assert(bound.attachment.usage != ImageUsageFlags{});
 					auto img = allocate_image(allocator, bound.attachment);
 					if (!img) {
 						return img;
@@ -724,6 +734,10 @@ namespace vuk {
 				fb_layer_count = layer_count;
 
 				auto specific_attachment = bound.attachment;
+				if (bound.parent_attachment < 0) {
+					specific_attachment = impl->get_bound_attachment(bound.parent_attachment).attachment;
+					specific_attachment.image_view = {};
+				}
 				if (specific_attachment.image_view == ImageView{}) {
 					specific_attachment.base_layer = base_layer;
 					if (specific_attachment.view_type == ImageViewType::eCube) {
@@ -764,14 +778,14 @@ namespace vuk {
 			rp.framebuffer = *fb; // queue framebuffer for destruction
 		}
 
-		for (auto& [name, attachment_info] : impl->bound_attachments) {
-			if (attachment_info.attached_future) {
+		for (auto& attachment_info : impl->bound_attachments) {
+			if (attachment_info.attached_future && attachment_info.parent_attachment == 0) {
 				ImageAttachment att = attachment_info.attachment;
 				attachment_info.attached_future->result = att;
 			}
 		}
 
-		for (auto& [name, buffer_info] : impl->bound_buffers) {
+		for (auto& buffer_info : impl->bound_buffers) {
 			if (buffer_info.attached_future) {
 				Buffer buf = buffer_info.buffer;
 				buffer_info.attached_future->result = buf;
@@ -829,7 +843,7 @@ namespace vuk {
 
 	Result<BufferInfo, RenderGraphException> ExecutableRenderGraph::get_resource_buffer(Name n, PassInfo* pass_info) {
 		for (auto& r : pass_info->resources.to_span(impl->resources)) {
-			if (r.type == Resource::Type::eBuffer && r.name.name == n) {
+			if (r.type == Resource::Type::eBuffer && r.original_name == n) {
 				auto& att = impl->get_bound_buffer(r.reference);
 				return { expected_value, att };
 			}
@@ -840,8 +854,11 @@ namespace vuk {
 
 	Result<AttachmentInfo, RenderGraphException> ExecutableRenderGraph::get_resource_image(Name n, PassInfo* pass_info) {
 		for (auto& r : pass_info->resources.to_span(impl->resources)) {
-			if (r.type == Resource::Type::eImage && r.name.name == n) {
+			if (r.type == Resource::Type::eImage && r.original_name == n) {
 				auto& att = impl->get_bound_attachment(r.reference);
+				if (att.parent_attachment < 0) {
+					return { expected_value, impl->get_bound_attachment(att.parent_attachment) };
+				}
 				return { expected_value, att };
 			}
 		}
@@ -851,7 +868,7 @@ namespace vuk {
 
 	Result<bool, RenderGraphException> ExecutableRenderGraph::is_resource_image_in_general_layout(Name n, PassInfo* pass_info) {
 		for (auto& r : pass_info->resources.to_span(impl->resources)) {
-			if (r.type == Resource::Type::eImage && r.name.name == n) {
+			if (r.type == Resource::Type::eImage && r.original_name == n) {
 				return { expected_value, r.promoted_to_general };
 			}
 		}
@@ -867,14 +884,22 @@ namespace vuk {
 	const ImageAttachment& InferenceContext::get_image_attachment(Name name) const {
 		auto fqname = QualifiedName{ prefix, name };
 		auto resolved_name = erg->impl->resolve_name(fqname);
-		auto whole_name = erg->impl->whole_name(resolved_name);
-		return erg->impl->bound_attachments.at(whole_name).attachment;
+
+		auto link = &erg->impl->res_to_links.at(resolved_name); // TODO: no error signaling
+		while (link->def->pass > 0) {
+			link = link->prev;
+		}
+		return erg->impl->get_bound_attachment(link->def->pass).attachment;
 	}
 
 	const Buffer& InferenceContext::get_buffer(Name name) const {
 		auto fqname = QualifiedName{ prefix, name };
 		auto resolved_name = erg->impl->resolve_name(fqname);
-		auto whole_name = erg->impl->whole_name(resolved_name);
-		return erg->impl->bound_buffers.at(whole_name).buffer;
+
+		auto link = &erg->impl->res_to_links.at(resolved_name); // TODO: no error signaling
+		while (link->def->pass > 0) {
+			link = link->prev;
+		}
+		return erg->impl->get_bound_buffer(link->def->pass).buffer;
 	}
 } // namespace vuk

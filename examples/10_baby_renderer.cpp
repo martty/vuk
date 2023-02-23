@@ -148,8 +148,10 @@ namespace {
 		      // The texture we have created is already in ShaderReadOptimal, but we need it in General during the pass, and we need it back to ShaderReadOptimal
 		      // afterwards
 		      rg.attach_in("10_doge", std::move(tex_fut));
-		      rg.attach_image("10_v1", vuk::ImageAttachment::from_texture(*variant1), vuk::eNone, vuk::eFragmentSampled);
-		      rg.attach_image("10_v2", vuk::ImageAttachment::from_texture(*variant2), vuk::eNone, vuk::eFragmentSampled);
+		      rg.attach_image("10_v1", vuk::ImageAttachment::from_texture(*variant1), vuk::eNone);
+		      rg.release("10_v1+", vuk::eFragmentSampled);
+		      rg.attach_image("10_v2", vuk::ImageAttachment::from_texture(*variant2), vuk::eNone);
+		      rg.release("10_v2+", vuk::eFragmentSampled);
 
 		      // enqueue running the preprocessing rendergraph and force 10_doge to be sampleable later
 		      auto fut = vuk::transition(vuk::Future{ std::make_unique<vuk::RenderGraph>(std::move(rg)), "10_doge" }, vuk::eFragmentSampled);
