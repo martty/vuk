@@ -1,4 +1,5 @@
 #include "../src/RenderGraphUtil.hpp"
+#include "vuk/RenderGraphReflection.hpp"
 #include "example_runner.hpp"
 
 std::vector<vuk::Name> chosen_resource;
@@ -89,28 +90,30 @@ void vuk::ExampleRunner::render() {
 				if (auto use_chains = compiler.get_use_chains(); use_chains.size() > 1) {
 					const auto& bound_attachments = compiler.get_bound_attachments();
 					bool disable = false;
-					for (const auto [key, use_refs] : use_chains) {
-						auto bound_it = bound_attachments.find(key);
-						if (bound_it == bound_attachments.end())
+					for (const auto head : use_chains) {
+						if (head->type != Resource::Type::eImage) {
 							continue;
+						}
+						
+						auto& att_info = compiler.get_chain_attachment(head);
 						auto samples = vuk::SampleCountFlagBits::e1;
-						auto& att_info = (*bound_it).second;
 						if (att_info.attachment.sample_count != vuk::Samples::eInfer)
 							samples = att_info.attachment.sample_count.count;
 						disable = disable || (samples != vuk::SampleCountFlagBits::e1);
 					}
 
-					for (const auto [key, use_refs] : use_chains) {
-						auto bound_it = bound_attachments.find(key);
-						if (bound_it == bound_attachments.end())
+					for (const auto head : use_chains) {
+						if (head->type != Resource::Type::eImage) {
 							continue;
+						}
+						auto& att_info = compiler.get_chain_attachment(head);
 						std::string btn_id = "";
 						bool prevent_disable = false;
-						if (key.name.to_sv() == attachment_name_out) {
+						if (att_info.name.name.to_sv() == attachment_name_out) {
 							prevent_disable = true;
 							btn_id = "F";
 						} else {
-							auto usage = compiler.compute_usage(use_refs);
+							auto usage = compiler.compute_usage(head);
 							if (usage & vuk::ImageUsageFlagBits::eColorAttachment) {
 								btn_id += "C";
 							} else if (usage & vuk::ImageUsageFlagBits::eDepthStencilAttachment) {
@@ -122,24 +125,25 @@ void vuk::ExampleRunner::render() {
 						if (disable && !prevent_disable) {
 							btn_id += " (MS)";
 						} else {
-							btn_id += "##" + std::string(key.name.to_sv());
+							btn_id += "##" + std::string(att_info.name.name.to_sv());
 						}
 						if (disable && !prevent_disable) {
 							ImGui::TextDisabled("%s", btn_id.c_str());
 						} else {
 							if (ImGui::Button(btn_id.c_str())) {
-								if (key.name.to_sv() == ex->name) {
+								if (att_info.name.name.to_sv() == ex->name) {
 									chosen_resource[i] = attachment_name_out;
 								} else {
-									Name last_use = use_refs.back().out_name.is_invalid() ? use_refs.back().name.name : use_refs.back().out_name.name;
+									// TODO:
+									/* Name last_use = use_refs.back().out_name.is_invalid() ? use_refs.back().name.name : use_refs.back().out_name.name;
 									auto sv = last_use.to_sv();
 									sv.remove_prefix(rg_frag->name.to_sv().size() + 2);
-									chosen_resource[i] = sv;
+									chosen_resource[i] = sv;*/
 								}
 							}
 						}
 						if (ImGui::IsItemHovered())
-							ImGui::SetTooltip("%s", key.name.c_str());
+							ImGui::SetTooltip("%s", att_info.name.name.c_str());
 						ImGui::SameLine();
 					}
 					ImGui::NewLine();
@@ -153,9 +157,6 @@ void vuk::ExampleRunner::render() {
 				} else {
 					rg->attach_in(attachment_name_out, std::move(rg_frag_fut));
 				}
-				// hacky way to reference image in the subgraph
-				// TODO: a proper way to do this?
-
 				auto si = vuk::make_sampled_image(NameReference{ rg.get(), attachment_name_out }, imgui_data.font_sci);
 				ImGui::Image(&*sampled_images.emplace(si), ImGui::GetContentRegionAvail());
 				ImGui::End();

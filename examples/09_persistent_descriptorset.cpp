@@ -117,8 +117,10 @@ namespace {
 		      // The texture we have created is already in ShaderReadOptimal, but we need it in General during the pass, and we need it back to ShaderReadOptimal
 		      // afterwards
 		      rg.attach_in("09_doge", std::move(tex_fut));
-		      rg.attach_image("09_v1", vuk::ImageAttachment::from_texture(*variant1), vuk::eNone, vuk::eFragmentSampled);
-		      rg.attach_image("09_v2", vuk::ImageAttachment::from_texture(*variant2), vuk::eNone, vuk::eFragmentSampled);
+		      rg.attach_image("09_v1", vuk::ImageAttachment::from_texture(*variant1), vuk::eNone);
+		      rg.release("09_v1+", vuk::eFragmentSampled);
+		      rg.attach_image("09_v2", vuk::ImageAttachment::from_texture(*variant2), vuk::eNone);
+		      rg.release("09_v2+", vuk::eFragmentSampled);
 
 		      // enqueue running the preprocessing rendergraph and force 09_doge to be sampleable later
 		      auto fut = vuk::transition(vuk::Future{ std::make_unique<vuk::RenderGraph>(std::move(rg)), "09_doge" }, vuk::eFragmentSampled);
@@ -128,9 +130,9 @@ namespace {
 		      pda = ctx.create_persistent_descriptorset(allocator, *runner.context->get_named_pipeline("bindless_cube"), 1, 64);
 		      // Enqueue updates to the descriptors in the array
 		      // This records the writes internally, but does not execute them
-		      pda->update_combined_image_sampler(ctx, 0, 0, texture_of_doge->view.get(), {}, vuk::ImageLayout::eShaderReadOnlyOptimal);
-		      pda->update_combined_image_sampler(ctx, 0, 1, variant1->view.get(), {}, vuk::ImageLayout::eShaderReadOnlyOptimal);
-		      pda->update_combined_image_sampler(ctx, 0, 2, variant2->view.get(), {}, vuk::ImageLayout::eShaderReadOnlyOptimal);
+		      pda->update_combined_image_sampler(ctx, 0, 0, texture_of_doge->view.get(), {}, vuk::ImageLayout::eReadOnlyOptimalKHR);
+		      pda->update_combined_image_sampler(ctx, 0, 1, variant1->view.get(), {}, vuk::ImageLayout::eReadOnlyOptimalKHR);
+		      pda->update_combined_image_sampler(ctx, 0, 2, variant2->view.get(), {}, vuk::ImageLayout::eReadOnlyOptimalKHR);
 		      // Execute the writes
 		      ctx.commit_persistent_descriptorset(pda.get());
 		    },
@@ -144,7 +146,7 @@ namespace {
 		      vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 1.f, 10.f);
 		      vp.proj[1][1] *= -1;
 
-		      auto [buboVP, uboVP_fut] = create_buffer(frame_allocator, vuk::MemoryUsage::eGPUonly, vuk::DomainFlagBits::eTransferOnGraphics, std::span(&vp, 1));
+		      auto [buboVP, uboVP_fut] = create_buffer(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, vuk::DomainFlagBits::eTransferOnGraphics, std::span(&vp, 1));
 		      auto uboVP = *buboVP;
 
 		      vuk::RenderGraph rg("09");

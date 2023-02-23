@@ -44,63 +44,6 @@ namespace vuk {
 
 	// implement MapProxy for relevant types
 
-	// implement MapProxy for UseRefs
-	using MP1 = MapProxy<QualifiedName, std::span<const UseRef>>;
-	using MPI1 = ConstMapIterator<QualifiedName, std::span<const UseRef>>;
-	using M1 = decltype(RGCImpl::use_chains);
-
-	template<>
-	MP1::const_iterator MP1::cbegin() const noexcept {
-		auto& map = *reinterpret_cast<M1*>(_map);
-		return MP1::const_iterator(new M1::const_iterator(map.cbegin()));
-	}
-
-	template<>
-	MP1::const_iterator MP1::cend() const noexcept {
-		auto& map = *reinterpret_cast<M1*>(_map);
-		return MP1::const_iterator(new M1::const_iterator(map.cend()));
-	}
-
-	template<>
-	MP1::const_iterator MP1::find(QualifiedName key) const noexcept {
-		auto& map = *reinterpret_cast<M1*>(_map);
-		return MP1::const_iterator(new M1::const_iterator(map.find(key)));
-	}
-
-	template<>
-	size_t MP1::size() const noexcept {
-		auto& map = *reinterpret_cast<M1*>(_map);
-		return map.size();
-	}
-
-	template<>
-	MPI1::~ConstMapIterator() {
-		delete reinterpret_cast<M1::const_iterator*>(_iter);
-	}
-
-	template<>
-	MPI1::ConstMapIterator(const MPI1& other) noexcept {
-		*reinterpret_cast<M1::const_iterator*>(_iter) = *reinterpret_cast<M1::iterator*>(other._iter);
-	}
-
-	template<>
-	MPI1::reference MPI1::operator*() noexcept {
-		const auto& iter = *reinterpret_cast<M1::const_iterator const*>(_iter);
-		std::pair<const QualifiedName&, std::span<const UseRef>> result(iter->first, std::span(iter->second));
-		return result;
-	}
-
-	template<>
-	MPI1& MPI1::operator++() noexcept {
-		reinterpret_cast<M1::iterator*>(_iter)->operator++();
-		return *this;
-	}
-
-	template<>
-	bool MPI1::operator==(MPI1 const& other) const noexcept {
-		return *reinterpret_cast<M1::iterator const*>(_iter) == *reinterpret_cast<M1::iterator const*>(other._iter);
-	}
-
 	// implement MapProxy for attachment
 	using MP2 = MapProxy<QualifiedName, const AttachmentInfo&>;
 	using MPI2 = ConstMapIterator<QualifiedName, const AttachmentInfo&>;

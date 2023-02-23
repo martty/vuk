@@ -62,7 +62,7 @@ namespace {
 			         .bind_sampler(0, 0, vuk::SamplerCreateInfo{ .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear });
 			     command_buffer.draw(3, 1, 0, 0);
 		     } });
-		rg.attach_image("_dst", vuk::ImageAttachment::from_texture(dst), vuk::Access::eNone, vuk::Access::eNone);
+		rg.attach_image("_dst", vuk::ImageAttachment::from_texture(dst), vuk::Access::eNone);
 		return rg;
 	}
 
@@ -78,7 +78,8 @@ namespace {
 			                  .bind_sampler(0, 0, { .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear });
 			              command_buffer.draw(3, 1, 0, 0);
 		              } });
-		rg->attach_image("dst", vuk::ImageAttachment::from_texture(dst), vuk::Access::eNone, vuk::Access::eFragmentSampled);
+		rg->attach_image("dst", vuk::ImageAttachment::from_texture(dst), vuk::Access::eNone);
+		rg->release("dst+", vuk::Access::eFragmentSampled);
 		vuk::Compiler c;
 		auto erg = *c.link({ &rg, 1 }, {});
 		vuk::execute_submit_and_wait(allocator, std::move(erg));

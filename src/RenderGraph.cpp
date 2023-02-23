@@ -47,9 +47,6 @@ namespace vuk {
 		pw.arguments = p.arguments;
 		pw.execute = std::move(p.execute);
 		pw.execute_on = p.execute_on;
-		pw.resolves =
-		    std::span{ reinterpret_cast<decltype(pw.resolves)::value_type*>(impl->arena_->allocate(sizeof(p.resolves[0]) * p.resolves.size())), p.resolves.size() };
-		std::copy(p.resolves.begin(), p.resolves.end(), pw.resolves.begin());
 		pw.resources.offset0 = impl->resources.size();
 		impl->resources.insert(impl->resources.end(), p.resources.begin(), p.resources.end());
 		pw.resources.offset1 = impl->resources.size();
@@ -74,6 +71,7 @@ namespace vuk {
 			pi.qualified_name = { joiner, p.name };
 			pi.resources.offset0 = resources.size();
 			for (auto r : p.resources.to_span(other.impl->resources)) {
+				r.original_name = r.name.name;
 				if (r.foreign) {
 					auto prefix = Name{ sg_prefixes.at(r.foreign) };
 					auto res_name = resolve_alias_rec({ prefix, r.name.name });
@@ -93,33 +91,26 @@ namespace vuk {
 				resources.emplace_back(std::move(r));
 			}
 			pi.resources.offset1 = resources.size();
-			pi.resolves.offset0 = resolves.size();
-			for (auto& [n1, n2] : p.resolves) {
-				resolves.emplace_back(QualifiedName{ joiner, n1 }, QualifiedName{ joiner, n2 });
-			}
-			pi.resolves.offset1 = resolves.size();
 		}
 
 		for (auto [name, att] : other.impl->bound_attachments) {
 			att.name = { joiner, name.name };
-			bound_attachments.emplace(QualifiedName{ joiner, name.name }, std::move(att));
+			bound_attachments.emplace_back(std::move(att));
 		}
 		for (auto [name, buf] : other.impl->bound_buffers) {
 			buf.name = { joiner, name.name };
-			bound_buffers.emplace(QualifiedName{ joiner, name.name }, std::move(buf));
+			bound_buffers.emplace_back(std::move(buf));
 		}
 
-		for (auto [name, prefix, iainf] : other.impl->ia_inference_rules) {
-			prefix = joiner.append(prefix.to_sv());
-			auto& rule = ia_inference_rules[{ joiner, name }];
-			rule.prefix = prefix;
+		for (auto [name, iainf] : other.impl->ia_inference_rules) {
+			auto& rule = ia_inference_rules[resolve_alias_rec(QualifiedName{ joiner, name.name })];
+			rule.prefix = joiner;
 			rule.rules.emplace_back(iainf);
 		}
 
-		for (auto [name, prefix, bufinf] : other.impl->buf_inference_rules) {
-			prefix = joiner.append(prefix.to_sv());
-			auto& rule = buf_inference_rules[{ joiner, name }];
-			rule.prefix = prefix;
+		for (auto [name, bufinf] : other.impl->buf_inference_rules) {
+			auto& rule = buf_inference_rules[resolve_alias_rec(QualifiedName{ joiner, name.name })];
+			rule.prefix = joiner;
 			rule.rules.emplace_back(bufinf);
 		}
 
@@ -151,20 +142,24 @@ namespace vuk {
 
 	void RenderGraph::converge_image_explicit(std::span<Name> pre_diverge, Name post_diverge) {
 		Pass post{ .name = post_diverge.append("_CONVERGE"), .execute = converge, .type = PassType::eConverge };
+		post.resources.emplace_back(Resource{ Name{}, Resource::Type::eImage, Access::eConverge, post_diverge });
 		for (auto& name : pre_diverge) {
 			post.resources.emplace_back(Resource{ name, Resource::Type::eImage, Access::eConsume });
 		}
-		post.resources.emplace_back(Resource{ Name{}, Resource::Type::eImage, Access::eConverge, post_diverge });
 		add_pass(std::move(post));
 	}
 
 	void RGCImpl::merge_diverge_passes(std::vector<PassInfo, short_alloc<PassInfo, 64>>& passes) {
-		std::unordered_map<Name, PassInfo*> merge_passes;
+		std::unordered_map<QualifiedName, PassInfo*> merge_passes;
 		for (auto& pass : passes) {
 			if (pass.pass->type == PassType::eDiverge) {
-				auto& pi = merge_passes[pass.pass->name];
+				auto& pi = merge_passes[pass.qualified_name];
 				if (!pi) {
 					pi = &pass;
+					auto res = pass.resources.to_span(resources)[0];
+					res.name = {};
+					pass.resources.append(resources, res);
+					pass.resources.to_span(resources)[0].out_name = {};
 				} else {
 					auto o = pass.resources.to_span(resources);
 					assert(o.size() == 1);
@@ -216,8 +211,7 @@ namespace vuk {
 					output_names.emplace_back(QualifiedName{ Name{}, out_name });
 				}
 
-				if (is_write_access(res.ia) || is_acquire(res.ia) || is_release(res.ia) || res.ia == Access::eConsume || res.ia == Access::eConverge ||
-				    pif.pass->type == PassType::eForcedAccess) {
+				if (is_write_access(res.ia) || res.ia == Access::eConsume || res.ia == Access::eConverge || pif.pass->type == PassType::eForcedAccess) {
 					assert(!poisoned_names.contains(in_name)); // we have poisoned this name because a write has already consumed it
 					pif.bloom_write_inputs |= hashed_in_name;
 					write_input_names.emplace_back(QualifiedName{ Name{}, in_name });
@@ -250,8 +244,8 @@ namespace vuk {
 		// TODO: we know the upper bound on size, use that
 		res_to_links.clear();
 		res_to_links.reserve(1000);
-		/* bound_attachments.reserve(100);
-		bound_buffers.reserve(100);*/
+		bound_attachments.reserve(1000);
+		bound_buffers.reserve(1000);
 
 		for (auto pass_idx = 0; pass_idx < passes.size(); pass_idx++) {
 			auto& pif = passes[pass_idx];
@@ -287,11 +281,11 @@ namespace vuk {
 		// introduce chain links with inputs (acquired and attached buffers & images) and outputs (releases)
 		// these are denoted with negative indices
 		for (auto& bound : bound_attachments) {
-			res_to_links[bound.first].def = { .pass = static_cast<int32_t>(-1 * (&bound - &*bound_attachments.begin() + 1)) };
+			res_to_links[bound.name].def = { .pass = static_cast<int32_t>(-1 * (&bound - &*bound_attachments.begin() + 1)) };
 		}
 
 		for (auto& bound : bound_buffers) {
-			res_to_links[bound.first].def = { .pass = static_cast<int32_t>(-1 * (&bound - &*bound_buffers.begin() + 1)) };
+			res_to_links[bound.name].def = { .pass = static_cast<int32_t>(-1 * (&bound - &*bound_buffers.begin() + 1)) };
 		}
 
 		for (auto& bound : releases) {
@@ -364,9 +358,60 @@ namespace vuk {
 		assert(ordered_passes.size() == passes.size());
 
 		// subchain fixup pass
-		// take all diverged subchains and replace their def with a new attachment that has the proper acq and subrange
+
+		// connect subchains
 		// diverging subchains are chains where def->pass >= 0 AND def->pass type is eDiverge
 		// reconverged subchains are chains where def->pass >= 0 AND def->pass type is eConverge
+		for (auto& head : chains) {
+			if (head->def->pass >= 0 && head->type == Resource::Type::eImage) { // no Buffer divergence
+				auto& pass = get_pass(*head->def);
+				if (pass.pass->type == PassType::eDiverge) { // diverging subchain
+					auto& whole_res = pass.resources.to_span(resources)[0].name;
+					head->source = &res_to_links[whole_res];
+				} else if (pass.pass->type == PassType::eConverge) { // reconverged subchain
+					// take first resource which guaranteed to be diverged
+					auto div_resources = pass.resources.to_span(resources).subspan(1);
+					for (auto& res : div_resources) {
+						res_to_links[res.name].destination = head;
+					}
+				}
+			}
+		}
+
+		helper_links.resize(100);
+		// fixup diverge subchains by copying first use on the converge subchain to their end
+		for (auto& head : chains) {
+			if (head->source) { // a diverged subchain
+				// seek to the end
+				ChainLink* chain;
+				for (chain = head; chain->destination == nullptr; chain = chain->next)
+					;
+				auto last_chain_on_diverged = chain;
+				auto first_chain_on_converged = chain->destination;
+				if (first_chain_on_converged->reads.size() > 0) { // first use is reads
+					// take the reads
+					for (auto& r : first_chain_on_converged->reads.to_span(pass_idx_helper)) {
+						last_chain_on_diverged->reads.append(pass_idx_helper, r);
+					}
+					// remove the undef from the diverged chain
+					last_chain_on_diverged->undef = {};
+				} else if (first_chain_on_converged->undef) {
+					// take the undef from the converged chain and put it on the diverged chain undef
+					last_chain_on_diverged->undef = first_chain_on_converged->undef;
+					// we need to add a release to nothing to preserve the last undef
+					ChainLink helper;
+					helper.prev = last_chain_on_diverged;
+					helper.def = last_chain_on_diverged->undef;
+					helper.type = last_chain_on_diverged->type;
+					auto& rel = releases.emplace_back(QualifiedName{}, Release{});
+					helper.undef = { .pass = static_cast<int32_t>(-1 * (&rel - &*releases.begin() + 1)) };
+					auto& new_link = helper_links.emplace_back(helper);
+					last_chain_on_diverged->next = &new_link;
+				}
+			}
+		}
+
+		// take all diverged subchains and replace their def with a new attachment that has the proper acq and subrange
 		for (auto& head : chains) {
 			if (head->def->pass >= 0 && head->type == Resource::Type::eImage) { // no Buffer divergence
 				auto& pass = get_pass(*head->def);
@@ -379,28 +424,61 @@ namespace vuk {
 					}
 					auto att = get_bound_attachment(link->def->pass); // the original chain attachment, make copy
 					auto& our_res = get_resource(*head->def);
-						
+
 					att.image_subrange = diverged_subchain_headers.at(our_res.out_name).second; // look up subrange referenced by this subchain
-					att.predecessor = head->def->pass;
-					att.depth++;
-					// TODO: convert bound_attachments to vec
-					auto new_bound = bound_attachments.emplace(QualifiedName{ Name{}, att.name.name.append(our_res.out_name.name.to_sv()) }, att).first;
+					att.name = QualifiedName{ Name{}, att.name.name.append(our_res.out_name.name.to_sv()) };
+					att.parent_attachment = link->def->pass;
+					auto new_bound = bound_attachments.emplace_back(att);
 					// replace def with new attachment
-					head->def = { .pass = static_cast<int32_t>(-1 * (&*new_bound - &*bound_attachments.begin() + 1)) };
-				} else if (pass.pass->type == PassType::eConverge) { // reconverged subchain
-					
+					head->def = { .pass = static_cast<int32_t>(-1 * bound_attachments.size()) };
 				}
 			}
-			// return { expected_error, errors::make_unattached_resource_exception(passinfo, res, undiverged_name) };
 		}
-		printf("");
-		// take converge pass and add a def with the attachment from the undiverged chain
 
-		// TODO: connect convergence passes to divergence passes
+		// fixup converge subchains by removing the first use
+		for (auto& head : chains) {
+			if (head->def->pass >= 0 && head->type == Resource::Type::eImage) { // no Buffer divergence
+				auto& pass = get_pass(*head->def);
+				if (pass.pass->type == PassType::eConverge) { // converge subchain
+					if (head->reads.size() > 0) {               // first use is reads
+						head->reads = {};                         // remove the reads
+					} else if (head->undef) {                   // first use is undef
+						head = head->next;                        // drop link from chain
+						head->prev = nullptr;
+					}
+					// reconverged resource is always first resource
+					auto& whole_res = pass.resources.to_span(resources)[0];
+					// take first resource which guaranteed to be diverged
+					auto div_resources = pass.resources.to_span(resources).subspan(1);
+					auto& div_res = div_resources[1];
+					// TODO: we actually need to walk all converging resources here to find the scope of the convergence
+					// walk this resource to convergence
+					auto link = &res_to_links[div_res.name];
+					while (link->prev) { // seek to the head of the diverged chain
+						link = link->prev;
+					}
+					assert(link->source);
+					link = link->source;
+					head->source = link; // set the source for this subchain the original undiv chain
+					while (link->prev) { // seek to the head of the original chain
+						link = link->prev;
+					}
+					auto whole_att = get_bound_attachment(link->def->pass); // the whole attachment
+					whole_att.name = QualifiedName{ Name{}, whole_att.name.name.append(whole_res.out_name.name.to_sv()) };
+					whole_att.acquire.unsynchronized = true;
+					whole_att.parent_attachment = link->def->pass;
+					auto new_bound = bound_attachments.emplace_back(whole_att);
+					// replace head->def with new attachments (the converged resource)
+					head->def = { .pass = static_cast<int32_t>(-1 * bound_attachments.size()) };
+				}
+			}
+		}
+
 		// TODO: validate incorrect convergence
 		/* else if (chain.back().high_level_access == Access::eConverge) {
 		  assert(it->second.dst_use.layout != ImageLayout::eUndefined); // convergence into no use = disallowed
 		}*/
+		// return { expected_error, errors::make_unattached_resource_exception(passinfo, res, undiverged_name) };
 	}
 
 	std::string Compiler::dump_graph() {
@@ -553,11 +631,7 @@ namespace vuk {
 
 		// auto dumped_graph = dump_graph();
 
-		// for now, just use what the passes requested as domain
-		for (auto& p : impl->computed_passes) {
-			p.domain = p.pass->execute_on;
-		}
-
+		// TODO: inference code relies on assigned names
 		impl->assigned_names.clear();
 		// populate resource name -> use chain map
 		for (auto& [k, v] : name_map) {
@@ -572,10 +646,14 @@ namespace vuk {
 		}
 
 		// queue inference pass
+		// prepopulate run domain with requested domain
+		for (auto& p : impl->computed_passes) {
+			p.domain = p.pass->execute_on;
+		}
+
 		for (auto& head : impl->chains) {
 			DomainFlags last_domain = DomainFlagBits::eDevice;
 			bool is_image = head->type == Resource::Type::eImage;
-
 			auto propagate_domain = [&last_domain](auto& domain) {
 				if (domain != last_domain && domain != DomainFlagBits::eDevice && domain != DomainFlagBits::eAny) {
 					last_domain = domain;
@@ -588,9 +666,9 @@ namespace vuk {
 
 			// forward inference
 			ChainLink* chain;
-			for (chain = head; chain->next != nullptr; chain = chain->next) {
+			for (chain = head; chain != nullptr; chain = chain->next) {
 				if (chain->def->pass >= 0) {
-					propagate_domain(impl->ordered_passes[chain->def->pass]->domain);
+					propagate_domain(impl->get_pass(*chain->def).domain);
 				} else {
 					DomainFlagBits att_dom;
 					if (is_image) {
@@ -603,27 +681,45 @@ namespace vuk {
 					}
 				}
 				for (auto& r : chain->reads.to_span(impl->pass_idx_helper)) {
-					propagate_domain(impl->ordered_passes[r.pass]->domain);
+					propagate_domain(impl->get_pass(r).domain);
 				}
-				if (chain->undef) {
-					propagate_domain(impl->ordered_passes[chain->undef->pass]->domain);
+				if (chain->undef && chain->undef->pass >= 0) {
+					propagate_domain(impl->get_pass(*chain->undef).domain);
 				}
 			}
-			last_domain = DomainFlagBits::eDevice;
-			// backward inference
-			for (; chain->prev != nullptr; chain = chain->prev) {
+		}
+
+		// backward inference
+		for (auto& head : impl->chains) {
+			DomainFlags last_domain = DomainFlagBits::eDevice;
+			// queue inference pass
+			auto propagate_domain = [&last_domain](auto& domain) {
+				if (domain != last_domain && domain != DomainFlagBits::eDevice && domain != DomainFlagBits::eAny) {
+					last_domain = domain;
+				}
+				if ((last_domain != DomainFlagBits::eDevice && last_domain != DomainFlagBits::eAny) &&
+				    (domain == DomainFlagBits::eDevice || domain == DomainFlagBits::eAny)) {
+					domain = last_domain;
+				}
+			};
+
+			ChainLink* chain;
+			// wind chain to the end
+			for (chain = head; chain->next != nullptr; chain = chain->next)
+				;
+			for (; chain != nullptr; chain = chain->prev) {
 				if (chain->undef) {
 					if (chain->undef->pass < 0) {
 						last_domain = impl->get_release(chain->undef->pass).dst_use.domain;
 					} else {
-						propagate_domain(impl->ordered_passes[chain->undef->pass]->domain);
+						propagate_domain(impl->get_pass(*chain->undef).domain);
 					}
 				}
 				for (auto& r : chain->reads.to_span(impl->pass_idx_helper)) {
-					propagate_domain(impl->ordered_passes[r.pass]->domain);
+					propagate_domain(impl->get_pass(r).domain);
 				}
 				if (chain->def->pass >= 0) {
-					propagate_domain(impl->ordered_passes[chain->def->pass]->domain);
+					propagate_domain(impl->get_pass(*chain->def).domain);
 				}
 			}
 		}
@@ -631,7 +727,7 @@ namespace vuk {
 		// queue inference failure fixup pass
 		for (auto& p : impl->ordered_passes) {
 			if (p->domain == DomainFlagBits::eDevice || p->domain == DomainFlagBits::eAny) { // couldn't infer, set pass as graphics
-				p->domain = DomainFlagBits::eGraphicsOnGraphics;
+				p->domain = DomainFlagBits::eGraphicsQueue;
 			}
 		}
 
@@ -677,6 +773,27 @@ namespace vuk {
 				auto& att = impl->get_bound_buffer(head->def->pass);
 				att.use_chains.append(impl->attachment_use_chain_references, head);
 			}
+
+			if (head->source) { // propagate use onto previous chain def
+				ChainLink* link = head;
+
+				while (link->source) {
+					for (link = link->source; link->def->pass > 0; link = link->prev)
+						;
+				}
+				for (; link->def->pass >= 0; link = link->prev)
+					;
+
+				if (link->type == Resource::Type::eImage) {
+					auto& att = impl->get_bound_attachment(link->def->pass);
+					att.use_chains.append(impl->attachment_use_chain_references, head);
+					is_swapchain = att.type == AttachmentInfo::Type::eSwapchain;
+				} else {
+					auto& att = impl->get_bound_buffer(link->def->pass);
+					att.use_chains.append(impl->attachment_use_chain_references, head);
+				}
+			}
+
 			for (ChainLink* link = head; link != nullptr; link = link->next) {
 				if (link->def->pass >= 0) {
 					auto& pass = impl->get_pass(*link->def);
@@ -758,9 +875,12 @@ namespace vuk {
 	}
 
 	void RenderGraph::resolve_resource_into(Name resolved_name_src, Name resolved_name_dst, Name ms_name) {
-		add_pass({ .resources = { Resource{ ms_name, Resource::Type::eImage, eColorResolveRead, {} },
-		                          Resource{ resolved_name_src, Resource::Type::eImage, eColorResolveWrite, resolved_name_dst } },
-		           .resolves = { { ms_name, resolved_name_src } } });
+		add_pass({ .resources = { Resource{ ms_name, Resource::Type::eImage, eTransferRead, {} },
+		                          Resource{ resolved_name_src, Resource::Type::eImage, eTransferWrite, resolved_name_dst } },
+		           .execute = [ms_name, resolved_name_src](CommandBuffer& cbuf) { cbuf.resolve_image(ms_name, resolved_name_src); },
+		           .type = PassType::eResolve });
+		inference_rule(resolved_name_src, same_shape_as(ms_name));
+		inference_rule(ms_name, same_shape_as(resolved_name_src));
 	}
 
 	void RenderGraph::clear_image(Name image_name, Name image_name_out, Clear clear_value) {
@@ -901,11 +1021,11 @@ namespace vuk {
 	}
 
 	void RenderGraph::inference_rule(Name target, std::function<void(const struct InferenceContext&, ImageAttachment&)> rule) {
-		impl->ia_inference_rules.emplace_back(IAInference{ target, Name(""), std::move(rule) });
+		impl->ia_inference_rules.emplace_back(IAInference{ QualifiedName{ Name{}, target }, std::move(rule) });
 	}
 
 	void RenderGraph::inference_rule(Name target, std::function<void(const struct InferenceContext&, Buffer&)> rule) {
-		impl->buf_inference_rules.emplace_back(BufferInference{ target, Name(""), std::move(rule) });
+		impl->buf_inference_rules.emplace_back(BufferInference{ QualifiedName{ Name{}, target }, std::move(rule) });
 	}
 
 	robin_hood::unordered_flat_set<Name> RGImpl::get_available_resources() {
@@ -1116,8 +1236,23 @@ namespace vuk {
 	Result<ExecutableRenderGraph> Compiler::link(std::span<std::shared_ptr<RenderGraph>> rgs, const RenderGraphCompileOptions& compile_options) {
 		VUK_DO_OR_RETURN(compile(rgs, compile_options));
 
-		// handle head (queue wait, initial use) -> emit barriers -> handle tail (signal, final use)
+		// we need to handle chains in order of dependency
+		std::vector<ChainLink*> work_queue;
 		for (auto head : impl->chains) {
+			bool is_image = head->type == Resource::Type::eImage;
+			if (is_image) {
+				if (!head->source) {
+					work_queue.push_back(head);
+				}
+			} else {
+				work_queue.push_back(head);
+			}
+		}
+
+		// handle head (queue wait, initial use) -> emit barriers -> handle tail (signal, final use)
+		while (work_queue.size() > 0) {
+			ChainLink* head = work_queue.back();
+			work_queue.pop_back();
 			// handle head
 			ImageAspectFlags aspect;
 			Subrange::Image image_subrange;
@@ -1125,9 +1260,9 @@ namespace vuk {
 			if (is_image) {
 				auto& att = impl->get_bound_attachment(head->def->pass);
 				aspect = format_to_aspect(att.attachment.format);
-				image_subrange = att.image_subrange; // TODO: this isn't yet filled
+				image_subrange = att.image_subrange;
 			}
-			// TODO: we probably want to handle acquire waits here together
+			bool is_subchain = head->source != nullptr;
 
 			// initial waits are handled by the common chain code
 			// last use on the chain
@@ -1147,76 +1282,114 @@ namespace vuk {
 				// we need to emit: def -> reads, RAW or nothing
 				//					reads -> undef, WAR
 				//					if there were no reads, then def -> undef, which is either WAR or WAW
-				int32_t last_read_pass_idx = link->def->pass >= 0 ? (int32_t)impl->computed_pass_idx_to_ordered_idx[link->def->pass] : -1;
+
+				// we need to sometimes emit a barrier onto the last thing that happened, find that pass here
+				// it is either last read pass, or if there were no reads, the def pass, or if the def pass doesn't exist, then we search parent chains
+				int32_t last_executing_pass_idx = link->def->pass >= 0 ? (int32_t)impl->computed_pass_idx_to_ordered_idx[link->def->pass] : -1;
+
 				if (link->reads.size() > 0) { // we need to emit: def -> reads, RAW or nothing (before first read)
 					// to avoid R->R deps, we emit a single dep for all the reads
 					// for this we compute a merged layout (TRANSFER_SRC_OPTIMAL / READ_ONLY_OPTIMAL / GENERAL)
-					bool need_read_only = false;
-					bool need_transfer = false;
-					bool need_general = false;
 					QueueResourceUse use;
-					use.domain = DomainFlagBits::eNone;
-					int32_t first_pass_idx = INT32_MAX;
-					use.layout = ImageLayout::eReadOnlyOptimalKHR;
-					for (auto& r : link->reads.to_span(impl->pass_idx_helper)) {
-						auto& pass = impl->get_pass(r);
-						auto& res = impl->get_resource(r);
-						if (is_transfer_access(res.ia)) {
-							need_transfer = true;
-						} else if (is_storage_access(res.ia)) {
-							need_general = true;
-						} else {
-							need_read_only = true;
-						}
-						auto use2 = to_use(res.ia, pass.domain);
-						use.access |= use2.access;
-						use.stages |= use2.stages;
-						if (use.domain == DomainFlagBits::eNone) {
-							use.domain = use2.domain;
-						} else {
-							assert(use2.domain == use.domain); // TODO: we only support one domain for the reads
-						}
-						auto order_idx = impl->computed_pass_idx_to_ordered_idx[r.pass];
-						if (order_idx < first_pass_idx) {
-							first_pass_idx = (int32_t)order_idx;
-						}
-						if (order_idx > last_read_pass_idx) {
-							last_read_pass_idx = (int32_t)order_idx;
-						}
-					}
-					if (need_transfer && !need_read_only) {
-						use.layout = ImageLayout::eTransferSrcOptimal;
-					}
-					if (need_general) {
-						use.layout = ImageLayout::eGeneral;
-						for (auto& r : link->reads.to_span(impl->pass_idx_helper)) {
-							auto& res = impl->get_resource(r);
-							res.promoted_to_general = true; // TODO: we need to move this out of Resource, because Passes should be immutable
-						}
-					}
+					auto reads = link->reads.to_span(impl->pass_idx_helper);
+					size_t read_idx = 0;
+					size_t start_of_reads = 0;
 
-					// TODO: do not emit this if dep is a read and the layouts match
-					auto& dst = impl->get_pass(first_pass_idx);
-					if (is_image) {
+					// this is where we stick the source dep, it is either def or undef in the parent chain
+					int32_t last_use_source = link->def->pass >= 0 ? link->def->pass : -1;
+
+					while (read_idx < reads.size()) {
+						int32_t first_pass_idx = INT32_MAX;
+						bool need_read_only = false;
+						bool need_transfer = false;
+						bool need_general = false;
+						use.domain = DomainFlagBits::eNone;
+						use.layout = ImageLayout::eReadOnlyOptimalKHR;
+						for (; read_idx < reads.size(); read_idx++) {
+							auto& r = reads[read_idx];
+							auto& pass = impl->get_pass(r);
+							auto& res = impl->get_resource(r);
+
+							auto use2 = to_use(res.ia, pass.domain);
+							if (use.domain == DomainFlagBits::eNone) {
+								use.domain = use2.domain;
+							} else if (use.domain != use2.domain) {
+								// there are multiple domains in this read group
+								// this is okay - but in this case we can't synchronize against all of them together
+								// so we synchronize against them individually by setting last use and ending the read gather
+								break;
+							}
+							// this read can be merged, so merge it
+							int32_t order_idx = (int32_t)impl->computed_pass_idx_to_ordered_idx[r.pass];
+							if (order_idx < first_pass_idx) {
+								first_pass_idx = (int32_t)order_idx;
+							}
+							if (order_idx > last_executing_pass_idx) {
+								last_executing_pass_idx = (int32_t)order_idx;
+							}
+
+							if (is_transfer_access(res.ia)) {
+								need_transfer = true;
+							}
+							if (is_storage_access(res.ia)) {
+								need_general = true;
+							}
+							if (is_readonly_access(res.ia)) {
+								need_read_only = true;
+							}
+
+							use.access |= use2.access;
+							use.stages |= use2.stages;
+						}
+
+						// compute barrier and waits for the merged reads
+
+						if (need_transfer && !need_read_only) {
+							use.layout = ImageLayout::eTransferSrcOptimal;
+						}
+
+						if (need_general || (need_transfer && need_read_only)) {
+							use.layout = ImageLayout::eGeneral;
+							for (auto& r : reads.subspan(start_of_reads, read_idx - start_of_reads)) {
+								auto& res = impl->get_resource(r);
+								res.promoted_to_general = true;
+							}
+						}
+
+						if (last_use_source < 0 && is_subchain) {
+							assert(link->source->undef && link->source->undef->pass >= 0);
+							last_use_source = link->source->undef->pass;
+						}
+
+						// TODO: do not emit this if dep is a read and the layouts match
+						auto& dst = impl->get_pass(first_pass_idx);
+						if (is_image) {
+							if (crosses_queue(last_use, use)) {
+								impl->emit_image_barrier(impl->get_pass((int32_t)impl->computed_pass_idx_to_ordered_idx[last_use_source]).post_image_barriers,
+								                         head->def->pass,
+								                         last_use,
+								                         use,
+								                         image_subrange,
+								                         aspect,
+								                         true);
+							}
+							impl->emit_image_barrier(dst.pre_image_barriers, head->def->pass, last_use, use, image_subrange, aspect);
+						} else {
+							impl->emit_memory_barrier(dst.pre_memory_barriers, last_use, use);
+						}
 						if (crosses_queue(last_use, use)) {
-							impl->emit_image_barrier(impl->get_pass(last_read_pass_idx).post_image_barriers, head->def->pass, last_use, use, image_subrange, aspect, true);
+							// in this case def was on a different queue the subsequent reads
+							// we stick the wait on the first read pass in order
+							impl->get_pass(first_pass_idx)
+							    .relative_waits.append(
+							        impl->waits,
+							        { (DomainFlagBits)(last_use.domain & DomainFlagBits::eQueueMask).m_mask, impl->computed_pass_idx_to_ordered_idx[last_use_source] });
+							impl->get_pass((int32_t)impl->computed_pass_idx_to_ordered_idx[last_use_source]).is_waited_on = true;
 						}
-						impl->emit_image_barrier(dst.pre_image_barriers, head->def->pass, last_use, use, image_subrange, aspect);
-					} else {
-						impl->emit_memory_barrier(dst.pre_memory_barriers, last_use, use);
+						last_use = use;
+						last_use_source = reads[read_idx - 1].pass;
+						start_of_reads = read_idx;
 					}
-					if (crosses_queue(last_use, use)) {
-						// in this case def was on a different queue the subsequent reads
-						// we stick the wait on the first read pass in order
-						impl->get_pass(first_pass_idx)
-						    .relative_waits.append(impl->waits,
-						                           { (DomainFlagBits)(last_use.domain & DomainFlagBits::eQueueMask).m_mask,
-						                             link->def->pass >= 0 ? impl->computed_pass_idx_to_ordered_idx[link->def->pass] : -1 });
-						if (link->def->pass >= 0) {
-							impl->get_pass(*link->def).is_waited_on = true;
-						}
-					}
-					last_use = use;
 				}
 
 				// process tails outside
@@ -1231,6 +1404,9 @@ namespace vuk {
 					auto& pass = impl->get_pass(*link->undef);
 					auto& res = impl->get_resource(*link->undef);
 					QueueResourceUse use = to_use(res.ia, pass.domain);
+					if (use.layout == ImageLayout::eGeneral) {
+						res.promoted_to_general = true;
+					}
 
 					// handle renderpass details
 					// all renderpass write-attachments are entered via an undef (because of it being a write)
@@ -1245,15 +1421,27 @@ namespace vuk {
 								} else if (use.access & AccessFlagBits::eColorAttachmentWrite) { // add CA read, because of LOAD_OP_LOAD
 									use.access |= AccessFlagBits::eColorAttachmentRead;
 								} else if (use.access & AccessFlagBits::eDepthStencilAttachmentWrite) { // add DSA read, because of LOAD_OP_LOAD
-									use.access |= AccessFlagBits::eDepthStencilAttachmentWrite;
+									use.access |= AccessFlagBits::eDepthStencilAttachmentRead;
 								}
 							}
 						}
 					}
 
+					// if the def pass doesn't exist, and there were no reads
+					if (last_executing_pass_idx == -1) {
+						if (is_subchain) { // if subchain, search parent chain for pass
+							assert(link->source->undef && link->source->undef->pass >= 0);
+							last_executing_pass_idx = (int32_t)impl->computed_pass_idx_to_ordered_idx[link->source->undef->pass];
+						}
+					}
+
 					if (is_image) {
 						if (crosses_queue(last_use, use)) { // release barrier
-							impl->emit_image_barrier(impl->get_pass(last_read_pass_idx).post_image_barriers, head->def->pass, last_use, use, image_subrange, aspect, true);
+							if (last_executing_pass_idx !=
+							    -1) { // if last_executing_pass_idx is -1, then there is release in this rg, so we don't emit the release (single-sided acq)
+								impl->emit_image_barrier(
+								    impl->get_pass(last_executing_pass_idx).post_image_barriers, head->def->pass, last_use, use, image_subrange, aspect, true);
+							}
 						}
 						impl->emit_image_barrier(impl->get_pass(*link->undef).pre_image_barriers, head->def->pass, last_use, use, image_subrange, aspect);
 					} else {
@@ -1261,12 +1449,15 @@ namespace vuk {
 					}
 
 					if (crosses_queue(last_use, use)) {
-						assert(link->def->pass >= 0);
 						// we wait on either def or the last read if there was one
-						int32_t wait_pass_idx = link->reads.size() > 0 ? last_read_pass_idx : (int32_t)impl->computed_pass_idx_to_ordered_idx[link->def->pass];
-						impl->get_pass(*link->undef)
-						    .relative_waits.append(impl->waits, { (DomainFlagBits)(last_use.domain & DomainFlagBits::eQueueMask).m_mask, wait_pass_idx });
-						impl->get_pass(wait_pass_idx).is_waited_on = true;
+						if (last_executing_pass_idx != -1) {
+							impl->get_pass(*link->undef)
+							    .relative_waits.append(impl->waits, { (DomainFlagBits)(last_use.domain & DomainFlagBits::eQueueMask).m_mask, last_executing_pass_idx });
+							impl->get_pass(last_executing_pass_idx).is_waited_on = true;
+						} else {
+							auto& acquire = is_image ? impl->get_bound_attachment(link->def->pass).acquire : impl->get_bound_buffer(link->def->pass).acquire;
+							impl->get_pass(*link->undef).absolute_waits.append(impl->absolute_waits, { acquire.initial_domain, acquire.initial_visibility });
+						}
 					}
 					last_use = use;
 				}
@@ -1289,8 +1480,9 @@ namespace vuk {
 				} else { // no intervening read, we put it directly on def
 					if (link->def->pass >= 0) {
 						last_pass_idx = (int32_t)impl->computed_pass_idx_to_ordered_idx[link->def->pass];
-					} else { // TODO: no passes using this resource, just acquired and released -> put the dep on an extra pass
-						printf("");
+					} else { // no passes using this resource, just acquired and released -> put the dep on last pass
+						// TODO: should this be last pass on domain?
+						last_pass_idx = (int32_t)impl->ordered_passes.size() - 1;
 					}
 				}
 
@@ -1310,7 +1502,6 @@ namespace vuk {
 				if (use.layout != ImageLayout::eUndefined) {
 					if (is_image) {
 						// single sided release barrier
-						// TODO: where is the single-sided acq barrier?
 						impl->emit_image_barrier(impl->get_pass(last_pass_idx).post_image_barriers, head->def->pass, last_use, use, image_subrange, aspect, true);
 					} else {
 						impl->emit_memory_barrier(impl->get_pass(last_pass_idx).post_memory_barriers, last_use, use);
@@ -1332,6 +1523,18 @@ namespace vuk {
 				}
 				// TODO: we can also downgrade if the reads are in the same RP, but this is less likely
 			}
+
+			// we have processed this chain, lets see if we can unblock more chains
+			// TODO: this is O(n^2)
+			if (is_image) {
+				for (auto new_head : impl->chains) {
+					if (new_head->source == link) {
+						auto& new_att = impl->get_bound_attachment(new_head->def->pass);
+						new_att.acquire.src_use = last_use;
+						work_queue.push_back(new_head);
+					}
+				}
+			}
 		}
 
 		// assign passes to batches (within a single queue)
@@ -1346,6 +1549,7 @@ namespace vuk {
 			if (queue != current_queue) { // if we go into a new queue, reset batch index
 				current_queue = queue;
 				batch_index = -1;
+				needs_split = false;
 			}
 
 			if (current_pass->relative_waits.size() > 0) {
@@ -1357,13 +1561,15 @@ namespace vuk {
 
 			current_pass->batch_index = (needs_split || (batch_index == -1)) ? ++batch_index : batch_index;
 			needs_split = needs_split_next;
+			needs_split_next = false;
 		}
 
 		// build waits, now that we have fixed the batches
 		for (size_t i = 0; i < impl->partitioned_passes.size(); i++) {
 			auto& current_pass = impl->partitioned_passes[i];
-			for (auto& wait : current_pass->relative_waits.to_span(impl->waits)) {
-				current_pass->absolute_waits.append(impl->absolute_waits, { wait.first, impl->ordered_passes[wait.second]->batch_index + 1 }); // 0 = means previous
+			auto waits = current_pass->relative_waits.to_span(impl->waits);
+			for (auto& wait : waits) {
+				wait.second = impl->ordered_passes[wait.second]->batch_index + 1; // 0 = means previous
 			}
 		}
 
@@ -1486,8 +1692,8 @@ namespace vuk {
 		return { expected_value, *this };
 	}
 
-	MapProxy<QualifiedName, std::span<const UseRef>> Compiler::get_use_chains() {
-		return &impl->use_chains;
+	std::span<ChainLink*> Compiler::get_use_chains() const {
+		return std::span(impl->chains);
 	}
 
 	MapProxy<QualifiedName, const AttachmentInfo&> Compiler::get_bound_attachments() {
@@ -1498,11 +1704,11 @@ namespace vuk {
 		return &impl->bound_buffers;
 	}
 
-	ImageUsageFlags Compiler::compute_usage(ChainLink* head) {
+	ImageUsageFlags Compiler::compute_usage(const ChainLink* head) {
 		return impl->compute_usage(head);
 	}
 
-	ImageUsageFlags RGCImpl::compute_usage(ChainLink* head) {
+	ImageUsageFlags RGCImpl::compute_usage(const ChainLink* head) {
 		ImageUsageFlags usage = {};
 
 		constexpr auto access_to_usage = [](ImageUsageFlags& usage, Access acc) {
@@ -1545,5 +1751,21 @@ namespace vuk {
 		}
 
 		return usage;
+	}
+
+	const struct AttachmentInfo& Compiler::get_chain_attachment(const ChainLink* head) {
+		const ChainLink* link = head;
+
+		while (link->def->pass >= 0 || link->source) {
+			for (; link->def->pass >= 0; link = link->prev)
+				;
+			while (link->source) {
+				for (link = link->source; link->def->pass > 0; link = link->prev)
+					;
+			}
+		}
+
+		assert(link->def->pass < 0);
+		return impl->get_bound_attachment(link->def->pass);
 	}
 } // namespace vuk

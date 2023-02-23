@@ -452,7 +452,7 @@ namespace vuk {
 			return *this;
 		}
 
-		auto layout = *res_gl ? ImageLayout::eGeneral : ImageLayout::eShaderReadOnlyOptimal;
+		auto layout = *res_gl ? ImageLayout::eGeneral : ImageLayout::eReadOnlyOptimalKHR;
 
 		return bind_image(set, binding, res->attachment, layout);
 	}

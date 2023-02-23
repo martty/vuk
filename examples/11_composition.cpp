@@ -139,7 +139,7 @@ namespace {
 			      rg.attach_in("hdr_texture", std::move(hdr_texture.second));
 			      rg.attach_in("verts", std::move(vert_fut));
 			      rg.attach_in("inds", std::move(ind_fut));
-			      rg.attach_image("env_cubemap", env_cubemap_ia, vuk::Access::eNone, vuk::Access::eNone);
+			      rg.attach_image("env_cubemap", env_cubemap_ia, vuk::Access::eNone);
 			      rg.add_pass({ .resources = { "env_cubemap"_image >> vuk::eColorWrite,
 			                                   "hdr_texture"_image >> vuk::eFragmentSampled,
 			                                   "verts"_buffer >> vuk::eAttributeRead,
@@ -204,6 +204,7 @@ namespace {
 		                               .format = vuk::Format::eR8G8B8A8Srgb,
 		                               .sample_count = vuk::Samples::e1,
 		                               .view_type = vuk::ImageViewType::eCube,
+		                               .level_count = 1,
 		                               .layer_count = 6 });
 
 		      // we split the cubemap into faces

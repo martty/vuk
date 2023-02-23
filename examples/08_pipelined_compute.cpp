@@ -147,7 +147,7 @@ namespace {
 			                          .broadcast_color_blend({}) // Set the default color blend state
 			                          .bind_image(0, 0, "08_rtt")
 			                          .bind_sampler(0, 0, {})
-			                          .bind_buffer(0, 1, *command_buffer.get_resource_buffer("08_scramble"))
+			                          .bind_buffer(0, 1, *command_buffer.get_resource_buffer("08_scramble+++"))
 			                          .bind_graphics_pipeline("scrambled_draw")
 			                          .draw(3, 1, 0, 0);
 		                      } });
@@ -163,10 +163,9 @@ namespace {
 		      // temporary buffer used for copying
 		      rgp->attach_buffer("08_scramble++",
 		                         **allocate_buffer(frame_allocator, { vuk::MemoryUsage::eGPUonly, sizeof(unsigned) * x * y, 1 }),
-		                         vuk::Access::eNone,
 		                         vuk::Access::eNone);
 		      // permanent buffer to keep state
-		      rgp->attach_buffer("08_scramble++++", *scramble_buf, vuk::Access::eNone, vuk::Access::eNone);
+		      rgp->attach_buffer("08_scramble++++", *scramble_buf, vuk::Access::eNone);
 		      scramble_buf_fut = { rgp, "08_scramble+++++" };
 
 		      return vuk::Future{ rgp, "08_pipelined_compute_final" };

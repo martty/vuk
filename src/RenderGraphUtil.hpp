@@ -1,6 +1,6 @@
 #pragma once
 
-#include "RelSpan.hpp"
+#include "vuk/RelSpan.hpp"
 #include "vuk/RenderGraph.hpp"
 #include "vuk/ShortAlloc.hpp"
 #include <optional>
@@ -167,58 +167,6 @@ namespace vuk {
 		return qr;
 	}
 
-	inline bool is_acquire(Access a) {
-		switch (a) {
-		case eAcquire:
-		case eAcquireFromGraphics:
-		case eAcquireFromCompute:
-		case eAcquireFromTransfer:
-			return true;
-		default:
-			return false;
-		}
-	}
-
-	inline bool is_release(Access a) {
-		switch (a) {
-		case eRelease:
-		case eReleaseToGraphics:
-		case eReleaseToCompute:
-		case eReleaseToTransfer:
-			return true;
-		default:
-			return false;
-		}
-	}
-
-	inline Access domain_to_release_access(DomainFlags dst) {
-		auto queue = (DomainFlagBits)(dst & DomainFlagBits::eQueueMask).m_mask;
-		switch (queue) {
-		case DomainFlagBits::eGraphicsQueue:
-			return Access::eReleaseToGraphics;
-		case DomainFlagBits::eComputeQueue:
-			return Access::eReleaseToCompute;
-		case DomainFlagBits::eTransferQueue:
-			return Access::eReleaseToTransfer;
-		default:
-			return Access::eRelease;
-		}
-	}
-
-	inline Access domain_to_acquire_access(DomainFlags dst) {
-		auto queue = (DomainFlagBits)(dst & DomainFlagBits::eQueueMask).m_mask;
-		switch (queue) {
-		case DomainFlagBits::eGraphicsQueue:
-			return Access::eAcquireFromGraphics;
-		case DomainFlagBits::eComputeQueue:
-			return Access::eAcquireFromCompute;
-		case DomainFlagBits::eTransferQueue:
-			return Access::eAcquireFromTransfer;
-		default:
-			return Access::eAcquire;
-		}
-	}
-
 	// not all domains can support all stages, this function corrects stage flags
 	inline void scope_to_domain(VkPipelineStageFlags2KHR& src, DomainFlags flags) {
 		DomainFlags remove;
@@ -294,32 +242,15 @@ namespace vuk {
 	}
 
 	inline bool is_transfer_access(Access a) {
-		switch (a) {
-		case eTransferRead:
-		case eTransferWrite:
-		case eTransferRW:
-			return true;
-		default:
-			return false;
-		}
+		return (a & eTransferRW);
 	}
 
 	inline bool is_storage_access(Access a) {
-		switch (a) {
-		case eComputeRead:
-		case eComputeRW:
-		case eComputeWrite:
-		case eVertexRead:
-		case eFragmentRead:
-		case eFragmentWrite:
-		case eFragmentRW:
-		case eRayTracingRead:
-		case eRayTracingWrite:
-		case eRayTracingRW:
-			return true;
-		default:
-			return false;
-		}
+		return (a & (eComputeRW | eVertexRead | eFragmentRW | eRayTracingRW));
+	}
+
+	inline bool is_readonly_access(Access a) {
+		return a & ~(eTransferRW | eComputeRW | eVertexRead | eFragmentRW | eRayTracingRW);
 	}
 
 	struct UseRef {
@@ -343,6 +274,7 @@ namespace vuk {
 		QueueResourceUse src_use;
 		DomainFlagBits initial_domain = DomainFlagBits::eAny;
 		uint64_t initial_visibility;
+		bool unsynchronized = false;
 	};
 
 	struct BufferInfo {
@@ -371,10 +303,9 @@ namespace vuk {
 		FutureBase* attached_future = nullptr;
 		Acquire acquire;
 		Subrange::Image image_subrange;
+		int32_t parent_attachment = 0;
 
 		RelSpan<ChainLink*> use_chains = {};
-		int32_t predecessor = -1;
-		uint32_t depth = 0;
 		std::optional<Allocator> allocator = {};
 	};
 

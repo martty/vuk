@@ -349,6 +349,7 @@ namespace vuk {
 				SubmitInfo& submit_info = batch.submits[i];
 				num_cbufs += submit_info.command_buffers.size();
 				num_waits += submit_info.relative_waits.size();
+				num_waits += submit_info.absolute_waits.size();
 			}
 
 			std::vector<VkSubmitInfo2KHR> sis;
@@ -381,6 +382,15 @@ namespace vuk {
 					auto& wait_queue = ctx.domain_to_queue(w.first).impl->submit_sync;
 					ssi.semaphore = wait_queue.semaphore;
 					ssi.value = queue_progress_references[ctx.domain_to_queue_index(w.first)] + w.second;
+					ssi.stageMask = (VkPipelineStageFlagBits2KHR)PipelineStageFlagBits::eAllCommands;
+					wait_semas.emplace_back(ssi);
+					wait_sema_count++;
+				}
+				for (auto& w : submit_info.absolute_waits) {
+					VkSemaphoreSubmitInfoKHR ssi{ VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR };
+					auto& wait_queue = ctx.domain_to_queue(w.first).impl->submit_sync;
+					ssi.semaphore = wait_queue.semaphore;
+					ssi.value = w.second;
 					ssi.stageMask = (VkPipelineStageFlagBits2KHR)PipelineStageFlagBits::eAllCommands;
 					wait_semas.emplace_back(ssi);
 					wait_sema_count++;
@@ -535,15 +545,15 @@ namespace vuk {
 	}
 
 	SampledImage make_sampled_image(ImageView iv, SamplerCreateInfo sci) {
-		return { SampledImage::Global{ iv, sci, ImageLayout::eShaderReadOnlyOptimal } };
+		return { SampledImage::Global{ iv, sci, ImageLayout::eReadOnlyOptimalKHR } };
 	}
 
 	SampledImage make_sampled_image(NameReference n, SamplerCreateInfo sci) {
-		return { SampledImage::RenderGraphAttachment{ n, sci, {}, ImageLayout::eShaderReadOnlyOptimal } };
+		return { SampledImage::RenderGraphAttachment{ n, sci, {}, ImageLayout::eReadOnlyOptimalKHR } };
 	}
 
 	SampledImage make_sampled_image(NameReference n, ImageViewCreateInfo ivci, SamplerCreateInfo sci) {
-		return { SampledImage::RenderGraphAttachment{ n, sci, ivci, ImageLayout::eShaderReadOnlyOptimal } };
+		return { SampledImage::RenderGraphAttachment{ n, sci, ivci, ImageLayout::eReadOnlyOptimalKHR } };
 	}
 
 	Future::Future(std::shared_ptr<struct RenderGraph> org, Name output_binding, DomainFlags dst_domain) :

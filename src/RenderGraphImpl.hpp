@@ -1,8 +1,9 @@
 #pragma once
 
-#include "RelSpan.hpp"
 #include "RenderGraphUtil.hpp"
 #include "RenderPass.hpp"
+#include "vuk/RelSpan.hpp"
+#include "vuk/RenderGraphReflection.hpp"
 #include "vuk/ShortAlloc.hpp"
 #include "vuk/SourceLocation.hpp"
 
@@ -25,8 +26,7 @@ namespace vuk {
 	using BufferRule = std::function<void(const struct InferenceContext&, Buffer&)>;
 
 	struct IAInference {
-		Name resource;
-		Name prefix;
+		QualifiedName resource;
 		IARule rule;
 	};
 
@@ -36,8 +36,7 @@ namespace vuk {
 	};
 
 	struct BufferInference {
-		Name resource;
-		Name prefix;
+		QualifiedName resource;
 		BufferRule rule;
 	};
 
@@ -56,7 +55,6 @@ namespace vuk {
 		DomainFlags execute_on = DomainFlagBits::eAny;
 
 		RelSpan<Resource> resources;
-		std::span<std::pair<Name, Name>> resolves; // src -> dst
 
 		std::function<void(CommandBuffer&)> execute;
 		std::byte* arguments; // internal use
@@ -78,7 +76,6 @@ namespace vuk {
 		DomainFlags domain = DomainFlagBits::eAny;
 
 		RelSpan<Resource> resources;
-		RelSpan<std::pair<QualifiedName, QualifiedName>> resolves; // src -> dst
 		RelSpan<QualifiedName> input_names;
 		RelSpan<QualifiedName> output_names;
 		RelSpan<QualifiedName> write_input_names;
@@ -105,7 +102,6 @@ namespace vuk {
 
 		std::vector<Name, short_alloc<Name, 64>> imported_names;                            // names coming from subgraphs
 		std::vector<std::pair<Name, Name>, short_alloc<std::pair<Name, Name>, 64>> aliases; // maps resource names to resource names
-		std::vector<Name, short_alloc<Name, 64>> whole_names_consumed;
 		std::vector<std::pair<QualifiedName, std::pair<QualifiedName, Subrange::Image>>,
 		            short_alloc<std::pair<QualifiedName, std::pair<QualifiedName, Subrange::Image>>, 64>>
 		    diverged_subchain_headers;
@@ -117,7 +113,6 @@ namespace vuk {
 		std::vector<BufferInference, short_alloc<BufferInference, 64>> buf_inference_rules;
 
 		std::vector<Resource> resources;
-		std::vector<std::pair<Name, Name>> resolves; // src -> dst
 		std::vector<QualifiedName> input_names;
 		std::vector<QualifiedName> output_names;
 		std::vector<QualifiedName> write_input_names;
@@ -137,7 +132,6 @@ namespace vuk {
 		    INIT(passes),
 		    INIT(imported_names),
 		    INIT(aliases),
-		    INIT(whole_names_consumed),
 		    INIT(diverged_subchain_headers),
 		    INIT(ia_inference_rules),
 		    INIT(buf_inference_rules),
@@ -163,20 +157,6 @@ namespace vuk {
 		Name temporary_name = "_temporary";
 	};
 
-	struct ChainAccess {
-		int32_t pass;
-		int32_t resource = -1;
-	};
-
-	struct ChainLink {
-		ChainLink* prev = nullptr; // if this came from a previous undef, we link them together
-		std::optional<ChainAccess> def;
-		RelSpan<ChainAccess> reads;
-		Resource::Type type;
-		std::optional<ChainAccess> undef;
-		ChainLink* next = nullptr; // if this links to a def, we link them together
-	};
-
 	struct RGCImpl {
 		RGCImpl() : arena_(new arena(4 * 1024 * 1024)), INIT(computed_passes), INIT(ordered_passes), INIT(partitioned_passes), INIT(rpis) {}
 		RGCImpl(arena* a) : arena_(a), INIT(computed_passes), INIT(ordered_passes), INIT(partitioned_passes), INIT(rpis) {}
@@ -184,7 +164,6 @@ namespace vuk {
 
 		// per PassInfo
 		std::vector<Resource> resources;
-		std::vector<std::pair<QualifiedName, QualifiedName>> resolves; // src -> dst
 
 		std::vector<std::pair<DomainFlagBits, uint64_t>> waits;
 		std::vector<std::pair<DomainFlagBits, uint64_t>> absolute_waits;
@@ -203,7 +182,6 @@ namespace vuk {
 		robin_hood::unordered_flat_map<QualifiedName, QualifiedName> assigned_names;   // maps resource names to attachment names
 		robin_hood::unordered_flat_map<Name, uint64_t> sg_name_counter;
 		std::unordered_map<RenderGraph*, std::string> sg_prefixes;
-		robin_hood::unordered_node_map<QualifiedName, std::vector<UseRef, short_alloc<UseRef, 64>>> use_chains;
 
 		std::vector<VkImageMemoryBarrier2KHR> image_barriers;
 		std::vector<VkMemoryBarrier2KHR> mem_barriers;
@@ -211,6 +189,10 @@ namespace vuk {
 		std::unordered_map<QualifiedName, ChainLink> res_to_links;
 		std::vector<ChainAccess> pass_idx_helper;
 		Resource& get_resource(ChainAccess& ca) {
+			return resources[computed_passes[ca.pass].resources.offset0 + ca.resource];
+		}
+
+		const Resource& get_resource(const ChainAccess& ca) const {
 			return resources[computed_passes[ca.pass].resources.offset0 + ca.resource];
 		}
 
@@ -224,17 +206,18 @@ namespace vuk {
 		}
 
 		std::vector<ChainLink*> chains;
+		std::vector<ChainLink> helper_links;
 		std::vector<int32_t> swapchain_references;
 
-		robin_hood::unordered_flat_map<QualifiedName, AttachmentInfo> bound_attachments;
-		robin_hood::unordered_flat_map<QualifiedName, BufferInfo> bound_buffers;
+		std::vector<AttachmentInfo> bound_attachments;
+		std::vector<BufferInfo> bound_buffers;
 		AttachmentInfo& get_bound_attachment(int32_t idx) {
 			assert(idx < 0);
-			return (&*bound_attachments.begin() + (-1 * idx - 1))->second;
+			return bound_attachments[(-1 * idx - 1)];
 		}
 		BufferInfo& get_bound_buffer(int32_t idx) {
 			assert(idx < 0);
-			return (&*bound_buffers.begin() + (-1 * idx - 1))->second;
+			return bound_buffers[(-1 * idx - 1)];
 		}
 
 		std::vector<ChainLink*> attachment_use_chain_references;
@@ -258,16 +241,6 @@ namespace vuk {
 				return it->second;
 			}
 		};
-
-		// note : call it on resolved names only
-		QualifiedName whole_name(QualifiedName in) {
-			if (auto it = diverged_subchain_headers.find(in); it != diverged_subchain_headers.end()) {
-				auto& sch_info = it->second;
-				return resolve_name(sch_info.first);
-			} else {
-				return in;
-			}
-		}
 
 		QualifiedName resolve_alias(QualifiedName in) {
 			auto it = computed_aliases.find(in);
@@ -314,7 +287,7 @@ namespace vuk {
 		                   RelSpan<VkMemoryBarrier2KHR> mem_bars,
 		                   RelSpan<VkImageMemoryBarrier2KHR> im_bars);
 
-		ImageUsageFlags compute_usage(ChainLink* head);
+		ImageUsageFlags compute_usage(const ChainLink* head);
 	};
 #undef INIT
 

@@ -57,6 +57,7 @@ namespace vuk {
 
 	struct Resource {
 		QualifiedName name;
+		Name original_name;
 		enum class Type { eBuffer, eImage } type;
 		Access ia;
 		QualifiedName out_name;
@@ -75,17 +76,14 @@ namespace vuk {
 
 	QueueResourceUse to_use(Access acc, DomainFlags domain);
 
-	enum class PassType { eUserPass, eClear, eDiverge, eConverge, eForcedAccess };
+	enum class PassType { eUserPass, eClear, eResolve, eDiverge, eConverge, eForcedAccess };
 
 	/// @brief Fundamental unit of execution and scheduling. Refers to resources
 	struct Pass {
 		Name name;
 		DomainFlags execute_on = DomainFlagBits::eDevice;
 
-		bool use_secondary_command_buffers = false;
-
 		std::vector<Resource> resources;
-		std::vector<std::pair<Name, Name>> resolves; // src -> dst
 
 		std::function<void(CommandBuffer&)> execute;
 		std::byte* arguments; // internal use
@@ -93,8 +91,6 @@ namespace vuk {
 	};
 
 	// declare these specializations for GCC
-	template<>
-	ConstMapIterator<QualifiedName, std::span<const struct UseRef>>::~ConstMapIterator();
 	template<>
 	ConstMapIterator<QualifiedName, const struct AttachmentInfo&>::~ConstMapIterator();
 	template<>
@@ -258,14 +254,16 @@ namespace vuk {
 
 		// reflection functions
 
-		/// @brief retrieve usages of resource in the RenderGraph
-		MapProxy<QualifiedName, std::span<const struct UseRef>> get_use_chains();
+		/// @brief retrieve usages of resources in the RenderGraph
+		std::span<struct ChainLink*> get_use_chains() const;
 		/// @brief retrieve bound image attachments in the RenderGraph
 		MapProxy<QualifiedName, const struct AttachmentInfo&> get_bound_attachments();
 		/// @brief retrieve bound buffers in the RenderGraph
 		MapProxy<QualifiedName, const struct BufferInfo&> get_bound_buffers();
+		
 		/// @brief compute ImageUsageFlags for given use chain
-		ImageUsageFlags compute_usage(struct ChainLink* chain);
+		ImageUsageFlags compute_usage(const struct ChainLink* chain);
+		const struct AttachmentInfo& get_chain_attachment(const struct ChainLink* chain);
 
 		/// @brief Dump the pass dependency graph in graphviz format
 		std::string dump_graph();
@@ -278,6 +276,7 @@ namespace vuk {
 
 	struct SubmitInfo {
 		std::vector<std::pair<DomainFlagBits, uint64_t>> relative_waits;
+		std::vector<std::pair<DomainFlagBits, uint64_t>> absolute_waits;
 		std::vector<VkCommandBuffer> command_buffers;
 		std::vector<FutureBase*> future_signals;
 		std::vector<SwapchainRef> used_swapchains;
