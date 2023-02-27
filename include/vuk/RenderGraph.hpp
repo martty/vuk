@@ -271,6 +271,13 @@ namespace vuk {
 	private:
 		struct RGCImpl* impl;
 
+		// internal passes
+		Result<void> inline_rgs(std::span<std::shared_ptr<RenderGraph>> rgs);
+		void queue_inference();
+		void pass_partitioning();
+		void resource_linking();
+		void renderpass_assignment();
+
 		friend struct ExecutableRenderGraph;
 	};
 

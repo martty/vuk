@@ -560,12 +560,7 @@ namespace vuk {
 		delete impl;
 	}
 
-	Result<void> Compiler::compile(std::span<std::shared_ptr<RenderGraph>> rgs, const RenderGraphCompileOptions& compile_options) {
-		auto arena = impl->arena_.release();
-		delete impl;
-		arena->reset();
-		impl = new RGCImpl(arena);
-
+	Result<void> Compiler::inline_rgs(std::span<std::shared_ptr<RenderGraph>> rgs) {
 		// inline all the subgraphs into us
 		for (auto& rg : rgs) {
 			impl->sg_prefixes.merge(impl->compute_prefixes(*rg, true));
@@ -582,12 +577,13 @@ namespace vuk {
 			impl->append(Name{ impl->sg_prefixes.at(rg.get()).c_str() }, *rg);
 		}
 
-		// gather name alias info now - once we partition, we might encounter unresolved aliases
-		robin_hood::unordered_flat_map<QualifiedName, QualifiedName> name_map;
+		return { expected_value };
+	}
 
-		name_map.insert(impl->computed_aliases.begin(), impl->computed_aliases.end());
+	void RGCImpl::compute_assigned_names_1(robin_hood::unordered_flat_map<QualifiedName, QualifiedName>& name_map) {
+		name_map.insert(computed_aliases.begin(), computed_aliases.end());
 
-		impl->computed_aliases.clear();
+		computed_aliases.clear();
 		// follow aliases and resolve them into a single lookup
 		for (auto& [k, v] : name_map) {
 			auto it = name_map.find(v);
@@ -597,11 +593,11 @@ namespace vuk {
 				it = name_map.find(res);
 			}
 			assert(!res.is_invalid());
-			impl->computed_aliases.emplace(k, res);
+			computed_aliases.emplace(k, res);
 		}
 
-		for (auto& passinfo : impl->computed_passes) {
-			for (auto& res : passinfo.resources.to_span(impl->resources)) {
+		for (auto& passinfo : computed_passes) {
+			for (auto& res : passinfo.resources.to_span(resources)) {
 				// for read or write, we add source to use chain
 				if (!res.name.is_invalid() && !res.out_name.is_invalid()) {
 					auto [iter, succ] = name_map.emplace(res.out_name, res.name);
@@ -610,7 +606,7 @@ namespace vuk {
 			}
 		}
 
-		impl->assigned_names.clear();
+		assigned_names.clear();
 		// populate resource name -> use chain map
 		for (auto& [k, v] : name_map) {
 			auto it = name_map.find(v);
@@ -620,31 +616,11 @@ namespace vuk {
 				it = name_map.find(res);
 			}
 			assert(!res.is_invalid());
-			impl->assigned_names.emplace(k, res);
+			assigned_names.emplace(k, res);
 		}
+	}
 
-		impl->merge_diverge_passes(impl->computed_passes);
-
-		// run global pass ordering - once we split per-queue we don't see enough
-		// inputs to order within a queue
-		impl->schedule_intra_queue(impl->computed_passes, compile_options);
-
-		// auto dumped_graph = dump_graph();
-
-		// TODO: inference code relies on assigned names
-		impl->assigned_names.clear();
-		// populate resource name -> use chain map
-		for (auto& [k, v] : name_map) {
-			auto it = name_map.find(v);
-			auto res = v;
-			while (it != name_map.end()) {
-				res = it->second;
-				it = name_map.find(res);
-			}
-			assert(!res.is_invalid());
-			impl->assigned_names.emplace(k, res);
-		}
-
+	void Compiler::queue_inference() {
 		// queue inference pass
 		// prepopulate run domain with requested domain
 		for (auto& p : impl->computed_passes) {
@@ -730,8 +706,10 @@ namespace vuk {
 				p->domain = DomainFlagBits::eGraphicsQueue;
 			}
 		}
-
-		// partition passes into different queues
+	}
+	
+	// partition passes into different queues
+	void Compiler::pass_partitioning() {
 		impl->partitioned_passes.reserve(impl->ordered_passes.size());
 		impl->computed_pass_idx_to_partitioned_idx.resize(impl->ordered_passes.size());
 		for (size_t i = 0; i < impl->ordered_passes.size(); i++) {
@@ -759,9 +737,11 @@ namespace vuk {
 		}
 		impl->graphics_passes = { impl->partitioned_passes.begin() + impl->transfer_passes.size() + impl->compute_passes.size(),
 			                        impl->partitioned_passes.size() - impl->transfer_passes.size() - impl->compute_passes.size() };
+	}
 
-		// resource linking pass
-		// populate swapchain and resource -> bound references
+	// resource linking pass
+	// populate swapchain and resource -> bound references
+	void Compiler::resource_linking() {
 		for (auto head : impl->chains) {
 			bool is_image = head->type == Resource::Type::eImage;
 			bool is_swapchain = false;
@@ -821,7 +801,9 @@ namespace vuk {
 				}
 			}
 		}
+	}
 
+	void Compiler::renderpass_assignment() {
 		// graphics: assemble renderpasses based on framebuffers
 		// we need to collect passes into framebuffers, which will determine the renderpasses
 		using attachment_set = std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>>;
@@ -870,6 +852,47 @@ namespace vuk {
 
 			impl->rpis.push_back(rpi);
 		}
+	}
+
+	Result<void> Compiler::compile(std::span<std::shared_ptr<RenderGraph>> rgs, const RenderGraphCompileOptions& compile_options) {
+		auto arena = impl->arena_.release();
+		delete impl;
+		arena->reset();
+		impl = new RGCImpl(arena);
+
+		VUK_DO_OR_RETURN(inline_rgs(rgs));
+
+		// gather name alias info now - once we partition, we might encounter unresolved aliases
+		robin_hood::unordered_flat_map<QualifiedName, QualifiedName> name_map;
+
+		impl->compute_assigned_names_1(name_map);
+
+		impl->merge_diverge_passes(impl->computed_passes);
+
+		// run global pass ordering - once we split per-queue we don't see enough
+		// inputs to order within a queue
+		impl->schedule_intra_queue(impl->computed_passes, compile_options);
+
+		// auto dumped_graph = dump_graph();
+
+		// TODO: inference code relies on assigned names
+		impl->assigned_names.clear();
+		// populate resource name -> use chain map
+		for (auto& [k, v] : name_map) {
+			auto it = name_map.find(v);
+			auto res = v;
+			while (it != name_map.end()) {
+				res = it->second;
+				it = name_map.find(res);
+			}
+			assert(!res.is_invalid());
+			impl->assigned_names.emplace(k, res);
+		}
+
+		queue_inference();
+		pass_partitioning();
+		resource_linking();
+		renderpass_assignment();
 
 		return { expected_value };
 	}
