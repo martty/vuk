@@ -243,9 +243,9 @@ namespace vuk {
 		// reserving here to avoid rehashing map
 		// TODO: we know the upper bound on size, use that
 		res_to_links.clear();
-		res_to_links.reserve(1000);
 		bound_attachments.reserve(1000);
 		bound_buffers.reserve(1000);
+		releases.reserve(1000);
 
 		for (auto pass_idx = 0; pass_idx < passes.size(); pass_idx++) {
 			auto& pif = passes[pass_idx];
@@ -471,6 +471,13 @@ namespace vuk {
 					// replace head->def with new attachments (the converged resource)
 					head->def = { .pass = static_cast<int32_t>(-1 * bound_attachments.size()) };
 				}
+			}
+		}
+
+		chains.clear();
+		for (auto& [name, link] : res_to_links) {
+			if (!link.prev) {
+				chains.push_back(&link);
 			}
 		}
 
@@ -707,7 +714,7 @@ namespace vuk {
 			}
 		}
 	}
-	
+
 	// partition passes into different queues
 	void Compiler::pass_partitioning() {
 		impl->partitioned_passes.reserve(impl->ordered_passes.size());
@@ -806,51 +813,30 @@ namespace vuk {
 	void Compiler::renderpass_assignment() {
 		// graphics: assemble renderpasses based on framebuffers
 		// we need to collect passes into framebuffers, which will determine the renderpasses
-		using attachment_set = std::unordered_set<Resource, std::hash<Resource>, std::equal_to<Resource>, short_alloc<Resource, 16>>;
-		using passinfo_vec = std::vector<PassInfo*, short_alloc<PassInfo*, 16>>;
-		std::vector<std::pair<attachment_set, passinfo_vec>, short_alloc<std::pair<attachment_set, passinfo_vec>, 8>> attachment_sets{ *impl->arena_ };
-		for (auto& passinfo : impl->graphics_passes) {
-			attachment_set atts{ *impl->arena_ };
-
-			for (auto& res : passinfo->resources.to_span(impl->resources)) {
-				if (is_framebuffer_attachment(res))
-					atts.insert(res);
-			}
-
-			if (auto p = attachment_sets.size() > 0 && attachment_sets.back().first == atts ? &attachment_sets.back() : nullptr) {
-				p->second.push_back(passinfo);
-			} else {
-				passinfo_vec pv{ *impl->arena_ };
-				pv.push_back(passinfo);
-				attachment_sets.emplace_back(atts, pv);
-			}
-		}
 
 		// renderpasses are uniquely identified by their index from now on
 		// tell passes in which renderpass/subpass they will execute
-		impl->rpis.reserve(attachment_sets.size());
-		for (auto& [attachments, passes] : attachment_sets) {
-			RenderPassInfo rpi{ *impl->arena_ };
-			auto rpi_index = impl->rpis.size();
+		impl->rpis.reserve(impl->graphics_passes.size());
+		for (auto& passinfo : impl->graphics_passes) {
+			int32_t rpi_index = -1;
+			RenderPassInfo* rpi = nullptr;
 
-			int32_t subpass = -1;
-
-			if (attachments.size() == 0) {
-				continue;
-			} else {
-				for (auto& p : passes) {
-					p->render_pass_index = (int32_t)rpi_index;
-					p->subpass = ++subpass;
-				}
-				for (auto& atts : attachments) {
-					auto& bound_att = impl->get_bound_attachment(atts.reference);
-					auto& att = rpi.attachments.emplace_back(AttachmentRPInfo{ &bound_att });
-					att.description.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-					att.description.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+			for (auto& res : passinfo->resources.to_span(impl->resources)) {
+				if (is_framebuffer_attachment(res)) {
+					if (rpi == nullptr) {
+						rpi_index = impl->rpis.size();
+						rpi = &impl->rpis.emplace_back();
+					}
+					auto& bound_att = impl->get_bound_attachment(res.reference);
+					AttachmentRPInfo rp_info{ &bound_att };
+					rp_info.description.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+					rp_info.description.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+					rpi->attachments.append(impl->rp_infos, rp_info);
 				}
 			}
 
-			impl->rpis.push_back(rpi);
+			passinfo->render_pass_index = (int32_t)rpi_index;
+			passinfo->subpass = 0;
 		}
 	}
 
@@ -1436,7 +1422,7 @@ namespace vuk {
 					if (pass.render_pass_index >= 0) {
 						auto& rpi = impl->rpis[pass.render_pass_index];
 						auto& bound_att = impl->get_bound_attachment(head->def->pass);
-						for (auto& att : rpi.attachments) {
+						for (auto& att : rpi.attachments.to_span(impl->rp_infos)) {
 							if (att.attachment_info == &bound_att) {
 								// if the last use was discard, then downgrade load op
 								if (last_use.layout == ImageLayout::eUndefined) {
@@ -1537,7 +1523,7 @@ namespace vuk {
 					if (pass.render_pass_index >= 0) {
 						auto& rpi = impl->rpis[pass.render_pass_index];
 						auto& bound_att = impl->get_bound_attachment(head->def->pass);
-						for (auto& att : rpi.attachments) {
+						for (auto& att : rpi.attachments.to_span(impl->rp_infos)) {
 							if (att.attachment_info == &bound_att) {
 								att.description.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 							}
@@ -1643,7 +1629,7 @@ namespace vuk {
 					layout = ImageLayout::eAttachmentOptimalKHR;
 				}
 
-				for (auto& att : rpi.attachments) {
+				for (auto& att : rpi.attachments.to_span(impl->rp_infos)) {
 					if (att.attachment_info == &attachment_info) {
 						att.description.initialLayout = (VkImageLayout)layout;
 						att.description.finalLayout = (VkImageLayout)layout;
@@ -1651,9 +1637,9 @@ namespace vuk {
 				}
 
 				attref.layout = (VkImageLayout)layout;
-				attref.attachment = (uint32_t)std::distance(rpi.attachments.begin(), std::find_if(rpi.attachments.begin(), rpi.attachments.end(), [&](auto& att) {
-					                                            return att.attachment_info == &attachment_info;
-				                                            }));
+				auto attachments = rpi.attachments.to_span(impl->rp_infos);
+				attref.attachment = (uint32_t)std::distance(
+				    attachments.begin(), std::find_if(attachments.begin(), attachments.end(), [&](auto& att) { return att.attachment_info == &attachment_info; }));
 				if ((aspect & ImageAspectFlagBits::eColor) == ImageAspectFlags{}) { // not color -> depth or depth/stencil
 					ds_attrefs[subpass_index] = attref;
 				} else {

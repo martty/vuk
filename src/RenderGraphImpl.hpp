@@ -12,10 +12,7 @@
 
 namespace vuk {
 	struct RenderPassInfo {
-		RenderPassInfo(arena&);
-		uint32_t batch_index;
-		std::vector<AttachmentRPInfo, short_alloc<AttachmentRPInfo, 16>> attachments;
-		uint32_t layer_count;
+		RelSpan<AttachmentRPInfo> attachments;
 		vuk::RenderPassCreateInfo rpci;
 		vuk::FramebufferCreateInfo fbci;
 		VkRenderPass handle = {};
@@ -186,7 +183,7 @@ namespace vuk {
 		std::vector<VkImageMemoryBarrier2KHR> image_barriers;
 		std::vector<VkMemoryBarrier2KHR> mem_barriers;
 
-		robin_hood::unordered_flat_map<QualifiedName, ChainLink> res_to_links;
+		robin_hood::unordered_node_map<QualifiedName, ChainLink> res_to_links;
 		std::vector<ChainAccess> pass_idx_helper;
 		Resource& get_resource(ChainAccess& ca) {
 			return resources[computed_passes[ca.pass].resources.offset0 + ca.resource];
@@ -208,6 +205,7 @@ namespace vuk {
 		std::vector<ChainLink*> chains;
 		std::vector<ChainLink> helper_links;
 		std::vector<int32_t> swapchain_references;
+		std::vector<AttachmentRPInfo> rp_infos;
 
 		std::vector<AttachmentInfo> bound_attachments;
 		std::vector<BufferInfo> bound_buffers;

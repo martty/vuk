@@ -58,15 +58,7 @@ namespace vuk {
 		rbi.renderPass = rpass.handle;
 		rbi.framebuffer = rpass.framebuffer;
 		rbi.renderArea = VkRect2D{ vuk::Offset2D{}, vuk::Extent2D{ rpass.fbci.width, rpass.fbci.height } };
-		std::vector<VkClearValue> clears(rpass.attachments.size());
-		for (size_t i = 0; i < rpass.attachments.size(); i++) {
-			auto& att = rpass.attachments[i];
-			if (att.clear_value) {
-				clears[i] = att.clear_value->c;
-			}
-		}
-		rbi.pClearValues = clears.data();
-		rbi.clearValueCount = (uint32_t)clears.size();
+		rbi.clearValueCount = 0;
 
 		ctx.vkCmdBeginRenderPass(cbuf, &rbi, use_secondary_command_buffers ? VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS : VK_SUBPASS_CONTENTS_INLINE);
 	}
@@ -136,8 +128,9 @@ namespace vuk {
 		rpi.color_attachments = std::span<const VkAttachmentReference>(spdesc.pColorAttachments, spdesc.colorAttachmentCount);
 		rpi.samples = rpass.fbci.sample_count.count;
 		rpi.depth_stencil_attachment = spdesc.pDepthStencilAttachment;
+		auto attachments = rpass.attachments.to_span(impl->rp_infos);
 		for (uint32_t i = 0; i < spdesc.colorAttachmentCount; i++) {
-			rpi.color_attachment_names[i] = rpass.attachments[spdesc.pColorAttachments[i].attachment].attachment_info->name;
+			rpi.color_attachment_names[i] = attachments[spdesc.pColorAttachments[i].attachment].attachment_info->name;
 		}
 		cobuf.color_blend_attachments.resize(spdesc.colorAttachmentCount);
 		cobuf.ongoing_renderpass = rpi;
@@ -317,7 +310,7 @@ namespace vuk {
 
 		// pre-inference: which IAs are in which FBs?
 		for (auto& rp : impl->rpis) {
-			for (auto& rp_att : rp.attachments) {
+			for (auto& rp_att : rp.attachments.to_span(impl->rp_infos)) {
 				auto& att = *rp_att.attachment_info;
 
 				att.rp_uses.append(impl->attachment_rp_references, &rp);
@@ -349,8 +342,6 @@ namespace vuk {
 					rp.fbci.width = ia.extent.extent.width;
 					rp.fbci.height = ia.extent.extent.height;
 				}
-
-				rp.fbci.layers = rp.layer_count;
 
 				// resolve images are always sample count 1
 				if (rp_att.is_resolve_dst) {
@@ -554,9 +545,9 @@ namespace vuk {
 						}
 
 						if (!samples_known && ia.sample_count != Samples::eInfer) {
-							auto it =
-							    std::find_if(rpi->attachments.begin(), rpi->attachments.end(), [attip = &atti](auto& rp_att) { return rp_att.attachment_info == attip; });
-							assert(it != rpi->attachments.end());
+							auto attachments = rpi->attachments.to_span(impl->rp_infos);
+							auto it = std::find_if(attachments.begin(), attachments.end(), [attip = &atti](auto& rp_att) { return rp_att.attachment_info == attip; });
+							assert(it != attachments.end());
 							if (!it->is_resolve_dst) {
 								fbci.sample_count = ia.sample_count;
 							}
@@ -670,7 +661,7 @@ namespace vuk {
 				continue;
 			}
 
-			for (auto& attrpinfo : rp.attachments) {
+			for (auto& attrpinfo : rp.attachments.to_span(impl->rp_infos)) {
 				attrpinfo.description.format = (VkFormat)attrpinfo.attachment_info->attachment.format;
 				attrpinfo.description.samples = (VkSampleCountFlagBits)attrpinfo.attachment_info->attachment.sample_count.count;
 				rp.rpci.attachments.push_back(attrpinfo.description);
@@ -725,7 +716,7 @@ namespace vuk {
 
 			// create internal attachments; bind attachments to fb
 			std::optional<uint32_t> fb_layer_count;
-			for (auto& attrpinfo : rp.attachments) {
+			for (auto& attrpinfo : rp.attachments.to_span(impl->rp_infos)) {
 				auto& bound = *attrpinfo.attachment_info;
 				// TODO: cleanup
 				uint32_t base_layer = bound.attachment.base_layer + bound.image_subrange.base_layer;
