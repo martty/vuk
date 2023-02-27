@@ -36,12 +36,6 @@ namespace vuk {
 		}
 	} // namespace detail
 
-#define INIT2(x) x(decltype(x)::allocator_type(arena_))
-
-	RenderPassInfo::RenderPassInfo(arena& arena_) : INIT2(attachments) {}
-
-#undef INIT2
-
 	// implement MapProxy for relevant types
 
 	// implement MapProxy for attachment
