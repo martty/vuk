@@ -186,7 +186,7 @@ namespace vuk {
 		std::vector<VkImageMemoryBarrier2KHR> image_barriers;
 		std::vector<VkMemoryBarrier2KHR> mem_barriers;
 
-		std::unordered_map<QualifiedName, ChainLink> res_to_links;
+		robin_hood::unordered_flat_map<QualifiedName, ChainLink> res_to_links;
 		std::vector<ChainAccess> pass_idx_helper;
 		Resource& get_resource(ChainAccess& ca) {
 			return resources[computed_passes[ca.pass].resources.offset0 + ca.resource];
@@ -259,6 +259,8 @@ namespace vuk {
 				return resolve_alias_rec(it->second);
 			}
 		};
+
+		void compute_assigned_names_1(robin_hood::unordered_flat_map<QualifiedName, QualifiedName>& assigned_names);
 
 		std::vector<RenderPassInfo, short_alloc<RenderPassInfo, 64>> rpis;
 		std::span<PassInfo*> transfer_passes, compute_passes, graphics_passes;
