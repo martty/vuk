@@ -281,6 +281,12 @@ namespace vuk {
 		                        bool is_release = false);
 		void emit_memory_barrier(RelSpan<VkMemoryBarrier2KHR>&, QueueResourceUse last_use, QueueResourceUse current_use);
 
+		// link passes
+		Result<void> generate_barriers_and_waits();
+		Result<void> assign_passes_to_batches();
+		Result<void> build_waits();
+		Result<void> build_renderpasses();
+
 		void emit_barriers(Context& ctx,
 		                   VkCommandBuffer cbuf,
 		                   vuk::DomainFlagBits domain,

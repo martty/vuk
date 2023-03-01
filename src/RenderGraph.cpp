@@ -475,13 +475,6 @@ namespace vuk {
 			}
 		}
 
-		chains.clear();
-		for (auto& [name, link] : res_to_links) {
-			if (!link.prev) {
-				chains.push_back(&link);
-			}
-		}
-
 		// TODO: validate incorrect convergence
 		/* else if (chain.back().high_level_access == Access::eConverge) {
 		  assert(it->second.dst_use.layout != ImageLayout::eUndefined); // convergence into no use = disallowed
@@ -1247,12 +1240,10 @@ namespace vuk {
 		barriers.append(mem_barriers, barrier);
 	}
 
-	Result<ExecutableRenderGraph> Compiler::link(std::span<std::shared_ptr<RenderGraph>> rgs, const RenderGraphCompileOptions& compile_options) {
-		VUK_DO_OR_RETURN(compile(rgs, compile_options));
-
+	Result<void> RGCImpl::generate_barriers_and_waits() {
 		// we need to handle chains in order of dependency
 		std::vector<ChainLink*> work_queue;
-		for (auto head : impl->chains) {
+		for (auto head : chains) {
 			bool is_image = head->type == Resource::Type::eImage;
 			if (is_image) {
 				if (!head->source) {
@@ -1272,7 +1263,7 @@ namespace vuk {
 			Subrange::Image image_subrange;
 			bool is_image = head->type == Resource::Type::eImage;
 			if (is_image) {
-				auto& att = impl->get_bound_attachment(head->def->pass);
+				auto& att = get_bound_attachment(head->def->pass);
 				aspect = format_to_aspect(att.attachment.format);
 				image_subrange = att.image_subrange;
 			}
@@ -1285,11 +1276,11 @@ namespace vuk {
 			for (link = head; link != nullptr; link = link->next) {
 				// populate last use from def or attach
 				if (link->def->pass >= 0) {
-					auto& def_pass = impl->get_pass(*link->def);
-					auto& def_res = impl->get_resource(*link->def);
+					auto& def_pass = get_pass(*link->def);
+					auto& def_res = get_resource(*link->def);
 					last_use = to_use(def_res.ia, def_pass.domain);
 				} else {
-					last_use = is_image ? impl->get_bound_attachment(head->def->pass).acquire.src_use : impl->get_bound_buffer(head->def->pass).acquire.src_use;
+					last_use = is_image ? get_bound_attachment(head->def->pass).acquire.src_use : get_bound_buffer(head->def->pass).acquire.src_use;
 				}
 
 				// handle chain
@@ -1299,13 +1290,13 @@ namespace vuk {
 
 				// we need to sometimes emit a barrier onto the last thing that happened, find that pass here
 				// it is either last read pass, or if there were no reads, the def pass, or if the def pass doesn't exist, then we search parent chains
-				int32_t last_executing_pass_idx = link->def->pass >= 0 ? (int32_t)impl->computed_pass_idx_to_ordered_idx[link->def->pass] : -1;
+				int32_t last_executing_pass_idx = link->def->pass >= 0 ? (int32_t)computed_pass_idx_to_ordered_idx[link->def->pass] : -1;
 
 				if (link->reads.size() > 0) { // we need to emit: def -> reads, RAW or nothing (before first read)
 					// to avoid R->R deps, we emit a single dep for all the reads
 					// for this we compute a merged layout (TRANSFER_SRC_OPTIMAL / READ_ONLY_OPTIMAL / GENERAL)
 					QueueResourceUse use;
-					auto reads = link->reads.to_span(impl->pass_idx_helper);
+					auto reads = link->reads.to_span(pass_idx_helper);
 					size_t read_idx = 0;
 					size_t start_of_reads = 0;
 
@@ -1321,8 +1312,8 @@ namespace vuk {
 						use.layout = ImageLayout::eReadOnlyOptimalKHR;
 						for (; read_idx < reads.size(); read_idx++) {
 							auto& r = reads[read_idx];
-							auto& pass = impl->get_pass(r);
-							auto& res = impl->get_resource(r);
+							auto& pass = get_pass(r);
+							auto& res = get_resource(r);
 
 							auto use2 = to_use(res.ia, pass.domain);
 							if (use.domain == DomainFlagBits::eNone) {
@@ -1334,7 +1325,7 @@ namespace vuk {
 								break;
 							}
 							// this read can be merged, so merge it
-							int32_t order_idx = (int32_t)impl->computed_pass_idx_to_ordered_idx[r.pass];
+							int32_t order_idx = (int32_t)computed_pass_idx_to_ordered_idx[r.pass];
 							if (order_idx < first_pass_idx) {
 								first_pass_idx = (int32_t)order_idx;
 							}
@@ -1365,7 +1356,7 @@ namespace vuk {
 						if (need_general || (need_transfer && need_read_only)) {
 							use.layout = ImageLayout::eGeneral;
 							for (auto& r : reads.subspan(start_of_reads, read_idx - start_of_reads)) {
-								auto& res = impl->get_resource(r);
+								auto& res = get_resource(r);
 								res.promoted_to_general = true;
 							}
 						}
@@ -1376,10 +1367,10 @@ namespace vuk {
 						}
 
 						// TODO: do not emit this if dep is a read and the layouts match
-						auto& dst = impl->get_pass(first_pass_idx);
+						auto& dst = get_pass(first_pass_idx);
 						if (is_image) {
 							if (crosses_queue(last_use, use)) {
-								impl->emit_image_barrier(impl->get_pass((int32_t)impl->computed_pass_idx_to_ordered_idx[last_use_source]).post_image_barriers,
+								emit_image_barrier(get_pass((int32_t)computed_pass_idx_to_ordered_idx[last_use_source]).post_image_barriers,
 								                         head->def->pass,
 								                         last_use,
 								                         use,
@@ -1387,18 +1378,18 @@ namespace vuk {
 								                         aspect,
 								                         true);
 							}
-							impl->emit_image_barrier(dst.pre_image_barriers, head->def->pass, last_use, use, image_subrange, aspect);
+							emit_image_barrier(dst.pre_image_barriers, head->def->pass, last_use, use, image_subrange, aspect);
 						} else {
-							impl->emit_memory_barrier(dst.pre_memory_barriers, last_use, use);
+							emit_memory_barrier(dst.pre_memory_barriers, last_use, use);
 						}
 						if (crosses_queue(last_use, use)) {
 							// in this case def was on a different queue the subsequent reads
 							// we stick the wait on the first read pass in order
-							impl->get_pass(first_pass_idx)
+							get_pass(first_pass_idx)
 							    .relative_waits.append(
-							        impl->waits,
-							        { (DomainFlagBits)(last_use.domain & DomainFlagBits::eQueueMask).m_mask, impl->computed_pass_idx_to_ordered_idx[last_use_source] });
-							impl->get_pass((int32_t)impl->computed_pass_idx_to_ordered_idx[last_use_source]).is_waited_on = true;
+							        waits,
+							        { (DomainFlagBits)(last_use.domain & DomainFlagBits::eQueueMask).m_mask, computed_pass_idx_to_ordered_idx[last_use_source] });
+							get_pass((int32_t)computed_pass_idx_to_ordered_idx[last_use_source]).is_waited_on = true;
 						}
 						last_use = use;
 						last_use_source = reads[read_idx - 1].pass;
@@ -1415,8 +1406,8 @@ namespace vuk {
 				//  def -> undef, which is either WAR or WAW (before undef)
 				//	reads -> undef, WAR (before undef)
 				if (link->undef) {
-					auto& pass = impl->get_pass(*link->undef);
-					auto& res = impl->get_resource(*link->undef);
+					auto& pass = get_pass(*link->undef);
+					auto& res = get_resource(*link->undef);
 					QueueResourceUse use = to_use(res.ia, pass.domain);
 					if (use.layout == ImageLayout::eGeneral) {
 						res.promoted_to_general = true;
@@ -1425,9 +1416,9 @@ namespace vuk {
 					// handle renderpass details
 					// all renderpass write-attachments are entered via an undef (because of it being a write)
 					if (pass.render_pass_index >= 0) {
-						auto& rpi = impl->rpis[pass.render_pass_index];
-						auto& bound_att = impl->get_bound_attachment(head->def->pass);
-						for (auto& att : rpi.attachments.to_span(impl->rp_infos)) {
+						auto& rpi = rpis[pass.render_pass_index];
+						auto& bound_att = get_bound_attachment(head->def->pass);
+						for (auto& att : rpi.attachments.to_span(rp_infos)) {
 							if (att.attachment_info == &bound_att) {
 								// if the last use was discard, then downgrade load op
 								if (last_use.layout == ImageLayout::eUndefined) {
@@ -1445,7 +1436,7 @@ namespace vuk {
 					if (last_executing_pass_idx == -1) {
 						if (is_subchain) { // if subchain, search parent chain for pass
 							assert(link->source->undef && link->source->undef->pass >= 0);
-							last_executing_pass_idx = (int32_t)impl->computed_pass_idx_to_ordered_idx[link->source->undef->pass];
+							last_executing_pass_idx = (int32_t)computed_pass_idx_to_ordered_idx[link->source->undef->pass];
 						}
 					}
 
@@ -1453,24 +1444,24 @@ namespace vuk {
 						if (crosses_queue(last_use, use)) { // release barrier
 							if (last_executing_pass_idx !=
 							    -1) { // if last_executing_pass_idx is -1, then there is release in this rg, so we don't emit the release (single-sided acq)
-								impl->emit_image_barrier(
-								    impl->get_pass(last_executing_pass_idx).post_image_barriers, head->def->pass, last_use, use, image_subrange, aspect, true);
+								emit_image_barrier(
+								    get_pass(last_executing_pass_idx).post_image_barriers, head->def->pass, last_use, use, image_subrange, aspect, true);
 							}
 						}
-						impl->emit_image_barrier(impl->get_pass(*link->undef).pre_image_barriers, head->def->pass, last_use, use, image_subrange, aspect);
+						emit_image_barrier(get_pass(*link->undef).pre_image_barriers, head->def->pass, last_use, use, image_subrange, aspect);
 					} else {
-						impl->emit_memory_barrier(impl->get_pass(*link->undef).pre_memory_barriers, last_use, use);
+						emit_memory_barrier(get_pass(*link->undef).pre_memory_barriers, last_use, use);
 					}
 
 					if (crosses_queue(last_use, use)) {
 						// we wait on either def or the last read if there was one
 						if (last_executing_pass_idx != -1) {
-							impl->get_pass(*link->undef)
-							    .relative_waits.append(impl->waits, { (DomainFlagBits)(last_use.domain & DomainFlagBits::eQueueMask).m_mask, last_executing_pass_idx });
-							impl->get_pass(last_executing_pass_idx).is_waited_on = true;
+							get_pass(*link->undef)
+							    .relative_waits.append(waits, { (DomainFlagBits)(last_use.domain & DomainFlagBits::eQueueMask).m_mask, last_executing_pass_idx });
+							get_pass(last_executing_pass_idx).is_waited_on = true;
 						} else {
-							auto& acquire = is_image ? impl->get_bound_attachment(link->def->pass).acquire : impl->get_bound_buffer(link->def->pass).acquire;
-							impl->get_pass(*link->undef).absolute_waits.append(impl->absolute_waits, { acquire.initial_domain, acquire.initial_visibility });
+							auto& acquire = is_image ? get_bound_attachment(link->def->pass).acquire : get_bound_buffer(link->def->pass).acquire;
+							get_pass(*link->undef).absolute_waits.append(absolute_waits, { acquire.initial_domain, acquire.initial_visibility });
 						}
 					}
 					last_use = use;
@@ -1482,53 +1473,53 @@ namespace vuk {
 				// what if last pass is a read:
 				// we loop through the read passes and select the one executing last based on the ordering
 				// that pass can perform the signal and the barrier post-pass
-				auto& release = impl->get_release(link->undef->pass);
+				auto& release = get_release(link->undef->pass);
 				int32_t last_pass_idx = 0;
 				if (link->reads.size() > 0) {
-					for (auto& r : link->reads.to_span(impl->pass_idx_helper)) {
-						auto order_idx = impl->computed_pass_idx_to_ordered_idx[r.pass];
+					for (auto& r : link->reads.to_span(pass_idx_helper)) {
+						auto order_idx = computed_pass_idx_to_ordered_idx[r.pass];
 						if (order_idx > last_pass_idx) {
 							last_pass_idx = (int32_t)order_idx;
 						}
 					}
 				} else { // no intervening read, we put it directly on def
 					if (link->def->pass >= 0) {
-						last_pass_idx = (int32_t)impl->computed_pass_idx_to_ordered_idx[link->def->pass];
+						last_pass_idx = (int32_t)computed_pass_idx_to_ordered_idx[link->def->pass];
 					} else { // no passes using this resource, just acquired and released -> put the dep on last pass
 						// TODO: should this be last pass on domain?
-						last_pass_idx = (int32_t)impl->ordered_passes.size() - 1;
+						last_pass_idx = (int32_t)ordered_passes.size() - 1;
 					}
 				}
 
 				// if the release has a bound future to signal, record that here
-				auto& pass = impl->get_pass(last_pass_idx);
+				auto& pass = get_pass(last_pass_idx);
 				if (auto* fut = release.signal) {
 					fut->last_use = last_use;
 					if (is_image) {
-						impl->get_bound_attachment(head->def->pass).attached_future = fut;
+						get_bound_attachment(head->def->pass).attached_future = fut;
 					} else {
-						impl->get_bound_buffer(head->def->pass).attached_future = fut;
+						get_bound_buffer(head->def->pass).attached_future = fut;
 					}
-					pass.future_signals.append(impl->future_signals, fut);
+					pass.future_signals.append(future_signals, fut);
 				}
 
 				QueueResourceUse use = release.dst_use;
 				if (use.layout != ImageLayout::eUndefined) {
 					if (is_image) {
 						// single sided release barrier
-						impl->emit_image_barrier(impl->get_pass(last_pass_idx).post_image_barriers, head->def->pass, last_use, use, image_subrange, aspect, true);
+						emit_image_barrier(get_pass(last_pass_idx).post_image_barriers, head->def->pass, last_use, use, image_subrange, aspect, true);
 					} else {
-						impl->emit_memory_barrier(impl->get_pass(last_pass_idx).post_memory_barriers, last_use, use);
+						emit_memory_barrier(get_pass(last_pass_idx).post_memory_barriers, last_use, use);
 					}
 				}
 			} else if (!link->undef) {
 				// no release on this end, so if def belongs to an RP and there were no reads, we can downgrade the store
 				if (link->def && link->def->pass >= 0 && link->reads.size() == 0) {
-					auto& pass = impl->get_pass(link->def->pass);
+					auto& pass = get_pass(link->def->pass);
 					if (pass.render_pass_index >= 0) {
-						auto& rpi = impl->rpis[pass.render_pass_index];
-						auto& bound_att = impl->get_bound_attachment(head->def->pass);
-						for (auto& att : rpi.attachments.to_span(impl->rp_infos)) {
+						auto& rpi = rpis[pass.render_pass_index];
+						auto& bound_att = get_bound_attachment(head->def->pass);
+						for (auto& att : rpi.attachments.to_span(rp_infos)) {
 							if (att.attachment_info == &bound_att) {
 								att.description.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 							}
@@ -1541,9 +1532,9 @@ namespace vuk {
 			// we have processed this chain, lets see if we can unblock more chains
 			// TODO: this is O(n^2)
 			if (is_image) {
-				for (auto new_head : impl->chains) {
+				for (auto new_head : chains) {
 					if (new_head->source == link) {
-						auto& new_att = impl->get_bound_attachment(new_head->def->pass);
+						auto& new_att = get_bound_attachment(new_head->def->pass);
 						new_att.acquire.src_use = last_use;
 						work_queue.push_back(new_head);
 					}
@@ -1551,13 +1542,17 @@ namespace vuk {
 			}
 		}
 
+		return { expected_value };
+	}
+
+	Result<void> RGCImpl::assign_passes_to_batches() {
 		// assign passes to batches (within a single queue)
 		uint32_t batch_index = -1;
 		DomainFlags current_queue = DomainFlagBits::eNone;
 		bool needs_split = false;
 		bool needs_split_next = false;
-		for (size_t i = 0; i < impl->partitioned_passes.size(); i++) {
-			auto& current_pass = impl->partitioned_passes[i];
+		for (size_t i = 0; i < partitioned_passes.size(); i++) {
+			auto& current_pass = partitioned_passes[i];
 			auto queue = (DomainFlagBits)(current_pass->domain & DomainFlagBits::eQueueMask).m_mask;
 
 			if (queue != current_queue) { // if we go into a new queue, reset batch index
@@ -1578,34 +1573,40 @@ namespace vuk {
 			needs_split_next = false;
 		}
 
+		return { expected_value };
+	}
+
+	Result<void> RGCImpl::build_waits() {
 		// build waits, now that we have fixed the batches
-		for (size_t i = 0; i < impl->partitioned_passes.size(); i++) {
-			auto& current_pass = impl->partitioned_passes[i];
-			auto waits = current_pass->relative_waits.to_span(impl->waits);
-			for (auto& wait : waits) {
-				wait.second = impl->ordered_passes[wait.second]->batch_index + 1; // 0 = means previous
+		for (size_t i = 0; i < partitioned_passes.size(); i++) {
+			auto& current_pass = partitioned_passes[i];
+			auto rel_waits = current_pass->relative_waits.to_span(waits);
+			for (auto& wait : rel_waits) {
+				wait.second = ordered_passes[wait.second]->batch_index + 1; // 0 = means previous
 			}
 		}
 
-		// we now have enough data to build VkRenderPasses and VkFramebuffers
+		return { expected_value };
+	}
 
+	Result<void> RGCImpl::build_renderpasses() {
 		// compile attachments
 		// we have to assign the proper attachments to proper slots
 		// the order is given by the resource binding order
 
-		for (auto& rp : impl->rpis) {
+		for (auto& rp : rpis) {
 			rp.rpci.color_ref_offsets.resize(1);
 			rp.rpci.ds_refs.resize(1);
 		}
 
 		size_t previous_rp = -1;
 		uint32_t previous_sp = -1;
-		for (auto& pass_p : impl->partitioned_passes) {
+		for (auto& pass_p : partitioned_passes) {
 			auto& pass = *pass_p;
 			if (pass.render_pass_index < 0) {
 				continue;
 			}
-			auto& rpi = impl->rpis[pass.render_pass_index];
+			auto& rpi = rpis[pass.render_pass_index];
 			auto subpass_index = pass.subpass;
 			auto& color_attrefs = rpi.rpci.color_refs;
 			auto& ds_attrefs = rpi.rpci.ds_refs;
@@ -1618,12 +1619,12 @@ namespace vuk {
 				previous_sp = pass.subpass;
 			}
 
-			for (auto& res : pass.resources.to_span(impl->resources)) {
+			for (auto& res : pass.resources.to_span(resources)) {
 				if (!is_framebuffer_attachment(res))
 					continue;
 				VkAttachmentReference attref{};
 
-				auto& attachment_info = impl->get_bound_attachment(res.reference);
+				auto& attachment_info = get_bound_attachment(res.reference);
 				auto aspect = format_to_aspect(attachment_info.attachment.format);
 				ImageLayout layout;
 				if (res.promoted_to_general) {
@@ -1634,7 +1635,7 @@ namespace vuk {
 					layout = ImageLayout::eAttachmentOptimalKHR;
 				}
 
-				for (auto& att : rpi.attachments.to_span(impl->rp_infos)) {
+				for (auto& att : rpi.attachments.to_span(rp_infos)) {
 					if (att.attachment_info == &attachment_info) {
 						att.description.initialLayout = (VkImageLayout)layout;
 						att.description.finalLayout = (VkImageLayout)layout;
@@ -1642,7 +1643,7 @@ namespace vuk {
 				}
 
 				attref.layout = (VkImageLayout)layout;
-				auto attachments = rpi.attachments.to_span(impl->rp_infos);
+				auto attachments = rpi.attachments.to_span(rp_infos);
 				attref.attachment = (uint32_t)std::distance(
 				    attachments.begin(), std::find_if(attachments.begin(), attachments.end(), [&](auto& att) { return att.attachment_info == &attachment_info; }));
 				if ((aspect & ImageAspectFlagBits::eColor) == ImageAspectFlags{}) { // not color -> depth or depth/stencil
@@ -1655,7 +1656,7 @@ namespace vuk {
 
 		// compile subpass description structures
 
-		for (auto& rp : impl->rpis) {
+		for (auto& rp : rpis) {
 			if (rp.attachments.size() == 0) {
 				continue;
 			}
@@ -1702,6 +1703,22 @@ namespace vuk {
 			rp.rpci.dependencyCount = (uint32_t)rp.rpci.subpass_dependencies.size();
 			rp.rpci.pDependencies = rp.rpci.subpass_dependencies.data();
 		}
+
+		return { expected_value };
+	}
+
+
+	Result<ExecutableRenderGraph> Compiler::link(std::span<std::shared_ptr<RenderGraph>> rgs, const RenderGraphCompileOptions& compile_options) {
+		VUK_DO_OR_RETURN(compile(rgs, compile_options));
+
+		VUK_DO_OR_RETURN(impl->generate_barriers_and_waits());
+
+		VUK_DO_OR_RETURN(impl->assign_passes_to_batches());
+
+		VUK_DO_OR_RETURN(impl->build_waits());
+		
+		// we now have enough data to build VkRenderPasses and VkFramebuffers
+		VUK_DO_OR_RETURN(impl->build_renderpasses());
 
 		return { expected_value, *this };
 	}
