@@ -178,7 +178,7 @@ namespace vuk {
 		robin_hood::unordered_flat_map<QualifiedName, QualifiedName> computed_aliases; // maps resource names to resource names
 		robin_hood::unordered_flat_map<QualifiedName, QualifiedName> assigned_names;   // maps resource names to attachment names
 		robin_hood::unordered_flat_map<Name, uint64_t> sg_name_counter;
-		std::unordered_map<RenderGraph*, std::string> sg_prefixes;
+		robin_hood::unordered_flat_map<const RenderGraph*, std::string> sg_prefixes;
 
 		std::vector<VkImageMemoryBarrier2KHR> image_barriers;
 		std::vector<VkMemoryBarrier2KHR> mem_barriers;
@@ -267,8 +267,8 @@ namespace vuk {
 
 		void merge_diverge_passes(std::vector<PassInfo, short_alloc<PassInfo, 64>>& passes);
 
-		std::unordered_map<RenderGraph*, std::string> compute_prefixes(const RenderGraph& rg, bool do_prefix);
-		void inline_subgraphs(const std::shared_ptr<RenderGraph>& rg, std::unordered_set<std::shared_ptr<RenderGraph>>& consumed_rgs);
+		void compute_prefixes(const RenderGraph& rg, std::string& prefix);
+		void inline_subgraphs(const RenderGraph& rg, robin_hood::unordered_flat_set<RenderGraph*>& consumed_rgs);
 
 		void schedule_intra_queue(std::span<struct PassInfo> passes, const RenderGraphCompileOptions& compile_options);
 
