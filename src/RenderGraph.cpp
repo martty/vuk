@@ -9,6 +9,7 @@
 #include <set>
 #include <sstream>
 #include <unordered_set>
+#include <charconv>
 
 // intrinsics
 namespace {
@@ -73,7 +74,7 @@ namespace vuk {
 			for (auto r : p.resources.to_span(other.impl->resources)) {
 				r.original_name = r.name.name;
 				if (r.foreign) {
-					auto prefix = Name{ sg_prefixes.at(r.foreign) };
+					auto prefix = Name{ std::find_if(sg_prefixes.begin(), sg_prefixes.end(), [=](auto& kv) { return kv.first == r.foreign; })->second };
 					auto res_name = resolve_alias_rec({ prefix, r.name.name });
 					auto res_out_name = r.out_name.name.is_invalid() ? QualifiedName{} : resolve_alias_rec({ prefix, r.out_name.name });
 					computed_aliases.emplace(QualifiedName{ joiner, r.name.name }, res_name);
@@ -519,44 +520,49 @@ namespace vuk {
 		return ss.str();
 	}
 
-	std::unordered_map<RenderGraph*, std::string> RGCImpl::compute_prefixes(const RenderGraph& rg, bool do_prefix) {
-		std::unordered_map<RenderGraph*, std::string> sg_prefixes;
+	void RGCImpl::compute_prefixes(const RenderGraph& rg, std::string& prefix) {
+		auto prefix_current_size = prefix.size();
+		prefix.append(rg.name.c_str());
+
+		if (auto& counter = ++sg_name_counter[rg.name]; counter > 1) {
+			prefix.append("#");
+			prefix.resize(prefix.size() + 10);
+			auto [ptr, ec] = std::to_chars(prefix.data() + prefix.size() - 10, prefix.data() + prefix.size(), counter - 1);
+			assert(ec == std::errc());
+			prefix.resize(ptr - prefix.data());
+		}
+
+		sg_prefixes.emplace(&rg, prefix);
+
+		prefix.append("::");
+
 		for (auto& [sg_ptr, sg_info] : rg.impl->subgraphs) {
 			if (sg_info.count > 0) {
-				Name sg_name = sg_ptr->name;
 				assert(sg_ptr->impl);
 
-				auto prefixes = compute_prefixes(*sg_ptr, true);
-				sg_prefixes.merge(prefixes);
-				if (auto& counter = ++sg_name_counter[sg_name]; counter > 1) {
-					sg_name = sg_name.append(std::string("_") + std::to_string(counter - 1));
-				}
-				sg_prefixes.emplace(sg_ptr.get(), std::string(sg_name.to_sv()));
+				compute_prefixes(*sg_ptr, prefix);
 			}
 		}
-		if (do_prefix && sg_prefixes.size() > 0) {
-			for (auto& [k, v] : sg_prefixes) {
-				v = std::string(rg.name.to_sv()) + "::" + v;
-			}
-		}
-		return sg_prefixes;
+
+		prefix.resize(prefix_current_size); // rewind prefix
 	}
 
-	void RGCImpl::inline_subgraphs(const std::shared_ptr<RenderGraph>& rg, std::unordered_set<std::shared_ptr<RenderGraph>>& consumed_rgs) {
-		auto our_prefix = sg_prefixes.at(rg.get());
-		for (auto& [sg_ptr, sg_info] : rg->impl->subgraphs) {
+	void RGCImpl::inline_subgraphs(const RenderGraph& rg, robin_hood::unordered_flat_set<RenderGraph*>& consumed_rgs) {
+		auto our_prefix = sg_prefixes.at(&rg);
+		for (auto& [sg_ptr, sg_info] : rg.impl->subgraphs) {
+			auto sg_raw_ptr = sg_ptr.get();
 			if (sg_info.count > 0) {
-				auto& prefix = sg_prefixes.at(sg_ptr.get());
-				assert(sg_ptr->impl);
+				auto prefix = sg_prefixes.at(sg_raw_ptr);
+				assert(sg_raw_ptr->impl);
 				for (auto& [name_in_parent, name_in_sg] : sg_info.exported_names) {
 					auto old_name = QualifiedName{ Name(prefix), name_in_sg };
 					auto new_name = QualifiedName{ our_prefix.empty() ? Name{} : Name(our_prefix), name_in_parent };
 					computed_aliases[new_name] = old_name;
 				}
-				if (!consumed_rgs.contains(sg_ptr)) {
-					inline_subgraphs(sg_ptr, consumed_rgs);
-					append(Name(prefix), *sg_ptr);
-					consumed_rgs.emplace(sg_ptr);
+				if (!consumed_rgs.contains(sg_raw_ptr)) {
+					inline_subgraphs(*sg_raw_ptr, consumed_rgs);
+					append(Name(prefix), *sg_raw_ptr);
+					consumed_rgs.emplace(sg_raw_ptr);
 				}
 			}
 		}
@@ -569,19 +575,18 @@ namespace vuk {
 
 	Result<void> Compiler::inline_rgs(std::span<std::shared_ptr<RenderGraph>> rgs) {
 		// inline all the subgraphs into us
+
+		robin_hood::unordered_flat_set<RenderGraph*> consumed_rgs = {};
+		std::string prefix = "";
 		for (auto& rg : rgs) {
-			impl->sg_prefixes.merge(impl->compute_prefixes(*rg, true));
-			auto rg_name = rg->name;
-			if (auto& counter = ++impl->sg_name_counter[rg_name]; counter > 1) {
-				rg_name = rg_name.append(std::string("_") + std::to_string(counter - 1));
-			}
-			impl->sg_prefixes.emplace(rg.get(), std::string{ rg_name.c_str() });
-			std::unordered_set<std::shared_ptr<RenderGraph>> consumed_rgs = {};
-			impl->inline_subgraphs(rg, consumed_rgs);
+			impl->compute_prefixes(*rg, prefix);
+			consumed_rgs.clear();
+			impl->inline_subgraphs(*rg, consumed_rgs);
 		}
 
 		for (auto& rg : rgs) {
-			impl->append(Name{ impl->sg_prefixes.at(rg.get()).c_str() }, *rg);
+			auto our_prefix = std::find_if(impl->sg_prefixes.begin(), impl->sg_prefixes.end(), [rgp = rg.get()](auto& kv) { return kv.first == rgp; })->second;
+			impl->append(Name{ our_prefix.c_str() }, *rg);
 		}
 
 		return { expected_value };
