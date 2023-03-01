@@ -63,10 +63,6 @@ namespace vuk {
 			computed_aliases.emplace(QualifiedName{ joiner, new_name }, QualifiedName{ Name{}, old_name });
 		}
 
-		/* for (auto old_name : other.impl->imported_names) {
-		  computed_aliases.emplace(QualifiedName{ joiner, old_name }, QualifiedName{ Name{}, old_name });
-		}*/
-
 		for (auto& p : other.impl->passes) {
 			PassInfo& pi = computed_passes.emplace_back(*arena_, p);
 			pi.qualified_name = { joiner, p.name };
@@ -242,11 +238,8 @@ namespace vuk {
 	void RGCImpl::schedule_intra_queue(std::span<PassInfo> passes, const RenderGraphCompileOptions& compile_options) {
 		// build edges into link map
 		// reserving here to avoid rehashing map
-		// TODO: we know the upper bound on size, use that
 		res_to_links.clear();
-		bound_attachments.reserve(1000);
-		bound_buffers.reserve(1000);
-		releases.reserve(1000);
+		res_to_links.reserve(passes.size() * 10);
 
 		for (auto pass_idx = 0; pass_idx < passes.size(); pass_idx++) {
 			auto& pif = passes[pass_idx];
@@ -379,7 +372,6 @@ namespace vuk {
 			}
 		}
 
-		helper_links.resize(100);
 		// fixup diverge subchains by copying first use on the converge subchain to their end
 		for (auto& head : chains) {
 			if (head->source) { // a diverged subchain
@@ -585,21 +577,10 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	void RGCImpl::compute_assigned_names_1(robin_hood::unordered_flat_map<QualifiedName, QualifiedName>& name_map) {
+	void RGCImpl::compute_assigned_names() {
+		// gather name alias info now - once we partition, we might encounter unresolved aliases
+		robin_hood::unordered_flat_map<QualifiedName, QualifiedName> name_map;
 		name_map.insert(computed_aliases.begin(), computed_aliases.end());
-
-		computed_aliases.clear();
-		// follow aliases and resolve them into a single lookup
-		for (auto& [k, v] : name_map) {
-			auto it = name_map.find(v);
-			auto res = v;
-			while (it != name_map.end()) {
-				res = it->second;
-				it = name_map.find(res);
-			}
-			assert(!res.is_invalid());
-			computed_aliases.emplace(k, res);
-		}
 
 		for (auto& passinfo : computed_passes) {
 			for (auto& res : passinfo.resources.to_span(resources)) {
@@ -846,10 +827,7 @@ namespace vuk {
 
 		VUK_DO_OR_RETURN(inline_rgs(rgs));
 
-		// gather name alias info now - once we partition, we might encounter unresolved aliases
-		robin_hood::unordered_flat_map<QualifiedName, QualifiedName> name_map;
-
-		impl->compute_assigned_names_1(name_map);
+		impl->compute_assigned_names();
 
 		impl->merge_diverge_passes(impl->computed_passes);
 
@@ -858,20 +836,6 @@ namespace vuk {
 		impl->schedule_intra_queue(impl->computed_passes, compile_options);
 
 		// auto dumped_graph = dump_graph();
-
-		// TODO: inference code relies on assigned names
-		impl->assigned_names.clear();
-		// populate resource name -> use chain map
-		for (auto& [k, v] : name_map) {
-			auto it = name_map.find(v);
-			auto res = v;
-			while (it != name_map.end()) {
-				res = it->second;
-				it = name_map.find(res);
-			}
-			assert(!res.is_invalid());
-			impl->assigned_names.emplace(k, res);
-		}
 
 		queue_inference();
 		pass_partitioning();

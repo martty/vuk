@@ -203,7 +203,7 @@ namespace vuk {
 		}
 
 		std::vector<ChainLink*> chains;
-		std::vector<ChainLink> helper_links;
+		std::deque<ChainLink> helper_links;
 		std::vector<int32_t> swapchain_references;
 		std::vector<AttachmentRPInfo> rp_infos;
 
@@ -258,7 +258,7 @@ namespace vuk {
 			}
 		};
 
-		void compute_assigned_names_1(robin_hood::unordered_flat_map<QualifiedName, QualifiedName>& assigned_names);
+		void compute_assigned_names();
 
 		std::vector<RenderPassInfo, short_alloc<RenderPassInfo, 64>> rpis;
 		std::span<PassInfo*> transfer_passes, compute_passes, graphics_passes;
