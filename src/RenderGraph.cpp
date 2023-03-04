@@ -70,16 +70,21 @@ namespace vuk {
 			for (auto r : p.resources.to_span(other.impl->resources)) {
 				r.original_name = r.name.name;
 				if (r.foreign) {
+					if (!r.name.prefix.is_invalid())
+						__debugbreak();
 					auto prefix = Name{ std::find_if(sg_prefixes.begin(), sg_prefixes.end(), [=](auto& kv) { return kv.first == r.foreign; })->second };
-					auto res_name = resolve_alias_rec({ prefix, r.name.name });
-					auto res_out_name = r.out_name.name.is_invalid() ? QualifiedName{} : resolve_alias_rec({ prefix, r.out_name.name });
-					computed_aliases.emplace(QualifiedName{ joiner, r.name.name }, res_name);
+					auto full_src_prefix = !r.name.prefix.is_invalid() ? prefix.append(r.name.prefix.to_sv()) : prefix;
+					auto res_name = resolve_alias_rec({ full_src_prefix, r.name.name });
+					auto res_out_name = r.out_name.name.is_invalid() ? QualifiedName{} : resolve_alias_rec({ full_src_prefix, r.out_name.name });
+					auto full_dst_prefix = !r.name.prefix.is_invalid() ? joiner.append(r.name.prefix.to_sv()) : joiner;
+					computed_aliases.emplace(QualifiedName{ full_dst_prefix, r.name.name }, res_name);
 					r.name = res_name;
 					if (!r.out_name.is_invalid()) {
-						computed_aliases.emplace(QualifiedName{ joiner, r.out_name.name }, res_out_name);
+						computed_aliases.emplace(QualifiedName{ full_dst_prefix, r.out_name.name }, res_out_name);
 						r.out_name = res_out_name;
 					}
 				} else {
+					assert(r.name.prefix.is_invalid());
 					if (!r.name.name.is_invalid()) {
 						r.name = resolve_alias_rec({ joiner, r.name.name });
 					}
@@ -112,6 +117,7 @@ namespace vuk {
 		}
 
 		for (auto& [name, v] : other.impl->releases) {
+			assert(name.prefix.is_invalid());
 			auto res_name = resolve_alias_rec({ joiner, name.name });
 			releases.emplace_back(res_name, v);
 		}
@@ -486,6 +492,7 @@ namespace vuk {
 		  assert(it->second.dst_use.layout != ImageLayout::eUndefined); // convergence into no use = disallowed
 		}*/
 		// 
+		return { expected_value };
 	}
 
 	std::string Compiler::dump_graph() {
@@ -554,7 +561,15 @@ namespace vuk {
 				auto prefix = sg_prefixes.at(sg_raw_ptr);
 				assert(sg_raw_ptr->impl);
 				for (auto& [name_in_parent, name_in_sg] : sg_info.exported_names) {
-					auto old_name = QualifiedName{ Name(prefix), name_in_sg };
+					QualifiedName old_name;
+					if (!name_in_sg.prefix.is_invalid()) { // unfortunately, prefix + name_in_sg.prefix duplicates the name of the sg, so remove it
+						std::string fixed_prefix = prefix.substr(0, prefix.size() - sg_raw_ptr->name.to_sv().size());
+						fixed_prefix.append(name_in_sg.prefix.to_sv());
+						old_name = QualifiedName{ Name(fixed_prefix), name_in_sg.name };
+					} else {
+						old_name = QualifiedName{ Name(prefix), name_in_sg.name };
+					}
+					
 					auto new_name = QualifiedName{ our_prefix.empty() ? Name{} : Name(our_prefix), name_in_parent };
 					computed_aliases[new_name] = old_name;
 				}
@@ -979,7 +994,7 @@ namespace vuk {
 		} else if (fimg.get_status() == FutureBase::Status::eInitial) {
 			// an unsubmitted RG is being attached, we remove the release from that RG, and we allow the name to be found in us
 			assert(fimg.rg->impl);
-			std::erase_if(fimg.rg->impl->releases, [name = fimg.get_bound_name()](auto& item) { return item.first.name == name; });
+			std::erase_if(fimg.rg->impl->releases, [name = fimg.get_bound_name()](auto& item) { return item.first == name; });
 			auto sg_info_it = std::find_if(impl->subgraphs.begin(), impl->subgraphs.end(), [&](auto& it) { return it.first == fimg.rg; });
 			if (sg_info_it == impl->subgraphs.end()) {
 				impl->subgraphs.emplace_back(std::pair{ fimg.rg, RGImpl::SGInfo{} });
@@ -1004,7 +1019,7 @@ namespace vuk {
 	void RenderGraph::attach_in(std::span<Future> futures) {
 		for (auto& f : futures) {
 			auto name = f.get_bound_name();
-			attach_in(name, std::move(f));
+			attach_in(name.name, std::move(f));
 		}
 	}
 
@@ -1052,13 +1067,13 @@ namespace vuk {
 		return futures;
 	}
 
-	void RenderGraph::attach_out(Name name, Future& fimg, DomainFlags dst_domain) {
-		impl->releases.emplace_back(QualifiedName{ Name{}, name }, Release{ to_use(Access::eNone, dst_domain), fimg.control.get() });
+	void RenderGraph::attach_out(QualifiedName name, Future& fimg, DomainFlags dst_domain) {
+		impl->releases.emplace_back(name, Release{ to_use(Access::eNone, dst_domain), fimg.control.get() });
 	}
 
-	void RenderGraph::detach_out(Name name, Future& fimg) {
+	void RenderGraph::detach_out(QualifiedName name, Future& fimg) {
 		for (auto it = impl->releases.begin(); it != impl->releases.end(); ++it) {
-			if (it->first.name == name && it->second.signal == fimg.control.get()) {
+			if (it->first == name && it->second.signal == fimg.control.get()) {
 				impl->releases.erase(it);
 				return;
 			}
@@ -1775,5 +1790,36 @@ namespace vuk {
 
 		assert(link->def->pass < 0);
 		return impl->get_bound_attachment(link->def->pass);
+	}
+
+	std::optional<QualifiedName> Compiler::get_last_use_name(const ChainLink* head) {
+		const ChainLink* link = head;
+		for (; link->next != nullptr; link = link->next)
+			;
+		if (link->reads.size()) {
+			auto r = link->reads.to_span(impl->pass_idx_helper)[0];
+			return impl->get_resource(r).name;
+		}
+		if (link->undef) {
+			if (link->undef->pass >= 0) {
+				return impl->get_resource(*link->undef).out_name;
+			} else {
+				if (link->def->pass >= 0) {
+					return impl->get_resource(*link->def).out_name;
+				} else {
+					return {}; // tailed by release and def unusable
+				}
+			}
+		}
+		if (link->def) {
+			if (link->def->pass >= 0) {
+				return impl->get_resource(*link->def).out_name;
+			} else {
+				return link->type == Resource::Type::eImage ? impl->get_bound_attachment(link->def->pass).name
+				                                            : impl->get_bound_buffer(link->def->pass).name; // the only def we have is the binding
+			}
+		}
+
+		return {};
 	}
 } // namespace vuk

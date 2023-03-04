@@ -67,7 +67,7 @@ namespace vuk {
 
 		Resource(Name n, Type t, Access ia) : name{ Name{}, n }, type(t), ia(ia) {}
 		Resource(Name n, Type t, Access ia, Name out_name) : name{ Name{}, n }, type(t), ia(ia), out_name{ Name{}, out_name } {}
-		Resource(RenderGraph* foreign, Name n, Type t, Access ia) : name{ Name{}, n }, type(t), ia(ia), foreign(foreign) {}
+		Resource(RenderGraph* foreign, QualifiedName n, Type t, Access ia) : name{ n }, type(t), ia(ia), foreign(foreign) {}
 
 		bool operator==(const Resource& o) const noexcept {
 			return name == o.name;
@@ -201,9 +201,9 @@ namespace vuk {
 
 		// future support functions
 		friend class Future;
-		void attach_out(Name, Future& fimg, DomainFlags dst_domain);
+		void attach_out(QualifiedName, Future& fimg, DomainFlags dst_domain);
 
-		void detach_out(Name, Future& fimg);
+		void detach_out(QualifiedName, Future& fimg);
 
 		Name get_temporary_name();
 	};
@@ -264,6 +264,7 @@ namespace vuk {
 		/// @brief compute ImageUsageFlags for given use chain
 		ImageUsageFlags compute_usage(const struct ChainLink* chain);
 		const struct AttachmentInfo& get_chain_attachment(const struct ChainLink* chain);
+		std::optional<QualifiedName> get_last_use_name(const struct ChainLink* chain);
 
 		/// @brief Dump the pass dependency graph in graphviz format
 		std::string dump_graph();

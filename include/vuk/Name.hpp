@@ -44,6 +44,9 @@ namespace vuk {
 		Name prefix;
 		Name name;
 
+		constexpr QualifiedName() = default;
+		constexpr QualifiedName(Name prefix, Name name) : prefix(prefix), name(name) {}
+
 		bool operator==(const QualifiedName&) const noexcept = default;
 		bool is_invalid() const noexcept {
 			return name.is_invalid();

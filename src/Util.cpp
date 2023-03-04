@@ -557,6 +557,13 @@ namespace vuk {
 	}
 
 	Future::Future(std::shared_ptr<struct RenderGraph> org, Name output_binding, DomainFlags dst_domain) :
+	    output_binding(QualifiedName{ {}, output_binding }),
+	    rg(std::move(org)),
+	    control(std::make_shared<FutureBase>()) {
+		rg->attach_out(QualifiedName{ {}, output_binding }, *this, dst_domain);
+	}
+
+	Future::Future(std::shared_ptr<struct RenderGraph> org, QualifiedName output_binding, DomainFlags dst_domain) :
 	    output_binding(output_binding),
 	    rg(std::move(org)),
 	    control(std::make_shared<FutureBase>()) {
@@ -573,14 +580,14 @@ namespace vuk {
 	}
 
 	Future::Future(Future&& o) noexcept :
-	    output_binding{ std::exchange(o.output_binding, Name{}) },
+	    output_binding{ std::exchange(o.output_binding, QualifiedName{}) },
 	    rg{ std::exchange(o.rg, nullptr) },
 	    control{ std::exchange(o.control, nullptr) } {}
 
 	Future& Future::operator=(Future&& o) noexcept {
 		control = std::exchange(o.control, nullptr);
 		rg = std::exchange(o.rg, nullptr);
-		output_binding = std::exchange(o.output_binding, Name{});
+		output_binding = std::exchange(o.output_binding, QualifiedName{});
 
 		return *this;
 	}
