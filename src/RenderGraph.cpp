@@ -6,10 +6,10 @@
 #include "vuk/Exception.hpp"
 #include "vuk/Future.hpp"
 
+#include <charconv>
 #include <set>
 #include <sstream>
 #include <unordered_set>
-#include <charconv>
 
 // intrinsics
 namespace {
@@ -166,7 +166,7 @@ namespace vuk {
 				}
 			}
 		}
-		std::erase_if(passes, [](auto& pass) { return pass.resources.size() == 0; });
+		std::erase_if(passes, [](auto& pass) { return pass.pass->type == PassType::eDiverge && pass.resources.size() == 0; });
 	}
 
 	// determine rendergraph inputs and outputs, and resources that are neither
@@ -235,7 +235,7 @@ namespace vuk {
 		return pis;
 	}
 
-	void RGCImpl::schedule_intra_queue(std::span<PassInfo> passes, const RenderGraphCompileOptions& compile_options) {
+	Result<void> RGCImpl::schedule_intra_queue(std::span<PassInfo> passes, const RenderGraphCompileOptions& compile_options) {
 		// build edges into link map
 		// reserving here to avoid rehashing map
 		res_to_links.clear();
@@ -295,8 +295,20 @@ namespace vuk {
 
 		// diagnose unheaded chains at this point
 		for (auto& chp : chains) {
-			assert(chp->def && "Unheaded chain.");
-			// return { expected_error, errors::make_unattached_resource_exception(passinfo, res, undiverged_name) };
+			if (!chp->def) {
+				if (chp->reads.size() > 0) {
+					auto& pass = get_pass(chp->reads.to_span(pass_idx_helper)[0]);
+					auto& res = get_resource(chp->reads.to_span(pass_idx_helper)[0]);
+
+					return { expected_error, errors::make_unattached_resource_exception(pass, res) };
+				}
+				if (chp->undef && chp->undef->pass >= 0) {
+					auto& pass = get_pass(*chp->undef);
+					auto& res = get_resource(*chp->undef);
+
+					return { expected_error, errors::make_unattached_resource_exception(pass, res) };
+				}
+			}
 		}
 
 		// calculate indegrees for all passes & build adjacency
@@ -361,7 +373,9 @@ namespace vuk {
 				auto& pass = get_pass(*head->def);
 				if (pass.pass->type == PassType::eDiverge) { // diverging subchain
 					auto& whole_res = pass.resources.to_span(resources)[0].name;
-					head->source = &res_to_links[whole_res];
+					auto parent_chain_end = &res_to_links[whole_res];
+					head->source = parent_chain_end;
+					parent_chain_end->child_chains.append(child_chains, head);
 				} else if (pass.pass->type == PassType::eConverge) { // reconverged subchain
 					// take first resource which guaranteed to be diverged
 					auto div_resources = pass.resources.to_span(resources).subspan(1);
@@ -471,7 +485,7 @@ namespace vuk {
 		/* else if (chain.back().high_level_access == Access::eConverge) {
 		  assert(it->second.dst_use.layout != ImageLayout::eUndefined); // convergence into no use = disallowed
 		}*/
-		// return { expected_error, errors::make_unattached_resource_exception(passinfo, res, undiverged_name) };
+		// 
 	}
 
 	std::string Compiler::dump_graph() {
@@ -702,6 +716,7 @@ namespace vuk {
 			auto& p = impl->ordered_passes[i];
 			if (p->domain & DomainFlagBits::eTransferQueue) {
 				impl->computed_pass_idx_to_partitioned_idx[impl->ordered_idx_to_computed_pass_idx[i]] = impl->partitioned_passes.size();
+				impl->last_ordered_pass_idx_in_domain_array[2] = impl->ordered_idx_to_computed_pass_idx[i];
 				impl->partitioned_passes.push_back(p);
 			}
 		}
@@ -710,6 +725,7 @@ namespace vuk {
 			auto& p = impl->ordered_passes[i];
 			if (p->domain & DomainFlagBits::eComputeQueue) {
 				impl->computed_pass_idx_to_partitioned_idx[impl->ordered_idx_to_computed_pass_idx[i]] = impl->partitioned_passes.size();
+				impl->last_ordered_pass_idx_in_domain_array[1] = impl->ordered_idx_to_computed_pass_idx[i];
 				impl->partitioned_passes.push_back(p);
 			}
 		}
@@ -718,6 +734,7 @@ namespace vuk {
 			auto& p = impl->ordered_passes[i];
 			if (p->domain & DomainFlagBits::eGraphicsQueue) {
 				impl->computed_pass_idx_to_partitioned_idx[impl->ordered_idx_to_computed_pass_idx[i]] = impl->partitioned_passes.size();
+				impl->last_ordered_pass_idx_in_domain_array[0] = impl->ordered_idx_to_computed_pass_idx[i];
 				impl->partitioned_passes.push_back(p);
 			}
 		}
@@ -1335,12 +1352,12 @@ namespace vuk {
 						if (is_image) {
 							if (crosses_queue(last_use, use)) {
 								emit_image_barrier(get_pass((int32_t)computed_pass_idx_to_ordered_idx[last_use_source]).post_image_barriers,
-								                         head->def->pass,
-								                         last_use,
-								                         use,
-								                         image_subrange,
-								                         aspect,
-								                         true);
+								                   head->def->pass,
+								                   last_use,
+								                   use,
+								                   image_subrange,
+								                   aspect,
+								                   true);
 							}
 							emit_image_barrier(dst.pre_image_barriers, head->def->pass, last_use, use, image_subrange, aspect);
 						} else {
@@ -1351,8 +1368,7 @@ namespace vuk {
 							// we stick the wait on the first read pass in order
 							get_pass(first_pass_idx)
 							    .relative_waits.append(
-							        waits,
-							        { (DomainFlagBits)(last_use.domain & DomainFlagBits::eQueueMask).m_mask, computed_pass_idx_to_ordered_idx[last_use_source] });
+							        waits, { (DomainFlagBits)(last_use.domain & DomainFlagBits::eQueueMask).m_mask, computed_pass_idx_to_ordered_idx[last_use_source] });
 							get_pass((int32_t)computed_pass_idx_to_ordered_idx[last_use_source]).is_waited_on = true;
 						}
 						last_use = use;
@@ -1408,8 +1424,7 @@ namespace vuk {
 						if (crosses_queue(last_use, use)) { // release barrier
 							if (last_executing_pass_idx !=
 							    -1) { // if last_executing_pass_idx is -1, then there is release in this rg, so we don't emit the release (single-sided acq)
-								emit_image_barrier(
-								    get_pass(last_executing_pass_idx).post_image_barriers, head->def->pass, last_use, use, image_subrange, aspect, true);
+								emit_image_barrier(get_pass(last_executing_pass_idx).post_image_barriers, head->def->pass, last_use, use, image_subrange, aspect, true);
 							}
 						}
 						emit_image_barrier(get_pass(*link->undef).pre_image_barriers, head->def->pass, last_use, use, image_subrange, aspect);
@@ -1450,8 +1465,12 @@ namespace vuk {
 					if (link->def->pass >= 0) {
 						last_pass_idx = (int32_t)computed_pass_idx_to_ordered_idx[link->def->pass];
 					} else { // no passes using this resource, just acquired and released -> put the dep on last pass
-						// TODO: should this be last pass on domain?
+						// in case neither acquire nor release specify a pass we just put it on the last pass
 						last_pass_idx = (int32_t)ordered_passes.size() - 1;
+						// if release specifies a domain, use that
+						if (release.dst_use.domain != DomainFlagBits::eAny && release.dst_use.domain != DomainFlagBits::eDevice) {
+							last_pass_idx = last_ordered_pass_idx_in_domain((DomainFlagBits)(release.dst_use.domain & DomainFlagBits::eQueueMask).m_mask);
+						}
 					}
 				}
 
@@ -1494,15 +1513,10 @@ namespace vuk {
 			}
 
 			// we have processed this chain, lets see if we can unblock more chains
-			// TODO: this is O(n^2)
-			if (is_image) {
-				for (auto new_head : chains) {
-					if (new_head->source == link) {
-						auto& new_att = get_bound_attachment(new_head->def->pass);
-						new_att.acquire.src_use = last_use;
-						work_queue.push_back(new_head);
-					}
-				}
+			for (auto new_head : link->child_chains.to_span(child_chains)) {
+				auto& new_att = get_bound_attachment(new_head->def->pass);
+				new_att.acquire.src_use = last_use;
+				work_queue.push_back(new_head);
 			}
 		}
 
@@ -1671,7 +1685,6 @@ namespace vuk {
 		return { expected_value };
 	}
 
-
 	Result<ExecutableRenderGraph> Compiler::link(std::span<std::shared_ptr<RenderGraph>> rgs, const RenderGraphCompileOptions& compile_options) {
 		VUK_DO_OR_RETURN(compile(rgs, compile_options));
 
@@ -1680,7 +1693,7 @@ namespace vuk {
 		VUK_DO_OR_RETURN(impl->assign_passes_to_batches());
 
 		VUK_DO_OR_RETURN(impl->build_waits());
-		
+
 		// we now have enough data to build VkRenderPasses and VkFramebuffers
 		VUK_DO_OR_RETURN(impl->build_renderpasses());
 

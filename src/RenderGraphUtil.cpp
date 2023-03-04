@@ -155,17 +155,15 @@ namespace vuk {
 			return fmt::format("{}({})", pass_info.pass->source.file_name(), pass_info.pass->source.line());
 		}
 
-		RenderGraphException make_unattached_resource_exception(PassInfo& pass_info, Resource& resource, QualifiedName undiverged_name) {
+		RenderGraphException make_unattached_resource_exception(PassInfo& pass_info, Resource& resource) {
 			const char* type = resource.type == Resource::Type::eBuffer ? "buffer" : "image";
 
 			std::string message =
-			    fmt::format("{}: Pass <{}> references {} <{}> (also known as <{}::{}>), which was never attached.\n(did you forget an attach_* call?).",
+			    fmt::format("{}: Pass <{}> references {} <{}>, which was never attached.\n(did you forget an attach_* call?).",
 			                format_source_location(pass_info),
 			                pass_info.pass->name.c_str(),
 			                type,
-			                resource.name.name.c_str(),
-			                undiverged_name.prefix.c_str(),
-			                undiverged_name.name.c_str());
+			                resource.name.name.c_str());
 			return RenderGraphException(std::move(message));
 		}
 

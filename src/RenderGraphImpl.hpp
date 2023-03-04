@@ -203,9 +203,22 @@ namespace vuk {
 		}
 
 		std::vector<ChainLink*> chains;
+		std::vector<ChainLink*> child_chains;
 		std::deque<ChainLink> helper_links;
 		std::vector<int32_t> swapchain_references;
 		std::vector<AttachmentRPInfo> rp_infos;
+		std::array<int32_t, 3> last_ordered_pass_idx_in_domain_array;
+		int32_t last_ordered_pass_idx_in_domain(DomainFlagBits queue) {
+			uint32_t idx;
+			if (queue == DomainFlagBits::eGraphicsQueue) {
+				idx = 0;
+			} else if (queue == DomainFlagBits::eComputeQueue) {
+				idx = 1;
+			} else {
+				idx = 2;
+			}
+			return last_ordered_pass_idx_in_domain_array[idx];
+		}
 
 		std::vector<AttachmentInfo> bound_attachments;
 		std::vector<BufferInfo> bound_buffers;
@@ -270,7 +283,7 @@ namespace vuk {
 		void compute_prefixes(const RenderGraph& rg, std::string& prefix);
 		void inline_subgraphs(const RenderGraph& rg, robin_hood::unordered_flat_set<RenderGraph*>& consumed_rgs);
 
-		void schedule_intra_queue(std::span<struct PassInfo> passes, const RenderGraphCompileOptions& compile_options);
+		Result<void> schedule_intra_queue(std::span<struct PassInfo> passes, const RenderGraphCompileOptions& compile_options);
 
 		void emit_image_barrier(RelSpan<VkImageMemoryBarrier2KHR>&,
 		                        int32_t bound_attachment,
@@ -337,7 +350,7 @@ namespace vuk {
 	}
 
 	namespace errors {
-		RenderGraphException make_unattached_resource_exception(PassInfo& pass_info, Resource& resource, QualifiedName undiverged_name);
+		RenderGraphException make_unattached_resource_exception(PassInfo& pass_info, Resource& resource);
 		RenderGraphException make_cbuf_references_unknown_resource(PassInfo& pass_info, Resource::Type type, Name name);
 		RenderGraphException make_cbuf_references_undeclared_resource(PassInfo& pass_info, Resource::Type type, Name name);
 	} // namespace errors
