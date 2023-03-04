@@ -19,7 +19,7 @@ namespace vuk {
 		std::optional<Context> context;
 		vkb::Instance vkbinstance;
 		vkb::Device vkbdevice;
-		std::optional<DeviceSuperFrameResource> xdev_rf_alloc;
+		std::optional<DeviceSuperFrameResource> sfa_resource;
 		std::optional<Allocator> allocator;
 
 		bool bringup() {
@@ -108,6 +108,8 @@ namespace vuk {
 			device = vkbdevice.device;
 			ContextCreateParameters::FunctionPointers fps;
 #define VUK_EX_LOAD_FP(name) fps.name = (PFN_##name)vkGetDeviceProcAddr(device, #name);
+			VUK_EX_LOAD_FP(vkQueueSubmit2KHR);
+			VUK_EX_LOAD_FP(vkCmdPipelineBarrier2KHR);
 			VUK_EX_LOAD_FP(vkSetDebugUtilsObjectNameEXT);
 			VUK_EX_LOAD_FP(vkCmdBeginDebugUtilsLabelEXT);
 			VUK_EX_LOAD_FP(vkCmdEndDebugUtilsLabelEXT);
@@ -131,8 +133,8 @@ namespace vuk {
 			                                         transfer_queue_family_index,
 			                                         fps });
 			const unsigned num_inflight_frames = 3;
-			xdev_rf_alloc.emplace(*context, num_inflight_frames);
-			allocator.emplace(*xdev_rf_alloc);
+			sfa_resource.emplace(*context, num_inflight_frames);
+			allocator.emplace(*sfa_resource);
 			needs_bringup = false;
 			return true;
 		}

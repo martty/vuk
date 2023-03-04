@@ -114,7 +114,6 @@ namespace vuk {
 		return true;
 	}
 
-	// TODO: refactor to return RenderPassInfo
 	void ExecutableRenderGraph::fill_renderpass_info(vuk::RenderPassInfo& rpass, const size_t& i, vuk::CommandBuffer& cobuf) {
 		if (rpass.handle == VK_NULL_HANDLE) {
 			cobuf.ongoing_renderpass = {};
@@ -621,6 +620,7 @@ namespace vuk {
 
 				// infer custom rule -> IA
 				if (bufi_it->second) {
+					inf_ctx.prefix = bufi_it->second->prefix;
 					for (auto& rule : bufi_it->second->rules) {
 						rule(inf_ctx, buff);
 					}
@@ -718,7 +718,6 @@ namespace vuk {
 			std::optional<uint32_t> fb_layer_count;
 			for (auto& attrpinfo : rp.attachments.to_span(impl->rp_infos)) {
 				auto& bound = *attrpinfo.attachment_info;
-				// TODO: cleanup
 				uint32_t base_layer = bound.attachment.base_layer + bound.image_subrange.base_layer;
 				uint32_t layer_count = bound.image_subrange.layer_count == VK_REMAINING_ARRAY_LAYERS ? bound.attachment.layer_count : bound.image_subrange.layer_count;
 				assert(base_layer + layer_count <= bound.attachment.base_layer + bound.attachment.layer_count);
