@@ -42,6 +42,11 @@ namespace vuk {
 		/// @param rg
 		/// @param output_binding
 		Future(std::shared_ptr<RenderGraph> rg, Name output_binding, DomainFlags dst_domain = DomainFlagBits::eDevice);
+
+		/// @brief Create a Future with ownership of a RenderGraph and bind to an output
+		/// @param rg
+		/// @param output_binding
+		Future(std::shared_ptr<RenderGraph> rg, QualifiedName output_binding, DomainFlags dst_domain = DomainFlagBits::eDevice);
 		
 		/// @brief Create a Future from a value, automatically making the result available on the host
 		/// @param value
@@ -80,7 +85,7 @@ namespace vuk {
 			return rg;
 		}
 
-		Name get_bound_name() {
+		QualifiedName get_bound_name() {
 			return output_binding;
 		}
 
@@ -111,7 +116,7 @@ namespace vuk {
 		}
 
 	private:
-		Name output_binding;
+		QualifiedName output_binding;
 
 		std::shared_ptr<RenderGraph> rg;
 

@@ -116,7 +116,7 @@ namespace vuk {
 
 		struct SGInfo {
 			uint64_t count = 0;
-			std::span<std::pair<Name, Name>> exported_names = {};
+			std::span<std::pair<Name, QualifiedName>> exported_names = {};
 		};
 
 		std::vector<std::pair<std::shared_ptr<RenderGraph>, SGInfo>, short_alloc<std::pair<std::shared_ptr<RenderGraph>, SGInfo>, 64>> subgraphs;

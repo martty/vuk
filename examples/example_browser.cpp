@@ -1,8 +1,8 @@
 #include "../src/RenderGraphUtil.hpp"
-#include "vuk/RenderGraphReflection.hpp"
 #include "example_runner.hpp"
+#include "vuk/RenderGraphReflection.hpp"
 
-std::vector<vuk::Name> chosen_resource;
+std::vector<vuk::QualifiedName> chosen_resource;
 
 bool render_all = true;
 vuk::SingleSwapchainRenderBundle bundle;
@@ -65,7 +65,6 @@ void vuk::ExampleRunner::render() {
 			sampled_images.clear();
 		} else { // render all examples as imgui windows
 			std::shared_ptr<RenderGraph> rg = std::make_shared<RenderGraph>("runner");
-			plf::colony<vuk::Name> attachment_names;
 
 			size_t i = 0;
 			for (auto& ex : examples) {
@@ -84,33 +83,24 @@ void vuk::ExampleRunner::render() {
 				                              .layer_count = 1 },
 				                            vuk::ClearColor(0.1f, 0.2f, 0.3f, 1.f));
 				auto rg_frag_fut = ex->render(*this, frame_allocator, Future{ rgx, "_img" });
-				Name& attachment_name_out = *attachment_names.emplace(std::string(ex->name) + "_final");
+				Name attachment_name_out = Name(std::string(ex->name) + "_final");
 				auto rg_frag = rg_frag_fut.get_render_graph();
 				compiler.compile({ &rg_frag, 1 }, {});
 				if (auto use_chains = compiler.get_use_chains(); use_chains.size() > 1) {
 					const auto& bound_attachments = compiler.get_bound_attachments();
-					bool disable = false;
 					for (const auto head : use_chains) {
 						if (head->type != Resource::Type::eImage) {
 							continue;
 						}
-						
-						auto& att_info = compiler.get_chain_attachment(head);
-						auto samples = vuk::SampleCountFlagBits::e1;
-						if (att_info.attachment.sample_count != vuk::Samples::eInfer)
-							samples = att_info.attachment.sample_count.count;
-						disable = disable || (samples != vuk::SampleCountFlagBits::e1);
-					}
 
-					for (const auto head : use_chains) {
-						if (head->type != Resource::Type::eImage) {
-							continue;
-						}
 						auto& att_info = compiler.get_chain_attachment(head);
+						auto samples = att_info.attachment.sample_count.count;
+						bool disable = (samples != vuk::SampleCountFlagBits::eInfer && samples != vuk::SampleCountFlagBits::e1);
+
+						auto maybe_name = compiler.get_last_use_name(head);
+						
 						std::string btn_id = "";
-						bool prevent_disable = false;
-						if (att_info.name.name.to_sv() == attachment_name_out) {
-							prevent_disable = true;
+						if (maybe_name->name.to_sv() == attachment_name_out) {
 							btn_id = "F";
 						} else {
 							auto usage = compiler.compute_usage(head);
@@ -122,23 +112,23 @@ void vuk::ExampleRunner::render() {
 								btn_id += "X";
 							}
 						}
-						if (disable && !prevent_disable) {
+						if (disable) {
 							btn_id += " (MS)";
 						} else {
-							btn_id += "##" + std::string(att_info.name.name.to_sv());
+							btn_id += "##" + std::string(att_info.name.prefix.to_sv()) + std::string(att_info.name.name.to_sv());
 						}
-						if (disable && !prevent_disable) {
+						if (disable) {
 							ImGui::TextDisabled("%s", btn_id.c_str());
 						} else {
-							if (ImGui::Button(btn_id.c_str())) {
-								if (att_info.name.name.to_sv() == ex->name) {
-									chosen_resource[i] = attachment_name_out;
-								} else {
-									// TODO:
-									/* Name last_use = use_refs.back().out_name.is_invalid() ? use_refs.back().name.name : use_refs.back().out_name.name;
-									auto sv = last_use.to_sv();
-									sv.remove_prefix(rg_frag->name.to_sv().size() + 2);
-									chosen_resource[i] = sv;*/
+							if (maybe_name) {
+								if (ImGui::Button(btn_id.c_str())) {
+									if (maybe_name->name.to_sv() == ex->name) {
+										chosen_resource[i] = QualifiedName{ {}, attachment_name_out };
+									} else {
+										if (maybe_name) {
+											chosen_resource[i] = *maybe_name;
+										}
+									}
 								}
 							}
 						}
@@ -149,15 +139,15 @@ void vuk::ExampleRunner::render() {
 					ImGui::NewLine();
 				}
 				if (chosen_resource[i].is_invalid())
-					chosen_resource[i] = attachment_name_out;
+					chosen_resource[i].name = attachment_name_out;
 
-				if (chosen_resource[i] != attachment_name_out) {
+				if (chosen_resource[i].name != attachment_name_out) {
 					auto othfut = Future(rg_frag, chosen_resource[i]);
 					rg->attach_in(attachment_name_out, std::move(othfut));
 				} else {
 					rg->attach_in(attachment_name_out, std::move(rg_frag_fut));
 				}
-				auto si = vuk::make_sampled_image(NameReference{ rg.get(), attachment_name_out }, imgui_data.font_sci);
+				auto si = vuk::make_sampled_image(NameReference{ rg.get(), QualifiedName({}, attachment_name_out) }, imgui_data.font_sci);
 				ImGui::Image(&*sampled_images.emplace(si), ImGui::GetContentRegionAvail());
 				ImGui::End();
 				i++;
