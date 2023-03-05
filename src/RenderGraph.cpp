@@ -18,13 +18,6 @@ namespace {
 } // namespace
 
 namespace vuk {
-	Name Subrange::Image::combine_name(Name prefix) const {
-		std::string suffix = std::string(prefix.to_sv());
-		suffix += "[" + std::to_string(base_layer) + ":" + std::to_string(base_layer + layer_count - 1) + "]";
-		suffix += "[" + std::to_string(base_level) + ":" + std::to_string(base_level + level_count - 1) + "]";
-		return Name(suffix.c_str());
-	}
-
 	RenderGraph::RenderGraph() : impl(new RGImpl) {
 		name = Name(std::to_string(reinterpret_cast<uintptr_t>(impl)));
 	}
@@ -64,7 +57,7 @@ namespace vuk {
 		}
 
 		for (auto& p : other.impl->passes) {
-			PassInfo& pi = computed_passes.emplace_back(*arena_, p);
+			PassInfo& pi = computed_passes.emplace_back(p);
 			pi.qualified_name = { joiner, p.name };
 			pi.resources.offset0 = resources.size();
 			for (auto r : p.resources.to_span(other.impl->resources)) {
@@ -175,73 +168,7 @@ namespace vuk {
 		std::erase_if(passes, [](auto& pass) { return pass.pass->type == PassType::eDiverge && pass.resources.size() == 0; });
 	}
 
-	// determine rendergraph inputs and outputs, and resources that are neither
-	std::vector<PassInfo, short_alloc<PassInfo, 64>> RGImpl::build_io(std::span<PassWrapper> passes_used) {
-		robin_hood::unordered_flat_set<Name> poisoned_names;
-
-		auto pis = std::vector<PassInfo, short_alloc<PassInfo, 64>>(*arena_);
-		for (auto& pass : passes_used) {
-			pis.emplace_back(*arena_, pass);
-		}
-
-		input_names.clear();
-		output_names.clear();
-		write_input_names.clear();
-
-		for (auto& pif : pis) {
-			pif.bloom_write_inputs = {};
-			pif.bloom_outputs = {};
-			pif.bloom_resolved_inputs = {};
-			pif.input_names.offset0 = input_names.size();
-			pif.output_names.offset0 = output_names.size();
-			pif.write_input_names.offset0 = write_input_names.size();
-
-			for (Resource& res : pif.resources.to_span(resources)) {
-				if (res.foreign) {
-					continue;
-				}
-				Name in_name = resolve_alias(res.name.name);
-				Name out_name = resolve_alias(res.out_name.name);
-
-				auto hashed_in_name = ::hash::fnv1a::hash(in_name.to_sv().data(), res.name.name.to_sv().size(), hash::fnv1a::default_offset_basis);
-				auto hashed_out_name = ::hash::fnv1a::hash(out_name.to_sv().data(), res.out_name.name.to_sv().size(), hash::fnv1a::default_offset_basis);
-
-				input_names.emplace_back(QualifiedName{ Name{}, in_name });
-				pif.bloom_resolved_inputs |= hashed_in_name;
-
-				if (!res.out_name.name.is_invalid()) {
-					pif.bloom_outputs |= hashed_out_name;
-					output_names.emplace_back(QualifiedName{ Name{}, out_name });
-				}
-
-				if (is_write_access(res.ia) || res.ia == Access::eConsume || res.ia == Access::eConverge || pif.pass->type == PassType::eForcedAccess) {
-					assert(!poisoned_names.contains(in_name)); // we have poisoned this name because a write has already consumed it
-					pif.bloom_write_inputs |= hashed_in_name;
-					write_input_names.emplace_back(QualifiedName{ Name{}, in_name });
-					poisoned_names.emplace(in_name);
-				}
-
-				// if this resource use is the first in a diverged subchain, we additionally add a dependency onto the undiverged subchain
-				if (auto it = std::find_if(diverged_subchain_headers.begin(), diverged_subchain_headers.end(), [=](auto& item) { return item.first.name == in_name; });
-				    it != diverged_subchain_headers.end()) {
-					auto& sch_info = it->second;
-					auto dep = sch_info.first.name.append("__diverged");
-					auto hashed_name = ::hash::fnv1a::hash(dep.to_sv().data(), dep.to_sv().size(), hash::fnv1a::default_offset_basis);
-
-					input_names.emplace_back(QualifiedName{ Name{}, dep });
-					pif.bloom_resolved_inputs |= hashed_name;
-				}
-			}
-
-			pif.input_names.offset1 = input_names.size();
-			pif.output_names.offset1 = output_names.size();
-			pif.write_input_names.offset1 = write_input_names.size();
-		}
-
-		return pis;
-	}
-
-	Result<void> RGCImpl::schedule_intra_queue(std::span<PassInfo> passes, const RenderGraphCompileOptions& compile_options) {
+	Result<void> build_links(std::span<PassInfo> passes, ResourceLinkMap& res_to_links, std::vector<Resource>& resources, std::vector<ChainAccess>& pass_reads) {
 		// build edges into link map
 		// reserving here to avoid rehashing map
 		res_to_links.clear();
@@ -257,7 +184,7 @@ namespace vuk {
 					auto& r_io = res_to_links[res.name];
 					r_io.type = res.type;
 					if (!is_write_access(res.ia) && pif.pass->type != PassType::eForcedAccess && res.ia != Access::eConsume) {
-						r_io.reads.append(pass_idx_helper, { pass_idx, res_idx });
+						r_io.reads.append(pass_reads, { pass_idx, res_idx });
 					}
 					if (is_write_access(res.ia) || res.ia == Access::eConsume || pif.pass->type == PassType::eForcedAccess) {
 						r_io.undef = { pass_idx, res_idx };
@@ -278,6 +205,10 @@ namespace vuk {
 			}
 		}
 
+		return { expected_value };
+	}
+
+	Result<void> RGCImpl::terminate_chains() {
 		// introduce chain links with inputs (acquired and attached buffers & images) and outputs (releases)
 		// these are denoted with negative indices
 		for (auto& bound : bound_attachments) {
@@ -292,6 +223,11 @@ namespace vuk {
 			res_to_links[bound.first].undef = { .pass = static_cast<int32_t>(-1 * (&bound - &*releases.begin() + 1)) };
 		}
 
+		return { expected_value };
+	}
+
+	Result<void> collect_chains(ResourceLinkMap& res_to_links, std::vector<ChainLink*>& chains) {
+		chains.clear();
 		// collect chains by looking at links without a prev
 		for (auto& [name, link] : res_to_links) {
 			if (!link.prev) {
@@ -299,12 +235,16 @@ namespace vuk {
 			}
 		}
 
+		return { expected_value };
+	}
+
+	Result<void> RGCImpl::diagnose_unheaded_chains() {
 		// diagnose unheaded chains at this point
 		for (auto& chp : chains) {
 			if (!chp->def) {
 				if (chp->reads.size() > 0) {
-					auto& pass = get_pass(chp->reads.to_span(pass_idx_helper)[0]);
-					auto& res = get_resource(chp->reads.to_span(pass_idx_helper)[0]);
+					auto& pass = get_pass(chp->reads.to_span(pass_reads)[0]);
+					auto& res = get_resource(chp->reads.to_span(pass_reads)[0]);
 
 					return { expected_error, errors::make_unattached_resource_exception(pass, res) };
 				}
@@ -317,6 +257,10 @@ namespace vuk {
 			}
 		}
 
+		return { expected_value };
+	}
+
+	Result<void> RGCImpl::schedule_intra_queue(std::span<PassInfo> passes, const RenderGraphCompileOptions& compile_options) {
 		// calculate indegrees for all passes & build adjacency
 		std::vector<size_t> indegrees(passes.size());
 		std::vector<uint8_t> adjacency_matrix(passes.size() * passes.size());
@@ -328,7 +272,7 @@ namespace vuk {
 					adjacency_matrix[link.def->pass * passes.size() + link.undef->pass]++; // def -> undef
 				}
 			}
-			for (auto& read : link.reads.to_span(pass_idx_helper)) {
+			for (auto& read : link.reads.to_span(pass_reads)) {
 				if ((link.def && link.def->pass >= 0)) {
 					indegrees[read.pass]++;                                         // this only counts as a dep if there is a def before
 					adjacency_matrix[link.def->pass * passes.size() + read.pass]++; // def -> read
@@ -369,6 +313,10 @@ namespace vuk {
 		}
 		assert(ordered_passes.size() == passes.size());
 
+		return { expected_value };
+	}
+
+	Result<void> RGCImpl::fix_subchains() {
 		// subchain fixup pass
 
 		// connect subchains
@@ -403,8 +351,8 @@ namespace vuk {
 				auto first_chain_on_converged = chain->destination;
 				if (first_chain_on_converged->reads.size() > 0) { // first use is reads
 					// take the reads
-					for (auto& r : first_chain_on_converged->reads.to_span(pass_idx_helper)) {
-						last_chain_on_diverged->reads.append(pass_idx_helper, r);
+					for (auto& r : first_chain_on_converged->reads.to_span(pass_reads)) {
+						last_chain_on_diverged->reads.append(pass_reads, r);
 					}
 					// remove the undef from the diverged chain
 					last_chain_on_diverged->undef = {};
@@ -487,12 +435,13 @@ namespace vuk {
 			}
 		}
 
+		return { expected_value };
+
 		// TODO: validate incorrect convergence
 		/* else if (chain.back().high_level_access == Access::eConverge) {
 		  assert(it->second.dst_use.layout != ImageLayout::eUndefined); // convergence into no use = disallowed
 		}*/
-		// 
-		return { expected_value };
+		//
 	}
 
 	std::string Compiler::dump_graph() {
@@ -569,7 +518,7 @@ namespace vuk {
 					} else {
 						old_name = QualifiedName{ Name(prefix), name_in_sg.name };
 					}
-					
+
 					auto new_name = QualifiedName{ our_prefix.empty() ? Name{} : Name(our_prefix), name_in_parent };
 					computed_aliases[new_name] = old_name;
 				}
@@ -671,7 +620,7 @@ namespace vuk {
 						last_domain = att_dom;
 					}
 				}
-				for (auto& r : chain->reads.to_span(impl->pass_idx_helper)) {
+				for (auto& r : chain->reads.to_span(impl->pass_reads)) {
 					propagate_domain(impl->get_pass(r).domain);
 				}
 				if (chain->undef && chain->undef->pass >= 0) {
@@ -706,7 +655,7 @@ namespace vuk {
 						propagate_domain(impl->get_pass(*chain->undef).domain);
 					}
 				}
-				for (auto& r : chain->reads.to_span(impl->pass_idx_helper)) {
+				for (auto& r : chain->reads.to_span(impl->pass_reads)) {
 					propagate_domain(impl->get_pass(r).domain);
 				}
 				if (chain->def->pass >= 0) {
@@ -801,7 +750,7 @@ namespace vuk {
 					}
 					def_res.reference = head->def->pass;
 				}
-				for (auto& r : link->reads.to_span(impl->pass_idx_helper)) {
+				for (auto& r : link->reads.to_span(impl->pass_reads)) {
 					auto& pass = impl->get_pass(r);
 					auto& def_res = impl->get_resource(r);
 					if (is_swapchain) {
@@ -835,7 +784,7 @@ namespace vuk {
 			for (auto& res : passinfo->resources.to_span(impl->resources)) {
 				if (is_framebuffer_attachment(res)) {
 					if (rpi == nullptr) {
-						rpi_index = impl->rpis.size();
+						rpi_index = (int32_t)impl->rpis.size();
 						rpi = &impl->rpis.emplace_back();
 					}
 					auto& bound_att = impl->get_bound_attachment(res.reference);
@@ -865,7 +814,13 @@ namespace vuk {
 
 		// run global pass ordering - once we split per-queue we don't see enough
 		// inputs to order within a queue
-		impl->schedule_intra_queue(impl->computed_passes, compile_options);
+
+		VUK_DO_OR_RETURN(build_links(impl->computed_passes, impl->res_to_links, impl->resources, impl->pass_reads));
+		VUK_DO_OR_RETURN(impl->terminate_chains());
+		VUK_DO_OR_RETURN(collect_chains(impl->res_to_links, impl->chains));
+		VUK_DO_OR_RETURN(impl->diagnose_unheaded_chains());
+		VUK_DO_OR_RETURN(impl->schedule_intra_queue(impl->computed_passes, compile_options));
+		VUK_DO_OR_RETURN(impl->fix_subchains());
 
 		// auto dumped_graph = dump_graph();
 
@@ -990,7 +945,7 @@ namespace vuk {
 				buf_info.acquire = { fimg.control->last_use, fimg.control->initial_domain, fimg.control->initial_visibility };
 				impl->bound_buffers.emplace(buf_info.name, buf_info);
 			}
-			impl->imported_names.emplace_back(name);
+			impl->imported_names.emplace_back(QualifiedName{ {}, name });
 		} else if (fimg.get_status() == FutureBase::Status::eInitial) {
 			// an unsubmitted RG is being attached, we remove the release from that RG, and we allow the name to be found in us
 			assert(fimg.rg->impl);
@@ -1009,7 +964,7 @@ namespace vuk {
 				                                  sg_info.exported_names.size() + 1 };
 			std::copy(old_exported_names.begin(), old_exported_names.end(), sg_info.exported_names.begin());
 			sg_info.exported_names.back() = std::pair{ name, fimg.get_bound_name() };
-			impl->imported_names.emplace_back(name);
+			impl->imported_names.emplace_back(QualifiedName{ {}, name });
 			fimg.rg.reset();
 		} else {
 			assert(0);
@@ -1031,35 +986,75 @@ namespace vuk {
 		impl->buf_inference_rules.emplace_back(BufferInference{ QualifiedName{ Name{}, target }, std::move(rule) });
 	}
 
-	robin_hood::unordered_flat_set<Name> RGImpl::get_available_resources() {
-		auto pass_infos = build_io(passes);
-		// seed the available names with the names we imported from subgraphs
-		robin_hood::unordered_flat_set<Name> outputs;
+	robin_hood::unordered_flat_set<QualifiedName> RGImpl::get_available_resources() {
+		std::vector<PassInfo> pass_infos;
+		pass_infos.reserve(passes.size());
+		for (auto& pass : passes) {
+			pass_infos.emplace_back(pass).resources = pass.resources;
+		}
+		std::vector<Resource> resolved_resources;
+		for (auto res : resources) {
+			res.name.name = res.name.name.is_invalid() ? Name{} : resolve_alias(res.name.name);
+			res.out_name.name = res.out_name.name.is_invalid() ? Name{} : resolve_alias(res.out_name.name);
+			resolved_resources.emplace_back(res);
+		}
+		ResourceLinkMap res_to_links;
+		std::vector<ChainAccess> pass_reads;
+		std::vector<ChainLink*> chains;
+		build_links(pass_infos, res_to_links, resolved_resources, pass_reads);
+
+		for (auto& bound : bound_attachments) {
+			res_to_links[bound.first].def = { .pass = static_cast<int32_t>(-1 * (&bound - &*bound_attachments.begin() + 1)) };
+		}
+
+		for (auto& bound : bound_buffers) {
+			res_to_links[bound.first].def = { .pass = static_cast<int32_t>(-1 * (&bound - &*bound_buffers.begin() + 1)) };
+		}
+
+		for (auto& bound : releases) {
+			res_to_links[bound.first].undef = { .pass = static_cast<int32_t>(-1 * (&bound - &*releases.begin() + 1)) };
+		}
+
+		collect_chains(res_to_links, chains);
+
+		robin_hood::unordered_flat_set<QualifiedName> outputs;
 		outputs.insert(imported_names.begin(), imported_names.end());
+		for (auto& head : chains) {
+			ChainLink* link;
+			for (link = head; link->next != nullptr; link = link->next)
+				;
 
-		for (auto& [name, _] : bound_attachments) {
-			outputs.insert(name.name);
-		}
-		for (auto& [name, _] : bound_buffers) {
-			outputs.insert(name.name);
-		}
-
-		for (auto& pif : pass_infos) {
-			for (auto& in : pif.input_names.to_span(input_names)) {
-				outputs.erase(in.name);
+			if (link->reads.size()) {
+				auto r = link->reads.to_span(pass_reads)[0];
+				outputs.emplace(get_resource(pass_infos, r).name);
 			}
-			for (auto& in : pif.write_input_names.to_span(write_input_names)) {
-				outputs.erase(in.name);
+			if (link->undef) {
+				if (link->undef->pass >= 0) {
+					outputs.emplace(get_resource(pass_infos, *link->undef).out_name);
+				} else {
+					if (link->def->pass >= 0) {
+						outputs.emplace(get_resource(pass_infos, *link->def).out_name);
+					} else {
+						// tailed by release and def unusable
+					}
+				}
 			}
-			for (auto& in : pif.output_names.to_span(output_names)) {
-				outputs.emplace(in.name);
+			if (link->def) {
+				if (link->def->pass >= 0) {
+					outputs.emplace(get_resource(pass_infos, *link->def).out_name);
+				} else {
+					QualifiedName name = link->type == Resource::Type::eImage
+					                         ? (&*bound_attachments.begin() + (-1 * (link->def->pass) - 1))->first
+					                         : (&*bound_buffers.begin() + (-1 * (link->def->pass) - 1))->first; // the only def we have is the binding
+					outputs.emplace(name);
+				}
 			}
 		}
 		return outputs;
 	}
 
 	std::vector<Future> RenderGraph::split() {
-		robin_hood::unordered_flat_set<Name> outputs = impl->get_available_resources();
+		robin_hood::unordered_flat_set<QualifiedName> outputs = impl->get_available_resources();
 		std::vector<Future> futures;
 		for (auto& elem : outputs) {
 			futures.emplace_back(this->shared_from_this(), elem);
@@ -1293,7 +1288,7 @@ namespace vuk {
 					// to avoid R->R deps, we emit a single dep for all the reads
 					// for this we compute a merged layout (TRANSFER_SRC_OPTIMAL / READ_ONLY_OPTIMAL / GENERAL)
 					QueueResourceUse use;
-					auto reads = link->reads.to_span(pass_idx_helper);
+					auto reads = link->reads.to_span(pass_reads);
 					size_t read_idx = 0;
 					size_t start_of_reads = 0;
 
@@ -1471,7 +1466,7 @@ namespace vuk {
 				auto& release = get_release(link->undef->pass);
 				int32_t last_pass_idx = 0;
 				if (link->reads.size() > 0) {
-					for (auto& r : link->reads.to_span(pass_idx_helper)) {
+					for (auto& r : link->reads.to_span(pass_reads)) {
 						auto order_idx = computed_pass_idx_to_ordered_idx[r.pass];
 						if (order_idx > last_pass_idx) {
 							last_pass_idx = (int32_t)order_idx;
@@ -1761,7 +1756,7 @@ namespace vuk {
 				auto ia = get_resource(*chain->def).ia;
 				access_to_usage(usage, ia);
 			}
-			for (auto& r : chain->reads.to_span(pass_idx_helper)) {
+			for (auto& r : chain->reads.to_span(pass_reads)) {
 				auto ia = get_resource(r).ia;
 				access_to_usage(usage, ia);
 			}
@@ -1769,7 +1764,6 @@ namespace vuk {
 				auto ia = get_resource(*chain->undef).ia;
 				access_to_usage(usage, ia);
 			} else if (chain->undef) { // TODO: add release here
-
 				// access_to_usage(usage, impl->get_release(chain->undef->pass));
 			}
 		}
@@ -1798,7 +1792,7 @@ namespace vuk {
 		for (; link->next != nullptr; link = link->next)
 			;
 		if (link->reads.size()) {
-			auto r = link->reads.to_span(impl->pass_idx_helper)[0];
+			auto r = link->reads.to_span(impl->pass_reads)[0];
 			return impl->get_resource(r).name;
 		}
 		if (link->undef) {
