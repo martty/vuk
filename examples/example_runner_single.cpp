@@ -38,6 +38,7 @@ void vuk::ExampleRunner::render() {
 		// make a new RG that will take care of putting the swapchain image into present and releasing it from the rg
 		std::shared_ptr<RenderGraph> rg_p(std::make_shared<RenderGraph>("presenter"));
 		rg_p->attach_in("_src", std::move(example_result));
+		// we tell the rendergraph that _src will be used for presenting after the rendergraph
 		rg_p->release_for_present("_src");
 		// compile the RG that contains all the rendering of the example
 		auto erg = *compiler.link(std::span{ &rg_p, 1 }, {});
