@@ -1013,6 +1013,7 @@ namespace vuk {
 		eMemoryRead = 1ULL << 35,
 		eMemoryWrite = 1ULL << 36,
 		eMemoryRW = eMemoryRead | eMemoryWrite,
+		ePresent = 1ULL << 37
 	};
 
 	inline constexpr Access operator|(Access bit0, Access bit1) noexcept {

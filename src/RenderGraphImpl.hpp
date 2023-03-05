@@ -43,6 +43,7 @@ namespace vuk {
 	};
 
 	struct Release {
+		Access original;
 		QueueResourceUse dst_use;
 		FutureBase* signal = nullptr;
 	};

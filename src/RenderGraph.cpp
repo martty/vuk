@@ -1063,7 +1063,7 @@ namespace vuk {
 	}
 
 	void RenderGraph::attach_out(QualifiedName name, Future& fimg, DomainFlags dst_domain) {
-		impl->releases.emplace_back(name, Release{ to_use(Access::eNone, dst_domain), fimg.control.get() });
+		impl->releases.emplace_back(name, Release{ Access::eNone, to_use(Access::eNone, dst_domain), fimg.control.get() });
 	}
 
 	void RenderGraph::detach_out(QualifiedName name, Future& fimg) {
@@ -1076,7 +1076,7 @@ namespace vuk {
 	}
 
 	void RenderGraph::release(Name name, Access final) {
-		impl->releases.emplace_back(QualifiedName{ Name{}, name }, Release{ to_use(final, DomainFlagBits::eAny) });
+		impl->releases.emplace_back(QualifiedName{ Name{}, name }, Release{ final, to_use(final, DomainFlagBits::eAny) });
 	}
 
 	void RenderGraph::release_for_present(Name name) {
@@ -1090,7 +1090,7 @@ namespace vuk {
 		QueueResourceUse final{
 			.stages = PipelineStageFlagBits::eAllCommands, .access = AccessFlagBits{}, .layout = ImageLayout::ePresentSrcKHR, .domain = DomainFlagBits::eAny
 		};
-		impl->releases.emplace_back(QualifiedName{ Name{}, name }, Release{ .dst_use = final });
+		impl->releases.emplace_back(QualifiedName{ Name{}, name }, Release{ .original = ePresent, .dst_use = final });
 	}
 
 	Name RenderGraph::get_temporary_name() {
@@ -1752,20 +1752,19 @@ namespace vuk {
 		};
 
 		for (auto chain = head; chain != nullptr; chain = chain->next) {
+			Access ia = Access::eNone;
 			if (chain->def->pass >= 0) {
-				auto ia = get_resource(*chain->def).ia;
-				access_to_usage(usage, ia);
+				ia = get_resource(*chain->def).ia;
 			}
 			for (auto& r : chain->reads.to_span(pass_reads)) {
-				auto ia = get_resource(r).ia;
-				access_to_usage(usage, ia);
+				ia = get_resource(r).ia;
 			}
 			if (chain->undef && chain->undef->pass >= 0) {
-				auto ia = get_resource(*chain->undef).ia;
-				access_to_usage(usage, ia);
-			} else if (chain->undef) { // TODO: add release here
-				// access_to_usage(usage, impl->get_release(chain->undef->pass));
+				ia = get_resource(*chain->undef).ia;
+			} else if (chain->undef) {
+				ia = get_release(chain->undef->pass).original;
 			}
+			access_to_usage(usage, ia);
 		}
 
 		return usage;
