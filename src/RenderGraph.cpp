@@ -63,8 +63,6 @@ namespace vuk {
 			for (auto r : p.resources.to_span(other.impl->resources)) {
 				r.original_name = r.name.name;
 				if (r.foreign) {
-					if (!r.name.prefix.is_invalid())
-						__debugbreak();
 					auto prefix = Name{ std::find_if(sg_prefixes.begin(), sg_prefixes.end(), [=](auto& kv) { return kv.first == r.foreign; })->second };
 					auto full_src_prefix = !r.name.prefix.is_invalid() ? prefix.append(r.name.prefix.to_sv()) : prefix;
 					auto res_name = resolve_alias_rec({ full_src_prefix, r.name.name });
@@ -77,7 +75,6 @@ namespace vuk {
 						r.out_name = res_out_name;
 					}
 				} else {
-					assert(r.name.prefix.is_invalid());
 					if (!r.name.name.is_invalid()) {
 						r.name = resolve_alias_rec({ joiner, r.name.name });
 					}
@@ -110,7 +107,6 @@ namespace vuk {
 		}
 
 		for (auto& [name, v] : other.impl->releases) {
-			assert(name.prefix.is_invalid());
 			auto res_name = resolve_alias_rec({ joiner, name.name });
 			releases.emplace_back(res_name, v);
 		}

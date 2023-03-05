@@ -188,9 +188,16 @@ namespace vuk {
 		/// @brief Compute all the unconsumed resource names and return them as Futures
 		std::vector<Future> split();
 
+		/// @brief Mark resources to be released from the rendergraph with future access
+		/// @param name Name of the resource to be released
+		/// @param final Access after the rendergraph
 		void release(Name name, Access final);
+
+		/// @brief Mark resource to be released from the rendergraph for presentation
+		/// @param name Name of the resource to be released 
 		void release_for_present(Name name);
 
+		/// @brief Name of the rendergraph
 		Name name;
 
 	private:
@@ -263,7 +270,9 @@ namespace vuk {
 		
 		/// @brief compute ImageUsageFlags for given use chain
 		ImageUsageFlags compute_usage(const struct ChainLink* chain);
+		/// @brief Get the image attachment heading this use chain
 		const struct AttachmentInfo& get_chain_attachment(const struct ChainLink* chain);
+		/// @brief Get the last name that references this chain (may not exist)
 		std::optional<QualifiedName> get_last_use_name(const struct ChainLink* chain);
 
 		/// @brief Dump the pass dependency graph in graphviz format

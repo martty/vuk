@@ -253,23 +253,6 @@ namespace vuk {
 		return a & ~(eTransferRW | eComputeRW | eVertexRead | eFragmentRW | eRayTracingRW);
 	}
 
-	struct UseRef {
-		QualifiedName name;
-		QualifiedName out_name;
-		vuk::Access original = vuk::eNone;
-		vuk::Access high_level_access;
-		QueueResourceUse use;
-		Resource::Type type;
-		Subrange subrange;
-		PassInfo* pass = nullptr;
-	};
-
-	struct AttachmentSInfo {
-		vuk::ImageLayout layout;
-		vuk::AccessFlags access;
-		vuk::PipelineStageFlags stage;
-	};
-
 	struct Acquire {
 		QueueResourceUse src_use;
 		DomainFlagBits initial_domain = DomainFlagBits::eAny;
