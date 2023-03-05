@@ -60,7 +60,7 @@ namespace vuk {
 	};
 
 	struct PassInfo {
-		PassInfo(arena&, PassWrapper&);
+		PassInfo(PassWrapper&);
 
 		PassWrapper* pass;
 
@@ -73,9 +73,6 @@ namespace vuk {
 		DomainFlags domain = DomainFlagBits::eAny;
 
 		RelSpan<Resource> resources;
-		RelSpan<QualifiedName> input_names;
-		RelSpan<QualifiedName> output_names;
-		RelSpan<QualifiedName> write_input_names;
 
 		RelSpan<VkImageMemoryBarrier2KHR> pre_image_barriers, post_image_barriers;
 		RelSpan<VkMemoryBarrier2KHR> pre_memory_barriers, post_memory_barriers;
@@ -85,11 +82,6 @@ namespace vuk {
 		RelSpan<int32_t> referenced_swapchains; // TODO: maybe not the best place for it
 
 		bool is_waited_on = false;
-
-		uint32_t bloom_resolved_inputs = 0;
-
-		uint32_t bloom_outputs = 0;
-		uint32_t bloom_write_inputs = 0;
 	};
 
 #define INIT(x) x(decltype(x)::allocator_type(*arena_))
@@ -97,7 +89,7 @@ namespace vuk {
 		std::unique_ptr<arena> arena_;
 		std::vector<PassWrapper, short_alloc<PassWrapper, 64>> passes;
 
-		std::vector<Name, short_alloc<Name, 64>> imported_names;                            // names coming from subgraphs
+		std::vector<QualifiedName, short_alloc<QualifiedName, 64>> imported_names;          // names coming from subgraphs
 		std::vector<std::pair<Name, Name>, short_alloc<std::pair<Name, Name>, 64>> aliases; // maps resource names to resource names
 		std::vector<std::pair<QualifiedName, std::pair<QualifiedName, Subrange::Image>>,
 		            short_alloc<std::pair<QualifiedName, std::pair<QualifiedName, Subrange::Image>>, 64>>
@@ -110,9 +102,6 @@ namespace vuk {
 		std::vector<BufferInference, short_alloc<BufferInference, 64>> buf_inference_rules;
 
 		std::vector<Resource> resources;
-		std::vector<QualifiedName> input_names;
-		std::vector<QualifiedName> output_names;
-		std::vector<QualifiedName> write_input_names;
 
 		struct SGInfo {
 			uint64_t count = 0;
@@ -145,14 +134,17 @@ namespace vuk {
 			}
 		};
 
-		// determine rendergraph inputs and outputs, and resources that are neither
-		std::vector<PassInfo, short_alloc<PassInfo, 64>> build_io(std::span<PassWrapper> passes);
+		robin_hood::unordered_flat_set<QualifiedName> get_available_resources();
 
-		robin_hood::unordered_flat_set<Name> get_available_resources();
+		Resource& get_resource(std::vector<PassInfo>& pass_infos, ChainAccess& ca) {
+			return resources[pass_infos[ca.pass].resources.offset0 + ca.resource];
+		}
 
 		size_t temporary_name_counter = 0;
 		Name temporary_name = "_temporary";
 	};
+
+	using ResourceLinkMap = robin_hood::unordered_node_map<QualifiedName, ChainLink>;
 
 	struct RGCImpl {
 		RGCImpl() : arena_(new arena(4 * 1024 * 1024)), INIT(computed_passes), INIT(ordered_passes), INIT(partitioned_passes), INIT(rpis) {}
@@ -183,8 +175,8 @@ namespace vuk {
 		std::vector<VkImageMemoryBarrier2KHR> image_barriers;
 		std::vector<VkMemoryBarrier2KHR> mem_barriers;
 
-		robin_hood::unordered_node_map<QualifiedName, ChainLink> res_to_links;
-		std::vector<ChainAccess> pass_idx_helper;
+		ResourceLinkMap res_to_links;
+		std::vector<ChainAccess> pass_reads;
 		Resource& get_resource(ChainAccess& ca) {
 			return resources[computed_passes[ca.pass].resources.offset0 + ca.resource];
 		}
@@ -207,7 +199,7 @@ namespace vuk {
 		std::deque<ChainLink> helper_links;
 		std::vector<int32_t> swapchain_references;
 		std::vector<AttachmentRPInfo> rp_infos;
-		std::array<int32_t, 3> last_ordered_pass_idx_in_domain_array;
+		std::array<size_t, 3> last_ordered_pass_idx_in_domain_array;
 		int32_t last_ordered_pass_idx_in_domain(DomainFlagBits queue) {
 			uint32_t idx;
 			if (queue == DomainFlagBits::eGraphicsQueue) {
@@ -217,7 +209,7 @@ namespace vuk {
 			} else {
 				idx = 2;
 			}
-			return last_ordered_pass_idx_in_domain_array[idx];
+			return (int32_t)last_ordered_pass_idx_in_domain_array[idx];
 		}
 
 		std::vector<AttachmentInfo> bound_attachments;
@@ -283,7 +275,10 @@ namespace vuk {
 		void compute_prefixes(const RenderGraph& rg, std::string& prefix);
 		void inline_subgraphs(const RenderGraph& rg, robin_hood::unordered_flat_set<RenderGraph*>& consumed_rgs);
 
+		Result<void> terminate_chains();
+		Result<void> diagnose_unheaded_chains();
 		Result<void> schedule_intra_queue(std::span<struct PassInfo> passes, const RenderGraphCompileOptions& compile_options);
+		Result<void> fix_subchains();
 
 		void emit_image_barrier(RelSpan<VkImageMemoryBarrier2KHR>&,
 		                        int32_t bound_attachment,
@@ -310,9 +305,8 @@ namespace vuk {
 	};
 #undef INIT
 
-#define INIT2(x) x(decltype(x)::allocator_type(arena_))
-	inline PassInfo::PassInfo(arena& arena_, PassWrapper& p) : pass(&p) {}
-#undef INIT2
+	inline PassInfo::PassInfo(PassWrapper& p) : pass(&p) {}
+
 	template<class T, class A, class F>
 	T* contains_if(std::vector<T, A>& v, F&& f) {
 		auto it = std::find_if(v.begin(), v.end(), f);
