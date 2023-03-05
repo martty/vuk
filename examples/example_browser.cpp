@@ -57,8 +57,12 @@ void vuk::ExampleRunner::render() {
 			ImGui::Render();
 
 			fut = util::ImGui_ImplVuk_Render(frame_allocator, std::move(fut), imgui_data, ImGui::GetDrawData(), sampled_images);
-			auto ptr = fut.get_render_graph();
-			auto erg = *compiler.link(std::span{ &ptr, 1 }, {});
+			// make a new RG that will take care of putting the swapchain image into present and releasing it from the rg
+			std::shared_ptr<RenderGraph> rg_p(std::make_shared<RenderGraph>("presenter"));
+			rg_p->attach_in("_src", std::move(fut));
+			// we tell the rendergraph that _src will be used for presenting after the rendergraph
+			rg_p->release_for_present("_src");
+			auto erg = *compiler.link(std::span{ &rg_p, 1 }, {});
 			bundle = *acquire_one(*context, swapchain, (*present_ready)[context->get_frame_count() % 3], (*render_complete)[context->get_frame_count() % 3]);
 			auto result = *execute_submit(frame_allocator, std::move(erg), std::move(bundle));
 			present_to_one(*context, std::move(result));
@@ -157,8 +161,11 @@ void vuk::ExampleRunner::render() {
 			rg->clear_image("SWAPCHAIN", "SWAPCHAIN+", vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
 			rg->attach_swapchain("SWAPCHAIN", swapchain);
 			auto fut = util::ImGui_ImplVuk_Render(frame_allocator, Future{ rg, "SWAPCHAIN+" }, imgui_data, ImGui::GetDrawData(), sampled_images);
-			auto ptr = fut.get_render_graph();
-			auto erg = *compiler.link(std::span{ &ptr, 1 }, {});
+			std::shared_ptr<RenderGraph> rg_p(std::make_shared<RenderGraph>("presenter"));
+			rg_p->attach_in("_src", std::move(fut));
+			// we tell the rendergraph that _src will be used for presenting after the rendergraph
+			rg_p->release_for_present("_src");
+			auto erg = *compiler.link(std::span{ &rg_p, 1 }, {});
 			bundle = *acquire_one(*context, swapchain, (*present_ready)[context->get_frame_count() % 3], (*render_complete)[context->get_frame_count() % 3]);
 			auto result = *execute_submit(frame_allocator, std::move(erg), std::move(bundle));
 			present_to_one(*context, std::move(result));
