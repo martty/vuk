@@ -56,6 +56,7 @@ namespace vuk {
 	} // namespace detail
 
 	struct Resource {
+		uint32_t id = 0;
 		QualifiedName name;
 		Name original_name;
 		enum class Type { eBuffer, eImage } type;
@@ -69,6 +70,7 @@ namespace vuk {
 		Resource(Name n, Type t, Access ia) : name{ Name{}, n }, type(t), ia(ia) {}
 		Resource(Name n, Type t, Access ia, Name out_name) : name{ Name{}, n }, type(t), ia(ia), out_name{ Name{}, out_name } {}
 		Resource(RenderGraph* foreign, QualifiedName n, Type t, Access ia) : name{ n }, type(t), ia(ia), foreign(foreign) {}
+		Resource(uint32_t id, Type t, Access ia) : id(id), type(t), ia(ia) {}
 
 		bool operator==(const Resource& o) const noexcept {
 			return name == o.name;
@@ -195,11 +197,13 @@ namespace vuk {
 		void release(Name name, Access final);
 
 		/// @brief Mark resource to be released from the rendergraph for presentation
-		/// @param name Name of the resource to be released 
+		/// @param name Name of the resource to be released
 		void release_for_present(Name name);
 
 		/// @brief Name of the rendergraph
 		Name name;
+
+		uint32_t id = 0;
 
 	private:
 		struct RGImpl* impl;
@@ -218,6 +222,141 @@ namespace vuk {
 
 		Name get_temporary_name();
 	};
+
+	template<size_t N>
+	struct StringLiteral {
+		constexpr StringLiteral(const char (&str)[N]) {
+			std::copy_n(str, N, value);
+		}
+
+		char value[N];
+	};
+
+	template<Access acc, StringLiteral N, class T = void>
+	struct IA {
+		static constexpr Access access = acc;
+		using base = Image;
+		using attach = ImageAttachment;
+		static constexpr StringLiteral identifier = N;
+
+		Name name;
+	};
+
+	// from: https://stackoverflow.com/a/28213747
+	template<typename T>
+	struct closure_traits {};
+
+#define REM_CTOR(...) __VA_ARGS__
+#define SPEC(cv, var, is_var)                                                                                                                                  \
+	template<typename C, typename R, typename... Args>                                                                                                           \
+	struct closure_traits<R (C::*)(Args... REM_CTOR var) cv> {                                                                                                   \
+		using arity = std::integral_constant<std::size_t, sizeof...(Args)>;                                                                                        \
+		using is_variadic = std::integral_constant<bool, is_var>;                                                                                                  \
+		using is_const = std::is_const<int cv>;                                                                                                                    \
+                                                                                                                                                               \
+		using result_type = R;                                                                                                                                     \
+                                                                                                                                                               \
+		template<std::size_t i>                                                                                                                                    \
+		using arg = typename std::tuple_element<i, std::tuple<Args...>>::type;                                                                                     \
+		static constexpr size_t count = sizeof...(Args);                                                                                                           \
+		using types = std::tuple<Args...>;                                                                                                                         \
+	};
+
+	SPEC(const, (, ...), 1)
+	SPEC(const, (), 0)
+	SPEC(, (, ...), 1)
+	SPEC(, (), 0)
+
+#undef SPEC
+#undef REM_CTOR
+
+	template<int i, typename T>
+	struct drop {
+		using type = T;
+	};
+
+	template<int i, typename T>
+	using drop_t = typename drop<i, T>::type;
+
+	template<typename T>
+	struct drop<0, T> {
+		using type = T;
+	};
+
+	template<int i, typename T, typename... Ts>
+	requires(i > 0)
+	struct drop<i, std::tuple<T, Ts...>> {
+		using type = drop_t<i - 1, std::tuple<Ts...>>;
+	};
+
+	template<class T>
+	struct TypedFuture {
+		Future future;
+	};
+
+	template<typename Tuple>
+	struct TupleMap;
+
+	template<class IA>
+	Resource to_resource() {
+		return Resource(Name(typeid(IA).name()), Resource::Type::eImage, IA::access);
+	}
+
+	template<class IA>
+	Resource to_resource_out() {
+		return Resource(Name{}, Resource::Type::eImage, IA::access, Name(typeid(IA).name()));
+	}
+
+	template<class U, class T>
+	void attach_one(std::shared_ptr<RenderGraph>& rg, T&& arg) {
+		rg->attach_in(Name(typeid(U).name()), arg.future);
+	}
+
+	template<typename... T>
+	struct TupleMap<std::tuple<T...>> {
+
+		using ret_tuple = std::tuple<TypedFuture<typename T::base>...>;
+
+		template<class Ret, class F>
+		static auto make_lam(Name name, F&& body) {
+			std::shared_ptr<RenderGraph> rg = std::make_shared<RenderGraph>();
+			Pass p;
+			p.name = name;
+			// we need to walk return types and match them to input types
+			p.resources = { to_resource<T>()... };
+			TupleMap<Ret>::fill_out(p);
+			// we need TE execution for this
+			// p.execute = std::function(body);
+			rg->add_pass(p);
+			return [=](TypedFuture<typename T::base>&&...args) mutable -> typename TupleMap<Ret>::ret_tuple{
+				(attach_one<T, TypedFuture<typename T::base>>(rg, std::move(args)), ...);
+				return TupleMap<Ret>::make_ret(rg);
+			};
+		}
+
+		static auto make_ret(std::shared_ptr<RenderGraph> rg) {
+			return std::make_tuple(TypedFuture<typename T::base>{ Future{ rg, Name(typeid(T).name()).append("+") } }...);
+		}
+
+		static auto fill_out(Pass& p ) {
+			auto out_res_names = { Name(typeid(T).name())... };
+			for (auto& n : out_res_names) {
+				for (auto& r : p.resources) {
+					if (n == r.name.name) {
+						r.out_name.name = n.append("+");
+						break;
+					}
+				}
+			}
+		}
+	};
+	
+
+	template<class F>
+	auto make_pass(Name name, F&& body) {
+		using traits = closure_traits<decltype(&F::operator())>;
+		return TupleMap<drop_t<1, typename traits::types>>::template make_lam<typename traits::result_type, F>(name, std::forward<F>(body));
+	}
 
 	struct InferenceContext {
 		const ImageAttachment& get_image_attachment(Name name) const;
@@ -271,7 +410,7 @@ namespace vuk {
 		MapProxy<QualifiedName, const struct AttachmentInfo&> get_bound_attachments();
 		/// @brief retrieve bound buffers in the RenderGraph
 		MapProxy<QualifiedName, const struct BufferInfo&> get_bound_buffers();
-		
+
 		/// @brief compute ImageUsageFlags for given use chain
 		ImageUsageFlags compute_usage(const struct ChainLink* chain);
 		/// @brief Get the image attachment heading this use chain
