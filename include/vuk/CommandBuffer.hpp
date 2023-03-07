@@ -153,6 +153,7 @@ namespace vuk {
 	class Allocator;
 
 	class CommandBuffer {
+		void* arg_tuple;
 	protected:
 		friend struct RenderGraph;
 		friend struct ExecutableRenderGraph;
@@ -169,6 +170,7 @@ namespace vuk {
 			SampleCountFlagBits samples;
 			VkAttachmentReference const* depth_stencil_attachment;
 			std::array<QualifiedName, VUK_MAX_COLOR_ATTACHMENTS> color_attachment_names;
+			std::array<ImageView, VUK_MAX_COLOR_ATTACHMENTS> color_attachment_ivs;
 			std::span<const VkAttachmentReference> color_attachments;
 		};
 		std::optional<RenderPassInfo> ongoing_render_pass;
@@ -304,6 +306,10 @@ namespace vuk {
 		/// @param color_attachment the Name of the color_attachment to set the blend state for
 		/// @param color_blend_state PipelineColorBlendAttachmentState to use
 		CommandBuffer& set_color_blend(Name color_attachment, PipelineColorBlendAttachmentState color_blend_state);
+		/// @brief Set color blend state for a specific color attachment
+		/// @param color_attachment the Name of the color_attachment to set the blend state for
+		/// @param color_blend_state PipelineColorBlendAttachmentState to use
+		CommandBuffer& set_color_blend(const ImageAttachment& color_attachment, PipelineColorBlendAttachmentState color_blend_state);
 		/// @brief Set color blend preset for a specific color attachment
 		/// @param color_attachment the Name of the color_attachment to set the blend preset for
 		/// @param blend_preset BlendPreset to use
