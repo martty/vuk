@@ -25,7 +25,7 @@ namespace {
 		                  },
 		              // Code ran every frame
 		              .render =
-		                  [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator, vuk::Future target) {
+		                  [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator, vuk::TypedFuture<vuk::Image> target) {
 		                    // The framework provides us with an image to render to in "target"
 		                    // We attach this to the rendergraph named as "01_triangle"
 		                    // The rendergraph is composed of passes (vuk::Pass)
@@ -43,12 +43,11 @@ namespace {
 			                    return std::make_tuple(color_rt);
 		                    });
 
-		                    auto typed_target = vuk::TypedFuture<vuk::Image>{ std::move(target) };
-		                    auto [drawn] = pass(std::move(typed_target));
+		                    auto drawn = pass(std::move(target));
 
 		                    // The rendergraph is given to a Future, which takes ownership and binds to the result ("01_triangle_final")
 		                    // The example framework takes care of the busywork (submission, presenting)
-		                    return drawn.future;
+		                    return drawn;
 		                  }
 	};
 

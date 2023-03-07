@@ -234,11 +234,27 @@ namespace vuk {
 		static constexpr Access access = acc;
 		using base = Image;
 		using attach = ImageAttachment;
+		static constexpr Resource::Type type = Resource::Type::eImage;
 		static constexpr StringLiteral identifier = N;
 
 		ImageAttachment* ptr;
 
 		operator ImageAttachment() {
+			return *ptr;
+		}
+	};
+
+	template<Access acc, class T, StringLiteral N = "">
+	struct BA {
+		static constexpr Access access = acc;
+		using base = Buffer;
+		using attach = Buffer;
+		static constexpr Resource::Type type = Resource::Type::eBuffer;
+		static constexpr StringLiteral identifier = N;
+
+		Buffer* ptr;
+
+		operator Buffer() {
 			return *ptr;
 		}
 	};
@@ -285,7 +301,7 @@ namespace vuk {
 	};
 
 	template<int i, typename T, typename... Ts>
-	requires(i > 0)
+	  requires(i > 0)
 	struct drop<i, std::tuple<T, Ts...>> {
 		using type = drop_t<i - 1, std::tuple<Ts...>>;
 	};
@@ -298,14 +314,14 @@ namespace vuk {
 	template<typename Tuple>
 	struct TupleMap;
 
-	template<class IA>
+	template<class R>
 	Resource to_resource() {
-		return Resource(Name(typeid(IA).name()), Resource::Type::eImage, IA::access);
+		return Resource(Name(typeid(R).name()), Resource::Type::eImage, R::access);
 	}
 
-	template<class IA>
+	template<class R>
 	Resource to_resource_out() {
-		return Resource(Name{}, Resource::Type::eImage, IA::access, Name(typeid(IA).name()));
+		return Resource(Name{}, Resource::Type::eImage, R::access, Name(typeid(R).name()));
 	}
 
 	template<class U, class T>
@@ -315,7 +331,6 @@ namespace vuk {
 
 	template<typename... T>
 	struct TupleMap<std::tuple<T...>> {
-
 		using ret_tuple = std::tuple<TypedFuture<typename T::base>...>;
 
 		template<class Ret, class F>
@@ -325,7 +340,9 @@ namespace vuk {
 			p.name = name;
 			// we need to walk return types and match them to input types
 			p.resources = { to_resource<T>()... };
-			TupleMap<Ret>::fill_out(p);
+			if constexpr (!std::is_same_v<Ret, void>) {
+				TupleMap<Ret>::fill_out(p);
+			}
 			// we need TE execution for this
 			// in cb we build a tuple (with cb in it) and then erase it into a void*
 			p.execute = [bo = std::move(body)](CommandBuffer& cb) {
@@ -336,29 +353,52 @@ namespace vuk {
 				delete &arg_tuple;
 			};
 
-			p.make_argument_tuple = [](CommandBuffer& cb, std::span<void*> elems) -> void*{
+			p.make_argument_tuple = [](CommandBuffer& cb, std::span<void*> elems) -> void* {
 				std::tuple<CommandBuffer*, T...>* tuple = new std::tuple<CommandBuffer*, T...>;
 				std::get<0>(*tuple) = &cb;
-				if constexpr (sizeof...(T) > 0) {
-					std::get<1>(*tuple).ptr = reinterpret_cast<ImageAttachment*>(elems[0]);
-				}
-				if constexpr (sizeof...(T) > 1) {
-					std::get<2>(*tuple).ptr = reinterpret_cast<ImageAttachment*>(elems[1]);
-				}
+#define X(n)                                                                                                                                                   \
+	if constexpr (sizeof...(T) > n) {                                                                                                                            \
+		auto& ptr = std::get<n + 1>(*tuple).ptr;                                                                                                                   \
+		ptr = reinterpret_cast<decltype(ptr)>(elems[n]);                                                                                                           \
+	}
+				X(0)
+				X(1)
+				X(2)
+				X(3)
+				X(4)
+				X(5)
+				X(6)
+				X(7)
+				X(8)
+				X(9)
+				X(10)
+				X(11)
+				X(12)
+				X(13)
+				X(14)
+				X(15)
+				static_assert(sizeof...(T) <= 16);
+#undef X
 				return tuple;
 			};
 			rg->add_pass(std::move(p));
-			return [=](TypedFuture<typename T::base>&&...args) mutable -> typename TupleMap<Ret>::ret_tuple{
+			return [=](TypedFuture<typename T::base>&&... args) mutable {
 				(attach_one<T, TypedFuture<typename T::base>>(rg, std::move(args)), ...);
-				return TupleMap<Ret>::make_ret(rg);
+				if constexpr (!std::is_same_v<Ret, void>) {
+					return TupleMap<Ret>::make_ret(rg);
+				}
 			};
 		}
 
 		static auto make_ret(std::shared_ptr<RenderGraph> rg) {
-			return std::make_tuple(TypedFuture<typename T::base>{ Future{ rg, Name(typeid(T).name()).append("+") } }...);
+			if constexpr (sizeof...(T) > 1) {
+				return std::make_tuple(TypedFuture<typename T::base>{ Future{ rg, Name(typeid(T).name()).append("+") } }...);	
+			} else if constexpr (sizeof...(T) == 1) {
+				return (TypedFuture<typename T::base>{ Future{ rg, Name(typeid(T).name()).append("+") } },...);
+			}
 		}
 
-		static auto fill_out(Pass& p ) {
+		static auto fill_out(Pass& p) {
 			auto out_res_names = { Name(typeid(T).name())... };
 			for (auto& n : out_res_names) {
 				for (auto& r : p.resources) {
@@ -370,10 +410,9 @@ namespace vuk {
 			}
 		}
 	};
-	
 
 	template<class F>
-	auto make_pass(Name name, F&& body) {
+	[[nodiscard]] auto make_pass(Name name, F&& body) {
 		using traits = closure_traits<decltype(&F::operator())>;
 		return TupleMap<drop_t<1, typename traits::types>>::template make_lam<typename traits::result_type, F>(name, std::forward<F>(body));
 	}

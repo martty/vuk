@@ -32,9 +32,9 @@ void vuk::ExampleRunner::render() {
 		// clear the "_swp" image and call the cleared image "example_target_image"
 		rg->clear_image("_swp", "example_target_image", vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
 		// bind "example_target_image" as the output of this rendergraph
-		Future cleared_image_to_render_into{ std::move(rg), "example_target_image" };
+		TypedFuture<Image> cleared_image_to_render_into{ Future{ std::move(rg), "example_target_image" } };
 		// invoke the render method of the example with the cleared image
-		Future example_result = examples[0]->render(*this, frame_allocator, std::move(cleared_image_to_render_into));
+		Future example_result = examples[0]->render(*this, frame_allocator, std::move(cleared_image_to_render_into)).future;
 		// make a new RG that will take care of putting the swapchain image into present and releasing it from the rg
 		std::shared_ptr<RenderGraph> rg_p(std::make_shared<RenderGraph>("presenter"));
 		rg_p->attach_in("_src", std::move(example_result));
