@@ -102,6 +102,7 @@ namespace vuk {
 		auto attachments = rpass.attachments.to_span(impl->rp_infos);
 		for (uint32_t i = 0; i < spdesc.colorAttachmentCount; i++) {
 			rpi.color_attachment_names[i] = attachments[spdesc.pColorAttachments[i].attachment].attachment_info->name;
+			rpi.color_attachment_ivs[i] = attachments[spdesc.pColorAttachments[i].attachment].attachment_info->attachment.image_view;
 		}
 		cobuf.color_blend_attachments.resize(spdesc.colorAttachmentCount);
 		cobuf.ongoing_render_pass = rpi;
@@ -245,6 +246,14 @@ namespace vuk {
 			}
 			if (pass->pass->execute) {
 				cobuf.current_pass = pass;
+				if (pass->pass->make_argument_tuple) {
+					std::vector<void*> list;
+					for (auto& r : pass->resources.to_span(impl->resources)) {
+						auto res = *get_resource_image(r.original_name, cobuf.current_pass);
+						list.emplace_back((void*)&res->attachment);
+					}
+					cobuf.arg_tuple = pass->pass->make_argument_tuple(cobuf, list);
+				}
 				void* pass_profile_data = nullptr;
 				if (this->impl->callbacks.on_begin_pass)
 					pass_profile_data = this->impl->callbacks.on_begin_pass(this->impl->callbacks.user_data, pass->pass->name, cbuf, (DomainFlagBits)pass->domain.m_mask);
@@ -843,7 +852,7 @@ namespace vuk {
 		for (auto& r : pass_info->resources.to_span(impl->resources)) {
 			if (r.type == Resource::Type::eBuffer && r.original_name == name_ref.name.name && r.foreign == name_ref.rg) {
 				auto& att = impl->get_bound_buffer(r.reference);
-				return { expected_value, att };
+				return { expected_value, &att };
 			}
 		}
 
@@ -870,7 +879,7 @@ namespace vuk {
 					att.attachment.view_type = parent->attachment.view_type;
 					att.attachment.image_view = {};
 				}
-				return { expected_value, att };
+				return { expected_value, &att };
 			}
 		}
 

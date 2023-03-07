@@ -89,6 +89,7 @@ namespace vuk {
 		std::vector<Resource> resources;
 
 		std::function<void(CommandBuffer&)> execute;
+		void* (*make_argument_tuple)(CommandBuffer&, std::span<void*>);
 		std::byte* arguments; // internal use
 		PassType type = PassType::eUserPass;
 	};
@@ -232,14 +233,18 @@ namespace vuk {
 		char value[N];
 	};
 
-	template<Access acc, StringLiteral N, class T = void>
+	template<Access acc, class T, StringLiteral N = "">
 	struct IA {
 		static constexpr Access access = acc;
 		using base = Image;
 		using attach = ImageAttachment;
 		static constexpr StringLiteral identifier = N;
 
-		Name name;
+		ImageAttachment* ptr;
+
+		operator ImageAttachment() {
+			return *ptr;
+		}
 	};
 
 	// from: https://stackoverflow.com/a/28213747
@@ -326,8 +331,27 @@ namespace vuk {
 			p.resources = { to_resource<T>()... };
 			TupleMap<Ret>::fill_out(p);
 			// we need TE execution for this
-			// p.execute = std::function(body);
-			rg->add_pass(p);
+			// in cb we build a tuple (with cb in it) and then erase it into a void*
+			p.execute = [bo = std::move(body)](CommandBuffer& cb) {
+				void* ptr;
+				memcpy(&ptr, &cb, sizeof(void*));
+				std::tuple<CommandBuffer&, T...>& arg_tuple = *reinterpret_cast<std::tuple<CommandBuffer&, T...>*>(ptr);
+				std::apply(bo, arg_tuple);
+				delete &arg_tuple;
+			};
+
+			p.make_argument_tuple = [](CommandBuffer& cb, std::span<void*> elems) -> void*{
+				std::tuple<CommandBuffer*, T...>* tuple = new std::tuple<CommandBuffer*, T...>;
+				std::get<0>(*tuple) = &cb;
+				if constexpr (sizeof...(T) > 0) {
+					std::get<1>(*tuple).ptr = reinterpret_cast<ImageAttachment*>(elems[0]);
+				}
+				if constexpr (sizeof...(T) > 1) {
+					std::get<2>(*tuple).ptr = reinterpret_cast<ImageAttachment*>(elems[1]);
+				}
+				return tuple;
+			};
+			rg->add_pass(std::move(p));
 			return [=](TypedFuture<typename T::base>&&...args) mutable -> typename TupleMap<Ret>::ret_tuple{
 				(attach_one<T, TypedFuture<typename T::base>>(rg, std::move(args)), ...);
 				return TupleMap<Ret>::make_ret(rg);
