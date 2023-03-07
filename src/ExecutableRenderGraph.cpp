@@ -130,6 +130,7 @@ namespace vuk {
 		auto attachments = rpass.attachments.to_span(impl->rp_infos);
 		for (uint32_t i = 0; i < spdesc.colorAttachmentCount; i++) {
 			rpi.color_attachment_names[i] = attachments[spdesc.pColorAttachments[i].attachment].attachment_info->name;
+			rpi.color_attachment_ivs[i] = attachments[spdesc.pColorAttachments[i].attachment].attachment_info->attachment.image_view;
 		}
 		cobuf.color_blend_attachments.resize(spdesc.colorAttachmentCount);
 		cobuf.ongoing_renderpass = rpi;
@@ -266,6 +267,14 @@ namespace vuk {
 			}
 			if (pass->pass->execute) {
 				cobuf.current_pass = pass;
+				if (pass->pass->make_argument_tuple) {
+					std::vector<void*> list;
+					for (auto& r : pass->resources.to_span(impl->resources)) {
+						auto res = *get_resource_image(r.original_name, cobuf.current_pass);
+						list.emplace_back((void*)&res->attachment);
+					}
+					cobuf.arg_tuple = pass->pass->make_argument_tuple(cobuf, list);
+				}
 				pass->pass->execute(cobuf);
 			}
 			if (!pass->qualified_name.is_invalid()) {
@@ -846,25 +855,25 @@ namespace vuk {
 		return { expected_value, std::move(sbundle) };
 	}
 
-	Result<BufferInfo, RenderGraphException> ExecutableRenderGraph::get_resource_buffer(Name n, PassInfo* pass_info) {
+	Result<BufferInfo*, RenderGraphException> ExecutableRenderGraph::get_resource_buffer(Name n, PassInfo* pass_info) {
 		for (auto& r : pass_info->resources.to_span(impl->resources)) {
 			if (r.type == Resource::Type::eBuffer && r.original_name == n) {
 				auto& att = impl->get_bound_buffer(r.reference);
-				return { expected_value, att };
+				return { expected_value, &att };
 			}
 		}
 
 		return { expected_error, errors::make_cbuf_references_undeclared_resource(*pass_info, Resource::Type::eImage, n) };
 	}
 
-	Result<AttachmentInfo, RenderGraphException> ExecutableRenderGraph::get_resource_image(Name n, PassInfo* pass_info) {
+	Result<AttachmentInfo*, RenderGraphException> ExecutableRenderGraph::get_resource_image(Name n, PassInfo* pass_info) {
 		for (auto& r : pass_info->resources.to_span(impl->resources)) {
 			if (r.type == Resource::Type::eImage && r.original_name == n) {
 				auto& att = impl->get_bound_attachment(r.reference);
 				if (att.parent_attachment < 0) {
-					return { expected_value, impl->get_bound_attachment(att.parent_attachment) };
+					return { expected_value, &impl->get_bound_attachment(att.parent_attachment) };
 				}
-				return { expected_value, att };
+				return { expected_value, &att };
 			}
 		}
 

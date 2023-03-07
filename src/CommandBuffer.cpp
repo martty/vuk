@@ -46,7 +46,7 @@ namespace vuk {
 		if (!res) {
 			return { expected_error, res.error() };
 		}
-		return { expected_value, res->buffer };
+		return { expected_value, (*res)->buffer };
 	}
 
 	Result<Image> CommandBuffer::get_resource_image(Name n) const {
@@ -55,7 +55,7 @@ namespace vuk {
 		if (!res) {
 			return { expected_error, res.error() };
 		}
-		return { expected_value, res->attachment.image };
+		return { expected_value, (*res)->attachment.image };
 	}
 
 	Result<ImageView> CommandBuffer::get_resource_image_view(Name n) const {
@@ -64,7 +64,7 @@ namespace vuk {
 		if (!res) {
 			return { expected_error, res.error() };
 		}
-		return { expected_value, res->attachment.image_view };
+		return { expected_value, (*res)->attachment.image_view };
 	}
 
 	Result<ImageAttachment> CommandBuffer::get_resource_image_attachment(Name n) const {
@@ -73,7 +73,7 @@ namespace vuk {
 		if (!res) {
 			return { expected_error, res.error() };
 		}
-		return { expected_value, res->attachment };
+		return { expected_value, (*res)->attachment };
 	}
 
 	CommandBuffer& CommandBuffer::set_descriptor_set_strategy(DescriptorSetStrategyFlags ds_strategy_flags) {
@@ -227,6 +227,19 @@ namespace vuk {
 		return broadcast_color_blend(blend_preset_to_pcba(preset));
 	}
 
+	CommandBuffer& CommandBuffer::set_color_blend(const ImageAttachment& att, PipelineColorBlendAttachmentState state) {
+		VUK_EARLY_RET();
+		assert(ongoing_renderpass);
+
+		auto it = std::find(ongoing_renderpass->color_attachment_ivs.begin(), ongoing_renderpass->color_attachment_ivs.end(), att.image_view);
+		assert(it != ongoing_renderpass->color_attachment_ivs.end() && "Color attachment name not found.");
+		auto idx = std::distance(ongoing_renderpass->color_attachment_ivs.begin(), it);
+		set_color_blend_attachments.set(idx, true);
+		color_blend_attachments[idx] = state;
+		broadcast_color_blend_attachment_0 = false;
+		return *this;
+	}
+
 	CommandBuffer& CommandBuffer::set_color_blend(Name att, PipelineColorBlendAttachmentState state) {
 		VUK_EARLY_RET();
 		assert(ongoing_renderpass);
@@ -331,7 +344,7 @@ namespace vuk {
 			current_error = std::move(res);
 			return *this;
 		}
-		return bind_vertex_buffer(binding, res->buffer, first_location, format_list);
+		return bind_vertex_buffer(binding, (*res)->buffer, first_location, format_list);
 	}
 
 	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, const Buffer& buf, std::span<VertexInputAttributeDescription> viads, uint32_t stride) {
@@ -362,7 +375,7 @@ namespace vuk {
 			current_error = std::move(res);
 			return *this;
 		}
-		return bind_vertex_buffer(binding, res->buffer, viads, stride);
+		return bind_vertex_buffer(binding, (*res)->buffer, viads, stride);
 	}
 
 	CommandBuffer& CommandBuffer::bind_index_buffer(const Buffer& buf, IndexType type) {
@@ -378,7 +391,7 @@ namespace vuk {
 			current_error = std::move(res);
 			return *this;
 		}
-		return bind_index_buffer(res->buffer, type);
+		return bind_index_buffer((*res)->buffer, type);
 	}
 
 
@@ -430,7 +443,7 @@ namespace vuk {
 			current_error = std::move(res);
 			return *this;
 		}
-		return bind_buffer(set, binding, res->buffer);
+		return bind_buffer(set, binding, (*res)->buffer);
 	}
 
 	CommandBuffer& CommandBuffer::bind_image(unsigned set, unsigned binding, Name resource_name) {
@@ -448,7 +461,7 @@ namespace vuk {
 
 		auto layout = *res_gl ? ImageLayout::eGeneral : ImageLayout::eReadOnlyOptimalKHR;
 
-		return bind_image(set, binding, res->attachment, layout);
+		return bind_image(set, binding, (*res)->attachment, layout);
 	}
 
 	CommandBuffer& CommandBuffer::bind_image(unsigned set, unsigned binding, const ImageAttachment& ia, ImageLayout layout) {
@@ -570,7 +583,7 @@ namespace vuk {
 			current_error = std::move(res);
 			return *this;
 		}
-		return draw_indexed_indirect(command_count, res->buffer);
+		return draw_indexed_indirect(command_count, (*res)->buffer);
 	}
 
 	CommandBuffer& CommandBuffer::draw_indexed_indirect(std::span<DrawIndexedIndirectCommand> cmds) {
@@ -618,7 +631,7 @@ namespace vuk {
 			current_error = std::move(res);
 			return *this;
 		}
-		return draw_indexed_indirect_count(max_command_count, res->buffer, count_res->buffer);
+		return draw_indexed_indirect_count(max_command_count, (*res)->buffer, (*count_res)->buffer);
 	}
 
 	CommandBuffer& CommandBuffer::dispatch(size_t size_x, size_t size_y, size_t size_z) {
@@ -661,7 +674,7 @@ namespace vuk {
 			current_error = std::move(res);
 			return *this;
 		}
-		return dispatch_indirect(res->buffer);
+		return dispatch_indirect((*res)->buffer);
 	}
 
 	CommandBuffer& CommandBuffer::trace_rays(size_t size_x, size_t size_y, size_t size_z) {
@@ -695,7 +708,7 @@ namespace vuk {
 		auto layout = *res_gl ? ImageLayout::eGeneral : ImageLayout::eTransferDstOptimal;
 
 		VkImageSubresourceRange isr = {};
-		auto& attachment = res->attachment;
+		auto& attachment = (*res)->attachment;
 		auto aspect = format_to_aspect(attachment.format);
 		isr.aspectMask = (VkImageAspectFlags)aspect;
 		isr.baseArrayLayer = attachment.base_layer;
@@ -721,16 +734,16 @@ namespace vuk {
 			current_error = std::move(src_res);
 			return *this;
 		}
-		auto src_image = src_res->attachment.image;
+		auto src_image = (*src_res)->attachment.image;
 		auto dst_res = rg->get_resource_image(dst, current_pass);
 		if (!dst_res) {
 			current_error = std::move(dst_res);
 			return *this;
 		}
-		auto dst_image = dst_res->attachment.image;
+		auto dst_image = (*dst_res)->attachment.image;
 		ImageSubresourceLayers isl;
 		ImageAspectFlagBits aspect;
-		if (dst_res->attachment.format == Format::eD32Sfloat) {
+		if ((*dst_res)->attachment.format == Format::eD32Sfloat) {
 			aspect = ImageAspectFlagBits::eDepth;
 		} else {
 			aspect = ImageAspectFlagBits::eColor;
@@ -744,7 +757,7 @@ namespace vuk {
 		ir.srcSubresource = isl;
 		ir.dstOffset = Offset3D{};
 		ir.dstSubresource = isl;
-		ir.extent = static_cast<Extent3D>(src_res->attachment.extent.extent);
+		ir.extent = static_cast<Extent3D>((*src_res)->attachment.extent.extent);
 
 		auto res_gl_src = rg->is_resource_image_in_general_layout(src, current_pass);
 		if (!res_gl_src) {
@@ -773,13 +786,13 @@ namespace vuk {
 			current_error = std::move(src_res);
 			return *this;
 		}
-		auto src_image = src_res->attachment.image;
+		auto src_image = (*src_res)->attachment.image;
 		auto dst_res = rg->get_resource_image(dst, current_pass);
 		if (!dst_res) {
 			current_error = std::move(dst_res);
 			return *this;
 		}
-		auto dst_image = dst_res->attachment.image;
+		auto dst_image = (*dst_res)->attachment.image;
 
 		auto res_gl_src = rg->is_resource_image_in_general_layout(src, current_pass);
 		if (!res_gl_src) {
@@ -809,7 +822,7 @@ namespace vuk {
 			current_error = std::move(src_res);
 			return *this;
 		}
-		auto src_bbuf = src_res->buffer;
+		auto src_bbuf = (*src_res)->buffer;
 		bic.bufferOffset += src_bbuf.offset;
 
 		auto dst_res = rg->get_resource_image(dst, current_pass);
@@ -817,7 +830,7 @@ namespace vuk {
 			current_error = std::move(dst_res);
 			return *this;
 		}
-		auto dst_image = dst_res->attachment.image;
+		auto dst_image = (*dst_res)->attachment.image;
 
 		auto res_gl = rg->is_resource_image_in_general_layout(dst, current_pass);
 		if (!res_gl) {
@@ -838,13 +851,13 @@ namespace vuk {
 			current_error = std::move(src_res);
 			return *this;
 		}
-		auto src_image = src_res->attachment.image;
+		auto src_image = (*src_res)->attachment.image;
 		auto dst_res = rg->get_resource_buffer(dst, current_pass);
 		if (!dst_res) {
 			current_error = std::move(dst_res);
 			return *this;
 		}
-		auto dst_bbuf = dst_res->buffer;
+		auto dst_bbuf = (*dst_res)->buffer;
 
 		bic.bufferOffset += dst_bbuf.offset;
 
@@ -867,13 +880,13 @@ namespace vuk {
 			current_error = std::move(src_res);
 			return *this;
 		}
-		auto src_bbuf = src_res->buffer;
+		auto src_bbuf = (*src_res)->buffer;
 		auto dst_res = rg->get_resource_buffer(dst, current_pass);
 		if (!dst_res) {
 			current_error = std::move(dst_res);
 			return *this;
 		}
-		auto dst_bbuf = dst_res->buffer;
+		auto dst_bbuf = (*dst_res)->buffer;
 
 		return copy_buffer(src_bbuf, dst_bbuf, size);
 	}
@@ -905,7 +918,7 @@ namespace vuk {
 			current_error = std::move(dst_res);
 			return *this;
 		}
-		auto dst_bbuf = dst_res->buffer;
+		auto dst_bbuf = (*dst_res)->buffer;
 		
 		
 		return fill_buffer(dst_bbuf, size, data);
@@ -924,7 +937,7 @@ namespace vuk {
 			current_error = std::move(dst_res);
 			return *this;
 		}
-		auto dst_bbuf = dst_res->buffer;
+		auto dst_bbuf = (*dst_res)->buffer;
 
 		return update_buffer(dst_bbuf, size, data);
 	}
@@ -952,7 +965,7 @@ namespace vuk {
 			current_error = std::move(src_res);
 			return *this;
 		}
-		auto src_image = src_res->attachment.image;
+		auto src_image = (*src_res)->attachment.image;
 
 		// TODO: fill these out from attachment
 		VkImageSubresourceRange isr = {};

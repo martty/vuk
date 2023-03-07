@@ -47,6 +47,7 @@ namespace vuk {
 		pw.resources.offset1 = impl->resources.size();
 		pw.type = p.type;
 		pw.source = std::move(source);
+		pw.make_argument_tuple = p.make_argument_tuple;
 		impl->passes.emplace_back(std::move(pw));
 	}
 

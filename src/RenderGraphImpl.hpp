@@ -55,6 +55,8 @@ namespace vuk {
 		RelSpan<Resource> resources;
 
 		std::function<void(CommandBuffer&)> execute;
+		void* (*make_argument_tuple)(CommandBuffer&, std::span<void*>);
+
 		std::byte* arguments; // internal use
 		PassType type;
 		source_location source;
