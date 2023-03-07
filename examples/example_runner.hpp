@@ -35,7 +35,7 @@ namespace vuk {
 		std::string_view name;
 
 		std::function<void(ExampleRunner&, vuk::Allocator&)> setup;
-		std::function<vuk::Future(ExampleRunner&, vuk::Allocator&, vuk::Future)> render;
+		std::function<vuk::TypedFuture<vuk::Image>(ExampleRunner&, vuk::Allocator&, vuk::TypedFuture<vuk::Image>)> render;
 		std::function<void(ExampleRunner&, vuk::Allocator&)> cleanup;
 	};
 
