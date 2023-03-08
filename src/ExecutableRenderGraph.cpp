@@ -348,8 +348,6 @@ namespace vuk {
 					rp.fbci.height = ia.extent.extent.height;
 				}
 
-				rp.fbci.layers = rp.layer_count;
-
 				// resolve images are always sample count 1
 				if (rp_att.is_resolve_dst) {
 					att.attachment.sample_count = Samples::e1;

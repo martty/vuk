@@ -161,7 +161,7 @@ namespace vuk {
 		/// @param name Name of the resource to attach to
 		/// @param image_attachment ImageAttachment to attach
 		/// @param initial Access to the resource prior to this rendergraph
-		void attach_image(Name name, ImageAttachment image_attachment, Access initial = eNone);
+		ImageAttachment& attach_image(Name name, ImageAttachment image_attachment, Access initial = eNone);
 
 		/// @brief Attach an image to be allocated from the specified allocator
 		/// @param name Name of the resource to attach to
@@ -315,6 +315,16 @@ namespace vuk {
 		Future future;
 	};
 
+	template<>
+	struct TypedFuture<Image> {
+		Future future;
+		ImageAttachment* attachment;
+
+		ImageAttachment* operator->() {
+			return attachment;
+		}
+	};
+
 	template<typename Tuple>
 	struct TupleMap;
 
@@ -419,6 +429,18 @@ namespace vuk {
 	[[nodiscard]] auto make_pass(Name name, F&& body) {
 		using traits = closure_traits<decltype(&F::operator())>;
 		return TupleMap<drop_t<1, typename traits::types>>::template make_lam<typename traits::result_type, F>(name, std::forward<F>(body));
+	}
+
+	inline [[nodiscard]] TypedFuture<Image> declare_ia(Name name) {
+		std::shared_ptr<RenderGraph> rg = std::make_shared<RenderGraph>();
+		return { Future{ rg, name }, &rg->attach_image(name, {}) };
+	}
+
+	inline [[nodiscard]] TypedFuture<Image> clear(TypedFuture<Image> in, Clear clear_value) {
+		std::shared_ptr<RenderGraph> rg = std::make_shared<RenderGraph>();
+		rg->attach_in("_in", std::move(in.future));
+		rg->clear_image("_in", "_out", clear_value);
+		return { Future{ rg, "_out" } };
 	}
 
 	struct InferenceContext {
