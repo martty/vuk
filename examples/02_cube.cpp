@@ -46,7 +46,7 @@ namespace {
 		      runner.enqueue_setup(std::move(ind_fut));
 		    },
 		.render =
-		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator, vuk::Future target) {
+		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator, vuk::TypedFuture<vuk::Image> target) {
 		      // This struct will represent the view-projection transform used for the cube
 		      struct VP {
 			      glm::mat4 view;
@@ -62,13 +62,7 @@ namespace {
 		      // since this memory is CPU visible (MemoryUsage::eCPUtoGPU), we don't need to wait for the future to complete
 		      auto uboVP = *buboVP;
 
-		      vuk::RenderGraph rg("02");
-		      rg.attach_in("02_cube", std::move(target));
-		      rg.add_pass(
-		          { // For this example, only a color image is needed to write to (our framebuffer)
-		            // The name is declared, and the way it will be used in the pass (color attachment - write)
-		            .resources = { "02_cube"_image >> vuk::eColorWrite >> "02_cube_final" },
-		            .execute = [uboVP](vuk::CommandBuffer& command_buffer) {
+		      auto pass = vuk::make_pass("02_cube", [uboVP](vuk::CommandBuffer& command_buffer, vuk::IA<vuk::eColorWrite, decltype([](){})> color_rt) {
 			            command_buffer
 			                // In vuk, all pipeline state (with the exception of the shaders) come from the command buffer
 			                // Such state can be requested to be dynamic - dynamic state does not form part of the pipeline key, and hence cheap to change
@@ -114,11 +108,15 @@ namespace {
 			            command_buffer.specialize_constants(0, tint.x).specialize_constants(1, tint.y).specialize_constants(2, tint.z);
 			            // The cube is drawn via indexed drawing
 			            command_buffer.draw_indexed(box.second.size(), 1, 0, 0, 0);
-		            } });
+
+						return std::make_tuple(color_rt);
+		            } );
+
+			  auto drawn = pass(std::move(target));
 		      // The angle is update to rotate the cube
 		      angle += 20.f * ImGui::GetIO().DeltaTime;
 
-		      return vuk::Future{ std::make_unique<vuk::RenderGraph>(std::move(rg)), "02_cube_final" };
+		      return drawn;
 		    },
 		.cleanup =
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator) {
