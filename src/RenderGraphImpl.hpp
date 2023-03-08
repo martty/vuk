@@ -98,8 +98,8 @@ namespace vuk {
 		            short_alloc<std::pair<QualifiedName, std::pair<QualifiedName, Subrange::Image>>, 64>>
 		    diverged_subchain_headers;
 
-		robin_hood::unordered_flat_map<QualifiedName, AttachmentInfo> bound_attachments;
-		robin_hood::unordered_flat_map<QualifiedName, BufferInfo> bound_buffers;
+		robin_hood::unordered_node_map<QualifiedName, AttachmentInfo> bound_attachments;
+		robin_hood::unordered_node_map<QualifiedName, BufferInfo> bound_buffers;
 
 		std::vector<IAInference, short_alloc<IAInference, 64>> ia_inference_rules;
 		std::vector<BufferInference, short_alloc<BufferInference, 64>> buf_inference_rules;

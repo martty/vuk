@@ -890,7 +890,7 @@ namespace vuk {
 		impl->bound_buffers.emplace(buf_info.name, buf_info);
 	}
 
-	void RenderGraph::attach_image(Name name, ImageAttachment att, Access initial_acc) {
+	ImageAttachment& RenderGraph::attach_image(Name name, ImageAttachment att, Access initial_acc) {
 		AttachmentInfo attachment_info;
 		attachment_info.name = { Name{}, name };
 		attachment_info.attachment = att;
@@ -903,7 +903,7 @@ namespace vuk {
 
 		QueueResourceUse& initial = attachment_info.acquire.src_use;
 		initial = to_use(initial_acc, DomainFlagBits::eAny);
-		impl->bound_attachments.emplace(attachment_info.name, attachment_info);
+		return impl->bound_attachments.emplace(attachment_info.name, attachment_info).first->second.attachment;
 	}
 
 	void RenderGraph::attach_image_from_allocator(Name name, ImageAttachment att, Allocator allocator, Access initial_acc) {
