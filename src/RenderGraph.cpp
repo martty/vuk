@@ -1384,15 +1384,10 @@ namespace vuk {
 					}
 				}
 
-				// process tails outside
-				if (link->next == nullptr) {
-					break;
-				}
-
 				// if there are no intervening reads, emit def -> undef, otherwise emit reads -> undef
 				//  def -> undef, which is either WAR or WAW (before undef)
 				//	reads -> undef, WAR (before undef)
-				if (link->undef) {
+				if (link->undef && link->undef->pass >= 0) {
 					auto& pass = get_pass(*link->undef);
 					auto& res = get_resource(*link->undef);
 					QueueResourceUse use = to_use(res.ia, pass.domain);
@@ -1451,6 +1446,11 @@ namespace vuk {
 						}
 					}
 					last_use = use;
+				}
+				
+				// process tails outside
+				if (link->next == nullptr) {
+					break;
 				}
 			}
 
