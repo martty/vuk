@@ -31,6 +31,27 @@ The number of bindable sets is limited by `VUK_MAX_SETS`. Both ephemeral descrip
 
 Push constants can be changed by calling :cpp:func:`vuk::CommandBuffer::push_constants()`.
 
+Vertex buffers and attributes
+-----------------------------
+While vertex buffers are waning in popularity, vuk still offers a convenient API for most attribute arrangements. If advanced addressing schemes are not required, they can be a convenient alternative to vertex pulling.
+
+The shader declares attributes, which require a `location`. When binding vertex buffers, you are telling vuk where each attribute, corresponding to a `location` can be found.
+Each :cpp:func:`vuk::CommandBuffer::bind_vertex_buffer()` binds a single vuk::Buffer, which can contain multiple attributes
+
+The first two arguments to :cpp:func:`vuk::CommandBuffer::bind_vertex_buffer()` specify the index of the vertex buffer binding and buffer to binding to that binding.
+(so if you have 1 vertex buffers, you pass 0, if you have 2 vertex buffers, you have 2 calls where you pass 0 and 1 as `binding` - these don't need to start at 0 or be contiguous but they might as well be)
+
+In the second part of the arguments you specify which attributes can be found the vertex buffer that is being bound, what is their format, and what is their offset. 
+For convenience vuk offers a utility called `vuk::Packed` to describe common vertex buffers that contain interleaved attribute data.
+
+The simplest case is a single attribute per vertex buffer, this is described by calling `bind_vertex_buffer(binding, buffer, location, vuk::Packed{ vuk::Format::eR32G32B32Sfloat })` - with the actual format of the attribute.
+Here `vuk::Packed` means that the formats are packed in the buffer, i.e. you have a R32G32B32, then immediately after a R32G32B32, and so on.
+
+If there are multiple interleaved attributes in a buffer, for example it is [position, normal, position, normal], then you can describe this in a very compact way in vuk if the position attribute location and normal attribute location is consecutive: `bind_vertex_buffer(binding, buffer, first_location, vuk::Packed{ vuk::Format::eR32G32B32Sfloat, vuk::Format::eR32G32B32Sfloat })`.
+Finally, you can describe holes in your interleaving by using `vuk::Ignore(byte_size)` in the format list for `vuk::Packed`.
+
+If your attribute scheme cannot be described like this, you can also use :cpp:func:`vuk::CommandBuffer::bind_vertex_buffer()` with a manually built `span<VertexInputAttributeDescription>` and computed stride.
+
 Command recording
 -----------------
 Draws and dispatches can be recorded by calling the appropriate function. Any state changes made will be recorded into the underlying Vulkan command buffer, along with the draw or dispatch.
