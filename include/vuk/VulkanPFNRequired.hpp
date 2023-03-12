@@ -109,11 +109,6 @@ VUK_X(vkDestroyBuffer)
 VUK_X(vkCreateImage)
 VUK_X(vkDestroyImage)
 
-// VK_KHR_swapchain
-VUK_X(vkAcquireNextImageKHR)
-VUK_X(vkQueuePresentKHR)
-VUK_X(vkDestroySwapchainKHR)
-
 // 1.1
 VUK_Y(vkGetPhysicalDeviceProperties2)
 

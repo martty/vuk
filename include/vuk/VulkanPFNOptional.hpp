@@ -1,4 +1,9 @@
 // OPTIONAL
+// VK_KHR_swapchain
+VUK_X(vkAcquireNextImageKHR)
+VUK_X(vkQueuePresentKHR)
+VUK_X(vkDestroySwapchainKHR)
+
 // VK_KHR_debug_utils
 VUK_Y(vkSetDebugUtilsObjectNameEXT)
 VUK_Y(vkCmdBeginDebugUtilsLabelEXT)
