@@ -1689,10 +1689,13 @@ namespace vuk {
 						emit_memory_barrier(get_pass(last_pass_idx).post_memory_barriers, last_use, use);
 					}
 				}
-			} else if (!link->undef) {
-				// no release on this end, so if def belongs to an RP and there were no reads, we can downgrade the store
-				if (link->def && link->def->pass >= 0 && link->reads.size() == 0) {
-					auto& pass = get_pass(link->def->pass);
+			} else {
+				// no release on this end, so if def belongs to an RP and there were no reads,
+				// or the chain ends in an RP undef, we can downgrade the store
+				bool def_only = link->def && link->def->pass >= 0 && link->reads.size() == 0;
+				bool undef = link->undef.has_value();
+				if (undef || def_only) {
+					auto& pass = get_pass(undef ? link->undef->pass : link->def->pass);
 					if (pass.render_pass_index >= 0) {
 						auto& rpi = rpis[pass.render_pass_index];
 						auto& bound_att = get_bound_attachment(head->def->pass);
