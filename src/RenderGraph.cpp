@@ -1217,6 +1217,10 @@ namespace vuk {
 	}
 
 	void RGCImpl::emit_memory_barrier(RelSpan<VkMemoryBarrier2KHR>& barriers, QueueResourceUse last_use, QueueResourceUse current_use) {
+		if (last_use.stages == vuk::PipelineStageFlagBits{}) {
+			return;
+		}
+
 		// for now we only emit pre- memory barriers, so the executing domain is always 'current_use.domain'
 		scope_to_domain((VkPipelineStageFlagBits2KHR&)last_use.stages, current_use.domain & DomainFlagBits::eQueueMask);
 		scope_to_domain((VkPipelineStageFlagBits2KHR&)current_use.stages, current_use.domain & DomainFlagBits::eQueueMask);
