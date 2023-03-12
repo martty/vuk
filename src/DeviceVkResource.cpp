@@ -6,6 +6,8 @@
 #include "vuk/Query.hpp"
 #include "vuk/resources/DeviceNestedResource.hpp"
 #define VMA_IMPLEMENTATION
+#define VMA_STATIC_VULKAN_FUNCTIONS 0
+#define VMA_DYNAMIC_VULKAN_FUNCTIONS 0
 #include <vk_mem_alloc.h>
 #include <mutex>
 #include <numeric>
@@ -40,23 +42,23 @@ namespace vuk {
 		allocatorInfo.flags = VMA_ALLOCATOR_CREATE_EXTERNALLY_SYNCHRONIZED_BIT | VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
 
 		VmaVulkanFunctions vulkanFunctions = {};
-		vulkanFunctions.vkGetPhysicalDeviceProperties = vkGetPhysicalDeviceProperties;
-		vulkanFunctions.vkGetPhysicalDeviceMemoryProperties = vkGetPhysicalDeviceMemoryProperties;
-		vulkanFunctions.vkAllocateMemory = vkAllocateMemory;
-		vulkanFunctions.vkFreeMemory = vkFreeMemory;
-		vulkanFunctions.vkMapMemory = vkMapMemory;
-		vulkanFunctions.vkUnmapMemory = vkUnmapMemory;
-		vulkanFunctions.vkFlushMappedMemoryRanges = vkFlushMappedMemoryRanges;
-		vulkanFunctions.vkInvalidateMappedMemoryRanges = vkInvalidateMappedMemoryRanges;
-		vulkanFunctions.vkBindBufferMemory = vkBindBufferMemory;
-		vulkanFunctions.vkBindImageMemory = vkBindImageMemory;
-		vulkanFunctions.vkGetBufferMemoryRequirements = vkGetBufferMemoryRequirements;
-		vulkanFunctions.vkGetImageMemoryRequirements = vkGetImageMemoryRequirements;
-		vulkanFunctions.vkCreateBuffer = vkCreateBuffer;
-		vulkanFunctions.vkDestroyBuffer = vkDestroyBuffer;
-		vulkanFunctions.vkCreateImage = vkCreateImage;
-		vulkanFunctions.vkDestroyImage = vkDestroyImage;
-		vulkanFunctions.vkCmdCopyBuffer = vkCmdCopyBuffer;
+		vulkanFunctions.vkGetPhysicalDeviceProperties = ctx.vkGetPhysicalDeviceProperties;
+		vulkanFunctions.vkGetPhysicalDeviceMemoryProperties = ctx.vkGetPhysicalDeviceMemoryProperties;
+		vulkanFunctions.vkAllocateMemory = ctx.vkAllocateMemory;
+		vulkanFunctions.vkFreeMemory = ctx.vkFreeMemory;
+		vulkanFunctions.vkMapMemory = ctx.vkMapMemory;
+		vulkanFunctions.vkUnmapMemory = ctx.vkUnmapMemory;
+		vulkanFunctions.vkFlushMappedMemoryRanges = ctx.vkFlushMappedMemoryRanges;
+		vulkanFunctions.vkInvalidateMappedMemoryRanges = ctx.vkInvalidateMappedMemoryRanges;
+		vulkanFunctions.vkBindBufferMemory = ctx.vkBindBufferMemory;
+		vulkanFunctions.vkBindImageMemory = ctx.vkBindImageMemory;
+		vulkanFunctions.vkGetBufferMemoryRequirements = ctx.vkGetBufferMemoryRequirements;
+		vulkanFunctions.vkGetImageMemoryRequirements = ctx.vkGetImageMemoryRequirements;
+		vulkanFunctions.vkCreateBuffer = ctx.vkCreateBuffer;
+		vulkanFunctions.vkDestroyBuffer = ctx.vkDestroyBuffer;
+		vulkanFunctions.vkCreateImage = ctx.vkCreateImage;
+		vulkanFunctions.vkDestroyImage = ctx.vkDestroyImage;
+		vulkanFunctions.vkCmdCopyBuffer = ctx.vkCmdCopyBuffer;
 		allocatorInfo.pVulkanFunctions = &vulkanFunctions;
 
 		vmaCreateAllocator(&allocatorInfo, &impl->allocator);
