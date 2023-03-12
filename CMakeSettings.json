@@ -31,6 +31,11 @@
           "name": "VUK_BUILD_TESTS",
           "value": "True",
           "type": "BOOL"
+        },
+        {
+          "name": "VUK_LINK_TO_LOADER",
+          "value": "False",
+          "type": "BOOL"
         }
       ]
     },
@@ -114,6 +119,11 @@
         },
         {
           "name": "VUK_USE_DXC",
+          "value": "False",
+          "type": "BOOL"
+        },
+        {
+          "name": "VUK_LINK_TO_LOADER",
           "value": "False",
           "type": "BOOL"
         }

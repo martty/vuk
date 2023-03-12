@@ -126,6 +126,7 @@ namespace vuk {
 			imgui_data.font_texture.image.reset();
 			superframe_resource.reset();
 			context.reset();
+			auto vkDestroySurfaceKHR = (PFN_vkDestroySurfaceKHR)vkbinstance.fp_vkGetInstanceProcAddr(vkbinstance.instance, "vkDestroySurfaceKHR");
 			vkDestroySurfaceKHR(vkbinstance.instance, surface, nullptr);
 			destroy_window_glfw(window);
 			vkb::destroy_device(vkbdevice);
@@ -226,8 +227,8 @@ namespace vuk {
 		auto transfer_queue_family_index = vkbdevice.get_queue_index(vkb::QueueType::transfer).value();
 		device = vkbdevice.device;
 		ContextCreateParameters::FunctionPointers fps;
-		fps.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
-		fps.vkGetDeviceProcAddr = vkGetDeviceProcAddr;
+		fps.vkGetInstanceProcAddr = vkbinstance.fp_vkGetInstanceProcAddr;
+		fps.vkGetDeviceProcAddr = vkbinstance.fp_vkGetDeviceProcAddr;
 		context.emplace(ContextCreateParameters{ instance,
 		                                         device,
 		                                         physical_device,
