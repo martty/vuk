@@ -44,7 +44,7 @@ namespace vuk {
 		dpci.pPoolSizes = descriptor_counts.data();
 		dpci.poolSizeCount = used_idx;
 		VkDescriptorPool pool;
-		vkCreateDescriptorPool(ctx.device, &dpci, nullptr, &pool);
+		ctx.vkCreateDescriptorPool(ctx.device, &dpci, nullptr, &pool);
 		impl->pools.emplace_back(pool);
 
 		VkDescriptorSetAllocateInfo dsai{ .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
@@ -54,7 +54,7 @@ namespace vuk {
 		dsai.pSetLayouts = layouts.data();
 		// allocate all the descriptorsets
 		std::vector<VkDescriptorSet> sets(dsai.descriptorSetCount);
-		vkAllocateDescriptorSets(ctx.device, &dsai, sets.data());
+		ctx.vkAllocateDescriptorSets(ctx.device, &dsai, sets.data());
 		impl->free_sets.enqueue_bulk(sets.data(), sets.size());
 		impl->sets_allocated = dpci.maxSets;
 
@@ -73,9 +73,9 @@ namespace vuk {
 		impl->free_sets.enqueue(ds);
 	}
 
-	void DescriptorPool::destroy(VkDevice device) const {
+	void DescriptorPool::destroy(Context& ctx, VkDevice device) const {
 		for (auto& p : impl->pools) {
-			vkDestroyDescriptorPool(device, p, nullptr);
+			ctx.vkDestroyDescriptorPool(device, p, nullptr);
 		}
 	}
 

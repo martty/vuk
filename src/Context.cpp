@@ -26,6 +26,64 @@
 #include "vuk/Query.hpp"
 #include "vuk/RenderGraph.hpp"
 
+namespace {
+	/* TODO: I am currently unaware of any use case that would make supporting static loading worthwhile
+	void load_pfns_static(vuk::ContextCreateParameters::FunctionPointers& pfns) {
+#define VUK_X(name)                                                                                                                                            \
+	if (pfns.name == nullptr) {                                                                                                                                  \
+	  pfns.name = (PFN_##name)name;                                                                                                                              \
+	}
+#define VUK_Y(name)                                                                                                                                            \
+	if (pfns.name == nullptr) {                                                                                                                                  \
+	  pfns.name = (PFN_##name)name;                                                                                                                              \
+	}
+#include "vuk/VulkanPFNOptional.hpp"
+#include "vuk/VulkanPFNRequired.hpp"
+#undef VUK_X
+#undef VUK_Y
+	}*/
+
+	void load_pfns_dynamic(VkInstance instance, VkDevice device, vuk::ContextCreateParameters::FunctionPointers& pfns) {
+#define VUK_X(name)                                                                                                                                            \
+	if (pfns.name == nullptr) {                                                                                                                                  \
+		pfns.name = (PFN_##name)pfns.vkGetDeviceProcAddr(device, #name);                                                                                           \
+	}
+#define VUK_Y(name)                                                                                                                                            \
+	if (pfns.name == nullptr) {                                                                                                                                  \
+		pfns.name = (PFN_##name)pfns.vkGetInstanceProcAddr(instance, #name);                                                                                       \
+	}
+#include "vuk/VulkanPFNOptional.hpp"
+#include "vuk/VulkanPFNRequired.hpp"
+#undef VUK_X
+#undef VUK_Y
+	}
+
+	bool check_pfns(vuk::ContextCreateParameters::FunctionPointers& pfns) {
+		bool valid = true;
+#define VUK_X(name) valid = valid && pfns.name;
+#define VUK_Y(name) valid = valid && pfns.name;
+#include "vuk/VulkanPFNRequired.hpp"
+#undef VUK_X
+#undef VUK_Y
+		return valid;
+	}
+
+	bool load_pfns(vuk::ContextCreateParameters params, vuk::ContextCreateParameters::FunctionPointers& pfns) {
+		// PFN loading
+		// if the user passes in PFNs, those will be used, always
+		if (check_pfns(pfns)) {
+			return true;
+		}
+		// we don't have all the PFNs, so we will load them if this is allowed
+		if (pfns.vkGetInstanceProcAddr && pfns.vkGetDeviceProcAddr && params.allow_dynamic_loading_of_vk_function_pointers) {
+			load_pfns_dynamic(params.instance, params.device, pfns);
+			return check_pfns(pfns);
+		} else {
+			return false;
+		}
+	}
+} // namespace
+
 namespace vuk {
 	Context::Context(ContextCreateParameters params) :
 	    ContextCreateParameters::FunctionPointers(params.pointers),
@@ -35,6 +93,11 @@ namespace vuk {
 	    graphics_queue_family_index(params.graphics_queue_family_index),
 	    compute_queue_family_index(params.compute_queue_family_index),
 	    transfer_queue_family_index(params.transfer_queue_family_index) {
+
+		// TODO: conversion to static factory fn
+		bool pfn_load_success = load_pfns(params, *this);
+		assert(pfn_load_success);
+
 		auto queueSubmit2KHR = (PFN_vkQueueSubmit2KHR)vkGetDeviceProcAddr(device, "vkQueueSubmit2KHR");
 		assert(queueSubmit2KHR != nullptr);
 
@@ -62,13 +125,13 @@ namespace vuk {
 		{
 			TimelineSemaphore ts;
 			impl->device_vk_resource->allocate_timeline_semaphores(std::span{ &ts, 1 }, {});
-			dedicated_graphics_queue.emplace(queueSubmit2KHR, params.graphics_queue, params.graphics_queue_family_index, ts);
+			dedicated_graphics_queue.emplace(this->vkQueueSubmit, queueSubmit2KHR, params.graphics_queue, params.graphics_queue_family_index, ts);
 			graphics_queue = &dedicated_graphics_queue.value();
 		}
 		if (dedicated_compute_queue_) {
 			TimelineSemaphore ts;
 			impl->device_vk_resource->allocate_timeline_semaphores(std::span{ &ts, 1 }, {});
-			dedicated_compute_queue.emplace(queueSubmit2KHR, params.compute_queue, params.compute_queue_family_index, ts);
+			dedicated_compute_queue.emplace(this->vkQueueSubmit, queueSubmit2KHR, params.compute_queue, params.compute_queue_family_index, ts);
 			compute_queue = &dedicated_compute_queue.value();
 		} else {
 			compute_queue = graphics_queue;
@@ -76,18 +139,18 @@ namespace vuk {
 		if (dedicated_transfer_queue_) {
 			TimelineSemaphore ts;
 			impl->device_vk_resource->allocate_timeline_semaphores(std::span{ &ts, 1 }, {});
-			dedicated_transfer_queue.emplace(queueSubmit2KHR, params.transfer_queue, params.transfer_queue_family_index, ts);
+			dedicated_transfer_queue.emplace(this->vkQueueSubmit, queueSubmit2KHR, params.transfer_queue, params.transfer_queue_family_index, ts);
 			transfer_queue = &dedicated_transfer_queue.value();
 		} else {
 			transfer_queue = compute_queue ? compute_queue : graphics_queue;
 		}
 
-		vkGetPhysicalDeviceProperties(physical_device, &physical_device_properties);
+		this->vkGetPhysicalDeviceProperties(physical_device, &physical_device_properties);
 		min_buffer_alignment =
 		    std::max(physical_device_properties.limits.minUniformBufferOffsetAlignment, physical_device_properties.limits.minStorageBufferOffsetAlignment);
 		VkPhysicalDeviceProperties2 prop2{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2 };
 		prop2.pNext = &rt_properties;
-		vkGetPhysicalDeviceProperties2(physical_device, &prop2);
+		this->vkGetPhysicalDeviceProperties2(physical_device, &prop2);
 	}
 
 	Context::Context(Context&& o) noexcept : impl(std::exchange(o.impl, nullptr)) {
@@ -165,7 +228,7 @@ namespace vuk {
 	}
 
 	bool Context::debug_enabled() const {
-		return vkSetDebugUtilsObjectNameEXT != nullptr;
+		return this->vkSetDebugUtilsObjectNameEXT != nullptr;
 	}
 
 	void Context::set_name(const Texture& tex, Name name) {
@@ -181,13 +244,13 @@ namespace vuk {
 		VkDebugUtilsLabelEXT label = { .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT };
 		label.pLabelName = name.c_str();
 		::memcpy(label.color, color.data(), sizeof(float) * 4);
-		vkCmdBeginDebugUtilsLabelEXT(cb, &label);
+		this->vkCmdBeginDebugUtilsLabelEXT(cb, &label);
 	}
 
 	void Context::end_region(const VkCommandBuffer& cb) {
 		if (!debug_enabled())
 			return;
-		vkCmdEndDebugUtilsLabelEXT(cb);
+		this->vkCmdEndDebugUtilsLabelEXT(cb);
 	}
 
 	Result<void> Context::submit_graphics(std::span<VkSubmitInfo> sis, VkFence fence) {
@@ -379,7 +442,7 @@ namespace vuk {
 		moduleCreateInfo.codeSize = size * sizeof(uint32_t);
 		moduleCreateInfo.pCode = spirv_ptr;
 		VkShaderModule sm;
-		vkCreateShaderModule(device, &moduleCreateInfo, nullptr, &sm);
+		this->vkCreateShaderModule(device, &moduleCreateInfo, nullptr, &sm);
 		std::string name = "ShaderModule: " + cinfo.filename;
 		set_name(sm, Name(name));
 		return { sm, p, stage };
@@ -456,17 +519,17 @@ namespace vuk {
 
 	bool Context::load_pipeline_cache(std::span<std::byte> data) {
 		VkPipelineCacheCreateInfo pcci{ .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO, .initialDataSize = data.size_bytes(), .pInitialData = data.data() };
-		vkDestroyPipelineCache(device, impl->vk_pipeline_cache, nullptr);
-		vkCreatePipelineCache(device, &pcci, nullptr, &impl->vk_pipeline_cache);
+		this->vkDestroyPipelineCache(device, impl->vk_pipeline_cache, nullptr);
+		this->vkCreatePipelineCache(device, &pcci, nullptr, &impl->vk_pipeline_cache);
 		return true;
 	}
 
 	std::vector<std::byte> Context::save_pipeline_cache() {
 		size_t size;
 		std::vector<std::byte> data;
-		vkGetPipelineCacheData(device, impl->vk_pipeline_cache, &size, nullptr);
+		this->vkGetPipelineCacheData(device, impl->vk_pipeline_cache, &size, nullptr);
 		data.resize(size);
-		vkGetPipelineCacheData(device, impl->vk_pipeline_cache, &size, data.data());
+		this->vkGetPipelineCacheData(device, impl->vk_pipeline_cache, &size, data.data());
 		return data;
 	}
 
@@ -514,7 +577,7 @@ namespace vuk {
 
 	DescriptorSetLayoutAllocInfo Context::create(const create_info_t<DescriptorSetLayoutAllocInfo>& cinfo) {
 		DescriptorSetLayoutAllocInfo ret;
-		vkCreateDescriptorSetLayout(device, &cinfo.dslci, nullptr, &ret.layout);
+		this->vkCreateDescriptorSetLayout(device, &cinfo.dslci, nullptr, &ret.layout);
 		for (size_t i = 0; i < cinfo.bindings.size(); i++) {
 			auto& b = cinfo.bindings[i];
 			// if this is not a variable count binding, add it to the descriptor count
@@ -532,7 +595,7 @@ namespace vuk {
 
 	VkPipelineLayout Context::create(const create_info_t<VkPipelineLayout>& cinfo) {
 		VkPipelineLayout pl;
-		vkCreatePipelineLayout(device, &cinfo.plci, nullptr, &pl);
+		this->vkCreatePipelineLayout(device, &cinfo.plci, nullptr, &pl);
 		return pl;
 	}
 
@@ -580,7 +643,7 @@ namespace vuk {
 		sci.source = std::move(source);
 		auto sm = impl->shader_modules.remove(sci);
 		if (sm) {
-			vkDestroyShaderModule(device, sm->shader_module, nullptr);
+			this->vkDestroyShaderModule(device, sm->shader_module, nullptr);
 		}
 		return impl->shader_modules.acquire(sci);
 	}
@@ -611,36 +674,36 @@ namespace vuk {
 	}
 
 	void Context::destroy(const DescriptorPool& dp) {
-		dp.destroy(device);
+		dp.destroy(*this, device);
 	}
 
 	void Context::destroy(const PipelineInfo& pi) {
-		vkDestroyPipeline(device, pi.pipeline, nullptr);
+		this->vkDestroyPipeline(device, pi.pipeline, nullptr);
 	}
 
 	void Context::destroy(const ComputePipelineInfo& pi) {
-		vkDestroyPipeline(device, pi.pipeline, nullptr);
+		this->vkDestroyPipeline(device, pi.pipeline, nullptr);
 	}
 
 	void Context::destroy(const RayTracingPipelineInfo& pi) {
 		impl->device_vk_resource->deallocate_buffers(std::span{ &pi.sbt, 1 });
-		vkDestroyPipeline(device, pi.pipeline, nullptr);
+		this->vkDestroyPipeline(device, pi.pipeline, nullptr);
 	}
 
 	void Context::destroy(const ShaderModule& sm) {
-		vkDestroyShaderModule(device, sm.shader_module, nullptr);
+		this->vkDestroyShaderModule(device, sm.shader_module, nullptr);
 	}
 
 	void Context::destroy(const DescriptorSetLayoutAllocInfo& ds) {
-		vkDestroyDescriptorSetLayout(device, ds.layout, nullptr);
+		this->vkDestroyDescriptorSetLayout(device, ds.layout, nullptr);
 	}
 
 	void Context::destroy(const VkPipelineLayout& pl) {
-		vkDestroyPipelineLayout(device, pl, nullptr);
+		this->vkDestroyPipelineLayout(device, pl, nullptr);
 	}
 
 	void Context::destroy(const VkRenderPass& rp) {
-		vkDestroyRenderPass(device, rp, nullptr);
+		this->vkDestroyRenderPass(device, rp, nullptr);
 	}
 
 	void Context::destroy(const DescriptorSet&) {
@@ -648,11 +711,11 @@ namespace vuk {
 	}
 
 	void Context::destroy(const VkFramebuffer& fb) {
-		vkDestroyFramebuffer(device, fb, nullptr);
+		this->vkDestroyFramebuffer(device, fb, nullptr);
 	}
 
 	void Context::destroy(const Sampler& sa) {
-		vkDestroySampler(device, sa.payload, nullptr);
+		this->vkDestroySampler(device, sa.payload, nullptr);
 	}
 
 	void Context::destroy(const PipelineBaseInfo& pbi) {
@@ -661,16 +724,16 @@ namespace vuk {
 
 	Context::~Context() {
 		if (impl) {
-			vkDeviceWaitIdle(device);
+			this->vkDeviceWaitIdle(device);
 
 			for (auto& s : impl->swapchains) {
 				for (auto& swiv : s.image_views) {
-					vkDestroyImageView(device, swiv.payload, nullptr);
+					this->vkDestroyImageView(device, swiv.payload, nullptr);
 				}
-				vkDestroySwapchainKHR(device, s.swapchain, nullptr);
+				this->vkDestroySwapchainKHR(device, s.swapchain, nullptr);
 			}
 
-			vkDestroyPipelineCache(device, impl->vk_pipeline_cache, nullptr);
+			this->vkDestroyPipelineCache(device, impl->vk_pipeline_cache, nullptr);
 
 			if (dedicated_graphics_queue) {
 				impl->device_vk_resource->deallocate_timeline_semaphores(std::span{ &dedicated_graphics_queue->get_submit_sync(), 1 });
@@ -711,7 +774,7 @@ namespace vuk {
 			transfer_lock = std::unique_lock{ transfer_queue->get_queue_lock() };
 		}
 
-		vkDeviceWaitIdle(device);
+		this->vkDeviceWaitIdle(device);
 	}
 
 	void Context::collect(uint64_t frame) {
@@ -744,7 +807,7 @@ namespace vuk {
 	}
 
 	void Context::commit_persistent_descriptorset(PersistentDescriptorSet& array) {
-		vkUpdateDescriptorSets(device, (uint32_t)array.pending_writes.size(), array.pending_writes.data(), 0, nullptr);
+		this->vkUpdateDescriptorSets(device, (uint32_t)array.pending_writes.size(), array.pending_writes.data(), 0, nullptr);
 		array.pending_writes.clear();
 	}
 
@@ -758,7 +821,7 @@ namespace vuk {
 
 	VkRenderPass Context::create(const create_info_t<VkRenderPass>& cinfo) {
 		VkRenderPass rp;
-		vkCreateRenderPass(device, &cinfo, nullptr, &rp);
+		this->vkCreateRenderPass(device, &cinfo, nullptr, &rp);
 		return rp;
 	}
 
@@ -1022,7 +1085,7 @@ namespace vuk {
 		gpci.pDynamicState = &dynamic_state;
 
 		VkPipeline pipeline;
-		VkResult res = vkCreateGraphicsPipelines(device, impl->vk_pipeline_cache, 1, &gpci, nullptr, &pipeline);
+		VkResult res = this->vkCreateGraphicsPipelines(device, impl->vk_pipeline_cache, 1, &gpci, nullptr, &pipeline);
 		assert(res == VK_SUCCESS);
 		set_name(pipeline, cinfo.base->pipeline_name);
 		return { cinfo.base, pipeline, gpci.layout, cinfo.base->layout_info };
@@ -1035,7 +1098,7 @@ namespace vuk {
 		cpci.stage = cinfo.base->psscis[0];
 
 		VkPipeline pipeline;
-		VkResult res = vkCreateComputePipelines(device, impl->vk_pipeline_cache, 1, &cpci, nullptr, &pipeline);
+		VkResult res = this->vkCreateComputePipelines(device, impl->vk_pipeline_cache, 1, &cpci, nullptr, &pipeline);
 		assert(res == VK_SUCCESS);
 		set_name(pipeline, cinfo.base->pipeline_name);
 		return { { cinfo.base, pipeline, cpci.layout, cinfo.base->layout_info }, cinfo.base->reflection_info.local_size };
@@ -1093,7 +1156,7 @@ namespace vuk {
 		cpci.stageCount = (uint32_t)cinfo.base->psscis.size();
 
 		VkPipeline pipeline;
-		VkResult res = vkCreateRayTracingPipelinesKHR(device, {}, impl->vk_pipeline_cache, 1, &cpci, nullptr, &pipeline);
+		VkResult res = this->vkCreateRayTracingPipelinesKHR(device, {}, impl->vk_pipeline_cache, 1, &cpci, nullptr, &pipeline);
 		assert(res == VK_SUCCESS);
 		set_name(pipeline, cinfo.base->pipeline_name);
 
@@ -1119,7 +1182,7 @@ namespace vuk {
 		// Get the shader group handles
 		uint32_t dataSize = handleCount * handleSize;
 		std::vector<uint8_t> handles(dataSize);
-		auto result = vkGetRayTracingShaderGroupHandlesKHR(device, pipeline, 0, handleCount, dataSize, handles.data());
+		auto result = this->vkGetRayTracingShaderGroupHandlesKHR(device, pipeline, 0, handleCount, dataSize, handles.data());
 		assert(result == VK_SUCCESS);
 
 		VkDeviceSize sbt_size = rgen_region.size + miss_region.size + hit_region.size + call_region.size;
@@ -1168,7 +1231,7 @@ namespace vuk {
 
 	Sampler Context::create(const create_info_t<Sampler>& cinfo) {
 		VkSampler s;
-		vkCreateSampler(device, (VkSamplerCreateInfo*)&cinfo, nullptr, &s);
+		this->vkCreateSampler(device, (VkSamplerCreateInfo*)&cinfo, nullptr, &s);
 		return wrap(s);
 	}
 
@@ -1243,14 +1306,14 @@ namespace vuk {
 			if (pool.count == 0) {
 				continue;
 			}
-			auto result = vkGetQueryPoolResults(device,
-			                                    pool.pool,
-			                                    0,
-			                                    pool.count,
-			                                    sizeof(uint64_t) * pool.count,
-			                                    host_values.data(),
-			                                    sizeof(uint64_t),
-			                                    VkQueryResultFlagBits::VK_QUERY_RESULT_64_BIT | VkQueryResultFlagBits::VK_QUERY_RESULT_WAIT_BIT);
+			auto result = this->vkGetQueryPoolResults(device,
+			                                        pool.pool,
+			                                        0,
+			                                        pool.count,
+			                                        sizeof(uint64_t) * pool.count,
+			                                        host_values.data(),
+			                                        sizeof(uint64_t),
+			                                        VkQueryResultFlagBits::VK_QUERY_RESULT_64_BIT | VkQueryResultFlagBits::VK_QUERY_RESULT_WAIT_BIT);
 			if (result != VK_SUCCESS) {
 				return { expected_error, AllocateException{ result } };
 			}

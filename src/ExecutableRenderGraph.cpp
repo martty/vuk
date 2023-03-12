@@ -54,7 +54,7 @@ namespace vuk {
 		}
 	}
 
-	void begin_renderpass(vuk::RenderPassInfo& rpass, VkCommandBuffer& cbuf, bool use_secondary_command_buffers) {
+	void begin_renderpass(Context& ctx, vuk::RenderPassInfo& rpass, VkCommandBuffer& cbuf, bool use_secondary_command_buffers) {
 		VkRenderPassBeginInfo rbi{ .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
 		rbi.renderPass = rpass.handle;
 		rbi.framebuffer = rpass.framebuffer;
@@ -69,7 +69,7 @@ namespace vuk {
 		rbi.pClearValues = clears.data();
 		rbi.clearValueCount = (uint32_t)clears.size();
 
-		vkCmdBeginRenderPass(cbuf, &rbi, use_secondary_command_buffers ? VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS : VK_SUBPASS_CONTENTS_INLINE);
+		ctx.vkCmdBeginRenderPass(cbuf, &rbi, use_secondary_command_buffers ? VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS : VK_SUBPASS_CONTENTS_INLINE);
 	}
 
 	[[nodiscard]] bool resolve_image_barrier(const Context& ctx, ImageBarrier& dep, const AttachmentInfo& bound, vuk::DomainFlagBits current_domain) {
@@ -166,12 +166,12 @@ namespace vuk {
 		VkCommandBuffer cbuf = hl_cbuf->command_buffer;
 
 		VkCommandBufferBeginInfo cbi{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
-		vkBeginCommandBuffer(cbuf, &cbi);
+		ctx.vkBeginCommandBuffer(cbuf, &cbi);
 
 		uint64_t command_buffer_index = rpis[0].command_buffer_index;
 		for (auto& rpass : rpis) {
 			if (rpass.command_buffer_index != command_buffer_index) { // end old cb and start new one
-				if (auto result = vkEndCommandBuffer(cbuf); result != VK_SUCCESS) {
+				if (auto result = ctx.vkEndCommandBuffer(cbuf); result != VK_SUCCESS) {
 					return { expected_error, VkException{ result } };
 				}
 
@@ -181,7 +181,7 @@ namespace vuk {
 				cbuf = hl_cbuf->command_buffer;
 
 				VkCommandBufferBeginInfo cbi{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
-				vkBeginCommandBuffer(cbuf, &cbi);
+				ctx.vkBeginCommandBuffer(cbuf, &cbi);
 			}
 
 			bool use_secondary_command_buffers = rpass.subpasses[0].use_secondary_command_buffers;
@@ -196,14 +196,14 @@ namespace vuk {
 				if (!resolve_image_barrier(ctx, dep, bound, domain)) {
 					continue;
 				}
-				vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
+				ctx.vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
 			}
 			for (const auto& dep : rpass.pre_mem_barriers) {
-				vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 1, &dep.barrier, 0, nullptr, 0, nullptr);
+				ctx.vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 1, &dep.barrier, 0, nullptr, 0, nullptr);
 			}
 
 			if (rpass.handle != VK_NULL_HANDLE) {
-				begin_renderpass(rpass, cbuf, use_secondary_command_buffers);
+				begin_renderpass(ctx, rpass, cbuf, use_secondary_command_buffers);
 			}
 
 			for (auto& att : rpass.attachments) {
@@ -225,10 +225,10 @@ namespace vuk {
 						if (!resolve_image_barrier(ctx, dep, bound, domain)) {
 							continue;
 						}
-						vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
+						ctx.vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
 					}
 					for (auto& dep : sp.pre_mem_barriers) {
-						vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 1, &dep.barrier, 0, nullptr, 0, nullptr);
+						ctx.vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 1, &dep.barrier, 0, nullptr, 0, nullptr);
 					}
 				} else {
 					assert(sp.pre_barriers.empty());
@@ -257,7 +257,7 @@ namespace vuk {
 				}
 				if (i < rpass.subpasses.size() - 1 && rpass.handle != VK_NULL_HANDLE) {
 					use_secondary_command_buffers = rpass.subpasses[i + 1].use_secondary_command_buffers;
-					vkCmdNextSubpass(cbuf, use_secondary_command_buffers ? VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS : VK_SUBPASS_CONTENTS_INLINE);
+					ctx.vkCmdNextSubpass(cbuf, use_secondary_command_buffers ? VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS : VK_SUBPASS_CONTENTS_INLINE);
 				}
 
 				// insert image post-barriers
@@ -267,10 +267,10 @@ namespace vuk {
 						if (!resolve_image_barrier(ctx, dep, bound, domain)) {
 							continue;
 						}
-						vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
+						ctx.vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
 					}
 					for (const auto& dep : sp.post_mem_barriers) {
-						vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 1, &dep.barrier, 0, nullptr, 0, nullptr);
+						ctx.vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 1, &dep.barrier, 0, nullptr, 0, nullptr);
 					}
 				} else {
 					assert(sp.post_barriers.empty());
@@ -281,21 +281,21 @@ namespace vuk {
 				ctx.end_region(cbuf);
 			}
 			if (rpass.handle != VK_NULL_HANDLE) {
-				vkCmdEndRenderPass(cbuf);
+				ctx.vkCmdEndRenderPass(cbuf);
 			}
 			for (auto dep : rpass.post_barriers) {
 				auto& bound = impl->bound_attachments[dep.image];
 				if (!resolve_image_barrier(ctx, dep, bound, domain)) {
 					continue;
 				}
-				vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
+				ctx.vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 0, nullptr, 0, nullptr, 1, &dep.barrier);
 			}
 			for (const auto& dep : rpass.post_mem_barriers) {
-				vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 1, &dep.barrier, 0, nullptr, 0, nullptr);
+				ctx.vkCmdPipelineBarrier(cbuf, (VkPipelineStageFlags)dep.src, (VkPipelineStageFlags)dep.dst, 0, 1, &dep.barrier, 0, nullptr, 0, nullptr);
 			}
 		}
 
-		if (auto result = vkEndCommandBuffer(cbuf); result != VK_SUCCESS) {
+		if (auto result = ctx.vkEndCommandBuffer(cbuf); result != VK_SUCCESS) {
 			return { expected_error, VkException{ result } };
 		}
 

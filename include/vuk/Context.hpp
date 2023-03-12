@@ -39,24 +39,26 @@ namespace vuk {
 		/// @brief Optional transfer queue family index
 		uint32_t transfer_queue_family_index = VK_QUEUE_FAMILY_IGNORED;
 
+		#define VUK_X(name) PFN_##name name = nullptr;
+		#define VUK_Y(name) PFN_##name name = nullptr;
+		/// @brief User provided function pointers. If you want dynamic loading, you must set vkGetInstanceProcAddr & vkGetDeviceProcAddr
 		struct FunctionPointers {
-			PFN_vkSetDebugUtilsObjectNameEXT vkSetDebugUtilsObjectNameEXT = nullptr;
-			PFN_vkCmdBeginDebugUtilsLabelEXT vkCmdBeginDebugUtilsLabelEXT = nullptr;
-			PFN_vkCmdEndDebugUtilsLabelEXT vkCmdEndDebugUtilsLabelEXT = nullptr;
-
-			PFN_vkCmdBuildAccelerationStructuresKHR vkCmdBuildAccelerationStructuresKHR = nullptr;
-			PFN_vkGetAccelerationStructureBuildSizesKHR vkGetAccelerationStructureBuildSizesKHR = nullptr;
-			PFN_vkCmdTraceRaysKHR vkCmdTraceRaysKHR = nullptr;
-			PFN_vkCreateAccelerationStructureKHR vkCreateAccelerationStructureKHR = nullptr;
-			PFN_vkDestroyAccelerationStructureKHR vkDestroyAccelerationStructureKHR = nullptr;
-			PFN_vkGetRayTracingShaderGroupHandlesKHR vkGetRayTracingShaderGroupHandlesKHR = nullptr;
-			PFN_vkCreateRayTracingPipelinesKHR vkCreateRayTracingPipelinesKHR = nullptr;
+			PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = nullptr;
+			PFN_vkGetDeviceProcAddr vkGetDeviceProcAddr = nullptr;
+			#include "vuk/VulkanPFNRequired.hpp"
+			#include "vuk/VulkanPFNOptional.hpp"
 		} pointers;
+		#undef VUK_X
+		#undef VUK_Y
+
+		/// @brief Allow vuk to load missing required and optional function pointers dynamically
+		/// If this is false, then you must fill in all required function pointers
+		bool allow_dynamic_loading_of_vk_function_pointers = true;
 	};
 
 	/// @brief Abstraction of a device queue in Vulkan
 	struct Queue {
-		Queue(PFN_vkQueueSubmit2KHR fn, VkQueue queue, uint32_t queue_family_index, TimelineSemaphore ts);
+		Queue(PFN_vkQueueSubmit fn1, PFN_vkQueueSubmit2KHR fn2, VkQueue queue, uint32_t queue_family_index, TimelineSemaphore ts);
 		~Queue();
 
 		Queue(const Queue&) = delete;
@@ -273,7 +275,7 @@ namespace vuk {
 			info.objectType = VK_OBJECT_TYPE_PIPELINE;
 		}
 		info.objectHandle = reinterpret_cast<uint64_t>(t);
-		vkSetDebugUtilsObjectNameEXT(device, &info);
+		this->vkSetDebugUtilsObjectNameEXT(device, &info);
 	}
 } // namespace vuk
 

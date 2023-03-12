@@ -60,7 +60,7 @@ namespace vuk {
 		allocatorInfo.pVulkanFunctions = &vulkanFunctions;
 
 		vmaCreateAllocator(&allocatorInfo, &impl->allocator);
-		vkGetPhysicalDeviceProperties(ctx.physical_device, &impl->properties);
+		ctx.vkGetPhysicalDeviceProperties(ctx.physical_device, &impl->properties);
 
 		if (ctx.transfer_queue_family_index != ctx.graphics_queue_family_index && ctx.compute_queue_family_index != ctx.graphics_queue_family_index) {
 			impl->all_queue_families = { ctx.graphics_queue_family_index, ctx.compute_queue_family_index, ctx.transfer_queue_family_index };
@@ -82,7 +82,7 @@ namespace vuk {
 	Result<void, AllocateException> DeviceVkResource::allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) {
 		VkSemaphoreCreateInfo sci{ .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
-			VkResult res = vkCreateSemaphore(device, &sci, nullptr, &dst[i]);
+			VkResult res = ctx->vkCreateSemaphore(device, &sci, nullptr, &dst[i]);
 			if (res != VK_SUCCESS) {
 				deallocate_semaphores({ dst.data(), (uint64_t)i });
 				return { expected_error, AllocateException{ res } };
@@ -94,7 +94,7 @@ namespace vuk {
 	void DeviceVkResource::deallocate_semaphores(std::span<const VkSemaphore> src) {
 		for (auto& v : src) {
 			if (v != VK_NULL_HANDLE) {
-				vkDestroySemaphore(device, v, nullptr);
+				ctx->vkDestroySemaphore(device, v, nullptr);
 			}
 		}
 	}
@@ -102,7 +102,7 @@ namespace vuk {
 	Result<void, AllocateException> DeviceVkResource::allocate_fences(std::span<VkFence> dst, SourceLocationAtFrame loc) {
 		VkFenceCreateInfo sci{ .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
-			VkResult res = vkCreateFence(device, &sci, nullptr, &dst[i]);
+			VkResult res = ctx->vkCreateFence(device, &sci, nullptr, &dst[i]);
 			if (res != VK_SUCCESS) {
 				deallocate_fences({ dst.data(), (uint64_t)i });
 				return { expected_error, AllocateException{ res } };
@@ -114,7 +114,7 @@ namespace vuk {
 	void DeviceVkResource::deallocate_fences(std::span<const VkFence> src) {
 		for (auto& v : src) {
 			if (v != VK_NULL_HANDLE) {
-				vkDestroyFence(device, v, nullptr);
+				ctx->vkDestroyFence(device, v, nullptr);
 			}
 		}
 	}
@@ -132,7 +132,7 @@ namespace vuk {
 			cbai.commandPool = ci.command_pool.command_pool;
 			cbai.level = ci.level;
 
-			VkResult res = vkAllocateCommandBuffers(device, &cbai, &dst[i].command_buffer);
+			VkResult res = ctx->vkAllocateCommandBuffers(device, &cbai, &dst[i].command_buffer);
 			if (res != VK_SUCCESS) {
 				return { expected_error, AllocateException{ res } };
 			}
@@ -144,7 +144,7 @@ namespace vuk {
 
 	void DeviceVkResource::deallocate_command_buffers(std::span<const CommandBufferAllocation> dst) {
 		for (auto& c : dst) {
-			vkFreeCommandBuffers(device, c.command_pool.command_pool, 1, &c.command_buffer);
+			ctx->vkFreeCommandBuffers(device, c.command_pool.command_pool, 1, &c.command_buffer);
 		}
 	}
 
@@ -152,7 +152,7 @@ namespace vuk {
 	DeviceVkResource::allocate_command_pools(std::span<CommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
-			VkResult res = vkCreateCommandPool(device, &cis[i], nullptr, &dst[i].command_pool);
+			VkResult res = ctx->vkCreateCommandPool(device, &cis[i], nullptr, &dst[i].command_pool);
 			dst[i].queue_family_index = cis[i].queueFamilyIndex;
 			if (res != VK_SUCCESS) {
 				deallocate_command_pools({ dst.data(), (uint64_t)i });
@@ -165,7 +165,7 @@ namespace vuk {
 	void DeviceVkResource::deallocate_command_pools(std::span<const CommandPool> src) {
 		for (auto& v : src) {
 			if (v.command_pool != VK_NULL_HANDLE) {
-				vkDestroyCommandPool(device, v.command_pool, nullptr);
+				ctx->vkDestroyCommandPool(device, v.command_pool, nullptr);
 			}
 		}
 	}
@@ -174,7 +174,7 @@ namespace vuk {
 	DeviceVkResource::allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
-			VkResult res = vkCreateFramebuffer(device, &cis[i], nullptr, &dst[i]);
+			VkResult res = ctx->vkCreateFramebuffer(device, &cis[i], nullptr, &dst[i]);
 			if (res != VK_SUCCESS) {
 				deallocate_framebuffers({ dst.data(), (uint64_t)i });
 				return { expected_error, AllocateException{ res } };
@@ -186,7 +186,7 @@ namespace vuk {
 	void DeviceVkResource::deallocate_framebuffers(std::span<const VkFramebuffer> src) {
 		for (auto& v : src) {
 			if (v != VK_NULL_HANDLE) {
-				vkDestroyFramebuffer(device, v, nullptr);
+				ctx->vkDestroyFramebuffer(device, v, nullptr);
 			}
 		}
 	}
@@ -216,7 +216,7 @@ namespace vuk {
 				return { expected_error, AllocateException{ res } };
 			}
 			VkBufferDeviceAddressInfo bdai{ VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, nullptr, buffer };
-			uint64_t device_address = vkGetBufferDeviceAddress(device, &bdai);
+			uint64_t device_address = ctx->vkGetBufferDeviceAddress(device, &bdai);
 			dst[i] = Buffer{ allocation, buffer, 0, ci.size, device_address, static_cast<std::byte*>(allocation_info.pMappedData), ci.mem_usage};
 		}
 		return { expected_value };
@@ -271,7 +271,7 @@ namespace vuk {
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
 			VkImageViewCreateInfo ci = cis[i];
 			VkImageView iv;
-			VkResult res = vkCreateImageView(device, &ci, nullptr, &iv);
+			VkResult res = ctx->vkCreateImageView(device, &ci, nullptr, &iv);
 			if (res != VK_SUCCESS) {
 				deallocate_image_views({ dst.data(), (uint64_t)i });
 				return { expected_error, AllocateException{ res } };
@@ -317,7 +317,7 @@ namespace vuk {
 
 			dpci.pPoolSizes = descriptor_counts.data();
 			dpci.poolSizeCount = used_idx;
-			VkResult result = vkCreateDescriptorPool(device, &dpci, nullptr, &tda.backing_pool);
+			VkResult result = ctx->vkCreateDescriptorPool(device, &dpci, nullptr, &tda.backing_pool);
 			if (result != VK_SUCCESS) {
 				deallocate_persistent_descriptor_sets({ dst.data(), (uint64_t)i });
 				return { expected_error, AllocateException{ result } };
@@ -331,7 +331,7 @@ namespace vuk {
 			dsvdcai.pDescriptorCounts = &ci.num_descriptors;
 			dsai.pNext = &dsvdcai;
 
-			vkAllocateDescriptorSets(device, &dsai, &tda.backing_set);
+			ctx->vkAllocateDescriptorSets(device, &dsai, &tda.backing_set);
 			if (result != VK_SUCCESS) {
 				deallocate_persistent_descriptor_sets({ dst.data(), (uint64_t)i });
 				return { expected_error, AllocateException{ result } };
@@ -353,7 +353,7 @@ namespace vuk {
 
 	void DeviceVkResource::deallocate_persistent_descriptor_sets(std::span<const PersistentDescriptorSet> src) {
 		for (auto& v : src) {
-			vkDestroyDescriptorPool(ctx->device, v.backing_pool, nullptr);
+			ctx->vkDestroyDescriptorPool(ctx->device, v.backing_pool, nullptr);
 		}
 	}
 
@@ -404,7 +404,7 @@ namespace vuk {
 					assert(0);
 				}
 			}
-			vkUpdateDescriptorSets(device, j, writes.data(), 0, nullptr);
+			ctx->vkUpdateDescriptorSets(device, j, writes.data(), 0, nullptr);
 			dst[i] = { ds, *cinfo.layout_info };
 		}
 		return { expected_value };
@@ -433,7 +433,7 @@ namespace vuk {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
 			VkDescriptorPoolCreateInfo ci = cis[i];
-			VkResult res = vkCreateDescriptorPool(device, &ci, nullptr, &dst[i]);
+			VkResult res = ctx->vkCreateDescriptorPool(device, &ci, nullptr, &dst[i]);
 			if (res != VK_SUCCESS) {
 				deallocate_descriptor_pools({ dst.data(), (uint64_t)i });
 				return { expected_error, AllocateException{ res } };
@@ -444,14 +444,14 @@ namespace vuk {
 
 	void DeviceVkResource::deallocate_descriptor_pools(std::span<const VkDescriptorPool> src) {
 		for (int64_t i = 0; i < (int64_t)src.size(); i++) {
-			vkDestroyDescriptorPool(device, src[i], nullptr);
+			ctx->vkDestroyDescriptorPool(device, src[i], nullptr);
 		}
 	}
 
 	void DeviceVkResource::deallocate_image_views(std::span<const ImageView> src) {
 		for (auto& v : src) {
 			if (v.payload != VK_NULL_HANDLE) {
-				vkDestroyImageView(device, v.payload, nullptr);
+				ctx->vkDestroyImageView(device, v.payload, nullptr);
 			}
 		}
 	}
@@ -460,12 +460,12 @@ namespace vuk {
 	DeviceVkResource::allocate_timestamp_query_pools(std::span<TimestampQueryPool> dst, std::span<const VkQueryPoolCreateInfo> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
-			VkResult res = vkCreateQueryPool(device, &cis[i], nullptr, &dst[i].pool);
+			VkResult res = ctx->vkCreateQueryPool(device, &cis[i], nullptr, &dst[i].pool);
 			if (res != VK_SUCCESS) {
 				deallocate_timestamp_query_pools({ dst.data(), (uint64_t)i });
 				return { expected_error, AllocateException{ res } };
 			}
-			vkResetQueryPool(device, dst[i].pool, 0, cis[i].queryCount);
+			ctx->vkResetQueryPool(device, dst[i].pool, 0, cis[i].queryCount);
 		}
 		return { expected_value };
 	}
@@ -473,7 +473,7 @@ namespace vuk {
 	void DeviceVkResource::deallocate_timestamp_query_pools(std::span<const TimestampQueryPool> src) {
 		for (auto& v : src) {
 			if (v.pool != VK_NULL_HANDLE) {
-				vkDestroyQueryPool(device, v.pool, nullptr);
+				ctx->vkDestroyQueryPool(device, v.pool, nullptr);
 			}
 		}
 	}
@@ -502,7 +502,7 @@ namespace vuk {
 			stci.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
 			stci.initialValue = 0;
 			sci.pNext = &stci;
-			VkResult res = vkCreateSemaphore(device, &sci, nullptr, &dst[i].semaphore);
+			VkResult res = ctx->vkCreateSemaphore(device, &sci, nullptr, &dst[i].semaphore);
 			if (res != VK_SUCCESS) {
 				deallocate_timeline_semaphores({ dst.data(), (uint64_t)i });
 				return { expected_error, AllocateException{ res } };
@@ -515,7 +515,7 @@ namespace vuk {
 	void DeviceVkResource::deallocate_timeline_semaphores(std::span<const TimelineSemaphore> src) {
 		for (auto& v : src) {
 			if (v.semaphore != VK_NULL_HANDLE) {
-				vkDestroySemaphore(device, v.semaphore, nullptr);
+				ctx->vkDestroySemaphore(device, v.semaphore, nullptr);
 				delete v.value;
 			}
 		}
@@ -547,7 +547,7 @@ namespace vuk {
 	void DeviceVkResource::deallocate_swapchains(std::span<const VkSwapchainKHR> src) {
 		for (auto& v : src) {
 			if (v != VK_NULL_HANDLE) {
-				vkDestroySwapchainKHR(device, v, nullptr);
+				ctx->vkDestroySwapchainKHR(device, v, nullptr);
 			}
 		}
 	}

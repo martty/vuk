@@ -65,6 +65,7 @@ namespace vuk {
 	};
 
 	struct DeviceFrameResourceImpl {
+		Context* ctx;
 		std::mutex sema_mutex;
 		std::vector<VkSemaphore> semaphores;
 		std::mutex buf_mutex;
@@ -110,6 +111,7 @@ namespace vuk {
 		BufferLinearAllocator linear_gpu_only;
 
 		DeviceFrameResourceImpl(VkDevice device, DeviceSuperFrameResource& upstream) :
+		    ctx(&upstream.get_context()),
 		    linear_cpu_only(upstream, vuk::MemoryUsage::eCPUonly, all_buffer_usage_flags),
 		    linear_cpu_gpu(upstream, vuk::MemoryUsage::eCPUtoGPU, all_buffer_usage_flags),
 		    linear_gpu_cpu(upstream, vuk::MemoryUsage::eGPUtoCPU, all_buffer_usage_flags),
@@ -277,7 +279,7 @@ namespace vuk {
 			dsai.descriptorSetCount = 1;
 			dsai.pSetLayouts = &ci.layout;
 			dst[i].layout_info = ci;
-			auto result = vkAllocateDescriptorSets(device, &dsai, &dst[i].descriptor_set);
+			auto result = impl->ctx->vkAllocateDescriptorSets(device, &dsai, &dst[i].descriptor_set);
 			// if we fail, we allocate another pool from upstream
 			if (result == VK_ERROR_OUT_OF_POOL_MEMORY ||
 			    result == VK_ERROR_FRAGMENTED_POOL) { // we potentially run this from multiple threads which results in additional pool allocs
@@ -288,7 +290,7 @@ namespace vuk {
 					last_pool = &*impl->ds_pools.emplace(pool);
 				}
 				dsai.descriptorPool = *last_pool;
-				result = vkAllocateDescriptorSets(device, &dsai, &dst[i].descriptor_set);
+				result = impl->ctx->vkAllocateDescriptorSets(device, &dsai, &dst[i].descriptor_set);
 				if (result != VK_SUCCESS) {
 					return { expected_error, AllocateException{ result } };
 				}
@@ -370,7 +372,7 @@ namespace vuk {
 
 	void DeviceFrameResource::wait() {
 		if (impl->fences.size() > 0) {
-			vkWaitForFences(device, (uint32_t)impl->fences.size(), impl->fences.data(), true, UINT64_MAX);
+			impl->ctx->vkWaitForFences(device, (uint32_t)impl->fences.size(), impl->fences.data(), true, UINT64_MAX);
 		}
 		if (impl->tsemas.size() > 0) {
 			VkSemaphoreWaitInfo swi{ VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO };
@@ -385,7 +387,7 @@ namespace vuk {
 			swi.pSemaphores = semas.data();
 			swi.pValues = values.data();
 			swi.semaphoreCount = (uint32_t)impl->tsemas.size();
-			vkWaitSemaphores(device, &swi, UINT64_MAX);
+			impl->ctx->vkWaitSemaphores(device, &swi, UINT64_MAX);
 		}
 	}
 
@@ -630,7 +632,7 @@ namespace vuk {
 		upstream->deallocate_fences(f.fences);
 		upstream->deallocate_command_buffers(f.cmdbuffers_to_free);
 		for (auto& pool : f.cmdpools_to_free) {
-			vkResetCommandPool(get_context().device, pool.command_pool, {});
+			direct->ctx->vkResetCommandPool(get_context().device, pool.command_pool, {});
 		}
 		deallocate_command_pools(f.cmdpools_to_free);
 		upstream->deallocate_buffers(f.buffer_gpus);
@@ -647,7 +649,7 @@ namespace vuk {
 		upstream->deallocate_buffers(f.buffers);
 
 		for (auto& p : f.ds_pools) {
-			vkResetDescriptorPool(get_context().device, p, {});
+			direct->ctx->vkResetDescriptorPool(get_context().device, p, {});
 			impl->ds_pools.push_back(p);
 		}
 

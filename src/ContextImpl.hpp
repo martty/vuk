@@ -107,7 +107,7 @@ namespace vuk {
 		    shader_modules(&ctx, &FN<struct ShaderModule>::create_fn, &FN<struct ShaderModule>::destroy_fn),
 		    descriptor_set_layouts(&ctx, &FN<struct DescriptorSetLayoutAllocInfo>::create_fn, &FN<struct DescriptorSetLayoutAllocInfo>::destroy_fn),
 		    pipeline_layouts(&ctx, &FN<VkPipelineLayout>::create_fn, &FN<VkPipelineLayout>::destroy_fn) {
-			vkGetPhysicalDeviceProperties(ctx.physical_device, &physical_device_properties);
+			ctx.vkGetPhysicalDeviceProperties(ctx.physical_device, &physical_device_properties);
 		}
 	};
 } // namespace vuk

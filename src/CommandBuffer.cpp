@@ -88,23 +88,23 @@ namespace vuk {
 		DynamicStateFlags not_enabled = DynamicStateFlags{ ~dynamic_state_flags.m_mask }; // has invalid bits, but doesn't matter
 		auto to_dynamic = not_enabled & flags;
 		if (to_dynamic & DynamicStateFlagBits::eViewport && viewports.size() > 0) {
-			vkCmdSetViewport(command_buffer, 0, (uint32_t)viewports.size(), viewports.data());
+			ctx.vkCmdSetViewport(command_buffer, 0, (uint32_t)viewports.size(), viewports.data());
 		}
 		if (to_dynamic & DynamicStateFlagBits::eScissor && scissors.size() > 0) {
-			vkCmdSetScissor(command_buffer, 0, (uint32_t)scissors.size(), scissors.data());
+			ctx.vkCmdSetScissor(command_buffer, 0, (uint32_t)scissors.size(), scissors.data());
 		}
 		if (to_dynamic & DynamicStateFlagBits::eLineWidth) {
-			vkCmdSetLineWidth(command_buffer, line_width);
+			ctx.vkCmdSetLineWidth(command_buffer, line_width);
 		}
 		if (to_dynamic & DynamicStateFlagBits::eDepthBias && rasterization_state) {
-			vkCmdSetDepthBias(
+			ctx.vkCmdSetDepthBias(
 			    command_buffer, rasterization_state->depthBiasConstantFactor, rasterization_state->depthBiasClamp, rasterization_state->depthBiasSlopeFactor);
 		}
 		if (to_dynamic & DynamicStateFlagBits::eBlendConstants && blend_constants) {
-			vkCmdSetBlendConstants(command_buffer, blend_constants.value().data());
+			ctx.vkCmdSetBlendConstants(command_buffer, blend_constants.value().data());
 		}
 		if (to_dynamic & DynamicStateFlagBits::eDepthBounds && depth_stencil_state) {
-			vkCmdSetDepthBounds(command_buffer, depth_stencil_state->minDepthBounds, depth_stencil_state->maxDepthBounds);
+			ctx.vkCmdSetDepthBounds(command_buffer, depth_stencil_state->minDepthBounds, depth_stencil_state->maxDepthBounds);
 		}
 		dynamic_state_flags = flags;
 		return *this;
@@ -119,7 +119,7 @@ namespace vuk {
 		viewports[index] = vp;
 
 		if (dynamic_state_flags & DynamicStateFlagBits::eViewport) {
-			vkCmdSetViewport(command_buffer, index, 1, &viewports[index]);
+			ctx.vkCmdSetViewport(command_buffer, index, 1, &viewports[index]);
 		}
 		return *this;
 	}
@@ -166,7 +166,7 @@ namespace vuk {
 		}
 		scissors[index] = vp;
 		if (dynamic_state_flags & DynamicStateFlagBits::eScissor) {
-			vkCmdSetScissor(command_buffer, index, 1, &scissors[index]);
+			ctx.vkCmdSetScissor(command_buffer, index, 1, &scissors[index]);
 		}
 		return *this;
 	}
@@ -175,10 +175,10 @@ namespace vuk {
 		VUK_EARLY_RET();
 		rasterization_state = state;
 		if (state.depthBiasEnable && (dynamic_state_flags & DynamicStateFlagBits::eDepthBias)) {
-			vkCmdSetDepthBias(command_buffer, state.depthBiasConstantFactor, state.depthBiasClamp, state.depthBiasSlopeFactor);
+			ctx.vkCmdSetDepthBias(command_buffer, state.depthBiasConstantFactor, state.depthBiasClamp, state.depthBiasSlopeFactor);
 		}
 		if (state.lineWidth != line_width && (dynamic_state_flags & DynamicStateFlagBits::eLineWidth)) {
-			vkCmdSetLineWidth(command_buffer, state.lineWidth);
+			ctx.vkCmdSetLineWidth(command_buffer, state.lineWidth);
 		}
 		return *this;
 	}
@@ -187,7 +187,7 @@ namespace vuk {
 		VUK_EARLY_RET();
 		depth_stencil_state = state;
 		if (state.depthBoundsTestEnable && (dynamic_state_flags & DynamicStateFlagBits::eDepthBounds)) {
-			vkCmdSetDepthBounds(command_buffer, state.minDepthBounds, state.maxDepthBounds);
+			ctx.vkCmdSetDepthBounds(command_buffer, state.minDepthBounds, state.maxDepthBounds);
 		}
 		return *this;
 	}
@@ -249,7 +249,7 @@ namespace vuk {
 		VUK_EARLY_RET();
 		blend_constants = constants;
 		if (dynamic_state_flags & DynamicStateFlagBits::eBlendConstants) {
-			vkCmdSetBlendConstants(command_buffer, constants.data());
+			ctx.vkCmdSetBlendConstants(command_buffer, constants.data());
 		}
 		return *this;
 	}
@@ -319,7 +319,7 @@ namespace vuk {
 		set_binding_descriptions.set(binding, true);
 
 		if (buf.buffer) {
-			vkCmdBindVertexBuffers(command_buffer, binding, 1, &buf.buffer, &buf.offset);
+			ctx.vkCmdBindVertexBuffers(command_buffer, binding, 1, &buf.buffer, &buf.offset);
 		}
 		return *this;
 	}
@@ -350,7 +350,7 @@ namespace vuk {
 		set_binding_descriptions.set(binding, true);
 
 		if (buf.buffer) {
-			vkCmdBindVertexBuffers(command_buffer, binding, 1, &buf.buffer, &buf.offset);
+			ctx.vkCmdBindVertexBuffers(command_buffer, binding, 1, &buf.buffer, &buf.offset);
 		}
 		return *this;
 	}
@@ -367,7 +367,7 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::bind_index_buffer(const Buffer& buf, IndexType type) {
 		VUK_EARLY_RET();
-		vkCmdBindIndexBuffer(command_buffer, buf.buffer, buf.offset, (VkIndexType)type);
+		ctx.vkCmdBindIndexBuffer(command_buffer, buf.buffer, buf.offset, (VkIndexType)type);
 		return *this;
 	}
 
@@ -539,7 +539,7 @@ namespace vuk {
 		if (!_bind_graphics_pipeline_state()) {
 			return *this;
 		}
-		vkCmdDraw(command_buffer, (uint32_t)vertex_count, (uint32_t)instance_count, (uint32_t)first_vertex, (uint32_t)first_instance);
+		ctx.vkCmdDraw(command_buffer, (uint32_t)vertex_count, (uint32_t)instance_count, (uint32_t)first_vertex, (uint32_t)first_instance);
 		return *this;
 	}
 
@@ -549,7 +549,7 @@ namespace vuk {
 			return *this;
 		}
 
-		vkCmdDrawIndexed(command_buffer, (uint32_t)index_count, (uint32_t)instance_count, (uint32_t)first_index, vertex_offset, (uint32_t)first_instance);
+		ctx.vkCmdDrawIndexed(command_buffer, (uint32_t)index_count, (uint32_t)instance_count, (uint32_t)first_index, vertex_offset, (uint32_t)first_instance);
 		return *this;
 	}
 
@@ -558,7 +558,7 @@ namespace vuk {
 		if (!_bind_graphics_pipeline_state()) {
 			return *this;
 		}
-		vkCmdDrawIndexedIndirect(
+		ctx.vkCmdDrawIndexedIndirect(
 		    command_buffer, indirect_buffer.buffer, (uint32_t)indirect_buffer.offset, (uint32_t)command_count, sizeof(DrawIndexedIndirectCommand));
 		return *this;
 	}
@@ -587,7 +587,7 @@ namespace vuk {
 
 		auto& buf = *res;
 		memcpy(buf->mapped_ptr, cmds.data(), cmds.size_bytes());
-		vkCmdDrawIndexedIndirect(command_buffer, buf->buffer, (uint32_t)buf->offset, (uint32_t)cmds.size(), sizeof(DrawIndexedIndirectCommand));
+		ctx.vkCmdDrawIndexedIndirect(command_buffer, buf->buffer, (uint32_t)buf->offset, (uint32_t)cmds.size(), sizeof(DrawIndexedIndirectCommand));
 		return *this;
 	}
 
@@ -596,7 +596,7 @@ namespace vuk {
 		if (!_bind_graphics_pipeline_state()) {
 			return *this;
 		}
-		vkCmdDrawIndexedIndirectCount(command_buffer,
+		ctx.vkCmdDrawIndexedIndirectCount(command_buffer,
 		                              indirect_buffer.buffer,
 		                              indirect_buffer.offset,
 		                              count_buffer.buffer,
@@ -626,7 +626,7 @@ namespace vuk {
 		if (!_bind_compute_pipeline_state()) {
 			return *this;
 		}
-		vkCmdDispatch(command_buffer, (uint32_t)size_x, (uint32_t)size_y, (uint32_t)size_z);
+		ctx.vkCmdDispatch(command_buffer, (uint32_t)size_x, (uint32_t)size_y, (uint32_t)size_z);
 		return *this;
 	}
 
@@ -641,7 +641,7 @@ namespace vuk {
 		uint32_t y = (uint32_t)(invocation_count_y + local_size[1] - 1) / local_size[1];
 		uint32_t z = (uint32_t)(invocation_count_z + local_size[2] - 1) / local_size[2];
 
-		vkCmdDispatch(command_buffer, x, y, z);
+		ctx.vkCmdDispatch(command_buffer, x, y, z);
 		return *this;
 	}
 
@@ -650,7 +650,7 @@ namespace vuk {
 		if (!_bind_compute_pipeline_state()) {
 			return *this;
 		}
-		vkCmdDispatchIndirect(command_buffer, indirect_buffer.buffer, indirect_buffer.offset);
+		ctx.vkCmdDispatchIndirect(command_buffer, indirect_buffer.buffer, indirect_buffer.offset);
 		return *this;
 	}
 
@@ -704,9 +704,9 @@ namespace vuk {
 		isr.levelCount = attachment.level_count;
 
 		if (aspect == ImageAspectFlagBits::eColor) {
-			vkCmdClearColorImage(command_buffer, attachment.image.image, (VkImageLayout)layout, &c.c.color, 1, &isr);
+			ctx.vkCmdClearColorImage(command_buffer, attachment.image.image, (VkImageLayout)layout, &c.c.color, 1, &isr);
 		} else if (aspect & (ImageAspectFlagBits::eDepth | ImageAspectFlagBits::eStencil)) {
-			vkCmdClearDepthStencilImage(command_buffer, attachment.image.image, (VkImageLayout)layout, &c.c.depthStencil, 1, &isr);
+			ctx.vkCmdClearDepthStencilImage(command_buffer, attachment.image.image, (VkImageLayout)layout, &c.c.depthStencil, 1, &isr);
 		}
 
 		return *this;
@@ -760,7 +760,7 @@ namespace vuk {
 		auto src_layout = *res_gl_src ? ImageLayout::eGeneral : ImageLayout::eTransferSrcOptimal;
 		auto dst_layout = *res_gl_dst ? ImageLayout::eGeneral : ImageLayout::eTransferDstOptimal;
 
-		vkCmdResolveImage(command_buffer, src_image.image, (VkImageLayout)src_layout, dst_image.image, (VkImageLayout)dst_layout, 1, &ir);
+		ctx.vkCmdResolveImage(command_buffer, src_image.image, (VkImageLayout)src_layout, dst_image.image, (VkImageLayout)dst_layout, 1, &ir);
 
 		return *this;
 	}
@@ -795,7 +795,7 @@ namespace vuk {
 		auto src_layout = *res_gl_src ? ImageLayout::eGeneral : ImageLayout::eTransferSrcOptimal;
 		auto dst_layout = *res_gl_dst ? ImageLayout::eGeneral : ImageLayout::eTransferDstOptimal;
 
-		vkCmdBlitImage(
+		ctx.vkCmdBlitImage(
 		    command_buffer, src_image.image, (VkImageLayout)src_layout, dst_image.image, (VkImageLayout)dst_layout, 1, (VkImageBlit*)&region, (VkFilter)filter);
 
 		return *this;
@@ -825,7 +825,7 @@ namespace vuk {
 			return *this;
 		}
 		auto dst_layout = *res_gl ? ImageLayout::eGeneral : ImageLayout::eTransferDstOptimal;
-		vkCmdCopyBufferToImage(command_buffer, src_bbuf.buffer, dst_image.image, (VkImageLayout)dst_layout, 1, (VkBufferImageCopy*)&bic);
+		ctx.vkCmdCopyBufferToImage(command_buffer, src_bbuf.buffer, dst_image.image, (VkImageLayout)dst_layout, 1, (VkBufferImageCopy*)&bic);
 
 		return *this;
 	}
@@ -854,7 +854,7 @@ namespace vuk {
 			return *this;
 		}
 		auto src_layout = *res_gl ? ImageLayout::eGeneral : ImageLayout::eTransferSrcOptimal;
-		vkCmdCopyImageToBuffer(command_buffer, src_image.image, (VkImageLayout)src_layout, dst_bbuf.buffer, 1, (VkBufferImageCopy*)&bic);
+		ctx.vkCmdCopyImageToBuffer(command_buffer, src_image.image, (VkImageLayout)src_layout, dst_bbuf.buffer, 1, (VkBufferImageCopy*)&bic);
 
 		return *this;
 	}
@@ -893,7 +893,7 @@ namespace vuk {
 		bc.dstOffset += dst.offset;
 		bc.size = size == VK_WHOLE_SIZE ? src.size : size;
 
-		vkCmdCopyBuffer(command_buffer, src.buffer, dst.buffer, 1, &bc);
+		ctx.vkCmdCopyBuffer(command_buffer, src.buffer, dst.buffer, 1, &bc);
 		return *this;
 	}
 
@@ -912,7 +912,7 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::fill_buffer(const Buffer& dst, size_t size, uint32_t data) {
-		vkCmdFillBuffer(command_buffer, dst.buffer, dst.offset, size, data);
+		ctx.vkCmdFillBuffer(command_buffer, dst.buffer, dst.offset, size, data);
 		return *this;
 	}
 
@@ -930,7 +930,7 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::update_buffer(const Buffer& dst, size_t size, void* data) {
-		vkCmdUpdateBuffer(command_buffer, dst.buffer, dst.offset, size, data);
+		ctx.vkCmdUpdateBuffer(command_buffer, dst.buffer, dst.offset, size, data);
 		return *this;
 	}
 
@@ -940,7 +940,7 @@ namespace vuk {
 		auto dst_use = to_use(dst_access, DomainFlagBits::eAny);
 		mb.srcAccessMask = is_read_access(src_use) ? 0 : (VkAccessFlags)src_use.access;
 		mb.dstAccessMask = (VkAccessFlags)dst_use.access;
-		vkCmdPipelineBarrier(command_buffer, (VkPipelineStageFlags)src_use.stages, (VkPipelineStageFlags)dst_use.stages, {}, 1, &mb, 0, nullptr, 0, nullptr);
+		ctx.vkCmdPipelineBarrier(command_buffer, (VkPipelineStageFlags)src_use.stages, (VkPipelineStageFlags)dst_use.stages, {}, 1, &mb, 0, nullptr, 0, nullptr);
 		return *this;
 	}
 
@@ -981,7 +981,7 @@ namespace vuk {
 			imb.newLayout = (VkImageLayout)dst_use.layout;
 		}
 		imb.subresourceRange = isr;
-		vkCmdPipelineBarrier(command_buffer, (VkPipelineStageFlags)src_use.stages, (VkPipelineStageFlags)dst_use.stages, {}, 0, nullptr, 0, nullptr, 1, &imb);
+		ctx.vkCmdPipelineBarrier(command_buffer, (VkPipelineStageFlags)src_use.stages, (VkPipelineStageFlags)dst_use.stages, {}, 0, nullptr, 0, nullptr, 1, &imb);
 
 		return *this;
 	}
@@ -998,7 +998,7 @@ namespace vuk {
 			return *this;
 		}
 
-		vkCmdWriteTimestamp(command_buffer, (VkPipelineStageFlagBits)stage, tsq.pool, tsq.id);
+		ctx.vkCmdWriteTimestamp(command_buffer, (VkPipelineStageFlagBits)stage, tsq.pool, tsq.id);
 		return *this;
 	}
 
@@ -1043,7 +1043,7 @@ namespace vuk {
 
 		for (auto& pcr : pcrs) {
 			void* data = push_constant_buffer.data() + pcr.offset;
-			vkCmdPushConstants(command_buffer, current_layout, pcr.stageFlags, pcr.offset, pcr.size, data);
+			ctx.vkCmdPushConstants(command_buffer, current_layout, pcr.stageFlags, pcr.offset, pcr.size, data);
 		}
 		pcrs.clear();
 
@@ -1234,15 +1234,15 @@ namespace vuk {
 							assert(0);
 						}
 					}
-					vkUpdateDescriptorSets(allocator->get_context().device, j, writes.data(), 0, nullptr);
+					ctx.vkUpdateDescriptorSets(allocator->get_context().device, j, writes.data(), 0, nullptr);
 				} else {
 					assert(0 && "Unimplemented DS strategy");
 				}
 
-				vkCmdBindDescriptorSets(command_buffer, bind_point, current_layout, i, 1, &ds->descriptor_set, 0, nullptr);
+				ctx.vkCmdBindDescriptorSets(command_buffer, bind_point, current_layout, i, 1, &ds->descriptor_set, 0, nullptr);
 				set_layouts_used[i] = ds->layout_info.layout;
 			} else {
-				vkCmdBindDescriptorSets(command_buffer, bind_point, current_layout, i, 1, &persistent_sets[i].first, 0, nullptr);
+				ctx.vkCmdBindDescriptorSets(command_buffer, bind_point, current_layout, i, 1, &persistent_sets[i].first, 0, nullptr);
 				set_layouts_used[i] = persistent_sets[i].second;
 			}
 		}
@@ -1289,7 +1289,7 @@ namespace vuk {
 
 			current_compute_pipeline = ctx.acquire_pipeline(pi, ctx.get_frame_count());
 
-			vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, current_compute_pipeline->pipeline);
+			ctx.vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, current_compute_pipeline->pipeline);
 			next_compute_pipeline = nullptr;
 		}
 
@@ -1555,7 +1555,7 @@ namespace vuk {
 				delete pi.extended_data;
 			}
 
-			vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, current_pipeline->pipeline);
+			ctx.vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, current_pipeline->pipeline);
 			next_pipeline = nullptr;
 		}
 		return _bind_state(PipeType::eGraphics);
@@ -1593,7 +1593,7 @@ namespace vuk {
 
 			current_ray_tracing_pipeline = ctx.acquire_pipeline(pi, ctx.get_frame_count());
 
-			vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, current_ray_tracing_pipeline->pipeline);
+			ctx.vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, current_ray_tracing_pipeline->pipeline);
 			next_ray_tracing_pipeline = nullptr;
 		}
 

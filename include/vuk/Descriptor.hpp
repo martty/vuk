@@ -201,7 +201,7 @@ namespace vuk {
 		void grow(Context& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info);
 		VkDescriptorSet acquire(Context& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info);
 		void release(VkDescriptorSet ds);
-		void destroy(VkDevice) const;
+		void destroy(Context& ctx, VkDevice) const;
 
 		DescriptorPool();
 		~DescriptorPool();

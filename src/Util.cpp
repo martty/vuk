@@ -15,6 +15,7 @@ namespace vuk {
 	struct QueueImpl {
 		// TODO: this recursive mutex should be changed to better queue handling
 		std::recursive_mutex queue_lock;
+		PFN_vkQueueSubmit queueSubmit;
 		PFN_vkQueueSubmit2KHR queueSubmit2KHR;
 		TimelineSemaphore submit_sync;
 		VkQueue queue;
@@ -22,15 +23,16 @@ namespace vuk {
 		std::atomic<uint64_t> last_host_wait;
 		uint32_t family_index;
 
-		QueueImpl(PFN_vkQueueSubmit2KHR fn, VkQueue queue, uint32_t queue_family_index, TimelineSemaphore ts) :
-		    queueSubmit2KHR(fn),
+		QueueImpl(PFN_vkQueueSubmit fn1, PFN_vkQueueSubmit2KHR fn2, VkQueue queue, uint32_t queue_family_index, TimelineSemaphore ts) :
+		    queueSubmit(fn1),
+		    queueSubmit2KHR(fn2),
 		    submit_sync(ts),
 		    queue(queue),
 		    family_index(queue_family_index) {}
 	};
 
-	Queue::Queue(PFN_vkQueueSubmit2KHR fn, VkQueue queue, uint32_t queue_family_index, TimelineSemaphore ts) :
-	    impl(new QueueImpl(fn, queue, queue_family_index, ts)) {}
+	Queue::Queue(PFN_vkQueueSubmit fn1, PFN_vkQueueSubmit2KHR fn2, VkQueue queue, uint32_t queue_family_index, TimelineSemaphore ts) :
+	    impl(new QueueImpl(fn1, fn2, queue, queue_family_index, ts)) {}
 	Queue::~Queue() {
 		delete impl;
 	}
@@ -60,7 +62,7 @@ namespace vuk {
 
 	Result<void> Queue::submit(std::span<VkSubmitInfo> sis, VkFence fence) {
 		std::lock_guard _(impl->queue_lock);
-		VkResult result = vkQueueSubmit(impl->queue, (uint32_t)sis.size(), sis.data(), fence);
+		VkResult result = impl->queueSubmit(impl->queue, (uint32_t)sis.size(), sis.data(), fence);
 		if (result != VK_SUCCESS) {
 			return { expected_error, VkException{ result } };
 		}
@@ -88,7 +90,7 @@ namespace vuk {
 		swi.pSemaphores = queue_timeline_semaphores.data();
 		swi.pValues = values.data();
 		swi.semaphoreCount = count;
-		VkResult result = vkWaitSemaphores(device, &swi, UINT64_MAX);
+		VkResult result = this->vkWaitSemaphores(device, &swi, UINT64_MAX);
 		for (auto [domain, v] : queue_waits) {
 			auto& q = domain_to_queue(domain);
 			q.impl->last_host_wait.store(v);
@@ -457,7 +459,7 @@ namespace vuk {
 		pi.pImageIndices = &bundle.image_index;
 		pi.waitSemaphoreCount = 1;
 		pi.pWaitSemaphores = &bundle.render_complete;
-		auto present_result = vkQueuePresentKHR(ctx.graphics_queue->impl->queue, &pi);
+		auto present_result = ctx.vkQueuePresentKHR(ctx.graphics_queue->impl->queue, &pi);
 		if (present_result != VK_SUCCESS && present_result != VK_SUBOPTIMAL_KHR) {
 			return { expected_error, VkException{ present_result } };
 		}
@@ -474,7 +476,7 @@ namespace vuk {
 		auto [present_rdy, render_complete] = *semas;
 
 		uint32_t image_index = (uint32_t)-1;
-		VkResult acq_result = vkAcquireNextImageKHR(ctx.device, swapchain->swapchain, UINT64_MAX, present_rdy, VK_NULL_HANDLE, &image_index);
+		VkResult acq_result = ctx.vkAcquireNextImageKHR(ctx.device, swapchain->swapchain, UINT64_MAX, present_rdy, VK_NULL_HANDLE, &image_index);
 		// VK_SUBOPTIMAL_KHR shouldn't stop presentation; it is handled at the end
 		if (acq_result != VK_SUCCESS && acq_result != VK_SUBOPTIMAL_KHR) {
 			return { expected_error, VkException{ acq_result } };
@@ -485,7 +487,7 @@ namespace vuk {
 
 	Result<SingleSwapchainRenderBundle> acquire_one(Context& ctx, SwapchainRef swapchain, VkSemaphore present_ready, VkSemaphore render_complete) {
 		uint32_t image_index = (uint32_t)-1;
-		VkResult acq_result = vkAcquireNextImageKHR(ctx.device, swapchain->swapchain, UINT64_MAX, present_ready, VK_NULL_HANDLE, &image_index);
+		VkResult acq_result = ctx.vkAcquireNextImageKHR(ctx.device, swapchain->swapchain, UINT64_MAX, present_ready, VK_NULL_HANDLE, &image_index);
 		// VK_SUBOPTIMAL_KHR shouldn't stop presentation; it is handled at the end
 		if (acq_result != VK_SUCCESS && acq_result != VK_SUBOPTIMAL_KHR) {
 			return { expected_error, VkException{ acq_result } };
