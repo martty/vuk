@@ -4,6 +4,8 @@
 #include "vuk/Buffer.hpp"
 #include "vuk/Exception.hpp"
 #include "vuk/ImageAttachment.hpp"
+#include "vuk/Descriptor.hpp"
+#include "vuk/Query.hpp"
 
 /// @cond INTERNAL
 #ifndef __cpp_consteval

@@ -76,8 +76,6 @@ namespace vuk {
 	struct PipelineBaseCreateInfo;
 	struct PipelineBaseInfo;
 	struct Program;
-
-	struct PersistentDescriptorSet;
 	
 	struct FutureBase;
 	class Future;
