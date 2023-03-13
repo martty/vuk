@@ -729,7 +729,7 @@ namespace vuk {
 				assert(base_layer + layer_count <= bound.attachment.base_layer + bound.attachment.layer_count);
 				fb_layer_count = layer_count;
 
-				auto specific_attachment = bound.attachment;
+				auto& specific_attachment = bound.attachment;
 				if (bound.parent_attachment < 0) {
 					specific_attachment = impl->get_bound_attachment(bound.parent_attachment).attachment;
 					specific_attachment.image_view = {};
