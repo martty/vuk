@@ -1216,6 +1216,12 @@ namespace vuk {
 		};
 	}
 
+	IARule same_extent_as(TypedFuture<Image> inference_source) {
+		return [=](const InferenceContext& ctx, ImageAttachment& ia) {
+			ia.extent = inference_source.attachment->extent;
+		};
+	}
+
 	IARule same_2D_extent_as(Name n) {
 		return [=](const InferenceContext& ctx, ImageAttachment& ia) {
 			auto& o = ctx.get_image_attachment(n);
