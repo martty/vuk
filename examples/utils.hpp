@@ -83,6 +83,7 @@ namespace util {
 		for (auto& i : views) {
 			sw.image_views.emplace_back();
 			sw.image_views.back().payload = i;
+			sw.image_views.back().id = 0;
 		}
 		sw.extent = vuk::Extent2D{ vkswapchain->extent.width, vkswapchain->extent.height };
 		sw.format = vuk::Format(vkswapchain->image_format);
