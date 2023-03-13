@@ -406,9 +406,9 @@ namespace vuk {
 
 		static auto make_ret(std::shared_ptr<RenderGraph> rg) {
 			if constexpr (sizeof...(T) > 1) {
-				return std::make_tuple(TypedFuture<typename T::base>{ Future{ rg, Name(typeid(T).name()).append("+") } }...);	
+				return std::make_tuple(TypedFuture<typename T::base>{ Future{ rg, Name(typeid(T).name()).append("+") } }...);
 			} else if constexpr (sizeof...(T) == 1) {
-				return (TypedFuture<typename T::base>{ Future{ rg, Name(typeid(T).name()).append("+") } },...);
+				return (TypedFuture<typename T::base>{ Future{ rg, Name(typeid(T).name()).append("+") } }, ...);
 			}
 		}
 
@@ -431,12 +431,12 @@ namespace vuk {
 		return TupleMap<drop_t<1, typename traits::types>>::template make_lam<typename traits::result_type, F>(name, std::forward<F>(body));
 	}
 
-	inline [[nodiscard]] TypedFuture<Image> declare_ia(Name name) {
+	[[nodiscard]] inline TypedFuture<Image> declare_ia(Name name, ImageAttachment ia = {}) {
 		std::shared_ptr<RenderGraph> rg = std::make_shared<RenderGraph>();
-		return { Future{ rg, name }, &rg->attach_image(name, {}) };
+		return { Future{ rg, name }, &rg->attach_image(name, ia) };
 	}
 
-	inline [[nodiscard]] TypedFuture<Image> clear(TypedFuture<Image> in, Clear clear_value) {
+	[[nodiscard]] inline TypedFuture<Image> clear(TypedFuture<Image> in, Clear clear_value) {
 		std::shared_ptr<RenderGraph> rg = std::make_shared<RenderGraph>();
 		rg->attach_in("_in", std::move(in.future));
 		rg->clear_image("_in", "_out", clear_value);
@@ -454,10 +454,18 @@ namespace vuk {
 	using IARule = std::function<void(const struct InferenceContext& ctx, ImageAttachment& ia)>;
 	using BufferRule = std::function<void(const struct InferenceContext& ctx, Buffer& buffer)>;
 
+	[[nodiscard]] inline TypedFuture<Image> infer(TypedFuture<Image>& in, IARule rule) {
+		std::shared_ptr<RenderGraph> rg = std::make_shared<RenderGraph>();
+		rg->attach_in("_in", std::move(in.future));
+		rg->inference_rule("_in", std::move(rule));
+		return { Future{ rg, "_in" } };
+	}
+
 	// builtin inference rules for convenience
 
 	/// @brief Inference target has the same extent as the source
 	IARule same_extent_as(Name inference_source);
+	IARule same_extent_as(TypedFuture<Image> inference_source);
 
 	/// @brief Inference target has the same width & height as the source
 	IARule same_2D_extent_as(Name inference_source);
