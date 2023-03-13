@@ -1399,7 +1399,6 @@ namespace vuk {
 			}
 			bool is_subchain = head->source != nullptr;
 
-			// initial waits are handled by the common chain code
 			// last use on the chain
 			QueueResourceUse last_use;
 			ChainLink* link;
@@ -1429,6 +1428,9 @@ namespace vuk {
 #endif
 				} else {
 					last_use = is_image ? get_bound_attachment(head->def->pass).acquire.src_use : get_bound_buffer(head->def->pass).acquire.src_use;
+				}
+				if (last_use.stages == PipelineStageFlagBits{}) {
+					last_use.stages = PipelineStageFlagBits::eAllCommands;
 				}
 
 				// handle chain
