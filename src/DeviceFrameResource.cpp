@@ -631,13 +631,7 @@ namespace vuk {
 
 	Result<void, AllocateException>
 	DeviceSuperFrameResource::allocate_cached_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) {
-		assert(dst.size() == cis.size());
-		for (uint64_t i = 0; i < dst.size(); i++) {
-			auto& ci = cis[i];
-			CompressedImageViewCreateInfo civci(ci);
-			dst[i] = impl->image_view_cache.acquire(civci, impl->frame_counter);
-		}
-		return { expected_value };
+		return allocate_image_views(dst, cis, loc);
 	}
 
 	Result<void, AllocateException>
