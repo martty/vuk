@@ -1530,6 +1530,81 @@ namespace vuk {
 		return { expected_value };
 	}
 
+	Result<void> RGCImpl::merge_rps() {
+		// we run this after barrier gen
+		// loop through gfx passes in order
+		for (size_t i = 0; i < graphics_passes.size() - 1; i++) {
+			auto& pass0 = *graphics_passes[i];
+			auto& pass1 = *graphics_passes[i + 1];
+
+			// two gfx passes can be merged if they are
+			// - adjacent and both have rps
+			if (pass0.render_pass_index == -1 || pass1.render_pass_index == -1) {
+				continue;
+			}
+			// - have the same ordered set of attachments
+			bool can_merge = true;
+			auto p0res = pass0.resources.to_span(resources);
+			auto p1res = pass1.resources.to_span(resources);
+			size_t k = 0;
+			for (size_t j = 0; j < p0res.size(); j++) {
+				auto& res0 = p0res[j];
+				auto& link0 = res_to_links.at(res0.name);
+				if (!is_framebuffer_attachment(res0)) {
+					continue;
+				}
+				// advance attachments in p1 until we get a match or run out
+				for (; k < p1res.size(); k++) {
+					auto& res1 = p1res[k];
+					auto& link1 = res_to_links.at(res1.name);
+					// TODO: we only handle some cases here (too conservative)
+					bool same_access = res0.ia == res1.ia;
+					if (same_access && link0.next == &link1) {
+						break;
+					}
+				}
+				if (k == p1res.size()) {
+					can_merge = false;
+				}
+			}
+			if (!can_merge) {
+				continue;
+			}
+			// - contain only color and ds deps between them
+			if (pass0.post_memory_barriers.size() > 0 || pass1.pre_memory_barriers.size() > 0) {
+				continue;
+			}
+			for (auto& bar : pass0.post_image_barriers.to_span(image_barriers)) {
+				if ((bar.srcAccessMask & ~(VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT |
+				                          VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT)) != 0) {
+					can_merge = false;
+				}
+				if ((bar.dstAccessMask & ~(VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT |
+				                           VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT)) != 0) {
+					can_merge = false;
+				}
+			}
+			for (auto& bar : pass1.pre_image_barriers.to_span(image_barriers)) {
+				if ((bar.srcAccessMask & ~(VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT |
+				                           VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT)) != 0) {
+					can_merge = false;
+				}
+				if ((bar.dstAccessMask & ~(VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT |
+				                           VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT)) != 0) {
+					can_merge = false;
+				}
+			}
+
+			if (can_merge) {
+				pass1.render_pass_index = pass0.render_pass_index;
+				pass0.post_image_barriers = {};
+				pass1.pre_image_barriers = {};
+			}
+		}
+
+		return { expected_value };
+	}
+
 	Result<void> RGCImpl::assign_passes_to_batches() {
 		// assign passes to batches (within a single queue)
 		uint32_t batch_index = -1;
@@ -1696,6 +1771,8 @@ namespace vuk {
 		VUK_DO_OR_RETURN(compile(rgs, compile_options));
 
 		VUK_DO_OR_RETURN(impl->generate_barriers_and_waits());
+
+		VUK_DO_OR_RETURN(impl->merge_rps());
 
 		VUK_DO_OR_RETURN(impl->assign_passes_to_batches());
 
