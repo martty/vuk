@@ -290,6 +290,9 @@ namespace vuk {
 		                        bool is_release = false);
 		void emit_memory_barrier(RelSpan<VkMemoryBarrier2KHR>&, QueueResourceUse last_use, QueueResourceUse current_use);
 
+		// opt passes
+		Result<void> merge_rps();
+
 		// link passes
 		Result<void> generate_barriers_and_waits();
 		Result<void> assign_passes_to_batches();
