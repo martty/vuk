@@ -1423,30 +1423,32 @@ namespace vuk {
 						}
 					}
 
-					if (is_image) {
-						if (crosses_queue(last_use, use)) { // release barrier
-							if (last_executing_pass_idx !=
-							    -1) { // if last_executing_pass_idx is -1, then there is release in this rg, so we don't emit the release (single-sided acq)
-								emit_image_barrier(get_pass(last_executing_pass_idx).post_image_barriers, head->def->pass, last_use, use, image_subrange, aspect, true);
+					if (res.ia != eConsume) {
+						if (is_image) {
+							if (crosses_queue(last_use, use)) { // release barrier
+								if (last_executing_pass_idx !=
+								    -1) { // if last_executing_pass_idx is -1, then there is release in this rg, so we don't emit the release (single-sided acq)
+									emit_image_barrier(get_pass(last_executing_pass_idx).post_image_barriers, head->def->pass, last_use, use, image_subrange, aspect, true);
+								}
+							}
+							emit_image_barrier(get_pass(*link->undef).pre_image_barriers, head->def->pass, last_use, use, image_subrange, aspect);
+						} else {
+							emit_memory_barrier(get_pass(*link->undef).pre_memory_barriers, last_use, use);
+						}
+
+						if (crosses_queue(last_use, use)) {
+							// we wait on either def or the last read if there was one
+							if (last_executing_pass_idx != -1) {
+								get_pass(*link->undef)
+								    .relative_waits.append(waits, { (DomainFlagBits)(last_use.domain & DomainFlagBits::eQueueMask).m_mask, last_executing_pass_idx });
+								get_pass(last_executing_pass_idx).is_waited_on++;
+							} else {
+								auto& acquire = is_image ? get_bound_attachment(link->def->pass).acquire : get_bound_buffer(link->def->pass).acquire;
+								get_pass(*link->undef).absolute_waits.append(absolute_waits, { acquire.initial_domain, acquire.initial_visibility });
 							}
 						}
-						emit_image_barrier(get_pass(*link->undef).pre_image_barriers, head->def->pass, last_use, use, image_subrange, aspect);
-					} else {
-						emit_memory_barrier(get_pass(*link->undef).pre_memory_barriers, last_use, use);
+						last_use = use;
 					}
-
-					if (crosses_queue(last_use, use)) {
-						// we wait on either def or the last read if there was one
-						if (last_executing_pass_idx != -1) {
-							get_pass(*link->undef)
-							    .relative_waits.append(waits, { (DomainFlagBits)(last_use.domain & DomainFlagBits::eQueueMask).m_mask, last_executing_pass_idx });
-							get_pass(last_executing_pass_idx).is_waited_on++;
-						} else {
-							auto& acquire = is_image ? get_bound_attachment(link->def->pass).acquire : get_bound_buffer(link->def->pass).acquire;
-							get_pass(*link->undef).absolute_waits.append(absolute_waits, { acquire.initial_domain, acquire.initial_visibility });
-						}
-					}
-					last_use = use;
 				}
 
 				// process tails outside
@@ -1610,7 +1612,7 @@ namespace vuk {
 		// cull waits
 		{
 			DomainFlags current_queue = DomainFlagBits::eNone;
-			std::array<uint32_t, 3> last_passes_waited = {};
+			std::array<uint64_t, 3> last_passes_waited = {};
 			// loop through all passes
 			for (size_t i = 0; i < partitioned_passes.size(); i++) {
 				auto& current_pass = partitioned_passes[i];
