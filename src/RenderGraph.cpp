@@ -10,6 +10,7 @@
 #include <set>
 #include <sstream>
 #include <unordered_set>
+#include <bit>
 
 // intrinsics
 namespace {
@@ -1376,7 +1377,7 @@ namespace vuk {
 							get_pass(first_pass_idx)
 							    .relative_waits.append(
 							        waits, { (DomainFlagBits)(last_use.domain & DomainFlagBits::eQueueMask).m_mask, computed_pass_idx_to_ordered_idx[last_use_source] });
-							get_pass((int32_t)computed_pass_idx_to_ordered_idx[last_use_source]).is_waited_on = true;
+							get_pass((int32_t)computed_pass_idx_to_ordered_idx[last_use_source]).is_waited_on++;
 						}
 						last_use = use;
 						last_use_source = reads[read_idx - 1].pass;
@@ -1439,7 +1440,7 @@ namespace vuk {
 						if (last_executing_pass_idx != -1) {
 							get_pass(*link->undef)
 							    .relative_waits.append(waits, { (DomainFlagBits)(last_use.domain & DomainFlagBits::eQueueMask).m_mask, last_executing_pass_idx });
-							get_pass(last_executing_pass_idx).is_waited_on = true;
+							get_pass(last_executing_pass_idx).is_waited_on++;
 						} else {
 							auto& acquire = is_image ? get_bound_attachment(link->def->pass).acquire : get_bound_buffer(link->def->pass).acquire;
 							get_pass(*link->undef).absolute_waits.append(absolute_waits, { acquire.initial_domain, acquire.initial_visibility });
@@ -1447,7 +1448,7 @@ namespace vuk {
 					}
 					last_use = use;
 				}
-				
+
 				// process tails outside
 				if (link->next == nullptr) {
 					break;
@@ -1576,7 +1577,7 @@ namespace vuk {
 			}
 			for (auto& bar : pass0.post_image_barriers.to_span(image_barriers)) {
 				if ((bar.srcAccessMask & ~(VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT |
-				                          VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT)) != 0) {
+				                           VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT)) != 0) {
 					can_merge = false;
 				}
 				if ((bar.dstAccessMask & ~(VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT |
@@ -1606,6 +1607,36 @@ namespace vuk {
 	}
 
 	Result<void> RGCImpl::assign_passes_to_batches() {
+		// cull waits
+		{
+			DomainFlags current_queue = DomainFlagBits::eNone;
+			std::array<uint32_t, 3> last_passes_waited = {};
+			// loop through all passes
+			for (size_t i = 0; i < partitioned_passes.size(); i++) {
+				auto& current_pass = partitioned_passes[i];
+				auto queue = (DomainFlagBits)(current_pass->domain & DomainFlagBits::eQueueMask).m_mask;
+
+				if (queue != current_queue) { // if we go into a new queue, reset wait indices
+					last_passes_waited = {};
+					current_queue = queue;
+				}
+
+				RelSpan<std::pair<DomainFlagBits, uint64_t>> new_waits = {};
+				for (auto [queue, pass_idx] : current_pass->relative_waits.to_span(waits)) {
+					auto queue_idx = std::countr_zero((uint32_t)queue) - 1;
+					auto& last_amt = last_passes_waited[queue_idx];
+					if (pass_idx > last_amt) {
+						last_amt = pass_idx;
+						new_waits.append(waits, std::pair{ queue, pass_idx });
+					} else {
+						ordered_passes[pass_idx]->is_waited_on--;
+					}
+				}
+
+				current_pass->relative_waits = new_waits;
+			}
+		}
+
 		// assign passes to batches (within a single queue)
 		uint32_t batch_index = -1;
 		DomainFlags current_queue = DomainFlagBits::eNone;
@@ -1624,7 +1655,7 @@ namespace vuk {
 			if (current_pass->relative_waits.size() > 0) {
 				needs_split = true;
 			}
-			if (current_pass->is_waited_on) {
+			if (current_pass->is_waited_on > 0) {
 				needs_split_next = true;
 			}
 

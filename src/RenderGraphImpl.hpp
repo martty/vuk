@@ -82,7 +82,7 @@ namespace vuk {
 		RelSpan<FutureBase*> future_signals;
 		RelSpan<int32_t> referenced_swapchains; // TODO: maybe not the best place for it
 
-		bool is_waited_on = false;
+		int32_t is_waited_on = 0;
 	};
 
 #define INIT(x) x(decltype(x)::allocator_type(*arena_))
