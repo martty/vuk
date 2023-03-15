@@ -21,6 +21,4 @@ While submitting work to the device can be performed by the user, it is usually 
 
 .. doxygenfunction:: vuk::execute_submit_and_wait
 
-.. doxygenfunction:: vuk::execute_submit
-
 .. doxygenfunction:: vuk::link_execute_submit
