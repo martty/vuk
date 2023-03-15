@@ -1599,6 +1599,7 @@ namespace vuk {
 			}
 
 			if (can_merge) {
+				rpis[pass1.render_pass_index].attachments = {};
 				pass1.render_pass_index = pass0.render_pass_index;
 				pass0.post_image_barriers = {};
 				pass1.pre_image_barriers = {};
