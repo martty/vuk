@@ -3,7 +3,7 @@
 ### **vuk** - A rendergraph-based abstraction for Vulkan
 
 [![Discord Server](https://img.shields.io/discord/939539624039186432?style=for-the-badge)](https://discord.gg/UNkJMHgUmZ)
-[![Documentation](https://img.shields.io/readthedocs/vuk/v0.3?style=for-the-badge)](https://vuk.readthedocs.io/en/v0.3/)
+[![Documentation](https://img.shields.io/readthedocs/vuk?style=for-the-badge)](https://vuk.readthedocs.io)
 [![CI](https://img.shields.io/github/workflow/status/martty/vuk/CMake?style=for-the-badge)](https://github.com/martty/vuk/actions/workflows/cmake.yml)
 
 ### Quick Start
