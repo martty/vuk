@@ -4,7 +4,7 @@
 
 [![Discord Server](https://img.shields.io/discord/939539624039186432?style=for-the-badge)](https://discord.gg/UNkJMHgUmZ)
 [![Documentation](https://img.shields.io/readthedocs/vuk?style=for-the-badge)](https://vuk.readthedocs.io)
-[![CI](https://img.shields.io/github/workflow/status/martty/vuk/CMake?style=for-the-badge)](https://github.com/martty/vuk/actions/workflows/cmake.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/martty/vuk/cmake.yml?branch=master&style=for-the-badge)](https://github.com/martty/vuk/actions/workflows/cmake.yml)
 
 ### Quick Start
 1. Grab the vuk repository
