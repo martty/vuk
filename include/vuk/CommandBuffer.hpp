@@ -205,6 +205,7 @@ namespace vuk {
 		// Individual pipeline states
 		std::optional<PipelineRasterizationStateCreateInfo> rasterization_state;
 		std::optional<PipelineDepthStencilStateCreateInfo> depth_stencil_state;
+		std::optional<PipelineRasterizationConservativeStateCreateInfo> conservative_state;
 		bool broadcast_color_blend_attachment_0 = false;
 		Bitset<VUK_MAX_COLOR_ATTACHMENTS> set_color_blend_attachments = {};
 		fixed_vector<PipelineColorBlendAttachmentState, VUK_MAX_COLOR_ATTACHMENTS> color_blend_attachments;
@@ -286,7 +287,9 @@ namespace vuk {
 		CommandBuffer& set_rasterization(PipelineRasterizationStateCreateInfo rasterization_state);
 		/// @brief Set the depth/stencil state
 		CommandBuffer& set_depth_stencil(PipelineDepthStencilStateCreateInfo depth_stencil_state);
-
+		/// @brief Set the conservative rasterization state
+		CommandBuffer& set_conservative(PipelineRasterizationConservativeStateCreateInfo conservative_state);
+		
 		/// @brief Set one color blend state to use for all color attachments
 		CommandBuffer& broadcast_color_blend(PipelineColorBlendAttachmentState color_blend_state);
 		/// @brief Set one color blend preset to use for all color attachments
