@@ -1382,36 +1382,31 @@ namespace vuk {
 				pi.extended_size += (uint16_t)sizeof(set_constants);
 				pi.extended_size += (uint16_t)spec_const_size;
 			}
-
 			if (rasterization) {
 				assert(rasterization_state && "If a pass has a depth/stencil or color attachment, you must set the rasterization state.");
 
-				if (conservative_state) {
+				pi.cullMode = (VkCullModeFlags)rasterization_state->cullMode;
+				PipelineRasterizationStateCreateInfo def{ .cullMode = rasterization_state->cullMode };
+				if (dynamic_state_flags & DynamicStateFlagBits::eDepthBias) {
+					def.depthBiasConstantFactor = rasterization_state->depthBiasConstantFactor;
+					def.depthBiasClamp = rasterization_state->depthBiasClamp;
+					def.depthBiasSlopeFactor = rasterization_state->depthBiasSlopeFactor;
+				} else {
+					// TODO: static depth bias unsupported
+					assert(rasterization_state->depthBiasConstantFactor == def.depthBiasConstantFactor);
+					assert(rasterization_state->depthBiasClamp == def.depthBiasClamp);
+					assert(rasterization_state->depthBiasSlopeFactor == def.depthBiasSlopeFactor);
+				}
+				records.depth_bias_enable = rasterization_state->depthBiasEnable; // the enable itself is not dynamic state in core
+				if (*rasterization_state != def) {
 					records.non_trivial_raster_state = true;
 					pi.extended_size += sizeof(PipelineInstanceCreateInfo::RasterizationState);
-					
-					records.conservative_rasterization_enabled = true;
-					pi.extended_size += sizeof(PipelineInstanceCreateInfo::ConservativeState);
 				}
-				if (!records.non_trivial_raster_state) {
-					pi.cullMode = (VkCullModeFlags)rasterization_state->cullMode;
-					PipelineRasterizationStateCreateInfo def{ .cullMode = rasterization_state->cullMode };
-					if (dynamic_state_flags & DynamicStateFlagBits::eDepthBias) {
-						def.depthBiasConstantFactor = rasterization_state->depthBiasConstantFactor;
-						def.depthBiasClamp = rasterization_state->depthBiasClamp;
-						def.depthBiasSlopeFactor = rasterization_state->depthBiasSlopeFactor;
-					} else {
-						// TODO: static depth bias unsupported
-						assert(rasterization_state->depthBiasConstantFactor == def.depthBiasConstantFactor);
-						assert(rasterization_state->depthBiasClamp == def.depthBiasClamp);
-						assert(rasterization_state->depthBiasSlopeFactor == def.depthBiasSlopeFactor);
-					}
-					records.depth_bias_enable = rasterization_state->depthBiasEnable; // the enable itself is not dynamic state in core
-					if (*rasterization_state != def) {
-						records.non_trivial_raster_state = true;
-						pi.extended_size += sizeof(PipelineInstanceCreateInfo::RasterizationState);
-					}
-				}
+			}
+
+			if (conservative_state) {
+				records.conservative_rasterization_enabled = true;
+				pi.extended_size += sizeof(PipelineInstanceCreateInfo::ConservativeState);
 			}
 
 			if (ongoing_renderpass->depth_stencil_attachment) {
@@ -1527,13 +1522,13 @@ namespace vuk {
 					                                                 .polygonMode = (uint8_t)rasterization_state->polygonMode,
 					                                                 .frontFace = (uint8_t)rasterization_state->frontFace };
 				write(data_ptr, rs);
-
-				if (records.conservative_rasterization_enabled) {
-					PipelineInstanceCreateInfo::ConservativeState cs{ .conservativeMode = (uint8_t)conservative_state->mode,
-																														 .overestimationAmount = conservative_state->overestimation_amount };
-					write(data_ptr, cs);
-				}
 				// TODO: support depth bias
+			}
+			
+			if (records.conservative_rasterization_enabled) {
+				PipelineInstanceCreateInfo::ConservativeState cs{ .conservativeMode = (uint8_t)conservative_state->mode,
+																													 .overestimationAmount = conservative_state->overestimationAmount };
+				write(data_ptr, cs);
 			}
 
 			if (ongoing_renderpass->depth_stencil_attachment) {

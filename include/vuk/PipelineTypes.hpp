@@ -288,7 +288,7 @@ namespace vuk {
 	
 	struct PipelineRasterizationConservativeStateCreateInfo {
 		bool operator==(PipelineRasterizationConservativeStateCreateInfo const& rhs) const noexcept {
-			return (mode == rhs.mode) && (overestimation_amount == rhs.overestimation_amount);
+			return (mode == rhs.mode) && (overestimationAmount == rhs.overestimationAmount);
 		}
 
 		bool operator!=(PipelineRasterizationConservativeStateCreateInfo const& rhs) const noexcept {
@@ -296,7 +296,7 @@ namespace vuk {
 		}
 		
 		ConservativeRasterizationMode mode = ConservativeRasterizationMode::eDisabled;
-		float overestimation_amount = {};
+		float overestimationAmount = {};
 	};
 
 	struct VertexInputAttributeDescription {

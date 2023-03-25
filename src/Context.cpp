@@ -927,8 +927,6 @@ namespace vuk {
 			                                                          .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
 			                                                          .lineWidth = 1.f };
 		
-		VkPipelineRasterizationConservativeStateCreateInfoEXT conservative_state{
-			.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT };
 		if (cinfo.records.non_trivial_raster_state) {
 			auto rs = read<PipelineInstanceCreateInfo::RasterizationState>(data_ptr);
 			rasterization_state = { .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
@@ -938,13 +936,6 @@ namespace vuk {
 				                      .cullMode = cinfo.cullMode,
 				                      .frontFace = (VkFrontFace)rs.frontFace,
 				                      .lineWidth = 1.f };
-			if (cinfo.records.conservative_rasterization_enabled) {
-				auto cs = read<PipelineInstanceCreateInfo::ConservativeState>(data_ptr);
-				conservative_state = { .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT,
-					.conservativeRasterizationMode = (VkConservativeRasterizationModeEXT) cs.conservativeMode,
-					.extraPrimitiveOverestimationSize = cs.overestimationAmount };
-				rasterization_state.pNext = &conservative_state;
-			}
 		}
 		rasterization_state.depthBiasEnable = cinfo.records.depth_bias_enable;
 		if (cinfo.records.depth_bias) {
@@ -955,6 +946,15 @@ namespace vuk {
 		}
 		if (cinfo.records.line_width_not_1) {
 			rasterization_state.lineWidth = read<float>(data_ptr);
+		}
+		VkPipelineRasterizationConservativeStateCreateInfoEXT conservative_state{
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT };
+		if (cinfo.records.conservative_rasterization_enabled) {
+			auto cs = read<PipelineInstanceCreateInfo::ConservativeState>(data_ptr);
+			conservative_state = { .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT,
+				.conservativeRasterizationMode = (VkConservativeRasterizationModeEXT) cs.conservativeMode,
+				.extraPrimitiveOverestimationSize = cs.overestimationAmount };
+			rasterization_state.pNext = &conservative_state;
 		}
 		gpci.pRasterizationState = &rasterization_state;
 
