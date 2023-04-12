@@ -273,6 +273,8 @@ namespace vuk {
 			info.objectType = VK_OBJECT_TYPE_SHADER_MODULE;
 		} else if constexpr (std::is_same_v<T, VkPipeline>) {
 			info.objectType = VK_OBJECT_TYPE_PIPELINE;
+		} else if constexpr (std::is_same_v<T, VkBuffer>) {
+			info.objectType = VK_OBJECT_TYPE_BUFFER;
 		}
 		info.objectHandle = reinterpret_cast<uint64_t>(t);
 		this->vkSetDebugUtilsObjectNameEXT(device, &info);
