@@ -280,6 +280,25 @@ namespace vuk {
 		float maxDepthBounds = {};
 	};
 
+	enum class ConservativeRasterizationMode {
+		eDisabled = VK_CONSERVATIVE_RASTERIZATION_MODE_DISABLED_EXT,
+		eOverestimate = VK_CONSERVATIVE_RASTERIZATION_MODE_OVERESTIMATE_EXT,
+		eUnderestimate = VK_CONSERVATIVE_RASTERIZATION_MODE_UNDERESTIMATE_EXT
+	};
+	
+	struct PipelineRasterizationConservativeStateCreateInfo {
+		bool operator==(PipelineRasterizationConservativeStateCreateInfo const& rhs) const noexcept {
+			return (mode == rhs.mode) && (overestimationAmount == rhs.overestimationAmount);
+		}
+
+		bool operator!=(PipelineRasterizationConservativeStateCreateInfo const& rhs) const noexcept {
+			return !operator==(rhs);
+		}
+		
+		ConservativeRasterizationMode mode = ConservativeRasterizationMode::eDisabled;
+		float overestimationAmount = {};
+	};
+
 	struct VertexInputAttributeDescription {
 		bool operator==(VertexInputAttributeDescription const& rhs) const noexcept {
 			return (location == rhs.location) && (binding == rhs.binding) && (format == rhs.format) && (offset == rhs.offset);

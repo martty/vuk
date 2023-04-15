@@ -36,6 +36,7 @@ namespace vuk {
 			uint32_t stencil_state : 1;
 			uint32_t line_width_not_1 : 1;
 			uint32_t more_than_one_sample : 1;
+			uint32_t conservative_rasterization_enabled : 1;
 		} records = {};
 		uint32_t attachmentCount : std::bit_width(VUK_MAX_COLOR_ATTACHMENTS); // up to VUK_MAX_COLOR_ATTACHMENTS attachments
 		// input assembly state
@@ -83,6 +84,11 @@ namespace vuk {
 			uint8_t frontFace : 1;
 		};
 
+		struct ConservativeState {
+			uint8_t conservativeMode : 2;
+			float overestimationAmount;
+		};
+		
 		struct DepthBias {
 			float depthBiasConstantFactor;
 			float depthBiasClamp;

@@ -192,6 +192,12 @@ namespace vuk {
 		return *this;
 	}
 
+	CommandBuffer& CommandBuffer::set_conservative(PipelineRasterizationConservativeStateCreateInfo state) {
+		VUK_EARLY_RET();
+		conservative_state = state;
+		return *this;
+	}
+
 	PipelineColorBlendAttachmentState blend_preset_to_pcba(BlendPreset preset) {
 		PipelineColorBlendAttachmentState pcba;
 		switch (preset) {
@@ -1377,7 +1383,6 @@ namespace vuk {
 				pi.extended_size += (uint16_t)sizeof(set_constants);
 				pi.extended_size += (uint16_t)spec_const_size;
 			}
-
 			if (rasterization) {
 				assert(rasterization_state && "If a pass has a depth/stencil or color attachment, you must set the rasterization state.");
 
@@ -1398,6 +1403,11 @@ namespace vuk {
 					records.non_trivial_raster_state = true;
 					pi.extended_size += sizeof(PipelineInstanceCreateInfo::RasterizationState);
 				}
+			}
+
+			if (conservative_state) {
+				records.conservative_rasterization_enabled = true;
+				pi.extended_size += sizeof(PipelineInstanceCreateInfo::ConservativeState);
 			}
 
 			if (ongoing_renderpass->depth_stencil_attachment) {
@@ -1514,6 +1524,12 @@ namespace vuk {
 					                                                 .frontFace = (uint8_t)rasterization_state->frontFace };
 				write(data_ptr, rs);
 				// TODO: support depth bias
+			}
+			
+			if (records.conservative_rasterization_enabled) {
+				PipelineInstanceCreateInfo::ConservativeState cs{ .conservativeMode = (uint8_t)conservative_state->mode,
+																													 .overestimationAmount = conservative_state->overestimationAmount };
+				write(data_ptr, cs);
 			}
 
 			if (ongoing_renderpass->depth_stencil_attachment) {
