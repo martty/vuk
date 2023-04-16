@@ -153,7 +153,7 @@ namespace {
 		      // With this rule, all image parameters can be inferred
 
 		      // rg.inference_rule("05_position", vuk::same_extent_as("05_deferred"));
-		      position_image = infer(position_image, vuk::same_extent_as(target));
+		      infer(position_image, vuk::same_extent_as(target));
 
 		      auto gbuffer = build_gbuffer_pass(std::move(position_image), std::move(normal_image), std::move(color_image), std::move(depth_img));
 		      auto result = std::apply(shading_pass, std::tuple_cat(std::make_tuple(target), gbuffer));
