@@ -464,11 +464,11 @@ namespace vuk {
 	using IARule = std::function<void(const struct InferenceContext& ctx, ImageAttachment& ia)>;
 	using BufferRule = std::function<void(const struct InferenceContext& ctx, Buffer& buffer)>;
 
-	[[nodiscard]] inline TypedFuture<Image> infer(TypedFuture<Image>& in, IARule rule) {
+	inline void infer(TypedFuture<Image>& in, IARule rule) {
 		std::shared_ptr<RenderGraph> rg = std::make_shared<RenderGraph>();
 		rg->attach_in("_in", std::move(in.future));
 		rg->inference_rule("_in", std::move(rule));
-		return { Future{ rg, "_in" } };
+		in = { Future{ rg, "_in" } };
 	}
 
 	// builtin inference rules for convenience
