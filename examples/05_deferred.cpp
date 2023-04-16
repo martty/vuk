@@ -68,10 +68,10 @@ namespace {
 		      auto build_gbuffer_pass = vuk::make_pass(
 		          "05_deferred_MRT",
 		          [uboVP](vuk::CommandBuffer& command_buffer,
-		                  vuk::IA<vuk::eColorWrite, decltype([]() {})> position,
-		                  vuk::IA<vuk::eColorWrite, decltype([]() {})> normal,
-		                  vuk::IA<vuk::eColorWrite, decltype([]() {})> color,
-		                  vuk::IA<vuk::eDepthStencilRW, decltype([]() {})> depth_rt) {
+		                  VUK_IA(vuk::eColorWrite) position,
+		                  VUK_IA(vuk::eColorWrite) normal,
+		                  VUK_IA(vuk::eColorWrite) color,
+		                  VUK_IA(vuk::eDepthStencilRW) depth_rt) {
 			          // Rendering is the same as in the case for forward
 			          command_buffer.set_viewport(0, vuk::Rect2D::framebuffer())
 			              .set_scissor(0, vuk::Rect2D::framebuffer())
@@ -107,10 +107,10 @@ namespace {
 		      // The shading pass for the deferred rendering
 		      auto shading_pass = vuk::make_pass("05_deferred_resolve",
 		                                         [cam_pos](vuk::CommandBuffer& command_buffer,
-		                                                   vuk::IA<vuk::eColorWrite, decltype([]() {})> deferred,
-		                                                   vuk::IA<vuk::eFragmentSampled, decltype([]() {})> position,
-		                                                   vuk::IA<vuk::eFragmentSampled, decltype([]() {})> normal,
-		                                                   vuk::IA<vuk::eFragmentSampled, decltype([]() {})> color) {
+		                                                   VUK_IA(vuk::eColorWrite) deferred,
+		                                                   VUK_IA(vuk::eFragmentSampled) position,
+		                                                   VUK_IA(vuk::eFragmentSampled) normal,
+		                                                   VUK_IA(vuk::eFragmentSampled) color) {
 			                                         command_buffer.set_viewport(0, vuk::Rect2D::framebuffer())
 			                                             .set_scissor(0, vuk::Rect2D::framebuffer())
 			                                             .set_rasterization({})     // Set the default rasterization state

@@ -17,6 +17,16 @@
 #include <unordered_set>
 #include <vector>
 
+#if defined(__clang__) or defined(__GNUC__)
+#define VUK_IA(access) vuk::IA<access, decltype([]() {})>
+#else
+namespace vuk {
+	template<size_t I>
+	struct tag_type {};
+}; // namespace vuk
+#define VUK_IA(access) vuk::IA<access, vuk::tag_type<__COUNTER__>>
+#endif
+
 namespace vuk {
 	struct FutureBase;
 	struct Resource;
