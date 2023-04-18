@@ -387,7 +387,6 @@ namespace vuk {
 		return bind_index_buffer(res->buffer, type);
 	}
 
-
 	CommandBuffer& CommandBuffer::set_primitive_topology(PrimitiveTopology topo) {
 		VUK_EARLY_RET();
 		topology = topo;
@@ -603,12 +602,12 @@ namespace vuk {
 			return *this;
 		}
 		ctx.vkCmdDrawIndexedIndirectCount(command_buffer,
-		                              indirect_buffer.buffer,
-		                              indirect_buffer.offset,
-		                              count_buffer.buffer,
-		                              count_buffer.offset,
-		                              (uint32_t)max_draw_count,
-		                              sizeof(DrawIndexedIndirectCommand));
+		                                  indirect_buffer.buffer,
+		                                  indirect_buffer.offset,
+		                                  count_buffer.buffer,
+		                                  count_buffer.offset,
+		                                  (uint32_t)max_draw_count,
+		                                  sizeof(DrawIndexedIndirectCommand));
 		return *this;
 	}
 
@@ -649,6 +648,30 @@ namespace vuk {
 
 		ctx.vkCmdDispatch(command_buffer, x, y, z);
 		return *this;
+	}
+
+	CommandBuffer& CommandBuffer::dispatch_invocations_per_pixel(Name name, size_t min_invocations_per_pixel) {
+		auto extent = get_resource_image_attachment(name).value().extent.extent;
+
+		return dispatch_invocations(min_invocations_per_pixel * extent.width, min_invocations_per_pixel * extent.height, min_invocations_per_pixel * extent.depth);
+	}
+
+	CommandBuffer& CommandBuffer::dispatch_invocations_per_pixel(ImageAttachment& ia, size_t min_invocations_per_pixel) {
+		auto extent = ia.extent.extent;
+
+		return dispatch_invocations(min_invocations_per_pixel * extent.width, min_invocations_per_pixel * extent.height, min_invocations_per_pixel * extent.depth);
+	}
+
+	CommandBuffer& CommandBuffer::dispatch_invocations_per_element(Name name, size_t element_size, size_t min_invocations_per_element) {
+		auto count = min_invocations_per_element * idivceil(get_resource_buffer(name).value().size, element_size);
+
+		return dispatch_invocations(count, 1, 1);
+	}
+
+	CommandBuffer& CommandBuffer::dispatch_invocations_per_element(Buffer& buffer, size_t element_size, size_t min_invocations_per_element) {
+		auto count = min_invocations_per_element * idivceil(buffer.size, element_size);
+
+		return dispatch_invocations(count, 1, 1);
 	}
 
 	CommandBuffer& CommandBuffer::dispatch_indirect(const Buffer& indirect_buffer) {
@@ -912,8 +935,7 @@ namespace vuk {
 			return *this;
 		}
 		auto dst_bbuf = dst_res->buffer;
-		
-		
+
 		return fill_buffer(dst_bbuf, size, data);
 	}
 
@@ -1525,10 +1547,10 @@ namespace vuk {
 				write(data_ptr, rs);
 				// TODO: support depth bias
 			}
-			
+
 			if (records.conservative_rasterization_enabled) {
 				PipelineInstanceCreateInfo::ConservativeState cs{ .conservativeMode = (uint8_t)conservative_state->mode,
-																													 .overestimationAmount = conservative_state->overestimationAmount };
+					                                                .overestimationAmount = conservative_state->overestimationAmount };
 				write(data_ptr, cs);
 			}
 

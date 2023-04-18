@@ -289,7 +289,7 @@ namespace vuk {
 		CommandBuffer& set_depth_stencil(PipelineDepthStencilStateCreateInfo depth_stencil_state);
 		/// @brief Set the conservative rasterization state
 		CommandBuffer& set_conservative(PipelineRasterizationConservativeStateCreateInfo conservative_state);
-		
+
 		/// @brief Set one color blend state to use for all color attachments
 		CommandBuffer& broadcast_color_blend(PipelineColorBlendAttachmentState color_blend_state);
 		/// @brief Set one color blend preset to use for all color attachments
@@ -435,7 +435,7 @@ namespace vuk {
 		/// @brief Bind an image to the command buffer
 		/// @param set The set bind index to be used
 		/// @param binding The descriptor binding to bind the image to
-		/// @param image_view The ImageAttachment to bind
+		/// @param image The ImageAttachment to bind
 		/// @param layout layout of the image when the affected draws execute
 		CommandBuffer& bind_image(unsigned set, unsigned binding, const ImageAttachment& image, ImageLayout layout = ImageLayout::eReadOnlyOptimalKHR);
 
@@ -521,6 +521,36 @@ namespace vuk {
 		/// @param invocation_count_y Number of invocations on the y-axis
 		/// @param invocation_count_z Number of invocations on the z-axis
 		CommandBuffer& dispatch_invocations(size_t invocation_count_x, size_t invocation_count_y = 1, size_t invocation_count_z = 1);
+
+		/// @brief Perform a dispatch with at least N invocations per pixel
+		/// Actual invocation count will be rounded up to be a multiple of local_size_{x,y,z}
+		/// Width corresponds to the x-axis, height to the y-axis and depth to the z-axis
+		/// @param name Name of the Image Resource to use for extents
+		/// @param min_invocations_per_pixel Minimum invocations to dispatch per pixel (N)
+		CommandBuffer& dispatch_invocations_per_pixel(Name name, size_t min_invocations_per_pixel = 1);
+
+		/// @brief Perform a dispatch with at least N invocations per pixel
+		/// Actual invocation count will be rounded up to be a multiple of local_size_{x,y,z}
+		/// Width corresponds to the x-axis, height to the y-axis and depth to the z-axis
+		/// @param ia ImageAttachment to use for extents
+		/// @param min_invocations_per_pixel Minimum invocations to dispatch per pixel (N)
+		CommandBuffer& dispatch_invocations_per_pixel(ImageAttachment& ia, size_t min_invocations_per_pixel = 1);
+
+		/// @brief Perform a dispatch with at least N invocations per buffer element
+		/// Actual invocation count will be rounded up to be a multiple of local_size_{x,y,z}
+		/// The dispatch will be sized only on the x-axis
+		/// @param name Name of the Buffer Resource to use for calculating element count
+		/// @param element_size Size of one element
+		/// @param min_invocations_per_element Minimum invocations to dispatch per element (N)
+		CommandBuffer& dispatch_invocations_per_element(Name name, size_t element_size, size_t min_invocations_per_element = 1);
+
+		/// @brief Perform a dispatch with at least N invocations per buffer element
+		/// Actual invocation count will be rounded up to be a multiple of local_size_{x,y,z}
+		/// The dispatch will be sized only on the x-axis
+		/// @param buffer Buffer to use for calculating element count
+		/// @param element_size Size of one element
+		/// @param min_invocations_per_element Minimum invocations to dispatch per element (N)
+		CommandBuffer& dispatch_invocations_per_element(Buffer& buffer, size_t element_size, size_t min_invocations_per_element = 1);
 
 		/// @brief Issue an indirect compute dispatch
 		/// @param indirect_buffer Buffer of workgroup counts
