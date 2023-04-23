@@ -522,35 +522,61 @@ namespace vuk {
 		/// @param invocation_count_z Number of invocations on the z-axis
 		CommandBuffer& dispatch_invocations(size_t invocation_count_x, size_t invocation_count_y = 1, size_t invocation_count_z = 1);
 
-		/// @brief Perform a dispatch with at least N invocations per pixel
-		/// Actual invocation count will be rounded up to be a multiple of local_size_{x,y,z}
+		/// @brief Perform a dispatch with invocations per pixel
+		/// The number of invocations per pixel can be scaled in all dimensions
+		/// If the scale is == 1, then 1 invocations will be dispatched per pixel
+		/// If the scale is larger than 1, then more invocations will be dispatched than pixels
+		/// If the scale is smaller than 1, then fewer invocations will be dispatched than pixels
+		/// Actual invocation count will be rounded up to be a multiple of local_size_{x,y,z} after scaling
 		/// Width corresponds to the x-axis, height to the y-axis and depth to the z-axis
 		/// @param name Name of the Image Resource to use for extents
-		/// @param min_invocations_per_pixel Minimum invocations to dispatch per pixel (N)
-		CommandBuffer& dispatch_invocations_per_pixel(Name name, size_t min_invocations_per_pixel = 1);
+		/// @param min_invocations_per_pixel_x Invocation count scale in x-axis
+		/// @param min_invocations_per_pixel_y Invocation count scale in y-axis
+		/// @param min_invocations_per_pixel_z Invocation count scale in z-axis
+		CommandBuffer& dispatch_invocations_per_pixel(Name name,
+		                                              float invocations_per_pixel_scale_x = 1.f,
+		                                              float invocations_per_pixel_scale_y = 1.f,
+		                                              float invocations_per_pixel_scale_z = 1.f);
 
-		/// @brief Perform a dispatch with at least N invocations per pixel
-		/// Actual invocation count will be rounded up to be a multiple of local_size_{x,y,z}
+		/// @brief Perform a dispatch with invocations per pixel
+		/// The number of invocations per pixel can be scaled in all dimensions
+		/// If the scale is == 1, then 1 invocations will be dispatched per pixel
+		/// If the scale is larger than 1, then more invocations will be dispatched than pixels
+		/// If the scale is smaller than 1, then fewer invocations will be dispatched than pixels
+		/// Actual invocation count will be rounded up to be a multiple of local_size_{x,y,z} after scaling
 		/// Width corresponds to the x-axis, height to the y-axis and depth to the z-axis
 		/// @param ia ImageAttachment to use for extents
-		/// @param min_invocations_per_pixel Minimum invocations to dispatch per pixel (N)
-		CommandBuffer& dispatch_invocations_per_pixel(ImageAttachment& ia, size_t min_invocations_per_pixel = 1);
+		/// @param min_invocations_per_pixel_x Invocation count scale in x-axis
+		/// @param min_invocations_per_pixel_y Invocation count scale in y-axis
+		/// @param min_invocations_per_pixel_z Invocation count scale in z-axis
+		CommandBuffer& dispatch_invocations_per_pixel(ImageAttachment& ia,
+		                                              float invocations_per_pixel_scale_x = 1.f,
+		                                              float invocations_per_pixel_scale_y = 1.f,
+		                                              float invocations_per_pixel_scale_z = 1.f);
 
-		/// @brief Perform a dispatch with at least N invocations per buffer element
+		/// @brief Perform a dispatch with invocations per buffer element
 		/// Actual invocation count will be rounded up to be a multiple of local_size_{x,y,z}
+		/// The number of invocations per element can be scaled
+		/// If the scale is == 1, then 1 invocations will be dispatched per element
+		/// If the scale is larger than 1, then more invocations will be dispatched than element
+		/// If the scale is smaller than 1, then fewer invocations will be dispatched than element
 		/// The dispatch will be sized only on the x-axis
 		/// @param name Name of the Buffer Resource to use for calculating element count
 		/// @param element_size Size of one element
-		/// @param min_invocations_per_element Minimum invocations to dispatch per element (N)
-		CommandBuffer& dispatch_invocations_per_element(Name name, size_t element_size, size_t min_invocations_per_element = 1);
+		/// @param invocations_per_element_scale Invocation count scale
+		CommandBuffer& dispatch_invocations_per_element(Name name, size_t element_size, float invocations_per_element_scale = 1.f);
 
-		/// @brief Perform a dispatch with at least N invocations per buffer element
+		/// @brief Perform a dispatch with invocations per buffer element
 		/// Actual invocation count will be rounded up to be a multiple of local_size_{x,y,z}
+		/// The number of invocations per element can be scaled
+		/// If the scale is == 1, then 1 invocations will be dispatched per element
+		/// If the scale is larger than 1, then more invocations will be dispatched than element
+		/// If the scale is smaller than 1, then fewer invocations will be dispatched than element
 		/// The dispatch will be sized only on the x-axis
 		/// @param buffer Buffer to use for calculating element count
 		/// @param element_size Size of one element
-		/// @param min_invocations_per_element Minimum invocations to dispatch per element (N)
-		CommandBuffer& dispatch_invocations_per_element(Buffer& buffer, size_t element_size, size_t min_invocations_per_element = 1);
+		/// @param invocations_per_element_scale Invocation count scale
+		CommandBuffer& dispatch_invocations_per_element(Buffer& buffer, size_t element_size, float invocations_per_element_scale = 1.f);
 
 		/// @brief Issue an indirect compute dispatch
 		/// @param indirect_buffer Buffer of workgroup counts

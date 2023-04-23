@@ -650,26 +650,36 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::dispatch_invocations_per_pixel(Name name, size_t min_invocations_per_pixel) {
+	CommandBuffer& CommandBuffer::dispatch_invocations_per_pixel(Name name,
+	                                                             float invocations_per_pixel_scale_x,
+	                                                             float invocations_per_pixel_scale_y,
+	                                                             float invocations_per_pixel_scale_z) {
 		auto extent = get_resource_image_attachment(name).value().extent.extent;
 
-		return dispatch_invocations(min_invocations_per_pixel * extent.width, min_invocations_per_pixel * extent.height, min_invocations_per_pixel * extent.depth);
+		return dispatch_invocations((uint32_t)std::ceilf(invocations_per_pixel_scale_x * extent.width),
+		                            (uint32_t)std::ceilf(invocations_per_pixel_scale_y * extent.height),
+		                            (uint32_t)std::ceilf(invocations_per_pixel_scale_z * extent.depth));
 	}
 
-	CommandBuffer& CommandBuffer::dispatch_invocations_per_pixel(ImageAttachment& ia, size_t min_invocations_per_pixel) {
+	CommandBuffer& CommandBuffer::dispatch_invocations_per_pixel(ImageAttachment& ia,
+	                                                             float invocations_per_pixel_scale_x,
+	                                                             float invocations_per_pixel_scale_y,
+	                                                             float invocations_per_pixel_scale_z) {
 		auto extent = ia.extent.extent;
 
-		return dispatch_invocations(min_invocations_per_pixel * extent.width, min_invocations_per_pixel * extent.height, min_invocations_per_pixel * extent.depth);
+		return dispatch_invocations((uint32_t)std::ceilf(invocations_per_pixel_scale_x * extent.width),
+		                            (uint32_t)std::ceilf(invocations_per_pixel_scale_y * extent.height),
+		                            (uint32_t)std::ceilf(invocations_per_pixel_scale_z * extent.depth));
 	}
 
-	CommandBuffer& CommandBuffer::dispatch_invocations_per_element(Name name, size_t element_size, size_t min_invocations_per_element) {
-		auto count = min_invocations_per_element * idivceil(get_resource_buffer(name).value().size, element_size);
+	CommandBuffer& CommandBuffer::dispatch_invocations_per_element(Name name, size_t element_size, float invocations_per_element_scale) {
+		auto count = (uint32_t)std::ceilf(invocations_per_element_scale * idivceil(get_resource_buffer(name).value().size, element_size));
 
 		return dispatch_invocations(count, 1, 1);
 	}
 
-	CommandBuffer& CommandBuffer::dispatch_invocations_per_element(Buffer& buffer, size_t element_size, size_t min_invocations_per_element) {
-		auto count = min_invocations_per_element * idivceil(buffer.size, element_size);
+	CommandBuffer& CommandBuffer::dispatch_invocations_per_element(Buffer& buffer, size_t element_size, float invocations_per_element_scale) {
+		auto count = (uint32_t)std::ceilf(invocations_per_element_scale * idivceil(buffer.size, element_size));
 
 		return dispatch_invocations(count, 1, 1);
 	}
