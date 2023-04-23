@@ -329,6 +329,15 @@ namespace vuk {
 	struct TypedFuture<Image> {
 		Future future;
 		ImageAttachment* attachment;
+		Name original_name;
+		Name last_name;
+		size_t counter = 0;
+
+		std::pair<Name, Name> generate_names() {
+			std::pair names = { last_name, original_name.append(std::to_string(counter++)) };
+			last_name = names.second;
+			return names;
+		}
 
 		ImageAttachment* operator->() {
 			return attachment;
@@ -353,17 +362,16 @@ namespace vuk {
 		rg->attach_in(Name(typeid(U).name()), arg.future);
 	}
 
-	template<typename... T>
-	struct TupleMap<std::tuple<T...>> {
-		using ret_tuple = std::tuple<TypedFuture<typename T::base>...>;
+	template<class T1, typename... T>
+	struct TupleMap<std::tuple<T1, T...>> {
+		using ret_tuple = std::tuple<TypedFuture<typename T1::base>, TypedFuture<typename T::base>...>;
 
 		template<class Ret, class F>
 		static auto make_lam(Name name, F&& body) {
-			std::shared_ptr<RenderGraph> rg = std::make_shared<RenderGraph>();
 			Pass p;
 			p.name = name;
 			// we need to walk return types and match them to input types
-			p.resources = { to_resource<T>()... };
+			p.resources = { to_resource<T1>(), to_resource<T>()... };
 			if constexpr (!std::is_same_v<Ret, void>) {
 				TupleMap<Ret>::fill_out(p);
 			}
@@ -372,16 +380,16 @@ namespace vuk {
 			p.execute = [bo = std::move(body)](CommandBuffer& cb) {
 				void* ptr;
 				memcpy(&ptr, &cb, sizeof(void*));
-				std::tuple<CommandBuffer&, T...>& arg_tuple = *reinterpret_cast<std::tuple<CommandBuffer&, T...>*>(ptr);
+				std::tuple<CommandBuffer&, T1, T...>& arg_tuple = *reinterpret_cast<std::tuple<CommandBuffer&, T1, T...>*>(ptr);
 				std::apply(bo, arg_tuple);
 				delete &arg_tuple;
 			};
 
 			p.make_argument_tuple = [](CommandBuffer& cb, std::span<void*> elems) -> void* {
-				std::tuple<CommandBuffer*, T...>* tuple = new std::tuple<CommandBuffer*, T...>;
+				std::tuple<CommandBuffer*, T1, T...>* tuple = new std::tuple<CommandBuffer*, T1, T...>;
 				std::get<0>(*tuple) = &cb;
 #define X(n)                                                                                                                                                   \
-	if constexpr (sizeof...(T) > n) {                                                                                                                            \
+	if constexpr ((sizeof...(T) + 1) > n) {                                                                                                                      \
 		auto& ptr = std::get<n + 1>(*tuple).ptr;                                                                                                                   \
 		ptr = reinterpret_cast<decltype(ptr)>(elems[n]);                                                                                                           \
 	}
@@ -405,8 +413,9 @@ namespace vuk {
 #undef X
 				return tuple;
 			};
-			rg->add_pass(std::move(p));
-			return [=](TypedFuture<typename T::base>&&... args) mutable {
+			return [=](TypedFuture<typename T1::base> arg, TypedFuture<typename T::base>&&... args) mutable {
+				auto& rg = arg.future.get_render_graph();
+				rg->add_pass(std::move(p));
 				(attach_one<T, TypedFuture<typename T::base>>(rg, std::move(args)), ...);
 				if constexpr (!std::is_same_v<Ret, void>) {
 					return TupleMap<Ret>::make_ret(rg);
@@ -415,15 +424,16 @@ namespace vuk {
 		}
 
 		static auto make_ret(std::shared_ptr<RenderGraph> rg) {
-			if constexpr (sizeof...(T) > 1) {
-				return std::make_tuple(TypedFuture<typename T::base>{ Future{ rg, Name(typeid(T).name()).append("+") } }...);
-			} else if constexpr (sizeof...(T) == 1) {
-				return (TypedFuture<typename T::base>{ Future{ rg, Name(typeid(T).name()).append("+") } }, ...);
+			if constexpr (sizeof...(T) > 0) {
+				return std::make_tuple(TypedFuture<typename T1::base>{ Future{ rg, Name(typeid(T1).name()).append("+") } },
+				                       TypedFuture<typename T::base>{ Future{ rg, Name(typeid(T).name()).append("+") } }...);
+			} else if constexpr (sizeof...(T) == 0) {
+				return TypedFuture<typename T1::base>{ Future{ rg, Name(typeid(T1).name()).append("+") } };
 			}
 		}
 
 		static auto fill_out(Pass& p) {
-			auto out_res_names = { Name(typeid(T).name())... };
+			auto out_res_names = { Name(typeid(T1).name()), Name(typeid(T).name())... };
 			for (auto& n : out_res_names) {
 				for (auto& r : p.resources) {
 					if (n == r.name.name) {
@@ -443,14 +453,14 @@ namespace vuk {
 
 	[[nodiscard]] inline TypedFuture<Image> declare_ia(Name name, ImageAttachment ia = {}) {
 		std::shared_ptr<RenderGraph> rg = std::make_shared<RenderGraph>();
-		return { Future{ rg, name }, &rg->attach_image(name, ia) };
+		return { Future{ rg, name }, &rg->attach_image(name, ia), name, name };
 	}
 
 	[[nodiscard]] inline TypedFuture<Image> clear(TypedFuture<Image> in, Clear clear_value) {
-		std::shared_ptr<RenderGraph> rg = std::make_shared<RenderGraph>();
-		rg->attach_in("_in", std::move(in.future));
-		rg->clear_image("_in", "_out", clear_value);
-		return { Future{ rg, "_out" } };
+		auto& rg = in.future.get_render_graph();
+		auto [prev, next] = in.generate_names();
+		rg->clear_image(prev, next, clear_value);
+		return { Future{ rg, next } };
 	}
 
 	struct InferenceContext {
@@ -465,10 +475,8 @@ namespace vuk {
 	using BufferRule = std::function<void(const struct InferenceContext& ctx, Buffer& buffer)>;
 
 	inline void infer(TypedFuture<Image>& in, IARule rule) {
-		std::shared_ptr<RenderGraph> rg = std::make_shared<RenderGraph>();
-		rg->attach_in("_in", std::move(in.future));
-		rg->inference_rule("_in", std::move(rule));
-		in = { Future{ rg, "_in" } };
+		auto& rg = in.future.get_render_graph();
+		rg->inference_rule(in.last_name, std::move(rule));
 	}
 
 	// builtin inference rules for convenience

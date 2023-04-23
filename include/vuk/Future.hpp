@@ -86,7 +86,7 @@ namespace vuk {
 		}
 
 		/// @brief Get the referenced RenderGraph
-		std::shared_ptr<RenderGraph> get_render_graph() {
+		std::shared_ptr<RenderGraph>& get_render_graph() {
 			return rg;
 		}
 
