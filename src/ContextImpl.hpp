@@ -1,5 +1,4 @@
 #include "Cache.hpp"
-#include "RGImage.hpp"
 #include "RenderPass.hpp"
 #include "vuk/Allocator.hpp"
 #include "vuk/Context.hpp"
@@ -39,7 +38,6 @@ namespace vuk {
 		Cache<ComputePipelineInfo> compute_pipeline_cache;
 		Cache<RayTracingPipelineInfo> ray_tracing_pipeline_cache;
 		Cache<VkRenderPass> renderpass_cache;
-		Cache<RGImage> transient_images;
 		Cache<DescriptorPool> pool_cache;
 		Cache<Sampler> sampler_cache;
 		Cache<ShaderModule> shader_modules;
@@ -64,7 +62,6 @@ namespace vuk {
 		robin_hood::unordered_map<Query, uint64_t> timestamp_result_map;
 
 		void collect(uint64_t absolute_frame) {
-			transient_images.collect(absolute_frame, 6);
 			// collect rarer resources
 			static constexpr uint32_t cache_collection_frequency = 16;
 			auto remainder = absolute_frame % cache_collection_frequency;
@@ -101,7 +98,6 @@ namespace vuk {
 		    compute_pipeline_cache(&ctx, &FN<struct ComputePipelineInfo>::create_fn, &FN<struct ComputePipelineInfo>::destroy_fn),
 		    ray_tracing_pipeline_cache(&ctx, &FN<struct RayTracingPipelineInfo>::create_fn, &FN<struct RayTracingPipelineInfo>::destroy_fn),
 		    renderpass_cache(&ctx, &FN<VkRenderPass>::create_fn, &FN<VkRenderPass>::destroy_fn),
-		    transient_images(&ctx, &FN<struct RGImage>::create_fn, &FN<struct RGImage>::destroy_fn),
 		    pool_cache(&ctx, &FN<struct DescriptorPool>::create_fn, &FN<struct DescriptorPool>::destroy_fn),
 		    sampler_cache(&ctx, &FN<Sampler>::create_fn, &FN<Sampler>::destroy_fn),
 		    shader_modules(&ctx, &FN<struct ShaderModule>::create_fn, &FN<struct ShaderModule>::destroy_fn),

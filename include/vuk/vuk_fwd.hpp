@@ -15,10 +15,6 @@ namespace vuk {
 
 	struct ShaderSource;
 
-	// temporary
-	struct RGImage;
-	struct RGCI;
-
 	// 0b00111 -> 3
 	inline uint32_t num_leading_ones(uint32_t mask) noexcept {
 #ifdef __has_builtin

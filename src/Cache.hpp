@@ -1,7 +1,6 @@
 #pragma once
 #include "../src/ToIntegral.hpp"
 #include "CreateInfo.hpp"
-#include "RGImage.hpp"
 #include "RenderPass.hpp"
 #include "vuk/Hash.hpp"
 #include "vuk/Pipeline.hpp"

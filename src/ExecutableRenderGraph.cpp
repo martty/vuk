@@ -22,37 +22,6 @@ namespace vuk {
 
 	ExecutableRenderGraph::~ExecutableRenderGraph() {}
 
-	void ExecutableRenderGraph::create_attachment(Context& ctx, AttachmentInfo& attachment_info) {
-		if (attachment_info.type == AttachmentInfo::Type::eInternal) {
-			vuk::ImageUsageFlags usage = {};
-			for (auto& chain : attachment_info.use_chains.to_span(impl->attachment_use_chain_references)) {
-				usage |= impl->compute_usage(chain);
-			}
-
-			vuk::ImageCreateInfo ici;
-			ici.usage = usage;
-			ici.arrayLayers = 1;
-			ici.flags = attachment_info.attachment.image_flags;
-			assert(attachment_info.attachment.extent.sizing != Sizing::eRelative);
-			ici.extent = static_cast<vuk::Extent3D>(attachment_info.attachment.extent.extent);
-			ici.imageType = attachment_info.attachment.image_type;
-			ici.format = attachment_info.attachment.format;
-			ici.mipLevels = attachment_info.attachment.level_count;
-			ici.arrayLayers = attachment_info.attachment.layer_count;
-			ici.initialLayout = vuk::ImageLayout::eUndefined;
-			ici.samples = attachment_info.attachment.sample_count.count;
-			ici.sharingMode = vuk::SharingMode::eExclusive;
-			ici.tiling = attachment_info.attachment.tiling;
-
-			RGCI rgci;
-			rgci.name = attachment_info.name;
-			rgci.ici = ici;
-
-			auto rg = ctx.acquire_rendertarget(rgci, ctx.get_frame_count());
-			attachment_info.attachment.image = rg.image;
-		}
-	}
-
 	void begin_renderpass(Context& ctx, vuk::RenderPassInfo& rpass, VkCommandBuffer& cbuf, bool use_secondary_command_buffers) {
 		VkRenderPassBeginInfo rbi{ .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
 		rbi.renderPass = rpass.handle;
@@ -689,18 +658,14 @@ namespace vuk {
 		// create non-attachment images
 		for (auto& bound : impl->bound_attachments) {
 			if (!bound.attachment.image && bound.parent_attachment == 0) {
-				if (bound.rp_uses.size() > 0) { // its an FB attachment
-					create_attachment(ctx, bound);
-				} else {
-					auto allocator = bound.allocator ? *bound.allocator : alloc;
-					assert(bound.attachment.usage != ImageUsageFlags{});
-					auto img = allocate_image(allocator, bound.attachment);
-					if (!img) {
-						return img;
-					}
-					bound.attachment.image = **img;
-					ctx.set_name(bound.attachment.image.image, bound.name.name);
+				auto allocator = bound.allocator ? *bound.allocator : alloc;
+				assert(bound.attachment.usage != ImageUsageFlags{});
+				auto img = allocate_image(allocator, bound.attachment);
+				if (!img) {
+					return img;
 				}
+				bound.attachment.image = **img;
+				ctx.set_name(bound.attachment.image.image, bound.name.name);
 			}
 		}
 

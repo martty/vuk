@@ -177,7 +177,6 @@ namespace vuk {
 		impl->pipeline_cache.allocator = this;
 		impl->compute_pipeline_cache.allocator = this;
 		impl->renderpass_cache.allocator = this;
-		impl->transient_images.allocator = this;
 		impl->pool_cache.allocator = this;
 		impl->sampler_cache.allocator = this;
 		impl->shader_modules.allocator = this;
@@ -213,7 +212,6 @@ namespace vuk {
 		impl->pipeline_cache.allocator = this;
 		impl->compute_pipeline_cache.allocator = this;
 		impl->renderpass_cache.allocator = this;
-		impl->transient_images.allocator = this;
 		impl->pool_cache.allocator = this;
 		impl->sampler_cache.allocator = this;
 		impl->shader_modules.allocator = this;
@@ -666,10 +664,6 @@ namespace vuk {
 		return tex;
 	}
 
-	void Context::destroy(const RGImage& image) {
-		deallocate(impl->direct_allocator, image.image);
-	}
-
 	void Context::destroy(const DescriptorPool& dp) {
 		dp.destroy(*this, device);
 	}
@@ -806,14 +800,6 @@ namespace vuk {
 	void Context::commit_persistent_descriptorset(PersistentDescriptorSet& array) {
 		this->vkUpdateDescriptorSets(device, (uint32_t)array.pending_writes.size(), array.pending_writes.data(), 0, nullptr);
 		array.pending_writes.clear();
-	}
-
-	RGImage Context::create(const create_info_t<RGImage>& cinfo) {
-		RGImage res{};
-		res.image = allocate_image(impl->direct_allocator, cinfo.ici)->release();
-		std::string name = std::string("Image: RenderTarget ") + std::string(cinfo.name.name.to_sv());
-		set_name(res.image.image, Name(name));
-		return res;
 	}
 
 	VkRenderPass Context::create(const create_info_t<VkRenderPass>& cinfo) {
@@ -1248,10 +1234,6 @@ namespace vuk {
 
 	VkRenderPass Context::acquire_renderpass(const RenderPassCreateInfo& rpci, uint64_t absolute_frame) {
 		return impl->renderpass_cache.acquire(rpci, absolute_frame);
-	}
-
-	RGImage Context::acquire_rendertarget(const RGCI& rgci, uint64_t absolute_frame) {
-		return impl->transient_images.acquire(rgci, absolute_frame);
 	}
 
 	Sampler Context::acquire_sampler(const SamplerCreateInfo& sci, uint64_t absolute_frame) {

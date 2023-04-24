@@ -330,7 +330,6 @@ namespace vuk {
 	private:
 		struct RGCImpl* impl;
 
-		void create_attachment(Context& ptc, struct AttachmentInfo& attachment_info);
 		void fill_renderpass_info(struct RenderPassInfo& rpass, const size_t& i, class CommandBuffer& cobuf);
 		Result<SubmitInfo> record_single_submit(Allocator&, std::span<PassInfo*> passes, DomainFlagBits domain);
 

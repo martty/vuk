@@ -197,8 +197,6 @@ namespace vuk {
 
 		// Caches
 
-		/// @brief Acquire a cached rendertarget
-		RGImage acquire_rendertarget(const struct RGCI& ci, uint64_t absolute_frame);
 		/// @brief Acquire a cached sampler
 		Sampler acquire_sampler(const SamplerCreateInfo& cu, uint64_t absolute_frame);
 		/// @brief Acquire a cached VkRenderPass
@@ -224,7 +222,6 @@ namespace vuk {
 		uint64_t get_unique_handle_id();
 
 		// internal functions
-		void destroy(const struct RGImage& image);
 		void destroy(const struct DescriptorPool& dp);
 		void destroy(const struct PipelineInfo& pi);
 		void destroy(const struct ComputePipelineInfo& pi);
@@ -247,7 +244,6 @@ namespace vuk {
 		ComputePipelineInfo create(const struct ComputePipelineInstanceCreateInfo& cinfo);
 		RayTracingPipelineInfo create(const struct RayTracingPipelineInstanceCreateInfo& cinfo);
 		VkRenderPass create(const struct RenderPassCreateInfo& cinfo);
-		RGImage create(const struct RGCI& cinfo);
 		Sampler create(const struct SamplerCreateInfo& cinfo);
 
 	private:
