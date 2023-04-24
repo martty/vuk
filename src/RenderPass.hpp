@@ -8,6 +8,7 @@
 #include "vuk/vuk_fwd.hpp"
 
 #include <optional>
+#include <tuple>
 #include <vector>
 
 inline bool operator==(VkAttachmentDescription const& lhs, VkAttachmentDescription const& rhs) noexcept {
