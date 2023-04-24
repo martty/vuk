@@ -4,6 +4,8 @@
 #include "vuk/Context.hpp"
 #include "vuk/RenderGraph.hpp"
 
+#include <cmath>
+
 #define VUK_EARLY_RET()                                                                                                                                        \
 	if (!current_error) {                                                                                                                                        \
 		return *this;                                                                                                                                              \
