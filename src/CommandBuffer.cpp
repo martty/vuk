@@ -658,9 +658,9 @@ namespace vuk {
 	                                                             float invocations_per_pixel_scale_z) {
 		auto extent = get_resource_image_attachment(name).value().extent.extent;
 
-		return dispatch_invocations((uint32_t)std::ceilf(invocations_per_pixel_scale_x * extent.width),
-		                            (uint32_t)std::ceilf(invocations_per_pixel_scale_y * extent.height),
-		                            (uint32_t)std::ceilf(invocations_per_pixel_scale_z * extent.depth));
+		return dispatch_invocations((uint32_t)std::ceil(invocations_per_pixel_scale_x * extent.width),
+		                            (uint32_t)std::ceil(invocations_per_pixel_scale_y * extent.height),
+		                            (uint32_t)std::ceil(invocations_per_pixel_scale_z * extent.depth));
 	}
 
 	CommandBuffer& CommandBuffer::dispatch_invocations_per_pixel(ImageAttachment& ia,
@@ -669,19 +669,19 @@ namespace vuk {
 	                                                             float invocations_per_pixel_scale_z) {
 		auto extent = ia.extent.extent;
 
-		return dispatch_invocations((uint32_t)std::ceilf(invocations_per_pixel_scale_x * extent.width),
-		                            (uint32_t)std::ceilf(invocations_per_pixel_scale_y * extent.height),
-		                            (uint32_t)std::ceilf(invocations_per_pixel_scale_z * extent.depth));
+		return dispatch_invocations((uint32_t)std::ceil(invocations_per_pixel_scale_x * extent.width),
+		                            (uint32_t)std::ceil(invocations_per_pixel_scale_y * extent.height),
+		                            (uint32_t)std::ceil(invocations_per_pixel_scale_z * extent.depth));
 	}
 
 	CommandBuffer& CommandBuffer::dispatch_invocations_per_element(Name name, size_t element_size, float invocations_per_element_scale) {
-		auto count = (uint32_t)std::ceilf(invocations_per_element_scale * idivceil(get_resource_buffer(name).value().size, element_size));
+		auto count = (uint32_t)std::ceil(invocations_per_element_scale * idivceil(get_resource_buffer(name).value().size, element_size));
 
 		return dispatch_invocations(count, 1, 1);
 	}
 
 	CommandBuffer& CommandBuffer::dispatch_invocations_per_element(Buffer& buffer, size_t element_size, float invocations_per_element_scale) {
-		auto count = (uint32_t)std::ceilf(invocations_per_element_scale * idivceil(buffer.size, element_size));
+		auto count = (uint32_t)std::ceil(invocations_per_element_scale * idivceil(buffer.size, element_size));
 
 		return dispatch_invocations(count, 1, 1);
 	}
