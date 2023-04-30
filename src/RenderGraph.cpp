@@ -1534,6 +1534,10 @@ namespace vuk {
 	}
 
 	Result<void> RGCImpl::merge_rps() {
+		// this is only done on gfx passes
+		if (graphics_passes.size() == 0) {
+			return { expected_value };
+		}
 		// we run this after barrier gen
 		// loop through gfx passes in order
 		for (size_t i = 0; i < graphics_passes.size() - 1; i++) {
