@@ -1625,12 +1625,15 @@ namespace vuk {
 				}
 
 				RelSpan<std::pair<DomainFlagBits, uint64_t>> new_waits = {};
-				for (auto [queue, pass_idx] : current_pass->relative_waits.to_span(waits)) {
+				auto sp = current_pass->relative_waits.to_span(waits);
+				for (auto i = 0; i < sp.size(); i++) {
+					auto [queue, pass_idx] = sp[i];
 					auto queue_idx = std::countr_zero((uint32_t)queue) - 1;
 					auto& last_amt = last_passes_waited[queue_idx];
 					if (pass_idx > last_amt) {
 						last_amt = pass_idx;
 						new_waits.append(waits, std::pair{ queue, pass_idx });
+						sp = current_pass->relative_waits.to_span(waits);
 					} else {
 						ordered_passes[pass_idx]->is_waited_on--;
 					}
