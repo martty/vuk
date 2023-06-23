@@ -11,7 +11,13 @@ out gl_PerVertex
 
 layout (location = 0) out vec3 color;
 
+#ifdef SCALE
+const float scale = SCALE;
+#else
+const float scale = 1.0;
+#endif
+
 void main() {
 	color = vec3(1,1,1);
-    gl_Position = projection * view * model * vec4(ipos, 1.0);
+    gl_Position = projection * view * model * vec4(scale * ipos, 1.0);
 }

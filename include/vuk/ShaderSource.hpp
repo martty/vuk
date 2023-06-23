@@ -145,9 +145,10 @@ namespace vuk {
 	struct ShaderModuleCreateInfo {
 		ShaderSource source;
 		std::string filename;
+		std::vector<std::pair<std::string, std::string>> defines;
 
 		bool operator==(const ShaderModuleCreateInfo& o) const noexcept {
-			return source == o.source;
+			return source == o.source && defines == o.defines;
 		}
 	};
 } // namespace vuk

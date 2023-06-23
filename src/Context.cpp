@@ -333,6 +333,9 @@ namespace vuk {
 			shaderc::CompileOptions options;
 			options.SetTargetEnvironment(shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_2);
 			options.SetIncluder(std::make_unique<ShadercDefaultIncluder>());
+			for (auto& [k, v] : cinfo.defines) {
+				options.AddMacroDefinition(k, v);
+			}
 			const auto result = compiler.CompileGlslToSpv(cinfo.source.as_c_str(), shaderc_glsl_infer_from_source, cinfo.filename.c_str(), options);
 
 			if (result.GetCompilationStatus() != shaderc_compilation_status_success) {
@@ -454,7 +457,7 @@ namespace vuk {
 			if (contents.data_ptr == nullptr) {
 				continue;
 			}
-			auto& sm = impl->shader_modules.acquire({ contents, cinfo.shader_paths[i] });
+			auto& sm = impl->shader_modules.acquire({ contents, cinfo.shader_paths[i], cinfo.defines });
 			VkPipelineShaderStageCreateInfo shader_stage{ .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
 			shader_stage.pSpecializationInfo = nullptr;
 			shader_stage.stage = sm.stage;
