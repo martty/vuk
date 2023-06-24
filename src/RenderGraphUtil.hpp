@@ -77,7 +77,11 @@ namespace vuk {
 			qr.stages |= PipelineStageFlagBits::eEarlyFragmentTests | PipelineStageFlagBits::eLateFragmentTests;
 		}
 		if (ia & (eFragmentRead | eComputeRead | eVertexRead | eRayTracingRead)) {
-			qr.access |= AccessFlagBits::eShaderRead | AccessFlagBits::eAccelerationStructureReadKHR;
+			qr.access |= AccessFlagBits::eShaderRead;
+			qr.layout = combine_layout(qr.layout, ImageLayout::eGeneral);
+		}
+		if (ia & eRayTracingRead) {
+			qr.access |= AccessFlagBits::eAccelerationStructureReadKHR;
 			qr.layout = combine_layout(qr.layout, ImageLayout::eGeneral);
 		}
 		if (ia & (eFragmentWrite | eComputeWrite | eRayTracingWrite)) {
@@ -126,7 +130,7 @@ namespace vuk {
 
 		if (ia & eAccelerationStructureBuildRead) {
 			qr.stages |= PipelineStageFlagBits::eAccelerationStructureBuildKHR;
-			qr.access |= AccessFlagBits::eShaderRead | AccessFlagBits::eAccelerationStructureReadKHR;
+			qr.access |= AccessFlagBits::eAccelerationStructureReadKHR;
 		}
 		if (ia & eAccelerationStructureBuildWrite) {
 			qr.stages |= PipelineStageFlagBits::eAccelerationStructureBuildKHR;
