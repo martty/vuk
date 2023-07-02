@@ -89,6 +89,7 @@ namespace vuk {
 			shader.data.resize(idivceil(source.size() + 1, sizeof(uint32_t)));
 			memcpy(shader.data.data(), source.data(), source.size() * sizeof(std::string_view::value_type));
 			shader.data_ptr = shader.data.data();
+			shader.size = shader.data.size();
 			shader.language = ShaderSourceLanguage::eGlsl;
 			return shader;
 		}
@@ -139,7 +140,14 @@ namespace vuk {
 	};
 
 	inline bool operator==(const ShaderSource& a, const ShaderSource& b) noexcept {
-		return a.language == b.language && a.data_ptr == b.data_ptr && a.size == b.size;
+		bool basics = a.language == b.language && a.size == b.size;
+		if (!basics) {
+			return false;
+		}
+		if (a.data_ptr == b.data_ptr) {
+			return true;
+		}
+		return memcmp(a.data_ptr, b.data_ptr, a.size) == 0;
 	}
 
 	struct ShaderModuleCreateInfo {
