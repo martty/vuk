@@ -28,7 +28,7 @@ namespace vuk {
 			} else if (input = std::ifstream(alternative_path); input) {
 				buf << input.rdbuf();
 				data->content = buf.str();
-				data->source = path.string();
+				data->source = alternative_path.string();
 			} else {
 				data->content = fmt::format("file could not be read (tried: {}; {})", path.string().c_str(), alternative_path.string().c_str());
 			}
