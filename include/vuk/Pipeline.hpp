@@ -125,7 +125,7 @@ namespace vuk {
 	public:
 		static vuk::fixed_vector<vuk::DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> build_descriptor_layouts(const Program&, const PipelineBaseCreateInfoBase&);
 		bool operator==(const PipelineBaseCreateInfo& o) const noexcept {
-			return shaders == o.shaders && binding_flags == o.binding_flags && variable_count_max == o.variable_count_max;
+			return shaders == o.shaders && binding_flags == o.binding_flags && variable_count_max == o.variable_count_max && defines == o.defines;
 		}
 	};
 
@@ -174,6 +174,15 @@ namespace std {
 		}
 	};
 
+	template<class T1, class T2>
+	struct hash<std::pair<T1, T2>> {
+		size_t operator()(std::pair<T1, T2> const& x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, x.first, x.second);
+			return h;
+		}
+	};
+
 	template<>
 	struct hash<vuk::ShaderSource> {
 		size_t operator()(vuk::ShaderSource const& x) const noexcept;
@@ -183,7 +192,7 @@ namespace std {
 	struct hash<vuk::PipelineBaseCreateInfo> {
 		size_t operator()(vuk::PipelineBaseCreateInfo const& x) const noexcept {
 			size_t h = 0;
-			hash_combine(h, x.shaders);
+			hash_combine(h, x.shaders, x.defines);
 			return h;
 		}
 	};
