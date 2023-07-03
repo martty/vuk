@@ -93,7 +93,6 @@ namespace vuk {
 	    graphics_queue_family_index(params.graphics_queue_family_index),
 	    compute_queue_family_index(params.compute_queue_family_index),
 	    transfer_queue_family_index(params.transfer_queue_family_index) {
-
 		// TODO: conversion to static factory fn
 		bool pfn_load_success = load_pfns(params, *this);
 		assert(pfn_load_success);
@@ -264,13 +263,8 @@ namespace vuk {
 		return transfer_queue->submit(sis, VK_NULL_HANDLE);
 	}
 
-	void PersistentDescriptorSet::update_combined_image_sampler(Context& ctx,
-	                                                            unsigned binding,
-	                                                            unsigned array_index,
-	                                                            ImageView iv,
-	                                                            SamplerCreateInfo sci,
-	                                                            ImageLayout layout) {
-		descriptor_bindings[binding][array_index].image = DescriptorImageInfo(ctx.acquire_sampler(sci, ctx.get_frame_count()), iv, layout);
+	void PersistentDescriptorSet::update_combined_image_sampler(unsigned binding, unsigned array_index, ImageView iv, Sampler sampler, ImageLayout layout) {
+		descriptor_bindings[binding][array_index].image = DescriptorImageInfo(sampler, iv, layout);
 		descriptor_bindings[binding][array_index].type = DescriptorType::eCombinedImageSampler;
 		VkWriteDescriptorSet wds = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
 		wds.descriptorCount = 1;
@@ -282,7 +276,7 @@ namespace vuk {
 		pending_writes.push_back(wds);
 	}
 
-	void PersistentDescriptorSet::update_storage_image(Context& ctx, unsigned binding, unsigned array_index, ImageView iv) {
+	void PersistentDescriptorSet::update_storage_image(unsigned binding, unsigned array_index, ImageView iv) {
 		descriptor_bindings[binding][array_index].image = DescriptorImageInfo({}, iv, ImageLayout::eGeneral);
 		descriptor_bindings[binding][array_index].type = DescriptorType::eStorageImage;
 		VkWriteDescriptorSet wds = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
@@ -295,7 +289,7 @@ namespace vuk {
 		pending_writes.push_back(wds);
 	}
 
-	void PersistentDescriptorSet::update_uniform_buffer(Context& ctx, unsigned binding, unsigned array_index, Buffer buffer) {
+	void PersistentDescriptorSet::update_uniform_buffer(unsigned binding, unsigned array_index, Buffer buffer) {
 		descriptor_bindings[binding][array_index].buffer = VkDescriptorBufferInfo{ buffer.buffer, buffer.offset, buffer.size };
 		descriptor_bindings[binding][array_index].type = DescriptorType::eUniformBuffer;
 		VkWriteDescriptorSet wds = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
@@ -308,7 +302,7 @@ namespace vuk {
 		pending_writes.push_back(wds);
 	}
 
-	void PersistentDescriptorSet::update_storage_buffer(Context& ctx, unsigned binding, unsigned array_index, Buffer buffer) {
+	void PersistentDescriptorSet::update_storage_buffer(unsigned binding, unsigned array_index, Buffer buffer) {
 		descriptor_bindings[binding][array_index].buffer = VkDescriptorBufferInfo{ buffer.buffer, buffer.offset, buffer.size };
 		descriptor_bindings[binding][array_index].type = DescriptorType::eStorageBuffer;
 		VkWriteDescriptorSet wds = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
@@ -317,6 +311,32 @@ namespace vuk {
 		wds.dstArrayElement = 0;
 		wds.dstBinding = binding;
 		wds.pBufferInfo = &descriptor_bindings[binding][array_index].buffer;
+		wds.dstSet = backing_set;
+		pending_writes.push_back(wds);
+	}
+
+	void PersistentDescriptorSet::update_sampler(unsigned binding, unsigned array_index, Sampler sampler) {
+		descriptor_bindings[binding][array_index].image = DescriptorImageInfo(sampler, {}, {});
+		descriptor_bindings[binding][array_index].type = DescriptorType::eSampler;
+		VkWriteDescriptorSet wds = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+		wds.descriptorCount = 1;
+		wds.descriptorType = (VkDescriptorType)DescriptorType::eSampler;
+		wds.dstArrayElement = array_index;
+		wds.dstBinding = binding;
+		wds.pImageInfo = &descriptor_bindings[binding][array_index].image.dii;
+		wds.dstSet = backing_set;
+		pending_writes.push_back(wds);
+	}
+
+	void PersistentDescriptorSet::update_sampled_image(unsigned binding, unsigned array_index, ImageView iv, ImageLayout layout) {
+		descriptor_bindings[binding][array_index].image = DescriptorImageInfo({}, iv, layout);
+		descriptor_bindings[binding][array_index].type = DescriptorType::eSampledImage;
+		VkWriteDescriptorSet wds = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+		wds.descriptorCount = 1;
+		wds.descriptorType = (VkDescriptorType)DescriptorType::eSampledImage;
+		wds.dstArrayElement = array_index;
+		wds.dstBinding = binding;
+		wds.pImageInfo = &descriptor_bindings[binding][array_index].image.dii;
 		wds.dstSet = backing_set;
 		pending_writes.push_back(wds);
 	}
@@ -796,7 +816,7 @@ namespace vuk {
 			dslci.dslci.pNext = &dslbfci;
 		}
 		auto& dslai = impl->descriptor_set_layouts.acquire(dslci, impl->frame_counter);
-		return create_persistent_descriptorset(allocator, { dslai, num_descriptors });
+		return create_persistent_descriptorset(allocator, { dslai, dslci, num_descriptors });
 	}
 
 	Unique<PersistentDescriptorSet> Context::create_persistent_descriptorset(Allocator& allocator, const PersistentDescriptorSetCreateInfo& ci) {
@@ -807,7 +827,7 @@ namespace vuk {
 
 	Unique<PersistentDescriptorSet>
 	Context::create_persistent_descriptorset(Allocator& allocator, const PipelineBaseInfo& base, unsigned set, unsigned num_descriptors) {
-		return create_persistent_descriptorset(allocator, { base.layout_info[set], num_descriptors });
+		return create_persistent_descriptorset(allocator, { base.layout_info[set], base.dslcis[set], num_descriptors });
 	}
 
 	void Context::commit_persistent_descriptorset(PersistentDescriptorSet& array) {
@@ -977,7 +997,7 @@ namespace vuk {
 			                                                          .cullMode = cinfo.cullMode,
 			                                                          .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
 			                                                          .lineWidth = 1.f };
-		
+
 		if (cinfo.records.non_trivial_raster_state) {
 			auto rs = read<PipelineInstanceCreateInfo::RasterizationState>(data_ptr);
 			rasterization_state = { .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
@@ -998,13 +1018,13 @@ namespace vuk {
 		if (cinfo.records.line_width_not_1) {
 			rasterization_state.lineWidth = read<float>(data_ptr);
 		}
-		VkPipelineRasterizationConservativeStateCreateInfoEXT conservative_state{
-			.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT };
+		VkPipelineRasterizationConservativeStateCreateInfoEXT conservative_state{ .sType =
+			                                                                            VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT };
 		if (cinfo.records.conservative_rasterization_enabled) {
 			auto cs = read<PipelineInstanceCreateInfo::ConservativeState>(data_ptr);
 			conservative_state = { .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT,
-				.conservativeRasterizationMode = (VkConservativeRasterizationModeEXT) cs.conservativeMode,
-				.extraPrimitiveOverestimationSize = cs.overestimationAmount };
+				                     .conservativeRasterizationMode = (VkConservativeRasterizationModeEXT)cs.conservativeMode,
+				                     .extraPrimitiveOverestimationSize = cs.overestimationAmount };
 			rasterization_state.pNext = &conservative_state;
 		}
 		gpci.pRasterizationState = &rasterization_state;
@@ -1309,13 +1329,13 @@ namespace vuk {
 				continue;
 			}
 			auto result = this->vkGetQueryPoolResults(device,
-			                                        pool.pool,
-			                                        0,
-			                                        pool.count,
-			                                        sizeof(uint64_t) * pool.count,
-			                                        host_values.data(),
-			                                        sizeof(uint64_t),
-			                                        VkQueryResultFlagBits::VK_QUERY_RESULT_64_BIT | VkQueryResultFlagBits::VK_QUERY_RESULT_WAIT_BIT);
+			                                          pool.pool,
+			                                          0,
+			                                          pool.count,
+			                                          sizeof(uint64_t) * pool.count,
+			                                          host_values.data(),
+			                                          sizeof(uint64_t),
+			                                          VkQueryResultFlagBits::VK_QUERY_RESULT_64_BIT | VkQueryResultFlagBits::VK_QUERY_RESULT_WAIT_BIT);
 			if (result != VK_SUCCESS) {
 				return { expected_error, AllocateException{ result } };
 			}

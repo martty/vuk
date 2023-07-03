@@ -6,11 +6,11 @@
 #include "vuk/Query.hpp"
 #include "vuk/resources/DeviceNestedResource.hpp"
 #define VMA_IMPLEMENTATION
-#define VMA_STATIC_VULKAN_FUNCTIONS 0
+#define VMA_STATIC_VULKAN_FUNCTIONS  0
 #define VMA_DYNAMIC_VULKAN_FUNCTIONS 0
-#include <vk_mem_alloc.h>
 #include <mutex>
 #include <numeric>
+#include <vk_mem_alloc.h>
 
 namespace vuk {
 	std::string to_human_readable(uint64_t in) {
@@ -219,7 +219,7 @@ namespace vuk {
 			}
 			VkBufferDeviceAddressInfo bdai{ VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, nullptr, buffer };
 			uint64_t device_address = ctx->vkGetBufferDeviceAddress(device, &bdai);
-			dst[i] = Buffer{ allocation, buffer, 0, ci.size, device_address, static_cast<std::byte*>(allocation_info.pMappedData), ci.mem_usage};
+			dst[i] = Buffer{ allocation, buffer, 0, ci.size, device_address, static_cast<std::byte*>(allocation_info.pMappedData), ci.mem_usage };
 		}
 		return { expected_value };
 	}
@@ -336,22 +336,23 @@ namespace vuk {
 			VkDescriptorSetVariableDescriptorCountAllocateInfo dsvdcai = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO };
 			dsvdcai.descriptorSetCount = 1;
 			dsvdcai.pDescriptorCounts = &ci.num_descriptors;
-			dsai.pNext = &dsvdcai;
+			if (dslai.variable_count_binding != (unsigned)-1) {
+				dsai.pNext = &dsvdcai;
+			}
 
 			ctx->vkAllocateDescriptorSets(device, &dsai, &tda.backing_set);
 			if (result != VK_SUCCESS) {
 				deallocate_persistent_descriptor_sets({ dst.data(), (uint64_t)i });
 				return { expected_error, AllocateException{ result } };
 			}
-			// TODO: we need more information here to handled arrayed bindings properly
-			// for now we assume no arrayed bindings outside of the variable count one
-			for (auto& bindings : tda.descriptor_bindings) {
-				bindings.resize(1);
+
+			for (unsigned i = 0; i < ci.dslci.bindings.size(); i++) {
+				tda.descriptor_bindings[i].resize(ci.dslci.bindings[i].descriptorCount);
 			}
 			if (dslai.variable_count_binding != (unsigned)-1) {
 				tda.descriptor_bindings[dslai.variable_count_binding].resize(ci.num_descriptors);
 			}
-
+			tda.set_layout_create_info = ci.dslci;
 			tda.set_layout = dsl;
 		}
 

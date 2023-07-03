@@ -6,13 +6,13 @@
 #include "vuk/Types.hpp"
 #include "vuk/vuk_fwd.hpp"
 
-#include <string.h>
 #include <array>
 #include <bitset>
 #include <cassert>
 #include <span>
-#include <vector>
+#include <string.h>
 #include <tuple>
+#include <vector>
 
 inline bool operator==(VkDescriptorSetLayoutBinding const& lhs, VkDescriptorSetLayoutBinding const& rhs) noexcept {
 	return (lhs.binding == rhs.binding) && (lhs.descriptorType == rhs.descriptorType) && (lhs.descriptorCount == rhs.descriptorCount) &&
@@ -81,11 +81,6 @@ namespace vuk {
 		bool operator==(const DescriptorSetLayoutAllocInfo& o) const noexcept {
 			return layout == o.layout && descriptor_counts == o.descriptor_counts;
 		}
-	};
-
-	struct PersistentDescriptorSetCreateInfo {
-		DescriptorSetLayoutAllocInfo dslai;
-		uint32_t num_descriptors;
 	};
 
 	struct DescriptorImageInfo {
@@ -216,10 +211,17 @@ namespace vuk {
 		using type = vuk::DescriptorSetLayoutAllocInfo;
 	};
 
+	struct PersistentDescriptorSetCreateInfo {
+		DescriptorSetLayoutAllocInfo dslai;
+		DescriptorSetLayoutCreateInfo dslci;
+		uint32_t num_descriptors;
+	};
+
 	struct Buffer;
 
 	struct PersistentDescriptorSet {
 		VkDescriptorPool backing_pool;
+		DescriptorSetLayoutCreateInfo set_layout_create_info;
 		VkDescriptorSetLayout set_layout;
 		VkDescriptorSet backing_set;
 
@@ -231,15 +233,12 @@ namespace vuk {
 			return backing_pool == other.backing_pool;
 		}
 
-		void update_combined_image_sampler(Context& ctx,
-		                                   unsigned binding,
-		                                   unsigned array_index,
-		                                   vuk::ImageView iv,
-		                                   vuk::SamplerCreateInfo sampler_create_info,
-		                                   vuk::ImageLayout layout);
-		void update_storage_image(Context& ctx, unsigned binding, unsigned array_index, vuk::ImageView iv);
-		void update_uniform_buffer(Context& ctx, unsigned binding, unsigned array_index, Buffer buf);
-		void update_storage_buffer(Context& ctx, unsigned binding, unsigned array_index, Buffer buf);
+		void update_combined_image_sampler(unsigned binding, unsigned array_index, ImageView iv, Sampler sampler, ImageLayout layout);
+		void update_storage_image(unsigned binding, unsigned array_index, ImageView iv);
+		void update_uniform_buffer(unsigned binding, unsigned array_index, Buffer buf);
+		void update_storage_buffer(unsigned binding, unsigned array_index, Buffer buf);
+		void update_sampler(unsigned binding, unsigned array_index, Sampler sampler);
+		void update_sampled_image(unsigned binding, unsigned array_index, ImageView iv, ImageLayout layout);
 	};
 } // namespace vuk
 
