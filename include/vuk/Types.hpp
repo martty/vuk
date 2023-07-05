@@ -615,6 +615,10 @@ namespace vuk {
 	std::string_view format_to_sv(Format format) noexcept;
 	// true if format performs automatic sRGB conversion
 	bool is_format_srgb(vuk::Format) noexcept;
+	// get the unorm equivalent of the srgb format (returns vuk::Format::Undefined if the format doesn't exist)
+	vuk::Format unorm_to_srgb(vuk::Format) noexcept;
+	// get the srgb equivalent of the unorm format (returns vuk::Format::Undefined if the format doesn't exist)
+	vuk::Format srgb_to_unorm(vuk::Format) noexcept;
 
 	enum class IndexType {
 		eUint16 = VK_INDEX_TYPE_UINT16,

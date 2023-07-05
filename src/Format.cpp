@@ -1,5 +1,5 @@
-#include <cassert>
 #include "vuk/Image.hpp"
+#include <cassert>
 
 namespace vuk {
 	uint32_t format_to_texel_block_size(Format format) noexcept {
@@ -981,7 +981,7 @@ namespace vuk {
 			return "";
 		}
 	}
-	
+
 	bool is_format_srgb(Format format) noexcept {
 		switch (format) {
 		case Format::eR8Srgb:
@@ -1020,6 +1020,152 @@ namespace vuk {
 			return true;
 		default:
 			return false;
+		}
+	}
+
+	vuk::Format unorm_to_srgb(vuk::Format format) noexcept {
+		switch (format) {
+		case Format::eR8Unorm:
+			return Format::eR8Srgb;
+		case Format::eR8G8Unorm:
+			return Format::eR8G8Srgb;
+		case Format::eR8G8B8Unorm:
+			return Format::eR8G8B8Srgb;
+		case Format::eB8G8R8Unorm:
+			return Format::eB8G8R8Srgb;
+		case Format::eR8G8B8A8Unorm:
+			return Format::eR8G8B8A8Srgb;
+		case Format::eB8G8R8A8Unorm:
+			return Format::eB8G8R8A8Srgb;
+		case Format::eA8B8G8R8UnormPack32:
+			return Format::eA8B8G8R8SrgbPack32;
+		case Format::eBc1RgbUnormBlock:
+			return Format::eBc1RgbSrgbBlock;
+		case Format::eBc1RgbaUnormBlock:
+			return Format::eBc1RgbaSrgbBlock;
+		case Format::eBc2UnormBlock:
+			return Format::eBc2SrgbBlock;
+		case Format::eBc3UnormBlock:
+			return Format::eBc3SrgbBlock;
+		case Format::eBc7UnormBlock:
+			return Format::eBc7SrgbBlock;
+		case Format::eEtc2R8G8B8UnormBlock:
+			return Format::eEtc2R8G8B8SrgbBlock;
+		case Format::eEtc2R8G8B8A1UnormBlock:
+			return Format::eEtc2R8G8B8A1SrgbBlock;
+		case Format::eEtc2R8G8B8A8UnormBlock:
+			return Format::eEtc2R8G8B8A8SrgbBlock;
+		case Format::eAstc4x4UnormBlock:
+			return Format::eAstc4x4SrgbBlock;
+		case Format::eAstc5x4UnormBlock:
+			return Format::eAstc5x4SrgbBlock;
+		case Format::eAstc5x5UnormBlock:
+			return Format::eAstc5x5SrgbBlock;
+		case Format::eAstc6x5UnormBlock:
+			return Format::eAstc6x5SrgbBlock;
+		case Format::eAstc6x6UnormBlock:
+			return Format::eAstc6x6SrgbBlock;
+		case Format::eAstc8x5UnormBlock:
+			return Format::eAstc8x5SrgbBlock;
+		case Format::eAstc8x6UnormBlock:
+			return Format::eAstc8x6SrgbBlock;
+		case Format::eAstc8x8UnormBlock:
+			return Format::eAstc8x8SrgbBlock;
+		case Format::eAstc10x5UnormBlock:
+			return Format::eAstc10x5SrgbBlock;
+		case Format::eAstc10x6UnormBlock:
+			return Format::eAstc10x6SrgbBlock;
+		case Format::eAstc10x8UnormBlock:
+			return Format::eAstc10x8SrgbBlock;
+		case Format::eAstc10x10UnormBlock:
+			return Format::eAstc10x10SrgbBlock;
+		case Format::eAstc12x10UnormBlock:
+			return Format::eAstc12x10SrgbBlock;
+		case Format::eAstc12x12UnormBlock:
+			return Format::eAstc12x12SrgbBlock;
+		case Format::ePvrtc12BppUnormBlockIMG:
+			return Format::ePvrtc12BppSrgbBlockIMG;
+		case Format::ePvrtc14BppUnormBlockIMG:
+			return Format::ePvrtc14BppSrgbBlockIMG;
+		case Format::ePvrtc22BppUnormBlockIMG:
+			return Format::ePvrtc22BppSrgbBlockIMG;
+		case Format::ePvrtc24BppUnormBlockIMG:
+			return Format::ePvrtc24BppSrgbBlockIMG;
+		default:
+			return Format::eUndefined;
+		}
+	}
+
+	vuk::Format srgb_to_unorm(vuk::Format format) noexcept {
+		switch (format) {
+		case Format::eR8Srgb:
+			return Format::eR8Unorm;
+		case Format::eR8G8Srgb:
+			return Format::eR8G8Unorm;
+		case Format::eR8G8B8Srgb:
+			return Format::eR8G8B8Unorm;
+		case Format::eB8G8R8Srgb:
+			return Format::eB8G8R8Unorm;
+		case Format::eR8G8B8A8Srgb:
+			return Format::eR8G8B8A8Unorm;
+		case Format::eB8G8R8A8Srgb:
+			return Format::eB8G8R8A8Unorm;
+		case Format::eA8B8G8R8SrgbPack32:
+			return Format::eA8B8G8R8UnormPack32;
+		case Format::eBc1RgbSrgbBlock:
+			return Format::eBc1RgbUnormBlock;
+		case Format::eBc1RgbaSrgbBlock:
+			return Format::eBc1RgbaUnormBlock;
+		case Format::eBc2SrgbBlock:
+			return Format::eBc2UnormBlock;
+		case Format::eBc3SrgbBlock:
+			return Format::eBc3UnormBlock;
+		case Format::eBc7SrgbBlock:
+			return Format::eBc7UnormBlock;
+		case Format::eEtc2R8G8B8SrgbBlock:
+			return Format::eEtc2R8G8B8UnormBlock;
+		case Format::eEtc2R8G8B8A1SrgbBlock:
+			return Format::eEtc2R8G8B8A1UnormBlock;
+		case Format::eEtc2R8G8B8A8SrgbBlock:
+			return Format::eEtc2R8G8B8A8UnormBlock;
+		case Format::eAstc4x4SrgbBlock:
+			return Format::eAstc4x4UnormBlock;
+		case Format::eAstc5x4SrgbBlock:
+			return Format::eAstc5x4UnormBlock;
+		case Format::eAstc5x5SrgbBlock:
+			return Format::eAstc5x5UnormBlock;
+		case Format::eAstc6x5SrgbBlock:
+			return Format::eAstc6x5UnormBlock;
+		case Format::eAstc6x6SrgbBlock:
+			return Format::eAstc6x6UnormBlock;
+		case Format::eAstc8x5SrgbBlock:
+			return Format::eAstc8x5UnormBlock;
+		case Format::eAstc8x6SrgbBlock:
+			return Format::eAstc8x6UnormBlock;
+		case Format::eAstc8x8SrgbBlock:
+			return Format::eAstc8x8UnormBlock;
+		case Format::eAstc10x5SrgbBlock:
+			return Format::eAstc10x5UnormBlock;
+		case Format::eAstc10x6SrgbBlock:
+			return Format::eAstc10x6UnormBlock;
+		case Format::eAstc10x8SrgbBlock:
+			return Format::eAstc10x8UnormBlock;
+		case Format::eAstc10x10SrgbBlock:
+			return Format::eAstc10x10UnormBlock;
+		case Format::eAstc12x10SrgbBlock:
+			return Format::eAstc12x10UnormBlock;
+		case Format::eAstc12x12SrgbBlock:
+			return Format::eAstc12x12UnormBlock;
+		case Format::ePvrtc12BppSrgbBlockIMG:
+			return Format::ePvrtc12BppUnormBlockIMG;
+		case Format::ePvrtc14BppSrgbBlockIMG:
+			return Format::ePvrtc14BppUnormBlockIMG;
+		case Format::ePvrtc22BppSrgbBlockIMG:
+			return Format::ePvrtc22BppUnormBlockIMG;
+		case Format::ePvrtc24BppSrgbBlockIMG:
+			return Format::ePvrtc24BppUnormBlockIMG;
+		default:
+			return Format::eUndefined;
 		}
 	}
 } // namespace vuk
