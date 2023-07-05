@@ -189,6 +189,16 @@ namespace vuk {
 	/// @param should_generate_mips if true, all mip levels are generated from the 0th level
 	inline std::pair<Texture, Future> create_texture(Allocator& allocator, Format format, Extent3D extent, void* data, bool should_generate_mips) {
 		ImageCreateInfo ici;
+		VkImageFormatListCreateInfo listci = {VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO};
+		auto unorm_fmt = srgb_to_unorm(format);
+		auto srgb_fmt = unorm_to_srgb(format);
+		VkFormat formats[2] = { (VkFormat)format, unorm_fmt == vuk::Format::eUndefined ? (VkFormat)srgb_fmt : (VkFormat)unorm_fmt };
+		listci.pViewFormats = formats;
+		listci.viewFormatCount = formats[1] == VK_FORMAT_UNDEFINED ? 1 : 2;
+		if (listci.viewFormatCount > 1) {
+			ici.flags = vuk::ImageCreateFlagBits::eMutableFormat;
+			ici.pNext = &listci;
+		}
 		ici.format = format;
 		ici.extent = extent;
 		ici.samples = Samples::e1;
