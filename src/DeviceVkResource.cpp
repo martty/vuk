@@ -272,6 +272,11 @@ namespace vuk {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
 			VkImageViewCreateInfo ci = cis[i];
+			VkImageViewUsageCreateInfo uvci{ VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO };
+			uvci.usage = (VkImageUsageFlags)cis[i].view_usage;
+			if (uvci.usage != 0) {
+				ci.pNext = &uvci;
+			}
 			VkImageView iv;
 			VkResult res = ctx->vkCreateImageView(device, &ci, nullptr, &iv);
 			if (res != VK_SUCCESS) {

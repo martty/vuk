@@ -17,6 +17,7 @@ namespace vuk {
 		Dimension3D extent = Dimension3D::framebuffer();
 		Format format = Format::eUndefined;
 		Samples sample_count = Samples::eInfer;
+		bool allow_srgb_unorm_mutable = false;
 		ImageViewCreateFlags image_view_flags = {};
 		ImageViewType view_type = ImageViewType::eInfer;
 		ComponentMapping components;

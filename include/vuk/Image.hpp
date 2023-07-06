@@ -295,6 +295,7 @@ namespace vuk {
 		Format format = Format::eUndefined;
 		ComponentMapping components = {};
 		ImageSubresourceRange subresourceRange = {};
+		vuk::ImageUsageFlags view_usage = {}; // added for vuk
 
 		operator VkImageViewCreateInfo const&() const noexcept {
 			return *reinterpret_cast<const VkImageViewCreateInfo*>(this);
@@ -313,7 +314,6 @@ namespace vuk {
 			return !operator==(rhs);
 		}
 	};
-	static_assert(sizeof(ImageViewCreateInfo) == sizeof(VkImageViewCreateInfo), "struct and wrapper have different size!");
 	static_assert(std::is_standard_layout<ImageViewCreateInfo>::value, "struct wrapper is not a standard layout!");
 
 #pragma pack(push, 1)
@@ -328,9 +328,10 @@ namespace vuk {
 		uint32_t aspectMask : 11 = {}; // 27 bits ~ pad to 4 bytes
 		uint32_t baseMipLevel : 16 = 0;
 		uint32_t levelCount : 16 = 1;
-		uint32_t baseArrayLayer = 0; // 8 bytes
-		uint32_t layerCount = 1;
-		VkImage image = {};                   // 16 bytes
+		uint32_t baseArrayLayer : 16 = 0; 
+		uint32_t layerCount : 16 = 1;
+		VkImageUsageFlags view_usage : 10; // 8 bytes
+		VkImage image = {};                 // 16 bytes
 		Format format = Format::eUndefined; // 32 bytes in total
 
 		CompressedImageViewCreateInfo(ImageViewCreateInfo ivci) {
@@ -348,22 +349,7 @@ namespace vuk {
 			layerCount = ivci.subresourceRange.layerCount;
 			image = ivci.image;
 			format = ivci.format;
-		}
-
-		explicit operator VkImageViewCreateInfo() const noexcept {
-			VkImageViewCreateInfo ivci{ .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
-			ivci.flags = flags;
-			ivci.viewType = (VkImageViewType)viewType;
-			ivci.components.r = (VkComponentSwizzle)r_swizzle;
-			ivci.components.g = (VkComponentSwizzle)g_swizzle;
-			ivci.components.b = (VkComponentSwizzle)b_swizzle;
-			ivci.components.a = (VkComponentSwizzle)a_swizzle;
-			ivci.subresourceRange = {
-				.aspectMask = aspectMask, .baseMipLevel = baseMipLevel, .levelCount = levelCount, .baseArrayLayer = baseArrayLayer, .layerCount = layerCount
-			};
-			ivci.image = image;
-			ivci.format = (VkFormat)format;
-			return ivci;
+			view_usage = (VkImageUsageFlags)ivci.view_usage;
 		}
 
 		explicit operator ImageViewCreateInfo() const noexcept {
@@ -374,11 +360,14 @@ namespace vuk {
 			ivci.components.g = (ComponentSwizzle)g_swizzle;
 			ivci.components.b = (ComponentSwizzle)b_swizzle;
 			ivci.components.a = (ComponentSwizzle)a_swizzle;
-			ivci.subresourceRange = {
-				.aspectMask = (ImageAspectFlags)aspectMask, .baseMipLevel = baseMipLevel, .levelCount = levelCount, .baseArrayLayer = baseArrayLayer, .layerCount = layerCount
-			};
+			ivci.subresourceRange = { .aspectMask = (ImageAspectFlags)aspectMask,
+				                        .baseMipLevel = baseMipLevel,
+				                        .levelCount = levelCount,
+				                        .baseArrayLayer = baseArrayLayer,
+				                        .layerCount = layerCount };
 			ivci.image = image;
 			ivci.format = (Format)format;
+			ivci.view_usage = (ImageUsageFlags)view_usage;
 			return ivci;
 		}
 

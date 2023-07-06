@@ -135,6 +135,19 @@ namespace vuk {
 		assert(attachment.extent.sizing == Sizing::eAbsolute);
 		ici.extent = static_cast<vuk::Extent3D>(attachment.extent.extent);
 
+		VkImageFormatListCreateInfo listci = { VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO };
+		if (attachment.allow_srgb_unorm_mutable) {
+			auto unorm_fmt = srgb_to_unorm(attachment.format);
+			auto srgb_fmt = unorm_to_srgb(attachment.format);
+			VkFormat formats[2] = { (VkFormat)attachment.format, unorm_fmt == vuk::Format::eUndefined ? (VkFormat)srgb_fmt : (VkFormat)unorm_fmt };
+			listci.pViewFormats = formats;
+			listci.viewFormatCount = formats[1] == VK_FORMAT_UNDEFINED ? 1 : 2;
+			if (listci.viewFormatCount > 1) {
+				ici.flags |= vuk::ImageCreateFlagBits::eMutableFormat;
+				ici.pNext = &listci;
+			}
+		}
+
 		if (auto res = allocator.allocate_images(std::span{ &img.get(), 1 }, std::span{ &ici, 1 }, loc); !res) {
 			return { expected_error, res.error() };
 		}
@@ -170,6 +183,7 @@ namespace vuk {
 		ivci.viewType = attachment.view_type;
 		ivci.format = vuk::Format(attachment.format);
 		ivci.components = attachment.components;
+		ivci.view_usage = attachment.usage;
 
 		ImageSubresourceRange& isr = ivci.subresourceRange;
 		isr.aspectMask = format_to_aspect(ivci.format);
