@@ -33,7 +33,7 @@ namespace std {
 }; // namespace std
 
 namespace vuk {
-	enum class DescriptorType {
+	enum class DescriptorType : uint8_t {
 		eSampler = VK_DESCRIPTOR_TYPE_SAMPLER,
 		eCombinedImageSampler = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 		eSampledImage = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
@@ -45,9 +45,9 @@ namespace vuk {
 		eUniformBufferDynamic = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
 		eStorageBufferDynamic = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC,
 		eInputAttachment = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
-		eInlineUniformBlockEXT = VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT,
-		eAccelerationStructureKHR = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
-		eAccelerationStructureNV = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV
+		eInlineUniformBlockEXT = 10,
+		eAccelerationStructureKHR = 11,
+		ePendingWrite = 128
 	};
 
 	enum class DescriptorBindingFlagBits : VkDescriptorBindingFlags {
@@ -110,17 +110,22 @@ namespace vuk {
 		}
 	};
 
+	struct ASInfo {
+		VkWriteDescriptorSetAccelerationStructureKHR wds{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR };
+		VkAccelerationStructureKHR as;
+	};
+
 	// use hand rolled variant to control bits
 	// memset to clear out the union
 #pragma pack(push, 1)
 	struct DescriptorBinding {
 		DescriptorBinding() {}
 
-		DescriptorType type = DescriptorType(-1);
+		DescriptorType type = DescriptorType(127);
 		union {
 			VkDescriptorBufferInfo buffer;
 			DescriptorImageInfo image;
-			VkAccelerationStructureKHR as;
+			ASInfo as;
 		};
 
 		bool operator==(const DescriptorBinding& o) const noexcept {
@@ -136,10 +141,32 @@ namespace vuk {
 			case DescriptorType::eCombinedImageSampler:
 				return image == o.image;
 			case DescriptorType::eAccelerationStructureKHR:
-				return as == o.as;
+				return as.as == o.as.as;
 			default:
 				assert(0);
 				return false;
+			}
+		}
+
+		static VkDescriptorType vk_descriptor_type(DescriptorType type) {
+			switch (type) {
+			case DescriptorType::eUniformBuffer:
+				return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			case DescriptorType::eStorageBuffer:
+				return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+			case DescriptorType::eStorageImage:
+				return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+			case DescriptorType::eSampledImage:
+				return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+			case DescriptorType::eSampler:
+				return VK_DESCRIPTOR_TYPE_SAMPLER;
+			case DescriptorType::eCombinedImageSampler:
+				return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			case DescriptorType::eAccelerationStructureKHR:
+				return VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+			default:
+				assert(0);
+				return VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
 			}
 		}
 	};
@@ -227,11 +254,11 @@ namespace vuk {
 
 		std::array<std::vector<DescriptorBinding>, VUK_MAX_BINDINGS> descriptor_bindings;
 
-		std::vector<VkWriteDescriptorSet> pending_writes;
-
 		bool operator==(const PersistentDescriptorSet& other) const {
 			return backing_pool == other.backing_pool;
 		}
+
+		// all of the update_ functions are thread safe
 
 		void update_combined_image_sampler(unsigned binding, unsigned array_index, ImageView iv, Sampler sampler, ImageLayout layout);
 		void update_storage_image(unsigned binding, unsigned array_index, ImageView iv);
@@ -239,6 +266,10 @@ namespace vuk {
 		void update_storage_buffer(unsigned binding, unsigned array_index, Buffer buf);
 		void update_sampler(unsigned binding, unsigned array_index, Sampler sampler);
 		void update_sampled_image(unsigned binding, unsigned array_index, ImageView iv, ImageLayout layout);
+		void update_acceleration_structure(unsigned binding, unsigned array_index, VkAccelerationStructureKHR as);
+
+		// non-thread safe
+		void commit(Context& ctx);
 	};
 } // namespace vuk
 

@@ -265,80 +265,64 @@ namespace vuk {
 
 	void PersistentDescriptorSet::update_combined_image_sampler(unsigned binding, unsigned array_index, ImageView iv, Sampler sampler, ImageLayout layout) {
 		descriptor_bindings[binding][array_index].image = DescriptorImageInfo(sampler, iv, layout);
-		descriptor_bindings[binding][array_index].type = DescriptorType::eCombinedImageSampler;
-		VkWriteDescriptorSet wds = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
-		wds.descriptorCount = 1;
-		wds.descriptorType = (VkDescriptorType)DescriptorType::eCombinedImageSampler;
-		wds.dstArrayElement = array_index;
-		wds.dstBinding = binding;
-		wds.pImageInfo = &descriptor_bindings[binding][array_index].image.dii;
-		wds.dstSet = backing_set;
-		pending_writes.push_back(wds);
+		descriptor_bindings[binding][array_index].type = (DescriptorType)((uint8_t)DescriptorType::eCombinedImageSampler | (uint8_t)DescriptorType::ePendingWrite);
 	}
 
 	void PersistentDescriptorSet::update_storage_image(unsigned binding, unsigned array_index, ImageView iv) {
 		descriptor_bindings[binding][array_index].image = DescriptorImageInfo({}, iv, ImageLayout::eGeneral);
-		descriptor_bindings[binding][array_index].type = DescriptorType::eStorageImage;
-		VkWriteDescriptorSet wds = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
-		wds.descriptorCount = 1;
-		wds.descriptorType = (VkDescriptorType)DescriptorType::eStorageImage;
-		wds.dstArrayElement = array_index;
-		wds.dstBinding = binding;
-		wds.pImageInfo = &descriptor_bindings[binding][array_index].image.dii;
-		wds.dstSet = backing_set;
-		pending_writes.push_back(wds);
+		descriptor_bindings[binding][array_index].type = (DescriptorType)((uint8_t)DescriptorType::eStorageImage | (uint8_t)DescriptorType::ePendingWrite);
 	}
 
 	void PersistentDescriptorSet::update_uniform_buffer(unsigned binding, unsigned array_index, Buffer buffer) {
 		descriptor_bindings[binding][array_index].buffer = VkDescriptorBufferInfo{ buffer.buffer, buffer.offset, buffer.size };
-		descriptor_bindings[binding][array_index].type = DescriptorType::eUniformBuffer;
-		VkWriteDescriptorSet wds = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
-		wds.descriptorCount = 1;
-		wds.descriptorType = (VkDescriptorType)DescriptorType::eUniformBuffer;
-		wds.dstArrayElement = 0;
-		wds.dstBinding = binding;
-		wds.pBufferInfo = &descriptor_bindings[binding][array_index].buffer;
-		wds.dstSet = backing_set;
-		pending_writes.push_back(wds);
+		descriptor_bindings[binding][array_index].type = (DescriptorType)((uint8_t)DescriptorType::eUniformBuffer | (uint8_t)DescriptorType::ePendingWrite);
 	}
 
 	void PersistentDescriptorSet::update_storage_buffer(unsigned binding, unsigned array_index, Buffer buffer) {
 		descriptor_bindings[binding][array_index].buffer = VkDescriptorBufferInfo{ buffer.buffer, buffer.offset, buffer.size };
-		descriptor_bindings[binding][array_index].type = DescriptorType::eStorageBuffer;
-		VkWriteDescriptorSet wds = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
-		wds.descriptorCount = 1;
-		wds.descriptorType = (VkDescriptorType)DescriptorType::eStorageBuffer;
-		wds.dstArrayElement = 0;
-		wds.dstBinding = binding;
-		wds.pBufferInfo = &descriptor_bindings[binding][array_index].buffer;
-		wds.dstSet = backing_set;
-		pending_writes.push_back(wds);
+		descriptor_bindings[binding][array_index].type = (DescriptorType)((uint8_t)DescriptorType::eStorageBuffer | (uint8_t)DescriptorType::ePendingWrite);
 	}
 
 	void PersistentDescriptorSet::update_sampler(unsigned binding, unsigned array_index, Sampler sampler) {
 		descriptor_bindings[binding][array_index].image = DescriptorImageInfo(sampler, {}, {});
-		descriptor_bindings[binding][array_index].type = DescriptorType::eSampler;
-		VkWriteDescriptorSet wds = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
-		wds.descriptorCount = 1;
-		wds.descriptorType = (VkDescriptorType)DescriptorType::eSampler;
-		wds.dstArrayElement = array_index;
-		wds.dstBinding = binding;
-		wds.pImageInfo = &descriptor_bindings[binding][array_index].image.dii;
-		wds.dstSet = backing_set;
-		pending_writes.push_back(wds);
+		descriptor_bindings[binding][array_index].type = (DescriptorType)((uint8_t)DescriptorType::eSampler | (uint8_t)DescriptorType::ePendingWrite);
 	}
 
 	void PersistentDescriptorSet::update_sampled_image(unsigned binding, unsigned array_index, ImageView iv, ImageLayout layout) {
 		descriptor_bindings[binding][array_index].image = DescriptorImageInfo({}, iv, layout);
-		descriptor_bindings[binding][array_index].type = DescriptorType::eSampledImage;
-		VkWriteDescriptorSet wds = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
-		wds.descriptorCount = 1;
-		wds.descriptorType = (VkDescriptorType)DescriptorType::eSampledImage;
-		wds.dstArrayElement = array_index;
-		wds.dstBinding = binding;
-		wds.pImageInfo = &descriptor_bindings[binding][array_index].image.dii;
-		wds.dstSet = backing_set;
-		pending_writes.push_back(wds);
+		descriptor_bindings[binding][array_index].type = (DescriptorType)((uint8_t)DescriptorType::eSampledImage | (uint8_t)DescriptorType::ePendingWrite);
+	}
+
+	void PersistentDescriptorSet::update_acceleration_structure(unsigned binding, unsigned array_index, VkAccelerationStructureKHR as) {
+		descriptor_bindings[binding][array_index].as.as = as;
+		descriptor_bindings[binding][array_index].type = (DescriptorType)((uint8_t)DescriptorType::eAccelerationStructureKHR | (uint8_t)DescriptorType::ePendingWrite);
+	}
+
+	void PersistentDescriptorSet::commit(Context& ctx) {
+		std::vector<VkWriteDescriptorSet> wdss;
+		for (unsigned i = 0; i < descriptor_bindings.size(); i++) {
+			auto& db = descriptor_bindings[i];
+			for (unsigned j = 0; j < db.size(); j++) {
+				if ((uint8_t)db[j].type & (uint8_t)DescriptorType::ePendingWrite) { // clear pending write
+					db[j].type = (DescriptorType)((uint8_t)db[j].type & ~(uint8_t)DescriptorType::ePendingWrite);
+					if (db[j].type == DescriptorType::eAccelerationStructureKHR) {
+						db[j].as.wds = { VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR };
+						db[j].as.wds.accelerationStructureCount = 1;
+						db[j].as.wds.pAccelerationStructures = &db[j].as.as;
+					}
+					wdss.push_back(VkWriteDescriptorSet{ .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+					                                     .pNext = db[j].type == DescriptorType::eAccelerationStructureKHR ? &db[j].as.wds : nullptr,
+					                                     .dstSet = backing_set,
+					                                     .dstBinding = i,
+					                                     .dstArrayElement = j,
+					                                     .descriptorCount = 1,
+					                                     .descriptorType = DescriptorBinding::vk_descriptor_type(db[j].type),
+					                                     .pImageInfo = &db[j].image.dii,
+					                                     .pBufferInfo = &db[j].buffer });
+				}
+			}
+		}
+		ctx.vkUpdateDescriptorSets(ctx.device, (uint32_t)wdss.size(), wdss.data(), 0, nullptr);
 	}
 
 	ShaderModule Context::create(const create_info_t<ShaderModule>& cinfo) {
@@ -595,11 +579,16 @@ namespace vuk {
 
 	DescriptorSetLayoutAllocInfo Context::create(const create_info_t<DescriptorSetLayoutAllocInfo>& cinfo) {
 		DescriptorSetLayoutAllocInfo ret;
-		this->vkCreateDescriptorSetLayout(device, &cinfo.dslci, nullptr, &ret.layout);
-		for (size_t i = 0; i < cinfo.bindings.size(); i++) {
-			auto& b = cinfo.bindings[i];
+		auto cinfo_mod = cinfo;
+		for (auto& b : cinfo_mod.bindings) {
+			b.descriptorType = DescriptorBinding::vk_descriptor_type((vuk::DescriptorType)b.descriptorType);
+		}
+		cinfo_mod.dslci.pBindings = cinfo_mod.bindings.data();
+		this->vkCreateDescriptorSetLayout(device, &cinfo_mod.dslci, nullptr, &ret.layout);
+		for (size_t i = 0; i < cinfo_mod.bindings.size(); i++) {
+			auto& b = cinfo_mod.bindings[i];
 			// if this is not a variable count binding, add it to the descriptor count
-			if (cinfo.flags.size() <= i || !(cinfo.flags[i] & to_integral(DescriptorBindingFlagBits::eVariableDescriptorCount))) {
+			if (cinfo_mod.flags.size() <= i || !(cinfo_mod.flags[i] & to_integral(DescriptorBindingFlagBits::eVariableDescriptorCount))) {
 				auto index = b.descriptorType == VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR ? 11 : to_integral(b.descriptorType);
 				ret.descriptor_counts[index] += b.descriptorCount;
 			} else { // a variable count binding
@@ -828,11 +817,6 @@ namespace vuk {
 	Unique<PersistentDescriptorSet>
 	Context::create_persistent_descriptorset(Allocator& allocator, const PipelineBaseInfo& base, unsigned set, unsigned num_descriptors) {
 		return create_persistent_descriptorset(allocator, { base.layout_info[set], base.dslcis[set], num_descriptors });
-	}
-
-	void Context::commit_persistent_descriptorset(PersistentDescriptorSet& array) {
-		this->vkUpdateDescriptorSets(device, (uint32_t)array.pending_writes.size(), array.pending_writes.data(), 0, nullptr);
-		array.pending_writes.clear();
 	}
 
 	VkRenderPass Context::create(const create_info_t<VkRenderPass>& cinfo) {

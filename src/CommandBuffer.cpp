@@ -535,7 +535,8 @@ namespace vuk {
 		assert(binding < VUK_MAX_BINDINGS);
 		sets_to_bind[set] = true;
 		auto& db = set_bindings[set].bindings[binding];
-		db.as = tlas;
+		db.as.as = tlas;
+		db.as.wds.accelerationStructureCount = 1;
 		db.type = DescriptorType::eAccelerationStructureKHR;
 		set_bindings[set].used.set(binding);
 		return *this;
@@ -1210,7 +1211,7 @@ namespace vuk {
 						if (dslci->optional[j]) { // this was an optional binding with a mismatched or missing bound resource -> forgo writing
 							sb.used[j] = false;
 						} else {
-							if (cbuf_dtype == vuk::DescriptorType(-1)) {
+							if (cbuf_dtype == vuk::DescriptorType(127)) {
 								assert(false && "Descriptor layout contains binding that was not bound.");
 							} else {
 								assert(false && "Attempting to bind the wrong descriptor type.");
@@ -1237,7 +1238,6 @@ namespace vuk {
 					auto mask = cinfo.used.to_ulong();
 					uint32_t leading_ones = num_leading_ones(mask);
 					std::array<VkWriteDescriptorSet, VUK_MAX_BINDINGS> writes;
-					std::array<VkWriteDescriptorSetAccelerationStructureKHR, VUK_MAX_BINDINGS> as_writes;
 					int j = 0;
 					for (uint32_t i = 0; i < leading_ones; i++, j++) {
 						if (!cinfo.used.test(i)) {
@@ -1245,10 +1245,9 @@ namespace vuk {
 							continue;
 						}
 						auto& write = writes[j];
-						auto& as_write = as_writes[j];
 						write = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
 						auto& binding = cinfo.bindings[i];
-						write.descriptorType = (VkDescriptorType)binding.type;
+						write.descriptorType = DescriptorBinding::vk_descriptor_type(binding.type);
 						write.dstArrayElement = 0;
 						write.descriptorCount = 1;
 						write.dstBinding = i;
@@ -1265,10 +1264,10 @@ namespace vuk {
 							write.pImageInfo = &binding.image.dii;
 							break;
 						case DescriptorType::eAccelerationStructureKHR:
-							as_write = { VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR };
-							as_write.pAccelerationStructures = &binding.as;
-							as_write.accelerationStructureCount = 1;
-							write.pNext = &as_write;
+							binding.as.wds = { VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR };
+							binding.as.wds.accelerationStructureCount = 1;
+							binding.as.wds.pAccelerationStructures = &binding.as.as;
+							write.pNext = &binding.as.wds;
 							break;
 						default:
 							assert(0);

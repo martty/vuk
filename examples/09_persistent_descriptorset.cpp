@@ -91,7 +91,9 @@ namespace {
 		      // Make a RenderGraph to process the loaded image
 		      vuk::RenderGraph rg("PP");
 		      rg.add_pass({ .name = "preprocess",
-		                    .resources = { "09_doge"_image >> (vuk::eTransferRead | vuk::eComputeSampled), "09_v1"_image >> vuk::eTransferWrite, "09_v2"_image >> vuk::eComputeWrite },
+		                    .resources = { "09_doge"_image >> (vuk::eTransferRead | vuk::eComputeSampled),
+		                                   "09_v1"_image >> vuk::eTransferWrite,
+		                                   "09_v2"_image >> vuk::eComputeWrite },
 		                    .execute = [x, y](vuk::CommandBuffer& command_buffer) {
 			                    // For the first image, flip the image on the Y axis using a blit
 			                    vuk::ImageBlit blit;
@@ -128,13 +130,15 @@ namespace {
 
 		      // Create persistent descriptorset for a pipeline and set index
 		      pda = ctx.create_persistent_descriptorset(allocator, *runner.context->get_named_pipeline("bindless_cube"), 1, 64);
+		      vuk::Sampler default_sampler = ctx.acquire_sampler({}, ctx.get_frame_count());
 		      // Enqueue updates to the descriptors in the array
 		      // This records the writes internally, but does not execute them
-		      pda->update_combined_image_sampler(ctx, 0, 0, texture_of_doge->view.get(), {}, vuk::ImageLayout::eReadOnlyOptimalKHR);
-		      pda->update_combined_image_sampler(ctx, 0, 1, variant1->view.get(), {}, vuk::ImageLayout::eReadOnlyOptimalKHR);
-		      pda->update_combined_image_sampler(ctx, 0, 2, variant2->view.get(), {}, vuk::ImageLayout::eReadOnlyOptimalKHR);
+		      // Updating can be done in parallel from different threads, only the commit call has to be synchronized
+		      pda->update_combined_image_sampler(0, 0, texture_of_doge->view.get(), default_sampler, vuk::ImageLayout::eReadOnlyOptimalKHR);
+		      pda->update_combined_image_sampler(0, 1, variant1->view.get(), default_sampler, vuk::ImageLayout::eReadOnlyOptimalKHR);
+		      pda->update_combined_image_sampler(0, 2, variant2->view.get(), default_sampler, vuk::ImageLayout::eReadOnlyOptimalKHR);
 		      // Execute the writes
-		      ctx.commit_persistent_descriptorset(pda.get());
+		      pda->commit(ctx);
 		    },
 		.render =
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator, vuk::Future target) {

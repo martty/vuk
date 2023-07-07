@@ -404,7 +404,7 @@ namespace vuk {
 					break;
 				case DescriptorType::eAccelerationStructureKHR:
 					as_write = { VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR };
-					as_write.pAccelerationStructures = &binding.as;
+					as_write.pAccelerationStructures = &binding.as.as;
 					as_write.accelerationStructureCount = 1;
 					write.pNext = &as_write;
 					break;
