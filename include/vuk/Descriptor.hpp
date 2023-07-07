@@ -75,7 +75,7 @@ namespace vuk {
 		std::array<uint32_t, 12> descriptor_counts = {};
 		VkDescriptorSetLayout layout;
 		unsigned variable_count_binding = (unsigned)-1;
-		vuk::DescriptorType variable_count_binding_type;
+		DescriptorType variable_count_binding_type;
 		unsigned variable_count_binding_max_size;
 
 		bool operator==(const DescriptorSetLayoutAllocInfo& o) const noexcept {
@@ -116,7 +116,7 @@ namespace vuk {
 	struct DescriptorBinding {
 		DescriptorBinding() {}
 
-		vuk::DescriptorType type = vuk::DescriptorType(-1);
+		DescriptorType type = DescriptorType(-1);
 		union {
 			VkDescriptorBufferInfo buffer;
 			DescriptorImageInfo image;
@@ -127,15 +127,15 @@ namespace vuk {
 			if (type != o.type)
 				return false;
 			switch (type) {
-			case vuk::DescriptorType::eUniformBuffer:
-			case vuk::DescriptorType::eStorageBuffer:
+			case DescriptorType::eUniformBuffer:
+			case DescriptorType::eStorageBuffer:
 				return memcmp(&buffer, &o.buffer, sizeof(VkDescriptorBufferInfo)) == 0;
-			case vuk::DescriptorType::eStorageImage:
-			case vuk::DescriptorType::eSampledImage:
-			case vuk::DescriptorType::eSampler:
-			case vuk::DescriptorType::eCombinedImageSampler:
+			case DescriptorType::eStorageImage:
+			case DescriptorType::eSampledImage:
+			case DescriptorType::eSampler:
+			case DescriptorType::eCombinedImageSampler:
 				return image == o.image;
-			case vuk::DescriptorType::eAccelerationStructureKHR:
+			case DescriptorType::eAccelerationStructureKHR:
 				return as == o.as;
 			default:
 				assert(0);
@@ -174,8 +174,8 @@ namespace vuk {
 	};
 
 	template<>
-	struct create_info<vuk::DescriptorSetLayoutAllocInfo> {
-		using type = vuk::DescriptorSetLayoutCreateInfo;
+	struct create_info<DescriptorSetLayoutAllocInfo> {
+		using type = DescriptorSetLayoutCreateInfo;
 	};
 
 	struct DescriptorSet {
@@ -188,13 +188,13 @@ namespace vuk {
 	};
 
 	template<>
-	struct create_info<vuk::DescriptorSet> {
-		using type = vuk::SetBinding;
+	struct create_info<DescriptorSet> {
+		using type = SetBinding;
 	};
 
 	struct DescriptorPool {
-		void grow(Context& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info);
-		VkDescriptorSet acquire(Context& ptc, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info);
+		void grow(Context& ptc, DescriptorSetLayoutAllocInfo layout_alloc_info);
+		VkDescriptorSet acquire(Context& ptc, DescriptorSetLayoutAllocInfo layout_alloc_info);
 		void release(VkDescriptorSet ds);
 		void destroy(Context& ctx, VkDevice) const;
 
@@ -207,8 +207,8 @@ namespace vuk {
 	};
 
 	template<>
-	struct create_info<vuk::DescriptorPool> {
-		using type = vuk::DescriptorSetLayoutAllocInfo;
+	struct create_info<DescriptorPool> {
+		using type = DescriptorSetLayoutAllocInfo;
 	};
 
 	struct PersistentDescriptorSetCreateInfo {
