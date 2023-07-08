@@ -93,6 +93,9 @@ namespace vuk {
 			qr.layout = combine_layout(qr.layout, ImageLayout::eReadOnlyOptimalKHR);
 		}
 
+		if (ia & (eVertexRead | eVertexSampled)) {
+			qr.stages |= PipelineStageFlagBits::eVertexShader;
+		}
 		if (ia & (eFragmentRW | eFragmentSampled)) {
 			qr.stages |= PipelineStageFlagBits::eFragmentShader;
 		}
