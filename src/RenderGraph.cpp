@@ -613,7 +613,7 @@ namespace vuk {
 					} else {
 						att_dom = impl->get_bound_buffer(chain->def->pass).acquire.initial_domain;
 					}
-					if (att_dom != last_domain && att_dom != DomainFlagBits::eDevice && att_dom != DomainFlagBits::eAny) {
+					if ((DomainFlags)att_dom != last_domain && att_dom != DomainFlagBits::eDevice && att_dom != DomainFlagBits::eAny) {
 						last_domain = att_dom;
 					}
 				}
@@ -1623,7 +1623,7 @@ namespace vuk {
 				auto& current_pass = partitioned_passes[i];
 				auto queue = (DomainFlagBits)(current_pass->domain & DomainFlagBits::eQueueMask).m_mask;
 
-				if (queue != current_queue) { // if we go into a new queue, reset wait indices
+				if ((DomainFlags)queue != current_queue) { // if we go into a new queue, reset wait indices
 					last_passes_waited = {};
 					current_queue = queue;
 				}
@@ -1656,7 +1656,7 @@ namespace vuk {
 			auto& current_pass = partitioned_passes[i];
 			auto queue = (DomainFlagBits)(current_pass->domain & DomainFlagBits::eQueueMask).m_mask;
 
-			if (queue != current_queue) { // if we go into a new queue, reset batch index
+			if ((DomainFlags)queue != current_queue) { // if we go into a new queue, reset batch index
 				current_queue = queue;
 				batch_index = -1;
 				needs_split = false;

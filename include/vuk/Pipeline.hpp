@@ -23,7 +23,7 @@ namespace vuk {
 		vuk::fixed_vector<vuk::DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> dslcis;
 
 		bool operator==(const PipelineLayoutCreateInfo& o) const noexcept {
-			return std::tie(plci.flags, pcrs, dslcis) == std::tie(o.plci.flags, o.pcrs, o.dslcis);
+			return plci.flags == o.plci.flags && pcrs == o.pcrs && dslcis == o.dslcis;
 		}
 	};
 

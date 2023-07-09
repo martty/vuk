@@ -4,6 +4,7 @@
 #include "vuk/CommandBuffer.hpp"
 #include "vuk/Future.hpp"
 #include "vuk/RenderGraph.hpp"
+#include "vuk/SourceLocation.hpp"
 #include <math.h>
 #include <span>
 
@@ -187,7 +188,7 @@ namespace vuk {
 	/// @param extent Extent3D of the image
 	/// @param data pointer to data to fill the image with
 	/// @param should_generate_mips if true, all mip levels are generated from the 0th level
-	inline std::pair<Texture, Future> create_texture(Allocator& allocator, Format format, Extent3D extent, void* data, bool should_generate_mips) {
+	inline std::pair<Texture, Future> create_texture(Allocator& allocator, Format format, Extent3D extent, void* data, bool should_generate_mips, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 		ImageCreateInfo ici;
 		ici.format = format;
 		ici.extent = extent;
@@ -197,7 +198,7 @@ namespace vuk {
 		ici.usage = ImageUsageFlagBits::eTransferSrc | ImageUsageFlagBits::eTransferDst | ImageUsageFlagBits::eSampled;
 		ici.mipLevels = should_generate_mips ? (uint32_t)log2f((float)std::max(extent.width, extent.height)) + 1 : 1;
 		ici.arrayLayers = 1;
-		auto tex = allocator.get_context().allocate_texture(allocator, ici);
+		auto tex = allocator.get_context().allocate_texture(allocator, ici, loc);
 
 		auto upload_fut = host_data_to_image(allocator, DomainFlagBits::eTransferQueue, ImageAttachment::from_texture(tex), data);
 		auto mipgen_fut = should_generate_mips ? generate_mips(std::move(upload_fut), 0, ici.mipLevels) : std::move(upload_fut);

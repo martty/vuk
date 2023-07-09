@@ -6,20 +6,7 @@
 #include "vuk/ImageAttachment.hpp"
 #include "vuk/Descriptor.hpp"
 #include "vuk/Query.hpp"
-
-/// @cond INTERNAL
-#ifndef __cpp_consteval
-#define VUK_HERE_AND_NOW()                                                                                                                                     \
-	SourceLocationAtFrame {                                                                                                                                      \
-		vuk::source_location::current(), (uint64_t)-1LL                                                                                                            \
-	}
-#else
-#define VUK_HERE_AND_NOW()                                                                                                                                     \
-	SourceLocationAtFrame {                                                                                                                                      \
-		std::source_location::current(), (uint64_t)-1LL                                                                                                            \
-	}
-#endif
-/// @endcond
+#include "vuk/SourceLocation.hpp"
 
 namespace vuk {
 	/// @brief Allocate a single semaphore from an Allocator
@@ -198,5 +185,3 @@ namespace vuk {
 		return { expected_value, std::move(iv) };
 	}
 } // namespace vuk
-
-#undef VUK_HERE_AND_NOW

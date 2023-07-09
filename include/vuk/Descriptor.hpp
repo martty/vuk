@@ -101,8 +101,8 @@ namespace vuk {
 		}
 
 		bool operator==(const DescriptorImageInfo& o) const noexcept {
-			return std::tie(dii.sampler, dii.imageView, dii.imageLayout, image_view_id, sampler_id) ==
-			       std::tie(o.dii.sampler, o.dii.imageView, o.dii.imageLayout, o.image_view_id, o.sampler_id);
+			return dii.sampler == o.dii.sampler && dii.imageView == o.dii.imageView && dii.imageLayout == o.dii.imageLayout && image_view_id == o.image_view_id &&
+			       sampler_id == o.sampler_id;
 		}
 
 		operator VkDescriptorImageInfo() const {
@@ -189,14 +189,14 @@ namespace vuk {
 
 	struct DescriptorSetLayoutCreateInfo {
 		VkDescriptorSetLayoutCreateInfo dslci = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
-		size_t index; // index of the descriptor set when used in a pipeline layout
+		size_t index;                                     // index of the descriptor set when used in a pipeline layout
 		std::vector<VkDescriptorSetLayoutBinding> bindings;
 		std::bitset<VUK_MAX_BINDINGS> used_bindings = {}; // used for ephemeral desc sets
 		std::bitset<VUK_MAX_BINDINGS> optional = {};
 		std::vector<VkDescriptorBindingFlags> flags;
 
 		bool operator==(const DescriptorSetLayoutCreateInfo& o) const noexcept {
-			return std::tie(dslci.flags, bindings, flags) == std::tie(o.dslci.flags, o.bindings, o.flags);
+			return dslci.flags == o.dslci.flags && bindings == o.bindings && flags == o.flags;
 		}
 	};
 

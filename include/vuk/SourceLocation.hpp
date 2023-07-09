@@ -7,7 +7,7 @@ namespace vuk {
 #ifndef __cpp_consteval
 	struct source_location {
 		uint_least32_t line_{};
-		uint_least32_t column{};
+		uint_least32_t column_{};
 		const char* file = "";
 		const char* function = "";
 
@@ -19,7 +19,7 @@ namespace vuk {
 		                                             const char* const function_ = __builtin_FUNCTION()) noexcept {
 			source_location result;
 			result.line_ = line_;
-			result.column = column_;
+			result.column_ = column_;
 			result.file = file_;
 			result.function = function_;
 			return result;
@@ -29,8 +29,16 @@ namespace vuk {
 			return line_;
 		}
 
+		[[nodiscard]] constexpr uint_least32_t column() const noexcept {
+			return line_;
+		}
+
 		[[nodiscard]] constexpr const char* file_name() const noexcept {
 			return file;
+		}
+
+		[[nodiscard]] constexpr const char* function_name() const noexcept {
+			return function;
 		}
 	};
 
@@ -46,7 +54,11 @@ namespace vuk {
 
 	using source_location = std::source_location;
 #endif
-#define VUK_HERE_AND_NOW()                                                                                                                                     \
-	SourceLocationAtFrame { source_location::current(), (uint64_t)-1LL }
-
 } // namespace vuk
+
+/// @cond INTERNAL
+#define VUK_HERE_AND_NOW()                                                                                                                                     \
+	SourceLocationAtFrame {                                                                                                                                      \
+		vuk::source_location::current(), (uint64_t)-1LL                                                                                                            \
+	}
+/// @endcond

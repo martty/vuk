@@ -464,5 +464,3 @@ namespace vuk {
 		}
 	}
 } // namespace vuk
-
-#undef VUK_HERE_AND_NOW

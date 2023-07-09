@@ -79,13 +79,7 @@ namespace vuk {
 			uint32_t layer_count = VK_REMAINING_ARRAY_LAYERS;
 			uint32_t level_count = VK_REMAINING_MIP_LEVELS;
 
-			constexpr bool operator==(const Image& o) const noexcept {
-				return base_level == o.base_level && level_count == o.level_count && base_layer == o.base_layer && layer_count == o.layer_count;
-			}
-
-			constexpr bool operator<(const Image& o) const noexcept {
-				return std::tie(base_layer, base_level, layer_count, level_count) < std::tie(o.base_layer, o.base_level, o.layer_count, o.level_count);
-			}
+			constexpr auto operator<=>(const Image& o) const noexcept = default;
 		} image = {};
 		struct Buffer {
 			uint64_t offset = 0;

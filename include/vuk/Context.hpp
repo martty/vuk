@@ -12,6 +12,8 @@
 #include "vuk/Swapchain.hpp"
 #include "vuk_fwd.hpp"
 
+#include "vuk/SourceLocation.hpp"
+
 namespace std {
 	class mutex;
 	class recursive_mutex;
@@ -144,7 +146,7 @@ namespace vuk {
 		/// @return The resource
 		DeviceVkResource& get_vk_resource();
 
-		Texture allocate_texture(Allocator& allocator, ImageCreateInfo ici);
+		Texture allocate_texture(Allocator& allocator, ImageCreateInfo ici, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
 		/// @brief Add a swapchain to be managed by the Context
 		/// @return Reference to the new swapchain that can be used during presentation

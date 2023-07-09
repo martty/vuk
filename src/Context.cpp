@@ -295,7 +295,8 @@ namespace vuk {
 
 	void PersistentDescriptorSet::update_acceleration_structure(unsigned binding, unsigned array_index, VkAccelerationStructureKHR as) {
 		descriptor_bindings[binding][array_index].as.as = as;
-		descriptor_bindings[binding][array_index].type = (DescriptorType)((uint8_t)DescriptorType::eAccelerationStructureKHR | (uint8_t)DescriptorType::ePendingWrite);
+		descriptor_bindings[binding][array_index].type =
+		    (DescriptorType)((uint8_t)DescriptorType::eAccelerationStructureKHR | (uint8_t)DescriptorType::ePendingWrite);
 	}
 
 	void PersistentDescriptorSet::commit(Context& ctx) {
@@ -655,7 +656,7 @@ namespace vuk {
 		return impl->shader_modules.acquire(sci);
 	}
 
-	Texture Context::allocate_texture(Allocator& allocator, ImageCreateInfo ici) {
+	Texture Context::allocate_texture(Allocator& allocator, ImageCreateInfo ici, SourceLocationAtFrame loc) {
 		ici.imageType = ici.extent.depth > 1 ? ImageType::e3D : ici.extent.height > 1 ? ImageType::e2D : ImageType::e1D;
 		VkImageFormatListCreateInfo listci = { VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO };
 		auto unorm_fmt = srgb_to_unorm(ici.format);
@@ -677,7 +678,7 @@ namespace vuk {
 		ivci.subresourceRange.layerCount = 1;
 		ivci.subresourceRange.levelCount = ici.mipLevels;
 		ivci.viewType = ici.imageType == ImageType::e3D ? ImageViewType::e3D : ici.imageType == ImageType::e2D ? ImageViewType::e2D : ImageViewType::e1D;
-		Texture tex{ std::move(dst), allocate_image_view(allocator, ivci).value() }; // TODO: dropping error
+		Texture tex{ std::move(dst), allocate_image_view(allocator, ivci, loc).value() }; // TODO: dropping error
 		tex.extent = ici.extent;
 		tex.format = ici.format;
 		tex.sample_count = ici.samples;

@@ -11,8 +11,17 @@
 #include <mutex>
 #include <numeric>
 #include <vk_mem_alloc.h>
+#include <sstream>
 
 namespace vuk {
+	std::string to_string(SourceLocationAtFrame loc) {
+		std::stringstream sstream;
+
+		sstream << loc.location.file_name() << '(' << loc.location.line() << ':' << loc.location.column() << ") `" << loc.location.function_name() << "@"
+		        << loc.absolute_frame;
+		return sstream.str();
+	}
+
 	std::string to_human_readable(uint64_t in) {
 		/*       k       M      G */
 		if (in >= 1024 * 1024 * 1024) {
