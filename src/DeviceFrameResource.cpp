@@ -251,13 +251,14 @@ namespace vuk {
 		VkDescriptorPoolCreateInfo dpci{ .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
 		dpci.maxSets = 1000;
 		std::array<VkDescriptorPoolSize, 12> descriptor_counts = {};
-		for (auto i = 0; i < descriptor_counts.size(); i++) {
+		unsigned count = get_context().vkCmdBuildAccelerationStructuresKHR ? descriptor_counts.size() : descriptor_counts.size() - 1;
+		for (auto i = 0; i < count; i++) {
 			auto& d = descriptor_counts[i];
 			d.type = i == 11 ? VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR : VkDescriptorType(i);
 			d.descriptorCount = 1000;
 		}
 		dpci.pPoolSizes = descriptor_counts.data();
-		dpci.poolSizeCount = (uint32_t)descriptor_counts.size();
+		dpci.poolSizeCount = count;
 
 		if (impl->ds_pools.size() == 0) {
 			std::unique_lock _(impl->ds_mutex);

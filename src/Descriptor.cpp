@@ -32,8 +32,9 @@ namespace vuk {
 		VkDescriptorPoolCreateInfo dpci{ .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
 		dpci.maxSets = impl->sets_allocated == 0 ? 1 : impl->sets_allocated * 2;
 		std::array<VkDescriptorPoolSize, 12> descriptor_counts = {};
+		unsigned count = ctx.vkCmdBuildAccelerationStructuresKHR ? descriptor_counts.size() : descriptor_counts.size() - 1;
 		uint32_t used_idx = 0;
-		for (auto i = 0; i < descriptor_counts.size(); i++) {
+		for (auto i = 0; i < count; i++) {
 			if (layout_alloc_info.descriptor_counts[i] > 0) {
 				auto& d = descriptor_counts[used_idx];
 				d.type = i == 11 ? VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR : VkDescriptorType(i);

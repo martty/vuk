@@ -320,8 +320,9 @@ namespace vuk {
 			VkDescriptorPoolCreateInfo dpci = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
 			dpci.maxSets = 1;
 			std::array<VkDescriptorPoolSize, 12> descriptor_counts = {};
+			unsigned count = get_context().vkCmdBuildAccelerationStructuresKHR ? descriptor_counts.size() : descriptor_counts.size() - 1;
 			uint32_t used_idx = 0;
-			for (auto i = 0; i < descriptor_counts.size(); i++) {
+			for (auto i = 0; i < count; i++) {
 				bool used = false;
 				// create non-variable count descriptors
 				if (dslai.descriptor_counts[i] > 0) {
