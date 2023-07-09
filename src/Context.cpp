@@ -264,36 +264,50 @@ namespace vuk {
 	}
 
 	void PersistentDescriptorSet::update_combined_image_sampler(unsigned binding, unsigned array_index, ImageView iv, Sampler sampler, ImageLayout layout) {
+		assert(binding < descriptor_bindings.size());
+		assert(array_index < descriptor_bindings[binding].size());
 		descriptor_bindings[binding][array_index].image = DescriptorImageInfo(sampler, iv, layout);
 		descriptor_bindings[binding][array_index].type = (DescriptorType)((uint8_t)DescriptorType::eCombinedImageSampler | (uint8_t)DescriptorType::ePendingWrite);
 	}
 
 	void PersistentDescriptorSet::update_storage_image(unsigned binding, unsigned array_index, ImageView iv) {
+		assert(binding < descriptor_bindings.size());
+		assert(array_index < descriptor_bindings[binding].size());
 		descriptor_bindings[binding][array_index].image = DescriptorImageInfo({}, iv, ImageLayout::eGeneral);
 		descriptor_bindings[binding][array_index].type = (DescriptorType)((uint8_t)DescriptorType::eStorageImage | (uint8_t)DescriptorType::ePendingWrite);
 	}
 
 	void PersistentDescriptorSet::update_uniform_buffer(unsigned binding, unsigned array_index, Buffer buffer) {
+		assert(binding < descriptor_bindings.size());
+		assert(array_index < descriptor_bindings[binding].size());
 		descriptor_bindings[binding][array_index].buffer = VkDescriptorBufferInfo{ buffer.buffer, buffer.offset, buffer.size };
 		descriptor_bindings[binding][array_index].type = (DescriptorType)((uint8_t)DescriptorType::eUniformBuffer | (uint8_t)DescriptorType::ePendingWrite);
 	}
 
 	void PersistentDescriptorSet::update_storage_buffer(unsigned binding, unsigned array_index, Buffer buffer) {
+		assert(binding < descriptor_bindings.size());
+		assert(array_index < descriptor_bindings[binding].size());
 		descriptor_bindings[binding][array_index].buffer = VkDescriptorBufferInfo{ buffer.buffer, buffer.offset, buffer.size };
 		descriptor_bindings[binding][array_index].type = (DescriptorType)((uint8_t)DescriptorType::eStorageBuffer | (uint8_t)DescriptorType::ePendingWrite);
 	}
 
 	void PersistentDescriptorSet::update_sampler(unsigned binding, unsigned array_index, Sampler sampler) {
+		assert(binding < descriptor_bindings.size());
+		assert(array_index < descriptor_bindings[binding].size());
 		descriptor_bindings[binding][array_index].image = DescriptorImageInfo(sampler, {}, {});
 		descriptor_bindings[binding][array_index].type = (DescriptorType)((uint8_t)DescriptorType::eSampler | (uint8_t)DescriptorType::ePendingWrite);
 	}
 
 	void PersistentDescriptorSet::update_sampled_image(unsigned binding, unsigned array_index, ImageView iv, ImageLayout layout) {
+		assert(binding < descriptor_bindings.size());
+		assert(array_index < descriptor_bindings[binding].size());
 		descriptor_bindings[binding][array_index].image = DescriptorImageInfo({}, iv, layout);
 		descriptor_bindings[binding][array_index].type = (DescriptorType)((uint8_t)DescriptorType::eSampledImage | (uint8_t)DescriptorType::ePendingWrite);
 	}
 
 	void PersistentDescriptorSet::update_acceleration_structure(unsigned binding, unsigned array_index, VkAccelerationStructureKHR as) {
+		assert(binding < descriptor_bindings.size());
+		assert(array_index < descriptor_bindings[binding].size());
 		descriptor_bindings[binding][array_index].as.as = as;
 		descriptor_bindings[binding][array_index].type =
 		    (DescriptorType)((uint8_t)DescriptorType::eAccelerationStructureKHR | (uint8_t)DescriptorType::ePendingWrite);
