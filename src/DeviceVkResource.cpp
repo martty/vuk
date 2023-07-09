@@ -8,17 +8,26 @@
 #define VMA_IMPLEMENTATION
 #define VMA_STATIC_VULKAN_FUNCTIONS  0
 #define VMA_DYNAMIC_VULKAN_FUNCTIONS 0
+#ifdef VUK_DEBUG_ALLOCATIONS
+#define VMA_DEBUG_LOG_FORMAT(format, ...)                                                                                                                      \
+	do {                                                                                                                                                         \
+		printf((format), __VA_ARGS__);                                                                                                                             \
+		printf("\n");                                                                                                                                              \
+	} while (false)
+#endif
 #include <mutex>
 #include <numeric>
-#include <vk_mem_alloc.h>
 #include <sstream>
+#include <vk_mem_alloc.h>
 
 namespace vuk {
 	std::string to_string(SourceLocationAtFrame loc) {
 		std::stringstream sstream;
 
-		sstream << loc.location.file_name() << '(' << loc.location.line() << ':' << loc.location.column() << ") `" << loc.location.function_name() << "@"
-		        << loc.absolute_frame;
+		sstream << loc.location.file_name() << '(' << loc.location.line() << ':' << loc.location.column() << "): " << loc.location.function_name();
+		if (loc.absolute_frame != -1) {
+			sstream << "@" << loc.absolute_frame;
+		}
 		return sstream.str();
 	}
 
@@ -226,6 +235,7 @@ namespace vuk {
 				deallocate_buffers({ dst.data(), (uint64_t)i });
 				return { expected_error, AllocateException{ res } };
 			}
+			vmaSetAllocationName(impl->allocator, allocation, to_string(loc).c_str());
 			VkBufferDeviceAddressInfo bdai{ VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, nullptr, buffer };
 			uint64_t device_address = ctx->vkGetBufferDeviceAddress(device, &bdai);
 			dst[i] = Buffer{ allocation, buffer, 0, ci.size, device_address, static_cast<std::byte*>(allocation_info.pMappedData), ci.mem_usage };
@@ -257,6 +267,7 @@ namespace vuk {
 			}
 
 			auto res = vmaCreateImage(impl->allocator, &vkici, &aci, &vkimg, &allocation, nullptr);
+			vmaSetAllocationName(impl->allocator, allocation, to_string(loc).c_str());
 
 			if (res != VK_SUCCESS) {
 				deallocate_images({ dst.data(), (uint64_t)i });
