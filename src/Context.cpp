@@ -648,6 +648,16 @@ namespace vuk {
 
 	Texture Context::allocate_texture(Allocator& allocator, ImageCreateInfo ici) {
 		ici.imageType = ici.extent.depth > 1 ? ImageType::e3D : ici.extent.height > 1 ? ImageType::e2D : ImageType::e1D;
+		VkImageFormatListCreateInfo listci = { VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO };
+		auto unorm_fmt = srgb_to_unorm(ici.format);
+		auto srgb_fmt = unorm_to_srgb(ici.format);
+		VkFormat formats[2] = { (VkFormat)ici.format, unorm_fmt == vuk::Format::eUndefined ? (VkFormat)srgb_fmt : (VkFormat)unorm_fmt };
+		listci.pViewFormats = formats;
+		listci.viewFormatCount = formats[1] == VK_FORMAT_UNDEFINED ? 1 : 2;
+		if (listci.viewFormatCount > 1) {
+			ici.flags = vuk::ImageCreateFlagBits::eMutableFormat;
+			ici.pNext = &listci;
+		}
 		Unique<Image> dst = allocate_image(allocator, ici).value(); // TODO: dropping error
 		ImageViewCreateInfo ivci;
 		ivci.format = ici.format;
