@@ -235,7 +235,9 @@ namespace vuk {
 				deallocate_buffers({ dst.data(), (uint64_t)i });
 				return { expected_error, AllocateException{ res } };
 			}
+#ifdef VUK_DEBUG_ALLOCATIONS
 			vmaSetAllocationName(impl->allocator, allocation, to_string(loc).c_str());
+#endif
 			VkBufferDeviceAddressInfo bdai{ VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, nullptr, buffer };
 			uint64_t device_address = ctx->vkGetBufferDeviceAddress(device, &bdai);
 			dst[i] = Buffer{ allocation, buffer, 0, ci.size, device_address, static_cast<std::byte*>(allocation_info.pMappedData), ci.mem_usage };
@@ -267,12 +269,14 @@ namespace vuk {
 			}
 
 			auto res = vmaCreateImage(impl->allocator, &vkici, &aci, &vkimg, &allocation, nullptr);
-			vmaSetAllocationName(impl->allocator, allocation, to_string(loc).c_str());
 
 			if (res != VK_SUCCESS) {
 				deallocate_images({ dst.data(), (uint64_t)i });
 				return { expected_error, AllocateException{ res } };
 			}
+#ifdef VUK_DEBUG_ALLOCATIONS
+			vmaSetAllocationName(impl->allocator, allocation, to_string(loc).c_str());
+#endif
 
 			dst[i] = Image{ vkimg, allocation };
 		}
