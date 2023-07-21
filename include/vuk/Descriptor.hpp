@@ -252,6 +252,8 @@ namespace vuk {
 		VkDescriptorSetLayout set_layout;
 		VkDescriptorSet backing_set;
 
+		std::vector<VkWriteDescriptorSet> wdss;
+
 		std::array<std::vector<DescriptorBinding>, VUK_MAX_BINDINGS> descriptor_bindings;
 
 		bool operator==(const PersistentDescriptorSet& other) const {

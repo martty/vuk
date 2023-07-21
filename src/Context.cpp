@@ -314,7 +314,7 @@ namespace vuk {
 	}
 
 	void PersistentDescriptorSet::commit(Context& ctx) {
-		std::vector<VkWriteDescriptorSet> wdss;
+		wdss.clear();
 		for (unsigned i = 0; i < descriptor_bindings.size(); i++) {
 			auto& db = descriptor_bindings[i];
 			for (unsigned j = 0; j < db.size(); j++) {
