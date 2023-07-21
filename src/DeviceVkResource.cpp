@@ -8,7 +8,7 @@
 #define VMA_IMPLEMENTATION
 #define VMA_STATIC_VULKAN_FUNCTIONS  0
 #define VMA_DYNAMIC_VULKAN_FUNCTIONS 0
-#ifdef VUK_DEBUG_ALLOCATIONS
+#if VUK_DEBUG_ALLOCATIONS
 #define VMA_DEBUG_LOG_FORMAT(format, ...)                                                                                                                      \
 	do {                                                                                                                                                         \
 		printf((format), __VA_ARGS__);                                                                                                                             \
@@ -235,7 +235,7 @@ namespace vuk {
 				deallocate_buffers({ dst.data(), (uint64_t)i });
 				return { expected_error, AllocateException{ res } };
 			}
-#ifdef VUK_DEBUG_ALLOCATIONS
+#if VUK_DEBUG_ALLOCATIONS
 			vmaSetAllocationName(impl->allocator, allocation, to_string(loc).c_str());
 #endif
 			VkBufferDeviceAddressInfo bdai{ VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, nullptr, buffer };
@@ -274,7 +274,7 @@ namespace vuk {
 				deallocate_images({ dst.data(), (uint64_t)i });
 				return { expected_error, AllocateException{ res } };
 			}
-#ifdef VUK_DEBUG_ALLOCATIONS
+#if VUK_DEBUG_ALLOCATIONS
 			vmaSetAllocationName(impl->allocator, allocation, to_string(loc).c_str());
 #endif
 
