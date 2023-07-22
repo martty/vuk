@@ -796,20 +796,20 @@ namespace vuk {
 		return { expected_value, std::move(sbundle) };
 	}
 
-	Result<BufferInfo, RenderGraphException> ExecutableRenderGraph::get_resource_buffer(Name n, PassInfo* pass_info) {
+	Result<BufferInfo, RenderGraphException> ExecutableRenderGraph::get_resource_buffer(const NameReference& name_ref, PassInfo* pass_info) {
 		for (auto& r : pass_info->resources.to_span(impl->resources)) {
-			if (r.type == Resource::Type::eBuffer && r.original_name == n) {
+			if (r.type == Resource::Type::eBuffer && r.original_name == name_ref.name.name && r.foreign == name_ref.rg) {
 				auto& att = impl->get_bound_buffer(r.reference);
 				return { expected_value, att };
 			}
 		}
 
-		return { expected_error, errors::make_cbuf_references_undeclared_resource(*pass_info, Resource::Type::eImage, n) };
+		return { expected_error, errors::make_cbuf_references_undeclared_resource(*pass_info, Resource::Type::eImage, name_ref.name.name) };
 	}
 
-	Result<AttachmentInfo, RenderGraphException> ExecutableRenderGraph::get_resource_image(Name n, PassInfo* pass_info) {
+	Result<AttachmentInfo, RenderGraphException> ExecutableRenderGraph::get_resource_image(const NameReference& name_ref, PassInfo* pass_info) {
 		for (auto& r : pass_info->resources.to_span(impl->resources)) {
-			if (r.type == Resource::Type::eImage && r.original_name == n) {
+			if (r.type == Resource::Type::eImage && r.original_name == name_ref.name.name && r.foreign == name_ref.rg) {
 				auto& att = impl->get_bound_attachment(r.reference);
 				if (att.parent_attachment < 0) {
 					return { expected_value, impl->get_bound_attachment(att.parent_attachment) };
@@ -818,17 +818,17 @@ namespace vuk {
 			}
 		}
 
-		return { expected_error, errors::make_cbuf_references_undeclared_resource(*pass_info, Resource::Type::eImage, n) };
+		return { expected_error, errors::make_cbuf_references_undeclared_resource(*pass_info, Resource::Type::eImage, name_ref.name.name) };
 	}
 
-	Result<bool, RenderGraphException> ExecutableRenderGraph::is_resource_image_in_general_layout(Name n, PassInfo* pass_info) {
+	Result<bool, RenderGraphException> ExecutableRenderGraph::is_resource_image_in_general_layout(const NameReference& name_ref, PassInfo* pass_info) {
 		for (auto& r : pass_info->resources.to_span(impl->resources)) {
-			if (r.type == Resource::Type::eImage && r.original_name == n) {
+			if (r.type == Resource::Type::eImage && r.original_name == name_ref.name.name && r.foreign == name_ref.rg) {
 				return { expected_value, r.promoted_to_general };
 			}
 		}
 
-		return { expected_error, errors::make_cbuf_references_undeclared_resource(*pass_info, Resource::Type::eImage, n) };
+		return { expected_error, errors::make_cbuf_references_undeclared_resource(*pass_info, Resource::Type::eImage, name_ref.name.name) };
 	}
 
 	QualifiedName ExecutableRenderGraph::resolve_name(Name name, PassInfo* pass_info) const noexcept {

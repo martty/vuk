@@ -52,6 +52,16 @@ namespace vuk {
 			return name.is_invalid();
 		}
 	};
+
+	// a stable Name that can refer to an arbitrary subgraph Name
+	struct NameReference {
+		struct RenderGraph* rg = nullptr;
+		QualifiedName name;
+
+		static constexpr NameReference direct(Name n) {
+			return NameReference{ nullptr, { Name{}, n } };
+		}
+	};
 } // namespace vuk
 
 namespace std {

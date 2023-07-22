@@ -320,10 +320,10 @@ namespace vuk {
 
 		Result<SubmitBundle> execute(Allocator&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
 
-		Result<struct BufferInfo, RenderGraphException> get_resource_buffer(Name, struct PassInfo*);
-		Result<struct AttachmentInfo, RenderGraphException> get_resource_image(Name, struct PassInfo*);
+		Result<struct BufferInfo, RenderGraphException> get_resource_buffer(const NameReference&, struct PassInfo*);
+		Result<struct AttachmentInfo, RenderGraphException> get_resource_image(const NameReference&, struct PassInfo*);
 
-		Result<bool, RenderGraphException> is_resource_image_in_general_layout(Name n, struct PassInfo* pass_info);
+		Result<bool, RenderGraphException> is_resource_image_in_general_layout(const NameReference&, struct PassInfo* pass_info);
 
 		QualifiedName resolve_name(Name, struct PassInfo*) const noexcept;
 

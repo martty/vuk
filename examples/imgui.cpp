@@ -155,12 +155,21 @@ vuk::Future util::ImGui_ImplVuk_Render(vuk::Allocator& allocator,
 							                } else {
 								                if (si.rg_attachment.ivci) {
 									                auto ivci = *si.rg_attachment.ivci;
-									                auto res_img = command_buffer.get_resource_image(si.rg_attachment.reference.name.name);
-									                ivci.image = res_img->image;
+													// it is possible that we end up binding multiple images here with the same name - 
+													// the rendergraph sorts this out, but we need to refer to the correct one here
+													// so we use a NameReference to make sure that we include the source rendergraph for identification
+													// this is useful for generic name binding, but not really needed for usual passes
+									                auto res_img = command_buffer.get_resource_image_attachment(si.rg_attachment.reference)->image;
+									                ivci.image = res_img.image;
 									                auto iv = vuk::allocate_image_view(allocator, ivci);
 									                command_buffer.bind_image(0, 0, **iv).bind_sampler(0, 0, si.rg_attachment.sci);
 								                } else {
-									                command_buffer.bind_image(0, 0, si.rg_attachment.reference.name.name).bind_sampler(0, 0, si.rg_attachment.sci);
+									                command_buffer
+									                    .bind_image(0,
+									                                0,
+									                                *command_buffer.get_resource_image_attachment(si.rg_attachment.reference),
+									                                vuk::ImageLayout::eShaderReadOnlyOptimal)
+									                    .bind_sampler(0, 0, si.rg_attachment.sci);
 								                }
 							                }
 						                }

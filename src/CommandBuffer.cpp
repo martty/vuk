@@ -44,6 +44,15 @@ namespace vuk {
 
 	Result<Buffer> CommandBuffer::get_resource_buffer(Name n) const {
 		assert(rg);
+		auto res = rg->get_resource_buffer(NameReference::direct(n), current_pass);
+		if (!res) {
+			return { expected_error, res.error() };
+		}
+		return { expected_value, res->buffer };
+	}
+
+	Result<Buffer> CommandBuffer::get_resource_buffer(const NameReference& n) const {
+		assert(rg);
 		auto res = rg->get_resource_buffer(n, current_pass);
 		if (!res) {
 			return { expected_error, res.error() };
@@ -53,7 +62,7 @@ namespace vuk {
 
 	Result<Image> CommandBuffer::get_resource_image(Name n) const {
 		assert(rg);
-		auto res = rg->get_resource_image(n, current_pass);
+		auto res = rg->get_resource_image(NameReference::direct(n), current_pass);
 		if (!res) {
 			return { expected_error, res.error() };
 		}
@@ -62,7 +71,7 @@ namespace vuk {
 
 	Result<ImageView> CommandBuffer::get_resource_image_view(Name n) const {
 		assert(rg);
-		auto res = rg->get_resource_image(n, current_pass);
+		auto res = rg->get_resource_image(NameReference::direct(n), current_pass);
 		if (!res) {
 			return { expected_error, res.error() };
 		}
@@ -70,6 +79,16 @@ namespace vuk {
 	}
 
 	Result<ImageAttachment> CommandBuffer::get_resource_image_attachment(Name n) const {
+		assert(rg);
+		auto res = rg->get_resource_image(NameReference::direct(n), current_pass);
+		if (!res) {
+			return { expected_error, res.error() };
+		}
+		return { expected_value, res->attachment };
+	}
+
+	
+	Result<ImageAttachment> CommandBuffer::get_resource_image_attachment(const NameReference& n) const {
 		assert(rg);
 		auto res = rg->get_resource_image(n, current_pass);
 		if (!res) {
@@ -334,7 +353,7 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, Name resource_name, unsigned first_location, Packed format_list) {
 		VUK_EARLY_RET();
-		auto res = rg->get_resource_buffer(resource_name, current_pass);
+		auto res = rg->get_resource_buffer(NameReference::direct(resource_name), current_pass);
 		if (!res) {
 			current_error = std::move(res);
 			return *this;
@@ -365,7 +384,7 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, Name resource_name, std::span<VertexInputAttributeDescription> viads, uint32_t stride) {
 		VUK_EARLY_RET();
-		auto res = rg->get_resource_buffer(resource_name, current_pass);
+		auto res = rg->get_resource_buffer(NameReference::direct(resource_name), current_pass);
 		if (!res) {
 			current_error = std::move(res);
 			return *this;
@@ -381,7 +400,7 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::bind_index_buffer(Name name, IndexType type) {
 		VUK_EARLY_RET();
-		auto res = rg->get_resource_buffer(name, current_pass);
+		auto res = rg->get_resource_buffer(NameReference::direct(name), current_pass);
 		if (!res) {
 			current_error = std::move(res);
 			return *this;
@@ -432,7 +451,7 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::bind_buffer(unsigned set, unsigned binding, Name name) {
 		VUK_EARLY_RET();
-		auto res = rg->get_resource_buffer(name, current_pass);
+		auto res = rg->get_resource_buffer(NameReference::direct(name), current_pass);
 		if (!res) {
 			current_error = std::move(res);
 			return *this;
@@ -442,12 +461,12 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::bind_image(unsigned set, unsigned binding, Name resource_name) {
 		VUK_EARLY_RET();
-		auto res = rg->get_resource_image(resource_name, current_pass);
+		auto res = rg->get_resource_image(NameReference::direct(resource_name), current_pass);
 		if (!res) {
 			current_error = std::move(res);
 			return *this;
 		}
-		auto res_gl = rg->is_resource_image_in_general_layout(resource_name, current_pass);
+		auto res_gl = rg->is_resource_image_in_general_layout(NameReference::direct(resource_name), current_pass);
 		if (!res_gl) {
 			current_error = std::move(res);
 			return *this;
@@ -573,7 +592,7 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::draw_indexed_indirect(size_t command_count, Name resource_name) {
 		VUK_EARLY_RET();
-		auto res = rg->get_resource_buffer(resource_name, current_pass);
+		auto res = rg->get_resource_buffer(NameReference::direct(resource_name), current_pass);
 		if (!res) {
 			current_error = std::move(res);
 			return *this;
@@ -616,12 +635,12 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::draw_indexed_indirect_count(size_t max_command_count, Name indirect_resource_name, Name count_resource_name) {
 		VUK_EARLY_RET();
-		auto res = rg->get_resource_buffer(indirect_resource_name, current_pass);
+		auto res = rg->get_resource_buffer(NameReference::direct(indirect_resource_name), current_pass);
 		if (!res) {
 			current_error = std::move(res);
 			return *this;
 		}
-		auto count_res = rg->get_resource_buffer(count_resource_name, current_pass);
+		auto count_res = rg->get_resource_buffer(NameReference::direct(count_resource_name), current_pass);
 		if (!res) {
 			current_error = std::move(res);
 			return *this;
@@ -698,7 +717,7 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::dispatch_indirect(Name indirect_resource_name) {
 		VUK_EARLY_RET();
-		auto res = rg->get_resource_buffer(indirect_resource_name, current_pass);
+		auto res = rg->get_resource_buffer(NameReference::direct(indirect_resource_name), current_pass);
 		if (!res) {
 			current_error = std::move(res);
 			return *this;
@@ -723,13 +742,13 @@ namespace vuk {
 		VUK_EARLY_RET();
 
 		assert(rg);
-		auto res = rg->get_resource_image(src, current_pass);
+		auto res = rg->get_resource_image(NameReference::direct(src), current_pass);
 		if (!res) {
 			current_error = std::move(res);
 			return *this;
 		}
 
-		auto res_gl = rg->is_resource_image_in_general_layout(src, current_pass);
+		auto res_gl = rg->is_resource_image_in_general_layout(NameReference::direct(src), current_pass);
 		if (!res_gl) {
 			current_error = std::move(res_gl);
 			return *this;
@@ -758,13 +777,13 @@ namespace vuk {
 		VUK_EARLY_RET();
 		assert(rg);
 		VkImageResolve ir;
-		auto src_res = rg->get_resource_image(src, current_pass);
+		auto src_res = rg->get_resource_image(NameReference::direct(src), current_pass);
 		if (!src_res) {
 			current_error = std::move(src_res);
 			return *this;
 		}
 		auto src_image = src_res->attachment.image;
-		auto dst_res = rg->get_resource_image(dst, current_pass);
+		auto dst_res = rg->get_resource_image(NameReference::direct(dst), current_pass);
 		if (!dst_res) {
 			current_error = std::move(dst_res);
 			return *this;
@@ -788,12 +807,12 @@ namespace vuk {
 		ir.dstSubresource = isl;
 		ir.extent = static_cast<Extent3D>(src_res->attachment.extent.extent);
 
-		auto res_gl_src = rg->is_resource_image_in_general_layout(src, current_pass);
+		auto res_gl_src = rg->is_resource_image_in_general_layout(NameReference::direct(src), current_pass);
 		if (!res_gl_src) {
 			current_error = std::move(res_gl_src);
 			return *this;
 		}
-		auto res_gl_dst = rg->is_resource_image_in_general_layout(dst, current_pass);
+		auto res_gl_dst = rg->is_resource_image_in_general_layout(NameReference::direct(dst), current_pass);
 		if (!res_gl_dst) {
 			current_error = std::move(res_gl_dst);
 			return *this;
@@ -810,25 +829,25 @@ namespace vuk {
 	CommandBuffer& CommandBuffer::blit_image(Name src, Name dst, ImageBlit region, Filter filter) {
 		VUK_EARLY_RET();
 		assert(rg);
-		auto src_res = rg->get_resource_image(src, current_pass);
+		auto src_res = rg->get_resource_image(NameReference::direct(src), current_pass);
 		if (!src_res) {
 			current_error = std::move(src_res);
 			return *this;
 		}
 		auto src_image = src_res->attachment.image;
-		auto dst_res = rg->get_resource_image(dst, current_pass);
+		auto dst_res = rg->get_resource_image(NameReference::direct(dst), current_pass);
 		if (!dst_res) {
 			current_error = std::move(dst_res);
 			return *this;
 		}
 		auto dst_image = dst_res->attachment.image;
 
-		auto res_gl_src = rg->is_resource_image_in_general_layout(src, current_pass);
+		auto res_gl_src = rg->is_resource_image_in_general_layout(NameReference::direct(src), current_pass);
 		if (!res_gl_src) {
 			current_error = std::move(res_gl_src);
 			return *this;
 		}
-		auto res_gl_dst = rg->is_resource_image_in_general_layout(dst, current_pass);
+		auto res_gl_dst = rg->is_resource_image_in_general_layout(NameReference::direct(dst), current_pass);
 		if (!res_gl_dst) {
 			current_error = std::move(res_gl_dst);
 			return *this;
@@ -846,7 +865,7 @@ namespace vuk {
 	CommandBuffer& CommandBuffer::copy_buffer_to_image(Name src, Name dst, BufferImageCopy bic) {
 		VUK_EARLY_RET();
 		assert(rg);
-		auto src_res = rg->get_resource_buffer(src, current_pass);
+		auto src_res = rg->get_resource_buffer(NameReference::direct(src), current_pass);
 		if (!src_res) {
 			current_error = std::move(src_res);
 			return *this;
@@ -854,14 +873,14 @@ namespace vuk {
 		auto src_bbuf = src_res->buffer;
 		bic.bufferOffset += src_bbuf.offset;
 
-		auto dst_res = rg->get_resource_image(dst, current_pass);
+		auto dst_res = rg->get_resource_image(NameReference::direct(dst), current_pass);
 		if (!dst_res) {
 			current_error = std::move(dst_res);
 			return *this;
 		}
 		auto dst_image = dst_res->attachment.image;
 
-		auto res_gl = rg->is_resource_image_in_general_layout(dst, current_pass);
+		auto res_gl = rg->is_resource_image_in_general_layout(NameReference::direct(dst), current_pass);
 		if (!res_gl) {
 			current_error = std::move(res_gl);
 			return *this;
@@ -875,13 +894,13 @@ namespace vuk {
 	CommandBuffer& CommandBuffer::copy_image_to_buffer(Name src, Name dst, BufferImageCopy bic) {
 		VUK_EARLY_RET();
 		assert(rg);
-		auto src_res = rg->get_resource_image(src, current_pass);
+		auto src_res = rg->get_resource_image(NameReference::direct(src), current_pass);
 		if (!src_res) {
 			current_error = std::move(src_res);
 			return *this;
 		}
 		auto src_image = src_res->attachment.image;
-		auto dst_res = rg->get_resource_buffer(dst, current_pass);
+		auto dst_res = rg->get_resource_buffer(NameReference::direct(dst), current_pass);
 		if (!dst_res) {
 			current_error = std::move(dst_res);
 			return *this;
@@ -890,7 +909,7 @@ namespace vuk {
 
 		bic.bufferOffset += dst_bbuf.offset;
 
-		auto res_gl = rg->is_resource_image_in_general_layout(src, current_pass);
+		auto res_gl = rg->is_resource_image_in_general_layout(NameReference::direct(src), current_pass);
 		if (!res_gl) {
 			current_error = std::move(res_gl);
 			return *this;
@@ -904,13 +923,13 @@ namespace vuk {
 	CommandBuffer& CommandBuffer::copy_buffer(Name src, Name dst, size_t size) {
 		VUK_EARLY_RET();
 		assert(rg);
-		auto src_res = rg->get_resource_buffer(src, current_pass);
+		auto src_res = rg->get_resource_buffer(NameReference::direct(src), current_pass);
 		if (!src_res) {
 			current_error = std::move(src_res);
 			return *this;
 		}
 		auto src_bbuf = src_res->buffer;
-		auto dst_res = rg->get_resource_buffer(dst, current_pass);
+		auto dst_res = rg->get_resource_buffer(NameReference::direct(dst), current_pass);
 		if (!dst_res) {
 			current_error = std::move(dst_res);
 			return *this;
@@ -942,7 +961,7 @@ namespace vuk {
 	CommandBuffer& CommandBuffer::fill_buffer(Name dst, size_t size, uint32_t data) {
 		VUK_EARLY_RET();
 		assert(rg);
-		auto dst_res = rg->get_resource_buffer(dst, current_pass);
+		auto dst_res = rg->get_resource_buffer(NameReference::direct(dst), current_pass);
 		if (!dst_res) {
 			current_error = std::move(dst_res);
 			return *this;
@@ -960,7 +979,7 @@ namespace vuk {
 	CommandBuffer& CommandBuffer::update_buffer(Name dst, size_t size, void* data) {
 		VUK_EARLY_RET();
 		assert(rg);
-		auto dst_res = rg->get_resource_buffer(dst, current_pass);
+		auto dst_res = rg->get_resource_buffer(NameReference::direct(dst), current_pass);
 		if (!dst_res) {
 			current_error = std::move(dst_res);
 			return *this;
@@ -988,7 +1007,7 @@ namespace vuk {
 	CommandBuffer& CommandBuffer::image_barrier(Name src, vuk::Access src_acc, vuk::Access dst_acc, uint32_t mip_level, uint32_t level_count) {
 		VUK_EARLY_RET();
 		assert(rg);
-		auto src_res = rg->get_resource_image(src, current_pass);
+		auto src_res = rg->get_resource_image(NameReference::direct(src), current_pass);
 		if (!src_res) {
 			current_error = std::move(src_res);
 			return *this;
@@ -1009,7 +1028,7 @@ namespace vuk {
 		imb.srcAccessMask = (VkAccessFlags)src_use.access;
 		imb.dstAccessMask = (VkAccessFlags)dst_use.access;
 
-		auto res_gl = rg->is_resource_image_in_general_layout(src, current_pass);
+		auto res_gl = rg->is_resource_image_in_general_layout(NameReference::direct(src), current_pass);
 		if (!res_gl) {
 			current_error = std::move(res_gl);
 			return *this;
@@ -1129,7 +1148,7 @@ namespace vuk {
 			} else {                                         // not set in the layout
 				if (!set_to_bind && !persistent_set_to_bind) { // not requested to bind now, noop
 					continue;
-				} else { // requested to bind now
+				} else {                                       // requested to bind now
 					assert(false && "Set layout doesn't contain set, but set in CommandBuffer.");
 					return false;
 				}

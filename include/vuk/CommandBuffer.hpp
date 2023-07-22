@@ -245,6 +245,9 @@ namespace vuk {
 		/// @brief Retrieve Buffer attached to given name
 		/// @return the attached Buffer or RenderGraphException
 		Result<Buffer> get_resource_buffer(Name resource_name) const;
+		/// @brief Retrieve Buffer attached to given NameReference
+		/// @return the attached Buffer or RenderGraphException
+		Result<Buffer> get_resource_buffer(const NameReference& resource_name_reference) const;
 		/// @brief Retrieve Image attached to given name
 		/// @return the attached Image or RenderGraphException
 		Result<Image> get_resource_image(Name resource_name) const;
@@ -254,6 +257,9 @@ namespace vuk {
 		/// @brief Retrieve ImageAttachment attached to given name
 		/// @return the attached ImageAttachment or RenderGraphException
 		Result<ImageAttachment> get_resource_image_attachment(Name resource_name) const;
+		/// @brief Retrieve ImageAttachment attached to given NameReference
+		/// @return the attached ImageAttachment or RenderGraphException
+		Result<ImageAttachment> get_resource_image_attachment(const NameReference& resource_name_reference) const;
 
 		// command buffer state setting
 		// when a state is set it is persistent for a pass (similar to Vulkan dynamic state) - see documentation
