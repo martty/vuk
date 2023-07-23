@@ -137,7 +137,7 @@ namespace vuk {
 			} else if (control->status == FutureBase::Status::eHostAvailable || control->status == FutureBase::Status::eSubmitted) {
 				continue;
 			} else {
-				rgs_to_run.emplace_back(&alloc, rgs[i]);
+				rgs_to_run.emplace_back(rgs[i]);
 			}
 		}
 		if (rgs_to_run.size() != 0) {
