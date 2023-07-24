@@ -788,7 +788,7 @@ namespace vuk {
 		collect(impl->frame_counter);
 	}
 
-	void Context::wait_idle() {
+	Result<void> Context::wait_idle() {
 		std::unique_lock<std::recursive_mutex> graphics_lock;
 		if (dedicated_graphics_queue) {
 			graphics_lock = std::unique_lock{ graphics_queue->get_queue_lock() };
@@ -802,7 +802,11 @@ namespace vuk {
 			transfer_lock = std::unique_lock{ transfer_queue->get_queue_lock() };
 		}
 
-		this->vkDeviceWaitIdle(device);
+		VkResult result = this->vkDeviceWaitIdle(device);
+		if (result < 0) {
+			return { expected_error, VkException{ result } };
+		}
+		return { expected_value };
 	}
 
 	void Context::collect(uint64_t frame) {

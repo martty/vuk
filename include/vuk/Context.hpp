@@ -160,7 +160,7 @@ namespace vuk {
 		void next_frame();
 
 		/// @brief Wait for the device to become idle. Useful for only a few synchronisation events, like resizing or shutting down.
-		void wait_idle();
+		Result<void> wait_idle();
 
 		/// @brief Create a wrapped handle type (eg. a ImageView) from an externally sourced Vulkan handle
 		/// @tparam T Vulkan handle type to wrap
