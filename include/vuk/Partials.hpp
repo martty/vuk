@@ -201,7 +201,7 @@ namespace vuk {
 		auto tex = allocator.get_context().allocate_texture(allocator, ici, loc);
 
 		auto upload_fut = host_data_to_image(allocator, DomainFlagBits::eTransferQueue, ImageAttachment::from_texture(tex), data);
-		auto mipgen_fut = should_generate_mips ? generate_mips(std::move(upload_fut), 0, ici.mipLevels) : std::move(upload_fut);
+		auto mipgen_fut = ici.mipLevels > 1 ? generate_mips(std::move(upload_fut), 0, ici.mipLevels) : std::move(upload_fut);
 		std::shared_ptr<RenderGraph> rgp = std::make_shared<RenderGraph>("create_texture");
 		rgp->add_pass({ .name = "TRANSITION",
 		                .execute_on = DomainFlagBits::eGraphicsQueue,
