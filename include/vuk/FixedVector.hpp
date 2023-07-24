@@ -23,54 +23,54 @@ namespace vuk {
 		alignas(a) std::byte items[sizeof(T) * n];
 		std::size_t len;
 
-		T* ptrat(std::size_t idx) {
+		constexpr T* ptrat(std::size_t idx) {
 			return static_cast<T*>(static_cast<void*>(&items)) + idx;
 		}
 
-		const T* ptrat(std::size_t idx) const {
+		constexpr const T* ptrat(std::size_t idx) const {
 			return static_cast<const T*>(static_cast<const void*>(&items)) + idx;
 		}
 
-		T& refat(std::size_t idx) {
+		constexpr T& refat(std::size_t idx) {
 			return *ptrat(idx);
 		}
 
-		const T& refat(std::size_t idx) const {
+		constexpr const T& refat(std::size_t idx) const {
 			return *ptrat(idx);
 		}
 
 	public:
-		static std::size_t max_size() {
+		constexpr static std::size_t max_size() {
 			return n;
 		}
 
-		fixed_vector() : len(0) {
+		constexpr fixed_vector() : len(0) {
 			memset(&items, 0, sizeof(T) * n);
 		}
 
-		fixed_vector(std::size_t capacity) : len(std::min(n, capacity)) {
+		constexpr fixed_vector(std::size_t capacity) : len(std::min(n, capacity)) {
 			memset(&items, 0, sizeof(T) * n);
 		}
 
 		template<std::size_t c>
-		fixed_vector(const T (&arr)[c]) : len(c) {
+		constexpr fixed_vector(const T (&arr)[c]) : len(c) {
 			memset(&items, 0, sizeof(T) * n);
 			static_assert(c < n, "Array too large to initialize fixed_vector");
 			std::copy(std::addressof(arr[0]), std::addressof(arr[c]), data());
 		}
 
-		fixed_vector(std::initializer_list<T> initializer) : len(std::min(n, initializer.size())) {
+		constexpr fixed_vector(std::initializer_list<T> initializer) : len(std::min(n, initializer.size())) {
 			memset(&items, 0, sizeof(T) * n);
 			std::copy(initializer.begin(), initializer.begin() + len, data());
 		}
 
-		fixed_vector(const fixed_vector& o) {
+		constexpr fixed_vector(const fixed_vector& o) {
 			memset(&items, 0, sizeof(T) * n);
 			std::uninitialized_copy(o.begin(), o.end(), begin());
 			len = o.len;
 		}
 
-		fixed_vector& operator=(const fixed_vector& o) {
+		constexpr fixed_vector& operator=(const fixed_vector& o) {
 			auto existing = std::min(len, o.len);
 			std::copy_n(o.begin(), existing, begin());
 			std::uninitialized_copy(o.begin() + existing, o.end(), begin() + existing);
@@ -78,14 +78,14 @@ namespace vuk {
 			return *this;
 		}
 
-		fixed_vector(fixed_vector&& o) {
+		constexpr fixed_vector(fixed_vector&& o) {
 			memset(&items, 0, sizeof(T) * n);
 			std::uninitialized_move(o.begin(), o.end(), begin());
 			len = o.len;
 			o.resize(0);
 		}
 
-		fixed_vector& operator=(fixed_vector&& o) {
+		constexpr fixed_vector& operator=(fixed_vector&& o) {
 			auto existing = std::min(len, o.len);
 			std::copy_n(std::make_move_iterator(o.begin()), existing, begin());
 			std::uninitialized_move(o.begin() + existing, o.end(), begin() + existing);
@@ -94,57 +94,57 @@ namespace vuk {
 			return *this;
 		}
 
-		~fixed_vector() {
+		constexpr ~fixed_vector() {
 			for (std::size_t i = 0; i < len; i++) {
 				ptrat(i)->~T();
 			}
 		}
 
-		bool empty() const {
+		constexpr bool empty() const {
 			return len < 1;
 		}
 
-		bool not_empty() const {
+		constexpr bool not_empty() const {
 			return len > 0;
 		}
 
-		bool full() const {
+		constexpr bool full() const {
 			return len >= n;
 		}
 
-		void push_back(const T& item) {
+		constexpr void push_back(const T& item) {
 			new (ptrat(len++)) T(item);
 		}
 
-		void push_back(T&& item) {
+		constexpr void push_back(T&& item) {
 			new (ptrat(len++)) T(std::move(item));
 		}
 
 		template<typename... Tn>
-		T& emplace_back(Tn&&... argn) {
+		constexpr T& emplace_back(Tn&&... argn) {
 			return *(new (ptrat(len++)) T(std::forward<Tn>(argn)...));
 		}
 
-		void pop_back() {
+		constexpr void pop_back() {
 			T& addr = refat(--len);
 			addr.~T();
 		}
 
-		void clear() {
+		constexpr void clear() {
 			for (; len > 0;) {
 				pop_back();
 			}
 		}
 
-		std::size_t size() const {
+		constexpr std::size_t size() const {
 			return len;
 		}
 
-		std::size_t capacity() const {
+		constexpr std::size_t capacity() const {
 			return n;
 		}
 
-		void resize(std::size_t sz) {
+		constexpr void resize(std::size_t sz) {
 			auto old_len = len;
 			while (len > sz)
 				pop_back();
@@ -154,7 +154,7 @@ namespace vuk {
 			len = std::min(sz, n);
 		}
 
-		void resize(std::size_t sz, const value_type& value) {
+		constexpr void resize(std::size_t sz, const value_type& value) {
 			auto old_len = len;
 			while (len > sz)
 				pop_back();
@@ -168,67 +168,67 @@ namespace vuk {
 			}
 		}
 
-		T* data() {
+		constexpr T* data() {
 			return ptrat(0);
 		}
 
-		const T* data() const {
+		constexpr const T* data() const {
 			return ptrat(0);
 		}
 
-		T& operator[](std::size_t idx) {
+		constexpr T& operator[](std::size_t idx) {
 			return refat(idx);
 		}
 
-		const T& operator[](std::size_t idx) const {
+		constexpr const T& operator[](std::size_t idx) const {
 			return refat(idx);
 		}
 
-		T& front() {
+		constexpr T& front() {
 			return refat(0);
 		}
 
-		T& back() {
+		constexpr T& back() {
 			return refat(len - 1);
 		}
 
-		const T& front() const {
+		constexpr const T& front() const {
 			return refat(0);
 		}
 
-		const T& back() const {
+		constexpr const T& back() const {
 			return refat(len - 1);
 		}
 
-		T* begin() {
+		constexpr T* begin() {
 			return data();
 		}
 
-		const T* cbegin() {
+		constexpr const T* cbegin() {
 			return data();
 		}
 
-		const T* begin() const {
+		constexpr const T* begin() const {
 			return data();
 		}
 
-		const T* cbegin() const {
+		constexpr const T* cbegin() const {
 			return data();
 		}
 
-		T* end() {
+		constexpr T* end() {
 			return data() + len;
 		}
 
-		const T* cend() {
+		constexpr const T* cend() {
 			return data() + len;
 		}
 
-		const T* end() const {
+		constexpr const T* end() const {
 			return data() + len;
 		}
 
-		const T* cend() const {
+		constexpr const T* cend() const {
 			return data() + len;
 		}
 
@@ -239,7 +239,7 @@ namespace vuk {
 		*/
 
 		template<class InputIt>
-		iterator insert(const_iterator pos, InputIt first, InputIt last) {
+		constexpr iterator insert(const_iterator pos, InputIt first, InputIt last) {
 			auto clen = std::distance(first, last);
 			if (clen == 0)
 				return pos;
@@ -249,7 +249,7 @@ namespace vuk {
 			return pos;
 		}
 
-		bool operator==(const fixed_vector& o) const noexcept {
+		constexpr bool operator==(const fixed_vector& o) const noexcept {
 			return std::equal(begin(), end(), o.begin(), o.end());
 		}
 	};
