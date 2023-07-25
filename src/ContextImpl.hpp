@@ -50,7 +50,7 @@ namespace vuk {
 		std::atomic<size_t> unique_handle_id_counter = 0;
 
 		std::mutex named_pipelines_lock;
-		std::unordered_map<Name, PipelineBaseInfo*> named_pipelines;
+		robin_hood::unordered_flat_map<Name, PipelineBaseInfo*> named_pipelines;
 
 		std::atomic<uint64_t> query_id_counter = 0;
 		VkPhysicalDeviceProperties physical_device_properties;
