@@ -230,8 +230,8 @@ namespace vuk {
 			VkBuffer buffer;
 			VmaAllocation allocation;
 			VmaAllocationInfo allocation_info;
-			auto alignment = std::lcm(ci.alignment, get_context().min_buffer_alignment);
-			auto res = vmaCreateBufferWithAlignment(impl->allocator, &bci, &aci, alignment, &buffer, &allocation, &allocation_info);
+			// ignore alignment: we get a fresh VkBuffer which satisfies all alignments inside the VkBfufer
+			auto res = vmaCreateBuffer(impl->allocator, &bci, &aci, &buffer, &allocation, &allocation_info);
 			if (res != VK_SUCCESS) {
 				deallocate_buffers({ dst.data(), (uint64_t)i });
 				return { expected_error, AllocateException{ res } };
