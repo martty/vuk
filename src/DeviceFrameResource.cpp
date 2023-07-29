@@ -1,6 +1,6 @@
 #include "vuk/resources/DeviceFrameResource.hpp"
-#include "Cache.hpp"
 #include "BufferAllocator.hpp"
+#include "Cache.hpp"
 #include "RenderPass.hpp"
 #include "vuk/Context.hpp"
 #include "vuk/Descriptor.hpp"
@@ -8,8 +8,8 @@
 
 #include <atomic>
 #include <mutex>
-#include <plf_colony.h>
 #include <numeric>
+#include <plf_colony.h>
 
 namespace vuk {
 	struct DeviceSuperFrameResourceImpl {
@@ -169,7 +169,7 @@ namespace vuk {
 	Result<void, AllocateException>
 	DeviceFrameResource::allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
-		
+
 		for (uint64_t i = 0; i < dst.size(); i++) {
 			auto& ci = cis[i];
 			Result<Buffer, AllocateException> result{ expected_value };
@@ -373,7 +373,15 @@ namespace vuk {
 
 	void DeviceFrameResource::wait() {
 		if (impl->fences.size() > 0) {
-			impl->ctx->vkWaitForFences(device, (uint32_t)impl->fences.size(), impl->fences.data(), true, UINT64_MAX);
+			if (impl->fences.size() > 64) {
+				int i = 0;
+				for (; i < impl->fences.size() - 64; i += 64) {
+					impl->ctx->vkWaitForFences(device, 64, impl->fences.data() + i, true, UINT64_MAX);
+				}
+				impl->ctx->vkWaitForFences(device, impl->fences.size() - i, impl->fences.data() + i, true, UINT64_MAX);
+			} else {
+				impl->ctx->vkWaitForFences(device, impl->fences.size(), impl->fences.data(), true, UINT64_MAX);
+			}
 		}
 		if (impl->tsemas.size() > 0) {
 			VkSemaphoreWaitInfo swi{ VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO };
