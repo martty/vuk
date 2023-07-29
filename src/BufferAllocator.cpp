@@ -129,7 +129,7 @@ namespace vuk {
 		auto& current_alloc = used_allocations[base_buffer];
 		auto offset = base - current_alloc.base_address;
 		Buffer b = current_alloc.buffer;
-		b.offset = offset;
+		b.offset += offset;
 		b.size = size;
 		b.mapped_ptr = b.mapped_ptr != nullptr ? b.mapped_ptr + offset : nullptr;
 		b.device_address = b.device_address != 0 ? b.device_address + offset : 0;
