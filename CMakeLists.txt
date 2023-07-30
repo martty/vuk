@@ -20,7 +20,6 @@ option(VUK_USE_DXC "Link in DirectXShaderCompiler for runtime compilation of HLS
 option(VUK_BUILD_TESTS "Build tests" OFF)
 option(VUK_FAIL_FAST "Trigger an assert upon encountering an error instead of propagating" OFF)
 option(VUK_DEBUG_ALLOCATIONS "Dump VMA allocations and give them debug names" OFF)
-option(VUK_USE_EXTERNAL_FMT "Use external fmt library instead of bundled" OFF)
 
 ##### Using vuk with volk (or a similar library)
 # step 1: turn off VUK_LINK_TO_LOADER and add_subdirectory vuk
@@ -107,7 +106,7 @@ target_sources(vuk PRIVATE
 
 target_include_directories(vuk PUBLIC ext/plf_colony)
 add_subdirectory(ext/robin-hood-hashing)
-if (VUK_USE_EXTERNAL_FMT)
+if (NOT TARGET fmt::fmt)
   add_subdirectory(ext/fmt)
 endif()
 target_include_directories(vuk PRIVATE ext/concurrentqueue ext/VulkanMemoryAllocator/include)
