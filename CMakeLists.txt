@@ -106,7 +106,9 @@ target_sources(vuk PRIVATE
 
 target_include_directories(vuk PUBLIC ext/plf_colony)
 add_subdirectory(ext/robin-hood-hashing)
-add_subdirectory(ext/fmt)
+if (NOT TARGET fmt::fmt)
+  add_subdirectory(ext/fmt)
+endif()
 target_include_directories(vuk PRIVATE ext/concurrentqueue ext/VulkanMemoryAllocator/include)
 target_include_directories(vuk PUBLIC include)
 
