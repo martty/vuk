@@ -12,6 +12,7 @@
 #include <utility>
 #include <vector>
 #include <vk_mem_alloc.h>
+#include <plf_colony.h>
 
 namespace vuk {
 	struct DeviceResource;
@@ -60,6 +61,7 @@ namespace vuk {
 	};
 
 	struct SubAllocation {
+		plf::colony<BufferBlock>::iterator it;
 		VmaVirtualBlock block;
 		VmaVirtualAllocation allocation;
 	};
@@ -68,8 +70,8 @@ namespace vuk {
 		DeviceResource* upstream;
 		MemoryUsage mem_usage;
 		BufferUsageFlags usage;
-		std::vector<BufferBlock> blocks;
-
+		plf::colony<BufferBlock> blocks;
+		std::mutex mutex;
 		size_t block_size;
 
 		BufferSubAllocator(DeviceResource& upstream, MemoryUsage mem_usage, BufferUsageFlags buf_usage, size_t block_size) :
@@ -82,7 +84,5 @@ namespace vuk {
 		Result<void, AllocateException> grow(size_t num_blocks, size_t alignment, SourceLocationAtFrame source);
 		Result<Buffer, AllocateException> allocate_buffer(size_t size, size_t alignment, SourceLocationAtFrame source);
 		void deallocate_buffer(const Buffer& buf);
-		// explicitly release resources
-		void free();
 	};
 }; // namespace vuk

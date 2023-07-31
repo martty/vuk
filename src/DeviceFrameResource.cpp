@@ -33,6 +33,8 @@ namespace vuk {
 		Cache<ImageWithIdentity> image_cache;
 		Cache<ImageView> image_view_cache;
 
+		BufferSubAllocator suballocators[4];
+
 		DeviceSuperFrameResourceImpl(DeviceSuperFrameResource& sfr, size_t frames_in_flight) :
 		    sfr(&sfr),
 		    image_cache(
@@ -55,7 +57,11 @@ namespace vuk {
 		        },
 		        +[](void* allocator, const ImageView& iv) {
 			        reinterpret_cast<DeviceSuperFrameResourceImpl*>(allocator)->sfr->deallocate_image_views({ &iv, 1 });
-		        }) {
+		        }),
+		    suballocators{ { *sfr.upstream, vuk::MemoryUsage::eGPUonly, all_buffer_usage_flags, 64 * 1024 * 1024 },
+			                 { *sfr.upstream, vuk::MemoryUsage::eCPUonly, all_buffer_usage_flags, 64 * 1024 * 1024 },
+			                 { *sfr.upstream, vuk::MemoryUsage::eCPUtoGPU, all_buffer_usage_flags, 64 * 1024 * 1024 },
+			                 { *sfr.upstream, vuk::MemoryUsage::eGPUtoCPU, all_buffer_usage_flags, 64 * 1024 * 1024 } } {
 			frames_storage = std::unique_ptr<char[]>(new char[sizeof(DeviceFrameResource) * frames_in_flight]);
 			for (uint64_t i = 0; i < frames_in_flight; i++) {
 				new (frames_storage.get() + i * sizeof(DeviceFrameResource)) DeviceFrameResource(sfr.get_context().device, sfr);
@@ -514,6 +520,23 @@ namespace vuk {
 		return { expected_value };
 	}
 
+	Result<void, AllocateException>
+	DeviceSuperFrameResource::allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
+		assert(dst.size() == cis.size());
+		for (uint64_t i = 0; i < dst.size(); i++) {
+			auto& ci = cis[i];
+			auto& alloc = impl->suballocators[(int)ci.mem_usage - 1];
+			auto alignment = std::lcm(ci.alignment, get_context().min_buffer_alignment);
+			auto res = alloc.allocate_buffer(ci.size, alignment, loc);
+			if (!res) {
+				deallocate_buffers({ dst.data(), (uint64_t)i });
+				return res;
+			}
+			dst[i] = *res;
+		}
+		return { expected_value };
+	}
+
 	void DeviceSuperFrameResource::deallocate_image_views(std::span<const ImageView> src) {
 		auto& f = get_last_frame();
 		std::unique_lock _(f.impl->image_views_mutex);
@@ -644,7 +667,9 @@ namespace vuk {
 			direct->ctx->vkResetCommandPool(get_context().device, pool.command_pool, {});
 		}
 		deallocate_command_pools(f.cmdpools_to_free);
-		upstream->deallocate_buffers(f.buffer_gpus);
+		for (Buffer& buf : f.buffer_gpus) {
+			impl->suballocators[(int)buf.memory_usage - 1].deallocate_buffer(buf);
+		}
 		upstream->deallocate_framebuffers(f.framebuffers);
 		upstream->deallocate_images(f.images);
 		upstream->deallocate_image_views(f.image_views);

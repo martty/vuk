@@ -156,6 +156,8 @@ namespace vuk {
 
 		Result<void, AllocateException> allocate_cached_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc);
 
+		Result<void, AllocateException> allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) override;
+
 		void deallocate_image_views(std::span<const ImageView> src) override;
 
 		void deallocate_persistent_descriptor_sets(std::span<const PersistentDescriptorSet> src) override;

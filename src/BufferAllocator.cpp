@@ -2,6 +2,7 @@
 #include "vuk/Allocator.hpp"
 #include "vuk/Result.hpp"
 #include "vuk/SourceLocation.hpp"
+#include <iostream>
 
 // Aligns given value down to nearest multiply of align value. For example: VmaAlignUp(11, 8) = 8.
 // Use types like uint32_t, uint64_t as T.
@@ -184,26 +185,29 @@ namespace vuk {
 
 	Result<void, AllocateException> BufferSubAllocator::grow(size_t size, size_t alignment, SourceLocationAtFrame source) {
 		BufferBlock alloc;
+		if (size < block_size) {
+			size = block_size;
+		}
 		BufferCreateInfo bci{ .mem_usage = mem_usage, .size = size, .alignment = alignment };
 		auto result = upstream->allocate_buffers(std::span{ &alloc.buffer, 1 }, std::span{ &bci, 1 }, source);
 		if (!result) {
 			return result;
 		}
-
 		VmaVirtualBlockCreateInfo vbci{};
 		vbci.size = size;
 		auto result2 = vmaCreateVirtualBlock(&vbci, &alloc.block);
-		if (!result2) {
+		if (result2 != VK_SUCCESS) {
 			return { expected_error, AllocateException(result2) };
 		}
 
-		blocks.push_back(alloc);
+		blocks.emplace(alloc);
 		return { expected_value };
 	}
 
 	Result<Buffer, AllocateException> BufferSubAllocator::allocate_buffer(size_t size, size_t alignment, SourceLocationAtFrame source) {
+		std::lock_guard _(mutex);
 		if (blocks.size() == 0) {
-			auto result = grow(size, alignment, source);
+			auto result = grow(size, 256, source);
 			if (!result) {
 				return result;
 			}
@@ -215,42 +219,44 @@ namespace vuk {
 		VmaVirtualAllocation va;
 		VkDeviceSize offset;
 
-		auto result = vmaVirtualAllocate(blocks.back().block, &vaci, &va, &offset);
+		auto it = blocks.begin();
+		advance(it, blocks.size() - 1);
+		auto result = vmaVirtualAllocate(it->block, &vaci, &va, &offset);
 		if (result == VK_ERROR_OUT_OF_DEVICE_MEMORY) {
-			auto result = grow(size, alignment, source);
+			auto result = grow(size, 256, source);
 			if (!result) {
 				return result;
 			}
-		}
-		// second try must succeed
-		result = vmaVirtualAllocate(blocks.back().block, &vaci, &va, &offset);
-		if (!result) {
-			return { expected_error, AllocateException(result) };
+			it = blocks.begin();
+			advance(it, blocks.size() - 1);
+			// second try must succeed
+			auto result2 = vmaVirtualAllocate(it->block, &vaci, &va, &offset);
+			if (result2 != VK_SUCCESS) {
+				return { expected_error, AllocateException(result2) };
+			}
 		}
 
-		Buffer buf = blocks.back().buffer.add_offset(offset);
-		buf.allocation = new SubAllocation{ blocks.back().block, va };
+		Buffer buf = it->buffer.add_offset(offset);
+		buf.size = size;
+		buf.allocation = new SubAllocation{ it, it->block, va };
 		return { expected_value, buf };
 	}
 
 	void BufferSubAllocator::deallocate_buffer(const Buffer& buf) {
+		std::lock_guard _(mutex);
 		auto sa = static_cast<SubAllocation*>(buf.allocation);
 		vmaVirtualFree(sa->block, sa->allocation);
+		if (vmaIsVirtualBlockEmpty(sa->block)) {
+			auto& bb = *sa->it;
+			upstream->deallocate_buffers(std::span{ &bb.buffer, 1 });
+			vmaDestroyVirtualBlock(bb.block);
+			blocks.erase(sa->it);
+		}
 		delete sa;
 	}
 
-	void BufferSubAllocator::free() {
-		for (auto& bb : blocks) {
-			if (bb.buffer) {
-				upstream->deallocate_buffers(std::span{ &bb.buffer, 1 });
-				vmaDestroyVirtualBlock(bb.block);
-			}
-		}
-		blocks.clear();
-	}
-
 	BufferSubAllocator::~BufferSubAllocator() {
-		free();
+		assert(blocks.size() == 0);
 	}
 
 } // namespace vuk
