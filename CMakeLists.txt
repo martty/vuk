@@ -136,7 +136,7 @@ endif()
 if(VUK_COMPILER_CLANGPP OR VUK_COMPILER_GPP)
 	target_compile_options(vuk PRIVATE -std=c++20 -fno-char8_t)
 elseif(MSVC)
-	target_compile_options(vuk PRIVATE /std:c++latest /permissive- /Zc:char8_t-)
+	target_compile_options(vuk PRIVATE /std:c++20 /permissive- /Zc:char8_t-)
 endif()
 
 if(VUK_COMPILER_CLANGPP OR VUK_COMPILER_CLANGCL)

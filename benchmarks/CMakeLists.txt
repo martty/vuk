@@ -52,7 +52,7 @@ function(ADD_BENCH name)
     if(VUK_COMPILER_CLANGPP OR VUK_COMPILER_GPP)
 	    target_compile_options(${FULL_NAME} PRIVATE -std=c++20 -fno-char8_t)
     elseif(MSVC)
-	    target_compile_options(${FULL_NAME} PRIVATE /std:c++latest /permissive- /Zc:char8_t-)
+	    target_compile_options(${FULL_NAME} PRIVATE /std:c++20 /permissive- /Zc:char8_t-)
     endif()
 endfunction(ADD_BENCH)
 
