@@ -684,6 +684,11 @@ namespace vuk {
 		// error handling
 		[[nodiscard]] Result<void> result();
 
+		// explicit command buffer access
+		[[nodiscard]] VkCommandBuffer bind_compute_pipeline_state();
+		[[nodiscard]] VkCommandBuffer bind_graphics_pipeline_state();
+		[[nodiscard]] VkCommandBuffer bind_ray_tracing_pipeline_state();
+
 	protected:
 		enum class PipeType { eGraphics, eCompute, eRayTracing };
 

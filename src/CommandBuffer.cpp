@@ -1075,6 +1075,22 @@ namespace vuk {
 		return std::move(current_error);
 	}
 
+	VkCommandBuffer CommandBuffer::bind_compute_pipeline_state() {
+		auto result = _bind_compute_pipeline_state();
+		assert(result);
+		return command_buffer;
+	}
+	VkCommandBuffer CommandBuffer::bind_graphics_pipeline_state() {
+		auto result = _bind_graphics_pipeline_state();
+		assert(result);
+		return command_buffer;
+	}
+	VkCommandBuffer CommandBuffer::bind_ray_tracing_pipeline_state() {
+		auto result = _bind_ray_tracing_pipeline_state();
+		assert(result);
+		return command_buffer;
+	}
+
 	bool CommandBuffer::_bind_state(PipeType pipe_type) {
 		VkPipelineLayout current_layout;
 		switch (pipe_type) {
