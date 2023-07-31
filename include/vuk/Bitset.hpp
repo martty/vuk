@@ -9,13 +9,13 @@ namespace vuk {
 	template<uint64_t Count>
 	struct Bitset {
 		static constexpr uint64_t bitmask(uint64_t const onecount) {
-			return static_cast<uint64_t>(-(onecount != 0)) & (static_cast<uint64_t>(-1) >> ((sizeof(uint64_t)) - onecount));
+			return static_cast<uint64_t>(-(onecount != 0)) & (static_cast<uint64_t>(-1) >> (8*sizeof(uint64_t) - onecount));
 		}
 
 		static constexpr uint64_t n_bits = sizeof(uint64_t) * 8;
 		static constexpr uint64_t n_words = idivceil(Count, n_bits);
 		static constexpr uint64_t remainder = Count - n_bits * (Count / n_bits);
-		static constexpr uint64_t last_word_mask = bitmask(remainder);
+		static constexpr uint64_t last_word_mask = remainder > 0 ? bitmask(remainder) : 0;
 		uint64_t words[n_words];
 
 		Bitset& set(uint64_t pos, bool value = true) noexcept {
@@ -26,6 +26,11 @@ namespace vuk {
 				words[word] &= ~(1ULL << (pos - n_bits * word));
 			}
 			return *this;
+		}
+
+		uint64_t to_ulong() const noexcept{
+			static_assert(n_words == 1);
+			return words[0];
 		}
 
 		uint64_t count() const noexcept {
@@ -44,8 +49,8 @@ namespace vuk {
 			return words[word] & 1ULL << (pos - n_bits * word);
 		}
 
-		void clear() noexcept {
-			for (uint64_t i = 0; i < (Count / n_bits); i++) {
+		void reset() noexcept {
+			for (uint64_t i = 0; i < n_words; i++) {
 				words[i] = 0;
 			}
 		}
@@ -60,5 +65,18 @@ namespace vuk {
 			}
 			return true;
 		}
+
+		Bitset operator|(const Bitset& other) const noexcept {
+			Bitset out;
+			for (uint64_t i = 0; i < (Count / n_bits); i++) {
+				out.words[i] = words[i] | other.words[i];
+			}
+			if constexpr (remainder > 0) {
+				out.words[n_words - 1] = (words[n_words - 1] & last_word_mask) | (other.words[n_words - 1] & last_word_mask);
+			}
+			return out;
+		}
+
+
 	};
 } // namespace vuk

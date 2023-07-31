@@ -417,7 +417,7 @@ namespace vuk {
 	CommandBuffer& CommandBuffer::bind_persistent(unsigned set, PersistentDescriptorSet& pda) {
 		VUK_EARLY_RET();
 		assert(set < VUK_MAX_SETS);
-		persistent_sets_to_bind[set] = true;
+		persistent_sets_to_bind.set(set, true);
 		persistent_sets[set] = { pda.backing_set, pda.set_layout };
 		return *this;
 	}
@@ -426,7 +426,7 @@ namespace vuk {
 		VUK_EARLY_RET();
 		assert(offset + size < VUK_MAX_PUSHCONSTANT_SIZE);
 		pcrs.push_back(VkPushConstantRange{ (VkShaderStageFlags)stages, (uint32_t)offset, (uint32_t)size });
-		void* dst = push_constant_buffer.data() + offset;
+		void* dst = push_constant_buffer + offset;
 		::memcpy(dst, data, size);
 		return *this;
 	}
@@ -442,7 +442,7 @@ namespace vuk {
 		VUK_EARLY_RET();
 		assert(set < VUK_MAX_SETS);
 		assert(binding < VUK_MAX_BINDINGS);
-		sets_to_bind[set] = true;
+		sets_to_bind.set(set, true);
 		set_bindings[set].bindings[binding].type = DescriptorType::eUniformBuffer; // just means buffer
 		set_bindings[set].bindings[binding].buffer = VkDescriptorBufferInfo{ buffer.buffer, buffer.offset, buffer.size };
 		set_bindings[set].used.set(binding);
@@ -499,7 +499,7 @@ namespace vuk {
 		assert(set < VUK_MAX_SETS);
 		assert(binding < VUK_MAX_BINDINGS);
 		assert(image_view.payload != VK_NULL_HANDLE);
-		sets_to_bind[set] = true;
+		sets_to_bind.set(set, true);
 		auto& db = set_bindings[set].bindings[binding];
 		// if previous descriptor was not an image, we reset the DescriptorImageInfo
 		if (db.type != DescriptorType::eStorageImage && db.type != DescriptorType::eSampledImage && db.type != DescriptorType::eSampler &&
@@ -518,7 +518,7 @@ namespace vuk {
 		VUK_EARLY_RET();
 		assert(set < VUK_MAX_SETS);
 		assert(binding < VUK_MAX_BINDINGS);
-		sets_to_bind[set] = true;
+		sets_to_bind.set(set, true);
 		auto& db = set_bindings[set].bindings[binding];
 		// if previous descriptor was not an image, we reset the DescriptorImageInfo
 		if (db.type != DescriptorType::eStorageImage && db.type != DescriptorType::eSampledImage && db.type != DescriptorType::eSampler &&
@@ -552,7 +552,7 @@ namespace vuk {
 		VUK_EARLY_RET();
 		assert(set < VUK_MAX_SETS);
 		assert(binding < VUK_MAX_BINDINGS);
-		sets_to_bind[set] = true;
+		sets_to_bind.set(set, true);
 		auto& db = set_bindings[set].bindings[binding];
 		db.as.as = tlas;
 		db.as.wds.accelerationStructureCount = 1;
@@ -1118,7 +1118,7 @@ namespace vuk {
 		}
 
 		for (auto& pcr : pcrs) {
-			void* data = push_constant_buffer.data() + pcr.offset;
+			void* data = push_constant_buffer + pcr.offset;
 			ctx.vkCmdPushConstants(command_buffer, current_layout, pcr.stageFlags, pcr.offset, pcr.size, data);
 		}
 		pcrs.clear();
@@ -1148,7 +1148,7 @@ namespace vuk {
 
 			// binding validation
 			if (pipeline_set_layout != VK_NULL_HANDLE) {                      // set in the layout
-				if (!sets_used[i] && !set_to_bind && !persistent_set_to_bind) { // never set in the cbuf & not requested to bind now
+				if (!sets_used.test(i) && !set_to_bind && !persistent_set_to_bind) { // never set in the cbuf & not requested to bind now
 					assert(false && "Pipeline layout contains set, but never set in CommandBuffer or disturbed by a previous set composition or binding.");
 					return false;
 				} else if (!set_to_bind && !persistent_set_to_bind) { // but not requested to bind now
@@ -1243,8 +1243,8 @@ namespace vuk {
 						return false;
 					}
 					if (pipe_dtype != cbuf_dtype) {
-						if (dslci->optional[j]) { // this was an optional binding with a mismatched or missing bound resource -> forgo writing
-							sb.used[j] = false;
+						if (dslci->optional.test(j)) { // this was an optional binding with a mismatched or missing bound resource -> forgo writing
+							sb.used.set(j, false);
 						} else {
 							if (cbuf_dtype == vuk::DescriptorType(127)) {
 								assert(false && "Descriptor layout contains binding that was not bound.");
@@ -1324,7 +1324,7 @@ namespace vuk {
 		for (unsigned i = lowest_disturbed_binding; i < VUK_MAX_SETS; i++) { // clear the slots where the binding was disturbed
 			sets_used.set(i, false);
 		}
-		sets_used |= sets_bound;
+		sets_used = sets_used | sets_bound;
 		sets_to_bind.reset();
 		persistent_sets_to_bind.reset();
 		return true;
@@ -1392,7 +1392,7 @@ namespace vuk {
 
 			// VERTEX INPUT
 			Bitset<VUK_MAX_ATTRIBUTES> used_bindings = {};
-			if (attribute_descriptions.size() > 0 && binding_descriptions.size() > 0 && pi.base->reflection_info.attributes.size() > 0) {
+			if (pi.base->reflection_info.attributes.size() > 0) {
 				records.vertex_input = true;
 				for (unsigned i = 0; i < pi.base->reflection_info.attributes.size(); i++) {
 					auto& reflected_att = pi.base->reflection_info.attributes[i];

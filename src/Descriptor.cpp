@@ -80,7 +80,7 @@ namespace vuk {
 		}
 	}
 
-	SetBinding SetBinding::finalize(std::bitset<VUK_MAX_BINDINGS> used_mask) {
+	SetBinding SetBinding::finalize(Bitset<VUK_MAX_BINDINGS> used_mask) {
 		SetBinding final;
 		final.used = used_mask;
 		final.layout_info = layout_info;

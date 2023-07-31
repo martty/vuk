@@ -191,9 +191,9 @@ namespace vuk {
 		// Input assembly & fixed-function attributes
 		PrimitiveTopology topology = PrimitiveTopology::eTriangleList;
 		Bitset<VUK_MAX_ATTRIBUTES> set_attribute_descriptions = {};
-		std::array<VertexInputAttributeDescription, VUK_MAX_ATTRIBUTES> attribute_descriptions;
+		VertexInputAttributeDescription attribute_descriptions[VUK_MAX_ATTRIBUTES];
 		Bitset<VUK_MAX_ATTRIBUTES> set_binding_descriptions = {};
-		std::array<VkVertexInputBindingDescription, VUK_MAX_ATTRIBUTES> binding_descriptions;
+		VkVertexInputBindingDescription binding_descriptions[VUK_MAX_ATTRIBUTES];
 
 		// Specialization constant support
 		struct SpecEntry {
@@ -215,17 +215,17 @@ namespace vuk {
 		fixed_vector<VkRect2D, VUK_MAX_SCISSORS> scissors;
 
 		// Push constants
-		std::array<unsigned char, VUK_MAX_PUSHCONSTANT_SIZE> push_constant_buffer;
+		unsigned char push_constant_buffer[VUK_MAX_PUSHCONSTANT_SIZE];
 		fixed_vector<VkPushConstantRange, VUK_MAX_PUSHCONSTANT_RANGES> pcrs;
 
 		// Descriptor sets
 		DescriptorSetStrategyFlags ds_strategy_flags = {};
-		std::bitset<VUK_MAX_SETS> sets_used = {};
-		std::array<VkDescriptorSetLayout, VUK_MAX_SETS> set_layouts_used = {};
-		std::bitset<VUK_MAX_SETS> sets_to_bind = {};
-		std::array<SetBinding, VUK_MAX_SETS> set_bindings = {};
-		std::bitset<VUK_MAX_SETS> persistent_sets_to_bind = {};
-		std::array<std::pair<VkDescriptorSet, VkDescriptorSetLayout>, VUK_MAX_SETS> persistent_sets = {};
+		Bitset<VUK_MAX_SETS> sets_used = {};
+		VkDescriptorSetLayout set_layouts_used[VUK_MAX_SETS] = {};
+		Bitset<VUK_MAX_SETS> sets_to_bind = {};
+		SetBinding set_bindings[VUK_MAX_SETS] = {};
+		Bitset<VUK_MAX_SETS> persistent_sets_to_bind = {};
+		std::pair<VkDescriptorSet, VkDescriptorSetLayout> persistent_sets[VUK_MAX_SETS] = {};
 
 		// for rendergraph
 		CommandBuffer(ExecutableRenderGraph& rg, Context& ctx, Allocator& allocator, VkCommandBuffer cb);
