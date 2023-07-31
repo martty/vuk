@@ -174,9 +174,9 @@ namespace vuk {
 	/// @param allocator Allocator to allocate this Buffer from
 	/// @param mem_usage Where to allocate the buffer (host visible buffers will be automatically mapped)
 	template<class T>
-	std::pair<Unique<Buffer>, Future> create_buffer(Allocator& allocator, vuk::MemoryUsage memory_usage, DomainFlagBits domain, std::span<T> data, size_t offset = 1) {
+	std::pair<Unique<Buffer>, Future> create_buffer(Allocator& allocator, vuk::MemoryUsage memory_usage, DomainFlagBits domain, std::span<T> data, size_t alignment = 1) {
 		Unique<Buffer> buf(allocator);
-		BufferCreateInfo bci{ memory_usage, sizeof(T) * data.size(), offset };
+		BufferCreateInfo bci{ memory_usage, sizeof(T) * data.size(), alignment };
 		auto ret = allocator.allocate_buffers(std::span{ &*buf, 1 }, std::span{ &bci, 1 }); // TODO: dropping error
 		Buffer b = buf.get();
 		return { std::move(buf), host_data_to_buffer(allocator, domain, b, data) };

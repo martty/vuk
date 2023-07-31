@@ -207,14 +207,14 @@ namespace vuk {
 	Result<Buffer, AllocateException> BufferSubAllocator::allocate_buffer(size_t size, size_t alignment, SourceLocationAtFrame source) {
 		std::lock_guard _(mutex);
 		if (blocks.size() == 0) {
-			auto result = grow(size, 256, source);
+			auto result = grow(size + alignment, 256, source);
 			if (!result) {
 				return result;
 			}
 		}
 		VmaVirtualAllocationCreateInfo vaci{};
-		vaci.size = size;
-		vaci.alignment = alignment;
+		vaci.size = size + alignment;
+		vaci.alignment = 0; // VMA does not handle NPOT alignment
 
 		VmaVirtualAllocation va;
 		VkDeviceSize offset;
@@ -235,8 +235,8 @@ namespace vuk {
 				return { expected_error, AllocateException(result2) };
 			}
 		}
-
-		Buffer buf = it->buffer.add_offset(offset);
+		auto aligned_offset = VmaAlignUp(offset, alignment);
+		Buffer buf = it->buffer.add_offset(aligned_offset);
 		buf.size = size;
 		buf.allocation = new SubAllocation{ it, it->block, va };
 		return { expected_value, buf };
