@@ -41,17 +41,17 @@ namespace vuk {
 		/// @brief Optional transfer queue family index
 		uint32_t transfer_queue_family_index = VK_QUEUE_FAMILY_IGNORED;
 
-		#define VUK_X(name) PFN_##name name = nullptr;
-		#define VUK_Y(name) PFN_##name name = nullptr;
+#define VUK_X(name) PFN_##name name = nullptr;
+#define VUK_Y(name) PFN_##name name = nullptr;
 		/// @brief User provided function pointers. If you want dynamic loading, you must set vkGetInstanceProcAddr & vkGetDeviceProcAddr
 		struct FunctionPointers {
 			PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = nullptr;
 			PFN_vkGetDeviceProcAddr vkGetDeviceProcAddr = nullptr;
-			#include "vuk/VulkanPFNRequired.hpp"
-			#include "vuk/VulkanPFNOptional.hpp"
+#include "vuk/VulkanPFNRequired.hpp"
+#include "vuk/VulkanPFNOptional.hpp"
 		} pointers;
-		#undef VUK_X
-		#undef VUK_Y
+#undef VUK_X
+#undef VUK_Y
 
 		/// @brief Allow vuk to load missing required and optional function pointers dynamically
 		/// If this is false, then you must fill in all required function pointers
@@ -97,6 +97,7 @@ namespace vuk {
 
 		VkPhysicalDeviceProperties physical_device_properties;
 		VkPhysicalDeviceRayTracingPipelinePropertiesKHR rt_properties{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR };
+		VkPhysicalDeviceAccelerationStructurePropertiesKHR as_properties{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR };
 		size_t min_buffer_alignment;
 
 		Result<void> wait_for_domains(std::span<std::pair<DomainFlags, uint64_t>> queue_waits);

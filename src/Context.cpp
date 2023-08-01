@@ -145,7 +145,10 @@ namespace vuk {
 		min_buffer_alignment =
 		    std::max(physical_device_properties.limits.minUniformBufferOffsetAlignment, physical_device_properties.limits.minStorageBufferOffsetAlignment);
 		VkPhysicalDeviceProperties2 prop2{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2 };
-		prop2.pNext = &rt_properties;
+		if (this->vkCmdBuildAccelerationStructuresKHR) {
+			prop2.pNext = &rt_properties;
+			rt_properties.pNext = &as_properties;
+		}
 		this->vkGetPhysicalDeviceProperties2(physical_device, &prop2);
 	}
 
@@ -1216,7 +1219,7 @@ namespace vuk {
 
 		VkDeviceSize sbt_size = rgen_region.size + miss_region.size + hit_region.size + call_region.size;
 		Buffer SBT;
-		BufferCreateInfo bci{ .mem_usage = vuk::MemoryUsage::eCPUtoGPU, .size = sbt_size };
+		BufferCreateInfo bci{ .mem_usage = vuk::MemoryUsage::eCPUtoGPU, .size = sbt_size, .alignment = rt_properties.shaderGroupBaseAlignment };
 		auto buff_cr_result = impl->device_vk_resource->allocate_buffers(std::span{ &SBT, 1 }, std::span{ &bci, 1 }, {});
 		assert(buff_cr_result);
 
