@@ -687,6 +687,8 @@ namespace vuk {
 			impl->ds_pools.push_back(p);
 		}
 
+		upstream->deallocate_descriptor_pools(f.ds_pools_to_destroy);
+
 		f.semaphores.clear();
 		f.fences.clear();
 		f.buffer_gpus.clear();
@@ -716,6 +718,7 @@ namespace vuk {
 		f.ass.clear();
 		f.swapchains.clear();
 		f.buffers.clear();
+		f.ds_pools_to_destroy.clear();
 	}
 
 	void DeviceSuperFrameResource::force_collect() {

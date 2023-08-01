@@ -102,7 +102,9 @@ target_sources(vuk PRIVATE
 	src/Name.cpp 
 	src/DeviceFrameResource.cpp
 	src/DeviceVkResource.cpp 
-	src/BufferAllocator.cpp)
+	src/BufferAllocator.cpp
+	src/DeviceLinearResource.cpp
+)
 
 target_include_directories(vuk PUBLIC ext/plf_colony)
 add_subdirectory(ext/robin-hood-hashing)
