@@ -155,7 +155,9 @@ namespace vuk {
 		std::lock_guard _(mutex);
 		for (size_t i = 0; i < available_allocation_count; i++) {
 			auto& alloc = available_allocations[i];
-			upstream->deallocate_buffers(std::span{ &alloc.buffer, 1 });
+			if (alloc.num_blocks > 0) {
+				upstream->deallocate_buffers(std::span{ &alloc.buffer, 1 });
+			}
 		}
 		available_allocation_count = 0;
 	}
@@ -167,7 +169,7 @@ namespace vuk {
 	void BufferLinearAllocator::free() {
 		for (size_t i = 0; i < used_allocation_count; i++) {
 			auto& buf = used_allocations[i].buffer;
-			if (buf) {
+			if (buf && used_allocations[i].num_blocks > 0) {
 				upstream->deallocate_buffers(std::span{ &buf, 1 });
 			}
 		}
@@ -175,7 +177,7 @@ namespace vuk {
 
 		for (size_t i = 0; i < available_allocation_count; i++) {
 			auto& buf = available_allocations[i].buffer;
-			if (buf) {
+			if (buf && available_allocations[i].num_blocks > 0) {
 				upstream->deallocate_buffers(std::span{ &buf, 1 });
 			}
 		}
