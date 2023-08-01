@@ -325,9 +325,9 @@ namespace vuk {
 			VkDescriptorPoolCreateInfo dpci = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
 			dpci.maxSets = 1;
 			std::array<VkDescriptorPoolSize, 12> descriptor_counts = {};
-			unsigned count = get_context().vkCmdBuildAccelerationStructuresKHR ? descriptor_counts.size() : descriptor_counts.size() - 1;
+			size_t count = get_context().vkCmdBuildAccelerationStructuresKHR ? descriptor_counts.size() : descriptor_counts.size() - 1;
 			uint32_t used_idx = 0;
-			for (auto i = 0; i < count; i++) {
+			for (size_t i = 0; i < count; i++) {
 				bool used = false;
 				// create non-variable count descriptors
 				if (dslai.descriptor_counts[i] > 0) {
@@ -399,7 +399,7 @@ namespace vuk {
 			auto& pool = ctx->acquire_descriptor_pool(*cinfo.layout_info, ctx->get_frame_count());
 			auto ds = pool.acquire(*ctx, *cinfo.layout_info);
 			auto mask = cinfo.used.to_ulong();
-			uint32_t leading_ones = num_leading_ones(mask);
+			uint32_t leading_ones = num_leading_ones((uint32_t)mask);
 			std::array<VkWriteDescriptorSet, VUK_MAX_BINDINGS> writes = {};
 			std::array<VkWriteDescriptorSetAccelerationStructureKHR, VUK_MAX_BINDINGS> as_writes = {};
 			int j = 0;

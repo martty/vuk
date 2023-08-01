@@ -1155,11 +1155,11 @@ namespace vuk {
 
 		auto sets_mask = sets_to_bind.to_ulong();
 		auto persistent_sets_mask = persistent_sets_to_bind.to_ulong();
-		uint32_t highest_undisturbed_binding_required = 0;
-		uint32_t lowest_disturbed_binding = VUK_MAX_SETS;
-		for (unsigned i = 0; i < VUK_MAX_SETS; i++) {
-			bool set_to_bind = sets_mask & (1 << i);
-			bool persistent_set_to_bind = persistent_sets_mask & (1 << i);
+		uint64_t highest_undisturbed_binding_required = 0;
+		uint64_t lowest_disturbed_binding = VUK_MAX_SETS;
+		for (size_t i = 0; i < VUK_MAX_SETS; i++) {
+			bool set_to_bind = sets_mask & (1ULL << i);
+			bool persistent_set_to_bind = persistent_sets_mask & (1ULL << i);
 
 			VkDescriptorSetLayout pipeline_set_layout;
 			DescriptorSetLayoutAllocInfo* ds_layout_alloc_info;
@@ -1305,7 +1305,7 @@ namespace vuk {
 
 					auto& cinfo = sb;
 					auto mask = cinfo.used.to_ulong();
-					uint32_t leading_ones = num_leading_ones(mask);
+					uint32_t leading_ones = num_leading_ones((uint32_t)mask);
 					VkWriteDescriptorSet writes[VUK_MAX_BINDINGS];
 					int j = 0;
 					for (uint32_t i = 0; i < leading_ones; i++, j++) {
@@ -1349,15 +1349,15 @@ namespace vuk {
 					assert(0 && "Unimplemented DS strategy");
 				}
 
-				ctx.vkCmdBindDescriptorSets(command_buffer, bind_point, current_layout, i, 1, &ds->descriptor_set, 0, nullptr);
+				ctx.vkCmdBindDescriptorSets(command_buffer, bind_point, current_layout, (uint32_t)i, 1, &ds->descriptor_set, 0, nullptr);
 				set_layouts_used[i] = ds->layout_info.layout;
 			} else {
-				ctx.vkCmdBindDescriptorSets(command_buffer, bind_point, current_layout, i, 1, &persistent_sets[i].first, 0, nullptr);
+				ctx.vkCmdBindDescriptorSets(command_buffer, bind_point, current_layout, (uint32_t)i, 1, &persistent_sets[i].first, 0, nullptr);
 				set_layouts_used[i] = persistent_sets[i].second;
 			}
 		}
 		auto sets_bound = sets_to_bind | persistent_sets_to_bind;            // these sets we bound freshly, valid
-		for (unsigned i = lowest_disturbed_binding; i < VUK_MAX_SETS; i++) { // clear the slots where the binding was disturbed
+		for (uint64_t i = lowest_disturbed_binding; i < VUK_MAX_SETS; i++) { // clear the slots where the binding was disturbed
 			VUK_SB_SET(sets_used, i, false);
 		}
 		sets_used = sets_used | sets_bound;
@@ -1438,9 +1438,9 @@ namespace vuk {
 
 				pi.extended_size += (uint16_t)pi.base->reflection_info.attributes.size() * sizeof(PipelineInstanceCreateInfo::VertexInputAttributeDescription);
 				pi.extended_size += sizeof(uint8_t);
-				uint16_t count;
+				uint64_t count;
 				VUK_SB_COUNT(used_bindings, count);
-				pi.extended_size += count * sizeof(PipelineInstanceCreateInfo::VertexInputBindingDescription);
+				pi.extended_size += (uint16_t)count * sizeof(PipelineInstanceCreateInfo::VertexInputBindingDescription);
 			}
 
 			// BLEND STATE
@@ -1449,7 +1449,7 @@ namespace vuk {
 			bool rasterization = ongoing_renderpass->depth_stencil_attachment || pi.attachmentCount > 0;
 
 			if (pi.attachmentCount > 0) {
-				uint16_t count;
+				uint64_t count;
 				VUK_SB_COUNT(set_color_blend_attachments, count);
 				assert(count > 0 && "If a pass has a color attachment, you must set at least one color blend state.");
 				records.broadcast_color_blend_attachment_0 = broadcast_color_blend_attachment_0;
@@ -1583,7 +1583,7 @@ namespace vuk {
 					};
 					write(data_ptr, viad);
 				}
-				uint8_t count;
+				uint64_t count;
 				VUK_SB_COUNT(used_bindings, count);
 				write<uint8_t>(data_ptr, (uint8_t)count);
 				for (unsigned i = 0; i < VUK_MAX_ATTRIBUTES; i++) {

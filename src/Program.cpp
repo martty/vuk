@@ -223,7 +223,7 @@ VkShaderStageFlagBits vuk::Program::introspect(const uint32_t* ir, size_t word_c
 			if (type.array.size() > 0) {
 				count = type.array[0];
 			}
-			for (auto i = 0; i < count; i++) {
+			for (uint32_t i = 0; i < count; i++) {
 				Attribute a;
 				a.location = location + i;
 				a.name = sb.name.c_str();

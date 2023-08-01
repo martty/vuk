@@ -32,9 +32,9 @@ namespace vuk {
 		VkDescriptorPoolCreateInfo dpci{ .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
 		dpci.maxSets = impl->sets_allocated == 0 ? 1 : impl->sets_allocated * 2;
 		std::array<VkDescriptorPoolSize, 12> descriptor_counts = {};
-		unsigned count = ctx.vkCmdBuildAccelerationStructuresKHR ? descriptor_counts.size() : descriptor_counts.size() - 1;
+		size_t count = ctx.vkCmdBuildAccelerationStructuresKHR ? descriptor_counts.size() : descriptor_counts.size() - 1;
 		uint32_t used_idx = 0;
-		for (auto i = 0; i < count; i++) {
+		for (size_t i = 0; i < count; i++) {
 			if (layout_alloc_info.descriptor_counts[i] > 0) {
 				auto& d = descriptor_counts[used_idx];
 				d.type = i == 11 ? VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR : VkDescriptorType(i);
@@ -84,7 +84,7 @@ namespace vuk {
 		SetBinding final;
 		final.used = used_mask;
 		final.layout_info = layout_info;
-		uint32_t mask = used_mask.to_ulong();
+		uint32_t mask = (uint32_t)used_mask.to_ulong();
 		for (size_t i = 0; i < VUK_MAX_BINDINGS; i++) {
 			if ((mask & (1 << i)) == 0) {
 				continue;
