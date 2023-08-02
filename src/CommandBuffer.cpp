@@ -13,7 +13,7 @@
 
 // hand-inlined versions of the most common bitset ops, because if these are not inlined, the overhead is terrible
 #define VUK_SB_SET(bitset, pos, value)                                                                                                                         \
-	if constexpr (bitset.n_words == 1) {                                                                                                                         \
+	if constexpr (decltype(bitset)::n_words == 1) {                                                                                                                         \
 		if (value) {                                                                                                                                               \
 			bitset.words[0] |= 1ULL << pos;                                                                                                                          \
 		} else {                                                                                                                                                   \
@@ -24,7 +24,7 @@
 	}
 
 #define VUK_SB_COUNT(bitset, dst)                                                                                                                              \
-	if constexpr (bitset.n_words == 1) {                                                                                                                         \
+	if constexpr (decltype(bitset)::n_words == 1) {                                                                                                                         \
 		using T = uint64_t;                                                                                                                                        \
 		uint64_t v = bitset.words[0];                                                                                                                              \
 		v = v - ((v >> 1) & (T) ~(T)0 / 3);                                                                                                                        \
@@ -36,7 +36,7 @@
 	}
 
 #define VUK_SB_TEST(bitset, pos, dst)                                                                                                                          \
-	if constexpr (bitset.n_words == 1) {                                                                                                                         \
+	if constexpr (decltype(bitset)::n_words == 1) {                                                                                                                         \
 		dst = bitset.words[0] & 1ULL << pos;                                                                                                                       \
 	} else {                                                                                                                                                     \
 		dst = bitset.test(pos);                                                                                                                                    \
