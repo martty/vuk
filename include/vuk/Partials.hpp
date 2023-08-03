@@ -10,7 +10,7 @@
 
 namespace vuk {
 	/// @brief Fill a buffer with host data
-	/// @param allocator Allocator to use for temporary allocations
+	/// @param allocator Allocator to use for scratch allocations
 	/// @param copy_domain The domain where the copy should happen (when dst is mapped, the copy happens on host)
 	/// @param buffer Buffer to fill
 	/// @param src_data pointer to source data
@@ -38,7 +38,7 @@ namespace vuk {
 	}
 
 	/// @brief Fill a buffer with host data
-	/// @param allocator Allocator to use for temporary allocations
+	/// @param allocator Allocator to use for scratch allocations
 	/// @param copy_domain The domain where the copy should happen (when dst is mapped, the copy happens on host)
 	/// @param dst Buffer to fill
 	/// @param data source data
@@ -62,7 +62,7 @@ namespace vuk {
 	}
 
 	/// @brief Fill an image with host data
-	/// @param allocator Allocator to use for temporary allocations
+	/// @param allocator Allocator to use for scratch allocations
 	/// @param copy_domain The domain where the copy should happen (when dst is mapped, the copy happens on host)
 	/// @param image ImageAttachment to fill
 	/// @param src_data pointer to source data
@@ -172,23 +172,39 @@ namespace vuk {
 
 	/// @brief Allocates & fills a buffer with explicitly managed lifetime
 	/// @param allocator Allocator to allocate this Buffer from
-	/// @param mem_usage Where to allocate the buffer (host visible buffers will be automatically mapped)
+	/// @param scratch_allocator Allocator to use for scratch allocations
+	/// @param memory_usage Where to allocate the buffer (host visible buffers will be automatically mapped)
+	/// @param domain The domain where the copy should happen (when dst is mapped, the copy happens on host)
+	/// @param data Host data to upload into the buffer
+	/// @param alignment Alignment of device buffer required
 	template<class T>
-	std::pair<Unique<Buffer>, Future> create_buffer(Allocator& allocator, vuk::MemoryUsage memory_usage, DomainFlagBits domain, std::span<T> data, size_t alignment = 1) {
+	std::pair<Unique<Buffer>, Future> create_buffer(Allocator& allocator,
+	                                                Allocator& scratch_allocator,
+	                                                vuk::MemoryUsage memory_usage,
+	                                                DomainFlagBits domain,
+	                                                std::span<T> data,
+	                                                size_t alignment = 1) {
 		Unique<Buffer> buf(allocator);
 		BufferCreateInfo bci{ memory_usage, sizeof(T) * data.size(), alignment };
 		auto ret = allocator.allocate_buffers(std::span{ &*buf, 1 }, std::span{ &bci, 1 }); // TODO: dropping error
 		Buffer b = buf.get();
-		return { std::move(buf), host_data_to_buffer(allocator, domain, b, data) };
+		return { std::move(buf), host_data_to_buffer(scratch_allocator, domain, b, data) };
 	}
 
 	/// @brief Allocates & fills an image, creates default ImageView for it (legacy)
 	/// @param allocator Allocator to allocate this Texture from
+	/// @param scratch_allocator Allocator to use for scratch allocations
 	/// @param format Format of the image
 	/// @param extent Extent3D of the image
 	/// @param data pointer to data to fill the image with
 	/// @param should_generate_mips if true, all mip levels are generated from the 0th level
-	inline std::pair<Texture, Future> create_texture(Allocator& allocator, Format format, Extent3D extent, void* data, bool should_generate_mips, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
+	inline std::pair<Texture, Future> create_texture(Allocator& allocator,
+	                                                 Allocator& scratch_allocator,
+	                                                 Format format,
+	                                                 Extent3D extent,
+	                                                 void* data,
+	                                                 bool should_generate_mips,
+	                                                 SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 		ImageCreateInfo ici;
 		ici.format = format;
 		ici.extent = extent;
@@ -200,7 +216,7 @@ namespace vuk {
 		ici.arrayLayers = 1;
 		auto tex = allocator.get_context().allocate_texture(allocator, ici, loc);
 
-		auto upload_fut = host_data_to_image(allocator, DomainFlagBits::eTransferQueue, ImageAttachment::from_texture(tex), data);
+		auto upload_fut = host_data_to_image(scratch_allocator, DomainFlagBits::eTransferQueue, ImageAttachment::from_texture(tex), data);
 		auto mipgen_fut = ici.mipLevels > 1 ? generate_mips(std::move(upload_fut), 0, ici.mipLevels) : std::move(upload_fut);
 		std::shared_ptr<RenderGraph> rgp = std::make_shared<RenderGraph>("create_texture");
 		rgp->add_pass({ .name = "TRANSITION",
