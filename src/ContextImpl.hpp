@@ -34,7 +34,7 @@ namespace vuk {
 
 		VkPipelineCache vk_pipeline_cache = VK_NULL_HANDLE;
 		Cache<PipelineBaseInfo> pipelinebase_cache;
-		Cache<PipelineInfo> pipeline_cache;
+		Cache<GraphicsPipelineInfo> graphics_pipeline_cache;
 		Cache<ComputePipelineInfo> compute_pipeline_cache;
 		Cache<RayTracingPipelineInfo> ray_tracing_pipeline_cache;
 		Cache<VkRenderPass> renderpass_cache;
@@ -67,7 +67,7 @@ namespace vuk {
 			auto remainder = absolute_frame % cache_collection_frequency;
 			switch (remainder) {
 			case 0:
-				pipeline_cache.collect(absolute_frame, cache_collection_frequency);
+				graphics_pipeline_cache.collect(absolute_frame, cache_collection_frequency);
 				break;
 			case 1:
 				compute_pipeline_cache.collect(absolute_frame, cache_collection_frequency);
@@ -94,7 +94,7 @@ namespace vuk {
 		    device_vk_resource(std::make_unique<DeviceVkResource>(ctx)),
 		    direct_allocator(*device_vk_resource.get()),
 		    pipelinebase_cache(&ctx, &FN<struct PipelineBaseInfo>::create_fn, &FN<struct PipelineBaseInfo>::destroy_fn),
-		    pipeline_cache(&ctx, &FN<struct PipelineInfo>::create_fn, &FN<struct PipelineInfo>::destroy_fn),
+		    graphics_pipeline_cache(&ctx, &FN<struct GraphicsPipelineInfo>::create_fn, &FN<struct GraphicsPipelineInfo>::destroy_fn),
 		    compute_pipeline_cache(&ctx, &FN<struct ComputePipelineInfo>::create_fn, &FN<struct ComputePipelineInfo>::destroy_fn),
 		    ray_tracing_pipeline_cache(&ctx, &FN<struct RayTracingPipelineInfo>::create_fn, &FN<struct RayTracingPipelineInfo>::destroy_fn),
 		    renderpass_cache(&ctx, &FN<VkRenderPass>::create_fn, &FN<VkRenderPass>::destroy_fn),

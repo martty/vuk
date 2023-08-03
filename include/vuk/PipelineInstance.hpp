@@ -13,7 +13,7 @@ inline bool operator==(VkSpecializationMapEntry const& lhs, VkSpecializationMapE
 }
 
 namespace vuk {
-	struct PipelineInstanceCreateInfo {
+	struct GraphicsPipelineInstanceCreateInfo {
 		PipelineBaseInfo* base;
 		VkRenderPass render_pass;
 		uint16_t dynamic_state_flags : 6;
@@ -120,7 +120,7 @@ namespace vuk {
 
 #pragma pack(pop)
 
-		bool operator==(const PipelineInstanceCreateInfo& o) const noexcept {
+		bool operator==(const GraphicsPipelineInstanceCreateInfo& o) const noexcept {
 			return base == o.base && render_pass == o.render_pass && extended_size == o.extended_size && attachmentCount == o.attachmentCount &&
 			       topology == o.topology && primitive_restart_enable == o.primitive_restart_enable && cullMode == o.cullMode &&
 			       (is_inline() ? (memcmp(inline_data, o.inline_data, extended_size) == 0) : (memcmp(extended_data, o.extended_data, extended_size) == 0));
@@ -131,7 +131,7 @@ namespace vuk {
 		}
 	};
 
-	struct PipelineInfo {
+	struct GraphicsPipelineInfo {
 		PipelineBaseInfo* base;
 		VkPipeline pipeline;
 		VkPipelineLayout pipeline_layout;
@@ -139,8 +139,8 @@ namespace vuk {
 	};
 
 	template<>
-	struct create_info<PipelineInfo> {
-		using type = vuk::PipelineInstanceCreateInfo;
+	struct create_info<GraphicsPipelineInfo> {
+		using type = vuk::GraphicsPipelineInstanceCreateInfo;
 	};
 
 	struct ComputePipelineInstanceCreateInfo {
@@ -156,7 +156,7 @@ namespace vuk {
 		}
 	};
 
-	struct ComputePipelineInfo : PipelineInfo {
+	struct ComputePipelineInfo : GraphicsPipelineInfo {
 		std::array<unsigned, 3> local_size;
 	};
 
@@ -178,7 +178,7 @@ namespace vuk {
 		}
 	};
 
-	struct RayTracingPipelineInfo : PipelineInfo {
+	struct RayTracingPipelineInfo : GraphicsPipelineInfo {
 		VkStridedDeviceAddressRegionKHR rgen_region{};
 		VkStridedDeviceAddressRegionKHR miss_region{};
 		VkStridedDeviceAddressRegionKHR hit_region{};
@@ -195,8 +195,8 @@ namespace vuk {
 
 namespace std {
 	template<>
-	struct hash<vuk::PipelineInstanceCreateInfo> {
-		size_t operator()(vuk::PipelineInstanceCreateInfo const& x) const noexcept;
+	struct hash<vuk::GraphicsPipelineInstanceCreateInfo> {
+		size_t operator()(vuk::GraphicsPipelineInstanceCreateInfo const& x) const noexcept;
 	};
 
 	template<>

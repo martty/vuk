@@ -168,7 +168,7 @@ namespace vuk {
 } // namespace vuk
 
 namespace std {
-	size_t hash<vuk::PipelineInstanceCreateInfo>::operator()(vuk::PipelineInstanceCreateInfo const& x) const noexcept {
+	size_t hash<vuk::GraphicsPipelineInstanceCreateInfo>::operator()(vuk::GraphicsPipelineInstanceCreateInfo const& x) const noexcept {
 		size_t h = 0;
 		auto ext_hash = x.is_inline() ? robin_hood::hash_bytes(x.inline_data, x.extended_size) : robin_hood::hash_bytes(x.extended_data, x.extended_size);
 		hash_combine(h, x.base, reinterpret_cast<uint64_t>((VkRenderPass)x.render_pass), x.extended_size, ext_hash);
