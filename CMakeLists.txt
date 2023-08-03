@@ -21,6 +21,10 @@ option(VUK_BUILD_TESTS "Build tests" OFF)
 option(VUK_FAIL_FAST "Trigger an assert upon encountering an error instead of propagating" OFF)
 option(VUK_DEBUG_ALLOCATIONS "Dump VMA allocations and give them debug names" OFF)
 
+if(CMAKE_SIZEOF_VOID_P EQUAL "4")
+	message(FATAL_ERROR "x86 is not supported.")
+endif()
+
 ##### Using vuk with volk (or a similar library)
 # step 1: turn off VUK_LINK_TO_LOADER and add_subdirectory vuk
 # set(VUK_LINK_TO_LOADER OFF)
