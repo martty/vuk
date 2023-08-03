@@ -176,7 +176,7 @@ namespace vuk {
 		rt_properties = o.rt_properties;
 
 		impl->pipelinebase_cache.allocator = this;
-		impl->pipeline_cache.allocator = this;
+		impl->graphics_pipeline_cache.allocator = this;
 		impl->compute_pipeline_cache.allocator = this;
 		impl->renderpass_cache.allocator = this;
 		impl->pool_cache.allocator = this;
@@ -211,7 +211,7 @@ namespace vuk {
 		}
 
 		impl->pipelinebase_cache.allocator = this;
-		impl->pipeline_cache.allocator = this;
+		impl->graphics_pipeline_cache.allocator = this;
 		impl->compute_pipeline_cache.allocator = this;
 		impl->renderpass_cache.allocator = this;
 		impl->pool_cache.allocator = this;
@@ -708,7 +708,7 @@ namespace vuk {
 		dp.destroy(*this, device);
 	}
 
-	void Context::destroy(const PipelineInfo& pi) {
+	void Context::destroy(const GraphicsPipelineInfo& pi) {
 		this->vkDestroyPipeline(device, pi.pipeline, nullptr);
 	}
 
@@ -855,7 +855,7 @@ namespace vuk {
 		return t;
 	};
 
-	PipelineInfo Context::create(const create_info_t<PipelineInfo>& cinfo) {
+	GraphicsPipelineInfo Context::create(const create_info_t<GraphicsPipelineInfo>& cinfo) {
 		// create gfx pipeline
 		VkGraphicsPipelineCreateInfo gpci{ .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
 		gpci.renderPass = cinfo.render_pass;
@@ -884,7 +884,7 @@ namespace vuk {
 		if (cinfo.records.vertex_input) {
 			viads.resize(cinfo.base->reflection_info.attributes.size());
 			for (auto& viad : viads) {
-				auto compressed = read<PipelineInstanceCreateInfo::VertexInputAttributeDescription>(data_ptr);
+				auto compressed = read<GraphicsPipelineInstanceCreateInfo::VertexInputAttributeDescription>(data_ptr);
 				viad.binding = compressed.binding;
 				viad.location = compressed.location;
 				viad.format = (VkFormat)compressed.format;
@@ -895,7 +895,7 @@ namespace vuk {
 
 			vibds.resize(read<uint8_t>(data_ptr));
 			for (auto& vibd : vibds) {
-				auto compressed = read<PipelineInstanceCreateInfo::VertexInputBindingDescription>(data_ptr);
+				auto compressed = read<GraphicsPipelineInstanceCreateInfo::VertexInputBindingDescription>(data_ptr);
 				vibd.binding = compressed.binding;
 				vibd.inputRate = (VkVertexInputRate)compressed.inputRate;
 				vibd.stride = compressed.stride;
@@ -913,7 +913,7 @@ namespace vuk {
 		if (cinfo.records.color_blend_attachments) {
 			if (!cinfo.records.broadcast_color_blend_attachment_0) {
 				for (auto& pcba : pcbas) {
-					auto compressed = read<PipelineInstanceCreateInfo::PipelineColorBlendAttachmentState>(data_ptr);
+					auto compressed = read<GraphicsPipelineInstanceCreateInfo::PipelineColorBlendAttachmentState>(data_ptr);
 					pcba = { compressed.blendEnable,
 						       (VkBlendFactor)compressed.srcColorBlendFactor,
 						       (VkBlendFactor)compressed.dstColorBlendFactor,
@@ -924,7 +924,7 @@ namespace vuk {
 						       compressed.colorWriteMask };
 				}
 			} else { // handle broadcast
-				auto compressed = read<PipelineInstanceCreateInfo::PipelineColorBlendAttachmentState>(data_ptr);
+				auto compressed = read<GraphicsPipelineInstanceCreateInfo::PipelineColorBlendAttachmentState>(data_ptr);
 				for (auto& pcba : pcbas) {
 					pcba = { compressed.blendEnable,
 						       (VkBlendFactor)compressed.srcColorBlendFactor,
@@ -938,7 +938,7 @@ namespace vuk {
 			}
 		}
 		if (cinfo.records.logic_op) {
-			auto compressed = read<PipelineInstanceCreateInfo::BlendStateLogicOp>(data_ptr);
+			auto compressed = read<GraphicsPipelineInstanceCreateInfo::BlendStateLogicOp>(data_ptr);
 			color_blend_state.logicOpEnable = true;
 			color_blend_state.logicOp = static_cast<VkLogicOp>(compressed.logic_op);
 		}
@@ -1005,7 +1005,7 @@ namespace vuk {
 			                                                          .lineWidth = 1.f };
 
 		if (cinfo.records.non_trivial_raster_state) {
-			auto rs = read<PipelineInstanceCreateInfo::RasterizationState>(data_ptr);
+			auto rs = read<GraphicsPipelineInstanceCreateInfo::RasterizationState>(data_ptr);
 			rasterization_state = { .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
 				                      .depthClampEnable = rs.depthClampEnable,
 				                      .rasterizerDiscardEnable = rs.rasterizerDiscardEnable,
@@ -1016,7 +1016,7 @@ namespace vuk {
 		}
 		rasterization_state.depthBiasEnable = cinfo.records.depth_bias_enable;
 		if (cinfo.records.depth_bias) {
-			auto db = read<PipelineInstanceCreateInfo::DepthBias>(data_ptr);
+			auto db = read<GraphicsPipelineInstanceCreateInfo::DepthBias>(data_ptr);
 			rasterization_state.depthBiasClamp = db.depthBiasClamp;
 			rasterization_state.depthBiasConstantFactor = db.depthBiasConstantFactor;
 			rasterization_state.depthBiasSlopeFactor = db.depthBiasSlopeFactor;
@@ -1027,7 +1027,7 @@ namespace vuk {
 		VkPipelineRasterizationConservativeStateCreateInfoEXT conservative_state{ .sType =
 			                                                                            VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT };
 		if (cinfo.records.conservative_rasterization_enabled) {
-			auto cs = read<PipelineInstanceCreateInfo::ConservativeState>(data_ptr);
+			auto cs = read<GraphicsPipelineInstanceCreateInfo::ConservativeState>(data_ptr);
 			conservative_state = { .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT,
 				                     .conservativeRasterizationMode = (VkConservativeRasterizationModeEXT)cs.conservativeMode,
 				                     .extraPrimitiveOverestimationSize = cs.overestimationAmount };
@@ -1038,18 +1038,18 @@ namespace vuk {
 		// DEPTH - STENCIL STATE
 		VkPipelineDepthStencilStateCreateInfo depth_stencil_state{ VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO };
 		if (cinfo.records.depth_stencil) {
-			auto d = read<PipelineInstanceCreateInfo::Depth>(data_ptr);
+			auto d = read<GraphicsPipelineInstanceCreateInfo::Depth>(data_ptr);
 			depth_stencil_state.depthTestEnable = d.depthTestEnable;
 			depth_stencil_state.depthWriteEnable = d.depthWriteEnable;
 			depth_stencil_state.depthCompareOp = (VkCompareOp)d.depthCompareOp;
 			if (cinfo.records.depth_bounds) {
-				auto db = read<PipelineInstanceCreateInfo::DepthBounds>(data_ptr);
+				auto db = read<GraphicsPipelineInstanceCreateInfo::DepthBounds>(data_ptr);
 				depth_stencil_state.depthBoundsTestEnable = true;
 				depth_stencil_state.minDepthBounds = db.minDepthBounds;
 				depth_stencil_state.maxDepthBounds = db.maxDepthBounds;
 			}
 			if (cinfo.records.stencil_state) {
-				auto s = read<PipelineInstanceCreateInfo::Stencil>(data_ptr);
+				auto s = read<GraphicsPipelineInstanceCreateInfo::Stencil>(data_ptr);
 				depth_stencil_state.stencilTestEnable = true;
 				depth_stencil_state.front = s.front;
 				depth_stencil_state.back = s.back;
@@ -1061,7 +1061,7 @@ namespace vuk {
 		VkPipelineMultisampleStateCreateInfo multisample_state{ .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
 			                                                      .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT };
 		if (cinfo.records.more_than_one_sample) {
-			auto ms = read<PipelineInstanceCreateInfo::Multisample>(data_ptr);
+			auto ms = read<GraphicsPipelineInstanceCreateInfo::Multisample>(data_ptr);
 			multisample_state.rasterizationSamples = static_cast<VkSampleCountFlagBits>(ms.rasterization_samples);
 			multisample_state.alphaToCoverageEnable = ms.alpha_to_coverage_enable;
 			multisample_state.alphaToOneEnable = ms.alpha_to_one_enable;
@@ -1283,8 +1283,8 @@ namespace vuk {
 		return impl->pool_cache.acquire(dslai, absolute_frame);
 	}
 
-	PipelineInfo Context::acquire_pipeline(const PipelineInstanceCreateInfo& pici, uint64_t absolute_frame) {
-		return impl->pipeline_cache.acquire(pici, absolute_frame);
+	GraphicsPipelineInfo Context::acquire_pipeline(const GraphicsPipelineInstanceCreateInfo& pici, uint64_t absolute_frame) {
+		return impl->graphics_pipeline_cache.acquire(pici, absolute_frame);
 	}
 
 	ComputePipelineInfo Context::acquire_pipeline(const ComputePipelineInstanceCreateInfo& pici, uint64_t absolute_frame) {

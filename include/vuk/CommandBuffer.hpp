@@ -184,7 +184,7 @@ namespace vuk {
 		PipelineBaseInfo* next_pipeline = nullptr;
 		PipelineBaseInfo* next_compute_pipeline = nullptr;
 		PipelineBaseInfo* next_ray_tracing_pipeline = nullptr;
-		std::optional<PipelineInfo> current_pipeline;
+		std::optional<GraphicsPipelineInfo> current_graphics_pipeline;
 		std::optional<ComputePipelineInfo> current_compute_pipeline;
 		std::optional<RayTracingPipelineInfo> current_ray_tracing_pipeline;
 
@@ -591,7 +591,7 @@ namespace vuk {
 		/// @param indirect_resource_name The Name of the Resource to use as indirect buffer
 		CommandBuffer& dispatch_indirect(Name indirect_resource_name);
 
-		/// @brief Perform ray trace query with a raytracing pipeline
+		/// @brief Perform ray trace query with a ray tracing pipeline
 		/// @param width width of the ray trace query dimensions
 		/// @param height height of the ray trace query dimensions
 		/// @param depth depth of the ray trace query dimensions

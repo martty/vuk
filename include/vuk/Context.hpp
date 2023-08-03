@@ -205,7 +205,7 @@ namespace vuk {
 		/// @brief Acquire a cached VkRenderPass
 		VkRenderPass acquire_renderpass(const struct RenderPassCreateInfo& ci, uint64_t absolute_frame);
 		/// @brief Acquire a cached pipeline
-		struct PipelineInfo acquire_pipeline(const struct PipelineInstanceCreateInfo& ci, uint64_t absolute_frame);
+		struct GraphicsPipelineInfo acquire_pipeline(const struct GraphicsPipelineInstanceCreateInfo& ci, uint64_t absolute_frame);
 		/// @brief Acquire a cached compute pipeline
 		struct ComputePipelineInfo acquire_pipeline(const struct ComputePipelineInstanceCreateInfo& ci, uint64_t absolute_frame);
 		/// @brief Acquire a cached ray tracing pipeline
@@ -225,7 +225,7 @@ namespace vuk {
 
 		// internal functions
 		void destroy(const struct DescriptorPool& dp);
-		void destroy(const struct PipelineInfo& pi);
+		void destroy(const struct GraphicsPipelineInfo& pi);
 		void destroy(const struct ComputePipelineInfo& pi);
 		void destroy(const struct RayTracingPipelineInfo& pi);
 		void destroy(const ShaderModule& sm);
@@ -242,7 +242,7 @@ namespace vuk {
 		VkPipelineLayout create(const struct PipelineLayoutCreateInfo& cinfo);
 		DescriptorSetLayoutAllocInfo create(const struct DescriptorSetLayoutCreateInfo& cinfo);
 		DescriptorPool create(const struct DescriptorSetLayoutAllocInfo& cinfo);
-		PipelineInfo create(const struct PipelineInstanceCreateInfo& cinfo);
+		GraphicsPipelineInfo create(const struct GraphicsPipelineInstanceCreateInfo& cinfo);
 		ComputePipelineInfo create(const struct ComputePipelineInstanceCreateInfo& cinfo);
 		RayTracingPipelineInfo create(const struct RayTracingPipelineInstanceCreateInfo& cinfo);
 		VkRenderPass create(const struct RenderPassCreateInfo& cinfo);

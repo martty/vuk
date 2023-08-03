@@ -1125,7 +1125,7 @@ namespace vuk {
 		VkPipelineLayout current_layout;
 		switch (pipe_type) {
 		case PipeType::eGraphics:
-			current_layout = current_pipeline->pipeline_layout;
+			current_layout = current_graphics_pipeline->pipeline_layout;
 			break;
 		case PipeType::eCompute:
 			current_layout = current_compute_pipeline->pipeline_layout;
@@ -1165,7 +1165,7 @@ namespace vuk {
 			DescriptorSetLayoutAllocInfo* ds_layout_alloc_info;
 			switch (pipe_type) {
 			case PipeType::eGraphics:
-				ds_layout_alloc_info = &current_pipeline->layout_info[i];
+				ds_layout_alloc_info = &current_graphics_pipeline->layout_info[i];
 				break;
 			case PipeType::eCompute:
 				ds_layout_alloc_info = &current_compute_pipeline->layout_info[i];
@@ -1209,7 +1209,7 @@ namespace vuk {
 
 			switch (pipe_type) {
 			case PipeType::eGraphics:
-				set_bindings[i].layout_info = &current_pipeline->layout_info[i];
+				set_bindings[i].layout_info = &current_graphics_pipeline->layout_info[i];
 				break;
 			case PipeType::eCompute:
 				set_bindings[i].layout_info = &current_compute_pipeline->layout_info[i];
@@ -1224,7 +1224,7 @@ namespace vuk {
 				DescriptorSetLayoutCreateInfo* dslci;
 				switch (pipe_type) {
 				case PipeType::eGraphics:
-					dslci = &current_pipeline->base->dslcis[i];
+					dslci = &current_graphics_pipeline->base->dslcis[i];
 					break;
 				case PipeType::eCompute:
 					dslci = &current_compute_pipeline->base->dslcis[i];
@@ -1414,7 +1414,7 @@ namespace vuk {
 
 	bool CommandBuffer::_bind_graphics_pipeline_state() {
 		if (next_pipeline) {
-			PipelineInstanceCreateInfo pi;
+			GraphicsPipelineInstanceCreateInfo pi;
 			pi.base = next_pipeline;
 			pi.render_pass = ongoing_renderpass->renderpass;
 			pi.dynamic_state_flags = dynamic_state_flags.m_mask;
@@ -1436,11 +1436,11 @@ namespace vuk {
 					VUK_SB_SET(used_bindings, attribute_descriptions[reflected_att.location].binding, true);
 				}
 
-				pi.extended_size += (uint16_t)pi.base->reflection_info.attributes.size() * sizeof(PipelineInstanceCreateInfo::VertexInputAttributeDescription);
+				pi.extended_size += (uint16_t)pi.base->reflection_info.attributes.size() * sizeof(GraphicsPipelineInstanceCreateInfo::VertexInputAttributeDescription);
 				pi.extended_size += sizeof(uint8_t);
 				uint64_t count;
 				VUK_SB_COUNT(used_bindings, count);
-				pi.extended_size += (uint16_t)count * sizeof(PipelineInstanceCreateInfo::VertexInputBindingDescription);
+				pi.extended_size += (uint16_t)count * sizeof(GraphicsPipelineInstanceCreateInfo::VertexInputBindingDescription);
 			}
 
 			// BLEND STATE
@@ -1460,13 +1460,13 @@ namespace vuk {
 					assert(set && "Broadcast turned on, but no blend state set.");
 					if (color_blend_attachments[0] != PipelineColorBlendAttachmentState{}) {
 						records.color_blend_attachments = true;
-						pi.extended_size += sizeof(PipelineInstanceCreateInfo::PipelineColorBlendAttachmentState);
+						pi.extended_size += sizeof(GraphicsPipelineInstanceCreateInfo::PipelineColorBlendAttachmentState);
 					}
 				} else {
 					assert(count >= pi.attachmentCount &&
 					       "If color blend state is not broadcast, you must set it for each color attachment.");
 					records.color_blend_attachments = true;
-					pi.extended_size += (uint16_t)(pi.attachmentCount * sizeof(PipelineInstanceCreateInfo::PipelineColorBlendAttachmentState));
+					pi.extended_size += (uint16_t)(pi.attachmentCount * sizeof(GraphicsPipelineInstanceCreateInfo::PipelineColorBlendAttachmentState));
 				}
 			}
 
@@ -1512,20 +1512,20 @@ namespace vuk {
 				records.depth_bias_enable = rasterization_state->depthBiasEnable; // the enable itself is not dynamic state in core
 				if (*rasterization_state != def) {
 					records.non_trivial_raster_state = true;
-					pi.extended_size += sizeof(PipelineInstanceCreateInfo::RasterizationState);
+					pi.extended_size += sizeof(GraphicsPipelineInstanceCreateInfo::RasterizationState);
 				}
 			}
 
 			if (conservative_state) {
 				records.conservative_rasterization_enabled = true;
-				pi.extended_size += sizeof(PipelineInstanceCreateInfo::ConservativeState);
+				pi.extended_size += sizeof(GraphicsPipelineInstanceCreateInfo::ConservativeState);
 			}
 
 			if (ongoing_renderpass->depth_stencil_attachment) {
 				assert(depth_stencil_state && "If a pass has a depth/stencil attachment, you must set the depth/stencil state.");
 
 				records.depth_stencil = true;
-				pi.extended_size += sizeof(PipelineInstanceCreateInfo::Depth);
+				pi.extended_size += sizeof(GraphicsPipelineInstanceCreateInfo::Depth);
 
 				assert(depth_stencil_state->stencilTestEnable == false);     // TODO: stencil unsupported
 				assert(depth_stencil_state->depthBoundsTestEnable == false); // TODO: depth bounds unsupported
@@ -1533,7 +1533,7 @@ namespace vuk {
 
 			if (ongoing_renderpass->samples != SampleCountFlagBits::e1) {
 				records.more_than_one_sample = true;
-				pi.extended_size += sizeof(PipelineInstanceCreateInfo::Multisample);
+				pi.extended_size += sizeof(GraphicsPipelineInstanceCreateInfo::Multisample);
 			}
 
 			if (rasterization) {
@@ -1578,7 +1578,7 @@ namespace vuk {
 				for (unsigned i = 0; i < pi.base->reflection_info.attributes.size(); i++) {
 					auto& reflected_att = pi.base->reflection_info.attributes[i];
 					auto& att = attribute_descriptions[reflected_att.location];
-					PipelineInstanceCreateInfo::VertexInputAttributeDescription viad{
+					GraphicsPipelineInstanceCreateInfo::VertexInputAttributeDescription viad{
 						.format = att.format, .offset = att.offset, .location = (uint8_t)att.location, .binding = (uint8_t)att.binding
 					};
 					write(data_ptr, viad);
@@ -1591,7 +1591,7 @@ namespace vuk {
 					VUK_SB_TEST(used_bindings, i, used);
 					if (used) {
 						auto& bin = binding_descriptions[i];
-						PipelineInstanceCreateInfo::VertexInputBindingDescription vibd{ .stride = bin.stride,
+						GraphicsPipelineInstanceCreateInfo::VertexInputBindingDescription vibd{ .stride = bin.stride,
 							                                                              .inputRate = (uint32_t)bin.inputRate,
 							                                                              .binding = (uint8_t)bin.binding };
 						write(data_ptr, vibd);
@@ -1603,7 +1603,7 @@ namespace vuk {
 				uint32_t num_pcba_to_write = records.broadcast_color_blend_attachment_0 ? 1 : (uint32_t)color_blend_attachments.size();
 				for (uint32_t i = 0; i < num_pcba_to_write; i++) {
 					auto& cba = color_blend_attachments[i];
-					PipelineInstanceCreateInfo::PipelineColorBlendAttachmentState pcba{ .blendEnable = cba.blendEnable,
+					GraphicsPipelineInstanceCreateInfo::PipelineColorBlendAttachmentState pcba{ .blendEnable = cba.blendEnable,
 						                                                                  .srcColorBlendFactor = cba.srcColorBlendFactor,
 						                                                                  .dstColorBlendFactor = cba.dstColorBlendFactor,
 						                                                                  .colorBlendOp = cba.colorBlendOp,
@@ -1636,7 +1636,7 @@ namespace vuk {
 			}
 
 			if (records.non_trivial_raster_state) {
-				PipelineInstanceCreateInfo::RasterizationState rs{ .depthClampEnable = (bool)rasterization_state->depthClampEnable,
+				GraphicsPipelineInstanceCreateInfo::RasterizationState rs{ .depthClampEnable = (bool)rasterization_state->depthClampEnable,
 					                                                 .rasterizerDiscardEnable = (bool)rasterization_state->rasterizerDiscardEnable,
 					                                                 .polygonMode = (uint8_t)rasterization_state->polygonMode,
 					                                                 .frontFace = (uint8_t)rasterization_state->frontFace };
@@ -1645,13 +1645,13 @@ namespace vuk {
 			}
 
 			if (records.conservative_rasterization_enabled) {
-				PipelineInstanceCreateInfo::ConservativeState cs{ .conservativeMode = (uint8_t)conservative_state->mode,
+				GraphicsPipelineInstanceCreateInfo::ConservativeState cs{ .conservativeMode = (uint8_t)conservative_state->mode,
 					                                                .overestimationAmount = conservative_state->overestimationAmount };
 				write(data_ptr, cs);
 			}
 
 			if (ongoing_renderpass->depth_stencil_attachment) {
-				PipelineInstanceCreateInfo::Depth ds = { .depthTestEnable = (bool)depth_stencil_state->depthTestEnable,
+				GraphicsPipelineInstanceCreateInfo::Depth ds = { .depthTestEnable = (bool)depth_stencil_state->depthTestEnable,
 					                                       .depthWriteEnable = (bool)depth_stencil_state->depthWriteEnable,
 					                                       .depthCompareOp = (uint8_t)depth_stencil_state->depthCompareOp };
 				write(data_ptr, ds);
@@ -1660,7 +1660,7 @@ namespace vuk {
 			}
 
 			if (ongoing_renderpass->samples != SampleCountFlagBits::e1) {
-				PipelineInstanceCreateInfo::Multisample ms{ .rasterization_samples = (uint32_t)ongoing_renderpass->samples };
+				GraphicsPipelineInstanceCreateInfo::Multisample ms{ .rasterization_samples = (uint32_t)ongoing_renderpass->samples };
 				write(data_ptr, ms);
 			}
 
@@ -1684,12 +1684,12 @@ namespace vuk {
 
 			assert(data_ptr - data_start_ptr == pi.extended_size); // sanity check: we wrote all the data we wanted to
 			// acquire_pipeline makes copy of extended_data if it needs to
-			current_pipeline = ctx.acquire_pipeline(pi, ctx.get_frame_count());
+			current_graphics_pipeline = ctx.acquire_pipeline(pi, ctx.get_frame_count());
 			if (!pi.is_inline()) {
 				delete pi.extended_data;
 			}
 
-			ctx.vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, current_pipeline->pipeline);
+			ctx.vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, current_graphics_pipeline->pipeline);
 			next_pipeline = nullptr;
 		}
 		return _bind_state(PipeType::eGraphics);
