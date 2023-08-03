@@ -34,9 +34,9 @@ namespace {
 
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
-			      pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/rt.rgen"), VUK_EX_PATH_TO_ROOT "examples/rt.rgen");
-			      pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/rt.rmiss"), VUK_EX_PATH_TO_ROOT "examples/rt.rmiss");
-			      pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/rt.rchit"), VUK_EX_PATH_TO_ROOT "examples/rt.rchit");
+			      pci.add_glsl(util::read_entire_file((root / "examples/rt.rgen").generic_string()), VUK_EX_PATH_TO_ROOT "examples/rt.rgen");
+			      pci.add_glsl(util::read_entire_file((root / "examples/rt.rmiss").generic_string()), VUK_EX_PATH_TO_ROOT "examples/rt.rmiss");
+			      pci.add_glsl(util::read_entire_file((root / "examples/rt.rchit").generic_string()), VUK_EX_PATH_TO_ROOT "examples/rt.rchit");
 			      // new for RT: a hit group is a collection of shaders identified by their index in the PipelineBaseCreateInfo
 			      // 2 => rt.rchit
 			      pci.add_hit_group(vuk::HitGroup{ .type = vuk::HitGroupType::eTriangles, .closest_hit = 2 });

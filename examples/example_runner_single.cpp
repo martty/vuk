@@ -58,7 +58,8 @@ void vuk::ExampleRunner::render() {
 	}
 }
 
-int main() {
+int main(int argc, char** argv) {
+	root = std::filesystem::canonical(std::filesystem::path(argv[0]).parent_path() / VUK_EX_PATH_TO_ROOT);
 	vuk::ExampleRunner::get_runner().setup();
 	vuk::ExampleRunner::get_runner().render();
 	vuk::ExampleRunner::get_runner().cleanup();

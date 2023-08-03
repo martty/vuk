@@ -5,6 +5,8 @@
 #include "vuk/Partials.hpp"
 #include "vuk/RenderGraph.hpp"
 #include "vuk/SampledImage.hpp"
+#include "imgui_vert.hpp"
+#include "imgui_frag.hpp"
 
 util::ImGuiData util::ImGui_ImplVuk_Init(vuk::Allocator& allocator) {
 	vuk::Context& ctx = allocator.get_context();
@@ -31,12 +33,10 @@ util::ImGuiData util::ImGui_ImplVuk_Init(vuk::Allocator& allocator) {
 	io.Fonts->TexID = (ImTextureID)data.font_si.get();
 	{
 		vuk::PipelineBaseCreateInfo pci;
-		auto vpath = VUK_EX_PATH_TO_ROOT "examples/imgui.vert.spv";
-		auto vcont = util::read_spirv(vpath);
-		pci.add_spirv(std::move(vcont), vpath);
-		auto fpath = VUK_EX_PATH_TO_ROOT "examples/imgui.frag.spv";
-		auto fcont = util::read_spirv(fpath);
-		pci.add_spirv(std::move(fcont), fpath);
+		// glslangValidator.exe -V imgui.vert --vn imgui_vert -o examples/imgui_vert.hpp
+		pci.add_static_spirv(imgui_vert, sizeof(imgui_vert) / 4, "imgui.vert");
+		// glslangValidator.exe -V imgui.frag --vn imgui_frag -o examples/imgui_frag.hpp
+		pci.add_static_spirv(imgui_frag, sizeof(imgui_frag) / 4, "imgui.frag");
 		ctx.create_named_pipeline("imgui", pci);
 	}
 	return data;

@@ -11,6 +11,7 @@
 #include "vuk/SampledImage.hpp"
 #include "vuk/resources/DeviceFrameResource.hpp"
 #include <VkBootstrap.h>
+#include <filesystem>
 #include <functional>
 #include <mutex>
 #include <optional>
@@ -22,6 +23,8 @@
 #include <vector>
 
 #include "backends/imgui_impl_glfw.h"
+
+inline std::filesystem::path root;
 
 namespace vuk {
 	struct ExampleRunner;
@@ -189,7 +192,7 @@ namespace vuk {
 		} else {
 			vkbphysical_device = phys_ret.value();
 		}
-		
+
 		physical_device = vkbphysical_device.physical_device;
 		vkb::DeviceBuilder device_builder{ vkbphysical_device };
 		VkPhysicalDeviceVulkan12Features vk12features{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };
