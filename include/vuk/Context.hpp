@@ -100,6 +100,8 @@ namespace vuk {
 		VkPhysicalDeviceAccelerationStructurePropertiesKHR as_properties{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR };
 		size_t min_buffer_alignment;
 
+		VkPipelineCache vk_pipeline_cache = VK_NULL_HANDLE;
+
 		Result<void> wait_for_domains(std::span<std::pair<DomainFlags, uint64_t>> queue_waits);
 
 		uint64_t get_frame_count() const;
@@ -204,12 +206,6 @@ namespace vuk {
 		Sampler acquire_sampler(const SamplerCreateInfo& cu, uint64_t absolute_frame);
 		/// @brief Acquire a cached VkRenderPass
 		VkRenderPass acquire_renderpass(const struct RenderPassCreateInfo& ci, uint64_t absolute_frame);
-		/// @brief Acquire a cached pipeline
-		struct GraphicsPipelineInfo acquire_pipeline(const struct GraphicsPipelineInstanceCreateInfo& ci, uint64_t absolute_frame);
-		/// @brief Acquire a cached compute pipeline
-		struct ComputePipelineInfo acquire_pipeline(const struct ComputePipelineInstanceCreateInfo& ci, uint64_t absolute_frame);
-		/// @brief Acquire a cached ray tracing pipeline
-		struct RayTracingPipelineInfo acquire_pipeline(const struct RayTracingPipelineInstanceCreateInfo& ci, uint64_t absolute_frame);
 		/// @brief Acquire a cached descriptor pool
 		struct DescriptorPool& acquire_descriptor_pool(const struct DescriptorSetLayoutAllocInfo& dslai, uint64_t absolute_frame);
 
@@ -225,9 +221,6 @@ namespace vuk {
 
 		// internal functions
 		void destroy(const struct DescriptorPool& dp);
-		void destroy(const struct GraphicsPipelineInfo& pi);
-		void destroy(const struct ComputePipelineInfo& pi);
-		void destroy(const struct RayTracingPipelineInfo& pi);
 		void destroy(const ShaderModule& sm);
 		void destroy(const DescriptorSetLayoutAllocInfo& ds);
 		void destroy(const VkPipelineLayout& pl);
@@ -242,9 +235,6 @@ namespace vuk {
 		VkPipelineLayout create(const struct PipelineLayoutCreateInfo& cinfo);
 		DescriptorSetLayoutAllocInfo create(const struct DescriptorSetLayoutCreateInfo& cinfo);
 		DescriptorPool create(const struct DescriptorSetLayoutAllocInfo& cinfo);
-		GraphicsPipelineInfo create(const struct GraphicsPipelineInstanceCreateInfo& cinfo);
-		ComputePipelineInfo create(const struct ComputePipelineInstanceCreateInfo& cinfo);
-		RayTracingPipelineInfo create(const struct RayTracingPipelineInstanceCreateInfo& cinfo);
 		VkRenderPass create(const struct RenderPassCreateInfo& cinfo);
 		Sampler create(const struct SamplerCreateInfo& cinfo);
 

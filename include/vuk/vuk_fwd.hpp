@@ -72,6 +72,13 @@ namespace vuk {
 	struct PipelineBaseCreateInfo;
 	struct PipelineBaseInfo;
 	struct Program;
+
+	struct GraphicsPipelineInfo;
+	struct GraphicsPipelineInstanceCreateInfo;
+	struct ComputePipelineInfo;
+	struct ComputePipelineInstanceCreateInfo;
+	struct RayTracingPipelineInfo;
+	struct RayTracingPipelineInstanceCreateInfo;
 	
 	struct FutureBase;
 	class Future;

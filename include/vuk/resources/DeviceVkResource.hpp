@@ -87,6 +87,20 @@ namespace vuk {
 
 		void deallocate_swapchains(std::span<const VkSwapchainKHR> src) override;
 
+				Result<void, AllocateException> allocate_graphics_pipelines(std::span<GraphicsPipelineInfo> dst,
+		                                                            std::span<const GraphicsPipelineInstanceCreateInfo> cis,
+		                                                            SourceLocationAtFrame loc) override;
+		void deallocate_graphics_pipelines(std::span<const GraphicsPipelineInfo> src) override;
+
+		Result<void, AllocateException>
+		allocate_compute_pipelines(std::span<ComputePipelineInfo> dst, std::span<const ComputePipelineInstanceCreateInfo> cis, SourceLocationAtFrame loc) override;
+		void deallocate_compute_pipelines(std::span<const ComputePipelineInfo> src) override;
+
+		Result<void, AllocateException> allocate_ray_tracing_pipelines(std::span<RayTracingPipelineInfo> dst,
+		                                                               std::span<const RayTracingPipelineInstanceCreateInfo> cis,
+		                                                               SourceLocationAtFrame loc) override;
+		void deallocate_ray_tracing_pipelines(std::span<const RayTracingPipelineInfo> src) override;
+
 		Context& get_context() override {
 			return *ctx;
 		}
