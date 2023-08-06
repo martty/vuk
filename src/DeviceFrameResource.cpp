@@ -4,6 +4,7 @@
 #include "RenderPass.hpp"
 #include "vuk/Context.hpp"
 #include "vuk/Descriptor.hpp"
+#include "vuk/PipelineInstance.hpp"
 #include "vuk/Query.hpp"
 
 #include <atomic>
@@ -33,6 +34,10 @@ namespace vuk {
 		Cache<ImageWithIdentity> image_cache;
 		Cache<ImageView> image_view_cache;
 
+		Cache<GraphicsPipelineInfo> graphics_pipeline_cache;
+		Cache<ComputePipelineInfo> compute_pipeline_cache;
+		Cache<RayTracingPipelineInfo> ray_tracing_pipeline_cache;
+
 		BufferSubAllocator suballocators[4];
 
 		DeviceSuperFrameResourceImpl(DeviceSuperFrameResource& sfr, size_t frames_in_flight) :
@@ -57,6 +62,36 @@ namespace vuk {
 		        },
 		        +[](void* allocator, const ImageView& iv) {
 			        reinterpret_cast<DeviceSuperFrameResourceImpl*>(allocator)->sfr->deallocate_image_views({ &iv, 1 });
+		        }),
+		    graphics_pipeline_cache(
+		        this,
+		        +[](void* allocator, const GraphicsPipelineInstanceCreateInfo& ci) {
+			        GraphicsPipelineInfo dst;
+			        reinterpret_cast<DeviceSuperFrameResourceImpl*>(allocator)->sfr->allocate_graphics_pipelines({ &dst, 1 }, { &ci, 1 }, {});
+			        return dst;
+		        },
+		        +[](void* allocator, const GraphicsPipelineInfo& v) {
+			        reinterpret_cast<DeviceSuperFrameResourceImpl*>(allocator)->sfr->deallocate_graphics_pipelines({ &v, 1 });
+		        }),
+		    compute_pipeline_cache(
+		        this,
+		        +[](void* allocator, const ComputePipelineInstanceCreateInfo& ci) {
+			        ComputePipelineInfo dst;
+			        reinterpret_cast<DeviceSuperFrameResourceImpl*>(allocator)->sfr->allocate_compute_pipelines({ &dst, 1 }, { &ci, 1 }, {});
+			        return dst;
+		        },
+		        +[](void* allocator, const ComputePipelineInfo& v) {
+			        reinterpret_cast<DeviceSuperFrameResourceImpl*>(allocator)->sfr->deallocate_compute_pipelines({ &v, 1 });
+		        }),
+		    ray_tracing_pipeline_cache(
+		        this,
+		        +[](void* allocator, const RayTracingPipelineInstanceCreateInfo& ci) {
+			        RayTracingPipelineInfo dst;
+			        reinterpret_cast<DeviceSuperFrameResourceImpl*>(allocator)->sfr->allocate_ray_tracing_pipelines({ &dst, 1 }, { &ci, 1 }, {});
+			        return dst;
+		        },
+		        +[](void* allocator, const RayTracingPipelineInfo& v) {
+			        reinterpret_cast<DeviceSuperFrameResourceImpl*>(allocator)->sfr->deallocate_ray_tracing_pipelines({ &v, 1 });
 		        }),
 		    suballocators{ { *sfr.upstream, vuk::MemoryUsage::eGPUonly, all_buffer_usage_flags, 64 * 1024 * 1024 },
 			                 { *sfr.upstream, vuk::MemoryUsage::eCPUonly, all_buffer_usage_flags, 64 * 1024 * 1024 },
@@ -377,6 +412,51 @@ namespace vuk {
 		vec.insert(vec.end(), src.begin(), src.end());
 	}
 
+	Result<void, AllocateException> DeviceFrameResource::allocate_graphics_pipelines(std::span<GraphicsPipelineInfo> dst,
+	                                                                                 std::span<const GraphicsPipelineInstanceCreateInfo> cis,
+	                                                                                 SourceLocationAtFrame loc) {
+		auto& sfr = *static_cast<DeviceSuperFrameResource*>(upstream);
+		assert(dst.size() == cis.size());
+
+		for (uint64_t i = 0; i < dst.size(); i++) {
+			auto& ci = cis[i];
+			dst[i] = sfr.impl->graphics_pipeline_cache.acquire(ci, construction_frame);
+		}
+
+		return { expected_value };
+	}
+	void DeviceFrameResource::deallocate_graphics_pipelines(std::span<const GraphicsPipelineInfo> src) {}
+
+	Result<void, AllocateException> DeviceFrameResource::allocate_compute_pipelines(std::span<ComputePipelineInfo> dst,
+	                                                                                std::span<const ComputePipelineInstanceCreateInfo> cis,
+	                                                                                SourceLocationAtFrame loc) {
+		auto& sfr = *static_cast<DeviceSuperFrameResource*>(upstream);
+		assert(dst.size() == cis.size());
+
+		for (uint64_t i = 0; i < dst.size(); i++) {
+			auto& ci = cis[i];
+			dst[i] = sfr.impl->compute_pipeline_cache.acquire(ci, construction_frame);
+		}
+
+		return { expected_value };
+	}
+	void DeviceFrameResource::deallocate_compute_pipelines(std::span<const ComputePipelineInfo> src) {}
+
+	Result<void, AllocateException> DeviceFrameResource::allocate_ray_tracing_pipelines(std::span<RayTracingPipelineInfo> dst,
+	                                                                                    std::span<const RayTracingPipelineInstanceCreateInfo> cis,
+	                                                                                    SourceLocationAtFrame loc) {
+		auto& sfr = *static_cast<DeviceSuperFrameResource*>(upstream);
+		assert(dst.size() == cis.size());
+
+		for (uint64_t i = 0; i < dst.size(); i++) {
+			auto& ci = cis[i];
+			dst[i] = sfr.impl->ray_tracing_pipeline_cache.acquire(ci, construction_frame);
+		}
+
+		return { expected_value };
+	}
+	void DeviceFrameResource::deallocate_ray_tracing_pipelines(std::span<const RayTracingPipelineInfo> src) {}
+
 	void DeviceFrameResource::wait() {
 		if (impl->fences.size() > 0) {
 			if (impl->fences.size() > 64) {
@@ -645,6 +725,9 @@ namespace vuk {
 		// garbage collect caches
 		impl->image_cache.collect(impl->frame_counter, 16);
 		impl->image_view_cache.collect(impl->frame_counter, 16);
+		impl->graphics_pipeline_cache.collect(impl->frame_counter, 16);
+		impl->compute_pipeline_cache.collect(impl->frame_counter, 16);
+		impl->ray_tracing_pipeline_cache.collect(impl->frame_counter, 16);
 		impl->image_identity.clear();
 
 		return f;
@@ -724,11 +807,18 @@ namespace vuk {
 	void DeviceSuperFrameResource::force_collect() {
 		impl->image_cache.collect(impl->frame_counter, 0);
 		impl->image_view_cache.collect(impl->frame_counter, 0);
+		impl->graphics_pipeline_cache.collect(impl->frame_counter, 0);
+		impl->compute_pipeline_cache.collect(impl->frame_counter, 0);
+		impl->ray_tracing_pipeline_cache.collect(impl->frame_counter, 0);
 	}
 
 	DeviceSuperFrameResource::~DeviceSuperFrameResource() {
 		impl->image_cache.clear();
 		impl->image_view_cache.clear();
+		impl->graphics_pipeline_cache.clear();
+		impl->compute_pipeline_cache.clear();
+		impl->ray_tracing_pipeline_cache.clear();
+
 		for (auto i = 0; i < frames_in_flight; i++) {
 			auto lframe = (impl->frame_counter + i) % frames_in_flight;
 			auto& f = impl->frames[lframe];

@@ -1397,7 +1397,8 @@ namespace vuk {
 				pi.base->psscis[0].pSpecializationInfo = &pi.specialization_info;
 			}
 
-			current_compute_pipeline = ctx.acquire_pipeline(pi, ctx.get_frame_count());
+			current_compute_pipeline = ComputePipelineInfo{};
+			allocator->allocate_compute_pipelines(std::span{ &current_compute_pipeline.value(), 1 }, std::span{ &pi, 1 });
 
 			ctx.vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, current_compute_pipeline->pipeline);
 			next_compute_pipeline = nullptr;
@@ -1684,7 +1685,8 @@ namespace vuk {
 
 			assert(data_ptr - data_start_ptr == pi.extended_size); // sanity check: we wrote all the data we wanted to
 			// acquire_pipeline makes copy of extended_data if it needs to
-			current_graphics_pipeline = ctx.acquire_pipeline(pi, ctx.get_frame_count());
+			current_graphics_pipeline = GraphicsPipelineInfo{};
+			allocator->allocate_graphics_pipelines(std::span{ &current_graphics_pipeline.value(), 1 }, std::span{ &pi, 1 });
 			if (!pi.is_inline()) {
 				delete pi.extended_data;
 			}
@@ -1725,7 +1727,8 @@ namespace vuk {
 				pi.base->psscis[0].pSpecializationInfo = &pi.specialization_info;
 			}
 
-			current_ray_tracing_pipeline = ctx.acquire_pipeline(pi, ctx.get_frame_count());
+			current_ray_tracing_pipeline = RayTracingPipelineInfo{};
+			allocator->allocate_ray_tracing_pipelines(std::span{ &current_ray_tracing_pipeline.value(), 1 }, std::span{ &pi, 1 });
 
 			ctx.vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, current_ray_tracing_pipeline->pipeline);
 			next_ray_tracing_pipeline = nullptr;
