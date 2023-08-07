@@ -9,6 +9,7 @@
 
 #include <atomic>
 #include <mutex>
+#include <shared_mutex>
 #include <numeric>
 #include <plf_colony.h>
 
@@ -16,7 +17,7 @@ namespace vuk {
 	struct DeviceSuperFrameResourceImpl {
 		DeviceSuperFrameResource* sfr;
 
-		std::mutex new_frame_mutex;
+		std::shared_mutex new_frame_mutex;
 		std::atomic<uint64_t> frame_counter;
 		std::atomic<uint64_t> local_frame;
 
@@ -511,6 +512,7 @@ namespace vuk {
 	    impl(new DeviceSuperFrameResourceImpl(*this, frames_in_flight)) {}
 
 	void DeviceSuperFrameResource::deallocate_semaphores(std::span<const VkSemaphore> src) {
+		std::shared_lock _s(impl->new_frame_mutex);
 		auto& f = get_last_frame();
 		std::unique_lock _(f.impl->sema_mutex);
 		auto& vec = get_last_frame().impl->semaphores;
@@ -518,6 +520,7 @@ namespace vuk {
 	}
 
 	void DeviceSuperFrameResource::deallocate_fences(std::span<const VkFence> src) {
+		std::shared_lock _s(impl->new_frame_mutex);
 		auto& f = get_last_frame();
 		std::unique_lock _(f.impl->fence_mutex);
 		auto& vec = f.impl->fences;
@@ -525,6 +528,7 @@ namespace vuk {
 	}
 
 	void DeviceSuperFrameResource::deallocate_command_buffers(std::span<const CommandBufferAllocation> src) {
+		std::shared_lock _s(impl->new_frame_mutex);
 		auto& f = get_last_frame();
 		std::unique_lock _(f.impl->cbuf_mutex);
 		auto& vec = f.impl->cmdbuffers_to_free;
@@ -556,6 +560,7 @@ namespace vuk {
 	}
 
 	void DeviceSuperFrameResource::deallocate_buffers(std::span<const Buffer> src) {
+		std::shared_lock _s(impl->new_frame_mutex);
 		auto& f = get_last_frame();
 		std::unique_lock _(f.impl->buffers_mutex);
 		auto& vec = f.impl->buffer_gpus;
@@ -563,6 +568,7 @@ namespace vuk {
 	}
 
 	void DeviceSuperFrameResource::deallocate_framebuffers(std::span<const VkFramebuffer> src) {
+		std::shared_lock _s(impl->new_frame_mutex);
 		auto& f = get_last_frame();
 		std::unique_lock _(f.impl->framebuffer_mutex);
 		auto& vec = f.impl->framebuffers;
@@ -570,6 +576,7 @@ namespace vuk {
 	}
 
 	void DeviceSuperFrameResource::deallocate_images(std::span<const Image> src) {
+		std::shared_lock _s(impl->new_frame_mutex);
 		auto& f = get_last_frame();
 		std::unique_lock _(f.impl->images_mutex);
 		auto& vec = f.impl->images;
@@ -618,6 +625,7 @@ namespace vuk {
 	}
 
 	void DeviceSuperFrameResource::deallocate_image_views(std::span<const ImageView> src) {
+		std::shared_lock _s(impl->new_frame_mutex);
 		auto& f = get_last_frame();
 		std::unique_lock _(f.impl->image_views_mutex);
 		auto& vec = f.impl->image_views;
@@ -625,6 +633,7 @@ namespace vuk {
 	}
 
 	void DeviceSuperFrameResource::deallocate_persistent_descriptor_sets(std::span<const PersistentDescriptorSet> src) {
+		std::shared_lock _s(impl->new_frame_mutex);
 		auto& f = get_last_frame();
 		std::unique_lock _(f.impl->pds_mutex);
 		auto& vec = f.impl->persistent_descriptor_sets;
@@ -632,6 +641,7 @@ namespace vuk {
 	}
 
 	void DeviceSuperFrameResource::deallocate_descriptor_sets(std::span<const DescriptorSet> src) {
+		std::shared_lock _s(impl->new_frame_mutex);
 		auto& f = get_last_frame();
 		std::unique_lock _(f.impl->ds_mutex);
 		auto& vec = f.impl->descriptor_sets;
@@ -657,6 +667,7 @@ namespace vuk {
 	}
 
 	void DeviceSuperFrameResource::deallocate_descriptor_pools(std::span<const VkDescriptorPool> src) {
+		std::shared_lock _s(impl->new_frame_mutex);
 		auto& f = get_last_frame();
 		std::unique_lock _(f.impl->ds_mutex);
 		auto& vec = f.impl->ds_pools_to_destroy;
@@ -664,6 +675,7 @@ namespace vuk {
 	}
 
 	void DeviceSuperFrameResource::deallocate_timestamp_query_pools(std::span<const TimestampQueryPool> src) {
+		std::shared_lock _s(impl->new_frame_mutex);
 		auto& f = get_last_frame();
 		std::unique_lock _(f.impl->query_pool_mutex);
 		auto& vec = f.impl->ts_query_pools;
@@ -673,6 +685,7 @@ namespace vuk {
 	void DeviceSuperFrameResource::deallocate_timestamp_queries(std::span<const TimestampQuery> src) {} // noop
 
 	void DeviceSuperFrameResource::deallocate_timeline_semaphores(std::span<const TimelineSemaphore> src) {
+		std::shared_lock _s(impl->new_frame_mutex);
 		auto& f = get_last_frame();
 		std::unique_lock _(f.impl->tsema_mutex);
 		auto& vec = f.impl->tsemas;
@@ -680,6 +693,7 @@ namespace vuk {
 	}
 
 	void DeviceSuperFrameResource::deallocate_acceleration_structures(std::span<const VkAccelerationStructureKHR> src) {
+		std::shared_lock _s(impl->new_frame_mutex);
 		auto& f = get_last_frame();
 		std::unique_lock _(f.impl->as_mutex);
 		auto& vec = f.impl->ass;
@@ -687,6 +701,7 @@ namespace vuk {
 	}
 
 	void DeviceSuperFrameResource::deallocate_swapchains(std::span<const VkSwapchainKHR> src) {
+		std::shared_lock _s(impl->new_frame_mutex);
 		auto& f = get_last_frame();
 		std::unique_lock _(f.impl->swapchain_mutex);
 		auto& vec = f.impl->swapchains;
@@ -698,7 +713,7 @@ namespace vuk {
 	}
 
 	DeviceFrameResource& DeviceSuperFrameResource::get_next_frame() {
-		std::unique_lock _(impl->new_frame_mutex);
+		std::unique_lock _s(impl->new_frame_mutex);
 
 		impl->frame_counter++;
 		impl->local_frame = impl->frame_counter % frames_in_flight;
@@ -722,19 +737,20 @@ namespace vuk {
 			}
 		}
 
+		impl->image_identity.clear();
+		_s.unlock();
 		// garbage collect caches
 		impl->image_cache.collect(impl->frame_counter, 16);
 		impl->image_view_cache.collect(impl->frame_counter, 16);
 		impl->graphics_pipeline_cache.collect(impl->frame_counter, 16);
 		impl->compute_pipeline_cache.collect(impl->frame_counter, 16);
 		impl->ray_tracing_pipeline_cache.collect(impl->frame_counter, 16);
-		impl->image_identity.clear();
 
 		return f;
 	}
 
 	DeviceMultiFrameResource& DeviceSuperFrameResource::get_multiframe_allocator(uint32_t frame_lifetime_count) {
-		std::unique_lock _(impl->new_frame_mutex);
+		std::unique_lock _s(impl->new_frame_mutex);
 
 		auto it = impl->multi_frames.emplace(DeviceMultiFrameResource(get_context().device, *this, frame_lifetime_count));
 		return *it;
