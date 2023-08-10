@@ -56,13 +56,12 @@ namespace vuk {
 	};
 
 	struct BufferBlock {
-		Buffer buffer;
-		VmaVirtualBlock block;
+		Buffer buffer = {};
+		size_t allocation_count = 0;
 	};
 
 	struct SubAllocation {
-		plf::colony<BufferBlock>::iterator it;
-		VmaVirtualBlock block;
+		size_t block_index;
 		VmaVirtualAllocation allocation;
 	};
 
@@ -70,18 +69,14 @@ namespace vuk {
 		DeviceResource* upstream;
 		MemoryUsage mem_usage;
 		BufferUsageFlags usage;
-		plf::colony<BufferBlock> blocks;
+		std::vector<BufferBlock> blocks;
+		VmaVirtualBlock virtual_alloc;
 		std::mutex mutex;
 		size_t block_size;
 
-		BufferSubAllocator(DeviceResource& upstream, MemoryUsage mem_usage, BufferUsageFlags buf_usage, size_t block_size) :
-		    upstream(&upstream),
-		    mem_usage(mem_usage),
-		    usage(buf_usage),
-		    block_size(block_size) {}
+		BufferSubAllocator(DeviceResource& upstream, MemoryUsage mem_usage, BufferUsageFlags buf_usage, size_t block_size);
 		~BufferSubAllocator();
 
-		Result<void, AllocateException> grow(size_t num_blocks, size_t alignment, SourceLocationAtFrame source);
 		Result<Buffer, AllocateException> allocate_buffer(size_t size, size_t alignment, SourceLocationAtFrame source);
 		void deallocate_buffer(const Buffer& buf);
 	};
