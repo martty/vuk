@@ -185,80 +185,81 @@ namespace vuk {
 		available_allocation_count = 0;
 	}
 
-	Result<void, AllocateException> BufferSubAllocator::grow(size_t size, size_t alignment, SourceLocationAtFrame source) {
-		BufferBlock alloc;
-		if (size < block_size) {
-			size = block_size;
-		}
-		BufferCreateInfo bci{ .mem_usage = mem_usage, .size = size, .alignment = alignment };
-		auto result = upstream->allocate_buffers(std::span{ &alloc.buffer, 1 }, std::span{ &bci, 1 }, source);
-		if (!result) {
-			return result;
-		}
-		VmaVirtualBlockCreateInfo vbci{};
-		vbci.size = size;
-		auto result2 = vmaCreateVirtualBlock(&vbci, &alloc.block);
-		if (result2 != VK_SUCCESS) {
-			return { expected_error, AllocateException(result2) };
-		}
-
-		blocks.emplace(alloc);
-		return { expected_value };
-	}
-
 	Result<Buffer, AllocateException> BufferSubAllocator::allocate_buffer(size_t size, size_t alignment, SourceLocationAtFrame source) {
 		std::lock_guard _(mutex);
-		if (blocks.size() == 0) {
-			auto result = grow(size + alignment, 256, source);
-			if (!result) {
-				return result;
-			}
-		}
+		
+		
+		VmaVirtualAllocation va;
+		VkDeviceSize offset;
 		VmaVirtualAllocationCreateInfo vaci{};
 		vaci.size = size + alignment;
 		vaci.alignment = 0; // VMA does not handle NPOT alignment
 
-		VmaVirtualAllocation va;
-		VkDeviceSize offset;
+		std::vector<VmaVirtualAllocation> straddlers;
+		bool is_straddling = true;
+		while (is_straddling) {
+			auto result = vmaVirtualAllocate(virtual_alloc, &vaci, &va, &offset);
+			if (result != VK_SUCCESS) { // this must always succeed, we have 128 GiB memory to allocate from
+				return { expected_error, AllocateException(result) };
+			}
+			is_straddling = offset / block_size != (offset + vaci.size) / block_size;
+			if (is_straddling) {
+				straddlers.push_back(va);
+			}
+		}
+		for (auto& s : straddlers) {
+			vmaVirtualFree(virtual_alloc, s);
+		}
 
-		auto it = blocks.begin();
-		advance(it, blocks.size() - 1);
-		auto result = vmaVirtualAllocate(it->block, &vaci, &va, &offset);
-		if (result == VK_ERROR_OUT_OF_DEVICE_MEMORY) {
-			auto result = grow(size, 256, source);
+		auto block_index = offset / block_size;
+		if (blocks.size() <= block_index) {
+			blocks.resize(block_index + 1);
+		}
+		
+		if (!blocks[block_index].buffer) {
+			BufferCreateInfo bci{ .mem_usage = mem_usage, .size = block_size, .alignment = 256 };
+			auto result = upstream->allocate_buffers(std::span{ &blocks[block_index].buffer, 1 }, std::span{ &bci, 1 }, source);
 			if (!result) {
 				return result;
 			}
-			it = blocks.begin();
-			advance(it, blocks.size() - 1);
-			// second try must succeed
-			auto result2 = vmaVirtualAllocate(it->block, &vaci, &va, &offset);
-			if (result2 != VK_SUCCESS) {
-				return { expected_error, AllocateException(result2) };
-			}
 		}
-		auto aligned_offset = VmaAlignUp(offset, alignment);
-		Buffer buf = it->buffer.add_offset(aligned_offset);
+		
+		auto aligned_offset = VmaAlignUp(offset - block_index * block_size, alignment);
+		Buffer buf = blocks[block_index].buffer.add_offset(aligned_offset);
+		assert(buf.offset % alignment == 0);
+		assert((buf.offset + size) < block_size);
 		buf.size = size;
-		buf.allocation = new SubAllocation{ it, it->block, va };
+		buf.allocation = new SubAllocation{ block_index, va };
+		blocks[block_index].allocation_count++;
 		return { expected_value, buf };
 	}
 
 	void BufferSubAllocator::deallocate_buffer(const Buffer& buf) {
 		std::lock_guard _(mutex);
 		auto sa = static_cast<SubAllocation*>(buf.allocation);
-		vmaVirtualFree(sa->block, sa->allocation);
-		if (vmaIsVirtualBlockEmpty(sa->block)) {
-			auto& bb = *sa->it;
-			upstream->deallocate_buffers(std::span{ &bb.buffer, 1 });
-			vmaDestroyVirtualBlock(bb.block);
-			blocks.erase(sa->it);
+		vmaVirtualFree(virtual_alloc, sa->allocation);
+		if (--blocks[sa->block_index].allocation_count == 0) {
+			upstream->deallocate_buffers(std::span{ &blocks[sa->block_index].buffer, 1 });
+			blocks[sa->block_index].buffer = {};
 		}
 		delete sa;
 	}
 
+	BufferSubAllocator::BufferSubAllocator(DeviceResource& upstream, MemoryUsage mem_usage, BufferUsageFlags buf_usage, size_t block_size) :
+	    upstream(&upstream),
+	    mem_usage(mem_usage),
+	    usage(buf_usage),
+	    block_size(block_size) {
+
+		VmaVirtualBlockCreateInfo vbci{};
+		vbci.size = 1024ULL * 1024 * 1024 * 128; // 128 GiB baybeh
+		auto result2 = vmaCreateVirtualBlock(&vbci, &virtual_alloc);
+		assert(result2 == VK_SUCCESS);
+	}
+
 	BufferSubAllocator::~BufferSubAllocator() {
-		assert(blocks.size() == 0);
+		assert(vmaIsVirtualBlockEmpty(virtual_alloc));
+		vmaDestroyVirtualBlock(virtual_alloc);
 	}
 
 } // namespace vuk
