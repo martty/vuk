@@ -181,11 +181,11 @@ if(VUK_BUILD_DOCS)
 endif()
 
 
-add_subdirectory(ext/doctest)
-target_link_libraries(vuk PUBLIC doctest::doctest)
-target_sources(vuk PRIVATE src/tests/Test.cpp)
-
 if(VUK_BUILD_TESTS)
+	add_subdirectory(ext/doctest)
+	target_link_libraries(vuk PUBLIC doctest::doctest)
+	target_sources(vuk PRIVATE src/tests/Test.cpp)
+
 	FetchContent_Declare(
 	  vk-bootstrap 
 	  GIT_REPOSITORY https://github.com/charles-lunarg/vk-bootstrap
