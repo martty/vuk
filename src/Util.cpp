@@ -6,7 +6,9 @@
 #include "vuk/SampledImage.hpp"
 
 #include <atomic>
+#ifndef DOCTEST_CONFIG_DISABLE
 #include <doctest/doctest.h>
+#endif
 #include <mutex>
 #include <sstream>
 #include <utility>
@@ -248,6 +250,7 @@ namespace vuk {
 		bundle.batches = { dst_batch };
 	}
 
+#ifndef DOCTEST_CONFIG_DISABLE
 	TEST_CASE("testing flattening submit graphs") {
 		{
 			SubmitBundle empty{};
@@ -293,6 +296,7 @@ namespace vuk {
 			CHECK(after == "digraph {subgraph cluster_Graphics {GA;GB;GC;GD;GE;GF;GG;GH;}GC->GB;GD->GC;GE->GD;GF->GE;GG->GF;GH->GG;}");
 		}
 	}
+#endif
 
 	Result<void> submit(Allocator& allocator, SubmitBundle bundle, VkSemaphore present_rdy, VkSemaphore render_complete) {
 		Context& ctx = allocator.get_context();
