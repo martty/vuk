@@ -15,18 +15,18 @@
 #include <string_view>
 
 namespace vuk {
-	template<class T>
-	struct FN {
-		static T create_fn(void* ctx, const create_info_t<T>& ci) {
-			return reinterpret_cast<Context*>(ctx)->create(ci);
-		}
-
-		static void destroy_fn(void* ctx, const T& v) {
-			return reinterpret_cast<Context*>(ctx)->destroy(v);
-		}
-	};
-
 	struct ContextImpl {
+		template<class T>
+		struct FN {
+			static T create_fn(void* ctx, const create_info_t<T>& ci) {
+				return reinterpret_cast<Context*>(ctx)->create(ci);
+			}
+
+			static void destroy_fn(void* ctx, const T& v) {
+				return reinterpret_cast<Context*>(ctx)->destroy(v);
+			}
+		};
+
 		VkDevice device;
 
 		std::unique_ptr<DeviceVkResource> device_vk_resource;
