@@ -80,6 +80,8 @@ namespace vuk {
 	struct RayTracingPipelineInfo;
 	struct RayTracingPipelineInstanceCreateInfo;
 	
+	struct RenderPassCreateInfo;
+	
 	struct FutureBase;
 	class Future;
 

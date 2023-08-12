@@ -768,7 +768,7 @@ namespace vuk {
 		}
 	}
 
-	void Compiler::renderpass_assignment() {
+	void Compiler::render_pass_assignment() {
 		// graphics: assemble renderpasses based on framebuffers
 		// we need to collect passes into framebuffers, which will determine the renderpasses
 
@@ -825,7 +825,7 @@ namespace vuk {
 		queue_inference();
 		pass_partitioning();
 		resource_linking();
-		renderpass_assignment();
+		render_pass_assignment();
 
 		return { expected_value };
 	}

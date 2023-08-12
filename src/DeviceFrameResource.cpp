@@ -38,6 +38,7 @@ namespace vuk {
 		Cache<GraphicsPipelineInfo> graphics_pipeline_cache;
 		Cache<ComputePipelineInfo> compute_pipeline_cache;
 		Cache<RayTracingPipelineInfo> ray_tracing_pipeline_cache;
+		Cache<VkRenderPass> render_pass_cache;
 
 		BufferSubAllocator suballocators[4];
 
@@ -93,6 +94,16 @@ namespace vuk {
 		        },
 		        +[](void* allocator, const RayTracingPipelineInfo& v) {
 			        reinterpret_cast<DeviceSuperFrameResourceImpl*>(allocator)->sfr->deallocate_ray_tracing_pipelines({ &v, 1 });
+		        }),
+		    render_pass_cache(
+		        this,
+		        +[](void* allocator, const RenderPassCreateInfo& ci) {
+			        VkRenderPass dst;
+			        reinterpret_cast<DeviceSuperFrameResourceImpl*>(allocator)->sfr->allocate_render_passes({ &dst, 1 }, { &ci, 1 }, {});
+			        return dst;
+		        },
+		        +[](void* allocator, const VkRenderPass& v) {
+			        reinterpret_cast<DeviceSuperFrameResourceImpl*>(allocator)->sfr->deallocate_render_passes({ &v, 1 });
 		        }),
 		    suballocators{ { *sfr.upstream, vuk::MemoryUsage::eGPUonly, all_buffer_usage_flags, 64 * 1024 * 1024 },
 			                 { *sfr.upstream, vuk::MemoryUsage::eCPUonly, all_buffer_usage_flags, 64 * 1024 * 1024 },
@@ -150,6 +161,8 @@ namespace vuk {
 		std::vector<GraphicsPipelineInfo> graphics_pipes;
 		std::vector<ComputePipelineInfo> compute_pipes;
 		std::vector<RayTracingPipelineInfo> ray_tracing_pipes;
+		std::mutex render_passes_mutex;
+		std::vector<VkRenderPass> render_passes;
 
 		BufferLinearAllocator linear_cpu_only;
 		BufferLinearAllocator linear_cpu_gpu;
@@ -462,6 +475,22 @@ namespace vuk {
 	}
 	void DeviceFrameResource::deallocate_ray_tracing_pipelines(std::span<const RayTracingPipelineInfo> src) {}
 
+	
+	Result<void, AllocateException>
+	DeviceFrameResource::allocate_render_passes(std::span<VkRenderPass> dst, std::span<const RenderPassCreateInfo> cis, SourceLocationAtFrame loc) {
+		auto& sfr = *static_cast<DeviceSuperFrameResource*>(upstream);
+		assert(dst.size() == cis.size());
+
+		for (uint64_t i = 0; i < dst.size(); i++) {
+			auto& ci = cis[i];
+			dst[i] = sfr.impl->render_pass_cache.acquire(ci, construction_frame);
+		}
+
+		return { expected_value };
+	}
+
+	void DeviceFrameResource::deallocate_render_passes(std::span<const VkRenderPass> src) {}
+
 	void DeviceFrameResource::wait() {
 		if (impl->fences.size() > 0) {
 			if (impl->fences.size() > 64) {
@@ -737,6 +766,14 @@ namespace vuk {
 		vec.insert(vec.end(), src.begin(), src.end());
 	}
 
+	void DeviceSuperFrameResource::deallocate_render_passes(std::span<const VkRenderPass> src) {
+		std::shared_lock _s(impl->new_frame_mutex);
+		auto& f = get_last_frame();
+		std::unique_lock _(f.impl->render_passes_mutex);
+		auto& vec = f.impl->render_passes;
+		vec.insert(vec.end(), src.begin(), src.end());
+	}
+
 	DeviceFrameResource& DeviceSuperFrameResource::get_last_frame() {
 		return impl->frames[impl->frame_counter.load() % frames_in_flight];
 	}
@@ -774,6 +811,7 @@ namespace vuk {
 		impl->graphics_pipeline_cache.collect(impl->frame_counter, 16);
 		impl->compute_pipeline_cache.collect(impl->frame_counter, 16);
 		impl->ray_tracing_pipeline_cache.collect(impl->frame_counter, 16);
+		impl->render_pass_cache.collect(impl->frame_counter, 16);
 
 		return f;
 	}
@@ -819,6 +857,7 @@ namespace vuk {
 		upstream->deallocate_graphics_pipelines(f.graphics_pipes);
 		upstream->deallocate_compute_pipelines(f.compute_pipes);
 		upstream->deallocate_ray_tracing_pipelines(f.ray_tracing_pipes);
+		upstream->deallocate_render_passes(f.render_passes);
 
 		f.semaphores.clear();
 		f.fences.clear();
@@ -853,6 +892,7 @@ namespace vuk {
 		f.graphics_pipes.clear();
 		f.compute_pipes.clear();
 		f.ray_tracing_pipes.clear();
+		f.render_passes.clear();
 	}
 
 	void DeviceSuperFrameResource::force_collect() {
@@ -861,6 +901,7 @@ namespace vuk {
 		impl->graphics_pipeline_cache.collect(impl->frame_counter, 0);
 		impl->compute_pipeline_cache.collect(impl->frame_counter, 0);
 		impl->ray_tracing_pipeline_cache.collect(impl->frame_counter, 0);
+		impl->render_pass_cache.collect(impl->frame_counter, 0);
 	}
 
 	DeviceSuperFrameResource::~DeviceSuperFrameResource() {
@@ -869,6 +910,7 @@ namespace vuk {
 		impl->graphics_pipeline_cache.clear();
 		impl->compute_pipeline_cache.clear();
 		impl->ray_tracing_pipeline_cache.clear();
+		impl->render_pass_cache.clear();
 
 		for (auto i = 0; i < frames_in_flight; i++) {
 			auto lframe = (impl->frame_counter + i) % frames_in_flight;

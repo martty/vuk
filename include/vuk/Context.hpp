@@ -204,8 +204,6 @@ namespace vuk {
 
 		/// @brief Acquire a cached sampler
 		Sampler acquire_sampler(const SamplerCreateInfo& cu, uint64_t absolute_frame);
-		/// @brief Acquire a cached VkRenderPass
-		VkRenderPass acquire_renderpass(const struct RenderPassCreateInfo& ci, uint64_t absolute_frame);
 		/// @brief Acquire a cached descriptor pool
 		struct DescriptorPool& acquire_descriptor_pool(const struct DescriptorSetLayoutAllocInfo& dslai, uint64_t absolute_frame);
 
@@ -224,9 +222,7 @@ namespace vuk {
 		void destroy(const ShaderModule& sm);
 		void destroy(const DescriptorSetLayoutAllocInfo& ds);
 		void destroy(const VkPipelineLayout& pl);
-		void destroy(const VkRenderPass& rp);
 		void destroy(const DescriptorSet&);
-		void destroy(const VkFramebuffer& fb);
 		void destroy(const Sampler& sa);
 		void destroy(const PipelineBaseInfo& pbi);
 
@@ -235,7 +231,6 @@ namespace vuk {
 		VkPipelineLayout create(const struct PipelineLayoutCreateInfo& cinfo);
 		DescriptorSetLayoutAllocInfo create(const struct DescriptorSetLayoutCreateInfo& cinfo);
 		DescriptorPool create(const struct DescriptorSetLayoutAllocInfo& cinfo);
-		VkRenderPass create(const struct RenderPassCreateInfo& cinfo);
 		Sampler create(const struct SamplerCreateInfo& cinfo);
 
 	private:

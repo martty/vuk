@@ -97,6 +97,10 @@ namespace vuk {
 		                                                               SourceLocationAtFrame loc) override;
 		void deallocate_ray_tracing_pipelines(std::span<const RayTracingPipelineInfo> src) override;
 
+		Result<void, AllocateException>
+		allocate_render_passes(std::span<VkRenderPass> dst, std::span<const RenderPassCreateInfo> cis, SourceLocationAtFrame loc) override;
+		void deallocate_render_passes(std::span<const VkRenderPass> src) override;
+
 		/// @brief Wait for the fences / timeline semaphores referencing this frame to complete
 		///
 		/// Called automatically when recycled
@@ -197,6 +201,8 @@ namespace vuk {
 		void deallocate_compute_pipelines(std::span<const ComputePipelineInfo> src) override;
 
 		void deallocate_ray_tracing_pipelines(std::span<const RayTracingPipelineInfo> src) override;
+
+		void deallocate_render_passes(std::span<const VkRenderPass> src) override;
 
 		/// @brief Recycle the least-recently-used frame and return it to be used again
 		/// @return DeviceFrameResource for use

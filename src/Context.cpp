@@ -176,7 +176,6 @@ namespace vuk {
 		rt_properties = o.rt_properties;
 
 		impl->pipelinebase_cache.allocator = this;
-		impl->renderpass_cache.allocator = this;
 		impl->pool_cache.allocator = this;
 		impl->sampler_cache.allocator = this;
 		impl->shader_modules.allocator = this;
@@ -209,7 +208,6 @@ namespace vuk {
 		}
 
 		impl->pipelinebase_cache.allocator = this;
-		impl->renderpass_cache.allocator = this;
 		impl->pool_cache.allocator = this;
 		impl->sampler_cache.allocator = this;
 		impl->shader_modules.allocator = this;
@@ -716,16 +714,8 @@ namespace vuk {
 		this->vkDestroyPipelineLayout(device, pl, nullptr);
 	}
 
-	void Context::destroy(const VkRenderPass& rp) {
-		this->vkDestroyRenderPass(device, rp, nullptr);
-	}
-
 	void Context::destroy(const DescriptorSet&) {
 		// no-op, we destroy the pools
-	}
-
-	void Context::destroy(const VkFramebuffer& fb) {
-		this->vkDestroyFramebuffer(device, fb, nullptr);
 	}
 
 	void Context::destroy(const Sampler& sa) {
@@ -824,12 +814,6 @@ namespace vuk {
 		return create_persistent_descriptorset(allocator, { base.layout_info[set], base.dslcis[set], num_descriptors });
 	}
 
-	VkRenderPass Context::create(const create_info_t<VkRenderPass>& cinfo) {
-		VkRenderPass rp;
-		this->vkCreateRenderPass(device, &cinfo, nullptr, &rp);
-		return rp;
-	}
-
 	Sampler Context::create(const create_info_t<Sampler>& cinfo) {
 		VkSampler s;
 		this->vkCreateSampler(device, (VkSamplerCreateInfo*)&cinfo, nullptr, &s);
@@ -838,10 +822,6 @@ namespace vuk {
 
 	DescriptorPool Context::create(const create_info_t<DescriptorPool>& cinfo) {
 		return DescriptorPool{};
-	}
-
-	VkRenderPass Context::acquire_renderpass(const RenderPassCreateInfo& rpci, uint64_t absolute_frame) {
-		return impl->renderpass_cache.acquire(rpci, absolute_frame);
 	}
 
 	Sampler Context::acquire_sampler(const SamplerCreateInfo& sci, uint64_t absolute_frame) {

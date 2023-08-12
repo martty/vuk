@@ -163,7 +163,7 @@ namespace vuk {
 		VkCommandBuffer command_buffer;
 
 		struct RenderPassInfo {
-			VkRenderPass renderpass;
+			VkRenderPass render_pass;
 			uint32_t subpass;
 			Extent2D extent;
 			SampleCountFlagBits samples;
@@ -171,7 +171,7 @@ namespace vuk {
 			std::array<QualifiedName, VUK_MAX_COLOR_ATTACHMENTS> color_attachment_names;
 			std::span<const VkAttachmentReference> color_attachments;
 		};
-		std::optional<RenderPassInfo> ongoing_renderpass;
+		std::optional<RenderPassInfo> ongoing_render_pass;
 		PassInfo* current_pass = nullptr;
 
 		Result<void> current_error = { expected_value };
@@ -241,7 +241,7 @@ namespace vuk {
 			return command_buffer;
 		}
 		/// @brief Retrieve information about the current renderpass
-		const RenderPassInfo& get_ongoing_renderpass() const;
+		const RenderPassInfo& get_ongoing_render_pass() const;
 		/// @brief Retrieve Buffer attached to given name
 		/// @return the attached Buffer or RenderGraphException
 		Result<Buffer> get_resource_buffer(Name resource_name) const;
@@ -602,7 +602,7 @@ namespace vuk {
 		                                             const VkAccelerationStructureBuildGeometryInfoKHR* pInfos,
 		                                             const VkAccelerationStructureBuildRangeInfoKHR* const* ppBuildRangeInfos);
 
-		// commands for renderpass-less command buffers
+		// commands for render pass-less command buffers
 
 		/// @brief Clear an image
 		/// @param src the Name of the Resource to be cleared

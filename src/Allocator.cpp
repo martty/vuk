@@ -221,59 +221,50 @@ namespace vuk {
 		return device_resource->allocate_graphics_pipelines(dst, cis, loc);
 	}
 
-	/// @brief Deallocate pipelines previously allocated from this Allocator
-	/// @param src Span of pipelines to be deallocated
 	void Allocator::deallocate(std::span<const GraphicsPipelineInfo> src) {
 		device_resource->deallocate_graphics_pipelines(src);
 	}
 
-	/// @brief Allocate compute pipelines from this Allocator
-	/// @param dst Destination span to place allocated pipelines into
-	/// @param loc Source location information
-	/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
 	Result<void, AllocateException> Allocator::allocate(std::span<ComputePipelineInfo> dst,
 		std::span<const ComputePipelineInstanceCreateInfo> cis, SourceLocationAtFrame loc) {
 		return device_resource->allocate_compute_pipelines(dst, cis, loc);
 	}
 
-	/// @brief Allocate compute pipelines from this Allocator
-	/// @param dst Destination span to place allocated pipelines into
-	/// @param loc Source location information
-	/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
 	Result<void, AllocateException> Allocator::allocate_compute_pipelines(std::span<ComputePipelineInfo> dst,
 		std::span<const ComputePipelineInstanceCreateInfo> cis,
 		SourceLocationAtFrame loc) {
 		return device_resource->allocate_compute_pipelines(dst, cis, loc);
 	}
 
-	/// @brief Deallocate pipelines previously allocated from this Allocator
-	/// @param src Span of pipelines to be deallocated
 	void Allocator::deallocate(std::span<const ComputePipelineInfo> src) {
 		device_resource->deallocate_compute_pipelines(src);
 	}
 
-	/// @brief Allocate graphics pipelines from this Allocator
-	/// @param dst Destination span to place allocated pipelines into
-	/// @param loc Source location information
-	/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
 	Result<void, AllocateException> Allocator::allocate(std::span<RayTracingPipelineInfo> dst,
 		std::span<const RayTracingPipelineInstanceCreateInfo> cis, SourceLocationAtFrame loc) {
 		return device_resource->allocate_ray_tracing_pipelines(dst, cis, loc);
 	}
 
-	/// @brief Allocate raytracing pipelines from this Allocator
-	/// @param dst Destination span to place allocated pipelines into
-	/// @param loc Source location information
-	/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
 	Result<void, AllocateException> Allocator::allocate_ray_tracing_pipelines(std::span<RayTracingPipelineInfo> dst,
 		std::span<const RayTracingPipelineInstanceCreateInfo> cis,
 		SourceLocationAtFrame loc) {
 		return device_resource->allocate_ray_tracing_pipelines(dst, cis, loc);
 	}
 
-	/// @brief Deallocate pipelines previously allocated from this Allocator
-	/// @param src Span of pipelines to be deallocated
 	void Allocator::deallocate(std::span<const RayTracingPipelineInfo> src) {
 		device_resource->deallocate_ray_tracing_pipelines(src);
+	}
+
+	Result<void, AllocateException> Allocator::allocate(std::span<VkRenderPass> dst, std::span<const RenderPassCreateInfo> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_render_passes(dst, cis, loc);
+	}
+
+	Result<void, AllocateException>
+	Allocator::allocate_render_passes(std::span<VkRenderPass> dst, std::span<const RenderPassCreateInfo> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_render_passes(dst, cis, loc);
+	}
+
+	void Allocator::deallocate(std::span<const VkRenderPass> src) {
+		device_resource->deallocate_render_passes(src);
 	}
 } // namespace vuk

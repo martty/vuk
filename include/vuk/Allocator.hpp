@@ -106,6 +106,10 @@ namespace vuk {
 		                                                                       SourceLocationAtFrame loc) = 0;
 		virtual void deallocate_ray_tracing_pipelines(std::span<const RayTracingPipelineInfo> src) = 0;
 
+		virtual Result<void, AllocateException>
+		allocate_render_passes(std::span<VkRenderPass> dst, std::span<const RenderPassCreateInfo> cis, SourceLocationAtFrame loc) = 0;
+		virtual void deallocate_render_passes(std::span<const VkRenderPass> src) = 0;
+
 		virtual Context& get_context() = 0;
 	};
 
@@ -447,14 +451,14 @@ namespace vuk {
 		/// @param src Span of pipelines to be deallocated
 		void deallocate(std::span<const ComputePipelineInfo> src);
 
-		/// @brief Allocate graphics pipelines from this Allocator
+		/// @brief Allocate ray tracing pipelines from this Allocator
 		/// @param dst Destination span to place allocated pipelines into
 		/// @param loc Source location information
 		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
 		Result<void, AllocateException>
 		allocate(std::span<RayTracingPipelineInfo> dst, std::span<const RayTracingPipelineInstanceCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
-		/// @brief Allocate ray_tracing pipelines from this Allocator
+		/// @brief Allocate ray tracing pipelines from this Allocator
 		/// @param dst Destination span to place allocated pipelines into
 		/// @param loc Source location information
 		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
@@ -465,6 +469,24 @@ namespace vuk {
 		/// @brief Deallocate pipelines previously allocated from this Allocator
 		/// @param src Span of pipelines to be deallocated
 		void deallocate(std::span<const RayTracingPipelineInfo> src);
+
+		/// @brief Allocate render passes from this Allocator
+		/// @param dst Destination span to place allocated render passes into
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
+		Result<void, AllocateException>
+		allocate(std::span<VkRenderPass> dst, std::span<const RenderPassCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+
+		/// @brief Allocate render passes from this Allocator
+		/// @param dst Destination span to place allocated render passes into
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
+		Result<void, AllocateException>
+		allocate_render_passes(std::span<VkRenderPass> dst, std::span<const RenderPassCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+
+		/// @brief Deallocate render passes previously allocated from this Allocator
+		/// @param src Span of render passes to be deallocated
+		void deallocate(std::span<const VkRenderPass> src);
 
 		/// @brief Get the underlying DeviceResource
 		/// @return the underlying DeviceResource

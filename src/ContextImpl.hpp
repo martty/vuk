@@ -33,7 +33,6 @@ namespace vuk {
 		Allocator direct_allocator;
 
 		Cache<PipelineBaseInfo> pipelinebase_cache;
-		Cache<VkRenderPass> renderpass_cache;
 		Cache<DescriptorPool> pool_cache;
 		Cache<Sampler> sampler_cache;
 		Cache<ShaderModule> shader_modules;
@@ -62,9 +61,6 @@ namespace vuk {
 			static constexpr uint32_t cache_collection_frequency = 16;
 			auto remainder = absolute_frame % cache_collection_frequency;
 			switch (remainder) {
-			case 2:
-				renderpass_cache.collect(absolute_frame, cache_collection_frequency);
-				break;
 				/*case 3:
 				  ptc.impl->sampler_cache.collect(cache_collection_frequency); break;*/ // sampler cache can't be collected due to persistent descriptor sets
 			case 4:
@@ -84,7 +80,6 @@ namespace vuk {
 		    device_vk_resource(std::make_unique<DeviceVkResource>(ctx)),
 		    direct_allocator(*device_vk_resource.get()),
 		    pipelinebase_cache(&ctx, &FN<struct PipelineBaseInfo>::create_fn, &FN<struct PipelineBaseInfo>::destroy_fn),
-		    renderpass_cache(&ctx, &FN<VkRenderPass>::create_fn, &FN<VkRenderPass>::destroy_fn),
 		    pool_cache(&ctx, &FN<struct DescriptorPool>::create_fn, &FN<struct DescriptorPool>::destroy_fn),
 		    sampler_cache(&ctx, &FN<Sampler>::create_fn, &FN<Sampler>::destroy_fn),
 		    shader_modules(&ctx, &FN<struct ShaderModule>::create_fn, &FN<struct ShaderModule>::destroy_fn),

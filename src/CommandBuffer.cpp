@@ -66,11 +66,11 @@ namespace vuk {
 	    ctx(ctx),
 	    allocator(&allocator),
 	    command_buffer(cb),
-	    ongoing_renderpass(ongoing),
+	    ongoing_render_pass(ongoing),
 	    ds_strategy_flags(ctx.default_descriptor_set_strategy) {}
 
-	const CommandBuffer::RenderPassInfo& CommandBuffer::get_ongoing_renderpass() const {
-		return ongoing_renderpass.value();
+	const CommandBuffer::RenderPassInfo& CommandBuffer::get_ongoing_render_pass() const {
+		return ongoing_render_pass.value();
 	}
 
 	Result<Buffer> CommandBuffer::get_resource_buffer(Name n) const {
@@ -186,8 +186,8 @@ namespace vuk {
 			vp.minDepth = min_depth;
 			vp.maxDepth = max_depth;
 		} else {
-			assert(ongoing_renderpass);
-			auto fb_dimensions = ongoing_renderpass->extent;
+			assert(ongoing_render_pass);
+			auto fb_dimensions = ongoing_render_pass->extent;
 			vp.x = area._relative.x * fb_dimensions.width;
 			vp.height = area._relative.height * fb_dimensions.height;
 			vp.y = area._relative.y * fb_dimensions.height;
@@ -204,8 +204,8 @@ namespace vuk {
 		if (area.sizing == Sizing::eAbsolute) {
 			vp = { area.offset, area.extent };
 		} else {
-			assert(ongoing_renderpass);
-			auto fb_dimensions = ongoing_renderpass->extent;
+			assert(ongoing_render_pass);
+			auto fb_dimensions = ongoing_render_pass->extent;
 			vp.offset.x = static_cast<int32_t>(area._relative.x * fb_dimensions.width);
 			vp.offset.y = static_cast<int32_t>(area._relative.y * fb_dimensions.height);
 			vp.extent.width = static_cast<int32_t>(area._relative.width * fb_dimensions.width);
@@ -272,7 +272,7 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::broadcast_color_blend(PipelineColorBlendAttachmentState state) {
 		VUK_EARLY_RET();
-		assert(ongoing_renderpass);
+		assert(ongoing_render_pass);
 		color_blend_attachments[0] = state;
 		set_color_blend_attachments.set(0, true);
 		broadcast_color_blend_attachment_0 = true;
@@ -286,11 +286,11 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::set_color_blend(Name att, PipelineColorBlendAttachmentState state) {
 		VUK_EARLY_RET();
-		assert(ongoing_renderpass);
+		assert(ongoing_render_pass);
 		auto resolved_name = rg->resolve_name(att, current_pass);
-		auto it = std::find(ongoing_renderpass->color_attachment_names.begin(), ongoing_renderpass->color_attachment_names.end(), resolved_name);
-		assert(it != ongoing_renderpass->color_attachment_names.end() && "Color attachment name not found.");
-		auto idx = std::distance(ongoing_renderpass->color_attachment_names.begin(), it);
+		auto it = std::find(ongoing_render_pass->color_attachment_names.begin(), ongoing_render_pass->color_attachment_names.end(), resolved_name);
+		assert(it != ongoing_render_pass->color_attachment_names.end() && "Color attachment name not found.");
+		auto idx = std::distance(ongoing_render_pass->color_attachment_names.begin(), it);
 		set_color_blend_attachments.set(idx, true);
 		color_blend_attachments[idx] = state;
 		broadcast_color_blend_attachment_0 = false;
@@ -313,7 +313,7 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::bind_graphics_pipeline(PipelineBaseInfo* pi) {
 		VUK_EARLY_RET();
-		assert(ongoing_renderpass);
+		assert(ongoing_render_pass);
 		next_pipeline = pi;
 		return *this;
 	}
@@ -325,7 +325,7 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::bind_compute_pipeline(PipelineBaseInfo* gpci) {
 		VUK_EARLY_RET();
-		assert(!ongoing_renderpass);
+		assert(!ongoing_render_pass);
 		next_compute_pipeline = gpci;
 		return *this;
 	}
@@ -337,7 +337,7 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::bind_ray_tracing_pipeline(PipelineBaseInfo* gpci) {
 		VUK_EARLY_RET();
-		assert(!ongoing_renderpass);
+		assert(!ongoing_render_pass);
 		next_ray_tracing_pipeline = gpci;
 		return *this;
 	}
@@ -1419,10 +1419,10 @@ namespace vuk {
 		if (next_pipeline) {
 			GraphicsPipelineInstanceCreateInfo pi;
 			pi.base = next_pipeline;
-			pi.render_pass = ongoing_renderpass->renderpass;
+			pi.render_pass = ongoing_render_pass->render_pass;
 			pi.dynamic_state_flags = dynamic_state_flags.m_mask;
 			auto& records = pi.records;
-			if (ongoing_renderpass->subpass > 0) {
+			if (ongoing_render_pass->subpass > 0) {
 				records.nonzero_subpass = true;
 				pi.extended_size += sizeof(uint8_t);
 			}
@@ -1448,8 +1448,8 @@ namespace vuk {
 
 			// BLEND STATE
 			// attachmentCount says how many attachments
-			pi.attachmentCount = (uint8_t)ongoing_renderpass->color_attachments.size();
-			bool rasterization = ongoing_renderpass->depth_stencil_attachment || pi.attachmentCount > 0;
+			pi.attachmentCount = (uint8_t)ongoing_render_pass->color_attachments.size();
+			bool rasterization = ongoing_render_pass->depth_stencil_attachment || pi.attachmentCount > 0;
 
 			if (pi.attachmentCount > 0) {
 				uint64_t count;
@@ -1524,7 +1524,7 @@ namespace vuk {
 				pi.extended_size += sizeof(GraphicsPipelineInstanceCreateInfo::ConservativeState);
 			}
 
-			if (ongoing_renderpass->depth_stencil_attachment) {
+			if (ongoing_render_pass->depth_stencil_attachment) {
 				assert(depth_stencil_state && "If a pass has a depth/stencil attachment, you must set the depth/stencil state.");
 
 				records.depth_stencil = true;
@@ -1534,7 +1534,7 @@ namespace vuk {
 				assert(depth_stencil_state->depthBoundsTestEnable == false); // TODO: depth bounds unsupported
 			}
 
-			if (ongoing_renderpass->samples != SampleCountFlagBits::e1) {
+			if (ongoing_render_pass->samples != SampleCountFlagBits::e1) {
 				records.more_than_one_sample = true;
 				pi.extended_size += sizeof(GraphicsPipelineInstanceCreateInfo::Multisample);
 			}
@@ -1573,8 +1573,8 @@ namespace vuk {
 				data_start_ptr = data_ptr = pi.extended_data;
 			}
 			// start writing packed stream
-			if (ongoing_renderpass->subpass > 0) {
-				write<uint8_t>(data_ptr, ongoing_renderpass->subpass);
+			if (ongoing_render_pass->subpass > 0) {
+				write<uint8_t>(data_ptr, ongoing_render_pass->subpass);
 			}
 
 			if (records.vertex_input) {
@@ -1653,7 +1653,7 @@ namespace vuk {
 				write(data_ptr, cs);
 			}
 
-			if (ongoing_renderpass->depth_stencil_attachment) {
+			if (ongoing_render_pass->depth_stencil_attachment) {
 				GraphicsPipelineInstanceCreateInfo::Depth ds = { .depthTestEnable = (bool)depth_stencil_state->depthTestEnable,
 					                                       .depthWriteEnable = (bool)depth_stencil_state->depthWriteEnable,
 					                                       .depthCompareOp = (uint8_t)depth_stencil_state->depthCompareOp };
@@ -1662,8 +1662,8 @@ namespace vuk {
 				// TODO: support depth bounds
 			}
 
-			if (ongoing_renderpass->samples != SampleCountFlagBits::e1) {
-				GraphicsPipelineInstanceCreateInfo::Multisample ms{ .rasterization_samples = (uint32_t)ongoing_renderpass->samples };
+			if (ongoing_render_pass->samples != SampleCountFlagBits::e1) {
+				GraphicsPipelineInstanceCreateInfo::Multisample ms{ .rasterization_samples = (uint32_t)ongoing_render_pass->samples };
 				write(data_ptr, ms);
 			}
 

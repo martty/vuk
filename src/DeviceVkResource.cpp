@@ -868,7 +868,7 @@ namespace vuk {
 				deallocate_graphics_pipelines({ dst.data(), (uint64_t)i });
 				return { expected_error, AllocateException{ res } };
 			}
-			
+
 			ctx->set_name(pipeline, cinfo.base->pipeline_name);
 			dst[i] = { cinfo.base, pipeline, gpci.layout, cinfo.base->layout_info };
 		}
@@ -976,7 +976,6 @@ namespace vuk {
 				return { expected_error, AllocateException{ res } };
 			}
 
-
 			auto handleCount = 1 + miss_count + hit_count + callable_count;
 			uint32_t handleSize = ctx->rt_properties.shaderGroupHandleSize;
 			// The SBT (buffer) need to have starting groups to be aligned and handles in the group to be aligned.
@@ -1054,6 +1053,26 @@ namespace vuk {
 		for (auto& v : src) {
 			deallocate_buffers(std::span{ &v.sbt, 1 });
 			ctx->vkDestroyPipeline(device, v.pipeline, nullptr);
+		}
+	}
+
+	Result<void, AllocateException>
+	DeviceVkResource::allocate_render_passes(std::span<VkRenderPass> dst, std::span<const RenderPassCreateInfo> cis, SourceLocationAtFrame loc) {
+		assert(dst.size() == cis.size());
+		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
+			auto cinfo = cis[i];
+			VkResult res = ctx->vkCreateRenderPass(device, &cinfo, nullptr, &dst[i]);
+			if (res != VK_SUCCESS) {
+				deallocate_render_passes({ dst.data(), (uint64_t)i });
+				return { expected_error, AllocateException{ res } };
+			}
+		}
+		return { expected_value };
+	}
+
+	void DeviceVkResource::deallocate_render_passes(std::span<const VkRenderPass> src) {
+		for (auto& v : src) {
+			ctx->vkDestroyRenderPass(device, v, nullptr);
 		}
 	}
 
@@ -1226,5 +1245,13 @@ namespace vuk {
 	}
 	void DeviceNestedResource::deallocate_ray_tracing_pipelines(std::span<const RayTracingPipelineInfo> src) {
 		upstream->deallocate_ray_tracing_pipelines(src);
+	}
+
+	Result<void, AllocateException>
+	DeviceNestedResource::allocate_render_passes(std::span<VkRenderPass> dst, std::span<const RenderPassCreateInfo> cis, SourceLocationAtFrame loc) {
+		return upstream->allocate_render_passes(dst, cis, loc);
+	}
+	void DeviceNestedResource::deallocate_render_passes(std::span<const VkRenderPass> src) {
+		return upstream->deallocate_render_passes(src);
 	}
 } // namespace vuk

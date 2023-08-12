@@ -130,8 +130,8 @@ vuk::Future util::ImGui_ImplVuk_Render(vuk::Allocator& allocator,
 					                clip_rect.z = (pcmd->ClipRect.z - clip_off.x) * clip_scale.x;
 					                clip_rect.w = (pcmd->ClipRect.w - clip_off.y) * clip_scale.y;
 
-					                auto fb_width = command_buffer.get_ongoing_renderpass().extent.width;
-					                auto fb_height = command_buffer.get_ongoing_renderpass().extent.height;
+					                auto fb_width = command_buffer.get_ongoing_render_pass().extent.width;
+					                auto fb_height = command_buffer.get_ongoing_render_pass().extent.height;
 					                if (clip_rect.x < fb_width && clip_rect.y < fb_height && clip_rect.z >= 0.0f && clip_rect.w >= 0.0f) {
 						                // Negative offsets are illegal for vkCmdSetScissor
 						                if (clip_rect.x < 0.0f)
