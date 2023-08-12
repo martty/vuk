@@ -9,9 +9,9 @@
 
 #include <atomic>
 #include <mutex>
-#include <shared_mutex>
 #include <numeric>
 #include <plf_colony.h>
+#include <shared_mutex>
 
 namespace vuk {
 	struct DeviceSuperFrameResourceImpl {
@@ -146,6 +146,10 @@ namespace vuk {
 		std::vector<VkAccelerationStructureKHR> ass;
 		std::mutex swapchain_mutex;
 		std::vector<VkSwapchainKHR> swapchains;
+		std::mutex pipelines_mutex;
+		std::vector<GraphicsPipelineInfo> graphics_pipes;
+		std::vector<ComputePipelineInfo> compute_pipes;
+		std::vector<RayTracingPipelineInfo> ray_tracing_pipes;
 
 		BufferLinearAllocator linear_cpu_only;
 		BufferLinearAllocator linear_cpu_gpu;
@@ -708,6 +712,31 @@ namespace vuk {
 		vec.insert(vec.end(), src.begin(), src.end());
 	}
 
+	
+	void DeviceSuperFrameResource::deallocate_graphics_pipelines(std::span<const GraphicsPipelineInfo> src) {
+		std::shared_lock _s(impl->new_frame_mutex);
+		auto& f = get_last_frame();
+		std::unique_lock _(f.impl->pipelines_mutex);
+		auto& vec = f.impl->graphics_pipes;
+		vec.insert(vec.end(), src.begin(), src.end());
+	}
+	
+	void DeviceSuperFrameResource::deallocate_compute_pipelines(std::span<const ComputePipelineInfo> src) {
+		std::shared_lock _s(impl->new_frame_mutex);
+		auto& f = get_last_frame();
+		std::unique_lock _(f.impl->pipelines_mutex);
+		auto& vec = f.impl->compute_pipes;
+		vec.insert(vec.end(), src.begin(), src.end());
+	}
+
+	void DeviceSuperFrameResource::deallocate_ray_tracing_pipelines(std::span<const RayTracingPipelineInfo> src) {
+		std::shared_lock _s(impl->new_frame_mutex);
+		auto& f = get_last_frame();
+		std::unique_lock _(f.impl->pipelines_mutex);
+		auto& vec = f.impl->ray_tracing_pipes;
+		vec.insert(vec.end(), src.begin(), src.end());
+	}
+
 	DeviceFrameResource& DeviceSuperFrameResource::get_last_frame() {
 		return impl->frames[impl->frame_counter.load() % frames_in_flight];
 	}
@@ -787,6 +816,9 @@ namespace vuk {
 		}
 
 		upstream->deallocate_descriptor_pools(f.ds_pools_to_destroy);
+		upstream->deallocate_graphics_pipelines(f.graphics_pipes);
+		upstream->deallocate_compute_pipelines(f.compute_pipes);
+		upstream->deallocate_ray_tracing_pipelines(f.ray_tracing_pipes);
 
 		f.semaphores.clear();
 		f.fences.clear();
@@ -818,6 +850,9 @@ namespace vuk {
 		f.swapchains.clear();
 		f.buffers.clear();
 		f.ds_pools_to_destroy.clear();
+		f.graphics_pipes.clear();
+		f.compute_pipes.clear();
+		f.ray_tracing_pipes.clear();
 	}
 
 	void DeviceSuperFrameResource::force_collect() {

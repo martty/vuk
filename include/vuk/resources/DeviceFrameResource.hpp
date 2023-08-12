@@ -125,7 +125,6 @@ namespace vuk {
 	/// Allocations from this resource are tied to the "multi-frame" - all allocations recycled when a DeviceMultiFrameResource is recycled.
 	/// All resources allocated are also deallocated at recycle time - it is not necessary (but not an error) to deallocate them.
 	struct DeviceMultiFrameResource final : DeviceFrameResource {
-
 		Result<void, AllocateException> allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) override;
 
 	private:
@@ -192,6 +191,12 @@ namespace vuk {
 		void deallocate_acceleration_structures(std::span<const VkAccelerationStructureKHR> src) override;
 
 		void deallocate_swapchains(std::span<const VkSwapchainKHR> src) override;
+
+		void deallocate_graphics_pipelines(std::span<const GraphicsPipelineInfo> src) override;
+
+		void deallocate_compute_pipelines(std::span<const ComputePipelineInfo> src) override;
+
+		void deallocate_ray_tracing_pipelines(std::span<const RayTracingPipelineInfo> src) override;
 
 		/// @brief Recycle the least-recently-used frame and return it to be used again
 		/// @return DeviceFrameResource for use

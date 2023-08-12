@@ -1399,6 +1399,8 @@ namespace vuk {
 
 			current_compute_pipeline = ComputePipelineInfo{};
 			allocator->allocate_compute_pipelines(std::span{ &current_compute_pipeline.value(), 1 }, std::span{ &pi, 1 });
+			// drop pipeline immediately
+			allocator->deallocate(std::span{ &current_compute_pipeline.value(), 1 });
 
 			ctx.vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, current_compute_pipeline->pipeline);
 			next_compute_pipeline = nullptr;
@@ -1690,6 +1692,8 @@ namespace vuk {
 			if (!pi.is_inline()) {
 				delete pi.extended_data;
 			}
+			// drop pipeline immediately
+			allocator->deallocate(std::span{ &current_graphics_pipeline.value(), 1 });
 
 			ctx.vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, current_graphics_pipeline->pipeline);
 			next_pipeline = nullptr;
@@ -1729,6 +1733,8 @@ namespace vuk {
 
 			current_ray_tracing_pipeline = RayTracingPipelineInfo{};
 			allocator->allocate_ray_tracing_pipelines(std::span{ &current_ray_tracing_pipeline.value(), 1 }, std::span{ &pi, 1 });
+			// drop pipeline immediately
+			allocator->deallocate(std::span{ &current_ray_tracing_pipeline.value(), 1 });
 
 			ctx.vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, current_ray_tracing_pipeline->pipeline);
 			next_ray_tracing_pipeline = nullptr;
