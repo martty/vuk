@@ -1105,17 +1105,17 @@ namespace vuk {
 		return std::move(current_error);
 	}
 
-	VkCommandBuffer CommandBuffer::bind_compute_pipeline_state() {
+	VkCommandBuffer CommandBuffer::bind_compute_state() {
 		auto result = _bind_compute_pipeline_state();
 		assert(result);
 		return command_buffer;
 	}
-	VkCommandBuffer CommandBuffer::bind_graphics_pipeline_state() {
+	VkCommandBuffer CommandBuffer::bind_graphics_state() {
 		auto result = _bind_graphics_pipeline_state();
 		assert(result);
 		return command_buffer;
 	}
-	VkCommandBuffer CommandBuffer::bind_ray_tracing_pipeline_state() {
+	VkCommandBuffer CommandBuffer::bind_ray_tracing_state() {
 		auto result = _bind_ray_tracing_pipeline_state();
 		assert(result);
 		return command_buffer;

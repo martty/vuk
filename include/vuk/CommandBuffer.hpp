@@ -536,9 +536,9 @@ namespace vuk {
 		/// Actual invocation count will be rounded up to be a multiple of local_size_{x,y,z} after scaling
 		/// Width corresponds to the x-axis, height to the y-axis and depth to the z-axis
 		/// @param name Name of the Image Resource to use for extents
-		/// @param min_invocations_per_pixel_x Invocation count scale in x-axis
-		/// @param min_invocations_per_pixel_y Invocation count scale in y-axis
-		/// @param min_invocations_per_pixel_z Invocation count scale in z-axis
+		/// @param invocations_per_pixel_scale_x Invocation count scale in x-axis
+		/// @param invocations_per_pixel_scale_y Invocation count scale in y-axis
+		/// @param invocations_per_pixel_scale_z Invocation count scale in z-axis
 		CommandBuffer& dispatch_invocations_per_pixel(Name name,
 		                                              float invocations_per_pixel_scale_x = 1.f,
 		                                              float invocations_per_pixel_scale_y = 1.f,
@@ -552,9 +552,9 @@ namespace vuk {
 		/// Actual invocation count will be rounded up to be a multiple of local_size_{x,y,z} after scaling
 		/// Width corresponds to the x-axis, height to the y-axis and depth to the z-axis
 		/// @param ia ImageAttachment to use for extents
-		/// @param min_invocations_per_pixel_x Invocation count scale in x-axis
-		/// @param min_invocations_per_pixel_y Invocation count scale in y-axis
-		/// @param min_invocations_per_pixel_z Invocation count scale in z-axis
+		/// @param invocations_per_pixel_scale_x Invocation count scale in x-axis
+		/// @param invocations_per_pixel_scale_y Invocation count scale in y-axis
+		/// @param invocations_per_pixel_scale_z Invocation count scale in z-axis
 		CommandBuffer& dispatch_invocations_per_pixel(ImageAttachment& ia,
 		                                              float invocations_per_pixel_scale_x = 1.f,
 		                                              float invocations_per_pixel_scale_y = 1.f,
@@ -685,9 +685,13 @@ namespace vuk {
 		[[nodiscard]] Result<void> result();
 
 		// explicit command buffer access
-		[[nodiscard]] VkCommandBuffer bind_compute_pipeline_state();
-		[[nodiscard]] VkCommandBuffer bind_graphics_pipeline_state();
-		[[nodiscard]] VkCommandBuffer bind_ray_tracing_pipeline_state();
+
+		/// @brief Bind all pending compute state and return a raw VkCommandBuffer for direct access
+		[[nodiscard]] VkCommandBuffer bind_compute_state();
+		/// @brief Bind all pending graphics state and return a raw VkCommandBuffer for direct access
+		[[nodiscard]] VkCommandBuffer bind_graphics_state();
+		/// @brief Bind all pending ray tracing state and return a raw VkCommandBuffer for direct access
+		[[nodiscard]] VkCommandBuffer bind_ray_tracing_state();
 
 	protected:
 		enum class PipeType { eGraphics, eCompute, eRayTracing };
@@ -735,6 +739,7 @@ namespace vuk {
 		return static_cast<T*>(_map_scratch_buffer(set, binding, sizeof(T)));
 	}
 
+	/// @brief RAII utility for creating a timed scope on the GPU
 	struct TimedScope {
 		TimedScope(CommandBuffer& cbuf, Query a, Query b) : cbuf(cbuf), a(a), b(b) {
 			cbuf.write_timestamp(a, PipelineStageFlagBits::eBottomOfPipe);
