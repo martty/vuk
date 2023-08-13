@@ -1,7 +1,7 @@
 #pragma once
 
 #include "RenderGraphUtil.hpp"
-#include "RenderPass.hpp"
+#include "vuk/RenderPass.hpp"
 #include "vuk/RelSpan.hpp"
 #include "vuk/RenderGraphReflection.hpp"
 #include "vuk/ShortAlloc.hpp"
@@ -57,6 +57,7 @@ namespace vuk {
 		std::function<void(CommandBuffer&)> execute;
 		std::byte* arguments; // internal use
 		PassType type;
+		PassFlags flags;
 		source_location source;
 	};
 

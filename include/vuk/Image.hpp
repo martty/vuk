@@ -2,7 +2,7 @@
 
 #include <cassert>
 
-#include "../src/CreateInfo.hpp"
+#include "vuk/CreateInfo.hpp"
 #include "Types.hpp"
 
 namespace vuk {

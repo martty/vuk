@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../src/CreateInfo.hpp"
+#include "vuk/CreateInfo.hpp"
 #include "vuk/Config.hpp"
 #include "vuk/vuk_fwd.hpp"
 

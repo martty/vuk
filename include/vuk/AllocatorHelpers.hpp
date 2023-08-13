@@ -2,10 +2,11 @@
 
 #include "vuk/Allocator.hpp"
 #include "vuk/Buffer.hpp"
+#include "vuk/Descriptor.hpp"
 #include "vuk/Exception.hpp"
 #include "vuk/ImageAttachment.hpp"
-#include "vuk/Descriptor.hpp"
 #include "vuk/Query.hpp"
+#include "vuk/RenderPass.hpp"
 #include "vuk/SourceLocation.hpp"
 
 namespace vuk {
@@ -183,5 +184,19 @@ namespace vuk {
 			return { expected_error, res.error() };
 		}
 		return { expected_value, std::move(iv) };
+	}
+
+	/// @brief Allocate a render pass from an Allocator
+	/// @param allocator Allocator to use
+	/// @param ci Render pass parameters
+	/// @param loc Source location information
+	/// @return VkRenderPass in a RAII wrapper (Unique<T>) or AllocateException on error
+	inline Result<Unique<VkRenderPass>, AllocateException>
+	allocate_render_pass(Allocator& allocator, const RenderPassCreateInfo& ci, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
+		Unique<VkRenderPass> img(allocator);
+		if (auto res = allocator.allocate_render_passes(std::span{ &img.get(), 1 }, std::span{ &ci, 1 }, loc); !res) {
+			return { expected_error, res.error() };
+		}
+		return { expected_value, std::move(img) };
 	}
 } // namespace vuk

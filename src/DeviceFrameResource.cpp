@@ -1,11 +1,11 @@
 #include "vuk/resources/DeviceFrameResource.hpp"
 #include "BufferAllocator.hpp"
 #include "Cache.hpp"
-#include "RenderPass.hpp"
 #include "vuk/Context.hpp"
 #include "vuk/Descriptor.hpp"
 #include "vuk/PipelineInstance.hpp"
 #include "vuk/Query.hpp"
+#include "vuk/RenderPass.hpp"
 
 #include <atomic>
 #include <mutex>
@@ -475,7 +475,6 @@ namespace vuk {
 	}
 	void DeviceFrameResource::deallocate_ray_tracing_pipelines(std::span<const RayTracingPipelineInfo> src) {}
 
-	
 	Result<void, AllocateException>
 	DeviceFrameResource::allocate_render_passes(std::span<VkRenderPass> dst, std::span<const RenderPassCreateInfo> cis, SourceLocationAtFrame loc) {
 		auto& sfr = *static_cast<DeviceSuperFrameResource*>(upstream);
@@ -483,7 +482,19 @@ namespace vuk {
 
 		for (uint64_t i = 0; i < dst.size(); i++) {
 			auto& ci = cis[i];
-			dst[i] = sfr.impl->render_pass_cache.acquire(ci, construction_frame);
+			if (ci.pNext == VK_NULL_HANDLE) { // we can only cache unextended RPs for now
+				dst[i] = sfr.impl->render_pass_cache.acquire(ci, construction_frame);
+			} else {
+				auto res = sfr.allocate_render_passes(std::span{ &dst[i], 1 }, std::span{ &ci, 1 }, loc);
+				if (!res) {
+					deallocate_render_passes({ dst.data(), (uint64_t)i });
+					return res;
+				}
+				std::scoped_lock _(impl->render_passes_mutex);
+
+				auto& vec = impl->render_passes;
+				vec.push_back(dst[i]);
+			}
 		}
 
 		return { expected_value };
@@ -741,7 +752,6 @@ namespace vuk {
 		vec.insert(vec.end(), src.begin(), src.end());
 	}
 
-	
 	void DeviceSuperFrameResource::deallocate_graphics_pipelines(std::span<const GraphicsPipelineInfo> src) {
 		std::shared_lock _s(impl->new_frame_mutex);
 		auto& f = get_last_frame();
@@ -749,7 +759,7 @@ namespace vuk {
 		auto& vec = f.impl->graphics_pipes;
 		vec.insert(vec.end(), src.begin(), src.end());
 	}
-	
+
 	void DeviceSuperFrameResource::deallocate_compute_pipelines(std::span<const ComputePipelineInfo> src) {
 		std::shared_lock _s(impl->new_frame_mutex);
 		auto& f = get_last_frame();

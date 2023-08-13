@@ -1,7 +1,7 @@
 #pragma once
 #include "../src/ToIntegral.hpp"
-#include "CreateInfo.hpp"
-#include "RenderPass.hpp"
+#include "vuk/CreateInfo.hpp"
+#include "vuk/RenderPass.hpp"
 #include "vuk/Hash.hpp"
 #include "vuk/Pipeline.hpp"
 #include "vuk/Program.hpp"
@@ -111,33 +111,6 @@ namespace std {
 		size_t operator()(VkViewport const& x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, x.x, x.y, x.width, x.height, x.minDepth, x.maxDepth);
-			return h;
-		}
-	};
-
-	template<>
-	struct hash<VkAttachmentDescription> {
-		size_t operator()(VkAttachmentDescription const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.flags, x.initialLayout, x.finalLayout, x.format, x.loadOp, x.stencilLoadOp, x.storeOp, x.stencilStoreOp, x.samples);
-			return h;
-		}
-	};
-
-	template<>
-	struct hash<VkAttachmentReference> {
-		size_t operator()(VkAttachmentReference const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.attachment, x.layout);
-			return h;
-		}
-	};
-
-	template<>
-	struct hash<VkSubpassDependency> {
-		size_t operator()(VkSubpassDependency const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.dependencyFlags, x.srcAccessMask, x.srcStageMask, x.srcSubpass, x.dstAccessMask, x.dstStageMask, x.dstSubpass);
 			return h;
 		}
 	};

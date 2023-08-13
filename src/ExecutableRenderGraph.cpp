@@ -90,6 +90,9 @@ namespace vuk {
 		}
 		vuk::CommandBuffer::RenderPassInfo rpi;
 		rpi.render_pass = rpass.handle;
+		rpi.framebuffer = rpass.framebuffer;
+		rpi.render_pass_create_info = &rpass.rpci;
+		rpi.framebuffer_create_info = &rpass.fbci;
 		rpi.subpass = (uint32_t)i;
 		rpi.extent = vuk::Extent2D{ rpass.fbci.width, rpass.fbci.height };
 		auto& spdesc = rpass.rpci.subpass_descriptions[i];
@@ -206,7 +209,9 @@ namespace vuk {
 
 			// if render pass is changing and new pass uses one
 			if (pass->render_pass_index != render_pass_index && pass->render_pass_index != -1) {
-				begin_render_pass(ctx, impl->rpis[pass->render_pass_index], cbuf, false);
+				if (!(pass->pass->flags & PassFlagBits::eManualRenderPassBegin)) {
+					begin_render_pass(ctx, impl->rpis[pass->render_pass_index], cbuf, false);
+				}
 			}
 
 			render_pass_index = pass->render_pass_index;

@@ -78,11 +78,24 @@ namespace vuk {
 
 	enum class PassType { eUserPass, eClear, eResolve, eDiverge, eConverge, eForcedAccess };
 
+	/// @brief Flags that control Pass behaviour
+	enum class PassFlagBits {
+		eNone = 0, 
+		/// @brief You are responsible for starting the render pass for Passes that need one
+		eManualRenderPassBegin = 1
+	};
+
+	using PassFlags = Flags<PassFlagBits>;
+
+	inline constexpr PassFlags operator|(PassFlagBits bit0, PassFlagBits bit1) noexcept {
+		return PassFlags(bit0) | bit1;
+	}
+
 	/// @brief Fundamental unit of execution and scheduling. Refers to resources
 	struct Pass {
 		Name name;
 		DomainFlags execute_on = DomainFlagBits::eDevice;
-
+		PassFlags flags = PassFlagBits::eNone;
 		std::vector<Resource> resources;
 
 		std::function<void(CommandBuffer&)> execute;

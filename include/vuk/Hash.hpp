@@ -1,6 +1,9 @@
 #pragma once
 #include <stdint.h>
 #include <string_view>
+#include <vector>
+#include <utility>
+#include "vuk/FixedVector.hpp"
 
 // https://gist.github.com/filsinger/1255697/21762ea83a2d3c17561c8e6a29f44249a4626f9e
 
@@ -54,4 +57,36 @@ inline void hash_combine(size_t& seed, const T& v, Rest&&... rest) noexcept {
 	hash_combine(seed, FWD(rest)...);
 }
 
+namespace std {
+	template<class T>
+	struct hash<std::vector<T>> {
+		size_t operator()(std::vector<T> const& x) const noexcept {
+			size_t h = 0;
+			for (auto& e : x) {
+				hash_combine(h, e);
+			}
+			return h;
+		}
+	};
+
+	template<class T, size_t N>
+	struct hash<vuk::fixed_vector<T, N>> {
+		size_t operator()(vuk::fixed_vector<T, N> const& x) const noexcept {
+			size_t h = 0;
+			for (auto& e : x) {
+				hash_combine(h, e);
+			}
+			return h;
+		}
+	};
+
+	template<class T1, class T2>
+	struct hash<std::pair<T1, T2>> {
+		size_t operator()(std::pair<T1, T2> const& x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, x.first, x.second);
+			return h;
+		}
+	};
+} // namespace std
 #undef FWD

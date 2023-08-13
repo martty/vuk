@@ -1,9 +1,7 @@
 #pragma once
 
-#include "Cache.hpp"
 #include "CreateInfo.hpp"
 #include "vuk/Image.hpp"
-#include "vuk/ShortAlloc.hpp"
 #include "vuk/Types.hpp"
 #include "vuk/vuk_fwd.hpp"
 
@@ -80,6 +78,33 @@ namespace std {
 		size_t operator()(vuk::SubpassDescription const& x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, x.flags, x.pipelineBindPoint);
+			return h;
+		}
+	};
+
+	template<>
+	struct hash<VkAttachmentDescription> {
+		size_t operator()(VkAttachmentDescription const& x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, x.flags, x.initialLayout, x.finalLayout, x.format, x.loadOp, x.stencilLoadOp, x.storeOp, x.stencilStoreOp, x.samples);
+			return h;
+		}
+	};
+
+	template<>
+	struct hash<VkAttachmentReference> {
+		size_t operator()(VkAttachmentReference const& x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, x.attachment, x.layout);
+			return h;
+		}
+	};
+
+	template<>
+	struct hash<VkSubpassDependency> {
+		size_t operator()(VkSubpassDependency const& x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, x.dependencyFlags, x.srcAccessMask, x.srcStageMask, x.srcSubpass, x.dstAccessMask, x.dstStageMask, x.dstSubpass);
 			return h;
 		}
 	};

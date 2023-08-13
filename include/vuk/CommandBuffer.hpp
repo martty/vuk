@@ -153,6 +153,21 @@ namespace vuk {
 	class Allocator;
 
 	class CommandBuffer {
+	public:
+		/// @brief Information about a render pass
+		struct RenderPassInfo {
+			VkRenderPass render_pass;
+			VkFramebuffer framebuffer;
+			RenderPassCreateInfo* render_pass_create_info;
+			FramebufferCreateInfo* framebuffer_create_info;
+			uint32_t subpass;
+			Extent2D extent;
+			SampleCountFlagBits samples;
+			VkAttachmentReference const* depth_stencil_attachment;
+			std::array<QualifiedName, VUK_MAX_COLOR_ATTACHMENTS> color_attachment_names;
+			std::span<const VkAttachmentReference> color_attachments;
+		};
+
 	protected:
 		friend struct RenderGraph;
 		friend struct ExecutableRenderGraph;
@@ -162,15 +177,6 @@ namespace vuk {
 		CommandBufferAllocation command_buffer_allocation;
 		VkCommandBuffer command_buffer;
 
-		struct RenderPassInfo {
-			VkRenderPass render_pass;
-			uint32_t subpass;
-			Extent2D extent;
-			SampleCountFlagBits samples;
-			VkAttachmentReference const* depth_stencil_attachment;
-			std::array<QualifiedName, VUK_MAX_COLOR_ATTACHMENTS> color_attachment_names;
-			std::span<const VkAttachmentReference> color_attachments;
-		};
 		std::optional<RenderPassInfo> ongoing_render_pass;
 		PassInfo* current_pass = nullptr;
 
@@ -236,9 +242,13 @@ namespace vuk {
 		Context& get_context() {
 			return ctx;
 		}
-
+		/// @brief Retrieve the underlying Vulkan command buffer 
 		VkCommandBuffer get_underlying() const {
 			return command_buffer;
+		}
+		/// @brief Retrieve the Allocator used by the command buffer 
+		Allocator& get_allocator() const {
+			return *allocator;
 		}
 		/// @brief Retrieve information about the current renderpass
 		const RenderPassInfo& get_ongoing_render_pass() const;

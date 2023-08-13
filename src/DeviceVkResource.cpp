@@ -1,11 +1,12 @@
 #include "vuk/resources/DeviceVkResource.hpp"
-#include "../src/RenderPass.hpp"
+#include "vuk/RenderPass.hpp"
 #include "vuk/Buffer.hpp"
 #include "vuk/Context.hpp"
 #include "vuk/Exception.hpp"
 #include "vuk/PipelineInstance.hpp"
 #include "vuk/Query.hpp"
 #include "vuk/resources/DeviceNestedResource.hpp"
+#include "../src/ToIntegral.hpp"
 #define VMA_IMPLEMENTATION
 #define VMA_STATIC_VULKAN_FUNCTIONS  0
 #define VMA_DYNAMIC_VULKAN_FUNCTIONS 0

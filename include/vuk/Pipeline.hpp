@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../src/CreateInfo.hpp"
 #include "vuk/Bitset.hpp"
 #include "vuk/Config.hpp"
+#include "vuk/CreateInfo.hpp"
 #include "vuk/Descriptor.hpp"
 #include "vuk/FixedVector.hpp"
 #include "vuk/Hash.hpp"
@@ -32,7 +32,7 @@ namespace vuk {
 		using type = vuk::PipelineLayoutCreateInfo;
 	};
 
-	enum class HitGroupType { 
+	enum class HitGroupType {
 		eTriangles = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR,
 		eProcedural = VK_RAY_TRACING_SHADER_GROUP_TYPE_PROCEDURAL_HIT_GROUP_KHR
 	};
@@ -152,37 +152,6 @@ namespace vuk {
 } // namespace vuk
 
 namespace std {
-	template<class T>
-	struct hash<std::vector<T>> {
-		size_t operator()(std::vector<T> const& x) const noexcept {
-			size_t h = 0;
-			for (auto& e : x) {
-				hash_combine(h, e);
-			}
-			return h;
-		}
-	};
-
-	template<class T, size_t N>
-	struct hash<vuk::fixed_vector<T, N>> {
-		size_t operator()(vuk::fixed_vector<T, N> const& x) const noexcept {
-			size_t h = 0;
-			for (auto& e : x) {
-				hash_combine(h, e);
-			}
-			return h;
-		}
-	};
-
-	template<class T1, class T2>
-	struct hash<std::pair<T1, T2>> {
-		size_t operator()(std::pair<T1, T2> const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.first, x.second);
-			return h;
-		}
-	};
-
 	template<>
 	struct hash<vuk::ShaderSource> {
 		size_t operator()(vuk::ShaderSource const& x) const noexcept;

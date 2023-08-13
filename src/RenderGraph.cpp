@@ -46,6 +46,7 @@ namespace vuk {
 		impl->resources.insert(impl->resources.end(), p.resources.begin(), p.resources.end());
 		pw.resources.offset1 = impl->resources.size();
 		pw.type = p.type;
+		pw.flags = p.flags;
 		pw.source = std::move(source);
 		impl->passes.emplace_back(std::move(pw));
 	}

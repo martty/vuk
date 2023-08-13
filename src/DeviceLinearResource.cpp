@@ -1,6 +1,6 @@
 #include "vuk/resources/DeviceLinearResource.hpp"
 #include "BufferAllocator.hpp"
-#include "RenderPass.hpp"
+#include "vuk/RenderPass.hpp"
 #include "vuk/Context.hpp"
 #include "vuk/Descriptor.hpp"
 #include "vuk/Query.hpp"
