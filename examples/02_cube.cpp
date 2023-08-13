@@ -3,6 +3,8 @@
 #include <glm/gtx/quaternion.hpp>
 #include <glm/mat4x4.hpp>
 
+#include "vuk/RenderPass.hpp"
+
 /* 02_cube
  * In this example we will draw a cube, still with a single attachment, but using vertex, index and uniform buffers.
  * The cube will spin around its Y axis, which we will achieve by changing the model matrix each frame.
@@ -67,8 +69,26 @@ namespace {
 		      rg.add_pass(
 		          { // For this example, only a color image is needed to write to (our framebuffer)
 		            // The name is declared, and the way it will be used in the pass (color attachment - write)
+		            .flags = { vuk::PassFlagBits::eManualRenderPassBegin },
 		            .resources = { "02_cube"_image >> vuk::eColorWrite >> "02_cube_final" },
 		            .execute = [uboVP](vuk::CommandBuffer& command_buffer) {
+			            // get information about render pass vuk would've started for us
+			            const vuk::CommandBuffer::RenderPassInfo& rp_info = command_buffer.get_ongoing_render_pass();
+						// modify the renderpass create info to include a pNext
+			            vuk::RenderPassCreateInfo rpci = *rp_info.render_pass_create_info;
+			            VkRenderPassMultiviewCreateInfo multiview_ci{ VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO };
+			            multiview_ci.subpassCount = 1;
+			            rpci.pNext = &multiview_ci;
+						// create a new render pass
+			            VkRenderPass rp = **allocate_render_pass(command_buffer.get_allocator(), rpci);
+			            // do the render pass begin ourselves
+			            VkRenderPassBeginInfo rbi{ .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
+			            rbi.renderPass = rp;
+			            rbi.framebuffer = rp_info.framebuffer;
+			            rbi.renderArea = VkRect2D{ vuk::Offset2D{}, vuk::Extent2D{ rp_info.extent.width, rp_info.extent.height } };
+			            auto vkcbuf = command_buffer.get_underlying();
+			            auto& ctx = command_buffer.get_context();
+			            ctx.vkCmdBeginRenderPass(vkcbuf, &rbi, VK_SUBPASS_CONTENTS_INLINE);
 			            command_buffer
 			                // In vuk, all pipeline state (with the exception of the shaders) come from the command buffer
 			                // Such state can be requested to be dynamic - dynamic state does not form part of the pipeline key, and hence cheap to change
