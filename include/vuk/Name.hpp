@@ -34,7 +34,7 @@ namespace vuk {
 		}
 
 	private:
-		static constexpr const char invalid_value[] = "INVALID";
+		static constexpr const char invalid_value[] = "UNNAMED";
 		const char* id = invalid_value;
 
 		friend struct std::hash<vuk::Name>;
