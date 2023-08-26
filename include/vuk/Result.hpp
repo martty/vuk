@@ -137,47 +137,65 @@ namespace vuk {
 		}
 
 		[[nodiscard]] T* operator->() {
-			assert(_holds_value && "cannot call operator-> on Result that does not hold a value");
+			if (!_holds_value) {
+				_error->throw_this();
+			}
 			return &_value;
 		}
 
 		[[nodiscard]] T const* operator->() const {
-			assert(_holds_value && "cannot call operator-> on Result that does not hold a value");
+			if (!_holds_value) {
+				_error->throw_this();
+			}
 			return &_value;
 		}
 
 		[[nodiscard]] T& operator*() & {
-			assert(_holds_value && "cannot call operator* on Result that does not hold a value");
+			if (!_holds_value) {
+				_error->throw_this();
+			}
 			return _value;
 		}
 
 		[[nodiscard]] T const& operator*() const& {
-			assert(_holds_value && "cannot call operator* on Result that does not hold a value");
+			if (!_holds_value) {
+				_error->throw_this();
+			}
 			return _value;
 		}
 
 		[[nodiscard]] T&& operator*() && {
-			assert(_holds_value && "cannot call operator* on Result that does not hold a value");
+			if (!_holds_value) {
+				_error->throw_this();
+			}
 			return MOV(_value);
 		}
 
 		[[nodiscard]] T const&& operator*() const&& {
-			assert(_holds_value && "cannot call operator* on Result that does not hold a value");
+			if (!_holds_value) {
+				_error->throw_this();
+			}
 			return _value;
 		}
 
 		[[nodiscard]] T& value() & {
-			assert(_holds_value && "cannot call value() on Result that does not hold a value");
+			if (!_holds_value) {
+				_error->throw_this();
+			}
 			return _value;
 		}
 
 		[[nodiscard]] T const& value() const& {
-			assert(_holds_value && "cannot call value() on Result that does not hold a value");
+			if (!_holds_value) {
+				_error->throw_this();
+			}
 			return _value;
 		}
 
 		[[nodiscard]] T&& value() && {
-			assert(_holds_value && "cannot call value() on Result that does not hold a value");
+			if (!_holds_value) {
+				_error->throw_this();
+			}
 			return MOV(_value);
 		}
 
