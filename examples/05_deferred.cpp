@@ -28,16 +28,16 @@ namespace {
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator) {
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
-			      pci.add_glsl(util::read_entire_file((root / "examples/deferred.vert").generic_string()), VUK_EX_PATH_TO_ROOT "examples/deferred.vert");
-			      pci.add_glsl(util::read_entire_file((root / "examples/deferred.frag").generic_string()), VUK_EX_PATH_TO_ROOT "examples/deferred.frag");
+			      pci.add_glsl(util::read_entire_file((root / "examples/deferred.vert").generic_string()), (root / "examples/deferred.vert").generic_string());
+			      pci.add_glsl(util::read_entire_file((root / "examples/deferred.frag").generic_string()), (root / "examples/deferred.frag").generic_string());
 			      runner.context->create_named_pipeline("cube_deferred", pci);
 		      }
 
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
-			      pci.add_glsl(util::read_entire_file((root / "examples/fullscreen.vert").generic_string()), VUK_EX_PATH_TO_ROOT "examples/fullscreen.vert");
+			      pci.add_glsl(util::read_entire_file((root / "examples/fullscreen.vert").generic_string()), (root / "examples/fullscreen.vert").generic_string());
 			      pci.add_glsl(util::read_entire_file((root / "examples/deferred_resolve.frag").generic_string()),
-			                   VUK_EX_PATH_TO_ROOT "examples/deferred_resolve.frag");
+			                   (root / "examples/deferred_resolve.frag").generic_string());
 			      runner.context->create_named_pipeline("deferred_resolve", pci);
 		      }
 

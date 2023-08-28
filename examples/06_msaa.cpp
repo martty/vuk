@@ -27,9 +27,9 @@ namespace {
 		      // This is a good option is if you don't want to ship shaderc or if you are caching or have your sl -> spirv pipeline
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
-			      pci.add_spirv(util::read_spirv((root / "examples/ubo_test_tex.vert.spv").generic_string()), VUK_EX_PATH_TO_ROOT "examples/ubo_test_tex.vert");
+			      pci.add_spirv(util::read_spirv((root / "examples/ubo_test_tex.vert.spv").generic_string()), (root / "examples/ubo_test_tex.vert").generic_string());
 			      pci.add_spirv(util::read_spirv((root / "examples/triangle_depthshaded_tex.frag.spv").generic_string()),
-			                    VUK_EX_PATH_TO_ROOT "examples/triangle_depthshaded_text.frag");
+			                    (root / "examples/triangle_depthshaded_text.frag").generic_string());
 			      runner.context->create_named_pipeline("textured_cube", pci);
 		      }
 

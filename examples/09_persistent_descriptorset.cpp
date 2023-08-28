@@ -38,9 +38,8 @@ namespace {
 		      vuk::Context& ctx = allocator.get_context();
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
-			      pci.add_glsl(util::read_entire_file((root / "examples/bindless.vert").generic_string()), VUK_EX_PATH_TO_ROOT "examples/bindless.vert");
-			      pci.add_glsl(util::read_entire_file((root / "examples/triangle_tex_bindless.frag").generic_string()),
-			                   VUK_EX_PATH_TO_ROOT "examples/triangle_tex_bindless.frag");
+			      pci.add_glsl(util::read_entire_file((root / "examples/bindless.vert").generic_string()), (root / "examples/bindless.vert").generic_string());
+			      pci.add_glsl(util::read_entire_file((root / "examples/triangle_tex_bindless.frag").generic_string()), (root / "examples/triangle_tex_bindless.frag").generic_string());
 			      // Flag this binding as partially bound, so that we don't need to set all the array elements
 			      pci.set_binding_flags(1, 0, vuk::DescriptorBindingFlagBits::ePartiallyBound);
 			      // Set the binding #0 in set #1 as a variable count binding, and set the maximum number of descriptors
@@ -51,7 +50,7 @@ namespace {
 		      // creating a compute pipeline that inverts an image
 		      {
 			      vuk::PipelineBaseCreateInfo pbci;
-			      pbci.add_glsl(util::read_entire_file((root / "examples/invert.comp").generic_string()), VUK_EX_PATH_TO_ROOT "examples/invert.comp");
+			      pbci.add_glsl(util::read_entire_file((root / "examples/invert.comp").generic_string()), "examples/invert.comp");
 			      runner.context->create_named_pipeline("invert", pbci);
 		      }
 
@@ -95,20 +94,24 @@ namespace {
 		                                   "09_v1"_image >> vuk::eTransferWrite,
 		                                   "09_v2"_image >> vuk::eComputeWrite },
 		                    .execute = [x, y](vuk::CommandBuffer& command_buffer) {
-			// For the first image, flip the image on the Y axis using a blit
-			vuk::ImageBlit blit;
-			blit.srcSubresource.aspectMask = vuk::ImageAspectFlagBits::eColor;
-			blit.srcSubresource.baseArrayLayer = 0;
-			blit.srcSubresource.layerCount = 1;
-			blit.srcSubresource.mipLevel = 0;
-			blit.srcOffsets[0] = vuk::Offset3D{ 0, 0, 0 };
-			blit.srcOffsets[1] = vuk::Offset3D{ x, y, 1 };
-			blit.dstSubresource = blit.srcSubresource;
-			blit.dstOffsets[0] = vuk::Offset3D{ x, y, 0 };
-			blit.dstOffsets[1] = vuk::Offset3D{ 0, 0, 1 };
-			command_buffer.blit_image("09_doge", "09_v1", blit, vuk::Filter::eLinear);
-			// For the second image, invert the colours in compute
-			command_buffer.bind_image(0, 0, "09_doge").bind_sampler(0, 0, {}).bind_image(0, 1, "09_v2").bind_compute_pipeline("invert").dispatch_invocations(x, y);
+			                    // For the first image, flip the image on the Y axis using a blit
+			                    vuk::ImageBlit blit;
+			                    blit.srcSubresource.aspectMask = vuk::ImageAspectFlagBits::eColor;
+			                    blit.srcSubresource.baseArrayLayer = 0;
+			                    blit.srcSubresource.layerCount = 1;
+			                    blit.srcSubresource.mipLevel = 0;
+			                    blit.srcOffsets[0] = vuk::Offset3D{ 0, 0, 0 };
+			                    blit.srcOffsets[1] = vuk::Offset3D{ x, y, 1 };
+			                    blit.dstSubresource = blit.srcSubresource;
+			                    blit.dstOffsets[0] = vuk::Offset3D{ x, y, 0 };
+			                    blit.dstOffsets[1] = vuk::Offset3D{ 0, 0, 1 };
+			                    command_buffer.blit_image("09_doge", "09_v1", blit, vuk::Filter::eLinear);
+			                    // For the second image, invert the colours in compute
+			                    command_buffer.bind_image(0, 0, "09_doge")
+			                        .bind_sampler(0, 0, {})
+			                        .bind_image(0, 1, "09_v2")
+			                        .bind_compute_pipeline("invert")
+			                        .dispatch_invocations(x, y);
 		                    } });
 		      // Bind the resources for the variant generation
 		      // We specify the initial and final access

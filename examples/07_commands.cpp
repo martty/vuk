@@ -32,9 +32,10 @@ namespace {
 		      // Same setup as for 04_texture
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
-			      pci.add_glsl(util::read_entire_file((root / "examples/ubo_test_tex.vert").generic_string()), VUK_EX_PATH_TO_ROOT "examples/ubo_test_tex.vert");
+			      pci.add_glsl(util::read_entire_file((root / "examples/ubo_test_tex.vert").generic_string()),
+			                   (root / "examples/ubo_test_tex.vert").generic_string());
 			      pci.add_glsl(util::read_entire_file((root / "examples/triangle_depthshaded_tex.frag").generic_string()),
-			                   VUK_EX_PATH_TO_ROOT "examples/triangle_depthshaded_text.frag");
+			                   (root / "examples/triangle_depthshaded_text.frag").generic_string());
 			      runner.context->create_named_pipeline("textured_cube", pci);
 		      }
 

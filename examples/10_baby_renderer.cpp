@@ -101,7 +101,7 @@ namespace {
 		      // Creating a compute pipeline that inverts an image
 		      {
 			      vuk::PipelineBaseCreateInfo pbci;
-			      pbci.add_glsl(util::read_entire_file((root /  "examples/invert.comp").generic_string()), VUK_EX_PATH_TO_ROOT "examples/invert.comp");
+			      pbci.add_glsl(util::read_entire_file((root / "examples/invert.comp").generic_string()), (root / "examples/invert.comp").generic_string());
 			      runner.context->create_named_pipeline("invert", pbci);
 		      }
 		      vuk::ImageCreateInfo ici;
@@ -186,9 +186,8 @@ namespace {
 		      vuk::PipelineBaseInfo* pipe1;
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
-			      pci.add_glsl(util::read_entire_file((root / "examples/baby_renderer.vert").generic_string()), VUK_EX_PATH_TO_ROOT "examples/baby_renderer.vert");
-			      pci.add_glsl(util::read_entire_file((root / "examples/triangle_depthshaded_tex.frag").generic_string()),
-			                   VUK_EX_PATH_TO_ROOT "examples/triangle_depthshaded_tex.frag");
+			      pci.add_glsl(util::read_entire_file((root / "examples/baby_renderer.vert").generic_string()), (root / "examples/baby_renderer.vert").generic_string());
+			      pci.add_glsl(util::read_entire_file((root / "examples/triangle_depthshaded_tex.frag").generic_string()), (root / "examples/triangle_depthshaded_tex.frag").generic_string());
 			      pipe1 = runner.context->get_pipeline(pci);
 		      }
 
@@ -196,9 +195,8 @@ namespace {
 		      vuk::PipelineBaseInfo* pipe2;
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
-			      pci.add_glsl(util::read_entire_file((root / "examples/baby_renderer.vert").generic_string()), VUK_EX_PATH_TO_ROOT "examples/baby_renderer.vert");
-			      pci.add_glsl(util::read_entire_file((root / "examples/triangle_tinted_tex.frag").generic_string()),
-			                   VUK_EX_PATH_TO_ROOT "examples/triangle_tinted_tex.frag");
+			      pci.add_glsl(util::read_entire_file((root / "examples/baby_renderer.vert").generic_string()), (root / "examples/baby_renderer.vert").generic_string());
+			      pci.add_glsl(util::read_entire_file((root / "examples/triangle_tinted_tex.frag").generic_string()), (root / "examples/triangle_tinted_tex.frag").generic_string());
 			      pipe2 = runner.context->get_pipeline(pci);
 		      }
 

@@ -23,15 +23,15 @@ namespace {
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator) {
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
-			      pci.add_glsl(util::read_entire_file((root / "examples/triangle.vert").generic_string()), VUK_EX_PATH_TO_ROOT "examples/triangle.vert");
-			      pci.add_glsl(util::read_entire_file((root / "examples/triangle.frag").generic_string()), VUK_EX_PATH_TO_ROOT "examples/triangle.frag");
+			      pci.add_glsl(util::read_entire_file((root / "examples/triangle.vert").generic_string()), (root / "examples/triangle.vert").generic_string());
+			      pci.add_glsl(util::read_entire_file((root / "examples/triangle.frag").generic_string()), (root / "examples/triangle.frag").generic_string());
 			      runner.context->create_named_pipeline("triangle", pci);
 		      }
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
-			      pci.add_glsl(util::read_entire_file((root / "examples/ubo_test.vert").generic_string()), VUK_EX_PATH_TO_ROOT "examples/ubo_test.vert");
+			      pci.add_glsl(util::read_entire_file((root / "examples/ubo_test.vert").generic_string()), (root / "examples/ubo_test.vert").generic_string());
 			      pci.add_glsl(util::read_entire_file((root / "examples/triangle_depthshaded.frag").generic_string()),
-			                   VUK_EX_PATH_TO_ROOT "examples/triangle_depthshaded.frag");
+			                   (root / "examples/triangle_depthshaded.frag").generic_string());
 			      runner.context->create_named_pipeline("cube", pci);
 		      }
 
@@ -64,15 +64,16 @@ namespace {
 
 		      // In this example we want to use this resource after our write, but resource names are consumed by writes
 		      // To be able to refer to this resource with the write completed, we assign it a new name ("03_multipass+")
-		      rg.add_pass(
-		          { .name = "pass0", .resources = { "03_multipass"_image >> vuk::eColorWrite >> "03_multipass+" }, .execute = [&](vuk::CommandBuffer& command_buffer) {
-			                   command_buffer.set_viewport(0, vuk::Rect2D::relative(0, 0, 0.2f, 0.2f))
-			                       .set_scissor(0, vuk::Rect2D::relative(0, 0, 0.2f, 0.2f))
-			                       .set_rasterization({})     // Set the default rasterization state
-			                       .broadcast_color_blend({}) // Set the default color blend state
-			                       .bind_graphics_pipeline("triangle")
-			                       .draw(3, 1, 0, 0);
-		                   } });
+		      rg.add_pass({ .name = "pass0",
+		                    .resources = { "03_multipass"_image >> vuk::eColorWrite >> "03_multipass+" },
+		                    .execute = [&](vuk::CommandBuffer& command_buffer) {
+			                    command_buffer.set_viewport(0, vuk::Rect2D::relative(0, 0, 0.2f, 0.2f))
+			                        .set_scissor(0, vuk::Rect2D::relative(0, 0, 0.2f, 0.2f))
+			                        .set_rasterization({})     // Set the default rasterization state
+			                        .broadcast_color_blend({}) // Set the default color blend state
+			                        .bind_graphics_pipeline("triangle")
+			                        .draw(3, 1, 0, 0);
+		                    } });
 
 		      // Add a pass to draw a triangle (from the first example) into the bottom right corner
 
@@ -118,7 +119,7 @@ namespace {
 		      // In this case, the depth attachment is an "internal" attachment:
 		      // we don't provide an input texture, nor do we want to save the results later
 		      // This depth attachment will have extents matching the framebuffer (deduced from the color attachment)
-			  // but we will need to provide the format
+		      // but we will need to provide the format
 		      rg.attach_and_clear_image("03_depth", { .format = vuk::Format::eD32Sfloat }, vuk::ClearDepthStencil{ 1.0f, 0 });
 
 		      return vuk::Future{ std::make_unique<vuk::RenderGraph>(std::move(rg)), "03_multipass_final" };

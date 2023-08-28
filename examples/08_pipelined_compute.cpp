@@ -36,22 +36,22 @@ namespace {
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator) {
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
-			      pci.add_glsl(util::read_entire_file((root / "examples/fullscreen.vert").generic_string()), VUK_EX_PATH_TO_ROOT "examples/fullscreen.vert");
-			      pci.add_glsl(util::read_entire_file((root / "examples/rtt.frag").generic_string()), VUK_EX_PATH_TO_ROOT "examples/rtt.frag");
+			      pci.add_glsl(util::read_entire_file((root / "examples/fullscreen.vert").generic_string()), (root / "examples/fullscreen.vert").generic_string());
+			      pci.add_glsl(util::read_entire_file((root / "examples/rtt.frag").generic_string()), (root / "examples/rtt.frag").generic_string());
 			      runner.context->create_named_pipeline("rtt", pci);
 		      }
 
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
-			      pci.add_glsl(util::read_entire_file((root / "examples/fullscreen.vert").generic_string()), VUK_EX_PATH_TO_ROOT "examples/fullscreen.vert");
-			      pci.add_glsl(util::read_entire_file((root / "examples/scrambled_draw.frag").generic_string()), VUK_EX_PATH_TO_ROOT "examples/scrambled_draw.frag");
+			      pci.add_glsl(util::read_entire_file((root / "examples/fullscreen.vert").generic_string()), (root / "examples/fullscreen.vert").generic_string());
+			      pci.add_glsl(util::read_entire_file((root / "examples/scrambled_draw.frag").generic_string()), (root / "examples/scrambled_draw.frag").generic_string());
 			      runner.context->create_named_pipeline("scrambled_draw", pci);
 		      }
 
 		      // creating a compute pipeline is the same as creating a graphics pipeline
 		      {
 			      vuk::PipelineBaseCreateInfo pbci;
-			      pbci.add_glsl(util::read_entire_file((root / "examples/stupidsort.comp").generic_string()), VUK_EX_PATH_TO_ROOT "examples/stupidsort.comp");
+			      pbci.add_glsl(util::read_entire_file((root / "examples/stupidsort.comp").generic_string()), "examples/stupidsort.comp");
 			      runner.context->create_named_pipeline("stupidsort", pbci);
 		      }
 

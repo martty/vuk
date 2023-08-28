@@ -81,22 +81,23 @@ namespace {
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator) {
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
-			      pci.add_glsl(util::read_entire_file((root / "examples/deferred.vert").generic_string()), "deferred.vert");
-			      pci.add_glsl(util::read_entire_file((root / "examples/deferred_reflective.frag").generic_string()), "deferred_reflective.frag");
+			      pci.add_glsl(util::read_entire_file((root / "examples/deferred.vert").generic_string()), (root / "deferred.vert").generic_string());
+			      pci.add_glsl(util::read_entire_file((root / "examples/deferred_reflective.frag").generic_string()),
+			                   (root / "deferred_reflective.frag").generic_string());
 			      runner.context->create_named_pipeline("cube_deferred_reflective", pci);
 		      }
 
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
-			      pci.add_glsl(util::read_entire_file((root / "examples/fullscreen.vert").generic_string()), "fullscreen.vert");
-			      pci.add_glsl(util::read_entire_file((root / "examples/deferred_resolve.frag").generic_string()), "deferred_resolve.frag");
+			      pci.add_glsl(util::read_entire_file((root / "examples/fullscreen.vert").generic_string()), (root / "fullscreen.vert").generic_string());
+			      pci.add_glsl(util::read_entire_file((root / "examples/deferred_resolve.frag").generic_string()), (root / "deferred_resolve.frag").generic_string());
 			      runner.context->create_named_pipeline("deferred_resolve", pci);
 		      }
 
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
-			      pci.add_glsl(util::read_entire_file((root / "examples/fullscreen.vert").generic_string()), "fullscreen.vert");
-			      pci.add_glsl(util::read_entire_file((root / "examples/fxaa.frag").generic_string()), "fxaa.frag");
+			      pci.add_glsl(util::read_entire_file((root / "examples/fullscreen.vert").generic_string()), (root / "fullscreen.vert").generic_string());
+			      pci.add_glsl(util::read_entire_file((root / "examples/fxaa.frag").generic_string()), (root / "fxaa.frag").generic_string());
 			      runner.context->create_named_pipeline("fxaa", pci);
 		      }
 
@@ -128,9 +129,9 @@ namespace {
 
 		      vuk::PipelineBaseCreateInfo equirectangular_to_cubemap;
 		      equirectangular_to_cubemap.add_glsl(util::read_entire_file((root / "examples/cubemap.vert").generic_string()),
-		                                          VUK_EX_PATH_TO_ROOT "examples/cubemap.vert");
+		                                          (root / "examples/cubemap.vert").generic_string());
 		      equirectangular_to_cubemap.add_glsl(util::read_entire_file((root / "examples/equirectangular_to_cubemap.frag").generic_string()),
-		                                          VUK_EX_PATH_TO_ROOT "examples/equirectangular_to_cubemap.frag");
+		                                          (root / "examples/equirectangular_to_cubemap.frag").generic_string());
 		      runner.context->create_named_pipeline("equirectangular_to_cubemap", equirectangular_to_cubemap);
 
 		      // make cubemap by rendering to individual faces - we use a layered framebuffer to achieve this

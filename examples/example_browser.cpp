@@ -183,7 +183,8 @@ void vuk::ExampleRunner::render() {
 }
 
 int main(int argc, char** argv) {
-	root = std::filesystem::canonical(std::filesystem::path(argv[0]).parent_path() / VUK_EX_PATH_TO_ROOT);
+	auto path_to_root = std::filesystem::relative(VUK_EX_PATH_ROOT, VUK_EX_PATH_TGT);
+	root = std::filesystem::canonical(std::filesystem::path(argv[0]).parent_path() / path_to_root);
 	// very simple error handling in the example framework: we don't check for errors and just let them be converted into exceptions that are caught at top level
 	try {
 		vuk::ExampleRunner::get_runner().setup();
