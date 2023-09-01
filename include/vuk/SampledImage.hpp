@@ -5,12 +5,6 @@
 #include <optional>
 
 namespace vuk {
-	// a stable Name that can refer to an arbitrary subgraph Name
-	struct NameReference {
-		struct RenderGraph* rg;
-		QualifiedName name;
-	};
-
 	// high level type around binding a sampled image with a sampler
 	struct SampledImage {
 		struct Global {

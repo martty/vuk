@@ -219,11 +219,17 @@ VkShaderStageFlagBits vuk::Program::introspect(const uint32_t* ir, size_t word_c
 		for (auto& sb : resources.stage_inputs) {
 			auto type = refl.get_type(sb.type_id);
 			auto location = refl.get_decoration(sb.id, spv::DecorationLocation);
-			Attribute a;
-			a.location = location;
-			a.name = sb.name.c_str();
-			a.type = to_type(type);
-			attributes.push_back(a);
+			unsigned count = 1;
+			if (type.array.size() > 0) {
+				count = type.array[0];
+			}
+			for (uint32_t i = 0; i < count; i++) {
+				Attribute a;
+				a.location = location + i;
+				a.name = sb.name.c_str();
+				a.type = to_type(type);
+				attributes.push_back(a);
+			}
 		}
 	}
 	// uniform buffers

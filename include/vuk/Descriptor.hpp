@@ -1,5 +1,6 @@
 #pragma once
 
+#include "vuk/Bitset.hpp"
 #include "vuk/Config.hpp"
 #include "vuk/Hash.hpp"
 #include "vuk/Image.hpp"
@@ -7,7 +8,6 @@
 #include "vuk/vuk_fwd.hpp"
 
 #include <array>
-#include <bitset>
 #include <cassert>
 #include <span>
 #include <string.h>
@@ -173,17 +173,17 @@ namespace vuk {
 #pragma pack(pop)
 
 	struct SetBinding {
-		std::bitset<VUK_MAX_BINDINGS> used = {};
-		std::array<DescriptorBinding, VUK_MAX_BINDINGS> bindings;
+		Bitset<VUK_MAX_BINDINGS> used = {};
+		DescriptorBinding bindings[VUK_MAX_BINDINGS];
 		DescriptorSetLayoutAllocInfo* layout_info = nullptr;
 		uint64_t hash = 0;
 
-		SetBinding finalize(std::bitset<VUK_MAX_BINDINGS> used_mask);
+		SetBinding finalize(Bitset<VUK_MAX_BINDINGS> used_mask);
 
 		bool operator==(const SetBinding& o) const noexcept {
 			if (layout_info != o.layout_info)
 				return false;
-			return memcmp(bindings.data(), o.bindings.data(), VUK_MAX_BINDINGS * sizeof(DescriptorBinding)) == 0;
+			return memcmp(bindings, o.bindings, VUK_MAX_BINDINGS * sizeof(DescriptorBinding)) == 0;
 		}
 	};
 
@@ -191,8 +191,8 @@ namespace vuk {
 		VkDescriptorSetLayoutCreateInfo dslci = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
 		size_t index;                                     // index of the descriptor set when used in a pipeline layout
 		std::vector<VkDescriptorSetLayoutBinding> bindings;
-		std::bitset<VUK_MAX_BINDINGS> used_bindings = {}; // used for ephemeral desc sets
-		std::bitset<VUK_MAX_BINDINGS> optional = {};
+		Bitset<VUK_MAX_BINDINGS> used_bindings = {}; // used for ephemeral desc sets
+		Bitset<VUK_MAX_BINDINGS> optional = {};
 		std::vector<VkDescriptorBindingFlags> flags;
 
 		bool operator==(const DescriptorSetLayoutCreateInfo& o) const noexcept {

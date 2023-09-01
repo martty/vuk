@@ -2,6 +2,7 @@
 #include "vuk/Allocator.hpp"
 #include "vuk/Result.hpp"
 #include "vuk/SourceLocation.hpp"
+#include <iostream>
 
 // Aligns given value down to nearest multiply of align value. For example: VmaAlignUp(11, 8) = 8.
 // Use types like uint32_t, uint64_t as T.
@@ -129,7 +130,7 @@ namespace vuk {
 		auto& current_alloc = used_allocations[base_buffer];
 		auto offset = base - current_alloc.base_address;
 		Buffer b = current_alloc.buffer;
-		b.offset = offset;
+		b.offset += offset;
 		b.size = size;
 		b.mapped_ptr = b.mapped_ptr != nullptr ? b.mapped_ptr + offset : nullptr;
 		b.device_address = b.device_address != 0 ? b.device_address + offset : 0;
@@ -154,7 +155,9 @@ namespace vuk {
 		std::lock_guard _(mutex);
 		for (size_t i = 0; i < available_allocation_count; i++) {
 			auto& alloc = available_allocations[i];
-			upstream->deallocate_buffers(std::span{ &alloc.buffer, 1 });
+			if (alloc.num_blocks > 0) {
+				upstream->deallocate_buffers(std::span{ &alloc.buffer, 1 });
+			}
 		}
 		available_allocation_count = 0;
 	}
@@ -166,7 +169,7 @@ namespace vuk {
 	void BufferLinearAllocator::free() {
 		for (size_t i = 0; i < used_allocation_count; i++) {
 			auto& buf = used_allocations[i].buffer;
-			if (buf) {
+			if (buf && used_allocations[i].num_blocks > 0) {
 				upstream->deallocate_buffers(std::span{ &buf, 1 });
 			}
 		}
@@ -174,7 +177,7 @@ namespace vuk {
 
 		for (size_t i = 0; i < available_allocation_count; i++) {
 			auto& buf = available_allocations[i].buffer;
-			if (buf) {
+			if (buf && available_allocations[i].num_blocks > 0) {
 				upstream->deallocate_buffers(std::span{ &buf, 1 });
 			}
 		}
@@ -182,75 +185,81 @@ namespace vuk {
 		available_allocation_count = 0;
 	}
 
-	Result<void, AllocateException> BufferSubAllocator::grow(size_t size, size_t alignment, SourceLocationAtFrame source) {
-		BufferBlock alloc;
-		BufferCreateInfo bci{ .mem_usage = mem_usage, .size = size, .alignment = alignment };
-		auto result = upstream->allocate_buffers(std::span{ &alloc.buffer, 1 }, std::span{ &bci, 1 }, source);
-		if (!result) {
-			return result;
-		}
-
-		VmaVirtualBlockCreateInfo vbci{};
-		vbci.size = size;
-		auto result2 = vmaCreateVirtualBlock(&vbci, &alloc.block);
-		if (!result2) {
-			return { expected_error, AllocateException(result2) };
-		}
-
-		blocks.push_back(alloc);
-		return { expected_value };
-	}
-
 	Result<Buffer, AllocateException> BufferSubAllocator::allocate_buffer(size_t size, size_t alignment, SourceLocationAtFrame source) {
-		if (blocks.size() == 0) {
-			auto result = grow(size, alignment, source);
-			if (!result) {
-				return result;
-			}
-		}
-		VmaVirtualAllocationCreateInfo vaci{};
-		vaci.size = size;
-		vaci.alignment = alignment;
-
+		std::lock_guard _(mutex);
+		
+		
 		VmaVirtualAllocation va;
 		VkDeviceSize offset;
+		VmaVirtualAllocationCreateInfo vaci{};
+		vaci.size = size + alignment;
+		vaci.alignment = 0; // VMA does not handle NPOT alignment
 
-		auto result = vmaVirtualAllocate(blocks.back().block, &vaci, &va, &offset);
-		if (result == VK_ERROR_OUT_OF_DEVICE_MEMORY) {
-			auto result = grow(size, alignment, source);
+		std::vector<VmaVirtualAllocation> straddlers;
+		bool is_straddling = true;
+		while (is_straddling) {
+			auto result = vmaVirtualAllocate(virtual_alloc, &vaci, &va, &offset);
+			if (result != VK_SUCCESS) { // this must always succeed, we have 128 GiB memory to allocate from
+				return { expected_error, AllocateException(result) };
+			}
+			is_straddling = offset / block_size != (offset + vaci.size) / block_size;
+			if (is_straddling) {
+				straddlers.push_back(va);
+			}
+		}
+		for (auto& s : straddlers) {
+			vmaVirtualFree(virtual_alloc, s);
+		}
+
+		auto block_index = offset / block_size;
+		if (blocks.size() <= block_index) {
+			blocks.resize(block_index + 1);
+		}
+		
+		if (!blocks[block_index].buffer) {
+			BufferCreateInfo bci{ .mem_usage = mem_usage, .size = block_size, .alignment = 256 };
+			auto result = upstream->allocate_buffers(std::span{ &blocks[block_index].buffer, 1 }, std::span{ &bci, 1 }, source);
 			if (!result) {
 				return result;
 			}
 		}
-		// second try must succeed
-		result = vmaVirtualAllocate(blocks.back().block, &vaci, &va, &offset);
-		if (!result) {
-			return { expected_error, AllocateException(result) };
-		}
-
-		Buffer buf = blocks.back().buffer.add_offset(offset);
-		buf.allocation = new SubAllocation{ blocks.back().block, va };
+		
+		auto aligned_offset = VmaAlignUp(offset - block_index * block_size, alignment);
+		Buffer buf = blocks[block_index].buffer.add_offset(aligned_offset);
+		assert(buf.offset % alignment == 0);
+		assert((buf.offset + size) < block_size);
+		buf.size = size;
+		buf.allocation = new SubAllocation{ block_index, va };
+		blocks[block_index].allocation_count++;
 		return { expected_value, buf };
 	}
 
 	void BufferSubAllocator::deallocate_buffer(const Buffer& buf) {
+		std::lock_guard _(mutex);
 		auto sa = static_cast<SubAllocation*>(buf.allocation);
-		vmaVirtualFree(sa->block, sa->allocation);
+		vmaVirtualFree(virtual_alloc, sa->allocation);
+		if (--blocks[sa->block_index].allocation_count == 0) {
+			upstream->deallocate_buffers(std::span{ &blocks[sa->block_index].buffer, 1 });
+			blocks[sa->block_index].buffer = {};
+		}
 		delete sa;
 	}
 
-	void BufferSubAllocator::free() {
-		for (auto& bb : blocks) {
-			if (bb.buffer) {
-				upstream->deallocate_buffers(std::span{ &bb.buffer, 1 });
-				vmaDestroyVirtualBlock(bb.block);
-			}
-		}
-		blocks.clear();
+	BufferSubAllocator::BufferSubAllocator(DeviceResource& upstream, MemoryUsage mem_usage, BufferUsageFlags buf_usage, size_t block_size) :
+	    upstream(&upstream),
+	    mem_usage(mem_usage),
+	    usage(buf_usage),
+	    block_size(block_size) {
+
+		VmaVirtualBlockCreateInfo vbci{};
+		vbci.size = 1024ULL * 1024 * 1024 * 128; // 128 GiB baybeh
+		auto result2 = vmaCreateVirtualBlock(&vbci, &virtual_alloc);
+		assert(result2 == VK_SUCCESS);
 	}
 
 	BufferSubAllocator::~BufferSubAllocator() {
-		free();
+		assert(vmaIsVirtualBlockEmpty(virtual_alloc));
+		vmaDestroyVirtualBlock(virtual_alloc);
 	}
 
 } // namespace vuk

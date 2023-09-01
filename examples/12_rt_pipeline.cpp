@@ -34,9 +34,9 @@ namespace {
 
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
-			      pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/rt.rgen"), VUK_EX_PATH_TO_ROOT "examples/rt.rgen");
-			      pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/rt.rmiss"), VUK_EX_PATH_TO_ROOT "examples/rt.rmiss");
-			      pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/rt.rchit"), VUK_EX_PATH_TO_ROOT "examples/rt.rchit");
+			      pci.add_glsl(util::read_entire_file((root / "examples/rt.rgen").generic_string()), (root / "examples/rt.rgen").generic_string());
+			      pci.add_glsl(util::read_entire_file((root / "examples/rt.rmiss").generic_string()), (root / "examples/rt.rmiss").generic_string());
+			      pci.add_glsl(util::read_entire_file((root / "examples/rt.rchit").generic_string()), (root / "examples/rt.rchit").generic_string());
 			      // new for RT: a hit group is a collection of shaders identified by their index in the PipelineBaseCreateInfo
 			      // 2 => rt.rchit
 			      pci.add_hit_group(vuk::HitGroup{ .type = vuk::HitGroupType::eTriangles, .closest_hit = 2 });
@@ -89,7 +89,8 @@ namespace {
 		      VkAccelerationStructureCreateInfoKHR blas_ci{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR };
 		      blas_ci.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
 		      blas_ci.size = blas_size_info.accelerationStructureSize; // Will be used to allocate memory.
-		      blas_buf = *vuk::allocate_buffer(allocator, { .mem_usage = vuk::MemoryUsage::eGPUonly, .size = blas_size_info.accelerationStructureSize });
+		      blas_buf =
+		          *vuk::allocate_buffer(allocator, { .mem_usage = vuk::MemoryUsage::eGPUonly, .size = blas_size_info.accelerationStructureSize, .alignment = 256 });
 		      blas_ci.buffer = blas_buf->buffer;
 		      blas_ci.offset = blas_buf->offset;
 
@@ -98,7 +99,10 @@ namespace {
 
 		      // Allocate the scratch memory for the BLAS build
 		      auto blas_scratch_buffer =
-		          *vuk::allocate_buffer(allocator, vuk::BufferCreateInfo{ .mem_usage = vuk::MemoryUsage::eGPUonly, .size = blas_size_info.buildScratchSize });
+		          *vuk::allocate_buffer(allocator,
+		                                vuk::BufferCreateInfo{ .mem_usage = vuk::MemoryUsage::eGPUonly,
+		                                                       .size = blas_size_info.buildScratchSize,
+		                                                       .alignment = ctx.as_properties.minAccelerationStructureScratchOffsetAlignment });
 
 		      // Update build information
 		      blas_build_info.srcAccelerationStructure = VK_NULL_HANDLE;
@@ -147,7 +151,8 @@ namespace {
 		      VkAccelerationStructureCreateInfoKHR tlas_ci{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR };
 		      tlas_ci.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
 		      tlas_ci.size = tlas_size_info.accelerationStructureSize;
-		      tlas_buf = *vuk::allocate_buffer(allocator, { .mem_usage = vuk::MemoryUsage::eGPUonly, .size = tlas_size_info.accelerationStructureSize });
+		      tlas_buf =
+		          *vuk::allocate_buffer(allocator, { .mem_usage = vuk::MemoryUsage::eGPUonly, .size = tlas_size_info.accelerationStructureSize, .alignment = 256 });
 		      tlas_ci.buffer = tlas_buf->buffer;
 		      tlas_ci.offset = tlas_buf->offset;
 
@@ -155,8 +160,10 @@ namespace {
 		      allocator.allocate_acceleration_structures({ &*tlas, 1 }, { &tlas_ci, 1 });
 
 		      // Allocate the scratch memory
-		      tlas_scratch_buffer =
-		          *vuk::allocate_buffer(allocator, vuk::BufferCreateInfo{ .mem_usage = vuk::MemoryUsage::eGPUonly, .size = tlas_size_info.buildScratchSize });
+		      tlas_scratch_buffer = *vuk::allocate_buffer(allocator,
+		                                                  vuk::BufferCreateInfo{ .mem_usage = vuk::MemoryUsage::eGPUonly,
+		                                                                         .size = tlas_size_info.buildScratchSize,
+		                                                                         .alignment = ctx.as_properties.minAccelerationStructureScratchOffsetAlignment });
 
 		      // Update build information
 		      tlas_build_info.srcAccelerationStructure = VK_NULL_HANDLE;

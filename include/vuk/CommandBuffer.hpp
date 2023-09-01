@@ -163,7 +163,7 @@ namespace vuk {
 		VkCommandBuffer command_buffer;
 
 		struct RenderPassInfo {
-			VkRenderPass renderpass;
+			VkRenderPass render_pass;
 			uint32_t subpass;
 			Extent2D extent;
 			SampleCountFlagBits samples;
@@ -171,7 +171,7 @@ namespace vuk {
 			std::array<QualifiedName, VUK_MAX_COLOR_ATTACHMENTS> color_attachment_names;
 			std::span<const VkAttachmentReference> color_attachments;
 		};
-		std::optional<RenderPassInfo> ongoing_renderpass;
+		std::optional<RenderPassInfo> ongoing_render_pass;
 		PassInfo* current_pass = nullptr;
 
 		Result<void> current_error = { expected_value };
@@ -184,16 +184,16 @@ namespace vuk {
 		PipelineBaseInfo* next_pipeline = nullptr;
 		PipelineBaseInfo* next_compute_pipeline = nullptr;
 		PipelineBaseInfo* next_ray_tracing_pipeline = nullptr;
-		std::optional<PipelineInfo> current_pipeline;
+		std::optional<GraphicsPipelineInfo> current_graphics_pipeline;
 		std::optional<ComputePipelineInfo> current_compute_pipeline;
 		std::optional<RayTracingPipelineInfo> current_ray_tracing_pipeline;
 
 		// Input assembly & fixed-function attributes
 		PrimitiveTopology topology = PrimitiveTopology::eTriangleList;
 		Bitset<VUK_MAX_ATTRIBUTES> set_attribute_descriptions = {};
-		std::array<VertexInputAttributeDescription, VUK_MAX_ATTRIBUTES> attribute_descriptions;
+		VertexInputAttributeDescription attribute_descriptions[VUK_MAX_ATTRIBUTES];
 		Bitset<VUK_MAX_ATTRIBUTES> set_binding_descriptions = {};
-		std::array<VkVertexInputBindingDescription, VUK_MAX_ATTRIBUTES> binding_descriptions;
+		VkVertexInputBindingDescription binding_descriptions[VUK_MAX_ATTRIBUTES];
 
 		// Specialization constant support
 		struct SpecEntry {
@@ -215,17 +215,17 @@ namespace vuk {
 		fixed_vector<VkRect2D, VUK_MAX_SCISSORS> scissors;
 
 		// Push constants
-		std::array<unsigned char, VUK_MAX_PUSHCONSTANT_SIZE> push_constant_buffer;
+		unsigned char push_constant_buffer[VUK_MAX_PUSHCONSTANT_SIZE];
 		fixed_vector<VkPushConstantRange, VUK_MAX_PUSHCONSTANT_RANGES> pcrs;
 
 		// Descriptor sets
 		DescriptorSetStrategyFlags ds_strategy_flags = {};
-		std::bitset<VUK_MAX_SETS> sets_used = {};
-		std::array<VkDescriptorSetLayout, VUK_MAX_SETS> set_layouts_used = {};
-		std::bitset<VUK_MAX_SETS> sets_to_bind = {};
-		std::array<SetBinding, VUK_MAX_SETS> set_bindings = {};
-		std::bitset<VUK_MAX_SETS> persistent_sets_to_bind = {};
-		std::array<std::pair<VkDescriptorSet, VkDescriptorSetLayout>, VUK_MAX_SETS> persistent_sets = {};
+		Bitset<VUK_MAX_SETS> sets_used = {};
+		VkDescriptorSetLayout set_layouts_used[VUK_MAX_SETS] = {};
+		Bitset<VUK_MAX_SETS> sets_to_bind = {};
+		SetBinding set_bindings[VUK_MAX_SETS] = {};
+		Bitset<VUK_MAX_SETS> persistent_sets_to_bind = {};
+		std::pair<VkDescriptorSet, VkDescriptorSetLayout> persistent_sets[VUK_MAX_SETS] = {};
 
 		// for rendergraph
 		CommandBuffer(ExecutableRenderGraph& rg, Context& ctx, Allocator& allocator, VkCommandBuffer cb);
@@ -241,10 +241,13 @@ namespace vuk {
 			return command_buffer;
 		}
 		/// @brief Retrieve information about the current renderpass
-		const RenderPassInfo& get_ongoing_renderpass() const;
+		const RenderPassInfo& get_ongoing_render_pass() const;
 		/// @brief Retrieve Buffer attached to given name
 		/// @return the attached Buffer or RenderGraphException
 		Result<Buffer> get_resource_buffer(Name resource_name) const;
+		/// @brief Retrieve Buffer attached to given NameReference
+		/// @return the attached Buffer or RenderGraphException
+		Result<Buffer> get_resource_buffer(const NameReference& resource_name_reference) const;
 		/// @brief Retrieve Image attached to given name
 		/// @return the attached Image or RenderGraphException
 		Result<Image> get_resource_image(Name resource_name) const;
@@ -254,6 +257,9 @@ namespace vuk {
 		/// @brief Retrieve ImageAttachment attached to given name
 		/// @return the attached ImageAttachment or RenderGraphException
 		Result<ImageAttachment> get_resource_image_attachment(Name resource_name) const;
+		/// @brief Retrieve ImageAttachment attached to given NameReference
+		/// @return the attached ImageAttachment or RenderGraphException
+		Result<ImageAttachment> get_resource_image_attachment(const NameReference& resource_name_reference) const;
 
 		// command buffer state setting
 		// when a state is set it is persistent for a pass (similar to Vulkan dynamic state) - see documentation
@@ -530,9 +536,9 @@ namespace vuk {
 		/// Actual invocation count will be rounded up to be a multiple of local_size_{x,y,z} after scaling
 		/// Width corresponds to the x-axis, height to the y-axis and depth to the z-axis
 		/// @param name Name of the Image Resource to use for extents
-		/// @param min_invocations_per_pixel_x Invocation count scale in x-axis
-		/// @param min_invocations_per_pixel_y Invocation count scale in y-axis
-		/// @param min_invocations_per_pixel_z Invocation count scale in z-axis
+		/// @param invocations_per_pixel_scale_x Invocation count scale in x-axis
+		/// @param invocations_per_pixel_scale_y Invocation count scale in y-axis
+		/// @param invocations_per_pixel_scale_z Invocation count scale in z-axis
 		CommandBuffer& dispatch_invocations_per_pixel(Name name,
 		                                              float invocations_per_pixel_scale_x = 1.f,
 		                                              float invocations_per_pixel_scale_y = 1.f,
@@ -546,9 +552,9 @@ namespace vuk {
 		/// Actual invocation count will be rounded up to be a multiple of local_size_{x,y,z} after scaling
 		/// Width corresponds to the x-axis, height to the y-axis and depth to the z-axis
 		/// @param ia ImageAttachment to use for extents
-		/// @param min_invocations_per_pixel_x Invocation count scale in x-axis
-		/// @param min_invocations_per_pixel_y Invocation count scale in y-axis
-		/// @param min_invocations_per_pixel_z Invocation count scale in z-axis
+		/// @param invocations_per_pixel_scale_x Invocation count scale in x-axis
+		/// @param invocations_per_pixel_scale_y Invocation count scale in y-axis
+		/// @param invocations_per_pixel_scale_z Invocation count scale in z-axis
 		CommandBuffer& dispatch_invocations_per_pixel(ImageAttachment& ia,
 		                                              float invocations_per_pixel_scale_x = 1.f,
 		                                              float invocations_per_pixel_scale_y = 1.f,
@@ -585,7 +591,7 @@ namespace vuk {
 		/// @param indirect_resource_name The Name of the Resource to use as indirect buffer
 		CommandBuffer& dispatch_indirect(Name indirect_resource_name);
 
-		/// @brief Perform ray trace query with a raytracing pipeline
+		/// @brief Perform ray trace query with a ray tracing pipeline
 		/// @param width width of the ray trace query dimensions
 		/// @param height height of the ray trace query dimensions
 		/// @param depth depth of the ray trace query dimensions
@@ -596,7 +602,7 @@ namespace vuk {
 		                                             const VkAccelerationStructureBuildGeometryInfoKHR* pInfos,
 		                                             const VkAccelerationStructureBuildRangeInfoKHR* const* ppBuildRangeInfos);
 
-		// commands for renderpass-less command buffers
+		// commands for render pass-less command buffers
 
 		/// @brief Clear an image
 		/// @param src the Name of the Resource to be cleared
@@ -678,6 +684,15 @@ namespace vuk {
 		// error handling
 		[[nodiscard]] Result<void> result();
 
+		// explicit command buffer access
+
+		/// @brief Bind all pending compute state and return a raw VkCommandBuffer for direct access
+		[[nodiscard]] VkCommandBuffer bind_compute_state();
+		/// @brief Bind all pending graphics state and return a raw VkCommandBuffer for direct access
+		[[nodiscard]] VkCommandBuffer bind_graphics_state();
+		/// @brief Bind all pending ray tracing state and return a raw VkCommandBuffer for direct access
+		[[nodiscard]] VkCommandBuffer bind_ray_tracing_state();
+
 	protected:
 		enum class PipeType { eGraphics, eCompute, eRayTracing };
 
@@ -724,6 +739,7 @@ namespace vuk {
 		return static_cast<T*>(_map_scratch_buffer(set, binding, sizeof(T)));
 	}
 
+	/// @brief RAII utility for creating a timed scope on the GPU
 	struct TimedScope {
 		TimedScope(CommandBuffer& cbuf, Query a, Query b) : cbuf(cbuf), a(a), b(b) {
 			cbuf.write_timestamp(a, PipelineStageFlagBits::eBottomOfPipe);

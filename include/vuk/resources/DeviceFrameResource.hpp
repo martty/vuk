@@ -83,6 +83,24 @@ namespace vuk {
 
 		void deallocate_swapchains(std::span<const VkSwapchainKHR> src) override;
 
+		Result<void, AllocateException> allocate_graphics_pipelines(std::span<GraphicsPipelineInfo> dst,
+		                                                            std::span<const GraphicsPipelineInstanceCreateInfo> cis,
+		                                                            SourceLocationAtFrame loc) override;
+		void deallocate_graphics_pipelines(std::span<const GraphicsPipelineInfo> src) override;
+
+		Result<void, AllocateException>
+		allocate_compute_pipelines(std::span<ComputePipelineInfo> dst, std::span<const ComputePipelineInstanceCreateInfo> cis, SourceLocationAtFrame loc) override;
+		void deallocate_compute_pipelines(std::span<const ComputePipelineInfo> src) override;
+
+		Result<void, AllocateException> allocate_ray_tracing_pipelines(std::span<RayTracingPipelineInfo> dst,
+		                                                               std::span<const RayTracingPipelineInstanceCreateInfo> cis,
+		                                                               SourceLocationAtFrame loc) override;
+		void deallocate_ray_tracing_pipelines(std::span<const RayTracingPipelineInfo> src) override;
+
+		Result<void, AllocateException>
+		allocate_render_passes(std::span<VkRenderPass> dst, std::span<const RenderPassCreateInfo> cis, SourceLocationAtFrame loc) override;
+		void deallocate_render_passes(std::span<const VkRenderPass> src) override;
+
 		/// @brief Wait for the fences / timeline semaphores referencing this frame to complete
 		///
 		/// Called automatically when recycled
@@ -111,7 +129,6 @@ namespace vuk {
 	/// Allocations from this resource are tied to the "multi-frame" - all allocations recycled when a DeviceMultiFrameResource is recycled.
 	/// All resources allocated are also deallocated at recycle time - it is not necessary (but not an error) to deallocate them.
 	struct DeviceMultiFrameResource final : DeviceFrameResource {
-
 		Result<void, AllocateException> allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) override;
 
 	private:
@@ -156,6 +173,8 @@ namespace vuk {
 
 		Result<void, AllocateException> allocate_cached_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc);
 
+		Result<void, AllocateException> allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) override;
+
 		void deallocate_image_views(std::span<const ImageView> src) override;
 
 		void deallocate_persistent_descriptor_sets(std::span<const PersistentDescriptorSet> src) override;
@@ -176,6 +195,14 @@ namespace vuk {
 		void deallocate_acceleration_structures(std::span<const VkAccelerationStructureKHR> src) override;
 
 		void deallocate_swapchains(std::span<const VkSwapchainKHR> src) override;
+
+		void deallocate_graphics_pipelines(std::span<const GraphicsPipelineInfo> src) override;
+
+		void deallocate_compute_pipelines(std::span<const ComputePipelineInfo> src) override;
+
+		void deallocate_ray_tracing_pipelines(std::span<const RayTracingPipelineInfo> src) override;
+
+		void deallocate_render_passes(std::span<const VkRenderPass> src) override;
 
 		/// @brief Recycle the least-recently-used frame and return it to be used again
 		/// @return DeviceFrameResource for use
@@ -198,5 +225,6 @@ namespace vuk {
 		void deallocate_frame(T& f);
 
 		struct DeviceSuperFrameResourceImpl* impl;
+		friend struct DeviceFrameResource;
 	};
 } // namespace vuk

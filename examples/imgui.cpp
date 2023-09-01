@@ -5,6 +5,8 @@
 #include "vuk/Partials.hpp"
 #include "vuk/RenderGraph.hpp"
 #include "vuk/SampledImage.hpp"
+#include "imgui_vert.hpp"
+#include "imgui_frag.hpp"
 
 util::ImGuiData util::ImGui_ImplVuk_Init(vuk::Allocator& allocator) {
 	vuk::Context& ctx = allocator.get_context();
@@ -31,12 +33,10 @@ util::ImGuiData util::ImGui_ImplVuk_Init(vuk::Allocator& allocator) {
 	io.Fonts->TexID = (ImTextureID)data.font_si.get();
 	{
 		vuk::PipelineBaseCreateInfo pci;
-		auto vpath = VUK_EX_PATH_TO_ROOT "examples/imgui.vert.spv";
-		auto vcont = util::read_spirv(vpath);
-		pci.add_spirv(std::move(vcont), vpath);
-		auto fpath = VUK_EX_PATH_TO_ROOT "examples/imgui.frag.spv";
-		auto fcont = util::read_spirv(fpath);
-		pci.add_spirv(std::move(fcont), fpath);
+		// glslangValidator.exe -V imgui.vert --vn imgui_vert -o examples/imgui_vert.hpp
+		pci.add_static_spirv(imgui_vert, sizeof(imgui_vert) / 4, "imgui.vert");
+		// glslangValidator.exe -V imgui.frag --vn imgui_frag -o examples/imgui_frag.hpp
+		pci.add_static_spirv(imgui_frag, sizeof(imgui_frag) / 4, "imgui.frag");
 		ctx.create_named_pipeline("imgui", pci);
 	}
 	return data;
@@ -130,8 +130,8 @@ vuk::Future util::ImGui_ImplVuk_Render(vuk::Allocator& allocator,
 					                clip_rect.z = (pcmd->ClipRect.z - clip_off.x) * clip_scale.x;
 					                clip_rect.w = (pcmd->ClipRect.w - clip_off.y) * clip_scale.y;
 
-					                auto fb_width = command_buffer.get_ongoing_renderpass().extent.width;
-					                auto fb_height = command_buffer.get_ongoing_renderpass().extent.height;
+					                auto fb_width = command_buffer.get_ongoing_render_pass().extent.width;
+					                auto fb_height = command_buffer.get_ongoing_render_pass().extent.height;
 					                if (clip_rect.x < fb_width && clip_rect.y < fb_height && clip_rect.z >= 0.0f && clip_rect.w >= 0.0f) {
 						                // Negative offsets are illegal for vkCmdSetScissor
 						                if (clip_rect.x < 0.0f)
@@ -155,12 +155,21 @@ vuk::Future util::ImGui_ImplVuk_Render(vuk::Allocator& allocator,
 							                } else {
 								                if (si.rg_attachment.ivci) {
 									                auto ivci = *si.rg_attachment.ivci;
-									                auto res_img = command_buffer.get_resource_image(si.rg_attachment.reference.name.name);
-									                ivci.image = res_img->image;
+													// it is possible that we end up binding multiple images here with the same name - 
+													// the rendergraph sorts this out, but we need to refer to the correct one here
+													// so we use a NameReference to make sure that we include the source rendergraph for identification
+													// this is useful for generic name binding, but not really needed for usual passes
+									                auto res_img = command_buffer.get_resource_image_attachment(si.rg_attachment.reference)->image;
+									                ivci.image = res_img.image;
 									                auto iv = vuk::allocate_image_view(allocator, ivci);
 									                command_buffer.bind_image(0, 0, **iv).bind_sampler(0, 0, si.rg_attachment.sci);
 								                } else {
-									                command_buffer.bind_image(0, 0, si.rg_attachment.reference.name.name).bind_sampler(0, 0, si.rg_attachment.sci);
+									                command_buffer
+									                    .bind_image(0,
+									                                0,
+									                                *command_buffer.get_resource_image_attachment(si.rg_attachment.reference),
+									                                vuk::ImageLayout::eShaderReadOnlyOptimal)
+									                    .bind_sampler(0, 0, si.rg_attachment.sci);
 								                }
 							                }
 						                }

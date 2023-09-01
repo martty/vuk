@@ -26,9 +26,9 @@ namespace {
 		.setup =
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator) {
 		      vuk::PipelineBaseCreateInfo pci;
-		      pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/ubo_test.vert"), VUK_EX_PATH_TO_ROOT "examples/ubo_test.vert");
-		      pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/triangle_depthshaded.frag"),
-		                   VUK_EX_PATH_TO_ROOT "examples/triangle_depthshaded.frag");
+		      pci.add_glsl(util::read_entire_file((root / "examples/ubo_test.vert").generic_string()), (root / "examples/ubo_test.vert").generic_string());
+		      pci.add_glsl(util::read_entire_file((root / "examples/triangle_depthshaded.frag").generic_string()),
+		                   (root / "examples/triangle_depthshaded.frag").generic_string());
 		      pci.define("SCALE", "0.75");
 		      allocator.get_context().create_named_pipeline("cube", pci);
 

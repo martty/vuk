@@ -418,6 +418,7 @@ namespace vuk {
 					assert(link->source);
 					link = link->source;
 					head->source = link; // set the source for this subchain the original undiv chain
+					link->child_chains.append(child_chains, head);
 					while (link->prev) { // seek to the head of the original chain
 						link = link->prev;
 					}
@@ -767,7 +768,7 @@ namespace vuk {
 		}
 	}
 
-	void Compiler::renderpass_assignment() {
+	void Compiler::render_pass_assignment() {
 		// graphics: assemble renderpasses based on framebuffers
 		// we need to collect passes into framebuffers, which will determine the renderpasses
 
@@ -824,7 +825,7 @@ namespace vuk {
 		queue_inference();
 		pass_partitioning();
 		resource_linking();
-		renderpass_assignment();
+		render_pass_assignment();
 
 		return { expected_value };
 	}
@@ -1244,9 +1245,11 @@ namespace vuk {
 		}
 
 		// handle head (queue wait, initial use) -> emit barriers -> handle tail (signal, final use)
+		unsigned seen_chains = 0;
 		while (work_queue.size() > 0) {
 			ChainLink* head = work_queue.back();
 			work_queue.pop_back();
+			seen_chains++;
 			// handle head
 			ImageAspectFlags aspect;
 			Subrange::Image image_subrange;
@@ -1529,6 +1532,8 @@ namespace vuk {
 				work_queue.push_back(new_head);
 			}
 		}
+
+		assert(seen_chains == chains.size());
 
 		return { expected_value };
 	}

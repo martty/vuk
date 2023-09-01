@@ -36,27 +36,27 @@ namespace {
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator) {
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
-			      pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/fullscreen.vert"), VUK_EX_PATH_TO_ROOT "examples/fullscreen.vert");
-			      pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/rtt.frag"), VUK_EX_PATH_TO_ROOT "examples/rtt.frag");
+			      pci.add_glsl(util::read_entire_file((root / "examples/fullscreen.vert").generic_string()), (root / "examples/fullscreen.vert").generic_string());
+			      pci.add_glsl(util::read_entire_file((root / "examples/rtt.frag").generic_string()), (root / "examples/rtt.frag").generic_string());
 			      runner.context->create_named_pipeline("rtt", pci);
 		      }
 
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
-			      pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/fullscreen.vert"), VUK_EX_PATH_TO_ROOT "examples/fullscreen.vert");
-			      pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/scrambled_draw.frag"), VUK_EX_PATH_TO_ROOT "examples/scrambled_draw.frag");
+			      pci.add_glsl(util::read_entire_file((root / "examples/fullscreen.vert").generic_string()), (root / "examples/fullscreen.vert").generic_string());
+			      pci.add_glsl(util::read_entire_file((root / "examples/scrambled_draw.frag").generic_string()), (root / "examples/scrambled_draw.frag").generic_string());
 			      runner.context->create_named_pipeline("scrambled_draw", pci);
 		      }
 
 		      // creating a compute pipeline is the same as creating a graphics pipeline
 		      {
 			      vuk::PipelineBaseCreateInfo pbci;
-			      pbci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/stupidsort.comp"), VUK_EX_PATH_TO_ROOT "examples/stupidsort.comp");
+			      pbci.add_glsl(util::read_entire_file((root / "examples/stupidsort.comp").generic_string()), "examples/stupidsort.comp");
 			      runner.context->create_named_pipeline("stupidsort", pbci);
 		      }
 
 		      int chans;
-		      auto doge_image = stbi_load(VUK_EX_PATH_TO_ROOT "examples/doge.png", &x, &y, &chans, 4);
+		      auto doge_image = stbi_load((root / "examples/doge.png").generic_string().c_str(), &x, &y, &chans, 4);
 
 		      auto [tex, tex_fut] = create_texture(allocator, vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, doge_image, true);
 		      texture_of_doge = std::move(tex);
@@ -161,9 +161,8 @@ namespace {
 		      // but on the subsequent frames the future becomes ready (on the gpu) and this will only attach a buffer
 		      rgp->attach_in("08_scramble", std::move(scramble_buf_fut));
 		      // temporary buffer used for copying
-		      rgp->attach_buffer("08_scramble++",
-		                         **allocate_buffer(frame_allocator, { vuk::MemoryUsage::eGPUonly, sizeof(unsigned) * x * y, 1 }),
-		                         vuk::Access::eNone);
+		      rgp->attach_buffer(
+		          "08_scramble++", **allocate_buffer(frame_allocator, { vuk::MemoryUsage::eGPUonly, sizeof(unsigned) * x * y, 1 }), vuk::Access::eNone);
 		      // permanent buffer to keep state
 		      rgp->attach_buffer("08_scramble++++", *scramble_buf, vuk::Access::eNone);
 		      scramble_buf_fut = { rgp, "08_scramble+++++" };

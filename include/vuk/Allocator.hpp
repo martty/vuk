@@ -3,8 +3,8 @@
 #include "vuk/Config.hpp"
 #include "vuk/Image.hpp"
 #include "vuk/Result.hpp"
-#include "vuk/vuk_fwd.hpp"
 #include "vuk/SourceLocation.hpp"
+#include "vuk/vuk_fwd.hpp"
 
 #include <span>
 
@@ -92,6 +92,23 @@ namespace vuk {
 		virtual void deallocate_acceleration_structures(std::span<const VkAccelerationStructureKHR> src) = 0;
 
 		virtual void deallocate_swapchains(std::span<const VkSwapchainKHR> src) = 0;
+
+		virtual Result<void, AllocateException>
+		allocate_graphics_pipelines(std::span<GraphicsPipelineInfo> dst, std::span<const GraphicsPipelineInstanceCreateInfo> cis, SourceLocationAtFrame loc) = 0;
+		virtual void deallocate_graphics_pipelines(std::span<const GraphicsPipelineInfo> src) = 0;
+
+		virtual Result<void, AllocateException>
+		allocate_compute_pipelines(std::span<ComputePipelineInfo> dst, std::span<const ComputePipelineInstanceCreateInfo> cis, SourceLocationAtFrame loc) = 0;
+		virtual void deallocate_compute_pipelines(std::span<const ComputePipelineInfo> src) = 0;
+
+		virtual Result<void, AllocateException> allocate_ray_tracing_pipelines(std::span<RayTracingPipelineInfo> dst,
+		                                                                       std::span<const RayTracingPipelineInstanceCreateInfo> cis,
+		                                                                       SourceLocationAtFrame loc) = 0;
+		virtual void deallocate_ray_tracing_pipelines(std::span<const RayTracingPipelineInfo> src) = 0;
+
+		virtual Result<void, AllocateException>
+		allocate_render_passes(std::span<VkRenderPass> dst, std::span<const RenderPassCreateInfo> cis, SourceLocationAtFrame loc) = 0;
+		virtual void deallocate_render_passes(std::span<const VkRenderPass> src) = 0;
 
 		virtual Context& get_context() = 0;
 	};
@@ -295,22 +312,21 @@ namespace vuk {
 		Result<void, AllocateException>
 		allocate_descriptor_sets_with_value(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
-		
 		/// @brief Allocate descriptor sets from this Allocator
 		/// @param dst Destination span to place allocated descriptor sets into
 		/// @param cis Per-element construction info
 		/// @param loc Source location information
 		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
-		Result<void, AllocateException> allocate(std::span<DescriptorSet> dst, std::span<const DescriptorSetLayoutAllocInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+		Result<void, AllocateException>
+		allocate(std::span<DescriptorSet> dst, std::span<const DescriptorSetLayoutAllocInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
 		/// @brief Allocate descriptor sets from this Allocator
 		/// @param dst Destination span to place allocated descriptor sets into
 		/// @param cis Per-element construction info
 		/// @param loc Source location information
 		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
-		Result<void, AllocateException> allocate_descriptor_sets(std::span<DescriptorSet> dst,
-		                                                                    std::span<const DescriptorSetLayoutAllocInfo> cis,
-		                                                                    SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+		Result<void, AllocateException>
+		allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const DescriptorSetLayoutAllocInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
 		/// @brief Deallocate descriptor sets previously allocated from this Allocator
 		/// @param src Span of descriptor sets to be deallocated
@@ -397,6 +413,81 @@ namespace vuk {
 		/// @param src Span of swapchains to be deallocated
 		void deallocate(std::span<const VkSwapchainKHR> src);
 
+		/// @brief Allocate graphics pipelines from this Allocator
+		/// @param dst Destination span to place allocated pipelines into
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
+		Result<void, AllocateException>
+		allocate(std::span<GraphicsPipelineInfo> dst, std::span<const GraphicsPipelineInstanceCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+
+		/// @brief Allocate graphics pipelines from this Allocator
+		/// @param dst Destination span to place allocated pipelines into
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
+		Result<void, AllocateException> allocate_graphics_pipelines(std::span<GraphicsPipelineInfo> dst,
+		                                                            std::span<const GraphicsPipelineInstanceCreateInfo> cis,
+		                                                            SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+
+		/// @brief Deallocate pipelines previously allocated from this Allocator
+		/// @param src Span of pipelines to be deallocated
+		void deallocate(std::span<const GraphicsPipelineInfo> src);
+
+		/// @brief Allocate compute pipelines from this Allocator
+		/// @param dst Destination span to place allocated pipelines into
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
+		Result<void, AllocateException>
+		allocate(std::span<ComputePipelineInfo> dst, std::span<const ComputePipelineInstanceCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+
+		/// @brief Allocate compute pipelines from this Allocator
+		/// @param dst Destination span to place allocated pipelines into
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
+		Result<void, AllocateException> allocate_compute_pipelines(std::span<ComputePipelineInfo> dst,
+		                                                           std::span<const ComputePipelineInstanceCreateInfo> cis,
+		                                                           SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+
+		/// @brief Deallocate pipelines previously allocated from this Allocator
+		/// @param src Span of pipelines to be deallocated
+		void deallocate(std::span<const ComputePipelineInfo> src);
+
+		/// @brief Allocate ray tracing pipelines from this Allocator
+		/// @param dst Destination span to place allocated pipelines into
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
+		Result<void, AllocateException>
+		allocate(std::span<RayTracingPipelineInfo> dst, std::span<const RayTracingPipelineInstanceCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+
+		/// @brief Allocate ray tracing pipelines from this Allocator
+		/// @param dst Destination span to place allocated pipelines into
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
+		Result<void, AllocateException> allocate_ray_tracing_pipelines(std::span<RayTracingPipelineInfo> dst,
+		                                                               std::span<const RayTracingPipelineInstanceCreateInfo> cis,
+		                                                               SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+
+		/// @brief Deallocate pipelines previously allocated from this Allocator
+		/// @param src Span of pipelines to be deallocated
+		void deallocate(std::span<const RayTracingPipelineInfo> src);
+
+		/// @brief Allocate render passes from this Allocator
+		/// @param dst Destination span to place allocated render passes into
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
+		Result<void, AllocateException>
+		allocate(std::span<VkRenderPass> dst, std::span<const RenderPassCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+
+		/// @brief Allocate render passes from this Allocator
+		/// @param dst Destination span to place allocated render passes into
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
+		Result<void, AllocateException>
+		allocate_render_passes(std::span<VkRenderPass> dst, std::span<const RenderPassCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+
+		/// @brief Deallocate render passes previously allocated from this Allocator
+		/// @param src Span of render passes to be deallocated
+		void deallocate(std::span<const VkRenderPass> src);
+
 		/// @brief Get the underlying DeviceResource
 		/// @return the underlying DeviceResource
 		DeviceResource& get_device_resource() {
@@ -434,7 +525,9 @@ namespace vuk {
 	/// @param allocator
 	/// @param src
 	template<class T>
-	void deallocate(Allocator& allocator, const T& src) requires(!Container<T>) {
+	void deallocate(Allocator& allocator, const T& src)
+	  requires(!Container<T>)
+	{
 		allocator.deallocate(std::span<const T>{ &src, 1 });
 	}
 
@@ -443,7 +536,9 @@ namespace vuk {
 	/// @param allocator
 	/// @param src
 	template<class T>
-	void deallocate(Allocator& allocator, const T& src) requires(Container<T>) {
+	void deallocate(Allocator& allocator, const T& src)
+	  requires(Container<T>)
+	{
 		allocator.deallocate(std::span(src));
 	}
 

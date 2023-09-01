@@ -15,29 +15,24 @@
 #include <string_view>
 
 namespace vuk {
-	template<class T>
-	struct FN {
-		static T create_fn(void* ctx, const create_info_t<T>& ci) {
-			return reinterpret_cast<Context*>(ctx)->create(ci);
-		}
-
-		static void destroy_fn(void* ctx, const T& v) {
-			return reinterpret_cast<Context*>(ctx)->destroy(v);
-		}
-	};
-
 	struct ContextImpl {
+		template<class T>
+		struct FN {
+			static T create_fn(void* ctx, const create_info_t<T>& ci) {
+				return reinterpret_cast<Context*>(ctx)->create(ci);
+			}
+
+			static void destroy_fn(void* ctx, const T& v) {
+				return reinterpret_cast<Context*>(ctx)->destroy(v);
+			}
+		};
+
 		VkDevice device;
 
 		std::unique_ptr<DeviceVkResource> device_vk_resource;
 		Allocator direct_allocator;
 
-		VkPipelineCache vk_pipeline_cache = VK_NULL_HANDLE;
 		Cache<PipelineBaseInfo> pipelinebase_cache;
-		Cache<PipelineInfo> pipeline_cache;
-		Cache<ComputePipelineInfo> compute_pipeline_cache;
-		Cache<RayTracingPipelineInfo> ray_tracing_pipeline_cache;
-		Cache<VkRenderPass> renderpass_cache;
 		Cache<DescriptorPool> pool_cache;
 		Cache<Sampler> sampler_cache;
 		Cache<ShaderModule> shader_modules;
@@ -50,7 +45,7 @@ namespace vuk {
 		std::atomic<size_t> unique_handle_id_counter = 0;
 
 		std::mutex named_pipelines_lock;
-		std::unordered_map<Name, PipelineBaseInfo*> named_pipelines;
+		robin_hood::unordered_flat_map<Name, PipelineBaseInfo*> named_pipelines;
 
 		std::atomic<uint64_t> query_id_counter = 0;
 		VkPhysicalDeviceProperties physical_device_properties;
@@ -66,15 +61,6 @@ namespace vuk {
 			static constexpr uint32_t cache_collection_frequency = 16;
 			auto remainder = absolute_frame % cache_collection_frequency;
 			switch (remainder) {
-			case 0:
-				pipeline_cache.collect(absolute_frame, cache_collection_frequency);
-				break;
-			case 1:
-				compute_pipeline_cache.collect(absolute_frame, cache_collection_frequency);
-				break;
-			case 2:
-				renderpass_cache.collect(absolute_frame, cache_collection_frequency);
-				break;
 				/*case 3:
 				  ptc.impl->sampler_cache.collect(cache_collection_frequency); break;*/ // sampler cache can't be collected due to persistent descriptor sets
 			case 4:
@@ -94,10 +80,6 @@ namespace vuk {
 		    device_vk_resource(std::make_unique<DeviceVkResource>(ctx)),
 		    direct_allocator(*device_vk_resource.get()),
 		    pipelinebase_cache(&ctx, &FN<struct PipelineBaseInfo>::create_fn, &FN<struct PipelineBaseInfo>::destroy_fn),
-		    pipeline_cache(&ctx, &FN<struct PipelineInfo>::create_fn, &FN<struct PipelineInfo>::destroy_fn),
-		    compute_pipeline_cache(&ctx, &FN<struct ComputePipelineInfo>::create_fn, &FN<struct ComputePipelineInfo>::destroy_fn),
-		    ray_tracing_pipeline_cache(&ctx, &FN<struct RayTracingPipelineInfo>::create_fn, &FN<struct RayTracingPipelineInfo>::destroy_fn),
-		    renderpass_cache(&ctx, &FN<VkRenderPass>::create_fn, &FN<VkRenderPass>::destroy_fn),
 		    pool_cache(&ctx, &FN<struct DescriptorPool>::create_fn, &FN<struct DescriptorPool>::destroy_fn),
 		    sampler_cache(&ctx, &FN<Sampler>::create_fn, &FN<Sampler>::destroy_fn),
 		    shader_modules(&ctx, &FN<struct ShaderModule>::create_fn, &FN<struct ShaderModule>::destroy_fn),

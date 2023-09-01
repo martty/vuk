@@ -120,8 +120,8 @@ namespace std {
 	}
 
 	size_t hash<vuk::QualifiedName>::operator()(vuk::QualifiedName const& s) const {
-		uint32_t h = hash<vuk::Name>()(s.prefix);
-		::hash_combine_direct(h, hash<vuk::Name>()(s.name));
+		uint32_t h = (uint32_t)hash<vuk::Name>()(s.prefix);
+		::hash_combine_direct(h, (uint32_t)hash<vuk::Name>()(s.name));
 		return h;
 	}
 } // namespace std

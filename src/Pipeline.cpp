@@ -26,7 +26,7 @@ namespace vuk {
 				layoutBinding.pImmutableSamplers = nullptr;
 				bindings.push_back(layoutBinding);
 				if (layoutBinding.binding < VUK_MAX_BINDINGS) {
-					dslci.used_bindings[layoutBinding.binding] = true;
+					dslci.used_bindings.set(layoutBinding.binding, true);
 				}
 			}
 
@@ -39,8 +39,8 @@ namespace vuk {
 				layoutBinding.pImmutableSamplers = nullptr;
 				bindings.push_back(layoutBinding);
 				if (layoutBinding.binding < VUK_MAX_BINDINGS) {
-					dslci.used_bindings[layoutBinding.binding] = true;
-					dslci.optional[layoutBinding.binding] = sb.is_hlsl_counter_buffer;
+					dslci.used_bindings.set(layoutBinding.binding, true);
+					dslci.optional.set(layoutBinding.binding, sb.is_hlsl_counter_buffer);
 				}
 			}
 
@@ -53,7 +53,7 @@ namespace vuk {
 				layoutBinding.pImmutableSamplers = nullptr;
 				bindings.push_back(layoutBinding);
 				if (layoutBinding.binding < VUK_MAX_BINDINGS) {
-					dslci.used_bindings[layoutBinding.binding] = true;
+					dslci.used_bindings.set(layoutBinding.binding, true);
 				}
 			}
 
@@ -69,7 +69,7 @@ namespace vuk {
 				}
 				bindings.push_back(layoutBinding);
 				if (layoutBinding.binding < VUK_MAX_BINDINGS) {
-					dslci.used_bindings[layoutBinding.binding] = true;
+					dslci.used_bindings.set(layoutBinding.binding, true);
 				}
 			}
 
@@ -85,7 +85,7 @@ namespace vuk {
 				}
 				bindings.push_back(layoutBinding);
 				if (layoutBinding.binding < VUK_MAX_BINDINGS) {
-					dslci.used_bindings[layoutBinding.binding] = true;
+					dslci.used_bindings.set(layoutBinding.binding, true);
 				}
 			}
 
@@ -101,7 +101,7 @@ namespace vuk {
 				}
 				bindings.push_back(layoutBinding);
 				if (layoutBinding.binding < VUK_MAX_BINDINGS) {
-					dslci.used_bindings[layoutBinding.binding] = true;
+					dslci.used_bindings.set(layoutBinding.binding, true);
 				}
 			}
 
@@ -117,7 +117,7 @@ namespace vuk {
 				}
 				bindings.push_back(layoutBinding);
 				if (layoutBinding.binding < VUK_MAX_BINDINGS) {
-					dslci.used_bindings[layoutBinding.binding] = true;
+					dslci.used_bindings.set(layoutBinding.binding, true);
 				}
 			}
 
@@ -130,7 +130,7 @@ namespace vuk {
 				layoutBinding.pImmutableSamplers = nullptr;
 				bindings.push_back(layoutBinding);
 				if (layoutBinding.binding < VUK_MAX_BINDINGS) {
-					dslci.used_bindings[layoutBinding.binding] = true;
+					dslci.used_bindings.set(layoutBinding.binding, true);
 				}
 			}
 
@@ -146,7 +146,7 @@ namespace vuk {
 				}
 				bindings.push_back(layoutBinding);
 				if (layoutBinding.binding < VUK_MAX_BINDINGS) {
-					dslci.used_bindings[layoutBinding.binding] = true;
+					dslci.used_bindings.set(layoutBinding.binding, true);
 				}
 			}
 
@@ -168,7 +168,7 @@ namespace vuk {
 } // namespace vuk
 
 namespace std {
-	size_t hash<vuk::PipelineInstanceCreateInfo>::operator()(vuk::PipelineInstanceCreateInfo const& x) const noexcept {
+	size_t hash<vuk::GraphicsPipelineInstanceCreateInfo>::operator()(vuk::GraphicsPipelineInstanceCreateInfo const& x) const noexcept {
 		size_t h = 0;
 		auto ext_hash = x.is_inline() ? robin_hood::hash_bytes(x.inline_data, x.extended_size) : robin_hood::hash_bytes(x.extended_data, x.extended_size);
 		hash_combine(h, x.base, reinterpret_cast<uint64_t>((VkRenderPass)x.render_pass), x.extended_size, ext_hash);

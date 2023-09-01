@@ -41,17 +41,17 @@ namespace vuk {
 		/// @brief Optional transfer queue family index
 		uint32_t transfer_queue_family_index = VK_QUEUE_FAMILY_IGNORED;
 
-		#define VUK_X(name) PFN_##name name = nullptr;
-		#define VUK_Y(name) PFN_##name name = nullptr;
+#define VUK_X(name) PFN_##name name = nullptr;
+#define VUK_Y(name) PFN_##name name = nullptr;
 		/// @brief User provided function pointers. If you want dynamic loading, you must set vkGetInstanceProcAddr & vkGetDeviceProcAddr
 		struct FunctionPointers {
 			PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = nullptr;
 			PFN_vkGetDeviceProcAddr vkGetDeviceProcAddr = nullptr;
-			#include "vuk/VulkanPFNRequired.hpp"
-			#include "vuk/VulkanPFNOptional.hpp"
+#include "vuk/VulkanPFNRequired.hpp"
+#include "vuk/VulkanPFNOptional.hpp"
 		} pointers;
-		#undef VUK_X
-		#undef VUK_Y
+#undef VUK_X
+#undef VUK_Y
 
 		/// @brief Allow vuk to load missing required and optional function pointers dynamically
 		/// If this is false, then you must fill in all required function pointers
@@ -80,6 +80,19 @@ namespace vuk {
 
 	class Context : public ContextCreateParameters::FunctionPointers {
 	public:
+		/// @brief Create a new Context
+		/// @param params Vulkan parameters initialized beforehand
+		Context(ContextCreateParameters params);
+		~Context();
+
+		Context(const Context&) = delete;
+		Context& operator=(const Context&) = delete;
+
+		Context(Context&&) noexcept;
+		Context& operator=(Context&&) noexcept;
+
+		// Vulkan instance, device and queues
+
 		VkInstance instance;
 		VkDevice device;
 		VkPhysicalDevice physical_device;
@@ -95,50 +108,53 @@ namespace vuk {
 		Queue* compute_queue = nullptr;
 		Queue* transfer_queue = nullptr;
 
+		// Vulkan properties
+
 		VkPhysicalDeviceProperties physical_device_properties;
 		VkPhysicalDeviceRayTracingPipelinePropertiesKHR rt_properties{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR };
+		VkPhysicalDeviceAccelerationStructurePropertiesKHR as_properties{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR };
 		size_t min_buffer_alignment;
 
-		Result<void> wait_for_domains(std::span<std::pair<DomainFlags, uint64_t>> queue_waits);
-
-		uint64_t get_frame_count() const;
-
-		/// @brief Create a new Context
-		/// @param params Vulkan parameters initialized beforehand
-		Context(ContextCreateParameters params);
-		~Context();
-
-		Context(const Context&) = delete;
-		Context& operator=(const Context&) = delete;
-
-		Context(Context&&) noexcept;
-		Context& operator=(Context&&) noexcept;
-
+		// Debug functions
+		
+		/// @brief If debug utils is available and debug names & markers are supported 
 		bool debug_enabled() const;
 
-		void set_name(const Texture& iv, Name name);
+		/// @brief Set debug name for Texture
+		void set_name(const Texture&, Name name);
+
+		/// @brief Set debug name for object
 		template<class T>
 		void set_name(const T& t, Name name);
 
+		/// @brief Add debug region to command buffer
+		/// @param name Name of the region
+		/// @param color Display color of the region
 		void begin_region(const VkCommandBuffer&, Name name, std::array<float, 4> color = { 1, 1, 1, 1 });
+		/// @brief End debug region in command buffer
 		void end_region(const VkCommandBuffer&);
 
+		// Pipeline management
+		
+		/// Internal pipeline cache to use
+		VkPipelineCache vk_pipeline_cache = VK_NULL_HANDLE;
+
+		/// @brief Create a pipeline base that can be recalled by name
 		void create_named_pipeline(Name name, PipelineBaseCreateInfo pbci);
 
+		/// @brief Recall name pipeline base
 		PipelineBaseInfo* get_named_pipeline(Name name);
 
 		PipelineBaseInfo* get_pipeline(const PipelineBaseCreateInfo& pbci);
+		/// @brief Reflect given pipeline base
 		Program get_pipeline_reflection_info(const PipelineBaseCreateInfo& pbci);
+		/// @brief Explicitly compile give ShaderSource into a ShaderModule
 		ShaderModule compile_shader(ShaderSource source, std::string path);
 
+		/// @brief Load a Vulkan pipeline cache
 		bool load_pipeline_cache(std::span<std::byte> data);
+		/// @brief Retrieve the current Vulkan pipeline cache 
 		std::vector<std::byte> save_pipeline_cache();
-
-		Queue& domain_to_queue(DomainFlags) const;
-		uint32_t domain_to_queue_index(DomainFlags) const;
-		uint32_t domain_to_queue_family_index(DomainFlags) const;
-
-		Query create_timestamp_query();
 
 		// Allocator support
 
@@ -148,6 +164,8 @@ namespace vuk {
 
 		Texture allocate_texture(Allocator& allocator, ImageCreateInfo ici, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
+		// Swapchain management
+
 		/// @brief Add a swapchain to be managed by the Context
 		/// @return Reference to the new swapchain that can be used during presentation
 		SwapchainRef add_swapchain(Swapchain);
@@ -156,25 +174,28 @@ namespace vuk {
 		/// the swapchain is not destroyed
 		void remove_swapchain(SwapchainRef);
 
+		// Frame management
+
+		/// @brief Retrieve the current frame count 
+		uint64_t get_frame_count() const;
+
 		/// @brief Advance internal counter used for caching and garbage collect caches
 		void next_frame();
 
 		/// @brief Wait for the device to become idle. Useful for only a few synchronisation events, like resizing or shutting down.
-		void wait_idle();
-
-		/// @brief Create a wrapped handle type (eg. a ImageView) from an externally sourced Vulkan handle
-		/// @tparam T Vulkan handle type to wrap
-		/// @param payload Vulkan handle to wrap
-		/// @return The wrapped handle.
-		template<class T>
-		Handle<T> wrap(T payload);
+		Result<void> wait_idle();
 
 		Result<void> submit_graphics(std::span<VkSubmitInfo>, VkFence);
 		Result<void> submit_transfer(std::span<VkSubmitInfo>, VkFence);
 		Result<void> submit_graphics(std::span<VkSubmitInfo2KHR>);
 		Result<void> submit_transfer(std::span<VkSubmitInfo2KHR>);
 
+		Result<void> wait_for_domains(std::span<std::pair<DomainFlags, uint64_t>> queue_waits);
+
 		// Query functionality
+
+		/// @brief Create a timestamp query to record timing information
+		Query create_timestamp_query();
 
 		/// @brief Checks if a timestamp query is available
 		/// @param q the Query to check
@@ -195,22 +216,14 @@ namespace vuk {
 		/// @brief Retrieve results from `TimestampQueryPool`s and make them available to retrieve_timestamp and retrieve_duration
 		Result<void> make_timestamp_results_available(std::span<const TimestampQueryPool> pools);
 
-		DescriptorSetStrategyFlags default_descriptor_set_strategy = {};
-
 		// Caches
 
 		/// @brief Acquire a cached sampler
 		Sampler acquire_sampler(const SamplerCreateInfo& cu, uint64_t absolute_frame);
-		/// @brief Acquire a cached VkRenderPass
-		VkRenderPass acquire_renderpass(const struct RenderPassCreateInfo& ci, uint64_t absolute_frame);
-		/// @brief Acquire a cached pipeline
-		struct PipelineInfo acquire_pipeline(const struct PipelineInstanceCreateInfo& ci, uint64_t absolute_frame);
-		/// @brief Acquire a cached compute pipeline
-		struct ComputePipelineInfo acquire_pipeline(const struct ComputePipelineInstanceCreateInfo& ci, uint64_t absolute_frame);
-		/// @brief Acquire a cached ray tracing pipeline
-		struct RayTracingPipelineInfo acquire_pipeline(const struct RayTracingPipelineInstanceCreateInfo& ci, uint64_t absolute_frame);
 		/// @brief Acquire a cached descriptor pool
 		struct DescriptorPool& acquire_descriptor_pool(const struct DescriptorSetLayoutAllocInfo& dslai, uint64_t absolute_frame);
+		/// @brief Force collection of caches
+		void collect(uint64_t frame);
 
 		// Persistent descriptor sets
 
@@ -218,21 +231,34 @@ namespace vuk {
 		Unique<PersistentDescriptorSet> create_persistent_descriptorset(Allocator& allocator, const PipelineBaseInfo& base, unsigned set, unsigned num_descriptors);
 		Unique<PersistentDescriptorSet> create_persistent_descriptorset(Allocator& allocator, const PersistentDescriptorSetCreateInfo&);
 
-		void collect(uint64_t frame);
+		// Misc.
 
+		/// @brief Descriptor set strategy to use by default, can be overridden on the CommandBuffer
+		DescriptorSetStrategyFlags default_descriptor_set_strategy = {};
+		/// @brief Retrieve a unique uint64_t value
 		uint64_t get_unique_handle_id();
+
+		/// @brief Create a wrapped handle type (eg. a ImageView) from an externally sourced Vulkan handle
+		/// @tparam T Vulkan handle type to wrap
+		/// @param payload Vulkan handle to wrap
+		/// @return The wrapped handle.
+		template<class T>
+		Handle<T> wrap(T payload);
+
+		Queue& domain_to_queue(DomainFlags) const;
+		uint32_t domain_to_queue_index(DomainFlags) const;
+		uint32_t domain_to_queue_family_index(DomainFlags) const;
+
+	private:
+		struct ContextImpl* impl;
+		friend struct ContextImpl;
 
 		// internal functions
 		void destroy(const struct DescriptorPool& dp);
-		void destroy(const struct PipelineInfo& pi);
-		void destroy(const struct ComputePipelineInfo& pi);
-		void destroy(const struct RayTracingPipelineInfo& pi);
 		void destroy(const ShaderModule& sm);
 		void destroy(const DescriptorSetLayoutAllocInfo& ds);
 		void destroy(const VkPipelineLayout& pl);
-		void destroy(const VkRenderPass& rp);
 		void destroy(const DescriptorSet&);
-		void destroy(const VkFramebuffer& fb);
 		void destroy(const Sampler& sa);
 		void destroy(const PipelineBaseInfo& pbi);
 
@@ -241,14 +267,7 @@ namespace vuk {
 		VkPipelineLayout create(const struct PipelineLayoutCreateInfo& cinfo);
 		DescriptorSetLayoutAllocInfo create(const struct DescriptorSetLayoutCreateInfo& cinfo);
 		DescriptorPool create(const struct DescriptorSetLayoutAllocInfo& cinfo);
-		PipelineInfo create(const struct PipelineInstanceCreateInfo& cinfo);
-		ComputePipelineInfo create(const struct ComputePipelineInstanceCreateInfo& cinfo);
-		RayTracingPipelineInfo create(const struct RayTracingPipelineInstanceCreateInfo& cinfo);
-		VkRenderPass create(const struct RenderPassCreateInfo& cinfo);
 		Sampler create(const struct SamplerCreateInfo& cinfo);
-
-	private:
-		struct ContextImpl* impl;
 	};
 
 	template<class T>

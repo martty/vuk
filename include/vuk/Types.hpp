@@ -982,8 +982,8 @@ namespace vuk {
 		eColorWrite = 1ULL << 7,
 		eColorRead = 1ULL << 8,
 		eColorRW = eColorWrite | eColorRead,
-		eColorResolveRead = 1ULL << 10, // special op to mark renderpass resolve read
-		eColorResolveWrite = 1ULL << 11, // special op to mark renderpass resolve write
+		eColorResolveRead = 1ULL << 10, // special op to mark render pass resolve read
+		eColorResolveWrite = 1ULL << 11, // special op to mark render pass resolve write
 		eDepthStencilRead = 1ULL << 12,
 		eDepthStencilWrite = 1ULL << 13,
 		eDepthStencilRW = eDepthStencilWrite | eDepthStencilRead,

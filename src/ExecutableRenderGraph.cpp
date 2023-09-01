@@ -22,7 +22,7 @@ namespace vuk {
 
 	ExecutableRenderGraph::~ExecutableRenderGraph() {}
 
-	void begin_renderpass(Context& ctx, vuk::RenderPassInfo& rpass, VkCommandBuffer& cbuf, bool use_secondary_command_buffers) {
+	void begin_render_pass(Context& ctx, vuk::RenderPassInfo& rpass, VkCommandBuffer& cbuf, bool use_secondary_command_buffers) {
 		VkRenderPassBeginInfo rbi{ .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
 		rbi.renderPass = rpass.handle;
 		rbi.framebuffer = rpass.framebuffer;
@@ -83,13 +83,13 @@ namespace vuk {
 		return true;
 	}
 
-	void ExecutableRenderGraph::fill_renderpass_info(vuk::RenderPassInfo& rpass, const size_t& i, vuk::CommandBuffer& cobuf) {
+	void ExecutableRenderGraph::fill_render_pass_info(vuk::RenderPassInfo& rpass, const size_t& i, vuk::CommandBuffer& cobuf) {
 		if (rpass.handle == VK_NULL_HANDLE) {
-			cobuf.ongoing_renderpass = {};
+			cobuf.ongoing_render_pass = {};
 			return;
 		}
 		vuk::CommandBuffer::RenderPassInfo rpi;
-		rpi.renderpass = rpass.handle;
+		rpi.render_pass = rpass.handle;
 		rpi.subpass = (uint32_t)i;
 		rpi.extent = vuk::Extent2D{ rpass.fbci.width, rpass.fbci.height };
 		auto& spdesc = rpass.rpci.subpass_descriptions[i];
@@ -101,7 +101,7 @@ namespace vuk {
 			rpi.color_attachment_names[i] = attachments[spdesc.pColorAttachments[i].attachment].attachment_info->name;
 		}
 		cobuf.color_blend_attachments.resize(spdesc.colorAttachmentCount);
-		cobuf.ongoing_renderpass = rpi;
+		cobuf.ongoing_render_pass = rpi;
 	}
 
 	void RGCImpl::emit_barriers(Context& ctx,
@@ -204,9 +204,9 @@ namespace vuk {
 			// insert pre-barriers
 			impl->emit_barriers(ctx, cbuf, domain, pass->pre_memory_barriers, pass->pre_image_barriers);
 
-			// if renderpass is changing and new pass uses one
+			// if render pass is changing and new pass uses one
 			if (pass->render_pass_index != render_pass_index && pass->render_pass_index != -1) {
-				begin_renderpass(ctx, impl->rpis[pass->render_pass_index], cbuf, false);
+				begin_render_pass(ctx, impl->rpis[pass->render_pass_index], cbuf, false);
 			}
 
 			render_pass_index = pass->render_pass_index;
@@ -221,9 +221,9 @@ namespace vuk {
 
 			CommandBuffer cobuf(*this, ctx, alloc, cbuf);
 			if (render_pass_index >= 0) {
-				fill_renderpass_info(impl->rpis[pass->render_pass_index], 0, cobuf);
+				fill_render_pass_info(impl->rpis[pass->render_pass_index], 0, cobuf);
 			} else {
-				cobuf.ongoing_renderpass = {};
+				cobuf.ongoing_render_pass = {};
 			}
 
 			// propagate signals onto SI
@@ -624,7 +624,7 @@ namespace vuk {
 			return { expected_error, RenderGraphException{ msg.str() } };
 		}
 
-		// acquire the renderpasses
+		// acquire the render passes
 		for (auto& rp : impl->rpis) {
 			if (rp.attachments.size() == 0) {
 				continue;
@@ -639,7 +639,11 @@ namespace vuk {
 			rp.rpci.attachmentCount = (uint32_t)rp.rpci.attachments.size();
 			rp.rpci.pAttachments = rp.rpci.attachments.data();
 
-			rp.handle = ctx.acquire_renderpass(rp.rpci, ctx.get_frame_count());
+			auto result = alloc.allocate_render_passes(std::span{ &rp.handle, 1 }, std::span{ &rp.rpci, 1 });
+			// drop render pass immediately
+			if (result) {
+				alloc.deallocate(std::span{ &rp.handle, 1 });
+			}
 		}
 
 		// create buffers
@@ -796,20 +800,20 @@ namespace vuk {
 		return { expected_value, std::move(sbundle) };
 	}
 
-	Result<BufferInfo, RenderGraphException> ExecutableRenderGraph::get_resource_buffer(Name n, PassInfo* pass_info) {
+	Result<BufferInfo, RenderGraphException> ExecutableRenderGraph::get_resource_buffer(const NameReference& name_ref, PassInfo* pass_info) {
 		for (auto& r : pass_info->resources.to_span(impl->resources)) {
-			if (r.type == Resource::Type::eBuffer && r.original_name == n) {
+			if (r.type == Resource::Type::eBuffer && r.original_name == name_ref.name.name && r.foreign == name_ref.rg) {
 				auto& att = impl->get_bound_buffer(r.reference);
 				return { expected_value, att };
 			}
 		}
 
-		return { expected_error, errors::make_cbuf_references_undeclared_resource(*pass_info, Resource::Type::eImage, n) };
+		return { expected_error, errors::make_cbuf_references_undeclared_resource(*pass_info, Resource::Type::eImage, name_ref.name.name) };
 	}
 
-	Result<AttachmentInfo, RenderGraphException> ExecutableRenderGraph::get_resource_image(Name n, PassInfo* pass_info) {
+	Result<AttachmentInfo, RenderGraphException> ExecutableRenderGraph::get_resource_image(const NameReference& name_ref, PassInfo* pass_info) {
 		for (auto& r : pass_info->resources.to_span(impl->resources)) {
-			if (r.type == Resource::Type::eImage && r.original_name == n) {
+			if (r.type == Resource::Type::eImage && r.original_name == name_ref.name.name && r.foreign == name_ref.rg) {
 				auto& att = impl->get_bound_attachment(r.reference);
 				if (att.parent_attachment < 0) {
 					return { expected_value, impl->get_bound_attachment(att.parent_attachment) };
@@ -818,17 +822,17 @@ namespace vuk {
 			}
 		}
 
-		return { expected_error, errors::make_cbuf_references_undeclared_resource(*pass_info, Resource::Type::eImage, n) };
+		return { expected_error, errors::make_cbuf_references_undeclared_resource(*pass_info, Resource::Type::eImage, name_ref.name.name) };
 	}
 
-	Result<bool, RenderGraphException> ExecutableRenderGraph::is_resource_image_in_general_layout(Name n, PassInfo* pass_info) {
+	Result<bool, RenderGraphException> ExecutableRenderGraph::is_resource_image_in_general_layout(const NameReference& name_ref, PassInfo* pass_info) {
 		for (auto& r : pass_info->resources.to_span(impl->resources)) {
-			if (r.type == Resource::Type::eImage && r.original_name == n) {
+			if (r.type == Resource::Type::eImage && r.original_name == name_ref.name.name && r.foreign == name_ref.rg) {
 				return { expected_value, r.promoted_to_general };
 			}
 		}
 
-		return { expected_error, errors::make_cbuf_references_undeclared_resource(*pass_info, Resource::Type::eImage, n) };
+		return { expected_error, errors::make_cbuf_references_undeclared_resource(*pass_info, Resource::Type::eImage, name_ref.name.name) };
 	}
 
 	QualifiedName ExecutableRenderGraph::resolve_name(Name name, PassInfo* pass_info) const noexcept {

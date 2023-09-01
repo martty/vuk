@@ -104,8 +104,8 @@ namespace vuk {
 			shader_paths.emplace_back(std::move(filename));
 		}
 
-		void add_static_spirv(const uint32_t* source, size_t size, std::string identifier) {
-			shaders.emplace_back(ShaderSource::spirv(source, size));
+		void add_static_spirv(const uint32_t* source, size_t num_words, std::string identifier) {
+			shaders.emplace_back(ShaderSource::spirv(source, num_words));
 			shader_paths.emplace_back(std::move(identifier));
 		}
 

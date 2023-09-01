@@ -29,9 +29,8 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(glm)
 
-file(RELATIVE_PATH binary_to_source ${CMAKE_BINARY_DIR} ${CMAKE_SOURCE_DIR})
 add_library(vuk-example-framework)
-target_compile_definitions(vuk-example-framework PUBLIC VUK_EX_PATH_TO_ROOT="${binary_to_source}")
+#message(FATAL_ERROR $<TARGET_FILE_DIR:vuk-example-framework>)
 SET(imgui_sources ../ext/imgui/imgui.cpp ../ext/imgui/imgui_draw.cpp ../ext/imgui/imgui_demo.cpp ../ext/imgui/imgui_widgets.cpp ../ext/imgui/imgui_tables.cpp ../ext/imgui/backends/imgui_impl_glfw.cpp)
 target_sources(vuk-example-framework PRIVATE imgui.cpp stbi.cpp ${imgui_sources})
 target_include_directories(vuk-example-framework SYSTEM PUBLIC ../ext/stb ../ext/imgui)
@@ -39,20 +38,18 @@ target_compile_definitions(vuk-example-framework PUBLIC GLM_FORCE_SIZE_FUNC GLM_
 if(VUK_COMPILER_CLANGPP OR VUK_COMPILER_GPP)
     target_compile_options(vuk-example-framework PUBLIC -std=c++20 -fno-char8_t)
 elseif(MSVC)
-    target_compile_options(vuk-example-framework PUBLIC /std:c++latest /permissive- /Zc:char8_t-)
+    target_compile_options(vuk-example-framework PUBLIC /std:c++20 /permissive- /Zc:char8_t-)
 endif()
 target_link_libraries(vuk-example-framework PUBLIC vuk vk-bootstrap glfw glm)
 
 add_executable(vuk_all_examples)
 target_sources(vuk_all_examples PRIVATE example_browser.cpp)
 target_link_libraries(vuk_all_examples PRIVATE vuk-example-framework)
-set_target_properties(vuk_all_examples
-    PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
-)
+target_compile_definitions(vuk_all_examples PUBLIC VUK_EX_PATH_TGT="$<TARGET_FILE_DIR:vuk_all_examples>" VUK_EX_PATH_ROOT="${CMAKE_SOURCE_DIR}")
 
 add_library(vuk_example_runner_single OBJECT example_runner_single.cpp)
 target_link_libraries(vuk_example_runner_single PRIVATE vuk-example-framework)
+target_compile_definitions(vuk-example-framework PUBLIC VUK_EX_PATH_TGT="$<TARGET_FILE_DIR:vuk_all_examples>" VUK_EX_PATH_ROOT="${CMAKE_SOURCE_DIR}")
 
 function(ADD_EXAMPLE name)
     set(FULL_NAME "vuk_example_${name}")
@@ -62,10 +59,6 @@ function(ADD_EXAMPLE name)
     target_link_libraries(${FULL_NAME}_obj PUBLIC vuk-example-framework)
     target_link_libraries(${FULL_NAME} PRIVATE ${FULL_NAME}_obj vuk_example_runner_single)
     target_link_libraries(vuk_all_examples PRIVATE ${FULL_NAME}_obj)
-    set_target_properties(${FULL_NAME}
-        PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
-    )
 endfunction(ADD_EXAMPLE)
 
 ADD_EXAMPLE(01_triangle)

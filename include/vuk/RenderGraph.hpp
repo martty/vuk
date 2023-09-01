@@ -250,7 +250,7 @@ namespace vuk {
 		Compiler();
 		~Compiler();
 
-		/// @brief Build the graph, assign framebuffers, renderpasses and subpasses
+		/// @brief Build the graph, assign framebuffers, render passes and subpasses
 		///	link automatically calls this, only needed if you want to use the reflection functions
 		/// @param compile_options CompileOptions controlling compilation behaviour
 		Result<void> compile(std::span<std::shared_ptr<RenderGraph>> rgs, const RenderGraphCompileOptions& compile_options);
@@ -286,7 +286,7 @@ namespace vuk {
 		void queue_inference();
 		void pass_partitioning();
 		void resource_linking();
-		void renderpass_assignment();
+		void render_pass_assignment();
 
 		friend struct ExecutableRenderGraph;
 	};
@@ -320,17 +320,17 @@ namespace vuk {
 
 		Result<SubmitBundle> execute(Allocator&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
 
-		Result<struct BufferInfo, RenderGraphException> get_resource_buffer(Name, struct PassInfo*);
-		Result<struct AttachmentInfo, RenderGraphException> get_resource_image(Name, struct PassInfo*);
+		Result<struct BufferInfo, RenderGraphException> get_resource_buffer(const NameReference&, struct PassInfo*);
+		Result<struct AttachmentInfo, RenderGraphException> get_resource_image(const NameReference&, struct PassInfo*);
 
-		Result<bool, RenderGraphException> is_resource_image_in_general_layout(Name n, struct PassInfo* pass_info);
+		Result<bool, RenderGraphException> is_resource_image_in_general_layout(const NameReference&, struct PassInfo* pass_info);
 
 		QualifiedName resolve_name(Name, struct PassInfo*) const noexcept;
 
 	private:
 		struct RGCImpl* impl;
 
-		void fill_renderpass_info(struct RenderPassInfo& rpass, const size_t& i, class CommandBuffer& cobuf);
+		void fill_render_pass_info(struct RenderPassInfo& rpass, const size_t& i, class CommandBuffer& cobuf);
 		Result<SubmitInfo> record_single_submit(Allocator&, std::span<PassInfo*> passes, DomainFlagBits domain);
 
 		friend struct InferenceContext;

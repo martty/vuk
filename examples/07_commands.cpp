@@ -32,14 +32,15 @@ namespace {
 		      // Same setup as for 04_texture
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
-			      pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/ubo_test_tex.vert"), VUK_EX_PATH_TO_ROOT "examples/ubo_test_tex.vert");
-			      pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "examples/triangle_depthshaded_tex.frag"),
-			                   VUK_EX_PATH_TO_ROOT "examples/triangle_depthshaded_text.frag");
+			      pci.add_glsl(util::read_entire_file((root / "examples/ubo_test_tex.vert").generic_string()),
+			                   (root / "examples/ubo_test_tex.vert").generic_string());
+			      pci.add_glsl(util::read_entire_file((root / "examples/triangle_depthshaded_tex.frag").generic_string()),
+			                   (root / "examples/triangle_depthshaded_text.frag").generic_string());
 			      runner.context->create_named_pipeline("textured_cube", pci);
 		      }
 
 		      int x, y, chans;
-		      auto doge_image = stbi_load(VUK_EX_PATH_TO_ROOT "examples/doge.png", &x, &y, &chans, 4);
+		      auto doge_image = stbi_load((root / "examples/doge.png").generic_string().c_str(), &x, &y, &chans, 4);
 
 		      auto [tex, tex_fut] = create_texture(allocator, vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, doge_image, false);
 		      texture_of_doge = std::move(tex);

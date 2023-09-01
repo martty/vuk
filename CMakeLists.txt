@@ -21,6 +21,10 @@ option(VUK_BUILD_TESTS "Build tests" OFF)
 option(VUK_FAIL_FAST "Trigger an assert upon encountering an error instead of propagating" OFF)
 option(VUK_DEBUG_ALLOCATIONS "Dump VMA allocations and give them debug names" OFF)
 
+if(CMAKE_SIZEOF_VOID_P EQUAL "4")
+	message(FATAL_ERROR "x86 is not supported.")
+endif()
+
 ##### Using vuk with volk (or a similar library)
 # step 1: turn off VUK_LINK_TO_LOADER and add_subdirectory vuk
 # set(VUK_LINK_TO_LOADER OFF)
@@ -102,7 +106,9 @@ target_sources(vuk PRIVATE
 	src/Name.cpp 
 	src/DeviceFrameResource.cpp
 	src/DeviceVkResource.cpp 
-	src/BufferAllocator.cpp)
+	src/BufferAllocator.cpp
+	src/DeviceLinearResource.cpp
+)
 
 target_include_directories(vuk PUBLIC ext/plf_colony)
 add_subdirectory(ext/robin-hood-hashing)
@@ -136,7 +142,7 @@ endif()
 if(VUK_COMPILER_CLANGPP OR VUK_COMPILER_GPP)
 	target_compile_options(vuk PRIVATE -std=c++20 -fno-char8_t)
 elseif(MSVC)
-	target_compile_options(vuk PRIVATE /std:c++latest /permissive- /Zc:char8_t-)
+	target_compile_options(vuk PRIVATE /std:c++20 /permissive- /Zc:char8_t-)
 endif()
 
 if(VUK_COMPILER_CLANGPP OR VUK_COMPILER_CLANGCL)
@@ -175,11 +181,11 @@ if(VUK_BUILD_DOCS)
 endif()
 
 
-add_subdirectory(ext/doctest)
-target_link_libraries(vuk PUBLIC doctest::doctest)
-target_sources(vuk PRIVATE src/tests/Test.cpp)
-
 if(VUK_BUILD_TESTS)
+	add_subdirectory(ext/doctest)
+	target_link_libraries(vuk PUBLIC doctest::doctest)
+	target_sources(vuk PRIVATE src/tests/Test.cpp)
+
 	FetchContent_Declare(
 	  vk-bootstrap 
 	  GIT_REPOSITORY https://github.com/charles-lunarg/vk-bootstrap

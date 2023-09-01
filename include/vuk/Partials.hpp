@@ -174,9 +174,9 @@ namespace vuk {
 	/// @param allocator Allocator to allocate this Buffer from
 	/// @param mem_usage Where to allocate the buffer (host visible buffers will be automatically mapped)
 	template<class T>
-	std::pair<Unique<Buffer>, Future> create_buffer(Allocator& allocator, vuk::MemoryUsage memory_usage, DomainFlagBits domain, std::span<T> data) {
+	std::pair<Unique<Buffer>, Future> create_buffer(Allocator& allocator, vuk::MemoryUsage memory_usage, DomainFlagBits domain, std::span<T> data, size_t alignment = 1) {
 		Unique<Buffer> buf(allocator);
-		BufferCreateInfo bci{ memory_usage, sizeof(T) * data.size(), 1 };
+		BufferCreateInfo bci{ memory_usage, sizeof(T) * data.size(), alignment };
 		auto ret = allocator.allocate_buffers(std::span{ &*buf, 1 }, std::span{ &bci, 1 }); // TODO: dropping error
 		Buffer b = buf.get();
 		return { std::move(buf), host_data_to_buffer(allocator, domain, b, data) };
@@ -201,7 +201,7 @@ namespace vuk {
 		auto tex = allocator.get_context().allocate_texture(allocator, ici, loc);
 
 		auto upload_fut = host_data_to_image(allocator, DomainFlagBits::eTransferQueue, ImageAttachment::from_texture(tex), data);
-		auto mipgen_fut = should_generate_mips ? generate_mips(std::move(upload_fut), 0, ici.mipLevels) : std::move(upload_fut);
+		auto mipgen_fut = ici.mipLevels > 1 ? generate_mips(std::move(upload_fut), 0, ici.mipLevels) : std::move(upload_fut);
 		std::shared_ptr<RenderGraph> rgp = std::make_shared<RenderGraph>("create_texture");
 		rgp->add_pass({ .name = "TRANSITION",
 		                .execute_on = DomainFlagBits::eGraphicsQueue,

@@ -210,4 +210,61 @@ namespace vuk {
 	void Allocator::deallocate(std::span<const VkSwapchainKHR> src) {
 		device_resource->deallocate_swapchains(src);
 	}
+
+	Result<void, AllocateException> Allocator::allocate(std::span<GraphicsPipelineInfo> dst, std::span<const GraphicsPipelineInstanceCreateInfo> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_graphics_pipelines(dst, cis, loc);
+	}
+
+	Result<void, AllocateException> Allocator::allocate_graphics_pipelines(std::span<GraphicsPipelineInfo> dst,
+		std::span<const GraphicsPipelineInstanceCreateInfo> cis,
+		SourceLocationAtFrame loc) {
+		return device_resource->allocate_graphics_pipelines(dst, cis, loc);
+	}
+
+	void Allocator::deallocate(std::span<const GraphicsPipelineInfo> src) {
+		device_resource->deallocate_graphics_pipelines(src);
+	}
+
+	Result<void, AllocateException> Allocator::allocate(std::span<ComputePipelineInfo> dst,
+		std::span<const ComputePipelineInstanceCreateInfo> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_compute_pipelines(dst, cis, loc);
+	}
+
+	Result<void, AllocateException> Allocator::allocate_compute_pipelines(std::span<ComputePipelineInfo> dst,
+		std::span<const ComputePipelineInstanceCreateInfo> cis,
+		SourceLocationAtFrame loc) {
+		return device_resource->allocate_compute_pipelines(dst, cis, loc);
+	}
+
+	void Allocator::deallocate(std::span<const ComputePipelineInfo> src) {
+		device_resource->deallocate_compute_pipelines(src);
+	}
+
+	Result<void, AllocateException> Allocator::allocate(std::span<RayTracingPipelineInfo> dst,
+		std::span<const RayTracingPipelineInstanceCreateInfo> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_ray_tracing_pipelines(dst, cis, loc);
+	}
+
+	Result<void, AllocateException> Allocator::allocate_ray_tracing_pipelines(std::span<RayTracingPipelineInfo> dst,
+		std::span<const RayTracingPipelineInstanceCreateInfo> cis,
+		SourceLocationAtFrame loc) {
+		return device_resource->allocate_ray_tracing_pipelines(dst, cis, loc);
+	}
+
+	void Allocator::deallocate(std::span<const RayTracingPipelineInfo> src) {
+		device_resource->deallocate_ray_tracing_pipelines(src);
+	}
+
+	Result<void, AllocateException> Allocator::allocate(std::span<VkRenderPass> dst, std::span<const RenderPassCreateInfo> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_render_passes(dst, cis, loc);
+	}
+
+	Result<void, AllocateException>
+	Allocator::allocate_render_passes(std::span<VkRenderPass> dst, std::span<const RenderPassCreateInfo> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_render_passes(dst, cis, loc);
+	}
+
+	void Allocator::deallocate(std::span<const VkRenderPass> src) {
+		device_resource->deallocate_render_passes(src);
+	}
 } // namespace vuk
