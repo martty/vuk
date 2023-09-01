@@ -647,6 +647,10 @@ namespace vuk {
 		return impl->named_pipelines.at(name);
 	}
 
+	bool Context::is_pipeline_available(Name name) {
+		return impl->named_pipelines.contains(name);
+	}
+
 	PipelineBaseInfo* Context::get_pipeline(const PipelineBaseCreateInfo& pbci) {
 		return &impl->pipelinebase_cache.acquire(pbci);
 	}
