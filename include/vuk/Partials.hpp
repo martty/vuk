@@ -155,13 +155,14 @@ namespace vuk {
 				                blit.srcSubresource.mipLevel = miplevel - 1;
 				                blit.srcOffsets[0] = Offset3D{ 0 };
 				                blit.srcOffsets[1] = Offset3D{ std::max((int32_t)extent.width >> (dmiplevel - 1), 1),
-					                                             std::max((int32_t)extent.height >> (dmiplevel - 1), 1),
-					                                             (int32_t)1 };
+                                                               std::max((int32_t)extent.height >> (dmiplevel - 1), 1),
+                                                               std::max((int32_t)extent.depth >> (dmiplevel - 1), 1) };
 				                blit.dstSubresource = blit.srcSubresource;
 				                blit.dstSubresource.mipLevel = miplevel;
 				                blit.dstOffsets[0] = Offset3D{ 0 };
-				                blit.dstOffsets[1] =
-				                    Offset3D{ std::max((int32_t)extent.width >> (dmiplevel), 1), std::max((int32_t)extent.height >> (dmiplevel), 1), (int32_t)1 };
+				                blit.dstOffsets[1] = Offset3D{ std::max((int32_t)extent.width >> (dmiplevel), 1),
+                                                               std::max((int32_t)extent.height >> (dmiplevel), 1),
+                                                               std::max((int32_t)extent.depth >> (dmiplevel), 1) };
 				                command_buffer.blit_image(mip_src_name, mip_dst_name, blit, Filter::eLinear);
 			                } });
 		}
