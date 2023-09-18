@@ -197,7 +197,7 @@ namespace vuk {
 		ici.initialLayout = ImageLayout::eUndefined;
 		ici.tiling = ImageTiling::eOptimal;
 		ici.usage = ImageUsageFlagBits::eTransferSrc | ImageUsageFlagBits::eTransferDst | ImageUsageFlagBits::eSampled;
-		ici.mipLevels = should_generate_mips ? (uint32_t)log2f((float)std::max(extent.width, extent.height)) + 1 : 1;
+		ici.mipLevels = should_generate_mips ? (uint32_t)log2f((float)std::max(std::max(extent.width, extent.height), extent.depth)) + 1 : 1;
 		ici.arrayLayers = 1;
 		auto tex = allocator.get_context().allocate_texture(allocator, ici, loc);
 
