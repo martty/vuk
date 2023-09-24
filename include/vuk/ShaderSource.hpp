@@ -102,7 +102,7 @@ namespace vuk {
 			memcpy(shader.data.data(), source.data(), source.size() * sizeof(std::string_view::value_type));
 			shader.data_ptr = shader.data.data();
 			shader.language = ShaderSourceLanguage::eHlsl;
-			shader.hlsl_stage = HlslShaderStage::eInferred;
+			shader.hlsl_stage = stage;
 			return shader;
 		}
 #endif
