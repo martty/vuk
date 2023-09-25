@@ -375,6 +375,14 @@ namespace vuk {
 			arguments.push_back(L"-fvk-use-gl-layout");
 			arguments.push_back(L"-no-warnings");
 
+			auto dir = std::filesystem::path(cinfo.filename).parent_path();
+			auto includePath = fmt::format("-I {0}", dir.string());
+			std::vector<wchar_t> buf(includePath.size());
+			std::use_facet<std::ctype<wchar_t>>(std::locale()).widen(includePath.data(), includePath.data() + includePath.size(), buf.data());
+			auto includePathW = std::wstring(buf.data(), buf.size());
+
+			arguments.push_back(includePathW.c_str());
+
 			static const std::pair<const char*, HlslShaderStage> inferred[] = {
 				{ ".vert.", HlslShaderStage::eVertex },   { ".frag.", HlslShaderStage::ePixel },       { ".comp.", HlslShaderStage::eCompute },
 				{ ".geom.", HlslShaderStage::eGeometry }, { ".mesh.", HlslShaderStage::eMesh },        { ".hull.", HlslShaderStage::eHull },
