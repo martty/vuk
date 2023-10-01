@@ -369,20 +369,25 @@ namespace vuk {
 		case ShaderSourceLanguage::eHlsl: {
 			std::vector<LPCWSTR> arguments;
 			arguments.push_back(L"-E");
-			arguments.push_back(L"main");
+
+			std::vector<wchar_t> buffer(cinfo.source.entry_point.size());
+			std::use_facet<std::ctype<wchar_t>>(std::locale()).widen(cinfo.source.entry_point.data(),
+			                                                         cinfo.source.entry_point.data() + cinfo.source.entry_point.size(),
+			                                                         buffer.data());
+			auto entry = std::wstring(buffer.data(), buffer.size());
+			arguments.push_back(entry.c_str());
+
+			auto dir = std::filesystem::path(cinfo.filename).parent_path();
+			auto include_path = fmt::format("-I {0}", dir.string());
+			buffer = std::vector<wchar_t>(include_path.size());
+			std::use_facet<std::ctype<wchar_t>>(std::locale()).widen(include_path.data(), include_path.data() + include_path.size(), buffer.data());
+			auto include_path_w = std::wstring(buffer.data(), buffer.size());
+			arguments.push_back(include_path_w.c_str());
+
 			arguments.push_back(L"-spirv");
 			arguments.push_back(L"-fspv-target-env=vulkan1.1");
 			arguments.push_back(L"-fvk-use-gl-layout");
 			arguments.push_back(L"-no-warnings");
-
-			auto dir = std::filesystem::path(cinfo.filename).parent_path();
-			auto includePath = fmt::format("-I {0}", dir.string());
-			std::vector<wchar_t> buf(includePath.size());
-			std::use_facet<std::ctype<wchar_t>>(std::locale()).widen(includePath.data(), includePath.data() + includePath.size(), buf.data());
-			auto includePathW = std::wstring(buf.data(), buf.size());
-
-			arguments.push_back(includePathW.c_str());
-
 			static const std::pair<const char*, HlslShaderStage> inferred[] = {
 				{ ".vert.", HlslShaderStage::eVertex },   { ".frag.", HlslShaderStage::ePixel },       { ".comp.", HlslShaderStage::eCompute },
 				{ ".geom.", HlslShaderStage::eGeometry }, { ".mesh.", HlslShaderStage::eMesh },        { ".hull.", HlslShaderStage::eHull },
