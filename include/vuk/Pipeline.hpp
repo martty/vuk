@@ -82,8 +82,8 @@ namespace vuk {
 		}
 
 #if VUK_USE_SHADERC
-		void add_glsl(std::string_view source, std::string filename) {
-			shaders.emplace_back(ShaderSource::glsl(source));
+		void add_glsl(std::string_view source, std::string filename, std::string entry_point = "main") {
+			shaders.emplace_back(ShaderSource::glsl(source, std::move(entry_point)));
 			shader_paths.emplace_back(std::move(filename));
 		}
 
@@ -93,19 +93,19 @@ namespace vuk {
 #endif
 
 #if VUK_USE_DXC
-		void add_hlsl(std::string_view source, std::string filename, HlslShaderStage stage = HlslShaderStage::eInferred) {
-			shaders.emplace_back(ShaderSource::hlsl(source, stage));
+		void add_hlsl(std::string_view source, std::string filename, HlslShaderStage stage = HlslShaderStage::eInferred, std::string entry_point = "main") {
+			shaders.emplace_back(ShaderSource::hlsl(source, stage, std::move(entry_point)));
 			shader_paths.emplace_back(std::move(filename));
 		}
 #endif
 
-		void add_spirv(std::vector<uint32_t> source, std::string filename) {
-			shaders.emplace_back(ShaderSource::spirv(std::move(source)));
+		void add_spirv(std::vector<uint32_t> source, std::string filename, std::string entry_point = "main") {
+			shaders.emplace_back(ShaderSource::spirv(std::move(source), std::move(entry_point)));
 			shader_paths.emplace_back(std::move(filename));
 		}
 
-		void add_static_spirv(const uint32_t* source, size_t num_words, std::string identifier) {
-			shaders.emplace_back(ShaderSource::spirv(source, num_words));
+		void add_static_spirv(const uint32_t* source, size_t num_words, std::string identifier, std::string entry_point = "main") {
+			shaders.emplace_back(ShaderSource::spirv(source, num_words, std::move(entry_point)));
 			shader_paths.emplace_back(std::move(identifier));
 		}
 

@@ -486,7 +486,7 @@ namespace vuk {
 			shader_stage.pSpecializationInfo = nullptr;
 			shader_stage.stage = sm.stage;
 			shader_stage.module = sm.shader_module;
-			shader_stage.pName = "main"; // TODO: make param
+			shader_stage.pName = contents.entry_point.c_str();
 			psscis.push_back(shader_stage);
 			accumulated_reflection.append(sm.reflection_info);
 			pipe_name += cinfo.shader_paths[i] + "+";

@@ -43,6 +43,7 @@ namespace vuk {
 			size = o.size;
 			language = o.language;
 			hlsl_stage = o.hlsl_stage;
+			entry_point = o.entry_point;
 		}
 		ShaderSource& operator=(const ShaderSource& o) noexcept {
 			data = o.data;
@@ -54,6 +55,7 @@ namespace vuk {
 			language = o.language;
 			size = o.size;
 			hlsl_stage = o.hlsl_stage;
+			entry_point = o.entry_point;
 
 			return *this;
 		}
@@ -68,6 +70,7 @@ namespace vuk {
 			size = o.size;
 			language = o.language;
 			hlsl_stage = o.hlsl_stage;
+			entry_point = o.entry_point;
 		}
 		ShaderSource& operator=(ShaderSource&& o) noexcept {
 			data = std::move(o.data);
@@ -79,48 +82,53 @@ namespace vuk {
 			size = o.size;
 			language = o.language;
 			hlsl_stage = o.hlsl_stage;
+			entry_point = o.entry_point;
 			
 			return *this;
 		}
 
 #if VUK_USE_SHADERC
-		static ShaderSource glsl(std::string_view source) {
+		static ShaderSource glsl(std::string_view source, std::string entry_point = "main") {
 			ShaderSource shader;
 			shader.data.resize(idivceil(source.size() + 1, sizeof(uint32_t)));
 			memcpy(shader.data.data(), source.data(), source.size() * sizeof(std::string_view::value_type));
 			shader.data_ptr = shader.data.data();
 			shader.size = shader.data.size();
 			shader.language = ShaderSourceLanguage::eGlsl;
+			shader.entry_point = std::move(entry_point);
 			return shader;
 		}
 #endif
 
 #if VUK_USE_DXC
-		static ShaderSource hlsl(std::string_view source, HlslShaderStage stage = HlslShaderStage::eInferred) {
+		static ShaderSource hlsl(std::string_view source, HlslShaderStage stage = HlslShaderStage::eInferred, std::string entry_point = "main") {
 			ShaderSource shader;
 			shader.data.resize(idivceil(source.size() + 1, sizeof(uint32_t)));
 			memcpy(shader.data.data(), source.data(), source.size() * sizeof(std::string_view::value_type));
 			shader.data_ptr = shader.data.data();
 			shader.language = ShaderSourceLanguage::eHlsl;
 			shader.hlsl_stage = stage;
+			shader.entry_point = std::move(entry_point);
 			return shader;
 		}
 #endif
 
-		static ShaderSource spirv(std::vector<uint32_t> source) {
+		static ShaderSource spirv(std::vector<uint32_t> source, std::string entry_point = "main") {
 			ShaderSource shader;
 			shader.data = std::move(source);
 			shader.data_ptr = shader.data.data();
 			shader.size = shader.data.size();
 			shader.language = ShaderSourceLanguage::eSpirv;
+			shader.entry_point = std::move(entry_point);
 			return shader;
 		}
 
-		static ShaderSource spirv(const uint32_t* source, size_t size) {
+		static ShaderSource spirv(const uint32_t* source, size_t size, std::string entry_point = "main") {
 			ShaderSource shader;
 			shader.data_ptr = source;
 			shader.size = size;
 			shader.language = ShaderSourceLanguage::eSpirv;
+			shader.entry_point = std::move(entry_point);
 			return shader;
 		}
 
@@ -137,6 +145,7 @@ namespace vuk {
 		std::vector<uint32_t> data;
 		ShaderSourceLanguage language;
 		HlslShaderStage hlsl_stage;
+		std::string entry_point;
 	};
 
 	inline bool operator==(const ShaderSource& a, const ShaderSource& b) noexcept {
