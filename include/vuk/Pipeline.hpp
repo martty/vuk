@@ -81,14 +81,14 @@ namespace vuk {
 			shader_paths.emplace_back(std::move(filename));
 		}
 
+		void define(std::string key, std::string value) {
+			defines.emplace_back(std::move(key), std::move(value));
+		}
+
 #if VUK_USE_SHADERC
 		void add_glsl(std::string_view source, std::string filename, std::string entry_point = "main") {
 			shaders.emplace_back(ShaderSource::glsl(source, std::move(entry_point)));
 			shader_paths.emplace_back(std::move(filename));
-		}
-
-		void define(std::string key, std::string value) {
-			defines.emplace_back(std::move(key), std::move(value));
 		}
 #endif
 
