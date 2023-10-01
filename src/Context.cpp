@@ -647,7 +647,8 @@ namespace vuk {
 		return impl->named_pipelines.at(name);
 	}
 
-	bool Context::is_pipeline_available(Name name) {
+	bool Context::is_pipeline_available(Name name) const {
+		std::lock_guard _(impl->named_pipelines_lock);
 		return impl->named_pipelines.contains(name);
 	}
 

@@ -148,7 +148,7 @@ namespace vuk {
 		/// @brief Checks if a pipeline is available
 		/// @param name the Name of the pipeline to check
 		/// @return true if the pipeline is available
-		bool is_pipeline_available(Name name);
+		bool is_pipeline_available(Name name) const;
 
 		PipelineBaseInfo* get_pipeline(const PipelineBaseCreateInfo& pbci);
 		/// @brief Reflect given pipeline base
