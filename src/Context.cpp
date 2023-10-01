@@ -337,6 +337,12 @@ namespace vuk {
 		ctx.vkUpdateDescriptorSets(ctx.device, (uint32_t)wdss.size(), wdss.data(), 0, nullptr);
 	}
 
+	static std::wstring convert_to_wstring(const std::string& string) {
+		std::vector<wchar_t> buffer(string.size());
+		std::use_facet<std::ctype<wchar_t>>(std::locale()).widen(string.data(), string.data() + string.size(), buffer.data());
+		return { buffer.data(), buffer.size() };
+	}
+
 	ShaderModule Context::create(const create_info_t<ShaderModule>& cinfo) {
 		std::vector<uint32_t> spirv;
 		const uint32_t* spirv_ptr = nullptr;
@@ -370,19 +376,18 @@ namespace vuk {
 			std::vector<LPCWSTR> arguments;
 			arguments.push_back(L"-E");
 
-			std::vector<wchar_t> buffer(cinfo.source.entry_point.size());
-			std::use_facet<std::ctype<wchar_t>>(std::locale()).widen(cinfo.source.entry_point.data(),
-			                                                         cinfo.source.entry_point.data() + cinfo.source.entry_point.size(),
-			                                                         buffer.data());
-			auto entry = std::wstring(buffer.data(), buffer.size());
-			arguments.push_back(entry.c_str());
+			auto entry_point = convert_to_wstring(cinfo.source.entry_point);
+			arguments.push_back(entry_point.c_str());
 
 			auto dir = std::filesystem::path(cinfo.filename).parent_path();
 			auto include_path = fmt::format("-I {0}", dir.string());
-			buffer = std::vector<wchar_t>(include_path.size());
-			std::use_facet<std::ctype<wchar_t>>(std::locale()).widen(include_path.data(), include_path.data() + include_path.size(), buffer.data());
-			auto include_path_w = std::wstring(buffer.data(), buffer.size());
+			auto include_path_w = convert_to_wstring(include_path);
 			arguments.push_back(include_path_w.c_str());
+
+			for (auto [k, v] : cinfo.defines) {
+				auto def = convert_to_wstring(fmt::format("-D{0}={1}", k, v));
+				arguments.push_back(def.c_str());
+			}
 
 			arguments.push_back(L"-spirv");
 			arguments.push_back(L"-fspv-target-env=vulkan1.1");
