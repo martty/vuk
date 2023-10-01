@@ -133,6 +133,7 @@ namespace vuk {
 		Name pipeline_name;
 		vuk::Program reflection_info;
 		std::vector<VkPipelineShaderStageCreateInfo> psscis;
+		std::vector<std::string> entry_point_names;
 		VkPipelineLayout pipeline_layout;
 		std::array<DescriptorSetLayoutAllocInfo, VUK_MAX_SETS> layout_info = {};
 		fixed_vector<DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> dslcis = {}; // saved for debug purposes

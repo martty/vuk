@@ -606,6 +606,9 @@ namespace vuk {
 			gpci.renderPass = cinfo.render_pass;
 			gpci.layout = cinfo.base->pipeline_layout;
 			auto psscis = cinfo.base->psscis;
+			for (auto i = 0; i < psscis.size(); i++) {
+				psscis[i].pName = cinfo.base->entry_point_names[i].c_str();
+			}
 			gpci.pStages = psscis.data();
 			gpci.stageCount = (uint32_t)psscis.size();
 
@@ -891,6 +894,7 @@ namespace vuk {
 			VkComputePipelineCreateInfo cpci{ .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO };
 			cpci.layout = cinfo.base->pipeline_layout;
 			cpci.stage = cinfo.base->psscis[0];
+			cpci.stage.pName = cinfo.base->entry_point_names[0].c_str();
 
 			VkPipeline pipeline;
 			VkResult res = ctx->vkCreateComputePipelines(device, ctx->vk_pipeline_cache, 1, &cpci, nullptr, &pipeline);
@@ -933,6 +937,11 @@ namespace vuk {
 			uint32_t hit_count = 0;
 			uint32_t callable_count = 0;
 
+			auto psscis = cinfo.base->psscis;
+			for (auto i = 0; i < psscis.size(); i++) {
+				psscis[i].pName = cinfo.base->entry_point_names[i].c_str();
+			}
+
 			for (size_t i = 0; i < cinfo.base->psscis.size(); i++) {
 				auto& stage = cinfo.base->psscis[i];
 				if (stage.stage == VK_SHADER_STAGE_RAYGEN_BIT_KHR) {
@@ -965,8 +974,8 @@ namespace vuk {
 			cpci.pGroups = groups.data();
 
 			cpci.maxPipelineRayRecursionDepth = cinfo.base->max_ray_recursion_depth;
-			cpci.pStages = cinfo.base->psscis.data();
-			cpci.stageCount = (uint32_t)cinfo.base->psscis.size();
+			cpci.pStages = psscis.data();
+			cpci.stageCount = (uint32_t)psscis.size();
 
 			VkPipeline pipeline;
 			VkResult res = ctx->vkCreateRayTracingPipelinesKHR(device, {}, ctx->vk_pipeline_cache, 1, &cpci, nullptr, &pipeline);

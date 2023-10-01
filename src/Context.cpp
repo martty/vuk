@@ -472,6 +472,7 @@ namespace vuk {
 
 	PipelineBaseInfo Context::create(const create_info_t<PipelineBaseInfo>& cinfo) {
 		std::vector<VkPipelineShaderStageCreateInfo> psscis;
+		std::vector<std::string> entry_point_names;
 
 		// accumulate descriptors from all stages
 		Program accumulated_reflection;
@@ -486,7 +487,7 @@ namespace vuk {
 			shader_stage.pSpecializationInfo = nullptr;
 			shader_stage.stage = sm.stage;
 			shader_stage.module = sm.shader_module;
-			shader_stage.pName = contents.entry_point.c_str();
+			entry_point_names.push_back(contents.entry_point);
 			psscis.push_back(shader_stage);
 			accumulated_reflection.append(sm.reflection_info);
 			pipe_name += cinfo.shader_paths[i] + "+";
@@ -524,6 +525,7 @@ namespace vuk {
 
 		PipelineBaseInfo pbi;
 		pbi.psscis = std::move(psscis);
+		pbi.entry_point_names = std::move(entry_point_names);
 		pbi.layout_info = dslai;
 		pbi.pipeline_layout = impl->pipeline_layouts.acquire(plci);
 		pbi.dslcis = std::move(plci.dslcis);
