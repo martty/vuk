@@ -1220,6 +1220,7 @@ namespace vuk {
 				if (!set_to_bind && !persistent_set_to_bind) { // not requested to bind now, noop
 					continue;
 				} else {                                       // requested to bind now
+					fmt::fprintf(stderr, "Attempting to bind descriptor(s)/set to (set: {}) not declared in shader.", set_index);
 					fmt::print(stderr, "Attempting to bind descriptor(s)/set to (set: {}) not declared in shader.", set_index);
 					assert(false && "Attempting to bind descriptor(s)/set to set not declared in shader (see stderr).");
 					return false;
