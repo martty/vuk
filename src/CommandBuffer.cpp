@@ -1,5 +1,6 @@
 #include "vuk/CommandBuffer.hpp"
 #include "RenderGraphUtil.hpp"
+#include "fmt/printf.h"
 #include "vuk/AllocatorHelpers.hpp"
 #include "vuk/Context.hpp"
 #include "vuk/RenderGraph.hpp"
@@ -13,7 +14,7 @@
 
 // hand-inlined versions of the most common bitset ops, because if these are not inlined, the overhead is terrible
 #define VUK_SB_SET(bitset, pos, value)                                                                                                                         \
-	if constexpr (decltype(bitset)::n_words == 1) {                                                                                                                         \
+	if constexpr (decltype(bitset)::n_words == 1) {                                                                                                              \
 		if (value) {                                                                                                                                               \
 			bitset.words[0] |= 1ULL << pos;                                                                                                                          \
 		} else {                                                                                                                                                   \
@@ -24,7 +25,7 @@
 	}
 
 #define VUK_SB_COUNT(bitset, dst)                                                                                                                              \
-	if constexpr (decltype(bitset)::n_words == 1) {                                                                                                                         \
+	if constexpr (decltype(bitset)::n_words == 1) {                                                                                                              \
 		using T = uint64_t;                                                                                                                                        \
 		uint64_t v = bitset.words[0];                                                                                                                              \
 		v = v - ((v >> 1) & (T) ~(T)0 / 3);                                                                                                                        \
@@ -36,7 +37,7 @@
 	}
 
 #define VUK_SB_TEST(bitset, pos, dst)                                                                                                                          \
-	if constexpr (decltype(bitset)::n_words == 1) {                                                                                                                         \
+	if constexpr (decltype(bitset)::n_words == 1) {                                                                                                              \
 		dst = bitset.words[0] & 1ULL << pos;                                                                                                                       \
 	} else {                                                                                                                                                     \
 		dst = bitset.test(pos);                                                                                                                                    \
@@ -1121,6 +1122,27 @@ namespace vuk {
 		return command_buffer;
 	}
 
+	std::string to_string(vuk::DescriptorType dt) {
+		switch (dt) {
+		case DescriptorType::eUniformBuffer:
+			return "Uniform Buffer";
+		case DescriptorType::eStorageBuffer:
+			return "Storage Buffer";
+		case DescriptorType::eSampledImage:
+			return "Sampled Image";
+		case DescriptorType::eSampler:
+			return "Sampler";
+		case DescriptorType::eCombinedImageSampler:
+			return "Combined Image-Sampler";
+		case DescriptorType::eStorageImage:
+			return "Storage Image";
+		case DescriptorType::eAccelerationStructureKHR:
+			return "Acceleration Structure";
+		}
+		assert(0);
+		return "";
+	}
+
 	bool CommandBuffer::_bind_state(PipeType pipe_type) {
 		VkPipelineLayout current_layout;
 		switch (pipe_type) {
@@ -1157,21 +1179,21 @@ namespace vuk {
 		auto persistent_sets_mask = persistent_sets_to_bind.to_ulong();
 		uint64_t highest_undisturbed_binding_required = 0;
 		uint64_t lowest_disturbed_binding = VUK_MAX_SETS;
-		for (size_t i = 0; i < VUK_MAX_SETS; i++) {
-			bool set_to_bind = sets_mask & (1ULL << i);
-			bool persistent_set_to_bind = persistent_sets_mask & (1ULL << i);
+		for (size_t set_index = 0; set_index < VUK_MAX_SETS; set_index++) {
+			bool set_to_bind = sets_mask & (1ULL << set_index);
+			bool persistent_set_to_bind = persistent_sets_mask & (1ULL << set_index);
 
 			VkDescriptorSetLayout pipeline_set_layout;
 			DescriptorSetLayoutAllocInfo* ds_layout_alloc_info;
 			switch (pipe_type) {
 			case PipeType::eGraphics:
-				ds_layout_alloc_info = &current_graphics_pipeline->layout_info[i];
+				ds_layout_alloc_info = &current_graphics_pipeline->layout_info[set_index];
 				break;
 			case PipeType::eCompute:
-				ds_layout_alloc_info = &current_compute_pipeline->layout_info[i];
+				ds_layout_alloc_info = &current_compute_pipeline->layout_info[set_index];
 				break;
 			case PipeType::eRayTracing:
-				ds_layout_alloc_info = &current_ray_tracing_pipeline->layout_info[i];
+				ds_layout_alloc_info = &current_ray_tracing_pipeline->layout_info[set_index];
 				break;
 			}
 			pipeline_set_layout = ds_layout_alloc_info->layout;
@@ -1179,15 +1201,16 @@ namespace vuk {
 			// binding validation
 			if (pipeline_set_layout != VK_NULL_HANDLE) { // set in the layout
 				bool is_used;
-				VUK_SB_TEST(sets_used, i, is_used);
+				VUK_SB_TEST(sets_used, set_index, is_used);
 				if (!is_used && !set_to_bind && !persistent_set_to_bind) { // never set in the cbuf & not requested to bind now
-					assert(false && "Pipeline layout contains set, but never set in CommandBuffer or disturbed by a previous set composition or binding.");
+					fmt::print(stderr, "Shader declares (set: {}), but never set in CommandBuffer or disturbed by a previous set composition or binding.", set_index);
+					assert(false && "Shader declares set, but never set in CommandBuffer or disturbed by a previous set composition or binding (see stderr).");
 					return false;
 				} else if (!set_to_bind && !persistent_set_to_bind) { // but not requested to bind now
 					// validate that current set is compatible (== same set layout)
-					assert(set_layouts_used[i] == pipeline_set_layout && "Previously bound set is incompatible with currently bound pipeline.");
+					assert(set_layouts_used[set_index] == pipeline_set_layout && "Previously bound set is incompatible with currently bound pipeline.");
 					// this set is compatible, but we require it to be undisturbed
-					highest_undisturbed_binding_required = std::max(highest_undisturbed_binding_required, i);
+					highest_undisturbed_binding_required = std::max(highest_undisturbed_binding_required, set_index);
 					// detect if during this binding we disturb a set that we depend on
 					assert(highest_undisturbed_binding_required < lowest_disturbed_binding &&
 					       "Set composition disturbs previously bound set that is not recomposed or bound for this drawcall.");
@@ -1197,25 +1220,26 @@ namespace vuk {
 				if (!set_to_bind && !persistent_set_to_bind) { // not requested to bind now, noop
 					continue;
 				} else {                                       // requested to bind now
-					assert(false && "Set layout doesn't contain set, but set in CommandBuffer.");
+					fmt::print(stderr, "Attempting to bind descriptor(s)/set to (set: {}) not declared in shader.", set_index);
+					assert(false && "Attempting to bind descriptor(s)/set to set not declared in shader (see stderr).");
 					return false;
 				}
 			}
 			// if the newly bound DS has a different set layout than the previously bound set, then it disturbs all the sets at higher indices
-			bool is_disturbing = set_layouts_used[i] != pipeline_set_layout;
+			bool is_disturbing = set_layouts_used[set_index] != pipeline_set_layout;
 			if (is_disturbing) {
-				lowest_disturbed_binding = std::min(lowest_disturbed_binding, i + 1);
+				lowest_disturbed_binding = std::min(lowest_disturbed_binding, set_index + 1);
 			}
 
 			switch (pipe_type) {
 			case PipeType::eGraphics:
-				set_bindings[i].layout_info = &current_graphics_pipeline->layout_info[i];
+				set_bindings[set_index].layout_info = &current_graphics_pipeline->layout_info[set_index];
 				break;
 			case PipeType::eCompute:
-				set_bindings[i].layout_info = &current_compute_pipeline->layout_info[i];
+				set_bindings[set_index].layout_info = &current_compute_pipeline->layout_info[set_index];
 				break;
 			case PipeType::eRayTracing:
-				set_bindings[i].layout_info = &current_ray_tracing_pipeline->layout_info[i];
+				set_bindings[set_index].layout_info = &current_ray_tracing_pipeline->layout_info[set_index];
 				break;
 			}
 
@@ -1224,18 +1248,18 @@ namespace vuk {
 				DescriptorSetLayoutCreateInfo* dslci;
 				switch (pipe_type) {
 				case PipeType::eGraphics:
-					dslci = &current_graphics_pipeline->base->dslcis[i];
+					dslci = &current_graphics_pipeline->base->dslcis[set_index];
 					break;
 				case PipeType::eCompute:
-					dslci = &current_compute_pipeline->base->dslcis[i];
+					dslci = &current_compute_pipeline->base->dslcis[set_index];
 					break;
 				case PipeType::eRayTracing:
-					dslci = &current_ray_tracing_pipeline->base->dslcis[i];
+					dslci = &current_ray_tracing_pipeline->base->dslcis[set_index];
 					break;
 				}
 				ppipeline_set_bindings = &dslci->bindings;
 				auto& pipeline_set_bindings = *ppipeline_set_bindings;
-				auto sb = set_bindings[i].finalize(dslci->used_bindings);
+				auto sb = set_bindings[set_index].finalize(dslci->used_bindings);
 
 				for (uint64_t j = 0; j < pipeline_set_bindings.size(); j++) {
 					auto& pipe_binding = pipeline_set_bindings[j];
@@ -1267,10 +1291,18 @@ namespace vuk {
 					}
 					// diagnose missing sampler or image
 					if (cbuf_dtype == DescriptorType::eSampler && pipe_dtype == DescriptorType::eCombinedImageSampler) {
+						fmt::print(stderr,
+						             "Shader has declared (set: {}, binding: {}) combined image-sampler, but only sampler was bound.",
+						             set_index,
+						             pipeline_set_bindings[j].binding);
 						assert(false && "Descriptor is combined image-sampler, but only sampler was bound.");
 						return false;
 					}
 					if (cbuf_dtype == DescriptorType::eSampledImage && pipe_dtype == DescriptorType::eCombinedImageSampler) {
+						fmt::print(stderr,
+						             "Shader has declared (set: {}, binding: {}) combined image-sampler, but only image was bound.",
+						             set_index,
+						             pipeline_set_bindings[j].binding);
 						assert(false && "Descriptor is combined image-sampler, but only image was bound.");
 						return false;
 					}
@@ -1281,9 +1313,16 @@ namespace vuk {
 							VUK_SB_SET(sb.used, j, false);
 						} else {
 							if (cbuf_dtype == vuk::DescriptorType(127)) {
-								assert(false && "Descriptor layout contains binding that was not bound.");
+								fmt::print(stderr, "Shader has declared (set: {}, binding: {}) that was not bound.", set_index, pipeline_set_bindings[j].binding);
+								assert(false && "Descriptor layout contains binding that was not bound (see stderr).");
 							} else {
-								assert(false && "Attempting to bind the wrong descriptor type.");
+								fmt::print(stderr,
+								             "Shader has declared (set: {}, binding: {}) with type <{}> - tried to bind <{}>.",
+								             set_index,
+								             pipeline_set_bindings[j].binding,
+								             to_string(pipe_dtype),
+								             to_string(cbuf_dtype));
+								assert(false && "Attempting to bind the wrong descriptor type (see stderr).");
 							}
 							return false;
 						}
@@ -1349,11 +1388,11 @@ namespace vuk {
 					assert(0 && "Unimplemented DS strategy");
 				}
 
-				ctx.vkCmdBindDescriptorSets(command_buffer, bind_point, current_layout, (uint32_t)i, 1, &ds->descriptor_set, 0, nullptr);
-				set_layouts_used[i] = ds->layout_info.layout;
+				ctx.vkCmdBindDescriptorSets(command_buffer, bind_point, current_layout, (uint32_t)set_index, 1, &ds->descriptor_set, 0, nullptr);
+				set_layouts_used[set_index] = ds->layout_info.layout;
 			} else {
-				ctx.vkCmdBindDescriptorSets(command_buffer, bind_point, current_layout, (uint32_t)i, 1, &persistent_sets[i].first, 0, nullptr);
-				set_layouts_used[i] = persistent_sets[i].second;
+				ctx.vkCmdBindDescriptorSets(command_buffer, bind_point, current_layout, (uint32_t)set_index, 1, &persistent_sets[set_index].first, 0, nullptr);
+				set_layouts_used[set_index] = persistent_sets[set_index].second;
 			}
 		}
 		auto sets_bound = sets_to_bind | persistent_sets_to_bind;            // these sets we bound freshly, valid
@@ -1466,8 +1505,7 @@ namespace vuk {
 						pi.extended_size += sizeof(GraphicsPipelineInstanceCreateInfo::PipelineColorBlendAttachmentState);
 					}
 				} else {
-					assert(count >= pi.attachmentCount &&
-					       "If color blend state is not broadcast, you must set it for each color attachment.");
+					assert(count >= pi.attachmentCount && "If color blend state is not broadcast, you must set it for each color attachment.");
 					records.color_blend_attachments = true;
 					pi.extended_size += (uint16_t)(pi.attachmentCount * sizeof(GraphicsPipelineInstanceCreateInfo::PipelineColorBlendAttachmentState));
 				}
@@ -1595,8 +1633,8 @@ namespace vuk {
 					if (used) {
 						auto& bin = binding_descriptions[i];
 						GraphicsPipelineInstanceCreateInfo::VertexInputBindingDescription vibd{ .stride = bin.stride,
-							                                                              .inputRate = (uint32_t)bin.inputRate,
-							                                                              .binding = (uint8_t)bin.binding };
+							                                                                      .inputRate = (uint32_t)bin.inputRate,
+							                                                                      .binding = (uint8_t)bin.binding };
 						write(data_ptr, vibd);
 					}
 				}
@@ -1607,13 +1645,13 @@ namespace vuk {
 				for (uint32_t i = 0; i < num_pcba_to_write; i++) {
 					auto& cba = color_blend_attachments[i];
 					GraphicsPipelineInstanceCreateInfo::PipelineColorBlendAttachmentState pcba{ .blendEnable = cba.blendEnable,
-						                                                                  .srcColorBlendFactor = cba.srcColorBlendFactor,
-						                                                                  .dstColorBlendFactor = cba.dstColorBlendFactor,
-						                                                                  .colorBlendOp = cba.colorBlendOp,
-						                                                                  .srcAlphaBlendFactor = cba.srcAlphaBlendFactor,
-						                                                                  .dstAlphaBlendFactor = cba.dstAlphaBlendFactor,
-						                                                                  .alphaBlendOp = cba.alphaBlendOp,
-						                                                                  .colorWriteMask = (uint32_t)cba.colorWriteMask };
+						                                                                          .srcColorBlendFactor = cba.srcColorBlendFactor,
+						                                                                          .dstColorBlendFactor = cba.dstColorBlendFactor,
+						                                                                          .colorBlendOp = cba.colorBlendOp,
+						                                                                          .srcAlphaBlendFactor = cba.srcAlphaBlendFactor,
+						                                                                          .dstAlphaBlendFactor = cba.dstAlphaBlendFactor,
+						                                                                          .alphaBlendOp = cba.alphaBlendOp,
+						                                                                          .colorWriteMask = (uint32_t)cba.colorWriteMask };
 					write(data_ptr, pcba);
 				}
 			}
@@ -1640,23 +1678,23 @@ namespace vuk {
 
 			if (records.non_trivial_raster_state) {
 				GraphicsPipelineInstanceCreateInfo::RasterizationState rs{ .depthClampEnable = (bool)rasterization_state->depthClampEnable,
-					                                                 .rasterizerDiscardEnable = (bool)rasterization_state->rasterizerDiscardEnable,
-					                                                 .polygonMode = (uint8_t)rasterization_state->polygonMode,
-					                                                 .frontFace = (uint8_t)rasterization_state->frontFace };
+					                                                         .rasterizerDiscardEnable = (bool)rasterization_state->rasterizerDiscardEnable,
+					                                                         .polygonMode = (uint8_t)rasterization_state->polygonMode,
+					                                                         .frontFace = (uint8_t)rasterization_state->frontFace };
 				write(data_ptr, rs);
 				// TODO: support depth bias
 			}
 
 			if (records.conservative_rasterization_enabled) {
 				GraphicsPipelineInstanceCreateInfo::ConservativeState cs{ .conservativeMode = (uint8_t)conservative_state->mode,
-					                                                .overestimationAmount = conservative_state->overestimationAmount };
+					                                                        .overestimationAmount = conservative_state->overestimationAmount };
 				write(data_ptr, cs);
 			}
 
 			if (ongoing_render_pass->depth_stencil_attachment) {
 				GraphicsPipelineInstanceCreateInfo::Depth ds = { .depthTestEnable = (bool)depth_stencil_state->depthTestEnable,
-					                                       .depthWriteEnable = (bool)depth_stencil_state->depthWriteEnable,
-					                                       .depthCompareOp = (uint8_t)depth_stencil_state->depthCompareOp };
+					                                               .depthWriteEnable = (bool)depth_stencil_state->depthWriteEnable,
+					                                               .depthCompareOp = (uint8_t)depth_stencil_state->depthCompareOp };
 				write(data_ptr, ds);
 				// TODO: support stencil
 				// TODO: support depth bounds
