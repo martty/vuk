@@ -149,7 +149,7 @@ namespace vuk {
 	};
 
 	inline bool operator==(const ShaderSource& a, const ShaderSource& b) noexcept {
-		bool basics = a.language == b.language && a.size == b.size;
+		bool basics = a.language == b.language && a.size == b.size && a.entry_point == b.entry_point;
 		if (!basics) {
 			return false;
 		}
