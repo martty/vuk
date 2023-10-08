@@ -384,9 +384,10 @@ namespace vuk {
 			auto include_path_w = convert_to_wstring(include_path);
 			arguments.push_back(include_path_w.c_str());
 
+			std::vector<std::wstring> def_ws;
 			for (auto [k, v] : cinfo.defines) {
-				auto def = convert_to_wstring(fmt::format("-D{0}={1}", k, v));
-				arguments.push_back(def.c_str());
+				auto def = fmt::format("-D{0}={1}", k, v);
+				arguments.push_back(def_ws.emplace_back(convert_to_wstring(def)).c_str());
 			}
 
 			arguments.push_back(L"-spirv");
