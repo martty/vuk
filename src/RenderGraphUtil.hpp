@@ -39,7 +39,7 @@ namespace vuk {
 		}
 		if ((a == ImageLayout::eDepthStencilReadOnlyOptimal && b == ImageLayout::eDepthStencilAttachmentOptimal) ||
 		    (b == ImageLayout::eDepthStencilReadOnlyOptimal && a == ImageLayout::eDepthStencilAttachmentOptimal)) {
-			return ImageLayout::eDepthStencilAttachmentOptimal;
+			return ImageLayout::eAttachmentOptimalKHR;
 		}
 		if ((a == ImageLayout::eReadOnlyOptimalKHR && b == ImageLayout::eAttachmentOptimalKHR) ||
 		    (b == ImageLayout::eReadOnlyOptimalKHR && a == ImageLayout::eAttachmentOptimalKHR)) {
@@ -214,8 +214,7 @@ namespace vuk {
 
 	inline bool is_framebuffer_attachment(QueueResourceUse u) {
 		switch (u.layout) {
-		case vuk::ImageLayout::eColorAttachmentOptimal:
-		case vuk::ImageLayout::eDepthStencilAttachmentOptimal:
+		case vuk::ImageLayout::eAttachmentOptimal:
 			return true;
 		default:
 			return false;

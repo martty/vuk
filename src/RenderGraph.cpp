@@ -1874,16 +1874,19 @@ namespace vuk {
 			Access ia = Access::eNone;
 			if (chain->def->pass >= 0) {
 				ia = get_resource(*chain->def).ia;
+				access_to_usage(usage, ia);
 			}
 			for (auto& r : chain->reads.to_span(pass_reads)) {
 				ia = get_resource(r).ia;
+				access_to_usage(usage, ia);
 			}
 			if (chain->undef && chain->undef->pass >= 0) {
 				ia = get_resource(*chain->undef).ia;
+				access_to_usage(usage, ia);
 			} else if (chain->undef) {
 				ia = get_release(chain->undef->pass).original;
+				access_to_usage(usage, ia);
 			}
-			access_to_usage(usage, ia);
 		}
 
 		return usage;
