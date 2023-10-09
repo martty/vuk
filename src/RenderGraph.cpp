@@ -6,11 +6,12 @@
 #include "vuk/Exception.hpp"
 #include "vuk/Future.hpp"
 
+#include <bit>
 #include <charconv>
+#include <fmt/printf.h>
 #include <set>
 #include <sstream>
 #include <unordered_set>
-#include <bit>
 
 // intrinsics
 namespace {
@@ -322,7 +323,7 @@ namespace vuk {
 		for (auto& head : chains) {
 			if (head->def->pass >= 0 && head->type == Resource::Type::eImage) { // no Buffer divergence
 				auto& pass = get_pass(*head->def);
-				if (pass.pass->type == PassType::eDiverge) { // diverging subchain
+				if (pass.pass->type == PassType::eDiverge) {                      // diverging subchain
 					auto& whole_res = pass.resources.to_span(resources)[0].name;
 					auto parent_chain_end = &res_to_links[whole_res];
 					head->source = parent_chain_end;
@@ -373,7 +374,7 @@ namespace vuk {
 		for (auto& head : chains) {
 			if (head->def->pass >= 0 && head->type == Resource::Type::eImage) { // no Buffer divergence
 				auto& pass = get_pass(*head->def);
-				if (pass.pass->type == PassType::eDiverge) { // diverging subchain
+				if (pass.pass->type == PassType::eDiverge) {                      // diverging subchain
 					// whole resource is always first resource
 					auto& whole_res = pass.resources.to_span(resources)[0].name;
 					auto link = &res_to_links[whole_res];
@@ -384,7 +385,7 @@ namespace vuk {
 					auto& our_res = get_resource(*head->def);
 
 					att.image_subrange = diverged_subchain_headers.at(our_res.out_name).second; // look up subrange referenced by this subchain
-					att.name = QualifiedName{ Name{}, att.name.name.append(our_res.out_name.name.to_sv()) };
+					att.name = QualifiedName{ Name{}, our_res.out_name.name };
 					att.parent_attachment = link->def->pass;
 					auto new_bound = bound_attachments.emplace_back(att);
 					// replace def with new attachment
@@ -397,11 +398,11 @@ namespace vuk {
 		for (auto& head : chains) {
 			if (head->def->pass >= 0 && head->type == Resource::Type::eImage) { // no Buffer divergence
 				auto& pass = get_pass(*head->def);
-				if (pass.pass->type == PassType::eConverge) { // converge subchain
-					if (head->reads.size() > 0) {               // first use is reads
-						head->reads = {};                         // remove the reads
-					} else if (head->undef) {                   // first use is undef
-						head = head->next;                        // drop link from chain
+				if (pass.pass->type == PassType::eConverge) {                     // converge subchain
+					if (head->reads.size() > 0) {                                   // first use is reads
+						head->reads = {};                                             // remove the reads
+					} else if (head->undef) {                                       // first use is undef
+						head = head->next;                                            // drop link from chain
 						head->prev = nullptr;
 					}
 					// reconverged resource is always first resource
@@ -423,7 +424,7 @@ namespace vuk {
 						link = link->prev;
 					}
 					auto whole_att = get_bound_attachment(link->def->pass); // the whole attachment
-					whole_att.name = QualifiedName{ Name{}, whole_att.name.name.append(whole_res.out_name.name.to_sv()) };
+					whole_att.name = QualifiedName{ Name{}, whole_res.out_name.name };
 					whole_att.acquire.unsynchronized = true;
 					whole_att.parent_attachment = link->def->pass;
 					auto new_bound = bound_attachments.emplace_back(whole_att);
@@ -1231,6 +1232,11 @@ namespace vuk {
 	}
 
 	Result<void> RGCImpl::generate_barriers_and_waits() {
+#ifdef VUK_DUMP_USE
+		fmt::printf("------------------------\n");
+		fmt::printf("digraph vuk {\n");
+#endif
+
 		// we need to handle chains in order of dependency
 		std::vector<ChainLink*> work_queue;
 		for (auto head : chains) {
@@ -1258,6 +1264,20 @@ namespace vuk {
 				auto& att = get_bound_attachment(head->def->pass);
 				aspect = format_to_aspect(att.attachment.format);
 				image_subrange = att.image_subrange;
+#ifdef VUK_DUMP_USE
+				if (head->source) {
+					fmt::print("\"{}\" [shape=diamond,label=\" {} \"];\n", att.name.name.c_str(), att.name.name.c_str());
+					auto& last_ud = get_resource(*head->source->undef);
+					fmt::print("\"{}\" -> \"{}\" [color = red];\n", last_ud.name.name.c_str(), att.name.name.c_str());
+				} else {
+					fmt::print("\"{}\" [shape=box,label=\" {} \"];\n", att.name.name.c_str(), att.name.name.c_str());
+				}
+#endif
+			} else {
+#ifdef VUK_DUMP_USE
+				auto& buf = get_bound_buffer(head->def->pass);
+				fmt::print("\"{}\" [shape=box,label=\" {} \"];\n", buf.name.name.c_str(), buf.name.name.c_str());
+#endif
 			}
 			bool is_subchain = head->source != nullptr;
 
@@ -1265,12 +1285,30 @@ namespace vuk {
 			// last use on the chain
 			QueueResourceUse last_use;
 			ChainLink* link;
+
 			for (link = head; link != nullptr; link = link->next) {
+#ifdef VUK_DUMP_USE
+				QualifiedName def_name;
+				if (link->def->pass >= 0) {
+					auto& def_res = get_resource(*link->def);
+					def_name = def_res.out_name;
+				} else {
+					if (is_image) {
+						def_name = get_bound_attachment(head->def->pass).name;
+					} else {
+						def_name = get_bound_buffer(head->def->pass).name;
+					}
+				}
+#endif
+
 				// populate last use from def or attach
 				if (link->def->pass >= 0) {
 					auto& def_pass = get_pass(*link->def);
 					auto& def_res = get_resource(*link->def);
 					last_use = to_use(def_res.ia, def_pass.domain);
+#ifdef VUK_DUMP_USE
+					fmt::print("\"{}\" [label=\" {} \"];\n", def_res.name.name.c_str(), def_res.name.name.c_str());
+#endif
 				} else {
 					last_use = is_image ? get_bound_attachment(head->def->pass).acquire.src_use : get_bound_buffer(head->def->pass).acquire.src_use;
 				}
@@ -1306,6 +1344,11 @@ namespace vuk {
 							auto& r = reads[read_idx];
 							auto& pass = get_pass(r);
 							auto& res = get_resource(r);
+#ifdef VUK_DUMP_USE
+							fmt::print("\"{}{}\" [label=\" {} \"];\n", def_name.name.c_str(), 10000 + r.pass, "R");
+							fmt::print(
+							    "\"{}\" -> \"{}{}\" [label=\" {} \"];\n", def_name.name.c_str(), def_name.name.c_str(), 10000 + r.pass, pass.qualified_name.name.c_str());
+#endif
 
 							auto use2 = to_use(res.ia, pass.domain);
 							if (use.domain == DomainFlagBits::eNone) {
@@ -1394,6 +1437,12 @@ namespace vuk {
 				if (link->undef && link->undef->pass >= 0) {
 					auto& pass = get_pass(*link->undef);
 					auto& res = get_resource(*link->undef);
+#ifdef VUK_DUMP_USE
+					fmt::print("\"{}\" -> \"{}\" [style=bold, color=blue, label=\" {} \"];\n",
+					           res.name.name.c_str(),
+					           res.out_name.name.c_str(),
+					           pass.qualified_name.name.c_str());
+#endif
 					QueueResourceUse use = to_use(res.ia, pass.domain);
 					if (use.layout == ImageLayout::eGeneral) {
 						res.promoted_to_general = true;
@@ -1409,7 +1458,7 @@ namespace vuk {
 								// if the last use was discard, then downgrade load op
 								if (last_use.layout == ImageLayout::eUndefined) {
 									att.description.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-								} else if (use.access & AccessFlagBits::eColorAttachmentWrite) { // add CA read, because of LOAD_OP_LOAD
+								} else if (use.access & AccessFlagBits::eColorAttachmentWrite) {        // add CA read, because of LOAD_OP_LOAD
 									use.access |= AccessFlagBits::eColorAttachmentRead;
 								} else if (use.access & AccessFlagBits::eDepthStencilAttachmentWrite) { // add DSA read, because of LOAD_OP_LOAD
 									use.access |= AccessFlagBits::eDepthStencilAttachmentRead;
@@ -1462,6 +1511,21 @@ namespace vuk {
 
 			// tail can be either a release or nothing
 			if (link->undef && link->undef->pass < 0) { // a release
+#ifdef VUK_DUMP_USE
+				QualifiedName def_name;
+				if (link->def->pass >= 0) {
+					auto& def_res = get_resource(*link->def);
+					def_name = def_res.out_name;
+				} else {
+					if (is_image) {
+						def_name = get_bound_attachment(head->def->pass).name;
+					} else {
+						def_name = get_bound_buffer(head->def->pass).name;
+					}
+				}
+				fmt::print(
+				    "\"{}\" -> \"R+\" [style=bold, color=green];\n", def_name.name.c_str());
+#endif
 				// what if last pass is a read:
 				// we loop through the read passes and select the one executing last based on the ordering
 				// that pass can perform the signal and the barrier post-pass
@@ -1534,6 +1598,11 @@ namespace vuk {
 		}
 
 		assert(seen_chains == chains.size());
+
+#ifdef VUK_DUMP_USE
+		fmt::printf("};\n");
+		fmt::printf("------------------------\n");
+#endif
 
 		return { expected_value };
 	}
