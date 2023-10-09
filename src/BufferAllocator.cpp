@@ -186,8 +186,18 @@ namespace vuk {
 	}
 
 	Result<Buffer, AllocateException> BufferSubAllocator::allocate_buffer(size_t size, size_t alignment, SourceLocationAtFrame source) {
+		if (size >= block_size) { // allocate-through
+			BufferCreateInfo bci{ .mem_usage = mem_usage, .size = size, .alignment = alignment };
+			Buffer buf;
+			auto result = upstream->allocate_buffers(std::span{ &buf, 1 }, std::span{ &bci, 1 }, source);
+			if (!result) {
+				return result;
+			} else {
+				return { expected_value, buf };
+			}
+		}
+
 		std::lock_guard _(mutex);
-		
 		
 		VmaVirtualAllocation va;
 		VkDeviceSize offset;
@@ -235,6 +245,10 @@ namespace vuk {
 	}
 
 	void BufferSubAllocator::deallocate_buffer(const Buffer& buf) {
+		if (buf.size >= block_size) {
+			upstream->deallocate_buffers(std::span{ &buf, 1 });
+			return;
+		}
 		std::lock_guard _(mutex);
 		auto sa = static_cast<SubAllocation*>(buf.allocation);
 		vmaVirtualFree(virtual_alloc, sa->allocation);
