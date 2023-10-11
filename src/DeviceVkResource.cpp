@@ -303,6 +303,8 @@ namespace vuk {
 			if (uvci.usage != 0) {
 				ci.pNext = &uvci;
 			}
+			ci.subresourceRange.layerCount = ci.subresourceRange.layerCount == 65535 ? VK_REMAINING_ARRAY_LAYERS : ci.subresourceRange.layerCount;
+			ci.subresourceRange.levelCount = ci.subresourceRange.levelCount == 65535 ? VK_REMAINING_MIP_LEVELS : ci.subresourceRange.levelCount;
 			VkImageView iv;
 			VkResult res = ctx->vkCreateImageView(device, &ci, nullptr, &iv);
 			if (res != VK_SUCCESS) {

@@ -279,6 +279,10 @@ namespace vuk {
 		Result<void> terminate_chains();
 		Result<void> diagnose_unheaded_chains();
 		Result<void> schedule_intra_queue(std::span<struct PassInfo> passes, const RenderGraphCompileOptions& compile_options);
+
+		std::vector<ChainLink*> div_subchains;
+		std::vector<ChainLink**> conv_subchains;
+		Result<void> relink_subchains();
 		Result<void> fix_subchains();
 
 		void emit_image_barrier(RelSpan<VkImageMemoryBarrier2KHR>&,

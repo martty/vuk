@@ -814,9 +814,16 @@ namespace vuk {
 	Result<AttachmentInfo, RenderGraphException> ExecutableRenderGraph::get_resource_image(const NameReference& name_ref, PassInfo* pass_info) {
 		for (auto& r : pass_info->resources.to_span(impl->resources)) {
 			if (r.type == Resource::Type::eImage && r.original_name == name_ref.name.name && r.foreign == name_ref.rg) {
-				auto& att = impl->get_bound_attachment(r.reference);
+				auto att = impl->get_bound_attachment(r.reference);
 				if (att.parent_attachment < 0) {
-					return { expected_value, impl->get_bound_attachment(att.parent_attachment) };
+					auto& parent = impl->get_bound_attachment(att.parent_attachment);
+					att.attachment.image = parent.attachment.image;
+					att.attachment.base_layer = att.image_subrange.base_layer;
+					att.attachment.base_level = att.image_subrange.base_level;
+					att.attachment.layer_count =
+					    att.image_subrange.layer_count == VK_REMAINING_ARRAY_LAYERS ? att.attachment.layer_count : att.image_subrange.layer_count;
+					att.attachment.level_count = att.image_subrange.level_count == VK_REMAINING_MIP_LEVELS ? att.attachment.level_count : att.image_subrange.level_count;
+					att.attachment.image_view = {};
 				}
 				return { expected_value, att };
 			}

@@ -314,9 +314,7 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	Result<void> RGCImpl::fix_subchains() {
-		// subchain fixup pass
-
+	Result<void> RGCImpl::relink_subchains() {
 		// connect subchains
 		// diverging subchains are chains where def->pass >= 0 AND def->pass type is eDiverge
 		// reconverged subchains are chains where def->pass >= 0 AND def->pass type is eConverge
@@ -338,43 +336,13 @@ namespace vuk {
 			}
 		}
 
-		// fixup diverge subchains by copying first use on the converge subchain to their end
-		for (auto& head : chains) {
-			if (head->source) { // a diverged subchain
-				// seek to the end
-				ChainLink* chain;
-				for (chain = head; chain->destination == nullptr; chain = chain->next)
-					;
-				auto last_chain_on_diverged = chain;
-				auto first_chain_on_converged = chain->destination;
-				if (first_chain_on_converged->reads.size() > 0) { // first use is reads
-					// take the reads
-					for (auto& r : first_chain_on_converged->reads.to_span(pass_reads)) {
-						last_chain_on_diverged->reads.append(pass_reads, r);
-					}
-					// remove the undef from the diverged chain
-					last_chain_on_diverged->undef = {};
-				} else if (first_chain_on_converged->undef) {
-					// take the undef from the converged chain and put it on the diverged chain undef
-					last_chain_on_diverged->undef = first_chain_on_converged->undef;
-					// we need to add a release to nothing to preserve the last undef
-					ChainLink helper;
-					helper.prev = last_chain_on_diverged;
-					helper.def = last_chain_on_diverged->undef;
-					helper.type = last_chain_on_diverged->type;
-					auto& rel = releases.emplace_back(QualifiedName{}, Release{});
-					helper.undef = { .pass = static_cast<int32_t>(-1 * (&rel - &*releases.begin() + 1)) };
-					auto& new_link = helper_links.emplace_back(helper);
-					last_chain_on_diverged->next = &new_link;
-				}
-			}
-		}
-
+		div_subchains.clear();
 		// take all diverged subchains and replace their def with a new attachment that has the proper acq and subrange
 		for (auto& head : chains) {
 			if (head->def->pass >= 0 && head->type == Resource::Type::eImage) { // no Buffer divergence
 				auto& pass = get_pass(*head->def);
 				if (pass.pass->type == PassType::eDiverge) {                      // diverging subchain
+					div_subchains.push_back(head);
 					// whole resource is always first resource
 					auto& whole_res = pass.resources.to_span(resources)[0].name;
 					auto link = &res_to_links[whole_res];
@@ -394,17 +362,13 @@ namespace vuk {
 			}
 		}
 
-		// fixup converge subchains by removing the first use
+		conv_subchains.clear();
+		// take all converged subchains and replace their def with a new attachment that has the original and subrange, and unsynch acq
 		for (auto& head : chains) {
 			if (head->def->pass >= 0 && head->type == Resource::Type::eImage) { // no Buffer divergence
 				auto& pass = get_pass(*head->def);
 				if (pass.pass->type == PassType::eConverge) {                     // converge subchain
-					if (head->reads.size() > 0) {                                   // first use is reads
-						head->reads = {};                                             // remove the reads
-					} else if (head->undef) {                                       // first use is undef
-						head = head->next;                                            // drop link from chain
-						head->prev = nullptr;
-					}
+					conv_subchains.push_back(&head);
 					// reconverged resource is always first resource
 					auto& whole_res = pass.resources.to_span(resources)[0];
 					// take first resource which guaranteed to be diverged
@@ -419,7 +383,6 @@ namespace vuk {
 					assert(link->source);
 					link = link->source;
 					head->source = link; // set the source for this subchain the original undiv chain
-					link->child_chains.append(child_chains, head);
 					while (link->prev) { // seek to the head of the original chain
 						link = link->prev;
 					}
@@ -432,6 +395,55 @@ namespace vuk {
 					head->def = { .pass = static_cast<int32_t>(-1 * bound_attachments.size()) };
 				}
 			}
+		}
+
+		return { expected_value };
+	}
+
+	// subchain fixup pass
+	Result<void> RGCImpl::fix_subchains() {
+		// fixup diverge subchains by copying first use on the converge subchain to their end
+		for (auto& head : div_subchains) {
+			// seek to the end
+			ChainLink* chain;
+			for (chain = head; chain->destination == nullptr; chain = chain->next)
+				;
+			auto last_chain_on_diverged = chain;
+			auto first_chain_on_converged = chain->destination;
+			if (first_chain_on_converged->reads.size() > 0) { // first use is reads
+				// take the reads
+				for (auto& r : first_chain_on_converged->reads.to_span(pass_reads)) {
+					last_chain_on_diverged->reads.append(pass_reads, r);
+				}
+				// remove the undef from the diverged chain
+				last_chain_on_diverged->undef = {};
+			} else if (first_chain_on_converged->undef) {
+				// take the undef from the converged chain and put it on the diverged chain undef
+				last_chain_on_diverged->undef = first_chain_on_converged->undef;
+				// we need to add a release to nothing to preserve the last undef
+				ChainLink helper;
+				helper.prev = last_chain_on_diverged;
+				helper.def = last_chain_on_diverged->undef;
+				helper.type = last_chain_on_diverged->type;
+				auto& rel = releases.emplace_back(QualifiedName{}, Release{});
+				helper.undef = { .pass = static_cast<int32_t>(-1 * (&rel - &*releases.begin() + 1)) };
+				auto& new_link = helper_links.emplace_back(helper);
+				last_chain_on_diverged->next = &new_link;
+			}
+		}
+
+		// fixup converge subchains by removing the first use
+		for (auto& head : conv_subchains) {
+			auto old_head = *head;
+			if ((*head)->reads.size() > 0) { // first use is reads
+				(*head)->reads = {};           // remove the reads
+			} else if ((*head)->undef) {     // first use is undef   /// TODO! need to change chains array here
+				*head = old_head->next;        // drop link from chain
+				(*head)->prev = nullptr;
+				(*head)->def = old_head->def;
+				(*head)->source = old_head->source;
+			}
+			old_head->source->child_chains.append(child_chains, *head);
 		}
 
 		return { expected_value };
@@ -819,13 +831,15 @@ namespace vuk {
 		VUK_DO_OR_RETURN(collect_chains(impl->res_to_links, impl->chains));
 		VUK_DO_OR_RETURN(impl->diagnose_unheaded_chains());
 		VUK_DO_OR_RETURN(impl->schedule_intra_queue(impl->computed_passes, compile_options));
+
+		VUK_DO_OR_RETURN(impl->relink_subchains());
+		resource_linking();
 		VUK_DO_OR_RETURN(impl->fix_subchains());
 
 		// auto dumped_graph = dump_graph();
 
 		queue_inference();
 		pass_partitioning();
-		resource_linking();
 		render_pass_assignment();
 
 		return { expected_value };
@@ -1523,8 +1537,7 @@ namespace vuk {
 						def_name = get_bound_buffer(head->def->pass).name;
 					}
 				}
-				fmt::print(
-				    "\"{}\" -> \"R+\" [style=bold, color=green];\n", def_name.name.c_str());
+				fmt::print("\"{}\" -> \"R+\" [style=bold, color=green];\n", def_name.name.c_str());
 #endif
 				// what if last pass is a read:
 				// we loop through the read passes and select the one executing last based on the ordering
