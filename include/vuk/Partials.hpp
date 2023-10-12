@@ -146,19 +146,20 @@ namespace vuk {
 			                .execute = [mip_src_name, mip_dst_name, dmiplevel, miplevel](CommandBuffer& command_buffer) {
 				                ImageBlit blit;
 				                auto src_ia = *command_buffer.get_resource_image_attachment(mip_src_name);
+				                auto dst_ia = *command_buffer.get_resource_image_attachment(mip_dst_name);
 				                auto dim = src_ia.extent;
 				                assert(dim.sizing == Sizing::eAbsolute);
 				                auto extent = dim.extent;
 				                blit.srcSubresource.aspectMask = format_to_aspect(src_ia.format);
 				                blit.srcSubresource.baseArrayLayer = src_ia.base_layer;
 				                blit.srcSubresource.layerCount = src_ia.layer_count;
-				                blit.srcSubresource.mipLevel = miplevel - 1;
+				                blit.srcSubresource.mipLevel = src_ia.base_level;
 				                blit.srcOffsets[0] = Offset3D{ 0 };
 				                blit.srcOffsets[1] = Offset3D{ std::max((int32_t)extent.width >> (dmiplevel - 1), 1),
                                                                std::max((int32_t)extent.height >> (dmiplevel - 1), 1),
                                                                std::max((int32_t)extent.depth >> (dmiplevel - 1), 1) };
 				                blit.dstSubresource = blit.srcSubresource;
-				                blit.dstSubresource.mipLevel = miplevel;
+				                blit.dstSubresource.mipLevel = dst_ia.base_level;
 				                blit.dstOffsets[0] = Offset3D{ 0 };
 				                blit.dstOffsets[1] = Offset3D{ std::max((int32_t)extent.width >> (dmiplevel), 1),
                                                                std::max((int32_t)extent.height >> (dmiplevel), 1),
