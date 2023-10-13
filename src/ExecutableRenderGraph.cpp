@@ -823,6 +823,7 @@ namespace vuk {
 					att.attachment.layer_count =
 					    att.image_subrange.layer_count == VK_REMAINING_ARRAY_LAYERS ? att.attachment.layer_count : att.image_subrange.layer_count;
 					att.attachment.level_count = att.image_subrange.level_count == VK_REMAINING_MIP_LEVELS ? att.attachment.level_count : att.image_subrange.level_count;
+					att.attachment.view_type = parent.attachment.view_type;
 					att.attachment.image_view = {};
 				}
 				return { expected_value, att };
