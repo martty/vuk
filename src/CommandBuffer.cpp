@@ -455,7 +455,7 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::push_constants(ShaderStageFlags stages, size_t offset, void* data, size_t size) {
 		VUK_EARLY_RET();
-		assert(offset + size < VUK_MAX_PUSHCONSTANT_SIZE);
+		assert(offset + size <= VUK_MAX_PUSHCONSTANT_SIZE);
 		pcrs.push_back(VkPushConstantRange{ (VkShaderStageFlags)stages, (uint32_t)offset, (uint32_t)size });
 		void* dst = push_constant_buffer + offset;
 		::memcpy(dst, data, size);
