@@ -356,9 +356,7 @@ namespace vuk {
 			// we need TE execution for this
 			// in cb we build a tuple (with cb in it) and then erase it into a void*
 			p.execute = [bo = std::move(body)](CommandBuffer& cb) {
-				void* ptr;
-				memcpy(&ptr, &cb, sizeof(void*));
-				std::tuple<CommandBuffer&, T...>& arg_tuple = *reinterpret_cast<std::tuple<CommandBuffer&, T...>*>(ptr);
+				auto& arg_tuple = *reinterpret_cast<std::tuple<CommandBuffer&, T...>*>(cb.arg_tuple);
 				std::apply(bo, arg_tuple);
 				delete &arg_tuple;
 			};
