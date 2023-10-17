@@ -90,9 +90,9 @@ namespace vuk {
 		}
 
 		/// @brief Submit Future for execution
-		Result<void> submit(Allocator& allocator, Compiler& compiler);
+		Result<void> submit(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options = {});
 		/// @brief Wait for Future to complete execution on host
-		Result<void> wait(Allocator& allocator, Compiler& compiler);
+		Result<void> wait(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options = {});
 		/// @brief Wait and retrieve the result of the Future on the host
 		template<class T>
 		[[nodiscard]] Result<T> get(Allocator& allocator, Compiler& compiler);

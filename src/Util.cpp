@@ -103,8 +103,8 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	Result<void> link_execute_submit(Allocator& allocator, Compiler& compiler, std::span<std::shared_ptr<RenderGraph>> rgs) {
-		auto erg = compiler.link(rgs, {});
+	Result<void> link_execute_submit(Allocator& allocator, Compiler& compiler, std::span<std::shared_ptr<RenderGraph>> rgs, RenderGraphCompileOptions options) {
+		auto erg = compiler.link(rgs, options);
 		if (!erg) {
 			return erg;
 		}
@@ -602,7 +602,7 @@ namespace vuk {
 		}
 	}
 
-	Result<void> Future::wait(Allocator& allocator, Compiler& compiler) {
+	Result<void> Future::wait(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options) {
 		if (control->status == FutureBase::Status::eInitial && !rg) {
 			return { expected_error,
 				       RenderGraphException{} }; // can't get wait for future that has not been attached anything or has been attached into a rendergraph
@@ -613,7 +613,7 @@ namespace vuk {
 			allocator.get_context().wait_for_domains(std::span{ &w, 1 });
 			return { expected_value };
 		} else {
-			auto erg = compiler.link(std::span{ &rg, 1 }, {});
+			auto erg = compiler.link(std::span{ &rg, 1 }, options);
 			if (!erg) {
 				return erg;
 			}
@@ -635,14 +635,14 @@ namespace vuk {
 		}
 	}
 
-	Result<void> Future::submit(Allocator& allocator, Compiler& compiler) {
+	Result<void> Future::submit(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options) {
 		if (control->status == FutureBase::Status::eInitial && !rg) {
 			return { expected_error, RenderGraphException{} };
 		} else if (control->status == FutureBase::Status::eHostAvailable || control->status == FutureBase::Status::eSubmitted) {
 			return { expected_value }; // nothing to do
 		} else {
 			control->status = FutureBase::Status::eSubmitted;
-			auto erg = compiler.link(std::span{ &rg, 1 }, {});
+			auto erg = compiler.link(std::span{ &rg, 1 }, options);
 			if (!erg) {
 				return erg;
 			}
