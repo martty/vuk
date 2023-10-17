@@ -816,6 +816,7 @@ namespace vuk {
 		delete impl;
 		arena->reset();
 		impl = new RGCImpl(arena);
+		impl->callbacks = compile_options.callbacks;
 
 		VUK_DO_OR_RETURN(inline_rgs(rgs));
 

@@ -29,18 +29,28 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(glm)
 
+set(TRACY_ENABLE ON)
+set(TRACY_ON_DEMAND OFF)
+FetchContent_Declare(tracy
+    GIT_REPOSITORY https://github.com/wolfpld/tracy.git
+    GIT_TAG v0.10
+    GIT_SHALLOW TRUE
+    GIT_PROGRESS TRUE
+)
+FetchContent_MakeAvailable(tracy)
+
 add_library(vuk-example-framework)
-#message(FATAL_ERROR $<TARGET_FILE_DIR:vuk-example-framework>)
+
 SET(imgui_sources ../ext/imgui/imgui.cpp ../ext/imgui/imgui_draw.cpp ../ext/imgui/imgui_demo.cpp ../ext/imgui/imgui_widgets.cpp ../ext/imgui/imgui_tables.cpp ../ext/imgui/backends/imgui_impl_glfw.cpp)
 target_sources(vuk-example-framework PRIVATE imgui.cpp stbi.cpp ${imgui_sources})
 target_include_directories(vuk-example-framework SYSTEM PUBLIC ../ext/stb ../ext/imgui)
-target_compile_definitions(vuk-example-framework PUBLIC GLM_FORCE_SIZE_FUNC GLM_FORCE_EXPLICIT_CTOR GLM_ENABLE_EXPERIMENTAL GLM_FORCE_RADIANS GLM_FORCE_DEPTH_ZERO_TO_ONE)
+target_compile_definitions(vuk-example-framework PUBLIC GLM_FORCE_SIZE_FUNC GLM_FORCE_EXPLICIT_CTOR GLM_ENABLE_EXPERIMENTAL GLM_FORCE_RADIANS GLM_FORCE_DEPTH_ZERO_TO_ONE TRACY_VK_USE_SYMBOL_TABLE)
 if(VUK_COMPILER_CLANGPP OR VUK_COMPILER_GPP)
     target_compile_options(vuk-example-framework PUBLIC -std=c++20 -fno-char8_t)
 elseif(MSVC)
     target_compile_options(vuk-example-framework PUBLIC /std:c++20 /permissive- /Zc:char8_t-)
 endif()
-target_link_libraries(vuk-example-framework PUBLIC vuk vk-bootstrap glfw glm)
+target_link_libraries(vuk-example-framework PUBLIC vuk vk-bootstrap glfw glm TracyClient)
 
 add_executable(vuk_all_examples)
 target_sources(vuk_all_examples PRIVATE example_browser.cpp)

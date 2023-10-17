@@ -24,6 +24,8 @@
 
 #include "backends/imgui_impl_glfw.h"
 
+#include <tracy/TracyVulkan.hpp>
+
 inline std::filesystem::path root;
 
 namespace vuk {
@@ -59,6 +61,12 @@ namespace vuk {
 		bool has_rt;
 		vuk::Unique<std::array<VkSemaphore, 3>> present_ready;
 		vuk::Unique<std::array<VkSemaphore, 3>> render_complete;
+		// one tracy::VkCtx per domain
+		tracy::VkCtx* tracy_graphics_ctx;
+		tracy::VkCtx* tracy_transfer_ctx;
+		// command buffer and pool for Tracy to do init & collect
+		vuk::Unique<vuk::CommandPool> tracy_cpool;
+		vuk::Unique<vuk::CommandBufferAllocation> tracy_cbufai;
 
 		// when called during setup, enqueues a device-side operation to be completed before rendering begins
 		void enqueue_setup(Future&& fut) {
@@ -251,6 +259,17 @@ namespace vuk {
 
 		superframe_allocator->allocate_semaphores(*present_ready);
 		superframe_allocator->allocate_semaphores(*render_complete);
+
+		// set up the example Tracy integration
+		VkCommandPoolCreateInfo cpci{ .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT };
+		cpci.queueFamilyIndex = graphics_queue_family_index;
+		superframe_allocator->allocate_command_pools(std::span{ &*tracy_cpool, 1 }, std::span{ &cpci, 1 });
+		vuk::CommandBufferAllocationCreateInfo ci{ .command_pool = *tracy_cpool };
+		superframe_allocator->allocate_command_buffers(std::span{ &*tracy_cbufai, 1 }, std::span{ &ci, 1 });
+		tracy_graphics_ctx = TracyVkContextCalibrated(
+		    instance, physical_device, device, graphics_queue, tracy_cbufai->command_buffer, fps.vkGetInstanceProcAddr, fps.vkGetDeviceProcAddr);
+		tracy_transfer_ctx = TracyVkContextCalibrated(
+		    instance, physical_device, device, graphics_queue, tracy_cbufai->command_buffer, fps.vkGetInstanceProcAddr, fps.vkGetDeviceProcAddr);
 	}
 } // namespace vuk
 

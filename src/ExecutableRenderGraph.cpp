@@ -169,6 +169,10 @@ namespace vuk {
 		VkCommandBufferBeginInfo cbi{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
 		ctx.vkBeginCommandBuffer(cbuf, &cbi);
 
+		void* cbuf_profile_data = nullptr;
+		if (this->impl->callbacks.on_begin_command_buffer)
+			cbuf_profile_data = this->impl->callbacks.on_begin_command_buffer(this->impl->callbacks.user_data, cbuf);
+
 		uint64_t command_buffer_index = passes[0]->command_buffer_index;
 		int32_t render_pass_index = -1;
 		for (size_t i = 0; i < passes.size(); i++) {
@@ -190,6 +194,9 @@ namespace vuk {
 
 				VkCommandBufferBeginInfo cbi{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
 				ctx.vkBeginCommandBuffer(cbuf, &cbi);
+
+				if (this->impl->callbacks.on_begin_command_buffer)
+					cbuf_profile_data = this->impl->callbacks.on_begin_command_buffer(this->impl->callbacks.user_data, cbuf);
 			}
 
 			// if we had a render pass running, but now it changes
@@ -235,7 +242,12 @@ namespace vuk {
 			}
 			if (pass->pass->execute) {
 				cobuf.current_pass = pass;
+				void* pass_profile_data = nullptr;
+				if (this->impl->callbacks.on_begin_pass)
+					pass_profile_data = this->impl->callbacks.on_begin_pass(this->impl->callbacks.user_data, pass->pass->name, cbuf, (DomainFlagBits)pass->domain.m_mask);
 				pass->pass->execute(cobuf);
+				if (this->impl->callbacks.on_end_pass)
+					this->impl->callbacks.on_end_pass(this->impl->callbacks.user_data, pass_profile_data);
 			}
 			if (!pass->qualified_name.is_invalid()) {
 				ctx.end_region(cobuf.command_buffer);
@@ -253,6 +265,8 @@ namespace vuk {
 		// insert post-barriers
 		impl->emit_barriers(ctx, cbuf, domain, passes.back()->post_memory_barriers, passes.back()->post_image_barriers);
 
+		if (this->impl->callbacks.on_end_command_buffer)
+			this->impl->callbacks.on_end_command_buffer(this->impl->callbacks.user_data, cbuf_profile_data);
 		if (auto result = ctx.vkEndCommandBuffer(cbuf); result != VK_SUCCESS) {
 			return { expected_error, VkException{ result } };
 		}

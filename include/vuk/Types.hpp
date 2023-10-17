@@ -973,16 +973,16 @@ namespace vuk {
 
 	enum Access : uint64_t {
 		eNone = 1ULL << 0,          // as initial use: resource available without synchronization, as final use: resource does not need synchronizing
-		eInfer = 1ULL << 1, // as final use only: this use must be overwritten/inferred before compiling (internal)
-		eConsume = 1ULL << 2, // must be overwritten before compiling: this access consumes this name (internal)
-		eConverge = 1ULL << 3, // converge previous uses (internal)
-		eManual = 1ULL << 4,   // provided explictly (internal)
-		eClear = 1ULL << 5,    // general clearing
+		eInfer = 1ULL << 1,         // as final use only: this use must be overwritten/inferred before compiling (internal)
+		eConsume = 1ULL << 2,       // must be overwritten before compiling: this access consumes this name (internal)
+		eConverge = 1ULL << 3,      // converge previous uses (internal)
+		eManual = 1ULL << 4,        // provided explictly (internal)
+		eClear = 1ULL << 5,         // general clearing
 		eTransferClear = 1ULL << 6, // vkCmdClearXXX
 		eColorWrite = 1ULL << 7,
 		eColorRead = 1ULL << 8,
 		eColorRW = eColorWrite | eColorRead,
-		eColorResolveRead = 1ULL << 10, // special op to mark render pass resolve read
+		eColorResolveRead = 1ULL << 10,  // special op to mark render pass resolve read
 		eColorResolveWrite = 1ULL << 11, // special op to mark render pass resolve write
 		eDepthStencilRead = 1ULL << 12,
 		eDepthStencilWrite = 1ULL << 13,
@@ -1076,7 +1076,7 @@ namespace vuk {
 	};
 
 	struct CommandBufferAllocationCreateInfo {
-		VkCommandBufferLevel level;
+		VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 		CommandPool command_pool;
 	};
 
@@ -1092,22 +1092,32 @@ namespace vuk {
 		}
 	};
 
-	/// @brief Control compilation options when compiling the rendergraph
-	struct RenderGraphCompileOptions {
+	struct ProfilingCallbacks {
+		void* (*on_begin_command_buffer)(void* user_data, VkCommandBuffer cmdbuf) = nullptr;
+		void (*on_end_command_buffer)(void* user_data, void* cbuf_data) = nullptr;
+
+		void* (*on_begin_pass)(void* user_data, Name pass_name, VkCommandBuffer cmdbuf, DomainFlagBits domain) = nullptr;
+		void (*on_end_pass)(void* user_data, void* pass_data) = nullptr;
+
+		void* user_data = nullptr;
 	};
 
-	
+	/// @brief Control compilation options when compiling the rendergraph
+	struct RenderGraphCompileOptions {
+		ProfilingCallbacks callbacks;
+	};
+
 	enum class DescriptorSetStrategyFlagBits {
 		eDefault = 0, // implementation choice
 		/* storage */
 		ePerLayout = 1 << 1, // one DS pool per layout
-		eCommon = 1 << 2, // common pool per layout
-		// eCached = 1 << 3,
-		/* update - no flag: standard */
-		// eUpdateAfterBind = 1 << 4,
-		// ePushDescriptor = 1 << 5,
-		/* templating - no flag: no template */
-		// eWithTemplate = 1 << 7
+		eCommon = 1 << 2,    // common pool per layout
+		                     // eCached = 1 << 3,
+		                     /* update - no flag: standard */
+		                     // eUpdateAfterBind = 1 << 4,
+		                     // ePushDescriptor = 1 << 5,
+		                     /* templating - no flag: no template */
+		                     // eWithTemplate = 1 << 7
 	};
 
 	using DescriptorSetStrategyFlags = Flags<DescriptorSetStrategyFlagBits>;

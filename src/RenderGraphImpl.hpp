@@ -310,6 +310,8 @@ namespace vuk {
 		                   RelSpan<VkImageMemoryBarrier2KHR> im_bars);
 
 		ImageUsageFlags compute_usage(const ChainLink* head);
+
+		ProfilingCallbacks callbacks;
 	};
 #undef INIT
 

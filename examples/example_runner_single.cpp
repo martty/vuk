@@ -4,9 +4,9 @@ vuk::SingleSwapchainRenderBundle bundle;
 
 void vuk::ExampleRunner::render() {
 	Compiler compiler;
-	// the examples can all enqueue upload tasks via enqueue_setup. for simplicity, we submit and wait for all the upload tasks before moving on to the render loop
-	// in a real application, one would have something more complex to handle uploading data
-	// it is also possible to wait for the uploads on the GPU by using these uploading futures as input
+	// the examples can all enqueue upload tasks via enqueue_setup. for simplicity, we submit and wait for all the upload tasks before moving on to the render
+	// loop in a real application, one would have something more complex to handle uploading data it is also possible to wait for the uploads on the GPU by using
+	// these uploading futures as input
 	vuk::wait_for_futures_explicit(*superframe_allocator, compiler, futures);
 	futures.clear();
 
@@ -21,7 +21,8 @@ void vuk::ExampleRunner::render() {
 		auto& frame_resource = superframe_resource->get_next_frame();
 		context->next_frame();
 		// create a frame allocator - we can allocate objects for the duration of the frame from this allocator
-		// all of the objects allocated from this allocator last for this frame, and get recycled automatically, so for this specific allocator, deallocation is optional
+		// all of the objects allocated from this allocator last for this frame, and get recycled automatically, so for this specific allocator, deallocation is
+		// optional
 		Allocator frame_allocator(frame_resource);
 		// acquire an image on the swapchain
 		bundle = *acquire_one(*context, swapchain, (*present_ready)[context->get_frame_count() % 3], (*render_complete)[context->get_frame_count() % 3]);
@@ -40,8 +41,42 @@ void vuk::ExampleRunner::render() {
 		rg_p->attach_in("_src", std::move(example_result));
 		// we tell the rendergraph that _src will be used for presenting after the rendergraph
 		rg_p->release_for_present("_src");
+		// set up some profiling callbacks for our example Tracy integration
+		vuk::ProfilingCallbacks cbs;
+		cbs.user_data = &get_runner();
+		cbs.on_begin_command_buffer = [](void* user_data, VkCommandBuffer cbuf) {
+			ExampleRunner& runner = *reinterpret_cast<vuk::ExampleRunner*>(user_data);
+			TracyVkCollect(runner.tracy_graphics_ctx, cbuf);
+			TracyVkCollect(runner.tracy_transfer_ctx, cbuf);
+			return (void*)nullptr;
+		};
+		// runs whenever entering a new vuk::Pass
+		// we start a GPU zone and then keep it open
+		cbs.on_begin_pass = [](void* user_data, Name pass_name, VkCommandBuffer cmdbuf, DomainFlagBits domain) {
+			ExampleRunner& runner = *reinterpret_cast<vuk::ExampleRunner*>(user_data);
+			void* pass_data = new char[sizeof(tracy::VkCtxScope)];
+			if (domain & vuk::DomainFlagBits::eGraphicsQueue) {
+#if defined TRACY_ENABLE
+				new (pass_data) TracyVkZoneTransient(runner.tracy_graphics_ctx, , cmdbuf, pass_name.c_str(), true);
+#endif
+			} else if (domain & vuk::DomainFlagBits::eTransferQueue) {
+#if defined TRACY_ENABLE
+				new (pass_data) TracyVkZoneTransient(runner.tracy_transfer_ctx, , cmdbuf, pass_name.c_str(), true);
+#endif
+			}
+
+			return pass_data;
+		};
+		// runs whenever a pass has ended, we end the GPU zone we started
+		cbs.on_end_pass = [](void* user_data, void* pass_data) {
+			auto tracy_scope = reinterpret_cast<tracy::VkCtxScope*>(pass_data);
+#if defined TRACY_ENABLE
+			tracy_scope->~VkCtxScope();
+#endif
+			delete reinterpret_cast<char*>(pass_data);
+		};
 		// compile the RG that contains all the rendering of the example
-		auto erg = *compiler.link(std::span{ &rg_p, 1 }, {});
+		auto erg = *compiler.link(std::span{ &rg_p, 1 }, { .callbacks = cbs });
 		// submit the compiled commands
 		auto result = *execute_submit(frame_allocator, std::move(erg), std::move(bundle));
 		// present the results
