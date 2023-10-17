@@ -131,6 +131,10 @@ namespace vuk {
 		}
 
 		~ExampleRunner() {
+			TracyVkDestroy(tracy_graphics_ctx);
+			TracyVkDestroy(tracy_transfer_ctx);
+			tracy_cbufai.reset();
+			tracy_cpool.reset();
 			present_ready.reset();
 			render_complete.reset();
 			imgui_data.font_texture.view.reset();
@@ -184,13 +188,17 @@ namespace vuk {
 		    .add_required_extension(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME)
 		    .add_required_extension(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME)
 		    .add_required_extension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME)
-		    .add_required_extension(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
+		    .add_required_extension(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME)
+		    .add_desired_extension(VK_EXT_CALIBRATED_TIMESTAMPS_EXTENSION_NAME);
 		auto phys_ret = selector.select();
 		vkb::PhysicalDevice vkbphysical_device;
 		if (!phys_ret) {
 			has_rt = false;
 			vkb::PhysicalDeviceSelector selector2{ vkbinstance };
-			selector2.set_surface(surface).set_minimum_version(1, 0).add_required_extension(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+			selector2.set_surface(surface)
+			    .set_minimum_version(1, 0)
+			    .add_required_extension(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME)
+			    .add_desired_extension(VK_EXT_CALIBRATED_TIMESTAMPS_EXTENSION_NAME);
 			auto phys_ret2 = selector2.select();
 			if (!phys_ret2) {
 				throw std::runtime_error("Couldn't create physical device");
@@ -263,8 +271,10 @@ namespace vuk {
 		// set up the example Tracy integration
 		VkCommandPoolCreateInfo cpci{ .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT };
 		cpci.queueFamilyIndex = graphics_queue_family_index;
+		tracy_cpool = Unique<CommandPool>(*superframe_allocator);
 		superframe_allocator->allocate_command_pools(std::span{ &*tracy_cpool, 1 }, std::span{ &cpci, 1 });
 		vuk::CommandBufferAllocationCreateInfo ci{ .command_pool = *tracy_cpool };
+		tracy_cbufai = Unique<CommandBufferAllocation>(*superframe_allocator);
 		superframe_allocator->allocate_command_buffers(std::span{ &*tracy_cbufai, 1 }, std::span{ &ci, 1 });
 		tracy_graphics_ctx = TracyVkContextCalibrated(
 		    instance, physical_device, device, graphics_queue, tracy_cbufai->command_buffer, fps.vkGetInstanceProcAddr, fps.vkGetDeviceProcAddr);

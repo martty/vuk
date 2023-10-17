@@ -17,3 +17,7 @@ VUK_X(vkCreateAccelerationStructureKHR)
 VUK_X(vkDestroyAccelerationStructureKHR)
 VUK_X(vkGetRayTracingShaderGroupHandlesKHR)
 VUK_X(vkCreateRayTracingPipelinesKHR)
+
+// VK_EXT_calibrated_timestamps
+VUK_X(vkGetCalibratedTimestampsEXT)
+VUK_Y(vkGetPhysicalDeviceCalibrateableTimeDomainsEXT)
