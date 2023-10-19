@@ -107,21 +107,8 @@ namespace vuk {
 			auto transfer_queue_family_index = vkbdevice.get_queue_index(vkb::QueueType::transfer).value();
 			device = vkbdevice.device;
 			ContextCreateParameters::FunctionPointers fps;
-#define VUK_EX_LOAD_FP(name) fps.name = (PFN_##name)vkGetDeviceProcAddr(device, #name);
-			VUK_EX_LOAD_FP(vkQueueSubmit2KHR);
-			VUK_EX_LOAD_FP(vkCmdPipelineBarrier2KHR);
-			VUK_EX_LOAD_FP(vkSetDebugUtilsObjectNameEXT);
-			VUK_EX_LOAD_FP(vkCmdBeginDebugUtilsLabelEXT);
-			VUK_EX_LOAD_FP(vkCmdEndDebugUtilsLabelEXT);
-			if (has_rt) {
-				VUK_EX_LOAD_FP(vkCmdBuildAccelerationStructuresKHR);
-				VUK_EX_LOAD_FP(vkGetAccelerationStructureBuildSizesKHR);
-				VUK_EX_LOAD_FP(vkCmdTraceRaysKHR);
-				VUK_EX_LOAD_FP(vkCreateAccelerationStructureKHR);
-				VUK_EX_LOAD_FP(vkDestroyAccelerationStructureKHR);
-				VUK_EX_LOAD_FP(vkGetRayTracingShaderGroupHandlesKHR);
-				VUK_EX_LOAD_FP(vkCreateRayTracingPipelinesKHR);
-			}
+			fps.vkGetInstanceProcAddr = vkbinstance.fp_vkGetInstanceProcAddr;
+			fps.vkGetDeviceProcAddr = vkbinstance.fp_vkGetDeviceProcAddr;
 			context.emplace(ContextCreateParameters{ instance,
 			                                         device,
 			                                         physical_device,

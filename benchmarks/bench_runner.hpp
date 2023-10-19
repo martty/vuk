@@ -134,6 +134,7 @@ namespace vuk {
 			imgui_data.font_texture.image.reset();
 			xdev_rf_alloc.reset();
 			context.reset();
+			auto vkDestroySurfaceKHR = (PFN_vkDestroySurfaceKHR)vkbinstance.fp_vkGetInstanceProcAddr(vkbinstance.instance, "vkDestroySurfaceKHR");
 			vkDestroySurfaceKHR(vkbinstance.instance, surface, nullptr);
 			destroy_window_glfw(window);
 			vkb::destroy_device(vkbdevice);
