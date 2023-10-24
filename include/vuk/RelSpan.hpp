@@ -34,8 +34,9 @@ namespace vuk {
 			}
 			// non-easy case: copy the span to the end and extend
 			auto new_offset0 = base.size();
-			base.insert(base.begin() + new_offset0, base.begin() + offset0, base.begin() + offset1);
-			base.push_back(std::move(value));
+			base.resize(base.size() + offset1 - offset0 + 1);
+			std::copy(base.begin() + offset0, base.begin() + offset1, base.begin() + new_offset0);
+			base.back() = std::move(value);
 			offset0 = new_offset0;
 			offset1 = base.size();
 		}

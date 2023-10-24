@@ -315,6 +315,7 @@ namespace vuk {
 	}
 
 	Result<void> RGCImpl::relink_subchains() {
+		child_chains.clear();
 		// connect subchains
 		// diverging subchains are chains where def->pass >= 0 AND def->pass type is eDiverge
 		// reconverged subchains are chains where def->pass >= 0 AND def->pass type is eConverge

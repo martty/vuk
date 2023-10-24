@@ -65,6 +65,7 @@ namespace vuk {
 		int32_t reference = 0;
 		bool promoted_to_general = false;
 
+		Resource() = default;
 		Resource(Name n, Type t, Access ia) : name{ Name{}, n }, type(t), ia(ia) {}
 		Resource(Name n, Type t, Access ia, Name out_name) : name{ Name{}, n }, type(t), ia(ia), out_name{ Name{}, out_name } {}
 		Resource(RenderGraph* foreign, QualifiedName n, Type t, Access ia) : name{ n }, type(t), ia(ia), foreign(foreign) {}
