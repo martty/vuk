@@ -33,7 +33,7 @@ set(TRACY_ENABLE ON)
 set(TRACY_ON_DEMAND OFF)
 FetchContent_Declare(tracy
     GIT_REPOSITORY https://github.com/wolfpld/tracy.git
-    GIT_TAG aae4d25
+    GIT_TAG master
     GIT_SHALLOW TRUE
     GIT_PROGRESS TRUE
 )
