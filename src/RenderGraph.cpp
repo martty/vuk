@@ -337,6 +337,54 @@ namespace vuk {
 			}
 		}
 
+		conv_subchains.clear();
+		// take all converged subchains and replace their def with a new attachment that has the original and subrange, and unsynch acq
+		for (auto& head : chains) {
+			if (head->def->pass >= 0 && head->type == Resource::Type::eImage) { // no Buffer divergence
+				auto& pass = get_pass(*head->def);
+				if (pass.pass->type == PassType::eConverge) {                     // converge subchain
+					conv_subchains.push_back(&head);
+					// reconverged resource is always first resource
+					auto& whole_res = pass.resources.to_span(resources)[0];
+					// take first resource which guaranteed to be diverged
+					auto div_resources = pass.resources.to_span(resources).subspan(1);
+					auto& div_res = div_resources[0];
+					// TODO: we actually need to walk all converging resources here to find the scope of the convergence
+					// walk this resource to convergence
+					ChainLink* link = &res_to_links[div_res.name];
+					while (link->prev) { // seek to the head of the diverged chain
+						link = link->prev;
+					}
+					assert(link->source);
+					link = link->source;
+					head->source = link; // set the source for this subchain the original undiv chain
+				}
+			}
+		}
+
+		for (auto& head : conv_subchains) {
+			auto& pass = get_pass(*(*head)->def);
+			// reconverged resource is always first resource
+			auto& whole_res = pass.resources.to_span(resources)[0];
+			auto link = *head;
+			// here we must climb back to a node where the def->pass is < 0
+			while (link->def->pass >= 0) {
+				while (link->prev) { // seek to the head of chain
+					link = link->prev;
+				}
+				if (link->source) {
+					link = link->source;
+				}
+			}
+			auto whole_att = get_bound_attachment(link->def->pass); // the whole attachment
+			whole_att.name = QualifiedName{ Name{}, whole_res.out_name.name };
+			whole_att.acquire.unsynchronized = true;
+			whole_att.parent_attachment = link->def->pass;
+			auto new_bound = bound_attachments.emplace_back(whole_att);
+			// replace head->def with new attachments (the converged resource)
+			(*head)->def = { .pass = static_cast<int32_t>(-1 * bound_attachments.size()) };
+		}
+
 		div_subchains.clear();
 		// take all diverged subchains and replace their def with a new attachment that has the proper acq and subrange
 		for (auto& head : chains) {
@@ -363,41 +411,6 @@ namespace vuk {
 			}
 		}
 
-		conv_subchains.clear();
-		// take all converged subchains and replace their def with a new attachment that has the original and subrange, and unsynch acq
-		for (auto& head : chains) {
-			if (head->def->pass >= 0 && head->type == Resource::Type::eImage) { // no Buffer divergence
-				auto& pass = get_pass(*head->def);
-				if (pass.pass->type == PassType::eConverge) {                     // converge subchain
-					conv_subchains.push_back(&head);
-					// reconverged resource is always first resource
-					auto& whole_res = pass.resources.to_span(resources)[0];
-					// take first resource which guaranteed to be diverged
-					auto div_resources = pass.resources.to_span(resources).subspan(1);
-					auto& div_res = div_resources[1];
-					// TODO: we actually need to walk all converging resources here to find the scope of the convergence
-					// walk this resource to convergence
-					auto link = &res_to_links[div_res.name];
-					while (link->prev) { // seek to the head of the diverged chain
-						link = link->prev;
-					}
-					assert(link->source);
-					link = link->source;
-					head->source = link; // set the source for this subchain the original undiv chain
-					while (link->prev) { // seek to the head of the original chain
-						link = link->prev;
-					}
-					auto whole_att = get_bound_attachment(link->def->pass); // the whole attachment
-					whole_att.name = QualifiedName{ Name{}, whole_res.out_name.name };
-					whole_att.acquire.unsynchronized = true;
-					whole_att.parent_attachment = link->def->pass;
-					auto new_bound = bound_attachments.emplace_back(whole_att);
-					// replace head->def with new attachments (the converged resource)
-					head->def = { .pass = static_cast<int32_t>(-1 * bound_attachments.size()) };
-				}
-			}
-		}
-
 		return { expected_value };
 	}
 
@@ -407,10 +420,13 @@ namespace vuk {
 		for (auto& head : div_subchains) {
 			// seek to the end
 			ChainLink* chain;
-			for (chain = head; chain->destination == nullptr; chain = chain->next)
+			for (chain = head; chain->destination == nullptr && chain->next != nullptr; chain = chain->next)
 				;
 			auto last_chain_on_diverged = chain;
 			auto first_chain_on_converged = chain->destination;
+			if (!chain->destination) {
+				continue;
+			}
 			if (first_chain_on_converged->reads.size() > 0) { // first use is reads
 				// take the reads
 				for (auto& r : first_chain_on_converged->reads.to_span(pass_reads)) {
@@ -438,14 +454,51 @@ namespace vuk {
 			auto old_head = *head;
 			if ((*head)->reads.size() > 0) { // first use is reads
 				(*head)->reads = {};           // remove the reads
-			} else if ((*head)->undef) {     // first use is undef   /// TODO! need to change chains array here
-				*head = old_head->next;        // drop link from chain
-				(*head)->prev = nullptr;
-				(*head)->def = old_head->def;
-				(*head)->source = old_head->source;
+			} else if ((*head)->undef) {     // first use is undef
+				// if we had this as a child chain, then lets replace it
+				auto it = std::find(child_chains.begin(), child_chains.end(), old_head);
+				while (it != child_chains.end()) {
+					*it = old_head->next;
+					it = std::find(child_chains.begin(), child_chains.end(), old_head);
+				}
+				if (old_head->next) { // drop link from chain
+					// repoint subchain while preserving def and source
+					*head = old_head->next;
+					(*head)->prev = nullptr;
+					(*head)->def = old_head->def;
+					(*head)->source = old_head->source;
+				} else { // there is no next use, just drop chain
+					// copy here to avoid reallocating the vector while going through
+					std::vector<ChainLink*> child_ch =
+					    std::vector<ChainLink*>((*head)->child_chains.to_span(child_chains).begin(), (*head)->child_chains.to_span(child_chains).end());
+					for (auto& cc : child_ch) {
+						(*head)->source->child_chains.append(child_chains, cc);
+					}
+					*head = nullptr;
+				}
 			}
-			old_head->source->child_chains.append(child_chains, *head);
+			if (*head) {
+				old_head->source->child_chains.append(child_chains, *head);
+			}
 		}
+		/*
+		for (auto& head : chains) {
+		  for (ChainLink* link = head; link != nullptr; link = link->next) {
+		    if (link && link->source) {
+		      link->source->child_chains.offset0 = link->source->child_chains.offset1 = 0;
+		    }
+		  }
+		}
+
+		child_chains.clear();
+
+		for (auto& head : chains) {
+		  for (ChainLink* link = head; link != nullptr; link = link->next) {
+		    if (link && link->source) {
+		      link->source->child_chains.append(child_chains, head);
+		    }
+		  }
+		}*/
 
 		return { expected_value };
 
@@ -837,7 +890,8 @@ namespace vuk {
 		VUK_DO_OR_RETURN(impl->relink_subchains());
 		resource_linking();
 		VUK_DO_OR_RETURN(impl->fix_subchains());
-
+		// fix subchains might remove chains, so drop those now
+		std::erase(impl->chains, nullptr);
 		// auto dumped_graph = dump_graph();
 
 		queue_inference();
@@ -1267,11 +1321,11 @@ namespace vuk {
 		}
 
 		// handle head (queue wait, initial use) -> emit barriers -> handle tail (signal, final use)
-		unsigned seen_chains = 0;
+		std::vector<ChainLink*> seen_chains;
 		while (work_queue.size() > 0) {
 			ChainLink* head = work_queue.back();
 			work_queue.pop_back();
-			seen_chains++;
+			seen_chains.push_back(head);
 			// handle head
 			ImageAspectFlags aspect;
 			Subrange::Image image_subrange;
@@ -1606,13 +1660,22 @@ namespace vuk {
 
 			// we have processed this chain, lets see if we can unblock more chains
 			for (auto new_head : link->child_chains.to_span(child_chains)) {
+				if (!new_head) {
+					continue;
+				}
 				auto& new_att = get_bound_attachment(new_head->def->pass);
 				new_att.acquire.src_use = last_use;
 				work_queue.push_back(new_head);
 			}
 		}
 
-		assert(seen_chains == chains.size());
+		if (seen_chains.size() != chains.size()) {
+			std::vector<ChainLink*> missing_chains;
+			std::sort(chains.begin(), chains.end());
+			std::sort(seen_chains.begin(), seen_chains.end());
+			std::set_difference(chains.begin(), chains.end(), seen_chains.begin(), seen_chains.end(), std::back_inserter(missing_chains));
+			assert(false);
+		}
 
 #ifdef VUK_DUMP_USE
 		fmt::printf("};\n");
