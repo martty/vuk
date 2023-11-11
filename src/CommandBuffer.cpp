@@ -287,11 +287,11 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::set_color_blend(const ImageAttachment& att, PipelineColorBlendAttachmentState state) {
 		VUK_EARLY_RET();
-		assert(ongoing_renderpass);
+		assert(ongoing_render_pass);
 
-		auto it = std::find(ongoing_renderpass->color_attachment_ivs.begin(), ongoing_renderpass->color_attachment_ivs.end(), att.image_view);
-		assert(it != ongoing_renderpass->color_attachment_ivs.end() && "Color attachment name not found.");
-		auto idx = std::distance(ongoing_renderpass->color_attachment_ivs.begin(), it);
+		auto it = std::find(ongoing_render_pass->color_attachment_ivs.begin(), ongoing_render_pass->color_attachment_ivs.end(), att.image_view);
+		assert(it != ongoing_render_pass->color_attachment_ivs.end() && "Color attachment name not found.");
+		auto idx = std::distance(ongoing_render_pass->color_attachment_ivs.begin(), it);
 		set_color_blend_attachments.set(idx, true);
 		color_blend_attachments[idx] = state;
 		broadcast_color_blend_attachment_0 = false;
