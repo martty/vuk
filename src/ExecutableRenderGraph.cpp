@@ -249,7 +249,7 @@ namespace vuk {
 				if (pass->pass->make_argument_tuple) {
 					std::vector<void*> list;
 					for (auto& r : pass->resources.to_span(impl->resources)) {
-						auto res = *get_resource_image(r.original_name, cobuf.current_pass);
+						auto res = *get_resource_image(vuk::NameReference::direct(r.original_name), cobuf.current_pass);
 						list.emplace_back((void*)&res->attachment);
 					}
 					cobuf.arg_tuple = pass->pass->make_argument_tuple(cobuf, list);
@@ -846,7 +846,7 @@ namespace vuk {
 		return { expected_value, std::move(sbundle) };
 	}
 
-	Result<BufferInfo, RenderGraphException> ExecutableRenderGraph::get_resource_buffer(const NameReference& name_ref, PassInfo* pass_info) {
+	Result<BufferInfo*, RenderGraphException> ExecutableRenderGraph::get_resource_buffer(const NameReference& name_ref, PassInfo* pass_info) {
 		for (auto& r : pass_info->resources.to_span(impl->resources)) {
 			if (r.type == Resource::Type::eBuffer && r.original_name == name_ref.name.name && r.foreign == name_ref.rg) {
 				auto& att = impl->get_bound_buffer(r.reference);
@@ -857,7 +857,7 @@ namespace vuk {
 		return { expected_error, errors::make_cbuf_references_undeclared_resource(*pass_info, Resource::Type::eImage, name_ref.name.name) };
 	}
 
-	Result<AttachmentInfo, RenderGraphException> ExecutableRenderGraph::get_resource_image(const NameReference& name_ref, PassInfo* pass_info) {
+	Result<AttachmentInfo*, RenderGraphException> ExecutableRenderGraph::get_resource_image(const NameReference& name_ref, PassInfo* pass_info) {
 		for (auto& r : pass_info->resources.to_span(impl->resources)) {
 			if (r.type == Resource::Type::eImage && r.original_name == name_ref.name.name && r.foreign == name_ref.rg) {
 				auto& att = impl->get_bound_attachment(r.reference);

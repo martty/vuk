@@ -84,8 +84,14 @@ namespace vuk {
 				} else {
 					if (!r.name.name.is_invalid()) {
 						r.name = resolve_alias_rec({ joiner, r.name.name });
+						if (r.name.prefix.is_invalid()) {
+							r.name.prefix = joiner;
+						}
 					}
 					r.out_name = r.out_name.name.is_invalid() ? QualifiedName{} : resolve_alias_rec({ joiner, r.out_name.name });
+					if (r.out_name.prefix.is_invalid()) {
+						r.out_name.prefix = joiner;
+					}
 				}
 				resources.emplace_back(std::move(r));
 			}
