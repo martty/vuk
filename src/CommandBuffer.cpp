@@ -80,7 +80,7 @@ namespace vuk {
 		if (!res) {
 			return { expected_error, res.error() };
 		}
-		return { expected_value, res->buffer };
+		return { expected_value, (*res)->buffer };
 	}
 
 	Result<Buffer> CommandBuffer::get_resource_buffer(const NameReference& n) const {
@@ -116,7 +116,7 @@ namespace vuk {
 		if (!res) {
 			return { expected_error, res.error() };
 		}
-		return { expected_value, res->attachment };
+		return { expected_value, (*res)->attachment };
 	}
 
 	Result<ImageAttachment> CommandBuffer::get_resource_image_attachment(const NameReference& n) const {
@@ -826,7 +826,7 @@ namespace vuk {
 			current_error = std::move(src_res);
 			return *this;
 		}
-		auto src_image = src_res->attachment.image;
+		auto src_image = (*src_res)->attachment.image;
 		auto dst_res = rg->get_resource_image(NameReference::direct(dst), current_pass);
 		if (!dst_res) {
 			current_error = std::move(dst_res);
@@ -878,7 +878,7 @@ namespace vuk {
 			current_error = std::move(src_res);
 			return *this;
 		}
-		auto src_image = src_res->attachment.image;
+		auto src_image = (*src_res)->attachment.image;
 		auto dst_res = rg->get_resource_image(NameReference::direct(dst), current_pass);
 		if (!dst_res) {
 			current_error = std::move(dst_res);
@@ -943,7 +943,7 @@ namespace vuk {
 			current_error = std::move(src_res);
 			return *this;
 		}
-		auto src_image = src_res->attachment.image;
+		auto src_image = (*src_res)->attachment.image;
 		auto dst_res = rg->get_resource_buffer(NameReference::direct(dst), current_pass);
 		if (!dst_res) {
 			current_error = std::move(dst_res);
@@ -972,7 +972,7 @@ namespace vuk {
 			current_error = std::move(src_res);
 			return *this;
 		}
-		auto src_bbuf = src_res->buffer;
+		auto src_bbuf = (*src_res)->buffer;
 		auto dst_res = rg->get_resource_buffer(NameReference::direct(dst), current_pass);
 		if (!dst_res) {
 			current_error = std::move(dst_res);
