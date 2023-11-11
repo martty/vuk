@@ -416,6 +416,7 @@ namespace vuk {
 			return [=](TypedFuture<typename T1::base> arg, TypedFuture<typename T::base>&&... args) mutable {
 				auto& rg = arg.future.get_render_graph();
 				rg->add_pass(std::move(p));
+				rg->add_alias(Name(typeid(T1).name()), arg.future.get_bound_name().name);
 				(attach_one<T, TypedFuture<typename T::base>>(rg, std::move(args)), ...);
 				if constexpr (!std::is_same_v<Ret, void>) {
 					return TupleMap<Ret>::make_ret(rg);
@@ -460,7 +461,8 @@ namespace vuk {
 		auto& rg = in.future.get_render_graph();
 		auto [prev, next] = in.generate_names();
 		rg->clear_image(prev, next, clear_value);
-		return { Future{ rg, next } };
+		in.future = Future{ rg, next };
+		return in;
 	}
 
 	struct InferenceContext {
@@ -574,8 +576,8 @@ namespace vuk {
 
 		Result<SubmitBundle> execute(Allocator&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
 
-		Result<struct BufferInfo, RenderGraphException> get_resource_buffer(const NameReference&, struct PassInfo*);
-		Result<struct AttachmentInfo, RenderGraphException> get_resource_image(const NameReference&, struct PassInfo*);
+		Result<struct BufferInfo*, RenderGraphException> get_resource_buffer(const NameReference&, struct PassInfo*);
+		Result<struct AttachmentInfo*, RenderGraphException> get_resource_image(const NameReference&, struct PassInfo*);
 
 		Result<bool, RenderGraphException> is_resource_image_in_general_layout(const NameReference&, struct PassInfo* pass_info);
 
