@@ -273,7 +273,10 @@ namespace vuk {
 
 	Result<void, AllocateException>
 	DeviceFrameResource::allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) {
-		VUK_DO_OR_RETURN(static_cast<DeviceSuperFrameResource*>(upstream)->allocate_cached_image_views(dst, cis, loc));
+		VUK_DO_OR_RETURN(upstream->allocate_image_views(dst, cis, loc));
+		std::unique_lock _(impl->image_views_mutex);
+		auto& vec = impl->image_views;
+		vec.insert(vec.end(), dst.begin(), dst.end());
 		return { expected_value };
 	}
 
