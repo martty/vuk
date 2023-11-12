@@ -273,6 +273,9 @@ namespace vuk {
 		}
 	};
 
+	using IARule = std::function<void(const struct InferenceContext& ctx, ImageAttachment& ia)>;
+	using BufferRule = std::function<void(const struct InferenceContext& ctx, Buffer& buffer)>;
+
 	// from: https://stackoverflow.com/a/28213747
 	template<typename T>
 	struct closure_traits {};
@@ -342,6 +345,10 @@ namespace vuk {
 		ImageAttachment* operator->() {
 			return attachment;
 		}
+
+		void infer(IARule rule) {
+			future.get_render_graph()->inference_rule(last_name, rule);
+		}
 	};
 
 	template<typename Tuple>
@@ -362,6 +369,12 @@ namespace vuk {
 		rg->attach_in(Name(typeid(U).name()), arg.future);
 	}
 
+	template<typename>
+	struct is_tuple : std::false_type {};
+
+	template<typename... T>
+	struct is_tuple<std::tuple<T...>> : std::true_type {};
+
 	template<class T1, typename... T>
 	struct TupleMap<std::tuple<T1, T...>> {
 		using ret_tuple = std::tuple<TypedFuture<typename T1::base>, TypedFuture<typename T::base>...>;
@@ -372,8 +385,18 @@ namespace vuk {
 			p.name = name;
 			// we need to walk return types and match them to input types
 			p.resources = { to_resource<T1>(), to_resource<T>()... };
-			if constexpr (!std::is_same_v<Ret, void>) {
+			if constexpr (is_tuple<Ret>::value) {
 				TupleMap<Ret>::fill_out(p);
+			} else if constexpr (!std::is_same_v<Ret, void>) {
+				auto out_res_names = { Name(typeid(T1).name()) };
+				for (auto& n : out_res_names) {
+					for (auto& r : p.resources) {
+						if (n == r.name.name) {
+							r.out_name.name = n.append("+");
+							break;
+						}
+					}
+				}
 			}
 			// we need TE execution for this
 			// in cb we build a tuple (with cb in it) and then erase it into a void*
@@ -413,13 +436,15 @@ namespace vuk {
 #undef X
 				return tuple;
 			};
-			return [=](TypedFuture<typename T1::base> arg, TypedFuture<typename T::base>&&... args) mutable {
+			return [=](TypedFuture<typename T1::base> arg, TypedFuture<typename T::base>... args) mutable {
 				auto& rg = arg.future.get_render_graph();
 				rg->add_pass(std::move(p));
 				rg->add_alias(Name(typeid(T1).name()), arg.future.get_bound_name().name);
 				(attach_one<T, TypedFuture<typename T::base>>(rg, std::move(args)), ...);
-				if constexpr (!std::is_same_v<Ret, void>) {
+				if constexpr (is_tuple<Ret>::value) {
 					return TupleMap<Ret>::make_ret(rg);
+				} else if constexpr (!std::is_same_v<Ret, void>) {
+					return TypedFuture<typename T1::base>{ Future{ rg, Name(typeid(T1).name()).append("+") } };
 				}
 			};
 		}
@@ -472,9 +497,6 @@ namespace vuk {
 		struct ExecutableRenderGraph* erg;
 		Name prefix;
 	};
-
-	using IARule = std::function<void(const struct InferenceContext& ctx, ImageAttachment& ia)>;
-	using BufferRule = std::function<void(const struct InferenceContext& ctx, Buffer& buffer)>;
 
 	inline void infer(TypedFuture<Image>& in, IARule rule) {
 		auto& rg = in.future.get_render_graph();

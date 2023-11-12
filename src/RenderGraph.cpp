@@ -189,7 +189,7 @@ namespace vuk {
 			auto& pif = passes[pass_idx];
 			for (Resource& res : pif.resources.to_span(resources)) {
 				bool is_undef = false;
-				bool is_def = !res.out_name.is_invalid();
+				bool is_def = !res.out_name.is_invalid(); // we introduce a new name
 				int32_t res_idx = static_cast<int32_t>(&res - &*pif.resources.to_span(resources).begin());
 				if (!res.name.is_invalid()) {
 					auto& r_io = res_to_links[res.name];

@@ -129,7 +129,7 @@ namespace {
 			                                             .bind_image(0, 2, color)
 			                                             .bind_sampler(0, 2, sci)
 			                                             .draw(3, 1, 0, 0);
-			                                         return std::make_tuple(deferred);
+			                                         return deferred;
 		                                         });
 
 		      // The intermediate offscreen textures need to be bound
@@ -152,11 +152,13 @@ namespace {
 		      // So we provide an additional rule - the extent of "05_position" must match our target extent
 		      // With this rule, all image parameters can be inferred
 
-		      // rg.inference_rule("05_position", vuk::same_extent_as("05_deferred"));
-		      infer(position_image, vuk::same_extent_as(target));
+		      position_image.infer(vuk::same_extent_as(target));
 
-		      auto gbuffer = build_gbuffer_pass(std::move(position_image), std::move(normal_image), std::move(color_image), std::move(depth_img));
-		      auto result = std::apply(shading_pass, std::tuple_cat(std::make_tuple(target), gbuffer));
+		      //auto gbuffer = build_gbuffer_pass(std::move(position_image), std::move(normal_image), std::move(color_image), std::move(depth_img));
+			  auto [pos, norm, col] = build_gbuffer_pass(std::move(position_image), std::move(normal_image), std::move(color_image), std::move(depth_img));
+		      auto result = shading_pass(target, pos, norm, col);
+		      //auto result = shading_pass(gbuffer)
+		      //auto result = std::apply(shading_pass, std::tuple_cat(target, gbuffer));
 
 		      return result;
 		    },
