@@ -577,6 +577,9 @@ namespace vuk {
 	Future::Future(const Future& o) noexcept : output_binding(o.output_binding), rg(o.rg), control(o.control) {}
 
 	Future& Future::operator=(const Future& o) noexcept {
+		if (rg && rg->impl) {
+			rg->detach_out(output_binding, *this);
+		}
 		control = o.control;
 		rg = o.rg;
 		output_binding = o.output_binding;
@@ -589,9 +592,9 @@ namespace vuk {
 	    control{ std::exchange(o.control, nullptr) } {}
 
 	Future& Future::operator=(Future&& o) noexcept {
-		control = std::exchange(o.control, nullptr);
-		rg = std::exchange(o.rg, nullptr);
-		output_binding = std::exchange(o.output_binding, QualifiedName{});
+		std::swap(o.control, control);
+		std::swap(o.rg, rg);
+		std::swap(o.output_binding, output_binding);
 
 		return *this;
 	}
