@@ -112,6 +112,7 @@ namespace vuk {
 		std::vector<std::pair<std::shared_ptr<RenderGraph>, SGInfo>, short_alloc<std::pair<std::shared_ptr<RenderGraph>, SGInfo>, 64>> subgraphs;
 
 		std::vector<std::pair<QualifiedName, Acquire>, short_alloc<std::pair<QualifiedName, Acquire>, 64>> acquires;
+		std::vector<Release> final_releases;
 		std::vector<std::pair<QualifiedName, Release>, short_alloc<std::pair<QualifiedName, Release>, 64>> releases;
 
 		RGImpl() :
@@ -228,6 +229,8 @@ namespace vuk {
 		std::vector<RenderPassInfo*> attachment_rp_references;
 
 		std::vector<std::pair<QualifiedName, Release>> releases;
+		std::vector<Release> final_releases;
+
 		Release& get_release(int64_t idx) {
 			return releases[-1 * (idx)-1].second;
 		}

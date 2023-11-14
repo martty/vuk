@@ -211,6 +211,9 @@ namespace vuk {
 		friend class Future;
 		void attach_out(QualifiedName, Future& fimg, DomainFlags dst_domain);
 
+		void add_final_release(Future& future, DomainFlags src_domain);
+		void remove_final_release(Future& future);
+
 		void detach_out(QualifiedName, Future& fimg);
 
 		Name get_temporary_name();

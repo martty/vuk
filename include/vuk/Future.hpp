@@ -26,7 +26,7 @@ namespace vuk {
 		QueueResourceUse last_use;                             // the results of the future are available if waited for on the initial_domain
 		uint64_t initial_visibility;                           // the results of the future are available if waited for {initial_domain, initial_visibility}
 
-		std::variant<ImageAttachment, Buffer> result;
+		std::variant<std::monostate, ImageAttachment, Buffer> result;
 
 		template<class T>
 		T& get_result() {
@@ -37,6 +37,11 @@ namespace vuk {
 	class Future {
 	public:
 		Future() = default;
+
+		/// @brief Create a Future with ownership of a RenderGraph without binding to an output
+		/// @param rg
+		/// @param future_domain The domain which should complete before the Future is signalled (must not be eDevice or eHost)
+		Future(std::shared_ptr<RenderGraph> rg, DomainFlagBits future_domain);
 
 		/// @brief Create a Future with ownership of a RenderGraph and bind to an output
 		/// @param rg
@@ -85,7 +90,7 @@ namespace vuk {
 			return rg;
 		}
 
-		QualifiedName get_bound_name() {
+		QualifiedName get_bound_name() const noexcept {
 			return output_binding;
 		}
 
@@ -102,16 +107,20 @@ namespace vuk {
 			return control.get();
 		}
 
-		bool is_image() const {
+		bool is_void() const noexcept {
 			return control->result.index() == 0;
 		}
 
-		bool is_buffer() const {
+		bool is_image() const noexcept {
 			return control->result.index() == 1;
 		}
 
+		bool is_buffer() const noexcept {
+			return control->result.index() == 2;
+		}
+
 		template<class T>
-		T& get_result() {
+		T& get_result() noexcept {
 			return control->get_result<T>();
 		}
 

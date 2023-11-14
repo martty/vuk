@@ -117,6 +117,8 @@ namespace vuk {
 			v.first.prefix = joiner;
 			diverged_subchain_headers.emplace(QualifiedName{ joiner, name.name }, v);
 		}
+
+		final_releases.insert(final_releases.end(), other.impl->final_releases.begin(), other.impl->final_releases.end());
 	}
 
 	void RenderGraph::add_alias(Name new_name, Name old_name) {
@@ -1129,6 +1131,19 @@ namespace vuk {
 			futures.emplace_back(this->shared_from_this(), elem);
 		}
 		return futures;
+	}
+
+	void RenderGraph::add_final_release(Future& future, DomainFlags src_domain) {
+		impl->final_releases.emplace_back(Release{ Access::eNone, to_use(Access::eNone, src_domain), future.control.get() });
+	}
+
+	void RenderGraph::remove_final_release(Future& future) {
+		for (auto it = impl->final_releases.begin(); it != impl->final_releases.end(); ++it) {
+			if (it->signal == future.control.get()) {
+				impl->final_releases.erase(it);
+				return;
+			}
+		}
 	}
 
 	void RenderGraph::attach_out(QualifiedName name, Future& fimg, DomainFlags dst_domain) {

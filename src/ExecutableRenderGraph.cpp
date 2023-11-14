@@ -10,6 +10,7 @@
 
 #include <sstream>
 #include <unordered_set>
+#include <vector>
 
 namespace vuk {
 	ExecutableRenderGraph::ExecutableRenderGraph(Compiler& rg) : impl(rg.impl) {}
@@ -781,6 +782,13 @@ namespace vuk {
 				sbatch.submits.emplace_back(*si);
 				partition_it = new_partition_it;
 			}
+			for (auto& rel : impl->final_releases) {
+				if (rel.dst_use.domain & domain) {
+					sbatch.submits.back().future_signals.push_back(rel.signal);
+				}
+			}
+			
+			std::erase_if(impl->final_releases, [=](auto& rel) { return rel.dst_use.domain & domain; });
 			return { expected_value, sbatch };
 		};
 

@@ -560,6 +560,14 @@ namespace vuk {
 		return { SampledImage::RenderGraphAttachment{ n, sci, ivci, ImageLayout::eReadOnlyOptimalKHR } };
 	}
 
+	Future::Future(std::shared_ptr<struct RenderGraph> org, DomainFlagBits future_domain) :
+	    rg(std::move(org)),
+	    control(std::make_shared<FutureBase>()) {
+		assert(future_domain != DomainFlagBits::eDevice);
+		assert(future_domain != DomainFlagBits::eHost);
+		rg->add_final_release(*this, future_domain);
+	}
+
 	Future::Future(std::shared_ptr<struct RenderGraph> org, Name output_binding, DomainFlags dst_domain) :
 	    output_binding(QualifiedName{ {}, output_binding }),
 	    rg(std::move(org)),
@@ -601,7 +609,11 @@ namespace vuk {
 
 	Future::~Future() {
 		if (rg && rg->impl) {
-			rg->detach_out(output_binding, *this);
+			if (!output_binding.name.is_invalid()) {
+				rg->detach_out(output_binding, *this);
+			} else {
+				rg->remove_final_release(*this);
+			}
 		}
 	}
 
