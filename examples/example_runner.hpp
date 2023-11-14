@@ -231,9 +231,9 @@ namespace vuk {
 			                                                             .accelerationStructure = true };
 		VkPhysicalDeviceRayTracingPipelineFeaturesKHR rtPipelineFeature{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR,
 			                                                               .rayTracingPipeline = true };
-		device_builder = device_builder.add_pNext(&vk12features).add_pNext(&vk11features).add_pNext(&sync_feat).add_pNext(&accelFeature).add_pNext(&vk10features);
+		device_builder = device_builder.add_pNext(&vk12features).add_pNext(&vk11features).add_pNext(&sync_feat).add_pNext(&vk10features);
 		if (has_rt) {
-			device_builder = device_builder.add_pNext(&rtPipelineFeature);
+			device_builder = device_builder.add_pNext(&rtPipelineFeature).add_pNext(&accelFeature);
 		}
 		auto dev_ret = device_builder.build();
 		if (!dev_ret) {
