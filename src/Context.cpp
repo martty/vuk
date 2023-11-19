@@ -122,12 +122,14 @@ namespace vuk {
 			TimelineSemaphore ts;
 			impl->device_vk_resource->allocate_timeline_semaphores(std::span{ &ts, 1 }, {});
 			dedicated_graphics_queue.emplace(this->vkQueueSubmit, this->vkQueueSubmit2KHR, params.graphics_queue, params.graphics_queue_family_index, ts);
+			set_name(params.graphics_queue, "Graphics Queue");
 			graphics_queue = &dedicated_graphics_queue.value();
 		}
 		if (dedicated_compute_queue_) {
 			TimelineSemaphore ts;
 			impl->device_vk_resource->allocate_timeline_semaphores(std::span{ &ts, 1 }, {});
 			dedicated_compute_queue.emplace(this->vkQueueSubmit, this->vkQueueSubmit2KHR, params.compute_queue, params.compute_queue_family_index, ts);
+			set_name(params.compute_queue, "Compute Queue");
 			compute_queue = &dedicated_compute_queue.value();
 		} else {
 			compute_queue = graphics_queue;
@@ -136,6 +138,7 @@ namespace vuk {
 			TimelineSemaphore ts;
 			impl->device_vk_resource->allocate_timeline_semaphores(std::span{ &ts, 1 }, {});
 			dedicated_transfer_queue.emplace(this->vkQueueSubmit, this->vkQueueSubmit2KHR, params.transfer_queue, params.transfer_queue_family_index, ts);
+			set_name(params.transfer_queue, "Transfer Queue");
 			transfer_queue = &dedicated_transfer_queue.value();
 		} else {
 			transfer_queue = compute_queue ? compute_queue : graphics_queue;
