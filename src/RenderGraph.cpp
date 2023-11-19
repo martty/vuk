@@ -1784,14 +1784,14 @@ namespace vuk {
 		// cull waits
 		{
 			DomainFlags current_queue = DomainFlagBits::eNone;
-			std::array<uint64_t, 3> last_passes_waited = {};
+			std::array<int64_t, 3> last_passes_waited = {-1, -1, -1};
 			// loop through all passes
 			for (size_t i = 0; i < partitioned_passes.size(); i++) {
 				auto& current_pass = partitioned_passes[i];
 				auto queue = (DomainFlagBits)(current_pass->domain & DomainFlagBits::eQueueMask).m_mask;
 
 				if ((DomainFlags)queue != current_queue) { // if we go into a new queue, reset wait indices
-					last_passes_waited = {};
+					last_passes_waited = { -1, -1, -1 };
 					current_queue = queue;
 				}
 
@@ -1801,7 +1801,7 @@ namespace vuk {
 					auto [queue, pass_idx] = sp[i];
 					auto queue_idx = std::countr_zero((uint32_t)queue) - 1;
 					auto& last_amt = last_passes_waited[queue_idx];
-					if (pass_idx > last_amt) {
+					if ((int64_t)pass_idx > last_amt) {
 						last_amt = pass_idx;
 						new_waits.append(waits, std::pair{ queue, pass_idx });
 						sp = current_pass->relative_waits.to_span(waits);
