@@ -972,6 +972,18 @@ namespace vuk {
 
 		QueueResourceUse& initial = attachment_info.acquire.src_use;
 		initial = to_use(initial_acc, DomainFlagBits::eAny);
+
+		// TODO: this is heavyhanded - we add this because of swapchain sync
+		if (format_to_aspect(att.format) & ImageAspectFlagBits::eDepth) {
+			initial.stages |= PipelineStageFlagBits::eEarlyFragmentTests | PipelineStageFlagBits::eLateFragmentTests;
+			initial.access |= vuk::AccessFlagBits::eDepthStencilAttachmentWrite;
+		}
+
+		if (format_to_aspect(att.format) & ImageAspectFlagBits::eColor) {
+			initial.stages |= PipelineStageFlagBits::eColorAttachmentOutput;
+			initial.access |= AccessFlagBits::eColorAttachmentWrite;
+		}
+
 		impl->bound_attachments.emplace(attachment_info.name, attachment_info);
 	}
 
@@ -989,6 +1001,18 @@ namespace vuk {
 
 		QueueResourceUse& initial = attachment_info.acquire.src_use;
 		initial = to_use(initial_acc, DomainFlagBits::eAny);
+
+		// TODO: this is heavyhanded - we add this because of swapchain sync
+		if (format_to_aspect(att.format) & ImageAspectFlagBits::eDepth) {
+			initial.stages |= PipelineStageFlagBits::eEarlyFragmentTests | PipelineStageFlagBits::eLateFragmentTests;
+			initial.access |= vuk::AccessFlagBits::eDepthStencilAttachmentWrite;
+		}
+
+		if (format_to_aspect(att.format) & ImageAspectFlagBits::eColor) {
+			initial.stages |= PipelineStageFlagBits::eColorAttachmentOutput;
+			initial.access |= AccessFlagBits::eColorAttachmentWrite;
+		}
+
 		impl->bound_attachments.emplace(attachment_info.name, attachment_info);
 	}
 
