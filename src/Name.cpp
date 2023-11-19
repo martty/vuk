@@ -70,16 +70,19 @@ namespace {
 		std::shared_mutex lock;
 	};
 
-	static Intern g_intern;
+	Intern& g_intern() {
+		static Intern intern;
+		return intern;
+	}
 } // namespace
 
 namespace vuk {
 	Name::Name(const char* str) noexcept {
-		id = g_intern.add(str);
+		id = g_intern().add(str);
 	}
 
 	Name::Name(std::string_view str) noexcept {
-		id = g_intern.add(str);
+		id = g_intern().add(str);
 	}
 
 	std::string_view Name::to_sv() const noexcept {
@@ -98,8 +101,8 @@ namespace vuk {
 
 		// speculative
 		{
-			std::shared_lock _(g_intern.lock);
-			if (auto it = g_intern.map.find(hash); it != g_intern.map.end()) {
+			std::shared_lock _(g_intern().lock);
+			if (auto it = g_intern().map.find(hash); it != g_intern().map.end()) {
 				Name n;
 				n.id = it->second;
 				return n;
