@@ -324,7 +324,7 @@ namespace vuk {
 		for (auto& head : chains) {
 			if (head->def->pass >= 0 && head->type == Resource::Type::eImage) { // no Buffer divergence
 				auto& pass = get_pass(*head->def);
-				if (pass.pass->type == PassType::eDiverge) {                      // diverging subchain
+				if (pass.pass->type == PassType::eDiverge) { // diverging subchain
 					auto& whole_res = pass.resources.to_span(resources)[0].name;
 					auto parent_chain_end = &res_to_links[whole_res];
 					head->source = parent_chain_end;
@@ -344,7 +344,7 @@ namespace vuk {
 		for (auto& head : chains) {
 			if (head->def->pass >= 0 && head->type == Resource::Type::eImage) { // no Buffer divergence
 				auto& pass = get_pass(*head->def);
-				if (pass.pass->type == PassType::eConverge) {                     // converge subchain
+				if (pass.pass->type == PassType::eConverge) { // converge subchain
 					conv_subchains.push_back(&head);
 					// reconverged resource is always first resource
 					auto& whole_res = pass.resources.to_span(resources)[0];
@@ -392,7 +392,7 @@ namespace vuk {
 		for (auto& head : chains) {
 			if (head->def->pass >= 0 && head->type == Resource::Type::eImage) { // no Buffer divergence
 				auto& pass = get_pass(*head->def);
-				if (pass.pass->type == PassType::eDiverge) {                      // diverging subchain
+				if (pass.pass->type == PassType::eDiverge) { // diverging subchain
 					div_subchains.push_back(head);
 					// whole resource is always first resource
 					auto& whole_res = pass.resources.to_span(resources)[0].name;
@@ -1567,7 +1567,7 @@ namespace vuk {
 								// if the last use was discard, then downgrade load op
 								if (last_use.layout == ImageLayout::eUndefined) {
 									att.description.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-								} else if (use.access & AccessFlagBits::eColorAttachmentWrite) {        // add CA read, because of LOAD_OP_LOAD
+								} else if (use.access & AccessFlagBits::eColorAttachmentWrite) { // add CA read, because of LOAD_OP_LOAD
 									use.access |= AccessFlagBits::eColorAttachmentRead;
 								} else if (use.access & AccessFlagBits::eDepthStencilAttachmentWrite) { // add DSA read, because of LOAD_OP_LOAD
 									use.access |= AccessFlagBits::eDepthStencilAttachmentRead;
@@ -1808,7 +1808,7 @@ namespace vuk {
 		// cull waits
 		{
 			DomainFlags current_queue = DomainFlagBits::eNone;
-			std::array<int64_t, 3> last_passes_waited = {-1, -1, -1};
+			std::array<int64_t, 3> last_passes_waited = { -1, -1, -1 };
 			// loop through all passes
 			for (size_t i = 0; i < partitioned_passes.size(); i++) {
 				auto& current_pass = partitioned_passes[i];
