@@ -52,6 +52,7 @@ namespace vuk {
 			if (dep.subresourceRange.baseArrayLayer > bound.attachment.base_layer + bound.attachment.layer_count) {
 				return false;
 			}
+			dep.subresourceRange.layerCount = bound.attachment.layer_count;
 		}
 		assert(bound.attachment.level_count != VK_REMAINING_MIP_LEVELS);
 		if (dep.subresourceRange.levelCount != VK_REMAINING_MIP_LEVELS) {
@@ -65,6 +66,7 @@ namespace vuk {
 			if (dep.subresourceRange.baseMipLevel > bound.attachment.base_level + bound.attachment.level_count) {
 				return false;
 			}
+			dep.subresourceRange.levelCount = bound.attachment.level_count;
 		}
 
 		if (dep.srcQueueFamilyIndex != VK_QUEUE_FAMILY_IGNORED) {
