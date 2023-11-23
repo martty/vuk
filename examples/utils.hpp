@@ -16,7 +16,6 @@
 #include <vuk/vuk_fwd.hpp>
 
 namespace vuk {
-	struct Pass;
 	struct RenderGraph;
 } // namespace vuk
 
