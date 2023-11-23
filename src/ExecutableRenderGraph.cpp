@@ -146,8 +146,8 @@ namespace vuk {
 		}
 	}
 
-	Result<SubmitInfo> ExecutableRenderGraph::record_single_submit(Allocator& alloc, std::span<PassInfo*> passes, vuk::DomainFlagBits domain) {
-		assert(passes.size() > 0);
+	Result<SubmitInfo> ExecutableRenderGraph::record_single_submit(Allocator& alloc, std::span<ScheduledItem*> items, vuk::DomainFlagBits domain) {
+		assert(items.size() > 0);
 
 		auto& ctx = alloc.get_context();
 		SubmitInfo si;
@@ -175,16 +175,16 @@ namespace vuk {
 		if (this->impl->callbacks.on_begin_command_buffer)
 			cbuf_profile_data = this->impl->callbacks.on_begin_command_buffer(this->impl->callbacks.user_data, cbuf);
 
-		uint64_t command_buffer_index = passes[0]->command_buffer_index;
+		uint64_t command_buffer_index = items[0]->command_buffer_index;
 		int32_t render_pass_index = -1;
-		for (size_t i = 0; i < passes.size(); i++) {
-			auto& pass = passes[i];
+		for (size_t i = 0; i < items.size(); i++) {
+			auto& item = items[i];
 
-			for (auto& ref : pass->referenced_swapchains.to_span(impl->swapchain_references)) {
+			for (auto& ref : item->referenced_swapchains.to_span(impl->swapchain_references)) {
 				used_swapchains.emplace(impl->get_bound_attachment(ref).swapchain);
 			}
 
-			if (pass->command_buffer_index != command_buffer_index) { // end old cb and start new one
+			if (item->command_buffer_index != command_buffer_index) { // end old cb and start new one
 				if (auto result = ctx.vkEndCommandBuffer(cbuf); result != VK_SUCCESS) {
 					return { expected_error, VkException{ result } };
 				}
@@ -202,55 +202,52 @@ namespace vuk {
 			}
 
 			// if we had a render pass running, but now it changes
-			if (pass->render_pass_index != render_pass_index && render_pass_index != -1) {
+			if (item->render_pass_index != render_pass_index && render_pass_index != -1) {
 				ctx.vkCmdEndRenderPass(cbuf);
 			}
 
 			if (i > 1) {
 				// insert post-barriers
-				impl->emit_barriers(ctx, cbuf, domain, passes[i - 1]->post_memory_barriers, passes[i - 1]->post_image_barriers);
+				impl->emit_barriers(ctx, cbuf, domain, items[i - 1]->post_memory_barriers, items[i - 1]->post_image_barriers);
 			}
 			// insert pre-barriers
-			impl->emit_barriers(ctx, cbuf, domain, pass->pre_memory_barriers, pass->pre_image_barriers);
+			impl->emit_barriers(ctx, cbuf, domain, item->pre_memory_barriers, item->pre_image_barriers);
 
 			// if render pass is changing and new pass uses one
-			if (pass->render_pass_index != render_pass_index && pass->render_pass_index != -1) {
-				begin_render_pass(ctx, impl->rpis[pass->render_pass_index], cbuf, false);
+			if (item->render_pass_index != render_pass_index && item->render_pass_index != -1) {
+				begin_render_pass(ctx, impl->rpis[item->render_pass_index], cbuf, false);
 			}
 
-			render_pass_index = pass->render_pass_index;
+			render_pass_index = item->render_pass_index;
 
-			for (auto& w : pass->relative_waits.to_span(impl->waits)) {
+			for (auto& w : item->relative_waits.to_span(impl->waits)) {
 				si.relative_waits.emplace_back(w);
 			}
 
-			for (auto& w : pass->absolute_waits.to_span(impl->absolute_waits)) {
+			for (auto& w : item->absolute_waits.to_span(impl->absolute_waits)) {
 				si.absolute_waits.emplace_back(w);
 			}
 
 			CommandBuffer cobuf(*this, ctx, alloc, cbuf);
 			if (render_pass_index >= 0) {
-				fill_render_pass_info(impl->rpis[pass->render_pass_index], 0, cobuf);
+				fill_render_pass_info(impl->rpis[item->render_pass_index], 0, cobuf);
 			} else {
 				cobuf.ongoing_render_pass = {};
 			}
 
 			// propagate signals onto SI
-			auto pass_fut_signals = pass->future_signals.to_span(impl->future_signals);
+			auto pass_fut_signals = item->future_signals.to_span(impl->future_signals);
 			si.future_signals.insert(si.future_signals.end(), pass_fut_signals.begin(), pass_fut_signals.end());
 
-			if (!pass->qualified_name.is_invalid()) {
+			/* if (!item->qualified_name.is_invalid()) {
 				ctx.begin_region(cobuf.command_buffer, pass->qualified_name.name);
-			}
-			if (pass->pass->execute) {
+			}*/
+			/*if (pass->pass->execute) {
 				cobuf.current_pass = pass;
-				if (pass->pass->make_argument_tuple) {
-					std::vector<void*> list;
-					for (auto& r : pass->resources.to_span(impl->resources)) {
-						auto res = *get_resource_image(vuk::NameReference::direct(r.original_name), cobuf.current_pass);
-						list.emplace_back((void*)&res->attachment);
-					}
-					cobuf.arg_tuple = pass->pass->make_argument_tuple(cobuf, list);
+				std::vector<void*> list;
+				for (auto& r : pass->resources.to_span(impl->resources)) {
+					auto res = *get_resource_image(vuk::NameReference::direct(r.original_name), cobuf.current_pass);
+					list.emplace_back((void*)&res->attachment);
 				}
 				void* pass_profile_data = nullptr;
 				if (this->impl->callbacks.on_begin_pass)
@@ -258,10 +255,10 @@ namespace vuk {
 				pass->pass->execute(cobuf);
 				if (this->impl->callbacks.on_end_pass)
 					this->impl->callbacks.on_end_pass(this->impl->callbacks.user_data, pass_profile_data);
-			}
-			if (!pass->qualified_name.is_invalid()) {
+			}*/
+			/* if (!item->execable->debug_info qualified_name.is_invalid()) {
 				ctx.end_region(cobuf.command_buffer);
-			}
+			}*/
 
 			if (auto res = cobuf.result(); !res) {
 				return res;
@@ -273,7 +270,7 @@ namespace vuk {
 		}
 
 		// insert post-barriers
-		impl->emit_barriers(ctx, cbuf, domain, passes.back()->post_memory_barriers, passes.back()->post_image_barriers);
+		impl->emit_barriers(ctx, cbuf, domain, items.back()->post_memory_barriers, items.back()->post_image_barriers);
 
 		if (this->impl->callbacks.on_end_command_buffer)
 			this->impl->callbacks.on_end_command_buffer(this->impl->callbacks.user_data, cbuf_profile_data);
@@ -289,8 +286,50 @@ namespace vuk {
 	Result<SubmitBundle> ExecutableRenderGraph::execute(Allocator& alloc, std::vector<std::pair<SwapchainRef, size_t>> swp_with_index) {
 		Context& ctx = alloc.get_context();
 
+		// DYNAMO
+		// loop through scheduled items
+		// for each scheduled item, schedule deps
+		// generate barriers and batch breaks as needed by deps
+		// allocate images/buffers as declares are encountered
+		// start/end RPs as needed
+		// inference will still need to run in the beginning, as that is compiletime
+		DomainFlagBits current_domain = DomainFlagBits::eNone;
+		for (auto& item : impl->scheduled_execables) {
+			auto& node = item.execable;
+			if (node->kind == Node::DECLARE) { // when encountering a DECLARE, allocate the thing if needed
+				if (node->type[0]->kind == Type::BUFFER_TY) {
+					auto& bound = *reinterpret_cast<Buffer*>(node->declare.value);
+					if (bound.buffer == VK_NULL_HANDLE) {
+						BufferCreateInfo bci{ .mem_usage = bound.memory_usage, .size = bound.size, .alignment = 1 }; // TODO: alignment?
+						auto allocator = node->declare.allocator ? *node->declare.allocator : alloc;
+						auto buf = allocate_buffer(allocator, bci);
+						if (!buf) {
+							return buf;
+						}
+						bound = **buf;
+					}
+				} else if (node->type[0]->kind == Type::IMAGE_TY) {
+					auto& attachment = *reinterpret_cast<ImageAttachment*>(node->declare.value);
+					if (!attachment.image) {
+						auto allocator = node->declare.allocator ? *node->declare.allocator : alloc;
+						assert(attachment.usage != ImageUsageFlags{});
+						auto img = allocate_image(allocator, attachment);
+						if (!img) {
+							return img;
+						}
+						attachment.image = **img;
+						//ctx.set_name(attachment.image.image, bound.name.name);
+					}
+				}
+			} else if (node->kind == Node::CALL) {
+				
+			}
+		}
+
+
+		// RESOLVE SWAPCHAIN DYNAMICITY
 		// bind swapchain attachment images & ivs
-		for (auto& bound : impl->bound_attachments) {
+		/*for (auto& bound : impl->bound_attachments) {
 			if (bound.type == AttachmentInfo::Type::eSwapchain && bound.parent_attachment == 0) {
 				auto it = std::find_if(swp_with_index.begin(), swp_with_index.end(), [boundb = &bound](auto& t) { return t.first == boundb->swapchain; });
 				bound.attachment.image_view = it->first->image_views[it->second];
@@ -298,8 +337,9 @@ namespace vuk {
 				bound.attachment.extent = Dimension3D::absolute(it->first->extent);
 				bound.attachment.sample_count = vuk::Samples::e1;
 			}
-		}
+		}*/
 
+		/* INFERENCE
 		// pre-inference: which IAs are in which FBs?
 		for (auto& rp : impl->rpis) {
 			for (auto& rp_att : rp.attachments.to_span(impl->rp_infos)) {
@@ -357,12 +397,12 @@ namespace vuk {
 
 		decltype(impl->ia_inference_rules) ia_resolved_rules;
 		for (auto& [n, rules] : impl->ia_inference_rules) {
-			ia_resolved_rules.emplace(impl->resolve_name(n), std::move(rules));
+		  ia_resolved_rules.emplace(impl->resolve_name(n), std::move(rules));
 		}
 
 		decltype(impl->buf_inference_rules) buf_resolved_rules;
 		for (auto& [n, rules] : impl->buf_inference_rules) {
-			buf_resolved_rules.emplace(impl->resolve_name(n), std::move(rules));
+		  buf_resolved_rules.emplace(impl->resolve_name(n), std::move(rules));
 		}
 
 		std::vector<std::pair<AttachmentInfo*, IAInferences*>> attis_to_infer;
@@ -660,8 +700,9 @@ namespace vuk {
 		if (bufis_to_infer.size() > 0) {
 			return { expected_error, RenderGraphException{ msg.str() } };
 		}
-
+		*/
 		// acquire the render passes
+		/*
 		for (auto& rp : impl->rpis) {
 			if (rp.attachments.size() == 0) {
 				continue;
@@ -790,12 +831,12 @@ namespace vuk {
 
 		SubmitBundle sbundle;
 
-		auto record_batch = [&alloc, this](std::span<PassInfo*> passes, DomainFlagBits domain) -> Result<SubmitBatch> {
+		auto record_batch = [&alloc, this](std::span<ScheduledItem*> passes, DomainFlagBits domain) -> Result<SubmitBatch> {
 			SubmitBatch sbatch{ .domain = domain };
 			auto partition_it = passes.begin();
 			while (partition_it != passes.end()) {
 				auto batch_index = (*partition_it)->batch_index;
-				auto new_partition_it = std::partition_point(partition_it, passes.end(), [batch_index](PassInfo* rpi) { return rpi->batch_index == batch_index; });
+				auto new_partition_it = std::partition_point(partition_it, passes.end(), [batch_index](ScheduledItem* rpi) { return rpi->batch_index == batch_index; });
 				auto partition_span = std::span(partition_it, new_partition_it);
 				auto si = record_single_submit(alloc, partition_span, domain);
 				if (!si) {
@@ -809,7 +850,7 @@ namespace vuk {
 					sbatch.submits.back().future_signals.push_back(rel.signal);
 				}
 			}
-			
+
 			std::erase_if(impl->final_releases, [=](auto& rel) { return rel.dst_use.domain & domain; });
 			return { expected_value, sbatch };
 		};
@@ -839,83 +880,63 @@ namespace vuk {
 				return batch;
 			}
 			sbundle.batches.emplace_back(std::move(*batch));
-		}
+		}*/
 
 		return { expected_value, std::move(sbundle) };
 	}
-
+	
 	Result<BufferInfo*, RenderGraphException> ExecutableRenderGraph::get_resource_buffer(const NameReference& name_ref, PassInfo* pass_info) {
-		for (auto& r : pass_info->resources.to_span(impl->resources)) {
-			if (r.type == Resource::Type::eBuffer && r.original_name == name_ref.name.name && r.foreign == name_ref.rg) {
-				auto& att = impl->get_bound_buffer(r.reference);
-				return { expected_value, &att };
-			}
-		}
+		return { expected_error, RenderGraphException{} };
+		/*
+	  for (auto& r : pass_info->resources.to_span(impl->resources)) {
+	    if (r.type == Resource::Type::eBuffer && r.original_name == name_ref.name.name && r.foreign == name_ref.rg) {
+	      auto& att = impl->get_bound_buffer(r.reference);
+	      return { expected_value, &att };
+	    }
+	  }
 
-		return { expected_error, errors::make_cbuf_references_undeclared_resource(*pass_info, Resource::Type::eImage, name_ref.name.name) };
+	  return { expected_error, errors::make_cbuf_references_undeclared_resource(*pass_info, Resource::Type::eImage, name_ref.name.name) };*/
 	}
 
 	Result<AttachmentInfo*, RenderGraphException> ExecutableRenderGraph::get_resource_image(const NameReference& name_ref, PassInfo* pass_info) {
-		for (auto& r : pass_info->resources.to_span(impl->resources)) {
-			if (r.type == Resource::Type::eImage && r.original_name == name_ref.name.name && r.foreign == name_ref.rg) {
-				auto& att = impl->get_bound_attachment(r.reference);
-				auto parent_idx = att.parent_attachment;
-				vuk::AttachmentInfo* parent = nullptr;
-				if (parent_idx < 0) {
-					while (parent_idx < 0) {
-						parent = &impl->get_bound_attachment(parent_idx);
-						parent_idx = parent->parent_attachment;
-					}
-					att.attachment.image = parent->attachment.image;
-					att.attachment.base_layer = att.image_subrange.base_layer;
-					att.attachment.base_level = att.image_subrange.base_level;
-					att.attachment.layer_count =
-					    att.image_subrange.layer_count == VK_REMAINING_ARRAY_LAYERS ? att.attachment.layer_count : att.image_subrange.layer_count;
-					att.attachment.level_count = att.image_subrange.level_count == VK_REMAINING_MIP_LEVELS ? att.attachment.level_count : att.image_subrange.level_count;
-					att.attachment.view_type = parent->attachment.view_type;
-					att.attachment.image_view = {};
-				}
-				return { expected_value, &att };
-			}
-		}
+		return { expected_error, RenderGraphException{} };
 
-		return { expected_error, errors::make_cbuf_references_undeclared_resource(*pass_info, Resource::Type::eImage, name_ref.name.name) };
+		/*
+	  for (auto& r : pass_info->resources.to_span(impl->resources)) {
+	    if (r.type == Resource::Type::eImage && r.original_name == name_ref.name.name && r.foreign == name_ref.rg) {
+	      auto& att = impl->get_bound_attachment(r.reference);
+	      auto parent_idx = att.parent_attachment;
+	      vuk::AttachmentInfo* parent = nullptr;
+	      if (parent_idx < 0) {
+	        while (parent_idx < 0) {
+	          parent = &impl->get_bound_attachment(parent_idx);
+	          parent_idx = parent->parent_attachment;
+	        }
+	        att.attachment.image = parent->attachment.image;
+	        att.attachment.base_layer = att.image_subrange.base_layer;
+	        att.attachment.base_level = att.image_subrange.base_level;
+	        att.attachment.layer_count =
+	            att.image_subrange.layer_count == VK_REMAINING_ARRAY_LAYERS ? att.attachment.layer_count : att.image_subrange.layer_count;
+	        att.attachment.level_count = att.image_subrange.level_count == VK_REMAINING_MIP_LEVELS ? att.attachment.level_count : att.image_subrange.level_count;
+	        att.attachment.view_type = parent->attachment.view_type;
+	        att.attachment.image_view = {};
+	      }
+	      return { expected_value, &att };
+	    }
+	  }
+
+	  return { expected_error, errors::make_cbuf_references_undeclared_resource(*pass_info, Resource::Type::eImage, name_ref.name.name) };*/
 	}
 
 	Result<bool, RenderGraphException> ExecutableRenderGraph::is_resource_image_in_general_layout(const NameReference& name_ref, PassInfo* pass_info) {
-		for (auto& r : pass_info->resources.to_span(impl->resources)) {
-			if (r.type == Resource::Type::eImage && r.original_name == name_ref.name.name && r.foreign == name_ref.rg) {
-				return { expected_value, r.promoted_to_general };
-			}
-		}
+		return { expected_error, RenderGraphException{} };
 
-		return { expected_error, errors::make_cbuf_references_undeclared_resource(*pass_info, Resource::Type::eImage, name_ref.name.name) };
-	}
+		/* for (auto& r : pass_info->resources.to_span(impl->resources)) {
+	    if (r.type == Resource::Type::eImage && r.original_name == name_ref.name.name && r.foreign == name_ref.rg) {
+	      return { expected_value, r.promoted_to_general };
+	    }
+	  }
 
-	QualifiedName ExecutableRenderGraph::resolve_name(Name name, PassInfo* pass_info) const noexcept {
-		auto qualified_name = QualifiedName{ pass_info->qualified_name.prefix, name };
-		return impl->resolve_name(qualified_name);
-	}
-
-	const ImageAttachment& InferenceContext::get_image_attachment(Name name) const {
-		auto fqname = QualifiedName{ prefix, name };
-		auto resolved_name = erg->impl->resolve_name(fqname);
-
-		auto link = &erg->impl->res_to_links.at(resolved_name); // TODO: no error signaling
-		while (link->def->pass > 0) {
-			link = link->prev;
-		}
-		return erg->impl->get_bound_attachment(link->def->pass).attachment;
-	}
-
-	const Buffer& InferenceContext::get_buffer(Name name) const {
-		auto fqname = QualifiedName{ prefix, name };
-		auto resolved_name = erg->impl->resolve_name(fqname);
-
-		auto link = &erg->impl->res_to_links.at(resolved_name); // TODO: no error signaling
-		while (link->def->pass > 0) {
-			link = link->prev;
-		}
-		return erg->impl->get_bound_buffer(link->def->pass).buffer;
+	  return { expected_error, errors::make_cbuf_references_undeclared_resource(*pass_info, Resource::Type::eImage, name_ref.name.name) };*/
 	}
 } // namespace vuk

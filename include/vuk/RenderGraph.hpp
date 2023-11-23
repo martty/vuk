@@ -10,6 +10,7 @@
 #include "vuk/Swapchain.hpp"
 #include "vuk/vuk_fwd.hpp"
 
+#include <deque>
 #include <functional>
 #include <optional>
 #include <span>
@@ -31,78 +32,183 @@ namespace vuk {
 	struct FutureBase;
 	struct Resource;
 
-	namespace detail {
-		struct BufferResourceInputOnly;
-
-		struct BufferResource {
-			Name name;
-
-			BufferResourceInputOnly operator>>(Access ba);
+	struct Type {
+		enum TypeKind { IMAGE_TY, BUFFER_TY, IMBUED_TY, BOUND_TY, OPAQUE_FN_TY } kind;
+		union {
+			struct {
+				Type* T;
+				Access access;
+			} imbued;
+			struct {
+				Type* T;
+				size_t ref_idx;
+			} bound;
+			struct {
+				std::span<Type* const> args;
+				std::span<Type* const> return_types;
+				int execute_on;
+				std::function<void(CommandBuffer&, std::span<void*>)>* callback;
+			} opaque_fn;
 		};
 
-		struct ImageResourceInputOnly;
+		bool is_image() {
+			return kind == IMAGE_TY;
+		}
 
-		struct ImageResource {
-			Name name;
+		bool is_buffer() {
+			return kind == BUFFER_TY;
+		}
 
-			ImageResourceInputOnly operator>>(Access ia);
+		~Type() {}
+	};
+
+	struct RG;
+
+	struct Node;
+
+	struct Ref {
+		Node* node;
+		size_t index;
+
+		Type* type();
+
+		constexpr std::strong_ordering operator<=>(const Ref&) const noexcept = default;
+	};
+
+	inline Ref first(Node* node) {
+		return { node, 0 };
+	}
+
+	struct DebugInfo {};
+	struct SchedulingInfo {
+		DomainFlags required_domain;
+	};
+
+	struct Node {
+		enum Kind { DECLARE, IMPORT, ATTACH, CALL, CLEAR, DIVERGE, CONVERGE, RESOLVE, RELEASE } kind;
+		std::span<Type* const> type;
+		DebugInfo* debug_info = nullptr;
+		SchedulingInfo* scheduling_info = nullptr;
+		union {
+			struct {
+				void* value;
+				std::optional<Allocator> allocator;
+			} declare;
+			struct {
+				void* value;
+			} import;
+			struct {
+				std::span<Ref> args;
+				Type* fn_ty;
+			} call;
+			struct {
+				const Ref dst;
+				Clear* cv;
+			} clear;
+			struct {
+				const Ref initial;
+				Subrange::Image subrange;
+			} diverge;
+			struct {
+				std::span<Ref> diverged;
+			} converge;
+			struct {
+				const Ref source_ms;
+				const Ref source_ss;
+				const Ref dst_ss;
+			} resolve;
+			struct {
+				const Ref src;
+			} release;
 		};
+	};
 
-		struct ImageResourceInputOnly {
-			Name name;
-			Access ba;
+	inline Type* Ref::type() {
+		return node->type[index];
+	}
 
-			Resource operator>>(Name output);
-			operator Resource();
-		};
+	struct RG {
+		RG() {
+			builtin_image = &types.emplace_back(Type{ .kind = Type::IMAGE_TY });
+			builtin_buffer = &types.emplace_back(Type{ .kind = Type::BUFFER_TY });
+		}
 
-		struct BufferResourceInputOnly {
-			Name name;
-			Access ba;
+		std::deque<Node> op_arena;
+		char* debug_arena;
 
-			Resource operator>>(Name output);
-			operator Resource();
-		};
-	} // namespace detail
+		std::deque<Type> types;
+		Type* builtin_image;
+		Type* builtin_buffer;
 
-	struct Resource {
-		uint32_t id = 0;
-		QualifiedName name;
-		Name original_name;
-		enum class Type { eBuffer, eImage } type;
-		Access ia;
-		QualifiedName out_name;
-		struct RenderGraph* foreign = nullptr;
-		int32_t reference = 0;
-		bool promoted_to_general = false;
+		std::vector<std::shared_ptr<RG>> subgraphs;
+		// uint64_t current_hash = 0;
 
-		Resource() = default;
-		Resource(Name n, Type t, Access ia) : name{ Name{}, n }, type(t), ia(ia) {}
-		Resource(Name n, Type t, Access ia, Name out_name) : name{ Name{}, n }, type(t), ia(ia), out_name{ Name{}, out_name } {}
-		Resource(RenderGraph* foreign, QualifiedName n, Type t, Access ia) : name{ n }, type(t), ia(ia), foreign(foreign) {}
-		Resource(uint32_t id, Type t, Access ia) : id(id), type(t), ia(ia) {}
+		void* ensure_space(size_t size) {
+			return &op_arena.emplace_back(Node{});
+		}
 
-		bool operator==(const Resource& o) const noexcept {
-			return name == o.name;
+		Node* emplace_op(Node v, DebugInfo = {}) {
+			return new (ensure_space(sizeof Node)) Node(v);
+		}
+
+		Type* emplace_type(Type&& t, DebugInfo = {}) {
+			return &types.emplace_back(std::move(t));
+		}
+
+		void reference_RG(std::shared_ptr<RG> other) {
+			subgraphs.emplace_back(other);
+		}
+
+		// TYPES
+		Type* make_imbued_ty(Type* ty, Access access) {
+			return emplace_type(Type{ .kind = Type::IMBUED_TY, .imbued = { .T = ty, .access = access } });
+		}
+
+		Type* make_bound_ty(Type* ty, size_t ref_idx) {
+			return emplace_type(Type{ .kind = Type::BOUND_TY, .bound = { .T = ty, .ref_idx = ref_idx } });
+		}
+
+		// OPS
+
+		Ref make_declare_image(ImageAttachment value) {
+			return first(emplace_op(Node{ .kind = Node::DECLARE, .type = std::span{ &builtin_image, 1 }, .declare = { .value = new ImageAttachment(value) } }));
+		}
+
+		Ref make_declare_buffer(Buffer value) {
+			return first(emplace_op(Node{ .kind = Node::DECLARE, .type = std::span{ &builtin_buffer, 1 }, .declare = { .value = new Buffer(value) } }));
+		}
+
+		Ref make_clear_image(Ref dst, Clear cv) {
+			return first(emplace_op(Node{ .kind = Node::CLEAR, .type = std::span{ &builtin_image, 1 }, .clear = { .dst = dst, .cv = new Clear(cv) } }));
+		}
+
+		Type* make_opaque_fn_ty(std::span<Type* const> args,
+		                        std::span<Type* const> ret_types,
+		                        DomainFlags execute_on,
+		                        std::function<void(CommandBuffer&, std::span<void*>)> callback) {
+			auto arg_ptr = new Type*[args.size()];
+			std::copy(args.begin(), args.end(), arg_ptr);
+			auto ret_ty_ptr = new Type*[ret_types.size()];
+			std::copy(ret_types.begin(), ret_types.end(), ret_ty_ptr);
+			return emplace_type(Type{ .kind = Type::OPAQUE_FN_TY,
+			                          .opaque_fn = { .args = std::span(arg_ptr, args.size()),
+			                                         .return_types = std::span(ret_ty_ptr, ret_types.size()),
+			                                         .execute_on = execute_on.m_mask,
+			                                         .callback = new std::function<void(CommandBuffer&, std::span<void*>)>(callback) } });
+		}
+
+		template<class... Refs>
+		Node* make_call(Type* fn, Refs... args) {
+			Ref* args_ptr = new Ref[sizeof...(args)]{ args... };
+			return emplace_op(Node{ .kind = Node::CALL, .type = fn->opaque_fn.return_types, .call = { .args = std::span(args_ptr, sizeof...(args)), .fn_ty = fn } });
+		}
+
+		Ref make_release(Ref src) {
+			return first(emplace_op(Node{ .kind = Node::RELEASE, .release = { .src = src } }));
 		}
 	};
 
 	QueueResourceUse to_use(Access acc, DomainFlags domain);
-
-	enum class PassType { eUserPass, eClear, eResolve, eDiverge, eConverge, eForcedAccess };
-
-	/// @brief Fundamental unit of execution and scheduling. Refers to resources
-	struct Pass {
-		Name name;
-		DomainFlags execute_on = DomainFlagBits::eDevice;
-
-		std::vector<Resource> resources;
-
-		std::function<void(CommandBuffer&)> execute;
-		void* (*make_argument_tuple)(CommandBuffer&, std::span<void*>);
-		std::byte* arguments; // internal use
-		PassType type = PassType::eUserPass;
-	};
 
 	// declare these specializations for GCC
 	template<>
@@ -120,10 +226,6 @@ namespace vuk {
 
 		RenderGraph(RenderGraph&&) noexcept;
 		RenderGraph& operator=(RenderGraph&&) noexcept;
-
-		/// @brief Add a pass to the rendergraph
-		/// @param pass the Pass to add to the RenderGraph
-		void add_pass(Pass pass, source_location location = source_location::current());
 
 		/// @brief Add an alias for a resource
 		/// @param new_name Additional name to refer to the resource
@@ -248,9 +350,8 @@ namespace vuk {
 		static constexpr Access access = acc;
 		using base = Image;
 		using attach = ImageAttachment;
-		static constexpr Resource::Type type = Resource::Type::eImage;
 		static constexpr StringLiteral identifier = N;
-
+		static constexpr Type::TypeKind kind = Type::IMAGE_TY;
 		ImageAttachment* ptr;
 
 		operator ImageAttachment() {
@@ -263,8 +364,8 @@ namespace vuk {
 		static constexpr Access access = acc;
 		using base = Buffer;
 		using attach = Buffer;
-		static constexpr Resource::Type type = Resource::Type::eBuffer;
 		static constexpr StringLiteral identifier = N;
+		static constexpr Type::TypeKind kind = Type::BUFFER_TY;
 
 		Buffer* ptr;
 
@@ -324,30 +425,27 @@ namespace vuk {
 	};
 
 	template<class T>
-	struct TypedFuture {
-		Future future;
-	};
+	struct TypedFuture {};
 
 	template<>
 	struct TypedFuture<Image> {
-		Future future;
+		std::shared_ptr<RG> rg;
+		Ref head;
 		ImageAttachment* attachment;
-		Name original_name;
-		Name last_name;
-		size_t counter = 0;
-
-		std::pair<Name, Name> generate_names() {
-			std::pair names = { last_name, original_name.append(std::to_string(counter++)) };
-			last_name = names.second;
-			return names;
-		}
 
 		ImageAttachment* operator->() {
 			return attachment;
 		}
+	};
 
-		void infer(IARule rule) {
-			future.get_render_graph()->inference_rule(last_name, rule);
+	template<>
+	struct TypedFuture<Buffer> {
+		std::shared_ptr<RG> rg;
+		Ref head;
+		Buffer* buffer;
+
+		Buffer* operator->() {
+			return buffer;
 		}
 	};
 
@@ -369,6 +467,35 @@ namespace vuk {
 		rg->attach_in(Name(typeid(U).name()), arg.future);
 	}
 
+	template<typename... T>
+	void* pack_argument_tuple(std::span<void*> elems) {
+		std::tuple<CommandBuffer*, T...>* tuple = new std::tuple<T...>;
+#define X(n)                                                                                                                                                   \
+	if constexpr ((sizeof...(T)) > n) {                                                                                                                          \
+		auto& ptr = std::get<n>(*tuple).ptr;                                                                                                                       \
+		ptr = reinterpret_cast<decltype(ptr)>(elems[n]);                                                                                                           \
+	}
+		X(0)
+		X(1)
+		X(2)
+		X(3)
+		X(4)
+		X(5)
+		X(6)
+		X(7)
+		X(8)
+		X(9)
+		X(10)
+		X(11)
+		X(12)
+		X(13)
+		X(14)
+		X(15)
+		static_assert(sizeof...(T) <= 16);
+#undef X
+		return tuple;
+	};
+
 	template<typename>
 	struct is_tuple : std::false_type {};
 
@@ -381,26 +508,12 @@ namespace vuk {
 
 		template<class Ret, class F>
 		static auto make_lam(Name name, F&& body) {
-			Pass p;
-			p.name = name;
 			// we need to walk return types and match them to input types
-			p.resources = { to_resource<T1>(), to_resource<T>()... };
-			if constexpr (is_tuple<Ret>::value) {
-				TupleMap<Ret>::fill_out(p);
-			} else if constexpr (!std::is_same_v<Ret, void>) {
-				auto out_res_names = { Name(typeid(T1).name()) };
-				for (auto& n : out_res_names) {
-					for (auto& r : p.resources) {
-						if (n == r.name.name) {
-							r.out_name.name = n.append("+");
-							break;
-						}
-					}
-				}
-			}
+			Type ty;
+
 			// we need TE execution for this
 			// in cb we build a tuple (with cb in it) and then erase it into a void*
-			p.execute = [bo = std::move(body)](CommandBuffer& cb) {
+			ty.opaque_fn.callback = [bo = std::move(body)](CommandBuffer& cb) {
 				void* ptr;
 				memcpy(&ptr, &cb, sizeof(void*));
 				std::tuple<CommandBuffer&, T1, T...>& arg_tuple = *reinterpret_cast<std::tuple<CommandBuffer&, T1, T...>*>(ptr);
@@ -408,7 +521,7 @@ namespace vuk {
 				delete &arg_tuple;
 			};
 
-			p.make_argument_tuple = [](CommandBuffer& cb, std::span<void*> elems) -> void* {
+			auto make_argument_tuple = [](CommandBuffer& cb, std::span<void*> elems) -> void* {
 				std::tuple<CommandBuffer*, T1, T...>* tuple = new std::tuple<CommandBuffer*, T1, T...>;
 				std::get<0>(*tuple) = &cb;
 #define X(n)                                                                                                                                                   \
@@ -436,38 +549,36 @@ namespace vuk {
 #undef X
 				return tuple;
 			};
+
 			return [=](TypedFuture<typename T1::base> arg, TypedFuture<typename T::base>... args) mutable {
-				auto& rg = arg.future.get_render_graph();
-				rg->add_pass(std::move(p));
-				rg->add_alias(Name(typeid(T1).name()), arg.future.get_bound_name().name);
-				(attach_one<T, TypedFuture<typename T::base>>(rg, std::move(args)), ...);
+				RG& rg = *arg.rg.get();
+				std::vector<Type*> ret_types;
 				if constexpr (is_tuple<Ret>::value) {
-					return TupleMap<Ret>::make_ret(rg);
+					TupleMap<Ret>::fill_out(rg, ret_types);
 				} else if constexpr (!std::is_same_v<Ret, void>) {
-					return TypedFuture<typename T1::base>{ Future{ rg, Name(typeid(T1).name()).append("+") } };
+					ret_types.emplace_back(rg.make_imbued_ty(rg.builtin_image, Ret::access));
+				}
+
+				Node* node = rg.make_call(arg.head, args.head...);
+				if constexpr (is_tuple<Ret>::value) {
+					return TupleMap<Ret>::make_ret(arg.rg, node);
+				} else if constexpr (!std::is_same_v<Ret, void>) {
+					return TypedFuture<typename T1::base>{ rg, first(node) };
 				}
 			};
 		}
 
-		static auto make_ret(std::shared_ptr<RenderGraph> rg) {
+		static auto make_ret(std::shared_ptr<RG> rg, Node* node) {
 			if constexpr (sizeof...(T) > 0) {
-				return std::make_tuple(TypedFuture<typename T1::base>{ Future{ rg, Name(typeid(T1).name()).append("+") } },
-				                       TypedFuture<typename T::base>{ Future{ rg, Name(typeid(T).name()).append("+") } }...);
+				return std::make_tuple(TypedFuture<typename T1::base>{ rg, { node, 0 } }, TypedFuture<typename T::base>{ rg, { node, 0 } }...);
 			} else if constexpr (sizeof...(T) == 0) {
-				return TypedFuture<typename T1::base>{ Future{ rg, Name(typeid(T1).name()).append("+") } };
+				return TypedFuture<typename T1::base>{ rg, first(node) };
 			}
 		}
 
-		static auto fill_out(Pass& p) {
-			auto out_res_names = { Name(typeid(T1).name()), Name(typeid(T).name())... };
-			for (auto& n : out_res_names) {
-				for (auto& r : p.resources) {
-					if (n == r.name.name) {
-						r.out_name.name = n.append("+");
-						break;
-					}
-				}
-			}
+		static auto fill_out(RG& rg, std::vector<Type*>& ret_types) {
+			ret_types.emplace_back(rg.make_imbued_ty(rg.builtin_image, T1::access));
+			(ret_types.emplace_back(rg.make_imbued_ty(rg.builtin_image, T::access)), ...);
 		}
 	};
 
@@ -478,16 +589,20 @@ namespace vuk {
 	}
 
 	[[nodiscard]] inline TypedFuture<Image> declare_ia(Name name, ImageAttachment ia = {}) {
-		std::shared_ptr<RenderGraph> rg = std::make_shared<RenderGraph>();
-		return { Future{ rg, name }, &rg->attach_image(name, ia), name, name };
+		std::shared_ptr<RG> rg = std::make_shared<RG>();
+		Ref ref = rg->make_declare_image(ia);
+		return { rg, ref, reinterpret_cast<ImageAttachment*>(ref.node->declare.value) };
+	}
+
+	[[nodiscard]] inline TypedFuture<Buffer> declare_buf(Name name, Buffer buf = {}) {
+		std::shared_ptr<RG> rg = std::make_shared<RG>();
+		Ref ref = rg->make_declare_buffer(buf);
+		return { rg, ref, reinterpret_cast<Buffer*>(ref.node->declare.value) };
 	}
 
 	[[nodiscard]] inline TypedFuture<Image> clear(TypedFuture<Image> in, Clear clear_value) {
-		auto& rg = in.future.get_render_graph();
-		auto [prev, next] = in.generate_names();
-		rg->clear_image(prev, next, clear_value);
-		in.future = Future{ rg, next };
-		return in;
+		auto& rg = in.rg;
+		return { rg, rg->make_clear_image(in.head, clear_value), in.attachment };
 	}
 
 	struct InferenceContext {
@@ -497,11 +612,6 @@ namespace vuk {
 		struct ExecutableRenderGraph* erg;
 		Name prefix;
 	};
-
-	inline void infer(TypedFuture<Image>& in, IARule rule) {
-		auto& rg = in.future.get_render_graph();
-		rg->inference_rule(in.last_name, std::move(rule));
-	}
 
 	// builtin inference rules for convenience
 
@@ -531,11 +641,11 @@ namespace vuk {
 		/// @brief Build the graph, assign framebuffers, render passes and subpasses
 		///	link automatically calls this, only needed if you want to use the reflection functions
 		/// @param compile_options CompileOptions controlling compilation behaviour
-		Result<void> compile(std::span<std::shared_ptr<RenderGraph>> rgs, const RenderGraphCompileOptions& compile_options);
+		Result<void> compile(std::span<std::shared_ptr<RG>> rgs, const RenderGraphCompileOptions& compile_options);
 
 		/// @brief Use this RenderGraph and create an ExecutableRenderGraph
 		/// @param compile_options CompileOptions controlling compilation behaviour
-		Result<struct ExecutableRenderGraph> link(std::span<std::shared_ptr<RenderGraph>> rgs, const RenderGraphCompileOptions& compile_options);
+		Result<struct ExecutableRenderGraph> link(std::span<std::shared_ptr<RG>> rgs, const RenderGraphCompileOptions& compile_options);
 
 		// reflection functions
 
@@ -560,7 +670,6 @@ namespace vuk {
 		struct RGCImpl* impl;
 
 		// internal passes
-		Result<void> inline_rgs(std::span<std::shared_ptr<RenderGraph>> rgs);
 		void queue_inference();
 		void pass_partitioning();
 		void resource_linking();
@@ -603,26 +712,16 @@ namespace vuk {
 
 		Result<bool, RenderGraphException> is_resource_image_in_general_layout(const NameReference&, struct PassInfo* pass_info);
 
-		QualifiedName resolve_name(Name, struct PassInfo*) const noexcept;
-
 	private:
 		struct RGCImpl* impl;
 
 		void fill_render_pass_info(struct RenderPassInfo& rpass, const size_t& i, class CommandBuffer& cobuf);
-		Result<SubmitInfo> record_single_submit(Allocator&, std::span<PassInfo*> passes, DomainFlagBits domain);
+		Result<SubmitInfo> record_single_submit(Allocator&, std::span<struct ScheduledItem*> passes, DomainFlagBits domain);
 
 		friend struct InferenceContext;
 	};
 
 } // namespace vuk
-
-inline vuk::detail::ImageResource operator"" _image(const char* name, size_t) {
-	return { name };
-}
-
-inline vuk::detail::BufferResource operator"" _buffer(const char* name, size_t) {
-	return { name };
-}
 
 namespace std {
 	template<>
@@ -630,6 +729,15 @@ namespace std {
 		size_t operator()(vuk::Subrange::Image const& x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, x.base_layer, x.base_level, x.layer_count, x.level_count);
+			return h;
+		}
+	};
+
+	template<>
+	struct hash<vuk::Ref> {
+		size_t operator()(vuk::Ref const& x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, x.node, x.index);
 			return h;
 		}
 	};

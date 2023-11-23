@@ -4,38 +4,6 @@
 #include <fmt/format.h>
 
 namespace vuk {
-	namespace detail {
-		ImageResourceInputOnly ImageResource::operator>>(Access ia) {
-			return { name, ia };
-		}
-
-		Resource ImageResourceInputOnly::operator>>(Name out) {
-			return { name, Resource::Type::eImage, ba, out };
-		}
-
-		ImageResourceInputOnly::operator Resource() {
-			if (!is_write_access(ba)) { // do not produce a name by default it is read-only
-				return operator>>(Name{});
-			}
-			return operator>>(name.append("+"));
-		}
-
-		BufferResourceInputOnly BufferResource::operator>>(Access ba) {
-			return { name, ba };
-		}
-
-		Resource BufferResourceInputOnly::operator>>(Name out) {
-			return { name, Resource::Type::eBuffer, ba, out };
-		}
-
-		BufferResourceInputOnly::operator Resource() {
-			if (!is_write_access(ba)) { // do not produce a name by default it is read-only
-				return operator>>(Name{});
-			}
-			return operator>>(name.append("+"));
-		}
-	} // namespace detail
-
 	// implement MapProxy for relevant types
 
 	// implement MapProxy for attachment
@@ -151,6 +119,7 @@ namespace vuk {
 	}
 
 	namespace errors {
+		/*
 		std::string format_source_location(PassInfo& pass_info) {
 			return fmt::format("{}({})", pass_info.pass->source.file_name(), pass_info.pass->source.line());
 		}
@@ -185,6 +154,6 @@ namespace vuk {
 			                                  type,
 			                                  name.c_str());
 			return RenderGraphException(std::move(message));
-		}
+		}*/
 	} // namespace errors
 } // namespace vuk

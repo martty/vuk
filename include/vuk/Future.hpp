@@ -86,7 +86,7 @@ namespace vuk {
 		}
 
 		/// @brief Get the referenced RenderGraph
-		std::shared_ptr<RenderGraph>& get_render_graph() {
+		std::shared_ptr<RG>& get_render_graph() {
 			return rg;
 		}
 
@@ -127,7 +127,7 @@ namespace vuk {
 	private:
 		QualifiedName output_binding;
 
-		std::shared_ptr<RenderGraph> rg;
+		std::shared_ptr<RG> rg;
 
 		std::shared_ptr<FutureBase> control;
 
@@ -138,7 +138,7 @@ namespace vuk {
 	Result<void> wait_for_futures(Allocator& alloc, Compiler& compiler, Args&&... futs) {
 		std::array controls = { futs.get_control()... };
 		std::array rgs = { futs.get_render_graph()... };
-		std::vector<std::shared_ptr<RenderGraph>> rgs_to_run;
+		std::vector<std::shared_ptr<RG>> rgs_to_run;
 		for (uint64_t i = 0; i < controls.size(); i++) {
 			auto& control = controls[i];
 			if (control->status == FutureBase::Status::eInitial && !rgs[i]) {
@@ -169,7 +169,7 @@ namespace vuk {
 	}
 
 	inline Result<void> wait_for_futures_explicit(Allocator& alloc, Compiler& compiler, std::span<Future> futures) {
-		std::vector<std::shared_ptr<RenderGraph>> rgs_to_run;
+		std::vector<std::shared_ptr<RG>> rgs_to_run;
 		for (uint64_t i = 0; i < futures.size(); i++) {
 			auto control = futures[i].get_control();
 			if (control->status == FutureBase::Status::eInitial && !futures[i].get_render_graph()) {
