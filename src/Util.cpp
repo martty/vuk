@@ -103,7 +103,7 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	Result<void> link_execute_submit(Allocator& allocator, Compiler& compiler, std::span<std::shared_ptr<RenderGraph>> rgs, RenderGraphCompileOptions options) {
+	Result<void> link_execute_submit(Allocator& allocator, Compiler& compiler, std::span<std::shared_ptr<RG>> rgs, RenderGraphCompileOptions options) {
 		auto erg = compiler.link(rgs, options);
 		if (!erg) {
 			return erg;
@@ -560,39 +560,9 @@ namespace vuk {
 		return { SampledImage::RenderGraphAttachment{ n, sci, ivci, ImageLayout::eReadOnlyOptimalKHR } };
 	}
 
-	Future::Future(std::shared_ptr<struct RenderGraph> org, DomainFlagBits future_domain) :
-	    rg(std::move(org)),
-	    control(std::make_shared<FutureBase>()) {
-		assert(future_domain != DomainFlagBits::eDevice);
-		assert(future_domain != DomainFlagBits::eHost);
-		rg->add_final_release(*this, future_domain);
-	}
-
-	Future::Future(std::shared_ptr<struct RenderGraph> org, Name output_binding, DomainFlags dst_domain) :
-	    output_binding(QualifiedName{ {}, output_binding }),
-	    rg(std::move(org)),
-	    control(std::make_shared<FutureBase>()) {
-		rg->attach_out(QualifiedName{ {}, output_binding }, *this, dst_domain);
-	}
-
-	Future::Future(std::shared_ptr<struct RenderGraph> org, QualifiedName output_binding, DomainFlags dst_domain) :
-	    output_binding(output_binding),
-	    rg(std::move(org)),
-	    control(std::make_shared<FutureBase>()) {
-		rg->attach_out(output_binding, *this, dst_domain);
-	}
-
 	Future::Future(const Future& o) noexcept : output_binding(o.output_binding), rg(o.rg), control(o.control) {}
 
-	Future& Future::operator=(const Future& o) noexcept {
-		if (rg && rg->impl) {
-			rg->detach_out(output_binding, *this);
-		}
-		control = o.control;
-		rg = o.rg;
-		output_binding = o.output_binding;
-		return *this;
-	}
+	
 
 	Future::Future(Future&& o) noexcept :
 	    output_binding{ std::exchange(o.output_binding, QualifiedName{}) },
@@ -605,16 +575,6 @@ namespace vuk {
 		std::swap(o.output_binding, output_binding);
 
 		return *this;
-	}
-
-	Future::~Future() {
-		if (rg && rg->impl) {
-			if (!output_binding.name.is_invalid()) {
-				rg->detach_out(output_binding, *this);
-			} else {
-				rg->remove_final_release(*this);
-			}
-		}
 	}
 
 	Result<void> Future::wait(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options) {

@@ -301,13 +301,13 @@ namespace vuk {
 	CommandBuffer& CommandBuffer::set_color_blend(Name att, PipelineColorBlendAttachmentState state) {
 		VUK_EARLY_RET();
 		assert(ongoing_render_pass);
-		auto resolved_name = rg->resolve_name(att, current_pass);
+		/* auto resolved_name = rg->resolve_name(att, current_pass);
 		auto it = std::find(ongoing_render_pass->color_attachment_names.begin(), ongoing_render_pass->color_attachment_names.end(), resolved_name);
 		assert(it != ongoing_render_pass->color_attachment_names.end() && "Color attachment name not found.");
 		auto idx = std::distance(ongoing_render_pass->color_attachment_names.begin(), it);
 		set_color_blend_attachments.set(idx, true);
 		color_blend_attachments[idx] = state;
-		broadcast_color_blend_attachment_0 = false;
+		broadcast_color_blend_attachment_0 = false;*/
 		return *this;
 	}
 

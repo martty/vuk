@@ -25,13 +25,11 @@ namespace vuk {
 		auto src = *allocate_buffer(allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, 1 });
 		::memcpy(src->mapped_ptr, src_data, size);
 
-		std::shared_ptr<RenderGraph> rgp = std::make_shared<RenderGraph>("host_data_to_buffer");
-		rgp->add_pass({ .name = "BUFFER UPLOAD",
-		                .execute_on = copy_domain,
-		                .resources = { "_dst"_buffer >> vuk::Access::eTransferWrite, "_src"_buffer >> vuk::Access::eTransferRead },
-		                .execute = [size](vuk::CommandBuffer& command_buffer) {
+		auto src_buf = vuk::declare_buf("_src", *src);
+		auto dst_buf = vuk::declare_buf("_dst", dst);
+		make_pass("BUFFER UPLOAD", [size](vuk::CommandBuffer& command_buffer, ) {
 			                command_buffer.copy_buffer("_src", "_dst", size);
-		                } });
+		                });
 		rgp->attach_buffer("_src", *src, vuk::Access::eNone);
 		rgp->attach_buffer("_dst", dst, vuk::Access::eNone);
 		return { std::move(rgp), "_dst+" };

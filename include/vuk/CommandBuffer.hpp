@@ -153,7 +153,6 @@ namespace vuk {
 	class Allocator;
 
 	class CommandBuffer {
-		void* arg_tuple;
 	protected:
 		friend struct RenderGraph;
 		friend struct ExecutableRenderGraph;

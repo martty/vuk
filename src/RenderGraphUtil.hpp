@@ -5,15 +5,6 @@
 #include "vuk/ShortAlloc.hpp"
 #include <optional>
 
-namespace std {
-	template<>
-	struct hash<vuk::Resource> {
-		std::size_t operator()(vuk::Resource const& s) const noexcept {
-			return (size_t)((uintptr_t)s.name.name.c_str());
-		}
-	};
-} // namespace std
-
 namespace vuk {
 	inline bool is_write_access(Access ia) {
 		constexpr uint64_t write_mask = eColorResolveWrite | eColorWrite | eDepthStencilWrite | eFragmentWrite | eTransferWrite | eComputeWrite | eHostWrite |
@@ -194,7 +185,7 @@ namespace vuk {
 			src &= (VkPipelineStageFlags2KHR)~0b100000000000;
 		}
 	}
-
+	/*
 	inline bool is_framebuffer_attachment(const Resource& r) {
 		if (r.type == Resource::Type::eBuffer)
 			return false;
@@ -219,7 +210,7 @@ namespace vuk {
 		default:
 			return false;
 		}
-	}
+	}*/
 
 	inline bool is_write_access(QueueResourceUse u) {
 		if (u.access == vuk::AccessFlagBits{})
