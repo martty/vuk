@@ -39,7 +39,7 @@ namespace vuk {
 	};
 
 	struct Type {
-		enum TypeKind { IMAGE_TY, BUFFER_TY, IMBUED_TY, CONNECTED_TY, OPAQUE_FN_TY } kind;
+		enum TypeKind { IMAGE_TY, BUFFER_TY, IMBUED_TY, ALIASED_TY, OPAQUE_FN_TY } kind;
 
 		TypeDebugInfo* debug_info = nullptr;
 
@@ -51,7 +51,7 @@ namespace vuk {
 			struct {
 				Type* T;
 				size_t ref_idx;
-			} connected;
+			} aliased;
 			struct {
 				std::span<Type* const> args;
 				std::span<Type* const> return_types;
@@ -197,8 +197,8 @@ namespace vuk {
 			return emplace_type(Type{ .kind = Type::IMBUED_TY, .imbued = { .T = ty, .access = access } });
 		}
 
-		Type* make_connected_ty(Type* ty, size_t ref_idx) {
-			return emplace_type(Type{ .kind = Type::CONNECTED_TY, .connected = { .T = ty, .ref_idx = ref_idx } });
+		Type* make_aliased_ty(Type* ty, size_t ref_idx) {
+			return emplace_type(Type{ .kind = Type::ALIASED_TY, .aliased = { .T = ty, .ref_idx = ref_idx } });
 		}
 
 		// OPS

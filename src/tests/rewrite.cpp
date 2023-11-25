@@ -30,7 +30,7 @@ inline TypedFuture<Buffer> host_data_to_buffer(Allocator& allocator, DomainFlagB
 	auto dst_buf = src_buf.rg->make_declare_buffer(dst);
 	auto read_ty = src_buf.rg->make_imbued_ty(src_buf.rg->builtin_buffer, Access::eTransferRead);
 	auto write_ty = src_buf.rg->make_imbued_ty(src_buf.rg->builtin_buffer, Access::eTransferWrite);
-	auto ret_tys = src_buf.rg->make_connected_ty(src_buf.rg->builtin_buffer, 1);
+	auto ret_tys = src_buf.rg->make_aliased_ty(src_buf.rg->builtin_buffer, 1);
 	auto args_ts = { read_ty, write_ty };
 	auto call_t = src_buf.rg->make_opaque_fn_ty(
 	    { args_ts }, { { ret_tys } }, copy_domain, [size](vuk::CommandBuffer& command_buffer, std::span<void*> args, std::span<void*> rets) {
