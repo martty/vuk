@@ -37,6 +37,12 @@ inline TypedFuture<Buffer> host_data_to_buffer(Allocator& allocator, DomainFlagB
 		    command_buffer.copy_buffer(*reinterpret_cast<Buffer*>(args[0]), *reinterpret_cast<Buffer*>(args[1]), size);
 		    rets[0] = args[1];
 	    });
+	auto dst_buf2 = vuk::declare_buf("_dst", dst);
+	auto pass = vuk::make_pass("copy_buffer", [size](vuk::CommandBuffer& command_buffer, VUK_BA(Access::eTransferRead) src, VUK_BA(Access::eTransferWrite) dst) {
+		command_buffer.copy_buffer(src, dst, size);
+		return dst;
+	});
+	auto resy = pass(src_buf, dst_buf2);
 	call_t->debug_info = new TypeDebugInfo{ "copy_buffer" };
 	src_buf.rg->name_outputs(dst_buf.node, { "dst" });
 

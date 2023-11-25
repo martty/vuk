@@ -20,12 +20,14 @@
 
 #if defined(__clang__) or defined(__GNUC__)
 #define VUK_IA(access) vuk::IA<access, decltype([]() {})>
+#define VUK_BA(access) vuk::BA<access, decltype([]() {})>
 #else
 namespace vuk {
 	template<size_t I>
 	struct tag_type {};
 }; // namespace vuk
 #define VUK_IA(access) vuk::IA<access, vuk::tag_type<__COUNTER__>>
+#define VUK_BA(access) vuk::BA<access, vuk::tag_type<__COUNTER__>>
 #endif
 
 namespace vuk {
@@ -480,10 +482,10 @@ namespace vuk {
 	struct TypedFuture<Image> {
 		std::shared_ptr<RG> rg;
 		Ref head;
-		ImageAttachment* attachment;
+		ImageAttachment* value;
 
 		ImageAttachment* operator->() {
-			return attachment;
+			return value;
 		}
 	};
 
@@ -491,38 +493,358 @@ namespace vuk {
 	struct TypedFuture<Buffer> {
 		std::shared_ptr<RG> rg;
 		Ref head;
-		Buffer* buffer;
+		Buffer* value;
 
 		Buffer* operator->() {
-			return buffer;
+			return value;
 		}
 	};
+
+#define DELAYED_ERROR(error)                                                                                                                                   \
+private:                                                                                                                                                       \
+	template<typename T>                                                                                                                                         \
+	struct Error {                                                                                                                                               \
+		static_assert(std::is_same_v<T, T> == false, error);                                                                                                       \
+		using type = T;                                                                                                                                            \
+	};                                                                                                                                                           \
+	using error_t = typename Error<void>::type;                                                                                                                  \
+                                                                                                                                                               \
+public:
+
+	struct Nil;
+
+	template<typename...>
+	struct type_list {
+		static constexpr size_t length = 0u;
+		using head = Nil;
+	};
+
+	template<typename Head_t, typename... Tail_ts>
+	struct type_list<Head_t, Tail_ts...> {
+		static constexpr size_t length = sizeof...(Tail_ts) + 1u;
+		using head = Head_t;
+		using tail = type_list<Tail_ts...>;
+	};
+
+	template<typename, typename>
+	struct cons {
+		DELAYED_ERROR("cons<T, U> expects a type_list as its U");
+	};
+
+	template<typename T, typename... Ts>
+	struct cons<T, type_list<Ts...>> {
+		using type = type_list<T, Ts...>;
+	};
+
+	template<typename T, typename... Ts>
+	using cons_t = typename cons<T, Ts...>::type;
+
+	template<typename T>
+	struct head {
+		using type = typename T::head;
+	};
+
+	template<typename T>
+	using head_t = typename head<T>::type;
+
+	template<typename T>
+	struct tail {
+		using type = typename T::tail;
+	};
+
+	template<typename T>
+	using tail_t = typename tail<T>::type;
+
+	template<typename T>
+	struct length {
+		static constexpr size_t value = T::length;
+	};
+
+	template<typename T>
+	constexpr size_t length_v = length<T>::value;
+
+	template<template<typename> typename, typename>
+	struct map {
+		DELAYED_ERROR("map<Metafunction_t, T> expects a type_list as its T");
+	};
+
+	template<template<typename> typename Metafunction_t>
+	struct map<Metafunction_t, type_list<>> {
+		using type = type_list<>;
+	};
+
+	template<template<typename> typename Metafunction_t, typename T, typename... Ts>
+	struct map<Metafunction_t, type_list<T, Ts...>> {
+	private:
+		using tail_mapped = typename map<Metafunction_t, type_list<Ts...>>::type;
+		using head_mapped = typename Metafunction_t<T>::type;
+
+	public:
+		using type = cons_t<head_mapped, tail_mapped>;
+	};
+
+	template<template<typename> typename Metafunction_t, typename T>
+	using map_t = typename map<Metafunction_t, T>::type;
+
+	namespace details {
+		template<template<typename> typename, template<typename, typename> typename, bool, typename>
+		struct reduce {
+			DELAYED_ERROR("reduce<Predicate_t, BinaryOp_t, Default, T> expects a type_list as its T");
+		};
+
+		template<template<typename> typename Predicate_t, template<typename, typename> typename BinaryOp_t, bool Default>
+		struct reduce<Predicate_t, BinaryOp_t, Default, type_list<>> {
+			static constexpr bool value = Default;
+		};
+
+		template<template<typename> typename Predicate_t, template<typename, typename> typename BinaryOp_t, bool Default, typename T, typename... Ts>
+		struct reduce<Predicate_t, BinaryOp_t, Default, type_list<T, Ts...>> {
+		private:
+			using applied_head = Predicate_t<T>;
+			using applied_tail = reduce<Predicate_t, BinaryOp_t, Default, type_list<Ts...>>;
+
+		public:
+			static constexpr bool value = BinaryOp_t<applied_head, applied_tail>::value;
+		};
+
+		template<typename T, typename U>
+		struct OR {
+			static constexpr bool value = T::value || U::value;
+		};
+
+		template<typename T, typename U>
+		struct AND {
+			static constexpr bool value = T::value && U::value;
+		};
+
+		template<typename T>
+		struct NOT {
+			static constexpr bool value = !T::value;
+		};
+	} // namespace details
+
+	template<template<typename> typename Predicate_t, typename List_t>
+	struct any : details::reduce<Predicate_t, details::OR, false, List_t> {};
+
+	template<template<typename> typename Predicate_t, typename T>
+	constexpr bool any_v = any<Predicate_t, T>::value;
+
+	template<template<typename> typename, typename>
+	struct filter {
+		DELAYED_ERROR("filter<Predicate_t, T> expects a type_list as its T");
+	};
+
+	template<template<typename> typename Predicate_t>
+	struct filter<Predicate_t, type_list<>> {
+		using type = type_list<>;
+	};
+
+	template<template<typename> typename Predicate_t, typename T, typename... Ts>
+	struct filter<Predicate_t, type_list<T, Ts...>> {
+	private:
+		using rest = typename filter<Predicate_t, type_list<Ts...>>::type;
+
+	public:
+		using type = std::conditional_t<Predicate_t<T>::value, cons_t<T, rest>, rest>;
+	};
+
+	template<template<typename> typename Predicate_t, typename List_t>
+	using filter_t = typename filter<Predicate_t, List_t>::type;
+
+	namespace details {
+		template<template<typename, size_t> typename, typename, size_t>
+		struct map_indexed_impl {
+			DELAYED_ERROR("map_indexed expects a type_list as its T");
+		};
+
+		template<template<typename, size_t> typename Metafunction_t, size_t I, typename T, typename... Ts>
+		struct map_indexed_impl<Metafunction_t, type_list<T, Ts...>, I> {
+		private:
+			using applied_head = typename Metafunction_t<T, I>::type;
+			using applied_tail = typename map_indexed_impl<Metafunction_t, type_list<Ts...>, I + 1>::type;
+
+		public:
+			using type = cons_t<applied_head, applied_tail>;
+		};
+
+		template<template<typename, size_t> typename Metafunction_t, size_t I, typename T>
+		struct map_indexed_impl<Metafunction_t, type_list<T>, I> {
+		private:
+			using applied_head = typename Metafunction_t<T, I>::type;
+
+		public:
+			using type = type_list<applied_head>;
+		};
+
+		template<template<typename, size_t> typename Metafunction_t, size_t I>
+		struct map_indexed_impl<Metafunction_t, type_list<>, I> {
+			using type = Nil;
+		};
+	} // namespace details
+
+	template<template<typename, size_t> typename Metafunction_t, typename List_t>
+	struct map_indexed {
+		using type = typename details::map_indexed_impl<Metafunction_t, List_t, 0u>::type;
+	};
+
+	template<template<typename, size_t> typename Metafunction_t, typename List_t>
+	using map_indexed_t = typename map_indexed<Metafunction_t, List_t>::type;
+
+	struct Good1 {};
+	struct Good2 {};
+	struct Bad1 {};
+	struct Bad2 {};
+
+	template<typename Spec1, typename Spec2>
+	struct same_specialization : std::false_type {};
+
+	template<template<typename> typename Spec1, template<typename> typename Spec2, typename T>
+	struct same_specialization<Spec1<T>, Spec2<T>> : std::true_type {};
+
+	template<typename T>
+	struct AT {
+		float x;
+	};
+
+	template<typename T>
+	struct BT {
+		float x;
+	};
+
+	using ListA = type_list<AT<Good1>, AT<Good2>, AT<Bad1>>;
+	using ListB = type_list<BT<Bad2>, BT<Good2>, BT<Good1>>;
+
+	template<typename T, typename U>
+	static constexpr bool same_specialization_v = same_specialization<T, U>::value;
+	static_assert(same_specialization_v<AT<Good1>, BT<Good1>>);
+	static_assert(!same_specialization_v<BT<Good1>, AT<Bad1>>);
+
+	template<typename T>
+	struct unwrap {
+		using type = typename T::type;
+	};
+
+	template<typename T>
+	using unwrap_t = typename T::type;
+
+	template<typename TypeList, typename T>
+	struct any_is_same_specialization_unwrapped {
+		template<typename U>
+		struct partial {
+			static constexpr bool value = std::is_same_v<unwrap_t<T>, U>;
+		};
+
+		static constexpr bool value = any_v<partial, TypeList>;
+	};
+
+	template<typename T, size_t I>
+	struct Indexed {
+		using type = T;
+		static constexpr size_t Index = I;
+	};
+
+	template<typename T, size_t I>
+	struct wrap_indexed {
+		using type = Indexed<T, I>;
+	};
+
+	template<typename>
+	struct tuple_to_typelist {
+		DELAYED_ERROR("tuple_to_typelist expects a std::tuple");
+	};
+
+	template<typename... Ts>
+	struct tuple_to_typelist<std::tuple<Ts...>> {
+		using type = type_list<Ts...>;
+	};
+
+	template<typename T>
+	using tuple_to_typelist_t = typename tuple_to_typelist<T>::type;
+
+	template<typename>
+	struct typelist_to_tuple {
+		DELAYED_ERROR("typelist_to_tuple expects a type_list");
+	};
+
+	template<typename... Ts>
+	struct typelist_to_tuple<type_list<Ts...>> {
+		using type = std::tuple<Ts...>;
+	};
+
+	template<typename T>
+	using typelist_to_tuple_t = typename typelist_to_tuple<T>::type;
+
+	template<typename ListA_t, typename ListB_t>
+	struct filtered_indexed {
+		template<typename Elem>
+		struct partial {
+			static constexpr bool value = any_is_same_specialization_unwrapped<ListB_t, Elem>::value;
+		};
+
+		using indexed_listA = map_indexed_t<wrap_indexed, ListA_t>;
+
+		using type = filter_t<partial, indexed_listA>;
+	};
+
+	template<typename IndexedList_t, size_t I, typename ToFill_t, typename Filled_t>
+	void fill_tuple(const ToFill_t& fill, Filled_t& filled) {
+		using head = typename IndexedList_t::head;
+		if constexpr (std::is_same_v<head, Nil>) {
+			return;
+		} else {
+			std::get<I>(filled) = std::get<head::Index>(fill);
+			fill_tuple<typename IndexedList_t::tail, I + 1>(fill, filled);
+		}
+	};
+
+	template<typename T1, typename T2>
+	auto intersect_tuples(const T1& t1) {
+		using T1List = tuple_to_typelist_t<T1>;
+		using T2List = tuple_to_typelist_t<T2>;
+		using indices = typename filtered_indexed<T1List, T2List>::type;
+		typelist_to_tuple_t<map_t<unwrap, indices>> t3;
+
+		fill_tuple<indices, 0>(t1, t3);
+
+		return t3;
+	}
 
 	template<typename Tuple>
 	struct TupleMap;
 
-	template<class R>
-	Resource to_resource() {
-		return Resource(Name(typeid(R).name()), Resource::Type::eImage, R::access);
-	}
-
-	template<class R>
-	Resource to_resource_out() {
-		return Resource(Name{}, Resource::Type::eImage, R::access, Name(typeid(R).name()));
-	}
-
-	template<class U, class T>
-	void attach_one(std::shared_ptr<RenderGraph>& rg, T&& arg) {
-		rg->attach_in(Name(typeid(U).name()), arg.future);
-	}
-
 	template<typename... T>
-	void* pack_argument_tuple(std::span<void*> elems) {
-		std::tuple<CommandBuffer*, T...>* tuple = new std::tuple<T...>;
+	void pack_typed_tuple(std::span<void*> src, CommandBuffer& cb, void* dst) {
+		std::tuple<CommandBuffer*, T...>& tuple = *reinterpret_cast<std::tuple<CommandBuffer*, T...>*>(dst);
+		std::get<0>(tuple) = &cb;
 #define X(n)                                                                                                                                                   \
 	if constexpr ((sizeof...(T)) > n) {                                                                                                                          \
-		auto& ptr = std::get<n>(*tuple).ptr;                                                                                                                       \
-		ptr = reinterpret_cast<decltype(ptr)>(elems[n]);                                                                                                           \
+		auto& ptr = std::get<n>(tuple).ptr;                                                                                                                        \
+		ptr = reinterpret_cast<decltype(ptr)>(src[n]);                                                                                                             \
+	}
+		X(1)
+		X(2)
+		X(3)
+		X(4)
+		X(5)
+		X(6)
+		X(7)
+		X(8)
+		X(9)
+		X(10)
+		X(11)
+		X(12)
+		X(13)
+		X(14)
+		X(15)
+		static_assert(sizeof...(T) <= 16);
+#undef X
+	};
+
+	template<typename... T>
+	void unpack_typed_tuple(const std::tuple<T...>& src, std::span<void*> dst) {
+#define X(n)                                                                                                                                                   \
+	if constexpr ((sizeof...(T)) > n) {                                                                                                                          \
+		dst[n] = std::get<n>(src).ptr;                                                                                                                             \
 	}
 		X(0)
 		X(1)
@@ -542,8 +864,7 @@ namespace vuk {
 		X(15)
 		static_assert(sizeof...(T) <= 16);
 #undef X
-		return tuple;
-	};
+	}
 
 	template<typename>
 	struct is_tuple : std::false_type {};
@@ -551,83 +872,71 @@ namespace vuk {
 	template<typename... T>
 	struct is_tuple<std::tuple<T...>> : std::true_type {};
 
-	template<class T1, typename... T>
-	struct TupleMap<std::tuple<T1, T...>> {
-		using ret_tuple = std::tuple<TypedFuture<typename T1::base>, TypedFuture<typename T::base>...>;
+	template<typename... T>
+	static auto make_ret(std::shared_ptr<RG> rg, Node* node, const std::tuple<T...>& us) {
+		if constexpr (sizeof...(T) > 0) {
+			size_t i = 0;
+			return std::make_tuple(TypedFuture<typename T::base>{ rg, { node, i++ }, std::get<T>(us).ptr }...);
+		} else if constexpr (sizeof...(T) == 0) {
+			return TypedFuture<typename T::base>{ rg, first(node), std::get<0>(us).ptr };
+		}
+	}
+
+	template<typename... T>
+	struct TupleMap<std::tuple<T...>> {
+		using ret_tuple = std::tuple<TypedFuture<typename T::base>...>;
 
 		template<class Ret, class F>
 		static auto make_lam(Name name, F&& body) {
-			// we need to walk return types and match them to input types
-			Type ty;
-
-			// we need TE execution for this
-			// in cb we build a tuple (with cb in it) and then erase it into a void*
-			ty.opaque_fn.callback = [bo = std::move(body)](CommandBuffer& cb) {
-				void* ptr;
-				memcpy(&ptr, &cb, sizeof(void*));
-				std::tuple<CommandBuffer&, T1, T...>& arg_tuple = *reinterpret_cast<std::tuple<CommandBuffer&, T1, T...>*>(ptr);
-				std::apply(bo, arg_tuple);
-				delete &arg_tuple;
-			};
-
-			auto make_argument_tuple = [](CommandBuffer& cb, std::span<void*> elems) -> void* {
-				std::tuple<CommandBuffer*, T1, T...>* tuple = new std::tuple<CommandBuffer*, T1, T...>;
-				std::get<0>(*tuple) = &cb;
-#define X(n)                                                                                                                                                   \
-	if constexpr ((sizeof...(T) + 1) > n) {                                                                                                                      \
-		auto& ptr = std::get<n + 1>(*tuple).ptr;                                                                                                                   \
-		ptr = reinterpret_cast<decltype(ptr)>(elems[n]);                                                                                                           \
-	}
-				X(0)
-				X(1)
-				X(2)
-				X(3)
-				X(4)
-				X(5)
-				X(6)
-				X(7)
-				X(8)
-				X(9)
-				X(10)
-				X(11)
-				X(12)
-				X(13)
-				X(14)
-				X(15)
-				static_assert(sizeof...(T) <= 16);
-#undef X
-				return tuple;
+			auto callback = [typed_cb = std::move(body)](CommandBuffer& cb, std::span<void*> args, std::span<void*> rets) {
+				// we do type recovery here -> convert untyped args to typed ones
+				alignas(alignof(std::tuple<CommandBuffer&, T...>)) char storage[sizeof(std::tuple<CommandBuffer&, T...>)];
+				pack_typed_tuple(args, cb, storage);
+				auto typed_ret = std::apply(typed_cb, *reinterpret_cast<std::tuple<CommandBuffer&, T...>*>(storage));
+				// now we erase these types
+				if constexpr (!is_tuple<Ret>::value) {
+					rets[0] = typed_ret.ptr;
+				} else {
+					unpack_typed_tuple(typed_ret, rets);
+				}
 			};
 
 			// when this function is called, we weave in this call into the IR
-			return [=](TypedFuture<typename T1::base> arg, TypedFuture<typename T::base>... args) mutable {
-				RG& rg = *arg.rg.get();
+			return [untyped_cb = std::move(callback)](TypedFuture<typename T::base>... args) mutable {
+				auto& first = [](auto& first, auto&...) -> auto& {
+					return first;
+				}(args...);
+				auto& rgp = first.rg;
+				RG& rg = *rgp.get();
+
+				std::vector<Type*> arg_types;
+				fill_arg_ty(rg, arg_types);
+
+				std::tuple arg_tuple = { T(args.value)... };
+
 				std::vector<Type*> ret_types;
 				if constexpr (is_tuple<Ret>::value) {
-					TupleMap<Ret>::fill_out(rg, ret_types);
+					TupleMap<Ret>::fill_ret_ty(rg, ret_types);
 				} else if constexpr (!std::is_same_v<Ret, void>) {
 					ret_types.emplace_back(rg.make_imbued_ty(rg.builtin_image, Ret::access));
 				}
+				auto opaque_fn_ty = rg.make_opaque_fn_ty(arg_types, ret_types, vuk::DomainFlagBits::eAny, untyped_cb);
 
-				Node* node = rg.make_call(arg.head, args.head...);
+				Node* node = rg.make_call(opaque_fn_ty, args.head...);
 				if constexpr (is_tuple<Ret>::value) {
-					return TupleMap<Ret>::make_ret(arg.rg, node);
+					std::tuple ret_tuple = intersect_tuples<std::tuple<T...>, Ret>(arg_tuple);
+					return make_ret(rgp, node, ret_tuple);
 				} else if constexpr (!std::is_same_v<Ret, void>) {
-					return TypedFuture<typename T1::base>{ rg, first(node) };
+					return std::remove_reference_t<decltype(first)>{ rgp, vuk::first(node), first.value };
 				}
 			};
 		}
 
-		static auto make_ret(std::shared_ptr<RG> rg, Node* node) {
-			if constexpr (sizeof...(T) > 0) {
-				return std::make_tuple(TypedFuture<typename T1::base>{ rg, { node, 0 } }, TypedFuture<typename T::base>{ rg, { node, 0 } }...);
-			} else if constexpr (sizeof...(T) == 0) {
-				return TypedFuture<typename T1::base>{ rg, first(node) };
-			}
+		static auto fill_arg_ty(RG& rg, std::vector<Type*>& arg_types) {
+			(arg_types.emplace_back(rg.make_imbued_ty(rg.builtin_image, T::access)), ...);
 		}
 
-		static auto fill_out(RG& rg, std::vector<Type*>& ret_types) {
-			ret_types.emplace_back(rg.make_imbued_ty(rg.builtin_image, T1::access));
+		static auto fill_ret_ty(RG& rg, std::vector<Type*>& ret_types) {
 			(ret_types.emplace_back(rg.make_imbued_ty(rg.builtin_image, T::access)), ...);
 		}
 	};
@@ -654,7 +963,7 @@ namespace vuk {
 
 	[[nodiscard]] inline TypedFuture<Image> clear(TypedFuture<Image> in, Clear clear_value) {
 		auto& rg = in.rg;
-		return { rg, rg->make_clear_image(in.head, clear_value), in.attachment };
+		return { rg, rg->make_clear_image(in.head, clear_value), in.value };
 	}
 
 	struct InferenceContext {

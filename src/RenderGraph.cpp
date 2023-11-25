@@ -716,7 +716,7 @@ namespace vuk {
 
 	IARule same_extent_as(TypedFuture<Image> inference_source) {
 		return [=](const InferenceContext& ctx, ImageAttachment& ia) {
-			ia.extent = inference_source.attachment->extent;
+			//ia.extent = inference_source.attachment->extent;
 		};
 	}
 
