@@ -54,20 +54,22 @@ namespace vuk {
 
 	struct ScheduledItem {
 		Node* execable;
-		DomainFlags scheduled_domain;
+		DomainFlagBits scheduled_domain;
 
 		int32_t is_waited_on = 0;
 		size_t batch_index;
 		size_t command_buffer_index = 0;
 		int32_t render_pass_index = -1;
 		uint32_t subpass;
-		
+
 		RelSpan<VkImageMemoryBarrier2KHR> pre_image_barriers, post_image_barriers;
 		RelSpan<VkMemoryBarrier2KHR> pre_memory_barriers, post_memory_barriers;
 		RelSpan<std::pair<DomainFlagBits, uint64_t>> relative_waits;
 		RelSpan<std::pair<DomainFlagBits, uint64_t>> absolute_waits;
 		RelSpan<FutureBase*> future_signals;
 		RelSpan<int32_t> referenced_swapchains; // TODO: maybe not the best place for it
+
+		bool ready = false; // for DYNAMO
 	};
 
 	struct RGCImpl {
@@ -95,17 +97,17 @@ namespace vuk {
 		std::vector<int32_t> swapchain_references;
 		std::vector<AttachmentRPInfo> rp_infos;
 		/* std::array<size_t, 3> last_ordered_pass_idx_in_domain_array;
-		
+
 		 int32_t last_ordered_pass_idx_in_domain(DomainFlagBits queue) {
-			uint32_t idx;
-			if (queue == DomainFlagBits::eGraphicsQueue) {
-				idx = 0;
-			} else if (queue == DomainFlagBits::eComputeQueue) {
-				idx = 1;
-			} else {
-				idx = 2;
-			}
-			return (int32_t)last_ordered_pass_idx_in_domain_array[idx];
+		  uint32_t idx;
+		  if (queue == DomainFlagBits::eGraphicsQueue) {
+		    idx = 0;
+		  } else if (queue == DomainFlagBits::eComputeQueue) {
+		    idx = 1;
+		  } else {
+		    idx = 2;
+		  }
+		  return (int32_t)last_ordered_pass_idx_in_domain_array[idx];
 		}*/
 
 		std::vector<ChainLink*> attachment_use_chain_references;
@@ -127,14 +129,9 @@ namespace vuk {
 		Result<void> relink_subchains();
 		Result<void> fix_subchains();
 
-		void emit_image_barrier(RelSpan<VkImageMemoryBarrier2KHR>&,
-		                        int32_t bound_attachment,
-		                        QueueResourceUse last_use,
-		                        QueueResourceUse current_use,
-		                        Subrange::Image& subrange,
-		                        ImageAspectFlags aspect,
-		                        bool is_release = false);
-		void emit_memory_barrier(RelSpan<VkMemoryBarrier2KHR>&, QueueResourceUse last_use, QueueResourceUse current_use);
+		VkImageMemoryBarrier2KHR
+		emit_image_barrier(QueueResourceUse last_use, QueueResourceUse current_use, const Subrange::Image& subrange, ImageAspectFlags aspect, bool is_release = false);
+		VkMemoryBarrier2KHR emit_memory_barrier(QueueResourceUse last_use, QueueResourceUse current_use);
 
 		// opt passes
 		Result<void> merge_rps();
@@ -197,5 +194,5 @@ namespace vuk {
 		RenderGraphException make_unattached_resource_exception(PassInfo& pass_info, Resource& resource);
 		RenderGraphException make_cbuf_references_unknown_resource(PassInfo& pass_info, Resource::Type type, Name name);
 		RenderGraphException make_cbuf_references_undeclared_resource(PassInfo& pass_info, Resource::Type type, Name name);*/
-	} // namespace errors
-};  // namespace vuk
+	}                  // namespace errors
+};                   // namespace vuk

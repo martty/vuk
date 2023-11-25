@@ -67,10 +67,14 @@ namespace vuk {
 	struct Node;
 
 	struct Ref {
-		Node* node;
+		Node* node = nullptr;
 		size_t index;
 
 		Type* type();
+
+		explicit constexpr operator bool() const noexcept {
+			return node != nullptr;
+		}
 
 		constexpr std::strong_ordering operator<=>(const Ref&) const noexcept = default;
 	};

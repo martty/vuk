@@ -125,6 +125,18 @@ namespace vuk {
 			}
 		}
 
+		for (auto& [ref, link] : res_to_links) {
+			if (link.urdef)
+				continue;
+			if (!link.prev) { // from head to tails, propagate
+				auto l = &link;
+				do {
+					l->urdef = link.def;
+					l = l->next;
+				} while (l);
+			}
+		}
+
 		return { expected_value };
 	}
 
@@ -162,6 +174,10 @@ namespace vuk {
 
 	  return { expected_value };
 	}*/
+
+	DomainFlagBits pick_first_domain(DomainFlags f) { // TODO: make this work
+		return (DomainFlagBits)f.m_mask;
+	}
 
 	Result<void> RGCImpl::schedule_intra_queue(std::span<std::shared_ptr<RG>> rgs, const RenderGraphCompileOptions& compile_options) {
 		// we need to schedule all execables that run
@@ -218,7 +234,8 @@ namespace vuk {
 			auto pop_idx = process_queue.back();
 			auto& execable = schedule_items[pop_idx];
 			ScheduledItem item{ .execable = execable,
-				                  .scheduled_domain = execable->scheduling_info ? execable->scheduling_info->required_domain : vuk::DomainFlagBits::eAny };
+				                  .scheduled_domain =
+				                      execable->scheduling_info ? pick_first_domain(execable->scheduling_info->required_domain) : vuk::DomainFlagBits::eAny };
 			if (execable->kind != Node::DECLARE) { // we use def nodes for deps, but we don't want to schedule them later
 				scheduled_execables.push_back(item);
 			}
@@ -536,7 +553,7 @@ namespace vuk {
 			auto& p = impl->scheduled_execables[i];
 			if (p.scheduled_domain & DomainFlagBits::eTransferQueue) {
 				impl->scheduled_idx_to_partitioned_idx[i] = impl->partitioned_execables.size();
-				//impl->last_ordered_pass_idx_in_domain_array[2] = impl->ordered_idx_to_computed_pass_idx[i];
+				// impl->last_ordered_pass_idx_in_domain_array[2] = impl->ordered_idx_to_computed_pass_idx[i];
 				impl->partitioned_execables.push_back(&p);
 			}
 		}
@@ -545,7 +562,7 @@ namespace vuk {
 			auto& p = impl->scheduled_execables[i];
 			if (p.scheduled_domain & DomainFlagBits::eComputeQueue) {
 				impl->scheduled_idx_to_partitioned_idx[i] = impl->partitioned_execables.size();
-				//impl->last_ordered_pass_idx_in_domain_array[1] = impl->ordered_idx_to_computed_pass_idx[i];
+				// impl->last_ordered_pass_idx_in_domain_array[1] = impl->ordered_idx_to_computed_pass_idx[i];
 				impl->partitioned_execables.push_back(&p);
 			}
 		}
@@ -555,7 +572,7 @@ namespace vuk {
 			auto& p = impl->scheduled_execables[i];
 			if (p.scheduled_domain & DomainFlagBits::eGraphicsQueue) {
 				impl->scheduled_idx_to_partitioned_idx[i] = impl->partitioned_execables.size();
-				//impl->last_ordered_pass_idx_in_domain_array[0] = impl->ordered_idx_to_computed_pass_idx[i];
+				// impl->last_ordered_pass_idx_in_domain_array[0] = impl->ordered_idx_to_computed_pass_idx[i];
 				impl->partitioned_execables.push_back(&p);
 			}
 		}
@@ -671,7 +688,7 @@ namespace vuk {
 		// inputs to order within a queue
 
 		VUK_DO_OR_RETURN(build_links(rgs, impl->res_to_links, impl->pass_reads));
-		//VUK_DO_OR_RETURN(collect_chains(impl->res_to_links, impl->chains));
+		// VUK_DO_OR_RETURN(collect_chains(impl->res_to_links, impl->chains));
 
 		// VUK_DO_OR_RETURN(impl->diagnose_unheaded_chains());
 		VUK_DO_OR_RETURN(impl->schedule_intra_queue(rgs, compile_options));
@@ -768,13 +785,11 @@ namespace vuk {
 		        current_use.domain != DomainFlagBits::eAny && (last_use.domain & DomainFlagBits::eQueueMask) != (current_use.domain & DomainFlagBits::eQueueMask));
 	}
 
-	void RGCImpl::emit_image_barrier(RelSpan<VkImageMemoryBarrier2KHR>& barriers,
-	                                 int32_t bound_attachment,
-	                                 QueueResourceUse last_use,
-	                                 QueueResourceUse current_use,
-	                                 Subrange::Image& subrange,
-	                                 ImageAspectFlags aspect,
-	                                 bool is_release) {
+	VkImageMemoryBarrier2KHR RGCImpl::emit_image_barrier(QueueResourceUse last_use,
+	                                                     QueueResourceUse current_use,
+	                                                     const Subrange::Image& subrange,
+	                                                     ImageAspectFlags aspect,
+	                                                     bool is_release) {
 		scope_to_domain((VkPipelineStageFlagBits2KHR&)last_use.stages, is_release ? last_use.domain : current_use.domain & DomainFlagBits::eQueueMask);
 		scope_to_domain((VkPipelineStageFlagBits2KHR&)current_use.stages, is_release ? last_use.domain : current_use.domain & DomainFlagBits::eQueueMask);
 
@@ -807,23 +822,22 @@ namespace vuk {
 			barrier.dstAccessMask = {};
 		}
 
-		std::memcpy(&barrier.pNext, &bound_attachment, sizeof(int32_t));
 		barrier.srcStageMask = (VkPipelineStageFlags2)last_use.stages.m_mask;
 		barrier.dstStageMask = (VkPipelineStageFlags2)current_use.stages.m_mask;
 
-		barriers.append(image_barriers, barrier);
+		return barrier;
 	}
 
-	void RGCImpl::emit_memory_barrier(RelSpan<VkMemoryBarrier2KHR>& barriers, QueueResourceUse last_use, QueueResourceUse current_use) {
+	VkMemoryBarrier2KHR RGCImpl::emit_memory_barrier(QueueResourceUse last_use, QueueResourceUse current_use) {
+		VkMemoryBarrier2KHR barrier{ .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2_KHR };
 		if (last_use.stages == vuk::PipelineStageFlagBits{}) {
-			return;
+			return barrier;
 		}
 
 		// for now we only emit pre- memory barriers, so the executing domain is always 'current_use.domain'
 		scope_to_domain((VkPipelineStageFlagBits2KHR&)last_use.stages, current_use.domain & DomainFlagBits::eQueueMask);
 		scope_to_domain((VkPipelineStageFlagBits2KHR&)current_use.stages, current_use.domain & DomainFlagBits::eQueueMask);
 
-		VkMemoryBarrier2KHR barrier{ .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2_KHR };
 		barrier.srcAccessMask = is_read_access(last_use) ? 0 : (VkAccessFlags)last_use.access;
 		barrier.dstAccessMask = (VkAccessFlags)current_use.access;
 		barrier.srcStageMask = (VkPipelineStageFlagBits2)last_use.stages.m_mask;
@@ -833,7 +847,7 @@ namespace vuk {
 			barrier.srcAccessMask = {};
 		}
 
-		barriers.append(mem_barriers, barrier);
+		return barrier;
 	}
 	/*
 	Result<void> RGCImpl::generate_barriers_and_waits() {
@@ -1519,14 +1533,6 @@ namespace vuk {
 
 	std::span<ChainLink*> Compiler::get_use_chains() const {
 		return std::span(impl->chains);
-	}
-
-	MapProxy<QualifiedName, const AttachmentInfo&> Compiler::get_bound_attachments() {
-		return &impl->bound_attachments;
-	}
-
-	MapProxy<QualifiedName, const BufferInfo&> Compiler::get_bound_buffers() {
-		return &impl->bound_buffers;
 	}
 
 	ImageUsageFlags Compiler::compute_usage(const ChainLink* head) {

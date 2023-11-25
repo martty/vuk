@@ -7,6 +7,7 @@
 // struct describing use chains
 namespace vuk {
 	struct ChainLink {
+		Ref urdef;                   // the first def
 		ChainLink* source = nullptr; // in subchains, this denotes the end of the undiverged chain
 		ChainLink* prev = nullptr;   // if this came from a previous undef, we link them together
 		Ref def;
