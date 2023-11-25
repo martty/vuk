@@ -944,6 +944,9 @@ namespace vuk {
 
 	static constexpr ClearDepth DepthOne = { 1.f };
 	static constexpr ClearDepth DepthZero = { 0.f };
+	
+	static constexpr ClearDepthStencil DepthStencilOne = { 1.f, 1 };
+	static constexpr ClearDepthStencil DepthStencilZero = { 0.f, 0 };
 
 	struct Clear {
 		constexpr Clear() = default;

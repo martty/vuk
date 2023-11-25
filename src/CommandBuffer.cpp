@@ -1569,8 +1569,15 @@ namespace vuk {
 				records.depth_stencil = true;
 				pi.extended_size += sizeof(GraphicsPipelineInstanceCreateInfo::Depth);
 
-				assert(depth_stencil_state->stencilTestEnable == false);     // TODO: stencil unsupported
-				assert(depth_stencil_state->depthBoundsTestEnable == false); // TODO: depth bounds unsupported
+				if (depth_stencil_state->stencilTestEnable) {
+					records.stencil_state = true;
+					pi.extended_size += sizeof(GraphicsPipelineInstanceCreateInfo::Stencil);
+				}
+
+				if (depth_stencil_state->depthBoundsTestEnable) {
+					records.depth_bounds = true;
+					pi.extended_size += sizeof(GraphicsPipelineInstanceCreateInfo::DepthBounds);
+				}
 			}
 
 			if (ongoing_render_pass->samples != SampleCountFlagBits::e1) {
@@ -1697,8 +1704,17 @@ namespace vuk {
 					                                               .depthWriteEnable = (bool)depth_stencil_state->depthWriteEnable,
 					                                               .depthCompareOp = (uint8_t)depth_stencil_state->depthCompareOp };
 				write(data_ptr, ds);
-				// TODO: support stencil
-				// TODO: support depth bounds
+
+				if (depth_stencil_state->stencilTestEnable) {
+					GraphicsPipelineInstanceCreateInfo::Stencil ss = { .front = depth_stencil_state->front, .back = depth_stencil_state->back };
+					write(data_ptr, ss);
+				}
+
+				if (depth_stencil_state->depthBoundsTestEnable) {
+					GraphicsPipelineInstanceCreateInfo::DepthBounds dps = { .minDepthBounds = depth_stencil_state->minDepthBounds,
+					                                                        .maxDepthBounds = depth_stencil_state->maxDepthBounds };
+					write(data_ptr, dps);
+				}
 			}
 
 			if (ongoing_render_pass->samples != SampleCountFlagBits::e1) {
