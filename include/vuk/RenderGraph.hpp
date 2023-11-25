@@ -79,7 +79,7 @@ namespace vuk {
 		Node* node = nullptr;
 		size_t index;
 
-		Type* type();
+		Type* type() const;
 
 		explicit constexpr operator bool() const noexcept {
 			return node != nullptr;
@@ -156,7 +156,7 @@ namespace vuk {
 		return { node, idx };
 	}
 
-	inline Type* Ref::type() {
+	inline Type* Ref::type() const {
 		return node->type[index];
 	}
 
@@ -403,7 +403,9 @@ namespace vuk {
 		using attach = ImageAttachment;
 		static constexpr StringLiteral identifier = N;
 		static constexpr Type::TypeKind kind = Type::IMAGE_TY;
+
 		ImageAttachment* ptr;
+		Ref src;
 
 		operator ImageAttachment() {
 			return *ptr;
@@ -419,6 +421,7 @@ namespace vuk {
 		static constexpr Type::TypeKind kind = Type::BUFFER_TY;
 
 		Buffer* ptr;
+		Ref src;
 
 		operator Buffer() {
 			return *ptr;
@@ -774,6 +777,7 @@ public:
 	template<typename T>
 	using typelist_to_tuple_t = typename typelist_to_tuple<T>::type;
 
+
 	template<typename ListA_t, typename ListB_t>
 	struct filtered_indexed {
 		template<typename Elem>
@@ -797,6 +801,11 @@ public:
 		}
 	};
 
+	template<typename... Ts>
+	auto get_indices(type_list<Ts...> ts) {
+		return std::array{ Ts::Index... };
+	}
+
 	template<typename T1, typename T2>
 	auto intersect_tuples(const T1& t1) {
 		using T1List = tuple_to_typelist_t<T1>;
@@ -805,8 +814,9 @@ public:
 		typelist_to_tuple_t<map_t<unwrap, indices>> t3;
 
 		fill_tuple<indices, 0>(t1, t3);
+		auto idxs = get_indices(indices{});
 
-		return t3;
+		return std::pair{ idxs, t3 };
 	}
 
 	template<typename Tuple>
@@ -883,6 +893,19 @@ public:
 	}
 
 	template<typename... T>
+	static auto fill_arg_ty(RG& rg, const std::tuple<T...>& args, std::vector<Type*>& arg_types) {
+		(arg_types.emplace_back(rg.make_imbued_ty(std::get<T>(args).src.type(), T::access)), ...);
+	}
+
+	template<typename... T>
+	static auto fill_ret_ty(RG& rg, std::array<size_t, sizeof...(T)> idxs, const std::tuple<T...>& args, std::vector<Type*>& ret_types) {
+		(ret_types.emplace_back(rg.make_aliased_ty(std::get<T>(args).src.type(), 0)), ...);
+		for (auto i = 0; i < ret_types.size(); i++) {
+			ret_types[i]->aliased.ref_idx = idxs[i];
+		}
+	}
+
+	template<typename... T>
 	struct TupleMap<std::tuple<T...>> {
 		using ret_tuple = std::tuple<TypedFuture<typename T::base>...>;
 
@@ -910,34 +933,27 @@ public:
 				RG& rg = *rgp.get();
 
 				std::vector<Type*> arg_types;
-				fill_arg_ty(rg, arg_types);
-
-				std::tuple arg_tuple = { T(args.value)... };
+				std::tuple arg_tuple_as_a = { T{ args.value, args.head }... };
+				fill_arg_ty(rg, arg_tuple_as_a, arg_types);
 
 				std::vector<Type*> ret_types;
 				if constexpr (is_tuple<Ret>::value) {
-					TupleMap<Ret>::fill_ret_ty(rg, ret_types);
+					auto [idxs, ret_tuple] = intersect_tuples<std::tuple<T...>, Ret>(arg_tuple_as_a);
+					fill_ret_ty(rg, idxs, ret_tuple, ret_types);
 				} else if constexpr (!std::is_same_v<Ret, void>) {
-					ret_types.emplace_back(rg.make_imbued_ty(rg.builtin_image, Ret::access));
+					auto [idxs, ret_tuple] = intersect_tuples<std::tuple<T...>, std::tuple<Ret>>(arg_tuple_as_a);
+					fill_ret_ty(rg, idxs, ret_tuple, ret_types);
 				}
 				auto opaque_fn_ty = rg.make_opaque_fn_ty(arg_types, ret_types, vuk::DomainFlagBits::eAny, untyped_cb);
 
 				Node* node = rg.make_call(opaque_fn_ty, args.head...);
 				if constexpr (is_tuple<Ret>::value) {
-					std::tuple ret_tuple = intersect_tuples<std::tuple<T...>, Ret>(arg_tuple);
+					auto [idxs, ret_tuple] = intersect_tuples<std::tuple<T...>, Ret>(arg_tuple_as_a);
 					return make_ret(rgp, node, ret_tuple);
 				} else if constexpr (!std::is_same_v<Ret, void>) {
 					return std::remove_reference_t<decltype(first)>{ rgp, vuk::first(node), first.value };
 				}
 			};
-		}
-
-		static auto fill_arg_ty(RG& rg, std::vector<Type*>& arg_types) {
-			(arg_types.emplace_back(rg.make_imbued_ty(rg.builtin_image, T::access)), ...);
-		}
-
-		static auto fill_ret_ty(RG& rg, std::vector<Type*>& ret_types) {
-			(ret_types.emplace_back(rg.make_imbued_ty(rg.builtin_image, T::access)), ...);
 		}
 	};
 
