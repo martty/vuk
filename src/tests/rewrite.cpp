@@ -33,7 +33,7 @@ inline TypedFuture<Buffer> host_data_to_buffer(Allocator& allocator, DomainFlagB
 	auto ret_tys = src_buf.rg->make_bound_ty(src_buf.rg->builtin_buffer, 1);
 	auto args_ts = { read_ty, write_ty };
 	auto call_t = src_buf.rg->make_opaque_fn_ty({ args_ts }, { { ret_tys } }, copy_domain, [size](vuk::CommandBuffer& command_buffer, std::span<void*> args) {
-		command_buffer.copy_buffer("_src", "_dst", size);
+		command_buffer.copy_buffer(*reinterpret_cast<Buffer*>(args[0]), *reinterpret_cast<Buffer*>(args[1]), size);
 	});
 
 	auto call_res = src_buf.rg->make_call(call_t, src_buf.head, dst_buf);
@@ -69,7 +69,8 @@ TEST_CASE("test buffer harness") {
 	REQUIRE(test_context.prepare());
 	auto data = { 1u, 2u, 3u };
 	auto [buf, fut] = create_buffer(*test_context.allocator, MemoryUsage::eGPUonly, vuk::DomainFlagBits::eTransferOnTransfer, std::span(data));
-	test_context.compiler.compile(std::span{ &fut.rg, 1 }, {});
+	auto exec = test_context.compiler.link(std::span{ &fut.rg, 1 }, {});
+	exec->execute(*test_context.allocator, {});
 	/* auto res = fut.get<Buffer>(*test_context.allocator, test_context.compiler);
 	CHECK(std::span((uint32_t*)res->mapped_ptr, 3) == std::span(data));*/
 }
