@@ -107,8 +107,8 @@ namespace vuk {
 					}
 					size_t index = 0;
 					for (auto& ret_t : node.type) {
-						assert(ret_t->kind == Type::BOUND_TY);
-						auto ref_idx = ret_t->bound.ref_idx;
+						assert(ret_t->kind == Type::CONNECTED_TY);
+						auto ref_idx = ret_t->connected.ref_idx;
 						res_to_links[{ &node, index }] = { .def = { &node, index } };
 						res_to_links[node.call.args[ref_idx]].next = &res_to_links[{ &node, index }];
 						res_to_links[{ &node, index }].prev = &res_to_links[node.call.args[ref_idx]];
