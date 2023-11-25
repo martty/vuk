@@ -37,11 +37,12 @@ inline TypedFuture<Buffer> host_data_to_buffer(Allocator& allocator, DomainFlagB
 		    command_buffer.copy_buffer(*reinterpret_cast<Buffer*>(args[0]), *reinterpret_cast<Buffer*>(args[1]), size);
 		    rets[0] = args[1];
 	    });
+	call_t->debug_info = new TypeDebugInfo{ "copy_buffer" };
+	src_buf.rg->name_outputs(dst_buf.node, { "dst" });
 
 	auto call_res = src_buf.rg->make_call(call_t, src_buf.head, dst_buf);
-	auto result = src_buf.rg->make_release(first(call_res));
-	// make_pass("BUFFER UPLOAD", );
-	return { src_buf.rg, result };
+	src_buf.rg->name_outputs(call_res, { "dst+" });
+	return { src_buf.rg, call_res };
 }
 
 /// @brief Fill a buffer with host data

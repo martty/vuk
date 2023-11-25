@@ -297,7 +297,13 @@ namespace vuk {
 		// start/end RPs as needed
 		// inference will still need to run in the beginning, as that is compiletime
 		std::deque<ScheduledItem> work_queue(impl->scheduled_execables.begin(), impl->scheduled_execables.end());
-		std::unordered_map<Node*, DomainFlagBits> executed;
+
+		size_t naming_index_counter = 0;
+		struct ExecutionInfo {
+			DomainFlagBits domain;
+			size_t naming_index;
+		};
+		std::unordered_map<Node*, ExecutionInfo> executed;
 		std::unordered_set<Node*> scheduled;
 		for (auto& i : impl->scheduled_execables) {
 			scheduled.emplace(i.execable);
@@ -375,6 +381,33 @@ namespace vuk {
 			return queue_rec.hl_cbuf->command_buffer;
 		};
 
+		auto print_results = [&naming_index_counter](Node* node) {
+			for (size_t i = 0; i < node->type.size(); i++) {
+				if (i > 0) {
+					fmt::print(", ");
+				}
+				if (node->debug_info) {
+					fmt::print("{}", node->debug_info->result_names[i]);
+				} else {
+					fmt::print("{}_{}", node->kind_to_sv(), naming_index_counter);
+				}
+			}
+		};
+		auto print_args = [&executed](std::span<Ref> args) {
+			for (size_t i = 0; i < args.size(); i++) {
+				if (i > 0) {
+					fmt::print(", ");
+				}
+				auto& parm = args[i];
+
+				if (parm.node->debug_info) {
+					fmt::print("{}", parm.node->debug_info->result_names[parm.index]);
+				} else {
+					fmt::print("{}_{}", parm.node->kind_to_sv(), executed.at(parm.node).naming_index);
+				}
+			}
+		};
+
 		// we are recording for 3 domains concurrently
 		// if we encounter a cross-queue operation, we split both the source and target, and insert signal -> wait
 
@@ -391,7 +424,8 @@ namespace vuk {
 				if (node->type[0]->kind == Type::BUFFER_TY) {
 					auto& bound = *reinterpret_cast<Buffer*>(node->declare.value);
 #ifdef VUK_DUMP_EXEC
-					fmt::print("declare buffer\n");
+					print_results(node);
+					fmt::print(" = declare<buffer>\n");
 #endif
 					if (bound.buffer == VK_NULL_HANDLE) {
 						BufferCreateInfo bci{ .mem_usage = bound.memory_usage, .size = bound.size, .alignment = 1 }; // TODO: alignment?
@@ -405,7 +439,8 @@ namespace vuk {
 				} else if (node->type[0]->kind == Type::IMAGE_TY) {
 					auto& attachment = *reinterpret_cast<ImageAttachment*>(node->declare.value);
 #ifdef VUK_DUMP_EXEC
-					fmt::print("declare image\n");
+					print_results(node);
+					fmt::print(" = declare<image>\n");
 #endif
 					if (!attachment.image) {
 						auto allocator = node->declare.allocator ? *node->declare.allocator : alloc;
@@ -418,9 +453,9 @@ namespace vuk {
 						// ctx.set_name(attachment.image.image, bound.name.name);
 					}
 				}
-				executed.emplace(node, DomainFlagBits::eHost); // declarations execute on the host
+				executed.emplace(node, ExecutionInfo{ DomainFlagBits::eHost, naming_index_counter++ }); // declarations execute on the host
 			} else if (node->kind == Node::CALL) {
-				if (item.ready) { // we have executed every dep, so execute ourselves too
+				if (item.ready) {                                   // we have executed every dep, so execute ourselves too
 					DomainFlagBits dst_domain = DomainFlagBits::eAny; // the domain this call will execute on
 					dst_domain = item.scheduled_domain;
 					// run all the barriers here!
@@ -431,10 +466,10 @@ namespace vuk {
 						auto& parm = node->call.args[i];
 						auto parm_ty = parm.type();
 						auto& link = impl->res_to_links[parm];
-						
+
 						Access src_access = Access::eNone;
 						Access dst_access = Access::eNone;
-						DomainFlagBits src_domain = executed.at(parm.node);
+						DomainFlagBits src_domain = executed.at(parm.node).domain;
 						Type* base_ty;
 						if (arg_ty->kind == Type::IMBUED_TY) {
 							dst_access = arg_ty->imbued.access;
@@ -493,9 +528,15 @@ namespace vuk {
 						assert(0);
 					}
 #ifdef VUK_DUMP_EXEC
-					fmt::print("call\n");
+					print_results(node);
+					fmt::print(" = call ");
+					if (node->call.fn_ty->debug_info) {
+						fmt::print("<{}> ", node->call.fn_ty->debug_info->name);
+					}
+					print_args(node->call.args);
+					fmt::print("\n");
 #endif
-					executed.emplace(node, dst_domain);
+					executed.emplace(node, ExecutionInfo{ dst_domain, naming_index_counter++ });
 				} else { // execute deps
 					item.ready = true;
 					work_queue.push_front(item); // requeue this item

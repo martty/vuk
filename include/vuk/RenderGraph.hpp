@@ -32,8 +32,15 @@ namespace vuk {
 	struct FutureBase;
 	struct Resource;
 
+	struct TypeDebugInfo {
+		std::string name;
+	};
+
 	struct Type {
 		enum TypeKind { IMAGE_TY, BUFFER_TY, IMBUED_TY, BOUND_TY, OPAQUE_FN_TY } kind;
+
+		TypeDebugInfo* debug_info = nullptr;
+
 		union {
 			struct {
 				Type* T;
@@ -79,19 +86,18 @@ namespace vuk {
 		constexpr std::strong_ordering operator<=>(const Ref&) const noexcept = default;
 	};
 
-	inline Ref first(Node* node) {
-		return { node, 0 };
-	}
-
-	struct DebugInfo {};
 	struct SchedulingInfo {
 		DomainFlags required_domain;
 	};
 
+	struct NodeDebugInfo {
+		std::vector<std::string> result_names;
+	};
+
 	struct Node {
-		enum Kind { DECLARE, IMPORT, ATTACH, CALL, CLEAR, DIVERGE, CONVERGE, RESOLVE, RELEASE } kind;
+		enum Kind { DECLARE, IMPORT, CALL, CLEAR, DIVERGE, CONVERGE, RESOLVE, RELEASE } kind;
 		std::span<Type* const> type;
-		DebugInfo* debug_info = nullptr;
+		NodeDebugInfo* debug_info = nullptr;
 		SchedulingInfo* scheduling_info = nullptr;
 		union {
 			struct {
@@ -125,7 +131,28 @@ namespace vuk {
 				const Ref src;
 			} release;
 		};
+
+		std::string_view kind_to_sv() {
+			switch (kind) {
+			case DECLARE:
+				return "declare";
+			case CALL:
+				return "call";
+			}
+			assert(0);
+			return "";
+		}
 	};
+
+	inline Ref first(Node* node) {
+		assert(node->type.size() > 0);
+		return { node, 0 };
+	}
+
+	inline Ref nth(Node* node, size_t idx) {
+		assert(node->type.size() > idx);
+		return { node, idx };
+	}
 
 	inline Type* Ref::type() {
 		return node->type[index];
@@ -151,11 +178,11 @@ namespace vuk {
 			return &op_arena.emplace_back(Node{});
 		}
 
-		Node* emplace_op(Node v, DebugInfo = {}) {
+		Node* emplace_op(Node v, NodeDebugInfo = {}) {
 			return new (ensure_space(sizeof Node)) Node(v);
 		}
 
-		Type* emplace_type(Type&& t, DebugInfo = {}) {
+		Type* emplace_type(Type&& t, TypeDebugInfo = {}) {
 			return &types.emplace_back(std::move(t));
 		}
 
@@ -173,6 +200,13 @@ namespace vuk {
 		}
 
 		// OPS
+
+		void name_outputs(Node* node, std::vector<std::string> names) {
+			if (!node->debug_info) {
+				node->debug_info = new NodeDebugInfo;
+			}
+			node->debug_info->result_names.assign(names.begin(), names.end());
+		}
 
 		Ref make_declare_image(ImageAttachment value) {
 			return first(emplace_op(Node{ .kind = Node::DECLARE, .type = std::span{ &builtin_image, 1 }, .declare = { .value = new ImageAttachment(value) } }));
@@ -207,8 +241,8 @@ namespace vuk {
 			return emplace_op(Node{ .kind = Node::CALL, .type = fn->opaque_fn.return_types, .call = { .args = std::span(args_ptr, sizeof...(args)), .fn_ty = fn } });
 		}
 
-		Ref make_release(Ref src) {
-			return first(emplace_op(Node{ .kind = Node::RELEASE, .release = { .src = src } }));
+		void make_release(Ref src) {
+			emplace_op(Node{ .kind = Node::RELEASE, .release = { .src = src } });
 		}
 	};
 
@@ -595,12 +629,14 @@ namespace vuk {
 	[[nodiscard]] inline TypedFuture<Image> declare_ia(Name name, ImageAttachment ia = {}) {
 		std::shared_ptr<RG> rg = std::make_shared<RG>();
 		Ref ref = rg->make_declare_image(ia);
+		rg->name_outputs(ref.node, { name.c_str() });
 		return { rg, ref, reinterpret_cast<ImageAttachment*>(ref.node->declare.value) };
 	}
 
 	[[nodiscard]] inline TypedFuture<Buffer> declare_buf(Name name, Buffer buf = {}) {
 		std::shared_ptr<RG> rg = std::make_shared<RG>();
 		Ref ref = rg->make_declare_buffer(buf);
+		rg->name_outputs(ref.node, { name.c_str() });
 		return { rg, ref, reinterpret_cast<Buffer*>(ref.node->declare.value) };
 	}
 
