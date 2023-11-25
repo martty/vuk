@@ -389,9 +389,9 @@ namespace vuk {
 					fmt::print(", ");
 				}
 				if (node->debug_info) {
-					fmt::print("{}", node->debug_info->result_names[i]);
+					fmt::print("%{}", node->debug_info->result_names[i]);
 				} else {
-					fmt::print("{}_{}", node->kind_to_sv(), naming_index_counter);
+					fmt::print("%{}_{}", node->kind_to_sv(), naming_index_counter);
 				}
 			}
 		};
@@ -403,9 +403,9 @@ namespace vuk {
 				auto& parm = args[i];
 
 				if (parm.node->debug_info) {
-					fmt::print("{}", parm.node->debug_info->result_names[parm.index]);
+					fmt::print("%{}", parm.node->debug_info->result_names[parm.index]);
 				} else {
-					fmt::print("{}_{}", parm.node->kind_to_sv(), executed.at(parm.node).naming_index);
+					fmt::print("%{}_{}", parm.node->kind_to_sv(), executed.at(parm.node).naming_index);
 				}
 			}
 		};
