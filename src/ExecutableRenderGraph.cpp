@@ -326,7 +326,7 @@ namespace vuk {
 		std::array<OngoingQueueRecording, 3> ongoing_queue_recordings;
 
 		auto begin_cbuf = [&](vuk::DomainFlagBits domain) -> Result<void> {
-			size_t index = ctx.domain_to_queue_family_index(domain);
+			uint32_t index = ctx.domain_to_queue_family_index(domain);
 			auto& queue_rec = ongoing_queue_recordings[index];
 			if (queue_rec.cpool->command_pool == VK_NULL_HANDLE) {
 				queue_rec.cpool = Unique<CommandPool>(alloc);
@@ -458,9 +458,9 @@ namespace vuk {
 						if (base_ty->is_image()) { // TODO: of course cross-queue barriers we need to issue twice
 							assert(link.urdef && link.urdef.node->kind == Node::DECLARE);
 							auto& img_att = *reinterpret_cast<ImageAttachment*>(link.urdef.node->declare.value);
-							impl->emit_image_barrier(src_use, dst_use, Subrange::Image{}, format_to_aspect(img_att.format), false);
+							im_bars.push_back(impl->emit_image_barrier(src_use, dst_use, Subrange::Image{}, format_to_aspect(img_att.format), false));
 						} else {
-							impl->emit_memory_barrier(src_use, dst_use);
+							mem_bars.push_back(impl->emit_memory_barrier(src_use, dst_use));
 						}
 					}
 					VkCommandBuffer cbuf = activate_domain(dst_domain);
@@ -480,13 +480,17 @@ namespace vuk {
 						CommandBuffer cobuf(*this, ctx, alloc, cbuf);
 						cobuf.ongoing_render_pass = {};
 						std::vector<void*> opaque_args;
+						std::vector<void*> opaque_rets;
 						for (size_t i = 0; i < node->call.args.size(); i++) {
 							auto& parm = node->call.args[i];
 							auto& link = impl->res_to_links[parm];
 							assert(link.urdef && link.urdef.node->kind == Node::DECLARE);
 							opaque_args.push_back(link.urdef.node->declare.value);
 						}
-						(*node->call.fn_ty->opaque_fn.callback)(cobuf, opaque_args);
+						opaque_rets.resize(node->call.fn_ty->opaque_fn.return_types.size());
+						(*node->call.fn_ty->opaque_fn.callback)(cobuf, opaque_args, opaque_rets);
+					} else {
+						assert(0);
 					}
 #ifdef VUK_DUMP_EXEC
 					fmt::print("call\n");

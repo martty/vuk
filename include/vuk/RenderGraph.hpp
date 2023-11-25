@@ -47,7 +47,7 @@ namespace vuk {
 				std::span<Type* const> args;
 				std::span<Type* const> return_types;
 				int execute_on;
-				std::function<void(CommandBuffer&, std::span<void*>)>* callback;
+				std::function<void(CommandBuffer&, std::span<void*>, std::span<void*>)>* callback;
 			} opaque_fn;
 		};
 
@@ -189,7 +189,7 @@ namespace vuk {
 		Type* make_opaque_fn_ty(std::span<Type* const> args,
 		                        std::span<Type* const> ret_types,
 		                        DomainFlags execute_on,
-		                        std::function<void(CommandBuffer&, std::span<void*>)> callback) {
+		                        std::function<void(CommandBuffer&, std::span<void*>, std::span<void*>)> callback) {
 			auto arg_ptr = new Type*[args.size()];
 			std::copy(args.begin(), args.end(), arg_ptr);
 			auto ret_ty_ptr = new Type*[ret_types.size()];
@@ -198,7 +198,7 @@ namespace vuk {
 			                          .opaque_fn = { .args = std::span(arg_ptr, args.size()),
 			                                         .return_types = std::span(ret_ty_ptr, ret_types.size()),
 			                                         .execute_on = execute_on.m_mask,
-			                                         .callback = new std::function<void(CommandBuffer&, std::span<void*>)>(callback) } });
+			                                         .callback = new std::function<void(CommandBuffer&, std::span<void*>, std::span<void*>)>(callback) } });
 		}
 
 		template<class... Refs>
