@@ -474,8 +474,8 @@ namespace vuk {
 						if (arg_ty->kind == Type::IMBUED_TY) {
 							dst_access = arg_ty->imbued.access;
 							base_ty = arg_ty->imbued.T;
-							if (parm_ty->kind == Type::BOUND_TY) { // this is coming from an output annotated, so we know the source access
-								auto src_arg = parm.node->call.args[parm_ty->bound.ref_idx];
+							if (parm_ty->kind == Type::CONNECTED_TY) { // this is coming from an output annotated, so we know the source access
+								auto src_arg = parm.node->call.args[parm_ty->connected.ref_idx];
 								auto src_ty = src_arg.type();
 								assert(src_ty->kind == Type::IMBUED_TY);
 								src_access = src_ty->imbued.access;

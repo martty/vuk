@@ -37,7 +37,7 @@ namespace vuk {
 	};
 
 	struct Type {
-		enum TypeKind { IMAGE_TY, BUFFER_TY, IMBUED_TY, BOUND_TY, OPAQUE_FN_TY } kind;
+		enum TypeKind { IMAGE_TY, BUFFER_TY, IMBUED_TY, CONNECTED_TY, OPAQUE_FN_TY } kind;
 
 		TypeDebugInfo* debug_info = nullptr;
 
@@ -49,7 +49,7 @@ namespace vuk {
 			struct {
 				Type* T;
 				size_t ref_idx;
-			} bound;
+			} connected;
 			struct {
 				std::span<Type* const> args;
 				std::span<Type* const> return_types;
@@ -195,8 +195,8 @@ namespace vuk {
 			return emplace_type(Type{ .kind = Type::IMBUED_TY, .imbued = { .T = ty, .access = access } });
 		}
 
-		Type* make_bound_ty(Type* ty, size_t ref_idx) {
-			return emplace_type(Type{ .kind = Type::BOUND_TY, .bound = { .T = ty, .ref_idx = ref_idx } });
+		Type* make_connected_ty(Type* ty, size_t ref_idx) {
+			return emplace_type(Type{ .kind = Type::CONNECTED_TY, .connected = { .T = ty, .ref_idx = ref_idx } });
 		}
 
 		// OPS
@@ -206,6 +206,17 @@ namespace vuk {
 				node->debug_info = new NodeDebugInfo;
 			}
 			node->debug_info->result_names.assign(names.begin(), names.end());
+		}
+
+		void name_output(Ref ref, std::string name) {
+			if (!ref.node->debug_info) {
+				ref.node->debug_info = new NodeDebugInfo;
+			}
+			auto& names = ref.node->debug_info->result_names;
+			if (names.size() <= ref.index) {
+				names.resize(ref.index + 1);
+			}
+			names[ref.index] = name;
 		}
 
 		Ref make_declare_image(ImageAttachment value) {
@@ -588,6 +599,7 @@ namespace vuk {
 				return tuple;
 			};
 
+			// when this function is called, we weave in this call into the IR
 			return [=](TypedFuture<typename T1::base> arg, TypedFuture<typename T::base>... args) mutable {
 				RG& rg = *arg.rg.get();
 				std::vector<Type*> ret_types;
