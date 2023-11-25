@@ -1067,7 +1067,7 @@ namespace vuk {
 	}
 
 	struct CommandPool {
-		VkCommandPool command_pool;
+		VkCommandPool command_pool = VK_NULL_HANDLE;
 		uint32_t queue_family_index;
 
 		constexpr bool operator==(const CommandPool& other) const noexcept {
@@ -1084,8 +1084,8 @@ namespace vuk {
 		CommandBufferAllocation() = default;
 		CommandBufferAllocation(VkCommandBuffer command_buffer, CommandPool command_pool) noexcept : command_buffer(command_buffer), command_pool(command_pool) {}
 
-		VkCommandBuffer command_buffer;
-		CommandPool command_pool;
+		VkCommandBuffer command_buffer = VK_NULL_HANDLE;
+		CommandPool command_pool = {};
 
 		operator VkCommandBuffer() noexcept {
 			return command_buffer;
