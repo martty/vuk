@@ -201,7 +201,7 @@ namespace vuk {
 		Result<void> submit_graphics(std::span<VkSubmitInfo2KHR>);
 		Result<void> submit_transfer(std::span<VkSubmitInfo2KHR>);
 
-		Result<void> wait_for_domains(std::span<std::pair<DomainFlags, uint64_t>> queue_waits);
+		Result<void> wait_for_domains(std::span<struct SyncPoint> sync_points);
 
 		// Query functionality
 
@@ -359,7 +359,7 @@ namespace vuk {
 	Result<SingleSwapchainRenderBundle> acquire_one(Context& ctx, SwapchainRef swapchain, VkSemaphore present_ready, VkSemaphore render_complete);
 	Result<SingleSwapchainRenderBundle> execute_submit(Allocator& allocator, ExecutableRenderGraph&& rg, SingleSwapchainRenderBundle&& bundle);
 	Result<VkResult> present_to_one(Context& ctx, SingleSwapchainRenderBundle&& bundle);
-	Result<VkResult> present(Allocator& allocator, Compiler& compiler, SwapchainRef swapchain, Future&& future, RenderGraphCompileOptions = {});
+	Result<VkResult> present(Allocator& allocator, Compiler& compiler, SwapchainRef swapchain, FutureBase&& future, RenderGraphCompileOptions = {});
 
 	struct SampledImage make_sampled_image(ImageView iv, SamplerCreateInfo sci);
 

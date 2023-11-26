@@ -71,13 +71,13 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	Result<void> Context::wait_for_domains(std::span<std::pair<DomainFlags, uint64_t>> queue_waits) {
+	Result<void> Context::wait_for_domains(std::span<SyncPoint> queue_waits) {
 		std::array<uint32_t, 3> domain_to_sema_index = { ~0u, ~0u, ~0u };
 		std::array<VkSemaphore, 3> queue_timeline_semaphores;
 		std::array<uint64_t, 3> values = {};
 
 		uint32_t count = 0;
-		for (auto [domain, v] : queue_waits) {
+		for (auto& [domain, v] : queue_waits) {
 			auto idx = domain_to_queue_index(domain);
 			auto& mapping = domain_to_sema_index[idx];
 			if (mapping == -1) {
@@ -368,7 +368,7 @@ namespace vuk {
 				SubmitInfo& submit_info = batch.submits[i];
 
 				for (auto& fut : submit_info.future_signals) {
-					fut->status = FutureBase::Status::eSubmitted;
+					fut->acqrel.status = Signal::Status::eSynchronizable;
 				}
 
 				if (submit_info.command_buffers.size() == 0) {
@@ -414,9 +414,8 @@ namespace vuk {
 				ssi.stageMask = (VkPipelineStageFlagBits2KHR)PipelineStageFlagBits::eAllCommands;
 
 				for (auto& fut : submit_info.future_signals) {
-					fut->status = FutureBase::Status::eSubmitted;
-					fut->initial_domain = domain;
-					fut->initial_visibility = ssi.value;
+					fut->acqrel.status = Signal::Status::eSynchronizable;
+					fut->acqrel.source = { domain, ssi.value };
 				}
 
 				uint32_t signal_sema_count = 1;
@@ -539,7 +538,7 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	Result<VkResult> present(Allocator& allocator, Compiler& compiler, SwapchainRef swapchain, Future&& future, RenderGraphCompileOptions compile_options) {
+	Result<VkResult> present(Allocator& allocator, Compiler& compiler, SwapchainRef swapchain, FutureBase&& future, RenderGraphCompileOptions compile_options) {
 		auto ptr = future.get_render_graph();
 		auto erg = compiler.link(std::span{ &ptr, 1 }, compile_options);
 		if (!erg) {
@@ -560,32 +559,14 @@ namespace vuk {
 		return { SampledImage::RenderGraphAttachment{ n, sci, ivci, ImageLayout::eReadOnlyOptimalKHR } };
 	}
 
-	Future::Future(const Future& o) noexcept : output_binding(o.output_binding), rg(o.rg), control(o.control) {}
-
-	
-
-	Future::Future(Future&& o) noexcept :
-	    output_binding{ std::exchange(o.output_binding, QualifiedName{}) },
-	    rg{ std::exchange(o.rg, nullptr) },
-	    control{ std::exchange(o.control, nullptr) } {}
-
-	Future& Future::operator=(Future&& o) noexcept {
-		std::swap(o.control, control);
-		std::swap(o.rg, rg);
-		std::swap(o.output_binding, output_binding);
-
-		return *this;
-	}
-
-	Result<void> Future::wait(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options) {
-		if (control->status == FutureBase::Status::eInitial && !rg) {
+	Result<void> FutureBase::wait(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options) {
+		if (acqrel.status == Signal::Status::eDisarmed && !rg) {
 			return { expected_error,
 				       RenderGraphException{} }; // can't get wait for future that has not been attached anything or has been attached into a rendergraph
-		} else if (control->status == FutureBase::Status::eHostAvailable) {
+		} else if (acqrel.status == Signal::Status::eHostAvailable) {
 			return { expected_value };
-		} else if (control->status == FutureBase::Status::eSubmitted) {
-			std::pair w = { (DomainFlags)control->initial_domain, control->initial_visibility };
-			allocator.get_context().wait_for_domains(std::span{ &w, 1 });
+		} else if (acqrel.status == Signal::Status::eSynchronizable) {
+			allocator.get_context().wait_for_domains(std::span{ &acqrel.source, 1 });
 			return { expected_value };
 		} else {
 			auto erg = compiler.link(std::span{ &rg, 1 }, options);
@@ -594,29 +575,19 @@ namespace vuk {
 			}
 			std::pair v = { &allocator, &*erg };
 			VUK_DO_OR_RETURN(execute_submit(allocator, std::span{ &v, 1 }, {}, {}, {}));
-			std::pair w = { (DomainFlags)control->initial_domain, control->initial_visibility };
-			allocator.get_context().wait_for_domains(std::span{ &w, 1 });
-			control->status = FutureBase::Status::eHostAvailable;
+			allocator.get_context().wait_for_domains(std::span{ &acqrel.source, 1 });
+			acqrel.status = Signal::Status::eHostAvailable;
 			return { expected_value };
 		}
 	}
 
-	template<class T>
-	Result<T> Future::get(Allocator& allocator, Compiler& compiler) {
-		if (auto result = wait(allocator, compiler)) {
-			return { expected_value, get_result<T>() };
-		} else {
-			return result;
-		}
-	}
-
-	Result<void> Future::submit(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options) {
-		if (control->status == FutureBase::Status::eInitial && !rg) {
+	Result<void> FutureBase::submit(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options) {
+		if (acqrel.status == Signal::Status::eDisarmed && !rg) {
 			return { expected_error, RenderGraphException{} };
-		} else if (control->status == FutureBase::Status::eHostAvailable || control->status == FutureBase::Status::eSubmitted) {
+		} else if (acqrel.status == Signal::Status::eHostAvailable || acqrel.status == Signal::Status::eSynchronizable) {
 			return { expected_value }; // nothing to do
 		} else {
-			control->status = FutureBase::Status::eSubmitted;
+			acqrel.status = Signal::Status::eSynchronizable;
 			auto erg = compiler.link(std::span{ &rg, 1 }, options);
 			if (!erg) {
 				return erg;
@@ -626,9 +597,10 @@ namespace vuk {
 			return { expected_value };
 		}
 	}
-
+	/*
 	template Result<Buffer> Future::get(Allocator&, Compiler&);
 	template Result<ImageAttachment> Future::get(Allocator&, Compiler&);
+	*/
 
 	std::string_view image_view_type_to_sv(ImageViewType view_type) noexcept {
 		switch (view_type) {

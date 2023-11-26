@@ -14,18 +14,6 @@
 #include <unordered_set>
 
 namespace vuk {
-	RenderGraph::RenderGraph() {}
-
-	RenderGraph::RenderGraph(Name name) : name(name) {}
-
-	RenderGraph::RenderGraph(RenderGraph&& o) noexcept : name(o.name) {}
-	RenderGraph& RenderGraph::operator=(RenderGraph&& o) noexcept {
-		name = o.name;
-		return *this;
-	}
-
-	RenderGraph::~RenderGraph() {}
-
 	/*
 	void RenderGraph::diverge_image(Name whole_name, Subrange::Image subrange, Name subrange_name) {
 	  impl->diverged_subchain_headers.emplace_back(QualifiedName{ Name{}, subrange_name }, std::pair{ QualifiedName{ Name{}, whole_name }, subrange });
