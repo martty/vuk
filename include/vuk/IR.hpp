@@ -58,6 +58,17 @@ namespace vuk {
 			} opaque_fn;
 		};
 
+		static Type* stripped(Type* t) {
+			switch (t->kind) {
+			case IMBUED_TY:
+				return stripped(t->imbued.T);
+			case ALIASED_TY:
+				return stripped(t->aliased.T);
+			default:
+				return t;
+			}
+		}
+
 		bool is_image() {
 			return kind == IMAGE_TY;
 		}
@@ -95,7 +106,7 @@ namespace vuk {
 	};
 
 	struct Node {
-		enum Kind { DECLARE, IMPORT, CALL, CLEAR, DIVERGE, CONVERGE, RESOLVE, SIGNAL, WAIT, ACQUIRE, RELEASE } kind;
+		enum Kind { NOP, DECLARE, IMPORT, CALL, CLEAR, DIVERGE, CONVERGE, RESOLVE, SIGNAL, WAIT, ACQUIRE, RELEASE } kind;
 		std::span<Type* const> type;
 		NodeDebugInfo* debug_info = nullptr;
 		SchedulingInfo* scheduling_info = nullptr;
@@ -265,8 +276,8 @@ namespace vuk {
 			return emplace_op(Node{ .kind = Node::CALL, .type = fn->opaque_fn.return_types, .call = { .args = std::span(args_ptr, sizeof...(args)), .fn_ty = fn } });
 		}
 
-		void make_release(Ref src) {
-			emplace_op(Node{ .kind = Node::RELEASE, .release = { .src = src } });
+		void make_release(Ref src, AcquireRelease* acq_rel) {
+			emplace_op(Node{ .kind = Node::RELEASE, .release = { .src = src, .release = acq_rel } });
 		}
 	};
 } // namespace vuk
