@@ -824,13 +824,14 @@ public:
 
 	template<typename... T>
 	void pack_typed_tuple(std::span<void*> src, CommandBuffer& cb, void* dst) {
-		std::tuple<CommandBuffer*, T...>& tuple = *reinterpret_cast<std::tuple<CommandBuffer*, T...>*>(dst);
+		std::tuple<CommandBuffer*, T...>& tuple = *new(dst) std::tuple<CommandBuffer*, T...>;
 		std::get<0>(tuple) = &cb;
 #define X(n)                                                                                                                                                   \
 	if constexpr ((sizeof...(T)) > n) {                                                                                                                          \
-		auto& ptr = std::get<n>(tuple).ptr;                                                                                                                        \
+		auto& ptr = std::get<n + 1>(tuple).ptr;                                                                                                                        \
 		ptr = reinterpret_cast<decltype(ptr)>(src[n]);                                                                                                             \
 	}
+		X(0)
 		X(1)
 		X(2)
 		X(3)
@@ -914,7 +915,7 @@ public:
 			auto callback = [typed_cb = std::move(body)](CommandBuffer& cb, std::span<void*> args, std::span<void*> rets) {
 				// we do type recovery here -> convert untyped args to typed ones
 				alignas(alignof(std::tuple<CommandBuffer&, T...>)) char storage[sizeof(std::tuple<CommandBuffer&, T...>)];
-				pack_typed_tuple(args, cb, storage);
+				pack_typed_tuple<T...>(args, cb, storage);
 				auto typed_ret = std::apply(typed_cb, *reinterpret_cast<std::tuple<CommandBuffer&, T...>*>(storage));
 				// now we erase these types
 				if constexpr (!is_tuple<Ret>::value) {
