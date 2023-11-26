@@ -38,7 +38,8 @@ inline TypedFuture<Buffer> host_data_to_buffer(Allocator& allocator, DomainFlagB
 		    rets[0] = args[1];
 	    });
 	auto dst_buf2 = vuk::declare_buf("_dst", dst);
-	auto pass = vuk::make_pass("copy_buffer", [size](vuk::CommandBuffer& command_buffer, VUK_BA(Access::eTransferRead) src, VUK_BA(Access::eTransferWrite) dst) {
+	auto pass =
+	    vuk::make_pass("copy_buffer", [size](vuk::CommandBuffer& command_buffer, VUK_BA(Access::eTransferRead) src, VUK_BA(Access::eTransferWrite) dst) {
 		command_buffer.copy_buffer(src, dst, size);
 		return dst;
 	});

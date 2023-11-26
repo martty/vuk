@@ -310,6 +310,7 @@ namespace vuk {
 		}
 
 		auto schedule_new = [&](Node* node) {
+			assert(node);
 			if (scheduled.count(node)) { // we have scheduling info for this
 				auto it = std::find_if(impl->scheduled_execables.begin(), impl->scheduled_execables.end(), [=](ScheduledItem& item) { return item.execable == node; });
 				if (it != impl->scheduled_execables.end()) {
