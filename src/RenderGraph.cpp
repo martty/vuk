@@ -681,17 +681,26 @@ namespace vuk {
 		impl = new RGCImpl(arena);
 		impl->callbacks = compile_options.callbacks;
 
+		std::vector<std::shared_ptr<RG>> work_queue(rgs.begin(), rgs.end());
+		std::vector<std::shared_ptr<RG>> all_rgs;
+
+		while (!work_queue.empty()) {
+			auto item = work_queue.back();
+			work_queue.pop_back();
+			work_queue.insert(work_queue.end(), item->subgraphs.begin(), item->subgraphs.end());
+			all_rgs.push_back(item);
+		}
 		// TODO:
 		// impl->merge_diverge_passes(impl->computed_passes);
 
 		// run global pass ordering - once we split per-queue we don't see enough
 		// inputs to order within a queue
 
-		VUK_DO_OR_RETURN(build_links(rgs, impl->res_to_links, impl->pass_reads));
+		VUK_DO_OR_RETURN(build_links(all_rgs, impl->res_to_links, impl->pass_reads));
 		// VUK_DO_OR_RETURN(collect_chains(impl->res_to_links, impl->chains));
 
 		// VUK_DO_OR_RETURN(impl->diagnose_unheaded_chains());
-		VUK_DO_OR_RETURN(impl->schedule_intra_queue(rgs, compile_options));
+		VUK_DO_OR_RETURN(impl->schedule_intra_queue(all_rgs, compile_options));
 		/*
 		VUK_DO_OR_RETURN(impl->relink_subchains());
 		resource_linking();
