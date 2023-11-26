@@ -26,8 +26,8 @@ namespace vuk {
 	template<size_t I>
 	struct tag_type {};
 }; // namespace vuk
-#define VUK_IA(access) vuk::IA<access, vuk::tag_type<__COUNTER__>>
-#define VUK_BA(access) vuk::BA<access, vuk::tag_type<__COUNTER__>>
+#define VUK_IA(access, ...) vuk::IA<access, vuk::tag_type<__COUNTER__>, __VA_ARGS__>
+#define VUK_BA(access, ...) vuk::BA<access, vuk::tag_type<__COUNTER__>, __VA_ARGS__>
 #endif
 
 namespace vuk {
@@ -479,27 +479,17 @@ namespace vuk {
 	};
 
 	template<class T>
-	struct TypedFuture {};
-
-	template<>
-	struct TypedFuture<Image> {
+	struct TypedFuture {
 		std::shared_ptr<RG> rg;
 		Ref head;
-		ImageAttachment* value;
+		T* value;
 
-		ImageAttachment* operator->() {
+		T* operator->() {
 			return value;
 		}
-	};
 
-	template<>
-	struct TypedFuture<Buffer> {
-		std::shared_ptr<RG> rg;
-		Ref head;
-		Buffer* value;
-
-		Buffer* operator->() {
-			return value;
+		void set_name(std::string_view name) {
+			rg->name_output(head, std::string(name));
 		}
 	};
 
@@ -926,7 +916,7 @@ public:
 			};
 
 			// when this function is called, we weave in this call into the IR
-			return [untyped_cb = std::move(callback)](TypedFuture<typename T::base>... args) mutable {
+			return [untyped_cb = std::move(callback), name](TypedFuture<typename T::base>... args) mutable {
 				auto& first = [](auto& first, auto&...) -> auto& {
 					return first;
 				}(args...);
@@ -949,6 +939,7 @@ public:
 					fill_ret_ty(rg, idxs, ret_tuple, ret_types);
 				}
 				auto opaque_fn_ty = rg.make_opaque_fn_ty(arg_types, ret_types, vuk::DomainFlagBits::eAny, untyped_cb);
+				opaque_fn_ty->debug_info = new TypeDebugInfo{ .name = name.c_str() };
 
 				Node* node = rg.make_call(opaque_fn_ty, args.head...);
 				if constexpr (is_tuple<Ret>::value) {
@@ -967,7 +958,7 @@ public:
 		return TupleMap<drop_t<1, typename traits::types>>::template make_lam<typename traits::result_type, F>(name, std::forward<F>(body));
 	}
 
-	[[nodiscard]] inline TypedFuture<Image> declare_ia(Name name, ImageAttachment ia = {}) {
+	[[nodiscard]] inline TypedFuture<ImageAttachment> declare_ia(Name name, ImageAttachment ia = {}) {
 		std::shared_ptr<RG> rg = std::make_shared<RG>();
 		Ref ref = rg->make_declare_image(ia);
 		rg->name_outputs(ref.node, { name.c_str() });
@@ -981,7 +972,7 @@ public:
 		return { rg, ref, reinterpret_cast<Buffer*>(ref.node->declare.value) };
 	}
 
-	[[nodiscard]] inline TypedFuture<Image> clear(TypedFuture<Image> in, Clear clear_value) {
+	[[nodiscard]] inline TypedFuture<ImageAttachment> clear(TypedFuture<ImageAttachment> in, Clear clear_value) {
 		auto& rg = in.rg;
 		return { rg, rg->make_clear_image(in.head, clear_value), in.value };
 	}
