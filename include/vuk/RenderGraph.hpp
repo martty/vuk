@@ -932,6 +932,9 @@ public:
 				}(args...);
 				auto& rgp = first.rg;
 				RG& rg = *rgp.get();
+				[](auto& first, auto&... rest) {
+					(first.rg->subgraphs.push_back(rest.rg),...);
+				}(args...);
 
 				std::vector<Type*> arg_types;
 				std::tuple arg_tuple_as_a = { T{ args.value, args.head }... };
