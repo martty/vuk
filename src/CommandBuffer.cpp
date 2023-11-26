@@ -1022,7 +1022,6 @@ namespace vuk {
 	CommandBuffer& CommandBuffer::copy_buffer(const Buffer& src, const Buffer& dst, size_t size) {
 		VUK_EARLY_RET();
 
-		assert(src.size == dst.size);
 		if (src.buffer == dst.buffer) {
 			bool overlap_a = src.offset > dst.offset && src.offset < (dst.offset + dst.size);
 			bool overlap_b = dst.offset > src.offset && dst.offset < (src.offset + src.size);

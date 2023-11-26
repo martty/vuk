@@ -476,12 +476,16 @@ namespace vuk {
 						Type* base_ty;
 						if (arg_ty->kind == Type::IMBUED_TY) {
 							dst_access = arg_ty->imbued.access;
-							base_ty = arg_ty->imbued.T;
+							base_ty = Type::stripped(arg_ty);
 							if (parm_ty->kind == Type::ALIASED_TY) { // this is coming from an output annotated, so we know the source access
 								auto src_arg = parm.node->call.args[parm_ty->aliased.ref_idx];
 								auto src_ty = src_arg.type();
-								assert(src_ty->kind == Type::IMBUED_TY);
-								src_access = src_ty->imbued.access;
+								if (src_ty->kind == Type::IMBUED_TY) {
+									src_access = src_ty->imbued.access;
+								} else {
+									// TODO: handling unimbued aliased
+									src_access = Access::eNone;
+								}
 							} else if (parm_ty->kind == Type::IMBUED_TY) {
 								assert(0);
 							} else { // there is no need to sync (eg. declare)
