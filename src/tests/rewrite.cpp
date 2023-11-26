@@ -28,6 +28,7 @@ inline TypedFuture<Buffer> host_data_to_buffer(Allocator& allocator, DomainFlagB
 
 	auto src_buf = vuk::declare_buf("_src", *src);
 	auto dst_buf = src_buf.rg->make_declare_buffer(dst);
+	src_buf.rg->name_outputs(dst_buf.node, { "dst" });
 	auto read_ty = src_buf.rg->make_imbued_ty(src_buf.rg->builtin_buffer, Access::eTransferRead);
 	auto write_ty = src_buf.rg->make_imbued_ty(src_buf.rg->builtin_buffer, Access::eTransferWrite);
 	auto ret_tys = src_buf.rg->make_aliased_ty(src_buf.rg->builtin_buffer, 1);
@@ -44,8 +45,8 @@ inline TypedFuture<Buffer> host_data_to_buffer(Allocator& allocator, DomainFlagB
 		return dst;
 	});
 	auto resy = pass(src_buf, dst_buf2);
+	resy.set_name("dst+");
 	call_t->debug_info = new TypeDebugInfo{ "copy_buffer" };
-	src_buf.rg->name_outputs(dst_buf.node, { "dst" });
 
 	auto call_res = src_buf.rg->make_call(call_t, src_buf.head, dst_buf);
 	src_buf.rg->name_outputs(call_res, { "dst+" });
