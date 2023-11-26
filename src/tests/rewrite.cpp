@@ -27,13 +27,13 @@ inline TypedFuture<Buffer> host_data_to_buffer(Allocator& allocator, DomainFlagB
 	::memcpy(src->mapped_ptr, src_data, size);
 
 	auto src_buf = vuk::declare_buf("_src", *src);
-	auto dst_buf = src_buf.rg->make_declare_buffer(dst);
-	src_buf.rg->name_outputs(dst_buf.node, { "dst" });
-	auto read_ty = src_buf.rg->make_imbued_ty(src_buf.rg->builtin_buffer, Access::eTransferRead);
-	auto write_ty = src_buf.rg->make_imbued_ty(src_buf.rg->builtin_buffer, Access::eTransferWrite);
-	auto ret_tys = src_buf.rg->make_aliased_ty(src_buf.rg->builtin_buffer, 1);
+	auto dst_buf = src_buf.get_render_graph()->make_declare_buffer(dst);
+	src_buf.get_render_graph()->name_outputs(dst_buf.node, { "dst" });
+	auto read_ty = src_buf.get_render_graph()->make_imbued_ty(src_buf.get_render_graph()->builtin_buffer, Access::eTransferRead);
+	auto write_ty = src_buf.get_render_graph()->make_imbued_ty(src_buf.get_render_graph()->builtin_buffer, Access::eTransferWrite);
+	auto ret_tys = src_buf.get_render_graph()->make_aliased_ty(src_buf.get_render_graph()->builtin_buffer, 1);
 	auto args_ts = { read_ty, write_ty };
-	auto call_t = src_buf.rg->make_opaque_fn_ty(
+	auto call_t = src_buf.get_render_graph()->make_opaque_fn_ty(
 	    { args_ts }, { { ret_tys } }, copy_domain, [size](vuk::CommandBuffer& command_buffer, std::span<void*> args, std::span<void*> rets) {
 		    command_buffer.copy_buffer(*reinterpret_cast<Buffer*>(args[0]), *reinterpret_cast<Buffer*>(args[1]), size);
 		    rets[0] = args[1];
@@ -48,9 +48,9 @@ inline TypedFuture<Buffer> host_data_to_buffer(Allocator& allocator, DomainFlagB
 	resy.set_name("dst+");
 	call_t->debug_info = new TypeDebugInfo{ "copy_buffer" };
 
-	auto call_res = src_buf.rg->make_call(call_t, src_buf.head, dst_buf);
-	src_buf.rg->name_outputs(call_res, { "dst+" });
-	return { src_buf.rg, call_res };
+	auto call_res = src_buf.get_render_graph()->make_call(call_t, src_buf.head, dst_buf);
+	src_buf.get_render_graph()->name_outputs(call_res, { "dst+" });
+	return { src_buf.get_render_graph(), first(call_res), src_buf.value };
 }
 
 /// @brief Fill a buffer with host data
@@ -76,11 +76,19 @@ create_buffer(Allocator& allocator, vuk::MemoryUsage memory_usage, DomainFlagBit
 	return { std::move(buf), host_data_to_buffer(allocator, domain, b, data) };
 }
 
+inline TypedFuture<Buffer> download_buffer(TypedFuture<Buffer> buffer_src) {
+	auto dst = declare_buf("dst", Buffer{ .memory_usage = MemoryUsage::eGPUtoCPU });
+	auto download = vuk::make_pass("download_buffer", [](vuk::CommandBuffer& command_buffer, VUK_BA(Access::eTransferRead) src, VUK_BA(Access::eTransferWrite) dst) {
+		command_buffer.copy_buffer(src, dst, VK_WHOLE_SIZE);
+		return dst;
+	});
+	return download(buffer_src, dst);
+}
+
 TEST_CASE("test buffer harness") {
 	REQUIRE(test_context.prepare());
 	auto data = { 1u, 2u, 3u };
 	auto [buf, fut] = create_buffer(*test_context.allocator, MemoryUsage::eGPUonly, vuk::DomainFlagBits::eTransferOnTransfer, std::span(data));
-	auto exec = *test_context.compiler.link(std::span{ &fut.rg, 1 }, {});
-	execute_submit_and_wait(*test_context.allocator, std::move(exec));
-	// CHECK(std::span((uint32_t*)res->mapped_ptr, 3) == std::span(data));
+	auto res = download_buffer(fut).get(*test_context.allocator, test_context.compiler);
+	CHECK(std::span((uint32_t*)res->mapped_ptr, 3) == std::span(data));
 }
