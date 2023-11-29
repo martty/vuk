@@ -60,6 +60,7 @@ namespace vuk {
 		// build edges into link map
 		// reserving here to avoid rehashing map
 		res_to_links.clear();
+		res_to_links.reserve(100);
 
 		for (auto& rg : rgs) {
 			// in each RG module, look at the nodes
@@ -72,8 +73,11 @@ namespace vuk {
 			// release: undef C
 			for (auto& node : rg->op_arena) {
 				switch (node.kind) {
+				case Node::NOP:
+					break;
 				case Node::DECLARE:
-					res_to_links[first(&node)] = { .def = first(&node), .type = first(&node).type() };
+					res_to_links[first(&node)].def = first(&node);
+					res_to_links[first(&node)].type = first(&node).type();
 					break;
 				case Node::CALL: {
 					// args
@@ -97,7 +101,7 @@ namespace vuk {
 					for (auto& ret_t : node.type) {
 						assert(ret_t->kind == Type::ALIASED_TY);
 						auto ref_idx = ret_t->aliased.ref_idx;
-						res_to_links[{ &node, index }] = { .def = { &node, index } };
+						res_to_links[{ &node, index }].def = { &node, index };
 						res_to_links[node.call.args[ref_idx]].next = &res_to_links[{ &node, index }];
 						res_to_links[{ &node, index }].prev = &res_to_links[node.call.args[ref_idx]];
 						index++;
@@ -178,6 +182,7 @@ namespace vuk {
 				case Node::DECLARE:
 				case Node::CALL:
 				case Node::CLEAR:
+				case Node::RELEASE:
 					node_to_schedule[&node] = schedule_items.size();
 					schedule_items.emplace_back(&node);
 					break;
