@@ -368,7 +368,7 @@ namespace vuk {
 				SubmitInfo& submit_info = batch.submits[i];
 
 				for (auto& fut : submit_info.future_signals) {
-					fut->acqrel.status = Signal::Status::eSynchronizable;
+					fut->status = Signal::Status::eSynchronizable;
 				}
 
 				if (submit_info.command_buffers.size() == 0) {
@@ -414,8 +414,8 @@ namespace vuk {
 				ssi.stageMask = (VkPipelineStageFlagBits2KHR)PipelineStageFlagBits::eAllCommands;
 
 				for (auto& fut : submit_info.future_signals) {
-					fut->acqrel.status = Signal::Status::eSynchronizable;
-					fut->acqrel.source = { domain, ssi.value };
+					fut->status = Signal::Status::eSynchronizable;
+					fut->source = { domain, ssi.value };
 				}
 
 				uint32_t signal_sema_count = 1;
@@ -575,6 +575,7 @@ namespace vuk {
 			}
 			std::pair v = { &allocator, &*erg };
 			VUK_DO_OR_RETURN(execute_submit(allocator, std::span{ &v, 1 }, {}, {}, {}));
+			assert(acqrel.status != Signal::Status::eDisarmed);
 			allocator.get_context().wait_for_domains(std::span{ &acqrel.source, 1 });
 			acqrel.status = Signal::Status::eHostAvailable;
 			return { expected_value };
