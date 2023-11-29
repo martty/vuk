@@ -326,9 +326,12 @@ namespace vuk {
 		SubmitBundle sbundle;
 
 		struct OngoingQueueRecording {
+			SubmitBatch sb;
+			DomainFlagBits domain;
 			SubmitInfo si;
 			Unique<CommandPool> cpool;
 			Unique<CommandBufferAllocation> hl_cbuf;
+			bool is_recording = false;
 			void* cbuf_profile_data;
 		};
 
@@ -337,6 +340,9 @@ namespace vuk {
 		auto begin_cbuf = [&](vuk::DomainFlagBits domain) -> Result<void> {
 			uint32_t index = ctx.domain_to_queue_family_index(domain);
 			auto& queue_rec = ongoing_queue_recordings[index];
+			assert(!queue_rec.is_recording);
+			queue_rec.is_recording = true;
+			queue_rec.domain = domain;
 			if (queue_rec.cpool->command_pool == VK_NULL_HANDLE) {
 				queue_rec.cpool = Unique<CommandPool>(alloc);
 				VkCommandPoolCreateInfo cpci{ VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
@@ -362,9 +368,9 @@ namespace vuk {
 			return { expected_value };
 		};
 
-		auto end_cbuf = [&](vuk::DomainFlagBits domain) -> Result<void> {
-			size_t index = ctx.domain_to_queue_family_index(domain);
+		auto end_cbuf_by_idx = [&](size_t index) -> Result<void> {
 			auto& queue_rec = ongoing_queue_recordings[index];
+			queue_rec.is_recording = false;
 			if (this->impl->callbacks.on_end_command_buffer)
 				this->impl->callbacks.on_end_command_buffer(this->impl->callbacks.user_data, queue_rec.cbuf_profile_data);
 			if (auto result = ctx.vkEndCommandBuffer(queue_rec.hl_cbuf->command_buffer); result != VK_SUCCESS) {
@@ -373,15 +379,46 @@ namespace vuk {
 			return { expected_value };
 		};
 
+		auto end_cbuf = [&](vuk::DomainFlagBits domain) -> Result<void> {
+			size_t index = ctx.domain_to_queue_family_index(domain);
+			return end_cbuf_by_idx(index);
+		};
+
 		auto activate_domain = [&](vuk::DomainFlagBits domain) -> VkCommandBuffer {
 			size_t index = ctx.domain_to_queue_family_index(domain);
 			auto& queue_rec = ongoing_queue_recordings[index];
 
-			if (queue_rec.hl_cbuf->command_buffer == VK_NULL_HANDLE) {
+			if (!queue_rec.is_recording) {
 				begin_cbuf(domain);
 			}
 
 			return queue_rec.hl_cbuf->command_buffer;
+		};
+
+		auto flush_domain = [&](vuk::DomainFlagBits domain) -> SubmitInfo* {
+			size_t index = ctx.domain_to_queue_family_index(domain);
+			auto& queue_rec = ongoing_queue_recordings[index];
+
+			if (queue_rec.cpool.get().command_pool == VK_NULL_HANDLE) {
+				return nullptr;
+			}
+
+			if (queue_rec.is_recording) {
+				end_cbuf_by_idx(index);
+				return &queue_rec.sb.submits.emplace_back(std::move(queue_rec.si));
+			} else {
+				return &queue_rec.sb.submits.back();
+			}
+		};
+
+		auto complete_domain = [&](vuk::DomainFlagBits domain) {
+			size_t index = ctx.domain_to_queue_family_index(domain);
+			auto& queue_rec = ongoing_queue_recordings[index];
+			if (queue_rec.cpool.get().command_pool == VK_NULL_HANDLE) {
+				return;
+			}
+			queue_rec.sb.domain = domain;
+			sbundle.batches.emplace_back(std::move(queue_rec.sb));
 		};
 
 		auto print_results = [&naming_index_counter](Node* node) {
@@ -423,7 +460,8 @@ namespace vuk {
 			}
 			// we run nodes twice - first time we reenqueue at the front and then put all deps before it
 			// second time we see it, we know that all deps have run, so we can run the node itself
-			if (node->kind == Node::DECLARE) { // when encountering a DECLARE, allocate the thing if needed
+			switch (node->kind) {
+			case Node::DECLARE: { // when encountering a DECLARE, allocate the thing if needed
 				if (node->type[0]->kind == Type::BUFFER_TY) {
 					auto& bound = *reinterpret_cast<Buffer*>(node->declare.value);
 #ifdef VUK_DUMP_EXEC
@@ -457,7 +495,9 @@ namespace vuk {
 					}
 				}
 				executed.emplace(node, ExecutionInfo{ DomainFlagBits::eHost, naming_index_counter++ }); // declarations execute on the host
-			} else if (node->kind == Node::CALL) {
+				break;
+			}
+			case Node::CALL: {
 				if (item.ready) {                                   // we have executed every dep, so execute ourselves too
 					DomainFlagBits dst_domain = DomainFlagBits::eAny; // the domain this call will execute on
 					dst_domain = item.scheduled_domain;
@@ -479,9 +519,9 @@ namespace vuk {
 							base_ty = Type::stripped(arg_ty);
 							if (parm_ty->kind == Type::ALIASED_TY) { // this is coming from an output annotated, so we know the source access
 								auto src_arg = parm.node->call.args[parm_ty->aliased.ref_idx];
-								auto src_ty = src_arg.type();
-								if (src_ty->kind == Type::IMBUED_TY) {
-									src_access = src_ty->imbued.access;
+								auto call_ty = parm.node->call.fn_ty->opaque_fn.args[parm_ty->aliased.ref_idx];
+								if (call_ty->kind == Type::IMBUED_TY) {
+									src_access = call_ty->imbued.access;
 								} else {
 									// TODO: handling unimbued aliased
 									src_access = Access::eNone;
@@ -574,8 +614,72 @@ namespace vuk {
 						}
 					}
 				}
+				break;
+			}
+			case Node::RELEASE:
+				if (item.ready) {
+					// release is to execute: we need to flush current queue -> end current batch and add signal
+					auto parm = node->release.src;
+					DomainFlagBits src_domain = executed.at(parm.node).domain;
+#ifdef VUK_DUMP_EXEC
+					print_results(node);
+					fmt::print("release ");
+					print_args(std::span{ &node->release.src, 1 });
+					fmt::print("\n");
+#endif
+					auto batch = flush_domain(src_domain);
+					if (!batch) {
+						continue;
+					}
+					auto& acqrel = node->release.release;
+					batch->future_signals.push_back(acqrel);
+					Access src_access = Access::eNone;
+					Access dst_access = Access::eNone;
+
+					Type* base_ty;
+					Type* parm_ty = parm.type();
+					if (parm_ty->kind == Type::ALIASED_TY) { // this is coming from an output annotated, so we know the source access
+						auto src_arg = parm.node->call.args[parm_ty->aliased.ref_idx];
+						auto call_ty = parm.node->call.fn_ty->opaque_fn.args[parm_ty->aliased.ref_idx];
+						if (call_ty->kind == Type::IMBUED_TY) {
+							src_access = call_ty->imbued.access;
+						} else {
+							// TODO: handling unimbued aliased
+							src_access = Access::eNone;
+						}
+					} else if (parm_ty->kind == Type::IMBUED_TY) {
+						assert(0);
+					} else { // there is no need to sync (eg. declare)
+						src_access = Access::eNone;
+					}
+					acqrel->last_use = src_access;
+					fmt::print("");
+				} else {
+					item.ready = true;
+					work_queue.push_front(item); // requeue this item
+
+					auto& parm = node->release.src;
+					auto& link = impl->res_to_links[parm];
+
+					if (link.reads.size() > 0) {
+						// all reads
+						for (auto& r : link.reads.to_span(impl->pass_reads)) {
+							schedule_new(r);
+						}
+					} else {
+						// just the def
+						schedule_new(link.def.node);
+					}
+				}
+				break;
+			default:
+				assert(0);
 			}
 		}
+
+		complete_domain(DomainFlagBits::eGraphicsQueue);
+		//complete_domain(DomainFlagBits::eComputeQueue);
+		complete_domain(DomainFlagBits::eTransferQueue);
 
 		// RESOLVE SWAPCHAIN DYNAMICITY
 		// bind swapchain attachment images & ivs

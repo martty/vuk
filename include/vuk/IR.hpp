@@ -24,7 +24,7 @@ namespace vuk {
 			eHostAvailable   // the result is available on host, available on device without sync
 		};
 
-		std::atomic<Status> status = Status::eDisarmed;
+		Status status = Status::eDisarmed;
 		SyncPoint source;
 	};
 
@@ -148,10 +148,10 @@ namespace vuk {
 			} wait;
 			struct {
 				const Ref dst;
-				AcquireRelease* release;
+				AcquireRelease* acquire;
 			} acquire;
 			struct {
-				const Ref src;
+				Ref src;
 				AcquireRelease* release;
 			} release;
 		};
@@ -203,7 +203,7 @@ namespace vuk {
 		}
 
 		Node* emplace_op(Node v, NodeDebugInfo = {}) {
-			return new (ensure_space(sizeof Node)) Node(v);
+			return new (ensure_space(sizeof(Node))) Node(v);
 		}
 
 		Type* emplace_type(Type&& t, TypeDebugInfo = {}) {
@@ -273,11 +273,16 @@ namespace vuk {
 		template<class... Refs>
 		Node* make_call(Type* fn, Refs... args) {
 			Ref* args_ptr = new Ref[sizeof...(args)]{ args... };
-			return emplace_op(Node{ .kind = Node::CALL, .type = fn->opaque_fn.return_types, .call = { .args = std::span(args_ptr, sizeof...(args)), .fn_ty = fn } });
+			decltype(Node::call) call = { .args = std::span(args_ptr, sizeof...(args)), .fn_ty = fn };
+			Node n{};
+			n.kind = Node::CALL;
+			n.type = fn->opaque_fn.return_types;
+			n.call = call;
+			return emplace_op(n);
 		}
 
-		void make_release(Ref src, AcquireRelease* acq_rel) {
-			emplace_op(Node{ .kind = Node::RELEASE, .release = { .src = src, .release = acq_rel } });
+		Node* make_release(Ref src, AcquireRelease* acq_rel) {
+			return emplace_op(Node{ .kind = Node::RELEASE, .release = { .src = src, .release = acq_rel } });
 		}
 	};
 } // namespace vuk

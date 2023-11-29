@@ -516,8 +516,6 @@ public:
 		if constexpr (sizeof...(T) > 0) {
 			size_t i = 0;
 			return std::make_tuple(TypedFuture<typename T::base>{ rg, { node, i++ }, std::get<T>(us).ptr }...);
-		} else if constexpr (sizeof...(T) == 0) {
-			return TypedFuture<typename T::base>{ rg, first(node), std::get<0>(us).ptr };
 		}
 	}
 
@@ -565,7 +563,7 @@ public:
 				}(args...);
 
 				std::vector<Type*> arg_types;
-				std::tuple arg_tuple_as_a = { T{ args.value, args.head }... };
+				std::tuple arg_tuple_as_a = { T{ args.value, args.get_head() }... };
 				fill_arg_ty(rg, arg_tuple_as_a, arg_types);
 
 				std::vector<Type*> ret_types;
@@ -579,7 +577,7 @@ public:
 				auto opaque_fn_ty = rg.make_opaque_fn_ty(arg_types, ret_types, vuk::DomainFlagBits::eAny, untyped_cb);
 				opaque_fn_ty->debug_info = new TypeDebugInfo{ .name = name.c_str() };
 
-				Node* node = rg.make_call(opaque_fn_ty, args.head...);
+				Node* node = rg.make_call(opaque_fn_ty, args.get_head()...);
 				if constexpr (is_tuple<Ret>::value) {
 					auto [idxs, ret_tuple] = intersect_tuples<std::tuple<T...>, Ret>(arg_tuple_as_a);
 					return make_ret(rgp, node, ret_tuple);
@@ -612,7 +610,7 @@ public:
 
 	[[nodiscard]] inline TypedFuture<ImageAttachment> clear(TypedFuture<ImageAttachment> in, Clear clear_value) {
 		auto& rg = in.get_render_graph();
-		return in.transmute(rg->make_clear_image(in.head, clear_value));
+		return in.transmute(rg->make_clear_image(in.get_head(), clear_value));
 	}
 
 	struct InferenceContext {
@@ -692,7 +690,7 @@ public:
 		std::vector<std::pair<DomainFlagBits, uint64_t>> relative_waits;
 		std::vector<std::pair<DomainFlagBits, uint64_t>> absolute_waits;
 		std::vector<VkCommandBuffer> command_buffers;
-		std::vector<FutureBase*> future_signals;
+		std::vector<Signal*> future_signals;
 		std::vector<SwapchainRef> used_swapchains;
 	};
 
