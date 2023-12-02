@@ -505,7 +505,7 @@ namespace vuk {
 					std::vector<VkImageMemoryBarrier2KHR> im_bars;
 					std::vector<VkMemoryBarrier2KHR> mem_bars;
 					for (size_t i = 0; i < node->call.args.size(); i++) {
-						auto& arg_ty = node->call.fn_ty->opaque_fn.args[i];
+						auto& arg_ty = node->call.fn.type()->opaque_fn.args[i];
 						auto& parm = node->call.args[i];
 						auto parm_ty = parm.type();
 						auto& link = impl->res_to_links[parm];
@@ -519,7 +519,7 @@ namespace vuk {
 							base_ty = Type::stripped(arg_ty);
 							if (parm_ty->kind == Type::ALIASED_TY) { // this is coming from an output annotated, so we know the source access
 								auto src_arg = parm.node->call.args[parm_ty->aliased.ref_idx];
-								auto call_ty = parm.node->call.fn_ty->opaque_fn.args[parm_ty->aliased.ref_idx];
+								auto call_ty = parm.node->call.fn.type()->opaque_fn.args[parm_ty->aliased.ref_idx];
 								if (call_ty->kind == Type::IMBUED_TY) {
 									src_access = call_ty->imbued.access;
 								} else {
@@ -558,7 +558,7 @@ namespace vuk {
 					// make the renderpass if needed!
 
 					// run the user cb!
-					if (node->call.fn_ty->kind == Type::OPAQUE_FN_TY) {
+					if (node->call.fn.type()->kind == Type::OPAQUE_FN_TY) {
 						CommandBuffer cobuf(*this, ctx, alloc, cbuf);
 						cobuf.ongoing_render_pass = {};
 						std::vector<void*> opaque_args;
@@ -569,16 +569,16 @@ namespace vuk {
 							assert(link.urdef && link.urdef.node->kind == Node::DECLARE);
 							opaque_args.push_back(link.urdef.node->declare.value);
 						}
-						opaque_rets.resize(node->call.fn_ty->opaque_fn.return_types.size());
-						(*node->call.fn_ty->opaque_fn.callback)(cobuf, opaque_args, opaque_rets);
+						opaque_rets.resize(node->call.fn.type()->opaque_fn.return_types.size());
+						(*node->call.fn.type()->opaque_fn.callback)(cobuf, opaque_args, opaque_rets);
 					} else {
 						assert(0);
 					}
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
 					fmt::print(" = call ");
-					if (node->call.fn_ty->debug_info) {
-						fmt::print("<{}> ", node->call.fn_ty->debug_info->name);
+					if (node->call.fn.type()->debug_info) {
+						fmt::print("<{}> ", node->call.fn.type()->debug_info->name);
 					}
 					print_args(node->call.args);
 					fmt::print("\n");
@@ -588,7 +588,7 @@ namespace vuk {
 					item.ready = true;
 					work_queue.push_front(item); // requeue this item
 					for (size_t i = 0; i < node->call.args.size(); i++) {
-						auto& arg_ty = node->call.fn_ty->opaque_fn.args[i];
+						auto& arg_ty = node->call.fn.type()->opaque_fn.args[i];
 						auto& parm = node->call.args[i];
 						auto& link = impl->res_to_links[parm];
 
@@ -636,11 +636,10 @@ namespace vuk {
 					Access src_access = Access::eNone;
 					Access dst_access = Access::eNone;
 
-					Type* base_ty;
 					Type* parm_ty = parm.type();
 					if (parm_ty->kind == Type::ALIASED_TY) { // this is coming from an output annotated, so we know the source access
 						auto src_arg = parm.node->call.args[parm_ty->aliased.ref_idx];
-						auto call_ty = parm.node->call.fn_ty->opaque_fn.args[parm_ty->aliased.ref_idx];
+						auto call_ty = parm.node->call.fn.type()->opaque_fn.args[parm_ty->aliased.ref_idx];
 						if (call_ty->kind == Type::IMBUED_TY) {
 							src_access = call_ty->imbued.access;
 						} else {
