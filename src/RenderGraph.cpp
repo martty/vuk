@@ -82,7 +82,7 @@ namespace vuk {
 				case Node::CALL: {
 					// args
 					for (size_t i = 0; i < node.call.args.size(); i++) {
-						auto& arg_ty = node.call.fn_ty->opaque_fn.args[i];
+						auto& arg_ty = node.call.fn.type()->opaque_fn.args[i];
 						auto& parm = node.call.args[i];
 						// TODO: assert same type when imbuement is stripped
 						if (arg_ty->kind == Type::IMBUED_TY) {

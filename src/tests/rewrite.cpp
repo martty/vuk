@@ -48,7 +48,8 @@ inline TypedFuture<Buffer> host_data_to_buffer(Allocator& allocator, DomainFlagB
 	resy.set_name("dst+");
 	call_t->debug_info = new TypeDebugInfo{ "copy_buffer" };
 
-	auto call_res = src_buf.get_render_graph()->make_call(call_t, src_buf.get_head(), dst_buf);
+	auto fn = src_buf.get_render_graph()->make_declare_fn(call_t);
+	auto call_res = src_buf.get_render_graph()->make_call(fn, src_buf.get_head(), dst_buf);
 	src_buf.get_render_graph()->name_outputs(call_res, { "dst2+" });
 	return resy; // { src_buf.get_render_graph(), first(call_res), src_buf.value };
 }
