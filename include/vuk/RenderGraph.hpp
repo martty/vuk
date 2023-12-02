@@ -576,8 +576,8 @@ public:
 				}
 				auto opaque_fn_ty = rg.make_opaque_fn_ty(arg_types, ret_types, vuk::DomainFlagBits::eAny, untyped_cb);
 				opaque_fn_ty->debug_info = new TypeDebugInfo{ .name = name.c_str() };
-
-				Node* node = rg.make_call(opaque_fn_ty, args.get_head()...);
+				auto opaque_fn = rg.make_declare_fn(opaque_fn_ty);
+				Node* node = rg.make_call(opaque_fn, args.get_head()...);
 				if constexpr (is_tuple<Ret>::value) {
 					auto [idxs, ret_tuple] = intersect_tuples<std::tuple<T...>, Ret>(arg_tuple_as_a);
 					return make_ret(rgp, node, ret_tuple);

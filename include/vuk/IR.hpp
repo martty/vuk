@@ -119,8 +119,8 @@ namespace vuk {
 				void* value;
 			} import;
 			struct {
+				Ref fn;
 				std::span<Ref> args;
-				Type* fn_ty;
 			} call;
 			struct {
 				const Ref dst;
@@ -270,13 +270,18 @@ namespace vuk {
 			                                         .callback = new std::function<void(CommandBuffer&, std::span<void*>, std::span<void*>)>(callback) } });
 		}
 
+		Ref make_declare_fn(Type* const fn_ty) {
+			auto ty = new Type*(fn_ty);
+			return first(emplace_op(Node{ .kind = Node::DECLARE, .type = std::span{ ty, 1 }, .declare = {} }));
+		}
+
 		template<class... Refs>
-		Node* make_call(Type* fn, Refs... args) {
+		Node* make_call(Ref fn, Refs... args) {
 			Ref* args_ptr = new Ref[sizeof...(args)]{ args... };
-			decltype(Node::call) call = { .args = std::span(args_ptr, sizeof...(args)), .fn_ty = fn };
+			decltype(Node::call) call = { .fn = fn, .args = std::span(args_ptr, sizeof...(args)) };
 			Node n{};
 			n.kind = Node::CALL;
-			n.type = fn->opaque_fn.return_types;
+			n.type = fn.type()->opaque_fn.return_types;
 			n.call = call;
 			return emplace_op(n);
 		}
