@@ -96,19 +96,6 @@ namespace vuk {
 		std::deque<ChainLink> helper_links;
 		std::vector<int32_t> swapchain_references;
 		std::vector<AttachmentRPInfo> rp_infos;
-		/* std::array<size_t, 3> last_ordered_pass_idx_in_domain_array;
-
-		 int32_t last_ordered_pass_idx_in_domain(DomainFlagBits queue) {
-		  uint32_t idx;
-		  if (queue == DomainFlagBits::eGraphicsQueue) {
-		    idx = 0;
-		  } else if (queue == DomainFlagBits::eComputeQueue) {
-		    idx = 1;
-		  } else {
-		    idx = 2;
-		  }
-		  return (int32_t)last_ordered_pass_idx_in_domain_array[idx];
-		}*/
 
 		std::vector<ChainLink*> attachment_use_chain_references;
 		std::vector<RenderPassInfo*> attachment_rp_references;
@@ -123,6 +110,7 @@ namespace vuk {
 
 		Result<void> diagnose_unheaded_chains();
 		Result<void> schedule_intra_queue(std::span<std::shared_ptr<RG>> rgs, const RenderGraphCompileOptions& compile_options);
+		Result<void> perform_inference(std::span<std::shared_ptr<RG>> rgs, const RenderGraphCompileOptions& compile_options);
 
 		std::vector<ChainLink*> div_subchains;
 		std::vector<ChainLink**> conv_subchains;

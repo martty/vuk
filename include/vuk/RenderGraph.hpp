@@ -563,7 +563,7 @@ public:
 				}(args...);
 
 				std::vector<Type*> arg_types;
-				std::tuple arg_tuple_as_a = { T{ args.value, args.get_head() }... };
+				std::tuple arg_tuple_as_a = { T{ args.operator->(), args.get_head() }... };
 				fill_arg_ty(rg, arg_tuple_as_a, arg_types);
 
 				std::vector<Type*> ret_types;
@@ -582,7 +582,7 @@ public:
 					auto [idxs, ret_tuple] = intersect_tuples<std::tuple<T...>, Ret>(arg_tuple_as_a);
 					return make_ret(rgp, node, ret_tuple);
 				} else if constexpr (!std::is_same_v<Ret, void>) {
-					return std::remove_reference_t<decltype(first)>{ rgp, vuk::first(node), first.value };
+					return std::remove_reference_t<decltype(first)>{ rgp, vuk::first(node), first.get_def() };
 				}
 			};
 		}
@@ -598,14 +598,14 @@ public:
 		std::shared_ptr<RG> rg = std::make_shared<RG>();
 		Ref ref = rg->make_declare_image(ia);
 		rg->name_outputs(ref.node, { name.c_str() });
-		return { rg, ref, reinterpret_cast<ImageAttachment*>(ref.node->valloc.args[0].node->constant.value) };
+		return { rg, ref, ref };
 	}
 
 	[[nodiscard]] inline TypedFuture<Buffer> declare_buf(Name name, Buffer buf = {}) {
 		std::shared_ptr<RG> rg = std::make_shared<RG>();
 		Ref ref = rg->make_declare_buffer(buf);
 		rg->name_outputs(ref.node, { name.c_str() });
-		return { rg, ref, reinterpret_cast<Buffer*>(ref.node->valloc.args[0].node->constant.value) };
+		return { rg, ref, ref };
 	}
 
 	[[nodiscard]] inline TypedFuture<ImageAttachment> clear(TypedFuture<ImageAttachment> in, Clear clear_value) {

@@ -36,26 +36,23 @@ namespace vuk {
 	template<class T>
 	class TypedFuture {
 	public:
-		TypedFuture(std::shared_ptr<RG> rg, Ref ref, T* value) {
+		TypedFuture(std::shared_ptr<RG> rg, Ref ref, Ref def) {
 			this->control = std::make_shared<FutureBase>();
 			this->head = { rg->make_release(ref, &this->control->acqrel), 0 };
 			this->control->rg = std::move(rg);
-			this->value = value;
+			this->def = def;
 		}
 
 		TypedFuture(const TypedFuture& o) noexcept :
 		    control{ std::make_shared<FutureBase>(*o.control) },
-		    value{ o.value },
+		    def{ o.def },
 		    head{ control->rg->make_release(o.get_head(), &this->control->acqrel), 0 } {}
 
-		TypedFuture(TypedFuture&& o) noexcept :
-		    control{ std::exchange(o.control, nullptr) },
-		    value{ std::exchange(o.value, nullptr) },
-		    head{ std::exchange(o.head, {}) } {}
+		TypedFuture(TypedFuture&& o) noexcept : control{ std::exchange(o.control, nullptr) }, def{ std::exchange(o.def, {}) }, head{ std::exchange(o.head, {}) } {}
 
 		TypedFuture& operator=(const TypedFuture& o) noexcept {
 			control = { std::make_shared<FutureBase>(*o.control) };
-			value = { o.value };
+			def = { o.def };
 			head = { control->rg->make_release(o.get_head(), &this->control->acqrel), 0 };
 
 			return *this;
@@ -63,7 +60,7 @@ namespace vuk {
 
 		TypedFuture& operator=(TypedFuture&& o) noexcept {
 			std::swap(o.control, control);
-			std::swap(o.value, value);
+			std::swap(o.def, def);
 			std::swap(o.head, head);
 
 			return *this;
@@ -91,29 +88,39 @@ namespace vuk {
 			return head.node->release.src;
 		}
 
+		Ref get_def() const noexcept {
+			return def;
+		}
+
 		TypedFuture transmute(Ref ref) noexcept {
 			head.node->release.src = ref;
 			return *this;
 		}
 
 		T* operator->() noexcept {
-			return value;
+			return reinterpret_cast<T*>(def.node->valloc.args[0].node->constant.value);
 		}
 
 		/// @brief Wait and retrieve the result of the Future on the host
 		[[nodiscard]] Result<T> get(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options = {}) {
 			if (auto result = control->wait(allocator, compiler, options)) {
-				return { expected_value, *value };
+				return { expected_value, *operator->() };
 			} else {
 				return result;
 			}
 		}
 
+		void same_size(TypedFuture<Buffer> src)
+		  requires std::is_same_v<T, Buffer>
+		{
+			def.node->valloc.args[1] = src.get_def().node->valloc.args[1];
+		}
+
 		// TODO: remove this from public API
 		std::shared_ptr<FutureBase> control;
-		T* value;
 
 	private:
+		Ref def;
 		Ref head;
 	};
 

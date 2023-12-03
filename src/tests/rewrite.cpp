@@ -78,7 +78,8 @@ create_buffer(Allocator& allocator, vuk::MemoryUsage memory_usage, DomainFlagBit
 }
 
 inline TypedFuture<Buffer> download_buffer(TypedFuture<Buffer> buffer_src) {
-	auto dst = declare_buf("dst", Buffer{ .size = 1024, .memory_usage = MemoryUsage::eGPUtoCPU }); //TODO: inference
+	auto dst = declare_buf("dst", Buffer{ .memory_usage = MemoryUsage::eGPUtoCPU });
+	dst.same_size(buffer_src);
 	auto download = vuk::make_pass("download_buffer", [](vuk::CommandBuffer& command_buffer, VUK_BA(Access::eTransferRead) src, VUK_BA(Access::eTransferWrite) dst) {
 		command_buffer.copy_buffer(src, dst, src.ptr->size);
 		return dst;
