@@ -37,11 +37,14 @@ namespace vuk {
 	};
 
 	struct Type {
-		enum TypeKind { IMAGE_TY, BUFFER_TY, IMBUED_TY, ALIASED_TY, OPAQUE_FN_TY } kind;
+		enum TypeKind { MEMORY_TY, INTEGER_TY, IMAGE_TY, BUFFER_TY, IMBUED_TY, ALIASED_TY, OPAQUE_FN_TY } kind;
 
 		TypeDebugInfo* debug_info = nullptr;
 
 		union {
+			struct {
+				size_t width;
+			} integer;
 			struct {
 				Type* T;
 				Access access;
@@ -106,15 +109,20 @@ namespace vuk {
 	};
 
 	struct Node {
-		enum Kind { NOP, DECLARE, IMPORT, CALL, CLEAR, DIVERGE, CONVERGE, RESOLVE, SIGNAL, WAIT, ACQUIRE, RELEASE } kind;
+		enum Kind { NOP, PLACEHOLDER, CONSTANT, VALLOC, IMPORT, CALL, CLEAR, DIVERGE, CONVERGE, RESOLVE, SIGNAL, WAIT, ACQUIRE, RELEASE } kind;
 		std::span<Type* const> type;
 		NodeDebugInfo* debug_info = nullptr;
 		SchedulingInfo* scheduling_info = nullptr;
 		union {
 			struct {
+			} placeholder;
+			struct {
 				void* value;
+			} constant;
+			struct {
+				std::span<Ref> args;
 				std::optional<Allocator> allocator;
-			} declare;
+			} valloc;
 			struct {
 				void* value;
 			} import;
@@ -158,8 +166,8 @@ namespace vuk {
 
 		std::string_view kind_to_sv() {
 			switch (kind) {
-			case DECLARE:
-				return "declare";
+			case VALLOC:
+				return "valloc";
 			case CALL:
 				return "call";
 			}
@@ -223,6 +231,10 @@ namespace vuk {
 			return emplace_type(Type{ .kind = Type::ALIASED_TY, .aliased = { .T = ty, .ref_idx = ref_idx } });
 		}
 
+		Type* u64() {
+			return emplace_type(Type{ .kind = Type::INTEGER_TY, .integer = { .width = 64 } });
+		}
+
 		// OPS
 
 		void name_outputs(Node* node, std::vector<std::string> names) {
@@ -244,11 +256,23 @@ namespace vuk {
 		}
 
 		Ref make_declare_image(ImageAttachment value) {
-			return first(emplace_op(Node{ .kind = Node::DECLARE, .type = std::span{ &builtin_image, 1 }, .declare = { .value = new ImageAttachment(value) } }));
+			assert(0);
+			return first(emplace_op(Node{ .kind = Node::VALLOC, .type = std::span{ &builtin_image, 1 }, .valloc = {} }));
 		}
 
 		Ref make_declare_buffer(Buffer value) {
-			return first(emplace_op(Node{ .kind = Node::DECLARE, .type = std::span{ &builtin_buffer, 1 }, .declare = { .value = new Buffer(value) } }));
+			auto buf_ptr = new Buffer(value); /* size rest */
+			auto args_ptr = new Ref[2];
+			auto mem_ty = emplace_type(Type{ .kind = Type::MEMORY_TY });
+			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ &mem_ty, 1 }, .constant = { .value = buf_ptr } }));
+			auto u64_ty = u64();
+			if (value.size > 0) {
+				args_ptr[1] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ &u64_ty, 1 }, .constant = { .value = &buf_ptr->size } }));
+			} else {
+				args_ptr[1] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ &u64_ty, 1 } }));
+			}
+
+			return first(emplace_op(Node{ .kind = Node::VALLOC, .type = std::span{ &builtin_buffer, 1 }, .valloc = { .args = std::span(args_ptr, 2) } }));
 		}
 
 		Ref make_clear_image(Ref dst, Clear cv) {
@@ -272,7 +296,7 @@ namespace vuk {
 
 		Ref make_declare_fn(Type* const fn_ty) {
 			auto ty = new Type*(fn_ty);
-			return first(emplace_op(Node{ .kind = Node::DECLARE, .type = std::span{ ty, 1 }, .declare = {} }));
+			return first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ ty, 1 }, .constant = { nullptr } }));
 		}
 
 		template<class... Refs>
