@@ -190,6 +190,12 @@ namespace vuk {
 		return node->type[index];
 	}
 
+	template<class T>
+	T& constant(Ref ref) {
+		assert(ref.type()->kind == Type::INTEGER_TY || ref.type()->kind == Type::MEMORY_TY);
+		return *reinterpret_cast<T*>(ref.node->constant.value);
+	}
+
 	struct RG {
 		RG() {
 			builtin_image = &types.emplace_back(Type{ .kind = Type::IMAGE_TY });
@@ -263,13 +269,13 @@ namespace vuk {
 		Ref make_declare_buffer(Buffer value) {
 			auto buf_ptr = new Buffer(value); /* size rest */
 			auto args_ptr = new Ref[2];
-			auto mem_ty = emplace_type(Type{ .kind = Type::MEMORY_TY });
-			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ &mem_ty, 1 }, .constant = { .value = buf_ptr } }));
-			auto u64_ty = u64();
+			auto mem_ty = new Type*(emplace_type(Type{ .kind = Type::MEMORY_TY }));
+			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = buf_ptr } }));
+			auto u64_ty = new Type*(u64());
 			if (value.size > 0) {
-				args_ptr[1] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ &u64_ty, 1 }, .constant = { .value = &buf_ptr->size } }));
+				args_ptr[1] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ u64_ty, 1 }, .constant = { .value = &buf_ptr->size } }));
 			} else {
-				args_ptr[1] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ &u64_ty, 1 } }));
+				args_ptr[1] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ u64_ty, 1 } }));
 			}
 
 			return first(emplace_op(Node{ .kind = Node::VALLOC, .type = std::span{ &builtin_buffer, 1 }, .valloc = { .args = std::span(args_ptr, 2) } }));
