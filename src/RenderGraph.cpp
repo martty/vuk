@@ -74,8 +74,9 @@ namespace vuk {
 			for (auto& node : rg->op_arena) {
 				switch (node.kind) {
 				case Node::NOP:
+				case Node::CONSTANT:
 					break;
-				case Node::DECLARE:
+				case Node::VALLOC:
 					res_to_links[first(&node)].def = first(&node);
 					res_to_links[first(&node)].type = first(&node).type();
 					break;
@@ -179,7 +180,7 @@ namespace vuk {
 		for (auto& rg : rgs) {
 			for (auto& node : rg->op_arena) {
 				switch (node.kind) {
-				case Node::DECLARE:
+				case Node::VALLOC:
 				case Node::CALL:
 				case Node::CLEAR:
 				case Node::RELEASE:
@@ -229,7 +230,7 @@ namespace vuk {
 			ScheduledItem item{ .execable = execable,
 				                  .scheduled_domain =
 				                      execable->scheduling_info ? pick_first_domain(execable->scheduling_info->required_domain) : vuk::DomainFlagBits::eAny };
-			if (execable->kind != Node::DECLARE) { // we use def nodes for deps, but we don't want to schedule them later
+			if (execable->kind != Node::VALLOC) { // we use def nodes for deps, but we don't want to schedule them later as their ordering doesn't matter
 				scheduled_execables.push_back(item);
 			}
 			process_queue.pop_back();

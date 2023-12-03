@@ -461,16 +461,16 @@ namespace vuk {
 			// we run nodes twice - first time we reenqueue at the front and then put all deps before it
 			// second time we see it, we know that all deps have run, so we can run the node itself
 			switch (node->kind) {
-			case Node::DECLARE: { // when encountering a DECLARE, allocate the thing if needed
+			case Node::VALLOC: { // when encountering a DECLARE, allocate the thing if needed
 				if (node->type[0]->kind == Type::BUFFER_TY) {
-					auto& bound = *reinterpret_cast<Buffer*>(node->declare.value);
+					auto& bound = *reinterpret_cast<Buffer*>(node->valloc.args[0].node->constant.value);
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
 					fmt::print(" = declare<buffer>\n");
 #endif
 					if (bound.buffer == VK_NULL_HANDLE) {
 						BufferCreateInfo bci{ .mem_usage = bound.memory_usage, .size = bound.size, .alignment = 1 }; // TODO: alignment?
-						auto allocator = node->declare.allocator ? *node->declare.allocator : alloc;
+						auto allocator = node->valloc.allocator ? *node->valloc.allocator : alloc;
 						auto buf = allocate_buffer(allocator, bci);
 						if (!buf) {
 							return buf;
@@ -478,13 +478,13 @@ namespace vuk {
 						bound = **buf;
 					}
 				} else if (node->type[0]->kind == Type::IMAGE_TY) {
-					auto& attachment = *reinterpret_cast<ImageAttachment*>(node->declare.value);
+					auto& attachment = *reinterpret_cast<ImageAttachment*>(node->valloc.args[0].node->constant.value);
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
 					fmt::print(" = declare<image>\n");
 #endif
 					if (!attachment.image) {
-						auto allocator = node->declare.allocator ? *node->declare.allocator : alloc;
+						auto allocator = node->valloc.allocator ? *node->valloc.allocator : alloc;
 						assert(attachment.usage != ImageUsageFlags{});
 						auto img = allocate_image(allocator, attachment);
 						if (!img) {
@@ -538,8 +538,8 @@ namespace vuk {
 						QueueResourceUse dst_use = to_use(dst_access, dst_domain);
 
 						if (base_ty->is_image()) { // TODO: of course cross-queue barriers we need to issue twice
-							assert(link.urdef && link.urdef.node->kind == Node::DECLARE);
-							auto& img_att = *reinterpret_cast<ImageAttachment*>(link.urdef.node->declare.value);
+							assert(link.urdef && link.urdef.node->kind == Node::VALLOC);
+							auto& img_att = *reinterpret_cast<ImageAttachment*>(link.urdef.node->valloc.args[0].node->constant.value);
 							im_bars.push_back(impl->emit_image_barrier(src_use, dst_use, Subrange::Image{}, format_to_aspect(img_att.format), false));
 						} else {
 							mem_bars.push_back(impl->emit_memory_barrier(src_use, dst_use));
@@ -566,8 +566,8 @@ namespace vuk {
 						for (size_t i = 0; i < node->call.args.size(); i++) {
 							auto& parm = node->call.args[i];
 							auto& link = impl->res_to_links[parm];
-							assert(link.urdef && link.urdef.node->kind == Node::DECLARE);
-							opaque_args.push_back(link.urdef.node->declare.value);
+							assert(link.urdef && link.urdef.node->kind == Node::VALLOC);
+							opaque_args.push_back(link.urdef.node->valloc.args[0].node->constant.value);
 						}
 						opaque_rets.resize(node->call.fn.type()->opaque_fn.return_types.size());
 						(*node->call.fn.type()->opaque_fn.callback)(cobuf, opaque_args, opaque_rets);
