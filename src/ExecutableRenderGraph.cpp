@@ -461,12 +461,14 @@ namespace vuk {
 			switch (node->kind) {
 			case Node::VALLOC: { // when encountering a DECLARE, allocate the thing if needed
 				if (node->type[0]->kind == Type::BUFFER_TY) {
-					auto& bound = *reinterpret_cast<Buffer*>(node->valloc.args[0].node->constant.value);
+					auto& bound = constant<Buffer>(node->valloc.args[0]);
+					bound.size = constant<size_t>(node->valloc.args[1]); // collapse inferencing
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
 					fmt::print(" = declare<buffer>\n");
 #endif
 					if (bound.buffer == VK_NULL_HANDLE) {
+						assert(bound.size != ~(0u));
 						BufferCreateInfo bci{ .mem_usage = bound.memory_usage, .size = bound.size, .alignment = 1 }; // TODO: alignment?
 						auto allocator = node->valloc.allocator ? *node->valloc.allocator : alloc;
 						auto buf = allocate_buffer(allocator, bci);
