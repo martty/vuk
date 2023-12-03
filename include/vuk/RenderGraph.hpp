@@ -598,14 +598,14 @@ public:
 		std::shared_ptr<RG> rg = std::make_shared<RG>();
 		Ref ref = rg->make_declare_image(ia);
 		rg->name_outputs(ref.node, { name.c_str() });
-		return { rg, ref, reinterpret_cast<ImageAttachment*>(ref.node->declare.value) };
+		return { rg, ref, reinterpret_cast<ImageAttachment*>(ref.node->valloc.args[0].node->constant.value) };
 	}
 
 	[[nodiscard]] inline TypedFuture<Buffer> declare_buf(Name name, Buffer buf = {}) {
 		std::shared_ptr<RG> rg = std::make_shared<RG>();
 		Ref ref = rg->make_declare_buffer(buf);
 		rg->name_outputs(ref.node, { name.c_str() });
-		return { rg, ref, reinterpret_cast<Buffer*>(ref.node->declare.value) };
+		return { rg, ref, reinterpret_cast<Buffer*>(ref.node->valloc.args[0].node->constant.value) };
 	}
 
 	[[nodiscard]] inline TypedFuture<ImageAttachment> clear(TypedFuture<ImageAttachment> in, Clear clear_value) {
