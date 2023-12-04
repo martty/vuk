@@ -74,60 +74,6 @@ namespace vuk {
 		return ongoing_render_pass.value();
 	}
 
-	Result<Buffer> CommandBuffer::get_resource_buffer(Name n) const {
-		assert(rg);
-		auto res = rg->get_resource_buffer(NameReference::direct(n), current_pass);
-		if (!res) {
-			return { expected_error, res.error() };
-		}
-		return { expected_value, (*res)->buffer };
-	}
-
-	Result<Buffer> CommandBuffer::get_resource_buffer(const NameReference& n) const {
-		assert(rg);
-		auto res = rg->get_resource_buffer(n, current_pass);
-		if (!res) {
-			return { expected_error, res.error() };
-		}
-		return { expected_value, (*res)->buffer };
-	}
-
-	Result<Image> CommandBuffer::get_resource_image(Name n) const {
-		assert(rg);
-		auto res = rg->get_resource_image(NameReference::direct(n), current_pass);
-		if (!res) {
-			return { expected_error, res.error() };
-		}
-		return { expected_value, (*res)->attachment.image };
-	}
-
-	Result<ImageView> CommandBuffer::get_resource_image_view(Name n) const {
-		assert(rg);
-		auto res = rg->get_resource_image(NameReference::direct(n), current_pass);
-		if (!res) {
-			return { expected_error, res.error() };
-		}
-		return { expected_value, (*res)->attachment.image_view };
-	}
-
-	Result<ImageAttachment> CommandBuffer::get_resource_image_attachment(Name n) const {
-		assert(rg);
-		auto res = rg->get_resource_image(NameReference::direct(n), current_pass);
-		if (!res) {
-			return { expected_error, res.error() };
-		}
-		return { expected_value, (*res)->attachment };
-	}
-
-	Result<ImageAttachment> CommandBuffer::get_resource_image_attachment(const NameReference& n) const {
-		assert(rg);
-		auto res = rg->get_resource_image(n, current_pass);
-		if (!res) {
-			return { expected_error, res.error() };
-		}
-		return { expected_value, (*res)->attachment };
-	}
-
 	CommandBuffer& CommandBuffer::set_descriptor_set_strategy(DescriptorSetStrategyFlags ds_strategy_flags) {
 		this->ds_strategy_flags = ds_strategy_flags;
 		return *this;
@@ -298,20 +244,7 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::set_color_blend(Name att, PipelineColorBlendAttachmentState state) {
-		VUK_EARLY_RET();
-		assert(ongoing_render_pass);
-		/* auto resolved_name = rg->resolve_name(att, current_pass);
-		auto it = std::find(ongoing_render_pass->color_attachment_names.begin(), ongoing_render_pass->color_attachment_names.end(), resolved_name);
-		assert(it != ongoing_render_pass->color_attachment_names.end() && "Color attachment name not found.");
-		auto idx = std::distance(ongoing_render_pass->color_attachment_names.begin(), it);
-		set_color_blend_attachments.set(idx, true);
-		color_blend_attachments[idx] = state;
-		broadcast_color_blend_attachment_0 = false;*/
-		return *this;
-	}
-
-	CommandBuffer& CommandBuffer::set_color_blend(Name att, BlendPreset preset) {
+	CommandBuffer& CommandBuffer::set_color_blend(const ImageAttachment& att, BlendPreset preset) {
 		VUK_EARLY_RET();
 		return set_color_blend(att, blend_preset_to_pcba(preset));
 	}
@@ -395,16 +328,6 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, Name resource_name, unsigned first_location, Packed format_list) {
-		VUK_EARLY_RET();
-		auto res = rg->get_resource_buffer(NameReference::direct(resource_name), current_pass);
-		if (!res) {
-			current_error = std::move(res);
-			return *this;
-		}
-		return bind_vertex_buffer(binding, (*res)->buffer, first_location, format_list);
-	}
-
 	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, const Buffer& buf, std::span<VertexInputAttributeDescription> viads, uint32_t stride) {
 		VUK_EARLY_RET();
 		assert(binding < VUK_MAX_ATTRIBUTES && "Vertex buffer binding must be smaller than VUK_MAX_ATTRIBUTES.");
@@ -426,30 +349,10 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, Name resource_name, std::span<VertexInputAttributeDescription> viads, uint32_t stride) {
-		VUK_EARLY_RET();
-		auto res = rg->get_resource_buffer(NameReference::direct(resource_name), current_pass);
-		if (!res) {
-			current_error = std::move(res);
-			return *this;
-		}
-		return bind_vertex_buffer(binding, (*res)->buffer, viads, stride);
-	}
-
 	CommandBuffer& CommandBuffer::bind_index_buffer(const Buffer& buf, IndexType type) {
 		VUK_EARLY_RET();
 		ctx.vkCmdBindIndexBuffer(command_buffer, buf.buffer, buf.offset, (VkIndexType)type);
 		return *this;
-	}
-
-	CommandBuffer& CommandBuffer::bind_index_buffer(Name name, IndexType type) {
-		VUK_EARLY_RET();
-		auto res = rg->get_resource_buffer(NameReference::direct(name), current_pass);
-		if (!res) {
-			current_error = std::move(res);
-			return *this;
-		}
-		return bind_index_buffer((*res)->buffer, type);
 	}
 
 	CommandBuffer& CommandBuffer::set_primitive_topology(PrimitiveTopology topo) {
@@ -493,38 +396,10 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::bind_buffer(unsigned set, unsigned binding, Name name) {
-		VUK_EARLY_RET();
-		auto res = rg->get_resource_buffer(NameReference::direct(name), current_pass);
-		if (!res) {
-			current_error = std::move(res);
-			return *this;
-		}
-		return bind_buffer(set, binding, (*res)->buffer);
-	}
-
-	CommandBuffer& CommandBuffer::bind_image(unsigned set, unsigned binding, Name resource_name) {
-		VUK_EARLY_RET();
-		auto res = rg->get_resource_image(NameReference::direct(resource_name), current_pass);
-		if (!res) {
-			current_error = std::move(res);
-			return *this;
-		}
-		auto res_gl = rg->is_resource_image_in_general_layout(NameReference::direct(resource_name), current_pass);
-		if (!res_gl) {
-			current_error = std::move(res);
-			return *this;
-		}
-
-		auto layout = *res_gl ? ImageLayout::eGeneral : ImageLayout::eReadOnlyOptimalKHR;
-
-		return bind_image(set, binding, (*res)->attachment, layout);
-	}
-
-	CommandBuffer& CommandBuffer::bind_image(unsigned set, unsigned binding, const ImageAttachment& ia, ImageLayout layout) {
+	CommandBuffer& CommandBuffer::bind_image(unsigned set, unsigned binding, const ImageAttachment& ia) {
 		VUK_EARLY_RET();
 		if (ia.image_view != ImageView{}) {
-			bind_image(set, binding, ia.image_view, layout);
+			bind_image(set, binding, ia.image_view, ia.layout);
 		} else {
 			assert(ia.image);
 			auto res = allocate_image_view(*allocator, ia);
@@ -532,7 +407,7 @@ namespace vuk {
 				current_error = std::move(res);
 				return *this;
 			} else {
-				bind_image(set, binding, **res, layout);
+				bind_image(set, binding, **res, ia.layout);
 			}
 		}
 		return *this;
@@ -576,7 +451,7 @@ namespace vuk {
 		return *this;
 	}
 
-	void* CommandBuffer::_map_scratch_buffer(unsigned set, unsigned binding, size_t size) {
+	void* CommandBuffer::_scratch_buffer(unsigned set, unsigned binding, size_t size) {
 		if (!current_error) {
 			return nullptr;
 		}
@@ -634,16 +509,6 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::draw_indexed_indirect(size_t command_count, Name resource_name) {
-		VUK_EARLY_RET();
-		auto res = rg->get_resource_buffer(NameReference::direct(resource_name), current_pass);
-		if (!res) {
-			current_error = std::move(res);
-			return *this;
-		}
-		return draw_indexed_indirect(command_count, (*res)->buffer);
-	}
-
 	CommandBuffer& CommandBuffer::draw_indexed_indirect(std::span<DrawIndexedIndirectCommand> cmds) {
 		VUK_EARLY_RET();
 		if (!_bind_graphics_pipeline_state()) {
@@ -677,21 +542,6 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::draw_indexed_indirect_count(size_t max_command_count, Name indirect_resource_name, Name count_resource_name) {
-		VUK_EARLY_RET();
-		auto res = rg->get_resource_buffer(NameReference::direct(indirect_resource_name), current_pass);
-		if (!res) {
-			current_error = std::move(res);
-			return *this;
-		}
-		auto count_res = rg->get_resource_buffer(NameReference::direct(count_resource_name), current_pass);
-		if (!res) {
-			current_error = std::move(res);
-			return *this;
-		}
-		return draw_indexed_indirect_count(max_command_count, (*res)->buffer, (*count_res)->buffer);
-	}
-
 	CommandBuffer& CommandBuffer::dispatch(size_t size_x, size_t size_y, size_t size_z) {
 		VUK_EARLY_RET();
 		if (!_bind_compute_pipeline_state()) {
@@ -716,17 +566,6 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::dispatch_invocations_per_pixel(Name name,
-	                                                             float invocations_per_pixel_scale_x,
-	                                                             float invocations_per_pixel_scale_y,
-	                                                             float invocations_per_pixel_scale_z) {
-		auto extent = get_resource_image_attachment(name).value().extent.extent;
-
-		return dispatch_invocations((uint32_t)std::ceil(invocations_per_pixel_scale_x * extent.width),
-		                            (uint32_t)std::ceil(invocations_per_pixel_scale_y * extent.height),
-		                            (uint32_t)std::ceil(invocations_per_pixel_scale_z * extent.depth));
-	}
-
 	CommandBuffer& CommandBuffer::dispatch_invocations_per_pixel(ImageAttachment& ia,
 	                                                             float invocations_per_pixel_scale_x,
 	                                                             float invocations_per_pixel_scale_y,
@@ -736,12 +575,6 @@ namespace vuk {
 		return dispatch_invocations((uint32_t)std::ceil(invocations_per_pixel_scale_x * extent.width),
 		                            (uint32_t)std::ceil(invocations_per_pixel_scale_y * extent.height),
 		                            (uint32_t)std::ceil(invocations_per_pixel_scale_z * extent.depth));
-	}
-
-	CommandBuffer& CommandBuffer::dispatch_invocations_per_element(Name name, size_t element_size, float invocations_per_element_scale) {
-		auto count = (uint32_t)std::ceil(invocations_per_element_scale * idivceil(get_resource_buffer(name).value().size, element_size));
-
-		return dispatch_invocations(count, 1, 1);
 	}
 
 	CommandBuffer& CommandBuffer::dispatch_invocations_per_element(Buffer& buffer, size_t element_size, float invocations_per_element_scale) {
@@ -759,16 +592,6 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::dispatch_indirect(Name indirect_resource_name) {
-		VUK_EARLY_RET();
-		auto res = rg->get_resource_buffer(NameReference::direct(indirect_resource_name), current_pass);
-		if (!res) {
-			current_error = std::move(res);
-			return *this;
-		}
-		return dispatch_indirect((*res)->buffer);
-	}
-
 	CommandBuffer& CommandBuffer::trace_rays(size_t size_x, size_t size_y, size_t size_z) {
 		VUK_EARLY_RET();
 		if (!_bind_ray_tracing_pipeline_state()) {
@@ -782,60 +605,36 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::clear_image(Name src, Clear c) {
+	CommandBuffer& CommandBuffer::clear_image(const ImageAttachment& src, Clear c) {
 		VUK_EARLY_RET();
 
 		assert(rg);
-		auto res = rg->get_resource_image(NameReference::direct(src), current_pass);
-		if (!res) {
-			current_error = std::move(res);
-			return *this;
-		}
-
-		auto res_gl = rg->is_resource_image_in_general_layout(NameReference::direct(src), current_pass);
-		if (!res_gl) {
-			current_error = std::move(res_gl);
-			return *this;
-		}
-		auto layout = *res_gl ? ImageLayout::eGeneral : ImageLayout::eTransferDstOptimal;
 
 		VkImageSubresourceRange isr = {};
-		auto& attachment = (*res)->attachment;
-		auto aspect = format_to_aspect(attachment.format);
+		auto aspect = format_to_aspect(src.format);
 		isr.aspectMask = (VkImageAspectFlags)aspect;
-		isr.baseArrayLayer = attachment.base_layer;
-		isr.layerCount = attachment.layer_count;
-		isr.baseMipLevel = attachment.base_level;
-		isr.levelCount = attachment.level_count;
+		isr.baseArrayLayer = src.base_layer;
+		isr.layerCount = src.layer_count;
+		isr.baseMipLevel = src.base_level;
+		isr.levelCount = src.level_count;
 
 		if (aspect == ImageAspectFlagBits::eColor) {
-			ctx.vkCmdClearColorImage(command_buffer, attachment.image.image, (VkImageLayout)layout, &c.c.color, 1, &isr);
+			ctx.vkCmdClearColorImage(command_buffer, src.image.image, (VkImageLayout)src.layout, &c.c.color, 1, &isr);
 		} else if (aspect & (ImageAspectFlagBits::eDepth | ImageAspectFlagBits::eStencil)) {
-			ctx.vkCmdClearDepthStencilImage(command_buffer, attachment.image.image, (VkImageLayout)layout, &c.c.depthStencil, 1, &isr);
+			ctx.vkCmdClearDepthStencilImage(command_buffer, src.image.image, (VkImageLayout)src.layout, &c.c.depthStencil, 1, &isr);
 		}
 
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::resolve_image(Name src, Name dst) {
+	CommandBuffer& CommandBuffer::resolve_image(const ImageAttachment& src, const ImageAttachment& dst) {
 		VUK_EARLY_RET();
 		assert(rg);
 		VkImageResolve ir;
-		auto src_res = rg->get_resource_image(NameReference::direct(src), current_pass);
-		if (!src_res) {
-			current_error = std::move(src_res);
-			return *this;
-		}
-		auto src_image = (*src_res)->attachment.image;
-		auto dst_res = rg->get_resource_image(NameReference::direct(dst), current_pass);
-		if (!dst_res) {
-			current_error = std::move(dst_res);
-			return *this;
-		}
-		auto dst_image = (*dst_res)->attachment.image;
+
 		ImageSubresourceLayers isl;
 		ImageAspectFlagBits aspect;
-		if ((*dst_res)->attachment.format == Format::eD32Sfloat) {
+		if (dst.format == Format::eD32Sfloat) {
 			aspect = ImageAspectFlagBits::eDepth;
 		} else {
 			aspect = ImageAspectFlagBits::eColor;
@@ -849,59 +648,19 @@ namespace vuk {
 		ir.srcSubresource = isl;
 		ir.dstOffset = Offset3D{};
 		ir.dstSubresource = isl;
-		ir.extent = static_cast<Extent3D>((*src_res)->attachment.extent.extent);
+		ir.extent = static_cast<Extent3D>(src.extent.extent);
 
-		auto res_gl_src = rg->is_resource_image_in_general_layout(NameReference::direct(src), current_pass);
-		if (!res_gl_src) {
-			current_error = std::move(res_gl_src);
-			return *this;
-		}
-		auto res_gl_dst = rg->is_resource_image_in_general_layout(NameReference::direct(dst), current_pass);
-		if (!res_gl_dst) {
-			current_error = std::move(res_gl_dst);
-			return *this;
-		}
-
-		auto src_layout = *res_gl_src ? ImageLayout::eGeneral : ImageLayout::eTransferSrcOptimal;
-		auto dst_layout = *res_gl_dst ? ImageLayout::eGeneral : ImageLayout::eTransferDstOptimal;
-
-		ctx.vkCmdResolveImage(command_buffer, src_image.image, (VkImageLayout)src_layout, dst_image.image, (VkImageLayout)dst_layout, 1, &ir);
+		ctx.vkCmdResolveImage(command_buffer, src.image.image, (VkImageLayout)src.layout, dst.image.image, (VkImageLayout)dst.layout, 1, &ir);
 
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::blit_image(Name src, Name dst, ImageBlit region, Filter filter) {
+	CommandBuffer& CommandBuffer::blit_image(const ImageAttachment& src, const ImageAttachment& dst, ImageBlit region, Filter filter) {
 		VUK_EARLY_RET();
 		assert(rg);
-		auto src_res = rg->get_resource_image(NameReference::direct(src), current_pass);
-		if (!src_res) {
-			current_error = std::move(src_res);
-			return *this;
-		}
-		auto src_image = (*src_res)->attachment.image;
-		auto dst_res = rg->get_resource_image(NameReference::direct(dst), current_pass);
-		if (!dst_res) {
-			current_error = std::move(dst_res);
-			return *this;
-		}
-		auto dst_image = (*dst_res)->attachment.image;
-
-		auto res_gl_src = rg->is_resource_image_in_general_layout(NameReference::direct(src), current_pass);
-		if (!res_gl_src) {
-			current_error = std::move(res_gl_src);
-			return *this;
-		}
-		auto res_gl_dst = rg->is_resource_image_in_general_layout(NameReference::direct(dst), current_pass);
-		if (!res_gl_dst) {
-			current_error = std::move(res_gl_dst);
-			return *this;
-		}
-
-		auto src_layout = *res_gl_src ? ImageLayout::eGeneral : ImageLayout::eTransferSrcOptimal;
-		auto dst_layout = *res_gl_dst ? ImageLayout::eGeneral : ImageLayout::eTransferDstOptimal;
 
 		ctx.vkCmdBlitImage(
-		    command_buffer, src_image.image, (VkImageLayout)src_layout, dst_image.image, (VkImageLayout)dst_layout, 1, (VkImageBlit*)&region, (VkFilter)filter);
+		    command_buffer, src.image.image, (VkImageLayout)src.layout, dst.image.image, (VkImageLayout)dst.layout, 1, (VkImageBlit*)&region, (VkFilter)filter);
 
 		return *this;
 	}
@@ -942,81 +701,23 @@ namespace vuk {
 		return *this;	
 	}
 
-	CommandBuffer& CommandBuffer::copy_buffer_to_image(Name src, Name dst, BufferImageCopy bic) {
+
+	CommandBuffer& CommandBuffer::copy_buffer_to_image(const Buffer& src, const ImageAttachment& dst, BufferImageCopy bic) {
 		VUK_EARLY_RET();
 		assert(rg);
-		auto src_res = rg->get_resource_buffer(NameReference::direct(src), current_pass);
-		if (!src_res) {
-			current_error = std::move(src_res);
-			return *this;
-		}
-		auto src_bbuf = (*src_res)->buffer;
-		bic.bufferOffset += src_bbuf.offset;
-
-		auto dst_res = rg->get_resource_image(NameReference::direct(dst), current_pass);
-		if (!dst_res) {
-			current_error = std::move(dst_res);
-			return *this;
-		}
-		auto dst_image = (*dst_res)->attachment.image;
-
-		auto res_gl = rg->is_resource_image_in_general_layout(NameReference::direct(dst), current_pass);
-		if (!res_gl) {
-			current_error = std::move(res_gl);
-			return *this;
-		}
-		auto dst_layout = *res_gl ? ImageLayout::eGeneral : ImageLayout::eTransferDstOptimal;
-		ctx.vkCmdCopyBufferToImage(command_buffer, src_bbuf.buffer, dst_image.image, (VkImageLayout)dst_layout, 1, (VkBufferImageCopy*)&bic);
+		
+		ctx.vkCmdCopyBufferToImage(command_buffer, src.buffer, dst.image.image, (VkImageLayout)dst.layout, 1, (VkBufferImageCopy*)&bic);
 
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::copy_image_to_buffer(Name src, Name dst, BufferImageCopy bic) {
+	CommandBuffer& CommandBuffer::copy_image_to_buffer(const ImageAttachment& src, const Buffer& dst, BufferImageCopy bic) {
 		VUK_EARLY_RET();
 		assert(rg);
-		auto src_res = rg->get_resource_image(NameReference::direct(src), current_pass);
-		if (!src_res) {
-			current_error = std::move(src_res);
-			return *this;
-		}
-		auto src_image = (*src_res)->attachment.image;
-		auto dst_res = rg->get_resource_buffer(NameReference::direct(dst), current_pass);
-		if (!dst_res) {
-			current_error = std::move(dst_res);
-			return *this;
-		}
-		auto dst_bbuf = (*dst_res)->buffer;
 
-		bic.bufferOffset += dst_bbuf.offset;
-
-		auto res_gl = rg->is_resource_image_in_general_layout(NameReference::direct(src), current_pass);
-		if (!res_gl) {
-			current_error = std::move(res_gl);
-			return *this;
-		}
-		auto src_layout = *res_gl ? ImageLayout::eGeneral : ImageLayout::eTransferSrcOptimal;
-		ctx.vkCmdCopyImageToBuffer(command_buffer, src_image.image, (VkImageLayout)src_layout, dst_bbuf.buffer, 1, (VkBufferImageCopy*)&bic);
+		ctx.vkCmdCopyImageToBuffer(command_buffer, src.image.image, (VkImageLayout)src.layout, dst.buffer, 1, (VkBufferImageCopy*)&bic);
 
 		return *this;
-	}
-
-	CommandBuffer& CommandBuffer::copy_buffer(Name src, Name dst, size_t size) {
-		VUK_EARLY_RET();
-		assert(rg);
-		auto src_res = rg->get_resource_buffer(NameReference::direct(src), current_pass);
-		if (!src_res) {
-			current_error = std::move(src_res);
-			return *this;
-		}
-		auto src_bbuf = (*src_res)->buffer;
-		auto dst_res = rg->get_resource_buffer(NameReference::direct(dst), current_pass);
-		if (!dst_res) {
-			current_error = std::move(dst_res);
-			return *this;
-		}
-		auto dst_bbuf = (*dst_res)->buffer;
-
-		return copy_buffer(src_bbuf, dst_bbuf, size);
 	}
 
 	CommandBuffer& CommandBuffer::copy_buffer(const Buffer& src, const Buffer& dst, size_t size) {
@@ -1037,36 +738,9 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::fill_buffer(Name dst, size_t size, uint32_t data) {
-		VUK_EARLY_RET();
-		assert(rg);
-		auto dst_res = rg->get_resource_buffer(NameReference::direct(dst), current_pass);
-		if (!dst_res) {
-			current_error = std::move(dst_res);
-			return *this;
-		}
-		auto dst_bbuf = (*dst_res)->buffer;
-		
-		
-		return fill_buffer(dst_bbuf, size, data);
-	}
-
 	CommandBuffer& CommandBuffer::fill_buffer(const Buffer& dst, size_t size, uint32_t data) {
 		ctx.vkCmdFillBuffer(command_buffer, dst.buffer, dst.offset, size, data);
 		return *this;
-	}
-
-	CommandBuffer& CommandBuffer::update_buffer(Name dst, size_t size, void* data) {
-		VUK_EARLY_RET();
-		assert(rg);
-		auto dst_res = rg->get_resource_buffer(NameReference::direct(dst), current_pass);
-		if (!dst_res) {
-			current_error = std::move(dst_res);
-			return *this;
-		}
-		auto dst_bbuf = (*dst_res)->buffer;
-
-		return update_buffer(dst_bbuf, size, data);
 	}
 
 	CommandBuffer& CommandBuffer::update_buffer(const Buffer& dst, size_t size, void* data) {
@@ -1084,15 +758,9 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::image_barrier(Name src, vuk::Access src_acc, vuk::Access dst_acc, uint32_t mip_level, uint32_t level_count) {
+	CommandBuffer& CommandBuffer::image_barrier(const ImageAttachment& src, vuk::Access src_acc, vuk::Access dst_acc, uint32_t mip_level, uint32_t level_count) {
 		VUK_EARLY_RET();
 		assert(rg);
-		auto src_res = rg->get_resource_image(NameReference::direct(src), current_pass);
-		if (!src_res) {
-			current_error = std::move(src_res);
-			return *this;
-		}
-		auto src_image = (*src_res)->attachment.image;
 
 		// TODO: fill these out from attachment
 		VkImageSubresourceRange isr = {};
@@ -1102,19 +770,14 @@ namespace vuk {
 		isr.baseMipLevel = mip_level;
 		isr.levelCount = level_count;
 		VkImageMemoryBarrier imb{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
-		imb.image = src_image.image;
+		imb.image = src.image.image;
 		auto src_use = to_use(src_acc, DomainFlagBits::eAny);
 		auto dst_use = to_use(dst_acc, DomainFlagBits::eAny);
 		imb.srcAccessMask = (VkAccessFlags)src_use.access;
 		imb.dstAccessMask = (VkAccessFlags)dst_use.access;
 
-		auto res_gl = rg->is_resource_image_in_general_layout(NameReference::direct(src), current_pass);
-		if (!res_gl) {
-			current_error = std::move(res_gl);
-			return *this;
-		}
-
-		if (*res_gl) {
+		// TODO: questionable
+		if (src.layout == ImageLayout::eGeneral) {
 			imb.oldLayout = imb.newLayout = VK_IMAGE_LAYOUT_GENERAL;
 		} else {
 			imb.oldLayout = (VkImageLayout)src_use.layout;
