@@ -21,6 +21,7 @@ namespace vuk {
 		ImageViewCreateFlags image_view_flags = {};
 		ImageViewType view_type = ImageViewType::eInfer;
 		ComponentMapping components;
+		ImageLayout layout = ImageLayout::eUndefined;
 
 		uint32_t base_level = VK_REMAINING_MIP_LEVELS;
 		uint32_t level_count = VK_REMAINING_MIP_LEVELS;

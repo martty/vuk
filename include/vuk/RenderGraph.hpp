@@ -60,7 +60,7 @@ namespace vuk {
 		ImageAttachment* ptr;
 		Ref src;
 
-		operator ImageAttachment() {
+		operator const ImageAttachment&() {
 			return *ptr;
 		}
 	};
@@ -76,7 +76,7 @@ namespace vuk {
 		Buffer* ptr;
 		Ref src;
 
-		operator Buffer() {
+		operator const Buffer&() {
 			return *ptr;
 		}
 	};
@@ -714,9 +714,6 @@ public:
 		ExecutableRenderGraph& operator=(ExecutableRenderGraph&&) noexcept;
 
 		Result<SubmitBundle> execute(Allocator&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
-
-		Result<struct BufferInfo*, RenderGraphException> get_resource_buffer(const NameReference&, struct PassInfo*);
-		Result<struct AttachmentInfo*, RenderGraphException> get_resource_image(const NameReference&, struct PassInfo*);
 
 		Result<bool, RenderGraphException> is_resource_image_in_general_layout(const NameReference&, struct PassInfo* pass_info);
 

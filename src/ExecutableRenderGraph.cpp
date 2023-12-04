@@ -1240,49 +1240,6 @@ namespace vuk {
 		return { expected_value, std::move(sbundle) };
 	}
 
-	Result<BufferInfo*, RenderGraphException> ExecutableRenderGraph::get_resource_buffer(const NameReference& name_ref, PassInfo* pass_info) {
-		return { expected_error, RenderGraphException{} };
-		/*
-		for (auto& r : pass_info->resources.to_span(impl->resources)) {
-		  if (r.type == Resource::Type::eBuffer && r.original_name == name_ref.name.name && r.foreign == name_ref.rg) {
-		    auto& att = impl->get_bound_buffer(r.reference);
-		    return { expected_value, &att };
-		  }
-		}
-
-		return { expected_error, errors::make_cbuf_references_undeclared_resource(*pass_info, Resource::Type::eImage, name_ref.name.name) };*/
-	}
-
-	Result<AttachmentInfo*, RenderGraphException> ExecutableRenderGraph::get_resource_image(const NameReference& name_ref, PassInfo* pass_info) {
-		return { expected_error, RenderGraphException{} };
-
-		/*
-		for (auto& r : pass_info->resources.to_span(impl->resources)) {
-		  if (r.type == Resource::Type::eImage && r.original_name == name_ref.name.name && r.foreign == name_ref.rg) {
-		    auto& att = impl->get_bound_attachment(r.reference);
-		    auto parent_idx = att.parent_attachment;
-		    vuk::AttachmentInfo* parent = nullptr;
-		    if (parent_idx < 0) {
-		      while (parent_idx < 0) {
-		        parent = &impl->get_bound_attachment(parent_idx);
-		        parent_idx = parent->parent_attachment;
-		      }
-		      att.attachment.image = parent->attachment.image;
-		      att.attachment.base_layer = att.image_subrange.base_layer;
-		      att.attachment.base_level = att.image_subrange.base_level;
-		      att.attachment.layer_count =
-		          att.image_subrange.layer_count == VK_REMAINING_ARRAY_LAYERS ? att.attachment.layer_count : att.image_subrange.layer_count;
-		      att.attachment.level_count = att.image_subrange.level_count == VK_REMAINING_MIP_LEVELS ? att.attachment.level_count : att.image_subrange.level_count;
-		      att.attachment.view_type = parent->attachment.view_type;
-		      att.attachment.image_view = {};
-		    }
-		    return { expected_value, &att };
-		  }
-		}
-
-		return { expected_error, errors::make_cbuf_references_undeclared_resource(*pass_info, Resource::Type::eImage, name_ref.name.name) };*/
-	}
-
 	Result<bool, RenderGraphException> ExecutableRenderGraph::is_resource_image_in_general_layout(const NameReference& name_ref, PassInfo* pass_info) {
 		return { expected_error, RenderGraphException{} };
 
