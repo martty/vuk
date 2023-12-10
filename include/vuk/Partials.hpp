@@ -15,11 +15,11 @@ namespace vuk {
 	/// @param buffer Buffer to fill
 	/// @param src_data pointer to source data
 	/// @param size size of source data
-	inline Future host_data_to_buffer(Allocator& allocator, DomainFlagBits copy_domain, Buffer dst, const void* src_data, size_t size) {
+	inline TypedFuture<Buffer> host_data_to_buffer(Allocator& allocator, DomainFlagBits copy_domain, Buffer dst, const void* src_data, size_t size) {
 		// host-mapped buffers just get memcpys
 		if (dst.mapped_ptr) {
 			memcpy(dst.mapped_ptr, src_data, size);
-			return { std::move(dst) };
+			return { vuk::declare_buf("_dst", dst) };
 		}
 
 		auto src = *allocate_buffer(allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, 1 });
@@ -27,12 +27,13 @@ namespace vuk {
 
 		auto src_buf = vuk::declare_buf("_src", *src);
 		auto dst_buf = vuk::declare_buf("_dst", dst);
-		make_pass("BUFFER UPLOAD", [size](vuk::CommandBuffer& command_buffer, ) {
-			                command_buffer.copy_buffer("_src", "_dst", size);
-		                });
-		rgp->attach_buffer("_src", *src, vuk::Access::eNone);
-		rgp->attach_buffer("_dst", dst, vuk::Access::eNone);
-		return { std::move(rgp), "_dst+" };
+		auto pass =
+		    vuk::make_pass("upload buffer", [](vuk::CommandBuffer& command_buffer, VUK_BA(Access::eTransferRead) src, VUK_BA(Access::eTransferWrite) dst) {
+			    command_buffer.copy_buffer(src, dst);
+			    return dst;
+		    });
+		auto result = pass(src_buf, dst_buf);
+		return result;
 	}
 
 	/// @brief Fill a buffer with host data
@@ -41,30 +42,29 @@ namespace vuk {
 	/// @param dst Buffer to fill
 	/// @param data source data
 	template<class T>
-	Future host_data_to_buffer(Allocator& allocator, DomainFlagBits copy_domain, Buffer dst, std::span<T> data) {
+	TypedFuture<Buffer> host_data_to_buffer(Allocator& allocator, DomainFlagBits copy_domain, Buffer dst, std::span<T> data) {
 		return host_data_to_buffer(allocator, copy_domain, dst, data.data(), data.size_bytes());
 	}
 
 	/// @brief Download a buffer to GPUtoCPU memory
 	/// @param buffer_src Buffer to download
-	inline Future download_buffer(Future buffer_src) {
-		std::shared_ptr<RenderGraph> rgp = std::make_shared<RenderGraph>("download_buffer");
-		rgp->attach_in("src", std::move(buffer_src));
-		rgp->attach_buffer("dst", Buffer{ .memory_usage = MemoryUsage::eGPUtoCPU });
-		rgp->inference_rule("dst", same_size_as("src"));
-		rgp->add_pass(
-		    { .name = "copy", .resources = { "src"_buffer >> eTransferRead, "dst"_buffer >> eTransferWrite }, .execute = [](vuk::CommandBuffer& command_buffer) {
-			     command_buffer.copy_buffer("src", "dst", VK_WHOLE_SIZE);
-		     } });
-		return { rgp, "dst+" };
+	inline TypedFuture<Buffer> download_buffer(TypedFuture<Buffer> buffer_src) {
+		auto dst = declare_buf("dst", Buffer{ .memory_usage = MemoryUsage::eGPUtoCPU });
+		dst.same_size(buffer_src);
+		auto download =
+		    vuk::make_pass("download buffer", [](vuk::CommandBuffer& command_buffer, VUK_BA(Access::eTransferRead) src, VUK_BA(Access::eTransferWrite) dst) {
+			    command_buffer.copy_buffer(src, dst);
+			    return dst;
+		    });
+		return download(buffer_src, dst);
 	}
 
 	/// @brief Fill an image with host data
 	/// @param allocator Allocator to use for temporary allocations
-	/// @param copy_domain The domain where the copy should happen (when dst is mapped, the copy happens on host)
+	/// @param copy_domain The domain where the copy should happen
 	/// @param image ImageAttachment to fill
 	/// @param src_data pointer to source data
-	inline Future host_data_to_image(Allocator& allocator, DomainFlagBits copy_domain, ImageAttachment image, const void* src_data) {
+	inline TypedFuture<ImageAttachment> host_data_to_image(Allocator& allocator, DomainFlagBits copy_domain, ImageAttachment image, const void* src_data) {
 		size_t alignment = format_to_texel_block_size(image.format);
 		assert(image.extent.sizing == Sizing::eAbsolute);
 		size_t size = compute_image_size(image.format, static_cast<Extent3D>(image.extent.extent));
@@ -82,22 +82,21 @@ namespace vuk {
 		assert(image.layer_count == 1); // unsupported yet
 		bc.imageSubresource.layerCount = image.layer_count;
 
-		std::shared_ptr<RenderGraph> rgp = std::make_shared<RenderGraph>("host_data_to_image");
-		rgp->add_pass({ .name = "IMAGE UPLOAD",
-		                .execute_on = copy_domain,
-		                .resources = { "_dst"_image >> vuk::Access::eTransferWrite, "_src"_buffer >> vuk::Access::eTransferRead },
-		                .execute = [bc](vuk::CommandBuffer& command_buffer) {
-			                command_buffer.copy_buffer_to_image("_src", "_dst", bc);
-		                } });
-		rgp->attach_buffer("_src", *src, vuk::Access::eNone);
-		rgp->attach_image("_dst", image, vuk::Access::eNone);
-		return { std::move(rgp), "_dst+" };
+		auto srcbuf = declare_buf("src", *src);
+		auto dst = declare_ia("dst", image);
+		auto image_upload =
+		    vuk::make_pass("image upload", [bc](vuk::CommandBuffer& command_buffer, VUK_BA(Access::eTransferRead) src, VUK_IA(Access::eTransferWrite) dst) {
+			    command_buffer.copy_buffer_to_image(src, dst, bc);
+			    return dst;
+		    });
+
+		return image_upload(srcbuf, dst);
 	}
 
 	/// @brief Transition image for given access - useful to force certain access across different RenderGraphs linked by Futures
 	/// @param image input Future of ImageAttachment
 	/// @param dst_access Access to have in the future
-	inline Future transition(Future image, Access dst_access) {
+	/* inline Future transition(Future image, Access dst_access) {
 		std::shared_ptr<RenderGraph> rgp = std::make_shared<RenderGraph>("transition");
 		rgp->add_pass({ .name = "TRANSITION",
 		                .execute_on = DomainFlagBits::eDevice,
@@ -154,27 +153,28 @@ namespace vuk {
 				                blit.srcSubresource.mipLevel = src_ia.base_level;
 				                blit.srcOffsets[0] = Offset3D{ 0 };
 				                blit.srcOffsets[1] = Offset3D{ std::max((int32_t)extent.width >> (dmiplevel - 1), 1),
-                                                               std::max((int32_t)extent.height >> (dmiplevel - 1), 1),
-                                                               std::max((int32_t)extent.depth >> (dmiplevel - 1), 1) };
+					                                             std::max((int32_t)extent.height >> (dmiplevel - 1), 1),
+					                                             std::max((int32_t)extent.depth >> (dmiplevel - 1), 1) };
 				                blit.dstSubresource = blit.srcSubresource;
 				                blit.dstSubresource.mipLevel = dst_ia.base_level;
 				                blit.dstOffsets[0] = Offset3D{ 0 };
 				                blit.dstOffsets[1] = Offset3D{ std::max((int32_t)extent.width >> (dmiplevel), 1),
-                                                               std::max((int32_t)extent.height >> (dmiplevel), 1),
-                                                               std::max((int32_t)extent.depth >> (dmiplevel), 1) };
+					                                             std::max((int32_t)extent.height >> (dmiplevel), 1),
+					                                             std::max((int32_t)extent.depth >> (dmiplevel), 1) };
 				                command_buffer.blit_image(mip_src_name, mip_dst_name, blit, Filter::eLinear);
 			                } });
 		}
 
 		rgp->converge_image_explicit(diverged_names, "_src+");
 		return { std::move(rgp), "_src+" };
-	}
+	}*/
 
 	/// @brief Allocates & fills a buffer with explicitly managed lifetime
 	/// @param allocator Allocator to allocate this Buffer from
 	/// @param mem_usage Where to allocate the buffer (host visible buffers will be automatically mapped)
 	template<class T>
-	std::pair<Unique<Buffer>, Future> create_buffer(Allocator& allocator, vuk::MemoryUsage memory_usage, DomainFlagBits domain, std::span<T> data, size_t alignment = 1) {
+	std::pair<Unique<Buffer>, TypedFuture<Buffer>>
+	create_buffer(Allocator& allocator, vuk::MemoryUsage memory_usage, DomainFlagBits domain, std::span<T> data, size_t alignment = 1) {
 		Unique<Buffer> buf(allocator);
 		BufferCreateInfo bci{ memory_usage, sizeof(T) * data.size(), alignment };
 		auto ret = allocator.allocate_buffers(std::span{ &*buf, 1 }, std::span{ &bci, 1 }); // TODO: dropping error
@@ -188,7 +188,8 @@ namespace vuk {
 	/// @param extent Extent3D of the image
 	/// @param data pointer to data to fill the image with
 	/// @param should_generate_mips if true, all mip levels are generated from the 0th level
-	inline std::pair<Texture, Future> create_texture(Allocator& allocator, Format format, Extent3D extent, void* data, bool should_generate_mips, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
+	/* inline std::pair<Texture, Future>
+	create_texture(Allocator& allocator, Format format, Extent3D extent, void* data, bool should_generate_mips, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 		ImageCreateInfo ici;
 		ici.format = format;
 		ici.extent = extent;
@@ -211,5 +212,5 @@ namespace vuk {
 		auto on_gfx = Future{ std::move(rgp), "_src+" };
 
 		return { std::move(tex), std::move(on_gfx) };
-	}
+	}*/
 } // namespace vuk

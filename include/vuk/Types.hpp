@@ -290,6 +290,9 @@ namespace vuk {
 		static Dimension3D absolute(Extent2D extent) noexcept {
 			return Dimension3D{ .extent = static_cast<Extent3D>(extent) };
 		}
+		static Dimension3D absolute(Extent3D extent) noexcept {
+			return Dimension3D{ .extent = static_cast<Extent3D>(extent) };
+		}
 		static Dimension3D relative(float width, float height) noexcept {
 			return Dimension3D{ .sizing = Sizing::eRelative, ._relative = { .width = width, .height = height } };
 		}
