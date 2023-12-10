@@ -52,13 +52,14 @@ namespace vuk {
 	template<Access acc, class T, StringLiteral N = "">
 	struct IA {
 		static constexpr Access access = acc;
-		using base = Image;
+		using base = ImageAttachment;
 		using attach = ImageAttachment;
 		static constexpr StringLiteral identifier = N;
 		static constexpr Type::TypeKind kind = Type::IMAGE_TY;
 
 		ImageAttachment* ptr;
 		Ref src;
+		Ref def;
 
 		operator const ImageAttachment&() {
 			return *ptr;
@@ -75,6 +76,7 @@ namespace vuk {
 
 		Buffer* ptr;
 		Ref src;
+		Ref def;
 
 		operator const Buffer&() {
 			return *ptr;
@@ -515,7 +517,7 @@ public:
 	static auto make_ret(std::shared_ptr<RG> rg, Node* node, const std::tuple<T...>& us) {
 		if constexpr (sizeof...(T) > 0) {
 			size_t i = 0;
-			return std::make_tuple(TypedFuture<typename T::base>{ rg, { node, i++ }, std::get<T>(us).ptr }...);
+			return std::make_tuple(TypedFuture<typename T::base>{ rg, { node, i++ }, std::get<T>(us).def }...);
 		}
 	}
 
@@ -563,7 +565,7 @@ public:
 				}(args...);
 
 				std::vector<Type*> arg_types;
-				std::tuple arg_tuple_as_a = { T{ args.operator->(), args.get_head() }... };
+				std::tuple arg_tuple_as_a = { T{ args.operator->(), args.get_head(), args.get_def() }... };
 				fill_arg_ty(rg, arg_tuple_as_a, arg_types);
 
 				std::vector<Type*> ret_types;
@@ -582,7 +584,8 @@ public:
 					auto [idxs, ret_tuple] = intersect_tuples<std::tuple<T...>, Ret>(arg_tuple_as_a);
 					return make_ret(rgp, node, ret_tuple);
 				} else if constexpr (!std::is_same_v<Ret, void>) {
-					return std::remove_reference_t<decltype(first)>{ rgp, vuk::first(node), first.get_def() };
+					auto [idxs, ret_tuple] = intersect_tuples<std::tuple<T...>, std::tuple<Ret>>(arg_tuple_as_a);
+					return std::get<0>(make_ret(rgp, node, ret_tuple));
 				}
 			};
 		}

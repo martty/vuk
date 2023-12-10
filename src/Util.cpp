@@ -576,7 +576,9 @@ namespace vuk {
 			std::pair v = { &allocator, &*erg };
 			VUK_DO_OR_RETURN(execute_submit(allocator, std::span{ &v, 1 }, {}, {}, {}));
 			assert(acqrel.status != Signal::Status::eDisarmed);
-			allocator.get_context().wait_for_domains(std::span{ &acqrel.source, 1 });
+			if (acqrel.status == Signal::Status::eSynchronizable) {
+				allocator.get_context().wait_for_domains(std::span{ &acqrel.source, 1 });
+			}
 			acqrel.status = Signal::Status::eHostAvailable;
 			return { expected_value };
 		}

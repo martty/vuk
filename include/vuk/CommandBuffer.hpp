@@ -548,18 +548,15 @@ namespace vuk {
 		/// @brief Copy between two Buffers
 		/// @param src the source Buffer
 		/// @param dst the destination Buffer
-		/// @param size number of bytes to copy (VK_WHOLE_SIZE to copy the entire "src" buffer)
-		CommandBuffer& copy_buffer(const Buffer& src, const Buffer& dst, size_t size);
+		CommandBuffer& copy_buffer(const Buffer& src, const Buffer& dst);
 		/// @brief Fill a buffer with a fixed value
 		/// @param dst the destination Buffer
-		/// @param size number of bytes to fill
 		/// @param data the 4 byte value to fill with
-		CommandBuffer& fill_buffer(const Buffer& dst, size_t size, uint32_t data);
+		CommandBuffer& fill_buffer(const Buffer& dst, uint32_t data);
 		/// @brief Fill a buffer with a host values
 		/// @param dst the destination Buffer
-		/// @param size number of bytes to fill
 		/// @param data pointer to host values
-		CommandBuffer& update_buffer(const Buffer& dst, size_t size, void* data);
+		CommandBuffer& update_buffer(const Buffer& dst, const void* data);
 
 		// explicit synchronisation
 
