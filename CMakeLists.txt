@@ -194,7 +194,7 @@ if(VUK_BUILD_TESTS)
 	FetchContent_MakeAvailable(vk-bootstrap)
 
 	include(doctest_force_link_static_lib_in_target) # until we can use cmake 3.24
-	add_executable(vuk-tests src/tests/Test.cpp src/tests/rewrite.cpp)
+	add_executable(vuk-tests src/tests/Test.cpp src/tests/buffer_ops.cpp)
 	#target_compile_features(vuk-tests PRIVATE cxx_std_17)
 	target_link_libraries(vuk-tests PRIVATE vuk doctest::doctest vk-bootstrap)
 	target_compile_definitions(vuk-tests PRIVATE VUK_TEST_RUNNER)

@@ -394,6 +394,9 @@ namespace vuk {
 		};
 
 		auto flush_domain = [&](vuk::DomainFlagBits domain) -> SubmitInfo* {
+			if (domain == DomainFlagBits::eHost) {
+				return nullptr;
+			}
 			size_t index = ctx.domain_to_queue_family_index(domain);
 			auto& queue_rec = ongoing_queue_recordings[index];
 
@@ -627,12 +630,7 @@ namespace vuk {
 					print_args(std::span{ &node->release.src, 1 });
 					fmt::print("\n");
 #endif
-					auto batch = flush_domain(src_domain);
-					if (!batch) {
-						continue;
-					}
 					auto& acqrel = node->release.release;
-					batch->future_signals.push_back(acqrel);
 					Access src_access = Access::eNone;
 					Access dst_access = Access::eNone;
 
@@ -652,6 +650,14 @@ namespace vuk {
 						src_access = Access::eNone;
 					}
 					acqrel->last_use = src_access;
+					if (src_domain == DomainFlagBits::eHost) {
+						acqrel->status = Signal::Status::eHostAvailable;
+					}
+					auto batch = flush_domain(src_domain);
+					if (!batch) {
+						continue;
+					}
+					batch->future_signals.push_back(acqrel);
 					fmt::print("");
 				} else {
 					item.ready = true;
