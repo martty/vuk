@@ -83,7 +83,7 @@ namespace vuk {
 			language = o.language;
 			hlsl_stage = o.hlsl_stage;
 			entry_point = o.entry_point;
-			
+
 			return *this;
 		}
 
@@ -156,7 +156,7 @@ namespace vuk {
 		if (a.data_ptr == b.data_ptr) {
 			return true;
 		}
-		return memcmp(a.data_ptr, b.data_ptr, a.size) == 0;
+		return memcmp(a.data_ptr, b.data_ptr, sizeof(uint32_t) * a.size) == 0;
 	}
 
 	struct ShaderModuleCreateInfo {
