@@ -1,11 +1,15 @@
-#pragma once 
-#include "vuk/Config.hpp"
+#pragma once
+#include "renderdoc_app.h"
 #include "vuk/Allocator.hpp"
 #include "vuk/AllocatorHelpers.hpp"
 #include "vuk/CommandBuffer.hpp"
+#include "vuk/Config.hpp"
 #include "vuk/Context.hpp"
 #include "vuk/RenderGraph.hpp"
 #include "vuk/resources/DeviceFrameResource.hpp"
+#ifdef WIN32
+#include <Windows.h>
+#endif
 #include <VkBootstrap.h>
 
 namespace vuk {
@@ -21,6 +25,7 @@ namespace vuk {
 		vkb::Device vkbdevice;
 		std::optional<DeviceSuperFrameResource> sfa_resource;
 		std::optional<Allocator> allocator;
+		RENDERDOC_API_1_6_0* rdoc_api = NULL;
 
 		bool bringup() {
 			vkb::InstanceBuilder builder;
@@ -123,11 +128,27 @@ namespace vuk {
 			sfa_resource.emplace(*context, num_inflight_frames);
 			allocator.emplace(*sfa_resource);
 			needs_bringup = false;
+#ifdef WIN32
+			// At init, on windows
+			if (HMODULE mod = GetModuleHandleA("renderdoc.dll")) {
+				pRENDERDOC_GetAPI RENDERDOC_GetAPI = (pRENDERDOC_GetAPI)GetProcAddress(mod, "RENDERDOC_GetAPI");
+				int ret = RENDERDOC_GetAPI(eRENDERDOC_API_Version_1_6_0, (void**)&rdoc_api);
+				if (ret != 1) {
+					rdoc_api = nullptr;
+				}
+			}
+#endif // WIN32
+
+			if (rdoc_api)
+				rdoc_api->StartFrameCapture(NULL, NULL);
 			return true;
 		}
 
 		bool teardown() {
 			context->wait_idle();
+			sfa_resource.reset();
+			if (rdoc_api)
+				rdoc_api->EndFrameCapture(NULL, NULL);
 			context.reset();
 			vkb::destroy_device(vkbdevice);
 			vkb::destroy_instance(vkbinstance);
@@ -149,7 +170,37 @@ namespace vuk {
 			// resource.drop_all();
 			return true;
 		}
+
+		~TestContext() {
+			teardown();
+		}
 	};
 
 	extern TestContext test_context;
 } // namespace vuk
+
+// helpers for testing
+
+constexpr bool operator==(const std::span<uint32_t>& lhs, const std::span<uint32_t>& rhs) {
+	return std::equal(begin(lhs), end(lhs), begin(rhs), end(rhs));
+}
+
+constexpr bool operator==(const std::span<uint32_t>& lhs, const std::span<const uint32_t>& rhs) {
+	return std::equal(begin(lhs), end(lhs), begin(rhs), end(rhs));
+}
+
+constexpr bool operator==(const std::span<const uint32_t>& lhs, const std::span<const uint32_t>& rhs) {
+	return std::equal(begin(lhs), end(lhs), begin(rhs), end(rhs));
+}
+
+constexpr bool operator==(const std::span<float>& lhs, const std::span<float>& rhs) {
+	return std::equal(begin(lhs), end(lhs), begin(rhs), end(rhs));
+}
+
+constexpr bool operator==(const std::span<float>& lhs, const std::span<const float>& rhs) {
+	return std::equal(begin(lhs), end(lhs), begin(rhs), end(rhs));
+}
+
+constexpr bool operator==(const std::span<const float>& lhs, const std::span<const float>& rhs) {
+	return std::equal(begin(lhs), end(lhs), begin(rhs), end(rhs));
+}
