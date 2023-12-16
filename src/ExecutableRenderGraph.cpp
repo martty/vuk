@@ -546,6 +546,8 @@ namespace vuk {
 							assert(link.urdef && link.urdef.node->kind == Node::VALLOC);
 							auto& img_att = *reinterpret_cast<ImageAttachment*>(link.urdef.node->valloc.args[0].node->constant.value);
 							im_bars.push_back(impl->emit_image_barrier(src_use, dst_use, Subrange::Image{}, format_to_aspect(img_att.format), false));
+							im_bars.back().image = img_att.image.image;
+							img_att.layout = (ImageLayout)im_bars.back().newLayout;
 						} else {
 							mem_bars.push_back(impl->emit_memory_barrier(src_use, dst_use));
 						}
@@ -581,7 +583,7 @@ namespace vuk {
 					}
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
-					fmt::print(" = call ");
+					fmt::print(" = call [{}] ", static_cast<uint32_t>(dst_domain));
 					if (node->call.fn.type()->debug_info) {
 						fmt::print("<{}> ", node->call.fn.type()->debug_info->name);
 					}
