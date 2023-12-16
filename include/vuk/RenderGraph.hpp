@@ -64,6 +64,10 @@ namespace vuk {
 		operator const ImageAttachment&() {
 			return *ptr;
 		}
+
+		const ImageAttachment* operator->() const {
+			return ptr;
+		}
 	};
 
 	template<Access acc, class T, StringLiteral N = "">
@@ -80,6 +84,10 @@ namespace vuk {
 
 		operator const Buffer&() {
 			return *ptr;
+		}
+
+		const Buffer* operator->() const {
+			return ptr;
 		}
 	};
 

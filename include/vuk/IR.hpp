@@ -262,12 +262,32 @@ namespace vuk {
 		}
 
 		Ref make_declare_image(ImageAttachment value) {
-			assert(0);
-			return first(emplace_op(Node{ .kind = Node::VALLOC, .type = std::span{ &builtin_image, 1 }, .valloc = {} }));
+			auto ptr = new ImageAttachment(value); /* rest extent_x extent_y extent_z */
+			auto args_ptr = new Ref[4];
+			auto mem_ty = new Type*(emplace_type(Type{ .kind = Type::MEMORY_TY }));
+			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = ptr } }));
+			auto u64_ty = new Type*(u64());
+			if (value.extent.extent.width > 0) {
+				args_ptr[1] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ u64_ty, 1 }, .constant = { .value = &ptr->extent.extent.width } }));
+			} else {
+				args_ptr[1] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ u64_ty, 1 } }));
+			}
+			if (value.extent.extent.height > 0) {
+				args_ptr[2] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ u64_ty, 1 }, .constant = { .value = &ptr->extent.extent.height } }));
+			} else {
+				args_ptr[2] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ u64_ty, 1 } }));
+			}
+			if (value.extent.extent.depth > 0) {
+				args_ptr[3] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ u64_ty, 1 }, .constant = { .value = &ptr->extent.extent.depth } }));
+			} else {
+				args_ptr[3] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ u64_ty, 1 } }));
+			}
+
+			return first(emplace_op(Node{ .kind = Node::VALLOC, .type = std::span{ &builtin_image, 1 }, .valloc = { .args = std::span(args_ptr, 4) } }));
 		}
 
 		Ref make_declare_buffer(Buffer value) {
-			auto buf_ptr = new Buffer(value); /* size rest */
+			auto buf_ptr = new Buffer(value); /* rest size */
 			auto args_ptr = new Ref[2];
 			auto mem_ty = new Type*(emplace_type(Type{ .kind = Type::MEMORY_TY }));
 			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = buf_ptr } }));

@@ -809,7 +809,7 @@ namespace vuk {
 		barrier.subresourceRange.levelCount = subrange.level_count;
 		assert(last_use.domain.m_mask != 0);
 		assert(current_use.domain.m_mask != 0);
-		if (last_use.domain == DomainFlagBits::eAny) {
+		if (last_use.domain == DomainFlagBits::eAny || last_use.domain == DomainFlagBits::eHost) {
 			last_use.domain = current_use.domain;
 		}
 		if (current_use.domain == DomainFlagBits::eAny) {

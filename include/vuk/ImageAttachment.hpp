@@ -64,19 +64,30 @@ namespace vuk {
 				                      .layer_count = t.layer_count };
 		}
 
+		enum class MipPreset {
+			eNoMips,
+			eFullMips
+		};
+
+		enum class UsagePreset {
+			eUpload, eDownload, eCopy, eRender, eStore
+		};
+
 		enum class Preset {
-			eMap1D,         // 1D image sampled, never rendered to. Full mip chain. No arraying.
-			eMap2D,         // 2D image sampled, never rendered to. Full mip chain. No arraying.
-			eMap3D,         // 3D image sampled, never rendered to. Full mip chain. No arraying.
-			eMapCube,       // Cubemap sampled, never rendered to. Full mip chain. No arraying.
+			eMap1D,         // 1D image with upload, sampled, never rendered to. Full mip chain. No arraying.
+			eMap2D,         // 2D image with upload, sampled, never rendered to. Full mip chain. No arraying.
+			eMap3D,         // 3D image with upload, sampled, never rendered to. Full mip chain. No arraying.
+			eMapCube,       // Cubemap with upload, sampled, never rendered to. Full mip chain. No arraying.
 			eRTT2D,         // 2D image sampled and rendered to. Full mip chain. No arraying.
 			eRTTCube,       // Cubemap sampled and rendered to. Full mip chain. No arraying.
 			eRTT2DUnmipped, // 2D image sampled and rendered to. No mip chain. No arraying.
 			eSTT2DUnmipped, // 2D image sampled and stored to. No mip chain. No arraying.
+			eGeneric2D,     // 2D image with upload, download, sampling, rendering and storing. Full mip chain. No arraying.
 		};
 
 		static ImageAttachment from_preset(Preset preset, Format format, Extent3D extent, Samples sample_count) {
 			ImageAttachment ia = {};
+			ia.usage = {};
 			ia.format = format;
 			ia.extent = Dimension3D::absolute(extent);
 			ia.sample_count = sample_count;
@@ -101,6 +112,13 @@ namespace vuk {
 			case Preset::eSTT2DUnmipped:
 				ia.usage |= ImageUsageFlagBits::eStorage | ImageUsageFlagBits::eSampled;
 				break;
+			case Preset::eGeneric2D:
+				ia.usage |= ImageUsageFlagBits::eStorage | ImageUsageFlagBits::eTransferDst | ImageUsageFlagBits::eTransferSrc | ImageUsageFlagBits::eSampled;
+				if (aspect & ImageAspectFlagBits::eColor)
+					ia.usage |= ImageUsageFlagBits::eColorAttachment;
+				if (aspect & (ImageAspectFlagBits::eDepth | ImageAspectFlagBits::eStencil))
+					ia.usage |= ImageUsageFlagBits::eDepthStencilAttachment;
+				break;
 			default:
 				assert(0);
 			}
@@ -120,6 +138,7 @@ namespace vuk {
 			case Preset::eMap2D:
 			case Preset::eRTT2D:
 			case Preset::eRTT2DUnmipped:
+			case Preset::eGeneric2D:
 				ia.view_type = ImageViewType::e2D;
 				break;
 			case Preset::eMap3D:

@@ -81,6 +81,7 @@ namespace vuk {
 		bc.imageSubresource.baseArrayLayer = image.base_layer;
 		assert(image.layer_count == 1); // unsupported yet
 		bc.imageSubresource.layerCount = image.layer_count;
+		bc.bufferOffset = src->offset;
 
 		auto srcbuf = declare_buf("src", *src);
 		auto dst = declare_ia("dst", image);
