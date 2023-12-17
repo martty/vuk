@@ -5,21 +5,14 @@
 
 using namespace vuk;
 
-TEST_CASE("test text_context preparation") {
-	REQUIRE(test_context.prepare());
-}
-
-/*
-TEST_CASE("test buffer harness") {
-	REQUIRE(test_context.prepare());
+TEST_CASE("buffer harness") {
 	auto data = { 1u, 2u, 3u };
 	auto [buf, fut] = create_buffer(*test_context.allocator, MemoryUsage::eCPUtoGPU, vuk::DomainFlagBits::eTransferOnTransfer, std::span(data));
 	auto res = fut.get(*test_context.allocator, test_context.compiler);
 	CHECK(std::span((uint32_t*)res->mapped_ptr, 3) == std::span(data));
 }
 
-TEST_CASE("test buffer upload/download") {
-	REQUIRE(test_context.prepare());
+TEST_CASE("buffer upload/download") {
 	{
 		auto data = { 1u, 2u, 3u };
 		auto [buf, fut] = create_buffer(*test_context.allocator, MemoryUsage::eGPUonly, DomainFlagBits::eAny, std::span(data));
@@ -36,8 +29,7 @@ TEST_CASE("test buffer upload/download") {
 	}
 }
 
-TEST_CASE("test buffer fill & update") {
-	REQUIRE(test_context.prepare());
+TEST_CASE("buffer fill & update") {
 	{
 		auto data = { 0xfeu, 0xfeu, 0xfeu, 0xfeu };
 		auto buf = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
@@ -62,7 +54,7 @@ TEST_CASE("test buffer fill & update") {
 		auto res = download_buffer(fill(declare_buf("src", **buf))).get(*test_context.allocator, test_context.compiler);
 		CHECK(std::span((uint32_t*)res->mapped_ptr, 4) == std::span(data));
 	}
-}*/
+}
 
 std::pair<Unique<Image>, TypedFuture<ImageAttachment>>
 create_image(Allocator& allocator, DomainFlagBits copy_domain, ImageAttachment ia, const void* data, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
@@ -93,8 +85,7 @@ auto image2buf = make_pass("copy image to buffer", [](CommandBuffer& cbuf, VUK_I
 	return dst;
 });
 
-TEST_CASE("test image upload/download") {
-	REQUIRE(test_context.prepare());
+TEST_CASE("image upload/download") {
 	{
 		auto data = { 1u, 2u, 3u, 4u };
 		auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, Samples::e1);
