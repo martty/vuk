@@ -11,6 +11,7 @@
 #include <Windows.h>
 #endif
 #include <VkBootstrap.h>
+#include <mutex>
 
 namespace vuk {
 	struct TestContext {
@@ -27,7 +28,7 @@ namespace vuk {
 		std::optional<Allocator> allocator;
 		RENDERDOC_API_1_6_0* rdoc_api = NULL;
 
-		bool bringup() {
+		void bringup() {
 			vkb::InstanceBuilder builder;
 			builder.request_validation_layers()
 			    .set_debug_callback([](VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
@@ -124,10 +125,8 @@ namespace vuk {
 			                                         transfer_queue,
 			                                         transfer_queue_family_index,
 			                                         fps });
-			const unsigned num_inflight_frames = 3;
-			sfa_resource.emplace(*context, num_inflight_frames);
-			allocator.emplace(*sfa_resource);
 			needs_bringup = false;
+			needs_teardown = true;
 #ifdef WIN32
 			// At init, on windows
 			if (HMODULE mod = GetModuleHandleA("renderdoc.dll")) {
@@ -138,41 +137,48 @@ namespace vuk {
 				}
 			}
 #endif // WIN32
-
-			if (rdoc_api)
-				rdoc_api->StartFrameCapture(NULL, NULL);
-			return true;
 		}
 
-		bool teardown() {
+		void start(const char* name) {
+			if (needs_bringup) {
+				bringup();
+			}
+
+			const unsigned num_inflight_frames = 3;
+			sfa_resource.emplace(*context, num_inflight_frames);
+			allocator.emplace(*sfa_resource);
+
+			if (rdoc_api) {
+				rdoc_api->StartFrameCapture(NULL, NULL);
+				rdoc_api->SetCaptureTitle(name);
+			}
+		}
+
+		void finish() {
 			context->wait_idle();
 			sfa_resource.reset();
 			if (rdoc_api)
 				rdoc_api->EndFrameCapture(NULL, NULL);
+#ifdef VUK_TEST_FULL_ISOLATION
+			teardown();
+#endif
+		}
+
+		void teardown() {
 			context.reset();
 			vkb::destroy_device(vkbdevice);
 			vkb::destroy_instance(vkbinstance);
-			return true;
+			needs_bringup = true;
+			needs_teardown = false;
 		}
 
 		bool needs_teardown = false;
 		bool needs_bringup = true;
 
-		bool prepare() {
-			if (needs_teardown) {
-				if (!teardown())
-					return false;
-			}
-			if (needs_bringup) {
-				if (!bringup())
-					return false;
-			}
-			// resource.drop_all();
-			return true;
-		}
-
 		~TestContext() {
-			teardown();
+			if (needs_teardown) {
+				teardown();
+			}
 		}
 	};
 
