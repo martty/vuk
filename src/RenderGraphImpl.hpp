@@ -12,9 +12,9 @@
 
 namespace vuk {
 	struct RenderPassInfo {
-		RelSpan<AttachmentRPInfo> attachments;
-		vuk::RenderPassCreateInfo rpci;
-		vuk::FramebufferCreateInfo fbci;
+		std::vector<VkImageView> framebuffer_ivs;
+		RenderPassCreateInfo rpci;
+		FramebufferCreateInfo fbci;
 		VkRenderPass handle = {};
 		VkFramebuffer framebuffer;
 	};

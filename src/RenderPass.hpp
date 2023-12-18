@@ -42,13 +42,12 @@ namespace vuk {
 		std::vector<VkSubpassDependency> subpass_dependencies;
 		std::vector<VkAttachmentReference> color_refs;
 		std::vector<VkAttachmentReference> resolve_refs;
-		std::vector<std::optional<VkAttachmentReference>> ds_refs;
-		std::vector<size_t> color_ref_offsets;
+		std::optional<VkAttachmentReference> ds_ref;
 
 		bool operator==(const RenderPassCreateInfo& o) const noexcept {
-			return std::forward_as_tuple(flags, attachments, subpass_descriptions, subpass_dependencies, color_refs, color_ref_offsets, ds_refs, resolve_refs) ==
+			return std::forward_as_tuple(flags, attachments, subpass_descriptions, subpass_dependencies, color_refs, ds_ref, resolve_refs) ==
 			       std::forward_as_tuple(
-			           o.flags, o.attachments, o.subpass_descriptions, o.subpass_dependencies, o.color_refs, o.color_ref_offsets, o.ds_refs, o.resolve_refs);
+			           o.flags, o.attachments, o.subpass_descriptions, o.subpass_dependencies, o.color_refs, o.ds_ref, o.resolve_refs);
 		}
 	};
 
@@ -88,7 +87,7 @@ namespace std {
 	struct hash<vuk::RenderPassCreateInfo> {
 		size_t operator()(vuk::RenderPassCreateInfo const& x) const noexcept {
 			size_t h = 0;
-			hash_combine(h, x.flags, x.attachments, x.color_refs, x.color_ref_offsets, x.ds_refs, x.subpass_dependencies, x.subpass_descriptions);
+			hash_combine(h, x.flags, x.attachments, x.color_refs, x.ds_ref, x.subpass_dependencies, x.subpass_descriptions);
 			return h;
 		}
 	};
