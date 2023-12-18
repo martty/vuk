@@ -89,15 +89,6 @@ TEST_CASE("image upload/download") {
 	}
 }
 
-TypedFuture<ImageAttachment> clear_image(TypedFuture<ImageAttachment> in, Clear clear_value) {
-	auto clear = make_pass("clear image", [=](CommandBuffer& cbuf, VUK_IA(Access::eClear) dst) {
-		cbuf.clear_image(dst, clear_value);
-		return dst;
-	});
-
-	return clear(in);
-}
-
 TEST_CASE("image clear") {
 	{
 		auto data = { 1u, 2u, 3u, 4u };
@@ -116,20 +107,43 @@ TEST_CASE("image clear") {
 	}
 }
 
-TEST_CASE("image resolve") {
+TEST_CASE("image blit") {
 	{
-		auto data = { 1u, 2u, 3u, 4u };
-		auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, Samples::e1);
-		auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
-
+		auto data = { 1.f, 0.f, 0.f, 1.f };
+		auto ia_src = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 2, 2, 1 }, Samples::e1);
+		ia_src.level_count = 1;
+		auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia_src, std::span(data));
+		auto ia_dst = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 1, 1, 1 }, Samples::e1);
+		ia_dst.level_count = 1;
+		auto img2 = allocate_image(*test_context.allocator, ia_dst);
 		size_t alignment = format_to_texel_block_size(fut->format);
 		assert(fut->extent.sizing == Sizing::eAbsolute);
 		size_t size = compute_image_size(fut->format, static_cast<Extent3D>(fut->extent.extent));
 		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
-		auto fut2 = clear_image(fut, vuk::ClearColor(5u, 5u, 5u, 5u));
+		auto fut2 = blit_image(fut, declare_ia("dst_i", ia_dst), Filter::eLinear);
 		auto dst_buf = declare_buf("dst", *dst);
 		auto res = download_buffer(image2buf(fut2, dst_buf)).get(*test_context.allocator, test_context.compiler);
-		auto updata = std::span((uint32_t*)res->mapped_ptr, 4);
-		CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 5; }));
+		auto updata = std::span((float*)res->mapped_ptr, 1);
+		CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 0.5f; }));
+	}
+	{
+		auto data = { 1.f, 0.f, 0.f, 1.f };
+		auto ia_src = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 2, 2, 1 }, Samples::e1);
+		ia_src.level_count = 1;
+		auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia_src, std::span(data));
+		auto ia_dst = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 1, 1, 1 }, Samples::e1);
+		ia_dst.level_count = 1;
+		auto img2 = allocate_image(*test_context.allocator, ia_dst);
+		size_t alignment = format_to_texel_block_size(fut->format);
+		assert(fut->extent.sizing == Sizing::eAbsolute);
+		size_t size = compute_image_size(fut->format, static_cast<Extent3D>(fut->extent.extent));
+		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
+		auto fut2 = blit_image(fut, declare_ia("dst_i", ia_dst), Filter::eNearest);
+		auto dst_buf = declare_buf("dst", *dst);
+		auto res = download_buffer(image2buf(fut2, dst_buf)).get(*test_context.allocator, test_context.compiler);
+		auto updata = std::span((float*)res->mapped_ptr, 1);
+		CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 1.f; }));
 	}
 }
+
+// TEST TODOS: image2image copy, resolve
