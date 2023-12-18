@@ -56,19 +56,6 @@ TEST_CASE("buffer fill & update") {
 	}
 }
 
-std::pair<Unique<Image>, TypedFuture<ImageAttachment>>
-create_image(Allocator& allocator, DomainFlagBits copy_domain, ImageAttachment ia, const void* data, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-	auto image = allocate_image(allocator, ia, loc);
-	ia.image = **image;
-	return { std::move(*image), host_data_to_image(allocator, copy_domain, ia, data) };
-}
-
-template<class T>
-std::pair<Unique<Image>, TypedFuture<ImageAttachment>>
-create_image(Allocator& allocator, DomainFlagBits copy_domain, ImageAttachment ia, std::span<T> data, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-	return create_image(allocator, copy_domain, ia, data.data(), loc);
-}
-
 auto image2buf = make_pass("copy image to buffer", [](CommandBuffer& cbuf, VUK_IA(Access::eTransferRead) src, VUK_BA(Access::eTransferWrite) dst) {
 	BufferImageCopy bc;
 	bc.imageOffset = { 0, 0, 0 };
@@ -89,7 +76,7 @@ TEST_CASE("image upload/download") {
 	{
 		auto data = { 1u, 2u, 3u, 4u };
 		auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, Samples::e1);
-		auto [img, fut] = create_image(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
+		auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
 
 		size_t alignment = format_to_texel_block_size(fut->format);
 		assert(fut->extent.sizing == Sizing::eAbsolute);
