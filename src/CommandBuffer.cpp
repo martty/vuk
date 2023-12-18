@@ -610,18 +610,40 @@ namespace vuk {
 
 		assert(rg);
 
-		VkImageSubresourceRange isr = {};
 		auto aspect = format_to_aspect(src.format);
-		isr.aspectMask = (VkImageAspectFlags)aspect;
-		isr.baseArrayLayer = src.base_layer;
-		isr.layerCount = src.layer_count;
-		isr.baseMipLevel = src.base_level;
-		isr.levelCount = src.level_count;
 
-		if (aspect == ImageAspectFlagBits::eColor) {
-			ctx.vkCmdClearColorImage(command_buffer, src.image.image, (VkImageLayout)src.layout, &c.c.color, 1, &isr);
-		} else if (aspect & (ImageAspectFlagBits::eDepth | ImageAspectFlagBits::eStencil)) {
-			ctx.vkCmdClearDepthStencilImage(command_buffer, src.image.image, (VkImageLayout)src.layout, &c.c.depthStencil, 1, &isr);
+		if (!ongoing_render_pass) {
+			VkImageSubresourceRange isr = {};
+			isr.aspectMask = (VkImageAspectFlags)aspect;
+			isr.baseArrayLayer = src.base_layer;
+			isr.layerCount = src.layer_count;
+			isr.baseMipLevel = src.base_level;
+			isr.levelCount = src.level_count;
+			if (aspect == ImageAspectFlagBits::eColor) {
+				ctx.vkCmdClearColorImage(command_buffer, src.image.image, (VkImageLayout)src.layout, &c.c.color, 1, &isr);
+			} else if (aspect & (ImageAspectFlagBits::eDepth | ImageAspectFlagBits::eStencil)) {
+				ctx.vkCmdClearDepthStencilImage(command_buffer, src.image.image, (VkImageLayout)src.layout, &c.c.depthStencil, 1, &isr);
+			}
+		} else {
+			VkClearAttachment clr = {};
+			clr.aspectMask = (VkImageAspectFlags)aspect;
+			clr.clearValue = c.c;
+			if (aspect == ImageAspectFlagBits::eColor) {
+				auto it = std::find(ongoing_render_pass->color_attachment_ivs.begin(), ongoing_render_pass->color_attachment_ivs.end(), src.image_view);
+				assert(it != ongoing_render_pass->color_attachment_ivs.end() && "Color attachment name not found.");
+				auto idx = std::distance(ongoing_render_pass->color_attachment_ivs.begin(), it);
+				clr.colorAttachment = (uint32_t)idx;
+			}
+			VkClearRect rect = {};
+			rect.baseArrayLayer = src.base_layer;
+			rect.layerCount = src.layer_count;
+			rect.rect = {
+				(int32_t)0,
+				(int32_t)0,
+				src.extent.extent.width,
+				src.extent.extent.height,
+			};
+			ctx.vkCmdClearAttachments(command_buffer, 1, &clr, 1, &rect);
 		}
 
 		return *this;
@@ -705,7 +727,7 @@ namespace vuk {
 	CommandBuffer& CommandBuffer::copy_buffer_to_image(const Buffer& src, const ImageAttachment& dst, BufferImageCopy bic) {
 		VUK_EARLY_RET();
 		assert(rg);
-		
+
 		ctx.vkCmdCopyBufferToImage(command_buffer, src.buffer, dst.image.image, (VkImageLayout)dst.layout, 1, (VkBufferImageCopy*)&bic);
 
 		return *this;
@@ -933,7 +955,7 @@ namespace vuk {
 			} else {                                         // not set in the layout
 				if (!set_to_bind && !persistent_set_to_bind) { // not requested to bind now, noop
 					continue;
-				} else {                                       // requested to bind now
+				} else { // requested to bind now
 					fmt::fprintf(stderr, "Attempting to bind descriptor(s)/set to (set: {}) not declared in shader.", set_index);
 					fmt::print(stderr, "Attempting to bind descriptor(s)/set to (set: {}) not declared in shader.", set_index);
 					assert(false && "Attempting to bind descriptor(s)/set to set not declared in shader (see stderr).");
@@ -1007,17 +1029,17 @@ namespace vuk {
 					// diagnose missing sampler or image
 					if (cbuf_dtype == DescriptorType::eSampler && pipe_dtype == DescriptorType::eCombinedImageSampler) {
 						fmt::print(stderr,
-						             "Shader has declared (set: {}, binding: {}) combined image-sampler, but only sampler was bound.",
-						             set_index,
-						             pipeline_set_bindings[j].binding);
+						           "Shader has declared (set: {}, binding: {}) combined image-sampler, but only sampler was bound.",
+						           set_index,
+						           pipeline_set_bindings[j].binding);
 						assert(false && "Descriptor is combined image-sampler, but only sampler was bound.");
 						return false;
 					}
 					if (cbuf_dtype == DescriptorType::eSampledImage && pipe_dtype == DescriptorType::eCombinedImageSampler) {
 						fmt::print(stderr,
-						             "Shader has declared (set: {}, binding: {}) combined image-sampler, but only image was bound.",
-						             set_index,
-						             pipeline_set_bindings[j].binding);
+						           "Shader has declared (set: {}, binding: {}) combined image-sampler, but only image was bound.",
+						           set_index,
+						           pipeline_set_bindings[j].binding);
 						assert(false && "Descriptor is combined image-sampler, but only image was bound.");
 						return false;
 					}
@@ -1032,11 +1054,11 @@ namespace vuk {
 								assert(false && "Descriptor layout contains binding that was not bound (see stderr).");
 							} else {
 								fmt::print(stderr,
-								             "Shader has declared (set: {}, binding: {}) with type <{}> - tried to bind <{}>.",
-								             set_index,
-								             pipeline_set_bindings[j].binding,
-								             to_string(pipe_dtype),
-								             to_string(cbuf_dtype));
+								           "Shader has declared (set: {}, binding: {}) with type <{}> - tried to bind <{}>.",
+								           set_index,
+								           pipeline_set_bindings[j].binding,
+								           to_string(pipe_dtype),
+								           to_string(cbuf_dtype));
 								assert(false && "Attempting to bind the wrong descriptor type (see stderr).");
 							}
 							return false;
