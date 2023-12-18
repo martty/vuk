@@ -182,7 +182,7 @@ namespace vuk {
 		return { std::move(buf), host_data_to_buffer(allocator, domain, b, data) };
 	}
 
-	std::pair<Unique<Image>, TypedFuture<ImageAttachment>> create_image_with_data(Allocator& allocator,
+	inline std::pair<Unique<Image>, TypedFuture<ImageAttachment>> create_image_with_data(Allocator& allocator,
 	                                                                              DomainFlagBits copy_domain,
 	                                                                              ImageAttachment ia,
 	                                                                              const void* data,
@@ -201,7 +201,8 @@ namespace vuk {
 		return create_image_with_data(allocator, copy_domain, ia, data.data(), loc);
 	}
 
-	std::tuple<Unique<Image>, Unique<ImageView>, TypedFuture<ImageAttachment>> create_image_and_view_with_data(Allocator& allocator,
+	inline std::tuple<Unique<Image>, Unique<ImageView>, TypedFuture<ImageAttachment>>
+	create_image_and_view_with_data(Allocator& allocator,
 	                                                                                                           DomainFlagBits copy_domain,
 	                                                                                                           ImageAttachment ia,
 	                                                                                                           const void* data,
@@ -222,7 +223,7 @@ namespace vuk {
 		return create_image_and_view_with_data(allocator, copy_domain, ia, data.data(), loc);
 	}
 
-	TypedFuture<ImageAttachment> clear_image(TypedFuture<ImageAttachment> in, Clear clear_value) {
+	inline TypedFuture<ImageAttachment> clear_image(TypedFuture<ImageAttachment> in, Clear clear_value) {
 		auto clear = make_pass("clear image", [=](CommandBuffer& cbuf, VUK_IA(Access::eClear) dst) {
 			cbuf.clear_image(dst, clear_value);
 			return dst;
@@ -231,7 +232,7 @@ namespace vuk {
 		return clear(in);
 	}
 
-	TypedFuture<ImageAttachment> blit_image(TypedFuture<ImageAttachment> src, TypedFuture<ImageAttachment> dst, Filter filter) {
+	inline TypedFuture<ImageAttachment> blit_image(TypedFuture<ImageAttachment> src, TypedFuture<ImageAttachment> dst, Filter filter) {
 		auto blit = make_pass("blit image", [=](CommandBuffer& cbuf, VUK_IA(Access::eTransferRead) src, VUK_IA(Access::eTransferWrite) dst) {
 			ImageBlit region = {};
 			region.srcOffsets[0] = Offset3D{};

@@ -185,11 +185,9 @@ namespace vuk {
 			src &= (VkPipelineStageFlags2KHR)~0b100000000000;
 		}
 	}
-	/*
-	inline bool is_framebuffer_attachment(const Resource& r) {
-		if (r.type == Resource::Type::eBuffer)
-			return false;
-		switch (r.ia) {
+
+	inline bool is_framebuffer_attachment(const Access acc) {
+		switch (acc) {
 		case eColorWrite:
 		case eColorRW:
 		case eDepthStencilRW:
@@ -210,7 +208,7 @@ namespace vuk {
 		default:
 			return false;
 		}
-	}*/
+	}
 
 	inline bool is_write_access(QueueResourceUse u) {
 		if (u.access == vuk::AccessFlagBits{})

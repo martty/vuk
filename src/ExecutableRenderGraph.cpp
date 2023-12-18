@@ -98,10 +98,8 @@ namespace vuk {
 		rpi.color_attachments = std::span<const VkAttachmentReference>(spdesc.pColorAttachments, spdesc.colorAttachmentCount);
 		rpi.samples = rpass.fbci.sample_count.count;
 		rpi.depth_stencil_attachment = spdesc.pDepthStencilAttachment;
-		auto attachments = rpass.attachments.to_span(impl->rp_infos);
 		for (uint32_t i = 0; i < spdesc.colorAttachmentCount; i++) {
-			rpi.color_attachment_names[i] = attachments[spdesc.pColorAttachments[i].attachment].attachment_info->name;
-			rpi.color_attachment_ivs[i] = attachments[spdesc.pColorAttachments[i].attachment].attachment_info->attachment.image_view;
+			rpi.color_attachment_ivs[i] = rpass.fbci.attachments[i];
 		}
 		cobuf.color_blend_attachments.resize(spdesc.colorAttachmentCount);
 		cobuf.ongoing_render_pass = rpi;
@@ -507,6 +505,9 @@ namespace vuk {
 					// run all the barriers here!
 					std::vector<VkImageMemoryBarrier2KHR> im_bars;
 					std::vector<VkMemoryBarrier2KHR> mem_bars;
+
+					RenderPassInfo rp = {};
+
 					for (size_t i = 0; i < node->call.args.size(); i++) {
 						auto& arg_ty = node->call.fn.type()->opaque_fn.args[i];
 						auto& parm = node->call.args[i];
@@ -543,9 +544,65 @@ namespace vuk {
 						if (base_ty->is_image()) { // TODO: of course cross-queue barriers we need to issue twice
 							assert(link.urdef && link.urdef.node->kind == Node::VALLOC);
 							auto& img_att = *reinterpret_cast<ImageAttachment*>(link.urdef.node->valloc.args[0].node->constant.value);
-							im_bars.push_back(impl->emit_image_barrier(src_use, dst_use, Subrange::Image{}, format_to_aspect(img_att.format), false));
+							auto aspect = format_to_aspect(img_att.format);
+
+							// if we start an RP and we have LOAD_OP_LOAD (currently always), then we must upgrade access with an appropriate READ
+							if (is_framebuffer_attachment(dst_access)) {
+								if ((aspect & ImageAspectFlagBits::eColor) == ImageAspectFlags{}) { // not color -> depth or depth/stencil
+									dst_use.access |= vuk::AccessFlagBits::eDepthStencilAttachmentRead;
+								} else {
+									dst_use.access |= vuk::AccessFlagBits::eColorAttachmentRead;
+								}
+							}
+
+							im_bars.push_back(impl->emit_image_barrier(src_use, dst_use, Subrange::Image{}, aspect, false));
 							im_bars.back().image = img_att.image.image;
-							img_att.layout = (ImageLayout)im_bars.back().newLayout;
+							VkImageLayout layout = im_bars.back().newLayout;
+							img_att.layout = (ImageLayout)layout;
+
+							if (is_framebuffer_attachment(dst_access)) {
+								VkAttachmentReference attref{};
+
+								attref.attachment = (uint32_t)rp.rpci.attachments.size();
+
+								auto& descr = rp.rpci.attachments.emplace_back();
+								// no layout changed by RPs currently
+								descr.initialLayout = layout;
+								descr.finalLayout = layout;
+								attref.layout = layout;
+
+								descr.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+								descr.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+
+								descr.format = (VkFormat)img_att.format;
+								descr.samples = (VkSampleCountFlagBits)img_att.sample_count.count;
+
+								if ((aspect & ImageAspectFlagBits::eColor) == ImageAspectFlags{}) { // not color -> depth or depth/stencil
+									rp.rpci.ds_ref = attref;
+								} else {
+									rp.rpci.color_refs.push_back(attref);
+								}
+
+								if (img_att.image_view.payload == VK_NULL_HANDLE) {
+									auto urdef = link.urdef.node;
+									auto allocator = urdef->valloc.allocator ? *urdef->valloc.allocator : alloc;
+									auto iv = allocate_image_view(allocator, img_att);
+									if (!iv) {
+										return iv;
+									}
+									img_att.image_view = **iv;
+
+									auto name = std::string("ImageView: RenderTarget ");
+									ctx.set_name(img_att.image_view.payload, Name(name));
+								}
+								rp.framebuffer_ivs.push_back(img_att.image_view.payload);
+								rp.fbci.width = img_att.extent.extent.width;
+								rp.fbci.height = img_att.extent.extent.height;
+								rp.fbci.layers = img_att.layer_count;
+								assert(img_att.level_count == 1);
+								rp.fbci.sample_count = img_att.sample_count;
+								rp.fbci.attachments.push_back(img_att.image_view);
+							}
 						} else {
 							mem_bars.push_back(impl->emit_memory_barrier(src_use, dst_use));
 						}
@@ -560,12 +617,57 @@ namespace vuk {
 					if (mem_bars.size() > 0 || im_bars.size() > 0) {
 						ctx.vkCmdPipelineBarrier2KHR(cbuf, &dependency_info);
 					}
-					// make the renderpass if needed!
 
+					// make the renderpass if needed!
+					if (rp.rpci.attachments.size() > 0) {
+						// subpass
+						SubpassDescription sd;
+						size_t color_count = 0;
+						sd.colorAttachmentCount = (uint32_t)rp.rpci.color_refs.size();
+						sd.pColorAttachments = rp.rpci.color_refs.data();
+
+						sd.pDepthStencilAttachment = rp.rpci.ds_ref ? &*rp.rpci.ds_ref : nullptr;
+						sd.flags = {};
+						sd.inputAttachmentCount = 0;
+						sd.pInputAttachments = nullptr;
+						sd.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+						sd.preserveAttachmentCount = 0;
+						sd.pPreserveAttachments = nullptr;
+
+						rp.rpci.subpass_descriptions.push_back(sd);
+
+						rp.rpci.subpassCount = (uint32_t)rp.rpci.subpass_descriptions.size();
+						rp.rpci.pSubpasses = rp.rpci.subpass_descriptions.data();
+
+						// we use barriers
+						rp.rpci.dependencyCount = 0;
+						rp.rpci.pDependencies = nullptr;
+
+						rp.rpci.attachmentCount = (uint32_t)rp.rpci.attachments.size();
+						rp.rpci.pAttachments = rp.rpci.attachments.data();
+
+						auto result = alloc.allocate_render_passes(std::span{ &rp.handle, 1 }, std::span{ &rp.rpci, 1 });
+
+						rp.fbci.renderPass = rp.handle;
+						rp.fbci.pAttachments = rp.framebuffer_ivs.data();
+						rp.fbci.attachmentCount = (uint32_t)rp.framebuffer_ivs.size();
+
+						Unique<VkFramebuffer> fb(alloc);
+						VUK_DO_OR_RETURN(alloc.allocate_framebuffers(std::span{ &*fb, 1 }, std::span{ &rp.fbci, 1 }));
+						rp.framebuffer = *fb; // queue framebuffer for destruction
+						// drop render pass immediately
+						if (result) {
+							alloc.deallocate(std::span{ &rp.handle, 1 });
+						}
+					}
 					// run the user cb!
 					if (node->call.fn.type()->kind == Type::OPAQUE_FN_TY) {
 						CommandBuffer cobuf(*this, ctx, alloc, cbuf);
-						cobuf.ongoing_render_pass = {};
+						if (rp.handle) {
+							begin_render_pass(ctx, rp, cbuf, false);
+							fill_render_pass_info(rp, 0, cobuf);
+						}
+
 						std::vector<void*> opaque_args;
 						std::vector<void*> opaque_rets;
 						for (size_t i = 0; i < node->call.args.size(); i++) {
@@ -576,6 +678,10 @@ namespace vuk {
 						}
 						opaque_rets.resize(node->call.fn.type()->opaque_fn.return_types.size());
 						(*node->call.fn.type()->opaque_fn.callback)(cobuf, opaque_args, opaque_rets);
+
+						if (rp.handle) {
+							ctx.vkCmdEndRenderPass(cbuf);
+						}
 					} else {
 						assert(0);
 					}
@@ -685,7 +791,7 @@ namespace vuk {
 		}
 
 		complete_domain(DomainFlagBits::eGraphicsQueue);
-		//complete_domain(DomainFlagBits::eComputeQueue);
+		// complete_domain(DomainFlagBits::eComputeQueue);
 		complete_domain(DomainFlagBits::eTransferQueue);
 
 		// RESOLVE SWAPCHAIN DYNAMICITY
