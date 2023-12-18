@@ -517,9 +517,9 @@ namespace vuk {
 		// commands for render pass-less command buffers
 
 		/// @brief Clear an image
-		/// @param src the Name of the Resource to be cleared
+		/// @param dst the Name of the Resource to be cleared
 		/// @param clear_value value to clear with
-		CommandBuffer& clear_image(const ImageAttachment& src, Clear clear_value);
+		CommandBuffer& clear_image(const ImageAttachment& dst, Clear clear_value);
 		/// @brief Resolve an image
 		/// @param src the Name of the multisampled Resource
 		/// @param dst the Name of the singlesampled Resource
