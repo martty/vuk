@@ -183,6 +183,46 @@ namespace vuk {
 		return { std::move(buf), host_data_to_buffer(allocator, domain, b, data) };
 	}
 
+	std::pair<Unique<Image>, TypedFuture<ImageAttachment>> create_image_with_data(Allocator& allocator,
+	                                                                              DomainFlagBits copy_domain,
+	                                                                              ImageAttachment ia,
+	                                                                              const void* data,
+	                                                                              SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
+		auto image = allocate_image(allocator, ia, loc);
+		ia.image = **image;
+		return { std::move(*image), host_data_to_image(allocator, copy_domain, ia, data) };
+	}
+
+	template<class T>
+	std::pair<Unique<Image>, TypedFuture<ImageAttachment>> create_image_with_data(Allocator& allocator,
+	                                                                              DomainFlagBits copy_domain,
+	                                                                              ImageAttachment ia,
+	                                                                              std::span<T> data,
+	                                                                              SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
+		return create_image_with_data(allocator, copy_domain, ia, data.data(), loc);
+	}
+
+	std::tuple<Unique<Image>, Unique<ImageView>, TypedFuture<ImageAttachment>> create_image_and_view_with_data(Allocator& allocator,
+	                                                                                                           DomainFlagBits copy_domain,
+	                                                                                                           ImageAttachment ia,
+	                                                                                                           const void* data,
+	                                                                                                           SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
+		auto image = allocate_image(allocator, ia, loc);
+		ia.image = **image;
+		auto view = allocate_image_view(allocator, ia, loc);
+		ia.image_view = **view;
+		return { std::move(*image), std::move(*view), host_data_to_image(allocator, copy_domain, ia, data) };
+	}
+
+	template<class T>
+	std::tuple<Unique<Image>, Unique<ImageView>, TypedFuture<ImageAttachment>> create_image_and_view_with_data(Allocator& allocator,
+	                                                                                                           DomainFlagBits copy_domain,
+	                                                                                                           ImageAttachment ia,
+	                                                                                                           std::span<T> data,
+	                                                                                                           SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
+		return create_image_and_view_with_data(allocator, copy_domain, ia, data.data(), loc);
+	}
+
 	/// @brief Allocates & fills an image, creates default ImageView for it (legacy)
 	/// @param allocator Allocator to allocate this Texture from
 	/// @param format Format of the image
