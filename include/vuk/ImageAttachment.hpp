@@ -4,6 +4,7 @@
 #include "vuk/Image.hpp"
 #include "vuk/vuk_fwd.hpp"
 #include <compare>
+#include <cmath>
 
 namespace vuk {
 	struct ImageAttachment {
