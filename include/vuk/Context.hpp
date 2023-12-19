@@ -120,9 +120,6 @@ namespace vuk {
 		/// @brief If debug utils is available and debug names & markers are supported 
 		bool debug_enabled() const;
 
-		/// @brief Set debug name for Texture
-		void set_name(const Texture&, Name name);
-
 		/// @brief Set debug name for object
 		template<class T>
 		void set_name(const T& t, Name name);
@@ -166,8 +163,6 @@ namespace vuk {
 		/// @brief Return an allocator over the direct resource - resources will be allocated from the Vulkan runtime
 		/// @return The resource
 		DeviceVkResource& get_vk_resource();
-
-		Texture allocate_texture(Allocator& allocator, ImageCreateInfo ici, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
 		// Swapchain management
 
@@ -309,14 +304,6 @@ namespace vuk {
 namespace vuk {
 	struct ExecutableRenderGraph;
 
-	struct SingleSwapchainRenderBundle {
-		SwapchainRef swapchain;
-		uint32_t image_index;
-		VkSemaphore present_ready;
-		VkSemaphore render_complete;
-		VkResult acquire_result;
-	};
-
 	/// @brief Compile & link given `RenderGraph`s, then execute them into API VkCommandBuffers, then submit them to queues
 	/// @param allocator Allocator to use for submission resources
 	/// @param rendergraphs `RenderGraph`s for compilation
@@ -349,10 +336,10 @@ namespace vuk {
 
 	struct RenderGraphCompileOptions;
 
-	Result<SingleSwapchainRenderBundle> acquire_one(Allocator& allocator, SwapchainRef swapchain);
-	Result<SingleSwapchainRenderBundle> acquire_one(Context& ctx, SwapchainRef swapchain, VkSemaphore present_ready, VkSemaphore render_complete);
-	Result<SingleSwapchainRenderBundle> execute_submit(Allocator& allocator, ExecutableRenderGraph&& rg, SingleSwapchainRenderBundle&& bundle);
-	Result<VkResult> present_to_one(Context& ctx, SingleSwapchainRenderBundle&& bundle);
+	Result<SwapchainRenderBundle> acquire_one(Allocator& allocator, SwapchainRef swapchain);
+	Result<SwapchainRenderBundle> acquire_one(Context& ctx, SwapchainRef swapchain, VkSemaphore present_ready, VkSemaphore render_complete);
+	Result<SwapchainRenderBundle> execute_submit(Allocator& allocator, ExecutableRenderGraph&& rg, SwapchainRenderBundle&& bundle);
+	Result<VkResult> present_to_one(Context& ctx, SwapchainRenderBundle&& bundle);
 	Result<VkResult> present(Allocator& allocator, Compiler& compiler, SwapchainRef swapchain, FutureBase&& future, RenderGraphCompileOptions = {});
 
 	struct SampledImage make_sampled_image(ImageView iv, SamplerCreateInfo sci);

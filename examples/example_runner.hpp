@@ -35,7 +35,7 @@ namespace vuk {
 		std::string_view name;
 
 		std::function<void(ExampleRunner&, vuk::Allocator&)> setup;
-		std::function<vuk::TypedFuture<vuk::Image>(ExampleRunner&, vuk::Allocator&, vuk::TypedFuture<vuk::Image>)> render;
+		std::function<vuk::TypedFuture<vuk::ImageAttachment>(ExampleRunner&, vuk::Allocator&, vuk::TypedFuture<vuk::ImageAttachment>)> render;
 		std::function<void(ExampleRunner&, vuk::Allocator&)> cleanup;
 	};
 
@@ -54,7 +54,7 @@ namespace vuk {
 		vkb::Instance vkbinstance;
 		vkb::Device vkbdevice;
 		util::ImGuiData imgui_data;
-		std::vector<Future> futures;
+		std::vector<FutureBase> futures;
 		std::mutex setup_lock;
 		double old_time = 0;
 		uint32_t num_frames = 0;
@@ -69,7 +69,7 @@ namespace vuk {
 		vuk::Unique<vuk::CommandBufferAllocation> tracy_cbufai;
 
 		// when called during setup, enqueues a device-side operation to be completed before rendering begins
-		void enqueue_setup(Future&& fut) {
+		void enqueue_setup(FutureBase&& fut) {
 			std::scoped_lock _(setup_lock);
 			futures.emplace_back(std::move(fut));
 		}

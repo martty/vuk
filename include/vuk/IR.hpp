@@ -2,6 +2,7 @@
 
 #include "vuk/Buffer.hpp"
 #include "vuk/ImageAttachment.hpp"
+#include "vuk/Swapchain.hpp"
 #include "vuk/Types.hpp"
 
 #include <deque>
@@ -37,7 +38,7 @@ namespace vuk {
 	};
 
 	struct Type {
-		enum TypeKind { MEMORY_TY, INTEGER_TY, IMAGE_TY, BUFFER_TY, IMBUED_TY, ALIASED_TY, OPAQUE_FN_TY } kind;
+		enum TypeKind { MEMORY_TY, INTEGER_TY, IMAGE_TY, BUFFER_TY, SWAPCHAIN_TY, IMBUED_TY, ALIASED_TY, OPAQUE_FN_TY } kind;
 
 		TypeDebugInfo* debug_info = nullptr;
 
@@ -109,7 +110,7 @@ namespace vuk {
 	};
 
 	struct Node {
-		enum Kind { NOP, PLACEHOLDER, CONSTANT, VALLOC, IMPORT, CALL, CLEAR, DIVERGE, CONVERGE, RESOLVE, SIGNAL, WAIT, ACQUIRE, RELEASE } kind;
+		enum Kind { NOP, PLACEHOLDER, CONSTANT, VALLOC, IMPORT, CALL, CLEAR, DIVERGE, CONVERGE, RESOLVE, SIGNAL, WAIT, ACQUIRE, RELEASE, ACQUIRE_NEXT_IMAGE } kind;
 		std::span<Type* const> type;
 		NodeDebugInfo* debug_info = nullptr;
 		SchedulingInfo* scheduling_info = nullptr;
@@ -162,10 +163,15 @@ namespace vuk {
 				Ref src;
 				AcquireRelease* release;
 			} release;
+			struct {
+				Ref swapchain;
+			} acquire_next_image;
 		};
 
 		std::string_view kind_to_sv() {
 			switch (kind) {
+			case IMPORT:
+				return "import";
 			case VALLOC:
 				return "valloc";
 			case CALL:
@@ -208,6 +214,7 @@ namespace vuk {
 		std::deque<Type> types;
 		Type* builtin_image;
 		Type* builtin_buffer;
+		Type* builtin_swapchain;
 
 		std::vector<std::shared_ptr<RG>> subgraphs;
 		// uint64_t current_hash = 0;
@@ -299,6 +306,16 @@ namespace vuk {
 			}
 
 			return first(emplace_op(Node{ .kind = Node::VALLOC, .type = std::span{ &builtin_buffer, 1 }, .valloc = { .args = std::span(args_ptr, 2) } }));
+		}
+
+		Ref make_import_swapchain(SwapchainRenderBundle& bundle) {
+			return first(
+			    emplace_op(Node{ .kind = Node::IMPORT, .type = std::span{ &builtin_swapchain, 1 }, .import = { .value = new SwapchainRenderBundle(bundle) } }));
+		}
+
+		Ref make_acquire_next_image(Ref swapchain) {
+			return first(
+			    emplace_op(Node{ .kind = Node::ACQUIRE_NEXT_IMAGE, .type = std::span{ &builtin_image, 1 }, .acquire_next_image = { .swapchain = swapchain } }));
 		}
 
 		Ref make_clear_image(Ref dst, Clear cv) {

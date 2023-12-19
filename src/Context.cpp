@@ -225,13 +225,6 @@ namespace vuk {
 		return this->vkSetDebugUtilsObjectNameEXT != nullptr;
 	}
 
-	void Context::set_name(const Texture& tex, Name name) {
-		if (!debug_enabled())
-			return;
-		set_name(tex.image->image, name);
-		set_name(tex.view->payload, name);
-	}
-
 	void Context::begin_region(const VkCommandBuffer& cb, Name name, std::array<float, 4> color) {
 		if (!debug_enabled())
 			return;
@@ -694,37 +687,6 @@ namespace vuk {
 			this->vkDestroyShaderModule(device, sm->shader_module, nullptr);
 		}
 		return impl->shader_modules.acquire(sci);
-	}
-
-	Texture Context::allocate_texture(Allocator& allocator, ImageCreateInfo ici, SourceLocationAtFrame loc) {
-		ici.imageType = ici.extent.depth > 1 ? ImageType::e3D : ici.extent.height > 1 ? ImageType::e2D : ImageType::e1D;
-		VkImageFormatListCreateInfo listci = { VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO };
-		auto unorm_fmt = srgb_to_unorm(ici.format);
-		auto srgb_fmt = unorm_to_srgb(ici.format);
-		VkFormat formats[2] = { (VkFormat)ici.format, unorm_fmt == vuk::Format::eUndefined ? (VkFormat)srgb_fmt : (VkFormat)unorm_fmt };
-		listci.pViewFormats = formats;
-		listci.viewFormatCount = formats[1] == VK_FORMAT_UNDEFINED ? 1 : 2;
-		if (listci.viewFormatCount > 1) {
-			ici.flags = vuk::ImageCreateFlagBits::eMutableFormat;
-			ici.pNext = &listci;
-		}
-		Unique<Image> dst = allocate_image(allocator, ici).value(); // TODO: dropping error
-		ImageViewCreateInfo ivci;
-		ivci.format = ici.format;
-		ivci.image = dst->image;
-		ivci.subresourceRange.aspectMask = format_to_aspect(ici.format);
-		ivci.subresourceRange.baseArrayLayer = 0;
-		ivci.subresourceRange.baseMipLevel = 0;
-		ivci.subresourceRange.layerCount = 1;
-		ivci.subresourceRange.levelCount = ici.mipLevels;
-		ivci.viewType = ici.imageType == ImageType::e3D ? ImageViewType::e3D : ici.imageType == ImageType::e2D ? ImageViewType::e2D : ImageViewType::e1D;
-		Texture tex{ std::move(dst), allocate_image_view(allocator, ivci, loc).value() }; // TODO: dropping error
-		tex.extent = ici.extent;
-		tex.format = ici.format;
-		tex.sample_count = ici.samples;
-		tex.layer_count = 1;
-		tex.level_count = ici.mipLevels;
-		return tex;
 	}
 
 	void Context::destroy(const DescriptorPool& dp) {

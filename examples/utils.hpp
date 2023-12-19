@@ -11,13 +11,10 @@
 #include <utility>
 #include <vector>
 #include <vuk/Context.hpp>
+#include <vuk/Future.hpp>
 #include <vuk/Swapchain.hpp>
 #include <vuk/Types.hpp>
 #include <vuk/vuk_fwd.hpp>
-
-namespace vuk {
-	struct RenderGraph;
-} // namespace vuk
 
 namespace util {
 	struct Vertex {
@@ -92,16 +89,17 @@ namespace util {
 	}
 
 	struct ImGuiData {
-		vuk::Texture font_texture;
+		vuk::Unique<vuk::Image> font_image;
+		vuk::Unique<vuk::ImageView> font_image_view;
 		vuk::SamplerCreateInfo font_sci;
 		std::unique_ptr<vuk::SampledImage> font_si;
 	};
 	ImGuiData ImGui_ImplVuk_Init(vuk::Allocator& allocator);
-	vuk::Future ImGui_ImplVuk_Render(vuk::Allocator& allocator,
-	                                 vuk::Future target,
-	                                 ImGuiData& data,
-	                                 ImDrawData* draw_data,
-	                                 const plf::colony<vuk::SampledImage>& sampled_images);
+	vuk::TypedFuture<vuk::ImageAttachment> ImGui_ImplVuk_Render(vuk::Allocator& allocator,
+	                                                            vuk::TypedFuture<vuk::ImageAttachment> target,
+	                                                            ImGuiData& data,
+	                                                            ImDrawData* draw_data,
+	                                                            const plf::colony<vuk::SampledImage>& sampled_images);
 
 	inline std::string read_entire_file(const std::string& path) {
 		std::ostringstream buf;

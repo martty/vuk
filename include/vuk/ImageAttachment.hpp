@@ -52,18 +52,6 @@ namespace vuk {
 			       layer_count != VK_REMAINING_ARRAY_LAYERS && (!may_require_image_view() || view_type != ImageViewType::eInfer);
 		}
 
-		static ImageAttachment from_texture(const vuk::Texture& t) {
-			return ImageAttachment{ .image = t.image.get(),
-				                      .image_view = t.view.get(),
-				                      .extent = { Sizing::eAbsolute, { t.extent.width, t.extent.height, t.extent.depth } },
-				                      .format = t.format,
-				                      .sample_count = { t.sample_count },
-				                      .base_level = 0,
-				                      .level_count = t.level_count,
-				                      .base_layer = 0,
-				                      .layer_count = t.layer_count };
-		}
-
 		enum class MipPreset {
 			eNoMips,
 			eFullMips

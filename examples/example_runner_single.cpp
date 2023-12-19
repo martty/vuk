@@ -1,6 +1,6 @@
 #include "example_runner.hpp"
 
-vuk::SingleSwapchainRenderBundle bundle;
+vuk::SwapchainRenderBundle bundle;
 
 void vuk::ExampleRunner::render() {
 	Compiler compiler;
@@ -24,27 +24,17 @@ void vuk::ExampleRunner::render() {
 		// all of the objects allocated from this allocator last for this frame, and get recycled automatically, so for this specific allocator, deallocation is
 		// optional
 		Allocator frame_allocator(frame_resource);
-		// acquire an image on the swapchain
-		bundle = *acquire_one(*context, swapchain, (*present_ready)[context->get_frame_count() % 3], (*render_complete)[context->get_frame_count() % 3]);
 		// create a rendergraph we will use to prepare a swapchain image for the example to render into
-		std::shared_ptr<RenderGraph> rg(std::make_shared<RenderGraph>("runner"));
-		// we bind the swapchain to name "_swp"
-		ImageAttachment swapchain_att;
-		swapchain_att.format = swapchain->format;
-		swapchain_att.extent = Dimension3D::absolute(swapchain->extent);
-		swapchain_att.sample_count = vuk::Samples::e1;
-		rg->attach_swapchain("_swp", swapchain);
-		// clear the "_swp" image and call the cleared image "example_target_image"
-		rg->clear_image("_swp", "example_target_image", vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
-		// bind "example_target_image" as the output of this rendergraph
-		TypedFuture<Image> cleared_image_to_render_into{ Future{ std::move(rg), "example_target_image" }, &swapchain_att };
+		auto imported_swapchain = import_swapchain(bundle);
+		// acquire an image on the swapchain
+		auto swapchain_image = acquire_next_image("swapchain image", imported_swapchain);
+
+		// clear the swapchain image
+		TypedFuture<ImageAttachment> cleared_image_to_render_into = clear_image(swapchain_image, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
 		// invoke the render method of the example with the cleared image
-		Future example_result = examples[0]->render(*this, frame_allocator, std::move(cleared_image_to_render_into)).future;
-		// make a new RG that will take care of putting the swapchain image into present and releasing it from the rg
-		std::shared_ptr<RenderGraph> rg_p(std::make_shared<RenderGraph>("presenter"));
-		rg_p->attach_in("_src", std::move(example_result));
-		// we tell the rendergraph that _src will be used for presenting after the rendergraph
-		rg_p->release_for_present("_src");
+		TypedFuture<ImageAttachment> example_result = examples[0]->render(*this, frame_allocator, std::move(cleared_image_to_render_into));
+
+
 		// set up some profiling callbacks for our example Tracy integration
 		vuk::ProfilingCallbacks cbs;
 		cbs.user_data = &get_runner();
@@ -79,12 +69,11 @@ void vuk::ExampleRunner::render() {
 #endif
 			delete reinterpret_cast<char*>(pass_data);
 		};
+
 		// compile the RG that contains all the rendering of the example
-		auto erg = *compiler.link(std::span{ &rg_p, 1 }, { .callbacks = cbs });
-		// submit the compiled commands
-		auto result = *execute_submit(frame_allocator, std::move(erg), std::move(bundle));
-		// present the results
-		present_to_one(*context, std::move(result));
+		// submit and present the results to the swapchain we imported previously
+		present_one(example_result, { .callbacks = cbs });
+	
 		// update window title with FPS
 		if (++num_frames == 16) {
 			auto new_time = get_time();
