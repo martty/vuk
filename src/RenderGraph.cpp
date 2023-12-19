@@ -80,6 +80,15 @@ namespace vuk {
 					res_to_links[first(&node)].def = first(&node);
 					res_to_links[first(&node)].type = first(&node).type();
 					break;
+				case Node::AALLOC:
+					for (size_t i = 0; i < node.aalloc.args.size(); i++) {
+						auto& parm = node.aalloc.args[i];
+						res_to_links[parm].undef = &node;
+					}
+
+					res_to_links[first(&node)].def = first(&node);
+					res_to_links[first(&node)].type = first(&node).type();
+					break;
 				case Node::CALL: {
 					// args
 					for (size_t i = 0; i < node.call.args.size(); i++) {
@@ -112,6 +121,11 @@ namespace vuk {
 				case Node::RELEASE:
 					res_to_links[node.release.src].undef = &node;
 					break;
+
+				case Node::INDEXING:
+					res_to_links[first(&node)].def = first(&node);
+					res_to_links[first(&node)].type = first(&node).type()->array.T;
+					break;
 				default:
 					assert(0);
 				}
@@ -127,6 +141,20 @@ namespace vuk {
 					l->urdef = link.def;
 					l = l->next;
 				} while (l);
+			}
+		}
+
+		// second pass - resolve composite urdefs
+		for (auto& rg : rgs) {
+			for (auto& node : rg->op_arena) {
+				switch (node.kind) {
+				case Node::INDEXING:
+					auto array_def = res_to_links[node.indexing.array].urdef;
+					auto index_v = constant<uint64_t>(node.indexing.index);
+					auto array_arg = array_def.node->aalloc.args[index_v + 1];
+					assert(res_to_links[array_arg].urdef);
+					res_to_links[first(&node)].urdef = res_to_links[array_arg].urdef;
+				}
 			}
 		}
 
