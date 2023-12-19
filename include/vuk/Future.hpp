@@ -92,9 +92,10 @@ namespace vuk {
 			return def;
 		}
 
-		TypedFuture transmute(Ref ref) noexcept {
+		template<class U = T>
+		TypedFuture<U> transmute(Ref ref) noexcept {
 			head.node->release.src = ref;
-			return *this;
+			return *reinterpret_cast<TypedFuture<U>*>(this); // TODO: not cool
 		}
 
 		T* operator->() noexcept {
@@ -108,6 +109,10 @@ namespace vuk {
 			} else {
 				return result;
 			}
+		}
+
+		Result<void> wait(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options = {}) {
+			return control->wait(allocator, compiler, options);
 		}
 
 		void same_size(TypedFuture<Buffer> src)

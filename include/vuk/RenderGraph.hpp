@@ -624,6 +624,19 @@ public:
 		return in.transmute(rg->make_clear_image(in.get_head(), clear_value));
 	}
 
+	[[nodiscard]] inline TypedFuture<SwapchainRenderBundle> import_swapchain(SwapchainRenderBundle bundle) {
+		std::shared_ptr<RG> rg = std::make_shared<RG>();
+		Ref ref = rg->make_import_swapchain(bundle);
+		return { rg, ref, ref };
+	}
+
+	[[nodiscard]] inline TypedFuture<ImageAttachment> acquire_next_image(Name name, TypedFuture<SwapchainRenderBundle> in) {
+		auto& rg = in.get_render_graph();
+		Ref ref = rg->make_acquire_next_image(in.get_head());
+		rg->name_outputs(ref.node, { name.c_str() });
+		return in.transmute<ImageAttachment>(ref);
+	}
+
 	struct InferenceContext {
 		const ImageAttachment& get_image_attachment(Name name) const;
 		const Buffer& get_buffer(Name name) const;

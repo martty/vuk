@@ -69,4 +69,12 @@ namespace vuk {
 	};
 
 	using SwapchainRef = Swapchain*;
+
+	struct SwapchainRenderBundle {
+		SwapchainRef swapchain;
+		uint32_t image_index;
+		VkSemaphore present_ready;
+		VkSemaphore render_complete;
+		VkResult acquire_result;
+	};
 } // namespace vuk

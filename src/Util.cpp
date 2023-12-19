@@ -465,7 +465,7 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	Result<VkResult> present_to_one(Context& ctx, SingleSwapchainRenderBundle&& bundle) {
+	Result<VkResult> present_to_one(Context& ctx, SwapchainRenderBundle&& bundle) {
 		VkPresentInfoKHR pi{ .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
 		pi.swapchainCount = 1;
 		pi.pSwapchains = &bundle.swapchain->swapchain;
@@ -482,7 +482,7 @@ namespace vuk {
 		return { expected_value, VK_SUCCESS };
 	}
 
-	Result<SingleSwapchainRenderBundle> acquire_one(Allocator& allocator, SwapchainRef swapchain) {
+	Result<SwapchainRenderBundle> acquire_one(Allocator& allocator, SwapchainRef swapchain) {
 		Context& ctx = allocator.get_context();
 		Unique<std::array<VkSemaphore, 2>> semas(allocator);
 		VUK_DO_OR_RETURN(allocator.allocate_semaphores(*semas));
@@ -495,10 +495,10 @@ namespace vuk {
 			return { expected_error, VkException{ acq_result } };
 		}
 
-		return { expected_value, SingleSwapchainRenderBundle{ swapchain, image_index, present_rdy, render_complete, acq_result } };
+		return { expected_value, SwapchainRenderBundle{ swapchain, image_index, present_rdy, render_complete, acq_result } };
 	}
 
-	Result<SingleSwapchainRenderBundle> acquire_one(Context& ctx, SwapchainRef swapchain, VkSemaphore present_ready, VkSemaphore render_complete) {
+	Result<SwapchainRenderBundle> acquire_one(Context& ctx, SwapchainRef swapchain, VkSemaphore present_ready, VkSemaphore render_complete) {
 		uint32_t image_index = (uint32_t)-1;
 		VkResult acq_result = ctx.vkAcquireNextImageKHR(ctx.device, swapchain->swapchain, UINT64_MAX, present_ready, VK_NULL_HANDLE, &image_index);
 		// VK_SUBOPTIMAL_KHR shouldn't stop presentation; it is handled at the end
@@ -506,10 +506,10 @@ namespace vuk {
 			return { expected_error, VkException{ acq_result } };
 		}
 
-		return { expected_value, SingleSwapchainRenderBundle{ swapchain, image_index, present_ready, render_complete, acq_result } };
+		return { expected_value, SwapchainRenderBundle{ swapchain, image_index, present_ready, render_complete, acq_result } };
 	}
 
-	Result<SingleSwapchainRenderBundle> execute_submit(Allocator& allocator, ExecutableRenderGraph&& rg, SingleSwapchainRenderBundle&& bundle) {
+	Result<SwapchainRenderBundle> execute_submit(Allocator& allocator, ExecutableRenderGraph&& rg, SwapchainRenderBundle&& bundle) {
 		std::vector<std::pair<SwapchainRef, size_t>> swapchains_with_indexes = { { bundle.swapchain, bundle.image_index } };
 
 		std::pair v = { &allocator, &rg };

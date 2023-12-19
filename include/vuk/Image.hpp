@@ -473,16 +473,6 @@ namespace vuk {
 		using type = vuk::SamplerCreateInfo;
 	};
 
-	struct Texture {
-		Unique<Image> image;
-		Unique<ImageView> view;
-		Extent3D extent;
-		Format format;
-		Samples sample_count;
-		uint32_t level_count;
-		uint32_t layer_count;
-	};
-
 	ImageAspectFlags format_to_aspect(Format format) noexcept;
 }; // namespace vuk
 
