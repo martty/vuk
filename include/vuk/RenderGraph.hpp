@@ -3,12 +3,12 @@
 #include "vuk/Buffer.hpp"
 #include "vuk/Future.hpp"
 #include "vuk/Hash.hpp"
+#include "vuk/IR.hpp"
 #include "vuk/Image.hpp"
 #include "vuk/ImageAttachment.hpp"
 #include "vuk/MapProxy.hpp"
 #include "vuk/Result.hpp"
 #include "vuk/Swapchain.hpp"
-#include "vuk/IR.hpp"
 #include "vuk/vuk_fwd.hpp"
 
 #include <deque>
@@ -20,15 +20,15 @@
 #include <vector>
 
 #if defined(__clang__) or defined(__GNUC__)
-#define VUK_IA(access) vuk::IA<access, decltype([]() {})>
-#define VUK_BA(access) vuk::BA<access, decltype([]() {})>
+#define VUK_IA(access) vuk::Arg<vuk::ImageAttachment, access, decltype([]() {})>
+#define VUK_BA(access) vuk::Arg<vuk::Buffer, access, decltype([]() {})>
 #else
 namespace vuk {
 	template<size_t I>
 	struct tag_type {};
 }; // namespace vuk
-#define VUK_IA(access, ...) vuk::IA<access, vuk::tag_type<__COUNTER__>, __VA_ARGS__>
-#define VUK_BA(access, ...) vuk::BA<access, vuk::tag_type<__COUNTER__>, __VA_ARGS__>
+#define VUK_IA(access, ...) vuk::Arg<vuk::ImageAttachment, access, vuk::tag_type<__COUNTER__>, __VA_ARGS__>
+#define VUK_BA(access, ...) vuk::Arg<vuk::Buffer, access, vuk::tag_type<__COUNTER__>, __VA_ARGS__>
 #endif
 
 namespace vuk {
@@ -49,47 +49,39 @@ namespace vuk {
 		char value[N];
 	};
 
-	template<Access acc, class T, StringLiteral N = "">
-	struct IA {
+	template<class Type, Access acc, class UniqueT, StringLiteral N = "">
+	struct Arg {
+		using type = Type;
 		static constexpr Access access = acc;
-		using base = ImageAttachment;
-		using attach = ImageAttachment;
+
 		static constexpr StringLiteral identifier = N;
+
+		Type* ptr;
+
+		Ref src;
+		Ref def;
+
+		operator const Type&() {
+			return *ptr;
+		}
+
+		const Type* operator->() const {
+			return ptr;
+		}
+	};
+	/*
+	template<class Arg>
+	struct arg_kind {};
+
+	template<Access acc, class UniqueT, StringLiteral N>
+	struct arg_kind<Arg<ImageAttachment, acc, UniqueT, N>>{
 		static constexpr Type::TypeKind kind = Type::IMAGE_TY;
-
-		ImageAttachment* ptr;
-		Ref src;
-		Ref def;
-
-		operator const ImageAttachment&() {
-			return *ptr;
-		}
-
-		const ImageAttachment* operator->() const {
-			return ptr;
-		}
 	};
 
-	template<Access acc, class T, StringLiteral N = "">
-	struct BA {
-		static constexpr Access access = acc;
-		using base = Buffer;
-		using attach = Buffer;
-		static constexpr StringLiteral identifier = N;
+	template<Access acc, class UniqueT, StringLiteral N>
+	struct arg_kind<Arg<Buffer, acc, UniqueT, N>> {
 		static constexpr Type::TypeKind kind = Type::BUFFER_TY;
-
-		Buffer* ptr;
-		Ref src;
-		Ref def;
-
-		operator const Buffer&() {
-			return *ptr;
-		}
-
-		const Buffer* operator->() const {
-			return ptr;
-		}
-	};
+	};*/
 
 	using IARule = std::function<void(const struct InferenceContext& ctx, ImageAttachment& ia)>;
 	using BufferRule = std::function<void(const struct InferenceContext& ctx, Buffer& buffer)>;
@@ -415,7 +407,6 @@ public:
 	template<typename T>
 	using typelist_to_tuple_t = typename typelist_to_tuple<T>::type;
 
-
 	template<typename ListA_t, typename ListB_t>
 	struct filtered_indexed {
 		template<typename Elem>
@@ -462,11 +453,11 @@ public:
 
 	template<typename... T>
 	void pack_typed_tuple(std::span<void*> src, CommandBuffer& cb, void* dst) {
-		std::tuple<CommandBuffer*, T...>& tuple = *new(dst) std::tuple<CommandBuffer*, T...>;
+		std::tuple<CommandBuffer*, T...>& tuple = *new (dst) std::tuple<CommandBuffer*, T...>;
 		std::get<0>(tuple) = &cb;
 #define X(n)                                                                                                                                                   \
 	if constexpr ((sizeof...(T)) > n) {                                                                                                                          \
-		auto& ptr = std::get<n + 1>(tuple).ptr;                                                                                                                        \
+		auto& ptr = std::get<n + 1>(tuple).ptr;                                                                                                                    \
 		ptr = reinterpret_cast<decltype(ptr)>(src[n]);                                                                                                             \
 	}
 		X(0)
@@ -525,7 +516,7 @@ public:
 	static auto make_ret(std::shared_ptr<RG> rg, Node* node, const std::tuple<T...>& us) {
 		if constexpr (sizeof...(T) > 0) {
 			size_t i = 0;
-			return std::make_tuple(TypedFuture<typename T::base>{ rg, { node, i++ }, std::get<T>(us).def }...);
+			return std::make_tuple(TypedFuture<typename T::type>{ rg, { node, i++ }, std::get<T>(us).def }...);
 		}
 	}
 
@@ -544,7 +535,7 @@ public:
 
 	template<typename... T>
 	struct TupleMap<std::tuple<T...>> {
-		using ret_tuple = std::tuple<TypedFuture<typename T::base>...>;
+		using ret_tuple = std::tuple<TypedFuture<typename T::type>...>;
 
 		template<class Ret, class F>
 		static auto make_lam(Name name, F&& body) {
@@ -562,7 +553,7 @@ public:
 			};
 
 			// when this function is called, we weave in this call into the IR
-			return [untyped_cb = std::move(callback), name](TypedFuture<typename T::base>... args) mutable {
+			return [untyped_cb = std::move(callback), name](TypedFuture<typename T::type>... args) mutable {
 				auto& first = [](auto& first, auto&...) -> auto& {
 					return first;
 				}(args...);
