@@ -20,15 +20,17 @@
 #include <vector>
 
 #if defined(__clang__) or defined(__GNUC__)
-#define VUK_IA(access) vuk::Arg<vuk::ImageAttachment, access, decltype([]() {})>
-#define VUK_BA(access) vuk::Arg<vuk::Buffer, access, decltype([]() {})>
+#define VUK_IA(access, ...)        vuk::Arg<vuk::ImageAttachment, access, decltype([]() {}), __VA_ARGS__>
+#define VUK_BA(access, ...)        vuk::Arg<vuk::Buffer, access, decltype([]() {}), __VA_ARGS__>
+#define VUK_ARG(type, access, ...) vuk::Arg<type, access, decltype([]() {}), __VA_ARGS__>
 #else
 namespace vuk {
 	template<size_t I>
 	struct tag_type {};
 }; // namespace vuk
-#define VUK_IA(access, ...) vuk::Arg<vuk::ImageAttachment, access, vuk::tag_type<__COUNTER__>, __VA_ARGS__>
-#define VUK_BA(access, ...) vuk::Arg<vuk::Buffer, access, vuk::tag_type<__COUNTER__>, __VA_ARGS__>
+#define VUK_IA(access, ...)        vuk::Arg<vuk::ImageAttachment, access, vuk::tag_type<__COUNTER__>, __VA_ARGS__>
+#define VUK_BA(access, ...)        vuk::Arg<vuk::Buffer, access, vuk::tag_type<__COUNTER__>, __VA_ARGS__>
+#define VUK_ARG(type, access, ...) vuk::Arg<type, access, vuk::tag_type<__COUNTER__>, __VA_ARGS__>
 #endif
 
 namespace vuk {
@@ -61,12 +63,28 @@ namespace vuk {
 		Ref src;
 		Ref def;
 
-		operator const Type&() {
+		operator const Type&() const noexcept
+		  requires(!std::is_array_v<Type>)
+		{
 			return *ptr;
 		}
 
-		const Type* operator->() const {
+		const Type* operator->() const noexcept
+		  requires(!std::is_array_v<Type>)
+		{
 			return ptr;
+		}
+
+		size_t size() const noexcept
+		  requires std::is_array_v<Type>
+		{
+			return def.type()->array.size;
+		}
+
+		auto operator[](size_t index) const noexcept
+		  requires std::is_array_v<Type>
+		{
+			return (*ptr)[index];
 		}
 	};
 	/*
@@ -75,12 +93,12 @@ namespace vuk {
 
 	template<Access acc, class UniqueT, StringLiteral N>
 	struct arg_kind<Arg<ImageAttachment, acc, UniqueT, N>>{
-		static constexpr Type::TypeKind kind = Type::IMAGE_TY;
+	  static constexpr Type::TypeKind kind = Type::IMAGE_TY;
 	};
 
 	template<Access acc, class UniqueT, StringLiteral N>
 	struct arg_kind<Arg<Buffer, acc, UniqueT, N>> {
-		static constexpr Type::TypeKind kind = Type::BUFFER_TY;
+	  static constexpr Type::TypeKind kind = Type::BUFFER_TY;
 	};*/
 
 	using IARule = std::function<void(const struct InferenceContext& ctx, ImageAttachment& ia)>;
@@ -452,13 +470,14 @@ public:
 	struct TupleMap;
 
 	template<typename... T>
-	void pack_typed_tuple(std::span<void*> src, CommandBuffer& cb, void* dst) {
+	void pack_typed_tuple(std::span<void*> src, std::span<void*> meta, CommandBuffer& cb, void* dst) {
 		std::tuple<CommandBuffer*, T...>& tuple = *new (dst) std::tuple<CommandBuffer*, T...>;
 		std::get<0>(tuple) = &cb;
 #define X(n)                                                                                                                                                   \
 	if constexpr ((sizeof...(T)) > n) {                                                                                                                          \
-		auto& ptr = std::get<n + 1>(tuple).ptr;                                                                                                                    \
-		ptr = reinterpret_cast<decltype(ptr)>(src[n]);                                                                                                             \
+		auto& elem = std::get<n + 1>(tuple);                                                                                                                       \
+		elem.ptr = reinterpret_cast<decltype(elem.ptr)>(src[n]);                                                                                                   \
+		elem.def = *reinterpret_cast<Ref*>(meta[n]);                                                                                                                \
 	}
 		X(0)
 		X(1)
@@ -478,7 +497,7 @@ public:
 		X(15)
 		static_assert(sizeof...(T) <= 16);
 #undef X
-	};
+	}; // namespace vuk
 
 	template<typename... T>
 	void unpack_typed_tuple(const std::tuple<T...>& src, std::span<void*> dst) {
@@ -539,10 +558,10 @@ public:
 
 		template<class Ret, class F>
 		static auto make_lam(Name name, F&& body) {
-			auto callback = [typed_cb = std::move(body)](CommandBuffer& cb, std::span<void*> args, std::span<void*> rets) {
+			auto callback = [typed_cb = std::move(body)](CommandBuffer& cb, std::span<void*> args, std::span<void*> meta, std::span<void*> rets) {
 				// we do type recovery here -> convert untyped args to typed ones
 				alignas(alignof(std::tuple<CommandBuffer&, T...>)) char storage[sizeof(std::tuple<CommandBuffer&, T...>)];
-				pack_typed_tuple<T...>(args, cb, storage);
+				pack_typed_tuple<T...>(args, meta, cb, storage);
 				auto typed_ret = std::apply(typed_cb, *reinterpret_cast<std::tuple<CommandBuffer&, T...>*>(storage));
 				// now we erase these types
 				if constexpr (!is_tuple<Ret>::value) {
@@ -606,6 +625,19 @@ public:
 	[[nodiscard]] inline TypedFuture<Buffer> declare_buf(Name name, Buffer buf = {}) {
 		std::shared_ptr<RG> rg = std::make_shared<RG>();
 		Ref ref = rg->make_declare_buffer(buf);
+		rg->name_outputs(ref.node, { name.c_str() });
+		return { rg, ref, ref };
+	}
+
+	template<class T, class... Args>
+	[[nodiscard]] inline TypedFuture<T[]> declare_array(Name name, const TypedFuture<T>& arg, Args... args) {
+		auto rg = arg.get_render_graph();
+		[&rg](auto&... rest) {
+			(rg->subgraphs.push_back(rest.get_render_graph()), ...);
+		}(args...);
+		std::array refs = { arg.get_head(), args.get_head()... };
+		std::array defs = { arg.get_def(), args.get_def()... };
+		Ref ref = rg->make_declare_array(refs[0].type(), refs, defs);
 		rg->name_outputs(ref.node, { name.c_str() });
 		return { rg, ref, ref };
 	}

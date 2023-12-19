@@ -75,7 +75,7 @@ namespace vuk {
 		}
 
 		/// @brief Get the referenced RenderGraph
-		std::shared_ptr<RG>& get_render_graph() noexcept {
+		const std::shared_ptr<RG>& get_render_graph() const noexcept {
 			return control->rg;
 		}
 
@@ -98,12 +98,15 @@ namespace vuk {
 			return *reinterpret_cast<TypedFuture<U>*>(this); // TODO: not cool
 		}
 
-		T* operator->() noexcept {
+		T* operator->() noexcept
+		{
 			return reinterpret_cast<T*>(def.node->valloc.args[0].node->constant.value);
 		}
 
 		/// @brief Wait and retrieve the result of the Future on the host
-		[[nodiscard]] Result<T> get(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options = {}) {
+		[[nodiscard]] Result<T> get(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options = {})
+		  requires(!std::is_array_v<T>)
+		{
 			if (auto result = control->wait(allocator, compiler, options)) {
 				return { expected_value, *operator->() };
 			} else {
@@ -115,10 +118,21 @@ namespace vuk {
 			return control->wait(allocator, compiler, options);
 		}
 
-		void same_size(TypedFuture<Buffer> src)
+		void same_size(const TypedFuture<Buffer>& src)
 		  requires std::is_same_v<T, Buffer>
 		{
+			assert(src.get_def().type()->is_buffer());
 			def.node->valloc.args[1] = src.get_def().node->valloc.args[1];
+		}
+
+		auto operator[](size_t index)
+		  requires std::is_array_v<T>
+		{
+			auto item = control->rg->make_array_indexing(get_head(), control->rg->make_constant(index));
+			assert(def.node->kind == Node::AALLOC);
+			assert(def.type()->kind == Type::ARRAY_TY);
+			auto item_def = def.node->aalloc.defs[index];
+			return TypedFuture<std::remove_reference_t<decltype(std::declval<T>()[0])>>(get_render_graph(), item, item_def);
 		}
 
 		// TODO: remove this from public API

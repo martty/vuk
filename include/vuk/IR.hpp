@@ -38,7 +38,7 @@ namespace vuk {
 	};
 
 	struct Type {
-		enum TypeKind { MEMORY_TY, INTEGER_TY, IMAGE_TY, BUFFER_TY, SWAPCHAIN_TY, IMBUED_TY, ALIASED_TY, OPAQUE_FN_TY } kind;
+		enum TypeKind { MEMORY_TY, INTEGER_TY, IMAGE_TY, BUFFER_TY, SWAPCHAIN_TY, ARRAY_TY, IMBUED_TY, ALIASED_TY, OPAQUE_FN_TY } kind;
 
 		TypeDebugInfo* debug_info = nullptr;
 
@@ -58,8 +58,12 @@ namespace vuk {
 				std::span<Type* const> args;
 				std::span<Type* const> return_types;
 				int execute_on;
-				std::function<void(CommandBuffer&, std::span<void*>, std::span<void*>)>* callback;
+				std::function<void(CommandBuffer&, std::span<void*>, std::span<void*>, std::span<void*>)>* callback;
 			} opaque_fn;
+			struct {
+				Type* T;
+				size_t size;
+			} array;
 		};
 
 		static Type* stripped(Type* t) {
@@ -110,7 +114,25 @@ namespace vuk {
 	};
 
 	struct Node {
-		enum Kind { NOP, PLACEHOLDER, CONSTANT, VALLOC, IMPORT, CALL, CLEAR, DIVERGE, CONVERGE, RESOLVE, SIGNAL, WAIT, ACQUIRE, RELEASE, ACQUIRE_NEXT_IMAGE } kind;
+		enum Kind {
+			NOP,
+			PLACEHOLDER,
+			CONSTANT,
+			VALLOC,
+			AALLOC,
+			IMPORT,
+			CALL,
+			CLEAR,
+			DIVERGE,
+			CONVERGE,
+			RESOLVE,
+			SIGNAL,
+			WAIT,
+			ACQUIRE,
+			RELEASE,
+			ACQUIRE_NEXT_IMAGE,
+			INDEXING
+		} kind;
 		std::span<Type* const> type;
 		NodeDebugInfo* debug_info = nullptr;
 		SchedulingInfo* scheduling_info = nullptr;
@@ -124,6 +146,10 @@ namespace vuk {
 				std::span<Ref> args;
 				std::optional<Allocator> allocator;
 			} valloc;
+			struct {
+				std::span<Ref> args;
+				std::span<Ref> defs; // for preserving provenance for composite types
+			} aalloc;
 			struct {
 				void* value;
 			} import;
@@ -166,6 +192,10 @@ namespace vuk {
 			struct {
 				Ref swapchain;
 			} acquire_next_image;
+			struct {
+				Ref array;
+				Ref index;
+			} indexing;
 		};
 
 		std::string_view kind_to_sv() {
@@ -176,6 +206,8 @@ namespace vuk {
 				return "valloc";
 			case CALL:
 				return "call";
+			case INDEXING:
+				return "indexing";
 			}
 			assert(0);
 			return "";
@@ -268,6 +300,11 @@ namespace vuk {
 			names[ref.index] = name;
 		}
 
+		Ref make_constant(uint64_t value) {
+			auto u64_ty = new Type*(u64());
+			return first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ u64_ty, 1 }, .constant = { .value = new uint64_t(value) } }));
+		}
+
 		Ref make_declare_image(ImageAttachment value) {
 			auto ptr = new ImageAttachment(value); /* rest extent_x extent_y extent_z */
 			auto args_ptr = new Ref[4];
@@ -308,6 +345,24 @@ namespace vuk {
 			return first(emplace_op(Node{ .kind = Node::VALLOC, .type = std::span{ &builtin_buffer, 1 }, .valloc = { .args = std::span(args_ptr, 2) } }));
 		}
 
+		Ref make_declare_array(Type* type, std::span<Ref> args, std::span<Ref> defs) {
+			auto arr_ty = new Type*(emplace_type(Type{ .kind = Type::ARRAY_TY, .array = { .T = type, .size = args.size() } }));
+			auto args_ptr = new Ref[args.size() + 1];
+			auto mem_ty = new Type*(emplace_type(Type{ .kind = Type::MEMORY_TY }));
+			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = nullptr } }));
+			std::copy(args.begin(), args.end(), args_ptr + 1);
+			auto defs_ptr = new Ref[defs.size()];
+			std::copy(defs.begin(), defs.end(), defs_ptr);
+			return first(emplace_op(Node{ .kind = Node::AALLOC,
+			                              .type = std::span{ arr_ty, 1 },
+			                              .aalloc = { .args = std::span(args_ptr, args.size() + 1), .defs = std::span(defs_ptr, defs.size()) } }));
+		}
+
+		Ref make_array_indexing(Ref array, Ref index) {
+			auto ty = new Type*(array.type()->array.T);
+			return first(emplace_op(Node{ .kind = Node::INDEXING, .type = std::span{ ty, 1 }, .indexing = { .array = array, .index = index } }));
+		}
+
 		Ref make_import_swapchain(SwapchainRenderBundle& bundle) {
 			return first(
 			    emplace_op(Node{ .kind = Node::IMPORT, .type = std::span{ &builtin_swapchain, 1 }, .import = { .value = new SwapchainRenderBundle(bundle) } }));
@@ -325,16 +380,17 @@ namespace vuk {
 		Type* make_opaque_fn_ty(std::span<Type* const> args,
 		                        std::span<Type* const> ret_types,
 		                        DomainFlags execute_on,
-		                        std::function<void(CommandBuffer&, std::span<void*>, std::span<void*>)> callback) {
+		                        std::function<void(CommandBuffer&, std::span<void*>, std::span<void*>, std::span<void*>)> callback) {
 			auto arg_ptr = new Type*[args.size()];
 			std::copy(args.begin(), args.end(), arg_ptr);
 			auto ret_ty_ptr = new Type*[ret_types.size()];
 			std::copy(ret_types.begin(), ret_types.end(), ret_ty_ptr);
-			return emplace_type(Type{ .kind = Type::OPAQUE_FN_TY,
-			                          .opaque_fn = { .args = std::span(arg_ptr, args.size()),
-			                                         .return_types = std::span(ret_ty_ptr, ret_types.size()),
-			                                         .execute_on = execute_on.m_mask,
-			                                         .callback = new std::function<void(CommandBuffer&, std::span<void*>, std::span<void*>)>(callback) } });
+			return emplace_type(
+			    Type{ .kind = Type::OPAQUE_FN_TY,
+			          .opaque_fn = { .args = std::span(arg_ptr, args.size()),
+			                         .return_types = std::span(ret_ty_ptr, ret_types.size()),
+			                         .execute_on = execute_on.m_mask,
+			                         .callback = new std::function<void(CommandBuffer&, std::span<void*>, std::span<void*>, std::span<void*>)>(callback) } });
 		}
 
 		Ref make_declare_fn(Type* const fn_ty) {
