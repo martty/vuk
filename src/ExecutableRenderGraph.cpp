@@ -622,7 +622,6 @@ namespace vuk {
 
 					// make the renderpass if needed!
 					if (rp.rpci.attachments.size() > 0) {
-						// subpass
 						SubpassDescription sd;
 						size_t color_count = 0;
 						sd.colorAttachmentCount = (uint32_t)rp.rpci.color_refs.size();
@@ -786,6 +785,10 @@ namespace vuk {
 						schedule_new(link.def.node);
 					}
 				}
+				break;
+
+				case Node::ACQUIRE:
+					//bundle = *acquire_one(*context, swapchain, (*present_ready)[context->get_frame_count() % 3], (*render_complete)[context->get_frame_count() % 3]);
 				break;
 			default:
 				assert(0);

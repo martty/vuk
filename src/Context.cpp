@@ -225,13 +225,6 @@ namespace vuk {
 		return this->vkSetDebugUtilsObjectNameEXT != nullptr;
 	}
 
-	void Context::set_name(const Texture& tex, Name name) {
-		if (!debug_enabled())
-			return;
-		set_name(tex.image->image, name);
-		set_name(tex.view->payload, name);
-	}
-
 	void Context::begin_region(const VkCommandBuffer& cb, Name name, std::array<float, 4> color) {
 		if (!debug_enabled())
 			return;
