@@ -480,6 +480,7 @@ namespace vuk {
 						}
 						bound = **buf;
 					}
+					executed.emplace(node, ExecutionInfo{ DomainFlagBits::eHost, naming_index_counter++ }); // declarations execute on the host
 				} else if (node->type[0]->kind == Type::IMAGE_TY) {
 					auto& attachment = *reinterpret_cast<ImageAttachment*>(node->valloc.args[0].node->constant.value);
 #ifdef VUK_DUMP_EXEC
@@ -496,8 +497,58 @@ namespace vuk {
 						attachment.image = **img;
 						// ctx.set_name(attachment.image.image, bound.name.name);
 					}
+					executed.emplace(node, ExecutionInfo{ DomainFlagBits::eHost, naming_index_counter++ }); // declarations execute on the host
+				} else {
+					assert(0);
 				}
-				executed.emplace(node, ExecutionInfo{ DomainFlagBits::eHost, naming_index_counter++ }); // declarations execute on the host
+				break;
+			}
+			case Node::AALLOC: {
+				assert(node->type[0]->kind == Type::ARRAY_TY);
+				if (item.ready) {
+#ifdef VUK_DUMP_EXEC
+					print_results(node);
+					auto size = node->type[0]->array.size;
+					auto elem_ty = node->type[0]->array.T;
+					assert(elem_ty->kind == Type::BUFFER_TY || elem_ty->kind == Type::IMAGE_TY);
+					fmt::print(" = declare<{}[{}]> ", elem_ty->kind == Type::BUFFER_TY ? "buffer" : "image", size);
+					print_args(node->valloc.args.subspan(1));
+					assert(node->valloc.args[0].type()->kind == Type::MEMORY_TY);
+					if (elem_ty->kind == Type::BUFFER_TY) {
+						auto arr_mem = new Buffer[size];
+						for (auto i = 0; i < size; i++) {
+							auto& elem = node->valloc.args[i + 1];
+							assert(elem.type()->kind == Type::BUFFER_TY);
+							auto& link = impl->res_to_links[elem];
+
+							auto src = link.urdef.node->valloc.args[0].node->constant.value;
+							memcpy(&arr_mem[i], src, sizeof(Buffer));
+						}
+						node->valloc.args[0].node->constant.value = arr_mem;
+					} else {
+					}
+
+					fmt::print("\n");
+#endif
+					executed.emplace(node, ExecutionInfo{ DomainFlagBits::eHost, naming_index_counter++ }); // declarations execute on the host
+				} else {
+					item.ready = true;
+					work_queue.push_front(item); // requeue this item
+
+					for (auto& parm : node->valloc.args.subspan(1)) {
+						auto& link = impl->res_to_links[parm];
+
+						if (link.reads.size() > 0) {
+							// all reads
+							for (auto& r : link.reads.to_span(impl->pass_reads)) {
+								schedule_new(r);
+							}
+						} else {
+							// just the def
+							schedule_new(link.def.node);
+						}
+					}
+				}
 				break;
 			}
 			case Node::CALL: {
@@ -543,9 +594,7 @@ namespace vuk {
 						QueueResourceUse src_use = to_use(src_access, src_domain);
 						QueueResourceUse dst_use = to_use(dst_access, dst_domain);
 
-						if (base_ty->is_image()) { // TODO: of course cross-queue barriers we need to issue twice
-							assert(link.urdef && link.urdef.node->kind == Node::VALLOC);
-							auto& img_att = *reinterpret_cast<ImageAttachment*>(link.urdef.node->valloc.args[0].node->constant.value);
+						auto synch_image = [&](ImageAttachment& img_att, QueueResourceUse src_use, QueueResourceUse dst_use, Access dst_access) {
 							auto aspect = format_to_aspect(img_att.format);
 
 							// if we start an RP and we have LOAD_OP_LOAD (currently always), then we must upgrade access with an appropriate READ
@@ -605,8 +654,36 @@ namespace vuk {
 								rp.fbci.sample_count = img_att.sample_count;
 								rp.fbci.attachments.push_back(img_att.image_view);
 							}
-						} else {
+						};
+
+						auto synch_memory = [&](QueueResourceUse src_use, QueueResourceUse dst_use) {
 							mem_bars.push_back(impl->emit_memory_barrier(src_use, dst_use));
+						};
+
+						if (base_ty->is_image()) { // TODO: of course cross-queue barriers we need to issue twice
+							assert(link.urdef && link.urdef.node->kind == Node::VALLOC);
+							auto& img_att = *reinterpret_cast<ImageAttachment*>(link.urdef.node->valloc.args[0].node->constant.value);
+							synch_image(img_att, src_use, dst_use, dst_access);
+						} else if (base_ty->is_buffer()) {
+							synch_memory(src_use, dst_use);
+						} else if (base_ty->kind == Type::ARRAY_TY) {
+							auto elem_ty = base_ty->array.T;
+							auto size = base_ty->array.size;
+							if (elem_ty->is_image()) {
+								assert(link.urdef && link.urdef.node->kind == Node::VALLOC);
+								auto& img_atts = *reinterpret_cast<ImageAttachment**>(link.urdef.node->valloc.args[0].node->constant.value);
+								for (int i = 0; i < size; i++) {
+									synch_image(img_atts[i], src_use, dst_use, dst_access);
+								}
+							} else if (elem_ty->is_buffer()) {
+								for (int i = 0; i < size; i++) {
+									synch_memory(src_use, dst_use);
+								}
+							} else {
+								assert(0);
+							}
+						} else {
+							assert(0);
 						}
 					}
 					VkCommandBuffer cbuf = activate_domain(dst_domain);
@@ -670,15 +747,24 @@ namespace vuk {
 						}
 
 						std::vector<void*> opaque_args;
+						std::vector<void*> opaque_meta;
 						std::vector<void*> opaque_rets;
 						for (size_t i = 0; i < node->call.args.size(); i++) {
 							auto& parm = node->call.args[i];
 							auto& link = impl->res_to_links[parm];
-							assert(link.urdef && link.urdef.node->kind == Node::VALLOC);
-							opaque_args.push_back(link.urdef.node->valloc.args[0].node->constant.value);
+							assert(link.urdef);
+							if (link.urdef.node->kind == Node::VALLOC) {
+								opaque_args.push_back(link.urdef.node->valloc.args[0].node->constant.value);
+								opaque_meta.push_back(&link.urdef);
+							} else if (link.urdef.node->kind == Node::AALLOC) {
+								opaque_args.push_back(link.urdef.node->aalloc.args[0].node->constant.value);
+								opaque_meta.push_back(&link.urdef);
+							} else {
+								assert(0);
+							}
 						}
 						opaque_rets.resize(node->call.fn.type()->opaque_fn.return_types.size());
-						(*node->call.fn.type()->opaque_fn.callback)(cobuf, opaque_args, opaque_rets);
+						(*node->call.fn.type()->opaque_fn.callback)(cobuf, opaque_args, opaque_meta, opaque_rets);
 
 						if (rp.handle) {
 							ctx.vkCmdEndRenderPass(cbuf);
@@ -787,8 +873,53 @@ namespace vuk {
 				}
 				break;
 
-				case Node::ACQUIRE:
-					//bundle = *acquire_one(*context, swapchain, (*present_ready)[context->get_frame_count() % 3], (*render_complete)[context->get_frame_count() % 3]);
+			case Node::ACQUIRE_NEXT_IMAGE:
+				// bundle = *acquire_one(*context, swapchain, (*present_ready)[context->get_frame_count() % 3], (*render_complete)[context->get_frame_count() % 3]);
+				break;
+			case Node::INDEXING:
+				if (item.ready) {
+#ifdef VUK_DUMP_EXEC
+					print_results(node);
+					fmt::print(" = ");
+					print_args(std::span{ &node->indexing.array, 1 });
+					fmt::print("[{}]", constant<uint64_t>(node->indexing.index));
+					fmt::print("\n");
+#endif
+					executed.emplace(node, ExecutionInfo{ DomainFlagBits::eHost, naming_index_counter++ });
+				} else {
+					item.ready = true;
+					work_queue.push_front(item); // requeue this item
+
+					{
+						auto& parm = node->indexing.array;
+						auto& link = impl->res_to_links[parm];
+
+						if (link.reads.size() > 0) {
+							// all reads
+							for (auto& r : link.reads.to_span(impl->pass_reads)) {
+								schedule_new(r);
+							}
+						} else {
+							// just the def
+							schedule_new(link.def.node);
+						}
+					}
+					// TODO: not everything has links
+					/* {
+					  auto& parm = node->indexing.index;
+					  auto& link = impl->res_to_links[parm];
+
+					  if (link.reads.size() > 0) {
+					    // all reads
+					    for (auto& r : link.reads.to_span(impl->pass_reads)) {
+					      schedule_new(r);
+					    }
+					  } else {
+					    // just the def
+					    schedule_new(link.def.node);
+					  }
+					}*/
+				}
 				break;
 			default:
 				assert(0);

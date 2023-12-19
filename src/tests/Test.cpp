@@ -18,6 +18,7 @@ struct DT : public doctest::IReporter {
 	const doctest::ContextOptions& opt;
 	const doctest::TestCaseData* tc;
 	std::mutex mutex;
+	bool crashing = false;
 
 	// constructor has to accept the ContextOptions by ref as a single argument
 	DT(const doctest::ContextOptions& in) : stdout_stream(*in.cout), opt(in), tc(nullptr) {}
@@ -36,16 +37,23 @@ struct DT : public doctest::IReporter {
 	void test_case_reenter(const doctest::TestCaseData& /*in*/) override {}
 
 	void test_case_end(const doctest::CurrentTestCaseStats& /*in*/) override {
-		vuk::test_context.finish();
+		if (!crashing) {
+			vuk::test_context.finish();
+		}
 	}
 
-	void test_case_exception(const doctest::TestCaseException& /*in*/) override {}
+	void test_case_exception(const doctest::TestCaseException& /*in*/) override {
+		//assert(0);
+		crashing = true;
+	}
 
 	void subcase_start(const doctest::SubcaseSignature& /*in*/) override {}
 
 	void subcase_end() override {}
 
-	void log_assert(const doctest::AssertData& in) override {}
+	void log_assert(const doctest::AssertData& in) override {
+		//assert(0);
+	}
 
 	void log_message(const doctest::MessageData& /*in*/) override {}
 
