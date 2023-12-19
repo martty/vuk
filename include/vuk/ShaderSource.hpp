@@ -106,6 +106,7 @@ namespace vuk {
 			shader.data.resize(idivceil(source.size() + 1, sizeof(uint32_t)));
 			memcpy(shader.data.data(), source.data(), source.size() * sizeof(std::string_view::value_type));
 			shader.data_ptr = shader.data.data();
+			shader.size = shader.data.size();
 			shader.language = ShaderSourceLanguage::eHlsl;
 			shader.hlsl_stage = stage;
 			shader.entry_point = std::move(entry_point);
