@@ -2,6 +2,7 @@
 #define DOCTEST_CONFIG_IMPLEMENT
 #endif
 #include <doctest/doctest.h>
+#include <fmt/format.h>
 
 #ifdef VUK_TEST_RUNNER
 #include "TestContext.hpp"
@@ -30,6 +31,7 @@ struct DT : public doctest::IReporter {
 	void test_run_end(const doctest::TestRunStats& /*in*/) override {}
 
 	void test_case_start(const doctest::TestCaseData& in) override {
+		fmt::print("//////////////{}\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\n", in.m_name);
 		tc = &in;
 		vuk::test_context.start(in.m_name);
 	}
@@ -40,6 +42,7 @@ struct DT : public doctest::IReporter {
 		if (!crashing) {
 			vuk::test_context.finish();
 		}
+		printf("======================================\n");
 	}
 
 	void test_case_exception(const doctest::TestCaseException& /*in*/) override {

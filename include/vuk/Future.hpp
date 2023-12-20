@@ -98,8 +98,7 @@ namespace vuk {
 			return *reinterpret_cast<TypedFuture<U>*>(this); // TODO: not cool
 		}
 
-		T* operator->() noexcept
-		{
+		T* operator->() noexcept {
 			return reinterpret_cast<T*>(def.node->valloc.args[0].node->constant.value);
 		}
 
@@ -128,10 +127,10 @@ namespace vuk {
 		auto operator[](size_t index)
 		  requires std::is_array_v<T>
 		{
-			auto item = control->rg->make_array_indexing(get_head(), control->rg->make_constant(index));
+			auto item_def = def.node->aalloc.defs[index];
+			Ref item = control->rg->make_array_indexing(def.type()->array.T, get_head(), control->rg->make_constant(index));
 			assert(def.node->kind == Node::AALLOC);
 			assert(def.type()->kind == Type::ARRAY_TY);
-			auto item_def = def.node->aalloc.defs[index];
 			return TypedFuture<std::remove_reference_t<decltype(std::declval<T>()[0])>>(get_render_graph(), item, item_def);
 		}
 

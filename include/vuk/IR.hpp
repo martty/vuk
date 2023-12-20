@@ -131,7 +131,8 @@ namespace vuk {
 			ACQUIRE,
 			RELEASE,
 			ACQUIRE_NEXT_IMAGE,
-			INDEXING
+			INDEXING,
+			CAST
 		} kind;
 		std::span<Type* const> type;
 		NodeDebugInfo* debug_info = nullptr;
@@ -196,6 +197,9 @@ namespace vuk {
 				Ref array;
 				Ref index;
 			} indexing;
+			struct {
+				Ref src;
+			} cast;
 		};
 
 		std::string_view kind_to_sv() {
@@ -358,9 +362,14 @@ namespace vuk {
 			                              .aalloc = { .args = std::span(args_ptr, args.size() + 1), .defs = std::span(defs_ptr, defs.size()) } }));
 		}
 
-		Ref make_array_indexing(Ref array, Ref index) {
-			auto ty = new Type*(array.type()->array.T);
+		Ref make_array_indexing(Type* type, Ref array, Ref index) {
+			auto ty = new Type*(type);
 			return first(emplace_op(Node{ .kind = Node::INDEXING, .type = std::span{ ty, 1 }, .indexing = { .array = array, .index = index } }));
+		}
+
+		Ref make_cast(Type* dst_type, Ref src) {
+			auto ty = new Type*(dst_type);
+			return first(emplace_op(Node{ .kind = Node::CAST, .type = std::span{ ty, 1 }, .cast = { .src = src } }));
 		}
 
 		Ref make_import_swapchain(SwapchainRenderBundle& bundle) {
