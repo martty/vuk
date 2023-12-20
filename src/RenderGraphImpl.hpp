@@ -117,9 +117,9 @@ namespace vuk {
 		Result<void> relink_subchains();
 		Result<void> fix_subchains();
 
-		VkImageMemoryBarrier2KHR
+		static VkImageMemoryBarrier2KHR
 		emit_image_barrier(QueueResourceUse last_use, QueueResourceUse current_use, const Subrange::Image& subrange, ImageAspectFlags aspect, bool is_release = false);
-		VkMemoryBarrier2KHR emit_memory_barrier(QueueResourceUse last_use, QueueResourceUse current_use);
+		static VkMemoryBarrier2KHR emit_memory_barrier(QueueResourceUse last_use, QueueResourceUse current_use);
 
 		// opt passes
 		Result<void> merge_rps();

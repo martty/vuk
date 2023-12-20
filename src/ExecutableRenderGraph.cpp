@@ -173,8 +173,8 @@ namespace vuk {
 	  ctx.vkBeginCommandBuffer(cbuf, &cbi);
 
 	  void* cbuf_profile_data = nullptr;
-	  if (this->impl->callbacks.on_begin_command_buffer)
-	    cbuf_profile_data = this->impl->callbacks.on_begin_command_buffer(this->impl->callbacks.user_data, cbuf);
+	  if (callbacks.on_begin_command_buffer)
+	    cbuf_profile_data = callbacks.on_begin_command_buffer(callbacks.user_data, cbuf);
 
 	  uint64_t command_buffer_index = items[0]->command_buffer_index;
 	  int32_t render_pass_index = -1;
@@ -198,8 +198,8 @@ namespace vuk {
 	      VkCommandBufferBeginInfo cbi{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
 	      ctx.vkBeginCommandBuffer(cbuf, &cbi);
 
-	      if (this->impl->callbacks.on_begin_command_buffer)
-	        cbuf_profile_data = this->impl->callbacks.on_begin_command_buffer(this->impl->callbacks.user_data, cbuf);
+	      if (callbacks.on_begin_command_buffer)
+	        cbuf_profile_data = callbacks.on_begin_command_buffer(callbacks.user_data, cbuf);
 	    }
 
 	    // if we had a render pass running, but now it changes
@@ -251,11 +251,11 @@ namespace vuk {
 	        list.emplace_back((void*)&res->attachment);
 	      }
 	      void* pass_profile_data = nullptr;
-	      if (this->impl->callbacks.on_begin_pass)
-	        pass_profile_data = this->impl->callbacks.on_begin_pass(this->impl->callbacks.user_data, pass->pass->name, cbuf, (DomainFlagBits)pass->domain.m_mask);
+	      if (callbacks.on_begin_pass)
+	        pass_profile_data = callbacks.on_begin_pass(callbacks.user_data, pass->pass->name, cbuf, (DomainFlagBits)pass->domain.m_mask);
 	      pass->pass->execute(cobuf);
-	      if (this->impl->callbacks.on_end_pass)
-	        this->impl->callbacks.on_end_pass(this->impl->callbacks.user_data, pass_profile_data);
+	      if (callbacks.on_end_pass)
+	        callbacks.on_end_pass(callbacks.user_data, pass_profile_data);
 	    }
 	    if (!item->execable->debug_info qualified_name.is_invalid()) {
 	      ctx.end_region(cobuf.command_buffer);
@@ -273,8 +273,8 @@ namespace vuk {
 	  // insert post-barriers
 	  impl->emit_barriers(ctx, cbuf, domain, items.back()->post_memory_barriers, items.back()->post_image_barriers);
 
-	  if (this->impl->callbacks.on_end_command_buffer)
-	    this->impl->callbacks.on_end_command_buffer(this->impl->callbacks.user_data, cbuf_profile_data);
+	  if (callbacks.on_end_command_buffer)
+	    callbacks.on_end_command_buffer(callbacks.user_data, cbuf_profile_data);
 	  if (auto result = ctx.vkEndCommandBuffer(cbuf); result != VK_SUCCESS) {
 	    return { expected_error, VkException{ result } };
 	  }
@@ -283,61 +283,238 @@ namespace vuk {
 
 	  return { expected_value, std::move(si) };
 	}*/
+	struct QueueRecording {
+		SubmitBatch sb;
+		DomainFlagBits domain;
+		SubmitInfo si;
+		Unique<CommandPool> cpool;
+		Unique<CommandBufferAllocation> hl_cbuf;
+		VkCommandBuffer cbuf;
+		bool is_recording = false;
+		void* cbuf_profile_data;
 
-#define VUK_DUMP_EXEC
+		RenderPassInfo rp = {};
+		std::vector<VkImageMemoryBarrier2KHR> im_bars;
+		std::vector<VkMemoryBarrier2KHR> mem_bars;
 
-	Result<SubmitBundle> ExecutableRenderGraph::execute(Allocator& alloc, std::vector<std::pair<SwapchainRef, size_t>> swp_with_index) {
-		Context& ctx = alloc.get_context();
+		void flush_barriers(Context& ctx) {
+			VkDependencyInfoKHR dependency_info{ .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO_KHR,
+				                                   .memoryBarrierCount = (uint32_t)mem_bars.size(),
+				                                   .pMemoryBarriers = mem_bars.data(),
+				                                   .imageMemoryBarrierCount = (uint32_t)im_bars.size(),
+				                                   .pImageMemoryBarriers = im_bars.data() };
 
-		// DYNAMO
-		// loop through scheduled items
-		// for each scheduled item, schedule deps
-		// generate barriers and batch breaks as needed by deps
-		// allocate images/buffers as declares are encountered
-		// start/end RPs as needed
-		// inference will still need to run in the beginning, as that is compiletime
-		std::deque<ScheduledItem> work_queue(impl->scheduled_execables.begin(), impl->scheduled_execables.end());
+			if (mem_bars.size() > 0 || im_bars.size() > 0) {
+				ctx.vkCmdPipelineBarrier2KHR(cbuf, &dependency_info);
+			}
 
-		size_t naming_index_counter = 0;
-		struct ExecutionInfo {
-			DomainFlagBits domain;
-			size_t naming_index;
-		};
-		std::unordered_map<Node*, ExecutionInfo> executed;
-		std::unordered_set<Node*> scheduled;
-		for (auto& i : impl->scheduled_execables) {
-			scheduled.emplace(i.execable);
+			mem_bars.clear();
+			im_bars.clear();
 		}
 
-		auto schedule_new = [&](Node* node) {
+		void synch_image(ImageAttachment& img_att, QueueResourceUse src_use, QueueResourceUse dst_use, Access dst_access) {
+			auto aspect = format_to_aspect(img_att.format);
+
+			// if we start an RP and we have LOAD_OP_LOAD (currently always), then we must upgrade access with an appropriate READ
+			if (is_framebuffer_attachment(dst_access)) {
+				if ((aspect & ImageAspectFlagBits::eColor) == ImageAspectFlags{}) { // not color -> depth or depth/stencil
+					dst_use.access |= vuk::AccessFlagBits::eDepthStencilAttachmentRead;
+				} else {
+					dst_use.access |= vuk::AccessFlagBits::eColorAttachmentRead;
+				}
+			}
+
+			im_bars.push_back(RGCImpl::emit_image_barrier(src_use, dst_use, Subrange::Image{}, aspect, false));
+			im_bars.back().image = img_att.image.image;
+			VkImageLayout layout = im_bars.back().newLayout;
+			img_att.layout = (ImageLayout)layout;
+		};
+
+		void synch_memory(QueueResourceUse src_use, QueueResourceUse dst_use) {
+			mem_bars.push_back(RGCImpl::emit_memory_barrier(src_use, dst_use));
+		};
+
+		void prepare_render_pass_attachment(Allocator alloc, ImageAttachment img_att) {
+			auto aspect = format_to_aspect(img_att.format);
+			VkAttachmentReference attref{};
+
+			attref.attachment = (uint32_t)rp.rpci.attachments.size();
+
+			auto& descr = rp.rpci.attachments.emplace_back();
+			// no layout changed by RPs currently
+			descr.initialLayout = (VkImageLayout)img_att.layout;
+			descr.finalLayout = (VkImageLayout)img_att.layout;
+			attref.layout = (VkImageLayout)img_att.layout;
+
+			descr.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+			descr.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+
+			descr.format = (VkFormat)img_att.format;
+			descr.samples = (VkSampleCountFlagBits)img_att.sample_count.count;
+
+			if ((aspect & ImageAspectFlagBits::eColor) == ImageAspectFlags{}) { // not color -> depth or depth/stencil
+				rp.rpci.ds_ref = attref;
+			} else {
+				rp.rpci.color_refs.push_back(attref);
+			}
+
+			if (img_att.image_view.payload == VK_NULL_HANDLE) {
+				auto iv = allocate_image_view(alloc, img_att); // TODO: dropping error
+				img_att.image_view = **iv;
+
+				auto name = std::string("ImageView: RenderTarget ");
+				alloc.get_context().set_name(img_att.image_view.payload, Name(name));
+			}
+			rp.framebuffer_ivs.push_back(img_att.image_view.payload);
+			rp.fbci.width = img_att.extent.extent.width;
+			rp.fbci.height = img_att.extent.extent.height;
+			rp.fbci.layers = img_att.layer_count;
+			assert(img_att.level_count == 1);
+			rp.fbci.sample_count = img_att.sample_count;
+			rp.fbci.attachments.push_back(img_att.image_view);
+		}
+
+		Result<void> prepare_render_pass(Allocator alloc) {
+			if (rp.rpci.attachments.size() > 0) {
+				SubpassDescription sd;
+				size_t color_count = 0;
+				sd.colorAttachmentCount = (uint32_t)rp.rpci.color_refs.size();
+				sd.pColorAttachments = rp.rpci.color_refs.data();
+
+				sd.pDepthStencilAttachment = rp.rpci.ds_ref ? &*rp.rpci.ds_ref : nullptr;
+				sd.flags = {};
+				sd.inputAttachmentCount = 0;
+				sd.pInputAttachments = nullptr;
+				sd.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+				sd.preserveAttachmentCount = 0;
+				sd.pPreserveAttachments = nullptr;
+
+				rp.rpci.subpass_descriptions.push_back(sd);
+
+				rp.rpci.subpassCount = (uint32_t)rp.rpci.subpass_descriptions.size();
+				rp.rpci.pSubpasses = rp.rpci.subpass_descriptions.data();
+
+				// we use barriers
+				rp.rpci.dependencyCount = 0;
+				rp.rpci.pDependencies = nullptr;
+
+				rp.rpci.attachmentCount = (uint32_t)rp.rpci.attachments.size();
+				rp.rpci.pAttachments = rp.rpci.attachments.data();
+
+				auto result = alloc.allocate_render_passes(std::span{ &rp.handle, 1 }, std::span{ &rp.rpci, 1 });
+
+				rp.fbci.renderPass = rp.handle;
+				rp.fbci.pAttachments = rp.framebuffer_ivs.data();
+				rp.fbci.attachmentCount = (uint32_t)rp.framebuffer_ivs.size();
+
+				Unique<VkFramebuffer> fb(alloc);
+				VUK_DO_OR_RETURN(alloc.allocate_framebuffers(std::span{ &*fb, 1 }, std::span{ &rp.fbci, 1 }));
+				rp.framebuffer = *fb; // queue framebuffer for destruction
+				// drop render pass immediately
+				if (result) {
+					alloc.deallocate(std::span{ &rp.handle, 1 });
+				}
+				begin_render_pass(alloc.get_context(), rp, cbuf, false);
+
+				return { expected_value };
+			}
+		}
+
+		void end_render_pass(Allocator alloc) {
+			alloc.get_context().vkCmdEndRenderPass(cbuf);
+			rp = {};
+		}
+	};
+
+	enum class RW { eRead, eWrite };
+	struct ExecutionInfo {
+		DomainFlagBits domain;
+		size_t naming_index;
+	};
+
+	struct Scheduler {
+		Scheduler(Allocator all, std::vector<ScheduledItem>& scheduled_execables, DefUseMap& res_to_links, std::vector<Node*>& pass_reads) :
+		    allocator(all),
+		    scheduled_execables(scheduled_execables),
+		    res_to_links(res_to_links),
+		    pass_reads(pass_reads) {
+			// these are the items that were determined to run
+			for (auto& i : scheduled_execables) {
+				scheduled.emplace(i.execable);
+				work_queue.emplace_back(i);
+			}
+		}
+
+		Allocator allocator;
+		DefUseMap& res_to_links;
+		std::vector<Node*>&(pass_reads);
+		std::vector<ScheduledItem>& scheduled_execables;
+
+		std::deque<ScheduledItem> work_queue;
+
+		size_t naming_index_counter = 0;
+		std::unordered_map<Node*, ExecutionInfo> executed;
+		std::unordered_set<Node*> scheduled;
+
+		void schedule_new(Node* node) {
 			assert(node);
 			if (scheduled.count(node)) { // we have scheduling info for this
-				auto it = std::find_if(impl->scheduled_execables.begin(), impl->scheduled_execables.end(), [=](ScheduledItem& item) { return item.execable == node; });
-				if (it != impl->scheduled_execables.end()) {
+				auto it = std::find_if(scheduled_execables.begin(), scheduled_execables.end(), [=](ScheduledItem& item) { return item.execable == node; });
+				if (it != scheduled_execables.end()) {
 					work_queue.push_front(*it);
 				}
 			} else { // no info, just schedule it as-is
 				work_queue.push_front(ScheduledItem{ .execable = node });
 			}
-		};
+		}
 
+		// returns true if the item is ready
+		bool process(ScheduledItem& item) {
+			if (item.ready) {
+				return true;
+			} else {
+				item.ready = true;
+				work_queue.push_front(item); // requeue this item
+				return false;
+			}
+		}
+
+		void schedule_dependency(Ref parm, RW access) {
+			auto& link = res_to_links[parm];
+
+			if (access == RW::eWrite) { // synchronize against writing
+				// we are going to write here, so schedule all reads or the def, if no read
+				if (link.reads.size() > 0) {
+					// all reads
+					for (auto& r : link.reads.to_span(pass_reads)) {
+						schedule_new(r);
+					}
+				} else {
+					// just the def
+					schedule_new(link.def.node);
+				}
+			} else { // just reading, so don't s
+				// just the def
+				schedule_new(link.def.node);
+			}
+		}
+
+		void done(Node* node, DomainFlagBits dst_domain) {
+			executed.emplace(node, ExecutionInfo{ dst_domain, naming_index_counter++ });
+		}
+	};
+
+	struct Recorder {
+		Recorder(Allocator alloc, ProfilingCallbacks* callbacks) : ctx(alloc.get_context()), alloc(alloc), callbacks(callbacks) {}
+		Context& ctx;
+		Allocator alloc;
+		ProfilingCallbacks* callbacks;
 		SubmitBundle sbundle;
 
-		struct OngoingQueueRecording {
-			SubmitBatch sb;
-			DomainFlagBits domain;
-			SubmitInfo si;
-			Unique<CommandPool> cpool;
-			Unique<CommandBufferAllocation> hl_cbuf;
-			bool is_recording = false;
-			void* cbuf_profile_data;
-		};
+		std::unordered_map<vuk::DomainFlagBits, QueueRecording> streams;
 
-		std::array<OngoingQueueRecording, 3> ongoing_queue_recordings;
-
-		auto begin_cbuf = [&](vuk::DomainFlagBits domain) -> Result<void> {
-			uint32_t index = ctx.domain_to_queue_family_index(domain);
-			auto& queue_rec = ongoing_queue_recordings[index];
+		auto begin_cbuf(vuk::DomainFlagBits domain) -> Result<void> {
+			auto& queue_rec = streams[domain];
 			assert(!queue_rec.is_recording);
 			queue_rec.is_recording = true;
 			queue_rec.domain = domain;
@@ -345,7 +522,7 @@ namespace vuk {
 				queue_rec.cpool = Unique<CommandPool>(alloc);
 				VkCommandPoolCreateInfo cpci{ VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
 				cpci.flags = VkCommandPoolCreateFlagBits::VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
-				cpci.queueFamilyIndex = index; // currently queue family idx = queue idx
+				cpci.queueFamilyIndex = ctx.domain_to_queue_family_index(domain); // currently queue family idx = queue idx
 
 				VUK_DO_OR_RETURN(alloc.allocate_command_pools(std::span{ &*queue_rec.cpool, 1 }, std::span{ &cpci, 1 }));
 			}
@@ -360,61 +537,56 @@ namespace vuk {
 			VkCommandBufferBeginInfo cbi{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
 			ctx.vkBeginCommandBuffer(cbuf, &cbi);
 
+			queue_rec.cbuf = queue_rec.hl_cbuf->command_buffer;
 			queue_rec.cbuf_profile_data = nullptr;
-			if (this->impl->callbacks.on_begin_command_buffer)
-				queue_rec.cbuf_profile_data = this->impl->callbacks.on_begin_command_buffer(this->impl->callbacks.user_data, cbuf);
+			if (callbacks->on_begin_command_buffer)
+				queue_rec.cbuf_profile_data = callbacks->on_begin_command_buffer(callbacks->user_data, cbuf);
 			return { expected_value };
 		};
 
-		auto end_cbuf_by_idx = [&](size_t index) -> Result<void> {
-			auto& queue_rec = ongoing_queue_recordings[index];
+		auto end_cbuf(vuk::DomainFlagBits domain) -> Result<void> {
+			auto& queue_rec = streams[domain];
 			queue_rec.is_recording = false;
-			if (this->impl->callbacks.on_end_command_buffer)
-				this->impl->callbacks.on_end_command_buffer(this->impl->callbacks.user_data, queue_rec.cbuf_profile_data);
+			if (callbacks->on_end_command_buffer)
+				callbacks->on_end_command_buffer(callbacks->user_data, queue_rec.cbuf_profile_data);
 			if (auto result = ctx.vkEndCommandBuffer(queue_rec.hl_cbuf->command_buffer); result != VK_SUCCESS) {
 				return { expected_error, VkException{ result } };
 			}
 			return { expected_value };
 		};
 
-		auto end_cbuf = [&](vuk::DomainFlagBits domain) -> Result<void> {
-			size_t index = ctx.domain_to_queue_family_index(domain);
-			return end_cbuf_by_idx(index);
-		};
-
-		auto activate_domain = [&](vuk::DomainFlagBits domain) -> VkCommandBuffer {
-			size_t index = ctx.domain_to_queue_family_index(domain);
-			auto& queue_rec = ongoing_queue_recordings[index];
+		QueueRecording* synchronize_domain(DomainFlagBits domain) {
+			auto& queue_rec = streams[domain];
 
 			if (!queue_rec.is_recording) {
 				begin_cbuf(domain);
 			}
 
-			return queue_rec.hl_cbuf->command_buffer;
-		};
+			queue_rec.flush_barriers(alloc.get_context());
 
-		auto flush_domain = [&](vuk::DomainFlagBits domain) -> SubmitInfo* {
+			return &queue_rec;
+		}
+
+		auto flush_domain(vuk::DomainFlagBits domain) -> SubmitInfo* {
 			if (domain == DomainFlagBits::eHost) {
 				return nullptr;
 			}
-			size_t index = ctx.domain_to_queue_family_index(domain);
-			auto& queue_rec = ongoing_queue_recordings[index];
+			auto& queue_rec = streams[domain];
 
 			if (queue_rec.cpool.get().command_pool == VK_NULL_HANDLE) {
 				return nullptr;
 			}
 
 			if (queue_rec.is_recording) {
-				end_cbuf_by_idx(index);
+				end_cbuf(domain);
 				return &queue_rec.sb.submits.emplace_back(std::move(queue_rec.si));
 			} else {
 				return &queue_rec.sb.submits.back();
 			}
 		};
 
-		auto complete_domain = [&](vuk::DomainFlagBits domain) {
-			size_t index = ctx.domain_to_queue_family_index(domain);
-			auto& queue_rec = ongoing_queue_recordings[index];
+		auto complete_domain(vuk::DomainFlagBits domain) {
+			auto& queue_rec = streams[domain];
 			if (queue_rec.cpool.get().command_pool == VK_NULL_HANDLE) {
 				return;
 			}
@@ -422,7 +594,94 @@ namespace vuk {
 			sbundle.batches.emplace_back(std::move(queue_rec.sb));
 		};
 
-		auto print_results = [&naming_index_counter](Node* node) {
+		void add_sync(Ref parm, Type* arg_ty, void* value, DomainFlagBits src_domain, DomainFlagBits dst_domain) {
+			auto parm_ty = parm.type();
+
+			Access src_access = Access::eNone;
+			Access dst_access = Access::eNone;
+			Type* base_ty;
+			if (arg_ty->kind == Type::IMBUED_TY) {
+				dst_access = arg_ty->imbued.access;
+				base_ty = Type::stripped(arg_ty);
+				if (parm_ty->kind == Type::ALIASED_TY) { // this is coming from an output annotated, so we know the source access
+					auto src_arg = parm.node->call.args[parm_ty->aliased.ref_idx];
+					auto call_ty = parm.node->call.fn.type()->opaque_fn.args[parm_ty->aliased.ref_idx];
+					if (call_ty->kind == Type::IMBUED_TY) {
+						src_access = call_ty->imbued.access;
+					} else {
+						// TODO: handling unimbued aliased
+						src_access = Access::eNone;
+					}
+				} else if (parm_ty->kind == Type::IMBUED_TY) {
+					assert(0);
+				} else { // there is no need to sync (eg. declare)
+					src_access = Access::eNone;
+				}
+			} else {
+				assert(0);
+			}
+			QueueResourceUse src_use = to_use(src_access, src_domain);
+			QueueResourceUse dst_use = to_use(dst_access, dst_domain);
+
+			bool has_src = src_domain != DomainFlagBits::eNone;
+			bool has_dst = dst_domain != DomainFlagBits::eNone;
+			bool has_both = has_src && has_dst;
+
+			if (has_both) {
+				auto& dst_rec = streams[dst_domain];
+				if (base_ty->is_image()) { // TODO: of course cross-queue barriers we need to issue twice
+					auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
+					dst_rec.synch_image(img_att, src_use, dst_use, dst_access);
+					if (is_framebuffer_attachment(dst_access)) {
+						dst_rec.prepare_render_pass_attachment(alloc, img_att);
+					}
+				} else if (base_ty->is_buffer()) {
+					dst_rec.synch_memory(src_use, dst_use);
+				} else if (base_ty->kind == Type::ARRAY_TY) {
+					auto elem_ty = base_ty->array.T;
+					auto size = base_ty->array.size;
+					if (elem_ty->is_image()) {
+						auto& img_atts = *reinterpret_cast<ImageAttachment**>(value);
+						for (int i = 0; i < size; i++) {
+							dst_rec.synch_image(img_atts[i], src_use, dst_use, dst_access);
+							if (is_framebuffer_attachment(dst_access)) {
+								dst_rec.prepare_render_pass_attachment(alloc, img_atts[i]);
+							}
+						}
+					} else if (elem_ty->is_buffer()) {
+						for (int i = 0; i < size; i++) {
+							dst_rec.synch_memory(src_use, dst_use);
+						}
+					} else {
+						assert(0);
+					}
+				} else {
+					assert(0);
+				}
+			} else {
+				assert(0);
+			}
+		}
+	};
+
+#define VUK_DUMP_EXEC
+
+	Result<SubmitBundle> ExecutableRenderGraph::execute(Allocator& alloc, std::vector<std::pair<SwapchainRef, size_t>> swp_with_index) {
+		Context& ctx = alloc.get_context();
+
+		Scheduler sched(alloc, impl->scheduled_execables, impl->res_to_links, impl->pass_reads);
+
+		Recorder recorder(alloc, &impl->callbacks);
+
+		// DYNAMO
+		// loop through scheduled items
+		// for each scheduled item, schedule deps
+		// generate barriers and batch breaks as needed by deps
+		// allocate images/buffers as declares are encountered
+		// start/end RPs as needed
+		// inference will still need to run in the beginning, as that is compiletime
+
+		auto print_results = [&](Node* node) {
 			for (size_t i = 0; i < node->type.size(); i++) {
 				if (i > 0) {
 					fmt::print(", ");
@@ -430,11 +689,11 @@ namespace vuk {
 				if (node->debug_info) {
 					fmt::print("%{}", node->debug_info->result_names[i]);
 				} else {
-					fmt::print("%{}_{}", node->kind_to_sv(), naming_index_counter);
+					fmt::print("%{}_{}", node->kind_to_sv(), sched.naming_index_counter);
 				}
 			}
 		};
-		auto print_args = [&executed](std::span<Ref> args) {
+		auto print_args = [&](std::span<Ref> args) {
 			for (size_t i = 0; i < args.size(); i++) {
 				if (i > 0) {
 					fmt::print(", ");
@@ -444,19 +703,16 @@ namespace vuk {
 				if (parm.node->debug_info) {
 					fmt::print("%{}", parm.node->debug_info->result_names[parm.index]);
 				} else {
-					fmt::print("%{}_{}", parm.node->kind_to_sv(), executed.at(parm.node).naming_index);
+					fmt::print("%{}_{}", parm.node->kind_to_sv(), sched.executed.at(parm.node).naming_index);
 				}
 			}
 		};
 
-		// we are recording for 3 domains concurrently
-		// if we encounter a cross-queue operation, we split both the source and target, and insert signal -> wait
-
-		while (!work_queue.empty()) {
-			auto item = work_queue.front();
-			work_queue.pop_front();
+		while (!sched.work_queue.empty()) {
+			auto item = sched.work_queue.front();
+			sched.work_queue.pop_front();
 			auto& node = item.execable;
-			if (executed.count(node)) { // only going execute things once
+			if (sched.executed.count(node)) { // only going execute things once
 				continue;
 			}
 			// we run nodes twice - first time we reenqueue at the front and then put all deps before it
@@ -480,7 +736,6 @@ namespace vuk {
 						}
 						bound = **buf;
 					}
-					executed.emplace(node, ExecutionInfo{ DomainFlagBits::eHost, naming_index_counter++ }); // declarations execute on the host
 				} else if (node->type[0]->kind == Type::IMAGE_TY) {
 					auto& attachment = *reinterpret_cast<ImageAttachment*>(node->valloc.args[0].node->constant.value);
 #ifdef VUK_DUMP_EXEC
@@ -497,15 +752,15 @@ namespace vuk {
 						attachment.image = **img;
 						// ctx.set_name(attachment.image.image, bound.name.name);
 					}
-					executed.emplace(node, ExecutionInfo{ DomainFlagBits::eHost, naming_index_counter++ }); // declarations execute on the host
 				} else {
 					assert(0);
 				}
+				sched.done(node, DomainFlagBits::eHost); // declarations execute on the host
 				break;
 			}
 			case Node::AALLOC: {
 				assert(node->type[0]->kind == Type::ARRAY_TY);
-				if (item.ready) {
+				if (sched.process(item)) {
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
 					auto size = node->type[0]->array.size;
@@ -530,220 +785,55 @@ namespace vuk {
 
 					fmt::print("\n");
 #endif
-					executed.emplace(node, ExecutionInfo{ DomainFlagBits::eHost, naming_index_counter++ }); // declarations execute on the host
+					sched.done(node, DomainFlagBits::eHost); // declarations execute on the host
 				} else {
-					item.ready = true;
-					work_queue.push_front(item); // requeue this item
-
 					for (auto& parm : node->valloc.args.subspan(1)) {
-						auto& link = impl->res_to_links[parm];
-
-						if (link.reads.size() > 0) {
-							// all reads
-							for (auto& r : link.reads.to_span(impl->pass_reads)) {
-								schedule_new(r);
-							}
-						} else {
-							// just the def
-							schedule_new(link.def.node);
-						}
+						sched.schedule_dependency(parm, RW::eWrite);
 					}
 				}
 				break;
 			}
 			case Node::CALL: {
-				if (item.ready) {                                   // we have executed every dep, so execute ourselves too
-					DomainFlagBits dst_domain = DomainFlagBits::eAny; // the domain this call will execute on
-					dst_domain = item.scheduled_domain;
-					// run all the barriers here!
-					std::vector<VkImageMemoryBarrier2KHR> im_bars;
-					std::vector<VkMemoryBarrier2KHR> mem_bars;
+				if (sched.process(item)) {                           // we have executed every dep, so execute ourselves too
+					DomainFlagBits dst_domain = item.scheduled_domain; // the domain this call will execute on
 
-					RenderPassInfo rp = {};
+					// run all the barriers here!
 
 					for (size_t i = 0; i < node->call.args.size(); i++) {
 						auto& arg_ty = node->call.fn.type()->opaque_fn.args[i];
 						auto& parm = node->call.args[i];
-						auto parm_ty = parm.type();
 						auto& link = impl->res_to_links[parm];
 
-						Access src_access = Access::eNone;
-						Access dst_access = Access::eNone;
-						DomainFlagBits src_domain = executed.at(parm.node).domain;
-						Type* base_ty;
+						DomainFlagBits src_domain = sched.executed.at(parm.node).domain;
 						if (arg_ty->kind == Type::IMBUED_TY) {
-							dst_access = arg_ty->imbued.access;
-							base_ty = Type::stripped(arg_ty);
-							if (parm_ty->kind == Type::ALIASED_TY) { // this is coming from an output annotated, so we know the source access
-								auto src_arg = parm.node->call.args[parm_ty->aliased.ref_idx];
-								auto call_ty = parm.node->call.fn.type()->opaque_fn.args[parm_ty->aliased.ref_idx];
-								if (call_ty->kind == Type::IMBUED_TY) {
-									src_access = call_ty->imbued.access;
-								} else {
-									// TODO: handling unimbued aliased
-									src_access = Access::eNone;
-								}
-							} else if (parm_ty->kind == Type::IMBUED_TY) {
-								assert(0);
-							} else { // there is no need to sync (eg. declare)
-								src_access = Access::eNone;
-							}
-						} else {
-							assert(0);
-						}
-						QueueResourceUse src_use = to_use(src_access, src_domain);
-						QueueResourceUse dst_use = to_use(dst_access, dst_domain);
+							auto dst_access = arg_ty->imbued.access;
 
-						auto synch_image = [&](ImageAttachment& img_att, QueueResourceUse src_use, QueueResourceUse dst_use, Access dst_access) {
-							auto aspect = format_to_aspect(img_att.format);
-
-							// if we start an RP and we have LOAD_OP_LOAD (currently always), then we must upgrade access with an appropriate READ
+							// here: figuring out which allocator to use to make image views for the RP and then making them
 							if (is_framebuffer_attachment(dst_access)) {
-								if ((aspect & ImageAspectFlagBits::eColor) == ImageAspectFlags{}) { // not color -> depth or depth/stencil
-									dst_use.access |= vuk::AccessFlagBits::eDepthStencilAttachmentRead;
-								} else {
-									dst_use.access |= vuk::AccessFlagBits::eColorAttachmentRead;
-								}
-							}
-
-							im_bars.push_back(impl->emit_image_barrier(src_use, dst_use, Subrange::Image{}, aspect, false));
-							im_bars.back().image = img_att.image.image;
-							VkImageLayout layout = im_bars.back().newLayout;
-							img_att.layout = (ImageLayout)layout;
-
-							if (is_framebuffer_attachment(dst_access)) {
-								VkAttachmentReference attref{};
-
-								attref.attachment = (uint32_t)rp.rpci.attachments.size();
-
-								auto& descr = rp.rpci.attachments.emplace_back();
-								// no layout changed by RPs currently
-								descr.initialLayout = layout;
-								descr.finalLayout = layout;
-								attref.layout = layout;
-
-								descr.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-								descr.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-
-								descr.format = (VkFormat)img_att.format;
-								descr.samples = (VkSampleCountFlagBits)img_att.sample_count.count;
-
-								if ((aspect & ImageAspectFlagBits::eColor) == ImageAspectFlags{}) { // not color -> depth or depth/stencil
-									rp.rpci.ds_ref = attref;
-								} else {
-									rp.rpci.color_refs.push_back(attref);
-								}
-
+								auto urdef = link.urdef.node;
+								auto allocator = urdef->valloc.allocator ? *urdef->valloc.allocator : alloc;
+								auto& img_att = *reinterpret_cast<ImageAttachment*>(link.urdef.node->valloc.args[0].node->constant.value);
 								if (img_att.image_view.payload == VK_NULL_HANDLE) {
-									auto urdef = link.urdef.node;
-									auto allocator = urdef->valloc.allocator ? *urdef->valloc.allocator : alloc;
-									auto iv = allocate_image_view(allocator, img_att);
-									if (!iv) {
-										return iv;
-									}
+									auto iv = allocate_image_view(allocator, img_att); // TODO: dropping error
 									img_att.image_view = **iv;
 
 									auto name = std::string("ImageView: RenderTarget ");
-									ctx.set_name(img_att.image_view.payload, Name(name));
+									alloc.get_context().set_name(img_att.image_view.payload, Name(name));
 								}
-								rp.framebuffer_ivs.push_back(img_att.image_view.payload);
-								rp.fbci.width = img_att.extent.extent.width;
-								rp.fbci.height = img_att.extent.extent.height;
-								rp.fbci.layers = img_att.layer_count;
-								assert(img_att.level_count == 1);
-								rp.fbci.sample_count = img_att.sample_count;
-								rp.fbci.attachments.push_back(img_att.image_view);
 							}
-						};
-
-						auto synch_memory = [&](QueueResourceUse src_use, QueueResourceUse dst_use) {
-							mem_bars.push_back(impl->emit_memory_barrier(src_use, dst_use));
-						};
-
-						if (base_ty->is_image()) { // TODO: of course cross-queue barriers we need to issue twice
-							assert(link.urdef && link.urdef.node->kind == Node::VALLOC);
-							auto& img_att = *reinterpret_cast<ImageAttachment*>(link.urdef.node->valloc.args[0].node->constant.value);
-							synch_image(img_att, src_use, dst_use, dst_access);
-						} else if (base_ty->is_buffer()) {
-							synch_memory(src_use, dst_use);
-						} else if (base_ty->kind == Type::ARRAY_TY) {
-							auto elem_ty = base_ty->array.T;
-							auto size = base_ty->array.size;
-							if (elem_ty->is_image()) {
-								assert(link.urdef && link.urdef.node->kind == Node::VALLOC);
-								auto& img_atts = *reinterpret_cast<ImageAttachment**>(link.urdef.node->valloc.args[0].node->constant.value);
-								for (int i = 0; i < size; i++) {
-									synch_image(img_atts[i], src_use, dst_use, dst_access);
-								}
-							} else if (elem_ty->is_buffer()) {
-								for (int i = 0; i < size; i++) {
-									synch_memory(src_use, dst_use);
-								}
-							} else {
-								assert(0);
-							}
-						} else {
-							assert(0);
 						}
-					}
-					VkCommandBuffer cbuf = activate_domain(dst_domain);
-					VkDependencyInfoKHR dependency_info{ .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO_KHR,
-						                                   .memoryBarrierCount = (uint32_t)mem_bars.size(),
-						                                   .pMemoryBarriers = mem_bars.data(),
-						                                   .imageMemoryBarrierCount = (uint32_t)im_bars.size(),
-						                                   .pImageMemoryBarriers = im_bars.data() };
-
-					if (mem_bars.size() > 0 || im_bars.size() > 0) {
-						ctx.vkCmdPipelineBarrier2KHR(cbuf, &dependency_info);
+						recorder.add_sync(parm, arg_ty, link.urdef.node->valloc.args[0].node->constant.value, src_domain, dst_domain);
 					}
 
 					// make the renderpass if needed!
-					if (rp.rpci.attachments.size() > 0) {
-						SubpassDescription sd;
-						size_t color_count = 0;
-						sd.colorAttachmentCount = (uint32_t)rp.rpci.color_refs.size();
-						sd.pColorAttachments = rp.rpci.color_refs.data();
+					auto rec = recorder.synchronize_domain(dst_domain);
 
-						sd.pDepthStencilAttachment = rp.rpci.ds_ref ? &*rp.rpci.ds_ref : nullptr;
-						sd.flags = {};
-						sd.inputAttachmentCount = 0;
-						sd.pInputAttachments = nullptr;
-						sd.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-						sd.preserveAttachmentCount = 0;
-						sd.pPreserveAttachments = nullptr;
-
-						rp.rpci.subpass_descriptions.push_back(sd);
-
-						rp.rpci.subpassCount = (uint32_t)rp.rpci.subpass_descriptions.size();
-						rp.rpci.pSubpasses = rp.rpci.subpass_descriptions.data();
-
-						// we use barriers
-						rp.rpci.dependencyCount = 0;
-						rp.rpci.pDependencies = nullptr;
-
-						rp.rpci.attachmentCount = (uint32_t)rp.rpci.attachments.size();
-						rp.rpci.pAttachments = rp.rpci.attachments.data();
-
-						auto result = alloc.allocate_render_passes(std::span{ &rp.handle, 1 }, std::span{ &rp.rpci, 1 });
-
-						rp.fbci.renderPass = rp.handle;
-						rp.fbci.pAttachments = rp.framebuffer_ivs.data();
-						rp.fbci.attachmentCount = (uint32_t)rp.framebuffer_ivs.size();
-
-						Unique<VkFramebuffer> fb(alloc);
-						VUK_DO_OR_RETURN(alloc.allocate_framebuffers(std::span{ &*fb, 1 }, std::span{ &rp.fbci, 1 }));
-						rp.framebuffer = *fb; // queue framebuffer for destruction
-						// drop render pass immediately
-						if (result) {
-							alloc.deallocate(std::span{ &rp.handle, 1 });
-						}
-					}
 					// run the user cb!
 					if (node->call.fn.type()->kind == Type::OPAQUE_FN_TY) {
-						CommandBuffer cobuf(*this, ctx, alloc, cbuf);
-						if (rp.handle) {
-							begin_render_pass(ctx, rp, cbuf, false);
-							fill_render_pass_info(rp, 0, cobuf);
+						CommandBuffer cobuf(*this, ctx, alloc, rec->cbuf);
+						if (rec->rp.handle) {
+							rec->prepare_render_pass(alloc);
+							fill_render_pass_info(rec->rp, 0, cobuf);
 						}
 
 						std::vector<void*> opaque_args;
@@ -766,25 +856,23 @@ namespace vuk {
 						opaque_rets.resize(node->call.fn.type()->opaque_fn.return_types.size());
 						(*node->call.fn.type()->opaque_fn.callback)(cobuf, opaque_args, opaque_meta, opaque_rets);
 
-						if (rp.handle) {
-							ctx.vkCmdEndRenderPass(cbuf);
+						if (rec->rp.handle) {
+							rec->end_render_pass(alloc);
 						}
 					} else {
 						assert(0);
 					}
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
-					fmt::print(" = call [{}] ", static_cast<uint32_t>(dst_domain));
+					fmt::print(" = call ${} ", static_cast<uint32_t>(dst_domain));
 					if (node->call.fn.type()->debug_info) {
 						fmt::print("<{}> ", node->call.fn.type()->debug_info->name);
 					}
 					print_args(node->call.args);
 					fmt::print("\n");
 #endif
-					executed.emplace(node, ExecutionInfo{ dst_domain, naming_index_counter++ });
+					sched.done(node, dst_domain);
 				} else { // execute deps
-					item.ready = true;
-					work_queue.push_front(item); // requeue this item
 					for (size_t i = 0; i < node->call.args.size(); i++) {
 						auto& arg_ty = node->call.fn.type()->opaque_fn.args[i];
 						auto& parm = node->call.args[i];
@@ -792,21 +880,9 @@ namespace vuk {
 
 						if (arg_ty->kind == Type::IMBUED_TY) {
 							auto access = arg_ty->imbued.access;
-							if (is_write_access(access) || access == Access::eConsume) { // Write and ReadWrite
-								// we are going to write here, so schedule all reads or the def, if no read
-								if (link.reads.size() > 0) {
-									// all reads
-									for (auto& r : link.reads.to_span(impl->pass_reads)) {
-										schedule_new(r);
-									}
-								} else {
-									// just the def
-									schedule_new(link.def.node);
-								}
-							} else { // Read
-								       // we are going to read, so schedule the def
-								schedule_new(link.def.node);
-							}
+							// Write and ReadWrite
+							RW sync_access = (is_write_access(access) || access == Access::eConsume) ? RW::eWrite : RW::eRead;
+							sched.schedule_dependency(parm, sync_access);
 						} else {
 							assert(0);
 						}
@@ -815,10 +891,10 @@ namespace vuk {
 				break;
 			}
 			case Node::RELEASE:
-				if (item.ready) {
+				if (sched.process(item)) {
 					// release is to execute: we need to flush current queue -> end current batch and add signal
 					auto parm = node->release.src;
-					DomainFlagBits src_domain = executed.at(parm.node).domain;
+					DomainFlagBits src_domain = sched.executed.at(parm.node).domain;
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
 					fmt::print("release ");
@@ -830,6 +906,7 @@ namespace vuk {
 					Access dst_access = Access::eNone;
 
 					Type* parm_ty = parm.type();
+
 					if (parm_ty->kind == Type::ALIASED_TY) { // this is coming from an output annotated, so we know the source access
 						auto src_arg = parm.node->call.args[parm_ty->aliased.ref_idx];
 						auto call_ty = parm.node->call.fn.type()->opaque_fn.args[parm_ty->aliased.ref_idx];
@@ -848,28 +925,15 @@ namespace vuk {
 					if (src_domain == DomainFlagBits::eHost) {
 						acqrel->status = Signal::Status::eHostAvailable;
 					}
-					auto batch = flush_domain(src_domain);
+					auto batch = recorder.flush_domain(src_domain);
 					if (!batch) {
 						continue;
 					}
 					batch->future_signals.push_back(acqrel);
 					fmt::print("");
+					sched.done(node, DomainFlagBits::eNone);
 				} else {
-					item.ready = true;
-					work_queue.push_front(item); // requeue this item
-
-					auto& parm = node->release.src;
-					auto& link = impl->res_to_links[parm];
-
-					if (link.reads.size() > 0) {
-						// all reads
-						for (auto& r : link.reads.to_span(impl->pass_reads)) {
-							schedule_new(r);
-						}
-					} else {
-						// just the def
-						schedule_new(link.def.node);
-					}
+					sched.schedule_dependency(node->release.src, RW::eWrite);
 				}
 				break;
 
@@ -877,7 +941,7 @@ namespace vuk {
 				// bundle = *acquire_one(*context, swapchain, (*present_ready)[context->get_frame_count() % 3], (*render_complete)[context->get_frame_count() % 3]);
 				break;
 			case Node::INDEXING:
-				if (item.ready) {
+				if (sched.process(item)) {
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
 					fmt::print(" = ");
@@ -885,25 +949,10 @@ namespace vuk {
 					fmt::print("[{}]", constant<uint64_t>(node->indexing.index));
 					fmt::print("\n");
 #endif
-					executed.emplace(node, ExecutionInfo{ DomainFlagBits::eHost, naming_index_counter++ });
+					sched.done(node, DomainFlagBits::eNone); // indexing doesn't execute
 				} else {
-					item.ready = true;
-					work_queue.push_front(item); // requeue this item
+					sched.schedule_dependency(node->indexing.array, RW::eWrite);
 
-					{
-						auto& parm = node->indexing.array;
-						auto& link = impl->res_to_links[parm];
-
-						if (link.reads.size() > 0) {
-							// all reads
-							for (auto& r : link.reads.to_span(impl->pass_reads)) {
-								schedule_new(r);
-							}
-						} else {
-							// just the def
-							schedule_new(link.def.node);
-						}
-					}
 					// TODO: not everything has links
 					/* {
 					  auto& parm = node->indexing.index;
@@ -926,9 +975,9 @@ namespace vuk {
 			}
 		}
 
-		complete_domain(DomainFlagBits::eGraphicsQueue);
+		recorder.complete_domain(DomainFlagBits::eGraphicsQueue);
 		// complete_domain(DomainFlagBits::eComputeQueue);
-		complete_domain(DomainFlagBits::eTransferQueue);
+		recorder.complete_domain(DomainFlagBits::eTransferQueue);
 
 		// RESOLVE SWAPCHAIN DYNAMICITY
 		// bind swapchain attachment images & ivs
@@ -1485,7 +1534,7 @@ namespace vuk {
 		  sbundle.batches.emplace_back(std::move(*batch));
 		}*/
 
-		return { expected_value, std::move(sbundle) };
+		return { expected_value, std::move(recorder.sbundle) };
 	}
 
 	Result<bool, RenderGraphException> ExecutableRenderGraph::is_resource_image_in_general_layout(const NameReference& name_ref, PassInfo* pass_info) {
