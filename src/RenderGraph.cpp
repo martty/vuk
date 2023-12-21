@@ -901,28 +901,6 @@ namespace vuk {
 
 		return barrier;
 	}
-
-	VkMemoryBarrier2KHR RGCImpl::emit_memory_barrier(QueueResourceUse last_use, QueueResourceUse current_use) {
-		VkMemoryBarrier2KHR barrier{ .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2_KHR };
-		if (last_use.stages == vuk::PipelineStageFlagBits{}) {
-			return barrier;
-		}
-
-		// for now we only emit pre- memory barriers, so the executing domain is always 'current_use.domain'
-		scope_to_domain((VkPipelineStageFlagBits2KHR&)last_use.stages, current_use.domain & DomainFlagBits::eQueueMask);
-		scope_to_domain((VkPipelineStageFlagBits2KHR&)current_use.stages, current_use.domain & DomainFlagBits::eQueueMask);
-
-		barrier.srcAccessMask = is_read_access(last_use) ? 0 : (VkAccessFlags)last_use.access;
-		barrier.dstAccessMask = (VkAccessFlags)current_use.access;
-		barrier.srcStageMask = (VkPipelineStageFlagBits2)last_use.stages.m_mask;
-		barrier.dstStageMask = (VkPipelineStageFlagBits2)current_use.stages.m_mask;
-		if (barrier.srcStageMask == 0) {
-			barrier.srcStageMask = (VkPipelineStageFlagBits2)PipelineStageFlagBits::eNone;
-			barrier.srcAccessMask = {};
-		}
-
-		return barrier;
-	}
 	/*
 	Result<void> RGCImpl::generate_barriers_and_waits() {
 	#ifdef VUK_DUMP_USE
