@@ -296,6 +296,7 @@ namespace vuk {
 		RenderPassInfo rp = {};
 		std::vector<VkImageMemoryBarrier2KHR> im_bars;
 		std::vector<VkMemoryBarrier2KHR> mem_bars;
+		std::vector<VkMemoryBarrier2KHR> half_mem_bars;
 
 		void flush_barriers(Context& ctx) {
 			VkDependencyInfoKHR dependency_info{ .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO_KHR,
@@ -330,8 +331,40 @@ namespace vuk {
 			img_att.layout = (ImageLayout)layout;
 		};
 
-		void synch_memory(QueueResourceUse src_use, QueueResourceUse dst_use) {
-			mem_bars.push_back(RGCImpl::emit_memory_barrier(src_use, dst_use));
+		void synch_memory(QueueResourceUse src_use, QueueResourceUse dst_use, void* tag) {
+			VkMemoryBarrier2KHR barrier{ .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2_KHR };
+
+			if (src_use.domain == DomainFlagBits::eAny || dst_use.domain == DomainFlagBits::eHost) {
+				src_use.domain = dst_use.domain;
+			}
+			if (dst_use.domain == DomainFlagBits::eAny) {
+				dst_use.domain = src_use.domain;
+			}
+
+			scope_to_domain((VkPipelineStageFlagBits2KHR&)src_use.stages, src_use.domain & DomainFlagBits::eQueueMask);
+			scope_to_domain((VkPipelineStageFlagBits2KHR&)dst_use.stages, dst_use.domain & DomainFlagBits::eQueueMask);
+
+			barrier.srcAccessMask = is_read_access(src_use) ? 0 : (VkAccessFlags)src_use.access;
+			barrier.dstAccessMask = (VkAccessFlags)dst_use.access;
+			barrier.srcStageMask = (VkPipelineStageFlagBits2)src_use.stages.m_mask;
+			barrier.dstStageMask = (VkPipelineStageFlagBits2)dst_use.stages.m_mask;
+			if (barrier.srcStageMask == 0) {
+				barrier.srcStageMask = (VkPipelineStageFlagBits2)PipelineStageFlagBits::eNone;
+				barrier.srcAccessMask = {};
+			}
+			if (dst_use.domain == DomainFlagBits::eNone) {
+				barrier.pNext = tag;
+				half_mem_bars.push_back(barrier);
+			} else if (src_use.domain == DomainFlagBits::eNone) {
+				auto it = std::find_if(half_mem_bars.begin(), half_mem_bars.end(), [=](auto& mb) { return mb.pNext == tag; });
+				assert(it != half_mem_bars.end());
+				barrier.srcAccessMask = it->srcAccessMask;
+				barrier.srcStageMask = it->srcStageMask;
+				mem_bars.push_back(barrier);
+				half_mem_bars.erase(it);
+			} else {
+				mem_bars.push_back(barrier);
+			}
 		};
 
 		void prepare_render_pass_attachment(Allocator alloc, ImageAttachment img_att) {
@@ -502,6 +535,31 @@ namespace vuk {
 		void done(Node* node, DomainFlagBits dst_domain) {
 			executed.emplace(node, ExecutionInfo{ dst_domain, naming_index_counter++ });
 		}
+
+		template<class T>
+		T& get_value(Ref parm) {
+			auto& link = res_to_links[parm];
+			if (link.urdef.node->kind == Node::VALLOC) {
+				return *reinterpret_cast<T*>(link.urdef.node->valloc.args[0].node->constant.value);
+			} else if (link.urdef.node->kind == Node::AALLOC) {
+				return reinterpret_cast<T&>(link.urdef.node->aalloc.args[0].node->constant.value);
+			} else {
+				assert(0);
+			}
+		};
+
+		template<class T>
+		T& get_array_elem_value_arg(Ref parm, size_t index) {
+			auto& link = res_to_links[parm];
+			auto& arg = link.urdef.node->aalloc.args[index + 1];
+			return get_value<T>(arg);
+		};
+
+		template<class T>
+		T& get_array_elem_value(Ref parm, size_t index) {
+			auto& link = res_to_links[parm];
+			return get_value<T*>(parm)[index];
+		};
 	};
 
 	struct Recorder {
@@ -599,10 +657,9 @@ namespace vuk {
 
 			Access src_access = Access::eNone;
 			Access dst_access = Access::eNone;
-			Type* base_ty;
+			Type* base_ty = Type::stripped(arg_ty);
 			if (arg_ty->kind == Type::IMBUED_TY) {
 				dst_access = arg_ty->imbued.access;
-				base_ty = Type::stripped(arg_ty);
 				if (parm_ty->kind == Type::ALIASED_TY) { // this is coming from an output annotated, so we know the source access
 					auto src_arg = parm.node->call.args[parm_ty->aliased.ref_idx];
 					auto call_ty = parm.node->call.fn.type()->opaque_fn.args[parm_ty->aliased.ref_idx];
@@ -617,8 +674,18 @@ namespace vuk {
 				} else { // there is no need to sync (eg. declare)
 					src_access = Access::eNone;
 				}
+			} else if (parm_ty->kind == Type::ALIASED_TY) { // this is coming from an output annotated, so we know the source access
+				auto src_arg = parm.node->call.args[parm_ty->aliased.ref_idx];
+				auto call_ty = parm.node->call.fn.type()->opaque_fn.args[parm_ty->aliased.ref_idx];
+				if (call_ty->kind == Type::IMBUED_TY) {
+					src_access = call_ty->imbued.access;
+				} else {
+					// TODO: handling unimbued aliased
+					src_access = Access::eNone;
+				}
 			} else {
-				assert(0);
+				/* no dst access */
+				assert(dst_domain == DomainFlagBits::eNone);
 			}
 			QueueResourceUse src_use = to_use(src_access, src_domain);
 			QueueResourceUse dst_use = to_use(dst_access, dst_domain);
@@ -626,34 +693,55 @@ namespace vuk {
 			bool has_src = src_domain != DomainFlagBits::eNone;
 			bool has_dst = dst_domain != DomainFlagBits::eNone;
 			bool has_both = has_src && has_dst;
+			bool cross = has_both && (src_domain != dst_domain);
+			bool only_src = has_src && !has_dst;
 
-			if (has_both) {
-				auto& dst_rec = streams[dst_domain];
-				if (base_ty->is_image()) { // TODO: of course cross-queue barriers we need to issue twice
-					auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
-					dst_rec.synch_image(img_att, src_use, dst_use, dst_access);
+			auto src_rec = has_src ? &streams[src_domain] : nullptr;
+			auto dst_rec = has_dst ? &streams[dst_domain] : nullptr;
+
+			if (base_ty->is_image()) { // TODO: of course cross-queue barriers we need to issue twice
+				auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
+				if (has_dst) {
+					dst_rec->synch_image(img_att, src_use, dst_use, dst_access);
 					if (is_framebuffer_attachment(dst_access)) {
-						dst_rec.prepare_render_pass_attachment(alloc, img_att);
+						dst_rec->prepare_render_pass_attachment(alloc, img_att);
 					}
-				} else if (base_ty->is_buffer()) {
-					dst_rec.synch_memory(src_use, dst_use);
-				} else if (base_ty->kind == Type::ARRAY_TY) {
-					auto elem_ty = base_ty->array.T;
-					auto size = base_ty->array.size;
-					if (elem_ty->is_image()) {
-						auto& img_atts = *reinterpret_cast<ImageAttachment**>(value);
-						for (int i = 0; i < size; i++) {
-							dst_rec.synch_image(img_atts[i], src_use, dst_use, dst_access);
+				}
+				if (only_src || cross) {
+					src_rec->synch_image(img_att, src_use, dst_use, dst_access);
+				}
+			} else if (base_ty->is_buffer()) {
+				// buffer needs no cross
+				if (has_dst) {
+					dst_rec->synch_memory(src_use, dst_use, value);
+				} else if (has_src) {
+					src_rec->synch_memory(src_use, dst_use, value);
+				}
+			} else if (base_ty->kind == Type::ARRAY_TY) {
+				auto elem_ty = base_ty->array.T;
+				auto size = base_ty->array.size;
+				if (elem_ty->is_image()) {
+					auto& img_atts = *reinterpret_cast<ImageAttachment**>(value);
+					for (int i = 0; i < size; i++) {
+						if (has_dst) {
+							dst_rec->synch_image(img_atts[i], src_use, dst_use, dst_access);
 							if (is_framebuffer_attachment(dst_access)) {
-								dst_rec.prepare_render_pass_attachment(alloc, img_atts[i]);
+								dst_rec->prepare_render_pass_attachment(alloc, img_atts[i]);
 							}
 						}
-					} else if (elem_ty->is_buffer()) {
-						for (int i = 0; i < size; i++) {
-							dst_rec.synch_memory(src_use, dst_use);
+						if (only_src || cross) {
+							src_rec->synch_image(img_atts[i], src_use, dst_use, dst_access);
 						}
-					} else {
-						assert(0);
+					}
+				} else if (elem_ty->is_buffer()) {
+					for (int i = 0; i < size; i++) {
+						// buffer needs no cross
+						auto bufs = reinterpret_cast<Buffer**>(value);
+						if (has_dst) {
+							dst_rec->synch_memory(src_use, dst_use, bufs[i]);
+						} else if (has_src) {
+							src_rec->synch_memory(src_use, dst_use, bufs[i]);
+						}
 					}
 				} else {
 					assert(0);
@@ -822,7 +910,13 @@ namespace vuk {
 								}
 							}
 						}
-						recorder.add_sync(parm, arg_ty, link.urdef.node->valloc.args[0].node->constant.value, src_domain, dst_domain);
+						void* value;
+						if (link.urdef.node->kind == Node::VALLOC) {
+							value = link.urdef.node->valloc.args[0].node->constant.value;
+						} else if (link.urdef.node->kind == Node::AALLOC) {
+							value = link.urdef.node->aalloc.args[0].node->constant.value;
+						}
+						recorder.add_sync(parm, arg_ty, value, src_domain, dst_domain);
 					}
 
 					// make the renderpass if needed!
@@ -942,6 +1036,18 @@ namespace vuk {
 				break;
 			case Node::INDEXING:
 				if (sched.process(item)) {
+					// half sync
+					std::vector<Buffer*> bufs;
+					auto& link = sched.res_to_links[node->indexing.array];
+					assert(link.urdef.node->kind == Node::AALLOC);
+					auto size = link.urdef.type()->array.size;
+					for (auto i = 0; i < size; i++) {
+						bufs.push_back(&sched.get_value<Buffer>(link.urdef.node->aalloc.args[i + 1]));
+					}
+					recorder.add_sync(node->indexing.array,
+					                  node->indexing.array.type(), bufs.data(),
+					                  sched.executed.at(node->indexing.array.node).domain,
+					                  DomainFlagBits::eNone);
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
 					fmt::print(" = ");
