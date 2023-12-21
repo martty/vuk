@@ -295,6 +295,7 @@ namespace vuk {
 
 		RenderPassInfo rp = {};
 		std::vector<VkImageMemoryBarrier2KHR> im_bars;
+		std::vector<VkImageMemoryBarrier2KHR> half_im_bars;
 		std::vector<VkMemoryBarrier2KHR> mem_bars;
 		std::vector<VkMemoryBarrier2KHR> half_mem_bars;
 
@@ -313,7 +314,7 @@ namespace vuk {
 			im_bars.clear();
 		}
 
-		void synch_image(ImageAttachment& img_att, QueueResourceUse src_use, QueueResourceUse dst_use, Access dst_access) {
+		void synch_image(ImageAttachment& img_att, QueueResourceUse src_use, QueueResourceUse dst_use, Access dst_access, void* tag) {
 			auto aspect = format_to_aspect(img_att.format);
 
 			// if we start an RP and we have LOAD_OP_LOAD (currently always), then we must upgrade access with an appropriate READ
@@ -325,10 +326,63 @@ namespace vuk {
 				}
 			}
 
-			im_bars.push_back(RGCImpl::emit_image_barrier(src_use, dst_use, Subrange::Image{}, aspect, false));
-			im_bars.back().image = img_att.image.image;
-			VkImageLayout layout = im_bars.back().newLayout;
-			img_att.layout = (ImageLayout)layout;
+			Subrange::Image subrange = {};
+
+			scope_to_domain((VkPipelineStageFlagBits2KHR&)src_use.stages, src_use.domain & DomainFlagBits::eQueueMask);
+			scope_to_domain((VkPipelineStageFlagBits2KHR&)dst_use.stages, dst_use.domain & DomainFlagBits::eQueueMask);
+
+			// compute image barrier for this access -> access
+			VkImageMemoryBarrier2KHR barrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2_KHR };
+			barrier.srcAccessMask = is_read_access(src_use) ? 0 : (VkAccessFlags)src_use.access;
+			barrier.dstAccessMask = (VkAccessFlags)dst_use.access;
+			barrier.oldLayout = (VkImageLayout)src_use.layout;
+			barrier.newLayout = (VkImageLayout)dst_use.layout;
+			barrier.subresourceRange.aspectMask = (VkImageAspectFlags)aspect;
+			barrier.subresourceRange.baseArrayLayer = subrange.base_layer;
+			barrier.subresourceRange.baseMipLevel = subrange.base_level;
+			barrier.subresourceRange.layerCount = subrange.layer_count;
+			barrier.subresourceRange.levelCount = subrange.level_count;
+
+			if (src_use.domain == DomainFlagBits::eAny || src_use.domain == DomainFlagBits::eHost) {
+				src_use.domain = dst_use.domain;
+			}
+			if (dst_use.domain == DomainFlagBits::eAny) {
+				dst_use.domain = src_use.domain;
+			}
+
+			barrier.srcQueueFamilyIndex = static_cast<uint32_t>((src_use.domain & DomainFlagBits::eQueueMask).m_mask);
+			barrier.dstQueueFamilyIndex = static_cast<uint32_t>((dst_use.domain & DomainFlagBits::eQueueMask).m_mask);
+
+			if (src_use.stages == PipelineStageFlags{}) {
+				barrier.srcAccessMask = {};
+			}
+			if (dst_use.stages == PipelineStageFlags{}) {
+				barrier.dstAccessMask = {};
+			}
+
+			barrier.srcStageMask = (VkPipelineStageFlags2)src_use.stages.m_mask;
+			barrier.dstStageMask = (VkPipelineStageFlags2)dst_use.stages.m_mask;
+
+			barrier.image = img_att.image.image;
+
+			if (dst_use.domain == DomainFlagBits::eNone) {
+				barrier.pNext = tag;
+				half_im_bars.push_back(barrier);
+			} else if (src_use.domain == DomainFlagBits::eNone) {
+				auto it = std::find_if(half_im_bars.begin(), half_im_bars.end(), [=](auto& mb) { return mb.pNext == tag; });
+				assert(it != half_im_bars.end());
+				barrier.pNext = nullptr;
+				barrier.srcAccessMask = it->srcAccessMask;
+				barrier.srcStageMask = it->srcStageMask;
+				barrier.srcQueueFamilyIndex = it->srcQueueFamilyIndex;
+				barrier.oldLayout = it->oldLayout;
+				im_bars.push_back(barrier);
+				half_im_bars.erase(it);
+				img_att.layout = (ImageLayout)barrier.newLayout;
+			} else {
+				im_bars.push_back(barrier);
+				img_att.layout = (ImageLayout)barrier.newLayout;
+			}
 		};
 
 		void synch_memory(QueueResourceUse src_use, QueueResourceUse dst_use, void* tag) {
@@ -358,6 +412,7 @@ namespace vuk {
 			} else if (src_use.domain == DomainFlagBits::eNone) {
 				auto it = std::find_if(half_mem_bars.begin(), half_mem_bars.end(), [=](auto& mb) { return mb.pNext == tag; });
 				assert(it != half_mem_bars.end());
+				barrier.pNext = nullptr;
 				barrier.srcAccessMask = it->srcAccessMask;
 				barrier.srcStageMask = it->srcStageMask;
 				mem_bars.push_back(barrier);
@@ -513,7 +568,12 @@ namespace vuk {
 		}
 
 		void schedule_dependency(Ref parm, RW access) {
-			auto& link = res_to_links[parm];
+			auto it = res_to_links.find(parm);
+			// some items (like constants) don't have links, so they also don't need to be scheduled
+			if (it == res_to_links.end()) {
+				return;
+			}
+			auto& link = it->second;
 
 			if (access == RW::eWrite) { // synchronize against writing
 				// we are going to write here, so schedule all reads or the def, if no read
@@ -526,7 +586,7 @@ namespace vuk {
 					// just the def
 					schedule_new(link.def.node);
 				}
-			} else { // just reading, so don't s
+			} else { // just reading, so don't synchronize with reads
 				// just the def
 				schedule_new(link.def.node);
 			}
@@ -547,6 +607,17 @@ namespace vuk {
 				assert(0);
 			}
 		};
+
+		void* get_value(Ref parm) {
+			auto& link = res_to_links[parm];
+			if (link.urdef.node->kind == Node::VALLOC) {
+				return link.urdef.node->valloc.args[0].node->constant.value;
+			} else if (link.urdef.node->kind == Node::AALLOC) {
+				return link.urdef.node->aalloc.args[0].node->constant.value;
+			} else {
+				assert(0);
+			}
+		}
 
 		template<class T>
 		T& get_array_elem_value_arg(Ref parm, size_t index) {
@@ -702,13 +773,13 @@ namespace vuk {
 			if (base_ty->is_image()) { // TODO: of course cross-queue barriers we need to issue twice
 				auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
 				if (has_dst) {
-					dst_rec->synch_image(img_att, src_use, dst_use, dst_access);
+					dst_rec->synch_image(img_att, src_use, dst_use, dst_access, value);
 					if (is_framebuffer_attachment(dst_access)) {
 						dst_rec->prepare_render_pass_attachment(alloc, img_att);
 					}
 				}
 				if (only_src || cross) {
-					src_rec->synch_image(img_att, src_use, dst_use, dst_access);
+					src_rec->synch_image(img_att, src_use, dst_use, dst_access, value);
 				}
 			} else if (base_ty->is_buffer()) {
 				// buffer needs no cross
@@ -721,16 +792,16 @@ namespace vuk {
 				auto elem_ty = base_ty->array.T;
 				auto size = base_ty->array.size;
 				if (elem_ty->is_image()) {
-					auto& img_atts = *reinterpret_cast<ImageAttachment**>(value);
+					auto img_atts = reinterpret_cast<ImageAttachment**>(value);
 					for (int i = 0; i < size; i++) {
 						if (has_dst) {
-							dst_rec->synch_image(img_atts[i], src_use, dst_use, dst_access);
+							dst_rec->synch_image(*img_atts[i], src_use, dst_use, dst_access, img_atts[i]);
 							if (is_framebuffer_attachment(dst_access)) {
-								dst_rec->prepare_render_pass_attachment(alloc, img_atts[i]);
+								dst_rec->prepare_render_pass_attachment(alloc, *img_atts[i]);
 							}
 						}
 						if (only_src || cross) {
-							src_rec->synch_image(img_atts[i], src_use, dst_use, dst_access);
+							src_rec->synch_image(*img_atts[i], src_use, dst_use, dst_access, img_atts[i]);
 						}
 					}
 				} else if (elem_ty->is_buffer()) {
@@ -849,6 +920,14 @@ namespace vuk {
 			case Node::AALLOC: {
 				assert(node->type[0]->kind == Type::ARRAY_TY);
 				if (sched.process(item)) {
+					for (size_t i = 1; i < node->aalloc.args.size(); i++) {
+						auto arg_ty = node->aalloc.args[i].type();
+						auto& parm = node->aalloc.args[i];
+
+						DomainFlagBits src_domain = sched.executed.at(parm.node).domain;
+						recorder.add_sync(parm, arg_ty, sched.get_value(parm), src_domain, DomainFlagBits::eNone);
+					}
+
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
 					auto size = node->type[0]->array.size;
@@ -861,14 +940,20 @@ namespace vuk {
 						auto arr_mem = new Buffer[size];
 						for (auto i = 0; i < size; i++) {
 							auto& elem = node->valloc.args[i + 1];
-							assert(elem.type()->kind == Type::BUFFER_TY);
-							auto& link = impl->res_to_links[elem];
+							assert(Type::stripped(elem.type())->kind == Type::BUFFER_TY);
 
-							auto src = link.urdef.node->valloc.args[0].node->constant.value;
-							memcpy(&arr_mem[i], src, sizeof(Buffer));
+							memcpy(&arr_mem[i], sched.get_value(elem), sizeof(Buffer));
 						}
 						node->valloc.args[0].node->constant.value = arr_mem;
-					} else {
+					} else if (elem_ty->kind == Type::IMAGE_TY) {
+						auto arr_mem = new ImageAttachment[size];
+						for (auto i = 0; i < size; i++) {
+							auto& elem = node->valloc.args[i + 1];
+							assert(Type::stripped(elem.type())->kind == Type::IMAGE_TY);
+
+							memcpy(&arr_mem[i], sched.get_value(elem), sizeof(ImageAttachment));
+						}
+						node->valloc.args[0].node->constant.value = arr_mem;
 					}
 
 					fmt::print("\n");
@@ -910,12 +995,8 @@ namespace vuk {
 								}
 							}
 						}
-						void* value;
-						if (link.urdef.node->kind == Node::VALLOC) {
-							value = link.urdef.node->valloc.args[0].node->constant.value;
-						} else if (link.urdef.node->kind == Node::AALLOC) {
-							value = link.urdef.node->aalloc.args[0].node->constant.value;
-						}
+						auto value = sched.get_value(parm);
+						ImageAttachment& att = *reinterpret_cast<ImageAttachment*>(value);
 						recorder.add_sync(parm, arg_ty, value, src_domain, dst_domain);
 					}
 
@@ -1044,10 +1125,8 @@ namespace vuk {
 					for (auto i = 0; i < size; i++) {
 						bufs.push_back(&sched.get_value<Buffer>(link.urdef.node->aalloc.args[i + 1]));
 					}
-					recorder.add_sync(node->indexing.array,
-					                  node->indexing.array.type(), bufs.data(),
-					                  sched.executed.at(node->indexing.array.node).domain,
-					                  DomainFlagBits::eNone);
+					recorder.add_sync(
+					    node->indexing.array, node->indexing.array.type(), bufs.data(), sched.executed.at(node->indexing.array.node).domain, DomainFlagBits::eNone);
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
 					fmt::print(" = ");
@@ -1058,22 +1137,7 @@ namespace vuk {
 					sched.done(node, DomainFlagBits::eNone); // indexing doesn't execute
 				} else {
 					sched.schedule_dependency(node->indexing.array, RW::eWrite);
-
-					// TODO: not everything has links
-					/* {
-					  auto& parm = node->indexing.index;
-					  auto& link = impl->res_to_links[parm];
-
-					  if (link.reads.size() > 0) {
-					    // all reads
-					    for (auto& r : link.reads.to_span(impl->pass_reads)) {
-					      schedule_new(r);
-					    }
-					  } else {
-					    // just the def
-					    schedule_new(link.def.node);
-					  }
-					}*/
+					sched.schedule_dependency(node->indexing.index, RW::eRead);
 				}
 				break;
 			default:
