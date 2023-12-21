@@ -153,7 +153,14 @@ namespace vuk {
 					auto index_v = constant<uint64_t>(node.indexing.index);
 					auto array_arg = array_def.node->aalloc.args[index_v + 1];
 					assert(res_to_links[array_arg].urdef);
-					res_to_links[first(&node)].urdef = res_to_links[array_arg].urdef;
+					auto& link = res_to_links[first(&node)];
+					link.urdef = res_to_links[array_arg].urdef;
+
+					auto l = &link;
+					do {
+						l->urdef = link.urdef;
+						l = l->next;
+					} while (l);
 				}
 			}
 		}
@@ -814,92 +821,6 @@ namespace vuk {
 	bool crosses_queue(QueueResourceUse last_use, QueueResourceUse current_use) {
 		return (last_use.domain != DomainFlagBits::eNone && last_use.domain != DomainFlagBits::eAny && current_use.domain != DomainFlagBits::eNone &&
 		        current_use.domain != DomainFlagBits::eAny && (last_use.domain & DomainFlagBits::eQueueMask) != (current_use.domain & DomainFlagBits::eQueueMask));
-	}
-
-	VkImageMemoryBarrier2KHR RGCImpl::emit_image_barrier(QueueResourceUse last_use,
-	                                                     QueueResourceUse current_use,
-	                                                     const Subrange::Image& subrange,
-	                                                     ImageAspectFlags aspect,
-	                                                     bool is_release) {
-		scope_to_domain((VkPipelineStageFlagBits2KHR&)last_use.stages, is_release ? last_use.domain : current_use.domain & DomainFlagBits::eQueueMask);
-		scope_to_domain((VkPipelineStageFlagBits2KHR&)current_use.stages, is_release ? last_use.domain : current_use.domain & DomainFlagBits::eQueueMask);
-
-		// compute image barrier for this access -> access
-		VkImageMemoryBarrier2KHR barrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2_KHR };
-		barrier.srcAccessMask = is_read_access(last_use) ? 0 : (VkAccessFlags)last_use.access;
-		barrier.dstAccessMask = (VkAccessFlags)current_use.access;
-		barrier.oldLayout = (VkImageLayout)last_use.layout;
-		barrier.newLayout = (VkImageLayout)current_use.layout;
-		barrier.subresourceRange.aspectMask = (VkImageAspectFlags)aspect;
-		barrier.subresourceRange.baseArrayLayer = subrange.base_layer;
-		barrier.subresourceRange.baseMipLevel = subrange.base_level;
-		barrier.subresourceRange.layerCount = subrange.layer_count;
-		barrier.subresourceRange.levelCount = subrange.level_count;
-		assert(last_use.domain.m_mask != 0);
-		assert(current_use.domain.m_mask != 0);
-		if (last_use.domain == DomainFlagBits::eAny || last_use.domain == DomainFlagBits::eHost) {
-			last_use.domain = current_use.domain;
-		}
-		if (current_use.domain == DomainFlagBits::eAny) {
-			current_use.domain = last_use.domain;
-		}
-		barrier.srcQueueFamilyIndex = static_cast<uint32_t>((last_use.domain & DomainFlagBits::eQueueMask).m_mask);
-		barrier.dstQueueFamilyIndex = static_cast<uint32_t>((current_use.domain & DomainFlagBits::eQueueMask).m_mask);
-
-		if (last_use.stages == PipelineStageFlags{}) {
-			barrier.srcAccessMask = {};
-		}
-		if (current_use.stages == PipelineStageFlags{}) {
-			barrier.dstAccessMask = {};
-		}
-
-		barrier.srcStageMask = (VkPipelineStageFlags2)last_use.stages.m_mask;
-		barrier.dstStageMask = (VkPipelineStageFlags2)current_use.stages.m_mask;
-
-		return barrier;
-	}
-
-	VkImageMemoryBarrier2KHR emit_av_image_barrier(QueueResourceUse last_use,
-	                                               QueueResourceUse current_use,
-	                                               const Subrange::Image& subrange,
-	                                               Image image,
-	                                               ImageAspectFlags aspect,
-	                                               bool is_release) {
-		scope_to_domain((VkPipelineStageFlagBits2KHR&)last_use.stages, is_release ? last_use.domain : current_use.domain & DomainFlagBits::eQueueMask);
-
-		// compute image barrier for this access -> access
-		VkImageMemoryBarrier2KHR barrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2_KHR };
-		barrier.srcAccessMask = is_read_access(last_use) ? 0 : (VkAccessFlags)last_use.access;
-		barrier.dstAccessMask = (VkAccessFlags)current_use.access;
-		barrier.oldLayout = (VkImageLayout)last_use.layout;
-		barrier.newLayout = (VkImageLayout)last_use.layout;
-		barrier.subresourceRange.aspectMask = (VkImageAspectFlags)aspect;
-		barrier.subresourceRange.baseArrayLayer = subrange.base_layer;
-		barrier.subresourceRange.baseMipLevel = subrange.base_level;
-		barrier.subresourceRange.layerCount = subrange.layer_count;
-		barrier.subresourceRange.levelCount = subrange.level_count;
-		assert(last_use.domain.m_mask != 0);
-		assert(current_use.domain.m_mask != 0);
-		if (last_use.domain == DomainFlagBits::eAny || last_use.domain == DomainFlagBits::eHost) {
-			last_use.domain = current_use.domain;
-		}
-		if (current_use.domain == DomainFlagBits::eAny) {
-			current_use.domain = last_use.domain;
-		}
-		barrier.srcQueueFamilyIndex = static_cast<uint32_t>((last_use.domain & DomainFlagBits::eQueueMask).m_mask);
-		barrier.dstQueueFamilyIndex = static_cast<uint32_t>((current_use.domain & DomainFlagBits::eQueueMask).m_mask);
-
-		if (last_use.stages == PipelineStageFlags{}) {
-			barrier.srcAccessMask = {};
-		}
-		if (current_use.stages == PipelineStageFlags{}) {
-			barrier.dstAccessMask = {};
-		}
-
-		barrier.srcStageMask = (VkPipelineStageFlags2)last_use.stages.m_mask;
-		barrier.dstStageMask = (VkPipelineStageFlags2)current_use.stages.m_mask;
-
-		return barrier;
 	}
 	/*
 	Result<void> RGCImpl::generate_barriers_and_waits() {
