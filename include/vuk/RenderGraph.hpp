@@ -637,7 +637,7 @@ public:
 		}(args...);
 		std::array refs = { arg.get_head(), args.get_head()... };
 		std::array defs = { arg.get_def(), args.get_def()... };
-		Ref ref = rg->make_declare_array(refs[0].type(), refs, defs);
+		Ref ref = rg->make_declare_array(Type::stripped(refs[0].type()), refs, defs);
 		rg->name_outputs(ref.node, { name.c_str() });
 		return { rg, ref, ref };
 	}
