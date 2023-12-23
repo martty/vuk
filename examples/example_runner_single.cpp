@@ -1,7 +1,5 @@
 #include "example_runner.hpp"
 
-vuk::SwapchainRenderBundle bundle;
-
 void vuk::ExampleRunner::render() {
 	Compiler compiler;
 	// the examples can all enqueue upload tasks via enqueue_setup. for simplicity, we submit and wait for all the upload tasks before moving on to the render
@@ -25,15 +23,14 @@ void vuk::ExampleRunner::render() {
 		// optional
 		Allocator frame_allocator(frame_resource);
 		// create a rendergraph we will use to prepare a swapchain image for the example to render into
-		auto imported_swapchain = import_swapchain(bundle);
+		auto imported_swapchain = declare_swapchain(*swapchain);
 		// acquire an image on the swapchain
-		auto swapchain_image = acquire_next_image("swapchain image", imported_swapchain);
+		auto swapchain_image = acquire_next_image("swp_img", std::move(imported_swapchain));
 
 		// clear the swapchain image
-		TypedFuture<ImageAttachment> cleared_image_to_render_into = clear_image(swapchain_image, vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
+		TypedFuture<ImageAttachment> cleared_image_to_render_into = clear_image(std::move(swapchain_image), vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
 		// invoke the render method of the example with the cleared image
 		TypedFuture<ImageAttachment> example_result = examples[0]->render(*this, frame_allocator, std::move(cleared_image_to_render_into));
-
 
 		// set up some profiling callbacks for our example Tracy integration
 		vuk::ProfilingCallbacks cbs;
@@ -72,8 +69,10 @@ void vuk::ExampleRunner::render() {
 
 		// compile the RG that contains all the rendering of the example
 		// submit and present the results to the swapchain we imported previously
-		present_one(example_result, { .callbacks = cbs });
-	
+		auto entire_thing = enqueue_presentation(std::move(example_result));
+
+		entire_thing.wait(frame_allocator, compiler, { .callbacks = cbs });
+
 		// update window title with FPS
 		if (++num_frames == 16) {
 			auto new_time = get_time();

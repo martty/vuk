@@ -150,6 +150,7 @@ namespace vuk {
 		AccessFlags access;
 		ImageLayout layout; // ignored for buffers
 		DomainFlags domain = DomainFlagBits::eAny;
+		uint32_t queue_family_index;
 	};
 
 	union Subrange {

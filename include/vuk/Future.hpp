@@ -38,22 +38,24 @@ namespace vuk {
 	public:
 		TypedFuture(std::shared_ptr<RG> rg, Ref ref, Ref def) {
 			this->control = std::make_shared<FutureBase>();
-			this->head = { rg->make_release(ref, &this->control->acqrel), 0 };
+
+			this->head = { rg->make_release(ref, &this->control->acqrel, Access::eHostRW, DomainFlagBits::eHost), 0 };
+
 			this->control->rg = std::move(rg);
 			this->def = def;
 		}
 
-		TypedFuture(const TypedFuture& o) noexcept :
-		    control{ std::make_shared<FutureBase>(*o.control) },
-		    def{ o.def },
-		    head{ control->rg->make_release(o.get_head(), &this->control->acqrel), 0 } {}
+		TypedFuture(const TypedFuture& o) noexcept : control{ std::make_shared<FutureBase>(*o.control) }, def{ o.def } {
+			head = { control->rg->make_release(o.get_head(), &this->control->acqrel, Access::eHostRW, DomainFlagBits::eHost), 0 };
+		}
 
 		TypedFuture(TypedFuture&& o) noexcept : control{ std::exchange(o.control, nullptr) }, def{ std::exchange(o.def, {}) }, head{ std::exchange(o.head, {}) } {}
 
 		TypedFuture& operator=(const TypedFuture& o) noexcept {
 			control = { std::make_shared<FutureBase>(*o.control) };
 			def = { o.def };
-			head = { control->rg->make_release(o.get_head(), &this->control->acqrel), 0 };
+
+			head = { control->rg->make_release(o.get_head(), &this->control->acqrel, Access::eHostRW, DomainFlagBits::eHost), 0 };
 
 			return *this;
 		}
@@ -96,6 +98,14 @@ namespace vuk {
 		TypedFuture<U> transmute(Ref ref) noexcept {
 			head.node->release.src = ref;
 			return *reinterpret_cast<TypedFuture<U>*>(this); // TODO: not cool
+		}
+
+		template<class U = T>
+		TypedFuture<U> release_to(Ref ref, Access access, DomainFlagBits domain) noexcept {
+			head.node->release.src = ref;
+			head.node->release.dst_access = access;
+			head.node->release.dst_domain = domain;
+			return std::move(*reinterpret_cast<TypedFuture<U>*>(this)); // TODO: not cool
 		}
 
 		T* operator->() noexcept {

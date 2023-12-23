@@ -32,6 +32,8 @@ namespace vuk {
 		std::unique_ptr<DeviceVkResource> device_vk_resource;
 		Allocator direct_allocator;
 
+		std::vector<std::unique_ptr<Executor>> executors;
+
 		Cache<PipelineBaseInfo> pipelinebase_cache;
 		Cache<DescriptorPool> pool_cache;
 		Cache<Sampler> sampler_cache;

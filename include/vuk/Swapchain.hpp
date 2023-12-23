@@ -2,6 +2,7 @@
 
 #include "vuk/Config.hpp"
 #include "vuk/Types.hpp"
+#include "vuk/vuk_fwd.hpp"
 
 #include <vector>
 
@@ -58,23 +59,19 @@ namespace vuk {
 		eSharedContinuousRefresh = VK_PRESENT_MODE_SHARED_CONTINUOUS_REFRESH_KHR
 	};
 
+	struct ImageAttachment;
+
 	struct Swapchain {
+		Swapchain(Allocator allocator, size_t image_count);
+
+		Allocator allocator;
 		VkSwapchainKHR swapchain;
 		VkSurfaceKHR surface;
 
-		vuk::Format format;
-		vuk::Extent2D extent = { 0, 0 };
-		std::vector<vuk::Image> images;
-		std::vector<vuk::ImageView> image_views;
-	};
-
-	using SwapchainRef = Swapchain*;
-
-	struct SwapchainRenderBundle {
-		SwapchainRef swapchain;
+		std::vector<ImageAttachment> images;
+		uint32_t linear_index = 0;
 		uint32_t image_index;
-		VkSemaphore present_ready;
-		VkSemaphore render_complete;
+		std::vector<VkSemaphore> semaphores; /* present_rdy_0 render_complete_0 present_rdy_1 render_complete_1 ... */
 		VkResult acquire_result;
 	};
 } // namespace vuk

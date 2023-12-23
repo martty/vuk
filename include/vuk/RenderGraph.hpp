@@ -632,9 +632,7 @@ public:
 	template<class T, class... Args>
 	[[nodiscard]] inline TypedFuture<T[]> declare_array(Name name, const TypedFuture<T>& arg, Args... args) {
 		auto rg = arg.get_render_graph();
-		[&rg](auto&... rest) {
-			(rg->subgraphs.push_back(rest.get_render_graph()), ...);
-		}(args...);
+		(rg->subgraphs.push_back(args.get_render_graph()), ...);
 		std::array refs = { arg.get_head(), args.get_head()... };
 		std::array defs = { arg.get_def(), args.get_def()... };
 		Ref ref = rg->make_declare_array(Type::stripped(refs[0].type()), refs, defs);
@@ -642,22 +640,43 @@ public:
 		return { rg, ref, ref };
 	}
 
-	[[nodiscard]] inline TypedFuture<ImageAttachment> clear(TypedFuture<ImageAttachment> in, Clear clear_value) {
-		auto& rg = in.get_render_graph();
-		return in.transmute(rg->make_clear_image(in.get_head(), clear_value));
-	}
-
-	[[nodiscard]] inline TypedFuture<SwapchainRenderBundle> import_swapchain(SwapchainRenderBundle bundle) {
-		std::shared_ptr<RG> rg = std::make_shared<RG>();
-		Ref ref = rg->make_import_swapchain(bundle);
+	template<class T>
+	[[nodiscard]] inline TypedFuture<T[]> declare_array(Name name, std::span<const TypedFuture<T>> args) {
+		assert(args.size() > 0);
+		auto rg = args[0].get_render_graph();
+		std::vector<Ref> refs;
+		std::vector<Ref> defs;
+		for (auto& arg : args) {
+			rg->subgraphs.push_back(arg.get_render_graph());
+			refs.push_back(arg.get_head());
+			defs.push_back(arg.get_def());
+		}
+		Ref ref = rg->make_declare_array(Type::stripped(refs[0].type()), refs, defs);
+		rg->name_outputs(ref.node, { name.c_str() });
 		return { rg, ref, ref };
 	}
 
-	[[nodiscard]] inline TypedFuture<ImageAttachment> acquire_next_image(Name name, TypedFuture<SwapchainRenderBundle> in) {
+	[[nodiscard]] inline TypedFuture<ImageAttachment> clear(TypedFuture<ImageAttachment> in, Clear clear_value) {
+		auto& rg = in.get_render_graph();
+		return std::move(std::move(in).transmute(rg->make_clear_image(in.get_head(), clear_value)));
+	}
+
+	[[nodiscard]] inline TypedFuture<Swapchain> declare_swapchain(Swapchain bundle) {
+		std::shared_ptr<RG> rg = std::make_shared<RG>();
+		Ref ref = rg->make_declare_swapchain(bundle);
+		return { rg, ref, ref };
+	}
+
+	[[nodiscard]] inline TypedFuture<ImageAttachment> acquire_next_image(Name name, TypedFuture<Swapchain> in) {
 		auto& rg = in.get_render_graph();
 		Ref ref = rg->make_acquire_next_image(in.get_head());
 		rg->name_outputs(ref.node, { name.c_str() });
-		return in.transmute<ImageAttachment>(ref);
+		return std::move(std::move(in).transmute<ImageAttachment>(ref));
+	}
+
+	[[nodiscard]] inline TypedFuture<void> enqueue_presentation(TypedFuture<ImageAttachment> in) {
+		auto& rg = in.get_render_graph();
+		return std::move(std::move(in).release_to<void>(in.get_head(), Access::ePresent, DomainFlagBits::ePE));
 	}
 
 	struct InferenceContext {
@@ -715,8 +734,6 @@ public:
 		ImageUsageFlags compute_usage(const struct ChainLink* chain);
 		/// @brief Get the image attachment heading this use chain
 		const struct AttachmentInfo& get_chain_attachment(const struct ChainLink* chain);
-		/// @brief Get the last name that references this chain (may not exist)
-		std::optional<QualifiedName> get_last_use_name(const struct ChainLink* chain);
 
 		/// @brief Dump the pass dependency graph in graphviz format
 		std::string dump_graph();
@@ -734,20 +751,12 @@ public:
 	};
 
 	struct SubmitInfo {
-		std::vector<std::pair<DomainFlagBits, uint64_t>> relative_waits;
-		std::vector<std::pair<DomainFlagBits, uint64_t>> absolute_waits;
 		std::vector<VkCommandBuffer> command_buffers;
-		std::vector<Signal*> future_signals;
-		std::vector<SwapchainRef> used_swapchains;
-	};
-
-	struct SubmitBatch {
-		DomainFlagBits domain;
-		std::vector<SubmitInfo> submits;
-	};
-
-	struct SubmitBundle {
-		std::vector<SubmitBatch> batches;
+		std::vector<std::pair<DomainFlagBits, uint64_t>> relative_waits;
+		std::vector<Signal*> waits;
+		std::vector<Signal*> signals;
+		std::vector<VkSemaphore> pres_wait;
+		std::vector<VkSemaphore> pres_signal;
 	};
 
 	struct ExecutableRenderGraph {
@@ -760,15 +769,12 @@ public:
 		ExecutableRenderGraph(ExecutableRenderGraph&&) noexcept;
 		ExecutableRenderGraph& operator=(ExecutableRenderGraph&&) noexcept;
 
-		Result<SubmitBundle> execute(Allocator&, std::vector<std::pair<Swapchain*, size_t>> swp_with_index);
-
-		Result<bool, RenderGraphException> is_resource_image_in_general_layout(const NameReference&, struct PassInfo* pass_info);
+		Result<void> execute(Allocator& allocator);
 
 	private:
 		struct RGCImpl* impl;
 
 		void fill_render_pass_info(struct RenderPassInfo& rpass, const size_t& i, class CommandBuffer& cobuf);
-		Result<SubmitInfo> record_single_submit(Allocator&, std::span<struct ScheduledItem*> passes, DomainFlagBits domain);
 
 		friend struct InferenceContext;
 	};

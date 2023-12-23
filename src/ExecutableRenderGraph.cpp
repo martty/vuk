@@ -7,8 +7,10 @@
 #include "vuk/Hash.hpp" // for create
 #include "vuk/RenderGraph.hpp"
 #include "vuk/Util.hpp"
+#include "vuk/runtime/vk/VulkanQueueExecutor.hpp"
 
 #include <fmt/format.h>
+#include <mutex>
 #include <sstream>
 #include <unordered_set>
 #include <vector>
@@ -33,7 +35,7 @@ namespace vuk {
 
 		ctx.vkCmdBeginRenderPass(cbuf, &rbi, use_secondary_command_buffers ? VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS : VK_SUBPASS_CONTENTS_INLINE);
 	}
-
+	/*
 	[[nodiscard]] bool resolve_image_barrier(const Context& ctx, VkImageMemoryBarrier2KHR& dep, const AttachmentInfo& bound, vuk::DomainFlagBits current_domain) {
 		dep.image = bound.attachment.image.image;
 		// turn base_{layer, level} into absolute values wrt the image
@@ -70,22 +72,22 @@ namespace vuk {
 			dep.subresourceRange.levelCount = bound.attachment.level_count;
 		}
 
-		if (dep.srcQueueFamilyIndex != VK_QUEUE_FAMILY_IGNORED) {
-			assert(dep.dstQueueFamilyIndex != VK_QUEUE_FAMILY_IGNORED);
-			bool transition = dep.dstQueueFamilyIndex != dep.srcQueueFamilyIndex;
-			auto src_domain = static_cast<vuk::DomainFlagBits>(dep.srcQueueFamilyIndex);
-			auto dst_domain = static_cast<vuk::DomainFlagBits>(dep.dstQueueFamilyIndex);
-			dep.srcQueueFamilyIndex = ctx.domain_to_queue_family_index(static_cast<vuk::DomainFlags>(dep.srcQueueFamilyIndex));
-			dep.dstQueueFamilyIndex = ctx.domain_to_queue_family_index(static_cast<vuk::DomainFlags>(dep.dstQueueFamilyIndex));
-			if (dep.srcQueueFamilyIndex == dep.dstQueueFamilyIndex && transition) {
-				if (dst_domain != current_domain) {
-					return false; // discard release barriers if they map to the same queue
-				}
-			}
-		}
+	  if (dep.srcQueueFamilyIndex != VK_QUEUE_FAMILY_IGNORED) {
+	    assert(dep.dstQueueFamilyIndex != VK_QUEUE_FAMILY_IGNORED);
+	    bool transition = dep.dstQueueFamilyIndex != dep.srcQueueFamilyIndex;
+	    auto src_domain = static_cast<vuk::DomainFlagBits>(dep.srcQueueFamilyIndex);
+	    auto dst_domain = static_cast<vuk::DomainFlagBits>(dep.dstQueueFamilyIndex);
+	    dep.srcQueueFamilyIndex = ctx.domain_to_queue_family_index(static_cast<vuk::DomainFlags>(dep.srcQueueFamilyIndex));
+	    dep.dstQueueFamilyIndex = ctx.domain_to_queue_family_index(static_cast<vuk::DomainFlags>(dep.dstQueueFamilyIndex));
+	    if (dep.srcQueueFamilyIndex == dep.dstQueueFamilyIndex && transition) {
+	      if (dst_domain != current_domain) {
+	        return false; // discard release barriers if they map to the same queue
+	      }
+	    }
+	  }
 
-		return true;
-	}
+	  return true;
+	}*/
 
 	void ExecutableRenderGraph::fill_render_pass_info(vuk::RenderPassInfo& rpass, const size_t& i, vuk::CommandBuffer& cobuf) {
 		if (rpass.handle == VK_NULL_HANDLE) {
@@ -283,15 +285,21 @@ namespace vuk {
 
 	  return { expected_value, std::move(si) };
 	}*/
-	struct QueueRecording {
-		SubmitBatch sb;
+
+	struct VkQueueStream : public Stream {
+		Context& ctx;
 		DomainFlagBits domain;
+		vuk::rtvk::QueueExecutor* executor;
+
+		std::vector<SubmitInfo> batch;
+		std::deque<Signal> signals;
 		SubmitInfo si;
 		Unique<CommandPool> cpool;
 		Unique<CommandBufferAllocation> hl_cbuf;
-		VkCommandBuffer cbuf;
+		VkCommandBuffer cbuf = VK_NULL_HANDLE;
+		ProfilingCallbacks* callbacks;
 		bool is_recording = false;
-		void* cbuf_profile_data;
+		void* cbuf_profile_data = nullptr;
 
 		RenderPassInfo rp = {};
 		std::vector<VkImageMemoryBarrier2KHR> im_bars;
@@ -299,7 +307,114 @@ namespace vuk {
 		std::vector<VkMemoryBarrier2KHR> mem_bars;
 		std::vector<VkMemoryBarrier2KHR> half_mem_bars;
 
-		void flush_barriers(Context& ctx) {
+		VkQueueStream(Allocator alloc, vuk::rtvk::QueueExecutor* qe, ProfilingCallbacks* callbacks) :
+		    Stream(alloc, qe->tag.domain),
+		    ctx(alloc.get_context()),
+		    domain(qe->tag.domain),
+		    executor(qe),
+		    callbacks(callbacks) {
+			batch.resize(1);
+		}
+
+		void add_dependency(Stream* dep) override {
+			if (is_recording) {
+				end_cbuf();
+			}
+			batch.emplace_back();
+			dependencies.push_back(dep);
+		}
+
+		void sync_deps() override {
+			for (auto dep : dependencies) {
+				auto res = *dep->submit();
+				if (res.signal) {
+					batch.front().waits.push_back(res.signal);
+				}
+				if (res.sema_wait != VK_NULL_HANDLE) {
+					batch.front().pres_wait.push_back(res.sema_wait);
+				}
+			}
+			if (!is_recording) {
+				begin_cbuf();
+			}
+			flush_barriers();
+		}
+
+		Result<SubmitResult> submit(Signal* signal = nullptr) override {
+			sync_deps();
+			end_cbuf();
+			if (!signal) {
+				signal = &signals.emplace_back();
+			}
+			batch.back().signals.emplace_back(signal);
+			executor->submit_batch(batch);
+			batch.clear();
+			batch.resize(1);
+			return { expected_value, signal };
+		}
+
+		Result<VkResult> present(Swapchain& swp) {
+			sync_deps();
+			end_cbuf();
+			batch.back().pres_signal.emplace_back(swp.semaphores[swp.linear_index * 2 + 1]);
+			executor->submit_batch(batch);
+			batch.clear();
+			batch.resize(1);
+			VkPresentInfoKHR pi{ .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
+			pi.swapchainCount = 1;
+			pi.pSwapchains = &swp.swapchain;
+			pi.pImageIndices = &swp.image_index;
+			pi.waitSemaphoreCount = 1;
+			pi.pWaitSemaphores = &swp.semaphores[swp.linear_index * 2 + 1];
+			auto res = executor->queue_present(pi);
+			if (res.value() && swp.acquire_result == VK_SUBOPTIMAL_KHR) {
+				return { expected_value, VK_SUBOPTIMAL_KHR };
+			}
+			return res;
+		}
+
+		Result<void> begin_cbuf() {
+			assert(!is_recording);
+			is_recording = true;
+			domain = domain;
+			if (cpool->command_pool == VK_NULL_HANDLE) {
+				cpool = Unique<CommandPool>(alloc);
+				VkCommandPoolCreateInfo cpci{ VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
+				cpci.flags = VkCommandPoolCreateFlagBits::VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+				cpci.queueFamilyIndex = executor->get_queue_family_index(); // currently queue family idx = queue idx
+
+				VUK_DO_OR_RETURN(alloc.allocate_command_pools(std::span{ &*cpool, 1 }, std::span{ &cpci, 1 }));
+			}
+			hl_cbuf = Unique<CommandBufferAllocation>(alloc);
+			CommandBufferAllocationCreateInfo ci{ .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .command_pool = *cpool };
+			VUK_DO_OR_RETURN(alloc.allocate_command_buffers(std::span{ &*hl_cbuf, 1 }, std::span{ &ci, 1 }));
+
+			si.command_buffers.emplace_back(*hl_cbuf);
+
+			cbuf = hl_cbuf->command_buffer;
+
+			VkCommandBufferBeginInfo cbi{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
+			alloc.get_context().vkBeginCommandBuffer(cbuf, &cbi);
+
+			cbuf_profile_data = nullptr;
+			if (callbacks->on_begin_command_buffer)
+				cbuf_profile_data = callbacks->on_begin_command_buffer(callbacks->user_data, cbuf);
+		}
+
+		Result<void> end_cbuf() {
+			flush_barriers();
+			is_recording = false;
+			if (callbacks->on_end_command_buffer)
+				callbacks->on_end_command_buffer(callbacks->user_data, cbuf_profile_data);
+			if (auto result = ctx.vkEndCommandBuffer(hl_cbuf->command_buffer); result != VK_SUCCESS) {
+				return { expected_error, VkException{ result } };
+			}
+			batch.back().command_buffers.push_back(hl_cbuf->command_buffer);
+			cbuf = VK_NULL_HANDLE;
+			return { expected_value };
+		};
+
+		void flush_barriers() {
 			VkDependencyInfoKHR dependency_info{ .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO_KHR,
 				                                   .memoryBarrierCount = (uint32_t)mem_bars.size(),
 				                                   .pMemoryBarriers = mem_bars.data(),
@@ -350,8 +465,18 @@ namespace vuk {
 				dst_use.domain = src_use.domain;
 			}
 
-			barrier.srcQueueFamilyIndex = static_cast<uint32_t>((src_use.domain & DomainFlagBits::eQueueMask).m_mask);
-			barrier.dstQueueFamilyIndex = static_cast<uint32_t>((dst_use.domain & DomainFlagBits::eQueueMask).m_mask);
+			barrier.srcQueueFamilyIndex = src_use.queue_family_index;
+			if (dst_use.domain & DomainFlagBits::eDevice) {
+				barrier.dstQueueFamilyIndex = dst_use.queue_family_index;
+			} else {
+				barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+				barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			}
+
+			if (src_use.queue_family_index == dst_use.queue_family_index) {
+				barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+				barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			}
 
 			if (src_use.stages == PipelineStageFlags{}) {
 				barrier.srcAccessMask = {};
@@ -382,6 +507,10 @@ namespace vuk {
 			} else {
 				im_bars.push_back(barrier);
 				img_att.layout = (ImageLayout)barrier.newLayout;
+			}
+
+			if (is_framebuffer_attachment(dst_access)) {
+				prepare_render_pass_attachment(alloc, img_att);
 			}
 		};
 
@@ -462,61 +591,109 @@ namespace vuk {
 			rp.fbci.attachments.push_back(img_att.image_view);
 		}
 
-		Result<void> prepare_render_pass(Allocator alloc) {
-			if (rp.rpci.attachments.size() > 0) {
-				SubpassDescription sd;
-				size_t color_count = 0;
-				sd.colorAttachmentCount = (uint32_t)rp.rpci.color_refs.size();
-				sd.pColorAttachments = rp.rpci.color_refs.data();
+		Result<void> prepare_render_pass() {
+			SubpassDescription sd;
+			size_t color_count = 0;
+			sd.colorAttachmentCount = (uint32_t)rp.rpci.color_refs.size();
+			sd.pColorAttachments = rp.rpci.color_refs.data();
 
-				sd.pDepthStencilAttachment = rp.rpci.ds_ref ? &*rp.rpci.ds_ref : nullptr;
-				sd.flags = {};
-				sd.inputAttachmentCount = 0;
-				sd.pInputAttachments = nullptr;
-				sd.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-				sd.preserveAttachmentCount = 0;
-				sd.pPreserveAttachments = nullptr;
+			sd.pDepthStencilAttachment = rp.rpci.ds_ref ? &*rp.rpci.ds_ref : nullptr;
+			sd.flags = {};
+			sd.inputAttachmentCount = 0;
+			sd.pInputAttachments = nullptr;
+			sd.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+			sd.preserveAttachmentCount = 0;
+			sd.pPreserveAttachments = nullptr;
 
-				rp.rpci.subpass_descriptions.push_back(sd);
+			rp.rpci.subpass_descriptions.push_back(sd);
 
-				rp.rpci.subpassCount = (uint32_t)rp.rpci.subpass_descriptions.size();
-				rp.rpci.pSubpasses = rp.rpci.subpass_descriptions.data();
+			rp.rpci.subpassCount = (uint32_t)rp.rpci.subpass_descriptions.size();
+			rp.rpci.pSubpasses = rp.rpci.subpass_descriptions.data();
 
-				// we use barriers
-				rp.rpci.dependencyCount = 0;
-				rp.rpci.pDependencies = nullptr;
+			// we use barriers
+			rp.rpci.dependencyCount = 0;
+			rp.rpci.pDependencies = nullptr;
 
-				rp.rpci.attachmentCount = (uint32_t)rp.rpci.attachments.size();
-				rp.rpci.pAttachments = rp.rpci.attachments.data();
+			rp.rpci.attachmentCount = (uint32_t)rp.rpci.attachments.size();
+			rp.rpci.pAttachments = rp.rpci.attachments.data();
 
-				auto result = alloc.allocate_render_passes(std::span{ &rp.handle, 1 }, std::span{ &rp.rpci, 1 });
+			auto result = alloc.allocate_render_passes(std::span{ &rp.handle, 1 }, std::span{ &rp.rpci, 1 });
 
-				rp.fbci.renderPass = rp.handle;
-				rp.fbci.pAttachments = rp.framebuffer_ivs.data();
-				rp.fbci.attachmentCount = (uint32_t)rp.framebuffer_ivs.size();
+			rp.fbci.renderPass = rp.handle;
+			rp.fbci.pAttachments = rp.framebuffer_ivs.data();
+			rp.fbci.attachmentCount = (uint32_t)rp.framebuffer_ivs.size();
 
-				Unique<VkFramebuffer> fb(alloc);
-				VUK_DO_OR_RETURN(alloc.allocate_framebuffers(std::span{ &*fb, 1 }, std::span{ &rp.fbci, 1 }));
-				rp.framebuffer = *fb; // queue framebuffer for destruction
-				// drop render pass immediately
-				if (result) {
-					alloc.deallocate(std::span{ &rp.handle, 1 });
-				}
-				begin_render_pass(alloc.get_context(), rp, cbuf, false);
-
-				return { expected_value };
+			Unique<VkFramebuffer> fb(alloc);
+			VUK_DO_OR_RETURN(alloc.allocate_framebuffers(std::span{ &*fb, 1 }, std::span{ &rp.fbci, 1 }));
+			rp.framebuffer = *fb; // queue framebuffer for destruction
+			// drop render pass immediately
+			if (result) {
+				alloc.deallocate(std::span{ &rp.handle, 1 });
 			}
+			begin_render_pass(alloc.get_context(), rp, cbuf, false);
+
+			return { expected_value };
 		}
 
-		void end_render_pass(Allocator alloc) {
+		void end_render_pass() {
 			alloc.get_context().vkCmdEndRenderPass(cbuf);
 			rp = {};
 		}
 	};
 
+	struct HostStream : Stream {
+		HostStream(Allocator alloc) : Stream(alloc, DomainFlagBits::eHost) {}
+
+		void add_dependency(Stream* dep) {
+			dependencies.push_back(dep);
+		}
+		void sync_deps() {
+			assert(false);
+		}
+
+		void synch_image(ImageAttachment& img_att, QueueResourceUse src_use, QueueResourceUse dst_use, Access dst_access, void* tag) {
+			/* host -> host and host -> device not needed, device -> host inserts things on the device side */
+			return;
+		}
+		void synch_memory(QueueResourceUse src_use, QueueResourceUse dst_use, void* tag) {
+			/* host -> host and host -> device not needed, device -> host inserts things on the device side */
+			return;
+		}
+
+		Result<SubmitResult> submit(Signal* signal = nullptr) {
+			return { expected_value, signal };
+		}
+	};
+
+	struct VkPEStream : Stream {
+		VkPEStream(Allocator alloc, Swapchain& swp) : Stream(alloc, DomainFlagBits::ePE), swp(&swp) {}
+		Swapchain* swp;
+
+		void add_dependency(Stream* dep) {
+			dependencies.push_back(dep);
+		}
+		void sync_deps() {
+			assert(false);
+		}
+
+		void synch_image(ImageAttachment& img_att, QueueResourceUse src_use, QueueResourceUse dst_use, Access dst_access, void* tag) {
+		}
+
+		void synch_memory(QueueResourceUse src_use, QueueResourceUse dst_use, void* tag) { /* PE doesn't do memory */
+			assert(false);
+		}
+
+		Result<SubmitResult> submit(Signal* signal = nullptr) {
+			assert(swp);
+			assert(signal == nullptr);
+			SubmitResult sr{ .sema_wait = swp->semaphores[2 * swp->linear_index] };
+			return { expected_value, sr };
+		}
+	};
+
 	enum class RW { eRead, eWrite };
 	struct ExecutionInfo {
-		DomainFlagBits domain;
+		Stream* stream;
 		size_t naming_index;
 	};
 
@@ -592,19 +769,17 @@ namespace vuk {
 			}
 		}
 
-		void done(Node* node, DomainFlagBits dst_domain) {
-			executed.emplace(node, ExecutionInfo{ dst_domain, naming_index_counter++ });
+		void done(Node* node, Stream* stream) {
+			executed.emplace(node, ExecutionInfo{ stream, naming_index_counter++ });
 		}
 
 		template<class T>
 		T& get_value(Ref parm) {
 			auto& link = res_to_links[parm];
-			if (link.urdef.node->kind == Node::VALLOC) {
-				return *reinterpret_cast<T*>(link.urdef.node->valloc.args[0].node->constant.value);
-			} else if (link.urdef.node->kind == Node::AALLOC) {
+			if (link.urdef.node->kind == Node::AALLOC) {
 				return reinterpret_cast<T&>(link.urdef.node->aalloc.args[0].node->constant.value);
 			} else {
-				assert(0);
+				return *reinterpret_cast<T*>(get_value(parm));
 			}
 		};
 
@@ -614,6 +789,9 @@ namespace vuk {
 				return link.urdef.node->valloc.args[0].node->constant.value;
 			} else if (link.urdef.node->kind == Node::AALLOC) {
 				return link.urdef.node->aalloc.args[0].node->constant.value;
+			} else if (link.urdef.node->kind == Node::ACQUIRE_NEXT_IMAGE) {
+				Swapchain* swp = reinterpret_cast<Swapchain*>(link.urdef.node->acquire_next_image.swapchain.node->valloc.args[0].node->constant.value);
+				return &swp->images[swp->image_index];
 			} else {
 				assert(0);
 			}
@@ -638,96 +816,41 @@ namespace vuk {
 		Context& ctx;
 		Allocator alloc;
 		ProfilingCallbacks* callbacks;
-		SubmitBundle sbundle;
 
-		std::unordered_map<vuk::DomainFlagBits, QueueRecording> streams;
+		std::unordered_map<DomainFlagBits, std::unique_ptr<Stream>> streams;
 
-		auto begin_cbuf(vuk::DomainFlagBits domain) -> Result<void> {
-			auto& queue_rec = streams[domain];
-			assert(!queue_rec.is_recording);
-			queue_rec.is_recording = true;
-			queue_rec.domain = domain;
-			if (queue_rec.cpool->command_pool == VK_NULL_HANDLE) {
-				queue_rec.cpool = Unique<CommandPool>(alloc);
-				VkCommandPoolCreateInfo cpci{ VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
-				cpci.flags = VkCommandPoolCreateFlagBits::VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
-				cpci.queueFamilyIndex = ctx.domain_to_queue_family_index(domain); // currently queue family idx = queue idx
-
-				VUK_DO_OR_RETURN(alloc.allocate_command_pools(std::span{ &*queue_rec.cpool, 1 }, std::span{ &cpci, 1 }));
-			}
-			queue_rec.hl_cbuf = Unique<CommandBufferAllocation>(alloc);
-			CommandBufferAllocationCreateInfo ci{ .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .command_pool = *queue_rec.cpool };
-			VUK_DO_OR_RETURN(alloc.allocate_command_buffers(std::span{ &*queue_rec.hl_cbuf, 1 }, std::span{ &ci, 1 }));
-
-			queue_rec.si.command_buffers.emplace_back(*queue_rec.hl_cbuf);
-
-			VkCommandBuffer cbuf = queue_rec.hl_cbuf->command_buffer;
-
-			VkCommandBufferBeginInfo cbi{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
-			ctx.vkBeginCommandBuffer(cbuf, &cbi);
-
-			queue_rec.cbuf = queue_rec.hl_cbuf->command_buffer;
-			queue_rec.cbuf_profile_data = nullptr;
-			if (callbacks->on_begin_command_buffer)
-				queue_rec.cbuf_profile_data = callbacks->on_begin_command_buffer(callbacks->user_data, cbuf);
-			return { expected_value };
-		};
-
-		auto end_cbuf(vuk::DomainFlagBits domain) -> Result<void> {
-			auto& queue_rec = streams[domain];
-			queue_rec.is_recording = false;
-			if (callbacks->on_end_command_buffer)
-				callbacks->on_end_command_buffer(callbacks->user_data, queue_rec.cbuf_profile_data);
-			if (auto result = ctx.vkEndCommandBuffer(queue_rec.hl_cbuf->command_buffer); result != VK_SUCCESS) {
-				return { expected_error, VkException{ result } };
-			}
-			return { expected_value };
-		};
-
-		QueueRecording* synchronize_domain(DomainFlagBits domain) {
-			auto& queue_rec = streams[domain];
-
-			if (!queue_rec.is_recording) {
-				begin_cbuf(domain);
-			}
-
-			queue_rec.flush_barriers(alloc.get_context());
-
-			return &queue_rec;
+		// start recording if needed
+		// all dependant domains flushed
+		// all pending sync to be flushed
+		void synchronize_stream(Stream* stream) {
+			stream->sync_deps();
 		}
 
-		auto flush_domain(vuk::DomainFlagBits domain) -> SubmitInfo* {
+		Stream* stream_for_domain(DomainFlagBits domain) {
+			return streams.at(domain).get();
+		}
+
+		auto flush_domain(vuk::DomainFlagBits domain, Signal* signal) -> SubmitInfo* {
 			if (domain == DomainFlagBits::eHost) {
 				return nullptr;
 			}
-			auto& queue_rec = streams[domain];
+			auto& stream = streams.at(domain);
 
-			if (queue_rec.cpool.get().command_pool == VK_NULL_HANDLE) {
-				return nullptr;
-			}
-
-			if (queue_rec.is_recording) {
-				end_cbuf(domain);
-				return &queue_rec.sb.submits.emplace_back(std::move(queue_rec.si));
-			} else {
-				return &queue_rec.sb.submits.back();
-			}
+			stream->submit(signal);
 		};
 
-		auto complete_domain(vuk::DomainFlagBits domain) {
-			auto& queue_rec = streams[domain];
-			if (queue_rec.cpool.get().command_pool == VK_NULL_HANDLE) {
-				return;
-			}
-			queue_rec.sb.domain = domain;
-			sbundle.batches.emplace_back(std::move(queue_rec.sb));
-		};
-
-		void add_sync(Ref parm, Type* arg_ty, void* value, DomainFlagBits src_domain, DomainFlagBits dst_domain) {
+		void add_sync(Ref parm,
+		              Type* arg_ty,
+		              void* value,
+		              Stream* src_stream,
+		              Stream* dst_stream,
+		              Access src_access = Access::eNone,
+		              Access dst_access = Access::eNone) {
 			auto parm_ty = parm.type();
 
-			Access src_access = Access::eNone;
-			Access dst_access = Access::eNone;
+			DomainFlagBits src_domain = src_stream ? src_stream->domain : DomainFlagBits::eNone;
+			DomainFlagBits dst_domain = dst_stream ? dst_stream->domain : DomainFlagBits::eNone;
+
 			Type* base_ty = Type::stripped(arg_ty);
 			if (arg_ty->kind == Type::IMBUED_TY) {
 				dst_access = arg_ty->imbued.access;
@@ -743,7 +866,6 @@ namespace vuk {
 				} else if (parm_ty->kind == Type::IMBUED_TY) {
 					assert(0);
 				} else { // there is no need to sync (eg. declare)
-					src_access = Access::eNone;
 				}
 			} else if (parm_ty->kind == Type::ALIASED_TY) { // this is coming from an output annotated, so we know the source access
 				auto src_arg = parm.node->call.args[parm_ty->aliased.ref_idx];
@@ -752,7 +874,6 @@ namespace vuk {
 					src_access = call_ty->imbued.access;
 				} else {
 					// TODO: handling unimbued aliased
-					src_access = Access::eNone;
 				}
 			} else {
 				/* no dst access */
@@ -767,26 +888,24 @@ namespace vuk {
 			bool cross = has_both && (src_domain != dst_domain);
 			bool only_src = has_src && !has_dst;
 
-			auto src_rec = has_src ? &streams[src_domain] : nullptr;
-			auto dst_rec = has_dst ? &streams[dst_domain] : nullptr;
+			if (cross) {
+				dst_stream->add_dependency(src_stream);
+			}
 
 			if (base_ty->is_image()) { // TODO: of course cross-queue barriers we need to issue twice
 				auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
 				if (has_dst) {
-					dst_rec->synch_image(img_att, src_use, dst_use, dst_access, value);
-					if (is_framebuffer_attachment(dst_access)) {
-						dst_rec->prepare_render_pass_attachment(alloc, img_att);
-					}
+					dst_stream->synch_image(img_att, src_use, dst_use, dst_access, value);
 				}
 				if (only_src || cross) {
-					src_rec->synch_image(img_att, src_use, dst_use, dst_access, value);
+					src_stream->synch_image(img_att, src_use, dst_use, dst_access, value);
 				}
 			} else if (base_ty->is_buffer()) {
 				// buffer needs no cross
 				if (has_dst) {
-					dst_rec->synch_memory(src_use, dst_use, value);
+					dst_stream->synch_memory(src_use, dst_use, value);
 				} else if (has_src) {
-					src_rec->synch_memory(src_use, dst_use, value);
+					src_stream->synch_memory(src_use, dst_use, value);
 				}
 			} else if (base_ty->kind == Type::ARRAY_TY) {
 				auto elem_ty = base_ty->array.T;
@@ -795,13 +914,10 @@ namespace vuk {
 					auto img_atts = reinterpret_cast<ImageAttachment**>(value);
 					for (int i = 0; i < size; i++) {
 						if (has_dst) {
-							dst_rec->synch_image(*img_atts[i], src_use, dst_use, dst_access, img_atts[i]);
-							if (is_framebuffer_attachment(dst_access)) {
-								dst_rec->prepare_render_pass_attachment(alloc, *img_atts[i]);
-							}
+							dst_stream->synch_image(*img_atts[i], src_use, dst_use, dst_access, img_atts[i]);
 						}
 						if (only_src || cross) {
-							src_rec->synch_image(*img_atts[i], src_use, dst_use, dst_access, img_atts[i]);
+							src_stream->synch_image(*img_atts[i], src_use, dst_use, dst_access, img_atts[i]);
 						}
 					}
 				} else if (elem_ty->is_buffer()) {
@@ -809,9 +925,9 @@ namespace vuk {
 						// buffer needs no cross
 						auto bufs = reinterpret_cast<Buffer**>(value);
 						if (has_dst) {
-							dst_rec->synch_memory(src_use, dst_use, bufs[i]);
+							dst_stream->synch_memory(src_use, dst_use, bufs[i]);
 						} else if (has_src) {
-							src_rec->synch_memory(src_use, dst_use, bufs[i]);
+							src_stream->synch_memory(src_use, dst_use, bufs[i]);
 						}
 					}
 				} else {
@@ -825,12 +941,24 @@ namespace vuk {
 
 #define VUK_DUMP_EXEC
 
-	Result<SubmitBundle> ExecutableRenderGraph::execute(Allocator& alloc, std::vector<std::pair<SwapchainRef, size_t>> swp_with_index) {
+	Result<void> ExecutableRenderGraph::execute(Allocator& alloc) {
 		Context& ctx = alloc.get_context();
 
-		Scheduler sched(alloc, impl->scheduled_execables, impl->res_to_links, impl->pass_reads);
-
 		Recorder recorder(alloc, &impl->callbacks);
+		recorder.streams.emplace(DomainFlagBits::eHost, std::make_unique<HostStream>(alloc));
+		if (auto exe = ctx.get_executor(DomainFlagBits::eGraphicsQueue)) {
+			recorder.streams.emplace(DomainFlagBits::eGraphicsQueue,
+			                         std::make_unique<VkQueueStream>(alloc, static_cast<rtvk::QueueExecutor*>(exe), &impl->callbacks));
+		}
+		auto host_stream = recorder.streams.at(DomainFlagBits::eHost).get();
+		
+		std::deque<VkPEStream> pe_streams;
+
+		for (auto& item : impl->scheduled_execables) {
+			item.scheduled_stream = recorder.stream_for_domain(item.scheduled_domain);
+		}
+
+		Scheduler sched(alloc, impl->scheduled_execables, impl->res_to_links, impl->pass_reads);
 
 		// DYNAMO
 		// loop through scheduled items
@@ -911,10 +1039,16 @@ namespace vuk {
 						attachment.image = **img;
 						// ctx.set_name(attachment.image.image, bound.name.name);
 					}
+				} else if (node->type[0]->kind == Type::SWAPCHAIN_TY) {
+#ifdef VUK_DUMP_EXEC
+					print_results(node);
+					fmt::print(" = declare<swapchain>\n");
+#endif
+					/* no-op */
 				} else {
 					assert(0);
 				}
-				sched.done(node, DomainFlagBits::eHost); // declarations execute on the host
+				sched.done(node, host_stream); // declarations execute on the host
 				break;
 			}
 			case Node::AALLOC: {
@@ -924,8 +1058,7 @@ namespace vuk {
 						auto arg_ty = node->aalloc.args[i].type();
 						auto& parm = node->aalloc.args[i];
 
-						DomainFlagBits src_domain = sched.executed.at(parm.node).domain;
-						recorder.add_sync(parm, arg_ty, sched.get_value(parm), src_domain, DomainFlagBits::eNone);
+						recorder.add_sync(parm, arg_ty, sched.get_value(parm), host_stream, nullptr);
 					}
 
 #ifdef VUK_DUMP_EXEC
@@ -958,7 +1091,7 @@ namespace vuk {
 
 					fmt::print("\n");
 #endif
-					sched.done(node, DomainFlagBits::eHost); // declarations execute on the host
+					sched.done(node, host_stream); // declarations execute on the host
 				} else {
 					for (auto& parm : node->valloc.args.subspan(1)) {
 						sched.schedule_dependency(parm, RW::eWrite);
@@ -967,8 +1100,8 @@ namespace vuk {
 				break;
 			}
 			case Node::CALL: {
-				if (sched.process(item)) {                           // we have executed every dep, so execute ourselves too
-					DomainFlagBits dst_domain = item.scheduled_domain; // the domain this call will execute on
+				if (sched.process(item)) {                    // we have executed every dep, so execute ourselves too
+					Stream* dst_stream = item.scheduled_stream; // the domain this call will execute on
 
 					// run all the barriers here!
 
@@ -977,7 +1110,6 @@ namespace vuk {
 						auto& parm = node->call.args[i];
 						auto& link = impl->res_to_links[parm];
 
-						DomainFlagBits src_domain = sched.executed.at(parm.node).domain;
 						if (arg_ty->kind == Type::IMBUED_TY) {
 							auto dst_access = arg_ty->imbued.access;
 
@@ -985,7 +1117,7 @@ namespace vuk {
 							if (is_framebuffer_attachment(dst_access)) {
 								auto urdef = link.urdef.node;
 								auto allocator = urdef->valloc.allocator ? *urdef->valloc.allocator : alloc;
-								auto& img_att = *reinterpret_cast<ImageAttachment*>(link.urdef.node->valloc.args[0].node->constant.value);
+								auto& img_att = sched.get_value<ImageAttachment>(parm);
 								if (img_att.image_view.payload == VK_NULL_HANDLE) {
 									auto iv = allocate_image_view(allocator, img_att); // TODO: dropping error
 									img_att.image_view = **iv;
@@ -996,19 +1128,19 @@ namespace vuk {
 							}
 						}
 						auto value = sched.get_value(parm);
-						ImageAttachment& att = *reinterpret_cast<ImageAttachment*>(value);
-						recorder.add_sync(parm, arg_ty, value, src_domain, dst_domain);
+						recorder.add_sync(parm, arg_ty, value, sched.executed.at(parm.node).stream, dst_stream);
 					}
 
 					// make the renderpass if needed!
-					auto rec = recorder.synchronize_domain(dst_domain);
-
+					recorder.synchronize_stream(dst_stream);
+					auto vk_rec = dynamic_cast<VkQueueStream*>(dst_stream); // TODO: change this into dynamic dispatch on the Stream
+					assert(vk_rec);
 					// run the user cb!
 					if (node->call.fn.type()->kind == Type::OPAQUE_FN_TY) {
-						CommandBuffer cobuf(*this, ctx, alloc, rec->cbuf);
-						if (rec->rp.handle) {
-							rec->prepare_render_pass(alloc);
-							fill_render_pass_info(rec->rp, 0, cobuf);
+						CommandBuffer cobuf(*this, ctx, alloc, vk_rec->cbuf);
+						if (vk_rec->rp.rpci.attachments.size() > 0) {
+							vk_rec->prepare_render_pass();
+							fill_render_pass_info(vk_rec->rp, 0, cobuf);
 						}
 
 						std::vector<void*> opaque_args;
@@ -1018,35 +1150,28 @@ namespace vuk {
 							auto& parm = node->call.args[i];
 							auto& link = impl->res_to_links[parm];
 							assert(link.urdef);
-							if (link.urdef.node->kind == Node::VALLOC) {
-								opaque_args.push_back(link.urdef.node->valloc.args[0].node->constant.value);
-								opaque_meta.push_back(&link.urdef);
-							} else if (link.urdef.node->kind == Node::AALLOC) {
-								opaque_args.push_back(link.urdef.node->aalloc.args[0].node->constant.value);
-								opaque_meta.push_back(&link.urdef);
-							} else {
-								assert(0);
-							}
+							opaque_args.push_back(sched.get_value(parm));
+							opaque_meta.push_back(&link.urdef);
 						}
 						opaque_rets.resize(node->call.fn.type()->opaque_fn.return_types.size());
 						(*node->call.fn.type()->opaque_fn.callback)(cobuf, opaque_args, opaque_meta, opaque_rets);
 
-						if (rec->rp.handle) {
-							rec->end_render_pass(alloc);
+						if (vk_rec->rp.handle) {
+							vk_rec->end_render_pass();
 						}
 					} else {
 						assert(0);
 					}
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
-					fmt::print(" = call ${} ", static_cast<uint32_t>(dst_domain));
+					fmt::print(" = call ${} ", static_cast<uint32_t>(dst_stream->domain));
 					if (node->call.fn.type()->debug_info) {
 						fmt::print("<{}> ", node->call.fn.type()->debug_info->name);
 					}
 					print_args(node->call.args);
 					fmt::print("\n");
 #endif
-					sched.done(node, dst_domain);
+					sched.done(node, dst_stream);
 				} else { // execute deps
 					for (size_t i = 0; i < node->call.args.size(); i++) {
 						auto& arg_ty = node->call.fn.type()->opaque_fn.args[i];
@@ -1069,18 +1194,31 @@ namespace vuk {
 				if (sched.process(item)) {
 					// release is to execute: we need to flush current queue -> end current batch and add signal
 					auto parm = node->release.src;
-					DomainFlagBits src_domain = sched.executed.at(parm.node).domain;
+					auto src_stream = sched.executed.at(parm.node).stream;
+					DomainFlagBits src_domain = src_stream->domain;
+					Stream* dst_stream;
+					if (node->release.dst_domain == DomainFlagBits::ePE) {
+						auto& link = sched.res_to_links[node->release.src];
+						auto& swp = sched.get_value<Swapchain>(link.urdef.node->acquire_next_image.swapchain);
+						auto it = std::find_if(pe_streams.begin(), pe_streams.end(), [&](auto& pe_stream) { return pe_stream.swp == &swp; });
+						assert(it != pe_streams.end());
+						dst_stream = &*it;
+					} else {
+						dst_stream = recorder.stream_for_domain(node->release.dst_domain);
+					}
+					assert(dst_stream);
+					DomainFlagBits dst_domain = dst_stream->domain;
+
+					Type* parm_ty = parm.type();
+					recorder.add_sync(parm, parm_ty, sched.get_value(parm), src_stream, dst_stream, Access::eNone, node->release.dst_access);
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
-					fmt::print("release ");
+					fmt::print("release ${} ", static_cast<uint32_t>(node->release.dst_domain));
 					print_args(std::span{ &node->release.src, 1 });
 					fmt::print("\n");
 #endif
 					auto& acqrel = node->release.release;
 					Access src_access = Access::eNone;
-					Access dst_access = Access::eNone;
-
-					Type* parm_ty = parm.type();
 
 					if (parm_ty->kind == Type::ALIASED_TY) { // this is coming from an output annotated, so we know the source access
 						auto src_arg = parm.node->call.args[parm_ty->aliased.ref_idx];
@@ -1094,27 +1232,50 @@ namespace vuk {
 					} else if (parm_ty->kind == Type::IMBUED_TY) {
 						assert(0);
 					} else { // there is no need to sync (eg. declare)
-						src_access = Access::eNone;
 					}
 					acqrel->last_use = src_access;
 					if (src_domain == DomainFlagBits::eHost) {
 						acqrel->status = Signal::Status::eHostAvailable;
 					}
-					auto batch = recorder.flush_domain(src_domain);
-					if (!batch) {
-						continue;
+					if (dst_domain == DomainFlagBits::ePE) {
+						auto& link = sched.res_to_links[node->release.src];
+						auto& swp = sched.get_value<Swapchain>(link.urdef.node->acquire_next_image.swapchain);
+						assert(src_stream->domain & DomainFlagBits::eDevice);
+						auto result = dynamic_cast<VkQueueStream*>(src_stream)->present(swp);
+						// TODO: do something with the result here
 					}
-					batch->future_signals.push_back(acqrel);
+					auto batch = recorder.flush_domain(src_domain, acqrel);
 					fmt::print("");
-					sched.done(node, DomainFlagBits::eNone);
+					sched.done(node, src_stream);
 				} else {
 					sched.schedule_dependency(node->release.src, RW::eWrite);
 				}
 				break;
 
-			case Node::ACQUIRE_NEXT_IMAGE:
-				// bundle = *acquire_one(*context, swapchain, (*present_ready)[context->get_frame_count() % 3], (*render_complete)[context->get_frame_count() % 3]);
+			case Node::ACQUIRE_NEXT_IMAGE: {
+				if (sched.process(item)) {
+					auto& swp = sched.get_value<Swapchain>(node->acquire_next_image.swapchain);
+					swp.linear_index = (swp.linear_index + 1) % swp.images.size();
+					swp.acquire_result =
+					    ctx.vkAcquireNextImageKHR(ctx.device, swp.swapchain, UINT64_MAX, swp.semaphores[2 * swp.linear_index], VK_NULL_HANDLE, &swp.image_index);
+					// VK_SUBOPTIMAL_KHR shouldn't stop presentation; it is handled at the end
+					if (swp.acquire_result != VK_SUCCESS && swp.acquire_result != VK_SUBOPTIMAL_KHR) {
+						return { expected_error, VkException{ swp.acquire_result } };
+					}
+					
+					auto pe_stream = &pe_streams.emplace_back(alloc, swp);
+#ifdef VUK_DUMP_EXEC
+					print_results(node);
+					fmt::print(" = acquire_next_image ");
+					print_args(std::span{ &node->acquire_next_image.swapchain, 1 });
+					fmt::print("\n");
+#endif
+					sched.done(node, pe_stream);
+				} else {
+					sched.schedule_dependency(node->acquire_next_image.swapchain, RW::eWrite);
+				}
 				break;
+			}
 			case Node::INDEXING:
 				if (sched.process(item)) {
 					// half sync
@@ -1125,8 +1286,7 @@ namespace vuk {
 					for (auto i = 0; i < size; i++) {
 						bufs.push_back(&sched.get_value<Buffer>(link.urdef.node->aalloc.args[i + 1]));
 					}
-					recorder.add_sync(
-					    node->indexing.array, node->indexing.array.type(), bufs.data(), sched.executed.at(node->indexing.array.node).domain, DomainFlagBits::eNone);
+					recorder.add_sync(node->indexing.array, node->indexing.array.type(), bufs.data(), sched.executed.at(node->indexing.array.node).stream, nullptr);
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
 					fmt::print(" = ");
@@ -1134,7 +1294,7 @@ namespace vuk {
 					fmt::print("[{}]", constant<uint64_t>(node->indexing.index));
 					fmt::print("\n");
 #endif
-					sched.done(node, DomainFlagBits::eNone); // indexing doesn't execute
+					sched.done(node, nullptr); // indexing doesn't execute
 				} else {
 					sched.schedule_dependency(node->indexing.array, RW::eWrite);
 					sched.schedule_dependency(node->indexing.index, RW::eRead);
@@ -1144,22 +1304,6 @@ namespace vuk {
 				assert(0);
 			}
 		}
-
-		recorder.complete_domain(DomainFlagBits::eGraphicsQueue);
-		// complete_domain(DomainFlagBits::eComputeQueue);
-		recorder.complete_domain(DomainFlagBits::eTransferQueue);
-
-		// RESOLVE SWAPCHAIN DYNAMICITY
-		// bind swapchain attachment images & ivs
-		/*for (auto& bound : impl->bound_attachments) {
-		  if (bound.type == AttachmentInfo::Type::eSwapchain && bound.parent_attachment == 0) {
-		    auto it = std::find_if(swp_with_index.begin(), swp_with_index.end(), [boundb = &bound](auto& t) { return t.first == boundb->swapchain; });
-		    bound.attachment.image_view = it->first->image_views[it->second];
-		    bound.attachment.image = it->first->images[it->second];
-		    bound.attachment.extent = Dimension3D::absolute(it->first->extent);
-		    bound.attachment.sample_count = vuk::Samples::e1;
-		  }
-		}*/
 
 		/* INFERENCE
 		// pre-inference: which IAs are in which FBs?
@@ -1173,8 +1317,8 @@ namespace vuk {
 
 		    ia.base_layer = ia.base_layer == VK_REMAINING_ARRAY_LAYERS ? 0 : ia.base_layer;
 		    ia.layer_count =
-		        ia.layer_count == VK_REMAINING_ARRAY_LAYERS ? 1 : ia.layer_count; // TODO: this prevents inference later on, so this means we are doing it too early
-		    ia.base_level = ia.base_level == VK_REMAINING_MIP_LEVELS ? 0 : ia.base_level;
+		        ia.layer_count == VK_REMAINING_ARRAY_LAYERS ? 1 : ia.layer_count; // TODO: this prevents inference later on, so this means we are doing it too
+		early ia.base_level = ia.base_level == VK_REMAINING_MIP_LEVELS ? 0 : ia.base_level;
 
 		    if (ia.view_type == ImageViewType::eInfer) {
 		      if (ia.layer_count > 1) {
@@ -1394,8 +1538,8 @@ namespace vuk {
 
 		      infer_progress = true;
 		      // infer IA -> FB
-		      if (ia.sample_count == Samples::eInfer && (ia.extent.extent.width == 0 && ia.extent.extent.height == 0)) { // this IA is not helpful for FB inference
-		        continue;
+		      if (ia.sample_count == Samples::eInfer && (ia.extent.extent.width == 0 && ia.extent.extent.height == 0)) { // this IA is not helpful for FB
+		inference continue;
 		      }
 		      for (auto* rpi : atti.rp_uses.to_span(impl->attachment_rp_references)) {
 		        auto& fbci = rpi->fbci;
@@ -1523,199 +1667,7 @@ namespace vuk {
 		  return { expected_error, RenderGraphException{ msg.str() } };
 		}
 		*/
-		// acquire the render passes
-		/*
-		for (auto& rp : impl->rpis) {
-		  if (rp.attachments.size() == 0) {
-		    continue;
-		  }
 
-		  for (auto& attrpinfo : rp.attachments.to_span(impl->rp_infos)) {
-		    attrpinfo.description.format = (VkFormat)attrpinfo.attachment_info->attachment.format;
-		    attrpinfo.description.samples = (VkSampleCountFlagBits)attrpinfo.attachment_info->attachment.sample_count.count;
-		    rp.rpci.attachments.push_back(attrpinfo.description);
-		  }
-
-		  rp.rpci.attachmentCount = (uint32_t)rp.rpci.attachments.size();
-		  rp.rpci.pAttachments = rp.rpci.attachments.data();
-
-		  auto result = alloc.allocate_render_passes(std::span{ &rp.handle, 1 }, std::span{ &rp.rpci, 1 });
-		  // drop render pass immediately
-		  if (result) {
-		    alloc.deallocate(std::span{ &rp.handle, 1 });
-		  }
-		}
-
-		// create buffers
-		for (auto& bound : impl->bound_buffers) {
-		  if (bound.buffer.buffer == VK_NULL_HANDLE) {
-		    BufferCreateInfo bci{ .mem_usage = bound.buffer.memory_usage, .size = bound.buffer.size, .alignment = 1 }; // TODO: alignment?
-		    auto allocator = bound.allocator ? *bound.allocator : alloc;
-		    auto buf = allocate_buffer(allocator, bci);
-		    if (!buf) {
-		      return buf;
-		    }
-		    bound.buffer = **buf;
-		  }
-		}
-
-		// create non-attachment images
-		for (auto& bound : impl->bound_attachments) {
-		  if (!bound.attachment.image && bound.parent_attachment == 0) {
-		    auto allocator = bound.allocator ? *bound.allocator : alloc;
-		    assert(bound.attachment.usage != ImageUsageFlags{});
-		    auto img = allocate_image(allocator, bound.attachment);
-		    if (!img) {
-		      return img;
-		    }
-		    bound.attachment.image = **img;
-		    ctx.set_name(bound.attachment.image.image, bound.name.name);
-		  }
-		}
-
-		// create framebuffers, create & bind attachments
-		for (auto& rp : impl->rpis) {
-		  if (rp.attachments.size() == 0)
-		    continue;
-
-		  auto& ivs = rp.fbci.attachments;
-		  std::vector<VkImageView> vkivs;
-
-		  Extent2D fb_extent = Extent2D{ rp.fbci.width, rp.fbci.height };
-
-		  // create internal attachments; bind attachments to fb
-		  std::optional<uint32_t> fb_layer_count;
-		  for (auto& attrpinfo : rp.attachments.to_span(impl->rp_infos)) {
-		    auto& bound = *attrpinfo.attachment_info;
-		    uint32_t base_layer = bound.attachment.base_layer + bound.image_subrange.base_layer;
-		    uint32_t layer_count = bound.image_subrange.layer_count == VK_REMAINING_ARRAY_LAYERS ? bound.attachment.layer_count : bound.image_subrange.layer_count;
-		    assert(base_layer + layer_count <= bound.attachment.base_layer + bound.attachment.layer_count);
-		    fb_layer_count = layer_count;
-
-		    auto& specific_attachment = bound.attachment;
-		    if (bound.parent_attachment < 0) {
-		      specific_attachment = impl->get_bound_attachment(bound.parent_attachment).attachment;
-		      specific_attachment.image_view = {};
-		    }
-		    if (specific_attachment.image_view == ImageView{}) {
-		      specific_attachment.base_layer = base_layer;
-		      if (specific_attachment.view_type == ImageViewType::eCube) {
-		        if (layer_count > 1) {
-		          specific_attachment.view_type = ImageViewType::e2DArray;
-		        } else {
-		          specific_attachment.view_type = ImageViewType::e2D;
-		        }
-		      }
-		      specific_attachment.layer_count = layer_count;
-		      assert(specific_attachment.level_count == 1);
-
-		      auto allocator = bound.allocator ? *bound.allocator : alloc;
-		      auto iv = allocate_image_view(allocator, specific_attachment);
-		      if (!iv) {
-		        return iv;
-		      }
-		      specific_attachment.image_view = **iv;
-		      auto name = std::string("ImageView: RenderTarget ") + std::string(bound.name.name.to_sv());
-		      ctx.set_name(specific_attachment.image_view.payload, Name(name));
-		    }
-
-		    ivs.push_back(specific_attachment.image_view);
-		    vkivs.push_back(specific_attachment.image_view.payload);
-		  }
-
-		  rp.fbci.renderPass = rp.handle;
-		  rp.fbci.pAttachments = &vkivs[0];
-		  rp.fbci.width = fb_extent.width;
-		  rp.fbci.height = fb_extent.height;
-		  assert(fb_extent.width > 0);
-		  assert(fb_extent.height > 0);
-		  rp.fbci.attachmentCount = (uint32_t)vkivs.size();
-		  rp.fbci.layers = *fb_layer_count;
-
-		  Unique<VkFramebuffer> fb(alloc);
-		  VUK_DO_OR_RETURN(alloc.allocate_framebuffers(std::span{ &*fb, 1 }, std::span{ &rp.fbci, 1 }));
-		  rp.framebuffer = *fb; // queue framebuffer for destruction
-		}
-
-		for (auto& attachment_info : impl->bound_attachments) {
-		  if (attachment_info.attached_future && attachment_info.parent_attachment == 0) {
-		    ImageAttachment att = attachment_info.attachment;
-		    attachment_info.attached_future->result = att;
-		  }
-		}
-
-		for (auto& buffer_info : impl->bound_buffers) {
-		  if (buffer_info.attached_future) {
-		    Buffer buf = buffer_info.buffer;
-		    buffer_info.attached_future->result = buf;
-		  }
-		}
-
-		SubmitBundle sbundle;
-
-		auto record_batch = [&alloc, this](std::span<ScheduledItem*> passes, DomainFlagBits domain) -> Result<SubmitBatch> {
-		  SubmitBatch sbatch{ .domain = domain };
-		  auto partition_it = passes.begin();
-		  while (partition_it != passes.end()) {
-		    auto batch_index = (*partition_it)->batch_index;
-		    auto new_partition_it = std::partition_point(partition_it, passes.end(), [batch_index](ScheduledItem* rpi) { return rpi->batch_index == batch_index; });
-		    auto partition_span = std::span(partition_it, new_partition_it);
-		    auto si = record_single_submit(alloc, partition_span, domain);
-		    if (!si) {
-		      return si;
-		    }
-		    sbatch.submits.emplace_back(*si);
-		    partition_it = new_partition_it;
-		  }
-		  for (auto& rel : impl->final_releases) {
-		    if (rel.dst_use.domain & domain) {
-		      sbatch.submits.back().future_signals.push_back(rel.signal);
-		    }
-		  }
-
-		  std::erase_if(impl->final_releases, [=](auto& rel) { return rel.dst_use.domain & domain; });
-		  return { expected_value, sbatch };
-		};
-
-		// record cbufs
-		// assume that rpis are partitioned wrt batch_index
-
-		if (impl->graphics_passes.size() > 0) {
-		  auto batch = record_batch(impl->graphics_passes, DomainFlagBits::eGraphicsQueue);
-		  if (!batch) {
-		    return batch;
-		  }
-		  sbundle.batches.emplace_back(std::move(*batch));
-		}
-
-		if (impl->compute_passes.size() > 0) {
-		  auto batch = record_batch(impl->compute_passes, DomainFlagBits::eComputeQueue);
-		  if (!batch) {
-		    return batch;
-		  }
-		  sbundle.batches.emplace_back(std::move(*batch));
-		}
-
-		if (impl->transfer_passes.size() > 0) {
-		  auto batch = record_batch(impl->transfer_passes, DomainFlagBits::eTransferQueue);
-		  if (!batch) {
-		    return batch;
-		  }
-		  sbundle.batches.emplace_back(std::move(*batch));
-		}*/
-
-		return { expected_value, std::move(recorder.sbundle) };
-	}
-
-	Result<bool, RenderGraphException> ExecutableRenderGraph::is_resource_image_in_general_layout(const NameReference& name_ref, PassInfo* pass_info) {
-		return { expected_error, RenderGraphException{} };
-
-		/* for (auto& r : pass_info->resources.to_span(impl->resources)) {
-		  if (r.type == Resource::Type::eImage && r.original_name == name_ref.name.name && r.foreign == name_ref.rg) {
-		    return { expected_value, r.promoted_to_general };
-		  }
-		}
-
-		return { expected_error, errors::make_cbuf_references_undeclared_resource(*pass_info, Resource::Type::eImage, name_ref.name.name) };*/
+		return { expected_value };
 	}
 } // namespace vuk

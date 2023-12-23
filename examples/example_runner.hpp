@@ -10,6 +10,7 @@
 #include "vuk/RenderGraph.hpp"
 #include "vuk/SampledImage.hpp"
 #include "vuk/resources/DeviceFrameResource.hpp"
+#include "vuk/runtime/ThisThreadExecutor.hpp"
 #include <VkBootstrap.h>
 #include <filesystem>
 #include <functional>
@@ -48,7 +49,7 @@ namespace vuk {
 		std::optional<DeviceSuperFrameResource> superframe_resource;
 		std::optional<Allocator> superframe_allocator;
 		bool suspend = false;
-		vuk::SwapchainRef swapchain;
+		std::optional<vuk::Swapchain> swapchain;
 		GLFWwindow* window;
 		VkSurfaceKHR surface;
 		vkb::Instance vkbinstance;
@@ -74,7 +75,7 @@ namespace vuk {
 			futures.emplace_back(std::move(fut));
 		}
 
-		plf::colony<vuk::SampledImage> sampled_images;
+		std::vector<TypedFuture<ImageAttachment>> sampled_images;
 		std::vector<Example*> examples;
 
 		ExampleRunner();
@@ -99,12 +100,9 @@ namespace vuk {
 				if (width == 0 && height == 0) {
 					runner.suspend = true;
 				} else {
-					runner.superframe_allocator->deallocate(std::span{ &runner.swapchain->swapchain, 1 });
-					runner.superframe_allocator->deallocate(runner.swapchain->image_views);
-					runner.context->remove_swapchain(runner.swapchain);
-					runner.swapchain = runner.context->add_swapchain(util::make_swapchain(runner.vkbdevice, runner.swapchain->swapchain));
-					for (auto& iv : runner.swapchain->image_views) {
-						runner.context->set_name(iv.payload, "Swapchain ImageView");
+					runner.swapchain = util::make_swapchain(*runner.superframe_allocator, runner.vkbdevice, runner.swapchain);
+					for (auto& iv : runner.swapchain->images) {
+						runner.context->set_name(iv.image_view.payload, "Swapchain ImageView");
 					}
 					runner.suspend = false;
 				}
@@ -137,8 +135,8 @@ namespace vuk {
 			tracy_cpool.reset();
 			present_ready.reset();
 			render_complete.reset();
-			imgui_data.font_texture.view.reset();
-			imgui_data.font_texture.image.reset();
+			imgui_data.font_image.reset();
+			imgui_data.font_image_view.reset();
 			superframe_resource.reset();
 			context.reset();
 			auto vkDestroySurfaceKHR = (PFN_vkDestroySurfaceKHR)vkbinstance.fp_vkGetInstanceProcAddr(vkbinstance.instance, "vkDestroySurfaceKHR");
@@ -245,23 +243,21 @@ namespace vuk {
 		transfer_queue = vkbdevice.get_queue(vkb::QueueType::transfer).value();
 		auto transfer_queue_family_index = vkbdevice.get_queue_index(vkb::QueueType::transfer).value();
 		device = vkbdevice.device;
-		ContextCreateParameters::FunctionPointers fps;
+		vuk::rtvk::FunctionPointers fps;
 		fps.vkGetInstanceProcAddr = vkbinstance.fp_vkGetInstanceProcAddr;
 		fps.vkGetDeviceProcAddr = vkbinstance.fp_vkGetDeviceProcAddr;
-		context.emplace(ContextCreateParameters{ instance,
-		                                         device,
-		                                         physical_device,
-		                                         graphics_queue,
-		                                         graphics_queue_family_index,
-		                                         VK_NULL_HANDLE,
-		                                         VK_QUEUE_FAMILY_IGNORED,
-		                                         transfer_queue,
-		                                         transfer_queue_family_index,
-		                                         fps });
+		fps.load_pfns(instance, device, true);
+		std::vector<std::unique_ptr<Executor>> executors;
+
+		executors.push_back(rtvk::create_vkqueue_executor(fps, device, graphics_queue, graphics_queue_family_index, DomainFlagBits::eGraphicsQueue));
+		executors.push_back(rtvk::create_vkqueue_executor(fps, device, transfer_queue, transfer_queue_family_index, DomainFlagBits::eTransferQueue));
+		executors.push_back(std::make_unique<ThisThreadExecutor>());
+
+		context.emplace(ContextCreateParameters{ instance, device, physical_device, std::move(executors), fps });
 		const unsigned num_inflight_frames = 3;
 		superframe_resource.emplace(*context, num_inflight_frames);
 		superframe_allocator.emplace(*superframe_resource);
-		swapchain = context->add_swapchain(util::make_swapchain(vkbdevice, {}));
+		swapchain = util::make_swapchain(*superframe_allocator, vkbdevice, {});
 		present_ready = vuk::Unique<std::array<VkSemaphore, 3>>(*superframe_allocator);
 		render_complete = vuk::Unique<std::array<VkSemaphore, 3>>(*superframe_allocator);
 

@@ -93,6 +93,7 @@ VUK_X(vkWaitSemaphores)
 VUK_X(vkDestroySemaphore)
 
 VUK_X(vkQueueSubmit)
+VUK_X(vkQueueWaitIdle)
 VUK_X(vkDeviceWaitIdle)
 
 VUK_Y(vkGetPhysicalDeviceMemoryProperties)

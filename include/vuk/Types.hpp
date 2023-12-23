@@ -1033,14 +1033,15 @@ namespace vuk {
 	enum class DomainFlagBits {
 		eNone = 0,
 		eHost = 1 << 0,
-		eGraphicsQueue = 1 << 1,
-		eComputeQueue = 1 << 2,
-		eTransferQueue = 1 << 3,
-		eGraphicsOperation = 1 << 4,
-		eComputeOperation = 1 << 5,
-		eTransferOperation = 1 << 6,
-		eQueueMask = 0b1110,
-		eOpMask = 0b1110000,
+		ePE = 1 << 1,
+		eGraphicsQueue = 1 << 2,
+		eComputeQueue = 1 << 3,
+		eTransferQueue = 1 << 4,
+		eGraphicsOperation = 1 << 5,
+		eComputeOperation = 1 << 6,
+		eTransferOperation = 1 << 7,
+		eQueueMask = 0b11100,
+		eOpMask = 0b11100000,
 		eGraphicsOnGraphics = eGraphicsQueue | eGraphicsOperation,
 		eComputeOnGraphics = eGraphicsQueue | eComputeOperation,
 		eTransferOnGraphics = eGraphicsQueue | eTransferOperation,
@@ -1048,7 +1049,7 @@ namespace vuk {
 		eTransferOnCompute = eComputeQueue | eComputeOperation,
 		eTransferOnTransfer = eTransferQueue | eTransferOperation,
 		eDevice = eGraphicsQueue | eComputeQueue | eTransferQueue,
-		eAny = eDevice | eHost
+		eAny = eDevice | eHost | ePE
 	};
 
 	using DomainFlags = Flags<DomainFlagBits>;
