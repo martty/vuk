@@ -16,6 +16,7 @@
 #include <optional>
 #include <span>
 #include <string_view>
+#include <type_traits>
 #include <unordered_set>
 #include <vector>
 
@@ -162,241 +163,12 @@ private:                                                                        
                                                                                                                                                                \
 public:
 
-	struct Nil;
+	// END OF DELAYED_ERROR
 
-	template<typename...>
+	template<typename... Ts>
 	struct type_list {
-		static constexpr size_t length = 0u;
-		using head = Nil;
-	};
-
-	template<typename Head_t, typename... Tail_ts>
-	struct type_list<Head_t, Tail_ts...> {
-		static constexpr size_t length = sizeof...(Tail_ts) + 1u;
-		using head = Head_t;
-		using tail = type_list<Tail_ts...>;
-	};
-
-	template<typename, typename>
-	struct cons {
-		DELAYED_ERROR("cons<T, U> expects a type_list as its U");
-	};
-
-	template<typename T, typename... Ts>
-	struct cons<T, type_list<Ts...>> {
-		using type = type_list<T, Ts...>;
-	};
-
-	template<typename T, typename... Ts>
-	using cons_t = typename cons<T, Ts...>::type;
-
-	template<typename T>
-	struct head {
-		using type = typename T::head;
-	};
-
-	template<typename T>
-	using head_t = typename head<T>::type;
-
-	template<typename T>
-	struct tail {
-		using type = typename T::tail;
-	};
-
-	template<typename T>
-	using tail_t = typename tail<T>::type;
-
-	template<typename T>
-	struct length {
-		static constexpr size_t value = T::length;
-	};
-
-	template<typename T>
-	constexpr size_t length_v = length<T>::value;
-
-	template<template<typename> typename, typename>
-	struct map {
-		DELAYED_ERROR("map<Metafunction_t, T> expects a type_list as its T");
-	};
-
-	template<template<typename> typename Metafunction_t>
-	struct map<Metafunction_t, type_list<>> {
-		using type = type_list<>;
-	};
-
-	template<template<typename> typename Metafunction_t, typename T, typename... Ts>
-	struct map<Metafunction_t, type_list<T, Ts...>> {
-	private:
-		using tail_mapped = typename map<Metafunction_t, type_list<Ts...>>::type;
-		using head_mapped = typename Metafunction_t<T>::type;
-
-	public:
-		using type = cons_t<head_mapped, tail_mapped>;
-	};
-
-	template<template<typename> typename Metafunction_t, typename T>
-	using map_t = typename map<Metafunction_t, T>::type;
-
-	namespace details {
-		template<template<typename> typename, template<typename, typename> typename, bool, typename>
-		struct reduce {
-			DELAYED_ERROR("reduce<Predicate_t, BinaryOp_t, Default, T> expects a type_list as its T");
-		};
-
-		template<template<typename> typename Predicate_t, template<typename, typename> typename BinaryOp_t, bool Default>
-		struct reduce<Predicate_t, BinaryOp_t, Default, type_list<>> {
-			static constexpr bool value = Default;
-		};
-
-		template<template<typename> typename Predicate_t, template<typename, typename> typename BinaryOp_t, bool Default, typename T, typename... Ts>
-		struct reduce<Predicate_t, BinaryOp_t, Default, type_list<T, Ts...>> {
-		private:
-			using applied_head = Predicate_t<T>;
-			using applied_tail = reduce<Predicate_t, BinaryOp_t, Default, type_list<Ts...>>;
-
-		public:
-			static constexpr bool value = BinaryOp_t<applied_head, applied_tail>::value;
-		};
-
-		template<typename T, typename U>
-		struct OR {
-			static constexpr bool value = T::value || U::value;
-		};
-
-		template<typename T, typename U>
-		struct AND {
-			static constexpr bool value = T::value && U::value;
-		};
-
-		template<typename T>
-		struct NOT {
-			static constexpr bool value = !T::value;
-		};
-	} // namespace details
-
-	template<template<typename> typename Predicate_t, typename List_t>
-	struct any : details::reduce<Predicate_t, details::OR, false, List_t> {};
-
-	template<template<typename> typename Predicate_t, typename T>
-	constexpr bool any_v = any<Predicate_t, T>::value;
-
-	template<template<typename> typename, typename>
-	struct filter {
-		DELAYED_ERROR("filter<Predicate_t, T> expects a type_list as its T");
-	};
-
-	template<template<typename> typename Predicate_t>
-	struct filter<Predicate_t, type_list<>> {
-		using type = type_list<>;
-	};
-
-	template<template<typename> typename Predicate_t, typename T, typename... Ts>
-	struct filter<Predicate_t, type_list<T, Ts...>> {
-	private:
-		using rest = typename filter<Predicate_t, type_list<Ts...>>::type;
-
-	public:
-		using type = std::conditional_t<Predicate_t<T>::value, cons_t<T, rest>, rest>;
-	};
-
-	template<template<typename> typename Predicate_t, typename List_t>
-	using filter_t = typename filter<Predicate_t, List_t>::type;
-
-	namespace details {
-		template<template<typename, size_t> typename, typename, size_t>
-		struct map_indexed_impl {
-			DELAYED_ERROR("map_indexed expects a type_list as its T");
-		};
-
-		template<template<typename, size_t> typename Metafunction_t, size_t I, typename T, typename... Ts>
-		struct map_indexed_impl<Metafunction_t, type_list<T, Ts...>, I> {
-		private:
-			using applied_head = typename Metafunction_t<T, I>::type;
-			using applied_tail = typename map_indexed_impl<Metafunction_t, type_list<Ts...>, I + 1>::type;
-
-		public:
-			using type = cons_t<applied_head, applied_tail>;
-		};
-
-		template<template<typename, size_t> typename Metafunction_t, size_t I, typename T>
-		struct map_indexed_impl<Metafunction_t, type_list<T>, I> {
-		private:
-			using applied_head = typename Metafunction_t<T, I>::type;
-
-		public:
-			using type = type_list<applied_head>;
-		};
-
-		template<template<typename, size_t> typename Metafunction_t, size_t I>
-		struct map_indexed_impl<Metafunction_t, type_list<>, I> {
-			using type = Nil;
-		};
-	} // namespace details
-
-	template<template<typename, size_t> typename Metafunction_t, typename List_t>
-	struct map_indexed {
-		using type = typename details::map_indexed_impl<Metafunction_t, List_t, 0u>::type;
-	};
-
-	template<template<typename, size_t> typename Metafunction_t, typename List_t>
-	using map_indexed_t = typename map_indexed<Metafunction_t, List_t>::type;
-
-	struct Good1 {};
-	struct Good2 {};
-	struct Bad1 {};
-	struct Bad2 {};
-
-	template<typename Spec1, typename Spec2>
-	struct same_specialization : std::false_type {};
-
-	template<template<typename> typename Spec1, template<typename> typename Spec2, typename T>
-	struct same_specialization<Spec1<T>, Spec2<T>> : std::true_type {};
-
-	template<typename T>
-	struct AT {
-		float x;
-	};
-
-	template<typename T>
-	struct BT {
-		float x;
-	};
-
-	using ListA = type_list<AT<Good1>, AT<Good2>, AT<Bad1>>;
-	using ListB = type_list<BT<Bad2>, BT<Good2>, BT<Good1>>;
-
-	template<typename T, typename U>
-	static constexpr bool same_specialization_v = same_specialization<T, U>::value;
-	static_assert(same_specialization_v<AT<Good1>, BT<Good1>>);
-	static_assert(!same_specialization_v<BT<Good1>, AT<Bad1>>);
-
-	template<typename T>
-	struct unwrap {
-		using type = typename T::type;
-	};
-
-	template<typename T>
-	using unwrap_t = typename T::type;
-
-	template<typename TypeList, typename T>
-	struct any_is_same_specialization_unwrapped {
-		template<typename U>
-		struct partial {
-			static constexpr bool value = std::is_same_v<unwrap_t<T>, U>;
-		};
-
-		static constexpr bool value = any_v<partial, TypeList>;
-	};
-
-	template<typename T, size_t I>
-	struct Indexed {
-		using type = T;
-		static constexpr size_t Index = I;
-	};
-
-	template<typename T, size_t I>
-	struct wrap_indexed {
-		using type = Indexed<T, I>;
+		static constexpr size_t length = sizeof...(Ts);
+		using type = type_list<Ts...>;
 	};
 
 	template<typename>
@@ -425,45 +197,71 @@ public:
 	template<typename T>
 	using typelist_to_tuple_t = typename typelist_to_tuple<T>::type;
 
-	template<typename ListA_t, typename ListB_t>
-	struct filtered_indexed {
-		template<typename Elem>
-		struct partial {
-			static constexpr bool value = any_is_same_specialization_unwrapped<ListB_t, Elem>::value;
-		};
+	template<typename T, typename List>
+	struct prepend_type;
 
-		using indexed_listA = map_indexed_t<wrap_indexed, ListA_t>;
-
-		using type = filter_t<partial, indexed_listA>;
+	template<typename T, typename... Ts>
+	struct prepend_type<T, type_list<Ts...>> {
+		using type = type_list<T, Ts...>;
 	};
 
-	template<typename IndexedList_t, size_t I, typename ToFill_t, typename Filled_t>
-	void fill_tuple(const ToFill_t& fill, Filled_t& filled) {
-		using head = typename IndexedList_t::head;
-		if constexpr (std::is_same_v<head, Nil>) {
-			return;
-		} else {
-			std::get<I>(filled) = std::get<head::Index>(fill);
-			fill_tuple<typename IndexedList_t::tail, I + 1>(fill, filled);
-		}
+	template<size_t... N>
+	struct index_list {
+		static constexpr size_t length = sizeof...(N);
+		using type = index_list<N...>;
 	};
 
-	template<typename... Ts>
-	auto get_indices(type_list<Ts...> ts) {
-		return std::array{ Ts::Index... };
+	template<size_t N, typename List>
+	struct prepend_index;
+
+	template<size_t N, size_t... Ns>
+	struct prepend_index<N, index_list<Ns...>> {
+		using type = index_list<N, Ns...>;
+	};
+
+	template<typename T1, typename T2, size_t N = 0>
+	struct intersect_type_lists;
+
+	template<typename... T1, size_t N>
+	struct intersect_type_lists<type_list<T1...>, type_list<>, N> {
+		using type = type_list<>;
+		using indices = index_list<>;
+	};
+
+	template<typename... T1, typename T2_Head, typename... T2, size_t N>
+	struct intersect_type_lists<type_list<T1...>, type_list<T2_Head, T2...>, N> {
+	private:
+		using rest = intersect_type_lists<type_list<T1...>, type_list<T2...>, N + 1>;
+		using rest_type = typename rest::type;
+		using rest_indices = typename rest::indices;
+
+		static constexpr bool condition = (std::is_same_v<T1, T2_Head> || ...);
+
+	public:
+		using type = std::conditional_t<condition, prepend_type<T2_Head, rest_type>, rest_type>;
+		using indices = std::conditional_t<condition, prepend_index<N, rest_indices>, rest_indices>;
+	};
+
+	template<typename Tuple, typename... Ts>
+	auto make_subtuple(const Tuple& tuple, type_list<Ts...>) -> typelist_to_tuple_t<type_list<Ts...>> {
+		return typelist_to_tuple_t<type_list<Ts...>>(std::get<Ts>(tuple)...);
+	}
+
+	template<size_t... Ns>
+	auto make_indices(index_list<Ns...> indices) {
+		return std::array{ Ns... };
 	}
 
 	template<typename T1, typename T2>
-	auto intersect_tuples(const T1& t1) {
-		using T1List = tuple_to_typelist_t<T1>;
-		using T2List = tuple_to_typelist_t<T2>;
-		using indices = typename filtered_indexed<T1List, T2List>::type;
-		typelist_to_tuple_t<map_t<unwrap, indices>> t3;
-
-		fill_tuple<indices, 0>(t1, t3);
-		auto idxs = get_indices(indices{});
-
-		return std::pair{ idxs, t3 };
+	auto intersect_tuples(const T1& tuple) {
+		using T1_list = tuple_to_typelist_t<T1>;
+		using T2_list = tuple_to_typelist_t<T2>;
+		using intersection = intersect_type_lists<T1_list, T2_list>;
+		using intersection_type = typename intersection::type;
+		using intersection_indices = typename intersection::indices;
+		auto subtuple = make_subtuple(tuple, intersection_type{});
+		auto indices = make_indices(intersection_indices{});
+		return std::pair{ indices, subtuple };
 	}
 
 	template<typename Tuple>
