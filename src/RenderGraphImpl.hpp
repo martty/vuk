@@ -52,9 +52,31 @@ namespace vuk {
 
 	using DefUseMap = std::unordered_map<Ref, ChainLink>;
 
+	struct Stream {
+		Stream(Allocator alloc, DomainFlagBits domain) : alloc(alloc), domain(domain) {}
+		virtual ~Stream() {}
+		Allocator alloc;
+		std::vector<Stream*> dependencies;
+		DomainFlagBits domain;
+
+		virtual void add_dependency(Stream* dep) = 0;
+		virtual void sync_deps() = 0;
+
+		virtual void synch_image(ImageAttachment& img_att, QueueResourceUse src_use, QueueResourceUse dst_use, Access dst_access, void* tag) = 0;
+		virtual void synch_memory(QueueResourceUse src_use, QueueResourceUse dst_use, void* tag) = 0;
+
+		struct SubmitResult {
+			Signal* signal = nullptr;
+			VkSemaphore sema_wait;
+		};
+
+		virtual Result<SubmitResult> submit(Signal* signal = nullptr) = 0;
+	};
+
 	struct ScheduledItem {
 		Node* execable;
 		DomainFlagBits scheduled_domain;
+		Stream* scheduled_stream;
 
 		int32_t is_waited_on = 0;
 		size_t batch_index;
@@ -106,8 +128,6 @@ namespace vuk {
 		std::vector<RenderPassInfo, short_alloc<RenderPassInfo, 64>> rpis;
 		std::span<ScheduledItem*> transfer_passes, compute_passes, graphics_passes;
 
-		void merge_diverge_passes(std::vector<PassInfo, short_alloc<PassInfo, 64>>& passes);
-
 		Result<void> diagnose_unheaded_chains();
 		Result<void> schedule_intra_queue(std::span<std::shared_ptr<RG>> rgs, const RenderGraphCompileOptions& compile_options);
 		Result<void> perform_inference(std::span<std::shared_ptr<RG>> rgs, const RenderGraphCompileOptions& compile_options);
@@ -117,8 +137,11 @@ namespace vuk {
 		Result<void> relink_subchains();
 		Result<void> fix_subchains();
 
-		static VkImageMemoryBarrier2KHR
-		emit_image_barrier(QueueResourceUse last_use, QueueResourceUse current_use, const Subrange::Image& subrange, ImageAspectFlags aspect, bool is_release = false);
+		static VkImageMemoryBarrier2KHR emit_image_barrier(QueueResourceUse last_use,
+		                                                   QueueResourceUse current_use,
+		                                                   const Subrange::Image& subrange,
+		                                                   ImageAspectFlags aspect,
+		                                                   bool is_release = false);
 		static VkMemoryBarrier2KHR emit_memory_barrier(QueueResourceUse last_use, QueueResourceUse current_use);
 
 		// opt passes

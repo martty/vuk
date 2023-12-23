@@ -43,7 +43,7 @@ namespace {
 #undef VUK_Y
 	}*/
 
-	void load_pfns_dynamic(VkInstance instance, VkDevice device, vuk::ContextCreateParameters::FunctionPointers& pfns) {
+	void load_pfns_dynamic(VkInstance instance, VkDevice device, vuk::rtvk::FunctionPointers& pfns) {
 #define VUK_X(name)                                                                                                                                            \
 	if (pfns.name == nullptr) {                                                                                                                                  \
 		pfns.name = (PFN_##name)pfns.vkGetDeviceProcAddr(device, #name);                                                                                           \
@@ -57,93 +57,53 @@ namespace {
 #undef VUK_X
 #undef VUK_Y
 	}
+} // namespace
 
-	bool check_pfns(vuk::ContextCreateParameters::FunctionPointers& pfns) {
-		bool valid = true;
-#define VUK_X(name) valid = valid && pfns.name;
-#define VUK_Y(name) valid = valid && pfns.name;
+bool vuk::rtvk::FunctionPointers::check_pfns() {
+	bool valid = true;
+#define VUK_X(name) valid = valid && name;
+#define VUK_Y(name) valid = valid && name;
 #include "vuk/VulkanPFNRequired.hpp"
 #undef VUK_X
 #undef VUK_Y
-		return valid;
+	return valid;
+}
+
+vuk::Result<void> vuk::rtvk::FunctionPointers::load_pfns(VkInstance instance, VkDevice device, bool allow_dynamic_loading_of_vk_function_pointers) {
+	// PFN loading
+	// if the user passes in PFNs, those will be used, always
+	if (check_pfns()) {
+		return { vuk::expected_value };
+	}
+	// we don't have all the PFNs, so we will load them if this is allowed
+	if (vkGetInstanceProcAddr && vkGetDeviceProcAddr && allow_dynamic_loading_of_vk_function_pointers) {
+		load_pfns_dynamic(instance, device, *this);
+		if (!check_pfns()) {
+			return { vuk::expected_error,
+				       vuk::RequiredPFNMissingException{ "A Vulkan PFN is required, but was not provided and dynamic loading could not load it." } };
+		}
+	} else {
+		return { vuk::expected_error, vuk::RequiredPFNMissingException{ "A Vulkan PFN is required, but was not provided and dynamic loading was not allowed." } };
 	}
 
-	bool load_pfns(vuk::ContextCreateParameters params, vuk::ContextCreateParameters::FunctionPointers& pfns) {
-		// PFN loading
-		// if the user passes in PFNs, those will be used, always
-		if (check_pfns(pfns)) {
-			return true;
-		}
-		// we don't have all the PFNs, so we will load them if this is allowed
-		if (pfns.vkGetInstanceProcAddr && pfns.vkGetDeviceProcAddr && params.allow_dynamic_loading_of_vk_function_pointers) {
-			load_pfns_dynamic(params.instance, params.device, pfns);
-			return check_pfns(pfns);
-		} else {
-			return false;
-		}
-	}
-} // namespace
+	return { vuk::expected_value };
+}
 
 namespace vuk {
 	Context::Context(ContextCreateParameters params) :
-	    ContextCreateParameters::FunctionPointers(params.pointers),
+	    rtvk::FunctionPointers(params.pointers),
 	    instance(params.instance),
 	    device(params.device),
-	    physical_device(params.physical_device),
-	    graphics_queue_family_index(params.graphics_queue_family_index),
-	    compute_queue_family_index(params.compute_queue_family_index),
-	    transfer_queue_family_index(params.transfer_queue_family_index) {
-		// TODO: conversion to static factory fn
-		bool pfn_load_success = load_pfns(params, *this);
-		assert(pfn_load_success);
+	    physical_device(params.physical_device) {
+		assert(check_pfns());
 
-		[[maybe_unused]] bool dedicated_graphics_queue_ = false;
-		bool dedicated_compute_queue_ = false;
-		bool dedicated_transfer_queue_ = false;
-
-		if (params.graphics_queue != VK_NULL_HANDLE && params.graphics_queue_family_index != VK_QUEUE_FAMILY_IGNORED) {
-			dedicated_graphics_queue_ = true;
-		}
-
-		if (params.compute_queue != VK_NULL_HANDLE && params.compute_queue_family_index != VK_QUEUE_FAMILY_IGNORED) {
-			dedicated_compute_queue_ = true;
-		} else {
-			compute_queue_family_index = params.graphics_queue_family_index;
-		}
-
-		if (params.transfer_queue != VK_NULL_HANDLE && params.transfer_queue_family_index != VK_QUEUE_FAMILY_IGNORED) {
-			dedicated_transfer_queue_ = true;
-		} else {
-			transfer_queue_family_index = compute_queue ? params.compute_queue_family_index : params.graphics_queue_family_index;
-		}
 		impl = new ContextImpl(*this);
-
-		{
-			TimelineSemaphore ts;
-			impl->device_vk_resource->allocate_timeline_semaphores(std::span{ &ts, 1 }, {});
-			dedicated_graphics_queue.emplace(this->vkQueueSubmit, this->vkQueueSubmit2KHR, params.graphics_queue, params.graphics_queue_family_index, ts);
-			set_name(params.graphics_queue, "Graphics Queue");
-			graphics_queue = &dedicated_graphics_queue.value();
+		impl->executors = std::move(params.executors);
+		for (auto& exe : impl->executors) {
+			if (exe->type == Executor::Type::eVulkanDeviceQueue) {
+				all_queue_families.push_back(static_cast<rtvk::QueueExecutor*>(exe.get())->get_queue_family_index());
+			}
 		}
-		if (dedicated_compute_queue_) {
-			TimelineSemaphore ts;
-			impl->device_vk_resource->allocate_timeline_semaphores(std::span{ &ts, 1 }, {});
-			dedicated_compute_queue.emplace(this->vkQueueSubmit, this->vkQueueSubmit2KHR, params.compute_queue, params.compute_queue_family_index, ts);
-			set_name(params.compute_queue, "Compute Queue");
-			compute_queue = &dedicated_compute_queue.value();
-		} else {
-			compute_queue = graphics_queue;
-		}
-		if (dedicated_transfer_queue_) {
-			TimelineSemaphore ts;
-			impl->device_vk_resource->allocate_timeline_semaphores(std::span{ &ts, 1 }, {});
-			dedicated_transfer_queue.emplace(this->vkQueueSubmit, this->vkQueueSubmit2KHR, params.transfer_queue, params.transfer_queue_family_index, ts);
-			set_name(params.transfer_queue, "Transfer Queue");
-			transfer_queue = &dedicated_transfer_queue.value();
-		} else {
-			transfer_queue = compute_queue ? compute_queue : graphics_queue;
-		}
-
 		this->vkGetPhysicalDeviceProperties(physical_device, &physical_device_properties);
 		min_buffer_alignment =
 		    std::max(physical_device_properties.limits.minUniformBufferOffsetAlignment, physical_device_properties.limits.minStorageBufferOffsetAlignment);
@@ -159,23 +119,6 @@ namespace vuk {
 		instance = o.instance;
 		device = o.device;
 		physical_device = o.physical_device;
-		graphics_queue_family_index = o.graphics_queue_family_index;
-		compute_queue_family_index = o.compute_queue_family_index;
-		transfer_queue_family_index = o.transfer_queue_family_index;
-		dedicated_graphics_queue = std::move(o.dedicated_graphics_queue);
-		graphics_queue = &dedicated_graphics_queue.value();
-		dedicated_compute_queue = std::move(o.dedicated_compute_queue);
-		if (dedicated_compute_queue) {
-			compute_queue = &o.dedicated_compute_queue.value();
-		} else {
-			compute_queue = graphics_queue;
-		}
-		dedicated_transfer_queue = std::move(o.dedicated_transfer_queue);
-		if (dedicated_transfer_queue) {
-			transfer_queue = &dedicated_transfer_queue.value();
-		} else {
-			transfer_queue = compute_queue ? compute_queue : graphics_queue;
-		}
 		rt_properties = o.rt_properties;
 
 		impl->pipelinebase_cache.allocator = this;
@@ -192,23 +135,6 @@ namespace vuk {
 		instance = o.instance;
 		device = o.device;
 		physical_device = o.physical_device;
-		graphics_queue_family_index = o.graphics_queue_family_index;
-		compute_queue_family_index = o.compute_queue_family_index;
-		transfer_queue_family_index = o.transfer_queue_family_index;
-		dedicated_graphics_queue = std::move(o.dedicated_graphics_queue);
-		graphics_queue = &dedicated_graphics_queue.value();
-		dedicated_compute_queue = std::move(o.dedicated_compute_queue);
-		if (dedicated_compute_queue) {
-			compute_queue = &o.dedicated_compute_queue.value();
-		} else {
-			compute_queue = graphics_queue;
-		}
-		dedicated_transfer_queue = std::move(o.dedicated_transfer_queue);
-		if (dedicated_transfer_queue) {
-			transfer_queue = &dedicated_transfer_queue.value();
-		} else {
-			transfer_queue = compute_queue ? compute_queue : graphics_queue;
-		}
 
 		impl->pipelinebase_cache.allocator = this;
 		impl->pool_cache.allocator = this;
@@ -219,6 +145,24 @@ namespace vuk {
 		impl->device_vk_resource->ctx = this;
 
 		return *this;
+	}
+
+	Executor* Context::get_executor(Executor::Tag tag) {
+		auto it = std::find_if(impl->executors.begin(), impl->executors.end(), [=](auto& exe) { return exe->tag == tag; });
+		if (it != impl->executors.end()) {
+			return it->get();
+		} else {
+			return nullptr;
+		}
+	}
+
+	Executor* Context::get_executor(DomainFlagBits domain) {
+		auto it = std::find_if(impl->executors.begin(), impl->executors.end(), [=](auto& exe) { return exe->tag.domain == domain; });
+		if (it != impl->executors.end()) {
+			return it->get();
+		} else {
+			return nullptr;
+		}
 	}
 
 	bool Context::debug_enabled() const {
@@ -238,22 +182,6 @@ namespace vuk {
 		if (!debug_enabled())
 			return;
 		this->vkCmdEndDebugUtilsLabelEXT(cb);
-	}
-
-	Result<void> Context::submit_graphics(std::span<VkSubmitInfo> sis, VkFence fence) {
-		return graphics_queue->submit(sis, fence);
-	}
-
-	Result<void> Context::submit_graphics(std::span<VkSubmitInfo2KHR> sis) {
-		return graphics_queue->submit(sis, VK_NULL_HANDLE);
-	}
-
-	Result<void> Context::submit_transfer(std::span<VkSubmitInfo> sis, VkFence fence) {
-		return transfer_queue->submit(sis, fence);
-	}
-
-	Result<void> Context::submit_transfer(std::span<VkSubmitInfo2KHR> sis) {
-		return transfer_queue->submit(sis, VK_NULL_HANDLE);
 	}
 
 	void PersistentDescriptorSet::update_combined_image_sampler(unsigned binding, unsigned array_index, ImageView iv, Sampler sampler, ImageLayout layout) {
@@ -564,40 +492,6 @@ namespace vuk {
 		return data;
 	}
 
-	Queue& Context::domain_to_queue(DomainFlags domain) const {
-		auto queue_only = (DomainFlagBits)(domain & DomainFlagBits::eQueueMask).m_mask;
-		switch (queue_only) {
-		case DomainFlagBits::eGraphicsQueue:
-			return *graphics_queue;
-		case DomainFlagBits::eComputeQueue:
-			return *compute_queue;
-		case DomainFlagBits::eTransferQueue:
-			return *transfer_queue;
-		default:
-			assert(0);
-			return *transfer_queue;
-		}
-	};
-
-	uint32_t Context::domain_to_queue_index(DomainFlags domain) const {
-		auto queue_only = (DomainFlagBits)(domain & DomainFlagBits::eQueueMask).m_mask;
-		switch (queue_only) {
-		case DomainFlagBits::eGraphicsQueue:
-			return graphics_queue_family_index;
-		case DomainFlagBits::eComputeQueue:
-			return compute_queue_family_index;
-		case DomainFlagBits::eTransferQueue:
-			return transfer_queue_family_index;
-		default:
-			assert(0);
-			return 0;
-		}
-	};
-
-	uint32_t Context::domain_to_queue_family_index(DomainFlags domain) const {
-		return domain_to_queue_index(domain);
-	}
-
 	Query Context::create_timestamp_query() {
 		return { impl->query_id_counter++ };
 	}
@@ -633,21 +527,6 @@ namespace vuk {
 		VkPipelineLayout pl;
 		this->vkCreatePipelineLayout(device, &cinfo.plci, nullptr, &pl);
 		return pl;
-	}
-
-	SwapchainRef Context::add_swapchain(Swapchain sw) {
-		std::lock_guard _(impl->swapchains_lock);
-		return &*impl->swapchains.emplace(sw);
-	}
-
-	void Context::remove_swapchain(SwapchainRef sw) {
-		std::lock_guard _(impl->swapchains_lock);
-		for (auto it = impl->swapchains.begin(); it != impl->swapchains.end(); it++) {
-			if (&*it == sw) {
-				impl->swapchains.erase(it);
-				return;
-			}
-		}
 	}
 
 	uint64_t Context::get_frame_count() const {
@@ -722,26 +601,7 @@ namespace vuk {
 		if (impl) {
 			this->vkDeviceWaitIdle(device);
 
-			for (auto& s : impl->swapchains) {
-				for (auto& swiv : s.image_views) {
-					this->vkDestroyImageView(device, swiv.payload, nullptr);
-				}
-				this->vkDestroySwapchainKHR(device, s.swapchain, nullptr);
-			}
-
 			this->vkDestroyPipelineCache(device, vk_pipeline_cache, nullptr);
-
-			if (dedicated_graphics_queue) {
-				impl->device_vk_resource->deallocate_timeline_semaphores(std::span{ &dedicated_graphics_queue->get_submit_sync(), 1 });
-			}
-
-			if (dedicated_compute_queue) {
-				impl->device_vk_resource->deallocate_timeline_semaphores(std::span{ &dedicated_compute_queue->get_submit_sync(), 1 });
-			}
-
-			if (dedicated_transfer_queue) {
-				impl->device_vk_resource->deallocate_timeline_semaphores(std::span{ &dedicated_transfer_queue->get_submit_sync(), 1 });
-			}
 
 			delete impl;
 		}
@@ -758,19 +618,14 @@ namespace vuk {
 
 	Result<void> Context::wait_idle() {
 		std::unique_lock<std::recursive_mutex> graphics_lock;
-		if (dedicated_graphics_queue) {
-			graphics_lock = std::unique_lock{ graphics_queue->get_queue_lock() };
+		for (auto& exe : impl->executors) {
+			exe->lock();
 		}
-		std::unique_lock<std::recursive_mutex> compute_lock;
-		if (dedicated_compute_queue) {
-			compute_lock = std::unique_lock{ compute_queue->get_queue_lock() };
-		}
-		std::unique_lock<std::recursive_mutex> transfer_lock;
-		if (dedicated_transfer_queue) {
-			transfer_lock = std::unique_lock{ transfer_queue->get_queue_lock() };
-		}
-
 		VkResult result = this->vkDeviceWaitIdle(device);
+
+		for (auto& exe : impl->executors) {
+			exe->unlock();
+		}
 		if (result < 0) {
 			return { expected_error, VkException{ result } };
 		}

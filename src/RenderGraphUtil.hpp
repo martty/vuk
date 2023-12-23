@@ -161,6 +161,12 @@ namespace vuk {
 			qr.layout = combine_layout(qr.layout, ImageLayout::eTransferDstOptimal);
 		}
 
+		if (ia & ePresent) {
+			qr.stages = PipelineStageFlagBits::eNone;
+			qr.access = {};
+			qr.layout = ImageLayout::ePresentSrcKHR;
+		}
+
 		qr.domain = domain;
 		return qr;
 	}

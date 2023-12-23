@@ -87,11 +87,11 @@ TEST_CASE("arrayed images, commands") {
 			CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 5; }));
 		}
 		{
-			auto futc2 = clear_image(arr[1], vuk::ClearColor(5u, 5u, 5u, 5u));
+			auto futc2 = clear_image(arr[1], vuk::ClearColor(6u, 6u, 6u, 6u));
 			auto dst_buf = declare_buf("dst", *dst);
 			auto res = download_buffer(image2buf(futc2, dst_buf)).get(*test_context.allocator, test_context.compiler);
 			auto updata = std::span((uint32_t*)res->mapped_ptr, 4);
-			CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 5; }));
+			CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 6; }));
 		}
 	}
 }

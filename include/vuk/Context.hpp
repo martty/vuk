@@ -10,6 +10,7 @@
 #include "vuk/Buffer.hpp"
 #include "vuk/Image.hpp"
 #include "vuk/Swapchain.hpp"
+#include "vuk/runtime/vk/VulkanQueueExecutor.hpp"
 #include "vuk_fwd.hpp"
 
 #include "vuk/SourceLocation.hpp"
@@ -20,6 +21,31 @@ namespace std {
 } // namespace std
 
 namespace vuk {
+	namespace rtvk {
+#define VUK_X(name) PFN_##name name = nullptr;
+#define VUK_Y(name) PFN_##name name = nullptr;
+
+		struct FunctionPointers {
+			PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = nullptr;
+			PFN_vkGetDeviceProcAddr vkGetDeviceProcAddr = nullptr;
+#include "vuk/VulkanPFNOptional.hpp"
+#include "vuk/VulkanPFNRequired.hpp"
+
+			/// @brief Check if all required function pointers are available (if providing them externally)
+			bool check_pfns();
+			/// @brief Load function pointers that the runtime needs
+			/// @param instance Vulkan instance
+			/// @param device Vulkan device
+			/// @param allow_dynamic_loading_of_vk_function_pointers If true, then this function will attempt dynamic loading of the fn pointers
+			/// If this is false, then you must fill in all required function pointers
+			vuk::Result<void> load_pfns(VkInstance instance, VkDevice device, bool allow_dynamic_loading_of_vk_function_pointers);
+		};
+#undef VUK_X
+#undef VUK_Y
+
+		std::unique_ptr<Executor> create_vkqueue_executor(const FunctionPointers& fps, VkDevice device, VkQueue queue, uint32_t queue_family_index, DomainFlagBits domain);
+	} // namespace rtvk
+
 	/// @brief Parameters used for creating a Context
 	struct ContextCreateParameters {
 		/// @brief Vulkan instance
@@ -28,57 +54,13 @@ namespace vuk {
 		VkDevice device;
 		/// @brief Vulkan physical device
 		VkPhysicalDevice physical_device;
-		/// @brief Optional graphics queue
-		VkQueue graphics_queue = VK_NULL_HANDLE;
-		/// @brief Optional graphics queue family index
-		uint32_t graphics_queue_family_index = VK_QUEUE_FAMILY_IGNORED;
-		/// @brief Optional compute queue
-		VkQueue compute_queue = VK_NULL_HANDLE;
-		/// @brief Optional compute queue family index
-		uint32_t compute_queue_family_index = VK_QUEUE_FAMILY_IGNORED;
-		/// @brief Optional transfer queue
-		VkQueue transfer_queue = VK_NULL_HANDLE;
-		/// @brief Optional transfer queue family index
-		uint32_t transfer_queue_family_index = VK_QUEUE_FAMILY_IGNORED;
-
-#define VUK_X(name) PFN_##name name = nullptr;
-#define VUK_Y(name) PFN_##name name = nullptr;
+		/// @brief Executors available to the runtime for scheduling
+		std::vector<std::unique_ptr<Executor>> executors;
 		/// @brief User provided function pointers. If you want dynamic loading, you must set vkGetInstanceProcAddr & vkGetDeviceProcAddr
-		struct FunctionPointers {
-			PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = nullptr;
-			PFN_vkGetDeviceProcAddr vkGetDeviceProcAddr = nullptr;
-#include "vuk/VulkanPFNRequired.hpp"
-#include "vuk/VulkanPFNOptional.hpp"
-		} pointers;
-#undef VUK_X
-#undef VUK_Y
-
-		/// @brief Allow vuk to load missing required and optional function pointers dynamically
-		/// If this is false, then you must fill in all required function pointers
-		bool allow_dynamic_loading_of_vk_function_pointers = true;
+		rtvk::FunctionPointers pointers;
 	};
 
-	/// @brief Abstraction of a device queue in Vulkan
-	struct Queue {
-		Queue(PFN_vkQueueSubmit fn1, PFN_vkQueueSubmit2KHR fn2, VkQueue queue, uint32_t queue_family_index, TimelineSemaphore ts);
-		~Queue();
-
-		Queue(const Queue&) = delete;
-		Queue& operator=(const Queue&) = delete;
-
-		Queue(Queue&&) noexcept;
-		Queue& operator=(Queue&&) noexcept;
-
-		TimelineSemaphore& get_submit_sync();
-		std::recursive_mutex& get_queue_lock();
-
-		Result<void> submit(std::span<VkSubmitInfo> submit_infos, VkFence fence);
-		Result<void> submit(std::span<VkSubmitInfo2KHR> submit_infos, VkFence fence);
-
-		struct QueueImpl* impl;
-	};
-
-	class Context : public ContextCreateParameters::FunctionPointers {
+	class Context : public rtvk::FunctionPointers {
 	public:
 		/// @brief Create a new Context
 		/// @param params Vulkan parameters initialized beforehand
@@ -91,22 +73,11 @@ namespace vuk {
 		Context(Context&&) noexcept;
 		Context& operator=(Context&&) noexcept;
 
-		// Vulkan instance, device and queues
+		// Vulkan instance and device
 
 		VkInstance instance;
 		VkDevice device;
 		VkPhysicalDevice physical_device;
-		uint32_t graphics_queue_family_index;
-		uint32_t compute_queue_family_index;
-		uint32_t transfer_queue_family_index;
-
-		std::optional<Queue> dedicated_graphics_queue;
-		std::optional<Queue> dedicated_compute_queue;
-		std::optional<Queue> dedicated_transfer_queue;
-
-		Queue* graphics_queue = nullptr;
-		Queue* compute_queue = nullptr;
-		Queue* transfer_queue = nullptr;
 
 		// Vulkan properties
 
@@ -115,9 +86,16 @@ namespace vuk {
 		VkPhysicalDeviceAccelerationStructurePropertiesKHR as_properties{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR };
 		size_t min_buffer_alignment;
 
+		// Executors
+		std::vector<uint32_t> all_queue_families;
+		// retrieve a specific executor from the runtime
+		Executor* get_executor(Executor::Tag tag);
+		// retrieve an executor for the given domain from the runtime
+		Executor* get_executor(DomainFlagBits domain);
+
 		// Debug functions
-		
-		/// @brief If debug utils is available and debug names & markers are supported 
+
+		/// @brief If debug utils is available and debug names & markers are supported
 		bool debug_enabled() const;
 
 		/// @brief Set debug name for object
@@ -132,7 +110,7 @@ namespace vuk {
 		void end_region(const VkCommandBuffer&);
 
 		// Pipeline management
-		
+
 		/// Internal pipeline cache to use
 		VkPipelineCache vk_pipeline_cache = VK_NULL_HANDLE;
 
@@ -155,7 +133,7 @@ namespace vuk {
 
 		/// @brief Load a Vulkan pipeline cache
 		bool load_pipeline_cache(std::span<std::byte> data);
-		/// @brief Retrieve the current Vulkan pipeline cache 
+		/// @brief Retrieve the current Vulkan pipeline cache
 		std::vector<std::byte> save_pipeline_cache();
 
 		// Allocator support
@@ -164,19 +142,9 @@ namespace vuk {
 		/// @return The resource
 		DeviceVkResource& get_vk_resource();
 
-		// Swapchain management
-
-		/// @brief Add a swapchain to be managed by the Context
-		/// @return Reference to the new swapchain that can be used during presentation
-		SwapchainRef add_swapchain(Swapchain);
-
-		/// @brief Remove a swapchain that is managed by the Context
-		/// the swapchain is not destroyed
-		void remove_swapchain(SwapchainRef);
-
 		// Frame management
 
-		/// @brief Retrieve the current frame count 
+		/// @brief Retrieve the current frame count
 		uint64_t get_frame_count() const;
 
 		/// @brief Advance internal counter used for caching and garbage collect caches
@@ -184,11 +152,6 @@ namespace vuk {
 
 		/// @brief Wait for the device to become idle. Useful for only a few synchronisation events, like resizing or shutting down.
 		Result<void> wait_idle();
-
-		Result<void> submit_graphics(std::span<VkSubmitInfo>, VkFence);
-		Result<void> submit_transfer(std::span<VkSubmitInfo>, VkFence);
-		Result<void> submit_graphics(std::span<VkSubmitInfo2KHR>);
-		Result<void> submit_transfer(std::span<VkSubmitInfo2KHR>);
 
 		Result<void> wait_for_domains(std::span<struct SyncPoint> sync_points);
 
@@ -244,10 +207,6 @@ namespace vuk {
 		/// @return The wrapped handle.
 		template<class T>
 		Handle<T> wrap(T payload);
-
-		Queue& domain_to_queue(DomainFlags) const;
-		uint32_t domain_to_queue_index(DomainFlags) const;
-		uint32_t domain_to_queue_family_index(DomainFlags) const;
 
 	private:
 		struct ContextImpl* impl;
@@ -308,39 +267,22 @@ namespace vuk {
 	/// @param allocator Allocator to use for submission resources
 	/// @param rendergraphs `RenderGraph`s for compilation
 	/// @param option Compilation options
-	Result<void> link_execute_submit(Allocator& allocator,
-	                                 Compiler& compiler,
-	                                 std::span<std::shared_ptr<struct RG>> rendergraphs,
-	                                 RenderGraphCompileOptions options = {});
+	Result<void>
+	link_execute_submit(Allocator& allocator, Compiler& compiler, std::span<std::shared_ptr<struct RG>> rendergraphs, RenderGraphCompileOptions options = {});
 	/// @brief Execute given `ExecutableRenderGraph`s into API VkCommandBuffers, then submit them to queues
 	/// @param allocator Allocator to use for submission resources
 	/// @param executable_rendergraphs `ExecutableRenderGraph`s for execution
 	/// @param swapchains_with_indexes Swapchains references by the rendergraphs
 	/// @param present_rdy Semaphore used to gate device-side execution
 	/// @param render_complete Semaphore used to gate presentation
-	Result<void> execute_submit(Allocator& allocator,
-	                            std::span<std::pair<Allocator*, ExecutableRenderGraph*>> executable_rendergraphs,
-	                            std::vector<std::pair<SwapchainRef, size_t>> swapchains_with_indexes,
-	                            VkSemaphore present_rdy,
-	                            VkSemaphore render_complete);
+	Result<void> execute_submit(Allocator& allocator, std::span<std::pair<Allocator*, ExecutableRenderGraph*>> executable_rendergraphs);
 
-	/// @brief Execute given `ExecutableRenderGraph` into API VkCommandBuffers, then submit them to queues, presenting to a single swapchain
-	/// @param allocator Allocator to use for submission resources
-	/// @param executable_rendergraph `ExecutableRenderGraph`s for execution
-	/// @param swapchain Swapchain referenced by the rendergraph
-	Result<VkResult> execute_submit_and_present_to_one(Allocator& allocator, ExecutableRenderGraph&& executable_rendergraph, SwapchainRef swapchain);
 	/// @brief Execute given `ExecutableRenderGraph` into API VkCommandBuffers, then submit them to queues, then blocking-wait for the submission to complete
 	/// @param allocator Allocator to use for submission resources
 	/// @param executable_rendergraph `ExecutableRenderGraph`s for execution
 	Result<void> execute_submit_and_wait(Allocator& allocator, ExecutableRenderGraph&& executable_rendergraph);
 
 	struct RenderGraphCompileOptions;
-
-	Result<SwapchainRenderBundle> acquire_one(Allocator& allocator, SwapchainRef swapchain);
-	Result<SwapchainRenderBundle> acquire_one(Context& ctx, SwapchainRef swapchain, VkSemaphore present_ready, VkSemaphore render_complete);
-	Result<SwapchainRenderBundle> execute_submit(Allocator& allocator, ExecutableRenderGraph&& rg, SwapchainRenderBundle&& bundle);
-	Result<VkResult> present_to_one(Context& ctx, SwapchainRenderBundle&& bundle);
-	Result<VkResult> present(Allocator& allocator, Compiler& compiler, SwapchainRef swapchain, FutureBase&& future, RenderGraphCompileOptions = {});
 
 	struct SampledImage make_sampled_image(ImageView iv, SamplerCreateInfo sci);
 

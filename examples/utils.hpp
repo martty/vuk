@@ -5,7 +5,6 @@
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 #include <imgui.h>
-#include <plf_colony.h>
 #include <sstream>
 #include <string_view>
 #include <utility>
@@ -58,34 +57,52 @@ namespace util {
 		// clang-format on
 	}
 
-	inline vuk::Swapchain make_swapchain(vkb::Device vkbdevice, std::optional<VkSwapchainKHR> old_swapchain) {
+	inline vuk::Swapchain make_swapchain(vuk::Allocator allocator, vkb::Device vkbdevice, std::optional<vuk::Swapchain> old_swapchain) {
 		vkb::SwapchainBuilder swb(vkbdevice);
 		swb.set_desired_format(vuk::SurfaceFormatKHR{ vuk::Format::eR8G8B8A8Srgb, vuk::ColorSpaceKHR::eSrgbNonlinear });
 		swb.add_fallback_format(vuk::SurfaceFormatKHR{ vuk::Format::eB8G8R8A8Srgb, vuk::ColorSpaceKHR::eSrgbNonlinear });
 		swb.set_desired_present_mode((VkPresentModeKHR)vuk::PresentModeKHR::eImmediate);
 		swb.set_image_usage_flags(VkImageUsageFlagBits::VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VkImageUsageFlagBits::VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-		if (old_swapchain) {
-			swb.set_old_swapchain(*old_swapchain);
+		
+		bool is_recycle = false;
+		vkb::Result<vkb::Swapchain> vkswapchain = { vkb::Swapchain{} };
+		if (!old_swapchain) {
+			vkswapchain = swb.build();
+			old_swapchain.emplace(allocator, vkswapchain->image_count);
+		} else {
+			is_recycle = true;
+			swb.set_old_swapchain(old_swapchain->swapchain);
+			vkswapchain = swb.build();
 		}
-		auto vkswapchain = swb.build();
 
-		vuk::Swapchain sw{};
+		if (is_recycle) {
+			allocator.deallocate(std::span{ &old_swapchain->swapchain, 1 });
+			for (auto& iv : old_swapchain->images) {
+				allocator.deallocate(std::span{ &iv.image_view, 1 });
+			}
+		}
+
 		auto images = *vkswapchain->get_images();
 		auto views = *vkswapchain->get_image_views();
 
-		for (auto& i : images) {
-			sw.images.push_back(vuk::Image{ i, nullptr });
+		old_swapchain->images.clear();
+
+		for (auto i = 0; i < images.size(); i++) {
+			vuk::ImageAttachment ia;
+			ia.extent = vuk::Dimension3D::absolute( vkswapchain->extent.width, vkswapchain->extent.height, 1 );
+			ia.format = (vuk::Format)vkswapchain->image_format;
+			ia.image = vuk::Image{ images[i], nullptr };
+			ia.image_view = vuk::ImageView{ 0, views[i] };
+			ia.view_type = vuk::ImageViewType::e2D;
+			ia.sample_count = vuk::Samples::e1;
+			ia.base_level = ia.base_layer = 0;
+			ia.level_count = ia.layer_count = 1;
+			old_swapchain->images.push_back(ia);
 		}
-		for (auto& i : views) {
-			sw.image_views.emplace_back();
-			sw.image_views.back().payload = i;
-			sw.image_views.back().id = 0;
-		}
-		sw.extent = vuk::Extent2D{ vkswapchain->extent.width, vkswapchain->extent.height };
-		sw.format = vuk::Format(vkswapchain->image_format);
-		sw.surface = vkbdevice.surface;
-		sw.swapchain = vkswapchain->swapchain;
-		return sw;
+		
+		old_swapchain->swapchain = vkswapchain->swapchain;
+		old_swapchain->surface = vkbdevice.surface;
+		return *old_swapchain;
 	}
 
 	struct ImGuiData {
@@ -99,7 +116,7 @@ namespace util {
 	                                                            vuk::TypedFuture<vuk::ImageAttachment> target,
 	                                                            ImGuiData& data,
 	                                                            ImDrawData* draw_data,
-	                                                            const plf::colony<vuk::SampledImage>& sampled_images);
+	                                                            const std::vector<vuk::TypedFuture<vuk::ImageAttachment>>& sampled_images);
 
 	inline std::string read_entire_file(const std::string& path) {
 		std::ostringstream buf;

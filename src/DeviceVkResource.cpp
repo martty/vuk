@@ -83,15 +83,7 @@ namespace vuk {
 		vmaCreateAllocator(&allocatorInfo, &impl->allocator);
 		ctx.vkGetPhysicalDeviceProperties(ctx.physical_device, &impl->properties);
 
-		if (ctx.transfer_queue_family_index != ctx.graphics_queue_family_index && ctx.compute_queue_family_index != ctx.graphics_queue_family_index) {
-			impl->all_queue_families = { ctx.graphics_queue_family_index, ctx.compute_queue_family_index, ctx.transfer_queue_family_index };
-		} else if (ctx.transfer_queue_family_index != ctx.graphics_queue_family_index) {
-			impl->all_queue_families = { ctx.graphics_queue_family_index, ctx.transfer_queue_family_index };
-		} else if (ctx.compute_queue_family_index != ctx.graphics_queue_family_index) {
-			impl->all_queue_families = { ctx.graphics_queue_family_index, ctx.compute_queue_family_index };
-		} else {
-			impl->all_queue_families = { ctx.graphics_queue_family_index };
-		}
+		impl->all_queue_families = ctx.all_queue_families;
 		impl->queue_family_count = (uint32_t)impl->all_queue_families.size();
 	}
 

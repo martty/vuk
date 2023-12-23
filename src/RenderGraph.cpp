@@ -126,6 +126,19 @@ namespace vuk {
 					res_to_links[first(&node)].def = first(&node);
 					res_to_links[first(&node)].type = first(&node).type()->array.T;
 					break;
+
+				case Node::ACQUIRE_NEXT_IMAGE:
+					res_to_links[first(&node)].def = first(&node);
+					res_to_links[first(&node)].type = first(&node).type();
+					break;
+
+				case Node::PRESENT:
+					res_to_links[node.present.src].undef = &node;
+					res_to_links[{ &node, 0 }].def = { &node, 0 };
+					res_to_links[node.present.src].next = &res_to_links[{ &node, 0 }];
+					res_to_links[{ &node, 0 }].prev = &res_to_links[node.present.src];
+					break;
+
 				default:
 					assert(0);
 				}

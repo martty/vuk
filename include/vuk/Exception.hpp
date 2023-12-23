@@ -1,9 +1,9 @@
 #pragma once
 
+#include "vuk/Config.hpp"
+#include <cassert>
 #include <exception>
 #include <string>
-#include <cassert>
-#include "vuk/Config.hpp"
 
 namespace vuk {
 	struct Exception : std::exception {
@@ -35,11 +35,19 @@ namespace vuk {
 		}
 	};
 
+	struct RequiredPFNMissingException : Exception {
+		using Exception::Exception;
+
+		void throw_this() override {
+			throw *this;
+		}
+	};
+
 	struct VkException : Exception {
 		VkResult error_code;
-		
+
 		using Exception::Exception;
-		
+
 		VkException(VkResult res) {
 			error_code = res;
 			switch (res) {
@@ -104,8 +112,10 @@ namespace vuk {
 				break;
 			}
 		}
-		
-		VkResult code() const { return error_code; }
+
+		VkResult code() const {
+			return error_code;
+		}
 
 		void throw_this() override {
 			throw *this;
@@ -115,7 +125,7 @@ namespace vuk {
 	struct AllocateException : VkException {
 		AllocateException(VkResult res) {
 			error_code = res;
-			
+
 			switch (res) {
 			case VK_ERROR_OUT_OF_HOST_MEMORY: {
 				error_message = "Out of host memory.";

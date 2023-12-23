@@ -7,6 +7,7 @@
 #include "vuk/Context.hpp"
 #include "vuk/RenderGraph.hpp"
 #include "vuk/resources/DeviceFrameResource.hpp"
+#include "vuk/runtime/ThisThreadExecutor.hpp"
 #ifdef WIN32
 #include <Windows.h>
 #endif
@@ -26,6 +27,7 @@ namespace vuk {
 		vkb::Device vkbdevice;
 		std::optional<DeviceSuperFrameResource> sfa_resource;
 		std::optional<Allocator> allocator;
+		std::vector<std::unique_ptr<Executor>> executors;
 		RENDERDOC_API_1_6_0* rdoc_api = NULL;
 
 		void bringup() {
@@ -112,19 +114,16 @@ namespace vuk {
 			transfer_queue = vkbdevice.get_queue(vkb::QueueType::transfer).value();
 			auto transfer_queue_family_index = vkbdevice.get_queue_index(vkb::QueueType::transfer).value();
 			device = vkbdevice.device;
-			ContextCreateParameters::FunctionPointers fps;
+			vuk::rtvk::FunctionPointers fps;
 			fps.vkGetInstanceProcAddr = vkbinstance.fp_vkGetInstanceProcAddr;
 			fps.vkGetDeviceProcAddr = vkbinstance.fp_vkGetDeviceProcAddr;
-			context.emplace(ContextCreateParameters{ instance,
-			                                         device,
-			                                         physical_device,
-			                                         graphics_queue,
-			                                         graphics_queue_family_index,
-			                                         VK_NULL_HANDLE,
-			                                         VK_QUEUE_FAMILY_IGNORED,
-			                                         transfer_queue,
-			                                         transfer_queue_family_index,
-			                                         fps });
+			fps.load_pfns(instance, device, true);
+
+			executors.push_back(rtvk::create_vkqueue_executor(fps, device, graphics_queue, graphics_queue_family_index, DomainFlagBits::eGraphicsQueue));
+			executors.push_back(rtvk::create_vkqueue_executor(fps, device, transfer_queue, transfer_queue_family_index, DomainFlagBits::eTransferQueue));
+			executors.push_back(std::make_unique<ThisThreadExecutor>());
+
+			context.emplace(ContextCreateParameters{ instance, device, physical_device, std::move(executors), fps });
 			needs_bringup = false;
 			needs_teardown = true;
 #ifdef WIN32

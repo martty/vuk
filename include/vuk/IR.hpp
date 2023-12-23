@@ -12,8 +12,8 @@
 
 namespace vuk {
 	struct SyncPoint {
-		DomainFlagBits domain = DomainFlagBits::eNone; // domain of the point
-		uint64_t visibility;                           // results are available if waiting for {domain, visibility}
+		Executor* executor;
+		uint64_t visibility;                           // results are available if waiting for {executor, visibility}
 	};
 
 	/// @brief Encapsulates a SyncPoint that can be synchronized against in the future
@@ -131,6 +131,7 @@ namespace vuk {
 			ACQUIRE,
 			RELEASE,
 			ACQUIRE_NEXT_IMAGE,
+			PRESENT,
 			INDEXING,
 			CAST
 		} kind;
@@ -189,6 +190,8 @@ namespace vuk {
 			struct {
 				Ref src;
 				AcquireRelease* release;
+				Access dst_access;
+				DomainFlagBits dst_domain;
 			} release;
 			struct {
 				Ref swapchain;
@@ -200,6 +203,9 @@ namespace vuk {
 			struct {
 				Ref src;
 			} cast;
+			struct {
+				Ref src;
+			} present;
 		};
 
 		std::string_view kind_to_sv() {
@@ -212,6 +218,8 @@ namespace vuk {
 				return "call";
 			case INDEXING:
 				return "indexing";
+			case PRESENT:
+				return "present";
 			}
 			assert(0);
 			return "";
@@ -242,6 +250,7 @@ namespace vuk {
 		RG() {
 			builtin_image = &types.emplace_back(Type{ .kind = Type::IMAGE_TY });
 			builtin_buffer = &types.emplace_back(Type{ .kind = Type::BUFFER_TY });
+			builtin_swapchain = &types.emplace_back(Type{ .kind = Type::SWAPCHAIN_TY });
 		}
 
 		std::deque<Node> op_arena;
@@ -362,6 +371,14 @@ namespace vuk {
 			                              .aalloc = { .args = std::span(args_ptr, args.size() + 1), .defs = std::span(defs_ptr, defs.size()) } }));
 		}
 
+		Ref make_declare_swapchain(Swapchain& bundle) {
+			auto buf_ptr = new Swapchain(bundle);
+			auto args_ptr = new Ref[1];
+			auto mem_ty = new Type*(emplace_type(Type{ .kind = Type::MEMORY_TY }));
+			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = buf_ptr } }));
+			return first(emplace_op(Node{ .kind = Node::VALLOC, .type = std::span{ &builtin_swapchain, 1 }, .valloc = { .args = std::span(args_ptr, 1) } }));
+		}
+
 		Ref make_array_indexing(Type* type, Ref array, Ref index) {
 			auto ty = new Type*(type);
 			return first(emplace_op(Node{ .kind = Node::INDEXING, .type = std::span{ ty, 1 }, .indexing = { .array = array, .index = index } }));
@@ -370,11 +387,6 @@ namespace vuk {
 		Ref make_cast(Type* dst_type, Ref src) {
 			auto ty = new Type*(dst_type);
 			return first(emplace_op(Node{ .kind = Node::CAST, .type = std::span{ ty, 1 }, .cast = { .src = src } }));
-		}
-
-		Ref make_import_swapchain(SwapchainRenderBundle& bundle) {
-			return first(
-			    emplace_op(Node{ .kind = Node::IMPORT, .type = std::span{ &builtin_swapchain, 1 }, .import = { .value = new SwapchainRenderBundle(bundle) } }));
 		}
 
 		Ref make_acquire_next_image(Ref swapchain) {
@@ -418,8 +430,12 @@ namespace vuk {
 			return emplace_op(n);
 		}
 
-		Node* make_release(Ref src, AcquireRelease* acq_rel) {
-			return emplace_op(Node{ .kind = Node::RELEASE, .release = { .src = src, .release = acq_rel } });
+		Node* make_release(Ref src, AcquireRelease* acq_rel, Access dst_access, DomainFlagBits dst_domain) {
+			return emplace_op(Node{ .kind = Node::RELEASE, .release = { .src = src, .release = acq_rel, .dst_access = dst_access, .dst_domain = dst_domain } });
+		}
+
+		Node* make_present(Ref src) {
+			return emplace_op(Node{ .kind = Node::PRESENT, .type = std::span{ &builtin_image, 1 }, .present = { .src = src } });
 		}
 	};
 } // namespace vuk
