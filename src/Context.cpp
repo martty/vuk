@@ -662,8 +662,9 @@ namespace vuk {
 	}
 
 	void Context::create_named_pipeline(Name name, PipelineBaseCreateInfo ci) {
+		auto pbi = &impl->pipelinebase_cache.acquire(std::move(ci));
 		std::lock_guard _(impl->named_pipelines_lock);
-		impl->named_pipelines.insert_or_assign(name, &impl->pipelinebase_cache.acquire(std::move(ci)));
+		impl->named_pipelines.insert_or_assign(name, pbi);
 	}
 
 	PipelineBaseInfo* Context::get_named_pipeline(Name name) {

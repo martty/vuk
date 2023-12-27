@@ -76,11 +76,11 @@ namespace vuk {
 			return *it->second.ptr;
 		} else {
 			_.unlock();
+			auto elem = create(allocator, ci);
 			std::unique_lock ulock(impl->cache_mtx);
 			typename Cache::LRUEntry entry{ nullptr, INT64_MAX };
 			it = impl->lru_map.emplace(ci, entry).first;
-			ulock.unlock();
-			auto pit = impl->pool.emplace(create(allocator, ci));
+			auto pit = impl->pool.emplace(std::move(elem));
 			it->second.ptr = &*pit;
 			it->second.load_cnt.store(1);
 			it->second.load_cnt.notify_all();
@@ -95,8 +95,9 @@ namespace vuk {
 			return *it->second.ptr;
 		} else {
 			_.unlock();
+			auto elem = create(allocator, ci);
 			std::unique_lock ulock(impl->cache_mtx);
-			auto pit = impl->pool.emplace(create(allocator, ci));
+			auto pit = impl->pool.emplace(std::move(elem));
 			typename Cache::LRUEntry entry{ &*pit, INT64_MAX };
 			it = impl->lru_map.emplace(ci, entry).first;
 			return *it->second.ptr;
