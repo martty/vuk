@@ -45,7 +45,7 @@ namespace vuk {
 	struct Release {
 		Access original;
 		QueueResourceUse dst_use;
-		FutureBase* signal = nullptr;
+		FutureControlBlock* signal = nullptr;
 	};
 
 #define INIT(x) x(decltype(x)::allocator_type(*arena_))
@@ -88,7 +88,7 @@ namespace vuk {
 		RelSpan<VkMemoryBarrier2KHR> pre_memory_barriers, post_memory_barriers;
 		RelSpan<std::pair<DomainFlagBits, uint64_t>> relative_waits;
 		RelSpan<std::pair<DomainFlagBits, uint64_t>> absolute_waits;
-		RelSpan<FutureBase*> future_signals;
+		RelSpan<FutureControlBlock*> future_signals;
 		RelSpan<int32_t> referenced_swapchains; // TODO: maybe not the best place for it
 
 		bool ready = false; // for DYNAMO
@@ -101,7 +101,7 @@ namespace vuk {
 
 		std::vector<std::pair<DomainFlagBits, uint64_t>> waits;
 		std::vector<std::pair<DomainFlagBits, uint64_t>> absolute_waits;
-		std::vector<FutureBase*> future_signals;
+		std::vector<FutureControlBlock*> future_signals;
 
 		std::vector<ScheduledItem> scheduled_execables;
 		std::vector<ScheduledItem*> partitioned_execables;

@@ -1040,6 +1040,7 @@ namespace vuk {
 		eGraphicsOperation = 1 << 5,
 		eComputeOperation = 1 << 6,
 		eTransferOperation = 1 << 7,
+		eDomainMask = 0b11111,
 		eQueueMask = 0b11100,
 		eOpMask = 0b11100000,
 		eGraphicsOnGraphics = eGraphicsQueue | eGraphicsOperation,

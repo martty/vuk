@@ -27,7 +27,7 @@ namespace {
 		                  },
 		              // Code ran every frame
 		              .render =
-		                  [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator, vuk::TypedFuture<vuk::ImageAttachment> target) {
+		                  [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator, vuk::Future<vuk::ImageAttachment> target) {
 		                    // The framework provides us with an image to render to in "target"
 		                    // We attach this to the rendergraph named as "01_triangle"
 		                    // The rendergraph is composed of passes (vuk::Pass)

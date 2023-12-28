@@ -535,7 +535,7 @@ public:
 	static auto make_ret(std::shared_ptr<RG> rg, Node* node, const std::tuple<T...>& us) {
 		if constexpr (sizeof...(T) > 0) {
 			size_t i = 0;
-			return std::make_tuple(TypedFuture<typename T::type>{ rg, { node, i++ }, std::get<T>(us).def }...);
+			return std::make_tuple(Future<typename T::type>{ rg, { node, i++ }, std::get<T>(us).def }...);
 		}
 	}
 
@@ -554,7 +554,7 @@ public:
 
 	template<typename... T>
 	struct TupleMap<std::tuple<T...>> {
-		using ret_tuple = std::tuple<TypedFuture<typename T::type>...>;
+		using ret_tuple = std::tuple<Future<typename T::type>...>;
 
 		template<class Ret, class F>
 		static auto make_lam(Name name, F&& body) {
@@ -572,7 +572,7 @@ public:
 			};
 
 			// when this function is called, we weave in this call into the IR
-			return [untyped_cb = std::move(callback), name](TypedFuture<typename T::type>... args) mutable {
+			return [untyped_cb = std::move(callback), name](Future<typename T::type>... args) mutable {
 				auto& first = [](auto& first, auto&...) -> auto& {
 					return first;
 				}(args...);
@@ -615,14 +615,14 @@ public:
 		return TupleMap<drop_t<1, typename traits::types>>::template make_lam<typename traits::result_type, F>(name, std::forward<F>(body));
 	}
 
-	[[nodiscard]] inline TypedFuture<ImageAttachment> declare_ia(Name name, ImageAttachment ia = {}) {
+	[[nodiscard]] inline Future<ImageAttachment> declare_ia(Name name, ImageAttachment ia = {}) {
 		std::shared_ptr<RG> rg = std::make_shared<RG>();
 		Ref ref = rg->make_declare_image(ia);
 		rg->name_outputs(ref.node, { name.c_str() });
 		return { rg, ref, ref };
 	}
 
-	[[nodiscard]] inline TypedFuture<Buffer> declare_buf(Name name, Buffer buf = {}) {
+	[[nodiscard]] inline Future<Buffer> declare_buf(Name name, Buffer buf = {}) {
 		std::shared_ptr<RG> rg = std::make_shared<RG>();
 		Ref ref = rg->make_declare_buffer(buf);
 		rg->name_outputs(ref.node, { name.c_str() });
@@ -630,7 +630,7 @@ public:
 	}
 
 	template<class T, class... Args>
-	[[nodiscard]] inline TypedFuture<T[]> declare_array(Name name, const TypedFuture<T>& arg, Args... args) {
+	[[nodiscard]] inline Future<T[]> declare_array(Name name, const Future<T>& arg, Args... args) {
 		auto rg = arg.get_render_graph();
 		(rg->subgraphs.push_back(args.get_render_graph()), ...);
 		std::array refs = { arg.get_head(), args.get_head()... };
@@ -641,7 +641,7 @@ public:
 	}
 
 	template<class T>
-	[[nodiscard]] inline TypedFuture<T[]> declare_array(Name name, std::span<const TypedFuture<T>> args) {
+	[[nodiscard]] inline Future<T[]> declare_array(Name name, std::span<const Future<T>> args) {
 		assert(args.size() > 0);
 		auto rg = args[0].get_render_graph();
 		std::vector<Ref> refs;
@@ -656,25 +656,25 @@ public:
 		return { rg, ref, ref };
 	}
 
-	[[nodiscard]] inline TypedFuture<ImageAttachment> clear(TypedFuture<ImageAttachment> in, Clear clear_value) {
+	[[nodiscard]] inline Future<ImageAttachment> clear(Future<ImageAttachment> in, Clear clear_value) {
 		auto& rg = in.get_render_graph();
 		return std::move(std::move(in).transmute(rg->make_clear_image(in.get_head(), clear_value)));
 	}
 
-	[[nodiscard]] inline TypedFuture<Swapchain> declare_swapchain(Swapchain bundle) {
+	[[nodiscard]] inline Future<Swapchain> declare_swapchain(Swapchain bundle) {
 		std::shared_ptr<RG> rg = std::make_shared<RG>();
 		Ref ref = rg->make_declare_swapchain(bundle);
 		return { rg, ref, ref };
 	}
 
-	[[nodiscard]] inline TypedFuture<ImageAttachment> acquire_next_image(Name name, TypedFuture<Swapchain> in) {
+	[[nodiscard]] inline Future<ImageAttachment> acquire_next_image(Name name, Future<Swapchain> in) {
 		auto& rg = in.get_render_graph();
 		Ref ref = rg->make_acquire_next_image(in.get_head());
 		rg->name_outputs(ref.node, { name.c_str() });
 		return std::move(std::move(in).transmute<ImageAttachment>(ref));
 	}
 
-	[[nodiscard]] inline TypedFuture<void> enqueue_presentation(TypedFuture<ImageAttachment> in) {
+	[[nodiscard]] inline Future<void> enqueue_presentation(Future<ImageAttachment> in) {
 		auto& rg = in.get_render_graph();
 		return std::move(std::move(in).release_to<void>(in.get_head(), Access::ePresent, DomainFlagBits::ePE));
 	}
@@ -691,7 +691,7 @@ public:
 
 	/// @brief Inference target has the same extent as the source
 	IARule same_extent_as(Name inference_source);
-	IARule same_extent_as(TypedFuture<Image> inference_source);
+	IARule same_extent_as(Future<Image> inference_source);
 
 	/// @brief Inference target has the same width & height as the source
 	IARule same_2D_extent_as(Name inference_source);
