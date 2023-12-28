@@ -13,7 +13,7 @@
 
 // futures
 namespace vuk {
-	class FutureBase {
+	class FutureControlBlock {
 	public:
 		/// @brief Submit Future for execution
 		Result<void> submit(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options = {});
@@ -34,10 +34,12 @@ namespace vuk {
 	};
 
 	template<class T>
-	class TypedFuture {
+	class Future;
+
+	class UntypedFuture {
 	public:
-		TypedFuture(std::shared_ptr<RG> rg, Ref ref, Ref def) {
-			this->control = std::make_shared<FutureBase>();
+		UntypedFuture(std::shared_ptr<RG> rg, Ref ref, Ref def) {
+			this->control = std::make_shared<FutureControlBlock>();
 
 			this->head = { rg->make_release(ref, &this->control->acqrel, Access::eHostRW, DomainFlagBits::eHost), 0 };
 
@@ -45,14 +47,17 @@ namespace vuk {
 			this->def = def;
 		}
 
-		TypedFuture(const TypedFuture& o) noexcept : control{ std::make_shared<FutureBase>(*o.control) }, def{ o.def } {
+		UntypedFuture(const UntypedFuture& o) noexcept : control{ std::make_shared<FutureControlBlock>(*o.control) }, def{ o.def } {
 			head = { control->rg->make_release(o.get_head(), &this->control->acqrel, Access::eHostRW, DomainFlagBits::eHost), 0 };
 		}
 
-		TypedFuture(TypedFuture&& o) noexcept : control{ std::exchange(o.control, nullptr) }, def{ std::exchange(o.def, {}) }, head{ std::exchange(o.head, {}) } {}
+		UntypedFuture(UntypedFuture&& o) noexcept :
+		    control{ std::exchange(o.control, nullptr) },
+		    def{ std::exchange(o.def, {}) },
+		    head{ std::exchange(o.head, {}) } {}
 
-		TypedFuture& operator=(const TypedFuture& o) noexcept {
-			control = { std::make_shared<FutureBase>(*o.control) };
+		UntypedFuture& operator=(const UntypedFuture& o) noexcept {
+			control = { std::make_shared<FutureControlBlock>(*o.control) };
 			def = { o.def };
 
 			head = { control->rg->make_release(o.get_head(), &this->control->acqrel, Access::eHostRW, DomainFlagBits::eHost), 0 };
@@ -60,7 +65,7 @@ namespace vuk {
 			return *this;
 		}
 
-		TypedFuture& operator=(TypedFuture&& o) noexcept {
+		UntypedFuture& operator=(UntypedFuture&& o) noexcept {
 			std::swap(o.control, control);
 			std::swap(o.def, def);
 			std::swap(o.head, head);
@@ -68,8 +73,7 @@ namespace vuk {
 			return *this;
 		}
 
-		// TODO: add back copy/move
-		~TypedFuture() {
+		~UntypedFuture() {
 			if (head.node) {
 				assert(head.node->kind == Node::RELEASE);
 				head.node->kind = Node::NOP;
@@ -94,18 +98,41 @@ namespace vuk {
 			return def;
 		}
 
-		template<class U = T>
-		TypedFuture<U> transmute(Ref ref) noexcept {
+		Result<void> wait(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options = {}) {
+			return control->wait(allocator, compiler, options);
+		}
+
+		template<class U>
+		Future<U> transmute(Ref ref) noexcept {
 			head.node->release.src = ref;
-			return *reinterpret_cast<TypedFuture<U>*>(this); // TODO: not cool
+			return *reinterpret_cast<Future<U>*>(this); // TODO: not cool
+		}
+
+		// TODO: remove this from public API
+		std::shared_ptr<FutureControlBlock> control;
+
+	protected:
+		Ref def;
+		Ref head;
+	};
+
+	template<class T>
+	class Future : public UntypedFuture {
+	public:
+		using UntypedFuture::UntypedFuture;
+
+		template<class U = T>
+		Future<U> transmute(Ref ref) noexcept {
+			head.node->release.src = ref;
+			return *reinterpret_cast<Future<U>*>(this); // TODO: not cool
 		}
 
 		template<class U = T>
-		TypedFuture<U> release_to(Ref ref, Access access, DomainFlagBits domain) noexcept {
+		Future<U> release_to(Ref ref, Access access, DomainFlagBits domain) noexcept {
 			head.node->release.src = ref;
 			head.node->release.dst_access = access;
 			head.node->release.dst_domain = domain;
-			return std::move(*reinterpret_cast<TypedFuture<U>*>(this)); // TODO: not cool
+			return std::move(*reinterpret_cast<Future<U>*>(this)); // TODO: not cool
 		}
 
 		T* operator->() noexcept {
@@ -123,11 +150,7 @@ namespace vuk {
 			}
 		}
 
-		Result<void> wait(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options = {}) {
-			return control->wait(allocator, compiler, options);
-		}
-
-		void same_size(const TypedFuture<Buffer>& src)
+		void same_size(const Future<Buffer>& src)
 		  requires std::is_same_v<T, Buffer>
 		{
 			assert(src.get_def().type()->is_buffer());
@@ -141,24 +164,17 @@ namespace vuk {
 			Ref item = control->rg->make_array_indexing(def.type()->array.T, get_head(), control->rg->make_constant(index));
 			assert(def.node->kind == Node::AALLOC);
 			assert(def.type()->kind == Type::ARRAY_TY);
-			return TypedFuture<std::remove_reference_t<decltype(std::declval<T>()[0])>>(get_render_graph(), item, item_def);
+			return Future<std::remove_reference_t<decltype(std::declval<T>()[0])>>(get_render_graph(), item, item_def);
 		}
-
-		// TODO: remove this from public API
-		std::shared_ptr<FutureBase> control;
-
-	private:
-		Ref def;
-		Ref head;
 	};
 
-	inline Result<void> wait_for_futures_explicit(Allocator& alloc, Compiler& compiler, std::span<FutureBase> futures) {
+	inline Result<void> wait_for_futures_explicit(Allocator& alloc, Compiler& compiler, std::span<UntypedFuture> futures) {
 		std::vector<std::shared_ptr<RG>> rgs_to_run;
 		for (uint64_t i = 0; i < futures.size(); i++) {
 			auto& future = futures[i];
-			if (future.acqrel.status == Signal::Status::eDisarmed && !futures[i].get_render_graph()) {
+			if (future.control->acqrel.status == Signal::Status::eDisarmed && !futures[i].get_render_graph()) {
 				return { expected_error, RenderGraphException{} };
-			} else if (future.acqrel.status == Signal::Status::eHostAvailable || future.acqrel.status == Signal::Status::eSynchronizable) {
+			} else if (future.control->acqrel.status == Signal::Status::eHostAvailable || future.control->acqrel.status == Signal::Status::eSynchronizable) {
 				continue;
 			} else {
 				rgs_to_run.emplace_back(futures[i].get_render_graph());
@@ -171,10 +187,10 @@ namespace vuk {
 		std::vector<SyncPoint> waits;
 		for (uint64_t i = 0; i < futures.size(); i++) {
 			auto& future = futures[i];
-			if (future.acqrel.status != Signal::Status::eSynchronizable) {
+			if (future.control->acqrel.status != Signal::Status::eSynchronizable) {
 				continue;
 			}
-			waits.emplace_back(future.acqrel.source);
+			waits.emplace_back(future.control->acqrel.source);
 		}
 		if (waits.size() > 0) {
 			alloc.get_context().wait_for_domains(std::span(waits));

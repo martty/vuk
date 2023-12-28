@@ -112,11 +112,11 @@ namespace util {
 		std::unique_ptr<vuk::SampledImage> font_si;
 	};
 	ImGuiData ImGui_ImplVuk_Init(vuk::Allocator& allocator);
-	vuk::TypedFuture<vuk::ImageAttachment> ImGui_ImplVuk_Render(vuk::Allocator& allocator,
-	                                                            vuk::TypedFuture<vuk::ImageAttachment> target,
+	vuk::Future<vuk::ImageAttachment> ImGui_ImplVuk_Render(vuk::Allocator& allocator,
+	                                                            vuk::Future<vuk::ImageAttachment> target,
 	                                                            ImGuiData& data,
 	                                                            ImDrawData* draw_data,
-	                                                            const std::vector<vuk::TypedFuture<vuk::ImageAttachment>>& sampled_images);
+	                                                            const std::vector<vuk::Future<vuk::ImageAttachment>>& sampled_images);
 
 	inline std::string read_entire_file(const std::string& path) {
 		std::ostringstream buf;

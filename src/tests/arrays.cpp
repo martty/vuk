@@ -19,7 +19,7 @@ TEST_CASE("arrayed buffers") {
 		});
 
 		auto arr = declare_array("buffers", declare_buf("src", **buf), declare_buf("src2", **buf2));
-		TypedFuture<Buffer[]> filled_bufs = fill(arr);
+		Future<Buffer[]> filled_bufs = fill(arr);
 		auto res = download_buffer(filled_bufs[0]).get(*test_context.allocator, test_context.compiler);
 		CHECK(std::span((uint32_t*)res->mapped_ptr, 4) == std::span(data));
 		res = download_buffer(filled_bufs[1]).get(*test_context.allocator, test_context.compiler);
@@ -42,7 +42,7 @@ TEST_CASE("arrayed buffers, internal loop") {
 		});
 
 		auto arr = declare_array("buffers", declare_buf("src", **buf), declare_buf("src2", **buf2));
-		TypedFuture<Buffer[]> filled_bufs = fill(arr);
+		Future<Buffer[]> filled_bufs = fill(arr);
 		auto res = download_buffer(filled_bufs[0]).get(*test_context.allocator, test_context.compiler);
 		CHECK(std::span((uint32_t*)res->mapped_ptr, 4) == std::span(data));
 		res = download_buffer(filled_bufs[1]).get(*test_context.allocator, test_context.compiler);

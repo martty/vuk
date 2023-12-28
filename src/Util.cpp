@@ -102,7 +102,7 @@ namespace vuk {
 		return { SampledImage::RenderGraphAttachment{ n, sci, ivci, ImageLayout::eReadOnlyOptimalKHR } };
 	}
 
-	Result<void> FutureBase::wait(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options) {
+	Result<void> FutureControlBlock::wait(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options) {
 		if (acqrel.status == Signal::Status::eDisarmed && !rg) {
 			return { expected_error,
 				       RenderGraphException{} }; // can't get wait for future that has not been attached anything or has been attached into a rendergraph
@@ -127,7 +127,7 @@ namespace vuk {
 		}
 	}
 
-	Result<void> FutureBase::submit(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options) {
+	Result<void> FutureControlBlock::submit(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options) {
 		if (acqrel.status == Signal::Status::eDisarmed && !rg) {
 			return { expected_error, RenderGraphException{} };
 		} else if (acqrel.status == Signal::Status::eHostAvailable || acqrel.status == Signal::Status::eSynchronizable) {

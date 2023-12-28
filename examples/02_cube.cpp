@@ -46,7 +46,7 @@ namespace {
 		      runner.enqueue_setup(std::move(ind_fut));
 		    },
 		.render =
-		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator, vuk::TypedFuture<vuk::Image> target) {
+		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator, vuk::Future<vuk::ImageAttachment> target) {
 		      // This struct will represent the view-projection transform used for the cube
 		      struct VP {
 			      glm::mat4 view;
@@ -62,7 +62,7 @@ namespace {
 		      // since this memory is CPU visible (MemoryUsage::eCPUtoGPU), we don't need to wait for the future to complete
 		      auto uboVP = *buboVP;
 
-		      auto pass = vuk::make_pass("02_cube", [uboVP](vuk::CommandBuffer& command_buffer, vuk::IA<vuk::eColorWrite, decltype([](){})> color_rt) {
+		      auto pass = vuk::make_pass("02_cube", [uboVP](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eColorWrite) color_rt) {
 			            command_buffer
 			                // In vuk, all pipeline state (with the exception of the shaders) come from the command buffer
 			                // Such state can be requested to be dynamic - dynamic state does not form part of the pipeline key, and hence cheap to change
@@ -89,7 +89,7 @@ namespace {
 			            // For the model matrix, we will take a shorter route
 			            // Frequently updated uniform buffers should be in CPUtoGPU type memory, which is mapped
 			            // So we create a typed mapping directly and write the model matrix
-			            glm::mat4* model = command_buffer.map_scratch_buffer<glm::mat4>(0, 1);
+			            glm::mat4* model = command_buffer.scratch_buffer<glm::mat4>(0, 1);
 			            *model = static_cast<glm::mat4>(glm::angleAxis(glm::radians(angle), glm::vec3(0.f, 1.f, 0.f)));
 
 			            // We can also customize pipelines by using specialization constants
@@ -109,7 +109,7 @@ namespace {
 			            // The cube is drawn via indexed drawing
 			            command_buffer.draw_indexed(box.second.size(), 1, 0, 0, 0);
 
-						return std::make_tuple(color_rt);
+						return color_rt;
 		            } );
 
 			  auto drawn = pass(std::move(target));

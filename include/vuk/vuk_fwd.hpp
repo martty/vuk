@@ -81,7 +81,7 @@ namespace vuk {
 	
 	struct RenderPassCreateInfo;
 	
-	class FutureBase;
+	class FutureControlBlock;
 
 	struct Compiler;
 } // namespace vuk

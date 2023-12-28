@@ -265,7 +265,7 @@ namespace vuk {
 		QualifiedName name;
 
 		Buffer buffer;
-		FutureBase* attached_future = nullptr;
+		FutureControlBlock* attached_future = nullptr;
 		Acquire acquire;
 
 		RelSpan<ChainLink*> use_chains;
@@ -284,7 +284,7 @@ namespace vuk {
 
 		RelSpan<struct RenderPassInfo*> rp_uses;
 
-		FutureBase* attached_future = nullptr;
+		FutureControlBlock* attached_future = nullptr;
 		Acquire acquire;
 		Subrange::Image image_subrange;
 		int32_t parent_attachment = 0;

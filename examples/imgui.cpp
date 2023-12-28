@@ -49,11 +49,11 @@ util::ImGuiData util::ImGui_ImplVuk_Init(Allocator& allocator) {
 	return data;
 }
 
-TypedFuture<ImageAttachment> util::ImGui_ImplVuk_Render(Allocator& allocator,
-                                                        TypedFuture<ImageAttachment> target,
+Future<ImageAttachment> util::ImGui_ImplVuk_Render(Allocator& allocator,
+                                                        Future<ImageAttachment> target,
                                                         util::ImGuiData& data,
                                                         ImDrawData* draw_data,
-                                                        const std::vector<TypedFuture<ImageAttachment>>& sampled_images) {
+                                                        const std::vector<Future<ImageAttachment>>& sampled_images) {
 	auto reset_render_state = [](const util::ImGuiData& data, CommandBuffer& command_buffer, ImDrawData* draw_data, Buffer vertex, Buffer index) {
 		command_buffer.bind_image(0, 0, *data.font_image_view).bind_sampler(0, 0, data.font_sci);
 		if (index.size > 0) {

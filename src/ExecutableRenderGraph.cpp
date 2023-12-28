@@ -37,40 +37,40 @@ namespace vuk {
 	}
 	/*
 	[[nodiscard]] bool resolve_image_barrier(const Context& ctx, VkImageMemoryBarrier2KHR& dep, const AttachmentInfo& bound, vuk::DomainFlagBits current_domain) {
-		dep.image = bound.attachment.image.image;
-		// turn base_{layer, level} into absolute values wrt the image
-		dep.subresourceRange.baseArrayLayer += bound.attachment.base_layer;
-		dep.subresourceRange.baseMipLevel += bound.attachment.base_level;
-		// clamp arrays and levels to actual accessible range in image, return false if the barrier would refer to no levels or layers
-		assert(bound.attachment.layer_count != VK_REMAINING_ARRAY_LAYERS);
-		if (dep.subresourceRange.layerCount != VK_REMAINING_ARRAY_LAYERS) {
-			if (dep.subresourceRange.baseArrayLayer + dep.subresourceRange.layerCount > bound.attachment.base_layer + bound.attachment.layer_count) {
-				int count = static_cast<int32_t>(bound.attachment.layer_count) - (dep.subresourceRange.baseArrayLayer - bound.attachment.base_layer);
-				if (count < 1) {
-					return false;
-				}
-				dep.subresourceRange.layerCount = static_cast<uint32_t>(count);
-			}
-		} else {
-			if (dep.subresourceRange.baseArrayLayer > bound.attachment.base_layer + bound.attachment.layer_count) {
-				return false;
-			}
-			dep.subresourceRange.layerCount = bound.attachment.layer_count;
-		}
-		assert(bound.attachment.level_count != VK_REMAINING_MIP_LEVELS);
-		if (dep.subresourceRange.levelCount != VK_REMAINING_MIP_LEVELS) {
-			if (dep.subresourceRange.baseMipLevel + dep.subresourceRange.levelCount > bound.attachment.base_level + bound.attachment.level_count) {
-				int count = static_cast<int32_t>(bound.attachment.level_count) - (dep.subresourceRange.baseMipLevel - bound.attachment.base_level);
-				if (count < 1)
-					return false;
-				dep.subresourceRange.levelCount = static_cast<uint32_t>(count);
-			}
-		} else {
-			if (dep.subresourceRange.baseMipLevel > bound.attachment.base_level + bound.attachment.level_count) {
-				return false;
-			}
-			dep.subresourceRange.levelCount = bound.attachment.level_count;
-		}
+	  dep.image = bound.attachment.image.image;
+	  // turn base_{layer, level} into absolute values wrt the image
+	  dep.subresourceRange.baseArrayLayer += bound.attachment.base_layer;
+	  dep.subresourceRange.baseMipLevel += bound.attachment.base_level;
+	  // clamp arrays and levels to actual accessible range in image, return false if the barrier would refer to no levels or layers
+	  assert(bound.attachment.layer_count != VK_REMAINING_ARRAY_LAYERS);
+	  if (dep.subresourceRange.layerCount != VK_REMAINING_ARRAY_LAYERS) {
+	    if (dep.subresourceRange.baseArrayLayer + dep.subresourceRange.layerCount > bound.attachment.base_layer + bound.attachment.layer_count) {
+	      int count = static_cast<int32_t>(bound.attachment.layer_count) - (dep.subresourceRange.baseArrayLayer - bound.attachment.base_layer);
+	      if (count < 1) {
+	        return false;
+	      }
+	      dep.subresourceRange.layerCount = static_cast<uint32_t>(count);
+	    }
+	  } else {
+	    if (dep.subresourceRange.baseArrayLayer > bound.attachment.base_layer + bound.attachment.layer_count) {
+	      return false;
+	    }
+	    dep.subresourceRange.layerCount = bound.attachment.layer_count;
+	  }
+	  assert(bound.attachment.level_count != VK_REMAINING_MIP_LEVELS);
+	  if (dep.subresourceRange.levelCount != VK_REMAINING_MIP_LEVELS) {
+	    if (dep.subresourceRange.baseMipLevel + dep.subresourceRange.levelCount > bound.attachment.base_level + bound.attachment.level_count) {
+	      int count = static_cast<int32_t>(bound.attachment.level_count) - (dep.subresourceRange.baseMipLevel - bound.attachment.base_level);
+	      if (count < 1)
+	        return false;
+	      dep.subresourceRange.levelCount = static_cast<uint32_t>(count);
+	    }
+	  } else {
+	    if (dep.subresourceRange.baseMipLevel > bound.attachment.base_level + bound.attachment.level_count) {
+	      return false;
+	    }
+	    dep.subresourceRange.levelCount = bound.attachment.level_count;
+	  }
 
 	  if (dep.srcQueueFamilyIndex != VK_QUEUE_FAMILY_IGNORED) {
 	    assert(dep.dstQueueFamilyIndex != VK_QUEUE_FAMILY_IGNORED);
@@ -676,8 +676,7 @@ namespace vuk {
 			assert(false);
 		}
 
-		void synch_image(ImageAttachment& img_att, QueueResourceUse src_use, QueueResourceUse dst_use, Access dst_access, void* tag) {
-		}
+		void synch_image(ImageAttachment& img_att, QueueResourceUse src_use, QueueResourceUse dst_use, Access dst_access, void* tag) {}
 
 		void synch_memory(QueueResourceUse src_use, QueueResourceUse dst_use, void* tag) { /* PE doesn't do memory */
 			assert(false);
@@ -839,13 +838,13 @@ namespace vuk {
 			stream->submit(signal);
 		};
 
-		void add_sync(Ref parm,
-		              Type* arg_ty,
-		              void* value,
-		              Stream* src_stream,
-		              Stream* dst_stream,
-		              Access src_access = Access::eNone,
-		              Access dst_access = Access::eNone) {
+		std::pair<Access, Access> add_sync(Ref parm,
+		                                   Type* arg_ty,
+		                                   void* value,
+		                                   Stream* src_stream,
+		                                   Stream* dst_stream,
+		                                   Access src_access = Access::eNone,
+		                                   Access dst_access = Access::eNone) {
 			auto parm_ty = parm.type();
 
 			DomainFlagBits src_domain = src_stream ? src_stream->domain : DomainFlagBits::eNone;
@@ -936,8 +935,30 @@ namespace vuk {
 			} else {
 				assert(0);
 			}
+			return { src_access, dst_access };
 		}
 	};
+
+	std::string_view domain_to_string(DomainFlagBits domain) {
+		domain = (DomainFlagBits)(domain & DomainFlagBits::eDomainMask).m_mask;
+
+		switch (domain) {
+		case DomainFlagBits::eNone:
+			return "None";
+		case DomainFlagBits::eHost:
+			return "Host";
+		case DomainFlagBits::ePE:
+			return "PE";
+		case DomainFlagBits::eGraphicsQueue:
+			return "Graphics";
+		case DomainFlagBits::eComputeQueue:
+			return "Compute";
+		case DomainFlagBits::eTransferQueue:
+			return "Transfer";
+		}
+		assert(false);
+		return "";
+	}
 
 #define VUK_DUMP_EXEC
 
@@ -951,7 +972,7 @@ namespace vuk {
 			                         std::make_unique<VkQueueStream>(alloc, static_cast<rtvk::QueueExecutor*>(exe), &impl->callbacks));
 		}
 		auto host_stream = recorder.streams.at(DomainFlagBits::eHost).get();
-		
+
 		std::deque<VkPEStream> pe_streams;
 
 		for (auto& item : impl->scheduled_execables) {
@@ -1164,7 +1185,7 @@ namespace vuk {
 					}
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
-					fmt::print(" = call ${} ", static_cast<uint32_t>(dst_stream->domain));
+					fmt::print(" = call ${} ", domain_to_string(dst_stream->domain));
 					if (node->call.fn.type()->debug_info) {
 						fmt::print("<{}> ", node->call.fn.type()->debug_info->name);
 					}
@@ -1210,29 +1231,15 @@ namespace vuk {
 					DomainFlagBits dst_domain = dst_stream->domain;
 
 					Type* parm_ty = parm.type();
-					recorder.add_sync(parm, parm_ty, sched.get_value(parm), src_stream, dst_stream, Access::eNone, node->release.dst_access);
+					auto [src_access, dst_access] =
+					    recorder.add_sync(parm, parm_ty, sched.get_value(parm), src_stream, dst_stream, Access::eNone, node->release.dst_access);
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
-					fmt::print("release ${} ", static_cast<uint32_t>(node->release.dst_domain));
+					fmt::print("release ${}->${} ", domain_to_string(src_domain), domain_to_string(node->release.dst_domain));
 					print_args(std::span{ &node->release.src, 1 });
 					fmt::print("\n");
 #endif
 					auto& acqrel = node->release.release;
-					Access src_access = Access::eNone;
-
-					if (parm_ty->kind == Type::ALIASED_TY) { // this is coming from an output annotated, so we know the source access
-						auto src_arg = parm.node->call.args[parm_ty->aliased.ref_idx];
-						auto call_ty = parm.node->call.fn.type()->opaque_fn.args[parm_ty->aliased.ref_idx];
-						if (call_ty->kind == Type::IMBUED_TY) {
-							src_access = call_ty->imbued.access;
-						} else {
-							// TODO: handling unimbued aliased
-							src_access = Access::eNone;
-						}
-					} else if (parm_ty->kind == Type::IMBUED_TY) {
-						assert(0);
-					} else { // there is no need to sync (eg. declare)
-					}
 					acqrel->last_use = src_access;
 					if (src_domain == DomainFlagBits::eHost) {
 						acqrel->status = Signal::Status::eHostAvailable;
@@ -1262,7 +1269,7 @@ namespace vuk {
 					if (swp.acquire_result != VK_SUCCESS && swp.acquire_result != VK_SUBOPTIMAL_KHR) {
 						return { expected_error, VkException{ swp.acquire_result } };
 					}
-					
+
 					auto pe_stream = &pe_streams.emplace_back(alloc, swp);
 #ifdef VUK_DUMP_EXEC
 					print_results(node);

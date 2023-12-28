@@ -15,7 +15,7 @@ namespace vuk {
 	/// @param buffer Buffer to fill
 	/// @param src_data pointer to source data
 	/// @param size size of source data
-	inline TypedFuture<Buffer> host_data_to_buffer(Allocator& allocator, DomainFlagBits copy_domain, Buffer dst, const void* src_data, size_t size) {
+	inline Future<Buffer> host_data_to_buffer(Allocator& allocator, DomainFlagBits copy_domain, Buffer dst, const void* src_data, size_t size) {
 		// host-mapped buffers just get memcpys
 		if (dst.mapped_ptr) {
 			memcpy(dst.mapped_ptr, src_data, size);
@@ -41,13 +41,13 @@ namespace vuk {
 	/// @param dst Buffer to fill
 	/// @param data source data
 	template<class T>
-	TypedFuture<Buffer> host_data_to_buffer(Allocator& allocator, DomainFlagBits copy_domain, Buffer dst, std::span<T> data) {
+	Future<Buffer> host_data_to_buffer(Allocator& allocator, DomainFlagBits copy_domain, Buffer dst, std::span<T> data) {
 		return host_data_to_buffer(allocator, copy_domain, dst, data.data(), data.size_bytes());
 	}
 
 	/// @brief Download a buffer to GPUtoCPU memory
 	/// @param buffer_src Buffer to download
-	inline TypedFuture<Buffer> download_buffer(TypedFuture<Buffer> buffer_src) {
+	inline Future<Buffer> download_buffer(Future<Buffer> buffer_src) {
 		auto dst = declare_buf("dst", Buffer{ .memory_usage = MemoryUsage::eGPUtoCPU });
 		dst.same_size(buffer_src);
 		auto download =
@@ -63,7 +63,7 @@ namespace vuk {
 	/// @param copy_domain The domain where the copy should happen
 	/// @param image ImageAttachment to fill
 	/// @param src_data pointer to source data
-	inline TypedFuture<ImageAttachment> host_data_to_image(Allocator& allocator, DomainFlagBits copy_domain, ImageAttachment image, const void* src_data) {
+	inline Future<ImageAttachment> host_data_to_image(Allocator& allocator, DomainFlagBits copy_domain, ImageAttachment image, const void* src_data) {
 		size_t alignment = format_to_texel_block_size(image.format);
 		assert(image.extent.sizing == Sizing::eAbsolute);
 		size_t size = compute_image_size(image.format, static_cast<Extent3D>(image.extent.extent));
@@ -173,7 +173,7 @@ namespace vuk {
 	/// @param allocator Allocator to allocate this Buffer from
 	/// @param mem_usage Where to allocate the buffer (host visible buffers will be automatically mapped)
 	template<class T>
-	std::pair<Unique<Buffer>, TypedFuture<Buffer>>
+	std::pair<Unique<Buffer>, Future<Buffer>>
 	create_buffer(Allocator& allocator, vuk::MemoryUsage memory_usage, DomainFlagBits domain, std::span<T> data, size_t alignment = 1) {
 		Unique<Buffer> buf(allocator);
 		BufferCreateInfo bci{ memory_usage, sizeof(T) * data.size(), alignment };
@@ -182,7 +182,7 @@ namespace vuk {
 		return { std::move(buf), host_data_to_buffer(allocator, domain, b, data) };
 	}
 
-	inline std::pair<Unique<Image>, TypedFuture<ImageAttachment>> create_image_with_data(Allocator& allocator,
+	inline std::pair<Unique<Image>, Future<ImageAttachment>> create_image_with_data(Allocator& allocator,
 	                                                                              DomainFlagBits copy_domain,
 	                                                                              ImageAttachment ia,
 	                                                                              const void* data,
@@ -193,7 +193,7 @@ namespace vuk {
 	}
 
 	template<class T>
-	std::pair<Unique<Image>, TypedFuture<ImageAttachment>> create_image_with_data(Allocator& allocator,
+	std::pair<Unique<Image>, Future<ImageAttachment>> create_image_with_data(Allocator& allocator,
 	                                                                              DomainFlagBits copy_domain,
 	                                                                              ImageAttachment ia,
 	                                                                              std::span<T> data,
@@ -201,7 +201,7 @@ namespace vuk {
 		return create_image_with_data(allocator, copy_domain, ia, data.data(), loc);
 	}
 
-	inline std::tuple<Unique<Image>, Unique<ImageView>, TypedFuture<ImageAttachment>>
+	inline std::tuple<Unique<Image>, Unique<ImageView>, Future<ImageAttachment>>
 	create_image_and_view_with_data(Allocator& allocator,
 	                                                                                                           DomainFlagBits copy_domain,
 	                                                                                                           ImageAttachment ia,
@@ -215,7 +215,7 @@ namespace vuk {
 	}
 
 	template<class T>
-	std::tuple<Unique<Image>, Unique<ImageView>, TypedFuture<ImageAttachment>> create_image_and_view_with_data(Allocator& allocator,
+	std::tuple<Unique<Image>, Unique<ImageView>, Future<ImageAttachment>> create_image_and_view_with_data(Allocator& allocator,
 	                                                                                                           DomainFlagBits copy_domain,
 	                                                                                                           ImageAttachment ia,
 	                                                                                                           std::span<T> data,
@@ -223,7 +223,7 @@ namespace vuk {
 		return create_image_and_view_with_data(allocator, copy_domain, ia, data.data(), loc);
 	}
 
-	inline TypedFuture<ImageAttachment> clear_image(TypedFuture<ImageAttachment> in, Clear clear_value) {
+	inline Future<ImageAttachment> clear_image(Future<ImageAttachment> in, Clear clear_value) {
 		auto clear = make_pass("clear image", [=](CommandBuffer& cbuf, VUK_IA(Access::eClear) dst) {
 			cbuf.clear_image(dst, clear_value);
 			return dst;
@@ -232,7 +232,7 @@ namespace vuk {
 		return clear(in);
 	}
 
-	inline TypedFuture<ImageAttachment> blit_image(TypedFuture<ImageAttachment> src, TypedFuture<ImageAttachment> dst, Filter filter) {
+	inline Future<ImageAttachment> blit_image(Future<ImageAttachment> src, Future<ImageAttachment> dst, Filter filter) {
 		auto blit = make_pass("blit image", [=](CommandBuffer& cbuf, VUK_IA(Access::eTransferRead) src, VUK_IA(Access::eTransferWrite) dst) {
 			ImageBlit region = {};
 			region.srcOffsets[0] = Offset3D{};
