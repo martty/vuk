@@ -74,10 +74,7 @@ namespace vuk {
 		}
 
 		~UntypedFuture() {
-			if (head.node) {
-				assert(head.node->kind == Node::RELEASE);
-				head.node->kind = Node::NOP;
-			}
+			abandon();
 		}
 
 		/// @brief Get the referenced RenderGraph
@@ -106,6 +103,13 @@ namespace vuk {
 		Future<U> transmute(Ref ref) noexcept {
 			head.node->release.src = ref;
 			return *reinterpret_cast<Future<U>*>(this); // TODO: not cool
+		}
+
+		void abandon() {
+			if (head.node) {
+				assert(head.node->kind == Node::RELEASE || head.node->kind == Node::NOP);
+				head.node->kind = Node::NOP;
+			}
 		}
 
 		// TODO: remove this from public API

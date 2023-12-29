@@ -312,28 +312,30 @@ namespace vuk {
 		    ctx(alloc.get_context()),
 		    domain(qe->tag.domain),
 		    executor(qe),
-		    callbacks(callbacks) {
-			batch.resize(1);
-		}
+		    callbacks(callbacks) {}
 
 		void add_dependency(Stream* dep) override {
 			if (is_recording) {
 				end_cbuf();
+				batch.emplace_back();
 			}
-			batch.emplace_back();
 			dependencies.push_back(dep);
 		}
 
 		void sync_deps() override {
+			if (batch.empty()) {
+				batch.emplace_back();
+			}
 			for (auto dep : dependencies) {
 				auto res = *dep->submit();
 				if (res.signal) {
-					batch.front().waits.push_back(res.signal);
+					batch.back().waits.push_back(res.signal);
 				}
 				if (res.sema_wait != VK_NULL_HANDLE) {
-					batch.front().pres_wait.push_back(res.sema_wait);
+					batch.back().pres_wait.push_back(res.sema_wait);
 				}
 			}
+			dependencies.clear();
 			if (!is_recording) {
 				begin_cbuf();
 			}
@@ -349,7 +351,6 @@ namespace vuk {
 			batch.back().signals.emplace_back(signal);
 			executor->submit_batch(batch);
 			batch.clear();
-			batch.resize(1);
 			return { expected_value, signal };
 		}
 
@@ -359,7 +360,6 @@ namespace vuk {
 			batch.back().pres_signal.emplace_back(swp.semaphores[swp.linear_index * 2 + 1]);
 			executor->submit_batch(batch);
 			batch.clear();
-			batch.resize(1);
 			VkPresentInfoKHR pi{ .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
 			pi.swapchainCount = 1;
 			pi.pSwapchains = &swp.swapchain;
@@ -429,11 +429,11 @@ namespace vuk {
 			im_bars.clear();
 		}
 
-		void synch_image(ImageAttachment& img_att, QueueResourceUse src_use, QueueResourceUse dst_use, Access dst_access, void* tag) {
+		void synch_image(ImageAttachment& img_att, QueueResourceUse src_use, QueueResourceUse dst_use, void* tag) {
 			auto aspect = format_to_aspect(img_att.format);
 
 			// if we start an RP and we have LOAD_OP_LOAD (currently always), then we must upgrade access with an appropriate READ
-			if (is_framebuffer_attachment(dst_access)) {
+			if (is_framebuffer_attachment(dst_use)) {
 				if ((aspect & ImageAspectFlagBits::eColor) == ImageAspectFlags{}) { // not color -> depth or depth/stencil
 					dst_use.access |= vuk::AccessFlagBits::eDepthStencilAttachmentRead;
 				} else {
@@ -504,12 +504,20 @@ namespace vuk {
 				im_bars.push_back(barrier);
 				half_im_bars.erase(it);
 				img_att.layout = (ImageLayout)barrier.newLayout;
+
+				if (barrier.oldLayout != VK_IMAGE_LAYOUT_UNDEFINED) {
+					assert(barrier.newLayout != VK_IMAGE_LAYOUT_UNDEFINED);
+				}
 			} else {
 				im_bars.push_back(barrier);
 				img_att.layout = (ImageLayout)barrier.newLayout;
+
+				if (barrier.oldLayout != VK_IMAGE_LAYOUT_UNDEFINED) {
+					assert(barrier.newLayout != VK_IMAGE_LAYOUT_UNDEFINED);
+				}
 			}
 
-			if (is_framebuffer_attachment(dst_access)) {
+			if (is_framebuffer_attachment(dst_use)) {
 				prepare_render_pass_attachment(alloc, img_att);
 			}
 		};
@@ -644,23 +652,23 @@ namespace vuk {
 	struct HostStream : Stream {
 		HostStream(Allocator alloc) : Stream(alloc, DomainFlagBits::eHost) {}
 
-		void add_dependency(Stream* dep) {
+		void add_dependency(Stream* dep) override {
 			dependencies.push_back(dep);
 		}
-		void sync_deps() {
+		void sync_deps() override {
 			assert(false);
 		}
 
-		void synch_image(ImageAttachment& img_att, QueueResourceUse src_use, QueueResourceUse dst_use, Access dst_access, void* tag) {
+		void synch_image(ImageAttachment& img_att, QueueResourceUse src_use, QueueResourceUse dst_use, void* tag) override {
 			/* host -> host and host -> device not needed, device -> host inserts things on the device side */
 			return;
 		}
-		void synch_memory(QueueResourceUse src_use, QueueResourceUse dst_use, void* tag) {
+		void synch_memory(QueueResourceUse src_use, QueueResourceUse dst_use, void* tag) override {
 			/* host -> host and host -> device not needed, device -> host inserts things on the device side */
 			return;
 		}
 
-		Result<SubmitResult> submit(Signal* signal = nullptr) {
+		Result<SubmitResult> submit(Signal* signal = nullptr) override {
 			return { expected_value, signal };
 		}
 	};
@@ -669,20 +677,20 @@ namespace vuk {
 		VkPEStream(Allocator alloc, Swapchain& swp) : Stream(alloc, DomainFlagBits::ePE), swp(&swp) {}
 		Swapchain* swp;
 
-		void add_dependency(Stream* dep) {
+		void add_dependency(Stream* dep) override {
 			dependencies.push_back(dep);
 		}
-		void sync_deps() {
+		void sync_deps() override {
 			assert(false);
 		}
 
-		void synch_image(ImageAttachment& img_att, QueueResourceUse src_use, QueueResourceUse dst_use, Access dst_access, void* tag) {}
+		void synch_image(ImageAttachment& img_att, QueueResourceUse src_use, QueueResourceUse dst_use, void* tag) override {}
 
-		void synch_memory(QueueResourceUse src_use, QueueResourceUse dst_use, void* tag) { /* PE doesn't do memory */
+		void synch_memory(QueueResourceUse src_use, QueueResourceUse dst_use, void* tag) override { /* PE doesn't do memory */
 			assert(false);
 		}
 
-		Result<SubmitResult> submit(Signal* signal = nullptr) {
+		Result<SubmitResult> submit(Signal* signal = nullptr) override {
 			assert(swp);
 			assert(signal == nullptr);
 			SubmitResult sr{ .sema_wait = swp->semaphores[2 * swp->linear_index] };
@@ -697,7 +705,7 @@ namespace vuk {
 	};
 
 	struct Scheduler {
-		Scheduler(Allocator all, std::vector<ScheduledItem>& scheduled_execables, DefUseMap& res_to_links, std::vector<Node*>& pass_reads) :
+		Scheduler(Allocator all, std::vector<ScheduledItem>& scheduled_execables, DefUseMap& res_to_links, std::vector<Ref>& pass_reads) :
 		    allocator(all),
 		    scheduled_execables(scheduled_execables),
 		    res_to_links(res_to_links),
@@ -711,7 +719,7 @@ namespace vuk {
 
 		Allocator allocator;
 		DefUseMap& res_to_links;
-		std::vector<Node*>&(pass_reads);
+		std::vector<Ref>& pass_reads;
 		std::vector<ScheduledItem>& scheduled_execables;
 
 		std::deque<ScheduledItem> work_queue;
@@ -756,7 +764,7 @@ namespace vuk {
 				if (link.reads.size() > 0) {
 					// all reads
 					for (auto& r : link.reads.to_span(pass_reads)) {
-						schedule_new(r);
+						schedule_new(r.node);
 					}
 				} else {
 					// just the def
@@ -811,10 +819,15 @@ namespace vuk {
 	};
 
 	struct Recorder {
-		Recorder(Allocator alloc, ProfilingCallbacks* callbacks) : ctx(alloc.get_context()), alloc(alloc), callbacks(callbacks) {}
+		Recorder(Allocator alloc, ProfilingCallbacks* callbacks, std::vector<Ref>& pass_reads) :
+		    ctx(alloc.get_context()),
+		    alloc(alloc),
+		    callbacks(callbacks),
+		    pass_reads(pass_reads) {}
 		Context& ctx;
 		Allocator alloc;
 		ProfilingCallbacks* callbacks;
+		std::vector<Ref>& pass_reads;
 
 		std::unordered_map<DomainFlagBits, std::unique_ptr<Stream>> streams;
 
@@ -829,16 +842,15 @@ namespace vuk {
 			return streams.at(domain).get();
 		}
 
-		auto flush_domain(vuk::DomainFlagBits domain, Signal* signal) -> SubmitInfo* {
-			if (domain == DomainFlagBits::eHost) {
-				return nullptr;
-			}
+		void flush_domain(vuk::DomainFlagBits domain, Signal* signal) {
 			auto& stream = streams.at(domain);
 
 			stream->submit(signal);
 		};
 
-		std::pair<Access, Access> add_sync(Ref parm,
+		std::pair<Access, Access> add_sync(ChainLink& link,
+		                                   RW type,
+		                                   Ref parm,
 		                                   Type* arg_ty,
 		                                   void* value,
 		                                   Stream* src_stream,
@@ -851,35 +863,189 @@ namespace vuk {
 			DomainFlagBits dst_domain = dst_stream ? dst_stream->domain : DomainFlagBits::eNone;
 
 			Type* base_ty = Type::stripped(arg_ty);
-			if (arg_ty->kind == Type::IMBUED_TY) {
-				dst_access = arg_ty->imbued.access;
-				if (parm_ty->kind == Type::ALIASED_TY) { // this is coming from an output annotated, so we know the source access
+
+			QueueResourceUse src_use = { .domain = src_domain };
+			bool sync_against_def = type == RW::eRead || link.reads.size() == 0; // def -> *, src = def
+			if (sync_against_def) {
+				if (arg_ty->kind == Type::IMBUED_TY) {
+					if (parm_ty->kind == Type::ALIASED_TY) { // this is coming from an output annotated, so we know the source access
+						auto src_arg = parm.node->call.args[parm_ty->aliased.ref_idx];
+						auto call_ty = parm.node->call.fn.type()->opaque_fn.args[parm_ty->aliased.ref_idx];
+						if (call_ty->kind == Type::IMBUED_TY) {
+							src_access = call_ty->imbued.access;
+						} else {
+							// TODO: handling unimbued aliased
+							src_access = Access::eNone;
+						}
+					} else if (parm_ty->kind == Type::IMBUED_TY) {
+						assert(0);
+					} else { // there is no need to sync (eg. declare)
+					}
+				} else if (parm_ty->kind == Type::ALIASED_TY) { // this is coming from an output annotated, so we know the source access
 					auto src_arg = parm.node->call.args[parm_ty->aliased.ref_idx];
 					auto call_ty = parm.node->call.fn.type()->opaque_fn.args[parm_ty->aliased.ref_idx];
 					if (call_ty->kind == Type::IMBUED_TY) {
 						src_access = call_ty->imbued.access;
 					} else {
 						// TODO: handling unimbued aliased
-						src_access = Access::eNone;
 					}
-				} else if (parm_ty->kind == Type::IMBUED_TY) {
-					assert(0);
-				} else { // there is no need to sync (eg. declare)
-				}
-			} else if (parm_ty->kind == Type::ALIASED_TY) { // this is coming from an output annotated, so we know the source access
-				auto src_arg = parm.node->call.args[parm_ty->aliased.ref_idx];
-				auto call_ty = parm.node->call.fn.type()->opaque_fn.args[parm_ty->aliased.ref_idx];
-				if (call_ty->kind == Type::IMBUED_TY) {
-					src_access = call_ty->imbued.access;
 				} else {
-					// TODO: handling unimbued aliased
+					/* no src access */
 				}
-			} else {
-				/* no dst access */
-				assert(dst_domain == DomainFlagBits::eNone);
+				src_use = to_use(src_access, src_domain);
+			} else {                       // read* -> undef, src = reads
+				if (link.reads.size() > 0) { // we need to emit: def -> reads, RAW or nothing (before first read)
+					// to avoid R->R deps, we emit a single dep for all the reads
+					// for this we compute a merged layout (TRANSFER_SRC_OPTIMAL / READ_ONLY_OPTIMAL / GENERAL)
+					QueueResourceUse use;
+					auto reads = link.reads.to_span(pass_reads);
+
+					bool need_read_only = false;
+					bool need_transfer = false;
+					bool need_general = false;
+					src_use.domain = DomainFlagBits::eNone;
+					src_use.layout = ImageLayout::eReadOnlyOptimalKHR;
+					for (int read_idx = 0; read_idx < reads.size(); read_idx++) {
+						auto& r = reads[read_idx];
+						if (r.node->kind == Node::CALL) {
+							arg_ty = r.node->call.fn.type()->opaque_fn.args[r.index];
+							parm = r.node->call.args[r.index];
+						} else {
+							assert(0);
+						}
+
+						if (arg_ty->kind == Type::IMBUED_TY) {
+							if (parm_ty->kind == Type::ALIASED_TY) { // this is coming from an output annotated, so we know the source access
+								auto src_arg = parm.node->call.args[parm_ty->aliased.ref_idx];
+								auto call_ty = parm.node->call.fn.type()->opaque_fn.args[parm_ty->aliased.ref_idx];
+								if (call_ty->kind == Type::IMBUED_TY) {
+									src_access = call_ty->imbued.access;
+								} else {
+									// TODO: handling unimbued aliased
+									src_access = Access::eNone;
+								}
+							} else if (parm_ty->kind == Type::IMBUED_TY) {
+								assert(0);
+							} else { // there is no need to sync (eg. declare)
+							}
+						} else if (parm_ty->kind == Type::ALIASED_TY) { // this is coming from an output annotated, so we know the source access
+							auto src_arg = parm.node->call.args[parm_ty->aliased.ref_idx];
+							auto call_ty = parm.node->call.fn.type()->opaque_fn.args[parm_ty->aliased.ref_idx];
+							if (call_ty->kind == Type::IMBUED_TY) {
+								src_access = call_ty->imbued.access;
+							} else {
+								// TODO: handling unimbued aliased
+							}
+						} else {
+							/* no src access */
+						}
+
+						auto use = to_use(dst_access, dst_domain);
+						if (use.domain == DomainFlagBits::eNone) {
+							use.domain = src_use.domain;
+						} else if (use.domain != src_use.domain && src_use.domain != DomainFlagBits::eNone) {
+							// there are multiple domains in this read group
+							// this is okay - but in this case we can't synchronize against all of them together
+							// so we synchronize against them individually by setting last use and ending the read gather
+							assert(false); // we should've handled this by now
+						}
+
+						if (is_transfer_access(dst_access)) {
+							need_transfer = true;
+						}
+						if (is_storage_access(dst_access)) {
+							need_general = true;
+						}
+						if (is_readonly_access(dst_access)) {
+							need_read_only = true;
+						}
+
+						src_use.access |= use.access;
+						src_use.stages |= use.stages;
+					}
+
+					// compute barrier and waits for the merged reads
+
+					if (need_transfer && !need_read_only) {
+						src_use.layout = ImageLayout::eTransferSrcOptimal;
+					}
+
+					if (need_general || (need_transfer && need_read_only)) {
+						src_use.layout = ImageLayout::eGeneral;
+					}
+				}
 			}
-			QueueResourceUse src_use = to_use(src_access, src_domain);
-			QueueResourceUse dst_use = to_use(dst_access, dst_domain);
+
+			QueueResourceUse dst_use = { .domain = dst_domain };
+			if (type == RW::eWrite) { // * -> undef, dst = undef
+				if (arg_ty->kind == Type::IMBUED_TY) {
+					dst_access = arg_ty->imbued.access;
+				} else {
+					/* no dst access */
+				}
+				dst_use = to_use(dst_access, dst_domain);
+			} else if (type == RW::eRead) { // def -> read, dst = sum(read)
+				if (link.reads.size() > 0) {  // we need to emit: def -> reads, RAW or nothing (before first read)
+					// to avoid R->R deps, we emit a single dep for all the reads
+					// for this we compute a merged layout (TRANSFER_SRC_OPTIMAL / READ_ONLY_OPTIMAL / GENERAL)
+					QueueResourceUse use;
+					auto reads = link.reads.to_span(pass_reads);
+
+					bool need_read_only = false;
+					bool need_transfer = false;
+					bool need_general = false;
+					dst_use.domain = dst_domain;
+					dst_use.layout = ImageLayout::eReadOnlyOptimalKHR;
+					for (int read_idx = 0; read_idx < reads.size(); read_idx++) {
+						auto& r = reads[read_idx];
+						if (r.node->kind == Node::CALL) {
+							arg_ty = r.node->call.fn.type()->opaque_fn.args[r.index];
+							parm = r.node->call.args[r.index];
+						} else {
+							assert(0);
+						}
+
+						if (arg_ty->kind == Type::IMBUED_TY) {
+							dst_access = arg_ty->imbued.access;
+						} else {
+							assert(0);
+						}
+
+						auto use = to_use(dst_access, dst_domain);
+						if (use.domain == DomainFlagBits::eNone) {
+							use.domain = dst_use.domain;
+						} else if (use.domain != dst_use.domain && dst_use.domain != DomainFlagBits::eNone) {
+							// there are multiple domains in this read group
+							// this is okay - but in this case we can't synchronize against all of them together
+							// so we synchronize against them individually by setting last use and ending the read gather
+							assert(false); // we should've handled this by now
+						}
+
+						if (is_transfer_access(dst_access)) {
+							need_transfer = true;
+						}
+						if (is_storage_access(dst_access)) {
+							need_general = true;
+						}
+						if (is_readonly_access(dst_access)) {
+							need_read_only = true;
+						}
+
+						dst_use.access |= use.access;
+						dst_use.stages |= use.stages;
+					}
+
+					// compute barrier and waits for the merged reads
+
+					if (need_transfer && !need_read_only) {
+						dst_use.layout = ImageLayout::eTransferSrcOptimal;
+					}
+
+					if (need_general || (need_transfer && need_read_only)) {
+						dst_use.layout = ImageLayout::eGeneral;
+					}
+				}
+			}
 
 			bool has_src = src_domain != DomainFlagBits::eNone;
 			bool has_dst = dst_domain != DomainFlagBits::eNone;
@@ -894,10 +1060,10 @@ namespace vuk {
 			if (base_ty->is_image()) { // TODO: of course cross-queue barriers we need to issue twice
 				auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
 				if (has_dst) {
-					dst_stream->synch_image(img_att, src_use, dst_use, dst_access, value);
+					dst_stream->synch_image(img_att, src_use, dst_use, value);
 				}
 				if (only_src || cross) {
-					src_stream->synch_image(img_att, src_use, dst_use, dst_access, value);
+					src_stream->synch_image(img_att, src_use, dst_use, value);
 				}
 			} else if (base_ty->is_buffer()) {
 				// buffer needs no cross
@@ -913,10 +1079,10 @@ namespace vuk {
 					auto img_atts = reinterpret_cast<ImageAttachment**>(value);
 					for (int i = 0; i < size; i++) {
 						if (has_dst) {
-							dst_stream->synch_image(*img_atts[i], src_use, dst_use, dst_access, img_atts[i]);
+							dst_stream->synch_image(*img_atts[i], src_use, dst_use, img_atts[i]);
 						}
 						if (only_src || cross) {
-							src_stream->synch_image(*img_atts[i], src_use, dst_use, dst_access, img_atts[i]);
+							src_stream->synch_image(*img_atts[i], src_use, dst_use, img_atts[i]);
 						}
 					}
 				} else if (elem_ty->is_buffer()) {
@@ -965,7 +1131,7 @@ namespace vuk {
 	Result<void> ExecutableRenderGraph::execute(Allocator& alloc) {
 		Context& ctx = alloc.get_context();
 
-		Recorder recorder(alloc, &impl->callbacks);
+		Recorder recorder(alloc, &impl->callbacks, impl->pass_reads);
 		recorder.streams.emplace(DomainFlagBits::eHost, std::make_unique<HostStream>(alloc));
 		if (auto exe = ctx.get_executor(DomainFlagBits::eGraphicsQueue)) {
 			recorder.streams.emplace(DomainFlagBits::eGraphicsQueue,
@@ -1078,8 +1244,9 @@ namespace vuk {
 					for (size_t i = 1; i < node->aalloc.args.size(); i++) {
 						auto arg_ty = node->aalloc.args[i].type();
 						auto& parm = node->aalloc.args[i];
+						auto& link = impl->res_to_links[parm];
 
-						recorder.add_sync(parm, arg_ty, sched.get_value(parm), host_stream, nullptr);
+						recorder.add_sync(link, RW::eWrite, parm, arg_ty, sched.get_value(parm), sched.executed.at(parm.node).stream, nullptr);
 					}
 
 #ifdef VUK_DUMP_EXEC
@@ -1149,7 +1316,14 @@ namespace vuk {
 							}
 						}
 						auto value = sched.get_value(parm);
-						recorder.add_sync(parm, arg_ty, value, sched.executed.at(parm.node).stream, dst_stream);
+						if (arg_ty->kind == Type::IMBUED_TY) {
+							auto access = arg_ty->imbued.access;
+							// Write and ReadWrite
+							RW sync_access = (is_write_access(access) || access == Access::eConsume) ? RW::eWrite : RW::eRead;
+							recorder.add_sync(link, sync_access, parm, arg_ty, value, sched.executed.at(parm.node).stream, dst_stream);
+						} else {
+							assert(0);
+						}
 					}
 
 					// make the renderpass if needed!
@@ -1216,6 +1390,7 @@ namespace vuk {
 					// release is to execute: we need to flush current queue -> end current batch and add signal
 					auto parm = node->release.src;
 					auto src_stream = sched.executed.at(parm.node).stream;
+					auto& link = impl->res_to_links[parm];
 					DomainFlagBits src_domain = src_stream->domain;
 					Stream* dst_stream;
 					if (node->release.dst_domain == DomainFlagBits::ePE) {
@@ -1232,7 +1407,7 @@ namespace vuk {
 
 					Type* parm_ty = parm.type();
 					auto [src_access, dst_access] =
-					    recorder.add_sync(parm, parm_ty, sched.get_value(parm), src_stream, dst_stream, Access::eNone, node->release.dst_access);
+					    recorder.add_sync(link, RW::eWrite, parm, parm_ty, sched.get_value(parm), src_stream, dst_stream, Access::eNone, node->release.dst_access);
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
 					fmt::print("release ${}->${} ", domain_to_string(src_domain), domain_to_string(node->release.dst_domain));
@@ -1251,7 +1426,8 @@ namespace vuk {
 						auto result = dynamic_cast<VkQueueStream*>(src_stream)->present(swp);
 						// TODO: do something with the result here
 					}
-					auto batch = recorder.flush_domain(src_domain, acqrel);
+
+					recorder.flush_domain(src_domain, acqrel);
 					fmt::print("");
 					sched.done(node, src_stream);
 				} else {
@@ -1293,7 +1469,8 @@ namespace vuk {
 					for (auto i = 0; i < size; i++) {
 						bufs.push_back(&sched.get_value<Buffer>(link.urdef.node->aalloc.args[i + 1]));
 					}
-					recorder.add_sync(node->indexing.array, node->indexing.array.type(), bufs.data(), sched.executed.at(node->indexing.array.node).stream, nullptr);
+					recorder.add_sync(
+					    link, RW::eWrite, node->indexing.array, node->indexing.array.type(), bufs.data(), sched.executed.at(node->indexing.array.node).stream, nullptr);
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
 					fmt::print(" = ");

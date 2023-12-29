@@ -83,7 +83,7 @@ TEST_CASE("image upload/download") {
 		size_t size = compute_image_size(fut->format, static_cast<Extent3D>(fut->extent.extent));
 		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 		auto dst_buf = declare_buf("dst", *dst);
-		auto res = download_buffer(image2buf(fut, dst_buf)).get(*test_context.allocator, test_context.compiler);
+		auto res = download_buffer(image2buf(fut, std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
 		auto updata = std::span((uint32_t*)res->mapped_ptr, 4);
 		CHECK(updata == std::span(data));
 	}
