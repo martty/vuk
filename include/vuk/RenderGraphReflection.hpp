@@ -11,7 +11,7 @@ namespace vuk {
 		ChainLink* source = nullptr; // in subchains, this denotes the end of the undiverged chain
 		ChainLink* prev = nullptr;   // if this came from a previous undef, we link them together
 		Ref def;
-		RelSpan<Node*> reads;
+		RelSpan<Ref> reads;
 		Type* type;
 		Node* undef = nullptr;
 		ChainLink* next = nullptr;        // if this links to a def, we link them together

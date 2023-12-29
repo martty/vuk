@@ -31,8 +31,7 @@ namespace vuk {
 			command_buffer.copy_buffer(src, dst);
 			return dst;
 		});
-		auto result = pass(src_buf, dst_buf);
-		return result;
+		return pass(std::move(src_buf), std::move(dst_buf));
 	}
 
 	/// @brief Fill a buffer with host data
@@ -55,7 +54,7 @@ namespace vuk {
 			    command_buffer.copy_buffer(src, dst);
 			    return dst;
 		    });
-		return download(buffer_src, dst);
+		return download(std::move(buffer_src), std::move(dst));
 	}
 
 	/// @brief Fill an image with host data
@@ -90,7 +89,7 @@ namespace vuk {
 			    return dst;
 		    });
 
-		return image_upload(srcbuf, dst);
+		return image_upload(std::move(srcbuf), std::move(dst));
 	}
 
 	/// @brief Transition image for given access - useful to force certain access across different RenderGraphs linked by Futures
@@ -229,7 +228,7 @@ namespace vuk {
 			return dst;
 		});
 
-		return clear(in);
+		return clear(std::move(in));
 	}
 
 	inline Future<ImageAttachment> blit_image(Future<ImageAttachment> src, Future<ImageAttachment> dst, Filter filter) {
@@ -262,7 +261,7 @@ namespace vuk {
 			return dst;
 		});
 
-		return blit(src, dst);
+		return blit(std::move(src), std::move(dst));
 	}
 
 	/// @brief Allocates & fills an image, creates default ImageView for it (legacy)

@@ -630,11 +630,13 @@ public:
 	}
 
 	template<class T, class... Args>
-	[[nodiscard]] inline Future<T[]> declare_array(Name name, const Future<T>& arg, Args... args) {
+	[[nodiscard]] inline Future<T[]> declare_array(Name name, Future<T>&& arg, Args&&... args) {
 		auto rg = arg.get_render_graph();
 		(rg->subgraphs.push_back(args.get_render_graph()), ...);
 		std::array refs = { arg.get_head(), args.get_head()... };
 		std::array defs = { arg.get_def(), args.get_def()... };
+		arg.abandon();
+		( args.abandon(), ... );
 		Ref ref = rg->make_declare_array(Type::stripped(refs[0].type()), refs, defs);
 		rg->name_outputs(ref.node, { name.c_str() });
 		return { rg, ref, ref };

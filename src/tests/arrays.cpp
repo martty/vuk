@@ -78,18 +78,18 @@ TEST_CASE("arrayed images, commands") {
 		size_t size = compute_image_size(fut->format, static_cast<Extent3D>(fut->extent.extent));
 		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 
-		auto arr = declare_array("images", fut, fut2);
+		auto arr = declare_array("images", std::move(fut), std::move(fut2));
 		{
-			auto futc = clear_image(arr[0], vuk::ClearColor(5u, 5u, 5u, 5u));
+			auto futc = clear_image(std::move(arr[0]), vuk::ClearColor(5u, 5u, 5u, 5u));
 			auto dst_buf = declare_buf("dst", *dst);
-			auto res = download_buffer(image2buf(futc, dst_buf)).get(*test_context.allocator, test_context.compiler);
+			auto res = download_buffer(image2buf(std::move(futc), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
 			auto updata = std::span((uint32_t*)res->mapped_ptr, 4);
 			CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 5; }));
 		}
 		{
-			auto futc2 = clear_image(arr[1], vuk::ClearColor(6u, 6u, 6u, 6u));
+			auto futc2 = clear_image(std::move(arr[1]), vuk::ClearColor(6u, 6u, 6u, 6u));
 			auto dst_buf = declare_buf("dst", *dst);
-			auto res = download_buffer(image2buf(futc2, dst_buf)).get(*test_context.allocator, test_context.compiler);
+			auto res = download_buffer(image2buf(std::move(futc2), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
 			auto updata = std::span((uint32_t*)res->mapped_ptr, 4);
 			CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 6; }));
 		}

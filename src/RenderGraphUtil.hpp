@@ -247,11 +247,11 @@ namespace vuk {
 	}
 
 	inline bool is_storage_access(Access a) {
-		return (a & (eComputeRW | eVertexRead | eFragmentRW | eRayTracingRW));
+		return (a & (eComputeRW | eVertexRead | eFragmentRW | eRayTracingRW | eHostRW));
 	}
 
 	inline bool is_readonly_access(Access a) {
-		return a & ~(eTransferRW | eComputeRW | eVertexRead | eFragmentRW | eRayTracingRW);
+		return a & ~(eTransferRW | eComputeRW | eVertexRead | eFragmentRW | eRayTracingRW | eHostRW);
 	}
 
 	struct Acquire {

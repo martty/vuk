@@ -56,7 +56,7 @@ namespace vuk {
 	  std::erase_if(passes, [](auto& pass) { return pass.pass->type == PassType::eDiverge && pass.resources.size() == 0; });
 	}*/
 
-	Result<void> build_links(std::span<std::shared_ptr<RG>> rgs, DefUseMap& res_to_links, std::vector<Node*>& pass_reads) {
+	Result<void> build_links(std::span<std::shared_ptr<RG>> rgs, DefUseMap& res_to_links, std::vector<Ref>& pass_reads) {
 		// build edges into link map
 		// reserving here to avoid rehashing map
 		res_to_links.clear();
@@ -101,7 +101,7 @@ namespace vuk {
 								res_to_links[parm].undef = &node;
 							}
 							if (!is_write_access(access) && access != Access::eConsume) { // Read and ReadWrite
-								res_to_links[parm].reads.append(pass_reads, &node);
+								res_to_links[parm].reads.append(pass_reads, nth(&node, i));
 							}
 						} else {
 							assert(0);
@@ -156,6 +156,12 @@ namespace vuk {
 				} while (l);
 			}
 		}
+
+		// TODO:
+		// we need a pass that walks through links
+		// an incompatible read group contains multiple domains
+		// in this case they can't be together - so we linearize them into domain groups
+		// so def -> {r1, r2} becomes def -> r1 -> undef{g0} -> def{g0} -> r2
 
 		// second pass - resolve composite urdefs
 		for (auto& rg : rgs) {
@@ -249,18 +255,18 @@ namespace vuk {
 				adjacency_matrix[node_to_schedule[link.def.node] * size + node_to_schedule[link.undef]]++; // def -> undef
 			}
 			for (auto& read : link.reads.to_span(pass_reads)) {
-				if (!node_to_schedule.count(read)) {
+				if (!node_to_schedule.count(read.node)) {
 					continue;
 				}
 
 				if (node_to_schedule.count(link.def.node)) {
-					indegrees[node_to_schedule[read]]++;                                                 // this only counts as a dep if there is a def before
-					adjacency_matrix[node_to_schedule[link.def.node] * size + node_to_schedule[read]]++; // def -> read
+					indegrees[node_to_schedule[read.node]]++;                                                 // this only counts as a dep if there is a def before
+					adjacency_matrix[node_to_schedule[link.def.node] * size + node_to_schedule[read.node]]++; // def -> read
 				}
 
 				if (link.undef && node_to_schedule.count(link.undef)) {
 					indegrees[node_to_schedule[link.undef]]++;
-					adjacency_matrix[node_to_schedule[read] * size + node_to_schedule[link.undef]]++; // read -> undef
+					adjacency_matrix[node_to_schedule[read.node] * size + node_to_schedule[link.undef]]++; // read -> undef
 				}
 			}
 		}
@@ -552,7 +558,7 @@ namespace vuk {
 			for (chain = head; chain != nullptr; chain = chain->next) {
 				propagate_domain(chain->def.node);
 				for (auto& r : chain->reads.to_span(impl->pass_reads)) {
-					propagate_domain(r);
+					propagate_domain(r.node);
 				}
 				if (chain->undef) {
 					propagate_domain(chain->undef);
@@ -573,7 +579,7 @@ namespace vuk {
 					propagate_domain(chain->undef);
 				}
 				for (auto& r : chain->reads.to_span(impl->pass_reads)) {
-					propagate_domain(r);
+					propagate_domain(r.node);
 				}
 				propagate_domain(chain->def.node);
 			}
@@ -621,100 +627,6 @@ namespace vuk {
 		impl->graphics_passes = { impl->partitioned_execables.begin() + impl->transfer_passes.size() + impl->compute_passes.size(),
 			                        impl->partitioned_execables.size() - impl->transfer_passes.size() - impl->compute_passes.size() };
 	}
-	/*
-	// resource linking pass
-	// populate swapchain and resource -> bound references
-	void Compiler::resource_linking() {
-	  for (auto head : impl->chains) {
-	    bool is_image = head->type == Resource::Type::eImage;
-	    bool is_swapchain = false;
-	    if (is_image) {
-	      auto& att = impl->get_bound_attachment(head->def->pass);
-	      att.use_chains.append(impl->attachment_use_chain_references, head);
-	      is_swapchain = att.type == AttachmentInfo::Type::eSwapchain;
-	    } else {
-	      auto& att = impl->get_bound_buffer(head->def->pass);
-	      att.use_chains.append(impl->attachment_use_chain_references, head);
-	    }
-
-	    if (head->source) { // propagate use onto previous chain def
-	      ChainLink* link = head;
-
-	      while (link->source) {
-	        for (link = link->source; link->def->pass > 0; link = link->prev)
-	          ;
-	      }
-	      for (; link->def->pass >= 0; link = link->prev)
-	        ;
-
-	      if (link->type == Resource::Type::eImage) {
-	        auto& att = impl->get_bound_attachment(link->def->pass);
-	        att.use_chains.append(impl->attachment_use_chain_references, head);
-	        is_swapchain = att.type == AttachmentInfo::Type::eSwapchain;
-	      } else {
-	        auto& att = impl->get_bound_buffer(link->def->pass);
-	        att.use_chains.append(impl->attachment_use_chain_references, head);
-	      }
-	    }
-
-	    for (ChainLink* link = head; link != nullptr; link = link->next) {
-	      if (link->def->pass >= 0) {
-	        auto& pass = impl->get_pass(*link->def);
-	        auto& def_res = impl->get_resource(*link->def);
-	        if (is_swapchain) {
-	          pass.referenced_swapchains.append(impl->swapchain_references, head->def->pass);
-	        }
-	        def_res.reference = head->def->pass;
-	      }
-	      for (auto& r : link->reads.to_span(impl->pass_reads)) {
-	        auto& pass = impl->get_pass(r);
-	        auto& def_res = impl->get_resource(r);
-	        if (is_swapchain) {
-	          pass.referenced_swapchains.append(impl->swapchain_references, head->def->pass);
-	        }
-	        def_res.reference = head->def->pass;
-	      }
-	      if (link->undef && link->undef->pass >= 0) {
-	        auto& pass = impl->get_pass(*link->undef);
-	        auto& def_res = impl->get_resource(*link->undef);
-	        if (is_swapchain) {
-	          pass.referenced_swapchains.append(impl->swapchain_references, head->def->pass);
-	        }
-	        def_res.reference = head->def->pass;
-	      }
-	    }
-	  }
-	}
-
-	void Compiler::render_pass_assignment() {
-	  // graphics: assemble renderpasses based on framebuffers
-	  // we need to collect passes into framebuffers, which will determine the renderpasses
-
-	  // renderpasses are uniquely identified by their index from now on
-	  // tell passes in which renderpass/subpass they will execute
-	  impl->rpis.reserve(impl->graphics_passes.size());
-	  for (auto& passinfo : impl->graphics_passes) {
-	    int32_t rpi_index = -1;
-	    RenderPassInfo* rpi = nullptr;
-
-	    for (auto& res : passinfo->resources.to_span(impl->resources)) {
-	      if (is_framebuffer_attachment(res)) {
-	        if (rpi == nullptr) {
-	          rpi_index = (int32_t)impl->rpis.size();
-	          rpi = &impl->rpis.emplace_back();
-	        }
-	        auto& bound_att = impl->get_bound_attachment(res.reference);
-	        AttachmentRPInfo rp_info{ &bound_att };
-	        rp_info.description.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-	        rp_info.description.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-	        rpi->attachments.append(impl->rp_infos, rp_info);
-	      }
-	    }
-
-	    passinfo->render_pass_index = (int32_t)rpi_index;
-	    passinfo->subpass = 0;
-	  }
-	}*/
 
 	Result<void> Compiler::compile(std::span<std::shared_ptr<RG>> rgs, const RenderGraphCompileOptions& compile_options) {
 		auto arena = impl->arena_.release();

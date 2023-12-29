@@ -62,7 +62,7 @@ namespace vuk {
 		virtual void add_dependency(Stream* dep) = 0;
 		virtual void sync_deps() = 0;
 
-		virtual void synch_image(ImageAttachment& img_att, QueueResourceUse src_use, QueueResourceUse dst_use, Access dst_access, void* tag) = 0;
+		virtual void synch_image(ImageAttachment& img_att, QueueResourceUse src_use, QueueResourceUse dst_use, void* tag) = 0;
 		virtual void synch_memory(QueueResourceUse src_use, QueueResourceUse dst_use, void* tag) = 0;
 
 		struct SubmitResult {
@@ -111,7 +111,7 @@ namespace vuk {
 		std::vector<VkMemoryBarrier2KHR> mem_barriers;
 
 		DefUseMap res_to_links;
-		std::vector<Node*> pass_reads;
+		std::vector<Ref> pass_reads;
 
 		std::vector<ChainLink*> chains;
 		std::vector<ChainLink*> child_chains;
