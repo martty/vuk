@@ -87,22 +87,6 @@ namespace vuk {
 			return (*ptr)[index];
 		}
 	};
-	/*
-	template<class Arg>
-	struct arg_kind {};
-
-	template<Access acc, class UniqueT, StringLiteral N>
-	struct arg_kind<Arg<ImageAttachment, acc, UniqueT, N>>{
-	  static constexpr Type::TypeKind kind = Type::IMAGE_TY;
-	};
-
-	template<Access acc, class UniqueT, StringLiteral N>
-	struct arg_kind<Arg<Buffer, acc, UniqueT, N>> {
-	  static constexpr Type::TypeKind kind = Type::BUFFER_TY;
-	};*/
-
-	using IARule = std::function<void(const struct InferenceContext& ctx, ImageAttachment& ia)>;
-	using BufferRule = std::function<void(const struct InferenceContext& ctx, Buffer& buffer)>;
 
 	// from: https://stackoverflow.com/a/28213747
 	template<typename T>
@@ -681,35 +665,6 @@ public:
 		return std::move(std::move(in).release_to<void>(in.get_head(), Access::ePresent, DomainFlagBits::ePE));
 	}
 
-	struct InferenceContext {
-		const ImageAttachment& get_image_attachment(Name name) const;
-		const Buffer& get_buffer(Name name) const;
-
-		struct ExecutableRenderGraph* erg;
-		Name prefix;
-	};
-
-	// builtin inference rules for convenience
-
-	/// @brief Inference target has the same extent as the source
-	IARule same_extent_as(Name inference_source);
-	IARule same_extent_as(Future<Image> inference_source);
-
-	/// @brief Inference target has the same width & height as the source
-	IARule same_2D_extent_as(Name inference_source);
-
-	/// @brief Inference target has the same format as the source
-	IARule same_format_as(Name inference_source);
-
-	/// @brief Inference target has the same shape(extent, layers, levels) as the source
-	IARule same_shape_as(Name inference_source);
-
-	/// @brief Inference target is similar to(same shape, same format, same sample count) the source
-	IARule similar_to(Name inference_source);
-
-	/// @brief Inference target is the same size as the source
-	BufferRule same_size_as(Name inference_source);
-
 	struct Compiler {
 		Compiler();
 		~Compiler();
@@ -727,15 +682,9 @@ public:
 
 		/// @brief retrieve usages of resources in the RenderGraph
 		std::span<struct ChainLink*> get_use_chains() const;
-		/// @brief retrieve bound image attachments in the RenderGraph
-		MapProxy<QualifiedName, const struct AttachmentInfo&> get_bound_attachments();
-		/// @brief retrieve bound buffers in the RenderGraph
-		MapProxy<QualifiedName, const struct BufferInfo&> get_bound_buffers();
 
 		/// @brief compute ImageUsageFlags for given use chain
 		ImageUsageFlags compute_usage(const struct ChainLink* chain);
-		/// @brief Get the image attachment heading this use chain
-		const struct AttachmentInfo& get_chain_attachment(const struct ChainLink* chain);
 
 		/// @brief Dump the pass dependency graph in graphviz format
 		std::string dump_graph();
