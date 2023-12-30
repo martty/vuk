@@ -182,6 +182,8 @@ endif()
 
 
 if(VUK_BUILD_TESTS)
+	enable_testing()
+
 	add_subdirectory(ext/doctest)
 	target_link_libraries(vuk PUBLIC doctest::doctest)
 	target_sources(vuk PRIVATE src/tests/Test.cpp)
@@ -204,6 +206,9 @@ if(VUK_BUILD_TESTS)
 	target_link_libraries(vuk-tests PRIVATE vuk doctest::doctest vk-bootstrap fmt::fmt)
 	target_compile_definitions(vuk-tests PRIVATE VUK_TEST_RUNNER)
 	doctest_force_link_static_lib_in_target(vuk-tests vuk)
+
+	include(ext/doctest/scripts/cmake/doctest.cmake) # until we can use cmake 3.24
+	doctest_discover_tests(vuk-tests)
 
 	if(VUK_COMPILER_CLANGPP OR VUK_COMPILER_GPP)
 		target_compile_options(vuk-tests PRIVATE -std=c++20 -fno-char8_t)
