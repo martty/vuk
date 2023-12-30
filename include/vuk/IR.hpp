@@ -319,8 +319,8 @@ namespace vuk {
 		}
 
 		Ref make_declare_image(ImageAttachment value) {
-			auto ptr = new ImageAttachment(value); /* rest extent_x extent_y extent_z */
-			auto args_ptr = new Ref[4];
+			auto ptr = new ImageAttachment(value); /* rest extent_x extent_y extent_z format samples base_layer layer_count base_level level_count */
+			auto args_ptr = new Ref[10];
 			auto mem_ty = new Type*(emplace_type(Type{ .kind = Type::MEMORY_TY }));
 			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = ptr } }));
 			auto u64_ty = new Type*(u64());
@@ -339,8 +339,38 @@ namespace vuk {
 			} else {
 				args_ptr[3] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ u64_ty, 1 } }));
 			}
+			if (value.format != Format::eUndefined) {
+				args_ptr[4] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = &ptr->format } }));
+			} else {
+				args_ptr[4] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ mem_ty, 1 } }));
+			}
+			if (value.sample_count != Samples::eInfer) {
+				args_ptr[5] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = &ptr->sample_count } }));
+			} else {
+				args_ptr[5] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ mem_ty, 1 } }));
+			}
+			if (value.base_layer != VK_REMAINING_ARRAY_LAYERS) {
+				args_ptr[6] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ u64_ty, 1 }, .constant = { .value = &ptr->base_layer } }));
+			} else {
+				args_ptr[6] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ mem_ty, 1 } }));
+			}
+			if (value.layer_count != VK_REMAINING_ARRAY_LAYERS) {
+				args_ptr[7] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ u64_ty, 1 }, .constant = { .value = &ptr->layer_count } }));
+			} else {
+				args_ptr[7] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ mem_ty, 1 } }));
+			}
+			if (value.base_level != VK_REMAINING_MIP_LEVELS) {
+				args_ptr[8] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ u64_ty, 1 }, .constant = { .value = &ptr->base_level } }));
+			} else {
+				args_ptr[8] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ mem_ty, 1 } }));
+			}
+			if (value.level_count != VK_REMAINING_MIP_LEVELS) {
+				args_ptr[9] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ u64_ty, 1 }, .constant = { .value = &ptr->level_count } }));
+			} else {
+				args_ptr[9] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ mem_ty, 1 } }));
+			}
 
-			return first(emplace_op(Node{ .kind = Node::VALLOC, .type = std::span{ &builtin_image, 1 }, .valloc = { .args = std::span(args_ptr, 4) } }));
+			return first(emplace_op(Node{ .kind = Node::VALLOC, .type = std::span{ &builtin_image, 1 }, .valloc = { .args = std::span(args_ptr, 10) } }));
 		}
 
 		Ref make_declare_buffer(Buffer value) {

@@ -154,6 +154,54 @@ namespace vuk {
 			}
 		}
 
+		// Image inferences
+		void same_extent_as(const Future<ImageAttachment>& src) 
+			 requires std::is_same_v<T, ImageAttachment>
+		{
+			assert(src.get_def().type()->is_image());
+			def.node->valloc.args[1] = src.get_def().node->valloc.args[1];
+			def.node->valloc.args[2] = src.get_def().node->valloc.args[2];
+			def.node->valloc.args[3] = src.get_def().node->valloc.args[3];
+		}
+
+		/// @brief Inference target has the same width & height as the source
+		void same_2D_extent_as(const Future<ImageAttachment>& src)
+		  requires std::is_same_v<T, ImageAttachment>
+		{
+			assert(src.get_def().type()->is_image());
+			def.node->valloc.args[1] = src.get_def().node->valloc.args[1];
+			def.node->valloc.args[2] = src.get_def().node->valloc.args[2];
+		}
+
+		/// @brief Inference target has the same format as the source
+		void same_format_as(const Future<ImageAttachment>& src)
+			requires std::is_same_v<T, ImageAttachment>
+		{
+			assert(src.get_def().type()->is_image());
+			def.node->valloc.args[4] = src.get_def().node->valloc.args[4];
+		}
+
+		/// @brief Inference target has the same shape(extent, layers, levels) as the source
+		void same_shape_as(const Future<ImageAttachment>& src)
+		  requires std::is_same_v<T, ImageAttachment>
+		{
+			same_extent_as(src);
+			for (auto i = 6; i < 10; i++) { /* 6 - 9 : layers, levels */
+				def.node->valloc.args[i] = src.get_def().node->valloc.args[i];
+			}
+		}
+
+		/// @brief Inference target is similar to(same shape, same format, same sample count) the source
+		void similar_to(const Future<ImageAttachment>& src)
+		  requires std::is_same_v<T, ImageAttachment>
+		{
+			same_shape_as(src);
+			same_format_as(src);
+			def.node->valloc.args[5] = src.get_def().node->valloc.args[5]; // sample count
+		}
+
+		// Buffer inferences
+
 		void same_size(const Future<Buffer>& src)
 		  requires std::is_same_v<T, Buffer>
 		{
