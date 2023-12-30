@@ -36,7 +36,7 @@ TEST_CASE("arrayed buffers, internal loop") {
 
 		auto fill = make_pass("fill two", [](CommandBuffer& cbuf, VUK_ARG(Buffer[], Access::eTransferWrite) dst) {
 			for (size_t i = 0; i < dst.size(); i++) {
-				cbuf.fill_buffer(dst[i], 0xfe - i);
+				cbuf.fill_buffer(dst[i], (uint32_t)(0xfe - i));
 			}
 			return dst;
 		});
