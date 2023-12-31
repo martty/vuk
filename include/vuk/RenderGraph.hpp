@@ -34,7 +34,7 @@ namespace vuk {
 #endif
 
 namespace vuk {
-	QueueResourceUse to_use(Access acc, DomainFlags domain);
+	ResourceUse to_use(Access acc);
 
 	// declare these specializations for GCC
 	template<>

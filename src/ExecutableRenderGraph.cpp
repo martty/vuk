@@ -288,7 +288,6 @@ namespace vuk {
 
 	struct VkQueueStream : public Stream {
 		Context& ctx;
-		DomainFlagBits domain;
 		vuk::rtvk::QueueExecutor* executor;
 
 		std::vector<SubmitInfo> batch;
@@ -308,11 +307,12 @@ namespace vuk {
 		std::vector<VkMemoryBarrier2KHR> half_mem_bars;
 
 		VkQueueStream(Allocator alloc, vuk::rtvk::QueueExecutor* qe, ProfilingCallbacks* callbacks) :
-		    Stream(alloc, qe->tag.domain),
+		    Stream(alloc, qe),
 		    ctx(alloc.get_context()),
-		    domain(qe->tag.domain),
 		    executor(qe),
-		    callbacks(callbacks) {}
+		    callbacks(callbacks) {
+			domain = qe->tag.domain;
+		}
 
 		void add_dependency(Stream* dep) override {
 			if (is_recording) {
@@ -429,7 +429,7 @@ namespace vuk {
 			im_bars.clear();
 		}
 
-		void synch_image(ImageAttachment& img_att, QueueResourceUse src_use, QueueResourceUse dst_use, void* tag) {
+		void synch_image(ImageAttachment& img_att, StreamResourceUse src_use, StreamResourceUse dst_use, void* tag) {
 			auto aspect = format_to_aspect(img_att.format);
 
 			// if we start an RP and we have LOAD_OP_LOAD (currently always), then we must upgrade access with an appropriate READ
@@ -443,8 +443,11 @@ namespace vuk {
 
 			Subrange::Image subrange = {};
 
-			scope_to_domain((VkPipelineStageFlagBits2KHR&)src_use.stages, src_use.domain & DomainFlagBits::eQueueMask);
-			scope_to_domain((VkPipelineStageFlagBits2KHR&)dst_use.stages, dst_use.domain & DomainFlagBits::eQueueMask);
+			DomainFlagBits src_domain = src_use.stream ? src_use.stream->domain : DomainFlagBits::eNone;
+			DomainFlagBits dst_domain = dst_use.stream ? dst_use.stream->domain : DomainFlagBits::eNone;
+
+			scope_to_domain((VkPipelineStageFlagBits2KHR&)src_use.stages, src_domain & DomainFlagBits::eQueueMask);
+			scope_to_domain((VkPipelineStageFlagBits2KHR&)dst_use.stages, dst_domain & DomainFlagBits::eQueueMask);
 
 			// compute image barrier for this access -> access
 			VkImageMemoryBarrier2KHR barrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2_KHR };
@@ -458,24 +461,25 @@ namespace vuk {
 			barrier.subresourceRange.layerCount = subrange.layer_count;
 			barrier.subresourceRange.levelCount = subrange.level_count;
 
-			if (src_use.domain == DomainFlagBits::eAny || src_use.domain == DomainFlagBits::eHost) {
-				src_use.domain = dst_use.domain;
+			if (src_domain == DomainFlagBits::eAny || src_domain == DomainFlagBits::eHost) {
+				src_domain = dst_domain;
 			}
-			if (dst_use.domain == DomainFlagBits::eAny) {
-				dst_use.domain = src_use.domain;
-			}
-
-			barrier.srcQueueFamilyIndex = src_use.queue_family_index;
-			if (dst_use.domain & DomainFlagBits::eDevice) {
-				barrier.dstQueueFamilyIndex = dst_use.queue_family_index;
-			} else {
-				barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-				barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			if (dst_domain == DomainFlagBits::eAny) {
+				dst_domain = src_domain;
 			}
 
-			if (src_use.queue_family_index == dst_use.queue_family_index) {
-				barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-				barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			if (src_use.stream && dst_use.stream && src_use.stream != dst_use.stream) { // cross-stream
+				if (src_use.stream->executor && src_use.stream->executor->type == Executor::Type::eVulkanDeviceQueue && dst_use.stream->executor &&
+				    dst_use.stream->executor->type == Executor::Type::eVulkanDeviceQueue) { // cross queue
+					auto src_queue = static_cast<rtvk::QueueExecutor*>(src_use.stream->executor);
+					auto dst_queue = static_cast<rtvk::QueueExecutor*>(dst_use.stream->executor);
+					if (src_queue->get_queue_family_index() != dst_queue->get_queue_family_index()) { // cross queue family
+						barrier.srcQueueFamilyIndex = src_queue->get_queue_family_index();
+						barrier.dstQueueFamilyIndex = dst_queue->get_queue_family_index();
+					}
+				}
 			}
 
 			if (src_use.stages == PipelineStageFlags{}) {
@@ -490,10 +494,10 @@ namespace vuk {
 
 			barrier.image = img_att.image.image;
 
-			if (dst_use.domain == DomainFlagBits::eNone) {
+			if (dst_domain == DomainFlagBits::eNone) {
 				barrier.pNext = tag;
 				half_im_bars.push_back(barrier);
-			} else if (src_use.domain == DomainFlagBits::eNone) {
+			} else if (src_domain == DomainFlagBits::eNone) {
 				auto it = std::find_if(half_im_bars.begin(), half_im_bars.end(), [=](auto& mb) { return mb.pNext == tag; });
 				assert(it != half_im_bars.end());
 				barrier.pNext = nullptr;
@@ -522,18 +526,21 @@ namespace vuk {
 			}
 		};
 
-		void synch_memory(QueueResourceUse src_use, QueueResourceUse dst_use, void* tag) {
+		void synch_memory(StreamResourceUse src_use, StreamResourceUse dst_use, void* tag) {
 			VkMemoryBarrier2KHR barrier{ .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2_KHR };
 
-			if (src_use.domain == DomainFlagBits::eAny || dst_use.domain == DomainFlagBits::eHost) {
-				src_use.domain = dst_use.domain;
+			DomainFlagBits src_domain = src_use.stream ? src_use.stream->domain : DomainFlagBits::eNone;
+			DomainFlagBits dst_domain = dst_use.stream ? dst_use.stream->domain : DomainFlagBits::eNone;
+
+			if (src_domain == DomainFlagBits::eAny || dst_domain == DomainFlagBits::eHost) {
+				src_domain = dst_domain;
 			}
-			if (dst_use.domain == DomainFlagBits::eAny) {
-				dst_use.domain = src_use.domain;
+			if (dst_domain == DomainFlagBits::eAny) {
+				dst_domain = src_domain;
 			}
 
-			scope_to_domain((VkPipelineStageFlagBits2KHR&)src_use.stages, src_use.domain & DomainFlagBits::eQueueMask);
-			scope_to_domain((VkPipelineStageFlagBits2KHR&)dst_use.stages, dst_use.domain & DomainFlagBits::eQueueMask);
+			scope_to_domain((VkPipelineStageFlagBits2KHR&)src_use.stages, src_domain & DomainFlagBits::eQueueMask);
+			scope_to_domain((VkPipelineStageFlagBits2KHR&)dst_use.stages, dst_domain & DomainFlagBits::eQueueMask);
 
 			barrier.srcAccessMask = is_read_access(src_use) ? 0 : (VkAccessFlags)src_use.access;
 			barrier.dstAccessMask = (VkAccessFlags)dst_use.access;
@@ -543,10 +550,10 @@ namespace vuk {
 				barrier.srcStageMask = (VkPipelineStageFlagBits2)PipelineStageFlagBits::eNone;
 				barrier.srcAccessMask = {};
 			}
-			if (dst_use.domain == DomainFlagBits::eNone) {
+			if (dst_domain == DomainFlagBits::eNone) {
 				barrier.pNext = tag;
 				half_mem_bars.push_back(barrier);
-			} else if (src_use.domain == DomainFlagBits::eNone) {
+			} else if (src_domain == DomainFlagBits::eNone) {
 				auto it = std::find_if(half_mem_bars.begin(), half_mem_bars.end(), [=](auto& mb) { return mb.pNext == tag; });
 				assert(it != half_mem_bars.end());
 				barrier.pNext = nullptr;
@@ -650,7 +657,9 @@ namespace vuk {
 	};
 
 	struct HostStream : Stream {
-		HostStream(Allocator alloc) : Stream(alloc, DomainFlagBits::eHost) {}
+		HostStream(Allocator alloc) : Stream(alloc, nullptr) {
+			domain = DomainFlagBits::eHost;
+		}
 
 		void add_dependency(Stream* dep) override {
 			dependencies.push_back(dep);
@@ -659,11 +668,11 @@ namespace vuk {
 			assert(false);
 		}
 
-		void synch_image(ImageAttachment& img_att, QueueResourceUse src_use, QueueResourceUse dst_use, void* tag) override {
+		void synch_image(ImageAttachment& img_att, StreamResourceUse src_use, StreamResourceUse dst_use, void* tag) override {
 			/* host -> host and host -> device not needed, device -> host inserts things on the device side */
 			return;
 		}
-		void synch_memory(QueueResourceUse src_use, QueueResourceUse dst_use, void* tag) override {
+		void synch_memory(StreamResourceUse src_use, StreamResourceUse dst_use, void* tag) override {
 			/* host -> host and host -> device not needed, device -> host inserts things on the device side */
 			return;
 		}
@@ -674,7 +683,9 @@ namespace vuk {
 	};
 
 	struct VkPEStream : Stream {
-		VkPEStream(Allocator alloc, Swapchain& swp) : Stream(alloc, DomainFlagBits::ePE), swp(&swp) {}
+		VkPEStream(Allocator alloc, Swapchain& swp) : Stream(alloc, nullptr), swp(&swp) {
+			domain = DomainFlagBits::ePE;
+		}
 		Swapchain* swp;
 
 		void add_dependency(Stream* dep) override {
@@ -684,9 +695,9 @@ namespace vuk {
 			assert(false);
 		}
 
-		void synch_image(ImageAttachment& img_att, QueueResourceUse src_use, QueueResourceUse dst_use, void* tag) override {}
+		void synch_image(ImageAttachment& img_att, StreamResourceUse src_use, StreamResourceUse dst_use, void* tag) override {}
 
-		void synch_memory(QueueResourceUse src_use, QueueResourceUse dst_use, void* tag) override { /* PE doesn't do memory */
+		void synch_memory(StreamResourceUse src_use, StreamResourceUse dst_use, void* tag) override { /* PE doesn't do memory */
 			assert(false);
 		}
 
@@ -816,55 +827,22 @@ namespace vuk {
 			auto& link = res_to_links[parm];
 			return get_value<T*>(parm)[index];
 		};
-	};
 
-	struct Recorder {
-		Recorder(Allocator alloc, ProfilingCallbacks* callbacks, std::vector<Ref>& pass_reads) :
-		    ctx(alloc.get_context()),
-		    alloc(alloc),
-		    callbacks(callbacks),
-		    pass_reads(pass_reads) {}
-		Context& ctx;
-		Allocator alloc;
-		ProfilingCallbacks* callbacks;
-		std::vector<Ref>& pass_reads;
-
-		std::unordered_map<DomainFlagBits, std::unique_ptr<Stream>> streams;
-
-		// start recording if needed
-		// all dependant domains flushed
-		// all pending sync to be flushed
-		void synchronize_stream(Stream* stream) {
-			stream->sync_deps();
+		Type* base_type(Ref parm) {
+			return Type::stripped(parm.type());
 		}
 
-		Stream* stream_for_domain(DomainFlagBits domain) {
-			return streams.at(domain).get();
-		}
-
-		void flush_domain(vuk::DomainFlagBits domain, Signal* signal) {
-			auto& stream = streams.at(domain);
-
-			stream->submit(signal);
+		struct DependencyInfo {
+			StreamResourceUse src_use;
+			StreamResourceUse dst_use;
 		};
 
-		std::pair<Access, Access> add_sync(ChainLink& link,
-		                                   RW type,
-		                                   Ref parm,
-		                                   Type* arg_ty,
-		                                   void* value,
-		                                   Stream* src_stream,
-		                                   Stream* dst_stream,
-		                                   Access src_access = Access::eNone,
-		                                   Access dst_access = Access::eNone) {
+		DependencyInfo
+		get_dependency_info(Ref parm, Type* arg_ty, RW type, Stream* dst_stream, Access src_access = Access::eNone, Access dst_access = Access::eNone) {
 			auto parm_ty = parm.type();
+			auto& link = res_to_links[parm];
 
-			DomainFlagBits src_domain = src_stream ? src_stream->domain : DomainFlagBits::eNone;
-			DomainFlagBits dst_domain = dst_stream ? dst_stream->domain : DomainFlagBits::eNone;
-
-			Type* base_ty = Type::stripped(arg_ty);
-
-			QueueResourceUse src_use = { .domain = src_domain };
+			StreamResourceUse src_use = {};
 			bool sync_against_def = type == RW::eRead || link.reads.size() == 0; // def -> *, src = def
 			if (sync_against_def) {
 				if (arg_ty->kind == Type::IMBUED_TY) {
@@ -892,18 +870,18 @@ namespace vuk {
 				} else {
 					/* no src access */
 				}
-				src_use = to_use(src_access, src_domain);
+				src_use = { to_use(src_access), executed.at(parm.node).stream };
 			} else {                       // read* -> undef, src = reads
 				if (link.reads.size() > 0) { // we need to emit: def -> reads, RAW or nothing (before first read)
 					// to avoid R->R deps, we emit a single dep for all the reads
 					// for this we compute a merged layout (TRANSFER_SRC_OPTIMAL / READ_ONLY_OPTIMAL / GENERAL)
-					QueueResourceUse use;
+					ResourceUse use;
 					auto reads = link.reads.to_span(pass_reads);
 
 					bool need_read_only = false;
 					bool need_transfer = false;
 					bool need_general = false;
-					src_use.domain = DomainFlagBits::eNone;
+					src_use.stream = nullptr;
 					src_use.layout = ImageLayout::eReadOnlyOptimalKHR;
 					for (int read_idx = 0; read_idx < reads.size(); read_idx++) {
 						auto& r = reads[read_idx];
@@ -940,11 +918,11 @@ namespace vuk {
 							/* no src access */
 						}
 
-						auto use = to_use(dst_access, dst_domain);
-						if (use.domain == DomainFlagBits::eNone) {
-							use.domain = src_use.domain;
-						} else if (use.domain != src_use.domain && src_use.domain != DomainFlagBits::eNone) {
-							// there are multiple domains in this read group
+						StreamResourceUse use = { to_use(src_access), executed.at(parm.node).stream };
+						if (use.stream == nullptr) {
+							use.stream = src_use.stream;
+						} else if (use.stream != src_use.stream && src_use.stream) {
+							// there are multiple stream in this read group
 							// this is okay - but in this case we can't synchronize against all of them together
 							// so we synchronize against them individually by setting last use and ending the read gather
 							assert(false); // we should've handled this by now
@@ -962,6 +940,7 @@ namespace vuk {
 
 						src_use.access |= use.access;
 						src_use.stages |= use.stages;
+						src_use.stream = use.stream;
 					}
 
 					// compute barrier and waits for the merged reads
@@ -976,25 +955,25 @@ namespace vuk {
 				}
 			}
 
-			QueueResourceUse dst_use = { .domain = dst_domain };
+			StreamResourceUse dst_use = {};
 			if (type == RW::eWrite) { // * -> undef, dst = undef
 				if (arg_ty->kind == Type::IMBUED_TY) {
 					dst_access = arg_ty->imbued.access;
 				} else {
 					/* no dst access */
 				}
-				dst_use = to_use(dst_access, dst_domain);
+				dst_use = { to_use(dst_access), dst_stream };
 			} else if (type == RW::eRead) { // def -> read, dst = sum(read)
 				if (link.reads.size() > 0) {  // we need to emit: def -> reads, RAW or nothing (before first read)
 					// to avoid R->R deps, we emit a single dep for all the reads
 					// for this we compute a merged layout (TRANSFER_SRC_OPTIMAL / READ_ONLY_OPTIMAL / GENERAL)
-					QueueResourceUse use;
+					ResourceUse use;
 					auto reads = link.reads.to_span(pass_reads);
 
- 					bool need_read_only = false;
+					bool need_read_only = false;
 					bool need_transfer = false;
 					bool need_general = false;
-					dst_use.domain = dst_domain;
+					dst_use.stream = nullptr;
 					dst_use.layout = ImageLayout::eReadOnlyOptimalKHR;
 					for (int read_idx = 0; read_idx < reads.size(); read_idx++) {
 						auto& r = reads[read_idx];
@@ -1011,11 +990,11 @@ namespace vuk {
 							assert(0);
 						}
 
-						auto use = to_use(dst_access, dst_domain);
-						if (use.domain == DomainFlagBits::eNone) {
-							use.domain = dst_use.domain;
-						} else if (use.domain != dst_use.domain && dst_use.domain != DomainFlagBits::eNone) {
-							// there are multiple domains in this read group
+						StreamResourceUse use = { to_use(dst_access), dst_stream };
+						if (use.stream == nullptr) {
+							use.stream = dst_use.stream;
+						} else if (use.stream != dst_use.stream && dst_use.stream) {
+							// there are multiple stream in this read group
 							// this is okay - but in this case we can't synchronize against all of them together
 							// so we synchronize against them individually by setting last use and ending the read gather
 							assert(false); // we should've handled this by now
@@ -1033,6 +1012,7 @@ namespace vuk {
 
 						dst_use.access |= use.access;
 						dst_use.stages |= use.stages;
+						dst_use.stream = use.stream;
 					}
 
 					// compute barrier and waits for the merged reads
@@ -1046,11 +1026,49 @@ namespace vuk {
 					}
 				}
 			}
+			return { src_use, dst_use };
+		}
+	};
 
-			bool has_src = src_domain != DomainFlagBits::eNone;
-			bool has_dst = dst_domain != DomainFlagBits::eNone;
+	struct Recorder {
+		Recorder(Allocator alloc, ProfilingCallbacks* callbacks, std::vector<Ref>& pass_reads) :
+		    ctx(alloc.get_context()),
+		    alloc(alloc),
+		    callbacks(callbacks),
+		    pass_reads(pass_reads) {}
+		Context& ctx;
+		Allocator alloc;
+		ProfilingCallbacks* callbacks;
+		std::vector<Ref>& pass_reads;
+
+		std::unordered_map<DomainFlagBits, std::unique_ptr<Stream>> streams;
+
+		// start recording if needed
+		// all dependant domains flushed
+		// all pending sync to be flushed
+		void synchronize_stream(Stream* stream) {
+			stream->sync_deps();
+		}
+
+		Stream* stream_for_domain(DomainFlagBits domain) {
+			return streams.at(domain).get();
+		}
+
+		void flush_domain(vuk::DomainFlagBits domain, Signal* signal) {
+			auto& stream = streams.at(domain);
+
+			stream->submit(signal);
+		};
+
+		void add_sync(Type* base_ty, Scheduler::DependencyInfo di, void* value) {
+			StreamResourceUse src_use = di.src_use;
+			StreamResourceUse dst_use = di.dst_use;
+			auto src_stream = src_use.stream;
+			auto dst_stream = dst_use.stream;
+			bool has_src = src_stream;
+			bool has_dst = dst_stream;
 			bool has_both = has_src && has_dst;
-			bool cross = has_both && (src_domain != dst_domain);
+			bool cross = has_both && (src_stream != dst_stream);
 			bool only_src = has_src && !has_dst;
 
 			if (cross) {
@@ -1101,7 +1119,6 @@ namespace vuk {
 			} else {
 				assert(0);
 			}
-			return { src_access, dst_access };
 		}
 	};
 
@@ -1216,6 +1233,7 @@ namespace vuk {
 					attachment.extent.extent.width = constant<uint32_t>(node->valloc.args[1]);
 					attachment.extent.extent.height = constant<uint32_t>(node->valloc.args[2]);
 					attachment.extent.extent.depth = constant<uint32_t>(node->valloc.args[3]);
+					attachment.extent.sizing = Sizing::eAbsolute;
 					attachment.format = constant<Format>(node->valloc.args[4]);
 					attachment.sample_count = constant<Samples>(node->valloc.args[5]);
 					attachment.base_layer = constant<uint32_t>(node->valloc.args[6]);
@@ -1256,7 +1274,7 @@ namespace vuk {
 						auto& parm = node->aalloc.args[i];
 						auto& link = impl->res_to_links[parm];
 
-						recorder.add_sync(link, RW::eWrite, parm, arg_ty, sched.get_value(parm), sched.executed.at(parm.node).stream, nullptr);
+						recorder.add_sync(sched.base_type(parm), sched.get_dependency_info(parm, arg_ty, RW::eWrite, nullptr), sched.get_value(parm));
 					}
 
 #ifdef VUK_DUMP_EXEC
@@ -1330,7 +1348,7 @@ namespace vuk {
 							auto access = arg_ty->imbued.access;
 							// Write and ReadWrite
 							RW sync_access = (is_write_access(access) || access == Access::eConsume) ? RW::eWrite : RW::eRead;
-							recorder.add_sync(link, sync_access, parm, arg_ty, value, sched.executed.at(parm.node).stream, dst_stream);
+							recorder.add_sync(sched.base_type(parm), sched.get_dependency_info(parm, arg_ty, sync_access, dst_stream), sched.get_value(parm));
 						} else {
 							assert(0);
 						}
@@ -1416,8 +1434,8 @@ namespace vuk {
 					DomainFlagBits dst_domain = dst_stream->domain;
 
 					Type* parm_ty = parm.type();
-					auto [src_access, dst_access] =
-					    recorder.add_sync(link, RW::eWrite, parm, parm_ty, sched.get_value(parm), src_stream, dst_stream, Access::eNone, node->release.dst_access);
+					auto di = sched.get_dependency_info(parm, parm_ty, RW::eWrite, dst_stream, Access::eNone, node->release.dst_access);
+					recorder.add_sync(sched.base_type(parm), di, sched.get_value(parm));
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
 					fmt::print("release ${}->${} ", domain_to_string(src_domain), domain_to_string(node->release.dst_domain));
@@ -1425,7 +1443,7 @@ namespace vuk {
 					fmt::print("\n");
 #endif
 					auto& acqrel = node->release.release;
-					acqrel->last_use = src_access;
+					acqrel->last_use = di.src_use;
 					if (src_domain == DomainFlagBits::eHost) {
 						acqrel->status = Signal::Status::eHostAvailable;
 					}
@@ -1479,8 +1497,10 @@ namespace vuk {
 					for (auto i = 0; i < size; i++) {
 						bufs.push_back(&sched.get_value<Buffer>(link.urdef.node->aalloc.args[i + 1]));
 					}
-					recorder.add_sync(
-					    link, RW::eWrite, node->indexing.array, node->indexing.array.type(), bufs.data(), sched.executed.at(node->indexing.array.node).stream, nullptr);
+
+					recorder.add_sync(sched.base_type(node->indexing.array),
+					                  sched.get_dependency_info(node->indexing.array, node->indexing.array.type(), RW::eWrite, nullptr),
+					                  bufs.data());
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
 					fmt::print(" = ");
@@ -1520,19 +1540,6 @@ namespace vuk {
 		      } else {
 		        ia.view_type = ImageViewType::e2D;
 		      }
-		    }
-
-		    ia.level_count = 1; // can only render to a single mip level
-		    ia.extent.extent.depth = 1;
-
-		    // we do an initial IA -> FB, because we won't process complete IAs later, but we need their info
-		    if (ia.sample_count != Samples::eInfer && !rp_att.is_resolve_dst) {
-		      rp.fbci.sample_count = ia.sample_count;
-		    }
-
-		    if (ia.extent.sizing == Sizing::eAbsolute && ia.extent.extent.width > 0 && ia.extent.extent.height > 0) {
-		      rp.fbci.width = ia.extent.extent.width;
-		      rp.fbci.height = ia.extent.extent.height;
 		    }
 
 		    ia.level_count = 1; // can only render to a single mip level

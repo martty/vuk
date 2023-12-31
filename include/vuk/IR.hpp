@@ -30,7 +30,7 @@ namespace vuk {
 	};
 
 	struct AcquireRelease : Signal {
-		Access last_use; // last access performed on resource before signalling
+		ResourceUse last_use; // last access performed on resource before signalling
 	};
 
 	struct TypeDebugInfo {
