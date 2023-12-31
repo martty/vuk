@@ -40,12 +40,12 @@ namespace vuk {
 		return ImageLayout::eGeneral;
 	}
 
-	inline QueueResourceUse to_use(Access ia, DomainFlags domain) {
+	inline ResourceUse to_use(Access ia) {
 		constexpr uint64_t color_read = eColorResolveRead | eColorRead;
 		constexpr uint64_t color_write = eColorResolveWrite | eColorWrite;
 		constexpr uint64_t color_rw = color_read | color_write;
 
-		QueueResourceUse qr{};
+		ResourceUse qr{};
 		if (ia & color_read) {
 			qr.access |= AccessFlagBits::eColorAttachmentRead;
 		}
@@ -167,7 +167,6 @@ namespace vuk {
 			qr.layout = ImageLayout::ePresentSrcKHR;
 		}
 
-		qr.domain = domain;
 		return qr;
 	}
 
@@ -207,7 +206,7 @@ namespace vuk {
 		}
 	}
 
-	inline bool is_framebuffer_attachment(QueueResourceUse u) {
+	inline bool is_framebuffer_attachment(ResourceUse u) {
 		switch (u.layout) {
 		case vuk::ImageLayout::eAttachmentOptimal:
 			return true;
@@ -216,7 +215,7 @@ namespace vuk {
 		}
 	}
 
-	inline bool is_write_access(QueueResourceUse u) {
+	inline bool is_write_access(ResourceUse u) {
 		if (u.access == vuk::AccessFlagBits{})
 			return false;
 		if (u.access & vuk::AccessFlagBits::eColorAttachmentWrite)
@@ -236,7 +235,7 @@ namespace vuk {
 		return false;
 	}
 
-	inline bool is_read_access(QueueResourceUse u) {
+	inline bool is_read_access(ResourceUse u) {
 		if (u.access == vuk::AccessFlagBits{})
 			return false;
 		return !is_write_access(u);
@@ -255,7 +254,7 @@ namespace vuk {
 	}
 
 	struct Acquire {
-		QueueResourceUse src_use;
+		ResourceUse src_use;
 		DomainFlagBits initial_domain = DomainFlagBits::eAny;
 		uint64_t initial_visibility;
 		bool unsynchronized = false;
@@ -298,7 +297,7 @@ namespace vuk {
 
 		VkAttachmentDescription description = {};
 
-		QueueResourceUse initial, final;
+		ResourceUse initial, final;
 
 		std::optional<Clear> clear_value;
 

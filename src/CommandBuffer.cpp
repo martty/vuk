@@ -737,8 +737,8 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::memory_barrier(Access src_access, Access dst_access) {
 		VkMemoryBarrier mb{ .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER };
-		auto src_use = to_use(src_access, DomainFlagBits::eAny);
-		auto dst_use = to_use(dst_access, DomainFlagBits::eAny);
+		auto src_use = to_use(src_access);
+		auto dst_use = to_use(dst_access);
 		mb.srcAccessMask = is_read_access(src_use) ? 0 : (VkAccessFlags)src_use.access;
 		mb.dstAccessMask = (VkAccessFlags)dst_use.access;
 		ctx.vkCmdPipelineBarrier(command_buffer, (VkPipelineStageFlags)src_use.stages, (VkPipelineStageFlags)dst_use.stages, {}, 1, &mb, 0, nullptr, 0, nullptr);
@@ -758,8 +758,8 @@ namespace vuk {
 		isr.levelCount = level_count;
 		VkImageMemoryBarrier imb{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
 		imb.image = src.image.image;
-		auto src_use = to_use(src_acc, DomainFlagBits::eAny);
-		auto dst_use = to_use(dst_acc, DomainFlagBits::eAny);
+		auto src_use = to_use(src_acc);
+		auto dst_use = to_use(dst_acc);
 		imb.srcAccessMask = (VkAccessFlags)src_use.access;
 		imb.dstAccessMask = (VkAccessFlags)dst_use.access;
 
@@ -1411,7 +1411,7 @@ namespace vuk {
 
 				if (depth_stencil_state->depthBoundsTestEnable) {
 					GraphicsPipelineInstanceCreateInfo::DepthBounds dps = { .minDepthBounds = depth_stencil_state->minDepthBounds,
-					                                                        .maxDepthBounds = depth_stencil_state->maxDepthBounds };
+						                                                      .maxDepthBounds = depth_stencil_state->maxDepthBounds };
 					write(data_ptr, dps);
 				}
 			}

@@ -53,17 +53,18 @@ namespace vuk {
 	using DefUseMap = std::unordered_map<Ref, ChainLink>;
 
 	struct Stream {
-		Stream(Allocator alloc, DomainFlagBits domain) : alloc(alloc), domain(domain) {}
+		Stream(Allocator alloc, Executor* executor) : alloc(alloc), executor(executor) {}
 		virtual ~Stream() {}
 		Allocator alloc;
-		std::vector<Stream*> dependencies;
+		Executor* executor = nullptr;
 		DomainFlagBits domain;
+		std::vector<Stream*> dependencies;
 
 		virtual void add_dependency(Stream* dep) = 0;
 		virtual void sync_deps() = 0;
 
-		virtual void synch_image(ImageAttachment& img_att, QueueResourceUse src_use, QueueResourceUse dst_use, void* tag) = 0;
-		virtual void synch_memory(QueueResourceUse src_use, QueueResourceUse dst_use, void* tag) = 0;
+		virtual void synch_image(ImageAttachment& img_att, StreamResourceUse src_use, StreamResourceUse dst_use, void* tag) = 0;
+		virtual void synch_memory(StreamResourceUse src_use, StreamResourceUse dst_use, void* tag) = 0;
 
 		struct SubmitResult {
 			Signal* signal = nullptr;
