@@ -313,9 +313,15 @@ namespace vuk {
 			names[ref.index] = name;
 		}
 
-		Ref make_constant(uint64_t value) {
-			auto u64_ty = new Type*(u64());
-			return first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ u64_ty, 1 }, .constant = { .value = new uint64_t(value) } }));
+		template<class T>
+		Ref make_constant(T value) {
+			Type** ty;
+			if constexpr (std::is_same_v<T, uint64_t>) {
+				ty = new Type*(u64());
+			} else {
+				ty = new Type*(emplace_type(Type{ .kind = Type::MEMORY_TY }));
+			}
+			return first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ ty, 1 }, .constant = { .value = new T(value) } }));
 		}
 
 		Ref make_declare_image(ImageAttachment value) {
