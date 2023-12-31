@@ -19,35 +19,6 @@ namespace vuk {
 		VkFramebuffer framebuffer;
 	};
 
-	using IARule = std::function<void(const struct InferenceContext&, ImageAttachment&)>;
-	using BufferRule = std::function<void(const struct InferenceContext&, Buffer&)>;
-
-	struct IAInference {
-		QualifiedName resource;
-		IARule rule;
-	};
-
-	struct IAInferences {
-		Name prefix;
-		std::vector<IARule> rules;
-	};
-
-	struct BufferInference {
-		QualifiedName resource;
-		BufferRule rule;
-	};
-
-	struct BufferInferences {
-		Name prefix;
-		std::vector<BufferRule> rules;
-	};
-
-	struct Release {
-		Access original;
-		QueueResourceUse dst_use;
-		FutureControlBlock* signal = nullptr;
-	};
-
 #define INIT(x) x(decltype(x)::allocator_type(*arena_))
 
 	using DefUseMap = std::unordered_map<Ref, ChainLink>;
@@ -123,9 +94,6 @@ namespace vuk {
 		std::vector<ChainLink*> attachment_use_chain_references;
 		std::vector<RenderPassInfo*> attachment_rp_references;
 
-		std::unordered_map<QualifiedName, IAInferences> ia_inference_rules;
-		std::unordered_map<QualifiedName, BufferInferences> buf_inference_rules;
-
 		std::vector<RenderPassInfo, short_alloc<RenderPassInfo, 64>> rpis;
 		std::span<ScheduledItem*> transfer_passes, compute_passes, graphics_passes;
 
@@ -137,13 +105,6 @@ namespace vuk {
 		std::vector<ChainLink**> conv_subchains;
 		Result<void> relink_subchains();
 		Result<void> fix_subchains();
-
-		static VkImageMemoryBarrier2KHR emit_image_barrier(QueueResourceUse last_use,
-		                                                   QueueResourceUse current_use,
-		                                                   const Subrange::Image& subrange,
-		                                                   ImageAspectFlags aspect,
-		                                                   bool is_release = false);
-		static VkMemoryBarrier2KHR emit_memory_barrier(QueueResourceUse last_use, QueueResourceUse current_use);
 
 		// opt passes
 		Result<void> merge_rps();

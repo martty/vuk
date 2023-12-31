@@ -75,6 +75,7 @@ namespace vuk {
 				switch (node.kind) {
 				case Node::NOP:
 				case Node::CONSTANT:
+				case Node::PLACEHOLDER:
 					break;
 				case Node::VALLOC:
 					res_to_links[first(&node)].def = first(&node);
@@ -180,6 +181,123 @@ namespace vuk {
 						l->urdef = link.urdef;
 						l = l->next;
 					} while (l);
+				}
+			}
+		}
+
+		// TODO: move this
+		// inference
+
+		auto is_placeholder = [](Ref r) {
+			return r.node->kind == Node::PLACEHOLDER;
+		};
+
+		auto placeholder_to_constant = []<class T>(Ref r, T value) {
+			r.node->kind = Node::CONSTANT;
+			r.node->constant.value = new T(value);
+		};
+
+		auto placeholder_to_ptr = []<class T>(Ref r, T* ptr) {
+			r.node->kind = Node::CONSTANT;
+			r.node->constant.value = ptr;
+		};
+
+		// valloc reification - if there were later setting of fields, then remove placeholders
+		for (auto& rg : rgs) {
+			for (auto& node : rg->op_arena) {
+				switch (node.kind) {
+				case Node::VALLOC:
+					auto args_ptr = node.valloc.args.data();
+					if (node.type[0]->is_image()) {
+						auto ptr = &constant<ImageAttachment>(args_ptr[0]);
+						auto& value = constant<ImageAttachment>(args_ptr[0]);
+						if (value.extent.extent.width > 0) {
+							placeholder_to_ptr(args_ptr[1], &ptr->extent.extent.width);
+						}
+						if (value.extent.extent.height > 0) {
+							placeholder_to_ptr(args_ptr[2], &ptr->extent.extent.height);
+						}
+						if (value.extent.extent.depth > 0) {
+							placeholder_to_ptr(args_ptr[3], &ptr->extent.extent.depth);
+						}
+						if (value.format != Format::eUndefined) {
+							placeholder_to_ptr(args_ptr[4], &ptr->format);
+						}
+						if (value.sample_count != Samples::eInfer) {
+							placeholder_to_ptr(args_ptr[5], &ptr->sample_count);
+						}
+						if (value.base_layer != VK_REMAINING_ARRAY_LAYERS) {
+							placeholder_to_ptr(args_ptr[6], &ptr->base_layer);
+						}
+						if (value.layer_count != VK_REMAINING_ARRAY_LAYERS) {
+							placeholder_to_ptr(args_ptr[7], &ptr->layer_count);
+						}
+						if (value.base_level != VK_REMAINING_MIP_LEVELS) {
+							placeholder_to_ptr(args_ptr[8], &ptr->base_level);
+						}
+						if (value.level_count != VK_REMAINING_MIP_LEVELS) {
+							placeholder_to_ptr(args_ptr[9], &ptr->level_count);
+						}
+					} else if (node.type[0]->is_buffer()) {
+						auto ptr = &constant<Buffer>(args_ptr[0]);
+						auto& value = constant<Buffer>(args_ptr[0]);
+						if (value.size != ~(0u)) {
+							placeholder_to_ptr(args_ptr[1], &ptr->size);
+						}
+					}
+				}
+			}
+		}
+
+		for (auto& rg : rgs) {
+			for (auto& node : rg->op_arena) {
+				switch (node.kind) {
+				case Node::CALL:
+					// args
+					std::optional<Extent2D> extent;
+					std::optional<Samples> samples;
+					std::optional<uint32_t> layer_count;
+					for (size_t i = 0; i < node.call.args.size(); i++) {
+						auto& arg_ty = node.call.fn.type()->opaque_fn.args[i];
+						auto& parm = node.call.args[i];
+						if (arg_ty->kind == Type::IMBUED_TY) {
+							auto access = arg_ty->imbued.access;
+							if (is_framebuffer_attachment(access)) {
+								auto& link = res_to_links[parm];
+								auto& args = link.urdef.node->valloc.args;
+								auto& value = constant<ImageAttachment>(args[0]);
+								if (is_placeholder(args[9])) {
+									placeholder_to_constant(args[9], 1U); // can only render to a single mip level
+								}
+								if (is_placeholder(args[3])) {
+									placeholder_to_constant(args[3], 1U); // depth must be 1
+								}
+								if (!samples && !is_placeholder(args[5])) { // known sample count
+									samples = constant<Samples>(args[5]);
+								} else if (samples && is_placeholder(args[5])) {
+									placeholder_to_constant(args[5], *samples);
+								}
+								if (!extent && !is_placeholder(args[1]) && !is_placeholder(args[2])) { // known extent2D
+									extent = Extent2D{ constant<uint32_t>(args[1]), constant<uint32_t>(args[2]) };
+								} else if (extent && is_placeholder(args[1]) && is_placeholder(args[2])) {
+									placeholder_to_constant(args[1], extent->width);
+									placeholder_to_constant(args[2], extent->height);
+								}
+								if (!layer_count && !is_placeholder(args[7])) { // known layer count
+									layer_count = constant<uint32_t>(args[7]);
+								} else if (layer_count && is_placeholder(args[7])) {
+									placeholder_to_constant(args[7], *layer_count);
+								}
+								if (constant<ImageAttachment>(args[0]).image.image == VK_NULL_HANDLE) { // if there is no image, we will use base layer 0 and base mip 0
+									placeholder_to_constant(args[6], 0U);
+									placeholder_to_constant(args[8], 0U);
+								}
+							}
+						} else {
+							assert(0);
+						}
+					}
+					break;
 				}
 			}
 		}
@@ -300,6 +418,7 @@ namespace vuk {
 				}
 			}
 		}
+
 		return { expected_value };
 	}
 
@@ -498,37 +617,6 @@ namespace vuk {
 	//
 	//}
 
-	std::string Compiler::dump_graph() {
-		std::stringstream ss;
-		/* ss << "digraph vuk {\n";
-		for (auto i = 0; i < impl->computed_passes.size(); i++) {
-		  for (auto j = 0; j < impl->computed_passes.size(); j++) {
-		    if (i == j)
-		      continue;
-		    auto& p1 = impl->computed_passes[i];
-		    auto& p2 = impl->computed_passes[j];
-		    for (auto& o : p1.output_names.to_span(impl->output_names)) {
-		      for (auto& i : p2.input_names.to_span(impl->input_names)) {
-		        if (o == impl->resolve_alias(i)) {
-		          ss << "\"" << p1.pass->name.c_str() << "\" -> \"" << p2.pass->name.c_str() << "\" [label=\"" << impl->resolve_alias(i).name.c_str() << "\"];\n";
-		          // p2 is ordered after p1
-		        }
-		      }
-		    }
-		    for (auto& o : p1.input_names.to_span(impl->input_names)) {
-		      for (auto& i : p2.write_input_names.to_span(impl->write_input_names)) {
-		        if (impl->resolve_alias(o) == impl->resolve_alias(i)) {
-		          ss << "\"" << p1.pass->name.c_str() << "\" -> \"" << p2.pass->name.c_str() << "\" [label=\"" << impl->resolve_alias(i).name.c_str() << "\"];\n";
-		          // p2 is ordered after p1
-		        }
-		      }
-		    }
-		  }
-		}
-		ss << "}\n";*/
-		return ss.str();
-	}
-
 	Compiler::Compiler() : impl(new RGCImpl) {}
 	Compiler::~Compiler() {
 		delete impl;
@@ -671,82 +759,6 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	IARule same_extent_as(Name n) {
-		return [=](const InferenceContext& ctx, ImageAttachment& ia) {
-			// ia.extent = ctx.get_image_attachment(n).extent;
-		};
-	}
-
-	IARule same_extent_as(Future<Image> inference_source) {
-		return [=](const InferenceContext& ctx, ImageAttachment& ia) {
-			// ia.extent = inference_source.attachment->extent;
-		};
-	}
-
-	IARule same_2D_extent_as(Name n) {
-		return [=](const InferenceContext& ctx, ImageAttachment& ia) {
-			/* auto& o = ctx.get_image_attachment(n);
-			ia.extent.sizing = o.extent.sizing;
-			ia.extent.extent.width = o.extent.extent.width;
-			ia.extent.extent.height = o.extent.extent.height;*/
-		};
-	}
-
-	IARule same_format_as(Name n) {
-		return [=](const InferenceContext& ctx, ImageAttachment& ia) {
-			// ia.format = ctx.get_image_attachment(n).format;
-		};
-	}
-
-	IARule same_shape_as(Name n) {
-		return [=](const InferenceContext& ctx, ImageAttachment& ia) {
-			/* auto& src = ctx.get_image_attachment(n);
-			if (src.base_layer != VK_REMAINING_ARRAY_LAYERS)
-			  ia.base_layer = src.base_layer;
-			if (src.layer_count != VK_REMAINING_ARRAY_LAYERS)
-			  ia.layer_count = src.layer_count;
-			if (src.base_level != VK_REMAINING_MIP_LEVELS)
-			  ia.base_level = src.base_level;
-			if (src.level_count != VK_REMAINING_MIP_LEVELS)
-			  ia.level_count = src.level_count;
-			if (src.extent.extent.width != 0 && src.extent.extent.height != 0)
-			  ia.extent = src.extent;
-			if (src.view_type != ImageViewType::eInfer)
-			  ia.view_type = src.view_type;*/
-		};
-	}
-
-	IARule similar_to(Name n) {
-		return [=](const InferenceContext& ctx, ImageAttachment& ia) {
-			/* auto& src = ctx.get_image_attachment(n);
-			if (src.base_layer != VK_REMAINING_ARRAY_LAYERS)
-			  ia.base_layer = src.base_layer;
-			if (src.layer_count != VK_REMAINING_ARRAY_LAYERS)
-			  ia.layer_count = src.layer_count;
-			if (src.base_level != VK_REMAINING_MIP_LEVELS)
-			  ia.base_level = src.base_level;
-			if (src.level_count != VK_REMAINING_MIP_LEVELS)
-			  ia.level_count = src.level_count;
-			if (src.extent.extent.width != 0 && src.extent.extent.height != 0)
-			  ia.extent = src.extent;
-			if (src.format != Format::eUndefined)
-			  ia.format = src.format;
-			if (src.sample_count != Samples::eInfer)
-			  ia.sample_count = src.sample_count;*/
-		};
-	}
-
-	BufferRule same_size_as(Name inference_source) {
-		return [=](const InferenceContext& ctx, Buffer& buf) {
-			/* auto& src = ctx.get_buffer(inference_source);
-			buf.size = src.size;*/
-		};
-	}
-
-	bool crosses_queue(QueueResourceUse last_use, QueueResourceUse current_use) {
-		return (last_use.domain != DomainFlagBits::eNone && last_use.domain != DomainFlagBits::eAny && current_use.domain != DomainFlagBits::eNone &&
-		        current_use.domain != DomainFlagBits::eAny && (last_use.domain & DomainFlagBits::eQueueMask) != (current_use.domain & DomainFlagBits::eQueueMask));
-	}
 	/*
 	Result<void> RGCImpl::generate_barriers_and_waits() {
 	#ifdef VUK_DUMP_USE
