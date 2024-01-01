@@ -85,7 +85,7 @@ namespace vuk {
 				case Node::AALLOC:
 					for (size_t i = 0; i < node.aalloc.args.size(); i++) {
 						auto& parm = node.aalloc.args[i];
-						res_to_links[parm].undef = &node;
+						res_to_links[parm].undef = { &node, i };
 					}
 
 					res_to_links[first(&node)].def = first(&node);
@@ -100,10 +100,10 @@ namespace vuk {
 						if (arg_ty->kind == Type::IMBUED_TY) {
 							auto access = arg_ty->imbued.access;
 							if (is_write_access(access) || access == Access::eConsume) { // Write and ReadWrite
-								res_to_links[parm].undef = &node;
+								res_to_links[parm].undef = { &node, i };
 							}
 							if (!is_write_access(access) && access != Access::eConsume) { // Read and ReadWrite
-								res_to_links[parm].reads.append(pass_reads, nth(&node, i));
+								res_to_links[parm].reads.append(pass_reads, { &node, i });
 							}
 						} else {
 							assert(0);
@@ -121,7 +121,7 @@ namespace vuk {
 					break;
 				}
 				case Node::RELEASE:
-					res_to_links[node.release.src].undef = &node;
+					res_to_links[node.release.src].undef = { &node, 0 };
 					break;
 
 				case Node::INDEXING:
@@ -132,13 +132,6 @@ namespace vuk {
 				case Node::ACQUIRE_NEXT_IMAGE:
 					res_to_links[first(&node)].def = first(&node);
 					res_to_links[first(&node)].type = first(&node).type();
-					break;
-
-				case Node::PRESENT:
-					res_to_links[node.present.src].undef = &node;
-					res_to_links[{ &node, 0 }].def = { &node, 0 };
-					res_to_links[node.present.src].next = &res_to_links[{ &node, 0 }];
-					res_to_links[{ &node, 0 }].prev = &res_to_links[node.present.src];
 					break;
 
 				default:
@@ -379,9 +372,9 @@ namespace vuk {
 		std::vector<uint8_t> adjacency_matrix(size * size);
 
 		for (auto& [ref, link] : res_to_links) {
-			if (link.undef && node_to_schedule.count(link.undef) && node_to_schedule.count(link.def.node)) {
-				indegrees[node_to_schedule[link.undef]]++;
-				adjacency_matrix[node_to_schedule[link.def.node] * size + node_to_schedule[link.undef]]++; // def -> undef
+			if (link.undef && node_to_schedule.count(link.undef.node) && node_to_schedule.count(link.def.node)) {
+				indegrees[node_to_schedule[link.undef.node]]++;
+				adjacency_matrix[node_to_schedule[link.def.node] * size + node_to_schedule[link.undef.node]]++; // def -> undef
 			}
 			for (auto& read : link.reads.to_span(pass_reads)) {
 				if (!node_to_schedule.count(read.node)) {
@@ -393,9 +386,9 @@ namespace vuk {
 					adjacency_matrix[node_to_schedule[link.def.node] * size + node_to_schedule[read.node]]++; // def -> read
 				}
 
-				if (link.undef && node_to_schedule.count(link.undef)) {
-					indegrees[node_to_schedule[link.undef]]++;
-					adjacency_matrix[node_to_schedule[read.node] * size + node_to_schedule[link.undef]]++; // read -> undef
+				if (link.undef && node_to_schedule.count(link.undef.node)) {
+					indegrees[node_to_schedule[link.undef.node]]++;
+					adjacency_matrix[node_to_schedule[read.node] * size + node_to_schedule[link.undef.node]]++; // read -> undef
 				}
 			}
 		}
@@ -660,7 +653,7 @@ namespace vuk {
 					propagate_domain(r.node);
 				}
 				if (chain->undef) {
-					propagate_domain(chain->undef);
+					propagate_domain(chain->undef.node);
 				}
 			}
 		}
@@ -675,7 +668,7 @@ namespace vuk {
 				;
 			for (; chain != nullptr; chain = chain->prev) {
 				if (chain->undef) {
-					propagate_domain(chain->undef);
+					propagate_domain(chain->undef.node);
 				}
 				for (auto& r : chain->reads.to_span(impl->pass_reads)) {
 					propagate_domain(r.node);
@@ -1462,49 +1455,70 @@ namespace vuk {
 
 	ImageUsageFlags RGCImpl::compute_usage(const ChainLink* head) {
 		ImageUsageFlags usage = {};
+		constexpr auto access_to_usage = [](ImageUsageFlags& usage, Access acc) {
+			if (acc & (eMemoryRW | eColorResolveRead | eColorResolveWrite | eColorRW)) {
+				usage |= ImageUsageFlagBits::eColorAttachment;
+			}
+			if (acc & (eMemoryRW | eFragmentSampled | eComputeSampled | eRayTracingSampled | eVertexSampled)) {
+				usage |= ImageUsageFlagBits::eSampled;
+			}
+			if (acc & (eMemoryRW | eDepthStencilRW)) {
+				usage |= ImageUsageFlagBits::eDepthStencilAttachment;
+			}
+			if (acc & (eMemoryRW | eTransferRead)) {
+				usage |= ImageUsageFlagBits::eTransferSrc;
+			}
+			if (acc & (eMemoryRW | eTransferWrite | eClear)) {
+				usage |= ImageUsageFlagBits::eTransferDst;
+			}
+			if (acc & (eMemoryRW | eFragmentRW | eComputeRW | eRayTracingRW)) {
+				usage |= ImageUsageFlagBits::eStorage;
+			}
+		};
+
+		for (auto chain = head; chain != nullptr; chain = chain->next) {
+			Access ia = Access::eNone;
+			auto use_to_usage = [&usage](Node* node) {
+				switch (node->kind) {
+				case Node::CALL: {
+					for (size_t i = 0; i < node->call.args.size(); i++) {
+						auto& arg_ty = node->call.fn.type()->opaque_fn.args[i];
+						auto& parm = node->call.args[i];
+						if (arg_ty->kind == Type::IMBUED_TY) {
+							auto access = arg_ty->imbued.access;
+							access_to_usage(usage, access);
+						}
+					}
+				}
+				}
+			};
+
+			for (auto& r : chain->reads.to_span(pass_reads)) {
+				switch (r.node->kind) {
+				case Node::CALL: {
+					auto& arg_ty = r.node->call.fn.type()->opaque_fn.args[r.index];
+					auto& parm = r.node->call.args[r.index];
+					if (arg_ty->kind == Type::IMBUED_TY) {
+						auto access = arg_ty->imbued.access;
+						access_to_usage(usage, access);
+					}
+				}
+				}
+			}
+			if (chain->undef) {
+				switch (chain->undef.node->kind) {
+				case Node::CALL: {
+					auto& arg_ty = chain->undef.node->call.fn.type()->opaque_fn.args[chain->undef.index];
+					auto& parm = chain->undef.node->call.args[chain->undef.index];
+					if (arg_ty->kind == Type::IMBUED_TY) {
+						auto access = arg_ty->imbued.access;
+						access_to_usage(usage, access);
+					}
+				}
+				}
+			}
+		}
+
 		return usage;
 	}
-	/*
-	constexpr auto access_to_usage = [](ImageUsageFlags& usage, Access acc) {
-	  if (acc & (eMemoryRW | eColorResolveRead | eColorResolveWrite | eColorRW)) {
-	    usage |= ImageUsageFlagBits::eColorAttachment;
-	  }
-	  if (acc & (eMemoryRW | eFragmentSampled | eComputeSampled | eRayTracingSampled | eVertexSampled)) {
-	    usage |= ImageUsageFlagBits::eSampled;
-	  }
-	  if (acc & (eMemoryRW | eDepthStencilRW)) {
-	    usage |= ImageUsageFlagBits::eDepthStencilAttachment;
-	  }
-	  if (acc & (eMemoryRW | eTransferRead)) {
-	    usage |= ImageUsageFlagBits::eTransferSrc;
-	  }
-	  if (acc & (eMemoryRW | eTransferWrite | eClear)) {
-	    usage |= ImageUsageFlagBits::eTransferDst;
-	  }
-	  if (acc & (eMemoryRW | eFragmentRW | eComputeRW | eRayTracingRW)) {
-	    usage |= ImageUsageFlagBits::eStorage;
-	  }
-	};
-
-	for (auto chain = head; chain != nullptr; chain = chain->next) {
-	  Access ia = Access::eNone;
-	  if (chain->def->pass >= 0) {
-	    ia = get_resource(*chain->def).ia;
-	    access_to_usage(usage, ia);
-	  }
-	  for (auto& r : chain->reads.to_span(pass_reads)) {
-	    ia = get_resource(r).ia;
-	    access_to_usage(usage, ia);
-	  }
-	  if (chain->undef && chain->undef->pass >= 0) {
-	    ia = get_resource(*chain->undef).ia;
-	    access_to_usage(usage, ia);
-	  } else if (chain->undef) {
-	    ia = get_release(chain->undef->pass).original;
-	    access_to_usage(usage, ia);
-	  }
-	}
-
-	return usage;
-	}*/
 } // namespace vuk

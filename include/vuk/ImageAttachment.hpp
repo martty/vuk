@@ -14,7 +14,7 @@ namespace vuk {
 		ImageCreateFlags image_flags = {};
 		ImageType image_type = ImageType::e2D;
 		ImageTiling tiling = ImageTiling::eOptimal;
-		ImageUsageFlags usage = ImageUsageFlagBits::eInfer;
+		ImageUsageFlags usage = {};
 		Dimension3D extent = Dimension3D::framebuffer();
 		Format format = Format::eUndefined;
 		Samples sample_count = Samples::eInfer;

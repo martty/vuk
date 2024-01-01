@@ -126,8 +126,15 @@ namespace vuk {
 		using UntypedFuture::UntypedFuture;
 
 		template<class U = T>
-		Future<U> transmute(Ref ref) noexcept {
-			head.node->release.src = ref;
+		Future<U> transmute(Ref new_head) noexcept {
+			head.node->release.src = new_head;
+			return *reinterpret_cast<Future<U>*>(this); // TODO: not cool
+		}
+
+		template<class U = T>
+		Future<U> transmute(Ref new_head, Ref new_def) noexcept {
+			head.node->release.src = new_head;
+			def = new_def;
 			return *reinterpret_cast<Future<U>*>(this); // TODO: not cool
 		}
 
@@ -158,27 +165,42 @@ namespace vuk {
 		void same_extent_as(const Future<ImageAttachment>& src)
 		  requires std::is_same_v<T, ImageAttachment>
 		{
-			assert(src.get_def().type()->is_image());
-			def.node->valloc.args[1] = src.get_def().node->valloc.args[1];
-			def.node->valloc.args[2] = src.get_def().node->valloc.args[2];
-			def.node->valloc.args[3] = src.get_def().node->valloc.args[3];
+			if (src.get_def().node->kind == Node::VALLOC) {
+				def.node->valloc.args[1] = src.get_def().node->valloc.args[1];
+				def.node->valloc.args[2] = src.get_def().node->valloc.args[2];
+				def.node->valloc.args[3] = src.get_def().node->valloc.args[3];
+			} else if (src.get_def().node->kind == Node::ACQUIRE_NEXT_IMAGE) {
+				Swapchain& swp = *reinterpret_cast<Swapchain*>(src.get_def().node->acquire_next_image.swapchain.node->valloc.args[0].node->constant.value);
+				def.node->valloc.args[1] = get_render_graph()->make_constant<uint32_t>(swp.images[0].extent.extent.width);
+				def.node->valloc.args[2] = get_render_graph()->make_constant<uint32_t>(swp.images[0].extent.extent.height);
+				def.node->valloc.args[3] = get_render_graph()->make_constant<uint32_t>(swp.images[0].extent.extent.depth);
+			}
 		}
 
 		/// @brief Inference target has the same width & height as the source
 		void same_2D_extent_as(const Future<ImageAttachment>& src)
 		  requires std::is_same_v<T, ImageAttachment>
 		{
-			assert(src.get_def().type()->is_image());
-			def.node->valloc.args[1] = src.get_def().node->valloc.args[1];
-			def.node->valloc.args[2] = src.get_def().node->valloc.args[2];
+			if (src.get_def().type()->is_image()) {
+				def.node->valloc.args[1] = src.get_def().node->valloc.args[1];
+				def.node->valloc.args[2] = src.get_def().node->valloc.args[2];
+			} else if (src.get_def().type()->kind == Type::SWAPCHAIN_TY) {
+				Swapchain& swp = *reinterpret_cast<Swapchain*>(src.get_def().node->acquire_next_image.swapchain.node->valloc.args[0].node->constant.value);
+				def.node->valloc.args[1] = get_render_graph()->make_constant<uint32_t>(swp.images[0].extent.extent.width);
+				def.node->valloc.args[2] = get_render_graph()->make_constant<uint32_t>(swp.images[0].extent.extent.height);
+			}
 		}
 
 		/// @brief Inference target has the same format as the source
 		void same_format_as(const Future<ImageAttachment>& src)
 		  requires std::is_same_v<T, ImageAttachment>
 		{
-			assert(src.get_def().type()->is_image());
-			def.node->valloc.args[4] = src.get_def().node->valloc.args[4];
+			if (src.get_def().type()->is_image()) {
+				def.node->valloc.args[4] = src.get_def().node->valloc.args[4];
+			} else if (src.get_def().type()->kind == Type::SWAPCHAIN_TY) {
+				Swapchain& swp = *reinterpret_cast<Swapchain*>(src.get_def().node->acquire_next_image.swapchain.node->valloc.args[0].node->constant.value);
+				def.node->valloc.args[4] = get_render_graph()->make_constant(swp.images[0].format);
+			}
 		}
 
 		/// @brief Inference target has the same shape(extent, layers, levels) as the source
@@ -186,8 +208,16 @@ namespace vuk {
 		  requires std::is_same_v<T, ImageAttachment>
 		{
 			same_extent_as(src);
-			for (auto i = 6; i < 10; i++) { /* 6 - 9 : layers, levels */
-				def.node->valloc.args[i] = src.get_def().node->valloc.args[i];
+			if (src.get_def().type()->is_image()) {
+				for (auto i = 6; i < 10; i++) { /* 6 - 9 : layers, levels */
+					def.node->valloc.args[i] = src.get_def().node->valloc.args[i];
+				}
+			} else if (src.get_def().type()->kind == Type::SWAPCHAIN_TY) {
+				Swapchain& swp = *reinterpret_cast<Swapchain*>(src.get_def().node->acquire_next_image.swapchain.node->valloc.args[0].node->constant.value);
+				def.node->valloc.args[6] = get_render_graph()->make_constant(swp.images[0].base_layer);
+				def.node->valloc.args[7] = get_render_graph()->make_constant(swp.images[0].layer_count);
+				def.node->valloc.args[8] = get_render_graph()->make_constant(swp.images[0].base_level);
+				def.node->valloc.args[9] = get_render_graph()->make_constant(swp.images[0].level_count);
 			}
 		}
 
@@ -197,7 +227,11 @@ namespace vuk {
 		{
 			same_shape_as(src);
 			same_format_as(src);
-			def.node->valloc.args[5] = src.get_def().node->valloc.args[5]; // sample count
+			if (src.get_def().type()->is_image()) {
+				def.node->valloc.args[5] = src.get_def().node->valloc.args[5]; // sample count
+			} else if (src.get_def().type()->kind == Type::SWAPCHAIN_TY) {
+				def.node->valloc.args[5] = get_render_graph()->make_constant(Samples::e1); // swapchain is always single-sample
+			}
 		}
 
 		// Buffer inferences

@@ -788,7 +788,9 @@ namespace vuk {
 		}
 
 		void done(Node* node, Stream* stream) {
-			executed.emplace(node, ExecutionInfo{ stream, naming_index_counter++ });
+			auto counter = naming_index_counter;
+			naming_index_counter += node->type.size();
+			executed.emplace(node, ExecutionInfo{ stream, counter });
 		}
 
 		template<class T>
@@ -1180,7 +1182,7 @@ namespace vuk {
 				if (node->debug_info) {
 					fmt::print("%{}", node->debug_info->result_names[i]);
 				} else {
-					fmt::print("%{}_{}", node->kind_to_sv(), sched.naming_index_counter);
+					fmt::print("%{}_{}", node->kind_to_sv(), sched.naming_index_counter + i);
 				}
 			}
 		};
@@ -1194,7 +1196,7 @@ namespace vuk {
 				if (parm.node->debug_info) {
 					fmt::print("%{}", parm.node->debug_info->result_names[parm.index]);
 				} else {
-					fmt::print("%{}_{}", parm.node->kind_to_sv(), sched.executed.at(parm.node).naming_index);
+					fmt::print("%{}_{}", parm.node->kind_to_sv(), sched.executed.at(parm.node).naming_index + parm.index);
 				}
 			}
 		};
@@ -1246,6 +1248,7 @@ namespace vuk {
 #endif
 					if (!attachment.image) {
 						auto allocator = node->valloc.allocator ? *node->valloc.allocator : alloc;
+						attachment.usage = impl->compute_usage(&impl->res_to_links[first(node)]);
 						assert(attachment.usage != ImageUsageFlags{});
 						auto img = allocate_image(allocator, attachment);
 						if (!img) {
@@ -1334,6 +1337,13 @@ namespace vuk {
 								auto urdef = link.urdef.node;
 								auto allocator = urdef->valloc.allocator ? *urdef->valloc.allocator : alloc;
 								auto& img_att = sched.get_value<ImageAttachment>(parm);
+								if (img_att.view_type == ImageViewType::eInfer) {// framebuffers need 2D or 2DArray views
+									if (img_att.layer_count > 1) {
+										img_att.view_type = ImageViewType::e2DArray;
+									} else {
+										img_att.view_type = ImageViewType::e2D;
+									}
+								}
 								if (img_att.image_view.payload == VK_NULL_HANDLE) {
 									auto iv = allocate_image_view(allocator, img_att); // TODO: dropping error
 									img_att.image_view = **iv;
