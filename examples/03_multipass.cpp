@@ -111,7 +111,7 @@ namespace {
 		      // but we will need to provide the format
 		      auto depth_img = vuk::declare_ia("03_depth");
 		      depth_img->format = vuk::Format::eD32Sfloat;
-		      depth_img = vuk::clear(depth_img, vuk::ClearDepthStencil{ 1.0f, 0 });
+		      depth_img = vuk::clear_image(depth_img, vuk::ClearDepthStencil{ 1.0f, 0 });
 
 		      return cube_pass(tl_tri(br_tri(std::move(target))), std::move(depth_img));
 		    },

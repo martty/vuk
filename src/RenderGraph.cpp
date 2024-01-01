@@ -269,33 +269,39 @@ namespace vuk {
 							auto access = arg_ty->imbued.access;
 							if (is_framebuffer_attachment(access)) {
 								auto& link = res_to_links[parm];
-								auto& args = link.urdef.node->valloc.args;
-								auto& value = constant<ImageAttachment>(args[0]);
-								if (is_placeholder(args[9])) {
-									placeholder_to_constant(args[9], 1U); // can only render to a single mip level
-								}
-								if (is_placeholder(args[3])) {
-									placeholder_to_constant(args[3], 1U); // depth must be 1
-								}
-								if (!samples && !is_placeholder(args[5])) { // known sample count
-									samples = constant<Samples>(args[5]);
-								} else if (samples && is_placeholder(args[5])) {
-									placeholder_to_constant(args[5], *samples);
-								}
-								if (!extent && !is_placeholder(args[1]) && !is_placeholder(args[2])) { // known extent2D
-									extent = Extent2D{ eval<uint32_t>(args[1]), eval<uint32_t>(args[2]) };
-								} else if (extent && is_placeholder(args[1]) && is_placeholder(args[2])) {
-									placeholder_to_constant(args[1], extent->width);
-									placeholder_to_constant(args[2], extent->height);
-								}
-								if (!layer_count && !is_placeholder(args[7])) { // known layer count
-									layer_count = eval<uint32_t>(args[7]);
-								} else if (layer_count && is_placeholder(args[7])) {
-									placeholder_to_constant(args[7], *layer_count);
-								}
-								if (constant<ImageAttachment>(args[0]).image.image == VK_NULL_HANDLE) { // if there is no image, we will use base layer 0 and base mip 0
-									placeholder_to_constant(args[6], 0U);
-									placeholder_to_constant(args[8], 0U);
+								if (link.urdef.node->kind == Node::VALLOC) {
+									auto& args = link.urdef.node->valloc.args;
+									if (is_placeholder(args[9])) {
+										placeholder_to_constant(args[9], 1U); // can only render to a single mip level
+									}
+									if (is_placeholder(args[3])) {
+										placeholder_to_constant(args[3], 1U); // depth must be 1
+									}
+									if (!samples && !is_placeholder(args[5])) { // known sample count
+										samples = constant<Samples>(args[5]);
+									} else if (samples && is_placeholder(args[5])) {
+										placeholder_to_constant(args[5], *samples);
+									}
+									if (!extent && !is_placeholder(args[1]) && !is_placeholder(args[2])) { // known extent2D
+										extent = Extent2D{ eval<uint32_t>(args[1]), eval<uint32_t>(args[2]) };
+									} else if (extent && is_placeholder(args[1]) && is_placeholder(args[2])) {
+										placeholder_to_constant(args[1], extent->width);
+										placeholder_to_constant(args[2], extent->height);
+									}
+									if (!layer_count && !is_placeholder(args[7])) { // known layer count
+										layer_count = eval<uint32_t>(args[7]);
+									} else if (layer_count && is_placeholder(args[7])) {
+										placeholder_to_constant(args[7], *layer_count);
+									}
+									if (constant<ImageAttachment>(args[0]).image.image == VK_NULL_HANDLE) { // if there is no image, we will use base layer 0 and base mip 0
+										placeholder_to_constant(args[6], 0U);
+										placeholder_to_constant(args[8], 0U);
+									}
+								} else if (link.urdef.node->kind == Node::ACQUIRE_NEXT_IMAGE) {
+									Swapchain& swp = *reinterpret_cast<Swapchain*>(link.urdef.node->acquire_next_image.swapchain.node->valloc.args[0].node->constant.value);
+									extent = Extent2D{ swp.images[0].extent.extent.width, swp.images[0].extent.extent.height };
+									layer_count = swp.images[0].layer_count;
+									samples = Samples::e1;
 								}
 							}
 						} else {
