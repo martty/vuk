@@ -13,7 +13,7 @@ namespace vuk {
 		Ref def;
 		RelSpan<Ref> reads;
 		Type* type;
-		Node* undef = nullptr;
+		Ref undef;
 		ChainLink* next = nullptr;        // if this links to a def, we link them together
 		ChainLink* destination = nullptr; // in subchains, this denotes the start of the converged chain
 		RelSpan<ChainLink*> child_chains;

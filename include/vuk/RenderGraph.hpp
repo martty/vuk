@@ -461,7 +461,7 @@ public:
 	if constexpr ((sizeof...(T)) > n) {                                                                                                                          \
 		auto& elem = std::get<n + 1>(tuple);                                                                                                                       \
 		elem.ptr = reinterpret_cast<decltype(elem.ptr)>(src[n]);                                                                                                   \
-		elem.def = *reinterpret_cast<Ref*>(meta[n]);                                                                                                                \
+		elem.def = *reinterpret_cast<Ref*>(meta[n]);                                                                                                               \
 	}
 		X(0)
 		X(1)
@@ -519,7 +519,7 @@ public:
 	static auto make_ret(std::shared_ptr<RG> rg, Node* node, const std::tuple<T...>& us) {
 		if constexpr (sizeof...(T) > 0) {
 			size_t i = 0;
-			return std::make_tuple(Future<typename T::type>{ rg, { node, i++ }, std::get<T>(us).def }...);
+			return std::tuple{ Future<typename T::type>{ rg, { node, sizeof...(T) - (++i) }, std::get<T>(us).def }... };
 		}
 	}
 
@@ -567,7 +567,7 @@ public:
 				}(args...);
 
 				std::vector<Type*> arg_types;
-				std::tuple arg_tuple_as_a = { T{ args.operator->(), args.get_head(), args.get_def() }... };
+				std::tuple arg_tuple_as_a = { T{ nullptr, args.get_head(), args.get_def() }... };
 				fill_arg_ty(rg, arg_tuple_as_a, arg_types);
 
 				std::vector<Type*> ret_types;
@@ -620,7 +620,7 @@ public:
 		std::array refs = { arg.get_head(), args.get_head()... };
 		std::array defs = { arg.get_def(), args.get_def()... };
 		arg.abandon();
-		( args.abandon(), ... );
+		(args.abandon(), ...);
 		Ref ref = rg->make_declare_array(Type::stripped(refs[0].type()), refs, defs);
 		rg->name_outputs(ref.node, { name.c_str() });
 		return { rg, ref, ref };
@@ -652,7 +652,7 @@ public:
 		auto& rg = in.get_render_graph();
 		Ref ref = rg->make_acquire_next_image(in.get_head());
 		rg->name_outputs(ref.node, { name.c_str() });
-		return std::move(std::move(in).transmute<ImageAttachment>(ref));
+		return std::move(std::move(in).transmute<ImageAttachment>(ref, ref));
 	}
 
 	[[nodiscard]] inline Future<void> enqueue_presentation(Future<ImageAttachment> in) {

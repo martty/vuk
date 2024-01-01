@@ -136,14 +136,15 @@ namespace {
 		      auto position_image = vuk::declare_ia("05_position");
 		      position_image->format = vuk::Format::eR16G16B16A16Sfloat;
 		      position_image->sample_count = vuk::Samples::e1;
-		      position_image = vuk::clear(position_image, vuk::ClearColor{ 1.f, 0.f, 0.f, 0.f });
+		      position_image->layer_count = 1;
+		      position_image = vuk::clear_image(std::move(position_image), vuk::ClearColor{ 1.f, 0.f, 0.f, 0.f });
 
-		      auto normal_image = vuk::clear(vuk::declare_ia("05_normal", { .format = vuk::Format::eR16G16B16A16Sfloat }), vuk::ClearColor{ 0.f, 1.f, 0.f, 0.f });
-		      auto color_image = vuk::clear(vuk::declare_ia("05_color", { .format = vuk::Format::eR8G8B8A8Srgb }), vuk::ClearColor{ 0.f, 0.f, 1.f, 0.f });
+		      auto normal_image = vuk::clear_image(vuk::declare_ia("05_normal", { .format = vuk::Format::eR16G16B16A16Sfloat }), vuk::ClearColor{ 0.f, 1.f, 0.f, 0.f });
+		      auto color_image = vuk::clear_image(vuk::declare_ia("05_color", { .format = vuk::Format::eR8G8B8A8Srgb }), vuk::ClearColor{ 0.f, 0.f, 1.f, 0.f });
 
 		      auto depth_img = vuk::declare_ia("05_depth");
 		      depth_img->format = vuk::Format::eD32Sfloat;
-		      depth_img = vuk::clear(depth_img, vuk::ClearDepthStencil{ 1.0f, 0 });
+		      depth_img = vuk::clear_image(std::move(depth_img), vuk::ClearDepthStencil{ 1.0f, 0 });
 
 		      // The framebuffer for the deferred rendering consists of "05_position", "05_normal", "05_color" and "05_depth" images
 		      // Since these belong to the same framebuffer, vuk can infer the missing parameters that we don't explicitly provide
@@ -152,11 +153,11 @@ namespace {
 		      // So we provide an additional rule - the extent of "05_position" must match our target extent
 		      // With this rule, all image parameters can be inferred
 
-		      position_image.infer(vuk::same_extent_as(target));
+		      position_image.same_extent_as(target);
 
 		      //auto gbuffer = build_gbuffer_pass(std::move(position_image), std::move(normal_image), std::move(color_image), std::move(depth_img));
 			  auto [pos, norm, col] = build_gbuffer_pass(std::move(position_image), std::move(normal_image), std::move(color_image), std::move(depth_img));
-		      auto result = shading_pass(target, pos, norm, col);
+		      auto result = shading_pass(std::move(target), std::move(pos), std::move(norm), std::move(col));
 		      //auto result = shading_pass(gbuffer)
 		      //auto result = std::apply(shading_pass, std::tuple_cat(target, gbuffer));
 
