@@ -1212,7 +1212,7 @@ namespace vuk {
 			case Node::VALLOC: { // when encountering a DECLARE, allocate the thing if needed
 				if (node->type[0]->kind == Type::BUFFER_TY) {
 					auto& bound = constant<Buffer>(node->valloc.args[0]);
-					bound.size = constant<size_t>(node->valloc.args[1]); // collapse inferencing
+					bound.size = eval<size_t>(node->valloc.args[1]); // collapse inferencing
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
 					fmt::print(" = declare<buffer>\n");
@@ -1230,16 +1230,16 @@ namespace vuk {
 				} else if (node->type[0]->kind == Type::IMAGE_TY) {
 					auto& attachment = *reinterpret_cast<ImageAttachment*>(node->valloc.args[0].node->constant.value);
 					// collapse inferencing
-					attachment.extent.extent.width = constant<uint32_t>(node->valloc.args[1]);
-					attachment.extent.extent.height = constant<uint32_t>(node->valloc.args[2]);
-					attachment.extent.extent.depth = constant<uint32_t>(node->valloc.args[3]);
+					attachment.extent.extent.width = eval<uint32_t>(node->valloc.args[1]);
+					attachment.extent.extent.height = eval<uint32_t>(node->valloc.args[2]);
+					attachment.extent.extent.depth = eval<uint32_t>(node->valloc.args[3]);
 					attachment.extent.sizing = Sizing::eAbsolute;
 					attachment.format = constant<Format>(node->valloc.args[4]);
 					attachment.sample_count = constant<Samples>(node->valloc.args[5]);
-					attachment.base_layer = constant<uint32_t>(node->valloc.args[6]);
-					attachment.layer_count = constant<uint32_t>(node->valloc.args[7]);
-					attachment.base_level = constant<uint32_t>(node->valloc.args[8]);
-					attachment.level_count = constant<uint32_t>(node->valloc.args[9]);
+					attachment.base_layer = eval<uint32_t>(node->valloc.args[6]);
+					attachment.layer_count = eval<uint32_t>(node->valloc.args[7]);
+					attachment.base_level = eval<uint32_t>(node->valloc.args[8]);
+					attachment.level_count = eval<uint32_t>(node->valloc.args[9]);
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
 					fmt::print(" = declare<image>\n");

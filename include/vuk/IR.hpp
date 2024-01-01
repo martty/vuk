@@ -13,7 +13,7 @@
 namespace vuk {
 	struct SyncPoint {
 		Executor* executor;
-		uint64_t visibility;                           // results are available if waiting for {executor, visibility}
+		uint64_t visibility; // results are available if waiting for {executor, visibility}
 	};
 
 	/// @brief Encapsulates a SyncPoint that can be synchronized against in the future
@@ -114,6 +114,7 @@ namespace vuk {
 	};
 
 	struct Node {
+		enum class BinOp { MUL };
 		enum Kind {
 			NOP,
 			PLACEHOLDER,
@@ -133,7 +134,8 @@ namespace vuk {
 			ACQUIRE_NEXT_IMAGE,
 			PRESENT,
 			INDEXING,
-			CAST
+			CAST,
+			MATH_BINARY
 		} kind;
 		std::span<Type* const> type;
 		NodeDebugInfo* debug_info = nullptr;
@@ -206,6 +208,11 @@ namespace vuk {
 			struct {
 				Ref src;
 			} present;
+			struct {
+				BinOp op;
+				Ref a;
+				Ref b;
+			} math_binary;
 		};
 
 		std::string_view kind_to_sv() {
@@ -244,6 +251,26 @@ namespace vuk {
 	T& constant(Ref ref) {
 		assert(ref.type()->kind == Type::INTEGER_TY || ref.type()->kind == Type::MEMORY_TY);
 		return *reinterpret_cast<T*>(ref.node->constant.value);
+	}
+
+	template<class T>
+	T eval(Ref ref) {
+		assert(ref.type()->kind == Type::INTEGER_TY);
+		switch (ref.node->kind) {
+		case Node::CONSTANT: {
+			return constant<T>(ref);
+		}
+		case Node::MATH_BINARY: {
+			auto& math_binary = ref.node->math_binary;
+			switch (math_binary.op) {
+			case Node::BinOp::MUL: {
+				return eval<T>(math_binary.a) * eval<T>(math_binary.b);
+			}
+			}
+		}
+		}
+		assert(0);
+		return T{};
 	}
 
 	struct RG {
@@ -293,6 +320,10 @@ namespace vuk {
 			return emplace_type(Type{ .kind = Type::INTEGER_TY, .integer = { .width = 64 } });
 		}
 
+		Type* u32() {
+			return emplace_type(Type{ .kind = Type::INTEGER_TY, .integer = { .width = 32 } });
+		}
+
 		// OPS
 
 		void name_outputs(Node* node, std::vector<std::string> names) {
@@ -318,6 +349,8 @@ namespace vuk {
 			Type** ty;
 			if constexpr (std::is_same_v<T, uint64_t>) {
 				ty = new Type*(u64());
+			} else if constexpr (std::is_same_v<T, uint32_t>) {
+				ty = new Type*(u32());
 			} else {
 				ty = new Type*(emplace_type(Type{ .kind = Type::MEMORY_TY }));
 			}
@@ -330,20 +363,21 @@ namespace vuk {
 			auto mem_ty = new Type*(emplace_type(Type{ .kind = Type::MEMORY_TY }));
 			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = ptr } }));
 			auto u64_ty = new Type*(u64());
+			auto u32_ty = new Type*(u32());
 			if (value.extent.extent.width > 0) {
-				args_ptr[1] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ u64_ty, 1 }, .constant = { .value = &ptr->extent.extent.width } }));
+				args_ptr[1] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ u32_ty, 1 }, .constant = { .value = &ptr->extent.extent.width } }));
 			} else {
-				args_ptr[1] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ u64_ty, 1 } }));
+				args_ptr[1] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ u32_ty, 1 } }));
 			}
 			if (value.extent.extent.height > 0) {
-				args_ptr[2] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ u64_ty, 1 }, .constant = { .value = &ptr->extent.extent.height } }));
+				args_ptr[2] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ u32_ty, 1 }, .constant = { .value = &ptr->extent.extent.height } }));
 			} else {
-				args_ptr[2] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ u64_ty, 1 } }));
+				args_ptr[2] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ u32_ty, 1 } }));
 			}
 			if (value.extent.extent.depth > 0) {
-				args_ptr[3] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ u64_ty, 1 }, .constant = { .value = &ptr->extent.extent.depth } }));
+				args_ptr[3] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ u32_ty, 1 }, .constant = { .value = &ptr->extent.extent.depth } }));
 			} else {
-				args_ptr[3] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ u64_ty, 1 } }));
+				args_ptr[3] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ u32_ty, 1 } }));
 			}
 			if (value.format != Format::eUndefined) {
 				args_ptr[4] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = &ptr->format } }));
@@ -356,24 +390,24 @@ namespace vuk {
 				args_ptr[5] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ mem_ty, 1 } }));
 			}
 			if (value.base_layer != VK_REMAINING_ARRAY_LAYERS) {
-				args_ptr[6] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ u64_ty, 1 }, .constant = { .value = &ptr->base_layer } }));
+				args_ptr[6] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ u32_ty, 1 }, .constant = { .value = &ptr->base_layer } }));
 			} else {
-				args_ptr[6] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ mem_ty, 1 } }));
+				args_ptr[6] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ u32_ty, 1 } }));
 			}
 			if (value.layer_count != VK_REMAINING_ARRAY_LAYERS) {
-				args_ptr[7] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ u64_ty, 1 }, .constant = { .value = &ptr->layer_count } }));
+				args_ptr[7] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ u32_ty, 1 }, .constant = { .value = &ptr->layer_count } }));
 			} else {
-				args_ptr[7] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ mem_ty, 1 } }));
+				args_ptr[7] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ u32_ty, 1 } }));
 			}
 			if (value.base_level != VK_REMAINING_MIP_LEVELS) {
-				args_ptr[8] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ u64_ty, 1 }, .constant = { .value = &ptr->base_level } }));
+				args_ptr[8] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ u32_ty, 1 }, .constant = { .value = &ptr->base_level } }));
 			} else {
-				args_ptr[8] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ mem_ty, 1 } }));
+				args_ptr[8] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ u32_ty, 1 } }));
 			}
 			if (value.level_count != VK_REMAINING_MIP_LEVELS) {
-				args_ptr[9] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ u64_ty, 1 }, .constant = { .value = &ptr->level_count } }));
+				args_ptr[9] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ u32_ty, 1 }, .constant = { .value = &ptr->level_count } }));
 			} else {
-				args_ptr[9] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ mem_ty, 1 } }));
+				args_ptr[9] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ u32_ty, 1 } }));
 			}
 
 			return first(emplace_op(Node{ .kind = Node::VALLOC, .type = std::span{ &builtin_image, 1 }, .valloc = { .args = std::span(args_ptr, 10) } }));
@@ -472,6 +506,13 @@ namespace vuk {
 
 		Node* make_present(Ref src) {
 			return emplace_op(Node{ .kind = Node::PRESENT, .type = std::span{ &builtin_image, 1 }, .present = { .src = src } });
+		}
+
+		// MATH
+
+		Ref make_math_binary_op(Node::BinOp op, Ref a, Ref b) {
+			Type** tys = new Type*(a.type());
+			return first(emplace_op(Node{ .kind = Node::MATH_BINARY, .type = std::span{ tys, 1 }, .math_binary = { .op = op, .a = a, .b = b } }));
 		}
 	};
 } // namespace vuk
