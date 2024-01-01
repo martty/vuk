@@ -642,11 +642,6 @@ public:
 		return { rg, ref, ref };
 	}
 
-	[[nodiscard]] inline Future<ImageAttachment> clear(Future<ImageAttachment> in, Clear clear_value) {
-		auto& rg = in.get_render_graph();
-		return std::move(std::move(in).transmute(rg->make_clear_image(in.get_head(), clear_value)));
-	}
-
 	[[nodiscard]] inline Future<Swapchain> declare_swapchain(Swapchain bundle) {
 		std::shared_ptr<RG> rg = std::make_shared<RG>();
 		Ref ref = rg->make_declare_swapchain(bundle);
