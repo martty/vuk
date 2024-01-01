@@ -155,8 +155,8 @@ namespace vuk {
 		}
 
 		// Image inferences
-		void same_extent_as(const Future<ImageAttachment>& src) 
-			 requires std::is_same_v<T, ImageAttachment>
+		void same_extent_as(const Future<ImageAttachment>& src)
+		  requires std::is_same_v<T, ImageAttachment>
 		{
 			assert(src.get_def().type()->is_image());
 			def.node->valloc.args[1] = src.get_def().node->valloc.args[1];
@@ -175,7 +175,7 @@ namespace vuk {
 
 		/// @brief Inference target has the same format as the source
 		void same_format_as(const Future<ImageAttachment>& src)
-			requires std::is_same_v<T, ImageAttachment>
+		  requires std::is_same_v<T, ImageAttachment>
 		{
 			assert(src.get_def().type()->is_image());
 			def.node->valloc.args[4] = src.get_def().node->valloc.args[4];
@@ -209,6 +209,19 @@ namespace vuk {
 			def.node->valloc.args[1] = src.get_def().node->valloc.args[1];
 		}
 
+		Future<uint64_t> get_size()
+		  requires std::is_same_v<T, Buffer>
+		{
+			return { get_render_graph(), def.node->valloc.args[1], {} };
+		}
+
+		void set_size(Future<uint64_t> arg)
+		  requires std::is_same_v<T, Buffer>
+		{
+			get_render_graph()->subgraphs.push_back(arg.get_render_graph());
+			def.node->valloc.args[1] = arg.get_head();
+		}
+
 		auto operator[](size_t index)
 		  requires std::is_array_v<T>
 		{
@@ -219,6 +232,11 @@ namespace vuk {
 			return Future<std::remove_reference_t<decltype(std::declval<T>()[0])>>(get_render_graph(), item, item_def);
 		}
 	};
+
+	inline Future<uint64_t> operator*(Future<uint64_t> a, uint64_t b) {
+		Ref ref = a.get_render_graph()->make_math_binary_op(Node::BinOp::MUL, a.get_head(), a.get_render_graph()->make_constant(b));
+		return std::move(std::move(a).transmute<uint64_t>(ref));
+	}
 
 	inline Result<void> wait_for_futures_explicit(Allocator& alloc, Compiler& compiler, std::span<UntypedFuture> futures) {
 		std::vector<std::shared_ptr<RG>> rgs_to_run;

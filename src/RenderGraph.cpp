@@ -76,6 +76,7 @@ namespace vuk {
 				case Node::NOP:
 				case Node::CONSTANT:
 				case Node::PLACEHOLDER:
+				case Node::MATH_BINARY:
 					break;
 				case Node::VALLOC:
 					res_to_links[first(&node)].def = first(&node);
@@ -193,13 +194,17 @@ namespace vuk {
 		};
 
 		auto placeholder_to_constant = []<class T>(Ref r, T value) {
-			r.node->kind = Node::CONSTANT;
-			r.node->constant.value = new T(value);
+			if (r.node->kind == Node::PLACEHOLDER) {
+				r.node->kind = Node::CONSTANT;
+				r.node->constant.value = new T(value);
+			}
 		};
 
 		auto placeholder_to_ptr = []<class T>(Ref r, T* ptr) {
-			r.node->kind = Node::CONSTANT;
-			r.node->constant.value = ptr;
+			if (r.node->kind == Node::PLACEHOLDER) {
+				r.node->kind = Node::CONSTANT;
+				r.node->constant.value = ptr;
+			}
 		};
 
 		// valloc reification - if there were later setting of fields, then remove placeholders
@@ -278,13 +283,13 @@ namespace vuk {
 									placeholder_to_constant(args[5], *samples);
 								}
 								if (!extent && !is_placeholder(args[1]) && !is_placeholder(args[2])) { // known extent2D
-									extent = Extent2D{ constant<uint32_t>(args[1]), constant<uint32_t>(args[2]) };
+									extent = Extent2D{ eval<uint32_t>(args[1]), eval<uint32_t>(args[2]) };
 								} else if (extent && is_placeholder(args[1]) && is_placeholder(args[2])) {
 									placeholder_to_constant(args[1], extent->width);
 									placeholder_to_constant(args[2], extent->height);
 								}
 								if (!layer_count && !is_placeholder(args[7])) { // known layer count
-									layer_count = constant<uint32_t>(args[7]);
+									layer_count = eval<uint32_t>(args[7]);
 								} else if (layer_count && is_placeholder(args[7])) {
 									placeholder_to_constant(args[7], *layer_count);
 								}
