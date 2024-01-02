@@ -41,14 +41,14 @@ namespace vuk {
 		UntypedFuture(std::shared_ptr<RG> rg, Ref ref, Ref def) {
 			this->control = std::make_shared<FutureControlBlock>();
 
-			this->head = { rg->make_release(ref, &this->control->acqrel, Access::eHostRW, DomainFlagBits::eHost), 0 };
+			this->head = { rg->make_release(ref, &this->control->acqrel, Access::eNone, DomainFlagBits::eAny), 0 };
 
 			this->control->rg = std::move(rg);
 			this->def = def;
 		}
 
 		UntypedFuture(const UntypedFuture& o) noexcept : control{ std::make_shared<FutureControlBlock>(*o.control) }, def{ o.def } {
-			head = { control->rg->make_release(o.get_head(), &this->control->acqrel, Access::eHostRW, DomainFlagBits::eHost), 0 };
+			head = { control->rg->make_release(o.get_head(), &this->control->acqrel, Access::eNone, DomainFlagBits::eAny), 0 };
 		}
 
 		UntypedFuture(UntypedFuture&& o) noexcept :

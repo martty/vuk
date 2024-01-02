@@ -63,7 +63,7 @@ TEST_CASE("renderpass framebuffer inference") {
 		auto depth_img = declare_ia("depth");
 		depth_img->format = vuk::Format::eD32Sfloat;
 
-		auto fut2 = rpclear(fut, depth_img);
+		auto fut2 = rpclear(fut, std::move(depth_img));
 		auto dst_buf = declare_buf("dst", *dst);
 		auto res = download_buffer(image2buf(fut2, dst_buf)).get(*test_context.allocator, test_context.compiler);
 		auto updata = std::span((uint32_t*)res->mapped_ptr, 4);

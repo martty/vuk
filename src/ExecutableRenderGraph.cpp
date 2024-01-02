@@ -1437,6 +1437,8 @@ namespace vuk {
 						auto it = std::find_if(pe_streams.begin(), pe_streams.end(), [&](auto& pe_stream) { return pe_stream.swp == &swp; });
 						assert(it != pe_streams.end());
 						dst_stream = &*it;
+					} else if (node->release.dst_domain == DomainFlagBits::eAny) {
+						dst_stream = src_stream;
 					} else {
 						dst_stream = recorder.stream_for_domain(node->release.dst_domain);
 					}
@@ -1445,10 +1447,12 @@ namespace vuk {
 
 					Type* parm_ty = parm.type();
 					auto di = sched.get_dependency_info(parm, parm_ty, RW::eWrite, dst_stream, Access::eNone, node->release.dst_access);
-					recorder.add_sync(sched.base_type(parm), di, sched.get_value(parm));
+					if (node->release.dst_access != Access::eNone) {
+						recorder.add_sync(sched.base_type(parm), di, sched.get_value(parm));
+					}
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
-					fmt::print("release ${}->${} ", domain_to_string(src_domain), domain_to_string(node->release.dst_domain));
+					fmt::print("release ${}->${} ", domain_to_string(src_domain), domain_to_string(dst_domain));
 					print_args(std::span{ &node->release.src, 1 });
 					fmt::print("\n");
 #endif
