@@ -348,6 +348,7 @@ namespace vuk {
 			if (!signal) {
 				signal = &signals.emplace_back();
 			}
+			signal->source.executor = executor;
 			batch.back().signals.emplace_back(signal);
 			executor->submit_batch(batch);
 			batch.clear();
@@ -805,16 +806,7 @@ namespace vuk {
 
 		void* get_value(Ref parm) {
 			auto& link = res_to_links[parm];
-			if (link.urdef.node->kind == Node::VALLOC) {
-				return link.urdef.node->valloc.args[0].node->constant.value;
-			} else if (link.urdef.node->kind == Node::AALLOC) {
-				return link.urdef.node->aalloc.args[0].node->constant.value;
-			} else if (link.urdef.node->kind == Node::ACQUIRE_NEXT_IMAGE) {
-				Swapchain* swp = reinterpret_cast<Swapchain*>(link.urdef.node->acquire_next_image.swapchain.node->valloc.args[0].node->constant.value);
-				return &swp->images[swp->image_index];
-			} else {
-				assert(0);
-			}
+			return get_constant_value(link.urdef.node);
 		}
 
 		template<class T>
@@ -1054,6 +1046,16 @@ namespace vuk {
 
 		Stream* stream_for_domain(DomainFlagBits domain) {
 			return streams.at(domain).get();
+		}
+
+		Stream* stream_for_executor(Executor* executor) {
+			for (auto& [domain, stream] : streams) {
+				if (stream->executor == executor) {
+					return stream.get();
+				}
+			}
+			assert(0);
+			return nullptr;
 		}
 
 		void flush_domain(vuk::DomainFlagBits domain, Signal* signal) {
@@ -1421,6 +1423,31 @@ namespace vuk {
 						}
 					}
 				}
+				break;
+			}
+			case Node::ACQUIRE: {
+				auto acq = node->acquire.acquire;
+				auto src_stream = recorder.stream_for_executor(acq->source.executor);
+				Stream* dst_stream = item.scheduled_stream;
+
+				Scheduler::DependencyInfo di;
+				di.src_use = { acq->last_use, src_stream };
+				di.dst_use = { to_use(Access::eNone), dst_stream };
+				recorder.add_sync(node->type[0], di, sched.get_value(first(node)));
+
+				if (node->type[0]->kind == Type::BUFFER_TY) {
+#ifdef VUK_DUMP_EXEC
+					print_results(node);
+					fmt::print(" = acquire<buffer>\n");
+#endif
+				} else if (node->type[0]->kind == Type::IMAGE_TY) {
+#ifdef VUK_DUMP_EXEC
+					print_results(node);
+					fmt::print(" = acquire<image>\n");
+#endif
+				}
+
+				sched.done(node, dst_stream);
 				break;
 			}
 			case Node::RELEASE:

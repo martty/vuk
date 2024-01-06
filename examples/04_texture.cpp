@@ -46,6 +46,7 @@ namespace {
 		      auto [image, view, future] = vuk::create_image_and_view_with_data(allocator, vuk::DomainFlagBits::eTransferOnTransfer, texture_of_doge, doge_image);
 		      image_of_doge = std::move(image);
 		      image_view_of_doge = std::move(view);
+		      future = future.release_to(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
 		      runner.enqueue_setup(std::move(future));
 		      stbi_image_free(doge_image);
 
