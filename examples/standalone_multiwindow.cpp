@@ -26,6 +26,9 @@ const int main_win_size_y = 512;
 const int small_win_size_x = 128;
 const int small_win_size_y = 128;
 
+const int vp_size_x = main_win_size_x + 2 * small_win_size_x;
+const int vp_size_y = main_win_size_y + small_win_size_y;
+
 int main_win_x, main_win_y;
 
 struct SmallWindow {
@@ -35,6 +38,7 @@ struct SmallWindow {
 	Swapchain swapchain;
 
 	int offset;
+	int vpx, vpy;
 };
 
 int main(int argc, char** argv) {
@@ -141,7 +145,7 @@ int main(int argc, char** argv) {
 	std::vector<SmallWindow> small_windows;
 	for (int i = 0; i < 5; i++) {
 		glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
-		auto s_window = glfwCreateWindow(128, 128, "Main window", NULL, NULL);
+		auto s_window = glfwCreateWindow(128, 128, "Schmol window", NULL, NULL);
 		VkSurfaceKHR s_surface = create_surface_glfw(vkbinstance.instance, s_window);
 		auto s_swapchain = util::make_swapchain(*superframe_allocator, vkbdevice, s_surface, {});
 		small_windows.emplace_back(s_window, s_swapchain, i * (340));
@@ -150,11 +154,49 @@ int main(int argc, char** argv) {
 
 	Compiler compiler;
 
-	vuk::PipelineBaseCreateInfo pci;
-	pci.add_glsl(util::read_entire_file((root / "examples/large_triangle.vert").generic_string()), (root / "examples/large_triangle.vert").generic_string());
-	pci.add_glsl(util::read_entire_file((root / "examples/triangle.frag").generic_string()), (root / "examples/triangle.frag").generic_string());
-	// The pipeline is stored with a user give name for simplicity
-	context->create_named_pipeline("triangle", pci);
+	{
+		vuk::PipelineBaseCreateInfo pci;
+		pci.add_glsl(util::read_entire_file((root / "examples/particle_points.vert").generic_string()), (root / "examples/large_triangle.vert").generic_string());
+		pci.add_glsl(util::read_entire_file((root / "examples/point.frag").generic_string()), (root / "examples/triangle.frag").generic_string());
+		context->create_named_pipeline("triangle", pci);
+	}
+	{
+		vuk::PipelineBaseCreateInfo pci;
+		pci.add_glsl(util::read_entire_file((root / "examples/particle_sim.comp").generic_string()), (root / "examples/particle_sim.comp").generic_string());
+		context->create_named_pipeline("particle_sim", pci);
+	}
+
+	{
+		vuk::PipelineBaseCreateInfo pci;
+		pci.add_glsl(util::read_entire_file((root / "examples/particle_sim_init.comp").generic_string()), (root / "examples/particle_sim.comp").generic_string());
+		context->create_named_pipeline("particle_sim_init", pci);
+	}
+
+	auto particle_count = 1000000;
+	struct Particle {
+		float x, y;
+		float vx, vy;
+	};
+
+	auto clear_buffer = make_pass("clear buffer", [](CommandBuffer& command_buffer, VUK_BA(Access::eComputeRW) particles) {
+		command_buffer.bind_compute_pipeline("particle_sim_init");
+		command_buffer.bind_buffer(0, 1, particles);
+		command_buffer.dispatch_invocations_per_element(particles, sizeof(Particle));
+		return particles;
+	});
+
+	struct Attractors {
+		struct Attractor {
+			float x, y;
+			float strength;
+			float _pad;
+		} attractors[32];
+		unsigned int count;
+	};
+
+	auto particles_buf = allocate_buffer(*superframe_allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(Particle) * particle_count });
+	auto particles = clear_buffer(declare_buf("particles", **particles_buf));
+	particles.wait(*superframe_allocator, compiler, {});
 
 	// our main loop
 	while (!glfwWindowShouldClose(main_window)) {
@@ -171,16 +213,18 @@ int main(int argc, char** argv) {
 		// optional
 		Allocator frame_allocator(frame_resource);
 
-		auto render = [](vuk::Rect2D viewport) {
-			return vuk::make_pass("01_triangle", [=](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eColorWrite) color_rt) {
+		auto render = [particle_count](vuk::Rect2D viewport) {
+			return vuk::make_pass("01_triangle", [=](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eColorWrite) color_rt, VUK_BA(vuk::eAttributeRead) particles) {
 				command_buffer.set_viewport(0, viewport);
 				// Set the scissor area to cover the entire framebuffer
 				command_buffer.set_scissor(0, vuk::Rect2D::framebuffer());
 				command_buffer
-				    .set_rasterization({})              // Set the default rasterization state
-				    .set_color_blend(color_rt, {})      // Set the default color blend state
-				    .bind_graphics_pipeline("triangle") // Recall pipeline for "triangle" and bind
-				    .draw(3, 1, 0, 0);                  // Draw 3 vertices
+				    .set_rasterization({}) // Set the default rasterization state
+				    .set_primitive_topology(PrimitiveTopology::ePointList)
+				    .set_color_blend(color_rt, BlendPreset::eAlphaBlend) // Set the default color blend state
+				    .bind_graphics_pipeline("triangle")                  // Recall pipeline for "triangle" and bind
+				    .bind_vertex_buffer(0, particles, 0, Packed{ Format::eR32G32Sfloat, Format::eR32G32Sfloat })
+				    .draw(particle_count, 1, 0, 0);
 				return color_rt;
 			});
 		};
@@ -191,8 +235,7 @@ int main(int argc, char** argv) {
 			auto swapchain_image = acquire_next_image("swp_img", std::move(imported_swapchain));
 			Future<ImageAttachment> cleared_image_to_render_into = clear_image(std::move(swapchain_image), vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
 
-			auto drawn = render(vuk::Rect2D::absolute(-small_win_size_x, 0, main_win_size_x + 2 * small_win_size_x, main_win_size_y + small_win_size_y))(
-			    std::move(cleared_image_to_render_into));
+			auto drawn = render(vuk::Rect2D::absolute(-small_win_size_x, 0, vp_size_x, vp_size_y))(std::move(cleared_image_to_render_into), particles);
 
 			// compile the RG that contains all the rendering of the example
 			// submit and present the results to the swapchain we imported previously
@@ -214,7 +257,8 @@ int main(int argc, char** argv) {
 				y = 0;
 				sw.offset = -1;
 			}
-			int vpx = x, vpy = y;
+			sw.vpx = x;
+			sw.vpy = y;
 			x += main_win_x;
 			y += main_win_y;
 			glfwSetWindowPos(sw.window, x, y);
@@ -223,18 +267,38 @@ int main(int argc, char** argv) {
 			auto swapchain_image = acquire_next_image("swp_img", std::move(imported_swapchain));
 			Future<ImageAttachment> cleared_image_to_render_into = clear_image(std::move(swapchain_image), vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
 
-			auto drawn = render(vuk::Rect2D::absolute(-(vpx + 128), -vpy, main_win_size_x + 2 * small_win_size_x, main_win_size_y + small_win_size_y))(
-			    std::move(cleared_image_to_render_into));
+			auto drawn = render(vuk::Rect2D::absolute(-(sw.vpx + 128), -sw.vpy, vp_size_x, vp_size_y))(std::move(cleared_image_to_render_into), particles);
 
 			// compile the RG that contains all the rendering of the example
 			// submit and present the results to the swapchain we imported previously
 			futs.push_back(enqueue_presentation(std::move(drawn)));
 		}
 
+		// particle sim
+		auto sim = vuk::make_pass("particle sim", [=](vuk::CommandBuffer& command_buffer, VUK_BA(vuk::eComputeRW) particles) {
+			command_buffer.bind_compute_pipeline("particle_sim");
+			Attractors attr{ .count = (uint32_t)small_windows.size() + 1 };
+			for (int i = 0; i < small_windows.size(); i++) {
+				auto& sw = small_windows[i];
+				attr.attractors[i].x = ((float)(sw.vpx + 128 + 64) / vp_size_x) * 2.f - 1.f;
+				attr.attractors[i].y = ((float)(sw.vpy + 64) / vp_size_y) * 2.f - 1.f;
+				attr.attractors[i].strength = 0.001f;
+			}
+			attr.attractors[5].strength = 0.005f;
+			*command_buffer.scratch_buffer<Attractors>(0, 0) = attr;
+			command_buffer.bind_buffer(0, 1, particles);
+			command_buffer.dispatch_invocations_per_element(particles, sizeof(Particle));
+			return particles;
+		});
+
+		auto sim_step = sim(particles);
+		sim_step.wait(frame_allocator, compiler, {});
 		wait_for_futures_explicit(frame_allocator, compiler, futs);
+		particles = declare_buf("particles", **particles_buf);
 	}
 
 	context->wait_idle();
+	particles_buf->reset();
 	superframe_resource.reset();
 	context.reset();
 	auto vkDestroySurfaceKHR = (PFN_vkDestroySurfaceKHR)vkbinstance.fp_vkGetInstanceProcAddr(vkbinstance.instance, "vkDestroySurfaceKHR");

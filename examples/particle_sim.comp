@@ -1,0 +1,43 @@
+#version 450
+#pragma shader_stage(compute)
+
+struct Attractor {
+	float x, y;
+	float strength;
+};
+
+layout (std140, binding = 0) uniform Attractors {
+	Attractor attractors[32];
+	int count;
+};
+
+struct Particle {
+	float x, y;
+	float vx, vy;
+};
+
+layout (std430, binding = 1) buffer Particles {
+	Particle[] particles;
+};
+
+layout (local_size_x = 64) in;
+
+void main() {
+	Particle p = particles[gl_GlobalInvocationID.x];
+
+	for(int i = 0; i < count; i++){
+		Attractor at = attractors[i];
+		vec2 dir = -vec2(p.x - at.x, p.y - at.y);
+		float dist2 = dot(dir, dir);
+		if(dist2 > 0.01){
+			vec2 a = 0.01 * at.strength * normalize(dir) / dist2;
+			p.vx += a.x;
+			p.vy += a.y;
+		}
+	}
+	
+	p.x += p.vx * 0.1;
+	p.y += p.vy * 0.1;
+
+	particles[gl_GlobalInvocationID.x] = p;
+}
