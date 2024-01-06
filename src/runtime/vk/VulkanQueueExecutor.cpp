@@ -142,11 +142,11 @@ namespace vuk::rtvk {
 		std::unique_lock _(*this);
 
 		uint64_t num_cbufs = 0;
-		uint64_t num_waits = 1; // 1 extra for present_rdy
+		uint64_t num_waits = 0;
 		for (uint64_t i = 0; i < batch.size(); i++) {
 			SubmitInfo& submit_info = batch[i];
 			num_cbufs += submit_info.command_buffers.size();
-			num_waits += submit_info.waits.size();
+			num_waits += submit_info.waits.size() + submit_info.pres_wait.size();
 		}
 
 		std::vector<VkSubmitInfo2KHR> sis;
