@@ -1045,7 +1045,11 @@ namespace vuk {
 		}
 
 		Stream* stream_for_domain(DomainFlagBits domain) {
-			return streams.at(domain).get();
+			auto it = streams.find(domain);
+			if (it != streams.end()) {
+				return it->second.get();
+			}
+			return nullptr;
 		}
 
 		Stream* stream_for_executor(Executor* executor) {
@@ -1156,6 +1160,14 @@ namespace vuk {
 		recorder.streams.emplace(DomainFlagBits::eHost, std::make_unique<HostStream>(alloc));
 		if (auto exe = ctx.get_executor(DomainFlagBits::eGraphicsQueue)) {
 			recorder.streams.emplace(DomainFlagBits::eGraphicsQueue,
+			                         std::make_unique<VkQueueStream>(alloc, static_cast<rtvk::QueueExecutor*>(exe), &impl->callbacks));
+		}
+		if (auto exe = ctx.get_executor(DomainFlagBits::eComputeQueue)) {
+			recorder.streams.emplace(DomainFlagBits::eComputeQueue,
+			                         std::make_unique<VkQueueStream>(alloc, static_cast<rtvk::QueueExecutor*>(exe), &impl->callbacks));
+		}
+		if (auto exe = ctx.get_executor(DomainFlagBits::eTransferQueue)) {
+			recorder.streams.emplace(DomainFlagBits::eTransferQueue,
 			                         std::make_unique<VkQueueStream>(alloc, static_cast<rtvk::QueueExecutor*>(exe), &impl->callbacks));
 		}
 		auto host_stream = recorder.streams.at(DomainFlagBits::eHost).get();

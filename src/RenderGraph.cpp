@@ -410,7 +410,7 @@ namespace vuk {
 			auto& execable = schedule_items[pop_idx];
 			ScheduledItem item{ .execable = execable,
 				                  .scheduled_domain =
-				                      execable->scheduling_info ? pick_first_domain(execable->scheduling_info->required_domain) : vuk::DomainFlagBits::eAny };
+				                      execable->scheduling_info ? pick_first_domain(execable->scheduling_info->required_domains) : vuk::DomainFlagBits::eAny };
 			if (execable->kind != Node::VALLOC) { // we use def nodes for deps, but we don't want to schedule them later as their ordering doesn't matter
 				scheduled_execables.push_back(item);
 			}
@@ -640,7 +640,7 @@ namespace vuk {
 			if (!node->scheduling_info) {
 				return;
 			}
-			auto& domain = node->scheduling_info->required_domain;
+			auto& domain = node->scheduling_info->required_domains;
 			if (domain != last_domain && domain != DomainFlagBits::eDevice && domain != DomainFlagBits::eAny) {
 				last_domain = domain;
 			}

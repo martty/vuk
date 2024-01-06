@@ -184,13 +184,13 @@ TEST_CASE("multi return pass") {
 TEST_CASE("scheduling single-queue") {
 	{
 		std::string execution;
-		
+
 		auto buf0 = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
-		
+
 		auto write = make_pass("write", [&](CommandBuffer& cbuf, VUK_BA(Access::eTransferWrite) dst) {
 			execution += "w";
-			    return dst;
-		    });
+			return dst;
+		});
 		auto read = make_pass("read", [&](CommandBuffer& cbuf, VUK_BA(Access::eTransferRead) dst) {
 			execution += "r";
 			return dst;
@@ -254,8 +254,75 @@ TEST_CASE("scheduling with submitted") {
 		{
 			auto written = write(declare_buf("src0", **buf0));
 			written.wait(*test_context.allocator, test_context.compiler);
-			write(std::move(written)).wait(*test_context.allocator, test_context.compiler);
+			auto res = write(std::move(written));
+			res.wait(*test_context.allocator, test_context.compiler);
 			CHECK(execution == "ww");
+			execution = "";
+		}
+	}
+}
+
+TEST_CASE("multi-queue buffers") {
+	{
+		std::string execution;
+
+		auto buf0 = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+
+		auto write = make_pass(
+		    "write_A",
+		    [&](CommandBuffer& cbuf, VUK_BA(Access::eTransferWrite) dst) {
+			    cbuf.fill_buffer(dst, 0xf);
+			    execution += "w";
+			    return dst;
+		    },
+		    DomainFlagBits::eTransferQueue);
+		auto read = make_pass(
+		    "read_B",
+		    [&](CommandBuffer& cbuf, VUK_BA(Access::eTransferRead) dst) {
+			    auto dummy = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+			    cbuf.copy_buffer(**dummy, dst);
+			    execution += "r";
+			    return dst;
+		    },
+		    DomainFlagBits::eGraphicsQueue);
+
+		{
+			auto written = write(declare_buf("src0", **buf0));
+			written.wait(*test_context.allocator, test_context.compiler);
+			read(written).wait(*test_context.allocator, test_context.compiler);
+			CHECK(execution == "wr");
+			execution = "";
+		}
+		{
+			auto written = write(declare_buf("src0", **buf0));
+			written.wait(*test_context.allocator, test_context.compiler);
+			read(std::move(written)).wait(*test_context.allocator, test_context.compiler);
+			CHECK(execution == "wr");
+			execution = "";
+		}
+		/* {
+	auto written = write(declare_buf("src0", **buf0));
+	written.wait(*test_context.allocator, test_context.compiler);
+	write(read(std::move(written))).wait(*test_context.allocator, test_context.compiler);
+	CHECK(execution == "wrw");
+	execution = "";
+}*/
+		{
+			auto written = write(declare_buf("src0", **buf0));
+			read(written).wait(*test_context.allocator, test_context.compiler);
+			CHECK(execution == "wr");
+			execution = "";
+		}
+		{
+			auto written = write(declare_buf("src0", **buf0));
+			read(std::move(written)).wait(*test_context.allocator, test_context.compiler);
+			CHECK(execution == "wr");
+			execution = "";
+		}
+		{
+			auto written = write(declare_buf("src0", **buf0));
+			write(read(std::move(written))).wait(*test_context.allocator, test_context.compiler);
+			CHECK(execution == "wrw");
 			execution = "";
 		}
 	}
