@@ -57,8 +57,8 @@ namespace util {
 		// clang-format on
 	}
 
-	inline vuk::Swapchain make_swapchain(vuk::Allocator allocator, vkb::Device vkbdevice, std::optional<vuk::Swapchain> old_swapchain) {
-		vkb::SwapchainBuilder swb(vkbdevice);
+	inline vuk::Swapchain make_swapchain(vuk::Allocator allocator, vkb::Device vkbdevice, VkSurfaceKHR surface, std::optional<vuk::Swapchain> old_swapchain) {
+		vkb::SwapchainBuilder swb(vkbdevice, surface);
 		swb.set_desired_format(vuk::SurfaceFormatKHR{ vuk::Format::eR8G8B8A8Srgb, vuk::ColorSpaceKHR::eSrgbNonlinear });
 		swb.add_fallback_format(vuk::SurfaceFormatKHR{ vuk::Format::eB8G8R8A8Srgb, vuk::ColorSpaceKHR::eSrgbNonlinear });
 		swb.set_desired_present_mode((VkPresentModeKHR)vuk::PresentModeKHR::eImmediate);
@@ -101,7 +101,7 @@ namespace util {
 		}
 		
 		old_swapchain->swapchain = vkswapchain->swapchain;
-		old_swapchain->surface = vkbdevice.surface;
+		old_swapchain->surface = surface;
 		return *old_swapchain;
 	}
 
