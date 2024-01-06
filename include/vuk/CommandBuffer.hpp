@@ -508,7 +508,7 @@ namespace vuk {
 		/// @param invocations_per_pixel_scale_x Invocation count scale in x-axis
 		/// @param invocations_per_pixel_scale_y Invocation count scale in y-axis
 		/// @param invocations_per_pixel_scale_z Invocation count scale in z-axis
-		CommandBuffer& dispatch_invocations_per_pixel(ImageAttachment& ia,
+		CommandBuffer& dispatch_invocations_per_pixel(const ImageAttachment& ia,
 		                                              float invocations_per_pixel_scale_x = 1.f,
 		                                              float invocations_per_pixel_scale_y = 1.f,
 		                                              float invocations_per_pixel_scale_z = 1.f);
@@ -523,7 +523,7 @@ namespace vuk {
 		/// @param buffer Buffer to use for calculating element count
 		/// @param element_size Size of one element
 		/// @param invocations_per_element_scale Invocation count scale
-		CommandBuffer& dispatch_invocations_per_element(Buffer& buffer, size_t element_size, float invocations_per_element_scale = 1.f);
+		CommandBuffer& dispatch_invocations_per_element(const Buffer& buffer, size_t element_size, float invocations_per_element_scale = 1.f);
 
 		/// @brief Issue an indirect compute dispatch
 		/// @param indirect_buffer Buffer of workgroup counts

@@ -566,7 +566,7 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::dispatch_invocations_per_pixel(ImageAttachment& ia,
+	CommandBuffer& CommandBuffer::dispatch_invocations_per_pixel(const ImageAttachment& ia,
 	                                                             float invocations_per_pixel_scale_x,
 	                                                             float invocations_per_pixel_scale_y,
 	                                                             float invocations_per_pixel_scale_z) {
@@ -577,7 +577,7 @@ namespace vuk {
 		                            (uint32_t)std::ceil(invocations_per_pixel_scale_z * extent.depth));
 	}
 
-	CommandBuffer& CommandBuffer::dispatch_invocations_per_element(Buffer& buffer, size_t element_size, float invocations_per_element_scale) {
+	CommandBuffer& CommandBuffer::dispatch_invocations_per_element(const Buffer& buffer, size_t element_size, float invocations_per_element_scale) {
 		auto count = (uint32_t)std::ceil(invocations_per_element_scale * idivceil(buffer.size, element_size));
 
 		return dispatch_invocations(count, 1, 1);
