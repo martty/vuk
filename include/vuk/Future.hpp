@@ -290,16 +290,16 @@ namespace vuk {
 		return std::move(std::move(a).transmute<uint64_t>(ref));
 	}
 
-	inline Result<void> wait_for_futures_explicit(Allocator& alloc, Compiler& compiler, std::span<UntypedFuture> futures) {
+	inline Result<void> wait_for_futures_explicit(Allocator& alloc, Compiler& compiler, std::span<std::shared_ptr<FutureControlBlock>> futures) {
 		std::vector<std::shared_ptr<RG>> rgs_to_run;
 		for (uint64_t i = 0; i < futures.size(); i++) {
 			auto& future = futures[i];
-			if (future.control->acqrel.status == Signal::Status::eDisarmed && !futures[i].get_render_graph()) {
+			if (future->acqrel.status == Signal::Status::eDisarmed && !futures[i]->get_render_graph()) {
 				return { expected_error, RenderGraphException{} };
-			} else if (future.control->acqrel.status == Signal::Status::eHostAvailable || future.control->acqrel.status == Signal::Status::eSynchronizable) {
+			} else if (future->acqrel.status == Signal::Status::eHostAvailable || future->acqrel.status == Signal::Status::eSynchronizable) {
 				continue;
 			} else {
-				rgs_to_run.emplace_back(futures[i].get_render_graph());
+				rgs_to_run.emplace_back(futures[i]->get_render_graph());
 			}
 		}
 		if (rgs_to_run.size() != 0) {
@@ -309,10 +309,10 @@ namespace vuk {
 		std::vector<SyncPoint> waits;
 		for (uint64_t i = 0; i < futures.size(); i++) {
 			auto& future = futures[i];
-			if (future.control->acqrel.status != Signal::Status::eSynchronizable) {
+			if (future->acqrel.status != Signal::Status::eSynchronizable) {
 				continue;
 			}
-			waits.emplace_back(future.control->acqrel.source);
+			waits.emplace_back(future->acqrel.source);
 		}
 		if (waits.size() > 0) {
 			alloc.get_context().wait_for_domains(std::span(waits));
@@ -321,8 +321,17 @@ namespace vuk {
 		return { expected_value };
 	}
 
+	inline Result<void> wait_for_futures_explicit(Allocator& alloc, Compiler& compiler, std::span<UntypedFuture> futures) {
+		std::vector<std::shared_ptr<FutureControlBlock>> cbs;
+		for (auto& f : futures) {
+			cbs.push_back(f.control);
+		}
+		return wait_for_futures_explicit(alloc, compiler, cbs);
+	}
+
 	template<class... Args>
 	Result<void> wait_for_futures(Allocator& alloc, Compiler& compiler, Args&&... futs) {
-		return wait_for_futures_explicit(alloc, compiler, std::array{ futs... });
+		auto cbs = std::array{ futs.control... };
+		return wait_for_futures_explicit(alloc, compiler, cbs);
 	}
 } // namespace vuk
