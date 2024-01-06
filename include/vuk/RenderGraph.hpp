@@ -516,10 +516,10 @@ public:
 	struct is_tuple<std::tuple<T...>> : std::true_type {};
 
 	template<typename... T>
-	static auto make_ret(std::shared_ptr<RG> rg, Node* node, const std::tuple<T...>& us) {
+	static auto make_ret(std::shared_ptr<RG> rg, Node* node, const std::tuple<T...>& us, std::vector<std::shared_ptr<FutureControlBlock>> dependent_blocks) {
 		if constexpr (sizeof...(T) > 0) {
 			size_t i = 0;
-			return std::tuple{ Future<typename T::type>{ rg, { node, sizeof...(T) - (++i) }, std::get<T>(us).def }... };
+			return std::tuple{ Future<typename T::type>{ rg, { node, sizeof...(T) - (++i) }, std::get<T>(us).def, dependent_blocks }... };
 		}
 	}
 
@@ -541,7 +541,7 @@ public:
 		using ret_tuple = std::tuple<Future<typename T::type>...>;
 
 		template<class Ret, class F>
-		static auto make_lam(Name name, F&& body) {
+		static auto make_lam(Name name, F&& body, SchedulingInfo scheduling_info) {
 			auto callback = [typed_cb = std::move(body)](CommandBuffer& cb, std::span<void*> args, std::span<void*> meta, std::span<void*> rets) {
 				// we do type recovery here -> convert untyped args to typed ones
 				alignas(alignof(std::tuple<CommandBuffer&, T...>)) char storage[sizeof(std::tuple<CommandBuffer&, T...>)];
@@ -556,14 +556,19 @@ public:
 			};
 
 			// when this function is called, we weave in this call into the IR
-			return [untyped_cb = std::move(callback), name](Future<typename T::type>... args) mutable {
+			return [untyped_cb = std::move(callback), name, scheduling_info](Future<typename T::type>... args) mutable {
 				auto& first = [](auto& first, auto&...) -> auto& {
 					return first;
 				}(args...);
 				auto& rgp = first.get_render_graph();
 				RG& rg = *rgp.get();
-				[](auto& first, auto&... rest) {
+
+				// TODO: write a test that this doesn't pass...
+				std::vector<std::shared_ptr<FutureControlBlock>> dependent_blocks;
+				[&dependent_blocks](auto& first, auto&... rest) {
 					(first.get_render_graph()->subgraphs.push_back(rest.get_render_graph()), ...);
+					dependent_blocks.push_back(first.control);
+					(dependent_blocks.push_back(rest.control), ...);
 				}(args...);
 
 				std::vector<Type*> arg_types;
@@ -582,35 +587,36 @@ public:
 				opaque_fn_ty->debug_info = new TypeDebugInfo{ .name = name.c_str() };
 				auto opaque_fn = rg.make_declare_fn(opaque_fn_ty);
 				Node* node = rg.make_call(opaque_fn, args.get_head()...);
+				node->scheduling_info = new SchedulingInfo(scheduling_info);
 				if constexpr (is_tuple<Ret>::value) {
 					auto [idxs, ret_tuple] = intersect_tuples<std::tuple<T...>, Ret>(arg_tuple_as_a);
-					return make_ret(rgp, node, ret_tuple);
+					return make_ret(rgp, node, ret_tuple, std::move(dependent_blocks));
 				} else if constexpr (!std::is_same_v<Ret, void>) {
 					auto [idxs, ret_tuple] = intersect_tuples<std::tuple<T...>, std::tuple<Ret>>(arg_tuple_as_a);
-					return std::get<0>(make_ret(rgp, node, ret_tuple));
+					return std::get<0>(make_ret(rgp, node, ret_tuple, std::move(dependent_blocks)));
 				}
 			};
 		}
 	};
 
 	template<class F>
-	[[nodiscard]] auto make_pass(Name name, F&& body) {
+	[[nodiscard]] auto make_pass(Name name, F&& body, SchedulingInfo scheduling_info = SchedulingInfo(DomainFlagBits::eAny)) {
 		using traits = closure_traits<decltype(&F::operator())>;
-		return TupleMap<drop_t<1, typename traits::types>>::template make_lam<typename traits::result_type, F>(name, std::forward<F>(body));
+		return TupleMap<drop_t<1, typename traits::types>>::template make_lam<typename traits::result_type, F>(name, std::forward<F>(body), scheduling_info);
 	}
 
 	[[nodiscard]] inline Future<ImageAttachment> declare_ia(Name name, ImageAttachment ia = {}) {
 		std::shared_ptr<RG> rg = std::make_shared<RG>();
 		Ref ref = rg->make_declare_image(ia);
 		rg->name_outputs(ref.node, { name.c_str() });
-		return { rg, ref, ref };
+		return { rg, ref, ref, {} };
 	}
 
 	[[nodiscard]] inline Future<Buffer> declare_buf(Name name, Buffer buf = {}) {
 		std::shared_ptr<RG> rg = std::make_shared<RG>();
 		Ref ref = rg->make_declare_buffer(buf);
 		rg->name_outputs(ref.node, { name.c_str() });
-		return { rg, ref, ref };
+		return { rg, ref, ref, {} };
 	}
 
 	template<class T, class... Args>
@@ -623,7 +629,7 @@ public:
 		(args.abandon(), ...);
 		Ref ref = rg->make_declare_array(Type::stripped(refs[0].type()), refs, defs);
 		rg->name_outputs(ref.node, { name.c_str() });
-		return { rg, ref, ref };
+		return { rg, ref, ref, {} };
 	}
 
 	template<class T>
@@ -639,13 +645,13 @@ public:
 		}
 		Ref ref = rg->make_declare_array(Type::stripped(refs[0].type()), refs, defs);
 		rg->name_outputs(ref.node, { name.c_str() });
-		return { rg, ref, ref };
+		return { rg, ref, ref, {} };
 	}
 
 	[[nodiscard]] inline Future<Swapchain> declare_swapchain(Swapchain bundle) {
 		std::shared_ptr<RG> rg = std::make_shared<RG>();
 		Ref ref = rg->make_declare_swapchain(bundle);
-		return { rg, ref, ref };
+		return { rg, ref, ref, {} };
 	}
 
 	[[nodiscard]] inline Future<ImageAttachment> acquire_next_image(Name name, Future<Swapchain> in) {

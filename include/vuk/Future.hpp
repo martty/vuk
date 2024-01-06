@@ -38,21 +38,24 @@ namespace vuk {
 
 	class UntypedFuture {
 	public:
-		UntypedFuture(std::shared_ptr<RG> rg, Ref ref, Ref def) {
+		UntypedFuture(std::shared_ptr<RG> rg, Ref ref, Ref def, std::vector<std::shared_ptr<FutureControlBlock>> dependent_blocks) {
 			this->control = std::make_shared<FutureControlBlock>();
 
 			this->head = { rg->make_release(ref, &this->control->acqrel, Access::eNone, DomainFlagBits::eAny), 0 };
 
 			this->control->rg = std::move(rg);
 			this->def = def;
+			this->dependent_blocks = std::move(dependent_blocks);
 		}
 
 		UntypedFuture(const UntypedFuture& o) noexcept : control{ std::make_shared<FutureControlBlock>(*o.control) }, def{ o.def } {
 			head = { control->rg->make_release(o.get_head(), &this->control->acqrel, Access::eNone, DomainFlagBits::eAny), 0 };
+			dependent_blocks = o.dependent_blocks;
 		}
 
 		UntypedFuture(UntypedFuture&& o) noexcept :
 		    control{ std::exchange(o.control, nullptr) },
+		    dependent_blocks{ std::exchange(o.dependent_blocks, {}) },
 		    def{ std::exchange(o.def, {}) },
 		    head{ std::exchange(o.head, {}) } {}
 
@@ -61,12 +64,14 @@ namespace vuk {
 			def = { o.def };
 
 			head = { control->rg->make_release(o.get_head(), &this->control->acqrel, Access::eNone, DomainFlagBits::eAny), 0 };
+			dependent_blocks = o.dependent_blocks;
 
 			return *this;
 		}
 
 		UntypedFuture& operator=(UntypedFuture&& o) noexcept {
 			std::swap(o.control, control);
+			std::swap(o.dependent_blocks, dependent_blocks);
 			std::swap(o.def, def);
 			std::swap(o.head, head);
 
@@ -126,6 +131,7 @@ namespace vuk {
 
 		// TODO: remove this from public API
 		std::shared_ptr<FutureControlBlock> control;
+		std::vector<std::shared_ptr<FutureControlBlock>> dependent_blocks;
 
 	protected:
 		Ref def;
@@ -258,7 +264,7 @@ namespace vuk {
 		Future<uint64_t> get_size()
 		  requires std::is_same_v<T, Buffer>
 		{
-			return { get_render_graph(), def.node->valloc.args[1], {} };
+			return { get_render_graph(), def.node->valloc.args[1], {}, {control} };
 		}
 
 		void set_size(Future<uint64_t> arg)
@@ -275,7 +281,7 @@ namespace vuk {
 			Ref item = control->rg->make_array_indexing(def.type()->array.T, get_head(), control->rg->make_constant(index));
 			assert(def.node->kind == Node::AALLOC);
 			assert(def.type()->kind == Type::ARRAY_TY);
-			return Future<std::remove_reference_t<decltype(std::declval<T>()[0])>>(get_render_graph(), item, item_def);
+			return Future<std::remove_reference_t<decltype(std::declval<T>()[0])>>(get_render_graph(), item, item_def, {control});
 		}
 	};
 

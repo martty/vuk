@@ -106,7 +106,10 @@ namespace vuk {
 	};
 
 	struct SchedulingInfo {
-		DomainFlags required_domain;
+		SchedulingInfo(DomainFlags required_domains) : required_domains(required_domains) {}
+		SchedulingInfo(DomainFlagBits required_domain) : required_domains(required_domain) {}
+
+		DomainFlags required_domains;
 	};
 
 	struct NodeDebugInfo {
