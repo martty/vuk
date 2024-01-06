@@ -132,7 +132,6 @@ namespace vuk {
 			ACQUIRE,
 			RELEASE,
 			ACQUIRE_NEXT_IMAGE,
-			PRESENT,
 			INDEXING,
 			CAST,
 			MATH_BINARY
@@ -186,7 +185,7 @@ namespace vuk {
 				Signal* signal;
 			} wait;
 			struct {
-				const Ref dst;
+				Ref arg;
 				AcquireRelease* acquire;
 			} acquire;
 			struct {
@@ -206,9 +205,6 @@ namespace vuk {
 				Ref src;
 			} cast;
 			struct {
-				Ref src;
-			} present;
-			struct {
 				BinOp op;
 				Ref a;
 				Ref b;
@@ -225,8 +221,8 @@ namespace vuk {
 				return "call";
 			case INDEXING:
 				return "indexing";
-			case PRESENT:
-				return "present";
+			case ACQUIRE:
+				return "acquire";
 			}
 			assert(0);
 			return "";
@@ -251,6 +247,21 @@ namespace vuk {
 	T& constant(Ref ref) {
 		assert(ref.type()->kind == Type::INTEGER_TY || ref.type()->kind == Type::MEMORY_TY);
 		return *reinterpret_cast<T*>(ref.node->constant.value);
+	}
+
+	inline void* get_constant_value(Node* node) {
+		if (node->kind == Node::VALLOC) {
+			return node->valloc.args[0].node->constant.value;
+		} else if (node->kind == Node::AALLOC) {
+			return node->aalloc.args[0].node->constant.value;
+		} else if (node->kind == Node::ACQUIRE_NEXT_IMAGE) {
+			Swapchain* swp = reinterpret_cast<Swapchain*>(node->acquire_next_image.swapchain.node->valloc.args[0].node->constant.value);
+			return &swp->images[swp->image_index];
+		} else if (node->kind == Node::ACQUIRE) {
+			return node->acquire.arg.node->constant.value;
+		} else {
+			assert(0);
+		}
 	}
 
 	template<class T>
@@ -299,7 +310,7 @@ namespace vuk {
 			return new (ensure_space(sizeof(Node))) Node(v);
 		}
 
-		Type* emplace_type(Type&& t, TypeDebugInfo = {}) {
+		Type* emplace_type(Type t, TypeDebugInfo = {}) {
 			return &types.emplace_back(std::move(t));
 		}
 
@@ -504,14 +515,21 @@ namespace vuk {
 			return emplace_op(Node{ .kind = Node::RELEASE, .release = { .src = src, .release = acq_rel, .dst_access = dst_access, .dst_domain = dst_domain } });
 		}
 
-		Node* make_present(Ref src) {
-			return emplace_op(Node{ .kind = Node::PRESENT, .type = std::span{ &builtin_image, 1 }, .present = { .src = src } });
+		Ref make_acquire(Type* type, AcquireRelease* acq_rel, void* value) {
+			auto ty = new Type*(emplace_type(*type));
+			auto mem_ty = new Type*(emplace_type(Type{ .kind = Type::MEMORY_TY }));
+			return first(emplace_op(
+			    Node{ .kind = Node::ACQUIRE,
+			          .type = std::span{ ty, 1 },
+			          .acquire = { .arg = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = value } })),
+			                       .acquire = acq_rel } }));
 		}
 
 		// MATH
 
 		Ref make_math_binary_op(Node::BinOp op, Ref a, Ref b) {
 			Type** tys = new Type*(a.type());
+
 			return first(emplace_op(Node{ .kind = Node::MATH_BINARY, .type = std::span{ tys, 1 }, .math_binary = { .op = op, .a = a, .b = b } }));
 		}
 	};

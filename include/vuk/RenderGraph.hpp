@@ -657,7 +657,7 @@ public:
 
 	[[nodiscard]] inline Future<void> enqueue_presentation(Future<ImageAttachment> in) {
 		auto& rg = in.get_render_graph();
-		return std::move(std::move(in).release_to<void>(in.get_head(), Access::ePresent, DomainFlagBits::ePE));
+		return std::move(std::move(in).release_to<void>(Access::ePresent, DomainFlagBits::ePE));
 	}
 
 	struct Compiler {

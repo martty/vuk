@@ -91,6 +91,10 @@ namespace vuk {
 					res_to_links[first(&node)].def = first(&node);
 					res_to_links[first(&node)].type = first(&node).type();
 					break;
+				case Node::ACQUIRE:
+					res_to_links[first(&node)].def = first(&node);
+					res_to_links[first(&node)].type = first(&node).type();
+					break;
 				case Node::CALL: {
 					// args
 					for (size_t i = 0; i < node.call.args.size(); i++) {
@@ -359,6 +363,7 @@ namespace vuk {
 				case Node::VALLOC:
 				case Node::CALL:
 				case Node::CLEAR:
+				case Node::ACQUIRE:
 				case Node::RELEASE:
 					node_to_schedule[&node] = schedule_items.size();
 					schedule_items.emplace_back(&node);
@@ -629,6 +634,9 @@ namespace vuk {
 		// queue inference pass
 		DomainFlags last_domain = DomainFlagBits::eDevice;
 		auto propagate_domain = [&last_domain](Node* node) {
+			if (!node) {
+				return;
+			}
 			if (!node->scheduling_info) {
 				return;
 			}
@@ -643,8 +651,6 @@ namespace vuk {
 		};
 
 		for (auto& head : impl->chains) {
-			bool is_image = head->type->is_image();
-
 			// forward inference
 			ChainLink* chain;
 			for (chain = head; chain != nullptr; chain = chain->next) {
@@ -681,6 +687,39 @@ namespace vuk {
 		for (auto& p : impl->scheduled_execables) {
 			if (p.scheduled_domain == DomainFlagBits::eDevice || p.scheduled_domain == DomainFlagBits::eAny) { // couldn't infer, set pass as graphics
 				p.scheduled_domain = DomainFlagBits::eGraphicsQueue;
+			}
+		}
+
+		for (auto& head : impl->chains) {
+			// forward inference
+			ChainLink* chain;
+			for (chain = head; chain != nullptr; chain = chain->next) {
+				propagate_domain(chain->def.node);
+				for (auto& r : chain->reads.to_span(impl->pass_reads)) {
+					propagate_domain(r.node);
+				}
+				if (chain->undef) {
+					propagate_domain(chain->undef.node);
+				}
+			}
+		}
+
+		// backward inference
+		for (auto& head : impl->chains) {
+			last_domain = DomainFlagBits::eDevice;
+
+			ChainLink* chain;
+			// wind chain to the end
+			for (chain = head; chain->next != nullptr; chain = chain->next)
+				;
+			for (; chain != nullptr; chain = chain->prev) {
+				if (chain->undef) {
+					propagate_domain(chain->undef.node);
+				}
+				for (auto& r : chain->reads.to_span(impl->pass_reads)) {
+					propagate_domain(r.node);
+				}
+				propagate_domain(chain->def.node);
 			}
 		}
 	}
@@ -743,7 +782,7 @@ namespace vuk {
 		// inputs to order within a queue
 
 		VUK_DO_OR_RETURN(build_links(all_rgs, impl->res_to_links, impl->pass_reads));
-		// VUK_DO_OR_RETURN(collect_chains(impl->res_to_links, impl->chains));
+		VUK_DO_OR_RETURN(collect_chains(impl->res_to_links, impl->chains));
 
 		// VUK_DO_OR_RETURN(impl->diagnose_unheaded_chains());
 		VUK_DO_OR_RETURN(impl->schedule_intra_queue(all_rgs, compile_options));

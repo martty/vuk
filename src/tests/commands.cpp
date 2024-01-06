@@ -222,4 +222,43 @@ TEST_CASE("scheduling single-queue") {
 	}
 }
 
+TEST_CASE("scheduling with submitted") {
+	{
+		std::string execution;
+
+		auto buf0 = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+
+		auto write = make_pass("write", [&](CommandBuffer& cbuf, VUK_BA(Access::eTransferWrite) dst) {
+			execution += "w";
+			return dst;
+		});
+		auto read = make_pass("read", [&](CommandBuffer& cbuf, VUK_BA(Access::eTransferRead) dst) {
+			execution += "r";
+			return dst;
+		});
+
+		{
+			auto written = write(declare_buf("src0", **buf0));
+			written.wait(*test_context.allocator, test_context.compiler);
+			read(written).wait(*test_context.allocator, test_context.compiler);
+			CHECK(execution == "wr");
+			execution = "";
+		}
+		{
+			auto written = write(declare_buf("src0", **buf0));
+			written.wait(*test_context.allocator, test_context.compiler);
+			read(std::move(written)).wait(*test_context.allocator, test_context.compiler);
+			CHECK(execution == "wr");
+			execution = "";
+		}
+		{
+			auto written = write(declare_buf("src0", **buf0));
+			written.wait(*test_context.allocator, test_context.compiler);
+			write(std::move(written)).wait(*test_context.allocator, test_context.compiler);
+			CHECK(execution == "ww");
+			execution = "";
+		}
+	}
+}
+
 // TEST TODOS: image2image copy, resolve

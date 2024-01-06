@@ -60,7 +60,7 @@ namespace vuk {
 			control = { std::make_shared<FutureControlBlock>(*o.control) };
 			def = { o.def };
 
-			head = { control->rg->make_release(o.get_head(), &this->control->acqrel, Access::eHostRW, DomainFlagBits::eHost), 0 };
+			head = { control->rg->make_release(o.get_head(), &this->control->acqrel, Access::eNone, DomainFlagBits::eAny), 0 };
 
 			return *this;
 		}
@@ -96,7 +96,19 @@ namespace vuk {
 		}
 
 		Result<void> wait(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options = {}) {
-			return control->wait(allocator, compiler, options);
+			auto result = control->wait(allocator, compiler, options);
+			if (result.holds_value()) {
+				// save value
+				auto current_value = get_constant_value(def.node);
+				auto current_ty = def.type();
+				// new RG with ACQUIRE node
+				auto new_rg = std::make_shared<RG>();
+				this->def = { new_rg->make_acquire(current_ty, &this->control->acqrel, current_value) };
+				// drop current RG
+				this->control->rg = std::move(new_rg);
+				this->head = { this->control->rg->make_release(this->def, &this->control->acqrel, Access::eNone, DomainFlagBits::eAny), 0 };
+			}
+			return result;
 		}
 
 		template<class U>
@@ -139,15 +151,15 @@ namespace vuk {
 		}
 
 		template<class U = T>
-		Future<U> release_to(Ref ref, Access access, DomainFlagBits domain) noexcept {
-			head.node->release.src = ref;
+		Future<U> release_to(Access access, DomainFlagBits domain) noexcept {
+			assert(head.node->kind == Node::RELEASE);
 			head.node->release.dst_access = access;
 			head.node->release.dst_domain = domain;
 			return std::move(*reinterpret_cast<Future<U>*>(this)); // TODO: not cool
 		}
 
 		T* operator->() noexcept {
-			return reinterpret_cast<T*>(def.node->valloc.args[0].node->constant.value);
+			return reinterpret_cast<T*>(get_constant_value(def.node));
 		}
 
 		/// @brief Wait and retrieve the result of the Future on the host
