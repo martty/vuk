@@ -394,7 +394,7 @@ namespace vuk {
 			}
 
 			arguments.push_back(L"-spirv");
-			arguments.push_back(L"-fspv-target-env=vulkan1.1");
+			arguments.push_back(L"-fspv-target-env=vulkan1.2");
 			arguments.push_back(L"-fvk-use-gl-layout");
 			arguments.push_back(L"-no-warnings");
 			static const std::pair<const char*, HlslShaderStage> inferred[] = {
