@@ -716,16 +716,22 @@ namespace vuk {
 		ivci.subresourceRange.aspectMask = format_to_aspect(ici.format);
 		ivci.subresourceRange.baseArrayLayer = 0;
 		ivci.subresourceRange.baseMipLevel = 0;
-		ivci.subresourceRange.layerCount = 1;
+		ivci.subresourceRange.layerCount = ici.arrayLayers;
 		ivci.subresourceRange.levelCount = ici.mipLevels;
-		ivci.viewType = ici.imageType == ImageType::e3D ? ImageViewType::e3D : ici.imageType == ImageType::e2D ? ImageViewType::e2D : ImageViewType::e1D;
-		Texture tex{ std::move(dst), allocate_image_view(allocator, ivci, loc).value() }; // TODO: dropping error
-		tex.extent = ici.extent;
-		tex.format = ici.format;
-		tex.sample_count = ici.samples;
-		tex.layer_count = 1;
-		tex.level_count = ici.mipLevels;
-		return tex;
+		ivci.viewType = ici.imageType == ImageType::e3D
+			                ? ImageViewType::e3D
+			                : ici.imageType == ImageType::e2D
+			                ? (ici.arrayLayers > 1 ? ImageViewType::e2DArray : ImageViewType::e2D)
+			                : ImageViewType::e1D;
+		return Texture{
+			std::move(dst),
+			allocate_image_view(allocator, ivci, loc).value(), // TODO: dropping error
+			ici.extent,
+			ici.format,
+			ici.samples,
+			ici.arrayLayers,
+			ici.mipLevels
+		};
 	}
 
 	void Context::destroy(const DescriptorPool& dp) {
