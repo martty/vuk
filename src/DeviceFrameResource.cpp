@@ -779,6 +779,18 @@ namespace vuk {
 	}
 
 	DeviceFrameResource& DeviceSuperFrameResource::get_next_frame() {
+		// trim here, outside of lock, to prevent deadlocking, as trim may release memory to the superframe
+		{
+			auto& trim_frame = impl->frames[impl->frame_counter % frames_in_flight];
+			if (direct) {
+				if (trim_frame.construction_frame % 16 == 0) {
+					trim_frame.impl->linear_cpu_only.trim();
+					trim_frame.impl->linear_cpu_gpu.trim();
+					trim_frame.impl->linear_gpu_cpu.trim();
+					trim_frame.impl->linear_gpu_only.trim();
+				}
+			}
+		}
 		std::unique_lock _s(impl->new_frame_mutex);
 
 		impl->frame_counter++;
@@ -866,12 +878,6 @@ namespace vuk {
 		f.cmdpools_to_free.clear();
 		f.ds_pools.clear();
 		if (direct) {
-			if (frame.construction_frame % 16 == 0) {
-				f.linear_cpu_only.trim();
-				f.linear_cpu_gpu.trim();
-				f.linear_gpu_cpu.trim();
-				f.linear_gpu_only.trim();
-			}
 			f.linear_cpu_only.reset();
 			f.linear_cpu_gpu.reset();
 			f.linear_gpu_cpu.reset();
