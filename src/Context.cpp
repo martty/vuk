@@ -729,8 +729,8 @@ namespace vuk {
 			ici.extent,
 			ici.format,
 			ici.samples,
-			ici.arrayLayers,
-			ici.mipLevels
+			ici.mipLevels,
+			ici.arrayLayers
 		};
 	}
 
