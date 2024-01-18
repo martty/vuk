@@ -85,6 +85,10 @@ namespace vuk {
 			defines.emplace_back(std::move(key), std::move(value));
 		}
 
+		void set_compile_options(ShaderCompileOptions shader_compile_options) {
+			compile_options = std::move(shader_compile_options);
+		}
+
 #if VUK_USE_SHADERC
 		void add_glsl(std::string_view source, std::string filename, std::string entry_point = "main") {
 			shaders.emplace_back(ShaderSource::glsl(source, std::move(entry_point)));
@@ -117,6 +121,7 @@ namespace vuk {
 		std::vector<std::string> shader_paths;
 		std::vector<HitGroup> hit_groups;
 		std::vector<std::pair<std::string, std::string>> defines;
+		ShaderCompileOptions compile_options = {};
 		/// @brief Recursion depth for RT pipelines, corresponding to maxPipelineRayRecursionDepth
 		uint32_t max_ray_recursion_depth = 1;
 
