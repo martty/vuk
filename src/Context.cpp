@@ -356,15 +356,33 @@ namespace vuk {
 		case ShaderSourceLanguage::eGlsl: {
 			shaderc::Compiler compiler;
 			shaderc::CompileOptions options;
-			options.SetTargetEnvironment(shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_2);
+
+			static const std::unordered_map<uint32_t, uint32_t> target_version = {
+				{ VK_API_VERSION_1_0, shaderc_env_version_vulkan_1_0 },
+				{ VK_API_VERSION_1_1, shaderc_env_version_vulkan_1_1 },
+				{ VK_API_VERSION_1_2, shaderc_env_version_vulkan_1_2 },
+				{ VK_API_VERSION_1_3, shaderc_env_version_vulkan_1_3 },
+			};
+
+			options.SetTargetEnvironment(shaderc_target_env_vulkan, target_version.at(cinfo.compile_options.target_version));
+
+			static const std::unordered_map<ShaderCompileOptions::OptimizationLevel, shaderc_optimization_level> optimization_level = {
+				{ ShaderCompileOptions::OptimizationLevel::O0, shaderc_optimization_level_zero },
+				{ ShaderCompileOptions::OptimizationLevel::O1, shaderc_optimization_level_performance },
+				{ ShaderCompileOptions::OptimizationLevel::O2, shaderc_optimization_level_performance },
+				{ ShaderCompileOptions::OptimizationLevel::O3, shaderc_optimization_level_performance },
+			};
+
+			options.SetOptimizationLevel(optimization_level.at(cinfo.compile_options.optimization_level));
+
 			options.SetIncluder(std::make_unique<ShadercDefaultIncluder>());
 			for (auto& [k, v] : cinfo.defines) {
 				options.AddMacroDefinition(k, v);
 			}
-			const auto result = compiler.CompileGlslToSpv(cinfo.source.as_c_str(), shaderc_glsl_infer_from_source, cinfo.filename.c_str(), options);
 
+			const auto result = compiler.CompileGlslToSpv(cinfo.source.as_c_str(), shaderc_glsl_infer_from_source, cinfo.filename.c_str(), options);
 			if (result.GetCompilationStatus() != shaderc_compilation_status_success) {
-				std::string message = result.GetErrorMessage().c_str();
+				std::string message = result.GetErrorMessage();
 				throw ShaderCompilationException{ message };
 			}
 
@@ -393,10 +411,29 @@ namespace vuk {
 				arguments.push_back(def_ws.emplace_back(convert_to_wstring(def)).c_str());
 			}
 
-			arguments.push_back(L"-spirv");
-			arguments.push_back(L"-fspv-target-env=vulkan1.2");
-			arguments.push_back(L"-fvk-use-gl-layout");
-			arguments.push_back(L"-no-warnings");
+			// current valid options in dxc are 1.0 and 1.1
+			static const std::unordered_map<uint32_t, const wchar_t*> target_version = {
+				{ VK_API_VERSION_1_0, L"-fspv-target-env=vulkan1.0"},
+				{ VK_API_VERSION_1_1, L"-fspv-target-env=vulkan1.1"},
+				{ VK_API_VERSION_1_2, L"-fspv-target-env=vulkan1.1"},
+				{ VK_API_VERSION_1_3, L"-fspv-target-env=vulkan1.1"},
+			};
+
+			arguments.push_back(target_version.at(cinfo.compile_options.target_version));
+
+			static const std::unordered_map<ShaderCompileOptions::OptimizationLevel, const wchar_t*> optimization_level = {
+				{ ShaderCompileOptions::OptimizationLevel::O0, L"-O0" },
+				{ ShaderCompileOptions::OptimizationLevel::O1, L"-O1" },
+				{ ShaderCompileOptions::OptimizationLevel::O2, L"-O2" },
+				{ ShaderCompileOptions::OptimizationLevel::O3, L"-O3" },
+			};
+
+			arguments.push_back(optimization_level.at(cinfo.compile_options.optimization_level));
+
+			for (auto& arg : cinfo.compile_options.dxc_extra_arguments) {
+				arguments.push_back(arg);
+			}
+
 			static const std::pair<const char*, HlslShaderStage> inferred[] = {
 				{ ".vert.", HlslShaderStage::eVertex },   { ".frag.", HlslShaderStage::ePixel },       { ".comp.", HlslShaderStage::eCompute },
 				{ ".geom.", HlslShaderStage::eGeometry }, { ".mesh.", HlslShaderStage::eMesh },        { ".hull.", HlslShaderStage::eHull },
@@ -439,7 +476,7 @@ namespace vuk {
 			DXC_HR(utils->CreateDefaultIncludeHandler(&include_handler), "Failed to create include handler");
 
 			CComPtr<IDxcResult> result = nullptr;
-			DXC_HR(compiler->Compile(&source_buf, arguments.data(), arguments.size(), &*include_handler, __uuidof(IDxcResult), (void**)&result),
+			DXC_HR(compiler->Compile(&source_buf, arguments.data(), (UINT32)arguments.size(), &*include_handler, __uuidof(IDxcResult), (void**)&result),
 			       "Failed to compile with DXC");
 
 			CComPtr<IDxcBlobUtf8> errors = nullptr;
@@ -496,7 +533,7 @@ namespace vuk {
 			if (contents.data_ptr == nullptr) {
 				continue;
 			}
-			auto& sm = impl->shader_modules.acquire({ contents, cinfo.shader_paths[i], cinfo.defines });
+			auto& sm = impl->shader_modules.acquire({ contents, cinfo.shader_paths[i], cinfo.defines, cinfo.compile_options });
 			VkPipelineShaderStageCreateInfo shader_stage{ .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
 			shader_stage.pSpecializationInfo = nullptr;
 			shader_stage.stage = sm.stage;

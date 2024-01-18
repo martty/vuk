@@ -29,6 +29,18 @@ namespace vuk {
 		eAmplification
 	};
 
+	struct ShaderCompileOptions {
+		enum class OptimizationLevel {
+			O0,
+			O1,
+			O2,
+			O3
+		} optimization_level = OptimizationLevel::O3;
+
+		uint32_t target_version = VK_API_VERSION_1_3;
+		std::vector<const wchar_t*> dxc_extra_arguments = { L"-spirv", L"-fvk-use-gl-layout", L"-no-warnings" };
+	};
+
 	/// @brief Wrapper over either a GLSL, HLSL, or SPIR-V source
 	struct ShaderSource {
 		ShaderSource() = default;
@@ -164,6 +176,7 @@ namespace vuk {
 		ShaderSource source;
 		std::string filename;
 		std::vector<std::pair<std::string, std::string>> defines;
+		ShaderCompileOptions compile_options = {};
 
 		bool operator==(const ShaderModuleCreateInfo& o) const noexcept {
 			return source == o.source && defines == o.defines;
