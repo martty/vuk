@@ -38,7 +38,7 @@ namespace vuk {
 		} optimization_level = OptimizationLevel::O3;
 
 		uint32_t target_version = VK_API_VERSION_1_3;
-		std::vector<const wchar_t*> dxc_extra_arguments = { L"-spirv", L"-fvk-use-gl-layout", L"-no-warnings" };
+		std::vector<std::wstring> dxc_extra_arguments = { L"-spirv", L"-fvk-use-gl-layout", L"-no-warnings" };
 	};
 
 	/// @brief Wrapper over either a GLSL, HLSL, or SPIR-V source
