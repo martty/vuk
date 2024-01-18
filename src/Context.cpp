@@ -431,7 +431,7 @@ namespace vuk {
 			arguments.push_back(optimization_level.at(cinfo.compile_options.optimization_level));
 
 			for (auto& arg : cinfo.compile_options.dxc_extra_arguments) {
-				arguments.push_back(arg);
+				arguments.push_back(arg.data());
 			}
 
 			static const std::pair<const char*, HlslShaderStage> inferred[] = {
