@@ -538,7 +538,7 @@ public:
 
 	template<typename... T>
 	struct TupleMap<std::tuple<T...>> {
-		using ret_tuple = std::tuple<Future<typename T::type>...>;
+		using ret_tuple = std::tuple<Value<typename T::type>...>;
 
 		template<class Ret, class F>
 		static auto make_lam(Name name, F&& body, SchedulingInfo scheduling_info) {
@@ -581,7 +581,11 @@ public:
 				Node* node = rg.make_call(opaque_fn, args.get_head()...);
 				node->scheduling_info = new SchedulingInfo(scheduling_info);
 
+				[](auto& first, auto&... rest) {
+					(first.get_render_graph()->subgraphs.push_back(rest.get_render_graph()), ...);
+				}(args...);
 				std::vector<std::shared_ptr<ExtRef>> dependent_refs = { std::move(args.head)... };
+	
 				std::erase_if(dependent_refs, [](auto& sp) { return sp.use_count() == 1; });
 
 				if constexpr (is_tuple<Ret>::value) {
@@ -620,7 +624,7 @@ public:
 	}
 
 	template<class T, class... Args>
-	[[nodiscard]] inline Value<T[]> declare_array(Name name, Future<T>&& arg, Args&&... args) {
+	[[nodiscard]] inline Value<T[]> declare_array(Name name, Value<T>&& arg, Args&&... args) {
 		auto rg = arg.get_render_graph();
 		(rg->subgraphs.push_back(args.get_render_graph()), ...);
 		std::array refs = { arg.get_head(), args.get_head()... };
@@ -633,7 +637,7 @@ public:
 	}
 
 	template<class T>
-	[[nodiscard]] inline Value<T[]> declare_array(Name name, std::span<const Future<T>> args) {
+	[[nodiscard]] inline Value<T[]> declare_array(Name name, std::span<const Value<T>> args) {
 		assert(args.size() > 0);
 		auto rg = args[0].get_render_graph();
 		std::vector<Ref> refs;
@@ -661,8 +665,8 @@ public:
 		return std::move(std::move(in).transmute<ImageAttachment>(ref));
 	}
 
-	[[nodiscard]] inline Future<void> enqueue_presentation(Value<ImageAttachment> in) {
-		return std::move(std::move(in).release<void>(Access::ePresent, DomainFlagBits::ePE));
+	[[nodiscard]] inline Value<void> enqueue_presentation(Value<ImageAttachment> in) {
+		return std::move(std::move(in).as_released<void>(Access::ePresent, DomainFlagBits::ePE));
 	}
 
 	struct Compiler {

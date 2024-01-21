@@ -1455,21 +1455,20 @@ namespace vuk {
 					auto arg_ty = node->type[0];
 					auto di = sched.get_dependency_info(parm, arg_ty, RW::eWrite, dst_stream);
 					recorder.add_sync(sched.base_type(parm), di, sched.get_value(parm));
-					if (!acqrel) {
-						fmt::print("$$ :");
+					if (!acqrel) { // (we should've handled this before this moment)
+						fmt::print("???");
+						assert(false);
 					} else {
 						switch (acqrel->status){ 
-							case Signal::Status::eDisarmed:
-							fmt::print("X :"); // means we have to signal this
+							case Signal::Status::eDisarmed: // means we have to signal this
 							acqrel->last_use = di.src_use;
 							node->relacq.value = sched.get_value(parm);
 							di.src_use.stream->add_dependent_signal(acqrel);
 							break;
-						  case Signal::Status::eSynchronizable: // means this is an acq instead
-							fmt::print("v :");
-							break;
+						  case Signal::Status::eSynchronizable: // means this is an acq instead (we should've handled this before this moment)
 						  case Signal::Status::eHostAvailable:
-							fmt::print("^ :");
+							fmt::print("???");
+							assert(false);
 							break;
 						}
 					}

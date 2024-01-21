@@ -172,7 +172,7 @@ namespace vuk {
 	/// @param allocator Allocator to allocate this Buffer from
 	/// @param mem_usage Where to allocate the buffer (host visible buffers will be automatically mapped)
 	template<class T>
-	std::pair<Unique<Buffer>, Future<Buffer>>
+	std::pair<Unique<Buffer>, Value<Buffer>>
 	create_buffer(Allocator& allocator, vuk::MemoryUsage memory_usage, DomainFlagBits domain, std::span<T> data, size_t alignment = 1) {
 		Unique<Buffer> buf(allocator);
 		BufferCreateInfo bci{ memory_usage, sizeof(T) * data.size(), alignment };
@@ -181,7 +181,7 @@ namespace vuk {
 		return { std::move(buf), host_data_to_buffer(allocator, domain, b, data) };
 	}
 
-	inline std::pair<Unique<Image>, Future<ImageAttachment>> create_image_with_data(Allocator& allocator,
+	inline std::pair<Unique<Image>, Value<ImageAttachment>> create_image_with_data(Allocator& allocator,
 	                                                                              DomainFlagBits copy_domain,
 	                                                                              ImageAttachment ia,
 	                                                                              const void* data,
@@ -192,7 +192,7 @@ namespace vuk {
 	}
 
 	template<class T>
-	std::pair<Unique<Image>, Future<ImageAttachment>> create_image_with_data(Allocator& allocator,
+	std::pair<Unique<Image>, Value<ImageAttachment>> create_image_with_data(Allocator& allocator,
 	                                                                              DomainFlagBits copy_domain,
 	                                                                              ImageAttachment ia,
 	                                                                              std::span<T> data,
@@ -200,7 +200,7 @@ namespace vuk {
 		return create_image_with_data(allocator, copy_domain, ia, data.data(), loc);
 	}
 
-	inline std::tuple<Unique<Image>, Unique<ImageView>, Future<ImageAttachment>>
+	inline std::tuple<Unique<Image>, Unique<ImageView>, Value<ImageAttachment>>
 	create_image_and_view_with_data(Allocator& allocator,
 	                                                                                                           DomainFlagBits copy_domain,
 	                                                                                                           ImageAttachment ia,
@@ -214,7 +214,7 @@ namespace vuk {
 	}
 
 	template<class T>
-	std::tuple<Unique<Image>, Unique<ImageView>, Future<ImageAttachment>> create_image_and_view_with_data(Allocator& allocator,
+	std::tuple<Unique<Image>, Unique<ImageView>, Value<ImageAttachment>> create_image_and_view_with_data(Allocator& allocator,
 	                                                                                                           DomainFlagBits copy_domain,
 	                                                                                                           ImageAttachment ia,
 	                                                                                                           std::span<T> data,

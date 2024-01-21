@@ -13,21 +13,17 @@
 
 // futures
 namespace vuk {
-	template<class T>
-	class Future;
-
-	template<class T>
-	class Value {
+	class UntypedValue {
 	public:
-		Value(std::shared_ptr<ExtRef> head, Ref def) : head(head), def(def) {}
-		Value(std::shared_ptr<ExtRef> head, Ref def, std::vector<std::shared_ptr<ExtRef>> deps) : head(head), def(def), deps(deps) {}
+		UntypedValue(std::shared_ptr<ExtRef> head, Ref def) : head(head), def(def) {}
+		UntypedValue(std::shared_ptr<ExtRef> head, Ref def, std::vector<std::shared_ptr<ExtRef>> deps) : head(head), def(def), deps(deps) {}
 
 		/// @brief Get the referenced RenderGraph
 		const std::shared_ptr<RG>& get_render_graph() const noexcept {
 			return head->module;
 		}
 
-		/// @brief Name the value currently referenced by this Future
+		/// @brief Name the value currently referenced by this Value
 		void set_name(std::string_view name) noexcept {
 			get_render_graph()->name_output(head->get_head(), std::string(name));
 		}
@@ -40,7 +36,50 @@ namespace vuk {
 			return def;
 		}
 
-	
+		void release(Access access = Access::eNone, DomainFlagBits domain = DomainFlagBits::eAny) noexcept {
+			assert(head->acqrel->status == Signal::Status::eDisarmed);
+			head->to_release(access, domain);
+		}
+
+		void to_acquire(){
+			auto current_value = get_constant_value(def.node);
+			auto current_ty = def.type();
+			// new RG with ACQUIRE node
+			auto new_rg = std::make_shared<RG>();
+			auto new_def = new_rg->make_acquire(current_ty, nullptr, current_value);
+			auto new_extref = std::make_shared<ExtRef>(new_rg, new_def);
+			new_def.node->acquire.acquire = head->acqrel.get();
+			head = new_extref;
+			def = new_def;
+			deps = { head };
+		}
+
+		void abandon() {
+			if (head->get_head().node) {
+				assert(head->get_head().node->kind == Node::RELEASE || head->get_head().node->kind == Node::NOP);
+				head->get_head().node->kind = Node::NOP;
+			}
+		}
+
+		/// @brief Submit Future for execution
+		Result<void> submit(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options = {});
+		/// @brief If the Future has been submitted for execution, polls for status.
+		[[nodiscard]] Result<Signal::Status> poll();
+
+		Result<void> wait(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options = {});
+
+		std::shared_ptr<ExtRef> head;
+
+	protected:
+		Ref def;
+		std::vector<std::shared_ptr<ExtRef>> deps;
+	};
+
+	template<class T>
+	class Value : public UntypedValue {
+	public:
+		using UntypedValue::UntypedValue;
+
 		template<class U>
 		Value<U> transmute(Ref new_head) noexcept {
 			head = std::make_shared<ExtRef>(ExtRef{ head->module, new_head });
@@ -48,15 +87,25 @@ namespace vuk {
 			return *reinterpret_cast<Value<U>*>(this); // TODO: not cool
 		}
 
-		template<class U = T>
-		Future<U> release(Access access = Access::eNone, DomainFlagBits domain = DomainFlagBits::eAny) noexcept {
-			assert(head->acqrel->status == Signal::Status::eDisarmed);
-			head->to_release(access, domain);
-			return Future<U>(*this);
-		}
-
 		T* operator->() noexcept {
 			return reinterpret_cast<T*>(get_constant_value(def.node));
+		}
+
+		/// @brief Wait and retrieve the result of the Future on the host
+		[[nodiscard]] Result<T> get(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options = {})
+		  requires(!std::is_array_v<T>)
+		{
+			if (auto result = wait(allocator, compiler, options)) {
+				return { expected_value, *operator->() };
+			} else {
+				return result;
+			}
+		}
+
+		template<class U = T>
+		Value<U> as_released(Access access = Access::eNone, DomainFlagBits domain = DomainFlagBits::eAny) {
+			release(access, domain);
+			return *reinterpret_cast<Value<U>*>(this); // TODO: not cool
 		}
 
 		// Image inferences
@@ -144,7 +193,7 @@ namespace vuk {
 		Value<uint64_t> get_size()
 		  requires std::is_same_v<T, Buffer>
 		{
-			return { make_ext_ref(get_render_graph(), def.node->valloc.args[1]), {} };
+			return { std::make_shared<ExtRef>(get_render_graph(), def.node->valloc.args[1]), {} };
 		}
 
 		void set_size(Value<uint64_t> arg)
@@ -158,85 +207,10 @@ namespace vuk {
 		  requires std::is_array_v<T>
 		{
 			auto item_def = def.node->aalloc.defs[index];
-			Ref item = head->rg->make_array_indexing(def.type()->array.T, get_head(), head->rg->make_constant(index));
+			Ref item = head->module->make_array_indexing(def.type()->array.T, get_head(), head->module->make_constant(index));
 			assert(def.node->kind == Node::AALLOC);
 			assert(def.type()->kind == Type::ARRAY_TY);
 			return Value<std::remove_reference_t<decltype(std::declval<T>()[0])>>(get_render_graph(), item, item_def);
-		}
-
-		std::shared_ptr<ExtRef> head;
-		Ref def;
-		std::vector<std::shared_ptr<ExtRef>> deps;
-	};
-
-	class UntypedFuture {
-	public:
-		template<class T>
-		UntypedFuture(Value<T> value) : head(value.head), def(value.def), deps(value.deps) {}
-
-		~UntypedFuture() {
-			abandon();
-		}
-
-		template<class U>
-		Future<U> transmute() noexcept {
-			return *reinterpret_cast<Future<U>*>(this); // TODO: not cool
-		}
-
-		void abandon() {
-			if (head->get_head().node) {
-				assert(head->get_head().node->kind == Node::RELEASE || head->get_head().node->kind == Node::NOP);
-				head->get_head().node->kind = Node::NOP;
-			}
-		}
-
-		/// @brief Submit Future for execution
-		Result<void> submit(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options = {});
-		/// @brief If the Future has been submitted for execution, polls for status.
-		[[nodiscard]] Result<Signal::Status> poll();
-
-		Result<void> wait(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options = {});
-
-		std::shared_ptr<ExtRef> head;
-	protected:
-		Ref def;
-		std::vector<std::shared_ptr<ExtRef>> deps;
-	};
-
-	template<class T>
-	class Future : public UntypedFuture {
-	public:
-		using UntypedFuture::UntypedFuture;
-
-		template<class U = T>
-		Future<U> transmute() noexcept {
-			return *reinterpret_cast<Future<U>*>(this); // TODO: not cool
-		}
-
-		T* operator->() noexcept {
-			return reinterpret_cast<T*>(get_constant_value(def.node));
-		}
-
-		operator Value<T>() {
-			auto current_value = get_constant_value(def.node);
-			auto current_ty = def.type();
-			// new RG with ACQUIRE node
-			auto new_rg = std::make_shared<RG>();
-			auto new_def = new_rg->make_acquire(current_ty, nullptr, current_value);
-			auto new_extref = std::make_shared<ExtRef>(new_rg, new_def);
-			new_def.node->acquire.acquire = head->acqrel.get();
-			return Value<T>(std::move(new_extref), new_def, { head });
-		}
-
-		/// @brief Wait and retrieve the result of the Future on the host
-		[[nodiscard]] Result<T> get(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options = {})
-		  requires(!std::is_array_v<T>)
-		{
-			if (auto result = wait(allocator, compiler, options)) {
-				return { expected_value, *operator->() };
-			} else {
-				return result;
-			}
 		}
 	};
 
@@ -245,7 +219,7 @@ namespace vuk {
 		return std::move(std::move(a).transmute<uint64_t>(ref));
 	}
 
-	inline Result<void> wait_for_futures_explicit(Allocator& alloc, Compiler& compiler, std::span<UntypedFuture> futures) {
+	inline Result<void> wait_for_futures_explicit(Allocator& alloc, Compiler& compiler, std::span<UntypedValue> futures) {
 		std::vector<std::shared_ptr<RG>> rgs_to_run;
 		for (uint64_t i = 0; i < futures.size(); i++) {
 			auto& future = futures[i];
