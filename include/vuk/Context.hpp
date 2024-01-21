@@ -139,6 +139,9 @@ namespace vuk {
 		/// Internal pipeline cache to use
 		VkPipelineCache vk_pipeline_cache = VK_NULL_HANDLE;
 
+		/// Shader compiler Vulkan version
+		uint32_t shader_compiler_target_version = VK_API_VERSION_1_3;
+
 		/// @brief Create a pipeline base that can be recalled by name
 		void create_named_pipeline(Name name, PipelineBaseCreateInfo pbci);
 
@@ -155,6 +158,9 @@ namespace vuk {
 		Program get_pipeline_reflection_info(const PipelineBaseCreateInfo& pbci);
 		/// @brief Explicitly compile give ShaderSource into a ShaderModule
 		ShaderModule compile_shader(ShaderSource source, std::string path);
+		/// @brief Set the target Vulkan version for shader compilers.
+		///	@param target_version the version to be set. VK_API_VERSION_1_X defines must be used.
+		void set_shader_target_version(uint32_t target_version = VK_API_VERSION_1_3);
 
 		/// @brief Load a Vulkan pipeline cache
 		bool load_pipeline_cache(std::span<std::byte> data);

@@ -37,7 +37,6 @@ namespace vuk {
 			O3
 		} optimization_level = OptimizationLevel::O3;
 
-		uint32_t target_version = VK_API_VERSION_1_3;
 		std::vector<std::wstring> dxc_extra_arguments = { L"-spirv", L"-fvk-use-gl-layout", L"-no-warnings" };
 	};
 
