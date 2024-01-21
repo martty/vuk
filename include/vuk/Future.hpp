@@ -41,7 +41,7 @@ namespace vuk {
 			head->to_release(access, domain);
 		}
 
-		void to_acquire(){
+		void to_acquire() {
 			auto current_value = get_constant_value(def.node);
 			auto current_ty = def.type();
 			// new RG with ACQUIRE node
@@ -49,9 +49,9 @@ namespace vuk {
 			auto new_def = new_rg->make_acquire(current_ty, nullptr, current_value);
 			auto new_extref = std::make_shared<ExtRef>(new_rg, new_def);
 			new_def.node->acquire.acquire = head->acqrel.get();
+			deps = { head };
 			head = new_extref;
 			def = new_def;
-			deps = { head };
 		}
 
 		void abandon() {
@@ -70,9 +70,9 @@ namespace vuk {
 
 		std::shared_ptr<ExtRef> head;
 
+		std::vector<std::shared_ptr<ExtRef>> deps;
 	protected:
 		Ref def;
-		std::vector<std::shared_ptr<ExtRef>> deps;
 	};
 
 	template<class T>

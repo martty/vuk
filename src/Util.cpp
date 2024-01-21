@@ -103,42 +103,14 @@ namespace vuk {
 	}
 
 	Result<void> UntypedValue::wait(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options) {
-		/* if (acqrel.status == Signal::Status::eDisarmed && !rg) {
-		  return { expected_error,
-		           RenderGraphException{} }; // can't get wait for future that has not been attached anything or has been attached into a rendergraph
-		} else if (acqrel.status == Signal::Status::eHostAvailable) {
-		  return { expected_value };
-		} else if (acqrel.status == Signal::Status::eSynchronizable) {
-		  allocator.get_context().wait_for_domains(std::span{ &acqrel.source, 1 });
-		  return { expected_value };
-		} else {
-		  auto erg = compiler.link(std::span{ &rg, 1 }, options);
-		  if (!erg) {
-		    return erg;
-		  }
-		  std::pair v = { &allocator, &*erg };
-		  VUK_DO_OR_RETURN(execute_submit(allocator, std::span{ &v, 1 }));
-		  assert(acqrel.status != Signal::Status::eDisarmed);
-		  if (acqrel.status == Signal::Status::eSynchronizable) {
-		    allocator.get_context().wait_for_domains(std::span{ &acqrel.source, 1 });
-		  }
-		  acqrel.status = Signal::Status::eHostAvailable;
-		  return { expected_value };
+		auto res = submit(allocator, compiler, options);
+		if (!res) {
+			return res;
 		}
-
-		auto result = control->wait(allocator, compiler, options);
-		if (result.holds_value()) {
-		  // save value
-		  auto current_value = get_constant_value(def.node);
-		  auto current_ty = def.type();
-		  // new RG with ACQUIRE node
-		  auto new_rg = std::make_shared<RG>();
-		  this->def = { new_rg->make_acquire(current_ty, &this->control->acqrel, current_value) };
-		  // drop current RG
-		  this->control->rg = std::move(new_rg);
-		  this->head = { this->control->rg->make_release(this->def, &this->control->acqrel, Access::eNone, DomainFlagBits::eAny), 0 };
-		}*/
-
+		assert(deps[0]->acqrel->status != Signal::Status::eDisarmed);
+		if (deps[0]->acqrel->status == Signal::Status::eSynchronizable) {
+			allocator.get_context().wait_for_domains(std::span{ &deps[0]->acqrel->source, 1 });
+		}
 		return { expected_value };
 	}
 
@@ -163,6 +135,7 @@ namespace vuk {
 			}
 			std::pair v = { &allocator, &*erg };
 			VUK_DO_OR_RETURN(execute_submit(allocator, std::span{ &v, 1 }));
+			to_acquire();
 			return { expected_value };
 		}
 	}
