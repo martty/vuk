@@ -39,6 +39,7 @@ namespace vuk {
 
 	struct Type {
 		enum TypeKind { MEMORY_TY, INTEGER_TY, IMAGE_TY, BUFFER_TY, SWAPCHAIN_TY, ARRAY_TY, IMBUED_TY, ALIASED_TY, OPAQUE_FN_TY } kind;
+		size_t size;
 
 		TypeDebugInfo* debug_info = nullptr;
 
@@ -62,7 +63,8 @@ namespace vuk {
 			} opaque_fn;
 			struct {
 				Type* T;
-				size_t size;
+				size_t count;
+				size_t stride;
 			} array;
 		};
 
@@ -152,7 +154,7 @@ namespace vuk {
 		};
 
 		struct Variable {
-			uint8_t arg_count = (uint8_t) ~0u;
+			uint8_t arg_count = (uint8_t)~0u;
 		};
 
 		union {
@@ -322,9 +324,9 @@ namespace vuk {
 
 	struct RG {
 		RG() {
-			builtin_image = &types.emplace_back(Type{ .kind = Type::IMAGE_TY });
-			builtin_buffer = &types.emplace_back(Type{ .kind = Type::BUFFER_TY });
-			builtin_swapchain = &types.emplace_back(Type{ .kind = Type::SWAPCHAIN_TY });
+			builtin_image = &types.emplace_back(Type{ .kind = Type::IMAGE_TY, .size = sizeof(ImageAttachment) });
+			builtin_buffer = &types.emplace_back(Type{ .kind = Type::BUFFER_TY, .size = sizeof(Buffer) });
+			builtin_swapchain = &types.emplace_back(Type{ .kind = Type::SWAPCHAIN_TY, .size = sizeof(Swapchain) });
 		}
 
 		~RG() {
@@ -360,19 +362,19 @@ namespace vuk {
 
 		// TYPES
 		Type* make_imbued_ty(Type* ty, Access access) {
-			return emplace_type(Type{ .kind = Type::IMBUED_TY, .imbued = { .T = ty, .access = access } });
+			return emplace_type(Type{ .kind = Type::IMBUED_TY, .size = ty->size, .imbued = { .T = ty, .access = access } });
 		}
 
 		Type* make_aliased_ty(Type* ty, size_t ref_idx) {
-			return emplace_type(Type{ .kind = Type::ALIASED_TY, .aliased = { .T = ty, .ref_idx = ref_idx } });
+			return emplace_type(Type{ .kind = Type::ALIASED_TY, .size = ty->size, .aliased = { .T = ty, .ref_idx = ref_idx } });
 		}
 
 		Type* u64() {
-			return emplace_type(Type{ .kind = Type::INTEGER_TY, .integer = { .width = 64 } });
+			return emplace_type(Type{ .kind = Type::INTEGER_TY, .size = sizeof(uint64_t), .integer = { .width = 64 } });
 		}
 
 		Type* u32() {
-			return emplace_type(Type{ .kind = Type::INTEGER_TY, .integer = { .width = 32 } });
+			return emplace_type(Type{ .kind = Type::INTEGER_TY, .size = sizeof(uint32_t), .integer = { .width = 32 } });
 		}
 
 		// OPS
@@ -480,7 +482,7 @@ namespace vuk {
 		}
 
 		Ref make_declare_array(Type* type, std::span<Ref> args, std::span<Ref> defs) {
-			auto arr_ty = new Type*(emplace_type(Type{ .kind = Type::ARRAY_TY, .array = { .T = type, .size = args.size() } }));
+			auto arr_ty = new Type*(emplace_type(Type{ .kind = Type::ARRAY_TY, .size = args.size() * type->size, .array = { .T = type, .count = args.size(), .stride = type->size } }));
 			auto args_ptr = new Ref[args.size() + 1];
 			auto mem_ty = new Type*(emplace_type(Type{ .kind = Type::MEMORY_TY }));
 			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = nullptr } }));

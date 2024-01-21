@@ -54,13 +54,6 @@ namespace vuk {
 			def = new_def;
 		}
 
-		void abandon() {
-			if (head->get_head().node) {
-				assert(head->get_head().node->kind == Node::RELEASE || head->get_head().node->kind == Node::NOP);
-				head->get_head().node->kind = Node::NOP;
-			}
-		}
-
 		/// @brief Submit Future for execution
 		Result<void> submit(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options = {});
 		/// @brief If the Future has been submitted for execution, polls for status.
@@ -210,7 +203,7 @@ namespace vuk {
 			Ref item = head->module->make_array_indexing(def.type()->array.T, get_head(), head->module->make_constant(index));
 			assert(def.node->kind == Node::AALLOC);
 			assert(def.type()->kind == Type::ARRAY_TY);
-			return Value<std::remove_reference_t<decltype(std::declval<T>()[0])>>(get_render_graph(), item, item_def);
+			return Value<std::remove_reference_t<decltype(std::declval<T>()[0])>>(std::make_shared<ExtRef>(get_render_graph(), item), item_def, {head});
 		}
 	};
 
