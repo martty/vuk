@@ -364,7 +364,7 @@ namespace vuk {
 				{ VK_API_VERSION_1_3, shaderc_env_version_vulkan_1_3 },
 			};
 
-			options.SetTargetEnvironment(shaderc_target_env_vulkan, target_version.at(cinfo.compile_options.target_version));
+			options.SetTargetEnvironment(shaderc_target_env_vulkan, target_version.at(shader_compiler_target_version));
 
 			static const std::unordered_map<ShaderCompileOptions::OptimizationLevel, shaderc_optimization_level> optimization_level = {
 				{ ShaderCompileOptions::OptimizationLevel::O0, shaderc_optimization_level_zero },
@@ -419,7 +419,7 @@ namespace vuk {
 				{ VK_API_VERSION_1_3, L"-fspv-target-env=vulkan1.1"},
 			};
 
-			arguments.push_back(target_version.at(cinfo.compile_options.target_version));
+			arguments.push_back(target_version.at(shader_compiler_target_version));
 
 			static const std::unordered_map<ShaderCompileOptions::OptimizationLevel, const wchar_t*> optimization_level = {
 				{ ShaderCompileOptions::OptimizationLevel::O0, L"-O0" },
@@ -732,6 +732,11 @@ namespace vuk {
 			this->vkDestroyShaderModule(device, sm->shader_module, nullptr);
 		}
 		return impl->shader_modules.acquire(sci);
+	}
+
+	void Context::set_shader_target_version(const uint32_t target_version) {
+		assert((target_version >= VK_API_VERSION_1_0 && target_version <= VK_API_VERSION_1_3) && "Invalid target version was passed.");
+		shader_compiler_target_version = target_version;
 	}
 
 	Texture Context::allocate_texture(Allocator& allocator, ImageCreateInfo ici, SourceLocationAtFrame loc) {
