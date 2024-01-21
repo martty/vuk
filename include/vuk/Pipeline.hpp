@@ -91,14 +91,14 @@ namespace vuk {
 
 #if VUK_USE_SHADERC
 		void add_glsl(std::string_view source, std::string filename, std::string entry_point = "main") {
-			shaders.emplace_back(ShaderSource::glsl(source, std::move(entry_point)));
+			shaders.emplace_back(ShaderSource::glsl(source, compile_options, std::move(entry_point)));
 			shader_paths.emplace_back(std::move(filename));
 		}
 #endif
 
 #if VUK_USE_DXC
 		void add_hlsl(std::string_view source, std::string filename, HlslShaderStage stage = HlslShaderStage::eInferred, std::string entry_point = "main") {
-			shaders.emplace_back(ShaderSource::hlsl(source, stage, std::move(entry_point)));
+			shaders.emplace_back(ShaderSource::hlsl(source, compile_options, stage, std::move(entry_point)));
 			shader_paths.emplace_back(std::move(filename));
 		}
 #endif

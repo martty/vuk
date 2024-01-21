@@ -99,7 +99,7 @@ namespace vuk {
 		}
 
 #if VUK_USE_SHADERC
-		static ShaderSource glsl(std::string_view source, std::string entry_point = "main") {
+		static ShaderSource glsl(std::string_view source, const ShaderCompileOptions& compile_options, std::string entry_point = "main") {
 			ShaderSource shader;
 			shader.data.resize(idivceil(source.size() + 1, sizeof(uint32_t)));
 			memcpy(shader.data.data(), source.data(), source.size() * sizeof(std::string_view::value_type));
@@ -107,12 +107,13 @@ namespace vuk {
 			shader.size = shader.data.size();
 			shader.language = ShaderSourceLanguage::eGlsl;
 			shader.entry_point = std::move(entry_point);
+			shader.opt_level = compile_options.optimization_level;
 			return shader;
 		}
 #endif
 
 #if VUK_USE_DXC
-		static ShaderSource hlsl(std::string_view source, HlslShaderStage stage = HlslShaderStage::eInferred, std::string entry_point = "main") {
+		static ShaderSource hlsl(std::string_view source, const ShaderCompileOptions& compile_options, HlslShaderStage stage = HlslShaderStage::eInferred, std::string entry_point = "main") {
 			ShaderSource shader;
 			shader.data.resize(idivceil(source.size() + 1, sizeof(uint32_t)));
 			memcpy(shader.data.data(), source.data(), source.size() * sizeof(std::string_view::value_type));
@@ -121,6 +122,7 @@ namespace vuk {
 			shader.language = ShaderSourceLanguage::eHlsl;
 			shader.hlsl_stage = stage;
 			shader.entry_point = std::move(entry_point);
+			shader.opt_level = compile_options.optimization_level;
 			return shader;
 		}
 #endif
@@ -158,10 +160,11 @@ namespace vuk {
 		ShaderSourceLanguage language;
 		HlslShaderStage hlsl_stage;
 		std::string entry_point;
+		ShaderCompileOptions::OptimizationLevel opt_level;
 	};
 
 	inline bool operator==(const ShaderSource& a, const ShaderSource& b) noexcept {
-		bool basics = a.language == b.language && a.size == b.size && a.entry_point == b.entry_point;
+		bool basics = a.language == b.language && a.size == b.size && a.entry_point == b.entry_point && a.opt_level == b.opt_level;
 		if (!basics) {
 			return false;
 		}
