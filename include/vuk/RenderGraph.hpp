@@ -516,10 +516,10 @@ public:
 	struct is_tuple<std::tuple<T...>> : std::true_type {};
 
 	template<typename... T>
-	static auto make_ret(std::shared_ptr<RG> rg, Node* node, const std::tuple<T...>& us, std::vector<std::shared_ptr<FutureControlBlock>> dependent_blocks) {
+	static auto make_ret(std::shared_ptr<RG> rg, Node* node, const std::tuple<T...>& us, std::vector<std::shared_ptr<ExtRef>>& deps) {
 		if constexpr (sizeof...(T) > 0) {
 			size_t i = 0;
-			return std::tuple{ Future<typename T::type>{ rg, { node, sizeof...(T) - (++i) }, std::get<T>(us).def, dependent_blocks }... };
+			return std::tuple{ Value<typename T::type>{ std::make_shared<ExtRef>(ExtRef(rg, Ref{ node, sizeof...(T) - (++i) })), std::get<T>(us).def, deps }... };
 		}
 	}
 
@@ -556,20 +556,12 @@ public:
 			};
 
 			// when this function is called, we weave in this call into the IR
-			return [untyped_cb = std::move(callback), name, scheduling_info](Future<typename T::type>... args) mutable {
+			return [untyped_cb = std::move(callback), name, scheduling_info](Value<typename T::type>... args) mutable {
 				auto& first = [](auto& first, auto&...) -> auto& {
 					return first;
 				}(args...);
-				auto& rgp = first.get_render_graph();
+				auto rgp = first.get_render_graph();
 				RG& rg = *rgp.get();
-
-				// TODO: write a test that this doesn't pass...
-				std::vector<std::shared_ptr<FutureControlBlock>> dependent_blocks;
-				[&dependent_blocks](auto& first, auto&... rest) {
-					(first.get_render_graph()->subgraphs.push_back(rest.get_render_graph()), ...);
-					dependent_blocks.push_back(first.control);
-					(dependent_blocks.push_back(rest.control), ...);
-				}(args...);
 
 				std::vector<Type*> arg_types;
 				std::tuple arg_tuple_as_a = { T{ nullptr, args.get_head(), args.get_def() }... };
@@ -588,12 +580,16 @@ public:
 				auto opaque_fn = rg.make_declare_fn(opaque_fn_ty);
 				Node* node = rg.make_call(opaque_fn, args.get_head()...);
 				node->scheduling_info = new SchedulingInfo(scheduling_info);
+
+				std::vector<std::shared_ptr<ExtRef>> dependent_refs = { std::move(args.head)... };
+				std::erase_if(dependent_refs, [](auto& sp) { return sp.use_count() == 1; });
+
 				if constexpr (is_tuple<Ret>::value) {
 					auto [idxs, ret_tuple] = intersect_tuples<std::tuple<T...>, Ret>(arg_tuple_as_a);
-					return make_ret(rgp, node, ret_tuple, std::move(dependent_blocks));
+					return make_ret(rgp, node, ret_tuple, dependent_refs);
 				} else if constexpr (!std::is_same_v<Ret, void>) {
 					auto [idxs, ret_tuple] = intersect_tuples<std::tuple<T...>, std::tuple<Ret>>(arg_tuple_as_a);
-					return std::get<0>(make_ret(rgp, node, ret_tuple, std::move(dependent_blocks)));
+					return std::get<0>(make_ret(rgp, node, ret_tuple, dependent_refs));
 				}
 			};
 		}
@@ -605,22 +601,26 @@ public:
 		return TupleMap<drop_t<1, typename traits::types>>::template make_lam<typename traits::result_type, F>(name, std::forward<F>(body), scheduling_info);
 	}
 
-	[[nodiscard]] inline Future<ImageAttachment> declare_ia(Name name, ImageAttachment ia = {}) {
+	inline std::shared_ptr<ExtRef> make_ext_ref(std::shared_ptr<RG> rg, Ref ref) {
+		return std::make_shared<ExtRef>(rg, ref);
+	}
+
+	[[nodiscard]] inline Value<ImageAttachment> declare_ia(Name name, ImageAttachment ia = {}) {
 		std::shared_ptr<RG> rg = std::make_shared<RG>();
 		Ref ref = rg->make_declare_image(ia);
 		rg->name_outputs(ref.node, { name.c_str() });
-		return { rg, ref, ref, {} };
+		return { make_ext_ref(rg, ref), ref };
 	}
 
-	[[nodiscard]] inline Future<Buffer> declare_buf(Name name, Buffer buf = {}) {
+	[[nodiscard]] inline Value<Buffer> declare_buf(Name name, Buffer buf = {}) {
 		std::shared_ptr<RG> rg = std::make_shared<RG>();
 		Ref ref = rg->make_declare_buffer(buf);
 		rg->name_outputs(ref.node, { name.c_str() });
-		return { rg, ref, ref, {} };
+		return { make_ext_ref(rg, ref), ref };
 	}
 
 	template<class T, class... Args>
-	[[nodiscard]] inline Future<T[]> declare_array(Name name, Future<T>&& arg, Args&&... args) {
+	[[nodiscard]] inline Value<T[]> declare_array(Name name, Future<T>&& arg, Args&&... args) {
 		auto rg = arg.get_render_graph();
 		(rg->subgraphs.push_back(args.get_render_graph()), ...);
 		std::array refs = { arg.get_head(), args.get_head()... };
@@ -629,11 +629,11 @@ public:
 		(args.abandon(), ...);
 		Ref ref = rg->make_declare_array(Type::stripped(refs[0].type()), refs, defs);
 		rg->name_outputs(ref.node, { name.c_str() });
-		return { rg, ref, ref, {} };
+		return { make_ext_ref(rg, ref), ref };
 	}
 
 	template<class T>
-	[[nodiscard]] inline Future<T[]> declare_array(Name name, std::span<const Future<T>> args) {
+	[[nodiscard]] inline Value<T[]> declare_array(Name name, std::span<const Future<T>> args) {
 		assert(args.size() > 0);
 		auto rg = args[0].get_render_graph();
 		std::vector<Ref> refs;
@@ -645,25 +645,24 @@ public:
 		}
 		Ref ref = rg->make_declare_array(Type::stripped(refs[0].type()), refs, defs);
 		rg->name_outputs(ref.node, { name.c_str() });
-		return { rg, ref, ref, {} };
+		return { make_ext_ref(rg, ref), ref };
 	}
 
-	[[nodiscard]] inline Future<Swapchain> declare_swapchain(Swapchain bundle) {
+	[[nodiscard]] inline Value<Swapchain> declare_swapchain(Swapchain bundle) {
 		std::shared_ptr<RG> rg = std::make_shared<RG>();
 		Ref ref = rg->make_declare_swapchain(bundle);
-		return { rg, ref, ref, {} };
+		return { make_ext_ref(rg, ref), ref };
 	}
 
-	[[nodiscard]] inline Future<ImageAttachment> acquire_next_image(Name name, Future<Swapchain> in) {
+	[[nodiscard]] inline Value<ImageAttachment> acquire_next_image(Name name, Value<Swapchain> in) {
 		auto& rg = in.get_render_graph();
 		Ref ref = rg->make_acquire_next_image(in.get_head());
 		rg->name_outputs(ref.node, { name.c_str() });
-		return std::move(std::move(in).transmute<ImageAttachment>(ref, ref));
+		return std::move(std::move(in).transmute<ImageAttachment>(ref));
 	}
 
-	[[nodiscard]] inline Future<void> enqueue_presentation(Future<ImageAttachment> in) {
-		auto& rg = in.get_render_graph();
-		return std::move(std::move(in).release_to<void>(Access::ePresent, DomainFlagBits::ePE));
+	[[nodiscard]] inline Future<void> enqueue_presentation(Value<ImageAttachment> in) {
+		return std::move(std::move(in).release<void>(Access::ePresent, DomainFlagBits::ePE));
 	}
 
 	struct Compiler {
@@ -673,11 +672,11 @@ public:
 		/// @brief Build the graph, assign framebuffers, render passes and subpasses
 		///	link automatically calls this, only needed if you want to use the reflection functions
 		/// @param compile_options CompileOptions controlling compilation behaviour
-		Result<void> compile(std::span<std::shared_ptr<RG>> rgs, const RenderGraphCompileOptions& compile_options);
+		Result<void> compile(std::span<std::shared_ptr<ExtRef>> rgs, const RenderGraphCompileOptions& compile_options);
 
 		/// @brief Use this RenderGraph and create an ExecutableRenderGraph
 		/// @param compile_options CompileOptions controlling compilation behaviour
-		Result<struct ExecutableRenderGraph> link(std::span<std::shared_ptr<RG>> rgs, const RenderGraphCompileOptions& compile_options);
+		Result<struct ExecutableRenderGraph> link(std::span<std::shared_ptr<ExtRef>> rgs, const RenderGraphCompileOptions& compile_options);
 
 		// reflection functions
 

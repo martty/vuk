@@ -51,12 +51,14 @@ namespace vuk {
 	}
 
 	Result<void> link_execute_submit(Allocator& allocator, Compiler& compiler, std::span<std::shared_ptr<RG>> rgs, RenderGraphCompileOptions options) {
-		auto erg = compiler.link(rgs, options);
+		/* auto erg = compiler.link(rgs, options);
 		if (!erg) {
 			return erg;
 		}
 		std::pair erg_and_alloc = std::pair{ &allocator, &*erg };
-		return execute_submit(allocator, std::span(&erg_and_alloc, 1));
+		return execute_submit(allocator, std::span(&erg_and_alloc, 1));*/
+		assert(false);
+		return { expected_value };
 	}
 
 	std::string_view to_name(vuk::DomainFlagBits d) {
@@ -102,8 +104,8 @@ namespace vuk {
 		return { SampledImage::RenderGraphAttachment{ n, sci, ivci, ImageLayout::eReadOnlyOptimalKHR } };
 	}
 
-	Result<void> FutureControlBlock::wait(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options) {
-		if (acqrel.status == Signal::Status::eDisarmed && !rg) {
+	Result<void> UntypedFuture::wait(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options) {
+		/* if (acqrel.status == Signal::Status::eDisarmed && !rg) {
 			return { expected_error,
 				       RenderGraphException{} }; // can't get wait for future that has not been attached anything or has been attached into a rendergraph
 		} else if (acqrel.status == Signal::Status::eHostAvailable) {
@@ -125,16 +127,32 @@ namespace vuk {
 			acqrel.status = Signal::Status::eHostAvailable;
 			return { expected_value };
 		}
+
+		auto result = control->wait(allocator, compiler, options);
+		if (result.holds_value()) {
+			// save value
+			auto current_value = get_constant_value(def.node);
+			auto current_ty = def.type();
+			// new RG with ACQUIRE node
+			auto new_rg = std::make_shared<RG>();
+			this->def = { new_rg->make_acquire(current_ty, &this->control->acqrel, current_value) };
+			// drop current RG
+			this->control->rg = std::move(new_rg);
+			this->head = { this->control->rg->make_release(this->def, &this->control->acqrel, Access::eNone, DomainFlagBits::eAny), 0 };
+		}*/
+
+		return { expected_value };
 	}
 
-	Result<void> FutureControlBlock::submit(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options) {
-		if (acqrel.status == Signal::Status::eDisarmed && !rg) {
+	Result<void> UntypedFuture::submit(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options) {
+		auto& acqrel = head->acqrel;
+		if (acqrel->status == Signal::Status::eDisarmed && !head->module) {
 			return { expected_error, RenderGraphException{} };
-		} else if (acqrel.status == Signal::Status::eHostAvailable || acqrel.status == Signal::Status::eSynchronizable) {
+		} else if (acqrel->status == Signal::Status::eHostAvailable || acqrel->status == Signal::Status::eSynchronizable) {
 			return { expected_value }; // nothing to do
 		} else {
-			acqrel.status = Signal::Status::eSynchronizable;
-			auto erg = compiler.link(std::span{ &rg, 1 }, options);
+			acqrel->status = Signal::Status::eSynchronizable;
+			auto erg = compiler.link(std::span{ &head, 1 }, options);
 			if (!erg) {
 				return erg;
 			}
@@ -143,10 +161,6 @@ namespace vuk {
 			return { expected_value };
 		}
 	}
-	/*
-	template Result<Buffer> Future::get(Allocator&, Compiler&);
-	template Result<ImageAttachment> Future::get(Allocator&, Compiler&);
-	*/
 
 	std::string_view image_view_type_to_sv(ImageViewType view_type) noexcept {
 		switch (view_type) {

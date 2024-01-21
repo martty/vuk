@@ -322,14 +322,22 @@ namespace vuk {
 			dependencies.push_back(dep);
 		}
 
+		Signal* make_signal() override {return &signals.emplace_back();
+			
+		}
+
 		void sync_deps() override {
 			if (batch.empty()) {
 				batch.emplace_back();
 			}
 			for (auto dep : dependencies) {
+				auto signal = dep->make_signal();
+				if (signal) {
+					dep->add_dependent_signal(signal);
+				}
 				auto res = *dep->submit();
-				if (res.signal) {
-					batch.back().waits.push_back(res.signal);
+				if (signal) {
+					batch.back().waits.push_back(signal);
 				}
 				if (res.sema_wait != VK_NULL_HANDLE) {
 					batch.back().pres_wait.push_back(res.sema_wait);
@@ -342,17 +350,17 @@ namespace vuk {
 			flush_barriers();
 		}
 
-		Result<SubmitResult> submit(Signal* signal = nullptr) override {
+		Result<SubmitResult> submit() override {
 			sync_deps();
 			end_cbuf();
-			if (!signal) {
-				signal = &signals.emplace_back();
+			for (auto& signal : dependent_signals) {
+				signal->source.executor = executor;
+				batch.back().signals.emplace_back(signal);
 			}
-			signal->source.executor = executor;
-			batch.back().signals.emplace_back(signal);
 			executor->submit_batch(batch);
 			batch.clear();
-			return { expected_value, signal };
+			dependent_signals.clear();
+			return { expected_value };
 		}
 
 		Result<VkResult> present(Swapchain& swp) {
@@ -678,8 +686,12 @@ namespace vuk {
 			return;
 		}
 
-		Result<SubmitResult> submit(Signal* signal = nullptr) override {
-			return { expected_value, signal };
+		Signal* make_signal() override {
+			return nullptr;
+		}
+
+		Result<SubmitResult> submit() override {
+			return { expected_value };
 		}
 	};
 
@@ -702,9 +714,13 @@ namespace vuk {
 			assert(false);
 		}
 
-		Result<SubmitResult> submit(Signal* signal = nullptr) override {
+		Signal* make_signal() override {
+			assert(false);
+			return nullptr;
+		}
+
+		Result<SubmitResult> submit() override {
 			assert(swp);
-			assert(signal == nullptr);
 			SubmitResult sr{ .sema_wait = swp->semaphores[2 * swp->linear_index] };
 			return { expected_value, sr };
 		}
@@ -1062,12 +1078,6 @@ namespace vuk {
 			return nullptr;
 		}
 
-		void flush_domain(vuk::DomainFlagBits domain, Signal* signal) {
-			auto& stream = streams.at(domain);
-
-			stream->submit(signal);
-		};
-
 		void add_sync(Type* base_ty, Scheduler::DependencyInfo di, void* value) {
 			StreamResourceUse src_use = di.src_use;
 			StreamResourceUse dst_use = di.dst_use;
@@ -1163,8 +1173,7 @@ namespace vuk {
 			                         std::make_unique<VkQueueStream>(alloc, static_cast<rtvk::QueueExecutor*>(exe), &impl->callbacks));
 		}
 		if (auto exe = ctx.get_executor(DomainFlagBits::eComputeQueue)) {
-			recorder.streams.emplace(DomainFlagBits::eComputeQueue,
-			                         std::make_unique<VkQueueStream>(alloc, static_cast<rtvk::QueueExecutor*>(exe), &impl->callbacks));
+			recorder.streams.emplace(DomainFlagBits::eComputeQueue, std::make_unique<VkQueueStream>(alloc, static_cast<rtvk::QueueExecutor*>(exe), &impl->callbacks));
 		}
 		if (auto exe = ctx.get_executor(DomainFlagBits::eTransferQueue)) {
 			recorder.streams.emplace(DomainFlagBits::eTransferQueue,
@@ -1351,7 +1360,7 @@ namespace vuk {
 								auto urdef = link.urdef.node;
 								auto allocator = urdef->valloc.allocator ? *urdef->valloc.allocator : alloc;
 								auto& img_att = sched.get_value<ImageAttachment>(parm);
-								if (img_att.view_type == ImageViewType::eInfer) {// framebuffers need 2D or 2DArray views
+								if (img_att.view_type == ImageViewType::eInfer) { // framebuffers need 2D or 2DArray views
 									if (img_att.layer_count > 1) {
 										img_att.view_type = ImageViewType::e2DArray;
 									} else {
@@ -1437,6 +1446,47 @@ namespace vuk {
 				}
 				break;
 			}
+			case Node::RELACQ: {
+				if (sched.process(item)) {
+					auto acqrel = node->relacq.rel_acq;
+					Stream* dst_stream = item.scheduled_stream;
+					// if acq is nullptr, then this degenerates to a NOP, sync and skip
+					auto parm = node->relacq.src;
+					auto arg_ty = node->type[0];
+					auto di = sched.get_dependency_info(parm, arg_ty, RW::eWrite, dst_stream);
+					recorder.add_sync(sched.base_type(parm), di, sched.get_value(parm));
+					if (!acqrel) {
+						fmt::print("$$ :");
+					} else {
+						switch (acqrel->status){ 
+							case Signal::Status::eDisarmed:
+							fmt::print("X :"); // means we have to signal this
+							acqrel->last_use = di.src_use;
+							node->relacq.value = sched.get_value(parm);
+							di.src_use.stream->add_dependent_signal(acqrel);
+							break;
+						  case Signal::Status::eSynchronizable: // means this is an acq instead
+							fmt::print("v :");
+							break;
+						  case Signal::Status::eHostAvailable:
+							fmt::print("^ :");
+							break;
+						}
+					}
+
+#ifdef VUK_DUMP_EXEC
+					print_results(node);
+					fmt::print(" <- ");
+					print_args(std::span{ &node->relacq.src, 1 });
+					fmt::print("\n");
+#endif
+
+					sched.done(node, dst_stream);
+				} else {
+					sched.schedule_dependency(node->relacq.src, RW::eWrite);
+				}
+				break;
+			}
 			case Node::ACQUIRE: {
 				auto acq = node->acquire.acquire;
 				auto src_stream = recorder.stream_for_executor(acq->source.executor);
@@ -1507,8 +1557,8 @@ namespace vuk {
 						auto result = dynamic_cast<VkQueueStream*>(src_stream)->present(swp);
 						// TODO: do something with the result here
 					}
-
-					recorder.flush_domain(src_domain, acqrel);
+					src_stream->add_dependent_signal(acqrel);
+					src_stream->submit();
 					fmt::print("");
 					sched.done(node, src_stream);
 				} else {

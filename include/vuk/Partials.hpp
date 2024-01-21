@@ -15,7 +15,7 @@ namespace vuk {
 	/// @param buffer Buffer to fill
 	/// @param src_data pointer to source data
 	/// @param size size of source data
-	inline Future<Buffer> host_data_to_buffer(Allocator& allocator, DomainFlagBits copy_domain, Buffer dst, const void* src_data, size_t size) {
+	inline Value<Buffer> host_data_to_buffer(Allocator& allocator, DomainFlagBits copy_domain, Buffer dst, const void* src_data, size_t size) {
 		// host-mapped buffers just get memcpys
 		if (dst.mapped_ptr) {
 			memcpy(dst.mapped_ptr, src_data, size);
@@ -40,13 +40,13 @@ namespace vuk {
 	/// @param dst Buffer to fill
 	/// @param data source data
 	template<class T>
-	Future<Buffer> host_data_to_buffer(Allocator& allocator, DomainFlagBits copy_domain, Buffer dst, std::span<T> data) {
+	Value<Buffer> host_data_to_buffer(Allocator& allocator, DomainFlagBits copy_domain, Buffer dst, std::span<T> data) {
 		return host_data_to_buffer(allocator, copy_domain, dst, data.data(), data.size_bytes());
 	}
 
 	/// @brief Download a buffer to GPUtoCPU memory
 	/// @param buffer_src Buffer to download
-	inline Future<Buffer> download_buffer(Future<Buffer> buffer_src) {
+	inline Value<Buffer> download_buffer(Value<Buffer> buffer_src) {
 		auto dst = declare_buf("dst", Buffer{ .memory_usage = MemoryUsage::eGPUtoCPU });
 		dst.same_size(buffer_src);
 		auto download =
@@ -62,7 +62,7 @@ namespace vuk {
 	/// @param copy_domain The domain where the copy should happen
 	/// @param image ImageAttachment to fill
 	/// @param src_data pointer to source data
-	inline Future<ImageAttachment> host_data_to_image(Allocator& allocator, DomainFlagBits copy_domain, ImageAttachment image, const void* src_data) {
+	inline Value<ImageAttachment> host_data_to_image(Allocator& allocator, DomainFlagBits copy_domain, ImageAttachment image, const void* src_data) {
 		size_t alignment = format_to_texel_block_size(image.format);
 		assert(image.extent.sizing == Sizing::eAbsolute);
 		size_t size = compute_image_size(image.format, static_cast<Extent3D>(image.extent.extent));
@@ -222,7 +222,7 @@ namespace vuk {
 		return create_image_and_view_with_data(allocator, copy_domain, ia, data.data(), loc);
 	}
 
-	inline Future<ImageAttachment> clear_image(Future<ImageAttachment> in, Clear clear_value) {
+	inline Value<ImageAttachment> clear_image(Value<ImageAttachment> in, Clear clear_value) {
 		auto clear = make_pass("clear image", [=](CommandBuffer& cbuf, VUK_IA(Access::eClear) dst) {
 			cbuf.clear_image(dst, clear_value);
 			return dst;
@@ -231,7 +231,7 @@ namespace vuk {
 		return clear(std::move(in));
 	}
 
-	inline Future<ImageAttachment> blit_image(Future<ImageAttachment> src, Future<ImageAttachment> dst, Filter filter) {
+	inline Value<ImageAttachment> blit_image(Value<ImageAttachment> src, Value<ImageAttachment> dst, Filter filter) {
 		auto blit = make_pass("blit image", [=](CommandBuffer& cbuf, VUK_IA(Access::eTransferRead) src, VUK_IA(Access::eTransferWrite) dst) {
 			ImageBlit region = {};
 			region.srcOffsets[0] = Offset3D{};

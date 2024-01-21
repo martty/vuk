@@ -117,6 +117,8 @@ namespace vuk {
 	};
 
 	struct Node {
+		static constexpr uint8_t MAX_ARGS = 16;
+
 		enum class BinOp { MUL };
 		enum Kind {
 			NOP,
@@ -134,6 +136,7 @@ namespace vuk {
 			WAIT,
 			ACQUIRE,
 			RELEASE,
+			RELACQ, // can realise into ACQUIRE, RELEASE or NOP
 			ACQUIRE_NEXT_IMAGE,
 			INDEXING,
 			CAST,
@@ -142,76 +145,102 @@ namespace vuk {
 		std::span<Type* const> type;
 		NodeDebugInfo* debug_info = nullptr;
 		SchedulingInfo* scheduling_info = nullptr;
+
+		template<uint8_t c>
+		struct Fixed {
+			uint8_t arg_count = c;
+		};
+
+		struct Variable {
+			uint8_t arg_count = (uint8_t) ~0u;
+		};
+
 		union {
-			struct {
+			struct : Fixed<0> {
 			} placeholder;
-			struct {
+			struct : Fixed<0> {
 				void* value;
 			} constant;
-			struct {
+			struct : Variable {
 				std::span<Ref> args;
 				std::optional<Allocator> allocator;
 			} valloc;
-			struct {
+			struct : Variable {
 				std::span<Ref> args;
 				std::span<Ref> defs; // for preserving provenance for composite types
 			} aalloc;
-			struct {
+			struct : Fixed<0> {
 				void* value;
 			} import;
-			struct {
-				Ref fn;
+			struct : Variable {
 				std::span<Ref> args;
+				Ref fn;
 			} call;
-			struct {
+			struct : Fixed<1> {
 				const Ref dst;
 				Clear* cv;
 			} clear;
-			struct {
+			struct : Fixed<1> {
 				const Ref initial;
 				Subrange::Image subrange;
 			} diverge;
-			struct {
+			struct : Variable {
 				std::span<Ref> diverged;
 			} converge;
-			struct {
+			struct : Fixed<3> {
 				const Ref source_ms;
 				const Ref source_ss;
 				const Ref dst_ss;
 			} resolve;
-			struct {
+			struct : Fixed<1> {
 				const Ref src;
 				Signal* signal;
 			} signal;
-			struct {
+			struct : Fixed<1> {
 				const Ref dst;
 				Signal* signal;
 			} wait;
-			struct {
+			struct : Fixed<1> {
 				Ref arg;
 				AcquireRelease* acquire;
 			} acquire;
-			struct {
+			struct : Fixed<1> {
 				Ref src;
 				AcquireRelease* release;
 				Access dst_access;
 				DomainFlagBits dst_domain;
 			} release;
-			struct {
+			struct : Fixed<1> {
+				Ref src;
+				AcquireRelease* rel_acq;
+				void* value;
+			} relacq;
+			struct : Fixed<1> {
 				Ref swapchain;
 			} acquire_next_image;
-			struct {
+			struct : Fixed<2> {
 				Ref array;
 				Ref index;
 			} indexing;
-			struct {
+			struct : Fixed<1> {
 				Ref src;
 			} cast;
-			struct {
-				BinOp op;
+			struct : Fixed<2> {
 				Ref a;
 				Ref b;
+				BinOp op;
 			} math_binary;
+			struct {
+				uint8_t arg_count;
+			} generic_node;
+			struct {
+				uint8_t arg_count;
+				Ref args[MAX_ARGS];
+			} fixed_node;
+			struct {
+				uint8_t arg_count;
+				std::span<Ref> args;
+			} variable_node;
 		};
 
 		std::string_view kind_to_sv() {
@@ -226,6 +255,10 @@ namespace vuk {
 				return "indexing";
 			case ACQUIRE:
 				return "acquire";
+			case RELACQ:
+				return "relacq";
+			case RELEASE:
+				return "release";
 			}
 			assert(0);
 			return "";
@@ -292,6 +325,10 @@ namespace vuk {
 			builtin_image = &types.emplace_back(Type{ .kind = Type::IMAGE_TY });
 			builtin_buffer = &types.emplace_back(Type{ .kind = Type::BUFFER_TY });
 			builtin_swapchain = &types.emplace_back(Type{ .kind = Type::SWAPCHAIN_TY });
+		}
+
+		~RG() {
+			printf("");
 		}
 
 		std::deque<Node> op_arena;
@@ -500,13 +537,13 @@ namespace vuk {
 
 		Ref make_declare_fn(Type* const fn_ty) {
 			auto ty = new Type*(fn_ty);
-			return first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ ty, 1 }, .constant = { nullptr } }));
+			return first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ ty, 1 }, .constant = { .value = nullptr } }));
 		}
 
 		template<class... Refs>
 		Node* make_call(Ref fn, Refs... args) {
 			Ref* args_ptr = new Ref[sizeof...(args)]{ args... };
-			decltype(Node::call) call = { .fn = fn, .args = std::span(args_ptr, sizeof...(args)) };
+			decltype(Node::call) call = { .args = std::span(args_ptr, sizeof...(args)), .fn = fn };
 			Node n{};
 			n.kind = Node::CALL;
 			n.type = fn.type()->opaque_fn.return_types;
@@ -516,6 +553,11 @@ namespace vuk {
 
 		Node* make_release(Ref src, AcquireRelease* acq_rel, Access dst_access, DomainFlagBits dst_domain) {
 			return emplace_op(Node{ .kind = Node::RELEASE, .release = { .src = src, .release = acq_rel, .dst_access = dst_access, .dst_domain = dst_domain } });
+		}
+
+		Ref make_relacq(Ref src, AcquireRelease* acq_rel) {
+			auto ty = new Type*(Type::stripped(src.type()));
+			return first(emplace_op(Node{ .kind = Node::RELACQ, .type = std::span{ ty, 1 }, .relacq = { .src = src, .rel_acq = acq_rel } }));
 		}
 
 		Ref make_acquire(Type* type, AcquireRelease* acq_rel, void* value) {
@@ -533,7 +575,40 @@ namespace vuk {
 		Ref make_math_binary_op(Node::BinOp op, Ref a, Ref b) {
 			Type** tys = new Type*(a.type());
 
-			return first(emplace_op(Node{ .kind = Node::MATH_BINARY, .type = std::span{ tys, 1 }, .math_binary = { .op = op, .a = a, .b = b } }));
+			return first(emplace_op(Node{ .kind = Node::MATH_BINARY, .type = std::span{ tys, 1 }, .math_binary = { .a = a, .b = b, .op = op } }));
 		}
+	};
+
+	struct ExtRef {
+		ExtRef(std::shared_ptr<RG> module, Ref head) : module(std::move(module)) {
+			acqrel = std::make_unique<AcquireRelease>();
+			this->head = this->module->make_relacq(head, acqrel.get());
+		}
+
+		~ExtRef() {
+			if (module && head.node->kind == Node::RELACQ) {
+				head.node->relacq.rel_acq = nullptr;
+			}
+		}
+
+		ExtRef(ExtRef&& o) = default;
+
+		Ref get_head() {
+			assert(head.node->kind == Node::RELACQ || head.node->kind == Node::RELEASE);
+			return head;
+		}
+
+		void to_release(Access access = Access::eNone, DomainFlagBits domain = DomainFlagBits::eAny) noexcept {
+			assert(head.node->kind == Node::RELACQ);
+			head.node->kind = Node::RELEASE;
+			head.node->release = { .src = head.node->relacq.src, .release = acqrel.get(), .dst_access = access, .dst_domain = domain };
+			head.node->type = std::span<Type*>();
+		}
+
+		std::shared_ptr<RG> module;
+		std::unique_ptr<AcquireRelease> acqrel;
+
+	private:
+		Ref head;
 	};
 } // namespace vuk

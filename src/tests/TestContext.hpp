@@ -13,6 +13,7 @@
 #endif
 #include <VkBootstrap.h>
 #include <mutex>
+#include <fmt/format.h>
 
 namespace vuk {
 	struct TestContext {
