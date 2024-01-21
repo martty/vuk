@@ -159,7 +159,7 @@ namespace vuk {
 		/// @brief Explicitly compile give ShaderSource into a ShaderModule
 		ShaderModule compile_shader(ShaderSource source, std::string path);
 		/// @brief Set the target Vulkan version for shader compilers.
-		///	@param target_version the version to be set. VK_API_VERSION_1_X defines must be used.
+		/// @param target_version the version to be set. VK_API_VERSION_1_X defines must be used.
 		void set_shader_target_version(uint32_t target_version = VK_API_VERSION_1_3);
 
 		/// @brief Load a Vulkan pipeline cache
