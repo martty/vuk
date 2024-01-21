@@ -581,10 +581,14 @@ public:
 				Node* node = rg.make_call(opaque_fn, args.get_head()...);
 				node->scheduling_info = new SchedulingInfo(scheduling_info);
 
-				[](auto& first, auto&... rest) {
+				std::vector<std::shared_ptr<ExtRef>> dependent_refs;
+				[&dependent_refs](auto& first, auto&... rest) {
 					(first.get_render_graph()->subgraphs.push_back(rest.get_render_graph()), ...);
+					dependent_refs.insert(dependent_refs.end(), std::move(first.deps).begin(), std::move(first.deps).end());
+					(dependent_refs.insert(dependent_refs.end(), std::move(rest.deps).begin(), std::move(rest.deps).end()), ...);
+					dependent_refs.push_back(std::move(first.head));
+					(dependent_refs.push_back(std::move(rest.head)), ...);
 				}(args...);
-				std::vector<std::shared_ptr<ExtRef>> dependent_refs = { std::move(args.head)... };
 	
 				std::erase_if(dependent_refs, [](auto& sp) { return sp.use_count() == 1; });
 
