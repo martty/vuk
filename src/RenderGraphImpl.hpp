@@ -30,19 +30,25 @@ namespace vuk {
 		Executor* executor = nullptr;
 		DomainFlagBits domain;
 		std::vector<Stream*> dependencies;
+		std::vector<Signal*> dependent_signals;
 
 		virtual void add_dependency(Stream* dep) = 0;
 		virtual void sync_deps() = 0;
+
+		virtual Signal* make_signal() = 0;
+
+		void add_dependent_signal(Signal* signal) {
+			dependent_signals.push_back(signal);
+		}
 
 		virtual void synch_image(ImageAttachment& img_att, StreamResourceUse src_use, StreamResourceUse dst_use, void* tag) = 0;
 		virtual void synch_memory(StreamResourceUse src_use, StreamResourceUse dst_use, void* tag) = 0;
 
 		struct SubmitResult {
-			Signal* signal = nullptr;
 			VkSemaphore sema_wait;
 		};
 
-		virtual Result<SubmitResult> submit(Signal* signal = nullptr) = 0;
+		virtual Result<SubmitResult> submit() = 0;
 	};
 
 	struct ScheduledItem {
@@ -60,7 +66,6 @@ namespace vuk {
 		RelSpan<VkMemoryBarrier2KHR> pre_memory_barriers, post_memory_barriers;
 		RelSpan<std::pair<DomainFlagBits, uint64_t>> relative_waits;
 		RelSpan<std::pair<DomainFlagBits, uint64_t>> absolute_waits;
-		RelSpan<FutureControlBlock*> future_signals;
 		RelSpan<int32_t> referenced_swapchains; // TODO: maybe not the best place for it
 
 		bool ready = false; // for DYNAMO
@@ -73,7 +78,6 @@ namespace vuk {
 
 		std::vector<std::pair<DomainFlagBits, uint64_t>> waits;
 		std::vector<std::pair<DomainFlagBits, uint64_t>> absolute_waits;
-		std::vector<FutureControlBlock*> future_signals;
 
 		std::vector<ScheduledItem> scheduled_execables;
 		std::vector<ScheduledItem*> partitioned_execables;
@@ -84,7 +88,10 @@ namespace vuk {
 
 		DefUseMap res_to_links;
 		std::vector<Ref> pass_reads;
-
+		
+		std::shared_ptr<RG> cg_module;
+		std::vector<std::shared_ptr<ExtRef>> refs;
+		std::vector<Node*> nodes;
 		std::vector<ChainLink*> chains;
 		std::vector<ChainLink*> child_chains;
 		std::deque<ChainLink> helper_links;
@@ -98,8 +105,10 @@ namespace vuk {
 		std::span<ScheduledItem*> transfer_passes, compute_passes, graphics_passes;
 
 		Result<void> diagnose_unheaded_chains();
-		Result<void> schedule_intra_queue(std::span<std::shared_ptr<RG>> rgs, const RenderGraphCompileOptions& compile_options);
-		Result<void> perform_inference(std::span<std::shared_ptr<RG>> rgs, const RenderGraphCompileOptions& compile_options);
+		Result<void> build_nodes();
+		Result<void> build_links(DefUseMap& res_to_links, std::vector<Ref>& pass_reads);
+		Result<void> schedule_intra_queue(const RenderGraphCompileOptions& compile_options);
+		Result<void> perform_inference(const RenderGraphCompileOptions& compile_options);
 
 		std::vector<ChainLink*> div_subchains;
 		std::vector<ChainLink**> conv_subchains;

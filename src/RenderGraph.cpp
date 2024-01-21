@@ -56,91 +56,171 @@ namespace vuk {
 	  std::erase_if(passes, [](auto& pass) { return pass.pass->type == PassType::eDiverge && pass.resources.size() == 0; });
 	}*/
 
-	Result<void> build_links(std::span<std::shared_ptr<RG>> rgs, DefUseMap& res_to_links, std::vector<Ref>& pass_reads) {
+	Result<void> RGCImpl::build_nodes() {
+		nodes.clear();
+
+		std::vector<Node*> work_queue;
+		for (auto& ref : refs) {
+			work_queue.push_back(ref->get_head().node);
+		}
+
+		while (!work_queue.empty()) {
+			auto node = work_queue.back();
+			work_queue.pop_back();
+
+			auto count = node->generic_node.arg_count;
+			if (count != (uint8_t)~0u) {
+				for (int i = 0; i < count; i++) {
+					work_queue.push_back(node->fixed_node.args[i].node);
+				}
+			} else {
+				for (int i = 0; i < node->variable_node.args.size(); i++) {
+					work_queue.push_back(node->variable_node.args[i].node);
+				}
+			}
+
+			nodes.push_back(node);
+		}
+
+		return { expected_value };
+	}
+
+	Result<void> RGCImpl::build_links(DefUseMap& res_to_links, std::vector<Ref>& pass_reads) {
 		// build edges into link map
 		// reserving here to avoid rehashing map
 		res_to_links.clear();
 		res_to_links.reserve(100);
 
-		for (auto& rg : rgs) {
-			// in each RG module, look at the nodes
-			// declare -> clear -> call(R) -> call(W) -> release
-			//   A     ->  B    ->  B      ->   C     -> X
-			// declare: def A -> new entry
-			// clear: undef A, def B
-			// call(R): read B
-			// call(W): undef B, def C
-			// release: undef C
-			for (auto& node : rg->op_arena) {
-				switch (node.kind) {
-				case Node::NOP:
-				case Node::CONSTANT:
-				case Node::PLACEHOLDER:
-				case Node::MATH_BINARY:
-					break;
-				case Node::VALLOC:
-					res_to_links[first(&node)].def = first(&node);
-					res_to_links[first(&node)].type = first(&node).type();
-					break;
-				case Node::AALLOC:
-					for (size_t i = 0; i < node.aalloc.args.size(); i++) {
-						auto& parm = node.aalloc.args[i];
-						res_to_links[parm].undef = { &node, i };
-					}
-
-					res_to_links[first(&node)].def = first(&node);
-					res_to_links[first(&node)].type = first(&node).type();
-					break;
-				case Node::ACQUIRE:
-					res_to_links[first(&node)].def = first(&node);
-					res_to_links[first(&node)].type = first(&node).type();
-					break;
-				case Node::CALL: {
-					// args
-					for (size_t i = 0; i < node.call.args.size(); i++) {
-						auto& arg_ty = node.call.fn.type()->opaque_fn.args[i];
-						auto& parm = node.call.args[i];
-						// TODO: assert same type when imbuement is stripped
-						if (arg_ty->kind == Type::IMBUED_TY) {
-							auto access = arg_ty->imbued.access;
-							if (is_write_access(access) || access == Access::eConsume) { // Write and ReadWrite
-								res_to_links[parm].undef = { &node, i };
-							}
-							if (!is_write_access(access) && access != Access::eConsume) { // Read and ReadWrite
-								res_to_links[parm].reads.append(pass_reads, { &node, i });
-							}
-						} else {
-							assert(0);
+		auto replace_refs = [&](Ref needle, Ref replace_with) {
+			for (auto node : nodes) {
+				auto count = node->generic_node.arg_count;
+				if (count != (uint8_t)~0u) {
+					for (int i = 0; i < count; i++) {
+						if (node->fixed_node.args[i] == needle) {
+							node->fixed_node.args[i] = replace_with;
 						}
 					}
-					size_t index = 0;
-					for (auto& ret_t : node.type) {
-						assert(ret_t->kind == Type::ALIASED_TY);
-						auto ref_idx = ret_t->aliased.ref_idx;
-						res_to_links[{ &node, index }].def = { &node, index };
-						res_to_links[node.call.args[ref_idx]].next = &res_to_links[{ &node, index }];
-						res_to_links[{ &node, index }].prev = &res_to_links[node.call.args[ref_idx]];
-						index++;
+				} else {
+					for (int i = 0; i < node->variable_node.args.size(); i++) {
+						if (node->variable_node.args[i] == needle) {
+							node->variable_node.args[i] = replace_with;
+						}
 					}
-					break;
 				}
-				case Node::RELEASE:
-					res_to_links[node.release.src].undef = { &node, 0 };
-					break;
+			}
+		};
 
-				case Node::INDEXING:
-					res_to_links[first(&node)].def = first(&node);
-					res_to_links[first(&node)].type = first(&node).type()->array.T;
-					break;
+		build_nodes();
 
-				case Node::ACQUIRE_NEXT_IMAGE:
-					res_to_links[first(&node)].def = first(&node);
-					res_to_links[first(&node)].type = first(&node).type();
-					break;
+		// eliminate useless relacqs
+		for (auto node : nodes) {
+			switch (node->kind) {
+			case Node::RELACQ:
+				if (node->relacq.rel_acq == nullptr) {
+					auto needle = first(node);
+					auto replace_with = node->relacq.src;
 
-				default:
-					assert(0);
+					replace_refs(needle, replace_with);
+				} else {
+					switch (node->relacq.rel_acq->status) {
+					case Signal::Status::eDisarmed: // means we have to signal this, keep
+						break;
+					case Signal::Status::eSynchronizable: // means this is an acq instead
+					case Signal::Status::eHostAvailable:
+						auto new_ref = cg_module->make_acquire(node->type[0], node->relacq.rel_acq, node->relacq.value);
+						replace_refs(first(node), new_ref);
+						break;
+					}
 				}
+				break;
+			}
+		}
+
+		build_nodes();
+
+		// in each RG module, look at the nodes
+		// declare -> clear -> call(R) -> call(W) -> release
+		//   A     ->  B    ->  B      ->   C     -> X
+		// declare: def A -> new entry
+		// clear: undef A, def B
+		// call(R): read B
+		// call(W): undef B, def C
+		// release: undef C
+		for (auto& node : nodes) {
+			switch (node->kind) {
+			case Node::NOP:
+			case Node::CONSTANT:
+			case Node::PLACEHOLDER:
+			case Node::MATH_BINARY:
+				break;
+			case Node::VALLOC:
+				res_to_links[first(node)].def = first(node);
+				res_to_links[first(node)].type = first(node).type();
+				break;
+			case Node::AALLOC:
+				for (size_t i = 0; i < node->aalloc.args.size(); i++) {
+					auto& parm = node->aalloc.args[i];
+					res_to_links[parm].undef = { node, i };
+				}
+
+				res_to_links[first(node)].def = first(node);
+				res_to_links[first(node)].type = first(node).type();
+				break;
+			case Node::RELACQ: // ~~ write joiner
+				res_to_links[node->relacq.src].undef = { node, 0 };
+				res_to_links[{ node, 0 }].def = { node, 0 };
+				res_to_links[node->relacq.src].next = &res_to_links[{ node, 0 }];
+				res_to_links[{ node, 0 }].prev = &res_to_links[node->relacq.src];
+				break;
+			case Node::ACQUIRE:
+				res_to_links[first(node)].def = first(node);
+				res_to_links[first(node)].type = first(node).type();
+				break;
+			case Node::CALL: {
+				// args
+				for (size_t i = 0; i < node->call.args.size(); i++) {
+					auto& arg_ty = node->call.fn.type()->opaque_fn.args[i];
+					auto& parm = node->call.args[i];
+					// TODO: assert same type when imbuement is stripped
+					if (arg_ty->kind == Type::IMBUED_TY) {
+						auto access = arg_ty->imbued.access;
+						if (is_write_access(access) || access == Access::eConsume) { // Write and ReadWrite
+							res_to_links[parm].undef = { node, i };
+						}
+						if (!is_write_access(access) && access != Access::eConsume) { // Read and ReadWrite
+							res_to_links[parm].reads.append(pass_reads, { node, i });
+						}
+					} else {
+						assert(0);
+					}
+				}
+				size_t index = 0;
+				for (auto& ret_t : node->type) {
+					assert(ret_t->kind == Type::ALIASED_TY);
+					auto ref_idx = ret_t->aliased.ref_idx;
+					res_to_links[{ node, index }].def = { node, index };
+					res_to_links[node->call.args[ref_idx]].next = &res_to_links[{ node, index }];
+					res_to_links[{ node, index }].prev = &res_to_links[node->call.args[ref_idx]];
+					index++;
+				}
+				break;
+			}
+			case Node::RELEASE:
+				res_to_links[node->release.src].undef = { node, 0 };
+				break;
+
+			case Node::INDEXING:
+				res_to_links[first(node)].def = first(node);
+				res_to_links[first(node)].type = first(node).type()->array.T;
+				break;
+
+			case Node::ACQUIRE_NEXT_IMAGE:
+				res_to_links[first(node)].def = first(node);
+				res_to_links[first(node)].type = first(node).type();
+				break;
+
+			default:
+				assert(0);
 			}
 		}
 
@@ -163,23 +243,21 @@ namespace vuk {
 		// so def -> {r1, r2} becomes def -> r1 -> undef{g0} -> def{g0} -> r2
 
 		// second pass - resolve composite urdefs
-		for (auto& rg : rgs) {
-			for (auto& node : rg->op_arena) {
-				switch (node.kind) {
-				case Node::INDEXING:
-					auto array_def = res_to_links[node.indexing.array].urdef;
-					auto index_v = constant<uint64_t>(node.indexing.index);
-					auto array_arg = array_def.node->aalloc.args[index_v + 1];
-					assert(res_to_links[array_arg].urdef);
-					auto& link = res_to_links[first(&node)];
-					link.urdef = res_to_links[array_arg].urdef;
+		for (auto node : nodes) {
+			switch (node->kind) {
+			case Node::INDEXING:
+				auto array_def = res_to_links[node->indexing.array].urdef;
+				auto index_v = constant<uint64_t>(node->indexing.index);
+				auto array_arg = array_def.node->aalloc.args[index_v + 1];
+				assert(res_to_links[array_arg].urdef);
+				auto& link = res_to_links[first(node)];
+				link.urdef = res_to_links[array_arg].urdef;
 
-					auto l = &link;
-					do {
-						l->urdef = link.urdef;
-						l = l->next;
-					} while (l);
-				}
+				auto l = &link;
+				do {
+					l->urdef = link.urdef;
+					l = l->next;
+				} while (l);
 			}
 		}
 
@@ -205,108 +283,104 @@ namespace vuk {
 		};
 
 		// valloc reification - if there were later setting of fields, then remove placeholders
-		for (auto& rg : rgs) {
-			for (auto& node : rg->op_arena) {
-				switch (node.kind) {
-				case Node::VALLOC:
-					auto args_ptr = node.valloc.args.data();
-					if (node.type[0]->is_image()) {
-						auto ptr = &constant<ImageAttachment>(args_ptr[0]);
-						auto& value = constant<ImageAttachment>(args_ptr[0]);
-						if (value.extent.extent.width > 0) {
-							placeholder_to_ptr(args_ptr[1], &ptr->extent.extent.width);
-						}
-						if (value.extent.extent.height > 0) {
-							placeholder_to_ptr(args_ptr[2], &ptr->extent.extent.height);
-						}
-						if (value.extent.extent.depth > 0) {
-							placeholder_to_ptr(args_ptr[3], &ptr->extent.extent.depth);
-						}
-						if (value.format != Format::eUndefined) {
-							placeholder_to_ptr(args_ptr[4], &ptr->format);
-						}
-						if (value.sample_count != Samples::eInfer) {
-							placeholder_to_ptr(args_ptr[5], &ptr->sample_count);
-						}
-						if (value.base_layer != VK_REMAINING_ARRAY_LAYERS) {
-							placeholder_to_ptr(args_ptr[6], &ptr->base_layer);
-						}
-						if (value.layer_count != VK_REMAINING_ARRAY_LAYERS) {
-							placeholder_to_ptr(args_ptr[7], &ptr->layer_count);
-						}
-						if (value.base_level != VK_REMAINING_MIP_LEVELS) {
-							placeholder_to_ptr(args_ptr[8], &ptr->base_level);
-						}
-						if (value.level_count != VK_REMAINING_MIP_LEVELS) {
-							placeholder_to_ptr(args_ptr[9], &ptr->level_count);
-						}
-					} else if (node.type[0]->is_buffer()) {
-						auto ptr = &constant<Buffer>(args_ptr[0]);
-						auto& value = constant<Buffer>(args_ptr[0]);
-						if (value.size != ~(0u)) {
-							placeholder_to_ptr(args_ptr[1], &ptr->size);
-						}
+		for (auto node : nodes) {
+			switch (node->kind) {
+			case Node::VALLOC:
+				auto args_ptr = node->valloc.args.data();
+				if (node->type[0]->is_image()) {
+					auto ptr = &constant<ImageAttachment>(args_ptr[0]);
+					auto& value = constant<ImageAttachment>(args_ptr[0]);
+					if (value.extent.extent.width > 0) {
+						placeholder_to_ptr(args_ptr[1], &ptr->extent.extent.width);
+					}
+					if (value.extent.extent.height > 0) {
+						placeholder_to_ptr(args_ptr[2], &ptr->extent.extent.height);
+					}
+					if (value.extent.extent.depth > 0) {
+						placeholder_to_ptr(args_ptr[3], &ptr->extent.extent.depth);
+					}
+					if (value.format != Format::eUndefined) {
+						placeholder_to_ptr(args_ptr[4], &ptr->format);
+					}
+					if (value.sample_count != Samples::eInfer) {
+						placeholder_to_ptr(args_ptr[5], &ptr->sample_count);
+					}
+					if (value.base_layer != VK_REMAINING_ARRAY_LAYERS) {
+						placeholder_to_ptr(args_ptr[6], &ptr->base_layer);
+					}
+					if (value.layer_count != VK_REMAINING_ARRAY_LAYERS) {
+						placeholder_to_ptr(args_ptr[7], &ptr->layer_count);
+					}
+					if (value.base_level != VK_REMAINING_MIP_LEVELS) {
+						placeholder_to_ptr(args_ptr[8], &ptr->base_level);
+					}
+					if (value.level_count != VK_REMAINING_MIP_LEVELS) {
+						placeholder_to_ptr(args_ptr[9], &ptr->level_count);
+					}
+				} else if (node->type[0]->is_buffer()) {
+					auto ptr = &constant<Buffer>(args_ptr[0]);
+					auto& value = constant<Buffer>(args_ptr[0]);
+					if (value.size != ~(0u)) {
+						placeholder_to_ptr(args_ptr[1], &ptr->size);
 					}
 				}
 			}
 		}
 
-		for (auto& rg : rgs) {
-			for (auto& node : rg->op_arena) {
-				switch (node.kind) {
-				case Node::CALL:
-					// args
-					std::optional<Extent2D> extent;
-					std::optional<Samples> samples;
-					std::optional<uint32_t> layer_count;
-					for (size_t i = 0; i < node.call.args.size(); i++) {
-						auto& arg_ty = node.call.fn.type()->opaque_fn.args[i];
-						auto& parm = node.call.args[i];
-						if (arg_ty->kind == Type::IMBUED_TY) {
-							auto access = arg_ty->imbued.access;
-							if (is_framebuffer_attachment(access)) {
-								auto& link = res_to_links[parm];
-								if (link.urdef.node->kind == Node::VALLOC) {
-									auto& args = link.urdef.node->valloc.args;
-									if (is_placeholder(args[9])) {
-										placeholder_to_constant(args[9], 1U); // can only render to a single mip level
-									}
-									if (is_placeholder(args[3])) {
-										placeholder_to_constant(args[3], 1U); // depth must be 1
-									}
-									if (!samples && !is_placeholder(args[5])) { // known sample count
-										samples = constant<Samples>(args[5]);
-									} else if (samples && is_placeholder(args[5])) {
-										placeholder_to_constant(args[5], *samples);
-									}
-									if (!extent && !is_placeholder(args[1]) && !is_placeholder(args[2])) { // known extent2D
-										extent = Extent2D{ eval<uint32_t>(args[1]), eval<uint32_t>(args[2]) };
-									} else if (extent && is_placeholder(args[1]) && is_placeholder(args[2])) {
-										placeholder_to_constant(args[1], extent->width);
-										placeholder_to_constant(args[2], extent->height);
-									}
-									if (!layer_count && !is_placeholder(args[7])) { // known layer count
-										layer_count = eval<uint32_t>(args[7]);
-									} else if (layer_count && is_placeholder(args[7])) {
-										placeholder_to_constant(args[7], *layer_count);
-									}
-									if (constant<ImageAttachment>(args[0]).image.image == VK_NULL_HANDLE) { // if there is no image, we will use base layer 0 and base mip 0
-										placeholder_to_constant(args[6], 0U);
-										placeholder_to_constant(args[8], 0U);
-									}
-								} else if (link.urdef.node->kind == Node::ACQUIRE_NEXT_IMAGE) {
-									Swapchain& swp = *reinterpret_cast<Swapchain*>(link.urdef.node->acquire_next_image.swapchain.node->valloc.args[0].node->constant.value);
-									extent = Extent2D{ swp.images[0].extent.extent.width, swp.images[0].extent.extent.height };
-									layer_count = swp.images[0].layer_count;
-									samples = Samples::e1;
+		for (auto node : nodes) {
+			switch (node->kind) {
+			case Node::CALL:
+				// args
+				std::optional<Extent2D> extent;
+				std::optional<Samples> samples;
+				std::optional<uint32_t> layer_count;
+				for (size_t i = 0; i < node->call.args.size(); i++) {
+					auto& arg_ty = node->call.fn.type()->opaque_fn.args[i];
+					auto& parm = node->call.args[i];
+					if (arg_ty->kind == Type::IMBUED_TY) {
+						auto access = arg_ty->imbued.access;
+						if (is_framebuffer_attachment(access)) {
+							auto& link = res_to_links[parm];
+							if (link.urdef.node->kind == Node::VALLOC) {
+								auto& args = link.urdef.node->valloc.args;
+								if (is_placeholder(args[9])) {
+									placeholder_to_constant(args[9], 1U); // can only render to a single mip level
 								}
+								if (is_placeholder(args[3])) {
+									placeholder_to_constant(args[3], 1U); // depth must be 1
+								}
+								if (!samples && !is_placeholder(args[5])) { // known sample count
+									samples = constant<Samples>(args[5]);
+								} else if (samples && is_placeholder(args[5])) {
+									placeholder_to_constant(args[5], *samples);
+								}
+								if (!extent && !is_placeholder(args[1]) && !is_placeholder(args[2])) { // known extent2D
+									extent = Extent2D{ eval<uint32_t>(args[1]), eval<uint32_t>(args[2]) };
+								} else if (extent && is_placeholder(args[1]) && is_placeholder(args[2])) {
+									placeholder_to_constant(args[1], extent->width);
+									placeholder_to_constant(args[2], extent->height);
+								}
+								if (!layer_count && !is_placeholder(args[7])) { // known layer count
+									layer_count = eval<uint32_t>(args[7]);
+								} else if (layer_count && is_placeholder(args[7])) {
+									placeholder_to_constant(args[7], *layer_count);
+								}
+								if (constant<ImageAttachment>(args[0]).image.image == VK_NULL_HANDLE) { // if there is no image, we will use base layer 0 and base mip 0
+									placeholder_to_constant(args[6], 0U);
+									placeholder_to_constant(args[8], 0U);
+								}
+							} else if (link.urdef.node->kind == Node::ACQUIRE_NEXT_IMAGE) {
+								Swapchain& swp = *reinterpret_cast<Swapchain*>(link.urdef.node->acquire_next_image.swapchain.node->valloc.args[0].node->constant.value);
+								extent = Extent2D{ swp.images[0].extent.extent.width, swp.images[0].extent.extent.height };
+								layer_count = swp.images[0].layer_count;
+								samples = Samples::e1;
 							}
-						} else {
-							assert(0);
 						}
+					} else {
+						assert(0);
 					}
-					break;
 				}
+				break;
 			}
 		}
 
@@ -352,23 +426,22 @@ namespace vuk {
 		return (DomainFlagBits)f.m_mask;
 	}
 
-	Result<void> RGCImpl::schedule_intra_queue(std::span<std::shared_ptr<RG>> rgs, const RenderGraphCompileOptions& compile_options) {
+	Result<void> RGCImpl::schedule_intra_queue(const RenderGraphCompileOptions& compile_options) {
 		// we need to schedule all execables that run
 		std::vector<Node*> schedule_items;
 		std::unordered_map<Node*, size_t> node_to_schedule;
 
-		for (auto& rg : rgs) {
-			for (auto& node : rg->op_arena) {
-				switch (node.kind) {
-				case Node::VALLOC:
-				case Node::CALL:
-				case Node::CLEAR:
-				case Node::ACQUIRE:
-				case Node::RELEASE:
-					node_to_schedule[&node] = schedule_items.size();
-					schedule_items.emplace_back(&node);
-					break;
-				}
+		for (auto node : nodes) {
+			switch (node->kind) {
+			case Node::VALLOC:
+			case Node::CALL:
+			case Node::CLEAR:
+			case Node::ACQUIRE:
+			case Node::RELACQ:
+			case Node::RELEASE:
+				node_to_schedule[node] = schedule_items.size();
+				schedule_items.emplace_back(node);
+				break;
 			}
 		}
 		// calculate indegrees for all passes & build adjacency
@@ -759,33 +832,28 @@ namespace vuk {
 			                        impl->partitioned_execables.size() - impl->transfer_passes.size() - impl->compute_passes.size() };
 	}
 
-	Result<void> Compiler::compile(std::span<std::shared_ptr<RG>> rgs, const RenderGraphCompileOptions& compile_options) {
+	Result<void> Compiler::compile(std::span<std::shared_ptr<ExtRef>> refs, const RenderGraphCompileOptions& compile_options) {
 		auto arena = impl->arena_.release();
 		delete impl;
 		arena->reset();
 		impl = new RGCImpl(arena);
 		impl->callbacks = compile_options.callbacks;
 
-		std::vector<std::shared_ptr<RG>> work_queue(rgs.begin(), rgs.end());
-		std::vector<std::shared_ptr<RG>> all_rgs;
+		impl->cg_module = refs[0]->module;
 
-		while (!work_queue.empty()) {
-			auto item = work_queue.back();
-			work_queue.pop_back();
-			work_queue.insert(work_queue.end(), item->subgraphs.begin(), item->subgraphs.end());
-			all_rgs.push_back(item);
-		}
+		impl->refs.assign(refs.begin(), refs.end());
+
 		// TODO:
 		// impl->merge_diverge_passes(impl->computed_passes);
 
 		// run global pass ordering - once we split per-queue we don't see enough
 		// inputs to order within a queue
 
-		VUK_DO_OR_RETURN(build_links(all_rgs, impl->res_to_links, impl->pass_reads));
+		VUK_DO_OR_RETURN(impl->build_links(impl->res_to_links, impl->pass_reads));
 		VUK_DO_OR_RETURN(collect_chains(impl->res_to_links, impl->chains));
 
 		// VUK_DO_OR_RETURN(impl->diagnose_unheaded_chains());
-		VUK_DO_OR_RETURN(impl->schedule_intra_queue(all_rgs, compile_options));
+		VUK_DO_OR_RETURN(impl->schedule_intra_queue(compile_options));
 		/*
 		VUK_DO_OR_RETURN(impl->relink_subchains());
 		resource_linking();
@@ -1467,8 +1535,8 @@ namespace vuk {
 	  return { expected_value };
 	}*/
 
-	Result<ExecutableRenderGraph> Compiler::link(std::span<std::shared_ptr<RG>> rgs, const RenderGraphCompileOptions& compile_options) {
-		VUK_DO_OR_RETURN(compile(rgs, compile_options));
+	Result<ExecutableRenderGraph> Compiler::link(std::span<std::shared_ptr<ExtRef>> refs, const RenderGraphCompileOptions& compile_options) {
+		VUK_DO_OR_RETURN(compile(refs, compile_options));
 
 		/* VUK_DO_OR_RETURN(impl->generate_barriers_and_waits());
 
