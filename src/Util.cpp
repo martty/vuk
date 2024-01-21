@@ -15,8 +15,7 @@
 #include <utility>
 
 namespace vuk {
-	Swapchain::Swapchain(Allocator alloc, size_t image_count) :
-	    allocator(alloc){
+	Swapchain::Swapchain(Allocator alloc, size_t image_count) : allocator(alloc) {
 		semaphores.resize(image_count * 2);
 		allocator.allocate_semaphores(std::span(semaphores));
 	}
@@ -53,7 +52,7 @@ namespace vuk {
 	Result<void> link_execute_submit(Allocator& allocator, Compiler& compiler, std::span<std::shared_ptr<RG>> rgs, RenderGraphCompileOptions options) {
 		/* auto erg = compiler.link(rgs, options);
 		if (!erg) {
-			return erg;
+		  return erg;
 		}
 		std::pair erg_and_alloc = std::pair{ &allocator, &*erg };
 		return execute_submit(allocator, std::span(&erg_and_alloc, 1));*/
@@ -75,8 +74,7 @@ namespace vuk {
 	}
 
 	// assume rgs are independent - they don't reference eachother
-	Result<void> execute_submit(Allocator& allocator,
-	                            std::span<std::pair<Allocator*, ExecutableRenderGraph*>> rgs) {
+	Result<void> execute_submit(Allocator& allocator, std::span<std::pair<Allocator*, ExecutableRenderGraph*>> rgs) {
 		for (auto& [alloc, rg] : rgs) {
 			rg->execute(*alloc);
 		}
@@ -104,47 +102,54 @@ namespace vuk {
 		return { SampledImage::RenderGraphAttachment{ n, sci, ivci, ImageLayout::eReadOnlyOptimalKHR } };
 	}
 
-	Result<void> UntypedFuture::wait(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options) {
+	Result<void> UntypedValue::wait(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options) {
 		/* if (acqrel.status == Signal::Status::eDisarmed && !rg) {
-			return { expected_error,
-				       RenderGraphException{} }; // can't get wait for future that has not been attached anything or has been attached into a rendergraph
+		  return { expected_error,
+		           RenderGraphException{} }; // can't get wait for future that has not been attached anything or has been attached into a rendergraph
 		} else if (acqrel.status == Signal::Status::eHostAvailable) {
-			return { expected_value };
+		  return { expected_value };
 		} else if (acqrel.status == Signal::Status::eSynchronizable) {
-			allocator.get_context().wait_for_domains(std::span{ &acqrel.source, 1 });
-			return { expected_value };
+		  allocator.get_context().wait_for_domains(std::span{ &acqrel.source, 1 });
+		  return { expected_value };
 		} else {
-			auto erg = compiler.link(std::span{ &rg, 1 }, options);
-			if (!erg) {
-				return erg;
-			}
-			std::pair v = { &allocator, &*erg };
-			VUK_DO_OR_RETURN(execute_submit(allocator, std::span{ &v, 1 }));
-			assert(acqrel.status != Signal::Status::eDisarmed);
-			if (acqrel.status == Signal::Status::eSynchronizable) {
-				allocator.get_context().wait_for_domains(std::span{ &acqrel.source, 1 });
-			}
-			acqrel.status = Signal::Status::eHostAvailable;
-			return { expected_value };
+		  auto erg = compiler.link(std::span{ &rg, 1 }, options);
+		  if (!erg) {
+		    return erg;
+		  }
+		  std::pair v = { &allocator, &*erg };
+		  VUK_DO_OR_RETURN(execute_submit(allocator, std::span{ &v, 1 }));
+		  assert(acqrel.status != Signal::Status::eDisarmed);
+		  if (acqrel.status == Signal::Status::eSynchronizable) {
+		    allocator.get_context().wait_for_domains(std::span{ &acqrel.source, 1 });
+		  }
+		  acqrel.status = Signal::Status::eHostAvailable;
+		  return { expected_value };
 		}
 
 		auto result = control->wait(allocator, compiler, options);
 		if (result.holds_value()) {
-			// save value
-			auto current_value = get_constant_value(def.node);
-			auto current_ty = def.type();
-			// new RG with ACQUIRE node
-			auto new_rg = std::make_shared<RG>();
-			this->def = { new_rg->make_acquire(current_ty, &this->control->acqrel, current_value) };
-			// drop current RG
-			this->control->rg = std::move(new_rg);
-			this->head = { this->control->rg->make_release(this->def, &this->control->acqrel, Access::eNone, DomainFlagBits::eAny), 0 };
+		  // save value
+		  auto current_value = get_constant_value(def.node);
+		  auto current_ty = def.type();
+		  // new RG with ACQUIRE node
+		  auto new_rg = std::make_shared<RG>();
+		  this->def = { new_rg->make_acquire(current_ty, &this->control->acqrel, current_value) };
+		  // drop current RG
+		  this->control->rg = std::move(new_rg);
+		  this->head = { this->control->rg->make_release(this->def, &this->control->acqrel, Access::eNone, DomainFlagBits::eAny), 0 };
 		}*/
 
 		return { expected_value };
 	}
 
-	Result<void> UntypedFuture::submit(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options) {
+	Result<void> UntypedValue::submit(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options) {
+		if (head->acqrel->status == Signal::Status::eDisarmed && head->get_head().node->kind == Node::RELACQ) { // relacq -> release if unsubmitted
+			head->to_release();
+		} else if (head->acqrel->status != Signal::Status::eDisarmed &&
+		           head->get_head().node->kind != Node::RELEASE) { // if submitted, we no longer allow relacq->release
+			return { expected_error, RenderGraphException{} };
+		}
+
 		auto& acqrel = head->acqrel;
 		if (acqrel->status == Signal::Status::eDisarmed && !head->module) {
 			return { expected_error, RenderGraphException{} };

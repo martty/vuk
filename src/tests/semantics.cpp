@@ -31,7 +31,7 @@ TEST_CASE("minimal graph is submitted") {
 
 	auto d = make_binary_computation("d", trace)(a, b); // d->a, d->b
 	auto e = make_unary_computation("e", trace)(a);     // e->a
-	e.release().submit(*test_context.allocator, test_context.compiler);
+	e.submit(*test_context.allocator, test_context.compiler);
 
 	trace = trace.substr(0, trace.size() - 1);
 	CHECK(trace == "a e");
@@ -46,8 +46,8 @@ TEST_CASE("computation is never duplicated") {
 	auto d = make_binary_computation("d", trace)(a, b); // d->a, d->b
 	auto e = make_unary_computation("e", trace)(a);     // e->a
 
-	e.release().submit(*test_context.allocator, test_context.compiler);
-	d.release().submit(*test_context.allocator, test_context.compiler);
+	e.submit(*test_context.allocator, test_context.compiler);
+	d.submit(*test_context.allocator, test_context.compiler);
 	trace = trace.substr(0, trace.size() - 1);
 	CHECK(trace == "a e b d");
 }
@@ -59,9 +59,8 @@ TEST_CASE("computation is never duplicated 2") {
 	auto b = make_unary_computation("b", trace)(declare_buf("_b", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
 
 	auto d = make_binary_computation("d", trace)(a, b); // d->a, d->b
-	auto fut = d.release();
-	fut.submit(*test_context.allocator, test_context.compiler);
-	fut.submit(*test_context.allocator, test_context.compiler);
+	d.submit(*test_context.allocator, test_context.compiler);
+	d.submit(*test_context.allocator, test_context.compiler);
 	trace = trace.substr(0, trace.size() - 1);
 	CHECK(trace == "a b d");
 }
@@ -73,7 +72,7 @@ TEST_CASE("not moving Values will emit relacqs") {
 	auto b = make_unary_computation("b", trace)(declare_buf("_b", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
 
 	auto d = make_binary_computation("d", trace)(a, b); // d->a, d->b
-	d.release().submit(*test_context.allocator, test_context.compiler);
+	d.submit(*test_context.allocator, test_context.compiler);
 	trace = trace.substr(0, trace.size() - 1);
 	CHECK(trace == "a b d");
 }
@@ -84,8 +83,8 @@ TEST_CASE("moving Values allows for more efficient building (but no semantic cha
 	auto a = make_unary_computation("a", trace)(declare_buf("_a", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
 	auto b = make_unary_computation("b", trace)(declare_buf("_b", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
 
-	auto d = make_binary_computation("d", trace)(std::move(a), b); // d->a, d->b
-	d.release().submit(*test_context.allocator, test_context.compiler);
+	auto d = make_binary_computation("d", trace)(std::move(a), std::move(b)); // d->a, d->b
+	d.submit(*test_context.allocator, test_context.compiler);
 	trace = trace.substr(0, trace.size() - 1);
 	CHECK(trace == "a b d");
 }
@@ -98,8 +97,8 @@ TEST_CASE("moving Values doesn't help if it was leaked before") {
 
 	auto d = make_binary_computation("d", trace)(a, b);        // d->a, d->b
 	auto e = make_unary_computation("e", trace)(std::move(a)); // e->a <--- a cannot be consumed here! since previously we made d depend on a
-	e.release().submit(*test_context.allocator, test_context.compiler);
-	d.release().submit(*test_context.allocator, test_context.compiler);
+	e.submit(*test_context.allocator, test_context.compiler);
+	d.submit(*test_context.allocator, test_context.compiler);
 	trace = trace.substr(0, trace.size() - 1);
 	CHECK(trace == "a e b d");
 }
@@ -109,26 +108,10 @@ TEST_CASE("can't make Futures out of Values that have already been submitted") {
 
 	auto a = make_unary_computation("a", trace)(declare_buf("_a", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
 	auto e = make_unary_computation("e", trace)(a); // e->a
-	e.release().submit(*test_context.allocator, test_context.compiler);
+	e.submit(*test_context.allocator, test_context.compiler);
     CHECK_THROWS(a.release()); // we don't allow this, because this Future no longer represents the computation of 'a'
 }
 */
-
-TEST_CASE("using Futures") {
-	std::string trace = "";
-
-	auto a = make_unary_computation("a", trace)(declare_buf("_a", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
-	auto b = make_unary_computation("b", trace)(declare_buf("_b", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
-
-	auto d = make_binary_computation("d", trace)(a, b);        // d->a, d->b
-	auto fut = d.release();
-	fut.submit(*test_context.allocator, test_context.compiler);
-
-    auto e = make_unary_computation("e", trace)(fut); // futures can be used transparently instead of Values - build functions that take Values
-    e.release().submit(*test_context.allocator, test_context.compiler);
-	trace = trace.substr(0, trace.size() - 1);
-	CHECK(trace == "a b d e");
-}
 
 /*
 TEST_CASE("scheduling single-queue") {
