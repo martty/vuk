@@ -242,25 +242,6 @@ namespace vuk {
 		// in this case they can't be together - so we linearize them into domain groups
 		// so def -> {r1, r2} becomes def -> r1 -> undef{g0} -> def{g0} -> r2
 
-		// second pass - resolve composite urdefs
-		for (auto node : nodes) {
-			switch (node->kind) {
-			case Node::INDEXING:
-				auto array_def = res_to_links[node->indexing.array].urdef;
-				auto index_v = constant<uint64_t>(node->indexing.index);
-				auto array_arg = array_def.node->aalloc.args[index_v + 1];
-				assert(res_to_links[array_arg].urdef);
-				auto& link = res_to_links[first(node)];
-				link.urdef = res_to_links[array_arg].urdef;
-
-				auto l = &link;
-				do {
-					l->urdef = link.urdef;
-					l = l->next;
-				} while (l);
-			}
-		}
-
 		// TODO: move this
 		// inference
 

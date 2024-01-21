@@ -822,7 +822,14 @@ namespace vuk {
 
 		void* get_value(Ref parm) {
 			auto& link = res_to_links[parm];
-			return get_constant_value(link.urdef.node);
+			if (link.urdef.node->kind == Node::INDEXING) {
+				auto array_def = res_to_links[link.urdef.node->indexing.array].urdef;
+				void* array_of_vs = get_constant_value(array_def.node);
+				auto index_v = constant<uint64_t>(link.urdef.node->indexing.index);
+				return reinterpret_cast<std::byte*>(array_of_vs) + array_def.type()->array.stride * index_v;
+			} else {
+				return get_constant_value(link.urdef.node);
+			}
 		}
 
 		template<class T>
@@ -1110,25 +1117,25 @@ namespace vuk {
 				}
 			} else if (base_ty->kind == Type::ARRAY_TY) {
 				auto elem_ty = base_ty->array.T;
-				auto size = base_ty->array.size;
+				auto size = base_ty->array.count;
 				if (elem_ty->is_image()) {
-					auto img_atts = reinterpret_cast<ImageAttachment**>(value);
+					auto img_atts = reinterpret_cast<ImageAttachment*>(value);
 					for (int i = 0; i < size; i++) {
 						if (has_dst) {
-							dst_stream->synch_image(*img_atts[i], src_use, dst_use, img_atts[i]);
+							dst_stream->synch_image(img_atts[i], src_use, dst_use, &img_atts[i]);
 						}
 						if (only_src || cross) {
-							src_stream->synch_image(*img_atts[i], src_use, dst_use, img_atts[i]);
+							src_stream->synch_image(img_atts[i], src_use, dst_use, &img_atts[i]);
 						}
 					}
 				} else if (elem_ty->is_buffer()) {
 					for (int i = 0; i < size; i++) {
 						// buffer needs no cross
-						auto bufs = reinterpret_cast<Buffer**>(value);
+						auto bufs = reinterpret_cast<Buffer*>(value);
 						if (has_dst) {
-							dst_stream->synch_memory(src_use, dst_use, bufs[i]);
+							dst_stream->synch_memory(src_use, dst_use, &bufs[i]);
 						} else if (has_src) {
-							src_stream->synch_memory(src_use, dst_use, bufs[i]);
+							src_stream->synch_memory(src_use, dst_use, &bufs[i]);
 						}
 					}
 				} else {
@@ -1305,7 +1312,7 @@ namespace vuk {
 
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
-					auto size = node->type[0]->array.size;
+					auto size = node->type[0]->array.count;
 					auto elem_ty = node->type[0]->array.T;
 					assert(elem_ty->kind == Type::BUFFER_TY || elem_ty->kind == Type::IMAGE_TY);
 					fmt::print(" = declare<{}[{}]> ", elem_ty->kind == Type::BUFFER_TY ? "buffer" : "image", size);
@@ -1454,6 +1461,8 @@ namespace vuk {
 					auto parm = node->relacq.src;
 					auto arg_ty = node->type[0];
 					auto di = sched.get_dependency_info(parm, arg_ty, RW::eWrite, dst_stream);
+					di.src_use.stream = di.dst_use.stream; // TODO: not sure this is valid, but we can't handle split
+					di.dst_use.stream = nullptr;
 					recorder.add_sync(sched.base_type(parm), di, sched.get_value(parm));
 					if (!acqrel) { // (we should've handled this before this moment)
 						fmt::print("???");
@@ -1480,7 +1489,7 @@ namespace vuk {
 					fmt::print("\n");
 #endif
 
-					sched.done(node, dst_stream);
+					sched.done(node, nullptr);
 				} else {
 					sched.schedule_dependency(node->relacq.src, RW::eWrite);
 				}
@@ -1594,15 +1603,12 @@ namespace vuk {
 					// half sync
 					std::vector<Buffer*> bufs;
 					auto& link = sched.res_to_links[node->indexing.array];
-					assert(link.urdef.node->kind == Node::AALLOC);
-					auto size = link.urdef.type()->array.size;
-					for (auto i = 0; i < size; i++) {
-						bufs.push_back(&sched.get_value<Buffer>(link.urdef.node->aalloc.args[i + 1]));
-					}
+					assert(link.urdef.type()->kind == Type::ARRAY_TY);
+					auto count = link.urdef.type()->array.count;
 
 					recorder.add_sync(sched.base_type(node->indexing.array),
 					                  sched.get_dependency_info(node->indexing.array, node->indexing.array.type(), RW::eWrite, nullptr),
-					                  bufs.data());
+					                  sched.get_value(node->indexing.array));
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
 					fmt::print(" = ");
