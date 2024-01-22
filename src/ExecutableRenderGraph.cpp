@@ -322,8 +322,8 @@ namespace vuk {
 			dependencies.push_back(dep);
 		}
 
-		Signal* make_signal() override {return &signals.emplace_back();
-			
+		Signal* make_signal() override {
+			return &signals.emplace_back();
 		}
 
 		void sync_deps() override {
@@ -782,7 +782,7 @@ namespace vuk {
 		void schedule_dependency(Ref parm, RW access) {
 			auto it = res_to_links.find(parm);
 			// some items (like constants) don't have links, so they also don't need to be scheduled
-			if (it == res_to_links.end()) {
+			if (it == res_to_links.end() || it->second.def.node == nullptr) {
 				return;
 			}
 			auto& link = it->second;
@@ -813,8 +813,8 @@ namespace vuk {
 		template<class T>
 		T& get_value(Ref parm) {
 			auto& link = res_to_links[parm];
-			if (link.urdef.node->kind == Node::AALLOC) {
-				return reinterpret_cast<T&>(link.urdef.node->aalloc.args[0].node->constant.value);
+			if (link.urdef.node->kind == Node::CONSTRUCT && parm.type()->kind == Type::ARRAY_TY) {
+				return reinterpret_cast<T&>(link.urdef.node->construct.args[0].node->constant.value);
 			} else {
 				return *reinterpret_cast<T*>(get_value(parm));
 			}
@@ -822,10 +822,10 @@ namespace vuk {
 
 		void* get_value(Ref parm) {
 			auto& link = res_to_links[parm];
-			if (link.urdef.node->kind == Node::INDEXING) {
-				auto array_def = res_to_links[link.urdef.node->indexing.array].urdef;
+			if (link.urdef.node->kind == Node::EXTRACT) {
+				auto array_def = res_to_links[link.urdef.node->extract.composite].urdef;
 				void* array_of_vs = get_constant_value(array_def.node);
-				auto index_v = constant<uint64_t>(link.urdef.node->indexing.index);
+				auto index_v = constant<uint64_t>(link.urdef.node->extract.index);
 				return reinterpret_cast<std::byte*>(array_of_vs) + array_def.type()->array.stride * index_v;
 			} else {
 				return get_constant_value(link.urdef.node);
@@ -835,7 +835,7 @@ namespace vuk {
 		template<class T>
 		T& get_array_elem_value_arg(Ref parm, size_t index) {
 			auto& link = res_to_links[parm];
-			auto& arg = link.urdef.node->aalloc.args[index + 1];
+			auto& arg = link.urdef.node->construct.args[index + 1];
 			return get_value<T>(arg);
 		};
 
@@ -1241,108 +1241,104 @@ namespace vuk {
 			// we run nodes twice - first time we reenqueue at the front and then put all deps before it
 			// second time we see it, we know that all deps have run, so we can run the node itself
 			switch (node->kind) {
-			case Node::VALLOC: { // when encountering a DECLARE, allocate the thing if needed
-				if (node->type[0]->kind == Type::BUFFER_TY) {
-					auto& bound = constant<Buffer>(node->valloc.args[0]);
-					bound.size = eval<size_t>(node->valloc.args[1]); // collapse inferencing
-#ifdef VUK_DUMP_EXEC
-					print_results(node);
-					fmt::print(" = declare<buffer>\n");
-#endif
-					if (bound.buffer == VK_NULL_HANDLE) {
-						assert(bound.size != ~(0u));
-						BufferCreateInfo bci{ .mem_usage = bound.memory_usage, .size = bound.size, .alignment = 1 }; // TODO: alignment?
-						auto allocator = node->valloc.allocator ? *node->valloc.allocator : alloc;
-						auto buf = allocate_buffer(allocator, bci);
-						if (!buf) {
-							return buf;
-						}
-						bound = **buf;
-					}
-				} else if (node->type[0]->kind == Type::IMAGE_TY) {
-					auto& attachment = *reinterpret_cast<ImageAttachment*>(node->valloc.args[0].node->constant.value);
-					// collapse inferencing
-					attachment.extent.extent.width = eval<uint32_t>(node->valloc.args[1]);
-					attachment.extent.extent.height = eval<uint32_t>(node->valloc.args[2]);
-					attachment.extent.extent.depth = eval<uint32_t>(node->valloc.args[3]);
-					attachment.extent.sizing = Sizing::eAbsolute;
-					attachment.format = constant<Format>(node->valloc.args[4]);
-					attachment.sample_count = constant<Samples>(node->valloc.args[5]);
-					attachment.base_layer = eval<uint32_t>(node->valloc.args[6]);
-					attachment.layer_count = eval<uint32_t>(node->valloc.args[7]);
-					attachment.base_level = eval<uint32_t>(node->valloc.args[8]);
-					attachment.level_count = eval<uint32_t>(node->valloc.args[9]);
-#ifdef VUK_DUMP_EXEC
-					print_results(node);
-					fmt::print(" = declare<image>\n");
-#endif
-					if (!attachment.image) {
-						auto allocator = node->valloc.allocator ? *node->valloc.allocator : alloc;
-						attachment.usage = impl->compute_usage(&impl->res_to_links[first(node)]);
-						assert(attachment.usage != ImageUsageFlags{});
-						auto img = allocate_image(allocator, attachment);
-						if (!img) {
-							return img;
-						}
-						attachment.image = **img;
-						// ctx.set_name(attachment.image.image, bound.name.name);
-					}
-				} else if (node->type[0]->kind == Type::SWAPCHAIN_TY) {
-#ifdef VUK_DUMP_EXEC
-					print_results(node);
-					fmt::print(" = declare<swapchain>\n");
-#endif
-					/* no-op */
-				} else {
-					assert(0);
-				}
-				sched.done(node, host_stream); // declarations execute on the host
-				break;
-			}
-			case Node::AALLOC: {
-				assert(node->type[0]->kind == Type::ARRAY_TY);
+			case Node::CONSTRUCT: { // when encountering a CONSTRUCT, allocate the thing if needed
 				if (sched.process(item)) {
-					for (size_t i = 1; i < node->aalloc.args.size(); i++) {
-						auto arg_ty = node->aalloc.args[i].type();
-						auto& parm = node->aalloc.args[i];
-						auto& link = impl->res_to_links[parm];
+					if (node->type[0]->kind == Type::BUFFER_TY) {
+						auto& bound = constant<Buffer>(node->construct.args[0]);
+						bound.size = eval<size_t>(node->construct.args[1]); // collapse inferencing
+#ifdef VUK_DUMP_EXEC
+						print_results(node);
+						fmt::print(" = construct<buffer>\n");
+#endif
+						if (bound.buffer == VK_NULL_HANDLE) {
+							assert(bound.size != ~(0u));
+							BufferCreateInfo bci{ .mem_usage = bound.memory_usage, .size = bound.size, .alignment = 1 }; // TODO: alignment?
+							auto allocator = node->construct.allocator ? *node->construct.allocator : alloc;
+							auto buf = allocate_buffer(allocator, bci);
+							if (!buf) {
+								return buf;
+							}
+							bound = **buf;
+						}
+					} else if (node->type[0]->kind == Type::IMAGE_TY) {
+						auto& attachment = *reinterpret_cast<ImageAttachment*>(node->construct.args[0].node->constant.value);
+						// collapse inferencing
+						attachment.extent.extent.width = eval<uint32_t>(node->construct.args[1]);
+						attachment.extent.extent.height = eval<uint32_t>(node->construct.args[2]);
+						attachment.extent.extent.depth = eval<uint32_t>(node->construct.args[3]);
+						attachment.extent.sizing = Sizing::eAbsolute;
+						attachment.format = constant<Format>(node->construct.args[4]);
+						attachment.sample_count = constant<Samples>(node->construct.args[5]);
+						attachment.base_layer = eval<uint32_t>(node->construct.args[6]);
+						attachment.layer_count = eval<uint32_t>(node->construct.args[7]);
+						attachment.base_level = eval<uint32_t>(node->construct.args[8]);
+						attachment.level_count = eval<uint32_t>(node->construct.args[9]);
+#ifdef VUK_DUMP_EXEC
+						print_results(node);
+						fmt::print(" = construct<image>\n");
+#endif
+						if (!attachment.image) {
+							auto allocator = node->construct.allocator ? *node->construct.allocator : alloc;
+							attachment.usage = impl->compute_usage(&impl->res_to_links[first(node)]);
+							assert(attachment.usage != ImageUsageFlags{});
+							auto img = allocate_image(allocator, attachment);
+							if (!img) {
+								return img;
+							}
+							attachment.image = **img;
+							// ctx.set_name(attachment.image.image, bound.name.name);
+						}
+					} else if (node->type[0]->kind == Type::SWAPCHAIN_TY) {
+#ifdef VUK_DUMP_EXEC
+						print_results(node);
+						fmt::print(" = construct<swapchain>\n");
+#endif
+						/* no-op */
+					} else if (node->type[0]->kind == Type::ARRAY_TY) {
+						for (size_t i = 1; i < node->construct.args.size(); i++) {
+							auto arg_ty = node->construct.args[i].type();
+							auto& parm = node->construct.args[i];
+							auto& link = impl->res_to_links[parm];
 
-						recorder.add_sync(sched.base_type(parm), sched.get_dependency_info(parm, arg_ty, RW::eWrite, nullptr), sched.get_value(parm));
-					}
+							recorder.add_sync(sched.base_type(parm), sched.get_dependency_info(parm, arg_ty, RW::eWrite, nullptr), sched.get_value(parm));
+						}
 
 #ifdef VUK_DUMP_EXEC
-					print_results(node);
-					auto size = node->type[0]->array.count;
-					auto elem_ty = node->type[0]->array.T;
-					assert(elem_ty->kind == Type::BUFFER_TY || elem_ty->kind == Type::IMAGE_TY);
-					fmt::print(" = declare<{}[{}]> ", elem_ty->kind == Type::BUFFER_TY ? "buffer" : "image", size);
-					print_args(node->valloc.args.subspan(1));
-					assert(node->valloc.args[0].type()->kind == Type::MEMORY_TY);
-					if (elem_ty->kind == Type::BUFFER_TY) {
-						auto arr_mem = new Buffer[size];
-						for (auto i = 0; i < size; i++) {
-							auto& elem = node->valloc.args[i + 1];
-							assert(Type::stripped(elem.type())->kind == Type::BUFFER_TY);
+						print_results(node);
+						auto size = node->type[0]->array.count;
+						auto elem_ty = node->type[0]->array.T;
+						assert(elem_ty->kind == Type::BUFFER_TY || elem_ty->kind == Type::IMAGE_TY);
+						fmt::print(" = construct<{}[{}]> ", elem_ty->kind == Type::BUFFER_TY ? "buffer" : "image", size);
+						print_args(node->construct.args.subspan(1));
+						assert(node->construct.args[0].type()->kind == Type::MEMORY_TY);
+						if (elem_ty->kind == Type::BUFFER_TY) {
+							auto arr_mem = new Buffer[size];
+							for (auto i = 0; i < size; i++) {
+								auto& elem = node->construct.args[i + 1];
+								assert(Type::stripped(elem.type())->kind == Type::BUFFER_TY);
 
-							memcpy(&arr_mem[i], sched.get_value(elem), sizeof(Buffer));
+								memcpy(&arr_mem[i], sched.get_value(elem), sizeof(Buffer));
+							}
+							node->construct.args[0].node->constant.value = arr_mem;
+						} else if (elem_ty->kind == Type::IMAGE_TY) {
+							auto arr_mem = new ImageAttachment[size];
+							for (auto i = 0; i < size; i++) {
+								auto& elem = node->construct.args[i + 1];
+								assert(Type::stripped(elem.type())->kind == Type::IMAGE_TY);
+
+								memcpy(&arr_mem[i], sched.get_value(elem), sizeof(ImageAttachment));
+							}
+							node->construct.args[0].node->constant.value = arr_mem;
 						}
-						node->valloc.args[0].node->constant.value = arr_mem;
-					} else if (elem_ty->kind == Type::IMAGE_TY) {
-						auto arr_mem = new ImageAttachment[size];
-						for (auto i = 0; i < size; i++) {
-							auto& elem = node->valloc.args[i + 1];
-							assert(Type::stripped(elem.type())->kind == Type::IMAGE_TY);
 
-							memcpy(&arr_mem[i], sched.get_value(elem), sizeof(ImageAttachment));
-						}
-						node->valloc.args[0].node->constant.value = arr_mem;
-					}
-
-					fmt::print("\n");
+						fmt::print("\n");
 #endif
+					} else {
+						assert(0);
+					}
 					sched.done(node, host_stream); // declarations execute on the host
 				} else {
-					for (auto& parm : node->valloc.args.subspan(1)) {
+					for (auto& parm : node->construct.args.subspan(1)) {
 						sched.schedule_dependency(parm, RW::eWrite);
 					}
 				}
@@ -1365,7 +1361,7 @@ namespace vuk {
 							// here: figuring out which allocator to use to make image views for the RP and then making them
 							if (is_framebuffer_attachment(dst_access)) {
 								auto urdef = link.urdef.node;
-								auto allocator = urdef->valloc.allocator ? *urdef->valloc.allocator : alloc;
+								auto allocator = urdef->construct.allocator ? *urdef->construct.allocator : alloc;
 								auto& img_att = sched.get_value<ImageAttachment>(parm);
 								if (img_att.view_type == ImageViewType::eInfer) { // framebuffers need 2D or 2DArray views
 									if (img_att.layer_count > 1) {
@@ -1468,14 +1464,14 @@ namespace vuk {
 						fmt::print("???");
 						assert(false);
 					} else {
-						switch (acqrel->status){ 
-							case Signal::Status::eDisarmed: // means we have to signal this
+						switch (acqrel->status) {
+						case Signal::Status::eDisarmed: // means we have to signal this
 							acqrel->last_use = di.src_use;
 							node->relacq.value = sched.get_value(parm);
 							di.src_use.stream->add_dependent_signal(acqrel);
 							break;
-						  case Signal::Status::eSynchronizable: // means this is an acq instead (we should've handled this before this moment)
-						  case Signal::Status::eHostAvailable:
+						case Signal::Status::eSynchronizable: // means this is an acq instead (we should've handled this before this moment)
+						case Signal::Status::eHostAvailable:
 							fmt::print("???");
 							assert(false);
 							break;
@@ -1598,28 +1594,28 @@ namespace vuk {
 				}
 				break;
 			}
-			case Node::INDEXING:
+			case Node::EXTRACT:
 				if (sched.process(item)) {
 					// half sync
 					std::vector<Buffer*> bufs;
-					auto& link = sched.res_to_links[node->indexing.array];
+					auto& link = sched.res_to_links[node->extract.composite];
 					assert(link.urdef.type()->kind == Type::ARRAY_TY);
 					auto count = link.urdef.type()->array.count;
 
-					recorder.add_sync(sched.base_type(node->indexing.array),
-					                  sched.get_dependency_info(node->indexing.array, node->indexing.array.type(), RW::eWrite, nullptr),
-					                  sched.get_value(node->indexing.array));
+					recorder.add_sync(sched.base_type(node->extract.composite),
+					                  sched.get_dependency_info(node->extract.composite, node->extract.composite.type(), RW::eWrite, nullptr),
+					                  sched.get_value(node->extract.composite));
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
 					fmt::print(" = ");
-					print_args(std::span{ &node->indexing.array, 1 });
-					fmt::print("[{}]", constant<uint64_t>(node->indexing.index));
+					print_args(std::span{ &node->extract.composite, 1 });
+					fmt::print("[{}]", constant<uint64_t>(node->extract.index));
 					fmt::print("\n");
 #endif
-					sched.done(node, nullptr); // indexing doesn't execute
+					sched.done(node, nullptr); // extract doesn't execute
 				} else {
-					sched.schedule_dependency(node->indexing.array, RW::eWrite);
-					sched.schedule_dependency(node->indexing.index, RW::eRead);
+					sched.schedule_dependency(node->extract.composite, RW::eWrite);
+					sched.schedule_dependency(node->extract.index, RW::eRead);
 				}
 				break;
 			default:

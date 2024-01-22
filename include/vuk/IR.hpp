@@ -126,8 +126,8 @@ namespace vuk {
 			NOP,
 			PLACEHOLDER,
 			CONSTANT,
-			VALLOC,
-			AALLOC,
+			CONSTRUCT,
+			EXTRACT,
 			IMPORT,
 			CALL,
 			CLEAR,
@@ -140,7 +140,6 @@ namespace vuk {
 			RELEASE,
 			RELACQ, // can realise into ACQUIRE, RELEASE or NOP
 			ACQUIRE_NEXT_IMAGE,
-			INDEXING,
 			CAST,
 			MATH_BINARY
 		} kind;
@@ -165,12 +164,13 @@ namespace vuk {
 			} constant;
 			struct : Variable {
 				std::span<Ref> args;
-				std::optional<Allocator> allocator;
-			} valloc;
-			struct : Variable {
-				std::span<Ref> args;
 				std::span<Ref> defs; // for preserving provenance for composite types
-			} aalloc;
+				std::optional<Allocator> allocator;
+			} construct;
+			struct : Fixed<2> {
+				Ref composite;
+				Ref index;
+			} extract;
 			struct : Fixed<0> {
 				void* value;
 			} import;
@@ -220,10 +220,6 @@ namespace vuk {
 			struct : Fixed<1> {
 				Ref swapchain;
 			} acquire_next_image;
-			struct : Fixed<2> {
-				Ref array;
-				Ref index;
-			} indexing;
 			struct : Fixed<1> {
 				Ref src;
 			} cast;
@@ -249,12 +245,12 @@ namespace vuk {
 			switch (kind) {
 			case IMPORT:
 				return "import";
-			case VALLOC:
-				return "valloc";
+			case CONSTRUCT:
+				return "construct";
 			case CALL:
 				return "call";
-			case INDEXING:
-				return "indexing";
+			case EXTRACT:
+				return "extract";
 			case ACQUIRE:
 				return "acquire";
 			case RELACQ:
@@ -288,12 +284,11 @@ namespace vuk {
 	}
 
 	inline void* get_constant_value(Node* node) {
-		if (node->kind == Node::VALLOC) {
-			return node->valloc.args[0].node->constant.value;
-		} else if (node->kind == Node::AALLOC) {
-			return node->aalloc.args[0].node->constant.value;
+		if (node->kind == Node::CONSTRUCT) {
+			return node->construct.args[0].node->constant.value;
 		} else if (node->kind == Node::ACQUIRE_NEXT_IMAGE) {
-			Swapchain* swp = reinterpret_cast<Swapchain*>(node->acquire_next_image.swapchain.node->valloc.args[0].node->constant.value);
+			assert(0); // we need to resolve this one out
+			Swapchain* swp = reinterpret_cast<Swapchain*>(node->acquire_next_image.swapchain.node->construct.args[0].node->constant.value);
 			return &swp->images[swp->image_index];
 		} else if (node->kind == Node::ACQUIRE) {
 			return node->acquire.arg.node->constant.value;
@@ -463,7 +458,7 @@ namespace vuk {
 				args_ptr[9] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ u32_ty, 1 } }));
 			}
 
-			return first(emplace_op(Node{ .kind = Node::VALLOC, .type = std::span{ &builtin_image, 1 }, .valloc = { .args = std::span(args_ptr, 10) } }));
+			return first(emplace_op(Node{ .kind = Node::CONSTRUCT, .type = std::span{ &builtin_image, 1 }, .construct = { .args = std::span(args_ptr, 10) } }));
 		}
 
 		Ref make_declare_buffer(Buffer value) {
@@ -478,7 +473,7 @@ namespace vuk {
 				args_ptr[1] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ u64_ty, 1 } }));
 			}
 
-			return first(emplace_op(Node{ .kind = Node::VALLOC, .type = std::span{ &builtin_buffer, 1 }, .valloc = { .args = std::span(args_ptr, 2) } }));
+			return first(emplace_op(Node{ .kind = Node::CONSTRUCT, .type = std::span{ &builtin_buffer, 1 }, .construct = { .args = std::span(args_ptr, 2) } }));
 		}
 
 		Ref make_declare_array(Type* type, std::span<Ref> args, std::span<Ref> defs) {
@@ -489,9 +484,9 @@ namespace vuk {
 			std::copy(args.begin(), args.end(), args_ptr + 1);
 			auto defs_ptr = new Ref[defs.size()];
 			std::copy(defs.begin(), defs.end(), defs_ptr);
-			return first(emplace_op(Node{ .kind = Node::AALLOC,
+			return first(emplace_op(Node{ .kind = Node::CONSTRUCT,
 			                              .type = std::span{ arr_ty, 1 },
-			                              .aalloc = { .args = std::span(args_ptr, args.size() + 1), .defs = std::span(defs_ptr, defs.size()) } }));
+			                              .construct = { .args = std::span(args_ptr, args.size() + 1), .defs = std::span(defs_ptr, defs.size()) } }));
 		}
 
 		Ref make_declare_swapchain(Swapchain& bundle) {
@@ -499,12 +494,12 @@ namespace vuk {
 			auto args_ptr = new Ref[1];
 			auto mem_ty = new Type*(emplace_type(Type{ .kind = Type::MEMORY_TY }));
 			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = buf_ptr } }));
-			return first(emplace_op(Node{ .kind = Node::VALLOC, .type = std::span{ &builtin_swapchain, 1 }, .valloc = { .args = std::span(args_ptr, 1) } }));
+			return first(emplace_op(Node{ .kind = Node::CONSTRUCT, .type = std::span{ &builtin_swapchain, 1 }, .construct = { .args = std::span(args_ptr, 1) } }));
 		}
 
 		Ref make_array_indexing(Type* type, Ref array, Ref index) {
 			auto ty = new Type*(type);
-			return first(emplace_op(Node{ .kind = Node::INDEXING, .type = std::span{ ty, 1 }, .indexing = { .array = array, .index = index } }));
+			return first(emplace_op(Node{ .kind = Node::EXTRACT, .type = std::span{ ty, 1 }, .extract = { .composite = array, .index = index } }));
 		}
 
 		Ref make_cast(Type* dst_type, Ref src) {

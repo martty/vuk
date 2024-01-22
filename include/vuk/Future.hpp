@@ -76,7 +76,7 @@ namespace vuk {
 		template<class U>
 		Value<U> transmute(Ref new_head) noexcept {
 			head = std::make_shared<ExtRef>(ExtRef{ head->module, new_head });
-			def = {};
+			def = new_head;
 			return *reinterpret_cast<Value<U>*>(this); // TODO: not cool
 		}
 
@@ -105,15 +105,15 @@ namespace vuk {
 		void same_extent_as(const Value<ImageAttachment>& src)
 		  requires std::is_same_v<T, ImageAttachment>
 		{
-			if (src.get_def().node->kind == Node::VALLOC) {
-				def.node->valloc.args[1] = src.get_def().node->valloc.args[1];
-				def.node->valloc.args[2] = src.get_def().node->valloc.args[2];
-				def.node->valloc.args[3] = src.get_def().node->valloc.args[3];
+			if (src.get_def().node->kind == Node::CONSTRUCT) {
+				def.node->construct.args[1] = src.get_def().node->construct.args[1];
+				def.node->construct.args[2] = src.get_def().node->construct.args[2];
+				def.node->construct.args[3] = src.get_def().node->construct.args[3];
 			} else if (src.get_def().node->kind == Node::ACQUIRE_NEXT_IMAGE) {
-				Swapchain& swp = *reinterpret_cast<Swapchain*>(src.get_def().node->acquire_next_image.swapchain.node->valloc.args[0].node->constant.value);
-				def.node->valloc.args[1] = get_render_graph()->make_constant<uint32_t>(swp.images[0].extent.extent.width);
-				def.node->valloc.args[2] = get_render_graph()->make_constant<uint32_t>(swp.images[0].extent.extent.height);
-				def.node->valloc.args[3] = get_render_graph()->make_constant<uint32_t>(swp.images[0].extent.extent.depth);
+				Swapchain& swp = *reinterpret_cast<Swapchain*>(src.get_def().node->acquire_next_image.swapchain.node->construct.args[0].node->constant.value);
+				def.node->construct.args[1] = get_render_graph()->make_constant<uint32_t>(swp.images[0].extent.extent.width);
+				def.node->construct.args[2] = get_render_graph()->make_constant<uint32_t>(swp.images[0].extent.extent.height);
+				def.node->construct.args[3] = get_render_graph()->make_constant<uint32_t>(swp.images[0].extent.extent.depth);
 			}
 		}
 
@@ -122,12 +122,12 @@ namespace vuk {
 		  requires std::is_same_v<T, ImageAttachment>
 		{
 			if (src.get_def().type()->is_image()) {
-				def.node->valloc.args[1] = src.get_def().node->valloc.args[1];
-				def.node->valloc.args[2] = src.get_def().node->valloc.args[2];
+				def.node->construct.args[1] = src.get_def().node->construct.args[1];
+				def.node->construct.args[2] = src.get_def().node->construct.args[2];
 			} else if (src.get_def().type()->kind == Type::SWAPCHAIN_TY) {
-				Swapchain& swp = *reinterpret_cast<Swapchain*>(src.get_def().node->acquire_next_image.swapchain.node->valloc.args[0].node->constant.value);
-				def.node->valloc.args[1] = get_render_graph()->make_constant<uint32_t>(swp.images[0].extent.extent.width);
-				def.node->valloc.args[2] = get_render_graph()->make_constant<uint32_t>(swp.images[0].extent.extent.height);
+				Swapchain& swp = *reinterpret_cast<Swapchain*>(src.get_def().node->acquire_next_image.swapchain.node->construct.args[0].node->constant.value);
+				def.node->construct.args[1] = get_render_graph()->make_constant<uint32_t>(swp.images[0].extent.extent.width);
+				def.node->construct.args[2] = get_render_graph()->make_constant<uint32_t>(swp.images[0].extent.extent.height);
 			}
 		}
 
@@ -136,10 +136,10 @@ namespace vuk {
 		  requires std::is_same_v<T, ImageAttachment>
 		{
 			if (src.get_def().type()->is_image()) {
-				def.node->valloc.args[4] = src.get_def().node->valloc.args[4];
+				def.node->construct.args[4] = src.get_def().node->construct.args[4];
 			} else if (src.get_def().type()->kind == Type::SWAPCHAIN_TY) {
-				Swapchain& swp = *reinterpret_cast<Swapchain*>(src.get_def().node->acquire_next_image.swapchain.node->valloc.args[0].node->constant.value);
-				def.node->valloc.args[4] = get_render_graph()->make_constant(swp.images[0].format);
+				Swapchain& swp = *reinterpret_cast<Swapchain*>(src.get_def().node->acquire_next_image.swapchain.node->construct.args[0].node->constant.value);
+				def.node->construct.args[4] = get_render_graph()->make_constant(swp.images[0].format);
 			}
 		}
 
@@ -150,14 +150,14 @@ namespace vuk {
 			same_extent_as(src);
 			if (src.get_def().type()->is_image()) {
 				for (auto i = 6; i < 10; i++) { /* 6 - 9 : layers, levels */
-					def.node->valloc.args[i] = src.get_def().node->valloc.args[i];
+					def.node->construct.args[i] = src.get_def().node->construct.args[i];
 				}
 			} else if (src.get_def().type()->kind == Type::SWAPCHAIN_TY) {
-				Swapchain& swp = *reinterpret_cast<Swapchain*>(src.get_def().node->acquire_next_image.swapchain.node->valloc.args[0].node->constant.value);
-				def.node->valloc.args[6] = get_render_graph()->make_constant(swp.images[0].base_layer);
-				def.node->valloc.args[7] = get_render_graph()->make_constant(swp.images[0].layer_count);
-				def.node->valloc.args[8] = get_render_graph()->make_constant(swp.images[0].base_level);
-				def.node->valloc.args[9] = get_render_graph()->make_constant(swp.images[0].level_count);
+				Swapchain& swp = *reinterpret_cast<Swapchain*>(src.get_def().node->acquire_next_image.swapchain.node->construct.args[0].node->constant.value);
+				def.node->construct.args[6] = get_render_graph()->make_constant(swp.images[0].base_layer);
+				def.node->construct.args[7] = get_render_graph()->make_constant(swp.images[0].layer_count);
+				def.node->construct.args[8] = get_render_graph()->make_constant(swp.images[0].base_level);
+				def.node->construct.args[9] = get_render_graph()->make_constant(swp.images[0].level_count);
 			}
 		}
 
@@ -168,9 +168,9 @@ namespace vuk {
 			same_shape_as(src);
 			same_format_as(src);
 			if (src.get_def().type()->is_image()) {
-				def.node->valloc.args[5] = src.get_def().node->valloc.args[5]; // sample count
+				def.node->construct.args[5] = src.get_def().node->construct.args[5]; // sample count
 			} else if (src.get_def().type()->kind == Type::SWAPCHAIN_TY) {
-				def.node->valloc.args[5] = get_render_graph()->make_constant(Samples::e1); // swapchain is always single-sample
+				def.node->construct.args[5] = get_render_graph()->make_constant(Samples::e1); // swapchain is always single-sample
 			}
 		}
 
@@ -180,29 +180,29 @@ namespace vuk {
 		  requires std::is_same_v<T, Buffer>
 		{
 			assert(src.get_def().type()->is_buffer());
-			def.node->valloc.args[1] = src.get_def().node->valloc.args[1];
+			def.node->construct.args[1] = src.get_def().node->construct.args[1];
 		}
 
 		Value<uint64_t> get_size()
 		  requires std::is_same_v<T, Buffer>
 		{
-			return { std::make_shared<ExtRef>(get_render_graph(), def.node->valloc.args[1]), {} };
+			return { std::make_shared<ExtRef>(get_render_graph(), def.node->construct.args[1]), {} };
 		}
 
 		void set_size(Value<uint64_t> arg)
 		  requires std::is_same_v<T, Buffer>
 		{
 			get_render_graph()->subgraphs.push_back(arg.get_render_graph());
-			def.node->valloc.args[1] = arg.get_head();
+			def.node->construct.args[1] = arg.get_head();
 		}
 
 		auto operator[](size_t index)
 		  requires std::is_array_v<T>
 		{
-			auto item_def = def.node->aalloc.defs[index];
-			Ref item = head->module->make_array_indexing(def.type()->array.T, get_head(), head->module->make_constant(index));
-			assert(def.node->kind == Node::AALLOC);
+			assert(def.node->kind == Node::CONSTRUCT);
 			assert(def.type()->kind == Type::ARRAY_TY);
+			auto item_def = def.node->construct.defs[index];
+			Ref item = head->module->make_array_indexing(def.type()->array.T, get_head(), head->module->make_constant(index));
 			return Value<std::remove_reference_t<decltype(std::declval<T>()[0])>>(std::make_shared<ExtRef>(get_render_graph(), item), item_def, {head});
 		}
 	};
@@ -213,31 +213,20 @@ namespace vuk {
 	}
 
 	inline Result<void> wait_for_futures_explicit(Allocator& alloc, Compiler& compiler, std::span<UntypedValue> futures) {
-		std::vector<std::shared_ptr<RG>> rgs_to_run;
-		for (uint64_t i = 0; i < futures.size(); i++) {
-			auto& future = futures[i];
-			if (future.head->acqrel->status == Signal::Status::eDisarmed && !future.head->module) {
-				return { expected_error, RenderGraphException{} };
-			} else if (future.head->acqrel->status == Signal::Status::eHostAvailable || future.head->acqrel->status == Signal::Status::eSynchronizable) {
-				continue;
-			} else {
-				rgs_to_run.emplace_back(future.head->module);
-			}
-		}
-		if (rgs_to_run.size() != 0) {
-			VUK_DO_OR_RETURN(link_execute_submit(alloc, compiler, std::span(rgs_to_run)));
-		}
-
 		std::vector<SyncPoint> waits;
 		for (uint64_t i = 0; i < futures.size(); i++) {
-			auto& future = futures[i];
+			auto& future = futures[i];			
+			auto res = future.submit(alloc, compiler, {});
+			if (!res) {
+				return res;
+			}
 			if (future.head->acqrel->status != Signal::Status::eSynchronizable) {
 				continue;
 			}
 			waits.emplace_back(future.head->acqrel->source);
 		}
 		if (waits.size() > 0) {
-			alloc.get_context().wait_for_domains(std::span(waits));
+			return alloc.get_context().wait_for_domains(std::span(waits));
 		}
 
 		return { expected_value };
@@ -245,7 +234,7 @@ namespace vuk {
 
 	template<class... Args>
 	Result<void> wait_for_futures(Allocator& alloc, Compiler& compiler, Args&&... futs) {
-		auto cbs = std::array{ futs.control... };
+		auto cbs = std::array{ futs... };
 		return wait_for_futures_explicit(alloc, compiler, cbs);
 	}
 } // namespace vuk

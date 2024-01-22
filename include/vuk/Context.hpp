@@ -269,12 +269,6 @@ namespace vuk {
 namespace vuk {
 	struct ExecutableRenderGraph;
 
-	/// @brief Compile & link given `RenderGraph`s, then execute them into API VkCommandBuffers, then submit them to queues
-	/// @param allocator Allocator to use for submission resources
-	/// @param rendergraphs `RenderGraph`s for compilation
-	/// @param option Compilation options
-	Result<void>
-	link_execute_submit(Allocator& allocator, Compiler& compiler, std::span<std::shared_ptr<struct RG>> rendergraphs, RenderGraphCompileOptions options = {});
 	/// @brief Execute given `ExecutableRenderGraph`s into API VkCommandBuffers, then submit them to queues
 	/// @param allocator Allocator to use for submission resources
 	/// @param executable_rendergraphs `ExecutableRenderGraph`s for execution

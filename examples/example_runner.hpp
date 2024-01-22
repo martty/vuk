@@ -36,7 +36,7 @@ namespace vuk {
 		std::string_view name;
 
 		std::function<void(ExampleRunner&, vuk::Allocator&)> setup;
-		std::function<vuk::Future<vuk::ImageAttachment>(ExampleRunner&, vuk::Allocator&, vuk::Future<vuk::ImageAttachment>)> render;
+		std::function<vuk::Value<vuk::ImageAttachment>(ExampleRunner&, vuk::Allocator&, vuk::Value<vuk::ImageAttachment>)> render;
 		std::function<void(ExampleRunner&, vuk::Allocator&)> cleanup;
 	};
 
@@ -55,7 +55,7 @@ namespace vuk {
 		vkb::Instance vkbinstance;
 		vkb::Device vkbdevice;
 		util::ImGuiData imgui_data;
-		std::vector<UntypedFuture> futures;
+		std::vector<UntypedValue> futures;
 		std::mutex setup_lock;
 		double old_time = 0;
 		uint32_t num_frames = 0;
@@ -70,12 +70,12 @@ namespace vuk {
 		vuk::Unique<vuk::CommandBufferAllocation> tracy_cbufai;
 
 		// when called during setup, enqueues a device-side operation to be completed before rendering begins
-		void enqueue_setup(UntypedFuture&& fut) {
+		void enqueue_setup(UntypedValue&& fut) {
 			std::scoped_lock _(setup_lock);
 			futures.emplace_back(std::move(fut));
 		}
 
-		std::vector<Future<ImageAttachment>> sampled_images;
+		std::vector<Value<ImageAttachment>> sampled_images;
 		std::vector<Example*> examples;
 
 		ExampleRunner();
@@ -100,7 +100,7 @@ namespace vuk {
 				if (width == 0 && height == 0) {
 					runner.suspend = true;
 				} else {
-					runner.swapchain = util::make_swapchain(*runner.superframe_allocator, runner.vkbdevice, runner.swapchain);
+					runner.swapchain = util::make_swapchain(*runner.superframe_allocator, runner.vkbdevice, runner.swapchain->surface, runner.swapchain);
 					for (auto& iv : runner.swapchain->images) {
 						runner.context->set_name(iv.image_view.payload, "Swapchain ImageView");
 					}
@@ -257,7 +257,7 @@ namespace vuk {
 		const unsigned num_inflight_frames = 3;
 		superframe_resource.emplace(*context, num_inflight_frames);
 		superframe_allocator.emplace(*superframe_resource);
-		swapchain = util::make_swapchain(*superframe_allocator, vkbdevice, {});
+		swapchain = util::make_swapchain(*superframe_allocator, vkbdevice, surface, {});
 		present_ready = vuk::Unique<std::array<VkSemaphore, 3>>(*superframe_allocator);
 		render_complete = vuk::Unique<std::array<VkSemaphore, 3>>(*superframe_allocator);
 
