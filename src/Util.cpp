@@ -49,17 +49,6 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	Result<void> link_execute_submit(Allocator& allocator, Compiler& compiler, std::span<std::shared_ptr<RG>> rgs, RenderGraphCompileOptions options) {
-		/* auto erg = compiler.link(rgs, options);
-		if (!erg) {
-		  return erg;
-		}
-		std::pair erg_and_alloc = std::pair{ &allocator, &*erg };
-		return execute_submit(allocator, std::span(&erg_and_alloc, 1));*/
-		assert(false);
-		return { expected_value };
-	}
-
 	std::string_view to_name(vuk::DomainFlagBits d) {
 		switch (d) {
 		case DomainFlagBits::eTransferQueue:

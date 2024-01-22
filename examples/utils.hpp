@@ -63,7 +63,7 @@ namespace util {
 		swb.add_fallback_format(vuk::SurfaceFormatKHR{ vuk::Format::eB8G8R8A8Srgb, vuk::ColorSpaceKHR::eSrgbNonlinear });
 		swb.set_desired_present_mode((VkPresentModeKHR)vuk::PresentModeKHR::eImmediate);
 		swb.set_image_usage_flags(VkImageUsageFlagBits::VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VkImageUsageFlagBits::VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-		
+
 		bool is_recycle = false;
 		vkb::Result<vkb::Swapchain> vkswapchain = { vkb::Swapchain{} };
 		if (!old_swapchain) {
@@ -89,7 +89,7 @@ namespace util {
 
 		for (auto i = 0; i < images.size(); i++) {
 			vuk::ImageAttachment ia;
-			ia.extent = vuk::Dimension3D::absolute( vkswapchain->extent.width, vkswapchain->extent.height, 1 );
+			ia.extent = vuk::Dimension3D::absolute(vkswapchain->extent.width, vkswapchain->extent.height, 1);
 			ia.format = (vuk::Format)vkswapchain->image_format;
 			ia.image = vuk::Image{ images[i], nullptr };
 			ia.image_view = vuk::ImageView{ 0, views[i] };
@@ -99,7 +99,7 @@ namespace util {
 			ia.level_count = ia.layer_count = 1;
 			old_swapchain->images.push_back(ia);
 		}
-		
+
 		old_swapchain->swapchain = vkswapchain->swapchain;
 		old_swapchain->surface = surface;
 		return *old_swapchain;
@@ -112,11 +112,11 @@ namespace util {
 		std::unique_ptr<vuk::SampledImage> font_si;
 	};
 	ImGuiData ImGui_ImplVuk_Init(vuk::Allocator& allocator);
-	vuk::Future<vuk::ImageAttachment> ImGui_ImplVuk_Render(vuk::Allocator& allocator,
-	                                                            vuk::Future<vuk::ImageAttachment> target,
-	                                                            ImGuiData& data,
-	                                                            ImDrawData* draw_data,
-	                                                            const std::vector<vuk::Future<vuk::ImageAttachment>>& sampled_images);
+	vuk::Value<vuk::ImageAttachment> ImGui_ImplVuk_Render(vuk::Allocator& allocator,
+	                                                      vuk::Value<vuk::ImageAttachment> target,
+	                                                      ImGuiData& data,
+	                                                      ImDrawData* draw_data,
+	                                                      const std::vector<vuk::Value<vuk::ImageAttachment>>& sampled_images);
 
 	inline std::string read_entire_file(const std::string& path) {
 		std::ostringstream buf;

@@ -153,13 +153,9 @@ namespace vuk {
 			case Node::PLACEHOLDER:
 			case Node::MATH_BINARY:
 				break;
-			case Node::VALLOC:
-				res_to_links[first(node)].def = first(node);
-				res_to_links[first(node)].type = first(node).type();
-				break;
-			case Node::AALLOC:
-				for (size_t i = 0; i < node->aalloc.args.size(); i++) {
-					auto& parm = node->aalloc.args[i];
+			case Node::CONSTRUCT:
+				for (size_t i = 0; i < node->construct.args.size(); i++) {
+					auto& parm = node->construct.args[i];
 					res_to_links[parm].undef = { node, i };
 				}
 
@@ -209,7 +205,7 @@ namespace vuk {
 				res_to_links[node->release.src].undef = { node, 0 };
 				break;
 
-			case Node::INDEXING:
+			case Node::EXTRACT:
 				res_to_links[first(node)].def = first(node);
 				res_to_links[first(node)].type = first(node).type()->array.T;
 				break;
@@ -266,8 +262,8 @@ namespace vuk {
 		// valloc reification - if there were later setting of fields, then remove placeholders
 		for (auto node : nodes) {
 			switch (node->kind) {
-			case Node::VALLOC:
-				auto args_ptr = node->valloc.args.data();
+			case Node::CONSTRUCT:
+				auto args_ptr = node->construct.args.data();
 				if (node->type[0]->is_image()) {
 					auto ptr = &constant<ImageAttachment>(args_ptr[0]);
 					auto& value = constant<ImageAttachment>(args_ptr[0]);
@@ -322,8 +318,8 @@ namespace vuk {
 						auto access = arg_ty->imbued.access;
 						if (is_framebuffer_attachment(access)) {
 							auto& link = res_to_links[parm];
-							if (link.urdef.node->kind == Node::VALLOC) {
-								auto& args = link.urdef.node->valloc.args;
+							if (link.urdef.node->kind == Node::CONSTRUCT) {
+								auto& args = link.urdef.node->construct.args;
 								if (is_placeholder(args[9])) {
 									placeholder_to_constant(args[9], 1U); // can only render to a single mip level
 								}
@@ -351,7 +347,8 @@ namespace vuk {
 									placeholder_to_constant(args[8], 0U);
 								}
 							} else if (link.urdef.node->kind == Node::ACQUIRE_NEXT_IMAGE) {
-								Swapchain& swp = *reinterpret_cast<Swapchain*>(link.urdef.node->acquire_next_image.swapchain.node->valloc.args[0].node->constant.value);
+								assert(0);
+								Swapchain& swp = *reinterpret_cast<Swapchain*>(link.urdef.node->acquire_next_image.swapchain.node->construct.args[0].node->constant.value);
 								extent = Extent2D{ swp.images[0].extent.extent.width, swp.images[0].extent.extent.height };
 								layer_count = swp.images[0].layer_count;
 								samples = Samples::e1;
@@ -414,7 +411,7 @@ namespace vuk {
 
 		for (auto node : nodes) {
 			switch (node->kind) {
-			case Node::VALLOC:
+			case Node::CONSTRUCT:
 			case Node::CALL:
 			case Node::CLEAR:
 			case Node::ACQUIRE:
@@ -465,7 +462,7 @@ namespace vuk {
 			ScheduledItem item{ .execable = execable,
 				                  .scheduled_domain =
 				                      execable->scheduling_info ? pick_first_domain(execable->scheduling_info->required_domains) : vuk::DomainFlagBits::eAny };
-			if (execable->kind != Node::VALLOC) { // we use def nodes for deps, but we don't want to schedule them later as their ordering doesn't matter
+			if (execable->kind != Node::CONSTRUCT) { // we use def nodes for deps, but we don't want to schedule them later as their ordering doesn't matter
 				scheduled_execables.push_back(item);
 			}
 			process_queue.pop_back();

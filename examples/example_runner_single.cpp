@@ -28,9 +28,9 @@ void vuk::ExampleRunner::render() {
 		auto swapchain_image = acquire_next_image("swp_img", std::move(imported_swapchain));
 
 		// clear the swapchain image
-		Future<ImageAttachment> cleared_image_to_render_into = clear_image(std::move(swapchain_image), vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
+		Value<ImageAttachment> cleared_image_to_render_into = clear_image(std::move(swapchain_image), vuk::ClearColor{ 0.3f, 0.5f, 0.3f, 1.0f });
 		// invoke the render method of the example with the cleared image
-		Future<ImageAttachment> example_result = examples[0]->render(*this, frame_allocator, std::move(cleared_image_to_render_into));
+		Value<ImageAttachment> example_result = examples[0]->render(*this, frame_allocator, std::move(cleared_image_to_render_into));
 
 		// set up some profiling callbacks for our example Tracy integration
 		vuk::ProfilingCallbacks cbs;
