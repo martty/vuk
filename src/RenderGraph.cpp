@@ -59,10 +59,16 @@ namespace vuk {
 	Result<void> RGCImpl::build_nodes() {
 		nodes.clear();
 
+		// type unification
+
 		std::vector<Node*> work_queue;
 		for (auto& ref : refs) {
 			work_queue.push_back(ref->get_head().node);
 		}
+
+		type_map[Type::hash(cg_module->builtin_buffer)] = cg_module->builtin_buffer;
+		type_map[Type::hash(cg_module->builtin_image)] = cg_module->builtin_image;
+		type_map[Type::hash(cg_module->builtin_swapchain)] = cg_module->builtin_swapchain;
 
 		while (!work_queue.empty()) {
 			auto node = work_queue.back();
@@ -80,7 +86,29 @@ namespace vuk {
 			}
 
 			nodes.push_back(node);
+			auto unify_type = [&](Type*& t) {
+				auto [v, succ] = type_map.try_emplace(Type::hash(t), t);
+				t = v->second;
+			};
+			for (auto& t : node->type) {
+				if (t->kind == Type::ALIASED_TY) {
+					unify_type(t->aliased.T);
+				} else if (t->kind == Type::IMBUED_TY) {
+					unify_type(t->imbued.T);
+				} else if (t->kind == Type::ARRAY_TY) {
+					unify_type(t->array.T);
+				} else if (t->kind == Type::COMPOSITE_TY) {
+					for (auto& elem_ty : t->composite.types) {
+						unify_type(elem_ty);
+					}
+				}
+				unify_type(t);
+			}
 		}
+
+		cg_module->builtin_buffer = type_map[Type::hash(cg_module->builtin_buffer)];
+		cg_module->builtin_image = type_map[Type::hash(cg_module->builtin_image)];
+		cg_module->builtin_swapchain = type_map[Type::hash(cg_module->builtin_swapchain)];
 
 		return { expected_value };
 	}
@@ -264,7 +292,7 @@ namespace vuk {
 			switch (node->kind) {
 			case Node::CONSTRUCT:
 				auto args_ptr = node->construct.args.data();
-				if (node->type[0]->is_image()) {
+				if (node->type[0] == cg_module->builtin_image) {
 					auto ptr = &constant<ImageAttachment>(args_ptr[0]);
 					auto& value = constant<ImageAttachment>(args_ptr[0]);
 					if (value.extent.extent.width > 0) {
@@ -294,7 +322,7 @@ namespace vuk {
 					if (value.level_count != VK_REMAINING_MIP_LEVELS) {
 						placeholder_to_ptr(args_ptr[9], &ptr->level_count);
 					}
-				} else if (node->type[0]->is_buffer()) {
+				} else if (node->type[0] == cg_module->builtin_buffer) {
 					auto ptr = &constant<Buffer>(args_ptr[0]);
 					auto& value = constant<Buffer>(args_ptr[0]);
 					if (value.size != ~(0u)) {
@@ -415,6 +443,7 @@ namespace vuk {
 			case Node::CALL:
 			case Node::CLEAR:
 			case Node::ACQUIRE:
+			case Node::MATH_BINARY:
 			case Node::RELACQ:
 			case Node::RELEASE:
 				node_to_schedule[node] = schedule_items.size();

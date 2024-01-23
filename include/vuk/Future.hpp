@@ -64,6 +64,7 @@ namespace vuk {
 		std::shared_ptr<ExtRef> head;
 
 		std::vector<std::shared_ptr<ExtRef>> deps;
+
 	protected:
 		Ref def;
 	};
@@ -105,42 +106,24 @@ namespace vuk {
 		void same_extent_as(const Value<ImageAttachment>& src)
 		  requires std::is_same_v<T, ImageAttachment>
 		{
-			if (src.get_def().node->kind == Node::CONSTRUCT) {
-				def.node->construct.args[1] = src.get_def().node->construct.args[1];
-				def.node->construct.args[2] = src.get_def().node->construct.args[2];
-				def.node->construct.args[3] = src.get_def().node->construct.args[3];
-			} else if (src.get_def().node->kind == Node::ACQUIRE_NEXT_IMAGE) {
-				Swapchain& swp = *reinterpret_cast<Swapchain*>(src.get_def().node->acquire_next_image.swapchain.node->construct.args[0].node->constant.value);
-				def.node->construct.args[1] = get_render_graph()->make_constant<uint32_t>(swp.images[0].extent.extent.width);
-				def.node->construct.args[2] = get_render_graph()->make_constant<uint32_t>(swp.images[0].extent.extent.height);
-				def.node->construct.args[3] = get_render_graph()->make_constant<uint32_t>(swp.images[0].extent.extent.depth);
-			}
+			def.node->construct.args[1] = get_render_graph()->make_extract(src.get_def(), 0);
+			def.node->construct.args[2] = get_render_graph()->make_extract(src.get_def(), 1);
+			def.node->construct.args[3] = get_render_graph()->make_extract(src.get_def(), 2);
 		}
 
 		/// @brief Inference target has the same width & height as the source
 		void same_2D_extent_as(const Value<ImageAttachment>& src)
 		  requires std::is_same_v<T, ImageAttachment>
 		{
-			if (src.get_def().type()->is_image()) {
-				def.node->construct.args[1] = src.get_def().node->construct.args[1];
-				def.node->construct.args[2] = src.get_def().node->construct.args[2];
-			} else if (src.get_def().type()->kind == Type::SWAPCHAIN_TY) {
-				Swapchain& swp = *reinterpret_cast<Swapchain*>(src.get_def().node->acquire_next_image.swapchain.node->construct.args[0].node->constant.value);
-				def.node->construct.args[1] = get_render_graph()->make_constant<uint32_t>(swp.images[0].extent.extent.width);
-				def.node->construct.args[2] = get_render_graph()->make_constant<uint32_t>(swp.images[0].extent.extent.height);
-			}
+			def.node->construct.args[1] = get_render_graph()->make_extract(src.get_def(), 0);
+			def.node->construct.args[2] = get_render_graph()->make_extract(src.get_def(), 1);
 		}
 
 		/// @brief Inference target has the same format as the source
 		void same_format_as(const Value<ImageAttachment>& src)
 		  requires std::is_same_v<T, ImageAttachment>
 		{
-			if (src.get_def().type()->is_image()) {
-				def.node->construct.args[4] = src.get_def().node->construct.args[4];
-			} else if (src.get_def().type()->kind == Type::SWAPCHAIN_TY) {
-				Swapchain& swp = *reinterpret_cast<Swapchain*>(src.get_def().node->acquire_next_image.swapchain.node->construct.args[0].node->constant.value);
-				def.node->construct.args[4] = get_render_graph()->make_constant(swp.images[0].format);
-			}
+			def.node->construct.args[4] = get_render_graph()->make_extract(src.get_def(), 3);
 		}
 
 		/// @brief Inference target has the same shape(extent, layers, levels) as the source
@@ -148,16 +131,9 @@ namespace vuk {
 		  requires std::is_same_v<T, ImageAttachment>
 		{
 			same_extent_as(src);
-			if (src.get_def().type()->is_image()) {
-				for (auto i = 6; i < 10; i++) { /* 6 - 9 : layers, levels */
-					def.node->construct.args[i] = src.get_def().node->construct.args[i];
-				}
-			} else if (src.get_def().type()->kind == Type::SWAPCHAIN_TY) {
-				Swapchain& swp = *reinterpret_cast<Swapchain*>(src.get_def().node->acquire_next_image.swapchain.node->construct.args[0].node->constant.value);
-				def.node->construct.args[6] = get_render_graph()->make_constant(swp.images[0].base_layer);
-				def.node->construct.args[7] = get_render_graph()->make_constant(swp.images[0].layer_count);
-				def.node->construct.args[8] = get_render_graph()->make_constant(swp.images[0].base_level);
-				def.node->construct.args[9] = get_render_graph()->make_constant(swp.images[0].level_count);
+
+			for (auto i = 6; i < 10; i++) { /* 6 - 9 : layers, levels */
+				def.node->construct.args[i] = get_render_graph()->make_extract(src.get_def(), i-1);
 			}
 		}
 
@@ -167,11 +143,7 @@ namespace vuk {
 		{
 			same_shape_as(src);
 			same_format_as(src);
-			if (src.get_def().type()->is_image()) {
-				def.node->construct.args[5] = src.get_def().node->construct.args[5]; // sample count
-			} else if (src.get_def().type()->kind == Type::SWAPCHAIN_TY) {
-				def.node->construct.args[5] = get_render_graph()->make_constant(Samples::e1); // swapchain is always single-sample
-			}
+			def.node->construct.args[5] = get_render_graph()->make_extract(src.get_def(), 4);
 		}
 
 		// Buffer inferences
@@ -179,14 +151,13 @@ namespace vuk {
 		void same_size(const Value<Buffer>& src)
 		  requires std::is_same_v<T, Buffer>
 		{
-			assert(src.get_def().type()->is_buffer());
-			def.node->construct.args[1] = src.get_def().node->construct.args[1];
+			def.node->construct.args[1] = get_render_graph()->make_extract(src.get_def(), 0);
 		}
 
 		Value<uint64_t> get_size()
 		  requires std::is_same_v<T, Buffer>
 		{
-			return { std::make_shared<ExtRef>(get_render_graph(), def.node->construct.args[1]), {} };
+			return { std::make_shared<ExtRef>(get_render_graph(), get_render_graph()->make_extract(get_def(), 0)), {} };
 		}
 
 		void set_size(Value<uint64_t> arg)
@@ -202,8 +173,8 @@ namespace vuk {
 			assert(def.node->kind == Node::CONSTRUCT);
 			assert(def.type()->kind == Type::ARRAY_TY);
 			auto item_def = def.node->construct.defs[index];
-			Ref item = head->module->make_array_indexing(def.type()->array.T, get_head(), head->module->make_constant(index));
-			return Value<std::remove_reference_t<decltype(std::declval<T>()[0])>>(std::make_shared<ExtRef>(get_render_graph(), item), item_def, {head});
+			Ref item = head->module->make_extract(get_head(), head->module->make_constant(index));
+			return Value<std::remove_reference_t<decltype(std::declval<T>()[0])>>(std::make_shared<ExtRef>(get_render_graph(), item), item_def, { head });
 		}
 	};
 
@@ -215,7 +186,7 @@ namespace vuk {
 	inline Result<void> wait_for_futures_explicit(Allocator& alloc, Compiler& compiler, std::span<UntypedValue> futures) {
 		std::vector<SyncPoint> waits;
 		for (uint64_t i = 0; i < futures.size(); i++) {
-			auto& future = futures[i];			
+			auto& future = futures[i];
 			auto res = future.submit(alloc, compiler, {});
 			if (!res) {
 				return res;
