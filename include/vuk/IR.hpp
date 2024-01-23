@@ -38,14 +38,14 @@ namespace vuk {
 	};
 
 	struct Type {
-		enum TypeKind { MEMORY_TY, INTEGER_TY, IMAGE_TY, BUFFER_TY, SWAPCHAIN_TY, ARRAY_TY, IMBUED_TY, ALIASED_TY, OPAQUE_FN_TY } kind;
+		enum TypeKind { MEMORY_TY, INTEGER_TY, COMPOSITE_TY, ARRAY_TY, IMBUED_TY, ALIASED_TY, OPAQUE_FN_TY } kind;
 		size_t size;
 
 		TypeDebugInfo* debug_info = nullptr;
 
 		union {
 			struct {
-				size_t width;
+				uint32_t width;
 			} integer;
 			struct {
 				Type* T;
@@ -56,8 +56,8 @@ namespace vuk {
 				size_t ref_idx;
 			} aliased;
 			struct {
-				std::span<Type* const> args;
-				std::span<Type* const> return_types;
+				std::span<Type*> args;
+				std::span<Type*> return_types;
 				int execute_on;
 				std::function<void(CommandBuffer&, std::span<void*>, std::span<void*>, std::span<void*>)>* callback;
 			} opaque_fn;
@@ -66,6 +66,11 @@ namespace vuk {
 				size_t count;
 				size_t stride;
 			} array;
+			struct {
+				std::span<Type*> types;
+				std::span<size_t> offsets;
+				size_t tag;
+			} composite;
 		};
 
 		static Type* stripped(Type* t) {
@@ -79,12 +84,42 @@ namespace vuk {
 			}
 		}
 
-		bool is_image() {
-			return kind == IMAGE_TY;
+		static Type* extract(Type* t, size_t index) {
+			assert(t->kind == COMPOSITE_TY);
+			assert(index < t->composite.types.size());
+			return t->composite.types[index];
 		}
 
-		bool is_buffer() {
-			return kind == BUFFER_TY;
+		static uint32_t hash(Type* t) {
+			uint32_t v = 0;
+			switch (t->kind) {
+			case IMBUED_TY:
+				v = Type::hash(t->imbued.T);
+				hash_combine_direct(v, (uint32_t)t->imbued.access);
+				return v;
+			case ALIASED_TY:
+				v = Type::hash(t->aliased.T);
+				hash_combine_direct(v, (uint32_t)t->aliased.ref_idx);
+				return v;
+			case MEMORY_TY:
+				return 0;
+			case INTEGER_TY:
+				return t->integer.width;
+			case ARRAY_TY:
+				v = Type::hash(t->array.T);
+				hash_combine_direct(v, (uint32_t)t->array.count);
+				return v;
+			case COMPOSITE_TY:
+				for (int i = 0; i < t->composite.types.size(); i++) {
+					hash_combine_direct(v, Type::hash(t->composite.types[i]));
+				}
+				hash_combine_direct(v, (uint32_t)t->composite.tag);
+				return v;
+			case OPAQUE_FN_TY:
+				hash_combine_direct(v, (uintptr_t)t->opaque_fn.callback >> 32);
+				hash_combine_direct(v, (uintptr_t)t->opaque_fn.callback & 0xffffffff);
+				return v;
+			}
 		}
 
 		~Type() {}
@@ -143,7 +178,7 @@ namespace vuk {
 			CAST,
 			MATH_BINARY
 		} kind;
-		std::span<Type* const> type;
+		std::span<Type*> type;
 		NodeDebugInfo* debug_info = nullptr;
 		SchedulingInfo* scheduling_info = nullptr;
 
@@ -298,6 +333,19 @@ namespace vuk {
 	}
 
 	template<class T>
+	  requires(std::is_pointer_v<T>)
+	T eval(Ref ref) {
+		switch (ref.node->kind) {
+		case Node::CONSTRUCT: {
+			return static_cast<T>(ref.node->construct.args[0].node->constant.value);
+		}
+		}
+		assert(0);
+		return T{};
+	}
+
+	template<class T>
+	  requires(!std::is_pointer_v<T>)
 	T eval(Ref ref) {
 		assert(ref.type()->kind == Type::INTEGER_TY);
 		switch (ref.node->kind) {
@@ -312,6 +360,16 @@ namespace vuk {
 			}
 			}
 		}
+		case Node::EXTRACT: {
+			auto composite = ref.node->extract.composite;
+			auto index = eval<uint64_t>(ref.node->extract.index);
+			if (composite.type()->kind == Type::COMPOSITE_TY) {
+				auto offset = composite.type()->composite.offsets[index];
+				return *reinterpret_cast<T*>(eval<unsigned char*>(composite) + offset);
+			} else if (composite.type()->kind == Type::ARRAY_TY) {
+				return eval<T*>(composite)[index];
+			}
+		}
 		}
 		assert(0);
 		return T{};
@@ -319,9 +377,30 @@ namespace vuk {
 
 	struct RG {
 		RG() {
-			builtin_image = &types.emplace_back(Type{ .kind = Type::IMAGE_TY, .size = sizeof(ImageAttachment) });
-			builtin_buffer = &types.emplace_back(Type{ .kind = Type::BUFFER_TY, .size = sizeof(Buffer) });
-			builtin_swapchain = &types.emplace_back(Type{ .kind = Type::SWAPCHAIN_TY, .size = sizeof(Swapchain) });
+			auto mem_ty = emplace_type(Type{ .kind = Type::MEMORY_TY });
+			auto image_ = new Type* [9] {
+				u32(), u32(), u32(), mem_ty, mem_ty, u32(), u32(), u32(), u32()
+			};
+			auto image_offsets = new size_t[9]{ offsetof(ImageAttachment, extent) + offsetof(Dimension3D, extent) + offsetof(Extent3D, width),
+				                                  offsetof(ImageAttachment, extent) + offsetof(Dimension3D, extent) + offsetof(Extent3D, height),
+				                                  offsetof(ImageAttachment, extent) + offsetof(Dimension3D, extent) + offsetof(Extent3D, depth),
+				                                  offsetof(ImageAttachment, format),
+				                                  offsetof(ImageAttachment, sample_count),
+				                                  offsetof(ImageAttachment, base_layer),
+				                                  offsetof(ImageAttachment, layer_count),
+				                                  offsetof(ImageAttachment, base_level),
+				                                  offsetof(ImageAttachment, level_count) };
+			builtin_image = emplace_type(Type{
+			    .kind = Type::COMPOSITE_TY, .size = sizeof(ImageAttachment), .composite = { .types = { image_, 9 }, .offsets = { image_offsets, 9 }, .tag = 0 } });
+			auto buffer_ = new Type* [1] {
+				u32()
+			};
+			auto buffer_offsets = new size_t[1]{ offsetof(Buffer, size) };
+			builtin_buffer = emplace_type(
+			    Type{ .kind = Type::COMPOSITE_TY, .size = sizeof(Buffer), .composite = { .types = { buffer_, 1 }, .offsets = { buffer_offsets, 1 }, .tag = 1 } });
+			auto swp_ = new Type* [0] {
+			};
+			builtin_swapchain = emplace_type(Type{ .kind = Type::COMPOSITE_TY, .size = sizeof(Swapchain), .composite = { .types = { swp_, 0 }, .tag = 2 } });
 		}
 
 		~RG() {
@@ -477,7 +556,8 @@ namespace vuk {
 		}
 
 		Ref make_declare_array(Type* type, std::span<Ref> args, std::span<Ref> defs) {
-			auto arr_ty = new Type*(emplace_type(Type{ .kind = Type::ARRAY_TY, .size = args.size() * type->size, .array = { .T = type, .count = args.size(), .stride = type->size } }));
+			auto arr_ty = new Type*(
+			    emplace_type(Type{ .kind = Type::ARRAY_TY, .size = args.size() * type->size, .array = { .T = type, .count = args.size(), .stride = type->size } }));
 			auto args_ptr = new Ref[args.size() + 1];
 			auto mem_ty = new Type*(emplace_type(Type{ .kind = Type::MEMORY_TY }));
 			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = nullptr } }));
@@ -497,9 +577,23 @@ namespace vuk {
 			return first(emplace_op(Node{ .kind = Node::CONSTRUCT, .type = std::span{ &builtin_swapchain, 1 }, .construct = { .args = std::span(args_ptr, 1) } }));
 		}
 
-		Ref make_array_indexing(Type* type, Ref array, Ref index) {
-			auto ty = new Type*(type);
-			return first(emplace_op(Node{ .kind = Node::EXTRACT, .type = std::span{ ty, 1 }, .extract = { .composite = array, .index = index } }));
+		Ref make_extract(Ref composite, Ref index) {
+			auto stripped = Type::stripped(composite.type());
+			assert(stripped->kind == Type::ARRAY_TY);
+			auto ty = new Type*(stripped->array.T);
+			return first(emplace_op(Node{ .kind = Node::EXTRACT, .type = std::span{ ty, 1 }, .extract = { .composite = composite, .index = index } }));
+		}
+
+		Ref make_extract(Ref composite, uint64_t index) {
+			auto ty = new Type*;
+			auto stripped = Type::stripped(composite.type());
+			if (stripped->kind == Type::ARRAY_TY) {
+				*ty = stripped->array.T;
+			} else if (stripped->kind == Type::COMPOSITE_TY) {
+				*ty = stripped->composite.types[index];
+			}
+			return first(emplace_op(
+			    Node{ .kind = Node::EXTRACT, .type = std::span{ ty, 1 }, .extract = { .composite = composite, .index = make_constant<uint64_t>(index) } }));
 		}
 
 		Ref make_cast(Type* dst_type, Ref src) {

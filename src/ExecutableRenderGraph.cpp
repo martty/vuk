@@ -1048,15 +1048,17 @@ namespace vuk {
 	};
 
 	struct Recorder {
-		Recorder(Allocator alloc, ProfilingCallbacks* callbacks, std::vector<Ref>& pass_reads) :
+		Recorder(Allocator alloc, ProfilingCallbacks* callbacks, std::vector<Ref>& pass_reads, std::shared_ptr<RG> cg_module) :
 		    ctx(alloc.get_context()),
 		    alloc(alloc),
 		    callbacks(callbacks),
-		    pass_reads(pass_reads) {}
+		    pass_reads(pass_reads),
+		    cg_module(cg_module) {}
 		Context& ctx;
 		Allocator alloc;
 		ProfilingCallbacks* callbacks;
 		std::vector<Ref>& pass_reads;
+		std::shared_ptr<RG> cg_module;
 
 		std::unordered_map<DomainFlagBits, std::unique_ptr<Stream>> streams;
 
@@ -1100,7 +1102,7 @@ namespace vuk {
 				dst_stream->add_dependency(src_stream);
 			}
 
-			if (base_ty->is_image()) {
+			if (base_ty == cg_module->builtin_image) {
 				auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
 				if (has_dst) {
 					dst_stream->synch_image(img_att, src_use, dst_use, value);
@@ -1108,7 +1110,7 @@ namespace vuk {
 				if (only_src || cross) {
 					src_stream->synch_image(img_att, src_use, dst_use, value);
 				}
-			} else if (base_ty->is_buffer()) {
+			} else if (base_ty == cg_module->builtin_buffer) {
 				// buffer needs no cross
 				if (has_dst) {
 					dst_stream->synch_memory(src_use, dst_use, value);
@@ -1118,7 +1120,7 @@ namespace vuk {
 			} else if (base_ty->kind == Type::ARRAY_TY) {
 				auto elem_ty = base_ty->array.T;
 				auto size = base_ty->array.count;
-				if (elem_ty->is_image()) {
+				if (elem_ty == cg_module->builtin_image) {
 					auto img_atts = reinterpret_cast<ImageAttachment*>(value);
 					for (int i = 0; i < size; i++) {
 						if (has_dst) {
@@ -1128,7 +1130,7 @@ namespace vuk {
 							src_stream->synch_image(img_atts[i], src_use, dst_use, &img_atts[i]);
 						}
 					}
-				} else if (elem_ty->is_buffer()) {
+				} else if (elem_ty == cg_module->builtin_buffer) {
 					for (int i = 0; i < size; i++) {
 						// buffer needs no cross
 						auto bufs = reinterpret_cast<Buffer*>(value);
@@ -1173,7 +1175,7 @@ namespace vuk {
 	Result<void> ExecutableRenderGraph::execute(Allocator& alloc) {
 		Context& ctx = alloc.get_context();
 
-		Recorder recorder(alloc, &impl->callbacks, impl->pass_reads);
+		Recorder recorder(alloc, &impl->callbacks, impl->pass_reads, impl->cg_module);
 		recorder.streams.emplace(DomainFlagBits::eHost, std::make_unique<HostStream>(alloc));
 		if (auto exe = ctx.get_executor(DomainFlagBits::eGraphicsQueue)) {
 			recorder.streams.emplace(DomainFlagBits::eGraphicsQueue,
@@ -1241,9 +1243,19 @@ namespace vuk {
 			// we run nodes twice - first time we reenqueue at the front and then put all deps before it
 			// second time we see it, we know that all deps have run, so we can run the node itself
 			switch (node->kind) {
+			case Node::MATH_BINARY: {
+				if (sched.process(item)) {
+					sched.done(node, nullptr);
+				} else {
+					for (auto i = 0; i < node->fixed_node.arg_count; i++) {
+						sched.schedule_dependency(node->fixed_node.args[i], RW::eRead);
+					}
+				}
+				break;
+			}
 			case Node::CONSTRUCT: { // when encountering a CONSTRUCT, allocate the thing if needed
 				if (sched.process(item)) {
-					if (node->type[0]->kind == Type::BUFFER_TY) {
+					if (node->type[0] == impl->cg_module->builtin_buffer) {
 						auto& bound = constant<Buffer>(node->construct.args[0]);
 						bound.size = eval<size_t>(node->construct.args[1]); // collapse inferencing
 #ifdef VUK_DUMP_EXEC
@@ -1260,7 +1272,7 @@ namespace vuk {
 							}
 							bound = **buf;
 						}
-					} else if (node->type[0]->kind == Type::IMAGE_TY) {
+					} else if (node->type[0] == impl->cg_module->builtin_image) {
 						auto& attachment = *reinterpret_cast<ImageAttachment*>(node->construct.args[0].node->constant.value);
 						// collapse inferencing
 						attachment.extent.extent.width = eval<uint32_t>(node->construct.args[1]);
@@ -1288,7 +1300,7 @@ namespace vuk {
 							attachment.image = **img;
 							// ctx.set_name(attachment.image.image, bound.name.name);
 						}
-					} else if (node->type[0]->kind == Type::SWAPCHAIN_TY) {
+					} else if (node->type[0] == impl->cg_module->builtin_swapchain) {
 #ifdef VUK_DUMP_EXEC
 						print_results(node);
 						fmt::print(" = construct<swapchain>\n");
@@ -1307,24 +1319,24 @@ namespace vuk {
 						print_results(node);
 						auto size = node->type[0]->array.count;
 						auto elem_ty = node->type[0]->array.T;
-						assert(elem_ty->kind == Type::BUFFER_TY || elem_ty->kind == Type::IMAGE_TY);
-						fmt::print(" = construct<{}[{}]> ", elem_ty->kind == Type::BUFFER_TY ? "buffer" : "image", size);
+						assert(elem_ty == impl->cg_module->builtin_buffer || elem_ty == impl->cg_module->builtin_image);
+						fmt::print(" = construct<{}[{}]> ", elem_ty == impl->cg_module->builtin_buffer ? "buffer" : "image", size);
 						print_args(node->construct.args.subspan(1));
 						assert(node->construct.args[0].type()->kind == Type::MEMORY_TY);
-						if (elem_ty->kind == Type::BUFFER_TY) {
+						if (elem_ty == impl->cg_module->builtin_buffer) {
 							auto arr_mem = new Buffer[size];
 							for (auto i = 0; i < size; i++) {
 								auto& elem = node->construct.args[i + 1];
-								assert(Type::stripped(elem.type())->kind == Type::BUFFER_TY);
+								assert(Type::stripped(elem.type()) == impl->cg_module->builtin_buffer);
 
 								memcpy(&arr_mem[i], sched.get_value(elem), sizeof(Buffer));
 							}
 							node->construct.args[0].node->constant.value = arr_mem;
-						} else if (elem_ty->kind == Type::IMAGE_TY) {
+						} else if (elem_ty == impl->cg_module->builtin_image) {
 							auto arr_mem = new ImageAttachment[size];
 							for (auto i = 0; i < size; i++) {
 								auto& elem = node->construct.args[i + 1];
-								assert(Type::stripped(elem.type())->kind == Type::IMAGE_TY);
+								assert(Type::stripped(elem.type()) == impl->cg_module->builtin_image);
 
 								memcpy(&arr_mem[i], sched.get_value(elem), sizeof(ImageAttachment));
 							}
@@ -1501,12 +1513,12 @@ namespace vuk {
 				di.dst_use = { to_use(Access::eNone), dst_stream };
 				recorder.add_sync(node->type[0], di, sched.get_value(first(node)));
 
-				if (node->type[0]->kind == Type::BUFFER_TY) {
+				if (node->type[0] == impl->cg_module->builtin_buffer) {
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
 					fmt::print(" = acquire<buffer>\n");
 #endif
-				} else if (node->type[0]->kind == Type::IMAGE_TY) {
+				} else if (node->type[0] == impl->cg_module->builtin_image) {
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
 					fmt::print(" = acquire<image>\n");
@@ -1599,8 +1611,6 @@ namespace vuk {
 					// half sync
 					std::vector<Buffer*> bufs;
 					auto& link = sched.res_to_links[node->extract.composite];
-					assert(link.urdef.type()->kind == Type::ARRAY_TY);
-					auto count = link.urdef.type()->array.count;
 
 					recorder.add_sync(sched.base_type(node->extract.composite),
 					                  sched.get_dependency_info(node->extract.composite, node->extract.composite.type(), RW::eWrite, nullptr),

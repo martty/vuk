@@ -90,6 +90,7 @@ namespace vuk {
 		std::vector<Ref> pass_reads;
 		
 		std::shared_ptr<RG> cg_module;
+		std::unordered_map<uint32_t, Type*> type_map;
 		std::vector<std::shared_ptr<ExtRef>> refs;
 		std::vector<Node*> nodes;
 		std::vector<ChainLink*> chains;
