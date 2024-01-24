@@ -715,7 +715,6 @@ namespace vuk {
 		}
 
 		Signal* make_signal() override {
-			assert(false);
 			return nullptr;
 		}
 

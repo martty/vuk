@@ -46,7 +46,7 @@ namespace {
 		      runner.enqueue_setup(std::move(ind_fut));
 		    },
 		.render =
-		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator, vuk::Future<vuk::ImageAttachment> target) {
+		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator, vuk::Value<vuk::ImageAttachment> target) {
 		      struct VP {
 			      glm::mat4 view;
 			      glm::mat4 proj;
@@ -78,12 +78,12 @@ namespace {
 		      auto tl_tri = small_tri_generic(vuk::Rect2D::relative(0.0f, 0.0f, 0.2f, 0.2f));
 		      auto br_tri = small_tri_generic(vuk::Rect2D::relative(0.8f, 0.8f, 0.2f, 0.2f));
 
-			  // Add a pass to draw a cube (from the second example) in the middle, but with depth buffering
+		      // Add a pass to draw a cube (from the second example) in the middle, but with depth buffering
 		      // Here a second resource is added: a depth attachment
 		      // The example framework took care of our color image, but this attachment we will need bind later
 		      // Depth attachments are denoted by the use vuk::eDepthStencilRW
-		      auto cube_pass = vuk::make_pass(
-		          "03_cube", [uboVP](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eColorWrite) color_rt, VUK_IA(vuk::eDepthStencilRW) depth_rt) {
+		      auto cube_pass =
+		          vuk::make_pass("03_cube", [uboVP](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eColorWrite) color_rt, VUK_IA(vuk::eDepthStencilRW) depth_rt) {
 			          command_buffer.set_viewport(0, vuk::Rect2D::framebuffer())
 			              .set_scissor(0, vuk::Rect2D::framebuffer())
 			              .set_rasterization({}) // Set the default rasterization state
@@ -100,8 +100,8 @@ namespace {
 			          *model = static_cast<glm::mat4>(glm::angleAxis(glm::radians(angle), glm::vec3(0.f, 1.f, 0.f)));
 			          command_buffer.draw_indexed(box.second.size(), 1, 0, 0, 0);
 			          return color_rt;
-				  });
-		      
+		          });
+
 		      angle += 360.f * ImGui::GetIO().DeltaTime;
 
 		      // The rendergraph has a reference to "03_depth" resource, so we must provide the attachment
