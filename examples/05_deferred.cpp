@@ -139,7 +139,8 @@ namespace {
 		      position_image->layer_count = 1;
 		      position_image = vuk::clear_image(std::move(position_image), vuk::ClearColor{ 1.f, 0.f, 0.f, 0.f });
 
-		      auto normal_image = vuk::clear_image(vuk::declare_ia("05_normal", { .format = vuk::Format::eR16G16B16A16Sfloat }), vuk::ClearColor{ 0.f, 1.f, 0.f, 0.f });
+		      auto normal_image =
+		          vuk::clear_image(vuk::declare_ia("05_normal", { .format = vuk::Format::eR16G16B16A16Sfloat }), vuk::ClearColor{ 0.f, 1.f, 0.f, 0.f });
 		      auto color_image = vuk::clear_image(vuk::declare_ia("05_color", { .format = vuk::Format::eR8G8B8A8Srgb }), vuk::ClearColor{ 0.f, 0.f, 1.f, 0.f });
 
 		      auto depth_img = vuk::declare_ia("05_depth");
@@ -155,11 +156,11 @@ namespace {
 
 		      position_image.same_extent_as(target);
 
-		      //auto gbuffer = build_gbuffer_pass(std::move(position_image), std::move(normal_image), std::move(color_image), std::move(depth_img));
-			  auto [pos, norm, col] = build_gbuffer_pass(std::move(position_image), std::move(normal_image), std::move(color_image), std::move(depth_img));
+		      // auto gbuffer = build_gbuffer_pass(std::move(position_image), std::move(normal_image), std::move(color_image), std::move(depth_img));
+		      auto [pos, norm, col] = build_gbuffer_pass(std::move(position_image), std::move(normal_image), std::move(color_image), std::move(depth_img));
 		      auto result = shading_pass(std::move(target), std::move(pos), std::move(norm), std::move(col));
-		      //auto result = shading_pass(gbuffer)
-		      //auto result = std::apply(shading_pass, std::tuple_cat(target, gbuffer));
+		      // auto result = shading_pass(gbuffer)
+		      // auto result = std::apply(shading_pass, std::tuple_cat(target, gbuffer));
 
 		      return result;
 		    },

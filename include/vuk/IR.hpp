@@ -322,7 +322,6 @@ namespace vuk {
 		if (node->kind == Node::CONSTRUCT) {
 			return node->construct.args[0].node->constant.value;
 		} else if (node->kind == Node::ACQUIRE_NEXT_IMAGE) {
-			assert(0); // we need to resolve this one out
 			Swapchain* swp = reinterpret_cast<Swapchain*>(node->acquire_next_image.swapchain.node->construct.args[0].node->constant.value);
 			return &swp->images[swp->image_index];
 		} else if (node->kind == Node::ACQUIRE) {
@@ -338,6 +337,10 @@ namespace vuk {
 		switch (ref.node->kind) {
 		case Node::CONSTRUCT: {
 			return static_cast<T>(ref.node->construct.args[0].node->constant.value);
+		}
+		case Node::ACQUIRE_NEXT_IMAGE: {
+			Swapchain* swp = reinterpret_cast<Swapchain*>(ref.node->acquire_next_image.swapchain.node->construct.args[0].node->constant.value);
+			return reinterpret_cast<T>(&swp->images[0]);
 		}
 		}
 		assert(0);

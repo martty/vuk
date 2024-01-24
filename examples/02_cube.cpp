@@ -46,7 +46,7 @@ namespace {
 		      runner.enqueue_setup(std::move(ind_fut));
 		    },
 		.render =
-		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator, vuk::Future<vuk::ImageAttachment> target) {
+		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator, vuk::Value<vuk::ImageAttachment> target) {
 		      // This struct will represent the view-projection transform used for the cube
 		      struct VP {
 			      glm::mat4 view;
@@ -63,56 +63,56 @@ namespace {
 		      auto uboVP = *buboVP;
 
 		      auto pass = vuk::make_pass("02_cube", [uboVP](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eColorWrite) color_rt) {
-			            command_buffer
-			                // In vuk, all pipeline state (with the exception of the shaders) come from the command buffer
-			                // Such state can be requested to be dynamic - dynamic state does not form part of the pipeline key, and hence cheap to change
-			                // On desktop, dynamic scissor and viewport is of no extra cost, and worthwhile to set always
-			                .set_dynamic_state(vuk::DynamicStateFlagBits::eScissor | vuk::DynamicStateFlagBits::eViewport)
-			                .set_viewport(0, vuk::Rect2D::framebuffer()) // Set the viewport to cover the entire framebuffer
-			                .set_scissor(0, vuk::Rect2D::framebuffer())  // Set the scissor area to cover the entire framebuffer
-			                .set_rasterization({})                       // Set the default rasterization state
-			                .broadcast_color_blend({})                   // Set the default color blend state
-			                // The vertex format and the buffer used are bound together for this call
-			                // The format is specified here as vuk::Packed{}, meaning we are going to make a consecutive binding
-			                // For each element in the list, a vuk::Format signifies a binding
-			                // And a vuk::Ignore signifies a number of bytes to be skipped
-			                // In this case, we will bind vuk::Format::eR32G32B32Sfloat to the first location (0)
-			                // And use the remaining vuk::Ignore-d bytes to establish the stride of the buffer
-			                .bind_vertex_buffer(
-			                    0, *verts, 0, vuk::Packed{ vuk::Format::eR32G32B32Sfloat, vuk::Ignore{ sizeof(util::Vertex) - sizeof(util::Vertex::position) } })
-			                // Bind the index buffer
-			                .bind_index_buffer(*inds, vuk::IndexType::eUint32)
-			                .bind_graphics_pipeline("cube")
-			                // Bind the uniform buffer we allocated to (set = 0, binding = 0)
-			                .bind_buffer(0, 0, uboVP)
-			                .bind_buffer(0, 1, uboVP); // It is allowed to bind to slots that are not consumed by the current pipeline
-			            // For the model matrix, we will take a shorter route
-			            // Frequently updated uniform buffers should be in CPUtoGPU type memory, which is mapped
-			            // So we create a typed mapping directly and write the model matrix
-			            glm::mat4* model = command_buffer.scratch_buffer<glm::mat4>(0, 1);
-			            *model = static_cast<glm::mat4>(glm::angleAxis(glm::radians(angle), glm::vec3(0.f, 1.f, 0.f)));
+			      command_buffer
+			          // In vuk, all pipeline state (with the exception of the shaders) come from the command buffer
+			          // Such state can be requested to be dynamic - dynamic state does not form part of the pipeline key, and hence cheap to change
+			          // On desktop, dynamic scissor and viewport is of no extra cost, and worthwhile to set always
+			          .set_dynamic_state(vuk::DynamicStateFlagBits::eScissor | vuk::DynamicStateFlagBits::eViewport)
+			          .set_viewport(0, vuk::Rect2D::framebuffer()) // Set the viewport to cover the entire framebuffer
+			          .set_scissor(0, vuk::Rect2D::framebuffer())  // Set the scissor area to cover the entire framebuffer
+			          .set_rasterization({})                       // Set the default rasterization state
+			          .broadcast_color_blend({})                   // Set the default color blend state
+			          // The vertex format and the buffer used are bound together for this call
+			          // The format is specified here as vuk::Packed{}, meaning we are going to make a consecutive binding
+			          // For each element in the list, a vuk::Format signifies a binding
+			          // And a vuk::Ignore signifies a number of bytes to be skipped
+			          // In this case, we will bind vuk::Format::eR32G32B32Sfloat to the first location (0)
+			          // And use the remaining vuk::Ignore-d bytes to establish the stride of the buffer
+			          .bind_vertex_buffer(
+			              0, *verts, 0, vuk::Packed{ vuk::Format::eR32G32B32Sfloat, vuk::Ignore{ sizeof(util::Vertex) - sizeof(util::Vertex::position) } })
+			          // Bind the index buffer
+			          .bind_index_buffer(*inds, vuk::IndexType::eUint32)
+			          .bind_graphics_pipeline("cube")
+			          // Bind the uniform buffer we allocated to (set = 0, binding = 0)
+			          .bind_buffer(0, 0, uboVP)
+			          .bind_buffer(0, 1, uboVP); // It is allowed to bind to slots that are not consumed by the current pipeline
+			      // For the model matrix, we will take a shorter route
+			      // Frequently updated uniform buffers should be in CPUtoGPU type memory, which is mapped
+			      // So we create a typed mapping directly and write the model matrix
+			      glm::mat4* model = command_buffer.scratch_buffer<glm::mat4>(0, 1);
+			      *model = static_cast<glm::mat4>(glm::angleAxis(glm::radians(angle), glm::vec3(0.f, 1.f, 0.f)));
 
-			            // We can also customize pipelines by using specialization constants
-			            // Here we will apply a tint based on the current frame
-			            auto current_frame = command_buffer.get_context().get_frame_count();
-			            auto mod_frame = current_frame % 1000;
-			            glm::vec3 tint{ 1.f, 1.f, 1.f };
-			            if (mod_frame <= 500 && mod_frame > 250) {
-				            tint = { 1.f, 0.5f, 0.5f };
-			            } else if (mod_frame <= 750 && mod_frame > 500) {
-				            tint = { 0.5f, 1.0f, 0.5f };
-			            } else if (mod_frame > 750) {
-				            tint = { 0.5f, 0.5f, 1.0f };
-			            }
-			            // Specialization constants can only be scalars, use three to make a vec3
-			            command_buffer.specialize_constants(0, tint.x).specialize_constants(1, tint.y).specialize_constants(2, tint.z);
-			            // The cube is drawn via indexed drawing
-			            command_buffer.draw_indexed(box.second.size(), 1, 0, 0, 0);
+			      // We can also customize pipelines by using specialization constants
+			      // Here we will apply a tint based on the current frame
+			      auto current_frame = command_buffer.get_context().get_frame_count();
+			      auto mod_frame = current_frame % 1000;
+			      glm::vec3 tint{ 1.f, 1.f, 1.f };
+			      if (mod_frame <= 500 && mod_frame > 250) {
+				      tint = { 1.f, 0.5f, 0.5f };
+			      } else if (mod_frame <= 750 && mod_frame > 500) {
+				      tint = { 0.5f, 1.0f, 0.5f };
+			      } else if (mod_frame > 750) {
+				      tint = { 0.5f, 0.5f, 1.0f };
+			      }
+			      // Specialization constants can only be scalars, use three to make a vec3
+			      command_buffer.specialize_constants(0, tint.x).specialize_constants(1, tint.y).specialize_constants(2, tint.z);
+			      // The cube is drawn via indexed drawing
+			      command_buffer.draw_indexed(box.second.size(), 1, 0, 0, 0);
 
-						return color_rt;
-		            } );
+			      return color_rt;
+		      });
 
-			  auto drawn = pass(std::move(target));
+		      auto drawn = pass(std::move(target));
 		      // The angle is update to rotate the cube
 		      angle += 20.f * ImGui::GetIO().DeltaTime;
 

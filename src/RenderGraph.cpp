@@ -375,7 +375,6 @@ namespace vuk {
 									placeholder_to_constant(args[8], 0U);
 								}
 							} else if (link.urdef.node->kind == Node::ACQUIRE_NEXT_IMAGE) {
-								assert(0);
 								Swapchain& swp = *reinterpret_cast<Swapchain*>(link.urdef.node->acquire_next_image.swapchain.node->construct.args[0].node->constant.value);
 								extent = Extent2D{ swp.images[0].extent.extent.width, swp.images[0].extent.extent.height };
 								layer_count = swp.images[0].layer_count;

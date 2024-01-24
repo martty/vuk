@@ -46,8 +46,7 @@ namespace {
 		      auto [image, view, future] = vuk::create_image_and_view_with_data(allocator, vuk::DomainFlagBits::eTransferOnTransfer, texture_of_doge, doge_image);
 		      image_of_doge = std::move(image);
 		      image_view_of_doge = std::move(view);
-		      future = future.release_to(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
-		      runner.enqueue_setup(std::move(future));
+		      runner.enqueue_setup(future.as_released(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue));
 		      stbi_image_free(doge_image);
 
 		      // We set up the cube data, same as in example 02_cube
@@ -61,7 +60,7 @@ namespace {
 		      runner.enqueue_setup(std::move(ind_fut));
 		    },
 		.render =
-		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator, vuk::Future<vuk::ImageAttachment> target) {
+		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator, vuk::Value<vuk::ImageAttachment> target) {
 		      struct VP {
 			      glm::mat4 view;
 			      glm::mat4 proj;
@@ -73,8 +72,8 @@ namespace {
 		      auto [buboVP, uboVP_fut] = create_buffer(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, vuk::DomainFlagBits::eTransferOnGraphics, std::span(&vp, 1));
 		      auto uboVP = *buboVP;
 
-			  auto pass =
-		          vuk::make_pass("04_textured_cube", [uboVP](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eColorWrite) color, VUK_IA(vuk::eDepthStencilRW) depth) {
+		      auto pass = vuk::make_pass(
+		          "04_textured_cube", [uboVP](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eColorWrite) color, VUK_IA(vuk::eDepthStencilRW) depth) {
 			          command_buffer.set_viewport(0, vuk::Rect2D::framebuffer())
 			              .set_scissor(0, vuk::Rect2D::framebuffer())
 			              .set_rasterization({}) // Set the default rasterization state
@@ -101,12 +100,12 @@ namespace {
 			          *model = static_cast<glm::mat4>(glm::angleAxis(glm::radians(angle), glm::vec3(0.f, 1.f, 0.f)));
 			          command_buffer.draw_indexed(box.second.size(), 1, 0, 0, 0);
 
-					  return color;
-					  });
+			          return color;
+		          });
 
 		      angle += 180.f * ImGui::GetIO().DeltaTime;
 
-			  auto depth_img = vuk::declare_ia("04_depth");
+		      auto depth_img = vuk::declare_ia("04_depth");
 		      depth_img->format = vuk::Format::eD32Sfloat;
 		      depth_img = vuk::clear_image(std::move(depth_img), vuk::ClearDepthStencil{ 1.0f, 0 });
 
