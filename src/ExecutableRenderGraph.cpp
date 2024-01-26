@@ -826,6 +826,9 @@ namespace vuk {
 				void* array_of_vs = get_constant_value(array_def.node);
 				auto index_v = constant<uint64_t>(link.urdef.node->extract.index);
 				return reinterpret_cast<std::byte*>(array_of_vs) + array_def.type()->array.stride * index_v;
+			} else if (link.urdef.node->kind == Node::ACQUIRE_NEXT_IMAGE) {
+				Swapchain* swp = reinterpret_cast<Swapchain*>(get_constant_value(link.urdef.node->acquire_next_image.swapchain.node));
+				return &swp->images[swp->image_index];
 			} else {
 				return get_constant_value(link.urdef.node);
 			}
@@ -1278,8 +1281,8 @@ namespace vuk {
 						attachment.extent.extent.height = eval<uint32_t>(node->construct.args[2]);
 						attachment.extent.extent.depth = eval<uint32_t>(node->construct.args[3]);
 						attachment.extent.sizing = Sizing::eAbsolute;
-						attachment.format = constant<Format>(node->construct.args[4]);
-						attachment.sample_count = constant<Samples>(node->construct.args[5]);
+						attachment.format = eval<Format>(node->construct.args[4]);
+						attachment.sample_count = eval<Samples>(node->construct.args[5]);
 						attachment.base_layer = eval<uint32_t>(node->construct.args[6]);
 						attachment.layer_count = eval<uint32_t>(node->construct.args[7]);
 						attachment.base_level = eval<uint32_t>(node->construct.args[8]);

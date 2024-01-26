@@ -264,6 +264,21 @@ namespace vuk {
 		return blit(std::move(src), std::move(dst));
 	}
 
+	inline Value<ImageAttachment> resolve_into(Value<ImageAttachment> src, Value<ImageAttachment> dst) {
+		dst.same_format_as(src);
+		src.same_format_as(dst);
+		dst.same_shape_as(src);
+		src.same_shape_as(dst);
+		dst->sample_count = Samples::e1;
+
+		auto resolve = make_pass("resolve image", [=](CommandBuffer& cbuf, VUK_IA(Access::eTransferRead) src, VUK_IA(Access::eTransferWrite) dst) {
+			cbuf.resolve_image(src, dst);
+			return dst;
+		});
+
+		return resolve(std::move(src), std::move(dst));
+	}
+
 	/// @brief Allocates & fills an image, creates default ImageView for it (legacy)
 	/// @param allocator Allocator to allocate this Texture from
 	/// @param format Format of the image

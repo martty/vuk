@@ -322,10 +322,12 @@ namespace vuk {
 		if (node->kind == Node::CONSTRUCT) {
 			return node->construct.args[0].node->constant.value;
 		} else if (node->kind == Node::ACQUIRE_NEXT_IMAGE) {
-			Swapchain* swp = reinterpret_cast<Swapchain*>(node->acquire_next_image.swapchain.node->construct.args[0].node->constant.value);
-			return &swp->images[swp->image_index];
+			Swapchain* swp = reinterpret_cast<Swapchain*>(get_constant_value(node->acquire_next_image.swapchain.node));
+			return &swp->images[0];
 		} else if (node->kind == Node::ACQUIRE) {
 			return node->acquire.arg.node->constant.value;
+		} else if (node->kind == Node::RELACQ){
+			return get_constant_value(node->relacq.src.node);
 		} else {
 			assert(0);
 		}
@@ -339,7 +341,7 @@ namespace vuk {
 			return static_cast<T>(ref.node->construct.args[0].node->constant.value);
 		}
 		case Node::ACQUIRE_NEXT_IMAGE: {
-			Swapchain* swp = reinterpret_cast<Swapchain*>(ref.node->acquire_next_image.swapchain.node->construct.args[0].node->constant.value);
+			Swapchain* swp = reinterpret_cast<Swapchain*>(get_constant_value(ref.node->acquire_next_image.swapchain.node));
 			return reinterpret_cast<T>(&swp->images[0]);
 		}
 		}
@@ -348,9 +350,8 @@ namespace vuk {
 	}
 
 	template<class T>
-	  requires(!std::is_pointer_v<T>)
+	  requires(std::is_arithmetic_v<T>)
 	T eval(Ref ref) {
-		assert(ref.type()->kind == Type::INTEGER_TY);
 		switch (ref.node->kind) {
 		case Node::CONSTANT: {
 			return constant<T>(ref);
@@ -362,6 +363,27 @@ namespace vuk {
 				return eval<T>(math_binary.a) * eval<T>(math_binary.b);
 			}
 			}
+		}
+		case Node::EXTRACT: {
+			auto composite = ref.node->extract.composite;
+			auto index = eval<uint64_t>(ref.node->extract.index);
+			if (composite.type()->kind == Type::COMPOSITE_TY) {
+				auto offset = composite.type()->composite.offsets[index];
+				return *reinterpret_cast<T*>(eval<unsigned char*>(composite) + offset);
+			} else if (composite.type()->kind == Type::ARRAY_TY) {
+				return eval<T*>(composite)[index];
+			}
+		}
+			assert(0);
+		}
+	}
+
+	template<class T>
+	  requires(!std::is_pointer_v<T> && !std::is_arithmetic_v<T>)
+	T eval(Ref ref) {
+		switch (ref.node->kind) {
+		case Node::CONSTANT: {
+			return constant<T>(ref);
 		}
 		case Node::EXTRACT: {
 			auto composite = ref.node->extract.composite;

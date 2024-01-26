@@ -106,6 +106,9 @@ namespace vuk {
 		void same_extent_as(const Value<ImageAttachment>& src)
 		  requires std::is_same_v<T, ImageAttachment>
 		{
+			if (def.node->kind == Node::ACQUIRE_NEXT_IMAGE) {
+				return;
+			}
 			def.node->construct.args[1] = get_render_graph()->make_extract(src.get_def(), 0);
 			def.node->construct.args[2] = get_render_graph()->make_extract(src.get_def(), 1);
 			def.node->construct.args[3] = get_render_graph()->make_extract(src.get_def(), 2);
@@ -115,6 +118,9 @@ namespace vuk {
 		void same_2D_extent_as(const Value<ImageAttachment>& src)
 		  requires std::is_same_v<T, ImageAttachment>
 		{
+			if (def.node->kind == Node::ACQUIRE_NEXT_IMAGE) {
+				return;
+			}
 			def.node->construct.args[1] = get_render_graph()->make_extract(src.get_def(), 0);
 			def.node->construct.args[2] = get_render_graph()->make_extract(src.get_def(), 1);
 		}
@@ -123,6 +129,9 @@ namespace vuk {
 		void same_format_as(const Value<ImageAttachment>& src)
 		  requires std::is_same_v<T, ImageAttachment>
 		{
+			if (def.node->kind == Node::ACQUIRE_NEXT_IMAGE) {
+				return;
+			}
 			def.node->construct.args[4] = get_render_graph()->make_extract(src.get_def(), 3);
 		}
 
@@ -130,6 +139,9 @@ namespace vuk {
 		void same_shape_as(const Value<ImageAttachment>& src)
 		  requires std::is_same_v<T, ImageAttachment>
 		{
+			if (def.node->kind == Node::ACQUIRE_NEXT_IMAGE) {
+				return;
+			}
 			same_extent_as(src);
 
 			for (auto i = 6; i < 10; i++) { /* 6 - 9 : layers, levels */
@@ -141,6 +153,9 @@ namespace vuk {
 		void similar_to(const Value<ImageAttachment>& src)
 		  requires std::is_same_v<T, ImageAttachment>
 		{
+			if (def.node->kind == Node::ACQUIRE_NEXT_IMAGE) {
+				return;
+			}
 			same_shape_as(src);
 			same_format_as(src);
 			def.node->construct.args[5] = get_render_graph()->make_extract(src.get_def(), 4);
