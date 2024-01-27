@@ -265,6 +265,9 @@ namespace vuk {
 		present_ready = vuk::Unique<std::array<VkSemaphore, 3>>(*superframe_allocator);
 		render_complete = vuk::Unique<std::array<VkSemaphore, 3>>(*superframe_allocator);
 
+		// match shader compilation target version to the vk version we request
+		context->set_shader_target_version(VK_API_VERSION_1_2);
+
 		superframe_allocator->allocate_semaphores(*present_ready);
 		superframe_allocator->allocate_semaphores(*render_complete);
 
