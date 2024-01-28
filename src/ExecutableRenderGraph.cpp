@@ -16,6 +16,17 @@
 #include <vector>
 
 namespace vuk {
+	std::string format_source_location(Node* node) {
+		if (node->debug_info && node->debug_info->decl_loc.line() > 0) {
+			auto& source = node->debug_info->decl_loc;
+			return fmt::format("{}({}): ", source.file_name(), source.line());
+		} else {
+			return "?: ";
+		}
+	}
+} // namespace vuk
+
+namespace vuk {
 	ExecutableRenderGraph::ExecutableRenderGraph(Compiler& rg) : impl(rg.impl) {}
 
 	ExecutableRenderGraph::ExecutableRenderGraph(ExecutableRenderGraph&& o) noexcept : impl(std::exchange(o.impl, nullptr)) {}
@@ -1208,31 +1219,81 @@ namespace vuk {
 		// start/end RPs as needed
 		// inference will still need to run in the beginning, as that is compiletime
 
-		auto print_results = [&](Node* node) {
+		auto print_results_to_string = [&](Node* node) {
+			std::string msg = "";
 			for (size_t i = 0; i < node->type.size(); i++) {
 				if (i > 0) {
-					fmt::print(", ");
+					msg += fmt::format(", ");
 				}
 				if (node->debug_info) {
-					fmt::print("%{}", node->debug_info->result_names[i]);
+					msg += fmt::format("%{}", node->debug_info->result_names[i]);
 				} else {
-					fmt::print("%{}_{}", node->kind_to_sv(), sched.naming_index_counter + i);
+					msg += fmt::format("%{}_{}", node->kind_to_sv(), sched.naming_index_counter + i);
 				}
 			}
+			return msg;
 		};
-		auto print_args = [&](std::span<Ref> args) {
+		auto print_results = [&](Node* node) {
+			fmt::print("{}", print_results_to_string(node));
+		};
+
+		auto parm_to_string = [&](Ref parm) {
+			if (parm.node->debug_info) {
+				return fmt::format("%{}", parm.node->debug_info->result_names[parm.index]);
+			} else if (parm.node->kind == Node::CONSTANT) {
+				Type* ty = parm.node->type[0];
+				if (ty->kind == Type::INTEGER_TY) {
+					switch (ty->integer.width) {
+					case 32:
+						return fmt::format("{}", constant<uint32_t>(parm));
+					case 64:
+						return fmt::format("{}", constant<uint64_t>(parm));
+					}
+				} else if (ty->kind == Type::MEMORY_TY) {
+					return std::string("<mem>");
+				}
+			} else if (parm.node->kind == Node::PLACEHOLDER) {
+				return std::string("?");
+			} else {
+				return fmt::format("%{}_{}", parm.node->kind_to_sv(), sched.executed.at(parm.node).naming_index + parm.index);
+			}
+		};
+
+		auto print_args_to_string = [&](std::span<Ref> args) {
+			std::string msg = "";
 			for (size_t i = 0; i < args.size(); i++) {
 				if (i > 0) {
-					fmt::print(", ");
+					msg += fmt::format(", ");
 				}
 				auto& parm = args[i];
 
-				if (parm.node->debug_info) {
-					fmt::print("%{}", parm.node->debug_info->result_names[parm.index]);
-				} else {
-					fmt::print("%{}_{}", parm.node->kind_to_sv(), sched.executed.at(parm.node).naming_index + parm.index);
-				}
+				msg += parm_to_string(parm);
 			}
+			return msg;
+		};
+		auto print_args = [&](std::span<Ref> args) {
+			fmt::print("{}", print_args_to_string(args));
+		};
+
+		auto node_to_string = [](Node* node) {
+			if (node->kind == Node::CONSTRUCT) {
+				return fmt::format(" = construct<{}> ", Type::to_string(node->type[0]));
+			} else {
+				return fmt::format(" = {} ", node->kind_to_sv());
+			}
+		};
+
+		enum class Level { eError };
+
+		auto format_message = [&](Level level, Node* node, std::span<Ref> args, std::string err) {
+			std::string msg = "";
+			msg += format_source_location(node);
+			msg += fmt::format("{} : '", level == Level::eError ? "error" : "other");
+			msg += print_results_to_string(node);
+			msg += fmt::format(" = {}", node_to_string(node));
+			msg += print_args_to_string(args);
+			msg += err;
+			return msg;
 		};
 
 		while (!sched.work_queue.empty()) {
@@ -1259,10 +1320,22 @@ namespace vuk {
 				if (sched.process(item)) {
 					if (node->type[0] == impl->cg_module->builtin_buffer) {
 						auto& bound = constant<Buffer>(node->construct.args[0]);
-						bound.size = eval<size_t>(node->construct.args[1]); // collapse inferencing
+						try {
+							bound.size = eval<size_t>(node->construct.args[1]); // collapse inferencing
+						} catch (CannotBeConstantEvaluated& err) {
+							if (err.ref.node->kind == Node::PLACEHOLDER) {
+								return { expected_error,
+									       RenderGraphException(format_message(Level::eError, node, node->construct.args.subspan(1), "': argument not set or inferrable\n")) };
+							} else {
+								return { expected_error,
+									       RenderGraphException(format_message(Level::eError, node, node->construct.args.subspan(1), "': argument not constant evaluatable\n")) };
+							}
+						}
 #ifdef VUK_DUMP_EXEC
 						print_results(node);
-						fmt::print(" = construct<buffer>\n");
+						fmt::print(" = construct<buffer> ");
+						print_args(node->construct.args.subspan(1));
+						fmt::print("\n");
 #endif
 						if (bound.buffer == VK_NULL_HANDLE) {
 							assert(bound.size != ~(0u));
@@ -1277,19 +1350,31 @@ namespace vuk {
 					} else if (node->type[0] == impl->cg_module->builtin_image) {
 						auto& attachment = *reinterpret_cast<ImageAttachment*>(node->construct.args[0].node->constant.value);
 						// collapse inferencing
-						attachment.extent.extent.width = eval<uint32_t>(node->construct.args[1]);
-						attachment.extent.extent.height = eval<uint32_t>(node->construct.args[2]);
-						attachment.extent.extent.depth = eval<uint32_t>(node->construct.args[3]);
-						attachment.extent.sizing = Sizing::eAbsolute;
-						attachment.format = eval<Format>(node->construct.args[4]);
-						attachment.sample_count = eval<Samples>(node->construct.args[5]);
-						attachment.base_layer = eval<uint32_t>(node->construct.args[6]);
-						attachment.layer_count = eval<uint32_t>(node->construct.args[7]);
-						attachment.base_level = eval<uint32_t>(node->construct.args[8]);
-						attachment.level_count = eval<uint32_t>(node->construct.args[9]);
+						try {
+							attachment.extent.extent.width = eval<uint32_t>(node->construct.args[1]);
+							attachment.extent.extent.height = eval<uint32_t>(node->construct.args[2]);
+							attachment.extent.extent.depth = eval<uint32_t>(node->construct.args[3]);
+							attachment.extent.sizing = Sizing::eAbsolute;
+							attachment.format = eval<Format>(node->construct.args[4]);
+							attachment.sample_count = eval<Samples>(node->construct.args[5]);
+							attachment.base_layer = eval<uint32_t>(node->construct.args[6]);
+							attachment.layer_count = eval<uint32_t>(node->construct.args[7]);
+							attachment.base_level = eval<uint32_t>(node->construct.args[8]);
+							attachment.level_count = eval<uint32_t>(node->construct.args[9]);
+						} catch (CannotBeConstantEvaluated& err) {
+							if (err.ref.node->kind == Node::PLACEHOLDER) {
+								return { expected_error,
+									       RenderGraphException(format_message(Level::eError, node, node->construct.args.subspan(1), "': argument not set or inferrable\n")) };
+							} else {
+								return { expected_error,
+									       RenderGraphException(format_message(Level::eError, node, node->construct.args.subspan(1), "': argument not constant evaluatable\n")) };
+							}
+						}
 #ifdef VUK_DUMP_EXEC
 						print_results(node);
-						fmt::print(" = construct<image>\n");
+						fmt::print(" = construct<image> ");
+						print_args(node->construct.args.subspan(1));
+						fmt::print("\n");
 #endif
 						if (!attachment.image) {
 							auto allocator = node->construct.allocator ? *node->construct.allocator : alloc;

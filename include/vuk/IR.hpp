@@ -122,6 +122,28 @@ namespace vuk {
 			}
 		}
 
+		static std::string to_string(Type* t) {
+			switch (t->kind) {
+			case IMBUED_TY:
+				return to_string(t->imbued.T) + std::string(":") + std::to_string(t->imbued.access);
+			case ALIASED_TY:
+				return to_string(t->aliased.T) + std::string("@") + std::to_string(t->aliased.ref_idx);
+			case MEMORY_TY:
+				return "mem";
+			case INTEGER_TY:
+				return t->integer.width == 32 ? "i32" : "i64";
+			case ARRAY_TY:
+				return to_string(t->array.T) + "[" + std::to_string(t->array.count) + "]";
+			case COMPOSITE_TY:
+				if (t->debug_info && !t->debug_info->name.empty()) {
+					return t->debug_info->name;
+				}
+				return "composite:" + std::to_string(t->composite.tag);
+			case OPAQUE_FN_TY:
+				return "ofn";
+			}
+		}
+
 		~Type() {}
 	};
 
@@ -151,6 +173,7 @@ namespace vuk {
 
 	struct NodeDebugInfo {
 		std::vector<std::string> result_names;
+		std::source_location decl_loc;
 	};
 
 	struct Node {
@@ -292,6 +315,8 @@ namespace vuk {
 				return "relacq";
 			case RELEASE:
 				return "release";
+			case MATH_BINARY:
+				return "math_b";
 			}
 			assert(0);
 			return "";
@@ -326,12 +351,22 @@ namespace vuk {
 			return &swp->images[0];
 		} else if (node->kind == Node::ACQUIRE) {
 			return node->acquire.arg.node->constant.value;
-		} else if (node->kind == Node::RELACQ){
+		} else if (node->kind == Node::RELACQ) {
 			return get_constant_value(node->relacq.src.node);
 		} else {
 			assert(0);
 		}
 	}
+
+	struct CannotBeConstantEvaluated : Exception {
+		CannotBeConstantEvaluated(Ref ref) : ref(ref) {}
+
+		Ref ref;
+
+		void throw_this() override {
+			throw *this;
+		}
+	};
 
 	template<class T>
 	  requires(std::is_pointer_v<T>)
@@ -344,9 +379,9 @@ namespace vuk {
 			Swapchain* swp = reinterpret_cast<Swapchain*>(get_constant_value(ref.node->acquire_next_image.swapchain.node));
 			return reinterpret_cast<T>(&swp->images[0]);
 		}
+		default:
+			throw CannotBeConstantEvaluated{ ref };
 		}
-		assert(0);
-		return T{};
 	}
 
 	template<class T>
@@ -374,7 +409,8 @@ namespace vuk {
 				return eval<T*>(composite)[index];
 			}
 		}
-			assert(0);
+		default:
+			throw CannotBeConstantEvaluated(ref);
 		}
 	}
 
@@ -393,11 +429,13 @@ namespace vuk {
 				return *reinterpret_cast<T*>(eval<unsigned char*>(composite) + offset);
 			} else if (composite.type()->kind == Type::ARRAY_TY) {
 				return eval<T*>(composite)[index];
+			} else {
+				assert(0);
 			}
 		}
+		default:
+			throw CannotBeConstantEvaluated(ref);
 		}
-		assert(0);
-		return T{};
 	}
 
 	struct RG {
@@ -415,22 +453,27 @@ namespace vuk {
 				                                  offsetof(ImageAttachment, layer_count),
 				                                  offsetof(ImageAttachment, base_level),
 				                                  offsetof(ImageAttachment, level_count) };
-			builtin_image = emplace_type(Type{
-			    .kind = Type::COMPOSITE_TY, .size = sizeof(ImageAttachment), .composite = { .types = { image_, 9 }, .offsets = { image_offsets, 9 }, .tag = 0 } });
+			builtin_image = emplace_type(Type{ .kind = Type::COMPOSITE_TY,
+			                                   .size = sizeof(ImageAttachment),
+			                                   .debug_info = new TypeDebugInfo{ "image" },
+			                                   .composite = { .types = { image_, 9 }, .offsets = { image_offsets, 9 }, .tag = 0 } });
 			auto buffer_ = new Type* [1] {
 				u32()
 			};
 			auto buffer_offsets = new size_t[1]{ offsetof(Buffer, size) };
-			builtin_buffer = emplace_type(
-			    Type{ .kind = Type::COMPOSITE_TY, .size = sizeof(Buffer), .composite = { .types = { buffer_, 1 }, .offsets = { buffer_offsets, 1 }, .tag = 1 } });
+			builtin_buffer = emplace_type(Type{ .kind = Type::COMPOSITE_TY,
+			                                    .size = sizeof(Buffer),
+			                                    .debug_info = new TypeDebugInfo{ "buffer" },
+			                                    .composite = { .types = { buffer_, 1 }, .offsets = { buffer_offsets, 1 }, .tag = 1 } });
 			auto swp_ = new Type* [0] {
 			};
-			builtin_swapchain = emplace_type(Type{ .kind = Type::COMPOSITE_TY, .size = sizeof(Swapchain), .composite = { .types = { swp_, 0 }, .tag = 2 } });
+			builtin_swapchain = emplace_type(Type{ .kind = Type::COMPOSITE_TY,
+			                                       .size = sizeof(Swapchain),
+			                                       .debug_info = new TypeDebugInfo{ "swapchain" },
+			                                       .composite = { .types = { swp_, 0 }, .tag = 2 } });
 		}
 
-		~RG() {
-			printf("");
-		}
+		~RG() {}
 
 		std::deque<Node> op_arena;
 		char* debug_arena;
@@ -459,6 +502,20 @@ namespace vuk {
 			subgraphs.emplace_back(other);
 		}
 
+		void name_outputs(Node* node, std::vector<std::string> names) {
+			if (!node->debug_info) {
+				node->debug_info = new NodeDebugInfo;
+			}
+			node->debug_info->result_names.assign(names.begin(), names.end());
+		}
+
+		void set_source_location(Node* node, std::source_location loc) {
+			if (!node->debug_info) {
+				node->debug_info = new NodeDebugInfo;
+			}
+			node->debug_info->decl_loc = loc;
+		}
+
 		// TYPES
 		Type* make_imbued_ty(Type* ty, Access access) {
 			return emplace_type(Type{ .kind = Type::IMBUED_TY, .size = ty->size, .imbued = { .T = ty, .access = access } });
@@ -477,13 +534,6 @@ namespace vuk {
 		}
 
 		// OPS
-
-		void name_outputs(Node* node, std::vector<std::string> names) {
-			if (!node->debug_info) {
-				node->debug_info = new NodeDebugInfo;
-			}
-			node->debug_info->result_names.assign(names.begin(), names.end());
-		}
 
 		void name_output(Ref ref, std::string name) {
 			if (!ref.node->debug_info) {
@@ -571,7 +621,7 @@ namespace vuk {
 			auto mem_ty = new Type*(emplace_type(Type{ .kind = Type::MEMORY_TY }));
 			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = buf_ptr } }));
 			auto u64_ty = new Type*(u64());
-			if (value.size > 0) {
+			if (value.size != ~(0u)) {
 				args_ptr[1] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ u64_ty, 1 }, .constant = { .value = &buf_ptr->size } }));
 			} else {
 				args_ptr[1] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ u64_ty, 1 } }));

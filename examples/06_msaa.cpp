@@ -99,7 +99,7 @@ namespace {
 			          *model = static_cast<glm::mat4>(glm::angleAxis(glm::radians(angle), glm::vec3(0.f, 1.f, 0.f)));
 			          command_buffer.draw_indexed(box.second.size(), 1, 0, 0, 0);
 
-					  return color;
+			          return color;
 		          });
 		      angle += 180.f * ImGui::GetIO().DeltaTime;
 
@@ -110,8 +110,8 @@ namespace {
 		      auto ms_img = vuk::declare_ia("06_ms");
 		      ms_img->sample_count = vuk::Samples::e8;
 		      ms_img = vuk::clear_image(std::move(ms_img), vuk::ClearColor{ 0.f, 0.f, 0.f, 0.f });
-		      
-			  auto depth_img = vuk::declare_ia("06_depth");
+
+		      auto depth_img = vuk::declare_ia("06_depth");
 		      depth_img->format = vuk::Format::eD32Sfloat;
 		      depth_img = vuk::clear_image(std::move(depth_img), vuk::ClearDepthStencil{ 1.0f, 0 });
 

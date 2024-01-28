@@ -200,7 +200,9 @@ if(VUK_BUILD_TESTS)
 					src/tests/commands.cpp 
 					src/tests/renderpass.cpp 
 					src/tests/arrays.cpp
-					src/tests/semantics.cpp)
+					src/tests/semantics.cpp
+					src/tests/rg_errors.cpp
+	)
 	#target_compile_features(vuk-tests PRIVATE cxx_std_17)
 	target_include_directories(vuk-tests PRIVATE ext/renderdoc)
 	target_link_libraries(vuk-tests PRIVATE vuk doctest::doctest vk-bootstrap fmt::fmt)
