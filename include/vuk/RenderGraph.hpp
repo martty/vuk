@@ -541,7 +541,7 @@ public:
 		using ret_tuple = std::tuple<Value<typename T::type>...>;
 
 		template<class Ret, class F>
-		static auto make_lam(Name name, F&& body, SchedulingInfo scheduling_info) {
+		static auto make_lam(Name name, F&& body, SchedulingInfo scheduling_info, std::source_location loc) {
 			auto callback = [typed_cb = std::move(body)](CommandBuffer& cb, std::span<void*> args, std::span<void*> meta, std::span<void*> rets) {
 				// we do type recovery here -> convert untyped args to typed ones
 				alignas(alignof(std::tuple<CommandBuffer&, T...>)) char storage[sizeof(std::tuple<CommandBuffer&, T...>)];
@@ -556,7 +556,7 @@ public:
 			};
 
 			// when this function is called, we weave in this call into the IR
-			return [untyped_cb = std::move(callback), name, scheduling_info](Value<typename T::type>... args) mutable {
+			return [untyped_cb = std::move(callback), name, scheduling_info, loc](Value<typename T::type>... args) mutable {
 				auto& first = [](auto& first, auto&...) -> auto& {
 					return first;
 				}(args...);
@@ -580,6 +580,7 @@ public:
 				auto opaque_fn = rg.make_declare_fn(opaque_fn_ty);
 				Node* node = rg.make_call(opaque_fn, args.get_head()...);
 				node->scheduling_info = new SchedulingInfo(scheduling_info);
+				rg.set_source_location(node, loc);
 
 				std::vector<std::shared_ptr<ExtRef>> dependent_refs;
 				[&dependent_refs](auto& first, auto&... rest) {
@@ -604,19 +605,23 @@ public:
 	};
 
 	template<class F>
-	[[nodiscard]] auto make_pass(Name name, F&& body, SchedulingInfo scheduling_info = SchedulingInfo(DomainFlagBits::eAny)) {
+	[[nodiscard]] auto make_pass(Name name,
+	                             F&& body,
+	                             SchedulingInfo scheduling_info = SchedulingInfo(DomainFlagBits::eAny),
+	                             std::source_location loc = std::source_location::current()) {
 		using traits = closure_traits<decltype(&F::operator())>;
-		return TupleMap<drop_t<1, typename traits::types>>::template make_lam<typename traits::result_type, F>(name, std::forward<F>(body), scheduling_info);
+		return TupleMap<drop_t<1, typename traits::types>>::template make_lam<typename traits::result_type, F>(name, std::forward<F>(body), scheduling_info, loc);
 	}
 
 	inline std::shared_ptr<ExtRef> make_ext_ref(std::shared_ptr<RG> rg, Ref ref) {
 		return std::make_shared<ExtRef>(rg, ref);
 	}
 
-	[[nodiscard]] inline Value<ImageAttachment> declare_ia(Name name, ImageAttachment ia = {}) {
+	[[nodiscard]] inline Value<ImageAttachment> declare_ia(Name name, ImageAttachment ia = {}, std::source_location loc = std::source_location::current()) {
 		std::shared_ptr<RG> rg = std::make_shared<RG>();
 		Ref ref = rg->make_declare_image(ia);
 		rg->name_outputs(ref.node, { name.c_str() });
+		rg->set_source_location(ref.node, loc);
 		return { make_ext_ref(rg, ref), ref };
 	}
 
@@ -629,18 +634,19 @@ public:
 	}
 
 	template<class T, class... Args>
-	[[nodiscard]] inline Value<T[]> declare_array(Name name, Value<T>&& arg, Args&&... args) {
+	[[nodiscard]] inline Value<T[]> declare_array(Name name, Value<T>&& arg, Args&&... args, std::source_location loc = std::source_location::current()) {
 		auto rg = arg.get_render_graph();
 		(rg->subgraphs.push_back(args.get_render_graph()), ...);
 		std::array refs = { arg.get_head(), args.get_head()... };
 		std::array defs = { arg.get_def(), args.get_def()... };
 		Ref ref = rg->make_declare_array(Type::stripped(refs[0].type()), refs, defs);
 		rg->name_outputs(ref.node, { name.c_str() });
+		rg->set_source_location(ref.node, loc);
 		return { make_ext_ref(rg, ref), ref };
 	}
 
 	template<class T>
-	[[nodiscard]] inline Value<T[]> declare_array(Name name, std::span<const Value<T>> args) {
+	[[nodiscard]] inline Value<T[]> declare_array(Name name, std::span<const Value<T>> args, std::source_location loc = std::source_location::current()) {
 		assert(args.size() > 0);
 		auto rg = args[0].get_render_graph();
 		std::vector<Ref> refs;
@@ -652,19 +658,22 @@ public:
 		}
 		Ref ref = rg->make_declare_array(Type::stripped(refs[0].type()), refs, defs);
 		rg->name_outputs(ref.node, { name.c_str() });
+		rg->set_source_location(ref.node, loc);
 		return { make_ext_ref(rg, ref), ref };
 	}
 
-	[[nodiscard]] inline Value<Swapchain> declare_swapchain(Swapchain bundle) {
+	[[nodiscard]] inline Value<Swapchain> declare_swapchain(Swapchain bundle, std::source_location loc = std::source_location::current()) {
 		std::shared_ptr<RG> rg = std::make_shared<RG>();
 		Ref ref = rg->make_declare_swapchain(bundle);
+		rg->set_source_location(ref.node, loc);
 		return { make_ext_ref(rg, ref), ref };
 	}
 
-	[[nodiscard]] inline Value<ImageAttachment> acquire_next_image(Name name, Value<Swapchain> in) {
+	[[nodiscard]] inline Value<ImageAttachment> acquire_next_image(Name name, Value<Swapchain> in, std::source_location loc = std::source_location::current()) {
 		auto& rg = in.get_render_graph();
 		Ref ref = rg->make_acquire_next_image(in.get_head());
 		rg->name_outputs(ref.node, { name.c_str() });
+		rg->set_source_location(ref.node, loc);
 		return std::move(std::move(in).transmute<ImageAttachment>(ref));
 	}
 

@@ -192,8 +192,11 @@ namespace {
 
 		      auto ss_img = vuk::declare_ia("07_singlesampled");
 		      ss_img->sample_count = vuk::Samples::e1;
-		      ss_img.same_shape_as(ms_img);
+		      ms_img.same_shape_as(ss_img);
+		      ms_img.same_format_as(ss_img);
 		      ss_img = vuk::clear_image(std::move(ss_img), vuk::ClearColor{ 0.f, 0.f, 0.f, 0.f });
+		      ss_img.same_shape_as(target);
+		      ss_img.same_format_as(target);
 
 		      ms_img = render(std::move(ms_img), std::move(depth_img));
 		      ss_img = resolve_pass(std::move(ms_img), std::move(ss_img));
