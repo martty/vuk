@@ -1225,7 +1225,7 @@ namespace vuk {
 				if (i > 0) {
 					msg += fmt::format(", ");
 				}
-				if (node->debug_info) {
+				if (node->debug_info && !node->debug_info->result_names.empty()) {
 					msg += fmt::format("%{}", node->debug_info->result_names[i]);
 				} else {
 					msg += fmt::format("%{}_{}", node->kind_to_sv(), sched.naming_index_counter + i);
@@ -1238,7 +1238,7 @@ namespace vuk {
 		};
 
 		auto parm_to_string = [&](Ref parm) {
-			if (parm.node->debug_info) {
+			if (parm.node->debug_info && !parm.node->debug_info->result_names.empty()) {
 				return fmt::format("%{}", parm.node->debug_info->result_names[parm.index]);
 			} else if (parm.node->kind == Node::CONSTANT) {
 				Type* ty = parm.node->type[0];
@@ -1277,9 +1277,9 @@ namespace vuk {
 
 		auto node_to_string = [](Node* node) {
 			if (node->kind == Node::CONSTRUCT) {
-				return fmt::format(" = construct<{}> ", Type::to_string(node->type[0]));
+				return fmt::format("construct<{}> ", Type::to_string(node->type[0]));
 			} else {
-				return fmt::format(" = {} ", node->kind_to_sv());
+				return fmt::format("{} ", node->kind_to_sv());
 			}
 		};
 
@@ -1288,7 +1288,7 @@ namespace vuk {
 		auto format_message = [&](Level level, Node* node, std::span<Ref> args, std::string err) {
 			std::string msg = "";
 			msg += format_source_location(node);
-			msg += fmt::format("{} : '", level == Level::eError ? "error" : "other");
+			msg += fmt::format("{}: '", level == Level::eError ? "error" : "other");
 			msg += print_results_to_string(node);
 			msg += fmt::format(" = {}", node_to_string(node));
 			msg += print_args_to_string(args);
