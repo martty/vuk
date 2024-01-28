@@ -119,11 +119,8 @@ namespace vuk {
 	}
 
 	namespace errors {
-		/*
-		std::string format_source_location(PassInfo& pass_info) {
-			return fmt::format("{}({})", pass_info.pass->source.file_name(), pass_info.pass->source.line());
-		}
 
+		/*
 		RenderGraphException make_unattached_resource_exception(PassInfo& pass_info, Resource& resource) {
 			const char* type = resource.type == Resource::Type::eBuffer ? "buffer" : "image";
 

@@ -620,10 +620,11 @@ public:
 		return { make_ext_ref(rg, ref), ref };
 	}
 
-	[[nodiscard]] inline Value<Buffer> declare_buf(Name name, Buffer buf = {}) {
+	[[nodiscard]] inline Value<Buffer> declare_buf(Name name, Buffer buf = {}, std::source_location loc = std::source_location::current()) {
 		std::shared_ptr<RG> rg = std::make_shared<RG>();
 		Ref ref = rg->make_declare_buffer(buf);
 		rg->name_outputs(ref.node, { name.c_str() });
+		rg->set_source_location(ref.node, loc);
 		return { make_ext_ref(rg, ref), ref };
 	}
 
