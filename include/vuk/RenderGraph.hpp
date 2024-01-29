@@ -633,15 +633,15 @@ public:
 		return { make_ext_ref(rg, ref), ref };
 	}
 
+	// TODO: due to the pack, we can't do the source_location::current() trick
 	template<class T, class... Args>
-	[[nodiscard]] inline Value<T[]> declare_array(Name name, Value<T>&& arg, Args&&... args, std::source_location loc = std::source_location::current()) {
+	[[nodiscard]] inline Value<T[]> declare_array(Name name, Value<T>&& arg, Args&&... args) {
 		auto rg = arg.get_render_graph();
 		(rg->subgraphs.push_back(args.get_render_graph()), ...);
 		std::array refs = { arg.get_head(), args.get_head()... };
 		std::array defs = { arg.get_def(), args.get_def()... };
 		Ref ref = rg->make_declare_array(Type::stripped(refs[0].type()), refs, defs);
 		rg->name_outputs(ref.node, { name.c_str() });
-		rg->set_source_location(ref.node, loc);
 		return { make_ext_ref(rg, ref), ref };
 	}
 
@@ -704,6 +704,13 @@ public:
 
 		/// @brief Dump the pass dependency graph in graphviz format
 		std::string dump_graph();
+
+		template<class T>
+		T& get_value(Ref parm) {
+			return *reinterpret_cast<T*>(get_value(parm));
+		};
+
+		void* get_value(Ref parm);
 
 	private:
 		struct RGCImpl* impl;

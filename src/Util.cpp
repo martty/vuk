@@ -124,7 +124,8 @@ namespace vuk {
 			}
 			std::pair v = { &allocator, &*erg };
 			VUK_DO_OR_RETURN(execute_submit(allocator, std::span{ &v, 1 }));
-			to_acquire();
+			auto current_value = compiler.get_value(def);
+			to_acquire(current_value);
 			return { expected_value };
 		}
 	}

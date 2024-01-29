@@ -41,8 +41,7 @@ namespace vuk {
 			head->to_release(access, domain);
 		}
 
-		void to_acquire() {
-			auto current_value = get_constant_value(def.node);
+		void to_acquire(void* current_value) {
 			auto current_ty = def.type();
 			// new RG with ACQUIRE node
 			auto new_rg = std::make_shared<RG>();
@@ -82,7 +81,7 @@ namespace vuk {
 		}
 
 		T* operator->() noexcept {
-			return reinterpret_cast<T*>(get_constant_value(def.node));
+			return eval<T*>(def);
 		}
 
 		/// @brief Wait and retrieve the result of the Future on the host

@@ -1562,6 +1562,10 @@ namespace vuk {
 		return std::span(impl->chains);
 	}
 
+	void* Compiler::get_value(Ref parm) {
+		return impl->get_value(parm);
+	}
+
 	ImageUsageFlags Compiler::compute_usage(const ChainLink* head) {
 		return impl->compute_usage(head);
 	}
