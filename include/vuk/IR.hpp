@@ -343,21 +343,6 @@ namespace vuk {
 		return *reinterpret_cast<T*>(ref.node->constant.value);
 	}
 
-	inline void* get_constant_value(Node* node) {
-		if (node->kind == Node::CONSTRUCT) {
-			return node->construct.args[0].node->constant.value;
-		} else if (node->kind == Node::ACQUIRE_NEXT_IMAGE) {
-			Swapchain* swp = reinterpret_cast<Swapchain*>(get_constant_value(node->acquire_next_image.swapchain.node));
-			return &swp->images[0];
-		} else if (node->kind == Node::ACQUIRE) {
-			return node->acquire.arg.node->constant.value;
-		} else if (node->kind == Node::RELACQ) {
-			return get_constant_value(node->relacq.src.node);
-		} else {
-			assert(0);
-		}
-	}
-
 	struct CannotBeConstantEvaluated : Exception {
 		CannotBeConstantEvaluated(Ref ref) : ref(ref) {}
 
@@ -372,11 +357,20 @@ namespace vuk {
 	  requires(std::is_pointer_v<T>)
 	T eval(Ref ref) {
 		switch (ref.node->kind) {
+		case Node::CONSTANT: {
+			return static_cast<T>(ref.node->constant.value);
+		}
 		case Node::CONSTRUCT: {
-			return static_cast<T>(ref.node->construct.args[0].node->constant.value);
+			return eval<T>(ref.node->construct.args[0]);
+		}
+		case Node::ACQUIRE: {
+			return eval<T>(ref.node->acquire.arg);
+		}
+		case Node::RELACQ: {
+			return eval<T>(ref.node->relacq.src);
 		}
 		case Node::ACQUIRE_NEXT_IMAGE: {
-			Swapchain* swp = reinterpret_cast<Swapchain*>(get_constant_value(ref.node->acquire_next_image.swapchain.node));
+			Swapchain* swp = eval<Swapchain*>(ref.node->acquire_next_image.swapchain);
 			return reinterpret_cast<T>(&swp->images[0]);
 		}
 		default:
@@ -433,6 +427,20 @@ namespace vuk {
 				assert(0);
 			}
 		}
+			/*
+			      if (node->kind == Node::CONSTRUCT) {
+			  return node->construct.args[0].node->constant.value;
+			} else if (node->kind == Node::ACQUIRE_NEXT_IMAGE) {
+			  Swapchain* swp = reinterpret_cast<Swapchain*>(get_constant_value(node->acquire_next_image.swapchain.node));
+			  return &swp->images[0];
+			} else if (node->kind == Node::ACQUIRE) {
+			  return node->acquire.arg.node->constant.value;
+			} else if (node->kind == Node::RELACQ) {
+			  return get_constant_value(node->relacq.src.node);
+			} else {
+			  assert(0);
+			}
+			*/
 		default:
 			throw CannotBeConstantEvaluated(ref);
 		}

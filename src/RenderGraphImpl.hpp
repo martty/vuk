@@ -56,19 +56,13 @@ namespace vuk {
 		DomainFlagBits scheduled_domain;
 		Stream* scheduled_stream;
 
-		int32_t is_waited_on = 0;
-		size_t batch_index;
-		size_t command_buffer_index = 0;
-		int32_t render_pass_index = -1;
-		uint32_t subpass;
-
-		RelSpan<VkImageMemoryBarrier2KHR> pre_image_barriers, post_image_barriers;
-		RelSpan<VkMemoryBarrier2KHR> pre_memory_barriers, post_memory_barriers;
-		RelSpan<std::pair<DomainFlagBits, uint64_t>> relative_waits;
-		RelSpan<std::pair<DomainFlagBits, uint64_t>> absolute_waits;
-		RelSpan<int32_t> referenced_swapchains; // TODO: maybe not the best place for it
-
 		bool ready = false; // for DYNAMO
+	};
+
+	struct ExecutionInfo {
+		Stream* stream;
+		size_t naming_index;
+		std::span<void*> values;
 	};
 
 	struct RGCImpl {
@@ -88,7 +82,7 @@ namespace vuk {
 
 		DefUseMap res_to_links;
 		std::vector<Ref> pass_reads;
-		
+
 		std::shared_ptr<RG> cg_module;
 		std::unordered_map<uint32_t, Type*> type_map;
 		std::vector<std::shared_ptr<ExtRef>> refs;
@@ -104,6 +98,37 @@ namespace vuk {
 
 		std::vector<RenderPassInfo, short_alloc<RenderPassInfo, 64>> rpis;
 		std::span<ScheduledItem*> transfer_passes, compute_passes, graphics_passes;
+
+		std::unordered_map<Node*, ExecutionInfo> executed;
+
+		template<class T>
+		T& get_value(Ref parm) {
+			return *reinterpret_cast<T*>(get_value(parm));
+		};
+
+		void* get_value(Ref parm) {
+			if (parm.node->kind == Node::EXTRACT) {
+				auto& composite = parm.node->extract.composite;
+				auto index_v = get_value<uint64_t>(parm.node->extract.index);
+				void* composite_v = get_value(parm.node->extract.composite);
+				if (composite.type()->kind == Type::COMPOSITE_TY) {
+					auto offset = composite.type()->composite.offsets[index_v];
+					return reinterpret_cast<std::byte*>(composite_v) + offset;
+				} else if (composite.type()->kind == Type::ARRAY_TY) {
+					return reinterpret_cast<std::byte*>(composite_v) + parm.node->extract.composite.type()->array.stride * index_v;
+				}
+			} else if (parm.node->kind == Node::ACQUIRE_NEXT_IMAGE) {
+				Swapchain* swp = reinterpret_cast<Swapchain*>(get_value(parm.node->acquire_next_image.swapchain));
+				return &swp->images[swp->image_index];
+			} else {
+				auto it = executed.find(parm.node);
+				if (it != executed.end()) {
+					return it->second.values[parm.index];
+				} else {
+					return eval<void*>(parm);
+				}
+			}
+		}
 
 		Result<void> diagnose_unheaded_chains();
 		Result<void> build_nodes();

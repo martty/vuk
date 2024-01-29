@@ -737,17 +737,15 @@ namespace vuk {
 	};
 
 	enum class RW { eRead, eWrite };
-	struct ExecutionInfo {
-		Stream* stream;
-		size_t naming_index;
-	};
 
 	struct Scheduler {
-		Scheduler(Allocator all, std::vector<ScheduledItem>& scheduled_execables, DefUseMap& res_to_links, std::vector<Ref>& pass_reads) :
+		Scheduler(Allocator all, RGCImpl* impl) :
 		    allocator(all),
-		    scheduled_execables(scheduled_execables),
-		    res_to_links(res_to_links),
-		    pass_reads(pass_reads) {
+		    scheduled_execables(impl->scheduled_execables),
+		    res_to_links(impl->res_to_links),
+		    pass_reads(impl->pass_reads),
+		    executed(impl->executed),
+		    impl(impl) {
 			// these are the items that were determined to run
 			for (auto& i : scheduled_execables) {
 				scheduled.emplace(i.execable);
@@ -760,10 +758,12 @@ namespace vuk {
 		std::vector<Ref>& pass_reads;
 		std::vector<ScheduledItem>& scheduled_execables;
 
+		RGCImpl* impl;
+
 		std::deque<ScheduledItem> work_queue;
 
 		size_t naming_index_counter = 0;
-		std::unordered_map<Node*, ExecutionInfo> executed;
+		std::unordered_map<Node*, ExecutionInfo>& executed;
 		std::unordered_set<Node*> scheduled;
 
 		void schedule_new(Node* node) {
@@ -814,49 +814,42 @@ namespace vuk {
 			}
 		}
 
-		void done(Node* node, Stream* stream) {
+		template<class T>
+		  requires(!std::is_same_v<T, void*> && !std::is_same_v<T, std::span<void*>>)
+		void done(Node* node, Stream* stream, T value) {
 			auto counter = naming_index_counter;
 			naming_index_counter += node->type.size();
-			executed.emplace(node, ExecutionInfo{ stream, counter });
+			auto value_ptr = static_cast<void*>(new T{ value });
+			auto values = new void*[1];
+			values[0] = value_ptr;
+			executed.emplace(node, ExecutionInfo{ stream, counter, std::span{ values, 1 } });
+		}
+
+		void done(Node* node, Stream* stream, void* value_ptr) {
+			auto counter = naming_index_counter;
+			naming_index_counter += node->type.size();
+			auto values = new void*[1];
+			values[0] = value_ptr;
+			executed.emplace(node, ExecutionInfo{ stream, counter, std::span{ values, 1 } });
+		}
+
+		void done(Node* node, Stream* stream, std::span<void*> values) {
+			auto counter = naming_index_counter;
+			naming_index_counter += node->type.size();
+			auto v = new void*[values.size()];
+			std::copy(values.begin(), values.end(), v);
+			executed.emplace(node, ExecutionInfo{ stream, counter, std::span{ v, values.size() } });
 		}
 
 		template<class T>
 		T& get_value(Ref parm) {
-			auto& link = res_to_links[parm];
-			if (link.urdef.node->kind == Node::CONSTRUCT && parm.type()->kind == Type::ARRAY_TY) {
-				return reinterpret_cast<T&>(link.urdef.node->construct.args[0].node->constant.value);
-			} else {
-				return *reinterpret_cast<T*>(get_value(parm));
-			}
+			return *reinterpret_cast<T*>(get_value(parm));
 		};
 
 		void* get_value(Ref parm) {
-			auto& link = res_to_links[parm];
-			if (link.urdef.node->kind == Node::EXTRACT) {
-				auto array_def = res_to_links[link.urdef.node->extract.composite].urdef;
-				void* array_of_vs = get_constant_value(array_def.node);
-				auto index_v = constant<uint64_t>(link.urdef.node->extract.index);
-				return reinterpret_cast<std::byte*>(array_of_vs) + array_def.type()->array.stride * index_v;
-			} else if (link.urdef.node->kind == Node::ACQUIRE_NEXT_IMAGE) {
-				Swapchain* swp = reinterpret_cast<Swapchain*>(get_constant_value(link.urdef.node->acquire_next_image.swapchain.node));
-				return &swp->images[swp->image_index];
-			} else {
-				return get_constant_value(link.urdef.node);
-			}
+			auto v = impl->get_value(parm);
+			return v;
 		}
-
-		template<class T>
-		T& get_array_elem_value_arg(Ref parm, size_t index) {
-			auto& link = res_to_links[parm];
-			auto& arg = link.urdef.node->construct.args[index + 1];
-			return get_value<T>(arg);
-		};
-
-		template<class T>
-		T& get_array_elem_value(Ref parm, size_t index) {
-			auto& link = res_to_links[parm];
-			return get_value<T*>(parm)[index];
-		};
 
 		Type* base_type(Ref parm) {
 			return Type::stripped(parm.type());
@@ -1209,7 +1202,7 @@ namespace vuk {
 			item.scheduled_stream = recorder.stream_for_domain(item.scheduled_domain);
 		}
 
-		Scheduler sched(alloc, impl->scheduled_execables, impl->res_to_links, impl->pass_reads);
+		Scheduler sched(alloc, impl);
 
 		// DYNAMO
 		// loop through scheduled items
@@ -1308,7 +1301,32 @@ namespace vuk {
 			switch (node->kind) {
 			case Node::MATH_BINARY: {
 				if (sched.process(item)) {
-					sched.done(node, nullptr);
+					auto do_op = [&]<class T>(T, Node* node) -> T {
+						T& a = sched.get_value<T>(node->math_binary.a);
+						T& b = sched.get_value<T>(node->math_binary.b);
+						switch (node->math_binary.op) {
+						case Node::BinOp::MUL:
+							return a * b;
+						}
+						assert(0);
+					};
+					switch (node->type[0]->kind) {
+					case Type::INTEGER_TY: {
+						switch (node->type[0]->integer.width) {
+						case 32:
+							sched.done(node, nullptr, do_op(uint32_t{}, node));
+							break;
+						case 64:
+							sched.done(node, nullptr, do_op(uint64_t{}, node));
+							break;
+						default:
+							assert(0);
+						}
+						break;
+					}
+					default:
+						assert(0);
+					}
 				} else {
 					for (auto i = 0; i < node->fixed_node.arg_count; i++) {
 						sched.schedule_dependency(node->fixed_node.args[i], RW::eRead);
@@ -1347,6 +1365,7 @@ namespace vuk {
 							}
 							bound = **buf;
 						}
+						sched.done(node, host_stream, bound);
 					} else if (node->type[0] == impl->cg_module->builtin_image) {
 						auto& attachment = *reinterpret_cast<ImageAttachment*>(node->construct.args[0].node->constant.value);
 						// collapse inferencing
@@ -1387,12 +1406,14 @@ namespace vuk {
 							attachment.image = **img;
 							// ctx.set_name(attachment.image.image, bound.name.name);
 						}
+						sched.done(node, host_stream, attachment);
 					} else if (node->type[0] == impl->cg_module->builtin_swapchain) {
 #ifdef VUK_DUMP_EXEC
 						print_results(node);
 						fmt::print(" = construct<swapchain>\n");
 #endif
 						/* no-op */
+						sched.done(node, host_stream, sched.get_value(node->construct.args[0]));
 					} else if (node->type[0]->kind == Type::ARRAY_TY) {
 						for (size_t i = 1; i < node->construct.args.size(); i++) {
 							auto arg_ty = node->construct.args[i].type();
@@ -1409,6 +1430,8 @@ namespace vuk {
 						assert(elem_ty == impl->cg_module->builtin_buffer || elem_ty == impl->cg_module->builtin_image);
 						fmt::print(" = construct<{}[{}]> ", elem_ty == impl->cg_module->builtin_buffer ? "buffer" : "image", size);
 						print_args(node->construct.args.subspan(1));
+						fmt::print("\n");
+#endif
 						assert(node->construct.args[0].type()->kind == Type::MEMORY_TY);
 						if (elem_ty == impl->cg_module->builtin_buffer) {
 							auto arr_mem = new Buffer[size];
@@ -1419,6 +1442,7 @@ namespace vuk {
 								memcpy(&arr_mem[i], sched.get_value(elem), sizeof(Buffer));
 							}
 							node->construct.args[0].node->constant.value = arr_mem;
+							sched.done(node, host_stream, (void*)arr_mem);
 						} else if (elem_ty == impl->cg_module->builtin_image) {
 							auto arr_mem = new ImageAttachment[size];
 							for (auto i = 0; i < size; i++) {
@@ -1428,14 +1452,11 @@ namespace vuk {
 								memcpy(&arr_mem[i], sched.get_value(elem), sizeof(ImageAttachment));
 							}
 							node->construct.args[0].node->constant.value = arr_mem;
+							sched.done(node, host_stream, (void*)arr_mem);
 						}
-
-						fmt::print("\n");
-#endif
 					} else {
 						assert(0);
 					}
-					sched.done(node, host_stream); // declarations execute on the host
 				} else {
 					for (auto& parm : node->construct.args.subspan(1)) {
 						sched.schedule_dependency(parm, RW::eWrite);
@@ -1478,7 +1499,6 @@ namespace vuk {
 								}
 							}
 						}
-						auto value = sched.get_value(parm);
 						if (arg_ty->kind == Type::IMBUED_TY) {
 							auto access = arg_ty->imbued.access;
 							// Write and ReadWrite
@@ -1494,6 +1514,7 @@ namespace vuk {
 					auto vk_rec = dynamic_cast<VkQueueStream*>(dst_stream); // TODO: change this into dynamic dispatch on the Stream
 					assert(vk_rec);
 					// run the user cb!
+					std::vector<void*> opaque_rets;
 					if (node->call.fn.type()->kind == Type::OPAQUE_FN_TY) {
 						CommandBuffer cobuf(*this, ctx, alloc, vk_rec->cbuf);
 						if (vk_rec->rp.rpci.attachments.size() > 0) {
@@ -1503,7 +1524,6 @@ namespace vuk {
 
 						std::vector<void*> opaque_args;
 						std::vector<void*> opaque_meta;
-						std::vector<void*> opaque_rets;
 						for (size_t i = 0; i < node->call.args.size(); i++) {
 							auto& parm = node->call.args[i];
 							auto& link = impl->res_to_links[parm];
@@ -1529,7 +1549,7 @@ namespace vuk {
 					print_args(node->call.args);
 					fmt::print("\n");
 #endif
-					sched.done(node, dst_stream);
+					sched.done(node, dst_stream, std::span(opaque_rets));
 				} else { // execute deps
 					for (size_t i = 0; i < node->call.args.size(); i++) {
 						auto& arg_ty = node->call.fn.type()->opaque_fn.args[i];
@@ -1584,7 +1604,7 @@ namespace vuk {
 					fmt::print("\n");
 #endif
 
-					sched.done(node, nullptr);
+					sched.done(node, nullptr, sched.get_value(parm));
 				} else {
 					sched.schedule_dependency(node->relacq.src, RW::eWrite);
 				}
@@ -1612,7 +1632,7 @@ namespace vuk {
 #endif
 				}
 
-				sched.done(node, dst_stream);
+				sched.done(node, dst_stream, sched.get_value(first(node)));
 				break;
 			}
 			case Node::RELEASE:
@@ -1663,7 +1683,7 @@ namespace vuk {
 					src_stream->add_dependent_signal(acqrel);
 					src_stream->submit();
 					fmt::print("");
-					sched.done(node, src_stream);
+					sched.done(node, src_stream, sched.get_value(parm));
 				} else {
 					sched.schedule_dependency(node->release.src, RW::eWrite);
 				}
@@ -1687,7 +1707,7 @@ namespace vuk {
 					print_args(std::span{ &node->acquire_next_image.swapchain, 1 });
 					fmt::print("\n");
 #endif
-					sched.done(node, pe_stream);
+					sched.done(node, pe_stream, swp.images[swp.image_index]);
 				} else {
 					sched.schedule_dependency(node->acquire_next_image.swapchain, RW::eWrite);
 				}
@@ -1695,10 +1715,8 @@ namespace vuk {
 			}
 			case Node::EXTRACT:
 				if (sched.process(item)) {
-					// half sync
-					std::vector<Buffer*> bufs;
 					auto& link = sched.res_to_links[node->extract.composite];
-
+					// half sync
 					recorder.add_sync(sched.base_type(node->extract.composite),
 					                  sched.get_dependency_info(node->extract.composite, node->extract.composite.type(), RW::eWrite, nullptr),
 					                  sched.get_value(node->extract.composite));
@@ -1709,7 +1727,7 @@ namespace vuk {
 					fmt::print("[{}]", constant<uint64_t>(node->extract.index));
 					fmt::print("\n");
 #endif
-					sched.done(node, nullptr); // extract doesn't execute
+					sched.done(node, nullptr, sched.get_value(first(node))); // extract doesn't execute
 				} else {
 					sched.schedule_dependency(node->extract.composite, RW::eWrite);
 					sched.schedule_dependency(node->extract.index, RW::eRead);
