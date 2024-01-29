@@ -396,12 +396,21 @@ namespace vuk {
 		case Node::EXTRACT: {
 			auto composite = ref.node->extract.composite;
 			auto index = eval<uint64_t>(ref.node->extract.index);
-			if (composite.type()->kind == Type::COMPOSITE_TY) {
-				auto offset = composite.type()->composite.offsets[index];
-				return *reinterpret_cast<T*>(eval<unsigned char*>(composite) + offset);
-			} else if (composite.type()->kind == Type::ARRAY_TY) {
-				return eval<T*>(composite)[index];
+			if (composite.node->kind == Node::CONSTRUCT) {
+				return eval<T>(composite.node->construct.args[index + 1]);
+			} else if (composite.node->kind == Node::ACQUIRE_NEXT_IMAGE) {
+				auto swp = composite.node->acquire_next_image.swapchain;
+				if (swp.node->kind == Node::CONSTRUCT) {
+					auto arr = swp.node->construct.args[1]; // array of images
+					if (arr.node->kind == Node::CONSTRUCT) {
+						auto elem = arr.node->construct.args[1]; // first image
+						if (elem.node->kind == Node::CONSTRUCT) {
+							return eval<T>(elem.node->construct.args[index + 1]);
+						}
+					}
+				}
 			}
+			throw CannotBeConstantEvaluated(ref);
 		}
 		default:
 			throw CannotBeConstantEvaluated(ref);
@@ -473,12 +482,15 @@ namespace vuk {
 			                                    .size = sizeof(Buffer),
 			                                    .debug_info = new TypeDebugInfo{ "buffer" },
 			                                    .composite = { .types = { buffer_, 1 }, .offsets = { buffer_offsets, 1 }, .tag = 1 } });
-			auto swp_ = new Type* [0] {
+			auto arr_ty = emplace_type(
+			    Type{ .kind = Type::ARRAY_TY, .size = 16 * builtin_image->size, .array = { .T = builtin_image, .count = 16, .stride = builtin_image->size } });
+			auto swp_ = new Type* [1] {
+				arr_ty
 			};
 			builtin_swapchain = emplace_type(Type{ .kind = Type::COMPOSITE_TY,
 			                                       .size = sizeof(Swapchain),
 			                                       .debug_info = new TypeDebugInfo{ "swapchain" },
-			                                       .composite = { .types = { swp_, 0 }, .tag = 2 } });
+			                                       .composite = { .types = { swp_, 1 }, .tag = 2 } });
 		}
 
 		~RG() {}
@@ -653,11 +665,16 @@ namespace vuk {
 		}
 
 		Ref make_declare_swapchain(Swapchain& bundle) {
-			auto buf_ptr = new Swapchain(bundle);
-			auto args_ptr = new Ref[1];
+			auto swp_ptr = new Swapchain(bundle);
+			auto args_ptr = new Ref[2];
 			auto mem_ty = new Type*(emplace_type(Type{ .kind = Type::MEMORY_TY }));
-			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = buf_ptr } }));
-			return first(emplace_op(Node{ .kind = Node::CONSTRUCT, .type = std::span{ &builtin_swapchain, 1 }, .construct = { .args = std::span(args_ptr, 1) } }));
+			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = swp_ptr } }));
+			std::vector<Ref> imgs;
+			for (auto i = 0; i < bundle.images.size(); i++) {
+				imgs.push_back(make_declare_image(bundle.images[i]));
+			}
+			args_ptr[1] = make_declare_array(builtin_image, imgs, {});
+			return first(emplace_op(Node{ .kind = Node::CONSTRUCT, .type = std::span{ &builtin_swapchain, 1 }, .construct = { .args = std::span(args_ptr, 2) } }));
 		}
 
 		Ref make_extract(Ref composite, Ref index) {
