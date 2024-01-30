@@ -149,9 +149,8 @@ namespace {
 				          blit.dstOffsets[0] = vuk::Offset3D{ static_cast<int>(sx * tile_x_size), static_cast<int>(sy * tile_y_size), 0 };
 				          blit.dstOffsets[1] = vuk::Offset3D{ static_cast<int>((sx + 1) * tile_x_size), static_cast<int>((sy + 1) * tile_y_size), 1 };
 				          command_buffer.blit_image(singlesampled, result, blit, vuk::Filter::eLinear);
-
-						  return result;
 			          }
+			          return result;
 		          });
 
 		      time += ImGui::GetIO().DeltaTime;
