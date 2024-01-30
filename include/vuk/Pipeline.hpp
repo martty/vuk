@@ -32,7 +32,7 @@ namespace vuk {
 		using type = vuk::PipelineLayoutCreateInfo;
 	};
 
-	enum class HitGroupType { 
+	enum class HitGroupType {
 		eTriangles = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR,
 		eProcedural = VK_RAY_TRACING_SHADER_GROUP_TYPE_PROCEDURAL_HIT_GROUP_KHR
 	};
@@ -99,6 +99,13 @@ namespace vuk {
 #if VUK_USE_DXC
 		void add_hlsl(std::string_view source, std::string filename, HlslShaderStage stage = HlslShaderStage::eInferred, std::string entry_point = "main") {
 			shaders.emplace_back(ShaderSource::hlsl(source, compile_options, stage, std::move(entry_point)));
+			shader_paths.emplace_back(std::move(filename));
+		}
+#endif
+
+#if VUK_USE_VCC
+		void add_c(std::string_view source, std::string filename, HlslShaderStage stage = HlslShaderStage::eInferred, std::string entry_point = "main") {
+			shaders.emplace_back(ShaderSource::c(source, compile_options, stage, std::move(entry_point)));
 			shader_paths.emplace_back(std::move(filename));
 		}
 #endif

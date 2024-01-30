@@ -17,6 +17,7 @@ option(VUK_LINK_TO_LOADER "Link \"statically\" to the loader" ON)
 option(VUK_USE_VULKAN_SDK "Use the Vulkan SDK to locate headers and libraries" ON)
 option(VUK_USE_SHADERC "Link in shaderc for runtime compilation of GLSL shaders" ON)
 option(VUK_USE_DXC "Link in DirectXShaderCompiler for runtime compilation of HLSL shaders" OFF)
+option(VUK_USE_VCC "Use Vcc for runtime compilation of C shaders (experimental)" OFF)
 option(VUK_BUILD_TESTS "Build tests" OFF)
 option(VUK_FAIL_FAST "Trigger an assert upon encountering an error instead of propagating" OFF)
 option(VUK_DEBUG_ALLOCATIONS "Dump VMA allocations and give them debug names" OFF)
@@ -74,10 +75,23 @@ endif()
 if (VUK_USE_DXC)
 	target_sources(vuk PRIVATE src/shader_compilers/dxc.cpp)
 endif()
+if (VUK_USE_VCC)
+	FetchContent_Declare(
+	  shady
+	  GIT_REPOSITORY https://github.com/martty/shady
+	  GIT_TAG ci-win
+	)
+	FetchContent_MakeAvailable(shady)
+
+	target_sources(vuk PRIVATE src/shader_compilers/vcc.cpp)
+	target_link_libraries(vuk PUBLIC shady driver)
+	target_compile_definitions(vuk PRIVATE "-DVUK_VCC_INCLUDE_DIR=\"${shady_BINARY_DIR}/share/vcc/include/\"")
+endif()
 
 target_compile_definitions(vuk PUBLIC 
 								VUK_USE_SHADERC=$<BOOL:${VUK_USE_SHADERC}>
 								VUK_USE_DXC=$<BOOL:${VUK_USE_DXC}>
+								VUK_USE_VCC=$<BOOL:${VUK_USE_VCC}>
 								VUK_BUILD_TESTS=$<BOOL:${VUK_BUILD_TESTS}>
 								VUK_FAIL_FAST=$<BOOL:${VUK_FAIL_FAST}>
 								VUK_DEBUG_ALLOCATIONS=$<BOOL:${VUK_DEBUG_ALLOCATIONS}>

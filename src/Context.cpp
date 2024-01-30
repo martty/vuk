@@ -71,6 +71,7 @@ namespace {
 namespace vuk {
 	Result<std::vector<uint32_t>> compile_glsl(const create_info_t<ShaderModule>& cinfo, uint32_t shader_compiler_target_version);
 	Result<std::vector<uint32_t>> compile_hlsl(const create_info_t<ShaderModule>& cinfo, uint32_t shader_compiler_target_version);
+	Result<std::vector<uint32_t>> compile_c(const create_info_t<ShaderModule>& cinfo, uint32_t shader_compiler_target_version);
 }
 
 namespace vuk {
@@ -346,6 +347,14 @@ namespace vuk {
 		case ShaderSourceLanguage::eHlsl: {
 #if VUK_USE_DXC
 			spirv = *compile_hlsl(cinfo, shader_compiler_target_version);
+			spirv_ptr = spirv.data();
+			size = spirv.size();
+#endif
+			break;
+		}
+		case ShaderSourceLanguage::eC: {
+#if VUK_USE_VCC
+			spirv = *compile_c(cinfo, shader_compiler_target_version);
 			spirv_ptr = spirv.data();
 			size = spirv.size();
 #endif
