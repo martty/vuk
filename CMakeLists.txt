@@ -68,6 +68,13 @@ else()
 	endif()
 endif()
 
+if (VUK_USE_SHADERC)
+	target_sources(vuk PRIVATE src/shader_compilers/shaderc.cpp)
+endif()
+if (VUK_USE_DXC)
+	target_sources(vuk PRIVATE src/shader_compilers/dxc.cpp)
+endif()
+
 target_compile_definitions(vuk PUBLIC 
 								VUK_USE_SHADERC=$<BOOL:${VUK_USE_SHADERC}>
 								VUK_USE_DXC=$<BOOL:${VUK_USE_DXC}>
