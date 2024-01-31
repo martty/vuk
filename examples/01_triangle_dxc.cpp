@@ -12,7 +12,7 @@
 namespace {
 	vuk::Example x{
 		// The display name of this example
-		.name = "01_triangle_vcc",
+		.name = "01_triangle_dxc",
 		// Setup code, ran once in the beginning
 		.setup =
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator) {
@@ -20,7 +20,7 @@ namespace {
 		      // In this case, we only need the shaders, we don't care about the rest of the state
 		      vuk::PipelineBaseCreateInfo pci;
 		      pci.add_glsl(util::read_entire_file((root / "examples/triangle.vert").generic_string()), (root / "examples/triangle.vert").generic_string());
-		      pci.add_c(util::read_entire_file((root / "examples/triangle.frag.c").generic_string()), (root / "examples/triangle.frag.c").generic_string());
+		      pci.add_hlsl(util::read_entire_file((root / "examples/triangle.frag.hlsl").generic_string()), (root / "examples/triangle.frag.hlsl").generic_string());
 		      // The pipeline is stored with a user give name for simplicity
 		      runner.context->create_named_pipeline("triangle", pci);
 		    },

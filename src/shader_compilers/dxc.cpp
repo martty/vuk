@@ -11,8 +11,13 @@
 #include <dxc/dxcapi.h>
 #define DXC_HR(hr, msg)                                                                                                                                        \
 	if (FAILED(hr)) {                                                                                                                                            \
-		throw ShaderCompilationException{ msg };                                                                                                                   \
+		return { expected_error, ShaderCompilationException{ msg } };                                                                                              \
 	}
+
+#include <filesystem>
+#include <fmt/format.h>
+#include <locale>
+#include <unordered_map>
 
 namespace {
 	std::wstring convert_to_wstring(const std::string& string) {
@@ -20,10 +25,10 @@ namespace {
 		std::use_facet<std::ctype<wchar_t>>(std::locale()).widen(string.data(), string.data() + string.size(), buffer.data());
 		return { buffer.data(), buffer.size() };
 	}
-}
+} // namespace
 
 namespace vuk {
-	Result<std::vector<uint32_t>> compile_hlsl(const ShaderModuleCreatInfo& cinfo, uint32_t shader_compiler_target_version) {
+	Result<std::vector<uint32_t>> compile_hlsl(const ShaderModuleCreateInfo& cinfo, uint32_t shader_compiler_target_version) {
 		std::vector<LPCWSTR> arguments;
 		arguments.push_back(L"-E");
 
@@ -112,7 +117,7 @@ namespace vuk {
 		DXC_HR(result->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&errors), nullptr), "Failed to get DXC compile errors");
 		if (errors && errors->GetStringLength() > 0) {
 			std::string message = errors->GetStringPointer();
-			throw ShaderCompilationException{ message };
+			return { expected_error, ShaderCompilationException{ message } };
 		}
 
 		CComPtr<IDxcBlob> output = nullptr;
@@ -122,6 +127,6 @@ namespace vuk {
 		const uint32_t* begin = (const uint32_t*)output->GetBufferPointer();
 		const uint32_t* end = begin + (output->GetBufferSize() / 4);
 
-		return std::vector<uint32_t>{ begin, end };
+		return { expected_value, std::vector<uint32_t>{ begin, end } };
 	}
 } // namespace vuk

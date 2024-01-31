@@ -24,7 +24,7 @@
         },
         {
           "name": "VUK_USE_DXC",
-          "value": "False",
+          "value": "True",
           "type": "BOOL"
         },
         {
