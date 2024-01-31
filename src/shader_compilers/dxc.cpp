@@ -46,12 +46,11 @@ namespace vuk {
 			arguments.push_back(def_ws.emplace_back(convert_to_wstring(def)).c_str());
 		}
 
-		// current valid options in dxc are 1.0 and 1.1
 		static const std::unordered_map<uint32_t, const wchar_t*> target_version = {
 			{ VK_API_VERSION_1_0, L"-fspv-target-env=vulkan1.0" },
 			{ VK_API_VERSION_1_1, L"-fspv-target-env=vulkan1.1" },
-			{ VK_API_VERSION_1_2, L"-fspv-target-env=vulkan1.1" },
-			{ VK_API_VERSION_1_3, L"-fspv-target-env=vulkan1.1" },
+			{ VK_API_VERSION_1_2, L"-fspv-target-env=vulkan1.2" },
+			{ VK_API_VERSION_1_3, L"-fspv-target-env=vulkan1.3" },
 		};
 
 		arguments.push_back(target_version.at(shader_compiler_target_version));
