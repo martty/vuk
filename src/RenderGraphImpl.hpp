@@ -85,7 +85,7 @@ namespace vuk {
 
 		std::shared_ptr<RG> cg_module;
 		std::unordered_map<uint32_t, Type*> type_map;
-		std::vector<std::shared_ptr<ExtRef>> refs;
+		std::vector<std::shared_ptr<ExtNode>> refs;
 		std::vector<Node*> nodes;
 		std::vector<ChainLink*> chains;
 		std::vector<ChainLink*> child_chains;
@@ -128,6 +128,12 @@ namespace vuk {
 					return eval<void*>(parm);
 				}
 			}
+		}
+
+		std::span<void*> get_values(Node* node) {
+			auto it = executed.find(node);
+			assert(it != executed.end());
+			return it->second.values;
 		}
 
 		Result<void> diagnose_unheaded_chains();

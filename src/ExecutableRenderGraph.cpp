@@ -851,6 +851,11 @@ namespace vuk {
 			return v;
 		}
 
+		std::span<void*> get_values(Node* node) {
+			auto v = impl->get_values(node);
+			return v;
+		}
+
 		Type* base_type(Ref parm) {
 			return Type::stripped(parm.type());
 		}
@@ -1573,21 +1578,25 @@ namespace vuk {
 					auto acqrel = node->relacq.rel_acq;
 					Stream* dst_stream = item.scheduled_stream;
 					// if acq is nullptr, then this degenerates to a NOP, sync and skip
-					auto parm = node->relacq.src;
-					auto arg_ty = node->type[0];
-					auto di = sched.get_dependency_info(parm, arg_ty, RW::eWrite, dst_stream);
-					di.src_use.stream = di.dst_use.stream; // TODO: not sure this is valid, but we can't handle split
-					di.dst_use.stream = nullptr;
-					recorder.add_sync(sched.base_type(parm), di, sched.get_value(parm));
+					for (size_t i = 0; i < node->relacq.src.size(); i++) {
+						auto parm = node->relacq.src[i];
+						auto arg_ty = node->type[i];
+						auto di = sched.get_dependency_info(parm, arg_ty, RW::eWrite, dst_stream);
+						di.src_use.stream = di.dst_use.stream; // TODO: not sure this is valid, but we can't handle split
+						di.dst_use.stream = nullptr;
+						recorder.add_sync(sched.base_type(parm), di, sched.get_value(parm));
+						acqrel->last_use.push_back(di.src_use);
+						if (i == 0) {
+							di.src_use.stream->add_dependent_signal(acqrel);
+						}
+					}
 					if (!acqrel) { // (we should've handled this before this moment)
 						fmt::print("???");
 						assert(false);
 					} else {
 						switch (acqrel->status) {
 						case Signal::Status::eDisarmed: // means we have to signal this
-							acqrel->last_use = di.src_use;
-							node->relacq.value = sched.get_value(parm);
-							di.src_use.stream->add_dependent_signal(acqrel);
+							node->relacq.values = sched.get_values(node->relacq.src[0].node);
 							break;
 						case Signal::Status::eSynchronizable: // means this is an acq instead (we should've handled this before this moment)
 						case Signal::Status::eHostAvailable:
@@ -1596,17 +1605,18 @@ namespace vuk {
 							break;
 						}
 					}
-
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
 					fmt::print(" <- ");
-					print_args(std::span{ &node->relacq.src, 1 });
+					print_args(node->relacq.src);
 					fmt::print("\n");
 #endif
 
-					sched.done(node, nullptr, sched.get_value(parm));
+					sched.done(node, /* sched.executed.at(node->relacq.src[0].node).stream*/ nullptr, sched.get_values(node->relacq.src[0].node));
 				} else {
-					sched.schedule_dependency(node->relacq.src, RW::eWrite);
+					for (size_t i = 0; i < node->relacq.src.size(); i++) {
+						sched.schedule_dependency(node->relacq.src[i], RW::eWrite);
+					}
 				}
 				break;
 			}
@@ -1616,7 +1626,7 @@ namespace vuk {
 				Stream* dst_stream = item.scheduled_stream;
 
 				Scheduler::DependencyInfo di;
-				di.src_use = { acq->last_use, src_stream };
+				di.src_use = { acq->last_use[node->acquire.index], src_stream };
 				di.dst_use = { to_use(Access::eNone), dst_stream };
 				recorder.add_sync(node->type[0], di, sched.get_value(first(node)));
 
@@ -1639,7 +1649,7 @@ namespace vuk {
 				if (sched.process(item)) {
 					// release is to execute: we need to flush current queue -> end current batch and add signal
 					auto parm = node->release.src;
-					auto src_stream = sched.executed.at(parm.node).stream;
+					auto src_stream = item.scheduled_stream;
 					auto& link = impl->res_to_links[parm];
 					DomainFlagBits src_domain = src_stream->domain;
 					Stream* dst_stream;
@@ -1669,7 +1679,7 @@ namespace vuk {
 					fmt::print("\n");
 #endif
 					auto& acqrel = node->release.release;
-					acqrel->last_use = di.src_use;
+					acqrel->last_use.push_back(di.src_use);
 					if (src_domain == DomainFlagBits::eHost) {
 						acqrel->status = Signal::Status::eHostAvailable;
 					}

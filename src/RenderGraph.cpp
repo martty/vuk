@@ -63,7 +63,7 @@ namespace vuk {
 
 		std::vector<Node*> work_queue;
 		for (auto& ref : refs) {
-			work_queue.push_back(ref->get_head().node);
+			work_queue.push_back(ref->get_node());
 		}
 
 		type_map[Type::hash(cg_module->builtin_buffer)] = cg_module->builtin_buffer;
@@ -145,18 +145,22 @@ namespace vuk {
 			switch (node->kind) {
 			case Node::RELACQ:
 				if (node->relacq.rel_acq == nullptr) {
-					auto needle = first(node);
-					auto replace_with = node->relacq.src;
+					for (size_t i = 0; i < node->relacq.src.size(); i++) {
+						auto needle = Ref{ node, i };
+						auto replace_with = node->relacq.src[i];
 
-					replace_refs(needle, replace_with);
+						replace_refs(needle, replace_with);
+					}
 				} else {
 					switch (node->relacq.rel_acq->status) {
 					case Signal::Status::eDisarmed: // means we have to signal this, keep
 						break;
 					case Signal::Status::eSynchronizable: // means this is an acq instead
 					case Signal::Status::eHostAvailable:
-						auto new_ref = cg_module->make_acquire(node->type[0], node->relacq.rel_acq, node->relacq.value);
-						replace_refs(first(node), new_ref);
+						for (size_t i = 0; i < node->relacq.src.size(); i++) {
+							auto new_ref = cg_module->make_acquire(node->type[i], node->relacq.rel_acq, i, node->relacq.values[i]);
+							replace_refs(Ref{ node, i }, new_ref);
+						}
 						break;
 					}
 				}
@@ -191,10 +195,12 @@ namespace vuk {
 				res_to_links[first(node)].type = first(node).type();
 				break;
 			case Node::RELACQ: // ~~ write joiner
-				res_to_links[node->relacq.src].undef = { node, 0 };
-				res_to_links[{ node, 0 }].def = { node, 0 };
-				res_to_links[node->relacq.src].next = &res_to_links[{ node, 0 }];
-				res_to_links[{ node, 0 }].prev = &res_to_links[node->relacq.src];
+				for (size_t i = 0; i < node->relacq.src.size(); i++) {
+					res_to_links[node->relacq.src[i]].undef = { node, i };
+					res_to_links[{ node, i }].def = { node, i };
+					res_to_links[node->relacq.src[i]].next = &res_to_links[{ node, i }];
+					res_to_links[{ node, i }].prev = &res_to_links[node->relacq.src[i]];
+				}
 				break;
 			case Node::ACQUIRE:
 				res_to_links[first(node)].def = first(node);
@@ -838,16 +844,16 @@ namespace vuk {
 			                        impl->partitioned_execables.size() - impl->transfer_passes.size() - impl->compute_passes.size() };
 	}
 
-	Result<void> Compiler::compile(std::span<std::shared_ptr<ExtRef>> refs, const RenderGraphCompileOptions& compile_options) {
+	Result<void> Compiler::compile(std::span<std::shared_ptr<ExtNode>> nodes, const RenderGraphCompileOptions& compile_options) {
 		auto arena = impl->arena_.release();
 		delete impl;
 		arena->reset();
 		impl = new RGCImpl(arena);
 		impl->callbacks = compile_options.callbacks;
 
-		impl->cg_module = refs[0]->module;
+		impl->cg_module = nodes[0]->module;
 
-		impl->refs.assign(refs.begin(), refs.end());
+		impl->refs.assign(nodes.begin(), nodes.end());
 
 		// TODO:
 		// impl->merge_diverge_passes(impl->computed_passes);
@@ -1541,8 +1547,8 @@ namespace vuk {
 	  return { expected_value };
 	}*/
 
-	Result<ExecutableRenderGraph> Compiler::link(std::span<std::shared_ptr<ExtRef>> refs, const RenderGraphCompileOptions& compile_options) {
-		VUK_DO_OR_RETURN(compile(refs, compile_options));
+	Result<ExecutableRenderGraph> Compiler::link(std::span<std::shared_ptr<ExtNode>> nodes, const RenderGraphCompileOptions& compile_options) {
+		VUK_DO_OR_RETURN(compile(nodes, compile_options));
 
 		/* VUK_DO_OR_RETURN(impl->generate_barriers_and_waits());
 

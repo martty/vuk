@@ -197,11 +197,11 @@ if(VUK_BUILD_TESTS)
 
 	include(doctest_force_link_static_lib_in_target) # until we can use cmake 3.24
 	add_executable(vuk-tests src/tests/Test.cpp 
-					src/tests/commands.cpp 
-					src/tests/renderpass.cpp 
-					src/tests/arrays.cpp
-					src/tests/semantics.cpp
-					src/tests/rg_errors.cpp
+					src/tests/01_semantics.cpp
+					src/tests/02_rg_errors.cpp
+					src/tests/03_commands.cpp
+					src/tests/04_arrays.cpp
+					src/tests/05_renderpass.cpp 
 	)
 	#target_compile_features(vuk-tests PRIVATE cxx_std_17)
 	target_include_directories(vuk-tests PRIVATE ext/renderdoc)

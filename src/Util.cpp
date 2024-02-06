@@ -104,21 +104,18 @@ namespace vuk {
 	}
 
 	Result<void> UntypedValue::submit(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options) {
-		if (head->acqrel->status == Signal::Status::eDisarmed && head->get_head().node->kind == Node::RELACQ) { // relacq -> release if unsubmitted
-			head->to_release();
-		} else if (head->acqrel->status != Signal::Status::eDisarmed &&
-		           head->get_head().node->kind != Node::RELEASE) { // if submitted, we no longer allow relacq->release
-			return { expected_error, RenderGraphException{} };
+		if (node->acqrel->status == Signal::Status::eDisarmed && node->get_node()->kind == Node::RELACQ) { // relacq -> release if unsubmitted
+			release();
 		}
 
-		auto& acqrel = head->acqrel;
-		if (acqrel->status == Signal::Status::eDisarmed && !head->module) {
-			return { expected_error, RenderGraphException{} };
+		auto& acqrel = node->acqrel;
+		if (acqrel->status == Signal::Status::eDisarmed && !node->module) {
+			return { expected_error, RenderGraphException{ "Tried to submit without a module" } };
 		} else if (acqrel->status == Signal::Status::eHostAvailable || acqrel->status == Signal::Status::eSynchronizable) {
 			return { expected_value }; // nothing to do
 		} else {
-			acqrel->status = Signal::Status::eSynchronizable;
-			auto erg = compiler.link(std::span{ &head, 1 }, options);
+			//acqrel->status = Signal::Status::eSynchronizable;
+			auto erg = compiler.link(std::span{ &node, 1 }, options);
 			if (!erg) {
 				return erg;
 			}

@@ -30,7 +30,7 @@ namespace vuk {
 	};
 
 	struct AcquireRelease : Signal {
-		ResourceUse last_use; // last access performed on resource before signalling
+		std::vector<ResourceUse> last_use; // last access performed on resource before signalling
 	};
 
 	struct TypeDebugInfo {
@@ -263,6 +263,7 @@ namespace vuk {
 			struct : Fixed<1> {
 				Ref arg;
 				AcquireRelease* acquire;
+				size_t index;
 			} acquire;
 			struct : Fixed<1> {
 				Ref src;
@@ -270,10 +271,10 @@ namespace vuk {
 				Access dst_access;
 				DomainFlagBits dst_domain;
 			} release;
-			struct : Fixed<1> {
-				Ref src;
+			struct : Variable {
+				std::span<Ref> src;
 				AcquireRelease* rel_acq;
-				void* value;
+				std::span<void*> values;
 			} relacq;
 			struct : Fixed<1> {
 				Ref swapchain;
@@ -367,7 +368,7 @@ namespace vuk {
 			return eval<T>(ref.node->acquire.arg);
 		}
 		case Node::RELACQ: {
-			return eval<T>(ref.node->relacq.src);
+			return eval<T>(ref.node->relacq.src[ref.index]);
 		}
 		case Node::ACQUIRE_NEXT_IMAGE: {
 			Swapchain* swp = eval<Swapchain*>(ref.node->acquire_next_image.swapchain);
@@ -746,19 +747,26 @@ namespace vuk {
 			return emplace_op(Node{ .kind = Node::RELEASE, .release = { .src = src, .release = acq_rel, .dst_access = dst_access, .dst_domain = dst_domain } });
 		}
 
-		Ref make_relacq(Ref src, AcquireRelease* acq_rel) {
-			auto ty = new Type*(Type::stripped(src.type()));
-			return first(emplace_op(Node{ .kind = Node::RELACQ, .type = std::span{ ty, 1 }, .relacq = { .src = src, .rel_acq = acq_rel } }));
+		Node* make_relacq(Node* src, AcquireRelease* acq_rel) {
+			Ref* args_ptr = new Ref[src->type.size()];
+			auto tys = new Type*[src->type.size()];
+			for (size_t i = 0; i < src->type.size(); i++) {
+				args_ptr[i] = Ref{ src, i };
+				tys[i] = Type::stripped(src->type[i]);
+			}
+			return emplace_op(Node{
+			    .kind = Node::RELACQ, .type = std::span{ tys, src->type.size() }, .relacq = { .src = std::span{ args_ptr, src->type.size() }, .rel_acq = acq_rel } });
 		}
 
-		Ref make_acquire(Type* type, AcquireRelease* acq_rel, void* value) {
+		Ref make_acquire(Type* type, AcquireRelease* acq_rel, size_t index, void* value) {
 			auto ty = new Type*(emplace_type(*type));
 			auto mem_ty = new Type*(emplace_type(Type{ .kind = Type::MEMORY_TY }));
 			return first(emplace_op(
 			    Node{ .kind = Node::ACQUIRE,
 			          .type = std::span{ ty, 1 },
 			          .acquire = { .arg = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = value } })),
-			                       .acquire = acq_rel } }));
+			                       .acquire = acq_rel,
+			                       .index = index } }));
 		}
 
 		// MATH
@@ -770,36 +778,48 @@ namespace vuk {
 		}
 	};
 
-	struct ExtRef {
-		ExtRef(std::shared_ptr<RG> module, Ref head) : module(std::move(module)) {
-			acqrel = std::make_unique<AcquireRelease>();
-			this->head = this->module->make_relacq(head, acqrel.get());
-		}
-
-		~ExtRef() {
-			if (module && head.node->kind == Node::RELACQ) {
-				head.node->relacq.rel_acq = nullptr;
+	struct ExtNode {
+		ExtNode(std::shared_ptr<RG> module, Node* node) : module(std::move(module)) {
+			if (node->kind != Node::RELEASE) {
+				owned_acqrel = std::make_unique<AcquireRelease>();
+				acqrel = owned_acqrel.get();
+				this->node = this->module->make_relacq(node, acqrel);
+			} else {
+				acqrel = node->release.release;
+				this->node = node;
 			}
 		}
 
-		ExtRef(ExtRef&& o) = default;
-
-		Ref get_head() {
-			assert(head.node->kind == Node::RELACQ || head.node->kind == Node::RELEASE);
-			return head;
+		~ExtNode() {
+			if (module && node->kind == Node::RELACQ) {
+				node->relacq.rel_acq = nullptr;
+			}
 		}
 
-		void to_release(Access access = Access::eNone, DomainFlagBits domain = DomainFlagBits::eAny) noexcept {
-			assert(head.node->kind == Node::RELACQ);
-			head.node->kind = Node::RELEASE;
-			head.node->release = { .src = head.node->relacq.src, .release = acqrel.get(), .dst_access = access, .dst_domain = domain };
-			head.node->type = std::span<Type*>();
+		ExtNode(ExtNode&& o) = default;
+
+		Node* get_node() {
+			assert(node->kind == Node::RELACQ || node->kind == Node::RELEASE);
+			return node;
+		}
+
+		Node* make_release(size_t index, Access access = Access::eNone, DomainFlagBits domain = DomainFlagBits::eAny) noexcept {
+			assert(node->kind == Node::RELACQ);
+			return this->module->make_release(Ref{ node, index }, acqrel, access, domain);
 		}
 
 		std::shared_ptr<RG> module;
-		std::unique_ptr<AcquireRelease> acqrel;
+		AcquireRelease* acqrel;
+		std::unique_ptr<AcquireRelease> owned_acqrel;
 
 	private:
-		Ref head;
+		Node* node;
+	};
+
+	struct ExtRef {
+		ExtRef(std::shared_ptr<ExtNode> node, Ref ref) : node(node), index(ref.index) {}
+
+		std::shared_ptr<ExtNode> node;
+		size_t index;
 	};
 } // namespace vuk

@@ -65,6 +65,26 @@ TEST_CASE("computation is never duplicated 2") {
 	CHECK(trace == "a b d");
 }
 
+
+TEST_CASE("computation is never duplicated 3") {
+	std::string trace = "";
+
+	auto a = make_unary_computation("a", trace)(declare_buf("_a", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
+	auto b = make_unary_computation("b", trace)(declare_buf("_b", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
+
+	auto [ap, bp] = make_pass("d", [=, &trace](CommandBuffer& cbuf, VUK_BA(Access::eTransferWrite) a, VUK_BA(Access::eTransferWrite) b) {
+		trace += "d";
+		trace += " ";
+		return std::make_tuple(a, b);
+	})(a, b);
+
+	ap.submit(*test_context.allocator, test_context.compiler);
+	bp.submit(*test_context.allocator, test_context.compiler);
+	trace = trace.substr(0, trace.size() - 1);
+	CHECK(trace == "a b d");
+}
+
+
 TEST_CASE("not moving Values will emit relacqs") {
 	std::string trace = "";
 
@@ -256,6 +276,39 @@ TEST_CASE("multi-queue buffers") {
 			write(read(std::move(written))).wait(*test_context.allocator, test_context.compiler);
 			CHECK(execution == "wrw");
 			execution = "";
+		}
+	}
+}
+
+TEST_CASE("multi return pass") {
+	{
+		auto buf0 = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+		auto buf1 = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+		auto buf2 = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+
+		auto fills = make_pass(
+		    "fills", [](CommandBuffer& cbuf, VUK_BA(Access::eTransferWrite) dst0, VUK_BA(Access::eTransferWrite) dst1, VUK_BA(Access::eTransferWrite) dst2) {
+			    cbuf.fill_buffer(dst0, 0xfc);
+			    cbuf.fill_buffer(dst1, 0xfd);
+			    cbuf.fill_buffer(dst2, 0xfe);
+			    return std::tuple{ dst0, dst1, dst2 };
+		    });
+
+		auto [buf0p, buf1p, buf2p] = fills(declare_buf("src0", **buf0), declare_buf("src1", **buf1), declare_buf("src2", **buf2));
+		{
+			auto data = { 0xfcu, 0xfcu, 0xfcu, 0xfcu };
+			auto res = download_buffer(buf0p).get(*test_context.allocator, test_context.compiler);
+			CHECK(std::span((uint32_t*)res->mapped_ptr, 4) == std::span(data));
+		}
+		{
+			auto data = { 0xfdu, 0xfdu, 0xfdu, 0xfdu };
+			auto res = download_buffer(buf1p).get(*test_context.allocator, test_context.compiler);
+			CHECK(std::span((uint32_t*)res->mapped_ptr, 4) == std::span(data));
+		}
+		{
+			auto data = { 0xfeu, 0xfeu, 0xfeu, 0xfeu };
+			auto res = download_buffer(buf2p).get(*test_context.allocator, test_context.compiler);
+			CHECK(std::span((uint32_t*)res->mapped_ptr, 4) == std::span(data));
 		}
 	}
 }
