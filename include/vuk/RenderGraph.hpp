@@ -516,10 +516,11 @@ public:
 	struct is_tuple<std::tuple<T...>> : std::true_type {};
 
 	template<typename... T>
-	static auto make_ret(std::shared_ptr<RG> rg, Node* node, const std::tuple<T...>& us, std::vector<std::shared_ptr<ExtRef>>& deps) {
+	static auto make_ret(std::shared_ptr<RG> rg, Node* node, const std::tuple<T...>& us, std::vector<std::shared_ptr<ExtNode>>& deps) {
+		auto extnode = std::make_shared<ExtNode>(ExtNode(rg, node));
 		if constexpr (sizeof...(T) > 0) {
 			size_t i = 0;
-			return std::tuple{ Value<typename T::type>{ std::make_shared<ExtRef>(ExtRef(rg, Ref{ node, sizeof...(T) - (++i) })), std::get<T>(us).def, deps }... };
+			return std::tuple{ Value<typename T::type>{ ExtRef{ extnode, Ref{ extnode->get_node(), sizeof...(T) - (++i) } }, std::get<T>(us).def, deps }... };
 		}
 	}
 
@@ -582,23 +583,23 @@ public:
 				node->scheduling_info = new SchedulingInfo(scheduling_info);
 				rg.set_source_location(node, loc);
 
-				std::vector<std::shared_ptr<ExtRef>> dependent_refs;
-				[&dependent_refs](auto& first, auto&... rest) {
+				std::vector<std::shared_ptr<ExtNode>> dependent_nodes;
+				[&dependent_nodes](auto& first, auto&... rest) {
 					(first.get_render_graph()->subgraphs.push_back(rest.get_render_graph()), ...);
-					dependent_refs.insert(dependent_refs.end(), std::move(first.deps).begin(), std::move(first.deps).end());
-					(dependent_refs.insert(dependent_refs.end(), std::move(rest.deps).begin(), std::move(rest.deps).end()), ...);
-					dependent_refs.push_back(std::move(first.head));
-					(dependent_refs.push_back(std::move(rest.head)), ...);
+					dependent_nodes.insert(dependent_nodes.end(), std::move(first.deps).begin(), std::move(first.deps).end());
+					(dependent_nodes.insert(dependent_nodes.end(), std::move(rest.deps).begin(), std::move(rest.deps).end()), ...);
+					dependent_nodes.push_back(std::move(first.node));
+					(dependent_nodes.push_back(std::move(rest.node)), ...);
 				}(args...);
-	
-				std::erase_if(dependent_refs, [](auto& sp) { return sp.use_count() == 1; });
+
+				std::erase_if(dependent_nodes, [](auto& sp) { return sp.use_count() == 1; });
 
 				if constexpr (is_tuple<Ret>::value) {
 					auto [idxs, ret_tuple] = intersect_tuples<std::tuple<T...>, Ret>(arg_tuple_as_a);
-					return make_ret(rgp, node, ret_tuple, dependent_refs);
+					return make_ret(rgp, node, ret_tuple, dependent_nodes);
 				} else if constexpr (!std::is_same_v<Ret, void>) {
 					auto [idxs, ret_tuple] = intersect_tuples<std::tuple<T...>, std::tuple<Ret>>(arg_tuple_as_a);
-					return std::get<0>(make_ret(rgp, node, ret_tuple, dependent_refs));
+					return std::get<0>(make_ret(rgp, node, ret_tuple, dependent_nodes));
 				}
 			};
 		}
@@ -613,8 +614,8 @@ public:
 		return TupleMap<drop_t<1, typename traits::types>>::template make_lam<typename traits::result_type, F>(name, std::forward<F>(body), scheduling_info, loc);
 	}
 
-	inline std::shared_ptr<ExtRef> make_ext_ref(std::shared_ptr<RG> rg, Ref ref) {
-		return std::make_shared<ExtRef>(rg, ref);
+	inline ExtRef make_ext_ref(std::shared_ptr<RG> rg, Ref ref) {
+		return ExtRef(std::make_shared<ExtNode>(rg, ref.node), ref);
 	}
 
 	[[nodiscard]] inline Value<ImageAttachment> declare_ia(Name name, ImageAttachment ia = {}, std::source_location loc = std::source_location::current()) {
@@ -688,11 +689,11 @@ public:
 		/// @brief Build the graph, assign framebuffers, render passes and subpasses
 		///	link automatically calls this, only needed if you want to use the reflection functions
 		/// @param compile_options CompileOptions controlling compilation behaviour
-		Result<void> compile(std::span<std::shared_ptr<ExtRef>> rgs, const RenderGraphCompileOptions& compile_options);
+		Result<void> compile(std::span<std::shared_ptr<ExtNode>> rgs, const RenderGraphCompileOptions& compile_options);
 
 		/// @brief Use this RenderGraph and create an ExecutableRenderGraph
 		/// @param compile_options CompileOptions controlling compilation behaviour
-		Result<struct ExecutableRenderGraph> link(std::span<std::shared_ptr<ExtRef>> rgs, const RenderGraphCompileOptions& compile_options);
+		Result<struct ExecutableRenderGraph> link(std::span<std::shared_ptr<ExtNode>> rgs, const RenderGraphCompileOptions& compile_options);
 
 		// reflection functions
 

@@ -15,21 +15,25 @@
 namespace vuk {
 	class UntypedValue {
 	public:
-		UntypedValue(std::shared_ptr<ExtRef> head, Ref def) : head(head), def(def) {}
-		UntypedValue(std::shared_ptr<ExtRef> head, Ref def, std::vector<std::shared_ptr<ExtRef>> deps) : head(head), def(def), deps(deps) {}
+		UntypedValue(ExtRef extref, Ref def) : node(std::move(extref.node)), head{ node->get_node(), extref.index }, def(def) {}
+		UntypedValue(ExtRef extref, Ref def, std::vector<std::shared_ptr<ExtNode>> deps) :
+		    node(std::move(extref.node)),
+		    head{ node->get_node(), extref.index },
+		    def(def),
+		    deps(deps) {}
 
 		/// @brief Get the referenced RenderGraph
 		const std::shared_ptr<RG>& get_render_graph() const noexcept {
-			return head->module;
+			return node->module;
 		}
 
 		/// @brief Name the value currently referenced by this Value
 		void set_name(std::string_view name) noexcept {
-			get_render_graph()->name_output(head->get_head(), std::string(name));
+			get_render_graph()->name_output(head, std::string(name));
 		}
 
 		Ref get_head() const noexcept {
-			return head->get_head();
+			return head;
 		}
 
 		Ref get_def() const noexcept {
@@ -37,19 +41,23 @@ namespace vuk {
 		}
 
 		void release(Access access = Access::eNone, DomainFlagBits domain = DomainFlagBits::eAny) noexcept {
-			assert(head->acqrel->status == Signal::Status::eDisarmed);
-			head->to_release(access, domain);
+			assert(node->acqrel->status == Signal::Status::eDisarmed);
+			auto rel = node->make_release(head.index, access, domain);
+			deps.push_back(node);
+			node = std::make_shared<ExtNode>(ExtNode{ node->module, rel });
+			head = { node->get_node(), 0 };
 		}
 
 		void to_acquire(void* current_value) {
 			auto current_ty = def.type();
 			// new RG with ACQUIRE node
 			auto new_rg = std::make_shared<RG>();
-			auto new_def = new_rg->make_acquire(current_ty, nullptr, current_value);
-			auto new_extref = std::make_shared<ExtRef>(new_rg, new_def);
-			new_def.node->acquire.acquire = head->acqrel.get();
-			deps = { head };
-			head = new_extref;
+			auto new_def = new_rg->make_acquire(current_ty, nullptr, head.index, current_value);
+			auto new_extnode = std::make_shared<ExtNode>(new_rg, new_def.node);
+			new_def.node->acquire.acquire = node->acqrel;
+			deps = { node, deps.back() };
+			node = new_extnode;
+			head = Ref{ node->get_node(), 0 };
 			def = new_def;
 		}
 
@@ -60,9 +68,9 @@ namespace vuk {
 
 		Result<void> wait(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options = {});
 
-		std::shared_ptr<ExtRef> head;
-
-		std::vector<std::shared_ptr<ExtRef>> deps;
+		std::shared_ptr<ExtNode> node;
+		Ref head;
+		std::vector<std::shared_ptr<ExtNode>> deps;
 
 	protected:
 		Ref def;
@@ -75,7 +83,8 @@ namespace vuk {
 
 		template<class U>
 		Value<U> transmute(Ref new_head) noexcept {
-			head = std::make_shared<ExtRef>(ExtRef{ head->module, new_head });
+			node = std::make_shared<ExtNode>(ExtNode{ node->module, new_head.node });
+			head = { node->get_node(), new_head.index };
 			def = new_head;
 			return *reinterpret_cast<Value<U>*>(this); // TODO: not cool
 		}
@@ -144,7 +153,7 @@ namespace vuk {
 			same_extent_as(src);
 
 			for (auto i = 6; i < 10; i++) { /* 6 - 9 : layers, levels */
-				def.node->construct.args[i] = get_render_graph()->make_extract(src.get_def(), i-1);
+				def.node->construct.args[i] = get_render_graph()->make_extract(src.get_def(), i - 1);
 			}
 		}
 
@@ -171,7 +180,8 @@ namespace vuk {
 		Value<uint64_t> get_size()
 		  requires std::is_same_v<T, Buffer>
 		{
-			return { std::make_shared<ExtRef>(get_render_graph(), get_render_graph()->make_extract(get_def(), 0)), {} };
+			Ref extract = get_render_graph()->make_extract(get_def(), 0);
+			return { ExtRef{ std::make_shared<ExtNode>(get_render_graph(), extract.node), extract }, {} };
 		}
 
 		void set_size(Value<uint64_t> arg)
@@ -187,8 +197,9 @@ namespace vuk {
 			assert(def.node->kind == Node::CONSTRUCT);
 			assert(def.type()->kind == Type::ARRAY_TY);
 			auto item_def = def.node->construct.defs[index];
-			Ref item = head->module->make_extract(get_head(), head->module->make_constant(index));
-			return Value<std::remove_reference_t<decltype(std::declval<T>()[0])>>(std::make_shared<ExtRef>(get_render_graph(), item), item_def, { head });
+			Ref item = node->module->make_extract(get_head(), node->module->make_constant(index));
+			return Value<std::remove_reference_t<decltype(std::declval<T>()[0])>>(
+			    ExtRef(std::make_shared<ExtNode>(get_render_graph(), item.node), item), item_def, { node });
 		}
 	};
 
@@ -205,10 +216,10 @@ namespace vuk {
 			if (!res) {
 				return res;
 			}
-			if (future.head->acqrel->status != Signal::Status::eSynchronizable) {
+			if (future.node->acqrel->status != Signal::Status::eSynchronizable) {
 				continue;
 			}
-			waits.emplace_back(future.head->acqrel->source);
+			waits.emplace_back(future.node->acqrel->source);
 		}
 		if (waits.size() > 0) {
 			return alloc.get_context().wait_for_domains(std::span(waits));
