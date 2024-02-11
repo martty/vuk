@@ -663,7 +663,7 @@ public:
 		return { make_ext_ref(rg, ref), ref };
 	}
 
-	[[nodiscard]] inline Value<Swapchain> declare_swapchain(Swapchain bundle, std::source_location loc = std::source_location::current()) {
+	[[nodiscard]] inline Value<Swapchain> declare_swapchain(Swapchain& bundle, std::source_location loc = std::source_location::current()) {
 		std::shared_ptr<RG> rg = std::make_shared<RG>();
 		Ref ref = rg->make_declare_swapchain(bundle);
 		rg->set_source_location(ref.node, loc);

@@ -20,6 +20,40 @@ namespace vuk {
 		allocator.allocate_semaphores(std::span(semaphores));
 	}
 
+	Swapchain::~Swapchain() {
+		if (swapchain != VK_NULL_HANDLE) {
+			allocator.deallocate(std::span{ &swapchain, 1 });
+		}
+		for (auto& i : images) {
+			allocator.deallocate(std::span{ &i.image_view, 1 });
+		}
+		allocator.deallocate(std::span(semaphores));
+	}
+
+	Swapchain::Swapchain(Swapchain&& o) noexcept :
+	    swapchain(std::exchange(o.swapchain, VK_NULL_HANDLE)),
+	    semaphores(std::move(o.semaphores)),
+	    allocator(o.allocator) {
+		images = std::move(o.images);
+		surface = o.surface;
+		linear_index = o.linear_index;
+		image_index = o.image_index;
+		acquire_result = o.acquire_result;
+	}
+
+	Swapchain& Swapchain::operator=(Swapchain&& o) noexcept {
+		swapchain = std::exchange(o.swapchain, VK_NULL_HANDLE);
+		semaphores = std::move(o.semaphores);
+		allocator = o.allocator;
+		images = std::move(o.images);
+		surface = o.surface;
+		linear_index = o.linear_index;
+		image_index = o.image_index;
+		acquire_result = o.acquire_result;
+
+		return *this;
+	}
+
 	Result<void> Context::wait_for_domains(std::span<SyncPoint> queue_waits) {
 		std::array<uint32_t, 3> domain_to_sema_index = { ~0u, ~0u, ~0u };
 		std::array<VkSemaphore, 3> queue_timeline_semaphores;
@@ -114,7 +148,7 @@ namespace vuk {
 		} else if (acqrel->status == Signal::Status::eHostAvailable || acqrel->status == Signal::Status::eSynchronizable) {
 			return { expected_value }; // nothing to do
 		} else {
-			//acqrel->status = Signal::Status::eSynchronizable;
+			// acqrel->status = Signal::Status::eSynchronizable;
 			auto erg = compiler.link(std::span{ &node, 1 }, options);
 			if (!erg) {
 				return erg;

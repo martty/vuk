@@ -63,10 +63,17 @@ namespace vuk {
 
 	struct Swapchain {
 		Swapchain(Allocator allocator, size_t image_count);
+		Swapchain(const Swapchain&) = delete;
+		Swapchain(Swapchain&&) noexcept;
+
+		Swapchain& operator=(const Swapchain&) = delete;
+		Swapchain& operator=(Swapchain&&) noexcept;
+
+		~Swapchain();
 
 		Allocator allocator;
-		VkSwapchainKHR swapchain;
-		VkSurfaceKHR surface;
+		VkSwapchainKHR swapchain = VK_NULL_HANDLE;
+		VkSurfaceKHR surface = VK_NULL_HANDLE;
 
 		std::vector<ImageAttachment> images;
 		uint32_t linear_index = 0;
