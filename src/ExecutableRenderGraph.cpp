@@ -1072,6 +1072,7 @@ namespace vuk {
 		std::shared_ptr<RG> cg_module;
 
 		std::unordered_map<DomainFlagBits, std::unique_ptr<Stream>> streams;
+		std::unordered_map<void*, Stream*> pending_syncs;
 
 		// start recording if needed
 		// all dependant domains flushed
@@ -1108,6 +1109,7 @@ namespace vuk {
 			bool has_both = has_src && has_dst;
 			bool cross = has_both && (src_stream != dst_stream);
 			bool only_src = has_src && !has_dst;
+			bool only_dst = !has_src && has_dst;
 
 			if (cross) {
 				dst_stream->add_dependency(src_stream);
@@ -1116,17 +1118,41 @@ namespace vuk {
 			if (base_ty == cg_module->builtin_image) {
 				auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
 				if (has_dst) {
+					if (only_dst) {
+						auto it = pending_syncs.find(value);
+						if (it != pending_syncs.end()) {
+							if (it->second != dst_stream) {
+								it->second->synch_image(img_att, src_use, dst_use, value);
+							}
+							pending_syncs.erase(it);
+						}
+					}
 					dst_stream->synch_image(img_att, src_use, dst_use, value);
 				}
 				if (only_src || cross) {
 					src_stream->synch_image(img_att, src_use, dst_use, value);
+					if (only_src) {
+						pending_syncs.emplace(value, src_stream);
+					}
 				}
 			} else if (base_ty == cg_module->builtin_buffer) {
 				// buffer needs no cross
 				if (has_dst) {
+					if (only_dst) {
+						auto it = pending_syncs.find(value);
+						if (it != pending_syncs.end()) {
+							if (it->second != dst_stream) {
+								it->second->synch_memory(src_use, dst_use, value);
+							}
+							pending_syncs.erase(it);
+						}
+					}
 					dst_stream->synch_memory(src_use, dst_use, value);
 				} else if (has_src) {
 					src_stream->synch_memory(src_use, dst_use, value);
+					if (only_src) {
+						pending_syncs.emplace(value, src_stream);
+					}
 				}
 			} else if (base_ty->kind == Type::ARRAY_TY) {
 				auto elem_ty = base_ty->array.T;
@@ -1135,10 +1161,22 @@ namespace vuk {
 					auto img_atts = reinterpret_cast<ImageAttachment*>(value);
 					for (int i = 0; i < size; i++) {
 						if (has_dst) {
+							if (only_dst) {
+								auto it = pending_syncs.find(value);
+								if (it != pending_syncs.end()) {
+									if (it->second != dst_stream) {
+										it->second->synch_image(img_atts[i], src_use, dst_use, value);
+									}
+									pending_syncs.erase(it);
+								}
+							}
 							dst_stream->synch_image(img_atts[i], src_use, dst_use, &img_atts[i]);
 						}
 						if (only_src || cross) {
 							src_stream->synch_image(img_atts[i], src_use, dst_use, &img_atts[i]);
+							if (only_src) {
+								pending_syncs.emplace(&img_atts[i], src_stream);
+							}
 						}
 					}
 				} else if (elem_ty == cg_module->builtin_buffer) {
@@ -1146,9 +1184,19 @@ namespace vuk {
 						// buffer needs no cross
 						auto bufs = reinterpret_cast<Buffer*>(value);
 						if (has_dst) {
+							auto it = pending_syncs.find(value);
+							if (it != pending_syncs.end()) {
+								if (it->second != dst_stream) {
+									it->second->synch_memory(src_use, dst_use, &bufs[i]);
+								}
+								pending_syncs.erase(it);
+							}
 							dst_stream->synch_memory(src_use, dst_use, &bufs[i]);
 						} else if (has_src) {
 							src_stream->synch_memory(src_use, dst_use, &bufs[i]);
+							if (only_src) {
+								pending_syncs.emplace(&bufs[i], src_stream);
+							}
 						}
 					}
 				} else {

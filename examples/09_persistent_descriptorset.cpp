@@ -70,6 +70,7 @@ namespace {
 		      // Similarly to buffers, we allocate the image and enqueue the upload
 		      texture_of_doge = vuk::ImageAttachment::from_preset(
 		          vuk::ImageAttachment::Preset::eMap2D, vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, vuk::Samples::e1);
+		      texture_of_doge.usage |= vuk::ImageUsageFlagBits::eTransferSrc;
 		      texture_of_doge.level_count = 1;
 		      auto [image, view, doge_src] = vuk::create_image_and_view_with_data(allocator, vuk::DomainFlagBits::eTransferOnTransfer, texture_of_doge, doge_image);
 		      image_of_doge = std::move(image);
