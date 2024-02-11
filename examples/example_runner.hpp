@@ -100,7 +100,7 @@ namespace vuk {
 				if (width == 0 && height == 0) {
 					runner.suspend = true;
 				} else {
-					runner.swapchain = util::make_swapchain(*runner.superframe_allocator, runner.vkbdevice, runner.swapchain->surface, runner.swapchain);
+					runner.swapchain = util::make_swapchain(*runner.superframe_allocator, runner.vkbdevice, runner.swapchain->surface, std::move(runner.swapchain));
 					for (auto& iv : runner.swapchain->images) {
 						runner.context->set_name(iv.image_view.payload, "Swapchain ImageView");
 					}
@@ -137,6 +137,7 @@ namespace vuk {
 			render_complete.reset();
 			imgui_data.font_image.reset();
 			imgui_data.font_image_view.reset();
+			swapchain.reset();
 			superframe_resource.reset();
 			context.reset();
 			auto vkDestroySurfaceKHR = (PFN_vkDestroySurfaceKHR)vkbinstance.fp_vkGetInstanceProcAddr(vkbinstance.instance, "vkDestroySurfaceKHR");

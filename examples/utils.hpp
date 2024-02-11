@@ -102,7 +102,7 @@ namespace util {
 
 		old_swapchain->swapchain = vkswapchain->swapchain;
 		old_swapchain->surface = surface;
-		return *old_swapchain;
+		return std::move(*old_swapchain);
 	}
 
 	struct ImGuiData {
