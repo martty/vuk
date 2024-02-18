@@ -58,7 +58,7 @@ namespace {
 		}
 
 		void bind_parameters(vuk::CommandBuffer& cbuf) override {
-			*cbuf.map_scratch_buffer<glm::vec4>(0, 3) = tint_color;
+			*cbuf.scratch_buffer<glm::vec4>(0, 3) = tint_color;
 		}
 	};
 
@@ -72,7 +72,15 @@ namespace {
 		glm::vec3 velocity = glm::vec3(0);
 	};
 
-	std::optional<vuk::Texture> texture_of_doge, variant1, variant2;
+	vuk::Unique<vuk::Image> image_of_doge;
+	vuk::Unique<vuk::ImageView> image_view_of_doge;
+	vuk::ImageAttachment texture_of_doge;
+	vuk::Unique<vuk::Image> image_of_doge_v1;
+	vuk::Unique<vuk::ImageView> image_view_of_doge_v1;
+	vuk::ImageAttachment texture_of_doge_v1;
+	vuk::Unique<vuk::Image> image_of_doge_v2;
+	vuk::Unique<vuk::ImageView> image_view_of_doge_v2;
+	vuk::ImageAttachment texture_of_doge_v2;
 
 	std::vector<NormalMaterial> nmats;
 	std::vector<TintMaterial> tmats;
@@ -93,8 +101,13 @@ namespace {
 		      auto doge_image = stbi_load((root / "examples/doge.png").generic_string().c_str(), &x, &y, &chans, 4);
 
 		      // Similarly to buffers, we allocate the image and enqueue the upload
-		      auto [tex, tex_fut] = create_texture(allocator, vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, doge_image, false);
-		      texture_of_doge = std::move(tex);
+		      texture_of_doge = vuk::ImageAttachment::from_preset(
+		          vuk::ImageAttachment::Preset::eMap2D, vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, vuk::Samples::e1);
+		      texture_of_doge.usage |= vuk::ImageUsageFlagBits::eTransferSrc;
+		      texture_of_doge.level_count = 1;
+		      auto [image, view, doge_src] = vuk::create_image_and_view_with_data(allocator, vuk::DomainFlagBits::eTransferOnTransfer, texture_of_doge, doge_image);
+		      image_of_doge = std::move(image);
+		      image_view_of_doge = std::move(view);
 		      stbi_image_free(doge_image);
 
 		      // Let's create two variants of the doge image (like in example 09)
@@ -104,58 +117,57 @@ namespace {
 			      pbci.add_glsl(util::read_entire_file((root / "examples/invert.comp").generic_string()), (root / "examples/invert.comp").generic_string());
 			      runner.context->create_named_pipeline("invert", pbci);
 		      }
-		      vuk::ImageCreateInfo ici;
-		      ici.format = vuk::Format::eR8G8B8A8Srgb;
-		      ici.extent = vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u };
-		      ici.samples = vuk::Samples::e1;
-		      ici.imageType = vuk::ImageType::e2D;
-		      ici.initialLayout = vuk::ImageLayout::eUndefined;
-		      ici.tiling = vuk::ImageTiling::eOptimal;
-		      ici.usage = vuk::ImageUsageFlagBits::eTransferDst | vuk::ImageUsageFlagBits::eSampled;
-		      ici.mipLevels = ici.arrayLayers = 1;
-		      variant1 = ctx.allocate_texture(allocator, ici);
-		      ici.format = vuk::Format::eR8G8B8A8Unorm;
-		      ici.usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled;
-		      variant2 = ctx.allocate_texture(allocator, ici);
+		      texture_of_doge_v1 = texture_of_doge;
+		      texture_of_doge_v1.usage = vuk::ImageUsageFlagBits::eTransferDst | vuk::ImageUsageFlagBits::eSampled;
+		      image_of_doge_v1 = *vuk::allocate_image(allocator, texture_of_doge_v1);
+		      texture_of_doge_v1.image = *image_of_doge_v1;
+		      image_view_of_doge_v1 = *vuk::allocate_image_view(allocator, texture_of_doge_v1);
+		      texture_of_doge_v2 = texture_of_doge;
+		      texture_of_doge_v2.format = vuk::Format::eR8G8B8A8Unorm;
+		      texture_of_doge_v2.usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled;
+		      image_of_doge_v2 = *vuk::allocate_image(allocator, texture_of_doge_v2);
+		      texture_of_doge_v2.image = *image_of_doge_v2;
+		      image_view_of_doge_v2 = *vuk::allocate_image_view(allocator, texture_of_doge_v2);
+
 		      // Make a RenderGraph to process the loaded image
-		      vuk::RenderGraph rg("PP");
-		      rg.add_pass({ .name = "preprocess",
-		                    .resources = { "10_doge"_image >> (vuk::eTransferRead | vuk::eComputeSampled),
-		                                   "10_v1"_image >> vuk::eTransferWrite,
-		                                   "10_v2"_image >> vuk::eComputeWrite },
-		                    .execute = [x, y](vuk::CommandBuffer& command_buffer) {
-			                    // For the first image, flip the image on the Y axis using a blit
-			                    vuk::ImageBlit blit;
-			                    blit.srcSubresource.aspectMask = vuk::ImageAspectFlagBits::eColor;
-			                    blit.srcSubresource.baseArrayLayer = 0;
-			                    blit.srcSubresource.layerCount = 1;
-			                    blit.srcSubresource.mipLevel = 0;
-			                    blit.srcOffsets[0] = vuk::Offset3D{ 0, 0, 0 };
-			                    blit.srcOffsets[1] = vuk::Offset3D{ x, y, 1 };
-			                    blit.dstSubresource = blit.srcSubresource;
-			                    blit.dstOffsets[0] = vuk::Offset3D{ x, y, 0 };
-			                    blit.dstOffsets[1] = vuk::Offset3D{ 0, 0, 1 };
-			                    command_buffer.blit_image("10_doge", "10_v1", blit, vuk::Filter::eLinear);
-			                    // For the second image, invert the colours in compute
-			                    command_buffer.bind_image(0, 0, "10_doge")
-			                        .bind_sampler(0, 0, {})
-			                        .bind_image(0, 1, "10_v2")
-			                        .bind_compute_pipeline("invert")
-			                        .dispatch_invocations(x, y);
-		                    } });
+		      auto doge_v1 = vuk::declare_ia("09_doge_v1", texture_of_doge_v1);
+		      auto doge_v2 = vuk::declare_ia("09_doge_v2", texture_of_doge_v2);
+
+		      auto preprocess = vuk::make_pass(
+		          "preprocess",
+		          [x, y](vuk::CommandBuffer& command_buffer,
+		                 VUK_IA(vuk::eTransferRead | vuk::eComputeSampled) src,
+		                 VUK_IA(vuk::eTransferWrite) v1,
+		                 VUK_IA(vuk::eComputeWrite) v2) {
+			          // For the first image, flip the image on the Y axis using a blit
+			          vuk::ImageBlit blit;
+			          blit.srcSubresource.aspectMask = vuk::ImageAspectFlagBits::eColor;
+			          blit.srcSubresource.baseArrayLayer = 0;
+			          blit.srcSubresource.layerCount = 1;
+			          blit.srcSubresource.mipLevel = 0;
+			          blit.srcOffsets[0] = vuk::Offset3D{ 0, 0, 0 };
+			          blit.srcOffsets[1] = vuk::Offset3D{ x, y, 1 };
+			          blit.dstSubresource = blit.srcSubresource;
+			          blit.dstOffsets[0] = vuk::Offset3D{ x, y, 0 };
+			          blit.dstOffsets[1] = vuk::Offset3D{ 0, 0, 1 };
+			          command_buffer.blit_image(src, v1, blit, vuk::Filter::eLinear);
+			          // For the second image, invert the colours in compute
+			          command_buffer.bind_image(0, 0, src).bind_sampler(0, 0, {}).bind_image(0, 1, v2).bind_compute_pipeline("invert").dispatch_invocations(x, y);
+
+			          return std::make_tuple(src, v1, v2);
+		          });
 		      // Bind the resources for the variant generation
 		      // We specify the initial and final access
 		      // The texture we have created is already in ShaderReadOptimal, but we need it in General during the pass, and we need it back to ShaderReadOptimal
 		      // afterwards
-		      rg.attach_in("10_doge", std::move(tex_fut));
-		      rg.attach_image("10_v1", vuk::ImageAttachment::from_texture(*variant1), vuk::eNone);
-		      rg.release("10_v1+", vuk::eFragmentSampled);
-		      rg.attach_image("10_v2", vuk::ImageAttachment::from_texture(*variant2), vuk::eNone);
-		      rg.release("10_v2+", vuk::eFragmentSampled);
-
-		      // enqueue running the preprocessing rendergraph and force 10_doge to be sampleable later
-		      auto fut = vuk::transition(vuk::Future{ std::make_unique<vuk::RenderGraph>(std::move(rg)), "10_doge" }, vuk::eFragmentSampled);
-		      runner.enqueue_setup(std::move(fut));
+		      auto [src, v1, v2] = preprocess(std::move(doge_src), std::move(doge_v1), std::move(doge_v2));
+		      src.release(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
+		      v1.release(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
+		      v2.release(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
+		      // enqueue running the preprocessing rendergraph and force 09_doge to be sampleable later
+		      runner.enqueue_setup(std::move(src));
+		      runner.enqueue_setup(std::move(v1));
+		      runner.enqueue_setup(std::move(v2));
 
 		      // Set up the resources for our renderer
 
@@ -186,8 +198,10 @@ namespace {
 		      vuk::PipelineBaseInfo* pipe1;
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
-			      pci.add_glsl(util::read_entire_file((root / "examples/baby_renderer.vert").generic_string()), (root / "examples/baby_renderer.vert").generic_string());
-			      pci.add_glsl(util::read_entire_file((root / "examples/triangle_depthshaded_tex.frag").generic_string()), (root / "examples/triangle_depthshaded_tex.frag").generic_string());
+			      pci.add_glsl(util::read_entire_file((root / "examples/baby_renderer.vert").generic_string()),
+			                   (root / "examples/baby_renderer.vert").generic_string());
+			      pci.add_glsl(util::read_entire_file((root / "examples/triangle_depthshaded_tex.frag").generic_string()),
+			                   (root / "examples/triangle_depthshaded_tex.frag").generic_string());
 			      pipe1 = runner.context->get_pipeline(pci);
 		      }
 
@@ -195,25 +209,27 @@ namespace {
 		      vuk::PipelineBaseInfo* pipe2;
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
-			      pci.add_glsl(util::read_entire_file((root / "examples/baby_renderer.vert").generic_string()), (root / "examples/baby_renderer.vert").generic_string());
-			      pci.add_glsl(util::read_entire_file((root / "examples/triangle_tinted_tex.frag").generic_string()), (root / "examples/triangle_tinted_tex.frag").generic_string());
+			      pci.add_glsl(util::read_entire_file((root / "examples/baby_renderer.vert").generic_string()),
+			                   (root / "examples/baby_renderer.vert").generic_string());
+			      pci.add_glsl(util::read_entire_file((root / "examples/triangle_tinted_tex.frag").generic_string()),
+			                   (root / "examples/triangle_tinted_tex.frag").generic_string());
 			      pipe2 = runner.context->get_pipeline(pci);
 		      }
 
 		      // Create materials
 		      nmats.resize(3);
-		      nmats[0].texture = texture_of_doge->view.get();
-		      nmats[1].texture = variant1->view.get();
-		      nmats[2].texture = variant2->view.get();
+		      nmats[0].texture = image_view_of_doge.get();
+		      nmats[1].texture = image_view_of_doge_v1.get();
+		      nmats[2].texture = image_view_of_doge_v2.get();
 		      for (auto& mat : nmats) {
 			      mat.pipeline = pipe1;
 		      }
 
 		      tmats.resize(3);
 		      std::uniform_real_distribution<float> dist_tint(0, 1);
-		      tmats[0].texture = texture_of_doge->view.get();
-		      tmats[1].texture = variant1->view.get();
-		      tmats[2].texture = variant2->view.get();
+		      tmats[0].texture = image_view_of_doge.get();
+		      tmats[1].texture = image_view_of_doge_v1.get();
+		      tmats[2].texture = image_view_of_doge_v2.get();
 		      for (auto& mat : tmats) {
 			      mat.pipeline = pipe2;
 			      mat.tint_color = glm::vec4(dist_tint(g), dist_tint(g), dist_tint(g), 1.f);
@@ -246,7 +262,7 @@ namespace {
 		      }
 		    },
 		.render =
-		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator, vuk::Future target) {
+		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator, vuk::Value<vuk::ImageAttachment> target) {
 		      // We set up VP data, same as in example 02_cube
 		      struct VP {
 			      glm::mat4 view;
@@ -275,54 +291,54 @@ namespace {
 			      memcpy(reinterpret_cast<glm::mat4*>(modelmats.mapped_ptr) + i, &model_matrix, sizeof(glm::mat4));
 		      }
 
-		      vuk::RenderGraph rg("10");
-		      rg.attach_in("10_baby_renderer", std::move(target));
-		      // Set up the pass to draw the renderables
-		      rg.add_pass({ .name = "forward",
-		                    .resources = { "10_baby_renderer"_image >> vuk::eColorWrite >> "10_baby_renderer_final", "10_depth"_image >> vuk::eDepthStencilRW },
-		                    .execute = [uboVP, modelmats](vuk::CommandBuffer& command_buffer) {
-			                    command_buffer.set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
-			                        .set_viewport(0, vuk::Rect2D::framebuffer())
-			                        .set_scissor(0, vuk::Rect2D::framebuffer())
-			                        .set_rasterization({}) // Set the default rasterization state
-			                        // Set the depth/stencil state
-			                        .set_depth_stencil(vuk::PipelineDepthStencilStateCreateInfo{
-			                            .depthTestEnable = true,
-			                            .depthWriteEnable = true,
-			                            .depthCompareOp = vuk::CompareOp::eLessOrEqual,
-			                        })
-			                        .broadcast_color_blend({}); // Set the default color blend state
+		      auto forward_pass = vuk::make_pass(
+		          "forward", [uboVP, modelmats](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eColorWrite) color, VUK_IA(vuk::eDepthStencilRW) depth) {
+			          command_buffer.set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
+			              .set_viewport(0, vuk::Rect2D::framebuffer())
+			              .set_scissor(0, vuk::Rect2D::framebuffer())
+			              .set_rasterization({}) // Set the default rasterization state
+			              // Set the depth/stencil state
+			              .set_depth_stencil(vuk::PipelineDepthStencilStateCreateInfo{
+			                  .depthTestEnable = true,
+			                  .depthWriteEnable = true,
+			                  .depthCompareOp = vuk::CompareOp::eLessOrEqual,
+			              })
+			              .broadcast_color_blend({}); // Set the default color blend state
 
-			                    // These binds don't change between meshes, so it is sufficient to bind them once
-			                    command_buffer.bind_buffer(0, 0, uboVP).bind_buffer(0, 1, modelmats);
+			          // These binds don't change between meshes, so it is sufficient to bind them once
+			          command_buffer.bind_buffer(0, 0, uboVP).bind_buffer(0, 1, modelmats);
 
-			                    for (auto i = 0; i < renderables.size(); i++) {
-				                    auto& r = renderables[i];
+			          for (auto i = 0; i < renderables.size(); i++) {
+				          auto& r = renderables[i];
 
-				                    // Set up the draw state based on the mesh and material
-				                    command_buffer
-				                        .bind_vertex_buffer(0,
-				                                            r.mesh->vertex_buffer.get(),
-				                                            0,
-				                                            vuk::Packed{ vuk::Format::eR32G32B32Sfloat,
-				                                                         vuk::Ignore{ offsetof(util::Vertex, uv_coordinates) - sizeof(util::Vertex::position) },
-				                                                         vuk::Format::eR32G32Sfloat })
-				                        .bind_index_buffer(r.mesh->index_buffer.get(), vuk::IndexType::eUint32)
-				                        .bind_graphics_pipeline(r.material->pipeline);
+				          // Set up the draw state based on the mesh and material
+				          command_buffer
+				              .bind_vertex_buffer(0,
+				                                  r.mesh->vertex_buffer.get(),
+				                                  0,
+				                                  vuk::Packed{ vuk::Format::eR32G32B32Sfloat,
+				                                               vuk::Ignore{ offsetof(util::Vertex, uv_coordinates) - sizeof(util::Vertex::position) },
+				                                               vuk::Format::eR32G32Sfloat })
+				              .bind_index_buffer(r.mesh->index_buffer.get(), vuk::IndexType::eUint32)
+				              .bind_graphics_pipeline(r.material->pipeline);
 
-				                    r.material->bind_parameters(command_buffer);
-				                    r.material->bind_textures(command_buffer);
+				          r.material->bind_parameters(command_buffer);
+				          r.material->bind_textures(command_buffer);
 
-				                    // Draw the mesh, assign them different base instance to pick the correct transformation
-				                    command_buffer.draw_indexed(r.mesh->index_count, 1, 0, 0, i);
-			                    }
-		                    } });
+				          // Draw the mesh, assign them different base instance to pick the correct transformation
+				          command_buffer.draw_indexed(r.mesh->index_count, 1, 0, 0, i);
+			          }
+
+					  return color;
+		          });
 
 		      angle += 10.f * ImGui::GetIO().DeltaTime;
 
-		      rg.attach_and_clear_image("10_depth", { .format = vuk::Format::eD32Sfloat }, vuk::ClearDepthStencil{ 1.0f, 0 });
+		      auto depth_img = vuk::declare_ia("09_depth");
+		      depth_img->format = vuk::Format::eD32Sfloat;
+		      depth_img = vuk::clear_image(std::move(depth_img), vuk::ClearDepthStencil{ 1.0f, 0 });
 
-		      return vuk::Future{ std::make_unique<vuk::RenderGraph>(std::move(rg)), "10_baby_renderer_final" };
+		      return forward_pass(std::move(target), std::move(depth_img));
 		    },
 		// Perform cleanup for the example
 		.cleanup =
@@ -330,9 +346,12 @@ namespace {
 		      // We release the resources manually
 		      cube_mesh.reset();
 		      quad_mesh.reset();
-		      texture_of_doge.reset();
-		      variant1.reset();
-		      variant2.reset();
+		      image_of_doge.reset();
+		      image_view_of_doge.reset();
+		      image_of_doge_v1.reset();
+		      image_view_of_doge_v1.reset();
+		      image_of_doge_v2.reset();
+		      image_view_of_doge_v2.reset();
 		    }
 	};
 

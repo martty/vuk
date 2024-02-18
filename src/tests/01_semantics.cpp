@@ -122,6 +122,7 @@ TEST_CASE("moving Values doesn't help if it was leaked before") {
 	trace = trace.substr(0, trace.size() - 1);
 	CHECK(trace == "a e b d");
 }
+
 /*
 TEST_CASE("can't release Values that have already been submitted") {
   std::string trace = "";
