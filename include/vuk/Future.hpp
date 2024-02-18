@@ -44,6 +44,8 @@ namespace vuk {
 			assert(node->acqrel->status == Signal::Status::eDisarmed);
 			auto rel = node->make_release(head.index, access, domain);
 			deps.push_back(node);
+			// if release has acc and/or dom, we must make a new ExtNode
+			// as an opt, we can reuse the existing acqrel maybe
 			node = std::make_shared<ExtNode>(ExtNode{ node->module, rel });
 			head = { node->get_node(), 0 };
 		}
