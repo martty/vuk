@@ -537,6 +537,11 @@ public:
 		}
 	}
 
+	
+	inline auto First = [](auto& first, auto&...) -> auto& {
+		return first;
+	};
+
 	template<typename... T>
 	struct TupleMap<std::tuple<T...>> {
 		using ret_tuple = std::tuple<Value<typename T::type>...>;
@@ -558,9 +563,7 @@ public:
 
 			// when this function is called, we weave in this call into the IR
 			return [untyped_cb = std::move(callback), name, scheduling_info, loc](Value<typename T::type>... args) mutable {
-				auto& first = [](auto& first, auto&...) -> auto& {
-					return first;
-				}(args...);
+				auto& first = First(args...);
 				auto rgp = first.get_render_graph();
 				RG& rg = *rgp.get();
 
