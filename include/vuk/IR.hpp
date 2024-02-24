@@ -779,12 +779,11 @@ namespace vuk {
 
 	struct ExtNode {
 		ExtNode(std::shared_ptr<RG> module, Node* node) : module(std::move(module)) {
+			owned_acqrel = std::make_unique<AcquireRelease>();
+			acqrel = owned_acqrel.get();
 			if (node->kind != Node::RELEASE) {
-				owned_acqrel = std::make_unique<AcquireRelease>();
-				acqrel = owned_acqrel.get();
 				this->node = this->module->make_relacq(node, acqrel);
 			} else {
-				acqrel = node->release.release;
 				this->node = node;
 			}
 		}
@@ -800,11 +799,6 @@ namespace vuk {
 		Node* get_node() {
 			assert(node->kind == Node::RELACQ || node->kind == Node::RELEASE);
 			return node;
-		}
-
-		Node* make_release(size_t index, Access access = Access::eNone, DomainFlagBits domain = DomainFlagBits::eAny) noexcept {
-			assert(node->kind == Node::RELACQ);
-			return this->module->make_release(Ref{ node, index }, acqrel, access, domain);
 		}
 
 		std::shared_ptr<RG> module;

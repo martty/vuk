@@ -1671,11 +1671,10 @@ namespace vuk {
 			case Node::ACQUIRE: {
 				auto acq = node->acquire.acquire;
 				auto src_stream = recorder.stream_for_executor(acq->source.executor);
-				Stream* dst_stream = item.scheduled_stream;
 
 				Scheduler::DependencyInfo di;
 				di.src_use = { acq->last_use[node->acquire.index], src_stream };
-				di.dst_use = { to_use(Access::eNone), dst_stream };
+				di.dst_use = { to_use(Access::eNone), nullptr };
 				recorder.add_sync(node->type[0], di, sched.get_value(first(node)));
 
 				if (node->type[0] == impl->cg_module->builtin_buffer) {
@@ -1690,7 +1689,7 @@ namespace vuk {
 #endif
 				}
 
-				sched.done(node, dst_stream, sched.get_value(first(node)));
+				sched.done(node, nullptr, sched.get_value(first(node)));
 				break;
 			}
 			case Node::RELEASE:

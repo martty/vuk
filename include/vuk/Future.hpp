@@ -42,11 +42,10 @@ namespace vuk {
 
 		void release(Access access = Access::eNone, DomainFlagBits domain = DomainFlagBits::eAny) noexcept {
 			assert(node->acqrel->status == Signal::Status::eDisarmed);
-			auto rel = node->make_release(head.index, access, domain);
-			deps.push_back(node);
-			// if release has acc and/or dom, we must make a new ExtNode
-			// as an opt, we can reuse the existing acqrel maybe
-			node = std::make_shared<ExtNode>(ExtNode{ node->module, rel });
+			auto release = node->module->make_release({ node->get_node(), head.index }, nullptr, access, domain);
+			deps.push_back(node); // previous extnode is a dep
+			node = std::make_shared<ExtNode>(ExtNode{ node->module, release });
+			release->release.release = node->acqrel;
 			head = { node->get_node(), 0 };
 		}
 
