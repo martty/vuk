@@ -77,15 +77,45 @@ if (VUK_USE_DXC)
 endif()
 if (VUK_USE_VCC)
 	FetchContent_Declare(
-	  shady
+	  shady-fc
 	  GIT_REPOSITORY https://github.com/martty/shady
 	  GIT_TAG ci-win
 	)
-	FetchContent_MakeAvailable(shady)
+	FetchContent_GetProperties(shady-fc)
+
+	if(NOT shady-fc_POPULATED)
+		FetchContent_Populate(shady-fc)
+	endif()
+
+	ExternalProject_Add(shady2
+		SOURCE_DIR
+			${shady-fc_SOURCE_DIR}
+		PREFIX ""
+		BINARY_DIR shady-build
+		CMAKE_ARGS -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_SHARED_LIBS=1 -DCMAKE_SHARED_LIBRARY_PREFIX="" -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER} -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
+		INSTALL_COMMAND ""
+		BUILD_ALWAYS OFF
+		BUILD_COMMAND 
+			${CMAKE_COMMAND} --build .
+#			COMMAND ${CMAKE_COMMAND} -E copy_if_different <BINARY_DIR>/shady.dll $<TARGET_FILE_DIR:vuk>
+#			COMMAND ${CMAKE_COMMAND} -E copy_if_different <BINARY_DIR>/driver.dll $<TARGET_FILE_DIR:vuk>
+		LOG_DOWNLOAD 1
+		LOG_BUILD 1
+		LOG_OUTPUT_ON_FAILURE 1
+		BUILD_BYPRODUCTS <BINARY_DIR>/lib/driver.lib
+    )
+
+	ExternalProject_Get_property(shady2 BINARY_DIR)
+	ExternalProject_Get_property(shady2 SOURCE_DIR)
+	add_library(shady-rel SHARED IMPORTED GLOBAL)
+	add_dependencies(shady-rel shady2)
+	file(MAKE_DIRECTORY ${BINARY_DIR}/src/shady/api)
+	target_include_directories(shady-rel INTERFACE ${SOURCE_DIR}/include ${BINARY_DIR}/src/shady/api)
+	set_target_properties(shady-rel PROPERTIES IMPORTED_IMPLIB ${BINARY_DIR}/lib/driver.lib IMPORTED_LOCATION ${BINARY_DIR}/bin/driver.dll)
 
 	target_sources(vuk PRIVATE src/shader_compilers/vcc.cpp)
-	target_link_libraries(vuk PUBLIC shady driver)
-	target_compile_definitions(vuk PRIVATE "-DVUK_VCC_INCLUDE_DIR=\"${shady_BINARY_DIR}/share/vcc/include/\"")
+	target_link_libraries(vuk PUBLIC shady-rel)
+	target_compile_definitions(vuk PRIVATE "-DVUK_VCC_INCLUDE_DIR=\"${BINARY_DIR}/share/vcc/include/\"")
 endif()
 
 target_compile_definitions(vuk PUBLIC 

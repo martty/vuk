@@ -52,7 +52,7 @@ namespace vuk {
 		shady::IrArena* arena = new_ir_arena(aconfig);
 		shady::Module* mod = new_module(arena, cinfo.filename.c_str());
 		shady::driver_load_source_file(shady::SrcLLVM, len, llvm_ir.c_str(), mod);
-		//shady::driver_compile(&driver_config, mod);
+
 		shady::CompilationResult result = run_compiler_passes(&compiler_config, &mod);
 		std::vector<uint32_t> spirv;
 		size_t output_size;
@@ -60,7 +60,7 @@ namespace vuk {
 		shady::emit_spirv(&compiler_config, mod, &output_size, &output_buffer, NULL);
 		spirv.resize(output_size / 4);
 		memcpy(&spirv[0], output_buffer, output_size);
-		free(output_buffer);
+		shady::free_output(output_buffer);
 		shady::destroy_ir_arena(arena);
 		shady::destroy_driver_config(&driver_config);
 		return { expected_value, spirv };

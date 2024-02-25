@@ -36,6 +36,11 @@
           "name": "VUK_LINK_TO_LOADER",
           "value": "False",
           "type": "BOOL"
+        },
+        {
+          "name": "VUK_USE_VCC",
+          "value": "True",
+          "type": "BOOL"
         }
       ]
     },

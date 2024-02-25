@@ -69,6 +69,11 @@ function(ADD_EXAMPLE name)
     target_link_libraries(${FULL_NAME}_obj PUBLIC vuk-example-framework)
     target_link_libraries(${FULL_NAME} PRIVATE ${FULL_NAME}_obj vuk_example_runner_single)
     target_link_libraries(vuk_all_examples PRIVATE ${FULL_NAME}_obj)
+
+    add_custom_command(TARGET ${FULL_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_RUNTIME_DLLS:${FULL_NAME}> $<TARGET_FILE_DIR:${FULL_NAME}>
+        COMMAND_EXPAND_LISTS
+    )
 endfunction(ADD_EXAMPLE)
 
 ADD_EXAMPLE(01_triangle)
