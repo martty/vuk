@@ -462,9 +462,9 @@ namespace vuk {
 			auto image_ = new Type* [9] {
 				u32(), u32(), u32(), mem_ty, mem_ty, u32(), u32(), u32(), u32()
 			};
-			auto image_offsets = new size_t[9]{ offsetof(ImageAttachment, extent) + offsetof(Dimension3D, extent) + offsetof(Extent3D, width),
-				                                  offsetof(ImageAttachment, extent) + offsetof(Dimension3D, extent) + offsetof(Extent3D, height),
-				                                  offsetof(ImageAttachment, extent) + offsetof(Dimension3D, extent) + offsetof(Extent3D, depth),
+			auto image_offsets = new size_t[9]{ offsetof(ImageAttachment, extent) + offsetof(Extent3D, width),
+				                                  offsetof(ImageAttachment, extent) + offsetof(Extent3D, height),
+				                                  offsetof(ImageAttachment, extent) + offsetof(Extent3D, depth),
 				                                  offsetof(ImageAttachment, format),
 				                                  offsetof(ImageAttachment, sample_count),
 				                                  offsetof(ImageAttachment, base_layer),
@@ -587,18 +587,18 @@ namespace vuk {
 			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = ptr } }));
 			auto u64_ty = new Type*(u64());
 			auto u32_ty = new Type*(u32());
-			if (value.extent.extent.width > 0) {
-				args_ptr[1] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ u32_ty, 1 }, .constant = { .value = &ptr->extent.extent.width } }));
+			if (value.extent.width > 0) {
+				args_ptr[1] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ u32_ty, 1 }, .constant = { .value = &ptr->extent.width } }));
 			} else {
 				args_ptr[1] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ u32_ty, 1 } }));
 			}
-			if (value.extent.extent.height > 0) {
-				args_ptr[2] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ u32_ty, 1 }, .constant = { .value = &ptr->extent.extent.height } }));
+			if (value.extent.height > 0) {
+				args_ptr[2] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ u32_ty, 1 }, .constant = { .value = &ptr->extent.height } }));
 			} else {
 				args_ptr[2] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ u32_ty, 1 } }));
 			}
-			if (value.extent.extent.depth > 0) {
-				args_ptr[3] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ u32_ty, 1 }, .constant = { .value = &ptr->extent.extent.depth } }));
+			if (value.extent.depth > 0) {
+				args_ptr[3] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ u32_ty, 1 }, .constant = { .value = &ptr->extent.depth } }));
 			} else {
 				args_ptr[3] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ u32_ty, 1 } }));
 			}

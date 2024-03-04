@@ -3,8 +3,8 @@
 #include "vuk/Buffer.hpp"
 #include "vuk/Image.hpp"
 #include "vuk/vuk_fwd.hpp"
-#include <compare>
 #include <cmath>
+#include <compare>
 
 namespace vuk {
 	struct ImageAttachment {
@@ -15,7 +15,7 @@ namespace vuk {
 		ImageType image_type = ImageType::e2D;
 		ImageTiling tiling = ImageTiling::eOptimal;
 		ImageUsageFlags usage = {};
-		Dimension3D extent = Dimension3D::framebuffer();
+		Extent3D extent = {};
 		Format format = Format::eUndefined;
 		Samples sample_count = Samples::eInfer;
 		bool allow_srgb_unorm_mutable = false;
@@ -47,20 +47,15 @@ namespace vuk {
 		}
 
 		constexpr bool is_fully_known() const noexcept {
-			return image_type != ImageType::eInfer && usage != ImageUsageFlagBits::eInfer && extent.sizing != Sizing::eRelative && extent.extent.width != 0 &&
-			       extent.extent.height != 0 && extent.extent.depth != 0 && format != Format::eUndefined && sample_count != Samples::eInfer &&
-			       base_level != VK_REMAINING_MIP_LEVELS && level_count != VK_REMAINING_MIP_LEVELS && base_layer != VK_REMAINING_ARRAY_LAYERS &&
-			       layer_count != VK_REMAINING_ARRAY_LAYERS && (!may_require_image_view() || view_type != ImageViewType::eInfer);
+			return image_type != ImageType::eInfer && usage != ImageUsageFlagBits::eInfer && extent.width != 0 && extent.height != 0 && extent.depth != 0 &&
+			       format != Format::eUndefined && sample_count != Samples::eInfer && base_level != VK_REMAINING_MIP_LEVELS &&
+			       level_count != VK_REMAINING_MIP_LEVELS && base_layer != VK_REMAINING_ARRAY_LAYERS && layer_count != VK_REMAINING_ARRAY_LAYERS &&
+			       (!may_require_image_view() || view_type != ImageViewType::eInfer);
 		}
 
-		enum class MipPreset {
-			eNoMips,
-			eFullMips
-		};
+		enum class MipPreset { eNoMips, eFullMips };
 
-		enum class UsagePreset {
-			eUpload, eDownload, eCopy, eRender, eStore
-		};
+		enum class UsagePreset { eUpload, eDownload, eCopy, eRender, eStore };
 
 		enum class Preset {
 			eMap1D,         // 1D image with upload, sampled, never rendered to. Full mip chain. No arraying.
@@ -78,7 +73,7 @@ namespace vuk {
 			ImageAttachment ia = {};
 			ia.usage = {};
 			ia.format = format;
-			ia.extent = Dimension3D::absolute(extent);
+			ia.extent = extent;
 			ia.sample_count = sample_count;
 			ia.allow_srgb_unorm_mutable = true;
 			ImageAspectFlags aspect = format_to_aspect(format);

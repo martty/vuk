@@ -301,14 +301,14 @@ namespace vuk {
 				if (node->type[0] == cg_module->builtin_image) {
 					auto ptr = &constant<ImageAttachment>(args_ptr[0]);
 					auto& value = constant<ImageAttachment>(args_ptr[0]);
-					if (value.extent.extent.width > 0) {
-						placeholder_to_ptr(args_ptr[1], &ptr->extent.extent.width);
+					if (value.extent.width > 0) {
+						placeholder_to_ptr(args_ptr[1], &ptr->extent.width);
 					}
-					if (value.extent.extent.height > 0) {
-						placeholder_to_ptr(args_ptr[2], &ptr->extent.extent.height);
+					if (value.extent.height > 0) {
+						placeholder_to_ptr(args_ptr[2], &ptr->extent.height);
 					}
-					if (value.extent.extent.depth > 0) {
-						placeholder_to_ptr(args_ptr[3], &ptr->extent.extent.depth);
+					if (value.extent.depth > 0) {
+						placeholder_to_ptr(args_ptr[3], &ptr->extent.depth);
 					}
 					if (value.format != Format::eUndefined) {
 						placeholder_to_ptr(args_ptr[4], &ptr->format);
@@ -382,7 +382,7 @@ namespace vuk {
 								}
 							} else if (link.urdef.node->kind == Node::ACQUIRE_NEXT_IMAGE) {
 								Swapchain& swp = *reinterpret_cast<Swapchain*>(link.urdef.node->acquire_next_image.swapchain.node->construct.args[0].node->constant.value);
-								extent = Extent2D{ swp.images[0].extent.extent.width, swp.images[0].extent.extent.height };
+								extent = Extent2D{ swp.images[0].extent.width, swp.images[0].extent.height };
 								layer_count = swp.images[0].layer_count;
 								samples = Samples::e1;
 							}

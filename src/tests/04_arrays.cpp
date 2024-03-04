@@ -55,7 +55,7 @@ auto image2buf = make_pass("copy image to buffer", [](CommandBuffer& cbuf, VUK_I
 	bc.imageOffset = { 0, 0, 0 };
 	bc.bufferRowLength = 0;
 	bc.bufferImageHeight = 0;
-	bc.imageExtent = static_cast<Extent3D>(src->extent.extent);
+	bc.imageExtent = src->extent;
 	bc.imageSubresource.aspectMask = format_to_aspect(src->format);
 	bc.imageSubresource.mipLevel = src->base_level;
 	bc.imageSubresource.baseArrayLayer = src->base_layer;
@@ -74,8 +74,7 @@ TEST_CASE("arrayed images, commands") {
 		auto [img2, fut2] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
 
 		size_t alignment = format_to_texel_block_size(fut->format);
-		assert(fut->extent.sizing == Sizing::eAbsolute);
-		size_t size = compute_image_size(fut->format, static_cast<Extent3D>(fut->extent.extent));
+		size_t size = compute_image_size(fut->format, fut->extent);
 		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 
 		auto arr = declare_array("images", std::move(fut), std::move(fut2));

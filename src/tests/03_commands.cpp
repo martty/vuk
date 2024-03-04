@@ -61,7 +61,7 @@ auto image2buf = make_pass("copy image to buffer", [](CommandBuffer& cbuf, VUK_I
 	bc.imageOffset = { 0, 0, 0 };
 	bc.bufferRowLength = 0;
 	bc.bufferImageHeight = 0;
-	bc.imageExtent = static_cast<Extent3D>(src->extent.extent);
+	bc.imageExtent = src->extent;
 	bc.imageSubresource.aspectMask = format_to_aspect(src->format);
 	bc.imageSubresource.mipLevel = src->base_level;
 	bc.imageSubresource.baseArrayLayer = src->base_layer;
@@ -79,8 +79,7 @@ TEST_CASE("image upload/download") {
 		auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
 
 		size_t alignment = format_to_texel_block_size(fut->format);
-		assert(fut->extent.sizing == Sizing::eAbsolute);
-		size_t size = compute_image_size(fut->format, static_cast<Extent3D>(fut->extent.extent));
+		size_t size = compute_image_size(fut->format, fut->extent);
 		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 		auto dst_buf = declare_buf("dst", *dst);
 		auto res = download_buffer(image2buf(fut, std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
@@ -96,8 +95,7 @@ TEST_CASE("image clear") {
 		auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
 
 		size_t alignment = format_to_texel_block_size(fut->format);
-		assert(fut->extent.sizing == Sizing::eAbsolute);
-		size_t size = compute_image_size(fut->format, static_cast<Extent3D>(fut->extent.extent));
+		size_t size = compute_image_size(fut->format, fut->extent);
 		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 		auto fut2 = clear_image(fut, vuk::ClearColor(5u, 5u, 5u, 5u));
 		auto dst_buf = declare_buf("dst", *dst);
@@ -117,8 +115,7 @@ TEST_CASE("image blit") {
 		ia_dst.level_count = 1;
 		auto img2 = allocate_image(*test_context.allocator, ia_dst);
 		size_t alignment = format_to_texel_block_size(fut->format);
-		assert(fut->extent.sizing == Sizing::eAbsolute);
-		size_t size = compute_image_size(fut->format, static_cast<Extent3D>(fut->extent.extent));
+		size_t size = compute_image_size(fut->format, fut->extent);
 		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 		auto fut2 = blit_image(fut, declare_ia("dst_i", ia_dst), Filter::eLinear);
 		auto dst_buf = declare_buf("dst", *dst);
@@ -135,8 +132,7 @@ TEST_CASE("image blit") {
 		ia_dst.level_count = 1;
 		auto img2 = allocate_image(*test_context.allocator, ia_dst);
 		size_t alignment = format_to_texel_block_size(fut->format);
-		assert(fut->extent.sizing == Sizing::eAbsolute);
-		size_t size = compute_image_size(fut->format, static_cast<Extent3D>(fut->extent.extent));
+		size_t size = compute_image_size(fut->format, fut->extent);
 		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 		auto fut2 = blit_image(fut, declare_ia("dst_i", ia_dst), Filter::eNearest);
 		auto dst_buf = declare_buf("dst", *dst);

@@ -266,43 +266,6 @@ namespace vuk {
 
 	enum class Sizing { eAbsolute, eRelative };
 
-	struct Dimension3D {
-		Sizing sizing = Sizing::eAbsolute;
-
-		Extent3D extent;
-
-		struct Relative {
-			float width = 1.0f;
-			float height = 1.0f;
-			float depth = 1.0f;
-
-			auto operator<=>(const Relative&) const = default;
-		} _relative;
-
-		static Dimension3D absolute(uint32_t width, uint32_t height) noexcept {
-			return Dimension3D{ .extent = { width, height, 1 } };
-		}
-
-		static Dimension3D absolute(uint32_t width, uint32_t height, uint32_t depth) noexcept {
-			return Dimension3D{ .extent = { width, height, depth } };
-		}
-
-		static Dimension3D absolute(Extent2D extent) noexcept {
-			return Dimension3D{ .extent = static_cast<Extent3D>(extent) };
-		}
-		static Dimension3D absolute(Extent3D extent) noexcept {
-			return Dimension3D{ .extent = static_cast<Extent3D>(extent) };
-		}
-		static Dimension3D relative(float width, float height) noexcept {
-			return Dimension3D{ .sizing = Sizing::eRelative, ._relative = { .width = width, .height = height } };
-		}
-		static Dimension3D framebuffer() noexcept {
-			return Dimension3D{ .sizing = Sizing::eRelative };
-		}
-
-		auto operator<=>(const Dimension3D&) const = default;
-	};
-
 	struct Rect2D {
 		Sizing sizing = Sizing::eAbsolute;
 
