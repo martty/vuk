@@ -570,7 +570,7 @@ namespace vuk {
 	                                                             float invocations_per_pixel_scale_x,
 	                                                             float invocations_per_pixel_scale_y,
 	                                                             float invocations_per_pixel_scale_z) {
-		auto extent = ia.extent.extent;
+		auto extent = ia.extent;
 
 		return dispatch_invocations((uint32_t)std::ceil(invocations_per_pixel_scale_x * extent.width),
 		                            (uint32_t)std::ceil(invocations_per_pixel_scale_y * extent.height),
@@ -640,8 +640,8 @@ namespace vuk {
 			rect.rect = {
 				(int32_t)0,
 				(int32_t)0,
-				src.extent.extent.width,
-				src.extent.extent.height,
+				src.extent.width,
+				src.extent.height,
 			};
 			ctx.vkCmdClearAttachments(command_buffer, 1, &clr, 1, &rect);
 		}
@@ -670,7 +670,7 @@ namespace vuk {
 		ir.srcSubresource = isl;
 		ir.dstOffset = Offset3D{};
 		ir.dstSubresource = isl;
-		ir.extent = static_cast<Extent3D>(src.extent.extent);
+		ir.extent = static_cast<Extent3D>(src.extent);
 
 		ctx.vkCmdResolveImage(command_buffer, src.image.image, (VkImageLayout)src.layout, dst.image.image, (VkImageLayout)dst.layout, 1, &ir);
 

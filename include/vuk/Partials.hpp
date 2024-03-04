@@ -64,8 +64,7 @@ namespace vuk {
 	/// @param src_data pointer to source data
 	inline Value<ImageAttachment> host_data_to_image(Allocator& allocator, DomainFlagBits copy_domain, ImageAttachment image, const void* src_data) {
 		size_t alignment = format_to_texel_block_size(image.format);
-		assert(image.extent.sizing == Sizing::eAbsolute);
-		size_t size = compute_image_size(image.format, static_cast<Extent3D>(image.extent.extent));
+		size_t size = compute_image_size(image.format, image.extent);
 		auto src = *allocate_buffer(allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 		::memcpy(src->mapped_ptr, src_data, size);
 
@@ -73,7 +72,7 @@ namespace vuk {
 		bc.imageOffset = { 0, 0, 0 };
 		bc.bufferRowLength = 0;
 		bc.bufferImageHeight = 0;
-		bc.imageExtent = static_cast<Extent3D>(image.extent.extent);
+		bc.imageExtent = image.extent;
 		bc.imageSubresource.aspectMask = format_to_aspect(image.format);
 		bc.imageSubresource.mipLevel = image.base_level;
 		bc.imageSubresource.baseArrayLayer = image.base_layer;
@@ -236,15 +235,15 @@ namespace vuk {
 			ImageBlit region = {};
 			region.srcOffsets[0] = Offset3D{};
 			region.srcOffsets[1] = Offset3D{
-				(int32_t)src->extent.extent.width,
-				(int32_t)src->extent.extent.height,
-				(int32_t)src->extent.extent.depth,
+				(int32_t)src->extent.width,
+				(int32_t)src->extent.height,
+				(int32_t)src->extent.depth,
 			};
 			region.dstOffsets[0] = Offset3D{};
 			region.dstOffsets[1] = Offset3D{
-				(int32_t)dst->extent.extent.width,
-				(int32_t)dst->extent.extent.height,
-				(int32_t)dst->extent.extent.depth,
+				(int32_t)dst->extent.width,
+				(int32_t)dst->extent.height,
+				(int32_t)dst->extent.depth,
 			};
 			region.srcSubresource.aspectMask = format_to_aspect(src->format);
 			region.srcSubresource.baseArrayLayer = src->base_layer;

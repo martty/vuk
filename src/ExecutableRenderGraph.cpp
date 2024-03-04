@@ -618,8 +618,8 @@ namespace vuk {
 				alloc.get_context().set_name(img_att.image_view.payload, Name(name));
 			}
 			rp.framebuffer_ivs.push_back(img_att.image_view.payload);
-			rp.fbci.width = img_att.extent.extent.width;
-			rp.fbci.height = img_att.extent.extent.height;
+			rp.fbci.width = img_att.extent.width;
+			rp.fbci.height = img_att.extent.height;
 			rp.fbci.layers = img_att.layer_count;
 			assert(img_att.level_count == 1);
 			rp.fbci.sample_count = img_att.sample_count;
@@ -1423,10 +1423,9 @@ namespace vuk {
 						auto& attachment = *reinterpret_cast<ImageAttachment*>(node->construct.args[0].node->constant.value);
 						// collapse inferencing
 						try {
-							attachment.extent.extent.width = eval<uint32_t>(node->construct.args[1]);
-							attachment.extent.extent.height = eval<uint32_t>(node->construct.args[2]);
-							attachment.extent.extent.depth = eval<uint32_t>(node->construct.args[3]);
-							attachment.extent.sizing = Sizing::eAbsolute;
+							attachment.extent.width = eval<uint32_t>(node->construct.args[1]);
+							attachment.extent.height = eval<uint32_t>(node->construct.args[2]);
+							attachment.extent.depth = eval<uint32_t>(node->construct.args[3]);
 							attachment.format = eval<Format>(node->construct.args[4]);
 							attachment.sample_count = eval<Samples>(node->construct.args[5]);
 							attachment.base_layer = eval<uint32_t>(node->construct.args[6]);
@@ -1819,16 +1818,16 @@ namespace vuk {
 		    }
 
 		    ia.level_count = 1; // can only render to a single mip level
-		    ia.extent.extent.depth = 1;
+		    ia.extent.depth = 1;
 
 		    // we do an initial IA -> FB, because we won't process complete IAs later, but we need their info
 		    if (ia.sample_count != Samples::eInfer && !rp_att.is_resolve_dst) {
 		      rp.fbci.sample_count = ia.sample_count;
 		    }
 
-		    if (ia.extent.sizing == Sizing::eAbsolute && ia.extent.extent.width > 0 && ia.extent.extent.height > 0) {
-		      rp.fbci.width = ia.extent.extent.width;
-		      rp.fbci.height = ia.extent.extent.height;
+		    if (ia.extent.sizing == Sizing::eAbsolute && ia.extent.width > 0 && ia.extent.height > 0) {
+		      rp.fbci.width = ia.extent.width;
+		      rp.fbci.height = ia.extent.height;
 		    }
 
 		    // resolve images are always sample count 1
@@ -1922,7 +1921,7 @@ namespace vuk {
 		    auto& ia = atti.attachment;
 		    auto prev = ia;
 		    // infer FB -> IA
-		    if (ia.sample_count == Samples::eInfer || (ia.extent.extent.width == 0 && ia.extent.extent.height == 0) ||
+		    if (ia.sample_count == Samples::eInfer || (ia.extent.width == 0 && ia.extent.height == 0) ||
 		        ia.extent.sizing == Sizing::eRelative) { // this IA can potentially take inference from an FB
 		      for (auto* rpi : atti.rp_uses.to_span(impl->attachment_rp_references)) {
 		        auto& fbci = rpi->fbci;
@@ -1939,13 +1938,13 @@ namespace vuk {
 		        }
 
 		        if (extent_known) {
-		          if (ia.extent.extent.width == 0 && ia.extent.extent.height == 0) {
-		            ia.extent.extent.width = fb_extent.width;
-		            ia.extent.extent.height = fb_extent.height;
+		          if (ia.extent.width == 0 && ia.extent.height == 0) {
+		            ia.extent.width = fb_extent.width;
+		            ia.extent.height = fb_extent.height;
 		          } else if (ia.extent.sizing == Sizing::eRelative) {
-		            ia.extent.extent.width = static_cast<uint32_t>(ia.extent._relative.width * fb_extent.width);
-		            ia.extent.extent.height = static_cast<uint32_t>(ia.extent._relative.height * fb_extent.height);
-		            ia.extent.extent.depth = static_cast<uint32_t>(ia.extent._relative.depth * fb_extent.depth);
+		            ia.extent.width = static_cast<uint32_t>(ia.extent._relative.width * fb_extent.width);
+		            ia.extent.height = static_cast<uint32_t>(ia.extent._relative.height * fb_extent.height);
+		            ia.extent.depth = static_cast<uint32_t>(ia.extent._relative.depth * fb_extent.depth);
 		          }
 		          ia.extent.sizing = Sizing::eAbsolute;
 		        }
@@ -1991,19 +1990,19 @@ namespace vuk {
 		            << static_cast<uint32_t>(ia.sample_count.count);
 		        return { expected_error, RenderGraphException{ msg.str() } };
 		      }
-		      if (prev.extent.extent.width != ia.extent.extent.width && prev.extent.extent.width != 0) {
+		      if (prev.extent.width != ia.extent.width && prev.extent.width != 0) {
 		        msg << "Rule broken for attachment[" << atti.name.name.c_str() << "] :\n ";
-		        msg << " extent.width was previously known to be " << prev.extent.extent.width << ", but now set to " << ia.extent.extent.width;
+		        msg << " extent.width was previously known to be " << prev.extent.width << ", but now set to " << ia.extent.width;
 		        return { expected_error, RenderGraphException{ msg.str() } };
 		      }
-		      if (prev.extent.extent.height != ia.extent.extent.height && prev.extent.extent.height != 0) {
+		      if (prev.extent.height != ia.extent.height && prev.extent.height != 0) {
 		        msg << "Rule broken for attachment[" << atti.name.name.c_str() << "] :\n ";
-		        msg << " extent.height was previously known to be " << prev.extent.extent.height << ", but now set to " << ia.extent.extent.height;
+		        msg << " extent.height was previously known to be " << prev.extent.height << ", but now set to " << ia.extent.height;
 		        return { expected_error, RenderGraphException{ msg.str() } };
 		      }
-		      if (prev.extent.extent.depth != ia.extent.extent.depth && prev.extent.extent.depth != 0) {
+		      if (prev.extent.depth != ia.extent.depth && prev.extent.depth != 0) {
 		        msg << "Rule broken for attachment[" << atti.name.name.c_str() << "] :\n ";
-		        msg << " extent.depth was previously known to be " << prev.extent.extent.depth << ", but now set to " << ia.extent.extent.depth;
+		        msg << " extent.depth was previously known to be " << prev.extent.depth << ", but now set to " << ia.extent.depth;
 		        return { expected_error, RenderGraphException{ msg.str() } };
 		      }
 		      if (ia.may_require_image_view() && prev.view_type != ia.view_type && prev.view_type != ImageViewType::eInfer) {
@@ -2015,7 +2014,7 @@ namespace vuk {
 
 		      infer_progress = true;
 		      // infer IA -> FB
-		      if (ia.sample_count == Samples::eInfer && (ia.extent.extent.width == 0 && ia.extent.extent.height == 0)) { // this IA is not helpful for FB
+		      if (ia.sample_count == Samples::eInfer && (ia.extent.width == 0 && ia.extent.height == 0)) { // this IA is not helpful for FB
 		inference continue;
 		      }
 		      for (auto* rpi : atti.rp_uses.to_span(impl->attachment_rp_references)) {
@@ -2041,9 +2040,9 @@ namespace vuk {
 		          }
 		        }
 
-		        if (ia.extent.sizing == vuk::Sizing::eAbsolute && ia.extent.extent.width > 0 && ia.extent.extent.height > 0) {
-		          fbci.width = ia.extent.extent.width;
-		          fbci.height = ia.extent.extent.height;
+		        if (ia.extent.sizing == vuk::Sizing::eAbsolute && ia.extent.width > 0 && ia.extent.height > 0) {
+		          fbci.width = ia.extent.width;
+		          fbci.height = ia.extent.height;
 		        }
 		      }
 		    }
@@ -2064,13 +2063,13 @@ namespace vuk {
 		  if (ia.extent.sizing == Sizing::eRelative) {
 		    msg << "- relative sizing could not be resolved\n";
 		  }
-		  if (ia.extent.extent.width == 0) {
+		  if (ia.extent.width == 0) {
 		    msg << "- extent.width unknown\n";
 		  }
-		  if (ia.extent.extent.height == 0) {
+		  if (ia.extent.height == 0) {
 		    msg << "- extent.height unknown\n";
 		  }
-		  if (ia.extent.extent.depth == 0) {
+		  if (ia.extent.depth == 0) {
 		    msg << "- extent.depth unknown\n";
 		  }
 		  if (ia.format == Format::eUndefined) {

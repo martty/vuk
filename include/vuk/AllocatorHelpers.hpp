@@ -119,8 +119,7 @@ namespace vuk {
 		ici.tiling = attachment.tiling;
 		ici.mipLevels = attachment.level_count;
 		ici.usage = attachment.usage;
-		assert(attachment.extent.sizing == Sizing::eAbsolute);
-		ici.extent = static_cast<vuk::Extent3D>(attachment.extent.extent);
+		ici.extent = attachment.extent;
 
 		VkImageFormatListCreateInfo listci = { VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO };
 		if (attachment.allow_srgb_unorm_mutable) {
