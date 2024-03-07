@@ -65,7 +65,7 @@ namespace vuk {
 		}
 	};
 	static_assert(sizeof(DrawIndexedIndirectCommand) == sizeof(VkDrawIndexedIndirectCommand), "struct and wrapper have different size!");
-	static_assert(std::is_standard_layout<DrawIndexedIndirectCommand>::value, "struct wrapper is not a standard layout!");
+	static_assert(std::is_standard_layout_v<DrawIndexedIndirectCommand>, "struct wrapper is not a standard layout!");
 
 	struct ImageSubresourceLayers {
 		ImageAspectFlags aspectMask = {};
@@ -90,7 +90,7 @@ namespace vuk {
 		}
 	};
 	static_assert(sizeof(ImageSubresourceLayers) == sizeof(VkImageSubresourceLayers), "struct and wrapper have different size!");
-	static_assert(std::is_standard_layout<ImageSubresourceLayers>::value, "struct wrapper is not a standard layout!");
+	static_assert(std::is_standard_layout_v<ImageSubresourceLayers>, "struct wrapper is not a standard layout!");
 
 	struct ImageBlit {
 		ImageSubresourceLayers srcSubresource = {};
@@ -116,7 +116,35 @@ namespace vuk {
 		}
 	};
 	static_assert(sizeof(ImageBlit) == sizeof(VkImageBlit), "struct and wrapper have different size!");
-	static_assert(std::is_standard_layout<ImageBlit>::value, "struct wrapper is not a standard layout!");
+	static_assert(std::is_standard_layout_v<ImageBlit>, "struct wrapper is not a standard layout!");
+
+	struct ImageCopy {
+		ImageSubresourceLayers srcSubresource = {};
+		Offset3D srcOffsets = {};
+		ImageSubresourceLayers dstSubresource = {};
+		Offset3D dstOffsets = {};
+		Extent3D imageExtent = {};
+
+		operator VkImageCopy const&() const noexcept {
+			return *reinterpret_cast<const VkImageCopy*>(this);
+		}
+
+		operator VkImageCopy&() noexcept {
+			return *reinterpret_cast<VkImageCopy*>(this);
+		}
+
+		bool operator==(ImageCopy const& rhs) const noexcept {
+			return (srcSubresource == rhs.srcSubresource) && (srcOffsets == rhs.srcOffsets) && (dstSubresource == rhs.dstSubresource) &&
+			       (dstOffsets == rhs.dstOffsets) && (imageExtent == rhs.imageExtent);
+		}
+
+		bool operator!=(ImageCopy const& rhs) const noexcept {
+			return !operator==(rhs);
+		}
+	};
+
+	static_assert(sizeof(ImageCopy) == sizeof(VkImageCopy), "struct and wrapper have different size!");
+	static_assert(std::is_standard_layout_v<ImageCopy>, "struct wrapper is not a standard layout!");
 
 	struct BufferImageCopy {
 		VkDeviceSize bufferOffset = {};
@@ -144,7 +172,7 @@ namespace vuk {
 		}
 	};
 	static_assert(sizeof(BufferImageCopy) == sizeof(VkBufferImageCopy), "struct and wrapper have different size!");
-	static_assert(std::is_standard_layout<BufferImageCopy>::value, "struct wrapper is not a standard layout!");
+	static_assert(std::is_standard_layout_v<BufferImageCopy>, "struct wrapper is not a standard layout!");
 
 	struct ExecutableRenderGraph;
 	struct ImageAttachment;
@@ -618,6 +646,11 @@ namespace vuk {
 		/// @param region parameters of the blit
 		/// @param filter Filter to use if the src and dst extents differ
 		CommandBuffer& blit_image(Name src, Name dst, ImageBlit region, Filter filter);
+		/// @brief Perform an image copy
+		/// @param src the Name of the source Resource
+		/// @param dst the Name of the destination Resource
+		/// @param region parameters of the copy
+		CommandBuffer& copy_image(Name src, Name dst, ImageCopy region);
 		/// @brief Copy a buffer resource into an image resource
 		/// @param src the Name of the source Resource
 		/// @param dst the Name of the destination Resource
