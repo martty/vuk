@@ -138,6 +138,38 @@ namespace vuk {
 
 			return ia;
 		}
+
+		ImageAttachment mip(uint32_t mip) {
+			ImageAttachment a = *this;
+			a.base_level = (a.base_level == VK_REMAINING_MIP_LEVELS ? 0 : a.base_level) + mip;
+			a.level_count = 1;
+			a.image_view = {};
+			return a;
+		}
+
+		ImageAttachment mip_range(uint32_t mip_base, uint32_t mip_count) {
+			ImageAttachment a = *this;
+			a.base_level = (a.base_level == VK_REMAINING_MIP_LEVELS ? 0 : a.base_level) + mip_base;
+			a.level_count = mip_count;
+			a.image_view = {};
+			return a;
+		}
+
+		ImageAttachment layer(uint32_t layer) {
+			ImageAttachment a = *this;
+			a.base_layer = (a.base_layer == VK_REMAINING_ARRAY_LAYERS ? 0 : a.base_layer) + layer;
+			a.layer_count = 1;
+			a.image_view = {};
+			return a;
+		}
+
+		ImageAttachment layer_range(uint32_t layer_base, uint32_t layer_count) {
+			ImageAttachment a = *this;
+			a.base_layer = (a.base_layer == VK_REMAINING_ARRAY_LAYERS ? 0 : a.base_layer) + layer_base;
+			a.layer_count = layer_count;
+			a.image_view = {};
+			return a;
+		}
 	};
 
 	struct ResourceUse {
