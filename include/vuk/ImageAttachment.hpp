@@ -139,7 +139,7 @@ namespace vuk {
 			return ia;
 		}
 
-		ImageAttachment mip(uint32_t mip) {
+		ImageAttachment mip(uint32_t mip) const noexcept {
 			ImageAttachment a = *this;
 			a.base_level = (a.base_level == VK_REMAINING_MIP_LEVELS ? 0 : a.base_level) + mip;
 			a.level_count = 1;
@@ -147,7 +147,7 @@ namespace vuk {
 			return a;
 		}
 
-		ImageAttachment mip_range(uint32_t mip_base, uint32_t mip_count) {
+		ImageAttachment mip_range(uint32_t mip_base, uint32_t mip_count) const noexcept {
 			ImageAttachment a = *this;
 			a.base_level = (a.base_level == VK_REMAINING_MIP_LEVELS ? 0 : a.base_level) + mip_base;
 			a.level_count = mip_count;
@@ -163,12 +163,16 @@ namespace vuk {
 			return a;
 		}
 
-		ImageAttachment layer_range(uint32_t layer_base, uint32_t layer_count) {
+		ImageAttachment layer_range(uint32_t layer_base, uint32_t layer_count) const noexcept {
 			ImageAttachment a = *this;
 			a.base_layer = (a.base_layer == VK_REMAINING_ARRAY_LAYERS ? 0 : a.base_layer) + layer_base;
 			a.layer_count = layer_count;
 			a.image_view = {};
 			return a;
+		}
+
+		Extent3D base_mip_extent() const noexcept {
+			return { std::max(1u, extent.width >> base_level), std::max(1u, extent.height >> base_level), std::max(1u, extent.depth >> base_level) };
 		}
 	};
 
@@ -184,11 +188,11 @@ namespace vuk {
 
 	union Subrange {
 		struct Image {
-			uint32_t base_layer = 0;
 			uint32_t base_level = 0;
-
-			uint32_t layer_count = VK_REMAINING_ARRAY_LAYERS;
 			uint32_t level_count = VK_REMAINING_MIP_LEVELS;
+
+			uint32_t base_layer = 0;
+			uint32_t layer_count = VK_REMAINING_ARRAY_LAYERS;
 
 			constexpr auto operator<=>(const Image& o) const noexcept = default;
 		} image = {};

@@ -244,6 +244,11 @@ namespace vuk {
 				res_to_links[first(node)].type = first(node).type()->array.T;
 				break;
 
+			case Node::SLICE:
+				res_to_links[first(node)].def = first(node);
+				res_to_links[first(node)].type = first(node).type();
+				break;
+
 			case Node::ACQUIRE_NEXT_IMAGE:
 				res_to_links[first(node)].def = first(node);
 				res_to_links[first(node)].type = first(node).type();

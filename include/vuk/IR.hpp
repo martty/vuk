@@ -186,6 +186,7 @@ namespace vuk {
 			CONSTANT,
 			CONSTRUCT,
 			EXTRACT,
+			SLICE,
 			IMPORT,
 			CALL,
 			CLEAR,
@@ -229,6 +230,13 @@ namespace vuk {
 				Ref composite;
 				Ref index;
 			} extract;
+			struct : Fixed<5> {
+				Ref image;
+				Ref base_level;
+				Ref level_count;
+				Ref base_layer;
+				Ref layer_count;
+			} slice;
 			struct : Fixed<0> {
 				void* value;
 			} import;
@@ -318,6 +326,8 @@ namespace vuk {
 				return "release";
 			case MATH_BINARY:
 				return "math_b";
+			case SLICE:
+				return "slice";
 			}
 			assert(0);
 			return "";
@@ -694,6 +704,15 @@ namespace vuk {
 			}
 			return first(emplace_op(
 			    Node{ .kind = Node::EXTRACT, .type = std::span{ ty, 1 }, .extract = { .composite = composite, .index = make_constant<uint64_t>(index) } }));
+		}
+
+		Ref make_slice(Ref image, Ref base_level, Ref level_count, Ref base_layer, Ref layer_count) {
+			auto stripped = Type::stripped(image.type());
+			auto ty = new Type*(stripped);
+			return first(emplace_op(
+			    Node{ .kind = Node::SLICE,
+			          .type = std::span{ ty, 1 },
+			          .slice = { .image = image, .base_level = base_level, .level_count = level_count, .base_layer = base_layer, .layer_count = layer_count } }));
 		}
 
 		Ref make_cast(Type* dst_type, Ref src) {

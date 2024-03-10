@@ -46,6 +46,38 @@ namespace vuk {
 
 		ctx.vkCmdBeginRenderPass(cbuf, &rbi, use_secondary_command_buffers ? VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS : VK_SUBPASS_CONTENTS_INLINE);
 	}
+
+	std::optional<Subrange::Image> intersect(Subrange::Image a, Subrange::Image b) {
+		Subrange::Image result;
+		result.base_layer = std::max(a.base_layer, b.base_layer);
+		int count;
+		if (a.layer_count == VK_REMAINING_ARRAY_LAYERS) {
+			count = static_cast<int32_t>(b.layer_count) + std::min(0, static_cast<int32_t>(result.base_layer) - static_cast<int32_t>(b.base_layer));
+		} else if (b.layer_count == VK_REMAINING_ARRAY_LAYERS) {
+			count = static_cast<int32_t>(a.layer_count) + std::min(0, static_cast<int32_t>(result.base_layer) - static_cast<int32_t>(a.base_layer));
+		} else {
+			count = static_cast<int32_t>(std::min(a.base_layer + a.layer_count, b.base_layer + b.layer_count)) - static_cast<int32_t>(result.base_layer);
+		}
+		if (count < 1) {
+			return {};
+		}
+		result.layer_count = static_cast<uint32_t>(count);
+
+		if (a.level_count == VK_REMAINING_MIP_LEVELS) {
+			count = static_cast<int32_t>(b.level_count) + std::min(0, static_cast<int32_t>(result.base_level) - static_cast<int32_t>(b.base_level));
+		} else if (b.level_count == VK_REMAINING_MIP_LEVELS) {
+			count = static_cast<int32_t>(a.level_count) + std::min(0, static_cast<int32_t>(result.base_level) - static_cast<int32_t>(a.base_level));
+		} else {
+			count = static_cast<int32_t>(std::min(a.base_level + a.level_count, b.base_level + b.level_count)) - static_cast<int32_t>(result.base_level);
+		}
+		if (count < 1) {
+			return {};
+		}
+		result.level_count = static_cast<uint32_t>(count);
+
+		return result;
+	}
+
 	/*
 	[[nodiscard]] bool resolve_image_barrier(const Context& ctx, VkImageMemoryBarrier2KHR& dep, const AttachmentInfo& bound, vuk::DomainFlagBits current_domain) {
 	  dep.image = bound.attachment.image.image;
@@ -461,8 +493,6 @@ namespace vuk {
 				}
 			}
 
-			Subrange::Image subrange = {};
-
 			DomainFlagBits src_domain = src_use.stream ? src_use.stream->domain : DomainFlagBits::eNone;
 			DomainFlagBits dst_domain = dst_use.stream ? dst_use.stream->domain : DomainFlagBits::eNone;
 
@@ -476,10 +506,10 @@ namespace vuk {
 			barrier.oldLayout = (VkImageLayout)src_use.layout;
 			barrier.newLayout = (VkImageLayout)dst_use.layout;
 			barrier.subresourceRange.aspectMask = (VkImageAspectFlags)aspect;
-			barrier.subresourceRange.baseArrayLayer = subrange.base_layer;
-			barrier.subresourceRange.baseMipLevel = subrange.base_level;
-			barrier.subresourceRange.layerCount = subrange.layer_count;
-			barrier.subresourceRange.levelCount = subrange.level_count;
+			barrier.subresourceRange.baseArrayLayer = img_att.base_layer;
+			barrier.subresourceRange.baseMipLevel = img_att.base_level;
+			barrier.subresourceRange.layerCount = img_att.layer_count;
+			barrier.subresourceRange.levelCount = img_att.level_count;
 
 			if (src_domain == DomainFlagBits::eAny || src_domain == DomainFlagBits::eHost) {
 				src_domain = dst_domain;
@@ -519,7 +549,25 @@ namespace vuk {
 				half_im_bars.push_back(barrier);
 			} else if (src_domain == DomainFlagBits::eNone) {
 				auto it = std::find_if(half_im_bars.begin(), half_im_bars.end(), [=](auto& mb) { return mb.pNext == tag; });
-				assert(it != half_im_bars.end());
+				if (it != half_im_bars.end()) { // find a specific match
+				} else { // find a nonspecific match
+					it = std::find_if(half_im_bars.begin(), half_im_bars.end(), [&](auto& mb) { return mb.image == img_att.image.image; });
+					assert(it != half_im_bars.end());
+
+					Subrange::Image a{ img_att.base_level, img_att.level_count, img_att.base_layer, img_att.layer_count };
+					Subrange::Image b{ it->subresourceRange.baseMipLevel,
+						                 it->subresourceRange.levelCount,
+						                 it->subresourceRange.baseArrayLayer,
+						                 it->subresourceRange.layerCount };
+					auto isection_opt = intersect(a, b);
+					assert(isection_opt);
+					auto isection = *isection_opt;
+
+					barrier.subresourceRange.baseArrayLayer = isection.base_layer;
+					barrier.subresourceRange.baseMipLevel = isection.base_level;
+					barrier.subresourceRange.layerCount = isection.layer_count;
+					barrier.subresourceRange.levelCount = isection.level_count;
+				}
 				barrier.pNext = nullptr;
 				barrier.srcAccessMask = it->srcAccessMask;
 				barrier.srcStageMask = it->srcStageMask;
@@ -528,7 +576,6 @@ namespace vuk {
 				im_bars.push_back(barrier);
 				half_im_bars.erase(it);
 				img_att.layout = (ImageLayout)barrier.newLayout;
-
 				if (barrier.oldLayout != VK_IMAGE_LAYOUT_UNDEFINED) {
 					assert(barrier.newLayout != VK_IMAGE_LAYOUT_UNDEFINED);
 				}
@@ -1769,7 +1816,7 @@ namespace vuk {
 				}
 				break;
 			}
-			case Node::EXTRACT:
+			case Node::EXTRACT: {
 				if (sched.process(item)) {
 					auto& link = sched.res_to_links[node->extract.composite];
 					// half sync
@@ -1789,6 +1836,45 @@ namespace vuk {
 					sched.schedule_dependency(node->extract.index, RW::eRead);
 				}
 				break;
+			}
+			case Node::SLICE: {
+				if (sched.process(item)) {
+					auto& link = sched.res_to_links[node->slice.image];
+					// half sync
+					recorder.add_sync(sched.base_type(node->slice.image),
+					                  sched.get_dependency_info(node->slice.image, node->extract.composite.type(), RW::eRead, nullptr),
+					                  sched.get_value(node->slice.image));
+#ifdef VUK_DUMP_EXEC
+					print_results(node);
+					fmt::print(" = ");
+					print_args(std::span{ &node->slice.image, 1 });
+					fmt::print("[m{}:{}, l{}:{}]",
+					           constant<uint32_t>(node->slice.base_level),
+					           constant<uint32_t>(node->slice.base_level) + constant<uint32_t>(node->slice.level_count),
+					           constant<uint32_t>(node->slice.base_layer),
+					           constant<uint32_t>(node->slice.base_layer) + constant<uint32_t>(node->slice.layer_count));
+					fmt::print("\n");
+#endif
+					// assert(elem_ty == impl->cg_module->builtin_image);
+					auto sliced = ImageAttachment(*(ImageAttachment*)sched.get_value(node->slice.image));
+					sliced.base_level += constant<uint32_t>(node->slice.base_level);
+					if (constant<uint32_t>(node->slice.level_count) != VK_REMAINING_MIP_LEVELS) {
+						sliced.level_count = constant<uint32_t>(node->slice.level_count);
+					}
+					sliced.base_layer += constant<uint32_t>(node->slice.base_layer);
+					if (constant<uint32_t>(node->slice.layer_count) != VK_REMAINING_ARRAY_LAYERS) {
+						sliced.layer_count = constant<uint32_t>(node->slice.layer_count);
+					}
+					sched.done(node, nullptr, sliced); // slice doesn't execute
+				} else {
+					sched.schedule_dependency(node->slice.image, RW::eRead);
+					sched.schedule_dependency(node->slice.base_level, RW::eRead);
+					sched.schedule_dependency(node->slice.level_count, RW::eRead);
+					sched.schedule_dependency(node->slice.base_layer, RW::eRead);
+					sched.schedule_dependency(node->slice.layer_count, RW::eRead);
+				}
+				break;
+			}
 			default:
 				assert(0);
 			}
