@@ -202,6 +202,18 @@ namespace vuk {
 			return Value<std::remove_reference_t<decltype(std::declval<T>()[0])>>(
 			    ExtRef(std::make_shared<ExtNode>(get_render_graph(), item.node), item), item_def, { node });
 		}
+
+		auto mip(uint32_t mip)
+		  requires std::is_same_v<T, ImageAttachment>
+		{
+			auto item_def = get_def();
+			Ref item = node->module->make_slice(get_head(),
+			                                    node->module->make_constant(mip),
+			                                    node->module->make_constant(1),
+			                                    node->module->make_constant(0),
+			                                    node->module->make_constant(VK_REMAINING_ARRAY_LAYERS));
+			return Value(ExtRef(std::make_shared<ExtNode>(get_render_graph(), item.node), item), item_def, { node });
+		}
 	};
 
 	inline Value<uint64_t> operator*(Value<uint64_t> a, uint64_t b) {
