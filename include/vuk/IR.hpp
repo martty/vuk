@@ -187,11 +187,10 @@ namespace vuk {
 			CONSTRUCT,
 			EXTRACT,
 			SLICE,
+			CONVERGE,
 			IMPORT,
 			CALL,
 			CLEAR,
-			DIVERGE,
-			CONVERGE,
 			RESOLVE,
 			SIGNAL,
 			WAIT,
@@ -248,12 +247,8 @@ namespace vuk {
 				const Ref dst;
 				Clear* cv;
 			} clear;
-			struct : Fixed<1> {
-				const Ref initial;
-				Subrange::Image subrange;
-			} diverge;
 			struct : Variable {
-				std::span<Ref> diverged;
+				std::span<Ref> ref_and_diverged;
 			} converge;
 			struct : Fixed<3> {
 				const Ref source_ms;
@@ -328,6 +323,8 @@ namespace vuk {
 				return "math_b";
 			case SLICE:
 				return "slice";
+			case CONVERGE:
+				return "converge";
 			}
 			assert(0);
 			return "";
@@ -713,6 +710,17 @@ namespace vuk {
 			    Node{ .kind = Node::SLICE,
 			          .type = std::span{ ty, 1 },
 			          .slice = { .image = image, .base_level = base_level, .level_count = level_count, .base_layer = base_layer, .layer_count = layer_count } }));
+		}
+
+		Ref make_converge(Ref ref, std::span<Ref> deps) {
+			auto stripped = Type::stripped(ref.type());
+			auto ty = new Type*(stripped);
+
+			auto deps_ptr = new Ref[deps.size() + 1];
+			deps_ptr[0] = ref;
+			std::copy(deps.begin(), deps.end(), deps_ptr + 1);
+			return first(
+			    emplace_op(Node{ .kind = Node::CONVERGE, .type = std::span{ ty, 1 }, .converge = { .ref_and_diverged = std::span{ deps_ptr, deps.size() + 1 } } }));
 		}
 
 		Ref make_cast(Type* dst_type, Ref src) {

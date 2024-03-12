@@ -550,15 +550,14 @@ namespace vuk {
 			} else if (src_domain == DomainFlagBits::eNone) {
 				auto it = std::find_if(half_im_bars.begin(), half_im_bars.end(), [=](auto& mb) { return mb.pNext == tag; });
 				if (it != half_im_bars.end()) { // find a specific match
-				} else { // find a nonspecific match
+				} else {                        // find a nonspecific match
 					it = std::find_if(half_im_bars.begin(), half_im_bars.end(), [&](auto& mb) { return mb.image == img_att.image.image; });
 					assert(it != half_im_bars.end());
 
 					Subrange::Image a{ img_att.base_level, img_att.level_count, img_att.base_layer, img_att.layer_count };
-					Subrange::Image b{ it->subresourceRange.baseMipLevel,
-						                 it->subresourceRange.levelCount,
-						                 it->subresourceRange.baseArrayLayer,
-						                 it->subresourceRange.layerCount };
+					Subrange::Image b{
+						it->subresourceRange.baseMipLevel, it->subresourceRange.levelCount, it->subresourceRange.baseArrayLayer, it->subresourceRange.layerCount
+					};
 					auto isection_opt = intersect(a, b);
 					assert(isection_opt);
 					auto isection = *isection_opt;
@@ -1839,31 +1838,38 @@ namespace vuk {
 			}
 			case Node::SLICE: {
 				if (sched.process(item)) {
-					auto& link = sched.res_to_links[node->slice.image];
-					// half sync
-					recorder.add_sync(sched.base_type(node->slice.image),
-					                  sched.get_dependency_info(node->slice.image, node->extract.composite.type(), RW::eRead, nullptr),
-					                  sched.get_value(node->slice.image));
+					Subrange::Image r = { constant<uint32_t>(node->slice.base_level),
+						                    constant<uint32_t>(node->slice.level_count),
+						                    constant<uint32_t>(node->slice.base_layer),
+						                    constant<uint32_t>(node->slice.layer_count) };
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
 					fmt::print(" = ");
 					print_args(std::span{ &node->slice.image, 1 });
-					fmt::print("[m{}:{}, l{}:{}]",
-					           constant<uint32_t>(node->slice.base_level),
-					           constant<uint32_t>(node->slice.base_level) + constant<uint32_t>(node->slice.level_count),
-					           constant<uint32_t>(node->slice.base_layer),
-					           constant<uint32_t>(node->slice.base_layer) + constant<uint32_t>(node->slice.layer_count));
+					if (r.base_level > 0 || r.level_count != VK_REMAINING_MIP_LEVELS) {
+						fmt::print("[m{}:{}]", r.base_level, r.base_level + r.level_count - 1);
+					}
+					if (r.base_layer > 0 || r.layer_count != VK_REMAINING_ARRAY_LAYERS) {
+						fmt::print("[l{}:{}]", r.base_layer, r.base_layer + r.layer_count - 1);
+					}
 					fmt::print("\n");
 #endif
+
+					auto& link = sched.res_to_links[node->slice.image];
+					// half sync
+					recorder.add_sync(sched.base_type(node->slice.image),
+					                  sched.get_dependency_info(node->slice.image, node->slice.image.type(), RW::eRead, nullptr),
+					                  sched.get_value(node->slice.image));
+
 					// assert(elem_ty == impl->cg_module->builtin_image);
 					auto sliced = ImageAttachment(*(ImageAttachment*)sched.get_value(node->slice.image));
-					sliced.base_level += constant<uint32_t>(node->slice.base_level);
-					if (constant<uint32_t>(node->slice.level_count) != VK_REMAINING_MIP_LEVELS) {
-						sliced.level_count = constant<uint32_t>(node->slice.level_count);
+					sliced.base_level += r.base_level;
+					if (r.level_count != VK_REMAINING_MIP_LEVELS) {
+						sliced.level_count = r.level_count;
 					}
-					sliced.base_layer += constant<uint32_t>(node->slice.base_layer);
-					if (constant<uint32_t>(node->slice.layer_count) != VK_REMAINING_ARRAY_LAYERS) {
-						sliced.layer_count = constant<uint32_t>(node->slice.layer_count);
+					sliced.base_layer += r.base_layer;
+					if (r.layer_count != VK_REMAINING_ARRAY_LAYERS) {
+						sliced.layer_count = r.layer_count;
 					}
 					sched.done(node, nullptr, sliced); // slice doesn't execute
 				} else {
@@ -1872,6 +1878,32 @@ namespace vuk {
 					sched.schedule_dependency(node->slice.level_count, RW::eRead);
 					sched.schedule_dependency(node->slice.base_layer, RW::eRead);
 					sched.schedule_dependency(node->slice.layer_count, RW::eRead);
+				}
+				break;
+			}
+			case Node::CONVERGE: {
+				if (sched.process(item)) {
+					auto base = node->converge.ref_and_diverged[0];
+#ifdef VUK_DUMP_EXEC
+					print_results(node);
+					fmt::print(" = ");
+					print_args(node->converge.ref_and_diverged.subspan(0, 1));
+					fmt::print("{{");
+					print_args(node->converge.ref_and_diverged.subspan(1));
+					fmt::print("}}");
+					fmt::print("\n");
+#endif
+					auto& link = sched.res_to_links[node->slice.image];
+					// half sync
+					recorder.add_sync(sched.base_type(base),
+					                  sched.get_dependency_info(base, base.type(), RW::eRead, nullptr),
+					                  sched.get_value(base));
+
+					sched.done(node, nullptr, sched.get_value(base)); // converge doesn't execute
+				} else {
+					for (size_t i = 0; i < node->converge.ref_and_diverged.size(); i++) {
+						sched.schedule_dependency(node->converge.ref_and_diverged[i], RW::eRead);
+					}
 				}
 				break;
 			}

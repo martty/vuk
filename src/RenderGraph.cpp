@@ -113,62 +113,12 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	Result<void> RGCImpl::build_links(DefUseMap& res_to_links, std::vector<Ref>& pass_reads) {
+	Result<void> RGCImpl::build_links() {
 		// build edges into link map
 		// reserving here to avoid rehashing map
 		res_to_links.clear();
+		pass_reads.clear();
 		res_to_links.reserve(100);
-
-		auto replace_refs = [&](Ref needle, Ref replace_with) {
-			for (auto node : nodes) {
-				auto count = node->generic_node.arg_count;
-				if (count != (uint8_t)~0u) {
-					for (int i = 0; i < count; i++) {
-						if (node->fixed_node.args[i] == needle) {
-							node->fixed_node.args[i] = replace_with;
-						}
-					}
-				} else {
-					for (int i = 0; i < node->variable_node.args.size(); i++) {
-						if (node->variable_node.args[i] == needle) {
-							node->variable_node.args[i] = replace_with;
-						}
-					}
-				}
-			}
-		};
-
-		build_nodes();
-
-		// eliminate useless relacqs
-		for (auto node : nodes) {
-			switch (node->kind) {
-			case Node::RELACQ:
-				if (node->relacq.rel_acq == nullptr) {
-					for (size_t i = 0; i < node->relacq.src.size(); i++) {
-						auto needle = Ref{ node, i };
-						auto replace_with = node->relacq.src[i];
-
-						replace_refs(needle, replace_with);
-					}
-				} else {
-					switch (node->relacq.rel_acq->status) {
-					case Signal::Status::eDisarmed: // means we have to signal this, keep
-						break;
-					case Signal::Status::eSynchronizable: // means this is an acq instead
-					case Signal::Status::eHostAvailable:
-						for (size_t i = 0; i < node->relacq.src.size(); i++) {
-							auto new_ref = cg_module->make_acquire(node->type[i], node->relacq.rel_acq, i, node->relacq.values[i]);
-							replace_refs(Ref{ node, i }, new_ref);
-						}
-						break;
-					}
-				}
-				break;
-			}
-		}
-
-		build_nodes();
 
 		// in each RG module, look at the nodes
 		// declare -> clear -> call(R) -> call(W) -> release
@@ -249,6 +199,15 @@ namespace vuk {
 				res_to_links[first(node)].type = first(node).type();
 				break;
 
+			case Node::CONVERGE:
+				res_to_links[first(node)].def = first(node);
+				res_to_links[first(node)].type = first(node).type();
+				for (size_t i = 1; i < node->converge.ref_and_diverged.size(); i++) {
+					auto& parm = node->converge.ref_and_diverged[i];
+					res_to_links[parm].reads.append(pass_reads, { node, i });
+				}
+				break;
+
 			case Node::ACQUIRE_NEXT_IMAGE:
 				res_to_links[first(node)].def = first(node);
 				res_to_links[first(node)].type = first(node).type();
@@ -277,9 +236,10 @@ namespace vuk {
 		// in this case they can't be together - so we linearize them into domain groups
 		// so def -> {r1, r2} becomes def -> r1 -> undef{g0} -> def{g0} -> r2
 
-		// TODO: move this
-		// inference
+		return { expected_value };
+	}
 
+	Result<void> RGCImpl::reify_inference() {
 		auto is_placeholder = [](Ref r) {
 			return r.node->kind == Node::PLACEHOLDER;
 		};
@@ -403,7 +363,7 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	Result<void> collect_chains(DefUseMap& res_to_links, std::vector<ChainLink*>& chains) {
+	Result<void> RGCImpl::collect_chains() {
 		chains.clear();
 		// collect chains by looking at links without a prev
 		for (auto& [name, link] : res_to_links) {
@@ -414,29 +374,6 @@ namespace vuk {
 
 		return { expected_value };
 	}
-
-	/*
-	Result<void> RGCImpl::diagnose_unheaded_chains() {
-	  // diagnose unheaded chains at this point
-	  for (auto& chp : chains) {
-	    if (!chp->def) {
-	      if (chp->reads.size() > 0) {
-	        auto& pass = get_pass(chp->reads.to_span(pass_reads)[0]);
-	        auto& res = get_resource(chp->reads.to_span(pass_reads)[0]);
-
-	        return { expected_error, errors::make_unattached_resource_exception(pass, res) };
-	      }
-	      if (chp->undef && chp->undef->pass >= 0) {
-	        auto& pass = get_pass(*chp->undef);
-	        auto& res = get_resource(*chp->undef);
-
-	        return { expected_error, errors::make_unattached_resource_exception(pass, res) };
-	      }
-	    }
-	  }
-
-	  return { expected_value };
-	}*/
 
 	DomainFlagBits pick_first_domain(DomainFlags f) { // TODO: make this work
 		return (DomainFlagBits)f.m_mask;
@@ -456,6 +393,7 @@ namespace vuk {
 			case Node::MATH_BINARY:
 			case Node::RELACQ:
 			case Node::RELEASE:
+			case Node::CONVERGE:
 				node_to_schedule[node] = schedule_items.size();
 				schedule_items.emplace_back(node);
 				break;
@@ -860,14 +798,119 @@ namespace vuk {
 
 		impl->refs.assign(nodes.begin(), nodes.end());
 
-		// TODO:
-		// impl->merge_diverge_passes(impl->computed_passes);
+		auto replace_refs = [&](Ref needle, Ref replace_with) {
+			for (auto node : impl->nodes) {
+				auto count = node->generic_node.arg_count;
+				if (count != (uint8_t)~0u) {
+					for (int i = 0; i < count; i++) {
+						if (node->fixed_node.args[i] == needle) {
+							node->fixed_node.args[i] = replace_with;
+						}
+					}
+				} else {
+					for (int i = 0; i < node->variable_node.args.size(); i++) {
+						if (node->variable_node.args[i] == needle) {
+							node->variable_node.args[i] = replace_with;
+						}
+					}
+				}
+			}
+		};
 
-		// run global pass ordering - once we split per-queue we don't see enough
-		// inputs to order within a queue
+		// implicit convergence: this has to be done on the full node set
+		// insert converge nodes
+		std::unordered_map<Ref, std::vector<Ref>> slices;
 
-		VUK_DO_OR_RETURN(impl->build_links(impl->res_to_links, impl->pass_reads));
-		VUK_DO_OR_RETURN(collect_chains(impl->res_to_links, impl->chains));
+		for (auto& r : impl->refs) {
+			for (auto& n : r->module->op_arena) {
+				auto node = &n;
+				if (node->kind != Node::CONVERGE) {
+					impl->nodes.push_back(node);
+				}
+				switch (node->kind) {
+				case Node::SLICE: {
+					slices[node->slice.image].push_back(first(node));
+					break;
+				}
+				}
+			}
+		}
+
+		// build links for the full node set
+		VUK_DO_OR_RETURN(impl->build_links());
+
+		// insert converge nodes
+
+		for (auto& [base, sliced] : slices) {
+			std::vector<Ref> tails;
+			for (auto& s : sliced) {
+				auto r = &impl->res_to_links[s];
+				while (r->next) {
+					r = r->next;
+				}
+				tails.push_back(r->def);
+			}
+			auto converged_base = impl->cg_module->make_converge(base, tails);
+
+			for (auto node : impl->nodes) {
+				if (node->kind == Node::SLICE) {
+					continue;
+				}
+
+				auto count = node->generic_node.arg_count;
+				if (count != (uint8_t)~0u) {
+					for (int i = 0; i < count; i++) {
+						if (node->fixed_node.args[i] == base) {
+							node->fixed_node.args[i] = converged_base;
+						}
+					}
+				} else {
+					for (int i = 0; i < node->variable_node.args.size(); i++) {
+						if (node->variable_node.args[i] == base) {
+							node->variable_node.args[i] = converged_base;
+						}
+					}
+				}
+			}
+		}
+
+		VUK_DO_OR_RETURN(impl->build_nodes());
+
+		// eliminate useless relacqs
+
+		for (auto node : impl->nodes) {
+			switch (node->kind) {
+			case Node::RELACQ: {
+				if (node->relacq.rel_acq == nullptr) {
+					for (size_t i = 0; i < node->relacq.src.size(); i++) {
+						auto needle = Ref{ node, i };
+						auto replace_with = node->relacq.src[i];
+
+						replace_refs(needle, replace_with);
+					}
+				} else {
+					switch (node->relacq.rel_acq->status) {
+					case Signal::Status::eDisarmed: // means we have to signal this, keep
+						break;
+					case Signal::Status::eSynchronizable: // means this is an acq instead
+					case Signal::Status::eHostAvailable:
+						for (size_t i = 0; i < node->relacq.src.size(); i++) {
+							auto new_ref = impl->cg_module->make_acquire(node->type[i], node->relacq.rel_acq, i, node->relacq.values[i]);
+							replace_refs(Ref{ node, i }, new_ref);
+						}
+						break;
+					}
+				}
+				break;
+			}
+			}
+		}
+
+		VUK_DO_OR_RETURN(impl->build_nodes());
+
+		VUK_DO_OR_RETURN(impl->build_links());
+		VUK_DO_OR_RETURN(impl->reify_inference());
+		VUK_DO_OR_RETURN(impl->collect_chains());
 
 		// VUK_DO_OR_RETURN(impl->diagnose_unheaded_chains());
 		VUK_DO_OR_RETURN(impl->schedule_intra_queue(compile_options));

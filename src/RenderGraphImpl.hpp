@@ -136,11 +136,11 @@ namespace vuk {
 			return it->second.values;
 		}
 
-		Result<void> diagnose_unheaded_chains();
 		Result<void> build_nodes();
-		Result<void> build_links(DefUseMap& res_to_links, std::vector<Ref>& pass_reads);
+		Result<void> build_links();
+		Result<void> reify_inference();
 		Result<void> schedule_intra_queue(const RenderGraphCompileOptions& compile_options);
-		Result<void> perform_inference(const RenderGraphCompileOptions& compile_options);
+		Result<void> collect_chains();
 
 		std::vector<ChainLink*> div_subchains;
 		std::vector<ChainLink**> conv_subchains;
