@@ -63,6 +63,7 @@ namespace vuk {
 		}
 		result.layer_count = static_cast<uint32_t>(count);
 
+		result.base_level = std::max(a.base_level, b.base_level);
 		if (a.level_count == VK_REMAINING_MIP_LEVELS) {
 			count = static_cast<int32_t>(b.level_count) + std::min(0, static_cast<int32_t>(result.base_level) - static_cast<int32_t>(b.base_level));
 		} else if (b.level_count == VK_REMAINING_MIP_LEVELS) {
@@ -548,35 +549,120 @@ namespace vuk {
 				barrier.pNext = tag;
 				half_im_bars.push_back(barrier);
 			} else if (src_domain == DomainFlagBits::eNone) {
+				VkImageMemoryBarrier2KHR found;
 				auto it = std::find_if(half_im_bars.begin(), half_im_bars.end(), [=](auto& mb) { return mb.pNext == tag; });
 				if (it != half_im_bars.end()) { // find a specific match
-				} else {                        // find a nonspecific match
-					it = std::find_if(half_im_bars.begin(), half_im_bars.end(), [&](auto& mb) { return mb.image == img_att.image.image; });
-					assert(it != half_im_bars.end());
+					found = *it;
+					half_im_bars.erase(it);
+					// fill out src part of the barrier based on the sync half we found
+					barrier.pNext = nullptr;
+					barrier.srcAccessMask = found.srcAccessMask;
+					barrier.srcStageMask = found.srcStageMask;
+					barrier.srcQueueFamilyIndex = found.srcQueueFamilyIndex;
+					barrier.oldLayout = found.oldLayout;
+					im_bars.push_back(barrier);
 
-					Subrange::Image a{ img_att.base_level, img_att.level_count, img_att.base_layer, img_att.layer_count };
-					Subrange::Image b{
-						it->subresourceRange.baseMipLevel, it->subresourceRange.levelCount, it->subresourceRange.baseArrayLayer, it->subresourceRange.layerCount
-					};
-					auto isection_opt = intersect(a, b);
-					assert(isection_opt);
-					auto isection = *isection_opt;
+					img_att.layout = (ImageLayout)barrier.newLayout;
+					if (barrier.oldLayout != VK_IMAGE_LAYOUT_UNDEFINED) {
+						assert(barrier.newLayout != VK_IMAGE_LAYOUT_UNDEFINED);
+					}
+				} else { // find a nonspecific match
+					std::vector<Subrange::Image> work_queue;
+					work_queue.emplace_back(Subrange::Image{ img_att.base_level, img_att.level_count, img_att.base_layer, img_att.layer_count });
 
-					barrier.subresourceRange.baseArrayLayer = isection.base_layer;
-					barrier.subresourceRange.baseMipLevel = isection.base_level;
-					barrier.subresourceRange.layerCount = isection.layer_count;
-					barrier.subresourceRange.levelCount = isection.level_count;
-				}
-				barrier.pNext = nullptr;
-				barrier.srcAccessMask = it->srcAccessMask;
-				barrier.srcStageMask = it->srcStageMask;
-				barrier.srcQueueFamilyIndex = it->srcQueueFamilyIndex;
-				barrier.oldLayout = it->oldLayout;
-				im_bars.push_back(barrier);
-				half_im_bars.erase(it);
-				img_att.layout = (ImageLayout)barrier.newLayout;
-				if (barrier.oldLayout != VK_IMAGE_LAYOUT_UNDEFINED) {
-					assert(barrier.newLayout != VK_IMAGE_LAYOUT_UNDEFINED);
+					while (work_queue.size() > 0) {
+						Subrange::Image b = work_queue.back();
+						work_queue.pop_back();
+						it = std::find_if(half_im_bars.begin(), half_im_bars.end(), [&](auto& mb) { return mb.image == img_att.image.image; });
+						assert(it != half_im_bars.end());
+						found = *it;
+						Subrange::Image a{
+							found.subresourceRange.baseMipLevel, found.subresourceRange.levelCount, found.subresourceRange.baseArrayLayer, found.subresourceRange.layerCount
+						};
+
+						// we want to make a barrier for the intersection of the existing and incoming
+						auto isection_opt = intersect(a, b);
+						if (!isection_opt) {
+							continue;
+						}
+						half_im_bars.erase(it);
+						auto isection = *isection_opt;
+
+						barrier.subresourceRange.baseArrayLayer = isection.base_layer;
+						barrier.subresourceRange.baseMipLevel = isection.base_level;
+						barrier.subresourceRange.layerCount = isection.layer_count;
+						barrier.subresourceRange.levelCount = isection.level_count;
+
+						// then we want to remove the existing barrier from the candidates and put barrier(s) that are the difference
+						auto difference = [](Subrange::Image a, Subrange::Image isection) {
+							std::vector<Subrange::Image> new_srs;
+							// before, mips
+							if (isection.base_level > a.base_level) {
+								new_srs.push_back({ .base_level = a.base_level,
+								                    .level_count = isection.base_level - a.base_level,
+								                    .base_layer = a.base_layer,
+								                    .layer_count = a.layer_count });
+							}
+							// after, mips
+							if (a.base_level + a.level_count > isection.base_level + isection.level_count) {
+								new_srs.push_back({ .base_level = isection.base_level + isection.level_count,
+								                    .level_count = a.base_level + a.level_count - (isection.base_level + isection.level_count),
+								                    .base_layer = a.base_layer,
+								                    .layer_count = a.layer_count });
+							}
+							// before, layers
+							if (isection.base_layer > a.base_layer) {
+								new_srs.push_back({ .base_level = a.base_level,
+								                    .level_count = a.level_count,
+								                    .base_layer = a.base_layer,
+								                    .layer_count = isection.base_layer - a.base_layer });
+							}
+							// after, layers
+							if (a.base_layer + a.layer_count > isection.base_layer + isection.layer_count) {
+								new_srs.push_back({
+								    .base_level = a.base_level,
+								    .level_count = a.level_count,
+								    .base_layer = isection.base_layer + isection.layer_count,
+								    .layer_count = a.base_layer + a.layer_count - (isection.base_layer + isection.layer_count),
+								});
+							}
+
+							return new_srs;
+						};
+
+						auto new_srs = difference(a, isection);
+						// push the splintered src half barrier(s)
+						for (auto& nb : new_srs) {
+							auto barrier = found;
+
+							barrier.subresourceRange.baseArrayLayer = nb.base_layer;
+							barrier.subresourceRange.baseMipLevel = nb.base_level;
+							barrier.subresourceRange.layerCount = nb.layer_count;
+							barrier.subresourceRange.levelCount = nb.level_count;
+
+							half_im_bars.push_back(barrier);
+						}
+
+						// splinter the dst barrier, and push into the work queue
+						auto new_dst = difference(b, isection);
+						if (new_dst.size() > 0) {
+							printf("");
+						}
+						work_queue.insert(work_queue.end(), new_dst.begin(), new_dst.end());
+
+						// fill out src part of the barrier based on the sync half we found
+						barrier.pNext = nullptr;
+						barrier.srcAccessMask = found.srcAccessMask;
+						barrier.srcStageMask = found.srcStageMask;
+						barrier.srcQueueFamilyIndex = found.srcQueueFamilyIndex;
+						barrier.oldLayout = found.oldLayout;
+						im_bars.push_back(barrier);
+
+						img_att.layout = (ImageLayout)barrier.newLayout;
+						if (barrier.oldLayout != VK_IMAGE_LAYOUT_UNDEFINED) {
+							assert(barrier.newLayout != VK_IMAGE_LAYOUT_UNDEFINED);
+						}
+					}
 				}
 			} else {
 				im_bars.push_back(barrier);
@@ -1054,6 +1140,8 @@ namespace vuk {
 						if (r.node->kind == Node::CALL) {
 							arg_ty = r.node->call.fn.type()->opaque_fn.args[r.index];
 							parm = r.node->call.args[r.index];
+						} else if (r.node->kind == Node::CONVERGE) {
+							continue;
 						} else {
 							assert(0);
 						}
@@ -1895,9 +1983,10 @@ namespace vuk {
 #endif
 					auto& link = sched.res_to_links[node->slice.image];
 					// half sync
-					recorder.add_sync(sched.base_type(base),
-					                  sched.get_dependency_info(base, base.type(), RW::eRead, nullptr),
-					                  sched.get_value(base));
+					for (size_t i = 1; i < node->converge.ref_and_diverged.size(); i++) {
+						auto& item = node->converge.ref_and_diverged[i];
+						recorder.add_sync(sched.base_type(item), sched.get_dependency_info(item, item.type(), RW::eRead, nullptr), sched.get_value(item));
+					}
 
 					sched.done(node, nullptr, sched.get_value(base)); // converge doesn't execute
 				} else {
