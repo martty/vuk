@@ -588,7 +588,7 @@ public:
 
 				std::vector<std::shared_ptr<ExtNode>> dependent_nodes;
 				[&dependent_nodes](auto& first, auto&... rest) {
-					(first.get_render_graph()->subgraphs.push_back(rest.get_render_graph()), ...);
+					(first.get_render_graph()->reference_RG(rest.get_render_graph()), ...);
 					dependent_nodes.insert(dependent_nodes.end(), std::move(first.deps).begin(), std::move(first.deps).end());
 					(dependent_nodes.insert(dependent_nodes.end(), std::move(rest.deps).begin(), std::move(rest.deps).end()), ...);
 					dependent_nodes.push_back(std::move(first.node));

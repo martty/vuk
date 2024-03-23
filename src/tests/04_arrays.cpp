@@ -95,7 +95,7 @@ TEST_CASE("arrayed images, commands") {
 	}
 }
 
-TEST_CASE("image slicing, mips"){
+TEST_CASE("image slicing, mips") {
 	{
 		auto data = { 1u, 2u, 3u, 4u };
 		auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, Samples::e1);
@@ -126,13 +126,9 @@ TEST_CASE("image slicing, mips"){
 auto blit_down = make_pass("blit down", [](CommandBuffer& cbuf, VUK_IA(Access::eTransferRead | Access::eTransferWrite) img) {
 	ImageBlit region = {};
 	region.srcOffsets[0] = Offset3D{};
-	region.srcOffsets[1] = Offset3D{
-		2, 2, 1
-	};
+	region.srcOffsets[1] = Offset3D{ 2, 2, 1 };
 	region.dstOffsets[0] = Offset3D{};
-	region.dstOffsets[1] = Offset3D{
-		1, 1, 1
-	};
+	region.dstOffsets[1] = Offset3D{ 1, 1, 1 };
 	region.srcSubresource.aspectMask = format_to_aspect(img->format);
 	region.srcSubresource.baseArrayLayer = 0;
 	region.srcSubresource.layerCount = 1;
@@ -163,7 +159,55 @@ TEST_CASE("image slicing, reconvergence") {
 			auto m1 = clear_image(fut.mip(0), vuk::ClearColor(5u, 5u, 5u, 5u));
 			auto m2 = clear_image(fut.mip(1), vuk::ClearColor(6u, 6u, 6u, 6u));
 			auto futp = blit_down(std::move(fut));
-			
+
+			auto dst_buf = declare_buf("dst", *dst);
+			auto res = download_buffer(image2buf(futp.mip(1), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
+			auto updata = std::span((uint32_t*)res->mapped_ptr, 1);
+			CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 5; }));
+		}
+	}
+}
+
+auto layout = make_pass("layout", [](CommandBuffer& cbuf, VUK_IA(Access::eTransferWrite) img) { return img; });
+
+TEST_CASE("image slicing, reconvergence 2") {
+	{
+		auto data = { 1u, 2u, 3u, 4u };
+		auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, Samples::e1);
+		ia.level_count = 2;
+		auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
+
+		size_t alignment = format_to_texel_block_size(fut->format);
+		size_t size = compute_image_size(fut->format, fut->extent);
+		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
+
+		{
+			auto m1 = clear_image(fut.mip(0), vuk::ClearColor(5u, 5u, 5u, 5u));
+			auto m2 = layout(clear_image(fut.mip(1), vuk::ClearColor(6u, 6u, 6u, 6u)));
+			auto futp = blit_down(std::move(fut));
+
+			auto dst_buf = declare_buf("dst", *dst);
+			auto res = download_buffer(image2buf(futp.mip(1), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
+			auto updata = std::span((uint32_t*)res->mapped_ptr, 1);
+			CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 5; }));
+		}
+	}
+}
+
+TEST_CASE("image slicing, reconvergence 3") {
+	{
+		auto data = { 1u, 2u, 3u, 4u };
+		auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, Samples::e1);
+		ia.level_count = 2;
+		auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
+
+		size_t alignment = format_to_texel_block_size(fut->format);
+		size_t size = compute_image_size(fut->format, fut->extent);
+		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
+
+		{
+			auto m1 = clear_image(fut.mip(0), vuk::ClearColor(5u, 5u, 5u, 5u));
+			auto futp = blit_down(fut);
 			auto dst_buf = declare_buf("dst", *dst);
 			auto res = download_buffer(image2buf(futp.mip(1), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
 			auto updata = std::span((uint32_t*)res->mapped_ptr, 1);
