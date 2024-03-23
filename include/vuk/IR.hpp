@@ -527,7 +527,7 @@ namespace vuk {
 		}
 
 		void reference_RG(std::shared_ptr<RG> other) {
-			subgraphs.emplace_back(other);
+			subgraphs.emplace_back(std::move(other));
 		}
 
 		void name_outputs(Node* node, std::vector<std::string> names) {

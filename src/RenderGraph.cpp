@@ -821,8 +821,19 @@ namespace vuk {
 		// insert converge nodes
 		std::unordered_map<Ref, std::vector<Ref>> slices;
 
-		for (auto& r : impl->refs) {
-			for (auto& n : r->module->op_arena) {
+		// linked-sea-of-nodes to list of nodes
+		std::vector<RG*> work_queue;
+		for (auto& ref : impl->refs) {
+			work_queue.push_back(ref->module.get());
+		}
+
+		while (!work_queue.empty()) {
+			auto mod = work_queue.back();
+			work_queue.pop_back();
+			for (auto& sg : mod->subgraphs) {
+				work_queue.push_back(sg.get());
+			}
+			for (auto& n : mod->op_arena) {
 				auto node = &n;
 				if (node->kind != Node::CONVERGE) {
 					impl->nodes.push_back(node);
@@ -840,6 +851,19 @@ namespace vuk {
 		VUK_DO_OR_RETURN(impl->build_links());
 
 		// insert converge nodes
+		auto in_module = [](RG& module, Node* node) {
+			auto it = std::find_if(module.op_arena.begin(), module.op_arena.end(), [=](auto& n) { return &n == node; });
+			if (it != module.op_arena.end()) {
+				return true;
+			}
+			return false;
+		};
+
+		auto before_module = [](RG& module, Node* a, Node* b) {
+			auto it_a = std::find_if(module.op_arena.begin(), module.op_arena.end(), [=](auto& n) { return &n == a; });
+			auto it_b = std::find_if(module.op_arena.begin(), module.op_arena.end(), [=](auto& n) { return &n == b; });
+			return it_a < it_b;
+		};
 
 		for (auto& [base, sliced] : slices) {
 			std::vector<Ref> tails;
@@ -848,10 +872,9 @@ namespace vuk {
 				while (r->next) {
 					r = r->next;
 				}
-				tails.push_back(r->def);
+				if (r->def.node)
+					tails.push_back(r->def);
 			}
-			auto converged_base = impl->cg_module->make_converge(base, tails);
-
 			for (auto node : impl->nodes) {
 				if (node->kind == Node::SLICE) {
 					continue;
@@ -861,12 +884,26 @@ namespace vuk {
 				if (count != (uint8_t)~0u) {
 					for (int i = 0; i < count; i++) {
 						if (node->fixed_node.args[i] == base) {
+							for (auto& t : tails) {
+								assert(in_module(*impl->cg_module, t.node));
+								if (!before_module(*impl->cg_module, t.node, node)) {
+									return { expected_error, RenderGraphException{ "Convergence not dominated" } };
+								}
+							}
+							auto converged_base = impl->cg_module->make_converge(base, tails);
 							node->fixed_node.args[i] = converged_base;
 						}
 					}
 				} else {
 					for (int i = 0; i < node->variable_node.args.size(); i++) {
 						if (node->variable_node.args[i] == base) {
+							for (auto& t : tails) {
+								assert(in_module(*impl->cg_module, t.node));
+								if (!before_module(*impl->cg_module, t.node, node)) {
+									return { expected_error, RenderGraphException{ "Convergence not dominated" } };
+								}
+							}
+							auto converged_base = impl->cg_module->make_converge(base, tails);
 							node->variable_node.args[i] = converged_base;
 						}
 					}
