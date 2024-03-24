@@ -45,11 +45,23 @@ namespace vuk {
 	struct SourceLocationAtFrame {
 		source_location location;
 		uint64_t absolute_frame;
+		SourceLocationAtFrame* parent;
+
+		constexpr bool operator==(const SourceLocationAtFrame& o) const noexcept {
+			return location.line() == o.location.line() && location.column() == o.location.column() && location.file_name() == o.location.file_name() &&
+			       location.function_name() == o.location.function_name() && absolute_frame == o.absolute_frame && parent == o.parent;
+		}
 	};
 #else
 	struct SourceLocationAtFrame {
 		std::source_location location;
 		uint64_t absolute_frame;
+		SourceLocationAtFrame* parent;
+
+		constexpr bool operator==(const SourceLocationAtFrame& o) const noexcept {
+			return location.line() == o.location.line() && location.column() == o.location.column() && location.file_name() == o.location.file_name() &&
+			       location.function_name() == o.location.function_name() && absolute_frame == o.absolute_frame && parent == o.parent;
+		}
 	};
 
 	using source_location = std::source_location;
@@ -59,6 +71,6 @@ namespace vuk {
 /// @cond INTERNAL
 #define VUK_HERE_AND_NOW()                                                                                                                                     \
 	SourceLocationAtFrame {                                                                                                                                      \
-		vuk::source_location::current(), (uint64_t)-1LL                                                                                                            \
+		vuk::source_location::current(), (uint64_t)-1LL, nullptr                                                                                                   \
 	}
 /// @endcond

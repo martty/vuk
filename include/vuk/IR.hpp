@@ -173,7 +173,7 @@ namespace vuk {
 
 	struct NodeDebugInfo {
 		std::vector<std::string> result_names;
-		std::source_location decl_loc;
+		std::vector<std::source_location> trace;
 	};
 
 	struct Node {
@@ -537,11 +537,15 @@ namespace vuk {
 			node->debug_info->result_names.assign(names.begin(), names.end());
 		}
 
-		void set_source_location(Node* node, std::source_location loc) {
+		void set_source_location(Node* node, SourceLocationAtFrame loc) {
 			if (!node->debug_info) {
 				node->debug_info = new NodeDebugInfo;
 			}
-			node->debug_info->decl_loc = loc;
+			auto p = &loc;
+			do {
+				node->debug_info->trace.push_back(p->location);
+				p = p->parent;
+			} while (p != nullptr);
 		}
 
 		// TYPES

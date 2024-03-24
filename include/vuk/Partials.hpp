@@ -62,7 +62,15 @@ namespace vuk {
 	/// @param copy_domain The domain where the copy should happen
 	/// @param image ImageAttachment to fill
 	/// @param src_data pointer to source data
-	inline Value<ImageAttachment> host_data_to_image(Allocator& allocator, DomainFlagBits copy_domain, ImageAttachment image, const void* src_data) {
+	inline Value<ImageAttachment> host_data_to_image(Allocator& allocator,
+	                                                 DomainFlagBits copy_domain,
+	                                                 ImageAttachment image,
+	                                                 const void* src_data,
+	                                                 SourceLocationAtFrame _pscope = VUK_HERE_AND_NOW(),
+	                                                 SourceLocationAtFrame _scope = VUK_HERE_AND_NOW()) {
+		if (_pscope != _scope) {
+			_scope.parent = &_pscope;
+		}
 		size_t alignment = format_to_texel_block_size(image.format);
 		size_t size = compute_image_size(image.format, image.extent);
 		auto src = *allocate_buffer(allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
@@ -80,8 +88,8 @@ namespace vuk {
 		bc.imageSubresource.layerCount = image.layer_count;
 		bc.bufferOffset = src->offset;
 
-		auto srcbuf = declare_buf("src", *src);
-		auto dst = declare_ia("dst", image);
+		auto srcbuf = declare_buf("src", *src, _scope);
+		auto dst = declare_ia("dst", image, _scope);
 		auto image_upload =
 		    vuk::make_pass("image upload", [bc](vuk::CommandBuffer& command_buffer, VUK_BA(Access::eTransferRead) src, VUK_IA(Access::eTransferWrite) dst) {
 			    command_buffer.copy_buffer_to_image(src, dst, bc);
@@ -181,43 +189,47 @@ namespace vuk {
 	}
 
 	inline std::pair<Unique<Image>, Value<ImageAttachment>> create_image_with_data(Allocator& allocator,
-	                                                                              DomainFlagBits copy_domain,
-	                                                                              ImageAttachment ia,
-	                                                                              const void* data,
-	                                                                              SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
+	                                                                               DomainFlagBits copy_domain,
+	                                                                               ImageAttachment ia,
+	                                                                               const void* data,
+	                                                                               SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 		auto image = allocate_image(allocator, ia, loc);
 		ia.image = **image;
-		return { std::move(*image), host_data_to_image(allocator, copy_domain, ia, data) };
+		return { std::move(*image), host_data_to_image(allocator, copy_domain, ia, data, loc) };
 	}
 
 	template<class T>
 	std::pair<Unique<Image>, Value<ImageAttachment>> create_image_with_data(Allocator& allocator,
-	                                                                              DomainFlagBits copy_domain,
-	                                                                              ImageAttachment ia,
-	                                                                              std::span<T> data,
-	                                                                              SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
+	                                                                        DomainFlagBits copy_domain,
+	                                                                        ImageAttachment ia,
+	                                                                        std::span<T> data,
+	                                                                        SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 		return create_image_with_data(allocator, copy_domain, ia, data.data(), loc);
 	}
 
 	inline std::tuple<Unique<Image>, Unique<ImageView>, Value<ImageAttachment>>
 	create_image_and_view_with_data(Allocator& allocator,
-	                                                                                                           DomainFlagBits copy_domain,
-	                                                                                                           ImageAttachment ia,
-	                                                                                                           const void* data,
-	                                                                                                           SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-		auto image = allocate_image(allocator, ia, loc);
+	                                DomainFlagBits copy_domain,
+	                                ImageAttachment ia,
+	                                const void* data,
+	                                SourceLocationAtFrame _pscope = VUK_HERE_AND_NOW(),
+	                                SourceLocationAtFrame _scope = VUK_HERE_AND_NOW()) {
+		if (_pscope != _scope) {
+			_scope.parent = &_pscope;
+		}
+		auto image = allocate_image(allocator, ia, _scope);
 		ia.image = **image;
-		auto view = allocate_image_view(allocator, ia, loc);
+		auto view = allocate_image_view(allocator, ia, _scope);
 		ia.image_view = **view;
-		return { std::move(*image), std::move(*view), host_data_to_image(allocator, copy_domain, ia, data) };
+		return { std::move(*image), std::move(*view), host_data_to_image(allocator, copy_domain, ia, data, _scope) };
 	}
 
 	template<class T>
 	std::tuple<Unique<Image>, Unique<ImageView>, Value<ImageAttachment>> create_image_and_view_with_data(Allocator& allocator,
-	                                                                                                           DomainFlagBits copy_domain,
-	                                                                                                           ImageAttachment ia,
-	                                                                                                           std::span<T> data,
-	                                                                                                           SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
+	                                                                                                     DomainFlagBits copy_domain,
+	                                                                                                     ImageAttachment ia,
+	                                                                                                     std::span<T> data,
+	                                                                                                     SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 		return create_image_and_view_with_data(allocator, copy_domain, ia, data.data(), loc);
 	}
 
