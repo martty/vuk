@@ -452,6 +452,8 @@ namespace vuk {
 			cbuf_profile_data = nullptr;
 			if (callbacks->on_begin_command_buffer)
 				cbuf_profile_data = callbacks->on_begin_command_buffer(callbacks->user_data, cbuf);
+
+			return { expected_value };
 		}
 
 		Result<void> end_cbuf() {
@@ -482,7 +484,7 @@ namespace vuk {
 			im_bars.clear();
 		}
 
-		void synch_image(ImageAttachment& img_att, StreamResourceUse src_use, StreamResourceUse dst_use, void* tag) {
+		void synch_image(ImageAttachment& img_att, StreamResourceUse src_use, StreamResourceUse dst_use, void* tag) override {
 			auto aspect = format_to_aspect(img_att.format);
 
 			// if we start an RP and we have LOAD_OP_LOAD (currently always), then we must upgrade access with an appropriate READ
@@ -678,7 +680,7 @@ namespace vuk {
 			}
 		};
 
-		void synch_memory(StreamResourceUse src_use, StreamResourceUse dst_use, void* tag) {
+		void synch_memory(StreamResourceUse src_use, StreamResourceUse dst_use, void* tag) override {
 			VkMemoryBarrier2KHR barrier{ .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2_KHR };
 
 			DomainFlagBits src_domain = src_use.stream ? src_use.stream->domain : DomainFlagBits::eNone;
@@ -760,7 +762,6 @@ namespace vuk {
 
 		Result<void> prepare_render_pass() {
 			SubpassDescription sd;
-			size_t color_count = 0;
 			sd.colorAttachmentCount = (uint32_t)rp.rpci.color_refs.size();
 			sd.pColorAttachments = rp.rpci.color_refs.data();
 
@@ -1437,6 +1438,8 @@ namespace vuk {
 			} else {
 				return fmt::format("%{}_{}", parm.node->kind_to_sv(), sched.executed.at(parm.node).naming_index + parm.index);
 			}
+			assert(0);
+			return std::string("???");
 		};
 
 		auto print_args_to_string = [&](std::span<Ref> args) {
@@ -1604,7 +1607,6 @@ namespace vuk {
 						for (size_t i = 1; i < node->construct.args.size(); i++) {
 							auto arg_ty = node->construct.args[i].type();
 							auto& parm = node->construct.args[i];
-							auto& link = impl->res_to_links[parm];
 
 							recorder.add_sync(sched.base_type(parm), sched.get_dependency_info(parm, arg_ty, RW::eWrite, nullptr), sched.get_value(parm));
 						}
@@ -1740,7 +1742,6 @@ namespace vuk {
 					for (size_t i = 0; i < node->call.args.size(); i++) {
 						auto& arg_ty = node->call.fn.type()->opaque_fn.args[i];
 						auto& parm = node->call.args[i];
-						auto& link = impl->res_to_links[parm];
 
 						if (arg_ty->kind == Type::IMBUED_TY) {
 							auto access = arg_ty->imbued.access;
@@ -1830,7 +1831,6 @@ namespace vuk {
 					// release is to execute: we need to flush current queue -> end current batch and add signal
 					auto parm = node->release.src;
 					auto src_stream = item.scheduled_stream;
-					auto& link = impl->res_to_links[parm];
 					DomainFlagBits src_domain = src_stream->domain;
 					Stream* dst_stream;
 					if (node->release.dst_domain == DomainFlagBits::ePE) {
@@ -1905,7 +1905,6 @@ namespace vuk {
 			}
 			case Node::EXTRACT: {
 				if (sched.process(item)) {
-					auto& link = sched.res_to_links[node->extract.composite];
 					// half sync
 					recorder.add_sync(sched.base_type(node->extract.composite),
 					                  sched.get_dependency_info(node->extract.composite, node->extract.composite.type(), RW::eWrite, nullptr),
@@ -1943,7 +1942,6 @@ namespace vuk {
 					fmt::print("\n");
 #endif
 
-					auto& link = sched.res_to_links[node->slice.image];
 					// half sync
 					recorder.add_sync(sched.base_type(node->slice.image),
 					                  sched.get_dependency_info(node->slice.image, node->slice.image.type(), RW::eRead, nullptr),
@@ -1981,7 +1979,6 @@ namespace vuk {
 					fmt::print("}}");
 					fmt::print("\n");
 #endif
-					auto& link = sched.res_to_links[node->slice.image];
 					// half sync
 					for (size_t i = 1; i < node->converge.ref_and_diverged.size(); i++) {
 						auto& item = node->converge.ref_and_diverged[i];

@@ -592,7 +592,6 @@ namespace vuk {
 			auto args_ptr = new Ref[10];
 			auto mem_ty = new Type*(emplace_type(Type{ .kind = Type::MEMORY_TY }));
 			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = ptr } }));
-			auto u64_ty = new Type*(u64());
 			auto u32_ty = new Type*(u32());
 			if (value.extent.width > 0) {
 				args_ptr[1] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ u32_ty, 1 }, .constant = { .value = &ptr->extent.width } }));

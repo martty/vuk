@@ -19,8 +19,8 @@ namespace vuk {
 		UntypedValue(ExtRef extref, Ref def, std::vector<std::shared_ptr<ExtNode>> deps) :
 		    node(std::move(extref.node)),
 		    head{ node->get_node(), extref.index },
-		    def(def),
-		    deps(deps) {}
+		    deps(deps),
+		    def(def) {}
 
 		/// @brief Get the referenced RenderGraph
 		const std::shared_ptr<RG>& get_render_graph() const noexcept {
@@ -214,11 +214,23 @@ namespace vuk {
 			                                    node->module->make_constant(VK_REMAINING_ARRAY_LAYERS));
 			return Value(ExtRef(std::make_shared<ExtNode>(get_render_graph(), item.node), item), item_def, { node });
 		}
+
+		auto layer(uint32_t layer)
+		  requires std::is_same_v<T, ImageAttachment>
+		{
+			auto item_def = get_def();
+			Ref item = node->module->make_slice(get_head(),
+			                                    node->module->make_constant(0),
+			                                    node->module->make_constant(VK_REMAINING_MIP_LEVELS),
+			                                    node->module->make_constant(layer),
+			                                    node->module->make_constant(1));
+			return Value(ExtRef(std::make_shared<ExtNode>(get_render_graph(), item.node), item), item_def, { node });
+		}
 	};
 
 	inline Value<uint64_t> operator*(Value<uint64_t> a, uint64_t b) {
 		Ref ref = a.get_render_graph()->make_math_binary_op(Node::BinOp::MUL, a.get_head(), a.get_render_graph()->make_constant(b));
-		return std::move(std::move(a).transmute<uint64_t>(ref));
+		return std::move(a).transmute<uint64_t>(ref);
 	}
 
 	inline Result<void> wait_for_futures_explicit(Allocator& alloc, Compiler& compiler, std::span<UntypedValue> futures) {
