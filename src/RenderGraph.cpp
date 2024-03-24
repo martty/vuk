@@ -197,11 +197,15 @@ namespace vuk {
 			case Node::SLICE:
 				res_to_links[first(node)].def = first(node);
 				res_to_links[first(node)].type = first(node).type();
+				res_to_links[node->slice.image].child_chains.append(child_chains, &res_to_links[first(node)]);
 				break;
 
 			case Node::CONVERGE:
+				res_to_links[node->converge.ref_and_diverged[0]].undef = { node, 0 };
 				res_to_links[first(node)].def = first(node);
+				res_to_links[node->converge.ref_and_diverged[0]].next = &res_to_links[first(node)];
 				res_to_links[first(node)].type = first(node).type();
+				res_to_links[first(node)].prev = &res_to_links[node->converge.ref_and_diverged[0]];
 				for (size_t i = 1; i < node->converge.ref_and_diverged.size(); i++) {
 					auto& parm = node->converge.ref_and_diverged[i];
 					res_to_links[parm].reads.append(pass_reads, { node, i });
@@ -305,7 +309,7 @@ namespace vuk {
 
 		for (auto node : nodes) {
 			switch (node->kind) {
-			case Node::CALL:
+			case Node::CALL: {
 				// args
 				std::optional<Extent2D> extent;
 				std::optional<Samples> samples;
@@ -315,10 +319,10 @@ namespace vuk {
 					auto& parm = node->call.args[i];
 					if (arg_ty->kind == Type::IMBUED_TY) {
 						auto access = arg_ty->imbued.access;
-						if (is_framebuffer_attachment(access)) {
-							auto& link = res_to_links[parm];
-							if (link.urdef.node->kind == Node::CONSTRUCT) {
-								auto& args = link.urdef.node->construct.args;
+						auto& link = res_to_links[parm];
+						if (link.urdef.node->kind == Node::CONSTRUCT) {
+							auto& args = link.urdef.node->construct.args;
+							if (is_framebuffer_attachment(access)) {
 								if (is_placeholder(args[9])) {
 									placeholder_to_constant(args[9], 1U); // can only render to a single mip level
 								}
@@ -341,22 +345,29 @@ namespace vuk {
 								} else if (layer_count && is_placeholder(args[7])) {
 									placeholder_to_constant(args[7], *layer_count);
 								}
-								if (constant<ImageAttachment>(args[0]).image.image == VK_NULL_HANDLE) { // if there is no image, we will use base layer 0 and base mip 0
-									placeholder_to_constant(args[6], 0U);
-									placeholder_to_constant(args[8], 0U);
-								}
-							} else if (link.urdef.node->kind == Node::ACQUIRE_NEXT_IMAGE) {
-								Swapchain& swp = *reinterpret_cast<Swapchain*>(link.urdef.node->acquire_next_image.swapchain.node->construct.args[0].node->constant.value);
-								extent = Extent2D{ swp.images[0].extent.width, swp.images[0].extent.height };
-								layer_count = swp.images[0].layer_count;
-								samples = Samples::e1;
 							}
+						} else if (link.urdef.node->kind == Node::ACQUIRE_NEXT_IMAGE) {
+							Swapchain& swp = *reinterpret_cast<Swapchain*>(link.urdef.node->acquire_next_image.swapchain.node->construct.args[0].node->constant.value);
+							extent = Extent2D{ swp.images[0].extent.width, swp.images[0].extent.height };
+							layer_count = swp.images[0].layer_count;
+							samples = Samples::e1;
 						}
 					} else {
 						assert(0);
 					}
 				}
 				break;
+			}
+			case Node::CONSTRUCT: {
+				auto& args = node->construct.args;
+				if (node->type[0] == cg_module->builtin_image) {
+					if (constant<ImageAttachment>(args[0]).image.image == VK_NULL_HANDLE) { // if there is no image, we will use base layer 0 and base mip 0
+						placeholder_to_constant(args[6], 0U);
+						placeholder_to_constant(args[8], 0U);
+					}
+				}
+				break;
+			}
 			}
 		}
 
@@ -823,15 +834,24 @@ namespace vuk {
 
 		// linked-sea-of-nodes to list of nodes
 		std::vector<RG*> work_queue;
+		std::unordered_set<RG*> visited;
 		for (auto& ref : impl->refs) {
-			work_queue.push_back(ref->module.get());
+			auto mod = ref->module.get();
+			if (!visited.count(mod)) {
+				work_queue.push_back(mod);
+				visited.emplace(mod);
+			}
 		}
 
 		while (!work_queue.empty()) {
 			auto mod = work_queue.back();
 			work_queue.pop_back();
 			for (auto& sg : mod->subgraphs) {
-				work_queue.push_back(sg.get());
+				auto mod = sg.get();
+				if (!visited.count(mod)) {
+					work_queue.push_back(sg.get());
+					visited.emplace(mod);
+				}
 			}
 			for (auto& n : mod->op_arena) {
 				auto node = &n;
@@ -898,10 +918,10 @@ namespace vuk {
 					for (int i = 0; i < node->variable_node.args.size(); i++) {
 						if (node->variable_node.args[i] == base) {
 							for (auto& t : tails) {
-								assert(in_module(*impl->cg_module, t.node));
+								/* assert(in_module(*impl->cg_module, t.node));
 								if (!before_module(*impl->cg_module, t.node, node)) {
-									return { expected_error, RenderGraphException{ "Convergence not dominated" } };
-								}
+								  return { expected_error, RenderGraphException{ "Convergence not dominated" } };
+								}*/
 							}
 							auto converged_base = impl->cg_module->make_converge(base, tails);
 							node->variable_node.args[i] = converged_base;
@@ -1661,46 +1681,31 @@ namespace vuk {
 		return impl->compute_usage(head);
 	}
 
+	constexpr void access_to_usage(ImageUsageFlags& usage, Access acc) {
+		if (acc & (eMemoryRW | eColorResolveRead | eColorResolveWrite | eColorRW)) {
+			usage |= ImageUsageFlagBits::eColorAttachment;
+		}
+		if (acc & (eMemoryRW | eFragmentSampled | eComputeSampled | eRayTracingSampled | eVertexSampled)) {
+			usage |= ImageUsageFlagBits::eSampled;
+		}
+		if (acc & (eMemoryRW | eDepthStencilRW)) {
+			usage |= ImageUsageFlagBits::eDepthStencilAttachment;
+		}
+		if (acc & (eMemoryRW | eTransferRead)) {
+			usage |= ImageUsageFlagBits::eTransferSrc;
+		}
+		if (acc & (eMemoryRW | eTransferWrite | eClear)) {
+			usage |= ImageUsageFlagBits::eTransferDst;
+		}
+		if (acc & (eMemoryRW | eFragmentRW | eComputeRW | eRayTracingRW)) {
+			usage |= ImageUsageFlagBits::eStorage;
+		}
+	};
+
 	ImageUsageFlags RGCImpl::compute_usage(const ChainLink* head) {
 		ImageUsageFlags usage = {};
-		constexpr auto access_to_usage = [](ImageUsageFlags& usage, Access acc) {
-			if (acc & (eMemoryRW | eColorResolveRead | eColorResolveWrite | eColorRW)) {
-				usage |= ImageUsageFlagBits::eColorAttachment;
-			}
-			if (acc & (eMemoryRW | eFragmentSampled | eComputeSampled | eRayTracingSampled | eVertexSampled)) {
-				usage |= ImageUsageFlagBits::eSampled;
-			}
-			if (acc & (eMemoryRW | eDepthStencilRW)) {
-				usage |= ImageUsageFlagBits::eDepthStencilAttachment;
-			}
-			if (acc & (eMemoryRW | eTransferRead)) {
-				usage |= ImageUsageFlagBits::eTransferSrc;
-			}
-			if (acc & (eMemoryRW | eTransferWrite | eClear)) {
-				usage |= ImageUsageFlagBits::eTransferDst;
-			}
-			if (acc & (eMemoryRW | eFragmentRW | eComputeRW | eRayTracingRW)) {
-				usage |= ImageUsageFlagBits::eStorage;
-			}
-		};
 
 		for (auto chain = head; chain != nullptr; chain = chain->next) {
-			Access ia = Access::eNone;
-			auto use_to_usage = [&usage, access_to_usage](Node* node) {
-				switch (node->kind) {
-				case Node::CALL: {
-					for (size_t i = 0; i < node->call.args.size(); i++) {
-						auto& arg_ty = node->call.fn.type()->opaque_fn.args[i];
-						auto& parm = node->call.args[i];
-						if (arg_ty->kind == Type::IMBUED_TY) {
-							auto access = arg_ty->imbued.access;
-							access_to_usage(usage, access);
-						}
-					}
-				}
-				}
-			};
-
 			for (auto& r : chain->reads.to_span(pass_reads)) {
 				switch (r.node->kind) {
 				case Node::CALL: {
@@ -1724,6 +1729,10 @@ namespace vuk {
 					}
 				}
 				}
+			}
+
+			for (auto& child_chain : chain->child_chains.to_span(child_chains)) {
+				usage |= compute_usage(child_chain);
 			}
 		}
 

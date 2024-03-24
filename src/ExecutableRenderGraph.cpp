@@ -1576,6 +1576,31 @@ namespace vuk {
 							attachment.layer_count = eval<uint32_t>(node->construct.args[7]);
 							attachment.base_level = eval<uint32_t>(node->construct.args[8]);
 							attachment.level_count = eval<uint32_t>(node->construct.args[9]);
+
+							if (attachment.image_view == ImageView{}) {
+								if (attachment.view_type == ImageViewType::eInfer && attachment.layer_count != VK_REMAINING_ARRAY_LAYERS) {
+									if (attachment.image_type == ImageType::e1D) {
+										if (attachment.layer_count == 1) {
+											attachment.view_type = ImageViewType::e1D;
+										} else {
+											attachment.view_type = ImageViewType::e1DArray;
+										}
+									} else if (attachment.image_type == ImageType::e2D) {
+										if (attachment.layer_count == 1) {
+											attachment.view_type = ImageViewType::e2D;
+										} else {
+											attachment.view_type = ImageViewType::e2DArray;
+										}
+									} else if (attachment.image_type == ImageType::e3D) {
+										if (attachment.layer_count == 1) {
+											attachment.view_type = ImageViewType::e3D;
+										} else {
+											attachment.view_type = ImageViewType::e2DArray;
+										}
+									}
+								}
+							}
+
 						} catch (CannotBeConstantEvaluated& err) {
 							if (err.ref.node->kind == Node::PLACEHOLDER) {
 								return { expected_error,
@@ -1676,9 +1701,9 @@ namespace vuk {
 							// here: figuring out which allocator to use to make image views for the RP and then making them
 							if (is_framebuffer_attachment(dst_access)) {
 								auto urdef = link.urdef.node;
-								auto allocator = urdef->construct.allocator ? *urdef->construct.allocator : alloc;
+								auto allocator = urdef->kind == Node::CONSTRUCT && urdef->construct.allocator ? *urdef->construct.allocator : alloc;
 								auto& img_att = sched.get_value<ImageAttachment>(parm);
-								if (img_att.view_type == ImageViewType::eInfer) { // framebuffers need 2D or 2DArray views
+								if (img_att.view_type == ImageViewType::eInfer || img_att.view_type == ImageViewType::eCube) { // framebuffers need 2D or 2DArray views
 									if (img_att.layer_count > 1) {
 										img_att.view_type = ImageViewType::e2DArray;
 									} else {
