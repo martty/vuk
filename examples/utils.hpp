@@ -89,10 +89,10 @@ namespace util {
 
 		for (auto i = 0; i < images.size(); i++) {
 			vuk::ImageAttachment ia;
-			ia.extent = vuk::Dimension3D::absolute(vkswapchain->extent.width, vkswapchain->extent.height, 1);
+			ia.extent = { vkswapchain->extent.width, vkswapchain->extent.height, 1 };
 			ia.format = (vuk::Format)vkswapchain->image_format;
 			ia.image = vuk::Image{ images[i], nullptr };
-			ia.image_view = vuk::ImageView{ 0, views[i] };
+			ia.image_view = vuk::ImageView{ { 0 }, views[i] };
 			ia.view_type = vuk::ImageViewType::e2D;
 			ia.sample_count = vuk::Samples::e1;
 			ia.base_level = ia.base_layer = 0;

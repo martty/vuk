@@ -1686,7 +1686,7 @@ namespace vuk {
 
 		for (auto chain = head; chain != nullptr; chain = chain->next) {
 			Access ia = Access::eNone;
-			auto use_to_usage = [&usage](Node* node) {
+			auto use_to_usage = [&usage, access_to_usage](Node* node) {
 				switch (node->kind) {
 				case Node::CALL: {
 					for (size_t i = 0; i < node->call.args.size(); i++) {

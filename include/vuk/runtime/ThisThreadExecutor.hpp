@@ -12,13 +12,13 @@ namespace vuk {
 	struct ThisThreadExecutor : Executor {
 		ThisThreadExecutor() : Executor(Executor::Type::eThisThread, DomainFlagBits::eHost, 0) {}
 
-		ThisThreadExecutor(ThisThreadExecutor&&) = default;
-		ThisThreadExecutor& operator=(ThisThreadExecutor&&) = default;
+		ThisThreadExecutor(ThisThreadExecutor&&) = delete;
+		ThisThreadExecutor& operator=(ThisThreadExecutor&&) = delete;
 
 		// scheduling on the current thread is lock-free
 		void lock() override {}
 		void unlock() override {}
-		Result<void> wait_idle() {
+		Result<void> wait_idle() override {
 			return { expected_value };
 		}
 	};

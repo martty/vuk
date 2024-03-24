@@ -678,11 +678,11 @@ public:
 		Ref ref = rg->make_acquire_next_image(in.get_head());
 		rg->name_outputs(ref.node, { name.c_str() });
 		rg->set_source_location(ref.node, loc);
-		return std::move(std::move(in).transmute<ImageAttachment>(ref));
+		return std::move(in).transmute<ImageAttachment>(ref);
 	}
 
 	[[nodiscard]] inline Value<void> enqueue_presentation(Value<ImageAttachment> in) {
-		return std::move(std::move(in).as_released<void>(Access::ePresent, DomainFlagBits::ePE));
+		return std::move(in).as_released<void>(Access::ePresent, DomainFlagBits::ePE);
 	}
 
 	struct Compiler {
