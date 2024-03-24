@@ -141,6 +141,11 @@
           "name": "VUK_BUILD_TESTS",
           "value": "True",
           "type": "BOOL"
+        },
+        {
+          "name": "VUK_FAIL_FAST",
+          "value": "True",
+          "type": "BOOL"
         }
       ]
     },
