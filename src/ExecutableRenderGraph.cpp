@@ -17,9 +17,16 @@
 
 namespace vuk {
 	std::string format_source_location(Node* node) {
-		if (node->debug_info && node->debug_info->decl_loc.line() > 0) {
-			auto& source = node->debug_info->decl_loc;
-			return fmt::format("{}({}): ", source.file_name(), source.line());
+		if (node->debug_info) {
+			std::string msg = "";
+			for (int i = node->debug_info->trace.size() - 1; i >= 0; i--) {
+				auto& source = node->debug_info->trace[i];
+				msg += fmt::format("{}({}): ", source.file_name(), source.line());
+				if (i > 0) {
+					msg += "\n";
+				}
+			}
+			return msg;
 		} else {
 			return "?: ";
 		}

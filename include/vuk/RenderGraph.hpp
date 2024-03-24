@@ -547,7 +547,7 @@ public:
 		using ret_tuple = std::tuple<Value<typename T::type>...>;
 
 		template<class Ret, class F>
-		static auto make_lam(Name name, F&& body, SchedulingInfo scheduling_info, std::source_location loc) {
+		static auto make_lam(Name name, F&& body, SchedulingInfo scheduling_info, SourceLocationAtFrame loc) {
 			auto callback = [typed_cb = std::move(body)](CommandBuffer& cb, std::span<void*> args, std::span<void*> meta, std::span<void*> rets) {
 				// we do type recovery here -> convert untyped args to typed ones
 				alignas(alignof(std::tuple<CommandBuffer&, T...>)) char storage[sizeof(std::tuple<CommandBuffer&, T...>)];
@@ -611,8 +611,7 @@ public:
 	template<class F>
 	[[nodiscard]] auto make_pass(Name name,
 	                             F&& body,
-	                             SchedulingInfo scheduling_info = SchedulingInfo(DomainFlagBits::eAny),
-	                             std::source_location loc = std::source_location::current()) {
+	                             SchedulingInfo scheduling_info = SchedulingInfo(DomainFlagBits::eAny), SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 		using traits = closure_traits<decltype(&F::operator())>;
 		return TupleMap<drop_t<1, typename traits::types>>::template make_lam<typename traits::result_type, F>(name, std::forward<F>(body), scheduling_info, loc);
 	}
@@ -621,19 +620,27 @@ public:
 		return ExtRef(std::make_shared<ExtNode>(rg, ref.node), ref);
 	}
 
-	[[nodiscard]] inline Value<ImageAttachment> declare_ia(Name name, ImageAttachment ia = {}, std::source_location loc = std::source_location::current()) {
+	[[nodiscard]] inline Value<ImageAttachment>
+	declare_ia(Name name, ImageAttachment ia = {}, SourceLocationAtFrame _pscope = VUK_HERE_AND_NOW(), SourceLocationAtFrame _scope = VUK_HERE_AND_NOW()) {
+		if (_pscope != _scope) {
+			_scope.parent = &_pscope;
+		}
 		std::shared_ptr<RG> rg = std::make_shared<RG>();
 		Ref ref = rg->make_declare_image(ia);
 		rg->name_outputs(ref.node, { name.c_str() });
-		rg->set_source_location(ref.node, loc);
+		rg->set_source_location(ref.node, _scope);
 		return { make_ext_ref(rg, ref), ref };
 	}
 
-	[[nodiscard]] inline Value<Buffer> declare_buf(Name name, Buffer buf = {}, std::source_location loc = std::source_location::current()) {
+	[[nodiscard]] inline Value<Buffer>
+	declare_buf(Name name, Buffer buf = {}, SourceLocationAtFrame _pscope = VUK_HERE_AND_NOW(), SourceLocationAtFrame _scope = VUK_HERE_AND_NOW()) {
+		if (_pscope != _scope) {
+			_scope.parent = &_pscope;
+		}
 		std::shared_ptr<RG> rg = std::make_shared<RG>();
 		Ref ref = rg->make_declare_buffer(buf);
 		rg->name_outputs(ref.node, { name.c_str() });
-		rg->set_source_location(ref.node, loc);
+		rg->set_source_location(ref.node, _scope);
 		return { make_ext_ref(rg, ref), ref };
 	}
 
@@ -650,7 +657,7 @@ public:
 	}
 
 	template<class T>
-	[[nodiscard]] inline Value<T[]> declare_array(Name name, std::span<const Value<T>> args, std::source_location loc = std::source_location::current()) {
+	[[nodiscard]] inline Value<T[]> declare_array(Name name, std::span<const Value<T>> args, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 		assert(args.size() > 0);
 		auto rg = args[0].get_render_graph();
 		std::vector<Ref> refs;
@@ -666,14 +673,14 @@ public:
 		return { make_ext_ref(rg, ref), ref };
 	}
 
-	[[nodiscard]] inline Value<Swapchain> declare_swapchain(Swapchain& bundle, std::source_location loc = std::source_location::current()) {
+	[[nodiscard]] inline Value<Swapchain> declare_swapchain(Swapchain& bundle, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 		std::shared_ptr<RG> rg = std::make_shared<RG>();
 		Ref ref = rg->make_declare_swapchain(bundle);
 		rg->set_source_location(ref.node, loc);
 		return { make_ext_ref(rg, ref), ref };
 	}
 
-	[[nodiscard]] inline Value<ImageAttachment> acquire_next_image(Name name, Value<Swapchain> in, std::source_location loc = std::source_location::current()) {
+	[[nodiscard]] inline Value<ImageAttachment> acquire_next_image(Name name, Value<Swapchain> in, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 		auto& rg = in.get_render_graph();
 		Ref ref = rg->make_acquire_next_image(in.get_head());
 		rg->name_outputs(ref.node, { name.c_str() });
