@@ -178,6 +178,7 @@ namespace vuk {
 
 	struct Node {
 		static constexpr uint8_t MAX_ARGS = 16;
+		uint8_t flag = 0;
 
 		enum class BinOp { MUL };
 		enum Kind {

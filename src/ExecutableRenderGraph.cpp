@@ -1643,10 +1643,10 @@ namespace vuk {
 							recorder.add_sync(sched.base_type(parm), sched.get_dependency_info(parm, arg_ty, RW::eWrite, nullptr), sched.get_value(parm));
 						}
 
-#ifdef VUK_DUMP_EXEC
-						print_results(node);
 						auto size = node->type[0]->array.count;
 						auto elem_ty = node->type[0]->array.T;
+#ifdef VUK_DUMP_EXEC
+						print_results(node);
 						assert(elem_ty == impl->cg_module->builtin_buffer || elem_ty == impl->cg_module->builtin_image);
 						fmt::print(" = construct<{}[{}]> ", elem_ty == impl->cg_module->builtin_buffer ? "buffer" : "image", size);
 						print_args(node->construct.args.subspan(1));

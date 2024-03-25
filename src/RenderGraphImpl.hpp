@@ -21,7 +21,7 @@ namespace vuk {
 
 #define INIT(x) x(decltype(x)::allocator_type(*arena_))
 
-	using DefUseMap = std::unordered_map<Ref, ChainLink>;
+	using DefUseMap = robin_hood::unordered_node_map<Ref, ChainLink>;
 
 	struct Stream {
 		Stream(Allocator alloc, Executor* executor) : alloc(alloc), executor(executor) {}
