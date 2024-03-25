@@ -48,7 +48,8 @@ namespace vuk {
 		        this,
 		        +[](void* allocator, const CachedImageIdentifier& cii) {
 			        ImageWithIdentity i;
-			        reinterpret_cast<DeviceSuperFrameResourceImpl*>(allocator)->sfr->allocate_images({ &i.image, 1 }, { &cii.ici, 1 }, {}); // TODO: dropping error
+			        reinterpret_cast<DeviceSuperFrameResourceImpl*>(allocator)->sfr->allocate_images(
+			            { &i.image, 1 }, { &cii.ici, 1 }, VUK_HERE_AND_NOW()); // TODO: dropping error
 			        return i;
 		        },
 		        +[](void* allocator, const ImageWithIdentity& i) {
@@ -59,7 +60,8 @@ namespace vuk {
 		        +[](void* allocator, const CompressedImageViewCreateInfo& civci) {
 			        ImageView iv;
 			        ImageViewCreateInfo ivci = static_cast<ImageViewCreateInfo>(civci);
-			        reinterpret_cast<DeviceSuperFrameResourceImpl*>(allocator)->sfr->allocate_image_views({ &iv, 1 }, { &ivci, 1 }, {}); // TODO: dropping error
+			        reinterpret_cast<DeviceSuperFrameResourceImpl*>(allocator)->sfr->allocate_image_views(
+			            { &iv, 1 }, { &ivci, 1 }, VUK_HERE_AND_NOW()); // TODO: dropping error
 			        return iv;
 		        },
 		        +[](void* allocator, const ImageView& iv) {
@@ -69,7 +71,7 @@ namespace vuk {
 		        this,
 		        +[](void* allocator, const GraphicsPipelineInstanceCreateInfo& ci) {
 			        GraphicsPipelineInfo dst;
-			        reinterpret_cast<DeviceSuperFrameResourceImpl*>(allocator)->sfr->allocate_graphics_pipelines({ &dst, 1 }, { &ci, 1 }, {});
+			        reinterpret_cast<DeviceSuperFrameResourceImpl*>(allocator)->sfr->allocate_graphics_pipelines({ &dst, 1 }, { &ci, 1 }, VUK_HERE_AND_NOW());
 			        return dst;
 		        },
 		        +[](void* allocator, const GraphicsPipelineInfo& v) {
@@ -79,7 +81,7 @@ namespace vuk {
 		        this,
 		        +[](void* allocator, const ComputePipelineInstanceCreateInfo& ci) {
 			        ComputePipelineInfo dst;
-			        reinterpret_cast<DeviceSuperFrameResourceImpl*>(allocator)->sfr->allocate_compute_pipelines({ &dst, 1 }, { &ci, 1 }, {});
+			        reinterpret_cast<DeviceSuperFrameResourceImpl*>(allocator)->sfr->allocate_compute_pipelines({ &dst, 1 }, { &ci, 1 }, VUK_HERE_AND_NOW());
 			        return dst;
 		        },
 		        +[](void* allocator, const ComputePipelineInfo& v) {
@@ -89,7 +91,7 @@ namespace vuk {
 		        this,
 		        +[](void* allocator, const RayTracingPipelineInstanceCreateInfo& ci) {
 			        RayTracingPipelineInfo dst;
-			        reinterpret_cast<DeviceSuperFrameResourceImpl*>(allocator)->sfr->allocate_ray_tracing_pipelines({ &dst, 1 }, { &ci, 1 }, {});
+			        reinterpret_cast<DeviceSuperFrameResourceImpl*>(allocator)->sfr->allocate_ray_tracing_pipelines({ &dst, 1 }, { &ci, 1 }, VUK_HERE_AND_NOW());
 			        return dst;
 		        },
 		        +[](void* allocator, const RayTracingPipelineInfo& v) {
@@ -99,7 +101,7 @@ namespace vuk {
 		        this,
 		        +[](void* allocator, const RenderPassCreateInfo& ci) {
 			        VkRenderPass dst;
-			        reinterpret_cast<DeviceSuperFrameResourceImpl*>(allocator)->sfr->allocate_render_passes({ &dst, 1 }, { &ci, 1 }, {});
+			        reinterpret_cast<DeviceSuperFrameResourceImpl*>(allocator)->sfr->allocate_render_passes({ &dst, 1 }, { &ci, 1 }, VUK_HERE_AND_NOW());
 			        return dst;
 		        },
 		        +[](void* allocator, const VkRenderPass& v) {
