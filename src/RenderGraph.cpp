@@ -63,7 +63,11 @@ namespace vuk {
 
 		std::vector<Node*> work_queue;
 		for (auto& ref : refs) {
-			work_queue.push_back(ref->get_node());
+			auto node = ref->get_node();
+			if (node->flag == 0) {
+				node->flag = 1;
+				work_queue.push_back(node);
+			}
 		}
 
 		type_map[Type::hash(cg_module->builtin_buffer)] = cg_module->builtin_buffer;
@@ -77,11 +81,19 @@ namespace vuk {
 			auto count = node->generic_node.arg_count;
 			if (count != (uint8_t)~0u) {
 				for (int i = 0; i < count; i++) {
-					work_queue.push_back(node->fixed_node.args[i].node);
+					auto arg = node->fixed_node.args[i].node;
+					if (arg->flag == 0) {
+						arg->flag = 1;
+						work_queue.push_back(arg);
+					}
 				}
 			} else {
 				for (int i = 0; i < node->variable_node.args.size(); i++) {
-					work_queue.push_back(node->variable_node.args[i].node);
+					auto arg = node->variable_node.args[i].node;
+					if (arg->flag == 0) {
+						arg->flag = 1;
+						work_queue.push_back(arg);
+					}
 				}
 			}
 
@@ -109,6 +121,10 @@ namespace vuk {
 		cg_module->builtin_buffer = type_map[Type::hash(cg_module->builtin_buffer)];
 		cg_module->builtin_image = type_map[Type::hash(cg_module->builtin_image)];
 		cg_module->builtin_swapchain = type_map[Type::hash(cg_module->builtin_swapchain)];
+
+		for (auto& node : nodes) {
+			node->flag = 0;
+		}
 
 		return { expected_value };
 	}
@@ -847,10 +863,10 @@ namespace vuk {
 			auto mod = work_queue.back();
 			work_queue.pop_back();
 			for (auto& sg : mod->subgraphs) {
-				auto mod = sg.get();
-				if (!visited.count(mod)) {
-					work_queue.push_back(sg.get());
-					visited.emplace(mod);
+				auto sg_mod = sg.get();
+				if (!visited.count(sg_mod)) {
+					work_queue.push_back(sg_mod);
+					visited.emplace(sg_mod);
 				}
 			}
 			for (auto& n : mod->op_arena) {
