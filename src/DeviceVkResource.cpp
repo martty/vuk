@@ -1007,7 +1007,7 @@ namespace vuk {
 			VkDeviceSize sbt_size = rgen_region.size + miss_region.size + hit_region.size + call_region.size;
 			Buffer SBT;
 			BufferCreateInfo bci{ .mem_usage = vuk::MemoryUsage::eCPUtoGPU, .size = sbt_size, .alignment = ctx->rt_properties.shaderGroupBaseAlignment };
-			auto buff_cr_result = allocate_buffers(std::span{ &SBT, 1 }, std::span{ &bci, 1 }, {});
+			auto buff_cr_result = allocate_buffers(std::span{ &SBT, 1 }, std::span{ &bci, 1 }, VUK_HERE_AND_NOW());
 			assert(buff_cr_result);
 
 			// Helper to retrieve the handle data
