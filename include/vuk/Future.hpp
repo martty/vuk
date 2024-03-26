@@ -29,7 +29,7 @@ namespace vuk {
 
 		/// @brief Name the value currently referenced by this Value
 		void set_name(std::string_view name) noexcept {
-			get_render_graph()->name_output(head, std::string(name));
+			get_render_graph()->name_output(head, name);
 		}
 
 		Ref get_head() const noexcept {
