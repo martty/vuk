@@ -537,7 +537,6 @@ public:
 		}
 	}
 
-	
 	inline auto First = [](auto& first, auto&...) -> auto& {
 		return first;
 	};
@@ -580,10 +579,10 @@ public:
 					fill_ret_ty(rg, idxs, ret_tuple, ret_types);
 				}
 				auto opaque_fn_ty = rg.make_opaque_fn_ty(arg_types, ret_types, vuk::DomainFlagBits::eAny, untyped_cb);
-				opaque_fn_ty->debug_info = new TypeDebugInfo{ .name = name.c_str() };
+				opaque_fn_ty->debug_info = rg.allocate_type_debug_info(name.c_str());
 				auto opaque_fn = rg.make_declare_fn(opaque_fn_ty);
 				Node* node = rg.make_call(opaque_fn, args.get_head()...);
-				node->scheduling_info = new SchedulingInfo(scheduling_info);
+				node->scheduling_info = new (rg.payload_arena.ensure_space(sizeof SchedulingInfo)) SchedulingInfo(scheduling_info);
 				rg.set_source_location(node, loc);
 
 				std::vector<std::shared_ptr<ExtNode>> dependent_nodes;
@@ -609,9 +608,8 @@ public:
 	};
 
 	template<class F>
-	[[nodiscard]] auto make_pass(Name name,
-	                             F&& body,
-	                             SchedulingInfo scheduling_info = SchedulingInfo(DomainFlagBits::eAny), SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
+	[[nodiscard]] auto
+	make_pass(Name name, F&& body, SchedulingInfo scheduling_info = SchedulingInfo(DomainFlagBits::eAny), SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 		using traits = closure_traits<decltype(&F::operator())>;
 		return TupleMap<drop_t<1, typename traits::types>>::template make_lam<typename traits::result_type, F>(name, std::forward<F>(body), scheduling_info, loc);
 	}
@@ -627,7 +625,7 @@ public:
 		}
 		std::shared_ptr<RG> rg = std::make_shared<RG>();
 		Ref ref = rg->make_declare_image(ia);
-		rg->name_outputs(ref.node, { name.c_str() });
+		rg->name_output(ref, name.c_str());
 		rg->set_source_location(ref.node, _scope);
 		return { make_ext_ref(rg, ref), ref };
 	}
@@ -639,7 +637,7 @@ public:
 		}
 		std::shared_ptr<RG> rg = std::make_shared<RG>();
 		Ref ref = rg->make_declare_buffer(buf);
-		rg->name_outputs(ref.node, { name.c_str() });
+		rg->name_output(ref, name.c_str());
 		rg->set_source_location(ref.node, _scope);
 		return { make_ext_ref(rg, ref), ref };
 	}
@@ -652,7 +650,7 @@ public:
 		std::array refs = { arg.get_head(), args.get_head()... };
 		std::array defs = { arg.get_def(), args.get_def()... };
 		Ref ref = rg->make_declare_array(Type::stripped(refs[0].type()), refs, defs);
-		rg->name_outputs(ref.node, { name.c_str() });
+		rg->name_output(ref, name.c_str());
 		return { make_ext_ref(rg, ref), ref };
 	}
 
@@ -668,7 +666,7 @@ public:
 			defs.push_back(arg.get_def());
 		}
 		Ref ref = rg->make_declare_array(Type::stripped(refs[0].type()), refs, defs);
-		rg->name_outputs(ref.node, { name.c_str() });
+		rg->name_output(ref, name.c_str());
 		rg->set_source_location(ref.node, loc);
 		return { make_ext_ref(rg, ref), ref };
 	}
@@ -683,7 +681,7 @@ public:
 	[[nodiscard]] inline Value<ImageAttachment> acquire_next_image(Name name, Value<Swapchain> in, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 		auto& rg = in.get_render_graph();
 		Ref ref = rg->make_acquire_next_image(in.get_head());
-		rg->name_outputs(ref.node, { name.c_str() });
+		rg->name_output(ref, name.c_str());
 		rg->set_source_location(ref.node, loc);
 		return std::move(in).transmute<ImageAttachment>(ref);
 	}

@@ -667,6 +667,8 @@ namespace vuk {
 		std::vector<Ref>& pass_reads;
 		std::vector<ScheduledItem>& scheduled_execables;
 
+		InlineArena<std::byte, 4 * 1024> arena;
+
 		RGCImpl* impl;
 
 		std::deque<ScheduledItem> work_queue;
@@ -728,8 +730,8 @@ namespace vuk {
 		void done(Node* node, Stream* stream, T value) {
 			auto counter = naming_index_counter;
 			naming_index_counter += node->type.size();
-			auto value_ptr = static_cast<void*>(new T{ value });
-			auto values = new void*[1];
+			auto value_ptr = static_cast<void*>(new (arena.ensure_space(sizeof(T))) T{ value });
+			auto values = new (arena.ensure_space(sizeof(void* [1]))) void*[1];
 			values[0] = value_ptr;
 			executed.emplace(node, ExecutionInfo{ stream, counter, std::span{ values, 1 } });
 		}
@@ -737,7 +739,7 @@ namespace vuk {
 		void done(Node* node, Stream* stream, void* value_ptr) {
 			auto counter = naming_index_counter;
 			naming_index_counter += node->type.size();
-			auto values = new void*[1];
+			auto values = new (arena.ensure_space(sizeof(void* [1]))) void*[1];
 			values[0] = value_ptr;
 			executed.emplace(node, ExecutionInfo{ stream, counter, std::span{ values, 1 } });
 		}
@@ -745,7 +747,7 @@ namespace vuk {
 		void done(Node* node, Stream* stream, std::span<void*> values) {
 			auto counter = naming_index_counter;
 			naming_index_counter += node->type.size();
-			auto v = new void*[values.size()];
+			auto v = new (arena.ensure_space(sizeof(void*) * values.size())) void*[values.size()];
 			std::copy(values.begin(), values.end(), v);
 			executed.emplace(node, ExecutionInfo{ stream, counter, std::span{ v, values.size() } });
 		}
@@ -1140,7 +1142,7 @@ namespace vuk {
 		return "";
 	}
 
-#define VUK_DUMP_EXEC
+	// #define VUK_DUMP_EXEC
 
 	Result<void> ExecutableRenderGraph::execute(Allocator& alloc) {
 		Context& ctx = alloc.get_context();
@@ -1423,7 +1425,7 @@ namespace vuk {
 #endif
 						assert(node->construct.args[0].type()->kind == Type::MEMORY_TY);
 						if (elem_ty == impl->cg_module->builtin_buffer) {
-							auto arr_mem = new Buffer[size];
+							auto arr_mem = new (sched.arena.ensure_space(sizeof(Buffer) * size)) Buffer[size];
 							for (auto i = 0; i < size; i++) {
 								auto& elem = node->construct.args[i + 1];
 								assert(Type::stripped(elem.type()) == impl->cg_module->builtin_buffer);
@@ -1433,7 +1435,7 @@ namespace vuk {
 							node->construct.args[0].node->constant.value = arr_mem;
 							sched.done(node, host_stream, (void*)arr_mem);
 						} else if (elem_ty == impl->cg_module->builtin_image) {
-							auto arr_mem = new ImageAttachment[size];
+							auto arr_mem = new (sched.arena.ensure_space(sizeof(ImageAttachment) * size)) ImageAttachment[size];
 							for (auto i = 0; i < size; i++) {
 								auto& elem = node->construct.args[i + 1];
 								assert(Type::stripped(elem.type()) == impl->cg_module->builtin_image);
