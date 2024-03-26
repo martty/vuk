@@ -28,9 +28,9 @@ namespace vuk {
 			}
 		}
 
-		type_map[Type::hash(cg_module->builtin_buffer)] = cg_module->builtin_buffer;
-		type_map[Type::hash(cg_module->builtin_image)] = cg_module->builtin_image;
-		type_map[Type::hash(cg_module->builtin_swapchain)] = cg_module->builtin_swapchain;
+		type_map[Type::hash(cg_module->get_builtin_buffer())] = cg_module->get_builtin_buffer();
+		type_map[Type::hash(cg_module->get_builtin_image())] = cg_module->get_builtin_image();
+		type_map[Type::hash(cg_module->get_builtin_swapchain())] = cg_module->get_builtin_swapchain();
 
 		while (!work_queue.empty()) {
 			auto node = work_queue.back();
