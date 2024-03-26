@@ -84,7 +84,7 @@ namespace vuk {
 		std::vector<Ref> pass_reads;
 
 		std::shared_ptr<RG> cg_module;
-		std::unordered_map<uint32_t, Type*> type_map;
+		robin_hood::unordered_flat_map<uint32_t, Type*> type_map;
 		std::vector<std::shared_ptr<ExtNode>> refs;
 		std::vector<Node*> nodes;
 		std::vector<ChainLink*> chains;
@@ -96,7 +96,7 @@ namespace vuk {
 		std::vector<ChainLink*> attachment_use_chain_references;
 		std::vector<RenderPassInfo*> attachment_rp_references;
 
-		std::vector<RenderPassInfo, short_alloc<RenderPassInfo, 64>> rpis;
+		std::vector<RenderPassInfo, short_alloc<RenderPassInfo>> rpis;
 		std::span<ScheduledItem*> transfer_passes, compute_passes, graphics_passes;
 
 		std::unordered_map<Node*, ExecutionInfo> executed;

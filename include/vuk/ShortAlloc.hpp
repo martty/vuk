@@ -78,7 +78,7 @@ inline void arena::deallocate(char* p, std::size_t n) noexcept {
 		::operator delete(p);
 }
 
-template<class T, std::size_t N>
+template<class T>
 class short_alloc {
 	arena& a_;
 
@@ -88,12 +88,12 @@ public:
 public:
 	template<class _Up>
 	struct rebind {
-		typedef short_alloc<_Up, N> other;
+		typedef short_alloc<_Up> other;
 	};
 
 	short_alloc(arena& a) : a_(a) {}
 	template<class U>
-	short_alloc(const short_alloc<U, N>& a) noexcept : a_(a.a_) {}
+	short_alloc(const short_alloc<U>& a) noexcept : a_(a.a_) {}
 	short_alloc(const short_alloc&) = default;
 	short_alloc& operator=(const short_alloc&) = delete;
 
@@ -104,19 +104,19 @@ public:
 		a_.deallocate(reinterpret_cast<char*>(p), n * sizeof(T));
 	}
 
-	template<class T1, std::size_t N1, class U, std::size_t M>
-	friend bool operator==(const short_alloc<T1, N1>& x, const short_alloc<U, M>& y) noexcept;
+	template<class T1, class U>
+	friend bool operator==(const short_alloc<T1>& x, const short_alloc<U>& y) noexcept;
 
-	template<class U, std::size_t M>
+	template<class U>
 	friend class short_alloc;
 };
 
-template<class T, std::size_t N, class U, std::size_t M>
-inline bool operator==(const short_alloc<T, N>& x, const short_alloc<U, M>& y) noexcept {
-	return N == M && &x.a_ == &y.a_;
+template<class T, class U>
+inline bool operator==(const short_alloc<T>& x, const short_alloc<U>& y) noexcept {
+	return &x.a_ == &y.a_;
 }
 
-template<class T, std::size_t N, class U, std::size_t M>
-inline bool operator!=(const short_alloc<T, N>& x, const short_alloc<U, M>& y) noexcept {
+template<class T, class U>
+inline bool operator!=(const short_alloc<T>& x, const short_alloc<U>& y) noexcept {
 	return !(x == y);
 }
