@@ -470,34 +470,38 @@ namespace vuk {
 
 		template<class T, size_t size>
 		struct Arena {
-			std::unique_ptr<Arena> prev;
-			std::unique_ptr<std::byte[]> arena;
+			std::unique_ptr<Arena> next;
+			std::byte arena[size];
+			std::byte* base;
+			std::byte* cur;
+
+			Arena() {
+				base = cur = arena;
+			}
 
 			void* ensure_space(size_t ns) {
-				if (left < ns) {
+				if ((size - (cur - base)) < ns) {
 					grow();
 				}
-				left -= ns;
-				return arena.get() + (size - left) - ns;
+				cur += ns;
+				return cur - ns;
 			}
 
 			void grow() {
-				if (arena) {
-					prev = std::make_unique<Arena>(std::move(*this));
+				Arena* tail = this;
+				while (tail->next != nullptr) {
+					tail = tail->next.get();
 				}
-
-				left = size;
-				arena = std::unique_ptr<std::byte[]>(new std::byte[size]);
+				tail->next = std::make_unique<Arena>();
+				base = cur = tail->next->arena;
 			}
 
 			T* emplace(T v) {
 				return new (ensure_space(sizeof(T))) T(std::move(v));
 			}
-
-			size_t left = 0;
 		};
-		Arena<std::byte, 16 * 1024> payload_arena;
-		Arena<Type, sizeof(Type) * 32> type_arena;
+		Arena<std::byte, 4 * 1024> payload_arena;
+		Arena<Type, 16 * sizeof(Type)> type_arena;
 
 		Type* builtin_image = nullptr;
 		Type* builtin_buffer = nullptr;
