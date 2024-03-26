@@ -19,7 +19,7 @@ namespace vuk {
 
 		// type unification
 
-		std::vector<Node*> work_queue;
+		std::vector<Node*, short_alloc<Node*>> work_queue(*arena_);
 		for (auto& ref : refs) {
 			auto node = ref->get_node();
 			if (node->flag == 0) {
@@ -366,8 +366,8 @@ namespace vuk {
 
 	Result<void> RGCImpl::schedule_intra_queue(const RenderGraphCompileOptions& compile_options) {
 		// we need to schedule all execables that run
-		std::vector<Node*> schedule_items;
-		std::unordered_map<Node*, size_t> node_to_schedule;
+		std::vector<Node*, short_alloc<Node*>> schedule_items(*arena_);
+		robin_hood::unordered_flat_map<Node*, size_t> node_to_schedule;
 
 		for (auto node : nodes) {
 			switch (node->kind) {
@@ -386,8 +386,8 @@ namespace vuk {
 		}
 		// calculate indegrees for all passes & build adjacency
 		const size_t size = schedule_items.size();
-		std::vector<size_t> indegrees(size);
-		std::vector<uint8_t> adjacency_matrix(size * size);
+		std::vector<size_t, short_alloc<size_t>> indegrees(size, *arena_);
+		std::vector<uint8_t, short_alloc<uint8_t>> adjacency_matrix(size * size, *arena_);
 
 		for (auto& [ref, link] : res_to_links) {
 			if (link.undef && node_to_schedule.count(link.undef.node) && node_to_schedule.count(link.def.node)) {
@@ -412,7 +412,7 @@ namespace vuk {
 		}
 
 		// enqueue all indegree == 0 execables
-		std::vector<size_t> process_queue;
+		std::vector<size_t, short_alloc<size_t>> process_queue(*arena_);
 		for (auto i = 0; i < indegrees.size(); i++) {
 			if (indegrees[i] == 0)
 				process_queue.push_back(i);
@@ -612,7 +612,7 @@ namespace vuk {
 		std::unordered_map<Ref, std::vector<Ref>> slices;
 
 		// linked-sea-of-nodes to list of nodes
-		std::vector<RG*> work_queue;
+		std::vector<RG*, short_alloc<RG*>> work_queue(*impl->arena_);
 		std::unordered_set<RG*> visited;
 		for (auto& ref : impl->refs) {
 			auto mod = ref->module.get();
@@ -665,7 +665,7 @@ namespace vuk {
 		};
 
 		for (auto& [base, sliced] : slices) {
-			std::vector<Ref> tails;
+			std::vector<Ref, short_alloc<Ref>> tails(*impl->arena_);
 			for (auto& s : sliced) {
 				auto r = &impl->res_to_links[s];
 				while (r->next) {
@@ -684,10 +684,13 @@ namespace vuk {
 					for (int i = 0; i < count; i++) {
 						if (node->fixed_node.args[i] == base) {
 							for (auto& t : tails) {
+								// TODO: multimodule dominance
+								/*
 								assert(in_module(*impl->cg_module, t.node));
 								if (!before_module(*impl->cg_module, t.node, node)) {
 									return { expected_error, RenderGraphException{ "Convergence not dominated" } };
 								}
+								*/
 							}
 							auto converged_base = impl->cg_module->make_converge(base, tails);
 							node->fixed_node.args[i] = converged_base;
@@ -697,6 +700,7 @@ namespace vuk {
 					for (int i = 0; i < node->variable_node.args.size(); i++) {
 						if (node->variable_node.args[i] == base) {
 							for (auto& t : tails) {
+								// TODO: multimodule dominance
 								/* assert(in_module(*impl->cg_module, t.node));
 								if (!before_module(*impl->cg_module, t.node, node)) {
 								  return { expected_error, RenderGraphException{ "Convergence not dominated" } };
