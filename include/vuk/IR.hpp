@@ -465,66 +465,106 @@ namespace vuk {
 	}
 
 	struct RG {
-		RG() {
-			auto mem_ty = emplace_type(Type{ .kind = Type::MEMORY_TY });
-			auto image_ = new Type* [9] {
-				u32(), u32(), u32(), mem_ty, mem_ty, u32(), u32(), u32(), u32()
-			};
-			auto image_offsets = new size_t[9]{ offsetof(ImageAttachment, extent) + offsetof(Extent3D, width),
-				                                  offsetof(ImageAttachment, extent) + offsetof(Extent3D, height),
-				                                  offsetof(ImageAttachment, extent) + offsetof(Extent3D, depth),
-				                                  offsetof(ImageAttachment, format),
-				                                  offsetof(ImageAttachment, sample_count),
-				                                  offsetof(ImageAttachment, base_layer),
-				                                  offsetof(ImageAttachment, layer_count),
-				                                  offsetof(ImageAttachment, base_level),
-				                                  offsetof(ImageAttachment, level_count) };
-			builtin_image = emplace_type(Type{ .kind = Type::COMPOSITE_TY,
-			                                   .size = sizeof(ImageAttachment),
-			                                   .debug_info = new TypeDebugInfo{ "image" },
-			                                   .composite = { .types = { image_, 9 }, .offsets = { image_offsets, 9 }, .tag = 0 } });
-			auto buffer_ = new Type* [1] {
-				u32()
-			};
-			auto buffer_offsets = new size_t[1]{ offsetof(Buffer, size) };
-			builtin_buffer = emplace_type(Type{ .kind = Type::COMPOSITE_TY,
-			                                    .size = sizeof(Buffer),
-			                                    .debug_info = new TypeDebugInfo{ "buffer" },
-			                                    .composite = { .types = { buffer_, 1 }, .offsets = { buffer_offsets, 1 }, .tag = 1 } });
-			auto arr_ty = emplace_type(
-			    Type{ .kind = Type::ARRAY_TY, .size = 16 * builtin_image->size, .array = { .T = builtin_image, .count = 16, .stride = builtin_image->size } });
-			auto swp_ = new Type* [1] {
-				arr_ty
-			};
-			builtin_swapchain = emplace_type(Type{ .kind = Type::COMPOSITE_TY,
-			                                       .size = sizeof(Swapchain),
-			                                       .debug_info = new TypeDebugInfo{ "swapchain" },
-			                                       .composite = { .types = { swp_, 1 }, .tag = 2 } });
+		std::deque<Node> op_arena;
+		std::byte* debug_arena;
+
+		template<class T, size_t size>
+		struct Arena {
+			std::unique_ptr<Arena> prev;
+			std::unique_ptr<std::byte[]> arena;
+
+			void* ensure_space(size_t ns) {
+				if (left < ns) {
+					grow();
+				}
+				left -= ns;
+				return arena.get() + (size - left) - ns;
+			}
+
+			void grow() {
+				if (arena) {
+					prev = std::make_unique<Arena>(std::move(*this));
+				}
+
+				left = size;
+				arena = std::unique_ptr<std::byte[]>(new std::byte[size]);
+			}
+
+			T* emplace(T v) {
+				return new (ensure_space(sizeof(T))) T(std::move(v));
+			}
+
+			size_t left = 0;
+		};
+		Arena<std::byte, 16 * 1024> payload_arena;
+		Arena<Type, sizeof(Type) * 32> type_arena;
+
+		Type* builtin_image = nullptr;
+		Type* builtin_buffer = nullptr;
+		Type* builtin_swapchain = nullptr;
+
+		Type*& get_builtin_image() {
+			if (!builtin_image) {
+				auto mem_ty = emplace_type(Type{ .kind = Type::MEMORY_TY });
+				auto image_ = new (payload_arena.ensure_space(sizeof(Type* [9]))) Type* [9] {
+					u32(), u32(), u32(), mem_ty, mem_ty, u32(), u32(), u32(), u32()
+				};
+				auto image_offsets = new (payload_arena.ensure_space(sizeof(size_t[9]))) size_t[9]{ offsetof(ImageAttachment, extent) + offsetof(Extent3D, width),
+					                                                                                  offsetof(ImageAttachment, extent) + offsetof(Extent3D, height),
+					                                                                                  offsetof(ImageAttachment, extent) + offsetof(Extent3D, depth),
+					                                                                                  offsetof(ImageAttachment, format),
+					                                                                                  offsetof(ImageAttachment, sample_count),
+					                                                                                  offsetof(ImageAttachment, base_layer),
+					                                                                                  offsetof(ImageAttachment, layer_count),
+					                                                                                  offsetof(ImageAttachment, base_level),
+					                                                                                  offsetof(ImageAttachment, level_count) };
+				builtin_image = emplace_type(Type{ .kind = Type::COMPOSITE_TY,
+				                                   .size = sizeof(ImageAttachment),
+				                                   .debug_info = new TypeDebugInfo{ "image" },
+				                                   .composite = { .types = { image_, 9 }, .offsets = { image_offsets, 9 }, .tag = 0 } });
+			}
+			return builtin_image;
 		}
 
-		~RG() {}
+		Type*& get_builtin_buffer() {
+			if (!builtin_buffer) {
+				auto buffer_ = new (payload_arena.ensure_space(sizeof(Type* [1]))) Type* [1] {
+					u32()
+				};
+				auto buffer_offsets = new (payload_arena.ensure_space(sizeof(size_t[1]))) size_t[1]{ offsetof(Buffer, size) };
+				builtin_buffer = emplace_type(Type{ .kind = Type::COMPOSITE_TY,
+				                                    .size = sizeof(Buffer),
+				                                    .debug_info = new TypeDebugInfo{ "buffer" },
+				                                    .composite = { .types = { buffer_, 1 }, .offsets = { buffer_offsets, 1 }, .tag = 1 } });
+			}
+			return builtin_buffer;
+		}
 
-		std::deque<Node> op_arena;
-		char* debug_arena;
-
-		std::deque<Type> types;
-		Type* builtin_image;
-		Type* builtin_buffer;
-		Type* builtin_swapchain;
+		Type*& get_builtin_swapchain() {
+			if (!builtin_swapchain) {
+				auto arr_ty = emplace_type(Type{ .kind = Type::ARRAY_TY,
+				                                 .size = 16 * get_builtin_image()->size,
+				                                 .array = { .T = get_builtin_image(), .count = 16, .stride = get_builtin_image()->size } });
+				auto swp_ = new (payload_arena.ensure_space(sizeof(Type* [1]))) Type* [1] {
+					arr_ty
+				};
+				builtin_swapchain = emplace_type(Type{ .kind = Type::COMPOSITE_TY,
+				                                       .size = sizeof(Swapchain),
+				                                       .debug_info = new TypeDebugInfo{ "swapchain" },
+				                                       .composite = { .types = { swp_, 1 }, .tag = 2 } });
+			}
+			return builtin_swapchain;
+		}
 
 		std::vector<std::shared_ptr<RG>> subgraphs;
 		// uint64_t current_hash = 0;
 
-		void* ensure_space(size_t size) {
-			return &op_arena.emplace_back(Node{});
+		Node* emplace_op(Node v) {
+			return &op_arena.emplace_back(std::move(v));
 		}
 
-		Node* emplace_op(Node v, NodeDebugInfo = {}) {
-			return new (ensure_space(sizeof(Node))) Node(v);
-		}
-
-		Type* emplace_type(Type t, TypeDebugInfo = {}) {
-			return &types.emplace_back(std::move(t));
+		Type* emplace_type(Type t) {
+			return type_arena.emplace(std::move(t));
 		}
 
 		void reference_RG(std::shared_ptr<RG> other) {
@@ -533,14 +573,14 @@ namespace vuk {
 
 		void name_outputs(Node* node, std::vector<std::string> names) {
 			if (!node->debug_info) {
-				node->debug_info = new NodeDebugInfo;
+				node->debug_info = new (payload_arena.ensure_space(sizeof NodeDebugInfo)) NodeDebugInfo;
 			}
-			node->debug_info->result_names.assign(names.begin(), names.end());
+			node->debug_info->result_names.assign(names.begin(), names.end()); // TODO: leak, convert to char*
 		}
 
 		void set_source_location(Node* node, SourceLocationAtFrame loc) {
 			if (!node->debug_info) {
-				node->debug_info = new NodeDebugInfo;
+				node->debug_info = new (payload_arena.ensure_space(sizeof NodeDebugInfo)) NodeDebugInfo;
 			}
 			auto p = &loc;
 			do {
@@ -583,21 +623,22 @@ namespace vuk {
 		Ref make_constant(T value) {
 			Type** ty;
 			if constexpr (std::is_same_v<T, uint64_t>) {
-				ty = new Type*(u64());
+				ty = new (payload_arena.ensure_space(sizeof(Type*))) Type*(u64());
 			} else if constexpr (std::is_same_v<T, uint32_t>) {
-				ty = new Type*(u32());
+				ty = new (payload_arena.ensure_space(sizeof(Type*))) Type*(u32());
 			} else {
-				ty = new Type*(emplace_type(Type{ .kind = Type::MEMORY_TY }));
+				ty = new (payload_arena.ensure_space(sizeof(Type*))) Type*(emplace_type(Type{ .kind = Type::MEMORY_TY }));
 			}
 			return first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ ty, 1 }, .constant = { .value = new T(value) } }));
 		}
 
 		Ref make_declare_image(ImageAttachment value) {
-			auto ptr = new ImageAttachment(value); /* rest extent_x extent_y extent_z format samples base_layer layer_count base_level level_count */
-			auto args_ptr = new Ref[10];
-			auto mem_ty = new Type*(emplace_type(Type{ .kind = Type::MEMORY_TY }));
+			auto ptr = new (payload_arena.ensure_space(sizeof ImageAttachment))
+			    ImageAttachment(value); /* rest extent_x extent_y extent_z format samples base_layer layer_count base_level level_count */
+			auto args_ptr = new (payload_arena.ensure_space(sizeof Ref * 10)) Ref[10];
+			auto mem_ty = new (payload_arena.ensure_space(sizeof(Type*))) Type*(emplace_type(Type{ .kind = Type::MEMORY_TY }));
 			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = ptr } }));
-			auto u32_ty = new Type*(u32());
+			auto u32_ty = new (payload_arena.ensure_space(sizeof(Type*))) Type*(u32());
 			if (value.extent.width > 0) {
 				args_ptr[1] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ u32_ty, 1 }, .constant = { .value = &ptr->extent.width } }));
 			} else {
@@ -644,7 +685,7 @@ namespace vuk {
 				args_ptr[9] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ u32_ty, 1 } }));
 			}
 
-			return first(emplace_op(Node{ .kind = Node::CONSTRUCT, .type = std::span{ &builtin_image, 1 }, .construct = { .args = std::span(args_ptr, 10) } }));
+			return first(emplace_op(Node{ .kind = Node::CONSTRUCT, .type = std::span{ &get_builtin_image(), 1 }, .construct = { .args = std::span(args_ptr, 10) } }));
 		}
 
 		Ref make_declare_buffer(Buffer value) {
@@ -659,7 +700,7 @@ namespace vuk {
 				args_ptr[1] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ u64_ty, 1 } }));
 			}
 
-			return first(emplace_op(Node{ .kind = Node::CONSTRUCT, .type = std::span{ &builtin_buffer, 1 }, .construct = { .args = std::span(args_ptr, 2) } }));
+			return first(emplace_op(Node{ .kind = Node::CONSTRUCT, .type = std::span{ &get_builtin_buffer(), 1 }, .construct = { .args = std::span(args_ptr, 2) } }));
 		}
 
 		Ref make_declare_array(Type* type, std::span<Ref> args, std::span<Ref> defs) {
@@ -684,8 +725,9 @@ namespace vuk {
 			for (auto i = 0; i < bundle.images.size(); i++) {
 				imgs.push_back(make_declare_image(bundle.images[i]));
 			}
-			args_ptr[1] = make_declare_array(builtin_image, imgs, {});
-			return first(emplace_op(Node{ .kind = Node::CONSTRUCT, .type = std::span{ &builtin_swapchain, 1 }, .construct = { .args = std::span(args_ptr, 2) } }));
+			args_ptr[1] = make_declare_array(get_builtin_image(), imgs, {});
+			return first(
+			    emplace_op(Node{ .kind = Node::CONSTRUCT, .type = std::span{ &get_builtin_swapchain(), 1 }, .construct = { .args = std::span(args_ptr, 2) } }));
 		}
 
 		Ref make_extract(Ref composite, Ref index) {
@@ -734,11 +776,11 @@ namespace vuk {
 
 		Ref make_acquire_next_image(Ref swapchain) {
 			return first(
-			    emplace_op(Node{ .kind = Node::ACQUIRE_NEXT_IMAGE, .type = std::span{ &builtin_image, 1 }, .acquire_next_image = { .swapchain = swapchain } }));
+			    emplace_op(Node{ .kind = Node::ACQUIRE_NEXT_IMAGE, .type = std::span{ &get_builtin_image(), 1 }, .acquire_next_image = { .swapchain = swapchain } }));
 		}
 
 		Ref make_clear_image(Ref dst, Clear cv) {
-			return first(emplace_op(Node{ .kind = Node::CLEAR, .type = std::span{ &builtin_image, 1 }, .clear = { .dst = dst, .cv = new Clear(cv) } }));
+			return first(emplace_op(Node{ .kind = Node::CLEAR, .type = std::span{ &get_builtin_image(), 1 }, .clear = { .dst = dst, .cv = new Clear(cv) } }));
 		}
 
 		Type* make_opaque_fn_ty(std::span<Type* const> args,
