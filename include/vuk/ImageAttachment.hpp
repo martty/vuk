@@ -155,7 +155,7 @@ namespace vuk {
 			return a;
 		}
 
-		ImageAttachment layer(uint32_t layer) {
+		ImageAttachment layer(uint32_t layer) const {
 			ImageAttachment a = *this;
 			a.base_layer = (a.base_layer == VK_REMAINING_ARRAY_LAYERS ? 0 : a.base_layer) + layer;
 			a.layer_count = 1;
