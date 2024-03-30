@@ -18,6 +18,7 @@ option(VUK_USE_VULKAN_SDK "Use the Vulkan SDK to locate headers and libraries" O
 option(VUK_USE_SHADERC "Link in shaderc for runtime compilation of GLSL shaders" ON)
 option(VUK_USE_DXC "Link in DirectXShaderCompiler for runtime compilation of HLSL shaders" OFF)
 option(VUK_USE_VCC "Use Vcc for runtime compilation of C shaders (experimental)" OFF)
+option(VUK_USE_SLANG "Use Slang for runtime compilation of Slang shaders" OFF)
 option(VUK_BUILD_TESTS "Build tests" OFF)
 option(VUK_FAIL_FAST "Trigger an assert upon encountering an error instead of propagating" OFF)
 option(VUK_DEBUG_ALLOCATIONS "Dump VMA allocations and give them debug names" OFF)
@@ -118,10 +119,29 @@ if (VUK_USE_VCC)
 	target_compile_definitions(vuk PRIVATE "-DVUK_VCC_INCLUDE_DIR=\"${BINARY_DIR}/share/vcc/include/\"")
 endif()
 
+if (VUK_USE_SLANG)
+	set(SLANG_ENABLE_SLANG_GLSLANG ON CACHE BOOL "" )
+	set(SLANG_ENABLE_GFX OFF CACHE BOOL "")
+	set(SLANG_ENABLE_SLANGC OFF CACHE BOOL "")
+	set(SLANG_ENABLE_TESTS OFF CACHE BOOL "")
+	set(SLANG_ENABLE_EXAMPLES OFF CACHE BOOL "")
+	FetchContent_Declare(
+	  slang
+	  GIT_REPOSITORY https://github.com/Hatrickek/slang
+	  GIT_TAG master	
+	  GIT_SHALLOW ON
+	  GIT_SUBMODULES external/miniz external/lz4 external/spirv-headers external/spirv-tools external/glslang external/unordered_dense
+	)
+	FetchContent_MakeAvailable(slang)
+	target_link_libraries(vuk PRIVATE slang)
+	target_sources(vuk PRIVATE src/shader_compilers/slang.cpp)
+endif()
+
 target_compile_definitions(vuk PUBLIC 
 								VUK_USE_SHADERC=$<BOOL:${VUK_USE_SHADERC}>
 								VUK_USE_DXC=$<BOOL:${VUK_USE_DXC}>
 								VUK_USE_VCC=$<BOOL:${VUK_USE_VCC}>
+								VUK_USE_SLANG=$<BOOL:${VUK_USE_SLANG}>
 								VUK_BUILD_TESTS=$<BOOL:${VUK_BUILD_TESTS}>
 								VUK_FAIL_FAST=$<BOOL:${VUK_FAIL_FAST}>
 								VUK_DEBUG_ALLOCATIONS=$<BOOL:${VUK_DEBUG_ALLOCATIONS}>
