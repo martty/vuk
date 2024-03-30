@@ -115,11 +115,11 @@ namespace vuk {
 				ia.level_count = 1;
 			}
 			ia.base_layer = 0;
-			if (preset != Preset::eRTTCube) {
-				ia.layer_count = 1;
-			} else {
+			if (preset == Preset::eRTTCube && preset == Preset::eMapCube) {
 				ia.layer_count = 6;
 				ia.image_flags = ImageCreateFlagBits::eCubeCompatible;
+			} else {
+				ia.layer_count = 1;
 			}
 
 			switch (preset) {
