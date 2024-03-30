@@ -115,7 +115,11 @@ namespace vuk {
 				ia.level_count = 1;
 			}
 			ia.base_layer = 0;
-			ia.layer_count = 1;
+			if (preset != Preset::eRTTCube) {
+				ia.layer_count = 1;
+			} else {
+				ia.layer_count = 6;
+			}
 
 			switch (preset) {
 			case Preset::eMap1D:
