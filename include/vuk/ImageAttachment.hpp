@@ -111,6 +111,8 @@ namespace vuk {
 			ia.base_level = 0;
 			if (preset != Preset::eRTT2DUnmipped) {
 				ia.level_count = max_mips;
+			} else {
+				ia.level_count = 1;
 			}
 			ia.base_layer = 0;
 			ia.layer_count = 1;
