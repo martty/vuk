@@ -82,6 +82,7 @@ namespace vuk {
 namespace vuk {
 	Result<std::vector<uint32_t>> compile_glsl(const create_info_t<ShaderModule>& cinfo, uint32_t shader_compiler_target_version);
 	Result<std::vector<uint32_t>> compile_hlsl(const create_info_t<ShaderModule>& cinfo, uint32_t shader_compiler_target_version);
+	Result<std::vector<uint32_t>> compile_slang(const create_info_t<ShaderModule>& cinfo, uint32_t shader_compiler_target_version);
 	Result<std::vector<uint32_t>> compile_c(const create_info_t<ShaderModule>& cinfo, uint32_t shader_compiler_target_version);
 
 	struct ContextImpl {
@@ -366,6 +367,14 @@ namespace vuk {
 		case ShaderSourceLanguage::eC: {
 #if VUK_USE_VCC
 			spirv = *compile_c(cinfo, shader_compiler_target_version);
+			spirv_ptr = spirv.data();
+			size = spirv.size();
+#endif
+			break;
+		}
+		case ShaderSourceLanguage::eSlang: {
+#if VUK_USE_SLANG
+			spirv = *compile_slang(cinfo, shader_compiler_target_version);
 			spirv_ptr = spirv.data();
 			size = spirv.size();
 #endif
