@@ -1562,6 +1562,7 @@ namespace vuk {
 				if (sched.process(item)) {
 					auto acqrel = node->relacq.rel_acq;
 					Stream* dst_stream = item.scheduled_stream;
+					std::vector<void*> values(node->relacq.src.size());
 					// if acq is nullptr, then this degenerates to a NOP, sync and skip
 					for (size_t i = 0; i < node->relacq.src.size(); i++) {
 						auto parm = node->relacq.src[i];
@@ -1569,19 +1570,23 @@ namespace vuk {
 						auto di = sched.get_dependency_info(parm, arg_ty, RW::eWrite, dst_stream);
 						di.src_use.stream = di.dst_use.stream; // TODO: not sure this is valid, but we can't handle split
 						di.dst_use.stream = nullptr;
-						recorder.add_sync(sched.base_type(parm), di, sched.get_value(parm));
+						auto value = sched.get_value(parm);
+						values[i] = value;
+						recorder.add_sync(sched.base_type(parm), di, value);
+
 						acqrel->last_use.push_back(di.src_use);
 						if (i == 0) {
 							di.src_use.stream->add_dependent_signal(acqrel);
 						}
 					}
+					sched.done(node, nullptr, std::span(values));
 					if (!acqrel) { // (we should've handled this before this moment)
 						fmt::print("???");
 						assert(false);
 					} else {
 						switch (acqrel->status) {
 						case Signal::Status::eDisarmed: // means we have to signal this
-							node->relacq.values = sched.get_values(node->relacq.src[0].node);
+							node->relacq.values = sched.get_values(node);
 							break;
 						case Signal::Status::eSynchronizable: // means this is an acq instead (we should've handled this before this moment)
 						case Signal::Status::eHostAvailable:
@@ -1596,8 +1601,6 @@ namespace vuk {
 					print_args(node->relacq.src);
 					fmt::print("\n");
 #endif
-
-					sched.done(node, /* sched.executed.at(node->relacq.src[0].node).stream*/ nullptr, sched.get_values(node->relacq.src[0].node));
 				} else {
 					for (size_t i = 0; i < node->relacq.src.size(); i++) {
 						sched.schedule_dependency(node->relacq.src[i], RW::eWrite);
