@@ -119,6 +119,7 @@ namespace vuk {
 				ia.layer_count = 1;
 			} else {
 				ia.layer_count = 6;
+				ia.image_flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
 			}
 
 			switch (preset) {
