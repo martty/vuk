@@ -352,6 +352,10 @@ namespace vuk {
 						Subrange::Image b = work_queue.back();
 						work_queue.pop_back();
 						it = std::find_if(half_im_bars.begin(), half_im_bars.end(), [&](auto& mb) { return mb.image == img_att.image.image; });
+						// if there isn't a matching first bar, but this readonly, then this sync can be skipped
+						if (it == half_im_bars.end() && is_readonly_access(dst_use)) {
+							return;
+						}
 						assert(it != half_im_bars.end());
 						found = *it;
 						Subrange::Image a{
@@ -827,6 +831,8 @@ namespace vuk {
 						if (r.node->kind == Node::CALL) {
 							arg_ty = r.node->call.fn.type()->opaque_fn.args[r.index];
 							parm = r.node->call.args[r.index];
+						} else if (r.node->kind == Node::CONVERGE) {
+							continue;
 						} else {
 							assert(0);
 						}
