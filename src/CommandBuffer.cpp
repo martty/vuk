@@ -776,7 +776,7 @@ namespace vuk {
 		VkMemoryBarrier mb{ .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER };
 		auto src_use = to_use(src_access);
 		auto dst_use = to_use(dst_access);
-		mb.srcAccessMask = is_read_access(src_use) ? 0 : (VkAccessFlags)src_use.access;
+		mb.srcAccessMask = is_readonly_access(src_use) ? 0 : (VkAccessFlags)src_use.access;
 		mb.dstAccessMask = (VkAccessFlags)dst_use.access;
 		ctx.vkCmdPipelineBarrier(command_buffer, (VkPipelineStageFlags)src_use.stages, (VkPipelineStageFlags)dst_use.stages, {}, 1, &mb, 0, nullptr, 0, nullptr);
 		return *this;

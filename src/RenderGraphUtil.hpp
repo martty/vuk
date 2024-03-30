@@ -12,12 +12,6 @@ namespace vuk {
 		return ia & write_mask;
 	}
 
-	inline bool is_read_access(Access ia) {
-		constexpr uint64_t read_mask = eColorResolveRead | eColorRead | eDepthStencilRead | eFragmentRead | eFragmentSampled | eTransferRead | eComputeRead |
-		                               eComputeSampled | eHostRead | eMemoryRead | eRayTracingRead | eRayTracingSampled | eAccelerationStructureBuildRead;
-		return ia & read_mask;
-	}
-
 	inline ImageLayout combine_layout(ImageLayout a, ImageLayout b) {
 		if (a == ImageLayout::eUndefined) {
 			return b;
@@ -235,7 +229,7 @@ namespace vuk {
 		return false;
 	}
 
-	inline bool is_read_access(ResourceUse u) {
+	inline bool is_readonly_access(ResourceUse u) {
 		if (u.access == vuk::AccessFlagBits{})
 			return false;
 		return !is_write_access(u);
