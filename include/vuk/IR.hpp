@@ -9,6 +9,7 @@
 #include <functional>
 #include <span>
 #include <vector>
+#include <plf_colony.h>
 
 namespace vuk {
 	struct SyncPoint {
@@ -530,8 +531,8 @@ namespace vuk {
 	};
 
 	struct RG {
-		std::deque<Node> op_arena;
-		std::deque<UserCallbackType> ucbs;
+		plf::colony<Node> op_arena;
+		plf::colony<UserCallbackType> ucbs;
 
 		InlineArena<std::byte, 4 * 1024> payload_arena;
 		InlineArena<Type, 16 * sizeof(Type)> type_arena;
@@ -597,7 +598,7 @@ namespace vuk {
 		// uint64_t current_hash = 0;
 
 		Node* emplace_op(Node v) {
-			return &op_arena.emplace_back(std::move(v));
+			return &*op_arena.emplace(std::move(v));
 		}
 
 		Type* emplace_type(Type t) {
@@ -840,7 +841,7 @@ namespace vuk {
 			                          .opaque_fn = { .args = std::span(arg_ptr, args.size()),
 			                                         .return_types = std::span(ret_ty_ptr, ret_types.size()),
 			                                         .execute_on = execute_on.m_mask,
-			                                         .callback = &ucbs.emplace_back(std::move(callback)) } });
+			                                         .callback = &*ucbs.emplace(std::move(callback)) } });
 		}
 
 		Ref make_declare_fn(Type* const fn_ty) {
