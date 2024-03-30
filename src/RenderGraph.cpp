@@ -90,9 +90,7 @@ namespace vuk {
 	Result<void> RGCImpl::build_links() {
 		// build edges into link map
 		// reserving here to avoid rehashing map
-		res_to_links.clear();
 		pass_reads.clear();
-		res_to_links.reserve(100);
 
 		// in each RG module, look at the nodes
 		// declare -> clear -> call(R) -> call(W) -> release
@@ -103,6 +101,13 @@ namespace vuk {
 		// call(W): undef B, def C
 		// release: undef C
 		for (auto& node : nodes) {
+			size_t result_count = node->type.size();
+			if (result_count > 0) {
+				node->links = new (cg_module->payload_arena.ensure_space(sizeof(ChainLink) * result_count)) ChainLink[result_count];
+			}
+		}
+
+		for (auto& node : nodes) {
 			switch (node->kind) {
 			case Node::NOP:
 			case Node::CONSTANT:
@@ -112,23 +117,21 @@ namespace vuk {
 			case Node::CONSTRUCT:
 				for (size_t i = 0; i < node->construct.args.size(); i++) {
 					auto& parm = node->construct.args[i];
-					res_to_links[parm].undef = { node, i };
+					parm.link().undef = { node, i };
 				}
 
-				res_to_links[first(node)].def = first(node);
-				res_to_links[first(node)].type = first(node).type();
+				first(node).link().def = first(node);
 				break;
 			case Node::RELACQ: // ~~ write joiner
 				for (size_t i = 0; i < node->relacq.src.size(); i++) {
-					res_to_links[node->relacq.src[i]].undef = { node, i };
-					res_to_links[{ node, i }].def = { node, i };
-					res_to_links[node->relacq.src[i]].next = &res_to_links[{ node, i }];
-					res_to_links[{ node, i }].prev = &res_to_links[node->relacq.src[i]];
+					node->relacq.src[i].link().undef = { node, i };
+					Ref{ node, i }.link().def = { node, i };
+					node->relacq.src[i].link().next = &Ref{ node, i }.link();
+					Ref{ node, i }.link().prev = &node->relacq.src[i].link();
 				}
 				break;
 			case Node::ACQUIRE:
-				res_to_links[first(node)].def = first(node);
-				res_to_links[first(node)].type = first(node).type();
+				first(node).link().def = first(node);
 				break;
 			case Node::CALL: {
 				// args
@@ -139,10 +142,10 @@ namespace vuk {
 					if (arg_ty->kind == Type::IMBUED_TY) {
 						auto access = arg_ty->imbued.access;
 						if (is_write_access(access) || access == Access::eConsume) { // Write and ReadWrite
-							res_to_links[parm].undef = { node, i };
+							parm.link().undef = { node, i };
 						}
 						if (!is_write_access(access) && access != Access::eConsume) { // Read and ReadWrite
-							res_to_links[parm].reads.append(pass_reads, { node, i });
+							parm.link().reads.append(pass_reads, { node, i });
 						}
 					} else {
 						assert(0);
@@ -152,43 +155,39 @@ namespace vuk {
 				for (auto& ret_t : node->type) {
 					assert(ret_t->kind == Type::ALIASED_TY);
 					auto ref_idx = ret_t->aliased.ref_idx;
-					res_to_links[{ node, index }].def = { node, index };
-					res_to_links[node->call.args[ref_idx]].next = &res_to_links[{ node, index }];
-					res_to_links[{ node, index }].prev = &res_to_links[node->call.args[ref_idx]];
+					Ref{ node, index }.link().def = { node, index };
+					node->call.args[ref_idx].link().next = &Ref{ node, index }.link();
+					Ref{ node, index }.link().prev = &node->call.args[ref_idx].link();
 					index++;
 				}
 				break;
 			}
 			case Node::RELEASE:
-				res_to_links[node->release.src].undef = { node, 0 };
+				node->release.src.link().undef = { node, 0 };
 				break;
 
 			case Node::EXTRACT:
-				res_to_links[first(node)].def = first(node);
-				res_to_links[first(node)].type = first(node).type()->array.T;
+				first(node).link().def = first(node);
 				break;
 
 			case Node::SLICE:
-				res_to_links[first(node)].def = first(node);
-				res_to_links[first(node)].type = first(node).type();
-				res_to_links[node->slice.image].child_chains.append(child_chains, &res_to_links[first(node)]);
+				first(node).link().def = first(node);
+				node->slice.image.link().child_chains.append(child_chains, &first(node).link());
 				break;
 
 			case Node::CONVERGE:
-				res_to_links[node->converge.ref_and_diverged[0]].undef = { node, 0 };
-				res_to_links[first(node)].def = first(node);
-				res_to_links[node->converge.ref_and_diverged[0]].next = &res_to_links[first(node)];
-				res_to_links[first(node)].type = first(node).type();
-				res_to_links[first(node)].prev = &res_to_links[node->converge.ref_and_diverged[0]];
+				node->converge.ref_and_diverged[0].link().undef = { node, 0 };
+				first(node).link().def = first(node);
+				node->converge.ref_and_diverged[0].link().next = &first(node).link();
+				first(node).link().prev = &node->converge.ref_and_diverged[0].link();
 				for (size_t i = 1; i < node->converge.ref_and_diverged.size(); i++) {
 					auto& parm = node->converge.ref_and_diverged[i];
-					res_to_links[parm].reads.append(pass_reads, { node, i });
+					parm.link().reads.append(pass_reads, { node, i });
 				}
 				break;
 
 			case Node::ACQUIRE_NEXT_IMAGE:
-				res_to_links[first(node)].def = first(node);
-				res_to_links[first(node)].type = first(node).type();
+				first(node).link().def = first(node);
 				break;
 
 			default:
@@ -196,15 +195,19 @@ namespace vuk {
 			}
 		}
 
-		for (auto& [ref, link] : res_to_links) {
-			if (link.urdef)
-				continue;
-			if (!link.prev) { // from head to tails, propagate
-				auto l = &link;
-				do {
-					l->urdef = link.def;
-					l = l->next;
-				} while (l);
+		for (auto& node : nodes) {
+			size_t result_count = node->type.size();
+			for (auto i = 0; i < result_count; i++) {
+				auto& link = node->links[i];
+				if (link.urdef)
+					continue;
+				if (!link.prev) { // from head to tails, propagate
+					auto l = &link;
+					do {
+						l->urdef = link.def;
+						l = l->next;
+					} while (l);
+				}
 			}
 		}
 
@@ -293,7 +296,7 @@ namespace vuk {
 					auto& parm = node->call.args[i];
 					if (arg_ty->kind == Type::IMBUED_TY) {
 						auto access = arg_ty->imbued.access;
-						auto& link = res_to_links[parm];
+						auto& link = parm.link();
 						if (link.urdef.node->kind == Node::CONSTRUCT) {
 							auto& args = link.urdef.node->construct.args;
 							if (is_framebuffer_attachment(access)) {
@@ -351,9 +354,13 @@ namespace vuk {
 	Result<void> RGCImpl::collect_chains() {
 		chains.clear();
 		// collect chains by looking at links without a prev
-		for (auto& [name, link] : res_to_links) {
-			if (!link.prev) {
-				chains.push_back(&link);
+		for (auto& node : nodes) {
+			size_t result_count = node->type.size();
+			for (auto i = 0; i < result_count; i++) {
+				auto& link = node->links[i];
+				if (!link.prev) {
+					chains.push_back(&link);
+				}
 			}
 		}
 
@@ -389,24 +396,28 @@ namespace vuk {
 		std::vector<size_t, short_alloc<size_t>> indegrees(size, *arena_);
 		std::vector<uint8_t, short_alloc<uint8_t>> adjacency_matrix(size * size, *arena_);
 
-		for (auto& [ref, link] : res_to_links) {
-			if (link.undef && node_to_schedule.count(link.undef.node) && node_to_schedule.count(link.def.node)) {
-				indegrees[node_to_schedule[link.undef.node]]++;
-				adjacency_matrix[node_to_schedule[link.def.node] * size + node_to_schedule[link.undef.node]]++; // def -> undef
-			}
-			for (auto& read : link.reads.to_span(pass_reads)) {
-				if (!node_to_schedule.count(read.node)) {
-					continue;
-				}
-
-				if (node_to_schedule.count(link.def.node)) {
-					indegrees[node_to_schedule[read.node]]++;                                                 // this only counts as a dep if there is a def before
-					adjacency_matrix[node_to_schedule[link.def.node] * size + node_to_schedule[read.node]]++; // def -> read
-				}
-
-				if (link.undef && node_to_schedule.count(link.undef.node)) {
+		for (auto& node : nodes) {
+			size_t result_count = node->type.size();
+			for (auto i = 0; i < result_count; i++) {
+				auto& link = node->links[i];
+				if (link.undef && node_to_schedule.count(link.undef.node) && node_to_schedule.count(link.def.node)) {
 					indegrees[node_to_schedule[link.undef.node]]++;
-					adjacency_matrix[node_to_schedule[read.node] * size + node_to_schedule[link.undef.node]]++; // read -> undef
+					adjacency_matrix[node_to_schedule[link.def.node] * size + node_to_schedule[link.undef.node]]++; // def -> undef
+				}
+				for (auto& read : link.reads.to_span(pass_reads)) {
+					if (!node_to_schedule.count(read.node)) {
+						continue;
+					}
+
+					if (node_to_schedule.count(link.def.node)) {
+						indegrees[node_to_schedule[read.node]]++;                                                 // this only counts as a dep if there is a def before
+						adjacency_matrix[node_to_schedule[link.def.node] * size + node_to_schedule[read.node]]++; // def -> read
+					}
+
+					if (link.undef && node_to_schedule.count(link.undef.node)) {
+						indegrees[node_to_schedule[link.undef.node]]++;
+						adjacency_matrix[node_to_schedule[read.node] * size + node_to_schedule[link.undef.node]]++; // read -> undef
+					}
 				}
 			}
 		}
@@ -667,7 +678,7 @@ namespace vuk {
 		for (auto& [base, sliced] : slices) {
 			std::vector<Ref, short_alloc<Ref>> tails(*impl->arena_);
 			for (auto& s : sliced) {
-				auto r = &impl->res_to_links[s];
+				auto r = &s.link();
 				while (r->next) {
 					r = r->next;
 				}
@@ -688,7 +699,7 @@ namespace vuk {
 								/*
 								assert(in_module(*impl->cg_module, t.node));
 								if (!before_module(*impl->cg_module, t.node, node)) {
-									return { expected_error, RenderGraphException{ "Convergence not dominated" } };
+								  return { expected_error, RenderGraphException{ "Convergence not dominated" } };
 								}
 								*/
 							}

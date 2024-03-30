@@ -655,7 +655,6 @@ namespace vuk {
 		Scheduler(Allocator all, RGCImpl* impl) :
 		    allocator(all),
 		    scheduled_execables(impl->scheduled_execables),
-		    res_to_links(impl->res_to_links),
 		    pass_reads(impl->pass_reads),
 		    executed(impl->executed),
 		    impl(impl) {
@@ -667,7 +666,6 @@ namespace vuk {
 		}
 
 		Allocator allocator;
-		DefUseMap& res_to_links;
 		std::vector<Ref>& pass_reads;
 		std::vector<ScheduledItem>& scheduled_execables;
 
@@ -705,12 +703,10 @@ namespace vuk {
 		}
 
 		void schedule_dependency(Ref parm, RW access) {
-			auto it = res_to_links.find(parm);
-			// some items (like constants) don't have links, so they also don't need to be scheduled
-			if (it == res_to_links.end() || it->second.def.node == nullptr) {
+			if (parm.node->kind == Node::CONSTANT) {
 				return;
 			}
-			auto& link = it->second;
+			auto link = parm.link();
 
 			if (access == RW::eWrite) { // synchronize against writing
 				// we are going to write here, so schedule all reads or the def, if no read
@@ -783,7 +779,7 @@ namespace vuk {
 		DependencyInfo
 		get_dependency_info(Ref parm, Type* arg_ty, RW type, Stream* dst_stream, Access src_access = Access::eNone, Access dst_access = Access::eNone) {
 			auto parm_ty = parm.type();
-			auto& link = res_to_links[parm];
+			auto& link = parm.link();
 
 			StreamResourceUse src_use = {};
 			bool sync_against_def = type == RW::eRead || link.reads.size() == 0; // def -> *, src = def
@@ -1148,7 +1144,7 @@ namespace vuk {
 		return "";
 	}
 
-	// #define VUK_DUMP_EXEC
+#define VUK_DUMP_EXEC
 
 	Result<void> ExecutableRenderGraph::execute(Allocator& alloc) {
 		Context& ctx = alloc.get_context();
@@ -1395,7 +1391,7 @@ namespace vuk {
 #endif
 						if (!attachment.image) {
 							auto allocator = node->construct.allocator ? *node->construct.allocator : alloc;
-							attachment.usage = impl->compute_usage(&impl->res_to_links[first(node)]);
+							attachment.usage = impl->compute_usage(&first(node).link());
 							assert(attachment.usage != ImageUsageFlags{});
 							auto img = allocate_image(allocator, attachment);
 							if (!img) {
@@ -1470,7 +1466,7 @@ namespace vuk {
 					for (size_t i = 0; i < node->call.args.size(); i++) {
 						auto& arg_ty = node->call.fn.type()->opaque_fn.args[i];
 						auto& parm = node->call.args[i];
-						auto& link = impl->res_to_links[parm];
+						auto& link = parm.link();
 
 						if (arg_ty->kind == Type::IMBUED_TY) {
 							auto dst_access = arg_ty->imbued.access;
@@ -1523,7 +1519,7 @@ namespace vuk {
 						std::vector<void*> opaque_meta;
 						for (size_t i = 0; i < node->call.args.size(); i++) {
 							auto& parm = node->call.args[i];
-							auto& link = impl->res_to_links[parm];
+							auto& link = parm.link();
 							assert(link.urdef);
 							opaque_args.push_back(sched.get_value(parm));
 							opaque_meta.push_back(&link.urdef);
@@ -1646,7 +1642,7 @@ namespace vuk {
 					DomainFlagBits src_domain = src_stream->domain;
 					Stream* dst_stream;
 					if (node->release.dst_domain == DomainFlagBits::ePE) {
-						auto& link = sched.res_to_links[node->release.src];
+						auto& link = node->release.src.link();
 						auto& swp = sched.get_value<Swapchain>(link.urdef.node->acquire_next_image.swapchain);
 						auto it = std::find_if(pe_streams.begin(), pe_streams.end(), [&](auto& pe_stream) { return pe_stream.swp == &swp; });
 						assert(it != pe_streams.end());
@@ -1676,7 +1672,7 @@ namespace vuk {
 						acqrel->status = Signal::Status::eHostAvailable;
 					}
 					if (dst_domain == DomainFlagBits::ePE) {
-						auto& link = sched.res_to_links[node->release.src];
+						auto& link = node->release.src.link();
 						auto& swp = sched.get_value<Swapchain>(link.urdef.node->acquire_next_image.swapchain);
 						assert(src_stream->domain & DomainFlagBits::eDevice);
 						auto result = dynamic_cast<VkQueueStream*>(src_stream)->present(swp);

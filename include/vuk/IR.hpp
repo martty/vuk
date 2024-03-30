@@ -4,6 +4,7 @@
 #include "vuk/ImageAttachment.hpp"
 #include "vuk/Swapchain.hpp"
 #include "vuk/Types.hpp"
+#include "vuk/RelSpan.hpp"
 
 #include <deque>
 #include <functional>
@@ -153,12 +154,14 @@ namespace vuk {
 	struct RG;
 
 	struct Node;
+	struct ChainLink;
 
 	struct Ref {
 		Node* node = nullptr;
 		size_t index;
 
-		Type* type() const;
+		Type* type() const noexcept;
+		ChainLink& link() noexcept;
 
 		explicit constexpr operator bool() const noexcept {
 			return node != nullptr;
@@ -179,9 +182,19 @@ namespace vuk {
 		std::span<std::source_location> trace;
 	};
 
+	// struct describing use chains
+	struct ChainLink {
+		Ref urdef;                 // the first def
+		ChainLink* prev = nullptr; // if this came from a previous undef, we link them together
+		Ref def;
+		RelSpan<Ref> reads;
+		Ref undef;
+		ChainLink* next = nullptr; // if this links to a def, we link them together
+		RelSpan<ChainLink*> child_chains;
+	};
+
 	struct Node {
 		static constexpr uint8_t MAX_ARGS = 16;
-		uint8_t flag = 0;
 
 		enum class BinOp { MUL };
 		enum Kind {
@@ -208,7 +221,10 @@ namespace vuk {
 		std::span<Type*> type;
 		NodeDebugInfo* debug_info = nullptr;
 		SchedulingInfo* scheduling_info = nullptr;
+		ChainLink* links = nullptr;
 
+		uint8_t flag = 0;
+			
 		template<uint8_t c>
 		struct Fixed {
 			uint8_t arg_count = c;
@@ -305,6 +321,7 @@ namespace vuk {
 				uint8_t arg_count;
 				std::span<Ref> args;
 			} variable_node;
+
 		};
 
 		std::string_view kind_to_sv() {
@@ -335,18 +352,22 @@ namespace vuk {
 		}
 	};
 
-	inline Ref first(Node* node) {
+	inline Ref first(Node* node) noexcept {
 		assert(node->type.size() > 0);
 		return { node, 0 };
 	}
 
-	inline Ref nth(Node* node, size_t idx) {
+	inline Ref nth(Node* node, size_t idx) noexcept {
 		assert(node->type.size() > idx);
 		return { node, idx };
 	}
 
-	inline Type* Ref::type() const {
+	inline Type* Ref::type() const noexcept {
 		return node->type[index];
+	}
+
+	inline ChainLink& Ref::link() noexcept {
+		return node->links[index];
 	}
 
 	template<class T>

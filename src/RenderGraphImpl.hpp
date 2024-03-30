@@ -80,7 +80,6 @@ namespace vuk {
 		std::vector<VkImageMemoryBarrier2KHR> image_barriers;
 		std::vector<VkMemoryBarrier2KHR> mem_barriers;
 
-		DefUseMap res_to_links;
 		std::vector<Ref> pass_reads;
 
 		std::shared_ptr<RG> cg_module;
