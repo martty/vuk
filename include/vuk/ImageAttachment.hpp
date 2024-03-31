@@ -129,6 +129,7 @@ namespace vuk {
 			case Preset::eMap2D:
 			case Preset::eRTT2D:
 			case Preset::eRTT2DUnmipped:
+			case Preset::eSTT2DUnmipped:
 			case Preset::eGeneric2D:
 				ia.view_type = ImageViewType::e2D;
 				break;
