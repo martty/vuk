@@ -120,17 +120,19 @@ if (VUK_USE_VCC)
 endif()
 
 if (VUK_USE_SLANG)
-	set(SLANG_ENABLE_SLANG_GLSLANG ON CACHE BOOL "" )
+	set(SLANG_ENABLE_SLANG_GLSLANG OFF CACHE BOOL "" )
 	set(SLANG_ENABLE_GFX OFF CACHE BOOL "")
 	set(SLANG_ENABLE_SLANGC OFF CACHE BOOL "")
 	set(SLANG_ENABLE_TESTS OFF CACHE BOOL "")
 	set(SLANG_ENABLE_EXAMPLES OFF CACHE BOOL "")
+	set(SLANG_ENABLE_SLANGRT OFF CACHE BOOL "")
+	set(SLANG_ENABLE_SLANGD OFF CACHE BOOL "")
 	FetchContent_Declare(
 	  slang
 	  GIT_REPOSITORY https://github.com/Hatrickek/slang
 	  GIT_TAG master	
 	  GIT_SHALLOW ON
-	  GIT_SUBMODULES external/miniz external/lz4 external/spirv-headers external/spirv-tools external/glslang external/unordered_dense
+	  GIT_SUBMODULES external/miniz external/lz4 external/unordered_dense external/spirv-headers
 	)
 	FetchContent_MakeAvailable(slang)
 	target_link_libraries(vuk PRIVATE slang)
