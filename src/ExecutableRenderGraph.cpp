@@ -1595,7 +1595,6 @@ namespace vuk {
 							di.src_use.stream->add_dependent_signal(acqrel);
 						}
 					}
-					sched.done(node, nullptr, std::span{ values, node->relacq.src.size() });
 					if (!acqrel) { // (we should've handled this before this moment)
 						fmt::print("???");
 						assert(false);
@@ -1617,6 +1616,7 @@ namespace vuk {
 					print_args(node->relacq.src);
 					fmt::print("\n");
 #endif
+					sched.done(node, nullptr, std::span{ values, node->relacq.src.size() });
 				} else {
 					for (size_t i = 0; i < node->relacq.src.size(); i++) {
 						sched.schedule_dependency(node->relacq.src[i], RW::eWrite);
