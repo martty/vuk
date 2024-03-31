@@ -551,12 +551,14 @@ public:
 				// we do type recovery here -> convert untyped args to typed ones
 				alignas(alignof(std::tuple<CommandBuffer&, T...>)) char storage[sizeof(std::tuple<CommandBuffer&, T...>)];
 				pack_typed_tuple<T...>(args, meta, cb, storage);
-				auto typed_ret = std::apply(typed_cb, *reinterpret_cast<std::tuple<CommandBuffer&, T...>*>(storage));
-				// now we erase these types
-				if constexpr (!is_tuple<Ret>::value) {
-					rets[0] = typed_ret.ptr;
-				} else {
-					unpack_typed_tuple(typed_ret, rets);
+				if constexpr (!std::is_same_v<void, decltype(std::apply(typed_cb, *reinterpret_cast<std::tuple<CommandBuffer&, T...>*>(storage)))>) {
+					auto typed_ret = std::apply(typed_cb, *reinterpret_cast<std::tuple<CommandBuffer&, T...>*>(storage));
+					// now we erase these types
+					if constexpr (!is_tuple<Ret>::value) {
+						rets[0] = typed_ret.ptr;
+					} else {
+						unpack_typed_tuple(typed_ret, rets);
+					}
 				}
 			};
 
