@@ -356,24 +356,32 @@ namespace vuk {
 					while (work_queue.size() > 0) {
 						Subrange::Image b = work_queue.back();
 						work_queue.pop_back();
-						it = std::find_if(half_im_bars.begin(), half_im_bars.end(), [&](auto& mb) { return mb.image == img_att.image.image; });
-						// if there isn't a matching first bar, but this readonly, then this sync can be skipped
-						if (it == half_im_bars.end() && is_readonly_access(dst_use)) {
-							return;
-						}
-						assert(it != half_im_bars.end());
-						found = *it;
-						Subrange::Image a{
-							found.subresourceRange.baseMipLevel, found.subresourceRange.levelCount, found.subresourceRange.baseArrayLayer, found.subresourceRange.layerCount
-						};
+						it = half_im_bars.begin();
+						vuk::Subrange::Image a, isection;
+						// locate matching half barrier
+						do {
+							it = std::find_if(it, half_im_bars.end(), [&](auto& mb) { return mb.image == img_att.image.image; });
+							// if there isn't a matching first bar, but this readonly, then this sync can be skipped
+							if (it == half_im_bars.end() && is_readonly_access(dst_use)) {
+								assert(img_att.layout == dst_use.layout);
+								return;
+							}
+							assert(it != half_im_bars.end());
+							found = *it;
+							a = {
+								found.subresourceRange.baseMipLevel, found.subresourceRange.levelCount, found.subresourceRange.baseArrayLayer, found.subresourceRange.layerCount
+							};
 
-						// we want to make a barrier for the intersection of the existing and incoming
-						auto isection_opt = intersect(a, b);
-						if (!isection_opt) {
-							continue;
-						}
+							// we want to make a barrier for the intersection of the existing and incoming
+							auto isection_opt = intersect(a, b);
+							if (isection_opt) {
+								isection = *isection_opt;
+								break;
+							}
+							++it;
+						} while (it != half_im_bars.end());
+						assert(it != half_im_bars.end());
 						half_im_bars.erase(it);
-						auto isection = *isection_opt;
 
 						barrier.subresourceRange.baseArrayLayer = isection.base_layer;
 						barrier.subresourceRange.baseMipLevel = isection.base_level;
@@ -432,9 +440,6 @@ namespace vuk {
 
 						// splinter the dst barrier, and push into the work queue
 						auto new_dst = difference(b, isection);
-						if (new_dst.size() > 0) {
-							printf("");
-						}
 						work_queue.insert(work_queue.end(), new_dst.begin(), new_dst.end());
 
 						// fill out src part of the barrier based on the sync half we found
