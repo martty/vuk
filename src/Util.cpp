@@ -155,7 +155,8 @@ namespace vuk {
 			}
 			std::pair v = { &allocator, &*erg };
 			VUK_DO_OR_RETURN(execute_submit(allocator, std::span{ &v, 1 }));
-			auto current_value = compiler.get_value(def);
+			// Compiler gets reset after this - we have the ExtNode manage the lifetime of the externally visible values
+			auto current_value = node->get_node()->kind == Node::RELACQ ? node->get_node()->relacq.values[head.index] : node->get_node()->release.value;
 			to_acquire(current_value);
 			return { expected_value };
 		}

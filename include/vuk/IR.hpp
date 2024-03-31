@@ -2,15 +2,15 @@
 
 #include "vuk/Buffer.hpp"
 #include "vuk/ImageAttachment.hpp"
+#include "vuk/RelSpan.hpp"
 #include "vuk/Swapchain.hpp"
 #include "vuk/Types.hpp"
-#include "vuk/RelSpan.hpp"
 
 #include <deque>
 #include <functional>
+#include <plf_colony.h>
 #include <span>
 #include <vector>
-#include <plf_colony.h>
 
 namespace vuk {
 	struct SyncPoint {
@@ -224,7 +224,7 @@ namespace vuk {
 		ChainLink* links = nullptr;
 
 		uint8_t flag = 0;
-			
+
 		template<uint8_t c>
 		struct Fixed {
 			uint8_t arg_count = c;
@@ -293,6 +293,7 @@ namespace vuk {
 				AcquireRelease* release;
 				Access dst_access;
 				DomainFlagBits dst_domain;
+				void* value;
 			} release;
 			struct : Variable {
 				std::span<Ref> src;
@@ -321,7 +322,6 @@ namespace vuk {
 				uint8_t arg_count;
 				std::span<Ref> args;
 			} variable_node;
-
 		};
 
 		std::string_view kind_to_sv() {
@@ -634,7 +634,6 @@ namespace vuk {
 			return new (payload_arena.ensure_space(sizeof(TypeDebugInfo))) TypeDebugInfo{ payload_arena.allocate_string(name) };
 		}
 
-		
 		void name_output(Ref ref, std::string_view name) {
 			auto node = ref.node;
 			if (!node->debug_info) {
@@ -851,9 +850,7 @@ namespace vuk {
 			return first(emplace_op(Node{ .kind = Node::CLEAR, .type = std::span{ &get_builtin_image(), 1 }, .clear = { .dst = dst, .cv = new Clear(cv) } }));
 		}
 
-		Type* make_opaque_fn_ty(std::span<Type* const> args,
-		                        std::span<Type* const> ret_types,
-		                        DomainFlags execute_on, UserCallbackType callback) {
+		Type* make_opaque_fn_ty(std::span<Type* const> args, std::span<Type* const> ret_types, DomainFlags execute_on, UserCallbackType callback) {
 			auto arg_ptr = new (payload_arena.ensure_space(sizeof(Type*) * args.size())) Type*[args.size()];
 			std::copy(args.begin(), args.end(), arg_ptr);
 			auto ret_ty_ptr = new (payload_arena.ensure_space(sizeof(Type*) * ret_types.size())) Type*[ret_types.size()];
@@ -928,8 +925,17 @@ namespace vuk {
 		}
 
 		~ExtNode() {
-			if (module && node->kind == Node::RELACQ) {
-				node->relacq.rel_acq = nullptr;
+			if (module) {
+				if (node->kind == Node::RELACQ) {
+					node->relacq.rel_acq = nullptr;
+					for (auto& v : node->relacq.values) {
+						delete v;
+					}
+
+					delete node->relacq.values.data();
+				} else {
+					delete node->release.value;
+				}
 			}
 		}
 
