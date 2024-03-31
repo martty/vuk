@@ -524,31 +524,7 @@ namespace vuk {
 
 	void DeviceVkResource::deallocate_timestamp_queries(std::span<const TimestampQuery> src) {}
 
-	Result<void, AllocateException> DeviceVkResource::allocate_timeline_semaphores(std::span<TimelineSemaphore> dst, SourceLocationAtFrame loc) {
-		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
-			VkSemaphoreCreateInfo sci{ .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
-			VkSemaphoreTypeCreateInfo stci{ .sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO };
-			stci.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
-			stci.initialValue = 0;
-			sci.pNext = &stci;
-			VkResult res = ctx->vkCreateSemaphore(device, &sci, nullptr, &dst[i].semaphore);
-			if (res != VK_SUCCESS) {
-				deallocate_timeline_semaphores({ dst.data(), (uint64_t)i });
-				return { expected_error, AllocateException{ res } };
-			}
-			dst[i].value = new uint64_t{ 0 }; // TODO: more sensibly
-		}
-		return { expected_value };
-	}
-
-	void DeviceVkResource::deallocate_timeline_semaphores(std::span<const TimelineSemaphore> src) {
-		for (auto& v : src) {
-			if (v.semaphore != VK_NULL_HANDLE) {
-				ctx->vkDestroySemaphore(device, v.semaphore, nullptr);
-				delete v.value;
-			}
-		}
-	}
+	void DeviceVkResource::wait_sync_points(std::span<const SyncPoint> src) {} // noop
 
 	Result<void, AllocateException> DeviceVkResource::allocate_acceleration_structures(std::span<VkAccelerationStructureKHR> dst,
 	                                                                                   std::span<const VkAccelerationStructureCreateInfoKHR> cis,
@@ -1201,12 +1177,8 @@ namespace vuk {
 		upstream->deallocate_timestamp_queries(src);
 	}
 
-	Result<void, AllocateException> DeviceNestedResource::allocate_timeline_semaphores(std::span<TimelineSemaphore> dst, SourceLocationAtFrame loc) {
-		return upstream->allocate_timeline_semaphores(dst, loc);
-	}
-
-	void DeviceNestedResource::deallocate_timeline_semaphores(std::span<const TimelineSemaphore> src) {
-		upstream->deallocate_timeline_semaphores(src);
+	void DeviceNestedResource::wait_sync_points(std::span<const SyncPoint> src) {
+		upstream->wait_sync_points(src);
 	}
 
 	Result<void, AllocateException> DeviceNestedResource::allocate_acceleration_structures(std::span<VkAccelerationStructureKHR> dst,

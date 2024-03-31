@@ -80,9 +80,7 @@ namespace vuk {
 
 		void deallocate_timestamp_queries(std::span<const TimestampQuery> src) override; // noop
 
-		Result<void, AllocateException> allocate_timeline_semaphores(std::span<TimelineSemaphore> dst, SourceLocationAtFrame loc) override;
-
-		void deallocate_timeline_semaphores(std::span<const TimelineSemaphore> src) override; // noop
+		void wait_sync_points(std::span<const SyncPoint> src) override;
 
 		/// @brief Wait for the fences / timeline semaphores referencing this allocator
 		void wait();

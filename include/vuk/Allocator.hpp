@@ -4,6 +4,7 @@
 #include "vuk/Image.hpp"
 #include "vuk/Result.hpp"
 #include "vuk/SourceLocation.hpp"
+#include "vuk/SyncPoint.hpp"
 #include "vuk/vuk_fwd.hpp"
 
 #include <span>
@@ -14,15 +15,6 @@ namespace vuk {
 		return std::move(res);                                                                                                                                     \
 	}
 	/// @endcond
-
-	struct TimelineSemaphore {
-		VkSemaphore semaphore;
-		uint64_t* value;
-
-		bool operator==(const TimelineSemaphore& other) const noexcept {
-			return semaphore == other.semaphore;
-		}
-	};
 
 	/// @brief DeviceResource is a polymorphic interface over allocation of GPU resources.
 	/// A DeviceResource must prevent reuse of cross-device resources after deallocation until CPU-GPU timelines are synchronized. GPU-only resources may be
@@ -83,8 +75,7 @@ namespace vuk {
 		allocate_timestamp_queries(std::span<TimestampQuery> dst, std::span<const TimestampQueryCreateInfo> cis, SourceLocationAtFrame loc) = 0;
 		virtual void deallocate_timestamp_queries(std::span<const TimestampQuery> src) = 0;
 
-		virtual Result<void, AllocateException> allocate_timeline_semaphores(std::span<TimelineSemaphore> dst, SourceLocationAtFrame loc) = 0;
-		virtual void deallocate_timeline_semaphores(std::span<const TimelineSemaphore> src) = 0;
+		virtual void wait_sync_points(std::span<const SyncPoint> src) = 0;
 
 		virtual Result<void, AllocateException> allocate_acceleration_structures(std::span<VkAccelerationStructureKHR> dst,
 		                                                                         std::span<const VkAccelerationStructureCreateInfoKHR> cis,
@@ -373,21 +364,9 @@ namespace vuk {
 		/// @param src Span of timestamp queries to be deallocated
 		void deallocate(std::span<const TimestampQuery> src);
 
-		/// @brief Allocate timeline semaphores from this Allocator
-		/// @param dst Destination span to place allocated timeline semaphores into
-		/// @param loc Source location information
-		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
-		Result<void, AllocateException> allocate(std::span<TimelineSemaphore> dst, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
-
-		/// @brief Allocate timeline semaphores from this Allocator
-		/// @param dst Destination span to place allocated timeline semaphores into
-		/// @param loc Source location information
-		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
-		Result<void, AllocateException> allocate_timeline_semaphores(std::span<TimelineSemaphore> dst, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
-
-		/// @brief Deallocate timeline semaphores previously allocated from this Allocator
-		/// @param src Span of timeline semaphores to be deallocated
-		void deallocate(std::span<const TimelineSemaphore> src);
+		/// @brief Make this allocator wait for the given SyncPoints before recycling
+		/// If the underlying resource does not support this, then this call is ignored
+		void wait_sync_points(std::span<const SyncPoint> src);
 
 		/// @brief Allocate acceleration structures from this Allocator
 		/// @param dst Destination span to place allocated acceleration structures into

@@ -21,19 +21,6 @@ namespace vuk {
 		return { expected_value, std::move(sema) };
 	}
 
-	/// @brief Allocate a single timeline semaphore from an Allocator
-	/// @param allocator Allocator to use
-	/// @param loc Source location information
-	/// @return Timeline semaphore in a RAII wrapper (Unique<T>) or AllocateException on error
-	inline Result<Unique<TimelineSemaphore>, AllocateException> allocate_timeline_semaphore(Allocator& allocator,
-	                                                                                        SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-		Unique<TimelineSemaphore> sema(allocator);
-		if (auto res = allocator.allocate_timeline_semaphores(std::span{ &sema.get(), 1 }, loc); !res) {
-			return { expected_error, res.error() };
-		}
-		return { expected_value, std::move(sema) };
-	}
-
 	/// @brief Allocate a single command pool from an Allocator
 	/// @param allocator Allocator to use
 	/// @param cpci Command pool creation parameters

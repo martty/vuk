@@ -3,18 +3,17 @@
 #include "vuk/Config.hpp"
 #include "vuk/Executor.hpp"
 
-#include <vector>
 #include <span>
+#include <vector>
 
 namespace vuk {
 	struct SubmitInfo;
-	struct TimelineSemaphore;
-}
+} // namespace vuk
 
 namespace vuk::rtvk {
 	/// @brief Abstraction of a device queue in Vulkan
 	struct QueueExecutor : Executor {
-		QueueExecutor(VkDevice device, DomainFlagBits domain, const struct FunctionPointers& fps, VkQueue queue, uint32_t queue_family_index, TimelineSemaphore ts);
+		QueueExecutor(VkDevice device, DomainFlagBits domain, const struct FunctionPointers& fps, VkQueue queue, uint32_t queue_family_index, VkSemaphore ts);
 		~QueueExecutor();
 
 		QueueExecutor(QueueExecutor&&) noexcept;
@@ -34,6 +33,12 @@ namespace vuk::rtvk {
 
 		Result<VkResult> queue_present(VkPresentInfoKHR pi);
 
+	private:
 		struct QueueImpl* impl;
+
+		std::vector<VkSubmitInfo2KHR> sis;
+		std::vector<VkCommandBufferSubmitInfoKHR> cbufsis;
+		std::vector<VkSemaphoreSubmitInfoKHR> wait_semas;
+		std::vector<VkSemaphoreSubmitInfoKHR> signal_semas;
 	};
 } // namespace vuk::rtvk

@@ -19,7 +19,7 @@ namespace vuk {
 	std::string format_source_location(Node* node) {
 		if (node->debug_info) {
 			std::string msg = "";
-			for (int i = node->debug_info->trace.size() - 1; i >= 0; i--) {
+			for (int i = (int)node->debug_info->trace.size() - 1; i >= 0; i--) {
 				auto& source = node->debug_info->trace[i];
 				msg += fmt::format("{}({}): ", source.file_name(), source.line());
 				if (i > 0) {
@@ -178,6 +178,11 @@ namespace vuk {
 				batch.back().signals.emplace_back(signal);
 			}
 			executor->submit_batch(batch);
+			for (auto& item : batch) {
+				for (auto& signal : item.signals) {
+					alloc.wait_sync_points(std::span{ &signal->source, 1 });
+				}
+			}
 			batch.clear();
 			dependent_signals.clear();
 			return { expected_value };

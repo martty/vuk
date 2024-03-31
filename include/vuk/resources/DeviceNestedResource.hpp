@@ -75,9 +75,7 @@ namespace vuk {
 
 		void deallocate_timestamp_queries(std::span<const TimestampQuery> src) override;
 
-		Result<void, AllocateException> allocate_timeline_semaphores(std::span<TimelineSemaphore> dst, SourceLocationAtFrame loc) override;
-
-		void deallocate_timeline_semaphores(std::span<const TimelineSemaphore> src) override;
+		void wait_sync_points(std::span<const SyncPoint> src) override;
 
 		Result<void, AllocateException> allocate_acceleration_structures(std::span<VkAccelerationStructureKHR> dst,
 		                                                                 std::span<const VkAccelerationStructureCreateInfoKHR> cis,

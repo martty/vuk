@@ -29,7 +29,7 @@ namespace vuk {
 		std::vector<TimestampQueryPool> ts_query_pools;
 		uint64_t query_index = 0;
 		uint64_t current_ts_pool = 0;
-		std::vector<TimelineSemaphore> tsemas;
+		std::vector<SyncPoint> syncpoints;
 		std::vector<VkAccelerationStructureKHR> ass;
 
 		BufferLinearAllocator linear_cpu_only;
@@ -277,14 +277,10 @@ namespace vuk {
 
 	void DeviceLinearResource::deallocate_timestamp_queries(std::span<const TimestampQuery> src) {} // noop
 
-	Result<void, AllocateException> DeviceLinearResource::allocate_timeline_semaphores(std::span<TimelineSemaphore> dst, SourceLocationAtFrame loc) {
-		VUK_DO_OR_RETURN(upstream->allocate_timeline_semaphores(dst, loc));
-		auto& vec = impl->tsemas;
-		vec.insert(vec.end(), dst.begin(), dst.end());
-		return { expected_value };
+	void DeviceLinearResource::wait_sync_points(std::span<const SyncPoint> src) {
+		auto& vec = impl->syncpoints;
+		vec.insert(vec.end(), src.begin(), src.end());
 	}
-
-	void DeviceLinearResource::deallocate_timeline_semaphores(std::span<const TimelineSemaphore> src) {} // noop
 
 	void DeviceLinearResource::wait() {
 		if (impl->fences.size() > 0) {
@@ -298,19 +294,25 @@ namespace vuk {
 				impl->ctx->vkWaitForFences(impl->device, (uint32_t)impl->fences.size(), impl->fences.data(), true, UINT64_MAX);
 			}
 		}
-		if (impl->tsemas.size() > 0) {
+		if (impl->syncpoints.size() > 0) {
 			VkSemaphoreWaitInfo swi{ VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO };
 
-			std::vector<VkSemaphore> semas(impl->tsemas.size());
-			std::vector<uint64_t> values(impl->tsemas.size());
+			std::vector<VkSemaphore> semas;
+			semas.reserve(impl->syncpoints.size());
+			std::vector<uint64_t> values;
+			values.reserve(impl->syncpoints.size());
 
-			for (uint64_t i = 0; i < impl->tsemas.size(); i++) {
-				semas[i] = impl->tsemas[i].semaphore;
-				values[i] = *impl->tsemas[i].value;
+			for (uint64_t i = 0; i < impl->syncpoints.size(); i++) {
+				auto& sp = impl->syncpoints[i];
+				if (sp.executor->type == Executor::Type::eVulkanDeviceQueue) {
+					auto dev_queue = static_cast<rtvk::QueueExecutor*>(sp.executor);
+					semas.push_back(dev_queue->get_semaphore());
+					values.push_back(sp.visibility);
+				}
 			}
 			swi.pSemaphores = semas.data();
 			swi.pValues = values.data();
-			swi.semaphoreCount = (uint32_t)impl->tsemas.size();
+			swi.semaphoreCount = (uint32_t)semas.size();
 			impl->ctx->vkWaitSemaphores(impl->device, &swi, UINT64_MAX);
 		}
 	}
@@ -332,8 +334,9 @@ namespace vuk {
 		upstream->deallocate_descriptor_sets(f.descriptor_sets);
 		f.ctx->make_timestamp_results_available(f.ts_query_pools);
 		upstream->deallocate_timestamp_query_pools(f.ts_query_pools);
-		upstream->deallocate_timeline_semaphores(f.tsemas);
 		upstream->deallocate_acceleration_structures(f.ass);
+
+		f.syncpoints.clear();
 
 		for (auto& p : f.ds_pools) {
 			upstream->deallocate_descriptor_pools({ &p, 1 });

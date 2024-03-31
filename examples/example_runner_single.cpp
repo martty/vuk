@@ -71,7 +71,7 @@ void vuk::ExampleRunner::render() {
 		// submit and present the results to the swapchain we imported previously
 		auto entire_thing = enqueue_presentation(std::move(example_result));
 
-		entire_thing.wait(frame_allocator, compiler, { .callbacks = cbs });
+		entire_thing.submit(frame_allocator, compiler, { .callbacks = cbs });
 
 		// update window title with FPS
 		if (++num_frames == 16) {

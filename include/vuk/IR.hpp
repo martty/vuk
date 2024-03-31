@@ -4,6 +4,7 @@
 #include "vuk/ImageAttachment.hpp"
 #include "vuk/RelSpan.hpp"
 #include "vuk/Swapchain.hpp"
+#include "vuk/SyncPoint.hpp"
 #include "vuk/Types.hpp"
 
 #include <deque>
@@ -13,11 +14,6 @@
 #include <vector>
 
 namespace vuk {
-	struct SyncPoint {
-		Executor* executor;
-		uint64_t visibility; // results are available if waiting for {executor, visibility}
-	};
-
 	/// @brief Encapsulates a SyncPoint that can be synchronized against in the future
 	struct Signal {
 	public:

@@ -18,39 +18,39 @@ namespace vuk::rtvk {
 		PFN_vkQueueWaitIdle queueWaitIdle;
 		PFN_vkDestroySemaphore destroySemaphore;
 		PFN_vkQueuePresentKHR queuePresentKHR;
-		TimelineSemaphore submit_sync;
+		VkSemaphore submit_sync;
+		uint64_t sync_value = 0;
 		VkQueue queue;
 		uint32_t family_index;
 
-		QueueImpl(VkDevice device, const FunctionPointers& fps, VkQueue queue, uint32_t queue_family_index, TimelineSemaphore ts) :
+		QueueImpl(VkDevice device, const FunctionPointers& fps, VkQueue queue, uint32_t queue_family_index, VkSemaphore sema) :
 		    device(device),
 		    queueSubmit(fps.vkQueueSubmit),
 		    queueSubmit2KHR(fps.vkQueueSubmit2KHR),
 		    queueWaitIdle(fps.vkQueueWaitIdle),
 		    destroySemaphore(fps.vkDestroySemaphore),
 		    queuePresentKHR(fps.vkQueuePresentKHR),
-		    submit_sync(ts),
+		    submit_sync(sema),
 		    queue(queue),
 		    family_index(queue_family_index) {}
 
 		~QueueImpl() {
-			destroySemaphore(device, submit_sync.semaphore, nullptr);
+			destroySemaphore(device, submit_sync, nullptr);
 		}
 	};
 
 	std::unique_ptr<Executor>
 	create_vkqueue_executor(const FunctionPointers& fps, VkDevice device, VkQueue queue, uint32_t queue_family_index, DomainFlagBits domain) {
-		TimelineSemaphore ts;
+		VkSemaphore sema;
 		VkSemaphoreCreateInfo sci{ .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
 		VkSemaphoreTypeCreateInfo stci{ .sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO };
 		stci.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
 		stci.initialValue = 0;
 		sci.pNext = &stci;
-		VkResult res = fps.vkCreateSemaphore(device, &sci, nullptr, &ts.semaphore);
+		VkResult res = fps.vkCreateSemaphore(device, &sci, nullptr, &sema);
 		if (res != VK_SUCCESS) {
 			return { nullptr };
 		}
-		ts.value = new uint64_t{ 0 };
 
 		if (fps.vkSetDebugUtilsObjectNameEXT) {
 			VkDebugUtilsObjectNameInfoEXT info = { .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT };
@@ -70,7 +70,7 @@ namespace vuk::rtvk {
 			fps.vkSetDebugUtilsObjectNameEXT(device, &info);
 		}
 
-		return std::make_unique<QueueExecutor>(device, domain, fps, queue, queue_family_index, ts);
+		return std::make_unique<QueueExecutor>(device, domain, fps, queue, queue_family_index, sema);
 	}
 
 	QueueExecutor::QueueExecutor(VkDevice device,
@@ -78,9 +78,9 @@ namespace vuk::rtvk {
 	                             const FunctionPointers& fps,
 	                             VkQueue queue,
 	                             uint32_t queue_family_index,
-	                             TimelineSemaphore ts) :
+	                             VkSemaphore sema) :
 	    Executor(Executor::Type::eVulkanDeviceQueue, domain, reinterpret_cast<uint64_t>(queue)),
-	    impl(new QueueImpl(device, fps, queue, queue_family_index, ts)) {}
+	    impl(new QueueImpl(device, fps, queue, queue_family_index, sema)) {}
 
 	QueueExecutor::~QueueExecutor() {
 		delete impl;
@@ -127,11 +127,11 @@ namespace vuk::rtvk {
 	}
 
 	uint64_t QueueExecutor::get_sync_value() {
-		return (*impl->submit_sync.value)++;
+		return impl->sync_value++;
 	}
 
 	VkSemaphore QueueExecutor::get_semaphore() {
-		return impl->submit_sync.semaphore;
+		return impl->submit_sync;
 	}
 
 	uint32_t QueueExecutor::get_queue_family_index() {
@@ -141,6 +141,11 @@ namespace vuk::rtvk {
 	Result<void> QueueExecutor::submit_batch(std::vector<SubmitInfo> batch) {
 		std::unique_lock _(*this);
 
+		sis.clear();
+		cbufsis.clear();
+		wait_semas.clear();
+		signal_semas.clear();
+
 		uint64_t num_cbufs = 0;
 		uint64_t num_waits = 0;
 		for (uint64_t i = 0; i < batch.size(); i++) {
@@ -149,12 +154,8 @@ namespace vuk::rtvk {
 			num_waits += submit_info.waits.size() + submit_info.pres_wait.size();
 		}
 
-		std::vector<VkSubmitInfo2KHR> sis;
-		std::vector<VkCommandBufferSubmitInfoKHR> cbufsis;
 		cbufsis.reserve(num_cbufs);
-		std::vector<VkSemaphoreSubmitInfoKHR> wait_semas;
 		wait_semas.reserve(num_waits);
-		std::vector<VkSemaphoreSubmitInfoKHR> signal_semas;
 		signal_semas.reserve(batch.size() + 1); // 1 extra for render_complete
 
 		for (uint64_t i = 0; i < batch.size(); i++) {
@@ -195,8 +196,8 @@ namespace vuk::rtvk {
 			}
 
 			VkSemaphoreSubmitInfoKHR ssi{ VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR };
-			ssi.semaphore = impl->submit_sync.semaphore;
-			ssi.value = ++(*impl->submit_sync.value);
+			ssi.semaphore = impl->submit_sync;
+			ssi.value = ++impl->sync_value;
 
 			ssi.stageMask = (VkPipelineStageFlagBits2KHR)PipelineStageFlagBits::eAllCommands;
 

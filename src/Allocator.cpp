@@ -180,16 +180,8 @@ namespace vuk {
 		device_resource->deallocate_timestamp_queries(src);
 	}
 
-	Result<void, AllocateException> Allocator::allocate(std::span<TimelineSemaphore> dst, SourceLocationAtFrame loc) {
-		return device_resource->allocate_timeline_semaphores(dst, loc);
-	}
-
-	Result<void, AllocateException> Allocator::allocate_timeline_semaphores(std::span<TimelineSemaphore> dst, SourceLocationAtFrame loc) {
-		return device_resource->allocate_timeline_semaphores(dst, loc);
-	}
-
-	void Allocator::deallocate(std::span<const TimelineSemaphore> src) {
-		device_resource->deallocate_timeline_semaphores(src);
+	void Allocator::wait_sync_points(std::span<const SyncPoint> src) {
+		device_resource->wait_sync_points(src);
 	}
 
 	Result<void, AllocateException>
