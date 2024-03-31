@@ -1403,7 +1403,9 @@ namespace vuk {
 								return img;
 							}
 							attachment.image = **img;
-							// ctx.set_name(attachment.image.image, bound.name.name);
+							if (node->debug_info && node->debug_info->result_names.size() > 0 && !node->debug_info->result_names[0].empty()) {
+								ctx.set_name(attachment.image.image, node->debug_info->result_names[0]);
+							}
 						}
 						sched.done(node, host_stream, attachment);
 					} else if (node->type[0] == impl->cg_module->builtin_swapchain) {
