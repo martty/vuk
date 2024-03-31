@@ -703,7 +703,7 @@ namespace vuk {
 		}
 
 		void schedule_dependency(Ref parm, RW access) {
-			if (parm.node->kind == Node::CONSTANT) {
+			if (parm.node->kind == Node::CONSTANT || parm.node->kind == Node::PLACEHOLDER || parm.node->kind == Node::MATH_BINARY) {
 				return;
 			}
 			auto link = parm.link();
