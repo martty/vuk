@@ -685,6 +685,7 @@ namespace vuk {
 				if (r->def.node)
 					tails.push_back(r->def);
 			}
+			auto converged_base = impl->cg_module->make_converge(base, tails);
 			for (auto node : impl->nodes) {
 				if (node->kind == Node::SLICE) {
 					continue;
@@ -703,7 +704,6 @@ namespace vuk {
 								}
 								*/
 							}
-							auto converged_base = impl->cg_module->make_converge(base, tails);
 							node->fixed_node.args[i] = converged_base;
 						}
 					}
@@ -717,7 +717,6 @@ namespace vuk {
 								  return { expected_error, RenderGraphException{ "Convergence not dominated" } };
 								}*/
 							}
-							auto converged_base = impl->cg_module->make_converge(base, tails);
 							node->variable_node.args[i] = converged_base;
 						}
 					}
