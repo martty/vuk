@@ -19,7 +19,7 @@ namespace {
 	auto box = util::generate_cube();
 	vuk::Unique<vuk::Buffer> verts, inds;
 	vuk::Unique<VkAccelerationStructureKHR> tlas, blas;
-	vuk::Unique<vuk::Buffer> tlas_buf, blas_buf, tlas_scratch_buffer;
+	vuk::Unique<vuk::Buffer> tlas_buf_alloc, blas_buf_alloc, tlas_scratch_buffer_alloc;
 
 	vuk::Example x{
 		.name = "12_rt_pipeline",
@@ -89,10 +89,10 @@ namespace {
 		      VkAccelerationStructureCreateInfoKHR blas_ci{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR };
 		      blas_ci.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
 		      blas_ci.size = blas_size_info.accelerationStructureSize; // Will be used to allocate memory.
-		      blas_buf =
+		      blas_buf_alloc =
 		          *vuk::allocate_buffer(allocator, { .mem_usage = vuk::MemoryUsage::eGPUonly, .size = blas_size_info.accelerationStructureSize, .alignment = 256 });
-		      blas_ci.buffer = blas_buf->buffer;
-		      blas_ci.offset = blas_buf->offset;
+		      blas_ci.buffer = blas_buf_alloc->buffer;
+		      blas_ci.offset = blas_buf_alloc->offset;
 
 		      blas = vuk::Unique<VkAccelerationStructureKHR>(allocator);
 		      allocator.allocate_acceleration_structures({ &*blas, 1 }, { &blas_ci, 1 });
@@ -117,7 +117,7 @@ namespace {
 		      rayInst.transform.matrix[1][1] = 1.f;
 		      rayInst.transform.matrix[2][2] = 1.f;
 		      rayInst.instanceCustomIndex = 0; // gl_InstanceCustomIndexEXT
-		      rayInst.accelerationStructureReference = blas_buf->device_address;
+		      rayInst.accelerationStructureReference = blas_buf_alloc->device_address;
 		      rayInst.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
 		      rayInst.mask = 0xFF;                                //  Only be hit if rayMask & instance.mask != 0
 		      rayInst.instanceShaderBindingTableRecordOffset = 0; // We will use the same hit group for all objects
@@ -151,66 +151,73 @@ namespace {
 		      VkAccelerationStructureCreateInfoKHR tlas_ci{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR };
 		      tlas_ci.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
 		      tlas_ci.size = tlas_size_info.accelerationStructureSize;
-		      tlas_buf =
+		      tlas_buf_alloc =
 		          *vuk::allocate_buffer(allocator, { .mem_usage = vuk::MemoryUsage::eGPUonly, .size = tlas_size_info.accelerationStructureSize, .alignment = 256 });
-		      tlas_ci.buffer = tlas_buf->buffer;
-		      tlas_ci.offset = tlas_buf->offset;
+		      tlas_ci.buffer = tlas_buf_alloc->buffer;
+		      tlas_ci.offset = tlas_buf_alloc->offset;
 
 		      tlas = vuk::Unique<VkAccelerationStructureKHR>(allocator);
 		      allocator.allocate_acceleration_structures({ &*tlas, 1 }, { &tlas_ci, 1 });
 
 		      // Allocate the scratch memory
-		      tlas_scratch_buffer = *vuk::allocate_buffer(allocator,
-		                                                  vuk::BufferCreateInfo{ .mem_usage = vuk::MemoryUsage::eGPUonly,
-		                                                                         .size = tlas_size_info.buildScratchSize,
-		                                                                         .alignment = ctx.as_properties.minAccelerationStructureScratchOffsetAlignment });
+		      tlas_scratch_buffer_alloc =
+		          *vuk::allocate_buffer(allocator,
+		                                vuk::BufferCreateInfo{ .mem_usage = vuk::MemoryUsage::eGPUonly,
+		                                                       .size = tlas_size_info.buildScratchSize,
+		                                                       .alignment = ctx.as_properties.minAccelerationStructureScratchOffsetAlignment });
 
 		      // Update build information
 		      tlas_build_info.srcAccelerationStructure = VK_NULL_HANDLE;
 		      tlas_build_info.dstAccelerationStructure = *tlas;
-		      tlas_build_info.scratchData.deviceAddress = tlas_scratch_buffer->device_address;
+		      tlas_build_info.scratchData.deviceAddress = tlas_scratch_buffer_alloc->device_address;
 
 		      // Build the BLAS & TLAS
-		      vuk::RenderGraph as_build("as_build");
-		      // We attach the vertex and index futures, which will be used for the BLAS build
-		      as_build.attach_in("verts", std::move(vert_fut));
-		      as_build.attach_in("inds", std::move(ind_fut));
+
 		      // Synchronization happens against the AS buffers
-		      as_build.attach_buffer("blas_buf", *blas_buf);
-		      as_build.attach_buffer("tlas_buf", *tlas_buf);
-		      as_build.add_pass({ .resources = { "blas_buf"_buffer >> vuk::eAccelerationStructureBuildWrite,
-		                                         "verts"_buffer >> vuk::eAccelerationStructureBuildRead,
-		                                         "inds"_buffer >> vuk::eAccelerationStructureBuildRead },
-		                          .execute = [maxPrimitiveCount, as_geom, blas_build_info](vuk::CommandBuffer& command_buffer) mutable {
-			                          // We make a copy of the AS geometry to not dangle when this runs.
-			                          blas_build_info.pGeometries = &as_geom;
+		      auto blas_buf = vuk::declare_buf("blas_buf", *blas_buf_alloc);
+		      auto tlas_buf = vuk::declare_buf("tlas_buf", *tlas_buf_alloc);
+		      auto build_blas = vuk::make_pass("BLAS build",
+		                                       [maxPrimitiveCount, as_geom, blas_build_info](vuk::CommandBuffer& command_buffer,
+		                                                                                     VUK_BA(vuk::eAccelerationStructureBuildWrite) blas_buf,
+		                                                                                     VUK_BA(vuk::eAccelerationStructureBuildRead) verts,
+		                                                                                     VUK_BA(vuk::eAccelerationStructureBuildRead) inds) mutable {
+			                                       // We make a copy of the AS geometry to not dangle when this runs.
+			                                       blas_build_info.pGeometries = &as_geom;
 
-			                          // Describe what we are building.
-			                          VkAccelerationStructureBuildRangeInfoKHR blas_offset;
-			                          blas_offset.primitiveCount = maxPrimitiveCount;
-			                          blas_offset.firstVertex = 0;
-			                          blas_offset.primitiveOffset = 0;
-			                          blas_offset.transformOffset = 0;
-			                          const VkAccelerationStructureBuildRangeInfoKHR* pblas_offset = &blas_offset;
-			                          command_buffer.build_acceleration_structures(1, &blas_build_info, &pblas_offset);
-		                          } });
-		      as_build.add_pass(
-		          { .resources = { "blas_buf+"_buffer >> vuk::eAccelerationStructureBuildRead, "tlas_buf"_buffer >> vuk::eAccelerationStructureBuildWrite },
-		            .execute = [countInstance, topASGeometry, tlas_build_info](vuk::CommandBuffer& command_buffer) mutable {
-			            // We make a copy of the AS geometry to not dangle when this runs.
-			            tlas_build_info.pGeometries = &topASGeometry;
+			                                       // Describe what we are building.
+			                                       VkAccelerationStructureBuildRangeInfoKHR blas_offset;
+			                                       blas_offset.primitiveCount = maxPrimitiveCount;
+			                                       blas_offset.firstVertex = 0;
+			                                       blas_offset.primitiveOffset = 0;
+			                                       blas_offset.transformOffset = 0;
+			                                       const VkAccelerationStructureBuildRangeInfoKHR* pblas_offset = &blas_offset;
+			                                       command_buffer.build_acceleration_structures(1, &blas_build_info, &pblas_offset);
 
-			            // Describe what we are building.
-			            VkAccelerationStructureBuildRangeInfoKHR tlas_offset{ countInstance, 0, 0, 0 };
-			            const VkAccelerationStructureBuildRangeInfoKHR* ptlas_offset = &tlas_offset;
-			            command_buffer.build_acceleration_structures(1, &tlas_build_info, &ptlas_offset);
-		            } });
+			                                       return blas_buf;
+		                                       });
+		      auto build_tlas = vuk::make_pass("TLAS build",
+		                                       [countInstance, topASGeometry, tlas_build_info](vuk::CommandBuffer& command_buffer,
+		                                                                                       VUK_BA(vuk::eAccelerationStructureBuildRead) blas_buf,
+		                                                                                       VUK_BA(vuk::eAccelerationStructureBuildWrite) tlas_buf) mutable {
+			                                       // We make a copy of the AS geometry to not dangle when this runs.
+			                                       tlas_build_info.pGeometries = &topASGeometry;
+
+			                                       // Describe what we are building.
+			                                       VkAccelerationStructureBuildRangeInfoKHR tlas_offset{ countInstance, 0, 0, 0 };
+			                                       const VkAccelerationStructureBuildRangeInfoKHR* ptlas_offset = &tlas_offset;
+			                                       command_buffer.build_acceleration_structures(1, &tlas_build_info, &ptlas_offset);
+
+			                                       return tlas_buf;
+		                                       });
+
 		      // For the example, we just ask these that these uploads and AS building complete before moving on to rendering
 		      // In an engine, you would integrate these uploads into some explicit system
-		      runner.enqueue_setup(vuk::Future(std::make_shared<vuk::RenderGraph>(std::move(as_build)), "tlas_buf+"));
+		      auto blas = build_blas(blas_buf, vert_fut, ind_fut);
+		      auto tlas = build_tlas(std::move(blas), tlas_buf);
+		      runner.enqueue_setup(std::move(tlas));
 		    },
 		.render =
-		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator, vuk::Future target) {
+		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator, vuk::Value<vuk::ImageAttachment> target) {
 		      if (!runner.has_rt) {
 			      return target;
 		      }
@@ -235,7 +242,7 @@ namespace {
 		      glm::mat3x4 reduced_model_transform = static_cast<glm::mat3x4>(model_transform);
 		      memcpy(&rayInst.transform.matrix, &reduced_model_transform, sizeof(glm::mat3x4));
 		      rayInst.instanceCustomIndex = 0; // gl_InstanceCustomIndexEXT
-		      rayInst.accelerationStructureReference = blas_buf->device_address;
+		      rayInst.accelerationStructureReference = blas_buf_alloc->device_address;
 		      rayInst.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
 		      rayInst.mask = 0xFF;                                //  Only be hit if rayMask & instance.mask != 0
 		      rayInst.instanceShaderBindingTableRecordOffset = 0; // We will use the same hit group for all objects
@@ -243,69 +250,74 @@ namespace {
 		      auto [instances_buffer, instances_fut] =
 		          vuk::create_buffer(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, vuk::DomainFlagBits::eTransferOnGraphics, std::span{ &rayInst, 1 });
 
-		      vuk::RenderGraph rg("12");
-		      rg.attach_in("12_rt", std::move(target));
-		      rg.attach_buffer("tlas", *tlas_buf);
 		      // TLAS update pass
-		      rg.add_pass({ .resources = { "tlas"_buffer >> vuk::eAccelerationStructureBuildWrite },
-		                    .execute = [inst_buf = *instances_buffer](vuk::CommandBuffer& command_buffer) {
-			                    // TLAS update
-			                    VkAccelerationStructureGeometryInstancesDataKHR instancesVk{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR };
-			                    instancesVk.data.deviceAddress = inst_buf.device_address;
+		      auto update_tlas = vuk::make_pass(
+		          "TLAS update", [inst_buf = *instances_buffer](vuk::CommandBuffer& command_buffer, VUK_BA(vuk::eAccelerationStructureBuildWrite) tlas_buf) {
+			          // TLAS update
+			          VkAccelerationStructureGeometryInstancesDataKHR instancesVk{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR };
+			          instancesVk.data.deviceAddress = inst_buf.device_address;
 
-			                    VkAccelerationStructureGeometryKHR topASGeometry{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR };
-			                    topASGeometry.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR;
-			                    topASGeometry.geometry.instances = instancesVk;
+			          VkAccelerationStructureGeometryKHR topASGeometry{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR };
+			          topASGeometry.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR;
+			          topASGeometry.geometry.instances = instancesVk;
 
-			                    VkAccelerationStructureBuildGeometryInfoKHR tlas_build_info{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR };
-			                    tlas_build_info.flags = VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR;
-			                    tlas_build_info.geometryCount = 1;
-			                    tlas_build_info.pGeometries = &topASGeometry;
-			                    tlas_build_info.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR;
-			                    tlas_build_info.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+			          VkAccelerationStructureBuildGeometryInfoKHR tlas_build_info{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR };
+			          tlas_build_info.flags = VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR;
+			          tlas_build_info.geometryCount = 1;
+			          tlas_build_info.pGeometries = &topASGeometry;
+			          tlas_build_info.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR;
+			          tlas_build_info.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
 
-			                    tlas_build_info.srcAccelerationStructure = *tlas;
-			                    tlas_build_info.dstAccelerationStructure = *tlas;
-			                    tlas_build_info.scratchData.deviceAddress = tlas_scratch_buffer->device_address;
+			          tlas_build_info.srcAccelerationStructure = *tlas;
+			          tlas_build_info.dstAccelerationStructure = *tlas;
+			          tlas_build_info.scratchData.deviceAddress = tlas_scratch_buffer_alloc->device_address;
 
-			                    VkAccelerationStructureBuildRangeInfoKHR tlas_offset{ 1, 0, 0, 0 };
-			                    const VkAccelerationStructureBuildRangeInfoKHR* ptlas_offset = &tlas_offset;
-			                    command_buffer.build_acceleration_structures(1, &tlas_build_info, &ptlas_offset);
-		                    } });
+			          VkAccelerationStructureBuildRangeInfoKHR tlas_offset{ 1, 0, 0, 0 };
+			          const VkAccelerationStructureBuildRangeInfoKHR* ptlas_offset = &tlas_offset;
+			          command_buffer.build_acceleration_structures(1, &tlas_build_info, &ptlas_offset);
+
+			          return tlas_buf;
+		          });
+
+		      auto tlas_buf = vuk::declare_buf("tlas_buf", *tlas_buf_alloc);
+		      auto updated_tlas = update_tlas(std::move(tlas_buf));
 		      // We use a eR8G8B8A8Unorm, as the swapchain is in sRGB which does not support storage use
-		      rg.attach_image("12_rt_target",
-		                      vuk::ImageAttachment{ .format = vuk::Format::eR8G8B8A8Unorm, .sample_count = vuk::SampleCountFlagBits::e1, .layer_count = 1 });
+		      auto rt_target = vuk::declare_ia(
+		          "12_rt_target", vuk::ImageAttachment{ .format = vuk::Format::eR8G8B8A8Unorm, .sample_count = vuk::SampleCountFlagBits::e1, .layer_count = 1 });
 		      // This intermediate image is the same shape as the swapchain image
-		      rg.inference_rule("12_rt_target", vuk::same_shape_as("12_rt"));
+		      rt_target.same_shape_as(target);
 		      // Synchronize against the TLAS buffer to run this pass after the TLAS update has completed
-		      rg.add_pass({ .resources = { "12_rt_target"_image >> vuk::eRayTracingWrite, "tlas+"_buffer >> vuk::eRayTracingRead },
-		                    .execute = [uboVP](vuk::CommandBuffer& command_buffer) {
-			                    command_buffer.bind_acceleration_structure(0, 0, *tlas)
-			                        .bind_image(0, 1, "12_rt_target")
-			                        .bind_buffer(0, 2, uboVP)
-			                        .bind_ray_tracing_pipeline("raytracing");
-			                    // Launch one ray per pixel in the intermediate image
-			                    auto extent = command_buffer.get_resource_image_attachment("12_rt_target")->extent;
-			                    command_buffer.trace_rays(extent.extent.width, extent.extent.height, 1);
-		                    } });
-		      // Perform a blit of the intermediate image onto the swapchain (this will also do the non-linear encoding for us, although we lost some precision when
-		      // we rendered into Unorm)
-		      rg.add_pass({ .resources = { "12_rt_target+"_image >> vuk::eTransferRead, "12_rt"_image >> vuk::eTransferWrite >> "12_rt_final" },
-		                    .execute = [](vuk::CommandBuffer& command_buffer) {
-			                    vuk::ImageBlit blit;
-			                    blit.srcSubresource.aspectMask = vuk::ImageAspectFlagBits::eColor;
-			                    blit.srcSubresource.baseArrayLayer = 0;
-			                    blit.srcSubresource.layerCount = 1;
-			                    blit.srcSubresource.mipLevel = 0;
-			                    blit.dstSubresource = blit.srcSubresource;
-			                    auto extent = command_buffer.get_resource_image_attachment("12_rt_target+")->extent;
-			                    blit.srcOffsets[1] = vuk::Offset3D{ static_cast<int>(extent.extent.width), static_cast<int>(extent.extent.height), 1 };
-			                    blit.dstOffsets[1] = blit.srcOffsets[1];
-			                    command_buffer.blit_image("12_rt_target+", "12_rt", blit, vuk::Filter::eNearest);
-		                    } });
+		      auto trace_rays = vuk::make_pass(
+		          "trace rays", [uboVP](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eRayTracingWrite) rt_target, VUK_BA(vuk::eRayTracingRead) tlas_buf) {
+			          command_buffer.bind_acceleration_structure(0, 0, *tlas)
+			              .bind_image(0, 1, rt_target)
+			              .bind_buffer(0, 2, uboVP)
+			              .bind_ray_tracing_pipeline("raytracing");
+			          // Launch one ray per pixel in the intermediate image
+			          auto extent = rt_target->extent;
+			          command_buffer.trace_rays(extent.width, extent.height, 1);
+
+			          return rt_target;
+		          });
+		      auto intermediate_image = trace_rays(std::move(rt_target), std::move(updated_tlas));
+		      // Perform a blit of the intermediate image onto the swapchain (this will also do the non-linear encoding for us, although we lost some precision
+		      // when we rendered into Unorm)
+		      auto blit_unorm =
+		          vuk::make_pass("blit unorm", [](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eTransferRead) rt_target, VUK_IA(vuk::eTransferWrite) rt_final) {
+			          vuk::ImageBlit blit;
+			          blit.srcSubresource.aspectMask = vuk::ImageAspectFlagBits::eColor;
+			          blit.srcSubresource.baseArrayLayer = 0;
+			          blit.srcSubresource.layerCount = 1;
+			          blit.srcSubresource.mipLevel = 0;
+			          blit.dstSubresource = blit.srcSubresource;
+			          blit.srcOffsets[1] = vuk::Offset3D{ static_cast<int>(rt_target->extent.width), static_cast<int>(rt_target->extent.height), 1 };
+			          blit.dstOffsets[1] = blit.srcOffsets[1];
+			          command_buffer.blit_image(rt_target, rt_final, blit, vuk::Filter::eNearest);
+			          return rt_final;
+		          });
 		      angle += 20.f * ImGui::GetIO().DeltaTime;
 
-		      return vuk::Future{ std::make_unique<vuk::RenderGraph>(std::move(rg)), "12_rt_final" };
+		      return blit_unorm(std::move(intermediate_image), std::move(target));
 		    },
 
 		// Perform cleanup for the example
@@ -314,10 +326,10 @@ namespace {
 		      verts.reset();
 		      inds.reset();
 		      tlas.reset();
-		      tlas_buf.reset();
+		      tlas_buf_alloc.reset();
 		      blas.reset();
-		      blas_buf.reset();
-		      tlas_scratch_buffer.reset();
+		      blas_buf_alloc.reset();
+		      tlas_scratch_buffer_alloc.reset();
 		    }
 	};
 

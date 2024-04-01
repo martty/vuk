@@ -501,7 +501,7 @@ public:
 
 		template<class Ret, class F>
 		static auto make_lam(Name name, F&& body, SchedulingInfo scheduling_info, SourceLocationAtFrame loc) {
-			auto callback = [typed_cb = std::move(body)](CommandBuffer& cb, std::span<void*> args, std::span<void*> meta, std::span<void*> rets) {
+			auto callback = [typed_cb = std::move(body)](CommandBuffer& cb, std::span<void*> args, std::span<void*> meta, std::span<void*> rets) mutable {
 				// we do type recovery here -> convert untyped args to typed ones
 				alignas(alignof(std::tuple<CommandBuffer&, T...>)) char storage[sizeof(std::tuple<CommandBuffer&, T...>)];
 				pack_typed_tuple<T...>(args, meta, cb, storage);
