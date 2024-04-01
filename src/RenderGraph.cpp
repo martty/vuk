@@ -709,7 +709,6 @@ namespace vuk {
 					tails.push_back(idep);
 					write.push_back(false);
 				} else if (r->reads.size() > 0) { // depend on reads indirectly via INDIRECT_DEPEND
-					auto read = r->reads.to_span(impl->pass_reads)[0];
 					tails.push_back(r->def);
 					write.push_back(true);
 				} else {

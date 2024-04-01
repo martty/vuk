@@ -528,8 +528,8 @@ namespace vuk {
 		}
 
 		template<class U>
-		std::span<U> allocate_span(std::span<U> sp, size_t size) {
-			auto dst = std::span((U*)ensure_space(sizeof(U) * size), size);
+		std::span<U> allocate_span(std::span<U> sp, size_t sz) {
+			auto dst = std::span((U*)ensure_space(sizeof(U) * sz), sz);
 
 			std::uninitialized_copy(sp.begin(), sp.end(), dst.begin());
 			return dst;
@@ -943,13 +943,22 @@ namespace vuk {
 			if (module) {
 				if (node->kind == Node::RELACQ) {
 					node->relacq.rel_acq = nullptr;
-					for (auto& v : node->relacq.values) {
-						delete v;
+					for (auto i = 0; i < node->relacq.values.size(); i++) {
+						auto& v = node->relacq.values[i];
+						if (node->relacq.src[i].type() == module->builtin_buffer) {
+							delete (Buffer*)v;
+						} else {
+							delete (ImageAttachment*)v;
+						}
 					}
 
 					delete node->relacq.values.data();
 				} else {
-					delete node->release.value;
+					if (node->release.src.type() == module->builtin_buffer) {
+						delete (Buffer*)node->release.value;
+					} else {
+						delete (ImageAttachment*)node->release.value;
+					}
 				}
 			}
 		}

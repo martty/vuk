@@ -97,7 +97,7 @@ Value<ImageAttachment> util::ImGui_ImplVuk_Render(Allocator& allocator,
 	auto sampled_images_array = declare_array("imgui_sampled", std::span(sampled_images));
 
 	auto pass = make_pass("imgui",
-	                      [&data, &allocator, verts = imvert.get(), inds = imind.get(), draw_data, reset_render_state](
+	                      [&data, verts = imvert.get(), inds = imind.get(), draw_data, reset_render_state](
 	                          CommandBuffer& command_buffer, VUK_IA(Access::eColorWrite) dst, VUK_ARG(ImageAttachment[], Access::eFragmentSampled) sis) {
 		                      command_buffer.set_dynamic_state(DynamicStateFlagBits::eViewport | DynamicStateFlagBits::eScissor);
 		                      command_buffer.set_rasterization(PipelineRasterizationStateCreateInfo{});
