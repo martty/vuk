@@ -559,6 +559,8 @@ public:
 					} else {
 						unpack_typed_tuple(typed_ret, rets);
 					}
+				} else {
+					std::apply(typed_cb, *reinterpret_cast<std::tuple<CommandBuffer&, T...>*>(storage));
 				}
 			};
 
