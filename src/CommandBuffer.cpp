@@ -893,6 +893,42 @@ namespace vuk {
 		return *this;
 	}
 
+	CommandBuffer& CommandBuffer::copy_image(Name src, Name dst, ImageCopy region) {
+		VUK_EARLY_RET();
+		assert(rg);
+		auto src_res = rg->get_resource_image(NameReference::direct(src), current_pass);
+		if (!src_res) {
+			current_error = std::move(src_res);
+			return *this;
+		}
+		auto src_image = src_res->attachment.image;
+		auto dst_res = rg->get_resource_image(NameReference::direct(dst), current_pass);
+		if (!dst_res) {
+			current_error = std::move(dst_res);
+			return *this;
+		}
+		auto dst_image = dst_res->attachment.image;
+
+		auto res_gl_src = rg->is_resource_image_in_general_layout(NameReference::direct(src), current_pass);
+		if (!res_gl_src) {
+			current_error = std::move(res_gl_src);
+			return *this;
+		}
+		auto res_gl_dst = rg->is_resource_image_in_general_layout(NameReference::direct(dst), current_pass);
+		if (!res_gl_dst) {
+			current_error = std::move(res_gl_dst);
+			return *this;
+		}
+
+		auto src_layout = *res_gl_src ? ImageLayout::eGeneral : ImageLayout::eTransferSrcOptimal;
+		auto dst_layout = *res_gl_dst ? ImageLayout::eGeneral : ImageLayout::eTransferDstOptimal;
+
+		ctx.vkCmdCopyImage(
+		    command_buffer, src_image.image, (VkImageLayout)src_layout, dst_image.image, (VkImageLayout)dst_layout, 1, (VkImageCopy*)&region);
+
+		return *this;	
+	}
+
 	CommandBuffer& CommandBuffer::copy_buffer_to_image(Name src, Name dst, BufferImageCopy bic) {
 		VUK_EARLY_RET();
 		assert(rg);

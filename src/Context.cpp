@@ -621,13 +621,32 @@ namespace vuk {
 		ivci.subresourceRange.baseMipLevel = 0;
 		ivci.subresourceRange.layerCount = ici.arrayLayers;
 		ivci.subresourceRange.levelCount = ici.mipLevels;
-		ivci.viewType = ici.imageType == ImageType::e3D   ? ImageViewType::e3D
-		                : ici.imageType == ImageType::e2D ? (ici.arrayLayers > 1 ? ImageViewType::e2DArray : ImageViewType::e2D)
-		                                                  : ImageViewType::e1D;
-		return Texture{ std::move(dst), allocate_image_view(allocator, ivci, loc).value(), // TODO: dropping error
-			              ici.extent,     ici.format,
-			              ici.samples,    ici.mipLevels,
-			              ici.arrayLayers };
+
+		ImageViewType view_type = ici.imageType == ImageType::e3D
+			                          ? ImageViewType::e3D
+			                          : ici.imageType == ImageType::e2D
+			                          ? ImageViewType::e2D
+			                          : ImageViewType::e1D;
+
+		if (ici.arrayLayers > 1 && ici.imageType == ImageType::e2D)
+			if (ici.flags & ImageCreateFlagBits::eCubeCompatible)
+				view_type = ici.arrayLayers > 6 ? ImageViewType::eCubeArray : ImageViewType::eCube;
+			else
+				view_type = ImageViewType::e2DArray;
+		else if (view_type == ImageViewType::e1D && ici.arrayLayers > 1)
+			view_type = ImageViewType::e1DArray;
+
+		ivci.viewType = view_type;
+
+		return {
+			.image = std::move(dst),
+			.view = allocate_image_view(allocator, ivci, loc).value(), // TODO: dropping error
+			.extent = ici.extent,
+			.format = ici.format,
+			.sample_count = ici.samples,
+			.level_count = ici.mipLevels,
+			.layer_count = ici.arrayLayers
+		};
 	}
 
 	void Context::destroy(const DescriptorPool& dp) {

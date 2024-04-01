@@ -1,12 +1,19 @@
-#pragma once 
-#include "vuk/Config.hpp"
+#pragma once
+#include "renderdoc_app.h"
 #include "vuk/Allocator.hpp"
 #include "vuk/AllocatorHelpers.hpp"
 #include "vuk/CommandBuffer.hpp"
+#include "vuk/Config.hpp"
 #include "vuk/Context.hpp"
 #include "vuk/RenderGraph.hpp"
 #include "vuk/resources/DeviceFrameResource.hpp"
+#include "vuk/runtime/ThisThreadExecutor.hpp"
+#ifdef WIN32
+#include <Windows.h>
+#endif
 #include <VkBootstrap.h>
+#include <mutex>
+#include <fmt/format.h>
 
 namespace vuk {
 	struct TestContext {
@@ -21,8 +28,10 @@ namespace vuk {
 		vkb::Device vkbdevice;
 		std::optional<DeviceSuperFrameResource> sfa_resource;
 		std::optional<Allocator> allocator;
+		std::vector<std::unique_ptr<Executor>> executors;
+		RENDERDOC_API_1_6_0* rdoc_api = NULL;
 
-		bool bringup() {
+		void bringup() {
 			vkb::InstanceBuilder builder;
 			builder.request_validation_layers()
 			    .set_debug_callback([](VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
@@ -106,50 +115,98 @@ namespace vuk {
 			transfer_queue = vkbdevice.get_queue(vkb::QueueType::transfer).value();
 			auto transfer_queue_family_index = vkbdevice.get_queue_index(vkb::QueueType::transfer).value();
 			device = vkbdevice.device;
-			ContextCreateParameters::FunctionPointers fps;
+			vuk::rtvk::FunctionPointers fps;
 			fps.vkGetInstanceProcAddr = vkbinstance.fp_vkGetInstanceProcAddr;
 			fps.vkGetDeviceProcAddr = vkbinstance.fp_vkGetDeviceProcAddr;
-			context.emplace(ContextCreateParameters{ instance,
-			                                         device,
-			                                         physical_device,
-			                                         graphics_queue,
-			                                         graphics_queue_family_index,
-			                                         VK_NULL_HANDLE,
-			                                         VK_QUEUE_FAMILY_IGNORED,
-			                                         transfer_queue,
-			                                         transfer_queue_family_index,
-			                                         fps });
+			fps.load_pfns(instance, device, true);
+
+			executors.push_back(rtvk::create_vkqueue_executor(fps, device, graphics_queue, graphics_queue_family_index, DomainFlagBits::eGraphicsQueue));
+			executors.push_back(rtvk::create_vkqueue_executor(fps, device, transfer_queue, transfer_queue_family_index, DomainFlagBits::eTransferQueue));
+			executors.push_back(std::make_unique<ThisThreadExecutor>());
+
+			context.emplace(ContextCreateParameters{ instance, device, physical_device, std::move(executors), fps });
+			needs_bringup = false;
+			needs_teardown = true;
+#ifdef WIN32
+			// At init, on windows
+			if (HMODULE mod = GetModuleHandleA("renderdoc.dll")) {
+				pRENDERDOC_GetAPI RENDERDOC_GetAPI = (pRENDERDOC_GetAPI)GetProcAddress(mod, "RENDERDOC_GetAPI");
+				int ret = RENDERDOC_GetAPI(eRENDERDOC_API_Version_1_6_0, (void**)&rdoc_api);
+				if (ret != 1) {
+					rdoc_api = nullptr;
+				}
+			}
+#endif // WIN32
+		}
+
+		void start(const char* name) {
+			if (needs_bringup) {
+				bringup();
+			}
+
 			const unsigned num_inflight_frames = 3;
 			sfa_resource.emplace(*context, num_inflight_frames);
 			allocator.emplace(*sfa_resource);
-			needs_bringup = false;
-			return true;
+
+			if (rdoc_api) {
+				rdoc_api->StartFrameCapture(NULL, NULL);
+				rdoc_api->SetCaptureTitle(name);
+			}
 		}
 
-		bool teardown() {
+		void finish() {
 			context->wait_idle();
+			sfa_resource.reset();
+			if (rdoc_api)
+				rdoc_api->EndFrameCapture(NULL, NULL);
+#ifdef VUK_TEST_FULL_ISOLATION
+			teardown();
+#endif
+		}
+
+		void teardown() {
 			context.reset();
 			vkb::destroy_device(vkbdevice);
 			vkb::destroy_instance(vkbinstance);
-			return true;
+			needs_bringup = true;
+			needs_teardown = false;
 		}
 
 		bool needs_teardown = false;
 		bool needs_bringup = true;
 
-		bool prepare() {
+		~TestContext() {
 			if (needs_teardown) {
-				if (!teardown())
-					return false;
+				teardown();
 			}
-			if (needs_bringup) {
-				if (!bringup())
-					return false;
-			}
-			// resource.drop_all();
-			return true;
 		}
 	};
 
 	extern TestContext test_context;
 } // namespace vuk
+
+// helpers for testing
+
+constexpr bool operator==(const std::span<uint32_t>& lhs, const std::span<uint32_t>& rhs) {
+	return std::equal(begin(lhs), end(lhs), begin(rhs), end(rhs));
+}
+
+constexpr bool operator==(const std::span<uint32_t>& lhs, const std::span<const uint32_t>& rhs) {
+	return std::equal(begin(lhs), end(lhs), begin(rhs), end(rhs));
+}
+
+constexpr bool operator==(const std::span<const uint32_t>& lhs, const std::span<const uint32_t>& rhs) {
+	return std::equal(begin(lhs), end(lhs), begin(rhs), end(rhs));
+}
+
+constexpr bool operator==(const std::span<float>& lhs, const std::span<float>& rhs) {
+	return std::equal(begin(lhs), end(lhs), begin(rhs), end(rhs));
+}
+
+constexpr bool operator==(const std::span<float>& lhs, const std::span<const float>& rhs) {
+	return std::equal(begin(lhs), end(lhs), begin(rhs), end(rhs));
+}
+
+constexpr bool operator==(const std::span<const float>& lhs, const std::span<const float>& rhs) {
+	return std::equal(begin(lhs), end(lhs), begin(rhs), end(rhs));
+}
