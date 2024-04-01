@@ -42,52 +42,6 @@ namespace vuk {
 	template<>
 	ConstMapIterator<QualifiedName, const struct BufferInfo&>::~ConstMapIterator();
 
-	template<size_t N>
-	struct StringLiteral {
-		constexpr StringLiteral(const char (&str)[N]) {
-			std::copy_n(str, N, value);
-		}
-
-		char value[N];
-	};
-
-	template<class Type, Access acc, class UniqueT, StringLiteral N = "">
-	struct Arg {
-		using type = Type;
-		static constexpr Access access = acc;
-
-		static constexpr StringLiteral identifier = N;
-
-		Type* ptr;
-
-		Ref src;
-		Ref def;
-
-		operator const Type&() const noexcept
-		  requires(!std::is_array_v<Type>)
-		{
-			return *ptr;
-		}
-
-		const Type* operator->() const noexcept
-		  requires(!std::is_array_v<Type>)
-		{
-			return ptr;
-		}
-
-		size_t size() const noexcept
-		  requires std::is_array_v<Type>
-		{
-			return def.type()->array.count;
-		}
-
-		auto operator[](size_t index) const noexcept
-		  requires std::is_array_v<Type>
-		{
-			return (*ptr)[index];
-		}
-	};
-
 	// from: https://stackoverflow.com/a/28213747
 	template<typename T>
 	struct closure_traits {};

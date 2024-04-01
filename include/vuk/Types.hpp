@@ -910,7 +910,7 @@ namespace vuk {
 
 	static constexpr ClearDepth DepthOne = { 1.f };
 	static constexpr ClearDepth DepthZero = { 0.f };
-	
+
 	static constexpr ClearDepthStencil DepthStencilOne = { 1.f, 1 };
 	static constexpr ClearDepthStencil DepthStencilZero = { 0.f, 0 };
 
@@ -1103,6 +1103,70 @@ namespace vuk {
 	inline constexpr DescriptorSetStrategyFlags operator^(DescriptorSetStrategyFlagBits bit0, DescriptorSetStrategyFlagBits bit1) noexcept {
 		return DescriptorSetStrategyFlags(bit0) ^ bit1;
 	}
+
+	struct Node;
+	struct Type;
+	struct ChainLink;
+
+	struct Ref {
+		Node* node = nullptr;
+		size_t index;
+
+		Type* type() const noexcept;
+		ChainLink& link() noexcept;
+
+		explicit constexpr operator bool() const noexcept {
+			return node != nullptr;
+		}
+
+		constexpr std::strong_ordering operator<=>(const Ref&) const noexcept = default;
+	};
+
+	template<size_t N>
+	struct StringLiteral {
+		constexpr StringLiteral(const char (&str)[N]) {
+			std::copy_n(str, N, value);
+		}
+
+		char value[N];
+	};
+
+	template<class Type, Access acc, class UniqueT, StringLiteral N = "">
+	struct Arg {
+		using type = Type;
+		static constexpr Access access = acc;
+
+		static constexpr StringLiteral identifier = N;
+
+		Type* ptr;
+
+		Ref src;
+		Ref def;
+
+		operator const Type&() const noexcept
+		  requires(!std::is_array_v<Type>)
+		{
+			return *ptr;
+		}
+
+		const Type* operator->() const noexcept
+		  requires(!std::is_array_v<Type>)
+		{
+			return ptr;
+		}
+
+		size_t size() const noexcept
+		  requires std::is_array_v<Type>
+		{
+			return def.type()->array.count;
+		}
+
+		auto operator[](size_t index) const noexcept
+		  requires std::is_array_v<Type>
+		{
+			return (*ptr)[index];
+		}
+	};
 } // namespace vuk
 
 namespace std {

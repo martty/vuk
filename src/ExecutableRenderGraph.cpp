@@ -1815,6 +1815,20 @@ namespace vuk {
 					if (r.layer_count != VK_REMAINING_ARRAY_LAYERS) {
 						sliced.layer_count = r.layer_count;
 					}
+
+					if (!(node->debug_info && node->debug_info->result_names.size() > 0 && !node->debug_info->result_names[0].empty())) {
+						auto decl = node->slice.image.link().urdef.node;
+						if (decl->debug_info && decl->debug_info->result_names.size() > 0 && !decl->debug_info->result_names[0].empty()) {
+							std::string name = fmt::format("{}[m{}:{}][l{}:{}]",
+							                               decl->debug_info->result_names[0],
+							                               sliced.base_level,
+							                               sliced.base_level + sliced.level_count - 1,
+							                               sliced.base_layer,
+							                               sliced.base_layer + sliced.layer_count - 1);
+							impl->cg_module->name_output(first(node), name);
+						}
+					}
+
 					sched.done(node, nullptr, sliced); // slice doesn't execute
 				} else {
 					sched.schedule_dependency(node->slice.image, RW::eRead);

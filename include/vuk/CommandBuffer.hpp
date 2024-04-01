@@ -428,6 +428,16 @@ namespace vuk {
 		/// @param binding The descriptor binding to bind the image to
 		/// @param image The ImageAttachment to bind
 		CommandBuffer& bind_image(unsigned set, unsigned binding, const ImageAttachment& image);
+		CommandBuffer& bind_image(unsigned set, unsigned binding, const ImageAttachment& image, Ref def);
+
+		/// @brief Bind an image to the command buffer
+		/// @param set The set bind index to be used
+		/// @param binding The descriptor binding to bind the image to
+		/// @param image The ImageAttachment to bind
+		template<Access acc, class UniqueT>
+		CommandBuffer& bind_image(unsigned set, unsigned binding, Arg<ImageAttachment, acc, UniqueT, ""> image) {
+			return bind_image(set, binding, *image.ptr, image.def);
+		}
 
 		/// @brief Bind a sampler to the command buffer from a Resource
 		/// @param set The set bind index to be used

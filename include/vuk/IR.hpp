@@ -149,23 +149,6 @@ namespace vuk {
 
 	struct RG;
 
-	struct Node;
-	struct ChainLink;
-
-	struct Ref {
-		Node* node = nullptr;
-		size_t index;
-
-		Type* type() const noexcept;
-		ChainLink& link() noexcept;
-
-		explicit constexpr operator bool() const noexcept {
-			return node != nullptr;
-		}
-
-		constexpr std::strong_ordering operator<=>(const Ref&) const noexcept = default;
-	};
-
 	struct SchedulingInfo {
 		SchedulingInfo(DomainFlags required_domains) : required_domains(required_domains) {}
 		SchedulingInfo(DomainFlagBits required_domain) : required_domains(required_domain) {}

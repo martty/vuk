@@ -413,6 +413,29 @@ namespace vuk {
 		return *this;
 	}
 
+	CommandBuffer& CommandBuffer::bind_image(unsigned set, unsigned binding, const ImageAttachment& ia, Ref def) {
+		VUK_EARLY_RET();
+		if (ia.image_view != ImageView{}) {
+			bind_image(set, binding, ia.image_view, ia.layout);
+		} else {
+			assert(ia.image);
+			auto res = allocate_image_view(*allocator, ia);
+			if (!res) {
+				current_error = std::move(res);
+				return *this;
+			} else {
+				auto node = def.node;
+				if (node->debug_info && node->debug_info->result_names.size() > 0 && !node->debug_info->result_names[0].empty()) {
+					ctx.set_name((**res).payload, node->debug_info->result_names[0]);
+				} else {
+					printf("");
+				}
+				bind_image(set, binding, **res, ia.layout);
+			}
+		}
+		return *this;
+	}
+
 	CommandBuffer& CommandBuffer::bind_image(unsigned set, unsigned binding, ImageView image_view, ImageLayout layout) {
 		VUK_EARLY_RET();
 		assert(set < VUK_MAX_SETS);
