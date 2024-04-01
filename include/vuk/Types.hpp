@@ -1156,10 +1156,7 @@ namespace vuk {
 		}
 
 		size_t size() const noexcept
-		  requires std::is_array_v<Type>
-		{
-			return def.type()->array.count;
-		}
+		  requires std::is_array_v<Type>;
 
 		auto operator[](size_t index) const noexcept
 		  requires std::is_array_v<Type>

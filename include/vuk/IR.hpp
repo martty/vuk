@@ -147,6 +147,13 @@ namespace vuk {
 		~Type() {}
 	};
 
+	template<class Type, Access acc, class UniqueT, StringLiteral N>
+	size_t Arg<Type, acc, UniqueT, N>::size() const noexcept
+	  requires std::is_array_v<Type>
+	{
+		return def.type()->array.count;
+	}
+
 	struct RG;
 
 	struct SchedulingInfo {
@@ -623,7 +630,7 @@ namespace vuk {
 		void name_output(Ref ref, std::string_view name) {
 			auto node = ref.node;
 			if (!node->debug_info) {
-				node->debug_info = new (payload_arena.ensure_space(sizeof NodeDebugInfo)) NodeDebugInfo;
+				node->debug_info = new (payload_arena.ensure_space(sizeof(NodeDebugInfo))) NodeDebugInfo;
 			}
 			auto& names = ref.node->debug_info->result_names;
 			if (names.size() <= ref.index) {
@@ -634,7 +641,7 @@ namespace vuk {
 
 		void set_source_location(Node* node, SourceLocationAtFrame loc) {
 			if (!node->debug_info) {
-				node->debug_info = new (payload_arena.ensure_space(sizeof NodeDebugInfo)) NodeDebugInfo;
+				node->debug_info = new (payload_arena.ensure_space(sizeof(NodeDebugInfo))) NodeDebugInfo;
 			}
 			auto p = &loc;
 			size_t cnt = 0;
@@ -686,9 +693,9 @@ namespace vuk {
 		}
 
 		Ref make_declare_image(ImageAttachment value) {
-			auto ptr = new (payload_arena.ensure_space(sizeof ImageAttachment))
+			auto ptr = new (payload_arena.ensure_space(sizeof(ImageAttachment)))
 			    ImageAttachment(value); /* rest extent_x extent_y extent_z format samples base_layer layer_count base_level level_count */
-			auto args_ptr = new (payload_arena.ensure_space(sizeof Ref * 10)) Ref[10];
+			auto args_ptr = new (payload_arena.ensure_space(sizeof(Ref) * 10)) Ref[10];
 			auto mem_ty = new (payload_arena.ensure_space(sizeof(Type*))) Type*(emplace_type(Type{ .kind = Type::MEMORY_TY }));
 			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = ptr } }));
 			auto u32_ty = new (payload_arena.ensure_space(sizeof(Type*))) Type*(u32());
@@ -742,7 +749,7 @@ namespace vuk {
 		}
 
 		Ref make_declare_buffer(Buffer value) {
-			auto buf_ptr = new (payload_arena.ensure_space(sizeof Buffer)) Buffer(value); /* rest size */
+			auto buf_ptr = new (payload_arena.ensure_space(sizeof(Buffer))) Buffer(value); /* rest size */
 			auto args_ptr = new (payload_arena.ensure_space(sizeof(Ref[2]))) Ref[2];
 			auto mem_ty = new (payload_arena.ensure_space(sizeof(Type*))) Type*(emplace_type(Type{ .kind = Type::MEMORY_TY }));
 			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = buf_ptr } }));

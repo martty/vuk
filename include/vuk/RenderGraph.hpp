@@ -540,7 +540,7 @@ public:
 				opaque_fn_ty->debug_info = rg.allocate_type_debug_info(name.c_str());
 				auto opaque_fn = rg.make_declare_fn(opaque_fn_ty);
 				Node* node = rg.make_call(opaque_fn, args.get_head()...);
-				node->scheduling_info = new (rg.payload_arena.ensure_space(sizeof SchedulingInfo)) SchedulingInfo(scheduling_info);
+				node->scheduling_info = new (rg.payload_arena.ensure_space(sizeof(SchedulingInfo))) SchedulingInfo(scheduling_info);
 				rg.set_source_location(node, loc);
 
 				std::vector<std::shared_ptr<ExtNode>> dependent_nodes;
