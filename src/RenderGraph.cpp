@@ -182,7 +182,12 @@ namespace vuk {
 				first(node).link().prev = &node->converge.ref_and_diverged[0].link();
 				for (size_t i = 1; i < node->converge.ref_and_diverged.size(); i++) {
 					auto& parm = node->converge.ref_and_diverged[i];
-					parm.link().reads.append(pass_reads, { node, i });
+					auto write = node->converge.write[i - 1];
+					if (write) {
+						parm.link().undef = { node, i };
+					} else {
+						parm.link().reads.append(pass_reads, { node, i });
+					}
 				}
 				break;
 
@@ -693,6 +698,7 @@ namespace vuk {
 
 		for (auto& [base, sliced] : slices) {
 			std::vector<Ref, short_alloc<Ref>> tails(*impl->arena_);
+			std::vector<char, short_alloc<char>> write(*impl->arena_);
 			for (auto& s : sliced) {
 				auto r = &s.link();
 				while (r->next) {
@@ -701,11 +707,17 @@ namespace vuk {
 				if (r->undef.node) { // depend on undefs indirectly via INDIRECT_DEPEND
 					auto idep = impl->cg_module->make_indirect_depend(r->undef.node, r->undef.index);
 					tails.push_back(idep);
+					write.push_back(false);
+				} else if (r->reads.size() > 0) { // depend on reads indirectly via INDIRECT_DEPEND
+					auto read = r->reads.to_span(impl->pass_reads)[0];
+					tails.push_back(r->def);
+					write.push_back(true);
 				} else {
-					tails.push_back(r->def); // depend on defs directly
+					tails.push_back(r->def); // depend on def directly (via a read)
+					write.push_back(false);
 				}
 			}
-			auto converged_base = impl->cg_module->make_converge(base, tails);
+			auto converged_base = impl->cg_module->make_converge(base, tails, write);
 			for (auto node : impl->nodes) {
 				if (node->kind == Node::SLICE) {
 					continue;

@@ -266,6 +266,7 @@ namespace vuk {
 			} clear;
 			struct : Variable {
 				std::span<Ref> ref_and_diverged;
+				std::span<bool> write;
 			} converge;
 			struct : Fixed<3> {
 				const Ref source_ms;
@@ -827,15 +828,18 @@ namespace vuk {
 			          .slice = { .image = image, .base_level = base_level, .level_count = level_count, .base_layer = base_layer, .layer_count = layer_count } }));
 		}
 
-		Ref make_converge(Ref ref, std::span<Ref> deps) {
+		Ref make_converge(Ref ref, std::span<Ref> deps, std::span<char> write) {
 			auto stripped = Type::stripped(ref.type());
 			auto ty = new (payload_arena.ensure_space(sizeof(Type*))) Type*(stripped);
 
 			auto deps_ptr = new (payload_arena.ensure_space(sizeof(Ref) * (deps.size() + 1))) Ref[deps.size() + 1];
 			deps_ptr[0] = ref;
 			std::copy(deps.begin(), deps.end(), deps_ptr + 1);
-			return first(
-			    emplace_op(Node{ .kind = Node::CONVERGE, .type = std::span{ ty, 1 }, .converge = { .ref_and_diverged = std::span{ deps_ptr, deps.size() + 1 } } }));
+			auto rw_ptr = new (payload_arena.ensure_space(sizeof(bool) * (deps.size()))) bool[deps.size()];
+			std::copy(write.begin(), write.end(), rw_ptr);
+			return first(emplace_op(Node{ .kind = Node::CONVERGE,
+			                              .type = std::span{ ty, 1 },
+			                              .converge = { .ref_and_diverged = std::span{ deps_ptr, deps.size() + 1 }, .write = std::span{ rw_ptr, deps.size() } } }));
 		}
 
 		Ref make_cast(Type* dst_type, Ref src) {
