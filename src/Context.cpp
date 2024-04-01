@@ -611,55 +611,6 @@ namespace vuk {
 		shader_compiler_target_version = target_version;
 	}
 
-	Texture Context::allocate_texture(Allocator& allocator, ImageCreateInfo ici, SourceLocationAtFrame loc) {
-		ici.imageType = ici.extent.depth > 1 ? ImageType::e3D : ici.extent.height > 1 ? ImageType::e2D : ImageType::e1D;
-		VkImageFormatListCreateInfo listci = { VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO };
-		auto unorm_fmt = srgb_to_unorm(ici.format);
-		auto srgb_fmt = unorm_to_srgb(ici.format);
-		VkFormat formats[2] = { (VkFormat)ici.format, unorm_fmt == vuk::Format::eUndefined ? (VkFormat)srgb_fmt : (VkFormat)unorm_fmt };
-		listci.pViewFormats = formats;
-		listci.viewFormatCount = formats[1] == VK_FORMAT_UNDEFINED ? 1 : 2;
-		if (listci.viewFormatCount > 1) {
-			ici.flags = vuk::ImageCreateFlagBits::eMutableFormat;
-			ici.pNext = &listci;
-		}
-		Unique<Image> dst = allocate_image(allocator, ici).value(); // TODO: dropping error
-		ImageViewCreateInfo ivci;
-		ivci.format = ici.format;
-		ivci.image = dst->image;
-		ivci.subresourceRange.aspectMask = format_to_aspect(ici.format);
-		ivci.subresourceRange.baseArrayLayer = 0;
-		ivci.subresourceRange.baseMipLevel = 0;
-		ivci.subresourceRange.layerCount = ici.arrayLayers;
-		ivci.subresourceRange.levelCount = ici.mipLevels;
-
-		ImageViewType view_type = ici.imageType == ImageType::e3D
-			                          ? ImageViewType::e3D
-			                          : ici.imageType == ImageType::e2D
-			                          ? ImageViewType::e2D
-			                          : ImageViewType::e1D;
-
-		if (ici.arrayLayers > 1 && ici.imageType == ImageType::e2D)
-			if (ici.flags & ImageCreateFlagBits::eCubeCompatible)
-				view_type = ici.arrayLayers > 6 ? ImageViewType::eCubeArray : ImageViewType::eCube;
-			else
-				view_type = ImageViewType::e2DArray;
-		else if (view_type == ImageViewType::e1D && ici.arrayLayers > 1)
-			view_type = ImageViewType::e1DArray;
-
-		ivci.viewType = view_type;
-
-		return {
-			.image = std::move(dst),
-			.view = allocate_image_view(allocator, ivci, loc).value(), // TODO: dropping error
-			.extent = ici.extent,
-			.format = ici.format,
-			.sample_count = ici.samples,
-			.level_count = ici.mipLevels,
-			.layer_count = ici.arrayLayers
-		};
-	}
-
 	void Context::destroy(const DescriptorPool& dp) {
 		dp.destroy(*this, device);
 	}

@@ -570,7 +570,7 @@ namespace vuk {
 		/// @param src the Name of the source Resource
 		/// @param dst the Name of the destination Resource
 		/// @param region parameters of the copy
-		CommandBuffer& copy_image(Name src, Name dst, ImageCopy region);
+		CommandBuffer& copy_image(const ImageAttachment& src, const ImageAttachment& dst, ImageCopy region);
 		/// @brief Copy a buffer resource into an image resource
 		/// @param src the Name of the source Resource
 		/// @param dst the Name of the destination Resource
