@@ -186,6 +186,22 @@ namespace vuk {
 				}
 				break;
 
+			case Node::INDIRECT_DEPEND: {
+				auto rref = node->indirect_depend.rref;
+				Ref true_ref;
+				auto count = rref.node->generic_node.arg_count;
+				if (count != (uint8_t)~0u) {
+					true_ref = rref.node->fixed_node.args[rref.index];
+				} else {
+					true_ref = rref.node->variable_node.args[rref.index];
+				}
+				first(node).link().def = first(node);
+				assert(true_ref.link().next == nullptr);
+				true_ref.link().next = &first(node).link();
+				first(node).link().prev = &true_ref.link();
+				break;
+			}
+
 			case Node::ACQUIRE_NEXT_IMAGE:
 				first(node).link().def = first(node);
 				break;
@@ -682,8 +698,12 @@ namespace vuk {
 				while (r->next) {
 					r = r->next;
 				}
-				if (r->def.node)
-					tails.push_back(r->def);
+				if (r->undef.node) { // depend on undefs indirectly via INDIRECT_DEPEND
+					auto idep = impl->cg_module->make_indirect_depend(r->undef.node, r->undef.index);
+					tails.push_back(idep);
+				} else {
+					tails.push_back(r->def); // depend on defs directly
+				}
 			}
 			auto converged_base = impl->cg_module->make_converge(base, tails);
 			for (auto node : impl->nodes) {

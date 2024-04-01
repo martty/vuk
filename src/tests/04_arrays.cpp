@@ -215,3 +215,33 @@ TEST_CASE("image slicing, reconvergence 3") {
 		}
 	}
 }
+
+inline void void_clear_image(Value<ImageAttachment> in, Clear clear_value) {
+	static auto clear = make_pass("void clear image", [=](CommandBuffer& cbuf, VUK_IA(Access::eClear) dst) {
+		cbuf.clear_image(dst, clear_value);
+	});
+
+	clear(std::move(in));
+}
+
+TEST_CASE("image slicing, reconvergence with undef") {
+	{
+		auto data = { 1u, 2u, 3u, 4u };
+		auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, Samples::e1);
+		ia.level_count = 2;
+		auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
+
+		size_t alignment = format_to_texel_block_size(fut->format);
+		size_t size = compute_image_size(fut->format, fut->extent);
+		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
+
+		{
+			void_clear_image(fut.mip(0), vuk::ClearColor(7u, 7u, 7u, 7u));
+			auto futp = blit_down(fut);
+			auto dst_buf = declare_buf("dst", *dst);
+			auto res = download_buffer(image2buf(futp.mip(1), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
+			auto updata = std::span((uint32_t*)res->mapped_ptr, 1);
+			CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 7; }));
+		}
+	}
+}

@@ -1818,6 +1818,35 @@ namespace vuk {
 				}
 				break;
 			}
+			case Node::INDIRECT_DEPEND: {
+				auto rref = node->indirect_depend.rref;
+				Ref true_ref;
+				auto count = rref.node->generic_node.arg_count;
+				if (count != (uint8_t)~0u) {
+					true_ref = rref.node->fixed_node.args[rref.index];
+				} else {
+					true_ref = rref.node->variable_node.args[rref.index];
+				}
+
+				if (sched.process(item)) {	
+#ifdef VUK_DUMP_EXEC
+					print_results(node);
+					fmt::print(" = ");
+					fmt::print("{{");
+					print_args(std::span{ &true_ref, 1 });
+					fmt::print("}}*");
+					fmt::print("\n");
+#endif
+					// half sync
+					//recorder.add_sync(sched.base_type(item), sched.get_dependency_info(item, item.type(), RW::eRead, nullptr), sched.get_value(item));
+
+					sched.done(node, nullptr, sched.get_value(true_ref)); // indirect depend doesn't execute
+				} else {
+					sched.schedule_dependency(true_ref, RW::eWrite);
+					sched.schedule_new(rref.node);
+				}
+				break;
+			}
 			default:
 				assert(0);
 			}
