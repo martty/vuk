@@ -8,7 +8,6 @@
 
 namespace vuk {
 	Result<std::vector<uint32_t>> compile_glsl(const ShaderModuleCreateInfo& cinfo, uint32_t shader_compiler_target_version) {
-		shaderc::Compiler compiler;
 		shaderc::CompileOptions options;
 
 		static const std::unordered_map<uint32_t, uint32_t> target_version = {
@@ -34,6 +33,15 @@ namespace vuk {
 			options.AddMacroDefinition(k, v);
 		}
 
+		if (cinfo.compile_options.compiler_flags & ShaderCompilerFlagBits::eNoWarnings)
+			options.SetSuppressWarnings();
+		else if (cinfo.compile_options.compiler_flags & ShaderCompilerFlagBits::eWarningsAsErrors)
+			options.SetWarningsAsErrors();
+
+		if (cinfo.compile_options.compiler_flags & ShaderCompilerFlagBits::eInvertY)
+			options.SetInvertY(true);
+
+		const shaderc::Compiler compiler;
 		const auto result = compiler.CompileGlslToSpv(cinfo.source.as_c_str(), shaderc_glsl_infer_from_source, cinfo.filename.c_str(), options);
 		if (result.GetCompilationStatus() != shaderc_compilation_status_success) {
 			std::string message = result.GetErrorMessage();

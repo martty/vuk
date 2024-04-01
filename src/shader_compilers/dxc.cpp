@@ -30,20 +30,21 @@ namespace {
 namespace vuk {
 	Result<std::vector<uint32_t>> compile_hlsl(const ShaderModuleCreateInfo& cinfo, uint32_t shader_compiler_target_version) {
 		std::vector<LPCWSTR> arguments;
-		arguments.push_back(L"-E");
+		arguments.emplace_back(L"-E");
+		arguments.emplace_back(L"-spirv");
 
 		auto entry_point = convert_to_wstring(cinfo.source.entry_point);
-		arguments.push_back(entry_point.c_str());
+		arguments.emplace_back(entry_point.c_str());
 
 		auto dir = std::filesystem::path(cinfo.filename).parent_path();
 		auto include_path = fmt::format("-I {0}", dir.string());
 		auto include_path_w = convert_to_wstring(include_path);
-		arguments.push_back(include_path_w.c_str());
+		arguments.emplace_back(include_path_w.c_str());
 
 		std::vector<std::wstring> def_ws;
 		for (auto [k, v] : cinfo.defines) {
 			auto def = v.empty() ? fmt::format("-D{0}", k) : fmt::format("-D{0}={1}", k, v);
-			arguments.push_back(def_ws.emplace_back(convert_to_wstring(def)).c_str());
+			arguments.emplace_back(def_ws.emplace_back(convert_to_wstring(def)).c_str());
 		}
 
 		static const std::unordered_map<uint32_t, const wchar_t*> target_version = {
@@ -53,7 +54,7 @@ namespace vuk {
 			{ VK_API_VERSION_1_3, L"-fspv-target-env=vulkan1.3" },
 		};
 
-		arguments.push_back(target_version.at(shader_compiler_target_version));
+		arguments.emplace_back(target_version.at(shader_compiler_target_version));
 
 		static const std::unordered_map<ShaderCompileOptions::OptimizationLevel, const wchar_t*> optimization_level = {
 			{ ShaderCompileOptions::OptimizationLevel::O0, L"-O0" },
@@ -62,11 +63,28 @@ namespace vuk {
 			{ ShaderCompileOptions::OptimizationLevel::O3, L"-O3" },
 		};
 
-		arguments.push_back(optimization_level.at(cinfo.compile_options.optimization_level));
+		arguments.emplace_back(optimization_level.at(cinfo.compile_options.optimization_level));
 
-		for (auto& arg : cinfo.compile_options.dxc_extra_arguments) {
-			arguments.push_back(arg.data());
-		}
+		if (cinfo.compile_options.compiler_flags & ShaderCompilerFlagBits::eGlLayout)
+			arguments.emplace_back(L"-fvk-use-gl-layout");
+		else if (cinfo.compile_options.compiler_flags & ShaderCompilerFlagBits::eDxLayout)
+			arguments.emplace_back(L"-fvk-use-dx-layout");
+
+		if (cinfo.compile_options.compiler_flags & ShaderCompilerFlagBits::eNoWarnings)
+			arguments.emplace_back(L"-no-warnings");
+		else if (cinfo.compile_options.compiler_flags & ShaderCompilerFlagBits::eWarningsAsErrors)
+			arguments.emplace_back(L"-WX");
+
+		if (cinfo.compile_options.compiler_flags & ShaderCompilerFlagBits::eMatrixColumnMajor)
+			arguments.emplace_back(L"-Zpc");
+		else if (cinfo.compile_options.compiler_flags & ShaderCompilerFlagBits::eMatrixRowMajor)
+			arguments.emplace_back(L"-Zpr");
+
+		if (cinfo.compile_options.compiler_flags & ShaderCompilerFlagBits::eInvertY)
+			arguments.emplace_back(L"-fvk-invert-y");
+
+		if (cinfo.compile_options.compiler_flags & ShaderCompilerFlagBits::eDxPositionW)
+			arguments.emplace_back(L"-fvk-use-dx-position-w");
 
 		static const std::pair<const char*, HlslShaderStage> inferred[] = { { ".vert.", HlslShaderStage::eVertex },  { ".frag.", HlslShaderStage::ePixel },
 			                                                                  { ".comp.", HlslShaderStage::eCompute }, { ".geom.", HlslShaderStage::eGeometry },
@@ -91,8 +109,8 @@ namespace vuk {
 
 		assert((shader_stage != HlslShaderStage::eInferred) && "Failed to infer HLSL shader stage");
 
-		arguments.push_back(L"-T");
-		arguments.push_back(stage_mappings.at(shader_stage));
+		arguments.emplace_back(L"-T");
+		arguments.emplace_back(stage_mappings.at(shader_stage));
 
 		DxcBuffer source_buf;
 		source_buf.Ptr = cinfo.source.as_c_str();
