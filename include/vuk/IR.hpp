@@ -912,13 +912,20 @@ namespace vuk {
 
 		Ref make_indirect_depend(Node* node, size_t index) {
 			Ref true_ref;
+			Type* type = nullptr;
 			auto count = node->generic_node.arg_count;
 			if (count != (uint8_t)~0u) {
 				true_ref = node->fixed_node.args[index];
 			} else {
+				if (node->kind == Node::CALL) {
+					type = node->call.fn.type()->opaque_fn.args[index];
+				}
 				true_ref = node->variable_node.args[index];
 			}
-			auto ty = new (payload_arena.ensure_space(sizeof(Type*))) Type*(true_ref.type());
+			if (!type) {
+				type = true_ref.type();
+			}
+			auto ty = new (payload_arena.ensure_space(sizeof(Type*))) Type*(type);
 			return first(emplace_op(Node{ .kind = Node::INDIRECT_DEPEND, .type = std::span{ ty, 1 }, .indirect_depend = { .rref = { node, index } } }));
 		}
 

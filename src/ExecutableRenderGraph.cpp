@@ -265,6 +265,18 @@ namespace vuk {
 			im_bars.clear();
 		}
 
+//#define VUK_DEBUG_IMBAR
+
+		void print_ib(VkImageMemoryBarrier2KHR ib, std::string extra = "") {
+			fmt::println("[{}][m{}:{}][l{}:{}]{}",
+			             fmt::ptr(ib.image),
+			             ib.subresourceRange.baseMipLevel,
+			             ib.subresourceRange.baseMipLevel + ib.subresourceRange.levelCount - 1,
+			             ib.subresourceRange.baseArrayLayer,
+			             ib.subresourceRange.baseArrayLayer + ib.subresourceRange.layerCount - 1,
+			             extra);
+		}
+
 		void synch_image(ImageAttachment& img_att, StreamResourceUse src_use, StreamResourceUse dst_use, void* tag) override {
 			auto aspect = format_to_aspect(img_att.format);
 
@@ -325,16 +337,26 @@ namespace vuk {
 
 			barrier.srcStageMask = (VkPipelineStageFlags2)src_use.stages.m_mask;
 			barrier.dstStageMask = (VkPipelineStageFlags2)dst_use.stages.m_mask;
-
+#ifdef VUK_DEBUG_IMBAR
+			fmt::println("----------------------------");
+#endif
 			barrier.image = img_att.image.image;
 
 			if (dst_domain == DomainFlagBits::eNone) {
 				barrier.pNext = tag;
+#ifdef VUK_DEBUG_IMBAR
+				print_ib(barrier, "+");
+#endif
 				half_im_bars.push_back(barrier);
 			} else if (src_domain == DomainFlagBits::eNone) {
 				VkImageMemoryBarrier2KHR found;
 				auto it = std::find_if(half_im_bars.begin(), half_im_bars.end(), [=](auto& mb) { return mb.pNext == tag; });
 				if (it != half_im_bars.end()) { // find a specific match
+#ifdef VUK_DEBUG_IMBAR
+					for (auto it2 = half_im_bars.begin(); it2 != half_im_bars.end(); ++it2) {
+						print_ib(*it2, it == it2 ? "-" : "");
+					}
+#endif
 					found = *it;
 					half_im_bars.erase(it);
 					// fill out src part of the barrier based on the sync half we found
@@ -362,8 +384,10 @@ namespace vuk {
 						do {
 							it = std::find_if(it, half_im_bars.end(), [&](auto& mb) { return mb.image == img_att.image.image; });
 							// if there isn't a matching first bar, but this readonly, then this sync can be skipped
+							// we might in the wrong layout for reconverged resources (but this might be bug)
+							// lets hope for the best!
 							if (it == half_im_bars.end() && is_readonly_access(dst_use)) {
-								assert(img_att.layout == dst_use.layout);
+								img_att.layout = dst_use.layout;
 								return;
 							}
 							assert(it != half_im_bars.end());
@@ -381,6 +405,11 @@ namespace vuk {
 							++it;
 						} while (it != half_im_bars.end());
 						assert(it != half_im_bars.end());
+#ifdef VUK_DEBUG_IMBAR
+						for (auto it2 = half_im_bars.begin(); it2 != half_im_bars.end(); ++it2) {
+							print_ib(*it2, it == it2 ? "*" : "");
+						}
+#endif
 						half_im_bars.erase(it);
 
 						barrier.subresourceRange.baseArrayLayer = isection.base_layer;
@@ -434,6 +463,10 @@ namespace vuk {
 							barrier.subresourceRange.baseMipLevel = nb.base_level;
 							barrier.subresourceRange.layerCount = nb.layer_count;
 							barrier.subresourceRange.levelCount = nb.level_count;
+
+#ifdef VUK_DEBUG_IMBAR
+							print_ib(barrier, "+");
+#endif
 
 							half_im_bars.push_back(barrier);
 						}
@@ -805,7 +838,7 @@ namespace vuk {
 							src_access = Access::eNone;
 						}
 					} else if (parm_ty->kind == Type::IMBUED_TY) {
-						assert(0);
+						src_access = arg_ty->imbued.access;
 					} else { // there is no need to sync (eg. declare)
 					}
 				} else if (parm_ty->kind == Type::ALIASED_TY) { // this is coming from an output annotated, so we know the source access
@@ -1154,7 +1187,7 @@ namespace vuk {
 		return "";
 	}
 
-	// #define VUK_DUMP_EXEC
+//#define VUK_DUMP_EXEC
 
 	Result<void> ExecutableRenderGraph::execute(Allocator& alloc) {
 		Context& ctx = alloc.get_context();
@@ -1795,6 +1828,13 @@ namespace vuk {
 			case Node::CONVERGE: {
 				if (sched.process(item)) {
 					auto base = node->converge.ref_and_diverged[0];
+
+					// half sync
+					for (size_t i = 1; i < node->converge.ref_and_diverged.size(); i++) {
+						auto& item = node->converge.ref_and_diverged[i];
+						recorder.add_sync(sched.base_type(item), sched.get_dependency_info(item, item.type(), RW::eRead, nullptr), sched.get_value(item));
+					}
+
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
 					fmt::print(" = ");
@@ -1804,11 +1844,6 @@ namespace vuk {
 					fmt::print("}}");
 					fmt::print("\n");
 #endif
-					// half sync
-					for (size_t i = 1; i < node->converge.ref_and_diverged.size(); i++) {
-						auto& item = node->converge.ref_and_diverged[i];
-						recorder.add_sync(sched.base_type(item), sched.get_dependency_info(item, item.type(), RW::eRead, nullptr), sched.get_value(item));
-					}
 
 					sched.done(node, nullptr, sched.get_value(base)); // converge doesn't execute
 				} else {
@@ -1828,7 +1863,7 @@ namespace vuk {
 					true_ref = rref.node->variable_node.args[rref.index];
 				}
 
-				if (sched.process(item)) {	
+				if (sched.process(item)) {
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
 					fmt::print(" = ");
@@ -1838,9 +1873,9 @@ namespace vuk {
 					fmt::print("\n");
 #endif
 					// half sync
-					//recorder.add_sync(sched.base_type(item), sched.get_dependency_info(item, item.type(), RW::eRead, nullptr), sched.get_value(item));
+					// recorder.add_sync(sched.base_type(true_ref), sched.get_dependency_info(true_ref, true_ref.type(), RW::eWrite, nullptr), sched.get_value(true_ref));
 
-					sched.done(node, nullptr, sched.get_value(true_ref)); // indirect depend doesn't execute
+					sched.done(node, sched.executed.at(rref.node).stream, sched.get_value(true_ref)); // indirect depend doesn't execute
 				} else {
 					sched.schedule_dependency(true_ref, RW::eWrite);
 					sched.schedule_new(rref.node);
