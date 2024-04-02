@@ -90,7 +90,6 @@ namespace vuk {
 		std::vector<ChainLink*> child_chains;
 		std::deque<ChainLink> helper_links;
 		std::vector<int32_t> swapchain_references;
-		std::vector<AttachmentRPInfo> rp_infos;
 
 		std::vector<ChainLink*> attachment_use_chain_references;
 		std::vector<RenderPassInfo*> attachment_rp_references;

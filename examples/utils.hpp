@@ -109,7 +109,7 @@ namespace util {
 		vuk::Unique<vuk::Image> font_image;
 		vuk::Unique<vuk::ImageView> font_image_view;
 		vuk::SamplerCreateInfo font_sci;
-		std::unique_ptr<vuk::SampledImage> font_si;
+		std::unique_ptr<vuk::Value<vuk::ImageAttachment>> font_si;
 	};
 	ImGuiData ImGui_ImplVuk_Init(vuk::Allocator& allocator);
 	vuk::Value<vuk::ImageAttachment> ImGui_ImplVuk_Render(vuk::Allocator& allocator,

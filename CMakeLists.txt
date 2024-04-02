@@ -95,7 +95,7 @@ target_sources(vuk PRIVATE
 	src/Program.cpp
 	src/Cache.cpp
 	src/RenderGraph.cpp 
-	src/RenderGraphUtil.cpp
+	
 	src/ExecutableRenderGraph.cpp
 	src/Allocator.cpp
 	src/Context.cpp

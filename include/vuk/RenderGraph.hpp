@@ -36,12 +36,6 @@ namespace vuk {
 namespace vuk {
 	ResourceUse to_use(Access acc);
 
-	// declare these specializations for GCC
-	template<>
-	ConstMapIterator<QualifiedName, const struct AttachmentInfo&>::~ConstMapIterator();
-	template<>
-	ConstMapIterator<QualifiedName, const struct BufferInfo&>::~ConstMapIterator();
-
 	// from: https://stackoverflow.com/a/28213747
 	template<typename T>
 	struct closure_traits {};

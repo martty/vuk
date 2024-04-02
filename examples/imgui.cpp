@@ -8,7 +8,6 @@
 #include "vuk/Context.hpp"
 #include "vuk/Partials.hpp"
 #include "vuk/RenderGraph.hpp"
-#include "vuk/SampledImage.hpp"
 
 using namespace vuk;
 
@@ -28,6 +27,8 @@ util::ImGuiData util::ImGui_ImplVuk_Init(Allocator& allocator) {
 	auto [image, view, fut] = create_image_and_view_with_data(allocator, DomainFlagBits::eTransferOnTransfer, font_ia, pixels);
 	data.font_image = std::move(image);
 	data.font_image_view = std::move(view);
+	font_ia.image = data.font_image.get();
+	font_ia.image_view = data.font_image_view.get();
 	Compiler comp;
 	fut.wait(allocator, comp);
 	ctx.set_name(data.font_image_view->payload, "ImGui/font");
@@ -36,7 +37,7 @@ util::ImGuiData util::ImGui_ImplVuk_Init(Allocator& allocator) {
 	sci.mipmapMode = SamplerMipmapMode::eLinear;
 	sci.addressModeU = sci.addressModeV = sci.addressModeW = SamplerAddressMode::eRepeat;
 	data.font_sci = sci;
-	data.font_si = std::make_unique<SampledImage>(SampledImage::Global{ *data.font_image_view, sci, ImageLayout::eReadOnlyOptimalKHR });
+	data.font_si = std::make_unique<vuk::Value<vuk::ImageAttachment>>(fut);
 	io.Fonts->TexID = (ImTextureID)data.font_si.get();
 	{
 		PipelineBaseCreateInfo pci;

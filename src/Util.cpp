@@ -3,7 +3,6 @@
 #include "vuk/Context.hpp"
 #include "vuk/Future.hpp"
 #include "vuk/RenderGraph.hpp"
-#include "vuk/SampledImage.hpp"
 #include "vuk/Swapchain.hpp"
 
 #include <atomic>
@@ -111,18 +110,6 @@ namespace vuk {
 		VUK_DO_OR_RETURN(execute_submit(allocator, std::span{ &v, 1 }));
 		ctx.wait_idle(); // TODO:
 		return { expected_value };
-	}
-
-	SampledImage make_sampled_image(ImageView iv, SamplerCreateInfo sci) {
-		return { SampledImage::Global{ iv, sci, ImageLayout::eReadOnlyOptimalKHR } };
-	}
-
-	SampledImage make_sampled_image(NameReference n, SamplerCreateInfo sci) {
-		return { SampledImage::RenderGraphAttachment{ n, sci, {}, ImageLayout::eReadOnlyOptimalKHR } };
-	}
-
-	SampledImage make_sampled_image(NameReference n, ImageViewCreateInfo ivci, SamplerCreateInfo sci) {
-		return { SampledImage::RenderGraphAttachment{ n, sci, ivci, ImageLayout::eReadOnlyOptimalKHR } };
 	}
 
 	Result<void> UntypedValue::wait(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options) {

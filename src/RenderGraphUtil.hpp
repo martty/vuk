@@ -253,47 +253,4 @@ namespace vuk {
 		uint64_t initial_visibility;
 		bool unsynchronized = false;
 	};
-
-	struct BufferInfo {
-		QualifiedName name;
-
-		Buffer buffer;
-		Acquire acquire;
-
-		RelSpan<ChainLink*> use_chains;
-		std::optional<Allocator> allocator = {};
-	};
-
-	struct AttachmentInfo {
-		QualifiedName name;
-
-		ImageAttachment attachment = {};
-
-		enum class Type { eInternal, eExternal, eSwapchain } type;
-
-		// swapchain for swapchain
-		Swapchain* swapchain = nullptr;
-
-		RelSpan<struct RenderPassInfo*> rp_uses;
-
-		Acquire acquire;
-		Subrange::Image image_subrange;
-		int32_t parent_attachment = 0;
-
-		RelSpan<ChainLink*> use_chains = {};
-		std::optional<Allocator> allocator = {};
-	};
-
-	struct AttachmentRPInfo {
-		AttachmentInfo* attachment_info;
-
-		VkAttachmentDescription description = {};
-
-		ResourceUse initial, final;
-
-		std::optional<Clear> clear_value;
-
-		bool is_resolve_dst = false;
-		AttachmentInfo* resolve_src = nullptr;
-	};
 } // namespace vuk
