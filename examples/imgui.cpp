@@ -37,8 +37,7 @@ util::ImGuiData util::ImGui_ImplVuk_Init(Allocator& allocator) {
 	sci.mipmapMode = SamplerMipmapMode::eLinear;
 	sci.addressModeU = sci.addressModeV = sci.addressModeW = SamplerAddressMode::eRepeat;
 	data.font_sci = sci;
-	data.font_si = std::make_unique<vuk::Value<vuk::ImageAttachment>>(fut);
-	io.Fonts->TexID = (ImTextureID)data.font_si.get();
+	data.font_si = fut;
 	{
 		PipelineBaseCreateInfo pci;
 		// glslangValidator.exe -V imgui.vert --vn imgui_vert -o examples/imgui_vert.hpp
@@ -54,7 +53,7 @@ Value<ImageAttachment> util::ImGui_ImplVuk_Render(Allocator& allocator,
                                                   Value<ImageAttachment> target,
                                                   util::ImGuiData& data,
                                                   ImDrawData* draw_data,
-                                                  const std::vector<Value<ImageAttachment>>& sampled_images) {
+                                                  std::vector<Value<ImageAttachment>>& sampled_images) {
 	auto reset_render_state = [](const util::ImGuiData& data, CommandBuffer& command_buffer, ImDrawData* draw_data, Buffer vertex, Buffer index) {
 		command_buffer.bind_image(0, 0, *data.font_image_view).bind_sampler(0, 0, data.font_sci);
 		if (index.size > 0) {
@@ -94,6 +93,8 @@ Value<ImageAttachment> util::ImGui_ImplVuk_Render(Allocator& allocator,
 	}
 
 	// add rendergraph dependencies to be transitioned
+	ImGui::GetIO().Fonts->TexID = (ImTextureID)sampled_images.size();
+	sampled_images.push_back(data.font_si);
 	// make all rendergraph sampled images available
 	auto sampled_images_array = declare_array("imgui_sampled", std::span(sampled_images));
 
@@ -150,9 +151,9 @@ Value<ImageAttachment> util::ImGui_ImplVuk_Render(Allocator& allocator,
 
 						                      // Bind texture
 						                      if (pcmd->TextureId) {
-							                      auto si_index = reinterpret_cast<uint64_t>(pcmd->TextureId);
+							                      auto ia_index = reinterpret_cast<size_t>(pcmd->TextureId);
 
-							                      command_buffer.bind_image(0, 0, sis[si_index]).bind_sampler(0, 0, {});
+							                      command_buffer.bind_image(0, 0, sis[ia_index]).bind_sampler(0, 0, {});
 
 							                      // TODO: SampledImage
 							                      //.bind_sampler(0, 0, sis[si_index]);

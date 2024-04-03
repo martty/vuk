@@ -109,14 +109,14 @@ namespace util {
 		vuk::Unique<vuk::Image> font_image;
 		vuk::Unique<vuk::ImageView> font_image_view;
 		vuk::SamplerCreateInfo font_sci;
-		std::unique_ptr<vuk::Value<vuk::ImageAttachment>> font_si;
+		vuk::Value<vuk::ImageAttachment> font_si;
 	};
 	ImGuiData ImGui_ImplVuk_Init(vuk::Allocator& allocator);
 	vuk::Value<vuk::ImageAttachment> ImGui_ImplVuk_Render(vuk::Allocator& allocator,
 	                                                      vuk::Value<vuk::ImageAttachment> target,
 	                                                      ImGuiData& data,
 	                                                      ImDrawData* draw_data,
-	                                                      const std::vector<vuk::Value<vuk::ImageAttachment>>& sampled_images);
+	                                                      std::vector<vuk::Value<vuk::ImageAttachment>>& sampled_images);
 
 	inline std::string read_entire_file(const std::string& path) {
 		std::ostringstream buf;
