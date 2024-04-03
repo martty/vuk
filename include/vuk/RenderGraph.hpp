@@ -608,8 +608,7 @@ public:
 
 	template<class T>
 	[[nodiscard]] inline Value<T[]> declare_array(Name name, std::span<const Value<T>> args, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-		assert(args.size() > 0);
-		auto rg = args[0].get_render_graph();
+		auto rg = args.size() > 0 ? args[0].get_render_graph() : std::make_shared<RG>();
 		std::vector<Ref> refs;
 		std::vector<Ref> defs;
 		for (auto& arg : args) {
@@ -617,7 +616,35 @@ public:
 			refs.push_back(arg.get_head());
 			defs.push_back(arg.get_def());
 		}
-		Ref ref = rg->make_declare_array(Type::stripped(refs[0].type()), refs, defs);
+		Type* t;
+		if constexpr (std::is_same_v<T, vuk::ImageAttachment>) {
+			t = rg->get_builtin_image();
+		} else if constexpr (std::is_same_v<T, vuk::Buffer>) {
+			t = rg->get_builtin_buffer();
+		}
+		Ref ref = rg->make_declare_array(t, refs, defs);
+		rg->name_output(ref, name.c_str());
+		rg->set_source_location(ref.node, loc);
+		return { make_ext_ref(rg, ref), ref };
+	}
+
+	template<class T>
+	[[nodiscard]] inline Value<T[]> declare_array(Name name, std::span<Value<T>> args, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
+		auto rg = args.size() > 0 ? args[0].get_render_graph() : std::make_shared<RG>();
+		std::vector<Ref> refs;
+		std::vector<Ref> defs;
+		for (auto& arg : args) {
+			rg->subgraphs.push_back(arg.get_render_graph());
+			refs.push_back(arg.get_head());
+			defs.push_back(arg.get_def());
+		}
+		Type* t;
+		if constexpr (std::is_same_v<T, vuk::ImageAttachment>) {
+			t = rg->get_builtin_image();
+		} else if constexpr (std::is_same_v<T, vuk::Buffer>) {
+			t = rg->get_builtin_buffer();
+		}
+		Ref ref = rg->make_declare_array(t, refs, defs);
 		rg->name_output(ref, name.c_str());
 		rg->set_source_location(ref.node, loc);
 		return { make_ext_ref(rg, ref), ref };
