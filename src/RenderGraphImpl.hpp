@@ -66,19 +66,13 @@ namespace vuk {
 	};
 
 	struct RGCImpl {
-		RGCImpl() : arena_(new arena(4 * 1024 * 1024)), INIT(rpis) {}
-		RGCImpl(arena* a) : arena_(a), INIT(rpis) {}
+		RGCImpl() : arena_(new arena(4 * 1024 * 1024)) {}
+		RGCImpl(arena* a) : arena_(a) {}
 		std::unique_ptr<arena> arena_;
-
-		std::vector<std::pair<DomainFlagBits, uint64_t>> waits;
-		std::vector<std::pair<DomainFlagBits, uint64_t>> absolute_waits;
 
 		std::vector<ScheduledItem> scheduled_execables;
 		std::vector<ScheduledItem*> partitioned_execables;
 		std::vector<size_t> scheduled_idx_to_partitioned_idx;
-
-		std::vector<VkImageMemoryBarrier2KHR> image_barriers;
-		std::vector<VkMemoryBarrier2KHR> mem_barriers;
 
 		std::vector<Ref> pass_reads;
 
@@ -88,13 +82,7 @@ namespace vuk {
 		std::vector<Node*> nodes;
 		std::vector<ChainLink*> chains;
 		std::vector<ChainLink*> child_chains;
-		std::deque<ChainLink> helper_links;
-		std::vector<int32_t> swapchain_references;
 
-		std::vector<ChainLink*> attachment_use_chain_references;
-		std::vector<RenderPassInfo*> attachment_rp_references;
-
-		std::vector<RenderPassInfo, short_alloc<RenderPassInfo>> rpis;
 		std::span<ScheduledItem*> transfer_passes, compute_passes, graphics_passes;
 
 		std::unordered_map<Node*, ExecutionInfo> executed;
@@ -139,26 +127,6 @@ namespace vuk {
 		Result<void> reify_inference();
 		Result<void> schedule_intra_queue(const RenderGraphCompileOptions& compile_options);
 		Result<void> collect_chains();
-
-		std::vector<ChainLink*> div_subchains;
-		std::vector<ChainLink**> conv_subchains;
-		Result<void> relink_subchains();
-		Result<void> fix_subchains();
-
-		// opt passes
-		Result<void> merge_rps();
-
-		// link passes
-		Result<void> generate_barriers_and_waits();
-		Result<void> assign_passes_to_batches();
-		Result<void> build_waits();
-		Result<void> build_renderpasses();
-
-		void emit_barriers(Context& ctx,
-		                   VkCommandBuffer cbuf,
-		                   vuk::DomainFlagBits domain,
-		                   RelSpan<VkMemoryBarrier2KHR> mem_bars,
-		                   RelSpan<VkImageMemoryBarrier2KHR> im_bars);
 
 		ImageUsageFlags compute_usage(const ChainLink* head);
 
