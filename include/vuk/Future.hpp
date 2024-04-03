@@ -15,6 +15,7 @@
 namespace vuk {
 	class UntypedValue {
 	public:
+		UntypedValue() = default;
 		UntypedValue(ExtRef extref, Ref def) : node(std::move(extref.node)), head{ node->get_node(), extref.index }, def(def) {}
 		UntypedValue(ExtRef extref, Ref def, std::vector<std::shared_ptr<ExtNode>> deps) :
 		    node(std::move(extref.node)),

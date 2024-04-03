@@ -14,6 +14,50 @@
 #include <unordered_set>
 
 namespace vuk {
+	Result<void> RGCImpl::unify_types() {
+		type_map.clear();
+		type_restore.clear();
+
+		type_map[Type::hash(cg_module->get_builtin_buffer())] = cg_module->get_builtin_buffer();
+		type_map[Type::hash(cg_module->get_builtin_image())] = cg_module->get_builtin_image();
+		type_map[Type::hash(cg_module->get_builtin_swapchain())] = cg_module->get_builtin_swapchain();
+
+		auto unify_type = [&](Type*& t) {
+			auto [v, succ] = type_map.try_emplace(Type::hash(t), t);
+			t = v->second;
+		};
+
+		for (auto& node : nodes) {
+			// type of acquire must be preserved
+			if (node->kind == Node::ACQUIRE) {
+				type_restore.emplace(node, node->type[0]);
+			}
+
+			for (auto& t : node->type) {
+				t = cg_module->copy_type(t);
+				if (t->kind == Type::ALIASED_TY) {
+					unify_type(t->aliased.T);
+				} else if (t->kind == Type::IMBUED_TY) {
+					unify_type(t->imbued.T);
+				} else if (t->kind == Type::ARRAY_TY) {
+					unify_type(t->array.T);
+				} else if (t->kind == Type::COMPOSITE_TY) {
+					for (auto& elem_ty : t->composite.types) {
+						unify_type(elem_ty);
+					}
+				}
+				unify_type(t);
+			}
+		}
+
+		
+		cg_module->builtin_buffer = type_map[Type::hash(cg_module->builtin_buffer)];
+		cg_module->builtin_image = type_map[Type::hash(cg_module->builtin_image)];
+		cg_module->builtin_swapchain = type_map[Type::hash(cg_module->builtin_swapchain)];
+
+		return { expected_value };
+	}
+
 	Result<void> RGCImpl::build_nodes() {
 		nodes.clear();
 
@@ -27,10 +71,6 @@ namespace vuk {
 				work_queue.push_back(node);
 			}
 		}
-
-		type_map[Type::hash(cg_module->get_builtin_buffer())] = cg_module->get_builtin_buffer();
-		type_map[Type::hash(cg_module->get_builtin_image())] = cg_module->get_builtin_image();
-		type_map[Type::hash(cg_module->get_builtin_swapchain())] = cg_module->get_builtin_swapchain();
 
 		while (!work_queue.empty()) {
 			auto node = work_queue.back();
@@ -56,29 +96,7 @@ namespace vuk {
 			}
 
 			nodes.push_back(node);
-			auto unify_type = [&](Type*& t) {
-				auto [v, succ] = type_map.try_emplace(Type::hash(t), t);
-				t = v->second;
-			};
-			for (auto& t : node->type) {
-				if (t->kind == Type::ALIASED_TY) {
-					unify_type(t->aliased.T);
-				} else if (t->kind == Type::IMBUED_TY) {
-					unify_type(t->imbued.T);
-				} else if (t->kind == Type::ARRAY_TY) {
-					unify_type(t->array.T);
-				} else if (t->kind == Type::COMPOSITE_TY) {
-					for (auto& elem_ty : t->composite.types) {
-						unify_type(elem_ty);
-					}
-				}
-				unify_type(t);
-			}
 		}
-
-		cg_module->builtin_buffer = type_map[Type::hash(cg_module->builtin_buffer)];
-		cg_module->builtin_image = type_map[Type::hash(cg_module->builtin_image)];
-		cg_module->builtin_swapchain = type_map[Type::hash(cg_module->builtin_swapchain)];
 
 		for (auto& node : nodes) {
 			node->flag = 0;
@@ -788,8 +806,9 @@ namespace vuk {
 		}
 
 		VUK_DO_OR_RETURN(impl->build_nodes());
-
 		VUK_DO_OR_RETURN(impl->build_links());
+		VUK_DO_OR_RETURN(impl->unify_types());
+
 		VUK_DO_OR_RETURN(impl->reify_inference());
 		VUK_DO_OR_RETURN(impl->collect_chains());
 

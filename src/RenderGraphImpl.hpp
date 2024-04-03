@@ -87,6 +87,8 @@ namespace vuk {
 
 		std::unordered_map<Node*, ExecutionInfo> executed;
 
+		std::unordered_map<Node*, Type*> type_restore;
+
 		template<class T>
 		T& get_value(Ref parm) {
 			return *reinterpret_cast<T*>(get_value(parm));
@@ -124,6 +126,7 @@ namespace vuk {
 
 		Result<void> build_nodes();
 		Result<void> build_links();
+		Result<void> unify_types();
 		Result<void> reify_inference();
 		Result<void> schedule_intra_queue(const RenderGraphCompileOptions& compile_options);
 		Result<void> collect_chains();

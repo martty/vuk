@@ -893,8 +893,31 @@ namespace vuk {
 			    .kind = Node::RELACQ, .type = std::span{ tys, src->type.size() }, .relacq = { .src = std::span{ args_ptr, src->type.size() }, .rel_acq = acq_rel } });
 		}
 
+		Type* copy_type(Type* type) {
+			auto make_type_copy = [this](Type*& t) {
+				t = emplace_type(*t);
+			};
+			// copy outer type, then copy inner types as needed
+			make_type_copy(type);
+
+			if (type->kind == Type::ALIASED_TY) {
+				make_type_copy(type->aliased.T);
+			} else if (type->kind == Type::IMBUED_TY) {
+				make_type_copy(type->imbued.T);
+			} else if (type->kind == Type::ARRAY_TY) {
+				make_type_copy(type->array.T);
+			} else if (type->kind == Type::COMPOSITE_TY) {
+				auto type_array = new (payload_arena.ensure_space(sizeof(Type*) * type->composite.types.size())) Type*[type->composite.types.size()];
+				for (auto i = 0; i < type->composite.types.size(); i++) {
+					type_array[i] = emplace_type(*type->composite.types[i]);
+				}
+				type->composite.types = { type_array, type->composite.types.size() };
+			}
+			return type;
+		}
+
 		Ref make_acquire(Type* type, AcquireRelease* acq_rel, size_t index, void* value) {
-			auto ty = new (payload_arena.ensure_space(sizeof(Type*))) Type*(emplace_type(*type));
+			auto ty = new (payload_arena.ensure_space(sizeof(Type*))) Type*(copy_type(type));
 			auto mem_ty = new (payload_arena.ensure_space(sizeof(Type*))) Type*(emplace_type(Type{ .kind = Type::MEMORY_TY }));
 			return first(emplace_op(
 			    Node{ .kind = Node::ACQUIRE,
@@ -936,7 +959,7 @@ namespace vuk {
 		ExtNode(std::shared_ptr<RG> module, Node* node) : module(std::move(module)) {
 			owned_acqrel = std::make_unique<AcquireRelease>();
 			acqrel = owned_acqrel.get();
-			if (node->kind != Node::RELEASE) {
+			if (node->kind != Node::RELEASE && node->kind != Node::ACQUIRE) {
 				this->node = this->module->make_relacq(node, acqrel);
 			} else {
 				this->node = node;
@@ -957,7 +980,7 @@ namespace vuk {
 					}
 
 					delete node->relacq.values.data();
-				} else {
+				} else if (node->kind == Node::RELEASE) {
 					if (node->release.src.type() == module->builtin_buffer) {
 						delete (Buffer*)node->release.value;
 					} else {
@@ -970,7 +993,7 @@ namespace vuk {
 		ExtNode(ExtNode&& o) = default;
 
 		Node* get_node() {
-			assert(node->kind == Node::RELACQ || node->kind == Node::RELEASE);
+			assert(node->kind == Node::RELACQ || node->kind == Node::RELEASE || node->kind == Node::ACQUIRE);
 			return node;
 		}
 

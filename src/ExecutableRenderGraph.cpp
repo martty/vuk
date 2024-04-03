@@ -1901,6 +1901,11 @@ namespace vuk {
 			}
 		}
 
+		// restore acquire types
+		for (auto& [node, t] : impl->type_restore) {
+			node->type[0] = t;
+		}
+
 		return { expected_value };
 	}
 } // namespace vuk
