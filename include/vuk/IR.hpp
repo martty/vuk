@@ -95,10 +95,12 @@ namespace vuk {
 			switch (t->kind) {
 			case IMBUED_TY:
 				v = Type::hash(t->imbued.T);
+				hash_combine_direct(v, IMBUED_TY);
 				hash_combine_direct(v, (uint32_t)t->imbued.access);
 				return v;
 			case ALIASED_TY:
 				v = Type::hash(t->aliased.T);
+				hash_combine_direct(v, ALIASED_TY);
 				hash_combine_direct(v, (uint32_t)t->aliased.ref_idx);
 				return v;
 			case MEMORY_TY:
@@ -107,9 +109,11 @@ namespace vuk {
 				return t->integer.width;
 			case ARRAY_TY:
 				v = Type::hash(t->array.T);
+				hash_combine_direct(v, ARRAY_TY);
 				hash_combine_direct(v, (uint32_t)t->array.count);
 				return v;
 			case COMPOSITE_TY:
+				v = COMPOSITE_TY;
 				for (int i = 0; i < t->composite.types.size(); i++) {
 					hash_combine_direct(v, Type::hash(t->composite.types[i]));
 				}
