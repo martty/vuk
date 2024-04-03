@@ -2,7 +2,7 @@
 #include "example_runner.hpp"
 #include "vuk/RenderGraphReflection.hpp"
 
-bool render_all = false;
+bool render_all = true;
 
 void vuk::ExampleRunner::render() {
 	Compiler compiler;
@@ -44,7 +44,7 @@ void vuk::ExampleRunner::render() {
 		context->next_frame();
 
 		Allocator frame_allocator(frame_resource);
-		
+
 		auto imported_swapchain = declare_swapchain(*swapchain);
 		// acquire an image on the swapchain
 		auto swapchain_image = acquire_next_image("swp_img", std::move(imported_swapchain));
@@ -68,22 +68,24 @@ void vuk::ExampleRunner::render() {
 				size.x = size.x <= 0 ? 1 : size.x;
 				size.y = size.y <= 0 ? 1 : size.y;
 				auto small_target = vuk::clear_image(vuk::declare_ia("_img",
-				                            { .extent = {(uint32_t)size.x, (uint32_t)size.y},
-				                              .format = swapchain->images[0].format,
-				                              .sample_count = vuk::Samples::e1,
-				                              .level_count = 1,
-				                              .layer_count = 1 }),
-				                            vuk::ClearColor(0.1f, 0.2f, 0.3f, 1.f));
-				auto rg_frag_fut = ex->render(*this, frame_allocator,std::move(small_target));
+				                                                     { .extent = { (uint32_t)size.x, (uint32_t)size.y, 1 },
+				                                                       .format = swapchain->images[0].format,
+				                                                       .sample_count = vuk::Samples::e1,
+				                                                       .level_count = 1,
+				                                                       .layer_count = 1 }),
+				                                     vuk::ClearColor(0.1f, 0.2f, 0.3f, 1.f));
+				auto rg_frag_fut = ex->render(*this, frame_allocator, std::move(small_target));
 
-				ImGui::Image(&sampled_images.emplace_back(std::move(rg_frag_fut)), ImGui::GetContentRegionAvail());
+				auto idx = sampled_images.size();
+				sampled_images.emplace_back(std::move(rg_frag_fut));
+				ImGui::Image((ImTextureID)idx, ImGui::GetContentRegionAvail());
 				ImGui::End();
 			}
 
 			ImGui::Render();
-			
+
 			imgui = util::ImGui_ImplVuk_Render(frame_allocator, std::move(cleared_image_to_render_into), imgui_data, ImGui::GetDrawData(), sampled_images);
-			
+
 			sampled_images.clear();
 		}
 

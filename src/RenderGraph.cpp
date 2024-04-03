@@ -133,12 +133,20 @@ namespace vuk {
 			case Node::MATH_BINARY:
 				break;
 			case Node::CONSTRUCT:
+				first(node).link().def = first(node);
+
 				for (size_t i = 0; i < node->construct.args.size(); i++) {
 					auto& parm = node->construct.args[i];
 					parm.link().undef = { node, i };
 				}
 
-				first(node).link().def = first(node);
+				if (node->type[0]->kind == Type::ARRAY_TY) {
+					for (size_t i = 1; i < node->construct.args.size(); i++) {
+						auto& parm = node->construct.args[i];
+						parm.link().next = &first(node).link();
+					}
+				}
+
 				break;
 			case Node::RELACQ: // ~~ write joiner
 				for (size_t i = 0; i < node->relacq.src.size(); i++) {
