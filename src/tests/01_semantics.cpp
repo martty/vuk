@@ -189,6 +189,27 @@ TEST_CASE("scheduling with submitted") {
 			execution += "r";
 			return dst;
 		});
+		auto read2 = make_pass("read", [&](CommandBuffer& cbuf, VUK_BA(Access::eTransferRead) dst, VUK_BA(Access::eTransferRead) dst2) {
+			execution += "r";
+			return dst;
+		});
+
+		// external facing types (i.e. in acquire) must not be changed, or they might dangle over time
+		{
+			auto written = write(declare_buf("src0", **buf0));
+			written.wait(*test_context.allocator, test_context.compiler);
+			{
+				auto buf2 = declare_buf("src0", **buf0);
+				auto res = read2(write(buf2), written);
+				res.wait(*test_context.allocator, test_context.compiler);
+			}
+			{
+				auto res2 = read(written);
+				res2.wait(*test_context.allocator, test_context.compiler);
+			}
+			CHECK(execution == "wwrr");
+			execution = "";
+		}
 
 		{
 			auto written = write(declare_buf("src0", **buf0));
@@ -212,6 +233,7 @@ TEST_CASE("scheduling with submitted") {
 			CHECK(execution == "ww");
 			execution = "";
 		}
+		
 	}
 }
 
