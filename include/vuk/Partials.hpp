@@ -276,9 +276,7 @@ namespace vuk {
 	}
 
 	inline Value<ImageAttachment> resolve_into(Value<ImageAttachment> src, Value<ImageAttachment> dst) {
-		dst.same_format_as(src);
 		src.same_format_as(dst);
-		dst.same_shape_as(src);
 		src.same_shape_as(dst);
 		dst->sample_count = Samples::e1;
 

@@ -27,7 +27,6 @@ vuk::Value<vuk::ImageAttachment> apply_fxaa(vuk::Value<vuk::ImageAttachment> sou
 	});
 	// bidirectional inference
 	source.same_shape_as(dst);
-	dst.same_shape_as(source);
 	return pass(source, dst);
 }
 
