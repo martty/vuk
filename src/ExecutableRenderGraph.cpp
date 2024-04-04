@@ -839,6 +839,7 @@ namespace vuk {
 		}
 
 		struct DependencyInfo {
+			bool init_permitted;
 			StreamResourceUse src_use;
 			StreamResourceUse dst_use;
 		};
@@ -847,6 +848,8 @@ namespace vuk {
 		get_dependency_info(Ref parm, Type* arg_ty, RW type, Stream* dst_stream, Access src_access = Access::eNone, Access dst_access = Access::eNone) {
 			auto parm_ty = parm.type();
 			auto& link = parm.link();
+
+			bool init_permitted = parm.node->kind == Node::CONSTRUCT && parm.node->type[0]->kind != Type::ARRAY_TY;
 
 			StreamResourceUse src_use = {};
 			bool sync_against_def = type == RW::eRead || link.reads.size() == 0; // def -> *, src = def
@@ -1036,7 +1039,7 @@ namespace vuk {
 					}
 				}
 			}
-			return { src_use, dst_use };
+			return { init_permitted, src_use, dst_use };
 		}
 	};
 
@@ -1095,6 +1098,10 @@ namespace vuk {
 
 			if (cross) {
 				dst_stream->add_dependency(src_stream);
+			}
+
+			if ((ResourceUse)src_use == ResourceUse{} && (ResourceUse)dst_use == ResourceUse{} && !di.init_permitted) {
+				return;
 			}
 
 			if (base_ty == cg_module->builtin_image) {
@@ -1811,6 +1818,12 @@ namespace vuk {
 						                    constant<uint32_t>(node->slice.level_count),
 						                    constant<uint32_t>(node->slice.base_layer),
 						                    constant<uint32_t>(node->slice.layer_count) };
+
+					// half sync
+					recorder.add_sync(sched.base_type(node->slice.image),
+					                  sched.get_dependency_info(node->slice.image, node->slice.image.type(), RW::eRead, nullptr),
+					                  sched.get_value(node->slice.image));
+
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
 					fmt::print(" = ");
@@ -1823,11 +1836,6 @@ namespace vuk {
 					}
 					fmt::print("\n");
 #endif
-
-					// half sync
-					recorder.add_sync(sched.base_type(node->slice.image),
-					                  sched.get_dependency_info(node->slice.image, node->slice.image.type(), RW::eRead, nullptr),
-					                  sched.get_value(node->slice.image));
 
 					// assert(elem_ty == impl->cg_module->builtin_image);
 					auto sliced = ImageAttachment(*(ImageAttachment*)sched.get_value(node->slice.image));
