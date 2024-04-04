@@ -188,6 +188,8 @@ namespace vuk {
 		PipelineStageFlags stages;
 		AccessFlags access;
 		ImageLayout layout; // ignored for buffers
+
+		bool operator==(const ResourceUse&) const = default;
 	};
 
 	struct StreamResourceUse : ResourceUse {

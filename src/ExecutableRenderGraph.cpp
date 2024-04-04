@@ -1057,7 +1057,8 @@ namespace vuk {
 		std::shared_ptr<RG> cg_module;
 
 		std::unordered_map<DomainFlagBits, std::unique_ptr<Stream>> streams;
-		std::unordered_map<void*, Stream*> pending_syncs;
+		std::unordered_map<VkImage, StreamResourceUse> pending_image_syncs;
+		std::unordered_map<void*, Stream*> pending_buffer_syncs;
 
 		// start recording if needed
 		// all dependant domains flushed
@@ -1108,12 +1109,13 @@ namespace vuk {
 				auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
 				if (has_dst) {
 					if (only_dst) {
-						auto it = pending_syncs.find(value);
-						if (it != pending_syncs.end()) {
-							if (it->second != dst_stream) {
-								it->second->synch_image(img_att, src_use, dst_use, value);
+						auto it = pending_image_syncs.find(img_att.image.image);
+						if (it != pending_image_syncs.end()) {
+							if (it->second.stream != dst_stream) {
+								it->second.stream->synch_image(img_att, {}, dst_use, value); // synchronize dst onto first stream
+								dst_stream->synch_image(img_att, it->second, {}, value);     // synchronize src onto second stream
 							}
-							pending_syncs.erase(it);
+							pending_image_syncs.erase(it);
 						}
 					}
 					dst_stream->synch_image(img_att, src_use, dst_use, value);
@@ -1121,26 +1123,26 @@ namespace vuk {
 				if (only_src || cross) {
 					src_stream->synch_image(img_att, src_use, dst_use, value);
 					if (only_src) {
-						pending_syncs.emplace(value, src_stream);
+						pending_image_syncs.emplace(img_att.image.image, src_use);
 					}
 				}
 			} else if (base_ty == cg_module->builtin_buffer) {
 				// buffer needs no cross
 				if (has_dst) {
 					if (only_dst) {
-						auto it = pending_syncs.find(value);
-						if (it != pending_syncs.end()) {
+						auto it = pending_buffer_syncs.find(value);
+						if (it != pending_buffer_syncs.end()) {
 							if (it->second != dst_stream) {
 								it->second->synch_memory(src_use, dst_use, value);
 							}
-							pending_syncs.erase(it);
+							pending_buffer_syncs.erase(it);
 						}
 					}
 					dst_stream->synch_memory(src_use, dst_use, value);
 				} else if (has_src) {
 					src_stream->synch_memory(src_use, dst_use, value);
 					if (only_src) {
-						pending_syncs.emplace(value, src_stream);
+						pending_buffer_syncs.emplace(value, src_stream);
 					}
 				}
 			} else if (base_ty->kind == Type::ARRAY_TY) {
@@ -1151,12 +1153,13 @@ namespace vuk {
 					for (int i = 0; i < size; i++) {
 						if (has_dst) {
 							if (only_dst) {
-								auto it = pending_syncs.find(value);
-								if (it != pending_syncs.end()) {
-									if (it->second != dst_stream) {
-										it->second->synch_image(img_atts[i], src_use, dst_use, value);
+								auto it = pending_image_syncs.find(img_atts[i].image.image);
+								if (it != pending_image_syncs.end()) {
+									if (it->second.stream != dst_stream) {
+										it->second.stream->synch_image(img_atts[i], {}, dst_use, value); // synchronize dst onto first stream
+										dst_stream->synch_image(img_atts[i], it->second, {}, value);     // synchronize dst onto second stream
 									}
-									pending_syncs.erase(it);
+									pending_image_syncs.erase(it);
 								}
 							}
 							dst_stream->synch_image(img_atts[i], src_use, dst_use, &img_atts[i]);
@@ -1164,7 +1167,7 @@ namespace vuk {
 						if (only_src || cross) {
 							src_stream->synch_image(img_atts[i], src_use, dst_use, &img_atts[i]);
 							if (only_src) {
-								pending_syncs.emplace(&img_atts[i], src_stream);
+								pending_image_syncs.emplace(img_atts[i].image.image, src_use);
 							}
 						}
 					}
@@ -1173,18 +1176,18 @@ namespace vuk {
 						// buffer needs no cross
 						auto bufs = reinterpret_cast<Buffer*>(value);
 						if (has_dst) {
-							auto it = pending_syncs.find(value);
-							if (it != pending_syncs.end()) {
+							auto it = pending_buffer_syncs.find(value);
+							if (it != pending_buffer_syncs.end()) {
 								if (it->second != dst_stream) {
 									it->second->synch_memory(src_use, dst_use, &bufs[i]);
 								}
-								pending_syncs.erase(it);
+								pending_buffer_syncs.erase(it);
 							}
 							dst_stream->synch_memory(src_use, dst_use, &bufs[i]);
 						} else if (has_src) {
 							src_stream->synch_memory(src_use, dst_use, &bufs[i]);
 							if (only_src) {
-								pending_syncs.emplace(&bufs[i], src_stream);
+								pending_buffer_syncs.emplace(&bufs[i], src_stream);
 							}
 						}
 					}
