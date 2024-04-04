@@ -76,7 +76,7 @@ void vuk::ExampleRunner::render() {
 				                                     vuk::ClearColor(0.1f, 0.2f, 0.3f, 1.f));
 				auto rg_frag_fut = ex->render(*this, frame_allocator, std::move(small_target));
 
-				auto idx = sampled_images.size();
+				auto idx = sampled_images.size() + 1;
 				sampled_images.emplace_back(std::move(rg_frag_fut));
 				ImGui::Image((ImTextureID)idx, ImGui::GetContentRegionAvail());
 				ImGui::End();

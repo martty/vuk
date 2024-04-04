@@ -93,7 +93,7 @@ Value<ImageAttachment> util::ImGui_ImplVuk_Render(Allocator& allocator,
 	}
 
 	// add rendergraph dependencies to be transitioned
-	ImGui::GetIO().Fonts->TexID = (ImTextureID)sampled_images.size();
+	ImGui::GetIO().Fonts->TexID = (ImTextureID)(sampled_images.size() + 1);
 	sampled_images.push_back(data.font_si);
 	// make all rendergraph sampled images available
 	auto sampled_images_array = declare_array("imgui_sampled", std::span(sampled_images));
@@ -151,7 +151,7 @@ Value<ImageAttachment> util::ImGui_ImplVuk_Render(Allocator& allocator,
 
 						                      // Bind texture
 						                      if (pcmd->TextureId) {
-							                      auto ia_index = reinterpret_cast<size_t>(pcmd->TextureId);
+							                      auto ia_index = reinterpret_cast<size_t>(pcmd->TextureId) - 1;
 
 							                      command_buffer.bind_image(0, 0, sis[ia_index]).bind_sampler(0, 0, {});
 
