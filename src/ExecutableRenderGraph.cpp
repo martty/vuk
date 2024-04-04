@@ -936,13 +936,13 @@ namespace vuk {
 							assert(false); // we should've handled this by now
 						}
 
-						if (is_transfer_access(dst_access)) {
+						if (is_transfer_access(src_access)) {
 							need_transfer = true;
 						}
-						if (is_storage_access(dst_access)) {
+						if (is_storage_access(src_access)) {
 							need_general = true;
 						}
-						if (is_readonly_access(dst_access)) {
+						if (is_readonly_access(src_access)) {
 							need_read_only = true;
 						}
 
