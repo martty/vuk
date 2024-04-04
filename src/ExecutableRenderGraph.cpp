@@ -265,15 +265,36 @@ namespace vuk {
 			im_bars.clear();
 		}
 
-//#define VUK_DEBUG_IMBAR
+		// #define VUK_DEBUG_IMBAR
 
 		void print_ib(VkImageMemoryBarrier2KHR ib, std::string extra = "") {
-			fmt::println("[{}][m{}:{}][l{}:{}]{}",
+			auto layout_to_str = [](VkImageLayout l) {
+				switch (l) {
+				case VK_IMAGE_LAYOUT_UNDEFINED:
+					return "UND";
+				case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
+					return "SRC";
+				case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
+					return "DST";
+				case VK_IMAGE_LAYOUT_GENERAL:
+					return "GEN";
+				case VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL:
+					return "ROO";
+				case VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL:
+					return "ATT";
+				case VK_IMAGE_LAYOUT_PRESENT_SRC_KHR:
+					return "PRS";
+				}
+				assert(0);
+			};
+			fmt::println("[{}][m{}:{}][l{}:{}][{}->{}]{}",
 			             fmt::ptr(ib.image),
 			             ib.subresourceRange.baseMipLevel,
 			             ib.subresourceRange.baseMipLevel + ib.subresourceRange.levelCount - 1,
 			             ib.subresourceRange.baseArrayLayer,
 			             ib.subresourceRange.baseArrayLayer + ib.subresourceRange.layerCount - 1,
+			             layout_to_str(ib.oldLayout),
+			             layout_to_str(ib.newLayout),
 			             extra);
 		}
 
@@ -490,6 +511,9 @@ namespace vuk {
 					}
 				}
 			} else {
+#ifdef VUK_DEBUG_IMBAR
+				print_ib(barrier, "$");
+#endif
 				im_bars.push_back(barrier);
 				img_att.layout = (ImageLayout)barrier.newLayout;
 
@@ -1187,7 +1211,7 @@ namespace vuk {
 		return "";
 	}
 
-//#define VUK_DUMP_EXEC
+	// #define VUK_DUMP_EXEC
 
 	Result<void> ExecutableRenderGraph::execute(Allocator& alloc) {
 		Context& ctx = alloc.get_context();
