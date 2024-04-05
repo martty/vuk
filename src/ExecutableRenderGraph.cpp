@@ -747,6 +747,7 @@ namespace vuk {
 		std::deque<ScheduledItem> work_queue;
 
 		size_t naming_index_counter = 0;
+		size_t instr_counter = 0;
 		std::unordered_map<Node*, ExecutionInfo>& executed;
 		std::unordered_set<Node*> scheduled;
 
@@ -1346,6 +1347,12 @@ namespace vuk {
 			auto& node = item.execable;
 			if (sched.executed.count(node)) { // only going execute things once
 				continue;
+			}
+			if (item.ready) {
+				sched.instr_counter++;
+#ifdef VUK_DUMP_EXEC
+				fmt::print("[{:#06x}] ", sched.instr_counter);
+#endif
 			}
 			// we run nodes twice - first time we reenqueue at the front and then put all deps before it
 			// second time we see it, we know that all deps have run, so we can run the node itself
