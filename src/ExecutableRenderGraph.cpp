@@ -298,7 +298,7 @@ namespace vuk {
 			             extra);
 		}
 
-		void synch_image(ImageAttachment& img_att, StreamResourceUse src_use, StreamResourceUse dst_use, void* tag) override {
+		void synch_image(ImageAttachment& img_att, StreamResourceUse src_use, StreamResourceUse dst_use, void* tag, bool init_allowed) override {
 			auto aspect = format_to_aspect(img_att.format);
 
 			// if we start an RP and we have LOAD_OP_LOAD (currently always), then we must upgrade access with an appropriate READ
@@ -386,6 +386,7 @@ namespace vuk {
 					barrier.srcStageMask = found.srcStageMask;
 					barrier.srcQueueFamilyIndex = found.srcQueueFamilyIndex;
 					barrier.oldLayout = found.oldLayout;
+					assert(img_att.layout == ImageLayout::eUndefined || barrier.oldLayout != VK_IMAGE_LAYOUT_UNDEFINED || init_allowed);
 					im_bars.push_back(barrier);
 
 					img_att.layout = (ImageLayout)barrier.newLayout;
@@ -408,6 +409,7 @@ namespace vuk {
 							// we might in the wrong layout for reconverged resources (but this might be bug)
 							// lets hope for the best!
 							if (it == half_im_bars.end() && is_readonly_access(dst_use)) {
+								// assert(img_att.layout == dst_use.layout);
 								img_att.layout = dst_use.layout;
 								return;
 							}
@@ -502,6 +504,7 @@ namespace vuk {
 						barrier.srcStageMask = found.srcStageMask;
 						barrier.srcQueueFamilyIndex = found.srcQueueFamilyIndex;
 						barrier.oldLayout = found.oldLayout;
+						assert(img_att.layout == ImageLayout::eUndefined || barrier.oldLayout != VK_IMAGE_LAYOUT_UNDEFINED || init_allowed);
 						im_bars.push_back(barrier);
 
 						img_att.layout = (ImageLayout)barrier.newLayout;
@@ -514,6 +517,7 @@ namespace vuk {
 #ifdef VUK_DEBUG_IMBAR
 				print_ib(barrier, "$");
 #endif
+				assert(img_att.layout == ImageLayout::eUndefined || barrier.oldLayout != VK_IMAGE_LAYOUT_UNDEFINED || init_allowed);
 				im_bars.push_back(barrier);
 				img_att.layout = (ImageLayout)barrier.newLayout;
 
@@ -668,7 +672,7 @@ namespace vuk {
 			assert(false);
 		}
 
-		void synch_image(ImageAttachment& img_att, StreamResourceUse src_use, StreamResourceUse dst_use, void* tag) override {
+		void synch_image(ImageAttachment& img_att, StreamResourceUse src_use, StreamResourceUse dst_use, void* tag, bool) override {
 			/* host -> host and host -> device not needed, device -> host inserts things on the device side */
 			return;
 		}
@@ -699,7 +703,7 @@ namespace vuk {
 			assert(false);
 		}
 
-		void synch_image(ImageAttachment& img_att, StreamResourceUse src_use, StreamResourceUse dst_use, void* tag) override {}
+		void synch_image(ImageAttachment& img_att, StreamResourceUse src_use, StreamResourceUse dst_use, void* tag, bool) override {}
 
 		void synch_memory(StreamResourceUse src_use, StreamResourceUse dst_use, void* tag) override { /* PE doesn't do memory */
 			assert(false);
@@ -849,7 +853,7 @@ namespace vuk {
 			auto parm_ty = parm.type();
 			auto& link = parm.link();
 
-			bool init_permitted = parm.node->kind == Node::CONSTRUCT && parm.node->type[0]->kind != Type::ARRAY_TY;
+			bool init_permitted = parm.node->kind == Node::CONSTRUCT && parm.node->type[0]->kind != Type::ARRAY_TY || parm.node->kind == Node::ACQUIRE_NEXT_IMAGE;
 
 			StreamResourceUse src_use = {};
 			bool sync_against_def = type == RW::eRead || link.reads.size() == 0; // def -> *, src = def
@@ -1112,18 +1116,18 @@ namespace vuk {
 						auto it = pending_image_syncs.find(img_att.image.image);
 						if (it != pending_image_syncs.end()) {
 							if (it->second.stream != dst_stream) {
-								it->second.stream->synch_image(img_att, {}, dst_use, value); // synchronize dst onto first stream
-								dst_stream->synch_image(img_att, it->second, {}, value);     // synchronize src onto second stream
+								it->second.stream->synch_image(img_att, {}, dst_use, value, di.init_permitted); // synchronize dst onto first stream
+								dst_stream->synch_image(img_att, it->second, {}, value, di.init_permitted);     // synchronize src onto second stream
 							}
 							pending_image_syncs.erase(it);
 						}
 					}
-					dst_stream->synch_image(img_att, src_use, dst_use, value);
+					dst_stream->synch_image(img_att, src_use, dst_use, value, di.init_permitted);
 				}
 				if (only_src || cross) {
-					src_stream->synch_image(img_att, src_use, dst_use, value);
+					src_stream->synch_image(img_att, src_use, dst_use, value, di.init_permitted);
 					if (only_src) {
-						pending_image_syncs.emplace(img_att.image.image, src_use);
+						pending_image_syncs.insert_or_assign(img_att.image.image, src_use);
 					}
 				}
 			} else if (base_ty == cg_module->builtin_buffer) {
@@ -1142,7 +1146,7 @@ namespace vuk {
 				} else if (has_src) {
 					src_stream->synch_memory(src_use, dst_use, value);
 					if (only_src) {
-						pending_buffer_syncs.emplace(value, src_stream);
+						pending_buffer_syncs.insert_or_assign(value, src_stream);
 					}
 				}
 			} else if (base_ty->kind == Type::ARRAY_TY) {
@@ -1156,18 +1160,18 @@ namespace vuk {
 								auto it = pending_image_syncs.find(img_atts[i].image.image);
 								if (it != pending_image_syncs.end()) {
 									if (it->second.stream != dst_stream) {
-										it->second.stream->synch_image(img_atts[i], {}, dst_use, value); // synchronize dst onto first stream
-										dst_stream->synch_image(img_atts[i], it->second, {}, value);     // synchronize dst onto second stream
+										it->second.stream->synch_image(img_atts[i], {}, dst_use, &img_atts[i], di.init_permitted); // synchronize dst onto first stream
+										dst_stream->synch_image(img_atts[i], it->second, {}, &img_atts[i], di.init_permitted);     // synchronize dst onto second stream
 									}
 									pending_image_syncs.erase(it);
 								}
 							}
-							dst_stream->synch_image(img_atts[i], src_use, dst_use, &img_atts[i]);
+							dst_stream->synch_image(img_atts[i], src_use, dst_use, &img_atts[i], di.init_permitted);
 						}
 						if (only_src || cross) {
-							src_stream->synch_image(img_atts[i], src_use, dst_use, &img_atts[i]);
+							src_stream->synch_image(img_atts[i], src_use, dst_use, &img_atts[i], di.init_permitted);
 							if (only_src) {
-								pending_image_syncs.emplace(img_atts[i].image.image, src_use);
+								pending_image_syncs.insert_or_assign(img_atts[i].image.image, src_use);
 							}
 						}
 					}
@@ -1187,7 +1191,7 @@ namespace vuk {
 						} else if (has_src) {
 							src_stream->synch_memory(src_use, dst_use, &bufs[i]);
 							if (only_src) {
-								pending_buffer_syncs.emplace(&bufs[i], src_stream);
+								pending_buffer_syncs.insert_or_assign(&bufs[i], src_stream);
 							}
 						}
 					}
@@ -1797,10 +1801,10 @@ namespace vuk {
 			}
 			case Node::EXTRACT: {
 				if (sched.process(item)) {
-					// half sync
-					recorder.add_sync(sched.base_type(node->extract.composite),
+					// no sync - currently no extract composite needs sync
+					/* recorder.add_sync(sched.base_type(node->extract.composite),
 					                  sched.get_dependency_info(node->extract.composite, node->extract.composite.type(), RW::eWrite, nullptr),
-					                  sched.get_value(node->extract.composite));
+					                  sched.get_value(node->extract.composite));*/
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
 					fmt::print(" = ");
