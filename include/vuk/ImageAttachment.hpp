@@ -107,12 +107,12 @@ namespace vuk {
 				assert(0);
 			}
 
-			uint32_t max_mips = (uint32_t)log2f((float)std::max(std::max(extent.width, extent.height), extent.depth)) + 1;
+			const uint32_t max_mips = (uint32_t)log2f((float)std::max(std::max(extent.width, extent.height), extent.depth)) + 1;
 			ia.base_level = 0;
-			if (preset != Preset::eRTT2DUnmipped) {
-				ia.level_count = max_mips;
-			} else {
+			if (preset == Preset::eRTT2DUnmipped || preset == Preset::eSTT2DUnmipped) {
 				ia.level_count = 1;
+			} else {
+				ia.level_count = max_mips;
 			}
 			ia.base_layer = 0;
 			if (preset == Preset::eRTTCube || preset == Preset::eMapCube) {
