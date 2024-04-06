@@ -1721,7 +1721,7 @@ namespace vuk {
 				Scheduler::DependencyInfo di;
 				di.src_use = { acq->last_use[node->acquire.index], src_stream };
 				di.dst_use = { to_use(Access::eNone), nullptr };
-				recorder.add_sync(node->type[0], di, sched.get_value(first(node)));
+				recorder.add_sync(node->type[0], di, sched.get_value({ node, node->acquire.index }));
 
 				if (node->type[0] == impl->cg_module->builtin_buffer) {
 #ifdef VUK_DUMP_EXEC
@@ -1735,7 +1735,7 @@ namespace vuk {
 #endif
 				}
 
-				sched.done(node, nullptr, sched.get_value(first(node)));
+				sched.done(node, nullptr, sched.get_value({ node, node->acquire.index }));
 				break;
 			}
 			case Node::RELEASE:

@@ -927,6 +927,12 @@ namespace vuk {
 			                       .index = index } }));
 		}
 
+		template<class T>
+		Ref make_acquire(Type* type, AcquireRelease* acq_rel, T value) {
+			auto val_ptr = new (payload_arena.ensure_space(sizeof(T))) T(value);
+			return make_acquire(type, acq_rel, 0, (void*)val_ptr);
+		}
+
 		Ref make_indirect_depend(Node* node, size_t index) {
 			Ref true_ref;
 			Type* type = nullptr;
