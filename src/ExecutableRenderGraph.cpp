@@ -1612,6 +1612,9 @@ namespace vuk {
 					std::vector<void*> opaque_rets;
 					if (node->call.fn.type()->kind == Type::OPAQUE_FN_TY) {
 						CommandBuffer cobuf(*this, ctx, alloc, vk_rec->cbuf);
+						if (node->call.fn.type()->debug_info) {
+							ctx.begin_region(vk_rec->cbuf, node->call.fn.type()->debug_info->name);
+						}
 						if (vk_rec->rp.rpci.attachments.size() > 0) {
 							vk_rec->prepare_render_pass();
 							fill_render_pass_info(vk_rec->rp, 0, cobuf);
@@ -1628,9 +1631,11 @@ namespace vuk {
 						}
 						opaque_rets.resize(node->call.fn.type()->opaque_fn.return_types.size());
 						(*node->call.fn.type()->opaque_fn.callback)(cobuf, opaque_args, opaque_meta, opaque_rets);
-
 						if (vk_rec->rp.handle) {
 							vk_rec->end_render_pass();
+						}
+						if (node->call.fn.type()->debug_info) {
+							ctx.end_region(vk_rec->cbuf);
 						}
 					} else {
 						assert(0);
