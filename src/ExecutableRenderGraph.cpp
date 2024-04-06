@@ -298,6 +298,15 @@ namespace vuk {
 			             extra);
 		}
 
+		bool is_readonly_layout(VkImageLayout l) {
+			switch (l) {
+			case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
+			case VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL:
+				return true;
+			}
+			return false;
+		}
+
 		void synch_image(ImageAttachment& img_att, StreamResourceUse src_use, StreamResourceUse dst_use, void* tag, bool init_allowed) override {
 			auto aspect = format_to_aspect(img_att.format);
 
@@ -387,6 +396,7 @@ namespace vuk {
 					barrier.srcQueueFamilyIndex = found.srcQueueFamilyIndex;
 					barrier.oldLayout = found.oldLayout;
 					assert(img_att.layout == ImageLayout::eUndefined || barrier.oldLayout != VK_IMAGE_LAYOUT_UNDEFINED || init_allowed);
+					assert(barrier.oldLayout != VK_IMAGE_LAYOUT_UNDEFINED || !is_readonly_layout(barrier.newLayout));
 					im_bars.push_back(barrier);
 
 					img_att.layout = (ImageLayout)barrier.newLayout;
@@ -505,6 +515,7 @@ namespace vuk {
 						barrier.srcQueueFamilyIndex = found.srcQueueFamilyIndex;
 						barrier.oldLayout = found.oldLayout;
 						assert(img_att.layout == ImageLayout::eUndefined || barrier.oldLayout != VK_IMAGE_LAYOUT_UNDEFINED || init_allowed);
+						assert(barrier.oldLayout != VK_IMAGE_LAYOUT_UNDEFINED || !is_readonly_layout(barrier.newLayout));
 						im_bars.push_back(barrier);
 
 						img_att.layout = (ImageLayout)barrier.newLayout;
@@ -518,6 +529,7 @@ namespace vuk {
 				print_ib(barrier, "$");
 #endif
 				assert(img_att.layout == ImageLayout::eUndefined || barrier.oldLayout != VK_IMAGE_LAYOUT_UNDEFINED || init_allowed);
+				assert(barrier.oldLayout != VK_IMAGE_LAYOUT_UNDEFINED || !is_readonly_layout(barrier.newLayout));
 				im_bars.push_back(barrier);
 				img_att.layout = (ImageLayout)barrier.newLayout;
 
