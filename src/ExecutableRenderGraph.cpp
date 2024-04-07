@@ -520,8 +520,9 @@ namespace vuk {
 					barrier.srcStageMask = found.srcStageMask;
 					barrier.srcQueueFamilyIndex = found.srcQueueFamilyIndex;
 					barrier.oldLayout = found.oldLayout;
-
+#ifdef VUK_DEBUG_IMBAR
 					print_ib(barrier, "*");
+#endif
 					add_full(barrier, img_att);
 				}
 			} else {
