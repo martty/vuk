@@ -52,7 +52,7 @@ namespace vuk {
 		}
 		if (ia & eDepthStencilRead) {
 			qr.access |= AccessFlagBits::eDepthStencilAttachmentRead;
-			qr.layout = combine_layout(qr.layout, ImageLayout::eReadOnlyOptimalKHR);
+			qr.layout = combine_layout(qr.layout, ImageLayout::eAttachmentOptimalKHR);
 		}
 		if (ia & eDepthStencilWrite) {
 			qr.access |= AccessFlagBits::eDepthStencilAttachmentWrite;
