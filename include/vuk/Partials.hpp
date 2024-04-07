@@ -19,7 +19,7 @@ namespace vuk {
 		// host-mapped buffers just get memcpys
 		if (dst.mapped_ptr) {
 			memcpy(dst.mapped_ptr, src_data, size);
-			return { vuk::declare_buf("_dst", dst) };
+			return { vuk::acquire_buf("_dst", dst, Access::eNone) };
 		}
 
 		auto src = *allocate_buffer(allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, 1 });

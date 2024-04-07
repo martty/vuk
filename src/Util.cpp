@@ -117,9 +117,11 @@ namespace vuk {
 		if (!res) {
 			return res;
 		}
-		assert(deps[0]->acqrel->status != Signal::Status::eDisarmed);
-		if (deps[0]->acqrel->status == Signal::Status::eSynchronizable) {
-			allocator.get_context().wait_for_domains(std::span{ &deps[0]->acqrel->source, 1 });
+		if (deps.size() > 0) {
+			assert(deps[0]->acqrel->status != Signal::Status::eDisarmed);
+			if (deps[0]->acqrel->status == Signal::Status::eSynchronizable) {
+				allocator.get_context().wait_for_domains(std::span{ &deps[0]->acqrel->source, 1 });
+			}
 		}
 		return { expected_value };
 	}

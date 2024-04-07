@@ -612,6 +612,28 @@ public:
 		return { make_ext_ref(rg, ref), ref };
 	}
 
+	[[nodiscard]] inline Value<Buffer> acquire_buf(Name name,
+	                                                       Buffer buf,
+	                                                       Access access,
+	                                                       SourceLocationAtFrame _pscope = VUK_HERE_AND_NOW(),
+	                                                       SourceLocationAtFrame _scope = VUK_HERE_AND_NOW()) {
+		if (_pscope != _scope) {
+			_scope.parent = &_pscope;
+		}
+		std::shared_ptr<RG> rg = std::make_shared<RG>();
+		Ref ref = rg->make_acquire(rg->get_builtin_buffer(), nullptr, buf);
+		auto ext_ref = make_ext_ref(rg, ref);
+		ext_ref.node->owned_acqrel = std::make_unique<AcquireRelease>();
+		ext_ref.node->acqrel = ext_ref.node->owned_acqrel.get();
+		ext_ref.node->owned_acqrel->status = Signal::Status::eHostAvailable;
+		ext_ref.node->owned_acqrel->last_use.resize(1);
+		ext_ref.node->owned_acqrel->last_use[0] = to_use(access);
+		ref.node->acquire.acquire = ext_ref.node->owned_acqrel.get();
+		rg->name_output(ref, name.c_str());
+		rg->set_source_location(ref.node, _scope);
+		return { std::move(ext_ref), ref };
+	}
+
 	// TODO: due to the pack, we can't do the source_location::current() trick
 	template<class T, class... Args>
 	[[nodiscard]] inline Value<T[]> declare_array(Name name, Value<T>&& arg, Args&&... args) {
