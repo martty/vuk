@@ -52,7 +52,7 @@ namespace vuk {
 		}
 		if (ia & eDepthStencilRead) {
 			qr.access |= AccessFlagBits::eDepthStencilAttachmentRead;
-			qr.layout = combine_layout(qr.layout, ImageLayout::eAttachmentOptimalKHR);
+			qr.layout = combine_layout(qr.layout, ImageLayout::eReadOnlyOptimal);
 		}
 		if (ia & eDepthStencilWrite) {
 			qr.access |= AccessFlagBits::eDepthStencilAttachmentWrite;
@@ -201,10 +201,9 @@ namespace vuk {
 	}
 
 	inline bool is_framebuffer_attachment(ResourceUse u) {
-		switch (u.layout) {
-		case vuk::ImageLayout::eAttachmentOptimal:
+		if (u.layout == ImageLayout::eAttachmentOptimal || u.access & AccessFlagBits::eDepthStencilAttachmentRead) {
 			return true;
-		default:
+		} else {
 			return false;
 		}
 	}

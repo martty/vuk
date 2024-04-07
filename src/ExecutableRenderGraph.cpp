@@ -15,6 +15,9 @@
 #include <unordered_set>
 #include <vector>
 
+//#define VUK_DUMP_EXEC
+//#define VUK_DEBUG_IMBAR
+
 namespace vuk {
 	std::string format_source_location(Node* node) {
 		if (node->debug_info) {
@@ -265,8 +268,6 @@ namespace vuk {
 			im_bars.clear();
 		}
 
-		// #define VUK_DEBUG_IMBAR
-
 		void print_ib(VkImageMemoryBarrier2KHR ib, std::string extra = "") {
 			auto layout_to_str = [](VkImageLayout l) {
 				switch (l) {
@@ -319,6 +320,10 @@ namespace vuk {
 				}
 			}
 
+			if (src_use == ResourceUse{} && is_readonly_access(dst_use) && img_att.layout == dst_use.layout) { // an already synchronized read
+				return;
+			}
+
 			DomainFlagBits src_domain = src_use.stream ? src_use.stream->domain : DomainFlagBits::eNone;
 			DomainFlagBits dst_domain = dst_use.stream ? dst_use.stream->domain : DomainFlagBits::eNone;
 
@@ -367,179 +372,163 @@ namespace vuk {
 
 			barrier.srcStageMask = (VkPipelineStageFlags2)src_use.stages.m_mask;
 			barrier.dstStageMask = (VkPipelineStageFlags2)dst_use.stages.m_mask;
+
 #ifdef VUK_DEBUG_IMBAR
 			fmt::println("----------------------------");
 #endif
 			barrier.image = img_att.image.image;
 
-			if (dst_domain == DomainFlagBits::eNone) {
-				barrier.pNext = tag;
+			auto add_half = [this, dst_use](VkImageMemoryBarrier2 barrier, ImageAttachment& img_att) {
+				Subrange::Image a_range{ img_att.base_level, img_att.level_count, img_att.base_layer, img_att.layer_count };
+				for (auto& b : half_im_bars) {
+					auto b_range = Subrange::Image{
+						b.subresourceRange.baseMipLevel, b.subresourceRange.levelCount, b.subresourceRange.baseArrayLayer, b.subresourceRange.layerCount
+					};
+					// duplicate
+					if (b.image == barrier.image && intersect(a_range, b_range)) {
+#ifdef VUK_DEBUG_IMBAR
+						print_ib(barrier, "!!");
+#endif
+						return;
+					}
+				}
 #ifdef VUK_DEBUG_IMBAR
 				print_ib(barrier, "+");
 #endif
 				half_im_bars.push_back(barrier);
+			};
+
+			auto add_full = [this, init_allowed](VkImageMemoryBarrier2 barrier, ImageAttachment& img_att) {
+				assert(img_att.layout == ImageLayout::eUndefined || barrier.oldLayout != VK_IMAGE_LAYOUT_UNDEFINED || init_allowed);
+				assert(barrier.oldLayout != VK_IMAGE_LAYOUT_UNDEFINED || !is_readonly_layout(barrier.newLayout));
+				im_bars.push_back(barrier);
+
+				img_att.layout = (ImageLayout)barrier.newLayout;
+				if (barrier.oldLayout != VK_IMAGE_LAYOUT_UNDEFINED) {
+					assert(barrier.newLayout != VK_IMAGE_LAYOUT_UNDEFINED);
+				}
+			};
+
+			if (dst_domain == DomainFlagBits::eNone) {
+				add_half(barrier, img_att);
 			} else if (src_domain == DomainFlagBits::eNone) {
 				VkImageMemoryBarrier2KHR found;
-				auto it = std::find_if(half_im_bars.begin(), half_im_bars.end(), [=](auto& mb) { return mb.pNext == tag; });
-				if (it != half_im_bars.end()) { // find a specific match
+				std::vector<Subrange::Image> work_queue;
+				work_queue.emplace_back(Subrange::Image{ img_att.base_level, img_att.level_count, img_att.base_layer, img_att.layer_count });
+
+				while (work_queue.size() > 0) {
+					Subrange::Image b = work_queue.back();
+					work_queue.pop_back();
+					auto it = half_im_bars.rbegin();
+					vuk::Subrange::Image a, isection;
+					// locate matching half barrier
+					do {
+						it = std::find_if(it, half_im_bars.rend(), [&](auto& mb) { return mb.image == img_att.image.image; });
+						// if there isn't a matching first bar, but this readonly, then this sync can be skipped
+						// we might in the wrong layout for reconverged resources (but this might be bug)
+						// lets hope for the best!
+						if (it == half_im_bars.rend() && is_readonly_access(dst_use)) {
+							// assert(img_att.layout == dst_use.layout);
+							img_att.layout = dst_use.layout;
+							if (is_framebuffer_attachment(dst_use)) {
+								prepare_render_pass_attachment(alloc, img_att);
+							}
+							return;
+						}
+						assert(it != half_im_bars.rend());
+						found = *it;
+						a = {
+							found.subresourceRange.baseMipLevel, found.subresourceRange.levelCount, found.subresourceRange.baseArrayLayer, found.subresourceRange.layerCount
+						};
+
+						// we want to make a barrier for the intersection of the existing and incoming
+						auto isection_opt = intersect(a, b);
+						if (isection_opt) {
+							isection = *isection_opt;
+							break;
+						}
+						++it;
+					} while (it != half_im_bars.rend());
+					assert(it != half_im_bars.rend());
 #ifdef VUK_DEBUG_IMBAR
-					for (auto it2 = half_im_bars.begin(); it2 != half_im_bars.end(); ++it2) {
-						print_ib(*it2, it == it2 ? "-" : "");
+					for (auto it2 = half_im_bars.rbegin(); it2 != half_im_bars.rend(); ++it2) {
+						if (it != it2) {
+							print_ib(*it2, "");
+						}
 					}
 #endif
-					found = *it;
-					half_im_bars.erase(it);
+					half_im_bars.erase(std::next(it).base());
+
+					barrier.subresourceRange.baseArrayLayer = isection.base_layer;
+					barrier.subresourceRange.baseMipLevel = isection.base_level;
+					barrier.subresourceRange.layerCount = isection.layer_count;
+					barrier.subresourceRange.levelCount = isection.level_count;
+
+					// then we want to remove the existing barrier from the candidates and put barrier(s) that are the difference
+					auto difference = [](Subrange::Image a, Subrange::Image isection) {
+						std::vector<Subrange::Image> new_srs;
+						// before, mips
+						if (isection.base_level > a.base_level) {
+							new_srs.push_back(
+							    { .base_level = a.base_level, .level_count = isection.base_level - a.base_level, .base_layer = a.base_layer, .layer_count = a.layer_count });
+						}
+						// after, mips
+						if (a.base_level + a.level_count > isection.base_level + isection.level_count) {
+							new_srs.push_back({ .base_level = isection.base_level + isection.level_count,
+							                    .level_count = a.base_level + a.level_count - (isection.base_level + isection.level_count),
+							                    .base_layer = a.base_layer,
+							                    .layer_count = a.layer_count });
+						}
+						// before, layers
+						if (isection.base_layer > a.base_layer) {
+							new_srs.push_back(
+							    { .base_level = a.base_level, .level_count = a.level_count, .base_layer = a.base_layer, .layer_count = isection.base_layer - a.base_layer });
+						}
+						// after, layers
+						if (a.base_layer + a.layer_count > isection.base_layer + isection.layer_count) {
+							new_srs.push_back({
+							    .base_level = a.base_level,
+							    .level_count = a.level_count,
+							    .base_layer = isection.base_layer + isection.layer_count,
+							    .layer_count = a.base_layer + a.layer_count - (isection.base_layer + isection.layer_count),
+							});
+						}
+
+						return new_srs;
+					};
+
+					auto new_srs = difference(a, isection);
+					// push the splintered src half barrier(s)
+					for (auto& nb : new_srs) {
+						auto barrier = found;
+
+						barrier.subresourceRange.baseArrayLayer = nb.base_layer;
+						barrier.subresourceRange.baseMipLevel = nb.base_level;
+						barrier.subresourceRange.layerCount = nb.layer_count;
+						barrier.subresourceRange.levelCount = nb.level_count;
+
+						add_half(barrier, img_att);
+					}
+
+					// splinter the dst barrier, and push into the work queue
+					auto new_dst = difference(b, isection);
+					work_queue.insert(work_queue.end(), new_dst.begin(), new_dst.end());
+
 					// fill out src part of the barrier based on the sync half we found
 					barrier.pNext = nullptr;
 					barrier.srcAccessMask = found.srcAccessMask;
 					barrier.srcStageMask = found.srcStageMask;
 					barrier.srcQueueFamilyIndex = found.srcQueueFamilyIndex;
 					barrier.oldLayout = found.oldLayout;
-					assert(img_att.layout == ImageLayout::eUndefined || barrier.oldLayout != VK_IMAGE_LAYOUT_UNDEFINED || init_allowed);
-					assert(barrier.oldLayout != VK_IMAGE_LAYOUT_UNDEFINED || !is_readonly_layout(barrier.newLayout));
-					im_bars.push_back(barrier);
 
-					img_att.layout = (ImageLayout)barrier.newLayout;
-					if (barrier.oldLayout != VK_IMAGE_LAYOUT_UNDEFINED) {
-						assert(barrier.newLayout != VK_IMAGE_LAYOUT_UNDEFINED);
-					}
-				} else { // find a nonspecific match
-					std::vector<Subrange::Image> work_queue;
-					work_queue.emplace_back(Subrange::Image{ img_att.base_level, img_att.level_count, img_att.base_layer, img_att.layer_count });
-
-					while (work_queue.size() > 0) {
-						Subrange::Image b = work_queue.back();
-						work_queue.pop_back();
-						it = half_im_bars.begin();
-						vuk::Subrange::Image a, isection;
-						// locate matching half barrier
-						do {
-							it = std::find_if(it, half_im_bars.end(), [&](auto& mb) { return mb.image == img_att.image.image; });
-							// if there isn't a matching first bar, but this readonly, then this sync can be skipped
-							// we might in the wrong layout for reconverged resources (but this might be bug)
-							// lets hope for the best!
-							if (it == half_im_bars.end() && is_readonly_access(dst_use)) {
-								// assert(img_att.layout == dst_use.layout);
-								img_att.layout = dst_use.layout;
-								return;
-							}
-							assert(it != half_im_bars.end());
-							found = *it;
-							a = {
-								found.subresourceRange.baseMipLevel, found.subresourceRange.levelCount, found.subresourceRange.baseArrayLayer, found.subresourceRange.layerCount
-							};
-
-							// we want to make a barrier for the intersection of the existing and incoming
-							auto isection_opt = intersect(a, b);
-							if (isection_opt) {
-								isection = *isection_opt;
-								break;
-							}
-							++it;
-						} while (it != half_im_bars.end());
-						assert(it != half_im_bars.end());
-#ifdef VUK_DEBUG_IMBAR
-						for (auto it2 = half_im_bars.begin(); it2 != half_im_bars.end(); ++it2) {
-							print_ib(*it2, it == it2 ? "*" : "");
-						}
-#endif
-						half_im_bars.erase(it);
-
-						barrier.subresourceRange.baseArrayLayer = isection.base_layer;
-						barrier.subresourceRange.baseMipLevel = isection.base_level;
-						barrier.subresourceRange.layerCount = isection.layer_count;
-						barrier.subresourceRange.levelCount = isection.level_count;
-
-						// then we want to remove the existing barrier from the candidates and put barrier(s) that are the difference
-						auto difference = [](Subrange::Image a, Subrange::Image isection) {
-							std::vector<Subrange::Image> new_srs;
-							// before, mips
-							if (isection.base_level > a.base_level) {
-								new_srs.push_back({ .base_level = a.base_level,
-								                    .level_count = isection.base_level - a.base_level,
-								                    .base_layer = a.base_layer,
-								                    .layer_count = a.layer_count });
-							}
-							// after, mips
-							if (a.base_level + a.level_count > isection.base_level + isection.level_count) {
-								new_srs.push_back({ .base_level = isection.base_level + isection.level_count,
-								                    .level_count = a.base_level + a.level_count - (isection.base_level + isection.level_count),
-								                    .base_layer = a.base_layer,
-								                    .layer_count = a.layer_count });
-							}
-							// before, layers
-							if (isection.base_layer > a.base_layer) {
-								new_srs.push_back({ .base_level = a.base_level,
-								                    .level_count = a.level_count,
-								                    .base_layer = a.base_layer,
-								                    .layer_count = isection.base_layer - a.base_layer });
-							}
-							// after, layers
-							if (a.base_layer + a.layer_count > isection.base_layer + isection.layer_count) {
-								new_srs.push_back({
-								    .base_level = a.base_level,
-								    .level_count = a.level_count,
-								    .base_layer = isection.base_layer + isection.layer_count,
-								    .layer_count = a.base_layer + a.layer_count - (isection.base_layer + isection.layer_count),
-								});
-							}
-
-							return new_srs;
-						};
-
-						auto new_srs = difference(a, isection);
-						// push the splintered src half barrier(s)
-						for (auto& nb : new_srs) {
-							auto barrier = found;
-
-							barrier.subresourceRange.baseArrayLayer = nb.base_layer;
-							barrier.subresourceRange.baseMipLevel = nb.base_level;
-							barrier.subresourceRange.layerCount = nb.layer_count;
-							barrier.subresourceRange.levelCount = nb.level_count;
-
-#ifdef VUK_DEBUG_IMBAR
-							print_ib(barrier, "+");
-#endif
-
-							half_im_bars.push_back(barrier);
-						}
-
-						// splinter the dst barrier, and push into the work queue
-						auto new_dst = difference(b, isection);
-						work_queue.insert(work_queue.end(), new_dst.begin(), new_dst.end());
-
-						// fill out src part of the barrier based on the sync half we found
-						barrier.pNext = nullptr;
-						barrier.srcAccessMask = found.srcAccessMask;
-						barrier.srcStageMask = found.srcStageMask;
-						barrier.srcQueueFamilyIndex = found.srcQueueFamilyIndex;
-						barrier.oldLayout = found.oldLayout;
-						assert(img_att.layout == ImageLayout::eUndefined || barrier.oldLayout != VK_IMAGE_LAYOUT_UNDEFINED || init_allowed);
-						assert(barrier.oldLayout != VK_IMAGE_LAYOUT_UNDEFINED || !is_readonly_layout(barrier.newLayout));
-						im_bars.push_back(barrier);
-
-						img_att.layout = (ImageLayout)barrier.newLayout;
-						if (barrier.oldLayout != VK_IMAGE_LAYOUT_UNDEFINED) {
-							assert(barrier.newLayout != VK_IMAGE_LAYOUT_UNDEFINED);
-						}
-					}
+					print_ib(barrier, "*");
+					add_full(barrier, img_att);
 				}
 			} else {
 #ifdef VUK_DEBUG_IMBAR
 				print_ib(barrier, "$");
 #endif
-				assert(img_att.layout == ImageLayout::eUndefined || barrier.oldLayout != VK_IMAGE_LAYOUT_UNDEFINED || init_allowed);
-				assert(barrier.oldLayout != VK_IMAGE_LAYOUT_UNDEFINED || !is_readonly_layout(barrier.newLayout));
-				im_bars.push_back(barrier);
-				img_att.layout = (ImageLayout)barrier.newLayout;
-
-				if (barrier.oldLayout != VK_IMAGE_LAYOUT_UNDEFINED) {
-					assert(barrier.newLayout != VK_IMAGE_LAYOUT_UNDEFINED);
-				}
-			}
-
-			if (is_framebuffer_attachment(dst_use)) {
-				prepare_render_pass_attachment(alloc, img_att);
+				add_full(barrier, img_att);
 			}
 		};
 
@@ -596,7 +585,7 @@ namespace vuk {
 			attref.layout = (VkImageLayout)img_att.layout;
 
 			descr.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-			descr.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+			descr.storeOp = is_readonly_layout((VkImageLayout)img_att.layout) ? VK_ATTACHMENT_STORE_OP_NONE_KHR : VK_ATTACHMENT_STORE_OP_STORE;
 
 			descr.format = (VkFormat)img_att.format;
 			descr.samples = (VkSampleCountFlagBits)img_att.sample_count.count;
@@ -897,7 +886,8 @@ namespace vuk {
 					/* no src access */
 				}
 				src_use = { to_use(src_access), executed.at(parm.node).stream };
-			} else {                       // read* -> undef, src = reads
+			} else { // read* -> undef, src = reads
+				auto arg_ty_copy = arg_ty;
 				if (link.reads.size() > 0) { // we need to emit: def -> reads, RAW or nothing (before first read)
 					// to avoid R->R deps, we emit a single dep for all the reads
 					// for this we compute a merged layout (TRANSFER_SRC_OPTIMAL / READ_ONLY_OPTIMAL / GENERAL)
@@ -912,7 +902,7 @@ namespace vuk {
 					for (int read_idx = 0; read_idx < reads.size(); read_idx++) {
 						auto& r = reads[read_idx];
 						if (r.node->kind == Node::CALL) {
-							arg_ty = r.node->call.fn.type()->opaque_fn.args[r.index];
+							arg_ty_copy = r.node->call.fn.type()->opaque_fn.args[r.index];
 							parm = r.node->call.args[r.index];
 						} else if (r.node->kind == Node::CONVERGE) {
 							continue;
@@ -920,7 +910,7 @@ namespace vuk {
 							assert(0);
 						}
 
-						if (arg_ty->kind == Type::IMBUED_TY) {
+						if (arg_ty_copy->kind == Type::IMBUED_TY) {
 							if (parm_ty->kind == Type::ALIASED_TY) { // this is coming from an output annotated, so we know the source access
 								auto src_arg = parm.node->call.args[parm_ty->aliased.ref_idx];
 								auto call_ty = parm.node->call.fn.type()->opaque_fn.args[parm_ty->aliased.ref_idx];
@@ -933,6 +923,7 @@ namespace vuk {
 							} else if (parm_ty->kind == Type::IMBUED_TY) {
 								assert(0);
 							} else { // there is no need to sync (eg. declare)
+								src_access = arg_ty->imbued.access;
 							}
 						} else if (parm_ty->kind == Type::ALIASED_TY) { // this is coming from an output annotated, so we know the source access
 							auto src_arg = parm.node->call.args[parm_ty->aliased.ref_idx];
@@ -992,7 +983,8 @@ namespace vuk {
 				}
 				dst_use = { to_use(dst_access), dst_stream };
 			} else if (type == RW::eRead) { // def -> read, dst = sum(read)
-				if (link.reads.size() > 0) {  // we need to emit: def -> reads, RAW or nothing (before first read)
+				auto arg_ty_copy = arg_ty;
+				if (link.reads.size() > 0) { // we need to emit: def -> reads, RAW or nothing (before first read)
 					// to avoid R->R deps, we emit a single dep for all the reads
 					// for this we compute a merged layout (TRANSFER_SRC_OPTIMAL / READ_ONLY_OPTIMAL / GENERAL)
 					ResourceUse use;
@@ -1006,7 +998,7 @@ namespace vuk {
 					for (int read_idx = 0; read_idx < reads.size(); read_idx++) {
 						auto& r = reads[read_idx];
 						if (r.node->kind == Node::CALL) {
-							arg_ty = r.node->call.fn.type()->opaque_fn.args[r.index];
+							arg_ty_copy = r.node->call.fn.type()->opaque_fn.args[r.index];
 							parm = r.node->call.args[r.index];
 						} else if (r.node->kind == Node::CONVERGE) {
 							continue;
@@ -1014,8 +1006,8 @@ namespace vuk {
 							assert(0);
 						}
 
-						if (arg_ty->kind == Type::IMBUED_TY) {
-							dst_access = arg_ty->imbued.access;
+						if (arg_ty_copy->kind == Type::IMBUED_TY) {
+							dst_access = arg_ty_copy->imbued.access;
 						} else {
 							assert(0);
 						}
@@ -1105,6 +1097,9 @@ namespace vuk {
 		void add_sync(Type* base_ty, Scheduler::DependencyInfo di, void* value) {
 			StreamResourceUse src_use = di.src_use;
 			StreamResourceUse dst_use = di.dst_use;
+			if ((ResourceUse)src_use == ResourceUse{} && !di.init_permitted) {
+				src_use.stream = nullptr;
+			}
 			auto src_stream = src_use.stream;
 			auto dst_stream = dst_use.stream;
 			bool has_src = src_stream;
@@ -1237,8 +1232,6 @@ namespace vuk {
 		assert(false);
 		return "";
 	}
-
-	// #define VUK_DUMP_EXEC
 
 	Result<void> ExecutableRenderGraph::execute(Allocator& alloc) {
 		Context& ctx = alloc.get_context();
@@ -1563,6 +1556,8 @@ namespace vuk {
 				if (sched.process(item)) {                    // we have executed every dep, so execute ourselves too
 					Stream* dst_stream = item.scheduled_stream; // the domain this call will execute on
 
+					auto vk_rec = dynamic_cast<VkQueueStream*>(dst_stream); // TODO: change this into dynamic dispatch on the Stream
+					assert(vk_rec);
 					// run all the barriers here!
 
 					for (size_t i = 0; i < node->call.args.size(); i++) {
@@ -1571,10 +1566,10 @@ namespace vuk {
 						auto& link = parm.link();
 
 						if (arg_ty->kind == Type::IMBUED_TY) {
-							auto dst_access = arg_ty->imbued.access;
+							auto access = arg_ty->imbued.access;
 
 							// here: figuring out which allocator to use to make image views for the RP and then making them
-							if (is_framebuffer_attachment(dst_access)) {
+							if (is_framebuffer_attachment(access)) {
 								auto urdef = link.urdef.node;
 								auto allocator = urdef->kind == Node::CONSTRUCT && urdef->construct.allocator ? *urdef->construct.allocator : alloc;
 								auto& img_att = sched.get_value<ImageAttachment>(parm);
@@ -1593,12 +1588,15 @@ namespace vuk {
 									alloc.get_context().set_name(img_att.image_view.payload, Name(name));
 								}
 							}
-						}
-						if (arg_ty->kind == Type::IMBUED_TY) {
-							auto access = arg_ty->imbued.access;
+
 							// Write and ReadWrite
 							RW sync_access = (is_write_access(access) || access == Access::eConsume) ? RW::eWrite : RW::eRead;
 							recorder.add_sync(sched.base_type(parm), sched.get_dependency_info(parm, arg_ty, sync_access, dst_stream), sched.get_value(parm));
+							
+							if (is_framebuffer_attachment(access)) {
+								auto& img_att = sched.get_value<ImageAttachment>(parm);
+								vk_rec->prepare_render_pass_attachment(alloc, img_att);
+							}
 						} else {
 							assert(0);
 						}
@@ -1606,8 +1604,6 @@ namespace vuk {
 
 					// make the renderpass if needed!
 					recorder.synchronize_stream(dst_stream);
-					auto vk_rec = dynamic_cast<VkQueueStream*>(dst_stream); // TODO: change this into dynamic dispatch on the Stream
-					assert(vk_rec);
 					// run the user cb!
 					std::vector<void*> opaque_rets;
 					if (node->call.fn.type()->kind == Type::OPAQUE_FN_TY) {
@@ -1711,7 +1707,7 @@ namespace vuk {
 					print_args(node->relacq.src);
 					fmt::print("\n");
 #endif
-					sched.done(node, nullptr, std::span{ values, node->relacq.src.size() });
+					sched.done(node, item.scheduled_stream, std::span{ values, node->relacq.src.size() });
 				} else {
 					for (size_t i = 0; i < node->relacq.src.size(); i++) {
 						sched.schedule_dependency(node->relacq.src[i], RW::eWrite);
@@ -1892,7 +1888,7 @@ namespace vuk {
 						}
 					}
 
-					sched.done(node, nullptr, sliced); // slice doesn't execute
+					sched.done(node, sched.executed.at(node->slice.image.node).stream, sliced); // slice doesn't execute
 				} else {
 					sched.schedule_dependency(node->slice.image, RW::eRead);
 					sched.schedule_dependency(node->slice.base_level, RW::eRead);
@@ -1909,7 +1905,9 @@ namespace vuk {
 					// half sync
 					for (size_t i = 1; i < node->converge.ref_and_diverged.size(); i++) {
 						auto& item = node->converge.ref_and_diverged[i];
-						recorder.add_sync(sched.base_type(item), sched.get_dependency_info(item, item.type(), RW::eRead, nullptr), sched.get_value(item));
+						recorder.add_sync(sched.base_type(item),
+						                  sched.get_dependency_info(item, item.type(), node->converge.write[i - 1] ? RW::eWrite : RW::eRead, nullptr),
+						                  sched.get_value(item));
 					}
 
 #ifdef VUK_DUMP_EXEC
@@ -1922,10 +1920,11 @@ namespace vuk {
 					fmt::print("\n");
 #endif
 
-					sched.done(node, nullptr, sched.get_value(base)); // converge doesn't execute
+					sched.done(node, item.scheduled_stream, sched.get_value(base)); // converge doesn't execute
 				} else {
-					for (size_t i = 0; i < node->converge.ref_and_diverged.size(); i++) {
-						sched.schedule_dependency(node->converge.ref_and_diverged[i], RW::eRead);
+					sched.schedule_dependency(node->converge.ref_and_diverged[0], RW::eRead);
+					for (size_t i = 1; i < node->converge.ref_and_diverged.size(); i++) {
+						sched.schedule_dependency(node->converge.ref_and_diverged[i], node->converge.write[i - 1] ? RW::eWrite : RW::eRead);
 					}
 				}
 				break;
