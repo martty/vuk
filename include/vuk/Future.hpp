@@ -210,8 +210,8 @@ namespace vuk {
 			auto item_def = get_def();
 			Ref item = node->module->make_slice(get_head(),
 			                                    node->module->make_constant(mip),
-			                                    node->module->make_constant(1),
-			                                    node->module->make_constant(0),
+			                                    node->module->make_constant(1u),
+			                                    node->module->make_constant(0u),
 			                                    node->module->make_constant(VK_REMAINING_ARRAY_LAYERS));
 			return Value(ExtRef(std::make_shared<ExtNode>(get_render_graph(), item.node), item), item_def, { node });
 		}
@@ -221,10 +221,10 @@ namespace vuk {
 		{
 			auto item_def = get_def();
 			Ref item = node->module->make_slice(get_head(),
-			                                    node->module->make_constant(0),
+			                                    node->module->make_constant(0u),
 			                                    node->module->make_constant(VK_REMAINING_MIP_LEVELS),
 			                                    node->module->make_constant(layer),
-			                                    node->module->make_constant(1));
+			                                    node->module->make_constant(1u));
 			return Value(ExtRef(std::make_shared<ExtNode>(get_render_graph(), item.node), item), item_def, { node });
 		}
 	};

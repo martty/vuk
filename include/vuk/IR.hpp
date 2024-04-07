@@ -126,10 +126,91 @@ namespace vuk {
 			}
 		}
 
+		static std::string_view to_sv(Access acc) {
+			switch (acc) {
+			case eNone:
+				return "None";
+			case eClear:
+				return "Clear";
+			case eColorWrite:
+				return "ColorW";
+			case eColorRead:
+				return "ColorR";
+			case eColorRW:
+				return "ColorRW";
+			case eDepthStencilRead:
+				return "DSRead";
+			case eDepthStencilWrite:
+				return "DSWrite";
+			case eDepthStencilRW:
+				return "DSRW";
+			case eInputRead:
+				return "InputR";
+			case eVertexSampled:
+				return "VtxS";
+			case eVertexRead:
+				return "VtxR";
+			case eAttributeRead:
+				return "AttrR";
+			case eIndexRead:
+				return "IdxR";
+			case eIndirectRead:
+				return "IndirR";
+			case eFragmentSampled:
+				return "FragS";
+			case eFragmentRead:
+				return "FragR";
+			case eFragmentWrite:
+				return "FragW";
+			case eFragmentRW:
+				return "FragRW";
+			case eTransferRead:
+				return "XferR";
+			case eTransferWrite:
+				return "XferW";
+			case eTransferRW:
+				return "XferRW";
+			case eComputeRead:
+				return "CompR";
+			case eComputeWrite:
+				return "CompW";
+			case eComputeRW:
+				return "CompRW";
+			case eComputeSampled:
+				return "CompS";
+			case eRayTracingRead:
+				return "RTR";
+			case eRayTracingWrite:
+				return "RTW";
+			case eRayTracingRW:
+				return "RTRW";
+			case eRayTracingSampled:
+				return "RTS";
+			case eAccelerationStructureBuildRead:
+				return "ASBuildR";
+			case eAccelerationStructureBuildWrite:
+				return "ASBuildW";
+			case eAccelerationStructureBuildRW:
+				return "ASBuildRW";
+			case eHostRead:
+				return "HostR";
+			case eHostWrite:
+				return "HostW";
+			case eHostRW:
+				return "HostRW";
+			case eMemoryRead:
+				return "MemR";
+			case eMemoryWrite:
+				return "MemW";
+			case eMemoryRW:
+				return "MemRW";
+			}
+		}
+
 		static std::string to_string(Type* t) {
 			switch (t->kind) {
 			case IMBUED_TY:
-				return to_string(t->imbued.T) + std::string(":") + std::to_string(t->imbued.access);
+				return to_string(t->imbued.T) + std::string(":") + std::string(to_sv(t->imbued.access));
 			case ALIASED_TY:
 				return to_string(t->aliased.T) + std::string("@") + std::to_string(t->aliased.ref_idx);
 			case MEMORY_TY:
@@ -321,10 +402,16 @@ namespace vuk {
 
 		std::string_view kind_to_sv() {
 			switch (kind) {
+			case PLACEHOLDER:
+				return "placeholder";
+			case CONSTANT:
+				return "constant";
 			case IMPORT:
 				return "import";
 			case CONSTRUCT:
 				return "construct";
+			case ACQUIRE_NEXT_IMAGE:
+				return "acquire_next_image";
 			case CALL:
 				return "call";
 			case EXTRACT:

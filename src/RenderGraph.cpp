@@ -50,12 +50,142 @@ namespace vuk {
 			}
 		}
 
-		
 		cg_module->builtin_buffer = type_map[Type::hash(cg_module->builtin_buffer)];
 		cg_module->builtin_image = type_map[Type::hash(cg_module->builtin_image)];
 		cg_module->builtin_swapchain = type_map[Type::hash(cg_module->builtin_swapchain)];
 
 		return { expected_value };
+	}
+
+	void RGCImpl::dump_graph() {
+		if (nodes.size() < 50) {
+			return;
+		}
+
+		std::stringstream ss;
+		ss << "digraph vuk {\n";
+		ss << "rankdir=\"TB\"\nnewrank = true\nnode[shape = rectangle width = 0 height = 0 margin = 0]\n";
+		for (auto node : nodes) {
+			if (node->kind == Node::CONSTANT) {
+				if (node->type[0]->kind == Type::INTEGER_TY || node->type[0]->kind == Type::MEMORY_TY) {
+					continue;
+				}
+			}
+			if (node->kind == Node::PLACEHOLDER || node->kind == Node::RELACQ || node->kind == Node::SLICE || node->kind == Node::INDIRECT_DEPEND) {
+				continue;
+			}
+
+			auto arg_count = node->generic_node.arg_count == (uint8_t)~0u ? node->variable_node.args.size() : node->generic_node.arg_count;
+			auto result_count = node->type.size();
+			ss << uintptr_t(node) << " [label=<\n";
+			ss << "<TABLE BORDER=\"0\" CELLBORDER=\"1\" CELLSPACING=\"0\"";
+			ss << "><TR>\n ";
+
+			if (node->debug_info) {
+				for (auto& n : node->debug_info->result_names) {
+					ss << "<TD>";
+					ss << "%" << n;
+					ss << "</TD>";
+				}
+			}
+
+			for (size_t i = 0; i < result_count; i++) {
+				ss << "<TD PORT= \"r" << i << "\">";
+				ss << "<FONT FACE=\"Courier New\">";
+				ss << Type::to_string(node->type[i]);
+				ss << "</FONT>";
+				ss << "</TD>";
+			}
+			ss << "<TD>";
+			ss << node->kind_to_sv();
+			if (node->kind == Node::CALL) {
+				auto opaque_fn_ty = node->call.fn.type()->opaque_fn;
+
+				if (node->call.fn.type()->debug_info) {
+					ss << " <B>";
+					ss << node->call.fn.type()->debug_info->name;
+					ss << "</B>";
+				}
+			}
+			ss << "</TD>";
+
+			
+
+			for (size_t i = 0; i < arg_count; i++) {
+				auto arg = node->generic_node.arg_count != (uint8_t)~0u ? node->fixed_node.args[i] : node->variable_node.args[i];
+
+				ss << "<TD PORT= \"a" << i << "\">";
+				if (arg.node->kind == Node::CONSTANT) {
+					if (arg.type()->kind == Type::INTEGER_TY) {
+						if (arg.type()->integer.width == 32) {
+							ss << constant<uint32_t>(arg);
+						} else {
+							ss << constant<uint64_t>(arg);
+						}
+					} else if (arg.type()->kind == Type::MEMORY_TY) {
+						ss << "&lt;mem&gt;";
+					}
+				} else if (arg.node->kind == Node::PLACEHOLDER){
+					ss << "?";
+				} else {
+					if (node->kind == Node::CALL) {
+						auto opaque_fn_ty = node->call.fn.type()->opaque_fn;
+						if (opaque_fn_ty.args[i]->kind == Type::IMBUED_TY) {
+							ss << "<FONT FACE=\"Courier New\">";
+							ss << ":" << Type::to_sv(opaque_fn_ty.args[i]->imbued.access);
+							ss << "</FONT>";
+						}
+					} else {
+						ss << "&bull;";
+					}
+				}
+				ss << "</TD>";
+			}
+
+			ss << "</TR></TABLE>>];\n";
+
+			// connections
+			for (size_t i = 0; i < arg_count; i++) {
+				auto arg = node->generic_node.arg_count != (uint8_t)~0u ? node->fixed_node.args[i] : node->variable_node.args[i];
+				if (arg.node->kind == Node::CONSTANT) {
+					if (arg.type()->kind == Type::INTEGER_TY || arg.type()->kind == Type::MEMORY_TY) {
+						continue;
+					}
+				}
+				if (arg.node->kind == Node::PLACEHOLDER) {
+					continue;
+				}
+				if (arg.node->kind == Node::RELACQ) { // bridge relacqs
+					auto bridged_arg = arg.node->relacq.src[arg.index];
+					ss << uintptr_t(bridged_arg.node) << " :r" << bridged_arg.index << " -> " << uintptr_t(node) << " :a" << i << " :n [color=blue]\n";
+				} else if (arg.node->kind == Node::INDIRECT_DEPEND) { // bridge indirect depends (connect to node)
+					auto bridged_arg = arg.node->indirect_depend.rref;
+					ss << uintptr_t(bridged_arg.node) << " -> " << uintptr_t(node) << " :a" << i << " :n [color=blue]\n";
+				} else if (arg.node->kind == Node::SLICE){ // bridge slices
+					auto bridged_arg = arg.node->slice.image;
+					if (bridged_arg.node->kind == Node::RELACQ) {
+						bridged_arg = bridged_arg.node->relacq.src[arg.index];
+					}
+					Subrange::Image r = { constant<uint32_t>(arg.node->slice.base_level),
+						                    constant<uint32_t>(arg.node->slice.level_count),
+						                    constant<uint32_t>(arg.node->slice.base_layer),
+						                    constant<uint32_t>(arg.node->slice.layer_count) };
+					ss << uintptr_t(bridged_arg.node) << " :r" << bridged_arg.index << " -> " << uintptr_t(node) << " :a" << i << " :n [color=green, label=\"";
+					if (r.base_level > 0 || r.level_count != VK_REMAINING_MIP_LEVELS) {
+						ss << fmt::format("[m{}:{}]", r.base_level, r.base_level + r.level_count - 1);
+					}
+					if (r.base_layer > 0 || r.layer_count != VK_REMAINING_ARRAY_LAYERS) {
+						ss << fmt::format("[l{}:{}]", r.base_layer, r.base_layer + r.layer_count - 1);
+					} 
+					ss << "\"]\n";
+				} else {
+					ss << uintptr_t(arg.node) << " :r" << arg.index << " -> " << uintptr_t(node) << " :a" << i << " :n\n";
+				}
+			}
+		}
+		ss << "}\n";
+		printf("\n\n%s\n\n", ss.str().c_str());
+		printf("");
 	}
 
 	Result<void> RGCImpl::build_nodes() {
@@ -814,6 +944,7 @@ namespace vuk {
 		}
 
 		VUK_DO_OR_RETURN(impl->build_nodes());
+		//impl->dump_graph();
 		VUK_DO_OR_RETURN(impl->build_links());
 		VUK_DO_OR_RETURN(impl->unify_types());
 

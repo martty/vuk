@@ -133,6 +133,8 @@ namespace vuk {
 
 		ImageUsageFlags compute_usage(const ChainLink* head);
 
+		void dump_graph();
+
 		ProfilingCallbacks callbacks;
 	};
 #undef INIT
