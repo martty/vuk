@@ -651,8 +651,11 @@ public:
 		auto rg = args.size() > 0 ? args[0].get_render_graph() : std::make_shared<RG>();
 		std::vector<Ref> refs;
 		std::vector<Ref> defs;
-		for (auto& arg : args) {
-			rg->subgraphs.push_back(arg.get_render_graph());
+		for (size_t i = 0; i < args.size(); i++) {
+			auto& arg = args[i];
+			if (i != 0) {
+				rg->subgraphs.push_back(arg.get_render_graph());
+			}
 			refs.push_back(arg.get_head());
 			defs.push_back(arg.get_def());
 		}
@@ -673,8 +676,11 @@ public:
 		auto rg = args.size() > 0 ? args[0].get_render_graph() : std::make_shared<RG>();
 		std::vector<Ref> refs;
 		std::vector<Ref> defs;
-		for (auto& arg : args) {
-			rg->subgraphs.push_back(arg.get_render_graph());
+		for (size_t i = 0; i < args.size(); i++) {
+			auto& arg = args[i];
+			if (i != 0) {
+				rg->subgraphs.push_back(arg.get_render_graph());
+			}
 			refs.push_back(arg.get_head());
 			defs.push_back(arg.get_def());
 		}

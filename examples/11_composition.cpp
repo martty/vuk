@@ -118,7 +118,6 @@ namespace {
 			                       .format = vuk::Format::eR32G32B32A32Sfloat,
 			                       .sample_count = vuk::Samples::e1,
 			                       .view_type = vuk::ImageViewType::eCube,
-			                       .layout = vuk::ImageLayout::eReadOnlyOptimal,
 			                       .base_level = 0,
 			                       .level_count = 1,
 			                       .base_layer = 0,

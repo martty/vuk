@@ -56,9 +56,10 @@ namespace vuk {
 			auto new_rg = std::make_shared<RG>();
 			auto new_def = new_rg->make_acquire(current_ty, nullptr, head.index, current_value);
 			auto new_extnode = std::make_shared<ExtNode>(new_rg, new_def.node);
+			node->module = {};
 			new_def.node->acquire.acquire = node->acqrel;
 			if (deps.size() > 0) {
-				deps = { node, deps.back() };
+				deps = { node };
 			} else {
 				deps = { node };
 			}

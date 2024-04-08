@@ -169,5 +169,5 @@ Value<ImageAttachment> util::ImGui_ImplVuk_Render(Allocator& allocator,
 		                      return dst;
 	                      });
 
-	return pass(target, sampled_images_array);
+	return pass(target, std::move(sampled_images_array));
 }
