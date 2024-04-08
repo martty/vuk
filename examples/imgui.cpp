@@ -49,7 +49,7 @@ util::ImGuiData util::ImGui_ImplVuk_Init(Allocator& allocator) {
 	return data;
 }
 
-Value<ImageAttachment> util::ImGui_ImplVuk_Render(Allocator& allocator,
+Value<ImageAttachment> util::ImGui_ImplVuk_Render(Allocator & allocator,
                                                   Value<ImageAttachment> target,
                                                   util::ImGuiData& data,
                                                   ImDrawData* draw_data,
@@ -79,15 +79,14 @@ Value<ImageAttachment> util::ImGui_ImplVuk_Render(Allocator& allocator,
 	auto imind = *allocate_buffer(allocator, { MemoryUsage::eCPUtoGPU, index_size, 1 });
 
 	size_t vtx_dst = 0, idx_dst = 0;
-	Compiler comp;
 	for (int n = 0; n < draw_data->CmdListsCount; n++) {
 		const ImDrawList* cmd_list = draw_data->CmdLists[n];
 		auto imverto = imvert->add_offset(vtx_dst * sizeof(ImDrawVert));
 		auto imindo = imind->add_offset(idx_dst * sizeof(ImDrawIdx));
 
-		// TODO:
-		host_data_to_buffer(allocator, DomainFlagBits{}, imverto, std::span(cmd_list->VtxBuffer.Data, cmd_list->VtxBuffer.Size)).wait(allocator, comp);
-		host_data_to_buffer(allocator, DomainFlagBits{}, imindo, std::span(cmd_list->IdxBuffer.Data, cmd_list->IdxBuffer.Size)).wait(allocator, comp);
+		memcpy(imverto.mapped_ptr, cmd_list->VtxBuffer.Data, cmd_list->VtxBuffer.Size * sizeof(ImDrawVert));
+		memcpy(imindo.mapped_ptr, cmd_list->IdxBuffer.Data, cmd_list->IdxBuffer.Size * sizeof(ImDrawIdx));
+
 		vtx_dst += cmd_list->VtxBuffer.Size;
 		idx_dst += cmd_list->IdxBuffer.Size;
 	}
