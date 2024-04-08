@@ -85,8 +85,6 @@ namespace vuk {
 
 		std::span<ScheduledItem*> transfer_passes, compute_passes, graphics_passes;
 
-		std::unordered_map<Node*, ExecutionInfo> executed;
-
 		std::unordered_map<Node*, Type*> type_restore;
 
 		template<class T>
@@ -109,9 +107,8 @@ namespace vuk {
 				Swapchain* swp = reinterpret_cast<Swapchain*>(get_value(parm.node->acquire_next_image.swapchain));
 				return &swp->images[swp->image_index];
 			} else {
-				auto it = executed.find(parm.node);
-				if (it != executed.end()) {
-					return it->second.values[parm.index];
+				if (parm.node->execution_info) {
+					return parm.node->execution_info->values[parm.index];
 				} else {
 					return eval<void*>(parm);
 				}
@@ -119,9 +116,8 @@ namespace vuk {
 		}
 
 		std::span<void*> get_values(Node* node) {
-			auto it = executed.find(node);
-			assert(it != executed.end());
-			return it->second.values;
+			assert(node->execution_info);
+			return node->execution_info->values;
 		}
 
 		Result<void> build_nodes();

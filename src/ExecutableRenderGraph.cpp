@@ -729,7 +729,6 @@ namespace vuk {
 		    allocator(all),
 		    scheduled_execables(impl->scheduled_execables),
 		    pass_reads(impl->pass_reads),
-		    executed(impl->executed),
 		    impl(impl) {
 			// these are the items that were determined to run
 			for (auto& i : scheduled_execables) {
@@ -750,7 +749,6 @@ namespace vuk {
 
 		size_t naming_index_counter = 0;
 		size_t instr_counter = 0;
-		std::unordered_map<Node*, ExecutionInfo>& executed;
 		std::unordered_set<Node*> scheduled;
 
 		void schedule_new(Node* node) {
@@ -807,7 +805,7 @@ namespace vuk {
 			auto value_ptr = static_cast<void*>(new (arena.ensure_space(sizeof(T))) T{ value });
 			auto values = new (arena.ensure_space(sizeof(void* [1]))) void*[1];
 			values[0] = value_ptr;
-			executed.emplace(node, ExecutionInfo{ stream, counter, std::span{ values, 1 } });
+			node->execution_info = new (arena.ensure_space(sizeof(ExecutionInfo))) ExecutionInfo{ stream, counter, std::span{ values, 1 } };
 		}
 
 		void done(Node* node, Stream* stream, void* value_ptr) {
@@ -815,7 +813,7 @@ namespace vuk {
 			naming_index_counter += node->type.size();
 			auto values = new (arena.ensure_space(sizeof(void* [1]))) void*[1];
 			values[0] = value_ptr;
-			executed.emplace(node, ExecutionInfo{ stream, counter, std::span{ values, 1 } });
+			node->execution_info = new (arena.ensure_space(sizeof(ExecutionInfo))) ExecutionInfo{ stream, counter, std::span{ values, 1 } };
 		}
 
 		void done(Node* node, Stream* stream, std::span<void*> values) {
@@ -823,7 +821,7 @@ namespace vuk {
 			naming_index_counter += node->type.size();
 			auto v = new (arena.ensure_space(sizeof(void*) * values.size())) void*[values.size()];
 			std::copy(values.begin(), values.end(), v);
-			executed.emplace(node, ExecutionInfo{ stream, counter, std::span{ v, values.size() } });
+			node->execution_info = new (arena.ensure_space(sizeof(ExecutionInfo))) ExecutionInfo{ stream, counter, std::span{ v, values.size() } };
 		}
 
 		template<class T>
@@ -886,7 +884,7 @@ namespace vuk {
 				} else {
 					/* no src access */
 				}
-				src_use = { to_use(src_access), executed.at(parm.node).stream };
+				src_use = { to_use(src_access), parm.node->execution_info->stream };
 			} else { // read* -> undef, src = reads
 				auto arg_ty_copy = arg_ty;
 				if (link.reads.size() > 0) { // we need to emit: def -> reads, RAW or nothing (before first read)
@@ -938,7 +936,7 @@ namespace vuk {
 							/* no src access */
 						}
 
-						StreamResourceUse use = { to_use(src_access), executed.at(parm.node).stream };
+						StreamResourceUse use = { to_use(src_access), parm.node->execution_info->stream };
 						if (use.stream == nullptr) {
 							use.stream = src_use.stream;
 						} else if (use.stream != src_use.stream && src_use.stream) {
@@ -1304,7 +1302,7 @@ namespace vuk {
 			} else if (parm.node->kind == Node::PLACEHOLDER) {
 				return std::string("?");
 			} else {
-				return fmt::format("%{}_{}", parm.node->kind_to_sv(), sched.executed.at(parm.node).naming_index + parm.index);
+				return fmt::format("%{}_{}", parm.node->kind_to_sv(), parm.node->execution_info->naming_index + parm.index);
 			}
 			assert(0);
 			return std::string("???");
@@ -1351,7 +1349,7 @@ namespace vuk {
 			auto item = sched.work_queue.front();
 			sched.work_queue.pop_front();
 			auto& node = item.execable;
-			if (sched.executed.count(node)) { // only going execute things once
+			if (node->execution_info) { // only going execute things once
 				continue;
 			}
 			if (item.ready) {
@@ -1889,7 +1887,7 @@ namespace vuk {
 						}
 					}
 
-					sched.done(node, sched.executed.at(node->slice.image.node).stream, sliced); // slice doesn't execute
+					sched.done(node, node->slice.image.node->execution_info->stream, sliced); // slice doesn't execute
 				} else {
 					sched.schedule_dependency(node->slice.image, RW::eRead);
 					sched.schedule_dependency(node->slice.base_level, RW::eRead);
@@ -1952,7 +1950,7 @@ namespace vuk {
 					// half sync
 					// recorder.add_sync(sched.base_type(true_ref), sched.get_dependency_info(true_ref, true_ref.type(), RW::eWrite, nullptr), sched.get_value(true_ref));
 
-					sched.done(node, sched.executed.at(rref.node).stream, sched.get_value(true_ref)); // indirect depend doesn't execute
+					sched.done(node, rref.node->execution_info->stream, sched.get_value(true_ref)); // indirect depend doesn't execute
 				} else {
 					sched.schedule_dependency(true_ref, RW::eWrite);
 					sched.schedule_new(rref.node);
@@ -1962,6 +1960,10 @@ namespace vuk {
 			default:
 				assert(0);
 			}
+		}
+
+		for (auto& node : impl->nodes) {
+			node->execution_info = nullptr;
 		}
 
 		// restore acquire types

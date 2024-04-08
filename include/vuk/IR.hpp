@@ -264,6 +264,8 @@ namespace vuk {
 		RelSpan<ChainLink*> child_chains;
 	};
 
+	struct ExecutionInfo;
+
 	struct Node {
 		static constexpr uint8_t MAX_ARGS = 16;
 
@@ -294,6 +296,7 @@ namespace vuk {
 		NodeDebugInfo* debug_info = nullptr;
 		SchedulingInfo* scheduling_info = nullptr;
 		ChainLink* links = nullptr;
+		ExecutionInfo* execution_info = nullptr;
 
 		uint8_t flag = 0;
 
