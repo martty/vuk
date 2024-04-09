@@ -109,8 +109,6 @@ namespace vuk {
 			}
 			ss << "</TD>";
 
-			
-
 			for (size_t i = 0; i < arg_count; i++) {
 				auto arg = node->generic_node.arg_count != (uint8_t)~0u ? node->fixed_node.args[i] : node->variable_node.args[i];
 
@@ -125,7 +123,7 @@ namespace vuk {
 					} else if (arg.type()->kind == Type::MEMORY_TY) {
 						ss << "&lt;mem&gt;";
 					}
-				} else if (arg.node->kind == Node::PLACEHOLDER){
+				} else if (arg.node->kind == Node::PLACEHOLDER) {
 					ss << "?";
 				} else {
 					if (node->kind == Node::CALL) {
@@ -161,7 +159,7 @@ namespace vuk {
 				} else if (arg.node->kind == Node::INDIRECT_DEPEND) { // bridge indirect depends (connect to node)
 					auto bridged_arg = arg.node->indirect_depend.rref;
 					ss << uintptr_t(bridged_arg.node) << " -> " << uintptr_t(node) << " :a" << i << " :n [color=blue]\n";
-				} else if (arg.node->kind == Node::SLICE){ // bridge slices
+				} else if (arg.node->kind == Node::SLICE) { // bridge slices
 					auto bridged_arg = arg.node->slice.image;
 					if (bridged_arg.node->kind == Node::RELACQ) {
 						bridged_arg = bridged_arg.node->relacq.src[arg.index];
@@ -176,7 +174,7 @@ namespace vuk {
 					}
 					if (r.base_layer > 0 || r.layer_count != VK_REMAINING_ARRAY_LAYERS) {
 						ss << fmt::format("[l{}:{}]", r.base_layer, r.base_layer + r.layer_count - 1);
-					} 
+					}
 					ss << "\"]\n";
 				} else {
 					ss << uintptr_t(arg.node) << " :r" << arg.index << " -> " << uintptr_t(node) << " :a" << i << " :n\n";
@@ -776,25 +774,6 @@ namespace vuk {
 
 		impl->refs.assign(nodes.begin(), nodes.end());
 
-		auto replace_refs = [&](Ref needle, Ref replace_with) {
-			for (auto node : impl->nodes) {
-				auto count = node->generic_node.arg_count;
-				if (count != (uint8_t)~0u) {
-					for (int i = 0; i < count; i++) {
-						if (node->fixed_node.args[i] == needle) {
-							node->fixed_node.args[i] = replace_with;
-						}
-					}
-				} else {
-					for (int i = 0; i < node->variable_node.args.size(); i++) {
-						if (node->variable_node.args[i] == needle) {
-							node->variable_node.args[i] = replace_with;
-						}
-					}
-				}
-			}
-		};
-
 		// implicit convergence: this has to be done on the full node set
 		// insert converge nodes
 		std::unordered_map<Ref, std::vector<Ref>> slices;
@@ -914,6 +893,12 @@ namespace vuk {
 		VUK_DO_OR_RETURN(impl->build_nodes());
 
 		// eliminate useless relacqs
+		struct Replace {
+			Ref needle;
+			Ref value;
+		};
+		std::vector<Replace, short_alloc<Replace>> replaces(*impl->arena_);
+		std::vector<Ref*, short_alloc<Ref*>> args(*impl->arena_);
 
 		for (auto node : impl->nodes) {
 			switch (node->kind) {
@@ -923,7 +908,7 @@ namespace vuk {
 						auto needle = Ref{ node, i };
 						auto replace_with = node->relacq.src[i];
 
-						replace_refs(needle, replace_with);
+						replaces.emplace_back(needle, replace_with);
 					}
 				} else {
 					switch (node->relacq.rel_acq->status) {
@@ -933,7 +918,7 @@ namespace vuk {
 					case Signal::Status::eHostAvailable:
 						for (size_t i = 0; i < node->relacq.src.size(); i++) {
 							auto new_ref = impl->cg_module->make_acquire(node->type[i], node->relacq.rel_acq, i, node->relacq.values[i]);
-							replace_refs(Ref{ node, i }, new_ref);
+							replaces.emplace_back(Ref{ node, i }, new_ref);
 						}
 						break;
 					}
@@ -943,8 +928,39 @@ namespace vuk {
 			}
 		}
 
+		// collect all args
+		for (auto node : impl->nodes) {
+			auto count = node->generic_node.arg_count;
+			if (count != (uint8_t)~0u) {
+				for (int i = 0; i < count; i++) {
+					auto arg = &node->fixed_node.args[i];
+					args.push_back(arg);
+				}
+			} else {
+				for (int i = 0; i < node->variable_node.args.size(); i++) {
+					auto arg = &(*(Ref**)&node->variable_node.args)[i];
+					args.push_back(arg);
+				}
+			}
+		}
+
+		std::sort(args.begin(), args.end(), [](Ref* a, Ref* b) { return *a < *b; });
+		std::sort(replaces.begin(), replaces.end(), [](Replace& a, Replace& b) { return a.needle < b.needle; });
+		
+		// do the replaces
+		auto arg_it = args.begin();
+		for (auto& r : replaces) {
+			while (**arg_it < r.needle) {
+				++arg_it;
+			}
+			while (arg_it != args.end() && **arg_it == r.needle) {
+				**arg_it = r.value;
+				++arg_it;
+			}
+		}
+
 		VUK_DO_OR_RETURN(impl->build_nodes());
-		//impl->dump_graph();
+		// impl->dump_graph();
 		VUK_DO_OR_RETURN(impl->build_links());
 		VUK_DO_OR_RETURN(impl->unify_types());
 
