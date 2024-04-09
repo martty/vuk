@@ -1093,6 +1093,12 @@ namespace vuk {
 			return node;
 		}
 
+		void mutate(Node* new_node) {
+			assert(node->kind == Node::RELACQ);
+			node->relacq.rel_acq = nullptr;
+			node = this->module->make_relacq(new_node, acqrel);
+		}
+
 		std::shared_ptr<RG> module;
 		AcquireRelease* acqrel;
 		std::unique_ptr<AcquireRelease> owned_acqrel;
