@@ -944,13 +944,15 @@ namespace vuk {
 			}
 		}
 
-		std::sort(args.begin(), args.end(), [](Ref* a, Ref* b) { return *a < *b; });
-		std::sort(replaces.begin(), replaces.end(), [](Replace& a, Replace& b) { return a.needle < b.needle; });
-		
+		std::sort(args.begin(), args.end(), [](Ref* a, Ref* b) { return a->node < b->node || (a->node == b->node && a->index < b->index); });
+		std::sort(replaces.begin(), replaces.end(), [](Replace& a, Replace& b) {
+			return a.needle.node < b.needle.node || (a.needle.node == b.needle.node && a.needle.index < b.needle.index);
+		});
+
 		// do the replaces
 		auto arg_it = args.begin();
 		for (auto& r : replaces) {
-			while (**arg_it < r.needle) {
+			while (arg_it != args.end() && **arg_it < r.needle) {
 				++arg_it;
 			}
 			while (arg_it != args.end() && **arg_it == r.needle) {
