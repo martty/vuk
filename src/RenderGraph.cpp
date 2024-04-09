@@ -249,7 +249,7 @@ namespace vuk {
 		for (auto& node : nodes) {
 			size_t result_count = node->type.size();
 			if (result_count > 0) {
-				node->links = new (cg_module->payload_arena.ensure_space(sizeof(ChainLink) * result_count)) ChainLink[result_count];
+				node->links = new (arena_->allocate(sizeof(ChainLink) * result_count)) ChainLink[result_count];
 			}
 		}
 
