@@ -651,9 +651,10 @@ namespace vuk {
 
 		Type*& get_builtin_image() {
 			if (!builtin_image) {
+				auto u32_t = u32();
 				auto mem_ty = emplace_type(Type{ .kind = Type::MEMORY_TY });
 				auto image_ = new (payload_arena.ensure_space(sizeof(Type* [9]))) Type* [9] {
-					u32(), u32(), u32(), mem_ty, mem_ty, u32(), u32(), u32(), u32()
+					u32_t, u32_t, u32_t, mem_ty, mem_ty, u32_t, u32_t, u32_t, u32_t
 				};
 				auto image_offsets = new (payload_arena.ensure_space(sizeof(size_t[9]))) size_t[9]{ offsetof(ImageAttachment, extent) + offsetof(Extent3D, width),
 					                                                                                  offsetof(ImageAttachment, extent) + offsetof(Extent3D, height),
