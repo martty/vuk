@@ -41,6 +41,14 @@ namespace vuk {
 			return def;
 		}
 
+		Ref get_peeled_head() const noexcept {
+			if (head.node->kind == Node::RELACQ) {
+				return head.node->relacq.src[head.index];
+			} else {
+				return head;
+			}
+		}
+
 		void release(Access access = Access::eNone, DomainFlagBits domain = DomainFlagBits::eAny) noexcept {
 			assert(node->acqrel->status == Signal::Status::eDisarmed);
 			auto release = node->module->make_release({ node->get_node(), head.index }, nullptr, access, domain);

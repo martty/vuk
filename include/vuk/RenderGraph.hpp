@@ -478,7 +478,7 @@ public:
 
 	template<typename... T>
 	static auto fill_ret_ty(RG& rg, std::array<size_t, sizeof...(T)> idxs, const std::tuple<T...>& args, std::vector<Type*>& ret_types) {
-		(ret_types.emplace_back(rg.make_aliased_ty(std::get<T>(args).src.type(), 0)), ...);
+		(ret_types.emplace_back(rg.make_aliased_ty(Type::stripped(std::get<T>(args).src.type()), 0)), ...);
 		for (auto i = 0; i < ret_types.size(); i++) {
 			ret_types[i]->aliased.ref_idx = idxs[i];
 		}
@@ -517,8 +517,10 @@ public:
 				auto rgp = first.get_render_graph();
 				RG& rg = *rgp.get();
 
+				bool reuse_node = first.node.use_count() == 1;
+
 				std::vector<Type*> arg_types;
-				std::tuple arg_tuple_as_a = { T{ nullptr, args.get_head(), args.get_def() }... };
+				std::tuple arg_tuple_as_a = { T{ nullptr, args.node.use_count() == 1 ? args.get_peeled_head() : args.get_head(), args.get_def() }... };
 				fill_arg_ty(rg, arg_tuple_as_a, arg_types);
 
 				std::vector<Type*> ret_types;
@@ -532,11 +534,9 @@ public:
 				auto opaque_fn_ty = rg.make_opaque_fn_ty(arg_types, ret_types, vuk::DomainFlagBits::eAny, untyped_cb);
 				opaque_fn_ty->debug_info = rg.allocate_type_debug_info(name.c_str());
 				auto opaque_fn = rg.make_declare_fn(opaque_fn_ty);
-				Node* node = rg.make_call(opaque_fn, args.get_head()...);
+				Node* node = rg.make_call(opaque_fn, args.node.use_count() == 1 ? args.get_peeled_head() : args.get_head()...);
 				node->scheduling_info = new (rg.payload_arena.ensure_space(sizeof(SchedulingInfo))) SchedulingInfo(scheduling_info);
 				rg.set_source_location(node, loc);
-
-				bool reuse_node = first.node.use_count() == 1;
 
 				std::vector<std::shared_ptr<ExtNode>> dependent_nodes;
 				[reuse_node, & dependent_nodes](auto& first, auto&... rest) {
