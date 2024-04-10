@@ -1610,6 +1610,12 @@ namespace vuk {
 						if (node->call.fn.type()->debug_info) {
 							ctx.begin_region(vk_rec->cbuf, node->call.fn.type()->debug_info->name);
 						}
+
+						void* rpass_profile_data = nullptr;
+						if (vk_rec->callbacks->on_begin_pass)
+							rpass_profile_data =
+							    vk_rec->callbacks->on_begin_pass(vk_rec->callbacks->user_data, node->call.fn.type()->debug_info->name, vk_rec->cbuf, vk_rec->domain);
+
 						if (vk_rec->rp.rpci.attachments.size() > 0) {
 							vk_rec->prepare_render_pass();
 							fill_render_pass_info(vk_rec->rp, 0, cobuf);
@@ -1632,6 +1638,8 @@ namespace vuk {
 						if (node->call.fn.type()->debug_info) {
 							ctx.end_region(vk_rec->cbuf);
 						}
+						if (vk_rec->callbacks->on_end_pass)
+							vk_rec->callbacks->on_end_pass(vk_rec->callbacks->user_data, rpass_profile_data);
 					} else {
 						assert(0);
 					}
