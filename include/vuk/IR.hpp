@@ -359,8 +359,8 @@ namespace vuk {
 				const Ref dst;
 				Signal* signal;
 			} wait;
-			struct : Fixed<1> {
-				Ref arg;
+			struct : Fixed<0> {
+				void* value;
 				AcquireRelease* acquire;
 				size_t index;
 			} acquire;
@@ -484,7 +484,7 @@ namespace vuk {
 			return eval<T>(ref.node->construct.args[0]);
 		}
 		case Node::ACQUIRE: {
-			return eval<T>(ref.node->acquire.arg);
+			return static_cast<T>(ref.node->acquire.value);
 		}
 		case Node::RELACQ: {
 			return eval<T>(ref.node->relacq.src[ref.index]);
@@ -970,7 +970,10 @@ namespace vuk {
 		}
 
 		Node* make_release(Ref src, AcquireRelease* acq_rel, Access dst_access, DomainFlagBits dst_domain) {
-			return emplace_op(Node{ .kind = Node::RELEASE, .release = { .src = src, .release = acq_rel, .dst_access = dst_access, .dst_domain = dst_domain } });
+			auto ty = new (payload_arena.ensure_space(sizeof(Type*))) Type*(Type::stripped(src.type()));
+			return emplace_op(
+			    Node{ .kind = Node::RELEASE,
+			          .type = std::span{ ty, 1 },.release = { .src = src, .release = acq_rel, .dst_access = dst_access, .dst_domain = dst_domain } });
 		}
 
 		Node* make_relacq(Node* src, AcquireRelease* acq_rel) {
@@ -1009,11 +1012,10 @@ namespace vuk {
 
 		Ref make_acquire(Type* type, AcquireRelease* acq_rel, size_t index, void* value) {
 			auto ty = new (payload_arena.ensure_space(sizeof(Type*))) Type*(copy_type(type));
-			auto mem_ty = new (payload_arena.ensure_space(sizeof(Type*))) Type*(emplace_type(Type{ .kind = Type::MEMORY_TY }));
 			return first(emplace_op(
 			    Node{ .kind = Node::ACQUIRE,
 			          .type = std::span{ ty, 1 },
-			          .acquire = { .arg = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = value } })),
+			          .acquire = { .value = value,
 			                       .acquire = acq_rel,
 			                       .index = index } }));
 		}

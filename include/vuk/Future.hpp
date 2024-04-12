@@ -20,7 +20,7 @@ namespace vuk {
 		UntypedValue(ExtRef extref, Ref def, std::vector<std::shared_ptr<ExtNode>> deps) :
 		    node(std::move(extref.node)),
 		    head{ node->get_node(), extref.index },
-		    deps(deps),
+		    deps(std::move(deps)),
 		    def(def) {}
 
 		/// @brief Get the referenced RenderGraph
@@ -42,7 +42,7 @@ namespace vuk {
 		}
 
 		Ref get_peeled_head() const noexcept {
-			if (head.node->kind == Node::RELACQ) {
+			if (node.use_count() == 1 && head.node->kind == Node::RELACQ) {
 				return head.node->relacq.src[head.index];
 			} else {
 				return head;
@@ -51,29 +51,12 @@ namespace vuk {
 
 		void release(Access access = Access::eNone, DomainFlagBits domain = DomainFlagBits::eAny) noexcept {
 			assert(node->acqrel->status == Signal::Status::eDisarmed);
-			auto release = node->module->make_release({ node->get_node(), head.index }, nullptr, access, domain);
+			auto ref = get_peeled_head();
+			auto release = node->module->make_release(ref, nullptr, access, domain);
 			deps.push_back(node); // previous extnode is a dep
 			node = std::make_shared<ExtNode>(ExtNode{ node->module, release });
 			release->release.release = node->acqrel;
 			head = { node->get_node(), 0 };
-		}
-
-		void to_acquire(void* current_value) {
-			auto current_ty = def.type();
-			// new RG with ACQUIRE node
-			auto new_rg = std::make_shared<RG>();
-			auto new_def = new_rg->make_acquire(current_ty, nullptr, head.index, current_value);
-			auto new_extnode = std::make_shared<ExtNode>(new_rg, new_def.node);
-			node->module = {};
-			new_def.node->acquire.acquire = node->acqrel;
-			if (deps.size() > 0) {
-				deps = { node };
-			} else {
-				deps = { node };
-			}
-			node = new_extnode;
-			head = Ref{ node->get_node(), 0 };
-			def = new_def;
 		}
 
 		/// @brief Submit Future for execution

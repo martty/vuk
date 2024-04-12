@@ -117,12 +117,11 @@ namespace vuk {
 		if (!res) {
 			return res;
 		}
-		if (deps.size() > 0) {
-			assert(deps[0]->acqrel->status != Signal::Status::eDisarmed);
-			if (deps[0]->acqrel->status == Signal::Status::eSynchronizable) {
-				allocator.get_context().wait_for_domains(std::span{ &deps[0]->acqrel->source, 1 });
-			}
+		assert(node->acqrel->status != Signal::Status::eDisarmed);
+		if (node->acqrel->status == Signal::Status::eSynchronizable) {
+			allocator.get_context().wait_for_domains(std::span{ &node->acqrel->source, 1 });
 		}
+
 		return { expected_value };
 	}
 
@@ -137,16 +136,12 @@ namespace vuk {
 		} else if (acqrel->status == Signal::Status::eHostAvailable || acqrel->status == Signal::Status::eSynchronizable) {
 			return { expected_value }; // nothing to do
 		} else {
-			// acqrel->status = Signal::Status::eSynchronizable;
 			auto erg = compiler.link(std::span{ &node, 1 }, options);
 			if (!erg) {
 				return erg;
 			}
 			std::pair v = { &allocator, &*erg };
 			VUK_DO_OR_RETURN(execute_submit(allocator, std::span{ &v, 1 }));
-			// Compiler gets reset after this - we have the ExtNode manage the lifetime of the externally visible values
-			auto current_value = node->get_node()->kind == Node::RELACQ ? node->get_node()->relacq.values[head.index] : node->get_node()->release.value;
-			to_acquire(current_value);
 			return { expected_value };
 		}
 	}

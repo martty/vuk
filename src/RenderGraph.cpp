@@ -29,13 +29,14 @@ namespace vuk {
 
 		for (auto& node : nodes) {
 			// type of acquire must be preserved
-			if (node->kind == Node::ACQUIRE) {
+			if (node->kind == Node::ACQUIRE || node->kind == Node::RELEASE) {
 				type_restore.emplace(node, node->type[0]);
 			}
 
 			for (auto& t : node->type) {
 				t = cg_module->copy_type(t);
 				if (t->kind == Type::ALIASED_TY) {
+					assert(t->aliased.T->kind != Type::ALIASED_TY);
 					unify_type(t->aliased.T);
 				} else if (t->kind == Type::IMBUED_TY) {
 					unify_type(t->imbued.T);
@@ -318,6 +319,7 @@ namespace vuk {
 			}
 			case Node::RELEASE:
 				node->release.src.link().undef = { node, 0 };
+				first(node).link().prev = &node->release.src.link();
 				break;
 
 			case Node::EXTRACT:
@@ -924,6 +926,26 @@ namespace vuk {
 					}
 				}
 				break;
+			}
+			case Node::RELEASE: {
+				if (node->links[0].reads.size() > 0 || node->links[0].undef) {
+					auto needle = Ref{ node, 0 };
+					/* if (node->release.release->status == Signal::Status::eDisarmed) {
+					  auto replace_with = first(impl->cg_module->make_relacq(node->release.src.node, node->release.release));
+					  replaces.emplace_back(needle, replace_with);
+					} else {
+					  auto replace_with = impl->cg_module->make_acquire(node->type[0], node->release.release, node->release.value);
+					  replaces.emplace_back(needle, replace_with);
+					}*/
+					if (node->release.release->status == Signal::Status::eDisarmed) {
+						memcpy(node, impl->cg_module->make_relacq(node->release.src.node, node->release.release), sizeof(Node));
+					} else {
+						Node acq_node{ .kind = Node::ACQUIRE,
+							             .type = node->type,
+							             .acquire = { .value = node->release.value, .acquire = node->release.release, .index = 0 } };
+						memcpy(node, &acq_node, sizeof(Node));
+					}
+				}
 			}
 			}
 		}
