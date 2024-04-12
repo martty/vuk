@@ -517,10 +517,10 @@ public:
 				auto rgp = first.get_render_graph();
 				RG& rg = *rgp.get();
 
-				bool reuse_node = first.node.use_count() == 1;
+				bool reuse_node = first.node.use_count() == 1 && first.node->get_node()->kind != Node::ACQUIRE;
 
 				std::vector<Type*> arg_types;
-				std::tuple arg_tuple_as_a = { T{ nullptr, args.node.use_count() == 1 ? args.get_peeled_head() : args.get_head(), args.get_def() }... };
+				std::tuple arg_tuple_as_a = { T{ nullptr, args.get_peeled_head(), args.get_def() }... };
 				fill_arg_ty(rg, arg_tuple_as_a, arg_types);
 
 				std::vector<Type*> ret_types;
@@ -534,7 +534,7 @@ public:
 				auto opaque_fn_ty = rg.make_opaque_fn_ty(arg_types, ret_types, vuk::DomainFlagBits::eAny, untyped_cb);
 				opaque_fn_ty->debug_info = rg.allocate_type_debug_info(name.c_str());
 				auto opaque_fn = rg.make_declare_fn(opaque_fn_ty);
-				Node* node = rg.make_call(opaque_fn, args.node.use_count() == 1 ? args.get_peeled_head() : args.get_head()...);
+				Node* node = rg.make_call(opaque_fn, args.get_peeled_head()...);
 				node->scheduling_info = new (rg.payload_arena.ensure_space(sizeof(SchedulingInfo))) SchedulingInfo(scheduling_info);
 				rg.set_source_location(node, loc);
 
@@ -542,9 +542,9 @@ public:
 				[reuse_node, & dependent_nodes](auto& first, auto&... rest) {
 					(first.get_render_graph()->reference_RG(rest.get_render_graph()), ...);
 					if (!reuse_node) {
-						dependent_nodes.insert(dependent_nodes.end(), std::move(first.deps).begin(), std::move(first.deps).end());
 						dependent_nodes.push_back(std::move(first.node));
 					}
+					dependent_nodes.insert(dependent_nodes.end(), std::move(first.deps).begin(), std::move(first.deps).end());
 					(dependent_nodes.insert(dependent_nodes.end(), std::move(rest.deps).begin(), std::move(rest.deps).end()), ...);
 					(dependent_nodes.push_back(std::move(rest.node)), ...);
 				}(args...);
