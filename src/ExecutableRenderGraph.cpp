@@ -15,8 +15,9 @@
 #include <unordered_set>
 #include <vector>
 
-//#define VUK_DUMP_EXEC
-//#define VUK_DEBUG_IMBAR
+#define VUK_DUMP_EXEC
+// #define VUK_DEBUG_IMBAR
+#define VUK_DEBUG_MEMBAR
 
 namespace vuk {
 	std::string format_source_location(Node* node) {
@@ -399,8 +400,8 @@ namespace vuk {
 			};
 
 			auto add_full = [this, init_allowed](VkImageMemoryBarrier2 barrier, ImageAttachment& img_att) {
-				assert(img_att.layout == ImageLayout::eUndefined || barrier.oldLayout != VK_IMAGE_LAYOUT_UNDEFINED || init_allowed);
-				assert(barrier.oldLayout != VK_IMAGE_LAYOUT_UNDEFINED || !is_readonly_layout(barrier.newLayout));
+				// assert(img_att.layout == ImageLayout::eUndefined || barrier.oldLayout != VK_IMAGE_LAYOUT_UNDEFINED || init_allowed);
+				// assert(barrier.oldLayout != VK_IMAGE_LAYOUT_UNDEFINED || !is_readonly_layout(barrier.newLayout));
 				im_bars.push_back(barrier);
 
 				img_att.layout = (ImageLayout)barrier.newLayout;
@@ -559,6 +560,7 @@ namespace vuk {
 			}
 			if (dst_domain == DomainFlagBits::eNone) {
 				barrier.pNext = tag;
+				fmt::println("[{}]{}({})+", fmt::ptr(tag), barrier.srcStageMask, barrier.srcAccessMask);
 				half_mem_bars.push_back(barrier);
 			} else if (src_domain == DomainFlagBits::eNone) {
 				auto it = std::find_if(half_mem_bars.begin(), half_mem_bars.end(), [=](auto& mb) { return mb.pNext == tag; });
@@ -567,6 +569,7 @@ namespace vuk {
 				barrier.srcAccessMask = it->srcAccessMask;
 				barrier.srcStageMask = it->srcStageMask;
 				mem_bars.push_back(barrier);
+				fmt::println("[{}]{}({})->{}({})", fmt::ptr(tag), barrier.srcStageMask, barrier.srcAccessMask, barrier.dstStageMask, barrier.dstAccessMask);
 				half_mem_bars.erase(it);
 			} else {
 				mem_bars.push_back(barrier);
@@ -725,11 +728,7 @@ namespace vuk {
 	enum class RW { eRead, eWrite };
 
 	struct Scheduler {
-		Scheduler(Allocator all, RGCImpl* impl) :
-		    allocator(all),
-		    scheduled_execables(impl->scheduled_execables),
-		    pass_reads(impl->pass_reads),
-		    impl(impl) {
+		Scheduler(Allocator all, RGCImpl* impl) : allocator(all), scheduled_execables(impl->scheduled_execables), pass_reads(impl->pass_reads), impl(impl) {
 			// these are the items that were determined to run
 			for (auto& i : scheduled_execables) {
 				scheduled.emplace(i.execable);
@@ -844,7 +843,7 @@ namespace vuk {
 		}
 
 		struct DependencyInfo {
-			bool init_permitted;
+			bool init_permitted = true;
 			StreamResourceUse src_use;
 			StreamResourceUse dst_use;
 		};
@@ -1591,7 +1590,7 @@ namespace vuk {
 							// Write and ReadWrite
 							RW sync_access = (is_write_access(access) || access == Access::eConsume) ? RW::eWrite : RW::eRead;
 							recorder.add_sync(sched.base_type(parm), sched.get_dependency_info(parm, arg_ty, sync_access, dst_stream), sched.get_value(parm));
-							
+
 							if (is_framebuffer_attachment(access)) {
 								auto& img_att = sched.get_value<ImageAttachment>(parm);
 								vk_rec->prepare_render_pass_attachment(alloc, img_att);

@@ -217,9 +217,7 @@ TEST_CASE("image slicing, reconvergence 3") {
 }
 
 inline void void_clear_image(Value<ImageAttachment> in, Clear clear_value) {
-	static auto clear = make_pass("void clear image", [=](CommandBuffer& cbuf, VUK_IA(Access::eClear) dst) {
-		cbuf.clear_image(dst, clear_value);
-	});
+	static auto clear = make_pass("void clear image", [=](CommandBuffer& cbuf, VUK_IA(Access::eClear) dst) { cbuf.clear_image(dst, clear_value); });
 
 	clear(std::move(in));
 }
@@ -244,4 +242,115 @@ TEST_CASE("image slicing, reconvergence with undef") {
 			CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 7; }));
 		}
 	}
+}
+
+vuk::Value<vuk::ImageAttachment> generate_mips(std::string& trace, vuk::Value<vuk::ImageAttachment> image, uint32_t mip_count) {
+	auto ia = image.mip(0);
+
+	for (uint32_t mip_level = 1; mip_level < mip_count; mip_level++) {
+		auto pass = vuk::make_pass(fmt::format("mip_{}", mip_level).c_str(),
+		                           [&trace, mip_level](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eTransferRead) src, VUK_IA(vuk::eTransferWrite) dst) {
+			                           ImageBlit blit;
+			                           const auto extent = src->extent;
+
+			                           blit.srcSubresource.aspectMask = format_to_aspect(src->format);
+			                           blit.srcSubresource.baseArrayLayer = src->base_layer;
+			                           blit.srcSubresource.layerCount = src->layer_count;
+			                           blit.srcSubresource.mipLevel = mip_level - 1;
+			                           blit.srcOffsets[0] = Offset3D{ 0 };
+			                           blit.srcOffsets[1] = Offset3D{ std::max(static_cast<int32_t>(extent.width) >> (mip_level - 1), 1),
+				                                                        std::max(static_cast<int32_t>(extent.height) >> (mip_level - 1), 1),
+				                                                        std::max(static_cast<int32_t>(extent.depth) >> (mip_level - 1), 1) };
+			                           blit.dstSubresource = blit.srcSubresource;
+			                           blit.dstSubresource.mipLevel = mip_level;
+			                           blit.dstOffsets[0] = Offset3D{ 0 };
+			                           blit.dstOffsets[1] = Offset3D{ std::max(static_cast<int32_t>(extent.width) >> (mip_level), 1),
+				                                                        std::max(static_cast<int32_t>(extent.height) >> (mip_level), 1),
+				                                                        std::max(static_cast<int32_t>(extent.depth) >> (mip_level), 1) };
+			                           command_buffer.blit_image(src, dst, blit, Filter::eLinear);
+
+									   trace += fmt::format("{}", mip_level);
+
+			                           return dst;
+		                           });
+
+		ia = pass(std::move(ia), image.mip(mip_level));
+	}
+	return image;
+}
+
+TEST_CASE("mip generation") {
+	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 64, 64, 1 }, Samples::e1);
+	auto img = vuk::clear_image(vuk::declare_ia("src", ia), vuk::ClearColor(0.1f, 0.1f, 0.1f, 0.1f));
+	std::string trace = "";
+	generate_mips(trace, std::move(img), 5).wait(*test_context.allocator, test_context.compiler);
+	CHECK(trace == "1234");
+}
+
+TEST_CASE("mip generation 2") {
+	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 64, 64, 1 }, Samples::e1);
+	auto img = vuk::clear_image(vuk::declare_ia("src", ia), vuk::ClearColor(0.1f, 0.1f, 0.1f, 0.1f));
+	std::string trace = "";
+	auto mipped = generate_mips(trace, std::move(img), 5);
+	size_t alignment = format_to_texel_block_size(mipped->format);
+	size_t size = compute_image_size(mipped->format, {1, 1});
+	auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
+	auto res = download_buffer(image2buf(mipped.mip(4), declare_buf("dst", *dst))).get(*test_context.allocator, test_context.compiler);
+	auto updata = std::span((float*)res->mapped_ptr, 1);
+	CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 0.1; }));
+	CHECK(trace == "1234");
+}
+
+
+vuk::Value<vuk::ImageAttachment> bloom_pass(std::string& trace,
+                                            vuk::Value<vuk::ImageAttachment> downsample_image,
+                                            vuk::Value<vuk::ImageAttachment> upsample_image,
+                                            vuk::Value<vuk::ImageAttachment> input) {
+	auto bloom_mip_count = downsample_image->level_count;
+	auto prefilter =
+	    vuk::make_pass("bloom_prefilter", [&trace](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eComputeRW) target, VUK_IA(vuk::eComputeSampled) input) {
+		    trace += "p";
+		    return target;
+	    });
+
+	auto prefiltered_image = prefilter(downsample_image.mip(0), input);
+	auto converge = vuk::make_pass("converge", [](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eComputeRW) output) { return output; });
+	auto prefiltered_downsample_image = converge(downsample_image);
+	auto src_mip = prefiltered_downsample_image.mip(0);
+
+	for (uint32_t i = 1; i < bloom_mip_count; i++) {
+		auto pass = vuk::make_pass("bloom_downsample",
+		                           [i](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eComputeRW) target, VUK_IA(vuk::eComputeSampled) input) { return target; });
+		trace += fmt::format("d{}", i);
+		src_mip = pass(prefiltered_downsample_image.mip(i), src_mip);
+	}
+
+	// Upsampling
+	// https://www.froyok.fr/blog/2021-12-ue4-custom-bloom/resources/code/bloom_down_up_demo.jpg
+
+	auto downsampled_image = converge(prefiltered_downsample_image);
+	auto upsample_src_mip = downsampled_image.mip(bloom_mip_count - 1);
+
+	for (int32_t i = (int32_t)bloom_mip_count - 2; i >= 0; i--) {
+		auto pass = vuk::make_pass(
+		    "bloom_upsample",
+		    [i, &trace](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eComputeRW) output, VUK_IA(vuk::eComputeSampled) src1, VUK_IA(vuk::eComputeSampled) src2) {
+			    trace += fmt::format("u{}", i);
+			    return output;
+		    });
+
+		upsample_src_mip = pass(upsample_image.mip(i), upsample_src_mip, downsampled_image.mip(i));
+	}
+
+	return upsample_image;
+}
+
+TEST_CASE("mip down-up") {
+	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 64, 64, 1 }, Samples::e1);
+	auto src = vuk::clear_image(vuk::declare_ia("src", ia), vuk::ClearColor(0.1f, 0.1f, 0.1f, 0.1f));
+	auto downsample = vuk::declare_ia("down", ia);
+	auto upsample = vuk::declare_ia("up", ia);
+	std::string trace = "";
+	bloom_pass(trace, std::move(src), std::move(downsample), std::move(upsample)).wait(*test_context.allocator, test_context.compiler);
+	CHECK(trace == "pd1d2d3d4d5u4u3u2u1u0");
 }
