@@ -42,7 +42,7 @@ namespace vuk {
 		}
 
 		Ref get_peeled_head() noexcept {
-			if (node.use_count() == 1 && head.node->kind == Node::RELACQ) {
+			if (node.use_count() == 1 && head.node->kind == Node::RELACQ && can_peel) {
 				Ref peeled_head = head.node->relacq.src[head.index];
 				return peeled_head;
 			} else {
@@ -51,7 +51,7 @@ namespace vuk {
 		}
 
 		Ref peel_head() noexcept {
-			if (node.use_count() == 1 && head.node->kind == Node::RELACQ) {
+			if (node.use_count() == 1 && head.node->kind == Node::RELACQ && can_peel) {
 				Ref peeled_head = head.node->relacq.src[head.index];
 				head.node->kind = Node::NOP;
 				return peeled_head;
@@ -83,6 +83,7 @@ namespace vuk {
 
 	protected:
 		Ref def;
+		bool can_peel = true;
 	};
 
 	template<class T>
@@ -214,6 +215,7 @@ namespace vuk {
 		auto mip(uint32_t mip)
 		  requires std::is_same_v<T, ImageAttachment>
 		{
+			can_peel = false;
 			auto item_def = get_def();
 			Ref item = node->module->make_slice(get_head(),
 			                                    node->module->make_constant(mip),
@@ -226,6 +228,7 @@ namespace vuk {
 		auto layer(uint32_t layer)
 		  requires std::is_same_v<T, ImageAttachment>
 		{
+			can_peel = false;
 			auto item_def = get_def();
 			Ref item = node->module->make_slice(get_head(),
 			                                    node->module->make_constant(0u),

@@ -295,8 +295,7 @@ TEST_CASE("mip generation 2") {
 	std::string trace = "";
 	auto converge = vuk::make_pass("converge", [](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eComputeRW) output) { return output; });
 
-	auto keep = generate_mips(trace, converge(img), 5);
-	auto mipped = converge(keep);
+	auto mipped = converge(generate_mips(trace, converge(std::move(img)), 5));
 	size_t alignment = format_to_texel_block_size(mipped->format);
 	size_t size = compute_image_size(mipped->format, {1, 1, 1});
 	auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });

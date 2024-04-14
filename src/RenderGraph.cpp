@@ -888,6 +888,7 @@ namespace vuk {
 				}
 				switch (node->kind) {
 				case Node::SLICE: {
+					assert(node->slice.image.node->kind != Node::NOP);
 					slices[node->slice.image].push_back(first(node));
 					break;
 				}
