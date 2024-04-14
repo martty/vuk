@@ -184,7 +184,25 @@ namespace vuk {
 		void same_size(const Value<Buffer>& src)
 		  requires std::is_same_v<T, Buffer>
 		{
-			def.node->construct.args[1] = get_render_graph()->make_extract(src.get_def(), 0);
+			uint64_t index = 0;
+			Type* cty = get_render_graph()->u64();
+			auto constant_node = Node{ .kind = Node::CONSTANT, .type = std::span{ &cty, 1 }, .constant = { .value = &index } };
+
+			auto composite = src.get_def();
+			Type* ty;
+			auto stripped = Type::stripped(composite.type());
+			if (stripped->kind == Type::ARRAY_TY) {
+				ty = stripped->array.T;
+			} else if (stripped->kind == Type::COMPOSITE_TY) {
+				ty = stripped->composite.types[index];
+			}
+			auto candidate_node = Node{ .kind = Node::EXTRACT, .type = std::span{ &ty, 1 }, .extract = { .composite = composite, .index = first(&constant_node) } };
+			try {
+				auto result = eval<uint64_t>(first(&candidate_node));
+				def.node->construct.args[1] = get_render_graph()->make_constant<uint64_t>(result);
+			} catch (...) {
+				def.node->construct.args[1] = get_render_graph()->make_extract(src.get_def(), 0);
+			}
 		}
 
 		Value<uint64_t> get_size()
