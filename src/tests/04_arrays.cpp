@@ -289,15 +289,20 @@ TEST_CASE("mip generation") {
 
 TEST_CASE("mip generation 2") {
 	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 64, 64, 1 }, Samples::e1);
-	auto img = vuk::clear_image(vuk::declare_ia("src", ia), vuk::ClearColor(0.1f, 0.1f, 0.1f, 0.1f));
+	auto img = vuk::declare_ia("src", ia);
+	vuk::clear_image(img.mip(0), vuk::ClearColor(0.1f, 0.1f, 0.1f, 0.1f));
+	vuk::clear_image(img.mip(4), vuk::ClearColor(0.6f, 0.1f, 0.1f, 0.1f));
 	std::string trace = "";
-	auto mipped = generate_mips(trace, std::move(img), 5);
+	auto converge = vuk::make_pass("converge", [](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eComputeRW) output) { return output; });
+
+	auto keep = generate_mips(trace, converge(img), 5);
+	auto mipped = converge(keep);
 	size_t alignment = format_to_texel_block_size(mipped->format);
-	size_t size = compute_image_size(mipped->format, {1, 1});
+	size_t size = compute_image_size(mipped->format, {1, 1, 1});
 	auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 	auto res = download_buffer(image2buf(mipped.mip(4), declare_buf("dst", *dst))).get(*test_context.allocator, test_context.compiler);
 	auto updata = std::span((float*)res->mapped_ptr, 1);
-	CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 0.1; }));
+	CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem - 0.1f < 0.001f; }));
 	CHECK(trace == "1234");
 }
 
@@ -319,9 +324,10 @@ vuk::Value<vuk::ImageAttachment> bloom_pass(std::string& trace,
 	auto src_mip = prefiltered_downsample_image.mip(0);
 
 	for (uint32_t i = 1; i < bloom_mip_count; i++) {
-		auto pass = vuk::make_pass("bloom_downsample",
-		                           [i](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eComputeRW) target, VUK_IA(vuk::eComputeSampled) input) { return target; });
-		trace += fmt::format("d{}", i);
+		auto pass = vuk::make_pass("bloom_downsample", [i, &trace](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eComputeRW) target, VUK_IA(vuk::eComputeSampled) input) {
+			trace += fmt::format("d{}", i);
+			return target;
+		});
 		src_mip = pass(prefiltered_downsample_image.mip(i), src_mip);
 	}
 
@@ -351,6 +357,6 @@ TEST_CASE("mip down-up") {
 	auto downsample = vuk::declare_ia("down", ia);
 	auto upsample = vuk::declare_ia("up", ia);
 	std::string trace = "";
-	bloom_pass(trace, std::move(src), std::move(downsample), std::move(upsample)).wait(*test_context.allocator, test_context.compiler);
-	CHECK(trace == "pd1d2d3d4d5u4u3u2u1u0");
+	bloom_pass(trace, std::move(downsample), std::move(upsample), std::move(src)).wait(*test_context.allocator, test_context.compiler);
+	CHECK(trace == "pd1d2d3d4d5d6u5u4u3u2u1u0");
 }
