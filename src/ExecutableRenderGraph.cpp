@@ -1672,16 +1672,14 @@ namespace vuk {
 					}
 
 					if (!(node->debug_info && node->debug_info->result_names.size() > 0 && !node->debug_info->result_names[0].empty())) {
-						auto decl = node->slice.image.link().urdef.node;
-						if (decl->debug_info && decl->debug_info->result_names.size() > 0 && !decl->debug_info->result_names[0].empty()) {
-							std::string name = fmt::format("{}[m{}:{}][l{}:{}]",
-							                               decl->debug_info->result_names[0],
-							                               sliced.base_level,
-							                               sliced.base_level + sliced.level_count - 1,
-							                               sliced.base_layer,
-							                               sliced.base_layer + sliced.layer_count - 1);
-							impl->cg_module->name_output(first(node), name);
-						}
+						std::string name = fmt::format("{}_{}[m{}:{}][l{}:{}]",
+						                               node->slice.image.node->kind_to_sv(),
+						                               node->slice.image.node->execution_info->naming_index,
+						                               sliced.base_level,
+						                               sliced.base_level + sliced.level_count - 1,
+						                               sliced.base_layer,
+						                               sliced.base_layer + sliced.layer_count - 1);
+						impl->cg_module->name_output(first(node), name);
 					}
 
 					sched.done(node, node->slice.image.node->execution_info->stream, sliced); // slice doesn't execute
