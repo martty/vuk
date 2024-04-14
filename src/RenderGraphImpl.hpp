@@ -59,6 +59,7 @@ namespace vuk {
 		bool ready = false; // for DYNAMO
 	};
 
+
 	struct ExecutionInfo {
 		Stream* stream;
 		size_t naming_index;
@@ -122,6 +123,7 @@ namespace vuk {
 
 		Result<void> build_nodes();
 		Result<void> build_links();
+		Result<void> build_sync();
 		Result<void> unify_types();
 		Result<void> reify_inference();
 		Result<void> schedule_intra_queue(const RenderGraphCompileOptions& compile_options);

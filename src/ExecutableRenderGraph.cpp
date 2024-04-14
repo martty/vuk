@@ -842,211 +842,22 @@ namespace vuk {
 			return Type::stripped(parm.type());
 		}
 
-		struct DependencyInfo {
-			bool init_permitted = true;
-			StreamResourceUse src_use;
-			StreamResourceUse dst_use;
-		};
-
-		DependencyInfo
-		get_dependency_info(Ref parm, Type* arg_ty, RW type, Stream* dst_stream, Access src_access = Access::eNone, Access dst_access = Access::eNone) {
+		std::optional<StreamResourceUse> get_dependency_info(Ref parm, Type* arg_ty, RW type, Stream* dst_stream) {
 			auto parm_ty = parm.type();
 			auto& link = parm.link();
 
-			bool init_permitted = parm.node->kind == Node::CONSTRUCT && parm.node->type[0]->kind != Type::ARRAY_TY || parm.node->kind == Node::ACQUIRE_NEXT_IMAGE;
+			std::optional<ResourceUse> s = {};
 
-			StreamResourceUse src_use = {};
-			bool sync_against_def = type == RW::eRead || link.reads.size() == 0; // def -> *, src = def
-			if (sync_against_def) {
-				if (arg_ty->kind == Type::IMBUED_TY) {
-					if (parm_ty->kind == Type::ALIASED_TY) { // this is coming from an output annotated, so we know the source access
-						auto src_arg = parm.node->call.args[parm_ty->aliased.ref_idx];
-						auto call_ty = parm.node->call.fn.type()->opaque_fn.args[parm_ty->aliased.ref_idx];
-						if (call_ty->kind == Type::IMBUED_TY) {
-							src_access = call_ty->imbued.access;
-						} else {
-							// TODO: handling unimbued aliased
-							src_access = Access::eNone;
-						}
-					} else if (parm_ty->kind == Type::IMBUED_TY) {
-						src_access = arg_ty->imbued.access;
-					} else { // there is no need to sync (eg. declare)
-					}
-				} else if (parm_ty->kind == Type::ALIASED_TY) { // this is coming from an output annotated, so we know the source access
-					auto src_arg = parm.node->call.args[parm_ty->aliased.ref_idx];
-					auto call_ty = parm.node->call.fn.type()->opaque_fn.args[parm_ty->aliased.ref_idx];
-					if (call_ty->kind == Type::IMBUED_TY) {
-						src_access = call_ty->imbued.access;
-					} else {
-						// TODO: handling unimbued aliased
-					}
-				} else {
-					/* no src access */
-				}
-				src_use = { to_use(src_access), parm.node->execution_info->stream };
-			} else { // read* -> undef, src = reads
-				auto arg_ty_copy = arg_ty;
-				if (link.reads.size() > 0) { // we need to emit: def -> reads, RAW or nothing (before first read)
-					// to avoid R->R deps, we emit a single dep for all the reads
-					// for this we compute a merged layout (TRANSFER_SRC_OPTIMAL / READ_ONLY_OPTIMAL / GENERAL)
-					ResourceUse use;
-					auto reads = link.reads.to_span(pass_reads);
-
-					bool need_read_only = false;
-					bool need_transfer = false;
-					bool need_general = false;
-					src_use.stream = nullptr;
-					src_use.layout = ImageLayout::eReadOnlyOptimalKHR;
-					for (int read_idx = 0; read_idx < reads.size(); read_idx++) {
-						auto& r = reads[read_idx];
-						if (r.node->kind == Node::CALL) {
-							arg_ty_copy = r.node->call.fn.type()->opaque_fn.args[r.index];
-							parm = r.node->call.args[r.index];
-						} else if (r.node->kind == Node::CONVERGE) {
-							continue;
-						} else {
-							assert(0);
-						}
-
-						if (arg_ty_copy->kind == Type::IMBUED_TY) {
-							if (parm_ty->kind == Type::ALIASED_TY) { // this is coming from an output annotated, so we know the source access
-								auto src_arg = parm.node->call.args[parm_ty->aliased.ref_idx];
-								auto call_ty = parm.node->call.fn.type()->opaque_fn.args[parm_ty->aliased.ref_idx];
-								if (call_ty->kind == Type::IMBUED_TY) {
-									src_access = call_ty->imbued.access;
-								} else {
-									// TODO: handling unimbued aliased
-									src_access = Access::eNone;
-								}
-							} else if (parm_ty->kind == Type::IMBUED_TY) {
-								assert(0);
-							} else { // there is no need to sync (eg. declare)
-								src_access = arg_ty->imbued.access;
-							}
-						} else if (parm_ty->kind == Type::ALIASED_TY) { // this is coming from an output annotated, so we know the source access
-							auto src_arg = parm.node->call.args[parm_ty->aliased.ref_idx];
-							auto call_ty = parm.node->call.fn.type()->opaque_fn.args[parm_ty->aliased.ref_idx];
-							if (call_ty->kind == Type::IMBUED_TY) {
-								src_access = call_ty->imbued.access;
-							} else {
-								// TODO: handling unimbued aliased
-							}
-						} else {
-							/* no src access */
-						}
-
-						StreamResourceUse use = { to_use(src_access), parm.node->execution_info->stream };
-						if (use.stream == nullptr) {
-							use.stream = src_use.stream;
-						} else if (use.stream != src_use.stream && src_use.stream) {
-							// there are multiple stream in this read group
-							// this is okay - but in this case we can't synchronize against all of them together
-							// so we synchronize against them individually by setting last use and ending the read gather
-							assert(false); // we should've handled this by now
-						}
-
-						if (is_transfer_access(src_access)) {
-							need_transfer = true;
-						}
-						if (is_storage_access(src_access)) {
-							need_general = true;
-						}
-						if (is_readonly_access(src_access)) {
-							need_read_only = true;
-						}
-
-						src_use.access |= use.access;
-						src_use.stages |= use.stages;
-						src_use.stream = use.stream;
-					}
-
-					// compute barrier and waits for the merged reads
-
-					if (need_transfer && !need_read_only) {
-						src_use.layout = ImageLayout::eTransferSrcOptimal;
-					}
-
-					if (need_general || (need_transfer && need_read_only)) {
-						src_use.layout = ImageLayout::eGeneral;
-					}
-				}
+			if (type == RW::eRead) {
+				std::exchange(s, link.read_sync);
+			} else {
+				std::exchange(s, link.undef_sync);
 			}
-
-			StreamResourceUse dst_use = {};
-			if (type == RW::eWrite) { // * -> undef, dst = undef
-				if (arg_ty->kind == Type::IMBUED_TY) {
-					dst_access = arg_ty->imbued.access;
-				} else {
-					/* no dst access */
-				}
-				dst_use = { to_use(dst_access), dst_stream };
-			} else if (type == RW::eRead) { // def -> read, dst = sum(read)
-				auto arg_ty_copy = arg_ty;
-				if (link.reads.size() > 0) { // we need to emit: def -> reads, RAW or nothing (before first read)
-					// to avoid R->R deps, we emit a single dep for all the reads
-					// for this we compute a merged layout (TRANSFER_SRC_OPTIMAL / READ_ONLY_OPTIMAL / GENERAL)
-					ResourceUse use;
-					auto reads = link.reads.to_span(pass_reads);
-
-					bool need_read_only = false;
-					bool need_transfer = false;
-					bool need_general = false;
-					dst_use.stream = nullptr;
-					dst_use.layout = ImageLayout::eReadOnlyOptimalKHR;
-					for (int read_idx = 0; read_idx < reads.size(); read_idx++) {
-						auto& r = reads[read_idx];
-						if (r.node->kind == Node::CALL) {
-							arg_ty_copy = r.node->call.fn.type()->opaque_fn.args[r.index];
-							parm = r.node->call.args[r.index];
-						} else if (r.node->kind == Node::CONVERGE) {
-							continue;
-						} else {
-							assert(0);
-						}
-
-						if (arg_ty_copy->kind == Type::IMBUED_TY) {
-							dst_access = arg_ty_copy->imbued.access;
-						} else {
-							assert(0);
-						}
-
-						StreamResourceUse use = { to_use(dst_access), dst_stream };
-						if (use.stream == nullptr) {
-							use.stream = dst_use.stream;
-						} else if (use.stream != dst_use.stream && dst_use.stream) {
-							// there are multiple stream in this read group
-							// this is okay - but in this case we can't synchronize against all of them together
-							// so we synchronize against them individually by setting last use and ending the read gather
-							assert(false); // we should've handled this by now
-						}
-
-						if (is_transfer_access(dst_access)) {
-							need_transfer = true;
-						}
-						if (is_storage_access(dst_access)) {
-							need_general = true;
-						}
-						if (is_readonly_access(dst_access)) {
-							need_read_only = true;
-						}
-
-						dst_use.access |= use.access;
-						dst_use.stages |= use.stages;
-						dst_use.stream = use.stream;
-					}
-
-					// compute barrier and waits for the merged reads
-
-					if (need_transfer && !need_read_only) {
-						dst_use.layout = ImageLayout::eTransferSrcOptimal;
-					}
-
-					if (need_general || (need_transfer && need_read_only)) {
-						dst_use.layout = ImageLayout::eGeneral;
-					}
-				}
+			if (s) {
+				return StreamResourceUse{ *s, dst_stream };
+			} else {
+				return {};
 			}
-			return { init_permitted, src_use, dst_use };
 		}
 	};
 
@@ -1066,6 +877,7 @@ namespace vuk {
 		std::unordered_map<DomainFlagBits, std::unique_ptr<Stream>> streams;
 		std::unordered_map<VkImage, StreamResourceUse> pending_image_syncs;
 		std::unordered_map<void*, Stream*> pending_buffer_syncs;
+		std::unordered_map<uint64_t, StreamResourceUse> last_modify;
 
 		// start recording if needed
 		// all dependant domains flushed
@@ -1092,12 +904,57 @@ namespace vuk {
 			return nullptr;
 		}
 
-		void add_sync(Type* base_ty, Scheduler::DependencyInfo di, void* value) {
-			StreamResourceUse src_use = di.src_use;
-			StreamResourceUse dst_use = di.dst_use;
-			if ((ResourceUse)src_use == ResourceUse{} && !di.init_permitted) {
-				src_use.stream = nullptr;
+		void init_sync(Type* base_ty, StreamResourceUse src_use, void* value) {
+			uint64_t key = 0;
+			if (base_ty == cg_module->builtin_image) {
+				auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
+				key = reinterpret_cast<uint64_t>(img_att.image.image);
+			} else if (base_ty == cg_module->builtin_buffer) {
+				key = reinterpret_cast<uint64_t>(reinterpret_cast<Buffer*>(value)->allocation);
+			} else if (base_ty->kind == Type::ARRAY_TY) { // for an array, we init all elements
+				auto elem_ty = base_ty->array.T;
+				auto size = base_ty->array.count;
+				auto elems = reinterpret_cast<std::byte*>(value);
+				for (int i = 0; i < size; i++) {
+					init_sync(elem_ty, src_use, elems);
+					elems += elem_ty->size;
+				}
+				return;
+			} else { // no other types require sync
+				return;
 			}
+
+			assert(last_modify.find(key) == last_modify.end());
+			last_modify.emplace(key, src_use);
+		}
+
+		void add_sync(Type* base_ty, std::optional<StreamResourceUse> maybe_dst_use, void* value) {
+			if (!maybe_dst_use) {
+				return;
+			}
+			auto& dst_use = *maybe_dst_use;
+
+			uint64_t key = 0;
+			if (base_ty->kind == Type::ARRAY_TY) {
+				auto elem_ty = base_ty->array.T;
+				auto size = base_ty->array.count;
+				auto elems = reinterpret_cast<std::byte*>(value);
+				for (int i = 0; i < size; i++) {
+					add_sync(elem_ty, dst_use, elems);
+					elems += elem_ty->size;
+				}
+				return;
+			} else if (base_ty == cg_module->builtin_image) {
+				auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
+				key = reinterpret_cast<uint64_t>(img_att.image.image);
+			} else if (base_ty == cg_module->builtin_buffer) {
+				key = reinterpret_cast<uint64_t>(reinterpret_cast<Buffer*>(value)->allocation);
+			} else { // no other types require sync
+				return;
+			}
+
+			auto& src_use = last_modify.at(key);
+
 			auto src_stream = src_use.stream;
 			auto dst_stream = dst_use.stream;
 			bool has_src = src_stream;
@@ -1111,102 +968,36 @@ namespace vuk {
 				dst_stream->add_dependency(src_stream);
 			}
 
-			if ((ResourceUse)src_use == ResourceUse{} && (ResourceUse)dst_use == ResourceUse{} && !di.init_permitted) {
-				return;
-			}
-
 			if (base_ty == cg_module->builtin_image) {
 				auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
-				if (has_dst) {
-					if (only_dst) {
-						auto it = pending_image_syncs.find(img_att.image.image);
-						if (it != pending_image_syncs.end()) {
-							if (it->second.stream != dst_stream) {
-								it->second.stream->synch_image(img_att, {}, dst_use, value, di.init_permitted); // synchronize dst onto first stream
-								dst_stream->synch_image(img_att, it->second, {}, value, di.init_permitted);     // synchronize src onto second stream
-							}
-							pending_image_syncs.erase(it);
-						}
-					}
-					dst_stream->synch_image(img_att, src_use, dst_use, value, di.init_permitted);
+				if (src_stream != dst_stream) {
+					src_stream->synch_image(img_att, src_use, dst_use, value, false); // synchronize dst onto first stream
 				}
-				if (only_src || cross) {
-					src_stream->synch_image(img_att, src_use, dst_use, value, di.init_permitted);
-					if (only_src) {
-						pending_image_syncs.insert_or_assign(img_att.image.image, src_use);
-					}
-				}
+				dst_stream->synch_image(img_att, src_use, dst_use, value, false); // synchronize src onto second stream
 			} else if (base_ty == cg_module->builtin_buffer) {
-				// buffer needs no cross
-				if (has_dst) {
-					if (only_dst) {
-						auto it = pending_buffer_syncs.find(value);
-						if (it != pending_buffer_syncs.end()) {
-							if (it->second != dst_stream) {
-								it->second->synch_memory(src_use, dst_use, value);
-							}
-							pending_buffer_syncs.erase(it);
-						}
-					}
-					dst_stream->synch_memory(src_use, dst_use, value);
-				} else if (has_src) {
-					src_stream->synch_memory(src_use, dst_use, value);
-					if (only_src) {
-						pending_buffer_syncs.insert_or_assign(value, src_stream);
-					}
-				}
-			} else if (base_ty->kind == Type::ARRAY_TY) {
+				dst_stream->synch_memory(src_use, dst_use, value);
+			}
+
+			src_use = dst_use;
+		}
+
+		StreamResourceUse last_use(Type* base_ty, void* value) {
+			uint64_t key = 0;
+			if (base_ty == cg_module->builtin_image) {
+				auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
+				key = reinterpret_cast<uint64_t>(img_att.image.image);
+			} else if (base_ty == cg_module->builtin_buffer) {
+				key = reinterpret_cast<uint64_t>(reinterpret_cast<Buffer*>(value)->allocation);
+			} else if (base_ty->kind == Type::ARRAY_TY) { // for an array, we key off the the first element, as the array syncs together
 				auto elem_ty = base_ty->array.T;
 				auto size = base_ty->array.count;
-				if (elem_ty == cg_module->builtin_image) {
-					auto img_atts = reinterpret_cast<ImageAttachment*>(value);
-					for (int i = 0; i < size; i++) {
-						if (has_dst) {
-							if (only_dst) {
-								auto it = pending_image_syncs.find(img_atts[i].image.image);
-								if (it != pending_image_syncs.end()) {
-									if (it->second.stream != dst_stream) {
-										it->second.stream->synch_image(img_atts[i], {}, dst_use, &img_atts[i], di.init_permitted); // synchronize dst onto first stream
-										dst_stream->synch_image(img_atts[i], it->second, {}, &img_atts[i], di.init_permitted);     // synchronize dst onto second stream
-									}
-									pending_image_syncs.erase(it);
-								}
-							}
-							dst_stream->synch_image(img_atts[i], src_use, dst_use, &img_atts[i], di.init_permitted);
-						}
-						if (only_src || cross) {
-							src_stream->synch_image(img_atts[i], src_use, dst_use, &img_atts[i], di.init_permitted);
-							if (only_src) {
-								pending_image_syncs.insert_or_assign(img_atts[i].image.image, src_use);
-							}
-						}
-					}
-				} else if (elem_ty == cg_module->builtin_buffer) {
-					for (int i = 0; i < size; i++) {
-						// buffer needs no cross
-						auto bufs = reinterpret_cast<Buffer*>(value);
-						if (has_dst) {
-							auto it = pending_buffer_syncs.find(value);
-							if (it != pending_buffer_syncs.end()) {
-								if (it->second != dst_stream) {
-									it->second->synch_memory(src_use, dst_use, &bufs[i]);
-								}
-								pending_buffer_syncs.erase(it);
-							}
-							dst_stream->synch_memory(src_use, dst_use, &bufs[i]);
-						} else if (has_src) {
-							src_stream->synch_memory(src_use, dst_use, &bufs[i]);
-							if (only_src) {
-								pending_buffer_syncs.insert_or_assign(&bufs[i], src_stream);
-							}
-						}
-					}
-				} else {
-					assert(0);
-				}
-			} else {
-				assert(0);
+				auto elems = reinterpret_cast<std::byte*>(value);
+				return last_use(elem_ty, elems);
+			} else { // no other types require sync
+				return {};
 			}
+
+			return last_modify.at(key);
 		}
 	};
 
@@ -1427,6 +1218,7 @@ namespace vuk {
 							bound = **buf;
 						}
 						sched.done(node, host_stream, bound);
+						recorder.init_sync(impl->cg_module->builtin_buffer, { to_use(eNone), host_stream }, sched.get_value(first(node)));
 					} else if (node->type[0] == impl->cg_module->builtin_image) {
 						auto& attachment = *reinterpret_cast<ImageAttachment*>(node->construct.args[0].node->constant.value);
 						// collapse inferencing
@@ -1494,6 +1286,7 @@ namespace vuk {
 							}
 						}
 						sched.done(node, host_stream, attachment);
+						recorder.init_sync(impl->cg_module->builtin_buffer, { to_use(eNone), host_stream }, sched.get_value(first(node)));
 					} else if (node->type[0] == impl->cg_module->builtin_swapchain) {
 #ifdef VUK_DUMP_EXEC
 						print_results(node);
@@ -1627,7 +1420,7 @@ namespace vuk {
 							auto& link = parm.link();
 							assert(link.urdef);
 							opaque_args.push_back(sched.get_value(parm));
-							opaque_meta.push_back(&link.urdef);
+							opaque_meta.push_back(&parm);
 						}
 						opaque_rets.resize(node->call.fn.type()->opaque_fn.return_types.size());
 						(*node->call.fn.type()->opaque_fn.callback)(cobuf, opaque_args, opaque_meta, opaque_rets);
@@ -1679,17 +1472,16 @@ namespace vuk {
 						auto parm = node->relacq.src[i];
 						auto arg_ty = node->type[i];
 						auto di = sched.get_dependency_info(parm, arg_ty, RW::eWrite, dst_stream);
-						di.src_use.stream = di.dst_use.stream; // TODO: not sure this is valid, but we can't handle split
-						di.dst_use.stream = nullptr;
 						auto value = sched.get_value(parm);
 						auto storage = new std::byte[parm.type()->size];
 						memcpy(storage, impl->get_value(parm), parm.type()->size);
 						values[i] = storage;
-						recorder.add_sync(sched.base_type(parm), di, storage);
+						recorder.add_sync(sched.base_type(parm), di, value);
 
-						acqrel->last_use.push_back(di.src_use);
+						auto last_use = recorder.last_use(sched.base_type(parm), value);
+						acqrel->last_use.push_back(last_use);
 						if (i == 0) {
-							di.src_use.stream->add_dependent_signal(acqrel);
+							last_use.stream->add_dependent_signal(acqrel);
 						}
 					}
 					if (!acqrel) { // (we should've handled this before this moment)
@@ -1725,10 +1517,8 @@ namespace vuk {
 				auto acq = node->acquire.acquire;
 				auto src_stream = recorder.stream_for_executor(acq->source.executor);
 
-				Scheduler::DependencyInfo di;
-				di.src_use = { acq->last_use[node->acquire.index], src_stream };
-				di.dst_use = { to_use(Access::eNone), nullptr };
-				recorder.add_sync(node->type[0], di, sched.get_value({ node, node->acquire.index }));
+				StreamResourceUse src_use = { acq->last_use[node->acquire.index], src_stream };
+				recorder.init_sync(node->type[0], src_use, sched.get_value({ node, node->acquire.index }));
 
 				if (node->type[0] == impl->cg_module->builtin_buffer) {
 #ifdef VUK_DUMP_EXEC
@@ -1742,7 +1532,7 @@ namespace vuk {
 #endif
 				}
 
-				sched.done(node, nullptr, sched.get_value({ node, node->acquire.index }));
+				sched.done(node, src_stream, sched.get_value({ node, node->acquire.index }));
 				break;
 			}
 			case Node::RELEASE:
@@ -1767,7 +1557,7 @@ namespace vuk {
 					DomainFlagBits dst_domain = dst_stream->domain;
 
 					Type* parm_ty = parm.type();
-					auto di = sched.get_dependency_info(parm, parm_ty, RW::eWrite, dst_stream, Access::eNone, node->release.dst_access);
+					auto di = sched.get_dependency_info(parm, parm_ty, RW::eWrite, dst_stream /*, Access::eNone, node->release.dst_access */); // TODO: release use
 					if (node->release.dst_access != Access::eNone) {
 						recorder.add_sync(sched.base_type(parm), di, sched.get_value(parm));
 					}
@@ -1778,7 +1568,7 @@ namespace vuk {
 					fmt::print("\n");
 #endif
 					auto& acqrel = node->release.release;
-					acqrel->last_use.push_back(di.src_use);
+					acqrel->last_use.push_back(recorder.last_use(sched.base_type(parm), sched.get_value(parm)));
 					if (src_domain == DomainFlagBits::eHost) {
 						acqrel->status = Signal::Status::eHostAvailable;
 					}
@@ -1838,7 +1628,7 @@ namespace vuk {
 					fmt::print("[{}]", constant<uint64_t>(node->extract.index));
 					fmt::print("\n");
 #endif
-					sched.done(node, nullptr, sched.get_value(first(node))); // extract doesn't execute
+					sched.done(node, item.scheduled_stream, sched.get_value(first(node))); // extract doesn't execute
 				} else {
 					sched.schedule_dependency(node->extract.composite, RW::eWrite);
 					sched.schedule_dependency(node->extract.index, RW::eRead);

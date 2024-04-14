@@ -544,6 +544,84 @@ namespace vuk {
 		return { expected_value };
 	}
 
+	Result<void> RGCImpl::build_sync() {
+		for (auto node : nodes) {
+			switch (node->kind) {
+			case Node::CALL: {
+				// args
+				for (size_t i = 0; i < node->call.args.size(); i++) {
+					auto& arg_ty = node->call.fn.type()->opaque_fn.args[i];
+					auto& parm = node->call.args[i];
+					auto& link = parm.link();
+
+					if (arg_ty->kind == Type::IMBUED_TY) {
+						auto access = arg_ty->imbued.access;
+						if (is_write_access(access)) { // Write and ReadWrite
+							assert(!link.undef_sync);
+							auto dst_access = arg_ty->imbued.access;
+							link.undef_sync = to_use(dst_access);
+						} else if (!link.read_sync) { // generate Read sync, if we haven't before
+							// to avoid R->R deps, we emit a single dep for all the reads
+							// for this we compute a merged layout (TRANSFER_SRC_OPTIMAL / READ_ONLY_OPTIMAL / GENERAL)
+							ResourceUse dst_use;
+							auto reads = link.reads.to_span(pass_reads);
+							Type* arg_ty;
+
+							bool need_read_only = false;
+							bool need_transfer = false;
+							bool need_general = false;
+
+							dst_use.layout = ImageLayout::eReadOnlyOptimalKHR;
+							for (int read_idx = 0; read_idx < reads.size(); read_idx++) {
+								auto& r = reads[read_idx];
+								if (r.node->kind == Node::CALL) {
+									arg_ty = r.node->call.fn.type()->opaque_fn.args[r.index]; // TODO: insert casts instead
+									parm = r.node->call.args[r.index];
+								} else if (r.node->kind == Node::CONVERGE) {
+									continue;
+								} else {
+									assert(0);
+								}
+
+								assert(arg_ty->kind == Type::IMBUED_TY); // TODO: handle discharged CALLs
+								Access dst_access = arg_ty->imbued.access;
+
+								if (is_transfer_access(dst_access)) {
+									need_transfer = true;
+								}
+								if (is_storage_access(dst_access)) {
+									need_general = true;
+								}
+								if (is_readonly_access(dst_access)) {
+									need_read_only = true;
+								}
+								auto use = to_use(dst_access);
+
+								dst_use.access |= use.access;
+								dst_use.stages |= use.stages;
+							}
+
+							// compute barrier and waits for the merged reads
+
+							if (need_transfer && !need_read_only) {
+								dst_use.layout = ImageLayout::eTransferSrcOptimal;
+							}
+
+							if (need_general || (need_transfer && need_read_only)) {
+								dst_use.layout = ImageLayout::eGeneral;
+							}
+
+							link.read_sync = dst_use;
+						}
+					}
+				}
+			}
+			}
+		}
+
+		return { expected_value };
+	}
+
 	DomainFlagBits pick_first_domain(DomainFlags f) { // TODO: make this work
 		return (DomainFlagBits)f.m_mask;
 	}
@@ -995,6 +1073,8 @@ namespace vuk {
 
 		queue_inference();
 		pass_partitioning();
+
+		VUK_DO_OR_RETURN(impl->build_sync());
 
 		return { expected_value };
 	}

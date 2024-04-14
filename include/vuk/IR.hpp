@@ -262,6 +262,8 @@ namespace vuk {
 		Ref undef;
 		ChainLink* next = nullptr; // if this links to a def, we link them together
 		RelSpan<ChainLink*> child_chains;
+		std::optional<ResourceUse> read_sync;  // optional, half sync to put resource into read
+		std::optional<ResourceUse> undef_sync; // optional, half sync to put resource into write
 	};
 
 	struct ExecutionInfo;
