@@ -1159,6 +1159,7 @@ namespace vuk {
 		auto operator[](size_t index) const noexcept
 		  requires std::is_array_v<Type>
 		{
+			assert(index < size());
 			return (*ptr)[index];
 		}
 	};
