@@ -315,7 +315,11 @@ namespace vuk {
 			struct : Fixed<0> {
 			} placeholder;
 			struct : Fixed<0> {
-				void* value;
+				union {
+					void* value;
+					uint64_t* value_uint64_t;
+					uint32_t* value_uint32_t;
+				};
 			} constant;
 			struct : Variable {
 				std::span<Ref> args;
