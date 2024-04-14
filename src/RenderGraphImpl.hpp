@@ -41,7 +41,7 @@ namespace vuk {
 			dependent_signals.push_back(signal);
 		}
 
-		virtual void synch_image(ImageAttachment& img_att, StreamResourceUse src_use, StreamResourceUse dst_use, void* tag, bool init_allowed) = 0;
+		virtual void synch_image(ImageAttachment& img_att, Subrange::Image subrange, StreamResourceUse src_use, StreamResourceUse dst_use, void* tag) = 0;
 		virtual void synch_memory(StreamResourceUse src_use, StreamResourceUse dst_use, void* tag) = 0;
 
 		struct SubmitResult {
