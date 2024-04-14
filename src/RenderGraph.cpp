@@ -277,14 +277,16 @@ namespace vuk {
 				}
 
 				break;
-			case Node::RELACQ: // ~~ write joiner
+			case Node::RELACQ: { // ~~ write joiner
 				for (size_t i = 0; i < node->relacq.src.size(); i++) {
+					assert(node->relacq.src[i].link().undef.node == nullptr);
 					node->relacq.src[i].link().undef = { node, i };
 					Ref{ node, i }.link().def = { node, i };
 					node->relacq.src[i].link().next = &Ref{ node, i }.link();
 					Ref{ node, i }.link().prev = &node->relacq.src[i].link();
 				}
 				break;
+			}
 			case Node::ACQUIRE:
 				first(node).link().def = first(node);
 				break;
@@ -990,6 +992,7 @@ namespace vuk {
 
 						replaces.emplace_back(needle, replace_with);
 					}
+					node->kind = Node::NOP;
 				} else {
 					switch (node->relacq.rel_acq->status) {
 					case Signal::Status::eDisarmed: // means we have to signal this, keep

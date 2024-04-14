@@ -41,9 +41,20 @@ namespace vuk {
 			return def;
 		}
 
-		Ref get_peeled_head() const noexcept {
+		Ref get_peeled_head() noexcept {
 			if (node.use_count() == 1 && head.node->kind == Node::RELACQ) {
-				return head.node->relacq.src[head.index];
+				Ref peeled_head = head.node->relacq.src[head.index];
+				return peeled_head;
+			} else {
+				return head;
+			}
+		}
+
+		Ref peel_head() noexcept {
+			if (node.use_count() == 1 && head.node->kind == Node::RELACQ) {
+				Ref peeled_head = head.node->relacq.src[head.index];
+				head.node->kind = Node::NOP;
+				return peeled_head;
 			} else {
 				return head;
 			}
@@ -51,7 +62,7 @@ namespace vuk {
 
 		void release(Access access = Access::eNone, DomainFlagBits domain = DomainFlagBits::eAny) noexcept {
 			assert(node->acqrel->status == Signal::Status::eDisarmed);
-			auto ref = get_peeled_head();
+			auto ref = get_head();
 			auto release = node->module->make_release(ref, nullptr, access, domain);
 			deps.push_back(node); // previous extnode is a dep
 			node = std::make_shared<ExtNode>(ExtNode{ node->module, release });

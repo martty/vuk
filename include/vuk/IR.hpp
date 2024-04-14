@@ -1103,8 +1103,9 @@ namespace vuk {
 		}
 
 		void mutate(Node* new_node) {
-			assert(node->kind == Node::RELACQ);
-			node->relacq.rel_acq = nullptr;
+			if (node->kind == Node::RELACQ) {
+				node->relacq.rel_acq = nullptr;
+			}
 			node = this->module->make_relacq(new_node, acqrel);
 		}
 
