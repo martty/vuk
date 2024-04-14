@@ -180,6 +180,7 @@ TEST_CASE("scheduling with submitted") {
 		std::string execution;
 
 		auto buf0 = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+		auto buf1 = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
 
 		auto write = make_pass("write", [&](CommandBuffer& cbuf, VUK_BA(Access::eTransferWrite) dst) {
 			execution += "w";
@@ -199,7 +200,7 @@ TEST_CASE("scheduling with submitted") {
 			auto written = write(declare_buf("src0", **buf0));
 			written.wait(*test_context.allocator, test_context.compiler);
 			{
-				auto buf2 = declare_buf("src0", **buf0);
+				auto buf2 = declare_buf("src1", **buf1);
 				auto res = read2(write(buf2), written);
 				res.wait(*test_context.allocator, test_context.compiler);
 			}
