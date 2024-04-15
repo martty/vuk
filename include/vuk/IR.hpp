@@ -269,7 +269,7 @@ namespace vuk {
 	struct ExecutionInfo;
 
 	struct Node {
-		static constexpr uint8_t MAX_ARGS = 16;
+		static constexpr uint8_t MAX_ARGS = 5;
 
 		enum class BinOp { MUL };
 		enum Kind {
@@ -294,16 +294,16 @@ namespace vuk {
 			MATH_BINARY,
 			INDIRECT_DEPEND // utility for dependencies on writes
 		} kind;
+		uint8_t flag = 0;
 		std::span<Type*> type;
 		NodeDebugInfo* debug_info = nullptr;
 		SchedulingInfo* scheduling_info = nullptr;
 		ChainLink* links = nullptr;
 		ExecutionInfo* execution_info = nullptr;
 
-		uint8_t flag = 0;
-
 		template<uint8_t c>
 		struct Fixed {
+			static_assert(c <= MAX_ARGS);
 			uint8_t arg_count = c;
 		};
 
