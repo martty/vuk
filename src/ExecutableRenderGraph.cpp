@@ -90,36 +90,32 @@ namespace vuk {
 		return result;
 	}
 
-	std::vector<Subrange::Image> difference(Subrange::Image a, Subrange::Image isection) {
-		std::vector<Subrange::Image> new_srs;
+	template<class F>
+	void difference(Subrange::Image a, Subrange::Image isection, F&& func) {
 		// before, mips
 		if (isection.base_level > a.base_level) {
-			new_srs.push_back(
-			    { .base_level = a.base_level, .level_count = isection.base_level - a.base_level, .base_layer = a.base_layer, .layer_count = a.layer_count });
+			func({ .base_level = a.base_level, .level_count = isection.base_level - a.base_level, .base_layer = a.base_layer, .layer_count = a.layer_count });
 		}
 		// after, mips
 		if (a.base_level + a.level_count > isection.base_level + isection.level_count) {
-			new_srs.push_back({ .base_level = isection.base_level + isection.level_count,
-			                    .level_count = a.base_level + a.level_count - (isection.base_level + isection.level_count),
-			                    .base_layer = a.base_layer,
-			                    .layer_count = a.layer_count });
+			func({ .base_level = isection.base_level + isection.level_count,
+			       .level_count = a.base_level + a.level_count - (isection.base_level + isection.level_count),
+			       .base_layer = a.base_layer,
+			       .layer_count = a.layer_count });
 		}
 		// before, layers
 		if (isection.base_layer > a.base_layer) {
-			new_srs.push_back(
-			    { .base_level = a.base_level, .level_count = a.level_count, .base_layer = a.base_layer, .layer_count = isection.base_layer - a.base_layer });
+			func({ .base_level = a.base_level, .level_count = a.level_count, .base_layer = a.base_layer, .layer_count = isection.base_layer - a.base_layer });
 		}
 		// after, layers
 		if (a.base_layer + a.layer_count > isection.base_layer + isection.layer_count) {
-			new_srs.push_back({
+			func({
 			    .base_level = a.base_level,
 			    .level_count = a.level_count,
 			    .base_layer = isection.base_layer + isection.layer_count,
 			    .layer_count = a.base_layer + a.layer_count - (isection.base_layer + isection.layer_count),
 			});
 		}
-
-		return new_srs;
 	};
 
 	void ExecutableRenderGraph::fill_render_pass_info(vuk::RenderPassInfo& rpass, const size_t& i, vuk::CommandBuffer& cobuf) {
@@ -852,23 +848,21 @@ namespace vuk {
 					// remove the existing barrier from the candidates
 					auto found = src;
 
-					// splinter the source and destination ranges
-					auto new_srcs = difference(src_range, isection);
 					// wind to the end
 					for (; src->next != nullptr; src = src->next)
 						;
-					// push the splintered src uses
-					for (auto& nb : new_srcs) {
+					// splinter the source and destination ranges
+					difference(src_range, isection, [&](Subrange::Image nb) {
+						// push the splintered src uses
 						PartialStreamResourceUse psru{ *src };
 						psru.subrange = { nb.base_level, nb.level_count, nb.base_layer, nb.layer_count };
 						src->next = new PartialStreamResourceUse(psru);
 						src->next->prev = src;
 						src = src->next;
-					}
+					});
 
 					// splinter the dst uses, and push into the work queue
-					auto new_dst = difference(dst_range, isection);
-					work_queue.insert(work_queue.end(), new_dst.begin(), new_dst.end());
+					difference(dst_range, isection, [&](Subrange::Image nb) { work_queue.push_back(nb); });
 
 					auto& src_use = *found;
 					if (src_use.stream && dst_use.stream && (src_use.stream != dst_use.stream)) {
