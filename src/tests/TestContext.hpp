@@ -210,3 +210,9 @@ constexpr bool operator==(const std::span<float>& lhs, const std::span<const flo
 constexpr bool operator==(const std::span<const float>& lhs, const std::span<const float>& rhs) {
 	return std::equal(begin(lhs), end(lhs), begin(rhs), end(rhs));
 }
+
+
+template<vuk::Access acc>
+auto image_use = vuk::make_pass("image use", [](vuk::CommandBuffer& cbuf, VUK_IA(acc) img) { return img; });
+template<vuk::Access acc>
+auto buffer_use = vuk::make_pass("buffer use", [](vuk::CommandBuffer& cbuf, VUK_BA(acc) buf) { return buf; });

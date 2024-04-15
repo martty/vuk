@@ -27,17 +27,16 @@ util::ImGuiData util::ImGui_ImplVuk_Init(Allocator& allocator) {
 	auto [image, view, fut] = create_image_and_view_with_data(allocator, DomainFlagBits::eTransferOnTransfer, font_ia, pixels);
 	data.font_image = std::move(image);
 	data.font_image_view = std::move(view);
-	font_ia.image = data.font_image.get();
-	font_ia.image_view = data.font_image_view.get();
 	Compiler comp;
-	fut.wait(allocator, comp);
+	fut.as_released(Access::eFragmentSampled, DomainFlagBits::eGraphicsQueue);
+	data.font_ia = *fut.get(allocator, comp);
+	data.font_ia.layout = vuk::ImageLayout::eReadOnlyOptimal;
 	ctx.set_name(data.font_image_view->payload, "ImGui/font");
 	SamplerCreateInfo sci;
 	sci.minFilter = sci.magFilter = Filter::eLinear;
 	sci.mipmapMode = SamplerMipmapMode::eLinear;
 	sci.addressModeU = sci.addressModeV = sci.addressModeW = SamplerAddressMode::eRepeat;
 	data.font_sci = sci;
-	data.font_si = fut;
 	{
 		PipelineBaseCreateInfo pci;
 		// glslangValidator.exe -V imgui.vert --vn imgui_vert -o examples/imgui_vert.hpp
@@ -93,7 +92,7 @@ Value<ImageAttachment> util::ImGui_ImplVuk_Render(Allocator & allocator,
 
 	// add rendergraph dependencies to be transitioned
 	ImGui::GetIO().Fonts->TexID = (ImTextureID)(sampled_images.size() + 1);
-	sampled_images.push_back(data.font_si);
+	sampled_images.push_back(acquire_ia("imgui font", data.font_ia, Access::eFragmentSampled));
 	// make all rendergraph sampled images available
 	auto sampled_images_array = declare_array("imgui_sampled", std::span(sampled_images));
 

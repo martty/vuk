@@ -659,6 +659,7 @@ public:
 		auto rg = args.size() > 0 ? args[0].get_render_graph() : std::make_shared<RG>();
 		std::vector<Ref> refs;
 		std::vector<Ref> defs;
+		std::vector<std::shared_ptr<ExtNode>> deps;
 		for (size_t i = 0; i < args.size(); i++) {
 			auto& arg = args[i];
 			if (i != 0) {
@@ -666,6 +667,7 @@ public:
 			}
 			refs.push_back(arg.get_head());
 			defs.push_back(arg.get_def());
+			deps.push_back(arg.node);
 		}
 		Type* t;
 		if constexpr (std::is_same_v<T, vuk::ImageAttachment>) {
@@ -676,7 +678,7 @@ public:
 		Ref ref = rg->make_declare_array(t, refs, defs);
 		rg->name_output(ref, name.c_str());
 		rg->set_source_location(ref.node, loc);
-		return { make_ext_ref(rg, ref), ref };
+		return { make_ext_ref(rg, ref), ref, deps };
 	}
 
 	template<class T>
@@ -684,6 +686,7 @@ public:
 		auto rg = args.size() > 0 ? args[0].get_render_graph() : std::make_shared<RG>();
 		std::vector<Ref> refs;
 		std::vector<Ref> defs;
+		std::vector<std::shared_ptr<ExtNode>> deps;
 		for (size_t i = 0; i < args.size(); i++) {
 			auto& arg = args[i];
 			if (i != 0) {
@@ -691,6 +694,7 @@ public:
 			}
 			refs.push_back(arg.get_head());
 			defs.push_back(arg.get_def());
+			deps.push_back(arg.node);
 		}
 		Type* t;
 		if constexpr (std::is_same_v<T, vuk::ImageAttachment>) {
@@ -701,7 +705,7 @@ public:
 		Ref ref = rg->make_declare_array(t, refs, defs);
 		rg->name_output(ref, name.c_str());
 		rg->set_source_location(ref.node, loc);
-		return { make_ext_ref(rg, ref), ref };
+		return { make_ext_ref(rg, ref), ref, deps };
 	}
 
 	[[nodiscard]] inline Value<Swapchain> declare_swapchain(Swapchain& bundle, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {

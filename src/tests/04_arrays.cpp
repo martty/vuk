@@ -95,6 +95,43 @@ TEST_CASE("arrayed images, commands") {
 	}
 }
 
+TEST_CASE("arrayed images, divergent source sync") {
+	{
+		auto data = { 1u, 2u, 3u, 4u };
+		auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, Samples::e1);
+		auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
+		auto [img2, fut2] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
+
+		size_t alignment = format_to_texel_block_size(fut->format);
+		size_t size = compute_image_size(fut->format, fut->extent);
+		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
+
+		fut = image_use<eFragmentRead>(clear_image(std::move(fut), vuk::ClearColor(5u, 5u, 5u, 5u)));
+		fut2 = image_use<eTransferRead>(clear_image(std::move(fut2), vuk::ClearColor(6u, 6u, 6u, 6u)));
+		auto arr = declare_array("images", std::move(fut), std::move(fut2));
+
+		auto array_use = make_pass("array_use", [](CommandBuffer& cbuf, VUK_ARG(ImageAttachment[], Access::eTransferWrite) img) {
+			auto& first = img[0];
+			auto& second = img[1];
+			return img;
+		});
+		arr = array_use(std::move(arr));
+
+		{
+			auto dst_buf = declare_buf("dst", *dst);
+			auto res = download_buffer(image2buf(std::move(arr[0]), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
+			auto updata = std::span((uint32_t*)res->mapped_ptr, 4);
+			CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 5; }));
+		}
+		{
+			auto dst_buf = declare_buf("dst", *dst);
+			auto res = download_buffer(image2buf(std::move(arr[1]), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
+			auto updata = std::span((uint32_t*)res->mapped_ptr, 4);
+			CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 6; }));
+		}
+	}
+}
+
 TEST_CASE("image slicing, mips") {
 	{
 		auto data = { 1u, 2u, 3u, 4u };
@@ -168,8 +205,6 @@ TEST_CASE("image slicing, reconvergence") {
 	}
 }
 
-auto layout = make_pass("layout", [](CommandBuffer& cbuf, VUK_IA(Access::eTransferWrite) img) { return img; });
-
 TEST_CASE("image slicing, reconvergence 2") {
 	{
 		auto data = { 1u, 2u, 3u, 4u };
@@ -183,7 +218,7 @@ TEST_CASE("image slicing, reconvergence 2") {
 
 		{
 			auto m1 = clear_image(fut.mip(0), vuk::ClearColor(5u, 5u, 5u, 5u));
-			auto m2 = layout(clear_image(fut.mip(1), vuk::ClearColor(6u, 6u, 6u, 6u)));
+			auto m2 = image_use<Access::eTransferWrite>(clear_image(fut.mip(1), vuk::ClearColor(6u, 6u, 6u, 6u)));
 			auto futp = blit_down(std::move(fut));
 
 			auto dst_buf = declare_buf("dst", *dst);
@@ -269,7 +304,7 @@ vuk::Value<vuk::ImageAttachment> generate_mips(std::string& trace, vuk::Value<vu
 				                                                        std::max(static_cast<int32_t>(extent.depth) >> (mip_level), 1) };
 			                           command_buffer.blit_image(src, dst, blit, Filter::eLinear);
 
-									   trace += fmt::format("{}", mip_level);
+			                           trace += fmt::format("{}", mip_level);
 
 			                           return dst;
 		                           });
@@ -297,14 +332,13 @@ TEST_CASE("mip generation 2") {
 
 	auto mipped = converge(generate_mips(trace, converge(std::move(img)), 5));
 	size_t alignment = format_to_texel_block_size(mipped->format);
-	size_t size = compute_image_size(mipped->format, {1, 1, 1});
+	size_t size = compute_image_size(mipped->format, { 1, 1, 1 });
 	auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 	auto res = download_buffer(image2buf(mipped.mip(4), declare_buf("dst", *dst))).get(*test_context.allocator, test_context.compiler);
 	auto updata = std::span((float*)res->mapped_ptr, 1);
 	CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem - 0.1f < 0.001f; }));
 	CHECK(trace == "1234");
 }
-
 
 vuk::Value<vuk::ImageAttachment> bloom_pass(std::string& trace,
                                             vuk::Value<vuk::ImageAttachment> downsample_image,
@@ -323,10 +357,11 @@ vuk::Value<vuk::ImageAttachment> bloom_pass(std::string& trace,
 	auto src_mip = prefiltered_downsample_image.mip(0);
 
 	for (uint32_t i = 1; i < bloom_mip_count; i++) {
-		auto pass = vuk::make_pass("bloom_downsample", [i, &trace](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eComputeRW) target, VUK_IA(vuk::eComputeSampled) input) {
-			trace += fmt::format("d{}", i);
-			return target;
-		});
+		auto pass =
+		    vuk::make_pass("bloom_downsample", [i, &trace](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eComputeRW) target, VUK_IA(vuk::eComputeSampled) input) {
+			    trace += fmt::format("d{}", i);
+			    return target;
+		    });
 		src_mip = pass(prefiltered_downsample_image.mip(i), src_mip);
 	}
 
