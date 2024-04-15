@@ -109,10 +109,12 @@ namespace vuk {
 		ici.extent = attachment.extent;
 
 		VkImageFormatListCreateInfo listci = { VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO };
+		VkFormat formats[2];
 		if (attachment.allow_srgb_unorm_mutable) {
 			auto unorm_fmt = srgb_to_unorm(attachment.format);
 			auto srgb_fmt = unorm_to_srgb(attachment.format);
-			VkFormat formats[2] = { (VkFormat)attachment.format, unorm_fmt == vuk::Format::eUndefined ? (VkFormat)srgb_fmt : (VkFormat)unorm_fmt };
+			formats[0] = (VkFormat)attachment.format;
+			formats[1] = unorm_fmt == vuk::Format::eUndefined ? (VkFormat)srgb_fmt : (VkFormat)unorm_fmt;
 			listci.pViewFormats = formats;
 			listci.viewFormatCount = formats[1] == VK_FORMAT_UNDEFINED ? 1 : 2;
 			if (listci.viewFormatCount > 1) {
