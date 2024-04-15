@@ -225,11 +225,8 @@ namespace vuk {
 		}
 
 		Result<VkResult> present(Swapchain& swp) {
-			sync_deps();
-			end_cbuf();
 			batch.back().pres_signal.emplace_back(swp.semaphores[swp.linear_index * 2 + 1]);
-			executor->submit_batch(batch);
-			batch.clear();
+			submit();
 			VkPresentInfoKHR pi{ .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
 			pi.swapchainCount = 1;
 			pi.pSwapchains = &swp.swapchain;
@@ -899,7 +896,7 @@ namespace vuk {
 			}
 		}
 
-		StreamResourceUse last_use(Type* base_ty, void* value) {
+		StreamResourceUse& last_use(Type* base_ty, void* value) {
 			uint64_t key = 0;
 			if (base_ty == cg_module->builtin_image) {
 				auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
@@ -912,7 +909,7 @@ namespace vuk {
 				auto elems = reinterpret_cast<std::byte*>(value);
 				return last_use(elem_ty, elems);
 			} else { // no other types require sync
-				return {};
+				assert(false);
 			}
 
 			return *last_modify.at(key);
@@ -1475,9 +1472,8 @@ namespace vuk {
 					DomainFlagBits dst_domain = dst_stream->domain;
 
 					Type* parm_ty = parm.type();
-					auto di = sched.get_dependency_info(parm, parm_ty, RW::eWrite, dst_stream /*, Access::eNone, node->release.dst_access */); // TODO: release use
 					if (node->release.dst_access != Access::eNone) {
-						recorder.add_sync(sched.base_type(parm), di, sched.get_value(parm));
+						recorder.add_sync(sched.base_type(parm), StreamResourceUse{ to_use(node->release.dst_access), dst_stream }, sched.get_value(parm));
 					}
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
@@ -1490,15 +1486,18 @@ namespace vuk {
 					if (src_domain == DomainFlagBits::eHost) {
 						acqrel->status = Signal::Status::eHostAvailable;
 					}
+
+					src_stream->add_dependent_signal(acqrel);
+
 					if (dst_domain == DomainFlagBits::ePE) {
 						auto& link = node->release.src.link();
 						auto& swp = sched.get_value<Swapchain>(link.urdef.node->acquire_next_image.swapchain);
 						assert(src_stream->domain & DomainFlagBits::eDevice);
 						auto result = dynamic_cast<VkQueueStream*>(src_stream)->present(swp);
 						// TODO: do something with the result here
+					} else {
+						src_stream->submit();
 					}
-					src_stream->add_dependent_signal(acqrel);
-					src_stream->submit();
 
 					auto storage = new std::byte[parm.type()->size];
 					memcpy(storage, impl->get_value(parm), parm.type()->size);
@@ -1528,6 +1527,7 @@ namespace vuk {
 					fmt::print("\n");
 #endif
 					sched.done(node, pe_stream, swp.images[swp.image_index]);
+					recorder.last_use(impl->cg_module->builtin_image, &swp.images[swp.image_index]).stream = pe_stream;
 				} else {
 					sched.schedule_dependency(node->acquire_next_image.swapchain, RW::eWrite);
 				}
