@@ -466,8 +466,7 @@ namespace vuk {
 				auto iv = allocate_image_view(alloc, img_att); // TODO: dropping error
 				img_att.image_view = **iv;
 
-				auto name = std::string("ImageView: RenderTarget ");
-				alloc.get_context().set_name(img_att.image_view.payload, Name(name));
+				alloc.get_context().set_name(img_att.image_view.payload, Name("ImageView: RenderTarget "));
 			}
 			rp.framebuffer_ivs.push_back(img_att.image_view.payload);
 			rp.fbci.width = img_att.extent.width;
@@ -735,6 +734,7 @@ namespace vuk {
 		ProfilingCallbacks* callbacks;
 		std::vector<Ref>& pass_reads;
 		std::shared_ptr<RG> cg_module;
+		InlineArena<std::byte, 1024> arena;
 
 		std::unordered_map<DomainFlagBits, std::unique_ptr<Stream>> streams;
 		struct PartialStreamResourceUse : StreamResourceUse {
@@ -825,7 +825,7 @@ namespace vuk {
 
 			if (base_ty == cg_module->builtin_image) {
 				auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
-				std::vector<Subrange::Image> work_queue;
+				std::vector<Subrange::Image, inline_alloc<Subrange::Image, 1024>> work_queue(this->arena);
 				work_queue.emplace_back(Subrange::Image{ img_att.base_level, img_att.level_count, img_att.base_layer, img_att.layer_count });
 
 				while (work_queue.size() > 0) {
@@ -1305,7 +1305,7 @@ namespace vuk {
 					// make the renderpass if needed!
 					recorder.synchronize_stream(dst_stream);
 					// run the user cb!
-					std::vector<void*> opaque_rets;
+					std::vector<void*, short_alloc<void*>> opaque_rets(*impl->arena_);
 					if (node->call.fn.type()->kind == Type::OPAQUE_FN_TY) {
 						CommandBuffer cobuf(*this, ctx, alloc, vk_rec->cbuf);
 						if (node->call.fn.type()->debug_info) {
@@ -1322,8 +1322,8 @@ namespace vuk {
 							fill_render_pass_info(vk_rec->rp, 0, cobuf);
 						}
 
-						std::vector<void*> opaque_args;
-						std::vector<void*> opaque_meta;
+						std::vector<void*, short_alloc<void*>> opaque_args(*impl->arena_);
+						std::vector<void*, short_alloc<void*>> opaque_meta(*impl->arena_);
 						for (size_t i = 0; i < node->call.args.size(); i++) {
 							auto& parm = node->call.args[i];
 							auto& link = parm.link();

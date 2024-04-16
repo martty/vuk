@@ -3,6 +3,7 @@
 #include "vuk/Buffer.hpp"
 #include "vuk/ImageAttachment.hpp"
 #include "vuk/RelSpan.hpp"
+#include "vuk/ShortAlloc.hpp"
 #include "vuk/Swapchain.hpp"
 #include "vuk/SyncPoint.hpp"
 #include "vuk/Types.hpp"
@@ -644,8 +645,53 @@ namespace vuk {
 		}
 	};
 
+	template<class T, size_t sz>
+	class inline_alloc {
+		InlineArena<std::byte, sz>* a_ = nullptr;
+
+	public:
+		typedef T value_type;
+
+	public:
+		template<class _Up>
+		struct rebind {
+			typedef inline_alloc<_Up, sz> other;
+		};
+
+		inline_alloc(){}
+		inline_alloc(InlineArena<std::byte, sz>& a) : a_(&a) {}
+		template<class U, size_t szz>
+		inline_alloc(const inline_alloc<U, szz>& a) noexcept : a_(a.a_) {}
+		inline_alloc(const inline_alloc&) = default;
+		inline_alloc& operator=(const inline_alloc&) = delete;
+
+		T* allocate(std::size_t n) {
+			return reinterpret_cast<T*>(a_->ensure_space(n * sizeof(T)));
+		}
+
+		void deallocate(T* p, std::size_t n) noexcept {}
+
+		template<class T1, class U, size_t s1, size_t s2>
+		friend bool operator==(const inline_alloc<T1, s1>& x, const inline_alloc<U, s2>& y) noexcept;
+
+		template<class U, size_t s>
+		friend class inline_alloc;
+	};
+
+	template<class T, class U, size_t s1, size_t s2>
+	inline bool operator==(const inline_alloc<T, s1>& x, const inline_alloc<U, s2>& y) noexcept {
+		return &x.a_ == &y.a_;
+	}
+
+	template<class T, class U, size_t s1, size_t s2>
+	inline bool operator!=(const inline_alloc<T, s1>& x, const inline_alloc<U, s2>& y) noexcept {
+		return !(x == y);
+	}
+
 	struct RG {
-		plf::colony<Node> op_arena;
+		RG() : op_arena(/**/) {}
+
+		plf::colony<Node /*, inline_alloc<Node, 4 * 1024>*/> op_arena;
 		plf::colony<UserCallbackType> ucbs;
 
 		InlineArena<std::byte, 4 * 1024> payload_arena;
