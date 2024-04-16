@@ -167,6 +167,9 @@ namespace vuk {
 		}
 
 		void add_dependency(Stream* dep) override {
+			if (dep->domain == DomainFlagBits::eHost) {
+				return;
+			}
 			if (is_recording) {
 				end_cbuf();
 				batch.emplace_back();
