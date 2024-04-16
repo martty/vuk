@@ -86,7 +86,7 @@ namespace vuk {
 
 		template<class U>
 		Value<U> transmute(Ref new_head) noexcept {
-			node = std::make_shared<ExtNode>(ExtNode{ node->module, new_head.node, std::vector<std::shared_ptr<ExtNode>>{ } });
+			node = std::make_shared<ExtNode>(ExtNode{ node->module, new_head.node, node });
 			head = { node->get_node(), new_head.index };
 			def = new_head;
 			return *reinterpret_cast<Value<U>*>(this); // TODO: not cool

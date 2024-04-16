@@ -503,7 +503,7 @@ namespace vuk {
 								}
 							}
 						} else if (link.urdef.node->kind == Node::ACQUIRE_NEXT_IMAGE) {
-							Swapchain& swp = *reinterpret_cast<Swapchain*>(link.urdef.node->acquire_next_image.swapchain.node->construct.args[0].node->constant.value);
+							Swapchain& swp = *eval<Swapchain*>(link.urdef.node->acquire_next_image.swapchain);
 							extent = Extent2D{ swp.images[0].extent.width, swp.images[0].extent.height };
 							layer_count = swp.images[0].layer_count;
 							samples = Samples::e1;

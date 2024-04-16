@@ -788,8 +788,8 @@ namespace vuk {
 					elems += elem_ty->size;
 				}
 				return;
-			} else { // no other types require sync
-				return;
+			} else { // other types just key on the voidptr
+				key = reinterpret_cast<uint64_t>(value);
 			}
 
 			assert(last_modify.find(key) == last_modify.end());
@@ -902,8 +902,8 @@ namespace vuk {
 				auto size = base_ty->array.count;
 				auto elems = reinterpret_cast<std::byte*>(value);
 				return last_use(elem_ty, elems);
-			} else { // no other types require sync
-				assert(false);
+			} else { // other types just key on the voidptr
+				key = reinterpret_cast<uint64_t>(value);
 			}
 
 			return *last_modify.at(key);
@@ -1203,6 +1203,7 @@ namespace vuk {
 #endif
 						/* no-op */
 						sched.done(node, host_stream, sched.get_value(node->construct.args[0]));
+						recorder.init_sync(impl->cg_module->builtin_swapchain, { to_use(eNone), host_stream }, sched.get_value(first(node)));
 					} else if (node->type[0]->kind == Type::ARRAY_TY) {
 						for (size_t i = 1; i < node->construct.args.size(); i++) {
 							auto arg_ty = node->construct.args[i].type();
