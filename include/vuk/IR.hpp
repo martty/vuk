@@ -1107,7 +1107,7 @@ namespace vuk {
 	};
 
 	struct ExtNode {
-		ExtNode(std::shared_ptr<RG> module, Node* node) : module(std::move(module)) {
+		ExtNode(std::shared_ptr<RG> module, Node* node, std::vector<std::shared_ptr<ExtNode>> deps) : module(std::move(module)), deps(std::move(deps)) {
 			owned_acqrel = std::make_unique<AcquireRelease>();
 			acqrel = owned_acqrel.get();
 			if (node->kind != Node::RELEASE && node->kind != Node::ACQUIRE) {
@@ -1115,6 +1115,18 @@ namespace vuk {
 			} else {
 				this->node = node;
 			}
+		}
+
+		ExtNode(std::shared_ptr<RG> module, Node* node, std::shared_ptr<ExtNode> dep) : module(std::move(module)) {
+			owned_acqrel = std::make_unique<AcquireRelease>();
+			acqrel = owned_acqrel.get();
+			if (node->kind != Node::RELEASE && node->kind != Node::ACQUIRE) {
+				this->node = this->module->make_relacq(node, acqrel);
+			} else {
+				this->node = node;
+			}
+
+			deps.push_back(std::move(dep));
 		}
 
 		~ExtNode() {
@@ -1158,7 +1170,7 @@ namespace vuk {
 		std::shared_ptr<RG> module;
 		AcquireRelease* acqrel;
 		std::unique_ptr<AcquireRelease> owned_acqrel;
-
+		std::vector<std::shared_ptr<ExtNode>> deps;
 	private:
 		Node* node;
 	};

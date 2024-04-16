@@ -17,11 +17,6 @@ namespace vuk {
 	public:
 		UntypedValue() = default;
 		UntypedValue(ExtRef extref, Ref def) : node(std::move(extref.node)), head{ node->get_node(), extref.index }, def(def) {}
-		UntypedValue(ExtRef extref, Ref def, std::vector<std::shared_ptr<ExtNode>> deps) :
-		    node(std::move(extref.node)),
-		    head{ node->get_node(), extref.index },
-		    deps(std::move(deps)),
-		    def(def) {}
 
 		/// @brief Get the referenced RenderGraph
 		const std::shared_ptr<RG>& get_render_graph() const noexcept {
@@ -64,8 +59,7 @@ namespace vuk {
 			assert(node->acqrel->status == Signal::Status::eDisarmed);
 			auto ref = get_head();
 			auto release = node->module->make_release(ref, nullptr, access, domain);
-			deps.push_back(node); // previous extnode is a dep
-			node = std::make_shared<ExtNode>(ExtNode{ node->module, release });
+			node = std::make_shared<ExtNode>(ExtNode{ node->module, release, { node } }); // previous extnode is a dep
 			release->release.release = node->acqrel;
 			head = { node->get_node(), 0 };
 		}
@@ -79,7 +73,6 @@ namespace vuk {
 
 		std::shared_ptr<ExtNode> node;
 		Ref head;
-		std::vector<std::shared_ptr<ExtNode>> deps;
 
 	protected:
 		Ref def;
@@ -93,7 +86,7 @@ namespace vuk {
 
 		template<class U>
 		Value<U> transmute(Ref new_head) noexcept {
-			node = std::make_shared<ExtNode>(ExtNode{ node->module, new_head.node });
+			node = std::make_shared<ExtNode>(ExtNode{ node->module, new_head.node, std::vector<std::shared_ptr<ExtNode>>{ } });
 			head = { node->get_node(), new_head.index };
 			def = new_head;
 			return *reinterpret_cast<Value<U>*>(this); // TODO: not cool
@@ -209,7 +202,7 @@ namespace vuk {
 		  requires std::is_same_v<T, Buffer>
 		{
 			Ref extract = get_render_graph()->make_extract(get_def(), 0);
-			return { ExtRef{ std::make_shared<ExtNode>(get_render_graph(), extract.node), extract }, {} };
+			return { ExtRef{ std::make_shared<ExtNode>(get_render_graph(), extract.node, node), extract }, {} };
 		}
 
 		void set_size(Value<uint64_t> arg)
@@ -227,7 +220,7 @@ namespace vuk {
 			auto item_def = def.node->construct.defs[index];
 			Ref item = node->module->make_extract(get_head(), node->module->make_constant(index));
 			return Value<std::remove_reference_t<decltype(std::declval<T>()[0])>>(
-			    ExtRef(std::make_shared<ExtNode>(get_render_graph(), item.node), item), item_def, { node });
+			    ExtRef(std::make_shared<ExtNode>(get_render_graph(), item.node, node), item), item_def);
 		}
 
 		auto mip(uint32_t mip)
@@ -240,7 +233,7 @@ namespace vuk {
 			                                    node->module->make_constant(1u),
 			                                    node->module->make_constant(0u),
 			                                    node->module->make_constant(VK_REMAINING_ARRAY_LAYERS));
-			return Value(ExtRef(std::make_shared<ExtNode>(get_render_graph(), item.node), item), item_def, { node });
+			return Value(ExtRef(std::make_shared<ExtNode>(get_render_graph(), item.node, node), item), item_def);
 		}
 
 		auto layer(uint32_t layer)
@@ -253,7 +246,7 @@ namespace vuk {
 			                                    node->module->make_constant(VK_REMAINING_MIP_LEVELS),
 			                                    node->module->make_constant(layer),
 			                                    node->module->make_constant(1u));
-			return Value(ExtRef(std::make_shared<ExtNode>(get_render_graph(), item.node), item), item_def, { node });
+			return Value(ExtRef(std::make_shared<ExtNode>(get_render_graph(), item.node, node), item), item_def);
 		}
 	};
 

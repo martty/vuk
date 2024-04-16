@@ -464,10 +464,10 @@ public:
 	struct is_tuple<std::tuple<T...>> : std::true_type {};
 
 	template<typename... T>
-	static auto make_ret(std::shared_ptr<ExtNode> extnode, const std::tuple<T...>& us, std::vector<std::shared_ptr<ExtNode>>& deps) {
+	static auto make_ret(std::shared_ptr<ExtNode> extnode, const std::tuple<T...>& us) {
 		if constexpr (sizeof...(T) > 0) {
 			size_t i = 0;
-			return std::tuple{ Value<typename T::type>{ ExtRef{ extnode, Ref{ extnode->get_node(), sizeof...(T) - (++i) } }, std::get<T>(us).def, deps }... };
+			return std::tuple{ Value<typename T::type>{ ExtRef{ extnode, Ref{ extnode->get_node(), sizeof...(T) - (++i) } }, std::get<T>(us).def }... };
 		}
 	}
 
@@ -539,29 +539,30 @@ public:
 				rg.set_source_location(node, loc);
 
 				std::vector<std::shared_ptr<ExtNode>> dependent_nodes;
-				[reuse_node, & dependent_nodes](auto& first, auto&... rest) {
+				[reuse_node, &dependent_nodes](auto& first, auto&... rest) {
 					(first.get_render_graph()->reference_RG(rest.get_render_graph()), ...);
 					if (!reuse_node) {
 						dependent_nodes.push_back(std::move(first.node));
 					}
-					dependent_nodes.insert(dependent_nodes.end(), std::move(first.deps).begin(), std::move(first.deps).end());
-					(dependent_nodes.insert(dependent_nodes.end(), std::move(rest.deps).begin(), std::move(rest.deps).end()), ...);
+					/* dependent_nodes.insert(dependent_nodes.end(), std::make_move_iterator(first.node->deps.begin()), std::make_move_iterator(first.deps.end()));
+					(dependent_nodes.insert(dependent_nodes.end(), std::make_move_iterator(rest.deps.begin()), std::make_move_iterator(rest.deps.end())), ...);*/
 					(dependent_nodes.push_back(std::move(rest.node)), ...);
 				}(args...);
 
-				std::erase_if(dependent_nodes, [](auto& sp) { return sp.use_count() == 1; });
-
-				if(reuse_node){
+				if (reuse_node) {
 					first.node->mutate(node);
 				}
-				auto extnode = reuse_node ? std::move(first.node) : std::make_shared<ExtNode>(ExtNode(rgp, node));
+				auto extnode = reuse_node ? std::move(first.node) : std::make_shared<ExtNode>(ExtNode(rgp, node, std::move(dependent_nodes)));
+				if (reuse_node) {
+					extnode->deps.insert(extnode->deps.end(), std::make_move_iterator(dependent_nodes.begin()), std::make_move_iterator(dependent_nodes.end()));
+				}
 
 				if constexpr (is_tuple<Ret>::value) {
 					auto [idxs, ret_tuple] = intersect_tuples<std::tuple<T...>, Ret>(arg_tuple_as_a);
-					return make_ret(std::move(extnode), ret_tuple, dependent_nodes);
+					return make_ret(std::move(extnode), ret_tuple);
 				} else if constexpr (!std::is_same_v<Ret, void>) {
 					auto [idxs, ret_tuple] = intersect_tuples<std::tuple<T...>, std::tuple<Ret>>(arg_tuple_as_a);
-					return std::get<0>(make_ret(std::move(extnode), ret_tuple, dependent_nodes));
+					return std::get<0>(make_ret(std::move(extnode), ret_tuple));
 				}
 			};
 		}
@@ -574,8 +575,8 @@ public:
 		return TupleMap<drop_t<1, typename traits::types>>::template make_lam<typename traits::result_type, F>(name, std::forward<F>(body), scheduling_info, loc);
 	}
 
-	inline ExtRef make_ext_ref(std::shared_ptr<RG> rg, Ref ref) {
-		return ExtRef(std::make_shared<ExtNode>(rg, ref.node), ref);
+	inline ExtRef make_ext_ref(std::shared_ptr<RG> rg, Ref ref, std::vector<std::shared_ptr<ExtNode>> deps = {}) {
+		return ExtRef(std::make_shared<ExtNode>(rg, ref.node, std::move(deps)), ref);
 	}
 
 	[[nodiscard]] inline Value<ImageAttachment>
@@ -590,8 +591,11 @@ public:
 		return { make_ext_ref(rg, ref), ref };
 	}
 
-	[[nodiscard]] inline Value<ImageAttachment>
-	acquire_ia(Name name, ImageAttachment ia, Access access, SourceLocationAtFrame _pscope = VUK_HERE_AND_NOW(), SourceLocationAtFrame _scope = VUK_HERE_AND_NOW()) {
+	[[nodiscard]] inline Value<ImageAttachment> acquire_ia(Name name,
+	                                                       ImageAttachment ia,
+	                                                       Access access,
+	                                                       SourceLocationAtFrame _pscope = VUK_HERE_AND_NOW(),
+	                                                       SourceLocationAtFrame _scope = VUK_HERE_AND_NOW()) {
 		if (_pscope != _scope) {
 			_scope.parent = &_pscope;
 		}
@@ -620,11 +624,8 @@ public:
 		return { make_ext_ref(rg, ref), ref };
 	}
 
-	[[nodiscard]] inline Value<Buffer> acquire_buf(Name name,
-	                                                       Buffer buf,
-	                                                       Access access,
-	                                                       SourceLocationAtFrame _pscope = VUK_HERE_AND_NOW(),
-	                                                       SourceLocationAtFrame _scope = VUK_HERE_AND_NOW()) {
+	[[nodiscard]] inline Value<Buffer>
+	acquire_buf(Name name, Buffer buf, Access access, SourceLocationAtFrame _pscope = VUK_HERE_AND_NOW(), SourceLocationAtFrame _scope = VUK_HERE_AND_NOW()) {
 		if (_pscope != _scope) {
 			_scope.parent = &_pscope;
 		}
@@ -678,7 +679,7 @@ public:
 		Ref ref = rg->make_declare_array(t, refs, defs);
 		rg->name_output(ref, name.c_str());
 		rg->set_source_location(ref.node, loc);
-		return { make_ext_ref(rg, ref), ref, deps };
+		return { make_ext_ref(rg, ref, std::move(deps)), ref };
 	}
 
 	template<class T>
@@ -705,7 +706,7 @@ public:
 		Ref ref = rg->make_declare_array(t, refs, defs);
 		rg->name_output(ref, name.c_str());
 		rg->set_source_location(ref.node, loc);
-		return { make_ext_ref(rg, ref), ref, deps };
+		return { make_ext_ref(rg, ref, std::move(deps)), ref };
 	}
 
 	[[nodiscard]] inline Value<Swapchain> declare_swapchain(Swapchain& bundle, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
