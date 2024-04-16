@@ -1,7 +1,6 @@
 #pragma once
 
 #include "vuk/Buffer.hpp"
-#include "vuk/Future.hpp"
 #include "vuk/Hash.hpp"
 #include "vuk/IR.hpp"
 #include "vuk/Image.hpp"
@@ -9,6 +8,7 @@
 #include "vuk/MapProxy.hpp"
 #include "vuk/Result.hpp"
 #include "vuk/Swapchain.hpp"
+#include "vuk/Value.hpp"
 #include "vuk/vuk_fwd.hpp"
 
 #include <deque>

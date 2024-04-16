@@ -1,5 +1,6 @@
 #pragma once
 
+#include "vuk/Allocator.hpp"
 #include "vuk/Config.hpp"
 #include "vuk/Types.hpp"
 #include "vuk/vuk_fwd.hpp"

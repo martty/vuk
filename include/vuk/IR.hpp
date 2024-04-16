@@ -4,12 +4,14 @@
 #include "vuk/ImageAttachment.hpp"
 #include "vuk/RelSpan.hpp"
 #include "vuk/ShortAlloc.hpp"
+#include "vuk/SourceLocation.hpp"
 #include "vuk/Swapchain.hpp"
 #include "vuk/SyncPoint.hpp"
 #include "vuk/Types.hpp"
 
 #include <deque>
 #include <functional>
+#include <optional>
 #include <plf_colony.h>
 #include <span>
 #include <vector>
@@ -658,7 +660,7 @@ namespace vuk {
 			typedef inline_alloc<_Up, sz> other;
 		};
 
-		inline_alloc(){}
+		inline_alloc() {}
 		inline_alloc(InlineArena<std::byte, sz>& a) : a_(&a) {}
 		template<class U, size_t szz>
 		inline_alloc(const inline_alloc<U, szz>& a) noexcept : a_(a.a_) {}
@@ -1023,9 +1025,9 @@ namespace vuk {
 
 		Node* make_release(Ref src, AcquireRelease* acq_rel, Access dst_access, DomainFlagBits dst_domain) {
 			auto ty = new (payload_arena.ensure_space(sizeof(Type*))) Type*(Type::stripped(src.type()));
-			return emplace_op(
-			    Node{ .kind = Node::RELEASE,
-			          .type = std::span{ ty, 1 },.release = { .src = src, .release = acq_rel, .dst_access = dst_access, .dst_domain = dst_domain } });
+			return emplace_op(Node{ .kind = Node::RELEASE,
+			                        .type = std::span{ ty, 1 },
+			                        .release = { .src = src, .release = acq_rel, .dst_access = dst_access, .dst_domain = dst_domain } });
 		}
 
 		Node* make_relacq(Node* src, AcquireRelease* acq_rel) {
@@ -1064,12 +1066,7 @@ namespace vuk {
 
 		Ref make_acquire(Type* type, AcquireRelease* acq_rel, size_t index, void* value) {
 			auto ty = new (payload_arena.ensure_space(sizeof(Type*))) Type*(copy_type(type));
-			return first(emplace_op(
-			    Node{ .kind = Node::ACQUIRE,
-			          .type = std::span{ ty, 1 },
-			          .acquire = { .value = value,
-			                       .acquire = acq_rel,
-			                       .index = index } }));
+			return first(emplace_op(Node{ .kind = Node::ACQUIRE, .type = std::span{ ty, 1 }, .acquire = { .value = value, .acquire = acq_rel, .index = index } }));
 		}
 
 		template<class T>
@@ -1171,6 +1168,7 @@ namespace vuk {
 		AcquireRelease* acqrel;
 		std::unique_ptr<AcquireRelease> owned_acqrel;
 		std::vector<std::shared_ptr<ExtNode>> deps;
+
 	private:
 		Node* node;
 	};

@@ -11,7 +11,6 @@
 #include <span>
 #include <variant>
 
-// futures
 namespace vuk {
 	class UntypedValue {
 	public:
@@ -64,9 +63,9 @@ namespace vuk {
 			head = { node->get_node(), 0 };
 		}
 
-		/// @brief Submit Future for execution
+		/// @brief Submit Value for execution
 		Result<void> submit(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options = {});
-		/// @brief If the Future has been submitted for execution, polls for status.
+		/// @brief If the Value has been submitted for execution, polls for status.
 		[[nodiscard]] Result<Signal::Status> poll();
 
 		Result<void> wait(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options = {});
@@ -96,7 +95,7 @@ namespace vuk {
 			return eval<T*>(def);
 		}
 
-		/// @brief Wait and retrieve the result of the Future on the host
+		/// @brief Wait and retrieve the result of the Value on the host
 		[[nodiscard]] Result<T> get(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options = {})
 		  requires(!std::is_array_v<T>)
 		{
@@ -219,8 +218,8 @@ namespace vuk {
 			assert(def.type()->kind == Type::ARRAY_TY);
 			auto item_def = def.node->construct.defs[index];
 			Ref item = node->module->make_extract(get_head(), node->module->make_constant(index));
-			return Value<std::remove_reference_t<decltype(std::declval<T>()[0])>>(
-			    ExtRef(std::make_shared<ExtNode>(get_render_graph(), item.node, node), item), item_def);
+			return Value<std::remove_reference_t<decltype(std::declval<T>()[0])>>(ExtRef(std::make_shared<ExtNode>(get_render_graph(), item.node, node), item),
+			                                                                      item_def);
 		}
 
 		auto mip(uint32_t mip)
@@ -255,18 +254,18 @@ namespace vuk {
 		return std::move(a).transmute<uint64_t>(ref);
 	}
 
-	inline Result<void> wait_for_futures_explicit(Allocator& alloc, Compiler& compiler, std::span<UntypedValue> futures) {
+	inline Result<void> wait_for_values_explicit(Allocator& alloc, Compiler& compiler, std::span<UntypedValue> values) {
 		std::vector<SyncPoint> waits;
-		for (uint64_t i = 0; i < futures.size(); i++) {
-			auto& future = futures[i];
-			auto res = future.submit(alloc, compiler, {});
+		for (uint64_t i = 0; i < values.size(); i++) {
+			auto& value = values[i];
+			auto res = value.submit(alloc, compiler, {});
 			if (!res) {
 				return res;
 			}
-			if (future.node->acqrel->status != Signal::Status::eSynchronizable) {
+			if (value.node->acqrel->status != Signal::Status::eSynchronizable) {
 				continue;
 			}
-			waits.emplace_back(future.node->acqrel->source);
+			waits.emplace_back(value.node->acqrel->source);
 		}
 		if (waits.size() > 0) {
 			return alloc.get_context().wait_for_domains(std::span(waits));
@@ -276,8 +275,8 @@ namespace vuk {
 	}
 
 	template<class... Args>
-	Result<void> wait_for_futures(Allocator& alloc, Compiler& compiler, Args&&... futs) {
+	Result<void> wait_for_values(Allocator& alloc, Compiler& compiler, Args&&... futs) {
 		auto cbs = std::array{ futs... };
-		return wait_for_futures_explicit(alloc, compiler, cbs);
+		return wait_for_values_explicit(alloc, compiler, cbs);
 	}
 } // namespace vuk

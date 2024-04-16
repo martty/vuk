@@ -2,9 +2,9 @@
 
 #include "vuk/AllocatorHelpers.hpp"
 #include "vuk/CommandBuffer.hpp"
-#include "vuk/Future.hpp"
 #include "vuk/RenderGraph.hpp"
 #include "vuk/SourceLocation.hpp"
+#include "vuk/Value.hpp"
 #include <math.h>
 #include <span>
 
@@ -99,19 +99,7 @@ namespace vuk {
 		return image_upload(std::move(srcbuf), std::move(dst));
 	}
 
-	/// @brief Transition image for given access - useful to force certain access across different RenderGraphs linked by Futures
-	/// @param image input Future of ImageAttachment
-	/// @param dst_access Access to have in the future
-	/* inline Future transition(Future image, Access dst_access) {
-	  std::shared_ptr<RenderGraph> rgp = std::make_shared<RenderGraph>("transition");
-	  rgp->add_pass({ .name = "TRANSITION",
-	                  .execute_on = DomainFlagBits::eDevice,
-	                  .resources = { "_src"_image >> dst_access >> "_src+" },
-	                  .type = PassType::eForcedAccess });
-	  rgp->attach_in("_src", std::move(image));
-	  return { std::move(rgp), "_src+" };
-	}
-
+/*
 	/// @brief Generate mips for given ImageAttachment
 	/// @param image input Future of ImageAttachment
 	/// @param base_mip source mip level

@@ -293,7 +293,7 @@ int main(int argc, char** argv) {
 
 		auto sim_step = sim(particles);
 		sim_step.wait(frame_allocator, compiler, {});
-		wait_for_futures_explicit(frame_allocator, compiler, futs);
+		wait_for_values_explicit(frame_allocator, compiler, futs);
 		particles = declare_buf("particles", **particles_buf);
 	}
 

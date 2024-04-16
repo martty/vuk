@@ -10,9 +10,9 @@
 #include <utility>
 #include <vector>
 #include <vuk/Context.hpp>
-#include <vuk/Future.hpp>
 #include <vuk/Swapchain.hpp>
 #include <vuk/Types.hpp>
+#include <vuk/Value.hpp>
 #include <vuk/vuk_fwd.hpp>
 
 namespace util {

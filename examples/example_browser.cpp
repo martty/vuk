@@ -7,7 +7,7 @@ bool render_all = true;
 void vuk::ExampleRunner::render() {
 	Compiler compiler;
 
-	vuk::wait_for_futures_explicit(*superframe_allocator, compiler, futures);
+	vuk::wait_for_values_explicit(*superframe_allocator, compiler, futures);
 	futures.clear();
 
 	while (!glfwWindowShouldClose(window)) {
