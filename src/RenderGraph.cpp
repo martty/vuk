@@ -856,6 +856,20 @@ namespace vuk {
 
 		impl->refs.assign(nodes.begin(), nodes.end());
 
+		std::vector<std::shared_ptr<ExtNode>, short_alloc<std::shared_ptr<ExtNode>>> extnode_work_queue(*impl->arena_);
+		extnode_work_queue.assign(nodes.begin(), nodes.end());
+
+		while (!extnode_work_queue.empty()) {
+			auto enode = extnode_work_queue.back();
+			extnode_work_queue.pop_back();
+			extnode_work_queue.insert(extnode_work_queue.end(), std::make_move_iterator(enode->deps.begin()), std::make_move_iterator(enode->deps.end()));
+			enode->deps.clear();
+			impl->depnodes.push_back(std::move(enode));
+		}
+
+		std::sort(impl->depnodes.begin(), impl->depnodes.end());
+		impl->depnodes.erase(std::unique(impl->depnodes.begin(), impl->depnodes.end()), impl->depnodes.end());
+
 		// implicit convergence: this has to be done on the full node set
 		// insert converge nodes
 		std::unordered_map<Ref, std::vector<Ref>> slices;
@@ -974,6 +988,7 @@ namespace vuk {
 		}
 
 		VUK_DO_OR_RETURN(impl->build_nodes());
+		std::erase_if(impl->depnodes, [](std::shared_ptr<ExtNode>& sp) { return sp.use_count() == 1 && sp->acqrel->status == Signal::Status::eDisarmed; });
 
 		// eliminate useless relacqs
 		struct Replace {

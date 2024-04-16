@@ -606,6 +606,7 @@ public:
 		ext_ref.node->owned_acqrel->status = Signal::Status::eHostAvailable;
 		ext_ref.node->owned_acqrel->last_use.resize(1);
 		ext_ref.node->owned_acqrel->last_use[0] = to_use(access);
+		ext_ref.node->acqrel = ext_ref.node->owned_acqrel.get();
 		ref.node->acquire.acquire = ext_ref.node->owned_acqrel.get();
 		rg->name_output(ref, name.c_str());
 		rg->set_source_location(ref.node, _scope);
