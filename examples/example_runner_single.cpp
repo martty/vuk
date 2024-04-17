@@ -67,7 +67,7 @@ void vuk::ExampleRunner::render() {
 			delete reinterpret_cast<char*>(pass_data);
 		};
 
-		// compile the RG that contains all the rendering of the example
+		// compile the IRModule that contains all the rendering of the example
 		// submit and present the results to the swapchain we imported previously
 		auto entire_thing = enqueue_presentation(std::move(example_result));
 

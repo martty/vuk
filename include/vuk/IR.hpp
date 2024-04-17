@@ -242,7 +242,7 @@ namespace vuk {
 		return def.type()->array.count;
 	}
 
-	struct RG;
+	struct IRModule;
 
 	struct SchedulingInfo {
 		SchedulingInfo(DomainFlags required_domains) : required_domains(required_domains) {}
@@ -690,8 +690,8 @@ namespace vuk {
 		return !(x == y);
 	}
 
-	struct RG {
-		RG() : op_arena(/**/) {}
+	struct IRModule {
+		IRModule() : op_arena(/**/) {}
 
 		plf::colony<Node /*, inline_alloc<Node, 4 * 1024>*/> op_arena;
 		plf::colony<UserCallbackType> ucbs;
@@ -757,7 +757,7 @@ namespace vuk {
 			return builtin_swapchain;
 		}
 
-		std::vector<std::shared_ptr<RG>> subgraphs;
+		std::vector<std::shared_ptr<IRModule>> subgraphs;
 		// uint64_t current_hash = 0;
 
 		Node* emplace_op(Node v) {
@@ -768,7 +768,7 @@ namespace vuk {
 			return type_arena.emplace(std::move(t));
 		}
 
-		void reference_RG(std::shared_ptr<RG> other) {
+		void reference_module(std::shared_ptr<IRModule> other) {
 			subgraphs.emplace_back(std::move(other));
 		}
 
@@ -1104,7 +1104,7 @@ namespace vuk {
 	};
 
 	struct ExtNode {
-		ExtNode(std::shared_ptr<RG> module, Node* node, std::vector<std::shared_ptr<ExtNode>> deps) : module(std::move(module)), deps(std::move(deps)) {
+		ExtNode(std::shared_ptr<IRModule> module, Node* node, std::vector<std::shared_ptr<ExtNode>> deps) : module(std::move(module)), deps(std::move(deps)) {
 			owned_acqrel = std::make_unique<AcquireRelease>();
 			acqrel = owned_acqrel.get();
 			if (node->kind != Node::RELEASE && node->kind != Node::ACQUIRE) {
@@ -1114,7 +1114,7 @@ namespace vuk {
 			}
 		}
 
-		ExtNode(std::shared_ptr<RG> module, Node* node, std::shared_ptr<ExtNode> dep) : module(std::move(module)) {
+		ExtNode(std::shared_ptr<IRModule> module, Node* node, std::shared_ptr<ExtNode> dep) : module(std::move(module)) {
 			owned_acqrel = std::make_unique<AcquireRelease>();
 			acqrel = owned_acqrel.get();
 			if (node->kind != Node::RELEASE && node->kind != Node::ACQUIRE) {
@@ -1164,7 +1164,7 @@ namespace vuk {
 			node = this->module->make_splice(new_node, acqrel);
 		}
 
-		std::shared_ptr<RG> module;
+		std::shared_ptr<IRModule> module;
 		AcquireRelease* acqrel;
 		std::unique_ptr<AcquireRelease> owned_acqrel;
 		std::vector<std::shared_ptr<ExtNode>> deps;

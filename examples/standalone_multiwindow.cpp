@@ -237,7 +237,7 @@ int main(int argc, char** argv) {
 
 			auto drawn = render(vuk::Rect2D::absolute(-small_win_size_x, 0, vp_size_x, vp_size_y))(std::move(cleared_image_to_render_into), particles);
 
-			// compile the RG that contains all the rendering of the example
+			// compile the IRModule that contains all the rendering of the example
 			// submit and present the results to the swapchain we imported previously
 			futs.push_back(enqueue_presentation(std::move(drawn)));
 		}
@@ -269,7 +269,7 @@ int main(int argc, char** argv) {
 
 			auto drawn = render(vuk::Rect2D::absolute(-(sw.vpx + 128), -sw.vpy, vp_size_x, vp_size_y))(std::move(cleared_image_to_render_into), particles);
 
-			// compile the RG that contains all the rendering of the example
+			// compile the IRModule that contains all the rendering of the example
 			// submit and present the results to the swapchain we imported previously
 			futs.push_back(enqueue_presentation(std::move(drawn)));
 		}

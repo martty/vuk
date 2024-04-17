@@ -167,7 +167,7 @@ int main(int argc, char** argv) {
 
 		auto drawn = pass(std::move(cleared_image_to_render_into));
 
-		// compile the RG that contains all the rendering of the example
+		// compile the IRModule that contains all the rendering of the example
 		// submit and present the results to the swapchain we imported previously
 		auto entire_thing = enqueue_presentation(std::move(drawn));
 

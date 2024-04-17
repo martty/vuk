@@ -726,7 +726,7 @@ namespace vuk {
 	};
 
 	struct Recorder {
-		Recorder(Allocator alloc, ProfilingCallbacks* callbacks, std::vector<Ref>& pass_reads, std::shared_ptr<RG> cg_module) :
+		Recorder(Allocator alloc, ProfilingCallbacks* callbacks, std::vector<Ref>& pass_reads, std::shared_ptr<IRModule> cg_module) :
 		    ctx(alloc.get_context()),
 		    alloc(alloc),
 		    callbacks(callbacks),
@@ -736,7 +736,7 @@ namespace vuk {
 		Allocator alloc;
 		ProfilingCallbacks* callbacks;
 		std::vector<Ref>& pass_reads;
-		std::shared_ptr<RG> cg_module;
+		std::shared_ptr<IRModule> cg_module;
 		InlineArena<std::byte, 1024> arena;
 
 		std::unordered_map<DomainFlagBits, std::unique_ptr<Stream>> streams;

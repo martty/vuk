@@ -239,7 +239,7 @@ namespace vuk {
 		// reserving here to avoid rehashing map
 		pass_reads.clear();
 
-		// in each RG module, look at the nodes
+		// in each IRModule module, look at the nodes
 		// declare -> clear -> call(R) -> call(W) -> release
 		//   A     ->  B    ->  B      ->   C     -> X
 		// declare: def A -> new entry
@@ -875,8 +875,8 @@ namespace vuk {
 		std::unordered_map<Ref, std::vector<Ref>> slices;
 
 		// linked-sea-of-nodes to list of nodes
-		std::vector<RG*, short_alloc<RG*>> work_queue(*impl->arena_);
-		std::unordered_set<RG*> visited;
+		std::vector<IRModule*, short_alloc<IRModule*>> work_queue(*impl->arena_);
+		std::unordered_set<IRModule*> visited;
 		for (auto& ref : impl->refs) {
 			auto mod = ref->module.get();
 			if (!visited.count(mod)) {
@@ -914,7 +914,7 @@ namespace vuk {
 		VUK_DO_OR_RETURN(impl->build_links());
 
 		// insert converge nodes
-		auto in_module = [](RG& module, Node* node) {
+		auto in_module = [](IRModule& module, Node* node) {
 			auto it = std::find_if(module.op_arena.begin(), module.op_arena.end(), [=](auto& n) { return &n == node; });
 			if (it != module.op_arena.end()) {
 				return true;
@@ -922,7 +922,7 @@ namespace vuk {
 			return false;
 		};
 
-		auto before_module = [](RG& module, Node* a, Node* b) {
+		auto before_module = [](IRModule& module, Node* a, Node* b) {
 			auto it_a = std::find_if(module.op_arena.begin(), module.op_arena.end(), [=](auto& n) { return &n == a; });
 			auto it_b = std::find_if(module.op_arena.begin(), module.op_arena.end(), [=](auto& n) { return &n == b; });
 			return it_a < it_b;

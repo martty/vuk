@@ -18,7 +18,7 @@ namespace vuk {
 		UntypedValue(ExtRef extref, Ref def) : node(std::move(extref.node)), head{ node->get_node(), extref.index }, def(def) {}
 
 		/// @brief Get the referenced RenderGraph
-		const std::shared_ptr<RG>& get_render_graph() const noexcept {
+		const std::shared_ptr<IRModule>& get_render_graph() const noexcept {
 			return node->module;
 		}
 

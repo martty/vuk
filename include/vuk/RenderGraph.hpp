@@ -477,12 +477,12 @@ public:
 	}
 
 	template<typename... T>
-	static auto fill_arg_ty(RG& rg, const std::tuple<T...>& args, std::vector<Type*>& arg_types) {
+	static auto fill_arg_ty(IRModule& rg, const std::tuple<T...>& args, std::vector<Type*>& arg_types) {
 		(arg_types.emplace_back(rg.make_imbued_ty(std::get<T>(args).src.type(), T::access)), ...);
 	}
 
 	template<typename... T>
-	static auto fill_ret_ty(RG& rg, std::array<size_t, sizeof...(T)> idxs, const std::tuple<T...>& args, std::vector<Type*>& ret_types) {
+	static auto fill_ret_ty(IRModule& rg, std::array<size_t, sizeof...(T)> idxs, const std::tuple<T...>& args, std::vector<Type*>& ret_types) {
 		(ret_types.emplace_back(rg.make_aliased_ty(Type::stripped(std::get<T>(args).src.type()), 0)), ...);
 		for (auto i = 0; i < ret_types.size(); i++) {
 			ret_types[i]->aliased.ref_idx = idxs[i];
@@ -520,7 +520,7 @@ public:
 			return [untyped_cb = std::move(callback), name, scheduling_info, loc](Value<typename T::type>... args) mutable {
 				auto& first = First(args...);
 				auto rgp = first.get_render_graph();
-				RG& rg = *rgp.get();
+				IRModule& rg = *rgp.get();
 
 				bool reuse_node = first.node.use_count() == 1 && first.node->get_node()->kind != Node::ACQUIRE;
 
@@ -545,7 +545,7 @@ public:
 
 				std::vector<std::shared_ptr<ExtNode>> dependent_nodes;
 				[reuse_node, &dependent_nodes](auto& first, auto&... rest) {
-					(first.get_render_graph()->reference_RG(rest.get_render_graph()), ...);
+					(first.get_render_graph()->reference_module(rest.get_render_graph()), ...);
 					if (!reuse_node) {
 						dependent_nodes.push_back(std::move(first.node));
 					}
@@ -580,7 +580,7 @@ public:
 		return TupleMap<drop_t<1, typename traits::types>>::template make_lam<typename traits::result_type, F>(name, std::forward<F>(body), scheduling_info, loc);
 	}
 
-	inline ExtRef make_ext_ref(std::shared_ptr<RG> rg, Ref ref, std::vector<std::shared_ptr<ExtNode>> deps = {}) {
+	inline ExtRef make_ext_ref(std::shared_ptr<IRModule> rg, Ref ref, std::vector<std::shared_ptr<ExtNode>> deps = {}) {
 		return ExtRef(std::make_shared<ExtNode>(rg, ref.node, std::move(deps)), ref);
 	}
 
@@ -589,7 +589,7 @@ public:
 		if (_pscope != _scope) {
 			_scope.parent = &_pscope;
 		}
-		std::shared_ptr<RG> rg = std::make_shared<RG>();
+		std::shared_ptr<IRModule> rg = std::make_shared<IRModule>();
 		Ref ref = rg->make_declare_image(ia);
 		rg->name_output(ref, name.c_str());
 		rg->set_source_location(ref.node, _scope);
@@ -604,7 +604,7 @@ public:
 		if (_pscope != _scope) {
 			_scope.parent = &_pscope;
 		}
-		std::shared_ptr<RG> rg = std::make_shared<RG>();
+		std::shared_ptr<IRModule> rg = std::make_shared<IRModule>();
 		Ref ref = rg->make_acquire(rg->get_builtin_image(), nullptr, ia);
 		auto ext_ref = make_ext_ref(rg, ref);
 		ext_ref.node->owned_acqrel = std::make_unique<AcquireRelease>();
@@ -623,7 +623,7 @@ public:
 		if (_pscope != _scope) {
 			_scope.parent = &_pscope;
 		}
-		std::shared_ptr<RG> rg = std::make_shared<RG>();
+		std::shared_ptr<IRModule> rg = std::make_shared<IRModule>();
 		Ref ref = rg->make_declare_buffer(buf);
 		rg->name_output(ref, name.c_str());
 		rg->set_source_location(ref.node, _scope);
@@ -635,7 +635,7 @@ public:
 		if (_pscope != _scope) {
 			_scope.parent = &_pscope;
 		}
-		std::shared_ptr<RG> rg = std::make_shared<RG>();
+		std::shared_ptr<IRModule> rg = std::make_shared<IRModule>();
 		Ref ref = rg->make_acquire(rg->get_builtin_buffer(), nullptr, buf);
 		auto ext_ref = make_ext_ref(rg, ref);
 		ext_ref.node->owned_acqrel = std::make_unique<AcquireRelease>();
@@ -665,7 +665,7 @@ public:
 
 	template<class T>
 	[[nodiscard]] inline Value<T[]> declare_array(Name name, std::span<const Value<T>> args, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-		auto rg = args.size() > 0 ? args[0].get_render_graph() : std::make_shared<RG>();
+		auto rg = args.size() > 0 ? args[0].get_render_graph() : std::make_shared<IRModule>();
 		std::vector<Ref> refs;
 		std::vector<Ref> defs;
 		std::vector<std::shared_ptr<ExtNode>> deps;
@@ -692,7 +692,7 @@ public:
 
 	template<class T>
 	[[nodiscard]] inline Value<T[]> declare_array(Name name, std::span<Value<T>> args, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-		auto rg = args.size() > 0 ? args[0].get_render_graph() : std::make_shared<RG>();
+		auto rg = args.size() > 0 ? args[0].get_render_graph() : std::make_shared<IRModule>();
 		std::vector<Ref> refs;
 		std::vector<Ref> defs;
 		std::vector<std::shared_ptr<ExtNode>> deps;
@@ -718,7 +718,7 @@ public:
 	}
 
 	[[nodiscard]] inline Value<Swapchain> declare_swapchain(Swapchain& bundle, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-		std::shared_ptr<RG> rg = std::make_shared<RG>();
+		std::shared_ptr<IRModule> rg = std::make_shared<IRModule>();
 		Ref ref = rg->make_declare_swapchain(bundle);
 		rg->set_source_location(ref.node, loc);
 		return { make_ext_ref(rg, ref), ref };

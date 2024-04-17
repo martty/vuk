@@ -89,7 +89,7 @@ void vuk::ExampleRunner::render() {
 			sampled_images.clear();
 		}
 
-		// compile the RG that contains all the rendering of the example
+		// compile the IRModule that contains all the rendering of the example
 		// submit and present the results to the swapchain we imported previously
 		auto entire_thing = enqueue_presentation(std::move(imgui));
 
