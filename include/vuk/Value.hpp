@@ -36,8 +36,8 @@ namespace vuk {
 		}
 
 		Ref get_peeled_head() noexcept {
-			if (node.use_count() == 1 && head.node->kind == Node::RELACQ && can_peel) {
-				Ref peeled_head = head.node->relacq.src[head.index];
+			if (node.use_count() == 1 && head.node->kind == Node::SPLICE && can_peel) {
+				Ref peeled_head = head.node->splice.src[head.index];
 				return peeled_head;
 			} else {
 				return head;
@@ -45,8 +45,8 @@ namespace vuk {
 		}
 
 		Ref peel_head() noexcept {
-			if (node.use_count() == 1 && head.node->kind == Node::RELACQ && can_peel) {
-				Ref peeled_head = head.node->relacq.src[head.index];
+			if (node.use_count() == 1 && head.node->kind == Node::SPLICE && can_peel) {
+				Ref peeled_head = head.node->splice.src[head.index];
 				head.node->kind = Node::NOP;
 				return peeled_head;
 			} else {

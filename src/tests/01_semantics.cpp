@@ -85,7 +85,7 @@ TEST_CASE("computation is never duplicated 3") {
 }
 
 
-TEST_CASE("not moving Values will emit relacqs") {
+TEST_CASE("not moving Values will emit splices") {
 	std::string trace = "";
 
 	auto a = make_unary_computation("a", trace)(declare_buf("_a", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));

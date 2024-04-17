@@ -1375,14 +1375,14 @@ namespace vuk {
 				}
 				break;
 			}
-			case Node::RELACQ: {
+			case Node::SPLICE: {
 				if (sched.process(item)) {
-					auto acqrel = node->relacq.rel_acq;
+					auto acqrel = node->splice.rel_acq;
 					Stream* dst_stream = item.scheduled_stream;
-					auto values = new void*[node->relacq.src.size()];
+					auto values = new void*[node->splice.src.size()];
 					// if acq is nullptr, then this degenerates to a NOP, sync and skip
-					for (size_t i = 0; i < node->relacq.src.size(); i++) {
-						auto parm = node->relacq.src[i];
+					for (size_t i = 0; i < node->splice.src.size(); i++) {
+						auto parm = node->splice.src[i];
 						auto arg_ty = node->type[i];
 						auto di = sched.get_dependency_info(parm, arg_ty, RW::eWrite, dst_stream);
 						auto value = sched.get_value(parm);
@@ -1403,7 +1403,7 @@ namespace vuk {
 					} else {
 						switch (acqrel->status) {
 						case Signal::Status::eDisarmed: // means we have to signal this
-							node->relacq.values = std::span{ values, node->relacq.src.size() };
+							node->splice.values = std::span{ values, node->splice.src.size() };
 							break;
 						case Signal::Status::eSynchronizable: // means this is an acq instead (we should've handled this before this moment)
 						case Signal::Status::eHostAvailable:
@@ -1415,13 +1415,13 @@ namespace vuk {
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
 					fmt::print(" <- ");
-					print_args(node->relacq.src);
+					print_args(node->splice.src);
 					fmt::print("\n");
 #endif
-					sched.done(node, item.scheduled_stream, std::span{ values, node->relacq.src.size() });
+					sched.done(node, item.scheduled_stream, std::span{ values, node->splice.src.size() });
 				} else {
-					for (size_t i = 0; i < node->relacq.src.size(); i++) {
-						sched.schedule_dependency(node->relacq.src[i], RW::eWrite);
+					for (size_t i = 0; i < node->splice.src.size(); i++) {
+						sched.schedule_dependency(node->splice.src[i], RW::eWrite);
 					}
 				}
 				break;

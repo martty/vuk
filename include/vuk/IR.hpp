@@ -291,7 +291,7 @@ namespace vuk {
 			WAIT,
 			ACQUIRE,
 			RELEASE,
-			RELACQ, // can realise into ACQUIRE, RELEASE or NOP
+			SPLICE, // for joining subgraphs - can morph into ACQUIRE or NOP, depending on the subgraph state
 			ACQUIRE_NEXT_IMAGE,
 			CAST,
 			MATH_BINARY,
@@ -384,7 +384,7 @@ namespace vuk {
 				std::span<Ref> src;
 				AcquireRelease* rel_acq;
 				std::span<void*> values;
-			} relacq;
+			} splice;
 			struct : Fixed<1> {
 				Ref swapchain;
 			} acquire_next_image;
@@ -430,8 +430,8 @@ namespace vuk {
 				return "extract";
 			case ACQUIRE:
 				return "acquire";
-			case RELACQ:
-				return "relacq";
+			case SPLICE:
+				return "splice";
 			case RELEASE:
 				return "release";
 			case MATH_BINARY:
@@ -495,8 +495,8 @@ namespace vuk {
 		case Node::ACQUIRE: {
 			return static_cast<T>(ref.node->acquire.value);
 		}
-		case Node::RELACQ: {
-			return eval<T>(ref.node->relacq.src[ref.index]);
+		case Node::SPLICE: {
+			return eval<T>(ref.node->splice.src[ref.index]);
 		}
 		case Node::ACQUIRE_NEXT_IMAGE: {
 			Swapchain* swp = eval<Swapchain*>(ref.node->acquire_next_image.swapchain);
@@ -573,8 +573,8 @@ namespace vuk {
 			  return &swp->images[0];
 			} else if (node->kind == Node::ACQUIRE) {
 			  return node->acquire.arg.node->constant.value;
-			} else if (node->kind == Node::RELACQ) {
-			  return get_constant_value(node->relacq.src.node);
+			} else if (node->kind == Node::SPLICE) {
+			  return get_constant_value(node->splice.src.node);
 			} else {
 			  assert(0);
 			}
@@ -1030,7 +1030,7 @@ namespace vuk {
 			                        .release = { .src = src, .release = acq_rel, .dst_access = dst_access, .dst_domain = dst_domain } });
 		}
 
-		Node* make_relacq(Node* src, AcquireRelease* acq_rel) {
+		Node* make_splice(Node* src, AcquireRelease* acq_rel) {
 			Ref* args_ptr = new (payload_arena.ensure_space(sizeof(Ref) * src->type.size())) Ref[src->type.size()];
 			auto tys = new (payload_arena.ensure_space(sizeof(Type*) * src->type.size())) Type*[src->type.size()];
 			for (size_t i = 0; i < src->type.size(); i++) {
@@ -1038,7 +1038,7 @@ namespace vuk {
 				tys[i] = Type::stripped(src->type[i]);
 			}
 			return emplace_op(Node{
-			    .kind = Node::RELACQ, .type = std::span{ tys, src->type.size() }, .relacq = { .src = std::span{ args_ptr, src->type.size() }, .rel_acq = acq_rel } });
+			    .kind = Node::SPLICE, .type = std::span{ tys, src->type.size() }, .splice = { .src = std::span{ args_ptr, src->type.size() }, .rel_acq = acq_rel } });
 		}
 
 		Type* copy_type(Type* type) {
@@ -1108,7 +1108,7 @@ namespace vuk {
 			owned_acqrel = std::make_unique<AcquireRelease>();
 			acqrel = owned_acqrel.get();
 			if (node->kind != Node::RELEASE && node->kind != Node::ACQUIRE) {
-				this->node = this->module->make_relacq(node, acqrel);
+				this->node = this->module->make_splice(node, acqrel);
 			} else {
 				this->node = node;
 			}
@@ -1118,7 +1118,7 @@ namespace vuk {
 			owned_acqrel = std::make_unique<AcquireRelease>();
 			acqrel = owned_acqrel.get();
 			if (node->kind != Node::RELEASE && node->kind != Node::ACQUIRE) {
-				this->node = this->module->make_relacq(node, acqrel);
+				this->node = this->module->make_splice(node, acqrel);
 			} else {
 				this->node = node;
 			}
@@ -1128,18 +1128,18 @@ namespace vuk {
 
 		~ExtNode() {
 			if (module) {
-				if (node->kind == Node::RELACQ) {
-					node->relacq.rel_acq = nullptr;
-					for (auto i = 0; i < node->relacq.values.size(); i++) {
-						auto& v = node->relacq.values[i];
-						if (node->relacq.src[i].type() == module->builtin_buffer) {
+				if (node->kind == Node::SPLICE) {
+					node->splice.rel_acq = nullptr;
+					for (auto i = 0; i < node->splice.values.size(); i++) {
+						auto& v = node->splice.values[i];
+						if (node->splice.src[i].type() == module->builtin_buffer) {
 							delete (Buffer*)v;
 						} else {
 							delete (ImageAttachment*)v;
 						}
 					}
 
-					delete node->relacq.values.data();
+					delete node->splice.values.data();
 				} else if (node->kind == Node::RELEASE) {
 					if (node->release.src.type() == module->builtin_buffer) {
 						delete (Buffer*)node->release.value;
@@ -1153,15 +1153,15 @@ namespace vuk {
 		ExtNode(ExtNode&& o) = default;
 
 		Node* get_node() {
-			assert(node->kind == Node::RELACQ || node->kind == Node::RELEASE || node->kind == Node::ACQUIRE);
+			assert(node->kind == Node::SPLICE || node->kind == Node::RELEASE || node->kind == Node::ACQUIRE);
 			return node;
 		}
 
 		void mutate(Node* new_node) {
-			if (node->kind == Node::RELACQ) {
-				node->relacq.rel_acq = nullptr;
+			if (node->kind == Node::SPLICE) {
+				node->splice.rel_acq = nullptr;
 			}
-			node = this->module->make_relacq(new_node, acqrel);
+			node = this->module->make_splice(new_node, acqrel);
 		}
 
 		std::shared_ptr<RG> module;

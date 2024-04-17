@@ -126,7 +126,7 @@ namespace vuk {
 	}
 
 	Result<void> UntypedValue::submit(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options) {
-		if (node->acqrel->status == Signal::Status::eDisarmed && node->get_node()->kind == Node::RELACQ) { // relacq -> release if unsubmitted
+		if (node->acqrel->status == Signal::Status::eDisarmed && node->get_node()->kind == Node::SPLICE) { // splice -> release if unsubmitted
 			release();
 		}
 

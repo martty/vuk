@@ -72,7 +72,7 @@ namespace vuk {
 					continue;
 				}
 			}
-			if (node->kind == Node::PLACEHOLDER || node->kind == Node::RELACQ || node->kind == Node::SLICE || node->kind == Node::INDIRECT_DEPEND) {
+			if (node->kind == Node::PLACEHOLDER || node->kind == Node::SPLICE || node->kind == Node::SLICE || node->kind == Node::INDIRECT_DEPEND) {
 				continue;
 			}
 
@@ -154,16 +154,16 @@ namespace vuk {
 				if (arg.node->kind == Node::PLACEHOLDER) {
 					continue;
 				}
-				if (arg.node->kind == Node::RELACQ) { // bridge relacqs
-					auto bridged_arg = arg.node->relacq.src[arg.index];
+				if (arg.node->kind == Node::SPLICE) { // bridge splices
+					auto bridged_arg = arg.node->splice.src[arg.index];
 					ss << uintptr_t(bridged_arg.node) << " :r" << bridged_arg.index << " -> " << uintptr_t(node) << " :a" << i << " :n [color=blue]\n";
 				} else if (arg.node->kind == Node::INDIRECT_DEPEND) { // bridge indirect depends (connect to node)
 					auto bridged_arg = arg.node->indirect_depend.rref;
 					ss << uintptr_t(bridged_arg.node) << " -> " << uintptr_t(node) << " :a" << i << " :n [color=blue]\n";
 				} else if (arg.node->kind == Node::SLICE) { // bridge slices
 					auto bridged_arg = arg.node->slice.image;
-					if (bridged_arg.node->kind == Node::RELACQ) {
-						bridged_arg = bridged_arg.node->relacq.src[arg.index];
+					if (bridged_arg.node->kind == Node::SPLICE) {
+						bridged_arg = bridged_arg.node->splice.src[arg.index];
 					}
 					Subrange::Image r = { constant<uint32_t>(arg.node->slice.base_level),
 						                    constant<uint32_t>(arg.node->slice.level_count),
@@ -277,13 +277,13 @@ namespace vuk {
 				}
 
 				break;
-			case Node::RELACQ: { // ~~ write joiner
-				for (size_t i = 0; i < node->relacq.src.size(); i++) {
-					assert(node->relacq.src[i].link().undef.node == nullptr);
-					node->relacq.src[i].link().undef = { node, i };
+			case Node::SPLICE: { // ~~ write joiner
+				for (size_t i = 0; i < node->splice.src.size(); i++) {
+					assert(node->splice.src[i].link().undef.node == nullptr);
+					node->splice.src[i].link().undef = { node, i };
 					Ref{ node, i }.link().def = { node, i };
-					node->relacq.src[i].link().next = &Ref{ node, i }.link();
-					Ref{ node, i }.link().prev = &node->relacq.src[i].link();
+					node->splice.src[i].link().next = &Ref{ node, i }.link();
+					Ref{ node, i }.link().prev = &node->splice.src[i].link();
 				}
 				break;
 			}
@@ -640,7 +640,7 @@ namespace vuk {
 			case Node::CLEAR:
 			case Node::ACQUIRE:
 			case Node::MATH_BINARY:
-			case Node::RELACQ:
+			case Node::SPLICE:
 			case Node::RELEASE:
 			case Node::CONVERGE:
 				node_to_schedule[node] = schedule_items.size();
@@ -990,7 +990,7 @@ namespace vuk {
 		VUK_DO_OR_RETURN(impl->build_nodes());
 		std::erase_if(impl->depnodes, [](std::shared_ptr<ExtNode>& sp) { return sp.use_count() == 1 && sp->acqrel->status == Signal::Status::eDisarmed; });
 
-		// eliminate useless relacqs
+		// eliminate useless splices
 		struct Replace {
 			Ref needle;
 			Ref value;
@@ -1000,23 +1000,23 @@ namespace vuk {
 
 		for (auto node : impl->nodes) {
 			switch (node->kind) {
-			case Node::RELACQ: {
-				if (node->relacq.rel_acq == nullptr) {
-					for (size_t i = 0; i < node->relacq.src.size(); i++) {
+			case Node::SPLICE: {
+				if (node->splice.rel_acq == nullptr) {
+					for (size_t i = 0; i < node->splice.src.size(); i++) {
 						auto needle = Ref{ node, i };
-						auto replace_with = node->relacq.src[i];
+						auto replace_with = node->splice.src[i];
 
 						replaces.emplace_back(needle, replace_with);
 					}
 					node->kind = Node::NOP;
 				} else {
-					switch (node->relacq.rel_acq->status) {
+					switch (node->splice.rel_acq->status) {
 					case Signal::Status::eDisarmed: // means we have to signal this, keep
 						break;
 					case Signal::Status::eSynchronizable: // means this is an acq instead
 					case Signal::Status::eHostAvailable:
-						for (size_t i = 0; i < node->relacq.src.size(); i++) {
-							auto new_ref = impl->cg_module->make_acquire(node->type[i], node->relacq.rel_acq, i, node->relacq.values[i]);
+						for (size_t i = 0; i < node->splice.src.size(); i++) {
+							auto new_ref = impl->cg_module->make_acquire(node->type[i], node->splice.rel_acq, i, node->splice.values[i]);
 							replaces.emplace_back(Ref{ node, i }, new_ref);
 						}
 						break;
@@ -1028,14 +1028,14 @@ namespace vuk {
 				if (node->links[0].reads.size() > 0 || node->links[0].undef) {
 					auto needle = Ref{ node, 0 };
 					/* if (node->release.release->status == Signal::Status::eDisarmed) {
-					  auto replace_with = first(impl->cg_module->make_relacq(node->release.src.node, node->release.release));
+					  auto replace_with = first(impl->cg_module->make_splice(node->release.src.node, node->release.release));
 					  replaces.emplace_back(needle, replace_with);
 					} else {
 					  auto replace_with = impl->cg_module->make_acquire(node->type[0], node->release.release, node->release.value);
 					  replaces.emplace_back(needle, replace_with);
 					}*/
 					if (node->release.release->status == Signal::Status::eDisarmed) {
-						memcpy(node, impl->cg_module->make_relacq(node->release.src.node, node->release.release), sizeof(Node));
+						memcpy(node, impl->cg_module->make_splice(node->release.src.node, node->release.release), sizeof(Node));
 					} else {
 						Node acq_node{ .kind = Node::ACQUIRE,
 							             .type = node->type,
