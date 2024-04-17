@@ -79,14 +79,14 @@ TEST_CASE("arrayed images, commands") {
 
 		auto arr = declare_array("images", std::move(fut), std::move(fut2));
 		{
-			auto futc = clear_image(std::move(arr[0]), vuk::ClearColor(5u, 5u, 5u, 5u));
+			auto futc = clear_image(arr[0], vuk::ClearColor(5u, 5u, 5u, 5u));
 			auto dst_buf = declare_buf("dst", *dst);
 			auto res = download_buffer(image2buf(std::move(futc), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
 			auto updata = std::span((uint32_t*)res->mapped_ptr, 4);
 			CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 5; }));
 		}
 		{
-			auto futc2 = clear_image(std::move(arr[1]), vuk::ClearColor(6u, 6u, 6u, 6u));
+			auto futc2 = clear_image(arr[1], vuk::ClearColor(6u, 6u, 6u, 6u));
 			auto dst_buf = declare_buf("dst", *dst);
 			auto res = download_buffer(image2buf(std::move(futc2), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
 			auto updata = std::span((uint32_t*)res->mapped_ptr, 4);
@@ -95,6 +95,8 @@ TEST_CASE("arrayed images, commands") {
 	}
 }
 
+// clang barfs on image_use<Acc>
+#if VUK_COMPILER_MSVC
 TEST_CASE("arrayed images, divergent source sync") {
 	{
 		auto data = { 1u, 2u, 3u, 4u };
@@ -131,7 +133,7 @@ TEST_CASE("arrayed images, divergent source sync") {
 		}
 	}
 }
-
+#endif
 TEST_CASE("image slicing, mips") {
 	{
 		auto data = { 1u, 2u, 3u, 4u };
@@ -204,7 +206,7 @@ TEST_CASE("image slicing, reconvergence") {
 		}
 	}
 }
-
+#if VUK_COMPILER_MSVC
 TEST_CASE("image slicing, reconvergence 2") {
 	{
 		auto data = { 1u, 2u, 3u, 4u };
@@ -228,7 +230,7 @@ TEST_CASE("image slicing, reconvergence 2") {
 		}
 	}
 }
-
+#endif
 TEST_CASE("image slicing, reconvergence 3") {
 	{
 		auto data = { 1u, 2u, 3u, 4u };

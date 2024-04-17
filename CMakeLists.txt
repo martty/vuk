@@ -132,22 +132,30 @@ else()
   set(VUK_COMPILER_GPP OFF)
 endif()
 
+set(VUK_COMPILER_MSVC OFF)
 string(FIND "${CMAKE_CXX_COMPILER}" "clang-cl" VUK_COMPILER_CLANGCL)
 if(VUK_COMPILER_CLANGCL GREATER -1)
   set(VUK_COMPILER_CLANGCL ON)
 else()
   set(VUK_COMPILER_CLANGCL OFF)
+  if(MSVC)
+	set(VUK_COMPILER_MSVC ON)
+  endif()
 endif()
 
 if(VUK_COMPILER_CLANGPP OR VUK_COMPILER_GPP)
 	target_compile_options(vuk PRIVATE -std=c++20 -fno-char8_t)
-elseif(MSVC)
+elseif(MSVC) # cl.exe or clang-cl
 	target_compile_options(vuk PRIVATE /std:c++20 /permissive- /Zc:char8_t-)
 endif()
 
 if(VUK_COMPILER_CLANGPP OR VUK_COMPILER_CLANGCL)
 	 target_compile_options(vuk PRIVATE -Wno-nullability-completeness)
 endif()
+
+target_compile_definitions(vuk PUBLIC 
+								VUK_COMPILER_MSVC=$<BOOL:${VUK_COMPILER_MSVC}>
+)
 
 target_link_libraries(vuk PRIVATE spirv-cross-core robin_hood fmt::fmt)
 

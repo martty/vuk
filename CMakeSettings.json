@@ -149,7 +149,7 @@
         },
         {
           "name": "VUK_FAIL_FAST",
-          "value": "True",
+          "value": "False",
           "type": "BOOL"
         }
       ]

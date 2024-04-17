@@ -178,7 +178,8 @@ namespace vuk {
 		{
 			uint64_t index = 0;
 			Type* cty = get_render_graph()->u64();
-			auto constant_node = Node{ .kind = Node::CONSTANT, .type = std::span{ &cty, 1 }, .constant = { .value = &index } };
+			auto constant_node = Node{ .kind = Node::CONSTANT, .type = std::span{ &cty, 1 } };
+			constant_node.constant.value = &index; // writing these out for clang workaround
 
 			auto composite = src.get_def();
 			Type* ty;
@@ -188,7 +189,9 @@ namespace vuk {
 			} else if (stripped->kind == Type::COMPOSITE_TY) {
 				ty = stripped->composite.types[index];
 			}
-			auto candidate_node = Node{ .kind = Node::EXTRACT, .type = std::span{ &ty, 1 }, .extract = { .composite = composite, .index = first(&constant_node) } };
+			auto candidate_node = Node{ .kind = Node::EXTRACT, .type = std::span{ &ty, 1 } };
+			candidate_node.extract.composite = composite; // writing these out for clang workaround
+			candidate_node.extract.index = first(&constant_node);
 			try {
 				auto result = eval<uint64_t>(first(&candidate_node));
 				def.node->construct.args[1] = get_render_graph()->make_constant<uint64_t>(result);

@@ -467,7 +467,12 @@ public:
 	static auto make_ret(std::shared_ptr<ExtNode> extnode, const std::tuple<T...>& us) {
 		if constexpr (sizeof...(T) > 0) {
 			size_t i = 0;
+			// FIXME: I think this is well defined but seems like compilers don't agree on the result
+#if VUK_COMPILER_MSVC
 			return std::tuple{ Value<typename T::type>{ ExtRef{ extnode, Ref{ extnode->get_node(), sizeof...(T) - (++i) } }, std::get<T>(us).def }... };
+#else
+			return std::tuple{ Value<typename T::type>{ ExtRef{ extnode, Ref{ extnode->get_node(), i++ } }, std::get<T>(us).def }... };
+#endif
 		}
 	}
 
