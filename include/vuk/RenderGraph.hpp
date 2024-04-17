@@ -648,12 +648,14 @@ public:
 	template<class T, class... Args>
 	[[nodiscard]] inline Value<T[]> declare_array(Name name, Value<T>&& arg, Args&&... args) {
 		auto rg = arg.get_render_graph();
+		std::vector<std::shared_ptr<ExtNode>> deps;
 		(rg->subgraphs.push_back(args.get_render_graph()), ...);
 		std::array refs = { arg.get_head(), args.get_head()... };
 		std::array defs = { arg.get_def(), args.get_def()... };
+		deps = { args.node... };
 		Ref ref = rg->make_declare_array(Type::stripped(refs[0].type()), refs, defs);
 		rg->name_output(ref, name.c_str());
-		return { make_ext_ref(rg, ref), ref };
+		return { make_ext_ref(rg, ref, deps), ref };
 	}
 
 	template<class T>
