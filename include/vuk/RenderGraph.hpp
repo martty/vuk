@@ -7,6 +7,7 @@
 #include "vuk/ImageAttachment.hpp"
 #include "vuk/MapProxy.hpp"
 #include "vuk/Result.hpp"
+#include "vuk/SourceLocation.hpp"
 #include "vuk/Swapchain.hpp"
 #include "vuk/Value.hpp"
 #include "vuk/vuk_fwd.hpp"
@@ -32,6 +33,9 @@ namespace vuk {
 #define VUK_BA(access, ...)        vuk::Arg<vuk::Buffer, access, vuk::tag_type<__COUNTER__>, __VA_ARGS__>
 #define VUK_ARG(type, access, ...) vuk::Arg<type, access, vuk::tag_type<__COUNTER__>, __VA_ARGS__>
 #endif
+
+#define VUK_CALLSTACK SourceLocationAtFrame _pscope = VUK_HERE_AND_NOW(), SourceLocationAtFrame _scope = VUK_HERE_AND_NOW()
+#define VUK_CALL      (_pscope != _scope ? _scope.parent = &_pscope, _scope : _scope)
 
 namespace vuk {
 	ResourceUse to_use(Access acc);
@@ -498,7 +502,7 @@ public:
 		using ret_tuple = std::tuple<Value<typename T::type>...>;
 
 		template<class Ret, class F>
-		static auto make_lam(Name name, F&& body, SchedulingInfo scheduling_info, SourceLocationAtFrame loc) {
+		static auto make_lam(Name name, F&& body, SchedulingInfo scheduling_info, VUK_CALLSTACK) {
 			auto callback = [typed_cb = std::move(body)](CommandBuffer& cb, std::span<void*> args, std::span<void*> meta, std::span<void*> rets) mutable {
 				// we do type recovery here -> convert untyped args to typed ones
 				alignas(alignof(std::tuple<CommandBuffer&, T...>)) char storage[sizeof(std::tuple<CommandBuffer&, T...>)];
@@ -517,7 +521,7 @@ public:
 			};
 
 			// when this function is called, we weave in this call into the IR
-			return [untyped_cb = std::move(callback), name, scheduling_info, loc](Value<typename T::type>... args) mutable {
+			return [untyped_cb = std::move(callback), name, scheduling_info, inner_scope = VUK_CALL](Value<typename T::type>... args, VUK_CALLSTACK) mutable {
 				auto& first = First(args...);
 				auto rgp = first.get_render_graph();
 				IRModule& rg = *rgp.get();
@@ -541,7 +545,8 @@ public:
 				auto opaque_fn = rg.make_declare_fn(opaque_fn_ty);
 				Node* node = rg.make_call(opaque_fn, args.peel_head()...);
 				node->scheduling_info = new (rg.payload_arena.ensure_space(sizeof(SchedulingInfo))) SchedulingInfo(scheduling_info);
-				rg.set_source_location(node, loc);
+				inner_scope.parent = &_scope;
+				rg.set_source_location(node, inner_scope);
 
 				std::vector<std::shared_ptr<ExtNode>> dependent_nodes;
 				[reuse_node, &dependent_nodes](auto& first, auto&... rest) {
@@ -549,8 +554,6 @@ public:
 					if (!reuse_node) {
 						dependent_nodes.push_back(std::move(first.node));
 					}
-					/* dependent_nodes.insert(dependent_nodes.end(), std::make_move_iterator(first.node->deps.begin()), std::make_move_iterator(first.deps.end()));
-					(dependent_nodes.insert(dependent_nodes.end(), std::make_move_iterator(rest.deps.begin()), std::make_move_iterator(rest.deps.end())), ...);*/
 					(dependent_nodes.push_back(std::move(rest.node)), ...);
 				}(args...);
 
@@ -575,9 +578,9 @@ public:
 
 	template<class F>
 	[[nodiscard]] auto
-	make_pass(Name name, F&& body, SchedulingInfo scheduling_info = SchedulingInfo(DomainFlagBits::eAny), SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
+	make_pass(Name name, F&& body, SchedulingInfo scheduling_info = SchedulingInfo(DomainFlagBits::eAny), VUK_CALLSTACK) {
 		using traits = closure_traits<decltype(&F::operator())>;
-		return TupleMap<drop_t<1, typename traits::types>>::template make_lam<typename traits::result_type, F>(name, std::forward<F>(body), scheduling_info, loc);
+		return TupleMap<drop_t<1, typename traits::types>>::template make_lam<typename traits::result_type, F>(name, std::forward<F>(body), scheduling_info, VUK_CALL);
 	}
 
 	inline ExtRef make_ext_ref(std::shared_ptr<IRModule> rg, Ref ref, std::vector<std::shared_ptr<ExtNode>> deps = {}) {
@@ -585,25 +588,15 @@ public:
 	}
 
 	[[nodiscard]] inline Value<ImageAttachment>
-	declare_ia(Name name, ImageAttachment ia = {}, SourceLocationAtFrame _pscope = VUK_HERE_AND_NOW(), SourceLocationAtFrame _scope = VUK_HERE_AND_NOW()) {
-		if (_pscope != _scope) {
-			_scope.parent = &_pscope;
-		}
+	declare_ia(Name name, ImageAttachment ia = {}, VUK_CALLSTACK) {
 		std::shared_ptr<IRModule> rg = std::make_shared<IRModule>();
 		Ref ref = rg->make_declare_image(ia);
 		rg->name_output(ref, name.c_str());
-		rg->set_source_location(ref.node, _scope);
+		rg->set_source_location(ref.node, VUK_CALL);
 		return { make_ext_ref(rg, ref), ref };
 	}
 
-	[[nodiscard]] inline Value<ImageAttachment> acquire_ia(Name name,
-	                                                       ImageAttachment ia,
-	                                                       Access access,
-	                                                       SourceLocationAtFrame _pscope = VUK_HERE_AND_NOW(),
-	                                                       SourceLocationAtFrame _scope = VUK_HERE_AND_NOW()) {
-		if (_pscope != _scope) {
-			_scope.parent = &_pscope;
-		}
+	[[nodiscard]] inline Value<ImageAttachment> acquire_ia(Name name, ImageAttachment ia, Access access, VUK_CALLSTACK) {
 		std::shared_ptr<IRModule> rg = std::make_shared<IRModule>();
 		Ref ref = rg->make_acquire(rg->get_builtin_image(), nullptr, ia);
 		auto ext_ref = make_ext_ref(rg, ref);
@@ -614,27 +607,20 @@ public:
 		ext_ref.node->acqrel = ext_ref.node->owned_acqrel.get();
 		ref.node->acquire.acquire = ext_ref.node->owned_acqrel.get();
 		rg->name_output(ref, name.c_str());
-		rg->set_source_location(ref.node, _scope);
+		rg->set_source_location(ref.node, VUK_CALL);
 		return { std::move(ext_ref), ref };
 	}
 
-	[[nodiscard]] inline Value<Buffer>
-	declare_buf(Name name, Buffer buf = {}, SourceLocationAtFrame _pscope = VUK_HERE_AND_NOW(), SourceLocationAtFrame _scope = VUK_HERE_AND_NOW()) {
-		if (_pscope != _scope) {
-			_scope.parent = &_pscope;
-		}
+	[[nodiscard]] inline Value<Buffer> declare_buf(Name name, Buffer buf = {}, VUK_CALLSTACK) {
 		std::shared_ptr<IRModule> rg = std::make_shared<IRModule>();
 		Ref ref = rg->make_declare_buffer(buf);
 		rg->name_output(ref, name.c_str());
-		rg->set_source_location(ref.node, _scope);
+		rg->set_source_location(ref.node, VUK_CALL);
 		return { make_ext_ref(rg, ref), ref };
 	}
 
 	[[nodiscard]] inline Value<Buffer>
-	acquire_buf(Name name, Buffer buf, Access access, SourceLocationAtFrame _pscope = VUK_HERE_AND_NOW(), SourceLocationAtFrame _scope = VUK_HERE_AND_NOW()) {
-		if (_pscope != _scope) {
-			_scope.parent = &_pscope;
-		}
+	acquire_buf(Name name, Buffer buf, Access access, VUK_CALLSTACK) {
 		std::shared_ptr<IRModule> rg = std::make_shared<IRModule>();
 		Ref ref = rg->make_acquire(rg->get_builtin_buffer(), nullptr, buf);
 		auto ext_ref = make_ext_ref(rg, ref);
@@ -645,13 +631,13 @@ public:
 		ext_ref.node->owned_acqrel->last_use[0] = to_use(access);
 		ref.node->acquire.acquire = ext_ref.node->owned_acqrel.get();
 		rg->name_output(ref, name.c_str());
-		rg->set_source_location(ref.node, _scope);
+		rg->set_source_location(ref.node, VUK_CALL);
 		return { std::move(ext_ref), ref };
 	}
 
 	// TODO: due to the pack, we can't do the source_location::current() trick
 	template<class T, class... Args>
-	[[nodiscard]] inline Value<T[]> declare_array(Name name, Value<T>&& arg, Args&&... args) {
+	[[nodiscard]] inline Value<T[]> declare_array(Name name, Value<T> arg, Args... args) {
 		auto rg = arg.get_render_graph();
 		std::vector<std::shared_ptr<ExtNode>> deps;
 		(rg->subgraphs.push_back(args.get_render_graph()), ...);
@@ -664,7 +650,7 @@ public:
 	}
 
 	template<class T>
-	[[nodiscard]] inline Value<T[]> declare_array(Name name, std::span<const Value<T>> args, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
+	[[nodiscard]] inline Value<T[]> declare_array(Name name, std::span<const Value<T>> args, VUK_CALLSTACK) {
 		auto rg = args.size() > 0 ? args[0].get_render_graph() : std::make_shared<IRModule>();
 		std::vector<Ref> refs;
 		std::vector<Ref> defs;
@@ -686,12 +672,12 @@ public:
 		}
 		Ref ref = rg->make_declare_array(t, refs, defs);
 		rg->name_output(ref, name.c_str());
-		rg->set_source_location(ref.node, loc);
+		rg->set_source_location(ref.node, VUK_CALL);
 		return { make_ext_ref(rg, ref, std::move(deps)), ref };
 	}
 
 	template<class T>
-	[[nodiscard]] inline Value<T[]> declare_array(Name name, std::span<Value<T>> args, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
+	[[nodiscard]] inline Value<T[]> declare_array(Name name, std::span<Value<T>> args, VUK_CALLSTACK) {
 		auto rg = args.size() > 0 ? args[0].get_render_graph() : std::make_shared<IRModule>();
 		std::vector<Ref> refs;
 		std::vector<Ref> defs;
@@ -713,22 +699,22 @@ public:
 		}
 		Ref ref = rg->make_declare_array(t, refs, defs);
 		rg->name_output(ref, name.c_str());
-		rg->set_source_location(ref.node, loc);
+		rg->set_source_location(ref.node, VUK_CALL);
 		return { make_ext_ref(rg, ref, std::move(deps)), ref };
 	}
 
-	[[nodiscard]] inline Value<Swapchain> declare_swapchain(Swapchain& bundle, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
+	[[nodiscard]] inline Value<Swapchain> declare_swapchain(Swapchain& bundle, VUK_CALLSTACK) {
 		std::shared_ptr<IRModule> rg = std::make_shared<IRModule>();
 		Ref ref = rg->make_declare_swapchain(bundle);
-		rg->set_source_location(ref.node, loc);
+		rg->set_source_location(ref.node, VUK_CALL);
 		return { make_ext_ref(rg, ref), ref };
 	}
 
-	[[nodiscard]] inline Value<ImageAttachment> acquire_next_image(Name name, Value<Swapchain> in, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
+	[[nodiscard]] inline Value<ImageAttachment> acquire_next_image(Name name, Value<Swapchain> in, VUK_CALLSTACK) {
 		auto& rg = in.get_render_graph();
 		Ref ref = rg->make_acquire_next_image(in.get_head());
 		rg->name_output(ref, name.c_str());
-		rg->set_source_location(ref.node, loc);
+		rg->set_source_location(ref.node, VUK_CALL);
 		return std::move(in).transmute<ImageAttachment>(ref);
 	}
 

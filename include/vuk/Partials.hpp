@@ -15,23 +15,23 @@ namespace vuk {
 	/// @param buffer Buffer to fill
 	/// @param src_data pointer to source data
 	/// @param size size of source data
-	inline Value<Buffer> host_data_to_buffer(Allocator& allocator, DomainFlagBits copy_domain, Buffer dst, const void* src_data, size_t size) {
+	inline Value<Buffer> host_data_to_buffer(Allocator& allocator, DomainFlagBits copy_domain, Buffer dst, const void* src_data, size_t size, VUK_CALLSTACK) {
 		// host-mapped buffers just get memcpys
 		if (dst.mapped_ptr) {
 			memcpy(dst.mapped_ptr, src_data, size);
-			return { vuk::acquire_buf("_dst", dst, Access::eNone) };
+			return { vuk::acquire_buf("_dst", dst, Access::eNone, VUK_CALL) };
 		}
 
 		auto src = *allocate_buffer(allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, 1 });
 		::memcpy(src->mapped_ptr, src_data, size);
 
-		auto src_buf = vuk::declare_buf("_src", *src);
-		auto dst_buf = vuk::declare_buf("_dst", dst);
+		auto src_buf = vuk::declare_buf("_src", *src, VUK_CALL);
+		auto dst_buf = vuk::declare_buf("_dst", dst, VUK_CALL);
 		auto pass = vuk::make_pass("upload buffer", [](vuk::CommandBuffer& command_buffer, VUK_BA(Access::eTransferRead) src, VUK_BA(Access::eTransferWrite) dst) {
 			command_buffer.copy_buffer(src, dst);
 			return dst;
 		});
-		return pass(std::move(src_buf), std::move(dst_buf));
+		return pass(std::move(src_buf), std::move(dst_buf), VUK_CALL);
 	}
 
 	/// @brief Fill a buffer with host data
@@ -40,21 +40,21 @@ namespace vuk {
 	/// @param dst Buffer to fill
 	/// @param data source data
 	template<class T>
-	Value<Buffer> host_data_to_buffer(Allocator& allocator, DomainFlagBits copy_domain, Buffer dst, std::span<T> data) {
-		return host_data_to_buffer(allocator, copy_domain, dst, data.data(), data.size_bytes());
+	Value<Buffer> host_data_to_buffer(Allocator& allocator, DomainFlagBits copy_domain, Buffer dst, std::span<T> data, VUK_CALLSTACK) {
+		return host_data_to_buffer(allocator, copy_domain, dst, data.data(), data.size_bytes(), VUK_CALL);
 	}
 
 	/// @brief Download a buffer to GPUtoCPU memory
 	/// @param buffer_src Buffer to download
-	inline Value<Buffer> download_buffer(Value<Buffer> buffer_src) {
-		auto dst = declare_buf("dst", Buffer{ .memory_usage = MemoryUsage::eGPUtoCPU });
+	inline Value<Buffer> download_buffer(Value<Buffer> buffer_src, VUK_CALLSTACK) {
+		auto dst = declare_buf("dst", Buffer{ .memory_usage = MemoryUsage::eGPUtoCPU }, VUK_CALL);
 		dst.same_size(buffer_src);
 		auto download =
 		    vuk::make_pass("download buffer", [](vuk::CommandBuffer& command_buffer, VUK_BA(Access::eTransferRead) src, VUK_BA(Access::eTransferWrite) dst) {
 			    command_buffer.copy_buffer(src, dst);
 			    return dst;
 		    });
-		return download(std::move(buffer_src), std::move(dst));
+		return download(std::move(buffer_src), std::move(dst), VUK_CALL);
 	}
 
 	/// @brief Fill an image with host data
@@ -66,11 +66,7 @@ namespace vuk {
 	                                                 DomainFlagBits copy_domain,
 	                                                 ImageAttachment image,
 	                                                 const void* src_data,
-	                                                 SourceLocationAtFrame _pscope = VUK_HERE_AND_NOW(),
-	                                                 SourceLocationAtFrame _scope = VUK_HERE_AND_NOW()) {
-		if (_pscope != _scope) {
-			_scope.parent = &_pscope;
-		}
+	                                                 VUK_CALLSTACK) {
 		size_t alignment = format_to_texel_block_size(image.format);
 		size_t size = compute_image_size(image.format, image.extent);
 		auto src = *allocate_buffer(allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
@@ -88,15 +84,15 @@ namespace vuk {
 		bc.imageSubresource.layerCount = image.layer_count;
 		bc.bufferOffset = src->offset;
 
-		auto srcbuf = declare_buf("src", *src, _scope);
-		auto dst = declare_ia("dst", image, _scope);
+		auto srcbuf = declare_buf("src", *src, VUK_CALL);
+		auto dst = declare_ia("dst", image, VUK_CALL);
 		auto image_upload =
 		    vuk::make_pass("image upload", [bc](vuk::CommandBuffer& command_buffer, VUK_BA(Access::eTransferRead) src, VUK_IA(Access::eTransferWrite) dst) {
 			    command_buffer.copy_buffer_to_image(src, dst, bc);
 			    return dst;
 		    });
 
-		return image_upload(std::move(srcbuf), std::move(dst));
+		return image_upload(std::move(srcbuf), std::move(dst), VUK_CALL);
 	}
 
 /*
@@ -168,22 +164,22 @@ namespace vuk {
 	/// @param mem_usage Where to allocate the buffer (host visible buffers will be automatically mapped)
 	template<class T>
 	std::pair<Unique<Buffer>, Value<Buffer>>
-	create_buffer(Allocator& allocator, vuk::MemoryUsage memory_usage, DomainFlagBits domain, std::span<T> data, size_t alignment = 1) {
+	create_buffer(Allocator& allocator, vuk::MemoryUsage memory_usage, DomainFlagBits domain, std::span<T> data, size_t alignment = 1, VUK_CALLSTACK) {
 		Unique<Buffer> buf(allocator);
 		BufferCreateInfo bci{ memory_usage, sizeof(T) * data.size(), alignment };
 		auto ret = allocator.allocate_buffers(std::span{ &*buf, 1 }, std::span{ &bci, 1 }); // TODO: dropping error
 		Buffer b = buf.get();
-		return { std::move(buf), host_data_to_buffer(allocator, domain, b, data) };
+		return { std::move(buf), host_data_to_buffer(allocator, domain, b, data, VUK_CALL) };
 	}
 
 	inline std::pair<Unique<Image>, Value<ImageAttachment>> create_image_with_data(Allocator& allocator,
 	                                                                               DomainFlagBits copy_domain,
 	                                                                               ImageAttachment ia,
 	                                                                               const void* data,
-	                                                                               SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-		auto image = allocate_image(allocator, ia, loc);
+	                                                                               VUK_CALLSTACK) {
+		auto image = allocate_image(allocator, ia, VUK_CALL);
 		ia.image = **image;
-		return { std::move(*image), host_data_to_image(allocator, copy_domain, ia, data, loc) };
+		return { std::move(*image), host_data_to_image(allocator, copy_domain, ia, data, VUK_CALL) };
 	}
 
 	template<class T>
@@ -191,8 +187,8 @@ namespace vuk {
 	                                                                        DomainFlagBits copy_domain,
 	                                                                        ImageAttachment ia,
 	                                                                        std::span<T> data,
-	                                                                        SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-		return create_image_with_data(allocator, copy_domain, ia, data.data(), loc);
+	                                                                        VUK_CALLSTACK) {
+		return create_image_with_data(allocator, copy_domain, ia, data.data(), VUK_CALL);
 	}
 
 	inline std::tuple<Unique<Image>, Unique<ImageView>, Value<ImageAttachment>>
@@ -200,16 +196,12 @@ namespace vuk {
 	                                DomainFlagBits copy_domain,
 	                                ImageAttachment ia,
 	                                const void* data,
-	                                SourceLocationAtFrame _pscope = VUK_HERE_AND_NOW(),
-	                                SourceLocationAtFrame _scope = VUK_HERE_AND_NOW()) {
-		if (_pscope != _scope) {
-			_scope.parent = &_pscope;
-		}
-		auto image = allocate_image(allocator, ia, _scope);
+	                                VUK_CALLSTACK) {
+		auto image = allocate_image(allocator, ia, VUK_CALL);
 		ia.image = **image;
-		auto view = allocate_image_view(allocator, ia, _scope);
+		auto view = allocate_image_view(allocator, ia, VUK_CALL);
 		ia.image_view = **view;
-		return { std::move(*image), std::move(*view), host_data_to_image(allocator, copy_domain, ia, data, _scope) };
+		return { std::move(*image), std::move(*view), host_data_to_image(allocator, copy_domain, ia, data, VUK_CALL) };
 	}
 
 	template<class T>
@@ -217,20 +209,20 @@ namespace vuk {
 	                                                                                                     DomainFlagBits copy_domain,
 	                                                                                                     ImageAttachment ia,
 	                                                                                                     std::span<T> data,
-	                                                                                                     SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-		return create_image_and_view_with_data(allocator, copy_domain, ia, data.data(), loc);
+	                                                                                                     VUK_CALLSTACK) {
+		return create_image_and_view_with_data(allocator, copy_domain, ia, data.data(), VUK_CALL);
 	}
 
-	inline Value<ImageAttachment> clear_image(Value<ImageAttachment> in, Clear clear_value) {
+	inline Value<ImageAttachment> clear_image(Value<ImageAttachment> in, Clear clear_value, VUK_CALLSTACK) {
 		auto clear = make_pass("clear image", [=](CommandBuffer& cbuf, VUK_IA(Access::eClear) dst) {
 			cbuf.clear_image(dst, clear_value);
 			return dst;
 		});
 
-		return clear(std::move(in));
+		return clear(std::move(in), VUK_CALL);
 	}
 
-	inline Value<ImageAttachment> blit_image(Value<ImageAttachment> src, Value<ImageAttachment> dst, Filter filter) {
+	inline Value<ImageAttachment> blit_image(Value<ImageAttachment> src, Value<ImageAttachment> dst, Filter filter, VUK_CALLSTACK) {
 		auto blit = make_pass("blit image", [=](CommandBuffer& cbuf, VUK_IA(Access::eTransferRead) src, VUK_IA(Access::eTransferWrite) dst) {
 			ImageBlit region = {};
 			region.srcOffsets[0] = Offset3D{};
@@ -260,10 +252,10 @@ namespace vuk {
 			return dst;
 		});
 
-		return blit(std::move(src), std::move(dst));
+		return blit(std::move(src), std::move(dst), VUK_CALL);
 	}
 
-	inline Value<ImageAttachment> resolve_into(Value<ImageAttachment> src, Value<ImageAttachment> dst) {
+	inline Value<ImageAttachment> resolve_into(Value<ImageAttachment> src, Value<ImageAttachment> dst, VUK_CALLSTACK) {
 		src.same_format_as(dst);
 		src.same_shape_as(dst);
 		dst->sample_count = Samples::e1;
@@ -273,7 +265,7 @@ namespace vuk {
 			return dst;
 		});
 
-		return resolve(std::move(src), std::move(dst));
+		return resolve(std::move(src), std::move(dst), VUK_CALL);
 	}
 
 	/// @brief Allocates & fills an image, creates default ImageView for it (legacy)
