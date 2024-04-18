@@ -1,5 +1,5 @@
 #include "bench_runner.hpp"
-#include "vuk/Partials.hpp"
+#include "vuk/vsl/Core.hpp"
 #include <stb_image.h>
 
 namespace {

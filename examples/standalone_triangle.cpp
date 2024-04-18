@@ -6,7 +6,7 @@
 #include "vuk/AllocatorHelpers.hpp"
 #include "vuk/CommandBuffer.hpp"
 #include "vuk/Context.hpp"
-#include "vuk/Partials.hpp"
+#include "vuk/vsl/Core.hpp"
 #include "vuk/RenderGraph.hpp"
 #include "vuk/SampledImage.hpp"
 #include "vuk/resources/DeviceFrameResource.hpp"

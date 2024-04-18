@@ -1,6 +1,6 @@
 #include "TestContext.hpp"
 #include "vuk/AllocatorHelpers.hpp"
-#include "vuk/Partials.hpp"
+#include "vuk/vsl/Core.hpp"
 #include <doctest/doctest.h>
 
 using namespace vuk;
