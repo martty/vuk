@@ -65,6 +65,7 @@ namespace vuk {
 			eRTT2D,         // 2D image sampled and rendered to. Full mip chain. No arraying.
 			eRTTCube,       // Cubemap sampled and rendered to. Full mip chain. No arraying.
 			eRTT2DUnmipped, // 2D image sampled and rendered to. No mip chain. No arraying.
+			eSTT2D,         // 2D image sampled and stored to. Full mip chain. No arraying.
 			eSTT2DUnmipped, // 2D image sampled and stored to. No mip chain. No arraying.
 			eGeneric2D,     // 2D image with upload, download, sampling, rendering and storing. Full mip chain. No arraying.
 		};
@@ -93,6 +94,7 @@ namespace vuk {
 					ia.usage |= ImageUsageFlagBits::eDepthStencilAttachment;
 				ia.usage |= ImageUsageFlagBits::eSampled;
 				break;
+			case Preset::eSTT2D:
 			case Preset::eSTT2DUnmipped:
 				ia.usage |= ImageUsageFlagBits::eStorage | ImageUsageFlagBits::eSampled;
 				break;
@@ -129,6 +131,7 @@ namespace vuk {
 			case Preset::eMap2D:
 			case Preset::eRTT2D:
 			case Preset::eRTT2DUnmipped:
+			case Preset::eSTT2D:
 			case Preset::eSTT2DUnmipped:
 			case Preset::eGeneric2D:
 				ia.view_type = ImageViewType::e2D;
