@@ -98,7 +98,6 @@ private:                                                                        
 	using error_t = typename Error<void>::type;                                                                                                                  \
                                                                                                                                                                \
 public:
-
 	// END OF DELAYED_ERROR
 
 	template<typename... Ts>
@@ -141,41 +140,24 @@ public:
 		using type = type_list<T, Ts...>;
 	};
 
-	template<size_t... N>
-	struct index_list {
-		static constexpr size_t length = sizeof...(N);
-		using type = index_list<N...>;
-	};
-
-	template<size_t N, typename List>
-	struct prepend_index;
-
-	template<size_t N, size_t... Ns>
-	struct prepend_index<N, index_list<Ns...>> {
-		using type = index_list<N, Ns...>;
-	};
-
-	template<typename T1, typename T2, size_t N = 0>
+	template<typename T1, typename T2>
 	struct intersect_type_lists;
 
-	template<typename... T1, size_t N>
-	struct intersect_type_lists<type_list<T1...>, type_list<>, N> {
+	template<typename... T1>
+	struct intersect_type_lists<type_list<T1...>, type_list<>> {
 		using type = type_list<>;
-		using indices = index_list<>;
 	};
 
-	template<typename... T1, typename T2_Head, typename... T2, size_t N>
-	struct intersect_type_lists<type_list<T1...>, type_list<T2_Head, T2...>, N> {
+	template<typename... T1, typename T2_Head, typename... T2>
+	struct intersect_type_lists<type_list<T1...>, type_list<T2_Head, T2...>> {
 	private:
-		using rest = intersect_type_lists<type_list<T1...>, type_list<T2...>, N + 1>;
+		using rest = intersect_type_lists<type_list<T1...>, type_list<T2...>>;
 		using rest_type = typename rest::type;
-		using rest_indices = typename rest::indices;
 
 		static constexpr bool condition = (std::is_same_v<T1, T2_Head> || ...);
 
 	public:
-		using type = std::conditional_t<condition, prepend_type<T2_Head, rest_type>, rest_type>;
-		using indices = std::conditional_t<condition, prepend_index<N, rest_indices>, rest_indices>;
+		using type = std::conditional_t<condition, typename prepend_type<T2_Head, rest_type>::type, rest_type>;
 	};
 
 	template<typename Tuple, typename... Ts>
@@ -183,9 +165,40 @@ public:
 		return typelist_to_tuple_t<type_list<Ts...>>(std::get<Ts>(tuple)...);
 	}
 
-	template<size_t... Ns>
-	auto make_indices(index_list<Ns...> indices) {
-		return std::array{ Ns... };
+	//	https://devblogs.microsoft.com/oldnewthing/20200629-00/?p=103910
+	template<typename T, typename Tuple>
+	struct tuple_element_index_helper;
+
+	template<typename T>
+	struct tuple_element_index_helper<T, std::tuple<>> {
+		static constexpr std::size_t value = 0;
+	};
+
+	template<typename T, typename... Rest>
+	struct tuple_element_index_helper<T, std::tuple<T, Rest...>> {
+		static constexpr std::size_t value = 0;
+		using RestTuple = std::tuple<Rest...>;
+		static_assert(tuple_element_index_helper<T, RestTuple>::value == std::tuple_size_v<RestTuple>, "type appears more than once in tuple");
+	};
+
+	template<typename T, typename First, typename... Rest>
+	struct tuple_element_index_helper<T, std::tuple<First, Rest...>> {
+		using RestTuple = std::tuple<Rest...>;
+		static constexpr std::size_t value = 1 + tuple_element_index_helper<T, RestTuple>::value;
+	};
+
+	template<typename T, typename Tuple>
+	struct tuple_element_index {
+		static constexpr std::size_t value = tuple_element_index_helper<T, Tuple>::value;
+		static_assert(value < std::tuple_size_v<Tuple>, "type does not appear in tuple");
+	};
+
+	template<typename T, typename Tuple>
+	inline constexpr std::size_t tuple_element_index_v = tuple_element_index<T, Tuple>::value;
+
+	template<typename Tuple, typename... Ts>
+	auto make_indices(const Tuple& tuple, type_list<Ts...>) {
+		return std::array{ tuple_element_index_v<Ts, Tuple>... };
 	}
 
 	template<typename T1, typename T2>
@@ -194,9 +207,8 @@ public:
 		using T2_list = tuple_to_typelist_t<T2>;
 		using intersection = intersect_type_lists<T1_list, T2_list>;
 		using intersection_type = typename intersection::type;
-		using intersection_indices = typename intersection::indices;
 		auto subtuple = make_subtuple(tuple, intersection_type{});
-		auto indices = make_indices(intersection_indices{});
+		auto indices = make_indices(tuple, intersection_type{});
 		return std::pair{ indices, subtuple };
 	}
 
@@ -375,18 +387,17 @@ public:
 	};
 
 	template<class F>
-	[[nodiscard]] auto
-	make_pass(Name name, F&& body, SchedulingInfo scheduling_info = SchedulingInfo(DomainFlagBits::eAny), VUK_CALLSTACK) {
+	[[nodiscard]] auto make_pass(Name name, F&& body, SchedulingInfo scheduling_info = SchedulingInfo(DomainFlagBits::eAny), VUK_CALLSTACK) {
 		using traits = closure_traits<decltype(&F::operator())>;
-		return TupleMap<drop_t<1, typename traits::types>>::template make_lam<typename traits::result_type, F>(name, std::forward<F>(body), scheduling_info, VUK_CALL);
+		return TupleMap<drop_t<1, typename traits::types>>::template make_lam<typename traits::result_type, F>(
+		    name, std::forward<F>(body), scheduling_info, VUK_CALL);
 	}
 
 	inline ExtRef make_ext_ref(std::shared_ptr<IRModule> rg, Ref ref, std::vector<std::shared_ptr<ExtNode>> deps = {}) {
 		return ExtRef(std::make_shared<ExtNode>(rg, ref.node, std::move(deps)), ref);
 	}
 
-	[[nodiscard]] inline Value<ImageAttachment>
-	declare_ia(Name name, ImageAttachment ia = {}, VUK_CALLSTACK) {
+	[[nodiscard]] inline Value<ImageAttachment> declare_ia(Name name, ImageAttachment ia = {}, VUK_CALLSTACK) {
 		std::shared_ptr<IRModule> rg = std::make_shared<IRModule>();
 		Ref ref = rg->make_declare_image(ia);
 		rg->name_output(ref, name.c_str());
@@ -417,8 +428,7 @@ public:
 		return { make_ext_ref(rg, ref), ref };
 	}
 
-	[[nodiscard]] inline Value<Buffer>
-	acquire_buf(Name name, Buffer buf, Access access, VUK_CALLSTACK) {
+	[[nodiscard]] inline Value<Buffer> acquire_buf(Name name, Buffer buf, Access access, VUK_CALLSTACK) {
 		std::shared_ptr<IRModule> rg = std::make_shared<IRModule>();
 		Ref ref = rg->make_acquire(rg->get_builtin_buffer(), nullptr, buf);
 		auto ext_ref = make_ext_ref(rg, ref);
