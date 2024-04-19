@@ -259,8 +259,58 @@ namespace vuk {
 		}
 	};
 
+	inline Value<uint64_t> operator+(Value<uint64_t> a, uint64_t b) {
+		Ref ref = a.get_render_graph()->make_math_binary_op(Node::BinOp::ADD, a.get_head(), a.get_render_graph()->make_constant(b));
+		return std::move(a).transmute<uint64_t>(ref);
+	}
+
+	inline Value<uint64_t> operator+(Value<uint64_t> a, Value<uint64_t> b) {
+		Ref ref = a.get_render_graph()->make_math_binary_op(Node::BinOp::ADD, a.get_head(), b.get_head());
+		a.node->deps.push_back(b.node);
+		return std::move(a).transmute<uint64_t>(ref);
+	}
+
+	inline Value<uint64_t> operator-(Value<uint64_t> a, uint64_t b) {
+		Ref ref = a.get_render_graph()->make_math_binary_op(Node::BinOp::SUB, a.get_head(), a.get_render_graph()->make_constant(b));
+		return std::move(a).transmute<uint64_t>(ref);
+	}
+
+	inline Value<uint64_t> operator-(Value<uint64_t> a, Value<uint64_t> b) {
+		Ref ref = a.get_render_graph()->make_math_binary_op(Node::BinOp::SUB, a.get_head(), b.get_head());
+		a.node->deps.push_back(b.node);
+		return std::move(a).transmute<uint64_t>(ref);
+	}
+
 	inline Value<uint64_t> operator*(Value<uint64_t> a, uint64_t b) {
 		Ref ref = a.get_render_graph()->make_math_binary_op(Node::BinOp::MUL, a.get_head(), a.get_render_graph()->make_constant(b));
+		return std::move(a).transmute<uint64_t>(ref);
+	}
+
+	inline Value<uint64_t> operator*(Value<uint64_t> a, Value<uint64_t> b) {
+		Ref ref = a.get_render_graph()->make_math_binary_op(Node::BinOp::MUL, a.get_head(), b.get_head());
+		a.node->deps.push_back(b.node);
+		return std::move(a).transmute<uint64_t>(ref);
+	}
+
+	inline Value<uint64_t> operator/(Value<uint64_t> a, uint64_t b) {
+		Ref ref = a.get_render_graph()->make_math_binary_op(Node::BinOp::DIV, a.get_head(), a.get_render_graph()->make_constant(b));
+		return std::move(a).transmute<uint64_t>(ref);
+	}
+
+	inline Value<uint64_t> operator/(Value<uint64_t> a, Value<uint64_t> b) {
+		Ref ref = a.get_render_graph()->make_math_binary_op(Node::BinOp::DIV, a.get_head(), b.get_head());
+		a.node->deps.push_back(b.node);
+		return std::move(a).transmute<uint64_t>(ref);
+	}
+
+	inline Value<uint64_t> operator%(Value<uint64_t> a, uint64_t b) {
+		Ref ref = a.get_render_graph()->make_math_binary_op(Node::BinOp::MOD, a.get_head(), a.get_render_graph()->make_constant(b));
+		return std::move(a).transmute<uint64_t>(ref);
+	}
+
+	inline Value<uint64_t> operator%(Value<uint64_t> a, Value<uint64_t> b) {
+		Ref ref = a.get_render_graph()->make_math_binary_op(Node::BinOp::MOD, a.get_head(), b.get_head());
+		a.node->deps.push_back(b.node);
 		return std::move(a).transmute<uint64_t>(ref);
 	}
 

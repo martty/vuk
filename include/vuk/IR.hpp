@@ -274,7 +274,7 @@ namespace vuk {
 	struct Node {
 		static constexpr uint8_t MAX_ARGS = 5;
 
-		enum class BinOp { MUL };
+		enum class BinOp { ADD, SUB, MUL, DIV, MOD };
 		enum Kind {
 			NOP,
 			PLACEHOLDER,
@@ -517,10 +517,23 @@ namespace vuk {
 		case Node::MATH_BINARY: {
 			auto& math_binary = ref.node->math_binary;
 			switch (math_binary.op) {
+			case Node::BinOp::ADD: {
+				return eval<T>(math_binary.a) + eval<T>(math_binary.b);
+			}
+			case Node::BinOp::SUB: {
+				return eval<T>(math_binary.a) - eval<T>(math_binary.b);
+			}
 			case Node::BinOp::MUL: {
 				return eval<T>(math_binary.a) * eval<T>(math_binary.b);
 			}
+			case Node::BinOp::DIV: {
+				return eval<T>(math_binary.a) / eval<T>(math_binary.b);
 			}
+			case Node::BinOp::MOD: {
+				return eval<T>(math_binary.a) % eval<T>(math_binary.b);
+			}
+			}
+			assert(0);
 		}
 		case Node::EXTRACT: {
 			auto composite = ref.node->extract.composite;
