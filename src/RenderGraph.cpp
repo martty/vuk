@@ -877,7 +877,7 @@ namespace vuk {
 		// linked-sea-of-nodes to list of nodes
 		std::vector<IRModule*, short_alloc<IRModule*>> work_queue(*impl->arena_);
 		std::unordered_set<IRModule*> visited;
-		for (auto& ref : impl->refs) {
+		for (auto& ref : impl->depnodes) {
 			auto mod = ref->module.get();
 			if (!visited.count(mod)) {
 				work_queue.push_back(mod);
