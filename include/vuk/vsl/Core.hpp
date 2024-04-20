@@ -1,7 +1,7 @@
 #pragma once
 
-#include "vuk/AllocatorHelpers.hpp"
-#include "vuk/CommandBuffer.hpp"
+#include "vuk/runtime/AllocatorHelpers.hpp"
+#include "vuk/runtime/CommandBuffer.hpp"
 #include "vuk/RenderGraph.hpp"
 #include "vuk/SourceLocation.hpp"
 #include "vuk/Value.hpp"

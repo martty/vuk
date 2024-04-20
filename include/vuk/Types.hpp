@@ -1,6 +1,7 @@
 #pragma once
 
 #include "vuk/Config.hpp"
+#include "vuk/Flags.hpp"
 #include "vuk/Hash.hpp"
 #include "vuk/vuk_fwd.hpp"
 
@@ -572,258 +573,19 @@ namespace vuk {
 	};
 
 	// return the texel block size of a format
-	uint32_t format_to_texel_block_size(vuk::Format) noexcept;
+	uint32_t format_to_texel_block_size(Format) noexcept;
 	// return the 3D texel block extent of a format
-	Extent3D format_to_texel_block_extent(vuk::Format) noexcept;
+	Extent3D format_to_texel_block_extent(Format) noexcept;
 	// compute the byte size of an image with given format and extent
-	uint32_t compute_image_size(vuk::Format, vuk::Extent3D) noexcept;
+	uint32_t compute_image_size(Format, Extent3D) noexcept;
 	// get name of format
 	std::string_view format_to_sv(Format format) noexcept;
 	// true if format performs automatic sRGB conversion
-	bool is_format_srgb(vuk::Format) noexcept;
-	// get the unorm equivalent of the srgb format (returns vuk::Format::Undefined if the format doesn't exist)
-	vuk::Format unorm_to_srgb(vuk::Format) noexcept;
-	// get the srgb equivalent of the unorm format (returns vuk::Format::Undefined if the format doesn't exist)
-	vuk::Format srgb_to_unorm(vuk::Format) noexcept;
-
-	enum class IndexType {
-		eUint16 = VK_INDEX_TYPE_UINT16,
-		eUint32 = VK_INDEX_TYPE_UINT32,
-		eNoneKHR = VK_INDEX_TYPE_NONE_KHR,
-		eUint8EXT = VK_INDEX_TYPE_UINT8_EXT,
-		eNoneNV = VK_INDEX_TYPE_NONE_NV
-	};
-
-	template<typename BitType>
-	class Flags {
-	public:
-		using MaskType = typename std::underlying_type_t<BitType>;
-
-		// constructors
-		constexpr Flags() noexcept : m_mask(0) {}
-
-		constexpr Flags(BitType bit) noexcept : m_mask(static_cast<MaskType>(bit)) {}
-
-		constexpr Flags(Flags<BitType> const& rhs) noexcept : m_mask(rhs.m_mask) {}
-
-		constexpr explicit Flags(MaskType flags) noexcept : m_mask(flags) {}
-
-		constexpr bool operator<(Flags<BitType> const& rhs) const noexcept {
-			return m_mask < rhs.m_mask;
-		}
-
-		constexpr bool operator<=(Flags<BitType> const& rhs) const noexcept {
-			return m_mask <= rhs.m_mask;
-		}
-
-		constexpr bool operator>(Flags<BitType> const& rhs) const noexcept {
-			return m_mask > rhs.m_mask;
-		}
-
-		constexpr bool operator>=(Flags<BitType> const& rhs) const noexcept {
-			return m_mask >= rhs.m_mask;
-		}
-
-		constexpr bool operator==(Flags<BitType> const& rhs) const noexcept {
-			return m_mask == rhs.m_mask;
-		}
-
-		constexpr bool operator!=(Flags<BitType> const& rhs) const noexcept {
-			return m_mask != rhs.m_mask;
-		}
-
-		// logical operator
-		constexpr bool operator!() const noexcept {
-			return !m_mask;
-		}
-
-		// assignment operators
-		constexpr Flags<BitType>& operator=(Flags<BitType> const& rhs) noexcept {
-			m_mask = rhs.m_mask;
-			return *this;
-		}
-
-		constexpr Flags<BitType>& operator|=(Flags<BitType> const& rhs) noexcept {
-			m_mask |= rhs.m_mask;
-			return *this;
-		}
-
-		constexpr Flags<BitType>& operator&=(Flags<BitType> const& rhs) noexcept {
-			m_mask &= rhs.m_mask;
-			return *this;
-		}
-
-		constexpr Flags<BitType>& operator^=(Flags<BitType> const& rhs) noexcept {
-			m_mask ^= rhs.m_mask;
-			return *this;
-		}
-
-		// cast operators
-		explicit constexpr operator bool() const noexcept {
-			return !!m_mask;
-		}
-
-		explicit constexpr operator MaskType() const noexcept {
-			return m_mask;
-		}
-
-		// bitwise operators
-		friend constexpr Flags<BitType> operator&(Flags<BitType> const& lhs, Flags<BitType> const& rhs) noexcept {
-			return Flags<BitType>(lhs.m_mask & rhs.m_mask);
-		}
-
-		friend constexpr Flags<BitType> operator|(Flags<BitType> const& lhs, Flags<BitType> const& rhs) noexcept {
-			return Flags<BitType>(lhs.m_mask | rhs.m_mask);
-		}
-
-		friend constexpr Flags<BitType> operator^(Flags<BitType> const& lhs, Flags<BitType> const& rhs) noexcept {
-			return Flags<BitType>(lhs.m_mask ^ rhs.m_mask);
-		}
-
-		friend constexpr Flags<BitType> operator&(Flags<BitType> const& lhs, BitType const& rhs) noexcept {
-			return Flags<BitType>(lhs.m_mask & (std::underlying_type_t<BitType>)rhs);
-		}
-
-		friend constexpr Flags<BitType> operator|(Flags<BitType> const& lhs, BitType const& rhs) noexcept {
-			return Flags<BitType>(lhs.m_mask | (std::underlying_type_t<BitType>)rhs);
-		}
-
-		friend constexpr Flags<BitType> operator^(Flags<BitType> const& lhs, BitType const& rhs) noexcept {
-			return Flags<BitType>(lhs.m_mask ^ (std::underlying_type_t<BitType>)rhs);
-		}
-
-		MaskType m_mask;
-	};
-
-	enum class ShaderStageFlagBits : VkShaderStageFlags {
-		eVertex = VK_SHADER_STAGE_VERTEX_BIT,
-		eTessellationControl = VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
-		eTessellationEvaluation = VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT,
-		eGeometry = VK_SHADER_STAGE_GEOMETRY_BIT,
-		eFragment = VK_SHADER_STAGE_FRAGMENT_BIT,
-		eCompute = VK_SHADER_STAGE_COMPUTE_BIT,
-		eAllGraphics = VK_SHADER_STAGE_ALL_GRAPHICS,
-		eAll = VK_SHADER_STAGE_ALL,
-		eRaygenKHR = VK_SHADER_STAGE_RAYGEN_BIT_KHR,
-		eAnyHitKHR = VK_SHADER_STAGE_ANY_HIT_BIT_KHR,
-		eClosestHitKHR = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
-		eMissKHR = VK_SHADER_STAGE_MISS_BIT_KHR,
-		eIntersectionKHR = VK_SHADER_STAGE_INTERSECTION_BIT_KHR,
-		eCallableKHR = VK_SHADER_STAGE_CALLABLE_BIT_KHR,
-		eTaskNV = VK_SHADER_STAGE_TASK_BIT_NV,
-		eMeshNV = VK_SHADER_STAGE_MESH_BIT_NV,
-		eAnyHitNV = VK_SHADER_STAGE_ANY_HIT_BIT_NV,
-		eCallableNV = VK_SHADER_STAGE_CALLABLE_BIT_NV,
-		eClosestHitNV = VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV,
-		eIntersectionNV = VK_SHADER_STAGE_INTERSECTION_BIT_NV,
-		eMissNV = VK_SHADER_STAGE_MISS_BIT_NV,
-		eRaygenNV = VK_SHADER_STAGE_RAYGEN_BIT_NV
-	};
-
-	using ShaderStageFlags = Flags<ShaderStageFlagBits>;
-	inline constexpr ShaderStageFlags operator|(ShaderStageFlagBits bit0, ShaderStageFlagBits bit1) noexcept {
-		return ShaderStageFlags(bit0) | bit1;
-	}
-
-	inline constexpr ShaderStageFlags operator&(ShaderStageFlagBits bit0, ShaderStageFlagBits bit1) noexcept {
-		return ShaderStageFlags(bit0) & bit1;
-	}
-
-	inline constexpr ShaderStageFlags operator^(ShaderStageFlagBits bit0, ShaderStageFlagBits bit1) noexcept {
-		return ShaderStageFlags(bit0) ^ bit1;
-	}
-
-	enum class PipelineStageFlagBits : uint32_t {
-		eNone = VK_PIPELINE_STAGE_NONE,
-		eTopOfPipe = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-		eDrawIndirect = VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT,
-		eVertexInput = VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
-		eVertexShader = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT,
-		eTessellationControlShader = VK_PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT,
-		eTessellationEvaluationShader = VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT,
-		eGeometryShader = VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT,
-		eFragmentShader = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-		eEarlyFragmentTests = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
-		eLateFragmentTests = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
-		eColorAttachmentOutput = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-		eComputeShader = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-		eTransfer = VK_PIPELINE_STAGE_TRANSFER_BIT,
-		eBottomOfPipe = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-		eHost = VK_PIPELINE_STAGE_HOST_BIT,
-		eAllGraphics = VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT,
-		eAllCommands = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-		eTransformFeedbackEXT = VK_PIPELINE_STAGE_TRANSFORM_FEEDBACK_BIT_EXT,
-		eConditionalRenderingEXT = VK_PIPELINE_STAGE_CONDITIONAL_RENDERING_BIT_EXT,
-		eRayTracingShaderKHR = VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
-		eAccelerationStructureBuildKHR = VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
-		eShadingRateImageNV = VK_PIPELINE_STAGE_SHADING_RATE_IMAGE_BIT_NV,
-		eTaskShaderNV = VK_PIPELINE_STAGE_TASK_SHADER_BIT_NV,
-		eMeshShaderNV = VK_PIPELINE_STAGE_MESH_SHADER_BIT_NV,
-		eFragmentDensityProcessEXT = VK_PIPELINE_STAGE_FRAGMENT_DENSITY_PROCESS_BIT_EXT,
-		eCommandPreprocessNV = VK_PIPELINE_STAGE_COMMAND_PREPROCESS_BIT_NV,
-		eAccelerationStructureBuildNV = VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_NV,
-		eRayTracingShaderNV = VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_NV
-	};
-
-	using PipelineStageFlags = Flags<PipelineStageFlagBits>;
-	inline constexpr PipelineStageFlags operator|(PipelineStageFlagBits bit0, PipelineStageFlagBits bit1) noexcept {
-		return PipelineStageFlags(bit0) | bit1;
-	}
-
-	inline constexpr PipelineStageFlags operator&(PipelineStageFlagBits bit0, PipelineStageFlagBits bit1) noexcept {
-		return PipelineStageFlags(bit0) & bit1;
-	}
-
-	inline constexpr PipelineStageFlags operator^(PipelineStageFlagBits bit0, PipelineStageFlagBits bit1) noexcept {
-		return PipelineStageFlags(bit0) ^ bit1;
-	}
-
-	enum class AccessFlagBits : VkAccessFlags {
-		eIndirectCommandRead = VK_ACCESS_INDIRECT_COMMAND_READ_BIT,
-		eIndexRead = VK_ACCESS_INDEX_READ_BIT,
-		eVertexAttributeRead = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT,
-		eUniformRead = VK_ACCESS_UNIFORM_READ_BIT,
-		eInputAttachmentRead = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT,
-		eShaderRead = VK_ACCESS_SHADER_READ_BIT,
-		eShaderWrite = VK_ACCESS_SHADER_WRITE_BIT,
-		eColorAttachmentRead = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT,
-		eColorAttachmentWrite = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-		eDepthStencilAttachmentRead = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
-		eDepthStencilAttachmentWrite = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-		eTransferRead = VK_ACCESS_TRANSFER_READ_BIT,
-		eTransferWrite = VK_ACCESS_TRANSFER_WRITE_BIT,
-		eHostRead = VK_ACCESS_HOST_READ_BIT,
-		eHostWrite = VK_ACCESS_HOST_WRITE_BIT,
-		eMemoryRead = VK_ACCESS_MEMORY_READ_BIT,
-		eMemoryWrite = VK_ACCESS_MEMORY_WRITE_BIT,
-		eTransformFeedbackWriteEXT = VK_ACCESS_TRANSFORM_FEEDBACK_WRITE_BIT_EXT,
-		eTransformFeedbackCounterReadEXT = VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_READ_BIT_EXT,
-		eTransformFeedbackCounterWriteEXT = VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_WRITE_BIT_EXT,
-		eConditionalRenderingReadEXT = VK_ACCESS_CONDITIONAL_RENDERING_READ_BIT_EXT,
-		eColorAttachmentReadNoncoherentEXT = VK_ACCESS_COLOR_ATTACHMENT_READ_NONCOHERENT_BIT_EXT,
-		eAccelerationStructureReadKHR = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,
-		eAccelerationStructureWriteKHR = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,
-		eShadingRateImageReadNV = VK_ACCESS_SHADING_RATE_IMAGE_READ_BIT_NV,
-		eFragmentDensityMapReadEXT = VK_ACCESS_FRAGMENT_DENSITY_MAP_READ_BIT_EXT,
-		eCommandPreprocessReadNV = VK_ACCESS_COMMAND_PREPROCESS_READ_BIT_NV,
-		eCommandPreprocessWriteNV = VK_ACCESS_COMMAND_PREPROCESS_WRITE_BIT_NV,
-		eAccelerationStructureReadNV = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_NV,
-		eAccelerationStructureWriteNV = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_NV
-	};
-
-	using AccessFlags = Flags<AccessFlagBits>;
-
-	inline constexpr AccessFlags operator|(AccessFlagBits bit0, AccessFlagBits bit1) noexcept {
-		return AccessFlags(bit0) | bit1;
-	}
-
-	inline constexpr AccessFlags operator&(AccessFlagBits bit0, AccessFlagBits bit1) noexcept {
-		return AccessFlags(bit0) & bit1;
-	}
-
-	inline constexpr AccessFlags operator^(AccessFlagBits bit0, AccessFlagBits bit1) noexcept {
-		return AccessFlags(bit0) ^ bit1;
-	}
+	bool is_format_srgb(Format) noexcept;
+	// get the unorm equivalent of the srgb format (returns Format::Undefined if the format doesn't exist)
+	Format unorm_to_srgb(Format) noexcept;
+	// get the srgb equivalent of the unorm format (returns Format::Undefined if the format doesn't exist)
+	Format srgb_to_unorm(Format) noexcept;
 
 	enum class MemoryUsage {
 		eGPUonly = 1 /*VMA_MEMORY_USAGE_GPU_ONLY*/,
@@ -1035,32 +797,6 @@ namespace vuk {
 		return (val + align - 1) / align * align;
 	}
 
-	struct CommandPool {
-		VkCommandPool command_pool = VK_NULL_HANDLE;
-		uint32_t queue_family_index;
-
-		constexpr bool operator==(const CommandPool& other) const noexcept {
-			return command_pool == other.command_pool;
-		}
-	};
-
-	struct CommandBufferAllocationCreateInfo {
-		VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-		CommandPool command_pool;
-	};
-
-	struct CommandBufferAllocation {
-		CommandBufferAllocation() = default;
-		CommandBufferAllocation(VkCommandBuffer command_buffer, CommandPool command_pool) noexcept : command_buffer(command_buffer), command_pool(command_pool) {}
-
-		VkCommandBuffer command_buffer = VK_NULL_HANDLE;
-		CommandPool command_pool = {};
-
-		operator VkCommandBuffer() noexcept {
-			return command_buffer;
-		}
-	};
-
 	struct ProfilingCallbacks {
 		void* (*on_begin_command_buffer)(void* user_data, VkCommandBuffer cmdbuf) = nullptr;
 		void (*on_end_command_buffer)(void* user_data, void* cbuf_data) = nullptr;
@@ -1164,14 +900,5 @@ namespace vuk {
 		}
 	};
 } // namespace vuk
-
-namespace std {
-	template<class BitType>
-	struct hash<vuk::Flags<BitType>> {
-		size_t operator()(vuk::Flags<BitType> const& x) const noexcept {
-			return std::hash<typename vuk::Flags<BitType>::MaskType>()((typename vuk::Flags<BitType>::MaskType)x);
-		}
-	};
-}; // namespace std
 
 #undef MOV

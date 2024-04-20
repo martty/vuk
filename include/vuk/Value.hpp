@@ -1,7 +1,7 @@
 #pragma once
 
-#include "vuk/Allocator.hpp"
-#include "vuk/Context.hpp"
+#include "vuk/runtime/Allocator.hpp"
+#include "vuk/runtime/vk/VkRuntime.hpp"
 #include "vuk/IR.hpp"
 #include "vuk/ImageAttachment.hpp"
 #include "vuk/Types.hpp"

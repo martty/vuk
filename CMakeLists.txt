@@ -90,25 +90,28 @@ add_subdirectory(ext/SPIRV-Cross)
 # we don't enable this directly, because the order of flags disables /Zc:char8_t- on MSVC
 #target_compile_features(vuk PUBLIC cxx_std_20)
 
-target_sources(vuk PRIVATE 
-	src/Pipeline.cpp
-	src/Program.cpp
-	src/Cache.cpp
-	src/RenderGraph.cpp 
-	
-	src/ExecutableRenderGraph.cpp
-	src/Allocator.cpp
-	src/Context.cpp
-	src/CommandBuffer.cpp
-	src/Descriptor.cpp
-	src/Util.cpp
+target_sources(vuk PRIVATE
 	src/Format.cpp
-	src/Name.cpp 
-	src/DeviceFrameResource.cpp
-	src/DeviceVkResource.cpp 
-	src/BufferAllocator.cpp
-	src/DeviceLinearResource.cpp
-	src/runtime/vk/VulkanQueueExecutor.cpp)
+	src/Name.cpp
+
+	src/IRPasses.cpp
+
+	src/runtime/Allocator.cpp
+	src/runtime/BufferAllocator.cpp
+	src/runtime/Cache.cpp
+	
+	src/runtime/vk/Backend.cpp
+	src/runtime/vk/CommandBuffer.cpp
+	src/runtime/vk/Descriptor.cpp
+	src/runtime/vk/DeviceFrameResource.cpp
+	src/runtime/vk/DeviceLinearResource.cpp
+	src/runtime/vk/DeviceVkResource.cpp
+	src/runtime/vk/Pipeline.cpp
+	src/runtime/vk/Program.cpp
+	src/runtime/vk/Util.cpp
+	src/runtime/vk/VkQueueExecutor.cpp
+	src/runtime/vk/VkRuntime.cpp
+	)
 
 target_include_directories(vuk PUBLIC ext/plf_colony)
 add_subdirectory(ext/robin-hood-hashing)
@@ -194,7 +197,7 @@ if(VUK_BUILD_TESTS)
 
 	add_subdirectory(ext/doctest)
 	target_link_libraries(vuk PUBLIC doctest::doctest)
-	target_sources(vuk PRIVATE src/tests/Test.cpp)
+	target_sources(vuk PRIVATE tests/Test.cpp)
 
 	FetchContent_Declare(
 	  vk-bootstrap 
@@ -204,12 +207,12 @@ if(VUK_BUILD_TESTS)
 	FetchContent_MakeAvailable(vk-bootstrap)
 
 	include(doctest_force_link_static_lib_in_target) # until we can use cmake 3.24
-	add_executable(vuk-tests src/tests/Test.cpp 
-					src/tests/01_semantics.cpp
-					src/tests/02_rg_errors.cpp
-					src/tests/03_commands.cpp
-					src/tests/04_arrays.cpp
-					src/tests/05_renderpass.cpp 
+	add_executable(vuk-tests tests/Test.cpp 
+					tests/01_semantics.cpp
+					tests/02_rg_errors.cpp
+					tests/03_commands.cpp
+					tests/04_arrays.cpp
+					tests/05_renderpass.cpp 
 	)
 	#target_compile_features(vuk-tests PRIVATE cxx_std_17)
 	target_include_directories(vuk-tests PRIVATE ext/renderdoc)

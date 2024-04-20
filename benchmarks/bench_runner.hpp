@@ -2,12 +2,12 @@
 
 #include "../examples/glfw.hpp"
 #include "../examples/utils.hpp"
-#include "vuk/AllocatorHelpers.hpp"
-#include "vuk/CommandBuffer.hpp"
-#include "vuk/Context.hpp"
+#include "vuk/runtime/AllocatorHelpers.hpp"
+#include "vuk/runtime/CommandBuffer.hpp"
+#include "vuk/runtime/vk/VkRuntime.hpp"
 #include "vuk/RenderGraph.hpp"
 #include "vuk/SampledImage.hpp"
-#include "vuk/resources/DeviceFrameResource.hpp"
+#include "vuk/runtime/vk/DeviceFrameResource.hpp"
 #include <VkBootstrap.h>
 #include <backends/imgui_impl_glfw.h>
 #include <functional>

@@ -1,51 +1,9 @@
 #pragma once
 
-#include "Types.hpp"
+#include "vuk/Types.hpp"
 #include <assert.h>
 
 namespace vuk {
-	enum class BufferUsageFlagBits : VkBufferUsageFlags {
-		eTransferRead = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-		eTransferWrite = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-		eUniformTexelBuffer = VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT,
-		eStorageTexelBuffer = VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT,
-		eUniformBuffer = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-		eStorageBuffer = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-		eIndexBuffer = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-		eVertexBuffer = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-		eIndirectBuffer = VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
-		eShaderDeviceAddress = VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-		eTransformFeedbackBufferEXT = VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT,
-		eTransformFeedbackCounterBufferEXT = VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_COUNTER_BUFFER_BIT_EXT,
-		eConditionalRenderingEXT = VK_BUFFER_USAGE_CONDITIONAL_RENDERING_BIT_EXT,
-		eShaderDeviceAddressEXT = VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_EXT,
-		eShaderDeviceAddressKHR = VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR,
-		eAccelerationStructureBuildInputReadOnlyKHR = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
-		eAccelerationStructureStorageKHR = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR,
-		eShaderBindingTable = VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR
-	};
-
-	using BufferUsageFlags = Flags<BufferUsageFlagBits>;
-
-	inline constexpr BufferUsageFlags operator|(BufferUsageFlagBits bit0, BufferUsageFlagBits bit1) noexcept {
-		return BufferUsageFlags(bit0) | bit1;
-	}
-
-	inline constexpr BufferUsageFlags operator&(BufferUsageFlagBits bit0, BufferUsageFlagBits bit1) noexcept {
-		return BufferUsageFlags(bit0) & bit1;
-	}
-
-	inline constexpr BufferUsageFlags operator^(BufferUsageFlagBits bit0, BufferUsageFlagBits bit1) noexcept {
-		return BufferUsageFlags(bit0) ^ bit1;
-	}
-
-	static constexpr vuk::BufferUsageFlags all_buffer_usage_flags =
-	    BufferUsageFlagBits::eTransferRead | BufferUsageFlagBits::eTransferWrite | BufferUsageFlagBits::eUniformTexelBuffer |
-	    BufferUsageFlagBits::eStorageTexelBuffer | BufferUsageFlagBits::eUniformBuffer | BufferUsageFlagBits::eStorageBuffer | BufferUsageFlagBits::eIndexBuffer |
-	    BufferUsageFlagBits::eVertexBuffer | BufferUsageFlagBits::eIndirectBuffer | BufferUsageFlagBits::eShaderDeviceAddress |
-	    BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR | BufferUsageFlagBits::eAccelerationStructureStorageKHR |
-	    BufferUsageFlagBits::eShaderBindingTable;
-
 	/// @brief A contiguous portion of GPU-visible memory that can be used for storing buffer-type data
 	struct Buffer {
 		void* allocation = nullptr;

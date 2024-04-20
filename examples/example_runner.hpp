@@ -2,13 +2,13 @@
 
 #include "glfw.hpp"
 #include "utils.hpp"
-#include "vuk/Allocator.hpp"
-#include "vuk/AllocatorHelpers.hpp"
-#include "vuk/CommandBuffer.hpp"
-#include "vuk/Context.hpp"
+#include "vuk/runtime/Allocator.hpp"
+#include "vuk/runtime/AllocatorHelpers.hpp"
+#include "vuk/runtime/CommandBuffer.hpp"
+#include "vuk/runtime/vk/VkRuntime.hpp"
 #include "vuk/vsl/Core.hpp"
 #include "vuk/RenderGraph.hpp"
-#include "vuk/resources/DeviceFrameResource.hpp"
+#include "vuk/runtime/vk/DeviceFrameResource.hpp"
 #include "vuk/runtime/ThisThreadExecutor.hpp"
 #include <VkBootstrap.h>
 #include <filesystem>

@@ -3,13 +3,12 @@
 #include "vuk/Buffer.hpp"
 #include "vuk/Hash.hpp"
 #include "vuk/IR.hpp"
-#include "vuk/Image.hpp"
 #include "vuk/ImageAttachment.hpp"
-#include "vuk/MapProxy.hpp"
 #include "vuk/Result.hpp"
 #include "vuk/SourceLocation.hpp"
-#include "vuk/Swapchain.hpp"
 #include "vuk/Value.hpp"
+#include "vuk/runtime/vk/Image.hpp"
+#include "vuk/runtime/vk/VkSwapchain.hpp"
 #include "vuk/vuk_fwd.hpp"
 
 #include <deque>

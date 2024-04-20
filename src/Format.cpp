@@ -1,4 +1,5 @@
-#include "vuk/Image.hpp"
+#include "vuk/runtime/vk/Image.hpp"
+#include "vuk/Util.hpp"
 #include <cassert>
 
 namespace vuk {
@@ -1166,6 +1167,41 @@ namespace vuk {
 			return Format::ePvrtc24BppUnormBlockIMG;
 		default:
 			return Format::eUndefined;
+		}
+	}
+
+	std::string_view image_view_type_to_sv(ImageViewType view_type) noexcept {
+		switch (view_type) {
+		case ImageViewType::e1D:
+			return "1D";
+		case ImageViewType::e2D:
+			return "2D";
+		case ImageViewType::e3D:
+			return "3D";
+		case ImageViewType::eCube:
+			return "Cube";
+		case ImageViewType::e1DArray:
+			return "1DArray";
+		case ImageViewType::e2DArray:
+			return "2DArray";
+		case ImageViewType::eCubeArray:
+			return "CubeArray";
+		default:
+			assert(0 && "not reached.");
+			return "";
+		}
+	}
+
+	std::string_view to_name(vuk::DomainFlagBits d) {
+		switch (d) {
+		case DomainFlagBits::eTransferQueue:
+			return "Transfer";
+		case DomainFlagBits::eGraphicsQueue:
+			return "Graphics";
+		case DomainFlagBits::eComputeQueue:
+			return "Compute";
+		default:
+			return "Unknown";
 		}
 	}
 } // namespace vuk

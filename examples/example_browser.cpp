@@ -1,6 +1,4 @@
-#include "../src/RenderGraphUtil.hpp"
 #include "example_runner.hpp"
-#include "vuk/RenderGraphReflection.hpp"
 
 bool render_all = true;
 

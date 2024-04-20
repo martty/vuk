@@ -3,11 +3,12 @@
 #include "vuk/Buffer.hpp"
 #include "vuk/ImageAttachment.hpp"
 #include "vuk/RelSpan.hpp"
+#include "vuk/ResourceUse.hpp"
 #include "vuk/ShortAlloc.hpp"
 #include "vuk/SourceLocation.hpp"
-#include "vuk/Swapchain.hpp"
 #include "vuk/SyncPoint.hpp"
 #include "vuk/Types.hpp"
+#include "vuk/runtime/vk/VkSwapchain.hpp" //TODO: leaking vk
 
 #include <deque>
 #include <functional>

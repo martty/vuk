@@ -1,7 +1,7 @@
 #pragma once
 
 #include "vuk/Buffer.hpp"
-#include "vuk/Image.hpp"
+#include "vuk/runtime/vk/Image.hpp"
 #include "vuk/vuk_fwd.hpp"
 #include <cmath>
 #include <compare>
@@ -187,18 +187,7 @@ namespace vuk {
 		}
 	};
 
-	struct ResourceUse {
-		PipelineStageFlags stages;
-		AccessFlags access;
-		ImageLayout layout; // ignored for buffers
-
-		bool operator==(const ResourceUse&) const = default;
-	};
-
-	struct StreamResourceUse : ResourceUse {
-		struct Stream* stream;
-	};
-
+	
 	union Subrange {
 		struct Image {
 			uint32_t base_level = 0;

@@ -9,10 +9,10 @@
 #include <string_view>
 #include <utility>
 #include <vector>
-#include <vuk/Context.hpp>
-#include <vuk/Swapchain.hpp>
 #include <vuk/Types.hpp>
 #include <vuk/Value.hpp>
+#include <vuk/runtime/vk/VkRuntime.hpp>
+#include <vuk/runtime/vk/VkSwapchain.hpp>
 #include <vuk/vuk_fwd.hpp>
 
 namespace util {
