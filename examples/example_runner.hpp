@@ -44,7 +44,7 @@ namespace vuk {
 		VkPhysicalDevice physical_device;
 		VkQueue graphics_queue;
 		VkQueue transfer_queue;
-		std::optional<Context> context;
+		std::optional<Runtime> runtime;
 		std::optional<DeviceSuperFrameResource> superframe_resource;
 		std::optional<Allocator> superframe_allocator;
 		bool suspend = false;
@@ -80,7 +80,7 @@ namespace vuk {
 		ExampleRunner();
 
 		void setup() {
-			// Setup Dear ImGui context
+			// Setup Dear ImGui runtime
 			IMGUI_CHECKVERSION();
 			ImGui::CreateContext();
 			// Setup Dear ImGui style
@@ -101,7 +101,7 @@ namespace vuk {
 				} else {
 					runner.swapchain = util::make_swapchain(*runner.superframe_allocator, runner.vkbdevice, runner.swapchain->surface, std::move(runner.swapchain));
 					for (auto& iv : runner.swapchain->images) {
-						runner.context->set_name(iv.image_view.payload, "Swapchain ImageView");
+						runner.runtime->set_name(iv.image_view.payload, "Swapchain ImageView");
 					}
 					runner.suspend = false;
 				}
@@ -111,7 +111,7 @@ namespace vuk {
 		void render();
 
 		void cleanup() {
-			context->wait_idle();
+			runtime->wait_idle();
 			for (auto& ex : examples) {
 				if (ex->cleanup) {
 					ex->cleanup(*this, *superframe_allocator);
@@ -138,7 +138,7 @@ namespace vuk {
 			imgui_data.font_image_view.reset();
 			swapchain.reset();
 			superframe_resource.reset();
-			context.reset();
+			runtime.reset();
 			auto vkDestroySurfaceKHR = (PFN_vkDestroySurfaceKHR)vkbinstance.fp_vkGetInstanceProcAddr(vkbinstance.instance, "vkDestroySurfaceKHR");
 			vkDestroySurfaceKHR(vkbinstance.instance, surface, nullptr);
 			destroy_window_glfw(window);
@@ -253,16 +253,16 @@ namespace vuk {
 		executors.push_back(rtvk::create_vkqueue_executor(fps, device, transfer_queue, transfer_queue_family_index, DomainFlagBits::eTransferQueue));
 		executors.push_back(std::make_unique<ThisThreadExecutor>());
 
-		context.emplace(ContextCreateParameters{ instance, device, physical_device, std::move(executors), fps });
+		runtime.emplace(RuntimeCreateParameters{ instance, device, physical_device, std::move(executors), fps });
 		const unsigned num_inflight_frames = 3;
-		superframe_resource.emplace(*context, num_inflight_frames);
+		superframe_resource.emplace(*runtime, num_inflight_frames);
 		superframe_allocator.emplace(*superframe_resource);
 		swapchain = util::make_swapchain(*superframe_allocator, vkbdevice, surface, {});
 		present_ready = vuk::Unique<std::array<VkSemaphore, 3>>(*superframe_allocator);
 		render_complete = vuk::Unique<std::array<VkSemaphore, 3>>(*superframe_allocator);
 
 		// match shader compilation target version to the vk version we request
-		context->set_shader_target_version(VK_API_VERSION_1_2);
+		runtime->set_shader_target_version(VK_API_VERSION_1_2);
 
 		superframe_allocator->allocate_semaphores(*present_ready);
 		superframe_allocator->allocate_semaphores(*render_complete);

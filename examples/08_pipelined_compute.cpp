@@ -38,21 +38,21 @@ namespace {
 			      vuk::PipelineBaseCreateInfo pci;
 			      pci.add_glsl(util::read_entire_file((root / "examples/fullscreen.vert").generic_string()), (root / "examples/fullscreen.vert").generic_string());
 			      pci.add_glsl(util::read_entire_file((root / "examples/rtt.frag").generic_string()), (root / "examples/rtt.frag").generic_string());
-			      runner.context->create_named_pipeline("rtt", pci);
+			      runner.runtime->create_named_pipeline("rtt", pci);
 		      }
 
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
 			      pci.add_glsl(util::read_entire_file((root / "examples/fullscreen.vert").generic_string()), (root / "examples/fullscreen.vert").generic_string());
 			      pci.add_glsl(util::read_entire_file((root / "examples/scrambled_draw.frag").generic_string()), (root / "examples/scrambled_draw.frag").generic_string());
-			      runner.context->create_named_pipeline("scrambled_draw", pci);
+			      runner.runtime->create_named_pipeline("scrambled_draw", pci);
 		      }
 
 		      // creating a compute pipeline is the same as creating a graphics pipeline
 		      {
 			      vuk::PipelineBaseCreateInfo pbci;
 			      pbci.add_glsl(util::read_entire_file((root / "examples/stupidsort.comp").generic_string()), "examples/stupidsort.comp");
-			      runner.context->create_named_pipeline("stupidsort", pbci);
+			      runner.runtime->create_named_pipeline("stupidsort", pbci);
 		      }
 
 		      int chans;

@@ -32,7 +32,7 @@ namespace {
 			                   (root / "examples/ubo_test_tex.vert").generic_string());
 			      pci.add_glsl(util::read_entire_file((root / "examples/triangle_depthshaded_tex.frag").generic_string()),
 			                   (root / "examples/triangle_depthshaded_tex.frag").generic_string());
-			      runner.context->create_named_pipeline("textured_cube", pci);
+			      runner.runtime->create_named_pipeline("textured_cube", pci);
 		      }
 
 		      // Use STBI to load the image

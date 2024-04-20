@@ -15,7 +15,7 @@ namespace vuk {
 	}
 
 	Result<void> execute_submit_and_wait(Allocator& allocator, ExecutableRenderGraph&& rg) {
-		Context& ctx = allocator.get_context();
+		Runtime& ctx = allocator.get_context();
 		std::pair v = { &allocator, &rg };
 		VUK_DO_OR_RETURN(execute_submit(allocator, std::span{ &v, 1 }));
 		ctx.wait_idle(); // TODO:

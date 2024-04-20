@@ -22,7 +22,7 @@ namespace {
 		      pci.add_glsl(util::read_entire_file((root / "examples/triangle.vert").generic_string()), (root / "examples/triangle.vert").generic_string());
 		      pci.add_glsl(util::read_entire_file((root / "examples/triangle.frag").generic_string()), (root / "examples/triangle.frag").generic_string());
 		      // The pipeline is stored with a user give name for simplicity
-		      runner.context->create_named_pipeline("triangle", pci);
+		      runner.runtime->create_named_pipeline("triangle", pci);
 		    },
 		// Code ran every frame
 		.render =

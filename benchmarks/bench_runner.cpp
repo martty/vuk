@@ -55,11 +55,11 @@ vuk::BenchRunner::BenchRunner() {
 	auto graphics_queue_family_index = vkbdevice.get_queue_index(vkb::QueueType::graphics).value();
 	device = vkbdevice.device;
 
-	context.emplace(ContextCreateParameters{ instance, device, physical_device, graphics_queue, graphics_queue_family_index });
+	runtime.emplace(RuntimeCreateParameters{ instance, device, physical_device, graphics_queue, graphics_queue_family_index });
 	const unsigned num_inflight_frames = 3;
-	xdev_rf_alloc.emplace(*context, num_inflight_frames);
+	xdev_rf_alloc.emplace(*runtime, num_inflight_frames);
 	global.emplace(*xdev_rf_alloc);
-	swapchain = context->add_swapchain(util::make_swapchain(vkbdevice, {}));
+	swapchain = runtime->add_swapchain(util::make_swapchain(vkbdevice, {}));
 }
 
 constexpr unsigned stage_wait = 0;
@@ -73,7 +73,7 @@ void vuk::BenchRunner::render() {
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
 		auto& xdev_frame_resource = xdev_rf_alloc->get_next_frame();
-		context->next_frame();
+		runtime->next_frame();
 		Allocator frame_allocator(xdev_frame_resource);
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
@@ -165,7 +165,7 @@ void vuk::BenchRunner::render() {
 		present(frame_allocator, compiler, swapchain, std::move(fut));
 		sampled_images.clear();
 
-		std::optional<double> duration = context->retrieve_duration(start, end);
+		std::optional<double> duration = runtime->retrieve_duration(start, end);
 		auto& bcase = bench->get_case(current_case);
 		if (!duration) {
 			continue;

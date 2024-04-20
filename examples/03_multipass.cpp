@@ -25,14 +25,14 @@ namespace {
 			      vuk::PipelineBaseCreateInfo pci;
 			      pci.add_glsl(util::read_entire_file((root / "examples/triangle.vert").generic_string()), (root / "examples/triangle.vert").generic_string());
 			      pci.add_glsl(util::read_entire_file((root / "examples/triangle.frag").generic_string()), (root / "examples/triangle.frag").generic_string());
-			      runner.context->create_named_pipeline("triangle", pci);
+			      runner.runtime->create_named_pipeline("triangle", pci);
 		      }
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
 			      pci.add_glsl(util::read_entire_file((root / "examples/ubo_test.vert").generic_string()), (root / "examples/ubo_test.vert").generic_string());
 			      pci.add_glsl(util::read_entire_file((root / "examples/triangle_depthshaded.frag").generic_string()),
 			                   (root / "examples/triangle_depthshaded.frag").generic_string());
-			      runner.context->create_named_pipeline("cube", pci);
+			      runner.runtime->create_named_pipeline("cube", pci);
 		      }
 
 		      // We set up the cube data, same as in example 02_cube

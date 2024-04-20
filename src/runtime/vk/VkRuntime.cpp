@@ -33,7 +33,7 @@
 
 namespace {
 	/* TODO: I am currently unaware of any use case that would make supporting static loading worthwhile
-	void load_pfns_static(vuk::ContextCreateParameters::FunctionPointers& pfns) {
+	void load_pfns_static(vuk::RuntimeCreateParameters::FunctionPointers& pfns) {
 #define VUK_X(name)                                                                                                                                            \
 	if (pfns.name == nullptr) {                                                                                                                                  \
 	  pfns.name = (PFN_##name)name;                                                                                                                              \
@@ -99,11 +99,11 @@ namespace vuk {
 		template<class T>
 		struct FN {
 			static T create_fn(void* ctx, const create_info_t<T>& ci) {
-				return reinterpret_cast<Context*>(ctx)->create(ci);
+				return reinterpret_cast<Runtime*>(ctx)->create(ci);
 			}
 
 			static void destroy_fn(void* ctx, const T& v) {
-				return reinterpret_cast<Context*>(ctx)->destroy(v);
+				return reinterpret_cast<Runtime*>(ctx)->destroy(v);
 			}
 		};
 
@@ -157,7 +157,7 @@ namespace vuk {
 			}
 		}
 
-		ContextImpl(Context& ctx) :
+		ContextImpl(Runtime& ctx) :
 		    device(ctx.device),
 		    device_vk_resource(std::make_unique<DeviceVkResource>(ctx)),
 		    direct_allocator(*device_vk_resource.get()),
@@ -171,7 +171,7 @@ namespace vuk {
 		}
 	};
 
-	Context::Context(ContextCreateParameters params) :
+	Runtime::Runtime(RuntimeCreateParameters params) :
 	    rtvk::FunctionPointers(params.pointers),
 	    instance(params.instance),
 	    device(params.device),
@@ -196,7 +196,7 @@ namespace vuk {
 		this->vkGetPhysicalDeviceProperties2(physical_device, &prop2);
 	}
 
-	Context::Context(Context&& o) noexcept : impl(std::exchange(o.impl, nullptr)) {
+	Runtime::Runtime(Runtime&& o) noexcept : impl(std::exchange(o.impl, nullptr)) {
 		instance = o.instance;
 		device = o.device;
 		physical_device = o.physical_device;
@@ -211,7 +211,7 @@ namespace vuk {
 		impl->device_vk_resource->ctx = this;
 	}
 
-	Context& Context::operator=(Context&& o) noexcept {
+	Runtime& Runtime::operator=(Runtime&& o) noexcept {
 		impl = std::exchange(o.impl, nullptr);
 		instance = o.instance;
 		device = o.device;
@@ -228,7 +228,7 @@ namespace vuk {
 		return *this;
 	}
 
-	Executor* Context::get_executor(Executor::Tag tag) {
+	Executor* Runtime::get_executor(Executor::Tag tag) {
 		auto it = std::find_if(impl->executors.begin(), impl->executors.end(), [=](auto& exe) { return exe->tag == tag; });
 		if (it != impl->executors.end()) {
 			return it->get();
@@ -237,7 +237,7 @@ namespace vuk {
 		}
 	}
 
-	Executor* Context::get_executor(DomainFlagBits domain) {
+	Executor* Runtime::get_executor(DomainFlagBits domain) {
 		auto it = std::find_if(impl->executors.begin(), impl->executors.end(), [=](auto& exe) { return exe->tag.domain == domain; });
 		if (it != impl->executors.end()) {
 			return it->get();
@@ -246,11 +246,11 @@ namespace vuk {
 		}
 	}
 
-	bool Context::debug_enabled() const {
+	bool Runtime::debug_enabled() const {
 		return this->vkSetDebugUtilsObjectNameEXT != nullptr;
 	}
 
-	void Context::begin_region(const VkCommandBuffer& cb, Name name, std::array<float, 4> color) {
+	void Runtime::begin_region(const VkCommandBuffer& cb, Name name, std::array<float, 4> color) {
 		if (!debug_enabled())
 			return;
 		VkDebugUtilsLabelEXT label = { .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT };
@@ -259,7 +259,7 @@ namespace vuk {
 		this->vkCmdBeginDebugUtilsLabelEXT(cb, &label);
 	}
 
-	void Context::end_region(const VkCommandBuffer& cb) {
+	void Runtime::end_region(const VkCommandBuffer& cb) {
 		if (!debug_enabled())
 			return;
 		this->vkCmdEndDebugUtilsLabelEXT(cb);
@@ -315,7 +315,7 @@ namespace vuk {
 		    (DescriptorType)((uint8_t)DescriptorType::eAccelerationStructureKHR | (uint8_t)DescriptorType::ePendingWrite);
 	}
 
-	void PersistentDescriptorSet::commit(Context& ctx) {
+	void PersistentDescriptorSet::commit(Runtime& ctx) {
 		wdss.clear();
 		for (unsigned i = 0; i < descriptor_bindings.size(); i++) {
 			auto& db = descriptor_bindings[i];
@@ -348,7 +348,7 @@ namespace vuk {
 		return { buffer.data(), buffer.size() };
 	}
 
-	ShaderModule Context::create(const create_info_t<ShaderModule>& cinfo) {
+	ShaderModule Runtime::create(const create_info_t<ShaderModule>& cinfo) {
 		std::vector<uint32_t> spirv;
 		const uint32_t* spirv_ptr = nullptr;
 		size_t size = 0;
@@ -523,7 +523,7 @@ namespace vuk {
 		return { sm, p, stage };
 	}
 
-	PipelineBaseInfo Context::create(const create_info_t<PipelineBaseInfo>& cinfo) {
+	PipelineBaseInfo Runtime::create(const create_info_t<PipelineBaseInfo>& cinfo) {
 		std::vector<VkPipelineShaderStageCreateInfo> psscis;
 		std::vector<std::string> entry_point_names;
 
@@ -594,14 +594,14 @@ namespace vuk {
 		return pbi;
 	}
 
-	bool Context::load_pipeline_cache(std::span<std::byte> data) {
+	bool Runtime::load_pipeline_cache(std::span<std::byte> data) {
 		VkPipelineCacheCreateInfo pcci{ .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO, .initialDataSize = data.size_bytes(), .pInitialData = data.data() };
 		this->vkDestroyPipelineCache(device, vk_pipeline_cache, nullptr);
 		this->vkCreatePipelineCache(device, &pcci, nullptr, &vk_pipeline_cache);
 		return true;
 	}
 
-	std::vector<std::byte> Context::save_pipeline_cache() {
+	std::vector<std::byte> Runtime::save_pipeline_cache() {
 		size_t size;
 		std::vector<std::byte> data;
 		this->vkGetPipelineCacheData(device, vk_pipeline_cache, &size, nullptr);
@@ -610,15 +610,15 @@ namespace vuk {
 		return data;
 	}
 
-	Query Context::create_timestamp_query() {
+	Query Runtime::create_timestamp_query() {
 		return { impl->query_id_counter++ };
 	}
 
-	DeviceVkResource& Context::get_vk_resource() {
+	DeviceVkResource& Runtime::get_vk_resource() {
 		return *impl->device_vk_resource;
 	}
 
-	DescriptorSetLayoutAllocInfo Context::create(const create_info_t<DescriptorSetLayoutAllocInfo>& cinfo) {
+	DescriptorSetLayoutAllocInfo Runtime::create(const create_info_t<DescriptorSetLayoutAllocInfo>& cinfo) {
 		DescriptorSetLayoutAllocInfo ret;
 		auto cinfo_mod = cinfo;
 		for (auto& b : cinfo_mod.bindings) {
@@ -641,42 +641,42 @@ namespace vuk {
 		return ret;
 	}
 
-	VkPipelineLayout Context::create(const create_info_t<VkPipelineLayout>& cinfo) {
+	VkPipelineLayout Runtime::create(const create_info_t<VkPipelineLayout>& cinfo) {
 		VkPipelineLayout pl;
 		this->vkCreatePipelineLayout(device, &cinfo.plci, nullptr, &pl);
 		return pl;
 	}
 
-	uint64_t Context::get_frame_count() const {
+	uint64_t Runtime::get_frame_count() const {
 		return impl->frame_counter;
 	}
 
-	void Context::create_named_pipeline(Name name, PipelineBaseCreateInfo ci) {
+	void Runtime::create_named_pipeline(Name name, PipelineBaseCreateInfo ci) {
 		auto pbi = &impl->pipelinebase_cache.acquire(std::move(ci));
 		std::lock_guard _(impl->named_pipelines_lock);
 		impl->named_pipelines.insert_or_assign(name, pbi);
 	}
 
-	PipelineBaseInfo* Context::get_named_pipeline(Name name) {
+	PipelineBaseInfo* Runtime::get_named_pipeline(Name name) {
 		std::lock_guard _(impl->named_pipelines_lock);
 		return impl->named_pipelines.at(name);
 	}
 
-	bool Context::is_pipeline_available(Name name) const {
+	bool Runtime::is_pipeline_available(Name name) const {
 		std::lock_guard _(impl->named_pipelines_lock);
 		return impl->named_pipelines.contains(name);
 	}
 
-	PipelineBaseInfo* Context::get_pipeline(const PipelineBaseCreateInfo& pbci) {
+	PipelineBaseInfo* Runtime::get_pipeline(const PipelineBaseCreateInfo& pbci) {
 		return &impl->pipelinebase_cache.acquire(pbci);
 	}
 
-	Program Context::get_pipeline_reflection_info(const PipelineBaseCreateInfo& pci) {
+	Program Runtime::get_pipeline_reflection_info(const PipelineBaseCreateInfo& pci) {
 		auto& res = impl->pipelinebase_cache.acquire(pci);
 		return res.reflection_info;
 	}
 
-	ShaderModule Context::compile_shader(ShaderSource source, std::string path) {
+	ShaderModule Runtime::compile_shader(ShaderSource source, std::string path) {
 		ShaderModuleCreateInfo sci;
 		sci.filename = std::move(path);
 		sci.source = std::move(source);
@@ -687,40 +687,40 @@ namespace vuk {
 		return impl->shader_modules.acquire(sci);
 	}
 
-	void Context::set_shader_target_version(const uint32_t target_version) {
+	void Runtime::set_shader_target_version(const uint32_t target_version) {
 		assert((target_version >= VK_API_VERSION_1_0 && target_version <= VK_API_VERSION_1_3) && "Invalid target version was passed.");
 		shader_compiler_target_version = target_version;
 	}
 
-	void Context::destroy(const DescriptorPool& dp) {
+	void Runtime::destroy(const DescriptorPool& dp) {
 		dp.destroy(*this, device);
 	}
 
-	void Context::destroy(const ShaderModule& sm) {
+	void Runtime::destroy(const ShaderModule& sm) {
 		this->vkDestroyShaderModule(device, sm.shader_module, nullptr);
 	}
 
-	void Context::destroy(const DescriptorSetLayoutAllocInfo& ds) {
+	void Runtime::destroy(const DescriptorSetLayoutAllocInfo& ds) {
 		this->vkDestroyDescriptorSetLayout(device, ds.layout, nullptr);
 	}
 
-	void Context::destroy(const VkPipelineLayout& pl) {
+	void Runtime::destroy(const VkPipelineLayout& pl) {
 		this->vkDestroyPipelineLayout(device, pl, nullptr);
 	}
 
-	void Context::destroy(const DescriptorSet&) {
+	void Runtime::destroy(const DescriptorSet&) {
 		// no-op, we destroy the pools
 	}
 
-	void Context::destroy(const Sampler& sa) {
+	void Runtime::destroy(const Sampler& sa) {
 		this->vkDestroySampler(device, sa.payload, nullptr);
 	}
 
-	void Context::destroy(const PipelineBaseInfo& pbi) {
+	void Runtime::destroy(const PipelineBaseInfo& pbi) {
 		// no-op, we don't own device objects
 	}
 
-	Context::~Context() {
+	Runtime::~Runtime() {
 		if (impl) {
 			this->vkDeviceWaitIdle(device);
 
@@ -730,16 +730,16 @@ namespace vuk {
 		}
 	}
 
-	uint64_t Context::get_unique_handle_id() {
+	uint64_t Runtime::get_unique_handle_id() {
 		return impl->unique_handle_id_counter++;
 	}
 
-	void Context::next_frame() {
+	void Runtime::next_frame() {
 		impl->frame_counter++;
 		collect(impl->frame_counter);
 	}
 
-	Result<void> Context::wait_idle() {
+	Result<void> Runtime::wait_idle() {
 		std::unique_lock<std::recursive_mutex> graphics_lock;
 		for (auto& exe : impl->executors) {
 			exe->lock();
@@ -755,12 +755,12 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	void Context::collect(uint64_t frame) {
+	void Runtime::collect(uint64_t frame) {
 		impl->collect(frame);
 	}
 
 	Unique<PersistentDescriptorSet>
-	Context::create_persistent_descriptorset(Allocator& allocator, DescriptorSetLayoutCreateInfo dslci, unsigned num_descriptors) {
+	Runtime::create_persistent_descriptorset(Allocator& allocator, DescriptorSetLayoutCreateInfo dslci, unsigned num_descriptors) {
 		dslci.dslci.bindingCount = (uint32_t)dslci.bindings.size();
 		dslci.dslci.pBindings = dslci.bindings.data();
 		VkDescriptorSetLayoutBindingFlagsCreateInfo dslbfci{ .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO };
@@ -773,42 +773,42 @@ namespace vuk {
 		return create_persistent_descriptorset(allocator, { dslai, dslci, num_descriptors });
 	}
 
-	Unique<PersistentDescriptorSet> Context::create_persistent_descriptorset(Allocator& allocator, const PersistentDescriptorSetCreateInfo& ci) {
+	Unique<PersistentDescriptorSet> Runtime::create_persistent_descriptorset(Allocator& allocator, const PersistentDescriptorSetCreateInfo& ci) {
 		Unique<PersistentDescriptorSet> pds(allocator);
 		allocator.allocate_persistent_descriptor_sets(std::span{ &*pds, 1 }, std::span{ &ci, 1 });
 		return pds;
 	}
 
 	Unique<PersistentDescriptorSet>
-	Context::create_persistent_descriptorset(Allocator& allocator, const PipelineBaseInfo& base, unsigned set, unsigned num_descriptors) {
+	Runtime::create_persistent_descriptorset(Allocator& allocator, const PipelineBaseInfo& base, unsigned set, unsigned num_descriptors) {
 		return create_persistent_descriptorset(allocator, { base.layout_info[set], base.dslcis[set], num_descriptors });
 	}
 
-	Sampler Context::create(const create_info_t<Sampler>& cinfo) {
+	Sampler Runtime::create(const create_info_t<Sampler>& cinfo) {
 		VkSampler s;
 		this->vkCreateSampler(device, (VkSamplerCreateInfo*)&cinfo, nullptr, &s);
 		return wrap(s);
 	}
 
-	DescriptorPool Context::create(const create_info_t<DescriptorPool>& cinfo) {
+	DescriptorPool Runtime::create(const create_info_t<DescriptorPool>& cinfo) {
 		return DescriptorPool{};
 	}
 
-	Sampler Context::acquire_sampler(const SamplerCreateInfo& sci, uint64_t absolute_frame) {
+	Sampler Runtime::acquire_sampler(const SamplerCreateInfo& sci, uint64_t absolute_frame) {
 		return impl->sampler_cache.acquire(sci, absolute_frame);
 	}
 
-	DescriptorPool& Context::acquire_descriptor_pool(const DescriptorSetLayoutAllocInfo& dslai, uint64_t absolute_frame) {
+	DescriptorPool& Runtime::acquire_descriptor_pool(const DescriptorSetLayoutAllocInfo& dslai, uint64_t absolute_frame) {
 		return impl->pool_cache.acquire(dslai, absolute_frame);
 	}
 
-	bool Context::is_timestamp_available(Query q) {
+	bool Runtime::is_timestamp_available(Query q) {
 		std::scoped_lock _(impl->query_lock);
 		auto it = impl->timestamp_result_map.find(q);
 		return (it != impl->timestamp_result_map.end());
 	}
 
-	std::optional<uint64_t> Context::retrieve_timestamp(Query q) {
+	std::optional<uint64_t> Runtime::retrieve_timestamp(Query q) {
 		std::scoped_lock _(impl->query_lock);
 		auto it = impl->timestamp_result_map.find(q);
 		if (it != impl->timestamp_result_map.end()) {
@@ -819,7 +819,7 @@ namespace vuk {
 		return {};
 	}
 
-	std::optional<double> Context::retrieve_duration(Query q1, Query q2) {
+	std::optional<double> Runtime::retrieve_duration(Query q1, Query q2) {
 		if (!is_timestamp_available(q1)) {
 			return {};
 		}
@@ -833,7 +833,7 @@ namespace vuk {
 		return ns * 1e-9;
 	}
 
-	Result<void> Context::make_timestamp_results_available(std::span<const TimestampQueryPool> pools) {
+	Result<void> Runtime::make_timestamp_results_available(std::span<const TimestampQueryPool> pools) {
 		std::scoped_lock _(impl->query_lock);
 		std::array<uint64_t, TimestampQueryPool::num_queries> host_values;
 
@@ -861,7 +861,7 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	Result<void> Context::wait_for_domains(std::span<SyncPoint> queue_waits) {
+	Result<void> Runtime::wait_for_domains(std::span<SyncPoint> queue_waits) {
 		std::array<uint32_t, 3> domain_to_sema_index = { ~0u, ~0u, ~0u };
 		std::array<VkSemaphore, 3> queue_timeline_semaphores;
 		std::array<uint64_t, 3> values = {};

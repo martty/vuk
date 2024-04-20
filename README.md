@@ -27,7 +27,7 @@ cmake --build .
 
 ### Overview of using **vuk**
 1. Initialize your window(s) and Vulkan device
-2. Create a `vuk::Context` object
+2. Create a `vuk::Runtime` object
 3. Each frame:
   1. Each frame, prepare high level description of your rendering, in the form of `vuk::Pass`
   2. Bind concrete resources as inputs and outputs

@@ -48,7 +48,7 @@ int main(int argc, char** argv) {
 	VkDevice device;
 	VkPhysicalDevice physical_device;
 	VkQueue graphics_queue;
-	std::optional<Context> context;
+	std::optional<Runtime> runtime;
 	std::optional<DeviceSuperFrameResource> superframe_resource;
 	std::optional<Allocator> superframe_allocator;
 	bool suspend = false;
@@ -136,9 +136,9 @@ int main(int argc, char** argv) {
 	executors.push_back(rtvk::create_vkqueue_executor(fps, device, graphics_queue, graphics_queue_family_index, DomainFlagBits::eGraphicsQueue));
 	executors.push_back(std::make_unique<ThisThreadExecutor>());
 
-	context.emplace(ContextCreateParameters{ instance, device, physical_device, std::move(executors), fps });
+	runtime.emplace(RuntimeCreateParameters{ instance, device, physical_device, std::move(executors), fps });
 	const unsigned num_inflight_frames = 3;
-	superframe_resource.emplace(*context, num_inflight_frames);
+	superframe_resource.emplace(*runtime, num_inflight_frames);
 	superframe_allocator.emplace(*superframe_resource);
 
 	// schmol windows
@@ -158,18 +158,18 @@ int main(int argc, char** argv) {
 		vuk::PipelineBaseCreateInfo pci;
 		pci.add_glsl(util::read_entire_file((root / "examples/particle_points.vert").generic_string()), (root / "examples/large_triangle.vert").generic_string());
 		pci.add_glsl(util::read_entire_file((root / "examples/point.frag").generic_string()), (root / "examples/triangle.frag").generic_string());
-		context->create_named_pipeline("triangle", pci);
+		runtime->create_named_pipeline("triangle", pci);
 	}
 	{
 		vuk::PipelineBaseCreateInfo pci;
 		pci.add_glsl(util::read_entire_file((root / "examples/particle_sim.comp").generic_string()), (root / "examples/particle_sim.comp").generic_string());
-		context->create_named_pipeline("particle_sim", pci);
+		runtime->create_named_pipeline("particle_sim", pci);
 	}
 
 	{
 		vuk::PipelineBaseCreateInfo pci;
 		pci.add_glsl(util::read_entire_file((root / "examples/particle_sim_init.comp").generic_string()), (root / "examples/particle_sim.comp").generic_string());
-		context->create_named_pipeline("particle_sim_init", pci);
+		runtime->create_named_pipeline("particle_sim_init", pci);
 	}
 
 	auto particle_count = 1000000;
@@ -207,7 +207,7 @@ int main(int argc, char** argv) {
 		}
 		// advance the frame for the allocators and caches used by vuk
 		auto& frame_resource = superframe_resource->get_next_frame();
-		context->next_frame();
+		runtime->next_frame();
 		// create a frame allocator - we can allocate objects for the duration of the frame from this allocator
 		// all of the objects allocated from this allocator last for this frame, and get recycled automatically, so for this specific allocator, deallocation is
 		// optional
@@ -297,10 +297,10 @@ int main(int argc, char** argv) {
 		particles = declare_buf("particles", **particles_buf);
 	}
 
-	context->wait_idle();
+	runtime->wait_idle();
 	particles_buf->reset();
 	superframe_resource.reset();
-	context.reset();
+	runtime.reset();
 	auto vkDestroySurfaceKHR = (PFN_vkDestroySurfaceKHR)vkbinstance.fp_vkGetInstanceProcAddr(vkbinstance.instance, "vkDestroySurfaceKHR");
 	vkDestroySurfaceKHR(vkbinstance.instance, surface, nullptr);
 	destroy_window_glfw(main_window);

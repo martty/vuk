@@ -73,7 +73,7 @@ namespace vuk {
 	/* filled out by the user */
 	struct PipelineBaseCreateInfo : PipelineBaseCreateInfoBase {
 		friend class CommandBuffer;
-		friend class Context;
+		friend class Runtime;
 
 	public:
 		void add_shader(ShaderSource source, std::string filename) {

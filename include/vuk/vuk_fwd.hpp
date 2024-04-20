@@ -3,7 +3,7 @@
 #include "vuk/Name.hpp"
 
 namespace vuk {
-	class Context;
+	class Runtime;
 	class Allocator;
 
 	class CommandBuffer;

@@ -40,7 +40,7 @@ namespace {
 			      // new for RT: a hit group is a collection of shaders identified by their index in the PipelineBaseCreateInfo
 			      // 2 => rt.rchit
 			      pci.add_hit_group(vuk::HitGroup{ .type = vuk::HitGroupType::eTriangles, .closest_hit = 2 });
-			      runner.context->create_named_pipeline("raytracing", pci);
+			      runner.runtime->create_named_pipeline("raytracing", pci);
 		      }
 
 		      // We set up the cube data, same as in example 02_cube

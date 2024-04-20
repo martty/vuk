@@ -120,7 +120,7 @@ namespace vuk {
 	};
 
 	struct DeviceFrameResourceImpl {
-		Context* ctx;
+		Runtime* ctx;
 		std::mutex sema_mutex;
 		std::vector<VkSemaphore> semaphores;
 		std::mutex buf_mutex;
@@ -539,7 +539,7 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	DeviceSuperFrameResource::DeviceSuperFrameResource(Context& ctx, uint64_t frames_in_flight) :
+	DeviceSuperFrameResource::DeviceSuperFrameResource(Runtime& ctx, uint64_t frames_in_flight) :
 	    DeviceNestedResource(ctx.get_vk_resource()),
 	    frames_in_flight(frames_in_flight),
 	    direct(static_cast<DeviceVkResource*>(upstream)),

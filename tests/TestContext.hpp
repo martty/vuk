@@ -23,7 +23,7 @@ namespace vuk {
 		VkPhysicalDevice physical_device;
 		VkQueue graphics_queue;
 		VkQueue transfer_queue;
-		std::optional<Context> context;
+		std::optional<Runtime> runtime;
 		vkb::Instance vkbinstance;
 		vkb::Device vkbdevice;
 		std::optional<DeviceSuperFrameResource> sfa_resource;
@@ -124,7 +124,7 @@ namespace vuk {
 			executors.push_back(rtvk::create_vkqueue_executor(fps, device, transfer_queue, transfer_queue_family_index, DomainFlagBits::eTransferQueue));
 			executors.push_back(std::make_unique<ThisThreadExecutor>());
 
-			context.emplace(ContextCreateParameters{ instance, device, physical_device, std::move(executors), fps });
+			runtime.emplace(RuntimeCreateParameters{ instance, device, physical_device, std::move(executors), fps });
 			needs_bringup = false;
 			needs_teardown = true;
 #ifdef WIN32
@@ -145,7 +145,7 @@ namespace vuk {
 			}
 
 			const unsigned num_inflight_frames = 3;
-			sfa_resource.emplace(*context, num_inflight_frames);
+			sfa_resource.emplace(*runtime, num_inflight_frames);
 			allocator.emplace(*sfa_resource);
 
 			if (rdoc_api) {
@@ -155,7 +155,7 @@ namespace vuk {
 		}
 
 		void finish() {
-			context->wait_idle();
+			runtime->wait_idle();
 			sfa_resource.reset();
 			if (rdoc_api)
 				rdoc_api->EndFrameCapture(NULL, NULL);
@@ -165,7 +165,7 @@ namespace vuk {
 		}
 
 		void teardown() {
-			context.reset();
+			runtime.reset();
 			vkb::destroy_device(vkbdevice);
 			vkb::destroy_instance(vkbinstance);
 			needs_bringup = true;

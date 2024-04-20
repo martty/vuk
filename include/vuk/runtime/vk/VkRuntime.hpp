@@ -47,8 +47,8 @@ namespace vuk {
 		create_vkqueue_executor(const FunctionPointers& fps, VkDevice device, VkQueue queue, uint32_t queue_family_index, DomainFlagBits domain);
 	} // namespace rtvk
 
-	/// @brief Parameters used for creating a Context
-	struct ContextCreateParameters {
+	/// @brief Parameters used for creating a Runtime
+	struct RuntimeCreateParameters {
 		/// @brief Vulkan instance
 		VkInstance instance;
 		/// @brief Vulkan device
@@ -61,18 +61,18 @@ namespace vuk {
 		rtvk::FunctionPointers pointers;
 	};
 
-	class Context : public rtvk::FunctionPointers {
+	class Runtime : public rtvk::FunctionPointers {
 	public:
-		/// @brief Create a new Context
+		/// @brief Create a new Runtime
 		/// @param params Vulkan parameters initialized beforehand
-		Context(ContextCreateParameters params);
-		~Context();
+		Runtime(RuntimeCreateParameters params);
+		~Runtime();
 
-		Context(const Context&) = delete;
-		Context& operator=(const Context&) = delete;
+		Runtime(const Runtime&) = delete;
+		Runtime& operator=(const Runtime&) = delete;
 
-		Context(Context&&) noexcept;
-		Context& operator=(Context&&) noexcept;
+		Runtime(Runtime&&) noexcept;
+		Runtime& operator=(Runtime&&) noexcept;
 
 		// Vulkan instance and device
 
@@ -237,12 +237,12 @@ namespace vuk {
 	};
 
 	template<class T>
-	Handle<T> Context::wrap(T payload) {
+	Handle<T> Runtime::wrap(T payload) {
 		return { { get_unique_handle_id() }, payload };
 	}
 
 	template<class T>
-	void Context::set_name(const T& t, Name name) {
+	void Runtime::set_name(const T& t, Name name) {
 		if (!debug_enabled())
 			return;
 		VkDebugUtilsObjectNameInfoEXT info = { .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT };

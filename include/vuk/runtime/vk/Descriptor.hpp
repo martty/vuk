@@ -220,10 +220,10 @@ namespace vuk {
 	};
 
 	struct DescriptorPool {
-		void grow(Context& ptc, DescriptorSetLayoutAllocInfo layout_alloc_info);
-		VkDescriptorSet acquire(Context& ptc, DescriptorSetLayoutAllocInfo layout_alloc_info);
+		void grow(Runtime& ptc, DescriptorSetLayoutAllocInfo layout_alloc_info);
+		VkDescriptorSet acquire(Runtime& ptc, DescriptorSetLayoutAllocInfo layout_alloc_info);
 		void release(VkDescriptorSet ds);
-		void destroy(Context& ctx, VkDevice) const;
+		void destroy(Runtime& ctx, VkDevice) const;
 
 		DescriptorPool();
 		~DescriptorPool();
@@ -271,7 +271,7 @@ namespace vuk {
 		void update_acceleration_structure(unsigned binding, unsigned array_index, VkAccelerationStructureKHR as);
 
 		// non-thread safe
-		void commit(Context& ctx);
+		void commit(Runtime& ctx);
 	};
 } // namespace vuk
 

@@ -12,7 +12,7 @@
 using namespace vuk;
 
 util::ImGuiData util::ImGui_ImplVuk_Init(Allocator& allocator) {
-	Context& ctx = allocator.get_context();
+	Runtime& ctx = allocator.get_context();
 	auto& io = ImGui::GetIO();
 	io.BackendRendererName = "imgui_impl_vuk";
 	io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset; // We can honor the ImDrawCmd::VtxOffset field, allowing for large meshes.

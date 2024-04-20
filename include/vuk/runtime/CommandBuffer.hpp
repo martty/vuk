@@ -14,7 +14,7 @@
 #include <utility>
 
 namespace vuk {
-	class Context;
+	class Runtime;
 
 	struct Ignore {
 		Ignore(size_t bytes) : format(Format::eUndefined), bytes((uint32_t)bytes) {}
@@ -184,7 +184,7 @@ namespace vuk {
 	protected:
 		friend struct ExecutableRenderGraph;
 		ExecutableRenderGraph* rg = nullptr;
-		Context& ctx;
+		Runtime& ctx;
 		Allocator* allocator;
 		CommandBufferAllocation command_buffer_allocation;
 		VkCommandBuffer command_buffer;
@@ -255,12 +255,12 @@ namespace vuk {
 		std::pair<VkDescriptorSet, VkDescriptorSetLayout> persistent_sets[VUK_MAX_SETS] = {};
 
 		// for rendergraph
-		CommandBuffer(ExecutableRenderGraph& rg, Context& ctx, Allocator& allocator, VkCommandBuffer cb);
-		CommandBuffer(ExecutableRenderGraph& rg, Context& ctx, Allocator& allocator, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing);
+		CommandBuffer(ExecutableRenderGraph& rg, Runtime& ctx, Allocator& allocator, VkCommandBuffer cb);
+		CommandBuffer(ExecutableRenderGraph& rg, Runtime& ctx, Allocator& allocator, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing);
 
 	public:
-		/// @brief Retrieve parent context
-		Context& get_context() {
+		/// @brief Retrieve parent runtime
+		Runtime& get_context() {
 			return ctx;
 		}
 
@@ -276,7 +276,7 @@ namespace vuk {
 		/// @brief Set the strategy for allocating and updating ephemeral descriptor sets
 		/// @param ds_strategy_flags Mask of strategy options
 		///
-		/// The default strategy is taken from the context when entering a new Pass
+		/// The default strategy is taken from the runtime when entering a new Pass
 		CommandBuffer& set_descriptor_set_strategy(DescriptorSetStrategyFlags ds_strategy_flags);
 
 		/// @brief Set mask of dynamic state in CommandBuffer

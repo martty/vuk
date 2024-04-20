@@ -43,7 +43,7 @@ namespace {
 		.name = "09_persistent_descriptorset",
 		.setup =
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator) {
-		      vuk::Context& ctx = allocator.get_context();
+		      vuk::Runtime& ctx = allocator.get_context();
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
 			      pci.add_glsl(util::read_entire_file((root / "examples/bindless.vert").generic_string()), (root / "examples/bindless.vert").generic_string());
@@ -53,14 +53,14 @@ namespace {
 			      pci.set_binding_flags(1, 0, vuk::DescriptorBindingFlagBits::ePartiallyBound);
 			      // Set the binding #0 in set #1 as a variable count binding, and set the maximum number of descriptors
 			      pci.set_variable_count_binding(1, 0, 1024);
-			      runner.context->create_named_pipeline("bindless_cube", pci);
+			      runner.runtime->create_named_pipeline("bindless_cube", pci);
 		      }
 
 		      // creating a compute pipeline that inverts an image
 		      {
 			      vuk::PipelineBaseCreateInfo pbci;
 			      pbci.add_glsl(util::read_entire_file((root / "examples/invert.comp").generic_string()), "examples/invert.comp");
-			      runner.context->create_named_pipeline("invert", pbci);
+			      runner.runtime->create_named_pipeline("invert", pbci);
 		      }
 
 		      // Use STBI to load the image
@@ -140,7 +140,7 @@ namespace {
 		      runner.enqueue_setup(std::move(v1));
 		      runner.enqueue_setup(std::move(v2));
 		      // Create persistent descriptorset for a pipeline and set index
-		      pda = ctx.create_persistent_descriptorset(allocator, *runner.context->get_named_pipeline("bindless_cube"), 1, 64);
+		      pda = ctx.create_persistent_descriptorset(allocator, *runner.runtime->get_named_pipeline("bindless_cube"), 1, 64);
 		      vuk::Sampler default_sampler = ctx.acquire_sampler({}, ctx.get_frame_count());
 		      // Enqueue updates to the descriptors in the array
 		      // This records the writes internally, but does not execute them

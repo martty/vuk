@@ -101,7 +101,7 @@ namespace vuk {
 		allocate_render_passes(std::span<VkRenderPass> dst, std::span<const RenderPassCreateInfo> cis, SourceLocationAtFrame loc) = 0;
 		virtual void deallocate_render_passes(std::span<const VkRenderPass> src) = 0;
 
-		virtual Context& get_context() = 0;
+		virtual Runtime& get_context() = 0;
 	};
 
 	struct DeviceVkResource;
@@ -473,14 +473,14 @@ namespace vuk {
 			return *device_resource;
 		}
 
-		/// @brief Get the parent Context
-		/// @return the parent Context
-		Context& get_context() {
+		/// @brief Get the parent Runtime
+		/// @return the parent Runtime
+		Runtime& get_context() {
 			return *ctx;
 		}
 
 	private:
-		Context* ctx;
+		Runtime* ctx;
 		DeviceResource* device_resource;
 	};
 

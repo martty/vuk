@@ -55,14 +55,14 @@ namespace vuk {
 
 	// for rendergraph
 
-	CommandBuffer::CommandBuffer(ExecutableRenderGraph& rg, Context& ctx, Allocator& allocator, VkCommandBuffer cb) :
+	CommandBuffer::CommandBuffer(ExecutableRenderGraph& rg, Runtime& ctx, Allocator& allocator, VkCommandBuffer cb) :
 	    rg(&rg),
 	    ctx(ctx),
 	    allocator(&allocator),
 	    command_buffer(cb),
 	    ds_strategy_flags(ctx.default_descriptor_set_strategy) {}
 
-	CommandBuffer::CommandBuffer(ExecutableRenderGraph& rg, Context& ctx, Allocator& allocator, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing) :
+	CommandBuffer::CommandBuffer(ExecutableRenderGraph& rg, Runtime& ctx, Allocator& allocator, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing) :
 	    rg(&rg),
 	    ctx(ctx),
 	    allocator(&allocator),

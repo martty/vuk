@@ -17,7 +17,7 @@ void vuk::ExampleRunner::render() {
 		}
 		// advance the frame for the allocators and caches used by vuk
 		auto& frame_resource = superframe_resource->get_next_frame();
-		context->next_frame();
+		runtime->next_frame();
 		// create a frame allocator - we can allocate objects for the duration of the frame from this allocator
 		// all of the objects allocated from this allocator last for this frame, and get recycled automatically, so for this specific allocator, deallocation is
 		// optional

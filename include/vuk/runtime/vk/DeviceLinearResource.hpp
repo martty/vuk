@@ -88,9 +88,9 @@ namespace vuk {
 		/// @brief Release the resources of this resource into the upstream
 		void free();
 
-		/// @brief Retrieve the parent Context
-		/// @return the parent Context
-		Context& get_context() override {
+		/// @brief Retrieve the parent Runtime
+		/// @return the parent Runtime
+		Runtime& get_context() override {
 			return upstream->get_context();
 		}
 

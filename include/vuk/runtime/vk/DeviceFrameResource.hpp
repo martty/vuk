@@ -104,9 +104,9 @@ namespace vuk {
 		/// Called automatically when recycled
 		void wait();
 
-		/// @brief Retrieve the parent Context
-		/// @return the parent Context
-		Context& get_context() override {
+		/// @brief Retrieve the parent Runtime
+		/// @return the parent Runtime
+		Runtime& get_context() override {
 			return upstream->get_context();
 		}
 
@@ -147,7 +147,7 @@ namespace vuk {
 	/// This resource also hands out DeviceFrameResources in a round-robin fashion.
 	/// The lifetime of resources allocated from those allocators is frames_in_flight number of frames (until the DeviceFrameResource is recycled).
 	struct DeviceSuperFrameResource : DeviceNestedResource {
-		DeviceSuperFrameResource(Context& ctx, uint64_t frames_in_flight);
+		DeviceSuperFrameResource(Runtime& ctx, uint64_t frames_in_flight);
 		DeviceSuperFrameResource(DeviceResource& upstream, uint64_t frames_in_flight);
 
 		void deallocate_semaphores(std::span<const VkSemaphore> src) override;

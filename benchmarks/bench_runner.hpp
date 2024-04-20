@@ -83,7 +83,7 @@ namespace vuk {
 		VkDevice device;
 		VkPhysicalDevice physical_device;
 		VkQueue graphics_queue;
-		std::optional<Context> context;
+		std::optional<Runtime> runtime;
 		std::optional<DeviceSuperFrameResource> xdev_rf_alloc;
 		std::optional<Allocator> global;
 		vuk::SwapchainRef swapchain;
@@ -106,7 +106,7 @@ namespace vuk {
 		BenchRunner();
 
 		void setup() {
-			// Setup Dear ImGui context
+			// Setup Dear ImGui runtime
 			IMGUI_CHECKVERSION();
 			ImGui::CreateContext();
 			// Setup Dear ImGui style
@@ -114,8 +114,8 @@ namespace vuk {
 			// Setup Platform/Renderer bindings
 			ImGui_ImplGlfw_InitForVulkan(window, true);
 
-			start = context->create_timestamp_query();
-			end = context->create_timestamp_query();
+			start = runtime->create_timestamp_query();
+			end = runtime->create_timestamp_query();
 			{ imgui_data = util::ImGui_ImplVuk_Init(*global); }
 			bench->setup(*this, *global);
 		}
@@ -123,7 +123,7 @@ namespace vuk {
 		void render();
 
 		void cleanup() {
-			context->wait_idle();
+			runtime->wait_idle();
 			if (bench->cleanup) {
 				bench->cleanup(*this, *global);
 			}
@@ -133,7 +133,7 @@ namespace vuk {
 			imgui_data.font_texture.view.reset();
 			imgui_data.font_texture.image.reset();
 			xdev_rf_alloc.reset();
-			context.reset();
+			runtime.reset();
 			auto vkDestroySurfaceKHR = (PFN_vkDestroySurfaceKHR)vkbinstance.fp_vkGetInstanceProcAddr(vkbinstance.instance, "vkDestroySurfaceKHR");
 			vkDestroySurfaceKHR(vkbinstance.instance, surface, nullptr);
 			destroy_window_glfw(window);

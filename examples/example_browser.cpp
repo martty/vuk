@@ -39,7 +39,7 @@ void vuk::ExampleRunner::render() {
 		ImGui::End();
 
 		auto& frame_resource = superframe_resource->get_next_frame();
-		context->next_frame();
+		runtime->next_frame();
 
 		Allocator frame_allocator(frame_resource);
 

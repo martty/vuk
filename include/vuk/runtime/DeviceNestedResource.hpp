@@ -102,7 +102,7 @@ namespace vuk {
 		allocate_render_passes(std::span<VkRenderPass> dst, std::span<const RenderPassCreateInfo> cis, SourceLocationAtFrame loc) override;
 		void deallocate_render_passes(std::span<const VkRenderPass> src) override;
 
-		Context& get_context() override {
+		Runtime& get_context() override {
 			return upstream->get_context();
 		}
 

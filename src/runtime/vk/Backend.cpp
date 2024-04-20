@@ -58,7 +58,7 @@ namespace vuk {
 		VkFramebuffer framebuffer;
 	};
 
-	void begin_render_pass(Context& ctx, vuk::RenderPassInfo& rpass, VkCommandBuffer& cbuf, bool use_secondary_command_buffers) {
+	void begin_render_pass(Runtime& ctx, vuk::RenderPassInfo& rpass, VkCommandBuffer& cbuf, bool use_secondary_command_buffers) {
 		VkRenderPassBeginInfo rbi{ .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
 		rbi.renderPass = rpass.handle;
 		rbi.framebuffer = rpass.framebuffer;
@@ -149,7 +149,7 @@ namespace vuk {
 	}
 
 	struct VkQueueStream : public Stream {
-		Context& ctx;
+		Runtime& ctx;
 		vuk::rtvk::QueueExecutor* executor;
 
 		std::vector<SubmitInfo> batch;
@@ -742,7 +742,7 @@ namespace vuk {
 		    callbacks(callbacks),
 		    pass_reads(pass_reads),
 		    cg_module(cg_module) {}
-		Context& ctx;
+		Runtime& ctx;
 		Allocator alloc;
 		ProfilingCallbacks* callbacks;
 		std::vector<Ref>& pass_reads;
@@ -945,7 +945,7 @@ namespace vuk {
 	}
 
 	Result<void> ExecutableRenderGraph::execute(Allocator& alloc) {
-		Context& ctx = alloc.get_context();
+		Runtime& ctx = alloc.get_context();
 
 		Recorder recorder(alloc, &impl->callbacks, impl->pass_reads, impl->cg_module);
 		recorder.streams.emplace(DomainFlagBits::eHost, std::make_unique<HostStream>(alloc));

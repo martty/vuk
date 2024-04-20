@@ -30,7 +30,7 @@ namespace {
 			      vuk::PipelineBaseCreateInfo pci;
 			      pci.add_glsl(util::read_entire_file((root / "examples/deferred.vert").generic_string()), (root / "examples/deferred.vert").generic_string());
 			      pci.add_glsl(util::read_entire_file((root / "examples/deferred.frag").generic_string()), (root / "examples/deferred.frag").generic_string());
-			      runner.context->create_named_pipeline("cube_deferred", pci);
+			      runner.runtime->create_named_pipeline("cube_deferred", pci);
 		      }
 
 		      {
@@ -38,7 +38,7 @@ namespace {
 			      pci.add_glsl(util::read_entire_file((root / "examples/fullscreen.vert").generic_string()), (root / "examples/fullscreen.vert").generic_string());
 			      pci.add_glsl(util::read_entire_file((root / "examples/deferred_resolve.frag").generic_string()),
 			                   (root / "examples/deferred_resolve.frag").generic_string());
-			      runner.context->create_named_pipeline("deferred_resolve", pci);
+			      runner.runtime->create_named_pipeline("deferred_resolve", pci);
 		      }
 
 		      // We set up the cube data, same as in example 02_cube

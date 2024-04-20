@@ -94,7 +94,7 @@ namespace {
 		.name = "10_baby_renderer",
 		.setup =
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator) {
-		      vuk::Context& ctx = allocator.get_context();
+		      vuk::Runtime& ctx = allocator.get_context();
 
 		      // Use STBI to load the image
 		      int x, y, chans;
@@ -115,7 +115,7 @@ namespace {
 		      {
 			      vuk::PipelineBaseCreateInfo pbci;
 			      pbci.add_glsl(util::read_entire_file((root / "examples/invert.comp").generic_string()), (root / "examples/invert.comp").generic_string());
-			      runner.context->create_named_pipeline("invert", pbci);
+			      runner.runtime->create_named_pipeline("invert", pbci);
 		      }
 		      texture_of_doge_v1 = texture_of_doge;
 		      texture_of_doge_v1.usage = vuk::ImageUsageFlagBits::eTransferDst | vuk::ImageUsageFlagBits::eSampled;
@@ -202,7 +202,7 @@ namespace {
 			                   (root / "examples/baby_renderer.vert").generic_string());
 			      pci.add_glsl(util::read_entire_file((root / "examples/triangle_depthshaded_tex.frag").generic_string()),
 			                   (root / "examples/triangle_depthshaded_tex.frag").generic_string());
-			      pipe1 = runner.context->get_pipeline(pci);
+			      pipe1 = runner.runtime->get_pipeline(pci);
 		      }
 
 		      // A "tinted" pipeline
@@ -213,7 +213,7 @@ namespace {
 			                   (root / "examples/baby_renderer.vert").generic_string());
 			      pci.add_glsl(util::read_entire_file((root / "examples/triangle_tinted_tex.frag").generic_string()),
 			                   (root / "examples/triangle_tinted_tex.frag").generic_string());
-			      pipe2 = runner.context->get_pipeline(pci);
+			      pipe2 = runner.runtime->get_pipeline(pci);
 		      }
 
 		      // Create materials

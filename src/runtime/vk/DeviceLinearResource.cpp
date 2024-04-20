@@ -12,7 +12,7 @@
 
 namespace vuk {
 	struct DeviceLinearResourceImpl {
-		Context* ctx;
+		Runtime* ctx;
 		VkDevice device;
 		std::vector<VkSemaphore> semaphores;
 		std::vector<Buffer> buffers;

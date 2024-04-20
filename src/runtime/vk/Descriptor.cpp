@@ -26,7 +26,7 @@ namespace vuk {
 		o.impl = nullptr;
 	}
 
-	void DescriptorPool::grow(Context& ctx, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info) {
+	void DescriptorPool::grow(Runtime& ctx, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info) {
 		if (!impl->grow_mutex.try_lock())
 			return;
 		VkDescriptorPoolCreateInfo dpci{ .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
@@ -62,7 +62,7 @@ namespace vuk {
 		impl->grow_mutex.unlock();
 	}
 
-	VkDescriptorSet DescriptorPool::acquire(Context& ctx, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info) {
+	VkDescriptorSet DescriptorPool::acquire(Runtime& ctx, vuk::DescriptorSetLayoutAllocInfo layout_alloc_info) {
 		VkDescriptorSet ds;
 		while (!impl->free_sets.try_dequeue(ds)) {
 			grow(ctx, layout_alloc_info);
@@ -74,7 +74,7 @@ namespace vuk {
 		impl->free_sets.enqueue(ds);
 	}
 
-	void DescriptorPool::destroy(Context& ctx, VkDevice device) const {
+	void DescriptorPool::destroy(Runtime& ctx, VkDevice device) const {
 		for (auto& p : impl->pools) {
 			ctx.vkDestroyDescriptorPool(device, p, nullptr);
 		}
