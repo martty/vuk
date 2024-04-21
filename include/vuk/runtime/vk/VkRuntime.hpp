@@ -83,7 +83,7 @@ namespace vuk {
 		// Executors
 		std::vector<uint32_t> all_queue_families;
 		// retrieve a specific executor from the runtime
-		Executor* get_executor(Executor::Tag tag);
+		Executor* get_executor(ExecutorTag tag);
 		// retrieve an executor for the given domain from the runtime
 		Executor* get_executor(DomainFlagBits domain);
 

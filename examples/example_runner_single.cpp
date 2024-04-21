@@ -35,10 +35,12 @@ void vuk::ExampleRunner::render() {
 		// set up some profiling callbacks for our example Tracy integration
 		vuk::ProfilingCallbacks cbs;
 		cbs.user_data = &get_runner();
-		cbs.on_begin_command_buffer = [](void* user_data, VkCommandBuffer cbuf) {
+		cbs.on_begin_command_buffer = [](void* user_data, ExecutorTag tag, VkCommandBuffer cbuf) {
 			ExampleRunner& runner = *reinterpret_cast<vuk::ExampleRunner*>(user_data);
-			TracyVkCollect(runner.tracy_graphics_ctx, cbuf);
-			TracyVkCollect(runner.tracy_transfer_ctx, cbuf);
+			if ((tag.domain & DomainFlagBits::eQueueMask) != DomainFlagBits::eTransferQueue) {
+				TracyVkCollect(runner.tracy_graphics_ctx, cbuf);
+				TracyVkCollect(runner.tracy_transfer_ctx, cbuf);
+			}
 			return (void*)nullptr;
 		};
 		// runs whenever entering a new vuk::Pass

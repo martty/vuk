@@ -229,7 +229,7 @@ namespace vuk {
 		return *this;
 	}
 
-	Executor* Runtime::get_executor(Executor::Tag tag) {
+	Executor* Runtime::get_executor(ExecutorTag tag) {
 		auto it = std::find_if(impl->executors.begin(), impl->executors.end(), [=](auto& exe) { return exe->tag == tag; });
 		if (it != impl->executors.end()) {
 			return it->get();

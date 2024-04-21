@@ -797,8 +797,10 @@ namespace vuk {
 		return (val + align - 1) / align * align;
 	}
 
+	struct ExecutorTag;
+
 	struct ProfilingCallbacks {
-		void* (*on_begin_command_buffer)(void* user_data, VkCommandBuffer cmdbuf) = nullptr;
+		void* (*on_begin_command_buffer)(void* user_data, ExecutorTag tag, VkCommandBuffer cmdbuf) = nullptr;
 		void (*on_end_command_buffer)(void* user_data, void* cbuf_data) = nullptr;
 
 		void* (*on_begin_pass)(void* user_data, Name pass_name, VkCommandBuffer cmdbuf, DomainFlagBits domain) = nullptr;

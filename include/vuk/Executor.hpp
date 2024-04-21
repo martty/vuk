@@ -3,17 +3,19 @@
 #include "vuk/Types.hpp"
 
 namespace vuk {
+	struct ExecutorTag {
+		DomainFlagBits domain;
+		size_t executor_id;
+
+		std::strong_ordering operator<=>(const ExecutorTag&) const = default;
+	};
+
 	/// @brief Base class for high level execution
 	struct Executor {
 		enum class Type { eVulkanDeviceQueue, eThisThread } type;
-		struct Tag {
-			DomainFlagBits domain;
-			size_t executor_id;
+		ExecutorTag tag;
 
-			std::strong_ordering operator<=>(const Tag&) const = default;
-		} tag;
-
-		Executor(Type type, DomainFlagBits domain, size_t executor_id) : type(type), tag{domain, executor_id} {}
+		Executor(Type type, DomainFlagBits domain, size_t executor_id) : type(type), tag{ domain, executor_id } {}
 		virtual ~Executor() {}
 		Executor(const Executor&) = delete;
 		Executor& operator=(const Executor&) = delete;

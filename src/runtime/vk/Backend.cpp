@@ -273,8 +273,9 @@ namespace vuk {
 			alloc.get_context().vkBeginCommandBuffer(cbuf, &cbi);
 
 			cbuf_profile_data = nullptr;
-			if (callbacks->on_begin_command_buffer)
-				cbuf_profile_data = callbacks->on_begin_command_buffer(callbacks->user_data, cbuf);
+			if (callbacks->on_begin_command_buffer) {
+				cbuf_profile_data = callbacks->on_begin_command_buffer(callbacks->user_data, executor->tag, cbuf);
+			}
 
 			return { expected_value };
 		}
