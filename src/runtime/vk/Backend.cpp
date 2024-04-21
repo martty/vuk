@@ -437,7 +437,8 @@ namespace vuk {
 				dst_domain = src_domain;
 			}
 
-			scope_to_domain((VkPipelineStageFlagBits2KHR&)src_use.stages, src_domain & DomainFlagBits::eQueueMask);
+			// always dst domain - we don't emit "release" on the src stream
+			scope_to_domain((VkPipelineStageFlagBits2KHR&)src_use.stages, dst_domain & DomainFlagBits::eQueueMask);
 			scope_to_domain((VkPipelineStageFlagBits2KHR&)dst_use.stages, dst_domain & DomainFlagBits::eQueueMask);
 
 			barrier.srcAccessMask = is_readonly_access(src_use) ? 0 : (VkAccessFlags)src_use.access;
