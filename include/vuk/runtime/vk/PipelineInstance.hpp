@@ -1,11 +1,11 @@
 #pragma once
 
-#include "vuk/runtime/CreateInfo.hpp"
 #include "Pipeline.hpp"
 #include "vuk/Buffer.hpp"
 #include "vuk/Config.hpp"
 #include "vuk/FixedVector.hpp"
 #include "vuk/Hash.hpp"
+#include "vuk/runtime/CreateInfo.hpp"
 #include <bit>
 
 inline bool operator==(VkSpecializationMapEntry const& lhs, VkSpecializationMapEntry const& rhs) noexcept {
@@ -88,7 +88,7 @@ namespace vuk {
 			uint8_t conservativeMode : 2;
 			float overestimationAmount;
 		};
-		
+
 		struct DepthBias {
 			float depthBiasConstantFactor;
 			float depthBiasClamp;
@@ -138,16 +138,11 @@ namespace vuk {
 		std::array<DescriptorSetLayoutAllocInfo, VUK_MAX_SETS> layout_info = {};
 	};
 
-	template<>
-	struct create_info<GraphicsPipelineInfo> {
-		using type = vuk::GraphicsPipelineInstanceCreateInfo;
-	};
-
 	struct ComputePipelineInstanceCreateInfo {
 		PipelineBaseInfo* base;
 
 		std::array<std::byte, VUK_MAX_SPECIALIZATIONCONSTANT_SIZE> specialization_constant_data = {};
-		vuk::fixed_vector<VkSpecializationMapEntry, VUK_MAX_SPECIALIZATIONCONSTANT_RANGES> specialization_map_entries;
+		fixed_vector<VkSpecializationMapEntry, VUK_MAX_SPECIALIZATIONCONSTANT_RANGES> specialization_map_entries;
 		VkSpecializationInfo specialization_info = {};
 
 		bool operator==(const ComputePipelineInstanceCreateInfo& o) const noexcept {
@@ -160,16 +155,11 @@ namespace vuk {
 		std::array<unsigned, 3> local_size;
 	};
 
-	template<>
-	struct create_info<ComputePipelineInfo> {
-		using type = vuk::ComputePipelineInstanceCreateInfo;
-	};
-
 	struct RayTracingPipelineInstanceCreateInfo {
 		PipelineBaseInfo* base;
 
 		std::array<std::byte, VUK_MAX_SPECIALIZATIONCONSTANT_SIZE> specialization_constant_data = {};
-		vuk::fixed_vector<VkSpecializationMapEntry, VUK_MAX_SPECIALIZATIONCONSTANT_RANGES> specialization_map_entries;
+		fixed_vector<VkSpecializationMapEntry, VUK_MAX_SPECIALIZATIONCONSTANT_RANGES> specialization_map_entries;
 		VkSpecializationInfo specialization_info = {};
 
 		bool operator==(const RayTracingPipelineInstanceCreateInfo& o) const noexcept {
@@ -184,14 +174,26 @@ namespace vuk {
 		VkStridedDeviceAddressRegionKHR hit_region{};
 		VkStridedDeviceAddressRegionKHR call_region{};
 
-		Buffer sbt;
+		vuk::Buffer sbt;
+	};
+} // namespace vuk
+
+namespace vuk {
+	template<>
+	struct create_info<vuk::GraphicsPipelineInfo> {
+		using type = vuk::GraphicsPipelineInstanceCreateInfo;
 	};
 
 	template<>
-	struct create_info<RayTracingPipelineInfo> {
+	struct create_info<vuk::ComputePipelineInfo> {
+		using type = vuk::ComputePipelineInstanceCreateInfo;
+	};
+
+	template<>
+	struct create_info<vuk::RayTracingPipelineInfo> {
 		using type = vuk::RayTracingPipelineInstanceCreateInfo;
 	};
-} // namespace vuk
+}
 
 namespace std {
 	template<>

@@ -67,7 +67,7 @@ namespace vuk {
 	}
 
 	template<>
-	ShaderModule& Cache<ShaderModule>::acquire(const create_info_t<ShaderModule>& ci) {
+	vuk::ShaderModule& Cache<vuk::ShaderModule>::acquire(const create_info_t<vuk::ShaderModule>& ci) {
 		std::shared_lock _(impl->cache_mtx);
 		if (auto it = impl->lru_map.find(ci); it != impl->lru_map.end()) {
 			if (it->second.load_cnt.load(std::memory_order_relaxed) == 0) { // perform a relaxed load to skip the atomic_wait path
@@ -89,7 +89,7 @@ namespace vuk {
 	}
 
 	template<>
-	PipelineBaseInfo& Cache<PipelineBaseInfo>::acquire(const create_info_t<PipelineBaseInfo>& ci) {
+	vuk::PipelineBaseInfo& Cache<vuk::PipelineBaseInfo>::acquire(const create_info_t<vuk::PipelineBaseInfo>& ci) {
 		std::shared_lock _(impl->cache_mtx);
 		if (auto it = impl->lru_map.find(ci); it != impl->lru_map.end()) {
 			return *it->second.ptr;
@@ -105,7 +105,7 @@ namespace vuk {
 	}
 
 	template<>
-	DescriptorSetLayoutAllocInfo& Cache<DescriptorSetLayoutAllocInfo>::acquire(const create_info_t<DescriptorSetLayoutAllocInfo>& ci) {
+	vuk::DescriptorSetLayoutAllocInfo& Cache<vuk::DescriptorSetLayoutAllocInfo>::acquire(const create_info_t<vuk::DescriptorSetLayoutAllocInfo>& ci) {
 		std::shared_lock _(impl->cache_mtx);
 		if (auto it = impl->lru_map.find(ci); it != impl->lru_map.end()) {
 			return *it->second.ptr;
@@ -135,7 +135,7 @@ namespace vuk {
 	}
 	// unfortunately, we need to manage extended_data lifetime here
 	template<>
-	GraphicsPipelineInfo& Cache<GraphicsPipelineInfo>::acquire(const create_info_t<GraphicsPipelineInfo>& ci, uint64_t current_frame) {
+	vuk::GraphicsPipelineInfo& Cache<vuk::GraphicsPipelineInfo>::acquire(const create_info_t<vuk::GraphicsPipelineInfo>& ci, uint64_t current_frame) {
 		std::shared_lock _(impl->cache_mtx);
 		if (auto it = impl->lru_map.find(ci); it != impl->lru_map.end()) {
 			it->second.last_use_frame = current_frame;
@@ -163,7 +163,7 @@ namespace vuk {
 	}
 
 	template<>
-	void Cache<GraphicsPipelineInfo>::collect(uint64_t current_frame, size_t threshold) {
+	void Cache<vuk::GraphicsPipelineInfo>::collect(uint64_t current_frame, size_t threshold) {
 		std::unique_lock _(impl->cache_mtx);
 		for (auto it = impl->lru_map.begin(); it != impl->lru_map.end();) {
 			auto last_use_frame = it->second.last_use_frame;

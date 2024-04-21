@@ -18,23 +18,6 @@
 #include <vector>
 
 namespace vuk {
-	/// @brief Encapsulates a SyncPoint that can be synchronized against in the future
-	struct Signal {
-	public:
-		enum class Status {
-			eDisarmed,       // the Signal is in the initial state - it must be armed before it can be sync'ed against
-			eSynchronizable, // this syncpoint has been submitted (result is available on device with appropriate sync)
-			eHostAvailable   // the result is available on host, available on device without sync
-		};
-
-		Status status = Status::eDisarmed;
-		SyncPoint source;
-	};
-
-	struct AcquireRelease : Signal {
-		std::vector<ResourceUse> last_use; // last access performed on resource before signalling
-	};
-
 	struct TypeDebugInfo {
 		std::string_view name;
 	};

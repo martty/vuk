@@ -1,8 +1,9 @@
 #include "vuk/runtime/vk/DeviceLinearResource.hpp"
-#include "vuk/runtime/BufferAllocator.hpp"
+#include "vuk/runtime/vk/BufferAllocator.hpp"
 #include "vuk/runtime/vk/Descriptor.hpp"
 #include "vuk/runtime/vk/Query.hpp"
 #include "vuk/runtime/vk/RenderPass.hpp"
+#include "vuk/runtime/vk/VkQueueExecutor.hpp"
 #include "vuk/runtime/vk/VkRuntime.hpp"
 
 #include <atomic>
@@ -305,7 +306,7 @@ namespace vuk {
 			for (uint64_t i = 0; i < impl->syncpoints.size(); i++) {
 				auto& sp = impl->syncpoints[i];
 				if (sp.executor->type == Executor::Type::eVulkanDeviceQueue) {
-					auto dev_queue = static_cast<rtvk::QueueExecutor*>(sp.executor);
+					auto dev_queue = static_cast<QueueExecutor*>(sp.executor);
 					semas.push_back(dev_queue->get_semaphore());
 					values.push_back(sp.visibility);
 				}

@@ -1,20 +1,37 @@
 #pragma once
 
 #include "vuk/Config.hpp"
-#include "vuk/runtime/vk/Image.hpp"
 #include "vuk/Result.hpp"
 #include "vuk/SourceLocation.hpp"
 #include "vuk/SyncPoint.hpp"
+#include "vuk/runtime/vk/Image.hpp"
 #include "vuk/vuk_fwd.hpp"
 
-#include <span>
-
-namespace vuk {
 #define VUK_DO_OR_RETURN(what)                                                                                                                                 \
 	if (auto res = what; !res) {                                                                                                                                 \
 		return std::move(res);                                                                                                                                     \
 	}
-	/// @endcond
+/// @endcond
+
+#include <span>
+
+namespace vuk {
+	struct FramebufferCreateInfo;
+	struct TimestampQueryCreateInfo;
+	struct RenderPassCreateInfo;
+	struct BufferCreateInfo;
+	struct PersistentDescriptorSet;
+	struct PersistentDescriptorSetCreateInfo;
+	struct DescriptorSet;
+	struct SetBinding;
+	struct TimestampQueryPool;
+	struct TimestampQuery;
+	struct GraphicsPipelineInfo;
+	struct GraphicsPipelineInstanceCreateInfo;
+	struct ComputePipelineInfo;
+	struct ComputePipelineInstanceCreateInfo;
+	struct RayTracingPipelineInfo;
+	struct RayTracingPipelineInstanceCreateInfo;
 
 	/// @brief DeviceResource is a polymorphic interface over allocation of GPU resources.
 	/// A DeviceResource must prevent reuse of cross-device resources after deallocation until CPU-GPU timelines are synchronized. GPU-only resources may be
@@ -520,7 +537,9 @@ namespace vuk {
 	{
 		allocator.deallocate(std::span(src));
 	}
+} // namespace vuk
 
+namespace vuk {
 	template<typename Type>
 	Unique<Type>::~Unique() noexcept {
 		if (allocator && payload != Type{}) {

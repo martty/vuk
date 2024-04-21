@@ -1,7 +1,7 @@
 #include "vuk/runtime/vk/DeviceVkResource.hpp"
 #include "vuk/Buffer.hpp"
 #include "vuk/Exception.hpp"
-#include "vuk/runtime/DeviceNestedResource.hpp"
+#include "vuk/runtime/vk/DeviceNestedResource.hpp"
 #include "vuk/runtime/vk/PipelineInstance.hpp"
 #include "vuk/runtime/vk/Query.hpp"
 #include "vuk/runtime/vk/RenderPass.hpp"

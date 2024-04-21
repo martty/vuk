@@ -2,15 +2,21 @@
 
 #include "vuk/Config.hpp"
 #include "vuk/Executor.hpp"
+#include "vuk/SyncPoint.hpp"
 
 #include <span>
 #include <vector>
 
 namespace vuk {
-	struct SubmitInfo;
-} // namespace vuk
+	struct SubmitInfo {
+		std::vector<VkCommandBuffer> command_buffers;
+		std::vector<std::pair<DomainFlagBits, uint64_t>> relative_waits;
+		std::vector<Signal*> waits;
+		std::vector<Signal*> signals;
+		std::vector<VkSemaphore> pres_wait;
+		std::vector<VkSemaphore> pres_signal;
+	};
 
-namespace vuk::rtvk {
 	/// @brief Abstraction of a device queue in Vulkan
 	struct QueueExecutor : Executor {
 		QueueExecutor(VkDevice device, DomainFlagBits domain, const struct FunctionPointers& fps, VkQueue queue, uint32_t queue_family_index, VkSemaphore ts);
@@ -41,4 +47,4 @@ namespace vuk::rtvk {
 		std::vector<VkSemaphoreSubmitInfoKHR> wait_semas;
 		std::vector<VkSemaphoreSubmitInfoKHR> signal_semas;
 	};
-} // namespace vuk::rtvk
+} // namespace vuk

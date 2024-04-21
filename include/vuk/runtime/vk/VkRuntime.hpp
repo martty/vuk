@@ -7,45 +7,38 @@
 #include <vector>
 
 #include "vuk/Buffer.hpp"
-#include "vuk/runtime/Allocator.hpp"
+#include "vuk/Executor.hpp"
+#include "vuk/runtime/vk/Allocator.hpp"
 #include "vuk/runtime/vk/Image.hpp"
-#include "vuk/runtime/vk/VkQueueExecutor.hpp"
 #include "vuk/runtime/vk/VkSwapchain.hpp"
 #include "vuk/vuk_fwd.hpp"
 
 #include "vuk/SourceLocation.hpp"
 
-namespace std {
-	class mutex;
-	class recursive_mutex;
-} // namespace std
-
 namespace vuk {
-	namespace rtvk {
 #define VUK_X(name) PFN_##name name = nullptr;
 #define VUK_Y(name) PFN_##name name = nullptr;
 
-		struct FunctionPointers {
-			PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = nullptr;
-			PFN_vkGetDeviceProcAddr vkGetDeviceProcAddr = nullptr;
+	struct FunctionPointers {
+		PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = nullptr;
+		PFN_vkGetDeviceProcAddr vkGetDeviceProcAddr = nullptr;
 #include "vuk/runtime/vk/VkPFNOptional.hpp"
 #include "vuk/runtime/vk/VkPFNRequired.hpp"
 
-			/// @brief Check if all required function pointers are available (if providing them externally)
-			bool check_pfns();
-			/// @brief Load function pointers that the runtime needs
-			/// @param instance Vulkan instance
-			/// @param device Vulkan device
-			/// @param allow_dynamic_loading_of_vk_function_pointers If true, then this function will attempt dynamic loading of the fn pointers
-			/// If this is false, then you must fill in all required function pointers
-			vuk::Result<void> load_pfns(VkInstance instance, VkDevice device, bool allow_dynamic_loading_of_vk_function_pointers);
-		};
+		/// @brief Check if all required function pointers are available (if providing them externally)
+		bool check_pfns();
+		/// @brief Load function pointers that the runtime needs
+		/// @param instance Vulkan instance
+		/// @param device Vulkan device
+		/// @param allow_dynamic_loading_of_vk_function_pointers If true, then this function will attempt dynamic loading of the fn pointers
+		/// If this is false, then you must fill in all required function pointers
+		vuk::Result<void> load_pfns(VkInstance instance, VkDevice device, bool allow_dynamic_loading_of_vk_function_pointers);
+	};
 #undef VUK_X
 #undef VUK_Y
 
-		std::unique_ptr<Executor>
-		create_vkqueue_executor(const FunctionPointers& fps, VkDevice device, VkQueue queue, uint32_t queue_family_index, DomainFlagBits domain);
-	} // namespace rtvk
+	std::unique_ptr<Executor>
+	create_vkqueue_executor(const FunctionPointers& fps, VkDevice device, VkQueue queue, uint32_t queue_family_index, DomainFlagBits domain);
 
 	/// @brief Parameters used for creating a Runtime
 	struct RuntimeCreateParameters {
@@ -58,10 +51,10 @@ namespace vuk {
 		/// @brief Executors available to the runtime for scheduling
 		std::vector<std::unique_ptr<Executor>> executors;
 		/// @brief User provided function pointers. If you want dynamic loading, you must set vkGetInstanceProcAddr & vkGetDeviceProcAddr
-		rtvk::FunctionPointers pointers;
+		FunctionPointers pointers;
 	};
 
-	class Runtime : public rtvk::FunctionPointers {
+	class Runtime : public FunctionPointers {
 	public:
 		/// @brief Create a new Runtime
 		/// @param params Vulkan parameters initialized beforehand
@@ -263,11 +256,9 @@ namespace vuk {
 		info.objectHandle = reinterpret_cast<uint64_t>(t);
 		this->vkSetDebugUtilsObjectNameEXT(device, &info);
 	}
-} // namespace vuk
 
-#include "vuk/Exception.hpp"
-// utility functions
-namespace vuk {
+	// utility functions
+
 	struct ExecutableRenderGraph;
 
 	/// @brief Execute given `ExecutableRenderGraph`s into API VkCommandBuffers, then submit them to queues
@@ -282,12 +273,4 @@ namespace vuk {
 	/// @param allocator Allocator to use for submission resources
 	/// @param executable_rendergraph `ExecutableRenderGraph`s for execution
 	Result<void> execute_submit_and_wait(Allocator& allocator, ExecutableRenderGraph&& executable_rendergraph);
-
-	struct RenderGraphCompileOptions;
-
-	struct SampledImage make_sampled_image(ImageView iv, SamplerCreateInfo sci);
-
-	struct SampledImage make_sampled_image(struct NameReference n, SamplerCreateInfo sci);
-
-	struct SampledImage make_sampled_image(struct NameReference n, ImageViewCreateInfo ivci, SamplerCreateInfo sci);
 } // namespace vuk

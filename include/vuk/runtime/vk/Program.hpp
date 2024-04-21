@@ -1,7 +1,7 @@
 #pragma once
 
-#include "vuk/runtime/CreateInfo.hpp"
 #include "vuk/Config.hpp"
+#include "vuk/runtime/CreateInfo.hpp"
 #include "vuk/vuk_fwd.hpp"
 
 #include <array>
@@ -186,15 +186,17 @@ namespace vuk {
 
 	struct ShaderModule {
 		VkShaderModule shader_module;
-		vuk::Program reflection_info;
+		Program reflection_info;
 		VkShaderStageFlagBits stage;
 	};
 
 	struct ShaderModuleCreateInfo;
+} // namespace vuk
 
+namespace vuk {
 	template<>
-	struct create_info<vuk::ShaderModule> {
-		using type = vuk::ShaderModuleCreateInfo;
+	struct create_info<ShaderModule> {
+		using type = ShaderModuleCreateInfo;
 	};
 } // namespace vuk
 

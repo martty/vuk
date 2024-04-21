@@ -20,12 +20,13 @@
 
 #include "vuk/Exception.hpp"
 #include "vuk/RenderGraph.hpp"
-#include "vuk/runtime/Allocator.hpp"
-#include "vuk/runtime/AllocatorHelpers.hpp"
 #include "vuk/runtime/Cache.hpp"
+#include "vuk/runtime/vk/Allocator.hpp"
+#include "vuk/runtime/vk/AllocatorHelpers.hpp"
 #include "vuk/runtime/vk/DeviceVkResource.hpp"
 #include "vuk/runtime/vk/Program.hpp"
 #include "vuk/runtime/vk/Query.hpp"
+#include "vuk/runtime/vk/VkQueueExecutor.hpp"
 #include "vuk/runtime/vk/VkRuntime.hpp"
 #include "vuk/runtime/vk/VkSwapchain.hpp"
 
@@ -48,7 +49,7 @@ namespace {
 #undef VUK_Y
 	}*/
 
-	void load_pfns_dynamic(VkInstance instance, VkDevice device, vuk::rtvk::FunctionPointers& pfns) {
+	void load_pfns_dynamic(VkInstance instance, VkDevice device, vuk::FunctionPointers& pfns) {
 #define VUK_X(name)                                                                                                                                            \
 	if (pfns.name == nullptr) {                                                                                                                                  \
 		pfns.name = (PFN_##name)pfns.vkGetDeviceProcAddr(device, #name);                                                                                           \
@@ -64,37 +65,37 @@ namespace {
 	}
 } // namespace
 
-bool vuk::rtvk::FunctionPointers::check_pfns() {
-	bool valid = true;
+namespace vuk {
+	bool FunctionPointers::check_pfns() {
+		bool valid = true;
 #define VUK_X(name) valid = valid && name;
 #define VUK_Y(name) valid = valid && name;
 #include "vuk/runtime/vk/VkPFNRequired.hpp"
 #undef VUK_X
 #undef VUK_Y
-	return valid;
-}
+		return valid;
+	}
 
-vuk::Result<void> vuk::rtvk::FunctionPointers::load_pfns(VkInstance instance, VkDevice device, bool allow_dynamic_loading_of_vk_function_pointers) {
-	// PFN loading
-	// if the user passes in PFNs, those will be used, always
-	if (check_pfns()) {
+	vuk::Result<void> FunctionPointers::load_pfns(VkInstance instance, VkDevice device, bool allow_dynamic_loading_of_vk_function_pointers) {
+		// PFN loading
+		// if the user passes in PFNs, those will be used, always
+		if (check_pfns()) {
+			return { vuk::expected_value };
+		}
+		// we don't have all the PFNs, so we will load them if this is allowed
+		if (vkGetInstanceProcAddr && vkGetDeviceProcAddr && allow_dynamic_loading_of_vk_function_pointers) {
+			load_pfns_dynamic(instance, device, *this);
+			if (!check_pfns()) {
+				return { vuk::expected_error,
+					       vuk::RequiredPFNMissingException{ "A Vulkan PFN is required, but was not provided and dynamic loading could not load it." } };
+			}
+		} else {
+			return { vuk::expected_error, vuk::RequiredPFNMissingException{ "A Vulkan PFN is required, but was not provided and dynamic loading was not allowed." } };
+		}
+
 		return { vuk::expected_value };
 	}
-	// we don't have all the PFNs, so we will load them if this is allowed
-	if (vkGetInstanceProcAddr && vkGetDeviceProcAddr && allow_dynamic_loading_of_vk_function_pointers) {
-		load_pfns_dynamic(instance, device, *this);
-		if (!check_pfns()) {
-			return { vuk::expected_error,
-				       vuk::RequiredPFNMissingException{ "A Vulkan PFN is required, but was not provided and dynamic loading could not load it." } };
-		}
-	} else {
-		return { vuk::expected_error, vuk::RequiredPFNMissingException{ "A Vulkan PFN is required, but was not provided and dynamic loading was not allowed." } };
-	}
 
-	return { vuk::expected_value };
-}
-
-namespace vuk {
 	struct ContextImpl {
 		template<class T>
 		struct FN {
@@ -172,7 +173,7 @@ namespace vuk {
 	};
 
 	Runtime::Runtime(RuntimeCreateParameters params) :
-	    rtvk::FunctionPointers(params.pointers),
+	    FunctionPointers(params.pointers),
 	    instance(params.instance),
 	    device(params.device),
 	    physical_device(params.physical_device) {
@@ -182,7 +183,7 @@ namespace vuk {
 		impl->executors = std::move(params.executors);
 		for (auto& exe : impl->executors) {
 			if (exe->type == Executor::Type::eVulkanDeviceQueue) {
-				all_queue_families.push_back(static_cast<rtvk::QueueExecutor*>(exe.get())->get_queue_family_index());
+				all_queue_families.push_back(static_cast<QueueExecutor*>(exe.get())->get_queue_family_index());
 			}
 		}
 		this->vkGetPhysicalDeviceProperties(physical_device, &physical_device_properties);
@@ -869,7 +870,7 @@ namespace vuk {
 		uint32_t count = 0;
 		for (auto& [executor, v] : queue_waits) {
 			assert(executor->type == Executor::Type::eVulkanDeviceQueue);
-			auto vkq = static_cast<rtvk::QueueExecutor*>(executor);
+			auto vkq = static_cast<QueueExecutor*>(executor);
 			auto idx = vkq->get_queue_family_index();
 			auto& mapping = domain_to_sema_index[idx];
 			if (mapping == -1) {

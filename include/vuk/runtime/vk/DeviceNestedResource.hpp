@@ -1,6 +1,6 @@
 #pragma once
 
-#include "vuk/runtime/Allocator.hpp"
+#include "vuk/runtime/vk/Allocator.hpp"
 #include "vuk/Exception.hpp"
 #include "vuk/vuk_fwd.hpp"
 

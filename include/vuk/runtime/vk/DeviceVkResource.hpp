@@ -1,6 +1,6 @@
 #pragma once
 
-#include "vuk/runtime/Allocator.hpp"
+#include "vuk/runtime/vk/Allocator.hpp"
 #include "vuk/Config.hpp"
 
 namespace vuk {

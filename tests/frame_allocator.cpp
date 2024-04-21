@@ -1,5 +1,5 @@
 #include "TestContext.hpp"
-#include "vuk/runtime/AllocatorHelpers.hpp"
+#include "vuk/runtime/vk/AllocatorHelpers.hpp"
 #include "vuk/vsl/Core.hpp"
 #include <doctest/doctest.h>
 

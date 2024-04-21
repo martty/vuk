@@ -572,15 +572,6 @@ public:
 		friend struct ExecutableRenderGraph;
 	};
 
-	struct SubmitInfo {
-		std::vector<VkCommandBuffer> command_buffers;
-		std::vector<std::pair<DomainFlagBits, uint64_t>> relative_waits;
-		std::vector<Signal*> waits;
-		std::vector<Signal*> signals;
-		std::vector<VkSemaphore> pres_wait;
-		std::vector<VkSemaphore> pres_signal;
-	};
-
 	struct ExecutableRenderGraph {
 		ExecutableRenderGraph(Compiler&);
 		~ExecutableRenderGraph();

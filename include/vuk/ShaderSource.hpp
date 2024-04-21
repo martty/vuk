@@ -1,7 +1,8 @@
 #pragma once
 
-#include "vuk/runtime/CreateInfo.hpp"
 #include "vuk/Config.hpp"
+#include "vuk/Util.hpp"
+#include "vuk/runtime/CreateInfo.hpp"
 #include "vuk/vuk_fwd.hpp"
 
 #include <cstring>
@@ -30,12 +31,7 @@ namespace vuk {
 	};
 
 	struct ShaderCompileOptions {
-		enum class OptimizationLevel {
-			O0,
-			O1,
-			O2,
-			O3
-		} optimization_level = OptimizationLevel::O3;
+		enum class OptimizationLevel { O0, O1, O2, O3 } optimization_level = OptimizationLevel::O3;
 
 		std::vector<std::wstring> dxc_extra_arguments = { L"-spirv", L"-fvk-use-gl-layout", L"-no-warnings" };
 	};
@@ -113,7 +109,10 @@ namespace vuk {
 #endif
 
 #if VUK_USE_DXC
-		static ShaderSource hlsl(std::string_view source, const ShaderCompileOptions& compile_options, HlslShaderStage stage = HlslShaderStage::eInferred, std::string entry_point = "main") {
+		static ShaderSource hlsl(std::string_view source,
+		                         const ShaderCompileOptions& compile_options,
+		                         HlslShaderStage stage = HlslShaderStage::eInferred,
+		                         std::string entry_point = "main") {
 			ShaderSource shader;
 			shader.data.resize(idivceil(source.size() + 1, sizeof(uint32_t)));
 			memcpy(shader.data.data(), source.data(), source.size() * sizeof(std::string_view::value_type));
@@ -173,7 +172,9 @@ namespace vuk {
 		}
 		return memcmp(a.data_ptr, b.data_ptr, sizeof(uint32_t) * a.size) == 0;
 	}
+} // namespace vuk
 
+namespace vuk {
 	struct ShaderModuleCreateInfo {
 		ShaderSource source;
 		std::string filename;
@@ -185,3 +186,10 @@ namespace vuk {
 		}
 	};
 } // namespace vuk
+
+namespace std {
+	template<>
+	struct hash<vuk::ShaderSource> {
+		size_t operator()(vuk::ShaderSource const& x) const noexcept;
+	};
+} // namespace std

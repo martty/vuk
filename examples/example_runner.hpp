@@ -2,8 +2,8 @@
 
 #include "glfw.hpp"
 #include "utils.hpp"
-#include "vuk/runtime/Allocator.hpp"
-#include "vuk/runtime/AllocatorHelpers.hpp"
+#include "vuk/runtime/vk/Allocator.hpp"
+#include "vuk/runtime/vk/AllocatorHelpers.hpp"
 #include "vuk/runtime/CommandBuffer.hpp"
 #include "vuk/runtime/vk/VkRuntime.hpp"
 #include "vuk/vsl/Core.hpp"
@@ -243,14 +243,14 @@ namespace vuk {
 		transfer_queue = vkbdevice.get_queue(vkb::QueueType::transfer).value();
 		auto transfer_queue_family_index = vkbdevice.get_queue_index(vkb::QueueType::transfer).value();
 		device = vkbdevice.device;
-		vuk::rtvk::FunctionPointers fps;
+		vuk::FunctionPointers fps;
 		fps.vkGetInstanceProcAddr = vkbinstance.fp_vkGetInstanceProcAddr;
 		fps.vkGetDeviceProcAddr = vkbinstance.fp_vkGetDeviceProcAddr;
 		fps.load_pfns(instance, device, true);
 		std::vector<std::unique_ptr<Executor>> executors;
 
-		executors.push_back(rtvk::create_vkqueue_executor(fps, device, graphics_queue, graphics_queue_family_index, DomainFlagBits::eGraphicsQueue));
-		executors.push_back(rtvk::create_vkqueue_executor(fps, device, transfer_queue, transfer_queue_family_index, DomainFlagBits::eTransferQueue));
+		executors.push_back(vuk::create_vkqueue_executor(fps, device, graphics_queue, graphics_queue_family_index, DomainFlagBits::eGraphicsQueue));
+		executors.push_back(vuk::create_vkqueue_executor(fps, device, transfer_queue, transfer_queue_family_index, DomainFlagBits::eTransferQueue));
 		executors.push_back(std::make_unique<ThisThreadExecutor>());
 
 		runtime.emplace(RuntimeCreateParameters{ instance, device, physical_device, std::move(executors), fps });

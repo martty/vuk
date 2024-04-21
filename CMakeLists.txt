@@ -96,8 +96,8 @@ target_sources(vuk PRIVATE
 
 	src/IRPasses.cpp
 
-	src/runtime/Allocator.cpp
-	src/runtime/BufferAllocator.cpp
+	src/runtime/vk/Allocator.cpp
+	src/runtime/vk/BufferAllocator.cpp
 	src/runtime/Cache.cpp
 	
 	src/runtime/vk/Backend.cpp

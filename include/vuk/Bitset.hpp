@@ -1,6 +1,6 @@
 #pragma once
 
-#include "vuk_fwd.hpp"
+#include "vuk/Util.hpp"
 
 #include <bit>
 #include <cstdint>

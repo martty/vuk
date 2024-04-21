@@ -1,5 +1,6 @@
-#include "vuk/runtime/BufferAllocator.hpp"
-#include "vuk/runtime/Allocator.hpp"
+#include "vuk/runtime/vk/BufferAllocator.hpp"
+#include "vuk/runtime/vk/Allocator.hpp"
+#include "vuk/Buffer.hpp"
 #include "vuk/Result.hpp"
 #include "vuk/SourceLocation.hpp"
 #include <iostream>

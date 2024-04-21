@@ -1,14 +1,14 @@
 #include "vuk/runtime/vk/VkQueueExecutor.hpp"
-#include "vuk/runtime/Allocator.hpp"
 #include "vuk/Exception.hpp"
 #include "vuk/RenderGraph.hpp"
+#include "vuk/runtime/vk/Allocator.hpp"
 
 #include <array>
 #include <atomic>
 #include <mutex>
 #include <vector>
 
-namespace vuk::rtvk {
+namespace vuk {
 	struct QueueImpl {
 		VkDevice device;
 		// TODO: this recursive mutex should be changed to better queue handling
@@ -177,7 +177,7 @@ namespace vuk::rtvk {
 			uint32_t wait_sema_count = 0;
 			for (auto& w : submit_info.waits) {
 				assert(w->source.executor->type == Executor::Type::eVulkanDeviceQueue);
-				rtvk::QueueExecutor* executor = static_cast<rtvk::QueueExecutor*>(w->source.executor);
+				QueueExecutor* executor = static_cast<QueueExecutor*>(w->source.executor);
 				VkSemaphoreSubmitInfoKHR ssi{ VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR };
 				ssi.semaphore = executor->get_semaphore();
 				ssi.value = w->source.visibility;
@@ -185,14 +185,13 @@ namespace vuk::rtvk {
 				wait_semas.emplace_back(ssi);
 				wait_sema_count++;
 			}
-			
-			
+
 			for (auto& w : submit_info.pres_wait) {
-			  VkSemaphoreSubmitInfoKHR ssi{ VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR };
-			  ssi.semaphore = w;
-			  ssi.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR;
-			  wait_semas.emplace_back(ssi);
-			  wait_sema_count++;
+				VkSemaphoreSubmitInfoKHR ssi{ VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR };
+				ssi.semaphore = w;
+				ssi.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR;
+				wait_semas.emplace_back(ssi);
+				wait_sema_count++;
 			}
 
 			VkSemaphoreSubmitInfoKHR ssi{ VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR };
@@ -210,10 +209,10 @@ namespace vuk::rtvk {
 			signal_semas.emplace_back(ssi);
 
 			for (auto& w : submit_info.pres_signal) {
-			  ssi.semaphore = w;
-			  ssi.value = 0; // binary sema
-			  signal_semas.emplace_back(ssi);
-			  signal_sema_count++;
+				ssi.semaphore = w;
+				ssi.value = 0; // binary sema
+				signal_semas.emplace_back(ssi);
+				signal_sema_count++;
 			}
 
 			VkSubmitInfo2KHR& si = sis.emplace_back(VkSubmitInfo2KHR{ VK_STRUCTURE_TYPE_SUBMIT_INFO_2_KHR });
@@ -250,4 +249,4 @@ namespace vuk::rtvk {
 			return { expected_value };
 		}
 	}
-} // namespace vuk::rtvk
+} // namespace vuk

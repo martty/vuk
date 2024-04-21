@@ -1,11 +1,12 @@
 #include "vuk/runtime/vk/DeviceFrameResource.hpp"
-#include "vuk/runtime/BufferAllocator.hpp"
 #include "vuk/runtime/Cache.hpp"
-#include "vuk/runtime/vk/RenderPass.hpp"
-#include "vuk/runtime/vk/VkRuntime.hpp"
+#include "vuk/runtime/vk/BufferAllocator.hpp"
 #include "vuk/runtime/vk/Descriptor.hpp"
 #include "vuk/runtime/vk/PipelineInstance.hpp"
 #include "vuk/runtime/vk/Query.hpp"
+#include "vuk/runtime/vk/RenderPass.hpp"
+#include "vuk/runtime/vk/VkRuntime.hpp"
+#include "vuk/runtime/vk/VkQueueExecutor.hpp"
 
 #include <atomic>
 #include <mutex>
@@ -476,7 +477,6 @@ namespace vuk {
 	}
 	void DeviceFrameResource::deallocate_ray_tracing_pipelines(std::span<const RayTracingPipelineInfo> src) {}
 
-	
 	Result<void, AllocateException>
 	DeviceFrameResource::allocate_render_passes(std::span<VkRenderPass> dst, std::span<const RenderPassCreateInfo> cis, SourceLocationAtFrame loc) {
 		auto& sfr = *static_cast<DeviceSuperFrameResource*>(upstream);
@@ -515,7 +515,7 @@ namespace vuk {
 			for (uint64_t i = 0; i < impl->syncpoints.size(); i++) {
 				auto& sp = impl->syncpoints[i];
 				if (sp.executor->type == Executor::Type::eVulkanDeviceQueue) {
-					auto dev_queue = static_cast<rtvk::QueueExecutor*>(sp.executor);
+					auto dev_queue = static_cast<QueueExecutor*>(sp.executor);
 					semas.push_back(dev_queue->get_semaphore());
 					values.push_back(sp.visibility);
 				}
@@ -742,7 +742,6 @@ namespace vuk {
 		vec.insert(vec.end(), src.begin(), src.end());
 	}
 
-	
 	void DeviceSuperFrameResource::deallocate_graphics_pipelines(std::span<const GraphicsPipelineInfo> src) {
 		std::shared_lock _s(impl->new_frame_mutex);
 		auto& f = get_last_frame();
@@ -750,7 +749,7 @@ namespace vuk {
 		auto& vec = f.impl->graphics_pipes;
 		vec.insert(vec.end(), src.begin(), src.end());
 	}
-	
+
 	void DeviceSuperFrameResource::deallocate_compute_pipelines(std::span<const ComputePipelineInfo> src) {
 		std::shared_lock _s(impl->new_frame_mutex);
 		auto& f = get_last_frame();

@@ -3,8 +3,8 @@
 #include "vuk/Bitset.hpp"
 #include "vuk/Config.hpp"
 #include "vuk/Hash.hpp"
-#include "vuk/runtime/vk/Image.hpp"
 #include "vuk/Types.hpp"
+#include "vuk/runtime/vk/Image.hpp"
 #include "vuk/vuk_fwd.hpp"
 
 #include <array>
@@ -189,7 +189,7 @@ namespace vuk {
 
 	struct DescriptorSetLayoutCreateInfo {
 		VkDescriptorSetLayoutCreateInfo dslci = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
-		size_t index;                                     // index of the descriptor set when used in a pipeline layout
+		size_t index; // index of the descriptor set when used in a pipeline layout
 		std::vector<VkDescriptorSetLayoutBinding> bindings;
 		Bitset<VUK_MAX_BINDINGS> used_bindings = {}; // used for ephemeral desc sets
 		Bitset<VUK_MAX_BINDINGS> optional = {};
@@ -200,11 +200,6 @@ namespace vuk {
 		}
 	};
 
-	template<>
-	struct create_info<DescriptorSetLayoutAllocInfo> {
-		using type = DescriptorSetLayoutCreateInfo;
-	};
-
 	struct DescriptorSet {
 		VkDescriptorSet descriptor_set = VK_NULL_HANDLE;
 		DescriptorSetLayoutAllocInfo layout_info;
@@ -212,11 +207,6 @@ namespace vuk {
 		bool operator==(const DescriptorSet& o) const noexcept {
 			return descriptor_set == o.descriptor_set;
 		}
-	};
-
-	template<>
-	struct create_info<DescriptorSet> {
-		using type = SetBinding;
 	};
 
 	struct DescriptorPool {
@@ -233,18 +223,11 @@ namespace vuk {
 		struct DescriptorPoolImpl* impl = nullptr;
 	};
 
-	template<>
-	struct create_info<DescriptorPool> {
-		using type = DescriptorSetLayoutAllocInfo;
-	};
-
 	struct PersistentDescriptorSetCreateInfo {
 		DescriptorSetLayoutAllocInfo dslai;
 		DescriptorSetLayoutCreateInfo dslci;
 		uint32_t num_descriptors;
 	};
-
-	struct Buffer;
 
 	struct PersistentDescriptorSet {
 		VkDescriptorPool backing_pool;
@@ -272,6 +255,23 @@ namespace vuk {
 
 		// non-thread safe
 		void commit(Runtime& ctx);
+	};
+} // namespace vuk
+
+namespace vuk {
+	template<>
+	struct create_info<DescriptorSet> {
+		using type = SetBinding;
+	};
+
+	template<>
+	struct create_info<DescriptorSetLayoutAllocInfo> {
+		using type = DescriptorSetLayoutCreateInfo;
+	};
+
+	template<>
+	struct create_info<DescriptorPool> {
+		using type = DescriptorSetLayoutAllocInfo;
 	};
 } // namespace vuk
 

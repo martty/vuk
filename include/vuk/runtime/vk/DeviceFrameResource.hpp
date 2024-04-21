@@ -1,7 +1,7 @@
 #pragma once
 
-#include "vuk/runtime/Allocator.hpp"
-#include "vuk/runtime/DeviceNestedResource.hpp"
+#include "vuk/runtime/vk/Allocator.hpp"
+#include "vuk/runtime/vk/DeviceNestedResource.hpp"
 #include "vuk/runtime/vk/DeviceVkResource.hpp"
 
 #include <memory>

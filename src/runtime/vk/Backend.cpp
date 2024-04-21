@@ -4,7 +4,7 @@
 #include "vuk/SyncLowering.hpp"
 #include "vuk/Util.hpp"
 #include "vuk/Value.hpp"
-#include "vuk/runtime/AllocatorHelpers.hpp"
+#include "vuk/runtime/vk/AllocatorHelpers.hpp"
 #include "vuk/runtime/Cache.hpp"
 #include "vuk/runtime/CommandBuffer.hpp"
 #include "vuk/runtime/Stream.hpp"
@@ -58,11 +58,11 @@ namespace vuk {
 		VkFramebuffer framebuffer;
 	};
 
-	void begin_render_pass(Runtime& ctx, vuk::RenderPassInfo& rpass, VkCommandBuffer& cbuf, bool use_secondary_command_buffers) {
+	void begin_render_pass(Runtime& ctx, RenderPassInfo& rpass, VkCommandBuffer& cbuf, bool use_secondary_command_buffers) {
 		VkRenderPassBeginInfo rbi{ .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
 		rbi.renderPass = rpass.handle;
 		rbi.framebuffer = rpass.framebuffer;
-		rbi.renderArea = VkRect2D{ vuk::Offset2D{}, vuk::Extent2D{ rpass.fbci.width, rpass.fbci.height } };
+		rbi.renderArea = VkRect2D{ Offset2D{}, Extent2D{ rpass.fbci.width, rpass.fbci.height } };
 		rbi.clearValueCount = 0;
 
 		ctx.vkCmdBeginRenderPass(cbuf, &rbi, use_secondary_command_buffers ? VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS : VK_SUBPASS_CONTENTS_INLINE);
@@ -128,15 +128,15 @@ namespace vuk {
 		}
 	};
 
-	void ExecutableRenderGraph::fill_render_pass_info(vuk::RenderPassInfo& rpass, const size_t& i, vuk::CommandBuffer& cobuf) {
+	void ExecutableRenderGraph::fill_render_pass_info(RenderPassInfo& rpass, const size_t& i, CommandBuffer& cobuf) {
 		if (rpass.handle == VK_NULL_HANDLE) {
 			cobuf.ongoing_render_pass = {};
 			return;
 		}
-		vuk::CommandBuffer::RenderPassInfo rpi;
+		CommandBuffer::RenderPassInfo rpi;
 		rpi.render_pass = rpass.handle;
 		rpi.subpass = (uint32_t)i;
-		rpi.extent = vuk::Extent2D{ rpass.fbci.width, rpass.fbci.height };
+		rpi.extent = Extent2D{ rpass.fbci.width, rpass.fbci.height };
 		auto& spdesc = rpass.rpci.subpass_descriptions[i];
 		rpi.color_attachments = std::span<const VkAttachmentReference>(spdesc.pColorAttachments, spdesc.colorAttachmentCount);
 		rpi.samples = rpass.fbci.sample_count.count;
@@ -150,7 +150,7 @@ namespace vuk {
 
 	struct VkQueueStream : public Stream {
 		Runtime& ctx;
-		vuk::rtvk::QueueExecutor* executor;
+		QueueExecutor* executor;
 
 		std::vector<SubmitInfo> batch;
 		std::deque<Signal> signals;
@@ -168,7 +168,7 @@ namespace vuk {
 		std::vector<VkMemoryBarrier2KHR> mem_bars;
 		std::vector<VkMemoryBarrier2KHR> half_mem_bars;
 
-		VkQueueStream(Allocator alloc, vuk::rtvk::QueueExecutor* qe, ProfilingCallbacks* callbacks) :
+		VkQueueStream(Allocator alloc, QueueExecutor* qe, ProfilingCallbacks* callbacks) :
 		    Stream(alloc, qe),
 		    ctx(alloc.get_context()),
 		    executor(qe),
@@ -353,9 +353,9 @@ namespace vuk {
 			// if we start an RP and we have LOAD_OP_LOAD (currently always), then we must upgrade access with an appropriate READ
 			if (is_framebuffer_attachment(dst_use)) {
 				if ((aspect & ImageAspectFlagBits::eColor) == ImageAspectFlags{}) { // not color -> depth or depth/stencil
-					dst_use.access |= vuk::AccessFlagBits::eDepthStencilAttachmentRead;
+					dst_use.access |= AccessFlagBits::eDepthStencilAttachmentRead;
 				} else {
-					dst_use.access |= vuk::AccessFlagBits::eColorAttachmentRead;
+					dst_use.access |= AccessFlagBits::eColorAttachmentRead;
 				}
 			}
 
@@ -389,8 +389,8 @@ namespace vuk {
 			if (src_use.stream && dst_use.stream && src_use.stream != dst_use.stream) { // cross-stream
 				if (src_use.stream->executor && src_use.stream->executor->type == Executor::Type::eVulkanDeviceQueue && dst_use.stream->executor &&
 				    dst_use.stream->executor->type == Executor::Type::eVulkanDeviceQueue) { // cross queue
-					auto src_queue = static_cast<rtvk::QueueExecutor*>(src_use.stream->executor);
-					auto dst_queue = static_cast<rtvk::QueueExecutor*>(dst_use.stream->executor);
+					auto src_queue = static_cast<QueueExecutor*>(src_use.stream->executor);
+					auto dst_queue = static_cast<QueueExecutor*>(dst_use.stream->executor);
 					if (src_queue->get_queue_family_index() != dst_queue->get_queue_family_index()) { // cross queue family
 						barrier.srcQueueFamilyIndex = src_queue->get_queue_family_index();
 						barrier.dstQueueFamilyIndex = dst_queue->get_queue_family_index();
@@ -951,14 +951,14 @@ namespace vuk {
 		recorder.streams.emplace(DomainFlagBits::eHost, std::make_unique<HostStream>(alloc));
 		if (auto exe = ctx.get_executor(DomainFlagBits::eGraphicsQueue)) {
 			recorder.streams.emplace(DomainFlagBits::eGraphicsQueue,
-			                         std::make_unique<VkQueueStream>(alloc, static_cast<rtvk::QueueExecutor*>(exe), &impl->callbacks));
+			                         std::make_unique<VkQueueStream>(alloc, static_cast<QueueExecutor*>(exe), &impl->callbacks));
 		}
 		if (auto exe = ctx.get_executor(DomainFlagBits::eComputeQueue)) {
-			recorder.streams.emplace(DomainFlagBits::eComputeQueue, std::make_unique<VkQueueStream>(alloc, static_cast<rtvk::QueueExecutor*>(exe), &impl->callbacks));
+			recorder.streams.emplace(DomainFlagBits::eComputeQueue, std::make_unique<VkQueueStream>(alloc, static_cast<QueueExecutor*>(exe), &impl->callbacks));
 		}
 		if (auto exe = ctx.get_executor(DomainFlagBits::eTransferQueue)) {
 			recorder.streams.emplace(DomainFlagBits::eTransferQueue,
-			                         std::make_unique<VkQueueStream>(alloc, static_cast<rtvk::QueueExecutor*>(exe), &impl->callbacks));
+			                         std::make_unique<VkQueueStream>(alloc, static_cast<QueueExecutor*>(exe), &impl->callbacks));
 		}
 		auto host_stream = recorder.streams.at(DomainFlagBits::eHost).get();
 
