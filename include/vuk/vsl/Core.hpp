@@ -174,7 +174,7 @@ namespace vuk {
 
 	inline std::pair<Unique<Image>, Value<ImageAttachment>> create_image_with_data(Allocator& allocator,
 	                                                                               DomainFlagBits copy_domain,
-	                                                                               ImageAttachment ia,
+	                                                                               ImageAttachment& ia,
 	                                                                               const void* data,
 	                                                                               VUK_CALLSTACK) {
 		auto image = allocate_image(allocator, ia, VUK_CALL);
@@ -185,7 +185,7 @@ namespace vuk {
 	template<class T>
 	std::pair<Unique<Image>, Value<ImageAttachment>> create_image_with_data(Allocator& allocator,
 	                                                                        DomainFlagBits copy_domain,
-	                                                                        ImageAttachment ia,
+	                                                                        ImageAttachment& ia,
 	                                                                        std::span<T> data,
 	                                                                        VUK_CALLSTACK) {
 		return create_image_with_data(allocator, copy_domain, ia, data.data(), VUK_CALL);
@@ -194,7 +194,7 @@ namespace vuk {
 	inline std::tuple<Unique<Image>, Unique<ImageView>, Value<ImageAttachment>>
 	create_image_and_view_with_data(Allocator& allocator,
 	                                DomainFlagBits copy_domain,
-	                                ImageAttachment ia,
+	                                ImageAttachment& ia,
 	                                const void* data,
 	                                VUK_CALLSTACK) {
 		auto image = allocate_image(allocator, ia, VUK_CALL);

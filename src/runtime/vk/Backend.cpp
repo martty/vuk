@@ -1133,6 +1133,7 @@ namespace vuk {
 #endif
 						if (bound.buffer == VK_NULL_HANDLE) {
 							assert(bound.size != ~(0u));
+							assert(bound.memory_usage != (MemoryUsage)0);
 							BufferCreateInfo bci{ .mem_usage = bound.memory_usage, .size = bound.size, .alignment = 1 }; // TODO: alignment?
 							auto allocator = node->construct.allocator ? *node->construct.allocator : alloc;
 							auto buf = allocate_buffer(allocator, bci);
