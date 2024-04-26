@@ -709,6 +709,18 @@ namespace vuk {
 			}
 		}
 
+		for (auto& ind : indegrees) {
+			if (ind > 0) {
+				std::vector<Node*> unschedulables;
+				for (auto i = 0; i < indegrees.size(); i++) {
+					if (indegrees[i] > 0) {
+						unschedulables.push_back(schedule_items[i]);
+					}
+				}
+				assert(false);
+			}
+		}
+
 		return { expected_value };
 	}
 
