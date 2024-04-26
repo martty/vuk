@@ -793,7 +793,9 @@ namespace vuk {
 				key = reinterpret_cast<uint64_t>(img_att.image.image);
 				psru.subrange = { img_att.base_level, img_att.level_count, img_att.base_layer, img_att.layer_count };
 			} else if (base_ty == cg_module->builtin_buffer) {
-				key = reinterpret_cast<uint64_t>(reinterpret_cast<Buffer*>(value)->allocation);
+				auto buf = reinterpret_cast<Buffer*>(value);
+				key = reinterpret_cast<uint64_t>(buf->allocation);
+				hash_combine(key, buf->offset);
 			} else if (base_ty->kind == Type::ARRAY_TY) { // for an array, we init all elements
 				auto elem_ty = base_ty->array.T;
 				auto size = base_ty->array.count;
@@ -831,7 +833,9 @@ namespace vuk {
 				auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
 				key = reinterpret_cast<uint64_t>(img_att.image.image);
 			} else if (base_ty == cg_module->builtin_buffer) {
-				key = reinterpret_cast<uint64_t>(reinterpret_cast<Buffer*>(value)->allocation);
+				auto buf = reinterpret_cast<Buffer*>(value);
+				key = reinterpret_cast<uint64_t>(buf->allocation);
+				hash_combine(key, buf->offset);
 			} else { // no other types require sync
 				return;
 			}
@@ -911,7 +915,9 @@ namespace vuk {
 				auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
 				key = reinterpret_cast<uint64_t>(img_att.image.image);
 			} else if (base_ty == cg_module->builtin_buffer) {
-				key = reinterpret_cast<uint64_t>(reinterpret_cast<Buffer*>(value)->allocation);
+				auto buf = reinterpret_cast<Buffer*>(value);
+				key = reinterpret_cast<uint64_t>(buf->allocation);
+				hash_combine(key, buf->offset);
 			} else if (base_ty->kind == Type::ARRAY_TY) { // for an array, we key off the the first element, as the array syncs together
 				auto elem_ty = base_ty->array.T;
 				auto size = base_ty->array.count;
