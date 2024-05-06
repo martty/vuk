@@ -4,10 +4,10 @@
 #include "vuk/SyncLowering.hpp"
 #include "vuk/Util.hpp"
 #include "vuk/Value.hpp"
-#include "vuk/runtime/vk/AllocatorHelpers.hpp"
 #include "vuk/runtime/Cache.hpp"
 #include "vuk/runtime/CommandBuffer.hpp"
 #include "vuk/runtime/Stream.hpp"
+#include "vuk/runtime/vk/AllocatorHelpers.hpp"
 #include "vuk/runtime/vk/VkQueueExecutor.hpp"
 #include "vuk/runtime/vk/VkRuntime.hpp"
 
@@ -958,15 +958,13 @@ namespace vuk {
 		Recorder recorder(alloc, &impl->callbacks, impl->pass_reads, impl->cg_module);
 		recorder.streams.emplace(DomainFlagBits::eHost, std::make_unique<HostStream>(alloc));
 		if (auto exe = ctx.get_executor(DomainFlagBits::eGraphicsQueue)) {
-			recorder.streams.emplace(DomainFlagBits::eGraphicsQueue,
-			                         std::make_unique<VkQueueStream>(alloc, static_cast<QueueExecutor*>(exe), &impl->callbacks));
+			recorder.streams.emplace(DomainFlagBits::eGraphicsQueue, std::make_unique<VkQueueStream>(alloc, static_cast<QueueExecutor*>(exe), &impl->callbacks));
 		}
 		if (auto exe = ctx.get_executor(DomainFlagBits::eComputeQueue)) {
 			recorder.streams.emplace(DomainFlagBits::eComputeQueue, std::make_unique<VkQueueStream>(alloc, static_cast<QueueExecutor*>(exe), &impl->callbacks));
 		}
 		if (auto exe = ctx.get_executor(DomainFlagBits::eTransferQueue)) {
-			recorder.streams.emplace(DomainFlagBits::eTransferQueue,
-			                         std::make_unique<VkQueueStream>(alloc, static_cast<QueueExecutor*>(exe), &impl->callbacks));
+			recorder.streams.emplace(DomainFlagBits::eTransferQueue, std::make_unique<VkQueueStream>(alloc, static_cast<QueueExecutor*>(exe), &impl->callbacks));
 		}
 		auto host_stream = recorder.streams.at(DomainFlagBits::eHost).get();
 
@@ -1633,10 +1631,10 @@ namespace vuk {
 
 					// half sync
 					for (size_t i = 1; i < node->converge.ref_and_diverged.size(); i++) {
-						auto& item = node->converge.ref_and_diverged[i];
-						recorder.add_sync(sched.base_type(item),
-						                  sched.get_dependency_info(item, item.type(), node->converge.write[i - 1] ? RW::eWrite : RW::eRead, nullptr),
-						                  sched.get_value(item));
+						auto& div = node->converge.ref_and_diverged[i];
+						recorder.add_sync(sched.base_type(div),
+						                  sched.get_dependency_info(div, div.type(), node->converge.write[i - 1] ? RW::eWrite : RW::eRead, item.scheduled_stream),
+						                  sched.get_value(div));
 					}
 
 #ifdef VUK_DUMP_EXEC

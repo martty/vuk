@@ -279,11 +279,13 @@ namespace vuk {
 				break;
 			case Node::SPLICE: { // ~~ write joiner
 				for (size_t i = 0; i < node->splice.src.size(); i++) {
-					assert(node->splice.src[i].link().undef.node == nullptr);
-					node->splice.src[i].link().undef = { node, i };
 					Ref{ node, i }.link().def = { node, i };
-					node->splice.src[i].link().next = &Ref{ node, i }.link();
-					Ref{ node, i }.link().prev = &node->splice.src[i].link();
+					if (node->splice.rel_acq && node->splice.rel_acq->status == Signal::Status::eDisarmed) {
+						assert(node->splice.src[i].link().undef.node == nullptr);
+						node->splice.src[i].link().undef = { node, i };
+						node->splice.src[i].link().next = &Ref{ node, i }.link();
+						Ref{ node, i }.link().prev = &node->splice.src[i].link();
+					}
 				}
 				break;
 			}
