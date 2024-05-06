@@ -282,9 +282,9 @@ public:
 			size_t i = 0;
 			// FIXME: I think this is well defined but seems like compilers don't agree on the result
 #if VUK_COMPILER_MSVC
-			return std::tuple{ Value<typename T::type>{ ExtRef{ extnode, Ref{ extnode->get_node(), sizeof...(T) - (++i) } }, std::get<T>(us).def }... };
+			return std::tuple{ Value<typename T::type>{ ExtRef{ extnode, Ref{ extnode->get_node(), sizeof...(T) - (++i) } } }... };
 #else
-			return std::tuple{ Value<typename T::type>{ ExtRef{ extnode, Ref{ extnode->get_node(), i++ } }, std::get<T>(us).def }... };
+			return std::tuple{ Value<typename T::type>{ ExtRef{ extnode, Ref{ extnode->get_node(), i++ } } }... };
 #endif
 		}
 	}
@@ -335,10 +335,11 @@ public:
 				auto rgp = first.get_render_graph();
 				IRModule& rg = *rgp.get();
 
-				bool reuse_node = first.node.use_count() == 1 && first.node->get_node()->kind != Node::ACQUIRE && first.node->acqrel->status == Signal::Status::eDisarmed;
+				bool reuse_node =
+				    first.node.use_count() == 1 && first.node->get_node()->kind != Node::ACQUIRE && first.node->acqrel->status == Signal::Status::eDisarmed;
 
 				std::vector<Type*> arg_types;
-				std::tuple arg_tuple_as_a = { T{ nullptr, args.get_peeled_head(), args.get_def() }... };
+				std::tuple arg_tuple_as_a = { T{ nullptr, args.get_peeled_head() }... };
 				fill_arg_ty(rg, arg_tuple_as_a, arg_types);
 
 				std::vector<Type*> ret_types;
@@ -401,7 +402,7 @@ public:
 		Ref ref = rg->make_declare_image(ia);
 		rg->name_output(ref, name.c_str());
 		rg->set_source_location(ref.node, VUK_CALL);
-		return { make_ext_ref(rg, ref), ref };
+		return { make_ext_ref(rg, ref) };
 	}
 
 	[[nodiscard]] inline Value<ImageAttachment> acquire_ia(Name name, ImageAttachment ia, Access access, VUK_CALLSTACK) {
@@ -416,7 +417,7 @@ public:
 		ref.node->acquire.acquire = ext_ref.node->owned_acqrel.get();
 		rg->name_output(ref, name.c_str());
 		rg->set_source_location(ref.node, VUK_CALL);
-		return { std::move(ext_ref), ref };
+		return { std::move(ext_ref) };
 	}
 
 	[[nodiscard]] inline Value<Buffer> declare_buf(Name name, Buffer buf = {}, VUK_CALLSTACK) {
@@ -424,7 +425,7 @@ public:
 		Ref ref = rg->make_declare_buffer(buf);
 		rg->name_output(ref, name.c_str());
 		rg->set_source_location(ref.node, VUK_CALL);
-		return { make_ext_ref(rg, ref), ref };
+		return { make_ext_ref(rg, ref) };
 	}
 
 	[[nodiscard]] inline Value<Buffer> acquire_buf(Name name, Buffer buf, Access access, VUK_CALLSTACK) {
@@ -439,7 +440,7 @@ public:
 		ref.node->acquire.acquire = ext_ref.node->owned_acqrel.get();
 		rg->name_output(ref, name.c_str());
 		rg->set_source_location(ref.node, VUK_CALL);
-		return { std::move(ext_ref), ref };
+		return { std::move(ext_ref) };
 	}
 
 	// TODO: due to the pack, we can't do the source_location::current() trick
@@ -449,18 +450,16 @@ public:
 		std::vector<std::shared_ptr<ExtNode>> deps;
 		(rg->subgraphs.push_back(args.get_render_graph()), ...);
 		std::array refs = { arg.get_head(), args.get_head()... };
-		std::array defs = { arg.get_def(), args.get_def()... };
 		deps = { arg.node, args.node... };
-		Ref ref = rg->make_declare_array(Type::stripped(refs[0].type()), refs, defs);
+		Ref ref = rg->make_declare_array(Type::stripped(refs[0].type()), refs);
 		rg->name_output(ref, name.c_str());
-		return { make_ext_ref(rg, ref, deps), ref };
+		return { make_ext_ref(rg, ref, deps) };
 	}
 
 	template<class T>
 	[[nodiscard]] inline Value<T[]> declare_array(Name name, std::span<const Value<T>> args, VUK_CALLSTACK) {
 		auto rg = args.size() > 0 ? args[0].get_render_graph() : std::make_shared<IRModule>();
 		std::vector<Ref> refs;
-		std::vector<Ref> defs;
 		std::vector<std::shared_ptr<ExtNode>> deps;
 		for (size_t i = 0; i < args.size(); i++) {
 			auto& arg = args[i];
@@ -468,7 +467,6 @@ public:
 				rg->subgraphs.push_back(arg.get_render_graph());
 			}
 			refs.push_back(arg.get_head());
-			defs.push_back(arg.get_def());
 			deps.push_back(arg.node);
 		}
 		Type* t;
@@ -477,17 +475,16 @@ public:
 		} else if constexpr (std::is_same_v<T, vuk::Buffer>) {
 			t = rg->get_builtin_buffer();
 		}
-		Ref ref = rg->make_declare_array(t, refs, defs);
+		Ref ref = rg->make_declare_array(t, refs);
 		rg->name_output(ref, name.c_str());
 		rg->set_source_location(ref.node, VUK_CALL);
-		return { make_ext_ref(rg, ref, std::move(deps)), ref };
+		return { make_ext_ref(rg, ref, std::move(deps)) };
 	}
 
 	template<class T>
 	[[nodiscard]] inline Value<T[]> declare_array(Name name, std::span<Value<T>> args, VUK_CALLSTACK) {
 		auto rg = args.size() > 0 ? args[0].get_render_graph() : std::make_shared<IRModule>();
 		std::vector<Ref> refs;
-		std::vector<Ref> defs;
 		std::vector<std::shared_ptr<ExtNode>> deps;
 		for (size_t i = 0; i < args.size(); i++) {
 			auto& arg = args[i];
@@ -495,7 +492,6 @@ public:
 				rg->subgraphs.push_back(arg.get_render_graph());
 			}
 			refs.push_back(arg.get_head());
-			defs.push_back(arg.get_def());
 			deps.push_back(arg.node);
 		}
 		Type* t;
@@ -504,17 +500,17 @@ public:
 		} else if constexpr (std::is_same_v<T, vuk::Buffer>) {
 			t = rg->get_builtin_buffer();
 		}
-		Ref ref = rg->make_declare_array(t, refs, defs);
+		Ref ref = rg->make_declare_array(t, refs);
 		rg->name_output(ref, name.c_str());
 		rg->set_source_location(ref.node, VUK_CALL);
-		return { make_ext_ref(rg, ref, std::move(deps)), ref };
+		return { make_ext_ref(rg, ref, std::move(deps)) };
 	}
 
 	[[nodiscard]] inline Value<Swapchain> declare_swapchain(Swapchain& bundle, VUK_CALLSTACK) {
 		std::shared_ptr<IRModule> rg = std::make_shared<IRModule>();
 		Ref ref = rg->make_declare_swapchain(bundle);
 		rg->set_source_location(ref.node, VUK_CALL);
-		return { make_ext_ref(rg, ref), ref };
+		return { make_ext_ref(rg, ref) };
 	}
 
 	[[nodiscard]] inline Value<ImageAttachment> acquire_next_image(Name name, Value<Swapchain> in, VUK_CALLSTACK) {

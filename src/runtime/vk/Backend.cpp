@@ -1395,50 +1395,72 @@ namespace vuk {
 			case Node::SPLICE: {
 				if (sched.process(item)) {
 					auto acqrel = node->splice.rel_acq;
-					Stream* dst_stream = item.scheduled_stream;
-					auto values = new void*[node->splice.src.size()];
-					// if acq is nullptr, then this degenerates to a NOP, sync and skip
-					for (size_t i = 0; i < node->splice.src.size(); i++) {
-						auto parm = node->splice.src[i];
-						auto arg_ty = node->type[i];
-						auto di = sched.get_dependency_info(parm, arg_ty, RW::eWrite, dst_stream);
-						auto value = sched.get_value(parm);
-						auto storage = new std::byte[parm.type()->size];
-						memcpy(storage, impl->get_value(parm), parm.type()->size);
-						values[i] = storage;
-						recorder.add_sync(sched.base_type(parm), di, value);
-
-						auto last_use = recorder.last_use(sched.base_type(parm), value);
-						acqrel->last_use.push_back(last_use);
-						if (i == 0) {
-							last_use.stream->add_dependent_signal(acqrel);
-						}
-					}
 					if (!acqrel) { // (we should've handled this before this moment)
 						fmt::print("???");
 						assert(false);
-					} else {
-						switch (acqrel->status) {
-						case Signal::Status::eDisarmed: // means we have to signal this
-							node->splice.values = std::span{ values, node->splice.src.size() };
-							break;
-						case Signal::Status::eSynchronizable: // means this is an acq instead (we should've handled this before this moment)
-						case Signal::Status::eHostAvailable:
-							fmt::print("???");
-							assert(false);
-							break;
-						}
 					}
+
+					Stream* dst_stream = item.scheduled_stream;
+
+					if (acqrel->status == Signal::Status::eDisarmed) {
+						auto values = new void*[node->splice.src.size()];
+						// if acq is nullptr, then this degenerates to a NOP, sync and skip
+						for (size_t i = 0; i < node->splice.src.size(); i++) {
+							auto parm = node->splice.src[i];
+							auto arg_ty = node->type[i];
+							auto di = sched.get_dependency_info(parm, arg_ty, RW::eWrite, dst_stream);
+							auto value = sched.get_value(parm);
+							auto storage = new std::byte[parm.type()->size];
+							memcpy(storage, impl->get_value(parm), parm.type()->size);
+							values[i] = storage;
+							recorder.add_sync(sched.base_type(parm), di, value);
+
+							auto last_use = recorder.last_use(sched.base_type(parm), value);
+							acqrel->last_use.push_back(last_use);
+							if (i == 0) {
+								last_use.stream->add_dependent_signal(acqrel);
+							}
+						}
+						node->splice.values = std::span{ values, node->splice.src.size() };
 #ifdef VUK_DUMP_EXEC
-					print_results(node);
-					fmt::print(" <- ");
-					print_args(node->splice.src);
-					fmt::print("\n");
+						print_results(node);
+						fmt::print(" <- ");
+						print_args(node->splice.src);
+						fmt::print("\n");
 #endif
-					sched.done(node, item.scheduled_stream, std::span{ values, node->splice.src.size() });
+						sched.done(node, item.scheduled_stream, std::span{ values, node->splice.src.size() });
+					} else {
+						auto src_stream = recorder.stream_for_executor(acqrel->source.executor);
+
+						for (size_t i = 0; i < node->splice.src.size(); i++) {
+							StreamResourceUse src_use = { acqrel->last_use[i], src_stream };
+							recorder.init_sync(node->type[i], src_use, node->splice.values[i]);
+							if (node->type[i] == impl->cg_module->builtin_buffer) {
+#ifdef VUK_DUMP_EXEC
+								print_results(node);
+								fmt::print(" = acquire!<buffer>\n");
+#endif
+							} else if (node->type[i] == impl->cg_module->builtin_image) {
+#ifdef VUK_DUMP_EXEC
+								print_results(node);
+								fmt::print(" = acquire!<image>\n");
+#endif
+							}
+						}
+
+						sched.done(node, src_stream, node->splice.values);
+					}
 				} else {
-					for (size_t i = 0; i < node->splice.src.size(); i++) {
-						sched.schedule_dependency(node->splice.src[i], RW::eWrite);
+					auto acqrel = node->splice.rel_acq;
+
+					if (!acqrel) { // (we should've handled this before this moment)
+						fmt::print("???");
+						assert(false);
+					}
+					if (acqrel->status == Signal::Status::eDisarmed) {
+						for (size_t i = 0; i < node->splice.src.size(); i++) {
+							sched.schedule_dependency(node->splice.src[i], RW::eWrite);
+						}
 					}
 				}
 				break;
@@ -1459,6 +1481,11 @@ namespace vuk {
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
 					fmt::print(" = acquire<image>\n");
+#endif
+				} else if (node->type[0]->kind == Type::ARRAY_TY) {
+#ifdef VUK_DUMP_EXEC
+					print_results(node);
+					fmt::print(" = acquire<{}[]>\n", node->type[0]->array.T == impl->cg_module->builtin_buffer ? "buffer" : "image");
 #endif
 				}
 
@@ -1563,7 +1590,7 @@ namespace vuk {
 #endif
 					sched.done(node, item.scheduled_stream, sched.get_value(first(node))); // extract doesn't execute
 				} else {
-					sched.schedule_dependency(node->extract.composite, RW::eWrite);
+					sched.schedule_new(node->extract.composite.node);
 					sched.schedule_dependency(node->extract.index, RW::eRead);
 				}
 				break;
