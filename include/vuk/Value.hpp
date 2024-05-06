@@ -15,7 +15,7 @@ namespace vuk {
 	class UntypedValue {
 	public:
 		UntypedValue() = default;
-		UntypedValue(ExtRef extref, Ref def) : node(std::move(extref.node)), head{ node->get_node(), extref.index }, def(def) {}
+		UntypedValue(ExtRef extref, Ref def) : node(std::move(extref.node)), index(extref.index), def(def) {}
 
 		/// @brief Get the referenced RenderGraph
 		const std::shared_ptr<IRModule>& get_render_graph() const noexcept {
@@ -24,11 +24,11 @@ namespace vuk {
 
 		/// @brief Name the value currently referenced by this Value
 		void set_name(std::string_view name) noexcept {
-			get_render_graph()->name_output(head, name);
+			get_render_graph()->name_output(get_head(), name);
 		}
 
 		Ref get_head() const noexcept {
-			return head;
+			return { node->get_node(), index };
 		}
 
 		Ref get_def() const noexcept {
@@ -36,21 +36,21 @@ namespace vuk {
 		}
 
 		Ref get_peeled_head() noexcept {
-			if (node.use_count() == 1 && head.node->kind == Node::SPLICE && can_peel) {
-				Ref peeled_head = head.node->splice.src[head.index];
+			if (node.use_count() == 1 && get_head().node->kind == Node::SPLICE && can_peel) {
+				Ref peeled_head = get_head().node->splice.src[get_head().index];
 				return peeled_head;
 			} else {
-				return head;
+				return get_head();
 			}
 		}
 
 		Ref peel_head() noexcept {
-			if (node.use_count() == 1 && head.node->kind == Node::SPLICE && can_peel) {
-				Ref peeled_head = head.node->splice.src[head.index];
-				head.node->kind = Node::NOP;
+			if (node.use_count() == 1 && get_head().node->kind == Node::SPLICE && can_peel) {
+				Ref peeled_head = get_head().node->splice.src[get_head().index];
+				get_head().node->kind = Node::NOP;
 				return peeled_head;
 			} else {
-				return head;
+				return get_head();
 			}
 		}
 
@@ -60,7 +60,7 @@ namespace vuk {
 			auto release = node->module->make_release(ref, nullptr, access, domain);
 			node = std::make_shared<ExtNode>(ExtNode{ node->module, release, { node } }); // previous extnode is a dep
 			release->release.release = node->acqrel;
-			head = { node->get_node(), 0 };
+			index = 0;
 		}
 
 		/// @brief Submit Value for execution
@@ -71,9 +71,9 @@ namespace vuk {
 		Result<void> wait(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options = {});
 
 		std::shared_ptr<ExtNode> node;
-		Ref head;
 
 	protected:
+		size_t index;
 		Ref def;
 		bool can_peel = true;
 	};
@@ -86,7 +86,7 @@ namespace vuk {
 		template<class U>
 		Value<U> transmute(Ref new_head) noexcept {
 			node = std::make_shared<ExtNode>(ExtNode{ node->module, new_head.node, node });
-			head = { node->get_node(), new_head.index };
+			index = new_head.index;
 			def = new_head;
 			return *reinterpret_cast<Value<U>*>(this); // TODO: not cool
 		}
@@ -328,6 +328,7 @@ namespace vuk {
 			waits.emplace_back(value.node->acqrel->source);
 		}
 		if (waits.size() > 0) {
+			// TODO: turn these into HostAvailable
 			return alloc.get_context().wait_for_domains(std::span(waits));
 		}
 

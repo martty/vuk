@@ -1061,6 +1061,10 @@ namespace vuk {
 			return type;
 		}
 
+		Node* copy_node(Node* node) {
+			return emplace_op(*node);
+		}
+
 		Ref make_acquire(Type* type, AcquireRelease* acq_rel, size_t index, void* value) {
 			auto ty = new (payload_arena.ensure_space(sizeof(Type*))) Type*(copy_type(type));
 			return first(emplace_op(Node{ .kind = Node::ACQUIRE, .type = std::span{ ty, 1 }, .acquire = { .value = value, .acquire = acq_rel, .index = index } }));
@@ -1150,7 +1154,7 @@ namespace vuk {
 		ExtNode(ExtNode&& o) = default;
 
 		Node* get_node() {
-			assert(node->kind == Node::SPLICE || node->kind == Node::RELEASE || node->kind == Node::ACQUIRE);
+			assert(node->kind == Node::NOP || node->kind == Node::SPLICE || node->kind == Node::RELEASE || node->kind == Node::ACQUIRE);
 			return node;
 		}
 
