@@ -18,13 +18,17 @@ namespace vuk {
 		UntypedValue(ExtRef extref, Ref def) : node(std::move(extref.node)), index(extref.index), def(def) {}
 
 		/// @brief Get the referenced RenderGraph
-		const std::shared_ptr<IRModule>& get_render_graph() const noexcept {
-			return node->module;
+		std::shared_ptr<IRModule> get_render_graph() const noexcept {
+			if (node->acqrel->status == Signal::Status::eDisarmed) {
+				return node->module;
+			} else {
+				return std::make_shared<IRModule>();
+			}
 		}
 
 		/// @brief Name the value currently referenced by this Value
 		void set_name(std::string_view name) noexcept {
-			get_render_graph()->name_output(get_head(), name);
+			node->module->name_output(get_head(), name);
 		}
 
 		Ref get_head() const noexcept {

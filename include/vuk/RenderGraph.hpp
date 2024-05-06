@@ -335,7 +335,7 @@ public:
 				auto rgp = first.get_render_graph();
 				IRModule& rg = *rgp.get();
 
-				bool reuse_node = first.node.use_count() == 1 && first.node->get_node()->kind != Node::ACQUIRE;
+				bool reuse_node = first.node.use_count() == 1 && first.node->get_node()->kind != Node::ACQUIRE && first.node->acqrel->status == Signal::Status::eDisarmed;
 
 				std::vector<Type*> arg_types;
 				std::tuple arg_tuple_as_a = { T{ nullptr, args.get_peeled_head(), args.get_def() }... };
@@ -518,7 +518,7 @@ public:
 	}
 
 	[[nodiscard]] inline Value<ImageAttachment> acquire_next_image(Name name, Value<Swapchain> in, VUK_CALLSTACK) {
-		auto& rg = in.get_render_graph();
+		auto rg = in.get_render_graph();
 		Ref ref = rg->make_acquire_next_image(in.get_head());
 		rg->name_output(ref, name.c_str());
 		rg->set_source_location(ref.node, VUK_CALL);
