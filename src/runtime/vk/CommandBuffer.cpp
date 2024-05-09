@@ -512,6 +512,33 @@ namespace vuk {
 		return *this;
 	}
 
+	CommandBuffer& CommandBuffer::draw_indirect(size_t command_count, const Buffer& indirect_buffer) {
+		VUK_EARLY_RET();
+		if (!_bind_graphics_pipeline_state()) {
+			return *this;
+		}
+		ctx.vkCmdDrawIndirect(command_buffer, indirect_buffer.buffer, (uint32_t)indirect_buffer.offset, (uint32_t)command_count, sizeof(DrawIndirectCommand));
+		return *this;
+	}
+
+	CommandBuffer& CommandBuffer::draw_indirect(std::span<DrawIndirectCommand> commands) {
+		VUK_EARLY_RET();
+		if (!_bind_graphics_pipeline_state()) {
+			return *this;
+		}
+
+		auto res = allocate_buffer(*allocator, { MemoryUsage::eCPUtoGPU, commands.size_bytes(), 1 });
+		if (!res) {
+			current_error = std::move(res);
+			return *this;
+		}
+
+		auto& buf = *res;
+		memcpy(buf->mapped_ptr, commands.data(), commands.size_bytes());
+		ctx.vkCmdDrawIndirect(command_buffer, buf->buffer, (uint32_t)buf->offset, (uint32_t)commands.size(), sizeof(DrawIndirectCommand));
+		return *this;
+	}
+
 	CommandBuffer& CommandBuffer::draw_indexed(size_t index_count, size_t instance_count, size_t first_index, int32_t vertex_offset, size_t first_instance) {
 		VUK_EARLY_RET();
 		if (!_bind_graphics_pipeline_state()) {
