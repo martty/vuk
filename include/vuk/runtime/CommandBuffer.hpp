@@ -40,6 +40,32 @@ namespace vuk {
 		fixed_vector<FormatOrIgnore, VUK_MAX_ATTRIBUTES> list;
 	};
 
+	struct DrawIndirectCommand {
+		uint32_t vertexCount = {};
+		uint32_t instanceCount = {};
+		uint32_t firstVertex = {};
+		uint32_t firstInstance = {};
+
+		operator VkDrawIndirectCommand const&() const noexcept {
+			return *reinterpret_cast<const VkDrawIndirectCommand*>(this);
+		}
+
+		operator VkDrawIndirectCommand&() noexcept {
+			return *reinterpret_cast<VkDrawIndirectCommand*>(this);
+		}
+
+		bool operator==(VkDrawIndirectCommand const& rhs) const noexcept {
+			return (vertexCount == rhs.vertexCount) && (instanceCount == rhs.instanceCount) && (firstVertex == rhs.firstVertex) &&
+			       (firstInstance == rhs.firstInstance);
+		}
+
+		bool operator!=(VkDrawIndirectCommand const& rhs) const noexcept {
+			return !operator==(rhs);
+		}
+	};
+	static_assert(sizeof(DrawIndirectCommand) == sizeof(VkDrawIndirectCommand), "struct and wrapper have different size!");
+	static_assert(std::is_standard_layout_v<DrawIndirectCommand>, "struct wrapper is not a standard layout!");
+
 	struct DrawIndexedIndirectCommand {
 		uint32_t indexCount = {};
 		uint32_t instanceCount = {};
@@ -472,6 +498,15 @@ namespace vuk {
 		/// @param first_vertex Index of the first vertex to draw
 		/// @param first_instance Index of the first instance to draw
 		CommandBuffer& draw(size_t vertex_count, size_t instance_count, size_t first_vertex, size_t first_instance);
+
+		/// @brief Issue an indirect draw
+		/// @param command_count Number of indirect commands to be used
+		/// @param indirect_buffer Buffer of indirect commands
+		CommandBuffer& draw_indirect(size_t command_count, const Buffer& indirect_buffer);
+		/// @brief Issue an indirect draw
+		/// @param commands Indirect commands to be uploaded and used for this draw
+		CommandBuffer& draw_indirect(std::span<DrawIndirectCommand> commands);
+
 		/// @brief Isuse an indexed draw
 		/// @param index_count Number of vertices to draw
 		/// @param instance_count Number of instances to draw
