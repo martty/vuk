@@ -41,9 +41,7 @@ namespace vuk {
 		}
 
 		auto& acqrel = node->acqrel;
-		if (acqrel->status == Signal::Status::eDisarmed && !node->module) {
-			return { expected_error, RenderGraphException{ "Tried to submit without a module" } };
-		} else if (acqrel->status == Signal::Status::eHostAvailable || acqrel->status == Signal::Status::eSynchronizable) {
+		if (acqrel->status == Signal::Status::eHostAvailable || acqrel->status == Signal::Status::eSynchronizable) {
 			return { expected_value }; // nothing to do
 		} else {
 			auto erg = compiler.link(std::span{ &node, 1 }, options);

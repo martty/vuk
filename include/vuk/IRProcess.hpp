@@ -39,7 +39,6 @@ namespace vuk {
 
 		std::vector<Ref> pass_reads;
 
-		std::shared_ptr<IRModule> cg_module;
 		robin_hood::unordered_flat_map<uint32_t, Type*> type_map;
 		std::vector<std::shared_ptr<ExtNode>> refs;
 		std::vector<std::shared_ptr<ExtNode>> depnodes;

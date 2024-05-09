@@ -664,6 +664,11 @@ namespace vuk {
 			base = cur = arena;
 		}
 
+		void reset() {
+			next.reset();
+			base = cur = arena;
+		}
+
 		void* ensure_space(size_t ns) {
 			if ((size - (cur - base)) < ns) {
 				grow();
@@ -828,7 +833,6 @@ namespace vuk {
 			return builtin_swapchain;
 		}
 
-		std::vector<std::shared_ptr<IRModule>> subgraphs;
 		// uint64_t current_hash = 0;
 
 		Node* emplace_op(Node v) {
@@ -837,10 +841,6 @@ namespace vuk {
 
 		Type* emplace_type(Type t) {
 			return type_arena.emplace(std::move(t));
-		}
-
-		void reference_module(std::shared_ptr<IRModule> other) {
-			subgraphs.emplace_back(std::move(other));
 		}
 
 		TypeDebugInfo* allocate_type_debug_info(std::string_view name) {
@@ -1177,22 +1177,24 @@ namespace vuk {
 		}
 	};
 
+	inline thread_local IRModule current_module;
+
 	struct ExtNode {
-		ExtNode(std::shared_ptr<IRModule> module, Node* node, std::vector<std::shared_ptr<ExtNode>> deps) : module(std::move(module)), deps(std::move(deps)) {
+		ExtNode(Node* node, std::vector<std::shared_ptr<ExtNode>> deps) : deps(std::move(deps)) {
 			owned_acqrel = std::make_unique<AcquireRelease>();
 			acqrel = owned_acqrel.get();
 			if (node->kind != Node::RELEASE && node->kind != Node::ACQUIRE) {
-				this->node = this->module->make_splice(node, acqrel);
+				this->node = current_module.make_splice(node, acqrel);
 			} else {
 				this->node = node;
 			}
 		}
 
-		ExtNode(std::shared_ptr<IRModule> module, Node* node, std::shared_ptr<ExtNode> dep) : module(std::move(module)) {
+		ExtNode(Node* node, std::shared_ptr<ExtNode> dep) {
 			owned_acqrel = std::make_unique<AcquireRelease>();
 			acqrel = owned_acqrel.get();
 			if (node->kind != Node::RELEASE && node->kind != Node::ACQUIRE) {
-				this->node = this->module->make_splice(node, acqrel);
+				this->node = current_module.make_splice(node, acqrel);
 			} else {
 				this->node = node;
 			}
@@ -1201,12 +1203,12 @@ namespace vuk {
 		}
 
 		~ExtNode() {
-			if (module) {
+			if (owned_acqrel) {
 				if (node->kind == Node::SPLICE) {
 					node->splice.rel_acq = nullptr;
 					for (auto i = 0; i < node->splice.values.size(); i++) {
 						auto& v = node->splice.values[i];
-						if (node->type[i] == module->builtin_buffer) {
+						if (node->type[i] == current_module.builtin_buffer) {
 							delete (Buffer*)v;
 						} else {
 							delete (ImageAttachment*)v;
@@ -1215,7 +1217,7 @@ namespace vuk {
 
 					delete node->splice.values.data();
 				} else if (node->kind == Node::RELEASE) {
-					if (node->release.src.type() == module->builtin_buffer) {
+					if (node->release.src.type() == current_module.builtin_buffer) {
 						delete (Buffer*)node->release.value;
 					} else {
 						delete (ImageAttachment*)node->release.value;
@@ -1235,10 +1237,9 @@ namespace vuk {
 			if (node->kind == Node::SPLICE) {
 				node->splice.rel_acq = nullptr;
 			}
-			node = this->module->make_splice(new_node, acqrel);
+			node = current_module.make_splice(new_node, acqrel);
 		}
 
-		std::shared_ptr<IRModule> module;
 		AcquireRelease* acqrel;
 		std::unique_ptr<AcquireRelease> owned_acqrel;
 		std::vector<std::shared_ptr<ExtNode>> deps;

@@ -290,13 +290,13 @@ public:
 	}
 
 	template<typename... T>
-	static auto fill_arg_ty(IRModule& rg, const std::tuple<T...>& args, std::vector<Type*>& arg_types) {
-		(arg_types.emplace_back(rg.make_imbued_ty(std::get<T>(args).src.type(), T::access)), ...);
+	static auto fill_arg_ty(const std::tuple<T...>& args, std::vector<Type*>& arg_types) {
+		(arg_types.emplace_back(current_module.make_imbued_ty(std::get<T>(args).src.type(), T::access)), ...);
 	}
 
 	template<typename... T>
-	static auto fill_ret_ty(IRModule& rg, std::array<size_t, sizeof...(T)> idxs, const std::tuple<T...>& args, std::vector<Type*>& ret_types) {
-		(ret_types.emplace_back(rg.make_aliased_ty(Type::stripped(std::get<T>(args).src.type()), 0)), ...);
+	static auto fill_ret_ty(std::array<size_t, sizeof...(T)> idxs, const std::tuple<T...>& args, std::vector<Type*>& ret_types) {
+		(ret_types.emplace_back(current_module.make_aliased_ty(Type::stripped(std::get<T>(args).src.type()), 0)), ...);
 		for (auto i = 0; i < ret_types.size(); i++) {
 			ret_types[i]->aliased.ref_idx = idxs[i];
 		}
@@ -332,35 +332,32 @@ public:
 			// when this function is called, we weave in this call into the IR
 			return [untyped_cb = std::move(callback), name, scheduling_info, inner_scope = VUK_CALL](Value<typename T::type>... args, VUK_CALLSTACK) mutable {
 				auto& first = First(args...);
-				auto rgp = first.get_render_graph();
-				IRModule& rg = *rgp.get();
 
 				bool reuse_node =
 				    first.node.use_count() == 1 && first.node->get_node()->kind != Node::ACQUIRE && first.node->acqrel->status == Signal::Status::eDisarmed;
 
 				std::vector<Type*> arg_types;
 				std::tuple arg_tuple_as_a = { T{ nullptr, args.get_peeled_head() }... };
-				fill_arg_ty(rg, arg_tuple_as_a, arg_types);
+				fill_arg_ty(arg_tuple_as_a, arg_types);
 
 				std::vector<Type*> ret_types;
 				if constexpr (is_tuple<Ret>::value) {
 					auto [idxs, ret_tuple] = intersect_tuples<std::tuple<T...>, Ret>(arg_tuple_as_a);
-					fill_ret_ty(rg, idxs, ret_tuple, ret_types);
+					fill_ret_ty(idxs, ret_tuple, ret_types);
 				} else if constexpr (!std::is_same_v<Ret, void>) {
 					auto [idxs, ret_tuple] = intersect_tuples<std::tuple<T...>, std::tuple<Ret>>(arg_tuple_as_a);
-					fill_ret_ty(rg, idxs, ret_tuple, ret_types);
+					fill_ret_ty(idxs, ret_tuple, ret_types);
 				}
-				auto opaque_fn_ty = rg.make_opaque_fn_ty(arg_types, ret_types, vuk::DomainFlagBits::eAny, untyped_cb);
-				opaque_fn_ty->debug_info = rg.allocate_type_debug_info(name.c_str());
-				auto opaque_fn = rg.make_declare_fn(opaque_fn_ty);
-				Node* node = rg.make_call(opaque_fn, args.peel_head()...);
-				node->scheduling_info = new (rg.payload_arena.ensure_space(sizeof(SchedulingInfo))) SchedulingInfo(scheduling_info);
+				auto opaque_fn_ty = current_module.make_opaque_fn_ty(arg_types, ret_types, vuk::DomainFlagBits::eAny, untyped_cb);
+				opaque_fn_ty->debug_info = current_module.allocate_type_debug_info(name.c_str());
+				auto opaque_fn = current_module.make_declare_fn(opaque_fn_ty);
+				Node* node = current_module.make_call(opaque_fn, args.peel_head()...);
+				node->scheduling_info = new (current_module.payload_arena.ensure_space(sizeof(SchedulingInfo))) SchedulingInfo(scheduling_info);
 				inner_scope.parent = &_scope;
-				rg.set_source_location(node, inner_scope);
+				current_module.set_source_location(node, inner_scope);
 
 				std::vector<std::shared_ptr<ExtNode>> dependent_nodes;
 				[reuse_node, &dependent_nodes](auto& first, auto&... rest) {
-					(first.get_render_graph()->reference_module(rest.get_render_graph()), ...);
 					if (!reuse_node) {
 						dependent_nodes.push_back(std::move(first.node));
 					}
@@ -370,7 +367,7 @@ public:
 				if (reuse_node) {
 					first.node->mutate(node);
 				}
-				auto extnode = reuse_node ? std::move(first.node) : std::make_shared<ExtNode>(ExtNode(rgp, node, std::move(dependent_nodes)));
+				auto extnode = reuse_node ? std::move(first.node) : std::make_shared<ExtNode>(ExtNode(node, std::move(dependent_nodes)));
 				if (reuse_node) {
 					extnode->deps.insert(extnode->deps.end(), std::make_move_iterator(dependent_nodes.begin()), std::make_move_iterator(dependent_nodes.end()));
 				}
@@ -393,131 +390,115 @@ public:
 		    name, std::forward<F>(body), scheduling_info, VUK_CALL);
 	}
 
-	inline ExtRef make_ext_ref(std::shared_ptr<IRModule> rg, Ref ref, std::vector<std::shared_ptr<ExtNode>> deps = {}) {
-		return ExtRef(std::make_shared<ExtNode>(rg, ref.node, std::move(deps)), ref);
+	inline ExtRef make_ext_ref(Ref ref, std::vector<std::shared_ptr<ExtNode>> deps = {}) {
+		return ExtRef(std::make_shared<ExtNode>(ref.node, std::move(deps)), ref);
 	}
 
 	[[nodiscard]] inline Value<ImageAttachment> declare_ia(Name name, ImageAttachment ia = {}, VUK_CALLSTACK) {
-		std::shared_ptr<IRModule> rg = std::make_shared<IRModule>();
-		Ref ref = rg->make_declare_image(ia);
-		rg->name_output(ref, name.c_str());
-		rg->set_source_location(ref.node, VUK_CALL);
-		return { make_ext_ref(rg, ref) };
+		Ref ref = current_module.make_declare_image(ia);
+		current_module.name_output(ref, name.c_str());
+		current_module.set_source_location(ref.node, VUK_CALL);
+		return { make_ext_ref(ref) };
 	}
 
 	[[nodiscard]] inline Value<ImageAttachment> acquire_ia(Name name, ImageAttachment ia, Access access, VUK_CALLSTACK) {
-		std::shared_ptr<IRModule> rg = std::make_shared<IRModule>();
-		Ref ref = rg->make_acquire(rg->get_builtin_image(), nullptr, ia);
-		auto ext_ref = make_ext_ref(rg, ref);
+		Ref ref = current_module.make_acquire(current_module.get_builtin_image(), nullptr, ia);
+		auto ext_ref = make_ext_ref(ref);
 		ext_ref.node->owned_acqrel = std::make_unique<AcquireRelease>();
 		ext_ref.node->owned_acqrel->status = Signal::Status::eHostAvailable;
 		ext_ref.node->owned_acqrel->last_use.resize(1);
 		ext_ref.node->owned_acqrel->last_use[0] = to_use(access);
 		ext_ref.node->acqrel = ext_ref.node->owned_acqrel.get();
 		ref.node->acquire.acquire = ext_ref.node->owned_acqrel.get();
-		rg->name_output(ref, name.c_str());
-		rg->set_source_location(ref.node, VUK_CALL);
+		current_module.name_output(ref, name.c_str());
+		current_module.set_source_location(ref.node, VUK_CALL);
 		return { std::move(ext_ref) };
 	}
 
 	[[nodiscard]] inline Value<Buffer> declare_buf(Name name, Buffer buf = {}, VUK_CALLSTACK) {
-		std::shared_ptr<IRModule> rg = std::make_shared<IRModule>();
-		Ref ref = rg->make_declare_buffer(buf);
-		rg->name_output(ref, name.c_str());
-		rg->set_source_location(ref.node, VUK_CALL);
-		return { make_ext_ref(rg, ref) };
+		Ref ref = current_module.make_declare_buffer(buf);
+		current_module.name_output(ref, name.c_str());
+		current_module.set_source_location(ref.node, VUK_CALL);
+		return { make_ext_ref(ref) };
 	}
 
 	[[nodiscard]] inline Value<Buffer> acquire_buf(Name name, Buffer buf, Access access, VUK_CALLSTACK) {
-		std::shared_ptr<IRModule> rg = std::make_shared<IRModule>();
-		Ref ref = rg->make_acquire(rg->get_builtin_buffer(), nullptr, buf);
-		auto ext_ref = make_ext_ref(rg, ref);
+		Ref ref = current_module.make_acquire(current_module.get_builtin_buffer(), nullptr, buf);
+		auto ext_ref = make_ext_ref(ref);
 		ext_ref.node->owned_acqrel = std::make_unique<AcquireRelease>();
 		ext_ref.node->acqrel = ext_ref.node->owned_acqrel.get();
 		ext_ref.node->owned_acqrel->status = Signal::Status::eHostAvailable;
 		ext_ref.node->owned_acqrel->last_use.resize(1);
 		ext_ref.node->owned_acqrel->last_use[0] = to_use(access);
 		ref.node->acquire.acquire = ext_ref.node->owned_acqrel.get();
-		rg->name_output(ref, name.c_str());
-		rg->set_source_location(ref.node, VUK_CALL);
+		current_module.name_output(ref, name.c_str());
+		current_module.set_source_location(ref.node, VUK_CALL);
 		return { std::move(ext_ref) };
 	}
 
 	// TODO: due to the pack, we can't do the source_location::current() trick
 	template<class T, class... Args>
 	[[nodiscard]] inline Value<T[]> declare_array(Name name, Value<T> arg, Args... args) {
-		auto rg = arg.get_render_graph();
 		std::vector<std::shared_ptr<ExtNode>> deps;
-		(rg->subgraphs.push_back(args.get_render_graph()), ...);
 		std::array refs = { arg.get_head(), args.get_head()... };
 		deps = { arg.node, args.node... };
-		Ref ref = rg->make_declare_array(Type::stripped(refs[0].type()), refs);
-		rg->name_output(ref, name.c_str());
-		return { make_ext_ref(rg, ref, deps) };
+		Ref ref = current_module.make_declare_array(Type::stripped(refs[0].type()), refs);
+		current_module.name_output(ref, name.c_str());
+		return { make_ext_ref(ref, deps) };
 	}
 
 	template<class T>
 	[[nodiscard]] inline Value<T[]> declare_array(Name name, std::span<const Value<T>> args, VUK_CALLSTACK) {
-		auto rg = args.size() > 0 ? args[0].get_render_graph() : std::make_shared<IRModule>();
 		std::vector<Ref> refs;
 		std::vector<std::shared_ptr<ExtNode>> deps;
 		for (size_t i = 0; i < args.size(); i++) {
 			auto& arg = args[i];
-			if (i != 0) {
-				rg->subgraphs.push_back(arg.get_render_graph());
-			}
 			refs.push_back(arg.get_head());
 			deps.push_back(arg.node);
 		}
 		Type* t;
 		if constexpr (std::is_same_v<T, vuk::ImageAttachment>) {
-			t = rg->get_builtin_image();
+			t = current_module.get_builtin_image();
 		} else if constexpr (std::is_same_v<T, vuk::Buffer>) {
-			t = rg->get_builtin_buffer();
+			t = current_module.get_builtin_buffer();
 		}
-		Ref ref = rg->make_declare_array(t, refs);
-		rg->name_output(ref, name.c_str());
-		rg->set_source_location(ref.node, VUK_CALL);
-		return { make_ext_ref(rg, ref, std::move(deps)) };
+		Ref ref = current_module.make_declare_array(t, refs);
+		current_module.name_output(ref, name.c_str());
+		current_module.set_source_location(ref.node, VUK_CALL);
+		return { make_ext_ref(ref, std::move(deps)) };
 	}
 
 	template<class T>
 	[[nodiscard]] inline Value<T[]> declare_array(Name name, std::span<Value<T>> args, VUK_CALLSTACK) {
-		auto rg = args.size() > 0 ? args[0].get_render_graph() : std::make_shared<IRModule>();
 		std::vector<Ref> refs;
 		std::vector<std::shared_ptr<ExtNode>> deps;
 		for (size_t i = 0; i < args.size(); i++) {
 			auto& arg = args[i];
-			if (i != 0) {
-				rg->subgraphs.push_back(arg.get_render_graph());
-			}
 			refs.push_back(arg.get_head());
 			deps.push_back(arg.node);
 		}
 		Type* t;
 		if constexpr (std::is_same_v<T, vuk::ImageAttachment>) {
-			t = rg->get_builtin_image();
+			t = current_module.get_builtin_image();
 		} else if constexpr (std::is_same_v<T, vuk::Buffer>) {
-			t = rg->get_builtin_buffer();
+			t = current_module.get_builtin_buffer();
 		}
-		Ref ref = rg->make_declare_array(t, refs);
-		rg->name_output(ref, name.c_str());
-		rg->set_source_location(ref.node, VUK_CALL);
-		return { make_ext_ref(rg, ref, std::move(deps)) };
+		Ref ref = current_module.make_declare_array(t, refs);
+		current_module.name_output(ref, name.c_str());
+		current_module.set_source_location(ref.node, VUK_CALL);
+		return { make_ext_ref(ref, std::move(deps)) };
 	}
 
 	[[nodiscard]] inline Value<Swapchain> declare_swapchain(Swapchain& bundle, VUK_CALLSTACK) {
-		std::shared_ptr<IRModule> rg = std::make_shared<IRModule>();
-		Ref ref = rg->make_declare_swapchain(bundle);
-		rg->set_source_location(ref.node, VUK_CALL);
-		return { make_ext_ref(rg, ref) };
+		Ref ref = current_module.make_declare_swapchain(bundle);
+		current_module.set_source_location(ref.node, VUK_CALL);
+		return { make_ext_ref(ref) };
 	}
 
 	[[nodiscard]] inline Value<ImageAttachment> acquire_next_image(Name name, Value<Swapchain> in, VUK_CALLSTACK) {
-		auto rg = in.get_render_graph();
-		Ref ref = rg->make_acquire_next_image(in.get_head());
-		rg->name_output(ref, name.c_str());
-		rg->set_source_location(ref.node, VUK_CALL);
+		Ref ref = current_module.make_acquire_next_image(in.get_head());
+		current_module.name_output(ref, name.c_str());
+		current_module.set_source_location(ref.node, VUK_CALL);
 		return std::move(in).transmute<ImageAttachment>(ref);
 	}
 

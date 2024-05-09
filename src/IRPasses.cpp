@@ -18,9 +18,9 @@ namespace vuk {
 		type_map.clear();
 		type_restore.clear();
 
-		type_map[Type::hash(cg_module->get_builtin_buffer())] = cg_module->get_builtin_buffer();
-		type_map[Type::hash(cg_module->get_builtin_image())] = cg_module->get_builtin_image();
-		type_map[Type::hash(cg_module->get_builtin_swapchain())] = cg_module->get_builtin_swapchain();
+		type_map[Type::hash(current_module.get_builtin_buffer())] = current_module.get_builtin_buffer();
+		type_map[Type::hash(current_module.get_builtin_image())] = current_module.get_builtin_image();
+		type_map[Type::hash(current_module.get_builtin_swapchain())] = current_module.get_builtin_swapchain();
 
 		auto unify_type = [&](Type*& t) {
 			auto [v, succ] = type_map.try_emplace(Type::hash(t), t);
@@ -34,7 +34,7 @@ namespace vuk {
 			}
 
 			for (auto& t : node->type) {
-				t = cg_module->copy_type(t);
+				t = current_module.copy_type(t);
 				if (t->kind == Type::ALIASED_TY) {
 					assert(t->aliased.T->kind != Type::ALIASED_TY);
 					unify_type(t->aliased.T);
@@ -51,9 +51,9 @@ namespace vuk {
 			}
 		}
 
-		cg_module->builtin_buffer = type_map[Type::hash(cg_module->builtin_buffer)];
-		cg_module->builtin_image = type_map[Type::hash(cg_module->builtin_image)];
-		cg_module->builtin_swapchain = type_map[Type::hash(cg_module->builtin_swapchain)];
+		current_module.builtin_buffer = type_map[Type::hash(current_module.builtin_buffer)];
+		current_module.builtin_image = type_map[Type::hash(current_module.builtin_image)];
+		current_module.builtin_swapchain = type_map[Type::hash(current_module.builtin_swapchain)];
 
 		return { expected_value };
 	}
@@ -409,7 +409,7 @@ namespace vuk {
 		auto placeholder_to_constant = [this]<class T>(Ref r, T value) {
 			if (r.node->kind == Node::PLACEHOLDER) {
 				r.node->kind = Node::CONSTANT;
-				r.node->constant.value = new (cg_module->payload_arena.ensure_space(sizeof(T))) T(value);
+				r.node->constant.value = new (current_module.payload_arena.ensure_space(sizeof(T))) T(value);
 			}
 		};
 
@@ -425,7 +425,7 @@ namespace vuk {
 			switch (node->kind) {
 			case Node::CONSTRUCT:
 				auto args_ptr = node->construct.args.data();
-				if (node->type[0] == cg_module->builtin_image) {
+				if (node->type[0] == current_module.builtin_image) {
 					auto ptr = &constant<ImageAttachment>(args_ptr[0]);
 					auto& value = constant<ImageAttachment>(args_ptr[0]);
 					if (value.extent.width > 0) {
@@ -455,7 +455,7 @@ namespace vuk {
 					if (value.level_count != VK_REMAINING_MIP_LEVELS) {
 						placeholder_to_ptr(args_ptr[9], &ptr->level_count);
 					}
-				} else if (node->type[0] == cg_module->builtin_buffer) {
+				} else if (node->type[0] == current_module.builtin_buffer) {
 					auto ptr = &constant<Buffer>(args_ptr[0]);
 					auto& value = constant<Buffer>(args_ptr[0]);
 					if (value.size != ~(0u)) {
@@ -518,7 +518,7 @@ namespace vuk {
 			}
 			case Node::CONSTRUCT: {
 				auto& args = node->construct.args;
-				if (node->type[0] == cg_module->builtin_image) {
+				if (node->type[0] == current_module.builtin_image) {
 					if (constant<ImageAttachment>(args[0]).image.image == VK_NULL_HANDLE) { // if there is no image, we will use base layer 0 and base mip 0
 						placeholder_to_constant(args[6], 0U);
 						placeholder_to_constant(args[8], 0U);
@@ -866,8 +866,6 @@ namespace vuk {
 		impl = new RGCImpl(arena);
 		impl->callbacks = compile_options.callbacks;
 
-		impl->cg_module = nodes[0]->module;
-
 		impl->refs.assign(nodes.begin(), nodes.end());
 
 		std::vector<std::shared_ptr<ExtNode>, short_alloc<std::shared_ptr<ExtNode>>> extnode_work_queue(*impl->arena_);
@@ -889,38 +887,17 @@ namespace vuk {
 		std::unordered_map<Ref, std::vector<Ref>> slices;
 
 		// linked-sea-of-nodes to list of nodes
-		std::vector<IRModule*, short_alloc<IRModule*>> work_queue(*impl->arena_);
-		std::unordered_set<IRModule*> visited;
-		for (auto& ref : impl->depnodes) {
-			auto mod = ref->module.get();
-			if (!visited.count(mod)) {
-				work_queue.push_back(mod);
-				visited.emplace(mod);
+		for (auto& n : current_module.op_arena) {
+			auto node = &n;
+			if (node->kind != Node::CONVERGE) {
+				impl->nodes.push_back(node);
 			}
-		}
-
-		while (!work_queue.empty()) {
-			auto mod = work_queue.back();
-			work_queue.pop_back();
-			for (auto& sg : mod->subgraphs) {
-				auto sg_mod = sg.get();
-				if (!visited.count(sg_mod)) {
-					work_queue.push_back(sg_mod);
-					visited.emplace(sg_mod);
-				}
+			switch (node->kind) {
+			case Node::SLICE: {
+				assert(node->slice.image.node->kind != Node::NOP);
+				slices[node->slice.image].push_back(first(node));
+				break;
 			}
-			for (auto& n : mod->op_arena) {
-				auto node = &n;
-				if (node->kind != Node::CONVERGE) {
-					impl->nodes.push_back(node);
-				}
-				switch (node->kind) {
-				case Node::SLICE: {
-					assert(node->slice.image.node->kind != Node::NOP);
-					slices[node->slice.image].push_back(first(node));
-					break;
-				}
-				}
 			}
 		}
 
@@ -951,7 +928,7 @@ namespace vuk {
 					r = r->next;
 				}
 				if (r->undef.node) { // depend on undefs indirectly via INDIRECT_DEPEND
-					auto idep = impl->cg_module->make_indirect_depend(r->undef.node, r->undef.index);
+					auto idep = current_module.make_indirect_depend(r->undef.node, r->undef.index);
 					tails.push_back(idep);
 					write.push_back(false);
 				} else if (r->reads.size() > 0) { // depend on reads indirectly via INDIRECT_DEPEND
@@ -962,7 +939,7 @@ namespace vuk {
 					write.push_back(false);
 				}
 			}
-			auto converged_base = impl->cg_module->make_converge(base, tails, write);
+			auto converged_base = current_module.make_converge(base, tails, write);
 			for (auto node : impl->nodes) {
 				if (node->kind == Node::SLICE) {
 					continue;
@@ -975,8 +952,8 @@ namespace vuk {
 							for (auto& t : tails) {
 								// TODO: multimodule dominance
 								/*
-								assert(in_module(*impl->cg_module, t.node));
-								if (!before_module(*impl->cg_module, t.node, node)) {
+								assert(in_module(*current_module., t.node));
+								if (!before_module(*current_module., t.node, node)) {
 								  return { expected_error, RenderGraphException{ "Convergence not dominated" } };
 								}
 								*/
@@ -989,8 +966,8 @@ namespace vuk {
 						if (node->variable_node.args[i] == base) {
 							for (auto& t : tails) {
 								// TODO: multimodule dominance
-								/* assert(in_module(*impl->cg_module, t.node));
-								if (!before_module(*impl->cg_module, t.node, node)) {
+								/* assert(in_module(*current_module., t.node));
+								if (!before_module(*current_module., t.node, node)) {
 								  return { expected_error, RenderGraphException{ "Convergence not dominated" } };
 								}*/
 							}
@@ -1023,6 +1000,8 @@ namespace vuk {
 						replaces.emplace_back(Replace{needle, replace_with});
 					}
 					node->kind = Node::NOP;
+					node->type = {};
+					node->generic_node.arg_count = 0;
 				} else {
 					switch (node->splice.rel_acq->status) {
 					case Signal::Status::eDisarmed: // means we have to signal this, keep
@@ -1030,8 +1009,8 @@ namespace vuk {
 					case Signal::Status::eSynchronizable: // means this is an acq instead
 					case Signal::Status::eHostAvailable:
 						for (size_t i = 0; i < node->splice.src.size(); i++) {
-							auto new_ref = impl->cg_module->make_acquire(node->type[i], node->splice.rel_acq, i, node->splice.values[i]);
-							replaces.emplace_back(Replace{Ref{ node, i }, new_ref});
+							auto new_ref = current_module.make_acquire(node->type[i], node->splice.rel_acq, i, node->splice.values[i]);
+							replaces.emplace_back(Replace{ Ref{ node, i }, new_ref });
 						}
 						break;
 					}
@@ -1041,20 +1020,14 @@ namespace vuk {
 			case Node::RELEASE: {
 				if (node->links[0].reads.size() > 0 || node->links[0].undef) {
 					auto needle = Ref{ node, 0 };
-					/* if (node->release.release->status == Signal::Status::eDisarmed) {
-					  auto replace_with = first(impl->cg_module->make_splice(node->release.src.node, node->release.release));
-					  replaces.emplace_back(needle, replace_with);
-					} else {
-					  auto replace_with = impl->cg_module->make_acquire(node->type[0], node->release.release, node->release.value);
-					  replaces.emplace_back(needle, replace_with);
-					}*/
 					if (node->release.release->status == Signal::Status::eDisarmed) {
-						memcpy(node, impl->cg_module->make_splice(node->release.src.node, node->release.release), sizeof(Node));
+						auto new_ref = current_module.make_splice(node->release.src.node, node->release.release);
+						replaces.emplace_back(needle, first(new_ref));
 					} else {
 						Node acq_node{ .kind = Node::ACQUIRE,
 							             .type = node->type,
 							             .acquire = { .value = node->release.value, .acquire = node->release.release, .index = 0 } };
-						memcpy(node, &acq_node, sizeof(Node));
+						replaces.emplace_back(needle, first(current_module.emplace_op(acq_node)));
 					}
 				}
 			}
