@@ -19,7 +19,7 @@
 
 namespace vuk {
 	struct TypeDebugInfo {
-		std::string_view name;
+		std::string name;
 	};
 
 	using UserCallbackType = std::function<void(CommandBuffer&, std::span<void*>, std::span<void*>, std::span<void*>)>;
@@ -769,8 +769,8 @@ namespace vuk {
 
 		plf::colony<Node /*, inline_alloc<Node, 4 * 1024>*/> op_arena;
 		plf::colony<UserCallbackType> ucbs;
+		plf::colony<Type*> type_refs;
 
-		InlineArena<std::byte, 4 * 1024> payload_arena;
 		InlineArena<Type, 16 * sizeof(Type)> type_arena;
 
 		Type* builtin_image = nullptr;
@@ -781,18 +781,18 @@ namespace vuk {
 			if (!builtin_image) {
 				auto u32_t = u32();
 				auto mem_ty = emplace_type(Type{ .kind = Type::MEMORY_TY });
-				auto image_ = new (payload_arena.ensure_space(sizeof(Type* [9]))) Type* [9] {
+				auto image_ = new Type* [9] {
 					u32_t, u32_t, u32_t, mem_ty, mem_ty, u32_t, u32_t, u32_t, u32_t
 				};
-				auto image_offsets = new (payload_arena.ensure_space(sizeof(size_t[9]))) size_t[9]{ offsetof(ImageAttachment, extent) + offsetof(Extent3D, width),
-					                                                                                  offsetof(ImageAttachment, extent) + offsetof(Extent3D, height),
-					                                                                                  offsetof(ImageAttachment, extent) + offsetof(Extent3D, depth),
-					                                                                                  offsetof(ImageAttachment, format),
-					                                                                                  offsetof(ImageAttachment, sample_count),
-					                                                                                  offsetof(ImageAttachment, base_layer),
-					                                                                                  offsetof(ImageAttachment, layer_count),
-					                                                                                  offsetof(ImageAttachment, base_level),
-					                                                                                  offsetof(ImageAttachment, level_count) };
+				auto image_offsets = new size_t[9]{ offsetof(ImageAttachment, extent) + offsetof(Extent3D, width),
+					                                  offsetof(ImageAttachment, extent) + offsetof(Extent3D, height),
+					                                  offsetof(ImageAttachment, extent) + offsetof(Extent3D, depth),
+					                                  offsetof(ImageAttachment, format),
+					                                  offsetof(ImageAttachment, sample_count),
+					                                  offsetof(ImageAttachment, base_layer),
+					                                  offsetof(ImageAttachment, layer_count),
+					                                  offsetof(ImageAttachment, base_level),
+					                                  offsetof(ImageAttachment, level_count) };
 				builtin_image = emplace_type(Type{ .kind = Type::COMPOSITE_TY,
 				                                   .size = sizeof(ImageAttachment),
 				                                   .debug_info = allocate_type_debug_info("image"),
@@ -803,10 +803,10 @@ namespace vuk {
 
 		Type*& get_builtin_buffer() {
 			if (!builtin_buffer) {
-				auto buffer_ = new (payload_arena.ensure_space(sizeof(Type* [1]))) Type* [1] {
+				auto buffer_ = new Type* [1] {
 					u32()
 				};
-				auto buffer_offsets = new (payload_arena.ensure_space(sizeof(size_t[1]))) size_t[1]{ offsetof(Buffer, size) };
+				auto buffer_offsets = new size_t[1]{ offsetof(Buffer, size) };
 				builtin_buffer = emplace_type(Type{ .kind = Type::COMPOSITE_TY,
 				                                    .size = sizeof(Buffer),
 				                                    .debug_info = allocate_type_debug_info("buffer"),
@@ -820,10 +820,10 @@ namespace vuk {
 				auto arr_ty = emplace_type(Type{ .kind = Type::ARRAY_TY,
 				                                 .size = 16 * get_builtin_image()->size,
 				                                 .array = { .T = get_builtin_image(), .count = 16, .stride = get_builtin_image()->size } });
-				auto swp_ = new (payload_arena.ensure_space(sizeof(Type* [1]))) Type* [1] {
+				auto swp_ = new Type* [1] {
 					arr_ty
 				};
-				auto offsets = new (payload_arena.ensure_space(sizeof(size_t[1]))) size_t[1]{ 0 };
+				auto offsets = new size_t[1]{ 0 };
 
 				builtin_swapchain = emplace_type(Type{ .kind = Type::COMPOSITE_TY,
 				                                       .size = sizeof(Swapchain),
@@ -844,24 +844,24 @@ namespace vuk {
 		}
 
 		TypeDebugInfo* allocate_type_debug_info(std::string_view name) {
-			return new (payload_arena.ensure_space(sizeof(TypeDebugInfo))) TypeDebugInfo{ payload_arena.allocate_string(name) };
+			return new TypeDebugInfo{ std::string(name) };
 		}
 
 		void name_output(Ref ref, std::string_view name) {
 			auto node = ref.node;
 			if (!node->debug_info) {
-				node->debug_info = new (payload_arena.ensure_space(sizeof(NodeDebugInfo))) NodeDebugInfo;
+				node->debug_info = new NodeDebugInfo;
 			}
 			auto& names = ref.node->debug_info->result_names;
-			if (names.size() <= ref.index) {
-				names = payload_arena.allocate_span(names, ref.index + 1);
+			/* if (names.size() <= ref.index) {
+			  names = payload_arena.allocate_span(names, ref.index + 1);
 			}
-			names[ref.index] = payload_arena.allocate_string(name);
+			names[ref.index] = payload_arena.allocate_string(name);*/
 		}
 
 		void set_source_location(Node* node, SourceLocationAtFrame loc) {
 			if (!node->debug_info) {
-				node->debug_info = new (payload_arena.ensure_space(sizeof(NodeDebugInfo))) NodeDebugInfo;
+				node->debug_info = new NodeDebugInfo;
 			}
 			auto p = &loc;
 			size_t cnt = 0;
@@ -869,7 +869,7 @@ namespace vuk {
 				cnt++;
 				p = p->parent;
 			} while (p != nullptr);
-			node->debug_info->trace = std::span((vuk::source_location*)payload_arena.ensure_space(sizeof(vuk::source_location) * cnt), cnt);
+			node->debug_info->trace = std::span(new vuk::source_location[cnt], cnt);
 			p = &loc;
 			cnt = 0;
 			do {
@@ -902,23 +902,21 @@ namespace vuk {
 		Ref make_constant(T value) {
 			Type** ty;
 			if constexpr (std::is_same_v<T, uint64_t>) {
-				ty = new (payload_arena.ensure_space(sizeof(Type*))) Type*(u64());
+				ty = new Type*(u64());
 			} else if constexpr (std::is_same_v<T, uint32_t>) {
-				ty = new (payload_arena.ensure_space(sizeof(Type*))) Type*(u32());
+				ty = new Type*(u32());
 			} else {
-				ty = new (payload_arena.ensure_space(sizeof(Type*))) Type*(emplace_type(Type{ .kind = Type::MEMORY_TY }));
+				ty = new Type*(emplace_type(Type{ .kind = Type::MEMORY_TY }));
 			}
-			return first(emplace_op(
-			    Node{ .kind = Node::CONSTANT, .type = std::span{ ty, 1 }, .constant = { .value = new (payload_arena.ensure_space(sizeof(T))) T(value) } }));
+			return first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ ty, 1 }, .constant = { .value = new T(value) } }));
 		}
 
 		Ref make_declare_image(ImageAttachment value) {
-			auto ptr = new (payload_arena.ensure_space(sizeof(ImageAttachment)))
-			    ImageAttachment(value); /* rest extent_x extent_y extent_z format samples base_layer layer_count base_level level_count */
-			auto args_ptr = new (payload_arena.ensure_space(sizeof(Ref) * 10)) Ref[10];
-			auto mem_ty = new (payload_arena.ensure_space(sizeof(Type*))) Type*(emplace_type(Type{ .kind = Type::MEMORY_TY }));
+			auto ptr = new ImageAttachment(value); /* rest extent_x extent_y extent_z format samples base_layer layer_count base_level level_count */
+			auto args_ptr = new Ref[10];
+			auto mem_ty = new Type*(emplace_type(Type{ .kind = Type::MEMORY_TY }));
 			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = ptr } }));
-			auto u32_ty = new (payload_arena.ensure_space(sizeof(Type*))) Type*(u32());
+			auto u32_ty = new Type*(u32());
 			if (value.extent.width > 0) {
 				args_ptr[1] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ u32_ty, 1 }, .constant = { .value = &ptr->extent.width } }));
 			} else {
@@ -969,11 +967,11 @@ namespace vuk {
 		}
 
 		Ref make_declare_buffer(Buffer value) {
-			auto buf_ptr = new (payload_arena.ensure_space(sizeof(Buffer))) Buffer(value); /* rest size */
-			auto args_ptr = new (payload_arena.ensure_space(sizeof(Ref[2]))) Ref[2];
-			auto mem_ty = new (payload_arena.ensure_space(sizeof(Type*))) Type*(emplace_type(Type{ .kind = Type::MEMORY_TY }));
+			auto buf_ptr = new Buffer(value); /* rest size */
+			auto args_ptr = new Ref[2];
+			auto mem_ty = new Type*(emplace_type(Type{ .kind = Type::MEMORY_TY }));
 			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = buf_ptr } }));
-			auto u64_ty = new (payload_arena.ensure_space(sizeof(Type*))) Type*(u64());
+			auto u64_ty = new Type*(u64());
 			if (value.size != ~(0u)) {
 				args_ptr[1] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ u64_ty, 1 }, .constant = { .value = &buf_ptr->size } }));
 			} else {
@@ -984,18 +982,18 @@ namespace vuk {
 		}
 
 		Ref make_declare_array(Type* type, std::span<Ref> args) {
-			auto arr_ty = new (payload_arena.ensure_space(sizeof(Type*))) Type*(
+			auto arr_ty = new Type*(
 			    emplace_type(Type{ .kind = Type::ARRAY_TY, .size = args.size() * type->size, .array = { .T = type, .count = args.size(), .stride = type->size } }));
-			auto args_ptr = new (payload_arena.ensure_space(sizeof(Ref) * (args.size() + 1))) Ref[args.size() + 1];
-			auto mem_ty = new (payload_arena.ensure_space(sizeof(Type*))) Type*(emplace_type(Type{ .kind = Type::MEMORY_TY }));
+			auto args_ptr = new Ref[args.size() + 1];
+			auto mem_ty = new Type*(emplace_type(Type{ .kind = Type::MEMORY_TY }));
 			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = nullptr } }));
 			std::copy(args.begin(), args.end(), args_ptr + 1);
 			return first(emplace_op(Node{ .kind = Node::CONSTRUCT, .type = std::span{ arr_ty, 1 }, .construct = { .args = std::span(args_ptr, args.size() + 1) } }));
 		}
 
 		Ref make_declare_swapchain(Swapchain& bundle) {
-			auto args_ptr = new (payload_arena.ensure_space(sizeof(Ref[2]))) Ref[2];
-			auto mem_ty = new (payload_arena.ensure_space(sizeof(Type*))) Type*(emplace_type(Type{ .kind = Type::MEMORY_TY }));
+			auto args_ptr = new Ref[2];
+			auto mem_ty = new Type*(emplace_type(Type{ .kind = Type::MEMORY_TY }));
 			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = &bundle } }));
 			std::vector<Ref> imgs;
 			for (auto i = 0; i < bundle.images.size(); i++) {
@@ -1009,12 +1007,12 @@ namespace vuk {
 		Ref make_extract(Ref composite, Ref index) {
 			auto stripped = Type::stripped(composite.type());
 			assert(stripped->kind == Type::ARRAY_TY);
-			auto ty = new (payload_arena.ensure_space(sizeof(Type*))) Type*(stripped->array.T);
+			auto ty = new Type*(stripped->array.T);
 			return first(emplace_op(Node{ .kind = Node::EXTRACT, .type = std::span{ ty, 1 }, .extract = { .composite = composite, .index = index } }));
 		}
 
 		Ref make_extract(Ref composite, uint64_t index) {
-			auto ty = new (payload_arena.ensure_space(sizeof(Type*))) Type*;
+			auto ty = new Type*;
 			auto stripped = Type::stripped(composite.type());
 			if (stripped->kind == Type::ARRAY_TY) {
 				*ty = stripped->array.T;
@@ -1027,7 +1025,7 @@ namespace vuk {
 
 		Ref make_slice(Ref image, Ref base_level, Ref level_count, Ref base_layer, Ref layer_count) {
 			auto stripped = Type::stripped(image.type());
-			auto ty = new (payload_arena.ensure_space(sizeof(Type*))) Type*(stripped);
+			auto ty = new Type*(stripped);
 			return first(emplace_op(
 			    Node{ .kind = Node::SLICE,
 			          .type = std::span{ ty, 1 },
@@ -1036,12 +1034,12 @@ namespace vuk {
 
 		Ref make_converge(Ref ref, std::span<Ref> deps, std::span<char> write) {
 			auto stripped = Type::stripped(ref.type());
-			auto ty = new (payload_arena.ensure_space(sizeof(Type*))) Type*(stripped);
+			auto ty = new Type*(stripped);
 
-			auto deps_ptr = new (payload_arena.ensure_space(sizeof(Ref) * (deps.size() + 1))) Ref[deps.size() + 1];
+			auto deps_ptr = new Ref[deps.size() + 1];
 			deps_ptr[0] = ref;
 			std::copy(deps.begin(), deps.end(), deps_ptr + 1);
-			auto rw_ptr = new (payload_arena.ensure_space(sizeof(bool) * (deps.size()))) bool[deps.size()];
+			auto rw_ptr = new bool[deps.size()];
 			std::copy(write.begin(), write.end(), rw_ptr);
 			return first(emplace_op(Node{ .kind = Node::CONVERGE,
 			                              .type = std::span{ ty, 1 },
@@ -1049,7 +1047,7 @@ namespace vuk {
 		}
 
 		Ref make_cast(Type* dst_type, Ref src) {
-			auto ty = new (payload_arena.ensure_space(sizeof(Type*))) Type*(dst_type);
+			auto ty = new Type*(dst_type);
 			return first(emplace_op(Node{ .kind = Node::CAST, .type = std::span{ ty, 1 }, .cast = { .src = src } }));
 		}
 
@@ -1063,9 +1061,9 @@ namespace vuk {
 		}
 
 		Type* make_opaque_fn_ty(std::span<Type* const> args, std::span<Type* const> ret_types, DomainFlags execute_on, UserCallbackType callback) {
-			auto arg_ptr = new (payload_arena.ensure_space(sizeof(Type*) * args.size())) Type*[args.size()];
+			auto arg_ptr = new Type*[args.size()];
 			std::copy(args.begin(), args.end(), arg_ptr);
-			auto ret_ty_ptr = new (payload_arena.ensure_space(sizeof(Type*) * ret_types.size())) Type*[ret_types.size()];
+			auto ret_ty_ptr = new Type*[ret_types.size()];
 			std::copy(ret_types.begin(), ret_types.end(), ret_ty_ptr);
 			return emplace_type(Type{ .kind = Type::OPAQUE_FN_TY,
 			                          .opaque_fn = { .args = std::span(arg_ptr, args.size()),
@@ -1075,13 +1073,13 @@ namespace vuk {
 		}
 
 		Ref make_declare_fn(Type* const fn_ty) {
-			auto ty = new (payload_arena.ensure_space(sizeof(Type*))) Type*(fn_ty);
+			auto ty = new Type*(fn_ty);
 			return first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ ty, 1 }, .constant = { .value = nullptr } }));
 		}
 
 		template<class... Refs>
 		Node* make_call(Ref fn, Refs... args) {
-			Ref* args_ptr = new (payload_arena.ensure_space(sizeof(Ref[sizeof...(args)]))) Ref[sizeof...(args)]{ args... };
+			Ref* args_ptr = new Ref[sizeof...(args)]{ args... };
 			decltype(Node::call) call = { .args = std::span(args_ptr, sizeof...(args)), .fn = fn };
 			Node n{};
 			n.kind = Node::CALL;
@@ -1091,15 +1089,15 @@ namespace vuk {
 		}
 
 		Node* make_release(Ref src, AcquireRelease* acq_rel, Access dst_access, DomainFlagBits dst_domain) {
-			auto ty = new (payload_arena.ensure_space(sizeof(Type*))) Type*(Type::stripped(src.type()));
+			auto ty = new Type*(Type::stripped(src.type()));
 			return emplace_op(Node{ .kind = Node::RELEASE,
 			                        .type = std::span{ ty, 1 },
 			                        .release = { .src = src, .release = acq_rel, .dst_access = dst_access, .dst_domain = dst_domain } });
 		}
 
 		Node* make_splice(Node* src, AcquireRelease* acq_rel) {
-			Ref* args_ptr = new (payload_arena.ensure_space(sizeof(Ref) * src->type.size())) Ref[src->type.size()];
-			auto tys = new (payload_arena.ensure_space(sizeof(Type*) * src->type.size())) Type*[src->type.size()];
+			Ref* args_ptr = new Ref[src->type.size()];
+			auto tys = new Type*[src->type.size()];
 			for (size_t i = 0; i < src->type.size(); i++) {
 				args_ptr[i] = Ref{ src, i };
 				tys[i] = copy_type(Type::stripped(src->type[i]));
@@ -1122,8 +1120,8 @@ namespace vuk {
 			} else if (type->kind == Type::ARRAY_TY) {
 				type->array.T = copy_type(type->array.T);
 			} else if (type->kind == Type::COMPOSITE_TY) {
-				auto type_array = new (payload_arena.ensure_space(sizeof(Type*) * type->composite.types.size())) Type*[type->composite.types.size()];
-				auto type_offsets = new (payload_arena.ensure_space(sizeof(size_t) * type->composite.types.size())) size_t[type->composite.types.size()];
+				auto type_array = new Type*[type->composite.types.size()];
+				auto type_offsets = new size_t[type->composite.types.size()];
 				for (auto i = 0; i < type->composite.types.size(); i++) {
 					type_array[i] = emplace_type(*type->composite.types[i]);
 					type_offsets[i] = type->composite.offsets[i];
@@ -1139,13 +1137,13 @@ namespace vuk {
 		}
 
 		Ref make_acquire(Type* type, AcquireRelease* acq_rel, size_t index, void* value) {
-			auto ty = new (payload_arena.ensure_space(sizeof(Type*))) Type*(copy_type(type));
+			auto ty = new Type*(copy_type(type));
 			return first(emplace_op(Node{ .kind = Node::ACQUIRE, .type = std::span{ ty, 1 }, .acquire = { .value = value, .acquire = acq_rel, .index = index } }));
 		}
 
 		template<class T>
 		Ref make_acquire(Type* type, AcquireRelease* acq_rel, T value) {
-			auto val_ptr = new (payload_arena.ensure_space(sizeof(T))) T(value);
+			auto val_ptr = new T(value);
 			return make_acquire(type, acq_rel, 0, (void*)val_ptr);
 		}
 
@@ -1164,14 +1162,14 @@ namespace vuk {
 			if (!type) {
 				type = true_ref.type();
 			}
-			auto ty = new (payload_arena.ensure_space(sizeof(Type*))) Type*(type);
+			auto ty = new Type*(type);
 			return first(emplace_op(Node{ .kind = Node::INDIRECT_DEPEND, .type = std::span{ ty, 1 }, .indirect_depend = { .rref = { node, index } } }));
 		}
 
 		// MATH
 
 		Ref make_math_binary_op(Node::BinOp op, Ref a, Ref b) {
-			Type** tys = new (payload_arena.ensure_space(sizeof(Type*))) Type*(a.type());
+			Type** tys = new Type*(a.type());
 
 			return first(emplace_op(Node{ .kind = Node::MATH_BINARY, .type = std::span{ tys, 1 }, .math_binary = { .a = a, .b = b, .op = op } }));
 		}

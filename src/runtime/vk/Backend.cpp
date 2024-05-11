@@ -1328,13 +1328,13 @@ namespace vuk {
 					if (node->call.fn.type()->kind == Type::OPAQUE_FN_TY) {
 						CommandBuffer cobuf(*this, ctx, alloc, vk_rec->cbuf);
 						if (node->call.fn.type()->debug_info) {
-							ctx.begin_region(vk_rec->cbuf, node->call.fn.type()->debug_info->name);
+							ctx.begin_region(vk_rec->cbuf, node->call.fn.type()->debug_info->name.c_str());
 						}
 
 						void* rpass_profile_data = nullptr;
 						if (vk_rec->callbacks->on_begin_pass)
 							rpass_profile_data =
-							    vk_rec->callbacks->on_begin_pass(vk_rec->callbacks->user_data, node->call.fn.type()->debug_info->name, vk_rec->cbuf, vk_rec->domain);
+							    vk_rec->callbacks->on_begin_pass(vk_rec->callbacks->user_data, node->call.fn.type()->debug_info->name.c_str(), vk_rec->cbuf, vk_rec->domain);
 
 						if (vk_rec->rp.rpci.attachments.size() > 0) {
 							vk_rec->prepare_render_pass();

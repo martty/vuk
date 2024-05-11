@@ -352,7 +352,7 @@ public:
 				opaque_fn_ty->debug_info = current_module.allocate_type_debug_info(name.c_str());
 				auto opaque_fn = current_module.make_declare_fn(opaque_fn_ty);
 				Node* node = current_module.make_call(opaque_fn, args.peel_head()...);
-				node->scheduling_info = new (current_module.payload_arena.ensure_space(sizeof(SchedulingInfo))) SchedulingInfo(scheduling_info);
+				node->scheduling_info = new SchedulingInfo(scheduling_info);
 				inner_scope.parent = &_scope;
 				current_module.set_source_location(node, inner_scope);
 

@@ -409,7 +409,7 @@ namespace vuk {
 		auto placeholder_to_constant = [this]<class T>(Ref r, T value) {
 			if (r.node->kind == Node::PLACEHOLDER) {
 				r.node->kind = Node::CONSTANT;
-				r.node->constant.value = new (current_module.payload_arena.ensure_space(sizeof(T))) T(value);
+				r.node->constant.value = new T(value);
 			}
 		};
 
