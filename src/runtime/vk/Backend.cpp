@@ -1279,8 +1279,8 @@ namespace vuk {
 					assert(vk_rec);
 					// run all the barriers here!
 
-					for (size_t i = 0; i < node->call.args.size(); i++) {
-						auto& arg_ty = node->call.fn.type()->opaque_fn.args[i];
+					for (size_t i = 1; i < node->call.args.size(); i++) {
+						auto& arg_ty = node->call.args[0].type()->opaque_fn.args[i - 1];
 						auto& parm = node->call.args[i];
 						auto& link = parm.link();
 
@@ -1325,16 +1325,16 @@ namespace vuk {
 					recorder.synchronize_stream(dst_stream);
 					// run the user cb!
 					std::vector<void*, short_alloc<void*>> opaque_rets(*impl->arena_);
-					if (node->call.fn.type()->kind == Type::OPAQUE_FN_TY) {
+					if (node->call.args[0].type()->kind == Type::OPAQUE_FN_TY) {
 						CommandBuffer cobuf(*this, ctx, alloc, vk_rec->cbuf);
-						if (node->call.fn.type()->debug_info) {
-							ctx.begin_region(vk_rec->cbuf, node->call.fn.type()->debug_info->name.c_str());
+						if (node->call.args[0].type()->debug_info) {
+							ctx.begin_region(vk_rec->cbuf, node->call.args[0].type()->debug_info->name.c_str());
 						}
 
 						void* rpass_profile_data = nullptr;
 						if (vk_rec->callbacks->on_begin_pass)
-							rpass_profile_data =
-							    vk_rec->callbacks->on_begin_pass(vk_rec->callbacks->user_data, node->call.fn.type()->debug_info->name.c_str(), vk_rec->cbuf, vk_rec->domain);
+							rpass_profile_data = vk_rec->callbacks->on_begin_pass(
+							    vk_rec->callbacks->user_data, node->call.args[0].type()->debug_info->name.c_str(), vk_rec->cbuf, vk_rec->domain);
 
 						if (vk_rec->rp.rpci.attachments.size() > 0) {
 							vk_rec->prepare_render_pass();
@@ -1343,19 +1343,19 @@ namespace vuk {
 
 						std::vector<void*, short_alloc<void*>> opaque_args(*impl->arena_);
 						std::vector<void*, short_alloc<void*>> opaque_meta(*impl->arena_);
-						for (size_t i = 0; i < node->call.args.size(); i++) {
+						for (size_t i = 1; i < node->call.args.size(); i++) {
 							auto& parm = node->call.args[i];
 							auto& link = parm.link();
 							assert(link.urdef);
 							opaque_args.push_back(sched.get_value(parm));
 							opaque_meta.push_back(&parm);
 						}
-						opaque_rets.resize(node->call.fn.type()->opaque_fn.return_types.size());
-						(*node->call.fn.type()->opaque_fn.callback)(cobuf, opaque_args, opaque_meta, opaque_rets);
+						opaque_rets.resize(node->call.args[0].type()->opaque_fn.return_types.size());
+						(*node->call.args[0].type()->opaque_fn.callback)(cobuf, opaque_args, opaque_meta, opaque_rets);
 						if (vk_rec->rp.handle) {
 							vk_rec->end_render_pass();
 						}
-						if (node->call.fn.type()->debug_info) {
+						if (node->call.args[0].type()->debug_info) {
 							ctx.end_region(vk_rec->cbuf);
 						}
 						if (vk_rec->callbacks->on_end_pass)
@@ -1366,16 +1366,16 @@ namespace vuk {
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
 					fmt::print(" = call ${} ", domain_to_string(dst_stream->domain));
-					if (node->call.fn.type()->debug_info) {
-						fmt::print("<{}> ", node->call.fn.type()->debug_info->name);
+					if (node->call.args[0].type()->debug_info) {
+						fmt::print("<{}> ", node->call.args[0].type()->debug_info->name);
 					}
-					print_args(node->call.args);
+					print_args(node->call.args.subspan(1));
 					fmt::print("\n");
 #endif
 					sched.done(node, dst_stream, std::span(opaque_rets));
 				} else { // execute deps
-					for (size_t i = 0; i < node->call.args.size(); i++) {
-						auto& arg_ty = node->call.fn.type()->opaque_fn.args[i];
+					for (size_t i = 1; i < node->call.args.size(); i++) {
+						auto& arg_ty = node->call.args[0].type()->opaque_fn.args[i - 1];
 						auto& parm = node->call.args[i];
 
 						if (arg_ty->kind == Type::IMBUED_TY) {

@@ -298,7 +298,7 @@ public:
 	static auto fill_ret_ty(std::array<size_t, sizeof...(T)> idxs, const std::tuple<T...>& args, std::vector<Type*>& ret_types) {
 		(ret_types.emplace_back(current_module.make_aliased_ty(Type::stripped(std::get<T>(args).src.type()), 0)), ...);
 		for (auto i = 0; i < ret_types.size(); i++) {
-			ret_types[i]->aliased.ref_idx = idxs[i];
+			ret_types[i]->aliased.ref_idx = idxs[i] + 1;
 		}
 	}
 

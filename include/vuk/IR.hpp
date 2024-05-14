@@ -329,7 +329,6 @@ namespace vuk {
 			} import;
 			struct : Variable {
 				std::span<Ref> args;
-				Ref fn;
 			} call;
 			struct : Fixed<1> {
 				const Ref dst;
@@ -398,6 +397,8 @@ namespace vuk {
 
 		std::string_view kind_to_sv() {
 			switch (kind) {
+			case NOP:
+				return "nop";
 			case PLACEHOLDER:
 				return "placeholder";
 			case CONSTANT:
@@ -1079,8 +1080,8 @@ namespace vuk {
 
 		template<class... Refs>
 		Node* make_call(Ref fn, Refs... args) {
-			Ref* args_ptr = new Ref[sizeof...(args)]{ args... };
-			decltype(Node::call) call = { .args = std::span(args_ptr, sizeof...(args)), .fn = fn };
+			Ref* args_ptr = new Ref[sizeof...(args) + 1]{ fn, args... };
+			decltype(Node::call) call = { .args = std::span(args_ptr, sizeof...(args) + 1) };
 			Node n{};
 			n.kind = Node::CALL;
 			n.type = fn.type()->opaque_fn.return_types;
@@ -1155,7 +1156,7 @@ namespace vuk {
 				true_ref = node->fixed_node.args[index];
 			} else {
 				if (node->kind == Node::CALL) {
-					type = node->call.fn.type()->opaque_fn.args[index];
+					type = node->call.args[0].type()->opaque_fn.args[index - 1];
 				}
 				true_ref = node->variable_node.args[index];
 			}

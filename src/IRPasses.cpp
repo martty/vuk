@@ -100,11 +100,11 @@ namespace vuk {
 			ss << "<TD>";
 			ss << node->kind_to_sv();
 			if (node->kind == Node::CALL) {
-				auto opaque_fn_ty = node->call.fn.type()->opaque_fn;
+				auto opaque_fn_ty = node->call.args[0].type()->opaque_fn;
 
-				if (node->call.fn.type()->debug_info) {
+				if (node->call.args[0].type()->debug_info) {
 					ss << " <B>";
-					ss << node->call.fn.type()->debug_info->name;
+					ss << node->call.args[0].type()->debug_info->name;
 					ss << "</B>";
 				}
 			}
@@ -128,10 +128,10 @@ namespace vuk {
 					ss << "?";
 				} else {
 					if (node->kind == Node::CALL) {
-						auto opaque_fn_ty = node->call.fn.type()->opaque_fn;
-						if (opaque_fn_ty.args[i]->kind == Type::IMBUED_TY) {
+						auto opaque_fn_ty = node->call.args[0].type()->opaque_fn;
+						if (opaque_fn_ty.args[i - 1]->kind == Type::IMBUED_TY) {
 							ss << "<FONT FACE=\"Courier New\">";
-							ss << ":" << Type::to_sv(opaque_fn_ty.args[i]->imbued.access);
+							ss << ":" << Type::to_sv(opaque_fn_ty.args[i - 1]->imbued.access);
 							ss << "</FONT>";
 						}
 					} else {
@@ -294,8 +294,8 @@ namespace vuk {
 				break;
 			case Node::CALL: {
 				// args
-				for (size_t i = 0; i < node->call.args.size(); i++) {
-					auto& arg_ty = node->call.fn.type()->opaque_fn.args[i];
+				for (size_t i = 1; i < node->call.args.size(); i++) {
+					auto& arg_ty = node->call.args[0].type()->opaque_fn.args[i - 1];
 					auto& parm = node->call.args[i];
 					// TODO: assert same type when imbuement is stripped
 					if (arg_ty->kind == Type::IMBUED_TY) {
@@ -472,8 +472,8 @@ namespace vuk {
 				std::optional<Extent2D> extent;
 				std::optional<Samples> samples;
 				std::optional<uint32_t> layer_count;
-				for (size_t i = 0; i < node->call.args.size(); i++) {
-					auto& arg_ty = node->call.fn.type()->opaque_fn.args[i];
+				for (size_t i = 1; i < node->call.args.size(); i++) {
+					auto& arg_ty = node->call.args[0].type()->opaque_fn.args[i - 1];
 					auto& parm = node->call.args[i];
 					if (arg_ty->kind == Type::IMBUED_TY) {
 						auto access = arg_ty->imbued.access;
@@ -553,8 +553,8 @@ namespace vuk {
 			switch (node->kind) {
 			case Node::CALL: {
 				// args
-				for (size_t i = 0; i < node->call.args.size(); i++) {
-					auto& arg_ty = node->call.fn.type()->opaque_fn.args[i];
+				for (size_t i = 1; i < node->call.args.size(); i++) {
+					auto& arg_ty = node->call.args[0].type()->opaque_fn.args[i - 1];
 					auto& parm = node->call.args[i];
 					auto& link = parm.link();
 
@@ -579,7 +579,7 @@ namespace vuk {
 							for (int read_idx = 0; read_idx < reads.size(); read_idx++) {
 								auto& r = reads[read_idx];
 								if (r.node->kind == Node::CALL) {
-									arg_ty = r.node->call.fn.type()->opaque_fn.args[r.index]; // TODO: insert casts instead
+									arg_ty = r.node->call.args[0].type()->opaque_fn.args[r.index - 1]; // TODO: insert casts instead
 									parm = r.node->call.args[r.index];
 								} else if (r.node->kind == Node::CONVERGE) {
 									continue;
@@ -1131,7 +1131,7 @@ namespace vuk {
 			for (auto& r : chain->reads.to_span(pass_reads)) {
 				switch (r.node->kind) {
 				case Node::CALL: {
-					auto& arg_ty = r.node->call.fn.type()->opaque_fn.args[r.index];
+					auto& arg_ty = r.node->call.args[0].type()->opaque_fn.args[r.index - 1];
 					auto& parm = r.node->call.args[r.index];
 					if (arg_ty->kind == Type::IMBUED_TY) {
 						auto access = arg_ty->imbued.access;
@@ -1143,7 +1143,7 @@ namespace vuk {
 			if (chain->undef) {
 				switch (chain->undef.node->kind) {
 				case Node::CALL: {
-					auto& arg_ty = chain->undef.node->call.fn.type()->opaque_fn.args[chain->undef.index];
+					auto& arg_ty = chain->undef.node->call.args[0].type()->opaque_fn.args[chain->undef.index - 1];
 					auto& parm = chain->undef.node->call.args[chain->undef.index];
 					if (arg_ty->kind == Type::IMBUED_TY) {
 						auto access = arg_ty->imbued.access;
