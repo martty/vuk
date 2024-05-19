@@ -510,6 +510,8 @@ public:
 		Compiler();
 		~Compiler();
 
+		void reset();
+
 		/// @brief Build the graph, assign framebuffers, render passes and subpasses
 		///	link automatically calls this, only needed if you want to use the reflection functions
 		/// @param compile_options CompileOptions controlling compilation behaviour

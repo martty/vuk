@@ -59,10 +59,6 @@ namespace vuk {
 	}
 
 	void RGCImpl::dump_graph() {
-		if (nodes.size() < 50) {
-			return;
-		}
-
 		std::stringstream ss;
 		ss << "digraph vuk {\n";
 		ss << "rankdir=\"TB\"\nnewrank = true\nnode[shape = rectangle width = 0 height = 0 margin = 0]\n";
@@ -278,7 +274,7 @@ namespace vuk {
 
 				break;
 			case Node::SPLICE: { // ~~ write joiner
-				for (size_t i = 0; i < node->splice.src.size(); i++) {
+				for (size_t i = 0; i < node->type.size(); i++) {
 					Ref{ node, i }.link().def = { node, i };
 					if (node->splice.rel_acq && node->splice.rel_acq->status == Signal::Status::eDisarmed) {
 						assert(node->splice.src[i].link().undef.node == nullptr);
@@ -859,11 +855,15 @@ namespace vuk {
 			                        impl->partitioned_execables.size() - impl->transfer_passes.size() - impl->compute_passes.size() };
 	}
 
-	Result<void> Compiler::compile(std::span<std::shared_ptr<ExtNode>> nodes, const RenderGraphCompileOptions& compile_options) {
+	void Compiler::reset() {
 		auto arena = impl->arena_.release();
 		delete impl;
 		arena->reset();
 		impl = new RGCImpl(arena);
+	}
+
+	Result<void> Compiler::compile(std::span<std::shared_ptr<ExtNode>> nodes, const RenderGraphCompileOptions& compile_options) {
+		reset();
 		impl->callbacks = compile_options.callbacks;
 
 		impl->refs.assign(nodes.begin(), nodes.end());
@@ -893,6 +893,10 @@ namespace vuk {
 				impl->nodes.push_back(node);
 			}
 			switch (node->kind) {
+			case Node::NOP: {
+				impl->garbage_nodes.push_back(node);
+				break;
+			}
 			case Node::SLICE: {
 				assert(node->slice.image.node->kind != Node::NOP);
 				slices[node->slice.image].push_back(first(node));
@@ -1000,15 +1004,15 @@ namespace vuk {
 						replaces.emplace_back(Replace{needle, replace_with});
 					}
 					node->kind = Node::NOP;
-					node->type = {};
 					node->generic_node.arg_count = 0;
+					impl->garbage_nodes.push_back(node);
 				} else {
 					switch (node->splice.rel_acq->status) {
 					case Signal::Status::eDisarmed: // means we have to signal this, keep
 						break;
 					case Signal::Status::eSynchronizable: // means this is an acq instead
 					case Signal::Status::eHostAvailable:
-						for (size_t i = 0; i < node->splice.src.size(); i++) {
+						for (size_t i = 0; i < node->type.size(); i++) {
 							auto new_ref = current_module.make_acquire(node->type[i], node->splice.rel_acq, i, node->splice.values[i]);
 							replaces.emplace_back(Replace{ Ref{ node, i }, new_ref });
 						}
@@ -1068,7 +1072,7 @@ namespace vuk {
 		}
 
 		VUK_DO_OR_RETURN(impl->build_nodes());
-		// impl->dump_graph();
+		//impl->dump_graph();
 		VUK_DO_OR_RETURN(impl->build_links());
 		VUK_DO_OR_RETURN(impl->unify_types());
 

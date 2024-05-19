@@ -51,6 +51,7 @@ namespace vuk {
 			std::pair v = { &allocator, &*erg };
 			VUK_DO_OR_RETURN(execute_submit(allocator, std::span{ &v, 1 }));
 			assert(acqrel->status != Signal::Status::eDisarmed);
+			compiler.reset();
 			return { expected_value };
 		}
 	}

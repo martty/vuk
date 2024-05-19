@@ -539,7 +539,11 @@ namespace vuk {
 			}
 		}
 		case Node::RELEASE:
-			return get_def(ref.node->release.src);
+			if (ref.node->release.release == nullptr || ref.node->release.release->status == Signal::Status::eDisarmed) {
+				return get_def(ref.node->release.src);
+			} else {
+				return RefOrValue::from_value(ref.node->release.value);
+			}
 		default:
 			throw CannotBeConstantEvaluated{ ref };
 		}
@@ -1216,7 +1220,7 @@ namespace vuk {
 
 					delete node->splice.values.data();
 				} else if (node->kind == Node::RELEASE) {
-					if (node->release.src.type() == current_module.builtin_buffer) {
+					if (node->type[0] == current_module.builtin_buffer) {
 						delete (Buffer*)node->release.value;
 					} else {
 						delete (ImageAttachment*)node->release.value;

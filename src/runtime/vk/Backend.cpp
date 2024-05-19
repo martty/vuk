@@ -178,6 +178,7 @@ namespace vuk {
 
 		void add_dependency(Stream* dep) override {
 			if (dep->domain == DomainFlagBits::eHost) {
+				dep->submit();
 				return;
 			}
 			if (is_recording) {
@@ -567,6 +568,9 @@ namespace vuk {
 		}
 
 		Result<SubmitResult> submit() override {
+			for (auto& sig : dependent_signals) {
+				sig->status = Signal::Status::eHostAvailable;
+			}
 			return { expected_value };
 		}
 	};
@@ -1718,6 +1722,18 @@ namespace vuk {
 
 		for (auto& node : impl->nodes) {
 			node->execution_info = nullptr;
+			if (node->kind != Node::SPLICE && node->kind != Node::RELEASE && node->kind != Node::ACQUIRE) {
+				auto it = current_module.op_arena.get_iterator(node);
+				current_module.op_arena.erase(it);
+			} else if (node->kind == Node::SPLICE) {
+				assert(node->splice.rel_acq->status != Signal::Status::eDisarmed);
+				node->splice.src = {};
+			}
+		}
+
+		for (auto& node : impl->garbage_nodes) {
+			auto it = current_module.op_arena.get_iterator(node);
+			current_module.op_arena.erase(it);
 		}
 
 		// restore acquire types

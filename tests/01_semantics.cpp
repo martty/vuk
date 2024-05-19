@@ -37,6 +37,24 @@ TEST_CASE("minimal graph is submitted") {
 	CHECK(trace == "a e");
 }
 
+TEST_CASE("graph is cleaned up after submit") {
+	std::string trace = "";
+	auto& oa = current_module.op_arena;
+	CHECK(current_module.op_arena.size() == 0);
+
+	auto a = make_unary_computation("a", trace)(declare_buf("_a", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
+	//auto b = make_unary_computation("b", trace)(declare_buf("_b", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
+
+	//auto d = make_binary_computation("d", trace)(a, b); // d->a, d->b
+	auto e = make_unary_computation("e", trace)(a);     // e->a
+	e.submit(*test_context.allocator, test_context.compiler);
+
+	for (auto& op : current_module.op_arena) {
+		fmt::println("{}", op.kind_to_sv());
+	}
+	CHECK(current_module.op_arena.size() == 2);
+}
+
 TEST_CASE("computation is never duplicated") {
 	std::string trace = "";
 
