@@ -367,7 +367,7 @@ public:
 				if (reuse_node) {
 					first.node->mutate(node);
 				}
-				auto extnode = reuse_node ? std::move(first.node) : std::make_shared<ExtNode>(ExtNode(node, std::move(dependent_nodes)));
+				auto extnode = reuse_node ? std::move(first.node) : std::make_shared<ExtNode>(node, std::move(dependent_nodes));
 				if (reuse_node) {
 					extnode->deps.insert(extnode->deps.end(), std::make_move_iterator(dependent_nodes.begin()), std::make_move_iterator(dependent_nodes.end()));
 				}

@@ -281,6 +281,7 @@ TEST_CASE("multi-queue buffers") {
 		    DomainFlagBits::eGraphicsQueue);
 
 		{
+			CHECK(current_module.op_arena.size() == 0);
 			auto written = write(declare_buf("src0", **buf0));
 			written.wait(*test_context.allocator, test_context.compiler);
 			read(written).wait(*test_context.allocator, test_context.compiler);
@@ -288,6 +289,7 @@ TEST_CASE("multi-queue buffers") {
 			execution = "";
 		}
 		{
+			CHECK(current_module.op_arena.size() == 0);
 			auto written = write(declare_buf("src0", **buf0));
 			written.wait(*test_context.allocator, test_context.compiler);
 			read(std::move(written)).wait(*test_context.allocator, test_context.compiler);
@@ -295,6 +297,7 @@ TEST_CASE("multi-queue buffers") {
 			execution = "";
 		}
 		{
+			CHECK(current_module.op_arena.size() == 0);
 			auto written = write(declare_buf("src0", **buf0));
 			written.wait(*test_context.allocator, test_context.compiler);
 			write(read(std::move(written))).wait(*test_context.allocator, test_context.compiler);
@@ -302,18 +305,21 @@ TEST_CASE("multi-queue buffers") {
 			execution = "";
 		}
 		{
+			CHECK(current_module.op_arena.size() == 0);
 			auto written = write(declare_buf("src0", **buf0));
 			read(written).wait(*test_context.allocator, test_context.compiler);
 			CHECK(execution == "wr");
 			execution = "";
 		}
 		{
+			CHECK(current_module.op_arena.size() == 0);
 			auto written = write(declare_buf("src0", **buf0));
 			read(std::move(written)).wait(*test_context.allocator, test_context.compiler);
 			CHECK(execution == "wr");
 			execution = "";
 		}
 		{
+			CHECK(current_module.op_arena.size() == 0);
 			auto written = write(declare_buf("src0", **buf0));
 			write(read(std::move(written))).wait(*test_context.allocator, test_context.compiler);
 			CHECK(execution == "wrw");

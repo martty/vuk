@@ -1015,6 +1015,7 @@ namespace vuk {
 						for (size_t i = 0; i < node->type.size(); i++) {
 							auto new_ref = current_module.make_acquire(node->type[i], node->splice.rel_acq, i, node->splice.values[i]);
 							replaces.emplace_back(Replace{ Ref{ node, i }, new_ref });
+							impl->garbage_nodes.emplace_back(new_ref.node);
 						}
 						break;
 					}
@@ -1025,13 +1026,16 @@ namespace vuk {
 				if (node->links[0].reads.size() > 0 || node->links[0].undef) {
 					auto needle = Ref{ node, 0 };
 					if (node->release.release->status == Signal::Status::eDisarmed) {
-						auto new_ref = current_module.make_splice(node->release.src.node, node->release.release);
-						replaces.emplace_back(needle, first(new_ref));
+						auto new_node = current_module.make_splice(node->release.src.node, node->release.release);
+						replaces.emplace_back(needle, first(new_node));
+						impl->garbage_nodes.emplace_back(new_node);
 					} else {
 						Node acq_node{ .kind = Node::ACQUIRE,
 							             .type = node->type,
 							             .acquire = { .value = node->release.value, .acquire = node->release.release, .index = 0 } };
-						replaces.emplace_back(needle, first(current_module.emplace_op(acq_node)));
+						auto new_node = current_module.emplace_op(acq_node);
+						replaces.emplace_back(needle, first(new_node));
+						impl->garbage_nodes.emplace_back(new_node);
 					}
 				}
 			}

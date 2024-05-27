@@ -49,7 +49,7 @@ namespace vuk {
 			assert(node->acqrel->status == Signal::Status::eDisarmed);
 			auto ref = get_head();
 			auto release = current_module.make_release(ref, nullptr, access, domain);
-			node = std::make_shared<ExtNode>(ExtNode{ release, { node } }); // previous extnode is a dep
+			node = std::make_shared<ExtNode>(release, node); // previous extnode is a dep
 			release->release.release = node->acqrel;
 			index = 0;
 		}

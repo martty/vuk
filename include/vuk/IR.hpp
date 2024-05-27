@@ -1219,11 +1219,20 @@ namespace vuk {
 					}
 
 					delete node->splice.values.data();
+
+					if (owned_acqrel->status != Signal::Status::eDisarmed) {
+						auto it = current_module.op_arena.get_iterator(node);
+						current_module.op_arena.erase(it);
+					}
 				} else if (node->kind == Node::RELEASE) {
 					if (node->type[0] == current_module.builtin_buffer) {
 						delete (Buffer*)node->release.value;
 					} else {
 						delete (ImageAttachment*)node->release.value;
+					}
+					if (owned_acqrel->status != Signal::Status::eDisarmed) {
+						auto it = current_module.op_arena.get_iterator(node);
+						current_module.op_arena.erase(it);
 					}
 				}
 			}
