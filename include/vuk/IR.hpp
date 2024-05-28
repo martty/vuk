@@ -14,6 +14,7 @@
 #include <functional>
 #include <optional>
 #include <plf_colony.h>
+#include <unordered_map>
 #include <span>
 #include <vector>
 
@@ -776,11 +777,11 @@ namespace vuk {
 		plf::colony<UserCallbackType> ucbs;
 		plf::colony<Type*> type_refs;
 
-		InlineArena<Type, 16 * sizeof(Type)> type_arena;
-
 		Type* builtin_image = nullptr;
 		Type* builtin_buffer = nullptr;
 		Type* builtin_swapchain = nullptr;
+
+		std::unordered_map<uint32_t, Type> type_map;
 
 		Type*& get_builtin_image() {
 			if (!builtin_image) {
@@ -844,8 +845,28 @@ namespace vuk {
 			return &*op_arena.emplace(std::move(v));
 		}
 
-		Type* emplace_type(Type t) {
-			return type_arena.emplace(std::move(t));
+		Type* emplace_type(Type tt) {
+			Type* t = &tt;
+			auto unify_type = [&](Type*& t) {
+				auto [v, succ] = type_map.try_emplace(Type::hash(t), *t);
+				t = &v->second;
+			};
+
+			if (t->kind == Type::ALIASED_TY) {
+				assert(t->aliased.T->kind != Type::ALIASED_TY);
+				unify_type(t->aliased.T);
+			} else if (t->kind == Type::IMBUED_TY) {
+				unify_type(t->imbued.T);
+			} else if (t->kind == Type::ARRAY_TY) {
+				unify_type(t->array.T);
+			} else if (t->kind == Type::COMPOSITE_TY) {
+				for (auto& elem_ty : t->composite.types) {
+					unify_type(elem_ty);
+				}
+			}
+			unify_type(t);
+
+			return t;
 		}
 
 		TypeDebugInfo* allocate_type_debug_info(std::string_view name) {
@@ -1105,36 +1126,10 @@ namespace vuk {
 			auto tys = new Type*[src->type.size()];
 			for (size_t i = 0; i < src->type.size(); i++) {
 				args_ptr[i] = Ref{ src, i };
-				tys[i] = copy_type(Type::stripped(src->type[i]));
+				tys[i] = Type::stripped(src->type[i]);
 			}
 			return emplace_op(Node{
 			    .kind = Node::SPLICE, .type = std::span{ tys, src->type.size() }, .splice = { .src = std::span{ args_ptr, src->type.size() }, .rel_acq = acq_rel } });
-		}
-
-		Type* copy_type(Type* type) {
-			auto make_type_copy = [this](Type*& t) {
-				t = emplace_type(*t);
-			};
-			// copy outer type, then copy inner types as needed
-			make_type_copy(type);
-
-			if (type->kind == Type::ALIASED_TY) {
-				make_type_copy(type->aliased.T);
-			} else if (type->kind == Type::IMBUED_TY) {
-				make_type_copy(type->imbued.T);
-			} else if (type->kind == Type::ARRAY_TY) {
-				type->array.T = copy_type(type->array.T);
-			} else if (type->kind == Type::COMPOSITE_TY) {
-				auto type_array = new Type*[type->composite.types.size()];
-				auto type_offsets = new size_t[type->composite.types.size()];
-				for (auto i = 0; i < type->composite.types.size(); i++) {
-					type_array[i] = emplace_type(*type->composite.types[i]);
-					type_offsets[i] = type->composite.offsets[i];
-				}
-				type->composite.types = { type_array, type->composite.types.size() };
-				type->composite.offsets = { type_offsets, type->composite.types.size() };
-			}
-			return type;
 		}
 
 		Node* copy_node(Node* node) {
@@ -1142,7 +1137,7 @@ namespace vuk {
 		}
 
 		Ref make_acquire(Type* type, AcquireRelease* acq_rel, size_t index, void* value) {
-			auto ty = new Type*(copy_type(type));
+			auto ty = new Type*(type);
 			return first(emplace_op(Node{ .kind = Node::ACQUIRE, .type = std::span{ ty, 1 }, .acquire = { .value = value, .acquire = acq_rel, .index = index } }));
 		}
 

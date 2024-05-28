@@ -39,7 +39,6 @@ namespace vuk {
 
 		std::vector<Ref> pass_reads;
 
-		robin_hood::unordered_flat_map<uint32_t, Type*> type_map;
 		std::vector<std::shared_ptr<ExtNode>> refs;
 		std::vector<std::shared_ptr<ExtNode>> depnodes;
 		std::vector<Node*> nodes;
@@ -87,7 +86,6 @@ namespace vuk {
 		Result<void> build_nodes();
 		Result<void> build_links();
 		Result<void> build_sync();
-		Result<void> unify_types();
 		Result<void> reify_inference();
 		Result<void> schedule_intra_queue(const RenderGraphCompileOptions& compile_options);
 		Result<void> collect_chains();

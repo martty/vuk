@@ -14,50 +14,6 @@
 #include <unordered_set>
 
 namespace vuk {
-	Result<void> RGCImpl::unify_types() {
-		type_map.clear();
-		type_restore.clear();
-
-		type_map[Type::hash(current_module.get_builtin_buffer())] = current_module.get_builtin_buffer();
-		type_map[Type::hash(current_module.get_builtin_image())] = current_module.get_builtin_image();
-		type_map[Type::hash(current_module.get_builtin_swapchain())] = current_module.get_builtin_swapchain();
-
-		auto unify_type = [&](Type*& t) {
-			auto [v, succ] = type_map.try_emplace(Type::hash(t), t);
-			t = v->second;
-		};
-
-		for (auto& node : nodes) {
-			// type of acquire must be preserved
-			if (node->kind == Node::ACQUIRE || node->kind == Node::RELEASE) {
-				type_restore.emplace(node, node->type[0]);
-			}
-
-			for (auto& t : node->type) {
-				t = current_module.copy_type(t);
-				if (t->kind == Type::ALIASED_TY) {
-					assert(t->aliased.T->kind != Type::ALIASED_TY);
-					unify_type(t->aliased.T);
-				} else if (t->kind == Type::IMBUED_TY) {
-					unify_type(t->imbued.T);
-				} else if (t->kind == Type::ARRAY_TY) {
-					unify_type(t->array.T);
-				} else if (t->kind == Type::COMPOSITE_TY) {
-					for (auto& elem_ty : t->composite.types) {
-						unify_type(elem_ty);
-					}
-				}
-				unify_type(t);
-			}
-		}
-
-		current_module.builtin_buffer = type_map[Type::hash(current_module.builtin_buffer)];
-		current_module.builtin_image = type_map[Type::hash(current_module.builtin_image)];
-		current_module.builtin_swapchain = type_map[Type::hash(current_module.builtin_swapchain)];
-
-		return { expected_value };
-	}
-
 	void RGCImpl::dump_graph() {
 		std::stringstream ss;
 		ss << "digraph vuk {\n";
@@ -1078,7 +1034,6 @@ namespace vuk {
 		VUK_DO_OR_RETURN(impl->build_nodes());
 		//impl->dump_graph();
 		VUK_DO_OR_RETURN(impl->build_links());
-		VUK_DO_OR_RETURN(impl->unify_types());
 
 		VUK_DO_OR_RETURN(impl->reify_inference());
 		VUK_DO_OR_RETURN(impl->collect_chains());

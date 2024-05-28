@@ -147,7 +147,6 @@ namespace vuk {
 			sfa_resource.emplace(*runtime, num_inflight_frames);
 			allocator.emplace(*sfa_resource);
 			vuk::current_module = {};
-			vuk::current_module.type_arena.reset();
 
 			if (rdoc_api) {
 				rdoc_api->StartFrameCapture(NULL, NULL);
