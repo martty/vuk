@@ -959,8 +959,6 @@ namespace vuk {
 
 						replaces.emplace_back(Replace{needle, replace_with});
 					}
-					node->kind = Node::NOP;
-					node->generic_node.arg_count = 0;
 					impl->garbage_nodes.push_back(node);
 				} else {
 					switch (node->splice.rel_acq->status) {

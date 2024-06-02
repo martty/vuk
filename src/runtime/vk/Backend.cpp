@@ -812,7 +812,7 @@ namespace vuk {
 			}
 
 			assert(last_modify.find(key) == last_modify.end());
-			last_modify.emplace(key, new PartialStreamResourceUse(psru));
+			last_modify.emplace(key, new (this->arena.ensure_space(sizeof(PartialStreamResourceUse))) PartialStreamResourceUse(psru));
 		}
 
 		void add_sync(Type* base_ty, std::optional<StreamResourceUse> maybe_dst_use, void* value) {
@@ -877,7 +877,7 @@ namespace vuk {
 						// push the splintered src uses
 						PartialStreamResourceUse psru{ *src };
 						psru.subrange = { nb.base_level, nb.level_count, nb.base_layer, nb.layer_count };
-						src->next = new PartialStreamResourceUse(psru);
+						src->next = new (this->arena.ensure_space(sizeof(PartialStreamResourceUse))) PartialStreamResourceUse(psru);
 						src->next->prev = src;
 						src = src->next;
 					});
@@ -1724,6 +1724,7 @@ namespace vuk {
 			node->execution_info = nullptr;
 			if (node->kind != Node::SPLICE && node->kind != Node::RELEASE && node->kind != Node::ACQUIRE) {
 				auto it = current_module.op_arena.get_iterator(node);
+				current_module.destroy_node(node);
 				current_module.op_arena.erase(it);
 			} else if (node->kind == Node::SPLICE) {
 				assert(node->splice.rel_acq->status != Signal::Status::eDisarmed);
@@ -1733,6 +1734,7 @@ namespace vuk {
 
 		for (auto& node : impl->garbage_nodes) {
 			auto it = current_module.op_arena.get_iterator(node);
+			current_module.destroy_node(node);
 			current_module.op_arena.erase(it);
 		}
 

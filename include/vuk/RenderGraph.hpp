@@ -346,8 +346,7 @@ public:
 					auto [idxs, ret_tuple] = intersect_tuples<std::tuple<T...>, std::tuple<Ret>>(arg_tuple_as_a);
 					fill_ret_ty(idxs, ret_tuple, ret_types);
 				}
-				auto opaque_fn_ty = current_module.make_opaque_fn_ty(arg_types, ret_types, vuk::DomainFlagBits::eAny, untyped_cb);
-				opaque_fn_ty->debug_info = current_module.allocate_type_debug_info(name.c_str());
+				auto opaque_fn_ty = current_module.make_opaque_fn_ty(arg_types, ret_types, vuk::DomainFlagBits::eAny, untyped_cb, name.c_str());
 				auto opaque_fn = current_module.make_declare_fn(opaque_fn_ty);
 				Node* node = current_module.make_call(opaque_fn, args.peel_head()...);
 				node->scheduling_info = new SchedulingInfo(scheduling_info);
