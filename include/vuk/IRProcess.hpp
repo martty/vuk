@@ -48,8 +48,6 @@ namespace vuk {
 
 		std::span<ScheduledItem*> transfer_passes, compute_passes, graphics_passes;
 
-		std::unordered_map<Node*, Type*> type_restore;
-
 		template<class T>
 		T& get_value(Ref parm) {
 			return *reinterpret_cast<T*>(get_value(parm));

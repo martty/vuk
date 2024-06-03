@@ -1720,8 +1720,30 @@ namespace vuk {
 			}
 		}
 
+		std::unordered_set<uint32_t> type_hashes;
+
 		for (auto& node : impl->nodes) {
 			node->execution_info = nullptr;
+			for (auto& t : node->type) {
+				switch (t->kind) {
+				case Type::IMBUED_TY:
+					type_hashes.emplace(Type::hash(t->imbued.T));
+					break;
+				case Type::ALIASED_TY:
+					type_hashes.emplace(Type::hash(t->aliased.T));
+					break;
+				case Type::ARRAY_TY:
+					type_hashes.emplace(Type::hash(t->array.T));
+					break;
+				case Type::COMPOSITE_TY:
+					for (int i = 0; i < t->composite.types.size(); i++) {
+						type_hashes.emplace(Type::hash(t->composite.types[i]));
+					}
+					break;
+				}
+				type_hashes.emplace(Type::hash(t));
+			}
+
 			if (node->kind != Node::SPLICE && node->kind != Node::RELEASE && node->kind != Node::ACQUIRE) {
 				auto it = current_module.op_arena.get_iterator(node);
 				current_module.destroy_node(node);
@@ -1738,9 +1760,26 @@ namespace vuk {
 			current_module.op_arena.erase(it);
 		}
 
-		// restore acquire types
-		for (auto& [node, t] : impl->type_restore) {
-			node->type[0] = t;
+		std::vector<uint32_t> to_erase;
+		for (auto& [k, v] : current_module.type_map) {
+			if (type_hashes.count(k) == 0) {
+				to_erase.push_back(k);
+			}
+		}
+
+		for (auto& key : to_erase) {
+			auto t = &current_module.type_map.at(key);
+			delete t->debug_info;
+			switch (t->kind) {
+			case Type::OPAQUE_FN_TY:
+				delete t->opaque_fn.args.data();
+				current_module.ucbs.erase(current_module.ucbs.get_iterator(t->opaque_fn.callback));
+				break;
+			case Type::COMPOSITE_TY:
+				delete t->composite.types.data();
+				break;
+			}
+			current_module.type_map.erase(key);
 		}
 
 		return { expected_value };
