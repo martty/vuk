@@ -401,12 +401,11 @@ public:
 	[[nodiscard]] inline Value<ImageAttachment> acquire_ia(Name name, ImageAttachment ia, Access access, VUK_CALLSTACK) {
 		Ref ref = current_module.make_acquire(current_module.get_builtin_image(), nullptr, ia);
 		auto ext_ref = make_ext_ref(ref);
-		ext_ref.node->owned_acqrel = std::make_unique<AcquireRelease>();
-		ext_ref.node->owned_acqrel->status = Signal::Status::eHostAvailable;
-		ext_ref.node->owned_acqrel->last_use.resize(1);
-		ext_ref.node->owned_acqrel->last_use[0] = to_use(access);
-		ext_ref.node->acqrel = ext_ref.node->owned_acqrel.get();
-		ref.node->acquire.acquire = ext_ref.node->owned_acqrel.get();
+		ext_ref.node->acqrel = std::make_unique<AcquireRelease>();
+		ext_ref.node->acqrel->status = Signal::Status::eHostAvailable;
+		ext_ref.node->acqrel->last_use.resize(1);
+		ext_ref.node->acqrel->last_use[0] = to_use(access);
+		ref.node->acquire.acquire = ext_ref.node->acqrel.get();
 		current_module.name_output(ref, name.c_str());
 		current_module.set_source_location(ref.node, VUK_CALL);
 		return { std::move(ext_ref) };
@@ -422,12 +421,11 @@ public:
 	[[nodiscard]] inline Value<Buffer> acquire_buf(Name name, Buffer buf, Access access, VUK_CALLSTACK) {
 		Ref ref = current_module.make_acquire(current_module.get_builtin_buffer(), nullptr, buf);
 		auto ext_ref = make_ext_ref(ref);
-		ext_ref.node->owned_acqrel = std::make_unique<AcquireRelease>();
-		ext_ref.node->acqrel = ext_ref.node->owned_acqrel.get();
-		ext_ref.node->owned_acqrel->status = Signal::Status::eHostAvailable;
-		ext_ref.node->owned_acqrel->last_use.resize(1);
-		ext_ref.node->owned_acqrel->last_use[0] = to_use(access);
-		ref.node->acquire.acquire = ext_ref.node->owned_acqrel.get();
+		ext_ref.node->acqrel = std::make_unique<AcquireRelease>();
+		ext_ref.node->acqrel->status = Signal::Status::eHostAvailable;
+		ext_ref.node->acqrel->last_use.resize(1);
+		ext_ref.node->acqrel->last_use[0] = to_use(access);
+		ref.node->acquire.acquire = ext_ref.node->acqrel.get();
 		current_module.name_output(ref, name.c_str());
 		current_module.set_source_location(ref.node, VUK_CALL);
 		return { std::move(ext_ref) };

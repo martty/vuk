@@ -17,7 +17,7 @@
 #include <unordered_set>
 #include <vector>
 
-#define VUK_DUMP_EXEC
+// #define VUK_DUMP_EXEC
 // #define VUK_DEBUG_IMBAR
 // #define VUK_DEBUG_MEMBAR
 
@@ -1722,9 +1722,8 @@ namespace vuk {
 
 		std::unordered_set<uint32_t> type_hashes;
 
-		for (auto& node : impl->nodes) {
-			node->execution_info = nullptr;
-			for (auto& t : node->type) {
+		for (auto& node : current_module.op_arena) {
+			for (auto& t : node.type) {
 				switch (t->kind) {
 				case Type::IMBUED_TY:
 					type_hashes.emplace(Type::hash(t->imbued.T));
@@ -1740,17 +1739,28 @@ namespace vuk {
 						type_hashes.emplace(Type::hash(t->composite.types[i]));
 					}
 					break;
+				case Type::OPAQUE_FN_TY:
+					for (int i = 0; i < t->opaque_fn.args.size(); i++) {
+						type_hashes.emplace(Type::hash(t->opaque_fn.args[i]));
+					}
+					break;
 				}
 				type_hashes.emplace(Type::hash(t));
 			}
+		}
 
+		for (auto& node : impl->nodes) {
+			node->execution_info = nullptr;
 			if (node->kind != Node::SPLICE && node->kind != Node::RELEASE && node->kind != Node::ACQUIRE) {
 				auto it = current_module.op_arena.get_iterator(node);
 				current_module.destroy_node(node);
 				current_module.op_arena.erase(it);
-			} else if (node->kind == Node::SPLICE) {
-				assert(node->splice.rel_acq->status != Signal::Status::eDisarmed);
-				node->splice.src = {};
+			} else {
+				if (node->kind == Node::SPLICE) {
+					assert(node->splice.rel_acq->status != Signal::Status::eDisarmed);
+					delete node->splice.src.data();
+					node->splice.src = {};
+				}
 			}
 		}
 
@@ -1759,6 +1769,14 @@ namespace vuk {
 			current_module.destroy_node(node);
 			current_module.op_arena.erase(it);
 		}
+
+		for (auto& node : current_module.garbage) {
+			auto it = current_module.op_arena.get_iterator(node);
+			current_module.destroy_node(node);
+			current_module.op_arena.erase(it);
+		}
+
+		current_module.garbage.clear();
 
 		std::vector<uint32_t> to_erase;
 		for (auto& [k, v] : current_module.type_map) {
@@ -1769,7 +1787,6 @@ namespace vuk {
 
 		for (auto& key : to_erase) {
 			auto t = &current_module.type_map.at(key);
-			delete t->debug_info;
 			switch (t->kind) {
 			case Type::OPAQUE_FN_TY:
 				delete t->opaque_fn.args.data();
@@ -1779,6 +1796,7 @@ namespace vuk {
 				delete t->composite.types.data();
 				break;
 			}
+			delete t->debug_info;
 			current_module.type_map.erase(key);
 		}
 

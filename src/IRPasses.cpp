@@ -362,6 +362,7 @@ namespace vuk {
 			if (r.node->kind == Node::PLACEHOLDER) {
 				r.node->kind = Node::CONSTANT;
 				r.node->constant.value = new T(value);
+				r.node->constant.owned = true;
 			}
 		};
 
@@ -369,6 +370,7 @@ namespace vuk {
 			if (r.node->kind == Node::PLACEHOLDER) {
 				r.node->kind = Node::CONSTANT;
 				r.node->constant.value = ptr;
+				r.node->constant.owned = false;
 			}
 		};
 

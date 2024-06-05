@@ -50,7 +50,7 @@ namespace vuk {
 			auto ref = get_head();
 			auto release = current_module.make_release(ref, nullptr, access, domain);
 			node = std::make_shared<ExtNode>(release, node); // previous extnode is a dep
-			release->release.release = node->acqrel;
+			release->release.release = node->acqrel.get();
 			index = 0;
 		}
 
@@ -75,7 +75,7 @@ namespace vuk {
 
 		template<class U>
 		Value<U> transmute(Ref new_head) noexcept {
-			node = std::make_shared<ExtNode>(ExtNode{ new_head.node, node });
+			node = std::make_shared<ExtNode>(new_head.node, node);
 			index = new_head.index;
 			return *reinterpret_cast<Value<U>*>(this); // TODO: not cool
 		}
@@ -249,6 +249,7 @@ namespace vuk {
 			auto candidate_node = Node{ .kind = Node::EXTRACT, .type = std::span{ &ty, 1 } };
 			candidate_node.extract.composite = composite; // writing these out for clang workaround
 			candidate_node.extract.index = first(&constant_node);
+			current_module.garbage.push_back(def.node->construct.args[index + 1].node);
 			try {
 				auto result = eval<uint64_t>(first(&candidate_node));
 				def.node->construct.args[index + 1] = current_module.template make_constant<uint64_t>(result);

@@ -308,6 +308,7 @@ namespace vuk {
 					uint64_t* value_uint64_t;
 					uint32_t* value_uint32_t;
 				};
+				bool owned = false;
 			} constant;
 			struct : Variable {
 				std::span<Ref> args;
@@ -774,6 +775,7 @@ namespace vuk {
 		IRModule() : op_arena(/**/) {}
 
 		plf::colony<Node /*, inline_alloc<Node, 4 * 1024>*/> op_arena;
+		std::vector<Node*> garbage;
 		plf::colony<UserCallbackType> ucbs;
 		plf::colony<Type*> type_refs;
 
@@ -907,12 +909,29 @@ namespace vuk {
 
 		void destroy_node(Node* node) {
 			switch (node->kind) {
+			case Node::CONSTANT:
+				if (!node->constant.owned) {
+					break;
+				}
+				switch (node->type[0]->kind) {
+				case Type::INTEGER_TY:
+					if (node->type[0]->integer.width == 32) {
+						delete node->constant.value_uint32_t;
+					} else {
+						delete node->constant.value_uint64_t;
+					}
+					break;
+				default:
+					assert(0);
+				}
+				break;
 			case Node::CONSTRUCT:
 				if (node->type[0] == builtin_image) {
 					delete (ImageAttachment*)node->construct.args[0].node->constant.value;
 				} else if (node->type[0] == builtin_buffer) {
 					delete (Buffer*)node->construct.args[0].node->constant.value;
 				}
+				break;
 			}
 			delete[] node->type.data();
 			if (node->generic_node.arg_count == (uint8_t)~0u) {
@@ -930,7 +949,6 @@ namespace vuk {
 
 				delete node->debug_info;
 			}
-			
 		}
 
 		// TYPES
@@ -962,7 +980,7 @@ namespace vuk {
 			} else {
 				ty = new Type*[1](emplace_type(Type{ .kind = Type::MEMORY_TY }));
 			}
-			return first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ ty, 1 }, .constant = { .value = new T(value) } }));
+			return first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ ty, 1 }, .constant = { .value = new T(value), .owned = true } }));
 		}
 
 		template<class T>
@@ -975,14 +993,14 @@ namespace vuk {
 			} else {
 				ty = new Type*[1](emplace_type(Type{ .kind = Type::MEMORY_TY }));
 			}
-			return first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ ty, 1 }, .constant = { .value = value } }));
+			return first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ ty, 1 }, .constant = { .value = value, .owned = false } }));
 		}
 
 		Ref make_declare_image(ImageAttachment value) {
 			auto ptr = new ImageAttachment(value); /* rest extent_x extent_y extent_z format samples base_layer layer_count base_level level_count */
 			auto args_ptr = new Ref[10];
 			auto mem_ty = new Type*[1](emplace_type(Type{ .kind = Type::MEMORY_TY }));
-			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = ptr } }));
+			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = ptr, .owned = false } }));
 			if (value.extent.width > 0) {
 				args_ptr[1] = make_constant(&ptr->extent.width);
 			} else {
@@ -1037,7 +1055,7 @@ namespace vuk {
 			auto buf_ptr = new Buffer(value); /* rest size */
 			auto args_ptr = new Ref[2];
 			auto mem_ty = new Type*[1](emplace_type(Type{ .kind = Type::MEMORY_TY }));
-			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = buf_ptr } }));
+			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = buf_ptr, .owned = false } }));
 			if (value.size != ~(0u)) {
 				args_ptr[1] = make_constant(&buf_ptr->size);
 			} else {
@@ -1061,14 +1079,14 @@ namespace vuk {
 		Ref make_declare_swapchain(Swapchain& bundle) {
 			auto args_ptr = new Ref[2];
 			auto mem_ty = new Type*[1](emplace_type(Type{ .kind = Type::MEMORY_TY }));
-			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = &bundle } }));
+			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = &bundle, .owned = false } }));
 			std::vector<Ref> imgs;
 			for (auto i = 0; i < bundle.images.size(); i++) {
 				imgs.push_back(make_declare_image(bundle.images[i]));
 			}
 			args_ptr[1] = make_declare_array(get_builtin_image(), imgs);
-			return first(
-			    emplace_op(Node{ .kind = Node::CONSTRUCT, .type = std::span{ new Type* [1](get_builtin_swapchain()), 1 }, .construct = { .args = std::span(args_ptr, 2) } }));
+			return first(emplace_op(
+			    Node{ .kind = Node::CONSTRUCT, .type = std::span{ new Type*[1](get_builtin_swapchain()), 1 }, .construct = { .args = std::span(args_ptr, 2) } }));
 		}
 
 		Ref make_extract(Ref composite, Ref index) {
@@ -1226,20 +1244,18 @@ namespace vuk {
 
 	struct ExtNode {
 		ExtNode(Node* node, std::vector<std::shared_ptr<ExtNode>> deps) : deps(std::move(deps)) {
-			owned_acqrel = std::make_unique<AcquireRelease>();
-			acqrel = owned_acqrel.get();
+			acqrel = std::make_unique<AcquireRelease>();
 			if (node->kind != Node::RELEASE && node->kind != Node::ACQUIRE) {
-				this->node = current_module.make_splice(node, acqrel);
+				this->node = current_module.make_splice(node, acqrel.get());
 			} else {
 				this->node = node;
 			}
 		}
 
 		ExtNode(Node* node, std::shared_ptr<ExtNode> dep) {
-			owned_acqrel = std::make_unique<AcquireRelease>();
-			acqrel = owned_acqrel.get();
+			acqrel = std::make_unique<AcquireRelease>();
 			if (node->kind != Node::RELEASE && node->kind != Node::ACQUIRE) {
-				this->node = current_module.make_splice(node, acqrel);
+				this->node = current_module.make_splice(node, acqrel.get());
 			} else {
 				this->node = node;
 			}
@@ -1248,7 +1264,7 @@ namespace vuk {
 		}
 
 		~ExtNode() {
-			if (owned_acqrel) {
+			if (acqrel) {
 				if (node->kind == Node::SPLICE) {
 					node->splice.rel_acq = nullptr;
 					for (auto i = 0; i < node->splice.values.size(); i++) {
@@ -1262,7 +1278,7 @@ namespace vuk {
 
 					delete node->splice.values.data();
 
-					if (owned_acqrel->status != Signal::Status::eDisarmed) {
+					if (acqrel->status != Signal::Status::eDisarmed) {
 						auto it = current_module.op_arena.get_iterator(node);
 						current_module.destroy_node(node);
 						current_module.op_arena.erase(it);
@@ -1273,7 +1289,7 @@ namespace vuk {
 					} else {
 						delete (ImageAttachment*)node->release.value;
 					}
-					if (owned_acqrel->status != Signal::Status::eDisarmed) {
+					if (acqrel->status != Signal::Status::eDisarmed) {
 						auto it = current_module.op_arena.get_iterator(node);
 						current_module.destroy_node(node);
 						current_module.op_arena.erase(it);
@@ -1282,7 +1298,45 @@ namespace vuk {
 			}
 		}
 
-		ExtNode(ExtNode&& o) = default;
+		ExtNode(ExtNode&& o) : acqrel(std::move(o.acqrel)), deps(std::move(o.deps)), node(o.node) {}
+		ExtNode& operator=(ExtNode&& o) {
+			if (acqrel) {
+				if (node->kind == Node::SPLICE) {
+					node->splice.rel_acq = nullptr;
+					for (auto i = 0; i < node->splice.values.size(); i++) {
+						auto& v = node->splice.values[i];
+						if (node->type[i] == current_module.builtin_buffer) {
+							delete (Buffer*)v;
+						} else {
+							delete (ImageAttachment*)v;
+						}
+					}
+
+					delete node->splice.values.data();
+
+					if (acqrel->status != Signal::Status::eDisarmed) {
+						auto it = current_module.op_arena.get_iterator(node);
+						current_module.destroy_node(node);
+						current_module.op_arena.erase(it);
+					}
+				} else if (node->kind == Node::RELEASE) {
+					if (node->type[0] == current_module.builtin_buffer) {
+						delete (Buffer*)node->release.value;
+					} else {
+						delete (ImageAttachment*)node->release.value;
+					}
+					if (acqrel->status != Signal::Status::eDisarmed) {
+						auto it = current_module.op_arena.get_iterator(node);
+						current_module.destroy_node(node);
+						current_module.op_arena.erase(it);
+					}
+				}
+			}
+
+			acqrel = std::move(o.acqrel);
+			deps = std::move(o.deps);
+			node = o.node;
+		}
 
 		Node* get_node() {
 			assert(node->kind == Node::NOP || node->kind == Node::SPLICE || node->kind == Node::RELEASE || node->kind == Node::ACQUIRE);
@@ -1293,11 +1347,10 @@ namespace vuk {
 			if (node->kind == Node::SPLICE) {
 				node->splice.rel_acq = nullptr;
 			}
-			node = current_module.make_splice(new_node, acqrel);
+			node = current_module.make_splice(new_node, acqrel.get());
 		}
 
-		AcquireRelease* acqrel;
-		std::unique_ptr<AcquireRelease> owned_acqrel;
+		std::unique_ptr<AcquireRelease> acqrel;
 		std::vector<std::shared_ptr<ExtNode>> deps;
 
 	private:
