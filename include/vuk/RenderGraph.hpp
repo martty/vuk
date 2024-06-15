@@ -297,7 +297,7 @@ public:
 	template<typename... T>
 	static auto fill_ret_ty(std::array<size_t, sizeof...(T)> idxs, const std::tuple<T...>& args, std::vector<Type*>& ret_types) {
 		size_t i = 0;
-		(ret_types.emplace_back(current_module.make_aliased_ty(Type::stripped(std::get<T>(args).src.type()), idxs[sizeof...(T) - (++i)] + 1)), ...);
+		(ret_types.emplace_back(current_module.make_aliased_ty(Type::stripped(std::get<T>(args).src.type()), idxs[i++] + 1)), ...);
 	}
 
 	inline auto First = [](auto& first, auto&...) -> auto& {
