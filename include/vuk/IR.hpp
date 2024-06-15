@@ -492,6 +492,8 @@ namespace vuk {
 		case Node::CONSTRUCT:
 		case Node::CONSTANT:
 			return RefOrValue::from_ref(ref);
+		case Node::ACQUIRE_NEXT_IMAGE:
+			return RefOrValue::from_ref(ref);
 		case Node::SPLICE: {
 			if (ref.node->splice.rel_acq == nullptr || ref.node->splice.rel_acq->status == Signal::Status::eDisarmed) {
 				return get_def(ref.node->splice.src[ref.index]);
@@ -515,15 +517,17 @@ namespace vuk {
 				if (composite.ref.node->kind == Node::CONSTRUCT) {
 					return RefOrValue::from_ref(composite.ref.node->construct.args[index + 1]);
 				} else if (composite.ref.node->kind == Node::ACQUIRE_NEXT_IMAGE) {
-					auto swp = composite.ref.node->acquire_next_image.swapchain;
-					if (swp.node->kind == Node::CONSTRUCT) {
-						auto arr = swp.node->construct.args[1]; // array of images
+					auto swp = get_def(composite.ref.node->acquire_next_image.swapchain);
+					if (swp.is_ref && swp.ref.node->kind == Node::CONSTRUCT) {
+						auto arr = swp.ref.node->construct.args[1]; // array of images
 						if (arr.node->kind == Node::CONSTRUCT) {
 							auto elem = arr.node->construct.args[1]; // first image
 							if (elem.node->kind == Node::CONSTRUCT) {
 								return RefOrValue::from_ref(elem.node->construct.args[index + 1]);
 							}
 						}
+					} else {
+						throw CannotBeConstantEvaluated{ ref };
 					}
 				} else {
 					throw CannotBeConstantEvaluated{ ref };
