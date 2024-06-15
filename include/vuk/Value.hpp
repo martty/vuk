@@ -239,9 +239,6 @@ namespace vuk {
 				return;
 			}
 			auto def = def_or_v.ref;
-			Type* cty = current_module.u64();
-			auto constant_node = Node{ .kind = Node::CONSTANT, .type = std::span{ &cty, 1 } };
-			constant_node.constant.value = &index; // writing these out for clang workaround
 
 			auto composite = src_composite;
 			Type* ty;
@@ -251,13 +248,22 @@ namespace vuk {
 			} else if (stripped->kind == Type::COMPOSITE_TY) {
 				ty = stripped->composite.types[index];
 			}
+
+			auto constant_node = Node{ .kind = Node::CONSTANT, .type = std::span{ &ty, 1 } };
+			constant_node.constant.value = &index; // writing these out for clang workaround
+
 			auto candidate_node = Node{ .kind = Node::EXTRACT, .type = std::span{ &ty, 1 } };
 			candidate_node.extract.composite = composite; // writing these out for clang workaround
 			candidate_node.extract.index = first(&constant_node);
 			current_module.garbage.push_back(def.node->construct.args[index + 1].node);
 			try {
-				auto result = eval<uint64_t>(first(&candidate_node));
-				def.node->construct.args[index + 1] = current_module.template make_constant<uint64_t>(result);
+				if (ty->kind == Type::INTEGER_TY && ty->integer.width == 64) {
+					auto result = eval<uint64_t>(first(&candidate_node));
+					def.node->construct.args[index + 1] = current_module.template make_constant<uint64_t>(result);
+				} else if (ty->kind == Type::INTEGER_TY && ty->integer.width == 32) {
+					auto result = eval<uint32_t>(first(&candidate_node));
+					def.node->construct.args[index + 1] = current_module.make_constant<uint32_t>(result);
+				}
 			} catch (...) {
 				def.node->construct.args[index + 1] = current_module.make_extract(composite, index);
 			}
