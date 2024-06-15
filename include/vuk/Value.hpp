@@ -39,6 +39,11 @@ namespace vuk {
 			if (node.use_count() == 1 && get_head().node->kind == Node::SPLICE && can_peel) {
 				Ref peeled_head = get_head().node->splice.src[get_head().index];
 				get_head().node->kind = Node::NOP;
+				if (get_head().node->generic_node.arg_count == 255) {
+					delete get_head().node->variable_node.args.data();
+				}
+				get_head().node->generic_node.arg_count = 0;
+				current_module.garbage.push_back(get_head().node);
 				return peeled_head;
 			} else {
 				return get_head();

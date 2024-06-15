@@ -42,6 +42,7 @@ namespace vuk {
 
 		auto& acqrel = node->acqrel;
 		if (acqrel->status == Signal::Status::eHostAvailable || acqrel->status == Signal::Status::eSynchronizable) {
+			compiler.reset();
 			return { expected_value }; // nothing to do
 		} else {
 			auto erg = compiler.link(std::span{ &node, 1 }, options);

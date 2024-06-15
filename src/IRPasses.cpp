@@ -274,8 +274,10 @@ namespace vuk {
 				break;
 			}
 			case Node::RELEASE:
-				node->release.src.link().undef = { node, 0 };
-				first(node).link().prev = &node->release.src.link();
+				if (node->release.arg_count == 1) {
+					node->release.src.link().undef = { node, 0 };
+					first(node).link().prev = &node->release.src.link();
+				}
 				break;
 
 			case Node::EXTRACT:
@@ -852,7 +854,7 @@ namespace vuk {
 			}
 			switch (node->kind) {
 			case Node::NOP: {
-				impl->garbage_nodes.push_back(node);
+				// impl->garbage_nodes.push_back(node);
 				break;
 			}
 			case Node::SLICE: {
@@ -987,7 +989,7 @@ namespace vuk {
 						impl->garbage_nodes.emplace_back(new_node);
 					} else {
 						Node acq_node{ .kind = Node::ACQUIRE,
-							             .type = node->type,
+							             .type = { new Type*[1](node->type[0]), 1 },
 							             .acquire = { .value = node->release.value, .acquire = node->release.release, .index = 0 } };
 						auto new_node = current_module.emplace_op(acq_node);
 						replaces.emplace_back(needle, first(new_node));
@@ -1032,7 +1034,7 @@ namespace vuk {
 		}
 
 		VUK_DO_OR_RETURN(impl->build_nodes());
-		//impl->dump_graph();
+		// impl->dump_graph();
 		VUK_DO_OR_RETURN(impl->build_links());
 
 		VUK_DO_OR_RETURN(impl->reify_inference());

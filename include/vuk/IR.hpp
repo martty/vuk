@@ -921,8 +921,6 @@ namespace vuk {
 						delete node->constant.value_uint64_t;
 					}
 					break;
-				default:
-					assert(0);
 				}
 				break;
 			case Node::CONSTRUCT:
@@ -949,6 +947,8 @@ namespace vuk {
 
 				delete node->debug_info;
 			}
+			auto it = op_arena.get_iterator(node);
+			op_arena.erase(it);
 		}
 
 		// TYPES
@@ -1275,25 +1275,24 @@ namespace vuk {
 							delete (ImageAttachment*)v;
 						}
 					}
-
 					delete node->splice.values.data();
-
-					if (acqrel->status != Signal::Status::eDisarmed) {
-						auto it = current_module.op_arena.get_iterator(node);
-						current_module.destroy_node(node);
-						current_module.op_arena.erase(it);
-					}
 				} else if (node->kind == Node::RELEASE) {
 					if (node->type[0] == current_module.builtin_buffer) {
 						delete (Buffer*)node->release.value;
 					} else {
 						delete (ImageAttachment*)node->release.value;
 					}
-					if (acqrel->status != Signal::Status::eDisarmed) {
-						auto it = current_module.op_arena.get_iterator(node);
-						current_module.destroy_node(node);
-						current_module.op_arena.erase(it);
+				} else if (node->kind == Node::ACQUIRE) {
+					if (node->type[0] == current_module.builtin_buffer) {
+						delete (Buffer*)node->acquire.value;
+					} else {
+						delete (ImageAttachment*)node->acquire.value;
 					}
+				}
+				if (acqrel->status != Signal::Status::eDisarmed) {
+					current_module.destroy_node(node);
+				} else {
+					current_module.garbage.push_back(node);
 				}
 			}
 		}

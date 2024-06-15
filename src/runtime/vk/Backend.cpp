@@ -1749,34 +1749,43 @@ namespace vuk {
 			}
 		}
 
+		if (current_module.builtin_image) {
+			type_hashes.emplace(Type::hash(current_module.builtin_image));
+		}
+		if (current_module.builtin_buffer) {
+			type_hashes.emplace(Type::hash(current_module.builtin_buffer));
+		}
+		if (current_module.builtin_swapchain) {
+			type_hashes.emplace(Type::hash(current_module.builtin_swapchain));
+		}
+
 		for (auto& node : impl->nodes) {
 			node->execution_info = nullptr;
 			if (node->kind != Node::SPLICE && node->kind != Node::RELEASE && node->kind != Node::ACQUIRE) {
-				auto it = current_module.op_arena.get_iterator(node);
 				current_module.destroy_node(node);
-				current_module.op_arena.erase(it);
 			} else {
 				if (node->kind == Node::SPLICE) {
 					assert(node->splice.rel_acq->status != Signal::Status::eDisarmed);
 					delete node->splice.src.data();
 					node->splice.src = {};
 				}
+				if (node->kind == Node::RELEASE) {
+					assert(node->release.release->status != Signal::Status::eDisarmed);
+					node->release.arg_count = 0;
+					node->release.src = {};
+				}
 			}
 		}
 
+		impl->garbage_nodes.insert(impl->garbage_nodes.end(), current_module.garbage.begin(), current_module.garbage.end());
+		std::sort(impl->garbage_nodes.begin(), impl->garbage_nodes.end());
+		impl->garbage_nodes.erase(std::unique(impl->garbage_nodes.begin(), impl->garbage_nodes.end()), impl->garbage_nodes.end());
 		for (auto& node : impl->garbage_nodes) {
-			auto it = current_module.op_arena.get_iterator(node);
 			current_module.destroy_node(node);
-			current_module.op_arena.erase(it);
-		}
-
-		for (auto& node : current_module.garbage) {
-			auto it = current_module.op_arena.get_iterator(node);
-			current_module.destroy_node(node);
-			current_module.op_arena.erase(it);
 		}
 
 		current_module.garbage.clear();
+		impl->garbage_nodes.clear();
 
 		std::vector<uint32_t> to_erase;
 		for (auto& [k, v] : current_module.type_map) {
@@ -1800,6 +1809,7 @@ namespace vuk {
 			current_module.type_map.erase(key);
 		}
 
+		impl->depnodes.clear();
 		return { expected_value };
 	}
 } // namespace vuk
