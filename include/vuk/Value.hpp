@@ -70,7 +70,7 @@ namespace vuk {
 
 	protected:
 		size_t index;
-		bool can_peel = true;
+		bool can_peel = false;
 	};
 
 	template<class T>
