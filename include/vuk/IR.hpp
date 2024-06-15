@@ -816,7 +816,7 @@ namespace vuk {
 		Type*& get_builtin_buffer() {
 			if (!builtin_buffer) {
 				auto buffer_ = new Type* [1] {
-					u32()
+					u64()
 				};
 				auto buffer_offsets = new size_t[1]{ offsetof(Buffer, size) };
 				builtin_buffer = emplace_type(Type{ .kind = Type::COMPOSITE_TY,
