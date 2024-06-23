@@ -365,7 +365,9 @@ namespace vuk {
 		auto placeholder_to_constant = [this, &progress]<class T>(Ref r, T value) {
 			if (r.node->kind == Node::PLACEHOLDER) {
 				r.node->kind = Node::CONSTANT;
-				r.node->constant.value = new T(value);
+				assert(sizeof(T) == r.type()->size);
+				r.node->constant.value = new char[sizeof(T)];
+				new (r.node->constant.value) T(value);
 				r.node->constant.owned = true;
 				progress = true;
 			}
@@ -423,7 +425,7 @@ namespace vuk {
 				}
 			}
 		}
-		
+
 		// framebuffer inference
 		try {
 			do {

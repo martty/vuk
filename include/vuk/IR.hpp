@@ -92,7 +92,10 @@ namespace vuk {
 				hash_combine_direct(v, (uint32_t)t->aliased.ref_idx);
 				return v;
 			case MEMORY_TY:
-				return 0;
+				v = 0;
+				hash_combine_direct(v, MEMORY_TY);
+				hash_combine_direct(v, t->size);
+				return v;
 			case INTEGER_TY:
 				return t->integer.width;
 			case ARRAY_TY:
@@ -882,27 +885,16 @@ namespace vuk {
 
 		void destroy_node(Node* node) {
 			switch (node->kind) {
-			case Node::CONSTANT:
-				if (!node->constant.owned) {
-					break;
-				}
-				switch (node->type[0]->kind) {
-				case Type::INTEGER_TY:
-					if (node->type[0]->integer.width == 32) {
-						delete node->constant.value_uint32_t;
-					} else {
-						delete node->constant.value_uint64_t;
-					}
-					break;
+			case Node::CONSTANT: {
+				if (node->constant.owned) {
+					delete[] (char*)node->constant.value;
 				}
 				break;
-			case Node::CONSTRUCT:
-				if (node->type[0] == builtin_image) {
-					delete (ImageAttachment*)node->construct.args[0].node->constant.value;
-				} else if (node->type[0] == builtin_buffer) {
-					delete (Buffer*)node->construct.args[0].node->constant.value;
-				}
+			}
+			case Node::CONVERGE: {
+				delete[] node->converge.write.data();
 				break;
+			}
 			}
 			delete[] node->type.data();
 			if (node->generic_node.arg_count == (uint8_t)~0u) {
@@ -953,7 +945,8 @@ namespace vuk {
 			} else {
 				ty = new Type*[1](emplace_type(Type{ .kind = Type::MEMORY_TY, .size = sizeof(T) }));
 			}
-			return first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ ty, 1 }, .constant = { .value = new T(value), .owned = true } }));
+			return first(
+			    emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ ty, 1 }, .constant = { .value = new (new char[sizeof(T)]) T(value), .owned = true } }));
 		}
 
 		template<class T>
@@ -970,10 +963,11 @@ namespace vuk {
 		}
 
 		Ref make_declare_image(ImageAttachment value) {
-			auto ptr = new ImageAttachment(value); /* rest extent_x extent_y extent_z format samples base_layer layer_count base_level level_count */
+			auto ptr = new (new char[sizeof(ImageAttachment)])
+			    ImageAttachment(value); /* rest extent_x extent_y extent_z format samples base_layer layer_count base_level level_count */
 			auto args_ptr = new Ref[10];
 			auto mem_ty = new Type*[1](emplace_type(Type{ .kind = Type::MEMORY_TY, .size = sizeof(ImageAttachment) }));
-			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = ptr, .owned = false } }));
+			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = ptr, .owned = true } }));
 			if (value.extent.width > 0) {
 				args_ptr[1] = make_constant(&ptr->extent.width);
 			} else {
@@ -1027,10 +1021,10 @@ namespace vuk {
 		}
 
 		Ref make_declare_buffer(Buffer value) {
-			auto buf_ptr = new Buffer(value); /* rest size */
+			auto buf_ptr = new (new char[sizeof(Buffer)]) Buffer(value); /* rest size */
 			auto args_ptr = new Ref[2];
 			auto mem_ty = new Type*[1](emplace_type(Type{ .kind = Type::MEMORY_TY, .size = sizeof(Buffer) }));
-			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = buf_ptr, .owned = false } }));
+			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = buf_ptr, .owned = true } }));
 			if (value.size != ~(0u)) {
 				args_ptr[1] = make_constant(&buf_ptr->size);
 			} else {
