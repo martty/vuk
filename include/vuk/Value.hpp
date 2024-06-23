@@ -263,6 +263,8 @@ namespace vuk {
 				} else if (ty->kind == Type::INTEGER_TY && ty->integer.width == 32) {
 					auto result = eval<uint32_t>(first(&candidate_node));
 					def.node->construct.args[index + 1] = current_module.make_constant<uint32_t>(result);
+				} else {
+					def.node->construct.args[index + 1] = current_module.make_extract(composite, index);
 				}
 			} catch (...) {
 				def.node->construct.args[index + 1] = current_module.make_extract(composite, index);
