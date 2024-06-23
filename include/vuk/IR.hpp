@@ -491,8 +491,8 @@ namespace vuk {
 		case Node::ACQUIRE:
 		case Node::CONSTRUCT:
 		case Node::CONSTANT:
-			return RefOrValue::from_ref(ref);
 		case Node::ACQUIRE_NEXT_IMAGE:
+		case Node::SLICE:
 			return RefOrValue::from_ref(ref);
 		case Node::SPLICE: {
 			if (ref.node->splice.rel_acq == nullptr || ref.node->splice.rel_acq->status == Signal::Status::eDisarmed) {
@@ -509,40 +509,8 @@ namespace vuk {
 			return get_def(ref.node->call.args[t->aliased.ref_idx]);
 		}
 		case Node::EXTRACT: {
-			auto index = eval<uint64_t>(ref.node->extract.index);
-
-			auto type = ref.node->extract.composite.type();
 			auto composite = get_def(ref.node->extract.composite);
-			if (composite.is_ref) {
-				if (composite.ref.node->kind == Node::CONSTRUCT) {
-					return RefOrValue::from_ref(composite.ref.node->construct.args[index + 1]);
-				} else if (composite.ref.node->kind == Node::ACQUIRE_NEXT_IMAGE) {
-					auto swp = get_def(composite.ref.node->acquire_next_image.swapchain);
-					if (swp.is_ref && swp.ref.node->kind == Node::CONSTRUCT) {
-						auto arr = swp.ref.node->construct.args[1]; // array of images
-						if (arr.node->kind == Node::CONSTRUCT) {
-							auto elem = arr.node->construct.args[1]; // first image
-							if (elem.node->kind == Node::CONSTRUCT) {
-								return RefOrValue::from_ref(elem.node->construct.args[index + 1]);
-							}
-						}
-					} else {
-						throw CannotBeConstantEvaluated{ ref };
-					}
-				} else {
-					throw CannotBeConstantEvaluated{ ref };
-				}
-			} else {
-				if (type->kind == Type::COMPOSITE_TY) {
-					auto offset = type->composite.offsets[index];
-					return RefOrValue::from_value(reinterpret_cast<void*>(static_cast<unsigned char*>(composite.value) + offset));
-				} else if (type->kind == Type::ARRAY_TY) {
-					auto offset = type->array.stride * index;
-					return RefOrValue::from_value(reinterpret_cast<void*>(static_cast<unsigned char*>(composite.value) + offset));
-				} else {
-					throw CannotBeConstantEvaluated{ ref };
-				}
-			}
+			return composite;
 		}
 		case Node::RELEASE:
 			if (ref.node->release.release == nullptr || ref.node->release.release->status == Signal::Status::eDisarmed) {
@@ -614,11 +582,49 @@ namespace vuk {
 		}
 
 		case Node::EXTRACT: {
-			auto def = get_def(ref);
-			if (def.is_ref) {
-				return eval<T>(def.ref);
+			auto composite = get_def(ref);
+			auto index = eval<uint64_t>(ref.node->extract.index);
+
+			auto type = ref.node->extract.composite.type();
+			if (composite.is_ref) {
+				if (composite.ref.node->kind == Node::CONSTRUCT) {
+					return eval<T>(composite.ref.node->construct.args[index + 1]);
+				} else if (composite.ref.node->kind == Node::ACQUIRE_NEXT_IMAGE) {
+					auto swp = get_def(composite.ref.node->acquire_next_image.swapchain);
+					if (swp.is_ref && swp.ref.node->kind == Node::CONSTRUCT) {
+						auto arr = swp.ref.node->construct.args[1]; // array of images
+						if (arr.node->kind == Node::CONSTRUCT) {
+							auto elem = arr.node->construct.args[1]; // first image
+							if (elem.node->kind == Node::CONSTRUCT) {
+								return eval<T>(elem.node->construct.args[index + 1]);
+							}
+						}
+					} else {
+						throw CannotBeConstantEvaluated{ ref };
+					}
+				} else if (composite.ref.node->kind == Node::SLICE) {
+					auto slice_def = get_def(composite.ref.node->slice.image);
+					if (!slice_def.is_ref || slice_def.ref.node->kind != Node::CONSTRUCT) {
+						throw CannotBeConstantEvaluated{ ref }; // TODO: this too limited
+					}
+					if (index < 6) {
+						return eval<T>(slice_def.ref.node->construct.args[index + 1]);
+					} else {
+						assert(false && "NYI");
+					}
+				} else {
+					throw CannotBeConstantEvaluated{ ref };
+				}
 			} else {
-				return *static_cast<T*>(def.value);
+				if (type->kind == Type::COMPOSITE_TY) {
+					auto offset = type->composite.offsets[index];
+					return *static_cast<T*>(reinterpret_cast<void*>(static_cast<unsigned char*>(composite.value) + offset));
+				} else if (type->kind == Type::ARRAY_TY) {
+					auto offset = type->array.stride * index;
+					return *static_cast<T*>(reinterpret_cast<void*>(static_cast<unsigned char*>(composite.value) + offset));
+				} else {
+					throw CannotBeConstantEvaluated{ ref };
+				}
 			}
 		}
 		default:
@@ -645,20 +651,6 @@ namespace vuk {
 				assert(0);
 			}
 		}
-			/*
-			      if (node->kind == Node::CONSTRUCT) {
-			  return node->construct.args[0].node->constant.value;
-			} else if (node->kind == Node::ACQUIRE_NEXT_IMAGE) {
-			  Swapchain* swp = reinterpret_cast<Swapchain*>(get_constant_value(node->acquire_next_image.swapchain.node));
-			  return &swp->images[0];
-			} else if (node->kind == Node::ACQUIRE) {
-			  return node->acquire.arg.node->constant.value;
-			} else if (node->kind == Node::SPLICE) {
-			  return get_constant_value(node->splice.src.node);
-			} else {
-			  assert(0);
-			}
-			*/
 		default:
 			throw CannotBeConstantEvaluated(ref);
 		}
