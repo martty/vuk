@@ -1044,6 +1044,19 @@ namespace vuk {
 			fmt::print("{}", print_args_to_string(args));
 		};
 
+		auto print_args_to_string_with_arg_names = [&](std::span<const std::string_view> arg_names, std::span<Ref> args) {
+			std::string msg = "";
+			for (size_t i = 0; i < args.size(); i++) {
+				if (i > 0) {
+					msg += fmt::format(", ");
+				}
+				auto& parm = args[i];
+
+				msg += fmt::format("{}:", arg_names[i]) + parm_to_string(parm);
+			}
+			return msg;
+		};
+
 		auto node_to_string = [](Node* node) {
 			if (node->kind == Node::CONSTRUCT) {
 				return fmt::format("construct<{}> ", Type::to_string(node->type[0]));
@@ -1054,13 +1067,29 @@ namespace vuk {
 
 		enum class Level { eError };
 
+		using namespace std::literals;
+		auto arg_names = [&](Type* t) -> std::vector<std::string_view>{
+			if (t == current_module.builtin_image) {
+				return { "width"sv, "height"sv, "depth"sv, "format"sv, "samples"sv, "base_layer"sv, "layer_count"sv, "base_level"sv, "level_count"sv };
+			} else if (t == current_module.builtin_buffer) {
+				return { "size"sv };
+			} else {
+				assert(0);
+			}
+		};
+
 		auto format_message = [&](Level level, Node* node, std::span<Ref> args, std::string err) {
 			std::string msg = "";
 			msg += format_source_location(node);
 			msg += fmt::format("{}: '", level == Level::eError ? "error" : "other");
 			msg += print_results_to_string(node);
 			msg += fmt::format(" = {}", node_to_string(node));
-			msg += print_args_to_string(args);
+			if (node->kind == Node::CONSTRUCT) {
+				auto names = arg_names(node->type[0]);
+				msg += print_args_to_string_with_arg_names(names, args);
+			} else {
+				msg += print_args_to_string(args);
+			}
 			msg += err;
 			return msg;
 		};
@@ -1125,10 +1154,10 @@ namespace vuk {
 						} catch (CannotBeConstantEvaluated& err) {
 							if (err.ref.node->kind == Node::PLACEHOLDER) {
 								return { expected_error,
-									       RenderGraphException(format_message(Level::eError, node, node->construct.args.subspan(1), "': argument not set or inferrable\n")) };
+									       RenderGraphException(format_message(Level::eError, node, node->construct.args.subspan(1), "': argument(s) not set or inferrable\n")) };
 							} else {
 								return { expected_error,
-									       RenderGraphException(format_message(Level::eError, node, node->construct.args.subspan(1), "': argument not constant evaluatable\n")) };
+									       RenderGraphException(format_message(Level::eError, node, node->construct.args.subspan(1), "': argument(s) not constant evaluatable\n")) };
 							}
 						}
 #ifdef VUK_DUMP_EXEC
@@ -1191,10 +1220,10 @@ namespace vuk {
 						} catch (CannotBeConstantEvaluated& err) {
 							if (err.ref.node->kind == Node::PLACEHOLDER) {
 								return { expected_error,
-									       RenderGraphException(format_message(Level::eError, node, node->construct.args.subspan(1), "': argument not set or inferrable\n")) };
+									       RenderGraphException(format_message(Level::eError, node, node->construct.args.subspan(1), "': argument(s) not set or inferrable\n")) };
 							} else {
 								return { expected_error,
-									       RenderGraphException(format_message(Level::eError, node, node->construct.args.subspan(1), "': argument not constant evaluatable\n")) };
+									       RenderGraphException(format_message(Level::eError, node, node->construct.args.subspan(1), "': argument(s) not constant evaluatable\n")) };
 							}
 						}
 #ifdef VUK_DUMP_EXEC
