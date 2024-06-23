@@ -106,7 +106,7 @@ namespace vuk {
 				if (arg.node->kind == Node::PLACEHOLDER) {
 					continue;
 				}
-				if (arg.node->kind == Node::SPLICE) { // bridge splices
+				if (arg.node->kind == Node::SPLICE && arg.node->splice.rel_acq && arg.node->splice.rel_acq->status == Signal::Status::eDisarmed) { // bridge splices
 					auto bridged_arg = arg.node->splice.src[arg.index];
 					ss << uintptr_t(bridged_arg.node) << " :r" << bridged_arg.index << " -> " << uintptr_t(node) << " :a" << i << " :n [color=blue]\n";
 				} else if (arg.node->kind == Node::INDIRECT_DEPEND) { // bridge indirect depends (connect to node)
@@ -232,7 +232,7 @@ namespace vuk {
 			case Node::SPLICE: { // ~~ write joiner
 				for (size_t i = 0; i < node->type.size(); i++) {
 					Ref{ node, i }.link().def = { node, i };
-					if (node->splice.rel_acq && node->splice.rel_acq->status == Signal::Status::eDisarmed) {
+					if (!node->splice.rel_acq || node->splice.rel_acq && node->splice.rel_acq->status == Signal::Status::eDisarmed) {
 						assert(node->splice.src[i].link().undef.node == nullptr);
 						node->splice.src[i].link().undef = { node, i };
 						node->splice.src[i].link().next = &Ref{ node, i }.link();
