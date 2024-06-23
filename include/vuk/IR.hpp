@@ -470,7 +470,6 @@ namespace vuk {
 	};
 
 	template<class T>
-	  requires(std::is_arithmetic_v<T>)
 	T eval(Ref ref);
 
 	struct RefOrValue {
@@ -524,59 +523,32 @@ namespace vuk {
 	}
 
 	template<class T>
-	  requires(std::is_pointer_v<T>)
-	T eval(Ref ref) {
-		switch (ref.node->kind) {
-		case Node::CONSTANT: {
-			return static_cast<T>(ref.node->constant.value);
-		}
-		case Node::CONSTRUCT: {
-			return eval<T>(ref.node->construct.args[0]);
-		}
-		case Node::ACQUIRE: {
-			return static_cast<T>(ref.node->acquire.value);
-		}
-		case Node::SPLICE: {
-			if (ref.node->splice.rel_acq->status == Signal::Status::eDisarmed) {
-				return eval<T>(ref.node->splice.src[ref.index]);
-			} else {
-				return static_cast<T>(ref.node->splice.values[ref.index]);
-			}
-		}
-		case Node::ACQUIRE_NEXT_IMAGE: {
-			Swapchain* swp = eval<Swapchain*>(ref.node->acquire_next_image.swapchain);
-			return reinterpret_cast<T>(&swp->images[0]);
-		}
-		default:
-			throw CannotBeConstantEvaluated{ ref };
-		}
-	}
-
-	template<class T>
-	  requires(std::is_arithmetic_v<T>)
+	  requires(!std::is_pointer_v<T>)
 	T eval(Ref ref) {
 		switch (ref.node->kind) {
 		case Node::CONSTANT: {
 			return constant<T>(ref);
 		}
 		case Node::MATH_BINARY: {
-			auto& math_binary = ref.node->math_binary;
-			switch (math_binary.op) {
-			case Node::BinOp::ADD: {
-				return eval<T>(math_binary.a) + eval<T>(math_binary.b);
-			}
-			case Node::BinOp::SUB: {
-				return eval<T>(math_binary.a) - eval<T>(math_binary.b);
-			}
-			case Node::BinOp::MUL: {
-				return eval<T>(math_binary.a) * eval<T>(math_binary.b);
-			}
-			case Node::BinOp::DIV: {
-				return eval<T>(math_binary.a) / eval<T>(math_binary.b);
-			}
-			case Node::BinOp::MOD: {
-				return eval<T>(math_binary.a) % eval<T>(math_binary.b);
-			}
+			if constexpr (std::is_arithmetic_v<T>) {
+				auto& math_binary = ref.node->math_binary;
+				switch (math_binary.op) {
+				case Node::BinOp::ADD: {
+					return eval<T>(math_binary.a) + eval<T>(math_binary.b);
+				}
+				case Node::BinOp::SUB: {
+					return eval<T>(math_binary.a) - eval<T>(math_binary.b);
+				}
+				case Node::BinOp::MUL: {
+					return eval<T>(math_binary.a) * eval<T>(math_binary.b);
+				}
+				case Node::BinOp::DIV: {
+					return eval<T>(math_binary.a) / eval<T>(math_binary.b);
+				}
+				case Node::BinOp::MOD: {
+					return eval<T>(math_binary.a) % eval<T>(math_binary.b);
+				}
+				}
 			}
 			assert(0);
 		}
@@ -633,26 +605,31 @@ namespace vuk {
 	}
 
 	template<class T>
-	  requires(!std::is_pointer_v<T> && !std::is_arithmetic_v<T>)
+	  requires(std::is_pointer_v<T>)
 	T eval(Ref ref) {
 		switch (ref.node->kind) {
 		case Node::CONSTANT: {
-			return constant<T>(ref);
+			return static_cast<T>(ref.node->constant.value);
 		}
-		case Node::EXTRACT: {
-			auto composite = ref.node->extract.composite;
-			auto index = eval<uint64_t>(ref.node->extract.index);
-			if (composite.type()->kind == Type::COMPOSITE_TY) {
-				auto offset = composite.type()->composite.offsets[index];
-				return *reinterpret_cast<T*>(eval<unsigned char*>(composite) + offset);
-			} else if (composite.type()->kind == Type::ARRAY_TY) {
-				return eval<T*>(composite)[index];
+		case Node::CONSTRUCT: {
+			return eval<T>(ref.node->construct.args[0]);
+		}
+		case Node::ACQUIRE: {
+			return static_cast<T>(ref.node->acquire.value);
+		}
+		case Node::SPLICE: {
+			if (ref.node->splice.rel_acq->status == Signal::Status::eDisarmed) {
+				return eval<T>(ref.node->splice.src[ref.index]);
 			} else {
-				assert(0);
+				return static_cast<T>(ref.node->splice.values[ref.index]);
 			}
 		}
+		case Node::ACQUIRE_NEXT_IMAGE: {
+			Swapchain* swp = eval<Swapchain*>(ref.node->acquire_next_image.swapchain);
+			return reinterpret_cast<T>(&swp->images[0]);
+		}
 		default:
-			throw CannotBeConstantEvaluated(ref);
+			throw CannotBeConstantEvaluated{ ref };
 		}
 	}
 
