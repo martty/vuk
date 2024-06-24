@@ -89,8 +89,9 @@ namespace vuk {
 			ImGui_ImplGlfw_InitForVulkan(window, true);
 			imgui_data = util::ImGui_ImplVuk_Init(*superframe_allocator);
 			{
+				std::vector<std::jthread> threads;
 				for (auto& ex : examples) {
-					ex->setup(*this, *superframe_allocator);
+					threads.emplace_back(std::jthread([&] { ex->setup(*this, *superframe_allocator); }));
 				}
 			}
 			glfwSetWindowSizeCallback(window, [](GLFWwindow* window, int width, int height) {
