@@ -37,14 +37,14 @@ namespace vuk {
 		std::vector<ScheduledItem*> partitioned_execables;
 		std::vector<size_t> scheduled_idx_to_partitioned_idx;
 
-		std::vector<Ref> pass_reads;
+		std::pmr::vector<Ref> pass_reads;
 
 		std::vector<std::shared_ptr<ExtNode>> refs;
 		std::vector<std::shared_ptr<ExtNode>> depnodes;
 		std::vector<Node*> nodes;
 		std::vector<Node*> garbage_nodes;
 		std::vector<ChainLink*> chains;
-		std::vector<ChainLink*> child_chains;
+		std::pmr::vector<ChainLink*> child_chains;
 
 		std::span<ScheduledItem*> transfer_passes, compute_passes, graphics_passes;
 
@@ -82,7 +82,7 @@ namespace vuk {
 		}
 
 		Result<void> build_nodes();
-		Result<void> build_links();
+		Result<void> build_links(const std::vector<Node*>& working_set, std::pmr::polymorphic_allocator<std::byte> allocator);
 		Result<void> build_sync();
 		Result<void> reify_inference();
 		Result<void> schedule_intra_queue(const RenderGraphCompileOptions& compile_options);

@@ -17,15 +17,18 @@ namespace vuk {
 			return std::span{ base + offset0, base + offset1 };
 		}
 
-		constexpr std::span<T> to_span(std::vector<T>& base) const noexcept {
+		template<class Allocator>
+		constexpr std::span<T> to_span(std::vector<T, Allocator>& base) const noexcept {
 			return std::span{ base.data() + offset0, base.data() + offset1 };
 		}
 
-		constexpr std::span<const T> to_span(const std::vector<T>& base) const noexcept {
+		template<class Allocator>
+		constexpr std::span<const T> to_span(const std::vector<T, Allocator>& base) const noexcept {
 			return std::span{ base.data() + offset0, base.data() + offset1 };
 		}
 
-		void append(std::vector<T>& base, T value) {
+		template<class Allocator>
+		void append(std::vector<T, Allocator>& base, T value) {
 			// easy case: we have space at the end of the vector
 			if (offset1 == base.size()) {
 				base.push_back(std::move(value));

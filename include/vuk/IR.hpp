@@ -1209,13 +1209,13 @@ namespace vuk {
 		}
 	};
 
-	inline thread_local IRModule current_module;
+	inline thread_local std::shared_ptr<IRModule> current_module = std::make_shared<IRModule>();
 
 	struct ExtNode {
 		ExtNode(Node* node, std::vector<std::shared_ptr<ExtNode>> deps) : deps(std::move(deps)) {
 			acqrel = std::make_unique<AcquireRelease>();
 			if (node->kind != Node::RELEASE && node->kind != Node::ACQUIRE) {
-				this->node = current_module.make_splice(node, acqrel.get());
+				this->node = current_module->make_splice(node, acqrel.get());
 			} else {
 				this->node = node;
 			}
@@ -1224,7 +1224,7 @@ namespace vuk {
 		ExtNode(Node* node, std::shared_ptr<ExtNode> dep) {
 			acqrel = std::make_unique<AcquireRelease>();
 			if (node->kind != Node::RELEASE && node->kind != Node::ACQUIRE) {
-				this->node = current_module.make_splice(node, acqrel.get());
+				this->node = current_module->make_splice(node, acqrel.get());
 			} else {
 				this->node = node;
 			}
@@ -1238,7 +1238,7 @@ namespace vuk {
 					node->splice.rel_acq = nullptr;
 					for (auto i = 0; i < node->splice.values.size(); i++) {
 						auto& v = node->splice.values[i];
-						if (node->type[i] == current_module.builtin_buffer) {
+						if (node->type[i] == current_module->builtin_buffer) {
 							delete (Buffer*)v;
 						} else {
 							delete (ImageAttachment*)v;
@@ -1246,22 +1246,22 @@ namespace vuk {
 					}
 					delete node->splice.values.data();
 				} else if (node->kind == Node::RELEASE) {
-					if (node->type[0] == current_module.builtin_buffer) {
+					if (node->type[0] == current_module->builtin_buffer) {
 						delete (Buffer*)node->release.value;
 					} else {
 						delete (ImageAttachment*)node->release.value;
 					}
 				} else if (node->kind == Node::ACQUIRE) {
-					if (node->type[0] == current_module.builtin_buffer) {
+					if (node->type[0] == current_module->builtin_buffer) {
 						delete (Buffer*)node->acquire.value;
 					} else {
 						delete (ImageAttachment*)node->acquire.value;
 					}
 				}
 				if (acqrel->status != Signal::Status::eDisarmed) {
-					current_module.destroy_node(node);
+					current_module->destroy_node(node);
 				} else {
-					current_module.garbage.push_back(node);
+					current_module->garbage.push_back(node);
 				}
 			}
 		}
@@ -1273,7 +1273,7 @@ namespace vuk {
 					node->splice.rel_acq = nullptr;
 					for (auto i = 0; i < node->splice.values.size(); i++) {
 						auto& v = node->splice.values[i];
-						if (node->type[i] == current_module.builtin_buffer) {
+						if (node->type[i] == current_module->builtin_buffer) {
 							delete (Buffer*)v;
 						} else {
 							delete (ImageAttachment*)v;
@@ -1283,20 +1283,20 @@ namespace vuk {
 					delete node->splice.values.data();
 
 					if (acqrel->status != Signal::Status::eDisarmed) {
-						auto it = current_module.op_arena.get_iterator(node);
-						current_module.destroy_node(node);
-						current_module.op_arena.erase(it);
+						auto it = current_module->op_arena.get_iterator(node);
+						current_module->destroy_node(node);
+						current_module->op_arena.erase(it);
 					}
 				} else if (node->kind == Node::RELEASE) {
-					if (node->type[0] == current_module.builtin_buffer) {
+					if (node->type[0] == current_module->builtin_buffer) {
 						delete (Buffer*)node->release.value;
 					} else {
 						delete (ImageAttachment*)node->release.value;
 					}
 					if (acqrel->status != Signal::Status::eDisarmed) {
-						auto it = current_module.op_arena.get_iterator(node);
-						current_module.destroy_node(node);
-						current_module.op_arena.erase(it);
+						auto it = current_module->op_arena.get_iterator(node);
+						current_module->destroy_node(node);
+						current_module->op_arena.erase(it);
 					}
 				}
 			}
@@ -1315,7 +1315,7 @@ namespace vuk {
 			if (node->kind == Node::SPLICE) {
 				node->splice.rel_acq = nullptr;
 			}
-			node = current_module.make_splice(new_node, acqrel.get());
+			node = current_module->make_splice(new_node, acqrel.get());
 		}
 
 		std::unique_ptr<AcquireRelease> acqrel;

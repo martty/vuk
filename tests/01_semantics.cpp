@@ -25,6 +25,7 @@ auto make_binary_computation(std::string name, std::string& trace) {
 
 TEST_CASE("minimal graph is submitted") {
 	std::string trace = "";
+	auto& oa = current_module;
 
 	auto a = make_unary_computation("a", trace)(declare_buf("_a", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
 	auto b = make_unary_computation("b", trace)(declare_buf("_b", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
@@ -39,8 +40,8 @@ TEST_CASE("minimal graph is submitted") {
 
 TEST_CASE("graph is cleaned up after submit") {
 	std::string trace = "";
-	auto& oa = current_module.op_arena;
-	CHECK(current_module.op_arena.size() == 0);
+	auto& oa = current_module->op_arena;
+	CHECK(current_module->op_arena.size() == 0);
 
 	auto a = make_unary_computation("a", trace)(declare_buf("_a", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
 	//auto b = make_unary_computation("b", trace)(declare_buf("_b", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
@@ -49,10 +50,10 @@ TEST_CASE("graph is cleaned up after submit") {
 	auto e = make_unary_computation("e", trace)(a);     // e->a
 	e.submit(*test_context.allocator, test_context.compiler);
 
-	for (auto& op : current_module.op_arena) {
+	for (auto& op : current_module->op_arena) {
 		fmt::println("{}", op.kind_to_sv());
 	}
-	CHECK(current_module.op_arena.size() == 2);
+	CHECK(current_module->op_arena.size() == 2);
 }
 
 TEST_CASE("computation is never duplicated") {
@@ -281,7 +282,7 @@ TEST_CASE("multi-queue buffers") {
 		    DomainFlagBits::eGraphicsQueue);
 
 		{
-			CHECK(current_module.op_arena.size() == 0);
+			CHECK(current_module->op_arena.size() == 0);
 			auto written = write(declare_buf("src0", **buf0));
 			written.wait(*test_context.allocator, test_context.compiler);
 			read(written).wait(*test_context.allocator, test_context.compiler);
@@ -289,7 +290,7 @@ TEST_CASE("multi-queue buffers") {
 			execution = "";
 		}
 		{
-			CHECK(current_module.op_arena.size() == 0);
+			CHECK(current_module->op_arena.size() == 0);
 			auto written = write(declare_buf("src0", **buf0));
 			written.wait(*test_context.allocator, test_context.compiler);
 			read(std::move(written)).wait(*test_context.allocator, test_context.compiler);
@@ -297,7 +298,7 @@ TEST_CASE("multi-queue buffers") {
 			execution = "";
 		}
 		{
-			CHECK(current_module.op_arena.size() == 0);
+			CHECK(current_module->op_arena.size() == 0);
 			auto written = write(declare_buf("src0", **buf0));
 			written.wait(*test_context.allocator, test_context.compiler);
 			write(read(std::move(written))).wait(*test_context.allocator, test_context.compiler);
@@ -305,21 +306,21 @@ TEST_CASE("multi-queue buffers") {
 			execution = "";
 		}
 		{
-			CHECK(current_module.op_arena.size() == 0);
+			CHECK(current_module->op_arena.size() == 0);
 			auto written = write(declare_buf("src0", **buf0));
 			read(written).wait(*test_context.allocator, test_context.compiler);
 			CHECK(execution == "wr");
 			execution = "";
 		}
 		{
-			CHECK(current_module.op_arena.size() == 0);
+			CHECK(current_module->op_arena.size() == 0);
 			auto written = write(declare_buf("src0", **buf0));
 			read(std::move(written)).wait(*test_context.allocator, test_context.compiler);
 			CHECK(execution == "wr");
 			execution = "";
 		}
 		{
-			CHECK(current_module.op_arena.size() == 0);
+			CHECK(current_module->op_arena.size() == 0);
 			auto written = write(declare_buf("src0", **buf0));
 			write(read(std::move(written))).wait(*test_context.allocator, test_context.compiler);
 			CHECK(execution == "wrw");

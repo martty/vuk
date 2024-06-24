@@ -15,11 +15,11 @@ namespace vuk {
 	class UntypedValue {
 	public:
 		UntypedValue() = default;
-		UntypedValue(ExtRef extref) : node(std::move(extref.node)), index(extref.index) {}
+		UntypedValue(ExtRef extref) : module(current_module), node(std::move(extref.node)), index(extref.index) {}
 
 		/// @brief Name the value currently referenced by this Value
 		void set_name(std::string_view name) noexcept {
-			current_module.name_output(get_head(), name);
+			current_module->name_output(get_head(), name);
 		}
 
 		Ref get_head() const noexcept {
@@ -43,7 +43,7 @@ namespace vuk {
 					delete get_head().node->variable_node.args.data();
 				}
 				get_head().node->generic_node.arg_count = 0;
-				current_module.garbage.push_back(get_head().node);
+				current_module->garbage.push_back(get_head().node);
 				return peeled_head;
 			} else {
 				return get_head();
@@ -53,7 +53,7 @@ namespace vuk {
 		void release(Access access = Access::eNone, DomainFlagBits domain = DomainFlagBits::eAny) noexcept {
 			assert(node->acqrel->status == Signal::Status::eDisarmed);
 			auto ref = get_head();
-			auto release = current_module.make_release(ref, nullptr, access, domain);
+			auto release = current_module->make_release(ref, nullptr, access, domain);
 			node = std::make_shared<ExtNode>(release, node); // previous extnode is a dep
 			release->release.release = node->acqrel.get();
 			index = 0;
@@ -66,8 +66,8 @@ namespace vuk {
 
 		Result<void> wait(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options = {});
 
+		std::shared_ptr<IRModule> module;
 		std::shared_ptr<ExtNode> node;
-
 	protected:
 		size_t index;
 		bool can_peel = false;
@@ -185,7 +185,7 @@ namespace vuk {
 		Value<uint64_t> get_size()
 		  requires std::is_same_v<T, Buffer>
 		{
-			Ref extract = current_module.make_extract(get_head(), 0);
+			Ref extract = current_module->make_extract(get_head(), 0);
 			return { ExtRef{ std::make_shared<ExtNode>(extract.node, node), extract } };
 		}
 
@@ -205,7 +205,7 @@ namespace vuk {
 		  requires std::is_array_v<T>
 		{
 			assert(get_head().type()->kind == Type::ARRAY_TY);
-			Ref item = current_module.make_extract(get_head(), current_module.make_constant(index));
+			Ref item = current_module->make_extract(get_head(), current_module->make_constant(index));
 			return Value<std::remove_reference_t<decltype(std::declval<T>()[0])>>(ExtRef(std::make_shared<ExtNode>(item.node, node), item));
 		}
 
@@ -213,11 +213,11 @@ namespace vuk {
 		  requires std::is_same_v<T, ImageAttachment>
 		{
 			can_peel = false;
-			Ref item = current_module.make_slice(get_head(),
-			                                     current_module.make_constant(mip),
-			                                     current_module.make_constant(1u),
-			                                     current_module.make_constant(0u),
-			                                     current_module.make_constant(VK_REMAINING_ARRAY_LAYERS));
+			Ref item = current_module->make_slice(get_head(),
+			                                     current_module->make_constant(mip),
+			                                     current_module->make_constant(1u),
+			                                     current_module->make_constant(0u),
+			                                     current_module->make_constant(VK_REMAINING_ARRAY_LAYERS));
 			return Value(ExtRef(std::make_shared<ExtNode>(item.node, node), item));
 		}
 
@@ -225,11 +225,11 @@ namespace vuk {
 		  requires std::is_same_v<T, ImageAttachment>
 		{
 			can_peel = false;
-			Ref item = current_module.make_slice(get_head(),
-			                                     current_module.make_constant(0u),
-			                                     current_module.make_constant(VK_REMAINING_MIP_LEVELS),
-			                                     current_module.make_constant(layer),
-			                                     current_module.make_constant(1u));
+			Ref item = current_module->make_slice(get_head(),
+			                                     current_module->make_constant(0u),
+			                                     current_module->make_constant(VK_REMAINING_MIP_LEVELS),
+			                                     current_module->make_constant(layer),
+			                                     current_module->make_constant(1u));
 			return Value(ExtRef(std::make_shared<ExtNode>(item.node, node), item));
 		}
 
@@ -255,74 +255,74 @@ namespace vuk {
 			auto candidate_node = Node{ .kind = Node::EXTRACT, .type = std::span{ &ty, 1 } };
 			candidate_node.extract.composite = composite; // writing these out for clang workaround
 			candidate_node.extract.index = first(&constant_node);
-			current_module.garbage.push_back(def.node->construct.args[index + 1].node);
+			current_module->garbage.push_back(def.node->construct.args[index + 1].node);
 			try {
 				if (ty->kind == Type::INTEGER_TY && ty->integer.width == 64) {
 					auto result = eval<uint64_t>(first(&candidate_node));
-					def.node->construct.args[index + 1] = current_module.template make_constant<uint64_t>(result);
+					def.node->construct.args[index + 1] = current_module->template make_constant<uint64_t>(result);
 				} else if (ty->kind == Type::INTEGER_TY && ty->integer.width == 32) {
 					auto result = eval<uint32_t>(first(&candidate_node));
-					def.node->construct.args[index + 1] = current_module.make_constant<uint32_t>(result);
+					def.node->construct.args[index + 1] = current_module->make_constant<uint32_t>(result);
 				} else {
-					def.node->construct.args[index + 1] = current_module.make_extract(composite, index);
+					def.node->construct.args[index + 1] = current_module->make_extract(composite, index);
 				}
 			} catch (...) {
-				def.node->construct.args[index + 1] = current_module.make_extract(composite, index);
+				def.node->construct.args[index + 1] = current_module->make_extract(composite, index);
 			}
 		}
 	};
 
 	inline Value<uint64_t> operator+(Value<uint64_t> a, uint64_t b) {
-		Ref ref = current_module.make_math_binary_op(Node::BinOp::ADD, a.get_head(), current_module.make_constant(b));
+		Ref ref = current_module->make_math_binary_op(Node::BinOp::ADD, a.get_head(), current_module->make_constant(b));
 		return std::move(a).transmute<uint64_t>(ref);
 	}
 
 	inline Value<uint64_t> operator+(Value<uint64_t> a, Value<uint64_t> b) {
-		Ref ref = current_module.make_math_binary_op(Node::BinOp::ADD, a.get_head(), b.get_head());
+		Ref ref = current_module->make_math_binary_op(Node::BinOp::ADD, a.get_head(), b.get_head());
 		a.node->deps.push_back(b.node);
 		return std::move(a).transmute<uint64_t>(ref);
 	}
 
 	inline Value<uint64_t> operator-(Value<uint64_t> a, uint64_t b) {
-		Ref ref = current_module.make_math_binary_op(Node::BinOp::SUB, a.get_head(), current_module.make_constant(b));
+		Ref ref = current_module->make_math_binary_op(Node::BinOp::SUB, a.get_head(), current_module->make_constant(b));
 		return std::move(a).transmute<uint64_t>(ref);
 	}
 
 	inline Value<uint64_t> operator-(Value<uint64_t> a, Value<uint64_t> b) {
-		Ref ref = current_module.make_math_binary_op(Node::BinOp::SUB, a.get_head(), b.get_head());
+		Ref ref = current_module->make_math_binary_op(Node::BinOp::SUB, a.get_head(), b.get_head());
 		a.node->deps.push_back(b.node);
 		return std::move(a).transmute<uint64_t>(ref);
 	}
 
 	inline Value<uint64_t> operator*(Value<uint64_t> a, uint64_t b) {
-		Ref ref = current_module.make_math_binary_op(Node::BinOp::MUL, a.get_head(), current_module.make_constant(b));
+		Ref ref = current_module->make_math_binary_op(Node::BinOp::MUL, a.get_head(), current_module->make_constant(b));
 		return std::move(a).transmute<uint64_t>(ref);
 	}
 
 	inline Value<uint64_t> operator*(Value<uint64_t> a, Value<uint64_t> b) {
-		Ref ref = current_module.make_math_binary_op(Node::BinOp::MUL, a.get_head(), b.get_head());
+		Ref ref = current_module->make_math_binary_op(Node::BinOp::MUL, a.get_head(), b.get_head());
 		a.node->deps.push_back(b.node);
 		return std::move(a).transmute<uint64_t>(ref);
 	}
 
 	inline Value<uint64_t> operator/(Value<uint64_t> a, uint64_t b) {
-		Ref ref = current_module.make_math_binary_op(Node::BinOp::DIV, a.get_head(), current_module.make_constant(b));
+		Ref ref = current_module->make_math_binary_op(Node::BinOp::DIV, a.get_head(), current_module->make_constant(b));
 		return std::move(a).transmute<uint64_t>(ref);
 	}
 
 	inline Value<uint64_t> operator/(Value<uint64_t> a, Value<uint64_t> b) {
-		Ref ref = current_module.make_math_binary_op(Node::BinOp::DIV, a.get_head(), b.get_head());
+		Ref ref = current_module->make_math_binary_op(Node::BinOp::DIV, a.get_head(), b.get_head());
 		a.node->deps.push_back(b.node);
 		return std::move(a).transmute<uint64_t>(ref);
 	}
 
 	inline Value<uint64_t> operator%(Value<uint64_t> a, uint64_t b) {
-		Ref ref = current_module.make_math_binary_op(Node::BinOp::MOD, a.get_head(), current_module.make_constant(b));
+		Ref ref = current_module->make_math_binary_op(Node::BinOp::MOD, a.get_head(), current_module->make_constant(b));
 		return std::move(a).transmute<uint64_t>(ref);
 	}
 
 	inline Value<uint64_t> operator%(Value<uint64_t> a, Value<uint64_t> b) {
-		Ref ref = current_module.make_math_binary_op(Node::BinOp::MOD, a.get_head(), b.get_head());
+		Ref ref = current_module->make_math_binary_op(Node::BinOp::MOD, a.get_head(), b.get_head());
 		a.node->deps.push_back(b.node);
 		return std::move(a).transmute<uint64_t>(ref);
 	}

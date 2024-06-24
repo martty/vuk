@@ -9,6 +9,7 @@
 #include <bit>
 #include <charconv>
 #include <fmt/printf.h>
+#include <memory_resource>
 #include <set>
 #include <sstream>
 #include <unordered_set>
@@ -139,10 +140,53 @@ namespace vuk {
 		printf("");
 	}
 
+	template<class It>
+	std::pmr::vector<Node*> collect_dependents(It start, It end, std::pmr::polymorphic_allocator<std::byte> allocator) {
+		std::pmr::vector<Node*> work_queue(allocator);
+		std::pmr::vector<Node*> nodes(allocator);
+		for (auto it = start; it != end; ++it) {
+			auto node = *it;
+			if (node->flag == 0) {
+				node->flag = 1;
+				work_queue.push_back(node);
+			}
+		}
+
+		while (!work_queue.empty()) {
+			auto node = work_queue.back();
+			work_queue.pop_back();
+
+			auto count = node->generic_node.arg_count;
+			if (count != (uint8_t)~0u) {
+				for (int i = 0; i < count; i++) {
+					auto arg = node->fixed_node.args[i].node;
+					if (arg->flag == 0) {
+						arg->flag = 1;
+						work_queue.push_back(arg);
+					}
+				}
+			} else {
+				for (int i = 0; i < node->variable_node.args.size(); i++) {
+					auto arg = node->variable_node.args[i].node;
+					if (arg->flag == 0) {
+						arg->flag = 1;
+						work_queue.push_back(arg);
+					}
+				}
+			}
+
+			nodes.push_back(node);
+		}
+
+		for (auto& node : nodes) {
+			node->flag = 0;
+		}
+
+		return nodes;
+	}
+
 	Result<void> RGCImpl::build_nodes() {
 		nodes.clear();
-
-		// type unification
 
 		std::vector<Node*, short_alloc<Node*>> work_queue(*arena_);
 		for (auto& ref : refs) {
@@ -186,10 +230,156 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	Result<void> RGCImpl::build_links() {
-		// build edges into link map
-		// reserving here to avoid rehashing map
+	void process_node_links(Node* node, std::pmr::vector<Ref>& pass_reads, std::pmr::vector<ChainLink*>& child_chains) {
+		switch (node->kind) {
+		case Node::NOP:
+		case Node::CONSTANT:
+		case Node::PLACEHOLDER:
+		case Node::MATH_BINARY:
+			break;
+		case Node::CONSTRUCT:
+			first(node).link().def = first(node);
+
+			for (size_t i = 0; i < node->construct.args.size(); i++) {
+				auto& parm = node->construct.args[i];
+				parm.link().undef = { node, i };
+			}
+
+			if (node->type[0]->kind == Type::ARRAY_TY) {
+				for (size_t i = 1; i < node->construct.args.size(); i++) {
+					auto& parm = node->construct.args[i];
+					parm.link().next = &first(node).link();
+				}
+			}
+
+			break;
+		case Node::SPLICE: { // ~~ write joiner
+			for (size_t i = 0; i < node->type.size(); i++) {
+				Ref{ node, i }.link().def = { node, i };
+				if (!node->splice.rel_acq || node->splice.rel_acq && node->splice.rel_acq->status == Signal::Status::eDisarmed) {
+					assert(node->splice.src[i].link().undef.node == nullptr);
+					node->splice.src[i].link().undef = { node, i };
+					node->splice.src[i].link().next = &Ref{ node, i }.link();
+					Ref{ node, i }.link().prev = &node->splice.src[i].link();
+				}
+			}
+			break;
+		}
+		case Node::ACQUIRE:
+			first(node).link().def = first(node);
+			break;
+		case Node::CALL: {
+			// args
+			for (size_t i = 1; i < node->call.args.size(); i++) {
+				auto& arg_ty = node->call.args[0].type()->opaque_fn.args[i - 1];
+				auto& parm = node->call.args[i];
+				// TODO: assert same type when imbuement is stripped
+				if (arg_ty->kind == Type::IMBUED_TY) {
+					auto access = arg_ty->imbued.access;
+					if (is_write_access(access) || access == Access::eConsume) { // Write and ReadWrite
+						parm.link().undef = { node, i };
+					}
+					if (!is_write_access(access) && access != Access::eConsume) { // Read and ReadWrite
+						parm.link().reads.append(pass_reads, { node, i });
+					}
+				} else {
+					assert(0);
+				}
+			}
+			size_t index = 0;
+			for (auto& ret_t : node->type) {
+				assert(ret_t->kind == Type::ALIASED_TY);
+				auto ref_idx = ret_t->aliased.ref_idx;
+				Ref{ node, index }.link().def = { node, index };
+				node->call.args[ref_idx].link().next = &Ref{ node, index }.link();
+				Ref{ node, index }.link().prev = &node->call.args[ref_idx].link();
+				index++;
+			}
+			break;
+		}
+		case Node::RELEASE:
+			if (node->release.arg_count == 1) {
+				node->release.src.link().undef = { node, 0 };
+				first(node).link().prev = &node->release.src.link();
+			}
+			break;
+
+		case Node::EXTRACT:
+			first(node).link().def = first(node);
+			break;
+
+		case Node::SLICE:
+			first(node).link().def = first(node);
+			node->slice.image.link().child_chains.append(child_chains, &first(node).link());
+			break;
+
+		case Node::CONVERGE:
+			node->converge.ref_and_diverged[0].link().undef = { node, 0 };
+			first(node).link().def = first(node);
+			node->converge.ref_and_diverged[0].link().next = &first(node).link();
+			first(node).link().prev = &node->converge.ref_and_diverged[0].link();
+			for (size_t i = 1; i < node->converge.ref_and_diverged.size(); i++) {
+				auto& parm = node->converge.ref_and_diverged[i];
+				auto write = node->converge.write[i - 1];
+				if (write) {
+					parm.link().undef = { node, i };
+				} else {
+					parm.link().reads.append(pass_reads, { node, i });
+				}
+			}
+			break;
+
+		case Node::INDIRECT_DEPEND: {
+			auto rref = node->indirect_depend.rref;
+			Ref true_ref;
+			auto count = rref.node->generic_node.arg_count;
+			if (count != (uint8_t)~0u) {
+				true_ref = rref.node->fixed_node.args[rref.index];
+			} else {
+				true_ref = rref.node->variable_node.args[rref.index];
+			}
+			first(node).link().def = first(node);
+			assert(true_ref.link().next == nullptr);
+			true_ref.link().next = &first(node).link();
+			first(node).link().prev = &true_ref.link();
+			break;
+		}
+
+		case Node::ACQUIRE_NEXT_IMAGE:
+			first(node).link().def = first(node);
+			break;
+
+		default:
+			assert(0);
+		}
+	}
+
+	void allocate_node_links(Node* node, std::pmr::polymorphic_allocator<std::byte> allocator) {
+		size_t result_count = node->type.size();
+		if (result_count > 0) {
+			node->links = new (allocator.allocate_bytes(sizeof(ChainLink) * result_count)) ChainLink[result_count];
+		}
+	}
+
+	void build_urdef(Node* node) {
+		size_t result_count = node->type.size();
+		for (auto i = 0; i < result_count; i++) {
+			auto& link = node->links[i];
+			if (link.urdef)
+				continue;
+			if (!link.prev) { // from head to tails, propagate
+				auto l = &link;
+				do {
+					l->urdef = link.def;
+					l = l->next;
+				} while (l);
+			}
+		}
+	}
+
+	Result<void> RGCImpl::build_links(const std::vector<Node*>& working_set, std::pmr::polymorphic_allocator<std::byte> allocator) {
 		pass_reads.clear();
+		child_chains.clear();
 
 		// in each IRModule module, look at the nodes
 		// declare -> clear -> call(R) -> call(W) -> release
@@ -199,151 +389,18 @@ namespace vuk {
 		// call(R): read B
 		// call(W): undef B, def C
 		// release: undef C
-		for (auto& node : nodes) {
-			size_t result_count = node->type.size();
-			if (result_count > 0) {
-				node->links = new (arena_->allocate(sizeof(ChainLink) * result_count)) ChainLink[result_count];
-			}
+		for (auto& node : working_set) {
+			allocate_node_links(node, allocator);
 		}
 
-		for (auto& node : nodes) {
-			switch (node->kind) {
-			case Node::NOP:
-			case Node::CONSTANT:
-			case Node::PLACEHOLDER:
-			case Node::MATH_BINARY:
-				break;
-			case Node::CONSTRUCT:
-				first(node).link().def = first(node);
-
-				for (size_t i = 0; i < node->construct.args.size(); i++) {
-					auto& parm = node->construct.args[i];
-					parm.link().undef = { node, i };
-				}
-
-				if (node->type[0]->kind == Type::ARRAY_TY) {
-					for (size_t i = 1; i < node->construct.args.size(); i++) {
-						auto& parm = node->construct.args[i];
-						parm.link().next = &first(node).link();
-					}
-				}
-
-				break;
-			case Node::SPLICE: { // ~~ write joiner
-				for (size_t i = 0; i < node->type.size(); i++) {
-					Ref{ node, i }.link().def = { node, i };
-					if (!node->splice.rel_acq || node->splice.rel_acq && node->splice.rel_acq->status == Signal::Status::eDisarmed) {
-						assert(node->splice.src[i].link().undef.node == nullptr);
-						node->splice.src[i].link().undef = { node, i };
-						node->splice.src[i].link().next = &Ref{ node, i }.link();
-						Ref{ node, i }.link().prev = &node->splice.src[i].link();
-					}
-				}
-				break;
-			}
-			case Node::ACQUIRE:
-				first(node).link().def = first(node);
-				break;
-			case Node::CALL: {
-				// args
-				for (size_t i = 1; i < node->call.args.size(); i++) {
-					auto& arg_ty = node->call.args[0].type()->opaque_fn.args[i - 1];
-					auto& parm = node->call.args[i];
-					// TODO: assert same type when imbuement is stripped
-					if (arg_ty->kind == Type::IMBUED_TY) {
-						auto access = arg_ty->imbued.access;
-						if (is_write_access(access) || access == Access::eConsume) { // Write and ReadWrite
-							parm.link().undef = { node, i };
-						}
-						if (!is_write_access(access) && access != Access::eConsume) { // Read and ReadWrite
-							parm.link().reads.append(pass_reads, { node, i });
-						}
-					} else {
-						assert(0);
-					}
-				}
-				size_t index = 0;
-				for (auto& ret_t : node->type) {
-					assert(ret_t->kind == Type::ALIASED_TY);
-					auto ref_idx = ret_t->aliased.ref_idx;
-					Ref{ node, index }.link().def = { node, index };
-					node->call.args[ref_idx].link().next = &Ref{ node, index }.link();
-					Ref{ node, index }.link().prev = &node->call.args[ref_idx].link();
-					index++;
-				}
-				break;
-			}
-			case Node::RELEASE:
-				if (node->release.arg_count == 1) {
-					node->release.src.link().undef = { node, 0 };
-					first(node).link().prev = &node->release.src.link();
-				}
-				break;
-
-			case Node::EXTRACT:
-				first(node).link().def = first(node);
-				break;
-
-			case Node::SLICE:
-				first(node).link().def = first(node);
-				node->slice.image.link().child_chains.append(child_chains, &first(node).link());
-				break;
-
-			case Node::CONVERGE:
-				node->converge.ref_and_diverged[0].link().undef = { node, 0 };
-				first(node).link().def = first(node);
-				node->converge.ref_and_diverged[0].link().next = &first(node).link();
-				first(node).link().prev = &node->converge.ref_and_diverged[0].link();
-				for (size_t i = 1; i < node->converge.ref_and_diverged.size(); i++) {
-					auto& parm = node->converge.ref_and_diverged[i];
-					auto write = node->converge.write[i - 1];
-					if (write) {
-						parm.link().undef = { node, i };
-					} else {
-						parm.link().reads.append(pass_reads, { node, i });
-					}
-				}
-				break;
-
-			case Node::INDIRECT_DEPEND: {
-				auto rref = node->indirect_depend.rref;
-				Ref true_ref;
-				auto count = rref.node->generic_node.arg_count;
-				if (count != (uint8_t)~0u) {
-					true_ref = rref.node->fixed_node.args[rref.index];
-				} else {
-					true_ref = rref.node->variable_node.args[rref.index];
-				}
-				first(node).link().def = first(node);
-				assert(true_ref.link().next == nullptr);
-				true_ref.link().next = &first(node).link();
-				first(node).link().prev = &true_ref.link();
-				break;
-			}
-
-			case Node::ACQUIRE_NEXT_IMAGE:
-				first(node).link().def = first(node);
-				break;
-
-			default:
-				assert(0);
-			}
+		for (auto& node : working_set) {
+			process_node_links(node, pass_reads, child_chains);
 		}
 
+		// build URDEF
+		// TODO: remove?, replace with get_def
 		for (auto& node : nodes) {
-			size_t result_count = node->type.size();
-			for (auto i = 0; i < result_count; i++) {
-				auto& link = node->links[i];
-				if (link.urdef)
-					continue;
-				if (!link.prev) { // from head to tails, propagate
-					auto l = &link;
-					do {
-						l->urdef = link.def;
-						l = l->next;
-					} while (l);
-				}
-			}
+			build_urdef(node);
 		}
 
 		// TODO:
@@ -351,6 +408,25 @@ namespace vuk {
 		// an incompatible read group contains multiple domains
 		// in this case they can't be together - so we linearize them into domain groups
 		// so def -> {r1, r2} becomes def -> r1 -> undef{g0} -> def{g0} -> r2
+
+		return { expected_value };
+	}
+
+	template<class It>
+	Result<void> build_links(It start,
+	                         It end,
+	                         std::pmr::vector<Ref>& pass_reads,
+	                         std::pmr::vector<ChainLink*>& child_chains,
+	                         std::pmr::polymorphic_allocator<std::byte> allocator) {
+		for (auto it = start; it != end; ++it) {
+			allocate_node_links(*it, allocator);
+		}
+		for (auto it = start; it != end; ++it) {
+			process_node_links(*it, pass_reads, child_chains);
+		}
+		for (auto it = start; it != end; ++it) {
+			build_urdef(*it);
+		}
 
 		return { expected_value };
 	}
@@ -386,7 +462,7 @@ namespace vuk {
 			switch (node->kind) {
 			case Node::CONSTRUCT:
 				auto args_ptr = node->construct.args.data();
-				if (node->type[0] == current_module.builtin_image) {
+				if (node->type[0] == current_module->builtin_image) {
 					auto ptr = &constant<ImageAttachment>(args_ptr[0]);
 					auto& value = constant<ImageAttachment>(args_ptr[0]);
 					if (value.extent.width > 0) {
@@ -416,7 +492,7 @@ namespace vuk {
 					if (value.level_count != VK_REMAINING_MIP_LEVELS) {
 						placeholder_to_ptr(args_ptr[9], &ptr->level_count);
 					}
-				} else if (node->type[0] == current_module.builtin_buffer) {
+				} else if (node->type[0] == current_module->builtin_buffer) {
 					auto ptr = &constant<Buffer>(args_ptr[0]);
 					auto& value = constant<Buffer>(args_ptr[0]);
 					if (value.size != ~(0u)) {
@@ -483,7 +559,7 @@ namespace vuk {
 					}
 					case Node::CONSTRUCT: {
 						auto& args = node->construct.args;
-						if (node->type[0] == current_module.builtin_image) {
+						if (node->type[0] == current_module->builtin_image) {
 							if (constant<ImageAttachment>(args[0]).image.image == VK_NULL_HANDLE) { // if there is no image, we will use base layer 0 and base mip 0
 								placeholder_to_constant(args[6], 0U);
 								placeholder_to_constant(args[8], 0U);
@@ -835,6 +911,117 @@ namespace vuk {
 		impl = new RGCImpl(arena);
 	}
 
+	template<class It>
+	void implicit_linking(It start, It end, std::pmr::polymorphic_allocator<std::byte> allocator) {
+		// collect all nodes that might require their inputs to be converged
+		// these are the nodes in the local set
+		std::pmr::vector<Node*> possible_divergent_use_set;
+
+		// we will enumerate all implicit uses
+		std::unordered_map<Ref, std::vector<Ref>> slices;
+
+		// build the possible candidates for implicit linking: nodes in the local set
+		for (auto it = start; it != end; ++it) {
+			auto node = &*it;
+			switch (node->kind) {
+			case Node::SLICE: {
+				assert(node->slice.image.node->kind != Node::NOP);
+				slices[node->slice.image].push_back(first(node));
+				break;
+			}
+			}
+			possible_divergent_use_set.push_back(node);
+		}
+
+		// input had no implicit behaviour, return early
+		if (slices.size() == 0) {
+			return;
+		}
+
+		// collect all nodes that the possibly divergent set can reference as inputs
+		auto divergence_dependency_scope = collect_dependents(possible_divergent_use_set.begin(), possible_divergent_use_set.end(), allocator);
+
+		std::pmr::vector<Ref> pass_reads(allocator);
+		std::pmr::vector<ChainLink*> child_chains(allocator);
+
+		// build chains (we only care about chains going through divergent/implicit nodes)
+		build_links(divergence_dependency_scope.begin(), divergence_dependency_scope.end(), pass_reads, child_chains, allocator);
+
+		auto in_module = [](IRModule& module, Node* node) {
+			auto it = std::find_if(module.op_arena.begin(), module.op_arena.end(), [=](auto& n) { return &n == node; });
+			if (it != module.op_arena.end()) {
+				return true;
+			}
+			return false;
+		};
+
+		auto before_module = [](IRModule& module, Node* a, Node* b) {
+			auto it_a = std::find_if(module.op_arena.begin(), module.op_arena.end(), [=](auto& n) { return &n == a; });
+			auto it_b = std::find_if(module.op_arena.begin(), module.op_arena.end(), [=](auto& n) { return &n == b; });
+			return it_a < it_b;
+		};
+
+		// insert converge nodes
+		for (auto& [base, sliced] : slices) {
+			std::pmr::vector<Ref> tails(allocator);
+			std::pmr::vector<char> write(allocator);
+			for (auto& s : sliced) {
+				auto r = &s.link();
+				while (r->next) {
+					r = r->next;
+				}
+				if (r->undef.node) { // depend on undefs indirectly via INDIRECT_DEPEND
+					auto idep = current_module->make_indirect_depend(r->undef.node, r->undef.index);
+					tails.push_back(idep);
+					write.push_back(false);
+				} else if (r->reads.size() > 0) { // depend on reads indirectly via INDIRECT_DEPEND
+					tails.push_back(r->def);
+					write.push_back(true);
+				} else {
+					tails.push_back(r->def); // depend on def directly (via a read)
+					write.push_back(false);
+				}
+			}
+			auto converged_base = current_module->make_converge(base, tails, write);
+			for (auto node : possible_divergent_use_set) {
+				if (node->kind == Node::SLICE) {
+					continue;
+				}
+
+				auto count = node->generic_node.arg_count;
+				if (count != (uint8_t)~0u) {
+					for (int i = 0; i < count; i++) {
+						if (node->fixed_node.args[i] == base) {
+							for (auto& t : tails) {
+								// TODO: multimodule dominance
+								/*
+								assert(in_module(*current_module->, t.node));
+								if (!before_module(*current_module->, t.node, node)) {
+								  return { expected_error, RenderGraphException{ "Convergence not dominated" } };
+								}
+								*/
+							}
+							node->fixed_node.args[i] = converged_base;
+						}
+					}
+				} else {
+					for (int i = 0; i < node->variable_node.args.size(); i++) {
+						if (node->variable_node.args[i] == base) {
+							for (auto& t : tails) {
+								// TODO: multimodule dominance
+								/* assert(in_module(*current_module->, t.node));
+								if (!before_module(*current_module->, t.node, node)) {
+								  return { expected_error, RenderGraphException{ "Convergence not dominated" } };
+								}*/
+							}
+							node->variable_node.args[i] = converged_base;
+						}
+					}
+				}
+			}
+		}
+	}
+
 	Result<void> Compiler::compile(std::span<std::shared_ptr<ExtNode>> nodes, const RenderGraphCompileOptions& compile_options) {
 		reset();
 		impl->callbacks = compile_options.callbacks;
@@ -855,108 +1042,12 @@ namespace vuk {
 		std::sort(impl->depnodes.begin(), impl->depnodes.end());
 		impl->depnodes.erase(std::unique(impl->depnodes.begin(), impl->depnodes.end()), impl->depnodes.end());
 
-		// implicit convergence: this has to be done on the full node set
-		// insert converge nodes
-		std::unordered_map<Ref, std::vector<Ref>> slices;
-
-		// linked-sea-of-nodes to list of nodes
-		for (auto& n : current_module.op_arena) {
-			auto node = &n;
-			if (node->kind != Node::CONVERGE) {
-				impl->nodes.push_back(node);
-			}
-			switch (node->kind) {
-			case Node::NOP: {
-				// impl->garbage_nodes.push_back(node);
-				break;
-			}
-			case Node::SLICE: {
-				assert(node->slice.image.node->kind != Node::NOP);
-				slices[node->slice.image].push_back(first(node));
-				break;
-			}
-			}
-		}
-
-		// build links for the full node set
-		VUK_DO_OR_RETURN(impl->build_links());
-
-		// insert converge nodes
-		auto in_module = [](IRModule& module, Node* node) {
-			auto it = std::find_if(module.op_arena.begin(), module.op_arena.end(), [=](auto& n) { return &n == node; });
-			if (it != module.op_arena.end()) {
-				return true;
-			}
-			return false;
-		};
-
-		auto before_module = [](IRModule& module, Node* a, Node* b) {
-			auto it_a = std::find_if(module.op_arena.begin(), module.op_arena.end(), [=](auto& n) { return &n == a; });
-			auto it_b = std::find_if(module.op_arena.begin(), module.op_arena.end(), [=](auto& n) { return &n == b; });
-			return it_a < it_b;
-		};
-
-		for (auto& [base, sliced] : slices) {
-			std::vector<Ref, short_alloc<Ref>> tails(*impl->arena_);
-			std::vector<char, short_alloc<char>> write(*impl->arena_);
-			for (auto& s : sliced) {
-				auto r = &s.link();
-				while (r->next) {
-					r = r->next;
-				}
-				if (r->undef.node) { // depend on undefs indirectly via INDIRECT_DEPEND
-					auto idep = current_module.make_indirect_depend(r->undef.node, r->undef.index);
-					tails.push_back(idep);
-					write.push_back(false);
-				} else if (r->reads.size() > 0) { // depend on reads indirectly via INDIRECT_DEPEND
-					tails.push_back(r->def);
-					write.push_back(true);
-				} else {
-					tails.push_back(r->def); // depend on def directly (via a read)
-					write.push_back(false);
-				}
-			}
-			auto converged_base = current_module.make_converge(base, tails, write);
-			for (auto node : impl->nodes) {
-				if (node->kind == Node::SLICE) {
-					continue;
-				}
-
-				auto count = node->generic_node.arg_count;
-				if (count != (uint8_t)~0u) {
-					for (int i = 0; i < count; i++) {
-						if (node->fixed_node.args[i] == base) {
-							for (auto& t : tails) {
-								// TODO: multimodule dominance
-								/*
-								assert(in_module(*current_module., t.node));
-								if (!before_module(*current_module., t.node, node)) {
-								  return { expected_error, RenderGraphException{ "Convergence not dominated" } };
-								}
-								*/
-							}
-							node->fixed_node.args[i] = converged_base;
-						}
-					}
-				} else {
-					for (int i = 0; i < node->variable_node.args.size(); i++) {
-						if (node->variable_node.args[i] == base) {
-							for (auto& t : tails) {
-								// TODO: multimodule dominance
-								/* assert(in_module(*current_module., t.node));
-								if (!before_module(*current_module., t.node, node)) {
-								  return { expected_error, RenderGraphException{ "Convergence not dominated" } };
-								}*/
-							}
-							node->variable_node.args[i] = converged_base;
-						}
-					}
-				}
-			}
-		}
+		std::pmr::polymorphic_allocator allocator(std::pmr::new_delete_resource());
+		implicit_linking(current_module->op_arena.begin(), current_module->op_arena.end(), allocator);
+		std::erase_if(impl->depnodes, [](std::shared_ptr<ExtNode>& sp) { return sp.use_count() == 1 && sp->acqrel->status == Signal::Status::eDisarmed; });
 
 		VUK_DO_OR_RETURN(impl->build_nodes());
-		std::erase_if(impl->depnodes, [](std::shared_ptr<ExtNode>& sp) { return sp.use_count() == 1 && sp->acqrel->status == Signal::Status::eDisarmed; });
+		VUK_DO_OR_RETURN(impl->build_links(impl->nodes, allocator));
 
 		// eliminate useless splices
 		struct Replace {
@@ -984,7 +1075,7 @@ namespace vuk {
 					case Signal::Status::eSynchronizable: // means this is an acq instead
 					case Signal::Status::eHostAvailable:
 						for (size_t i = 0; i < node->type.size(); i++) {
-							auto new_ref = current_module.make_acquire(node->type[i], node->splice.rel_acq, i, node->splice.values[i]);
+							auto new_ref = current_module->make_acquire(node->type[i], node->splice.rel_acq, i, node->splice.values[i]);
 							replaces.emplace_back(Replace{ Ref{ node, i }, new_ref });
 							impl->garbage_nodes.emplace_back(new_ref.node);
 						}
@@ -997,14 +1088,14 @@ namespace vuk {
 				if (node->links[0].reads.size() > 0 || node->links[0].undef) {
 					auto needle = Ref{ node, 0 };
 					if (node->release.release->status == Signal::Status::eDisarmed) {
-						auto new_node = current_module.make_splice(node->release.src.node, node->release.release);
+						auto new_node = current_module->make_splice(node->release.src.node, node->release.release);
 						replaces.emplace_back(needle, first(new_node));
 						impl->garbage_nodes.emplace_back(new_node);
 					} else {
 						Node acq_node{ .kind = Node::ACQUIRE,
 							             .type = { new Type*[1](node->type[0]), 1 },
 							             .acquire = { .value = node->release.value, .acquire = node->release.release, .index = 0 } };
-						auto new_node = current_module.emplace_op(acq_node);
+						auto new_node = current_module->emplace_op(acq_node);
 						replaces.emplace_back(needle, first(new_node));
 						impl->garbage_nodes.emplace_back(new_node);
 					}
@@ -1048,7 +1139,7 @@ namespace vuk {
 
 		VUK_DO_OR_RETURN(impl->build_nodes());
 		// impl->dump_graph();
-		VUK_DO_OR_RETURN(impl->build_links());
+		VUK_DO_OR_RETURN(impl->build_links(impl->nodes, allocator));
 
 		VUK_DO_OR_RETURN(impl->reify_inference());
 		VUK_DO_OR_RETURN(impl->collect_chains());
