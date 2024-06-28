@@ -294,7 +294,7 @@ namespace vuk {
 		return bind_ray_tracing_pipeline(ctx.get_named_pipeline(p));
 	}
 
-	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, const Buffer& buf, unsigned first_attribute, Packed format) {
+	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, const Buffer& buf, unsigned first_attribute, Packed format, VertexInputRate input_rate) {
 		VUK_EARLY_RET();
 		assert(binding < VUK_MAX_ATTRIBUTES && "Vertex buffer binding must be smaller than VUK_MAX_ATTRIBUTES.");
 		uint32_t location = first_attribute;
@@ -317,7 +317,7 @@ namespace vuk {
 
 		VkVertexInputBindingDescription vibd;
 		vibd.binding = binding;
-		vibd.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+		vibd.inputRate = (VkVertexInputRate)input_rate;
 		vibd.stride = offset;
 		binding_descriptions[binding] = vibd;
 		VUK_SB_SET(set_binding_descriptions, binding, true);
@@ -328,7 +328,7 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, const Buffer& buf, std::span<VertexInputAttributeDescription> viads, uint32_t stride) {
+	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, const Buffer& buf, std::span<VertexInputAttributeDescription> viads, uint32_t stride, VertexInputRate input_rate) {
 		VUK_EARLY_RET();
 		assert(binding < VUK_MAX_ATTRIBUTES && "Vertex buffer binding must be smaller than VUK_MAX_ATTRIBUTES.");
 		for (auto& viad : viads) {
@@ -338,7 +338,7 @@ namespace vuk {
 
 		VkVertexInputBindingDescription vibd;
 		vibd.binding = binding;
-		vibd.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+		vibd.inputRate = (VkVertexInputRate)input_rate;
 		vibd.stride = stride;
 		binding_descriptions[binding] = vibd;
 		VUK_SB_SET(set_binding_descriptions, binding, true);

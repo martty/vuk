@@ -40,6 +40,11 @@ namespace vuk {
 		fixed_vector<FormatOrIgnore, VUK_MAX_ATTRIBUTES> list;
 	};
 
+	enum class VertexInputRate {
+		eVertex = VK_VERTEX_INPUT_RATE_VERTEX,
+		eInstance = VK_VERTEX_INPUT_RATE_INSTANCE,
+	};
+
 	struct DrawIndirectCommand {
 		uint32_t vertexCount = {};
 		uint32_t instanceCount = {};
@@ -400,7 +405,7 @@ namespace vuk {
 		/// @param buffer The buffer to be bound
 		/// @param first_location First location assigned to the attributes
 		/// @param format_list List of formats packed in buffer to generate attributes from
-		CommandBuffer& bind_vertex_buffer(unsigned binding, const Buffer& buffer, unsigned first_location, Packed format_list);
+		CommandBuffer& bind_vertex_buffer(unsigned binding, const Buffer& buffer, unsigned first_location, Packed format_list, VertexInputRate input_rate = VertexInputRate::eVertex);
 		/// @brief Binds a vertex buffer to the given binding point and configures attributes sourced from this buffer based on a span of attribute descriptions and
 		/// stride
 		/// @param binding The binding point of the buffer
@@ -408,7 +413,7 @@ namespace vuk {
 		/// @param attribute_descriptions Attributes that are sourced from this buffer
 		/// @param stride Stride of a vertex sourced from this buffer
 		CommandBuffer&
-		bind_vertex_buffer(unsigned binding, const Buffer& buffer, std::span<VertexInputAttributeDescription> attribute_descriptions, uint32_t stride);
+		bind_vertex_buffer(unsigned binding, const Buffer& buffer, std::span<VertexInputAttributeDescription> attribute_descriptions, uint32_t stride, VertexInputRate input_rate = VertexInputRate::eVertex);
 
 		/// @brief Update push constants for the specified stages with bytes
 		/// @param stages Pipeline stages that can see the updated bytes
