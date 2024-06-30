@@ -26,7 +26,7 @@ namespace vuk {
 	using UserCallbackType = std::function<void(CommandBuffer&, std::span<void*>, std::span<void*>, std::span<void*>)>;
 
 	struct Type {
-		enum TypeKind { MEMORY_TY, INTEGER_TY, COMPOSITE_TY, ARRAY_TY, IMBUED_TY, ALIASED_TY, OPAQUE_FN_TY } kind;
+		enum TypeKind { MEMORY_TY = 1, INTEGER_TY, COMPOSITE_TY, ARRAY_TY, IMBUED_TY, ALIASED_TY, OPAQUE_FN_TY } kind;
 		size_t size = ~0ULL;
 
 		TypeDebugInfo* debug_info = nullptr;
@@ -78,8 +78,12 @@ namespace vuk {
 			return t->composite.types[index];
 		}
 
-		static uint32_t hash(Type* t) {
-			uint32_t v = 0;
+		using Hash = uint32_t;
+		Hash hash_value;
+
+		static Hash hash(Type* t) {
+			Hash v = 0;
+			assert(t->kind < 100);
 			switch (t->kind) {
 			case IMBUED_TY:
 				v = Type::hash(t->imbued.T);
@@ -103,13 +107,20 @@ namespace vuk {
 				hash_combine_direct(v, ARRAY_TY);
 				hash_combine_direct(v, (uint32_t)t->array.count);
 				return v;
-			case COMPOSITE_TY:
+			case COMPOSITE_TY: {
 				v = COMPOSITE_TY;
+				if (t->composite.types.size() == 9)
+					printf("%u\n", v);
 				for (int i = 0; i < t->composite.types.size(); i++) {
 					hash_combine_direct(v, Type::hash(t->composite.types[i]));
+					if (t->composite.types.size() == 9)
+						printf("%u\n", v);
 				}
 				hash_combine_direct(v, (uint32_t)t->composite.tag);
+				if (t->composite.types.size() == 9)
+					printf("%u\n", v);
 				return v;
+			}
 			case OPAQUE_FN_TY:
 				hash_combine_direct(v, (uintptr_t)t->opaque_fn.callback >> 32);
 				hash_combine_direct(v, (uintptr_t)t->opaque_fn.callback & 0xffffffff);
@@ -283,7 +294,8 @@ namespace vuk {
 			ACQUIRE_NEXT_IMAGE,
 			CAST,
 			MATH_BINARY,
-			INDIRECT_DEPEND // utility for dependencies on writes
+			INDIRECT_DEPEND, // utility for dependencies on writes
+			GARBAGE
 		} kind;
 		uint8_t flag = 0;
 		std::span<Type*> type;
@@ -755,13 +767,13 @@ namespace vuk {
 		plf::colony<UserCallbackType> ucbs;
 		plf::colony<Type*> type_refs;
 
-		Type* builtin_image = nullptr;
-		Type* builtin_buffer = nullptr;
-		Type* builtin_swapchain = nullptr;
+		Type::Hash builtin_image = 0;
+		Type::Hash builtin_buffer = 0;
+		Type::Hash builtin_swapchain = 0;
 
-		std::unordered_map<uint32_t, Type> type_map;
+		std::unordered_map<Type::Hash, Type> type_map;
 
-		Type*& get_builtin_image() {
+		Type* get_builtin_image() {
 			if (!builtin_image) {
 				auto u32_t = u32();
 				auto mem_ty = emplace_type(Type{ .kind = Type::MEMORY_TY });
@@ -777,29 +789,33 @@ namespace vuk {
 					                                  offsetof(ImageAttachment, layer_count),
 					                                  offsetof(ImageAttachment, base_level),
 					                                  offsetof(ImageAttachment, level_count) };
-				builtin_image = emplace_type(Type{ .kind = Type::COMPOSITE_TY,
+				auto image_type = emplace_type(Type{ .kind = Type::COMPOSITE_TY,
 				                                   .size = sizeof(ImageAttachment),
 				                                   .debug_info = allocate_type_debug_info("image"),
 				                                   .composite = { .types = { image_, 9 }, .offsets = { image_offsets, 9 }, .tag = 0 } });
+				builtin_image = Type::hash(image_type);
+				return image_type;
 			}
-			return builtin_image;
+			return &type_map.at(builtin_image);
 		}
 
-		Type*& get_builtin_buffer() {
+		Type* get_builtin_buffer() {
 			if (!builtin_buffer) {
 				auto buffer_ = new Type* [1] {
 					u64()
 				};
 				auto buffer_offsets = new size_t[1]{ offsetof(Buffer, size) };
-				builtin_buffer = emplace_type(Type{ .kind = Type::COMPOSITE_TY,
+				auto buffer_type = emplace_type(Type{ .kind = Type::COMPOSITE_TY,
 				                                    .size = sizeof(Buffer),
 				                                    .debug_info = allocate_type_debug_info("buffer"),
 				                                    .composite = { .types = { buffer_, 1 }, .offsets = { buffer_offsets, 1 }, .tag = 1 } });
+				builtin_buffer = Type::hash(buffer_type);
+				return buffer_type;
 			}
-			return builtin_buffer;
+			return &type_map.at(builtin_buffer);
 		}
 
-		Type*& get_builtin_swapchain() {
+		Type* get_builtin_swapchain() {
 			if (!builtin_swapchain) {
 				auto arr_ty = emplace_type(Type{ .kind = Type::ARRAY_TY,
 				                                 .size = 16 * get_builtin_image()->size,
@@ -809,12 +825,14 @@ namespace vuk {
 				};
 				auto offsets = new size_t[1]{ 0 };
 
-				builtin_swapchain = emplace_type(Type{ .kind = Type::COMPOSITE_TY,
+				auto swapchain_type = emplace_type(Type{ .kind = Type::COMPOSITE_TY,
 				                                       .size = sizeof(Swapchain),
 				                                       .debug_info = allocate_type_debug_info("swapchain"),
 				                                       .composite = { .types = { swp_, 1 }, .offsets = { offsets, 1 }, .tag = 2 } });
+				builtin_swapchain = Type::hash(swapchain_type);
+				return swapchain_type;
 			}
-			return builtin_swapchain;
+			return &type_map.at(builtin_swapchain);
 		}
 
 		// uint64_t current_hash = 0;
@@ -913,7 +931,11 @@ namespace vuk {
 				delete node->debug_info;
 			}
 			auto it = op_arena.get_iterator(node);
-			op_arena.erase(it);
+			if (it != op_arena.end()) {
+				op_arena.erase(it);
+			} else {
+				node->kind = Node::GARBAGE;
+			}
 		}
 
 		// TYPES
@@ -1219,6 +1241,8 @@ namespace vuk {
 			} else {
 				this->node = node;
 			}
+
+			source_module = current_module.get();
 		}
 
 		ExtNode(Node* node, std::shared_ptr<ExtNode> dep) {
@@ -1230,6 +1254,8 @@ namespace vuk {
 			}
 
 			deps.push_back(std::move(dep));
+
+			source_module = current_module.get();
 		}
 
 		~ExtNode() {
@@ -1238,7 +1264,7 @@ namespace vuk {
 					node->splice.rel_acq = nullptr;
 					for (auto i = 0; i < node->splice.values.size(); i++) {
 						auto& v = node->splice.values[i];
-						if (node->type[i] == current_module->builtin_buffer) {
+						if (node->type[i]->hash_value == current_module->builtin_buffer) {
 							delete (Buffer*)v;
 						} else {
 							delete (ImageAttachment*)v;
@@ -1246,13 +1272,13 @@ namespace vuk {
 					}
 					delete node->splice.values.data();
 				} else if (node->kind == Node::RELEASE) {
-					if (node->type[0] == current_module->builtin_buffer) {
+					if (node->type[0]->hash_value == current_module->builtin_buffer) {
 						delete (Buffer*)node->release.value;
 					} else {
 						delete (ImageAttachment*)node->release.value;
 					}
 				} else if (node->kind == Node::ACQUIRE) {
-					if (node->type[0] == current_module->builtin_buffer) {
+					if (node->type[0]->hash_value == current_module->builtin_buffer) {
 						delete (Buffer*)node->acquire.value;
 					} else {
 						delete (ImageAttachment*)node->acquire.value;
@@ -1273,7 +1299,7 @@ namespace vuk {
 					node->splice.rel_acq = nullptr;
 					for (auto i = 0; i < node->splice.values.size(); i++) {
 						auto& v = node->splice.values[i];
-						if (node->type[i] == current_module->builtin_buffer) {
+						if (node->type[i]->hash_value == current_module->builtin_buffer) {
 							delete (Buffer*)v;
 						} else {
 							delete (ImageAttachment*)v;
@@ -1288,7 +1314,7 @@ namespace vuk {
 						current_module->op_arena.erase(it);
 					}
 				} else if (node->kind == Node::RELEASE) {
-					if (node->type[0] == current_module->builtin_buffer) {
+					if (node->type[0]->hash_value == current_module->builtin_buffer) {
 						delete (Buffer*)node->release.value;
 					} else {
 						delete (ImageAttachment*)node->release.value;
@@ -1320,7 +1346,7 @@ namespace vuk {
 
 		std::unique_ptr<AcquireRelease> acqrel;
 		std::vector<std::shared_ptr<ExtNode>> deps;
-
+		IRModule* source_module;
 	private:
 		Node* node;
 	};

@@ -462,7 +462,7 @@ namespace vuk {
 			switch (node->kind) {
 			case Node::CONSTRUCT:
 				auto args_ptr = node->construct.args.data();
-				if (node->type[0] == current_module->builtin_image) {
+				if (node->type[0]->hash_value == current_module->builtin_image) {
 					auto ptr = &constant<ImageAttachment>(args_ptr[0]);
 					auto& value = constant<ImageAttachment>(args_ptr[0]);
 					if (value.extent.width > 0) {
@@ -492,7 +492,7 @@ namespace vuk {
 					if (value.level_count != VK_REMAINING_MIP_LEVELS) {
 						placeholder_to_ptr(args_ptr[9], &ptr->level_count);
 					}
-				} else if (node->type[0] == current_module->builtin_buffer) {
+				} else if (node->type[0]->hash_value == current_module->builtin_buffer) {
 					auto ptr = &constant<Buffer>(args_ptr[0]);
 					auto& value = constant<Buffer>(args_ptr[0]);
 					if (value.size != ~(0u)) {
@@ -559,7 +559,7 @@ namespace vuk {
 					}
 					case Node::CONSTRUCT: {
 						auto& args = node->construct.args;
-						if (node->type[0] == current_module->builtin_image) {
+						if (node->type[0]->hash_value == current_module->builtin_image) {
 							if (constant<ImageAttachment>(args[0]).image.image == VK_NULL_HANDLE) { // if there is no image, we will use base layer 0 and base mip 0
 								placeholder_to_constant(args[6], 0U);
 								placeholder_to_constant(args[8], 0U);
@@ -1031,12 +1031,34 @@ namespace vuk {
 		std::vector<std::shared_ptr<ExtNode>, short_alloc<std::shared_ptr<ExtNode>>> extnode_work_queue(*impl->arena_);
 		extnode_work_queue.assign(nodes.begin(), nodes.end());
 
+		std::unordered_set<IRModule*> modules;
+		modules.emplace(current_module.get());
+
 		while (!extnode_work_queue.empty()) {
 			auto enode = extnode_work_queue.back();
 			extnode_work_queue.pop_back();
 			extnode_work_queue.insert(extnode_work_queue.end(), std::make_move_iterator(enode->deps.begin()), std::make_move_iterator(enode->deps.end()));
 			enode->deps.clear();
+
+			// merge in any types that we are missing
+			for (auto& [k, v] : enode->source_module->type_map) {
+				auto local_ty = current_module->emplace_type(v);
+			}
+			modules.emplace(enode->source_module);
 			impl->depnodes.push_back(std::move(enode));
+		}
+
+		impl->all_nodes.clear();
+		for (auto& m : modules) {
+			for (auto& node : m->op_arena) {
+				if (node.kind != Node::GARBAGE) {
+					impl->all_nodes.push_back(&node);
+				}
+			}
+		}
+
+		for (auto& [k, v] : current_module->type_map) {
+			v.hash_value = k;
 		}
 
 		std::sort(impl->depnodes.begin(), impl->depnodes.end());

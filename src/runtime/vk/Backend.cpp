@@ -790,11 +790,11 @@ namespace vuk {
 		void init_sync(Type* base_ty, StreamResourceUse src_use, void* value) {
 			uint64_t key = 0;
 			PartialStreamResourceUse psru{ src_use };
-			if (base_ty == current_module->builtin_image) {
+			if (base_ty->hash_value == current_module->builtin_image) {
 				auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
 				key = reinterpret_cast<uint64_t>(img_att.image.image);
 				psru.subrange = { img_att.base_level, img_att.level_count, img_att.base_layer, img_att.layer_count };
-			} else if (base_ty == current_module->builtin_buffer) {
+			} else if (base_ty->hash_value == current_module->builtin_buffer) {
 				auto buf = reinterpret_cast<Buffer*>(value);
 				key = reinterpret_cast<uint64_t>(buf->allocation);
 				hash_combine(key, buf->offset);
@@ -831,10 +831,10 @@ namespace vuk {
 					elems += elem_ty->size;
 				}
 				return;
-			} else if (base_ty == current_module->builtin_image) {
+			} else if (base_ty->hash_value == current_module->builtin_image) {
 				auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
 				key = reinterpret_cast<uint64_t>(img_att.image.image);
-			} else if (base_ty == current_module->builtin_buffer) {
+			} else if (base_ty->hash_value == current_module->builtin_buffer) {
 				auto buf = reinterpret_cast<Buffer*>(value);
 				key = reinterpret_cast<uint64_t>(buf->allocation);
 				hash_combine(key, buf->offset);
@@ -844,7 +844,7 @@ namespace vuk {
 
 			auto& head = last_modify.at(key);
 
-			if (base_ty == current_module->builtin_image) {
+			if (base_ty->hash_value == current_module->builtin_image) {
 				auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
 				std::vector<Subrange::Image, inline_alloc<Subrange::Image, 1024>> work_queue(this->arena);
 				work_queue.emplace_back(Subrange::Image{ img_att.base_level, img_att.level_count, img_att.base_layer, img_att.layer_count });
@@ -900,7 +900,7 @@ namespace vuk {
 					found->subrange.image.base_layer = isection.base_layer;
 					found->subrange.image.layer_count = isection.layer_count;
 				}
-			} else if (base_ty == current_module->builtin_buffer) {
+			} else if (base_ty->hash_value == current_module->builtin_buffer) {
 				auto& src_use = *head;
 				if (src_use.stream && dst_use.stream && (src_use.stream != dst_use.stream)) {
 					dst_use.stream->add_dependency(src_use.stream);
@@ -913,10 +913,10 @@ namespace vuk {
 
 		StreamResourceUse& last_use(Type* base_ty, void* value) {
 			uint64_t key = 0;
-			if (base_ty == current_module->builtin_image) {
+			if (base_ty->hash_value == current_module->builtin_image) {
 				auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
 				key = reinterpret_cast<uint64_t>(img_att.image.image);
-			} else if (base_ty == current_module->builtin_buffer) {
+			} else if (base_ty->hash_value == current_module->builtin_buffer) {
 				auto buf = reinterpret_cast<Buffer*>(value);
 				key = reinterpret_cast<uint64_t>(buf->allocation);
 				hash_combine(key, buf->offset);
@@ -1068,10 +1068,10 @@ namespace vuk {
 		enum class Level { eError };
 
 		using namespace std::literals;
-		auto arg_names = [&](Type* t) -> std::vector<std::string_view>{
-			if (t == current_module->builtin_image) {
+		auto arg_names = [&](Type* t) -> std::vector<std::string_view> {
+			if (t->hash_value == current_module->builtin_image) {
 				return { "width"sv, "height"sv, "depth"sv, "format"sv, "samples"sv, "base_layer"sv, "layer_count"sv, "base_level"sv, "level_count"sv };
-			} else if (t == current_module->builtin_buffer) {
+			} else if (t->hash_value == current_module->builtin_buffer) {
 				return { "size"sv };
 			} else {
 				assert(0);
@@ -1147,7 +1147,7 @@ namespace vuk {
 			}
 			case Node::CONSTRUCT: { // when encountering a CONSTRUCT, allocate the thing if needed
 				if (sched.process(item)) {
-					if (node->type[0] == current_module->builtin_buffer) {
+					if (node->type[0]->hash_value == current_module->builtin_buffer) {
 						auto& bound = constant<Buffer>(node->construct.args[0]);
 						try {
 							bound.size = eval<size_t>(node->construct.args[1]); // collapse inferencing
@@ -1157,7 +1157,8 @@ namespace vuk {
 									       RenderGraphException(format_message(Level::eError, node, node->construct.args.subspan(1), "': argument(s) not set or inferrable\n")) };
 							} else {
 								return { expected_error,
-									       RenderGraphException(format_message(Level::eError, node, node->construct.args.subspan(1), "': argument(s) not constant evaluatable\n")) };
+									       RenderGraphException(
+									           format_message(Level::eError, node, node->construct.args.subspan(1), "': argument(s) not constant evaluatable\n")) };
 							}
 						}
 #ifdef VUK_DUMP_EXEC
@@ -1178,8 +1179,8 @@ namespace vuk {
 							bound = **buf;
 						}
 						sched.done(node, host_stream, bound);
-						recorder.init_sync(current_module->builtin_buffer, { to_use(eNone), host_stream }, sched.get_value(first(node)));
-					} else if (node->type[0] == current_module->builtin_image) {
+						recorder.init_sync(node->type[0], { to_use(eNone), host_stream }, sched.get_value(first(node)));
+					} else if (node->type[0]->hash_value == current_module->builtin_image) {
 						auto& attachment = *reinterpret_cast<ImageAttachment*>(node->construct.args[0].node->constant.value);
 						// collapse inferencing
 						try {
@@ -1223,7 +1224,8 @@ namespace vuk {
 									       RenderGraphException(format_message(Level::eError, node, node->construct.args.subspan(1), "': argument(s) not set or inferrable\n")) };
 							} else {
 								return { expected_error,
-									       RenderGraphException(format_message(Level::eError, node, node->construct.args.subspan(1), "': argument(s) not constant evaluatable\n")) };
+									       RenderGraphException(
+									           format_message(Level::eError, node, node->construct.args.subspan(1), "': argument(s) not constant evaluatable\n")) };
 							}
 						}
 #ifdef VUK_DUMP_EXEC
@@ -1246,15 +1248,15 @@ namespace vuk {
 							}
 						}
 						sched.done(node, host_stream, attachment);
-						recorder.init_sync(current_module->builtin_image, { to_use(eNone), host_stream }, sched.get_value(first(node)));
-					} else if (node->type[0] == current_module->builtin_swapchain) {
+						recorder.init_sync(node->type[0], { to_use(eNone), host_stream }, sched.get_value(first(node)));
+					} else if (node->type[0]->hash_value == current_module->builtin_swapchain) {
 #ifdef VUK_DUMP_EXEC
 						print_results(node);
 						fmt::print(" = construct<swapchain>\n");
 #endif
 						/* no-op */
 						sched.done(node, host_stream, sched.get_value(node->construct.args[0]));
-						recorder.init_sync(current_module->builtin_swapchain, { to_use(eNone), host_stream }, sched.get_value(first(node)));
+						recorder.init_sync(node->type[0], { to_use(eNone), host_stream }, sched.get_value(first(node)));
 					} else if (node->type[0]->kind == Type::ARRAY_TY) {
 						for (size_t i = 1; i < node->construct.args.size(); i++) {
 							auto arg_ty = node->construct.args[i].type();
@@ -1273,21 +1275,21 @@ namespace vuk {
 						fmt::print("\n");
 #endif
 						assert(node->construct.args[0].type()->kind == Type::MEMORY_TY);
-						if (elem_ty == current_module->builtin_buffer) {
+						if (elem_ty->hash_value == current_module->builtin_buffer) {
 							auto arr_mem = new (sched.arena.ensure_space(sizeof(Buffer) * size)) Buffer[size];
 							for (auto i = 0; i < size; i++) {
 								auto& elem = node->construct.args[i + 1];
-								assert(Type::stripped(elem.type()) == current_module->builtin_buffer);
+								assert(Type::stripped(elem.type())->hash_value == current_module->builtin_buffer);
 
 								memcpy(&arr_mem[i], sched.get_value(elem), sizeof(Buffer));
 							}
 							node->construct.args[0].node->constant.value = arr_mem;
 							sched.done(node, host_stream, (void*)arr_mem);
-						} else if (elem_ty == current_module->builtin_image) {
+						} else if (elem_ty->hash_value == current_module->builtin_image) {
 							auto arr_mem = new (sched.arena.ensure_space(sizeof(ImageAttachment) * size)) ImageAttachment[size];
 							for (auto i = 0; i < size; i++) {
 								auto& elem = node->construct.args[i + 1];
-								assert(Type::stripped(elem.type()) == current_module->builtin_image);
+								assert(Type::stripped(elem.type())->hash_value == current_module->builtin_image);
 
 								memcpy(&arr_mem[i], sched.get_value(elem), sizeof(ImageAttachment));
 							}
@@ -1466,12 +1468,12 @@ namespace vuk {
 						for (size_t i = 0; i < node->splice.src.size(); i++) {
 							StreamResourceUse src_use = { acqrel->last_use[i], src_stream };
 							recorder.init_sync(node->type[i], src_use, node->splice.values[i]);
-							if (node->type[i] == current_module->builtin_buffer) {
+							if (node->type[i]->hash_value == current_module->builtin_buffer) {
 #ifdef VUK_DUMP_EXEC
 								print_results(node);
 								fmt::print(" = acquire!<buffer>\n");
 #endif
-							} else if (node->type[i] == current_module->builtin_image) {
+							} else if (node->type[i]->hash_value == current_module->builtin_image) {
 #ifdef VUK_DUMP_EXEC
 								print_results(node);
 								fmt::print(" = acquire!<image>\n");
@@ -1503,12 +1505,12 @@ namespace vuk {
 				StreamResourceUse src_use = { acq->last_use[node->acquire.index], src_stream };
 				recorder.init_sync(node->type[0], src_use, sched.get_value({ node, node->acquire.index }));
 
-				if (node->type[0] == current_module->builtin_buffer) {
+				if (node->type[0]->hash_value == current_module->builtin_buffer) {
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
 					fmt::print(" = acquire<buffer>\n");
 #endif
-				} else if (node->type[0] == current_module->builtin_image) {
+				} else if (node->type[0]->hash_value == current_module->builtin_image) {
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
 					fmt::print(" = acquire<image>\n");
@@ -1600,7 +1602,7 @@ namespace vuk {
 					fmt::print("\n");
 #endif
 					sched.done(node, pe_stream, swp.images[swp.image_index]);
-					recorder.last_use(current_module->builtin_image, &swp.images[swp.image_index]).stream = pe_stream;
+					recorder.last_use(node->type[0], &swp.images[swp.image_index]).stream = pe_stream;
 				} else {
 					sched.schedule_dependency(node->acquire_next_image.swapchain, RW::eWrite);
 				}
@@ -1751,8 +1753,8 @@ namespace vuk {
 
 		std::unordered_set<uint32_t> type_hashes;
 
-		for (auto& node : current_module->op_arena) {
-			for (auto& t : node.type) {
+		for (auto& node : impl->all_nodes) {
+			for (auto& t : node->type) {
 				switch (t->kind) {
 				case Type::IMBUED_TY:
 					type_hashes.emplace(Type::hash(t->imbued.T));
@@ -1779,13 +1781,13 @@ namespace vuk {
 		}
 
 		if (current_module->builtin_image) {
-			type_hashes.emplace(Type::hash(current_module->builtin_image));
+			type_hashes.emplace(current_module->builtin_image);
 		}
 		if (current_module->builtin_buffer) {
-			type_hashes.emplace(Type::hash(current_module->builtin_buffer));
+			type_hashes.emplace(current_module->builtin_buffer);
 		}
 		if (current_module->builtin_swapchain) {
-			type_hashes.emplace(Type::hash(current_module->builtin_swapchain));
+			type_hashes.emplace(current_module->builtin_swapchain);
 		}
 
 		for (auto& node : impl->nodes) {
@@ -1826,13 +1828,19 @@ namespace vuk {
 		for (auto& key : to_erase) {
 			auto t = &current_module->type_map.at(key);
 			switch (t->kind) {
-			case Type::OPAQUE_FN_TY:
+			case Type::OPAQUE_FN_TY: {
 				delete t->opaque_fn.args.data();
-				current_module->ucbs.erase(current_module->ucbs.get_iterator(t->opaque_fn.callback));
+				auto it = current_module->ucbs.get_iterator(t->opaque_fn.callback);
+				if (it != current_module->ucbs.end()) {
+					current_module->ucbs.erase(it);
+				}
 				break;
-			case Type::COMPOSITE_TY:
+			}
+			case Type::COMPOSITE_TY: {
 				delete t->composite.types.data();
+				delete t->composite.offsets.data();
 				break;
+			}
 			}
 			delete t->debug_info;
 			current_module->type_map.erase(key);

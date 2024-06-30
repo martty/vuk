@@ -42,6 +42,7 @@ namespace vuk {
 		std::vector<std::shared_ptr<ExtNode>> refs;
 		std::vector<std::shared_ptr<ExtNode>> depnodes;
 		std::vector<Node*> nodes;
+		std::pmr::vector<Node*> all_nodes;
 		std::vector<Node*> garbage_nodes;
 		std::vector<ChainLink*> chains;
 		std::pmr::vector<ChainLink*> child_chains;
