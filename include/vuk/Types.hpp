@@ -8,6 +8,7 @@
 #include <compare>
 #include <string_view>
 #include <type_traits>
+#include <algorithm>
 
 #define MOV(x) (static_cast<std::remove_reference_t<decltype(x)>&&>(x))
 

@@ -252,7 +252,7 @@ namespace vuk {
 			candidate_node.extract.index = first(&constant_node);
 			try {
 				auto result = eval<uint64_t>(first(&candidate_node));
-				construct.node->construct.args[index + 1] = get_render_graph()->make_constant<uint64_t>(result);
+				construct.node->construct.args[index + 1] = get_render_graph()->template make_constant<uint64_t>(result);
 			} catch (...) {
 				construct.node->construct.args[index + 1] = get_render_graph()->make_extract(composite, index);
 			}

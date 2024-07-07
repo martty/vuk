@@ -237,7 +237,7 @@ namespace vuk {
 
 	struct NodeDebugInfo {
 		std::span<std::string_view> result_names;
-		std::span<std::source_location> trace;
+		std::span<vuk::source_location> trace;
 	};
 
 	// struct describing use chains

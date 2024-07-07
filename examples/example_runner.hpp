@@ -245,7 +245,6 @@ namespace vuk {
 		device = vkbdevice.device;
 		vuk::FunctionPointers fps;
 		fps.vkGetInstanceProcAddr = vkbinstance.fp_vkGetInstanceProcAddr;
-		fps.vkGetDeviceProcAddr = vkbinstance.fp_vkGetDeviceProcAddr;
 		fps.load_pfns(instance, device, true);
 		std::vector<std::unique_ptr<Executor>> executors;
 

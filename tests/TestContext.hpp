@@ -117,7 +117,6 @@ namespace vuk {
 			device = vkbdevice.device;
 			vuk::FunctionPointers fps;
 			fps.vkGetInstanceProcAddr = vkbinstance.fp_vkGetInstanceProcAddr;
-			fps.vkGetDeviceProcAddr = vkbinstance.fp_vkGetDeviceProcAddr;
 			fps.load_pfns(instance, device, true);
 
 			executors.push_back(vuk::create_vkqueue_executor(fps, device, graphics_queue, graphics_queue_family_index, DomainFlagBits::eGraphicsQueue));

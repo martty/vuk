@@ -1,6 +1,8 @@
 #pragma once
 
 #include <type_traits>
+#include <memory>
+#include <utility>
 
 namespace vuk {
 	template<typename BitType>
@@ -108,7 +110,7 @@ namespace vuk {
 namespace std {
 	template<class BitType>
 	struct hash<vuk::Flags<BitType>> {
-		size_t operator()(vuk::Flags<BitType> const& x) const noexcept {
+		size_t operator()(vuk::Flags<BitType> const& x) const {
 			return std::hash<typename vuk::Flags<BitType>::MaskType>()((typename vuk::Flags<BitType>::MaskType)x);
 		}
 	};

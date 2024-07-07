@@ -1018,7 +1018,7 @@ namespace vuk {
 						auto needle = Ref{ node, i };
 						auto replace_with = node->splice.src[i];
 
-						replaces.emplace_back(needle, replace_with);
+						replaces.emplace_back(Replace{needle, replace_with});
 					}
 					node->kind = Node::NOP;
 				} else {
@@ -1029,7 +1029,7 @@ namespace vuk {
 					case Signal::Status::eHostAvailable:
 						for (size_t i = 0; i < node->splice.src.size(); i++) {
 							auto new_ref = impl->cg_module->make_acquire(node->type[i], node->splice.rel_acq, i, node->splice.values[i]);
-							replaces.emplace_back(Ref{ node, i }, new_ref);
+							replaces.emplace_back(Replace{Ref{ node, i }, new_ref});
 						}
 						break;
 					}

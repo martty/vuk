@@ -46,9 +46,9 @@ namespace vuk {
 #endif
 
 	struct SourceLocationAtFrame {
-		SourceLocationAtFrame(std::source_location loc) : location(loc) {}
+		SourceLocationAtFrame(source_location loc) : location(loc) {}
 
-		std::source_location location;
+		source_location location;
 		uint64_t absolute_frame = (uint64_t)-1LL;
 		SourceLocationAtFrame* parent = nullptr;
 

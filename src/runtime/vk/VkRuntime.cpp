@@ -50,6 +50,7 @@ namespace {
 	}*/
 
 	void load_pfns_dynamic(VkInstance instance, VkDevice device, vuk::FunctionPointers& pfns) {
+		pfns.vkGetDeviceProcAddr = (PFN_vkGetDeviceProcAddr)pfns.vkGetInstanceProcAddr(instance, "vkGetDeviceProcAddr");
 #define VUK_X(name)                                                                                                                                            \
 	if (pfns.name == nullptr) {                                                                                                                                  \
 		pfns.name = (PFN_##name)pfns.vkGetDeviceProcAddr(device, #name);                                                                                           \
@@ -83,7 +84,7 @@ namespace vuk {
 			return { vuk::expected_value };
 		}
 		// we don't have all the PFNs, so we will load them if this is allowed
-		if (vkGetInstanceProcAddr && vkGetDeviceProcAddr && allow_dynamic_loading_of_vk_function_pointers) {
+		if (vkGetInstanceProcAddr && allow_dynamic_loading_of_vk_function_pointers) {
 			load_pfns_dynamic(instance, device, *this);
 			if (!check_pfns()) {
 				return { vuk::expected_error,
