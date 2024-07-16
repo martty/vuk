@@ -118,6 +118,7 @@ VUK_Y(vkGetPhysicalDeviceProperties2)
 
 // 1.2 
 VUK_X(vkGetBufferDeviceAddress)
+VUK_X(vkCmdDrawIndirectCount)
 VUK_X(vkCmdDrawIndexedIndirectCount)
 VUK_X(vkResetQueryPool)
 

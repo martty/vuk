@@ -512,6 +512,12 @@ namespace vuk {
 		/// @param commands Indirect commands to be uploaded and used for this draw
 		CommandBuffer& draw_indirect(std::span<DrawIndirectCommand> commands);
 
+		/// @brief Issue an indirect draw with count
+		/// @param max_command_count Upper limit of commands that can be drawn
+		/// @param indirect_buffer Buffer of indirect commands
+		/// @param count_buffer Buffer of command count
+		CommandBuffer& draw_indirect_count(size_t max_draw_count, const Buffer& indirect_buffer, const Buffer& count_buffer);
+
 		/// @brief Isuse an indexed draw
 		/// @param index_count Number of vertices to draw
 		/// @param instance_count Number of instances to draw
