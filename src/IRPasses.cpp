@@ -1041,10 +1041,13 @@ namespace vuk {
 			enode->deps.clear();
 
 			// merge in any types that we are missing
-			for (auto& [k, v] : enode->source_module->type_map) {
-				auto local_ty = current_module->emplace_type(v);
+			if (enode->source_module != current_module.get()) {
+				for (auto& [k, v] : enode->source_module->type_map) {
+					current_module->copy_type(&v);
+				}
+				modules.emplace(enode->source_module);
+
 			}
-			modules.emplace(enode->source_module);
 			impl->depnodes.push_back(std::move(enode));
 		}
 
@@ -1064,7 +1067,7 @@ namespace vuk {
 		std::sort(impl->depnodes.begin(), impl->depnodes.end());
 		impl->depnodes.erase(std::unique(impl->depnodes.begin(), impl->depnodes.end()), impl->depnodes.end());
 
-		std::pmr::polymorphic_allocator allocator(std::pmr::new_delete_resource());
+		std::pmr::polymorphic_allocator allocator(&impl->mbr);
 		implicit_linking(current_module->op_arena.begin(), current_module->op_arena.end(), allocator);
 		std::erase_if(impl->depnodes, [](std::shared_ptr<ExtNode>& sp) { return sp.use_count() == 1 && sp->acqrel->status == Signal::Status::eDisarmed; });
 

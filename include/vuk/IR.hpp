@@ -109,16 +109,10 @@ namespace vuk {
 				return v;
 			case COMPOSITE_TY: {
 				v = COMPOSITE_TY;
-				if (t->composite.types.size() == 9)
-					printf("%u\n", v);
 				for (int i = 0; i < t->composite.types.size(); i++) {
 					hash_combine_direct(v, Type::hash(t->composite.types[i]));
-					if (t->composite.types.size() == 9)
-						printf("%u\n", v);
 				}
 				hash_combine_direct(v, (uint32_t)t->composite.tag);
-				if (t->composite.types.size() == 9)
-					printf("%u\n", v);
 				return v;
 			}
 			case OPAQUE_FN_TY:
@@ -790,9 +784,9 @@ namespace vuk {
 					                                  offsetof(ImageAttachment, base_level),
 					                                  offsetof(ImageAttachment, level_count) };
 				auto image_type = emplace_type(Type{ .kind = Type::COMPOSITE_TY,
-				                                   .size = sizeof(ImageAttachment),
-				                                   .debug_info = allocate_type_debug_info("image"),
-				                                   .composite = { .types = { image_, 9 }, .offsets = { image_offsets, 9 }, .tag = 0 } });
+				                                     .size = sizeof(ImageAttachment),
+				                                     .debug_info = allocate_type_debug_info("image"),
+				                                     .composite = { .types = { image_, 9 }, .offsets = { image_offsets, 9 }, .tag = 0 } });
 				builtin_image = Type::hash(image_type);
 				return image_type;
 			}
@@ -806,9 +800,9 @@ namespace vuk {
 				};
 				auto buffer_offsets = new size_t[1]{ offsetof(Buffer, size) };
 				auto buffer_type = emplace_type(Type{ .kind = Type::COMPOSITE_TY,
-				                                    .size = sizeof(Buffer),
-				                                    .debug_info = allocate_type_debug_info("buffer"),
-				                                    .composite = { .types = { buffer_, 1 }, .offsets = { buffer_offsets, 1 }, .tag = 1 } });
+				                                      .size = sizeof(Buffer),
+				                                      .debug_info = allocate_type_debug_info("buffer"),
+				                                      .composite = { .types = { buffer_, 1 }, .offsets = { buffer_offsets, 1 }, .tag = 1 } });
 				builtin_buffer = Type::hash(buffer_type);
 				return buffer_type;
 			}
@@ -826,9 +820,9 @@ namespace vuk {
 				auto offsets = new size_t[1]{ 0 };
 
 				auto swapchain_type = emplace_type(Type{ .kind = Type::COMPOSITE_TY,
-				                                       .size = sizeof(Swapchain),
-				                                       .debug_info = allocate_type_debug_info("swapchain"),
-				                                       .composite = { .types = { swp_, 1 }, .offsets = { offsets, 1 }, .tag = 2 } });
+				                                         .size = sizeof(Swapchain),
+				                                         .debug_info = allocate_type_debug_info("swapchain"),
+				                                         .composite = { .types = { swp_, 1 }, .offsets = { offsets, 1 }, .tag = 2 } });
 				builtin_swapchain = Type::hash(swapchain_type);
 				return swapchain_type;
 			}
@@ -863,6 +857,44 @@ namespace vuk {
 			unify_type(t);
 
 			return t;
+		}
+
+		Type* copy_type(Type* type) {
+			auto make_type_copy = [this](Type*& t) {
+				t = emplace_type(*t);
+				if (t->debug_info) {
+					t->debug_info = new TypeDebugInfo(*t->debug_info);
+				}
+			};
+			// copy outer type, then copy inner types as needed
+			make_type_copy(type);
+
+			if (type->kind == Type::ALIASED_TY) {
+				make_type_copy(type->aliased.T);
+			} else if (type->kind == Type::IMBUED_TY) {
+				make_type_copy(type->imbued.T);
+			} else if (type->kind == Type::ARRAY_TY) {
+				type->array.T = copy_type(type->array.T);
+			} else if (type->kind == Type::COMPOSITE_TY) {
+				auto type_array = new Type*[type->composite.types.size()];
+				auto type_offsets = new size_t[type->composite.types.size()];
+				for (auto i = 0; i < type->composite.types.size(); i++) {
+					type_array[i] = copy_type(type->composite.types[i]);
+					type_offsets[i] = type->composite.offsets[i];
+				}
+				type->composite.types = { type_array, type->composite.types.size() };
+				type->composite.offsets = { type_offsets, type->composite.types.size() };
+			} else if (type->kind == Type::OPAQUE_FN_TY) {
+				auto args = new Type*[type->opaque_fn.args.size()];
+				std::copy(type->opaque_fn.args.begin(), type->opaque_fn.args.end(), args);
+				type->opaque_fn.args = { args, type->opaque_fn.args.size() };
+				auto ret_ty_ptr = new Type*[type->opaque_fn.return_types.size()];
+				std::copy(type->opaque_fn.return_types.begin(), type->opaque_fn.return_types.end(), ret_ty_ptr);
+				type->opaque_fn.return_types = { ret_ty_ptr, type->opaque_fn.return_types.size() };
+				type->opaque_fn.callback = &*ucbs.emplace(*type->opaque_fn.callback);
+			}
+
+			return type;
 		}
 
 		TypeDebugInfo* allocate_type_debug_info(std::string_view name) {
@@ -1165,7 +1197,8 @@ namespace vuk {
 			decltype(Node::call) call = { .args = std::span(args_ptr, sizeof...(args) + 1) };
 			Node n{};
 			n.kind = Node::CALL;
-			n.type = fn.type()->opaque_fn.return_types;
+			n.type = { new Type*[fn.type()->opaque_fn.return_types.size()], fn.type()->opaque_fn.return_types.size() };
+			std::copy(fn.type()->opaque_fn.return_types.begin(), fn.type()->opaque_fn.return_types.end(), n.type.data());
 			n.call = call;
 			return emplace_op(n);
 		}
@@ -1347,6 +1380,7 @@ namespace vuk {
 		std::unique_ptr<AcquireRelease> acqrel;
 		std::vector<std::shared_ptr<ExtNode>> deps;
 		IRModule* source_module;
+
 	private:
 		Node* node;
 	};

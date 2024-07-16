@@ -7,6 +7,7 @@
 
 #include <deque>
 #include <robin_hood.h>
+#include <memory_resource>
 
 namespace vuk {
 
@@ -32,6 +33,7 @@ namespace vuk {
 		RGCImpl() : arena_(new arena(4 * 1024 * 1024)) {}
 		RGCImpl(arena* a) : arena_(a) {}
 		std::unique_ptr<arena> arena_;
+		std::pmr::monotonic_buffer_resource mbr;
 
 		std::vector<ScheduledItem> scheduled_execables;
 		std::vector<ScheduledItem*> partitioned_execables;

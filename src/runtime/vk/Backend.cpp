@@ -1830,6 +1830,7 @@ namespace vuk {
 			switch (t->kind) {
 			case Type::OPAQUE_FN_TY: {
 				delete t->opaque_fn.args.data();
+				delete t->opaque_fn.return_types.data();
 				auto it = current_module->ucbs.get_iterator(t->opaque_fn.callback);
 				if (it != current_module->ucbs.end()) {
 					current_module->ucbs.erase(it);
