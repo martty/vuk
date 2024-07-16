@@ -539,6 +539,21 @@ namespace vuk {
 		return *this;
 	}
 
+	CommandBuffer& CommandBuffer::draw_indirect_count(size_t max_draw_count, const Buffer& indirect_buffer, const Buffer& count_buffer) {
+		VUK_EARLY_RET();
+		if (!_bind_graphics_pipeline_state()) {
+			return *this;
+		}
+		ctx.vkCmdDrawIndirectCount(command_buffer,
+		                           indirect_buffer.buffer,
+		                           indirect_buffer.offset,
+		                           count_buffer.buffer,
+		                           count_buffer.offset,
+		                           (uint32_t)max_draw_count,
+		                           sizeof(DrawIndirectCommand));
+		return *this;
+	}
+
 	CommandBuffer& CommandBuffer::draw_indexed(size_t index_count, size_t instance_count, size_t first_index, int32_t vertex_offset, size_t first_instance) {
 		VUK_EARLY_RET();
 		if (!_bind_graphics_pipeline_state()) {
