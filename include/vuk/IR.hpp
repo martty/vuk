@@ -777,9 +777,9 @@ namespace vuk {
 		std::unordered_map<Type::Hash, std::weak_ptr<Type>> type_map;
 		std::shared_mutex lock;
 
-		Type::Hash builtin_image = 0;
-		Type::Hash builtin_buffer = 0;
-		Type::Hash builtin_swapchain = 0;
+		Type::Hash builtin_image = -1;
+		Type::Hash builtin_buffer = -1;
+		Type::Hash builtin_swapchain = -1;
 
 		// TYPES
 		static std::shared_ptr<Type> make_imbued_ty(std::shared_ptr<Type> ty, Access access) {
@@ -805,60 +805,53 @@ namespace vuk {
 		}
 
 		static std::shared_ptr<Type> get_builtin_image() {
-			if (!Types::global().builtin_image) {
-				auto u32_t = u32();
-				auto image_ = std::vector<std::shared_ptr<Type>>{ u32_t, u32_t, u32_t, memory(sizeof(Format)), memory(sizeof(Samples)), u32_t, u32_t, u32_t, u32_t };
-				auto image_offsets = std::vector<size_t>{ offsetof(ImageAttachment, extent) + offsetof(Extent3D, width),
-					                                        offsetof(ImageAttachment, extent) + offsetof(Extent3D, height),
-					                                        offsetof(ImageAttachment, extent) + offsetof(Extent3D, depth),
-					                                        offsetof(ImageAttachment, format),
-					                                        offsetof(ImageAttachment, sample_count),
-					                                        offsetof(ImageAttachment, base_layer),
-					                                        offsetof(ImageAttachment, layer_count),
-					                                        offsetof(ImageAttachment, base_level),
-					                                        offsetof(ImageAttachment, level_count) };
-				auto image_type = Types::global().emplace_type(std::shared_ptr<Type>(new Type{ .kind = Type::COMPOSITE_TY,
-				                                                                               .size = sizeof(ImageAttachment),
-				                                                                               .debug_info = Types::global().allocate_type_debug_info("image"),
-				                                                                               .composite = { .types = image_, .offsets = image_offsets, .tag = 0 } }));
-				Types::global().builtin_image = Type::hash(image_type.get());
-				return image_type;
-			}
-			return Types::global().type_map.at(Types::global().builtin_image).lock();
+			auto u32_t = u32();
+			auto image_ = std::vector<std::shared_ptr<Type>>{ u32_t, u32_t, u32_t, memory(sizeof(Format)), memory(sizeof(Samples)), u32_t, u32_t, u32_t, u32_t };
+			auto image_offsets = std::vector<size_t>{ offsetof(ImageAttachment, extent) + offsetof(Extent3D, width),
+				                                        offsetof(ImageAttachment, extent) + offsetof(Extent3D, height),
+				                                        offsetof(ImageAttachment, extent) + offsetof(Extent3D, depth),
+				                                        offsetof(ImageAttachment, format),
+				                                        offsetof(ImageAttachment, sample_count),
+				                                        offsetof(ImageAttachment, base_layer),
+				                                        offsetof(ImageAttachment, layer_count),
+				                                        offsetof(ImageAttachment, base_level),
+				                                        offsetof(ImageAttachment, level_count) };
+			auto image_type = Types::global().emplace_type(std::shared_ptr<Type>(new Type{ .kind = Type::COMPOSITE_TY,
+			                                                                               .size = sizeof(ImageAttachment),
+			                                                                               .debug_info = Types::global().allocate_type_debug_info("image"),
+			                                                                               .composite = { .types = image_, .offsets = image_offsets, .tag = 0 } }));
+
+			Types::global().builtin_image = Type::hash(image_type.get());
+
+			return image_type;
 		}
 
 		static std::shared_ptr<Type> get_builtin_buffer() {
-			if (!Types::global().builtin_buffer) {
-				auto buffer_ = std::vector<std::shared_ptr<Type>>{ u64() };
-				auto buffer_offsets = std::vector<size_t>{ offsetof(Buffer, size) };
-				auto buffer_type =
-				    Types::global().emplace_type(std::shared_ptr<Type>(new Type{ .kind = Type::COMPOSITE_TY,
-				                                                                 .size = sizeof(Buffer),
-				                                                                 .debug_info = Types::global().allocate_type_debug_info("buffer"),
-				                                                                 .composite = { .types = buffer_, .offsets = buffer_offsets, .tag = 1 } }));
-				Types::global().builtin_buffer = Type::hash(buffer_type.get());
-				return buffer_type;
-			}
-			return Types::global().type_map.at(Types::global().builtin_buffer).lock();
+			auto buffer_ = std::vector<std::shared_ptr<Type>>{ u64() };
+			auto buffer_offsets = std::vector<size_t>{ offsetof(Buffer, size) };
+			auto buffer_type =
+			    Types::global().emplace_type(std::shared_ptr<Type>(new Type{ .kind = Type::COMPOSITE_TY,
+			                                                                 .size = sizeof(Buffer),
+			                                                                 .debug_info = Types::global().allocate_type_debug_info("buffer"),
+			                                                                 .composite = { .types = buffer_, .offsets = buffer_offsets, .tag = 1 } }));
+			Types::global().builtin_buffer = Type::hash(buffer_type.get());
+			return buffer_type;
 		}
 
 		static std::shared_ptr<Type> get_builtin_swapchain() {
-			if (!Types::global().builtin_swapchain) {
-				auto arr_ty = Types::global().emplace_type(
-				    std::shared_ptr<Type>(new Type{ .kind = Type::ARRAY_TY,
-				                                    .size = 16 * get_builtin_image()->size,
-				                                    .array = { .T = get_builtin_image(), .count = 16, .stride = get_builtin_image()->size } }));
-				auto swp_ = std::vector<std::shared_ptr<Type>>{ arr_ty };
-				auto offsets = std::vector<size_t>{ 0 };
+			auto arr_ty = Types::global().emplace_type(
+			    std::shared_ptr<Type>(new Type{ .kind = Type::ARRAY_TY,
+			                                    .size = 16 * get_builtin_image()->size,
+			                                    .array = { .T = get_builtin_image(), .count = 16, .stride = get_builtin_image()->size } }));
+			auto swp_ = std::vector<std::shared_ptr<Type>>{ arr_ty };
+			auto offsets = std::vector<size_t>{ 0 };
 
-				auto swapchain_type = Types::global().emplace_type(std::shared_ptr<Type>(new Type{ .kind = Type::COMPOSITE_TY,
-				                                                                                   .size = sizeof(Swapchain),
-				                                                                                   .debug_info = Types::global().allocate_type_debug_info("swapchain"),
-				                                                                                   .composite = { .types = swp_, .offsets = offsets, .tag = 2 } }));
-				Types::global().builtin_swapchain = Type::hash(swapchain_type.get());
-				return swapchain_type;
-			}
-			return Types::global().type_map.at(Types::global().builtin_swapchain).lock();
+			auto swapchain_type = Types::global().emplace_type(std::shared_ptr<Type>(new Type{ .kind = Type::COMPOSITE_TY,
+			                                                                                   .size = sizeof(Swapchain),
+			                                                                                   .debug_info = Types::global().allocate_type_debug_info("swapchain"),
+			                                                                                   .composite = { .types = swp_, .offsets = offsets, .tag = 2 } }));
+			Types::global().builtin_swapchain = Type::hash(swapchain_type.get());
+			return swapchain_type;
 		}
 
 		std::shared_ptr<Type> emplace_type(std::shared_ptr<Type> t) {
@@ -866,11 +859,11 @@ namespace vuk {
 				auto th = Type::hash(t.get());
 				auto [v, succ] = type_map.try_emplace(th, t);
 				if (succ) {
-					t->hash_value = Type::hash(t.get());
+					t->hash_value = th;
 				} else if (!v->second.lock()) {
 					type_map[th] = t;
-					t->hash_value = Type::hash(t.get());
 				}
+				t->hash_value = th;
 			};
 
 			if (t->kind == Type::ALIASED_TY) {
