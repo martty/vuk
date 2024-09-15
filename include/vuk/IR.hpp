@@ -316,6 +316,7 @@ namespace vuk {
 		SchedulingInfo* scheduling_info = nullptr;
 		ChainLink* links = nullptr;
 		ExecutionInfo* execution_info = nullptr;
+		struct ScheduledItem* scheduled_item = nullptr;
 
 		template<uint8_t c>
 		struct Fixed {

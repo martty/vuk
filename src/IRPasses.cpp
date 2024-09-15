@@ -28,7 +28,7 @@ namespace {
 			}
 		}
 	}
-}
+} // namespace
 
 namespace vuk {
 	void RGCImpl::dump_graph() {
@@ -687,11 +687,41 @@ namespace vuk {
 						}
 					}
 				}
-			}
-			default: {
-				// TODO: maybe we need to add sync here if things are crossing without calls?
-			}
+			} break;
+			case Node::RELEASE: {
+				Ref parm = node->release.src;
+				auto& link = parm.link();
+				if (node->release.dst_access != Access::eNone) {
+					link.undef_sync = to_use(node->release.dst_access);
+				}
+			} break;
+			case Node::SPLICE: {
+				auto& node_si = *node->scheduled_item;
 
+				for (size_t i = 0; i < node->splice.src.size(); i++) {
+					auto& parm = node->splice.src[i];
+					auto& link = parm.link();
+
+					if (parm.node->scheduled_item) {
+						auto& parm_si = *parm.node->scheduled_item;
+						if (parm_si.scheduled_domain != node_si.scheduled_domain) { // parameters are scheduled on different domain
+							// we don't know anything about future use, so put "anything"
+							parm.link().undef_sync = to_use(Access::eMemoryRW);
+						}
+					}
+				}
+			} break;
+			default: {
+				if (node->scheduled_item) {
+					auto& node_si = *node->scheduled_item;
+
+					// SANITY: parameters on the same domain as node
+					apply_generic_args(
+					    [&](Ref parm) { assert(!parm.node->scheduled_item || parm.node->scheduled_item->scheduled_domain == node_si.scheduled_domain);
+					    },
+					    node);
+				}
+			}
 			}
 		}
 
@@ -767,7 +797,8 @@ namespace vuk {
 				                  .scheduled_domain =
 				                      execable->scheduling_info ? pick_first_domain(execable->scheduling_info->required_domains) : vuk::DomainFlagBits::eAny };
 			if (execable->kind != Node::CONSTRUCT) { // we use def nodes for deps, but we don't want to schedule them later as their ordering doesn't matter
-				scheduled_execables.push_back(item);
+				auto it = scheduled_execables.emplace(item);
+				it->execable->scheduled_item = &*it;
 			}
 			process_queue.pop_back();
 			for (auto i = 0; i < schedule_items.size(); i++) { // all the outgoing from this pass
@@ -899,31 +930,21 @@ namespace vuk {
 	// partition passes into different queues
 	void Compiler::pass_partitioning() {
 		impl->partitioned_execables.reserve(impl->scheduled_execables.size());
-		impl->scheduled_idx_to_partitioned_idx.resize(impl->scheduled_execables.size());
-		for (size_t i = 0; i < impl->scheduled_execables.size(); i++) {
-			auto& p = impl->scheduled_execables[i];
+		for (auto& p : impl->scheduled_execables) {
 			if (p.scheduled_domain & DomainFlagBits::eTransferQueue) {
-				impl->scheduled_idx_to_partitioned_idx[i] = impl->partitioned_execables.size();
-				// impl->last_ordered_pass_idx_in_domain_array[2] = impl->ordered_idx_to_computed_pass_idx[i];
 				impl->partitioned_execables.push_back(&p);
 			}
 		}
 		impl->transfer_passes = { impl->partitioned_execables.begin(), impl->partitioned_execables.size() };
-		for (size_t i = 0; i < impl->scheduled_execables.size(); i++) {
-			auto& p = impl->scheduled_execables[i];
+		for (auto& p : impl->scheduled_execables) {
 			if (p.scheduled_domain & DomainFlagBits::eComputeQueue) {
-				impl->scheduled_idx_to_partitioned_idx[i] = impl->partitioned_execables.size();
-				// impl->last_ordered_pass_idx_in_domain_array[1] = impl->ordered_idx_to_computed_pass_idx[i];
 				impl->partitioned_execables.push_back(&p);
 			}
 		}
 		impl->compute_passes = { impl->partitioned_execables.begin() + impl->transfer_passes.size(),
 			                       impl->partitioned_execables.size() - impl->transfer_passes.size() };
-		for (size_t i = 0; i < impl->scheduled_execables.size(); i++) {
-			auto& p = impl->scheduled_execables[i];
+		for (auto& p : impl->scheduled_execables) {
 			if (p.scheduled_domain & DomainFlagBits::eGraphicsQueue) {
-				impl->scheduled_idx_to_partitioned_idx[i] = impl->partitioned_execables.size();
-				// impl->last_ordered_pass_idx_in_domain_array[0] = impl->ordered_idx_to_computed_pass_idx[i];
 				impl->partitioned_execables.push_back(&p);
 			}
 		}
@@ -1111,7 +1132,7 @@ namespace vuk {
 						auto needle = Ref{ node, i };
 						auto replace_with = node->splice.src[i];
 
-						replaces.emplace_back(Replace{needle, replace_with});
+						replaces.emplace_back(Replace{ needle, replace_with });
 					}
 				} else {
 					switch (node->splice.rel_acq->status) {

@@ -35,9 +35,8 @@ namespace vuk {
 		std::unique_ptr<arena> arena_;
 		std::pmr::monotonic_buffer_resource mbr;
 
-		std::vector<ScheduledItem> scheduled_execables;
+		plf::colony<ScheduledItem> scheduled_execables;
 		std::vector<ScheduledItem*> partitioned_execables;
-		std::vector<size_t> scheduled_idx_to_partitioned_idx;
 
 		std::pmr::vector<Ref> pass_reads;
 

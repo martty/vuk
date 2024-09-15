@@ -618,7 +618,7 @@ namespace vuk {
 
 		Allocator allocator;
 		std::pmr::vector<Ref>& pass_reads;
-		std::vector<ScheduledItem>& scheduled_execables;
+		plf::colony<ScheduledItem>& scheduled_execables;
 
 		InlineArena<std::byte, 4 * 1024> arena;
 
@@ -1543,10 +1543,7 @@ namespace vuk {
 					assert(dst_stream);
 					DomainFlagBits dst_domain = dst_stream->domain;
 
-					Type* parm_ty = parm.type().get();
-					if (node->release.dst_access != Access::eNone) {
-						recorder.add_sync(sched.base_type(parm).get(), StreamResourceUse{ to_use(node->release.dst_access), dst_stream }, sched.get_value(parm));
-					}
+					recorder.add_sync(sched.base_type(parm).get(), sched.get_dependency_info(parm, parm.type().get(), RW::eWrite, dst_stream), sched.get_value(parm));
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
 					fmt::print("release ${}->${} ", domain_to_string(src_domain), domain_to_string(dst_domain));
