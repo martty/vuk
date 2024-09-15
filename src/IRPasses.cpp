@@ -125,10 +125,16 @@ namespace vuk {
 				}
 				if (arg.node->kind == Node::SPLICE && arg.node->splice.rel_acq && arg.node->splice.rel_acq->status == Signal::Status::eDisarmed) { // bridge splices
 					auto bridged_arg = arg.node->splice.src[arg.index];
+					ss << uintptr_t(bridged_arg.node) << " :r" << bridged_arg.index << " -> " << uintptr_t(node) << " :a" << i << " :n [color=red]\n";
+				} else if (arg.node->kind == Node::SPLICE && arg.node->splice.rel_acq) {
+					ss << "EXT\n";
+					ss << "EXT -> " << uintptr_t(node) << " :a" << i << " :n [color=red]\n";
+				} else if (arg.node->kind == Node::SPLICE) { // disabled
+					auto bridged_arg = arg.node->splice.src[arg.index];
 					ss << uintptr_t(bridged_arg.node) << " :r" << bridged_arg.index << " -> " << uintptr_t(node) << " :a" << i << " :n [color=blue]\n";
 				} else if (arg.node->kind == Node::INDIRECT_DEPEND) { // bridge indirect depends (connect to node)
 					auto bridged_arg = arg.node->indirect_depend.rref;
-					ss << uintptr_t(bridged_arg.node) << " -> " << uintptr_t(node) << " :a" << i << " :n [color=blue]\n";
+					ss << uintptr_t(bridged_arg.node) << " -> " << uintptr_t(node) << " :a" << i << " :n [color=yellow]\n";
 				} else if (arg.node->kind == Node::SLICE) { // bridge slices
 					auto bridged_arg = arg.node->slice.image;
 					if (bridged_arg.node->kind == Node::SPLICE) {
@@ -1078,6 +1084,12 @@ namespace vuk {
 
 		std::pmr::polymorphic_allocator allocator(&impl->mbr);
 		implicit_linking(current_module->op_arena.begin(), current_module->op_arena.end(), allocator);
+		for (auto& depnode : impl->depnodes) {
+			if (depnode.use_count() == 1 && depnode->acqrel->status == Signal::Status::eDisarmed) {
+				assert(depnode->get_node()->kind == Node::SPLICE);
+				depnode->get_node()->splice.rel_acq = nullptr;
+			}
+		}
 		//std::erase_if(impl->depnodes, [](std::shared_ptr<ExtNode>& sp) { return sp.use_count() == 1 && sp->acqrel->status == Signal::Status::eDisarmed; });
 
 		VUK_DO_OR_RETURN(impl->build_nodes());
@@ -1101,7 +1113,6 @@ namespace vuk {
 
 						replaces.emplace_back(Replace{needle, replace_with});
 					}
-					impl->garbage_nodes.push_back(node);
 				} else {
 					switch (node->splice.rel_acq->status) {
 					case Signal::Status::eDisarmed: // means we have to signal this, keep
@@ -1172,6 +1183,15 @@ namespace vuk {
 		}
 
 		VUK_DO_OR_RETURN(impl->build_nodes());
+		// SANITY: we have resolved all splices / releases
+		impl->dump_graph();
+		for (auto node : impl->nodes) {
+			switch (node->kind) {
+			case Node::SPLICE: {
+				assert(node->splice.rel_acq != nullptr);
+			}
+			}
+		}
 		// impl->dump_graph();
 		VUK_DO_OR_RETURN(impl->build_links(impl->nodes, allocator));
 

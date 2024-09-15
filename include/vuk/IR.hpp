@@ -1328,6 +1328,7 @@ namespace vuk {
 		}
 
 		void mutate(Node* new_node) {
+			current_module->garbage.push_back(node);
 			if (node->kind == Node::SPLICE) {
 				node->splice.rel_acq = nullptr;
 			}

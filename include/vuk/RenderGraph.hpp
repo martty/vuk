@@ -333,6 +333,7 @@ public:
 
 				bool reuse_node =
 				    first.node.use_count() == 1 && first.node->get_node()->kind != Node::ACQUIRE && first.node->acqrel->status == Signal::Status::eDisarmed;
+				reuse_node = false;
 
 				std::vector<std::shared_ptr<Type>> arg_types;
 				std::tuple arg_tuple_as_a = { T{ nullptr, args.get_peeled_head() }... };

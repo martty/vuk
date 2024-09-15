@@ -51,7 +51,7 @@ namespace vuk {
 		}
 
 		void release(Access access = Access::eNone, DomainFlagBits domain = DomainFlagBits::eAny) noexcept {
-			assert(node->acqrel->status == Signal::Status::eDisarmed);
+			assert(node->acqrel && node->acqrel->status == Signal::Status::eDisarmed);
 			auto ref = get_head();
 			auto release = current_module->make_release(ref, nullptr, access, domain);
 			node = std::make_shared<ExtNode>(release, node); // previous extnode is a dep

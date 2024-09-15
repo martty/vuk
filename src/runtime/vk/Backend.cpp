@@ -1428,10 +1428,7 @@ namespace vuk {
 			case Node::SPLICE: {
 				if (sched.process(item)) {
 					auto acqrel = node->splice.rel_acq;
-					if (!acqrel) { // (we should've handled this before this moment)
-						fmt::print("???");
-						assert(false);
-					}
+					assert(acqrel);
 
 					Stream* dst_stream = item.scheduled_stream;
 
@@ -1489,10 +1486,7 @@ namespace vuk {
 				} else {
 					auto acqrel = node->splice.rel_acq;
 
-					if (!acqrel) { // (we should've handled this before this moment)
-						fmt::print("???");
-						assert(false);
-					}
+					assert(acqrel);
 					if (acqrel->status == Signal::Status::eDisarmed) {
 						for (size_t i = 0; i < node->splice.src.size(); i++) {
 							sched.schedule_dependency(node->splice.src[i], RW::eWrite);
