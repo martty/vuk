@@ -1437,7 +1437,7 @@ namespace vuk {
 
 					if (acqrel->status == Signal::Status::eDisarmed) {
 						auto values = new void*[node->splice.src.size()];
-						// if acq is nullptr, then this degenerates to a NOP, sync and skip
+
 						for (size_t i = 0; i < node->splice.src.size(); i++) {
 							auto parm = node->splice.src[i];
 							auto arg_ty = node->type[i];
@@ -1450,6 +1450,9 @@ namespace vuk {
 
 							auto last_use = recorder.last_use(sched.base_type(parm).get(), value);
 							acqrel->last_use.push_back(last_use);
+							// SANITY: if we change streams, then we must've had sync
+							// TODO: remove host exception here
+							assert(di || last_use.stream->domain == DomainFlagBits::eHost || (last_use.stream == item.scheduled_stream));
 							if (i == 0) {
 								last_use.stream->add_dependent_signal(acqrel);
 							}

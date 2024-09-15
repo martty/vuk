@@ -14,6 +14,22 @@
 #include <sstream>
 #include <unordered_set>
 
+namespace {
+	template<class F>
+	auto apply_generic_args(F&& f, vuk::Node* node) {
+		auto count = node->generic_node.arg_count;
+		if (count != (uint8_t)~0u) {
+			for (int i = 0; i < count; i++) {
+				f(node->fixed_node.args[i]);
+			}
+		} else {
+			for (int i = 0; i < node->variable_node.args.size(); i++) {
+				f(node->variable_node.args[i]);
+			}
+		}
+	}
+}
+
 namespace vuk {
 	void RGCImpl::dump_graph() {
 		std::stringstream ss;
@@ -593,11 +609,12 @@ namespace vuk {
 		return { expected_value };
 	}
 
+	// build required synchronization for nodes
+	// at this point we know everything
 	Result<void> RGCImpl::build_sync() {
 		for (auto node : nodes) {
 			switch (node->kind) {
 			case Node::CALL: {
-				// args
 				for (size_t i = 1; i < node->call.args.size(); i++) {
 					auto& arg_ty = node->call.args[0].type()->opaque_fn.args[i - 1];
 					auto& parm = node->call.args[i];
@@ -665,6 +682,10 @@ namespace vuk {
 					}
 				}
 			}
+			default: {
+				// TODO: maybe we need to add sync here if things are crossing without calls?
+			}
+
 			}
 		}
 
