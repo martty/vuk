@@ -241,7 +241,7 @@ namespace vuk {
 			auto def = def_or_v.ref;
 
 			auto composite = src_composite;
-			Type* ty;
+			std::shared_ptr<Type> ty;
 			auto stripped = Type::stripped(composite.type());
 			if (stripped->kind == Type::ARRAY_TY) {
 				ty = stripped->array.T;

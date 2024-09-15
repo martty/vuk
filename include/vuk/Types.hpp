@@ -849,7 +849,7 @@ namespace vuk {
 		Node* node = nullptr;
 		size_t index;
 
-		Type* type() const noexcept;
+		std::shared_ptr<Type> type() const noexcept;
 		ChainLink& link() noexcept;
 
 		explicit constexpr operator bool() const noexcept {

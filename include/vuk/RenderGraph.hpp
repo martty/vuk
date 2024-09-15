@@ -290,14 +290,14 @@ public:
 	}
 
 	template<typename... T>
-	static auto fill_arg_ty(const std::tuple<T...>& args, std::vector<Type*>& arg_types) {
-		(arg_types.emplace_back(current_module->make_imbued_ty(std::get<T>(args).src.type(), T::access)), ...);
+	static auto fill_arg_ty(const std::tuple<T...>& args, std::vector<std::shared_ptr<Type>>& arg_types) {
+		(arg_types.emplace_back(Types::global().make_imbued_ty(std::get<T>(args).src.type(), T::access)), ...);
 	}
 
 	template<typename... T>
-	static auto fill_ret_ty(std::array<size_t, sizeof...(T)> idxs, const std::tuple<T...>& args, std::vector<Type*>& ret_types) {
+	static auto fill_ret_ty(std::array<size_t, sizeof...(T)> idxs, const std::tuple<T...>& args, std::vector<std::shared_ptr<Type>>& ret_types) {
 		size_t i = 0;
-		(ret_types.emplace_back(current_module->make_aliased_ty(Type::stripped(std::get<T>(args).src.type()), idxs[i++] + 1)), ...);
+		(ret_types.emplace_back(Types::global().make_aliased_ty(Type::stripped(std::get<T>(args).src.type()), idxs[i++] + 1)), ...);
 	}
 
 	inline auto First = [](auto& first, auto&...) -> auto& {
@@ -334,11 +334,11 @@ public:
 				bool reuse_node =
 				    first.node.use_count() == 1 && first.node->get_node()->kind != Node::ACQUIRE && first.node->acqrel->status == Signal::Status::eDisarmed;
 
-				std::vector<Type*> arg_types;
+				std::vector<std::shared_ptr<Type>> arg_types;
 				std::tuple arg_tuple_as_a = { T{ nullptr, args.get_peeled_head() }... };
 				fill_arg_ty(arg_tuple_as_a, arg_types);
 
-				std::vector<Type*> ret_types;
+				std::vector<std::shared_ptr<Type>> ret_types;
 				if constexpr (is_tuple<Ret>::value) {
 					auto [idxs, ret_tuple] = intersect_tuples<std::tuple<T...>, Ret>(arg_tuple_as_a);
 					fill_ret_ty(idxs, ret_tuple, ret_types);
@@ -399,7 +399,7 @@ public:
 	}
 
 	[[nodiscard]] inline Value<ImageAttachment> acquire_ia(Name name, ImageAttachment ia, Access access, VUK_CALLSTACK) {
-		Ref ref = current_module->make_acquire(current_module->get_builtin_image(), nullptr, ia);
+		Ref ref = current_module->make_acquire(Types::global().get_builtin_image(), nullptr, ia);
 		auto ext_ref = make_ext_ref(ref);
 		ext_ref.node->acqrel = std::make_unique<AcquireRelease>();
 		ext_ref.node->acqrel->status = Signal::Status::eHostAvailable;
@@ -419,7 +419,7 @@ public:
 	}
 
 	[[nodiscard]] inline Value<Buffer> acquire_buf(Name name, Buffer buf, Access access, VUK_CALLSTACK) {
-		Ref ref = current_module->make_acquire(current_module->get_builtin_buffer(), nullptr, buf);
+		Ref ref = current_module->make_acquire(Types::global().get_builtin_buffer(), nullptr, buf);
 		auto ext_ref = make_ext_ref(ref);
 		ext_ref.node->acqrel = std::make_unique<AcquireRelease>();
 		ext_ref.node->acqrel->status = Signal::Status::eHostAvailable;
@@ -453,9 +453,9 @@ public:
 		}
 		Type* t;
 		if constexpr (std::is_same_v<T, vuk::ImageAttachment>) {
-			t = current_module->get_builtin_image();
+			t = Types::global().get_builtin_image();
 		} else if constexpr (std::is_same_v<T, vuk::Buffer>) {
-			t = current_module->get_builtin_buffer();
+			t = Types::global().get_builtin_buffer();
 		}
 		Ref ref = current_module->make_declare_array(t, refs);
 		current_module->name_output(ref, name.c_str());
@@ -472,11 +472,11 @@ public:
 			refs.push_back(arg.get_head());
 			deps.push_back(arg.node);
 		}
-		Type* t;
+		std::shared_ptr<Type> t;
 		if constexpr (std::is_same_v<T, vuk::ImageAttachment>) {
-			t = current_module->get_builtin_image();
+			t = Types::global().get_builtin_image();
 		} else if constexpr (std::is_same_v<T, vuk::Buffer>) {
-			t = current_module->get_builtin_buffer();
+			t = Types::global().get_builtin_buffer();
 		}
 		Ref ref = current_module->make_declare_array(t, refs);
 		current_module->name_output(ref, name.c_str());

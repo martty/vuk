@@ -46,7 +46,7 @@ namespace vuk {
 			for (size_t i = 0; i < result_count; i++) {
 				ss << "<TD PORT= \"r" << i << "\">";
 				ss << "<FONT FACE=\"Courier New\">";
-				ss << Type::to_string(node->type[i]);
+				ss << Type::to_string(node->type[i].get());
 				ss << "</FONT>";
 				ss << "</TD>";
 			}
@@ -55,9 +55,9 @@ namespace vuk {
 			if (node->kind == Node::CALL) {
 				auto opaque_fn_ty = node->call.args[0].type()->opaque_fn;
 
-				if (node->call.args[0].type()->debug_info) {
+				if (!node->call.args[0].type()->debug_info.name.empty()) {
 					ss << " <B>";
-					ss << node->call.args[0].type()->debug_info->name;
+					ss << node->call.args[0].type()->debug_info.name;
 					ss << "</B>";
 				}
 			}
@@ -462,7 +462,7 @@ namespace vuk {
 			switch (node->kind) {
 			case Node::CONSTRUCT:
 				auto args_ptr = node->construct.args.data();
-				if (node->type[0]->hash_value == current_module->builtin_image) {
+				if (node->type[0]->hash_value == Types::global().builtin_image) {
 					auto ptr = &constant<ImageAttachment>(args_ptr[0]);
 					auto& value = constant<ImageAttachment>(args_ptr[0]);
 					if (value.extent.width > 0) {
@@ -492,7 +492,7 @@ namespace vuk {
 					if (value.level_count != VK_REMAINING_MIP_LEVELS) {
 						placeholder_to_ptr(args_ptr[9], &ptr->level_count);
 					}
-				} else if (node->type[0]->hash_value == current_module->builtin_buffer) {
+				} else if (node->type[0]->hash_value == Types::global().builtin_buffer) {
 					auto ptr = &constant<Buffer>(args_ptr[0]);
 					auto& value = constant<Buffer>(args_ptr[0]);
 					if (value.size != ~(0u)) {
@@ -559,7 +559,7 @@ namespace vuk {
 					}
 					case Node::CONSTRUCT: {
 						auto& args = node->construct.args;
-						if (node->type[0]->hash_value == current_module->builtin_image) {
+						if (node->type[0]->hash_value == Types::global().builtin_image) {
 							if (constant<ImageAttachment>(args[0]).image.image == VK_NULL_HANDLE) { // if there is no image, we will use base layer 0 and base mip 0
 								placeholder_to_constant(args[6], 0U);
 								placeholder_to_constant(args[8], 0U);
@@ -624,7 +624,7 @@ namespace vuk {
 							for (int read_idx = 0; read_idx < reads.size(); read_idx++) {
 								auto& r = reads[read_idx];
 								if (r.node->kind == Node::CALL) {
-									arg_ty = r.node->call.args[0].type()->opaque_fn.args[r.index - 1]; // TODO: insert casts instead
+									arg_ty = r.node->call.args[0].type()->opaque_fn.args[r.index - 1].get(); // TODO: insert casts instead
 									parm = r.node->call.args[r.index];
 								} else if (r.node->kind == Node::CONVERGE) {
 									continue;
@@ -1040,14 +1040,6 @@ namespace vuk {
 			extnode_work_queue.insert(extnode_work_queue.end(), std::make_move_iterator(enode->deps.begin()), std::make_move_iterator(enode->deps.end()));
 			enode->deps.clear();
 
-			// merge in any types that we are missing
-			if (enode->source_module != current_module.get()) {
-				for (auto& [k, v] : enode->source_module->type_map) {
-					current_module->copy_type(&v);
-				}
-				modules.emplace(enode->source_module);
-
-			}
 			impl->depnodes.push_back(std::move(enode));
 		}
 
@@ -1060,16 +1052,12 @@ namespace vuk {
 			}
 		}
 
-		for (auto& [k, v] : current_module->type_map) {
-			v.hash_value = k;
-		}
-
 		std::sort(impl->depnodes.begin(), impl->depnodes.end());
 		impl->depnodes.erase(std::unique(impl->depnodes.begin(), impl->depnodes.end()), impl->depnodes.end());
 
 		std::pmr::polymorphic_allocator allocator(&impl->mbr);
 		implicit_linking(current_module->op_arena.begin(), current_module->op_arena.end(), allocator);
-		std::erase_if(impl->depnodes, [](std::shared_ptr<ExtNode>& sp) { return sp.use_count() == 1 && sp->acqrel->status == Signal::Status::eDisarmed; });
+		//std::erase_if(impl->depnodes, [](std::shared_ptr<ExtNode>& sp) { return sp.use_count() == 1 && sp->acqrel->status == Signal::Status::eDisarmed; });
 
 		VUK_DO_OR_RETURN(impl->build_nodes());
 		VUK_DO_OR_RETURN(impl->build_links(impl->nodes, allocator));
@@ -1118,7 +1106,7 @@ namespace vuk {
 						impl->garbage_nodes.emplace_back(new_node);
 					} else {
 						Node acq_node{ .kind = Node::ACQUIRE,
-							             .type = { new Type*[1](node->type[0]), 1 },
+							             .type = { new std::shared_ptr<Type>[1](node->type[0]), 1 },
 							             .acquire = { .value = node->release.value, .acquire = node->release.release, .index = 0 } };
 						auto new_node = current_module->emplace_op(acq_node);
 						replaces.emplace_back(needle, first(new_node));
