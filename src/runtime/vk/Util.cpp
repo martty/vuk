@@ -8,7 +8,10 @@ namespace vuk {
 	// assume rgs are independent - they don't reference eachother
 	Result<void> execute_submit(Allocator& allocator, std::span<std::pair<Allocator*, ExecutableRenderGraph*>> rgs) {
 		for (auto& [alloc, rg] : rgs) {
-			rg->execute(*alloc);
+			auto res = rg->execute(*alloc);
+			if (!res) {
+				return res;
+			}
 		}
 
 		return { expected_value };
@@ -25,6 +28,7 @@ namespace vuk {
 	Result<void> UntypedValue::wait(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options) {
 		auto res = submit(allocator, compiler, options);
 		if (!res) {
+			compiler.reset();
 			return res;
 		}
 		assert(node->acqrel->status != Signal::Status::eDisarmed);
