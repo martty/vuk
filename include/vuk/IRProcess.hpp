@@ -6,8 +6,8 @@
 #include "vuk/SourceLocation.hpp"
 
 #include <deque>
-#include <robin_hood.h>
 #include <memory_resource>
+#include <robin_hood.h>
 
 namespace vuk {
 
@@ -91,8 +91,6 @@ namespace vuk {
 		Result<void> collect_chains();
 
 		ImageUsageFlags compute_usage(const ChainLink* head);
-
-		void dump_graph();
 
 		ProfilingCallbacks callbacks;
 	};

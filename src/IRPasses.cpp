@@ -31,7 +31,8 @@ namespace {
 } // namespace
 
 namespace vuk {
-	void RGCImpl::dump_graph() {
+	template<class Allocator>
+	void _dump_graph(std::vector<Node*, Allocator> nodes) {
 		std::stringstream ss;
 		ss << "digraph vuk {\n";
 		ss << "rankdir=\"TB\"\nnewrank = true\nnode[shape = rectangle width = 0 height = 0 margin = 0]\n";
