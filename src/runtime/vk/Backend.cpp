@@ -1746,7 +1746,17 @@ namespace vuk {
 		}
 
 		// post-run: checks and cleanup
+		impl->depnodes.clear();
+
 		for (auto& node : impl->nodes) {
+			apply_generic_args(
+			    [](Ref parm) {
+				    if (current_module->potential_garbage.contains(parm.node)) {
+					    current_module->potential_garbage[parm.node]++;
+				    }
+			    },
+			    node);
+
 			// reset any nodes we ran
 			node->execution_info = nullptr;
 			// if we ran any non-splice nodes: they are garbage now
@@ -1769,6 +1779,19 @@ namespace vuk {
 		}
 
 		// destroy garbage nodes
+		std::vector<Node*> to_garbage;
+		for (auto& [node, counts] : current_module->potential_garbage) {
+			if (counts == 0) {
+				to_garbage.push_back(node);
+			}
+			counts = 0;
+		}
+
+		for (auto& tg : to_garbage) {
+			current_module->potential_garbage.erase(tg);
+		}
+
+		impl->garbage_nodes.insert(impl->garbage_nodes.end(), to_garbage.begin(), to_garbage.end());
 		impl->garbage_nodes.insert(impl->garbage_nodes.end(), current_module->garbage.begin(), current_module->garbage.end());
 		std::sort(impl->garbage_nodes.begin(), impl->garbage_nodes.end());
 		impl->garbage_nodes.erase(std::unique(impl->garbage_nodes.begin(), impl->garbage_nodes.end()), impl->garbage_nodes.end());
@@ -1779,7 +1802,6 @@ namespace vuk {
 		current_module->garbage.clear();
 		impl->garbage_nodes.clear();
 
-		impl->depnodes.clear();
 		return { expected_value };
 	}
 } // namespace vuk

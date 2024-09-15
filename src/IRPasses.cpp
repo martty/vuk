@@ -14,22 +14,6 @@
 #include <sstream>
 #include <unordered_set>
 
-namespace {
-	template<class F>
-	auto apply_generic_args(F&& f, vuk::Node* node) {
-		auto count = node->generic_node.arg_count;
-		if (count != (uint8_t)~0u) {
-			for (int i = 0; i < count; i++) {
-				f(node->fixed_node.args[i]);
-			}
-		} else {
-			for (int i = 0; i < node->variable_node.args.size(); i++) {
-				f(node->variable_node.args[i]);
-			}
-		}
-	}
-} // namespace
-
 namespace vuk {
 	template<class Allocator>
 	void _dump_graph(std::vector<Node*, Allocator> nodes) {
@@ -1106,13 +1090,14 @@ namespace vuk {
 
 		std::pmr::polymorphic_allocator allocator(&impl->mbr);
 		implicit_linking(current_module->op_arena.begin(), current_module->op_arena.end(), allocator);
+
+		// disable splices that are unwaited
 		for (auto& depnode : impl->depnodes) {
 			if (depnode.use_count() == 1 && depnode->acqrel->status == Signal::Status::eDisarmed) {
 				assert(depnode->get_node()->kind == Node::SPLICE);
 				depnode->get_node()->splice.rel_acq = nullptr;
 			}
 		}
-		//std::erase_if(impl->depnodes, [](std::shared_ptr<ExtNode>& sp) { return sp.use_count() == 1 && sp->acqrel->status == Signal::Status::eDisarmed; });
 
 		VUK_DO_OR_RETURN(impl->build_nodes());
 		VUK_DO_OR_RETURN(impl->build_links(impl->nodes, allocator));
@@ -1171,6 +1156,7 @@ namespace vuk {
 			}
 		}
 
+		
 		// collect all args
 		for (auto node : impl->nodes) {
 			auto count = node->generic_node.arg_count;
@@ -1206,7 +1192,6 @@ namespace vuk {
 
 		VUK_DO_OR_RETURN(impl->build_nodes());
 		// SANITY: we have resolved all splices / releases
-		impl->dump_graph();
 		for (auto node : impl->nodes) {
 			switch (node->kind) {
 			case Node::SPLICE: {
@@ -1214,7 +1199,7 @@ namespace vuk {
 			}
 			}
 		}
-		// impl->dump_graph();
+		// _dump_graph(impl->nodes);
 		VUK_DO_OR_RETURN(impl->build_links(impl->nodes, allocator));
 
 		VUK_DO_OR_RETURN(impl->reify_inference());

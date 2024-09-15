@@ -898,6 +898,7 @@ namespace vuk {
 
 		plf::colony<Node /*, inline_alloc<Node, 4 * 1024>*/> op_arena;
 		std::vector<Node*> garbage;
+		std::unordered_map<Node*, size_t> potential_garbage;
 		plf::colony<UserCallbackType> ucbs;
 
 		// uint64_t current_hash = 0;
@@ -1309,7 +1310,7 @@ namespace vuk {
 						delete (ImageAttachment*)node->acquire.value;
 					}
 				}
-				source_module->destroy_node(node);
+				source_module->potential_garbage.emplace(node, 0);
 			}
 		}
 

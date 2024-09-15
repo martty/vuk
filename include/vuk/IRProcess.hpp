@@ -132,9 +132,23 @@ namespace vuk {
 		}
 	}
 
+	template<class F>
+	auto apply_generic_args(F&& f, vuk::Node* node) {
+		auto count = node->generic_node.arg_count;
+		if (count != (uint8_t)~0u) {
+			for (int i = 0; i < count; i++) {
+				f(node->fixed_node.args[i]);
+			}
+		} else {
+			for (int i = 0; i < node->variable_node.args.size(); i++) {
+				f(node->variable_node.args[i]);
+			}
+		}
+	}
+
 	namespace errors { /*
 		RenderGraphException make_unattached_resource_exception(PassInfo& pass_info, Resource& resource);
 		RenderGraphException make_cbuf_references_unknown_resource(PassInfo& pass_info, Resource::Type type, Name name);
 		RenderGraphException make_cbuf_references_undeclared_resource(PassInfo& pass_info, Resource::Type type, Name name);*/
-	}                  // namespace errors
-};                   // namespace vuk
+	} // namespace errors
+}; // namespace vuk
