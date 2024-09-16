@@ -1268,7 +1268,7 @@ namespace vuk {
 				this->node = node;
 			}
 
-			source_module = current_module.get();
+			source_module = current_module;
 		}
 
 		ExtNode(Node* node, std::shared_ptr<ExtNode> dep) {
@@ -1281,7 +1281,7 @@ namespace vuk {
 
 			deps.push_back(std::move(dep));
 
-			source_module = current_module.get();
+			source_module = current_module;
 		}
 
 		~ExtNode() {
@@ -1332,7 +1332,7 @@ namespace vuk {
 
 		std::unique_ptr<AcquireRelease> acqrel;
 		std::vector<std::shared_ptr<ExtNode>> deps;
-		IRModule* source_module;
+		std::shared_ptr<IRModule> source_module;
 
 	private:
 		Node* node;

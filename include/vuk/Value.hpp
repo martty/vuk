@@ -15,7 +15,7 @@ namespace vuk {
 	class UntypedValue {
 	public:
 		UntypedValue() = default;
-		UntypedValue(ExtRef extref) : module(current_module), node(std::move(extref.node)), index(extref.index) {}
+		UntypedValue(ExtRef extref) : node(std::move(extref.node)), index(extref.index) {}
 
 		/// @brief Name the value currently referenced by this Value
 		void set_name(std::string_view name) noexcept {
@@ -66,7 +66,6 @@ namespace vuk {
 
 		Result<void> wait(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options = {});
 
-		std::shared_ptr<IRModule> module;
 		std::shared_ptr<ExtNode> node;
 	protected:
 		size_t index;
