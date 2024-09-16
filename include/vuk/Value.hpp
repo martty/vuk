@@ -85,12 +85,12 @@ namespace vuk {
 		}
 
 		T* operator->() noexcept {
-			auto def_or_v = get_def(get_head());
+			auto def_or_v = *get_def(get_head());
 			if (!def_or_v.is_ref) {
 				return static_cast<T*>(def_or_v.value);
 			}
 			auto def = def_or_v.ref;
-			return eval<T*>(def);
+			return *eval<T*>(def);
 		}
 
 		/// @brief Wait and retrieve the result of the Value on the host
@@ -233,7 +233,7 @@ namespace vuk {
 		}
 
 		void replace_arg_with_extract_or_constant(Ref construct, Ref src_composite, uint64_t index) {
-			auto def_or_v = get_def(construct);
+			auto def_or_v = *get_def(construct);
 			if (!def_or_v.is_ref) {
 				return;
 			}
@@ -255,17 +255,28 @@ namespace vuk {
 			candidate_node.extract.composite = composite; // writing these out for clang workaround
 			candidate_node.extract.index = first(&constant_node);
 			current_module->garbage.push_back(def.node->construct.args[index + 1].node);
-			try {
+			auto res = [&]() -> Result<void>{
 				if (ty->kind == Type::INTEGER_TY && ty->integer.width == 64) {
-					auto result = eval<uint64_t>(first(&candidate_node));
+					auto result_ = eval<uint64_t>(first(&candidate_node));
+					if (!result_) {
+						return result_;
+					}
+					auto result = *result_;
 					def.node->construct.args[index + 1] = current_module->template make_constant<uint64_t>(result);
 				} else if (ty->kind == Type::INTEGER_TY && ty->integer.width == 32) {
-					auto result = eval<uint32_t>(first(&candidate_node));
+					auto result_ = eval<uint32_t>(first(&candidate_node));
+					if (!result_) {
+						return result_;
+					}
+					auto result = *result_;
 					def.node->construct.args[index + 1] = current_module->make_constant<uint32_t>(result);
 				} else {
 					def.node->construct.args[index + 1] = current_module->make_extract(composite, index);
 				}
-			} catch (...) {
+				return { expected_value };
+			}();
+			if(!res) {
+				(void)res.error();
 				def.node->construct.args[index + 1] = current_module->make_extract(composite, index);
 			}
 		}

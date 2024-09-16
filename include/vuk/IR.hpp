@@ -515,25 +515,25 @@ namespace vuk {
 		}
 	};
 
-	inline RefOrValue get_def(Ref ref) {
+	inline Result<RefOrValue, CannotBeConstantEvaluated> get_def(Ref ref) {
 		switch (ref.node->kind) {
 		case Node::ACQUIRE:
 		case Node::CONSTRUCT:
 		case Node::CONSTANT:
 		case Node::ACQUIRE_NEXT_IMAGE:
 		case Node::SLICE:
-			return RefOrValue::from_ref(ref);
+			return { expected_value, RefOrValue::from_ref(ref) };
 		case Node::SPLICE: {
 			if (ref.node->splice.rel_acq == nullptr || ref.node->splice.rel_acq->status == Signal::Status::eDisarmed) {
 				return get_def(ref.node->splice.src[ref.index]);
 			} else {
-				return RefOrValue::from_value(ref.node->splice.values[ref.index]);
+				return { expected_value, RefOrValue::from_value(ref.node->splice.values[ref.index]) };
 			}
 		}
 		case Node::CALL: {
 			auto t = ref.type();
 			if (t->kind != Type::ALIASED_TY) {
-				throw CannotBeConstantEvaluated(ref);
+				return { expected_error, CannotBeConstantEvaluated{ ref } };
 			}
 			return get_def(ref.node->call.args[t->aliased.ref_idx]);
 		}
@@ -545,38 +545,60 @@ namespace vuk {
 			if (ref.node->release.release == nullptr || ref.node->release.release->status == Signal::Status::eDisarmed) {
 				return get_def(ref.node->release.src);
 			} else {
-				return RefOrValue::from_value(ref.node->release.value);
+				return { expected_value, RefOrValue::from_value(ref.node->release.value) };
 			}
 		default:
-			throw CannotBeConstantEvaluated{ ref };
+			return { expected_error, CannotBeConstantEvaluated{ ref } };
 		}
 	}
 
 	template<class T>
 	  requires(!std::is_pointer_v<T>)
-	T eval(Ref ref) {
+	Result<T, CannotBeConstantEvaluated> eval(Ref ref) {
 		switch (ref.node->kind) {
 		case Node::CONSTANT: {
-			return constant<T>(ref);
+			return { expected_value, constant<T>(ref) };
 		}
 		case Node::MATH_BINARY: {
 			if constexpr (std::is_arithmetic_v<T>) {
 				auto& math_binary = ref.node->math_binary;
 				switch (math_binary.op) {
+#define UNWRAP_A(val)                                                                                                                                          \
+	auto a_ = eval<T>(val);                                                                                                                                      \
+	if (!a_) {                                                                                                                                                   \
+		return a_;                                                                                                                                                 \
+	}                                                                                                                                                            \
+	auto a = *a_;
+#define UNWRAP_B(val)                                                                                                                                          \
+	auto b_ = eval<T>(val);                                                                                                                                      \
+	if (!b_) {                                                                                                                                                   \
+		return b_;                                                                                                                                                 \
+	}                                                                                                                                                            \
+	auto b = *b_;
 				case Node::BinOp::ADD: {
-					return eval<T>(math_binary.a) + eval<T>(math_binary.b);
+					UNWRAP_A(math_binary.a)
+					UNWRAP_B(math_binary.b)
+					return { expected_value, a + b };
 				}
 				case Node::BinOp::SUB: {
-					return eval<T>(math_binary.a) - eval<T>(math_binary.b);
+					UNWRAP_A(math_binary.a)
+					UNWRAP_B(math_binary.b)
+					return { expected_value, a - b };
 				}
 				case Node::BinOp::MUL: {
-					return eval<T>(math_binary.a) * eval<T>(math_binary.b);
+					UNWRAP_A(math_binary.a)
+					UNWRAP_B(math_binary.b)
+					return { expected_value, a * b };
 				}
 				case Node::BinOp::DIV: {
-					return eval<T>(math_binary.a) / eval<T>(math_binary.b);
+					UNWRAP_A(math_binary.a)
+					UNWRAP_B(math_binary.b)
+					return { expected_value, a / b };
 				}
 				case Node::BinOp::MOD: {
-					return eval<T>(math_binary.a) % eval<T>(math_binary.b);
+					UNWRAP_A(math_binary.a)
+					UNWRAP_B(math_binary.b)
+					return { expected_value, a % b };
 				}
 				}
 			}
@@ -584,15 +606,26 @@ namespace vuk {
 		}
 
 		case Node::EXTRACT: {
-			auto composite = get_def(ref);
-			auto index = eval<uint64_t>(ref.node->extract.index);
-
+			auto composite_ = get_def(ref);
+			if (!composite_) {
+				return composite_;
+			}
+			auto composite = *composite_;
+			auto index_ = eval<uint64_t>(ref.node->extract.index);
+			if (!index_) {
+				return index_;
+			}
+			auto index = *index_;
 			auto type = ref.node->extract.composite.type();
 			if (composite.is_ref) {
 				if (composite.ref.node->kind == Node::CONSTRUCT) {
 					return eval<T>(composite.ref.node->construct.args[index + 1]);
 				} else if (composite.ref.node->kind == Node::ACQUIRE_NEXT_IMAGE) {
-					auto swp = get_def(composite.ref.node->acquire_next_image.swapchain);
+					auto swp_ = get_def(composite.ref.node->acquire_next_image.swapchain);
+					if (!swp_) {
+						return swp_;
+					}
+					auto swp = *swp_;
 					if (swp.is_ref && swp.ref.node->kind == Node::CONSTRUCT) {
 						auto arr = swp.ref.node->construct.args[1]; // array of images
 						if (arr.node->kind == Node::CONSTRUCT) {
@@ -602,12 +635,16 @@ namespace vuk {
 							}
 						}
 					} else {
-						throw CannotBeConstantEvaluated{ ref };
+						return { expected_error, CannotBeConstantEvaluated{ ref } };
 					}
 				} else if (composite.ref.node->kind == Node::SLICE) {
-					auto slice_def = get_def(composite.ref.node->slice.image);
+					auto slice_def_ = get_def(composite.ref.node->slice.image);
+					if (!slice_def_) {
+						return slice_def_;
+					}
+					auto slice_def = *slice_def_;
 					if (!slice_def.is_ref || slice_def.ref.node->kind != Node::CONSTRUCT) {
-						throw CannotBeConstantEvaluated{ ref }; // TODO: this too limited
+						return { expected_error, CannotBeConstantEvaluated{ ref } }; // TODO: this too limited
 					}
 					if (index < 6) {
 						return eval<T>(slice_def.ref.node->construct.args[index + 1]);
@@ -615,51 +652,51 @@ namespace vuk {
 						assert(false && "NYI");
 					}
 				} else {
-					throw CannotBeConstantEvaluated{ ref };
+					return { expected_error, CannotBeConstantEvaluated{ ref } };
 				}
 			} else {
 				if (type->kind == Type::COMPOSITE_TY) {
 					auto offset = type->composite.offsets[index];
-					return *static_cast<T*>(reinterpret_cast<void*>(static_cast<unsigned char*>(composite.value) + offset));
+					return { expected_value, *static_cast<T*>(reinterpret_cast<void*>(static_cast<unsigned char*>(composite.value) + offset)) };
 				} else if (type->kind == Type::ARRAY_TY) {
 					auto offset = type->array.stride * index;
-					return *static_cast<T*>(reinterpret_cast<void*>(static_cast<unsigned char*>(composite.value) + offset));
+					return { expected_value, *static_cast<T*>(reinterpret_cast<void*>(static_cast<unsigned char*>(composite.value) + offset)) };
 				} else {
-					throw CannotBeConstantEvaluated{ ref };
+					return { expected_error, CannotBeConstantEvaluated{ ref } };
 				}
 			}
 		}
 		default:
-			throw CannotBeConstantEvaluated(ref);
+			return { expected_error, CannotBeConstantEvaluated{ ref } };
 		}
 	}
 
 	template<class T>
 	  requires(std::is_pointer_v<T>)
-	T eval(Ref ref) {
+	Result<T, CannotBeConstantEvaluated> eval(Ref ref) {
 		switch (ref.node->kind) {
 		case Node::CONSTANT: {
-			return static_cast<T>(ref.node->constant.value);
+			return { expected_value, static_cast<T>(ref.node->constant.value) };
 		}
 		case Node::CONSTRUCT: {
 			return eval<T>(ref.node->construct.args[0]);
 		}
 		case Node::ACQUIRE: {
-			return static_cast<T>(ref.node->acquire.value);
+			return { expected_value, static_cast<T>(ref.node->acquire.value) };
 		}
 		case Node::SPLICE: {
 			if (ref.node->splice.rel_acq->status == Signal::Status::eDisarmed) {
 				return eval<T>(ref.node->splice.src[ref.index]);
 			} else {
-				return static_cast<T>(ref.node->splice.values[ref.index]);
+				return { expected_value, static_cast<T>(ref.node->splice.values[ref.index]) };
 			}
 		}
 		case Node::ACQUIRE_NEXT_IMAGE: {
-			Swapchain* swp = eval<Swapchain*>(ref.node->acquire_next_image.swapchain);
-			return reinterpret_cast<T>(&swp->images[0]);
+			Swapchain* swp = *eval<Swapchain*>(ref.node->acquire_next_image.swapchain);
+			return { expected_value, reinterpret_cast<T>(&swp->images[0]) };
 		}
 		default:
-			throw CannotBeConstantEvaluated{ ref };
+			return { expected_error, CannotBeConstantEvaluated{ ref } };
 		}
 	}
 

@@ -73,7 +73,7 @@ namespace vuk {
 				if (parm.node->execution_info) {
 					return parm.node->execution_info->values[parm.index];
 				} else {
-					return eval<void*>(parm);
+					return *eval<void*>(parm);
 				}
 			}
 		}

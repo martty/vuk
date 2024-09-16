@@ -510,76 +510,82 @@ namespace vuk {
 		}
 
 		// framebuffer inference
-		try {
-			do {
-				progress = false;
-				for (auto node : nodes) {
-					switch (node->kind) {
-					case Node::CALL: {
-						// args
-						std::optional<Extent2D> extent;
-						std::optional<Samples> samples;
-						std::optional<uint32_t> layer_count;
-						for (size_t i = 1; i < node->call.args.size(); i++) {
-							auto& arg_ty = node->call.args[0].type()->opaque_fn.args[i - 1];
-							auto& parm = node->call.args[i];
-							if (arg_ty->kind == Type::IMBUED_TY) {
-								auto access = arg_ty->imbued.access;
-								auto& link = parm.link();
-								if (link.urdef.node->kind == Node::CONSTRUCT) {
-									auto& args = link.urdef.node->construct.args;
-									if (is_framebuffer_attachment(access)) {
-										if (is_placeholder(args[9])) {
-											placeholder_to_constant(args[9], 1U); // can only render to a single mip level
-										}
-										if (is_placeholder(args[3])) {
-											placeholder_to_constant(args[3], 1U); // depth must be 1
-										}
-										if (!samples && !is_placeholder(args[5])) { // known sample count
-											samples = constant<Samples>(args[5]);
-										} else if (samples && is_placeholder(args[5])) {
-											placeholder_to_constant(args[5], *samples);
-										}
-										if (!extent && !is_placeholder(args[1]) && !is_placeholder(args[2])) { // known extent2D
-											extent = Extent2D{ eval<uint32_t>(args[1]), eval<uint32_t>(args[2]) };
-										} else if (extent && is_placeholder(args[1]) && is_placeholder(args[2])) {
-											placeholder_to_constant(args[1], extent->width);
-											placeholder_to_constant(args[2], extent->height);
-										}
-										if (!layer_count && !is_placeholder(args[7])) { // known layer count
-											layer_count = eval<uint32_t>(args[7]);
-										} else if (layer_count && is_placeholder(args[7])) {
-											placeholder_to_constant(args[7], *layer_count);
-										}
+		do {
+			progress = false;
+			for (auto node : nodes) {
+				switch (node->kind) {
+				case Node::CALL: {
+					// args
+					std::optional<Extent2D> extent;
+					std::optional<Samples> samples;
+					std::optional<uint32_t> layer_count;
+					for (size_t i = 1; i < node->call.args.size(); i++) {
+						auto& arg_ty = node->call.args[0].type()->opaque_fn.args[i - 1];
+						auto& parm = node->call.args[i];
+						if (arg_ty->kind == Type::IMBUED_TY) {
+							auto access = arg_ty->imbued.access;
+							auto& link = parm.link();
+							if (link.urdef.node->kind == Node::CONSTRUCT) {
+								auto& args = link.urdef.node->construct.args;
+								if (is_framebuffer_attachment(access)) {
+									if (is_placeholder(args[9])) {
+										placeholder_to_constant(args[9], 1U); // can only render to a single mip level
 									}
-								} else if (link.urdef.node->kind == Node::ACQUIRE_NEXT_IMAGE) {
-									Swapchain& swp = *eval<Swapchain*>(link.urdef.node->acquire_next_image.swapchain);
+									if (is_placeholder(args[3])) {
+										placeholder_to_constant(args[3], 1U); // depth must be 1
+									}
+									if (!samples && !is_placeholder(args[5])) { // known sample count
+										samples = constant<Samples>(args[5]);
+									} else if (samples && is_placeholder(args[5])) {
+										placeholder_to_constant(args[5], *samples);
+									}
+									if (!extent && !is_placeholder(args[1]) && !is_placeholder(args[2])) { // known extent2D
+										auto e1 = eval<uint32_t>(args[1]);
+										auto e2 = eval<uint32_t>(args[2]);
+										if (e1 && e2) {
+											extent = Extent2D{ *e1, *e2 };
+										}
+									} else if (extent && is_placeholder(args[1]) && is_placeholder(args[2])) {
+										placeholder_to_constant(args[1], extent->width);
+										placeholder_to_constant(args[2], extent->height);
+									}
+									if (!layer_count && !is_placeholder(args[7])) { // known layer count
+										auto e = eval<uint32_t>(args[7]);
+										if (e) {
+											layer_count = *e;
+										}
+									} else if (layer_count && is_placeholder(args[7])) {
+										placeholder_to_constant(args[7], *layer_count);
+									}
+								}
+							} else if (link.urdef.node->kind == Node::ACQUIRE_NEXT_IMAGE) {
+								auto e = eval<Swapchain*>(link.urdef.node->acquire_next_image.swapchain);
+								if (e) {
+									Swapchain& swp = **e;
 									extent = Extent2D{ swp.images[0].extent.width, swp.images[0].extent.height };
 									layer_count = swp.images[0].layer_count;
 									samples = Samples::e1;
 								}
-							} else {
-								assert(0);
 							}
+						} else {
+							assert(0);
 						}
-						break;
 					}
-					case Node::CONSTRUCT: {
-						auto& args = node->construct.args;
-						if (node->type[0]->hash_value == Types::global().builtin_image) {
-							if (constant<ImageAttachment>(args[0]).image.image == VK_NULL_HANDLE) { // if there is no image, we will use base layer 0 and base mip 0
-								placeholder_to_constant(args[6], 0U);
-								placeholder_to_constant(args[8], 0U);
-							}
-						}
-						break;
-					}
-					}
+					break;
 				}
-			} while (progress);
-		} catch (vuk::CannotBeConstantEvaluated& exc) {
-			return { expected_error, exc };
-		}
+				case Node::CONSTRUCT: {
+					auto& args = node->construct.args;
+					if (node->type[0]->hash_value == Types::global().builtin_image) {
+						if (constant<ImageAttachment>(args[0]).image.image == VK_NULL_HANDLE) { // if there is no image, we will use base layer 0 and base mip 0
+							placeholder_to_constant(args[6], 0U);
+							placeholder_to_constant(args[8], 0U);
+						}
+					}
+					break;
+				}
+				}
+			}
+		} while (progress);
 
 		return { expected_value };
 	}
@@ -701,10 +707,8 @@ namespace vuk {
 					auto& node_si = *node->scheduled_item;
 
 					// SANITY: parameters on the same domain as node
-					apply_generic_args(
-					    [&](Ref parm) { assert(!parm.node->scheduled_item || parm.node->scheduled_item->scheduled_domain == node_si.scheduled_domain);
-					    },
-					    node);
+					apply_generic_args([&](Ref parm) { assert(!parm.node->scheduled_item || parm.node->scheduled_item->scheduled_domain == node_si.scheduled_domain); },
+					                   node);
 				}
 			}
 			}
@@ -1156,7 +1160,6 @@ namespace vuk {
 			}
 		}
 
-		
 		// collect all args
 		for (auto node : impl->nodes) {
 			auto count = node->generic_node.arg_count;

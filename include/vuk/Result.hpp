@@ -75,7 +75,7 @@ namespace vuk {
 			}
 
 			if (!other._holds_value) {
-				_error = MOV(other._error);
+				_error = static_cast<E*>(other._error);
 				other._error = nullptr;
 			}
 
@@ -275,7 +275,7 @@ namespace vuk {
 		Result(Result<U, F>&& other) : _null_state(), _holds_value(other._holds_value) {
 			static_assert(std::is_convertible_v<F*, E*>, "error must be convertible");
 			if (!other._holds_value) {
-				_error = other._error;
+				_error = static_cast<E*>(other._error);
 				other._error = nullptr;
 				_extracted = other._extracted;
 			}

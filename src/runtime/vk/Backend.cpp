@@ -1145,14 +1145,24 @@ namespace vuk {
 				}
 				break;
 			}
+#define CONCAT(a, b)       CONCAT_INNER(a, b)
+#define CONCAT_INNER(a, b) a##b
+
+#define UNIQUE_NAME(base) CONCAT(base, __LINE__)
+#define EVAL(dst, arg)                                                                                                                                         \
+	auto UNIQUE_NAME(A) = eval<decltype(dst)>(arg);                                                                                                              \
+	if (!UNIQUE_NAME(A))                                                                                                                                         \
+		return UNIQUE_NAME(A);                                                                                                                                     \
+	dst = *UNIQUE_NAME(A)
 			case Node::CONSTRUCT: { // when encountering a CONSTRUCT, allocate the thing if needed
 				if (sched.process(item)) {
 					if (node->type[0]->hash_value == Types::global().builtin_buffer) {
 						auto& bound = constant<Buffer>(node->construct.args[0]);
-						try {
-							bound.size = eval<size_t>(node->construct.args[1]); // collapse inferencing
-						} catch (CannotBeConstantEvaluated& err) {
-							if (err.ref.node->kind == Node::PLACEHOLDER) {
+						auto res = [&]() -> Result<void, CannotBeConstantEvaluated> {
+							EVAL(bound.size, node->construct.args[1]);
+						}();
+						if (!res) {
+							if (res.error().ref.node->kind == Node::PLACEHOLDER) {
 								return { expected_error,
 									       RenderGraphException(format_message(Level::eError, node, node->construct.args.subspan(1), "': argument(s) not set or inferrable\n")) };
 							} else {
@@ -1183,16 +1193,16 @@ namespace vuk {
 					} else if (node->type[0]->hash_value == Types::global().builtin_image) {
 						auto& attachment = *reinterpret_cast<ImageAttachment*>(node->construct.args[0].node->constant.value);
 						// collapse inferencing
-						try {
-							attachment.extent.width = eval<uint32_t>(node->construct.args[1]);
-							attachment.extent.height = eval<uint32_t>(node->construct.args[2]);
-							attachment.extent.depth = eval<uint32_t>(node->construct.args[3]);
-							attachment.format = eval<Format>(node->construct.args[4]);
-							attachment.sample_count = eval<Samples>(node->construct.args[5]);
-							attachment.base_layer = eval<uint32_t>(node->construct.args[6]);
-							attachment.layer_count = eval<uint32_t>(node->construct.args[7]);
-							attachment.base_level = eval<uint32_t>(node->construct.args[8]);
-							attachment.level_count = eval<uint32_t>(node->construct.args[9]);
+						auto res = [&]() -> Result<void, CannotBeConstantEvaluated> {
+							EVAL(attachment.extent.width, node->construct.args[1]);
+							EVAL(attachment.extent.height, node->construct.args[2]);
+							EVAL(attachment.extent.depth, node->construct.args[3]);
+							EVAL(attachment.format, node->construct.args[4]);
+							EVAL(attachment.sample_count, node->construct.args[5]);
+							EVAL(attachment.base_layer, node->construct.args[6]);
+							EVAL(attachment.layer_count, node->construct.args[7]);
+							EVAL(attachment.base_level, node->construct.args[8]);
+							EVAL(attachment.level_count, node->construct.args[9]);
 
 							if (attachment.image_view == ImageView{}) {
 								if (attachment.view_type == ImageViewType::eInfer && attachment.layer_count != VK_REMAINING_ARRAY_LAYERS) {
@@ -1217,9 +1227,10 @@ namespace vuk {
 									}
 								}
 							}
-
-						} catch (CannotBeConstantEvaluated& err) {
-							if (err.ref.node->kind == Node::PLACEHOLDER) {
+							return { expected_value };
+						}();
+						if (!res) {
+							if (res.error().ref.node->kind == Node::PLACEHOLDER) {
 								return { expected_error,
 									       RenderGraphException(format_message(Level::eError, node, node->construct.args.subspan(1), "': argument(s) not set or inferrable\n")) };
 							} else {
