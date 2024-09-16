@@ -1746,6 +1746,10 @@ namespace vuk {
 		}
 
 		// post-run: checks and cleanup
+		std::vector<std::shared_ptr<IRModule>> modules;
+		for (auto& depnode : impl->depnodes) {
+			modules.push_back(depnode->source_module);
+		}
 		impl->depnodes.clear();
 
 		for (auto& node : impl->nodes) {
