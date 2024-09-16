@@ -48,7 +48,7 @@ namespace vuk {
 				std::vector<std::shared_ptr<Type>> args;
 				std::vector<std::shared_ptr<Type>> return_types;
 				int execute_on;
-				UserCallbackType* callback;
+				UserCallbackType callback;
 			} opaque_fn;
 			struct {
 				std::shared_ptr<Type> T;
@@ -137,8 +137,9 @@ namespace vuk {
 				return v;
 			}
 			case OPAQUE_FN_TY:
-				hash_combine_direct(v, (uintptr_t)t->opaque_fn.callback >> 32);
-				hash_combine_direct(v, (uintptr_t)t->opaque_fn.callback & 0xffffffff);
+				hash_combine_direct(v, (uintptr_t)t->opaque_fn.callback.target<void(CommandBuffer&, std::span<void*>, std::span<void*>, std::span<void*>)>() >> 32);
+				hash_combine_direct(v,
+				                    (uintptr_t)t->opaque_fn.callback.target<void(CommandBuffer&, std::span<void*>, std::span<void*>, std::span<void*>)>() & 0xffffffff);
 				return v;
 			}
 		}
@@ -775,6 +776,7 @@ namespace vuk {
 
 	struct Types {
 		std::unordered_map<Type::Hash, std::weak_ptr<Type>> type_map;
+		plf::colony<UserCallbackType> ucbs;
 		std::shared_mutex lock;
 
 		Type::Hash builtin_image = -1;
@@ -887,6 +889,16 @@ namespace vuk {
 			return TypeDebugInfo(name);
 		}
 
+		void collect() {
+			for (auto it = type_map.begin(); it != type_map.end();) {
+				if (it->second.expired()) {
+					it = type_map.erase(it);
+				} else {
+					++it;
+				}
+			}
+		}
+
 		static Types& global() {
 			static Types t;
 			return t;
@@ -899,7 +911,6 @@ namespace vuk {
 		plf::colony<Node /*, inline_alloc<Node, 4 * 1024>*/> op_arena;
 		std::vector<Node*> garbage;
 		std::unordered_map<Node*, size_t> potential_garbage;
-		plf::colony<UserCallbackType> ucbs;
 
 		// uint64_t current_hash = 0;
 
@@ -1172,9 +1183,9 @@ namespace vuk {
 			std::copy(args.begin(), args.end(), arg_ptr.begin());
 			auto ret_ty_ptr = std::vector<std::shared_ptr<Type>>(ret_types.size());
 			std::copy(ret_types.begin(), ret_types.end(), ret_ty_ptr.begin());
-			auto ty = Types::global().emplace_type(std::shared_ptr<Type>(new Type{
-			    .kind = Type::OPAQUE_FN_TY,
-			    .opaque_fn = { .args = arg_ptr, .return_types = ret_ty_ptr, .execute_on = execute_on.m_mask, .callback = &*ucbs.emplace(std::move(callback)) } }));
+			auto ty = Types::global().emplace_type(std::shared_ptr<Type>(
+			    new Type{ .kind = Type::OPAQUE_FN_TY,
+			              .opaque_fn = { .args = arg_ptr, .return_types = ret_ty_ptr, .execute_on = execute_on.m_mask, .callback = std::move(callback) } }));
 			ty->debug_info = Types::global().allocate_type_debug_info(std::string(name));
 			return ty;
 		}

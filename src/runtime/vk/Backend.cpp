@@ -1386,7 +1386,7 @@ namespace vuk {
 							opaque_meta.push_back(&parm);
 						}
 						opaque_rets.resize(node->call.args[0].type()->opaque_fn.return_types.size());
-						(*node->call.args[0].type()->opaque_fn.callback)(cobuf, opaque_args, opaque_meta, opaque_rets);
+						node->call.args[0].type()->opaque_fn.callback(cobuf, opaque_args, opaque_meta, opaque_rets);
 						if (vk_rec->rp.handle) {
 							vk_rec->end_render_pass();
 						}
@@ -1805,6 +1805,8 @@ namespace vuk {
 
 		current_module->garbage.clear();
 		impl->garbage_nodes.clear();
+
+		Types::global().collect();
 
 		return { expected_value };
 	}
