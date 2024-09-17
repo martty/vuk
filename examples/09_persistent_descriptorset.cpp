@@ -93,12 +93,14 @@ namespace {
 		      image_of_doge_v1 = *vuk::allocate_image(allocator, texture_of_doge_v1);
 		      texture_of_doge_v1.image = *image_of_doge_v1;
 		      image_view_of_doge_v1 = *vuk::allocate_image_view(allocator, texture_of_doge_v1);
+		      texture_of_doge_v1.image_view = *image_view_of_doge_v1;
 		      texture_of_doge_v2 = texture_of_doge;
 		      texture_of_doge_v2.format = vuk::Format::eR8G8B8A8Unorm;
 		      texture_of_doge_v2.usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled;
 		      image_of_doge_v2 = *vuk::allocate_image(allocator, texture_of_doge_v2);
 		      texture_of_doge_v2.image = *image_of_doge_v2;
 		      image_view_of_doge_v2 = *vuk::allocate_image_view(allocator, texture_of_doge_v2);
+		      texture_of_doge_v2.image_view = *image_view_of_doge_v2;
 
 		      // Make a RenderGraph to process the loaded image
 		      auto doge_v1 = vuk::declare_ia("09_doge_v1", texture_of_doge_v1);
