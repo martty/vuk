@@ -128,11 +128,13 @@ namespace vuk {
 			}
 		}
 
-		[[nodiscard]] operator bool() const {
+		[[nodiscard]] explicit operator bool() const {
+			_extracted = true;
 			return _holds_value;
 		}
 
 		[[nodiscard]] bool holds_value() const {
+			_extracted = true;
 			return _holds_value;
 		}
 
@@ -320,11 +322,13 @@ namespace vuk {
 			}
 		}
 
-		[[nodiscard]] operator bool() const {
+		[[nodiscard]] explicit operator bool() const {
+			_extracted = true;
 			return _holds_value;
 		}
 
 		[[nodiscard]] bool holds_value() const {
+			_extracted = true;
 			return _holds_value;
 		}
 
