@@ -867,18 +867,6 @@ namespace vuk {
 			dynamic_state.pDynamicStates = dyn_states.data();
 			gpci.pDynamicState = &dynamic_state;
 
-			VkPipelineTessellationStateCreateInfo tessellation_state{ .sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO };
-			for (auto& it : cinfo.base->psscis) {
-				if (it.stage == VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT || it.stage == VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT) {
-					tessellation_state.pNext = nullptr;
-					tessellation_state.flags = 0;
-					tessellation_state.patchControlPoints = (cinfo.topology == 3 || cinfo.topology == 4) ? 3 : 4;
-					gpci.pTessellationState = &tessellation_state;
-					input_assembly_state.topology = VK_PRIMITIVE_TOPOLOGY_PATCH_LIST;
-					break;
-				}
-			}
-
 			VkPipeline pipeline;
 			VkResult res = ctx->vkCreateGraphicsPipelines(device, ctx->vk_pipeline_cache, 1, &gpci, nullptr, &pipeline);
 			if (res != VK_SUCCESS) {
