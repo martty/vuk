@@ -281,6 +281,53 @@ TEST_CASE("image slicing, reconvergence with undef") {
 	}
 }
 
+#include <thread>
+
+TEST_CASE("MT") {
+	{
+		auto data = { 1u, 2u, 3u, 4u };
+		auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, Samples::e1);
+		auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
+
+		size_t alignment = format_to_texel_block_size(fut->format);
+		size_t size = compute_image_size(fut->format, fut->extent);
+
+		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
+		auto dst_buf = declare_buf("dst", *dst);
+		std::jthread worker([&]() { dst_buf = image2buf(fut, std::move(dst_buf)); });
+		worker.join();
+		auto res = download_buffer(dst_buf).get(*test_context.allocator, test_context.compiler);
+		auto updata = std::span((uint32_t*)res->mapped_ptr, 4);
+		CHECK(updata == std::span(data));
+	}
+}
+
+TEST_CASE("MT reconvergence") {
+	{
+		auto data = { 1u, 2u, 3u, 4u };
+		auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, Samples::e1);
+		ia.level_count = 2;
+		auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
+
+		size_t alignment = format_to_texel_block_size(fut->format);
+		size_t size = compute_image_size(fut->format, fut->extent);
+		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
+
+		vuk::Value<vuk::ImageAttachment> futp;
+
+		std::jthread worker([&]() {
+			void_clear_image(fut.mip(0), vuk::ClearColor(7u, 7u, 7u, 7u));
+			futp = blit_down(fut);
+		});
+		worker.join();
+
+		auto dst_buf = declare_buf("dst", *dst);
+		auto res = download_buffer(image2buf(futp.mip(1), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
+		auto updata = std::span((uint32_t*)res->mapped_ptr, 1);
+		CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 7; }));
+	}
+}
+
 vuk::Value<vuk::ImageAttachment> generate_mips(std::string& trace, vuk::Value<vuk::ImageAttachment> image, uint32_t mip_count) {
 	auto ia = image.mip(0);
 

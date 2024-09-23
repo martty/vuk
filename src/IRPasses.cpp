@@ -1077,23 +1077,17 @@ namespace vuk {
 			extnode_work_queue.insert(extnode_work_queue.end(), std::make_move_iterator(enode->deps.begin()), std::make_move_iterator(enode->deps.end()));
 			enode->deps.clear();
 
+			modules.emplace(enode->source_module.get());
 			impl->depnodes.push_back(std::move(enode));
 		}
 
-		impl->all_nodes.clear();
+		std::pmr::polymorphic_allocator allocator(&impl->mbr);
 		for (auto& m : modules) {
-			for (auto& node : m->op_arena) {
-				if (node.kind != Node::GARBAGE) {
-					impl->all_nodes.push_back(&node);
-				}
-			}
+			implicit_linking(m->op_arena.begin(), m->op_arena.end(), allocator);
 		}
 
 		std::sort(impl->depnodes.begin(), impl->depnodes.end());
 		impl->depnodes.erase(std::unique(impl->depnodes.begin(), impl->depnodes.end()), impl->depnodes.end());
-
-		std::pmr::polymorphic_allocator allocator(&impl->mbr);
-		implicit_linking(current_module->op_arena.begin(), current_module->op_arena.end(), allocator);
 
 		// disable splices that are unwaited
 		for (auto& depnode : impl->depnodes) {
