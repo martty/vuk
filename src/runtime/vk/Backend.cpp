@@ -1160,6 +1160,7 @@ namespace vuk {
 						auto& bound = constant<Buffer>(node->construct.args[0]);
 						auto res = [&]() -> Result<void, CannotBeConstantEvaluated> {
 							EVAL(bound.size, node->construct.args[1]);
+							return { expected_value };
 						}();
 						if (!res) {
 							if (res.error().ref.node->kind == Node::PLACEHOLDER) {

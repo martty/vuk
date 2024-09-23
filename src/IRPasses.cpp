@@ -542,7 +542,7 @@ namespace vuk {
 									if (!extent && !is_placeholder(args[1]) && !is_placeholder(args[2])) { // known extent2D
 										auto e1 = eval<uint32_t>(args[1]);
 										auto e2 = eval<uint32_t>(args[2]);
-										if (e1 && e2) {
+										if (e1.holds_value() && e2.holds_value()) {
 											extent = Extent2D{ *e1, *e2 };
 										}
 									} else if (extent && is_placeholder(args[1]) && is_placeholder(args[2])) {
@@ -551,7 +551,7 @@ namespace vuk {
 									}
 									if (!layer_count && !is_placeholder(args[7])) { // known layer count
 										auto e = eval<uint32_t>(args[7]);
-										if (e) {
+										if (e.holds_value()) {
 											layer_count = *e;
 										}
 									} else if (layer_count && is_placeholder(args[7])) {
@@ -560,7 +560,7 @@ namespace vuk {
 								}
 							} else if (link.urdef.node->kind == Node::ACQUIRE_NEXT_IMAGE) {
 								auto e = eval<Swapchain*>(link.urdef.node->acquire_next_image.swapchain);
-								if (e) {
+								if (e.holds_value()) {
 									Swapchain& swp = **e;
 									extent = Extent2D{ swp.images[0].extent.width, swp.images[0].extent.height };
 									layer_count = swp.images[0].layer_count;

@@ -129,7 +129,6 @@ namespace vuk {
 		}
 
 		[[nodiscard]] explicit operator bool() const {
-			_extracted = true;
 			return _holds_value;
 		}
 
@@ -323,7 +322,6 @@ namespace vuk {
 		}
 
 		[[nodiscard]] explicit operator bool() const {
-			_extracted = true;
 			return _holds_value;
 		}
 

@@ -5,6 +5,10 @@
 
 using namespace vuk;
 
+#if VUK_FAIL_FAST
+#error "can't run these on FAIL_FAST"
+#endif
+
 TEST_CASE("error: can't construct incomplete") {
 	auto data = { 1u, 2u, 3u };
 	auto [b0, buf0] = create_buffer(*test_context.allocator, MemoryUsage::eGPUonly, DomainFlagBits::eAny, std::span(data));

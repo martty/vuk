@@ -193,10 +193,10 @@ namespace vuk {
 		{
 			node->deps.push_back(arg.node);
 			auto def_or_v = get_def(get_head());
-			if (!def_or_v.is_ref) {
+			if (!def_or_v || !def_or_v->is_ref) {
 				return;
 			}
-			auto def = def_or_v.ref;
+			auto def = def_or_v->ref;
 			def.node->construct.args[1] = arg.get_head();
 		}
 
