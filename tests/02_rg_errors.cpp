@@ -65,7 +65,7 @@ auto blit_down = make_pass("blit down", [](CommandBuffer& cbuf, VUK_IA(Access::e
 	cbuf.blit_image(img, img, region, vuk::Filter::eNearest);
 	return img;
 });
-/*
+
 TEST_CASE("error: reconvergence, time-travel forbidden") {
 	{
 		auto data = { 1u, 2u, 3u, 4u };
@@ -87,4 +87,4 @@ TEST_CASE("error: reconvergence, time-travel forbidden") {
 			REQUIRE_THROWS(download_buffer(image2buf(futp.mip(1), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler));
 		}
 	}
-}*/
+}

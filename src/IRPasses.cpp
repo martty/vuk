@@ -949,7 +949,7 @@ namespace vuk {
 	}
 
 	template<class It>
-	void implicit_linking(It start, It end, std::pmr::polymorphic_allocator<std::byte> allocator) {
+	Result<void> implicit_linking(It start, It end, std::pmr::polymorphic_allocator<std::byte> allocator) {
 		// collect all nodes that might require their inputs to be converged
 		// these are the nodes in the local set
 		std::pmr::vector<Node*> possible_divergent_use_set;
@@ -972,7 +972,7 @@ namespace vuk {
 
 		// input had no implicit behaviour, return early
 		if (slices.size() == 0) {
-			return;
+			return { expected_value };
 		}
 
 		// collect all nodes that the possibly divergent set can reference as inputs
@@ -984,17 +984,17 @@ namespace vuk {
 		// build chains (we only care about chains going through divergent/implicit nodes)
 		build_links(divergence_dependency_scope.begin(), divergence_dependency_scope.end(), pass_reads, child_chains, allocator);
 
-		auto in_module = [](IRModule& module, Node* node) {
-			auto it = std::find_if(module.op_arena.begin(), module.op_arena.end(), [=](auto& n) { return &n == node; });
-			if (it != module.op_arena.end()) {
+		auto in_module = [=](Node* node) {
+			auto it = std::find_if(start, end, [=](auto& n) { return &n == node; });
+			if (it != end) {
 				return true;
 			}
 			return false;
 		};
 
-		auto before_module = [](IRModule& module, Node* a, Node* b) {
-			auto it_a = std::find_if(module.op_arena.begin(), module.op_arena.end(), [=](auto& n) { return &n == a; });
-			auto it_b = std::find_if(module.op_arena.begin(), module.op_arena.end(), [=](auto& n) { return &n == b; });
+		auto before_module = [=](Node* a, Node* b) {
+			auto it_a = std::find_if(start, end, [=](auto& n) { return &n == a; });
+			auto it_b = std::find_if(start, end, [=](auto& n) { return &n == b; });
 			return it_a < it_b;
 		};
 
@@ -1030,13 +1030,10 @@ namespace vuk {
 					for (int i = 0; i < count; i++) {
 						if (node->fixed_node.args[i] == base) {
 							for (auto& t : tails) {
-								// TODO: multimodule dominance
-								/*
-								assert(in_module(*current_module->, t.node));
-								if (!before_module(*current_module->, t.node, node)) {
-								  return { expected_error, RenderGraphException{ "Convergence not dominated" } };
+								assert(in_module(t.node));
+								if (!before_module(t.node, node)) {
+									return { expected_error, RenderGraphException{ "Convergence not dominated" } };
 								}
-								*/
 							}
 							node->fixed_node.args[i] = converged_base;
 						}
@@ -1045,11 +1042,13 @@ namespace vuk {
 					for (int i = 0; i < node->variable_node.args.size(); i++) {
 						if (node->variable_node.args[i] == base) {
 							for (auto& t : tails) {
-								// TODO: multimodule dominance
-								/* assert(in_module(*current_module->, t.node));
-								if (!before_module(*current_module->, t.node, node)) {
-								  return { expected_error, RenderGraphException{ "Convergence not dominated" } };
-								}*/
+								if (t.node->kind == Node::INDIRECT_DEPEND) { // we just added these, its fine
+									continue;
+								}
+								assert(in_module(t.node));
+								if (!before_module(t.node, node)) {
+									return { expected_error, RenderGraphException{ "Convergence not dominated" } };
+								}
 							}
 							node->variable_node.args[i] = converged_base;
 						}
@@ -1057,6 +1056,8 @@ namespace vuk {
 				}
 			}
 		}
+
+		return { expected_value };
 	}
 
 	Result<void> Compiler::compile(std::span<std::shared_ptr<ExtNode>> nodes, const RenderGraphCompileOptions& compile_options) {
@@ -1083,7 +1084,7 @@ namespace vuk {
 
 		std::pmr::polymorphic_allocator allocator(&impl->mbr);
 		for (auto& m : modules) {
-			implicit_linking(m->op_arena.begin(), m->op_arena.end(), allocator);
+			VUK_DO_OR_RETURN(implicit_linking(m->op_arena.begin(), m->op_arena.end(), allocator));
 		}
 
 		std::sort(impl->depnodes.begin(), impl->depnodes.end());
