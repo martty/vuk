@@ -25,7 +25,7 @@ namespace vuk {
 		auto src = *allocate_buffer(allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, 1 });
 		::memcpy(src->mapped_ptr, src_data, size);
 
-		auto src_buf = vuk::declare_buf("_src", *src, VUK_CALL);
+		auto src_buf = vuk::acquire_buf("_src", *src, Access::eNone, VUK_CALL);
 		auto dst_buf = vuk::declare_buf("_dst", dst, VUK_CALL);
 		auto pass = vuk::make_pass("upload buffer", [](vuk::CommandBuffer& command_buffer, VUK_BA(Access::eTransferRead) src, VUK_BA(Access::eTransferWrite) dst) {
 			command_buffer.copy_buffer(src, dst);
