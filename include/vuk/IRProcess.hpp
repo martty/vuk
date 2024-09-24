@@ -145,6 +145,20 @@ namespace vuk {
 		}
 	}
 
+	// errors and printing
+	enum class Level { eError };
+
+	std::string format_source_location(Node* node);
+
+	std::string parm_to_string(Ref parm);
+	std::string print_args_to_string(std::span<Ref> args);
+	void print_args(std::span<Ref> args);
+	std::string print_args_to_string_with_arg_names(std::span<const std::string_view> arg_names, std::span<Ref> args);
+	std::string node_to_string(Node* node);
+	std::vector<std::string_view> arg_names(Type* t);
+
+	std::string format_graph_message(Level level, Node* node, std::string err);
+
 	namespace errors { /*
 		RenderGraphException make_unattached_resource_exception(PassInfo& pass_info, Resource& resource);
 		RenderGraphException make_cbuf_references_unknown_resource(PassInfo& pass_info, Resource::Type type, Name name);

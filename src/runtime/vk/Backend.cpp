@@ -37,6 +37,87 @@ namespace vuk {
 			return "?: ";
 		}
 	}
+
+	std::string parm_to_string(Ref parm) {
+		if (parm.node->debug_info && !parm.node->debug_info->result_names.empty()) {
+			return fmt::format("%{}", parm.node->debug_info->result_names[parm.index]);
+		} else if (parm.node->kind == Node::CONSTANT) {
+			Type* ty = parm.node->type[0].get();
+			if (ty->kind == Type::INTEGER_TY) {
+				switch (ty->integer.width) {
+				case 32:
+					return fmt::format("{}", constant<uint32_t>(parm));
+				case 64:
+					return fmt::format("{}", constant<uint64_t>(parm));
+				}
+			} else if (ty->kind == Type::MEMORY_TY) {
+				return std::string("<mem>");
+			}
+		} else if (parm.node->kind == Node::PLACEHOLDER) {
+			return std::string("?");
+		} else {
+			return fmt::format("%{}_{}", parm.node->kind_to_sv(), parm.node->execution_info->naming_index + parm.index);
+		}
+		assert(0);
+		return std::string("???");
+	};
+
+	std::string print_args_to_string(std::span<Ref> args) {
+		std::string msg = "";
+		for (size_t i = 0; i < args.size(); i++) {
+			if (i > 0) {
+				msg += fmt::format(", ");
+			}
+			auto& parm = args[i];
+
+			msg += parm_to_string(parm);
+		}
+		return msg;
+	};
+
+	void print_args(std::span<Ref> args) {
+		fmt::print("{}", print_args_to_string(args));
+	};
+
+	std::string print_args_to_string_with_arg_names(std::span<const std::string_view> arg_names, std::span<Ref> args) {
+		std::string msg = "";
+		for (size_t i = 0; i < args.size(); i++) {
+			if (i > 0) {
+				msg += fmt::format(", ");
+			}
+			auto& parm = args[i];
+
+			msg += fmt::format("{}:", arg_names[i]) + parm_to_string(parm);
+		}
+		return msg;
+	};
+
+	std::string node_to_string(Node* node) {
+		if (node->kind == Node::CONSTRUCT) {
+			return fmt::format("construct<{}> ", Type::to_string(node->type[0].get()));
+		} else {
+			return fmt::format("{} ", node->kind_to_sv());
+		}
+	};
+
+	using namespace std::literals;
+	std::vector<std::string_view> arg_names(Type* t) {
+		if (t->hash_value == Types::global().builtin_image) {
+			return { "width"sv, "height"sv, "depth"sv, "format"sv, "samples"sv, "base_layer"sv, "layer_count"sv, "base_level"sv, "level_count"sv };
+		} else if (t->hash_value == Types::global().builtin_buffer) {
+			return { "size"sv };
+		} else {
+			assert(0);
+		}
+	};
+
+	std::string format_graph_message(Level level, Node* node, std::string err) {
+		std::string msg = "";
+		msg += format_source_location(node);
+		msg += fmt::format("{}: {}", level == Level::eError ? "error" : "other", node_to_string(node));
+		msg += err;
+		return msg;
+	};
 } // namespace vuk
 
 namespace vuk {
@@ -1002,80 +1083,6 @@ namespace vuk {
 		};
 		auto print_results = [&](Node* node) {
 			fmt::print("{}", print_results_to_string(node));
-		};
-
-		auto parm_to_string = [&](Ref parm) {
-			if (parm.node->debug_info && !parm.node->debug_info->result_names.empty()) {
-				return fmt::format("%{}", parm.node->debug_info->result_names[parm.index]);
-			} else if (parm.node->kind == Node::CONSTANT) {
-				Type* ty = parm.node->type[0].get();
-				if (ty->kind == Type::INTEGER_TY) {
-					switch (ty->integer.width) {
-					case 32:
-						return fmt::format("{}", constant<uint32_t>(parm));
-					case 64:
-						return fmt::format("{}", constant<uint64_t>(parm));
-					}
-				} else if (ty->kind == Type::MEMORY_TY) {
-					return std::string("<mem>");
-				}
-			} else if (parm.node->kind == Node::PLACEHOLDER) {
-				return std::string("?");
-			} else {
-				return fmt::format("%{}_{}", parm.node->kind_to_sv(), parm.node->execution_info->naming_index + parm.index);
-			}
-			assert(0);
-			return std::string("???");
-		};
-
-		auto print_args_to_string = [&](std::span<Ref> args) {
-			std::string msg = "";
-			for (size_t i = 0; i < args.size(); i++) {
-				if (i > 0) {
-					msg += fmt::format(", ");
-				}
-				auto& parm = args[i];
-
-				msg += parm_to_string(parm);
-			}
-			return msg;
-		};
-		auto print_args = [&](std::span<Ref> args) {
-			fmt::print("{}", print_args_to_string(args));
-		};
-
-		auto print_args_to_string_with_arg_names = [&](std::span<const std::string_view> arg_names, std::span<Ref> args) {
-			std::string msg = "";
-			for (size_t i = 0; i < args.size(); i++) {
-				if (i > 0) {
-					msg += fmt::format(", ");
-				}
-				auto& parm = args[i];
-
-				msg += fmt::format("{}:", arg_names[i]) + parm_to_string(parm);
-			}
-			return msg;
-		};
-
-		auto node_to_string = [](Node* node) {
-			if (node->kind == Node::CONSTRUCT) {
-				return fmt::format("construct<{}> ", Type::to_string(node->type[0].get()));
-			} else {
-				return fmt::format("{} ", node->kind_to_sv());
-			}
-		};
-
-		enum class Level { eError };
-
-		using namespace std::literals;
-		auto arg_names = [&](Type* t) -> std::vector<std::string_view> {
-			if (t->hash_value == Types::global().builtin_image) {
-				return { "width"sv, "height"sv, "depth"sv, "format"sv, "samples"sv, "base_layer"sv, "layer_count"sv, "base_level"sv, "level_count"sv };
-			} else if (t->hash_value == Types::global().builtin_buffer) {
-				return { "size"sv };
-			} else {
-				assert(0);
-			}
 		};
 
 		auto format_message = [&](Level level, Node* node, std::span<Ref> args, std::string err) {
