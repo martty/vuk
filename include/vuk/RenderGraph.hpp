@@ -21,9 +21,9 @@
 #include <vector>
 
 #if defined(__clang__) or defined(__GNUC__)
-#define VUK_IA(access, ...)        vuk::Arg<vuk::ImageAttachment, access, decltype([]() {}) __VA_OPT__(,) __VA_ARGS__>
-#define VUK_BA(access, ...)        vuk::Arg<vuk::Buffer, access, decltype([]() {}) __VA_OPT__(,) __VA_ARGS__>
-#define VUK_ARG(type, access, ...) vuk::Arg<type, access, decltype([]() {}) __VA_OPT__(,) __VA_ARGS__>
+#define VUK_IA(access, ...)        vuk::Arg<vuk::ImageAttachment, access, decltype([]() {}) __VA_OPT__(, ) __VA_ARGS__>
+#define VUK_BA(access, ...)        vuk::Arg<vuk::Buffer, access, decltype([]() {}) __VA_OPT__(, ) __VA_ARGS__>
+#define VUK_ARG(type, access, ...) vuk::Arg<type, access, decltype([]() {}) __VA_OPT__(, ) __VA_ARGS__>
 #else
 namespace vuk {
 	template<size_t I>
@@ -384,6 +384,7 @@ public:
 	template<class F>
 	[[nodiscard]] auto make_pass(Name name, F&& body, SchedulingInfo scheduling_info = SchedulingInfo(DomainFlagBits::eAny), VUK_CALLSTACK) {
 		using traits = closure_traits<decltype(&F::operator())>;
+		static_assert(std::is_same_v<std::tuple_element_t<0, typename traits::types>, CommandBuffer&>, "First argument to pass MUST be CommandBuffer&");
 		return TupleMap<drop_t<1, typename traits::types>>::template make_lam<typename traits::result_type, F>(
 		    name, std::forward<F>(body), scheduling_info, VUK_CALL);
 	}
