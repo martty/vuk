@@ -21,7 +21,7 @@ TEST_CASE("error: can't construct incomplete") {
 	auto buf3 = declare_buf("b3");
 	buf3->memory_usage = MemoryUsage::eGPUonly;
 
-	auto copy = make_pass("cpy", [](CommandBuffer& cbuf, VUK_BA(Access::eTransferRead) src, VUK_BA(Access::eTransferWrite) dst) {
+	auto copy = make_pass("cpy", [](CommandBuffer& cbuf, VUK_BA(Access::eTransferWrite) src, VUK_BA(Access::eTransferWrite) dst) {
 		cbuf.copy_buffer(src, dst);
 		return dst;
 	});
@@ -87,4 +87,17 @@ TEST_CASE("error: reconvergence, time-travel forbidden") {
 			REQUIRE_THROWS(download_buffer(image2buf(futp.mip(1), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler));
 		}
 	}
+
+TEST_CASE("error: read without write") {
+	{
+		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, 100, 1 });
+		auto buf = vuk::declare_buf("a", *dst);
+
+		auto rd_buf = vuk::make_pass("rd", [](CommandBuffer&, VUK_BA(vuk::eTransferRead) buf) { return buf; });
+
+
+		REQUIRE_THROWS(rd_buf(buf).get(*test_context.allocator, test_context.compiler)); // report an error also if the splice remains
+		REQUIRE_THROWS(rd_buf(std::move(buf)).get(*test_context.allocator, test_context.compiler));
+	}
+}
 }

@@ -15,6 +15,18 @@
 #include <unordered_set>
 
 namespace vuk {
+	Compiler::Compiler() : impl(new RGCImpl) {}
+	Compiler::~Compiler() {
+		delete impl;
+	}
+
+	void Compiler::reset() {
+		auto arena = impl->arena_.release();
+		delete impl;
+		arena->reset();
+		impl = new RGCImpl(arena);
+	}
+
 	template<class Allocator>
 	void _dump_graph(std::vector<Node*, Allocator> nodes) {
 		std::stringstream ss;
@@ -818,10 +830,6 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	Compiler::Compiler() : impl(new RGCImpl) {}
-	Compiler::~Compiler() {
-		delete impl;
-	}
 	void Compiler::queue_inference() {
 		// queue inference pass
 		DomainFlags last_domain = DomainFlagBits::eDevice;
@@ -941,11 +949,36 @@ namespace vuk {
 			                        impl->partitioned_execables.size() - impl->transfer_passes.size() - impl->compute_passes.size() };
 	}
 
-	void Compiler::reset() {
-		auto arena = impl->arena_.release();
-		delete impl;
-		arena->reset();
-		impl = new RGCImpl(arena);
+	Result<void> Compiler::validate_read_undefined() {
+		for (auto node : impl->nodes) {
+			switch (node->kind) {
+			case Node::CONSTRUCT: {                // CONSTRUCT discards -
+				if (node->links->reads.size() > 0) { // we are trying to read from it :(
+					auto& offender = node->links->reads.to_span(impl->pass_reads)[0];
+					return { expected_error,
+						       RenderGraphException{ format_graph_message(Level::eError, offender.node, "tried to read something that was never written.") } };
+				} else if (!node->links->undef) {
+					// TODO: DCE
+					break;
+				}
+				// in case we have CONSTRUCT -> (SPLICE ->)* READ
+				// there is an undef and no read - unravel splices that are never read
+				auto undef = node;
+				while (undef->links->reads.size() == 0 && undef->links->undef && undef->links->undef.node->kind == Node::SPLICE) {
+					undef = undef->links->undef.node;
+				}
+				// it is either not splice or there are reads
+				if (undef->links->reads.size() > 0) {
+					auto& offender = undef->links->reads.to_span(impl->pass_reads)[0];
+					return { expected_error,
+						       RenderGraphException{ format_graph_message(Level::eError, offender.node, "tried to read something that was never written.") } };
+				}
+				break;
+			}
+			}
+		}
+
+		return { expected_value };
 	}
 
 	template<class It>
@@ -1199,6 +1232,8 @@ namespace vuk {
 		}
 		// _dump_graph(impl->nodes);
 		VUK_DO_OR_RETURN(impl->build_links(impl->nodes, allocator));
+
+		VUK_DO_OR_RETURN(validate_read_undefined());
 
 		VUK_DO_OR_RETURN(impl->reify_inference());
 		VUK_DO_OR_RETURN(impl->collect_chains());

@@ -544,6 +544,7 @@ public:
 		void pass_partitioning();
 		void resource_linking();
 		void render_pass_assignment();
+		Result<void> validate_read_undefined();
 
 		friend struct ExecutableRenderGraph;
 	};
