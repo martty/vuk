@@ -38,7 +38,7 @@ namespace vuk {
 					continue;
 				}
 			}
-			if (node->kind == Node::PLACEHOLDER || node->kind == Node::SPLICE || node->kind == Node::SLICE || node->kind == Node::INDIRECT_DEPEND) {
+			if (node->kind == Node::PLACEHOLDER || (bridge_splices && node->kind == Node::SPLICE) || (bridge_slices && node->kind == Node::SLICE) || node->kind == Node::INDIRECT_DEPEND) {
 				continue;
 			}
 
@@ -251,7 +251,6 @@ namespace vuk {
 
 	void process_node_links(Node* node, std::pmr::vector<Ref>& pass_reads, std::pmr::vector<ChainLink*>& child_chains) {
 		switch (node->kind) {
-		case Node::NOP:
 		case Node::CONSTANT:
 		case Node::PLACEHOLDER:
 		case Node::MATH_BINARY:
@@ -1048,7 +1047,6 @@ namespace vuk {
 			auto node = &*it;
 			switch (node->kind) {
 			case Node::SLICE: {
-				assert(node->slice.image.node->kind != Node::NOP);
 				slices[node->slice.image].push_back(first(node));
 				break;
 			}

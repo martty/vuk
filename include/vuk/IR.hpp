@@ -289,7 +289,6 @@ namespace vuk {
 
 		enum class BinOp { ADD, SUB, MUL, DIV, MOD };
 		enum Kind {
-			NOP,
 			PLACEHOLDER,
 			CONSTANT,
 			CONSTRUCT,
@@ -304,7 +303,7 @@ namespace vuk {
 			WAIT,
 			ACQUIRE,
 			RELEASE,
-			SPLICE, // for joining subgraphs - can morph into ACQUIRE or NOP, depending on the subgraph state
+			SPLICE, // for joining subgraphs
 			ACQUIRE_NEXT_IMAGE,
 			CAST,
 			MATH_BINARY,
@@ -429,8 +428,6 @@ namespace vuk {
 
 		std::string_view kind_to_sv() {
 			switch (kind) {
-			case NOP:
-				return "nop";
 			case PLACEHOLDER:
 				return "placeholder";
 			case CONSTANT:
@@ -1366,7 +1363,7 @@ namespace vuk {
 		ExtNode& operator=(ExtNode&& o) = delete;
 
 		Node* get_node() {
-			assert(node->kind == Node::NOP || node->kind == Node::SPLICE || node->kind == Node::RELEASE || node->kind == Node::ACQUIRE);
+			assert(node->kind == Node::SPLICE || node->kind == Node::RELEASE || node->kind == Node::ACQUIRE);
 			return node;
 		}
 

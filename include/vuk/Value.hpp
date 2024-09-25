@@ -27,27 +27,11 @@ namespace vuk {
 		}
 
 		Ref get_peeled_head() noexcept {
-			if (node.use_count() == 1 && get_head().node->kind == Node::SPLICE && can_peel) {
-				Ref peeled_head = get_head().node->splice.src[get_head().index];
-				return peeled_head;
-			} else {
-				return get_head();
-			}
+			return get_head();
 		}
 
 		Ref peel_head() noexcept {
-			if (node.use_count() == 1 && get_head().node->kind == Node::SPLICE && can_peel) {
-				Ref peeled_head = get_head().node->splice.src[get_head().index];
-				get_head().node->kind = Node::NOP;
-				if (get_head().node->generic_node.arg_count == 255) {
-					delete get_head().node->variable_node.args.data();
-				}
-				get_head().node->generic_node.arg_count = 0;
-				current_module->garbage.push_back(get_head().node);
-				return peeled_head;
-			} else {
-				return get_head();
-			}
+			return get_head();
 		}
 
 		void release(Access access = Access::eNone, DomainFlagBits domain = DomainFlagBits::eAny) noexcept {
@@ -69,7 +53,6 @@ namespace vuk {
 		std::shared_ptr<ExtNode> node;
 	protected:
 		size_t index;
-		bool can_peel = false;
 	};
 
 	template<class T>
@@ -211,7 +194,6 @@ namespace vuk {
 		auto mip(uint32_t mip)
 		  requires std::is_same_v<T, ImageAttachment>
 		{
-			can_peel = false;
 			Ref item = current_module->make_slice(get_head(),
 			                                     current_module->make_constant(mip),
 			                                     current_module->make_constant(1u),
@@ -223,7 +205,6 @@ namespace vuk {
 		auto layer(uint32_t layer)
 		  requires std::is_same_v<T, ImageAttachment>
 		{
-			can_peel = false;
 			Ref item = current_module->make_slice(get_head(),
 			                                     current_module->make_constant(0u),
 			                                     current_module->make_constant(VK_REMAINING_MIP_LEVELS),
