@@ -28,7 +28,7 @@ namespace vuk {
 	}
 
 	template<class Allocator>
-	void _dump_graph(std::vector<Node*, Allocator> nodes) {
+	void _dump_graph(std::vector<Node*, Allocator> nodes, bool bridge_splices = true, bool bridge_slices = true) {
 		std::stringstream ss;
 		ss << "digraph vuk {\n";
 		ss << "rankdir=\"TB\"\nnewrank = true\nnode[shape = rectangle width = 0 height = 0 margin = 0]\n";
@@ -120,19 +120,19 @@ namespace vuk {
 				if (arg.node->kind == Node::PLACEHOLDER) {
 					continue;
 				}
-				if (arg.node->kind == Node::SPLICE && arg.node->splice.rel_acq && arg.node->splice.rel_acq->status == Signal::Status::eDisarmed) { // bridge splices
+				if (bridge_splices && arg.node->kind == Node::SPLICE && arg.node->splice.rel_acq && arg.node->splice.rel_acq->status == Signal::Status::eDisarmed) { // bridge splices
 					auto bridged_arg = arg.node->splice.src[arg.index];
 					ss << uintptr_t(bridged_arg.node) << " :r" << bridged_arg.index << " -> " << uintptr_t(node) << " :a" << i << " :n [color=red]\n";
-				} else if (arg.node->kind == Node::SPLICE && arg.node->splice.rel_acq) {
+				} else if (bridge_splices && arg.node->kind == Node::SPLICE && arg.node->splice.rel_acq) {
 					ss << "EXT\n";
 					ss << "EXT -> " << uintptr_t(node) << " :a" << i << " :n [color=red]\n";
-				} else if (arg.node->kind == Node::SPLICE) { // disabled
+				} else if (bridge_splices && arg.node->kind == Node::SPLICE) { // disabled
 					auto bridged_arg = arg.node->splice.src[arg.index];
 					ss << uintptr_t(bridged_arg.node) << " :r" << bridged_arg.index << " -> " << uintptr_t(node) << " :a" << i << " :n [color=blue]\n";
 				} else if (arg.node->kind == Node::INDIRECT_DEPEND) { // bridge indirect depends (connect to node)
 					auto bridged_arg = arg.node->indirect_depend.rref;
 					ss << uintptr_t(bridged_arg.node) << " -> " << uintptr_t(node) << " :a" << i << " :n [color=yellow]\n";
-				} else if (arg.node->kind == Node::SLICE) { // bridge slices
+				} else if (bridge_slices && arg.node->kind == Node::SLICE) { // bridge slices
 					auto bridged_arg = arg.node->slice.image;
 					if (bridged_arg.node->kind == Node::SPLICE) {
 						bridged_arg = bridged_arg.node->splice.src[arg.index];
