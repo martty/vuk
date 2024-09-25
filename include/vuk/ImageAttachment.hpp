@@ -187,7 +187,6 @@ namespace vuk {
 		}
 	};
 
-	
 	union Subrange {
 		struct Image {
 			uint32_t base_level = 0;
@@ -208,3 +207,10 @@ namespace vuk {
 		} buffer;
 	};
 } // namespace vuk
+
+namespace std {
+	template<>
+	struct hash<vuk::ImageAttachment> {
+		size_t operator()(vuk::ImageAttachment const& x) const noexcept;
+	};
+} // namespace std

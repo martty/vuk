@@ -57,3 +57,10 @@ namespace vuk {
 		VkDeviceSize alignment = 1;
 	};
 } // namespace vuk
+
+namespace std {
+	template<>
+	struct hash<vuk::Buffer> {
+		size_t operator()(vuk::Buffer const& x) const noexcept;
+	};
+} // namespace std
