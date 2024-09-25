@@ -981,6 +981,59 @@ namespace vuk {
 		return { expected_value };
 	}
 
+	Result<void> Compiler::validate_duplicated_resource_ref() {
+		std::unordered_set<Buffer> bufs;
+		std::unordered_set<ImageAttachment> ias;
+		std::unordered_set<Swapchain*> swps;
+		for (auto node : impl->nodes) {
+			switch (node->kind) {
+			case Node::CONSTRUCT: {
+				bool s = true;
+				if (node->type[0]->hash_value == Types::global().builtin_image) {
+					auto ia = reinterpret_cast<ImageAttachment*>(node->construct.args[0].node->constant.value);
+					if (ia->image) {
+						auto [_, succ] = ias.emplace(*ia);
+						s = succ;
+					}
+				} else if (node->type[0]->hash_value == Types::global().builtin_buffer) {
+					auto buf = reinterpret_cast<Buffer*>(node->construct.args[0].node->constant.value);
+					if (buf->buffer != VK_NULL_HANDLE) {
+						auto [_, succ] = bufs.emplace(*buf);
+						s = succ;
+					}
+				} else if (node->type[0]->hash_value == Types::global().builtin_swapchain) {
+					auto [_, succ] = swps.emplace(reinterpret_cast<Swapchain*>(node->construct.args[0].node->constant.value));
+					s = succ;
+				} else { //TODO: it is an array, no val yet
+					
+				}
+				if (!s) {
+					return { expected_error, RenderGraphException{ format_graph_message(Level::eError, node, "tried to acquire something that was already known.") } };
+				}
+			} break;
+			case Node::ACQUIRE: {
+				bool s = true;
+				if (node->type[0]->hash_value == Types::global().builtin_image) {
+					auto [_, succ] = ias.emplace(*reinterpret_cast<ImageAttachment*>(node->acquire.value));
+					s = succ;
+				} else if (node->type[0]->hash_value == Types::global().builtin_buffer) {
+					auto [_, succ] = bufs.emplace(*reinterpret_cast<Buffer*>(node->acquire.value));
+					s = succ;
+				} else if (node->type[0]->hash_value == Types::global().builtin_swapchain) {
+					auto [_, succ] = swps.emplace(reinterpret_cast<Swapchain*>(node->acquire.value));
+					s = succ;
+				} else { // TODO: it is an array, no val yet
+				}
+				if (!s) {
+					return { expected_error, RenderGraphException{ format_graph_message(Level::eError, node, "tried to acquire something that was already known.") } };
+				}
+			}
+			}
+		}
+
+		return { expected_value };
+	}
+
 	template<class It>
 	Result<void> implicit_linking(It start, It end, std::pmr::polymorphic_allocator<std::byte> allocator) {
 		// collect all nodes that might require their inputs to be converged
@@ -1235,6 +1288,7 @@ namespace vuk {
 		VUK_DO_OR_RETURN(impl->build_links(impl->nodes, allocator));
 
 		VUK_DO_OR_RETURN(validate_read_undefined());
+		VUK_DO_OR_RETURN(validate_duplicated_resource_ref());
 
 		VUK_DO_OR_RETURN(impl->reify_inference());
 		VUK_DO_OR_RETURN(impl->collect_chains());

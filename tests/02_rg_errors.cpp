@@ -87,6 +87,7 @@ TEST_CASE("error: reconvergence, time-travel forbidden") {
 			REQUIRE_THROWS(download_buffer(image2buf(futp.mip(1), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler));
 		}
 	}
+}
 
 TEST_CASE("error: read without write") {
 	{
@@ -100,4 +101,39 @@ TEST_CASE("error: read without write") {
 		REQUIRE_THROWS(rd_buf(std::move(buf)).get(*test_context.allocator, test_context.compiler));
 	}
 }
+
+TEST_CASE("error: attaching something twice decl/decl") {
+	{
+		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, 100, 1 });
+		auto buf_a = vuk::declare_buf("a", *dst);
+		auto buf_b = vuk::declare_buf("a again", *dst);
+
+		auto wr_buf = vuk::make_pass("wr", [](CommandBuffer&, VUK_BA(vuk::eTransferWrite) buf, VUK_BA(vuk::eTransferWrite) bufb) { return buf; });
+
+		REQUIRE_THROWS(wr_buf(buf_a, buf_b).get(*test_context.allocator, test_context.compiler));
+	}
+}
+
+TEST_CASE("error: attaching something twice acq/acq") {
+	{
+		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, 100, 1 });
+		auto buf_a = vuk::acquire_buf("a", *dst, vuk::Access::eNone);
+		auto buf_b = vuk::acquire_buf("a again", *dst, vuk::Access::eNone);
+
+		auto wr_buf = vuk::make_pass("wr", [](CommandBuffer&, VUK_BA(vuk::eTransferWrite) buf, VUK_BA(vuk::eTransferWrite) bufb) { return buf; });
+
+		REQUIRE_THROWS(wr_buf(buf_a, buf_b).get(*test_context.allocator, test_context.compiler));
+	}
+}
+
+TEST_CASE("error: attaching something twice decl/acq") {
+	{
+		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, 100, 1 });
+		auto buf_a = vuk::declare_buf("a", *dst);
+		auto buf_b = vuk::acquire_buf("a again", *dst, vuk::Access::eNone);
+
+		auto wr_buf = vuk::make_pass("wr", [](CommandBuffer&, VUK_BA(vuk::eTransferWrite) buf, VUK_BA(vuk::eTransferWrite) bufb) { return buf; });
+
+		REQUIRE_THROWS(wr_buf(buf_a, buf_b).get(*test_context.allocator, test_context.compiler));
+	}
 }

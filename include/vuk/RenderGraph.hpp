@@ -545,6 +545,7 @@ public:
 		void resource_linking();
 		void render_pass_assignment();
 		Result<void> validate_read_undefined();
+		Result<void> validate_duplicated_resource_ref();
 
 		friend struct ExecutableRenderGraph;
 	};
