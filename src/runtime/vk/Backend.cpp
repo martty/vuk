@@ -1783,7 +1783,7 @@ namespace vuk {
 			// reset any nodes we ran
 			node->execution_info = nullptr;
 			// if we ran any non-splice nodes: they are garbage now
-			if (node->kind != Node::SPLICE && node->kind != Node::RELEASE && node->kind != Node::ACQUIRE) {
+			if (node->kind != Node::SPLICE && node->kind != Node::RELEASE && node->kind != Node::ACQUIRE && node->kind != Node::CONVERGE) {
 				current_module->destroy_node(node);
 			} else {
 				// SANITY: if we ran any splice or release nodes, they must be pending now

@@ -1053,6 +1053,7 @@ namespace vuk {
 				}
 			}
 			auto converged_base = current_module->make_converge(base, tails, write);
+			current_module->garbage.push_back(converged_base.node);
 			for (auto node : possible_divergent_use_set) {
 				if (node->kind == Node::SLICE) {
 					continue;
