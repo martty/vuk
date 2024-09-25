@@ -84,7 +84,7 @@ namespace vuk {
 		bc.imageSubresource.layerCount = image.layer_count;
 		bc.bufferOffset = src->offset;
 
-		auto srcbuf = declare_buf("src", *src, VUK_CALL);
+		auto srcbuf = acquire_buf("src", *src, Access::eNone, VUK_CALL);
 		auto dst = declare_ia("dst", image, VUK_CALL);
 		auto image_upload =
 		    vuk::make_pass("image upload", [bc](vuk::CommandBuffer& command_buffer, VUK_BA(Access::eTransferRead) src, VUK_IA(Access::eTransferWrite) dst) {
