@@ -453,7 +453,7 @@ public:
 			refs.push_back(arg.get_head());
 			deps.push_back(arg.node);
 		}
-		Type* t;
+		std::shared_ptr<Type> t;
 		if constexpr (std::is_same_v<T, vuk::ImageAttachment>) {
 			t = Types::global().get_builtin_image();
 		} else if constexpr (std::is_same_v<T, vuk::Buffer>) {

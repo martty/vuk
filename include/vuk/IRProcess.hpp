@@ -83,7 +83,7 @@ namespace vuk {
 		}
 
 		Result<void> build_nodes();
-		Result<void> build_links(const std::vector<Node*>& working_set, std::pmr::polymorphic_allocator<std::byte> allocator);
+		Result<void> build_links(std::vector<Node*>& working_set, std::pmr::polymorphic_allocator<std::byte> allocator);
 		Result<void> build_sync();
 		Result<void> reify_inference();
 		Result<void> schedule_intra_queue(const RenderGraphCompileOptions& compile_options);
@@ -144,6 +144,149 @@ namespace vuk {
 			}
 		}
 	}
+
+	inline std::optional<Subrange::Image> intersect_one(Subrange::Image a, Subrange::Image b) {
+		Subrange::Image result;
+		int64_t count;
+
+		result.base_layer = std::max(a.base_layer, b.base_layer);
+		int64_t end_layer = std::min(a.base_layer + (int64_t)a.layer_count, b.base_layer + (int64_t)b.layer_count);
+		count = end_layer - result.base_layer;
+
+		if (count < 1) {
+			return {};
+		}
+		result.layer_count = static_cast<uint32_t>(count);
+
+		result.base_level = std::max(a.base_level, b.base_level);
+		int64_t end_level = std::min(a.base_level + (int64_t)a.level_count, b.base_level + (int64_t)b.level_count);
+		count = end_level - result.base_level;
+
+		if (count < 1) {
+			return {};
+		}
+		result.level_count = static_cast<uint32_t>(count);
+
+		return result;
+	}
+
+	template<class F>
+	void difference_one(Subrange::Image a, Subrange::Image isection, F&& func) {
+		if (!intersect_one(a, isection)) {
+			func(a);
+			return;
+		}
+		// before, mips
+		if (isection.base_level > a.base_level) {
+			func({ .base_level = a.base_level, .level_count = isection.base_level - a.base_level, .base_layer = a.base_layer, .layer_count = a.layer_count });
+		}
+		// after, mips
+		if (a.base_level + (int64_t)a.level_count > isection.base_level + (int64_t)isection.level_count) {
+			func({ .base_level = isection.base_level + isection.level_count,
+			       .level_count = a.level_count == VK_REMAINING_MIP_LEVELS ? VK_REMAINING_MIP_LEVELS
+			                                                               : a.base_level + a.level_count - (isection.base_level + isection.level_count),
+			       .base_layer = a.base_layer,
+			       .layer_count = a.layer_count });
+		}
+		// before, layers
+		if (isection.base_layer > a.base_layer) {
+			func({ .base_level = a.base_level, .level_count = a.level_count, .base_layer = a.base_layer, .layer_count = isection.base_layer - a.base_layer });
+		}
+		// after, layers
+		if (a.base_layer + (int64_t)a.layer_count > isection.base_layer + (int64_t)isection.layer_count) {
+			func({
+			    .base_level = a.base_level,
+			    .level_count = a.level_count,
+			    .base_layer = isection.base_layer + isection.layer_count,
+			    .layer_count = a.level_count == VK_REMAINING_ARRAY_LAYERS ? VK_REMAINING_ARRAY_LAYERS
+			                                                              : a.base_layer + a.layer_count - (isection.base_layer + isection.layer_count),
+			});
+		}
+	};
+
+	struct MultiSubrange {
+		static MultiSubrange all() {
+			MultiSubrange msr;
+			msr.ranges.resize(1);
+			return msr;
+		}
+
+		static MultiSubrange none() {
+			MultiSubrange msr;
+			return msr;
+		}
+
+		MultiSubrange() = default;
+		MultiSubrange(Subrange::Image r) {
+			ranges.emplace_back(r);
+		}
+
+		MultiSubrange(std::pmr::vector<Subrange::Image> r) {
+			if (r.size() == 1) {
+				ranges = std::move(r);
+				return;
+			}
+			for (auto i = 0; i < ((int)r.size()) - 1; i++) {
+				for (auto j = i + 1; j < r.size(); j++) {
+					auto& ri = r[i];
+					auto& rj = r[j];
+					if (auto isection = intersect_one(r[i], r[j])) {
+						difference_one(r[i], *isection, [&](Subrange::Image i) { ranges.emplace_back(i); });
+					} else {
+						ranges.push_back(r[i]);
+					}
+					ranges.push_back(r[j]);
+				}
+			}
+		}
+
+		MultiSubrange set_intersect(Subrange::Image b) {
+			std::pmr::vector<Subrange::Image> new_ranges;
+			for (auto& a : ranges) {
+				if (auto i = intersect_one(a, b)) {
+					new_ranges.emplace_back(*i);
+				}
+			}
+			return MultiSubrange(std::move(new_ranges));
+		}
+
+		MultiSubrange set_difference(Subrange::Image b) {
+			std::pmr::vector<Subrange::Image> new_ranges;
+			for (auto& a : ranges) {
+				difference_one(a, b, [&](Subrange::Image i) { new_ranges.emplace_back(i); });
+			}
+			return MultiSubrange(std::move(new_ranges));
+		}
+
+		MultiSubrange set_difference(MultiSubrange& b) {
+			std::pmr::vector<Subrange::Image> new_ranges;
+			for (auto& a : ranges) {
+				for (auto& b : b.ranges) {
+					difference_one(a, b, [&](Subrange::Image i) { new_ranges.emplace_back(i); });
+				}
+			}
+			return MultiSubrange(std::move(new_ranges));
+		}
+
+		constexpr Subrange::Image& operator[](size_t index) {
+			return ranges[index];
+		}
+
+		constexpr const Subrange::Image& operator[](size_t index) const {
+			return ranges[index];
+		}
+
+		constexpr size_t size() const {
+			return ranges.size();
+		}
+
+		constexpr explicit operator bool() {
+			return ranges.size() > 0;
+		}
+
+	private:
+		std::pmr::vector<Subrange::Image> ranges;
+	};
 
 	// errors and printing
 	enum class Level { eError };

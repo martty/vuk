@@ -375,9 +375,8 @@ TEST_CASE("mip generation 2") {
 	vuk::clear_image(img.mip(0), vuk::ClearColor(0.1f, 0.1f, 0.1f, 0.1f));
 	vuk::clear_image(img.mip(4), vuk::ClearColor(0.6f, 0.1f, 0.1f, 0.1f));
 	std::string trace = "";
-	auto converge = vuk::make_pass("converge", [](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eComputeRW) output) { return output; });
 
-	auto mipped = converge(generate_mips(trace, converge(std::move(img)), 5));
+	auto mipped = generate_mips(trace, std::move(img), 5);
 	size_t alignment = format_to_texel_block_size(mipped->format);
 	size_t size = compute_image_size(mipped->format, { 1, 1, 1 });
 	auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
@@ -385,6 +384,101 @@ TEST_CASE("mip generation 2") {
 	auto updata = std::span((float*)res->mapped_ptr, 1);
 	CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem - 0.1f < 0.001f; }));
 	CHECK(trace == "1234");
+}
+
+void generate_mips_2(std::string& trace, vuk::Value<vuk::ImageAttachment> image, uint32_t mip_count) {
+	auto blit_mip = vuk::make_pass("blit_mip", [&trace](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eTransferRead) src, VUK_IA(vuk::eTransferWrite) dst) {
+		ImageBlit blit;
+		const auto extent = src->extent;
+
+		blit.srcSubresource.aspectMask = format_to_aspect(src->format);
+		blit.srcSubresource.baseArrayLayer = src->base_layer;
+		blit.srcSubresource.layerCount = src->layer_count;
+		blit.srcSubresource.mipLevel = src->base_level;
+		blit.srcOffsets[0] = Offset3D{ 0 };
+		blit.srcOffsets[1] = Offset3D{ std::max(static_cast<int32_t>(extent.width) >> (src->base_level), 1),
+			                             std::max(static_cast<int32_t>(extent.height) >> (src->base_level), 1),
+			                             std::max(static_cast<int32_t>(extent.depth) >> (src->base_level), 1) };
+		blit.dstSubresource = blit.srcSubresource;
+		blit.dstSubresource.mipLevel = dst->base_level;
+		blit.dstOffsets[0] = Offset3D{ 0 };
+		blit.dstOffsets[1] = Offset3D{ std::max(static_cast<int32_t>(extent.width) >> (dst->base_level), 1),
+			                             std::max(static_cast<int32_t>(extent.height) >> (dst->base_level), 1),
+			                             std::max(static_cast<int32_t>(extent.depth) >> (dst->base_level), 1) };
+		command_buffer.blit_image(src, dst, blit, Filter::eLinear);
+
+		trace += fmt::format("{}", dst->base_level);
+	});
+
+	for (uint32_t mip_level = 1; mip_level < mip_count; mip_level++) {
+		blit_mip(image.mip(mip_level - 1), image.mip(mip_level));
+	}
+}
+
+TEST_CASE("mip generation 3") {
+	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 64, 64, 1 }, Samples::e1);
+	auto img = vuk::declare_ia("src", ia);
+	vuk::clear_image(img.mip(0), vuk::ClearColor(0.1f, 0.1f, 0.1f, 0.1f));
+	vuk::clear_image(img.mip(4), vuk::ClearColor(0.6f, 0.1f, 0.1f, 0.1f));
+	std::string trace = "";
+
+	generate_mips_2(trace, img, 5);
+	size_t alignment = format_to_texel_block_size(img->format);
+	size_t size = compute_image_size(img->format, { 1, 1, 1 });
+	auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
+	auto res = download_buffer(image2buf(img.mip(4), declare_buf("dst", *dst))).get(*test_context.allocator, test_context.compiler);
+	auto updata = std::span((float*)res->mapped_ptr, 1);
+	CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem - 0.1f < 0.001f; }));
+	CHECK(trace == "1234");
+}
+
+TEST_CASE("mip generation 4") {
+	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 64, 64, 1 }, Samples::e1);
+	auto img = vuk::declare_ia("src", ia);
+	vuk::clear_image(img.mip(0), vuk::ClearColor(0.1f, 0.1f, 0.1f, 0.1f));
+	vuk::clear_image(img.mip(4), vuk::ClearColor(0.6f, 0.1f, 0.1f, 0.1f));
+	std::string trace = "";
+
+	generate_mips_2(trace, img, 5);
+	size_t alignment = format_to_texel_block_size(img->format);
+	size_t size = compute_image_size(img->format, { 1, 1, 1 });
+	auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
+	auto res = download_buffer(image2buf(img.mip(4), declare_buf("dst", *dst))).get(*test_context.allocator, test_context.compiler);
+	auto updata = std::span((float*)res->mapped_ptr, 1);
+	CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem - 0.1f < 0.001f; }));
+	CHECK(trace == "1234");
+}
+
+TEST_CASE("mip generation 5") {
+	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 64, 64, 1 }, Samples::e1);
+	auto img = vuk::declare_ia("src", ia);
+	vuk::clear_image(img, vuk::ClearColor(0.1f, 0.1f, 0.1f, 0.1f));
+	std::string trace = "";
+
+	generate_mips_2(trace, img, 5);
+	size_t alignment = format_to_texel_block_size(img->format);
+	size_t size = compute_image_size(img->format, { 1, 1, 1 });
+	auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
+	auto res = download_buffer(image2buf(img.mip(4), declare_buf("dst", *dst))).get(*test_context.allocator, test_context.compiler);
+	auto updata = std::span((float*)res->mapped_ptr, 1);
+	CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem - 0.1f < 0.001f; }));
+	CHECK(trace == "1234");
+}
+
+TEST_CASE("mip2mip dep") {
+	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 64, 64, 1 }, Samples::e1);
+	auto img = vuk::declare_ia("src", ia);
+	vuk::clear_image(img.mip(0), vuk::ClearColor(0.1f, 0.1f, 0.1f, 0.1f));
+	vuk::clear_image(img.mip(4), vuk::ClearColor(0.6f, 0.1f, 0.1f, 0.1f));
+
+	auto a = img.mip(0);
+	blit_image(a, img.mip(4), Filter::eLinear);
+	size_t alignment = format_to_texel_block_size(img->format);
+	size_t size = compute_image_size(img->format, { 1, 1, 1 });
+	auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
+	auto res = download_buffer(image2buf(img.mip(4), declare_buf("dst", *dst))).get(*test_context.allocator, test_context.compiler);
+	auto updata = std::span((float*)res->mapped_ptr, 1);
+	CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem - 0.1f < 0.001f; }));
 }
 
 vuk::Value<vuk::ImageAttachment> bloom_pass(std::string& trace,
@@ -395,38 +489,32 @@ vuk::Value<vuk::ImageAttachment> bloom_pass(std::string& trace,
 	auto prefilter =
 	    vuk::make_pass("bloom_prefilter", [&trace](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eComputeRW) target, VUK_IA(vuk::eComputeSampled) input) {
 		    trace += "p";
-		    return target;
 	    });
 
-	auto prefiltered_image = prefilter(downsample_image.mip(0), input);
-	auto converge = vuk::make_pass("converge", [](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eComputeRW) output) { return output; });
-	auto prefiltered_downsample_image = converge(downsample_image);
-	auto src_mip = prefiltered_downsample_image.mip(0);
+	prefilter(downsample_image.mip(0), input);
 
 	for (uint32_t i = 1; i < bloom_mip_count; i++) {
-		auto pass =
-		    vuk::make_pass("bloom_downsample", [i, &trace](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eComputeRW) target, VUK_IA(vuk::eComputeSampled) input) {
-			    trace += fmt::format("d{}", i);
-			    return target;
-		    });
-		src_mip = pass(prefiltered_downsample_image.mip(i), src_mip);
+		auto pass = vuk::make_pass(fmt::format("bloom_downsample_{}", i).c_str(),
+		                           [i, &trace](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eComputeRW) target, VUK_IA(vuk::eComputeSampled) input) {
+			                           trace += fmt::format("d{}", i);
+		                           });
+		pass(downsample_image.mip(i), downsample_image.mip(i - 1));
 	}
 
 	// Upsampling
 	// https://www.froyok.fr/blog/2021-12-ue4-custom-bloom/resources/code/bloom_down_up_demo.jpg
 
-	auto downsampled_image = converge(prefiltered_downsample_image);
-	auto upsample_src_mip = downsampled_image.mip(bloom_mip_count - 1);
+	auto upsample_src_mip = downsample_image.mip(bloom_mip_count - 1);
 
 	for (int32_t i = (int32_t)bloom_mip_count - 2; i >= 0; i--) {
 		auto pass = vuk::make_pass(
-		    "bloom_upsample",
+		    fmt::format("bloom_upsample_{}", i).c_str(),
 		    [i, &trace](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eComputeRW) output, VUK_IA(vuk::eComputeSampled) src1, VUK_IA(vuk::eComputeSampled) src2) {
 			    trace += fmt::format("u{}", i);
-			    return output;
 		    });
 
-		upsample_src_mip = pass(upsample_image.mip(i), upsample_src_mip, downsampled_image.mip(i));
+		pass(upsample_image.mip(i), upsample_src_mip, downsample_image.mip(i));
+		upsample_src_mip = upsample_image.mip(i);
 	}
 
 	return upsample_image;

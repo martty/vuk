@@ -149,66 +149,6 @@ namespace vuk {
 		ctx.vkCmdBeginRenderPass(cbuf, &rbi, use_secondary_command_buffers ? VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS : VK_SUBPASS_CONTENTS_INLINE);
 	}
 
-	std::optional<Subrange::Image> intersect(Subrange::Image a, Subrange::Image b) {
-		Subrange::Image result;
-		result.base_layer = std::max(a.base_layer, b.base_layer);
-		int count;
-		if (a.layer_count == VK_REMAINING_ARRAY_LAYERS) {
-			count = static_cast<int32_t>(b.layer_count) + std::min(0, static_cast<int32_t>(result.base_layer) - static_cast<int32_t>(b.base_layer));
-		} else if (b.layer_count == VK_REMAINING_ARRAY_LAYERS) {
-			count = static_cast<int32_t>(a.layer_count) + std::min(0, static_cast<int32_t>(result.base_layer) - static_cast<int32_t>(a.base_layer));
-		} else {
-			count = static_cast<int32_t>(std::min(a.base_layer + a.layer_count, b.base_layer + b.layer_count)) - static_cast<int32_t>(result.base_layer);
-		}
-		if (count < 1) {
-			return {};
-		}
-		result.layer_count = static_cast<uint32_t>(count);
-
-		result.base_level = std::max(a.base_level, b.base_level);
-		if (a.level_count == VK_REMAINING_MIP_LEVELS) {
-			count = static_cast<int32_t>(b.level_count) + std::min(0, static_cast<int32_t>(result.base_level) - static_cast<int32_t>(b.base_level));
-		} else if (b.level_count == VK_REMAINING_MIP_LEVELS) {
-			count = static_cast<int32_t>(a.level_count) + std::min(0, static_cast<int32_t>(result.base_level) - static_cast<int32_t>(a.base_level));
-		} else {
-			count = static_cast<int32_t>(std::min(a.base_level + a.level_count, b.base_level + b.level_count)) - static_cast<int32_t>(result.base_level);
-		}
-		if (count < 1) {
-			return {};
-		}
-		result.level_count = static_cast<uint32_t>(count);
-
-		return result;
-	}
-
-	template<class F>
-	void difference(Subrange::Image a, Subrange::Image isection, F&& func) {
-		// before, mips
-		if (isection.base_level > a.base_level) {
-			func({ .base_level = a.base_level, .level_count = isection.base_level - a.base_level, .base_layer = a.base_layer, .layer_count = a.layer_count });
-		}
-		// after, mips
-		if (a.base_level + a.level_count > isection.base_level + isection.level_count) {
-			func({ .base_level = isection.base_level + isection.level_count,
-			       .level_count = a.base_level + a.level_count - (isection.base_level + isection.level_count),
-			       .base_layer = a.base_layer,
-			       .layer_count = a.layer_count });
-		}
-		// before, layers
-		if (isection.base_layer > a.base_layer) {
-			func({ .base_level = a.base_level, .level_count = a.level_count, .base_layer = a.base_layer, .layer_count = isection.base_layer - a.base_layer });
-		}
-		// after, layers
-		if (a.base_layer + a.layer_count > isection.base_layer + isection.layer_count) {
-			func({
-			    .base_level = a.base_level,
-			    .level_count = a.level_count,
-			    .base_layer = isection.base_layer + isection.layer_count,
-			    .layer_count = a.base_layer + a.layer_count - (isection.base_layer + isection.layer_count),
-			});
-		}
-	};
-
 	void ExecutableRenderGraph::fill_render_pass_info(RenderPassInfo& rpass, const size_t& i, CommandBuffer& cobuf) {
 		if (rpass.handle == VK_NULL_HANDLE) {
 			cobuf.ongoing_render_pass = {};
@@ -940,7 +880,7 @@ namespace vuk {
 						src_range = { src->subrange.image.base_level, src->subrange.image.level_count, src->subrange.image.base_layer, src->subrange.image.layer_count };
 
 						// we want to make a barrier for the intersection of the source and incoming
-						auto isection_opt = intersect(src_range, dst_range);
+						auto isection_opt = intersect_one(src_range, dst_range);
 						if (isection_opt) {
 							isection = *isection_opt;
 							break;
@@ -954,7 +894,7 @@ namespace vuk {
 					for (; src->next != nullptr; src = src->next)
 						;
 					// splinter the source and destination ranges
-					difference(src_range, isection, [&](Subrange::Image nb) {
+					difference_one(src_range, isection, [&](Subrange::Image nb) {
 						// push the splintered src uses
 						PartialStreamResourceUse psru{ *src };
 						psru.subrange = { nb.base_level, nb.level_count, nb.base_layer, nb.layer_count };
@@ -964,7 +904,7 @@ namespace vuk {
 					});
 
 					// splinter the dst uses, and push into the work queue
-					difference(dst_range, isection, [&](Subrange::Image nb) { work_queue.push_back(nb); });
+					difference_one(dst_range, isection, [&](Subrange::Image nb) { work_queue.push_back(nb); });
 
 					auto& src_use = *found;
 					if (src_use.stream && dst_use.stream && (src_use.stream != dst_use.stream)) {
@@ -1687,8 +1627,11 @@ namespace vuk {
 						                               sliced.base_layer + sliced.layer_count - 1);
 						current_module->name_output(first(node), name);
 					}
-
-					sched.done(node, node->slice.image.node->execution_info->stream, sliced); // slice doesn't execute
+					std::vector<void*, short_alloc<void*>> rets(2, *impl->arena_);
+					rets[0] = static_cast<void*>(new (impl->arena_->allocate(sizeof(ImageAttachment))) ImageAttachment{ sliced });
+					rets[1] = static_cast<void*>(new (impl->arena_->allocate(sizeof(ImageAttachment)))
+					                                 ImageAttachment{ *(ImageAttachment*)sched.get_value(node->slice.image) });
+					sched.done(node, node->slice.image.node->execution_info->stream, std::span(rets));
 				} else {
 					sched.schedule_dependency(node->slice.image, RW::eRead);
 					sched.schedule_dependency(node->slice.base_level, RW::eRead);
@@ -1700,31 +1643,29 @@ namespace vuk {
 			}
 			case Node::CONVERGE: {
 				if (sched.process(item)) {
-					auto base = node->converge.ref_and_diverged[0];
+					auto base = node->converge.diverged[0];
 
 					// half sync
-					for (size_t i = 1; i < node->converge.ref_and_diverged.size(); i++) {
-						auto& div = node->converge.ref_and_diverged[i];
+					for (size_t i = 0; i < node->converge.diverged.size(); i++) {
+						auto& div = node->converge.diverged[i];
 						recorder.add_sync(sched.base_type(div).get(),
-						                  sched.get_dependency_info(div, div.type().get(), node->converge.write[i - 1] ? RW::eWrite : RW::eRead, item.scheduled_stream),
+						                  sched.get_dependency_info(div, div.type().get(), node->converge.write[i] ? RW::eWrite : RW::eRead, item.scheduled_stream),
 						                  sched.get_value(div));
 					}
 
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
 					fmt::print(" = ");
-					print_args(node->converge.ref_and_diverged.subspan(0, 1));
 					fmt::print("{{");
-					print_args(node->converge.ref_and_diverged.subspan(1));
+					print_args(node->converge.diverged);
 					fmt::print("}}");
 					fmt::print("\n");
 #endif
 
 					sched.done(node, item.scheduled_stream, sched.get_value(base)); // converge doesn't execute
 				} else {
-					sched.schedule_dependency(node->converge.ref_and_diverged[0], RW::eRead);
-					for (size_t i = 1; i < node->converge.ref_and_diverged.size(); i++) {
-						sched.schedule_dependency(node->converge.ref_and_diverged[i], node->converge.write[i - 1] ? RW::eWrite : RW::eRead);
+					for (size_t i = 0; i < node->converge.diverged.size(); i++) {
+						sched.schedule_dependency(node->converge.diverged[i], node->converge.write[i] ? RW::eWrite : RW::eRead);
 					}
 				}
 				break;

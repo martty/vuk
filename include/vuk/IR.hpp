@@ -317,6 +317,7 @@ namespace vuk {
 		ChainLink* links = nullptr;
 		ExecutionInfo* execution_info = nullptr;
 		struct ScheduledItem* scheduled_item = nullptr;
+		size_t index;
 
 		template<uint8_t c>
 		struct Fixed {
@@ -366,7 +367,7 @@ namespace vuk {
 				Clear* cv;
 			} clear;
 			struct : Variable {
-				std::span<Ref> ref_and_diverged;
+				std::span<Ref> diverged;
 				std::span<bool> write;
 			} converge;
 			struct : Fixed<3> {
@@ -945,10 +946,12 @@ namespace vuk {
 		plf::colony<Node /*, inline_alloc<Node, 4 * 1024>*/> op_arena;
 		std::vector<Node*> garbage;
 		std::unordered_map<Node*, size_t> potential_garbage;
+		size_t node_counter = 0;
 
 		// uint64_t current_hash = 0;
 
 		Node* emplace_op(Node v) {
+			v.index = node_counter++;
 			return &*op_arena.emplace(std::move(v));
 		}
 
@@ -1170,25 +1173,27 @@ namespace vuk {
 
 		Ref make_slice(Ref image, Ref base_level, Ref level_count, Ref base_layer, Ref layer_count) {
 			auto stripped = Type::stripped(image.type());
-			auto ty = new std::shared_ptr<Type>[1](stripped);
-			return first(emplace_op(
-			    Node{ .kind = Node::SLICE,
-			          .type = std::span{ ty, 1 },
-			          .slice = { .image = image, .base_level = base_level, .level_count = level_count, .base_layer = base_layer, .layer_count = layer_count } }));
+			auto ty = new std::shared_ptr<Type>[2](stripped, stripped);
+			return first(emplace_op(Node{ .kind = Node::SLICE,
+			                              .type = std::span{ ty, 2 },
+			                              .slice = { .image = image,
+			                                         .base_level = base_level,
+			                                         .level_count = level_count,
+			                                         .base_layer = base_layer,
+			                                         .layer_count = layer_count } }));
 		}
 
-		Ref make_converge(Ref ref, std::span<Ref> deps, std::span<char> write) {
-			auto stripped = Type::stripped(ref.type());
+		Ref make_converge(std::span<Ref> deps, std::span<char> write) {
+			auto stripped = Type::stripped(deps[0].type());
 			auto ty = new std::shared_ptr<Type>[1](stripped);
 
-			auto deps_ptr = new Ref[deps.size() + 1];
-			deps_ptr[0] = ref;
-			std::copy(deps.begin(), deps.end(), deps_ptr + 1);
+			auto deps_ptr = new Ref[deps.size()];
+			std::copy(deps.begin(), deps.end(), deps_ptr);
 			auto rw_ptr = new bool[deps.size()];
 			std::copy(write.begin(), write.end(), rw_ptr);
 			return first(emplace_op(Node{ .kind = Node::CONVERGE,
 			                              .type = std::span{ ty, 1 },
-			                              .converge = { .ref_and_diverged = std::span{ deps_ptr, deps.size() + 1 }, .write = std::span{ rw_ptr, deps.size() } } }));
+			                              .converge = { .diverged = std::span{ deps_ptr, deps.size() }, .write = std::span{ rw_ptr, deps.size() } } }));
 		}
 
 		Ref make_cast(std::shared_ptr<Type> dst_type, Ref src) {

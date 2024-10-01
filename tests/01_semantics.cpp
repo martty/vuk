@@ -7,6 +7,14 @@ using namespace vuk;
 
 #include <string>
 
+template<Access access = Access::eTransferWrite>
+auto make_unary_void(std::string name, std::string& trace) {
+	return make_pass(Name(name.c_str()), [=, &trace](CommandBuffer& cbuf, VUK_BA(access) dst) {
+		trace += name;
+		trace += " ";
+	});
+}
+
 auto make_unary_computation(std::string name, std::string& trace) {
 	return make_pass(Name(name.c_str()), [=, &trace](CommandBuffer& cbuf, VUK_BA(Access::eTransferWrite) dst) {
 		trace += name;
@@ -16,11 +24,25 @@ auto make_unary_computation(std::string name, std::string& trace) {
 }
 
 auto make_binary_computation(std::string name, std::string& trace) {
-	return make_pass(Name(name.c_str()), [=, &trace](CommandBuffer& cbuf, VUK_BA(Access::eTransferWrite) a, VUK_BA(Access::eTransferWrite) b) {
+	return make_pass(Name(name.c_str()), [=, &trace](CommandBuffer& cbuf, VUK_BA(Access::eTransferRead) a, VUK_BA(Access::eTransferWrite) b) {
 		trace += name;
 		trace += " ";
 		return a;
 	});
+}
+
+TEST_CASE("conversion to SSA") {
+	std::string trace = "";
+	auto& oa = current_module;
+	
+	auto decl = declare_buf("_a", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly });
+	make_unary_void("a", trace)(decl);
+	make_unary_void("b", trace)(decl);
+	make_unary_void<Access::eTransferRead>("c", trace)(decl);
+	decl.submit(*test_context.allocator, test_context.compiler);
+
+	trace = trace.substr(0, trace.size() - 1);
+	CHECK(trace == "a b c");
 }
 
 TEST_CASE("minimal graph is submitted") {
