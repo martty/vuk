@@ -31,6 +31,7 @@ struct DT : public doctest::IReporter {
 	void test_run_end(const doctest::TestRunStats& /*in*/) override {}
 
 	void test_case_start(const doctest::TestCaseData& in) override {
+		crashing = false;
 		fmt::print("//////////////{}\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\n", in.m_name);
 		tc = &in;
 		vuk::test_context.start(in.m_name);
