@@ -1710,6 +1710,9 @@ namespace vuk {
 		for (auto& depnode : impl->depnodes) {
 			modules.push_back(depnode->source_module);
 		}
+		std::sort(modules.begin(), modules.end());
+		modules.erase(std::unique(modules.begin(), modules.end()), modules.end());
+
 		impl->depnodes.clear();
 
 		for (auto& node : impl->nodes) {
@@ -1723,6 +1726,7 @@ namespace vuk {
 
 			// reset any nodes we ran
 			node->execution_info = nullptr;
+			node->links = nullptr;
 			// if we ran any non-splice nodes: they are garbage now
 			if (node->kind != Node::SPLICE && node->kind != Node::RELEASE && node->kind != Node::ACQUIRE && node->kind != Node::CONVERGE) {
 				current_module->destroy_node(node);
@@ -1765,6 +1769,12 @@ namespace vuk {
 
 		current_module->garbage.clear();
 		impl->garbage_nodes.clear();
+
+		for (auto& m : modules) {
+			for (auto& op : m->op_arena) {
+				op.links = nullptr;
+			}
+		}
 
 		Types::global().collect();
 

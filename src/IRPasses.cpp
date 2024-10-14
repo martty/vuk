@@ -1253,86 +1253,6 @@ namespace vuk {
 		std::sort(divergence_dependency_scope.begin(), divergence_dependency_scope.end(), [](Node* a, Node* b) { return a->index < b->index; });
 		// build chains (we only care about chains going through divergent/implicit nodes)
 		build_links(divergence_dependency_scope.begin(), divergence_dependency_scope.end(), pass_reads, child_chains, allocator);
-
-		auto in_module = [=](Node* node) {
-			auto it = std::find_if(start, end, [=](auto& n) { return &n == node; });
-			if (it != end) {
-				return true;
-			}
-			return false;
-		};
-
-		auto before_module = [=](Node* a, Node* b) {
-			auto it_a = std::find_if(start, end, [=](auto& n) { return &n == a; });
-			auto it_b = std::find_if(start, end, [=](auto& n) { return &n == b; });
-			return it_a < it_b;
-		};
-
-		std::vector<Node*> converges;
-		/*
-		// insert converge nodes
-		for (auto& [base, sliced] : slices) {
-		  std::pmr::vector<Ref> tails(allocator);
-		  std::pmr::vector<char> write(allocator);
-		  for (auto& s : sliced) {
-		    auto r = &s.link();
-		    while (r->next) {
-		      r = r->next;
-		    }
-		    if (r->undef.node) { // depend on undefs indirectly via INDIRECT_DEPEND
-		      auto idep = current_module->make_indirect_depend(r->undef.node, r->undef.index);
-		      converges.push_back(idep.node);
-		      tails.push_back(idep);
-		      write.push_back(false);
-		    } else if (r->reads.size() > 0) { // depend on reads indirectly via INDIRECT_DEPEND
-		      tails.push_back(r->def);
-		      write.push_back(true);
-		    } else {
-		      tails.push_back(r->def); // depend on def directly (via a read)
-		      write.push_back(false);
-		    }
-		  }
-		  auto converged_base = current_module->make_converge(base, tails, write);
-		  current_module->garbage.push_back(converged_base.node);
-		  converges.push_back(converged_base.node);
-		  for (auto node : possible_divergent_use_set) {
-		    if (node->kind == Node::SLICE) {
-		      continue;
-		    }
-
-		    auto count = node->generic_node.arg_count;
-		    if (count != (uint8_t)~0u) {
-		      for (int i = 0; i < count; i++) {
-		        if (node->fixed_node.args[i] == base) {
-		          for (auto& t : tails) {
-		            assert(in_module(t.node));
-		            if (!before_module(t.node, node)) {
-		              return { expected_error, RenderGraphException{ "Convergence not dominated" } };
-		            }
-		          }
-		          node->fixed_node.args[i] = converged_base;
-		        }
-		      }
-		    } else {
-		      for (int i = 0; i < node->variable_node.args.size(); i++) {
-		        if (node->variable_node.args[i] == base) {
-		          for (auto& t : tails) {
-		            if (t.node->kind == Node::INDIRECT_DEPEND) { // we just added these, its fine
-		              continue;
-		            }
-		            assert(in_module(t.node));
-		            if (!before_module(t.node, node)) {
-		              return { expected_error, RenderGraphException{ "Convergence not dominated" } };
-		            }
-		          }
-		          node->variable_node.args[i] = converged_base;
-		        }
-		      }
-		    }
-		  }
-		}*/
-		//_dump_graph(divergence_dependency_scope, true, false);
-
 		return { expected_value };
 	}
 
@@ -1361,18 +1281,24 @@ namespace vuk {
 		std::pmr::polymorphic_allocator allocator(&impl->mbr);
 		for (auto& m : modules) {
 			// GC the module
-			for (auto it = m->op_arena.begin(); it != m->op_arena.end(); ++it) {
+			for (auto it = m->op_arena.begin(); it != m->op_arena.end();) {
 				auto node = &*it;
 				if (m->potential_garbage.contains(node)) {
+					++it;
 					continue;
 				}
-				apply_generic_args(
-				    [&](Ref parm) {
-					    if (m->potential_garbage.contains(parm.node)) {
-						    m->potential_garbage[parm.node]++;
-					    }
-				    },
-				    node);
+				if (node->kind == Node::GARBAGE) {
+					it = m->op_arena.erase(it);
+				} else {
+					apply_generic_args(
+					    [&](Ref parm) {
+						    if (m->potential_garbage.contains(parm.node)) {
+							    m->potential_garbage[parm.node]++;
+						    }
+					    },
+					    node);
+					++it;
+				}
 			}
 			std::vector<Node*> to_garbage;
 			for (auto& [node, counts] : m->potential_garbage) {
@@ -1408,7 +1334,7 @@ namespace vuk {
 		for (auto& n : current_module->op_arena) {
 			all_nodes.push_back(&n);
 		}
-		_dump_graph(all_nodes, true, false);
+		//_dump_graph(all_nodes, true, false);
 		VUK_DO_OR_RETURN(impl->build_links(impl->nodes, allocator));
 
 		// eliminate useless splices
@@ -1634,7 +1560,7 @@ namespace vuk {
 			}
 		}
 		// FINAL GRAPH
-		_dump_graph(impl->nodes, false, false);
+		//_dump_graph(impl->nodes, false, false);
 
 		VUK_DO_OR_RETURN(impl->build_links(impl->nodes, allocator));
 
