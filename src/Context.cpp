@@ -589,6 +589,7 @@ namespace vuk {
 		pbi.variable_count_max = cinfo.variable_count_max;
 		pbi.hit_groups = cinfo.hit_groups;
 		pbi.max_ray_recursion_depth = cinfo.max_ray_recursion_depth;
+		pbi.patchControlPoints = cinfo.patchControlPoints;
 		return pbi;
 	}
 
