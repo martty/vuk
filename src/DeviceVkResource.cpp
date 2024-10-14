@@ -872,15 +872,7 @@ namespace vuk {
 				if (it.stage == VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT || it.stage == VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT) {
 					tessellation_state.pNext = nullptr;
 					tessellation_state.flags = 0;
-					if (0 == cinfo.topology) {
-						tessellation_state.patchControlPoints = 1;
-					} else if (cinfo.topology < 3 || cinfo.topology == 6 || cinfo.topology == 7) {
-						tessellation_state.patchControlPoints = 2;
-					} else if (cinfo.topology <= 5 || cinfo.topology == 8 || cinfo.topology == 9) {
-						tessellation_state.patchControlPoints = 3;
-					} else {
-						tessellation_state.patchControlPoints = 4;
-					}
+					tessellation_state.patchControlPoints = cinfo.base->patchControlPoints;
 					gpci.pTessellationState = &tessellation_state;
 					input_assembly_state.topology = VK_PRIMITIVE_TOPOLOGY_PATCH_LIST;
 					break;
