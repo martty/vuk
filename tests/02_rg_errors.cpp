@@ -92,7 +92,7 @@ TEST_CASE("error: reconvergence, time-travel forbidden") {
 TEST_CASE("error: read without write") {
 	{
 		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, 100, 1 });
-		auto buf = vuk::declare_buf("a", *dst);
+		auto buf = vuk::discard_buf("a", *dst);
 
 		auto rd_buf = vuk::make_pass("rd", [](CommandBuffer&, VUK_BA(vuk::eTransferRead) buf) { return buf; });
 
@@ -105,8 +105,8 @@ TEST_CASE("error: read without write") {
 TEST_CASE("error: attaching something twice decl/decl") {
 	{
 		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, 100, 1 });
-		auto buf_a = vuk::declare_buf("a", *dst);
-		auto buf_b = vuk::declare_buf("a again", *dst);
+		auto buf_a = vuk::discard_buf("a", *dst);
+		auto buf_b = vuk::discard_buf("a again", *dst);
 
 		auto wr_buf = vuk::make_pass("wr", [](CommandBuffer&, VUK_BA(vuk::eTransferWrite) buf, VUK_BA(vuk::eTransferWrite) bufb) { return buf; });
 
@@ -129,7 +129,7 @@ TEST_CASE("error: attaching something twice acq/acq") {
 TEST_CASE("error: attaching something twice decl/acq") {
 	{
 		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, 100, 1 });
-		auto buf_a = vuk::declare_buf("a", *dst);
+		auto buf_a = vuk::discard_buf("a", *dst);
 		auto buf_b = vuk::acquire_buf("a again", *dst, vuk::Access::eNone);
 
 		auto wr_buf = vuk::make_pass("wr", [](CommandBuffer&, VUK_BA(vuk::eTransferWrite) buf, VUK_BA(vuk::eTransferWrite) bufb) { return buf; });

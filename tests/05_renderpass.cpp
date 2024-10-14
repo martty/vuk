@@ -36,7 +36,7 @@ TEST_CASE("renderpass clear") {
 		size_t size = compute_image_size(fut->format, fut->extent);
 		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 		auto fut2 = rpclear(fut);
-		auto dst_buf = declare_buf("dst", *dst);
+		auto dst_buf = discard_buf("dst", *dst);
 		auto res = download_buffer(image2buf(fut2, dst_buf)).get(*test_context.allocator, test_context.compiler);
 		auto updata = std::span((uint32_t*)res->mapped_ptr, 4);
 		CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 5; }));
@@ -62,7 +62,7 @@ TEST_CASE("renderpass framebuffer inference") {
 		depth_img->format = vuk::Format::eD32Sfloat;
 
 		auto fut2 = rpclear(fut, std::move(depth_img));
-		auto dst_buf = declare_buf("dst", *dst);
+		auto dst_buf = discard_buf("dst", *dst);
 		auto res = download_buffer(image2buf(fut2, dst_buf)).get(*test_context.allocator, test_context.compiler);
 		auto updata = std::span((uint32_t*)res->mapped_ptr, 4);
 		CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 5; }));

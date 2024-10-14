@@ -174,8 +174,8 @@ namespace {
 		      // Build the BLAS & TLAS
 
 		      // Synchronization happens against the AS buffers
-		      auto blas_buf = vuk::declare_buf("blas_buf", *blas_buf_alloc);
-		      auto tlas_buf = vuk::declare_buf("tlas_buf", *tlas_buf_alloc);
+		      auto blas_buf = vuk::discard_buf("blas_buf", *blas_buf_alloc);
+		      auto tlas_buf = vuk::discard_buf("tlas_buf", *tlas_buf_alloc);
 		      auto build_blas = vuk::make_pass("BLAS build",
 		                                       [maxPrimitiveCount, as_geom, blas_build_info](vuk::CommandBuffer& command_buffer,
 		                                                                                     VUK_BA(vuk::eAccelerationStructureBuildWrite) blas_buf,

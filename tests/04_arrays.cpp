@@ -18,7 +18,7 @@ TEST_CASE("arrayed buffers") {
 			return dst;
 		});
 
-		auto arr = declare_array("buffers", declare_buf("src", **buf), declare_buf("src2", **buf2));
+		auto arr = declare_array("buffers", discard_buf("src", **buf), discard_buf("src2", **buf2));
 		Value<Buffer[]> filled_bufs = fill(arr);
 		auto res = download_buffer(filled_bufs[0]).get(*test_context.allocator, test_context.compiler);
 		CHECK(std::span((uint32_t*)res->mapped_ptr, 4) == std::span(data));
@@ -41,7 +41,7 @@ TEST_CASE("arrayed buffers, internal loop") {
 			return dst;
 		});
 
-		auto arr = declare_array("buffers", declare_buf("src", **buf), declare_buf("src2", **buf2));
+		auto arr = declare_array("buffers", discard_buf("src", **buf), discard_buf("src2", **buf2));
 		Value<Buffer[]> filled_bufs = fill(arr);
 		auto res = download_buffer(filled_bufs[0]).get(*test_context.allocator, test_context.compiler);
 		CHECK(std::span((uint32_t*)res->mapped_ptr, 4) == std::span(data));
@@ -80,14 +80,14 @@ TEST_CASE("arrayed images, commands") {
 		auto arr = declare_array("images", std::move(fut), std::move(fut2));
 		{
 			auto futc = clear_image(arr[0], vuk::ClearColor(5u, 5u, 5u, 5u));
-			auto dst_buf = declare_buf("dst", *dst);
+			auto dst_buf = discard_buf("dst", *dst);
 			auto res = download_buffer(image2buf(std::move(futc), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
 			auto updata = std::span((uint32_t*)res->mapped_ptr, 4);
 			CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 5; }));
 		}
 		{
 			auto futc2 = clear_image(arr[1], vuk::ClearColor(6u, 6u, 6u, 6u));
-			auto dst_buf = declare_buf("dst", *dst);
+			auto dst_buf = discard_buf("dst", *dst);
 			auto res = download_buffer(image2buf(std::move(futc2), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
 			auto updata = std::span((uint32_t*)res->mapped_ptr, 4);
 			CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 6; }));
@@ -120,13 +120,13 @@ TEST_CASE("arrayed images, divergent source sync") {
 		arr = array_use(std::move(arr));
 
 		{
-			auto dst_buf = declare_buf("dst", *dst);
+			auto dst_buf = discard_buf("dst", *dst);
 			auto res = download_buffer(image2buf(std::move(arr[0]), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
 			auto updata = std::span((uint32_t*)res->mapped_ptr, 4);
 			CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 5; }));
 		}
 		{
-			auto dst_buf = declare_buf("dst", *dst);
+			auto dst_buf = discard_buf("dst", *dst);
 			auto res = download_buffer(image2buf(std::move(arr[1]), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
 			auto updata = std::span((uint32_t*)res->mapped_ptr, 4);
 			CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 6; }));
@@ -147,14 +147,14 @@ TEST_CASE("image slicing, mips") {
 
 		{
 			auto futc = clear_image(fut.mip(0), vuk::ClearColor(5u, 5u, 5u, 5u));
-			auto dst_buf = declare_buf("dst", *dst);
+			auto dst_buf = discard_buf("dst", *dst);
 			auto res = download_buffer(image2buf(std::move(futc), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
 			auto updata = std::span((uint32_t*)res->mapped_ptr, 4);
 			CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 5; }));
 		}
 		{
 			auto futc2 = clear_image(fut.mip(1), vuk::ClearColor(6u, 6u, 6u, 6u));
-			auto dst_buf = declare_buf("dst", *dst);
+			auto dst_buf = discard_buf("dst", *dst);
 			auto res = download_buffer(image2buf(std::move(futc2), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
 			auto updata = std::span((uint32_t*)res->mapped_ptr, 1);
 			CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 6; }));
@@ -198,7 +198,7 @@ TEST_CASE("image slicing, reconvergence") {
 		auto m2 = clear_image(fut.mip(1), vuk::ClearColor(6u, 6u, 6u, 6u));
 		auto futp = blit_down(std::move(fut));
 
-		auto dst_buf = declare_buf("dst", *dst);
+		auto dst_buf = discard_buf("dst", *dst);
 		auto res = download_buffer(image2buf(futp.mip(1), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
 		auto updata = std::span((uint32_t*)res->mapped_ptr, 1);
 		CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 5; }));
@@ -221,7 +221,7 @@ TEST_CASE("image slicing, reconvergence 2") {
 			auto m2 = image_use<Access::eTransferWrite>(clear_image(fut.mip(1), vuk::ClearColor(6u, 6u, 6u, 6u)));
 			auto futp = blit_down(std::move(fut));
 
-			auto dst_buf = declare_buf("dst", *dst);
+			auto dst_buf = discard_buf("dst", *dst);
 			auto res = download_buffer(image2buf(futp.mip(1), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
 			auto updata = std::span((uint32_t*)res->mapped_ptr, 1);
 			CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 5; }));
@@ -243,7 +243,7 @@ TEST_CASE("image slicing, reconvergence 3") {
 		{
 			auto m1 = clear_image(fut.mip(0), vuk::ClearColor(5u, 5u, 5u, 5u));
 			auto futp = blit_down(fut);
-			auto dst_buf = declare_buf("dst", *dst);
+			auto dst_buf = discard_buf("dst", *dst);
 			auto res = download_buffer(image2buf(futp.mip(1), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
 			auto updata = std::span((uint32_t*)res->mapped_ptr, 1);
 			CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 5; }));
@@ -271,7 +271,7 @@ TEST_CASE("image slicing, reconvergence with undef") {
 		{
 			void_clear_image(fut.mip(0), vuk::ClearColor(7u, 7u, 7u, 7u));
 			auto futp = blit_down(fut);
-			auto dst_buf = declare_buf("dst", *dst);
+			auto dst_buf = discard_buf("dst", *dst);
 			auto res = download_buffer(image2buf(futp.mip(1), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
 			auto updata = std::span((uint32_t*)res->mapped_ptr, 1);
 			CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 7; }));
@@ -291,7 +291,7 @@ TEST_CASE("MT") {
 		size_t size = compute_image_size(fut->format, fut->extent);
 
 		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
-		auto dst_buf = declare_buf("dst", *dst);
+		auto dst_buf = discard_buf("dst", *dst);
 		std::jthread worker([&]() { dst_buf = image2buf(fut, std::move(dst_buf)); });
 		worker.join();
 		auto res = download_buffer(dst_buf).get(*test_context.allocator, test_context.compiler);
@@ -319,7 +319,7 @@ TEST_CASE("MT reconvergence") {
 		});
 		worker.join();
 
-		auto dst_buf = declare_buf("dst", *dst);
+		auto dst_buf = discard_buf("dst", *dst);
 		auto res = download_buffer(image2buf(futp.mip(1), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
 		auto updata = std::span((uint32_t*)res->mapped_ptr, 1);
 		CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 7; }));
@@ -380,7 +380,7 @@ TEST_CASE("mip generation 2") {
 	size_t alignment = format_to_texel_block_size(mipped->format);
 	size_t size = compute_image_size(mipped->format, { 1, 1, 1 });
 	auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
-	auto res = download_buffer(image2buf(mipped.mip(4), declare_buf("dst", *dst))).get(*test_context.allocator, test_context.compiler);
+	auto res = download_buffer(image2buf(mipped.mip(4), discard_buf("dst", *dst))).get(*test_context.allocator, test_context.compiler);
 	auto updata = std::span((float*)res->mapped_ptr, 1);
 	CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem - 0.1f < 0.001f; }));
 	CHECK(trace == "1234");
@@ -426,7 +426,7 @@ TEST_CASE("mip generation 3") {
 	size_t alignment = format_to_texel_block_size(img->format);
 	size_t size = compute_image_size(img->format, { 1, 1, 1 });
 	auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
-	auto res = download_buffer(image2buf(img.mip(4), declare_buf("dst", *dst))).get(*test_context.allocator, test_context.compiler);
+	auto res = download_buffer(image2buf(img.mip(4), discard_buf("dst", *dst))).get(*test_context.allocator, test_context.compiler);
 	auto updata = std::span((float*)res->mapped_ptr, 1);
 	CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem - 0.1f < 0.001f; }));
 	CHECK(trace == "1234");
@@ -443,7 +443,7 @@ TEST_CASE("mip generation 4") {
 	size_t alignment = format_to_texel_block_size(img->format);
 	size_t size = compute_image_size(img->format, { 1, 1, 1 });
 	auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
-	auto res = download_buffer(image2buf(img.mip(4), declare_buf("dst", *dst))).get(*test_context.allocator, test_context.compiler);
+	auto res = download_buffer(image2buf(img.mip(4), discard_buf("dst", *dst))).get(*test_context.allocator, test_context.compiler);
 	auto updata = std::span((float*)res->mapped_ptr, 1);
 	CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem - 0.1f < 0.001f; }));
 	CHECK(trace == "1234");
@@ -459,7 +459,7 @@ TEST_CASE("mip generation 5") {
 	size_t alignment = format_to_texel_block_size(img->format);
 	size_t size = compute_image_size(img->format, { 1, 1, 1 });
 	auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
-	auto res = download_buffer(image2buf(img.mip(4), declare_buf("dst", *dst))).get(*test_context.allocator, test_context.compiler);
+	auto res = download_buffer(image2buf(img.mip(4), discard_buf("dst", *dst))).get(*test_context.allocator, test_context.compiler);
 	auto updata = std::span((float*)res->mapped_ptr, 1);
 	CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem - 0.1f < 0.001f; }));
 	CHECK(trace == "1234");
@@ -476,7 +476,7 @@ TEST_CASE("mip2mip dep") {
 	size_t alignment = format_to_texel_block_size(img->format);
 	size_t size = compute_image_size(img->format, { 1, 1, 1 });
 	auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
-	auto res = download_buffer(image2buf(img.mip(4), declare_buf("dst", *dst))).get(*test_context.allocator, test_context.compiler);
+	auto res = download_buffer(image2buf(img.mip(4), discard_buf("dst", *dst))).get(*test_context.allocator, test_context.compiler);
 	auto updata = std::span((float*)res->mapped_ptr, 1);
 	CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem - 0.1f < 0.001f; }));
 }

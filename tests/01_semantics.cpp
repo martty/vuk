@@ -191,25 +191,25 @@ TEST_CASE("scheduling single-queue") {
 		});
 
 		{
-			auto b0 = declare_buf("src0", **buf0);
+			auto b0 = discard_buf("src0", **buf0);
 			write(write(b0)).wait(*test_context.allocator, test_context.compiler);
 			CHECK(execution == "ww");
 			execution = "";
 		}
 		{
-			auto b0 = declare_buf("src0", **buf0);
+			auto b0 = discard_buf("src0", **buf0);
 			read(write(b0)).wait(*test_context.allocator, test_context.compiler);
 			CHECK(execution == "wr");
 			execution = "";
 		}
 		{
-			auto b0 = declare_buf("src0", **buf0);
+			auto b0 = discard_buf("src0", **buf0);
 			write(read(write(b0))).wait(*test_context.allocator, test_context.compiler);
 			CHECK(execution == "wrw");
 			execution = "";
 		}
 		{
-			auto b0 = declare_buf("src0", **buf0);
+			auto b0 = discard_buf("src0", **buf0);
 			write(read(read(write(b0)))).wait(*test_context.allocator, test_context.compiler);
 			CHECK(execution == "wrrw");
 		}
@@ -238,10 +238,10 @@ TEST_CASE("scheduling with submitted") {
 
 		// external facing types (i.e. in acquire) must not be changed, or they might dangle over time
 		{
-			auto written = write(declare_buf("src0", **buf0));
+			auto written = write(discard_buf("src0", **buf0));
 			written.wait(*test_context.allocator, test_context.compiler);
 			{
-				auto buf2 = declare_buf("src1", **buf1);
+				auto buf2 = discard_buf("src1", **buf1);
 				auto res = read2(write(buf2), written);
 				res.wait(*test_context.allocator, test_context.compiler);
 			}
@@ -254,21 +254,21 @@ TEST_CASE("scheduling with submitted") {
 		}
 
 		{
-			auto written = write(declare_buf("src0", **buf0));
+			auto written = write(discard_buf("src0", **buf0));
 			written.wait(*test_context.allocator, test_context.compiler);
 			read(written).wait(*test_context.allocator, test_context.compiler);
 			CHECK(execution == "wr");
 			execution = "";
 		}
 		{
-			auto written = write(declare_buf("src0", **buf0));
+			auto written = write(discard_buf("src0", **buf0));
 			written.wait(*test_context.allocator, test_context.compiler);
 			read(std::move(written)).wait(*test_context.allocator, test_context.compiler);
 			CHECK(execution == "wr");
 			execution = "";
 		}
 		{
-			auto written = write(declare_buf("src0", **buf0));
+			auto written = write(discard_buf("src0", **buf0));
 			written.wait(*test_context.allocator, test_context.compiler);
 			auto res = write(std::move(written));
 			res.wait(*test_context.allocator, test_context.compiler);
@@ -305,7 +305,7 @@ TEST_CASE("multi-queue buffers") {
 
 		{
 			CHECK(current_module->op_arena.size() == 0);
-			auto written = write(declare_buf("src0", **buf0));
+			auto written = write(discard_buf("src0", **buf0));
 			written.wait(*test_context.allocator, test_context.compiler);
 			read(written).wait(*test_context.allocator, test_context.compiler);
 			CHECK(execution == "wr");
@@ -313,7 +313,7 @@ TEST_CASE("multi-queue buffers") {
 		}
 		{
 			CHECK(current_module->op_arena.size() == 2);
-			auto written = write(declare_buf("src0", **buf0));
+			auto written = write(discard_buf("src0", **buf0));
 			written.wait(*test_context.allocator, test_context.compiler);
 			read(std::move(written)).wait(*test_context.allocator, test_context.compiler);
 			CHECK(execution == "wr");
@@ -321,7 +321,7 @@ TEST_CASE("multi-queue buffers") {
 		}
 		{
 			CHECK(current_module->op_arena.size() == 1);
-			auto written = write(declare_buf("src0", **buf0));
+			auto written = write(discard_buf("src0", **buf0));
 			written.wait(*test_context.allocator, test_context.compiler);
 			write(read(std::move(written))).wait(*test_context.allocator, test_context.compiler);
 			CHECK(execution == "wrw");
@@ -329,21 +329,21 @@ TEST_CASE("multi-queue buffers") {
 		}
 		{
 			CHECK(current_module->op_arena.size() == 1);
-			auto written = write(declare_buf("src0", **buf0));
+			auto written = write(discard_buf("src0", **buf0));
 			read(written).wait(*test_context.allocator, test_context.compiler);
 			CHECK(execution == "wr");
 			execution = "";
 		}
 		{
 			CHECK(current_module->op_arena.size() == 2);
-			auto written = write(declare_buf("src0", **buf0));
+			auto written = write(discard_buf("src0", **buf0));
 			read(std::move(written)).wait(*test_context.allocator, test_context.compiler);
 			CHECK(execution == "wr");
 			execution = "";
 		}
 		{
 			CHECK(current_module->op_arena.size() == 1);
-			auto written = write(declare_buf("src0", **buf0));
+			auto written = write(discard_buf("src0", **buf0));
 			write(read(std::move(written))).wait(*test_context.allocator, test_context.compiler);
 			CHECK(execution == "wrw");
 			execution = "";
@@ -365,7 +365,7 @@ TEST_CASE("multi return pass") {
 			    return std::tuple{ dst0, dst1, dst2 };
 		    });
 
-		auto [buf0p, buf1p, buf2p] = fills(declare_buf("src0", **buf0), declare_buf("src1", **buf1), declare_buf("src2", **buf2));
+		auto [buf0p, buf1p, buf2p] = fills(discard_buf("src0", **buf0), discard_buf("src1", **buf1), discard_buf("src2", **buf2));
 		{
 			auto data = { 0xfcu, 0xfcu, 0xfcu, 0xfcu };
 			auto res = download_buffer(buf0p).get(*test_context.allocator, test_context.compiler);

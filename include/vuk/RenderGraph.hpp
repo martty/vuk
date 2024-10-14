@@ -400,7 +400,16 @@ public:
 		return { make_ext_ref(ref) };
 	}
 
+	[[nodiscard]] inline Value<ImageAttachment> discard_ia(Name name, ImageAttachment ia, VUK_CALLSTACK) {
+		assert(ia.image_view != ImageView{});
+		Ref ref = current_module->make_declare_image(ia);
+		current_module->name_output(ref, name.c_str());
+		current_module->set_source_location(ref.node, VUK_CALL);
+		return { make_ext_ref(ref) };
+	}
+
 	[[nodiscard]] inline Value<ImageAttachment> acquire_ia(Name name, ImageAttachment ia, Access access, VUK_CALLSTACK) {
+		assert(ia.image_view != ImageView{});
 		Ref ref = current_module->make_acquire(Types::global().get_builtin_image(), nullptr, ia);
 		auto ext_ref = make_ext_ref(ref);
 		ext_ref.node->acqrel = std::make_unique<AcquireRelease>();
@@ -420,7 +429,16 @@ public:
 		return { make_ext_ref(ref) };
 	}
 
+	[[nodiscard]] inline Value<Buffer> discard_buf(Name name, Buffer buf, VUK_CALLSTACK) {
+		assert(buf.buffer != VK_NULL_HANDLE);
+		Ref ref = current_module->make_declare_buffer(buf);
+		current_module->name_output(ref, name.c_str());
+		current_module->set_source_location(ref.node, VUK_CALL);
+		return { make_ext_ref(ref) };
+	}
+
 	[[nodiscard]] inline Value<Buffer> acquire_buf(Name name, Buffer buf, Access access, VUK_CALLSTACK) {
+		assert(buf.buffer != VK_NULL_HANDLE);
 		Ref ref = current_module->make_acquire(Types::global().get_builtin_buffer(), nullptr, buf);
 		auto ext_ref = make_ext_ref(ref);
 		ext_ref.node->acqrel = std::make_unique<AcquireRelease>();
