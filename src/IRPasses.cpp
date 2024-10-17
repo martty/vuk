@@ -291,6 +291,65 @@ namespace vuk {
 	                        std::pmr::vector<Node*>& new_nodes,
 	                        std::pmr::polymorphic_allocator<std::byte> allocator,
 	                        bool do_ssa) {
+		auto walk_writes = [&](Ref parm, Subrange::Image requested) -> Ref {
+			auto link = &parm.link();
+			Ref last_write;
+
+			MultiSubrange current_range = MultiSubrange::all();
+
+			do {
+				if (link->undef && link->undef.node->kind == Node::SLICE) {
+					auto& slice = link->undef.node->slice;
+					// TODO: support const eval here
+					Subrange::Image existing_slice_range = { constant<uint32_t>(slice.base_level),
+						                                       constant<uint32_t>(slice.level_count),
+						                                       constant<uint32_t>(slice.base_layer),
+						                                       constant<uint32_t>(slice.layer_count) };
+					auto left = current_range.set_intersect(existing_slice_range);
+					if (auto isection = left.set_intersect(requested)) {        // requested range overlaps with split -> we might need to converge
+						if (!MultiSubrange(requested).set_difference(isection)) { // if fully contained in the left -> no converge needed
+							link = &nth(link->undef.node, 0).link();
+							current_range = left;
+						} else { // requested range is partially in left and in right -> converge needed of the tails
+							std::pmr::vector<Ref> tails;
+							// walk left and walk right
+							collect_tails(nth(link->undef.node, 0), tails, pass_reads);
+							collect_tails(nth(link->undef.node, 1), tails, pass_reads);
+							std::pmr::vector<char> ws(tails.size(), true);
+
+							last_write = current_module->make_converge(tails, ws);
+							current_module->garbage.push_back(last_write.node);
+							last_write.node->index = node->index - 1;
+							allocate_node_links(last_write.node, allocator);
+							link->undef = last_write;
+							link->next = &last_write.link();
+							last_write.link().prev = link;
+							last_write.link().def = last_write;
+							new_nodes.push_back(last_write.node);
+							break;
+						}
+					} else { // requested range is fully contained in rest, switch to rest
+						link = &nth(link->undef.node, 1).link();
+						auto right = current_range.set_difference(left);
+						current_range = right;
+					}
+				} else if (link->undef && link->undef.node->kind == Node::CONVERGE) {
+					// TODO: this does not support walking converges properly yet!
+					current_range = MultiSubrange::all();
+				}
+				if (link->next) {
+					link = link->next;
+				}
+			} while (link->next || link->child_chains.size() > 0);
+
+			if (!last_write.node) {
+				assert(!link->undef);
+				last_write = link->def;
+			}
+
+			return last_write;
+		};
+
 		auto add_write = [&](Node* node, Ref& parm, size_t index, Subrange::Image requested = {}) -> void {
 			if (!parm.node->links) {
 				assert(do_ssa);
@@ -306,58 +365,7 @@ namespace vuk {
 
 				// attempt to find the final revision of this
 				// this could be either the last write on the main chain, or the last write on a child chain
-				auto link = &parm.link();
-				Ref last_write;
-
-				MultiSubrange current_range = MultiSubrange::all();
-				do {
-					if (link->undef && link->undef.node->kind == Node::SLICE) {
-						auto& slice = link->undef.node->slice;
-						// TODO: support const eval here
-						Subrange::Image existing_slice_range = { constant<uint32_t>(slice.base_level),
-							                                       constant<uint32_t>(slice.level_count),
-							                                       constant<uint32_t>(slice.base_layer),
-							                                       constant<uint32_t>(slice.layer_count) };
-						auto left = current_range.set_intersect(existing_slice_range);
-						if (auto isection = left.set_intersect(requested)) {        // requested range overlaps with split -> we might need to converge
-							if (!MultiSubrange(requested).set_difference(isection)) { // if fully contained in the left -> no converge needed
-								link = &nth(link->undef.node, 0).link();
-								current_range = left;
-							} else { // requested range is partially in left and in right -> converge needed of the tails
-								std::pmr::vector<Ref> tails;
-								// walk left and walk right
-								collect_tails(nth(link->undef.node, 0), tails, pass_reads);
-								collect_tails(nth(link->undef.node, 1), tails, pass_reads);
-								std::pmr::vector<char> ws(tails.size(), true);
-
-								last_write = current_module->make_converge(tails, ws);
-								current_module->garbage.push_back(last_write.node);
-								last_write.node->index = node->index - 1;
-								allocate_node_links(last_write.node, allocator);
-								link->undef = last_write;
-								link->next = &last_write.link();
-								last_write.link().prev = link;
-								last_write.link().def = last_write;
-								new_nodes.push_back(last_write.node);
-								break;
-							}
-						} else { // requested range is fully contained in rest, switch to rest
-							link = &nth(link->undef.node, 1).link();
-							auto right = current_range.set_difference(left);
-							current_range = right;
-						}
-					} else if (link->undef && link->undef.node->kind == Node::CONVERGE) { // TODO: this does not support walking converges yet!
-						assert(0);
-					}
-					if (link->next) {
-						link = link->next;
-					}
-				} while (link->next || link->child_chains.size() > 0);
-
-				if (!last_write.node) {
-					assert(!link->undef);
-					last_write = link->def;
-				}
+				auto last_write = walk_writes(parm, requested);
 				parm = last_write;
 			}
 			parm.link().undef = { node, index };
@@ -370,12 +378,8 @@ namespace vuk {
 			}
 			if (parm.link().undef.node != nullptr && node->index > parm.link().undef.node->index) { // there is already a write and it is earlier than us
 				assert(do_ssa);
-				auto link = &parm.link();
-				while (link->next && (!link->undef.node || node->index > link->undef.node->index)) {
-					link = link->next;
-				}
-				// this is now the latest write we are after
-				parm = link->def;
+				auto last_write = walk_writes(parm, {});
+				parm = last_write;
 			}
 			parm.link().reads.append(pass_reads, { node, index });
 		};

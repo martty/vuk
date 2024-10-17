@@ -198,7 +198,7 @@ namespace vuk {
 			    .base_level = a.base_level,
 			    .level_count = a.level_count,
 			    .base_layer = isection.base_layer + isection.layer_count,
-			    .layer_count = a.level_count == VK_REMAINING_ARRAY_LAYERS ? VK_REMAINING_ARRAY_LAYERS
+			    .layer_count = a.layer_count == VK_REMAINING_ARRAY_LAYERS ? VK_REMAINING_ARRAY_LAYERS
 			                                                              : a.base_layer + a.layer_count - (isection.base_layer + isection.layer_count),
 			});
 		}

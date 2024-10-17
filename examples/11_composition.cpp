@@ -289,12 +289,10 @@ namespace {
 				                                        .bind_image(0, 2, color)
 				                                        .bind_sampler(0, 2, sci)
 				                                        .draw(3, 1, 0, 0);
-
-				                                    return cube_face;
 			                                    });
 			      auto cube_face = cube_src.layer(i);
 			      temp_position.same_2D_extent_as(cube_face);
-			      auto single_face = resolve(cube_face, temp_position, temp_normal, temp_color);
+			      resolve(cube_face, temp_position, temp_normal, temp_color);
 		      }
 		      // time to render the final scene
 		      // and do the standard deferred rendering as before, this time using the new cube map for the environment

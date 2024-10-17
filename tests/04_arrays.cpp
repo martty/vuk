@@ -369,6 +369,32 @@ TEST_CASE("mip generation") {
 	CHECK(trace == "1234");
 }
 
+TEST_CASE("read convergence") {
+	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 64, 64, 1 }, Samples::e1);
+	auto img = vuk::clear_image(vuk::declare_ia("src", ia), vuk::ClearColor(0.1f, 0.1f, 0.1f, 0.1f));
+	std::string trace = "";
+	auto mipped = generate_mips(trace, std::move(img), 5);
+	auto pass = vuk::make_pass("rd", [&trace](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eTransferRead) src) {
+		trace += "r";
+	});
+	pass(mipped);
+	mipped.wait(*test_context.allocator, test_context.compiler);
+	CHECK(trace == "1234r");
+}
+
+TEST_CASE("read convergence 2") {
+	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 64, 64, 1 }, Samples::e1);
+	auto img = vuk::clear_image(vuk::declare_ia("src", ia), vuk::ClearColor(0.1f, 0.1f, 0.1f, 0.1f));
+	auto img2 = vuk::clear_image(vuk::declare_ia("src2", ia), vuk::ClearColor(0.1f, 0.1f, 0.1f, 0.1f));
+	std::string trace = "";
+	auto mipped = generate_mips(trace, img, 5);
+	auto pass =
+	    vuk::make_pass("rd", [&trace](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eTransferRead) src, VUK_IA(vuk::eTransferWrite) src2) { trace += "r"; });
+	pass(std::move(mipped), img2);
+	img.wait(*test_context.allocator, test_context.compiler);
+	CHECK(trace == "1234r");
+}
+
 TEST_CASE("mip generation 2") {
 	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 64, 64, 1 }, Samples::e1);
 	auto img = vuk::declare_ia("src", ia);
