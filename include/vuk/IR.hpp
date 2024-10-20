@@ -19,6 +19,8 @@
 #include <unordered_map>
 #include <vector>
 
+//#define VUK_GARBAGE_SAN
+
 namespace vuk {
 	struct TypeDebugInfo {
 		std::string name;

@@ -347,7 +347,37 @@ public:
 					auto [idxs, ret_tuple] = intersect_tuples<std::tuple<T...>, std::tuple<Ret>>(arg_tuple_as_a);
 					fill_ret_ty(idxs, ret_tuple, ret_types);
 				}
-				auto opaque_fn_ty = current_module->make_opaque_fn_ty(arg_types, ret_types, vuk::DomainFlagBits::eAny, untyped_cb, name.c_str());
+
+				std::vector<bool> existing_maps;
+				std::vector<size_t> maps_to_add;
+				existing_maps.resize(arg_types.size());
+				for (auto& ret_t : ret_types) {
+					assert(ret_t->kind == Type::ALIASED_TY);
+					existing_maps[ret_t->aliased.ref_idx - 1] = true;
+				}
+
+				auto old_ret_cnt = ret_types.size();
+				for (size_t i = 0; i < arg_types.size(); i++) {
+					if (!existing_maps[i]) {
+						maps_to_add.push_back(i);
+						ret_types.push_back(Types::global().make_aliased_ty(Type::stripped(arg_types[i]), i + 1));
+					}
+				}
+
+				std::shared_ptr<Type> opaque_fn_ty;
+				if (maps_to_add.size() > 0) {
+					auto wrapped_cb = [cb = std::move(untyped_cb), old_ret_cnt, maps_to_add] (
+					                 CommandBuffer& cbuf, std::span<void*> opaque_args, std::span<void*> opaque_meta, std::span<void*> opaque_rets) mutable -> void {
+						cb(cbuf, opaque_args, opaque_meta, opaque_rets.subspan(0, old_ret_cnt));
+						for (auto i = 0; i < maps_to_add.size(); i++) {
+							opaque_rets[old_ret_cnt + i] = opaque_args[maps_to_add[i]];
+						}
+					};
+					opaque_fn_ty = current_module->make_opaque_fn_ty(arg_types, ret_types, vuk::DomainFlagBits::eAny, wrapped_cb, name.c_str());
+				} else {
+					opaque_fn_ty = current_module->make_opaque_fn_ty(arg_types, ret_types, vuk::DomainFlagBits::eAny, untyped_cb, name.c_str());
+				}
+
 				auto opaque_fn = current_module->make_declare_fn(opaque_fn_ty);
 				Node* node = current_module->make_call(opaque_fn, args.peel_head()...);
 				node->scheduling_info = new SchedulingInfo(scheduling_info);

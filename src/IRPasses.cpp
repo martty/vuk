@@ -1217,52 +1217,6 @@ namespace vuk {
 		std::pmr::vector<Ref> pass_reads(allocator);
 		std::pmr::vector<ChainLink*> child_chains(allocator);
 
-		// call rewrite pass - add outputs where they might be missing
-		std::vector<bool> existing_maps;
-		std::vector<size_t> maps_to_add;
-		for (auto& node : divergence_dependency_scope) {
-			if (node->kind == Node::CALL) {
-				existing_maps.clear();
-				maps_to_add.clear();
-				existing_maps.resize(node->call.args.size() - 1);
-				for (auto& ret_t : node->type) {
-					assert(ret_t->kind == Type::ALIASED_TY);
-					existing_maps[ret_t->aliased.ref_idx - 1] = true;
-				}
-
-				for (size_t i = 1; i < node->call.args.size(); i++) {
-					if (!existing_maps[i - 1]) {
-						maps_to_add.push_back(i - 1);
-					}
-				}
-
-				if (maps_to_add.empty()) {
-					continue;
-				}
-
-				auto& curr_fn_ty = node->call.args[0].type()->opaque_fn;
-				auto ret_tys = curr_fn_ty.return_types;
-				auto old_ret_cnt = curr_fn_ty.return_types.size();
-				for (auto m : maps_to_add) {
-					ret_tys.push_back(Types::global().make_aliased_ty(Type::stripped(node->call.args[m + 1].type()), m + 1));
-				}
-
-				auto new_cb = [curr_fn_ty, old_ret_cnt, maps_to_add](
-				                  CommandBuffer& cbuf, std::span<void*> opaque_args, std::span<void*> opaque_meta, std::span<void*> opaque_rets) -> void {
-					curr_fn_ty.callback(cbuf, opaque_args, opaque_meta, opaque_rets.subspan(0, old_ret_cnt));
-					for (auto i = 0; i < maps_to_add.size(); i++) {
-						opaque_rets[old_ret_cnt + i] = opaque_args[maps_to_add[i]];
-					}
-				};
-				current_module->garbage.push_back(node->call.args[0].node);
-				auto opaque_fn_ty = current_module->make_opaque_fn_ty(
-				    curr_fn_ty.args, ret_tys, (vuk::DomainFlags)curr_fn_ty.execute_on, new_cb, node->call.args[0].type()->debug_info.name);
-				auto opaque_fn = current_module->make_declare_fn(opaque_fn_ty);
-				node->call.args[0] = opaque_fn;
-				node->type = { new std::shared_ptr<Type>[ret_tys.size()], ret_tys.size() };
-				std::copy(ret_tys.begin(), ret_tys.end(), node->type.data());
-			}
-		}
 		std::sort(divergence_dependency_scope.begin(), divergence_dependency_scope.end(), [](Node* a, Node* b) { return a->index < b->index; });
 		// build chains (we only care about chains going through divergent/implicit nodes)
 		build_links(divergence_dependency_scope.begin(), divergence_dependency_scope.end(), pass_reads, child_chains, allocator);
