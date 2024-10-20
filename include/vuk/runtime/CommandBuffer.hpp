@@ -214,7 +214,6 @@ namespace vuk {
 	class CommandBuffer {
 	protected:
 		friend struct ExecutableRenderGraph;
-		ExecutableRenderGraph* rg = nullptr;
 		Runtime& ctx;
 		Allocator* allocator;
 		CommandBufferAllocation command_buffer_allocation;
@@ -230,7 +229,7 @@ namespace vuk {
 			std::span<const VkAttachmentReference> color_attachments;
 		};
 		std::optional<RenderPassInfo> ongoing_render_pass;
-		PassInfo* current_pass = nullptr;
+		struct Stream* stream;
 
 		Result<void> current_error = { expected_value };
 
@@ -285,10 +284,7 @@ namespace vuk {
 		Bitset<VUK_MAX_SETS> persistent_sets_to_bind = {};
 		std::pair<VkDescriptorSet, VkDescriptorSetLayout> persistent_sets[VUK_MAX_SETS] = {};
 
-		// for rendergraph
-		CommandBuffer(ExecutableRenderGraph& rg, Runtime& ctx, Allocator& allocator, VkCommandBuffer cb);
-		CommandBuffer(ExecutableRenderGraph& rg, Runtime& ctx, Allocator& allocator, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing);
-
+		CommandBuffer(Stream& stream, Runtime& ctx, Allocator& allocator, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing = {});
 	public:
 		/// @brief Retrieve parent runtime
 		Runtime& get_context() {
@@ -300,6 +296,12 @@ namespace vuk {
 		}
 		/// @brief Retrieve information about the current renderpass
 		const RenderPassInfo& get_ongoing_render_pass() const;
+
+		Stream& get_scheduled_stream() {
+			return *stream;
+		}
+
+		DomainFlagBits get_scheduled_domain() const;
 
 		// command buffer state setting
 		// when a state is set it is persistent for a pass (similar to Vulkan dynamic state) - see documentation

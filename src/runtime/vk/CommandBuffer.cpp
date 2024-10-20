@@ -1,6 +1,7 @@
 #include "vuk/runtime/CommandBuffer.hpp"
 #include "vuk/RenderGraph.hpp"
 #include "vuk/SyncLowering.hpp"
+#include "vuk/runtime/Stream.hpp"
 #include "vuk/runtime/vk/AllocatorHelpers.hpp"
 #include "vuk/runtime/vk/VkRuntime.hpp"
 
@@ -55,23 +56,19 @@ namespace vuk {
 
 	// for rendergraph
 
-	CommandBuffer::CommandBuffer(ExecutableRenderGraph& rg, Runtime& ctx, Allocator& allocator, VkCommandBuffer cb) :
-	    rg(&rg),
+	CommandBuffer::CommandBuffer(Stream& stream, Runtime& ctx, Allocator& allocator, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing) :
+	    stream(&stream),
 	    ctx(ctx),
 	    allocator(&allocator),
 	    command_buffer(cb),
-	    ds_strategy_flags(ctx.default_descriptor_set_strategy) {}
-
-	CommandBuffer::CommandBuffer(ExecutableRenderGraph& rg, Runtime& ctx, Allocator& allocator, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing) :
-	    rg(&rg),
-	    ctx(ctx),
-	    allocator(&allocator),
-	    command_buffer(cb),
-	    ongoing_render_pass(ongoing),
 	    ds_strategy_flags(ctx.default_descriptor_set_strategy) {}
 
 	const CommandBuffer::RenderPassInfo& CommandBuffer::get_ongoing_render_pass() const {
 		return ongoing_render_pass.value();
+	}
+
+	DomainFlagBits CommandBuffer::get_scheduled_domain() const {
+		return stream->domain;
 	}
 
 	CommandBuffer& CommandBuffer::set_descriptor_set_strategy(DescriptorSetStrategyFlags ds_strategy_flags) {
@@ -328,7 +325,11 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, const Buffer& buf, std::span<VertexInputAttributeDescription> viads, uint32_t stride, VertexInputRate input_rate) {
+	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding,
+	                                                 const Buffer& buf,
+	                                                 std::span<VertexInputAttributeDescription> viads,
+	                                                 uint32_t stride,
+	                                                 VertexInputRate input_rate) {
 		VUK_EARLY_RET();
 		assert(binding < VUK_MAX_ATTRIBUTES && "Vertex buffer binding must be smaller than VUK_MAX_ATTRIBUTES.");
 		for (auto& viad : viads) {
@@ -673,8 +674,6 @@ namespace vuk {
 	CommandBuffer& CommandBuffer::clear_image(const ImageAttachment& src, Clear c) {
 		VUK_EARLY_RET();
 
-		assert(rg);
-
 		auto aspect = format_to_aspect(src.format);
 
 		if (!ongoing_render_pass) {
@@ -716,7 +715,6 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::resolve_image(const ImageAttachment& src, const ImageAttachment& dst) {
 		VUK_EARLY_RET();
-		assert(rg);
 		VkImageResolve ir;
 
 		ImageSubresourceLayers isl;
@@ -744,7 +742,6 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::blit_image(const ImageAttachment& src, const ImageAttachment& dst, ImageBlit region, Filter filter) {
 		VUK_EARLY_RET();
-		assert(rg);
 
 		ctx.vkCmdBlitImage(
 		    command_buffer, src.image.image, (VkImageLayout)src.layout, dst.image.image, (VkImageLayout)dst.layout, 1, (VkImageBlit*)&region, (VkFilter)filter);
@@ -754,7 +751,6 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::copy_image(const ImageAttachment& src, const ImageAttachment& dst, ImageCopy region) {
 		VUK_EARLY_RET();
-		assert(rg);
 
 		ctx.vkCmdCopyImage(command_buffer, src.image.image, (VkImageLayout)src.layout, dst.image.image, (VkImageLayout)dst.layout, 1, (VkImageCopy*)&region);
 
@@ -763,7 +759,6 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::copy_buffer_to_image(const Buffer& src, const ImageAttachment& dst, BufferImageCopy bic) {
 		VUK_EARLY_RET();
-		assert(rg);
 
 		ctx.vkCmdCopyBufferToImage(command_buffer, src.buffer, dst.image.image, (VkImageLayout)dst.layout, 1, (VkBufferImageCopy*)&bic);
 
@@ -772,7 +767,6 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::copy_image_to_buffer(const ImageAttachment& src, const Buffer& dst, BufferImageCopy bic) {
 		VUK_EARLY_RET();
-		assert(rg);
 
 		ctx.vkCmdCopyImageToBuffer(command_buffer, src.image.image, (VkImageLayout)src.layout, dst.buffer, 1, (VkBufferImageCopy*)&bic);
 
@@ -821,7 +815,6 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::image_barrier(const ImageAttachment& src, vuk::Access src_acc, vuk::Access dst_acc, uint32_t mip_level, uint32_t level_count) {
 		VUK_EARLY_RET();
-		assert(rg);
 
 		// TODO: fill these out from attachment
 		VkImageSubresourceRange isr = {};

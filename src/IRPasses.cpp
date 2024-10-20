@@ -955,9 +955,7 @@ namespace vuk {
 		while (process_queue.size() > 0) {
 			auto pop_idx = process_queue.back();
 			auto& execable = schedule_items[pop_idx];
-			ScheduledItem item{ .execable = execable,
-				                  .scheduled_domain =
-				                      execable->scheduling_info ? pick_first_domain(execable->scheduling_info->required_domains) : vuk::DomainFlagBits::eAny };
+			ScheduledItem item{ .execable = execable, .scheduled_domain = vuk::DomainFlagBits::eAny };
 			if (execable->kind != Node::CONSTRUCT) { // we use def nodes for deps, but we don't want to schedule them later as their ordering doesn't matter
 				auto it = scheduled_execables.emplace(item);
 				it->execable->scheduled_item = &*it;
@@ -993,21 +991,31 @@ namespace vuk {
 
 	void Compiler::queue_inference() {
 		// queue inference pass
-		DomainFlags last_domain = DomainFlagBits::eDevice;
+		DomainFlagBits last_domain = DomainFlagBits::eDevice;
 		auto propagate_domain = [&last_domain](Node* node) {
-			if (!node) {
+			if (!node || !node->scheduled_item) {
 				return;
 			}
-			if (!node->scheduling_info) {
-				return;
-			}
-			auto& domain = node->scheduling_info->required_domains;
-			if (domain != last_domain && domain != DomainFlagBits::eDevice && domain != DomainFlagBits::eAny) {
-				last_domain = domain;
-			}
-			if ((last_domain != DomainFlagBits::eDevice && last_domain != DomainFlagBits::eAny) &&
-			    (domain == DomainFlagBits::eDevice || domain == DomainFlagBits::eAny)) {
-				domain = last_domain;
+			auto& sched_domain = node->scheduled_item->scheduled_domain;
+
+			// this node has not yet been scheduled
+			if (sched_domain == DomainFlagBits::eAny) {
+				if ((last_domain != DomainFlagBits::eDevice && last_domain != DomainFlagBits::eAny) &&
+				    !node->scheduling_info) { // we have prop info and no scheduling info
+					sched_domain = last_domain;
+				} else if ((last_domain == DomainFlagBits::eDevice || last_domain == DomainFlagBits::eAny) &&
+				           node->scheduling_info) { // we have scheduling info but no prop info
+					sched_domain = pick_first_domain(node->scheduling_info->required_domains);
+				} else if ((last_domain != DomainFlagBits::eDevice && last_domain != DomainFlagBits::eAny) && node->scheduling_info) { // we have both
+					auto intersection = last_domain & node->scheduling_info->required_domains;
+					if (intersection.m_mask == 0) { // no intersection, we pick required
+						sched_domain = pick_first_domain(node->scheduling_info->required_domains);
+					} else { // there was intersection, pick that
+						sched_domain = (DomainFlagBits)intersection.m_mask;
+					}
+				}
+			} else { // we have already scheduled this -> propagate
+				last_domain = sched_domain;
 			}
 		};
 
@@ -1113,7 +1121,7 @@ namespace vuk {
 	Result<void> Compiler::validate_read_undefined() {
 		for (auto node : impl->nodes) {
 			switch (node->kind) {
-			case Node::CONSTRUCT: {                // CONSTRUCT discards -
+			case Node::CONSTRUCT: {                                                         // CONSTRUCT discards -
 				if (node->type[0]->kind != Type::ARRAY_TY && node->links->reads.size() > 0) { // we are trying to read from it :(
 					auto& offender = node->links->reads.to_span(impl->pass_reads)[0];
 					return { expected_error,

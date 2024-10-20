@@ -1320,7 +1320,7 @@ namespace vuk {
 					// run the user cb!
 					std::vector<void*, short_alloc<void*>> opaque_rets(*impl->arena_);
 					if (node->call.args[0].type()->kind == Type::OPAQUE_FN_TY) {
-						CommandBuffer cobuf(*this, ctx, alloc, vk_rec->cbuf);
+						CommandBuffer cobuf(*dst_stream, ctx, alloc, vk_rec->cbuf);
 						if (!node->call.args[0].type()->debug_info.name.empty()) {
 							ctx.begin_region(vk_rec->cbuf, node->call.args[0].type()->debug_info.name.c_str());
 						}
