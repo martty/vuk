@@ -33,6 +33,9 @@ namespace vuk {
 		ss << "digraph vuk {\n";
 		ss << "rankdir=\"TB\"\nnewrank = true\nnode[shape = rectangle width = 0 height = 0 margin = 0]\n";
 		for (auto node : nodes) {
+			if (node->kind == Node::GARBAGE) {
+				continue;
+			}
 			if (node->kind == Node::CONSTANT) {
 				if (node->type[0]->kind == Type::INTEGER_TY || node->type[0]->kind == Type::MEMORY_TY) {
 					continue;
@@ -351,6 +354,7 @@ namespace vuk {
 		};
 
 		auto add_write = [&](Node* node, Ref& parm, size_t index, Subrange::Image requested = {}) -> void {
+			assert(parm.node->kind != Node::GARBAGE);
 			if (!parm.node->links) {
 				assert(do_ssa);
 				return;
@@ -372,6 +376,7 @@ namespace vuk {
 		};
 
 		auto add_read = [&](Node* node, Ref& parm, size_t index) {
+			assert(parm.node->kind != Node::GARBAGE);
 			if (!parm.node->links) {
 				assert(do_ssa);
 				return;
@@ -520,6 +525,9 @@ namespace vuk {
 
 		case Node::ACQUIRE_NEXT_IMAGE:
 			first(node).link().def = first(node);
+			break;
+
+		case Node::GARBAGE:
 			break;
 
 		default:
@@ -1246,6 +1254,7 @@ namespace vuk {
 						opaque_rets[old_ret_cnt + i] = opaque_args[maps_to_add[i]];
 					}
 				};
+				current_module->garbage.push_back(node->call.args[0].node);
 				auto opaque_fn_ty = current_module->make_opaque_fn_ty(
 				    curr_fn_ty.args, ret_tys, (vuk::DomainFlags)curr_fn_ty.execute_on, new_cb, node->call.args[0].type()->debug_info.name);
 				auto opaque_fn = current_module->make_declare_fn(opaque_fn_ty);
@@ -1318,6 +1327,10 @@ namespace vuk {
 			for (auto& node : to_garbage) {
 				m->destroy_node(node);
 			}
+			for (auto& node : m->garbage) {
+				m->destroy_node(node);
+			}
+			m->garbage.clear();
 			// implicit link the module
 			VUK_DO_OR_RETURN(implicit_linking(m->op_arena.begin(), m->op_arena.end(), allocator));
 		}

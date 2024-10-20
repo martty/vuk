@@ -458,6 +458,8 @@ namespace vuk {
 				return "converge";
 			case INDIRECT_DEPEND:
 				return "indir_dep";
+			case GARBAGE:
+				return "garbage";
 			}
 			assert(0);
 			return "";
@@ -1020,9 +1022,17 @@ namespace vuk {
 
 			auto it = op_arena.get_iterator(node);
 			if (it != op_arena.end()) {
+#ifdef VUK_GARBAGE_SAN
+				node->kind = Node::GARBAGE;
+				node->generic_node.arg_count = 0;
+				node->type = {};
+#else
 				op_arena.erase(it);
+#endif
 			} else {
 				node->kind = Node::GARBAGE;
+				node->generic_node.arg_count = 0;
+				node->type = {};
 			}
 		}
 
@@ -1175,13 +1185,10 @@ namespace vuk {
 		Ref make_slice(Ref image, Ref base_level, Ref level_count, Ref base_layer, Ref layer_count) {
 			auto stripped = Type::stripped(image.type());
 			auto ty = new std::shared_ptr<Type>[2](stripped, stripped);
-			return first(emplace_op(Node{ .kind = Node::SLICE,
-			                              .type = std::span{ ty, 2 },
-			                              .slice = { .image = image,
-			                                         .base_level = base_level,
-			                                         .level_count = level_count,
-			                                         .base_layer = base_layer,
-			                                         .layer_count = layer_count } }));
+			return first(emplace_op(
+			    Node{ .kind = Node::SLICE,
+			          .type = std::span{ ty, 2 },
+			          .slice = { .image = image, .base_level = base_level, .level_count = level_count, .base_layer = base_layer, .layer_count = layer_count } }));
 		}
 
 		Ref make_converge(std::span<Ref> deps, std::span<char> write) {

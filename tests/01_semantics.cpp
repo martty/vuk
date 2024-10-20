@@ -34,7 +34,7 @@ auto make_binary_computation(std::string name, std::string& trace) {
 TEST_CASE("conversion to SSA") {
 	std::string trace = "";
 	auto& oa = current_module;
-	
+
 	auto decl = declare_buf("_a", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly });
 	make_unary_void("a", trace)(decl);
 	make_unary_void("b", trace)(decl);
@@ -66,16 +66,18 @@ TEST_CASE("graph is cleaned up after submit") {
 	CHECK(current_module->op_arena.size() == 0);
 
 	auto a = make_unary_computation("a", trace)(declare_buf("_a", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
-	//auto b = make_unary_computation("b", trace)(declare_buf("_b", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
+	// auto b = make_unary_computation("b", trace)(declare_buf("_b", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
 
-	//auto d = make_binary_computation("d", trace)(a, b); // d->a, d->b
-	auto e = make_unary_computation("e", trace)(a);     // e->a
+	// auto d = make_binary_computation("d", trace)(a, b); // d->a, d->b
+	auto e = make_unary_computation("e", trace)(a); // e->a
 	e.submit(*test_context.allocator, test_context.compiler);
 
 	for (auto& op : current_module->op_arena) {
 		fmt::println("{}", op.kind_to_sv());
 	}
+#ifndef VUK_GARBAGE_SAN
 	CHECK(current_module->op_arena.size() == 2);
+#endif
 }
 
 TEST_CASE("computation is never duplicated") {
@@ -106,7 +108,6 @@ TEST_CASE("computation is never duplicated 2") {
 	CHECK(trace == "a b d");
 }
 
-
 TEST_CASE("computation is never duplicated 3") {
 	std::string trace = "";
 
@@ -124,7 +125,6 @@ TEST_CASE("computation is never duplicated 3") {
 	trace = trace.substr(0, trace.size() - 1);
 	CHECK(trace == "a b d");
 }
-
 
 TEST_CASE("not moving Values will emit splices") {
 	std::string trace = "";
@@ -275,7 +275,6 @@ TEST_CASE("scheduling with submitted") {
 			CHECK(execution == "ww");
 			execution = "";
 		}
-		
 	}
 }
 
@@ -312,7 +311,9 @@ TEST_CASE("multi-queue buffers") {
 			execution = "";
 		}
 		{
+#ifndef VUK_GARBAGE_SAN
 			CHECK(current_module->op_arena.size() == 2);
+#endif
 			auto written = write(discard_buf("src0", **buf0));
 			written.wait(*test_context.allocator, test_context.compiler);
 			read(std::move(written)).wait(*test_context.allocator, test_context.compiler);
@@ -320,7 +321,9 @@ TEST_CASE("multi-queue buffers") {
 			execution = "";
 		}
 		{
+#ifndef VUK_GARBAGE_SAN
 			CHECK(current_module->op_arena.size() == 1);
+#endif
 			auto written = write(discard_buf("src0", **buf0));
 			written.wait(*test_context.allocator, test_context.compiler);
 			write(read(std::move(written))).wait(*test_context.allocator, test_context.compiler);
@@ -328,21 +331,27 @@ TEST_CASE("multi-queue buffers") {
 			execution = "";
 		}
 		{
+#ifndef VUK_GARBAGE_SAN
 			CHECK(current_module->op_arena.size() == 1);
+#endif
 			auto written = write(discard_buf("src0", **buf0));
 			read(written).wait(*test_context.allocator, test_context.compiler);
 			CHECK(execution == "wr");
 			execution = "";
 		}
 		{
+#ifndef VUK_GARBAGE_SAN
 			CHECK(current_module->op_arena.size() == 2);
+#endif
 			auto written = write(discard_buf("src0", **buf0));
 			read(std::move(written)).wait(*test_context.allocator, test_context.compiler);
 			CHECK(execution == "wr");
 			execution = "";
 		}
 		{
+#ifndef VUK_GARBAGE_SAN
 			CHECK(current_module->op_arena.size() == 1);
+#endif
 			auto written = write(discard_buf("src0", **buf0));
 			write(read(std::move(written))).wait(*test_context.allocator, test_context.compiler);
 			CHECK(execution == "wrw");
@@ -384,9 +393,8 @@ TEST_CASE("multi return pass") {
 	}
 }
 
-
-#include <source_location>
 #include <iostream>
+#include <source_location>
 
 struct S {
 	std::source_location location;
