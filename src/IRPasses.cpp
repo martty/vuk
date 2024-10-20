@@ -1114,7 +1114,7 @@ namespace vuk {
 		for (auto node : impl->nodes) {
 			switch (node->kind) {
 			case Node::CONSTRUCT: {                // CONSTRUCT discards -
-				if (node->links->reads.size() > 0) { // we are trying to read from it :(
+				if (node->type[0]->kind != Type::ARRAY_TY && node->links->reads.size() > 0) { // we are trying to read from it :(
 					auto& offender = node->links->reads.to_span(impl->pass_reads)[0];
 					return { expected_error,
 						       RenderGraphException{ format_graph_message(Level::eError, offender.node, "tried to read something that was never written.") } };
