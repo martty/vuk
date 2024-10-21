@@ -1644,6 +1644,12 @@ namespace vuk {
 			case Node::CONVERGE: {
 				if (sched.process(item)) {
 					auto base = node->converge.diverged[0];
+					if (base.link().urdef.node->kind == Node::SLICE) {
+						base = base.link().urdef.node->slice.image;
+					} else {
+						assert(0);
+					}
+					auto sliced = ImageAttachment(*(ImageAttachment*)sched.get_value(base));
 
 					// half sync
 					for (size_t i = 0; i < node->converge.diverged.size(); i++) {
@@ -1662,7 +1668,7 @@ namespace vuk {
 					fmt::print("\n");
 #endif
 
-					sched.done(node, item.scheduled_stream, sched.get_value(base)); // converge doesn't execute
+					sched.done(node, item.scheduled_stream, sliced); // converge doesn't execute
 				} else {
 					for (size_t i = 0; i < node->converge.diverged.size(); i++) {
 						sched.schedule_dependency(node->converge.diverged[i], node->converge.write[i] ? RW::eWrite : RW::eRead);

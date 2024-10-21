@@ -1396,9 +1396,6 @@ namespace vuk {
 			auto arg_it = args.begin();
 			for (auto& r : replaces) {
 				int num_replaces = 0;
-				if (r.needle.node->kind == Node::SLICE) {
-					printf("");
-				}
 				while (arg_it != args.end() && **arg_it < r.needle) {
 					++arg_it;
 				}

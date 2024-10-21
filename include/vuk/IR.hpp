@@ -19,7 +19,7 @@
 #include <unordered_map>
 #include <vector>
 
-//#define VUK_GARBAGE_SAN
+// #define VUK_GARBAGE_SAN
 
 namespace vuk {
 	struct TypeDebugInfo {
@@ -372,6 +372,7 @@ namespace vuk {
 			struct : Variable {
 				std::span<Ref> diverged;
 				std::span<bool> write;
+				Subrange::Image range;
 			} converge;
 			struct : Fixed<3> {
 				const Ref source_ms;
@@ -1193,6 +1194,9 @@ namespace vuk {
 			          .slice = { .image = image, .base_level = base_level, .level_count = level_count, .base_layer = base_layer, .layer_count = layer_count } }));
 		}
 
+		// slice splits a range into two halves
+		// converge is essentially an unslice -> it returns back to before the slice was made
+		// since a slice source is always a single range, converge produces a single range too
 		Ref make_converge(std::span<Ref> deps, std::span<char> write) {
 			auto stripped = Type::stripped(deps[0].type());
 			auto ty = new std::shared_ptr<Type>[1](stripped);
