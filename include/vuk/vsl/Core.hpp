@@ -146,17 +146,13 @@ namespace vuk {
 		auto blit = make_pass("blit image", [=](CommandBuffer& cbuf, VUK_IA(Access::eTransferRead) src, VUK_IA(Access::eTransferWrite) dst) {
 			ImageBlit region = {};
 			region.srcOffsets[0] = Offset3D{};
-			region.srcOffsets[1] = Offset3D{
-				(int32_t)src->extent.width,
-				(int32_t)src->extent.height,
-				(int32_t)src->extent.depth,
-			};
+			region.srcOffsets[1] = Offset3D{ std::max(static_cast<int32_t>(src->extent.width) >> src->base_level, 1),
+				                               std::max(static_cast<int32_t>(src->extent.height) >> src->base_level, 1),
+				                               std::max(static_cast<int32_t>(src->extent.depth) >> src->base_level, 1) };
 			region.dstOffsets[0] = Offset3D{};
-			region.dstOffsets[1] = Offset3D{
-				(int32_t)dst->extent.width,
-				(int32_t)dst->extent.height,
-				(int32_t)dst->extent.depth,
-			};
+			region.dstOffsets[1] = Offset3D{ std::max(static_cast<int32_t>(dst->extent.width) >> dst->base_level, 1),
+				                               std::max(static_cast<int32_t>(dst->extent.height) >> dst->base_level, 1),
+				                               std::max(static_cast<int32_t>(dst->extent.depth) >> dst->base_level, 1) };
 			region.srcSubresource.aspectMask = format_to_aspect(src->format);
 			region.srcSubresource.baseArrayLayer = src->base_layer;
 			region.srcSubresource.layerCount = src->layer_count;
