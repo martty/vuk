@@ -41,8 +41,7 @@ namespace vuk {
 					continue;
 				}
 			}
-			if (node->kind == Node::PLACEHOLDER || (bridge_splices && node->kind == Node::SPLICE) || (bridge_slices && node->kind == Node::SLICE) ||
-			    node->kind == Node::INDIRECT_DEPEND) {
+			if (node->kind == Node::PLACEHOLDER || (bridge_splices && node->kind == Node::SPLICE) || (bridge_slices && node->kind == Node::SLICE)) {
 				continue;
 			}
 
@@ -134,9 +133,6 @@ namespace vuk {
 				} else if (bridge_splices && arg.node->kind == Node::SPLICE) { // disabled
 					auto bridged_arg = arg.node->splice.src[arg.index];
 					ss << uintptr_t(bridged_arg.node) << " :r" << bridged_arg.index << " -> " << uintptr_t(node) << " :a" << i << " :n [color=blue]\n";
-				} else if (arg.node->kind == Node::INDIRECT_DEPEND) { // bridge indirect depends (connect to node)
-					auto bridged_arg = arg.node->indirect_depend.rref;
-					ss << uintptr_t(bridged_arg.node) << " -> " << uintptr_t(node) << " :a" << i << " :n [color=yellow]\n";
 				} else if (bridge_slices && arg.node->kind == Node::SLICE) { // bridge slices
 					auto bridged_arg = arg.node->slice.image;
 					if (bridged_arg.node->kind == Node::SPLICE) {
@@ -506,22 +502,6 @@ namespace vuk {
 				}
 			}
 			break;
-
-		case Node::INDIRECT_DEPEND: {
-			auto rref = node->indirect_depend.rref;
-			Ref true_ref;
-			auto count = rref.node->generic_node.arg_count;
-			if (count != (uint8_t)~0u) {
-				true_ref = rref.node->fixed_node.args[rref.index];
-			} else {
-				true_ref = rref.node->variable_node.args[rref.index];
-			}
-			first(node).link().def = first(node);
-			assert(true_ref.link().next == nullptr);
-			true_ref.link().next = &first(node).link();
-			first(node).link().prev = &true_ref.link();
-			break;
-		}
 
 		case Node::ACQUIRE_NEXT_IMAGE:
 			first(node).link().def = first(node);

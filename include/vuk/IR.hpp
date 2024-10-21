@@ -310,7 +310,6 @@ namespace vuk {
 			ACQUIRE_NEXT_IMAGE,
 			CAST,
 			MATH_BINARY,
-			INDIRECT_DEPEND, // utility for dependencies on writes
 			GARBAGE
 		} kind;
 		uint8_t flag = 0;
@@ -415,9 +414,6 @@ namespace vuk {
 				Ref b;
 				BinOp op;
 			} math_binary;
-			struct : Fixed<1> {
-				Ref rref; // reverse Ref
-			} indirect_depend;
 			struct {
 				uint8_t arg_count;
 			} generic_node;
@@ -459,8 +455,6 @@ namespace vuk {
 				return "slice";
 			case CONVERGE:
 				return "converge";
-			case INDIRECT_DEPEND:
-				return "indir_dep";
 			case GARBAGE:
 				return "garbage";
 			}
@@ -1291,25 +1285,6 @@ namespace vuk {
 		Ref make_acquire(std::shared_ptr<Type> type, AcquireRelease* acq_rel, T value) {
 			auto val_ptr = new T(value);
 			return make_acquire(type, acq_rel, 0, (void*)val_ptr);
-		}
-
-		Ref make_indirect_depend(Node* node, size_t index) {
-			Ref true_ref;
-			std::shared_ptr<Type> type = nullptr;
-			auto count = node->generic_node.arg_count;
-			if (count != (uint8_t)~0u) {
-				true_ref = node->fixed_node.args[index];
-			} else {
-				if (node->kind == Node::CALL) {
-					type = node->call.args[0].type()->opaque_fn.args[index - 1];
-				}
-				true_ref = node->variable_node.args[index];
-			}
-			if (!type) {
-				type = true_ref.type();
-			}
-			auto ty = new std::shared_ptr<Type>[1](type);
-			return first(emplace_op(Node{ .kind = Node::INDIRECT_DEPEND, .type = std::span{ ty, 1 }, .indirect_depend = { .rref = { node, index } } }));
 		}
 
 		// MATH
