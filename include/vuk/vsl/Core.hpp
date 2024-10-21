@@ -134,39 +134,45 @@ namespace vuk {
 	}
 
 	inline Value<ImageAttachment> clear_image(Value<ImageAttachment> in, Clear clear_value, VUK_CALLSTACK) {
-		auto clear = make_pass("clear image", [=](CommandBuffer& cbuf, VUK_IA(Access::eClear) dst) {
-			cbuf.clear_image(dst, clear_value);
-			return dst;
-		});
+		auto clear = make_pass(
+		    "clear image",
+		    [=](CommandBuffer& cbuf, VUK_IA(Access::eClear) dst) {
+			    cbuf.clear_image(dst, clear_value);
+			    return dst;
+		    },
+		    DomainFlagBits::eGraphicsQueue);
 
 		return clear(std::move(in), VUK_CALL);
 	}
 
 	inline Value<ImageAttachment> blit_image(Value<ImageAttachment> src, Value<ImageAttachment> dst, Filter filter, VUK_CALLSTACK) {
-		auto blit = make_pass("blit image", [=](CommandBuffer& cbuf, VUK_IA(Access::eTransferRead) src, VUK_IA(Access::eTransferWrite) dst) {
-			ImageBlit region = {};
-			region.srcOffsets[0] = Offset3D{};
-			region.srcOffsets[1] = Offset3D{ std::max(static_cast<int32_t>(src->extent.width) >> src->base_level, 1),
-				                               std::max(static_cast<int32_t>(src->extent.height) >> src->base_level, 1),
-				                               std::max(static_cast<int32_t>(src->extent.depth) >> src->base_level, 1) };
-			region.dstOffsets[0] = Offset3D{};
-			region.dstOffsets[1] = Offset3D{ std::max(static_cast<int32_t>(dst->extent.width) >> dst->base_level, 1),
-				                               std::max(static_cast<int32_t>(dst->extent.height) >> dst->base_level, 1),
-				                               std::max(static_cast<int32_t>(dst->extent.depth) >> dst->base_level, 1) };
-			region.srcSubresource.aspectMask = format_to_aspect(src->format);
-			region.srcSubresource.baseArrayLayer = src->base_layer;
-			region.srcSubresource.layerCount = src->layer_count;
-			region.srcSubresource.mipLevel = src->base_level;
-			assert(src->level_count == 1);
-			region.dstSubresource.baseArrayLayer = dst->base_layer;
-			region.dstSubresource.layerCount = dst->layer_count;
-			region.dstSubresource.mipLevel = dst->base_level;
-			assert(dst->level_count == 1);
-			region.dstSubresource.aspectMask = format_to_aspect(dst->format);
+		auto blit = make_pass(
+		    "blit image",
+		    [=](CommandBuffer& cbuf, VUK_IA(Access::eTransferRead) src, VUK_IA(Access::eTransferWrite) dst) {
+			    ImageBlit region = {};
+			    region.srcOffsets[0] = Offset3D{};
+			    region.srcOffsets[1] = Offset3D{ std::max(static_cast<int32_t>(src->extent.width) >> src->base_level, 1),
+				                                   std::max(static_cast<int32_t>(src->extent.height) >> src->base_level, 1),
+				                                   std::max(static_cast<int32_t>(src->extent.depth) >> src->base_level, 1) };
+			    region.dstOffsets[0] = Offset3D{};
+			    region.dstOffsets[1] = Offset3D{ std::max(static_cast<int32_t>(dst->extent.width) >> dst->base_level, 1),
+				                                   std::max(static_cast<int32_t>(dst->extent.height) >> dst->base_level, 1),
+				                                   std::max(static_cast<int32_t>(dst->extent.depth) >> dst->base_level, 1) };
+			    region.srcSubresource.aspectMask = format_to_aspect(src->format);
+			    region.srcSubresource.baseArrayLayer = src->base_layer;
+			    region.srcSubresource.layerCount = src->layer_count;
+			    region.srcSubresource.mipLevel = src->base_level;
+			    assert(src->level_count == 1);
+			    region.dstSubresource.baseArrayLayer = dst->base_layer;
+			    region.dstSubresource.layerCount = dst->layer_count;
+			    region.dstSubresource.mipLevel = dst->base_level;
+			    assert(dst->level_count == 1);
+			    region.dstSubresource.aspectMask = format_to_aspect(dst->format);
 
-			cbuf.blit_image(src, dst, region, filter);
-			return dst;
-		});
+			    cbuf.blit_image(src, dst, region, filter);
+			    return dst;
+		    },
+		    DomainFlagBits::eGraphicsQueue);
 
 		return blit(std::move(src), std::move(dst), VUK_CALL);
 	}
@@ -176,10 +182,13 @@ namespace vuk {
 		src.same_shape_as(dst);
 		dst->sample_count = Samples::e1;
 
-		auto resolve = make_pass("resolve image", [=](CommandBuffer& cbuf, VUK_IA(Access::eTransferRead) src, VUK_IA(Access::eTransferWrite) dst) {
-			cbuf.resolve_image(src, dst);
-			return dst;
-		});
+		auto resolve = make_pass(
+		    "resolve image",
+		    [=](CommandBuffer& cbuf, VUK_IA(Access::eTransferRead) src, VUK_IA(Access::eTransferWrite) dst) {
+			    cbuf.resolve_image(src, dst);
+			    return dst;
+		    },
+		    DomainFlagBits::eGraphicsQueue);
 
 		return resolve(std::move(src), std::move(dst), VUK_CALL);
 	}
