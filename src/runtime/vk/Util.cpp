@@ -41,22 +41,20 @@ namespace vuk {
 	}
 
 	Result<void> UntypedValue::submit(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options) {
-		if (node->acqrel->status == Signal::Status::eDisarmed && node->get_node()->kind == Node::SPLICE) { // splice -> release if unsubmitted
-			release();
-		}
-
-		auto& acqrel = node->acqrel;
-		if (acqrel->status == Signal::Status::eHostAvailable || acqrel->status == Signal::Status::eSynchronizable) {
+		if (node->acqrel->status == Signal::Status::eHostAvailable || node->acqrel->status == Signal::Status::eSynchronizable) {
 			compiler.reset();
 			return { expected_value }; // nothing to do
 		} else {
+			if (node->get_node()->splice.dst_access == Access::eNone && node->get_node()->splice.dst_domain == DomainFlagBits::eAny) {
+				release();
+			}
 			auto erg = compiler.link(std::span{ &node, 1 }, options);
 			if (!erg) {
 				return erg;
 			}
 			std::pair v = { &allocator, &*erg };
 			VUK_DO_OR_RETURN(execute_submit(allocator, std::span{ &v, 1 }));
-			assert(acqrel->status != Signal::Status::eDisarmed);
+			assert(node->acqrel->status != Signal::Status::eDisarmed);
 			compiler.reset();
 			return { expected_value };
 		}

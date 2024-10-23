@@ -308,7 +308,7 @@ TEST_CASE("multi-queue buffers") {
 	}
 	{
 #ifndef VUK_GARBAGE_SAN
-		CHECK(current_module->op_arena.size() == 1);
+		CHECK(current_module->op_arena.size() == 2);
 #endif
 		auto written = write(discard_buf("src0", **buf0));
 		written.wait(*test_context.allocator, test_context.compiler);
@@ -318,7 +318,7 @@ TEST_CASE("multi-queue buffers") {
 	}
 	{
 #ifndef VUK_GARBAGE_SAN
-		CHECK(current_module->op_arena.size() == 1);
+		CHECK(current_module->op_arena.size() == 2);
 #endif
 		auto written = write(discard_buf("src0", **buf0));
 		read(written).wait(*test_context.allocator, test_context.compiler);

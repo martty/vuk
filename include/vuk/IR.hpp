@@ -304,8 +304,6 @@ namespace vuk {
 			RESOLVE,
 			SIGNAL,
 			WAIT,
-			ACQUIRE,
-			RELEASE,
 			SPLICE, // for joining subgraphs
 			ACQUIRE_NEXT_IMAGE,
 			CAST,
@@ -386,22 +384,12 @@ namespace vuk {
 				const Ref dst;
 				Signal* signal;
 			} wait;
-			struct : Fixed<0> {
-				void* value;
-				AcquireRelease* acquire;
-				size_t index;
-			} acquire;
-			struct : Fixed<1> {
-				Ref src;
-				AcquireRelease* release;
-				Access dst_access;
-				DomainFlagBits dst_domain;
-				void* value;
-			} release;
 			struct : Variable {
 				std::span<Ref> src;
 				AcquireRelease* rel_acq;
 				std::span<void*> values;
+				Access dst_access;
+				DomainFlagBits dst_domain;
 			} splice;
 			struct : Fixed<1> {
 				Ref swapchain;
@@ -443,12 +431,8 @@ namespace vuk {
 				return "call";
 			case EXTRACT:
 				return "extract";
-			case ACQUIRE:
-				return "acquire";
 			case SPLICE:
 				return "splice";
-			case RELEASE:
-				return "release";
 			case MATH_BINARY:
 				return "math_b";
 			case SLICE:
@@ -515,7 +499,6 @@ namespace vuk {
 
 	inline Result<RefOrValue, CannotBeConstantEvaluated> get_def(Ref ref) {
 		switch (ref.node->kind) {
-		case Node::ACQUIRE:
 		case Node::CONSTRUCT:
 		case Node::CONSTANT:
 		case Node::ACQUIRE_NEXT_IMAGE:
@@ -539,12 +522,6 @@ namespace vuk {
 			auto composite = get_def(ref.node->extract.composite);
 			return composite;
 		}
-		case Node::RELEASE:
-			if (ref.node->release.release == nullptr || ref.node->release.release->status == Signal::Status::eDisarmed) {
-				return get_def(ref.node->release.src);
-			} else {
-				return { expected_value, RefOrValue::from_value(ref.node->release.value) };
-			}
 		default:
 			return { expected_error, CannotBeConstantEvaluated{ ref } };
 		}
@@ -678,9 +655,6 @@ namespace vuk {
 		}
 		case Node::CONSTRUCT: {
 			return eval<T>(ref.node->construct.args[0]);
-		}
-		case Node::ACQUIRE: {
-			return { expected_value, static_cast<T>(ref.node->acquire.value) };
 		}
 		case Node::SPLICE: {
 			if (ref.node->splice.rel_acq->status == Signal::Status::eDisarmed) {
@@ -1254,37 +1228,39 @@ namespace vuk {
 			return emplace_op(n);
 		}
 
-		Node* make_release(Ref src, AcquireRelease* acq_rel, Access dst_access, DomainFlagBits dst_domain) {
-			auto ty = new std::shared_ptr<Type>[1](Type::stripped(src.type()));
-			return emplace_op(Node{ .kind = Node::RELEASE,
-			                        .type = std::span{ ty, 1 },
-			                        .release = { .src = src, .release = acq_rel, .dst_access = dst_access, .dst_domain = dst_domain } });
-		}
-
-		Node* make_splice(Node* src, AcquireRelease* acq_rel) {
+		Node* make_splice(Node* src, AcquireRelease* acq_rel, Access dst_access = Access::eNone, DomainFlagBits dst_domain = DomainFlagBits::eAny) {
 			Ref* args_ptr = new Ref[src->type.size()];
 			auto tys = new std::shared_ptr<Type>[src->type.size()];
 			for (size_t i = 0; i < src->type.size(); i++) {
 				args_ptr[i] = Ref{ src, i };
 				tys[i] = Type::stripped(src->type[i]);
 			}
-			return emplace_op(Node{
-			    .kind = Node::SPLICE, .type = std::span{ tys, src->type.size() }, .splice = { .src = std::span{ args_ptr, src->type.size() }, .rel_acq = acq_rel } });
+			return emplace_op(
+			    Node{ .kind = Node::SPLICE,
+			          .type = std::span{ tys, src->type.size() },
+			          .splice = { .src = std::span{ args_ptr, src->type.size() }, .rel_acq = acq_rel, .dst_access = dst_access, .dst_domain = dst_domain } });
+		}
+
+		Ref make_ref_splice(Ref src, AcquireRelease* acq_rel, Access dst_access = Access::eNone, DomainFlagBits dst_domain = DomainFlagBits::eAny) {
+			Ref* args_ptr = new Ref[1]{ src };
+			auto tys = new std::shared_ptr<Type>[1]{ src.type() };
+			return first(emplace_op(
+			    Node{ .kind = Node::SPLICE,
+			          .type = std::span{ tys, 1 },
+			          .splice = { .src = std::span{ args_ptr, 1 }, .rel_acq = acq_rel, .dst_access = dst_access, .dst_domain = dst_domain } }));
+		}
+
+		template<class T>
+		Ref acquire(std::shared_ptr<Type> type, AcquireRelease* acq_rel, T value) {
+			auto val_ptr = new T(value);
+
+			auto tys = new std::shared_ptr<Type>[1]{ type };
+			auto vals = new void*[1]{ val_ptr };
+			return first(emplace_op(Node{ .kind = Node::SPLICE, .type = std::span{ tys, 1 }, .splice = { .rel_acq = acq_rel, .values = std::span{ vals, 1 } } }));
 		}
 
 		Node* copy_node(Node* node) {
 			return emplace_op(*node);
-		}
-
-		Ref make_acquire(std::shared_ptr<Type> type, AcquireRelease* acq_rel, size_t index, void* value) {
-			auto ty = new std::shared_ptr<Type>[1](type);
-			return first(emplace_op(Node{ .kind = Node::ACQUIRE, .type = std::span{ ty, 1 }, .acquire = { .value = value, .acquire = acq_rel, .index = index } }));
-		}
-
-		template<class T>
-		Ref make_acquire(std::shared_ptr<Type> type, AcquireRelease* acq_rel, T value) {
-			auto val_ptr = new T(value);
-			return make_acquire(type, acq_rel, 0, (void*)val_ptr);
 		}
 
 		// MATH
@@ -1301,54 +1277,64 @@ namespace vuk {
 	struct ExtNode {
 		ExtNode(Node* node, std::vector<std::shared_ptr<ExtNode>> deps) : deps(std::move(deps)) {
 			acqrel = std::make_unique<AcquireRelease>();
-			if (node->kind != Node::RELEASE && node->kind != Node::ACQUIRE) {
-				this->node = current_module->make_splice(node, acqrel.get());
-			} else {
-				this->node = node;
-			}
+			this->node = current_module->make_splice(node, acqrel.get());
 
 			source_module = current_module;
 		}
 
 		ExtNode(Node* node, std::shared_ptr<ExtNode> dep) {
 			acqrel = std::make_unique<AcquireRelease>();
-			if (node->kind != Node::RELEASE && node->kind != Node::ACQUIRE) {
-				this->node = current_module->make_splice(node, acqrel.get());
-			} else {
-				this->node = node;
-			}
+			this->node = current_module->make_splice(node, acqrel.get());
 
 			deps.push_back(std::move(dep));
 
 			source_module = current_module;
 		}
 
+		ExtNode(Ref ref, std::shared_ptr<ExtNode> dep, Access access = Access::eNone, DomainFlagBits domain = DomainFlagBits::eAny) {
+			acqrel = std::make_unique<AcquireRelease>();
+			this->node = current_module->make_ref_splice(ref, acqrel.get(), access, domain).node;
+
+			deps.push_back(std::move(dep));
+
+			source_module = current_module;
+		}
+		// for releases
+		ExtNode(Node* node, std::shared_ptr<ExtNode> dep, Access access, DomainFlagBits domain) {
+			acqrel = std::make_unique<AcquireRelease>();
+			this->node = current_module->make_splice(node, acqrel.get(), access, domain);
+
+			deps.push_back(std::move(dep));
+
+			source_module = current_module;
+		}
+
+		// for acquires - adopt the node
+		ExtNode(Node* node, ResourceUse use) : node(node) {
+			acqrel = std::make_unique<AcquireRelease>();
+			acqrel->status = Signal::Status::eHostAvailable;
+			acqrel->last_use.resize(1);
+			acqrel->last_use[0] = use;
+
+			node->splice.rel_acq = acqrel.get();
+
+			source_module = current_module;
+		}
+
 		~ExtNode() {
 			if (acqrel) {
-				if (node->kind == Node::SPLICE) {
-					node->splice.rel_acq = nullptr;
-					for (auto i = 0; i < node->splice.values.size(); i++) {
-						auto& v = node->splice.values[i];
-						if (node->type[i]->hash_value == Types::global().builtin_buffer) {
-							delete (Buffer*)v;
-						} else {
-							delete (ImageAttachment*)v;
-						}
-					}
-					delete node->splice.values.data();
-				} else if (node->kind == Node::RELEASE) {
-					if (node->type[0]->hash_value == Types::global().builtin_buffer) {
-						delete (Buffer*)node->release.value;
+				assert(node->kind == Node::SPLICE);
+				node->splice.rel_acq = nullptr;
+				for (auto i = 0; i < node->splice.values.size(); i++) {
+					auto& v = node->splice.values[i];
+					if (node->type[i]->hash_value == Types::global().builtin_buffer) {
+						delete (Buffer*)v;
 					} else {
-						delete (ImageAttachment*)node->release.value;
-					}
-				} else if (node->kind == Node::ACQUIRE) {
-					if (node->type[0]->hash_value == Types::global().builtin_buffer) {
-						delete (Buffer*)node->acquire.value;
-					} else {
-						delete (ImageAttachment*)node->acquire.value;
+						delete (ImageAttachment*)v;
 					}
 				}
+				delete node->splice.values.data();
+
 				source_module->potential_garbage.emplace(node, 0);
 			}
 		}
@@ -1357,15 +1343,14 @@ namespace vuk {
 		ExtNode& operator=(ExtNode&& o) = delete;
 
 		Node* get_node() {
-			assert(node->kind == Node::SPLICE || node->kind == Node::RELEASE || node->kind == Node::ACQUIRE);
+			assert(node->kind == Node::SPLICE);
 			return node;
 		}
 
 		void mutate(Node* new_node) {
 			current_module->garbage.push_back(node);
-			if (node->kind == Node::SPLICE) {
-				node->splice.rel_acq = nullptr;
-			}
+			assert(node->kind == Node::SPLICE);
+			node->splice.rel_acq = nullptr;
 			node = current_module->make_splice(new_node, acqrel.get());
 		}
 

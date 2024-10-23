@@ -26,21 +26,9 @@ namespace vuk {
 			return { node->get_node(), index };
 		}
 
-		Ref get_peeled_head() noexcept {
-			return get_head();
-		}
-
-		Ref peel_head() noexcept {
-			return get_head();
-		}
-
-		void release(Access access = Access::eNone, DomainFlagBits domain = DomainFlagBits::eAny) noexcept {
+		void release(Access access = Access::eNone, DomainFlagBits domain = DomainFlagBits::eDevice) noexcept {
 			assert(node->acqrel && node->acqrel->status == Signal::Status::eDisarmed);
-			auto ref = get_head();
-			auto release = current_module->make_release(ref, nullptr, access, domain);
-			node = std::make_shared<ExtNode>(release, node); // previous extnode is a dep
-			release->release.release = node->acqrel.get();
-			index = 0;
+			node = std::make_shared<ExtNode>(Ref{ node->get_node(), index }, node, access, domain); // previous extnode is a dep
 		}
 
 		/// @brief Submit Value for execution
@@ -199,7 +187,7 @@ namespace vuk {
 			                                     current_module->make_constant(1u),
 			                                     current_module->make_constant(0u),
 			                                     current_module->make_constant(VK_REMAINING_ARRAY_LAYERS));
-			return Value(ExtRef(std::make_shared<ExtNode>(item.node, node), item));
+			return Value(ExtRef(std::make_shared<ExtNode>(item, node), item));
 		}
 
 		auto layer(uint32_t layer)
@@ -210,7 +198,7 @@ namespace vuk {
 			                                     current_module->make_constant(VK_REMAINING_MIP_LEVELS),
 			                                     current_module->make_constant(layer),
 			                                     current_module->make_constant(1u));
-			return Value(ExtRef(std::make_shared<ExtNode>(item.node, node), item));
+			return Value(ExtRef(std::make_shared<ExtNode>(item, node), item));
 		}
 
 		void replace_arg_with_extract_or_constant(Ref construct, Ref src_composite, uint64_t index) {

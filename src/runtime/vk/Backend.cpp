@@ -1387,11 +1387,33 @@ namespace vuk {
 			case Node::SPLICE: {
 				if (sched.process(item)) {
 					auto acqrel = node->splice.rel_acq;
-					assert(acqrel);
 
-					Stream* dst_stream = item.scheduled_stream;
+					auto sched_stream = item.scheduled_stream;
+					DomainFlagBits sched_domain = sched_stream->domain;
 
-					if (acqrel->status == Signal::Status::eDisarmed) {
+					if (!acqrel || acqrel->status == Signal::Status::eDisarmed) {
+						Stream* dst_stream;
+
+						bool is_release = false;
+						if (node->splice.dst_domain == DomainFlagBits::ePE) {
+							auto& link = node->splice.src[0].link();
+							auto& swp = sched.get_value<Swapchain>(link.urdef.node->acquire_next_image.swapchain);
+							auto it = std::find_if(pe_streams.begin(), pe_streams.end(), [&](auto& pe_stream) { return pe_stream.swp == &swp; });
+							assert(it != pe_streams.end());
+							dst_stream = &*it;
+							is_release = true;
+						} else if (node->splice.dst_domain == DomainFlagBits::eAny) {
+							dst_stream = sched_stream;
+						} else if (node->splice.dst_domain == DomainFlagBits::eDevice) {
+							dst_stream = sched_stream;
+							is_release = true;
+						} else {
+							dst_stream = recorder.stream_for_domain(node->splice.dst_domain);
+							is_release = true;
+						}
+						assert(dst_stream);
+						DomainFlagBits dst_domain = dst_stream->domain;
+
 						auto values = new void*[node->splice.src.size()];
 
 						for (size_t i = 0; i < node->splice.src.size(); i++) {
@@ -1405,48 +1427,96 @@ namespace vuk {
 							recorder.add_sync(sched.base_type(parm).get(), di, value);
 
 							auto last_use = recorder.last_use(sched.base_type(parm).get(), value);
-							acqrel->last_use.push_back(last_use);
 							// SANITY: if we change streams, then we must've had sync
 							// TODO: remove host exception here
 							assert(di || last_use.stream->domain == DomainFlagBits::eHost || (last_use.stream == item.scheduled_stream));
-							if (i == 0) {
-								last_use.stream->add_dependent_signal(acqrel);
+							if (acqrel) {
+								acqrel->last_use.push_back(last_use);
+								if (i == 0) {
+									if (is_release) { // TODO: why are these different?
+										sched_stream->add_dependent_signal(acqrel);
+									} else {
+										last_use.stream->add_dependent_signal(acqrel);
+									}
+								}
 							}
 						}
 						node->splice.values = std::span{ values, node->splice.src.size() };
+						if (is_release) {
+							if (acqrel && sched_domain == DomainFlagBits::eHost) {
+								acqrel->status = Signal::Status::eHostAvailable;
+							}
+
+							if (dst_domain == DomainFlagBits::ePE) {
+								auto& link = node->splice.src[0].link();
+								auto& swp = sched.get_value<Swapchain>(link.urdef.node->acquire_next_image.swapchain);
+								assert(sched_stream->domain & DomainFlagBits::eDevice);
+								auto result = dynamic_cast<VkQueueStream*>(sched_stream)->present(swp);
+								// TODO: do something with the result here
+								if (acqrel) {
+									acqrel->status = Signal::Status::eHostAvailable; // TODO: ???
+								}
+							} else {
+								sched_stream->submit();
+							}
 #ifdef VUK_DUMP_EXEC
-						print_results(node);
-						fmt::print(" <- ");
-						print_args(node->splice.src);
-						fmt::print("\n");
+							print_results(node);
+							fmt::print(" = release ${} -> ${} ", domain_to_string(sched_domain), domain_to_string(dst_domain));
+							print_args(node->splice.src);
+							fmt::print("\n");
 #endif
+						} else {
+#ifdef VUK_DUMP_EXEC
+							print_results(node);
+							fmt::print(" <- ");
+							print_args(node->splice.src);
+							fmt::print("\n");
+#endif
+						}
 						sched.done(node, item.scheduled_stream, std::span{ values, node->splice.src.size() });
 					} else {
 						auto src_stream = recorder.stream_for_executor(acqrel->source.executor);
 
-						for (size_t i = 0; i < node->splice.src.size(); i++) {
+#ifdef VUK_DUMP_EXEC
+						print_results(node);
+						fmt::print(" = acquire<");
+#endif
+
+						for (size_t i = 0; i < node->splice.values.size(); i++) {
+							auto& link = node->links[i];
+							if (!link.undef && link.reads.size() == 0 && !link.next) { // it is never used
+								continue;
+							}
 							StreamResourceUse src_use = { acqrel->last_use[i], src_stream };
 							recorder.init_sync(node->type[i].get(), src_use, node->splice.values[i]);
 							if (node->type[i]->hash_value == Types::global().builtin_buffer) {
 #ifdef VUK_DUMP_EXEC
-								print_results(node);
-								fmt::print(" = acquire!<buffer>\n");
+								fmt::print("buffer");
 #endif
 							} else if (node->type[i]->hash_value == Types::global().builtin_image) {
 #ifdef VUK_DUMP_EXEC
-								print_results(node);
-								fmt::print(" = acquire!<image>\n");
+								fmt::print("image");
+#endif
+							} else if (node->type[0]->kind == Type::ARRAY_TY) {
+#ifdef VUK_DUMP_EXEC
+								fmt::print("{}[]", node->type[0]->array.T->hash_value == Types::global().builtin_buffer ? "buffer" : "image");
 #endif
 							}
+#ifdef VUK_DUMP_EXEC
+							if (i + 1 < node->splice.values.size()) {
+								fmt::print(", ");
+							}
+#endif
 						}
+#ifdef VUK_DUMP_EXEC
+						fmt::print(">\n");
+#endif
 
 						sched.done(node, src_stream, node->splice.values);
 					}
 				} else {
 					auto acqrel = node->splice.rel_acq;
-
-					assert(acqrel);
-					if (acqrel->status == Signal::Status::eDisarmed) {
+					if (!acqrel || acqrel->status == Signal::Status::eDisarmed) {
 						for (size_t i = 0; i < node->splice.src.size(); i++) {
 							sched.schedule_dependency(node->splice.src[i], RW::eWrite);
 						}
@@ -1454,87 +1524,6 @@ namespace vuk {
 				}
 				break;
 			}
-			case Node::ACQUIRE: {
-				auto acq = node->acquire.acquire;
-				auto src_stream = recorder.stream_for_executor(acq->source.executor);
-
-				StreamResourceUse src_use = { acq->last_use[node->acquire.index], src_stream };
-				recorder.init_sync(node->type[0].get(), src_use, sched.get_value({ node, node->acquire.index }));
-
-				if (node->type[0]->hash_value == Types::global().builtin_buffer) {
-#ifdef VUK_DUMP_EXEC
-					print_results(node);
-					fmt::print(" = acquire<buffer>\n");
-#endif
-				} else if (node->type[0]->hash_value == Types::global().builtin_image) {
-#ifdef VUK_DUMP_EXEC
-					print_results(node);
-					fmt::print(" = acquire<image>\n");
-#endif
-				} else if (node->type[0]->kind == Type::ARRAY_TY) {
-#ifdef VUK_DUMP_EXEC
-					print_results(node);
-					fmt::print(" = acquire<{}[]>\n", node->type[0]->array.T->hash_value == Types::global().builtin_buffer ? "buffer" : "image");
-#endif
-				}
-
-				sched.done(node, src_stream, sched.get_value({ node, node->acquire.index }));
-				break;
-			}
-			case Node::RELEASE:
-				if (sched.process(item)) {
-					// release is to execute: we need to flush current queue -> end current batch and add signal
-					auto parm = node->release.src;
-					auto src_stream = item.scheduled_stream;
-					DomainFlagBits src_domain = src_stream->domain;
-					Stream* dst_stream;
-					if (node->release.dst_domain == DomainFlagBits::ePE) {
-						auto& link = node->release.src.link();
-						auto& swp = sched.get_value<Swapchain>(link.urdef.node->acquire_next_image.swapchain);
-						auto it = std::find_if(pe_streams.begin(), pe_streams.end(), [&](auto& pe_stream) { return pe_stream.swp == &swp; });
-						assert(it != pe_streams.end());
-						dst_stream = &*it;
-					} else if (node->release.dst_domain == DomainFlagBits::eAny) {
-						dst_stream = src_stream;
-					} else {
-						dst_stream = recorder.stream_for_domain(node->release.dst_domain);
-					}
-					assert(dst_stream);
-					DomainFlagBits dst_domain = dst_stream->domain;
-
-					recorder.add_sync(sched.base_type(parm).get(), sched.get_dependency_info(parm, parm.type().get(), RW::eWrite, dst_stream), sched.get_value(parm));
-#ifdef VUK_DUMP_EXEC
-					print_results(node);
-					fmt::print("release ${}->${} ", domain_to_string(src_domain), domain_to_string(dst_domain));
-					print_args(std::span{ &node->release.src, 1 });
-					fmt::print("\n");
-#endif
-					auto& acqrel = node->release.release;
-					acqrel->last_use.push_back(recorder.last_use(sched.base_type(parm).get(), sched.get_value(parm)));
-					if (src_domain == DomainFlagBits::eHost) {
-						acqrel->status = Signal::Status::eHostAvailable;
-					}
-
-					src_stream->add_dependent_signal(acqrel);
-
-					if (dst_domain == DomainFlagBits::ePE) {
-						auto& link = node->release.src.link();
-						auto& swp = sched.get_value<Swapchain>(link.urdef.node->acquire_next_image.swapchain);
-						assert(src_stream->domain & DomainFlagBits::eDevice);
-						auto result = dynamic_cast<VkQueueStream*>(src_stream)->present(swp);
-						// TODO: do something with the result here
-					} else {
-						src_stream->submit();
-					}
-
-					auto storage = new std::byte[parm.type()->size];
-					memcpy(storage, impl->get_value(parm), parm.type()->size);
-					node->release.value = storage;
-					sched.done(node, src_stream, sched.get_value(parm));
-				} else {
-					sched.schedule_dependency(node->release.src, RW::eWrite);
-				}
-				break;
 
 			case Node::ACQUIRE_NEXT_IMAGE: {
 				if (sched.process(item)) {
@@ -1704,20 +1693,15 @@ namespace vuk {
 			node->execution_info = nullptr;
 			node->links = nullptr;
 			// if we ran any non-splice nodes: they are garbage now
-			if (node->kind != Node::SPLICE && node->kind != Node::RELEASE && node->kind != Node::ACQUIRE && node->kind != Node::CONVERGE) {
+			if (node->kind != Node::SPLICE && node->kind != Node::CONVERGE) {
 				current_module->destroy_node(node);
 			} else {
-				// SANITY: if we ran any splice or release nodes, they must be pending now
-				// SPLICE and RELEASE nodes are unlinked
+				// SANITY: if we ran any splice nodes, they must be pending now
+				// SPLICE nodes are unlinked
 				if (node->kind == Node::SPLICE) {
-					assert(node->splice.rel_acq->status != Signal::Status::eDisarmed);
+					assert(!node->splice.rel_acq || node->splice.rel_acq->status != Signal::Status::eDisarmed);
 					delete node->splice.src.data();
 					node->splice.src = {};
-				}
-				if (node->kind == Node::RELEASE) {
-					assert(node->release.release->status != Signal::Status::eDisarmed);
-					node->release.arg_count = 0;
-					node->release.src = {};
 				}
 			}
 		}

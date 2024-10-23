@@ -419,21 +419,15 @@ namespace vuk {
 			break;
 		case Node::SPLICE: { // ~~ write joiner
 			for (size_t i = 0; i < node->type.size(); i++) {
-				Ref{ node, i }.link().def = { node, i };
 				if (!node->splice.rel_acq || node->splice.rel_acq && node->splice.rel_acq->status == Signal::Status::eDisarmed) {
-					assert(node->splice.src[i].link().undef.node == nullptr || node->splice.src[i].link().undef.node == node);
-					if (node->splice.src[i].link().undef.node != node) {
-						node->splice.src[i].link().next = &Ref{ node, i }.link();
-						Ref{ node, i }.link().prev = &node->splice.src[i].link();
-					}
-					node->splice.src[i].link().undef = { node, i };
+					add_write(node, node->splice.src[i], i);
+					add_result(node, i, node->splice.src[i]);
+				} else {
+					Ref{ node, i }.link().def = { node, i };
 				}
 			}
 			break;
 		}
-		case Node::ACQUIRE:
-			first(node).link().def = first(node);
-			break;
 		case Node::CALL: {
 			// args
 			for (size_t i = 1; i < node->call.args.size(); i++) {
@@ -461,12 +455,6 @@ namespace vuk {
 			}
 			break;
 		}
-		case Node::RELEASE:
-			if (node->release.arg_count == 1) {
-				auto& parm = node->release.src;
-				add_write(node, parm, 0);
-			}
-			break;
 
 		case Node::EXTRACT:
 			first(node).link().def = first(node);
@@ -832,13 +820,6 @@ namespace vuk {
 					}
 				}
 			} break;
-			case Node::RELEASE: {
-				Ref parm = node->release.src;
-				auto& link = parm.link();
-				if (node->release.dst_access != Access::eNone) {
-					link.undef_sync = to_use(node->release.dst_access);
-				}
-			} break;
 			case Node::SPLICE: {
 				auto& node_si = *node->scheduled_item;
 
@@ -846,11 +827,15 @@ namespace vuk {
 					auto& parm = node->splice.src[i];
 					auto& link = parm.link();
 
-					if (parm.node->scheduled_item) {
-						auto& parm_si = *parm.node->scheduled_item;
-						if (parm_si.scheduled_domain != node_si.scheduled_domain) { // parameters are scheduled on different domain
-							// we don't know anything about future use, so put "anything"
-							parm.link().undef_sync = to_use(Access::eMemoryRW);
+					if (node->splice.dst_access != Access::eNone) {
+						link.undef_sync = to_use(node->splice.dst_access);
+					} else {
+						if (parm.node->scheduled_item) {
+							auto& parm_si = *parm.node->scheduled_item;
+							if (parm_si.scheduled_domain != node_si.scheduled_domain) { // parameters are scheduled on different domain
+								// we don't know anything about future use, so put "anything"
+								parm.link().undef_sync = to_use(Access::eMemoryRW);
+							}
 						}
 					}
 				}
@@ -884,10 +869,8 @@ namespace vuk {
 			case Node::CONSTRUCT:
 			case Node::CALL:
 			case Node::CLEAR:
-			case Node::ACQUIRE:
 			case Node::MATH_BINARY:
 			case Node::SPLICE:
-			case Node::RELEASE:
 			case Node::CONVERGE:
 				node_to_schedule[node] = schedule_items.size();
 				schedule_items.emplace_back(node);
@@ -1159,18 +1142,32 @@ namespace vuk {
 					return { expected_error, RenderGraphException{ format_graph_message(Level::eError, node, "tried to acquire something that was already known.") } };
 				}
 			} break;
-			case Node::ACQUIRE: {
+			case Node::SPLICE: {
+				if (!node->splice.rel_acq || node->splice.rel_acq->status == Signal::Status::eDisarmed) {
+					break;
+				}
 				bool s = true;
-				if (node->type[0]->hash_value == Types::global().builtin_image) {
-					auto [_, succ] = ias.emplace(*reinterpret_cast<ImageAttachment*>(node->acquire.value));
-					s = succ;
-				} else if (node->type[0]->hash_value == Types::global().builtin_buffer) {
-					auto [_, succ] = bufs.emplace(*reinterpret_cast<Buffer*>(node->acquire.value));
-					s = succ;
-				} else if (node->type[0]->hash_value == Types::global().builtin_swapchain) {
-					auto [_, succ] = swps.emplace(reinterpret_cast<Swapchain*>(node->acquire.value));
-					s = succ;
-				} else { // TODO: it is an array, no val yet
+				assert(node->type.size() == node->splice.values.size());
+				for (auto i = 0; i < node->type.size(); i++) {
+					// is this ever used?
+					auto& link = node->links[i];
+					if (!link.undef && link.reads.size() == 0 && !link.next) { // it is never used
+						continue;
+					}
+					if (node->type[i]->hash_value == Types::global().builtin_image) {
+						auto [_, succ] = ias.emplace(*reinterpret_cast<ImageAttachment*>(node->splice.values[i]));
+						s = succ;
+					} else if (node->type[i]->hash_value == Types::global().builtin_buffer) {
+						auto [_, succ] = bufs.emplace(*reinterpret_cast<Buffer*>(node->splice.values[i]));
+						s = succ;
+					} else if (node->type[i]->hash_value == Types::global().builtin_swapchain) {
+						auto [_, succ] = swps.emplace(reinterpret_cast<Swapchain*>(node->splice.values[i]));
+						s = succ;
+					} else { // TODO: it is an array, no val yet
+					}
+					if (!s) {
+						break;
+					}
 				}
 				if (!s) {
 					return { expected_error, RenderGraphException{ format_graph_message(Level::eError, node, "tried to acquire something that was already known.") } };
@@ -1307,43 +1304,12 @@ namespace vuk {
 			for (auto node : impl->nodes) {
 				switch (node->kind) {
 				case Node::SPLICE: {
-					if (node->splice.rel_acq == nullptr) {
+					if (node->splice.rel_acq == nullptr && node->splice.dst_access == Access::eNone && node->splice.dst_domain == DomainFlagBits::eAny) {
 						for (size_t i = 0; i < node->splice.src.size(); i++) {
 							auto needle = Ref{ node, i };
 							auto replace_with = node->splice.src[i];
 
 							replaces.emplace_back(Replace{ needle, replace_with });
-						}
-					} else {
-						switch (node->splice.rel_acq->status) {
-						case Signal::Status::eDisarmed: // means we have to signal this, keep
-							break;
-						case Signal::Status::eSynchronizable: // means this is an acq instead
-						case Signal::Status::eHostAvailable:
-							for (size_t i = 0; i < node->type.size(); i++) {
-								auto new_ref = current_module->make_acquire(node->type[i], node->splice.rel_acq, i, node->splice.values[i]);
-								replaces.emplace_back(Replace{ Ref{ node, i }, new_ref });
-								impl->garbage_nodes.emplace_back(new_ref.node);
-							}
-							break;
-						}
-					}
-				} break;
-
-				case Node::RELEASE: {
-					if (node->links[0].reads.size() > 0 || node->links[0].undef) {
-						auto needle = Ref{ node, 0 };
-						if (node->release.release->status == Signal::Status::eDisarmed) {
-							auto new_node = current_module->make_splice(node->release.src.node, node->release.release);
-							replaces.emplace_back(needle, first(new_node));
-							impl->garbage_nodes.emplace_back(new_node);
-						} else {
-							Node acq_node{ .kind = Node::ACQUIRE,
-								             .type = { new std::shared_ptr<Type>[1](node->type[0]), 1 },
-								             .acquire = { .value = node->release.value, .acquire = node->release.release, .index = 0 } };
-							auto new_node = current_module->emplace_op(acq_node);
-							replaces.emplace_back(needle, first(new_node));
-							impl->garbage_nodes.emplace_back(new_node);
 						}
 					}
 				} break;
@@ -1374,15 +1340,22 @@ namespace vuk {
 
 			// do the replaces
 			auto arg_it = args.begin();
-			for (auto& r : replaces) {
+			for (auto replace_it = replaces.begin(); replace_it != replaces.end(); ++replace_it) {
+				auto& replace = *replace_it;
 				int num_replaces = 0;
-				while (arg_it != args.end() && **arg_it < r.needle) {
+				while (arg_it != args.end() && **arg_it < replace.needle) {
 					++arg_it;
 				}
-				while (arg_it != args.end() && **arg_it == r.needle) {
-					**arg_it = r.value;
+				while (arg_it != args.end() && **arg_it == replace.needle) {
+					**arg_it = replace.value;
 					++arg_it;
 					num_replaces++;
+				}
+				// replace in replaces
+				for (auto rit = replace_it + 1; rit != replaces.end(); ++rit) {
+					if (rit->needle == replace.needle) {
+						rit->needle = replace.value;
+					}
 				}
 				// rewind most pessimistically
 				auto new_index = std::distance(args.begin(), arg_it) - num_replaces - 1;
@@ -1507,11 +1480,13 @@ namespace vuk {
 		}
 
 		VUK_DO_OR_RETURN(impl->build_nodes());
-		// SANITY: we have resolved all splices / releases
+		// SANITY: we have resolved all splices
 		for (auto node : impl->nodes) {
 			switch (node->kind) {
 			case Node::SPLICE: {
-				assert(node->splice.rel_acq != nullptr);
+				if (node->splice.dst_access == Access::eNone && node->splice.dst_domain == DomainFlagBits::eAny) {
+					assert(node->splice.rel_acq != nullptr);
+				}
 			}
 			}
 		}

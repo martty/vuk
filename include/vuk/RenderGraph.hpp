@@ -331,12 +331,11 @@ public:
 			return [untyped_cb = std::move(callback), name, scheduling_info, inner_scope = VUK_CALL](Value<typename T::type>... args, VUK_CALLSTACK) mutable {
 				auto& first = First(args...);
 
-				bool reuse_node =
-				    first.node.use_count() == 1 && first.node->get_node()->kind != Node::ACQUIRE && first.node->acqrel->status == Signal::Status::eDisarmed;
+				bool reuse_node = first.node.use_count() == 1 && first.node->acqrel->status == Signal::Status::eDisarmed;
 				reuse_node = false;
 
 				std::vector<std::shared_ptr<Type>> arg_types;
-				std::tuple arg_tuple_as_a = { T{ nullptr, args.get_peeled_head() }... };
+				std::tuple arg_tuple_as_a = { T{ nullptr, args.get_head() }... };
 				fill_arg_ty(arg_tuple_as_a, arg_types);
 
 				std::vector<std::shared_ptr<Type>> ret_types;
@@ -366,8 +365,8 @@ public:
 
 				std::shared_ptr<Type> opaque_fn_ty;
 				if (maps_to_add.size() > 0) {
-					auto wrapped_cb = [cb = std::move(untyped_cb), old_ret_cnt, maps_to_add] (
-					                 CommandBuffer& cbuf, std::span<void*> opaque_args, std::span<void*> opaque_meta, std::span<void*> opaque_rets) mutable -> void {
+					auto wrapped_cb = [cb = std::move(untyped_cb), old_ret_cnt, maps_to_add](
+					                      CommandBuffer& cbuf, std::span<void*> opaque_args, std::span<void*> opaque_meta, std::span<void*> opaque_rets) mutable -> void {
 						cb(cbuf, opaque_args, opaque_meta, opaque_rets.subspan(0, old_ret_cnt));
 						for (auto i = 0; i < maps_to_add.size(); i++) {
 							opaque_rets[old_ret_cnt + i] = opaque_args[maps_to_add[i]];
@@ -379,7 +378,7 @@ public:
 				}
 
 				auto opaque_fn = current_module->make_declare_fn(opaque_fn_ty);
-				Node* node = current_module->make_call(opaque_fn, args.peel_head()...);
+				Node* node = current_module->make_call(opaque_fn, args.get_head()...);
 				node->scheduling_info = new SchedulingInfo(scheduling_info);
 				inner_scope.parent = &_scope;
 				current_module->set_source_location(node, inner_scope);
@@ -399,6 +398,8 @@ public:
 				if (reuse_node) {
 					extnode->deps.insert(extnode->deps.end(), std::make_move_iterator(dependent_nodes.begin()), std::make_move_iterator(dependent_nodes.end()));
 				}
+
+				current_module->set_source_location(extnode->get_node(), inner_scope);
 
 				if constexpr (is_tuple<Ret>::value) {
 					auto [idxs, ret_tuple] = intersect_tuples<std::tuple<T...>, Ret>(arg_tuple_as_a);
@@ -440,13 +441,8 @@ public:
 
 	[[nodiscard]] inline Value<ImageAttachment> acquire_ia(Name name, ImageAttachment ia, Access access, VUK_CALLSTACK) {
 		assert(ia.image_view != ImageView{});
-		Ref ref = current_module->make_acquire(Types::global().get_builtin_image(), nullptr, ia);
-		auto ext_ref = make_ext_ref(ref);
-		ext_ref.node->acqrel = std::make_unique<AcquireRelease>();
-		ext_ref.node->acqrel->status = Signal::Status::eHostAvailable;
-		ext_ref.node->acqrel->last_use.resize(1);
-		ext_ref.node->acqrel->last_use[0] = to_use(access);
-		ref.node->acquire.acquire = ext_ref.node->acqrel.get();
+		Ref ref = current_module->acquire(Types::global().get_builtin_image(), nullptr, ia);
+		auto ext_ref = ExtRef(std::make_shared<ExtNode>(ref.node, to_use(access)), ref);
 		current_module->name_output(ref, name.c_str());
 		current_module->set_source_location(ref.node, VUK_CALL);
 		return { std::move(ext_ref) };
@@ -469,13 +465,8 @@ public:
 
 	[[nodiscard]] inline Value<Buffer> acquire_buf(Name name, Buffer buf, Access access, VUK_CALLSTACK) {
 		assert(buf.buffer != VK_NULL_HANDLE);
-		Ref ref = current_module->make_acquire(Types::global().get_builtin_buffer(), nullptr, buf);
-		auto ext_ref = make_ext_ref(ref);
-		ext_ref.node->acqrel = std::make_unique<AcquireRelease>();
-		ext_ref.node->acqrel->status = Signal::Status::eHostAvailable;
-		ext_ref.node->acqrel->last_use.resize(1);
-		ext_ref.node->acqrel->last_use[0] = to_use(access);
-		ref.node->acquire.acquire = ext_ref.node->acqrel.get();
+		Ref ref = current_module->acquire(Types::global().get_builtin_buffer(), nullptr, buf);
+		auto ext_ref = ExtRef(std::make_shared<ExtNode>(ref.node, to_use(access)), ref);
 		current_module->name_output(ref, name.c_str());
 		current_module->set_source_location(ref.node, VUK_CALL);
 		return { std::move(ext_ref) };

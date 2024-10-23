@@ -59,11 +59,14 @@ namespace vuk {
 				auto& composite = parm.node->extract.composite;
 				auto index_v = get_value<uint64_t>(parm.node->extract.index);
 				void* composite_v = get_value(parm.node->extract.composite);
-				if (composite.type()->kind == Type::COMPOSITE_TY) {
-					auto offset = composite.type()->composite.offsets[index_v];
+				auto t = Type::stripped(composite.type());
+				if (t->kind == Type::COMPOSITE_TY) {
+					auto offset = t->composite.offsets[index_v];
 					return reinterpret_cast<std::byte*>(composite_v) + offset;
-				} else if (composite.type()->kind == Type::ARRAY_TY) {
-					return reinterpret_cast<std::byte*>(composite_v) + parm.node->extract.composite.type()->array.stride * index_v;
+				} else if (t->kind == Type::ARRAY_TY) {
+					return reinterpret_cast<std::byte*>(composite_v) + t->array.stride * index_v;
+				} else {
+					assert(0);
 				}
 			} else if (parm.node->kind == Node::ACQUIRE_NEXT_IMAGE) {
 				Swapchain* swp = reinterpret_cast<Swapchain*>(get_value(parm.node->acquire_next_image.swapchain));
@@ -75,6 +78,8 @@ namespace vuk {
 					return *eval<void*>(parm);
 				}
 			}
+			assert(0);
+			return nullptr;
 		}
 
 		std::span<void*> get_values(Node* node) {
