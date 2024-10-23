@@ -34,62 +34,46 @@ namespace vuk {
 
 		TypeDebugInfo debug_info;
 
+		std::vector<std::shared_ptr<Type>> child_types;
+		std::vector<size_t> offsets;                // for now only useful for composites
+		std::unique_ptr<UserCallbackType> callback; // only useful for user CBs
+
 		union {
 			struct {
 				uint32_t width;
 			} integer;
 			struct {
-				std::shared_ptr<Type> T;
+				std::shared_ptr<Type>* T;
 				Access access;
 			} imbued;
 			struct {
-				std::shared_ptr<Type> T;
+				std::shared_ptr<Type>* T;
 				size_t ref_idx;
 			} aliased;
 			struct {
-				std::vector<std::shared_ptr<Type>> args;
-				std::vector<std::shared_ptr<Type>> return_types;
+				std::span<std::shared_ptr<Type>> args;
+				std::span<std::shared_ptr<Type>> return_types;
 				int execute_on;
-				UserCallbackType callback;
 			} opaque_fn;
 			struct {
-				std::shared_ptr<Type> T;
+				std::shared_ptr<Type>* T;
 				size_t count;
 				size_t stride;
 			} array;
 			struct {
-				std::vector<std::shared_ptr<Type>> types;
-				std::vector<size_t> offsets;
+				std::span<std::shared_ptr<Type>> types;
 				size_t tag;
 			} composite;
 		};
 
-		~Type() {
-			switch (kind) {
-			case IMBUED_TY:
-				std::destroy_at(&imbued);
-				break;
-			case ALIASED_TY:
-				std::destroy_at(&aliased);
-				break;
-			case OPAQUE_FN_TY:
-				std::destroy_at(&opaque_fn);
-				break;
-			case ARRAY_TY:
-				std::destroy_at(&array);
-				break;
-			case COMPOSITE_TY:
-				std::destroy_at(&composite);
-				break;
-			}
-		}
+		~Type() {}
 
 		static std::shared_ptr<Type> stripped(std::shared_ptr<Type> t) {
 			switch (t->kind) {
 			case IMBUED_TY:
-				return stripped(t->imbued.T);
+				return stripped(*t->imbued.T);
 			case ALIASED_TY:
-				return stripped(t->aliased.T);
+				return stripped(*t->aliased.T);
 			default:
 				return t;
 			}
@@ -106,15 +90,14 @@ namespace vuk {
 
 		static Hash hash(Type* t) {
 			Hash v = 0;
-			assert(t->kind < 100);
 			switch (t->kind) {
 			case IMBUED_TY:
-				v = Type::hash(t->imbued.T.get());
+				v = Type::hash(t->imbued.T->get());
 				hash_combine_direct(v, IMBUED_TY);
 				hash_combine_direct(v, (uint32_t)t->imbued.access);
 				return v;
 			case ALIASED_TY:
-				v = Type::hash(t->aliased.T.get());
+				v = Type::hash(t->aliased.T->get());
 				hash_combine_direct(v, ALIASED_TY);
 				hash_combine_direct(v, (uint32_t)t->aliased.ref_idx);
 				return v;
@@ -126,7 +109,7 @@ namespace vuk {
 			case INTEGER_TY:
 				return t->integer.width;
 			case ARRAY_TY:
-				v = Type::hash(t->array.T.get());
+				v = Type::hash(t->array.T->get());
 				hash_combine_direct(v, ARRAY_TY);
 				hash_combine_direct(v, (uint32_t)t->array.count);
 				return v;
@@ -139,9 +122,9 @@ namespace vuk {
 				return v;
 			}
 			case OPAQUE_FN_TY:
-				hash_combine_direct(v, (uintptr_t)t->opaque_fn.callback.target<void(CommandBuffer&, std::span<void*>, std::span<void*>, std::span<void*>)>() >> 32);
-				hash_combine_direct(v,
-				                    (uintptr_t)t->opaque_fn.callback.target<void(CommandBuffer&, std::span<void*>, std::span<void*>, std::span<void*>)>() & 0xffffffff);
+				hash_combine_direct(v, (uintptr_t)t->callback->target<void(CommandBuffer&, std::span<void*>, std::span<void*>, std::span<void*>)>() >> 32);
+				hash_combine_direct(
+				    v, (uintptr_t)t->callback->target<void(CommandBuffer&, std::span<void*>, std::span<void*>, std::span<void*>)>() & 0xffffffff);
 				return v;
 			}
 		}
@@ -231,15 +214,15 @@ namespace vuk {
 		static std::string to_string(Type* t) {
 			switch (t->kind) {
 			case IMBUED_TY:
-				return to_string(t->imbued.T.get()) + std::string(":") + std::string(to_sv(t->imbued.access));
+				return to_string(t->imbued.T->get()) + std::string(":") + std::string(to_sv(t->imbued.access));
 			case ALIASED_TY:
-				return to_string(t->aliased.T.get()) + std::string("@") + std::to_string(t->aliased.ref_idx);
+				return to_string(t->aliased.T->get()) + std::string("@") + std::to_string(t->aliased.ref_idx);
 			case MEMORY_TY:
 				return "mem";
 			case INTEGER_TY:
 				return t->integer.width == 32 ? "i32" : "i64";
 			case ARRAY_TY:
-				return to_string(t->array.T.get()) + "[" + std::to_string(t->array.count) + "]";
+				return to_string(t->array.T->get()) + "[" + std::to_string(t->array.count) + "]";
 			case COMPOSITE_TY:
 				if (!t->debug_info.name.empty()) {
 					return std::string(t->debug_info.name);
@@ -631,7 +614,7 @@ namespace vuk {
 				}
 			} else {
 				if (type->kind == Type::COMPOSITE_TY) {
-					auto offset = type->composite.offsets[index];
+					auto offset = type->offsets[index];
 					return { expected_value, *static_cast<T*>(reinterpret_cast<void*>(static_cast<unsigned char*>(composite.value) + offset)) };
 				} else if (type->kind == Type::ARRAY_TY) {
 					auto offset = type->array.stride * index;
@@ -783,137 +766,6 @@ namespace vuk {
 		return !(x == y);
 	}
 
-	struct Types {
-		std::unordered_map<Type::Hash, std::weak_ptr<Type>> type_map;
-		plf::colony<UserCallbackType> ucbs;
-		std::shared_mutex lock;
-
-		Type::Hash builtin_image = -1;
-		Type::Hash builtin_buffer = -1;
-		Type::Hash builtin_swapchain = -1;
-
-		// TYPES
-		static std::shared_ptr<Type> make_imbued_ty(std::shared_ptr<Type> ty, Access access) {
-			return Types::global().emplace_type(
-			    std::shared_ptr<Type>(new Type{ .kind = Type::IMBUED_TY, .size = ty->size, .imbued = { .T = ty, .access = access } }));
-		}
-
-		static std::shared_ptr<Type> make_aliased_ty(std::shared_ptr<Type> ty, size_t ref_idx) {
-			return Types::global().emplace_type(
-			    std::shared_ptr<Type>(new Type{ .kind = Type::ALIASED_TY, .size = ty->size, .aliased = { .T = ty, .ref_idx = ref_idx } }));
-		}
-
-		static std::shared_ptr<Type> u64() {
-			return Types::global().emplace_type(std::shared_ptr<Type>(new Type{ .kind = Type::INTEGER_TY, .size = sizeof(uint64_t), .integer = { .width = 64 } }));
-		}
-
-		static std::shared_ptr<Type> u32() {
-			return Types::global().emplace_type(std::shared_ptr<Type>(new Type{ .kind = Type::INTEGER_TY, .size = sizeof(uint32_t), .integer = { .width = 32 } }));
-		}
-
-		static std::shared_ptr<Type> memory(size_t size) {
-			return Types::global().emplace_type(std::shared_ptr<Type>(new Type{ .kind = Type::MEMORY_TY, .size = size }));
-		}
-
-		static std::shared_ptr<Type> get_builtin_image() {
-			auto u32_t = u32();
-			auto image_ = std::vector<std::shared_ptr<Type>>{ u32_t, u32_t, u32_t, memory(sizeof(Format)), memory(sizeof(Samples)), u32_t, u32_t, u32_t, u32_t };
-			auto image_offsets = std::vector<size_t>{ offsetof(ImageAttachment, extent) + offsetof(Extent3D, width),
-				                                        offsetof(ImageAttachment, extent) + offsetof(Extent3D, height),
-				                                        offsetof(ImageAttachment, extent) + offsetof(Extent3D, depth),
-				                                        offsetof(ImageAttachment, format),
-				                                        offsetof(ImageAttachment, sample_count),
-				                                        offsetof(ImageAttachment, base_layer),
-				                                        offsetof(ImageAttachment, layer_count),
-				                                        offsetof(ImageAttachment, base_level),
-				                                        offsetof(ImageAttachment, level_count) };
-			auto image_type = Types::global().emplace_type(std::shared_ptr<Type>(new Type{ .kind = Type::COMPOSITE_TY,
-			                                                                               .size = sizeof(ImageAttachment),
-			                                                                               .debug_info = Types::global().allocate_type_debug_info("image"),
-			                                                                               .composite = { .types = image_, .offsets = image_offsets, .tag = 0 } }));
-
-			Types::global().builtin_image = Type::hash(image_type.get());
-
-			return image_type;
-		}
-
-		static std::shared_ptr<Type> get_builtin_buffer() {
-			auto buffer_ = std::vector<std::shared_ptr<Type>>{ u64() };
-			auto buffer_offsets = std::vector<size_t>{ offsetof(Buffer, size) };
-			auto buffer_type =
-			    Types::global().emplace_type(std::shared_ptr<Type>(new Type{ .kind = Type::COMPOSITE_TY,
-			                                                                 .size = sizeof(Buffer),
-			                                                                 .debug_info = Types::global().allocate_type_debug_info("buffer"),
-			                                                                 .composite = { .types = buffer_, .offsets = buffer_offsets, .tag = 1 } }));
-			Types::global().builtin_buffer = Type::hash(buffer_type.get());
-			return buffer_type;
-		}
-
-		static std::shared_ptr<Type> get_builtin_swapchain() {
-			auto arr_ty = Types::global().emplace_type(
-			    std::shared_ptr<Type>(new Type{ .kind = Type::ARRAY_TY,
-			                                    .size = 16 * get_builtin_image()->size,
-			                                    .array = { .T = get_builtin_image(), .count = 16, .stride = get_builtin_image()->size } }));
-			auto swp_ = std::vector<std::shared_ptr<Type>>{ arr_ty };
-			auto offsets = std::vector<size_t>{ 0 };
-
-			auto swapchain_type = Types::global().emplace_type(std::shared_ptr<Type>(new Type{ .kind = Type::COMPOSITE_TY,
-			                                                                                   .size = sizeof(Swapchain),
-			                                                                                   .debug_info = Types::global().allocate_type_debug_info("swapchain"),
-			                                                                                   .composite = { .types = swp_, .offsets = offsets, .tag = 2 } }));
-			Types::global().builtin_swapchain = Type::hash(swapchain_type.get());
-			return swapchain_type;
-		}
-
-		std::shared_ptr<Type> emplace_type(std::shared_ptr<Type> t) {
-			auto unify_type = [&](std::shared_ptr<Type>& t) {
-				auto th = Type::hash(t.get());
-				auto [v, succ] = type_map.try_emplace(th, t);
-				if (succ) {
-					t->hash_value = th;
-				} else if (!v->second.lock()) {
-					type_map[th] = t;
-				}
-				t->hash_value = th;
-			};
-
-			if (t->kind == Type::ALIASED_TY) {
-				assert(t->aliased.T->kind != Type::ALIASED_TY);
-				unify_type(t->aliased.T);
-			} else if (t->kind == Type::IMBUED_TY) {
-				unify_type(t->imbued.T);
-			} else if (t->kind == Type::ARRAY_TY) {
-				unify_type(t->array.T);
-			} else if (t->kind == Type::COMPOSITE_TY) {
-				for (auto& elem_ty : t->composite.types) {
-					unify_type(elem_ty);
-				}
-			}
-			unify_type(t);
-
-			return t;
-		}
-
-		TypeDebugInfo allocate_type_debug_info(std::string name) {
-			return TypeDebugInfo(name);
-		}
-
-		void collect() {
-			for (auto it = type_map.begin(); it != type_map.end();) {
-				if (it->second.expired()) {
-					it = type_map.erase(it);
-				} else {
-					++it;
-				}
-			}
-		}
-
-		static Types& global() {
-			static Types t;
-			return t;
-		}
-	};
-
 	struct IRModule {
 		IRModule() : op_arena(/**/) {}
 
@@ -922,7 +774,157 @@ namespace vuk {
 		std::unordered_map<Node*, size_t> potential_garbage;
 		size_t node_counter = 0;
 
-		// uint64_t current_hash = 0;
+		struct Types {
+			std::unordered_map<Type::Hash, std::weak_ptr<Type>> type_map;
+			plf::colony<UserCallbackType> ucbs;
+
+			Type::Hash builtin_image = -1;
+			Type::Hash builtin_buffer = -1;
+			Type::Hash builtin_swapchain = -1;
+
+			// TYPES
+			std::shared_ptr<Type> make_imbued_ty(std::shared_ptr<Type> ty, Access access) {
+				auto t = new Type{ .kind = Type::IMBUED_TY, .size = ty->size, .imbued = { .access = access } };
+				t->imbued.T = &t->child_types.emplace_back(ty);
+				return emplace_type(std::shared_ptr<Type>(t));
+			}
+
+			std::shared_ptr<Type> make_aliased_ty(std::shared_ptr<Type> ty, size_t ref_idx) {
+				auto t = new Type{ .kind = Type::ALIASED_TY, .size = ty->size, .aliased = { .ref_idx = ref_idx } };
+				t->imbued.T = &t->child_types.emplace_back(ty);
+				return emplace_type(std::shared_ptr<Type>(t));
+			}
+
+			std::shared_ptr<Type> make_array_ty(std::shared_ptr<Type> ty, size_t count) {
+				auto t = new Type{ .kind = Type::ARRAY_TY, .size = count * ty->size, .array = { .count = count, .stride = ty->size } };
+				t->array.T = &t->child_types.emplace_back(ty);
+				return emplace_type(std::shared_ptr<Type>(t));
+			}
+
+			std::shared_ptr<Type> make_opaque_fn_ty(std::span<std::shared_ptr<Type> const> args,
+			                                        std::span<std::shared_ptr<Type> const> ret_types,
+			                                        DomainFlags execute_on,
+			                                        UserCallbackType callback,
+			                                        std::string_view name) {
+				auto arg_ptr_ret_ty_ptr = std::vector<std::shared_ptr<Type>>(args.size() + ret_types.size());
+				auto it = std::copy(args.begin(), args.end(), arg_ptr_ret_ty_ptr.begin());
+				std::copy(ret_types.begin(), ret_types.end(), it);
+				auto t = new Type{ .kind = Type::OPAQUE_FN_TY,
+					                 .opaque_fn = { .args = std::span{ arg_ptr_ret_ty_ptr.data(), args.size() },
+					                                .return_types = std::span{ arg_ptr_ret_ty_ptr.data() + args.size(), ret_types.size() },
+					                                .execute_on = execute_on.m_mask } };
+				t->callback = std::make_unique<UserCallbackType>(std::move(callback));
+				t->child_types = std::move(arg_ptr_ret_ty_ptr);
+				t->debug_info = allocate_type_debug_info(std::string(name));
+				return emplace_type(std::shared_ptr<Type>(t));
+			}
+
+			std::shared_ptr<Type> u64() {
+				return emplace_type(std::shared_ptr<Type>(new Type{ .kind = Type::INTEGER_TY, .size = sizeof(uint64_t), .integer = { .width = 64 } }));
+			}
+
+			std::shared_ptr<Type> u32() {
+				return emplace_type(std::shared_ptr<Type>(new Type{ .kind = Type::INTEGER_TY, .size = sizeof(uint32_t), .integer = { .width = 32 } }));
+			}
+
+			std::shared_ptr<Type> memory(size_t size) {
+				return emplace_type(std::shared_ptr<Type>(new Type{ .kind = Type::MEMORY_TY, .size = size }));
+			}
+
+			std::shared_ptr<Type> get_builtin_image() {
+				auto u32_t = u32();
+				auto image_ = std::vector<std::shared_ptr<Type>>{ u32_t, u32_t, u32_t, memory(sizeof(Format)), memory(sizeof(Samples)), u32_t, u32_t, u32_t, u32_t };
+				auto image_offsets = std::vector<size_t>{ offsetof(ImageAttachment, extent) + offsetof(Extent3D, width),
+					                                        offsetof(ImageAttachment, extent) + offsetof(Extent3D, height),
+					                                        offsetof(ImageAttachment, extent) + offsetof(Extent3D, depth),
+					                                        offsetof(ImageAttachment, format),
+					                                        offsetof(ImageAttachment, sample_count),
+					                                        offsetof(ImageAttachment, base_layer),
+					                                        offsetof(ImageAttachment, layer_count),
+					                                        offsetof(ImageAttachment, base_level),
+					                                        offsetof(ImageAttachment, level_count) };
+				auto image_type = emplace_type(std::shared_ptr<Type>(new Type{ .kind = Type::COMPOSITE_TY,
+				                                                               .size = sizeof(ImageAttachment),
+				                                                               .debug_info = allocate_type_debug_info("image"),
+				                                                               .offsets = image_offsets,
+				                                                               .composite = { .types = image_, .tag = 0 } }));
+				image_type->child_types = std::move(image_);
+				builtin_image = Type::hash(image_type.get());
+
+				return image_type;
+			}
+
+			std::shared_ptr<Type> get_builtin_buffer() {
+				auto buffer_ = std::vector<std::shared_ptr<Type>>{ u64() };
+				auto buffer_offsets = std::vector<size_t>{ offsetof(Buffer, size) };
+				auto buffer_type = emplace_type(std::shared_ptr<Type>(new Type{ .kind = Type::COMPOSITE_TY,
+				                                                                .size = sizeof(Buffer),
+				                                                                .debug_info = allocate_type_debug_info("buffer"),
+				                                                                .offsets = buffer_offsets,
+				                                                                .composite = { .types = buffer_, .tag = 1 } }));
+				buffer_type->child_types = std::move(buffer_);
+
+				builtin_buffer = Type::hash(buffer_type.get());
+				return buffer_type;
+			}
+
+			std::shared_ptr<Type> get_builtin_swapchain() {
+				auto arr_ty = make_array_ty(get_builtin_image(), 16);
+				auto swp_ = std::vector<std::shared_ptr<Type>>{ arr_ty };
+				auto offsets = std::vector<size_t>{ 0 };
+
+				auto swapchain_type = emplace_type(std::shared_ptr<Type>(new Type{ .kind = Type::COMPOSITE_TY,
+				                                                                   .size = sizeof(Swapchain),
+				                                                                   .debug_info = allocate_type_debug_info("swapchain"),
+				                                                                   .offsets = offsets,
+				                                                                   .composite = { .types = swp_, .tag = 2 } }));
+				builtin_swapchain = Type::hash(swapchain_type.get());
+				return swapchain_type;
+			}
+
+			std::shared_ptr<Type> emplace_type(std::shared_ptr<Type> t) {
+				auto unify_type = [&](std::shared_ptr<Type>& t) {
+					auto th = Type::hash(t.get());
+					auto [v, succ] = type_map.try_emplace(th, t);
+					if (succ) {
+						t->hash_value = th;
+					} else if (!v->second.lock()) {
+						type_map[th] = t;
+					}
+					t->hash_value = th;
+				};
+
+				if (t->kind == Type::ALIASED_TY) {
+					assert((*t->aliased.T)->kind != Type::ALIASED_TY);
+					unify_type(*t->aliased.T);
+				} else if (t->kind == Type::IMBUED_TY) {
+					unify_type(*t->imbued.T);
+				} else if (t->kind == Type::ARRAY_TY) {
+					unify_type(*t->array.T);
+				} else if (t->kind == Type::COMPOSITE_TY) {
+					for (auto& elem_ty : t->composite.types) {
+						unify_type(elem_ty);
+					}
+				}
+				unify_type(t);
+
+				return t;
+			}
+
+			TypeDebugInfo allocate_type_debug_info(std::string name) {
+				return TypeDebugInfo(name);
+			}
+
+			void collect() {
+				for (auto it = type_map.begin(); it != type_map.end();) {
+					if (it->second.expired()) {
+						it = type_map.erase(it);
+					} else {
+						++it;
+					}
+				}
+			}
+		} types;
 
 		Node* emplace_op(Node v) {
 			v.index = node_counter++;
@@ -1013,11 +1015,11 @@ namespace vuk {
 		Ref make_constant(T value) {
 			std::shared_ptr<Type>* ty;
 			if constexpr (std::is_same_v<T, uint64_t>) {
-				ty = new std::shared_ptr<Type>[1](Types::u64());
+				ty = new std::shared_ptr<Type>[1](types.u64());
 			} else if constexpr (std::is_same_v<T, uint32_t>) {
-				ty = new std::shared_ptr<Type>[1](Types::u32());
+				ty = new std::shared_ptr<Type>[1](types.u32());
 			} else {
-				ty = new std::shared_ptr<Type>[1](Types::memory(sizeof(T)));
+				ty = new std::shared_ptr<Type>[1](types.memory(sizeof(T)));
 			}
 			return first(
 			    emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ ty, 1 }, .constant = { .value = new (new char[sizeof(T)]) T(value), .owned = true } }));
@@ -1027,11 +1029,11 @@ namespace vuk {
 		Ref make_constant(T* value) {
 			std::shared_ptr<Type>* ty;
 			if constexpr (std::is_same_v<T, uint64_t>) {
-				ty = new std::shared_ptr<Type>[1](Types::u64());
+				ty = new std::shared_ptr<Type>[1](types.u64());
 			} else if constexpr (std::is_same_v<T, uint32_t>) {
-				ty = new std::shared_ptr<Type>[1](Types::u32());
+				ty = new std::shared_ptr<Type>[1](types.u32());
 			} else {
-				ty = new std::shared_ptr<Type>[1](Types::memory(sizeof(T)));
+				ty = new std::shared_ptr<Type>[1](types.memory(sizeof(T)));
 			}
 			return first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ ty, 1 }, .constant = { .value = value, .owned = false } }));
 		}
@@ -1040,81 +1042,79 @@ namespace vuk {
 			auto ptr = new (new char[sizeof(ImageAttachment)])
 			    ImageAttachment(value); /* rest extent_x extent_y extent_z format samples base_layer layer_count base_level level_count */
 			auto args_ptr = new Ref[10];
-			auto mem_ty = new std::shared_ptr<Type>[1](Types::memory(sizeof(ImageAttachment)));
+			auto mem_ty = new std::shared_ptr<Type>[1](types.memory(sizeof(ImageAttachment)));
 			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = ptr, .owned = true } }));
 			if (value.extent.width > 0) {
 				args_ptr[1] = make_constant(&ptr->extent.width);
 			} else {
-				args_ptr[1] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1](Types::u32()), 1 } }));
+				args_ptr[1] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1](types.u32()), 1 } }));
 			}
 			if (value.extent.height > 0) {
 				args_ptr[2] = make_constant(&ptr->extent.height);
 			} else {
-				args_ptr[2] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1](Types::u32()), 1 } }));
+				args_ptr[2] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1](types.u32()), 1 } }));
 			}
 			if (value.extent.depth > 0) {
 				args_ptr[3] = make_constant(&ptr->extent.depth);
 			} else {
-				args_ptr[3] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1](Types::u32()), 1 } }));
+				args_ptr[3] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1](types.u32()), 1 } }));
 			}
 			if (value.format != Format::eUndefined) {
 				args_ptr[4] = make_constant(&ptr->format);
 			} else {
-				args_ptr[4] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1](Types::memory(sizeof(Format))), 1 } }));
+				args_ptr[4] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1](types.memory(sizeof(Format))), 1 } }));
 			}
 			if (value.sample_count != Samples::eInfer) {
 				args_ptr[5] = make_constant(&ptr->sample_count);
 			} else {
-				args_ptr[5] =
-				    first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1](Types::memory(sizeof(Samples))), 1 } }));
+				args_ptr[5] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1](types.memory(sizeof(Samples))), 1 } }));
 			}
 			if (value.base_layer != VK_REMAINING_ARRAY_LAYERS) {
 				args_ptr[6] = make_constant(&ptr->base_layer);
 			} else {
-				args_ptr[6] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1](Types::u32()), 1 } }));
+				args_ptr[6] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1](types.u32()), 1 } }));
 			}
 			if (value.layer_count != VK_REMAINING_ARRAY_LAYERS) {
 				args_ptr[7] = make_constant(&ptr->layer_count);
 			} else {
-				args_ptr[7] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1](Types::u32()), 1 } }));
+				args_ptr[7] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1](types.u32()), 1 } }));
 			}
 			if (value.base_level != VK_REMAINING_MIP_LEVELS) {
 				args_ptr[8] = make_constant(&ptr->base_level);
 			} else {
-				args_ptr[8] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1](Types::u32()), 1 } }));
+				args_ptr[8] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1](types.u32()), 1 } }));
 			}
 			if (value.level_count != VK_REMAINING_MIP_LEVELS) {
 				args_ptr[9] = make_constant(&ptr->level_count);
 			} else {
-				args_ptr[9] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1](Types::u32()), 1 } }));
+				args_ptr[9] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1](types.u32()), 1 } }));
 			}
 
 			return first(emplace_op(Node{ .kind = Node::CONSTRUCT,
-			                              .type = std::span{ new std::shared_ptr<Type>[1](Types::get_builtin_image()), 1 },
+			                              .type = std::span{ new std::shared_ptr<Type>[1](types.get_builtin_image()), 1 },
 			                              .construct = { .args = std::span(args_ptr, 10) } }));
 		}
 
 		Ref make_declare_buffer(Buffer value) {
 			auto buf_ptr = new (new char[sizeof(Buffer)]) Buffer(value); /* rest size */
 			auto args_ptr = new Ref[2];
-			auto mem_ty = new std::shared_ptr<Type>[1](Types::memory(sizeof(Buffer)));
+			auto mem_ty = new std::shared_ptr<Type>[1](types.memory(sizeof(Buffer)));
 			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = buf_ptr, .owned = true } }));
 			if (value.size != ~(0u)) {
 				args_ptr[1] = make_constant(&buf_ptr->size);
 			} else {
-				args_ptr[1] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1](Types::u64()), 1 } }));
+				args_ptr[1] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1](types.u64()), 1 } }));
 			}
 
 			return first(emplace_op(Node{ .kind = Node::CONSTRUCT,
-			                              .type = std::span{ new std::shared_ptr<Type>[1](Types::get_builtin_buffer()), 1 },
+			                              .type = std::span{ new std::shared_ptr<Type>[1](types.get_builtin_buffer()), 1 },
 			                              .construct = { .args = std::span(args_ptr, 2) } }));
 		}
 
 		Ref make_declare_array(std::shared_ptr<Type> type, std::span<Ref> args) {
-			auto arr_ty = new std::shared_ptr<Type>[1](Types::global().emplace_type(std::shared_ptr<Type>(
-			    new Type{ .kind = Type::ARRAY_TY, .size = args.size() * type->size, .array = { .T = type, .count = args.size(), .stride = type->size } })));
+			auto arr_ty = new std::shared_ptr<Type>[1](types.make_array_ty(type, args.size()));
 			auto args_ptr = new Ref[args.size() + 1];
-			auto mem_ty = new std::shared_ptr<Type>[1](Types::memory(0));
+			auto mem_ty = new std::shared_ptr<Type>[1](types.memory(0));
 			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = nullptr } }));
 			std::copy(args.begin(), args.end(), args_ptr + 1);
 			return first(emplace_op(Node{ .kind = Node::CONSTRUCT, .type = std::span{ arr_ty, 1 }, .construct = { .args = std::span(args_ptr, args.size() + 1) } }));
@@ -1122,22 +1122,22 @@ namespace vuk {
 
 		Ref make_declare_swapchain(Swapchain& bundle) {
 			auto args_ptr = new Ref[2];
-			auto mem_ty = new std::shared_ptr<Type>[1](Types::memory(sizeof(Swapchain*)));
+			auto mem_ty = new std::shared_ptr<Type>[1](types.memory(sizeof(Swapchain*)));
 			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = &bundle, .owned = false } }));
 			std::vector<Ref> imgs;
 			for (auto i = 0; i < bundle.images.size(); i++) {
 				imgs.push_back(make_declare_image(bundle.images[i]));
 			}
-			args_ptr[1] = make_declare_array(Types::get_builtin_image(), imgs);
+			args_ptr[1] = make_declare_array(types.get_builtin_image(), imgs);
 			return first(emplace_op(Node{ .kind = Node::CONSTRUCT,
-			                              .type = std::span{ new std::shared_ptr<Type>[1](Types::get_builtin_swapchain()), 1 },
+			                              .type = std::span{ new std::shared_ptr<Type>[1](types.get_builtin_swapchain()), 1 },
 			                              .construct = { .args = std::span(args_ptr, 2) } }));
 		}
 
 		Ref make_extract(Ref composite, Ref index) {
 			auto stripped = Type::stripped(composite.type());
 			assert(stripped->kind == Type::ARRAY_TY);
-			auto ty = new std::shared_ptr<Type>[1](stripped->array.T);
+			auto ty = new std::shared_ptr<Type>[1](*stripped->array.T);
 			return first(emplace_op(Node{ .kind = Node::EXTRACT, .type = std::span{ ty, 1 }, .extract = { .composite = composite, .index = index } }));
 		}
 
@@ -1145,7 +1145,7 @@ namespace vuk {
 			auto ty = new std::shared_ptr<Type>[1];
 			auto stripped = Type::stripped(composite.type());
 			if (stripped->kind == Type::ARRAY_TY) {
-				*ty = stripped->array.T;
+				*ty = *stripped->array.T;
 			} else if (stripped->kind == Type::COMPOSITE_TY) {
 				*ty = stripped->composite.types[index];
 			}
@@ -1185,30 +1185,14 @@ namespace vuk {
 
 		Ref make_acquire_next_image(Ref swapchain) {
 			return first(emplace_op(Node{ .kind = Node::ACQUIRE_NEXT_IMAGE,
-			                              .type = std::span{ new std::shared_ptr<Type>[1](Types::get_builtin_image()), 1 },
+			                              .type = std::span{ new std::shared_ptr<Type>[1](types.get_builtin_image()), 1 },
 			                              .acquire_next_image = { .swapchain = swapchain } }));
 		}
 
 		Ref make_clear_image(Ref dst, Clear cv) {
 			return first(emplace_op(Node{ .kind = Node::CLEAR,
-			                              .type = std::span{ new std::shared_ptr<Type>[1](Types::get_builtin_image()), 1 },
+			                              .type = std::span{ new std::shared_ptr<Type>[1](types.get_builtin_image()), 1 },
 			                              .clear = { .dst = dst, .cv = new Clear(cv) } }));
-		}
-
-		std::shared_ptr<Type> make_opaque_fn_ty(std::span<std::shared_ptr<Type> const> args,
-		                                        std::span<std::shared_ptr<Type> const> ret_types,
-		                                        DomainFlags execute_on,
-		                                        UserCallbackType callback,
-		                                        std::string_view name) {
-			auto arg_ptr = std::vector<std::shared_ptr<Type>>(args.size());
-			std::copy(args.begin(), args.end(), arg_ptr.begin());
-			auto ret_ty_ptr = std::vector<std::shared_ptr<Type>>(ret_types.size());
-			std::copy(ret_types.begin(), ret_types.end(), ret_ty_ptr.begin());
-			auto ty = Types::global().emplace_type(std::shared_ptr<Type>(
-			    new Type{ .kind = Type::OPAQUE_FN_TY,
-			              .opaque_fn = { .args = arg_ptr, .return_types = ret_ty_ptr, .execute_on = execute_on.m_mask, .callback = std::move(callback) } }));
-			ty->debug_info = Types::global().allocate_type_debug_info(std::string(name));
-			return ty;
 		}
 
 		Ref make_declare_fn(std::shared_ptr<Type> const fn_ty) {
@@ -1244,10 +1228,9 @@ namespace vuk {
 		Ref make_ref_splice(Ref src, AcquireRelease* acq_rel, Access dst_access = Access::eNone, DomainFlagBits dst_domain = DomainFlagBits::eAny) {
 			Ref* args_ptr = new Ref[1]{ src };
 			auto tys = new std::shared_ptr<Type>[1]{ src.type() };
-			return first(emplace_op(
-			    Node{ .kind = Node::SPLICE,
-			          .type = std::span{ tys, 1 },
-			          .splice = { .src = std::span{ args_ptr, 1 }, .rel_acq = acq_rel, .dst_access = dst_access, .dst_domain = dst_domain } }));
+			return first(emplace_op(Node{ .kind = Node::SPLICE,
+			                              .type = std::span{ tys, 1 },
+			                              .splice = { .src = std::span{ args_ptr, 1 }, .rel_acq = acq_rel, .dst_access = dst_access, .dst_domain = dst_domain } }));
 		}
 
 		template<class T>
@@ -1327,7 +1310,7 @@ namespace vuk {
 				node->splice.rel_acq = nullptr;
 				for (auto i = 0; i < node->splice.values.size(); i++) {
 					auto& v = node->splice.values[i];
-					if (node->type[i]->hash_value == Types::global().builtin_buffer) {
+					if (node->type[i]->hash_value == source_module->types.builtin_buffer) {
 						delete (Buffer*)v;
 					} else {
 						delete (ImageAttachment*)v;

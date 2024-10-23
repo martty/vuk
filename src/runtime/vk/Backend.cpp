@@ -102,9 +102,9 @@ namespace vuk {
 
 	using namespace std::literals;
 	std::vector<std::string_view> arg_names(Type* t) {
-		if (t->hash_value == Types::global().builtin_image) {
+		if (t->hash_value == current_module->types.builtin_image) {
 			return { "width"sv, "height"sv, "depth"sv, "format"sv, "samples"sv, "base_layer"sv, "layer_count"sv, "base_level"sv, "level_count"sv };
-		} else if (t->hash_value == Types::global().builtin_buffer) {
+		} else if (t->hash_value == current_module->types.builtin_buffer) {
 			return { "size"sv };
 		} else {
 			assert(0);
@@ -819,16 +819,16 @@ namespace vuk {
 		void init_sync(Type* base_ty, StreamResourceUse src_use, void* value) {
 			uint64_t key = 0;
 			PartialStreamResourceUse psru{ src_use };
-			if (base_ty->hash_value == Types::global().builtin_image) {
+			if (base_ty->hash_value == current_module->types.builtin_image) {
 				auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
 				key = reinterpret_cast<uint64_t>(img_att.image.image);
 				psru.subrange = { img_att.base_level, img_att.level_count, img_att.base_layer, img_att.layer_count };
-			} else if (base_ty->hash_value == Types::global().builtin_buffer) {
+			} else if (base_ty->hash_value == current_module->types.builtin_buffer) {
 				auto buf = reinterpret_cast<Buffer*>(value);
 				key = reinterpret_cast<uint64_t>(buf->allocation);
 				hash_combine(key, buf->offset);
 			} else if (base_ty->kind == Type::ARRAY_TY) { // for an array, we init all elements
-				auto elem_ty = base_ty->array.T.get();
+				auto elem_ty = base_ty->array.T->get();
 				auto size = base_ty->array.count;
 				auto elems = reinterpret_cast<std::byte*>(value);
 				for (int i = 0; i < size; i++) {
@@ -852,7 +852,7 @@ namespace vuk {
 
 			uint64_t key = 0;
 			if (base_ty->kind == Type::ARRAY_TY) {
-				auto elem_ty = base_ty->array.T.get();
+				auto elem_ty = base_ty->array.T->get();
 				auto size = base_ty->array.count;
 				auto elems = reinterpret_cast<std::byte*>(value);
 				for (int i = 0; i < size; i++) {
@@ -860,10 +860,10 @@ namespace vuk {
 					elems += elem_ty->size;
 				}
 				return;
-			} else if (base_ty->hash_value == Types::global().builtin_image) {
+			} else if (base_ty->hash_value == current_module->types.builtin_image) {
 				auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
 				key = reinterpret_cast<uint64_t>(img_att.image.image);
-			} else if (base_ty->hash_value == Types::global().builtin_buffer) {
+			} else if (base_ty->hash_value == current_module->types.builtin_buffer) {
 				auto buf = reinterpret_cast<Buffer*>(value);
 				key = reinterpret_cast<uint64_t>(buf->allocation);
 				hash_combine(key, buf->offset);
@@ -873,7 +873,7 @@ namespace vuk {
 
 			auto& head = last_modify.at(key);
 
-			if (base_ty->hash_value == Types::global().builtin_image) {
+			if (base_ty->hash_value == current_module->types.builtin_image) {
 				auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
 				std::vector<Subrange::Image, inline_alloc<Subrange::Image, 1024>> work_queue(this->arena);
 				work_queue.emplace_back(Subrange::Image{ img_att.base_level, img_att.level_count, img_att.base_layer, img_att.layer_count });
@@ -929,7 +929,7 @@ namespace vuk {
 					found->subrange.image.base_layer = isection.base_layer;
 					found->subrange.image.layer_count = isection.layer_count;
 				}
-			} else if (base_ty->hash_value == Types::global().builtin_buffer) {
+			} else if (base_ty->hash_value == current_module->types.builtin_buffer) {
 				auto& src_use = *head;
 				if (src_use.stream && dst_use.stream && (src_use.stream != dst_use.stream)) {
 					dst_use.stream->add_dependency(src_use.stream);
@@ -942,16 +942,16 @@ namespace vuk {
 
 		StreamResourceUse& last_use(Type* base_ty, void* value) {
 			uint64_t key = 0;
-			if (base_ty->hash_value == Types::global().builtin_image) {
+			if (base_ty->hash_value == current_module->types.builtin_image) {
 				auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
 				key = reinterpret_cast<uint64_t>(img_att.image.image);
-			} else if (base_ty->hash_value == Types::global().builtin_buffer) {
+			} else if (base_ty->hash_value == current_module->types.builtin_buffer) {
 				auto buf = reinterpret_cast<Buffer*>(value);
 				key = reinterpret_cast<uint64_t>(buf->allocation);
 				hash_combine(key, buf->offset);
 			} else if (base_ty->kind == Type::ARRAY_TY) {
 				if (base_ty->array.count > 0) { // for an array, we key off the the first element, as the array syncs together
-					auto elem_ty = base_ty->array.T.get();
+					auto elem_ty = base_ty->array.T->get();
 					auto size = base_ty->array.count;
 					auto elems = reinterpret_cast<std::byte*>(value);
 					return last_use(elem_ty, elems);
@@ -1117,7 +1117,7 @@ namespace vuk {
 	dst = *UNIQUE_NAME(A)
 			case Node::CONSTRUCT: { // when encountering a CONSTRUCT, allocate the thing if needed
 				if (sched.process(item)) {
-					if (node->type[0]->hash_value == Types::global().builtin_buffer) {
+					if (node->type[0]->hash_value == current_module->types.builtin_buffer) {
 						auto& bound = constant<Buffer>(node->construct.args[0]);
 						auto res = [&]() -> Result<void, CannotBeConstantEvaluated> {
 							EVAL(bound.size, node->construct.args[1]);
@@ -1152,7 +1152,7 @@ namespace vuk {
 						}
 						sched.done(node, host_stream, bound);
 						recorder.init_sync(node->type[0].get(), { to_use(eNone), host_stream }, sched.get_value(first(node)));
-					} else if (node->type[0]->hash_value == Types::global().builtin_image) {
+					} else if (node->type[0]->hash_value == current_module->types.builtin_image) {
 						auto& attachment = *reinterpret_cast<ImageAttachment*>(node->construct.args[0].node->constant.value);
 						// collapse inferencing
 						auto res = [&]() -> Result<void, CannotBeConstantEvaluated> {
@@ -1222,7 +1222,7 @@ namespace vuk {
 						}
 						sched.done(node, host_stream, attachment);
 						recorder.init_sync(node->type[0].get(), { to_use(eNone), host_stream }, sched.get_value(first(node)));
-					} else if (node->type[0]->hash_value == Types::global().builtin_swapchain) {
+					} else if (node->type[0]->hash_value == current_module->types.builtin_swapchain) {
 #ifdef VUK_DUMP_EXEC
 						print_results(node);
 						fmt::print(" = construct<swapchain>\n");
@@ -1239,20 +1239,20 @@ namespace vuk {
 						}
 
 						auto size = node->type[0]->array.count;
-						auto elem_ty = node->type[0]->array.T;
+						auto elem_ty = *node->type[0]->array.T;
 #ifdef VUK_DUMP_EXEC
 						print_results(node);
-						assert(elem_ty->hash_value == Types::global().builtin_buffer || elem_ty->hash_value == Types::global().builtin_image);
-						fmt::print(" = construct<{}[{}]> ", elem_ty->hash_value == Types::global().builtin_buffer ? "buffer" : "image", size);
+						assert(elem_ty->hash_value == current_module->types.builtin_buffer || elem_ty->hash_value == current_module->types.builtin_image);
+						fmt::print(" = construct<{}[{}]> ", elem_ty->hash_value == current_module->types.builtin_buffer ? "buffer" : "image", size);
 						print_args(node->construct.args.subspan(1));
 						fmt::print("\n");
 #endif
 						assert(node->construct.args[0].type()->kind == Type::MEMORY_TY);
-						if (elem_ty->hash_value == Types::global().builtin_buffer) {
+						if (elem_ty->hash_value == current_module->types.builtin_buffer) {
 							auto arr_mem = new (sched.arena.ensure_space(sizeof(Buffer) * size)) Buffer[size];
 							for (auto i = 0; i < size; i++) {
 								auto& elem = node->construct.args[i + 1];
-								assert(Type::stripped(elem.type())->hash_value == Types::global().builtin_buffer);
+								assert(Type::stripped(elem.type())->hash_value == current_module->types.builtin_buffer);
 
 								memcpy(&arr_mem[i], sched.get_value(elem), sizeof(Buffer));
 							}
@@ -1261,11 +1261,11 @@ namespace vuk {
 							}
 							node->construct.args[0].node->constant.value = arr_mem;
 							sched.done(node, host_stream, (void*)arr_mem);
-						} else if (elem_ty->hash_value == Types::global().builtin_image) {
+						} else if (elem_ty->hash_value == current_module->types.builtin_image) {
 							auto arr_mem = new (sched.arena.ensure_space(sizeof(ImageAttachment) * size)) ImageAttachment[size];
 							for (auto i = 0; i < size; i++) {
 								auto& elem = node->construct.args[i + 1];
-								assert(Type::stripped(elem.type())->hash_value == Types::global().builtin_image);
+								assert(Type::stripped(elem.type())->hash_value == current_module->types.builtin_image);
 
 								memcpy(&arr_mem[i], sched.get_value(elem), sizeof(ImageAttachment));
 							}
@@ -1365,7 +1365,7 @@ namespace vuk {
 							opaque_meta.push_back(&parm);
 						}
 						opaque_rets.resize(node->call.args[0].type()->opaque_fn.return_types.size());
-						node->call.args[0].type()->opaque_fn.callback(cobuf, opaque_args, opaque_meta, opaque_rets);
+						(*node->call.args[0].type()->callback)(cobuf, opaque_args, opaque_meta, opaque_rets);
 						if (vk_rec->rp.handle) {
 							vk_rec->end_render_pass();
 						}
@@ -1510,17 +1510,17 @@ namespace vuk {
 							}
 							StreamResourceUse src_use = { acqrel->last_use[i], src_stream };
 							recorder.init_sync(node->type[i].get(), src_use, node->splice.values[i]);
-							if (node->type[i]->hash_value == Types::global().builtin_buffer) {
+							if (node->type[i]->hash_value == current_module->types.builtin_buffer) {
 #ifdef VUK_DUMP_EXEC
 								fmt::print("buffer");
 #endif
-							} else if (node->type[i]->hash_value == Types::global().builtin_image) {
+							} else if (node->type[i]->hash_value == current_module->types.builtin_image) {
 #ifdef VUK_DUMP_EXEC
 								fmt::print("image");
 #endif
 							} else if (node->type[0]->kind == Type::ARRAY_TY) {
 #ifdef VUK_DUMP_EXEC
-								fmt::print("{}[]", node->type[0]->array.T->hash_value == Types::global().builtin_buffer ? "buffer" : "image");
+								fmt::print("{}[]", (*node->type[0]->array.T)->hash_value == current_module->types.builtin_buffer ? "buffer" : "image");
 #endif
 							}
 #ifdef VUK_DUMP_EXEC
@@ -1757,7 +1757,7 @@ namespace vuk {
 			}
 		}
 
-		Types::global().collect();
+		current_module->types.collect();
 
 		return { expected_value };
 	}

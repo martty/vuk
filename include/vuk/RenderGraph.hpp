@@ -291,13 +291,13 @@ public:
 
 	template<typename... T>
 	static auto fill_arg_ty(const std::tuple<T...>& args, std::vector<std::shared_ptr<Type>>& arg_types) {
-		(arg_types.emplace_back(Types::global().make_imbued_ty(std::get<T>(args).src.type(), T::access)), ...);
+		(arg_types.emplace_back(current_module->types.make_imbued_ty(std::get<T>(args).src.type(), T::access)), ...);
 	}
 
 	template<typename... T>
 	static auto fill_ret_ty(std::array<size_t, sizeof...(T)> idxs, const std::tuple<T...>& args, std::vector<std::shared_ptr<Type>>& ret_types) {
 		size_t i = 0;
-		(ret_types.emplace_back(Types::global().make_aliased_ty(Type::stripped(std::get<T>(args).src.type()), idxs[i++] + 1)), ...);
+		(ret_types.emplace_back(current_module->types.make_aliased_ty(Type::stripped(std::get<T>(args).src.type()), idxs[i++] + 1)), ...);
 	}
 
 	inline auto First = [](auto& first, auto&...) -> auto& {
@@ -359,7 +359,7 @@ public:
 				for (size_t i = 0; i < arg_types.size(); i++) {
 					if (!existing_maps[i]) {
 						maps_to_add.push_back(i);
-						ret_types.push_back(Types::global().make_aliased_ty(Type::stripped(arg_types[i]), i + 1));
+						ret_types.push_back(current_module->types.make_aliased_ty(Type::stripped(arg_types[i]), i + 1));
 					}
 				}
 
@@ -372,9 +372,9 @@ public:
 							opaque_rets[old_ret_cnt + i] = opaque_args[maps_to_add[i]];
 						}
 					};
-					opaque_fn_ty = current_module->make_opaque_fn_ty(arg_types, ret_types, vuk::DomainFlagBits::eAny, wrapped_cb, name.c_str());
+					opaque_fn_ty = current_module->types.make_opaque_fn_ty(arg_types, ret_types, vuk::DomainFlagBits::eAny, wrapped_cb, name.c_str());
 				} else {
-					opaque_fn_ty = current_module->make_opaque_fn_ty(arg_types, ret_types, vuk::DomainFlagBits::eAny, untyped_cb, name.c_str());
+					opaque_fn_ty = current_module->types.make_opaque_fn_ty(arg_types, ret_types, vuk::DomainFlagBits::eAny, untyped_cb, name.c_str());
 				}
 
 				auto opaque_fn = current_module->make_declare_fn(opaque_fn_ty);
@@ -441,7 +441,7 @@ public:
 
 	[[nodiscard]] inline Value<ImageAttachment> acquire_ia(Name name, ImageAttachment ia, Access access, VUK_CALLSTACK) {
 		assert(ia.image_view != ImageView{});
-		Ref ref = current_module->acquire(Types::global().get_builtin_image(), nullptr, ia);
+		Ref ref = current_module->acquire(current_module->types.get_builtin_image(), nullptr, ia);
 		auto ext_ref = ExtRef(std::make_shared<ExtNode>(ref.node, to_use(access)), ref);
 		current_module->name_output(ref, name.c_str());
 		current_module->set_source_location(ref.node, VUK_CALL);
@@ -465,7 +465,7 @@ public:
 
 	[[nodiscard]] inline Value<Buffer> acquire_buf(Name name, Buffer buf, Access access, VUK_CALLSTACK) {
 		assert(buf.buffer != VK_NULL_HANDLE);
-		Ref ref = current_module->acquire(Types::global().get_builtin_buffer(), nullptr, buf);
+		Ref ref = current_module->acquire(current_module->types.get_builtin_buffer(), nullptr, buf);
 		auto ext_ref = ExtRef(std::make_shared<ExtNode>(ref.node, to_use(access)), ref);
 		current_module->name_output(ref, name.c_str());
 		current_module->set_source_location(ref.node, VUK_CALL);
@@ -494,9 +494,9 @@ public:
 		}
 		std::shared_ptr<Type> t;
 		if constexpr (std::is_same_v<T, vuk::ImageAttachment>) {
-			t = Types::global().get_builtin_image();
+			t = current_module->types.get_builtin_image();
 		} else if constexpr (std::is_same_v<T, vuk::Buffer>) {
-			t = Types::global().get_builtin_buffer();
+			t = current_module->types.get_builtin_buffer();
 		}
 		Ref ref = current_module->make_declare_array(t, refs);
 		current_module->name_output(ref, name.c_str());
@@ -515,9 +515,9 @@ public:
 		}
 		std::shared_ptr<Type> t;
 		if constexpr (std::is_same_v<T, vuk::ImageAttachment>) {
-			t = Types::global().get_builtin_image();
+			t = current_module->types.get_builtin_image();
 		} else if constexpr (std::is_same_v<T, vuk::Buffer>) {
-			t = Types::global().get_builtin_buffer();
+			t = current_module->types.get_builtin_buffer();
 		}
 		Ref ref = current_module->make_declare_array(t, refs);
 		current_module->name_output(ref, name.c_str());

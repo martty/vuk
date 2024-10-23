@@ -212,7 +212,7 @@ namespace vuk {
 			std::shared_ptr<Type> ty;
 			auto stripped = Type::stripped(composite.type());
 			if (stripped->kind == Type::ARRAY_TY) {
-				ty = stripped->array.T;
+				ty = *stripped->array.T;
 			} else if (stripped->kind == Type::COMPOSITE_TY) {
 				ty = stripped->composite.types[index];
 			}

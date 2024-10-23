@@ -608,7 +608,7 @@ namespace vuk {
 			switch (node->kind) {
 			case Node::CONSTRUCT:
 				auto args_ptr = node->construct.args.data();
-				if (node->type[0]->hash_value == Types::global().builtin_image) {
+				if (node->type[0]->hash_value == current_module->types.builtin_image) {
 					auto ptr = &constant<ImageAttachment>(args_ptr[0]);
 					auto& value = constant<ImageAttachment>(args_ptr[0]);
 					if (value.extent.width > 0) {
@@ -638,7 +638,7 @@ namespace vuk {
 					if (value.level_count != VK_REMAINING_MIP_LEVELS) {
 						placeholder_to_ptr(args_ptr[9], &ptr->level_count);
 					}
-				} else if (node->type[0]->hash_value == Types::global().builtin_buffer) {
+				} else if (node->type[0]->hash_value == current_module->types.builtin_buffer) {
 					auto ptr = &constant<Buffer>(args_ptr[0]);
 					auto& value = constant<Buffer>(args_ptr[0]);
 					if (value.size != ~(0u)) {
@@ -714,7 +714,7 @@ namespace vuk {
 				}
 				case Node::CONSTRUCT: {
 					auto& args = node->construct.args;
-					if (node->type[0]->hash_value == Types::global().builtin_image) {
+					if (node->type[0]->hash_value == current_module->types.builtin_image) {
 						if (constant<ImageAttachment>(args[0]).image.image == VK_NULL_HANDLE) { // if there is no image, we will use base layer 0 and base mip 0
 							placeholder_to_constant(args[6], 0U);
 							placeholder_to_constant(args[8], 0U);
@@ -1121,19 +1121,19 @@ namespace vuk {
 			switch (node->kind) {
 			case Node::CONSTRUCT: {
 				bool s = true;
-				if (node->type[0]->hash_value == Types::global().builtin_image) {
+				if (node->type[0]->hash_value == current_module->types.builtin_image) {
 					auto ia = reinterpret_cast<ImageAttachment*>(node->construct.args[0].node->constant.value);
 					if (ia->image) {
 						auto [_, succ] = ias.emplace(*ia);
 						s = succ;
 					}
-				} else if (node->type[0]->hash_value == Types::global().builtin_buffer) {
+				} else if (node->type[0]->hash_value == current_module->types.builtin_buffer) {
 					auto buf = reinterpret_cast<Buffer*>(node->construct.args[0].node->constant.value);
 					if (buf->buffer != VK_NULL_HANDLE) {
 						auto [_, succ] = bufs.emplace(*buf);
 						s = succ;
 					}
-				} else if (node->type[0]->hash_value == Types::global().builtin_swapchain) {
+				} else if (node->type[0]->hash_value == current_module->types.builtin_swapchain) {
 					auto [_, succ] = swps.emplace(reinterpret_cast<Swapchain*>(node->construct.args[0].node->constant.value));
 					s = succ;
 				} else { // TODO: it is an array, no val yet
@@ -1154,13 +1154,13 @@ namespace vuk {
 					if (!link.undef && link.reads.size() == 0 && !link.next) { // it is never used
 						continue;
 					}
-					if (node->type[i]->hash_value == Types::global().builtin_image) {
+					if (node->type[i]->hash_value == current_module->types.builtin_image) {
 						auto [_, succ] = ias.emplace(*reinterpret_cast<ImageAttachment*>(node->splice.values[i]));
 						s = succ;
-					} else if (node->type[i]->hash_value == Types::global().builtin_buffer) {
+					} else if (node->type[i]->hash_value == current_module->types.builtin_buffer) {
 						auto [_, succ] = bufs.emplace(*reinterpret_cast<Buffer*>(node->splice.values[i]));
 						s = succ;
-					} else if (node->type[i]->hash_value == Types::global().builtin_swapchain) {
+					} else if (node->type[i]->hash_value == current_module->types.builtin_swapchain) {
 						auto [_, succ] = swps.emplace(reinterpret_cast<Swapchain*>(node->splice.values[i]));
 						s = succ;
 					} else { // TODO: it is an array, no val yet

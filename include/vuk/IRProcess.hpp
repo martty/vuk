@@ -61,7 +61,7 @@ namespace vuk {
 				void* composite_v = get_value(parm.node->extract.composite);
 				auto t = Type::stripped(composite.type());
 				if (t->kind == Type::COMPOSITE_TY) {
-					auto offset = t->composite.offsets[index_v];
+					auto offset = t->offsets[index_v];
 					return reinterpret_cast<std::byte*>(composite_v) + offset;
 				} else if (t->kind == Type::ARRAY_TY) {
 					return reinterpret_cast<std::byte*>(composite_v) + t->array.stride * index_v;
