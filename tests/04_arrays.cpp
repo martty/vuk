@@ -50,6 +50,30 @@ TEST_CASE("arrayed buffers, internal loop") {
 	}
 }
 
+TEST_CASE("zero len arrayed buffers") {
+	{
+		auto data = { 0xfeu, 0xfeu, 0xfeu, 0xfeu };
+		auto data2 = { 0xfdu, 0xfdu, 0xfdu, 0xfdu };
+		auto buf = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+		auto buf2 = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+
+		std::string trace = "";
+
+		auto fill = make_pass("fill two", [&](CommandBuffer& cbuf, VUK_ARG(Buffer[], Access::eTransferWrite) dst) {
+			for (size_t i = 0; i < dst.size(); i++) {
+				cbuf.fill_buffer(dst[i], (uint32_t)(0xfe - i));
+				trace += "+";
+			}
+			return dst;
+		});
+
+		auto arr = declare_array("buffers", std::span<vuk::Value<vuk::Buffer>>{});
+		Value<Buffer[]> filled_bufs = fill(arr);
+		auto res = filled_bufs.wait(*test_context.allocator, test_context.compiler);
+		CHECK(trace == "");
+	}
+}
+
 auto image2buf = make_pass("copy image to buffer", [](CommandBuffer& cbuf, VUK_IA(Access::eTransferRead) src, VUK_BA(Access::eTransferWrite) dst) {
 	BufferImageCopy bc;
 	bc.imageOffset = { 0, 0, 0 };
@@ -374,9 +398,7 @@ TEST_CASE("read convergence") {
 	auto img = vuk::clear_image(vuk::declare_ia("src", ia), vuk::ClearColor(0.1f, 0.1f, 0.1f, 0.1f));
 	std::string trace = "";
 	auto mipped = generate_mips(trace, std::move(img), 5);
-	auto pass = vuk::make_pass("rd", [&trace](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eTransferRead) src) {
-		trace += "r";
-	});
+	auto pass = vuk::make_pass("rd", [&trace](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eTransferRead) src) { trace += "r"; });
 	pass(mipped);
 	mipped.wait(*test_context.allocator, test_context.compiler);
 	CHECK(trace == "1234r");
@@ -512,10 +534,8 @@ vuk::Value<vuk::ImageAttachment> bloom_pass(std::string& trace,
                                             vuk::Value<vuk::ImageAttachment> upsample_image,
                                             vuk::Value<vuk::ImageAttachment> input) {
 	auto bloom_mip_count = downsample_image->level_count;
-	auto prefilter =
-	    vuk::make_pass("bloom_prefilter", [&trace](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eComputeRW) target, VUK_IA(vuk::eComputeSampled) input) {
-		    trace += "p";
-	    });
+	auto prefilter = vuk::make_pass(
+	    "bloom_prefilter", [&trace](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eComputeRW) target, VUK_IA(vuk::eComputeSampled) input) { trace += "p"; });
 
 	prefilter(downsample_image.mip(0), input);
 

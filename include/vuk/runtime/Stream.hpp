@@ -15,7 +15,7 @@ namespace vuk {
 
 		virtual Signal* make_signal() = 0;
 
-		void add_dependent_signal(Signal* signal) {
+		virtual void add_dependent_signal(Signal* signal) {
 			dependent_signals.push_back(signal);
 		}
 

@@ -568,6 +568,12 @@ namespace vuk {
 			domain = DomainFlagBits::eHost;
 		}
 
+		void add_dependent_signal(Signal* signal) override {
+			signal->source.executor = executor;
+			signal->source.visibility = 0;
+			signal->status = Signal::Status::eHostAvailable;
+		}
+
 		void add_dependency(Stream* dep) override {
 			dependencies.push_back(dep);
 		}
@@ -767,7 +773,9 @@ namespace vuk {
 		    ctx(alloc.get_context()),
 		    alloc(alloc),
 		    callbacks(callbacks),
-		    pass_reads(pass_reads) {}
+		    pass_reads(pass_reads) {
+			last_modify.emplace(0, new (this->arena.ensure_space(sizeof(PartialStreamResourceUse))) PartialStreamResourceUse{ { to_use(eNone), nullptr } });
+		}
 		Runtime& ctx;
 		Allocator alloc;
 		ProfilingCallbacks* callbacks;
@@ -941,11 +949,15 @@ namespace vuk {
 				auto buf = reinterpret_cast<Buffer*>(value);
 				key = reinterpret_cast<uint64_t>(buf->allocation);
 				hash_combine(key, buf->offset);
-			} else if (base_ty->kind == Type::ARRAY_TY) { // for an array, we key off the the first element, as the array syncs together
-				auto elem_ty = base_ty->array.T.get();
-				auto size = base_ty->array.count;
-				auto elems = reinterpret_cast<std::byte*>(value);
-				return last_use(elem_ty, elems);
+			} else if (base_ty->kind == Type::ARRAY_TY) {
+				if (base_ty->array.count > 0) { // for an array, we key off the the first element, as the array syncs together
+					auto elem_ty = base_ty->array.T.get();
+					auto size = base_ty->array.count;
+					auto elems = reinterpret_cast<std::byte*>(value);
+					return last_use(elem_ty, elems);
+				} else { // zero-len arrays
+					return *last_modify.at(0);
+				}
 			} else { // other types just key on the voidptr
 				key = reinterpret_cast<uint64_t>(value);
 			}
@@ -990,6 +1002,8 @@ namespace vuk {
 			recorder.streams.emplace(DomainFlagBits::eTransferQueue, std::make_unique<VkQueueStream>(alloc, static_cast<QueueExecutor*>(exe), &impl->callbacks));
 		}
 		auto host_stream = recorder.streams.at(DomainFlagBits::eHost).get();
+		host_stream->executor = ctx.get_executor(DomainFlagBits::eHost);
+		recorder.last_modify.at(0)->stream = host_stream;
 
 		std::deque<VkPEStream> pe_streams;
 
@@ -1242,6 +1256,9 @@ namespace vuk {
 
 								memcpy(&arr_mem[i], sched.get_value(elem), sizeof(Buffer));
 							}
+							if (size == 0) { // zero-len arrays
+								arr_mem = nullptr;
+							}
 							node->construct.args[0].node->constant.value = arr_mem;
 							sched.done(node, host_stream, (void*)arr_mem);
 						} else if (elem_ty->hash_value == Types::global().builtin_image) {
@@ -1251,6 +1268,9 @@ namespace vuk {
 								assert(Type::stripped(elem.type())->hash_value == Types::global().builtin_image);
 
 								memcpy(&arr_mem[i], sched.get_value(elem), sizeof(ImageAttachment));
+							}
+							if (size == 0) { // zero-len arrays
+								arr_mem = nullptr;
 							}
 							node->construct.args[0].node->constant.value = arr_mem;
 							sched.done(node, host_stream, (void*)arr_mem);
@@ -1475,8 +1495,8 @@ namespace vuk {
 						}
 						sched.done(node, item.scheduled_stream, std::span{ values, node->splice.src.size() });
 					} else {
-						auto src_stream = recorder.stream_for_executor(acqrel->source.executor);
-
+						auto src_stream =
+						    acqrel->source.executor ? recorder.stream_for_executor(acqrel->source.executor) : recorder.stream_for_domain(DomainFlagBits::eHost);
 #ifdef VUK_DUMP_EXEC
 						print_results(node);
 						fmt::print(" = acquire<");
@@ -1484,7 +1504,8 @@ namespace vuk {
 
 						for (size_t i = 0; i < node->splice.values.size(); i++) {
 							auto& link = node->links[i];
-							if (!link.undef && link.reads.size() == 0 && !link.next) { // it is never used
+							// TODO: array exception
+							if (!link.undef && link.reads.size() == 0 && !link.next && node->type[0]->kind != Type::ARRAY_TY) { // it is never used
 								continue;
 							}
 							StreamResourceUse src_use = { acqrel->last_use[i], src_stream };
