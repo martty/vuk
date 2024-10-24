@@ -8,6 +8,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <optional>
 
 namespace vuk {
 	struct Program {
@@ -179,7 +180,7 @@ namespace vuk {
 
 			unsigned highest_descriptor_binding = 0;
 		};
-		std::unordered_map<size_t, Descriptors> sets;
+		std::vector<std::optional<Descriptors>> sets;
 		VkShaderStageFlags stages = {};
 		void append(const Program& o);
 	};

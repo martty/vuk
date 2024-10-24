@@ -249,7 +249,11 @@ namespace vuk {
 				reflect_members(refl, refl.get_type(ub.type_id), un.members);
 			}
 			un.size = refl.get_declared_struct_size(type);
-			sets[set].uniform_buffers.push_back(un);
+			if (set >= sets.size()) {
+				sets.resize(set + 1, std::nullopt);
+				sets[set] = Descriptors{};
+			}
+			sets[set]->uniform_buffers.push_back(un);
 		}
 
 		for (auto& sb : resources.storage_buffers) {
@@ -265,7 +269,11 @@ namespace vuk {
 				reflect_members(refl, refl.get_type(sb.type_id), un.members);
 			}
 			un.is_hlsl_counter_buffer = refl.buffer_is_hlsl_counter_buffer(sb.id);
-			sets[set].storage_buffers.push_back(un);
+			if (set >= sets.size()) {
+				sets.resize(set + 1, std::nullopt);
+				sets[set] = Descriptors{};
+			}
+			sets[set]->storage_buffers.push_back(un);
 		}
 
 		for (auto& si : resources.sampled_images) {
@@ -279,7 +287,11 @@ namespace vuk {
 			// maybe spirv cross bug?
 			t.array_size = type.array.size() == 1 ? (type.array[0] == 1 ? 0 : type.array[0]) : -1;
 			t.shadow = type.image.depth;
-			sets[set].combined_image_samplers.push_back(t);
+			if (set >= sets.size()) {
+				sets.resize(set + 1, std::nullopt);
+				sets[set] = Descriptors{};
+			}
+			sets[set]->combined_image_samplers.push_back(t);
 		}
 
 		for (auto& sa : resources.separate_samplers) {
@@ -293,7 +305,11 @@ namespace vuk {
 			// maybe spirv cross bug?
 			t.array_size = type.array.size() == 1 ? (type.array[0] == 1 ? 0 : type.array[0]) : -1;
 			t.shadow = type.image.depth;
-			sets[set].samplers.push_back(t);
+			if (set >= sets.size()) {
+				sets.resize(set + 1, std::nullopt);
+				sets[set] = Descriptors{};
+			}
+			sets[set]->samplers.push_back(t);
 		}
 
 		for (auto& si : resources.separate_images) {
@@ -306,7 +322,11 @@ namespace vuk {
 			t.stage = stage;
 			// maybe spirv cross bug?
 			t.array_size = type.array.size() == 1 ? (type.array[0] == 1 ? 0 : type.array[0]) : -1;
-			sets[set].sampled_images.push_back(t);
+			if (set >= sets.size()) {
+				sets.resize(set + 1, std::nullopt);
+				sets[set] = Descriptors{};
+			}
+			sets[set]->sampled_images.push_back(t);
 		}
 
 		for (auto& sb : resources.storage_images) {
@@ -319,7 +339,11 @@ namespace vuk {
 			un.name = sb.name.c_str();
 			// maybe spirv cross bug?
 			un.array_size = type.array.size() == 1 ? (type.array[0] == 1 ? 0 : type.array[0]) : -1;
-			sets[set].storage_images.push_back(un);
+			if (set >= sets.size()) {
+				sets.resize(set + 1, std::nullopt);
+				sets[set] = Descriptors{};
+			}
+			sets[set]->storage_images.push_back(un);
 		}
 
 		// subpass inputs
@@ -331,7 +355,11 @@ namespace vuk {
 			s.name = std::string(si.name.c_str());
 			s.binding = binding;
 			s.stage = stage;
-			sets[set].subpass_inputs.push_back(s);
+			if (set >= sets.size()) {
+				sets.resize(set + 1, std::nullopt);
+				sets[set] = Descriptors{};
+			}
+			sets[set]->subpass_inputs.push_back(s);
 		}
 
 		// ASs
@@ -344,7 +372,11 @@ namespace vuk {
 			s.binding = binding;
 			s.stage = stage;
 			s.array_size = type.array.size() == 1 ? (type.array[0] == 1 ? 0 : type.array[0]) : -1;
-			sets[set].acceleration_structures.push_back(s);
+			if (set >= sets.size()) {
+				sets.resize(set + 1, std::nullopt);
+				sets[set] = Descriptors{};
+			}
+			sets[set]->acceleration_structures.push_back(s);
 		}
 
 		for (auto& sc : refl.get_specialization_constants()) {
@@ -353,47 +385,53 @@ namespace vuk {
 
 		// remove duplicated bindings (aliased bindings)
 		// TODO: we need to preserve this information somewhere
-		for (auto& [index, set] : sets) {
-			unq(set.samplers);
-			unq(set.sampled_images);
-			unq(set.combined_image_samplers);
-			unq(set.uniform_buffers);
-			unq(set.storage_buffers);
-			unq(set.texel_buffers);
-			unq(set.subpass_inputs);
-			unq(set.storage_images);
-			unq(set.acceleration_structures);
+		for (auto& set : sets) {
+			if (!set) {
+				continue;
+			}
+			unq(set->samplers);
+			unq(set->sampled_images);
+			unq(set->combined_image_samplers);
+			unq(set->uniform_buffers);
+			unq(set->storage_buffers);
+			unq(set->texel_buffers);
+			unq(set->subpass_inputs);
+			unq(set->storage_images);
+			unq(set->acceleration_structures);
 		}
 
 		std::sort(spec_constants.begin(), spec_constants.end(), binding_cmp);
 
-		for (auto& [index, set] : sets) {
+		for (auto& set : sets) {
+			if (!set) {
+				continue;
+			}
 			unsigned max_binding = 0;
-			for (auto& ub : set.uniform_buffers) {
+			for (auto& ub : set->uniform_buffers) {
 				max_binding = std::max(max_binding, ub.binding);
 			}
-			for (auto& ub : set.storage_buffers) {
+			for (auto& ub : set->storage_buffers) {
 				max_binding = std::max(max_binding, ub.binding);
 			}
-			for (auto& ub : set.samplers) {
+			for (auto& ub : set->samplers) {
 				max_binding = std::max(max_binding, ub.binding);
 			}
-			for (auto& ub : set.sampled_images) {
+			for (auto& ub : set->sampled_images) {
 				max_binding = std::max(max_binding, ub.binding);
 			}
-			for (auto& ub : set.combined_image_samplers) {
+			for (auto& ub : set->combined_image_samplers) {
 				max_binding = std::max(max_binding, ub.binding);
 			}
-			for (auto& ub : set.subpass_inputs) {
+			for (auto& ub : set->subpass_inputs) {
 				max_binding = std::max(max_binding, ub.binding);
 			}
-			for (auto& ub : set.storage_buffers) {
+			for (auto& ub : set->storage_buffers) {
 				max_binding = std::max(max_binding, ub.binding);
 			}
-			for (auto& ub : set.acceleration_structures) {
+			for (auto& ub : set->acceleration_structures) {
 				max_binding = std::max(max_binding, ub.binding);
 			}
-			set.highest_descriptor_binding = max_binding;
+			set->highest_descriptor_binding = max_binding;
 		}
 
 		// push constants
@@ -420,28 +458,38 @@ namespace vuk {
 		push_constant_ranges.insert(push_constant_ranges.end(), o.push_constant_ranges.begin(), o.push_constant_ranges.end());
 		spec_constants.insert(spec_constants.end(), o.spec_constants.begin(), o.spec_constants.end());
 		unq(spec_constants);
-		for (auto& [index, os] : o.sets) {
+		if (o.sets.size() > sets.size()) {
+			sets.resize(o.sets.size());
+		}
+		for (auto index = 0; index < o.sets.size(); index++) {
+			auto& os = o.sets[index];
+			if (!os) {
+				continue;
+			}
 			auto& s = sets[index];
-			s.samplers.insert(s.samplers.end(), os.samplers.begin(), os.samplers.end());
-			s.sampled_images.insert(s.sampled_images.end(), os.sampled_images.begin(), os.sampled_images.end());
-			s.combined_image_samplers.insert(s.combined_image_samplers.end(), os.combined_image_samplers.begin(), os.combined_image_samplers.end());
-			s.uniform_buffers.insert(s.uniform_buffers.end(), os.uniform_buffers.begin(), os.uniform_buffers.end());
-			s.storage_buffers.insert(s.storage_buffers.end(), os.storage_buffers.begin(), os.storage_buffers.end());
-			s.texel_buffers.insert(s.texel_buffers.end(), os.texel_buffers.begin(), os.texel_buffers.end());
-			s.subpass_inputs.insert(s.subpass_inputs.end(), os.subpass_inputs.begin(), os.subpass_inputs.end());
-			s.storage_images.insert(s.storage_images.end(), os.storage_images.begin(), os.storage_images.end());
-			s.acceleration_structures.insert(s.acceleration_structures.end(), os.acceleration_structures.begin(), os.acceleration_structures.end());
+			if (!s) {
+				s = os;
+			}
+			s->samplers.insert(s->samplers.end(), os->samplers.begin(), os->samplers.end());
+			s->sampled_images.insert(s->sampled_images.end(), os->sampled_images.begin(), os->sampled_images.end());
+			s->combined_image_samplers.insert(s->combined_image_samplers.end(), os->combined_image_samplers.begin(), os->combined_image_samplers.end());
+			s->uniform_buffers.insert(s->uniform_buffers.end(), os->uniform_buffers.begin(), os->uniform_buffers.end());
+			s->storage_buffers.insert(s->storage_buffers.end(), os->storage_buffers.begin(), os->storage_buffers.end());
+			s->texel_buffers.insert(s->texel_buffers.end(), os->texel_buffers.begin(), os->texel_buffers.end());
+			s->subpass_inputs.insert(s->subpass_inputs.end(), os->subpass_inputs.begin(), os->subpass_inputs.end());
+			s->storage_images.insert(s->storage_images.end(), os->storage_images.begin(), os->storage_images.end());
+			s->acceleration_structures.insert(s->acceleration_structures.end(), os->acceleration_structures.begin(), os->acceleration_structures.end());
 
-			unq(s.samplers);
-			unq(s.sampled_images);
-			unq(s.combined_image_samplers);
-			unq(s.uniform_buffers);
-			unq(s.storage_buffers);
-			unq(s.texel_buffers);
-			unq(s.subpass_inputs);
-			unq(s.storage_images);
-			unq(s.acceleration_structures);
-			s.highest_descriptor_binding = std::max(s.highest_descriptor_binding, os.highest_descriptor_binding);
+			unq(s->samplers);
+			unq(s->sampled_images);
+			unq(s->combined_image_samplers);
+			unq(s->uniform_buffers);
+			unq(s->storage_buffers);
+			unq(s->texel_buffers);
+			unq(s->subpass_inputs);
+			unq(s->storage_images);
+			unq(s->acceleration_structures);
+			s->highest_descriptor_binding = std::max(s->highest_descriptor_binding, os->highest_descriptor_binding);
 		}
 
 		stages |= o.stages;
