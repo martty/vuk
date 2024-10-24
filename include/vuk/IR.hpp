@@ -88,7 +88,7 @@ namespace vuk {
 		using Hash = uint32_t;
 		Hash hash_value;
 
-		static Hash hash(Type* t) {
+		static Hash hash(Type const* t) {
 			Hash v = 0;
 			switch (t->kind) {
 			case IMBUED_TY:
@@ -123,8 +123,7 @@ namespace vuk {
 			}
 			case OPAQUE_FN_TY:
 				hash_combine_direct(v, (uintptr_t)t->callback->target<void(CommandBuffer&, std::span<void*>, std::span<void*>, std::span<void*>)>() >> 32);
-				hash_combine_direct(
-				    v, (uintptr_t)t->callback->target<void(CommandBuffer&, std::span<void*>, std::span<void*>, std::span<void*>)>() & 0xffffffff);
+				hash_combine_direct(v, (uintptr_t)t->callback->target<void(CommandBuffer&, std::span<void*>, std::span<void*>, std::span<void*>)>() & 0xffffffff);
 				return v;
 			}
 		}
@@ -778,9 +777,9 @@ namespace vuk {
 			std::unordered_map<Type::Hash, std::weak_ptr<Type>> type_map;
 			plf::colony<UserCallbackType> ucbs;
 
-			Type::Hash builtin_image = -1;
-			Type::Hash builtin_buffer = -1;
-			Type::Hash builtin_swapchain = -1;
+			Type::Hash builtin_image = 0;
+			Type::Hash builtin_buffer = 0;
+			Type::Hash builtin_swapchain = 0;
 
 			// TYPES
 			std::shared_ptr<Type> make_imbued_ty(std::shared_ptr<Type> ty, Access access) {
@@ -820,18 +819,50 @@ namespace vuk {
 			}
 
 			std::shared_ptr<Type> u64() {
+				Type ty{ .kind = Type::INTEGER_TY, .size = sizeof(uint64_t), .integer = { .width = 64 } };
+				auto it = type_map.find(Type::hash(&ty));
+				if (it != type_map.end()) {
+					if (auto ty = it->second.lock()) {
+						return ty;
+					}
+				}
+
 				return emplace_type(std::shared_ptr<Type>(new Type{ .kind = Type::INTEGER_TY, .size = sizeof(uint64_t), .integer = { .width = 64 } }));
 			}
 
 			std::shared_ptr<Type> u32() {
+				Type ty{ .kind = Type::INTEGER_TY, .size = sizeof(uint32_t), .integer = { .width = 32 } };
+				auto it = type_map.find(Type::hash(&ty));
+				if (it != type_map.end()) {
+					if (auto ty = it->second.lock()) {
+						return ty;
+					}
+				}
+
 				return emplace_type(std::shared_ptr<Type>(new Type{ .kind = Type::INTEGER_TY, .size = sizeof(uint32_t), .integer = { .width = 32 } }));
 			}
 
 			std::shared_ptr<Type> memory(size_t size) {
+				Type ty{ .kind = Type::MEMORY_TY, .size = size };
+				auto it = type_map.find(Type::hash(&ty));
+				if (it != type_map.end()) {
+					if (auto ty = it->second.lock()) {
+						return ty;
+					}
+				}
 				return emplace_type(std::shared_ptr<Type>(new Type{ .kind = Type::MEMORY_TY, .size = size }));
 			}
 
 			std::shared_ptr<Type> get_builtin_image() {
+				if (builtin_image) {
+					auto it = type_map.find(builtin_image);
+					if (it != type_map.end()) {
+						if (auto ty = it->second.lock()) {
+							return ty;
+						}
+					}
+				}
+
 				auto u32_t = u32();
 				auto image_ = std::vector<std::shared_ptr<Type>>{ u32_t, u32_t, u32_t, memory(sizeof(Format)), memory(sizeof(Samples)), u32_t, u32_t, u32_t, u32_t };
 				auto image_offsets = std::vector<size_t>{ offsetof(ImageAttachment, extent) + offsetof(Extent3D, width),
@@ -855,6 +886,15 @@ namespace vuk {
 			}
 
 			std::shared_ptr<Type> get_builtin_buffer() {
+				if (builtin_buffer) {
+					auto it = type_map.find(builtin_buffer);
+					if (it != type_map.end()) {
+						if (auto ty = it->second.lock()) {
+							return ty;
+						}
+					}
+				}
+
 				auto buffer_ = std::vector<std::shared_ptr<Type>>{ u64() };
 				auto buffer_offsets = std::vector<size_t>{ offsetof(Buffer, size) };
 				auto buffer_type = emplace_type(std::shared_ptr<Type>(new Type{ .kind = Type::COMPOSITE_TY,
@@ -869,6 +909,14 @@ namespace vuk {
 			}
 
 			std::shared_ptr<Type> get_builtin_swapchain() {
+				if (builtin_swapchain) {
+					auto it = type_map.find(builtin_swapchain);
+					if (it != type_map.end()) {
+						if (auto ty = it->second.lock()) {
+							return ty;
+						}
+					}
+				}
 				auto arr_ty = make_array_ty(get_builtin_image(), 16);
 				auto swp_ = std::vector<std::shared_ptr<Type>>{ arr_ty };
 				auto offsets = std::vector<size_t>{ 0 };
@@ -938,7 +986,7 @@ namespace vuk {
 			}
 			auto& names = ref.node->debug_info->result_names;
 			if (names.size() <= ref.index) {
-			  names.resize(ref.index + 1);
+				names.resize(ref.index + 1);
 			}
 			names[ref.index] = name;
 		}
