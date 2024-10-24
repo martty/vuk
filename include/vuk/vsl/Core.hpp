@@ -19,15 +19,15 @@ namespace vuk {
 		// host-mapped buffers just get memcpys
 		if (dst.mapped_ptr) {
 			memcpy(dst.mapped_ptr, src_data, size);
-			return { vuk::acquire_buf("_dst", dst, Access::eNone, VUK_CALL) };
+			return { acquire_buf("_dst", dst, Access::eNone, VUK_CALL) };
 		}
 
 		auto src = *allocate_buffer(allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, 1 });
 		::memcpy(src->mapped_ptr, src_data, size);
 
-		auto src_buf = vuk::acquire_buf("_src", *src, Access::eNone, VUK_CALL);
-		auto dst_buf = vuk::discard_buf("_dst", dst, VUK_CALL);
-		auto pass = vuk::make_pass("upload buffer", [](vuk::CommandBuffer& command_buffer, VUK_BA(Access::eTransferRead) src, VUK_BA(Access::eTransferWrite) dst) {
+		auto src_buf = acquire_buf("_src", *src, Access::eNone, VUK_CALL);
+		auto dst_buf = discard_buf("_dst", dst, VUK_CALL);
+		auto pass = make_pass("upload buffer", [](CommandBuffer& command_buffer, VUK_BA(Access::eTransferRead) src, VUK_BA(Access::eTransferWrite) dst) {
 			command_buffer.copy_buffer(src, dst);
 			return dst;
 		});
@@ -50,7 +50,7 @@ namespace vuk {
 		auto dst = declare_buf("dst", Buffer{ .memory_usage = MemoryUsage::eGPUtoCPU }, VUK_CALL);
 		dst.same_size(buffer_src);
 		auto download =
-		    vuk::make_pass("download buffer", [](vuk::CommandBuffer& command_buffer, VUK_BA(Access::eTransferRead) src, VUK_BA(Access::eTransferWrite) dst) {
+		    make_pass("download buffer", [](CommandBuffer& command_buffer, VUK_BA(Access::eTransferRead) src, VUK_BA(Access::eTransferWrite) dst) {
 			    command_buffer.copy_buffer(src, dst);
 			    return dst;
 		    });
@@ -84,7 +84,7 @@ namespace vuk {
 		auto srcbuf = acquire_buf("src", *src, Access::eNone, VUK_CALL);
 		auto dst = declare_ia("dst", image, VUK_CALL);
 		auto image_upload =
-		    vuk::make_pass("image upload", [bc](vuk::CommandBuffer& command_buffer, VUK_BA(Access::eTransferRead) src, VUK_IA(Access::eTransferWrite) dst) {
+		    make_pass("image upload", [bc](CommandBuffer& command_buffer, VUK_BA(Access::eTransferRead) src, VUK_IA(Access::eTransferWrite) dst) {
 			    command_buffer.copy_buffer_to_image(src, dst, bc);
 			    return dst;
 		    });
@@ -97,7 +97,7 @@ namespace vuk {
 	/// @param mem_usage Where to allocate the buffer (host visible buffers will be automatically mapped)
 	template<class T>
 	std::pair<Unique<Buffer>, Value<Buffer>>
-	create_buffer(Allocator& allocator, vuk::MemoryUsage memory_usage, DomainFlagBits domain, std::span<T> data, size_t alignment = 1, VUK_CALLSTACK) {
+	create_buffer(Allocator& allocator, MemoryUsage memory_usage, DomainFlagBits domain, std::span<T> data, size_t alignment = 1, VUK_CALLSTACK) {
 		Unique<Buffer> buf(allocator);
 		BufferCreateInfo bci{ memory_usage, sizeof(T) * data.size(), alignment };
 		auto ret = allocator.allocate_buffers(std::span{ &*buf, 1 }, std::span{ &bci, 1 }); // TODO: dropping error
@@ -197,7 +197,7 @@ namespace vuk {
 	/// @param image input Future of ImageAttachment
 	/// @param base_mip source mip level
 	/// @param num_mips number of mip levels to generate
-	inline vuk::Value<vuk::ImageAttachment> generate_mips(vuk::Value<vuk::ImageAttachment> image, uint32_t base_mip, uint32_t num_mips) {
+	inline Value<ImageAttachment> generate_mips(Value<ImageAttachment> image, uint32_t base_mip, uint32_t num_mips) {
 		for (uint32_t mip_level = base_mip + 1; mip_level < (base_mip + num_mips + 1); mip_level++) {
 			blit_image(image.mip(mip_level - 1), image.mip(mip_level), Filter::eLinear);
 		}
