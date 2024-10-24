@@ -20,7 +20,7 @@
 #include <unordered_set>
 #include <vector>
 
-#if defined(__clang__) or defined(__GNUC__)
+#if false // seems like clang still has issues with this - lets keep it safe
 #define VUK_IA(access, ...)        vuk::Arg<vuk::ImageAttachment, access, decltype([]() {}) __VA_OPT__(, ) __VA_ARGS__>
 #define VUK_BA(access, ...)        vuk::Arg<vuk::Buffer, access, decltype([]() {}) __VA_OPT__(, ) __VA_ARGS__>
 #define VUK_ARG(type, access, ...) vuk::Arg<type, access, decltype([]() {}) __VA_OPT__(, ) __VA_ARGS__>
