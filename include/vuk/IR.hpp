@@ -251,7 +251,7 @@ namespace vuk {
 	};
 
 	struct NodeDebugInfo {
-		std::span<std::string_view> result_names;
+		std::vector<std::string> result_names;
 		std::span<vuk::source_location> trace;
 	};
 
@@ -937,10 +937,10 @@ namespace vuk {
 				node->debug_info = new NodeDebugInfo;
 			}
 			auto& names = ref.node->debug_info->result_names;
-			/* if (names.size() <= ref.index) {
-			  names = payload_arena.allocate_span(names, ref.index + 1);
+			if (names.size() <= ref.index) {
+			  names.resize(ref.index + 1);
 			}
-			names[ref.index] = payload_arena.allocate_string(name);*/
+			names[ref.index] = name;
 		}
 
 		void set_source_location(Node* node, SourceLocationAtFrame loc) {
@@ -985,9 +985,6 @@ namespace vuk {
 			if (node->debug_info) {
 				if (node->debug_info->trace.size() > 0) {
 					delete[] node->debug_info->trace.data();
-				}
-				if (node->debug_info->result_names.size() > 0) {
-					delete[] node->debug_info->result_names.data();
 				}
 
 				delete node->debug_info;

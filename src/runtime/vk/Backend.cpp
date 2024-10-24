@@ -39,7 +39,7 @@ namespace vuk {
 	}
 
 	std::string parm_to_string(Ref parm) {
-		if (parm.node->debug_info && !parm.node->debug_info->result_names.empty()) {
+		if (parm.node->debug_info && parm.node->debug_info->result_names.size() > parm.index) {
 			return fmt::format("%{}", parm.node->debug_info->result_names[parm.index]);
 		} else if (parm.node->kind == Node::CONSTANT) {
 			Type* ty = parm.node->type[0].get();
@@ -1217,7 +1217,7 @@ namespace vuk {
 							}
 							attachment.image = **img;
 							if (node->debug_info && node->debug_info->result_names.size() > 0 && !node->debug_info->result_names[0].empty()) {
-								ctx.set_name(attachment.image.image, node->debug_info->result_names[0]);
+								ctx.set_name(attachment.image.image, node->debug_info->result_names[0].c_str());
 							}
 						}
 						sched.done(node, host_stream, attachment);
