@@ -1208,6 +1208,94 @@ namespace vuk {
 		return { expected_value };
 	}
 
+	struct Replace {
+		Ref needle;
+		Ref value;
+	};
+	// the issue with multiple replaces is that if there are two replaces link: eg, a->b and b->c
+	// in this case the order of replaces / args after replacement will determine the outcome and we might leave b's, despite wanting to get rid of them all
+	// to prevent this, we form replace chains when adding replaces
+	// if we already b->c:
+	//   - and we want to add a->b, then we add a->c and keep b->c (search value in needles)
+	//   - and we want to add c->d, then we add c->d and change b->c to b->d (search needle in values)
+
+	// for efficient replacing we can sort both replaces and args with the same sort predicate
+	// we loop over replaces and keep a persistent iterator into args, that we increment
+	struct Replacer {
+		Replacer(std::vector<Replace, short_alloc<Replace>>& v) : replaces(v) {}
+
+		// we keep replaces sorted by needle
+		std::vector<Replace, short_alloc<Replace>>& replaces;
+
+		void replace(Ref needle, Ref value) {
+			Ref value2 = value;
+			// search value in needles -> this will be the end we use
+			// 0 or 1 hits
+			auto iit =
+			    std::upper_bound(replaces.begin(), replaces.end(), Replace{ value, value }, [](const Replace& a, const Replace& b) { return a.needle < b.needle; });
+			if (iit != replaces.end() && iit->needle == value) { // 1 hit
+				value2 = iit->value;
+			}
+
+			// search needle in values (extend chains longer)
+			iit = std::find_if(replaces.begin(), replaces.end(), [=](Replace& a) { return a.value == needle; });
+			while (iit != replaces.end()) { //
+				iit->value = value2;
+				iit = std::find_if(iit, replaces.end(), [=](Replace& a) { return a.value == needle; });
+			}
+
+			// sorted insert of new replace
+			auto it =
+			    std::upper_bound(replaces.begin(), replaces.end(), Replace{ needle, value }, [](const Replace& a, const Replace& b) { return a.needle < b.needle; });
+			replaces.insert(it, { needle, value2 });
+		}
+	};
+
+	template<class Pred>
+	Result<void> Compiler::rewrite(Pred pred) {
+		std::vector<Replace, short_alloc<Replace>> replaces(*impl->arena_);
+		Replacer rr(replaces);
+
+		for (auto node : impl->nodes) {
+			pred(node, rr);
+		}
+
+		std::vector<Ref*, short_alloc<Ref*>> args(*impl->arena_);
+		// collect all args
+		for (auto node : impl->nodes) {
+			auto count = node->generic_node.arg_count;
+			if (count != (uint8_t)~0u) {
+				for (int i = 0; i < count; i++) {
+					auto arg = &node->fixed_node.args[i];
+					args.push_back(arg);
+				}
+			} else {
+				for (int i = 0; i < node->variable_node.args.size(); i++) {
+					auto arg = &(*(Ref**)&node->variable_node.args)[i];
+					args.push_back(arg);
+				}
+			}
+		}
+
+		std::sort(args.begin(), args.end(), [](Ref* a, Ref* b) { return a->node < b->node || (a->node == b->node && a->index < b->index); });
+
+		// do the replaces
+		auto arg_it = args.begin();
+		auto arg_end = args.end();
+		for (auto replace_it = replaces.begin(); replace_it != replaces.end(); ++replace_it) {
+			auto& replace = *replace_it;
+			while (arg_it != arg_end && **arg_it < replace.needle) {
+				++arg_it;
+			}
+			while (arg_it != arg_end && **arg_it == replace.needle) {
+				**arg_it = replace.value;
+				++arg_it;
+			}
+		}
+
+		return { expected_value };
+	}
+
 	Result<void> Compiler::compile(std::span<std::shared_ptr<ExtNode>> nodes, const RenderGraphCompileOptions& compile_options) {
 		reset();
 		impl->callbacks = compile_options.callbacks;
@@ -1286,128 +1374,35 @@ namespace vuk {
 		}
 
 		VUK_DO_OR_RETURN(impl->build_nodes());
-		std::vector<Node*> all_nodes;
+		/*std::vector<Node*> all_nodes;
 		for (auto& n : current_module->op_arena) {
-			all_nodes.push_back(&n);
+		  all_nodes.push_back(&n);
 		}
-		//_dump_graph(all_nodes, true, false);
+		_dump_graph(all_nodes, true, false);*/
 		VUK_DO_OR_RETURN(impl->build_links(impl->nodes, allocator));
 
-		// eliminate useless splices
-		struct Replace {
-			Ref needle;
-			Ref value;
-		};
-		{
-			std::vector<Replace, short_alloc<Replace>> replaces(*impl->arena_);
+		// eliminate useless splices & bridge multiple slices
+		VUK_DO_OR_RETURN(rewrite([](Node* node, auto& replaces) {
+			switch (node->kind) {
+			case Node::SPLICE: {
+				if (node->splice.rel_acq == nullptr && node->splice.dst_access == Access::eNone && node->splice.dst_domain == DomainFlagBits::eAny) {
+					for (size_t i = 0; i < node->splice.src.size(); i++) {
+						auto needle = Ref{ node, i };
+						auto replace_with = node->splice.src[i];
 
-			for (auto node : impl->nodes) {
-				switch (node->kind) {
-				case Node::SPLICE: {
-					if (node->splice.rel_acq == nullptr && node->splice.dst_access == Access::eNone && node->splice.dst_domain == DomainFlagBits::eAny) {
-						for (size_t i = 0; i < node->splice.src.size(); i++) {
-							auto needle = Ref{ node, i };
-							auto replace_with = node->splice.src[i];
-
-							replaces.emplace_back(Replace{ needle, replace_with });
-						}
-					}
-				} break;
-				}
-			}
-
-			std::vector<Ref*, short_alloc<Ref*>> args(*impl->arena_);
-			// collect all args
-			for (auto node : impl->nodes) {
-				auto count = node->generic_node.arg_count;
-				if (count != (uint8_t)~0u) {
-					for (int i = 0; i < count; i++) {
-						auto arg = &node->fixed_node.args[i];
-						args.push_back(arg);
-					}
-				} else {
-					for (int i = 0; i < node->variable_node.args.size(); i++) {
-						auto arg = &(*(Ref**)&node->variable_node.args)[i];
-						args.push_back(arg);
+						replaces.replace(needle, replace_with);
 					}
 				}
-			}
-
-			std::sort(args.begin(), args.end(), [](Ref* a, Ref* b) { return a->node < b->node || (a->node == b->node && a->index < b->index); });
-			std::sort(replaces.begin(), replaces.end(), [](Replace& a, Replace& b) {
-				return a.needle.node < b.needle.node || (a.needle.node == b.needle.node && a.needle.index < b.needle.index);
-			});
-
-			// do the replaces
-			auto arg_it = args.begin();
-			for (auto replace_it = replaces.begin(); replace_it != replaces.end(); ++replace_it) {
-				auto& replace = *replace_it;
-				int num_replaces = 0;
-				while (arg_it != args.end() && **arg_it < replace.needle) {
-					++arg_it;
-				}
-				while (arg_it != args.end() && **arg_it == replace.needle) {
-					**arg_it = replace.value;
-					++arg_it;
-					num_replaces++;
-				}
-				// replace in replaces
-				for (auto rit = replace_it + 1; rit != replaces.end(); ++rit) {
-					if (rit->needle == replace.needle) {
-						rit->needle = replace.value;
-					}
-				}
-				// rewind most pessimistically
-				auto new_index = std::distance(args.begin(), arg_it) - num_replaces - 1;
-				new_index = std::max(new_index, 0LL);
-				// resort args
-				std::sort(args.begin(), args.end(), [](Ref* a, Ref* b) { return a->node < b->node || (a->node == b->node && a->index < b->index); });
-				arg_it = args.begin();
-			}
-		}
-		VUK_DO_OR_RETURN(impl->build_nodes());
-		VUK_DO_OR_RETURN(impl->build_links(impl->nodes, allocator));
-
-		{
-			std::vector<Replace, short_alloc<Replace>> replaces(*impl->arena_);
-
-			for (auto node : impl->nodes) {
-				switch (node->kind) {
-				case Node::SLICE: {
-					auto& slice = node->slice;
-					Subrange::Image our_slice_range = { constant<uint32_t>(slice.base_level),
-						                                  constant<uint32_t>(slice.level_count),
-						                                  constant<uint32_t>(slice.base_layer),
-						                                  constant<uint32_t>(slice.layer_count) };
-					// walk up
-					auto link = &node->slice.image.link();
-					do {
-						if (link->def.node->kind == Node::SLICE) { // it is a slice
-							Subrange::Image their_slice_range = { constant<uint32_t>(link->def.node->slice.base_level),
-								                                    constant<uint32_t>(link->def.node->slice.level_count),
-								                                    constant<uint32_t>(link->def.node->slice.base_layer),
-								                                    constant<uint32_t>(link->def.node->slice.layer_count) };
-							if (link->def.index == 0) { //  and we took left
-								auto isect = intersect_one(our_slice_range, their_slice_range);
-								if (isect == our_slice_range) {
-									replaces.emplace_back(first(node), node->slice.image);
-									replaces.emplace_back(nth(node, 1), node->slice.image);
-									break;
-								}
-							} else { //  and we took right
-								auto isect = intersect_one(our_slice_range, their_slice_range);
-								if (isect == our_slice_range) {
-									replaces.emplace_back(first(node), node->slice.image);
-									replaces.emplace_back(nth(node, 1), node->slice.image);
-									break;
-								}
-							}
-						}
-						if (!link->prev) {
-							break;
-						}
-						link = link->prev;
-					} while (link->prev);
+			} break;
+			case Node::SLICE: {
+				auto& slice = node->slice;
+				Subrange::Image our_slice_range = { constant<uint32_t>(slice.base_level),
+					                                  constant<uint32_t>(slice.level_count),
+					                                  constant<uint32_t>(slice.base_layer),
+					                                  constant<uint32_t>(slice.layer_count) };
+				// walk up
+				auto link = &node->slice.image.link();
+				do {
 					if (link->def.node->kind == Node::SLICE) { // it is a slice
 						Subrange::Image their_slice_range = { constant<uint32_t>(link->def.node->slice.base_level),
 							                                    constant<uint32_t>(link->def.node->slice.level_count),
@@ -1416,70 +1411,52 @@ namespace vuk {
 						if (link->def.index == 0) { //  and we took left
 							auto isect = intersect_one(our_slice_range, their_slice_range);
 							if (isect == our_slice_range) {
-								replaces.emplace_back(first(node), node->slice.image);
-								replaces.emplace_back(nth(node, 1), node->slice.image);
+								replaces.replace(first(node), node->slice.image);
+								replaces.replace(nth(node, 1), node->slice.image);
 								break;
 							}
 						} else { //  and we took right
 							auto isect = intersect_one(our_slice_range, their_slice_range);
 							if (isect == our_slice_range) {
-								replaces.emplace_back(first(node), node->slice.image);
-								replaces.emplace_back(nth(node, 1), node->slice.image);
+								replaces.replace(first(node), node->slice.image);
+								replaces.replace(nth(node, 1), node->slice.image);
 								break;
 							}
 						}
 					}
-				} break;
-				}
-			}
-
-			std::vector<Ref*, short_alloc<Ref*>> args(*impl->arena_);
-			// collect all args
-			for (auto node : impl->nodes) {
-				auto count = node->generic_node.arg_count;
-				if (count != (uint8_t)~0u) {
-					for (int i = 0; i < count; i++) {
-						auto arg = &node->fixed_node.args[i];
-						args.push_back(arg);
+					if (!link->prev) {
+						break;
 					}
-				} else {
-					for (int i = 0; i < node->variable_node.args.size(); i++) {
-						auto arg = &(*(Ref**)&node->variable_node.args)[i];
-						args.push_back(arg);
+					link = link->prev;
+				} while (link->prev);
+				if (link->def.node->kind == Node::SLICE) { // it is a slice
+					Subrange::Image their_slice_range = { constant<uint32_t>(link->def.node->slice.base_level),
+						                                    constant<uint32_t>(link->def.node->slice.level_count),
+						                                    constant<uint32_t>(link->def.node->slice.base_layer),
+						                                    constant<uint32_t>(link->def.node->slice.layer_count) };
+					if (link->def.index == 0) { //  and we took left
+						auto isect = intersect_one(our_slice_range, their_slice_range);
+						if (isect == our_slice_range) {
+							replaces.replace(first(node), node->slice.image);
+							replaces.replace(nth(node, 1), node->slice.image);
+							break;
+						}
+					} else { //  and we took right
+						auto isect = intersect_one(our_slice_range, their_slice_range);
+						if (isect == our_slice_range) {
+							replaces.replace(first(node), node->slice.image);
+							replaces.replace(nth(node, 1), node->slice.image);
+							break;
+						}
 					}
 				}
+			} break;
 			}
-
-			std::sort(args.begin(), args.end(), [](Ref* a, Ref* b) { return a->node < b->node || (a->node == b->node && a->index < b->index); });
-			std::sort(replaces.begin(), replaces.end(), [](Replace& a, Replace& b) {
-				return a.needle.node < b.needle.node || (a.needle.node == b.needle.node && a.needle.index < b.needle.index);
-			});
-
-			// do the replaces
-			auto arg_it = args.begin();
-			for (auto& r : replaces) {
-				int num_replaces = 0;
-				if (r.needle.node->kind == Node::SLICE) {
-					printf("");
-				}
-				while (arg_it != args.end() && **arg_it < r.needle) {
-					++arg_it;
-				}
-				while (arg_it != args.end() && **arg_it == r.needle) {
-					**arg_it = r.value;
-					++arg_it;
-					num_replaces++;
-				}
-				// rewind most pessimistically
-				auto new_index = std::distance(args.begin(), arg_it) - num_replaces - 1;
-				new_index = std::max(new_index, 0LL);
-				// resort args
-				std::sort(args.begin(), args.end(), [](Ref* a, Ref* b) { return a->node < b->node || (a->node == b->node && a->index < b->index); });
-				arg_it = args.begin();
-			}
-		}
+		}));
 
 		VUK_DO_OR_RETURN(impl->build_nodes());
+		VUK_DO_OR_RETURN(impl->build_links(impl->nodes, allocator));
+
 		// SANITY: we have resolved all splices
 		for (auto node : impl->nodes) {
 			switch (node->kind) {
@@ -1492,8 +1469,6 @@ namespace vuk {
 		}
 		// FINAL GRAPH
 		//_dump_graph(impl->nodes, false, false);
-
-		VUK_DO_OR_RETURN(impl->build_links(impl->nodes, allocator));
 
 		VUK_DO_OR_RETURN(validate_read_undefined());
 		VUK_DO_OR_RETURN(validate_duplicated_resource_ref());

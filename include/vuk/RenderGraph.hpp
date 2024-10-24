@@ -586,6 +586,9 @@ public:
 		Result<void> validate_read_undefined();
 		Result<void> validate_duplicated_resource_ref();
 
+		template<class Pred>
+		Result<void> rewrite(Pred pred);
+
 		friend struct ExecutableRenderGraph;
 	};
 
