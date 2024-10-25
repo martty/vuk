@@ -1003,7 +1003,7 @@ namespace vuk {
 			}
 
 			TypeDebugInfo allocate_type_debug_info(std::string name) {
-				return TypeDebugInfo(name);
+				return TypeDebugInfo{ name };
 			}
 
 			void collect() {
@@ -1105,11 +1105,11 @@ namespace vuk {
 		Ref make_constant(T value) {
 			std::shared_ptr<Type>* ty;
 			if constexpr (std::is_same_v<T, uint64_t>) {
-				ty = new std::shared_ptr<Type>[1](types.u64());
+				ty = new std::shared_ptr<Type>[1]{ types.u64() };
 			} else if constexpr (std::is_same_v<T, uint32_t>) {
-				ty = new std::shared_ptr<Type>[1](types.u32());
+				ty = new std::shared_ptr<Type>[1]{ types.u32() };
 			} else {
-				ty = new std::shared_ptr<Type>[1](types.memory(sizeof(T)));
+				ty = new std::shared_ptr<Type>[1]{ types.memory(sizeof(T)) };
 			}
 			return first(
 			    emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ ty, 1 }, .constant = { .value = new (new char[sizeof(T)]) T(value), .owned = true } }));
@@ -1119,11 +1119,11 @@ namespace vuk {
 		Ref make_constant(T* value) {
 			std::shared_ptr<Type>* ty;
 			if constexpr (std::is_same_v<T, uint64_t>) {
-				ty = new std::shared_ptr<Type>[1](types.u64());
+				ty = new std::shared_ptr<Type>[1]{ types.u64() };
 			} else if constexpr (std::is_same_v<T, uint32_t>) {
-				ty = new std::shared_ptr<Type>[1](types.u32());
+				ty = new std::shared_ptr<Type>[1]{ types.u32() };
 			} else {
-				ty = new std::shared_ptr<Type>[1](types.memory(sizeof(T)));
+				ty = new std::shared_ptr<Type>[1]{ types.memory(sizeof(T)) };
 			}
 			return first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ ty, 1 }, .constant = { .value = value, .owned = false } }));
 		}
@@ -1132,79 +1132,81 @@ namespace vuk {
 			auto ptr = new (new char[sizeof(ImageAttachment)])
 			    ImageAttachment(value); /* rest extent_x extent_y extent_z format samples base_layer layer_count base_level level_count */
 			auto args_ptr = new Ref[10];
-			auto mem_ty = new std::shared_ptr<Type>[1](types.memory(sizeof(ImageAttachment)));
+			auto mem_ty = new std::shared_ptr<Type>[1]{ types.memory(sizeof(ImageAttachment)) };
 			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = ptr, .owned = true } }));
 			if (value.extent.width > 0) {
 				args_ptr[1] = make_constant(&ptr->extent.width);
 			} else {
-				args_ptr[1] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1](types.u32()), 1 } }));
+				args_ptr[1] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.u32() }, 1 } }));
 			}
 			if (value.extent.height > 0) {
 				args_ptr[2] = make_constant(&ptr->extent.height);
 			} else {
-				args_ptr[2] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1](types.u32()), 1 } }));
+				args_ptr[2] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.u32() }, 1 } }));
 			}
 			if (value.extent.depth > 0) {
 				args_ptr[3] = make_constant(&ptr->extent.depth);
 			} else {
-				args_ptr[3] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1](types.u32()), 1 } }));
+				args_ptr[3] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.u32() }, 1 } }));
 			}
 			if (value.format != Format::eUndefined) {
 				args_ptr[4] = make_constant(&ptr->format);
 			} else {
-				args_ptr[4] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1](types.memory(sizeof(Format))), 1 } }));
+				args_ptr[4] =
+				    first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.memory(sizeof(Format)) }, 1 } }));
 			}
 			if (value.sample_count != Samples::eInfer) {
 				args_ptr[5] = make_constant(&ptr->sample_count);
 			} else {
-				args_ptr[5] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1](types.memory(sizeof(Samples))), 1 } }));
+				args_ptr[5] =
+				    first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.memory(sizeof(Samples)) }, 1 } }));
 			}
 			if (value.base_layer != VK_REMAINING_ARRAY_LAYERS) {
 				args_ptr[6] = make_constant(&ptr->base_layer);
 			} else {
-				args_ptr[6] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1](types.u32()), 1 } }));
+				args_ptr[6] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.u32() }, 1 } }));
 			}
 			if (value.layer_count != VK_REMAINING_ARRAY_LAYERS) {
 				args_ptr[7] = make_constant(&ptr->layer_count);
 			} else {
-				args_ptr[7] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1](types.u32()), 1 } }));
+				args_ptr[7] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.u32() }, 1 } }));
 			}
 			if (value.base_level != VK_REMAINING_MIP_LEVELS) {
 				args_ptr[8] = make_constant(&ptr->base_level);
 			} else {
-				args_ptr[8] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1](types.u32()), 1 } }));
+				args_ptr[8] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.u32() }, 1 } }));
 			}
 			if (value.level_count != VK_REMAINING_MIP_LEVELS) {
 				args_ptr[9] = make_constant(&ptr->level_count);
 			} else {
-				args_ptr[9] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1](types.u32()), 1 } }));
+				args_ptr[9] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.u32() }, 1 } }));
 			}
 
 			return first(emplace_op(Node{ .kind = Node::CONSTRUCT,
-			                              .type = std::span{ new std::shared_ptr<Type>[1](types.get_builtin_image()), 1 },
+			                              .type = std::span{ new std::shared_ptr<Type>[1]{ types.get_builtin_image() }, 1 },
 			                              .construct = { .args = std::span(args_ptr, 10) } }));
 		}
 
 		Ref make_declare_buffer(Buffer value) {
 			auto buf_ptr = new (new char[sizeof(Buffer)]) Buffer(value); /* rest size */
 			auto args_ptr = new Ref[2];
-			auto mem_ty = new std::shared_ptr<Type>[1](types.memory(sizeof(Buffer)));
+			auto mem_ty = new std::shared_ptr<Type>[1]{ types.memory(sizeof(Buffer)) };
 			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = buf_ptr, .owned = true } }));
 			if (value.size != ~(0u)) {
 				args_ptr[1] = make_constant(&buf_ptr->size);
 			} else {
-				args_ptr[1] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1](types.u64()), 1 } }));
+				args_ptr[1] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.u64() }, 1 } }));
 			}
 
 			return first(emplace_op(Node{ .kind = Node::CONSTRUCT,
-			                              .type = std::span{ new std::shared_ptr<Type>[1](types.get_builtin_buffer()), 1 },
+			                              .type = std::span{ new std::shared_ptr<Type>[1]{ types.get_builtin_buffer() }, 1 },
 			                              .construct = { .args = std::span(args_ptr, 2) } }));
 		}
 
 		Ref make_declare_array(std::shared_ptr<Type> type, std::span<Ref> args) {
-			auto arr_ty = new std::shared_ptr<Type>[1](types.make_array_ty(type, args.size()));
+			auto arr_ty = new std::shared_ptr<Type>[1]{ types.make_array_ty(type, args.size()) };
 			auto args_ptr = new Ref[args.size() + 1];
-			auto mem_ty = new std::shared_ptr<Type>[1](types.memory(0));
+			auto mem_ty = new std::shared_ptr<Type>[1]{ types.memory(0) };
 			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = nullptr } }));
 			std::copy(args.begin(), args.end(), args_ptr + 1);
 			return first(emplace_op(Node{ .kind = Node::CONSTRUCT, .type = std::span{ arr_ty, 1 }, .construct = { .args = std::span(args_ptr, args.size() + 1) } }));
@@ -1212,7 +1214,7 @@ namespace vuk {
 
 		Ref make_declare_swapchain(Swapchain& bundle) {
 			auto args_ptr = new Ref[2];
-			auto mem_ty = new std::shared_ptr<Type>[1](types.memory(sizeof(Swapchain*)));
+			auto mem_ty = new std::shared_ptr<Type>[1]{ types.memory(sizeof(Swapchain*)) };
 			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = &bundle, .owned = false } }));
 			std::vector<Ref> imgs;
 			for (auto i = 0; i < bundle.images.size(); i++) {
@@ -1220,14 +1222,14 @@ namespace vuk {
 			}
 			args_ptr[1] = make_declare_array(types.get_builtin_image(), imgs);
 			return first(emplace_op(Node{ .kind = Node::CONSTRUCT,
-			                              .type = std::span{ new std::shared_ptr<Type>[1](types.get_builtin_swapchain()), 1 },
+			                              .type = std::span{ new std::shared_ptr<Type>[1]{ types.get_builtin_swapchain() }, 1 },
 			                              .construct = { .args = std::span(args_ptr, 2) } }));
 		}
 
 		Ref make_extract(Ref composite, Ref index) {
 			auto stripped = Type::stripped(composite.type());
 			assert(stripped->kind == Type::ARRAY_TY);
-			auto ty = new std::shared_ptr<Type>[1](*stripped->array.T);
+			auto ty = new std::shared_ptr<Type>[1]{ *stripped->array.T };
 			return first(emplace_op(Node{ .kind = Node::EXTRACT, .type = std::span{ ty, 1 }, .extract = { .composite = composite, .index = index } }));
 		}
 
@@ -1245,7 +1247,7 @@ namespace vuk {
 
 		Ref make_slice(Ref image, Ref base_level, Ref level_count, Ref base_layer, Ref layer_count) {
 			auto stripped = Type::stripped(image.type());
-			auto ty = new std::shared_ptr<Type>[2](stripped, stripped);
+			auto ty = new std::shared_ptr<Type>[2]{ stripped, stripped };
 			return first(emplace_op(
 			    Node{ .kind = Node::SLICE,
 			          .type = std::span{ ty, 2 },
@@ -1257,7 +1259,7 @@ namespace vuk {
 		// since a slice source is always a single range, converge produces a single range too
 		Ref make_converge(std::span<Ref> deps, std::span<char> write) {
 			auto stripped = Type::stripped(deps[0].type());
-			auto ty = new std::shared_ptr<Type>[1](stripped);
+			auto ty = new std::shared_ptr<Type>[1]{ stripped };
 
 			auto deps_ptr = new Ref[deps.size()];
 			std::copy(deps.begin(), deps.end(), deps_ptr);
@@ -1269,24 +1271,24 @@ namespace vuk {
 		}
 
 		Ref make_cast(std::shared_ptr<Type> dst_type, Ref src) {
-			auto ty = new std::shared_ptr<Type>[1](dst_type);
+			auto ty = new std::shared_ptr<Type>[1]{ dst_type };
 			return first(emplace_op(Node{ .kind = Node::CAST, .type = std::span{ ty, 1 }, .cast = { .src = src } }));
 		}
 
 		Ref make_acquire_next_image(Ref swapchain) {
 			return first(emplace_op(Node{ .kind = Node::ACQUIRE_NEXT_IMAGE,
-			                              .type = std::span{ new std::shared_ptr<Type>[1](types.get_builtin_image()), 1 },
+			                              .type = std::span{ new std::shared_ptr<Type>[1]{ types.get_builtin_image() }, 1 },
 			                              .acquire_next_image = { .swapchain = swapchain } }));
 		}
 
 		Ref make_clear_image(Ref dst, Clear cv) {
 			return first(emplace_op(Node{ .kind = Node::CLEAR,
-			                              .type = std::span{ new std::shared_ptr<Type>[1](types.get_builtin_image()), 1 },
+			                              .type = std::span{ new std::shared_ptr<Type>[1]{ types.get_builtin_image() }, 1 },
 			                              .clear = { .dst = dst, .cv = new Clear(cv) } }));
 		}
 
 		Ref make_declare_fn(std::shared_ptr<Type> const fn_ty) {
-			auto ty = new std::shared_ptr<Type>[1](fn_ty);
+			auto ty = new std::shared_ptr<Type>[1]{ fn_ty };
 			return first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ ty, 1 }, .constant = { .value = nullptr } }));
 		}
 
@@ -1347,7 +1349,7 @@ namespace vuk {
 		// MATH
 
 		Ref make_math_binary_op(Node::BinOp op, Ref a, Ref b) {
-			std::shared_ptr<Type>* tys = new std::shared_ptr<Type>[1](a.type());
+			std::shared_ptr<Type>* tys = new std::shared_ptr<Type>[1]{ a.type() };
 
 			return first(emplace_op(Node{ .kind = Node::MATH_BINARY, .type = std::span{ tys, 1 }, .math_binary = { .a = a, .b = b, .op = op } }));
 		}
