@@ -11,19 +11,31 @@ jobs:
     # The CMake configure and build commands are platform agnostic and should work equally well on Windows or Mac.
     # You can convert this to a matrix build if you need cross-platform coverage.
     # See: https://docs.github.com/en/free-pro-team@latest/actions/learn-github-actions/managing-complex-workflows#using-a-build-matrix
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     
     strategy:
       fail-fast: false
       matrix:
         config:
         - {
-            name: "Ubuntu GCC-11 Release",
-            cc: "gcc-11", cxx: "g++-11"
+            name: "Ubuntu GCC-13 Release",
+            cc: "gcc-13", cxx: "g++-13"
           }
         - {
-            name: "Ubuntu Clang-11 Release",
-            cc: "clang-11", cxx: "clang++-11"
+            name: "Ubuntu GCC-14 Release",
+            cc: "gcc-14", cxx: "g++-14"
+          }
+        - {
+            name: "Ubuntu Clang-16 Release",
+            cc: "clang-16", cxx: "clang++-16"
+          }
+        - {
+            name: "Ubuntu Clang-17 Release",
+            cc: "clang-17", cxx: "clang++-17"
+          }
+        - {
+            name: "Ubuntu Clang-18 Release",
+            cc: "clang-18", cxx: "clang++-18"
           }
 
     steps:
@@ -33,7 +45,7 @@ jobs:
 
     - run: |
         sudo apt-get update
-        sudo apt-get install -y xorg-dev gcc-11 g++-11 clang-11
+        sudo apt-get install -y xorg-dev g++-13 g++-14 clang-16 clang-17 clang-18
 
     - name: Setup Vulkan SDK
       uses: sjcobb2022/setup-vulkan-sdk@c2612401009bbce8002630e838bf91cc67f8b3c3
