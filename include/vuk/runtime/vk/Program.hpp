@@ -2,13 +2,14 @@
 
 #include "vuk/Config.hpp"
 #include "vuk/runtime/CreateInfo.hpp"
+#include "vuk/runtime/vk/Descriptor.hpp"
 #include "vuk/vuk_fwd.hpp"
 
 #include <array>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
-#include <optional>
 
 namespace vuk {
 	struct Program {
@@ -67,89 +68,21 @@ namespace vuk {
 			std::vector<Member> members;
 		};
 
-		// always a struct
-		struct UniformBuffer {
+		struct Binding {
+			DescriptorType type;
+
 			std::string name;
 
 			unsigned binding;
 			size_t size;
+			size_t min_size;
 			unsigned array_size;
 
 			std::vector<Member> members;
-
-			VkShaderStageFlags stage;
-		};
-
-		struct StorageBuffer {
-			std::string name;
-
-			unsigned binding;
-			size_t min_size;
 
 			bool is_hlsl_counter_buffer = false;
+			bool shadow; // if this is a samplerXXXShadow / samplerShadow
 
-			std::vector<Member> members;
-
-			VkShaderStageFlags stage;
-		};
-
-		struct StorageImage {
-			std::string name;
-
-			unsigned array_size;
-			unsigned binding;
-			VkShaderStageFlags stage;
-		};
-
-		struct SampledImage {
-			std::string name;
-
-			unsigned array_size;
-			unsigned binding;
-			VkShaderStageFlags stage;
-		};
-
-		struct CombinedImageSampler {
-			std::string name;
-
-			unsigned array_size;
-			unsigned binding;
-
-			bool shadow; // if this is a samplerXXXShadow
-
-			VkShaderStageFlags stage;
-		};
-
-		struct Sampler {
-			std::string name;
-
-			unsigned array_size;
-			unsigned binding;
-
-			bool shadow; // if this is a samplerShadow
-
-			VkShaderStageFlags stage;
-		};
-
-		struct TexelBuffer {
-			std::string name;
-
-			unsigned binding;
-			VkShaderStageFlags stage;
-		};
-
-		struct SubpassInput {
-			std::string name;
-
-			unsigned binding;
-			VkShaderStageFlags stage;
-		};
-
-		struct AccelerationStructure {
-			std::string name;
-
-			unsigned array_size;
-			unsigned binding;
 			VkShaderStageFlags stage;
 		};
 
@@ -168,15 +101,7 @@ namespace vuk {
 		std::vector<VkPushConstantRange> push_constant_ranges;
 		std::vector<SpecConstant> spec_constants;
 		struct Descriptors {
-			std::vector<UniformBuffer> uniform_buffers;
-			std::vector<StorageBuffer> storage_buffers;
-			std::vector<StorageImage> storage_images;
-			std::vector<TexelBuffer> texel_buffers;
-			std::vector<CombinedImageSampler> combined_image_samplers;
-			std::vector<SampledImage> sampled_images;
-			std::vector<Sampler> samplers;
-			std::vector<SubpassInput> subpass_inputs;
-			std::vector<AccelerationStructure> acceleration_structures;
+			std::vector<Binding> bindings; // sorted by binding #
 
 			unsigned highest_descriptor_binding = 0;
 		};

@@ -7,151 +7,35 @@
 namespace vuk {
 	fixed_vector<DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> PipelineBaseCreateInfo::build_descriptor_layouts(const Program& program,
 	                                                                                                           const PipelineBaseCreateInfoBase& bci) {
-		fixed_vector<DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> dslcis;
+		fixed_vector<DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> dslcis(program.sets.size());
 
 		for (size_t index = 0; index < program.sets.size(); index++) {
 			const auto& set = program.sets[index];
 			if (!set) {
 				continue;
 			}
-			// fill up unused sets, if there are holes in descriptor set order
-			dslcis.resize(std::max(dslcis.size(), index + 1), {});
-
 			DescriptorSetLayoutCreateInfo dslci;
 			dslci.index = index;
 			auto& bindings = dslci.bindings;
 
-			for (auto& ub : set->uniform_buffers) {
+			for (auto& ub : set->bindings) {
 				VkDescriptorSetLayoutBinding layoutBinding;
 				layoutBinding.binding = ub.binding;
-				layoutBinding.descriptorType = (VkDescriptorType)DescriptorType::eUniformBuffer;
-				layoutBinding.descriptorCount = 1;
+				layoutBinding.descriptorType = (VkDescriptorType)ub.type;
+				layoutBinding.descriptorCount = ub.array_size == (unsigned)-1 ? 1 : ub.array_size;
+				if (ub.array_size == 0) {
+					layoutBinding.descriptorCount = bci.variable_count_max[index];
+				}
 				layoutBinding.stageFlags = ub.stage;
 				layoutBinding.pImmutableSamplers = nullptr;
-				bindings.push_back(layoutBinding);
-				if (layoutBinding.binding < VUK_MAX_BINDINGS) {
-					dslci.used_bindings.set(layoutBinding.binding, true);
-				}
-			}
 
-			for (auto& sb : set->storage_buffers) {
-				VkDescriptorSetLayoutBinding layoutBinding;
-				layoutBinding.binding = sb.binding;
-				layoutBinding.descriptorType = (VkDescriptorType)DescriptorType::eStorageBuffer;
-				layoutBinding.descriptorCount = 1;
-				layoutBinding.stageFlags = sb.stage;
-				layoutBinding.pImmutableSamplers = nullptr;
-				bindings.push_back(layoutBinding);
 				if (layoutBinding.binding < VUK_MAX_BINDINGS) {
 					dslci.used_bindings.set(layoutBinding.binding, true);
-					dslci.optional.set(layoutBinding.binding, sb.is_hlsl_counter_buffer);
-				}
-			}
-
-			for (auto& tb : set->texel_buffers) {
-				VkDescriptorSetLayoutBinding layoutBinding;
-				layoutBinding.binding = tb.binding;
-				layoutBinding.descriptorType = (VkDescriptorType)DescriptorType::eUniformTexelBuffer;
-				layoutBinding.descriptorCount = 1;
-				layoutBinding.stageFlags = tb.stage;
-				layoutBinding.pImmutableSamplers = nullptr;
-				bindings.push_back(layoutBinding);
-				if (layoutBinding.binding < VUK_MAX_BINDINGS) {
-					dslci.used_bindings.set(layoutBinding.binding, true);
-				}
-			}
-
-			for (auto& si : set->combined_image_samplers) {
-				VkDescriptorSetLayoutBinding layoutBinding;
-				layoutBinding.binding = si.binding;
-				layoutBinding.descriptorType = (VkDescriptorType)DescriptorType::eCombinedImageSampler;
-				layoutBinding.descriptorCount = si.array_size == (unsigned)-1 ? 1 : si.array_size;
-				layoutBinding.stageFlags = si.stage;
-				layoutBinding.pImmutableSamplers = nullptr;
-				if (si.array_size == 0) {
-					layoutBinding.descriptorCount = bci.variable_count_max[index];
+					if (ub.type == DescriptorType::eStorageBuffer) {
+						dslci.optional.set(layoutBinding.binding, ub.is_hlsl_counter_buffer);
+					}
 				}
 				bindings.push_back(layoutBinding);
-				if (layoutBinding.binding < VUK_MAX_BINDINGS) {
-					dslci.used_bindings.set(layoutBinding.binding, true);
-				}
-			}
-
-			for (auto& si : set->samplers) {
-				VkDescriptorSetLayoutBinding layoutBinding;
-				layoutBinding.binding = si.binding;
-				layoutBinding.descriptorType = (VkDescriptorType)DescriptorType::eSampler;
-				layoutBinding.descriptorCount = si.array_size == (unsigned)-1 ? 1 : si.array_size;
-				layoutBinding.stageFlags = si.stage;
-				layoutBinding.pImmutableSamplers = nullptr;
-				if (si.array_size == 0) {
-					layoutBinding.descriptorCount = bci.variable_count_max[index];
-				}
-				bindings.push_back(layoutBinding);
-				if (layoutBinding.binding < VUK_MAX_BINDINGS) {
-					dslci.used_bindings.set(layoutBinding.binding, true);
-				}
-			}
-
-			for (auto& si : set->sampled_images) {
-				VkDescriptorSetLayoutBinding layoutBinding;
-				layoutBinding.binding = si.binding;
-				layoutBinding.descriptorType = (VkDescriptorType)DescriptorType::eSampledImage;
-				layoutBinding.descriptorCount = si.array_size == (unsigned)-1 ? 1 : si.array_size;
-				layoutBinding.stageFlags = si.stage;
-				layoutBinding.pImmutableSamplers = nullptr;
-				if (si.array_size == 0) {
-					layoutBinding.descriptorCount = bci.variable_count_max[index];
-				}
-				bindings.push_back(layoutBinding);
-				if (layoutBinding.binding < VUK_MAX_BINDINGS) {
-					dslci.used_bindings.set(layoutBinding.binding, true);
-				}
-			}
-
-			for (auto& si : set->storage_images) {
-				VkDescriptorSetLayoutBinding layoutBinding;
-				layoutBinding.binding = si.binding;
-				layoutBinding.descriptorType = (VkDescriptorType)DescriptorType::eStorageImage;
-				layoutBinding.descriptorCount = si.array_size == (unsigned)-1 ? 1 : si.array_size;
-				layoutBinding.stageFlags = si.stage;
-				layoutBinding.pImmutableSamplers = nullptr;
-				if (si.array_size == 0) {
-					layoutBinding.descriptorCount = bci.variable_count_max[index];
-				}
-				bindings.push_back(layoutBinding);
-				if (layoutBinding.binding < VUK_MAX_BINDINGS) {
-					dslci.used_bindings.set(layoutBinding.binding, true);
-				}
-			}
-
-			for (auto& si : set->subpass_inputs) {
-				VkDescriptorSetLayoutBinding layoutBinding;
-				layoutBinding.binding = si.binding;
-				layoutBinding.descriptorType = (VkDescriptorType)DescriptorType::eInputAttachment;
-				layoutBinding.descriptorCount = 1;
-				layoutBinding.stageFlags = si.stage;
-				layoutBinding.pImmutableSamplers = nullptr;
-				bindings.push_back(layoutBinding);
-				if (layoutBinding.binding < VUK_MAX_BINDINGS) {
-					dslci.used_bindings.set(layoutBinding.binding, true);
-				}
-			}
-
-			for (auto& si : set->acceleration_structures) {
-				VkDescriptorSetLayoutBinding layoutBinding;
-				layoutBinding.binding = si.binding;
-				layoutBinding.descriptorType = (VkDescriptorType)DescriptorType::eAccelerationStructureKHR;
-				layoutBinding.descriptorCount = si.array_size == (unsigned)-1 ? 1 : si.array_size;
-				layoutBinding.stageFlags = si.stage;
-				layoutBinding.pImmutableSamplers = nullptr;
-				if (si.array_size == 0) {
-					layoutBinding.descriptorCount = bci.variable_count_max[index];
-				}
-				bindings.push_back(layoutBinding);
-				if (layoutBinding.binding < VUK_MAX_BINDINGS) {
-					dslci.used_bindings.set(layoutBinding.binding, true);
-				}
 			}
 
 			// extract flags from the packed bitset

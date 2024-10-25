@@ -171,6 +171,10 @@ namespace vuk {
 				error_message = "Format not supported.";
 				break;
 			}
+			case VK_ERROR_UNKNOWN: {
+				error_message = "Unknown error.";
+				break;
+			}
 			default:
 				assert(0 && "Unimplemented error.");
 				break;

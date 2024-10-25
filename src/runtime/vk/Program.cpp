@@ -237,7 +237,7 @@ namespace vuk {
 			auto type = refl.get_type(ub.type_id);
 			auto binding = refl.get_decoration(ub.id, spv::DecorationBinding);
 			auto set = refl.get_decoration(ub.id, spv::DecorationDescriptorSet);
-			UniformBuffer un;
+			Binding un{ .type = DescriptorType::eUniformBuffer };
 			un.binding = binding;
 			un.stage = stage;
 			un.name = std::string(ub.name.c_str());
@@ -253,17 +253,21 @@ namespace vuk {
 				sets.resize(set + 1, std::nullopt);
 				sets[set] = Descriptors{};
 			}
-			sets[set]->uniform_buffers.push_back(un);
+			sets[set]->bindings.push_back(un);
 		}
 
 		for (auto& sb : resources.storage_buffers) {
 			auto type = refl.get_type(sb.type_id);
 			auto binding = refl.get_decoration(sb.id, spv::DecorationBinding);
 			auto set = refl.get_decoration(sb.id, spv::DecorationDescriptorSet);
-			StorageBuffer un;
+			Binding un{ .type = DescriptorType::eStorageBuffer };
 			un.binding = binding;
 			un.stage = stage;
 			un.name = sb.name.c_str();
+			if (type.array.size() > 0)
+				un.array_size = type.array[0];
+			else
+				un.array_size = 1;
 			un.min_size = refl.get_declared_struct_size(refl.get_type(sb.type_id));
 			if (type.basetype == spirv_cross::SPIRType::Struct) {
 				reflect_members(refl, refl.get_type(sb.type_id), un.members);
@@ -273,14 +277,14 @@ namespace vuk {
 				sets.resize(set + 1, std::nullopt);
 				sets[set] = Descriptors{};
 			}
-			sets[set]->storage_buffers.push_back(un);
+			sets[set]->bindings.push_back(un);
 		}
 
 		for (auto& si : resources.sampled_images) {
 			auto type = refl.get_type(si.type_id);
 			auto binding = refl.get_decoration(si.id, spv::DecorationBinding);
 			auto set = refl.get_decoration(si.id, spv::DecorationDescriptorSet);
-			CombinedImageSampler t;
+			Binding t{ .type = DescriptorType::eCombinedImageSampler };
 			t.binding = binding;
 			t.name = std::string(si.name.c_str());
 			t.stage = stage;
@@ -291,14 +295,14 @@ namespace vuk {
 				sets.resize(set + 1, std::nullopt);
 				sets[set] = Descriptors{};
 			}
-			sets[set]->combined_image_samplers.push_back(t);
+			sets[set]->bindings.push_back(t);
 		}
 
 		for (auto& sa : resources.separate_samplers) {
 			auto type = refl.get_type(sa.type_id);
 			auto binding = refl.get_decoration(sa.id, spv::DecorationBinding);
 			auto set = refl.get_decoration(sa.id, spv::DecorationDescriptorSet);
-			Sampler t;
+			Binding t{ .type = DescriptorType::eSampler };
 			t.binding = binding;
 			t.name = std::string(sa.name.c_str());
 			t.stage = stage;
@@ -309,14 +313,14 @@ namespace vuk {
 				sets.resize(set + 1, std::nullopt);
 				sets[set] = Descriptors{};
 			}
-			sets[set]->samplers.push_back(t);
+			sets[set]->bindings.push_back(t);
 		}
 
 		for (auto& si : resources.separate_images) {
 			auto type = refl.get_type(si.type_id);
 			auto binding = refl.get_decoration(si.id, spv::DecorationBinding);
 			auto set = refl.get_decoration(si.id, spv::DecorationDescriptorSet);
-			SampledImage t;
+			Binding t{ .type = DescriptorType::eSampledImage };
 			t.binding = binding;
 			t.name = std::string(si.name.c_str());
 			t.stage = stage;
@@ -326,14 +330,14 @@ namespace vuk {
 				sets.resize(set + 1, std::nullopt);
 				sets[set] = Descriptors{};
 			}
-			sets[set]->sampled_images.push_back(t);
+			sets[set]->bindings.push_back(t);
 		}
 
 		for (auto& sb : resources.storage_images) {
 			auto type = refl.get_type(sb.type_id);
 			auto binding = refl.get_decoration(sb.id, spv::DecorationBinding);
 			auto set = refl.get_decoration(sb.id, spv::DecorationDescriptorSet);
-			StorageImage un;
+			Binding un{ .type = DescriptorType::eStorageImage };
 			un.binding = binding;
 			un.stage = stage;
 			un.name = sb.name.c_str();
@@ -343,7 +347,7 @@ namespace vuk {
 				sets.resize(set + 1, std::nullopt);
 				sets[set] = Descriptors{};
 			}
-			sets[set]->storage_images.push_back(un);
+			sets[set]->bindings.push_back(un);
 		}
 
 		// subpass inputs
@@ -351,7 +355,7 @@ namespace vuk {
 			auto type = refl.get_type(si.type_id);
 			auto binding = refl.get_decoration(si.id, spv::DecorationBinding);
 			auto set = refl.get_decoration(si.id, spv::DecorationDescriptorSet);
-			SubpassInput s;
+			Binding s{ .type = DescriptorType::eInputAttachment };
 			s.name = std::string(si.name.c_str());
 			s.binding = binding;
 			s.stage = stage;
@@ -359,7 +363,7 @@ namespace vuk {
 				sets.resize(set + 1, std::nullopt);
 				sets[set] = Descriptors{};
 			}
-			sets[set]->subpass_inputs.push_back(s);
+			sets[set]->bindings.push_back(s);
 		}
 
 		// ASs
@@ -367,7 +371,7 @@ namespace vuk {
 			auto type = refl.get_type(as.type_id);
 			auto binding = refl.get_decoration(as.id, spv::DecorationBinding);
 			auto set = refl.get_decoration(as.id, spv::DecorationDescriptorSet);
-			AccelerationStructure s;
+			Binding s{ .type = DescriptorType::eAccelerationStructureKHR };
 			s.name = std::string(as.name.c_str());
 			s.binding = binding;
 			s.stage = stage;
@@ -376,7 +380,7 @@ namespace vuk {
 				sets.resize(set + 1, std::nullopt);
 				sets[set] = Descriptors{};
 			}
-			sets[set]->acceleration_structures.push_back(s);
+			sets[set]->bindings.push_back(s);
 		}
 
 		for (auto& sc : refl.get_specialization_constants()) {
@@ -389,15 +393,8 @@ namespace vuk {
 			if (!set) {
 				continue;
 			}
-			unq(set->samplers);
-			unq(set->sampled_images);
-			unq(set->combined_image_samplers);
-			unq(set->uniform_buffers);
-			unq(set->storage_buffers);
-			unq(set->texel_buffers);
-			unq(set->subpass_inputs);
-			unq(set->storage_images);
-			unq(set->acceleration_structures);
+			unq(set->bindings);
+			std::sort(set->bindings.begin(), set->bindings.end(), [](auto& a, auto& b) { return a.binding < b.binding; });
 		}
 
 		std::sort(spec_constants.begin(), spec_constants.end(), binding_cmp);
@@ -407,28 +404,7 @@ namespace vuk {
 				continue;
 			}
 			unsigned max_binding = 0;
-			for (auto& ub : set->uniform_buffers) {
-				max_binding = std::max(max_binding, ub.binding);
-			}
-			for (auto& ub : set->storage_buffers) {
-				max_binding = std::max(max_binding, ub.binding);
-			}
-			for (auto& ub : set->samplers) {
-				max_binding = std::max(max_binding, ub.binding);
-			}
-			for (auto& ub : set->sampled_images) {
-				max_binding = std::max(max_binding, ub.binding);
-			}
-			for (auto& ub : set->combined_image_samplers) {
-				max_binding = std::max(max_binding, ub.binding);
-			}
-			for (auto& ub : set->subpass_inputs) {
-				max_binding = std::max(max_binding, ub.binding);
-			}
-			for (auto& ub : set->storage_buffers) {
-				max_binding = std::max(max_binding, ub.binding);
-			}
-			for (auto& ub : set->acceleration_structures) {
+			for (auto& ub : set->bindings) {
 				max_binding = std::max(max_binding, ub.binding);
 			}
 			set->highest_descriptor_binding = max_binding;
@@ -470,25 +446,9 @@ namespace vuk {
 			if (!s) {
 				s = os;
 			}
-			s->samplers.insert(s->samplers.end(), os->samplers.begin(), os->samplers.end());
-			s->sampled_images.insert(s->sampled_images.end(), os->sampled_images.begin(), os->sampled_images.end());
-			s->combined_image_samplers.insert(s->combined_image_samplers.end(), os->combined_image_samplers.begin(), os->combined_image_samplers.end());
-			s->uniform_buffers.insert(s->uniform_buffers.end(), os->uniform_buffers.begin(), os->uniform_buffers.end());
-			s->storage_buffers.insert(s->storage_buffers.end(), os->storage_buffers.begin(), os->storage_buffers.end());
-			s->texel_buffers.insert(s->texel_buffers.end(), os->texel_buffers.begin(), os->texel_buffers.end());
-			s->subpass_inputs.insert(s->subpass_inputs.end(), os->subpass_inputs.begin(), os->subpass_inputs.end());
-			s->storage_images.insert(s->storage_images.end(), os->storage_images.begin(), os->storage_images.end());
-			s->acceleration_structures.insert(s->acceleration_structures.end(), os->acceleration_structures.begin(), os->acceleration_structures.end());
+			s->bindings.insert(s->bindings.end(), os->bindings.begin(), os->bindings.end());
 
-			unq(s->samplers);
-			unq(s->sampled_images);
-			unq(s->combined_image_samplers);
-			unq(s->uniform_buffers);
-			unq(s->storage_buffers);
-			unq(s->texel_buffers);
-			unq(s->subpass_inputs);
-			unq(s->storage_images);
-			unq(s->acceleration_structures);
+			unq(s->bindings);
 			s->highest_descriptor_binding = std::max(s->highest_descriptor_binding, os->highest_descriptor_binding);
 		}
 
