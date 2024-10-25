@@ -22,6 +22,10 @@
 // #define VUK_DEBUG_MEMBAR
 
 namespace vuk {
+	std::string format_source_location(SourceLocationAtFrame& source) {
+		return fmt::format("{}({}): ", source.location.file_name(), source.location.line());
+	}
+
 	std::string format_source_location(Node* node) {
 		if (node->debug_info) {
 			std::string msg = "";

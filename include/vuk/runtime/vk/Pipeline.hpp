@@ -5,6 +5,7 @@
 #include "vuk/FixedVector.hpp"
 #include "vuk/Hash.hpp"
 #include "vuk/ShaderSource.hpp"
+#include "vuk/SourceLocation.hpp"
 #include "vuk/runtime/CreateInfo.hpp"
 #include "vuk/runtime/vk/Descriptor.hpp"
 #include "vuk/runtime/vk/Image.hpp"
@@ -89,6 +90,8 @@ namespace vuk {
 			shaders.emplace_back(ShaderSource::glsl(source, compile_options, std::move(entry_point)));
 			shader_paths.emplace_back(std::move(filename));
 		}
+
+		static PipelineBaseCreateInfo from_inline_glsl(std::string_view source, SourceLocationAtFrame _pscope = VUK_HERE_AND_NOW());
 #endif
 
 #if VUK_USE_DXC

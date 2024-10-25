@@ -181,8 +181,7 @@ TEST_CASE("lift compute 3") {
 	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, Samples::e1);
 	auto [img, img0] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data2));
 
-	vuk::PipelineBaseCreateInfo pbci;
-	pbci.add_glsl(R"(#version 450
+	auto pass = lift_compute(test_context.runtime->get_pipeline(vuk::PipelineBaseCreateInfo::from_inline_glsl(R"(#version 450
 #pragma shader_stage(compute)
 
 layout (std430, binding = 0) buffer coherent BufferIn {
@@ -196,9 +195,7 @@ layout (local_size_x = 1) in;
 void main() {
 	data_in[gl_GlobalInvocationID.x] *= imageLoad(someImage, ivec2(gl_GlobalInvocationID.x % 2,gl_GlobalInvocationID.x / 2)).x;
 }
-)",
-	              "<>");
-	auto pass = lift_compute(test_context.runtime->get_pipeline(pbci));
+)")));
 	pass(4, 1, 1, buf0, img0);
 	auto res = download_buffer(buf0).get(*test_context.allocator, test_context.compiler);
 	auto test = { 4u, 8u, 6u, 8u };

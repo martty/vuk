@@ -1,6 +1,7 @@
 #pragma once
 
 #include <source_location>
+#include <string>
 
 namespace vuk {
 /// @cond INTERNAL
@@ -57,6 +58,8 @@ namespace vuk {
 			       location.function_name() == o.location.function_name() && absolute_frame == o.absolute_frame && parent == o.parent;
 		}
 	};
+
+	std::string format_source_location(SourceLocationAtFrame& source);
 } // namespace vuk
 
 /// @cond INTERNAL
