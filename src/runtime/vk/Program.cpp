@@ -465,7 +465,7 @@ namespace vuk {
 
 	void Program::flatten_bindings() {
 		flat_bindings.clear();
-		for (size_t i = 0; i < sets.size(); i++) {
+		for (uint32_t i = 0; i < (uint32_t)sets.size(); i++) {
 			auto& set = sets[i];
 			if (!set) {
 				continue;

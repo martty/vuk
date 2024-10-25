@@ -33,7 +33,7 @@ auto make_binary_computation(std::string name, std::string& trace) {
 
 TEST_CASE("conversion to SSA") {
 	std::string trace = "";
-	auto& oa = current_module;
+	[[maybe_unused]] auto& oa = current_module;
 
 	auto decl = declare_buf("_a", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly });
 	make_unary_void("a", trace)(decl);
@@ -47,7 +47,7 @@ TEST_CASE("conversion to SSA") {
 
 TEST_CASE("minimal graph is submitted") {
 	std::string trace = "";
-	auto& oa = current_module;
+	[[maybe_unused]] auto& oa = current_module;
 
 	auto a = make_unary_computation("a", trace)(declare_buf("_a", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
 	auto b = make_unary_computation("b", trace)(declare_buf("_b", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
@@ -62,7 +62,7 @@ TEST_CASE("minimal graph is submitted") {
 
 TEST_CASE("graph is cleaned up after submit") {
 	std::string trace = "";
-	auto& oa = current_module->op_arena;
+	[[maybe_unused]] auto& oa = current_module->op_arena;
 	CHECK(current_module->op_arena.size() == 0);
 
 	auto a = make_unary_computation("a", trace)(declare_buf("_a", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));

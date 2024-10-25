@@ -344,7 +344,7 @@ namespace vuk {
 		ctx.vkUpdateDescriptorSets(ctx.device, (uint32_t)wdss.size(), wdss.data(), 0, nullptr);
 	}
 
-	static std::wstring convert_to_wstring(const std::string& string) {
+	[[maybe_unused]] static std::wstring convert_to_wstring(const std::string& string) {
 		std::vector<wchar_t> buffer(string.size());
 		std::use_facet<std::ctype<wchar_t>>(std::locale()).widen(string.data(), string.data() + string.size(), buffer.data());
 		return { buffer.data(), buffer.size() };
@@ -908,9 +908,9 @@ namespace vuk {
 	}
 
 	Swapchain::Swapchain(Swapchain&& o) noexcept :
+	    allocator(o.allocator),
 	    swapchain(std::exchange(o.swapchain, VK_NULL_HANDLE)),
-	    semaphores(std::move(o.semaphores)),
-	    allocator(o.allocator) {
+	    semaphores(std::move(o.semaphores)) {
 		images = std::move(o.images);
 		surface = o.surface;
 		linear_index = o.linear_index;

@@ -52,8 +52,6 @@ TEST_CASE("arrayed buffers, internal loop") {
 
 TEST_CASE("zero len arrayed buffers") {
 	{
-		auto data = { 0xfeu, 0xfeu, 0xfeu, 0xfeu };
-		auto data2 = { 0xfdu, 0xfdu, 0xfdu, 0xfdu };
 		auto buf = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
 		auto buf2 = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
 

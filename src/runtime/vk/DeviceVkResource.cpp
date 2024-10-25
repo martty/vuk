@@ -53,7 +53,7 @@ namespace vuk {
 		uint32_t queue_family_count;
 	};
 
-	DeviceVkResource::DeviceVkResource(Runtime& ctx) : ctx(&ctx), impl(new DeviceVkResourceImpl), device(ctx.device) {
+	DeviceVkResource::DeviceVkResource(Runtime& ctx) : ctx(&ctx), device(ctx.device), impl(new DeviceVkResourceImpl) {
 		VmaAllocatorCreateInfo allocatorInfo = {};
 		allocatorInfo.instance = ctx.instance;
 		allocatorInfo.physicalDevice = ctx.physical_device;

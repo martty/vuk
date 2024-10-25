@@ -9,6 +9,11 @@ using namespace vuk;
 #error "can't run these on FAIL_FAST"
 #endif
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-result"
+#pragma warning(push)
+#pragma warning(disable : 4834)
+
 TEST_CASE("error: can't construct incomplete") {
 	auto data = { 1u, 2u, 3u };
 	auto [b0, buf0] = create_buffer(*test_context.allocator, MemoryUsage::eGPUonly, DomainFlagBits::eAny, std::span(data));
@@ -65,29 +70,6 @@ auto blit_down = make_pass("blit down", [](CommandBuffer& cbuf, VUK_IA(Access::e
 	cbuf.blit_image(img, img, region, vuk::Filter::eNearest);
 	return img;
 });
-/*
-TEST_CASE("error: reconvergence, time-travel forbidden") {
-	{
-		auto data = { 1u, 2u, 3u, 4u };
-		auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, Samples::e1);
-		ia.level_count = 2;
-		auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
-
-		size_t alignment = format_to_texel_block_size(fut->format);
-		size_t size = compute_image_size(fut->format, fut->extent);
-		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
-
-		{
-			auto m1 = clear_image(fut.mip(0), vuk::ClearColor(5u, 5u, 5u, 5u));
-			auto futp = blit_down(fut);
-			auto m2 = clear_image(
-			    fut.mip(1),
-			    vuk::ClearColor(6u, 6u, 6u, 6u)); // m2 would need to travel before the reconvergence, which was implict on the previous line - this is not allowed
-			auto dst_buf = declare_buf("dst", *dst);
-			REQUIRE_THROWS(download_buffer(image2buf(futp.mip(1), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler));
-		}
-	}
-}*/
 
 TEST_CASE("error: read without write") {
 	{
@@ -95,7 +77,6 @@ TEST_CASE("error: read without write") {
 		auto buf = vuk::discard_buf("a", *dst);
 
 		auto rd_buf = vuk::make_pass("rd", [](CommandBuffer&, VUK_BA(vuk::eTransferRead) buf) { return buf; });
-
 
 		REQUIRE_THROWS(rd_buf(buf).get(*test_context.allocator, test_context.compiler)); // report an error also if the splice remains
 		REQUIRE_THROWS(rd_buf(std::move(buf)).get(*test_context.allocator, test_context.compiler));
@@ -137,3 +118,7 @@ TEST_CASE("error: attaching something twice decl/acq") {
 		REQUIRE_THROWS(wr_buf(buf_a, buf_b).get(*test_context.allocator, test_context.compiler));
 	}
 }
+
+// your code for which the warning gets suppressed
+#pragma clang diagnostic pop
+#pragma warning(pop)

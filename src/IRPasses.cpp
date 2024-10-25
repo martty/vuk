@@ -359,8 +359,6 @@ namespace vuk {
 			if (parm.link().undef.node != nullptr) { // there is already a write -> do SSA rewrite
 				assert(do_ssa);
 				auto old_ref = parm.link().undef; // this is an rref
-				auto old_node = old_ref.node;
-				auto old_arg_index = old_ref.index;
 				assert(node->index >= old_ref.node->index); // we are after the existing write
 
 				// attempt to find the final revision of this
@@ -419,7 +417,7 @@ namespace vuk {
 			break;
 		case Node::SPLICE: { // ~~ write joiner
 			for (size_t i = 0; i < node->type.size(); i++) {
-				if (!node->splice.rel_acq || node->splice.rel_acq && node->splice.rel_acq->status == Signal::Status::eDisarmed) {
+				if (!node->splice.rel_acq || (node->splice.rel_acq && node->splice.rel_acq->status == Signal::Status::eDisarmed)) {
 					add_write(node, node->splice.src[i], i);
 					add_result(node, i, node->splice.src[i]);
 				} else {
@@ -604,7 +602,7 @@ namespace vuk {
 
 		bool progress = false;
 
-		auto placeholder_to_constant = [this, &progress]<class T>(Ref r, T value) {
+		auto placeholder_to_constant = [&progress]<class T>(Ref r, T value) {
 			if (r.node->kind == Node::PLACEHOLDER) {
 				r.node->kind = Node::CONSTANT;
 				assert(sizeof(T) == r.type()->size);
@@ -626,7 +624,7 @@ namespace vuk {
 		// valloc reification - if there were later setting of fields, then remove placeholders
 		for (auto node : nodes) {
 			switch (node->kind) {
-			case Node::CONSTRUCT:
+			case Node::CONSTRUCT: {
 				auto args_ptr = node->construct.args.data();
 				if (node->type[0]->hash_value == current_module->types.builtin_image) {
 					auto ptr = &constant<ImageAttachment>(args_ptr[0]);
@@ -665,6 +663,9 @@ namespace vuk {
 						placeholder_to_ptr(args_ptr[1], &ptr->size);
 					}
 				}
+			} break;
+			default:
+				break;
 			}
 		}
 
@@ -746,6 +747,8 @@ namespace vuk {
 					}
 					break;
 				}
+				default:
+					break;
 				}
 			}
 		} while (progress);
@@ -908,6 +911,8 @@ namespace vuk {
 			case Node::CONVERGE:
 				node_to_schedule[node] = schedule_items.size();
 				schedule_items.emplace_back(node);
+				break;
+			default:
 				break;
 			}
 		}
@@ -1141,6 +1146,8 @@ namespace vuk {
 				}
 				break;
 			}
+			default:
+				break;
 			}
 		}
 
@@ -1206,7 +1213,9 @@ namespace vuk {
 				if (!s) {
 					return { expected_error, RenderGraphException{ format_graph_message(Level::eError, node, "tried to acquire something that was already known.") } };
 				}
-			}
+			} break;
+			default:
+				break;
 			}
 		}
 
@@ -1485,6 +1494,8 @@ namespace vuk {
 					}
 				}
 			} break;
+			default:
+				break;
 			}
 		}));
 
@@ -1498,7 +1509,9 @@ namespace vuk {
 				if (node->splice.dst_access == Access::eNone && node->splice.dst_domain == DomainFlagBits::eAny) {
 					assert(node->splice.rel_acq != nullptr);
 				}
-			}
+			} break;
+			default:
+				break;
 			}
 		}
 		// FINAL GRAPH
@@ -1567,24 +1580,28 @@ namespace vuk {
 				switch (r.node->kind) {
 				case Node::CALL: {
 					auto& arg_ty = r.node->call.args[0].type()->opaque_fn.args[r.index - 1];
-					auto& parm = r.node->call.args[r.index];
 					if (arg_ty->kind == Type::IMBUED_TY) {
 						auto access = arg_ty->imbued.access;
 						access_to_usage(usage, access);
 					}
+					break;
 				}
+				default:
+					break;
 				}
 			}
 			if (chain->undef) {
 				switch (chain->undef.node->kind) {
 				case Node::CALL: {
 					auto& arg_ty = chain->undef.node->call.args[0].type()->opaque_fn.args[chain->undef.index - 1];
-					auto& parm = chain->undef.node->call.args[chain->undef.index];
 					if (arg_ty->kind == Type::IMBUED_TY) {
 						auto access = arg_ty->imbued.access;
 						access_to_usage(usage, access);
 					}
+					break;
 				}
+				default:
+					break;
 				}
 			}
 

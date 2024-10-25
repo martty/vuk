@@ -64,6 +64,8 @@ namespace vuk {
 			case DomainFlagBits::eTransferQueue:
 				info.pObjectName = "Transfer Queue";
 				break;
+			default:
+				break;
 			}
 			info.objectType = VK_OBJECT_TYPE_QUEUE;
 			info.objectHandle = reinterpret_cast<uint64_t>(queue);

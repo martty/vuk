@@ -94,8 +94,6 @@ namespace {
 		.name = "10_baby_renderer",
 		.setup =
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator) {
-		      vuk::Runtime& ctx = allocator.get_context();
-
 		      // Use STBI to load the image
 		      int x, y, chans;
 		      auto doge_image = stbi_load((root / "examples/doge.png").generic_string().c_str(), &x, &y, &chans, 4);

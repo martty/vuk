@@ -429,7 +429,7 @@ public:
 		std::shared_ptr<Type> base_ty;
 		size_t i = 0;
 		for (auto& [set_index, b] : flat_bindings) {
-			Access acc;
+			Access acc = Access::eNone;
 			switch (b->type) {
 			case DescriptorType::eSampledImage:
 			case DescriptorType::eCombinedImageSampler:
@@ -442,6 +442,8 @@ public:
 				acc = b->non_writable ? Access::eComputeRead : (b->non_readable ? Access::eComputeWrite : Access::eComputeRW);
 				base_ty = current_module->types.get_builtin_buffer();
 				break;
+			default:
+				assert(0);
 			}
 
 			arg_types.push_back(current_module->types.make_imbued_ty(base_ty, acc));

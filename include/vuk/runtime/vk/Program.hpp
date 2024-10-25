@@ -108,7 +108,7 @@ namespace vuk {
 			unsigned highest_descriptor_binding = 0;
 		};
 		std::vector<std::optional<Descriptors>> sets;
-		std::vector<std::pair<size_t, Binding*>> flat_bindings; // sorted by set, and then by binding
+		std::vector<std::pair<uint32_t, Binding*>> flat_bindings; // sorted by set, and then by binding
 		VkShaderStageFlags stages = {};
 		void append(const Program& o);
 

@@ -235,12 +235,12 @@ namespace vuk {
 				for (auto j = i + 1; j < r.size(); j++) {
 					auto& ri = r[i];
 					auto& rj = r[j];
-					if (auto isection = intersect_one(r[i], r[j])) {
-						difference_one(r[i], *isection, [&](Subrange::Image i) { ranges.emplace_back(i); });
+					if (auto isection = intersect_one(ri, rj)) {
+						difference_one(ri, *isection, [&](Subrange::Image i) { ranges.emplace_back(i); });
 					} else {
-						ranges.push_back(r[i]);
+						ranges.push_back(ri);
 					}
-					ranges.push_back(r[j]);
+					ranges.push_back(rj);
 				}
 			}
 		}
@@ -273,19 +273,19 @@ namespace vuk {
 			return MultiSubrange(std::move(new_ranges));
 		}
 
-		constexpr Subrange::Image& operator[](size_t index) {
+		Subrange::Image& operator[](size_t index) {
 			return ranges[index];
 		}
 
-		constexpr const Subrange::Image& operator[](size_t index) const {
+		const Subrange::Image& operator[](size_t index) const {
 			return ranges[index];
 		}
 
-		constexpr size_t size() const {
+		size_t size() const {
 			return ranges.size();
 		}
 
-		constexpr explicit operator bool() {
+		explicit operator bool() {
 			return ranges.size() > 0;
 		}
 

@@ -468,7 +468,7 @@ namespace vuk {
 		/// @param binding The descriptor binding to bind the image to
 		/// @param image The ImageAttachment to bind
 		template<Access acc, class UniqueT>
-		CommandBuffer& bind_image(unsigned set, unsigned binding, Arg<ImageAttachment, acc, UniqueT, ""> image) {
+		CommandBuffer& bind_image(unsigned set, unsigned binding, Arg<ImageAttachment, acc, UniqueT> image) {
 			return bind_image(set, binding, *image.ptr, image.def);
 		}
 

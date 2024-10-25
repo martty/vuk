@@ -868,12 +868,10 @@ namespace vuk {
 		char value[N];
 	};
 
-	template<class Type, Access acc, class UniqueT, StringLiteral N = "">
+	template<class Type, Access acc, class UniqueT>
 	struct Arg {
 		using type = Type;
 		static constexpr Access access = acc;
-
-		static constexpr StringLiteral identifier = N;
 
 		Type* ptr;
 

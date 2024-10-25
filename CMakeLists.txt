@@ -149,7 +149,8 @@ endif()
 if(VUK_COMPILER_CLANGPP OR VUK_COMPILER_GPP)
 	target_compile_options(vuk PRIVATE -std=c++20 -fno-char8_t)
 elseif(MSVC) # cl.exe or clang-cl
-	target_compile_options(vuk PRIVATE /std:c++20 /permissive- /Zc:char8_t-)
+	# w4068 : unknown pragma
+	target_compile_options(vuk PRIVATE /std:c++20 /permissive- /Zc:char8_t- /wd4068)
 endif()
 
 if(VUK_COMPILER_CLANGPP OR VUK_COMPILER_CLANGCL)
@@ -183,9 +184,9 @@ if(VUK_BUILD_EXAMPLES)
 	add_subdirectory(examples)
 endif()
 
-if(VUK_BUILD_BENCHMARKS)
-	add_subdirectory(benchmarks)
-endif()
+#if(VUK_BUILD_BENCHMARKS)
+#	add_subdirectory(benchmarks)
+#endif()
 
 if(VUK_BUILD_DOCS)
 	add_subdirectory(docs)
@@ -226,7 +227,8 @@ if(VUK_BUILD_TESTS)
 	if(VUK_COMPILER_CLANGPP OR VUK_COMPILER_GPP)
 		target_compile_options(vuk-tests PRIVATE -std=c++20 -fno-char8_t)
 	elseif(MSVC)
-		target_compile_options(vuk-tests PRIVATE /std:c++latest /permissive- /Zc:char8_t-)
+		# w4068 : unknown pragma
+		target_compile_options(vuk-tests PRIVATE /std:c++latest /permissive- /Zc:char8_t- /wd4068) 
 	endif()
 
 	if(VUK_COMPILER_CLANGPP OR VUK_COMPILER_CLANGCL)

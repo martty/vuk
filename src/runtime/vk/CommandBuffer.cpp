@@ -57,10 +57,10 @@ namespace vuk {
 	// for rendergraph
 
 	CommandBuffer::CommandBuffer(Stream& stream, Runtime& ctx, Allocator& allocator, VkCommandBuffer cb, std::optional<RenderPassInfo> ongoing) :
-	    stream(&stream),
 	    ctx(ctx),
 	    allocator(&allocator),
 	    command_buffer(cb),
+	    stream(&stream),
 	    ds_strategy_flags(ctx.default_descriptor_set_strategy) {}
 
 	const CommandBuffer::RenderPassInfo& CommandBuffer::get_ongoing_render_pass() const {
@@ -701,12 +701,7 @@ namespace vuk {
 			VkClearRect rect = {};
 			rect.baseArrayLayer = src.base_layer;
 			rect.layerCount = src.layer_count;
-			rect.rect = {
-				(int32_t)0,
-				(int32_t)0,
-				src.extent.width,
-				src.extent.height,
-			};
+			rect.rect = { { (int32_t)0, (int32_t)0 }, { src.extent.width, src.extent.height } };
 			ctx.vkCmdClearAttachments(command_buffer, 1, &clr, 1, &rect);
 		}
 
@@ -904,9 +899,10 @@ namespace vuk {
 			return "Storage Image";
 		case DescriptorType::eAccelerationStructureKHR:
 			return "Acceleration Structure";
+		default:
+			assert(0);
+			return "";
 		}
-		assert(0);
-		return "";
 	}
 
 	bool CommandBuffer::_bind_state(PipeType pipe_type) {

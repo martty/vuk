@@ -110,7 +110,7 @@ namespace vuk {
 			case MEMORY_TY:
 				v = 0;
 				hash_combine_direct(v, MEMORY_TY);
-				hash_combine_direct(v, t->size);
+				hash_combine_direct(v, (uint32_t)t->size);
 				return v;
 			case INTEGER_TY:
 				return t->integer.width;
@@ -131,7 +131,13 @@ namespace vuk {
 				hash_combine_direct(v, (uintptr_t)t->callback->target<void(CommandBuffer&, std::span<void*>, std::span<void*>, std::span<void*>)>() >> 32);
 				hash_combine_direct(v, (uintptr_t)t->callback->target<void(CommandBuffer&, std::span<void*>, std::span<void*>, std::span<void*>)>() & 0xffffffff);
 				return v;
+			case SHADER_FN_TY:
+				hash_combine_direct(v, (uintptr_t)t->shader_fn.shader >> 32);
+				hash_combine_direct(v, (uintptr_t)t->shader_fn.shader & 0xffffffff);
+				return v;
 			}
+			assert(0);
+			return v;
 		}
 
 		// TODO: handle multiple flags
@@ -213,6 +219,9 @@ namespace vuk {
 				return "MemW";
 			case eMemoryRW:
 				return "MemRW";
+			default:
+				assert(0);
+				return "";
 			}
 		}
 
@@ -235,12 +244,17 @@ namespace vuk {
 				return "composite:" + std::to_string(t->composite.tag);
 			case OPAQUE_FN_TY:
 				return "ofn";
+			case SHADER_FN_TY:
+				return "sfn";
+			default:
+				assert(0);
+				return "?";
 			}
 		}
 	};
 
-	template<class Type, Access acc, class UniqueT, StringLiteral N>
-	size_t Arg<Type, acc, UniqueT, N>::size() const noexcept
+	template<class Type, Access acc, class UniqueT>
+	size_t Arg<Type, acc, UniqueT>::size() const noexcept
 	  requires std::is_array_v<Type>
 	{
 		return def.type()->array.count;
@@ -289,9 +303,6 @@ namespace vuk {
 			IMPORT,
 			CALL,
 			CLEAR,
-			RESOLVE,
-			SIGNAL,
-			WAIT,
 			SPLICE, // for joining subgraphs
 			ACQUIRE_NEXT_IMAGE,
 			CAST,
@@ -427,6 +438,10 @@ namespace vuk {
 				return "slice";
 			case CONVERGE:
 				return "converge";
+			case CLEAR:
+				return "clear";
+			case CAST:
+				return "cast";
 			case GARBAGE:
 				return "garbage";
 			}
@@ -889,6 +904,9 @@ namespace vuk {
 
 				auto u32_t = u32();
 				auto image_ = std::vector<std::shared_ptr<Type>>{ u32_t, u32_t, u32_t, memory(sizeof(Format)), memory(sizeof(Samples)), u32_t, u32_t, u32_t, u32_t };
+				// TODO: crimes
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Winvalid-offsetof"
 				auto image_offsets = std::vector<size_t>{ offsetof(ImageAttachment, extent) + offsetof(Extent3D, width),
 					                                        offsetof(ImageAttachment, extent) + offsetof(Extent3D, height),
 					                                        offsetof(ImageAttachment, extent) + offsetof(Extent3D, depth),
@@ -898,6 +916,7 @@ namespace vuk {
 					                                        offsetof(ImageAttachment, layer_count),
 					                                        offsetof(ImageAttachment, base_level),
 					                                        offsetof(ImageAttachment, level_count) };
+#pragma clang diagnostic pop
 				auto image_type = emplace_type(std::shared_ptr<Type>(new Type{ .kind = Type::COMPOSITE_TY,
 				                                                               .size = sizeof(ImageAttachment),
 				                                                               .debug_info = allocate_type_debug_info("image"),
@@ -1047,6 +1066,8 @@ namespace vuk {
 				delete[] node->converge.write.data();
 				break;
 			}
+			default: // nothing extra to be done here
+				break;
 			}
 			delete[] node->type.data();
 			if (node->generic_node.arg_count == (uint8_t)~0u) {

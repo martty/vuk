@@ -48,7 +48,7 @@ target_compile_definitions(vuk-example-framework PUBLIC GLM_FORCE_SIZE_FUNC GLM_
 if(VUK_COMPILER_CLANGPP OR VUK_COMPILER_GPP)
     target_compile_options(vuk-example-framework PUBLIC -std=c++20 -fno-char8_t)
 elseif(MSVC)
-    target_compile_options(vuk-example-framework PUBLIC /std:c++20 /permissive- /Zc:char8_t-)
+    target_compile_options(vuk-example-framework PUBLIC /std:c++20 /permissive- /Zc:char8_t- /wd4068)
 endif()
 target_link_libraries(vuk-example-framework PUBLIC vuk vk-bootstrap glfw glm TracyClient)
 
@@ -85,5 +85,5 @@ ADD_EXAMPLE(11_composition)
 ADD_EXAMPLE(12_rt_pipeline)
 
 # standalone examples
-add_executable(standalone_multiwindow standalone_multiwindow.cpp)
-target_link_libraries(standalone_multiwindow PUBLIC vuk-example-framework)
+#add_executable(standalone_multiwindow standalone_multiwindow.cpp)
+#target_link_libraries(standalone_multiwindow PUBLIC vuk-example-framework)

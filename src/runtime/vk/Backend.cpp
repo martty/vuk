@@ -112,6 +112,7 @@ namespace vuk {
 			return { "size"sv };
 		} else {
 			assert(0);
+			return {};
 		}
 	};
 
@@ -351,8 +352,10 @@ namespace vuk {
 					return "ATT";
 				case VK_IMAGE_LAYOUT_PRESENT_SRC_KHR:
 					return "PRS";
+				default:
+					assert(0);
+					return "";
 				}
-				assert(0);
 			};
 			fmt::println("[{}][m{}:{}][l{}:{}][{}->{}]{}",
 			             fmt::ptr(ib.image),
@@ -370,8 +373,9 @@ namespace vuk {
 			case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
 			case VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL:
 				return true;
+			default:
+				return false;
 			}
-			return false;
 		}
 
 		void synch_image(ImageAttachment& img_att, Subrange::Image subrange, StreamResourceUse src_use, StreamResourceUse dst_use, void* tag) override {
@@ -639,7 +643,7 @@ namespace vuk {
 	enum class RW { eRead, eWrite };
 
 	struct Scheduler {
-		Scheduler(Allocator all, RGCImpl* impl) : allocator(all), scheduled_execables(impl->scheduled_execables), pass_reads(impl->pass_reads), impl(impl) {
+		Scheduler(Allocator all, RGCImpl* impl) : allocator(all), pass_reads(impl->pass_reads), scheduled_execables(impl->scheduled_execables), impl(impl) {
 			// these are the items that were determined to run
 			for (auto& i : scheduled_execables) {
 				scheduled.emplace(i.execable);
@@ -826,7 +830,7 @@ namespace vuk {
 			if (base_ty->hash_value == current_module->types.builtin_image) {
 				auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
 				key = reinterpret_cast<uint64_t>(img_att.image.image);
-				psru.subrange = { img_att.base_level, img_att.level_count, img_att.base_layer, img_att.layer_count };
+				psru.subrange.image = { img_att.base_level, img_att.level_count, img_att.base_layer, img_att.layer_count };
 			} else if (base_ty->hash_value == current_module->types.builtin_buffer) {
 				auto buf = reinterpret_cast<Buffer*>(value);
 				key = reinterpret_cast<uint64_t>(buf->allocation);
@@ -909,7 +913,7 @@ namespace vuk {
 					difference_one(src_range, isection, [&](Subrange::Image nb) {
 						// push the splintered src uses
 						PartialStreamResourceUse psru{ *src };
-						psru.subrange = { nb.base_level, nb.level_count, nb.base_layer, nb.layer_count };
+						psru.subrange.image = { nb.base_level, nb.level_count, nb.base_layer, nb.layer_count };
 						src->next = new (this->arena.ensure_space(sizeof(PartialStreamResourceUse))) PartialStreamResourceUse(psru);
 						src->next->prev = src;
 						src = src->next;
@@ -956,7 +960,6 @@ namespace vuk {
 			} else if (base_ty->kind == Type::ARRAY_TY) {
 				if (base_ty->array.count > 0) { // for an array, we key off the the first element, as the array syncs together
 					auto elem_ty = base_ty->array.T->get();
-					auto size = base_ty->array.count;
 					auto elems = reinterpret_cast<std::byte*>(value);
 					return last_use(elem_ty, elems);
 				} else { // zero-len arrays
@@ -986,9 +989,10 @@ namespace vuk {
 			return "Compute";
 		case DomainFlagBits::eTransferQueue:
 			return "Transfer";
+		default:
+			assert(0);
+			return "";
 		}
-		assert(false);
-		return "";
 	}
 
 	Result<void> ExecutableRenderGraph::execute(Allocator& alloc) {
@@ -1039,9 +1043,6 @@ namespace vuk {
 			}
 			return msg;
 		};
-		auto print_results = [&](Node* node) {
-			fmt::print("{}", print_results_to_string(node));
-		};
 
 		auto format_message = [&](Level level, Node* node, std::span<Ref> args, std::string err) {
 			std::string msg = "";
@@ -1081,10 +1082,19 @@ namespace vuk {
 						T& a = sched.get_value<T>(node->math_binary.a);
 						T& b = sched.get_value<T>(node->math_binary.b);
 						switch (node->math_binary.op) {
+						case Node::BinOp::ADD:
+							return a + b;
+						case Node::BinOp::SUB:
+							return a - b;
 						case Node::BinOp::MUL:
 							return a * b;
+						case Node::BinOp::DIV:
+							return a / b;
+						case Node::BinOp::MOD:
+							return a % b;
 						}
 						assert(0);
+						return a;
 					};
 					switch (node->type[0]->kind) {
 					case Type::INTEGER_TY: {
@@ -1401,7 +1411,7 @@ namespace vuk {
 						// call the cbuf directly: bind everything, then dispatch shader
 						opaque_rets.resize(fn_type->shader_fn.return_types.size());
 						auto pbi = reinterpret_cast<PipelineBaseInfo*>(fn_type->shader_fn.shader);
-						
+
 						cobuf.bind_compute_pipeline(pbi);
 
 						auto& flat_bindings = pbi->reflection_info.flat_bindings;
