@@ -430,20 +430,40 @@ namespace vuk {
 		}
 		case Node::CALL: {
 			// args
-			for (size_t i = 1; i < node->call.args.size(); i++) {
-				auto& arg_ty = node->call.args[0].type()->opaque_fn.args[i - 1];
-				auto& parm = node->call.args[i];
-				// TODO: assert same type when imbuement is stripped
-				if (arg_ty->kind == Type::IMBUED_TY) {
-					auto access = arg_ty->imbued.access;
-					if (is_write_access(access) || access == Access::eConsume) { // Write and ReadWrite
-						add_write(node, parm, i);
+			auto fn_ty = node->call.args[0].type();
+			if (fn_ty->kind == Type::OPAQUE_FN_TY) {
+				for (size_t i = 1; i < node->call.args.size(); i++) {
+					auto& arg_ty = fn_ty->opaque_fn.args[i - 1];
+					auto& parm = node->call.args[i];
+					// TODO: assert same type when imbuement is stripped
+					if (arg_ty->kind == Type::IMBUED_TY) {
+						auto access = arg_ty->imbued.access;
+						if (is_write_access(access) || access == Access::eConsume) { // Write and ReadWrite
+							add_write(node, parm, i);
+						}
+						if (!is_write_access(access) && access != Access::eConsume) { // Read and ReadWrite
+							add_read(node, parm, i);
+						}
+					} else {
+						assert(0);
 					}
-					if (!is_write_access(access) && access != Access::eConsume) { // Read and ReadWrite
-						add_read(node, parm, i);
+				}
+			} else if (fn_ty->kind == Type::SHADER_FN_TY) {
+				for (size_t i = 4; i < node->call.args.size(); i++) {
+					auto& arg_ty = fn_ty->shader_fn.args[i - 4];
+					auto& parm = node->call.args[i];
+					// TODO: assert same type when imbuement is stripped
+					if (arg_ty->kind == Type::IMBUED_TY) {
+						auto access = arg_ty->imbued.access;
+						if (is_write_access(access) || access == Access::eConsume) { // Write and ReadWrite
+							add_write(node, parm, i);
+						}
+						if (!is_write_access(access) && access != Access::eConsume) { // Read and ReadWrite
+							add_read(node, parm, i);
+						}
+					} else {
+						assert(0);
 					}
-				} else {
-					assert(0);
 				}
 			}
 			size_t index = 0;
@@ -654,6 +674,10 @@ namespace vuk {
 			for (auto node : nodes) {
 				switch (node->kind) {
 				case Node::CALL: {
+					if (node->call.args[0].type()->kind != Type::OPAQUE_FN_TY) {
+						continue;
+					}
+
 					// args
 					std::optional<Extent2D> extent;
 					std::optional<Samples> samples;
@@ -753,8 +777,11 @@ namespace vuk {
 		for (auto node : nodes) {
 			switch (node->kind) {
 			case Node::CALL: {
-				for (size_t i = 1; i < node->call.args.size(); i++) {
-					auto& arg_ty = node->call.args[0].type()->opaque_fn.args[i - 1];
+				auto fn_type = node->call.args[0].type();
+				size_t first_parm = fn_type->kind == Type::OPAQUE_FN_TY ? 1 : 4;
+				auto& args = fn_type->kind == Type::OPAQUE_FN_TY ? fn_type->opaque_fn.args : fn_type->shader_fn.args;
+				for (size_t i = first_parm; i < node->call.args.size(); i++) {
+					auto& arg_ty = args[i - first_parm];
 					auto& parm = node->call.args[i];
 					auto& link = parm.link();
 
@@ -779,8 +806,15 @@ namespace vuk {
 							for (int read_idx = 0; read_idx < reads.size(); read_idx++) {
 								auto& r = reads[read_idx];
 								if (r.node->kind == Node::CALL) {
-									arg_ty = r.node->call.args[0].type()->opaque_fn.args[r.index - 1].get(); // TODO: insert casts instead
-									parm = r.node->call.args[r.index];
+									if (r.node->call.args[0].type()->kind == Type::OPAQUE_FN_TY) {
+										arg_ty = r.node->call.args[0].type()->opaque_fn.args[r.index - first_parm].get(); // TODO: insert casts instead
+										parm = r.node->call.args[r.index];
+									} else if (r.node->call.args[0].type()->kind == Type::SHADER_FN_TY) {
+										arg_ty = r.node->call.args[0].type()->shader_fn.args[r.index - first_parm].get(); // TODO: insert casts instead
+										parm = r.node->call.args[r.index];
+									} else {
+										assert(0);
+									}
 								} else if (r.node->kind == Node::CONVERGE) {
 									continue;
 								} else {

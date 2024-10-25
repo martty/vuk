@@ -8,6 +8,7 @@
 #include "vuk/SourceLocation.hpp"
 #include "vuk/Value.hpp"
 #include "vuk/runtime/vk/Image.hpp"
+#include "vuk/runtime/vk/Pipeline.hpp"
 #include "vuk/runtime/vk/VkSwapchain.hpp"
 #include "vuk/vuk_fwd.hpp"
 
@@ -418,6 +419,47 @@ public:
 		static_assert(std::is_same_v<std::tuple_element_t<0, typename traits::types>, CommandBuffer&>, "First argument to pass MUST be CommandBuffer&");
 		return TupleMap<drop_t<1, typename traits::types>>::template make_lam<typename traits::result_type, F>(
 		    name, std::forward<F>(body), scheduling_info, VUK_CALL);
+	}
+
+	inline auto lift_compute(PipelineBaseInfo* compute_pipeline, VUK_CALLSTACK) {
+		auto& flat_bindings = compute_pipeline->reflection_info.flat_bindings;
+
+		std::vector<std::shared_ptr<Type>> arg_types;
+		std::vector<std::shared_ptr<Type>> ret_types;
+		std::shared_ptr<Type> base_ty;
+		size_t i = 0;
+		for (auto& [set_index, b] : flat_bindings) {
+			Access acc;
+			switch (b->type) {
+			case DescriptorType::eSampledImage:
+			case DescriptorType::eCombinedImageSampler:
+				acc = Access::eComputeSampled;
+				base_ty = current_module->types.get_builtin_image();
+				break;
+			case DescriptorType::eUniformBuffer:
+			case DescriptorType::eStorageBuffer:
+			case DescriptorType::eStorageImage:
+				acc = b->non_writable ? Access::eComputeRead : (b->non_readable ? Access::eComputeWrite : Access::eComputeRW);
+				base_ty = current_module->types.get_builtin_buffer();
+				break;
+			}
+
+			arg_types.push_back(current_module->types.make_imbued_ty(base_ty, acc));
+			ret_types.emplace_back(current_module->types.make_aliased_ty(base_ty, i + 4));
+			i++;
+		}
+
+		return [arg_types, ret_types, compute_pipeline, inner_scope = VUK_CALL]<class... T>(
+		           size_t size_x, size_t size_y, size_t size_z, Value<T>... args) mutable { // no callstack for these :/
+			assert(sizeof...(args) == arg_types.size());
+
+			auto shader_fn_ty =
+			    current_module->types.make_shader_fn_ty(arg_types, ret_types, vuk::DomainFlagBits::eAny, compute_pipeline, compute_pipeline->pipeline_name.c_str());
+			auto fn = current_module->make_declare_fn(shader_fn_ty);
+			Node* node = current_module->make_call(
+			    fn, current_module->make_constant(size_x), current_module->make_constant(size_y), current_module->make_constant(size_z), args.get_head()...);
+			current_module->set_source_location(node, inner_scope);
+		};
 	}
 
 	inline ExtRef make_ext_ref(Ref ref, std::vector<std::shared_ptr<ExtNode>> deps = {}) {

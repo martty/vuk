@@ -29,7 +29,7 @@ namespace vuk {
 	using UserCallbackType = std::function<void(CommandBuffer&, std::span<void*>, std::span<void*>, std::span<void*>)>;
 
 	struct Type {
-		enum TypeKind { MEMORY_TY = 1, INTEGER_TY, COMPOSITE_TY, ARRAY_TY, IMBUED_TY, ALIASED_TY, OPAQUE_FN_TY } kind;
+		enum TypeKind { MEMORY_TY = 1, INTEGER_TY, COMPOSITE_TY, ARRAY_TY, IMBUED_TY, ALIASED_TY, OPAQUE_FN_TY, SHADER_FN_TY } kind;
 		size_t size = ~0ULL;
 
 		TypeDebugInfo debug_info;
@@ -55,6 +55,12 @@ namespace vuk {
 				std::span<std::shared_ptr<Type>> return_types;
 				int execute_on;
 			} opaque_fn;
+			struct {
+				void* shader;
+				std::span<std::shared_ptr<Type>> args;
+				std::span<std::shared_ptr<Type>> return_types;
+				int execute_on;
+			} shader_fn;
 			struct {
 				std::shared_ptr<Type>* T;
 				size_t count;
@@ -818,6 +824,24 @@ namespace vuk {
 				return emplace_type(std::shared_ptr<Type>(t));
 			}
 
+			std::shared_ptr<Type> make_shader_fn_ty(std::span<std::shared_ptr<Type> const> args,
+			                                        std::span<std::shared_ptr<Type> const> ret_types,
+			                                        DomainFlags execute_on,
+			                                        void* shader,
+			                                        std::string_view name) {
+				auto arg_ptr_ret_ty_ptr = std::vector<std::shared_ptr<Type>>(args.size() + ret_types.size());
+				auto it = std::copy(args.begin(), args.end(), arg_ptr_ret_ty_ptr.begin());
+				std::copy(ret_types.begin(), ret_types.end(), it);
+				auto t = new Type{ .kind = Type::SHADER_FN_TY,
+					                 .shader_fn = { .shader = shader,
+					                                .args = std::span{ arg_ptr_ret_ty_ptr.data(), args.size() },
+					                                .return_types = std::span{ arg_ptr_ret_ty_ptr.data() + args.size(), ret_types.size() },
+					                                .execute_on = execute_on.m_mask } };
+				t->child_types = std::move(arg_ptr_ret_ty_ptr);
+				t->debug_info = allocate_type_debug_info(std::string(name));
+				return emplace_type(std::shared_ptr<Type>(t));
+			}
+
 			std::shared_ptr<Type> u64() {
 				Type ty{ .kind = Type::INTEGER_TY, .size = sizeof(uint64_t), .integer = { .width = 64 } };
 				auto it = type_map.find(Type::hash(&ty));
@@ -1251,8 +1275,16 @@ namespace vuk {
 			decltype(Node::call) call = { .args = std::span(args_ptr, sizeof...(args) + 1) };
 			Node n{};
 			n.kind = Node::CALL;
-			n.type = { new std::shared_ptr<Type>[fn.type()->opaque_fn.return_types.size()], fn.type()->opaque_fn.return_types.size() };
-			std::copy(fn.type()->opaque_fn.return_types.begin(), fn.type()->opaque_fn.return_types.end(), n.type.data());
+			if (fn.type()->kind == Type::OPAQUE_FN_TY) {
+				n.type = { new std::shared_ptr<Type>[fn.type()->opaque_fn.return_types.size()], fn.type()->opaque_fn.return_types.size() };
+				std::copy(fn.type()->opaque_fn.return_types.begin(), fn.type()->opaque_fn.return_types.end(), n.type.data());
+			} else if (fn.type()->kind == Type::SHADER_FN_TY) {
+				n.type = { new std::shared_ptr<Type>[fn.type()->shader_fn.return_types.size()], fn.type()->shader_fn.return_types.size() };
+				std::copy(fn.type()->shader_fn.return_types.begin(), fn.type()->shader_fn.return_types.end(), n.type.data());
+			} else {
+				assert(0);
+			}
+
 			n.call = call;
 			return emplace_op(n);
 		}

@@ -82,6 +82,8 @@ namespace vuk {
 
 			bool is_hlsl_counter_buffer = false;
 			bool shadow; // if this is a samplerXXXShadow / samplerShadow
+			bool non_writable;
+			bool non_readable;
 
 			VkShaderStageFlags stage;
 		};
@@ -106,8 +108,12 @@ namespace vuk {
 			unsigned highest_descriptor_binding = 0;
 		};
 		std::vector<std::optional<Descriptors>> sets;
+		std::vector<std::pair<size_t, Binding*>> flat_bindings; // sorted by set, and then by binding
 		VkShaderStageFlags stages = {};
 		void append(const Program& o);
+
+	private:
+		void flatten_bindings();
 	};
 
 	struct ShaderModule {

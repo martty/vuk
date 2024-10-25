@@ -237,7 +237,7 @@ namespace vuk {
 			auto type = refl.get_type(ub.type_id);
 			auto binding = refl.get_decoration(ub.id, spv::DecorationBinding);
 			auto set = refl.get_decoration(ub.id, spv::DecorationDescriptorSet);
-			Binding un{ .type = DescriptorType::eUniformBuffer };
+			Binding un{ .type = DescriptorType::eUniformBuffer, .non_writable = true };
 			un.binding = binding;
 			un.stage = stage;
 			un.name = std::string(ub.name.c_str());
@@ -273,6 +273,8 @@ namespace vuk {
 				reflect_members(refl, refl.get_type(sb.type_id), un.members);
 			}
 			un.is_hlsl_counter_buffer = refl.buffer_is_hlsl_counter_buffer(sb.id);
+			un.non_writable = refl.get_decoration(sb.id, spv::DecorationNonWritable);
+			un.non_readable = refl.get_decoration(sb.id, spv::DecorationNonReadable);
 			if (set >= sets.size()) {
 				sets.resize(set + 1, std::nullopt);
 				sets[set] = Descriptors{};
@@ -284,7 +286,7 @@ namespace vuk {
 			auto type = refl.get_type(si.type_id);
 			auto binding = refl.get_decoration(si.id, spv::DecorationBinding);
 			auto set = refl.get_decoration(si.id, spv::DecorationDescriptorSet);
-			Binding t{ .type = DescriptorType::eCombinedImageSampler };
+			Binding t{ .type = DescriptorType::eCombinedImageSampler, .non_writable = true };
 			t.binding = binding;
 			t.name = std::string(si.name.c_str());
 			t.stage = stage;
@@ -302,7 +304,7 @@ namespace vuk {
 			auto type = refl.get_type(sa.type_id);
 			auto binding = refl.get_decoration(sa.id, spv::DecorationBinding);
 			auto set = refl.get_decoration(sa.id, spv::DecorationDescriptorSet);
-			Binding t{ .type = DescriptorType::eSampler };
+			Binding t{ .type = DescriptorType::eSampler, .non_writable = true };
 			t.binding = binding;
 			t.name = std::string(sa.name.c_str());
 			t.stage = stage;
@@ -320,7 +322,7 @@ namespace vuk {
 			auto type = refl.get_type(si.type_id);
 			auto binding = refl.get_decoration(si.id, spv::DecorationBinding);
 			auto set = refl.get_decoration(si.id, spv::DecorationDescriptorSet);
-			Binding t{ .type = DescriptorType::eSampledImage };
+			Binding t{ .type = DescriptorType::eSampledImage, .non_writable = true };
 			t.binding = binding;
 			t.name = std::string(si.name.c_str());
 			t.stage = stage;
@@ -341,6 +343,8 @@ namespace vuk {
 			un.binding = binding;
 			un.stage = stage;
 			un.name = sb.name.c_str();
+			un.non_writable = refl.get_decoration(sb.id, spv::DecorationNonWritable);
+			un.non_readable = refl.get_decoration(sb.id, spv::DecorationNonReadable);
 			// maybe spirv cross bug?
 			un.array_size = type.array.size() == 1 ? (type.array[0] == 1 ? 0 : type.array[0]) : -1;
 			if (set >= sets.size()) {
@@ -355,7 +359,7 @@ namespace vuk {
 			auto type = refl.get_type(si.type_id);
 			auto binding = refl.get_decoration(si.id, spv::DecorationBinding);
 			auto set = refl.get_decoration(si.id, spv::DecorationDescriptorSet);
-			Binding s{ .type = DescriptorType::eInputAttachment };
+			Binding s{ .type = DescriptorType::eInputAttachment, .non_writable = true };
 			s.name = std::string(si.name.c_str());
 			s.binding = binding;
 			s.stage = stage;
@@ -371,7 +375,7 @@ namespace vuk {
 			auto type = refl.get_type(as.type_id);
 			auto binding = refl.get_decoration(as.id, spv::DecorationBinding);
 			auto set = refl.get_decoration(as.id, spv::DecorationDescriptorSet);
-			Binding s{ .type = DescriptorType::eAccelerationStructureKHR };
+			Binding s{ .type = DescriptorType::eAccelerationStructureKHR, .non_writable = true };
 			s.name = std::string(as.name.c_str());
 			s.binding = binding;
 			s.stage = stage;
@@ -409,6 +413,8 @@ namespace vuk {
 			}
 			set->highest_descriptor_binding = max_binding;
 		}
+
+		flatten_bindings();
 
 		// push constants
 		for (auto& si : resources.push_constant_buffers) {
@@ -451,9 +457,23 @@ namespace vuk {
 			unq(s->bindings);
 			s->highest_descriptor_binding = std::max(s->highest_descriptor_binding, os->highest_descriptor_binding);
 		}
+		flatten_bindings();
 
 		stages |= o.stages;
 		local_size = o.local_size;
+	}
+
+	void Program::flatten_bindings() {
+		flat_bindings.clear();
+		for (size_t i = 0; i < sets.size(); i++) {
+			auto& set = sets[i];
+			if (!set) {
+				continue;
+			}
+			for (auto& b : set->bindings) {
+				flat_bindings.emplace_back(i, &b);
+			}
+		}
 	}
 } // namespace vuk
 

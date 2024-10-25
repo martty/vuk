@@ -1286,6 +1286,10 @@ namespace vuk {
 				break;
 			}
 			case Node::CALL: {
+				auto fn_type = node->call.args[0].type();
+				size_t first_parm = fn_type->kind == Type::OPAQUE_FN_TY ? 1 : 4;
+				auto& args = fn_type->kind == Type::OPAQUE_FN_TY ? fn_type->opaque_fn.args : fn_type->shader_fn.args;
+
 				if (sched.process(item)) {                    // we have executed every dep, so execute ourselves too
 					Stream* dst_stream = item.scheduled_stream; // the domain this call will execute on
 
@@ -1293,8 +1297,8 @@ namespace vuk {
 					assert(vk_rec);
 					// run all the barriers here!
 
-					for (size_t i = 1; i < node->call.args.size(); i++) {
-						auto& arg_ty = node->call.args[0].type()->opaque_fn.args[i - 1];
+					for (size_t i = first_parm; i < node->call.args.size(); i++) {
+						auto& arg_ty = args[i - first_parm];
 						auto& parm = node->call.args[i];
 						auto& link = parm.link();
 
@@ -1339,16 +1343,16 @@ namespace vuk {
 					recorder.synchronize_stream(dst_stream);
 					// run the user cb!
 					std::vector<void*, short_alloc<void*>> opaque_rets(*impl->arena_);
-					if (node->call.args[0].type()->kind == Type::OPAQUE_FN_TY) {
+					if (fn_type->kind == Type::OPAQUE_FN_TY) {
 						CommandBuffer cobuf(*dst_stream, ctx, alloc, vk_rec->cbuf);
-						if (!node->call.args[0].type()->debug_info.name.empty()) {
-							ctx.begin_region(vk_rec->cbuf, node->call.args[0].type()->debug_info.name.c_str());
+						if (!fn_type->debug_info.name.empty()) {
+							ctx.begin_region(vk_rec->cbuf, fn_type->debug_info.name.c_str());
 						}
 
 						void* rpass_profile_data = nullptr;
 						if (vk_rec->callbacks->on_begin_pass)
-							rpass_profile_data = vk_rec->callbacks->on_begin_pass(
-							    vk_rec->callbacks->user_data, node->call.args[0].type()->debug_info.name.c_str(), vk_rec->cbuf, vk_rec->domain);
+							rpass_profile_data =
+							    vk_rec->callbacks->on_begin_pass(vk_rec->callbacks->user_data, fn_type->debug_info.name.c_str(), vk_rec->cbuf, vk_rec->domain);
 
 						if (vk_rec->rp.rpci.attachments.size() > 0) {
 							vk_rec->prepare_render_pass();
@@ -1357,19 +1361,74 @@ namespace vuk {
 
 						std::vector<void*, short_alloc<void*>> opaque_args(*impl->arena_);
 						std::vector<void*, short_alloc<void*>> opaque_meta(*impl->arena_);
-						for (size_t i = 1; i < node->call.args.size(); i++) {
+						for (size_t i = first_parm; i < node->call.args.size(); i++) {
 							auto& parm = node->call.args[i];
 							auto& link = parm.link();
 							assert(link.urdef);
 							opaque_args.push_back(sched.get_value(parm));
 							opaque_meta.push_back(&parm);
 						}
-						opaque_rets.resize(node->call.args[0].type()->opaque_fn.return_types.size());
-						(*node->call.args[0].type()->callback)(cobuf, opaque_args, opaque_meta, opaque_rets);
+						opaque_rets.resize(fn_type->opaque_fn.return_types.size());
+						(*fn_type->callback)(cobuf, opaque_args, opaque_meta, opaque_rets);
 						if (vk_rec->rp.handle) {
 							vk_rec->end_render_pass();
 						}
-						if (!node->call.args[0].type()->debug_info.name.empty()) {
+						if (!fn_type->debug_info.name.empty()) {
+							ctx.end_region(vk_rec->cbuf);
+						}
+						if (vk_rec->callbacks->on_end_pass)
+							vk_rec->callbacks->on_end_pass(vk_rec->callbacks->user_data, rpass_profile_data);
+					} else if (fn_type->kind == Type::SHADER_FN_TY) {
+						CommandBuffer cobuf(*dst_stream, ctx, alloc, vk_rec->cbuf);
+						if (!fn_type->debug_info.name.empty()) {
+							ctx.begin_region(vk_rec->cbuf, fn_type->debug_info.name.c_str());
+						}
+
+						void* rpass_profile_data = nullptr;
+						if (vk_rec->callbacks->on_begin_pass)
+							rpass_profile_data =
+							    vk_rec->callbacks->on_begin_pass(vk_rec->callbacks->user_data, fn_type->debug_info.name.c_str(), vk_rec->cbuf, vk_rec->domain);
+
+						if (vk_rec->rp.rpci.attachments.size() > 0) {
+							vk_rec->prepare_render_pass();
+							fill_render_pass_info(vk_rec->rp, 0, cobuf);
+						}
+
+						// call the cbuf directly: bind everything, then dispatch shader
+						opaque_rets.resize(fn_type->shader_fn.return_types.size());
+						auto pbi = reinterpret_cast<PipelineBaseInfo*>(fn_type->shader_fn.shader);
+						
+						cobuf.bind_compute_pipeline(pbi);
+
+						auto& flat_bindings = pbi->reflection_info.flat_bindings;
+						for (size_t i = first_parm; i < node->call.args.size(); i++) {
+							auto& parm = node->call.args[i];
+
+							auto binding_idx = i - first_parm;
+							auto& [set, binding] = flat_bindings[binding_idx];
+							auto val = sched.get_value(parm);
+							switch (binding->type) {
+							case DescriptorType::eSampledImage:
+							case DescriptorType::eCombinedImageSampler:
+							case DescriptorType::eStorageImage:
+								cobuf.bind_image(set, binding->binding, *reinterpret_cast<ImageAttachment*>(val));
+								break;
+							case DescriptorType::eUniformBuffer:
+							case DescriptorType::eStorageBuffer:
+								cobuf.bind_buffer(set, binding->binding, *reinterpret_cast<Buffer*>(val));
+								break;
+							default:
+								assert(0);
+							}
+
+							opaque_rets[binding_idx] = val;
+						}
+						cobuf.dispatch(constant<uint32_t>(node->call.args[1]), constant<uint32_t>(node->call.args[2]), constant<uint32_t>(node->call.args[3]));
+
+						if (vk_rec->rp.handle) {
+							vk_rec->end_render_pass();
+						}
+						if (!fn_type->debug_info.name.empty()) {
 							ctx.end_region(vk_rec->cbuf);
 						}
 						if (vk_rec->callbacks->on_end_pass)
@@ -1380,16 +1439,16 @@ namespace vuk {
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
 					fmt::print(" = call ${} ", domain_to_string(dst_stream->domain));
-					if (!node->call.args[0].type()->debug_info.name.empty()) {
-						fmt::print("<{}> ", node->call.args[0].type()->debug_info.name);
+					if (!fn_type->debug_info.name.empty()) {
+						fmt::print("<{}> ", fn_type->debug_info.name);
 					}
 					print_args(node->call.args.subspan(1));
 					fmt::print("\n");
 #endif
 					sched.done(node, dst_stream, std::span(opaque_rets));
 				} else { // execute deps
-					for (size_t i = 1; i < node->call.args.size(); i++) {
-						auto& arg_ty = node->call.args[0].type()->opaque_fn.args[i - 1];
+					for (size_t i = first_parm; i < node->call.args.size(); i++) {
+						auto& arg_ty = args[i - first_parm];
 						auto& parm = node->call.args[i];
 
 						if (arg_ty->kind == Type::IMBUED_TY) {

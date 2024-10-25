@@ -522,7 +522,7 @@ namespace vuk {
 		this->vkCreateShaderModule(device, &moduleCreateInfo, nullptr, &sm);
 		std::string name = "ShaderModule: " + cinfo.filename;
 		set_name(sm, Name(name));
-		return { sm, p, stage };
+		return { sm, std::move(p), stage };
 	}
 
 	PipelineBaseInfo Runtime::create(const create_info_t<PipelineBaseInfo>& cinfo) {
@@ -588,7 +588,7 @@ namespace vuk {
 			std::sort(dslci.bindings.begin(), dslci.bindings.end(), [](auto& a, auto& b) { return a.binding < b.binding; });
 		}
 		pbi.pipeline_name = Name(pipe_name);
-		pbi.reflection_info = accumulated_reflection;
+		pbi.reflection_info = std::move(accumulated_reflection);
 		pbi.binding_flags = cinfo.binding_flags;
 		pbi.variable_count_max = cinfo.variable_count_max;
 		pbi.hit_groups = cinfo.hit_groups;
