@@ -151,13 +151,11 @@ namespace vuk {
 		    [=](CommandBuffer& cbuf, VUK_IA(Access::eTransferRead) src, VUK_IA(Access::eTransferWrite) dst) {
 			    ImageBlit region = {};
 			    region.srcOffsets[0] = Offset3D{};
-			    region.srcOffsets[1] = Offset3D{ std::max(static_cast<int32_t>(src->extent.width) >> src->base_level, 1),
-				                                   std::max(static_cast<int32_t>(src->extent.height) >> src->base_level, 1),
-				                                   std::max(static_cast<int32_t>(src->extent.depth) >> src->base_level, 1) };
+			    auto src_extent = src->base_mip_extent();
+			    region.srcOffsets[1] = Offset3D{ (int32_t)src_extent.width, (int32_t)src_extent.height, (int32_t)src_extent.depth };
 			    region.dstOffsets[0] = Offset3D{};
-			    region.dstOffsets[1] = Offset3D{ std::max(static_cast<int32_t>(dst->extent.width) >> dst->base_level, 1),
-				                                   std::max(static_cast<int32_t>(dst->extent.height) >> dst->base_level, 1),
-				                                   std::max(static_cast<int32_t>(dst->extent.depth) >> dst->base_level, 1) };
+			    auto dst_extent = dst->base_mip_extent();
+			    region.dstOffsets[1] = Offset3D{ (int32_t)dst_extent.width, (int32_t)dst_extent.height, (int32_t)dst_extent.depth };
 			    region.srcSubresource.aspectMask = format_to_aspect(src->format);
 			    region.srcSubresource.baseArrayLayer = src->base_layer;
 			    region.srcSubresource.layerCount = src->layer_count;
@@ -175,6 +173,83 @@ namespace vuk {
 		    DomainFlagBits::eGraphicsQueue);
 
 		return blit(std::move(src), std::move(dst), VUK_CALL);
+	}
+
+	inline Value<Buffer> copy(Value<ImageAttachment> src, Value<Buffer> dst, VUK_CALLSTACK) {
+		auto image2buf = make_pass("copy image to buffer", [](CommandBuffer& cbuf, VUK_IA(Access::eTransferRead) src, VUK_BA(Access::eTransferWrite) dst) {
+			BufferImageCopy bc;
+			bc.imageOffset = { 0, 0, 0 };
+			bc.bufferRowLength = 0;
+			bc.bufferImageHeight = 0;
+			bc.imageExtent = src->base_mip_extent();
+			bc.imageSubresource.aspectMask = format_to_aspect(src->format);
+			bc.imageSubresource.mipLevel = src->base_level;
+			bc.imageSubresource.baseArrayLayer = src->base_layer;
+			assert(src->layer_count == 1); // unsupported yet
+			bc.imageSubresource.layerCount = src->layer_count;
+			bc.bufferOffset = dst->offset;
+			cbuf.copy_image_to_buffer(src, dst, bc);
+			return dst;
+		});
+
+		return image2buf(src, dst);
+	}
+
+	inline Value<Buffer> copy(Value<Buffer> src, Value<Buffer> dst, VUK_CALLSTACK) {
+		auto buf2buf = vuk::make_pass(
+		    "copy buffer to buffer",
+		    [](vuk::CommandBuffer& command_buffer, VUK_BA(vuk::eTransferRead) src, VUK_BA(vuk::eTransferWrite) dst) {
+			    command_buffer.copy_buffer(src, dst);
+			    return dst;
+		    });
+		return buf2buf(src, dst);
+	}
+
+	inline Value<ImageAttachment> copy(Value<Buffer> src, Value<ImageAttachment> dst, VUK_CALLSTACK) {
+		auto buf2img = make_pass("copy buffer to image", [](CommandBuffer& cbuf, VUK_BA(Access::eTransferRead) src, VUK_IA(Access::eTransferWrite) dst) {
+			BufferImageCopy bc;
+			bc.imageOffset = { 0, 0, 0 };
+			bc.bufferRowLength = 0;
+			bc.bufferImageHeight = 0;
+			bc.imageExtent = dst->base_mip_extent();
+			bc.imageSubresource.aspectMask = format_to_aspect(dst->format);
+			bc.imageSubresource.mipLevel = dst->base_level;
+			bc.imageSubresource.baseArrayLayer = dst->base_layer;
+			assert(dst->layer_count == 1); // unsupported yet
+			bc.imageSubresource.layerCount = dst->layer_count;
+			bc.bufferOffset = src->offset;
+			cbuf.copy_buffer_to_image(src, dst, bc);
+			return dst;
+		});
+
+		return buf2img(src, dst);
+	}
+
+		inline Value<ImageAttachment> copy(Value<ImageAttachment> src, Value<ImageAttachment> dst, VUK_CALLSTACK) {
+		auto img2img = make_pass("copy image to image", [](CommandBuffer& cbuf, VUK_IA(Access::eTransferRead) src, VUK_IA(Access::eTransferWrite) dst) {
+			assert(src->level_count == dst->level_count);
+
+			ImageCopy bc;
+			bc.imageExtent = dst->base_mip_extent();
+			bc.srcOffsets = {};
+			bc.srcSubresource.aspectMask = format_to_aspect(src->format);
+			bc.srcSubresource.baseArrayLayer = src->base_layer;
+			bc.srcSubresource.layerCount = src->layer_count;
+			bc.dstOffsets = {};
+			bc.dstSubresource.aspectMask = format_to_aspect(dst->format);
+			bc.dstSubresource.baseArrayLayer = dst->base_layer;
+			bc.dstSubresource.layerCount = dst->layer_count;
+
+			for (uint32_t i = 0; i < src->level_count; i++) {
+				bc.srcSubresource.mipLevel = src->base_level + i;
+				bc.dstSubresource.mipLevel = dst->base_level + i;
+				cbuf.copy_image(src, dst, bc);
+			}
+
+			return dst;
+		});
+
+		return img2img(src, dst);
 	}
 
 	inline Value<ImageAttachment> resolve_into(Value<ImageAttachment> src, Value<ImageAttachment> dst, VUK_CALLSTACK) {

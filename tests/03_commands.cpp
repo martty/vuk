@@ -56,22 +56,6 @@ TEST_CASE("buffer fill & update") {
 	}
 }
 
-auto image2buf = make_pass("copy image to buffer", [](CommandBuffer& cbuf, VUK_IA(Access::eTransferRead) src, VUK_BA(Access::eTransferWrite) dst) {
-	BufferImageCopy bc;
-	bc.imageOffset = { 0, 0, 0 };
-	bc.bufferRowLength = 0;
-	bc.bufferImageHeight = 0;
-	bc.imageExtent = src->extent;
-	bc.imageSubresource.aspectMask = format_to_aspect(src->format);
-	bc.imageSubresource.mipLevel = src->base_level;
-	bc.imageSubresource.baseArrayLayer = src->base_layer;
-	assert(src->layer_count == 1); // unsupported yet
-	bc.imageSubresource.layerCount = src->layer_count;
-	bc.bufferOffset = dst->offset;
-	cbuf.copy_image_to_buffer(src, dst, bc);
-	return dst;
-});
-
 TEST_CASE("image upload/download") {
 	{
 		auto data = { 1u, 2u, 3u, 4u };
@@ -82,7 +66,7 @@ TEST_CASE("image upload/download") {
 		size_t size = compute_image_size(fut->format, fut->extent);
 		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 		auto dst_buf = discard_buf("dst", *dst);
-		auto res = download_buffer(image2buf(fut, std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
+		auto res = download_buffer(copy(fut, std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
 		auto updata = std::span((uint32_t*)res->mapped_ptr, 4);
 		CHECK(updata == std::span(data));
 	}
@@ -99,7 +83,7 @@ TEST_CASE("image clear") {
 		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 		auto fut2 = clear_image(fut, vuk::ClearColor(5u, 5u, 5u, 5u));
 		auto dst_buf = discard_buf("dst", *dst);
-		auto res = download_buffer(image2buf(fut2, dst_buf)).get(*test_context.allocator, test_context.compiler);
+		auto res = download_buffer(copy(fut2, dst_buf)).get(*test_context.allocator, test_context.compiler);
 		auto updata = std::span((uint32_t*)res->mapped_ptr, 4);
 		CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 5; }));
 	}
@@ -119,7 +103,7 @@ TEST_CASE("image blit") {
 		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 		auto fut2 = blit_image(fut, declare_ia("dst_i", ia_dst), Filter::eLinear);
 		auto dst_buf = discard_buf("dst", *dst);
-		auto res = download_buffer(image2buf(fut2, dst_buf)).get(*test_context.allocator, test_context.compiler);
+		auto res = download_buffer(copy(fut2, dst_buf)).get(*test_context.allocator, test_context.compiler);
 		auto updata = std::span((float*)res->mapped_ptr, 1);
 		CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 0.5f; }));
 	}
@@ -136,7 +120,7 @@ TEST_CASE("image blit") {
 		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 		auto fut2 = blit_image(fut, declare_ia("dst_i", ia_dst), Filter::eNearest);
 		auto dst_buf = discard_buf("dst", *dst);
-		auto res = download_buffer(image2buf(fut2, dst_buf)).get(*test_context.allocator, test_context.compiler);
+		auto res = download_buffer(copy(fut2, dst_buf)).get(*test_context.allocator, test_context.compiler);
 		auto updata = std::span((float*)res->mapped_ptr, 1);
 		CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 1.f; }));
 	}
