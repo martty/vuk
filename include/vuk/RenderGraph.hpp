@@ -569,7 +569,7 @@ public:
 		return { make_ext_ref(ref, std::move(deps)) };
 	}
 
-	[[nodiscard]] inline Value<Swapchain> declare_swapchain(Swapchain& bundle, VUK_CALLSTACK) {
+	[[nodiscard]] inline Value<Swapchain> acquire_swapchain(Swapchain& bundle, VUK_CALLSTACK) {
 		Ref ref = current_module->make_declare_swapchain(bundle);
 		current_module->set_source_location(ref.node, VUK_CALL);
 		return { make_ext_ref(ref) };

@@ -43,7 +43,7 @@ void vuk::ExampleRunner::render() {
 
 		Allocator frame_allocator(frame_resource);
 
-		auto imported_swapchain = declare_swapchain(*swapchain);
+		auto imported_swapchain = acquire_swapchain(*swapchain);
 		// acquire an image on the swapchain
 		auto swapchain_image = acquire_next_image("swp_img", std::move(imported_swapchain));
 		// clear the swapchain image
