@@ -1339,7 +1339,14 @@ namespace vuk {
 
 			auto tys = new std::shared_ptr<Type>[1]{ type };
 			auto vals = new void*[1]{ val_ptr };
-			return first(emplace_op(Node{ .kind = Node::SPLICE, .type = std::span{ tys, 1 }, .splice = { .rel_acq = acq_rel, .values = std::span{ vals, 1 } } }));
+
+			// spelling this out due to clang bug
+			Node node;
+			node.kind = Node::SPLICE;
+			node.type = std::span{ tys, 1 };
+			node.splice.rel_acq = acq_rel;
+			node.splice.values = std::span{ vals, 1 };
+			return first(emplace_op(std::move(node)));
 		}
 
 		Node* copy_node(Node* node) {

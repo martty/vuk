@@ -30,9 +30,9 @@ namespace vuk {
 	template<size_t I>
 	struct tag_type {};
 }; // namespace vuk
-#define VUK_IA(access, ...)        vuk::Arg<vuk::ImageAttachment, access, vuk::tag_type<__COUNTER__>, __VA_ARGS__>
-#define VUK_BA(access, ...)        vuk::Arg<vuk::Buffer, access, vuk::tag_type<__COUNTER__>, __VA_ARGS__>
-#define VUK_ARG(type, access, ...) vuk::Arg<type, access, vuk::tag_type<__COUNTER__>, __VA_ARGS__>
+#define VUK_IA(access)        vuk::Arg<vuk::ImageAttachment, access, vuk::tag_type<__COUNTER__>>
+#define VUK_BA(access)        vuk::Arg<vuk::Buffer, access, vuk::tag_type<__COUNTER__>>
+#define VUK_ARG(type, access) vuk::Arg<type, access, vuk::tag_type<__COUNTER__>>
 #endif
 
 #define VUK_CALLSTACK SourceLocationAtFrame _pscope = VUK_HERE_AND_NOW(), SourceLocationAtFrame _scope = VUK_HERE_AND_NOW()
