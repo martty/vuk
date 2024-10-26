@@ -1341,7 +1341,7 @@ namespace vuk {
 			auto vals = new void*[1]{ val_ptr };
 
 			// spelling this out due to clang bug
-			Node node;
+			Node node{};
 			node.kind = Node::SPLICE;
 			node.type = std::span{ tys, 1 };
 			node.splice.rel_acq = acq_rel;

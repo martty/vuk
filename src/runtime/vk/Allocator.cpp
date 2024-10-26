@@ -2,6 +2,7 @@
 #include "vuk/Exception.hpp"
 #include "vuk/runtime/vk/DeviceFrameResource.hpp"
 #include "vuk/runtime/vk/DeviceVkResource.hpp"
+#include "vuk/runtime/vk/PipelineInstance.hpp"
 #include "vuk/runtime/vk/Query.hpp"
 #include "vuk/runtime/vk/RenderPass.hpp"
 #include "vuk/runtime/vk/VkRuntime.hpp"

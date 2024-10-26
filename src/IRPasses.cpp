@@ -1361,7 +1361,7 @@ namespace vuk {
 			impl->depnodes.push_back(std::move(enode));
 		}
 
-		std::pmr::polymorphic_allocator allocator(&impl->mbr);
+		std::pmr::polymorphic_allocator<std::byte> allocator(&impl->mbr);
 		for (auto& m : modules) {
 			// GC the module
 			for (auto it = m->op_arena.begin(); it != m->op_arena.end();) {
