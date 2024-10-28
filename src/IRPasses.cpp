@@ -427,40 +427,23 @@ namespace vuk {
 		}
 		case Node::CALL: {
 			// args
-			auto fn_ty = node->call.args[0].type();
-			if (fn_ty->kind == Type::OPAQUE_FN_TY) {
-				for (size_t i = 1; i < node->call.args.size(); i++) {
-					auto& arg_ty = fn_ty->opaque_fn.args[i - 1];
-					auto& parm = node->call.args[i];
-					// TODO: assert same type when imbuement is stripped
-					if (arg_ty->kind == Type::IMBUED_TY) {
-						auto access = arg_ty->imbued.access;
-						if (is_write_access(access) || access == Access::eConsume) { // Write and ReadWrite
-							add_write(node, parm, i);
-						}
-						if (!is_write_access(access) && access != Access::eConsume) { // Read and ReadWrite
-							add_read(node, parm, i);
-						}
-					} else {
-						assert(0);
+			auto fn_type = node->call.args[0].type();
+			size_t first_parm = fn_type->kind == Type::OPAQUE_FN_TY ? 1 : 4;
+			auto& args = fn_type->kind == Type::OPAQUE_FN_TY ? fn_type->opaque_fn.args : fn_type->shader_fn.args;
+			for (size_t i = first_parm; i < node->call.args.size(); i++) {
+				auto& arg_ty = args[i - first_parm];
+				auto& parm = node->call.args[i];
+				// TODO: assert same type when imbuement is stripped
+				if (arg_ty->kind == Type::IMBUED_TY) {
+					auto access = arg_ty->imbued.access;
+					if (is_write_access(access) || access == Access::eConsume) { // Write and ReadWrite
+						add_write(node, parm, i);
 					}
-				}
-			} else if (fn_ty->kind == Type::SHADER_FN_TY) {
-				for (size_t i = 4; i < node->call.args.size(); i++) {
-					auto& arg_ty = fn_ty->shader_fn.args[i - 4];
-					auto& parm = node->call.args[i];
-					// TODO: assert same type when imbuement is stripped
-					if (arg_ty->kind == Type::IMBUED_TY) {
-						auto access = arg_ty->imbued.access;
-						if (is_write_access(access) || access == Access::eConsume) { // Write and ReadWrite
-							add_write(node, parm, i);
-						}
-						if (!is_write_access(access) && access != Access::eConsume) { // Read and ReadWrite
-							add_read(node, parm, i);
-						}
-					} else {
-						assert(0);
+					if (!is_write_access(access) && access != Access::eConsume) { // Read and ReadWrite
+						add_read(node, parm, i);
 					}
+				} else {
+					assert(0);
 				}
 			}
 			size_t index = 0;
@@ -1632,7 +1615,11 @@ namespace vuk {
 			if (chain->undef) {
 				switch (chain->undef.node->kind) {
 				case Node::CALL: {
-					auto& arg_ty = chain->undef.node->call.args[0].type()->opaque_fn.args[chain->undef.index - 1];
+					auto fn_type = chain->undef.node->call.args[0].type();
+					size_t first_parm = fn_type->kind == Type::OPAQUE_FN_TY ? 1 : 4;
+					auto& args = fn_type->kind == Type::OPAQUE_FN_TY ? fn_type->opaque_fn.args : fn_type->shader_fn.args;
+
+					auto& arg_ty = args[chain->undef.index - first_parm];
 					if (arg_ty->kind == Type::IMBUED_TY) {
 						auto access = arg_ty->imbued.access;
 						access_to_usage(usage, access);
