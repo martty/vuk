@@ -996,6 +996,7 @@ namespace vuk {
 			Type::Hash builtin_buffer = 0;
 			Type::Hash builtin_swapchain = 0;
 			Type::Hash builtin_sampler = 0;
+			Type::Hash builtin_sampled_image = 0;
 
 			// TYPES
 			std::shared_ptr<Type> make_imbued_ty(std::shared_ptr<Type> ty, Access access) {
@@ -1184,6 +1185,24 @@ namespace vuk {
 				                                                                 .composite = { .types = {}, .tag = 3 } }));
 				builtin_sampler = Type::hash(sampler_type.get());
 				return sampler_type;
+			}
+
+			std::shared_ptr<Type> get_builtin_sampled_image() {
+				if (builtin_sampled_image) {
+					auto it = type_map.find(builtin_sampled_image);
+					if (it != type_map.end()) {
+						if (auto ty = it->second.lock()) {
+							return ty;
+						}
+					}
+				}
+				auto sampled_image_type = emplace_type(std::shared_ptr<Type>(new Type{ .kind = Type::COMPOSITE_TY,
+				                                                                       .size = sizeof(SampledImage),
+				                                                                       .debug_info = allocate_type_debug_info("sampled_image"),
+				                                                                       .offsets = {},
+				                                                                       .composite = { .types = {}, .tag = 4 } }));
+				builtin_sampled_image = Type::hash(sampled_image_type.get());
+				return sampled_image_type;
 			}
 
 			std::shared_ptr<Type> emplace_type(std::shared_ptr<Type> t) {
@@ -1437,6 +1456,13 @@ namespace vuk {
 			return first(emplace_op(Node{ .kind = Node::CONSTRUCT,
 			                              .type = std::span{ new std::shared_ptr<Type>[1]{ types.get_builtin_swapchain() }, 1 },
 			                              .construct = { .args = std::span(args_ptr, 2) } }));
+		}
+
+		Ref make_sampled_image(Ref image, Ref sampler) {
+			auto args_ptr = new Ref[3]{ make_constant(0), image, sampler };
+			return first(emplace_op(Node{ .kind = Node::CONSTRUCT,
+			                              .type = std::span{ new std::shared_ptr<Type>[1]{ types.get_builtin_sampled_image() }, 1 },
+			                              .construct = { .args = std::span(args_ptr, 3) } }));
 		}
 
 		Ref make_extract(Ref composite, Ref index) {

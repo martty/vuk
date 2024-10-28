@@ -238,3 +238,40 @@ void main() {
 	auto test1 = { 3.f, 3.f, 3.f, 3.f };
 	CHECK(std::span((float*)res1->mapped_ptr, 4) == std::span(test1));
 }
+
+TEST_CASE("combined sampler") {
+	auto data2 = { 4.f, 4.f, 2.f, 2.f };
+	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 2, 2, 1 }, Samples::e1);
+	auto [img, img0] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data2));
+
+	auto nearest_samp = vuk::acquire_sampler("nearest", SamplerCreateInfo{ .magFilter = vuk::Filter::eNearest, .minFilter = vuk::Filter::eNearest });
+
+	auto image_and_samp = vuk::combine_image_sampler("combined", img0, nearest_samp);
+
+	auto out_nearest =
+	    vuk::declare_ia("out_nearest", ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 2, 2, 1 }, Samples::e1));
+
+	auto pass = lift_compute(test_context.runtime->get_pipeline(vuk::PipelineBaseCreateInfo::from_inline_glsl(R"(#version 450
+#pragma shader_stage(compute)
+
+uniform layout(binding=0) sampler2D nearest;
+
+uniform layout(binding=3,r32f) image2D out_nearest;
+
+layout (local_size_x = 1) in;
+
+void main() {
+	ivec2 coord = ivec2(gl_GlobalInvocationID.x % 2,gl_GlobalInvocationID.x / 2);
+	vec2 normcoord = coord / 2;
+	imageStore(out_nearest, coord, texture(nearest, normcoord));
+}
+)")));
+	pass(4, 1, 1, image_and_samp, out_nearest);
+	size_t alignment = format_to_texel_block_size(out_nearest->format);
+	size_t size = compute_image_size(out_nearest->format, out_nearest->extent);
+	auto dst0 = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
+	auto dst_buf0 = discard_buf("dst", *dst0);
+	auto res0 = download_buffer(copy(out_nearest, dst_buf0)).get(*test_context.allocator, test_context.compiler);
+	auto test0 = { 4.f, 4.f, 4.f, 4.f };
+	CHECK(std::span((float*)res0->mapped_ptr, 4) == std::span(test0));
+}

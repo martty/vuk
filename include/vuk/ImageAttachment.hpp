@@ -206,6 +206,12 @@ namespace vuk {
 			}
 		} buffer;
 	};
+
+	// high level type around binding a sampled image with a sampler
+	struct SampledImage {
+		ImageAttachment ia;
+		SamplerCreateInfo sci = {};
+	};
 } // namespace vuk
 
 namespace std {

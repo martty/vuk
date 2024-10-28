@@ -880,6 +880,10 @@ namespace vuk {
 				auto buf = reinterpret_cast<Buffer*>(value);
 				key = reinterpret_cast<uint64_t>(buf->allocation);
 				hash_combine(key, buf->offset);
+			} else if (base_ty->hash_value == current_module->types.builtin_sampled_image) { // sync the image
+				auto& img_att = reinterpret_cast<SampledImage*>(value)->ia;
+				add_sync(current_module->types.get_builtin_image().get(), dst_use, &img_att);
+				return;
 			} else { // no other types require sync
 				return;
 			}
@@ -970,6 +974,9 @@ namespace vuk {
 				} else { // zero-len arrays
 					return *last_modify.at(0);
 				}
+			} else if (base_ty->hash_value == current_module->types.builtin_sampled_image) { // only image syncs
+				auto& img_att = reinterpret_cast<SampledImage*>(value)->ia;
+				key = reinterpret_cast<uint64_t>(img_att.image.image);
 			} else { // other types just key on the voidptr
 				key = reinterpret_cast<uint64_t>(value);
 			}
@@ -1301,6 +1308,22 @@ namespace vuk {
 							node->construct.args[0].node->constant.value = arr_mem;
 							sched.done(node, host_stream, (void*)arr_mem);
 						}
+					} else if (node->type[0]->hash_value == current_module->types.builtin_sampled_image) {
+						for (size_t i = 1; i < node->construct.args.size(); i++) {
+							auto arg_ty = node->construct.args[i].type();
+							auto& parm = node->construct.args[i];
+
+							recorder.add_sync(sched.base_type(parm).get(), sched.get_dependency_info(parm, arg_ty.get(), RW::eWrite, nullptr), sched.get_value(parm));
+						}
+						auto image = sched.get_value<ImageAttachment>(node->construct.args[1]);
+						auto samp = sched.get_value<SamplerCreateInfo>(node->construct.args[2]);
+#ifdef VUK_DUMP_EXEC
+						print_results(node);
+						fmt::print(" = construct<sampled_image> ");
+						print_args(node->construct.args.subspan(1));
+						fmt::print("\n");
+#endif
+						sched.done(node, host_stream, SampledImage{ image, samp });
 					} else {
 						assert(0);
 					}
@@ -1445,6 +1468,12 @@ namespace vuk {
 							case DescriptorType::eSampler:
 								cobuf.bind_sampler(set, binding->binding, *reinterpret_cast<SamplerCreateInfo*>(val));
 								break;
+							case DescriptorType::eCombinedImageSampler: {
+								auto& si = *reinterpret_cast<SampledImage*>(val);
+								cobuf.bind_image(set, binding->binding, si.ia);
+								cobuf.bind_sampler(set, binding->binding, si.sci);
+								break;
+							}
 							default:
 								assert(0);
 							}
