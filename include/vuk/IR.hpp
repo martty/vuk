@@ -491,12 +491,16 @@ namespace vuk {
 		Ref ref;
 		void* value;
 		bool is_ref;
+		bool owned = false;
 
 		static RefOrValue from_ref(Ref r) {
 			return { r, nullptr, true };
 		}
 		static RefOrValue from_value(void* v) {
 			return { {}, v, false };
+		}
+		static RefOrValue adopt_value(void* v) {
+			return { {}, v, false, true };
 		}
 	};
 
@@ -524,6 +528,196 @@ namespace vuk {
 		case Node::EXTRACT: {
 			auto composite = get_def(ref.node->extract.composite);
 			return composite;
+		}
+		default:
+			return { expected_error, CannotBeConstantEvaluated{ ref } };
+		}
+	}
+
+	template<class F, class... Args>
+	auto eval_with_type(const std::shared_ptr<Type>& t, F&& f, Args... args) {
+		switch (t->kind) {
+		case Type::INTEGER_TY: {
+			switch (t->integer.width) {
+			case 32:
+				return f(*reinterpret_cast<uint32_t*>(args)...);
+				break;
+			case 64:
+				return f(*reinterpret_cast<uint64_t*>(args)...);
+				break;
+			default:
+				assert(0);
+			}
+			break;
+		}
+		}
+	}
+
+	inline void* eval_binop(Node::BinOp op, const std::shared_ptr<Type>& t, void* a, void* b) {
+		auto result = (void*)new char[t->size];
+		switch (op) {
+		case Node::BinOp::ADD: {
+			eval_with_type(
+			    t,
+			    [&](auto a, auto b) {
+				    auto c = a + b;
+				    memcpy(result, &c, sizeof(c));
+			    },
+			    a,
+			    b);
+		} break;
+		case Node::BinOp::SUB: {
+			eval_with_type(
+			    t,
+			    [&](auto a, auto b) {
+				    auto c = a - b;
+				    memcpy(result, &c, sizeof(c));
+			    },
+			    a,
+			    b);
+		} break;
+		case Node::BinOp::MUL: {
+			eval_with_type(
+			    t,
+			    [&](auto a, auto b) {
+				    auto c = a * b;
+				    memcpy(result, &c, sizeof(c));
+			    },
+			    a,
+			    b);
+		} break;
+		case Node::BinOp::DIV: {
+			eval_with_type(
+			    t,
+			    [&](auto a, auto b) {
+				    auto c = a / b;
+				    memcpy(result, &c, sizeof(c));
+			    },
+			    a,
+			    b);
+		} break;
+		case Node::BinOp::MOD: {
+			eval_with_type(
+			    t,
+			    [&](auto a, auto b) {
+				    auto c = a % b;
+				    memcpy(result, &c, sizeof(c));
+			    },
+			    a,
+			    b);
+		} break;
+		}
+		return result;
+	}
+
+	inline Result<RefOrValue, CannotBeConstantEvaluated> eval2(Ref ref) {
+		switch (ref.node->kind) {
+		case Node::CONSTANT: {
+			return { expected_value, RefOrValue::from_value(ref.node->constant.value) };
+		}
+		case Node::CONSTRUCT:
+		case Node::ACQUIRE_NEXT_IMAGE:
+		case Node::SLICE:
+			return { expected_value, RefOrValue::from_ref(ref) };
+		case Node::CALL: {
+			auto t = ref.type();
+			if (t->kind != Type::ALIASED_TY) {
+				return { expected_error, CannotBeConstantEvaluated{ ref } };
+			}
+			return eval2(ref.node->call.args[t->aliased.ref_idx]);
+		}
+		case Node::MATH_BINARY: {
+			auto& math_binary = ref.node->math_binary;
+
+			auto a_ = eval2(math_binary.a);
+			if (!a_) {
+				return a_;
+			}
+			auto a_rov = *a_;
+			if (a_rov.is_ref) {
+				return { expected_error, CannotBeConstantEvaluated{ ref } };
+			}
+			auto a = a_rov.value;
+
+			auto b_ = eval2(math_binary.b);
+			if (!b_) {
+				return b_;
+			}
+			auto b_rov = *b_;
+			if (b_rov.is_ref) {
+				return { expected_error, CannotBeConstantEvaluated{ ref } };
+			}
+			auto b = b_rov.value;
+			return { expected_value, RefOrValue::adopt_value(eval_binop(math_binary.op, ref.type(), a, b)) };
+
+		} break;
+		case Node::EXTRACT: {
+			auto composite_ = eval2(ref.node->extract.composite);
+			if (!composite_) {
+				return composite_;
+			}
+			auto composite = *composite_;
+			auto index_ = eval2(ref.node->extract.index);
+			if (!index_) {
+				return index_;
+			}
+			auto rov_index = *index_;
+			if (rov_index.is_ref) {
+				return { expected_error, CannotBeConstantEvaluated{ ref } };
+			}
+			auto index = *(uint64_t*)rov_index.value;
+			auto type = ref.node->extract.composite.type();
+
+			if (composite.is_ref) {
+				if (composite.ref.node->kind == Node::CONSTRUCT) {
+					return eval2(composite.ref.node->construct.args[index + 1]);
+				} else if (composite.ref.node->kind == Node::ACQUIRE_NEXT_IMAGE) {
+					auto swp_ = get_def(composite.ref.node->acquire_next_image.swapchain);
+					if (!swp_) {
+						return swp_;
+					}
+					auto swp = *swp_;
+					if (swp.is_ref && swp.ref.node->kind == Node::CONSTRUCT) {
+						auto arr = swp.ref.node->construct.args[1]; // array of images
+						if (arr.node->kind == Node::CONSTRUCT) {
+							auto elem = arr.node->construct.args[1]; // first image
+							if (elem.node->kind == Node::CONSTRUCT) {
+								return eval2(elem.node->construct.args[index + 1]);
+							}
+						}
+					} else {
+						return { expected_error, CannotBeConstantEvaluated{ ref } };
+					}
+				} else if (composite.ref.node->kind == Node::SLICE) {
+					auto slice_def_ = get_def(composite.ref.node->slice.image);
+					if (!slice_def_) {
+						return slice_def_;
+					}
+					auto slice_def = *slice_def_;
+					if (!slice_def.is_ref || slice_def.ref.node->kind != Node::CONSTRUCT) {
+						return { expected_error, CannotBeConstantEvaluated{ ref } }; // TODO: this too limited
+					}
+					if (index < 6) {
+						return eval2(slice_def.ref.node->construct.args[index + 1]);
+					} else {
+						assert(false && "NYI");
+					}
+				} else {
+					return { expected_error, CannotBeConstantEvaluated{ ref } };
+				}
+			} else {
+				if (type->kind == Type::COMPOSITE_TY) {
+					auto offset = type->offsets[index];
+					return { expected_value, RefOrValue::from_value((reinterpret_cast<void*>(static_cast<unsigned char*>(composite.value) + offset))) };
+				} else if (type->kind == Type::ARRAY_TY) {
+					auto offset = type->array.stride * index;
+					return { expected_value, RefOrValue::from_value((reinterpret_cast<void*>(static_cast<unsigned char*>(composite.value) + offset))) };
+				} else {
+					return { expected_error, CannotBeConstantEvaluated{ ref } };
+				}
+			}
+
+			return { expected_error, CannotBeConstantEvaluated{ ref } };
 		}
 		default:
 			return { expected_error, CannotBeConstantEvaluated{ ref } };

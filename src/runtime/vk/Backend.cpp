@@ -21,6 +21,11 @@
 // #define VUK_DEBUG_IMBAR
 // #define VUK_DEBUG_MEMBAR
 
+#define CONCAT(a, b)       CONCAT_INNER(a, b)
+#define CONCAT_INNER(a, b) a##b
+
+#define UNIQUE_NAME(base) CONCAT(base, __LINE__)
+
 namespace vuk {
 	std::string format_source_location(SourceLocationAtFrame& source) {
 		return fmt::format("{}({}): ", source.location.file_name(), source.location.line());
@@ -1044,6 +1049,10 @@ namespace vuk {
 			return msg;
 		};
 
+		[[maybe_unused]] auto print_results = [&](Node* node) {
+			fmt::print("{}", print_results_to_string(node));
+		};
+
 		auto format_message = [&](Level level, Node* node, std::span<Ref> args, std::string err) {
 			std::string msg = "";
 			msg += format_source_location(node);
@@ -1120,15 +1129,18 @@ namespace vuk {
 				}
 				break;
 			}
-#define CONCAT(a, b)       CONCAT_INNER(a, b)
-#define CONCAT_INNER(a, b) a##b
-
-#define UNIQUE_NAME(base) CONCAT(base, __LINE__)
 #define EVAL(dst, arg)                                                                                                                                         \
-	auto UNIQUE_NAME(A) = eval<decltype(dst)>(arg);                                                                                                              \
-	if (!UNIQUE_NAME(A))                                                                                                                                         \
+	auto UNIQUE_NAME(A) = eval2(arg);                                                                                                                            \
+	if (!UNIQUE_NAME(A)) {                                                                                                                                       \
 		return UNIQUE_NAME(A);                                                                                                                                     \
-	dst = *UNIQUE_NAME(A)
+	}                                                                                                                                                            \
+	if (UNIQUE_NAME(A)->is_ref) {                                                                                                                                \
+		return { expected_error, CannotBeConstantEvaluated{ arg } };                                                                                               \
+	}                                                                                                                                                            \
+	dst = *reinterpret_cast<decltype(dst)*>(UNIQUE_NAME(A)->value);                                                                                              \
+	if (UNIQUE_NAME(A)->owned) {                                                                                                                                 \
+		delete[] UNIQUE_NAME(A)->value;                                                                                                                            \
+	}
 			case Node::CONSTRUCT: { // when encountering a CONSTRUCT, allocate the thing if needed
 				if (sched.process(item)) {
 					if (node->type[0]->hash_value == current_module->types.builtin_buffer) {
