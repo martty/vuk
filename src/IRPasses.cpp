@@ -209,8 +209,7 @@ namespace vuk {
 		nodes.clear();
 
 		std::vector<Node*, short_alloc<Node*>> work_queue(*arena_);
-		for (auto& ref : refs) {
-			auto node = ref->get_node();
+		for (auto& node : ref_nodes) {
 			if (node->flag == 0) {
 				node->flag = 1;
 				work_queue.push_back(node);
@@ -358,7 +357,7 @@ namespace vuk {
 
 			if (parm.link().undef.node != nullptr) { // there is already a write -> do SSA rewrite
 				assert(do_ssa);
-				auto old_ref = parm.link().undef; // this is an rref
+				auto old_ref = parm.link().undef;           // this is an rref
 				assert(node->index >= old_ref.node->index); // we are after the existing write
 
 				// attempt to find the final revision of this
@@ -1344,6 +1343,10 @@ namespace vuk {
 		impl->callbacks = compile_options.callbacks;
 
 		impl->refs.assign(nodes.begin(), nodes.end());
+		// tail nodes
+		for (auto& r : impl->refs) {
+			impl->ref_nodes.emplace_back(r->get_node());
+		}
 
 		std::vector<std::shared_ptr<ExtNode>, short_alloc<std::shared_ptr<ExtNode>>> extnode_work_queue(*impl->arena_);
 		extnode_work_queue.assign(nodes.begin(), nodes.end());
@@ -1417,7 +1420,7 @@ namespace vuk {
 		}
 
 		VUK_DO_OR_RETURN(impl->build_nodes());
-		/*std::vector<Node*> all_nodes;
+		/* std::vector<Node*> all_nodes;
 		for (auto& n : current_module->op_arena) {
 		  all_nodes.push_back(&n);
 		}
@@ -1425,15 +1428,57 @@ namespace vuk {
 		VUK_DO_OR_RETURN(impl->build_links(impl->nodes, allocator));
 
 		// eliminate useless splices & bridge multiple slices
-		VUK_DO_OR_RETURN(rewrite([](Node* node, auto& replaces) {
+		rewrite([&](Node* node, auto& replaces) {
 			switch (node->kind) {
 			case Node::SPLICE: {
-				if (node->splice.rel_acq == nullptr && node->splice.dst_access == Access::eNone && node->splice.dst_domain == DomainFlagBits::eAny) {
-					for (size_t i = 0; i < node->splice.src.size(); i++) {
-						auto needle = Ref{ node, i };
-						auto replace_with = node->splice.src[i];
+				// splice elimination
+				// a release - must be kept
+				if (!(node->splice.dst_access == Access::eNone && node->splice.dst_domain == DomainFlagBits::eAny)) {
+					break;
+				}
 
-						replaces.replace(needle, replace_with);
+				// an acquire - must be kept
+				if (node->splice.rel_acq != nullptr && node->splice.rel_acq->status != Signal::Status::eDisarmed) {
+					break;
+				}
+
+				if (node->splice.rel_acq != nullptr) {
+					node->splice.values = { new void*[node->splice.src.size()], node -> splice.src.size() };
+					node->splice.rel_acq->last_use.resize(node->splice.src.size());
+				}
+
+				for (size_t i = 0; i < node->splice.src.size(); i++) {
+					auto needle = Ref{ node, i };
+					auto parm = node->splice.src[i];
+
+					replaces.replace(needle, parm);
+
+					// a splice that requires signalling -> defer it
+					if (node->splice.rel_acq != nullptr) {
+						node->splice.values[i] = new std::byte[parm.type()->size];
+
+						// find last use that is not splice that we defer away
+						auto link = &parm.link();
+						while (link->next) {
+							link = link->next;
+						}
+						Node* last_use = nullptr;
+						while (link) {
+							if (link->reads.size() > 0) { // splices never read
+								last_use = link->reads.to_span(impl->pass_reads)[0].node;
+								break;
+							}
+							if (link->def.node->kind == Node::SPLICE && (node->splice.rel_acq == nullptr || node->splice.rel_acq->status == Signal::Status::eDisarmed)) {
+								  ;
+							} else {
+								last_use = link->def.node;
+								break;
+							}
+							link = link->prev;
+						}
+						assert(last_use);
+						impl->deferred_splices[last_use].push_back(needle);
+						impl->pending_splice_sigs[needle.node] = 0;
 					}
 				}
 			} break;
@@ -1497,23 +1542,13 @@ namespace vuk {
 			default:
 				break;
 			}
-		}));
+		});
 
 		VUK_DO_OR_RETURN(impl->build_nodes());
+		// post replace
+		//_dump_graph(impl->nodes, false, false);
 		VUK_DO_OR_RETURN(impl->build_links(impl->nodes, allocator));
 
-		// SANITY: we have resolved all splices
-		for (auto node : impl->nodes) {
-			switch (node->kind) {
-			case Node::SPLICE: {
-				if (node->splice.dst_access == Access::eNone && node->splice.dst_domain == DomainFlagBits::eAny) {
-					assert(node->splice.rel_acq != nullptr);
-				}
-			} break;
-			default:
-				break;
-			}
-		}
 		// FINAL GRAPH
 		//_dump_graph(impl->nodes, false, false);
 
@@ -1579,7 +1614,11 @@ namespace vuk {
 			for (auto& r : chain->reads.to_span(pass_reads)) {
 				switch (r.node->kind) {
 				case Node::CALL: {
-					auto& arg_ty = r.node->call.args[0].type()->opaque_fn.args[r.index - 1];
+					auto fn_type = r.node->call.args[0].type();
+					size_t first_parm = fn_type->kind == Type::OPAQUE_FN_TY ? 1 : 4;
+					auto& args = fn_type->kind == Type::OPAQUE_FN_TY ? fn_type->opaque_fn.args : fn_type->shader_fn.args;
+
+					auto& arg_ty = args[r.index - first_parm];
 					if (arg_ty->kind == Type::IMBUED_TY) {
 						auto access = arg_ty->imbued.access;
 						access_to_usage(usage, access);

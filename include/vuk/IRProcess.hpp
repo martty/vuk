@@ -41,11 +41,16 @@ namespace vuk {
 		std::pmr::vector<Ref> pass_reads;
 
 		std::vector<std::shared_ptr<ExtNode>> refs;
+		std::vector<Node*> ref_nodes;
 		std::vector<std::shared_ptr<ExtNode>> depnodes;
 		std::vector<Node*> nodes;
 		std::vector<Node*> garbage_nodes;
 		std::vector<ChainLink*> chains;
 		std::pmr::vector<ChainLink*> child_chains;
+
+		std::unordered_map<Node*, std::vector<Ref>> deferred_splices; // Node: the node that needs to signal the splice, Ref: ref to a splice result
+		std::unordered_map<Node*, size_t> pending_splice_sigs; // Node: splice node, size_t: number of splice srcs that have been processed
+
 
 		std::span<ScheduledItem*> transfer_passes, compute_passes, graphics_passes;
 

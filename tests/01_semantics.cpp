@@ -222,7 +222,6 @@ TEST_CASE("scheduling with submitted") {
 		return dst;
 	});
 
-	// external facing types (i.e. in acquire) must not be changed, or they might dangle over time
 	{
 		auto written = write(discard_buf("src0", **buf0));
 		written.wait(*test_context.allocator, test_context.compiler);

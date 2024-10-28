@@ -1509,6 +1509,7 @@ namespace vuk {
 							is_release = true;
 						} else if (node->splice.dst_domain == DomainFlagBits::eAny) {
 							dst_stream = sched_stream;
+							assert(false);
 						} else if (node->splice.dst_domain == DomainFlagBits::eDevice) {
 							dst_stream = sched_stream;
 							is_release = true;
@@ -1538,11 +1539,7 @@ namespace vuk {
 							if (acqrel) {
 								acqrel->last_use.push_back(last_use);
 								if (i == 0) {
-									if (is_release) { // TODO: why are these different?
-										sched_stream->add_dependent_signal(acqrel);
-									} else {
-										last_use.stream->add_dependent_signal(acqrel);
-									}
+									sched_stream->add_dependent_signal(acqrel);
 								}
 							}
 						}
@@ -1774,6 +1771,27 @@ namespace vuk {
 			default:
 				assert(0);
 			}
+
+			// run splice signalling
+			if (node->execution_info) {
+				auto it = impl->deferred_splices.find(node);
+				if (it != impl->deferred_splices.end()) {
+					for (auto& splice_ref : it->second) {
+						assert(splice_ref.node->kind == Node::SPLICE);
+						auto pending = ++impl->pending_splice_sigs.at(splice_ref.node);
+						auto& splice = splice_ref.node->splice;
+						assert(splice.rel_acq);
+						auto& parm = splice.src[splice_ref.index];
+						splice.rel_acq->last_use[splice_ref.index] = recorder.last_use(sched.base_type(parm).get(), sched.get_value(parm));
+						memcpy(splice.values[splice_ref.index], impl->get_value(parm), parm.type()->size);
+
+						// if all of the splice was encountered, add signal to the stream where this node ran
+						if (pending == splice_ref.node->splice.src.size()) {
+							node->execution_info->stream->add_dependent_signal(splice.rel_acq);
+						}
+					}
+				}
+			}
 		}
 
 		// post-run: checks and cleanup
@@ -1785,6 +1803,28 @@ namespace vuk {
 		modules.erase(std::unique(modules.begin(), modules.end()), modules.end());
 
 		impl->depnodes.clear();
+
+		for (auto& [_, refs] : impl->deferred_splices) {
+			for (auto& splice_ref : refs) {
+				auto& node = splice_ref.node;
+				if (current_module->potential_garbage.contains(node)) {
+					current_module->potential_garbage[node]++;
+				}
+				// reset any nodes we ran
+				node->execution_info = nullptr;
+				node->links = nullptr;
+
+				// SANITY: if we ran any splice nodes, they must be pending now
+				// SPLICE nodes are unlinked
+				assert(node->kind == Node::SPLICE);
+
+				assert(!node->splice.rel_acq || node->splice.rel_acq->status != Signal::Status::eDisarmed);
+				delete node->splice.src.data();
+				node->splice.src = {};
+			}
+		}
+
+		impl->deferred_splices.clear();
 
 		for (auto& node : impl->nodes) {
 			apply_generic_args(
@@ -1802,7 +1842,7 @@ namespace vuk {
 			if (node->kind != Node::SPLICE && node->kind != Node::CONVERGE) {
 				current_module->destroy_node(node);
 			} else {
-				// SANITY: if we ran any splice nodes, they must be pending now
+				// SANITY: if we ran any splice nodes as release, they must be pending now
 				// SPLICE nodes are unlinked
 				if (node->kind == Node::SPLICE) {
 					assert(!node->splice.rel_acq || node->splice.rel_acq->status != Signal::Status::eDisarmed);
@@ -1845,5 +1885,5 @@ namespace vuk {
 		current_module->types.collect();
 
 		return { expected_value };
-	}
+	} // namespace vuk
 } // namespace vuk
