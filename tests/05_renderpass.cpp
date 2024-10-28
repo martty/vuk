@@ -82,11 +82,6 @@ TEST_CASE("buffer size inference") {
 	buf3.same_size(buf2);
 	buf3->memory_usage = MemoryUsage::eGPUonly;
 
-	auto copy = make_pass("cpy", [](CommandBuffer& cbuf, VUK_BA(Access::eTransferRead) src, VUK_BA(Access::eTransferWrite) dst) {
-		cbuf.copy_buffer(src, dst);
-		return dst;
-	});
-
 	auto res = download_buffer(copy(std::move(buf0), std::move(buf3))).get(*test_context.allocator, test_context.compiler);
 	CHECK(std::span((uint32_t*)res->mapped_ptr, 3) == std::span(data));
 }
@@ -106,11 +101,6 @@ TEST_CASE("buffer size with inference with math") {
 
 	auto data2 = { 1u, 2u, 3u, 4u, 5u, 6u };
 	auto [b4, buf4] = create_buffer(*test_context.allocator, MemoryUsage::eGPUonly, DomainFlagBits::eAny, std::span(data2));
-
-	auto copy = make_pass("cpy", [](CommandBuffer& cbuf, VUK_BA(Access::eTransferRead) src, VUK_BA(Access::eTransferWrite) dst) {
-		cbuf.copy_buffer(src, dst);
-		return dst;
-	});
 
 	auto res = download_buffer(copy(std::move(buf4), std::move(buf3))).get(*test_context.allocator, test_context.compiler);
 	CHECK(std::span((uint32_t*)res->mapped_ptr, 3) == std::span(data));
@@ -188,7 +178,7 @@ layout (std430, binding = 0) buffer coherent BufferIn {
 	uint[] data_in;
 };
 
-uniform layout(binding=1,rgba32ui) readonly uimage2D someImage;
+uniform layout(binding=1,r32ui) readonly uimage2D someImage;
 
 layout (local_size_x = 1) in;
 
@@ -200,4 +190,51 @@ void main() {
 	auto res = download_buffer(buf0).get(*test_context.allocator, test_context.compiler);
 	auto test = { 4u, 8u, 6u, 8u };
 	CHECK(std::span((uint32_t*)res->mapped_ptr, 4) == std::span(test));
+}
+
+TEST_CASE("separate sampler") {
+	auto data2 = { 4.f, 4.f, 2.f, 2.f };
+	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 2, 2, 1 }, Samples::e1);
+	auto [img, img0] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data2));
+
+	auto nearest_samp = vuk::acquire_sampler("nearest", SamplerCreateInfo{ .magFilter = vuk::Filter::eNearest, .minFilter = vuk::Filter::eNearest });
+	auto linear_samp = vuk::acquire_sampler("linear", SamplerCreateInfo{ .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear });
+
+	auto out_nearest =
+	    vuk::declare_ia("out_nearest", ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 2, 2, 1 }, Samples::e1));
+	auto out_linear =
+	    vuk::declare_ia("out_linear", ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 2, 2, 1 }, Samples::e1));
+
+	auto pass = lift_compute(test_context.runtime->get_pipeline(vuk::PipelineBaseCreateInfo::from_inline_glsl(R"(#version 450
+#pragma shader_stage(compute)
+
+uniform layout(binding=0) texture2D someImage;
+uniform layout(binding=1) sampler nearest;
+uniform layout(binding=2) sampler linear;
+
+uniform layout(binding=3,r32f) image2D out_nearest;
+uniform layout(binding=4,r32f) image2D out_linear;
+
+layout (local_size_x = 1) in;
+
+void main() {
+	ivec2 coord = ivec2(gl_GlobalInvocationID.x % 2,gl_GlobalInvocationID.x / 2);
+	vec2 normcoord = coord / 2;
+	imageStore(out_nearest, coord, texture(sampler2D(someImage, nearest), normcoord));
+	imageStore(out_linear, coord, texture(sampler2D(someImage, linear), normcoord));
+}
+)")));
+	pass(4, 1, 1, img0, nearest_samp, linear_samp, out_nearest, out_linear);
+	size_t alignment = format_to_texel_block_size(out_nearest->format);
+	size_t size = compute_image_size(out_nearest->format, out_nearest->extent);
+	auto dst0 = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
+	auto dst_buf0 = discard_buf("dst", *dst0);
+	auto dst1 = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
+	auto dst_buf1 = discard_buf("dst", *dst1);
+	auto res0 = download_buffer(copy(out_nearest, dst_buf0)).get(*test_context.allocator, test_context.compiler);
+	auto res1 = download_buffer(copy(out_linear, dst_buf1)).get(*test_context.allocator, test_context.compiler);
+	auto test0 = { 4.f, 4.f, 4.f, 4.f };
+	CHECK(std::span((float*)res0->mapped_ptr, 4) == std::span(test0));
+	auto test1 = { 3.f, 3.f, 3.f, 3.f };
+	CHECK(std::span((float*)res1->mapped_ptr, 4) == std::span(test1));
 }

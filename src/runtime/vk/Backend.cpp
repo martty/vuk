@@ -1435,13 +1435,15 @@ namespace vuk {
 							auto val = sched.get_value(parm);
 							switch (binding->type) {
 							case DescriptorType::eSampledImage:
-							case DescriptorType::eCombinedImageSampler:
 							case DescriptorType::eStorageImage:
 								cobuf.bind_image(set, binding->binding, *reinterpret_cast<ImageAttachment*>(val));
 								break;
 							case DescriptorType::eUniformBuffer:
 							case DescriptorType::eStorageBuffer:
 								cobuf.bind_buffer(set, binding->binding, *reinterpret_cast<Buffer*>(val));
+								break;
+							case DescriptorType::eSampler:
+								cobuf.bind_sampler(set, binding->binding, *reinterpret_cast<SamplerCreateInfo*>(val));
 								break;
 							default:
 								assert(0);

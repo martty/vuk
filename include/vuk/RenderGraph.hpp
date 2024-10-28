@@ -432,15 +432,21 @@ public:
 			Access acc = Access::eNone;
 			switch (b->type) {
 			case DescriptorType::eSampledImage:
-			case DescriptorType::eCombinedImageSampler:
 				acc = Access::eComputeSampled;
+				base_ty = current_module->types.get_builtin_image();
+				break;
+			case DescriptorType::eStorageImage:
+				acc = b->non_writable ? Access::eComputeRead : (b->non_readable ? Access::eComputeWrite : Access::eComputeRW);
 				base_ty = current_module->types.get_builtin_image();
 				break;
 			case DescriptorType::eUniformBuffer:
 			case DescriptorType::eStorageBuffer:
-			case DescriptorType::eStorageImage:
 				acc = b->non_writable ? Access::eComputeRead : (b->non_readable ? Access::eComputeWrite : Access::eComputeRW);
 				base_ty = current_module->types.get_builtin_buffer();
+				break;
+			case DescriptorType::eSampler:
+				acc = Access::eNone;
+				base_ty = current_module->types.get_builtin_sampler();
 				break;
 			default:
 				assert(0);
@@ -573,6 +579,14 @@ public:
 		Ref ref = current_module->make_declare_swapchain(bundle);
 		current_module->set_source_location(ref.node, VUK_CALL);
 		return { make_ext_ref(ref) };
+	}
+
+	[[nodiscard]] inline Value<Buffer> acquire_sampler(Name name, SamplerCreateInfo sci, VUK_CALLSTACK) {
+		Ref ref = current_module->acquire(current_module->types.get_builtin_sampler(), nullptr, sci);
+		auto ext_ref = ExtRef(std::make_shared<ExtNode>(ref.node, to_use(Access::eNone)), ref);
+		current_module->name_output(ref, name.c_str());
+		current_module->set_source_location(ref.node, VUK_CALL);
+		return { std::move(ext_ref) };
 	}
 
 	[[nodiscard]] inline Value<ImageAttachment> acquire_next_image(Name name, Value<Swapchain> in, VUK_CALLSTACK) {

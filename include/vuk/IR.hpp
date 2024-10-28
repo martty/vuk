@@ -995,6 +995,7 @@ namespace vuk {
 			Type::Hash builtin_image = 0;
 			Type::Hash builtin_buffer = 0;
 			Type::Hash builtin_swapchain = 0;
+			Type::Hash builtin_sampler = 0;
 
 			// TYPES
 			std::shared_ptr<Type> make_imbued_ty(std::shared_ptr<Type> ty, Access access) {
@@ -1165,6 +1166,24 @@ namespace vuk {
 				                                                                   .composite = { .types = swp_, .tag = 2 } }));
 				builtin_swapchain = Type::hash(swapchain_type.get());
 				return swapchain_type;
+			}
+
+			std::shared_ptr<Type> get_builtin_sampler() {
+				if (builtin_sampler) {
+					auto it = type_map.find(builtin_sampler);
+					if (it != type_map.end()) {
+						if (auto ty = it->second.lock()) {
+							return ty;
+						}
+					}
+				}
+				auto sampler_type = emplace_type(std::shared_ptr<Type>(new Type{ .kind = Type::COMPOSITE_TY,
+				                                                                 .size = sizeof(SamplerCreateInfo),
+				                                                                 .debug_info = allocate_type_debug_info("sampler"),
+				                                                                 .offsets = {},
+				                                                                 .composite = { .types = {}, .tag = 3 } }));
+				builtin_sampler = Type::hash(sampler_type.get());
+				return sampler_type;
 			}
 
 			std::shared_ptr<Type> emplace_type(std::shared_ptr<Type> t) {
