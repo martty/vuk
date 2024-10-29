@@ -17,7 +17,7 @@
 #include <unordered_set>
 #include <vector>
 
-// #define VUK_DUMP_EXEC
+#define VUK_DUMP_EXEC
 // #define VUK_DEBUG_IMBAR
 // #define VUK_DEBUG_MEMBAR
 
@@ -1271,43 +1271,28 @@ namespace vuk {
 							recorder.add_sync(sched.base_type(parm).get(), sched.get_dependency_info(parm, arg_ty.get(), RW::eWrite, nullptr), sched.get_value(parm));
 						}
 
-						auto size = node->type[0]->array.count;
+						auto array_size = node->type[0]->array.count;
 						auto elem_ty = *node->type[0]->array.T;
 #ifdef VUK_DUMP_EXEC
 						print_results(node);
-						assert(elem_ty->hash_value == current_module->types.builtin_buffer || elem_ty->hash_value == current_module->types.builtin_image);
-						fmt::print(" = construct<{}[{}]> ", elem_ty->hash_value == current_module->types.builtin_buffer ? "buffer" : "image", size);
+						fmt::print(" = construct<{}[{}]> ", elem_ty->debug_info.name, array_size);
 						print_args(node->construct.args.subspan(1));
 						fmt::print("\n");
 #endif
 						assert(node->construct.args[0].type()->kind == Type::MEMORY_TY);
-						if (elem_ty->hash_value == current_module->types.builtin_buffer) {
-							auto arr_mem = new (sched.arena.ensure_space(sizeof(Buffer) * size)) Buffer[size];
-							for (auto i = 0; i < size; i++) {
-								auto& elem = node->construct.args[i + 1];
-								assert(Type::stripped(elem.type())->hash_value == current_module->types.builtin_buffer);
 
-								memcpy(&arr_mem[i], sched.get_value(elem), sizeof(Buffer));
-							}
-							if (size == 0) { // zero-len arrays
-								arr_mem = nullptr;
-							}
-							node->construct.args[0].node->constant.value = arr_mem;
-							sched.done(node, host_stream, (void*)arr_mem);
-						} else if (elem_ty->hash_value == current_module->types.builtin_image) {
-							auto arr_mem = new (sched.arena.ensure_space(sizeof(ImageAttachment) * size)) ImageAttachment[size];
-							for (auto i = 0; i < size; i++) {
-								auto& elem = node->construct.args[i + 1];
-								assert(Type::stripped(elem.type())->hash_value == current_module->types.builtin_image);
+						char* arr_mem = static_cast<char*>(sched.arena.ensure_space(elem_ty->size * array_size));
+						for (auto i = 0; i < array_size; i++) {
+							auto& elem = node->construct.args[i + 1];
+							assert(Type::stripped(elem.type())->hash_value == elem_ty->hash_value);
 
-								memcpy(&arr_mem[i], sched.get_value(elem), sizeof(ImageAttachment));
-							}
-							if (size == 0) { // zero-len arrays
-								arr_mem = nullptr;
-							}
-							node->construct.args[0].node->constant.value = arr_mem;
-							sched.done(node, host_stream, (void*)arr_mem);
+							memcpy(arr_mem + i * elem_ty->size, sched.get_value(elem), elem_ty->size);
 						}
+						if (array_size == 0) { // zero-len arrays
+							arr_mem = nullptr;
+						}
+						node->construct.args[0].node->constant.value = arr_mem;
+						sched.done(node, host_stream, (void*)arr_mem);
 					} else if (node->type[0]->hash_value == current_module->types.builtin_sampled_image) {
 						for (size_t i = 1; i < node->construct.args.size(); i++) {
 							auto arg_ty = node->construct.args[i].type();

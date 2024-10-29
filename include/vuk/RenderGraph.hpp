@@ -471,6 +471,8 @@ public:
 			Node* node = current_module->make_call(
 			    fn, current_module->make_constant(size_x), current_module->make_constant(size_y), current_module->make_constant(size_z), args.get_head()...);
 			current_module->set_source_location(node, inner_scope);
+			auto extnode = std::make_shared<ExtNode>(node);
+			(args.node->deps.push_back(extnode),...);
 		};
 	}
 
@@ -551,6 +553,10 @@ public:
 			t = current_module->types.get_builtin_image();
 		} else if constexpr (std::is_same_v<T, vuk::Buffer>) {
 			t = current_module->types.get_builtin_buffer();
+		} else if constexpr (std::is_same_v<T, vuk::Sampler>) {
+			t = current_module->types.get_builtin_sampler();
+		} else if constexpr (std::is_same_v<T, vuk::SampledImage>) {
+			t = current_module->types.get_builtin_sampled_image();
 		}
 		Ref ref = current_module->make_declare_array(t, refs);
 		current_module->name_output(ref, name.c_str());
@@ -572,6 +578,10 @@ public:
 			t = current_module->types.get_builtin_image();
 		} else if constexpr (std::is_same_v<T, vuk::Buffer>) {
 			t = current_module->types.get_builtin_buffer();
+		} else if constexpr (std::is_same_v<T, vuk::Sampler>) {
+			t = current_module->types.get_builtin_sampler();
+		} else if constexpr (std::is_same_v<T, vuk::SampledImage>) {
+			t = current_module->types.get_builtin_sampled_image();
 		}
 		Ref ref = current_module->make_declare_array(t, refs);
 		current_module->name_output(ref, name.c_str());

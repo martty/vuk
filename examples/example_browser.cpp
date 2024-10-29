@@ -72,10 +72,10 @@ void vuk::ExampleRunner::render() {
 				                                                       .level_count = 1,
 				                                                       .layer_count = 1 }),
 				                                     vuk::ClearColor(0.1f, 0.2f, 0.3f, 1.f));
-				auto rg_frag_fut = ex->render(*this, frame_allocator, std::move(small_target));
+				auto rendered_image = ex->render(*this, frame_allocator, std::move(small_target));
 
 				auto idx = sampled_images.size() + 1;
-				sampled_images.emplace_back(std::move(rg_frag_fut));
+				sampled_images.emplace_back(vuk::combine_image_sampler("_simg", std::move(rendered_image), vuk::acquire_sampler("_default_sampler", {})));
 				ImGui::Image((ImTextureID)idx, ImGui::GetContentRegionAvail());
 				ImGui::End();
 			}

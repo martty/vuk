@@ -116,7 +116,7 @@ namespace util {
 	                                                      vuk::Value<vuk::ImageAttachment> target,
 	                                                      ImGuiData& data,
 	                                                      ImDrawData* draw_data,
-	                                                      std::vector<vuk::Value<vuk::ImageAttachment>>& sampled_images);
+	                                                      std::vector<vuk::Value<vuk::SampledImage>>& sampled_images);
 
 	inline std::string read_entire_file(const std::string& path) {
 		std::ostringstream buf;

@@ -74,7 +74,7 @@ namespace vuk {
 			futures.emplace_back(std::move(fut));
 		}
 
-		std::vector<Value<ImageAttachment>> sampled_images;
+		std::vector<Value<SampledImage>> sampled_images;
 		std::vector<Example*> examples;
 
 		ExampleRunner();

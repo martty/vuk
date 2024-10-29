@@ -406,7 +406,7 @@ namespace vuk {
 				parm.link().undef = { node, i };
 			}
 
-			if (node->type[0]->kind == Type::ARRAY_TY) {
+			if (node->type[0]->kind == Type::ARRAY_TY || node->type[0]->hash_value == current_module->types.builtin_sampled_image) {
 				for (size_t i = 1; i < node->construct.args.size(); i++) {
 					auto& parm = node->construct.args[i];
 					parm.link().next = &first(node).link();

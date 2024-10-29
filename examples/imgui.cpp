@@ -3,11 +3,11 @@
 #include "imgui_frag.hpp"
 #include "imgui_vert.hpp"
 #include "utils.hpp"
-#include "vuk/runtime/vk/AllocatorHelpers.hpp"
+#include "vuk/RenderGraph.hpp"
 #include "vuk/runtime/CommandBuffer.hpp"
+#include "vuk/runtime/vk/AllocatorHelpers.hpp"
 #include "vuk/runtime/vk/VkRuntime.hpp"
 #include "vuk/vsl/Core.hpp"
-#include "vuk/RenderGraph.hpp"
 
 using namespace vuk;
 
@@ -48,11 +48,11 @@ util::ImGuiData util::ImGui_ImplVuk_Init(Allocator& allocator) {
 	return data;
 }
 
-Value<ImageAttachment> util::ImGui_ImplVuk_Render(Allocator & allocator,
+Value<ImageAttachment> util::ImGui_ImplVuk_Render(Allocator& allocator,
                                                   Value<ImageAttachment> target,
                                                   util::ImGuiData& data,
                                                   ImDrawData* draw_data,
-                                                  std::vector<Value<ImageAttachment>>& sampled_images) {
+                                                  std::vector<Value<SampledImage>>& sampled_images) {
 	auto reset_render_state = [](const util::ImGuiData& data, CommandBuffer& command_buffer, ImDrawData* draw_data, Buffer vertex, Buffer index) {
 		command_buffer.bind_image(0, 0, *data.font_image_view).bind_sampler(0, 0, data.font_sci);
 		if (index.size > 0) {
@@ -92,13 +92,14 @@ Value<ImageAttachment> util::ImGui_ImplVuk_Render(Allocator & allocator,
 
 	// add rendergraph dependencies to be transitioned
 	ImGui::GetIO().Fonts->TexID = (ImTextureID)(sampled_images.size() + 1);
-	sampled_images.push_back(acquire_ia("imgui font", data.font_ia, Access::eFragmentSampled));
+	sampled_images.push_back(
+	    combine_image_sampler("imgui font", acquire_ia("imgui font", data.font_ia, Access::eFragmentSampled), acquire_sampler("font sampler", data.font_sci)));
 	// make all rendergraph sampled images available
 	auto sampled_images_array = declare_array("imgui_sampled", std::span(sampled_images));
 
 	auto pass = make_pass("imgui",
 	                      [&data, verts = imvert.get(), inds = imind.get(), draw_data, reset_render_state](
-	                          CommandBuffer& command_buffer, VUK_IA(Access::eColorWrite) dst, VUK_ARG(ImageAttachment[], Access::eFragmentSampled) sis) {
+	                          CommandBuffer& command_buffer, VUK_IA(Access::eColorWrite) dst, VUK_ARG(SampledImage[], Access::eFragmentSampled) sis) {
 		                      command_buffer.set_dynamic_state(DynamicStateFlagBits::eViewport | DynamicStateFlagBits::eScissor);
 		                      command_buffer.set_rasterization(PipelineRasterizationStateCreateInfo{});
 		                      command_buffer.set_color_blend(dst, BlendPreset::eAlphaBlend);
@@ -151,7 +152,7 @@ Value<ImageAttachment> util::ImGui_ImplVuk_Render(Allocator & allocator,
 						                      if (pcmd->TextureId) {
 							                      auto ia_index = reinterpret_cast<size_t>(pcmd->TextureId) - 1;
 
-							                      command_buffer.bind_image(0, 0, sis[ia_index]).bind_sampler(0, 0, {});
+							                      command_buffer.bind_image(0, 0, sis[ia_index].ia).bind_sampler(0, 0, sis[ia_index].sci);
 
 							                      // TODO: SampledImage
 							                      //.bind_sampler(0, 0, sis[si_index]);

@@ -1604,6 +1604,13 @@ namespace vuk {
 	inline thread_local std::shared_ptr<IRModule> current_module = std::make_shared<IRModule>();
 
 	struct ExtNode {
+		ExtNode(Node* node) {
+			acqrel = std::make_unique<AcquireRelease>();
+			this->node = current_module->make_splice(node, acqrel.get());
+
+			source_module = current_module;
+		}
+
 		ExtNode(Node* node, std::vector<std::shared_ptr<ExtNode>> deps) : deps(std::move(deps)) {
 			acqrel = std::make_unique<AcquireRelease>();
 			this->node = current_module->make_splice(node, acqrel.get());

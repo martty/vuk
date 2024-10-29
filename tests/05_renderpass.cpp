@@ -231,8 +231,9 @@ void main() {
 	auto dst_buf0 = discard_buf("dst", *dst0);
 	auto dst1 = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 	auto dst_buf1 = discard_buf("dst", *dst1);
-	auto res0 = download_buffer(copy(out_nearest, dst_buf0)).get(*test_context.allocator, test_context.compiler);
+	auto dl = download_buffer(copy(out_nearest, dst_buf0));
 	auto res1 = download_buffer(copy(out_linear, dst_buf1)).get(*test_context.allocator, test_context.compiler);
+	auto res0 = dl.get(*test_context.allocator, test_context.compiler);
 	auto test0 = { 4.f, 4.f, 4.f, 4.f };
 	CHECK(std::span((float*)res0->mapped_ptr, 4) == std::span(test0));
 	auto test1 = { 3.f, 3.f, 3.f, 3.f };
