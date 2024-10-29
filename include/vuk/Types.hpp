@@ -706,7 +706,6 @@ namespace vuk {
 	enum Access : uint64_t {
 		eNone = 1ULL << 0,          // as initial use: resource available without synchronization, as final use: resource does not need synchronizing
 		eInfer = 1ULL << 1,         // as final use only: this use must be overwritten/inferred before compiling (internal)
-		eConsume = 1ULL << 2,       // must be overwritten before compiling: this access consumes this name (internal)
 		eClear = 1ULL << 5,         // general clearing
 		eTransferClear = 1ULL << 6, // vkCmdClearXXX
 		eColorWrite = 1ULL << 7,

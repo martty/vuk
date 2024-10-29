@@ -436,10 +436,10 @@ namespace vuk {
 				// TODO: assert same type when imbuement is stripped
 				if (arg_ty->kind == Type::IMBUED_TY) {
 					auto access = arg_ty->imbued.access;
-					if (is_write_access(access) || access == Access::eConsume) { // Write and ReadWrite
+					if (is_write_access(access)) { // Write and ReadWrite
 						add_write(node, parm, i);
 					}
-					if (!is_write_access(access) && access != Access::eConsume) { // Read and ReadWrite
+					if (!is_write_access(access)) { // Read and ReadWrite
 						add_read(node, parm, i);
 					}
 				} else {

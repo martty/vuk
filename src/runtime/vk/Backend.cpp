@@ -1361,7 +1361,7 @@ namespace vuk {
 							}
 
 							// Write and ReadWrite
-							RW sync_access = (is_write_access(access) || access == Access::eConsume) ? RW::eWrite : RW::eRead;
+							RW sync_access = (is_write_access(access)) ? RW::eWrite : RW::eRead;
 							recorder.add_sync(sched.base_type(parm).get(), sched.get_dependency_info(parm, arg_ty.get(), sync_access, dst_stream), sched.get_value(parm));
 
 							if (is_framebuffer_attachment(access)) {
@@ -1496,7 +1496,7 @@ namespace vuk {
 						if (arg_ty->kind == Type::IMBUED_TY) {
 							auto access = arg_ty->imbued.access;
 							// Write and ReadWrite
-							RW sync_access = (is_write_access(access) || access == Access::eConsume) ? RW::eWrite : RW::eRead;
+							RW sync_access = (is_write_access(access)) ? RW::eWrite : RW::eRead;
 							sched.schedule_dependency(parm, sync_access);
 						} else {
 							assert(0);
