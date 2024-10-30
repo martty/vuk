@@ -17,7 +17,7 @@
 #include <unordered_set>
 #include <vector>
 
-#define VUK_DUMP_EXEC
+// #define VUK_DUMP_EXEC
 // #define VUK_DEBUG_IMBAR
 // #define VUK_DEBUG_MEMBAR
 
@@ -1242,7 +1242,7 @@ namespace vuk {
 #endif
 						if (!attachment.image) {
 							auto allocator = node->construct.allocator ? *node->construct.allocator : alloc;
-							attachment.usage = impl->compute_usage(&first(node).link());
+							attachment.usage |= impl->compute_usage(&first(node).link());
 							assert(attachment.usage != ImageUsageFlags{});
 							auto img = allocate_image(allocator, attachment);
 							if (!img) {

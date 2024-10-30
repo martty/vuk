@@ -15,6 +15,27 @@
 #include <unordered_set>
 
 namespace vuk {
+	constexpr void access_to_usage(ImageUsageFlags& usage, Access acc) {
+		if (acc & (eMemoryRW | eColorResolveRead | eColorResolveWrite | eColorRW)) {
+			usage |= ImageUsageFlagBits::eColorAttachment;
+		}
+		if (acc & (eMemoryRW | eFragmentSampled | eComputeSampled | eRayTracingSampled | eVertexSampled)) {
+			usage |= ImageUsageFlagBits::eSampled;
+		}
+		if (acc & (eMemoryRW | eDepthStencilRW)) {
+			usage |= ImageUsageFlagBits::eDepthStencilAttachment;
+		}
+		if (acc & (eMemoryRW | eTransferRead)) {
+			usage |= ImageUsageFlagBits::eTransferSrc;
+		}
+		if (acc & (eMemoryRW | eTransferWrite | eClear)) {
+			usage |= ImageUsageFlagBits::eTransferDst;
+		}
+		if (acc & (eMemoryRW | eFragmentRW | eComputeRW | eRayTracingRW)) {
+			usage |= ImageUsageFlagBits::eStorage;
+		}
+	};
+
 	Compiler::Compiler() : impl(new RGCImpl) {}
 	Compiler::~Compiler() {
 		delete impl;
@@ -280,6 +301,43 @@ namespace vuk {
 		}
 	}
 
+	std::optional<Ref> get_def2(Ref ref) {
+		if (!ref.node->links) {
+			return {};
+		}
+		auto link = &ref.link();
+		while (link->prev) {
+			link = link->prev;
+		}
+		auto def = link->def;
+		switch (def.node->kind) {
+		case Node::CONSTRUCT:
+		case Node::SPLICE:
+			return def;
+		case Node::EXTRACT: {
+			auto compdef_ = get_def2(def.node->extract.composite);
+			if (!compdef_) {
+				return {};
+			}
+			auto compdef = *compdef_;
+			auto index = *eval<uint64_t>(def.node->extract.index);
+
+			switch (compdef.node->kind) {
+			case Node::CONSTRUCT:
+				return get_def2(compdef.node->construct.args[index + 1]);
+			case Node::SPLICE:
+				return compdef;
+			default:
+				assert(0);
+			}
+		}
+		case Node::SLICE:
+			return get_def2(def.node->slice.image);
+		default:
+			assert(0);
+		}
+	}
+
 	void process_node_links(Node* node,
 	                        std::pmr::vector<Ref>& pass_reads,
 	                        std::pmr::vector<ChainLink*>& child_chains,
@@ -438,6 +496,20 @@ namespace vuk {
 					}
 					if (!is_write_access(access)) { // Read and ReadWrite
 						add_read(node, parm, i);
+					}
+					auto& base = *arg_ty->imbued.T;
+					if (do_ssa && base->hash_value == current_module->types.builtin_image) {
+						auto def = get_def2(parm);
+						if (def && def->node->kind == Node::CONSTRUCT) {
+							auto& ia = *reinterpret_cast<ImageAttachment*>(def->node->construct.args[0].node->constant.value);
+							if (!ia.image) {
+								access_to_usage(ia.usage, access);
+							}
+						} else if (def && def->node->kind == Node::SPLICE) { // nop
+						} else if (!def) {
+						} else {
+							assert(0);
+						}
 					}
 				} else {
 					assert(0);
@@ -1102,9 +1174,10 @@ namespace vuk {
 	Result<void> Compiler::validate_read_undefined() {
 		for (auto node : impl->nodes) {
 			switch (node->kind) {
-			case Node::CONSTRUCT: {                                                         // CONSTRUCT discards -
+			case Node::CONSTRUCT: { // CONSTRUCT discards -
 				// TODO: arrays!
-				if (node->type[0]->kind != Type::ARRAY_TY && node->links->reads.size() > 0 && node->type[0]->hash_value != current_module->types.builtin_sampled_image) { // we are trying to read from it :(
+				if (node->type[0]->kind != Type::ARRAY_TY && node->links->reads.size() > 0 &&
+				    node->type[0]->hash_value != current_module->types.builtin_sampled_image) { // we are trying to read from it :(
 					auto& offender = node->links->reads.to_span(impl->pass_reads)[0];
 					return { expected_error,
 						       RenderGraphException{ format_graph_message(Level::eError, offender.node, "tried to read something that was never written.") } };
@@ -1450,7 +1523,7 @@ namespace vuk {
 								break;
 							}
 							if (link->def.node->kind == Node::SPLICE && (node->splice.rel_acq == nullptr || node->splice.rel_acq->status == Signal::Status::eDisarmed)) {
-								  ;
+								;
 							} else {
 								last_use = link->def.node;
 								break;
@@ -1566,27 +1639,6 @@ namespace vuk {
 	ImageUsageFlags Compiler::compute_usage(const ChainLink* head) {
 		return impl->compute_usage(head);
 	}
-
-	constexpr void access_to_usage(ImageUsageFlags& usage, Access acc) {
-		if (acc & (eMemoryRW | eColorResolveRead | eColorResolveWrite | eColorRW)) {
-			usage |= ImageUsageFlagBits::eColorAttachment;
-		}
-		if (acc & (eMemoryRW | eFragmentSampled | eComputeSampled | eRayTracingSampled | eVertexSampled)) {
-			usage |= ImageUsageFlagBits::eSampled;
-		}
-		if (acc & (eMemoryRW | eDepthStencilRW)) {
-			usage |= ImageUsageFlagBits::eDepthStencilAttachment;
-		}
-		if (acc & (eMemoryRW | eTransferRead)) {
-			usage |= ImageUsageFlagBits::eTransferSrc;
-		}
-		if (acc & (eMemoryRW | eTransferWrite | eClear)) {
-			usage |= ImageUsageFlagBits::eTransferDst;
-		}
-		if (acc & (eMemoryRW | eFragmentRW | eComputeRW | eRayTracingRW)) {
-			usage |= ImageUsageFlagBits::eStorage;
-		}
-	};
 
 	ImageUsageFlags RGCImpl::compute_usage(const ChainLink* head) {
 		ImageUsageFlags usage = {};

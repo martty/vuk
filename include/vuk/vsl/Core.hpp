@@ -192,7 +192,7 @@ namespace vuk {
 			return dst;
 		});
 
-		return image2buf(src, dst);
+		return image2buf(src, dst, VUK_CALL);
 	}
 
 	inline Value<Buffer> copy(Value<Buffer> src, Value<Buffer> dst, VUK_CALLSTACK) {
@@ -202,7 +202,7 @@ namespace vuk {
 			    command_buffer.copy_buffer(src, dst);
 			    return dst;
 		    });
-		return buf2buf(src, dst);
+		return buf2buf(src, dst, VUK_CALL);
 	}
 
 	inline Value<ImageAttachment> copy(Value<Buffer> src, Value<ImageAttachment> dst, VUK_CALLSTACK) {
@@ -222,7 +222,7 @@ namespace vuk {
 			return dst;
 		});
 
-		return buf2img(src, dst);
+		return buf2img(src, dst, VUK_CALL);
 	}
 
 		inline Value<ImageAttachment> copy(Value<ImageAttachment> src, Value<ImageAttachment> dst, VUK_CALLSTACK) {
@@ -249,7 +249,7 @@ namespace vuk {
 			return dst;
 		});
 
-		return img2img(src, dst);
+		return img2img(src, dst, VUK_CALL);
 	}
 
 	inline Value<ImageAttachment> resolve_into(Value<ImageAttachment> src, Value<ImageAttachment> dst, VUK_CALLSTACK) {
