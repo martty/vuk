@@ -313,6 +313,7 @@ namespace vuk {
 		switch (def.node->kind) {
 		case Node::CONSTRUCT:
 		case Node::SPLICE:
+		case Node::ACQUIRE_NEXT_IMAGE:
 			return def;
 		case Node::EXTRACT: {
 			auto compdef_ = get_def2(def.node->extract.composite);
@@ -505,7 +506,7 @@ namespace vuk {
 							if (!ia.image) {
 								access_to_usage(ia.usage, access);
 							}
-						} else if (def && def->node->kind == Node::SPLICE) { // nop
+						} else if (def && (def->node->kind == Node::SPLICE || def->node->kind == Node::ACQUIRE_NEXT_IMAGE)) { // nop
 						} else if (!def) {
 						} else {
 							assert(0);
