@@ -1179,9 +1179,23 @@ namespace vuk {
 				// TODO: arrays!
 				if (node->type[0]->kind != Type::ARRAY_TY && node->links->reads.size() > 0 &&
 				    node->type[0]->hash_value != current_module->types.builtin_sampled_image) { // we are trying to read from it :(
-					auto& offender = node->links->reads.to_span(impl->pass_reads)[0];
+					auto offender = node->links->reads.to_span(impl->pass_reads)[0];
+
+					auto message0 = format_graph_message(Level::eError, offender.node, "tried to read something that was never written:\n");
+					std::string message1;
+					if (node->debug_info && node->debug_info->result_names.size() > 0) {
+						message1 = fmt::format("	{} was declared/discarded on {}\n", node->debug_info->result_names[0], format_source_location(node));
+					} else {
+						message1 = fmt::format("	declared/discarded on {}\n", format_source_location(node));
+					}
+					if (offender.node->kind == Node::CALL) {
+						auto fn_type = offender.node->call.args[0].type();
+						size_t first_parm = fn_type->kind == Type::OPAQUE_FN_TY ? 1 : 4;
+						offender.index -= first_parm;
+					}
+					auto message2 = fmt::format("	tried to be read as {}th argument", offender.index);
 					return { expected_error,
-						       RenderGraphException{ format_graph_message(Level::eError, offender.node, "tried to read something that was never written.") } };
+						       RenderGraphException{ message0 + message1 + message2 } };
 				} else if (!node->links->undef) {
 					// TODO: DCE
 					break;
