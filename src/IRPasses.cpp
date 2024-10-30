@@ -51,17 +51,12 @@ namespace vuk {
 			ss << "<TABLE BORDER=\"0\" CELLBORDER=\"1\" CELLSPACING=\"0\"";
 			ss << "><TR>\n ";
 
-			if (node->debug_info) {
-				for (auto& n : node->debug_info->result_names) {
-					ss << "<TD>";
-					ss << "%" << n;
-					ss << "</TD>";
-				}
-			}
-
 			for (size_t i = 0; i < result_count; i++) {
 				ss << "<TD PORT= \"r" << i << "\">";
 				ss << "<FONT FACE=\"Courier New\">";
+				if (node->debug_info && node->debug_info->result_names.size() > i) {
+					ss << "%" << node->debug_info->result_names[i] << ":";
+				}
 				ss << Type::to_string(node->type[i].get());
 				ss << "</FONT>";
 				ss << "</TD>";
@@ -97,10 +92,12 @@ namespace vuk {
 					ss << "?";
 				} else {
 					if (node->kind == Node::CALL) {
-						auto opaque_fn_ty = node->call.args[0].type()->opaque_fn;
-						if (opaque_fn_ty.args[i - 1]->kind == Type::IMBUED_TY) {
+						auto fn_type = node->call.args[0].type();
+						size_t first_parm = fn_type->kind == Type::OPAQUE_FN_TY ? 1 : 4;
+						auto& args = fn_type->kind == Type::OPAQUE_FN_TY ? fn_type->opaque_fn.args : fn_type->shader_fn.args;
+						if (args[i - first_parm]->kind == Type::IMBUED_TY) {
 							ss << "<FONT FACE=\"Courier New\">";
-							ss << ":" << Type::to_sv(opaque_fn_ty.args[i - 1]->imbued.access);
+							ss << ":" << Type::to_sv(args[i - first_parm]->imbued.access);
 							ss << "</FONT>";
 						}
 					} else {
