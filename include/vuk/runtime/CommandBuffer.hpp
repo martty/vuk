@@ -449,6 +449,15 @@ namespace vuk {
 		/// @param buffer The buffer to be bound
 		CommandBuffer& bind_buffer(unsigned set, unsigned binding, const Buffer& buffer);
 
+		/// @brief Bind a buffer to the command buffer
+		/// @param set The set bind index to be used
+		/// @param binding The descriptor binding to bind the buffer to
+		/// @param buffer The buffer to be bound
+		template<Access acc, class UniqueT>
+		CommandBuffer& bind_buffer(unsigned set, unsigned binding, Arg<Buffer, acc, UniqueT> buffer) {
+			return bind_buffer(set, binding, *buffer.ptr);
+		}
+
 		/// @brief Bind an image to the command buffer
 		/// @param set The set bind index to be used
 		/// @param binding The descriptor binding to bind the image to

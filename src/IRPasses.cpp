@@ -1199,8 +1199,7 @@ namespace vuk {
 						offender.index -= first_parm;
 					}
 					auto message2 = fmt::format("	tried to be read as {}th argument", offender.index);
-					return { expected_error,
-						       RenderGraphException{ message0 + message1 + message2 } };
+					return { expected_error, RenderGraphException{ message0 + message1 + message2 } };
 				} else if (!node->links->undef) {
 					// TODO: DCE
 					break;

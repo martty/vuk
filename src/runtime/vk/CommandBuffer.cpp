@@ -428,8 +428,6 @@ namespace vuk {
 				auto node = def.node;
 				if (node->debug_info && node->debug_info->result_names.size() > 0 && !node->debug_info->result_names[0].empty()) {
 					ctx.set_name((**res).payload, node->debug_info->result_names[0].c_str());
-				} else {
-					printf("");
 				}
 				bind_image(set, binding, **res, ia.layout);
 			}
