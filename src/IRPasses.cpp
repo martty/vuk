@@ -445,8 +445,13 @@ namespace vuk {
 				return;
 			}
 
+			auto& prev = Ref{ node, output_idx }.link().prev;
+			if (!do_ssa) {
+				assert(!src.link().next);
+				assert(!prev);
+			}
 			src.link().next = &Ref{ node, output_idx }.link();
-			Ref{ node, output_idx }.link().prev = &src.link();
+			prev = &src.link();
 		};
 
 		switch (node->kind) {
