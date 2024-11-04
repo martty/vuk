@@ -495,10 +495,14 @@ public:
 		return { make_ext_ref(ref) };
 	}
 
-	[[nodiscard]] inline Value<ImageAttachment> acquire_ia(Name name, ImageAttachment ia, Access access, VUK_CALLSTACK) {
+	/// @brief Adopt an existing resource into a Value. 
+	/// @param name 
+	/// @param ia 
+	/// @param previous_access 
+	[[nodiscard]] inline Value<ImageAttachment> acquire_ia(Name name, ImageAttachment ia, Access previous_access, VUK_CALLSTACK) {
 		assert(ia.image_view != ImageView{});
 		Ref ref = current_module->acquire(current_module->types.get_builtin_image(), nullptr, ia);
-		auto ext_ref = ExtRef(std::make_shared<ExtNode>(ref.node, to_use(access)), ref);
+		auto ext_ref = ExtRef(std::make_shared<ExtNode>(ref.node, to_use(previous_access)), ref);
 		current_module->name_output(ref, name.c_str());
 		current_module->set_source_location(ref.node, VUK_CALL);
 		return { std::move(ext_ref) };
