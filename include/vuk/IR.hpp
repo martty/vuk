@@ -981,12 +981,14 @@ namespace vuk {
 	}
 
 	struct IRModule {
-		IRModule() : op_arena(/**/) {}
+		IRModule() : op_arena(/**/), module_id(module_id_counter++) {}
 
 		plf::colony<Node /*, inline_alloc<Node, 4 * 1024>*/> op_arena;
 		std::vector<Node*> garbage;
 		std::unordered_map<Node*, size_t> potential_garbage;
 		size_t node_counter = 0;
+		size_t module_id = 0;
+		inline static std::atomic<size_t> module_id_counter;
 
 		struct Types {
 			std::unordered_map<Type::Hash, std::weak_ptr<Type>> type_map;
@@ -1250,7 +1252,7 @@ namespace vuk {
 		} types;
 
 		Node* emplace_op(Node v) {
-			v.index = node_counter++;
+			v.index = module_id << 32 | node_counter++;
 			return &*op_arena.emplace(std::move(v));
 		}
 
