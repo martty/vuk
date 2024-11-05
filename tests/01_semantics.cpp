@@ -203,6 +203,39 @@ TEST_CASE("scheduling single-queue") {
 	}
 }
 
+TEST_CASE("write-read-write") {
+	std::string execution;
+
+	auto buf0 = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+	auto buf1 = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+
+	auto write = make_pass("write", [&](CommandBuffer& cbuf, VUK_BA(Access::eTransferWrite) dst) {
+		execution += "w";
+		return dst;
+	});
+	auto write2 = make_pass("write", [&](CommandBuffer& cbuf, VUK_BA(Access::eTransferWrite) dst, VUK_BA(Access::eTransferWrite) dst2) {
+		execution += "w";
+		return dst;
+	});
+	auto read = make_pass("read", [&](CommandBuffer& cbuf, VUK_BA(Access::eTransferWrite) dst, VUK_BA(Access::eTransferRead) r) {
+		execution += "r";
+		return dst;
+	});
+
+	{
+		auto b0 = discard_buf("src0", **buf0);
+		auto b1 = discard_buf("src1", **buf1);
+		write(b0);
+		write(b1);
+		read(b0, b1);
+		read(b0, b1);
+		read(b0, b1);
+		write2(b0, b1).wait(*test_context.allocator, test_context.compiler);
+		CHECK(execution == "wwrrrw");
+		execution = "";
+	}
+}
+
 TEST_CASE("scheduling with submitted") {
 	std::string execution;
 
