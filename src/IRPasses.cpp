@@ -209,12 +209,13 @@ namespace vuk {
 		}
 	}
 
-	void process_node_links(Node* node,
-	                        std::pmr::vector<Ref>& pass_reads,
-	                        std::pmr::vector<ChainLink*>& child_chains,
-	                        std::pmr::vector<Node*>& new_nodes,
-	                        std::pmr::polymorphic_allocator<std::byte> allocator,
-	                        bool do_ssa) {
+	void RGCImpl::process_node_links(IRModule* module,
+	                                 Node* node,
+	                                 std::pmr::vector<Ref>& pass_reads,
+	                                 std::pmr::vector<ChainLink*>& child_chains,
+	                                 std::pmr::vector<Node*>& new_nodes,
+	                                 std::pmr::polymorphic_allocator<std::byte> allocator,
+	                                 bool do_ssa) {
 		auto walk_writes = [&](Ref parm, Subrange::Image requested) -> Ref {
 			auto link = &parm.link();
 			Ref last_write;
@@ -241,8 +242,8 @@ namespace vuk {
 							collect_tails(nth(link->undef.node, 1), tails, pass_reads);
 							std::pmr::vector<char> ws(tails.size(), true);
 
-							last_write = current_module->make_converge(tails, ws);
-							current_module->garbage.push_back(last_write.node);
+							last_write = module->make_converge(tails, ws);
+							garbage_nodes.push_back(last_write.node);
 							last_write.node->index = node->index - 1;
 							allocate_node_links(last_write.node, allocator);
 							link->undef = last_write;
@@ -274,7 +275,6 @@ namespace vuk {
 			return last_write;
 		};
 
-		
 		auto add_result = [&](Node* node, size_t output_idx, Ref src) {
 			Ref{ node, output_idx }.link().def = { node, output_idx };
 			if (!src.node->links) {
@@ -297,7 +297,7 @@ namespace vuk {
 				assert(do_ssa);
 				// external node -> init
 				allocate_node_links(parm.node, allocator);
-				for (size_t i = 0; i < parm.node->type.size(); i ++) {
+				for (size_t i = 0; i < parm.node->type.size(); i++) {
 					Ref{ parm.node, 0 }.link().def = { parm.node, i };
 				}
 			}
@@ -491,7 +491,7 @@ namespace vuk {
 
 		std::pmr::vector<Node*> new_nodes;
 		for (auto& node : working_set) {
-			process_node_links(node, pass_reads, child_chains, new_nodes, allocator, false);
+			process_node_links(current_module.get(), node, pass_reads, child_chains, new_nodes, allocator, false);
 		}
 
 		working_set.insert(working_set.end(), new_nodes.begin(), new_nodes.end());
@@ -512,17 +512,18 @@ namespace vuk {
 	}
 
 	template<class It>
-	Result<void> build_links(It start,
-	                         It end,
-	                         std::pmr::vector<Ref>& pass_reads,
-	                         std::pmr::vector<ChainLink*>& child_chains,
-	                         std::pmr::polymorphic_allocator<std::byte> allocator) {
+	Result<void> RGCImpl::build_links(IRModule* module,
+	                                  It start,
+	                                  It end,
+	                                  std::pmr::vector<Ref>& pass_reads,
+	                                  std::pmr::vector<ChainLink*>& child_chains,
+	                                  std::pmr::polymorphic_allocator<std::byte> allocator) {
 		std::pmr::vector<Node*> new_nodes(allocator);
 		for (auto it = start; it != end; ++it) {
 			allocate_node_links(*it, allocator);
 		}
 		for (auto it = start; it != end; ++it) {
-			process_node_links(*it, pass_reads, child_chains, new_nodes, allocator, true);
+			process_node_links(module, *it, pass_reads, child_chains, new_nodes, allocator, true);
 		}
 		for (auto it = start; it != end; ++it) {
 			build_urdef(*it);
@@ -1173,13 +1174,11 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	template<class It>
-	Result<void> implicit_linking(It start, It end, std::pmr::polymorphic_allocator<std::byte> allocator) {
+	Result<void> RGCImpl::implicit_linking(IRModule* module, std::pmr::polymorphic_allocator<std::byte> allocator) {
 		std::pmr::vector<Node*> nodes(allocator);
 
-		for (auto it = start; it != end; ++it) {
-			auto node = &*it;
-			nodes.push_back(node);
+		for (auto& node : module->op_arena) {
+			nodes.push_back(&node);
 		}
 
 		std::pmr::vector<Ref> pass_reads(allocator);
@@ -1187,7 +1186,7 @@ namespace vuk {
 
 		std::sort(nodes.begin(), nodes.end(), [](Node* a, Node* b) { return a->index < b->index; });
 		// link with SSA
-		build_links(nodes.begin(), nodes.end(), pass_reads, child_chains, allocator);
+		build_links(module, nodes.begin(), nodes.end(), pass_reads, child_chains, allocator);
 		return { expected_value };
 	}
 
@@ -1351,7 +1350,7 @@ namespace vuk {
 			GraphDumper::begin_cluster(std::string("fragments_") + std::to_string(m->module_id));
 			GraphDumper::dump_graph_op(m->op_arena, false, false);
 			GraphDumper::end_cluster();
-			VUK_DO_OR_RETURN(implicit_linking(m->op_arena.begin(), m->op_arena.end(), allocator));
+			VUK_DO_OR_RETURN(impl->implicit_linking(m, allocator));
 			for (auto& op : m->op_arena) {
 				op.links = nullptr;
 			}

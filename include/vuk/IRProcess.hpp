@@ -49,8 +49,7 @@ namespace vuk {
 		std::pmr::vector<ChainLink*> child_chains;
 
 		std::unordered_map<Node*, std::vector<Ref>> deferred_splices; // Node: the node that needs to signal the splice, Ref: ref to a splice result
-		std::unordered_map<Node*, size_t> pending_splice_sigs; // Node: splice node, size_t: number of splice srcs that have been processed
-
+		std::unordered_map<Node*, size_t> pending_splice_sigs;        // Node: splice node, size_t: number of splice srcs that have been processed
 
 		std::span<ScheduledItem*> transfer_passes, compute_passes, graphics_passes;
 
@@ -92,8 +91,24 @@ namespace vuk {
 			return node->execution_info->values;
 		}
 
+		void process_node_links(IRModule* module,
+		                        Node* node,
+		                        std::pmr::vector<Ref>& pass_reads,
+		                        std::pmr::vector<ChainLink*>& child_chains,
+		                        std::pmr::vector<Node*>& new_nodes,
+		                        std::pmr::polymorphic_allocator<std::byte> allocator,
+		                        bool do_ssa);
+
 		Result<void> build_nodes();
 		Result<void> build_links(std::vector<Node*>& working_set, std::pmr::polymorphic_allocator<std::byte> allocator);
+		template<class It>
+		Result<void> build_links(IRModule* module,
+		                         It start,
+		                         It end,
+		                         std::pmr::vector<Ref>& pass_reads,
+		                         std::pmr::vector<ChainLink*>& child_chains,
+		                         std::pmr::polymorphic_allocator<std::byte> allocator);
+		Result<void> implicit_linking(IRModule* module, std::pmr::polymorphic_allocator<std::byte> allocator);
 		Result<void> build_sync();
 		Result<void> reify_inference();
 		Result<void> schedule_intra_queue(const RenderGraphCompileOptions& compile_options);

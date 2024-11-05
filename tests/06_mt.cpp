@@ -52,25 +52,27 @@ TEST_CASE("MT") {
 }
 
 TEST_CASE("MT reconvergence") {
-	auto data = { 1u, 2u, 3u, 4u };
-	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, Samples::e1);
-	ia.level_count = 2;
-	auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
+	for (int i = 0; i < 2; i++) {
+		auto data = { 1u, 2u, 3u, 4u };
+		auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, Samples::e1);
+		ia.level_count = 2;
+		auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
 
-	size_t alignment = format_to_texel_block_size(fut->format);
-	size_t size = compute_image_size(fut->format, fut->extent);
-	auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
+		size_t alignment = format_to_texel_block_size(fut->format);
+		size_t size = compute_image_size(fut->format, fut->extent);
+		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 
-	vuk::Value<vuk::ImageAttachment> futp;
+		vuk::Value<vuk::ImageAttachment> futp;
 
-	std::jthread worker([&]() {
-		void_clear_image(fut.mip(0), vuk::ClearColor(7u, 7u, 7u, 7u));
-		futp = blit_down(fut);
-	});
-	worker.join();
+		std::jthread worker([&]() {
+			void_clear_image(fut.mip(0), vuk::ClearColor(7u, 7u, 7u, 7u));
+			futp = blit_down(fut);
+		});
+		worker.join();
 
-	auto dst_buf = discard_buf("dst", *dst);
-	auto res = download_buffer(copy(futp.mip(1), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
-	auto updata = std::span((uint32_t*)res->mapped_ptr, 1);
-	CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 7; }));
+		auto dst_buf = discard_buf("dst", *dst);
+		auto res = download_buffer(copy(futp.mip(1), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
+		auto updata = std::span((uint32_t*)res->mapped_ptr, 1);
+		CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 7; }));
+	}
 }
