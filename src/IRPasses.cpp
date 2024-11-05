@@ -274,11 +274,32 @@ namespace vuk {
 			return last_write;
 		};
 
+		
+		auto add_result = [&](Node* node, size_t output_idx, Ref src) {
+			Ref{ node, output_idx }.link().def = { node, output_idx };
+			if (!src.node->links) {
+				assert(do_ssa);
+				return;
+			}
+
+			auto& prev = Ref{ node, output_idx }.link().prev;
+			if (!do_ssa) {
+				assert(!src.link().next);
+				assert(!prev);
+			}
+			src.link().next = &Ref{ node, output_idx }.link();
+			prev = &src.link();
+		};
+
 		auto add_write = [&](Node* node, Ref& parm, size_t index, Subrange::Image requested = {}) -> void {
 			assert(parm.node->kind != Node::GARBAGE);
 			if (!parm.node->links) {
 				assert(do_ssa);
-				return;
+				// external node -> init
+				allocate_node_links(parm.node, allocator);
+				for (size_t i = 0; i < parm.node->type.size(); i ++) {
+					Ref{ parm.node, 0 }.link().def = { parm.node, i };
+				}
 			}
 
 			if (parm.link().undef.node != nullptr) { // there is already a write -> do SSA rewrite
@@ -298,7 +319,11 @@ namespace vuk {
 			assert(parm.node->kind != Node::GARBAGE);
 			if (!parm.node->links) {
 				assert(do_ssa);
-				return;
+				// external node -> init
+				allocate_node_links(parm.node, allocator);
+				for (size_t i = 0; i < parm.node->type.size(); i++) {
+					Ref{ parm.node, 0 }.link().def = { parm.node, i };
+				}
 			}
 			if (parm.link().undef.node != nullptr && node->index > parm.link().undef.node->index) { // there is already a write and it is earlier than us
 				assert(do_ssa);
@@ -306,22 +331,6 @@ namespace vuk {
 				parm = last_write;
 			}
 			parm.link().reads.append(pass_reads, { node, index });
-		};
-
-		auto add_result = [&](Node* node, size_t output_idx, Ref src) {
-			Ref{ node, output_idx }.link().def = { node, output_idx };
-			if (!src.node->links) {
-				assert(do_ssa);
-				return;
-			}
-
-			auto& prev = Ref{ node, output_idx }.link().prev;
-			if (!do_ssa) {
-				assert(!src.link().next);
-				assert(!prev);
-			}
-			src.link().next = &Ref{ node, output_idx }.link();
-			prev = &src.link();
 		};
 
 		switch (node->kind) {
@@ -1177,8 +1186,6 @@ namespace vuk {
 		std::pmr::vector<ChainLink*> child_chains(allocator);
 
 		std::sort(nodes.begin(), nodes.end(), [](Node* a, Node* b) { return a->index < b->index; });
-		// sanity: nodes share module_id??
-		assert(std::all_of(nodes.begin(), nodes.end(), [&](Node* node) { return node->index >> 32 == (nodes[0]->index >> 32); }));
 		// link with SSA
 		build_links(nodes.begin(), nodes.end(), pass_reads, child_chains, allocator);
 		return { expected_value };

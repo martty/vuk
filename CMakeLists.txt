@@ -225,6 +225,7 @@ if(VUK_BUILD_TESTS)
 					tests/03_commands.cpp
 					tests/04_arrays.cpp
 					tests/05_renderpass.cpp 
+					tests/06_mt.cpp
 	)
 	#target_compile_features(vuk-tests PRIVATE cxx_std_17)
 	target_include_directories(vuk-tests PRIVATE ext/renderdoc)
