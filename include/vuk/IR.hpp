@@ -414,7 +414,7 @@ namespace vuk {
 			} variable_node;
 		};
 
-		std::string_view kind_to_sv() {
+		std::string_view kind_to_sv() const {
 			switch (kind) {
 			case PLACEHOLDER:
 				return "placeholder";

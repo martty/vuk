@@ -6,6 +6,7 @@
 #include "vuk/vuk_fwd.hpp"
 
 #include <compare>
+#include <string>
 #include <string_view>
 #include <type_traits>
 #include <algorithm>
@@ -811,6 +812,7 @@ namespace vuk {
 
 	/// @brief Control compilation options when compiling the rendergraph
 	struct RenderGraphCompileOptions {
+		std::string graph_label;
 		ProfilingCallbacks callbacks;
 	};
 

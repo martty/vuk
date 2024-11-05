@@ -95,6 +95,7 @@ target_sources(vuk PRIVATE
 	src/Name.cpp
 
 	src/IRPasses.cpp
+	src/GraphDumper.cpp
 
 	src/runtime/vk/Allocator.cpp
 	src/runtime/vk/BufferAllocator.cpp

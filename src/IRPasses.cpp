@@ -1,3 +1,4 @@
+#include "GraphDumper.hpp"
 #include "vuk/Exception.hpp"
 #include "vuk/IRProcess.hpp"
 #include "vuk/RenderGraph.hpp"
@@ -11,7 +12,6 @@
 #include <fmt/printf.h>
 #include <memory_resource>
 #include <set>
-#include <sstream>
 #include <unordered_set>
 
 namespace vuk {
@@ -46,136 +46,6 @@ namespace vuk {
 		delete impl;
 		arena->reset();
 		impl = new RGCImpl(arena);
-	}
-
-	template<class T>
-	void _dump_graph(T nodes, bool bridge_splices = true, bool bridge_slices = true) {
-		std::stringstream ss;
-		ss << "digraph vuk {\n";
-		ss << "rankdir=\"TB\"\nnewrank = true\nnode[shape = rectangle width = 0 height = 0 margin = 0]\n";
-		for (auto node : nodes) {
-			if (node->kind == Node::GARBAGE) {
-				continue;
-			}
-			if (node->kind == Node::CONSTANT) {
-				if (node->type[0]->kind == Type::INTEGER_TY || node->type[0]->kind == Type::MEMORY_TY) {
-					continue;
-				}
-			}
-			if (node->kind == Node::PLACEHOLDER || (bridge_splices && node->kind == Node::SPLICE) || (bridge_slices && node->kind == Node::SLICE)) {
-				continue;
-			}
-
-			auto arg_count = node->generic_node.arg_count == (uint8_t)~0u ? node->variable_node.args.size() : node->generic_node.arg_count;
-			auto result_count = node->type.size();
-			ss << uintptr_t(node) << " [label=<\n";
-			ss << "<TABLE BORDER=\"0\" CELLBORDER=\"1\" CELLSPACING=\"0\"";
-			ss << "><TR>\n ";
-
-			for (size_t i = 0; i < result_count; i++) {
-				ss << "<TD PORT= \"r" << i << "\">";
-				ss << "<FONT FACE=\"Courier New\">";
-				if (node->debug_info && node->debug_info->result_names.size() > i) {
-					ss << "%" << node->debug_info->result_names[i] << ":";
-				}
-				ss << Type::to_string(node->type[i].get());
-				ss << "</FONT>";
-				ss << "</TD>";
-			}
-			ss << "<TD>";
-			ss << node->kind_to_sv();
-			if (node->kind == Node::CALL) {
-				auto opaque_fn_ty = node->call.args[0].type()->opaque_fn;
-
-				if (!node->call.args[0].type()->debug_info.name.empty()) {
-					ss << " <B>";
-					ss << node->call.args[0].type()->debug_info.name;
-					ss << "</B>";
-				}
-			}
-			ss << "</TD>";
-
-			for (size_t i = 0; i < arg_count; i++) {
-				auto arg = node->generic_node.arg_count != (uint8_t)~0u ? node->fixed_node.args[i] : node->variable_node.args[i];
-
-				ss << "<TD PORT= \"a" << i << "\">";
-				if (arg.node->kind == Node::CONSTANT) {
-					if (arg.type()->kind == Type::INTEGER_TY) {
-						if (arg.type()->integer.width == 32) {
-							ss << constant<uint32_t>(arg);
-						} else {
-							ss << constant<uint64_t>(arg);
-						}
-					} else if (arg.type()->kind == Type::MEMORY_TY) {
-						ss << "&lt;mem&gt;";
-					}
-				} else if (arg.node->kind == Node::PLACEHOLDER) {
-					ss << "?";
-				} else {
-					if (node->kind == Node::CALL) {
-						auto fn_type = node->call.args[0].type();
-						size_t first_parm = fn_type->kind == Type::OPAQUE_FN_TY ? 1 : 4;
-						auto& args = fn_type->kind == Type::OPAQUE_FN_TY ? fn_type->opaque_fn.args : fn_type->shader_fn.args;
-						if (args[i - first_parm]->kind == Type::IMBUED_TY) {
-							ss << "<FONT FACE=\"Courier New\">";
-							ss << ":" << Type::to_sv(args[i - first_parm]->imbued.access);
-							ss << "</FONT>";
-						}
-					} else {
-						ss << "&bull;";
-					}
-				}
-				ss << "</TD>";
-			}
-
-			ss << "</TR></TABLE>>];\n";
-
-			// connections
-			for (size_t i = 0; i < arg_count; i++) {
-				auto arg = node->generic_node.arg_count != (uint8_t)~0u ? node->fixed_node.args[i] : node->variable_node.args[i];
-				if (arg.node->kind == Node::CONSTANT) {
-					if (arg.type()->kind == Type::INTEGER_TY || arg.type()->kind == Type::MEMORY_TY) {
-						continue;
-					}
-				}
-				if (arg.node->kind == Node::PLACEHOLDER) {
-					continue;
-				}
-				if (bridge_splices && arg.node->kind == Node::SPLICE && arg.node->splice.rel_acq &&
-				    arg.node->splice.rel_acq->status == Signal::Status::eDisarmed) { // bridge splices
-					auto bridged_arg = arg.node->splice.src[arg.index];
-					ss << uintptr_t(bridged_arg.node) << " :r" << bridged_arg.index << " -> " << uintptr_t(node) << " :a" << i << " :n [color=red]\n";
-				} else if (bridge_splices && arg.node->kind == Node::SPLICE && arg.node->splice.rel_acq) {
-					ss << "EXT\n";
-					ss << "EXT -> " << uintptr_t(node) << " :a" << i << " :n [color=red]\n";
-				} else if (bridge_splices && arg.node->kind == Node::SPLICE) { // disabled
-					auto bridged_arg = arg.node->splice.src[arg.index];
-					ss << uintptr_t(bridged_arg.node) << " :r" << bridged_arg.index << " -> " << uintptr_t(node) << " :a" << i << " :n [color=blue]\n";
-				} else if (bridge_slices && arg.node->kind == Node::SLICE) { // bridge slices
-					auto bridged_arg = arg.node->slice.image;
-					if (bridged_arg.node->kind == Node::SPLICE) {
-						bridged_arg = bridged_arg.node->splice.src[arg.index];
-					}
-					Subrange::Image r = { constant<uint32_t>(arg.node->slice.base_level),
-						                    constant<uint32_t>(arg.node->slice.level_count),
-						                    constant<uint32_t>(arg.node->slice.base_layer),
-						                    constant<uint32_t>(arg.node->slice.layer_count) };
-					ss << uintptr_t(bridged_arg.node) << " :r" << bridged_arg.index << " -> " << uintptr_t(node) << " :a" << i << " :n [color=green, label=\"";
-					if (r.base_level > 0 || r.level_count != VK_REMAINING_MIP_LEVELS) {
-						ss << fmt::format("[m{}:{}]", r.base_level, r.base_level + r.level_count - 1);
-					}
-					if (r.base_layer > 0 || r.layer_count != VK_REMAINING_ARRAY_LAYERS) {
-						ss << fmt::format("[l{}:{}]", r.base_layer, r.base_layer + r.layer_count - 1);
-					}
-					ss << "\"]\n";
-				} else {
-					ss << uintptr_t(arg.node) << " :r" << arg.index << " -> " << uintptr_t(node) << " :a" << i << " :n\n";
-				}
-			}
-		}
-		ss << "}\n";
-		printf("\n\n%s\n\n", ss.str().c_str());
-		printf("");
 	}
 
 	template<class It>
@@ -1296,30 +1166,21 @@ namespace vuk {
 
 	template<class It>
 	Result<void> implicit_linking(It start, It end, std::pmr::polymorphic_allocator<std::byte> allocator) {
-		// collect all nodes that might require their inputs to be converged
-		// these are the nodes in the local set
-		std::pmr::vector<Node*> possible_divergent_use_set(allocator);
+		std::pmr::vector<Node*> nodes(allocator);
 
-		// build the possible candidates for implicit linking: nodes in the local set
 		for (auto it = start; it != end; ++it) {
 			auto node = &*it;
-			possible_divergent_use_set.push_back(node);
+			nodes.push_back(node);
 		}
 
-		// input had no implicit behaviour, return early
-		/* if (slices.size() == 0) {
-		  return { expected_value };
-		} */
-
-		// collect all nodes that the possibly divergent set can reference as inputs
-		auto divergence_dependency_scope =
-		    possible_divergent_use_set; // collect_dependents(possible_divergent_use_set.begin(), possible_divergent_use_set.end(), allocator);
 		std::pmr::vector<Ref> pass_reads(allocator);
 		std::pmr::vector<ChainLink*> child_chains(allocator);
 
-		std::sort(divergence_dependency_scope.begin(), divergence_dependency_scope.end(), [](Node* a, Node* b) { return a->index < b->index; });
-		// build chains (we only care about chains going through divergent/implicit nodes)
-		build_links(divergence_dependency_scope.begin(), divergence_dependency_scope.end(), pass_reads, child_chains, allocator);
+		std::sort(nodes.begin(), nodes.end(), [](Node* a, Node* b) { return a->index < b->index; });
+		// sanity: nodes share module_id??
+		assert(std::all_of(nodes.begin(), nodes.end(), [&](Node* node) { return node->index >> 32 == (nodes[0]->index >> 32); }));
+		// link with SSA
+		build_links(nodes.begin(), nodes.end(), pass_reads, child_chains, allocator);
 		return { expected_value };
 	}
 
@@ -1414,6 +1275,7 @@ namespace vuk {
 	Result<void> Compiler::compile(std::span<std::shared_ptr<ExtNode>> nodes, const RenderGraphCompileOptions& compile_options) {
 		reset();
 		impl->callbacks = compile_options.callbacks;
+		GraphDumper::begin_graph(false, compile_options.graph_label);
 
 		impl->refs.assign(nodes.begin(), nodes.end());
 		// tail nodes
@@ -1437,6 +1299,7 @@ namespace vuk {
 			impl->depnodes.push_back(std::move(enode));
 		}
 
+		GraphDumper::begin_cluster("fragments");
 		std::pmr::polymorphic_allocator<std::byte> allocator(&impl->mbr);
 		for (auto& m : modules) {
 			// GC the module
@@ -1478,7 +1341,19 @@ namespace vuk {
 			}
 			m->garbage.clear();
 			// implicit link the module
+			GraphDumper::begin_cluster(std::string("fragments_") + std::to_string(m->module_id));
+			GraphDumper::dump_graph_op(m->op_arena, false, false);
+			GraphDumper::end_cluster();
 			VUK_DO_OR_RETURN(implicit_linking(m->op_arena.begin(), m->op_arena.end(), allocator));
+			for (auto& op : m->op_arena) {
+				op.links = nullptr;
+			}
+		}
+		GraphDumper::next_cluster("fragments", "modules");
+		for (auto& m : modules) {
+			GraphDumper::begin_cluster(std::string("modules_") + std::to_string(m->module_id));
+			GraphDumper::dump_graph_op(m->op_arena, false, false);
+			GraphDumper::end_cluster();
 		}
 
 		std::sort(impl->depnodes.begin(), impl->depnodes.end());
@@ -1493,12 +1368,9 @@ namespace vuk {
 		}
 
 		VUK_DO_OR_RETURN(impl->build_nodes());
-		/* std::vector<Node*> all_nodes;
-		for (auto& n : current_module->op_arena) {
-		  all_nodes.push_back(&n);
-		}
-		_dump_graph(all_nodes, true, false);*/
 		VUK_DO_OR_RETURN(impl->build_links(impl->nodes, allocator));
+		GraphDumper::next_cluster("modules", "full");
+		GraphDumper::dump_graph(impl->nodes, false, false);
 
 		// eliminate useless splices & bridge multiple slices
 		rewrite([&](Node* node, auto& replaces) {
@@ -1623,6 +1495,10 @@ namespace vuk {
 		VUK_DO_OR_RETURN(impl->build_links(impl->nodes, allocator));
 
 		// FINAL GRAPH
+		GraphDumper::next_cluster("final");
+		GraphDumper::dump_graph(impl->nodes);
+		GraphDumper::end_cluster();
+		GraphDumper::end_graph();
 		//_dump_graph(impl->nodes, false, false);
 
 		VUK_DO_OR_RETURN(validate_read_undefined());
