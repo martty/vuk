@@ -243,6 +243,6 @@ namespace vuk {
 	}
 
 	inline bool is_readonly_access(Access a) {
-		return a & ~(eTransferRW | eComputeRW | eVertexRead | eFragmentRW | eRayTracingRW | eHostRW);
+		return !(a & (eTransferWrite | eComputeWrite | eFragmentWrite | eRayTracingWrite | eHostWrite | eMemoryWrite));
 	}
 } // namespace vuk

@@ -814,6 +814,7 @@ namespace vuk {
 	struct RenderGraphCompileOptions {
 		std::string graph_label;
 		ProfilingCallbacks callbacks;
+		bool dump_graph = false;
 	};
 
 	enum class DescriptorSetStrategyFlagBits {

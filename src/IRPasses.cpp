@@ -13,6 +13,19 @@
 #include <memory_resource>
 #include <set>
 #include <unordered_set>
+#include <random>
+
+namespace {
+	using Generator = std::mt19937;
+	thread_local static std::random_device rd;
+
+	thread_local static Generator _random_generator = []() {
+		std::array<typename Generator::result_type, Generator::state_size> data;
+		std::generate(std::begin(data), std::end(data), std::ref(rd));
+		auto seq = std::seed_seq(std::begin(data), std::end(data));
+		return Generator(seq);
+	}();
+}
 
 namespace vuk {
 	constexpr void access_to_usage(ImageUsageFlags& usage, Access acc) {
@@ -1281,7 +1294,7 @@ namespace vuk {
 	Result<void> Compiler::compile(std::span<std::shared_ptr<ExtNode>> nodes, const RenderGraphCompileOptions& compile_options) {
 		reset();
 		impl->callbacks = compile_options.callbacks;
-		GraphDumper::begin_graph(false, compile_options.graph_label);
+		GraphDumper::begin_graph(compile_options.dump_graph, compile_options.graph_label);
 
 		impl->refs.assign(nodes.begin(), nodes.end());
 		// tail nodes
@@ -1374,6 +1387,8 @@ namespace vuk {
 		}
 
 		VUK_DO_OR_RETURN(impl->build_nodes());
+
+		std::shuffle(impl->nodes.begin(), impl->nodes.end(), _random_generator);
 		VUK_DO_OR_RETURN(impl->build_links(impl->nodes, allocator));
 		GraphDumper::next_cluster("modules", "full");
 		GraphDumper::dump_graph(impl->nodes, false, false);
