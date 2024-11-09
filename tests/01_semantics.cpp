@@ -46,18 +46,21 @@ TEST_CASE("conversion to SSA") {
 }
 
 TEST_CASE("minimal graph is submitted") {
-	std::string trace = "";
 	[[maybe_unused]] auto& oa = current_module;
 
-	auto a = make_unary_computation("a", trace)(declare_buf("_a", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
-	auto b = make_unary_computation("b", trace)(declare_buf("_b", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
+	for (int i = 0; i < 10; i++) {
+		std::string trace = "";
 
-	auto d = make_binary_computation("d", trace)(a, b); // d->a, d->b
-	auto e = make_unary_computation("e", trace)(a);     // e->a
-	e.submit(*test_context.allocator, test_context.compiler);
+		auto a = make_unary_computation("a", trace)(declare_buf("_a", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
+		auto b = make_unary_computation("b", trace)(declare_buf("_b", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
 
-	trace = trace.substr(0, trace.size() - 1);
-	CHECK(trace == "a e");
+		auto d = make_binary_computation("d", trace)(a, b); // d->a, d->b
+		auto e = make_unary_computation("e", trace)(a);     // e->a
+		e.submit(*test_context.allocator, test_context.compiler, { .dump_graph = false });
+
+		trace = trace.substr(0, trace.size() - 1);
+		CHECK(trace == "a e");
+	}
 }
 
 TEST_CASE("graph is cleaned up after submit") {

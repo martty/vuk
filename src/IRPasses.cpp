@@ -1203,10 +1203,19 @@ namespace vuk {
 		return { expected_value };
 	}
 
+	auto format_as(Ref f) {
+		return std::string("\"") + fmt::to_string(fmt::ptr(f.node)) + "@" + fmt::to_string(f.index) + std::string("\"");
+	}
+
 	struct Replace {
 		Ref needle;
 		Ref value;
 	};
+
+	auto format_as(Replace f) {
+		return fmt::to_string(f.needle) + "->" + fmt::to_string(f.value);
+	}
+
 	// the issue with multiple replaces is that if there are two replaces link: eg, a->b and b->c
 	// in this case the order of replaces / args after replacement will determine the outcome and we might leave b's, despite wanting to get rid of them all
 	// to prevent this, we form replace chains when adding replaces
@@ -1227,7 +1236,7 @@ namespace vuk {
 			// search value in needles -> this will be the end we use
 			// 0 or 1 hits
 			auto iit =
-			    std::upper_bound(replaces.begin(), replaces.end(), Replace{ value, value }, [](const Replace& a, const Replace& b) { return a.needle < b.needle; });
+			    std::lower_bound(replaces.begin(), replaces.end(), Replace{ value, value }, [](const Replace& a, const Replace& b) { return a.needle < b.needle; });
 			if (iit != replaces.end() && iit->needle == value) { // 1 hit
 				value2 = iit->value;
 			}
@@ -1236,6 +1245,7 @@ namespace vuk {
 			iit = std::find_if(replaces.begin(), replaces.end(), [=](Replace& a) { return a.value == needle; });
 			while (iit != replaces.end()) { //
 				iit->value = value2;
+				// fmt::print("{}", *iit);
 				iit = std::find_if(iit, replaces.end(), [=](Replace& a) { return a.value == needle; });
 			}
 
@@ -1243,6 +1253,7 @@ namespace vuk {
 			auto it =
 			    std::upper_bound(replaces.begin(), replaces.end(), Replace{ needle, value }, [](const Replace& a, const Replace& b) { return a.needle < b.needle; });
 			replaces.insert(it, { needle, value2 });
+			// fmt::print("{}\n", Replace{ needle, value2 });
 		}
 	};
 
@@ -1254,6 +1265,12 @@ namespace vuk {
 		for (auto node : impl->nodes) {
 			pred(node, rr);
 		}
+
+		/* fmt::print("[");
+		    for (auto& r : replaces) {
+		      fmt::print("{}, ", r);
+		    }
+		    fmt::print("]\n");*/
 
 		std::vector<Ref*, short_alloc<Ref*>> args(*impl->arena_);
 		// collect all args
@@ -1517,7 +1534,7 @@ namespace vuk {
 
 		// FINAL GRAPH
 		GraphDumper::next_cluster("final");
-		GraphDumper::dump_graph(impl->nodes);
+		GraphDumper::dump_graph(impl->nodes, false, true);
 		GraphDumper::end_cluster();
 		GraphDumper::end_graph();
 		//_dump_graph(impl->nodes, false, false);
