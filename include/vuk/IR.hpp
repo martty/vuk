@@ -619,6 +619,12 @@ namespace vuk {
 		case Node::ACQUIRE_NEXT_IMAGE:
 		case Node::SLICE:
 			return { expected_value, RefOrValue::from_ref(ref) };
+		case Node::SPLICE:
+			if (!ref.node->splice.rel_acq || ref.node->splice.rel_acq->status == Signal::Status::eDisarmed) {
+				return eval2(ref.node->splice.src[ref.index]);
+			} else {
+				return { expected_value, RefOrValue::from_value(ref.node->splice.values[ref.index]) };
+			}
 		case Node::CALL: {
 			auto t = ref.type();
 			if (t->kind != Type::ALIASED_TY) {
@@ -722,6 +728,7 @@ namespace vuk {
 		default:
 			return { expected_error, CannotBeConstantEvaluated{ ref } };
 		}
+		assert(0);
 	}
 
 	template<class T>
@@ -869,6 +876,88 @@ namespace vuk {
 		}
 	}
 
+	inline std::optional<Ref> get_def2(Ref ref) {
+		if (!ref.node->links) {
+			return {};
+		}
+		auto link = &ref.link();
+		while (link->prev) {
+			link = link->prev;
+		}
+		auto def = link->def;
+		switch (def.node->kind) {
+		case Node::CONSTRUCT:
+		case Node::SPLICE:
+		case Node::ACQUIRE_NEXT_IMAGE:
+			return def;
+		case Node::EXTRACT: {
+			auto compdef_ = get_def2(def.node->extract.composite);
+			if (!compdef_) {
+				return {};
+			}
+			auto compdef = *compdef_;
+			auto index = *eval<uint64_t>(def.node->extract.index);
+
+			switch (compdef.node->kind) {
+			case Node::CONSTRUCT:
+				return get_def2(compdef.node->construct.args[index + 1]);
+			case Node::SPLICE:
+				return compdef;
+			default:
+				assert(0);
+			}
+		}
+		case Node::SLICE:
+			return get_def2(def.node->slice.image);
+		case Node::CALL:
+			if (def.type()->kind == Type::ALIASED_TY) {
+				return get_def2(def.node->call.args[def.type()->aliased.ref_idx]);
+			} else {
+				assert(0);
+			}
+		default:
+			assert(0);
+		}
+	}
+
+	inline std::optional<Ref> get_def2slice(Ref ref) {
+		if (!ref.node->links) {
+			return {};
+		}
+		auto link = &ref.link();
+		while (link->prev) {
+			link = link->prev;
+		}
+		auto def = link->def;
+		switch (def.node->kind) {
+		case Node::CONSTRUCT:
+		case Node::SPLICE:
+		case Node::ACQUIRE_NEXT_IMAGE:
+			return def;
+		case Node::EXTRACT: {
+			auto compdef_ = get_def2(def.node->extract.composite);
+			if (!compdef_) {
+				return {};
+			}
+			auto compdef = *compdef_;
+			auto index = *eval<uint64_t>(def.node->extract.index);
+
+			switch (compdef.node->kind) {
+			case Node::CONSTRUCT:
+				return get_def2(compdef.node->construct.args[index + 1]);
+			case Node::SPLICE:
+				return compdef;
+			default:
+				assert(0);
+			}
+		}
+		case Node::SLICE:
+			return def;
+		default:
+			assert(0);
+		}
+	}
+
 	template<class T, size_t size>
 	struct InlineArena {
 		std::unique_ptr<InlineArena> next;
@@ -987,6 +1076,7 @@ namespace vuk {
 		std::vector<Node*> garbage;
 		std::unordered_map<Node*, size_t> potential_garbage;
 		size_t node_counter = 0;
+		size_t link_frontier = 0;
 		size_t module_id = 0;
 		inline static std::atomic<size_t> module_id_counter;
 
@@ -1601,6 +1691,10 @@ namespace vuk {
 
 			return first(emplace_op(Node{ .kind = Node::MATH_BINARY, .type = std::span{ tys, 1 }, .math_binary = { .a = a, .b = b, .op = op } }));
 		}
+
+		// GC
+		void collect_garbage();
+		void collect_garbage(std::pmr::polymorphic_allocator<std::byte> allocator);
 	};
 
 	inline thread_local std::shared_ptr<IRModule> current_module = std::make_shared<IRModule>();

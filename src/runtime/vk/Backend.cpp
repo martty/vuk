@@ -697,23 +697,7 @@ namespace vuk {
 			if (parm.node->kind == Node::CONSTANT || parm.node->kind == Node::PLACEHOLDER || parm.node->kind == Node::MATH_BINARY) {
 				return;
 			}
-			auto link = parm.link();
-
-			if (access == RW::eWrite) { // synchronize against writing
-				// we are going to write here, so schedule all reads or the def, if no read
-				if (link.reads.size() > 0) {
-					// all reads
-					for (auto& r : link.reads.to_span(pass_reads)) {
-						schedule_new(r.node);
-					}
-				} else {
-					// just the def
-					schedule_new(link.def.node);
-				}
-			} else { // just reading, so don't synchronize with reads
-				// just the def
-				schedule_new(link.def.node);
-			}
+			schedule_new(parm.node);
 		}
 
 		template<class T>
@@ -1341,7 +1325,7 @@ namespace vuk {
 
 							// here: figuring out which allocator to use to make image views for the RP and then making them
 							if (is_framebuffer_attachment(access)) {
-								auto urdef = link.urdef.node;
+								auto urdef = get_def2(parm)->node;
 								auto allocator = urdef->kind == Node::CONSTRUCT && urdef->construct.allocator ? *urdef->construct.allocator : alloc;
 								auto& img_att = sched.get_value<ImageAttachment>(parm);
 								if (img_att.view_type == ImageViewType::eInfer || img_att.view_type == ImageViewType::eCube) { // framebuffers need 2D or 2DArray views
@@ -1397,8 +1381,6 @@ namespace vuk {
 						std::vector<void*, short_alloc<void*>> opaque_meta(*impl->arena_);
 						for (size_t i = first_parm; i < node->call.args.size(); i++) {
 							auto& parm = node->call.args[i];
-							auto& link = parm.link();
-							assert(link.urdef);
 							opaque_args.push_back(sched.get_value(parm));
 							opaque_meta.push_back(&parm);
 						}
@@ -1525,7 +1507,22 @@ namespace vuk {
 							is_release = true;
 						} else if (node->splice.dst_domain == DomainFlagBits::eAny) {
 							dst_stream = sched_stream;
-							assert(false);
+							auto values = new void*[node->splice.src.size()];
+							for (size_t i = 0; i < node->splice.src.size(); i++) {
+								auto parm = node->splice.src[i];
+								auto arg_ty = node->type[i];
+								auto di = sched.get_dependency_info(parm, arg_ty.get(), RW::eWrite, dst_stream);
+								values[i] = sched.get_value(parm);
+							}
+#ifdef VUK_DUMP_EXEC
+							print_results(node);
+							fmt::print(" <- ");
+							print_args(node->splice.src);
+							fmt::print("\n");
+#endif
+							sched.done(node, item.scheduled_stream, std::span{ values, node->splice.src.size() });
+
+							break;
 						} else if (node->splice.dst_domain == DomainFlagBits::eDevice) {
 							dst_stream = sched_stream;
 							is_release = true;
@@ -1561,6 +1558,26 @@ namespace vuk {
 						}
 						node->splice.values = std::span{ values, node->splice.src.size() };
 						if (is_release) {
+							// for releases, run deferred splices before submission
+							auto it = impl->deferred_splices.find(node);
+							if (it != impl->deferred_splices.end()) {
+								for (auto& splice_ref : it->second) {
+									assert(splice_ref.node->kind == Node::SPLICE);
+									auto pending = ++impl->pending_splice_sigs.at(splice_ref.node);
+									auto& splice = splice_ref.node->splice;
+									assert(splice.rel_acq);
+									auto& parm = splice.src[splice_ref.index];
+									splice.rel_acq->last_use[splice_ref.index] = recorder.last_use(sched.base_type(parm).get(), sched.get_value(parm));
+									memcpy(splice.values[splice_ref.index], impl->get_value(parm), parm.type()->size);
+
+									// if all of the splice was encountered, add signal to the stream where this node ran
+									if (pending == splice_ref.node->splice.src.size()) {
+										sched_stream->add_dependent_signal(splice.rel_acq);
+									}
+								}
+								impl->deferred_splices.erase(it);
+							}
+
 							if (acqrel && sched_domain == DomainFlagBits::eHost) {
 								acqrel->status = Signal::Status::eHostAvailable;
 							}
@@ -1583,13 +1600,6 @@ namespace vuk {
 							print_args(node->splice.src);
 							fmt::print("\n");
 #endif
-						} else {
-#ifdef VUK_DUMP_EXEC
-							print_results(node);
-							fmt::print(" <- ");
-							print_args(node->splice.src);
-							fmt::print("\n");
-#endif
 						}
 						sched.done(node, item.scheduled_stream, std::span{ values, node->splice.src.size() });
 					} else {
@@ -1599,6 +1609,15 @@ namespace vuk {
 						print_results(node);
 						fmt::print(" = acquire<");
 #endif
+						bool internal = false;
+						for (auto& [k, vec] : impl->deferred_splices) {
+							for (auto& v : vec) {
+								if (v.node == node) {
+									internal = true;
+									break;
+								}
+							}
+						}
 
 						for (size_t i = 0; i < node->splice.values.size(); i++) {
 							auto& link = node->links[i];
@@ -1607,7 +1626,9 @@ namespace vuk {
 								continue;
 							}
 							StreamResourceUse src_use = { acqrel->last_use[i], src_stream };
-							recorder.init_sync(node->type[i].get(), src_use, node->splice.values[i]);
+							if (!internal) {
+								recorder.init_sync(node->type[i].get(), src_use, node->splice.values[i]);
+							}
 							if (node->type[i]->hash_value == current_module->types.builtin_buffer) {
 #ifdef VUK_DUMP_EXEC
 								fmt::print("buffer");
@@ -1637,7 +1658,7 @@ namespace vuk {
 					auto acqrel = node->splice.rel_acq;
 					if (!acqrel || acqrel->status == Signal::Status::eDisarmed) {
 						for (size_t i = 0; i < node->splice.src.size(); i++) {
-							sched.schedule_dependency(node->splice.src[i], RW::eWrite);
+							sched.schedule_dependency(node->splice.src[i], RW::eRead);
 						}
 					}
 				}
@@ -1752,8 +1773,9 @@ namespace vuk {
 			case Node::CONVERGE: {
 				if (sched.process(item)) {
 					auto base = node->converge.diverged[0];
-					if (base.link().urdef.node->kind == Node::SLICE) {
-						base = base.link().urdef.node->slice.image;
+					auto def = get_def2slice(base);
+					if (def && def->node->kind == Node::SLICE) {
+						base = def->node->slice.image;
 					} else {
 						assert(0);
 					}
@@ -1820,37 +1842,7 @@ namespace vuk {
 
 		impl->depnodes.clear();
 
-		for (auto& [_, refs] : impl->deferred_splices) {
-			for (auto& splice_ref : refs) {
-				auto& node = splice_ref.node;
-				if (current_module->potential_garbage.contains(node)) {
-					current_module->potential_garbage[node]++;
-				}
-				// reset any nodes we ran
-				node->execution_info = nullptr;
-				node->links = nullptr;
-
-				// SANITY: if we ran any splice nodes, they must be pending now
-				// SPLICE nodes are unlinked
-				assert(node->kind == Node::SPLICE);
-
-				assert(!node->splice.rel_acq || node->splice.rel_acq->status != Signal::Status::eDisarmed);
-				delete node->splice.src.data();
-				node->splice.src = {};
-			}
-		}
-
-		impl->deferred_splices.clear();
-
 		for (auto& node : impl->nodes) {
-			apply_generic_args(
-			    [](Ref parm) {
-				    if (current_module->potential_garbage.contains(parm.node)) {
-					    current_module->potential_garbage[parm.node]++;
-				    }
-			    },
-			    node);
-
 			// reset any nodes we ran
 			node->execution_info = nullptr;
 			node->links = nullptr;
@@ -1868,20 +1860,7 @@ namespace vuk {
 			}
 		}
 
-		// destroy garbage nodes
-		std::vector<Node*> to_garbage;
-		for (auto& [node, counts] : current_module->potential_garbage) {
-			if (counts == 0) {
-				to_garbage.push_back(node);
-			}
-			counts = 0;
-		}
-
-		for (auto& tg : to_garbage) {
-			current_module->potential_garbage.erase(tg);
-		}
-
-		impl->garbage_nodes.insert(impl->garbage_nodes.end(), to_garbage.begin(), to_garbage.end());
+		impl->deferred_splices.clear();
 		impl->garbage_nodes.insert(impl->garbage_nodes.end(), current_module->garbage.begin(), current_module->garbage.end());
 		std::sort(impl->garbage_nodes.begin(), impl->garbage_nodes.end());
 		impl->garbage_nodes.erase(std::unique(impl->garbage_nodes.begin(), impl->garbage_nodes.end()), impl->garbage_nodes.end());

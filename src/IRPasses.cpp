@@ -11,9 +11,9 @@
 #include <charconv>
 #include <fmt/printf.h>
 #include <memory_resource>
+#include <random>
 #include <set>
 #include <unordered_set>
-#include <random>
 
 namespace {
 	using Generator = std::mt19937;
@@ -25,7 +25,15 @@ namespace {
 		auto seq = std::seed_seq(std::begin(data), std::end(data));
 		return Generator(seq);
 	}();
-}
+} // namespace
+
+#define VUK_ENABLE_ICE
+
+#ifndef VUK_ENABLE_ICE
+#define VUK_ICE(expression) (void)((!!(expression)) || assert(expression))
+#else
+#define VUK_ICE(expression) (void)((!!(expression)) || (GraphDumper::end_cluster(), GraphDumper::end_graph(), false) || (assert(expression), false))
+#endif
 
 namespace vuk {
 	constexpr void access_to_usage(ImageUsageFlags& usage, Access acc) {
@@ -48,6 +56,62 @@ namespace vuk {
 			usage |= ImageUsageFlagBits::eStorage;
 		}
 	};
+
+	void IRModule::collect_garbage() {
+		std::pmr::monotonic_buffer_resource mbr;
+		std::pmr::polymorphic_allocator<std::byte> allocator(&mbr);
+		collect_garbage(allocator);
+	}
+
+	void IRModule::collect_garbage(std::pmr::polymorphic_allocator<std::byte> allocator) {
+		std::pmr::vector<Node*> liveness_work_queue(allocator);
+		std::pmr::unordered_set<Node*> live_set(allocator);
+
+		// initial set of live nodes
+		for (auto it = op_arena.begin(); it != op_arena.end();) {
+			auto node = &*it;
+			// splices in potential garbage are not in the initial set
+			if (node->kind == Node::SPLICE && node->splice.rel_acq == nullptr) {
+				++it;
+				continue;
+			}
+			if (node->index < (module_id << 32 | link_frontier)) {
+				if (node->kind != Node::SPLICE) { // non-splice nodes before the link frontier are not in the initial set
+					++it;
+					continue;
+				}
+				// splice nodes that are not potential garbage are in the initial set even before the link frontier
+			}
+			// if the node is garbage, just collect it now
+			if (node->kind == Node::GARBAGE) {
+				it = op_arena.erase(it);
+				continue;
+			}
+			// everything else is in the initial set
+			liveness_work_queue.emplace_back(node);
+			++it;
+		}
+
+		// compute live set
+		while (!liveness_work_queue.empty()) {
+			auto node = liveness_work_queue.back();
+			liveness_work_queue.pop_back();
+			apply_generic_args([&](Ref parm) { liveness_work_queue.push_back(parm.node); }, node);
+			live_set.emplace(node);
+		}
+
+		// GC the module
+		for (auto it = op_arena.begin(); it != op_arena.end(); ++it) {
+			auto node = &*it;
+			if (!live_set.contains(node)) {
+				garbage.push_back(node);
+			}
+		}
+		for (auto& node : garbage) {
+			destroy_node(node);
+		}
+		garbage.clear();
+	}
 
 	Compiler::Compiler() : impl(new RGCImpl) {}
 	Compiler::~Compiler() {
@@ -184,44 +248,6 @@ namespace vuk {
 		}
 	}
 
-	std::optional<Ref> get_def2(Ref ref) {
-		if (!ref.node->links) {
-			return {};
-		}
-		auto link = &ref.link();
-		while (link->prev) {
-			link = link->prev;
-		}
-		auto def = link->def;
-		switch (def.node->kind) {
-		case Node::CONSTRUCT:
-		case Node::SPLICE:
-		case Node::ACQUIRE_NEXT_IMAGE:
-			return def;
-		case Node::EXTRACT: {
-			auto compdef_ = get_def2(def.node->extract.composite);
-			if (!compdef_) {
-				return {};
-			}
-			auto compdef = *compdef_;
-			auto index = *eval<uint64_t>(def.node->extract.index);
-
-			switch (compdef.node->kind) {
-			case Node::CONSTRUCT:
-				return get_def2(compdef.node->construct.args[index + 1]);
-			case Node::SPLICE:
-				return compdef;
-			default:
-				assert(0);
-			}
-		}
-		case Node::SLICE:
-			return get_def2(def.node->slice.image);
-		default:
-			assert(0);
-		}
-	}
-
 	void RGCImpl::process_node_links(IRModule* module,
 	                                 Node* node,
 	                                 std::pmr::vector<Ref>& pass_reads,
@@ -288,62 +314,82 @@ namespace vuk {
 			return last_write;
 		};
 
-		auto add_result = [&](Node* node, size_t output_idx, Ref src) {
-			Ref{ node, output_idx }.link().def = { node, output_idx };
-			if (!src.node->links) {
+		auto add_result = [&](Node* node, size_t output_idx, Ref parm) {
+			Ref out = Ref{ node, output_idx };
+			out.link().def = { node, output_idx };
+
+			auto link = &parm.link();
+			bool see_through_splice = parm.node->kind == Node::SPLICE && parm.node->splice.dst_access == Access::eNone &&
+			                          parm.node->splice.dst_domain == DomainFlagBits::eAny &&
+			                          (!parm.node->splice.rel_acq || parm.node->splice.rel_acq->status == Signal::Status::eDisarmed);
+			if (see_through_splice) {
+				link = &parm.node->splice.src[parm.index].link();
+			}
+			if (!parm.node->links) {
 				assert(do_ssa);
 				return;
 			}
 
-			auto& prev = Ref{ node, output_idx }.link().prev;
+			auto& prev = out.link().prev;
 			if (!do_ssa) {
-				assert(!src.link().next);
+				VUK_ICE(!link->next);
 				assert(!prev);
 			}
-			src.link().next = &Ref{ node, output_idx }.link();
-			prev = &src.link();
+			link->next = &out.link();
+			prev = link;
 		};
 
 		auto add_write = [&](Node* node, Ref& parm, size_t index, Subrange::Image requested = {}) -> void {
 			assert(parm.node->kind != Node::GARBAGE);
-			if (!parm.node->links) {
+			bool see_through_splice = parm.node->kind == Node::SPLICE && parm.node->splice.dst_access == Access::eNone &&
+			                          parm.node->splice.dst_domain == DomainFlagBits::eAny &&
+			                          (!parm.node->splice.rel_acq || parm.node->splice.rel_acq->status == Signal::Status::eDisarmed);
+			auto& st_parm = see_through_splice ? parm.node->splice.src[parm.index] : parm;
+			if (!st_parm.node->links) {
 				assert(do_ssa);
 				// external node -> init
-				allocate_node_links(parm.node, allocator);
-				for (size_t i = 0; i < parm.node->type.size(); i++) {
-					Ref{ parm.node, 0 }.link().def = { parm.node, i };
+				allocate_node_links(st_parm.node, allocator);
+				for (size_t i = 0; i < st_parm.node->type.size(); i++) {
+					Ref{ st_parm.node, 0 }.link().def = { st_parm.node, i };
 				}
 			}
-
-			if (parm.link().undef.node != nullptr) { // there is already a write -> do SSA rewrite
+			auto link = &st_parm.link();
+			if (link->undef.node != nullptr) { // there is already a write -> do SSA rewrite
 				assert(do_ssa);
-				auto old_ref = parm.link().undef;           // this is an rref
+				auto old_ref = link->undef;                 // this is an rref
 				assert(node->index >= old_ref.node->index); // we are after the existing write
 
 				// attempt to find the final revision of this
 				// this could be either the last write on the main chain, or the last write on a child chain
-				auto last_write = walk_writes(parm, requested);
+				auto last_write = walk_writes(see_through_splice ? parm.node->splice.src[parm.index] : parm, requested);
 				parm = last_write;
+				link = &parm.link();
 			}
-			parm.link().undef = { node, index };
+			link->undef = { node, index };
 		};
 
 		auto add_read = [&](Node* node, Ref& parm, size_t index) {
 			assert(parm.node->kind != Node::GARBAGE);
-			if (!parm.node->links) {
+			bool see_through_splice = parm.node->kind == Node::SPLICE && parm.node->splice.dst_access == Access::eNone &&
+			                          parm.node->splice.dst_domain == DomainFlagBits::eAny &&
+			                          (!parm.node->splice.rel_acq || parm.node->splice.rel_acq->status == Signal::Status::eDisarmed);
+			auto& st_parm = see_through_splice ? parm.node->splice.src[parm.index] : parm;
+			if (!st_parm.node->links) {
 				assert(do_ssa);
 				// external node -> init
-				allocate_node_links(parm.node, allocator);
-				for (size_t i = 0; i < parm.node->type.size(); i++) {
-					Ref{ parm.node, 0 }.link().def = { parm.node, i };
+				allocate_node_links(st_parm.node, allocator);
+				for (size_t i = 0; i < st_parm.node->type.size(); i++) {
+					Ref{ st_parm.node, 0 }.link().def = { st_parm.node, i };
 				}
 			}
-			if (parm.link().undef.node != nullptr && node->index > parm.link().undef.node->index) { // there is already a write and it is earlier than us
+			auto link = &st_parm.link();
+			if (link->undef.node != nullptr && node->index > link->undef.node->index) { // there is already a write and it is earlier than us
 				assert(do_ssa);
-				auto last_write = walk_writes(parm, {});
+				auto last_write = walk_writes(see_through_splice ? parm.node->splice.src[parm.index] : parm, {});
 				parm = last_write;
+				link = &parm.link();
 			}
-			parm.link().reads.append(pass_reads, { node, index });
+			link->reads.append(pass_reads, { node, index });
 		};
 
 		switch (node->kind) {
@@ -367,12 +413,36 @@ namespace vuk {
 			}
 
 			break;
-		case Node::SPLICE: { // ~~ write joiner
+		case Node::SPLICE: { // ~~ read joiner
 			for (size_t i = 0; i < node->type.size(); i++) {
 				if (!node->splice.rel_acq || (node->splice.rel_acq && node->splice.rel_acq->status == Signal::Status::eDisarmed)) {
-					add_write(node, node->splice.src[i], i);
-					add_result(node, i, node->splice.src[i]);
-				} else {
+					if (node->splice.dst_access == Access::eNone && node->splice.dst_domain == DomainFlagBits::eAny) {
+						// do not rewrite SPLICEs
+						/* auto& parm = node->splice.src[i];
+						if (!parm.node->links) {
+						  assert(do_ssa);
+						  // external node -> init
+						  allocate_node_links(parm.node, allocator);
+						  for (size_t i = 0; i < parm.node->type.size(); i++) {
+						    Ref{ parm.node, 0 }.link().def = { parm.node, i };
+						  }
+						}
+
+						parm.link().reads.append(pass_reads, { node, i });
+						*/
+						if (do_ssa){
+							add_write(node, node->splice.src[i], i);
+							add_result(node, i, node->splice.src[i]);
+						} else {
+							Ref{ node, i }.link().def = { node, i };
+							Ref{ node, i }.link().prev = &node->splice.src[i].link();
+						}
+						
+					} else { // releases are still writes...
+						add_write(node, node->splice.src[i], i);
+						add_result(node, i, node->splice.src[i]);
+					}
+				} else { // acquire
 					Ref{ node, i }.link().def = { node, i };
 				}
 			}
@@ -417,7 +487,18 @@ namespace vuk {
 			for (auto& ret_t : node->type) {
 				assert(ret_t->kind == Type::ALIASED_TY);
 				auto ref_idx = ret_t->aliased.ref_idx;
-				add_result(node, index, node->call.args[ref_idx]);
+				auto& arg_ty = args[ref_idx - first_parm];
+				if (arg_ty->kind == Type::IMBUED_TY) {
+					auto access = arg_ty->imbued.access;
+					if (is_write_access(access)) {
+						add_result(node, index, node->call.args[ref_idx]);
+					} else {
+						Ref{ node, index }.link().def = { node, index };
+						Ref{ node, index }.link().prev = &node->call.args[ref_idx].link();
+					}
+				} else {
+					assert(0);
+				}
 				index++;
 			}
 			break;
@@ -639,8 +720,9 @@ namespace vuk {
 						if (arg_ty->kind == Type::IMBUED_TY) {
 							auto access = arg_ty->imbued.access;
 							auto& link = parm.link();
-							if (link.urdef.node->kind == Node::CONSTRUCT) {
-								auto& args = link.urdef.node->construct.args;
+							auto def = get_def2(parm);
+							if (def && def->node->kind == Node::CONSTRUCT) {
+								auto& args = def->node->construct.args;
 								if (is_framebuffer_attachment(access)) {
 									if (is_placeholder(args[9])) {
 										placeholder_to_constant(args[9], 1U); // can only render to a single mip level
@@ -672,8 +754,8 @@ namespace vuk {
 										placeholder_to_constant(args[7], *layer_count);
 									}
 								}
-							} else if (link.urdef.node->kind == Node::ACQUIRE_NEXT_IMAGE) {
-								auto e = eval<Swapchain*>(link.urdef.node->acquire_next_image.swapchain);
+							} else if (def && def->node->kind == Node::ACQUIRE_NEXT_IMAGE) {
+								auto e = eval<Swapchain*>(def->node->acquire_next_image.swapchain);
 								if (e.holds_value()) {
 									Swapchain& swp = **e;
 									extent = Extent2D{ swp.images[0].extent.width, swp.images[0].extent.height };
@@ -715,8 +797,6 @@ namespace vuk {
 				auto& link = node->links[i];
 				if (!link.prev) {
 					chains.push_back(&link);
-				} else {
-					assert(link.prev->next == &link);
 				}
 			}
 		}
@@ -769,6 +849,8 @@ namespace vuk {
 										assert(0);
 									}
 								} else if (r.node->kind == Node::CONVERGE) {
+									continue;
+								} else if (r.node->kind == Node::SPLICE) {
 									continue;
 								} else {
 									assert(0);
@@ -1077,22 +1159,27 @@ namespace vuk {
 				// TODO: arrays!
 				if (node->type[0]->kind != Type::ARRAY_TY && node->links->reads.size() > 0 &&
 				    node->type[0]->hash_value != current_module->types.builtin_sampled_image) { // we are trying to read from it :(
-					auto offender = node->links->reads.to_span(impl->pass_reads)[0];
+					auto reads = node->links->reads.to_span(impl->pass_reads);
+					for (auto offender : reads) {
+						if (offender.node->kind == Node::SPLICE) { // TODO: not actually a read
+							continue;
+						}
 
-					auto message0 = format_graph_message(Level::eError, offender.node, "tried to read something that was never written:\n");
-					std::string message1;
-					if (node->debug_info && node->debug_info->result_names.size() > 0) {
-						message1 = fmt::format("	{} was declared/discarded on {}\n", node->debug_info->result_names[0], format_source_location(node));
-					} else {
-						message1 = fmt::format("	declared/discarded on {}\n", format_source_location(node));
+						auto message0 = format_graph_message(Level::eError, offender.node, "tried to read something that was never written:\n");
+						std::string message1;
+						if (node->debug_info && node->debug_info->result_names.size() > 0) {
+							message1 = fmt::format("	{} was declared/discarded on {}\n", node->debug_info->result_names[0], format_source_location(node));
+						} else {
+							message1 = fmt::format("	declared/discarded on {}\n", format_source_location(node));
+						}
+						if (offender.node->kind == Node::CALL) {
+							auto fn_type = offender.node->call.args[0].type();
+							size_t first_parm = fn_type->kind == Type::OPAQUE_FN_TY ? 1 : 4;
+							offender.index -= first_parm;
+						}
+						auto message2 = fmt::format("	tried to be read as {}th argument", offender.index);
+						return { expected_error, RenderGraphException{ message0 + message1 + message2 } };
 					}
-					if (offender.node->kind == Node::CALL) {
-						auto fn_type = offender.node->call.args[0].type();
-						size_t first_parm = fn_type->kind == Type::OPAQUE_FN_TY ? 1 : 4;
-						offender.index -= first_parm;
-					}
-					auto message2 = fmt::format("	tried to be read as {}th argument", offender.index);
-					return { expected_error, RenderGraphException{ message0 + message1 + message2 } };
 				} else if (!node->links->undef) {
 					// TODO: DCE
 					break;
@@ -1105,9 +1192,14 @@ namespace vuk {
 				}
 				// it is either not splice or there are reads
 				if (undef->links->reads.size() > 0) {
-					auto& offender = undef->links->reads.to_span(impl->pass_reads)[0];
-					return { expected_error,
-						       RenderGraphException{ format_graph_message(Level::eError, offender.node, "tried to read something that was never written.") } };
+					auto reads = undef->links->reads.to_span(impl->pass_reads);
+					for (auto offender : reads) {
+						if (offender.node->kind == Node::SPLICE) {
+							continue;
+						}
+						return { expected_error,
+							       RenderGraphException{ format_graph_message(Level::eError, offender.node, "tried to read something that was never written.") } };
+					}
 				}
 				break;
 			}
@@ -1200,6 +1292,7 @@ namespace vuk {
 		std::sort(nodes.begin(), nodes.end(), [](Node* a, Node* b) { return a->index < b->index; });
 		// link with SSA
 		build_links(module, nodes.begin(), nodes.end(), pass_reads, child_chains, allocator);
+		module->link_frontier = module->node_counter;
 		return { expected_value };
 	}
 
@@ -1337,45 +1430,11 @@ namespace vuk {
 
 		GraphDumper::begin_cluster("fragments");
 		std::pmr::polymorphic_allocator<std::byte> allocator(&impl->mbr);
-		for (auto& m : modules) {
-			// GC the module
-			for (auto it = m->op_arena.begin(); it != m->op_arena.end();) {
-				auto node = &*it;
-				if (m->potential_garbage.contains(node)) {
-					++it;
-					continue;
-				}
-				if (node->kind == Node::GARBAGE) {
-					it = m->op_arena.erase(it);
-				} else {
-					apply_generic_args(
-					    [&](Ref parm) {
-						    if (m->potential_garbage.contains(parm.node)) {
-							    m->potential_garbage[parm.node]++;
-						    }
-					    },
-					    node);
-					++it;
-				}
-			}
-			std::vector<Node*> to_garbage;
-			for (auto& [node, counts] : m->potential_garbage) {
-				if (counts == 0) {
-					to_garbage.push_back(node);
-				}
-				counts = 0;
-			}
 
-			for (auto& tg : to_garbage) {
-				m->potential_garbage.erase(tg);
-			}
-			for (auto& node : to_garbage) {
-				m->destroy_node(node);
-			}
-			for (auto& node : m->garbage) {
-				m->destroy_node(node);
-			}
-			m->garbage.clear();
+		for (auto& m : modules) {
+			// gc the module
+			m->collect_garbage(allocator);
+
 			// implicit link the module
 			GraphDumper::begin_cluster(std::string("fragments_") + std::to_string(m->module_id));
 			GraphDumper::dump_graph_op(m->op_arena, false, false);
@@ -1433,8 +1492,6 @@ namespace vuk {
 				for (size_t i = 0; i < node->splice.src.size(); i++) {
 					auto needle = Ref{ node, i };
 					auto parm = node->splice.src[i];
-
-					replaces.replace(needle, parm);
 
 					// a splice that requires signalling -> defer it
 					if (node->splice.rel_acq != nullptr) {

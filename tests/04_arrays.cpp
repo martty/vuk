@@ -333,10 +333,16 @@ TEST_CASE("read convergence") {
 	auto img = vuk::clear_image(vuk::declare_ia("src", ia), vuk::ClearColor(0.1f, 0.1f, 0.1f, 0.1f));
 	std::string trace = "";
 	auto mipped = generate_mips(trace, std::move(img), 5);
-	auto pass = vuk::make_pass("rd", [&trace](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eTransferRead) src) { trace += "r"; });
-	pass(mipped);
-	mipped.wait(*test_context.allocator, test_context.compiler);
-	CHECK(trace == "1234r");
+	auto passr = vuk::make_pass("rd", [&trace](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eTransferRead) src) {
+		trace += "r";
+		return src;
+	});
+	auto passw = vuk::make_pass("wr", [&trace](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eTransferWrite) src) {
+		trace += "w";
+		return src;
+	});
+	passw(passr(mipped)).wait(*test_context.allocator, test_context.compiler);
+	CHECK(trace == "1234rw");
 }
 
 TEST_CASE("read convergence 2") {
@@ -345,10 +351,11 @@ TEST_CASE("read convergence 2") {
 	auto img2 = vuk::clear_image(vuk::declare_ia("src2", ia), vuk::ClearColor(0.1f, 0.1f, 0.1f, 0.1f));
 	std::string trace = "";
 	auto mipped = generate_mips(trace, img, 5);
-	auto pass =
-	    vuk::make_pass("rd", [&trace](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eTransferRead) src, VUK_IA(vuk::eTransferWrite) src2) { trace += "r"; });
-	pass(std::move(mipped), img2);
-	img.wait(*test_context.allocator, test_context.compiler);
+	auto pass = vuk::make_pass("rd", [&trace](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eTransferRead) src, VUK_IA(vuk::eTransferWrite) src2) {
+		trace += "r";
+		return src;
+	});
+	pass(std::move(mipped), img2).wait(*test_context.allocator, test_context.compiler);
 	CHECK(trace == "1234r");
 }
 
