@@ -319,18 +319,16 @@ namespace vuk {
 			Ref out = Ref{ node, output_idx };
 			out.link().def = { node, output_idx };
 
-			auto link = &parm.link();
 			bool see_through_splice = parm.node->kind == Node::SPLICE && parm.node->splice.dst_access == Access::eNone &&
 			                          parm.node->splice.dst_domain == DomainFlagBits::eAny &&
 			                          (!parm.node->splice.rel_acq || parm.node->splice.rel_acq->status == Signal::Status::eDisarmed);
-			if (see_through_splice) {
-				link = &parm.node->splice.src[parm.index].link();
-			}
-			if (!parm.node->links) {
+			auto& st_parm = see_through_splice ? parm.node->splice.src[parm.index] : parm;
+			if (!st_parm.node->links) {
 				assert(do_ssa);
 				return;
 			}
-
+			
+			auto link = &st_parm.link();
 			auto& prev = out.link().prev;
 			if (!do_ssa) {
 				VUK_ICE(!link->next);
