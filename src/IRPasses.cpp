@@ -251,6 +251,7 @@ namespace vuk {
 	void RGCImpl::process_node_links(IRModule* module,
 	                                 Node* node,
 	                                 std::pmr::vector<Ref>& pass_reads,
+	                                 std::pmr::vector<Ref>& pass_nops,
 	                                 std::pmr::vector<ChainLink*>& child_chains,
 	                                 std::pmr::vector<Node*>& new_nodes,
 	                                 std::pmr::polymorphic_allocator<std::byte> allocator,
@@ -413,31 +414,31 @@ namespace vuk {
 			}
 
 			break;
-		case Node::SPLICE: { // ~~ read joiner
+		case Node::SPLICE: { // ~~ nop joiner
+			                   /*
+                 " results must be through splices "
+                 a -> splice
+			             -> b (r or w)
+                 must rewrite into
+                 a -> splice -> b
+			             
+                 " dependencies must not bypass splices "
+                 a -> splice -> b
+                 must not rewrite into
+                 a -> b
+			                 */
 			for (size_t i = 0; i < node->type.size(); i++) {
 				if (!node->splice.rel_acq || (node->splice.rel_acq && node->splice.rel_acq->status == Signal::Status::eDisarmed)) {
 					if (node->splice.dst_access == Access::eNone && node->splice.dst_domain == DomainFlagBits::eAny) {
-						// do not rewrite SPLICEs
-						/* auto& parm = node->splice.src[i];
-						if (!parm.node->links) {
-						  assert(do_ssa);
-						  // external node -> init
-						  allocate_node_links(parm.node, allocator);
-						  for (size_t i = 0; i < parm.node->type.size(); i++) {
-						    Ref{ parm.node, 0 }.link().def = { parm.node, i };
-						  }
-						}
-
-						parm.link().reads.append(pass_reads, { node, i });
-						*/
-						if (do_ssa){
+						if (do_ssa) {
 							add_write(node, node->splice.src[i], i);
 							add_result(node, i, node->splice.src[i]);
 						} else {
+							node->splice.src[i].link().nops.append(pass_nops, { node, i });
 							Ref{ node, i }.link().def = { node, i };
 							Ref{ node, i }.link().prev = &node->splice.src[i].link();
 						}
-						
+
 					} else { // releases are still writes...
 						add_write(node, node->splice.src[i], i);
 						add_result(node, i, node->splice.src[i]);
@@ -569,6 +570,7 @@ namespace vuk {
 
 	Result<void> RGCImpl::build_links(std::vector<Node*>& working_set, std::pmr::polymorphic_allocator<std::byte> allocator) {
 		pass_reads.clear();
+		pass_nops.clear();
 		child_chains.clear();
 
 		// in each IRModule module, look at the nodes
@@ -585,7 +587,22 @@ namespace vuk {
 
 		std::pmr::vector<Node*> new_nodes;
 		for (auto& node : working_set) {
-			process_node_links(current_module.get(), node, pass_reads, child_chains, new_nodes, allocator, false);
+			process_node_links(current_module.get(), node, pass_reads, pass_nops, child_chains, new_nodes, allocator, false);
+		}
+
+		// fixup splice links - they are bridged
+		for (auto& node : working_set) {
+			switch (node->kind) {
+			case Node::SPLICE: {
+				for (size_t i = 0; i < node->type.size(); i++) {
+					if (!node->splice.rel_acq || (node->splice.rel_acq && node->splice.rel_acq->status == Signal::Status::eDisarmed)) {
+						if (node->splice.dst_access == Access::eNone && node->splice.dst_domain == DomainFlagBits::eAny) {
+							Ref{ node, i }.link() = node->splice.src[i].link();
+						}
+					}
+				}
+			}
+			}
 		}
 
 		working_set.insert(working_set.end(), new_nodes.begin(), new_nodes.end());
@@ -610,6 +627,7 @@ namespace vuk {
 	                                  It start,
 	                                  It end,
 	                                  std::pmr::vector<Ref>& pass_reads,
+	                                  std::pmr::vector<Ref>& pass_nops,
 	                                  std::pmr::vector<ChainLink*>& child_chains,
 	                                  std::pmr::polymorphic_allocator<std::byte> allocator) {
 		std::pmr::vector<Node*> new_nodes(allocator);
@@ -617,7 +635,7 @@ namespace vuk {
 			allocate_node_links(*it, allocator);
 		}
 		for (auto it = start; it != end; ++it) {
-			process_node_links(module, *it, pass_reads, child_chains, new_nodes, allocator, true);
+			process_node_links(module, *it, pass_reads, pass_nops, child_chains, new_nodes, allocator, true);
 		}
 		for (auto it = start; it != end; ++it) {
 			build_urdef(*it);
@@ -1287,11 +1305,12 @@ namespace vuk {
 		}
 
 		std::pmr::vector<Ref> pass_reads(allocator);
+		std::pmr::vector<Ref> pass_nops(allocator);
 		std::pmr::vector<ChainLink*> child_chains(allocator);
 
 		std::sort(nodes.begin(), nodes.end(), [](Node* a, Node* b) { return a->index < b->index; });
 		// link with SSA
-		build_links(module, nodes.begin(), nodes.end(), pass_reads, child_chains, allocator);
+		build_links(module, nodes.begin(), nodes.end(), pass_reads, pass_nops, child_chains, allocator);
 		module->link_frontier = module->node_counter;
 		return { expected_value };
 	}

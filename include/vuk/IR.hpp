@@ -280,6 +280,7 @@ namespace vuk {
 		ChainLink* prev = nullptr; // if this came from a previous undef, we link them together
 		Ref def;
 		RelSpan<Ref> reads;
+		RelSpan<Ref> nops;
 		Ref undef;
 		ChainLink* next = nullptr; // if this links to a def, we link them together
 		RelSpan<ChainLink*> child_chains;
