@@ -1499,8 +1499,7 @@ namespace vuk {
 
 						bool is_release = false;
 						if (node->splice.dst_domain == DomainFlagBits::ePE) {
-							auto& link = node->splice.src[0].link();
-							auto& swp = sched.get_value<Swapchain>(link.urdef.node->acquire_next_image.swapchain);
+							auto& swp = sched.get_value<Swapchain>(get_def2(node->splice.src[0])->node->acquire_next_image.swapchain);
 							auto it = std::find_if(pe_streams.begin(), pe_streams.end(), [&](auto& pe_stream) { return pe_stream.swp == &swp; });
 							assert(it != pe_streams.end());
 							dst_stream = &*it;
@@ -1583,8 +1582,7 @@ namespace vuk {
 							}
 
 							if (dst_domain == DomainFlagBits::ePE) {
-								auto& link = node->splice.src[0].link();
-								auto& swp = sched.get_value<Swapchain>(link.urdef.node->acquire_next_image.swapchain);
+								auto& swp = sched.get_value<Swapchain>(get_def2(node->splice.src[0])->node->acquire_next_image.swapchain);
 								assert(sched_stream->domain & DomainFlagBits::eDevice);
 								auto result = dynamic_cast<VkQueueStream*>(sched_stream)->present(swp);
 								// TODO: do something with the result here

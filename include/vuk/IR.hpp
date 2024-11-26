@@ -862,7 +862,7 @@ namespace vuk {
 			return eval<T>(ref.node->construct.args[0]);
 		}
 		case Node::SPLICE: {
-			if (ref.node->splice.rel_acq->status == Signal::Status::eDisarmed) {
+			if (!ref.node->splice.rel_acq || (ref.node->splice.rel_acq->status == Signal::Status::eDisarmed)) {
 				return eval<T>(ref.node->splice.src[ref.index]);
 			} else {
 				return { expected_value, static_cast<T>(ref.node->splice.values[ref.index]) };
