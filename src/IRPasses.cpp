@@ -70,6 +70,11 @@ namespace vuk {
 		// initial set of live nodes
 		for (auto it = op_arena.begin(); it != op_arena.end();) {
 			auto node = &*it;
+			// if the node is garbage, just collect it now
+			if (node->kind == Node::GARBAGE) {
+				it = op_arena.erase(it);
+				continue;
+			}
 			// splices in potential garbage are not in the initial set
 			if (node->kind == Node::SPLICE && node->splice.rel_acq == nullptr) {
 				++it;
@@ -81,11 +86,6 @@ namespace vuk {
 					continue;
 				}
 				// splice nodes that are not potential garbage are in the initial set even before the link frontier
-			}
-			// if the node is garbage, just collect it now
-			if (node->kind == Node::GARBAGE) {
-				it = op_arena.erase(it);
-				continue;
 			}
 			// everything else is in the initial set
 			liveness_work_queue.emplace_back(node);
