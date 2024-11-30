@@ -1501,7 +1501,7 @@ namespace vuk {
 
 						bool is_release = false;
 						if (node->splice.dst_domain == DomainFlagBits::ePE) {
-							auto& swp = sched.get_value<Swapchain>(get_def2(node->splice.src[0])->node->acquire_next_image.swapchain);
+							auto& swp = *sched.get_value<Swapchain*>(get_def2(node->splice.src[0])->node->acquire_next_image.swapchain);
 							auto it = std::find_if(pe_streams.begin(), pe_streams.end(), [&](auto& pe_stream) { return pe_stream.swp == &swp; });
 							assert(it != pe_streams.end());
 							dst_stream = &*it;
@@ -1584,7 +1584,7 @@ namespace vuk {
 							}
 
 							if (dst_domain == DomainFlagBits::ePE) {
-								auto& swp = sched.get_value<Swapchain>(get_def2(node->splice.src[0])->node->acquire_next_image.swapchain);
+								auto& swp = *sched.get_value<Swapchain*>(get_def2(node->splice.src[0])->node->acquire_next_image.swapchain);
 								assert(sched_stream->domain & DomainFlagBits::eDevice);
 								auto result = dynamic_cast<VkQueueStream*>(sched_stream)->present(swp);
 								// TODO: do something with the result here
@@ -1667,7 +1667,7 @@ namespace vuk {
 
 			case Node::ACQUIRE_NEXT_IMAGE: {
 				if (sched.process(item)) {
-					auto& swp = sched.get_value<Swapchain>(node->acquire_next_image.swapchain);
+					auto& swp = *sched.get_value<Swapchain*>(node->acquire_next_image.swapchain);
 					swp.linear_index = (swp.linear_index + 1) % swp.images.size();
 					swp.acquire_result =
 					    ctx.vkAcquireNextImageKHR(ctx.device, swp.swapchain, UINT64_MAX, swp.semaphores[2 * swp.linear_index], VK_NULL_HANDLE, &swp.image_index);

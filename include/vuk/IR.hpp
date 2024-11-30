@@ -871,7 +871,7 @@ namespace vuk {
 			}
 		}
 		case Node::ACQUIRE_NEXT_IMAGE: {
-			Swapchain* swp = *eval<Swapchain*>(ref.node->acquire_next_image.swapchain);
+			Swapchain* swp = **eval<Swapchain**>(ref.node->acquire_next_image.swapchain);
 			return { expected_value, reinterpret_cast<T>(&swp->images[0]) };
 		}
 		default:
@@ -1256,7 +1256,7 @@ namespace vuk {
 				auto offsets = std::vector<size_t>{ 0 };
 
 				auto swapchain_type = emplace_type(std::shared_ptr<Type>(new Type{ .kind = Type::COMPOSITE_TY,
-				                                                                   .size = sizeof(Swapchain),
+				                                                                   .size = sizeof(Swapchain*),
 				                                                                   .debug_info = allocate_type_debug_info("swapchain"),
 				                                                                   .offsets = offsets,
 				                                                                   .composite = { .types = swp_, .tag = 2 } }));
@@ -1552,9 +1552,10 @@ namespace vuk {
 		}
 
 		Ref make_declare_swapchain(Swapchain& bundle) {
+			auto swpptr = new void*(&bundle);
 			auto args_ptr = new Ref[2];
 			auto mem_ty = new std::shared_ptr<Type>[1]{ types.memory(sizeof(Swapchain*)) };
-			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = &bundle, .owned = false } }));
+			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = swpptr, .owned = true } }));
 			std::vector<Ref> imgs;
 			for (auto i = 0; i < bundle.images.size(); i++) {
 				imgs.push_back(make_declare_image(bundle.images[i]));

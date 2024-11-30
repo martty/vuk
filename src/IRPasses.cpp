@@ -789,9 +789,9 @@ namespace vuk {
 									}
 								}
 							} else if (def && def->node->kind == Node::ACQUIRE_NEXT_IMAGE) {
-								auto e = eval<Swapchain*>(def->node->acquire_next_image.swapchain);
+								auto e = eval<Swapchain**>(def->node->acquire_next_image.swapchain);
 								if (e.holds_value()) {
-									Swapchain& swp = **e;
+									Swapchain& swp = ***e;
 									extent = Extent2D{ swp.images[0].extent.width, swp.images[0].extent.height };
 									layer_count = swp.images[0].layer_count;
 									samples = Samples::e1;

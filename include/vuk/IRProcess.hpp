@@ -74,7 +74,7 @@ namespace vuk {
 					assert(0);
 				}
 			} else if (parm.node->kind == Node::ACQUIRE_NEXT_IMAGE) {
-				Swapchain* swp = reinterpret_cast<Swapchain*>(get_value(parm.node->acquire_next_image.swapchain));
+				Swapchain* swp = *reinterpret_cast<Swapchain**>(get_value(parm.node->acquire_next_image.swapchain));
 				return &swp->images[swp->image_index];
 			} else {
 				if (parm.node->execution_info) {
