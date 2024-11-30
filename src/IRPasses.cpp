@@ -65,11 +65,13 @@ namespace vuk {
 
 	void IRModule::collect_garbage(std::pmr::polymorphic_allocator<std::byte> allocator) {
 		std::pmr::vector<Node*> liveness_work_queue(allocator);
-		std::pmr::unordered_set<Node*> live_set(allocator);
+
+		enum { DEAD = 0, ALIVE = 1 };
 
 		// initial set of live nodes
 		for (auto it = op_arena.begin(); it != op_arena.end();) {
 			auto node = &*it;
+			node->flag = DEAD;
 			// if the node is garbage, just collect it now
 			if (node->kind == Node::GARBAGE) {
 				it = op_arena.erase(it);
@@ -77,11 +79,9 @@ namespace vuk {
 			}
 			if (node->kind == Node::SPLICE) {
 				// dropped splices not in the initial set
-				if(!node->splice.held) {
+				if (!node->splice.held) {
 					++it;
 					continue;
-				} else { // held splices are always live
-					live_set.emplace(node);
 				}
 			}
 			if (node->index < (module_id << 32 | link_frontier)) {
@@ -100,14 +100,20 @@ namespace vuk {
 		while (!liveness_work_queue.empty()) {
 			auto node = liveness_work_queue.back();
 			liveness_work_queue.pop_back();
-			apply_generic_args([&](Ref parm) { liveness_work_queue.push_back(parm.node); }, node);
-			live_set.emplace(node);
+			node->flag = ALIVE;
+			apply_generic_args(
+			    [&](Ref parm) {
+				    if (parm.node->flag != ALIVE) {
+					    liveness_work_queue.push_back(parm.node);
+				    }
+			    },
+			    node);
 		}
 
 		// GC the module
 		for (auto it = op_arena.begin(); it != op_arena.end(); ++it) {
 			auto node = &*it;
-			if (!live_set.contains(node)) {
+			if (node->flag == DEAD) {
 				garbage.push_back(node);
 			}
 		}
@@ -1485,6 +1491,11 @@ namespace vuk {
 			VUK_DO_OR_RETURN(impl->implicit_linking(m, allocator));
 			for (auto& op : m->op_arena) {
 				op.links = nullptr;
+			}
+		}
+		for (auto& m : modules) {
+			for (auto& op : m->op_arena) {
+				op.flag = 0;
 			}
 		}
 		GraphDumper::next_cluster("fragments", "modules");
