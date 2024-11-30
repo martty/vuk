@@ -18,6 +18,7 @@
 #include <span>
 #include <unordered_map>
 #include <vector>
+#include <atomic>
 
 // #define VUK_GARBAGE_SAN
 
