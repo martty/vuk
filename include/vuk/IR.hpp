@@ -95,33 +95,34 @@ namespace vuk {
 		using Hash = uint32_t;
 		Hash hash_value;
 
+		static Hash hash_integer(size_t width) {
+			Hash v = (Hash)Type::INTEGER_TY;
+			hash_combine_direct(v, width);
+			return v;
+		}
+
 		static Hash hash(Type const* t) {
-			Hash v = 0;
+			Hash v = (Hash)t->kind;
 			switch (t->kind) {
 			case IMBUED_TY:
-				v = Type::hash(t->imbued.T->get());
-				hash_combine_direct(v, IMBUED_TY);
+				hash_combine_direct(v, Type::hash(t->imbued.T->get()));
 				hash_combine_direct(v, (uint32_t)t->imbued.access);
 				return v;
 			case ALIASED_TY:
-				v = Type::hash(t->aliased.T->get());
-				hash_combine_direct(v, ALIASED_TY);
+				hash_combine_direct(v, Type::hash(t->aliased.T->get()));
 				hash_combine_direct(v, (uint32_t)t->aliased.ref_idx);
 				return v;
 			case MEMORY_TY:
-				v = 0;
-				hash_combine_direct(v, MEMORY_TY);
 				hash_combine_direct(v, (uint32_t)t->size);
 				return v;
 			case INTEGER_TY:
-				return t->integer.width;
+				hash_combine_direct(v, t->integer.width);
+				return v;
 			case ARRAY_TY:
-				v = Type::hash(t->array.T->get());
-				hash_combine_direct(v, ARRAY_TY);
+				hash_combine_direct(v, Type::hash(t->array.T->get()));
 				hash_combine_direct(v, (uint32_t)t->array.count);
 				return v;
 			case COMPOSITE_TY: {
-				v = COMPOSITE_TY;
 				for (int i = 0; i < t->composite.types.size(); i++) {
 					hash_combine_direct(v, Type::hash(t->composite.types[i].get()));
 				}
@@ -1080,7 +1081,6 @@ namespace vuk {
 
 		plf::colony<Node /*, inline_alloc<Node, 4 * 1024>*/> op_arena;
 		std::vector<Node*> garbage;
-		std::unordered_map<Node*, size_t> potential_garbage;
 		size_t node_counter = 0;
 		size_t link_frontier = 0;
 		size_t module_id = 0;
@@ -1152,8 +1152,8 @@ namespace vuk {
 			}
 
 			std::shared_ptr<Type> u64() {
-				Type ty{ .kind = Type::INTEGER_TY, .size = sizeof(uint64_t), .integer = { .width = 64 } };
-				auto it = type_map.find(Type::hash(&ty));
+				auto hash = Type::hash_integer(64);
+				auto it = type_map.find(hash);
 				if (it != type_map.end()) {
 					if (auto ty = it->second.lock()) {
 						return ty;
@@ -1164,8 +1164,8 @@ namespace vuk {
 			}
 
 			std::shared_ptr<Type> u32() {
-				Type ty{ .kind = Type::INTEGER_TY, .size = sizeof(uint32_t), .integer = { .width = 32 } };
-				auto it = type_map.find(Type::hash(&ty));
+				auto hash = Type::hash_integer(32);
+				auto it = type_map.find(hash);
 				if (it != type_map.end()) {
 					if (auto ty = it->second.lock()) {
 						return ty;
@@ -1798,7 +1798,6 @@ namespace vuk {
 				assert(node->kind == Node::SPLICE);
 
 				node->splice.held = false;
-				source_module->potential_garbage.emplace(node, 0);
 			}
 		}
 
