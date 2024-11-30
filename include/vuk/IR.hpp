@@ -10,6 +10,7 @@
 #include "vuk/Types.hpp"
 #include "vuk/runtime/vk/VkSwapchain.hpp" //TODO: leaking vk
 
+#include <atomic>
 #include <deque>
 #include <functional>
 #include <optional>
@@ -18,7 +19,6 @@
 #include <span>
 #include <unordered_map>
 #include <vector>
-#include <atomic>
 
 // #define VUK_GARBAGE_SAN
 
@@ -1342,6 +1342,29 @@ namespace vuk {
 					}
 				}
 			}
+
+			void destroy(Type* t, void* v) {
+				if (t->hash_value == builtin_buffer) {
+					delete (Buffer*)v;
+				} else if (t->hash_value == builtin_image) {
+					delete (ImageAttachment*)v;
+				} else if (t->hash_value == builtin_sampled_image) {
+					delete (SampledImage*)v;
+				} else if (t->hash_value == builtin_sampler) {
+					delete (SamplerCreateInfo*)v;
+				} else if (t->hash_value == builtin_swapchain) {
+					delete (Swapchain**)v;
+				} else if (t->kind == Type::ARRAY_TY){
+					// currently arrays don't own their values
+					/* auto cv = (char*)v;
+					for (auto i = 0; i < t->array.count; i++) {
+						destroy(t->array.T->get(), cv);
+						cv += t->array.stride;
+					}*/
+				} else {
+					assert(0);
+				}
+			}
 		} types;
 
 		Node* emplace_op(Node v) {
@@ -1396,11 +1419,7 @@ namespace vuk {
 			case Node::SPLICE: {
 				for (auto i = 0; i < node->splice.values.size(); i++) {
 					auto& v = node->splice.values[i];
-					if (node->type[i]->hash_value == types.builtin_buffer) {
-						delete (Buffer*)v;
-					} else {
-						delete (ImageAttachment*)v;
-					}
+					types.destroy(node->type[i].get(), v);
 				}
 				delete node->splice.values.data();
 				delete node->splice.rel_acq;
