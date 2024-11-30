@@ -390,6 +390,7 @@ namespace vuk {
 				std::span<void*> values;
 				Access dst_access;
 				DomainFlagBits dst_domain;
+				bool held = true;
 			} splice;
 			struct : Fixed<1> {
 				Ref swapchain;
@@ -1716,21 +1717,21 @@ namespace vuk {
 		ExtNode(Node* node) {
 			acqrel = new AcquireRelease;
 			this->node = current_module->make_splice(node, acqrel);
-
+			this->node->splice.held = true;
 			source_module = current_module;
 		}
 
 		ExtNode(Node* node, std::vector<std::shared_ptr<ExtNode>> deps) : deps(std::move(deps)) {
 			acqrel = new AcquireRelease;
 			this->node = current_module->make_splice(node, acqrel);
-
+			this->node->splice.held = true;
 			source_module = current_module;
 		}
 
 		ExtNode(Node* node, std::shared_ptr<ExtNode> dep) {
 			acqrel = new AcquireRelease;
 			this->node = current_module->make_splice(node, acqrel);
-
+			this->node->splice.held = true;
 			deps.push_back(std::move(dep));
 
 			source_module = current_module;
@@ -1739,7 +1740,7 @@ namespace vuk {
 		ExtNode(Ref ref, std::shared_ptr<ExtNode> dep, Access access = Access::eNone, DomainFlagBits domain = DomainFlagBits::eAny) {
 			acqrel = new AcquireRelease;
 			this->node = current_module->make_ref_splice(ref, acqrel, access, domain).node;
-
+			this->node->splice.held = true;
 			deps.push_back(std::move(dep));
 
 			source_module = current_module;
@@ -1748,7 +1749,7 @@ namespace vuk {
 		ExtNode(Node* node, std::shared_ptr<ExtNode> dep, Access access, DomainFlagBits domain) {
 			acqrel = new AcquireRelease;
 			this->node = current_module->make_splice(node, acqrel, access, domain);
-
+			this->node->splice.held = true;
 			deps.push_back(std::move(dep));
 
 			source_module = current_module;
@@ -1756,13 +1757,15 @@ namespace vuk {
 
 		// for acquires - adopt the node
 		ExtNode(Node* node, ResourceUse use) : node(node) {
+			assert(node->kind == Node::SPLICE);
+
 			acqrel = new AcquireRelease;
 			acqrel->status = Signal::Status::eHostAvailable;
 			acqrel->last_use.resize(1);
 			acqrel->last_use[0] = use;
 
 			node->splice.rel_acq = acqrel;
-
+			this->node->splice.held = true;
 			source_module = current_module;
 		}
 
@@ -1770,6 +1773,7 @@ namespace vuk {
 			if (acqrel) {
 				assert(node->kind == Node::SPLICE);
 
+				node->splice.held = false;
 				source_module->potential_garbage.emplace(node, 0);
 			}
 		}

@@ -961,6 +961,8 @@ namespace vuk {
 			} else if (base_ty->hash_value == current_module->types.builtin_sampled_image) { // only image syncs
 				auto& img_att = reinterpret_cast<SampledImage*>(value)->ia;
 				key = reinterpret_cast<uint64_t>(img_att.image.image);
+			} else if (base_ty->kind == Type::INTEGER_TY){ // TODO: generalise
+				return *last_modify.at(0);
 			} else { // other types just key on the voidptr
 				key = reinterpret_cast<uint64_t>(value);
 			}
@@ -1100,10 +1102,10 @@ namespace vuk {
 					case Type::INTEGER_TY: {
 						switch (node->type[0]->integer.width) {
 						case 32:
-							sched.done(node, nullptr, do_op(uint32_t{}, node));
+							sched.done(node, host_stream, do_op(uint32_t{}, node));
 							break;
 						case 64:
-							sched.done(node, nullptr, do_op(uint64_t{}, node));
+							sched.done(node, host_stream, do_op(uint64_t{}, node));
 							break;
 						default:
 							assert(0);

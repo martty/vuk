@@ -75,10 +75,14 @@ namespace vuk {
 				it = op_arena.erase(it);
 				continue;
 			}
-			// splices in potential garbage are not in the initial set
-			if (node->kind == Node::SPLICE && node->splice.rel_acq == nullptr) {
-				++it;
-				continue;
+			if (node->kind == Node::SPLICE) {
+				// dropped splices not in the initial set
+				if(!node->splice.held) {
+					++it;
+					continue;
+				} else { // held splices are always live
+					live_set.emplace(node);
+				}
 			}
 			if (node->index < (module_id << 32 | link_frontier)) {
 				if (node->kind != Node::SPLICE) { // non-splice nodes before the link frontier are not in the initial set
@@ -315,6 +319,11 @@ namespace vuk {
 			return last_write;
 		};
 
+		auto add_breaking_result = [&](Node* node, size_t output_idx) {
+			Ref out = Ref{ node, output_idx };
+			out.link().def = { node, output_idx };
+		};
+
 		auto add_result = [&](Node* node, size_t output_idx, Ref parm) {
 			Ref out = Ref{ node, output_idx };
 			out.link().def = { node, output_idx };
@@ -394,7 +403,6 @@ namespace vuk {
 		switch (node->kind) {
 		case Node::CONSTANT:
 		case Node::PLACEHOLDER:
-		case Node::MATH_BINARY:
 			break;
 		case Node::CONSTRUCT:
 			first(node).link().def = first(node);
@@ -411,6 +419,11 @@ namespace vuk {
 				}
 			}
 
+			break;
+		case Node::MATH_BINARY:
+			add_read(node, node->math_binary.a, 0);
+			add_read(node, node->math_binary.b, 1);
+			add_breaking_result(node, 0);
 			break;
 		case Node::SPLICE: { // ~~ nop joiner
 			                   /*
