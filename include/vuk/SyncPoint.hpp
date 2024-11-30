@@ -5,7 +5,7 @@
 
 namespace vuk {
 	struct SyncPoint {
-		struct Executor* executor;
+		struct Executor* executor = nullptr;
 		uint64_t visibility; // results are available if waiting for {executor, visibility}
 	};
 

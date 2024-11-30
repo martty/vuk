@@ -327,7 +327,7 @@ namespace vuk {
 				assert(do_ssa);
 				return;
 			}
-			
+
 			auto link = &st_parm.link();
 			auto& prev = out.link().prev;
 			if (!do_ssa) {
@@ -424,6 +424,11 @@ namespace vuk {
                  a -> splice -> b
                  must not rewrite into
                  a -> b
+			             
+                 splice -> a -> splice
+                 -> b
+                 must not rewrite into
+                 splice -> a -> splice -> b
 			                 */
 			for (size_t i = 0; i < node->type.size(); i++) {
 				if (!node->splice.rel_acq || (node->splice.rel_acq && node->splice.rel_acq->status == Signal::Status::eDisarmed)) {
@@ -1470,14 +1475,6 @@ namespace vuk {
 
 		std::sort(impl->depnodes.begin(), impl->depnodes.end());
 		impl->depnodes.erase(std::unique(impl->depnodes.begin(), impl->depnodes.end()), impl->depnodes.end());
-
-		// disable splices that are unwaited
-		for (auto& depnode : impl->depnodes) {
-			if (depnode.use_count() == 1 && depnode->acqrel->status == Signal::Status::eDisarmed) {
-				assert(depnode->get_node()->kind == Node::SPLICE);
-				depnode->get_node()->splice.rel_acq = nullptr;
-			}
-		}
 
 		VUK_DO_OR_RETURN(impl->build_nodes());
 

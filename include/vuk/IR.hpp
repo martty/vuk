@@ -1391,6 +1391,18 @@ namespace vuk {
 				delete[] node->converge.write.data();
 				break;
 			}
+			case Node::SPLICE: {
+				for (auto i = 0; i < node->splice.values.size(); i++) {
+					auto& v = node->splice.values[i];
+					if (node->type[i]->hash_value == types.builtin_buffer) {
+						delete (Buffer*)v;
+					} else {
+						delete (ImageAttachment*)v;
+					}
+				}
+				delete node->splice.values.data();
+				delete node->splice.rel_acq;
+			}
 			default: // nothing extra to be done here
 				break;
 			}
@@ -1702,22 +1714,22 @@ namespace vuk {
 
 	struct ExtNode {
 		ExtNode(Node* node) {
-			acqrel = std::make_unique<AcquireRelease>();
-			this->node = current_module->make_splice(node, acqrel.get());
+			acqrel = new AcquireRelease;
+			this->node = current_module->make_splice(node, acqrel);
 
 			source_module = current_module;
 		}
 
 		ExtNode(Node* node, std::vector<std::shared_ptr<ExtNode>> deps) : deps(std::move(deps)) {
-			acqrel = std::make_unique<AcquireRelease>();
-			this->node = current_module->make_splice(node, acqrel.get());
+			acqrel = new AcquireRelease;
+			this->node = current_module->make_splice(node, acqrel);
 
 			source_module = current_module;
 		}
 
 		ExtNode(Node* node, std::shared_ptr<ExtNode> dep) {
-			acqrel = std::make_unique<AcquireRelease>();
-			this->node = current_module->make_splice(node, acqrel.get());
+			acqrel = new AcquireRelease;
+			this->node = current_module->make_splice(node, acqrel);
 
 			deps.push_back(std::move(dep));
 
@@ -1725,8 +1737,8 @@ namespace vuk {
 		}
 
 		ExtNode(Ref ref, std::shared_ptr<ExtNode> dep, Access access = Access::eNone, DomainFlagBits domain = DomainFlagBits::eAny) {
-			acqrel = std::make_unique<AcquireRelease>();
-			this->node = current_module->make_ref_splice(ref, acqrel.get(), access, domain).node;
+			acqrel = new AcquireRelease;
+			this->node = current_module->make_ref_splice(ref, acqrel, access, domain).node;
 
 			deps.push_back(std::move(dep));
 
@@ -1734,8 +1746,8 @@ namespace vuk {
 		}
 		// for releases
 		ExtNode(Node* node, std::shared_ptr<ExtNode> dep, Access access, DomainFlagBits domain) {
-			acqrel = std::make_unique<AcquireRelease>();
-			this->node = current_module->make_splice(node, acqrel.get(), access, domain);
+			acqrel = new AcquireRelease;
+			this->node = current_module->make_splice(node, acqrel, access, domain);
 
 			deps.push_back(std::move(dep));
 
@@ -1744,12 +1756,12 @@ namespace vuk {
 
 		// for acquires - adopt the node
 		ExtNode(Node* node, ResourceUse use) : node(node) {
-			acqrel = std::make_unique<AcquireRelease>();
+			acqrel = new AcquireRelease;
 			acqrel->status = Signal::Status::eHostAvailable;
 			acqrel->last_use.resize(1);
 			acqrel->last_use[0] = use;
 
-			node->splice.rel_acq = acqrel.get();
+			node->splice.rel_acq = acqrel;
 
 			source_module = current_module;
 		}
@@ -1757,16 +1769,6 @@ namespace vuk {
 		~ExtNode() {
 			if (acqrel) {
 				assert(node->kind == Node::SPLICE);
-				node->splice.rel_acq = nullptr;
-				for (auto i = 0; i < node->splice.values.size(); i++) {
-					auto& v = node->splice.values[i];
-					if (node->type[i]->hash_value == source_module->types.builtin_buffer) {
-						delete (Buffer*)v;
-					} else {
-						delete (ImageAttachment*)v;
-					}
-				}
-				delete node->splice.values.data();
 
 				source_module->potential_garbage.emplace(node, 0);
 			}
@@ -1784,10 +1786,10 @@ namespace vuk {
 			current_module->garbage.push_back(node);
 			assert(node->kind == Node::SPLICE);
 			node->splice.rel_acq = nullptr;
-			node = current_module->make_splice(new_node, acqrel.get());
+			node = current_module->make_splice(new_node, acqrel);
 		}
 
-		std::unique_ptr<AcquireRelease> acqrel;
+		AcquireRelease* acqrel;
 		std::vector<std::shared_ptr<ExtNode>> deps;
 		std::shared_ptr<IRModule> source_module;
 
