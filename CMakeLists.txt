@@ -101,7 +101,7 @@ if (VUK_USE_VCC)
 		CMAKE_ARGS -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_SHARED_LIBS=1 -DCMAKE_SHARED_LIBRARY_PREFIX="" -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER} -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
 		INSTALL_COMMAND ""
 		BUILD_ALWAYS OFF
-		BUILD_COMMAND 
+		BUILD_COMMAND
 			${CMAKE_COMMAND} --build .
 		LOG_DOWNLOAD 1
 		LOG_BUILD 1
@@ -142,14 +142,14 @@ if (VUK_USE_SLANG)
 			${slang-fc_SOURCE_DIR}
 		PREFIX ""
 		BINARY_DIR slang-build
-		CMAKE_ARGS 
+		CMAKE_ARGS
 			-DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_SHARED_LIBRARY_PREFIX="" -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER} -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
-			-DSLANG_ENABLE_GFX=0 -DSLANG_ENABLE_SLANGC=0	-DSLANG_ENABLE_TESTS=0	-DSLANG_ENABLE_EXAMPLES=0 -DSLANG_ENABLE_SLANGRT=0 -DSLANG_ENABLE_SLANGD=0 
+			-DSLANG_ENABLE_GFX=0 -DSLANG_ENABLE_SLANGC=0	-DSLANG_ENABLE_TESTS=0	-DSLANG_ENABLE_EXAMPLES=0 -DSLANG_ENABLE_SLANGRT=0 -DSLANG_ENABLE_SLANGD=0
 			-DSLANG_ENABLE_SLANGRT=0 -DSLANG_ENABLE_SLANG_RHI=0 -DSLANG_ENABLE_DXIL=0 -DSLANG_ENABLE_PREBUILT_BINARIES=0 -DSLANG_EMBED_CORE_MODULE_SOURCE=1
 			-DSLANG_EMBED_CORE_MODULE=0
 		INSTALL_COMMAND ""
 		BUILD_ALWAYS OFF
-		BUILD_COMMAND 
+		BUILD_COMMAND
 			${CMAKE_COMMAND} --build .
 		LOG_DOWNLOAD 1
 		LOG_BUILD 1
@@ -169,7 +169,7 @@ if (VUK_USE_SLANG)
 	target_sources(vuk PRIVATE src/shader_compilers/slang.cpp)
 endif()
 
-target_compile_definitions(vuk PUBLIC 
+target_compile_definitions(vuk PUBLIC
 								VUK_USE_SHADERC=$<BOOL:${VUK_USE_SHADERC}>
 								VUK_USE_DXC=$<BOOL:${VUK_USE_DXC}>
 								VUK_USE_VCC=$<BOOL:${VUK_USE_VCC}>
@@ -204,7 +204,7 @@ target_sources(vuk PRIVATE
 	src/runtime/vk/Allocator.cpp
 	src/runtime/vk/BufferAllocator.cpp
 	src/runtime/Cache.cpp
-	
+
 	src/runtime/vk/Backend.cpp
 	src/runtime/vk/CommandBuffer.cpp
 	src/runtime/vk/Descriptor.cpp
@@ -228,54 +228,42 @@ add_subdirectory (ext/small_vector)
 target_include_directories(vuk PRIVATE ext/concurrentqueue ext/VulkanMemoryAllocator/include)
 target_include_directories(vuk PUBLIC include)
 
-string(FIND "${CMAKE_CXX_COMPILER}" "clang-cl" VUK_COMPILER_CLANGCL)
-string(FIND "${CMAKE_CXX_COMPILER}" "clang" VUK_COMPILER_CLANG)
-string(FIND "${CMAKE_CXX_COMPILER}" "clang++" VUK_COMPILER_CLANGPP)
-
-if(VUK_COMPILER_CLANGCL EQUAL -1)
-	if(VUK_COMPILER_CLANGPP GREATER -1 OR VUK_COMPILER_CLANG GREATER -1)
-	  set(VUK_COMPILER_CLANGPP ON)
-	else()
-	  set(VUK_COMPILER_CLANGPP OFF)
-	endif()
-else()
-	set(VUK_COMPILER_CLANGPP OFF)
-endif()
-
-string(FIND "${CMAKE_CXX_COMPILER}" "gcc" VUK_COMPILER_GCC)
-string(FIND "${CMAKE_CXX_COMPILER}" "g++" VUK_COMPILER_GPP)
-if(VUK_COMPILER_GPP GREATER -1 OR VUK_COMPILER_GCC GREATER -1)
-  set(VUK_COMPILER_GPP ON)
-else()
-  set(VUK_COMPILER_GPP OFF)
-endif()
-
+set(VUK_COMPILER_CLANGPP OFF)
+set(VUK_COMPILER_CLANGCL OFF)
+set(VUK_COMPILER_GPP OFF)
 set(VUK_COMPILER_MSVC OFF)
 
-if(VUK_COMPILER_CLANGCL GREATER -1)
-  set(VUK_COMPILER_CLANGCL ON)
-else()
-  set(VUK_COMPILER_CLANGCL OFF)
-  if(MSVC)
-	set(VUK_COMPILER_MSVC ON)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+  if(CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "GNU")
+    set(VUK_COMPILER_CLANGPP ON)
+  elseif(CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+    set(VUK_COMPILER_CLANGCL ON)
+  else()
+    message(FATAL "unrecognised clang frontend '${CMAKE_CXX_COMPILER_FRONTEND_VARIANT}'")
   endif()
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  set(VUK_COMPILER_GPP ON)
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+  set(VUK_COMPILER_MSVC ON)
+else()
+  message(FATAL "unrecognised compiler '${CMAKE_CXX_COMPILER}' with ID '${CMAKE_CXX_COMPILER_ID}'")
 endif()
 
 message(CMAKE_CXX_COMPILER="${CMAKE_CXX_COMPILER}" IS_CLANGCL="${VUK_COMPILER_CLANGCL}" IS_MSVC="${MSVC}" IS_CLANGPP="${VUK_COMPILER_CLANGPP}" IS_GPP="${VUK_COMPILER_GPP}")
 
 if(VUK_COMPILER_CLANGPP OR VUK_COMPILER_GPP)
-       target_compile_options(vuk PRIVATE -fno-char8_t)
-elseif(MSVC) # cl.exe or clang-cl
-       # w4068 : unknown pragma
-       target_compile_options(vuk PRIVATE /permissive- /Zc:char8_t- /wd4068)
+  target_compile_options(vuk PRIVATE -fno-char8_t)
+elseif(VUK_COMPILER_MSVC OR VUK_COMPILER_CLANGCL) # cl.exe or clang-cl
+  # w4068 : unknown pragma
+  target_compile_options(vuk PRIVATE /permissive- /Zc:char8_t- /wd4068)
 endif()
 
 if(VUK_COMPILER_CLANGPP OR VUK_COMPILER_CLANGCL)
-	 target_compile_options(vuk PRIVATE -Wno-nullability-completeness)
+  target_compile_options(vuk PRIVATE -Wno-nullability-completeness)
 endif()
 
-target_compile_definitions(vuk PUBLIC 
-								VUK_COMPILER_MSVC=$<BOOL:${VUK_COMPILER_MSVC}>
+target_compile_definitions(vuk PUBLIC
+  VUK_COMPILER_MSVC=$<BOOL:${VUK_COMPILER_MSVC}>
 )
 
 target_link_libraries(vuk PRIVATE spirv-cross-core robin_hood fmt::fmt gch::small_vector)
@@ -304,7 +292,7 @@ function(copy_runtime_dlls TARGET)
         -t "$<TARGET_RUNTIME_DLLS:${TARGET}>" "$<TARGET_FILE_DIR:${TARGET}>"
       COMMAND_EXPAND_LISTS
     )
- 
+
     set_property(TARGET "${TARGET}" PROPERTY _copy_runtime_dlls_applied 1)
   endif ()
 endfunction()
@@ -334,20 +322,20 @@ if(VUK_BUILD_TESTS)
 	target_sources(vuk PRIVATE tests/Test.cpp)
 
 	FetchContent_Declare(
-	  vk-bootstrap 
+	  vk-bootstrap
 	  GIT_REPOSITORY https://github.com/charles-lunarg/vk-bootstrap
 	  GIT_TAG        cf8df11a0a071463009031cb474099dacffe90ed
 	)
 	FetchContent_MakeAvailable(vk-bootstrap)
 
 	include(doctest_force_link_static_lib_in_target) # until we can use cmake 3.24
-	add_executable(vuk-tests tests/Test.cpp 
+	add_executable(vuk-tests tests/Test.cpp
 					tests/00_misc.cpp
 					tests/01_semantics.cpp
 					tests/02_rg_errors.cpp
 					tests/03_commands.cpp
 					tests/04_arrays.cpp
-					tests/05_renderpass.cpp 
+					tests/05_renderpass.cpp
 					tests/06_mt.cpp
 	)
 	#target_compile_features(vuk-tests PRIVATE cxx_std_17)
