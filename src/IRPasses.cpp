@@ -409,13 +409,21 @@ namespace vuk {
 
 			for (size_t i = 0; i < node->construct.args.size(); i++) {
 				auto& parm = node->construct.args[i];
-				parm.link().undef = { node, i };
+				if (node->type[0]->kind == Type::ARRAY_TY) {
+					add_write(node, parm, i);
+				} else {
+					add_read(node, parm, i);
+				}
 			}
 
 			if (node->type[0]->kind == Type::ARRAY_TY || node->type[0]->hash_value == current_module->types.builtin_sampled_image) {
 				for (size_t i = 1; i < node->construct.args.size(); i++) {
 					auto& parm = node->construct.args[i];
-					parm.link().next = &first(node).link();
+					bool see_through_splice = parm.node->kind == Node::SPLICE && parm.node->splice.dst_access == Access::eNone &&
+					                          parm.node->splice.dst_domain == DomainFlagBits::eAny &&
+					                          (!parm.node->splice.rel_acq || parm.node->splice.rel_acq->status == Signal::Status::eDisarmed);
+					auto& st_parm = see_through_splice ? parm.node->splice.src[parm.index] : parm;
+					st_parm.link().next = &first(node).link();
 				}
 			}
 
