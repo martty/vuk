@@ -43,3 +43,6 @@
 [submodule "ext/fmt"]
 	path = ext/fmt
 	url = https://github.com/fmtlib/fmt
+[submodule "ext/function2"]
+	path = ext/function2
+	url = https://github.com/Naios/function2.git

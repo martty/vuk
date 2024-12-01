@@ -323,8 +323,11 @@ public:
 				}
 			};
 
+			std::shared_ptr<Type> opaque_fn_ty;
+
 			// when this function is called, we weave in this call into the IR
-			return [untyped_cb = std::move(callback), name, scheduling_info, inner_scope = VUK_CALL](Value<typename T::type>... args, VUK_CALLSTACK) mutable {
+			return [untyped_cb = std::move(callback), name, scheduling_info, opaque_fn_ty, inner_scope = VUK_CALL](Value<typename T::type>... args,
+			                                                                                                                    VUK_CALLSTACK) mutable {
 				auto& first = First(args...);
 
 				bool reuse_node = first.node.use_count() == 1 && first.node->acqrel->status == Signal::Status::eDisarmed;
@@ -333,46 +336,52 @@ public:
 				std::tuple arg_tuple_as_a = { T{ nullptr, args.get_head() }... };
 				constexpr size_t arg_count = std::tuple_size_v<decltype(arg_tuple_as_a)>;
 
-				std::array<std::shared_ptr<Type>, arg_count> arg_types = { current_module->types.make_imbued_ty(T{ nullptr, args.get_head() }.src.type(), T::access)... };
+				size_t hash_code = typeid(untyped_cb).hash_code();
+				if (!opaque_fn_ty) {
+					std::array<std::shared_ptr<Type>, arg_count> arg_types = { current_module->types.make_imbued_ty(T{ nullptr, args.get_head() }.src.type(),
+						                                                                                              T::access)... };
 
-				fixed_vector<std::shared_ptr<Type>, arg_count> ret_types;
-				if constexpr (is_tuple<Ret>::value) {
-					auto [idxs, ret_tuple] = intersect_tuples<std::tuple<T...>, Ret>(arg_tuple_as_a);
-					fill_ret_ty(idxs, ret_tuple, ret_types);
-				} else if constexpr (!std::is_same_v<Ret, void>) {
-					auto [idxs, ret_tuple] = intersect_tuples<std::tuple<T...>, std::tuple<Ret>>(arg_tuple_as_a);
-					fill_ret_ty(idxs, ret_tuple, ret_types);
-				}
+					fixed_vector<std::shared_ptr<Type>, arg_count> ret_types;
+					if constexpr (is_tuple<Ret>::value) {
+						auto [idxs, ret_tuple] = intersect_tuples<std::tuple<T...>, Ret>(arg_tuple_as_a);
+						fill_ret_ty(idxs, ret_tuple, ret_types);
+					} else if constexpr (!std::is_same_v<Ret, void>) {
+						auto [idxs, ret_tuple] = intersect_tuples<std::tuple<T...>, std::tuple<Ret>>(arg_tuple_as_a);
+						fill_ret_ty(idxs, ret_tuple, ret_types);
+					}
 
-				std::array<bool, arg_count> existing_maps = {};
-				fixed_vector<size_t, arg_count> maps_to_add;
-				for (auto& ret_t : ret_types) {
-					assert(ret_t->kind == Type::ALIASED_TY);
-					existing_maps[ret_t->aliased.ref_idx - 1] = true;
-				}
+					std::array<bool, arg_count> existing_maps = {};
+					fixed_vector<size_t, arg_count> maps_to_add;
+					for (auto& ret_t : ret_types) {
+						assert(ret_t->kind == Type::ALIASED_TY);
+						existing_maps[ret_t->aliased.ref_idx - 1] = true;
+					}
 
-				auto old_ret_cnt = ret_types.size();
-				for (size_t i = 0; i < arg_types.size(); i++) {
-					if (!existing_maps[i]) {
-						maps_to_add.push_back(i);
-						ret_types.push_back(current_module->types.make_aliased_ty(Type::stripped(arg_types[i]), i + 1));
+					auto old_ret_cnt = ret_types.size();
+					for (size_t i = 0; i < arg_types.size(); i++) {
+						if (!existing_maps[i]) {
+							maps_to_add.push_back(i);
+							ret_types.push_back(current_module->types.make_aliased_ty(Type::stripped(arg_types[i]), i + 1));
+						}
+					}
+
+					if (maps_to_add.size() > 0) {
+						auto wrapped_cb = [cb = std::move(untyped_cb), old_ret_cnt, maps_to_add](CommandBuffer& cbuf,
+						                                                                         std::span<void*> opaque_args,
+						                                                                         std::span<void*> opaque_meta,
+						                                                                         std::span<void*> opaque_rets) mutable -> void {
+							cb(cbuf, opaque_args, opaque_meta, opaque_rets.subspan(0, old_ret_cnt));
+							for (auto i = 0; i < maps_to_add.size(); i++) {
+								opaque_rets[old_ret_cnt + i] = opaque_args[maps_to_add[i]];
+							}
+						};
+						opaque_fn_ty =
+						    current_module->types.make_opaque_fn_ty(arg_types, ret_types, vuk::DomainFlagBits::eAny, hash_code, std::move(wrapped_cb), name.c_str());
+					} else {
+						opaque_fn_ty =
+						    current_module->types.make_opaque_fn_ty(arg_types, ret_types, vuk::DomainFlagBits::eAny, hash_code, std::move(untyped_cb), name.c_str());
 					}
 				}
-
-				std::shared_ptr<Type> opaque_fn_ty;
-				if (maps_to_add.size() > 0) {
-					auto wrapped_cb = [cb = std::move(untyped_cb), old_ret_cnt, maps_to_add](
-					                      CommandBuffer& cbuf, std::span<void*> opaque_args, std::span<void*> opaque_meta, std::span<void*> opaque_rets) mutable -> void {
-						cb(cbuf, opaque_args, opaque_meta, opaque_rets.subspan(0, old_ret_cnt));
-						for (auto i = 0; i < maps_to_add.size(); i++) {
-							opaque_rets[old_ret_cnt + i] = opaque_args[maps_to_add[i]];
-						}
-					};
-					opaque_fn_ty = current_module->types.make_opaque_fn_ty(arg_types, ret_types, vuk::DomainFlagBits::eAny, wrapped_cb, name.c_str());
-				} else {
-					opaque_fn_ty = current_module->types.make_opaque_fn_ty(arg_types, ret_types, vuk::DomainFlagBits::eAny, untyped_cb, name.c_str());
-				}
-
 				auto opaque_fn = current_module->make_declare_fn(opaque_fn_ty);
 				Node* node = current_module->make_call(opaque_fn, args.get_head()...);
 				node->scheduling_info = new SchedulingInfo(scheduling_info);

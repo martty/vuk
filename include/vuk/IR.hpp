@@ -12,7 +12,7 @@
 
 #include <atomic>
 #include <deque>
-#include <functional>
+#include <function2/function2.hpp>
 #include <optional>
 #include <plf_colony.h>
 #include <shared_mutex>
@@ -27,7 +27,7 @@ namespace vuk {
 		std::string name;
 	};
 
-	using UserCallbackType = std::function<void(CommandBuffer&, std::span<void*>, std::span<void*>, std::span<void*>)>;
+	using UserCallbackType = fu2::unique_function<void(CommandBuffer&, std::span<void*>, std::span<void*>, std::span<void*>)>;
 
 	struct Type {
 		enum TypeKind { MEMORY_TY = 1, INTEGER_TY, COMPOSITE_TY, ARRAY_TY, IMBUED_TY, ALIASED_TY, OPAQUE_FN_TY, SHADER_FN_TY } kind;
@@ -54,6 +54,7 @@ namespace vuk {
 			struct {
 				std::span<std::shared_ptr<Type>> args;
 				std::span<std::shared_ptr<Type>> return_types;
+				size_t hash_code;
 				int execute_on;
 			} opaque_fn;
 			struct {
@@ -130,8 +131,8 @@ namespace vuk {
 				return v;
 			}
 			case OPAQUE_FN_TY:
-				hash_combine_direct(v, (uintptr_t)t->callback->target<void(CommandBuffer&, std::span<void*>, std::span<void*>, std::span<void*>)>() >> 32);
-				hash_combine_direct(v, (uintptr_t)t->callback->target<void(CommandBuffer&, std::span<void*>, std::span<void*>, std::span<void*>)>() & 0xffffffff);
+				hash_combine_direct(v, (uintptr_t)t->opaque_fn.hash_code >> 32);
+				hash_combine_direct(v, (uintptr_t)t->opaque_fn.hash_code & 0xffffffff);
 				return v;
 			case SHADER_FN_TY:
 				hash_combine_direct(v, (uintptr_t)t->shader_fn.shader >> 32);
@@ -1118,6 +1119,7 @@ namespace vuk {
 			std::shared_ptr<Type> make_opaque_fn_ty(std::span<std::shared_ptr<Type> const> args,
 			                                        std::span<std::shared_ptr<Type> const> ret_types,
 			                                        DomainFlags execute_on,
+			                                        size_t hash_code,
 			                                        UserCallbackType callback,
 			                                        std::string_view name) {
 				auto arg_ptr_ret_ty_ptr = std::vector<std::shared_ptr<Type>>(args.size() + ret_types.size());
@@ -1126,6 +1128,7 @@ namespace vuk {
 				auto t = new Type{ .kind = Type::OPAQUE_FN_TY,
 					                 .opaque_fn = { .args = std::span{ arg_ptr_ret_ty_ptr.data(), args.size() },
 					                                .return_types = std::span{ arg_ptr_ret_ty_ptr.data() + args.size(), ret_types.size() },
+					                                .hash_code = hash_code,
 					                                .execute_on = execute_on.m_mask } };
 				t->callback = std::make_unique<UserCallbackType>(std::move(callback));
 				t->child_types = std::move(arg_ptr_ret_ty_ptr);
@@ -1357,12 +1360,12 @@ namespace vuk {
 					delete (SamplerCreateInfo*)v;
 				} else if (t->hash_value == builtin_swapchain) {
 					delete (Swapchain**)v;
-				} else if (t->kind == Type::ARRAY_TY){
+				} else if (t->kind == Type::ARRAY_TY) {
 					// currently arrays don't own their values
 					/* auto cv = (char*)v;
 					for (auto i = 0; i < t->array.count; i++) {
-						destroy(t->array.T->get(), cv);
-						cv += t->array.stride;
+					  destroy(t->array.T->get(), cv);
+					  cv += t->array.stride;
 					}*/
 				} else {
 					assert(0);

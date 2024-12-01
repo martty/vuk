@@ -372,7 +372,7 @@ TEST_CASE("multi-queue buffers") {
 	}
 	{
 #ifndef VUK_GARBAGE_SAN
-		//CHECK(current_module->op_arena.size() == 3);
+		// CHECK(current_module->op_arena.size() == 3);
 #endif
 		auto written = write(discard_buf("src0", **buf0));
 		read(written).wait(*test_context.allocator, test_context.compiler);
@@ -381,7 +381,7 @@ TEST_CASE("multi-queue buffers") {
 	}
 	{
 #ifndef VUK_GARBAGE_SAN
-		//CHECK(current_module->op_arena.size() == 3);
+		// CHECK(current_module->op_arena.size() == 3);
 #endif
 		auto written = write(discard_buf("src0", **buf0));
 		read(std::move(written)).wait(*test_context.allocator, test_context.compiler);
@@ -390,7 +390,7 @@ TEST_CASE("multi-queue buffers") {
 	}
 	{
 #ifndef VUK_GARBAGE_SAN
-		//CHECK(current_module->op_arena.size() == 1);
+		// CHECK(current_module->op_arena.size() == 1);
 #endif
 		auto written = write(discard_buf("src0", **buf0));
 		write2(read(std::move(written))).wait(*test_context.allocator, test_context.compiler);
@@ -469,4 +469,16 @@ TEST_CASE("multi return pass") {
 		auto res = download_buffer(buf2p).get(*test_context.allocator, test_context.compiler);
 		CHECK(std::span((uint32_t*)res->mapped_ptr, 4) == std::span(data));
 	}
+}
+
+TEST_CASE("multi fn calls") {
+	auto buf0 = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+
+	std::unique_ptr<int> a = std::make_unique<int>(5);
+	auto p = make_pass("fills", [ab = std::move(a)](CommandBuffer& cbuf, VUK_BA(Access::eTransferWrite) dst0) {
+		CHECK(ab);
+		return dst0;
+	});
+
+	p(p(discard_buf("src0", **buf0))).get(*test_context.allocator, test_context.compiler);
 }
