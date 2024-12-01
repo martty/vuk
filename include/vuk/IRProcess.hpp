@@ -30,10 +30,14 @@ namespace vuk {
 #define INIT(x) x(decltype(x)::allocator_type(*arena_))
 
 	struct RGCImpl {
-		RGCImpl() : arena_(new arena(4 * 1024 * 1024)) {}
-		RGCImpl(arena* a) : arena_(a) {}
+		RGCImpl() :
+		    arena_(new arena(4 * 1024 * 1024)),
+		    pool(std::make_unique<std::pmr::unsynchronized_pool_resource>()),
+		    mbr(pool.get()) {}
+		RGCImpl(arena* a, std::unique_ptr<std::pmr::unsynchronized_pool_resource> pool) : arena_(a), pool(std::move(pool)), mbr(pool.get()) {}
 		std::unique_ptr<arena> arena_;
 		std::pmr::monotonic_buffer_resource mbr;
+		std::unique_ptr<std::pmr::unsynchronized_pool_resource> pool;
 
 		plf::colony<ScheduledItem> scheduled_execables;
 		std::vector<ScheduledItem*> partitioned_execables;

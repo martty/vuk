@@ -132,11 +132,12 @@ namespace vuk {
 	}
 
 	void Compiler::reset() {
+		auto pool = std::move(impl->pool);
 		auto pass_r = std::move(impl->pass_reads);
 		auto arena = impl->arena_.release();
 		delete impl;
 		arena->reset();
-		impl = new RGCImpl(arena);
+		impl = new RGCImpl(arena, std::move(pool));
 		impl->pass_reads = std::move(pass_r);
 		impl->pass_reads.clear();
 	}
