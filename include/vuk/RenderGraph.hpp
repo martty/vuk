@@ -290,13 +290,8 @@ public:
 		}
 	}
 
-	template<typename... T>
-	static auto fill_arg_ty(const std::tuple<T...>& args, std::vector<std::shared_ptr<Type>>& arg_types) {
-		(arg_types.emplace_back(current_module->types.make_imbued_ty(std::get<T>(args).src.type(), T::access)), ...);
-	}
-
-	template<typename... T>
-	static auto fill_ret_ty(std::array<size_t, sizeof...(T)> idxs, const std::tuple<T...>& args, std::vector<std::shared_ptr<Type>>& ret_types) {
+	template<size_t N, typename... T>
+	static auto fill_ret_ty(std::array<size_t, sizeof...(T)> idxs, const std::tuple<T...>& args, fixed_vector<std::shared_ptr<Type>, N>& ret_types) {
 		size_t i = 0;
 		(ret_types.emplace_back(current_module->types.make_aliased_ty(Type::stripped(std::get<T>(args).src.type()), idxs[i++] + 1)), ...);
 	}
@@ -335,11 +330,12 @@ public:
 				bool reuse_node = first.node.use_count() == 1 && first.node->acqrel->status == Signal::Status::eDisarmed;
 				reuse_node = false;
 
-				std::vector<std::shared_ptr<Type>> arg_types;
 				std::tuple arg_tuple_as_a = { T{ nullptr, args.get_head() }... };
-				fill_arg_ty(arg_tuple_as_a, arg_types);
+				constexpr size_t arg_count = std::tuple_size_v<decltype(arg_tuple_as_a)>;
 
-				std::vector<std::shared_ptr<Type>> ret_types;
+				std::array<std::shared_ptr<Type>, arg_count> arg_types = { current_module->types.make_imbued_ty(T{ nullptr, args.get_head() }.src.type(), T::access)... };
+
+				fixed_vector<std::shared_ptr<Type>, arg_count> ret_types;
 				if constexpr (is_tuple<Ret>::value) {
 					auto [idxs, ret_tuple] = intersect_tuples<std::tuple<T...>, Ret>(arg_tuple_as_a);
 					fill_ret_ty(idxs, ret_tuple, ret_types);
@@ -348,9 +344,8 @@ public:
 					fill_ret_ty(idxs, ret_tuple, ret_types);
 				}
 
-				std::vector<bool> existing_maps;
-				std::vector<size_t> maps_to_add;
-				existing_maps.resize(arg_types.size());
+				std::array<bool, arg_count> existing_maps = {};
+				fixed_vector<size_t, arg_count> maps_to_add;
 				for (auto& ret_t : ret_types) {
 					assert(ret_t->kind == Type::ALIASED_TY);
 					existing_maps[ret_t->aliased.ref_idx - 1] = true;
@@ -472,7 +467,7 @@ public:
 			    fn, current_module->make_constant(size_x), current_module->make_constant(size_y), current_module->make_constant(size_z), args.get_head()...);
 			current_module->set_source_location(node, inner_scope);
 			auto extnode = std::make_shared<ExtNode>(node);
-			(args.node->deps.push_back(extnode),...);
+			(args.node->deps.push_back(extnode), ...);
 		};
 	}
 
@@ -495,10 +490,10 @@ public:
 		return { make_ext_ref(ref) };
 	}
 
-	/// @brief Adopt an existing resource into a Value. 
-	/// @param name 
-	/// @param ia 
-	/// @param previous_access 
+	/// @brief Adopt an existing resource into a Value.
+	/// @param name
+	/// @param ia
+	/// @param previous_access
 	[[nodiscard]] inline Value<ImageAttachment> acquire_ia(Name name, ImageAttachment ia, Access previous_access, VUK_CALLSTACK) {
 		assert(ia.image_view != ImageView{});
 		Ref ref = current_module->acquire(current_module->types.get_builtin_image(), nullptr, ia);
@@ -611,7 +606,7 @@ public:
 		Ref ref = current_module->make_sampled_image(ia.get_head(), sampler.get_head());
 		current_module->name_output(ref, name.c_str());
 		current_module->set_source_location(ref.node, VUK_CALL);
-		return { make_ext_ref(ref, {ia.node, sampler.node}) };
+		return { make_ext_ref(ref, { ia.node, sampler.node }) };
 	}
 
 	[[nodiscard]] inline Value<ImageAttachment> acquire_next_image(Name name, Value<Swapchain> in, VUK_CALLSTACK) {
