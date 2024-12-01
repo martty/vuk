@@ -293,7 +293,6 @@ namespace vuk {
 							std::pmr::vector<char> ws(tails.size(), true);
 
 							last_write = module->make_converge(tails, ws);
-							garbage_nodes.push_back(last_write.node);
 							last_write.node->index = node->index - 1;
 							allocate_node_links(last_write.node, allocator);
 							link->undef = last_write;

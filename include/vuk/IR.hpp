@@ -888,6 +888,9 @@ namespace vuk {
 			link = link->prev;
 		}
 		auto def = link->def;
+		if (!def) {
+			return {};
+		}
 		switch (def.node->kind) {
 		case Node::CONSTRUCT:
 		case Node::SPLICE:
