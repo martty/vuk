@@ -1410,7 +1410,7 @@ namespace vuk {
 			} while (p != nullptr);
 		}
 
-		void destroy_node(Node* node) {
+		std::optional<plf::colony<Node>::iterator> destroy_node(Node* node) {
 			switch (node->kind) {
 			case Node::CONSTANT: {
 				if (node->constant.owned) {
@@ -1454,13 +1454,14 @@ namespace vuk {
 				node->generic_node.arg_count = 0;
 				node->type = {};
 #else
-				op_arena.erase(it);
+				return op_arena.erase(it);
 #endif
 			} else {
 				node->kind = Node::GARBAGE;
 				node->generic_node.arg_count = 0;
 				node->type = {};
 			}
+			return {};
 		}
 
 		// OPS

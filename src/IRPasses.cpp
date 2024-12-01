@@ -65,6 +65,7 @@ namespace vuk {
 
 	void IRModule::collect_garbage(std::pmr::polymorphic_allocator<std::byte> allocator) {
 		std::pmr::vector<Node*> liveness_work_queue(allocator);
+		liveness_work_queue.reserve(op_arena.size());
 
 		enum { DEAD = 0, ALIVE = 1 };
 
@@ -111,10 +112,12 @@ namespace vuk {
 		}
 
 		// GC the module
-		for (auto it = op_arena.begin(); it != op_arena.end(); ++it) {
+		for (auto it = op_arena.begin(); it != op_arena.end();) {
 			auto node = &*it;
 			if (node->flag == DEAD) {
-				garbage.push_back(node);
+				it = *destroy_node(node);
+			} else {
+				++it;
 			}
 		}
 		for (auto& node : garbage) {
@@ -129,10 +132,13 @@ namespace vuk {
 	}
 
 	void Compiler::reset() {
+		auto pass_r = std::move(impl->pass_reads);
 		auto arena = impl->arena_.release();
 		delete impl;
 		arena->reset();
 		impl = new RGCImpl(arena);
+		impl->pass_reads = std::move(pass_r);
+		impl->pass_reads.clear();
 	}
 
 	template<class It>
