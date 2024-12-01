@@ -63,11 +63,8 @@ namespace vuk {
 		collect_garbage(allocator);
 	}
 
-	void IRModule::collect_garbage(std::pmr::polymorphic_allocator<std::byte> allocator) {
-		std::pmr::vector<Node*> liveness_work_queue(allocator);
-		liveness_work_queue.reserve(op_arena.size());
-
-		enum { DEAD = 0, ALIVE = 1 };
+		void IRModule::collect_garbage(std::pmr::polymorphic_allocator<std::byte> allocator) {
+		enum { DEAD = 1, ALIVE = 2, ALIVE_REC = 3 };
 
 		// initial set of live nodes
 		for (auto it = op_arena.begin(); it != op_arena.end();) {
@@ -93,23 +90,67 @@ namespace vuk {
 				// splice nodes that are not potential garbage are in the initial set even before the link frontier
 			}
 			// everything else is in the initial set
-			liveness_work_queue.emplace_back(node);
+			node->flag = ALIVE;
 			++it;
 		}
 
+		int outer_loops = 0;
+		int inner_loops = 0;
+		int steps = 0;
 		// compute live set
-		while (!liveness_work_queue.empty()) {
-			auto node = liveness_work_queue.back();
-			liveness_work_queue.pop_back();
-			node->flag = ALIVE;
-			apply_generic_args(
-			    [&](Ref parm) {
-				    if (parm.node->flag != ALIVE) {
-					    liveness_work_queue.push_back(parm.node);
-				    }
-			    },
-			    node);
-		}
+		bool change = false;
+		do {
+			outer_loops++;
+			change = false;
+			for (auto it = op_arena.begin(), end = op_arena.end(); it != end; ++it) {
+				inner_loops++;
+				auto orig_node = &*it;
+				if (orig_node->flag != ALIVE) {
+					continue;
+				}
+				while (orig_node->flag != ALIVE_REC) {
+					auto node = orig_node;
+					// if node is ALIVE then we make all children ALIVE
+					while (node->flag == ALIVE) {
+						bool step = false;
+						auto count = node->generic_node.arg_count;
+						if (count != (uint8_t)~0u) {
+							for (int i = 0; i < count; i++) {
+								auto snode = node->fixed_node.args[i].node;
+								if (snode->flag == DEAD) { // turn it ALIVE and start from there
+									node = snode;
+									node->flag = ALIVE;
+									step = true;
+									change = true;
+									steps++;
+									break;
+								}
+							}
+							if (step) {
+								continue;
+							}
+						} else {
+							for (int i = 0; i < node->variable_node.args.size(); i++) {
+								auto snode = node->variable_node.args[i].node;
+								if (snode->flag == DEAD) { // turn it ALIVE and start from there
+									node = snode;
+									node->flag = ALIVE;
+									step = true;
+									change = true;
+									steps++;
+									break;
+								}
+							}
+							if (step) {
+								continue;
+							}
+						}
+						// we got here so all children must be ALIVE or ALIVE_REC
+						node->flag = ALIVE_REC;
+					}
+				}
+			}
+		} while (change);
 
 		// GC the module
 		for (auto it = op_arena.begin(); it != op_arena.end();) {
