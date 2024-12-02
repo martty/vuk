@@ -645,10 +645,10 @@ namespace vuk {
 		}
 	};
 
-	enum class RW { eRead, eWrite };
+	enum class RW { eNop, eRead, eWrite };
 
 	struct Scheduler {
-		Scheduler(Allocator all, RGCImpl* impl) : allocator(all), pass_reads(impl->pass_reads), scheduled_execables(impl->scheduled_execables), impl(impl) {
+		Scheduler(Allocator all, RGCImpl* impl) : allocator(all), pass_reads(impl->pass_reads), pass_nops(impl->pass_nops), scheduled_execables(impl->scheduled_execables), impl(impl) {
 			// these are the items that were determined to run
 			for (auto& i : scheduled_execables) {
 				scheduled.emplace(i.execable);
@@ -658,6 +658,7 @@ namespace vuk {
 
 		Allocator allocator;
 		std::pmr::vector<Ref>& pass_reads;
+		std::pmr::vector<Ref>& pass_nops;
 		plf::colony<ScheduledItem>& scheduled_execables;
 
 		InlineArena<std::byte, 4 * 1024> arena;
@@ -697,7 +698,30 @@ namespace vuk {
 			if (parm.node->kind == Node::CONSTANT || parm.node->kind == Node::PLACEHOLDER || parm.node->kind == Node::MATH_BINARY) {
 				return;
 			}
-			schedule_new(parm.node);
+			auto link = parm.link();
+
+			if (access == RW::eWrite) { // synchronize against writing
+				// we are going to write here, so schedule all reads or the def, if no read
+				if (link.reads.size() > 0) {
+					// all reads
+					for (auto& r : link.reads.to_span(pass_reads)) {
+						schedule_new(r.node);
+					}
+				} else {
+					// just the def
+					schedule_new(link.def.node);
+				}
+			} else { // just reading or nop, so don't synchronize with reads
+				// just the def
+				schedule_new(link.def.node);
+			}
+
+			// all nops
+			if (access != RW::eNop) {
+				for (auto& r : link.nops.to_span(pass_nops)) {
+					schedule_new(r.node);
+				}
+			}
 		}
 
 		template<class T>
@@ -1300,7 +1324,7 @@ namespace vuk {
 					}
 				} else {
 					for (auto& parm : node->construct.args.subspan(1)) {
-						sched.schedule_dependency(parm, RW::eWrite);
+						sched.schedule_dependency(parm, RW::eRead);
 					}
 				}
 				break;
@@ -1657,8 +1681,9 @@ namespace vuk {
 				} else {
 					auto acqrel = node->splice.rel_acq;
 					if (!acqrel || acqrel->status == Signal::Status::eDisarmed) {
+						bool is_release = !(node->splice.dst_access == Access::eNone && node->splice.dst_domain == DomainFlagBits::eAny);
 						for (size_t i = 0; i < node->splice.src.size(); i++) {
-							sched.schedule_dependency(node->splice.src[i], RW::eRead);
+							sched.schedule_dependency(node->splice.src[i], is_release ? RW::eWrite : RW::eNop);
 						}
 					}
 				}
