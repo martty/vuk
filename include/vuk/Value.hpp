@@ -306,14 +306,13 @@ namespace vuk {
 		return std::move(a).transmute<uint64_t>(ref);
 	}
 
-	inline Result<void> wait_for_values_explicit(Allocator& alloc, Compiler& compiler, std::span<UntypedValue> values) {
+	Result<void> submit(Allocator& allocator, Compiler& compiler, std::span<UntypedValue> values, RenderGraphCompileOptions options);
+
+	inline Result<void> wait_for_values_explicit(Allocator& alloc, Compiler& compiler, std::span<UntypedValue> values, RenderGraphCompileOptions options = {}) {
 		std::vector<SyncPoint> waits;
+		VUK_DO_OR_RETURN(submit(alloc, compiler, values, options));
 		for (uint64_t i = 0; i < values.size(); i++) {
 			auto& value = values[i];
-			auto res = value.submit(alloc, compiler, {});
-			if (!res) {
-				return res;
-			}
 			if (value.node->acqrel->status != Signal::Status::eSynchronizable) {
 				continue;
 			}

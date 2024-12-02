@@ -26,6 +26,34 @@ namespace vuk {
 		return { expected_value };
 	}
 
+	Result<void> submit(Allocator& allocator, Compiler& compiler, std::span<UntypedValue> values, RenderGraphCompileOptions options) {
+		std::vector<std::shared_ptr<ExtNode>> extnodes;
+		for (auto& value : values) {
+			auto& node = value.node;
+			if (node->acqrel->status == Signal::Status::eHostAvailable || node->acqrel->status == Signal::Status::eSynchronizable) {
+				// nothing to do
+			} else {
+				if (node->get_node()->splice.dst_access == Access::eNone && node->get_node()->splice.dst_domain == DomainFlagBits::eAny) {
+					value.release();
+				}
+				extnodes.push_back(node);
+			}
+		}
+		if (extnodes.size() == 0) {
+			compiler.reset();
+			return { expected_value }; // nothing to do
+		}
+		auto erg = compiler.link(extnodes, options);
+		if (!erg) {
+			return erg;
+		}
+
+		std::pair v = { &allocator, &*erg };
+		VUK_DO_OR_RETURN(execute_submit(allocator, std::span{ &v, 1 }));
+		compiler.reset();
+		return { expected_value };
+	}
+
 	Result<void> UntypedValue::wait(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options) {
 		auto res = submit(allocator, compiler, options);
 		if (!res) {
