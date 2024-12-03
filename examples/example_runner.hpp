@@ -187,7 +187,8 @@ namespace vuk {
 		    .add_required_extension(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME)
 		    .add_required_extension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME)
 		    .add_required_extension(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME)
-		    .add_desired_extension(VK_EXT_CALIBRATED_TIMESTAMPS_EXTENSION_NAME);
+		    .add_desired_extension(VK_EXT_CALIBRATED_TIMESTAMPS_EXTENSION_NAME)
+		    .add_desired_extension(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
 		auto phys_ret = selector.select();
 		vkb::PhysicalDevice vkbphysical_device;
 		if (!phys_ret) {
@@ -196,7 +197,8 @@ namespace vuk {
 			selector2.set_surface(surface)
 			    .set_minimum_version(1, 0)
 			    .add_required_extension(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME)
-			    .add_desired_extension(VK_EXT_CALIBRATED_TIMESTAMPS_EXTENSION_NAME);
+			    .add_desired_extension(VK_EXT_CALIBRATED_TIMESTAMPS_EXTENSION_NAME)
+			    .add_desired_extension(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
 			auto phys_ret2 = selector2.select();
 			if (!phys_ret2) {
 				throw std::runtime_error("Couldn't create physical device");

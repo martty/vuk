@@ -816,14 +816,9 @@ namespace vuk {
 	enum class DescriptorSetStrategyFlagBits {
 		eDefault = 0, // implementation choice
 		/* storage */
-		ePerLayout = 1 << 1, // one DS pool per layout
-		eCommon = 1 << 2,    // common pool per layout
-		                     // eCached = 1 << 3,
-		                     /* update - no flag: standard */
-		                     // eUpdateAfterBind = 1 << 4,
-		                     // ePushDescriptor = 1 << 5,
-		                     /* templating - no flag: no template */
-		                     // eWithTemplate = 1 << 7
+		ePerLayout = 1 << 1,      // one DS pool per layout
+		eCommon = 1 << 2,         // common pool per layout
+		ePushDescriptor = 1 << 3, // use push descriptors
 	};
 
 	using DescriptorSetStrategyFlags = Flags<DescriptorSetStrategyFlagBits>;

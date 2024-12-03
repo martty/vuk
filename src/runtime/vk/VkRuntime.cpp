@@ -196,6 +196,10 @@ namespace vuk {
 			rt_properties.pNext = &as_properties;
 		}
 		this->vkGetPhysicalDeviceProperties2(physical_device, &prop2);
+		// if we haved push descriptors available, use it
+		if (params.pointers.vkCmdPushDescriptorSetKHR) {
+			default_descriptor_set_strategy = DescriptorSetStrategyFlagBits::ePushDescriptor;
+		}
 	}
 
 	Runtime::Runtime(Runtime&& o) noexcept : impl(std::exchange(o.impl, nullptr)) {
@@ -562,6 +566,7 @@ namespace vuk {
 		plci.plci.pPushConstantRanges = accumulated_reflection.push_constant_ranges.data();
 		std::array<DescriptorSetLayoutAllocInfo, VUK_MAX_SETS> dslai = {};
 		std::vector<VkDescriptorSetLayout> dsls;
+		bool use_pd = default_descriptor_set_strategy == DescriptorSetStrategyFlagBits::ePushDescriptor;
 		for (auto& dsl : plci.dslcis) {
 			dsl.dslci.bindingCount = (uint32_t)dsl.bindings.size();
 			dsl.dslci.pBindings = dsl.bindings.data();
@@ -570,6 +575,8 @@ namespace vuk {
 				dslbfci.bindingCount = (uint32_t)dsl.bindings.size();
 				dslbfci.pBindingFlags = dsl.flags.data();
 				dsl.dslci.pNext = &dslbfci;
+			} else if (use_pd) {
+				dsl.dslci.flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
 			}
 			auto descset_layout_alloc_info = impl->descriptor_set_layouts.acquire(dsl);
 			dslai[dsl.index] = descset_layout_alloc_info;

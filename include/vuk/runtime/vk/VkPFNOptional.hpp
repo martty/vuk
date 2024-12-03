@@ -21,3 +21,6 @@ VUK_X(vkCreateRayTracingPipelinesKHR)
 // VK_EXT_calibrated_timestamps
 VUK_X(vkGetCalibratedTimestampsEXT)
 VUK_Y(vkGetPhysicalDeviceCalibrateableTimeDomainsEXT)
+
+// VK_KHR_push_descriptors
+VUK_X(vkCmdPushDescriptorSetKHR)
