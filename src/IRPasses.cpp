@@ -985,23 +985,27 @@ namespace vuk {
 				}
 			} break;
 			case Node::SPLICE: {
-				auto& node_si = *node->scheduled_item;
+				if (node->scheduled_item) {
+					auto& node_si = *node->scheduled_item;
 
-				for (size_t i = 0; i < node->splice.src.size(); i++) {
-					auto& parm = node->splice.src[i];
-					auto& link = parm.link();
+					for (size_t i = 0; i < node->splice.src.size(); i++) {
+						auto& parm = node->splice.src[i];
+						auto& link = parm.link();
 
-					if (node->splice.dst_access != Access::eNone) {
-						link.undef_sync = to_use(node->splice.dst_access);
-					} else {
-						if (parm.node->scheduled_item) {
-							auto& parm_si = *parm.node->scheduled_item;
-							if (parm_si.scheduled_domain != node_si.scheduled_domain) { // parameters are scheduled on different domain
-								// we don't know anything about future use, so put "anything"
-								parm.link().undef_sync = to_use(Access::eMemoryRW);
+						if (node->splice.dst_access != Access::eNone) {
+							link.undef_sync = to_use(node->splice.dst_access);
+						} else {
+							if (parm.node->scheduled_item) {
+								auto& parm_si = *parm.node->scheduled_item;
+								if (parm_si.scheduled_domain != node_si.scheduled_domain) { // parameters are scheduled on different domain
+									// we don't know anything about future use, so put "anything"
+									parm.link().undef_sync = to_use(Access::eMemoryRW);
+								}
 							}
 						}
 					}
+				} else {
+					assert(node->splice.dst_access == Access::eNone);
 				}
 			} break;
 			default: {
@@ -1021,101 +1025,6 @@ namespace vuk {
 
 	DomainFlagBits pick_first_domain(DomainFlags f) { // TODO: make this work
 		return (DomainFlagBits)f.m_mask;
-	}
-
-	Result<void> RGCImpl::schedule_intra_queue(const RenderGraphCompileOptions& compile_options) {
-		// we need to schedule all execables that run
-		std::vector<Node*, short_alloc<Node*>> schedule_items(*arena_);
-		robin_hood::unordered_flat_map<Node*, size_t> node_to_schedule;
-
-		for (auto node : nodes) {
-			switch (node->kind) {
-			case Node::CONSTRUCT:
-			case Node::CALL:
-			case Node::CLEAR:
-			case Node::MATH_BINARY:
-			case Node::SPLICE:
-			case Node::CONVERGE:
-				node_to_schedule[node] = schedule_items.size();
-				schedule_items.emplace_back(node);
-				break;
-			default:
-				break;
-			}
-		}
-		// calculate indegrees for all passes & build adjacency
-		const size_t size = schedule_items.size();
-		std::vector<size_t, short_alloc<size_t>> indegrees(size, *arena_);
-		std::vector<uint8_t, short_alloc<uint8_t>> adjacency_matrix(size * size, *arena_);
-
-		for (auto& node : nodes) {
-			size_t result_count = node->type.size();
-			for (auto i = 0; i < result_count; i++) {
-				auto& link = node->links[i];
-				if (link.undef && node_to_schedule.count(link.undef.node) && node_to_schedule.count(link.def.node)) {
-					indegrees[node_to_schedule[link.undef.node]]++;
-					adjacency_matrix[node_to_schedule[link.def.node] * size + node_to_schedule[link.undef.node]]++; // def -> undef
-				}
-				for (auto& read : link.reads.to_span(pass_reads)) {
-					if (!node_to_schedule.count(read.node)) {
-						continue;
-					}
-
-					if (node_to_schedule.count(link.def.node)) {
-						indegrees[node_to_schedule[read.node]]++;                                                 // this only counts as a dep if there is a def before
-						adjacency_matrix[node_to_schedule[link.def.node] * size + node_to_schedule[read.node]]++; // def -> read
-					}
-
-					if (link.undef && node_to_schedule.count(link.undef.node)) {
-						indegrees[node_to_schedule[link.undef.node]]++;
-						adjacency_matrix[node_to_schedule[read.node] * size + node_to_schedule[link.undef.node]]++; // read -> undef
-					}
-				}
-			}
-		}
-
-		// enqueue all indegree == 0 execables
-		std::vector<size_t, short_alloc<size_t>> process_queue(*arena_);
-		for (auto i = 0; i < indegrees.size(); i++) {
-			if (indegrees[i] == 0)
-				process_queue.push_back(i);
-		}
-		// dequeue indegree = 0 execables, add it to the ordered list, then decrement adjacent execables indegrees and push indegree == 0 to queue
-		while (process_queue.size() > 0) {
-			auto pop_idx = process_queue.back();
-			auto& execable = schedule_items[pop_idx];
-			ScheduledItem item{ .execable = execable, .scheduled_domain = vuk::DomainFlagBits::eAny };
-			if (execable->kind != Node::CONSTRUCT) { // we use def nodes for deps, but we don't want to schedule them later as their ordering doesn't matter
-				auto it = scheduled_execables.emplace(item);
-				it->execable->scheduled_item = &*it;
-			}
-			process_queue.pop_back();
-			for (auto i = 0; i < schedule_items.size(); i++) { // all the outgoing from this pass
-				if (i == pop_idx) {
-					continue;
-				}
-				auto adj_value = adjacency_matrix[pop_idx * size + i];
-				if (adj_value > 0) {
-					if (indegrees[i] -= adj_value; indegrees[i] == 0) {
-						process_queue.push_back(i);
-					}
-				}
-			}
-		}
-
-		for (auto& ind : indegrees) {
-			if (ind > 0) {
-				std::vector<Node*> unschedulables;
-				for (auto i = 0; i < indegrees.size(); i++) {
-					if (indegrees[i] > 0) {
-						unschedulables.push_back(schedule_items[i]);
-					}
-				}
-				assert(false);
-			}
-		}
-
-		return { expected_value };
 	}
 
 	void Compiler::queue_inference() {
@@ -1695,7 +1604,29 @@ namespace vuk {
 		VUK_DO_OR_RETURN(impl->collect_chains());
 		VUK_DO_OR_RETURN(impl->reify_inference());
 
-		VUK_DO_OR_RETURN(impl->schedule_intra_queue(compile_options));
+		for (auto& node : impl->ref_nodes) {
+			ScheduledItem item{ .execable = node, .scheduled_domain = vuk::DomainFlagBits::eAny };
+			auto it = impl->scheduled_execables.emplace(item);
+			it->execable->scheduled_item = &*it;
+		}
+
+		for (auto& node : impl->nodes) {
+			switch (node->kind) {
+			case Node::SPLICE:
+				// acquires need scheduling
+				if (!node->splice.rel_acq || node->splice.rel_acq->status == Signal::Status::eDisarmed) {
+					break;
+				}
+			case Node::CALL: {
+				ScheduledItem item{ .execable = node, .scheduled_domain = vuk::DomainFlagBits::eAny };
+				auto it = impl->scheduled_execables.emplace(item);
+				it->execable->scheduled_item = &*it;
+				break;
+			}
+			default:
+				break;
+			}
+		}
 
 		queue_inference();
 		pass_partitioning();

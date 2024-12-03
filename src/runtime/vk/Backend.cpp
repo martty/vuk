@@ -1517,9 +1517,6 @@ namespace vuk {
 				if (sched.process(item)) {
 					auto acqrel = node->splice.rel_acq;
 
-					auto sched_stream = item.scheduled_stream;
-					DomainFlagBits sched_domain = sched_stream->domain;
-
 					if (!acqrel || acqrel->status == Signal::Status::eDisarmed) {
 						Stream* dst_stream;
 
@@ -1531,12 +1528,11 @@ namespace vuk {
 							dst_stream = &*it;
 							is_release = true;
 						} else if (node->splice.dst_domain == DomainFlagBits::eAny) {
-							dst_stream = sched_stream;
 							auto values = new void*[node->splice.src.size()];
 							for (size_t i = 0; i < node->splice.src.size(); i++) {
 								auto parm = node->splice.src[i];
 								auto arg_ty = node->type[i];
-								auto di = sched.get_dependency_info(parm, arg_ty.get(), RW::eWrite, dst_stream);
+								auto di = sched.get_dependency_info(parm, arg_ty.get(), RW::eWrite, parm.node->execution_info->stream);
 								values[i] = sched.get_value(parm);
 							}
 #ifdef VUK_DUMP_EXEC
@@ -1545,16 +1541,18 @@ namespace vuk {
 							print_args(node->splice.src);
 							fmt::print("\n");
 #endif
-							sched.done(node, item.scheduled_stream, std::span{ values, node->splice.src.size() });
+							sched.done(node, host_stream, std::span{ values, node->splice.src.size() });
 
 							break;
 						} else if (node->splice.dst_domain == DomainFlagBits::eDevice) {
-							dst_stream = sched_stream;
+							dst_stream = item.scheduled_stream;
 							is_release = true;
 						} else {
 							dst_stream = recorder.stream_for_domain(node->splice.dst_domain);
 							is_release = true;
 						}
+						auto sched_stream = item.scheduled_stream;
+						DomainFlagBits sched_domain = sched_stream->domain;
 						assert(dst_stream);
 						DomainFlagBits dst_domain = dst_stream->domain;
 
@@ -1684,6 +1682,9 @@ namespace vuk {
 						bool is_release = !(node->splice.dst_access == Access::eNone && node->splice.dst_domain == DomainFlagBits::eAny);
 						for (size_t i = 0; i < node->splice.src.size(); i++) {
 							sched.schedule_dependency(node->splice.src[i], is_release ? RW::eWrite : RW::eNop);
+							if (!is_release) { // if we share a nop group, the dependency will not get scheduled - explicitly schedule it here
+								sched.schedule_new(node->splice.src[i].node);
+							}
 						}
 					}
 				}
@@ -1810,7 +1811,7 @@ namespace vuk {
 					for (size_t i = 0; i < node->converge.diverged.size(); i++) {
 						auto& div = node->converge.diverged[i];
 						recorder.add_sync(sched.base_type(div).get(),
-						                  sched.get_dependency_info(div, div.type().get(), node->converge.write[i] ? RW::eWrite : RW::eRead, item.scheduled_stream),
+						                  sched.get_dependency_info(div, div.type().get(), node->converge.write[i] ? RW::eWrite : RW::eRead, base.node->execution_info->stream),
 						                  sched.get_value(div));
 					}
 
@@ -1823,7 +1824,7 @@ namespace vuk {
 					fmt::print("\n");
 #endif
 
-					sched.done(node, item.scheduled_stream, sliced); // converge doesn't execute
+					sched.done(node, base.node->execution_info->stream, sliced); // converge doesn't execute
 				} else {
 					for (size_t i = 0; i < node->converge.diverged.size(); i++) {
 						sched.schedule_dependency(node->converge.diverged[i], node->converge.write[i] ? RW::eWrite : RW::eRead);

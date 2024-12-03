@@ -110,7 +110,8 @@ TEST_CASE("computation is never duplicated 2") {
 	d.submit(*test_context.allocator, test_context.compiler);
 	d.submit(*test_context.allocator, test_context.compiler);
 	trace = trace.substr(0, trace.size() - 1);
-	CHECK(trace == "a b d");
+	bool good = (trace == "a b d") || (trace == "b a d");
+	CHECK(good);
 }
 
 TEST_CASE("computation is never duplicated 3") {
@@ -128,7 +129,8 @@ TEST_CASE("computation is never duplicated 3") {
 	ap.submit(*test_context.allocator, test_context.compiler);
 	bp.submit(*test_context.allocator, test_context.compiler);
 	trace = trace.substr(0, trace.size() - 1);
-	CHECK(trace == "a b d");
+	bool good = (trace == "a b d") || (trace == "b a d");
+	CHECK(good);
 }
 
 TEST_CASE("not moving Values will emit splices") {
@@ -140,7 +142,8 @@ TEST_CASE("not moving Values will emit splices") {
 	auto d = make_binary_computation("d", trace)(a, b); // d->a, d->b
 	d.submit(*test_context.allocator, test_context.compiler);
 	trace = trace.substr(0, trace.size() - 1);
-	CHECK(trace == "a b d");
+	bool good = (trace == "a b d") || (trace == "b a d");
+	CHECK(good);
 }
 
 TEST_CASE("moving Values allows for more efficient building (but no semantic change)") {
@@ -152,7 +155,8 @@ TEST_CASE("moving Values allows for more efficient building (but no semantic cha
 	auto d = make_binary_computation("d", trace)(std::move(a), std::move(b)); // d->a, d->b
 	d.submit(*test_context.allocator, test_context.compiler);
 	trace = trace.substr(0, trace.size() - 1);
-	CHECK(trace == "a b d");
+	bool good = (trace == "a b d") || (trace == "b a d");
+	CHECK(good);
 }
 
 TEST_CASE("moving Values doesn't help if it was leaked before") {

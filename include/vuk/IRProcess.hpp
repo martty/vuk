@@ -118,7 +118,6 @@ namespace vuk {
 		Result<void> implicit_linking(IRModule* module, std::pmr::polymorphic_allocator<std::byte> allocator);
 		Result<void> build_sync();
 		Result<void> reify_inference();
-		Result<void> schedule_intra_queue(const RenderGraphCompileOptions& compile_options);
 		Result<void> collect_chains();
 
 		ImageUsageFlags compute_usage(const ChainLink* head);
