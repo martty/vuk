@@ -834,7 +834,7 @@ namespace vuk {
 			return nullptr;
 		}
 
-		void init_sync(Type* base_ty, StreamResourceUse src_use, void* value) {
+		void init_sync(Type* base_ty, StreamResourceUse src_use, void* value, bool enforce_unique = true) {
 			uint64_t key = 0;
 			PartialStreamResourceUse psru{ src_use };
 			if (base_ty->hash_value == current_module->types.builtin_image) {
@@ -850,7 +850,7 @@ namespace vuk {
 				auto size = base_ty->array.count;
 				auto elems = reinterpret_cast<std::byte*>(value);
 				for (int i = 0; i < size; i++) {
-					init_sync(elem_ty, src_use, elems);
+					init_sync(elem_ty, src_use, elems, enforce_unique);
 					elems += elem_ty->size;
 				}
 				return;
@@ -858,8 +858,12 @@ namespace vuk {
 				key = reinterpret_cast<uint64_t>(value);
 			}
 
-			assert(last_modify.find(key) == last_modify.end());
-			last_modify.emplace(key, new (this->arena.ensure_space(sizeof(PartialStreamResourceUse))) PartialStreamResourceUse(psru));
+			if (enforce_unique) {
+				assert(last_modify.find(key) == last_modify.end());
+				last_modify.emplace(key, new (this->arena.ensure_space(sizeof(PartialStreamResourceUse))) PartialStreamResourceUse(psru));
+			} else {
+				last_modify.try_emplace(key, new (this->arena.ensure_space(sizeof(PartialStreamResourceUse))) PartialStreamResourceUse(psru));
+			}
 		}
 
 		void add_sync(Type* base_ty, std::optional<StreamResourceUse> maybe_dst_use, void* value) {
@@ -1628,16 +1632,6 @@ namespace vuk {
 						print_results(node);
 						fmt::print(" = acquire<");
 #endif
-						bool internal = false;
-						for (auto& [k, vec] : impl->deferred_splices) {
-							for (auto& v : vec) {
-								if (v.node == node) {
-									internal = true;
-									break;
-								}
-							}
-						}
-
 						for (size_t i = 0; i < node->splice.values.size(); i++) {
 							auto& link = node->links[i];
 							// TODO: array exception
@@ -1645,9 +1639,7 @@ namespace vuk {
 								continue;
 							}
 							StreamResourceUse src_use = { acqrel->last_use[i], src_stream };
-							if (!internal) {
-								recorder.init_sync(node->type[i].get(), src_use, node->splice.values[i]);
-							}
+							recorder.init_sync(node->type[i].get(), src_use, node->splice.values[i], false);
 							if (node->type[i]->hash_value == current_module->types.builtin_buffer) {
 #ifdef VUK_DUMP_EXEC
 								fmt::print("buffer");
