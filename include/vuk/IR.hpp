@@ -162,8 +162,6 @@ namespace vuk {
 				return "DSWrite";
 			case eDepthStencilRW:
 				return "DSRW";
-			case eInputRead:
-				return "InputR";
 			case eVertexSampled:
 				return "VtxS";
 			case eVertexRead:

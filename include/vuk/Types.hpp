@@ -9,7 +9,6 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
-#include <algorithm>
 
 #define MOV(x) (static_cast<std::remove_reference_t<decltype(x)>&&>(x))
 
@@ -705,49 +704,46 @@ namespace vuk {
 	};
 
 	enum Access : uint64_t {
-		eNone = 1ULL << 0,          // as initial use: resource available without synchronization, as final use: resource does not need synchronizing
-		eInfer = 1ULL << 1,         // as final use only: this use must be overwritten/inferred before compiling (internal)
-		eClear = 1ULL << 5,         // general clearing
-		eTransferClear = 1ULL << 6, // vkCmdClearXXX
-		eColorWrite = 1ULL << 7,
-		eColorRead = 1ULL << 8,
-		eColorRW = eColorWrite | eColorRead,
+		eNone = 1ULL << 0,       // as initial use: resource available without synchronization, as final use: resource does not need synchronizing
+		eClear = 1ULL << 5,      // general clearing
+		eColorRead = 1ULL << 7,  // read as a framebuffer color attachment
+		eColorWrite = 1ULL << 8, // written as a framebuffer color attachment
+		eColorRW = eColorRead | eColorWrite,
 		eColorResolveRead = 1ULL << 10,  // special op to mark render pass resolve read
 		eColorResolveWrite = 1ULL << 11, // special op to mark render pass resolve write
-		eDepthStencilRead = 1ULL << 12,
-		eDepthStencilWrite = 1ULL << 13,
+		eDepthStencilRead = 1ULL << 12,  // read as a framebuffer depth attachment
+		eDepthStencilWrite = 1ULL << 13, // written as a framebuffer depth attachment
 		eDepthStencilRW = eDepthStencilWrite | eDepthStencilRead,
-		eInputRead = 1ULL << 14,
-		eVertexSampled = 1ULL << 15,
-		eVertexRead = 1ULL << 16,
-		eAttributeRead = 1ULL << 17,
-		eIndexRead = 1ULL << 18,
-		eIndirectRead = 1ULL << 19,
-		eFragmentSampled = 1ULL << 20,
-		eFragmentRead = 1ULL << 21,
-		eFragmentWrite = 1ULL << 22, // written using image store
+		eVertexSampled = 1ULL << 15,   // sampled in a vertex shader
+		eVertexRead = 1ULL << 16,      // read from an image or buffer in a vertex shader
+		eAttributeRead = 1ULL << 17,   // read from an attribute in a vertex shader
+		eIndexRead = 1ULL << 18,       // read from an index buffer for indexed rendering
+		eIndirectRead = 1ULL << 19,    // read from an indirect buffer for indirect rendering
+		eFragmentSampled = 1ULL << 20, // sampled in a fragment shader
+		eFragmentRead = 1ULL << 21,    // read from an image or buffer in a fragment shader
+		eFragmentWrite = 1ULL << 22,   // written using image store or buffer write in a fragment shader
 		eFragmentRW = eFragmentRead | eFragmentWrite,
-		eTransferRead = 1ULL << 23,
-		eTransferWrite = 1ULL << 24,
+		eTransferRead = 1ULL << 23,  // read from an image or buffer in a transfer operation
+		eTransferWrite = 1ULL << 24, // written from an image or buffer in a transfer operation
 		eTransferRW = eTransferRead | eTransferWrite,
-		eComputeRead = 1ULL << 25,
-		eComputeWrite = 1ULL << 26,
+		eComputeRead = 1ULL << 25,  // read from an image or buffer in a compute shader
+		eComputeWrite = 1ULL << 26, // written using image store or buffer write in a compute shader
 		eComputeRW = eComputeRead | eComputeWrite,
-		eComputeSampled = 1ULL << 27,
-		eRayTracingRead = 1ULL << 28,
-		eRayTracingWrite = 1ULL << 29,
+		eComputeSampled = 1ULL << 27,  // sampled in a compute shader
+		eRayTracingRead = 1ULL << 28,  // read from an image or buffer in a ray tracing shader
+		eRayTracingWrite = 1ULL << 29, // written using image store or buffer write in a ray tracing shader
 		eRayTracingRW = eRayTracingRead | eRayTracingWrite,
-		eRayTracingSampled = 1ULL << 30,
-		eAccelerationStructureBuildRead = 1ULL << 31,
-		eAccelerationStructureBuildWrite = 1ULL << 32,
+		eRayTracingSampled = 1ULL << 30,               // sampled in a ray tracing shader
+		eAccelerationStructureBuildRead = 1ULL << 31,  // read during acceleration structure build
+		eAccelerationStructureBuildWrite = 1ULL << 32, // written during acceleration structure build
 		eAccelerationStructureBuildRW = eAccelerationStructureBuildRead | eAccelerationStructureBuildWrite,
-		eHostRead = 1ULL << 33,
-		eHostWrite = 1ULL << 34,
+		eHostRead = 1ULL << 33,  // read by the host
+		eHostWrite = 1ULL << 34, // written by the host
 		eHostRW = eHostRead | eHostWrite,
-		eMemoryRead = 1ULL << 35,
-		eMemoryWrite = 1ULL << 36,
+		eMemoryRead = 1ULL << 35,  // any device access that reads
+		eMemoryWrite = 1ULL << 36, // any device access that writes
 		eMemoryRW = eMemoryRead | eMemoryWrite,
-		ePresent = 1ULL << 37
+		ePresent = 1ULL << 37 // presented from
 	};
 
 	inline constexpr Access operator|(Access bit0, Access bit1) noexcept {
