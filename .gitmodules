@@ -7,30 +7,12 @@
 [submodule "ext/VulkanMemoryAllocator"]
 	path = ext/VulkanMemoryAllocator
 	url = https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator
-[submodule "ext/glm"]
-	path = ext/glm
-	url = https://github.com/g-truc/glm
 [submodule "ext/stb"]
 	path = ext/stb
 	url = https://github.com/nothings/stb
 [submodule "ext/imgui"]
 	path = ext/imgui
 	url = https://github.com/ocornut/imgui
-[submodule "ext/Mustache"]
-	path = ext/Mustache
-	url = https://github.com/kainjow/Mustache
-[submodule "ext/Catch2"]
-	path = ext/Catch2
-	url = https://github.com/catchorg/Catch2
-[submodule "ext/ImGuiColorTextEdit"]
-	path = ext/ImGuiColorTextEdit
-	url = https://github.com/martty/ImGuiColorTextEdit
-[submodule "ext/ImGui-Addons"]
-	path = ext/ImGui-Addons
-	url = https://github.com/gallickgunner/ImGui-Addons
-[submodule "ext/tinygltf"]
-	path = ext/tinygltf
-	url = https://github.com/syoyo/tinygltf
 [submodule "ext/concurrentqueue"]
 	path = ext/concurrentqueue
 	url = https://github.com/cameron314/concurrentqueue
