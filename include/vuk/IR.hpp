@@ -279,7 +279,6 @@ namespace vuk {
 
 	// struct describing use chains
 	struct ChainLink {
-		Ref urdef = {};            // the first def
 		ChainLink* prev = nullptr; // if this came from a previous undef, we link them together
 		Ref def;
 		RelSpan<Ref> reads;

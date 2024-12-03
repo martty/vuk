@@ -629,22 +629,6 @@ namespace vuk {
 		}
 	}
 
-	void build_urdef(Node* node) {
-		size_t result_count = node->type.size();
-		for (auto i = 0; i < result_count; i++) {
-			auto& link = node->links[i];
-			if (link.urdef)
-				continue;
-			if (!link.prev) { // from head to tails, propagate
-				auto l = &link;
-				do {
-					l->urdef = link.def;
-					l = l->next;
-				} while (l);
-			}
-		}
-	}
-
 	Result<void> RGCImpl::build_links(std::vector<Node*>& working_set, std::pmr::polymorphic_allocator<std::byte> allocator) {
 		pass_reads.clear();
 		pass_nops.clear();
@@ -684,12 +668,6 @@ namespace vuk {
 
 		working_set.insert(working_set.end(), new_nodes.begin(), new_nodes.end());
 
-		// build URDEF
-		// TODO: remove?, replace with get_def
-		for (auto& node : working_set) {
-			build_urdef(node);
-		}
-
 		// TODO:
 		// we need a pass that walks through links
 		// an incompatible read group contains multiple domains
@@ -713,9 +691,6 @@ namespace vuk {
 		}
 		for (auto it = start; it != end; ++it) {
 			process_node_links(module, *it, pass_reads, pass_nops, child_chains, new_nodes, allocator, true);
-		}
-		for (auto it = start; it != end; ++it) {
-			build_urdef(*it);
 		}
 
 		return { expected_value };
