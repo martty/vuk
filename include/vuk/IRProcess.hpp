@@ -8,6 +8,7 @@
 #include <deque>
 #include <memory_resource>
 #include <robin_hood.h>
+#include <gch/small_vector.hpp>
 
 namespace vuk {
 
@@ -252,7 +253,7 @@ namespace vuk {
 			ranges.emplace_back(r);
 		}
 
-		MultiSubrange(std::pmr::vector<Subrange::Image> r) {
+		MultiSubrange(gch::small_vector<Subrange::Image, 16> r) {
 			if (r.size() == 1) {
 				ranges = std::move(r);
 				return;
@@ -272,7 +273,7 @@ namespace vuk {
 		}
 
 		MultiSubrange set_intersect(Subrange::Image b) {
-			std::pmr::vector<Subrange::Image> new_ranges;
+			gch::small_vector<Subrange::Image, 16> new_ranges;
 			for (auto& a : ranges) {
 				if (auto i = intersect_one(a, b)) {
 					new_ranges.emplace_back(*i);
@@ -282,7 +283,7 @@ namespace vuk {
 		}
 
 		MultiSubrange set_difference(Subrange::Image b) {
-			std::pmr::vector<Subrange::Image> new_ranges;
+			gch::small_vector<Subrange::Image, 16> new_ranges;
 			for (auto& a : ranges) {
 				difference_one(a, b, [&](Subrange::Image i) { new_ranges.emplace_back(i); });
 			}
@@ -290,7 +291,7 @@ namespace vuk {
 		}
 
 		MultiSubrange set_difference(MultiSubrange& b) {
-			std::pmr::vector<Subrange::Image> new_ranges;
+			gch::small_vector<Subrange::Image, 16> new_ranges;
 			for (auto& a : ranges) {
 				for (auto& b : b.ranges) {
 					difference_one(a, b, [&](Subrange::Image i) { new_ranges.emplace_back(i); });
@@ -316,7 +317,7 @@ namespace vuk {
 		}
 
 	private:
-		std::pmr::vector<Subrange::Image> ranges;
+		gch::small_vector<Subrange::Image, 16> ranges;
 	};
 
 	// errors and printing

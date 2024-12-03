@@ -120,6 +120,7 @@ if (NOT TARGET fmt::fmt)
   add_subdirectory(ext/fmt)
 endif()
 add_subdirectory(ext/function2)
+add_subdirectory (ext/small_vector)
 target_include_directories(vuk PRIVATE ext/concurrentqueue ext/VulkanMemoryAllocator/include)
 target_include_directories(vuk PUBLIC include)
 
@@ -173,7 +174,7 @@ target_compile_definitions(vuk PUBLIC
 								VUK_COMPILER_MSVC=$<BOOL:${VUK_COMPILER_MSVC}>
 )
 
-target_link_libraries(vuk PRIVATE spirv-cross-core robin_hood fmt::fmt)
+target_link_libraries(vuk PRIVATE spirv-cross-core robin_hood fmt::fmt gch::small_vector)
 target_link_libraries(vuk PUBLIC function2)
 
 if(VUK_LINK_TO_LOADER)
