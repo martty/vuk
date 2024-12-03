@@ -852,15 +852,6 @@ namespace vuk {
 		constexpr std::strong_ordering operator<=>(const Ref&) const noexcept = default;
 	};
 
-	template<size_t N>
-	struct StringLiteral {
-		constexpr StringLiteral(const char (&str)[N]) {
-			std::copy_n(str, N, value);
-		}
-
-		char value[N];
-	};
-
 	template<class Type, Access acc, class UniqueT>
 	struct Arg {
 		using type = Type;
