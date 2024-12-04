@@ -514,7 +514,7 @@ namespace vuk {
 		case Node::SLICE:
 			return { expected_value, RefOrValue::from_ref(ref) };
 		case Node::SPLICE: {
-			if (ref.node->splice.rel_acq == nullptr || ref.node->splice.rel_acq->status == Signal::Status::eDisarmed) {
+			if (ref.node->splice.rel_acq == nullptr || ref.node->splice.rel_acq->status == Signal::Status::eDisarmed || ref.node->splice.src.size() > ref.index) {
 				return get_def(ref.node->splice.src[ref.index]);
 			} else {
 				return { expected_value, RefOrValue::from_value(ref.node->splice.values[ref.index]) };
