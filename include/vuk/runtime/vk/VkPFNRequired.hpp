@@ -121,6 +121,7 @@ VUK_X(vkGetBufferDeviceAddress)
 VUK_X(vkCmdDrawIndirectCount)
 VUK_X(vkCmdDrawIndexedIndirectCount)
 VUK_X(vkResetQueryPool)
+VUK_X(vkGetSemaphoreCounterValue)
 
 // sync2 or 1.3
 VUK_X(vkCmdPipelineBarrier2KHR)

@@ -33,9 +33,9 @@ namespace vuk {
 
 		/// @brief Submit Value for execution
 		Result<void> submit(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options = {});
-		/// @brief If the Value has been submitted for execution, polls for status.
+		/// @brief Polls for the status of this Value.
 		[[nodiscard]] Result<Signal::Status> poll();
-
+		/// @brief Submit this Value and waits for it the be ready on the host.
 		Result<void> wait(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options = {});
 
 		std::shared_ptr<ExtNode> node;
@@ -308,23 +308,7 @@ namespace vuk {
 
 	Result<void> submit(Allocator& allocator, Compiler& compiler, std::span<UntypedValue> values, RenderGraphCompileOptions options);
 
-	inline Result<void> wait_for_values_explicit(Allocator& alloc, Compiler& compiler, std::span<UntypedValue> values, RenderGraphCompileOptions options = {}) {
-		std::vector<SyncPoint> waits;
-		VUK_DO_OR_RETURN(submit(alloc, compiler, values, options));
-		for (uint64_t i = 0; i < values.size(); i++) {
-			auto& value = values[i];
-			if (value.node->acqrel->status != Signal::Status::eSynchronizable) {
-				continue;
-			}
-			waits.emplace_back(value.node->acqrel->source);
-		}
-		if (waits.size() > 0) {
-			// TODO: turn these into HostAvailable
-			return alloc.get_context().wait_for_domains(std::span(waits));
-		}
-
-		return { expected_value };
-	}
+	Result<void> wait_for_values_explicit(Allocator& alloc, Compiler& compiler, std::span<UntypedValue> values, RenderGraphCompileOptions options = {});
 
 	template<class... Args>
 	Result<void> wait_for_values(Allocator& alloc, Compiler& compiler, Args&&... futs) {

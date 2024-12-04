@@ -154,6 +154,7 @@ namespace vuk {
 		Result<void> wait_idle();
 
 		Result<void> wait_for_domains(std::span<struct SyncPoint> sync_points);
+		static Result<bool> sync_point_ready(SyncPoint sp);
 
 		// Query functionality
 

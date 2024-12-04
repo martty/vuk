@@ -18,6 +18,7 @@ namespace vuk {
 		PFN_vkQueueWaitIdle queueWaitIdle;
 		PFN_vkDestroySemaphore destroySemaphore;
 		PFN_vkQueuePresentKHR queuePresentKHR;
+		PFN_vkGetSemaphoreCounterValue getSemaphoreCounterValue;
 		VkSemaphore submit_sync;
 		uint64_t sync_value = 0;
 		VkQueue queue;
@@ -30,6 +31,7 @@ namespace vuk {
 		    queueWaitIdle(fps.vkQueueWaitIdle),
 		    destroySemaphore(fps.vkDestroySemaphore),
 		    queuePresentKHR(fps.vkQueuePresentKHR),
+		    getSemaphoreCounterValue(fps.vkGetSemaphoreCounterValue),
 		    submit_sync(sema),
 		    queue(queue),
 		    family_index(queue_family_index) {}
@@ -128,8 +130,13 @@ namespace vuk {
 		return { expected_value, VK_SUCCESS };
 	}
 
-	uint64_t QueueExecutor::get_sync_value() {
-		return impl->sync_value++;
+	Result<uint64_t> QueueExecutor::get_sync_value() {
+		uint64_t value;
+		auto res = impl->getSemaphoreCounterValue(impl->device, impl->submit_sync, &value);
+		if (res != VK_SUCCESS) {
+			return { expected_error, VkException{ res } };
+		}
+		return { expected_value, value };
 	}
 
 	VkSemaphore QueueExecutor::get_semaphore() {

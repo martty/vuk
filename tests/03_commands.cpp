@@ -126,6 +126,24 @@ TEST_CASE("image blit") {
 	}
 }
 
+TEST_CASE("poll wait") {
+	{
+		auto data = { 1u, 2u, 3u, 4u };
+		auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, Samples::e1);
+		auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
 
+		size_t alignment = format_to_texel_block_size(fut->format);
+		size_t size = compute_image_size(fut->format, fut->extent);
+		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
+		auto fut2 = clear_image(fut, vuk::ClearColor(5u, 5u, 5u, 5u));
+		auto dst_buf = discard_buf("dst", *dst);
+		download_buffer(copy(fut2, dst_buf)).submit(*test_context.allocator, test_context.compiler);
+		while (*dst_buf.poll() != Signal::Status::eHostAvailable) {
+			std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		}
+		auto updata = std::span((uint32_t*)dst_buf->mapped_ptr, 4);
+		CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 5; }));
+	}
+}
 
 // TEST TODOS: image2image copy, resolve

@@ -26,7 +26,7 @@ namespace vuk {
 		QueueExecutor& operator=(QueueExecutor&&) noexcept;
 
 		Result<void> submit_batch(std::vector<SubmitInfo> batch);
-		uint64_t get_sync_value();
+		Result<uint64_t> get_sync_value();
 		VkSemaphore get_semaphore();
 		uint32_t get_queue_family_index();
 

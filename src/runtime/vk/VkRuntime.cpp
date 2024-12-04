@@ -899,6 +899,18 @@ namespace vuk {
 		return { expected_value };
 	}
 
+	Result<bool> Runtime::sync_point_ready(SyncPoint sp) {
+		auto& [executor, v] = sp; 
+		assert(executor->type == Executor::Type::eVulkanDeviceQueue);
+		auto vkq = static_cast<QueueExecutor*>(executor);
+		auto idx = vkq->get_queue_family_index();
+		auto val = vkq->get_sync_value();
+		if (!val) {
+			return val;
+		}
+		return { expected_value, *val >= v };
+	}
+
 	Swapchain::Swapchain(Allocator alloc, size_t image_count) : allocator(alloc) {
 		semaphores.resize(image_count * 2);
 		allocator.allocate_semaphores(std::span(semaphores));

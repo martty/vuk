@@ -54,6 +54,29 @@ namespace vuk {
 		return { expected_value };
 	}
 
+	Result<void> wait_for_values_explicit(Allocator& alloc, Compiler& compiler, std::span<UntypedValue> values, RenderGraphCompileOptions options) {
+		std::vector<SyncPoint> waits;
+		VUK_DO_OR_RETURN(submit(alloc, compiler, values, options));
+		for (uint64_t i = 0; i < values.size(); i++) {
+			auto& value = values[i];
+			if (value.node->acqrel->status != Signal::Status::eSynchronizable) {
+				continue;
+			}
+			waits.emplace_back(value.node->acqrel->source);
+		}
+		if (waits.size() > 0) {
+			VUK_DO_OR_RETURN(alloc.get_context().wait_for_domains(std::span(waits)));
+			for (uint64_t i = 0; i < values.size(); i++) {
+				auto& value = values[i];
+				if (value.node->acqrel->status == Signal::Status::eSynchronizable) {
+					value.node->acqrel->status = Signal::Status::eHostAvailable;
+				}
+			}
+		}
+
+		return { expected_value };
+	}
+
 	Result<void> UntypedValue::wait(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options) {
 		auto res = submit(allocator, compiler, options);
 		if (!res) {
@@ -69,23 +92,21 @@ namespace vuk {
 	}
 
 	Result<void> UntypedValue::submit(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options) {
-		if (node->acqrel->status == Signal::Status::eHostAvailable || node->acqrel->status == Signal::Status::eSynchronizable) {
-			compiler.reset();
-			return { expected_value }; // nothing to do
-		} else {
-			if (node->get_node()->splice.dst_access == Access::eNone && node->get_node()->splice.dst_domain == DomainFlagBits::eAny) {
-				release();
-			}
-			auto erg = compiler.link(std::span{ &node, 1 }, options);
-			if (!erg) {
-				return erg;
-			}
-			std::pair v = { &allocator, &*erg };
-			VUK_DO_OR_RETURN(execute_submit(allocator, std::span{ &v, 1 }));
-			assert(node->acqrel->status != Signal::Status::eDisarmed);
-			compiler.reset();
-			return { expected_value };
+		return vuk::submit(allocator, compiler, std::span{ this, 1 }, options);
+	}
+
+	Result<Signal::Status> UntypedValue::poll() {
+		if (node->acqrel->status == Signal::Status::eDisarmed || node->acqrel->status == Signal::Status::eHostAvailable) {
+			return { expected_value, node->acqrel->status };
 		}
+		auto res = Runtime::sync_point_ready(node->acqrel->source);
+		if (!res) {
+			return res;
+		}
+		if (*res) {
+			node->acqrel->status = Signal::Status::eHostAvailable;
+		}
+		return { expected_value, node->acqrel->status };
 	}
 } // namespace vuk
 
