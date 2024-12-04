@@ -35,10 +35,10 @@ namespace vuk {
 		    arena_(new arena(4 * 1024 * 1024)),
 		    pool(std::make_unique<std::pmr::unsynchronized_pool_resource>()),
 		    mbr(pool.get()) {}
-		RGCImpl(arena* a, std::unique_ptr<std::pmr::unsynchronized_pool_resource> pool) : arena_(a), pool(std::move(pool)), mbr(pool.get()) {}
+		RGCImpl(arena* a, std::unique_ptr<std::pmr::unsynchronized_pool_resource> pool) : arena_(a), pool(std::move(pool)), mbr(this->pool.get()) {}
 		std::unique_ptr<arena> arena_;
-		std::pmr::monotonic_buffer_resource mbr;
 		std::unique_ptr<std::pmr::unsynchronized_pool_resource> pool;
+		std::pmr::monotonic_buffer_resource mbr;
 
 		plf::colony<ScheduledItem> scheduled_execables;
 		std::vector<ScheduledItem*> partitioned_execables;
