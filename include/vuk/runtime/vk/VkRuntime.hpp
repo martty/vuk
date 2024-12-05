@@ -257,21 +257,4 @@ namespace vuk {
 		info.objectHandle = reinterpret_cast<uint64_t>(t);
 		this->vkSetDebugUtilsObjectNameEXT(device, &info);
 	}
-
-	// utility functions
-
-	struct ExecutableRenderGraph;
-
-	/// @brief Execute given `ExecutableRenderGraph`s into API VkCommandBuffers, then submit them to queues
-	/// @param allocator Allocator to use for submission resources
-	/// @param executable_rendergraphs `ExecutableRenderGraph`s for execution
-	/// @param swapchains_with_indexes Swapchains references by the rendergraphs
-	/// @param present_rdy Semaphore used to gate device-side execution
-	/// @param render_complete Semaphore used to gate presentation
-	Result<void> execute_submit(Allocator& allocator, std::span<std::pair<Allocator*, ExecutableRenderGraph*>> executable_rendergraphs);
-
-	/// @brief Execute given `ExecutableRenderGraph` into API VkCommandBuffers, then submit them to queues, then blocking-wait for the submission to complete
-	/// @param allocator Allocator to use for submission resources
-	/// @param executable_rendergraph `ExecutableRenderGraph`s for execution
-	Result<void> execute_submit_and_wait(Allocator& allocator, ExecutableRenderGraph&& executable_rendergraph);
 } // namespace vuk

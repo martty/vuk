@@ -6,26 +6,6 @@
 #include "vuk/runtime/vk/VkSwapchain.hpp"
 
 namespace vuk {
-	// assume rgs are independent - they don't reference eachother
-	Result<void> execute_submit(Allocator& allocator, std::span<std::pair<Allocator*, ExecutableRenderGraph*>> rgs) {
-		for (auto& [alloc, rg] : rgs) {
-			auto res = rg->execute(*alloc);
-			if (!res) {
-				return res;
-			}
-		}
-
-		return { expected_value };
-	}
-
-	Result<void> execute_submit_and_wait(Allocator& allocator, ExecutableRenderGraph&& rg) {
-		Runtime& ctx = allocator.get_context();
-		std::pair v = { &allocator, &rg };
-		VUK_DO_OR_RETURN(execute_submit(allocator, std::span{ &v, 1 }));
-		ctx.wait_idle(); // TODO:
-		return { expected_value };
-	}
-
 	Result<void> submit(Allocator& allocator, Compiler& compiler, std::span<UntypedValue> values, RenderGraphCompileOptions options) {
 		std::vector<std::shared_ptr<ExtNode>> extnodes;
 		for (auto& value : values) {
@@ -48,8 +28,7 @@ namespace vuk {
 			return erg;
 		}
 
-		std::pair v = { &allocator, &*erg };
-		VUK_DO_OR_RETURN(execute_submit(allocator, std::span{ &v, 1 }));
+		VUK_DO_OR_RETURN(erg->execute(allocator));
 		compiler.reset();
 		return { expected_value };
 	}
