@@ -1529,12 +1529,11 @@ namespace vuk {
 							dst_stream = &*it;
 							is_release = true;
 						} else if (node->splice.dst_domain == DomainFlagBits::eAny) {
-							auto values = new void*[node->splice.src.size()];
 							for (size_t i = 0; i < node->splice.src.size(); i++) {
 								auto parm = node->splice.src[i];
 								auto arg_ty = node->type[i];
 								auto di = sched.get_dependency_info(parm, arg_ty.get(), RW::eWrite, parm.node->execution_info->stream);
-								values[i] = sched.get_value(parm);
+								memcpy(node->splice.values[i], impl->get_value(parm), parm.type()->size);
 							}
 #ifdef VUK_DUMP_EXEC
 							print_results(node);
@@ -1542,7 +1541,7 @@ namespace vuk {
 							print_args(node->splice.src);
 							fmt::print("\n");
 #endif
-							sched.done(node, host_stream, std::span{ values, node->splice.src.size() });
+							sched.done(node, host_stream, node->splice.values);
 
 							break;
 						} else if (node->splice.dst_domain == DomainFlagBits::eDevice) {
@@ -1557,16 +1556,12 @@ namespace vuk {
 						assert(dst_stream);
 						DomainFlagBits dst_domain = dst_stream->domain;
 
-						auto values = new void*[node->splice.src.size()];
-
 						for (size_t i = 0; i < node->splice.src.size(); i++) {
 							auto parm = node->splice.src[i];
 							auto arg_ty = node->type[i];
 							auto di = sched.get_dependency_info(parm, arg_ty.get(), RW::eWrite, dst_stream);
 							auto value = sched.get_value(parm);
-							auto storage = new std::byte[parm.type()->size];
-							memcpy(storage, impl->get_value(parm), parm.type()->size);
-							values[i] = storage;
+							memcpy(node->splice.values[i], impl->get_value(parm), parm.type()->size);
 							recorder.add_sync(sched.base_type(parm).get(), di, value);
 
 							auto last_use = recorder.last_use(sched.base_type(parm).get(), value);
@@ -1580,7 +1575,6 @@ namespace vuk {
 								}
 							}
 						}
-						node->splice.values = std::span{ values, node->splice.src.size() };
 						if (is_release) {
 							// for releases, run deferred splices before submission
 							auto it = impl->deferred_splices.find(node);
@@ -1624,7 +1618,7 @@ namespace vuk {
 							fmt::print("\n");
 #endif
 						}
-						sched.done(node, item.scheduled_stream, std::span{ values, node->splice.src.size() });
+						sched.done(node, item.scheduled_stream, node->splice.values);
 					} else {
 						auto src_stream =
 						    acqrel->source.executor ? recorder.stream_for_executor(acqrel->source.executor) : recorder.stream_for_domain(DomainFlagBits::eHost);

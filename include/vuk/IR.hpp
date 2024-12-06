@@ -1348,15 +1348,15 @@ namespace vuk {
 
 			void destroy(Type* t, void* v) {
 				if (t->hash_value == builtin_buffer) {
-					delete (Buffer*)v;
+					std::destroy_at<Buffer>((Buffer*)v);
 				} else if (t->hash_value == builtin_image) {
-					delete (ImageAttachment*)v;
+					std::destroy_at<ImageAttachment>((ImageAttachment*)v);
 				} else if (t->hash_value == builtin_sampled_image) {
-					delete (SampledImage*)v;
+					std::destroy_at<SampledImage>((SampledImage*)v);
 				} else if (t->hash_value == builtin_sampler) {
-					delete (SamplerCreateInfo*)v;
+					std::destroy_at<SamplerCreateInfo>((SamplerCreateInfo*)v);
 				} else if (t->hash_value == builtin_swapchain) {
-					delete (Swapchain**)v;
+					std::destroy_at<Swapchain*>((Swapchain**)v);
 				} else if (t->kind == Type::ARRAY_TY) {
 					// currently arrays don't own their values
 					/* auto cv = (char*)v;
@@ -1367,6 +1367,7 @@ namespace vuk {
 				} else {
 					assert(0);
 				}
+				delete[] (std::byte*)v;
 			}
 		} types;
 
@@ -1426,6 +1427,7 @@ namespace vuk {
 				}
 				delete node->splice.values.data();
 				delete node->splice.rel_acq;
+				break;
 			}
 			default: // nothing extra to be done here
 				break;

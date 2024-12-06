@@ -1451,19 +1451,26 @@ namespace vuk {
 			switch (node->kind) {
 			case Node::SPLICE: {
 				// splice elimination
-				// a release - must be kept
-				if (!(node->splice.dst_access == Access::eNone && node->splice.dst_domain == DomainFlagBits::eAny)) {
-					break;
-				}
-
 				// an acquire - must be kept
 				if (node->splice.rel_acq != nullptr && node->splice.rel_acq->status != Signal::Status::eDisarmed) {
 					break;
 				}
 
+				// initialise storage
 				if (node->splice.rel_acq != nullptr) {
+					assert(node->splice.values.data() == nullptr);
 					node->splice.values = { new void*[node->splice.src.size()], node -> splice.src.size() };
 					node->splice.rel_acq->last_use.resize(node->splice.src.size());
+
+					for (size_t i = 0; i < node->splice.src.size(); i++) {
+						auto parm = node->splice.src[i];
+						node->splice.values[i] = new std::byte[parm.type()->size];
+					}
+				}
+
+				// a release - must be kept
+				if (!(node->splice.dst_access == Access::eNone && node->splice.dst_domain == DomainFlagBits::eAny)) {
+					break;
 				}
 
 				for (size_t i = 0; i < node->splice.src.size(); i++) {
@@ -1472,8 +1479,6 @@ namespace vuk {
 
 					// a splice that requires signalling -> defer it
 					if (node->splice.rel_acq != nullptr) {
-						node->splice.values[i] = new std::byte[parm.type()->size];
-
 						// find last use that is not splice that we defer away
 						auto link = &parm.link();
 						while (link->next) {
