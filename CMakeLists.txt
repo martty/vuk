@@ -343,10 +343,11 @@ target_sources(vuk PRIVATE
 	src/IRPasses.cpp
 	src/GraphDumper.cpp
 
-	src/runtime/vk/Allocator.cpp
-	src/runtime/vk/BufferAllocator.cpp
 	src/runtime/Cache.cpp
+	src/runtime/RadixTree.cpp
 
+	src/runtime/vk/Allocator.cpp
+	src/runtime/vk/BufferAllocator.cpp	
 	src/runtime/vk/Backend.cpp
 	src/runtime/vk/CommandBuffer.cpp
 	src/runtime/vk/Descriptor.cpp
@@ -473,6 +474,7 @@ if(VUK_BUILD_TESTS)
 					tests/06_mt.cpp
 					tests/address_alloc.cpp
 					tests/X1_SPD.cpp
+					#tests/radix_tree.cpp
 	)
 	#target_compile_features(vuk-tests PRIVATE cxx_std_17)
 	target_include_directories(vuk-tests PRIVATE ext/renderdoc)
