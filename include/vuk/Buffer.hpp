@@ -23,7 +23,7 @@ namespace vuk {
 		}
 
 		/// @brief Create a new Buffer by offsetting
-		[[nodiscard]] Buffer add_offset(VkDeviceSize offset_to_add) {
+		[[nodiscard]] Buffer add_offset(VkDeviceSize offset_to_add) const {
 			assert(offset_to_add <= size);
 			return { allocation,
 				       buffer,
@@ -35,7 +35,7 @@ namespace vuk {
 		}
 
 		/// @brief Create a new Buffer that is a subset of the original
-		[[nodiscard]] Buffer subrange(VkDeviceSize new_offset, VkDeviceSize new_size) {
+		[[nodiscard]] Buffer subrange(VkDeviceSize new_offset, VkDeviceSize new_size) const {
 			assert(new_offset + new_size <= size);
 			return { allocation,
 				       buffer,
