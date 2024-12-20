@@ -63,7 +63,7 @@ namespace vuk {
 		collect_garbage(allocator);
 	}
 
-		void IRModule::collect_garbage(std::pmr::polymorphic_allocator<std::byte> allocator) {
+	void IRModule::collect_garbage(std::pmr::polymorphic_allocator<std::byte> allocator) {
 		enum { DEAD = 1, ALIVE = 2, ALIVE_REC = 3 };
 
 		// initial set of live nodes
@@ -1458,8 +1458,11 @@ namespace vuk {
 
 				// initialise storage
 				if (node->splice.rel_acq != nullptr) {
-					assert(node->splice.values.data() == nullptr);
-					node->splice.values = { new void*[node->splice.src.size()], node -> splice.src.size() };
+					if (!node->splice.values.data()) { // in case of errors, we might still have the allocation hanging around, we can reuse it
+						node->splice.values = { new void*[node->splice.src.size()], node -> splice.src.size() };
+					} else {
+						assert(node->splice.values.size() == node->splice.src.size());
+					}
 					node->splice.rel_acq->last_use.resize(node->splice.src.size());
 
 					for (size_t i = 0; i < node->splice.src.size(); i++) {
