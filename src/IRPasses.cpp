@@ -603,9 +603,6 @@ namespace vuk {
 			break;
 		}
 		case Node::CONVERGE:
-			first(node).link().def = first(node);
-			node->converge.diverged[0].link().next = &first(node).link();
-			first(node).link().prev = &node->converge.diverged[0].link();
 			for (size_t i = 0; i < node->converge.diverged.size(); i++) {
 				auto& parm = node->converge.diverged[i];
 				auto write = node->converge.write[i];
@@ -615,6 +612,7 @@ namespace vuk {
 					add_read(node, parm, i);
 				}
 			}
+			add_result(node, 0, node->converge.diverged[0]);
 			break;
 
 		case Node::ACQUIRE_NEXT_IMAGE:
