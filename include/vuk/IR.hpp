@@ -32,7 +32,7 @@ namespace vuk {
 	using UserCallbackType = fu2::unique_function<void(CommandBuffer&, std::span<void*>, std::span<void*>, std::span<void*>)>;
 
 	struct Type {
-		enum TypeKind { VOID_TY = 0, MEMORY_TY = 1, INTEGER_TY, COMPOSITE_TY, ARRAY_TY, UNION_TY, IMBUED_TY, ALIASED_TY, OPAQUE_FN_TY, SHADER_FN_TY } kind;
+		enum TypeKind { VOID_TY = 0, MEMORY_TY = 1, INTEGER_TY, POINTER_TY, COMPOSITE_TY, ARRAY_TY, UNION_TY, IMBUED_TY, ALIASED_TY, OPAQUE_FN_TY, SHADER_FN_TY } kind;
 		size_t size = ~0ULL;
 
 		TypeDebugInfo debug_info;
@@ -65,6 +65,9 @@ namespace vuk {
 				std::span<std::shared_ptr<Type>> return_types;
 				int execute_on;
 			} shader_fn;
+			struct {
+				std::shared_ptr<Type>* T;
+			} pointer;
 			struct {
 				std::shared_ptr<Type>* T;
 				size_t count;
@@ -142,6 +145,9 @@ namespace vuk {
 			case SHADER_FN_TY:
 				hash_combine_direct(v, (uintptr_t)t->shader_fn.shader >> 32);
 				hash_combine_direct(v, (uintptr_t)t->shader_fn.shader & 0xffffffff);
+				return v;
+			case POINTER_TY:
+				hash_combine_direct(v, Type::hash(t->array.T->get()));
 				return v;
 			}
 			assert(0);
@@ -264,6 +270,8 @@ namespace vuk {
 				return "ofn";
 			case SHADER_FN_TY:
 				return "sfn";
+			case POINTER_TY:
+				return to_string(t->pointer.T->get()) + "*";
 			default:
 				assert(0);
 				return "?";
@@ -734,6 +742,12 @@ namespace vuk {
 				return emplace_type(std::shared_ptr<Type>(t));
 			}
 
+			std::shared_ptr<Type> make_pointer_ty(std::shared_ptr<Type> ty) {
+				auto t = new Type{ .kind = Type::POINTER_TY, .size = sizeof(uint64_t), .pointer = { } };
+				t->pointer.T = &t->child_types.emplace_back(ty);
+				return emplace_type(std::shared_ptr<Type>(t));
+			}
+			
 			std::shared_ptr<Type> make_union_ty(std::vector<std::shared_ptr<Type>> types) {
 				std::vector<size_t> offsets;
 				size_t offset = 0;
@@ -1226,6 +1240,18 @@ namespace vuk {
 			return first(emplace_op(Node{ .kind = Node::CONSTRUCT,
 			                              .type = std::span{ new std::shared_ptr<Type>[1]{ types.get_builtin_buffer() }, 1 },
 			                              .construct = { .args = std::span(args_ptr, 2) } }));
+		}
+
+		Ref make_declare_ptr(const ptr_base& value) {
+			auto buf_ptr = new (new char[sizeof(ptr_base)]) ptr_base(value); /* rest size */
+			auto args_ptr = new Ref[1];
+			auto mem_ty = new std::shared_ptr<Type>[1]{ types.memory(sizeof(ptr_base)) };
+			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = buf_ptr, .owned = true } }));
+
+			// TODO: void type
+			return first(emplace_op(Node{ .kind = Node::CONSTRUCT,
+			                              .type = std::span{ new std::shared_ptr<Type>[1]{ types.make_pointer_ty(types.u32()) }, 1 },
+			                              .construct = { .args = std::span(args_ptr, 1) } }));
 		}
 
 		Ref make_declare_array(std::shared_ptr<Type> type, std::span<Ref> args) {

@@ -3,6 +3,7 @@
 #include "vuk/Config.hpp"
 #include "vuk/Flags.hpp"
 #include "vuk/Hash.hpp"
+#include "vuk/RadixTree.hpp"
 #include "vuk/vuk_fwd.hpp"
 
 #include <cassert>
@@ -14,6 +15,16 @@
 #define MOV(x) (static_cast<std::remove_reference_t<decltype(x)>&&>(x))
 
 namespace vuk {
+	struct ptr_base {
+		uint64_t device_address;
+
+		explicit operator bool() const noexcept {
+			return device_address != 0;
+		}
+
+		std::strong_ordering operator<=>(const ptr_base&) const noexcept = default;
+	};
+
 	struct HandleBase {
 		size_t id = UINT64_MAX;
 	};
@@ -805,6 +816,24 @@ namespace vuk {
 		return (val + align - 1) / align * align;
 	}
 
+	// Source: VMA
+	template<typename T>
+	static inline T align_down(T val, T align) {
+		return val / align * align;
+	}
+
+	// Source: VMA
+	static inline uint64_t previous_pow2(uint64_t v) {
+		v |= v >> 1;
+		v |= v >> 2;
+		v |= v >> 4;
+		v |= v >> 8;
+		v |= v >> 16;
+		v |= v >> 32;
+		v = v ^ (v >> 1);
+		return v;
+	}
+
 	struct ExecutorTag;
 
 	struct ProfilingCallbacks {
@@ -844,6 +873,10 @@ namespace vuk {
 	inline constexpr DescriptorSetStrategyFlags operator^(DescriptorSetStrategyFlagBits bit0, DescriptorSetStrategyFlagBits bit1) noexcept {
 		return DescriptorSetStrategyFlags(bit0) ^ bit1;
 	}
+
+	struct view_base {
+		uint64_t key;
+	};
 
 	struct Node;
 	struct Type;

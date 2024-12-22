@@ -919,6 +919,8 @@ namespace vuk {
 					elems += elem_ty->size;
 				}
 				return;
+			} else if (base_ty->kind == Type::POINTER_TY) {
+				key = reinterpret_cast<ptr_base*>(value)->device_address;
 			}
 
 			uint64_t key = value_identity(base_ty, value);
@@ -1332,8 +1334,11 @@ namespace vuk {
 						}
 					}
 				}
-
-				if (node->type[0]->hash_value == current_module->types.builtin_buffer) {
+				if (node->type[0]->kind == Type::POINTER_TY) {
+						auto& ptr = constant<ptr_base>(node->construct.args[0]);
+						sched.done(node, host_stream, ptr);
+						recorder.init_sync(node->type[0].get(), { to_use(eNone), host_stream }, sched.get_value(first(node)));
+				} else if (node->type[0]->hash_value == current_module->types.builtin_buffer) {
 					auto& bound = constant<Buffer>(node->construct.args[0]);
 
 					if (bound.buffer == VK_NULL_HANDLE) {

@@ -6,6 +6,7 @@
 #include "vuk/ImageAttachment.hpp"
 #include "vuk/runtime/vk/Descriptor.hpp"
 #include "vuk/runtime/vk/Query.hpp"
+#include "vuk/runtime/vk/Allocation.hpp"
 #include "vuk/SourceLocation.hpp"
 
 namespace vuk {
@@ -61,7 +62,7 @@ namespace vuk {
 		return { expected_value, std::move(fence) };
 	}
 
-	/// @brief Allocate a single GPU-only buffer from an Allocator
+	/// @brief Allocate a single Buffer from an Allocator
 	/// @param allocator Allocator to use
 	/// @param bci Buffer creation parameters
 	/// @param loc Source location information
@@ -70,6 +71,33 @@ namespace vuk {
 	allocate_buffer(Allocator& allocator, const BufferCreateInfo& bci, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 		Unique<Buffer> buf(allocator);
 		if (auto res = allocator.allocate_buffers(std::span{ &buf.get(), 1 }, std::span{ &bci, 1 }, loc); !res) {
+			return { expected_error, res.error() };
+		}
+		return { expected_value, std::move(buf) };
+	}
+
+	/// @brief Allocate a single GPU-only buffer from an Allocator
+	/// @param allocator Allocator to use
+	/// @param bci Buffer creation parameters
+	/// @param loc Source location information
+	/// @return GPU-only buffer in a RAII wrapper (Unique<T>) or AllocateException on error
+	template<class T>
+	inline Result<Unique<ptr<T>>, AllocateException>
+	allocate_memory(Allocator& allocator, MemoryUsage mem_usage, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
+		Unique<ptr<T>> buf(allocator);
+		BufferCreateInfo bci{ .mem_usage = mem_usage, .size = sizeof(T), .alignment = alignof(T) };
+		if (auto res = allocator.allocate_memory(std::span{ static_cast<ptr_base*>(&buf.get()), 1 }, std::span{ &bci, 1 }, loc); !res) {
+			return { expected_error, res.error() };
+		}
+		return { expected_value, std::move(buf) };
+	}
+
+	template<class T>
+	inline Result<Unique<ptr<T[]>>, AllocateException>
+	allocate_array(Allocator& allocator, size_t count, MemoryUsage mem_usage, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
+		Unique<ptr<T[]>> buf(allocator);
+		BufferCreateInfo bci{ .mem_usage = mem_usage, .size = sizeof(T) * count, .alignment = alignof(T) };
+		if (auto res = allocator.allocate_memory(std::span{ static_cast<ptr_base*>(&buf.get()), 1 }, std::span{ &bci, 1 }, loc); !res) {
 			return { expected_error, res.error() };
 		}
 		return { expected_value, std::move(buf) };

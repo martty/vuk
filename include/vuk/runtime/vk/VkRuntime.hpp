@@ -8,6 +8,7 @@
 
 #include "vuk/Buffer.hpp"
 #include "vuk/Executor.hpp"
+#include "vuk/runtime/vk/Allocation.hpp"
 #include "vuk/runtime/vk/Allocator.hpp"
 #include "vuk/runtime/vk/Image.hpp"
 #include "vuk/runtime/vk/VkSwapchain.hpp"
@@ -54,7 +55,7 @@ namespace vuk {
 		FunctionPointers pointers;
 	};
 
-	class Runtime : public FunctionPointers {
+	class Runtime : public FunctionPointers, public Resolver {
 	public:
 		/// @brief Create a new Runtime
 		/// @param params Vulkan parameters initialized beforehand

@@ -485,6 +485,16 @@ public:
 			i++;
 		}
 
+		if (compute_pipeline->reflection_info.push_constant_ranges.size() > 0) {
+			auto& pcr = compute_pipeline->reflection_info.push_constant_ranges[0];
+			auto base_ty = current_module->types.make_pointer_ty(current_module->types.u32());
+			for (auto j = 0; j < pcr.num_members; j++) {
+				// TODO: check which args are pointers and dereference on host the once that are not
+				arg_types.push_back(current_module->types.make_imbued_ty(base_ty, Access::eComputeRW));
+				ret_types.emplace_back(current_module->types.make_aliased_ty(base_ty, i + 4));
+				i++;
+			}
+		}
 		return [arg_types, ret_types, compute_pipeline, inner_scope = VUK_CALL]<class... T>(
 		           size_t size_x, size_t size_y, size_t size_z, Value<T>... args) mutable { // no callstack for these :/
 			assert(sizeof...(args) == arg_types.size());
@@ -559,9 +569,28 @@ public:
 		return { make_ext_ref(ref) };
 	}
 
+	template<class T>
+	[[nodiscard]] inline val_ptr<T> discard_ptr(Name name, ptr<T> buf, VUK_CALLSTACK) {
+		assert(buf);
+		Ref ref = current_module->make_declare_ptr(buf);
+		current_module->name_output(ref, name.c_str());
+		current_module->set_source_location(ref.node, VUK_CALL);
+		return { make_ext_ref(ref) };
+	}
+
 	[[nodiscard]] inline Value<Buffer> acquire_buf(Name name, Buffer buf, Access access, VUK_CALLSTACK) {
 		assert(buf.buffer != VK_NULL_HANDLE || buf.size == 0);
 		Ref ref = current_module->acquire(current_module->types.get_builtin_buffer(), nullptr, buf);
+		auto ext_ref = ExtRef(std::make_shared<ExtNode>(ref.node, to_use(access)), ref);
+		current_module->name_output(ref, name.c_str());
+		current_module->set_source_location(ref.node, VUK_CALL);
+		return { std::move(ext_ref) };
+	}
+
+	template<class T>
+	[[nodiscard]] inline val_ptr<T> acquire_ptr(Name name, ptr<T> buf, Access access, VUK_CALLSTACK) {
+		assert(buf);
+		Ref ref = current_module->acquire(current_module->types.make_pointer_ty(current_module->types.u32()), nullptr, buf);
 		auto ext_ref = ExtRef(std::make_shared<ExtNode>(ref.node, to_use(access)), ref);
 		current_module->name_output(ref, name.c_str());
 		current_module->set_source_location(ref.node, VUK_CALL);

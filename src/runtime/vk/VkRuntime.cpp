@@ -188,6 +188,8 @@ namespace vuk {
 		if (params.pointers.vkCmdPushDescriptorSetKHR) {
 			default_descriptor_set_strategy = DescriptorSetStrategyFlagBits::ePushDescriptor;
 		}
+
+		install_as_thread_resolver();
 	}
 
 	Executor* Runtime::get_executor(ExecutorTag tag) {
@@ -833,5 +835,23 @@ namespace vuk {
 		acquire_result = o.acquire_result;
 
 		return *this;
+	}
+
+	void Resolver::install_as_thread_resolver() {
+		Resolver::per_thread = this;
+	}
+
+	AllocationEntry& Resolver::resolve_ptr(ptr_base ptr) {
+		auto p = allocations.find(ptr.device_address);
+		assert(p);
+		return *p;
+	}
+
+	void Resolver::commit(uint64_t base, size_t size, AllocationEntry& ae) {
+		allocations.insert_unaligned(base, size, ae);
+	}
+
+	void Resolver::decommit(uint64_t base, size_t size) {
+		allocations.erase_unaligned(base, size);
 	}
 } // namespace vuk

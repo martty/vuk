@@ -475,6 +475,7 @@ if(VUK_BUILD_TESTS)
 					tests/address_alloc.cpp
 					tests/X1_SPD.cpp
 					#tests/radix_tree.cpp
+					tests/frame_allocator.cpp
 	)
 	#target_compile_features(vuk-tests PRIVATE cxx_std_17)
 	target_include_directories(vuk-tests PRIVATE ext/renderdoc)
