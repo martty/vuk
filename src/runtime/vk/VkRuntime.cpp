@@ -408,7 +408,10 @@ namespace vuk {
 		for (auto& l : cinfo.explicit_set_layouts) {
 			plci.dslcis[l.index] = l;
 		}
-		plci.pcrs.insert(plci.pcrs.begin(), accumulated_reflection.push_constant_ranges.begin(), accumulated_reflection.push_constant_ranges.end());
+		// set up push constant ranges
+		for (auto& pcr : accumulated_reflection.push_constant_ranges) {
+			plci.pcrs.push_back(pcr);
+		}
 		plci.plci.pushConstantRangeCount = (uint32_t)accumulated_reflection.push_constant_ranges.size();
 		plci.plci.pPushConstantRanges = accumulated_reflection.push_constant_ranges.data();
 		std::array<DescriptorSetLayoutAllocInfo, VUK_MAX_SETS> dslai = {};
