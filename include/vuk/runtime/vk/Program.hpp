@@ -118,7 +118,10 @@ namespace vuk {
 		std::array<unsigned, 3> local_size;
 
 		std::vector<Attribute> attributes;
-		std::vector<VkPushConstantRange> push_constant_ranges;
+		struct PushConstant : VkPushConstantRange {
+			size_t num_members;
+		};
+		std::vector<PushConstant> push_constant_ranges;
 		std::vector<SpecConstant> spec_constants;
 		struct Descriptors {
 			std::vector<Binding> bindings; // sorted by binding #
