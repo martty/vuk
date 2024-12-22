@@ -48,7 +48,7 @@ namespace vuk {
 #endif
 
 	struct SourceLocationAtFrame {
-		SourceLocationAtFrame(source_location loc) : location(loc) {}
+		SourceLocationAtFrame(source_location loc = source_location::current()) : location(loc) {}
 
 		source_location location;
 		uint64_t absolute_frame = (uint64_t)-1LL;
