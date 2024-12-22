@@ -36,16 +36,21 @@ R"(
 
 
 #define TYPE(type, align)                                                                                              \
-   layout(buffer_reference, buffer_reference_align = align, scalar) buffer type##_ref                                  \
+   layout(buffer_reference, buffer_reference_align = align, scalar) buffer type##_ref                                 \
+   {                                                                                                                   \
+      type[] value;                                                                                                      \
+   }; \
+   layout(buffer_reference, buffer_reference_align = align, scalar) buffer type##_ref_s                                 \
    {                                                                                                                   \
       type value;                                                                                                      \
    };
 
 #define REF(type)  type##_ref
+#define REFS(type)  type##_ref_s
 #define VOID_REF   uint64_t
 #define NULL       0
 #define DEREF(var) var.value
-#define SIZEOF(type) uint32_t(uint64_t(REF(type)(uint64_t(0)) + 1))
+#define SIZEOF(type) uint32_t(uint64_t(REFS(type)(uint64_t(0)) + 1))
 
 #define OFFSET(ptr, offset) (uint64_t(ptr) + offset)
 
