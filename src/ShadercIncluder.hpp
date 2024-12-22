@@ -13,6 +13,9 @@ namespace vuk {
 		};
 
 		std::filesystem::path base_path = std::filesystem::current_path();
+		static constexpr const char* runtime_include = 
+#include "vuk/vsl/glsl/vuk_runtime.glsl"
+			;
 
 	public:
 		// Handles shaderc_include_resolver_fn callbacks.
@@ -21,7 +24,10 @@ namespace vuk {
 			auto path = base_path / requested_source;
 			auto alternative_path = std::filesystem::absolute(std::filesystem::path(requesting_source).remove_filename() / requested_source);
 			std::ostringstream buf;
-			if (std::ifstream input(path); input) {
+			if (type == shaderc_include_type::shaderc_include_type_standard && strcmp(requested_source, "runtime") == 0) {
+				data->content = runtime_include;
+				data->source = "/vuk/vsl/glsl/vuk_runtime.glsl";
+			} else if (std::ifstream input(path); input) {
 				buf << input.rdbuf();
 				data->content = buf.str();
 				data->source = path.string();
