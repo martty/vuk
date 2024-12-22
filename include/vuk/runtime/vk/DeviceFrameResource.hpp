@@ -196,6 +196,12 @@ namespace vuk {
 		Result<void, AllocateException> allocate_cached_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc);
 
 		Result<void, AllocateException> allocate_cached_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc);
+		/*
+		Result<void, AllocateException> allocate_memory(std::span<ptr_base> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) override;
+		void deallocate_memory(std::span<const ptr_base> dst) override;
+
+		Result<void, AllocateException> allocate_views(std::span<view_base> dst, std::span<const VCI> cis, SourceLocationAtFrame loc) override;
+		void deallocate_views(std::span<const view_base> dst) override;*/
 
 		Result<void, AllocateException> allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) override;
 

@@ -28,6 +28,12 @@ namespace vuk {
 
 		void deallocate_command_pools(std::span<const CommandPool> dst) override;
 
+		Result<void, AllocateException> allocate_memory(std::span<ptr_base> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) override;
+		void deallocate_memory(std::span<const ptr_base> dst) override;
+
+		Result<void, AllocateException> allocate_views(std::span<view_base> dst, std::span<const VCI> cis, SourceLocationAtFrame loc) override;
+		void deallocate_views(std::span<const view_base> dst) override;
+
 		Result<void, AllocateException> allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) override;
 
 		void deallocate_buffers(std::span<const Buffer> src) override;

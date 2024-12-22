@@ -243,6 +243,13 @@ namespace vuk {
 			current_module->set_value(construct, index, current_module->make_extract(src_composite, index));
 		}
 	};
+	
+	template<class T, class...Ctrs>
+	using val_ptr = Value<ptr<T, Ctrs...>>;
+	/*
+	template<class T, class...Ctrs>
+	using val_view = Value<view<T, Ctrs...>>;
+	*/
 
 	// Arithmetic operators for Value<uint64_t>
 

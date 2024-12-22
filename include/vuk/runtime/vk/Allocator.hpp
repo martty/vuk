@@ -33,6 +33,7 @@ namespace vuk {
 	struct ComputePipelineInstanceCreateInfo;
 	struct RayTracingPipelineInfo;
 	struct RayTracingPipelineInstanceCreateInfo;
+	struct VCI;
 
 	/// @brief DeviceResource is a polymorphic interface over allocation of GPU resources.
 	/// A DeviceResource must prevent reuse of cross-device resources after deallocation until CPU-GPU timelines are synchronized. GPU-only resources may be
@@ -40,7 +41,6 @@ namespace vuk {
 	struct DeviceResource {
 		// missing here: Events (gpu only)
 
-		// gpu only
 		virtual Result<void, AllocateException> allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) = 0;
 		virtual void deallocate_semaphores(std::span<const VkSemaphore> src) = 0;
 
@@ -55,6 +55,12 @@ namespace vuk {
 		allocate_command_pools(std::span<CommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) = 0;
 		virtual void deallocate_command_pools(std::span<const CommandPool> dst) = 0;
 
+		virtual Result<void, AllocateException> allocate_memory(std::span<ptr_base> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) = 0;
+		virtual void deallocate_memory(std::span<const ptr_base> dst) = 0;
+
+		virtual Result<void, AllocateException> allocate_views(std::span<view_base> dst, std::span<const VCI> cis, SourceLocationAtFrame loc) = 0;
+		virtual void deallocate_views(std::span<const view_base> dst) = 0;
+
 		virtual Result<void, AllocateException> allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) = 0;
 		virtual void deallocate_buffers(std::span<const Buffer> dst) = 0;
 		virtual void set_buffer_allocation_name(Buffer& dst, Name name) = 0;
@@ -63,7 +69,6 @@ namespace vuk {
 		allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) = 0;
 		virtual void deallocate_framebuffers(std::span<const VkFramebuffer> dst) = 0;
 
-		// gpu only
 		virtual Result<void, AllocateException> allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) = 0;
 		virtual void deallocate_images(std::span<const Image> dst) = 0;
 		virtual void set_image_allocation_name(Image& dst, Name name) = 0;
@@ -222,6 +227,25 @@ namespace vuk {
 		/// @brief Deallocate command buffers previously allocated from this Allocator
 		/// @param src Span of command buffers to be deallocated
 		void deallocate(std::span<const CommandBufferAllocation> src);
+
+		/// @brief Allocate buffers from this Allocator
+		/// @param dst Destination span to place allocated buffers into
+		/// @param cis Per-element construction info
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
+		Result<void, AllocateException> allocate(std::span<ptr_base> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+
+		/// @brief Allocate buffers from this Allocator
+		/// @param dst Destination span to place allocated buffers into
+		/// @param cis Per-element construction info
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
+		Result<void, AllocateException>
+		allocate_memory(std::span<ptr_base> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+
+		/// @brief Deallocate buffers previously allocated from this Allocator
+		/// @param src Span of buffers to be deallocated
+		void deallocate(std::span<const ptr_base> src);
 
 		/// @brief Allocate buffers from this Allocator
 		/// @param dst Destination span to place allocated buffers into
@@ -668,7 +692,11 @@ namespace vuk {
 	void deallocate(Allocator& allocator, const T& src)
 	  requires(!Container<T>)
 	{
-		allocator.deallocate(std::span<const T>{ &src, 1 });
+		if constexpr (std::is_base_of_v<ptr_base, T>) {
+			allocator.deallocate(std::span<const ptr_base>{ static_cast<const ptr_base*>(&src), 1 });
+		} else {
+			allocator.deallocate(std::span<const T>{ &src, 1 });
+		}
 	}
 
 	/// @brief Customization point for deallocation of user types

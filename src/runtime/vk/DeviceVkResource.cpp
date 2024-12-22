@@ -208,6 +208,68 @@ namespace vuk {
 		}
 	}
 
+	Result<void, AllocateException> DeviceVkResource::allocate_memory(std::span<ptr_base> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
+		assert(dst.size() == cis.size());
+		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
+			std::lock_guard _(impl->mutex);
+			auto& ci = cis[i];
+			VkBufferCreateInfo bci{ .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
+			bci.size = ci.size;
+			bci.usage = (VkBufferUsageFlags)all_buffer_usage_flags;
+			bci.queueFamilyIndexCount = impl->queue_family_count;
+			bci.sharingMode = bci.queueFamilyIndexCount > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
+			bci.pQueueFamilyIndices = impl->all_queue_families.data();
+
+			VmaAllocationCreateInfo aci = {};
+			aci.usage = VmaMemoryUsage(to_integral(ci.mem_usage));
+			aci.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
+			VkBuffer buffer;
+			VmaAllocation allocation;
+			VmaAllocationInfo allocation_info;
+			// ignore alignment: we get a fresh VkBuffer which satisfies all alignments inside the VkBfufer
+			auto res = vmaCreateBuffer(impl->allocator, &bci, &aci, &buffer, &allocation, &allocation_info);
+			if (res != VK_SUCCESS) {
+				deallocate_memory({ dst.data(), (uint64_t)i });
+				return { expected_error, AllocateException{ res } };
+			}
+#if VUK_DEBUG_ALLOCATIONS
+			vmaSetAllocationName(impl->allocator, allocation, to_string(loc).c_str());
+#endif
+			VkBufferDeviceAddressInfo bdai{ VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, nullptr, buffer };
+			uint64_t device_address = ctx->vkGetBufferDeviceAddress(device, &bdai);
+
+			AllocationEntry entry{ .host_ptr = allocation_info.pMappedData, .buffer = { .buffer = buffer, .base_address = device_address } };
+			entry.buffer.alignment = ci.alignment;
+			entry.buffer.mem_usage = ci.mem_usage;
+			entry.buffer.size = ci.size;
+			entry.device_memory = allocation_info.deviceMemory;
+			entry.allocation = allocation;
+			// TODO: default view
+
+			ctx->commit(device_address, ci.size, entry);
+
+			dst[i] = { device_address };
+		}
+		return { expected_value };
+	}
+
+	void DeviceVkResource::deallocate_memory(std::span<const ptr_base> src) {
+		for (auto& v : src) {
+			if (v) {
+				auto& ae = ctx->resolve_ptr(v);
+				ctx->decommit(ae.buffer.base_address, ae.buffer.size);
+				vmaDestroyBuffer(impl->allocator, ae.buffer.buffer, static_cast<VmaAllocation>(ae.allocation));
+			}
+		}
+	}
+
+	Result<void, AllocateException> DeviceVkResource::allocate_views(std::span<view_base> dst, std::span<const VCI> cis, SourceLocationAtFrame loc) {
+		return { expected_value };
+	}
+
+	void DeviceVkResource::deallocate_views(std::span<const view_base> dst) {}
+
 	Result<void, AllocateException> DeviceVkResource::allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
@@ -1184,6 +1246,23 @@ namespace vuk {
 
 	void DeviceNestedResource::deallocate_command_pools(std::span<const CommandPool> dst) {
 		upstream->deallocate_command_pools(dst);
+	}
+
+	Result<void, AllocateException>
+	DeviceNestedResource::allocate_memory(std::span<ptr_base> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
+		return upstream->allocate_memory(dst, cis, loc);
+	}
+
+	void DeviceNestedResource::deallocate_memory(std::span<const ptr_base> dst) {
+		upstream->deallocate_memory(dst);
+	}
+
+	Result<void, AllocateException> DeviceNestedResource::allocate_views(std::span<view_base> dst, std::span<const VCI> cis, SourceLocationAtFrame loc) {
+		return upstream->allocate_views(dst, cis, loc);
+	}
+
+	void DeviceNestedResource::deallocate_views(std::span<const view_base> dst) {
+		upstream->deallocate_views(dst);
 	}
 
 	Result<void, AllocateException>

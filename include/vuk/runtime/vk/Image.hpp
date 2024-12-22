@@ -444,6 +444,46 @@ namespace vuk {
 
 	ImageAspectFlags format_to_aspect(Format format) noexcept;
 	std::string_view image_view_type_to_sv(ImageViewType) noexcept;
+
+	// max_dim: 32k x 32k x 16k max_mips : 16 max_layers : 2048 components: 4
+	// xyz offset relative to mip
+	struct ImageOffset {
+		uint32_t layer : 11;
+		uint32_t mip : 4;
+		uint32_t x : 15;
+		uint32_t y : 15;
+		uint32_t z : 14;
+		uint32_t component : 2;
+	};
+
+	union Offset {
+		size_t linear;
+		ImageOffset image;
+	};
+
+	/*struct ACI {
+		union {
+			BufferCreateInfo buffer;
+			ImageCreateInfo image;
+		};
+	};*/
+
+
+	struct IVCI {
+		Extent3D extent = {};
+		Format format = Format::eUndefined;
+		bool allow_srgb_unorm_mutable;
+		ImageViewCreateFlags image_view_flags;
+		ImageViewType view_type;
+		ComponentMapping components;
+		ImageLayout layout = ImageLayout::eUndefined;
+
+		uint32_t base_level = VK_REMAINING_MIP_LEVELS;
+		uint32_t level_count = VK_REMAINING_MIP_LEVELS;
+
+		uint32_t base_layer = VK_REMAINING_ARRAY_LAYERS;
+		uint32_t layer_count = VK_REMAINING_ARRAY_LAYERS;
+	};
 }; // namespace vuk
 
 namespace std {

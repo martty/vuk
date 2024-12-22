@@ -56,6 +56,10 @@ namespace vuk {
 		/// @brief Alignment of the allocated Buffer in bytes
 		VkDeviceSize alignment = 1;
 	};
+
+	struct BufferViewCreateInfo {
+		Format format;
+	};
 } // namespace vuk
 
 namespace std {
