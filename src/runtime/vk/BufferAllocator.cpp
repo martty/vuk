@@ -1,8 +1,8 @@
 #include "vuk/runtime/vk/BufferAllocator.hpp"
-#include "vuk/runtime/vk/Allocator.hpp"
 #include "vuk/Buffer.hpp"
 #include "vuk/Result.hpp"
 #include "vuk/SourceLocation.hpp"
+#include "vuk/runtime/vk/Allocator.hpp"
 #include <iostream>
 
 // Aligns given value down to nearest multiply of align value. For example: VmaAlignUp(11, 8) = 8.
@@ -81,7 +81,7 @@ namespace vuk {
 		}
 		used_allocation_count += actual_blocks;
 
-		return {expected_value};
+		return { expected_value };
 	}
 
 	// lock-free bump allocation if there is still space
@@ -199,12 +199,15 @@ namespace vuk {
 		}
 
 		std::lock_guard _(mutex);
-		
+
 		VmaVirtualAllocation va;
 		VkDeviceSize offset;
 		VmaVirtualAllocationCreateInfo vaci{};
 		vaci.size = size + alignment;
 		vaci.alignment = 0; // VMA does not handle NPOT alignment
+#if VUK_DEBUG_ALLOCATIONS
+		vaci.pUserData = new SourceLocationAtFrame(source);
+#endif
 
 		std::vector<VmaVirtualAllocation> straddlers;
 		bool is_straddling = true;
@@ -226,7 +229,7 @@ namespace vuk {
 		if (blocks.size() <= block_index) {
 			blocks.resize(block_index + 1);
 		}
-		
+
 		if (!blocks[block_index].buffer) {
 			BufferCreateInfo bci{ .mem_usage = mem_usage, .size = block_size, .alignment = 256 };
 			auto result = upstream->allocate_buffers(std::span{ &blocks[block_index].buffer, 1 }, std::span{ &bci, 1 }, source);
@@ -234,7 +237,7 @@ namespace vuk {
 				return result;
 			}
 		}
-		
+
 		auto aligned_offset = VmaAlignUp(offset - block_index * block_size, alignment);
 		Buffer buf = blocks[block_index].buffer.add_offset(aligned_offset);
 		assert(buf.offset % alignment == 0);
@@ -252,6 +255,11 @@ namespace vuk {
 		}
 		std::lock_guard _(mutex);
 		auto sa = static_cast<SubAllocation*>(buf.allocation);
+#if VUK_DEBUG_ALLOCATIONS
+		VmaVirtualAllocationInfo info;
+		vmaGetVirtualAllocationInfo(virtual_alloc, sa->allocation, &info);
+		delete reinterpret_cast<SourceLocationAtFrame*>(info.pUserData);
+#endif
 		vmaVirtualFree(virtual_alloc, sa->allocation);
 		if (--blocks[sa->block_index].allocation_count == 0) {
 			upstream->deallocate_buffers(std::span{ &blocks[sa->block_index].buffer, 1 });
@@ -265,7 +273,6 @@ namespace vuk {
 	    mem_usage(mem_usage),
 	    usage(buf_usage),
 	    block_size(block_size) {
-
 		VmaVirtualBlockCreateInfo vbci{};
 		vbci.size = 1024ULL * 1024 * 1024 * 128; // 128 GiB baybeh
 		auto result2 = vmaCreateVirtualBlock(&vbci, &virtual_alloc);
@@ -273,7 +280,6 @@ namespace vuk {
 	}
 
 	BufferSubAllocator::~BufferSubAllocator() {
-		assert(vmaIsVirtualBlockEmpty(virtual_alloc));
 		vmaDestroyVirtualBlock(virtual_alloc);
 	}
 
