@@ -14,7 +14,7 @@ namespace spirv_cross {
 	class Compiler;
 }; // namespace spirv_cross
 namespace vuk {
-	enum class ShaderSourceLanguage { eGlsl, eHlsl, eSpirv };
+	enum class ShaderSourceLanguage { eGlsl, eHlsl, eC, eSpirv };
 
 	/// @brief Specifies the HLSL Shader Stage for a given HLSL shader.
 	enum class HlslShaderStage {
@@ -119,6 +119,25 @@ namespace vuk {
 			shader.data_ptr = shader.data.data();
 			shader.size = shader.data.size();
 			shader.language = ShaderSourceLanguage::eHlsl;
+			shader.hlsl_stage = stage;
+			shader.entry_point = std::move(entry_point);
+			shader.opt_level = compile_options.optimization_level;
+			return shader;
+		}
+#endif
+
+		
+#if VUK_USE_VCC
+		static ShaderSource c(std::string_view source,
+		                         const ShaderCompileOptions& compile_options,
+		                         HlslShaderStage stage = HlslShaderStage::eInferred,
+		                         std::string entry_point = "main") {
+			ShaderSource shader;
+			shader.data.resize(idivceil(source.size() + 1, sizeof(uint32_t)));
+			memcpy(shader.data.data(), source.data(), source.size() * sizeof(std::string_view::value_type));
+			shader.data_ptr = shader.data.data();
+			shader.size = shader.data.size();
+			shader.language = ShaderSourceLanguage::eC;
 			shader.hlsl_stage = stage;
 			shader.entry_point = std::move(entry_point);
 			shader.opt_level = compile_options.optimization_level;

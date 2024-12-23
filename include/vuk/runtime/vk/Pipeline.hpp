@@ -101,6 +101,13 @@ namespace vuk {
 		}
 #endif
 
+#if VUK_USE_VCC
+		void add_c(std::string_view source, std::string filename, HlslShaderStage stage = HlslShaderStage::eInferred, std::string entry_point = "main") {
+			shaders.emplace_back(ShaderSource::c(source, compile_options, stage, std::move(entry_point)));
+			shader_paths.emplace_back(std::move(filename));
+		}
+#endif
+
 		void add_spirv(std::vector<uint32_t> source, std::string filename, std::string entry_point = "main") {
 			shaders.emplace_back(ShaderSource::spirv(std::move(source), std::move(entry_point)));
 			shader_paths.emplace_back(std::move(filename));
