@@ -11,7 +11,7 @@ namespace vuk {
 		using MaskType = typename std::underlying_type_t<BitType>;
 
 		// constructors
-		constexpr Flags() noexcept : m_mask(0) {}
+		constexpr Flags() = default;
 
 		constexpr Flags(BitType bit) noexcept : m_mask(static_cast<MaskType>(bit)) {}
 
@@ -49,11 +49,6 @@ namespace vuk {
 		}
 
 		// assignment operators
-		constexpr Flags<BitType>& operator=(Flags<BitType> const& rhs) noexcept {
-			m_mask = rhs.m_mask;
-			return *this;
-		}
-
 		constexpr Flags<BitType>& operator|=(Flags<BitType> const& rhs) noexcept {
 			m_mask |= rhs.m_mask;
 			return *this;
@@ -103,7 +98,7 @@ namespace vuk {
 			return Flags<BitType>(lhs.m_mask ^ (std::underlying_type_t<BitType>)rhs);
 		}
 
-		MaskType m_mask;
+		MaskType m_mask{ 0 };
 	};
 } // namespace vuk
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "vuk/Config.hpp"
+#include "vuk/Types.hpp"
 #include "vuk/Util.hpp"
 #include "vuk/runtime/CreateInfo.hpp"
 #include "vuk/vuk_fwd.hpp"
@@ -31,14 +32,14 @@ namespace vuk {
 	};
 
 	enum class ShaderCompilerFlagBits : uint32_t {
-		eNoWarnings,
-		eWarningsAsErrors,
-		eGlLayout,
-		eDxLayout,
-		eMatrixRowMajor,
-		eMatrixColumnMajor,
-		eInvertY,
-		eDxPositionW
+		eNoWarnings = 1 << 0,
+		eWarningsAsErrors = 1 << 1,
+		eGlLayout = 1 << 2,
+		eDxLayout = 1 << 3,
+		eMatrixRowMajor = 1 << 4,
+		eMatrixColumnMajor = 1 << 5,
+		eInvertY = 1 << 6,
+		eDxPositionW = 1 << 7
 	};
 
 	using ShaderCompilerFlags = Flags<ShaderCompilerFlagBits>;

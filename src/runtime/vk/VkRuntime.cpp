@@ -79,7 +79,7 @@ namespace vuk {
 		}
 		return { vuk::expected_value };
 	}
-namespace vuk {
+
 	Result<std::vector<uint32_t>> compile_glsl(const create_info_t<ShaderModule>& cinfo, uint32_t shader_compiler_target_version);
 	Result<std::vector<uint32_t>> compile_hlsl(const create_info_t<ShaderModule>& cinfo, uint32_t shader_compiler_target_version);
 	Result<std::vector<uint32_t>> compile_slang(const create_info_t<ShaderModule>& cinfo, uint32_t shader_compiler_target_version);
@@ -334,12 +334,6 @@ namespace vuk {
 			}
 		}
 		ctx.vkUpdateDescriptorSets(ctx.device, (uint32_t)wdss.size(), wdss.data(), 0, nullptr);
-	}
-
-	[[maybe_unused]] static std::wstring convert_to_wstring(const std::string& string) {
-		std::vector<wchar_t> buffer(string.size());
-		std::use_facet<std::ctype<wchar_t>>(std::locale()).widen(string.data(), string.data() + string.size(), buffer.data());
-		return { buffer.data(), buffer.size() };
 	}
 
 	ShaderModule Runtime::create(const create_info_t<ShaderModule>& cinfo) {

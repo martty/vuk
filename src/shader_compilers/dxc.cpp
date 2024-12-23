@@ -30,9 +30,9 @@ namespace {
 namespace vuk {
 	Result<std::vector<uint32_t>> compile_hlsl(const ShaderModuleCreateInfo& cinfo, uint32_t shader_compiler_target_version) {
 		std::vector<LPCWSTR> arguments;
-		arguments.emplace_back(L"-E");
 		arguments.emplace_back(L"-spirv");
-
+		
+		arguments.emplace_back(L"-E");
 		auto entry_point = convert_to_wstring(cinfo.source.entry_point);
 		arguments.emplace_back(entry_point.c_str());
 
@@ -111,6 +111,9 @@ namespace vuk {
 
 		arguments.emplace_back(L"-T");
 		arguments.emplace_back(stage_mappings.at(shader_stage));
+
+		// because of current impl, the input buffer may have zeros at the end
+		arguments.emplace_back(L"-Wno-null-character");
 
 		DxcBuffer source_buf;
 		source_buf.Ptr = cinfo.source.as_c_str();
