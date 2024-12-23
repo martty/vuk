@@ -1,11 +1,12 @@
 #include "vuk/runtime/vk/Pipeline.hpp"
+#include "vuk/SourceLocation.hpp"
 #include "vuk/runtime/vk/PipelineInstance.hpp"
 #include "vuk/runtime/vk/Program.hpp"
-#include "vuk/SourceLocation.hpp"
 
 #include <robin_hood.h>
 
 namespace vuk {
+#if VUK_USE_SHADERC
 	PipelineBaseCreateInfo PipelineBaseCreateInfo::from_inline_glsl(std::string_view source, SourceLocationAtFrame _pscope) {
 		PipelineBaseCreateInfo pbci;
 		pbci.shaders.emplace_back(ShaderSource::glsl(source, {}, "main"));
@@ -13,6 +14,7 @@ namespace vuk {
 
 		return pbci;
 	}
+#endif
 
 	fixed_vector<DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> PipelineBaseCreateInfo::build_descriptor_layouts(const Program& program,
 	                                                                                                           const PipelineBaseCreateInfoBase& bci) {
