@@ -98,8 +98,6 @@ if (VUK_USE_VCC)
 		BUILD_ALWAYS OFF
 		BUILD_COMMAND 
 			${CMAKE_COMMAND} --build .
-#			COMMAND ${CMAKE_COMMAND} -E copy_if_different <BINARY_DIR>/shady.dll $<TARGET_FILE_DIR:vuk>
-#			COMMAND ${CMAKE_COMMAND} -E copy_if_different <BINARY_DIR>/driver.dll $<TARGET_FILE_DIR:vuk>
 		LOG_DOWNLOAD 1
 		LOG_BUILD 1
 		LOG_OUTPUT_ON_FAILURE 1
@@ -120,22 +118,49 @@ if (VUK_USE_VCC)
 endif()
 
 if (VUK_USE_SLANG)
-	set(SLANG_ENABLE_SLANG_GLSLANG OFF CACHE BOOL "" )
-	set(SLANG_ENABLE_GFX OFF CACHE BOOL "")
-	set(SLANG_ENABLE_SLANGC OFF CACHE BOOL "")
-	set(SLANG_ENABLE_TESTS OFF CACHE BOOL "")
-	set(SLANG_ENABLE_EXAMPLES OFF CACHE BOOL "")
-	set(SLANG_ENABLE_SLANGRT OFF CACHE BOOL "")
-	set(SLANG_ENABLE_SLANGD OFF CACHE BOOL "")
 	FetchContent_Declare(
-	  slang
-	  GIT_REPOSITORY https://github.com/Hatrickek/slang
-	  GIT_TAG master	
+	  slang-fc
+	  GIT_REPOSITORY https://github.com/shader-slang/slang
+	  GIT_TAG 76fdeaa477a5d21176facf0296f77e28e2d59477
 	  GIT_SHALLOW ON
-	  GIT_SUBMODULES external/miniz external/lz4 external/unordered_dense external/spirv-headers
+	  GIT_SUBMODULES external/miniz external/lz4 external/unordered_dense external/spirv-headers external/spirv-tools external/vulkan external/glslang
+	  GIT_SUBMODULES_RECURSE ON
 	)
-	FetchContent_MakeAvailable(slang)
-	target_link_libraries(vuk PRIVATE slang)
+	FetchContent_GetProperties(slang-fc)
+
+	if(NOT slang-fc_POPULATED)
+		FetchContent_Populate(slang-fc)
+	endif()
+
+	ExternalProject_Add(slang2
+		SOURCE_DIR
+			${slang-fc_SOURCE_DIR}
+		PREFIX ""
+		BINARY_DIR slang-build
+		CMAKE_ARGS 
+			-DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_SHARED_LIBRARY_PREFIX="" -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER} -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
+			-DSLANG_ENABLE_GFX=0 -DSLANG_ENABLE_SLANGC=0	-DSLANG_ENABLE_TESTS=0	-DSLANG_ENABLE_EXAMPLES=0 -DSLANG_ENABLE_SLANGRT=0 -DSLANG_ENABLE_SLANGD=0 
+			-DSLANG_ENABLE_SLANGRT=0 -DSLANG_ENABLE_SLANG_RHI=0 -DSLANG_ENABLE_DXIL=0 -DSLANG_ENABLE_PREBUILT_BINARIES=0 -DSLANG_EMBED_CORE_MODULE_SOURCE=1
+			-DSLANG_EMBED_CORE_MODULE=0
+		INSTALL_COMMAND ""
+		BUILD_ALWAYS OFF
+		BUILD_COMMAND 
+			${CMAKE_COMMAND} --build .
+		LOG_DOWNLOAD 1
+		LOG_BUILD 1
+		LOG_OUTPUT_ON_FAILURE 1
+		BUILD_BYPRODUCTS <BINARY_DIR>/RelWithDebInfo/lib/slang.lib <BINARY_DIR>/RelWithDebInfo/lib/slang-glslang.lib
+    )
+	ExternalProject_Get_property(slang2 BINARY_DIR)
+	ExternalProject_Get_property(slang2 SOURCE_DIR)
+	add_library(slang-rel SHARED IMPORTED GLOBAL)
+	add_dependencies(slang-rel slang2)
+	target_include_directories(slang-rel INTERFACE ${SOURCE_DIR} ${SOURCE_DIR}/include)
+	set_target_properties(slang-rel PROPERTIES IMPORTED_IMPLIB ${BINARY_DIR}/RelWithDebInfo/lib/slang.lib IMPORTED_LOCATION ${BINARY_DIR}/RelWithDebInfo/bin/slang.dll)
+	add_library(slang-glslang SHARED IMPORTED GLOBAL)
+	add_dependencies(slang-glslang slang2)
+	set_target_properties(slang-glslang PROPERTIES IMPORTED_IMPLIB ${BINARY_DIR}/RelWithDebInfo/lib/slang-glslang.lib IMPORTED_LOCATION ${BINARY_DIR}/RelWithDebInfo/bin/slang-glslang.dll)
+	target_link_libraries(vuk PRIVATE slang-rel slang-glslang)
 	target_sources(vuk PRIVATE src/shader_compilers/slang.cpp)
 endif()
 

@@ -27,7 +27,7 @@ namespace vuk {
 		slang::SessionDesc sessionDesc = {};
 		slang::TargetDesc targetDesc = {};
 		targetDesc.format = SLANG_SPIRV;
-		targetDesc.profile = slangGlobalSession->findProfile("glsl440");
+		targetDesc.profile = slangGlobalSession->findProfile("glsl460");
 		targetDesc.flags = SLANG_TARGET_FLAG_GENERATE_SPIRV_DIRECTLY;
 
 		std::vector<slang::CompilerOptionEntry> entries = {};

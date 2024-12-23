@@ -120,6 +120,7 @@ namespace vuk {
 		VkShaderModule shader_module;
 		Program reflection_info;
 		VkShaderStageFlagBits stage;
+		bool override_entry_point_name_to_main = false;
 	};
 
 	struct ShaderModuleCreateInfo;

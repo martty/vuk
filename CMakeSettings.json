@@ -41,6 +41,11 @@
           "name": "VUK_FAIL_FAST",
           "value": "False",
           "type": "BOOL"
+        },
+        {
+          "name": "VUK_USE_SLANG",
+          "value": "True",
+          "type": "BOOL"
         }
       ]
     },
