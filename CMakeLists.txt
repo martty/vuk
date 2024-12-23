@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.7)
-project(vuk LANGUAGES CXX)
+project(vuk LANGUAGES CXX C)
 
 include(ExternalProject)
 include(FetchContent)
@@ -334,6 +334,11 @@ if(VUK_BUILD_TESTS)
 	target_link_libraries(vuk-tests PRIVATE vuk doctest::doctest vk-bootstrap fmt::fmt)
 	target_compile_definitions(vuk-tests PRIVATE VUK_TEST_RUNNER)
 	doctest_force_link_static_lib_in_target(vuk-tests vuk)
+
+	add_custom_command(TARGET vuk-tests POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_RUNTIME_DLLS:vuk-tests> $<TARGET_FILE_DIR:vuk-tests>
+        COMMAND_EXPAND_LISTS
+    )
 
 	include(ext/doctest/scripts/cmake/doctest.cmake) # until we can use cmake 3.24
 	doctest_discover_tests(vuk-tests)
