@@ -288,6 +288,21 @@ else()
 	endif()
 endif()
 
+function(copy_runtime_dlls TARGET)
+  get_property(already_applied TARGET "${TARGET}" PROPERTY _copy_runtime_dlls_applied)
+
+  if (CMAKE_IMPORT_LIBRARY_SUFFIX AND NOT already_applied)
+    add_custom_command(
+      TARGET "${TARGET}" POST_BUILD
+      COMMAND "${CMAKE_COMMAND}" -E copy
+        -t "$<TARGET_RUNTIME_DLLS:${TARGET}>" "$<TARGET_FILE_DIR:${TARGET}>"
+      COMMAND_EXPAND_LISTS
+    )
+ 
+    set_property(TARGET "${TARGET}" PROPERTY _copy_runtime_dlls_applied 1)
+  endif ()
+endfunction()
+
 if (WIN32)
 	target_compile_definitions(vuk PUBLIC NOMINMAX VC_EXTRALEAN WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS _SCL_SECURE_NO_WARNINGS _SILENCE_CLANG_CONCEPTS_MESSAGE _SILENCE_CXX23_ALIGNED_STORAGE_DEPRECATION_WARNING)
 endif()
@@ -335,10 +350,7 @@ if(VUK_BUILD_TESTS)
 	target_compile_definitions(vuk-tests PRIVATE VUK_TEST_RUNNER)
 	doctest_force_link_static_lib_in_target(vuk-tests vuk)
 
-	add_custom_command(TARGET vuk-tests POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_RUNTIME_DLLS:vuk-tests> $<TARGET_FILE_DIR:vuk-tests>
-        COMMAND_EXPAND_LISTS
-    )
+	copy_runtime_dlls(vuk-tests)
 
 	include(ext/doctest/scripts/cmake/doctest.cmake) # until we can use cmake 3.24
 	doctest_discover_tests(vuk-tests)

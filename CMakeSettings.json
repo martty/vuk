@@ -44,7 +44,12 @@
         },
         {
           "name": "VUK_USE_SLANG",
-          "value": "True",
+          "value": "False",
+          "type": "BOOL"
+        },
+        {
+          "name": "VUK_USE_VCC",
+          "value": "False",
           "type": "BOOL"
         }
       ]
