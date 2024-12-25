@@ -61,6 +61,7 @@ namespace vuk {
 		union {
 			struct : BufferCreateInfo {
 				VkBuffer buffer;
+				size_t offset;
 				uint64_t base_address;
 			} buffer;
 			struct : ImageCreateInfo {

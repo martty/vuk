@@ -470,7 +470,7 @@ public:
 			case DescriptorType::eUniformBuffer:
 			case DescriptorType::eStorageBuffer:
 				acc = b->non_writable ? Access::eComputeRead : (b->non_readable ? Access::eComputeWrite : Access::eComputeRW);
-				base_ty = current_module->types.get_builtin_buffer();
+				base_ty = current_module->types.make_pointer_ty(current_module->types.u32()); // TODO: become view
 				break;
 			case DescriptorType::eSampler:
 				acc = Access::eNone;

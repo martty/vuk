@@ -1617,6 +1617,23 @@ namespace vuk {
 
 						opaque_rets[binding_idx] = val;
 					}
+					size_t pc_offset = 0;
+					if (pbi->reflection_info.push_constant_ranges.size() > 0) {
+							auto& pcr = pbi->reflection_info.push_constant_ranges[0];
+							auto base_ty = current_module->types.make_pointer_ty(current_module->types.u32());
+							for (auto j = 0; j < pcr.num_members; j++) {
+								auto& parm = node->call.args[parm_idx];
+								auto val = sched.get_value(parm);
+								auto ptr = *reinterpret_cast<ptr_base*>(val);
+								// TODO: check which args are pointers and dereference on host the once that are not
+								cobuf.push_constants(ShaderStageFlagBits::eCompute, pc_offset, ptr);
+								auto binding_idx = parm_idx - first_parm;
+								opaque_rets[binding_idx] = val;
+								parm_idx++;
+								pc_offset += sizeof(uint64_t);
+							}
+					}
+					
 					cobuf.dispatch(constant<uint32_t>(node->call.args[1]), constant<uint32_t>(node->call.args[2]), constant<uint32_t>(node->call.args[3]));
 
 					if (vk_rec->rp.handle) {
