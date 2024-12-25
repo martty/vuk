@@ -183,7 +183,7 @@ namespace vuk {
 		eShaderDeviceAddressKHR = VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR,
 		eAccelerationStructureBuildInputReadOnlyKHR = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
 		eAccelerationStructureStorageKHR = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR,
-		eShaderBindingTable = VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR
+		eShaderBindingTableKHR = VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR
 	};
 
 	using BufferUsageFlags = Flags<BufferUsageFlagBits>;
@@ -199,13 +199,6 @@ namespace vuk {
 	inline constexpr BufferUsageFlags operator^(BufferUsageFlagBits bit0, BufferUsageFlagBits bit1) noexcept {
 		return BufferUsageFlags(bit0) ^ bit1;
 	}
-
-	static constexpr vuk::BufferUsageFlags all_buffer_usage_flags =
-	    BufferUsageFlagBits::eTransferRead | BufferUsageFlagBits::eTransferWrite | BufferUsageFlagBits::eUniformTexelBuffer |
-	    BufferUsageFlagBits::eStorageTexelBuffer | BufferUsageFlagBits::eUniformBuffer | BufferUsageFlagBits::eStorageBuffer | BufferUsageFlagBits::eIndexBuffer |
-	    BufferUsageFlagBits::eVertexBuffer | BufferUsageFlagBits::eIndirectBuffer | BufferUsageFlagBits::eShaderDeviceAddress |
-	    BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR | BufferUsageFlagBits::eAccelerationStructureStorageKHR |
-	    BufferUsageFlagBits::eShaderBindingTable;
 
 	enum class ImageLayout {
 		eUndefined = VK_IMAGE_LAYOUT_UNDEFINED,

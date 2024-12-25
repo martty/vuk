@@ -51,6 +51,8 @@ namespace vuk {
 		VkPhysicalDeviceProperties properties;
 		std::vector<uint32_t> all_queue_families;
 		uint32_t queue_family_count;
+
+		vuk::BufferUsageFlags all_buffer_usage_flags;
 	};
 
 	DeviceVkResource::DeviceVkResource(Runtime& ctx) : ctx(&ctx), device(ctx.device), impl(new DeviceVkResourceImpl) {
@@ -85,6 +87,8 @@ namespace vuk {
 
 		impl->all_queue_families = ctx.all_queue_families;
 		impl->queue_family_count = (uint32_t)impl->all_queue_families.size();
+
+		impl->all_buffer_usage_flags = get_all_buffer_usage_flags(ctx);
 	}
 
 	DeviceVkResource::~DeviceVkResource() {
@@ -211,7 +215,7 @@ namespace vuk {
 			auto& ci = cis[i];
 			VkBufferCreateInfo bci{ .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
 			bci.size = ci.size;
-			bci.usage = (VkBufferUsageFlags)all_buffer_usage_flags;
+			bci.usage = (VkBufferUsageFlags)impl->all_buffer_usage_flags;
 			bci.queueFamilyIndexCount = impl->queue_family_count;
 			bci.sharingMode = bci.queueFamilyIndexCount > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
 			bci.pQueueFamilyIndices = impl->all_queue_families.data();

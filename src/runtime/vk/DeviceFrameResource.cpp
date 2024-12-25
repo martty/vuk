@@ -41,6 +41,8 @@ namespace vuk {
 		Cache<RayTracingPipelineInfo> ray_tracing_pipeline_cache;
 		Cache<VkRenderPass> render_pass_cache;
 
+		BufferUsageFlags all_buffer_usage_flags;
+
 		BufferSubAllocator suballocators[4];
 
 		DeviceSuperFrameResourceImpl(DeviceSuperFrameResource& sfr, size_t frames_in_flight) :
@@ -108,6 +110,7 @@ namespace vuk {
 		        +[](void* allocator, const VkRenderPass& v) {
 			        reinterpret_cast<DeviceSuperFrameResourceImpl*>(allocator)->sfr->deallocate_render_passes({ &v, 1 });
 		        }),
+		    all_buffer_usage_flags(sfr.get_all_buffer_usage_flags(sfr.get_context())),
 		    suballocators{ { *sfr.upstream, vuk::MemoryUsage::eGPUonly, all_buffer_usage_flags, 64 * 1024 * 1024 },
 			                 { *sfr.upstream, vuk::MemoryUsage::eCPUonly, all_buffer_usage_flags, 64 * 1024 * 1024 },
 			                 { *sfr.upstream, vuk::MemoryUsage::eCPUtoGPU, all_buffer_usage_flags, 64 * 1024 * 1024 },
@@ -167,6 +170,8 @@ namespace vuk {
 		std::mutex render_passes_mutex;
 		std::vector<VkRenderPass> render_passes;
 
+		BufferUsageFlags all_buffer_usage_flags;
+
 		BufferLinearAllocator linear_cpu_only;
 		BufferLinearAllocator linear_cpu_gpu;
 		BufferLinearAllocator linear_gpu_cpu;
@@ -174,6 +179,7 @@ namespace vuk {
 
 		DeviceFrameResourceImpl(VkDevice device, DeviceSuperFrameResource& upstream) :
 		    ctx(&upstream.get_context()),
+		    all_buffer_usage_flags(upstream.get_all_buffer_usage_flags(*ctx)),
 		    linear_cpu_only(upstream, vuk::MemoryUsage::eCPUonly, all_buffer_usage_flags),
 		    linear_cpu_gpu(upstream, vuk::MemoryUsage::eCPUtoGPU, all_buffer_usage_flags),
 		    linear_gpu_cpu(upstream, vuk::MemoryUsage::eGPUtoCPU, all_buffer_usage_flags),

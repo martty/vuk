@@ -119,6 +119,8 @@ namespace vuk {
 		virtual void deallocate_render_passes(std::span<const VkRenderPass> src) = 0;
 
 		virtual Runtime& get_context() = 0;
+
+		BufferUsageFlags get_all_buffer_usage_flags(Runtime& runtime);
 	};
 
 	struct DeviceVkResource;

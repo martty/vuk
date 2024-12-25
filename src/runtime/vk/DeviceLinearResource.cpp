@@ -33,6 +33,8 @@ namespace vuk {
 		std::vector<SyncPoint> syncpoints;
 		std::vector<VkAccelerationStructureKHR> ass;
 
+		BufferUsageFlags all_buffer_usage_flags;
+
 		BufferLinearAllocator linear_cpu_only;
 		BufferLinearAllocator linear_cpu_gpu;
 		BufferLinearAllocator linear_gpu_cpu;
@@ -41,6 +43,7 @@ namespace vuk {
 		DeviceLinearResourceImpl(DeviceResource& upstream) :
 		    ctx(&upstream.get_context()),
 		    device(ctx->device),
+		    all_buffer_usage_flags(upstream.get_all_buffer_usage_flags(*ctx)),
 		    linear_cpu_only(upstream, vuk::MemoryUsage::eCPUonly, all_buffer_usage_flags),
 		    linear_cpu_gpu(upstream, vuk::MemoryUsage::eCPUtoGPU, all_buffer_usage_flags),
 		    linear_gpu_cpu(upstream, vuk::MemoryUsage::eGPUtoCPU, all_buffer_usage_flags),

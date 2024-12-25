@@ -12,6 +12,18 @@
 #include <utility>
 
 namespace vuk {
+	BufferUsageFlags DeviceResource::get_all_buffer_usage_flags(Runtime& runtime) {
+		auto all_buffer_usage_flags = BufferUsageFlagBits::eTransferRead | BufferUsageFlagBits::eTransferWrite | BufferUsageFlagBits::eUniformTexelBuffer |
+		                              BufferUsageFlagBits::eStorageTexelBuffer | BufferUsageFlagBits::eUniformBuffer | BufferUsageFlagBits::eStorageBuffer |
+		                              BufferUsageFlagBits::eIndexBuffer | BufferUsageFlagBits::eVertexBuffer | BufferUsageFlagBits::eIndirectBuffer |
+		                              BufferUsageFlagBits::eShaderDeviceAddress;
+		if (runtime.vkCmdBuildAccelerationStructuresKHR) {
+			all_buffer_usage_flags |= BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR | BufferUsageFlagBits::eAccelerationStructureStorageKHR |
+			                          BufferUsageFlagBits::eShaderBindingTableKHR;
+		}
+		return all_buffer_usage_flags;
+	}
+
 	/****Allocator impls *****/
 
 	Result<void, AllocateException> Allocator::allocate(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) {
