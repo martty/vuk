@@ -1396,8 +1396,7 @@ namespace vuk {
 
 						void* rpass_profile_data = nullptr;
 						if (vk_rec->callbacks->on_begin_pass)
-							rpass_profile_data =
-							    vk_rec->callbacks->on_begin_pass(vk_rec->callbacks->user_data, fn_type->debug_info.name.c_str(), vk_rec->cbuf, vk_rec->domain);
+							rpass_profile_data = vk_rec->callbacks->on_begin_pass(vk_rec->callbacks->user_data, fn_type->debug_info.name.c_str(), cobuf, vk_rec->domain);
 
 						if (vk_rec->rp.rpci.attachments.size() > 0) {
 							vk_rec->prepare_render_pass();
@@ -1430,7 +1429,7 @@ namespace vuk {
 						void* rpass_profile_data = nullptr;
 						if (vk_rec->callbacks->on_begin_pass)
 							rpass_profile_data =
-							    vk_rec->callbacks->on_begin_pass(vk_rec->callbacks->user_data, fn_type->debug_info.name.c_str(), vk_rec->cbuf, vk_rec->domain);
+							    vk_rec->callbacks->on_begin_pass(vk_rec->callbacks->user_data, fn_type->debug_info.name.c_str(), cobuf, vk_rec->domain);
 
 						if (vk_rec->rp.rpci.attachments.size() > 0) {
 							vk_rec->prepare_render_pass();

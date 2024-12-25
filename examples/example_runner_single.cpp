@@ -45,16 +45,16 @@ void vuk::ExampleRunner::render() {
 		};
 		// runs whenever entering a new vuk::Pass
 		// we start a GPU zone and then keep it open
-		cbs.on_begin_pass = [](void* user_data, Name pass_name, VkCommandBuffer cmdbuf, DomainFlagBits domain) {
+		cbs.on_begin_pass = [](void* user_data, Name pass_name, CommandBuffer& cbuf, DomainFlagBits domain) {
 			ExampleRunner& runner = *reinterpret_cast<vuk::ExampleRunner*>(user_data);
 			void* pass_data = new char[sizeof(tracy::VkCtxScope)];
 			if (domain & vuk::DomainFlagBits::eGraphicsQueue) {
 #if defined TRACY_ENABLE
-				new (pass_data) TracyVkZoneTransient(runner.tracy_graphics_ctx, , cmdbuf, pass_name.c_str(), true);
+				new (pass_data) TracyVkZoneTransient(runner.tracy_graphics_ctx, , cbuf.get_underlying(), pass_name.c_str(), true);
 #endif
 			} else if (domain & vuk::DomainFlagBits::eTransferQueue) {
 #if defined TRACY_ENABLE
-				new (pass_data) TracyVkZoneTransient(runner.tracy_transfer_ctx, , cmdbuf, pass_name.c_str(), true);
+				new (pass_data) TracyVkZoneTransient(runner.tracy_transfer_ctx, , cbuf.get_underlying(), pass_name.c_str(), true);
 #endif
 			}
 
