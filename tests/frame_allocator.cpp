@@ -137,7 +137,7 @@ layout (push_constant) uniform data {
 layout (local_size_x = 1) in;
 
 void main() {
-	DEREF(data_in)[gl_GlobalInvocationID.x] *= 2;
+	ARRAY(data_in)[gl_GlobalInvocationID.x] *= 2;
 }
 )")));
 	pass(4, 1, 1, buf0);
