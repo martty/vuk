@@ -146,6 +146,39 @@ void main() {
 	auto schpen = std::span(&foo[0], 4);
 	CHECK(schpen == std::span(test));
 }
+
+TEST_CASE("shader buffer access") {
+	Allocator alloc(test_context.runtime->get_vk_resource());
+
+	Unique_ptr<float[]> foo = *allocate_array<float>(alloc, 4, MemoryUsage::eCPUonly);
+	for (int i = 0; i < 4; i++) {
+		foo[i] = (i + 1);
+	}
+
+	auto buf0 = vuk::acquire_ptr("b0", foo.get(), vuk::Access::eNone);
+
+	auto pass = lift_compute(test_context.runtime->get_pipeline(vuk::PipelineBaseCreateInfo::from_inline_glsl(R"(#version 460
+#pragma shader_stage(compute)
+#include <runtime>
+
+layout (std430, binding = 0) buffer coherent BufferIn {
+	float[] data_in;
+};
+
+layout (local_size_x = 1) in;
+
+void main() {
+	data_in[gl_GlobalInvocationID.x] *= 2;
+}
+)")));
+	pass(4, 1, 1, buf0);
+	buf0.wait(*test_context.allocator, test_context.compiler);
+	auto test = { 2.f, 4.f, 6.f, 8.f };
+	auto schpen = std::span(&foo[0], 4);
+	CHECK(schpen == std::span(test));
+}
+
+
 /*
 TEST_CASE("superframe allocator, uncached resource") {
   AllocatorChecker ac(*test_context.sfa_resource);

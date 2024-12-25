@@ -58,7 +58,7 @@ namespace vuk {
 	};
 
 	struct BufferViewCreateInfo {
-		Format format;
+		Format format = Format::eUndefined;
 	};
 } // namespace vuk
 

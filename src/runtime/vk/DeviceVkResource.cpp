@@ -242,6 +242,7 @@ namespace vuk {
 			AllocationEntry entry{ .host_ptr = allocation_info.pMappedData, .buffer = { .buffer = buffer, .base_address = device_address } };
 			entry.buffer.alignment = ci.alignment;
 			entry.buffer.mem_usage = ci.mem_usage;
+			entry.buffer.offset = 0;
 			entry.buffer.size = ci.size;
 			entry.device_memory = allocation_info.deviceMemory;
 			entry.allocation = allocation;
