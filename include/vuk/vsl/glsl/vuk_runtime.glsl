@@ -49,7 +49,8 @@ R"(
 #define REFS(type)  type##_ref_s
 #define VOID_REF   uint64_t
 #define NULL       0
-#define DEREF(var) var.value
+#define ARRAY(var) var.value
+#define DEREF(var) var.value[0]
 #define SIZEOF(type) uint32_t(uint64_t(REFS(type)(uint64_t(0)) + 1))
 
 #define OFFSET(ptr, offset) (uint64_t(ptr) + offset)
@@ -57,7 +58,6 @@ R"(
 #define INFINITY (1.0 / 0.0)
 #define NAN      (0.0 / 0.0)
 
-#define INDEX(type, ptr, index) REF(type)(OFFSET(ptr, (index)*SIZEOF(type)))
 
 TYPE(int8_t, 1);
 TYPE(uint8_t, 1);
