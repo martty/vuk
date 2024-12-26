@@ -215,7 +215,7 @@ namespace vuk {
 			auto& ci = cis[i];
 			VkBufferCreateInfo bci{ .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
 			bci.size = ci.size;
-			bci.usage = (VkBufferUsageFlags)all_buffer_usage_flags;
+			bci.usage = (VkBufferUsageFlags)impl->all_buffer_usage_flags;
 			bci.queueFamilyIndexCount = impl->queue_family_count;
 			bci.sharingMode = bci.queueFamilyIndexCount > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
 			bci.pQueueFamilyIndices = impl->all_queue_families.data();
@@ -265,11 +265,38 @@ namespace vuk {
 		}
 	}
 
-	Result<void, AllocateException> DeviceVkResource::allocate_views(std::span<view_base> dst, std::span<const VCI> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException>
+	DeviceVkResource::allocate_memory_views(std::span<generic_view_base> dst, std::span<const BVCI> cis, SourceLocationAtFrame loc) {
+		assert(dst.size() == cis.size());
+		for (int64_t i = 0; i < (int64_t)dst.size(); i++){
+			auto& ci = cis[i];
+			auto& ae = ctx->resolve_ptr(ci.ptr);
+			assert(ci.vci.format == Format::eUndefined); // TODO: implement texel bufs
+			const auto& view_data = view<BufferLike<void>>{.ptr = ci.ptr, .count = ci.vci.count };
+			ptr_base meta_p;
+			BufferCreateInfo bci{ .mem_usage = ae.buffer.mem_usage, .size = sizeof(view_data) };
+			auto res = allocate_memory({ &meta_p, 1 }, { &bci, 1 }, loc);
+			if (!res) {
+				deallocate_memory_views({ dst.data(), (uint64_t)i });
+				return res;
+			}
+			ViewEntry ve{ .ptr = ci.ptr, .size = { .linear = ci.vci.count * ci.vci.elem_size }, .buffer = ci.vci };
+			ctx->add_generic_view(meta_p.device_address, ve);
+			dst[i] = generic_view_base{ meta_p.device_address };
+		}
 		return { expected_value };
 	}
 
-	void DeviceVkResource::deallocate_views(std::span<const view_base> dst) {}
+	void DeviceVkResource::deallocate_memory_views(std::span<const generic_view_base> dst) {
+		for (auto& v : dst) {
+			if (v) {
+				assert((v.key & 0x1) == 0); // memory
+				ctx->remove_generic_view(v.key);
+				ptr_base ptr{ v.key };
+				deallocate_memory({ &ptr, 1 });
+			}
+		}
+	}
 
 	Result<void, AllocateException> DeviceVkResource::allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
@@ -1258,12 +1285,13 @@ namespace vuk {
 		upstream->deallocate_memory(dst);
 	}
 
-	Result<void, AllocateException> DeviceNestedResource::allocate_views(std::span<view_base> dst, std::span<const VCI> cis, SourceLocationAtFrame loc) {
-		return upstream->allocate_views(dst, cis, loc);
+	Result<void, AllocateException>
+	DeviceNestedResource::allocate_memory_views(std::span<generic_view_base> dst, std::span<const BVCI> cis, SourceLocationAtFrame loc) {
+		return upstream->allocate_memory_views(dst, cis, loc);
 	}
 
-	void DeviceNestedResource::deallocate_views(std::span<const view_base> dst) {
-		upstream->deallocate_views(dst);
+	void DeviceNestedResource::deallocate_memory_views(std::span<const generic_view_base> dst) {
+		upstream->deallocate_memory_views(dst);
 	}
 
 	Result<void, AllocateException>

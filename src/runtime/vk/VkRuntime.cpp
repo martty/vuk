@@ -847,6 +847,15 @@ namespace vuk {
 		return *p;
 	}
 
+	ViewEntry& Resolver::resolve_view(generic_view_base v) {
+		if ((v.key & 0x3) == 0) { // a generic memory view
+			auto p = memory_views.find(v.key);
+			assert(p);
+			return *p;
+		}
+		assert(false);
+	}
+
 	void Resolver::commit(uint64_t base, size_t size, AllocationEntry& ae) {
 		allocations.insert_unaligned(base, size, ae);
 	}
@@ -854,4 +863,13 @@ namespace vuk {
 	void Resolver::decommit(uint64_t base, size_t size) {
 		allocations.erase_unaligned(base, size);
 	}
-} // namespace vuk
+
+	void Resolver::add_generic_view(uint64_t key, ViewEntry& ae) {
+		memory_views.insert_unaligned(key, 1, ae);
+	}
+
+	void Resolver::remove_generic_view(uint64_t key) {
+		memory_views.erase_unaligned(key, 1);
+	}
+
+	} // namespace vuk

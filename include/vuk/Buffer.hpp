@@ -58,6 +58,8 @@ namespace vuk {
 	};
 
 	struct BufferViewCreateInfo {
+		size_t elem_size;
+		size_t count;
 		Format format = Format::eUndefined;
 	};
 } // namespace vuk
