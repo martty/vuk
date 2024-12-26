@@ -103,6 +103,17 @@ namespace vuk {
 		return { expected_value, std::move(buf) };
 	}
 
+	template<class T>
+	inline Result<Unique<view<T>>, AllocateException>
+	generic_view_from_array(Allocator& allocator, ptr<T[]> ptr, size_t count, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
+		Unique<view<T>> view(allocator);
+		BVCI bvci{ .ptr = ptr, .vci = { .elem_size = sizeof(T), .count = count } };
+		if (auto res = allocator.allocate_memory_views({ static_cast<generic_view_base*>(&view.get()), 1 }, { &bvci, 1 }); !res) {
+			return { expected_error, res.error() };
+		}
+		return { expected_value, std::move(view) };
+	}
+
 	/// @brief Allocate a single image from an Allocator
 	/// @param allocator Allocator to use
 	/// @param ici Image creation parameters

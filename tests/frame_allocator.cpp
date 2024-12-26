@@ -147,7 +147,7 @@ void main() {
 	CHECK(schpen == std::span(test));
 }
 
-TEST_CASE("shader buffer access") {
+TEST_CASE("shader buffer access (ptr)") {
 	Allocator alloc(test_context.runtime->get_vk_resource());
 
 	Unique_ptr<float[]> foo = *allocate_array<float>(alloc, 4, MemoryUsage::eCPUonly);
@@ -178,6 +178,98 @@ void main() {
 	CHECK(schpen == std::span(test));
 }
 
+TEST_CASE("generic view from array") {
+	Allocator alloc(test_context.runtime->get_vk_resource());
+
+	Unique_ptr<float[]> foo = *allocate_array<float>(alloc, 16, MemoryUsage::eCPUonly);
+	BVCI bvci{ .ptr = foo.get(), .vci = { .elem_size = sizeof(float), .count = 16 } };
+	view<float> view;
+	alloc.allocate_memory_views({ static_cast<generic_view_base*>(&view), 1 }, { &bvci, 1 });
+
+	for (int i = 0; i < 5; i++) {
+		view[i] = i;
+	}
+
+	for (int i = 0; i < 5; i++) {
+		view[i] *= i;
+	}
+
+	for (int i = 0; i < 5; i++) {
+		CHECK(view[i] == i * i);
+	}
+
+	alloc.deallocate(std::span{ static_cast<generic_view_base*>(&view), 1 });
+}
+
+TEST_CASE("generic view from array with helper") {
+	Allocator alloc(test_context.runtime->get_vk_resource());
+
+	Unique_ptr<float[]> foo = *allocate_array<float>(alloc, 16, MemoryUsage::eCPUonly);
+	Unique<view<float>> view = *generic_view_from_array(alloc, foo.get(), 16);
+
+	for (int i = 0; i < 5; i++) {
+		view[i] = i;
+	}
+
+	for (int i = 0; i < 5; i++) {
+		view[i] *= i;
+	}
+
+	for (int i = 0; i < 5; i++) {
+		CHECK(view[i] == i * i);
+	}
+}
+
+TEST_CASE("memory view from array with helper") {
+	Allocator alloc(test_context.runtime->get_vk_resource());
+
+	Unique_ptr<float[]> foo = *allocate_array<float>(alloc, 16, MemoryUsage::eCPUonly);
+	// concrete views don't need allocations
+	view<BufferLike<float>> view = ::view<BufferLike<float>>{ foo.get(), 16 };
+
+	for (int i = 0; i < 5; i++) {
+		view[i] = i;
+	}
+
+	for (int i = 0; i < 5; i++) {
+		view[i] *= i;
+	}
+
+	for (int i = 0; i < 5; i++) {
+		CHECK(view[i] == i * i);
+	}
+}
+
+void sqr_generic(view<float> view) {
+	for (int i = 0; i < view.size(); i++) {
+		view[i] *= i;
+	}
+}
+
+void sqr_specific(view<BufferLike<float>> view) {
+	for (int i = 0; i < view.size(); i++) {
+		view[i] *= i;
+	}
+}
+
+TEST_CASE("function taking views") {
+	Allocator alloc(test_context.runtime->get_vk_resource());
+
+	Unique_ptr<float[]> foo = *allocate_array<float>(alloc, 16, MemoryUsage::eCPUonly);
+	// concrete views don't need allocations
+	view<BufferLike<float>> v = ::view<BufferLike<float>>{ foo.get(), 16 };
+
+	for (int i = 0; i < 5; i++) {
+		v[i] = i;
+	}
+
+	sqr_generic(v);
+	sqr_specific(v);
+
+	for (int i = 0; i < 5; i++) {
+		CHECK(v[i] == i * i * i);
+	}
+}
 
 /*
 TEST_CASE("superframe allocator, uncached resource") {

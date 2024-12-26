@@ -82,7 +82,15 @@ namespace vuk {
 	}
 
 	void Allocator::deallocate(std::span<const ptr_base> src) {
-		return device_resource->deallocate_memory(src);
+		device_resource->deallocate_memory(src);
+	}
+
+	Result<void, AllocateException> Allocator::allocate_memory_views(std::span<generic_view_base> dst, std::span<const BVCI> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_memory_views(dst, cis, loc);
+	}
+
+	void Allocator::deallocate(std::span<const generic_view_base> src) {
+		device_resource->deallocate_memory_views(src);
 	}
 
 	Result<void, AllocateException> Allocator::allocate(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {

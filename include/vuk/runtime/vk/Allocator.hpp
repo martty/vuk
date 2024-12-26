@@ -33,7 +33,7 @@ namespace vuk {
 	struct ComputePipelineInstanceCreateInfo;
 	struct RayTracingPipelineInfo;
 	struct RayTracingPipelineInstanceCreateInfo;
-	struct VCI;
+	struct BVCI;
 
 	/// @brief DeviceResource is a polymorphic interface over allocation of GPU resources.
 	/// A DeviceResource must prevent reuse of cross-device resources after deallocation until CPU-GPU timelines are synchronized. GPU-only resources may be
@@ -58,8 +58,8 @@ namespace vuk {
 		virtual Result<void, AllocateException> allocate_memory(std::span<ptr_base> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) = 0;
 		virtual void deallocate_memory(std::span<const ptr_base> dst) = 0;
 
-		virtual Result<void, AllocateException> allocate_views(std::span<view_base> dst, std::span<const VCI> cis, SourceLocationAtFrame loc) = 0;
-		virtual void deallocate_views(std::span<const view_base> dst) = 0;
+		virtual Result<void, AllocateException> allocate_memory_views(std::span<generic_view_base> dst, std::span<const BVCI> cis, SourceLocationAtFrame loc) = 0;
+		virtual void deallocate_memory_views(std::span<const generic_view_base> dst) = 0;
 
 		virtual Result<void, AllocateException> allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) = 0;
 		virtual void deallocate_buffers(std::span<const Buffer> dst) = 0;
@@ -246,6 +246,18 @@ namespace vuk {
 		/// @brief Deallocate buffers previously allocated from this Allocator
 		/// @param src Span of buffers to be deallocated
 		void deallocate(std::span<const ptr_base> src);
+
+		/// @brief Allocate buffers from this Allocator
+		/// @param dst Destination span to place allocated buffers into
+		/// @param cis Per-element construction info
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
+		Result<void, AllocateException>
+		allocate_memory_views(std::span<generic_view_base> dst, std::span<const BVCI> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+
+		/// @brief Deallocate buffers previously allocated from this Allocator
+		/// @param src Span of buffers to be deallocated
+		void deallocate(std::span<const generic_view_base> src);
 
 		/// @brief Allocate buffers from this Allocator
 		/// @param dst Destination span to place allocated buffers into
@@ -694,6 +706,8 @@ namespace vuk {
 	{
 		if constexpr (std::is_base_of_v<ptr_base, T>) {
 			allocator.deallocate(std::span<const ptr_base>{ static_cast<const ptr_base*>(&src), 1 });
+		} else if constexpr (std::is_base_of_v<generic_view_base, T>) {
+			allocator.deallocate(std::span<const generic_view_base>{ static_cast<const generic_view_base*>(&src), 1 });
 		} else {
 			allocator.deallocate(std::span<const T>{ &src, 1 });
 		}

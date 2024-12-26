@@ -461,16 +461,7 @@ namespace vuk {
 		ImageOffset image;
 	};
 
-	/*struct ACI {
-		union {
-			BufferCreateInfo buffer;
-			ImageCreateInfo image;
-		};
-	};*/
-
-
 	struct IVCI {
-		Extent3D extent = {};
 		Format format = Format::eUndefined;
 		bool allow_srgb_unorm_mutable;
 		ImageViewCreateFlags image_view_flags;

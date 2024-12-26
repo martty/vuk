@@ -13,12 +13,15 @@ namespace vuk {
 		void commit(uint64_t base, size_t size, AllocationEntry& ae);
 		void decommit(uint64_t base, size_t size);
 
+		void add_generic_view(uint64_t key, ViewEntry& ve);
+		void remove_generic_view(uint64_t key);
+
 		AllocationEntry& resolve_ptr(ptr_base ptr);
-		ViewEntry& resolve_view(view_base view);
+		ViewEntry& resolve_view(generic_view_base view);
 		void install_as_thread_resolver();
 
 		RadixTree<AllocationEntry> allocations;
-		RadixTree<ViewEntry> views;
+		RadixTree<ViewEntry> memory_views;
 	};
 
 	template<class Type = void, class... Constraints>
@@ -26,25 +29,25 @@ namespace vuk {
 		using T = Type;
 
 		Type* operator->()
-		  requires (!std::is_same_v<Type, void>)
+		  requires(!std::is_same_v<Type, void>)
 		{
 			return reinterpret_cast<Type*>(Resolver::per_thread->resolve_ptr(*this).host_ptr);
 		}
 
-		Type& operator*()
-		  requires (!std::is_same_v<Type, void>)
+		auto& operator*()
+		  requires(!std::is_same_v<Type, void>)
 		{
 			return *reinterpret_cast<Type*>(Resolver::per_thread->resolve_ptr(*this).host_ptr);
 		}
 
-		std::remove_extent_t<Type>& operator[](size_t index)
+		auto& operator[](size_t index)
 		  requires(!std::is_same_v<Type, void>)
 		{
 			return *(reinterpret_cast<std::remove_extent_t<Type>*>(Resolver::per_thread->resolve_ptr(*this).host_ptr) + index);
 		}
 
 		ptr operator+(size_t offset)
-		  requires (!std::is_same_v<Type, void>)
+		  requires(!std::is_same_v<Type, void>)
 		{
 			return { device_address + offset * sizeof(Type) };
 		}
@@ -53,8 +56,89 @@ namespace vuk {
 	template<class T>
 	using Unique_ptr = Unique<ptr<T>>;
 
+	template<class T>
+	struct BufferLike {};
+
+	template<Format f>
+	struct FormatT {};
+
 	template<class Type = void, class... Constraints>
-	struct view : view_base {};
+	struct view : generic_view_base {
+		Type& operator[](size_t index)
+		  requires(!std::is_same_v<Type, void>)
+		{
+			if ((key & 0x3) == 0) { // generic memory view
+				auto& ve = Resolver::per_thread->resolve_view(*this);
+				assert(index < ve.buffer.count);
+				return static_cast<ptr<Type>>(ve.ptr)[index];
+			} else if ((key & 0x3) == 0x2) { // specific memory view
+				return reinterpret_cast<view<BufferLike<Type>>*>(key & ~0x3)->operator[](index);
+			}
+		}
+
+		const Type& operator[](size_t index) const
+		  requires(!std::is_same_v<Type, void>)
+		{
+			if ((key & 0x3) == 0) { // generic memory view
+				auto& ve = Resolver::per_thread->resolve_view(*this);
+				assert(index < ve.buffer.count);
+				return static_cast<ptr<Type>>(ve.ptr)[index];
+			} else if ((key & 0x3) == 0x2) { // specific memory view
+				return reinterpret_cast<const view<BufferLike<Type>>*>(key & ~0x3)->operator[](index);
+			}
+		}
+
+		size_t size() const {
+			if ((key & 0x3) == 0) { // generic memory view
+				auto& ve = Resolver::per_thread->resolve_view(*this);
+				return ve.buffer.count;
+			} else if ((key & 0x3) == 0x2) { // specific memory view
+				return reinterpret_cast<view<BufferLike<Type>>*>(key & ~0x3)->size();
+			}
+		}
+	};
+
+	template<class Type, class... Constraints>
+	struct view_base<view<Type, Constraints...>> {
+		static constexpr bool value = true;
+	};
+
+	template<class Type, class... Constraints>
+	struct view<BufferLike<Type>, Constraints...> {
+		ptr<Type> ptr;
+		size_t count;
+
+		auto& operator[](size_t index)
+		  requires(!std::is_same_v<Type, void>)
+		{
+			assert(index < count);
+			return ptr[index];
+		}
+
+		const auto& operator[](size_t index) const
+		  requires(!std::is_same_v<Type, void>)
+		{
+			assert(index < count);
+			return ptr[index];
+		}
+
+		size_t size() const noexcept {
+			return count;
+		}
+
+		operator view<Type>() {
+			view<Type> v;
+			v.key = reinterpret_cast<uintptr_t>(this) | 0x2;
+			return v;
+		}
+	};
+
+	template<class... Constraints>
+	struct view<BufferLike<FormatT<Format::eUndefined>>, Constraints...> {
+		ptr<BufferLike<FormatT<Format::eUndefined>>> ptr;
+		size_t count;
+		Format format;
+	};
 
 	struct AllocationEntry {
 		void* host_ptr;
@@ -71,27 +155,29 @@ namespace vuk {
 		struct ViewEntry* default_view;
 		VkDeviceMemory device_memory;
 		void* allocation;
-		//enum class PTEFlags {} flags;
+		// enum class PTEFlags {} flags;
 	};
 
-	template<Format f>
-	struct FormatT {};
+	struct BVCI {
+		ptr_base ptr;
+		BufferViewCreateInfo vci;
+	};
 
-	struct VCI {
-		ptr_base allocation;
-		BufferViewCreateInfo buffer;
+	struct IVCI2 {
+		ptr_base ptr;
+		IVCI vci;
 	};
 
 	struct ViewEntry {
-		ptr_base allocation;
+		ptr_base ptr;
+		Offset size;
 		union {
 			struct : BufferViewCreateInfo {
-				size_t offset;
 			} buffer;
 			struct : IVCI {
 				VkImageView view;
 			} image;
 		};
-		enum class ViewEntryFlags {} flags;
+		// enum class ViewEntryFlags {} flags;
 	};
 } // namespace vuk
