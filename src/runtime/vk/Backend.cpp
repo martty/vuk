@@ -921,6 +921,10 @@ namespace vuk {
 				return;
 			} else if (base_ty->kind == Type::POINTER_TY) {
 				key = reinterpret_cast<ptr_base*>(value)->device_address;
+			} else if (base_ty->is_bufferlike_view()) {
+				auto& v = *reinterpret_cast<view<BufferLike<void>>*>(value);
+				key = v.ptr.device_address;
+				hash_combine(key, v.count);
 			}
 
 			uint64_t key = value_identity(base_ty, value);
