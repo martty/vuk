@@ -655,7 +655,10 @@ namespace vuk {
 				add_breaking_result(node, 0);
 				add_read(node, node->compile_pipeline.src, 0);
 				break;
-
+			case Node::GET_ALLOCATION_SIZE:
+				add_read(node, node->get_allocation_size.ptr, 0);
+				add_breaking_result(node, 0);
+				break;
 			default:
 				assert(0);
 			}

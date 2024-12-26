@@ -1604,7 +1604,10 @@ namespace vuk {
 							break;
 						case DescriptorType::eUniformBuffer:
 						case DescriptorType::eStorageBuffer:
-							cobuf.bind_buffer(set, binding->binding, *reinterpret_cast<Buffer*>(val));
+							auto& v = *reinterpret_cast<view<BufferLike<void>>*>(val);
+							auto& ae = alloc.get_context().resolve_ptr(v.data());
+							Buffer buf{ nullptr, ae.buffer.buffer, ae.buffer.offset, v.size() };
+							cobuf.bind_buffer(set, binding->binding, buf);
 							break;
 						case DescriptorType::eSampler:
 							cobuf.bind_sampler(set, binding->binding, *reinterpret_cast<SamplerCreateInfo*>(val));
@@ -1829,6 +1832,22 @@ namespace vuk {
 				auto pipeline = alloc.get_context().get_pipeline(pbci);
 
 				sched.done(node, host_stream, pipeline);
+				break;
+			}
+			case Node::GET_ALLOCATION_SIZE: {
+				if (sched.process(item)) {
+#ifdef VUK_DUMP_EXEC
+					print_results(node);
+					fmt::print(" = get_allocation_size ");
+					print_args({ &node->get_allocation_size.ptr, 1 });
+					fmt::print("\n");
+#endif
+					auto ptr = sched.get_value<ptr_base>(node->get_allocation_size.ptr);
+					auto size = alloc.get_context().resolve_ptr(ptr).buffer.size;
+					sched.done(node, item.scheduled_stream, size); // converge doesn't execute
+				} else {
+					sched.schedule_dependency(node->get_allocation_size.ptr, RW::eRead);
+				}
 				break;
 			}
 			default:

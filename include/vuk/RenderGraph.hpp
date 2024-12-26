@@ -470,7 +470,7 @@ public:
 			case DescriptorType::eUniformBuffer:
 			case DescriptorType::eStorageBuffer:
 				acc = b->non_writable ? Access::eComputeRead : (b->non_readable ? Access::eComputeWrite : Access::eComputeRW);
-				base_ty = current_module->types.make_pointer_ty(current_module->types.u32()); // TODO: become view
+				base_ty = current_module->types.make_bufferlike_view_ty(current_module->types.u32());
 				break;
 			case DescriptorType::eSampler:
 				acc = Access::eNone;
@@ -592,6 +592,26 @@ public:
 		assert(buf);
 		Ref ref = current_module->acquire(current_module->types.make_pointer_ty(current_module->types.u32()), nullptr, buf);
 		auto ext_ref = ExtRef(std::make_shared<ExtNode>(ref.node, to_use(access)), ref);
+		current_module->name_output(ref, name.c_str());
+		current_module->set_source_location(ref.node, VUK_CALL);
+		return { std::move(ext_ref) };
+	}
+
+	template<class T>
+	[[nodiscard]] inline val_view<BufferLike<T>> acquire_view(Name name, view<BufferLike<T>> buf, Access access, VUK_CALLSTACK) {
+		assert(buf);
+		Ref ref = current_module->acquire(current_module->types.make_bufferlike_view_ty(current_module->types.u32()), nullptr, buf);
+		auto ext_ref = ExtRef(std::make_shared<ExtNode>(ref.node, to_use(access)), ref);
+		current_module->name_output(ref, name.c_str());
+		current_module->set_source_location(ref.node, VUK_CALL);
+		return { std::move(ext_ref) };
+	}
+
+	template<class T>
+	[[nodiscard]] inline val_view<BufferLike<T>> make_view(Name name, val_ptr<BufferLike<T>> buf, Value<size_t> size, VUK_CALLSTACK) {
+		assert(buf);
+		Ref ref = current_module->make_construct(current_module->types.make_bufferlike_view_ty(current_module->types.u32()), buf.get_head(), size.get_head());
+		auto ext_ref = make_ext_ref(ref, {buf.node, size.node});
 		current_module->name_output(ref, name.c_str());
 		current_module->set_source_location(ref.node, VUK_CALL);
 		return { std::move(ext_ref) };

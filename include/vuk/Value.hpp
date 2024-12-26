@@ -242,14 +242,21 @@ namespace vuk {
 		void set_with_extract(Ref construct, Ref src_composite, uint64_t index) {
 			current_module->set_value(construct, index, current_module->make_extract(src_composite, index));
 		}
+
+		Value<view<T>> implicit_view()
+		  requires std::is_base_of_v<ptr_base, T>
+		{
+			std::array args = { get_head(), current_module->make_get_allocation_size(get_head()) };
+			auto imp_view = current_module->make_construct(current_module->types.make_bufferlike_view_ty(current_module->types.u32()), args);
+			return { make_ext_ref(imp_view) };
+		}
 	};
-	
-	template<class T, class...Ctrs>
+
+	template<class T, class... Ctrs>
 	using val_ptr = Value<ptr<T, Ctrs...>>;
-	/*
-	template<class T, class...Ctrs>
+
+	template<class T, class... Ctrs>
 	using val_view = Value<view<T, Ctrs...>>;
-	*/
 
 	// Arithmetic operators for Value<uint64_t>
 
