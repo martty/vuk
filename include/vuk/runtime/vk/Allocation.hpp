@@ -64,7 +64,7 @@ namespace vuk {
 
 	template<class Type = void, class... Constraints>
 	struct view : generic_view_base {
-		Type& operator[](size_t index)
+		auto& operator[](size_t index)
 		  requires(!std::is_same_v<Type, void>)
 		{
 			if ((key & 0x3) == 0) { // generic memory view
@@ -76,7 +76,7 @@ namespace vuk {
 			}
 		}
 
-		const Type& operator[](size_t index) const
+		const auto& operator[](size_t index) const
 		  requires(!std::is_same_v<Type, void>)
 		{
 			if ((key & 0x3) == 0) { // generic memory view
@@ -94,6 +94,15 @@ namespace vuk {
 				return ve.buffer.count;
 			} else if ((key & 0x3) == 0x2) { // specific memory view
 				return reinterpret_cast<view<BufferLike<Type>>*>(key & ~0x3)->size();
+			}
+		}
+
+		auto& data() {
+			if ((key & 0x3) == 0) { // generic memory view
+				auto& ve = Resolver::per_thread->resolve_view(*this);
+				return static_cast<ptr<Type>&>(ve.ptr);
+			} else if ((key & 0x3) == 0x2) { // specific memory view
+				return reinterpret_cast<view<BufferLike<Type>>*>(key & ~0x3)->ptr;
 			}
 		}
 	};
@@ -131,6 +140,16 @@ namespace vuk {
 			v.key = reinterpret_cast<uintptr_t>(this) | 0x2;
 			return v;
 		}
+
+		explicit operator bool() const noexcept {
+			return !!ptr;
+		}
+
+		auto& data() {
+			return ptr;
+		}
+
+		std::strong_ordering operator<=>(const view<BufferLike<Type>, Constraints...>&) const noexcept = default;
 	};
 
 	template<class... Constraints>
