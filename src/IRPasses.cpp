@@ -490,14 +490,14 @@ namespace vuk {
 
 				for (size_t i = 0; i < node->construct.args.size(); i++) {
 					auto& parm = node->construct.args[i];
-					if (node->type[0]->kind == Type::ARRAY_TY || node->type[0]->kind == Type::UNION_TY) {
+					if (node->type[0]->kind == Type::ARRAY_TY || node->type[0]->kind == Type::UNION_TY || parm.type()->kind == Type::POINTER_TY) {
 						add_write(node, parm, i);
 					} else {
 						add_read(node, parm, i);
 					}
 				}
 
-				if (node->type[0]->kind == Type::ARRAY_TY || node->type[0]->hash_value == current_module->types.builtin_sampled_image) {
+				if (node->type[0]->kind == Type::ARRAY_TY || node->type[0]->hash_value == current_module->types.builtin_sampled_image || parm.type()->kind == Type::POINTER_TY) {
 					for (size_t i = 1; i < node->construct.args.size(); i++) {
 						auto& parm = node->construct.args[i];
 						auto& st_parm = parm;

@@ -248,7 +248,9 @@ namespace vuk {
 		{
 			std::array args = { get_head(), current_module->make_get_allocation_size(get_head()) };
 			auto imp_view = current_module->make_construct(current_module->types.make_bufferlike_view_ty(current_module->types.u32()), args);
-			return { make_ext_ref(imp_view) };
+			auto vval = Value<view<T>>{ make_ext_ref(imp_view, { node }) };
+			node->deps.push_back(vval.node);
+			return std::move(vval);
 		}
 	};
 
