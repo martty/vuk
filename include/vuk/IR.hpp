@@ -785,7 +785,7 @@ namespace vuk {
 				auto buffer_offsets = std::vector<size_t>{ sizeof(uint64_t) };
 				auto buffer_type = emplace_type(std::shared_ptr<Type>(new Type{ .kind = Type::COMPOSITE_TY,
 				                                                                .size = sizeof(view<BufferLike<void>>),
-				                                                                .debug_info = allocate_type_debug_info("view<b>"),
+				                                                                .debug_info = allocate_type_debug_info("view/b"),
 				                                                                .offsets = buffer_offsets,
 				                                                                .composite = { .types = buffer_, .tag = Type::TAG_BUFFERLIKE_VIEW } }));
 				buffer_type->child_types = std::move(buffer_);
