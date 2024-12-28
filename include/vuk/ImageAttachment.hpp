@@ -21,7 +21,7 @@ namespace vuk {
 		bool allow_srgb_unorm_mutable = false;
 		ImageViewCreateFlags image_view_flags = {};
 		ImageViewType view_type = ImageViewType::eInfer;
-		ComponentMapping components;
+		ComponentMapping components = {};
 		ImageLayout layout = ImageLayout::eUndefined;
 
 		uint32_t base_level = VK_REMAINING_MIP_LEVELS;
