@@ -802,6 +802,15 @@ public:
 	}
 
 	template<class T>
+	[[nodiscard]] inline Value<T> acquire(Name name, T value, Access access, VUK_CALLSTACK) {
+		Ref ref = current_module->acquire(to_IR_type<T>(), nullptr, value);
+		auto ext_ref = ExtRef(std::make_shared<ExtNode>(ref.node, to_use(access)), ref);
+		current_module->name_output(ref, name.c_str());
+		current_module->set_source_location(ref.node, VUK_CALL);
+		return { std::move(ext_ref) };
+	}
+
+	template<class T>
 	[[nodiscard]] inline val_view<BufferLike<T>> acquire_view(Name name, view<BufferLike<T>> buf, Access access, VUK_CALLSTACK) {
 		assert(buf);
 		Ref ref = current_module->acquire(to_IR_type<view<BufferLike<T>>>(), nullptr, buf);

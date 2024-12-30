@@ -372,6 +372,46 @@ void main() {
 	alloc.deallocate({ (ptr_base*) & res, 1 });
 }
 
+struct Bigbog {
+	ptr<BufferLike<float>> the_boof;
+	ptr<BufferLike<uint32_t>> the_beef;
+	float a_milkshake;
+};
+
+ADAPT_STRUCT_FOR_IR(Bigbog, the_boof, the_beef, a_milkshake);
+
+TEST_CASE("composite transport") {
+	Allocator alloc(test_context.runtime->get_vk_resource());
+
+	Bigbog boog{ .a_milkshake = 14.f };
+	Unique_ptr<BufferLike<float[]>> foo = *allocate_array<float>(alloc, 4, MemoryUsage::eCPUonly);
+	boog.the_boof = static_cast<ptr<BufferLike<float>>>(foo.get());
+	Unique_ptr<BufferLike<uint32_t[]>> foo2 = *allocate_array<uint32_t>(alloc, 4, MemoryUsage::eCPUonly);
+	boog.the_beef = static_cast<ptr<BufferLike<uint32_t>>>(foo2.get());
+
+	auto buf0 = vuk::acquire("jacobious_boog", boog, vuk::Access::eNone);
+	auto dogget = vuk::acquire("dogget", 12u, vuk::Access::eNone);
+
+	auto pass = vuk::make_pass("transport", [](CommandBuffer& cb, VUK_ARG(Bigbog, Access::eTransferWrite) bogbig, VUK_ARG(uint32_t, Access::eNone) doggets) { 
+		cb.fill_buffer(Buffer2<byte>{ bogbig->the_beef, 16 }, doggets);
+		uint32_t a;
+		memcpy(&a, &bogbig->a_milkshake, sizeof(float)); // yes this will go away
+		cb.fill_buffer(Buffer2<byte>{ bogbig->the_boof, 16 }, a);
+	});
+	pass(buf0, dogget);
+	auto res = *buf0.get(*test_context.allocator, test_context.compiler);
+	{
+		auto test = { res.a_milkshake, res.a_milkshake, res.a_milkshake, res.a_milkshake };
+		auto schpen = std::span(&res.the_boof[0], 4);
+		CHECK(schpen == std::span(test));
+	}
+	{
+		auto test = { 12u, 12u, 12u, 12u };
+		auto schpen = std::span(&res.the_beef[0], 4);
+		CHECK(schpen == std::span(test));
+	}
+}
+
 /*
 TEST_CASE("superframe allocator, uncached resource") {
   AllocatorChecker ac(*test_context.sfa_resource);
