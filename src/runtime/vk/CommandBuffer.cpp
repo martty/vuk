@@ -918,11 +918,12 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::fill_buffer(const Buffer& dst, uint32_t data) {
+	CommandBuffer& CommandBuffer::fill_buffer(const view<BufferLike<byte>>& dst, uint32_t data) {
 		if (dst.size == 0) {
 			return *this;
 		}
-		ctx.vkCmdFillBuffer(command_buffer, dst.buffer, dst.offset, dst.size, data);
+		auto& underlying = allocator->get_context().resolve_ptr(dst.ptr).buffer;
+		ctx.vkCmdFillBuffer(command_buffer, underlying.buffer, underlying.offset, dst.size_bytes(), data);
 		return *this;
 	}
 

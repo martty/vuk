@@ -4,6 +4,7 @@
 #include "vuk/Exception.hpp"
 #include "vuk/FixedVector.hpp"
 #include "vuk/Result.hpp"
+#include "vuk/runtime/vk/Allocation.hpp"
 #include "vuk/runtime/vk/Image.hpp"
 #include "vuk/runtime/vk/PipelineInstance.hpp"
 #include "vuk/runtime/vk/Query.hpp"
@@ -733,7 +734,7 @@ namespace vuk {
 		/// @brief Fill a buffer with a fixed value
 		/// @param dst the destination Buffer
 		/// @param data the 4 byte value to fill with
-		CommandBuffer& fill_buffer(const Buffer& dst, uint32_t data);
+		CommandBuffer& fill_buffer(const view<BufferLike<byte>>& dst, uint32_t data);
 		/// @brief Fill a buffer with a host values
 		/// @param dst the destination Buffer
 		/// @param data pointer to host values
