@@ -982,6 +982,12 @@ namespace vuk {
 				auto& img_att = reinterpret_cast<SampledImage*>(value)->ia;
 				add_sync(current_module->types.get_builtin_image().get(), dst_use, &img_att);
 				return;
+			} else if (!base_ty->is_bufferlike_view() && base_ty->kind == Type::COMPOSITE_TY) { // sync every part of a composite
+				auto& composite = base_ty->composite;
+				for (int i = 0; i < composite.types.size(); i++) {
+					add_sync(composite.types[i].get(), dst_use, base_ty->composite.get(value, i));
+				}
+				return;
 			}
 
 			uint64_t key = value_identity(base_ty, value);
