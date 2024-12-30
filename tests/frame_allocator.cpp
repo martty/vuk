@@ -342,7 +342,7 @@ TEST_CASE("allocate ptr and view in IR") {
 
 	auto buf0 = vuk::declare_ptr<float>("jacob");
 	// set directly on struct from an immediate
-	buf0.def()->mem_usage = MemoryUsage::eCPUonly;
+	buf0.def()->mem_usage.set(MemoryUsage::eCPUonly);
 	// set from function that could take Value
 	buf0.set_size_bytes(16);
 
@@ -364,12 +364,12 @@ void main() {
 }
 )")));
 	pass(4, 1, 1, buf0);
-	auto res = *buf0.get(*test_context.allocator, test_context.compiler);
+	auto res = *buf0.get(*test_context.allocator, test_context.compiler, {.dump_graph = true});
 	auto test = { 1.f, 2.f, 3.f, 4.f };
 	auto schpen = std::span(&res[0], 4);
 	CHECK(schpen == std::span(test));
 
-	alloc.deallocate({ (ptr_base*) & res, 1 });
+	alloc.deallocate({ (ptr_base*)&res, 1 });
 }
 
 struct Bigbog {
@@ -392,7 +392,7 @@ TEST_CASE("composite transport") {
 	auto buf0 = vuk::acquire("jacobious_boog", boog, vuk::Access::eNone);
 	auto dogget = vuk::acquire("dogget", 12u, vuk::Access::eNone);
 
-	auto pass = vuk::make_pass("transport", [](CommandBuffer& cb, VUK_ARG(Bigbog, Access::eTransferWrite) bogbig, VUK_ARG(uint32_t, Access::eNone) doggets) { 
+	auto pass = vuk::make_pass("transport", [](CommandBuffer& cb, VUK_ARG(Bigbog, Access::eTransferWrite) bogbig, VUK_ARG(uint32_t, Access::eNone) doggets) {
 		cb.fill_buffer(Buffer2<byte>{ bogbig->the_beef, 16 }, doggets);
 		uint32_t a;
 		memcpy(&a, &bogbig->a_milkshake, sizeof(float)); // yes this will go away
@@ -407,6 +407,39 @@ TEST_CASE("composite transport") {
 	}
 	{
 		auto test = { 12u, 12u, 12u, 12u };
+		auto schpen = std::span(&res.the_beef[0], 4);
+		CHECK(schpen == std::span(test));
+	}
+}
+
+
+TEST_CASE("composite support for Value") {
+	Allocator alloc(test_context.runtime->get_vk_resource());
+
+	Bigbog boog{ .a_milkshake = 14.f };
+	Unique_ptr<BufferLike<float[]>> foo = *allocate_array<float>(alloc, 4, MemoryUsage::eCPUonly);
+	boog.the_boof = static_cast<ptr<BufferLike<float>>>(foo.get());
+	Unique_ptr<BufferLike<uint32_t[]>> foo2 = *allocate_array<uint32_t>(alloc, 4, MemoryUsage::eCPUonly);
+	boog.the_beef = static_cast<ptr<BufferLike<uint32_t>>>(foo2.get());
+
+	auto buf0 = vuk::acquire("jacobious_boog", boog, vuk::Access::eNone);
+
+	auto pass = vuk::make_pass("transport", [](CommandBuffer& cb, VUK_ARG(Bigbog, Access::eTransferWrite) bogbig, VUK_ARG(float, Access::eNone) doggets) {
+		uint32_t a;
+		memcpy(&a, &bogbig->a_milkshake, sizeof(float)); // yes this will go away
+		cb.fill_buffer(Buffer2<byte>{ bogbig->the_boof, 16 }, a);
+		cb.fill_buffer(Buffer2<byte>{ bogbig->the_beef, 16 }, (uint32_t)doggets);
+	});
+
+	pass(buf0, buf0->a_milkshake);
+	auto res = *buf0.get(*test_context.allocator, test_context.compiler);
+	{
+		auto test = { res.a_milkshake, res.a_milkshake, res.a_milkshake, res.a_milkshake };
+		auto schpen = std::span(&res.the_boof[0], 4);
+		CHECK(schpen == std::span(test));
+	}
+	{
+		auto test = { 14u, 14u, 14u, 14u };
 		auto schpen = std::span(&res.the_beef[0], 4);
 		CHECK(schpen == std::span(test));
 	}
