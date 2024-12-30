@@ -659,6 +659,10 @@ namespace vuk {
 				add_read(node, node->get_allocation_size.ptr, 0);
 				add_breaking_result(node, 0);
 				break;
+			case Node::ALLOCATE:
+				add_read(node, node->allocate.src, 0);
+				add_result(node, 0, node->allocate.src);
+				break;
 			default:
 				assert(0);
 			}
@@ -742,7 +746,7 @@ namespace vuk {
 			}
 		};
 
-		auto placeholder_to_ptr = []<class T>(Ref r, T* ptr) {
+		auto placeholder_to_ptr = [](Ref r, void* ptr) {
 			if (r.node->kind == Node::PLACEHOLDER) {
 				r.node->kind = Node::CONSTANT;
 				r.node->constant.value = ptr;
@@ -750,12 +754,13 @@ namespace vuk {
 			}
 		};
 
-		// valloc reification - if there were later setting of fields, then remove placeholders
+		// construct reification - if there were later setting of fields, then remove placeholders
 		for (auto node : nodes) {
 			switch (node->kind) {
 			case Node::CONSTRUCT: {
 				auto args_ptr = node->construct.args.data();
-				if (node->type[0]->hash_value == current_module->types.builtin_image) {
+				auto ty = node->type[0];
+				if (ty->hash_value == current_module->types.builtin_image) {
 					auto ptr = &constant<ImageAttachment>(args_ptr[0]);
 					auto& value = constant<ImageAttachment>(args_ptr[0]);
 					if (value.extent.width > 0) {
@@ -785,13 +790,19 @@ namespace vuk {
 					if (value.level_count != VK_REMAINING_MIP_LEVELS) {
 						placeholder_to_ptr(args_ptr[9], &ptr->level_count);
 					}
-				} else if (node->type[0]->hash_value == current_module->types.builtin_buffer) {
-					auto ptr = &constant<Buffer>(args_ptr[0]);
-					auto& value = constant<Buffer>(args_ptr[0]);
-					if (value.size != ~(0ULL)) {
-						placeholder_to_ptr(args_ptr[1], &ptr->size);
+				} else if (ty->kind == Type::COMPOSITE_TY) {
+					auto* base = constant(args_ptr[0]);
+					if (!base) { // if there was no value provided here, then we don't perform any reification
+						break;
+					}
+					for (size_t i = 1; i < node->construct.args.size(); i++) {
+						bool is_default = ty->composite.is_default(base, i - 1);
+						if (!is_default) {
+							placeholder_to_ptr(args_ptr[i], ty->composite.get(base, i - 1));
+						}
 					}
 				}
+
 			} break;
 			default:
 				break;
@@ -1181,10 +1192,8 @@ namespace vuk {
 	Result<void> Compiler::validate_read_undefined() {
 		for (auto node : impl->nodes) {
 			switch (node->kind) {
-			case Node::CONSTRUCT: { // CONSTRUCT discards -
-				// TODO: arrays!
-				if (node->type[0]->kind != Type::ARRAY_TY && node->links->reads.size() > 0 &&
-				    node->type[0]->hash_value != current_module->types.builtin_sampled_image) { // we are trying to read from it :(
+			case Node::ALLOCATE: { // ALLOCATE discards
+				if (node->links->reads.size() > 0) { // we are trying to read from it :(
 					auto reads = node->links->reads.to_span(impl->pass_reads);
 					for (auto offender : reads) {
 						auto message0 = format_graph_message(Level::eError, offender.node, "tried to read something that was never written:\n");

@@ -33,7 +33,7 @@ namespace vuk {
 	using UserCallbackType = fu2::unique_function<void(CommandBuffer&, std::span<void*>, std::span<void*>, std::span<void*>)>;
 
 	struct Type {
-		enum TypeKind { VOID_TY = 0, MEMORY_TY = 1, INTEGER_TY, POINTER_TY, COMPOSITE_TY, ARRAY_TY, UNION_TY, IMBUED_TY, ALIASED_TY, OPAQUE_FN_TY, SHADER_FN_TY } kind;
+		enum TypeKind { VOID_TY = 0, MEMORY_TY = 1, INTEGER_TY, FLOAT_TY, POINTER_TY, COMPOSITE_TY, ARRAY_TY, UNION_TY, IMBUED_TY, ALIASED_TY, OPAQUE_FN_TY, SHADER_FN_TY } kind;
 		enum Tags { TAG_BUFFERLIKE_VIEW = 1, TAG_BUFFER = 2, TAG_IMAGE = 3, TAG_SWAPCHAIN = 4 };
 		size_t size = ~0ULL;
 
@@ -46,7 +46,7 @@ namespace vuk {
 		union {
 			struct {
 				uint32_t width;
-			} integer;
+			} scalar;
 			struct {
 				std::shared_ptr<Type>* T;
 				Access access;
@@ -78,6 +78,9 @@ namespace vuk {
 			struct {
 				std::span<std::shared_ptr<Type>> types;
 				size_t tag;
+				void (*construct)(void* dst, std::span<void*> args) = nullptr;
+				void* (*get)(void* value, size_t index) = nullptr;
+				bool (*is_default)(void* value, size_t index) = nullptr;
 			} composite;
 		};
 
@@ -103,8 +106,8 @@ namespace vuk {
 		using Hash = uint32_t;
 		Hash hash_value;
 
-		static Hash hash_integer(size_t width) {
-			Hash v = (Hash)Type::INTEGER_TY;
+		static Hash hash_scalar(Type::TypeKind kind, size_t width) {
+			Hash v = (Hash)kind;
 			hash_combine_direct(v, width);
 			return v;
 		}
@@ -126,7 +129,8 @@ namespace vuk {
 				hash_combine_direct(v, (uint32_t)t->size);
 				return v;
 			case INTEGER_TY:
-				hash_combine_direct(v, t->integer.width);
+			case FLOAT_TY:
+				hash_combine_direct(v, t->scalar.width);
 				return v;
 			case ARRAY_TY:
 				hash_combine_direct(v, Type::hash(t->array.T->get()));
@@ -157,14 +161,8 @@ namespace vuk {
 		}
 
 		bool is_bufferlike_view() const {
-			if (kind != COMPOSITE_TY) {
-				return false;
-			}
-			if (composite.tag == TAG_BUFFERLIKE_VIEW) {
-				return true;
-			}
-
-			return false;
+			return kind == Type::COMPOSITE_TY && composite.types.size() == 2 && composite.types[0]->kind == Type::POINTER_TY &&
+			       composite.types[1]->kind == Type::INTEGER_TY && composite.types[1]->scalar.width == 64;
 		}
 
 		// TODO: handle multiple flags
@@ -266,7 +264,9 @@ namespace vuk {
 			case MEMORY_TY:
 				return "mem";
 			case INTEGER_TY:
-				return t->integer.width == 32 ? "i32" : "i64";
+				return t->scalar.width == 32 ? "i32" : "i64";
+			case FLOAT_TY:
+				return t->scalar.width == 32 ? "f32" : "f64";
 			case ARRAY_TY:
 				return to_string(t->array.T->get()) + "[" + std::to_string(t->array.count) + "]";
 			case COMPOSITE_TY:
@@ -349,6 +349,7 @@ namespace vuk {
 			CAST,
 			MATH_BINARY,
 			COMPILE_PIPELINE,
+			ALLOCATE,
 			GET_ALLOCATION_SIZE,
 			GARBAGE
 		} kind;
@@ -393,8 +394,6 @@ namespace vuk {
 			} constant;
 			struct : Variable {
 				std::span<Ref> args;
-				std::span<Ref> defs; // for preserving provenance for composite types
-				std::optional<Allocator> allocator;
 			} construct;
 			struct : Fixed<3> {
 				Ref src;
@@ -447,6 +446,10 @@ namespace vuk {
 				Ref b;
 				BinOp op;
 			} math_binary;
+			struct : Fixed<1> {
+				Ref src;
+				std::optional<Allocator> allocator;
+			} allocate;
 			struct : Fixed<1> {
 				Ref src;
 				Access access;
@@ -518,6 +521,8 @@ namespace vuk {
 				return "get_allocation_size";
 			case COMPILE_PIPELINE:
 				return "compile_pipeline";
+			case ALLOCATE:
+				return "allocate";
 			}
 			assert(0);
 			return "";
@@ -540,6 +545,17 @@ namespace vuk {
 
 	inline ChainLink& Ref::link() noexcept {
 		return node->links[index];
+	}
+
+	template<class T>
+	T& constant(Ref ref) {
+		assert(ref.type()->kind == Type::INTEGER_TY || ref.type()->kind == Type::MEMORY_TY);
+		return *reinterpret_cast<T*>(ref.node->constant.value);
+	}
+
+	inline void* constant(Ref ref) {
+		assert(ref.type()->kind == Type::INTEGER_TY || ref.type()->kind == Type::MEMORY_TY);
+		return ref.node->constant.value;
 	}
 
 	struct CannotBeConstantEvaluated : Exception {
@@ -780,18 +796,6 @@ namespace vuk {
 				return union_type;
 			}
 
-			std::shared_ptr<Type> make_bufferlike_view_ty(std::shared_ptr<Type> ty) {
-				auto buffer_ = std::vector<std::shared_ptr<Type>>{ make_pointer_ty(ty), u64() };
-				auto buffer_offsets = std::vector<size_t>{ sizeof(uint64_t) };
-				auto buffer_type = emplace_type(std::shared_ptr<Type>(new Type{ .kind = Type::COMPOSITE_TY,
-				                                                                .size = sizeof(view<BufferLike<void>>),
-				                                                                .debug_info = allocate_type_debug_info("view/b"),
-				                                                                .offsets = buffer_offsets,
-				                                                                .composite = { .types = buffer_, .tag = Type::TAG_BUFFERLIKE_VIEW } }));
-				buffer_type->child_types = std::move(buffer_);
-				return buffer_type;
-			}
-
 			std::shared_ptr<Type> make_opaque_fn_ty(std::span<std::shared_ptr<Type> const> args,
 			                                        std::span<std::shared_ptr<Type> const> ret_types,
 			                                        DomainFlags execute_on,
@@ -830,8 +834,8 @@ namespace vuk {
 				return emplace_type(std::shared_ptr<Type>(t));
 			}
 
-			std::shared_ptr<Type> u64() {
-				auto hash = Type::hash_integer(64);
+			std::shared_ptr<Type> make_void_ty() {
+				auto hash = 1;
 				auto it = type_map.find(hash);
 				if (it != type_map.end()) {
 					if (auto ty = it->second.lock()) {
@@ -839,19 +843,27 @@ namespace vuk {
 					}
 				}
 
-				return emplace_type(std::shared_ptr<Type>(new Type{ .kind = Type::INTEGER_TY, .size = sizeof(uint64_t), .integer = { .width = 64 } }));
+				return emplace_type(std::shared_ptr<Type>(new Type{ .kind = Type::VOID_TY, .size = 0 }));
+			}
+
+			std::shared_ptr<Type> make_scalar_ty(Type::TypeKind kind, uint32_t bit_width) {
+				auto hash = Type::hash_scalar(kind, bit_width);
+				auto it = type_map.find(hash);
+				if (it != type_map.end()) {
+					if (auto ty = it->second.lock()) {
+						return ty;
+					}
+				}
+
+				return emplace_type(std::shared_ptr<Type>(new Type{ .kind = kind, .size = bit_width / 8, .scalar = { .width = bit_width } }));
 			}
 
 			std::shared_ptr<Type> u32() {
-				auto hash = Type::hash_integer(32);
-				auto it = type_map.find(hash);
-				if (it != type_map.end()) {
-					if (auto ty = it->second.lock()) {
-						return ty;
-					}
-				}
+				return make_scalar_ty(Type::INTEGER_TY, 32);
+			}
 
-				return emplace_type(std::shared_ptr<Type>(new Type{ .kind = Type::INTEGER_TY, .size = sizeof(uint32_t), .integer = { .width = 32 } }));
+			std::shared_ptr<Type> u64() {
+				return make_scalar_ty(Type::INTEGER_TY, 64);
 			}
 
 			std::shared_ptr<Type> memory(size_t size) {
@@ -993,6 +1005,8 @@ namespace vuk {
 						t->hash_value = th;
 					} else if (!v->second.lock()) {
 						type_map[th] = t;
+					} else {
+						t = v->second.lock();
 					}
 					t->hash_value = th;
 				};
@@ -1004,10 +1018,13 @@ namespace vuk {
 					unify_type(*t->imbued.T);
 				} else if (t->kind == Type::ARRAY_TY) {
 					unify_type(*t->array.T);
+				} else if (t->kind == Type::POINTER_TY){
+					unify_type(*t->pointer.T);
 				} else if (t->kind == Type::COMPOSITE_TY) {
-					for (auto& elem_ty : t->composite.types) {
+					for (auto& elem_ty : t->child_types) {
 						unify_type(elem_ty);
 					}
+					t->composite.types = t->child_types;
 				}
 				unify_type(t);
 
@@ -1273,6 +1290,10 @@ namespace vuk {
 			                              .construct = { .args = std::span(args_ptr, 2) } }));
 		}
 
+		Ref make_placeholder(std::shared_ptr<Type> type) {
+			return first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ type }, 1 } }));
+		}
+
 		Ref make_declare_ptr(const ptr_base& value) {
 			auto buf_ptr = new (new char[sizeof(ptr_base)]) ptr_base(value); /* rest size */
 			auto args_ptr = new Ref[1];
@@ -1330,13 +1351,20 @@ namespace vuk {
 			                              .construct = { .args = std::span(args_ptr, 3) } }));
 		}
 
-		Ref make_construct(std::shared_ptr<Type> type, std::span<Ref> args) {
+		Ref make_construct(std::shared_ptr<Type> type, void* value, std::span<Ref> args) {
 			auto ty = new std::shared_ptr<Type>[1]{ type };
 			auto args_ptr = new Ref[args.size() + 1];
 			auto mem_ty = new std::shared_ptr<Type>[1]{ types.memory(0) };
-			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = nullptr } }));
+			args_ptr[0] =
+			    first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = value, .owned = static_cast<bool>(value) } }));
 			std::copy(args.begin(), args.end(), args_ptr + 1);
 			return first(emplace_op(Node{ .kind = Node::CONSTRUCT, .type = std::span{ ty, 1 }, .construct = { .args = std::span(args_ptr, args.size() + 1) } }));
+		}
+
+		/// @brief  Allocate the given type, using `src` to describe the allocation.
+		Ref make_allocate(std::shared_ptr<Type> type, Ref src, std::optional<Allocator> allocator = {}) {
+			auto ty = new std::shared_ptr<Type>[1]{ type };
+			return first(emplace_op(Node{ .kind = Node::ALLOCATE, .type = std::span{ ty, 1 }, .allocate = { .src = src, .allocator = allocator } }));
 		}
 
 		Ref make_extract(Ref composite, Ref index) {
@@ -1378,9 +1406,7 @@ namespace vuk {
 		}
 		Ref make_get_allocation_size(Ref ptr) {
 			auto ty = new std::shared_ptr<Type>[1]{ types.u64() };
-			return first(emplace_op(Node{ .kind = Node::GET_ALLOCATION_SIZE,
-			                              .type = std::span{ ty, 1 },
-			                              .get_allocation_size = { .ptr = ptr } }));
+			return first(emplace_op(Node{ .kind = Node::GET_ALLOCATION_SIZE, .type = std::span{ ty, 1 }, .get_allocation_size = { .ptr = ptr } }));
 		}
 
 

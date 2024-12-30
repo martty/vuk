@@ -430,6 +430,180 @@ public:
 		    name, std::forward<F>(body), scheduling_info, VUK_CALL);
 	}
 
+	template<class T>
+	struct member_type_helper;
+
+	template<class C, class T>
+	struct member_type_helper<T C::*> {
+		using type = T;
+	};
+
+	template<class T>
+	struct member_type : member_type_helper<typename std::remove_cvref<T>::type> {};
+
+	// Helper type
+	template<class T>
+	using member_type_t = member_type<T>::type;
+
+	template<class T>
+	struct erased_tuple_adaptor : std::false_type {};
+
+// https://stackoverflow.com/a/44479664
+#define EVAL(...)                                              __VA_ARGS__
+#define VARCOUNT(...)                                          EVAL(VARCOUNT_I(__VA_ARGS__, 9, 8, 7, 6, 5, 4, 3, 2, 1, ))
+#define VARCOUNT_I(_, _9, _8, _7, _6, _5, _4, _3, _2, X_, ...) X_
+#define STR(X)                                                 STR_I(X)
+#define STR_I(X)                                               #X
+#define GLUE(X, Y)                                             GLUE_I(X, Y)
+#define GLUE_I(X, Y)                                           X##Y
+#define FIRST(...)                                             EVAL(FIRST_I(__VA_ARGS__, ))
+#define FIRST_I(X, ...)                                        X
+#define TUPLE_TAIL(...)                                        EVAL(TUPLE_TAIL_I(__VA_ARGS__))
+#define TUPLE_TAIL_I(X, ...)                                   (__VA_ARGS__)
+
+#define TRANSFORM(NAME_, ARGS_)   (GLUE(TRANSFORM_, VARCOUNT ARGS_)(NAME_, ARGS_))
+#define TRANSFORM_1(NAME_, ARGS_) NAME_ ARGS_
+#define TRANSFORM_2(NAME_, ARGS_) NAME_(FIRST ARGS_), TRANSFORM_1(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORM_3(NAME_, ARGS_) NAME_(FIRST ARGS_), TRANSFORM_2(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORM_4(NAME_, ARGS_) NAME_(FIRST ARGS_), TRANSFORM_3(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORM_5(NAME_, ARGS_) NAME_(FIRST ARGS_), TRANSFORM_4(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORM_6(NAME_, ARGS_) NAME_(FIRST ARGS_), TRANSFORM_5(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORM_7(NAME_, ARGS_) NAME_(FIRST ARGS_), TRANSFORM_6(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORM_8(NAME_, ARGS_) NAME_(FIRST ARGS_), TRANSFORM_7(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORM_9(NAME_, ARGS_) NAME_(FIRST ARGS_), TRANSFORM_8(NAME_, TUPLE_TAIL ARGS_)
+
+#define MEM_OBJ_ARG(X)  &T::X
+#define STRIFY(X)       STR(X)
+#define MEM_OBJ_TYPE(X) member_type_t<decltype(&T::X)>
+#define OFFSETIFY(X)    offsetof(T, X)
+
+#define MAKE_INITIALIZER(...)   { __VA_ARGS__ }
+#define MAKE_TEMPLATE_LIST(...) <__VA_ARGS__>
+
+#define ADAPT_STRUCT_FOR_IR(type, ...)                                                                                                                         \
+	template<>                                                                                                                                                   \
+	struct erased_tuple_adaptor<type> : std::true_type {                                                                                                         \
+		using T = type;                                                                                                                                            \
+		static constexpr std::tuple members = EVAL(MAKE_INITIALIZER TRANSFORM(MEM_OBJ_ARG, (__VA_ARGS__)));                                                        \
+		static constexpr std::array member_names = EVAL(MAKE_INITIALIZER TRANSFORM(STRIFY, (__VA_ARGS__)));                                                        \
+		static constexpr std::tuple EVAL(MAKE_TEMPLATE_LIST TRANSFORM(MEM_OBJ_TYPE, (__VA_ARGS__))) member_types;                                                  \
+		static constexpr std::array offsets = EVAL(MAKE_INITIALIZER TRANSFORM(OFFSETIFY, (__VA_ARGS__)));                                                          \
+		static void construct(void* dst, std::span<void*> parts) {                                                                                                 \
+			T& v = *new (dst) T;                                                                                                                                     \
+			size_t i = 0;                                                                                                                                            \
+			std::apply([&](auto... member_obj_tys) { ((v.*member_obj_tys = *reinterpret_cast<member_type_t<decltype(member_obj_tys)>*>(parts[i++])), ...); },        \
+			           members);                                                                                                                                     \
+		}                                                                                                                                                          \
+		static void* get(void* value, size_t index) {                                                                                                              \
+			T& v = *reinterpret_cast<T*>(value);                                                                                                                     \
+			return std::apply(                                                                                                                                       \
+			    [&](auto... member_obj_tys) {                                                                                                                        \
+				    std::array results = { static_cast<void*>(&(v.*member_obj_tys))... };                                                                              \
+				    return results[index];                                                                                                                             \
+			    },                                                                                                                                                   \
+			    members);                                                                                                                                            \
+		}                                                                                                                                                          \
+		static bool is_default(void* value, size_t index) {                                                                                                        \
+			T& v = *reinterpret_cast<T*>(value);                                                                                                                     \
+			T def{};                                                                                                                                                 \
+			return std::apply(                                                                                                                                       \
+			    [&](auto... member_obj_tys) {                                                                                                                        \
+				    std::array results = { (def.*member_obj_tys) == (v.*member_obj_tys)... };                                                                          \
+				    return results[index];                                                                                                                             \
+			    },                                                                                                                                                   \
+			    members);                                                                                                                                            \
+		}                                                                                                                                                          \
+		static constexpr const char* name = #type;                                                                                                                 \
+	}
+
+#define ADAPT_TEMPLATED_STRUCT_FOR_IR(type, ...)                                                                                                               \
+	template<class... Args>                                                                                                                                      \
+	struct erased_tuple_adaptor<type<Args...>> : std::true_type {                                                                                                \
+		using T = type<Args...>;                                                                                                                                   \
+		static constexpr std::tuple members = EVAL(MAKE_INITIALIZER TRANSFORM(MEM_OBJ_ARG, (__VA_ARGS__)));                                                        \
+		static constexpr std::array member_names = EVAL(MAKE_INITIALIZER TRANSFORM(STRIFY, (__VA_ARGS__)));                                                        \
+		static constexpr std::tuple EVAL(MAKE_TEMPLATE_LIST TRANSFORM(MEM_OBJ_TYPE, (__VA_ARGS__))) member_types;                                                  \
+		static constexpr std::array offsets = EVAL(MAKE_INITIALIZER TRANSFORM(OFFSETIFY, (__VA_ARGS__)));                                                          \
+		static void construct(void* dst, std::span<void*> parts) {                                                                                                 \
+			T& v = *new (dst) T;                                                                                                                                     \
+			size_t i = 0;                                                                                                                                            \
+			std::apply([&](auto... member_obj_tys) { ((v.*member_obj_tys = *reinterpret_cast<member_type_t<decltype(member_obj_tys)>*>(parts[i++])), ...); },        \
+			           members);                                                                                                                                     \
+		}                                                                                                                                                          \
+		static void* get(void* value, size_t index) {                                                                                                              \
+			T& v = *reinterpret_cast<T*>(value);                                                                                                                     \
+			return std::apply(                                                                                                                                       \
+			    [&](auto... member_obj_tys) {                                                                                                                        \
+				    std::array results = { static_cast<void*>(&(v.*member_obj_tys))... };                                                                              \
+				    return results[index];                                                                                                                             \
+			    },                                                                                                                                                   \
+			    members);                                                                                                                                            \
+		}                                                                                                                                                          \
+		static bool is_default(void* value, size_t index) {                                                                                                        \
+			T& v = *reinterpret_cast<T*>(value);                                                                                                                     \
+			T def{};                                                                                                                                                 \
+			return std::apply(                                                                                                                                       \
+			    [&](auto... member_obj_tys) {                                                                                                                        \
+				    std::array results = { (def.*member_obj_tys) == (v.*member_obj_tys)... };                                                                          \
+				    return results[index];                                                                                                                             \
+			    },                                                                                                                                                   \
+			    members);                                                                                                                                            \
+		}                                                                                                                                                          \
+		static constexpr const char* name = #type;                                                                                                                 \
+	}
+
+	template<class... Args>
+	using Buffer2 = view<BufferLike<Args...>>;
+
+	ADAPT_TEMPLATED_STRUCT_FOR_IR(Buffer2, ptr, sz_bytes);
+	ADAPT_STRUCT_FOR_IR(BufferCreateInfo, mem_usage, size, alignment);
+
+	template<class T>
+	inline std::shared_ptr<Type> to_IR_type() {
+		if constexpr (!std::is_same_v<T, typename detail::unwrap<T>::T>) {
+			return to_IR_type<typename detail::unwrap<T>::T>();
+		}
+		if constexpr (std::is_array_v<T> && std::extent_v<T> == 0) {
+			return to_IR_type<std::remove_all_extents_t<T>>();
+		}
+
+		if constexpr (std::is_void_v<T>) {
+			return current_module->types.make_void_ty();
+		} else if constexpr (std::is_integral_v<T>) {
+			return current_module->types.make_scalar_ty(Type::INTEGER_TY, sizeof(T) * 8);
+		} else if constexpr (std::is_floating_point_v<T>) {
+			return current_module->types.make_scalar_ty(Type::FLOAT_TY, sizeof(T) * 8);
+		} else if constexpr (std::is_enum_v<T>) {
+			return current_module->types.make_scalar_ty(Type::INTEGER_TY, sizeof(T) * 8);
+		} else if constexpr (std::is_base_of_v<ptr_base, T>) {
+			return current_module->types.make_pointer_ty(to_IR_type<typename T::pointed_T>());
+		} else if constexpr (erased_tuple_adaptor<T>::value) {
+			std::vector<std::shared_ptr<Type>> child_types =
+			    std::apply([&](auto... member_tys) { return std::vector<std::shared_ptr<Type>>{ to_IR_type<decltype(member_tys)>()... }; },
+			               erased_tuple_adaptor<T>::member_types);
+			auto offsets = std::vector<size_t>(erased_tuple_adaptor<T>::offsets.begin(), erased_tuple_adaptor<T>::offsets.end());
+			auto composite_type = current_module->types.emplace_type(
+			    std::shared_ptr<Type>(new Type{ .kind = Type::COMPOSITE_TY,
+			                                    .size = sizeof(T),
+			                                    .debug_info = current_module->types.allocate_type_debug_info(erased_tuple_adaptor<T>::name),
+			                                    .child_types = child_types,
+			                                    .offsets = offsets,
+			                                    .composite = { .types = child_types,
+			                                                   .tag = std::hash<const char*>{}(erased_tuple_adaptor<T>::name),
+			                                                   .construct = &erased_tuple_adaptor<T>::construct,
+			                                                   .get = &erased_tuple_adaptor<T>::get,
+			                                                   .is_default = &erased_tuple_adaptor<T>::is_default } }));
+			return composite_type;
+		}
+	}
+
+	template<class T, class... Ts>
+	constexpr std::size_t index_of(const std::tuple<Ts...>&) {
+		int found{}, count{};
+		((!found ? (++count, found = std::is_same_v<T, Ts>) : 0), ...);
+		return found ? count - 1 : count;
+	}
+	
 	/// @brief Turn a compute pipeline create info into a callable compute pass
 	inline auto lift_compute(PipelineBaseCreateInfo pbci, VUK_CALLSTACK) {
 		return [pbci, inner_scope = VUK_CALL]<class... T>(size_t size_x, size_t size_y, size_t size_z, Value<T>... args) mutable { // no callstack for these :/
@@ -470,7 +644,7 @@ public:
 			case DescriptorType::eUniformBuffer:
 			case DescriptorType::eStorageBuffer:
 				acc = b->non_writable ? Access::eComputeRead : (b->non_readable ? Access::eComputeWrite : Access::eComputeRW);
-				base_ty = current_module->types.make_bufferlike_view_ty(current_module->types.u32());
+				base_ty = to_IR_type<view<BufferLike<float>>>();
 				break;
 			case DescriptorType::eSampler:
 				acc = Access::eNone;
@@ -487,7 +661,7 @@ public:
 
 		if (compute_pipeline->reflection_info.push_constant_ranges.size() > 0) {
 			auto& pcr = compute_pipeline->reflection_info.push_constant_ranges[0];
-			auto base_ty = current_module->types.make_pointer_ty(current_module->types.u32());
+			auto base_ty = current_module->types.make_pointer_ty(current_module->types.make_scalar_ty(Type::FLOAT_TY, 32)); // TODO: IR types from shader types
 			for (auto j = 0; j < pcr.num_members; j++) {
 				// TODO: check which args are pointers and dereference on host the once that are not
 				arg_types.push_back(current_module->types.make_imbued_ty(base_ty, Access::eComputeRW));
@@ -588,9 +762,34 @@ public:
 	}
 
 	template<class T>
+	[[nodiscard]] inline val_ptr<BufferLike<T>> declare_ptr(Name name, BufferCreateInfo bci = {}, VUK_CALLSTACK) {
+		std::array<Ref, 3> args = {};
+		if (bci.mem_usage != BufferCreateInfo{}.mem_usage) {
+			args[0] = current_module->make_constant(&bci.mem_usage);
+		} else {
+			args[0] =
+			    current_module->make_placeholder(to_IR_type<std::remove_cvref_t<decltype(std::get<0>(erased_tuple_adaptor<BufferCreateInfo>::member_types))>>());
+		}
+		if (bci.size != BufferCreateInfo{}.size) {
+			args[1] = current_module->make_constant(&bci.size);
+		} else {
+			args[1] =
+			    current_module->make_placeholder(to_IR_type<std::remove_cvref_t<decltype(std::get<1>(erased_tuple_adaptor<BufferCreateInfo>::member_types))>>());
+		}
+		// don't provide this yet
+		args[2] = current_module->make_constant(&bci.alignment);
+
+		Ref bci_ref = current_module->make_construct(to_IR_type<BufferCreateInfo>(), new BufferCreateInfo{ bci }, args);
+		Ref ref = current_module->make_allocate(current_module->types.make_pointer_ty(to_IR_type<T>()), bci_ref);
+		current_module->name_output(ref, name.c_str());
+		current_module->set_source_location(ref.node, VUK_CALL);
+		return { make_ext_ref(ref) };
+	}
+
+	template<class T>
 	[[nodiscard]] inline val_ptr<T> acquire_ptr(Name name, ptr<T> buf, Access access, VUK_CALLSTACK) {
 		assert(buf);
-		Ref ref = current_module->acquire(current_module->types.make_pointer_ty(current_module->types.u32()), nullptr, buf);
+		Ref ref = current_module->acquire(current_module->types.make_pointer_ty(to_IR_type<T>()), nullptr, buf);
 		auto ext_ref = ExtRef(std::make_shared<ExtNode>(ref.node, to_use(access)), ref);
 		current_module->name_output(ref, name.c_str());
 		current_module->set_source_location(ref.node, VUK_CALL);
@@ -600,7 +799,7 @@ public:
 	template<class T>
 	[[nodiscard]] inline val_view<BufferLike<T>> acquire_view(Name name, view<BufferLike<T>> buf, Access access, VUK_CALLSTACK) {
 		assert(buf);
-		Ref ref = current_module->acquire(current_module->types.make_bufferlike_view_ty(current_module->types.u32()), nullptr, buf);
+		Ref ref = current_module->acquire(to_IR_type<view<BufferLike<T>>>(), nullptr, buf);
 		auto ext_ref = ExtRef(std::make_shared<ExtNode>(ref.node, to_use(access)), ref);
 		current_module->name_output(ref, name.c_str());
 		current_module->set_source_location(ref.node, VUK_CALL);
@@ -610,8 +809,8 @@ public:
 	template<class T>
 	[[nodiscard]] inline val_view<BufferLike<T>> make_view(Name name, val_ptr<BufferLike<T>> buf, Value<size_t> size, VUK_CALLSTACK) {
 		assert(buf);
-		Ref ref = current_module->make_construct(current_module->types.make_bufferlike_view_ty(current_module->types.u32()), buf.get_head(), size.get_head());
-		auto ext_ref = make_ext_ref(ref, {buf.node, size.node});
+		Ref ref = current_module->make_construct(to_IR_type<view<BufferLike<T>>>(), buf.get_head(), size.get_head());
+		auto ext_ref = make_ext_ref(ref, { buf.node, size.node });
 		current_module->name_output(ref, name.c_str());
 		current_module->set_source_location(ref.node, VUK_CALL);
 		return { std::move(ext_ref) };

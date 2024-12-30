@@ -86,6 +86,7 @@ namespace vuk {
 					ss << "</B>";
 				}
 			}
+			ss << " {" << (node->index & 0xffffffff) << "} ";
 			ss << "</TD>";
 
 			for (size_t i = 0; i < arg_count; i++) {
@@ -94,7 +95,7 @@ namespace vuk {
 				ss << "<TD PORT= \"a" << i << "\">";
 				if (arg.node->kind == Node::CONSTANT) {
 					if (arg.type()->kind == Type::INTEGER_TY) {
-						if (arg.type()->integer.width == 32) {
+						if (arg.type()->scalar.width == 32) {
 							ss << constant<uint32_t>(arg);
 						} else {
 							ss << constant<uint64_t>(arg);
