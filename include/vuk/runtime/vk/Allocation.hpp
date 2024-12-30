@@ -24,43 +24,41 @@ namespace vuk {
 		RadixTree<ViewEntry> memory_views;
 	};
 
+	template<Format f>
+	struct FormatT {};
+
 	template<class Type = void, class... Constraints>
 	struct ptr : ptr_base {
-		using T = Type;
+		using pointed_T = Type;
+		using UnwrappedT = detail::unwrap<Type>::T;
 
-		Type* operator->()
-		  requires(!std::is_same_v<Type, void>)
+		UnwrappedT* operator->()
+		  requires(!std::is_same_v<UnwrappedT, void>)
 		{
-			return reinterpret_cast<Type*>(Resolver::per_thread->resolve_ptr(*this).host_ptr);
+			return reinterpret_cast<UnwrappedT*>(Resolver::per_thread->resolve_ptr(*this).host_ptr);
 		}
 
 		auto& operator*()
-		  requires(!std::is_same_v<Type, void>)
+		  requires(!std::is_same_v<UnwrappedT, void>)
 		{
-			return *reinterpret_cast<Type*>(Resolver::per_thread->resolve_ptr(*this).host_ptr);
+			return *reinterpret_cast<UnwrappedT*>(Resolver::per_thread->resolve_ptr(*this).host_ptr);
 		}
 
 		auto& operator[](size_t index)
-		  requires(!std::is_same_v<Type, void>)
+		  requires(!std::is_same_v<UnwrappedT, void>)
 		{
-			return *(reinterpret_cast<std::remove_extent_t<Type>*>(Resolver::per_thread->resolve_ptr(*this).host_ptr) + index);
+			return *(reinterpret_cast<std::remove_extent_t<UnwrappedT>*>(Resolver::per_thread->resolve_ptr(*this).host_ptr) + index);
 		}
 
 		ptr operator+(size_t offset)
-		  requires(!std::is_same_v<Type, void>)
+		  requires(!std::is_same_v<UnwrappedT, void>)
 		{
-			return { device_address + offset * sizeof(Type) };
+			return { device_address + offset * sizeof(UnwrappedT) };
 		}
 	};
 
 	template<class T>
 	using Unique_ptr = Unique<ptr<T>>;
-
-	template<class T>
-	struct BufferLike {};
-
-	template<Format f>
-	struct FormatT {};
 
 	template<class Type = void, class... Constraints>
 	struct view : generic_view_base {
@@ -88,13 +86,17 @@ namespace vuk {
 			}
 		}
 
-		size_t size() const {
+		size_t size_bytes() const {
 			if ((key & 0x3) == 0) { // generic memory view
 				auto& ve = Resolver::per_thread->resolve_view(*this);
-				return ve.buffer.count;
+				return ve.buffer.count * ve.buffer.elem_size;
 			} else if ((key & 0x3) == 0x2) { // specific memory view
-				return reinterpret_cast<view<BufferLike<Type>>*>(key & ~0x3)->size();
+				return reinterpret_cast<view<BufferLike<Type>>*>(key & ~0x3)->size_bytes();
 			}
+		}
+
+		size_t count() const noexcept {
+			return size_bytes() / sizeof(Type);
 		}
 
 		auto& data() {
@@ -112,30 +114,28 @@ namespace vuk {
 		static constexpr bool value = true;
 	};
 
+	using byte = std::byte;
+
 	template<class Type, class... Constraints>
 	struct view<BufferLike<Type>, Constraints...> {
 		ptr<Type> ptr;
-		size_t count;
+		size_t sz_bytes;
 
 		auto& operator[](size_t index)
 		  requires(!std::is_same_v<Type, void>)
 		{
-			assert(index < count);
+			assert(index < (sz_bytes / sizeof(Type)));
 			return ptr[index];
 		}
 
 		const auto& operator[](size_t index) const
 		  requires(!std::is_same_v<Type, void>)
 		{
-			assert(index < count);
+			assert(index < (sz_bytes / sizeof(Type)));
 			return ptr[index];
 		}
 
-		size_t size() const noexcept {
-			return count;
-		}
-
-		operator view<Type>() {
+		operator view<Type>() const noexcept {
 			view<Type> v;
 			v.key = reinterpret_cast<uintptr_t>(this) | 0x2;
 			return v;
@@ -145,8 +145,20 @@ namespace vuk {
 			return !!ptr;
 		}
 
-		auto& data() {
+		auto& data() noexcept {
 			return ptr;
+		}
+
+		size_t size_bytes() const noexcept {
+			return sz_bytes;
+		}
+
+		size_t count() const noexcept {
+			return sz_bytes / sizeof(Type);
+		}
+
+		view<BufferLike<byte>> to_byte_view() const noexcept {
+			return { vuk::ptr<BufferLike<byte>>{ ptr.device_address }, sz_bytes };
 		}
 
 		std::strong_ordering operator<=>(const view<BufferLike<Type>, Constraints...>&) const noexcept = default;
@@ -155,7 +167,7 @@ namespace vuk {
 	template<class... Constraints>
 	struct view<BufferLike<FormatT<Format::eUndefined>>, Constraints...> {
 		ptr<BufferLike<FormatT<Format::eUndefined>>> ptr;
-		size_t count;
+		size_t size_bytes;
 		Format format;
 	};
 
