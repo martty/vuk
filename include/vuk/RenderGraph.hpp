@@ -588,6 +588,7 @@ public:
 			                                    .debug_info = current_module->types.allocate_type_debug_info(erased_tuple_adaptor<T>::name),
 			                                    .child_types = child_types,
 			                                    .offsets = offsets,
+			                                    .member_names = { erased_tuple_adaptor<T>::member_names.begin(), erased_tuple_adaptor<T>::member_names.end() },
 			                                    .composite = { .types = child_types,
 			                                                   .tag = std::hash<const char*>{}(erased_tuple_adaptor<T>::name),
 			                                                   .construct = &erased_tuple_adaptor<T>::construct,
