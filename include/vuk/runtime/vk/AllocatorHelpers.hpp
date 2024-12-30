@@ -82,9 +82,9 @@ namespace vuk {
 	/// @param loc Source location information
 	/// @return GPU-only buffer in a RAII wrapper (Unique<T>) or AllocateException on error
 	template<class T>
-	inline Result<Unique<ptr<T>>, AllocateException>
+	inline Result<Unique<ptr<BufferLike<T>>>, AllocateException>
 	allocate_memory(Allocator& allocator, MemoryUsage mem_usage, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-		Unique<ptr<T>> buf(allocator);
+		Unique<ptr<BufferLike<T>>> buf(allocator);
 		BufferCreateInfo bci{ .mem_usage = mem_usage, .size = sizeof(T), .alignment = alignof(T) };
 		if (auto res = allocator.allocate_memory(std::span{ static_cast<ptr_base*>(&buf.get()), 1 }, std::span{ &bci, 1 }, loc); !res) {
 			return { expected_error, res.error() };
@@ -93,9 +93,9 @@ namespace vuk {
 	}
 
 	template<class T>
-	inline Result<Unique<ptr<T[]>>, AllocateException>
+	inline Result<Unique<ptr<BufferLike<T[]>>>, AllocateException>
 	allocate_array(Allocator& allocator, size_t count, MemoryUsage mem_usage, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-		Unique<ptr<T[]>> buf(allocator);
+		Unique<ptr<BufferLike<T[]>>> buf(allocator);
 		BufferCreateInfo bci{ .mem_usage = mem_usage, .size = sizeof(T) * count, .alignment = alignof(T) };
 		if (auto res = allocator.allocate_memory(std::span{ static_cast<ptr_base*>(&buf.get()), 1 }, std::span{ &bci, 1 }, loc); !res) {
 			return { expected_error, res.error() };
@@ -105,7 +105,7 @@ namespace vuk {
 
 	template<class T>
 	inline Result<Unique<view<T>>, AllocateException>
-	generic_view_from_array(Allocator& allocator, ptr<T[]> ptr, size_t count, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
+	generic_view_from_array(Allocator& allocator, ptr<BufferLike<T[]>> ptr, size_t count, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
 		Unique<view<T>> view(allocator);
 		BVCI bvci{ .ptr = ptr, .vci = { .elem_size = sizeof(T), .count = count } };
 		if (auto res = allocator.allocate_memory_views({ static_cast<generic_view_base*>(&view.get()), 1 }, { &bvci, 1 }); !res) {

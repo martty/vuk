@@ -50,11 +50,13 @@ namespace vuk {
 	/// @brief Buffer creation parameters
 	struct BufferCreateInfo {
 		/// @brief Memory usage to determine which heap to allocate the memory from
-		MemoryUsage mem_usage;
+		MemoryUsage mem_usage = MemoryUsage::eUnset;
 		/// @brief Size of the Buffer in bytes
-		VkDeviceSize size;
+		VkDeviceSize size = ~(0u);
 		/// @brief Alignment of the allocated Buffer in bytes
 		VkDeviceSize alignment = 1;
+
+		std::strong_ordering operator<=>(const BufferCreateInfo&) const noexcept = default;
 	};
 
 	struct BufferViewCreateInfo {

@@ -272,7 +272,7 @@ namespace vuk {
 			auto& ci = cis[i];
 			auto& ae = ctx->resolve_ptr(ci.ptr);
 			assert(ci.vci.format == Format::eUndefined); // TODO: implement texel bufs
-			const auto& view_data = view<BufferLike<void>>{.ptr = ci.ptr, .count = ci.vci.count };
+			const auto& view_data = view<BufferLike<void>>{.ptr = ci.ptr, .sz_bytes = ci.vci.count * ci.vci.elem_size };
 			ptr_base meta_p;
 			BufferCreateInfo bci{ .mem_usage = ae.buffer.mem_usage, .size = sizeof(view_data) };
 			auto res = allocate_memory({ &meta_p, 1 }, { &bci, 1 }, loc);

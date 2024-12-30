@@ -55,6 +55,21 @@ namespace vuk {
 			return id == o.id;
 		}
 	};
+
+	template<class T>
+	struct BufferLike {};
+
+	namespace detail {
+		template<class Tin>
+		struct unwrap {
+			using T = Tin;
+		};
+
+		template<class Tin>
+		struct unwrap<BufferLike<Tin>> {
+			using T = Tin;
+		};
+	} // namespace detail
 } // namespace vuk
 
 namespace std {
@@ -547,6 +562,7 @@ namespace vuk {
 	Format srgb_to_unorm(Format) noexcept;
 
 	enum class MemoryUsage {
+		eUnset = 0,
 		eGPUonly = 1 /*VMA_MEMORY_USAGE_GPU_ONLY*/,
 		eCPUtoGPU = 3 /*VMA_MEMORY_USAGE_CPU_TO_GPU*/,
 		eCPUonly = 2 /*VMA_MEMORY_USAGE_CPU_ONLY*/,
