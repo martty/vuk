@@ -1048,7 +1048,7 @@ namespace vuk {
 					found->subrange.image.base_layer = isection.base_layer;
 					found->subrange.image.layer_count = isection.layer_count;
 				}
-			} else if (base_ty->hash_value == current_module->types.builtin_buffer) {
+			} else if (base_ty->kind == Type::POINTER_TY || base_ty->is_bufferlike_view()) {
 				auto& att = *reinterpret_cast<Buffer*>(value);
 				if (att.size == 0) {
 					return;
