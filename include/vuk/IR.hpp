@@ -42,6 +42,7 @@ namespace vuk {
 		std::vector<std::shared_ptr<Type>> child_types;
 		std::vector<size_t> offsets;                // for now only useful for composites
 		std::unique_ptr<UserCallbackType> callback; // only useful for user CBs
+		std::vector<const char*> member_names;
 
 		union {
 			struct {

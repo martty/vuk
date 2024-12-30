@@ -324,19 +324,6 @@ TEST_CASE("adapt type to IR") {
 	auto vty = to_IR_type<view<BufferLike<float[]>>>();
 }
 
-template<class W, class T, class U>
-void set(Value<W>& t, U T::*ptr, U arg)
-  requires std::is_base_of_v<ptr_base, W>
-{
-	auto index = index_of<decltype(ptr)>(erased_tuple_adaptor<BufferCreateInfo>::members);
-	auto def_or_v = get_def(t.get_head());
-	if (!def_or_v || !def_or_v->is_ref) {
-		return;
-	}
-	auto def = def_or_v->ref;
-	def.node->construct.args[index] = current_module->make_constant(arg);
-}
-
 template<class T>
 inline val_view<BufferLike<T>> clear(val_view<BufferLike<T>> in, T clear_value, VUK_CALLSTACK) {
 	auto clear = make_pass(
@@ -381,6 +368,8 @@ void main() {
 	auto test = { 1.f, 2.f, 3.f, 4.f };
 	auto schpen = std::span(&res[0], 4);
 	CHECK(schpen == std::span(test));
+
+	alloc.deallocate({ (ptr_base*) & res, 1 });
 }
 
 /*
