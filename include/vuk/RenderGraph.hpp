@@ -404,6 +404,10 @@ public:
 					extnode->deps.insert(extnode->deps.end(), std::make_move_iterator(dependent_nodes.begin()), std::make_move_iterator(dependent_nodes.end()));
 				}
 
+				for (auto& node : extnode->deps) {
+					node->deps.push_back(extnode);
+				}
+
 				current_module->set_source_location(extnode->get_node(), inner_scope);
 
 				if constexpr (is_tuple<Ret>::value) {
