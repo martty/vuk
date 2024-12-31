@@ -114,6 +114,7 @@ namespace vuk {
 
 	private:
 		void flatten_bindings();
+		Descriptors& ensure_set(size_t set_index);
 	};
 
 	struct ShaderModule {
